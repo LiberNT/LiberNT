@@ -105,6 +105,7 @@ RunSetupThreadProc(
     TRACE("Should run '%s' now\n", debugstr_w(CommandLine));
 
     SwitchDesktop(WLSession->ApplicationDesktop);
+    RemoveStatusMessage(WLSession);
 
     /* Start process */
     StartupInfo.cb = sizeof(StartupInfo);
