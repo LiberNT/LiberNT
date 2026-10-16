@@ -736,6 +736,12 @@ IopDeviceFsIoControl(IN HANDLE DeviceHandle,
                                         IopOtherTransfer);
 }
 
+VOID
+NTAPI
+IopReportIncompleteSynchronousIrp(
+    _In_ PIRP Irp,
+    _In_ NTSTATUS Status);
+
 NTSTATUS
 NTAPI
 IopQueryDeviceInformation(IN PFILE_OBJECT FileObject,
@@ -818,6 +824,16 @@ IopQueryDeviceInformation(IN PFILE_OBJECT FileObject,
 
     /* Call the Driver */
     Status = IoCallDriver(DeviceObject, Irp);
+
+    if (LocalEvent && (Status != STATUS_PENDING) && !NT_ERROR(Status))
+    {
+        KIRQL CheckIrql;
+
+        KeRaiseIrql(APC_LEVEL, &CheckIrql);
+        if (!KeReadStateEvent(&Event))
+            IopReportIncompleteSynchronousIrp(Irp, Status);
+        KeLowerIrql(CheckIrql);
+    }
 
     /* Check if this was synch I/O */
     if (!LocalEvent)

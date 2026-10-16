@@ -300,6 +300,132 @@ IopAbandonThreadAgnosticIrp(IN PIRP Irp)
     IopCleanupIrp(Irp, FileObject);
 }
 
+static
+ULONG_PTR
+IopPackDriverName(
+    _In_opt_ PDEVICE_OBJECT DeviceObject)
+{
+    PUNICODE_STRING Name;
+    USHORT Count, Start, Index;
+    ULONG_PTR Packed = 0;
+
+    if (!DeviceObject || !DeviceObject->DriverObject)
+        return 0;
+
+    Name = &DeviceObject->DriverObject->DriverName;
+    if (!Name->Buffer)
+        return 0;
+
+    Count = Name->Length / sizeof(WCHAR);
+    for (Start = Count; Start > 0 && Name->Buffer[Start - 1] != L'\\'; Start--);
+    for (Index = 0; Index < sizeof(ULONG_PTR) && Start + Index < Count; Index++)
+        Packed |= (ULONG_PTR)(UCHAR)Name->Buffer[Start + Index] << (Index * 8);
+
+    return Packed;
+}
+
+static
+VOID
+IopRecordCompleter(
+    _Inout_ PKAPC Apc)
+{
+    Apc->NormalContext = (PVOID)((ULONG_PTR)KeGetCurrentThread() | KeGetCurrentIrql());
+    Apc->SpareLong0 = KeGetCurrentProcessorNumber();
+}
+
+static
+DECLSPEC_NORETURN
+VOID
+IopReportLateCompletion(
+    _In_ PIRP Irp,
+    _In_ UCHAR Kind,
+    _In_ ULONG_PTR Parameter2)
+{
+    PIO_STACK_LOCATION StackPtr;
+    PDEVICE_OBJECT Top = NULL, Bottom = NULL, Current = NULL;
+    UCHAR TopMajor = 0;
+    BOOLEAN Completed = (Irp->CurrentLocation > Irp->StackCount);
+    ULONG_PTR Completer = Completed ? (ULONG_PTR)Irp->Tail.Apc.NormalContext : 0;
+    ULONG64 State;
+    LONG Index;
+
+    for (Index = Irp->StackCount - 1; Index >= 0; Index--)
+    {
+        StackPtr = (PIO_STACK_LOCATION)(Irp + 1) + Index;
+        if (!StackPtr->DeviceObject)
+            continue;
+
+        if (!Top)
+        {
+            Top = StackPtr->DeviceObject;
+            TopMajor = StackPtr->MajorFunction;
+        }
+        Bottom = StackPtr->DeviceObject;
+        if (Index == Irp->CurrentLocation - 1)
+            Current = StackPtr->DeviceObject;
+
+        DbgPrint("IRP %p location %ld: major 0x%x, device %p, driver %wZ\n",
+                 Irp, Index, StackPtr->MajorFunction, StackPtr->DeviceObject,
+                 StackPtr->DeviceObject->DriverObject ? &StackPtr->DeviceObject->DriverObject->DriverName : NULL);
+    }
+
+    State = Kind;
+    State |= (ULONG64)(Irp->PendingReturned != FALSE) << 8;
+    State |= (ULONG64)((Completer & ~(ULONG_PTR)0xF) == (ULONG_PTR)KeGetCurrentThread()) << 9;
+    State |= (ULONG64)(Completed && Irp->Tail.Apc.Inserted) << 10;
+    State |= (ULONG64)(KeGetCurrentThread()->SpecialApcDisable != 0) << 11;
+    State |= (ULONG64)(Completer & 0xF) << 12;
+    State |= (ULONG64)(Completed ? (Irp->Tail.Apc.SpareLong0 & 0xFF) : 0) << 16;
+    State |= (ULONG64)(KeGetCurrentProcessorNumber() & 0xFF) << 24;
+    State |= (ULONG64)(UCHAR)Irp->CurrentLocation << 32;
+    State |= (ULONG64)(UCHAR)Irp->StackCount << 40;
+    State |= (ULONG64)(KeGetCurrentIrql() & 0xF) << 48;
+    State |= (ULONG64)(Completer != 0) << 52;
+    State |= (ULONG64)(KeGetCurrentThread()->ApcState.KernelApcPending != FALSE) << 53;
+    State |= (ULONG64)(KeGetCurrentThread()->KernelApcDisable != 0) << 54;
+    State |= (ULONG64)TopMajor << 56;
+
+    KeBugCheckEx(0xC9,
+                 (ULONG_PTR)State,
+                 Parameter2,
+                 IopPackDriverName(Current ? Current : Top),
+                 IopPackDriverName(Bottom));
+}
+
+VOID
+NTAPI
+IopReportIncompleteSynchronousIrp(
+    _In_ PIRP Irp,
+    _In_ NTSTATUS Status)
+{
+    IopReportLateCompletion(Irp,
+                            0x1C,
+                            (ULONG_PTR)(((ULONG64)(ULONG)Irp->IoStatus.Status << 32) | (ULONG)Status));
+}
+
+static
+VOID
+IopCheckUnwoundCompletionTarget(
+    _In_ PIRP Irp)
+{
+    volatile ULONG_PTR Start = (ULONG_PTR)KeGetCurrentThread()->StackLimit;
+    ULONG_PTR End = (ULONG_PTR)&Start;
+    ULONG_PTR Iosb = (ULONG_PTR)Irp->UserIosb;
+    ULONG_PTR Event = (ULONG_PTR)Irp->UserEvent;
+    UCHAR Kind;
+
+    if (Iosb && (Iosb >= Start) && (Iosb < End))
+        Kind = 0x0C;
+    else if (Event && (Event >= Start) && (Event < End))
+        Kind = 0x0D;
+    else
+        return;
+
+    IopReportLateCompletion(Irp,
+                            Kind,
+                            (ULONG_PTR)(((ULONG64)Irp->IoStatus.Information << 32) | (ULONG)Irp->IoStatus.Status));
+}
+
 VOID
 NTAPI
 IopCompleteRequest(IN PKAPC Apc,
@@ -328,6 +454,8 @@ IopCompleteRequest(IN PKAPC Apc,
 
     /* Sanity check */
     ASSERT(Irp->IoStatus.Status != (NTSTATUS)0xFFFFFFFF);
+
+    IopCheckUnwoundCompletionTarget(Irp);
 
     /* Check if we have a file object */
     if (*SystemArgument2)
@@ -1736,6 +1864,7 @@ IofCompleteRequest(IN PIRP Irp,
                         NULL,
                         KernelMode,
                         NULL);
+        IopRecordCompleter(&Irp->Tail.Apc);
 
         /* Queue it */
         KeInsertQueueApc(&Irp->Tail.Apc,
@@ -1757,6 +1886,7 @@ IofCompleteRequest(IN PIRP Irp,
                             NULL,
                             KernelMode,
                             NULL);
+            IopRecordCompleter(&Irp->Tail.Apc);
 
             /* Queue it */
             KeInsertQueueApc(&Irp->Tail.Apc,
