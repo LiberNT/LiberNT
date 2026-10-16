@@ -1170,6 +1170,7 @@ HRESULT STDMETHODCALLTYPE Native12Device::CheckFeatureSupport(D3D12_FEATURE feat
             ZeroMemory(caps, sizeof(*caps));
             caps->CopyQueueTimestampQueriesSupported = !!options.CopyQueueTimestampQueriesSupported;
             caps->BarycentricsSupported = !!options.BarycentricsSupported;
+            caps->ViewInstancingTier = static_cast<D3D12_VIEW_INSTANCING_TIER>(options.ViewInstancingTier);
             if (options.WriteBufferImmediateQueueFlags & D3D12DDI_COMMAND_QUEUE_FLAG_3D)
                 caps->WriteBufferImmediateSupportFlags |= D3D12_COMMAND_LIST_SUPPORT_FLAG_DIRECT;
             if (options.WriteBufferImmediateQueueFlags & D3D12DDI_COMMAND_QUEUE_FLAG_COMPUTE)

@@ -49,6 +49,17 @@ static SIZE_T Native12AlignStream(SIZE_T value, SIZE_T alignment)
     return (value + alignment - 1) & ~(alignment - 1);
 }
 
+static bool Native12ViewInstancingValid(const D3D12_VIEW_INSTANCING_DESC &desc, UINT highest_shader_model,
+        D3D12DDI_VIEW_INSTANCING_TIER tier)
+{
+    bool supported = tier != D3D12DDI_VIEW_INSTANCING_TIER_NOT_SUPPORTED;
+    if (!desc.ViewInstanceCount && !desc.pViewInstanceLocations && !desc.Flags) return true;
+    if (desc.ViewInstanceCount == 1 && highest_shader_model < D3D_SHADER_MODEL_6_1) return false;
+    if (desc.Flags & ~D3D12_VIEW_INSTANCING_FLAG_ENABLE_VIEW_INSTANCE_MASKING) return false;
+    if ((desc.Flags & D3D12_VIEW_INSTANCING_FLAG_ENABLE_VIEW_INSTANCE_MASKING) && !supported) return false;
+    return desc.ViewInstanceCount <= 1 || (supported && desc.ViewInstanceCount <= D3D12_MAX_VIEW_INSTANCE_COUNT);
+}
+
 HRESULT STDMETHODCALLTYPE Native12Device::CreatePipelineState(const D3D12_PIPELINE_STATE_STREAM_DESC *desc,
         REFIID iid, void **out)
 {
@@ -242,7 +253,9 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreatePipelineState(const D3D12_PIPELI
         }
     }
 
-    if (view_instancing.ViewInstanceCount || amplification.BytecodeLength || mesh.BytecodeLength)
+    if (amplification.BytecodeLength || mesh.BytecodeLength) return E_INVALIDARG;
+    if (!compute_shader.BytecodeLength
+            && !Native12ViewInstancingValid(view_instancing, highest_shader_model, options.ViewInstancingTier))
         return E_INVALIDARG;
     if (targets.NumRenderTargets > D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT) return E_INVALIDARG;
 
@@ -280,6 +293,10 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreatePipelineState(const D3D12_PIPELI
         pipeline->depth_bias = bias;
         pipeline->line_mode_set = line_set;
         pipeline->line_mode = line;
+        pipeline->view_instance_count = view_instancing.ViewInstanceCount;
+        for (UINT i = 0; i < view_instancing.ViewInstanceCount && view_instancing.pViewInstanceLocations; ++i)
+            pipeline->view_instance_locations[i] = view_instancing.pViewInstanceLocations[i];
+        pipeline->view_instancing_flags = view_instancing.Flags;
         hr = pipeline->InitializeGraphics(&graphics);
     }
     if (SUCCEEDED(hr)) hr = pipeline->QueryInterface(iid, out);

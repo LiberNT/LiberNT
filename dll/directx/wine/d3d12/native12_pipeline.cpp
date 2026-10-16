@@ -407,6 +407,7 @@ struct Native12ConvertedShader
     BYTE data[1];
 };
 
+static const UINT Native12PsvRuntimeInfo1Size = 36;
 static SRWLOCK Native12ConvertedLock = SRWLOCK_INIT;
 static Native12ConvertedShader *Native12ConvertedShaders;
 static INIT_ONCE Native12DxilconvOnce = INIT_ONCE_STATIC_INIT;
@@ -451,6 +452,7 @@ struct Native12ShaderCode
     D3D12DDI_SHADERCACHE_HASH hash = {};
     Native12Signature input, output, patch;
     bool dxil = false;
+    UINT psv_runtime_info_size = 0;
 
     HRESULT ConvertToDxil(UINT highest_shader_model, const D3D12_SHADER_BYTECODE &bytecode)
     {
@@ -547,6 +549,8 @@ struct Native12ShaderCode
             else if (tag == 0x4e47534f || tag == 0x3147534f || tag == 0x3547534f)
                 hr = output.Read(chunk, chunk_size, tag);
             else if (tag == 0x47534350 || tag == 0x31475350) hr = patch.Read(chunk, chunk_size, tag);
+            else if (tag == 0x30565350 && chunk_size >= 4 && Native12ReadDword(chunk) <= chunk_size - 4)
+                psv_runtime_info_size = Native12ReadDword(chunk);
             if (FAILED(hr)) return hr;
         }
         return code ? S_OK : E_INVALIDARG;
@@ -837,6 +841,11 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
         if (!bytecode.pShaderBytecode || !bytecode.BytecodeLength) continue;
         Native12ShaderCode &shader = parsed[i];
         if (FAILED(hr = shader.Parse(bytecode))) return hr;
+        if (view_instance_count > 1 && shader.psv_runtime_info_size < Native12PsvRuntimeInfo1Size)
+        {
+            WARN("Stage %u has no view ID metadata for %u views.\n", i, view_instance_count);
+            return E_INVALIDARG;
+        }
         if (FAILED(hr = shader.ConvertToDxil(device->highest_shader_model, bytecode))) return hr;
         if (stream_output && stages[i].stage == Native12StageGeometry)
             hr = Native12CreateStreamOutputShader(this, shader, false, input->StreamOutput);
@@ -999,6 +1008,13 @@ HRESULT Native12PipelineState::InitializeGraphics(const D3D12_GRAPHICS_PIPELINE_
     args.SampleDesc = input->SampleDesc;
     if (!args.SampleDesc.Count) args.SampleDesc.Count = 1;
     args.NodeMask = input->NodeMask ? input->NodeMask : 1;
+    if (view_instance_count)
+    {
+        args.ViewInstancingDesc.ViewInstanceCount = view_instance_count;
+        args.ViewInstancingDesc.pViewInstanceLocations =
+                reinterpret_cast<const D3D12DDI_VIEW_INSTANCE_LOCATION *>(view_instance_locations);
+        args.ViewInstancingDesc.Flags = static_cast<D3D12DDI_VIEW_INSTANCING_FLAGS>(view_instancing_flags);
+    }
     args.Flags = static_cast<D3D12DDI_PIPELINE_STATE_FLAGS>(input->Flags
             & (D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS | D3D12_PIPELINE_STATE_FLAG_DYNAMIC_INDEX_BUFFER_STRIP_CUT));
     size = device->functions.pfnCalcPrivatePipelineStateSize(device->driver_device, &args);

@@ -307,6 +307,9 @@ public:
     FLOAT depth_bias = 0.0f;
     bool line_mode_set = false;
     D3D12_LINE_RASTERIZATION_MODE line_mode = D3D12_LINE_RASTERIZATION_MODE_ALIASED;
+    UINT view_instance_count = 0;
+    D3D12_VIEW_INSTANCE_LOCATION view_instance_locations[D3D12_MAX_VIEW_INSTANCE_COUNT] = {};
+    D3D12_VIEW_INSTANCING_FLAGS view_instancing_flags = D3D12_VIEW_INSTANCING_FLAG_NONE;
 
     using Native12Child::Native12Child;
     ~Native12PipelineState();
