@@ -93,7 +93,7 @@ ExternalProject_Add(dxilconv-tablegen
 
 set(_dxilconv_sdk_targets
     msvcrtex libucrtbase libmsvcrt libkernel32 libntdll ucrtoldnames libuser32 libgdi32 libwinspool
-    libshell32 libole32 liboleaut32 uuid libcomdlg32 libadvapi32)
+    libshell32 libole32 liboleaut32 uuid libcomdlg32 libadvapi32 libpsapi)
 export_sdk_libraries(dxilconv_sdk_libs "${DXILCONV_SDK_LIBDIR}"
     LIBRARIES ${_dxilconv_sdk_targets}
     DEPENDS ${_dxilconv_sdk_targets} ucrtoldnames_target)
