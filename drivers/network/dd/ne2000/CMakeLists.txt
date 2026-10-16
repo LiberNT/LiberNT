@@ -2,9 +2,8 @@
 include_directories(BEFORE include)
 
 add_definitions(
-    -DNDIS51_MINIPORT
-    -DNDIS_MINIPORT_DRIVER
-    -DNDIS_LEGACY_MINIPORT=1)
+    -DNDIS60_MINIPORT
+    -DNDIS_MINIPORT_DRIVER)
 
 list(APPEND SOURCE
     ne2000/8390.c

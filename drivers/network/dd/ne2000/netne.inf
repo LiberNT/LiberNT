@@ -29,19 +29,23 @@ DefaultDestDir = 12
 
 [NE2000_Inst_Isa.ndi.NT]
 Characteristics = 0x4 ; NCF_PHYSICAL
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType = 14 ; PNPIsaBus
 AddReg = NE2000_AddReg.NT
 CopyFiles = NE2000_CopyFiles.NT
 
 [NE2000_Inst_Pci.ndi.NT]
 Characteristics = 0x4 ; NCF_PHYSICAL
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
 BusType = 5 ; PCIBus
 AddReg = NE2000_AddReg.NT
 CopyFiles = NE2000_CopyFiles.NT
 
 [NE2000_AddReg.NT]
-HKR,,Port,0x00000000,"c100"
-HKR,,Irq,0x00000000,"B"
 HKR, Ndi,            Service,    0, "ne2000"
 HKR, Ndi\Interfaces, UpperRange, 0, "ndis5"
 HKR, Ndi\Interfaces, LowerRange, 0, "ethernet"

@@ -23,15 +23,11 @@
 
 /* Global constants */
 
-#define DRIVER_NDIS_MAJOR_VERSION 3
-#define DRIVER_NDIS_MINOR_VERSION 0
-
-#define DRIVER_DEFAULT_IO_BASE_ADDRESS      0x280  /* bochs default */
-#define DRIVER_DEFAULT_INTERRUPT_NUMBER     9      /* bochs default */
-#define DRIVER_DEFAULT_INTERRUPT_SHARED     FALSE
-#define DRIVER_DEFAULT_INTERRUPT_MODE       NdisInterruptLatched
-
 #define DRIVER_MAX_MULTICAST_LIST_SIZE  8
+
+#define DRIVER_MINIMUM_FRAME_SIZE   60
+#define DRIVER_RECEIVE_NBL_COUNT    32
+#define DRIVER_TAG                  'k2EN'
 
 #define DRIVER_VENDOR_DESCRIPTION       "Novell Eagle 2000 Adapter."
 #define DRIVER_VENDOR_DRIVER_VERSION    0x0100  /* 1.0 */
@@ -59,13 +55,6 @@
 
 /* Global structures */
 
-typedef struct _MINIPORT_RESERVED
-{
-    PNDIS_PACKET Next;
-} MINIPORT_RESERVED, *PMINIPORT_RESERVED;
-
-#define RESERVED(Packet) ((PMINIPORT_RESERVED)((Packet)->MiniportReserved))
-
 typedef UCHAR DRIVER_HARDWARE_ADDRESS[DRIVER_LENGTH_OF_ADDRESS];
 
 /* Information about an adapter */
@@ -75,15 +64,14 @@ typedef struct _NIC_ADAPTER
     LIST_ENTRY ListEntry;
     /* Adapter handle */
     NDIS_HANDLE MiniportAdapterHandle;
-    /* NDIS interrupt object */
-    NDIS_MINIPORT_INTERRUPT Interrupt;
+    NDIS_HANDLE InterruptHandle;
+    NDIS_SPIN_LOCK Lock;
+    BOOLEAN Paused;
+    BOOLEAN PausePending;
+    BOOLEAN InterruptsDisabled;
 
     /* I/O base address and interrupt number of adapter */
     ULONG_PTR IoBaseAddress;
-    ULONG InterruptLevel;
-    ULONG InterruptVector;
-    BOOLEAN InterruptShared;
-    KINTERRUPT_MODE InterruptMode;
 
     /* Mapped address of the I/O base port */
     PUCHAR IOBase;
@@ -124,7 +112,6 @@ typedef struct _NIC_ADAPTER
 
     /* Lookahead buffer */
     UINT LookaheadSize;
-    UCHAR Lookahead[DRIVER_MAXIMUM_LOOKAHEAD + DRIVER_HEADER_SIZE];
 
     /* Receive buffer ring */
     UINT PageStart;
@@ -150,8 +137,13 @@ typedef struct _NIC_ADAPTER
     /* Offset in onboard RAM of received packet */
     ULONG PacketOffset;
 
-    /* TRUE if receive indications are done and should be completed */
-    BOOLEAN DoneIndicating;
+    NDIS_HANDLE ReceiveNblPool;
+    PNET_BUFFER_LIST FreeReceiveNbls;
+    PNET_BUFFER_LIST ReceiveNbls[DRIVER_RECEIVE_NBL_COUNT];
+    ULONG ReceiveNblsOutstanding;
+    PNET_BUFFER_LIST ReceiveHead;
+    PNET_BUFFER_LIST ReceiveTail;
+    ULONG ReceiveCount;
 
     /* Transmit buffers */
     UINT TXStart;   /* Start block of transmit buffer ring */
@@ -163,26 +155,30 @@ typedef struct _NIC_ADAPTER
     INT TXCurrent;  /* Current buffer beeing transmitted. -1 means none */
 
     /* Head of transmit queue */
-    PNDIS_PACKET TXQueueHead;
+    PNET_BUFFER_LIST TXQueueHead;
     /* Tail of transmit queue */
-    PNDIS_PACKET TXQueueTail;
+    PNET_BUFFER_LIST TXQueueTail;
+    PNET_BUFFER_LIST CompleteHead;
+    PNET_BUFFER_LIST CompleteTail;
+    UCHAR TXBuffer[DRIVER_FRAME_SIZE];
 
     /* Statistics */
     ULONG FrameAlignmentErrors;
     ULONG CrcErrors;
     ULONG MissedPackets;
+    ULONG ReceiveOk;
+    ULONG ReceiveNoBuffers;
+    ULONG TransmitOk;
+    ULONG TransmitErrors;
 
     /* Flags used for driver cleanup */
     BOOLEAN IOPortRangeRegistered;
-    BOOLEAN InterruptRegistered;
-    BOOLEAN ShutdownHandlerRegistered;
 } NIC_ADAPTER, *PNIC_ADAPTER;
 
 /* Global driver information */
 typedef struct _DRIVER_INFORMATION
 {
-    NDIS_HANDLE NdisWrapperHandle;  /* Returned from NdisInitializeWrapper */
-    NDIS_HANDLE NdisMacHandle;      /* Returned from NdisRegisterMac */
+    NDIS_HANDLE NdisDriverHandle;
     LIST_ENTRY  AdapterListHead;    /* Adapters this driver control */
 } DRIVER_INFORMATION, *PDRIVER_INFORMATION;
 
@@ -191,7 +187,6 @@ typedef struct _DRIVER_INFORMATION
 /* Global variable */
 
 extern DRIVER_INFORMATION DriverInfo;
-extern NDIS_PHYSICAL_ADDRESS HighestAcceptableMax;
 
 
 
@@ -244,5 +239,10 @@ VOID NICWriteData(
 
 VOID NICTransmit(
     PNIC_ADAPTER Adapter);
+
+VOID NICAppendNbl(
+    PNET_BUFFER_LIST *Head,
+    PNET_BUFFER_LIST *Tail,
+    PNET_BUFFER_LIST Nbl);
 
 #endif /* _NE2000_PCH_ */

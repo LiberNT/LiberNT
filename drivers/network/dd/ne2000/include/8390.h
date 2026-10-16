@@ -166,7 +166,6 @@ typedef struct _DISCARD_HEADER {
     NdisRawWritePortUchar((Adapter)->IOBase + PG0_IMR, (Adapter)->InterruptMask); \
 }
 
-VOID NTAPI MiniportHandleInterrupt(
-    IN  NDIS_HANDLE MiniportAdapterContext);
+MINIPORT_INTERRUPT_DPC MiniportInterruptDpc;
 
 /* EOF */

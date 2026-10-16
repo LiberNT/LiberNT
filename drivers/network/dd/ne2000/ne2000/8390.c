@@ -10,9 +10,6 @@
 
 #include <ne2000.h>
 
-/* Null-terminated array of ports to probe. This is "semi-risky" (Don Becker).  */
-ULONG_PTR ProbeAddressList[] = { 0x280, 0x300, 0x320, 0x340, 0x360, 0x380, 0 };
-
 static BOOLEAN ProbeAddressForNIC(
     ULONG_PTR address)
 /*
@@ -60,26 +57,12 @@ BOOLEAN NICCheck(
  *     TRUE if NIC is believed to be present, FALSE if not
  */
 {
-    int i;
-
     NDIS_DbgPrint(MAX_TRACE, ("Called\n"));
 
-    /* first try the supplied value */
-    if(ProbeAddressForNIC(Adapter->IoBaseAddress))
+    if(ProbeAddressForNIC((ULONG_PTR)Adapter->IOBase))
     {
         NDIS_DbgPrint(MID_TRACE, ("Found adapter at 0x%x\n", Adapter->IoBaseAddress));
         return TRUE;
-    }
-
-    /* ok, no dice, time to probe */
-    for(i = 0; ProbeAddressList[i]; i++)
-    {
-        if(ProbeAddressForNIC(ProbeAddressList[i]))
-        {
-            NDIS_DbgPrint(MID_TRACE, ("Found adapter at address 0x%x\n", ProbeAddressList[i]));
-            Adapter->IoBaseAddress = ProbeAddressList[i];
-            return TRUE;
-        }
     }
 
     NDIS_DbgPrint(MIN_TRACE,("Adapter NOT found!\n"));
@@ -892,56 +875,49 @@ static VOID NICIndicatePacket(
  *     Adapter = Pointer to adapter information
  */
 {
-    UINT IndicateLength;
+    PNET_BUFFER_LIST Nbl;
+    PNET_BUFFER NetBuffer;
+    PUCHAR Buffer;
+    UINT Length;
+    UINT FirstLength;
+    ULONG_PTR Source;
+    ULONG_PTR RecvStop;
 
-    IndicateLength = (Adapter->PacketHeader.PacketLength <
-        (Adapter->LookaheadSize + DRIVER_HEADER_SIZE))?
-        (Adapter->PacketHeader.PacketLength) :
-        (Adapter->LookaheadSize + DRIVER_HEADER_SIZE);
+    Length = Adapter->PacketHeader.PacketLength - sizeof(PACKET_HEADER);
 
-    /* Fill the lookahead buffer */
-    NICReadData(Adapter,
-                (PUCHAR)&Adapter->Lookahead,
-                Adapter->PacketOffset + sizeof(PACKET_HEADER),
-                IndicateLength + DRIVER_HEADER_SIZE);
-
-    NDIS_DbgPrint(MID_TRACE, ("Indicating (%d) bytes.\n", IndicateLength));
-    NDIS_DbgPrint(MID_TRACE, ("ne2000!NICIndicatePacket: Indicating (%d) bytes.\n", IndicateLength));
-
-#if 0
-    NDIS_DbgPrint(MAX_TRACE, ("FRAME:\n"));
-    for (i = 0; i < (IndicateLength + 7) / 8; i++) {
-        NDIS_DbgPrint(MAX_TRACE, ("%02X %02X %02X %02X %02X %02X %02X %02X\n",
-            Adapter->Lookahead[i*8+0],
-            Adapter->Lookahead[i*8+1],
-            Adapter->Lookahead[i*8+2],
-            Adapter->Lookahead[i*8+3],
-            Adapter->Lookahead[i*8+4],
-            Adapter->Lookahead[i*8+5],
-            Adapter->Lookahead[i*8+6],
-            Adapter->Lookahead[i*8+7]));
+    if (Adapter->Paused || Adapter->FreeReceiveNbls == NULL) {
+        Adapter->ReceiveNoBuffers++;
+        return;
     }
-#endif
 
-    if (IndicateLength >= DRIVER_HEADER_SIZE) {
-	NDIS_DbgPrint(MAX_TRACE,("Adapter->MiniportAdapterHandle: %x\n",
-				 Adapter->MiniportAdapterHandle));
-        NdisMEthIndicateReceive(Adapter->MiniportAdapterHandle,
-                                NULL,
-                                (PVOID)&Adapter->Lookahead,
-                                DRIVER_HEADER_SIZE,
-                                (PVOID)&Adapter->Lookahead[DRIVER_HEADER_SIZE],
-                                IndicateLength - DRIVER_HEADER_SIZE,
-                                Adapter->PacketHeader.PacketLength - DRIVER_HEADER_SIZE);
-    } else {
-        NdisMEthIndicateReceive(Adapter->MiniportAdapterHandle,
-                                NULL,
-                                (PVOID)&Adapter->Lookahead,
-                                IndicateLength,
-                                NULL,
-                                0,
-                                0);
-    }
+    Nbl = Adapter->FreeReceiveNbls;
+    Adapter->FreeReceiveNbls = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+    Adapter->ReceiveNblsOutstanding++;
+    Buffer = Nbl->MiniportReserved[0];
+
+    Source   = Adapter->PacketOffset + sizeof(PACKET_HEADER);
+    RecvStop = Adapter->PageStop * DRIVER_BLOCK_SIZE;
+    FirstLength = (Source + Length > RecvStop) ? (UINT)(RecvStop - Source) : Length;
+
+    NICReadData(Adapter, Buffer, Source, (USHORT)FirstLength);
+    if (FirstLength < Length)
+        NICReadData(Adapter,
+                    Buffer + FirstLength,
+                    Adapter->PageStart * DRIVER_BLOCK_SIZE,
+                    (USHORT)(Length - FirstLength));
+
+    NDIS_DbgPrint(MID_TRACE, ("Indicating (%d) bytes.\n", Length));
+
+    NetBuffer = NET_BUFFER_LIST_FIRST_NB(Nbl);
+    NdisAdjustMdlLength(NET_BUFFER_FIRST_MDL(NetBuffer), Length);
+    NET_BUFFER_DATA_OFFSET(NetBuffer) = 0;
+    NET_BUFFER_CURRENT_MDL(NetBuffer) = NET_BUFFER_FIRST_MDL(NetBuffer);
+    NET_BUFFER_CURRENT_MDL_OFFSET(NetBuffer) = 0;
+    NET_BUFFER_DATA_LENGTH(NetBuffer) = Length;
+    NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
+    NICAppendNbl(&Adapter->ReceiveHead, &Adapter->ReceiveTail, Nbl);
+    Adapter->ReceiveCount++;
+    Adapter->ReceiveOk++;
 }
 
 
@@ -993,7 +969,8 @@ static VOID NICReadPacket(
 
 
 static VOID NICWritePacket(
-    PNIC_ADAPTER Adapter)
+    PNIC_ADAPTER Adapter,
+    UINT Length)
 /*
  * FUNCTION: Writes a full packet to the transmit buffer ring
  * ARGUMENTS:
@@ -1004,60 +981,62 @@ static VOID NICWritePacket(
  *     into the transmit buffer ring is taken from TXNext
  */
 {
-    PNDIS_BUFFER SrcBuffer;
-    UINT BytesToCopy, SrcSize, DstSize;
-    PUCHAR SrcData;
     ULONG DstData;
-    UINT TXStart;
-    UINT TXStop;
 
     NDIS_DbgPrint(MAX_TRACE, ("Called.\n"));
 
-    TXStart = Adapter->TXStart * DRIVER_BLOCK_SIZE;
-    TXStop  = (Adapter->TXStart + Adapter->TXCount) * DRIVER_BLOCK_SIZE;
-
-    NdisQueryPacket(Adapter->TXQueueHead,
-                    NULL,
-                    NULL,
-                    &SrcBuffer,
-                    &Adapter->TXSize[Adapter->TXNext]);
+    Adapter->TXSize[Adapter->TXNext] = Length;
 
     NDIS_DbgPrint(MID_TRACE, ("Packet (%d) is now size (%d).\n",
         Adapter->TXNext,
         Adapter->TXSize[Adapter->TXNext]));
 
-    NdisQueryBuffer(SrcBuffer, (PVOID)&SrcData, &SrcSize);
+    DstData = (Adapter->TXStart + Adapter->TXNext) * DRIVER_BLOCK_SIZE;
 
-    DstData = TXStart + Adapter->TXNext * DRIVER_BLOCK_SIZE;
-    DstSize = TXStop - DstData;
+    NICWriteData(Adapter, DstData, Adapter->TXBuffer, (USHORT)Length);
+}
 
-    /* Start copying the data */
-    for (;;) {
-        BytesToCopy = (SrcSize < DstSize)? SrcSize : DstSize;
 
-        NICWriteData(Adapter, DstData, SrcData, BytesToCopy);
+static BOOLEAN NICCopyNetBuffer(
+    PNIC_ADAPTER Adapter,
+    PNET_BUFFER NetBuffer,
+    PUINT Length)
+{
+    PMDL Mdl = NET_BUFFER_CURRENT_MDL(NetBuffer);
+    ULONG Offset = NET_BUFFER_CURRENT_MDL_OFFSET(NetBuffer);
+    ULONG Remaining = NET_BUFFER_DATA_LENGTH(NetBuffer);
+    ULONG Copied = 0;
+    ULONG MdlLength;
+    PUCHAR Source;
 
-        SrcData = (PUCHAR)((ULONG_PTR) SrcData + BytesToCopy);
-        SrcSize            -= BytesToCopy;
-        DstData            += BytesToCopy;
-        DstSize            -= BytesToCopy;
+    while (Mdl != NULL && Remaining != 0) {
+        NdisQueryMdl(Mdl, (PVOID *)&Source, &MdlLength, NormalPagePriority);
+        if (Source == NULL)
+            return FALSE;
 
-        if (SrcSize == 0) {
-            /* No more bytes in source buffer. Proceed to
-               the next buffer in the source buffer chain */
-            NdisGetNextBuffer(SrcBuffer, &SrcBuffer);
-            if (!SrcBuffer)
-                break;
-
-            NdisQueryBuffer(SrcBuffer, (PVOID)&SrcData, &SrcSize);
+        if (MdlLength > Offset) {
+            MdlLength = min(MdlLength - Offset, Remaining);
+            NdisMoveMemory(Adapter->TXBuffer + Copied, Source + Offset, MdlLength);
+            Copied += MdlLength;
+            Remaining -= MdlLength;
+            Offset = 0;
+        } else {
+            Offset -= MdlLength;
         }
 
-        if (DstSize == 0) {
-            /* Wrap around the end of the transmit buffer ring */
-            DstData = TXStart;
-            DstSize = Adapter->TXCount * DRIVER_BLOCK_SIZE;
-        }
+        NdisGetNextMdl(Mdl, &Mdl);
     }
+
+    if (Remaining != 0)
+        return FALSE;
+
+    if (Copied < DRIVER_MINIMUM_FRAME_SIZE) {
+        NdisZeroMemory(Adapter->TXBuffer + Copied, DRIVER_MINIMUM_FRAME_SIZE - Copied);
+        Copied = DRIVER_MINIMUM_FRAME_SIZE;
+    }
+
+    *Length = Copied;
+    return TRUE;
 }
 
 
@@ -1075,49 +1054,74 @@ static BOOLEAN NICPrepareForTransmit(
 {
     UINT Length;
     UINT BufferCount;
-    PNDIS_PACKET Packet;
+    PNET_BUFFER_LIST Nbl;
+    PNET_BUFFER NetBuffer;
 
     NDIS_DbgPrint(MAX_TRACE, ("Called.\n"));
 
-    /* Calculate number of buffers needed to transmit packet */
-    NdisQueryPacket(Adapter->TXQueueHead,
-                    NULL,
-                    NULL,
-                    NULL,
-                    &Length);
+    while ((Nbl = Adapter->TXQueueHead) != NULL) {
+        NetBuffer = (PNET_BUFFER)Nbl->MiniportReserved[0];
+        if (NetBuffer == NULL) {
+            Adapter->TXQueueHead = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+            if (Adapter->TXQueueHead == NULL)
+                Adapter->TXQueueTail = NULL;
+            NICAppendNbl(&Adapter->CompleteHead, &Adapter->CompleteTail, Nbl);
+            continue;
+        }
 
-    BufferCount = (Length + DRIVER_BLOCK_SIZE - 1) / DRIVER_BLOCK_SIZE;
+        Length = NET_BUFFER_DATA_LENGTH(NetBuffer);
+        if (Length == 0 || Length > DRIVER_FRAME_SIZE) {
+            NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_INVALID_LENGTH;
+            Adapter->TransmitErrors++;
+            Nbl->MiniportReserved[0] = NET_BUFFER_NEXT_NB(NetBuffer);
+            continue;
+        }
 
-    if (BufferCount > Adapter->TXFree) {
-        NDIS_DbgPrint(MID_TRACE, ("No transmit resources. Have (%d) buffers, need (%d).\n",
-            Adapter->TXFree, BufferCount));
-        /* We don't have the resources to transmit this packet right now */
-        return FALSE;
+        BufferCount = (max(Length, DRIVER_MINIMUM_FRAME_SIZE) + DRIVER_BLOCK_SIZE - 1) / DRIVER_BLOCK_SIZE;
+
+        if (Adapter->TXFree == Adapter->TXCount)
+            Adapter->TXNext = 0;
+
+        if (BufferCount > Adapter->TXFree) {
+            NDIS_DbgPrint(MID_TRACE, ("No transmit resources. Have (%d) buffers, need (%d).\n",
+                Adapter->TXFree, BufferCount));
+            return FALSE;
+        }
+
+        Nbl->MiniportReserved[0] = NET_BUFFER_NEXT_NB(NetBuffer);
+
+        if (!NICCopyNetBuffer(Adapter, NetBuffer, &Length)) {
+            NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_RESOURCES;
+            Adapter->TransmitErrors++;
+            continue;
+        }
+
+        NICWritePacket(Adapter, Length);
+
+        if (Adapter->TXCurrent == -1)
+            Adapter->TXCurrent = Adapter->TXNext;
+
+        Adapter->TXNext  = (Adapter->TXNext + BufferCount) % Adapter->TXCount;
+        Adapter->TXFree -= BufferCount;
+
+        return TRUE;
     }
 
-    /* Write the packet to the card */
-    NICWritePacket(Adapter);
+    return FALSE;
+}
 
-    /* If the NIC is not transmitting, reset the current transmit pointer */
-    if (Adapter->TXCurrent == -1)
-        Adapter->TXCurrent = Adapter->TXNext;
 
-    Adapter->TXNext  = (Adapter->TXNext + BufferCount) % Adapter->TXCount;
-    Adapter->TXFree -= BufferCount;
-
-    /* Remove the packet from the queue */
-    Packet = Adapter->TXQueueHead;
-    Adapter->TXQueueHead = RESERVED(Packet)->Next;
-
-    if (Packet == Adapter->TXQueueTail)
-        Adapter->TXQueueTail = NULL;
-
-    /* Assume the transmit went well */
-    NdisMSendComplete(Adapter->MiniportAdapterHandle,
-                      Packet,
-                      NDIS_STATUS_SUCCESS);
-
-    return TRUE;
+VOID NICAppendNbl(
+    PNET_BUFFER_LIST *Head,
+    PNET_BUFFER_LIST *Tail,
+    PNET_BUFFER_LIST Nbl)
+{
+    NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+    if (*Tail)
+        NET_BUFFER_LIST_NEXT_NBL(*Tail) = Nbl;
+    else
+        *Head = Nbl;
+    *Tail = Nbl;
 }
 
 
@@ -1159,7 +1163,6 @@ static VOID HandleReceive(
 
     NDIS_DbgPrint(MAX_TRACE, ("Called.\n"));
 
-    Adapter->DoneIndicating = FALSE;
     PacketCount = 0;
 
     NICGetCurrentPage(Adapter);
@@ -1233,8 +1236,6 @@ static VOID HandleReceive(
             /* Read packet from receive buffer ring */
             NICReadPacket(Adapter);
 
-            Adapter->DoneIndicating = TRUE;
-
             PacketCount++;
             if (PacketCount == 10) {
                 /* Don't starve transmit interrupts */
@@ -1249,9 +1250,6 @@ static VOID HandleReceive(
         NICStartTransmit(Adapter);
         Adapter->TransmitPending = FALSE;
     }
-
-    if (Adapter->DoneIndicating)
-        NdisMEthIndicateReceiveComplete(Adapter->MiniportAdapterHandle);
 }
 
 
@@ -1273,6 +1271,9 @@ static VOID HandleTransmit(
     if (Adapter->TransmitError) {
         /* FIXME: Retransmit now or let upper layer protocols handle retransmit? */
         Adapter->TransmitError = FALSE;
+        Adapter->TransmitErrors++;
+    } else {
+        Adapter->TransmitOk++;
     }
 
     /* Free transmit buffers */
@@ -1300,8 +1301,11 @@ static VOID HandleTransmit(
 }
 
 
-VOID NTAPI MiniportHandleInterrupt(
-    IN  NDIS_HANDLE MiniportAdapterContext)
+VOID NTAPI MiniportInterruptDpc(
+    IN  NDIS_HANDLE MiniportInterruptContext,
+    IN  PVOID       MiniportDpcContext,
+    IN  PVOID       ReceiveThrottleParameters,
+    IN  PVOID       NdisReserved2)
 /*
  * FUNCTION: Handler for deferred processing of interrupts
  * ARGUMENTS:
@@ -1314,8 +1318,17 @@ VOID NTAPI MiniportHandleInterrupt(
     UCHAR ISRValue;
     UCHAR ISRMask;
     UCHAR Mask;
-    PNIC_ADAPTER Adapter = (PNIC_ADAPTER)MiniportAdapterContext;
+    PNIC_ADAPTER Adapter = (PNIC_ADAPTER)MiniportInterruptContext;
+    PNET_BUFFER_LIST CompleteHead;
+    PNET_BUFFER_LIST ReceiveHead;
+    ULONG ReceiveCount;
     UINT i = 0;
+
+    UNREFERENCED_PARAMETER(MiniportDpcContext);
+    UNREFERENCED_PARAMETER(ReceiveThrottleParameters);
+    UNREFERENCED_PARAMETER(NdisReserved2);
+
+    NdisDprAcquireSpinLock(&Adapter->Lock);
 
     ISRMask = Adapter->InterruptMask;
     NdisRawReadPortUchar(Adapter->IOBase + PG0_ISR, &ISRValue);
@@ -1414,7 +1427,31 @@ VOID NTAPI MiniportHandleInterrupt(
         Adapter->InterruptStatus |= (ISRValue & ISRMask);
     }
 
-    NICEnableInterrupts((PNIC_ADAPTER)MiniportAdapterContext);
+    Adapter->InterruptsDisabled = FALSE;
+    NICEnableInterrupts(Adapter);
+
+    CompleteHead = Adapter->CompleteHead;
+    Adapter->CompleteHead = NULL;
+    Adapter->CompleteTail = NULL;
+    ReceiveHead = Adapter->ReceiveHead;
+    ReceiveCount = Adapter->ReceiveCount;
+    Adapter->ReceiveHead = NULL;
+    Adapter->ReceiveTail = NULL;
+    Adapter->ReceiveCount = 0;
+
+    NdisDprReleaseSpinLock(&Adapter->Lock);
+
+    if (CompleteHead != NULL)
+        NdisMSendNetBufferListsComplete(Adapter->MiniportAdapterHandle,
+                                        CompleteHead,
+                                        NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+
+    if (ReceiveHead != NULL)
+        NdisMIndicateReceiveNetBufferLists(Adapter->MiniportAdapterHandle,
+                                           ReceiveHead,
+                                           NDIS_DEFAULT_PORT_NUMBER,
+                                           ReceiveCount,
+                                           NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL);
 }
 
 /* EOF */
