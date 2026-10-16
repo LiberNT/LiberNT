@@ -353,6 +353,58 @@ public:
     HRESULT STDMETHODCALLTYPE GetProtectedResourceSession(REFIID iid, void **out) override;
 };
 
+struct Native12VideoBlob
+{
+    UINT size = 0;
+    void *data = NULL;
+
+    ~Native12VideoBlob() { if (data) HeapFree(GetProcessHeap(), 0, data); }
+    HRESULT Assign(UINT input_size, const void *input);
+    HRESULT CopyTo(UINT output_size, void *output) const;
+};
+
+class Native12VideoEncoder final : public Native12Child<ID3D12VideoEncoder>
+{
+public:
+    D3D12_VIDEO_ENCODER_DESC desc = {};
+    Native12VideoBlob profile, configuration;
+    D3D12DDI_HVIDEOENCODER_0080 driver = {};
+    bool driver_created = false;
+
+    using Native12Child::Native12Child;
+    ~Native12VideoEncoder();
+    HRESULT Initialize(const D3D12_VIDEO_ENCODER_DESC *input);
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+    UINT STDMETHODCALLTYPE GetNodeMask() override;
+    D3D12_VIDEO_ENCODER_FLAGS STDMETHODCALLTYPE GetEncoderFlags() override;
+    D3D12_VIDEO_ENCODER_CODEC STDMETHODCALLTYPE GetCodec() override;
+    HRESULT STDMETHODCALLTYPE GetCodecProfile(D3D12_VIDEO_ENCODER_PROFILE_DESC dst) override;
+    HRESULT STDMETHODCALLTYPE GetCodecConfiguration(D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION dst) override;
+    DXGI_FORMAT STDMETHODCALLTYPE GetInputFormat() override;
+    D3D12_VIDEO_ENCODER_MOTION_ESTIMATION_PRECISION_MODE STDMETHODCALLTYPE GetMaxMotionEstimationPrecision() override;
+};
+
+class Native12VideoEncoderHeap final : public Native12Child<ID3D12VideoEncoderHeap>
+{
+public:
+    D3D12_VIDEO_ENCODER_HEAP_DESC desc = {};
+    Native12VideoBlob profile, level, resolutions;
+    D3D12DDI_HVIDEOENCODERHEAP_0080 driver = {};
+    bool driver_created = false;
+
+    using Native12Child::Native12Child;
+    ~Native12VideoEncoderHeap();
+    HRESULT Initialize(const D3D12_VIDEO_ENCODER_HEAP_DESC *input);
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override;
+    UINT STDMETHODCALLTYPE GetNodeMask() override;
+    D3D12_VIDEO_ENCODER_HEAP_FLAGS STDMETHODCALLTYPE GetEncoderHeapFlags() override;
+    D3D12_VIDEO_ENCODER_CODEC STDMETHODCALLTYPE GetCodec() override;
+    HRESULT STDMETHODCALLTYPE GetCodecProfile(D3D12_VIDEO_ENCODER_PROFILE_DESC dst) override;
+    HRESULT STDMETHODCALLTYPE GetCodecLevel(D3D12_VIDEO_ENCODER_LEVEL_SETTING dst) override;
+    UINT STDMETHODCALLTYPE GetResolutionListCount() override;
+    HRESULT STDMETHODCALLTYPE GetResolutionList(UINT count, D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC *list) override;
+};
+
 struct Native12VideoListFunctions
 {
     PFND3D12DDI_CLOSECOMMANDLIST close;
@@ -435,7 +487,7 @@ public:
             const D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS1 *inputs) override;
 };
 
-class Native12VideoEncodeCommandList final : public Native12Child<ID3D12VideoEncodeCommandList>,
+class Native12VideoEncodeCommandList final : public Native12Child<ID3D12VideoEncodeCommandList2>,
         public Native12VideoListCore
 {
 public:
@@ -466,6 +518,15 @@ public:
     void STDMETHODCALLTYPE WriteBufferImmediate(UINT count, const D3D12_WRITEBUFFERIMMEDIATE_PARAMETER *parameters,
             const D3D12_WRITEBUFFERIMMEDIATE_MODE *modes) override;
     void STDMETHODCALLTYPE SetProtectedResourceSession(ID3D12ProtectedResourceSession *session) override;
+    void STDMETHODCALLTYPE InitializeExtensionCommand(ID3D12VideoExtensionCommand *command, const void *parameters,
+            SIZE_T size) override;
+    void STDMETHODCALLTYPE ExecuteExtensionCommand(ID3D12VideoExtensionCommand *command, const void *parameters,
+            SIZE_T size) override;
+    void STDMETHODCALLTYPE EncodeFrame(ID3D12VideoEncoder *encoder, ID3D12VideoEncoderHeap *heap,
+            const D3D12_VIDEO_ENCODER_ENCODEFRAME_INPUT_ARGUMENTS *input,
+            const D3D12_VIDEO_ENCODER_ENCODEFRAME_OUTPUT_ARGUMENTS *output) override;
+    void STDMETHODCALLTYPE ResolveEncoderOutputMetadata(const D3D12_VIDEO_ENCODER_RESOLVE_METADATA_INPUT_ARGUMENTS *input,
+            const D3D12_VIDEO_ENCODER_RESOLVE_METADATA_OUTPUT_ARGUMENTS *output) override;
 };
 
 class Native12VideoDecodeCommandList final : public Native12Child<ID3D12VideoDecodeCommandList1>,

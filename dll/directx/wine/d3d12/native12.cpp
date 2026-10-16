@@ -952,9 +952,11 @@ HRESULT STDMETHODCALLTYPE Native12Device::QueryInterface(REFIID iid, void **out)
         AddRef();
         return S_OK;
     }
-    if ((IsEqualGUID(iid, __uuidof(ID3D12VideoDevice)) || IsEqualGUID(iid, __uuidof(ID3D12VideoDevice1))) && EnsureVideo())
+    if ((IsEqualGUID(iid, __uuidof(ID3D12VideoDevice)) || IsEqualGUID(iid, __uuidof(ID3D12VideoDevice1))
+            || IsEqualGUID(iid, __uuidof(ID3D12VideoDevice2)) || IsEqualGUID(iid, __uuidof(ID3D12VideoDevice3)))
+            && EnsureVideo())
     {
-        *out = static_cast<ID3D12VideoDevice1 *>(this);
+        *out = static_cast<ID3D12VideoDevice3 *>(this);
         AddRef();
         return S_OK;
     }

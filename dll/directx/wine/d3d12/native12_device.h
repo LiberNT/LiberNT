@@ -23,7 +23,7 @@ struct Native12BackgroundWork
 DWORD WINAPI Native12BackgroundWorker(void *parameter);
 
 class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData2,
-        public ID3D12DeviceConfiguration1, public ID3D12VideoDevice1, public Native12Allocation
+        public ID3D12DeviceConfiguration1, public ID3D12VideoDevice3, public Native12Allocation
 {
 public:
     LONG references = 1;
@@ -108,6 +108,8 @@ public:
     bool EnsureVideo();
     bool EnsureVideoProcess();
     bool EnsureVideoEncode();
+    bool EnsureVideoEncoder();
+    HRESULT CheckVideoEncoder(D3D12_FEATURE_VIDEO feature, void *data, UINT size);
     HRESULT CheckMotionEstimator(D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR *caps);
     HRESULT ValidateMotionEstimator(const D3D12_VIDEO_MOTION_ESTIMATOR_DESC *desc, BOOL protected_session);
     HRESULT CheckVideoProcessSupport(D3D12_FEATURE_DATA_VIDEO_PROCESS_SUPPORT *caps);
@@ -213,6 +215,21 @@ public:
             ID3D12ProtectedResourceSession *session, REFIID iid, void **out) override;
     HRESULT STDMETHODCALLTYPE CreateVideoMotionVectorHeap(const D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC *desc,
             ID3D12ProtectedResourceSession *session, REFIID iid, void **out) override;
+    HRESULT STDMETHODCALLTYPE CreateVideoDecoder1(const D3D12_VIDEO_DECODER_DESC *desc,
+            ID3D12ProtectedResourceSession *session, REFIID iid, void **out) override;
+    HRESULT STDMETHODCALLTYPE CreateVideoDecoderHeap1(const D3D12_VIDEO_DECODER_HEAP_DESC *desc,
+            ID3D12ProtectedResourceSession *session, REFIID iid, void **out) override;
+    HRESULT STDMETHODCALLTYPE CreateVideoProcessor1(UINT node_mask, const D3D12_VIDEO_PROCESS_OUTPUT_STREAM_DESC *output,
+            UINT input_count, const D3D12_VIDEO_PROCESS_INPUT_STREAM_DESC *inputs,
+            ID3D12ProtectedResourceSession *session, REFIID iid, void **out) override;
+    HRESULT STDMETHODCALLTYPE CreateVideoExtensionCommand(const D3D12_VIDEO_EXTENSION_COMMAND_DESC *desc,
+            const void *parameters, SIZE_T size, ID3D12ProtectedResourceSession *session, REFIID iid,
+            void **out) override;
+    HRESULT STDMETHODCALLTYPE ExecuteExtensionCommand(ID3D12VideoExtensionCommand *command, const void *parameters,
+            SIZE_T size, void *output, SIZE_T output_size) override;
+    HRESULT STDMETHODCALLTYPE CreateVideoEncoder(const D3D12_VIDEO_ENCODER_DESC *desc, REFIID iid, void **out) override;
+    HRESULT STDMETHODCALLTYPE CreateVideoEncoderHeap(const D3D12_VIDEO_ENCODER_HEAP_DESC *desc, REFIID iid,
+            void **out) override;
     HRESULT STDMETHODCALLTYPE OpenExistingHeapFromAddress(const void *, REFIID, void **) override;
     HRESULT STDMETHODCALLTYPE OpenExistingHeapFromFileMapping(HANDLE, REFIID, void **) override;
     HRESULT STDMETHODCALLTYPE EnqueueMakeResident(D3D12_RESIDENCY_FLAGS, UINT, ID3D12Pageable *const *,
