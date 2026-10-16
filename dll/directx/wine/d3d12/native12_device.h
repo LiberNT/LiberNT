@@ -10,7 +10,8 @@
 class Native12DescriptorHeap;
 class Native12PipelineState;
 
-class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData2, public Native12Allocation
+class Native12Device final : public ID3D12Device14, public ID3D12DeviceRemovedExtendedData2,
+        public ID3D12DeviceConfiguration1, public Native12Allocation
 {
 public:
     LONG references = 1;
@@ -69,6 +70,7 @@ public:
     HRESULT removed_reason = S_OK;
     D3D12_DRED_ENABLEMENT dred_auto_breadcrumbs = D3D12_DRED_ENABLEMENT_SYSTEM_CONTROLLED;
     D3D12_DRED_ENABLEMENT dred_page_fault = D3D12_DRED_ENABLEMENT_SYSTEM_CONTROLLED;
+    UINT configuration_flags = 0;
     LONG64 resource_sequence = 0;
     LONG64 list_sequence = 0;
     Native12PrivateData private_data;
@@ -221,6 +223,14 @@ public:
     HRESULT STDMETHODCALLTYPE GetPageFaultAllocationOutput1(D3D12_DRED_PAGE_FAULT_OUTPUT1 *) override;
     HRESULT STDMETHODCALLTYPE GetPageFaultAllocationOutput2(D3D12_DRED_PAGE_FAULT_OUTPUT2 *) override;
     D3D12_DRED_DEVICE_STATE STDMETHODCALLTYPE GetDeviceState() override;
+    D3D12_DEVICE_CONFIGURATION_DESC *STDMETHODCALLTYPE GetDesc(D3D12_DEVICE_CONFIGURATION_DESC *desc) override;
+    HRESULT STDMETHODCALLTYPE GetEnabledExperimentalFeatures(GUID *guids, UINT count) override;
+    HRESULT STDMETHODCALLTYPE SerializeVersionedRootSignature(const D3D12_VERSIONED_ROOT_SIGNATURE_DESC *desc,
+            ID3DBlob **blob, ID3DBlob **error) override;
+    HRESULT STDMETHODCALLTYPE CreateVersionedRootSignatureDeserializer(const void *data, SIZE_T size, REFIID iid,
+            void **out) override;
+    HRESULT STDMETHODCALLTYPE CreateVersionedRootSignatureDeserializerFromSubobjectInLibrary(const void *blob,
+            SIZE_T size, LPCWSTR name, REFIID iid, void **out) override;
     HRESULT RefreshRemovedReason();
     HRESULT DredStatus(D3D12_DRED_ENABLEMENT enablement);
 };

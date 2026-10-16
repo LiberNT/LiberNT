@@ -554,6 +554,7 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
     if (FAILED(hr)) return hr;
     luid = desc.AdapterLuid;
     d3d12_dred_enablement(&dred_auto_breadcrumbs, &dred_page_fault);
+    configuration_flags = d3d12_device_configuration_flags();
 
     D3DKMT_OPENADAPTERFROMLUID open = {};
     open.AdapterLuid = desc.AdapterLuid;
@@ -891,6 +892,12 @@ HRESULT STDMETHODCALLTYPE Native12Device::QueryInterface(REFIID iid, void **out)
             || IsEqualGUID(iid, IID_ID3D12DeviceRemovedExtendedData2))
     {
         *out = static_cast<ID3D12DeviceRemovedExtendedData2 *>(this);
+        AddRef();
+        return S_OK;
+    }
+    if (IsEqualGUID(iid, IID_ID3D12DeviceConfiguration) || IsEqualGUID(iid, IID_ID3D12DeviceConfiguration1))
+    {
+        *out = static_cast<ID3D12DeviceConfiguration1 *>(this);
         AddRef();
         return S_OK;
     }

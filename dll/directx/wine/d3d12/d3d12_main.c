@@ -142,6 +142,29 @@ void d3d12_dred_enablement(D3D12_DRED_ENABLEMENT *auto_breadcrumbs, D3D12_DRED_E
     *page_fault = d3d12_dred_page_fault;
 }
 
+UINT d3d12_device_configuration_flags(void)
+{
+    UINT flags = 0;
+
+    if (d3d12_dred_auto_breadcrumbs == D3D12_DRED_ENABLEMENT_FORCED_ON)
+        flags |= D3D12_DEVICE_FLAG_DRED_AUTO_BREADCRUMBS_ENABLED;
+    if (d3d12_dred_page_fault == D3D12_DRED_ENABLEMENT_FORCED_ON)
+        flags |= D3D12_DEVICE_FLAG_DRED_PAGE_FAULT_REPORTING_ENABLED;
+    if (d3d12_dred_watson_dump == D3D12_DRED_ENABLEMENT_FORCED_ON)
+        flags |= D3D12_DEVICE_FLAG_DRED_WATSON_REPORTING_ENABLED;
+    if (d3d12_dred_breadcrumb_context == D3D12_DRED_ENABLEMENT_FORCED_ON)
+        flags |= D3D12_DEVICE_FLAG_DRED_BREADCRUMB_CONTEXT_ENABLED;
+    if (d3d12_dred_markers_only)
+        flags |= D3D12_DEVICE_FLAG_DRED_USE_MARKERS_ONLY_BREADCRUMBS;
+    return flags;
+}
+
+static void d3d12_dred_update(void)
+{
+    vkd3d_set_dred_enablement(d3d12_dred_auto_breadcrumbs, d3d12_dred_page_fault);
+    vkd3d_set_device_configuration_flags(d3d12_device_configuration_flags());
+}
+
 struct d3d12_dred_settings
 {
     ID3D12DeviceRemovedExtendedDataSettings2 ID3D12DeviceRemovedExtendedDataSettings2_iface;
@@ -193,7 +216,7 @@ d3d12_dred_settings_SetAutoBreadcrumbsEnablement(ID3D12DeviceRemovedExtendedData
                                                  D3D12_DRED_ENABLEMENT enablement)
 {
     InterlockedExchange(&d3d12_dred_auto_breadcrumbs, enablement);
-    vkd3d_set_dred_enablement(d3d12_dred_auto_breadcrumbs, d3d12_dred_page_fault);
+    d3d12_dred_update();
 }
 
 static void STDMETHODCALLTYPE
@@ -201,7 +224,7 @@ d3d12_dred_settings_SetPageFaultEnablement(ID3D12DeviceRemovedExtendedDataSettin
                                            D3D12_DRED_ENABLEMENT enablement)
 {
     InterlockedExchange(&d3d12_dred_page_fault, enablement);
-    vkd3d_set_dred_enablement(d3d12_dred_auto_breadcrumbs, d3d12_dred_page_fault);
+    d3d12_dred_update();
 }
 
 static void STDMETHODCALLTYPE
@@ -209,6 +232,7 @@ d3d12_dred_settings_SetWatsonDumpEnablement(ID3D12DeviceRemovedExtendedDataSetti
                                             D3D12_DRED_ENABLEMENT enablement)
 {
     InterlockedExchange(&d3d12_dred_watson_dump, enablement);
+    d3d12_dred_update();
 }
 
 static void STDMETHODCALLTYPE
@@ -216,12 +240,14 @@ d3d12_dred_settings_SetBreadcrumbContextEnablement(ID3D12DeviceRemovedExtendedDa
                                                    D3D12_DRED_ENABLEMENT enablement)
 {
     InterlockedExchange(&d3d12_dred_breadcrumb_context, enablement);
+    d3d12_dred_update();
 }
 
 static void STDMETHODCALLTYPE
 d3d12_dred_settings_UseMarkersOnlyAutoBreadcrumbs(ID3D12DeviceRemovedExtendedDataSettings2 *iface, BOOL markers_only)
 {
     InterlockedExchange(&d3d12_dred_markers_only, markers_only);
+    d3d12_dred_update();
 }
 
 static const ID3D12DeviceRemovedExtendedDataSettings2Vtbl d3d12_dred_settings_vtbl =

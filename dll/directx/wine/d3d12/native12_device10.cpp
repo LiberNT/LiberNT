@@ -202,3 +202,36 @@ HRESULT STDMETHODCALLTYPE Native12Device::CreateRootSignatureFromSubobjectInLibr
     if (out) *out = NULL;
     return E_INVALIDARG;
 }
+
+D3D12_DEVICE_CONFIGURATION_DESC *STDMETHODCALLTYPE Native12Device::GetDesc(D3D12_DEVICE_CONFIGURATION_DESC *desc)
+{
+    desc->Flags = static_cast<D3D12_DEVICE_FLAGS>(configuration_flags);
+    desc->GpuBasedValidationFlags = D3D12_GPU_BASED_VALIDATION_FLAGS_NONE;
+    desc->SDKVersion = 612;
+    desc->NumEnabledExperimentalFeatures = 0;
+    return desc;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::GetEnabledExperimentalFeatures(GUID *, UINT)
+{
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::SerializeVersionedRootSignature(const D3D12_VERSIONED_ROOT_SIGNATURE_DESC *desc,
+        ID3DBlob **blob, ID3DBlob **error)
+{
+    return D3D12SerializeVersionedRootSignature(desc, blob, error);
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::CreateVersionedRootSignatureDeserializer(const void *data, SIZE_T size,
+        REFIID iid, void **out)
+{
+    return D3D12CreateVersionedRootSignatureDeserializer(data, size, iid, out);
+}
+
+HRESULT STDMETHODCALLTYPE Native12Device::CreateVersionedRootSignatureDeserializerFromSubobjectInLibrary(const void *,
+        SIZE_T, LPCWSTR, REFIID, void **out)
+{
+    if (out) *out = NULL;
+    return E_INVALIDARG;
+}
