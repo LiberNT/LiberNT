@@ -609,7 +609,8 @@ CsrCreateProcess(IN HANDLE hProcess,
     }
 
     /* Reference the session */
-    CsrReferenceNtSession(NtSession);
+    if (NtSession)
+        CsrReferenceNtSession(NtSession);
     CsrProcess->NtSession = NtSession;
 
     /* Setup Process Data */
