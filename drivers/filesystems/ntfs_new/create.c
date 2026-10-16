@@ -1088,6 +1088,20 @@ NtfsRememberLookupParent(
                   ParentLength * sizeof(WCHAR));
 }
 
+static
+BOOLEAN
+NtfsIsDirectoryIndexName(
+    _In_opt_ PWSTR Name)
+{
+    UNICODE_STRING StreamName;
+    UNICODE_STRING IndexName = RTL_CONSTANT_STRING(L"$I30");
+
+    if (!Name)
+        return TRUE;
+    RtlInitUnicodeString(&StreamName, Name);
+    return RtlEqualUnicodeString(&StreamName, &IndexName, TRUE);
+}
+
 PStreamContextBlock
 NtfsReferenceStreamContext(
     _In_ PVolumeContextBlock VolCB,
@@ -1866,6 +1880,7 @@ NtfsOpenVolume(
         VolCB->VolumeHandleCount++;
         VolCB->OpenHandleCount++;
         FileObject->FsContext = FileCB;
+        FileObject->Vpb = IrpSp->DeviceObject->Vpb;
     }
     ExReleaseFastMutex(&VolCB->VolumeStateMutex);
 
@@ -2061,18 +2076,10 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         Status = NtfsVolumeGetADSPreference(DiskVolume, &FileObject->FileName,
                                             &RequestedType, &RequestedStream);
         if (NT_SUCCESS(Status) &&
-            RequestedType != TypeData && RequestedType != TypeIndexAllocation)
+            RequestedType != TypeData && RequestedType != TypeIndexAllocation &&
+            RequestedType != TypeBitmap)
         {
             Status = STATUS_ACCESS_DENIED;
-        }
-        if (NT_SUCCESS(Status) && RequestedType == TypeIndexAllocation && RequestedStream)
-        {
-            UNICODE_STRING StreamName;
-            UNICODE_STRING IndexName = RTL_CONSTANT_STRING(L"$I30");
-
-            RtlInitUnicodeString(&StreamName, RequestedStream);
-            if (!RtlEqualUnicodeString(&StreamName, &IndexName, TRUE))
-                Status = STATUS_INVALID_PARAMETER;
         }
         if (RequestedStream)
             ExFreePool(RequestedStream);
@@ -2250,6 +2257,20 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             &FileObject->FileName);
     }
 
+    if (NT_SUCCESS(Status) &&
+        NtfsFileRecordGetHeader(CurrentFile)->BaseFileRecord == 0)
+    {
+        switch (NtfsFileRecordGetHeader(CurrentFile)->MFTRecordNumber)
+        {
+            case _LogFile:
+            case _Bitmap:
+            case _Boot:
+            case _BadClus:
+                Status = STATUS_ACCESS_DENIED;
+                break;
+        }
+    }
+
     /* What we do here depends on the CreateDisposition value.
      * See https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntcreatefile
      */
@@ -2275,7 +2296,7 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             {
                 ++StreamOffset;
             }
-            if (RequestedType == TypeIndexAllocation)
+            if (RequestedType == TypeIndexAllocation && NtfsIsDirectoryIndexName(RequestedStream))
             {
                 if (!BaseDirectory)
                 {
@@ -2288,6 +2309,25 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                     if (RequestedStream)
                         ExFreePool(RequestedStream);
                     RequestedStream = NULL;
+                }
+            }
+            else if (RequestedType == TypeIndexAllocation || RequestedType == TypeBitmap)
+            {
+                if (!NtfsFileRecordGetAttribute(CurrentFile, RequestedType, RequestedStream) &&
+                    (RequestedType != TypeIndexAllocation ||
+                     !NtfsFileRecordGetAttribute(CurrentFile, TypeIndexRoot, RequestedStream)))
+                {
+                    Status = RequestedType == TypeBitmap ? STATUS_ACCESS_DENIED : STATUS_INVALID_PARAMETER;
+                }
+                else if (OpenTargetDirectory ||
+                         Disposition != FILE_OPEN ||
+                         (IrpSp->Parameters.Create.SecurityContext->DesiredAccess &
+                          (FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_ATTRIBUTES |
+                           FILE_WRITE_EA | DELETE | WRITE_DAC | WRITE_OWNER | GENERIC_WRITE |
+                           GENERIC_ALL | MAXIMUM_ALLOWED)) ||
+                         (IrpSp->Parameters.Create.Options & FILE_DELETE_ON_CLOSE))
+                {
+                    Status = STATUS_ACCESS_DENIED;
                 }
             }
             else if (BaseDirectory && !RequestedStream &&
@@ -3193,6 +3233,7 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         }
         FileObject->FsContext = FileCB->StreamCB;
         FileObject->FsContext2 = FileCB;
+        FileObject->Vpb = VolumeDeviceObject->Vpb;
     }
 
     /* Asking to delete a read-only file on close is refused at the open, the
@@ -3223,6 +3264,7 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             FileObject->FsContext = NULL;
             FileObject->FsContext2 = NULL;
             FileObject->SectionObjectPointer = NULL;
+            FileObject->Vpb = NULL;
             return NtfsCompleteFailedCreate(VolumeDeviceObject,
                                             Irp,
                                             FileCB,
@@ -3254,6 +3296,7 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             FileObject->FsContext = NULL;
             FileObject->FsContext2 = NULL;
             FileObject->SectionObjectPointer = NULL;
+            FileObject->Vpb = NULL;
             return NtfsCompleteFailedCreate(VolumeDeviceObject, Irp, FileCB,
                                             CurrentFile, CachedRecord, Status);
         }
@@ -3289,6 +3332,7 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             FileObject->FsContext = NULL;
             FileObject->FsContext2 = NULL;
             FileObject->SectionObjectPointer = NULL;
+            FileObject->Vpb = NULL;
             return NtfsCompleteFailedCreate(VolumeDeviceObject,
                                             Irp,
                                             FileCB,
