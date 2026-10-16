@@ -1176,9 +1176,21 @@ typedef struct _EXTENDED_DRIVER_EXTENSION
     UNICODE_STRING ServiceKeyName;
     PIO_CLIENT_EXTENSION ClientDriverExtension;
     PFS_FILTER_CALLBACKS FsFilterCallbacks;
+    PVOID KseCallbacks;
+    PVOID DvCallbacks;
+    PVOID VerifierContext;
+    PVOID DriverProxyExtension;
     LONG PnpUnloadBarrier;
     LONG PnpUnloadPending;
 } EXTENDED_DRIVER_EXTENSION, *PEXTENDED_DRIVER_EXTENSION;
+
+C_ASSERT(FIELD_OFFSET(EXTENDED_DRIVER_EXTENSION, ServiceKeyName) == 3 * sizeof(PVOID));
+C_ASSERT(FIELD_OFFSET(EXTENDED_DRIVER_EXTENSION, ClientDriverExtension) == 5 * sizeof(PVOID));
+C_ASSERT(FIELD_OFFSET(EXTENDED_DRIVER_EXTENSION, FsFilterCallbacks) == 6 * sizeof(PVOID));
+C_ASSERT(FIELD_OFFSET(EXTENDED_DRIVER_EXTENSION, KseCallbacks) == 7 * sizeof(PVOID));
+C_ASSERT(FIELD_OFFSET(EXTENDED_DRIVER_EXTENSION, DvCallbacks) == 8 * sizeof(PVOID));
+C_ASSERT(FIELD_OFFSET(EXTENDED_DRIVER_EXTENSION, VerifierContext) == 9 * sizeof(PVOID));
+C_ASSERT(FIELD_OFFSET(EXTENDED_DRIVER_EXTENSION, DriverProxyExtension) == 10 * sizeof(PVOID));
 
 #endif // !NTOS_MODE_USER
 
