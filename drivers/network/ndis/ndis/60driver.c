@@ -235,6 +235,30 @@ Ndis6DispatchHybridGeneric(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PIRP           Irp);
 
+static VOID NTAPI
+Ndis6DriverUnload(
+    _In_ PDRIVER_OBJECT DriverObject)
+{
+    MINIPORT_UNLOAD_HANDLER UnloadHandler = NULL;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&g_Ndis6DriverListLock, &OldIrql);
+    for (Entry = g_Ndis6DriverList.Flink; Entry != &g_Ndis6DriverList; Entry = Entry->Flink)
+    {
+        PNDIS6_DRIVER_BLOCK Block = CONTAINING_RECORD(Entry, NDIS6_DRIVER_BLOCK, ListEntry);
+        if (Block->DriverObject == DriverObject)
+        {
+            UnloadHandler = Block->Characteristics.UnloadHandler;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&g_Ndis6DriverListLock, OldIrql);
+
+    if (UnloadHandler != NULL)
+        UnloadHandler(DriverObject);
+}
+
 /* ============================================================================
  *  NdisMRegisterMiniportDriver — the entry point e1000e (and others) call
  *  from DriverEntry to register themselves as an NDIS 6 miniport.
@@ -363,6 +387,7 @@ Ndis6RegisterMiniportDriverInternal(
         }
 
         DriverObject->DriverExtension->AddDevice         = Ndis6AddDevice;
+        DriverObject->DriverUnload                       = Ndis6DriverUnload;
         DriverObject->MajorFunction[IRP_MJ_PNP]          = Ndis6DispatchPnp;
         DriverObject->MajorFunction[IRP_MJ_POWER]        = Ndis6DispatchPower;
         DriverObject->MajorFunction[IRP_MJ_SYSTEM_CONTROL] = Ndis6DispatchSystemControl;
