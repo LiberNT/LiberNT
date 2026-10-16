@@ -62,6 +62,8 @@ CreateMainWindow(
         return NULL;
 
     Info->nCmdShow = nCmdShow;
+    Info->TopView = DM_PANE_VOLUME_LIST;
+    Info->BottomView = DM_PANE_GRAPHICAL;
 
     hwnd = CreateWindowExW(WS_EX_WINDOWEDGE,
                            szMainWndClass,

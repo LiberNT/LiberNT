@@ -58,7 +58,25 @@ DmMainWndLayoutMainWindow(
 
     DmMainWndGetCurrentLayoutPanes(Info, &Panes);
 
-    hdwp = BeginDeferWindowPos(3);
+    if (Info->hMenu != NULL)
+    {
+        UINT View;
+
+        for (View = DM_PANE_DISK_LIST; View <= DM_PANE_HIDDEN; View++)
+        {
+            if (View != DM_PANE_HIDDEN)
+            {
+                CheckMenuItem(Info->hMenu,
+                              IDM_VIEW_TOP_DISK_LIST + View,
+                              MF_BYCOMMAND | (View == Info->TopView ? MF_CHECKED : MF_UNCHECKED));
+            }
+            CheckMenuItem(Info->hMenu,
+                          IDM_VIEW_BOTTOM_DISK_LIST + View,
+                          MF_BYCOMMAND | (View == Info->BottomView ? MF_CHECKED : MF_UNCHECKED));
+        }
+    }
+
+    hdwp = BeginDeferWindowPos(4);
     if (hdwp != NULL && Info->hToolbar != NULL)
     {
         hdwp = DeferWindowPos(hdwp,
@@ -70,32 +88,75 @@ DmMainWndLayoutMainWindow(
                               Panes.ToolbarRect.bottom - Panes.ToolbarRect.top,
                               SWP_NOZORDER | SWP_NOACTIVATE);
     }
-    if (hdwp != NULL)
     {
-        hdwp = DeferWindowPos(hdwp,
-                              Info->hVolumeView,
-                              NULL,
-                              Panes.TopRect.left,
-                              Panes.TopRect.top,
-                              Panes.TopRect.right - Panes.TopRect.left,
-                              Panes.TopRect.bottom - Panes.TopRect.top,
-                              SWP_NOZORDER | SWP_NOACTIVATE);
-    }
-    if (hdwp != NULL)
-    {
-        hdwp = DeferWindowPos(hdwp,
-                              Info->hDiskView,
-                              NULL,
-                              Panes.BottomRect.left,
-                              Panes.BottomRect.top,
-                              Panes.BottomRect.right - Panes.BottomRect.left,
-                              Panes.BottomRect.bottom - Panes.BottomRect.top,
-                              SWP_NOZORDER | SWP_NOACTIVATE);
+        HWND Views[3] = { Info->hDiskListView, Info->hVolumeView, Info->hDiskView };
+        RECT TopRect = Panes.TopRect;
+        const RECT *Rect;
+        UINT Index;
+
+        if (Info->BottomView == DM_PANE_HIDDEN)
+            TopRect.bottom = Panes.BottomRect.bottom;
+
+        for (Index = 0; Index < ARRAYSIZE(Views) && hdwp != NULL; Index++)
+        {
+            if (Views[Index] == NULL)
+                continue;
+
+            if (Index == Info->TopView)
+                Rect = &TopRect;
+            else if (Index == Info->BottomView)
+                Rect = &Panes.BottomRect;
+            else
+            {
+                ShowWindow(Views[Index], SW_HIDE);
+                continue;
+            }
+
+            hdwp = DeferWindowPos(hdwp,
+                                  Views[Index],
+                                  NULL,
+                                  Rect->left,
+                                  Rect->top,
+                                  Rect->right - Rect->left,
+                                  Rect->bottom - Rect->top,
+                                  SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
     }
     if (hdwp != NULL)
         EndDeferWindowPos(hdwp);
 
     DmMainWndUpdateDiskViewScrollInfo(Info);
+}
+
+VOID
+DmMainWndSetPaneView(
+    _In_ PMAIN_WND_INFO Info,
+    _In_ BOOL Top,
+    _In_ UINT View)
+{
+    if (Info == NULL || View > DM_PANE_HIDDEN || (Top && View == DM_PANE_HIDDEN))
+        return;
+
+    if (Top)
+    {
+        if (View == Info->BottomView)
+            Info->BottomView = Info->TopView;
+        Info->TopView = View;
+    }
+    else
+    {
+        if (View == Info->TopView)
+        {
+            if (Info->BottomView != DM_PANE_HIDDEN)
+                Info->TopView = Info->BottomView;
+            else
+                Info->TopView = (View == DM_PANE_VOLUME_LIST) ? DM_PANE_GRAPHICAL : DM_PANE_VOLUME_LIST;
+        }
+        Info->BottomView = View;
+    }
+
+    DmMainWndLayoutMainWindow(Info);
+    InvalidateRect(Info->hMainWnd, NULL, TRUE);
 }
 
 BOOL

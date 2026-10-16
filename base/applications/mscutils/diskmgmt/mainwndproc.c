@@ -557,6 +557,7 @@ OnCommand(
         case IDM_ACTION_REMOVE_LETTER:
         case IDM_ACTION_CHANGE_MOUNT_PATH:
         case IDM_ACTION_REMOVE_MOUNT_PATH:
+        case IDM_ACTION_CHANGE_LETTER_PATHS:
         case IDM_ACTION_ONLINE:
         case IDM_ACTION_OFFLINE:
         case IDM_ACTION_SET_READ_ONLY:
@@ -581,6 +582,28 @@ OnCommand(
 
         case IDM_HELP_ABOUT:
             DmMainWndShowAboutDialog(Info->hMainWnd);
+            return 0;
+
+        case IDM_VIEW_TOP_DISK_LIST:
+        case IDM_VIEW_TOP_VOLUME_LIST:
+        case IDM_VIEW_TOP_GRAPHICAL:
+            DmMainWndSetPaneView(Info, TRUE, LOWORD(wParam) - IDM_VIEW_TOP_DISK_LIST);
+            return 0;
+
+        case IDM_VIEW_BOTTOM_DISK_LIST:
+        case IDM_VIEW_BOTTOM_VOLUME_LIST:
+        case IDM_VIEW_BOTTOM_GRAPHICAL:
+        case IDM_VIEW_BOTTOM_HIDDEN:
+            DmMainWndSetPaneView(Info, FALSE, LOWORD(wParam) - IDM_VIEW_BOTTOM_DISK_LIST);
+            return 0;
+
+        case IDM_VIEW_DRIVE_PATHS:
+            DmMainWndShowDrivePaths(Info);
+            return 0;
+
+        case IDM_ACTION_OPEN:
+        case IDM_ACTION_EXPLORE:
+            DmMainWndOpenVolume(Info, LOWORD(wParam) == IDM_ACTION_EXPLORE);
             return 0;
 
         default:

@@ -121,6 +121,7 @@ static const DM_ACTION_ENTRY DmActionTable[] =
     { IDM_ACTION_REMOVE_LETTER,     IDS_HINT_ACTION_REMOVE_LETTER,     IDS_STATUS_REMOVING_LETTER,     DmActionRequiresVolume,     TRUE  },
     { IDM_ACTION_CHANGE_MOUNT_PATH, IDS_HINT_ACTION_CHANGE_MOUNT_PATH, IDS_STATUS_CHANGING_MOUNT_PATH, DmActionRequiresVolume,     TRUE  },
     { IDM_ACTION_REMOVE_MOUNT_PATH, IDS_HINT_ACTION_REMOVE_MOUNT_PATH, IDS_STATUS_REMOVING_MOUNT_PATH, DmActionRequiresVolume,     TRUE  },
+    { IDM_ACTION_CHANGE_LETTER_PATHS, IDS_HINT_ACTION_ASSIGN_LETTER,   IDS_STATUS_ASSIGNING_LETTER,    DmActionRequiresVolume,     TRUE  },
     { IDM_ACTION_ONLINE,            IDS_HINT_ACTION_ONLINE,            IDS_STATUS_ONLINING_DISK,       DmActionRequiresDisk,       TRUE  },
     { IDM_ACTION_OFFLINE,           IDS_HINT_ACTION_OFFLINE,           IDS_STATUS_OFFLINING_DISK,      DmActionRequiresDisk,       TRUE  },
     { IDM_ACTION_SET_READ_ONLY,     IDS_HINT_ACTION_SET_READ_ONLY,     IDS_STATUS_SETTING_READ_ONLY,   DmActionRequiresDisk,       TRUE  },
@@ -5363,6 +5364,10 @@ DmActionIsAvailable(
                     (Context->Disk == NULL ||
                      (!Context->Disk->IsOffline && !Context->Disk->IsReadOnly)));
 
+        case IDM_ACTION_CHANGE_LETTER_PATHS:
+            return (DmActionCanMutateSimpleBasicVolume(Context) &&
+                    (Context->Disk == NULL || !Context->Disk->IsOffline));
+
         case IDM_ACTION_ASSIGN_LETTER:
             return (DmActionCanMutateSimpleBasicVolume(Context) &&
                     (Context->Disk == NULL || !Context->Disk->IsOffline) &&
@@ -5534,6 +5539,192 @@ DmActionShowStubMessage(
                 MB_OK | MB_ICONINFORMATION);
 }
 
+#define DM_LETTER_PATHS_ADD     1
+#define DM_LETTER_PATHS_CHANGE  2
+#define DM_LETTER_PATHS_REMOVE  3
+
+typedef struct _DM_LETTER_PATHS_DIALOG
+{
+    const DM_VOLUME *Volume;
+    UINT Choice;
+    INT Selection;
+} DM_LETTER_PATHS_DIALOG, *PDM_LETTER_PATHS_DIALOG;
+
+static VOID
+DmLetterPathsUpdateButtons(
+    _In_ HWND hwndDlg,
+    _In_ const DM_LETTER_PATHS_DIALOG *Dialog)
+{
+    INT Index;
+
+    Index = (INT)SendDlgItemMessageW(hwndDlg, IDC_CLP_LIST, LB_GETCURSEL, 0, 0);
+    EnableWindow(GetDlgItem(hwndDlg, IDC_CLP_CHANGE), Index == 0 && Dialog->Volume->HasDriveLetter);
+    EnableWindow(GetDlgItem(hwndDlg, IDC_CLP_REMOVE), Index != LB_ERR);
+}
+
+static INT_PTR CALLBACK
+DmLetterPathsDlgProc(
+    _In_ HWND hwndDlg,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam)
+{
+    PDM_LETTER_PATHS_DIALOG Dialog;
+    WCHAR Text[MAX_PATH + 64];
+    ULONG Index;
+
+    Dialog = (PDM_LETTER_PATHS_DIALOG)GetWindowLongPtrW(hwndDlg, DWLP_USER);
+
+    switch (uMsg)
+    {
+        case WM_INITDIALOG:
+            Dialog = (PDM_LETTER_PATHS_DIALOG)lParam;
+            SetWindowLongPtrW(hwndDlg, DWLP_USER, lParam);
+
+            if (Dialog->Volume->HasDriveLetter)
+            {
+                StringCchPrintfW(Text,
+                                 ARRAYSIZE(Text),
+                                 L"Change Drive Letter and Paths for %C: (%s)",
+                                 towupper(Dialog->Volume->DriveLetter),
+                                 Dialog->Volume->Label);
+            }
+            else
+            {
+                StringCchPrintfW(Text,
+                                 ARRAYSIZE(Text),
+                                 L"Change Drive Letter and Paths for %s",
+                                 Dialog->Volume->Label);
+            }
+            SetWindowTextW(hwndDlg, Text);
+
+            if (Dialog->Volume->HasDriveLetter)
+            {
+                StringCchPrintfW(Text, ARRAYSIZE(Text), L"%C:", towupper(Dialog->Volume->DriveLetter));
+                SendDlgItemMessageW(hwndDlg, IDC_CLP_LIST, LB_ADDSTRING, 0, (LPARAM)Text);
+            }
+
+            for (Index = 0;
+                 Index < Dialog->Volume->FolderMountPointCount && Index < DM_MAX_MOUNT_PATHS;
+                 Index++)
+            {
+                SendDlgItemMessageW(hwndDlg,
+                                    IDC_CLP_LIST,
+                                    LB_ADDSTRING,
+                                    0,
+                                    (LPARAM)Dialog->Volume->FolderMountPoints[Index]);
+            }
+
+            SendDlgItemMessageW(hwndDlg, IDC_CLP_LIST, LB_SETCURSEL, 0, 0);
+            DmLetterPathsUpdateButtons(hwndDlg, Dialog);
+            return TRUE;
+
+        case WM_COMMAND:
+            switch (LOWORD(wParam))
+            {
+                case IDC_CLP_LIST:
+                    if (HIWORD(wParam) == LBN_SELCHANGE)
+                        DmLetterPathsUpdateButtons(hwndDlg, Dialog);
+                    return TRUE;
+
+                case IDC_CLP_ADD:
+                    Dialog->Choice = DM_LETTER_PATHS_ADD;
+                    EndDialog(hwndDlg, IDOK);
+                    return TRUE;
+
+                case IDC_CLP_CHANGE:
+                    Dialog->Choice = DM_LETTER_PATHS_CHANGE;
+                    EndDialog(hwndDlg, IDOK);
+                    return TRUE;
+
+                case IDC_CLP_REMOVE:
+                    Dialog->Selection = (INT)SendDlgItemMessageW(hwndDlg, IDC_CLP_LIST, LB_GETCURSEL, 0, 0);
+                    Dialog->Choice = DM_LETTER_PATHS_REMOVE;
+                    EndDialog(hwndDlg, IDOK);
+                    return TRUE;
+
+                case IDOK:
+                case IDCANCEL:
+                    EndDialog(hwndDlg, IDCANCEL);
+                    return TRUE;
+            }
+            break;
+    }
+
+    return FALSE;
+}
+
+static BOOL
+DmActionChangeLetterAndPaths(
+    _In_ const DM_ACTION_CONTEXT *Context)
+{
+    DM_LETTER_PATHS_DIALOG Dialog;
+    WCHAR Letter;
+
+    if (Context == NULL || Context->Volume == NULL)
+        return FALSE;
+
+    ZeroMemory(&Dialog, sizeof(Dialog));
+    Dialog.Volume = Context->Volume;
+    if (DialogBoxParamW(hInstance,
+                        MAKEINTRESOURCEW(IDD_CHANGE_LETTER_PATHS),
+                        Context->hWnd,
+                        DmLetterPathsDlgProc,
+                        (LPARAM)&Dialog) != IDOK)
+    {
+        return FALSE;
+    }
+
+    switch (Dialog.Choice)
+    {
+        case DM_LETTER_PATHS_ADD:
+            return Context->Volume->HasDriveLetter ? DmActionChangeMountPath(Context) :
+                                                     DmActionAssignDriveLetter(Context);
+
+        case DM_LETTER_PATHS_CHANGE:
+            if (!Context->Volume->HasDriveLetter)
+                return FALSE;
+
+            if (Context->Volume->IsBoot || Context->Volume->IsSystem)
+            {
+                MessageBoxW(Context->hWnd,
+                            L"The drive letter for the selected system or boot volume cannot be changed.",
+                            L"Disk Management",
+                            MB_OK | MB_ICONWARNING);
+                return FALSE;
+            }
+
+            if (!DmActionPromptForDriveLetter(Context->hWnd, &Letter))
+                return FALSE;
+
+            if (MessageBoxW(Context->hWnd,
+                            L"Some programs that rely on drive letters might not run correctly. Do you want to continue?",
+                            L"Disk Management",
+                            MB_YESNO | MB_ICONWARNING) != IDYES)
+            {
+                return FALSE;
+            }
+
+            if (!StorageUtilDeleteDriveLetter(Context->Volume->DriveLetter) ||
+                !StorageUtilAssignDriveLetter(Context->Volume->DeviceName, Letter))
+            {
+                DmActionShowWin32Error(Context->hWnd,
+                                       L"Changing the drive letter failed.",
+                                       GetLastError());
+                return FALSE;
+            }
+            return TRUE;
+
+        case DM_LETTER_PATHS_REMOVE:
+            if (Context->Volume->HasDriveLetter && Dialog.Selection == 0)
+                return DmActionRemoveDriveLetter(Context);
+            return DmActionRemoveMountPath(Context);
+
+        default:
+            return FALSE;
+    }
+}
+
 BOOL
 DmActionExecute(
     _In_ const DM_ACTION_CONTEXT *Context,
@@ -5608,6 +5799,9 @@ DmActionExecute(
 
         case IDM_ACTION_REMOVE_MOUNT_PATH:
             return DmActionRemoveMountPath(Context);
+
+        case IDM_ACTION_CHANGE_LETTER_PATHS:
+            return DmActionChangeLetterAndPaths(Context);
 
         case IDM_ACTION_ONLINE:
             return DmActionBringDiskOnline(Context);

@@ -116,6 +116,10 @@ DmGetBusTypeLabel(
         case BusTypeMmc: DmWriteLabel(Buffer, cchBuffer, L"MMC"); break;
         case BusTypeVirtual: DmWriteLabel(Buffer, cchBuffer, L"Virtual"); break;
         case BusTypeFileBackedVirtual: DmWriteLabel(Buffer, cchBuffer, L"File-backed Virtual"); break;
+        case BusTypeSpaces: DmWriteLabel(Buffer, cchBuffer, L"Spaces"); break;
+        case BusTypeNvme: DmWriteLabel(Buffer, cchBuffer, L"NVMe"); break;
+        case BusTypeSCM: DmWriteLabel(Buffer, cchBuffer, L"SCM"); break;
+        case BusTypeUfs: DmWriteLabel(Buffer, cchBuffer, L"UFS"); break;
         default:
             DmWriteFormattedLabel(Buffer, cchBuffer, L"Bus %lu", (ULONG)BusType);
             break;

@@ -14,36 +14,47 @@ BEGIN
     END
     POPUP "&Aktion"
     BEGIN
+        MENUITEM "&Aktualisieren", IDM_ACTION_REFRESH
         MENUITEM "Datentraeger er&neut suchen", IDM_ACTION_RESCAN
-        MENUITEM "&Aktualisieren\tF5", IDM_ACTION_REFRESH
         MENUITEM SEPARATOR
-        MENUITEM "Datentraeger &initialisieren...", IDM_ACTION_INITIALIZE_DISK
-        MENUITEM "In &GPT-Datentraeger konvertieren", IDM_ACTION_CONVERT_GPT
-        MENUITEM "In &MBR-Datentraeger konvertieren", IDM_ACTION_CONVERT_MBR
-        MENUITEM "&Partition erstellen...", IDM_ACTION_CREATE_PARTITION
-        MENUITEM "&Volume loeschen", IDM_ACTION_DELETE_VOLUME
-        MENUITEM "Volume e&rweitern...", IDM_ACTION_EXTEND_VOLUME
-        MENUITEM "Volume ver&kleinern...", IDM_ACTION_SHRINK_VOLUME
-        MENUITEM "&Formatieren...", IDM_ACTION_FORMAT
-        MENUITEM "Laufwerksbuchstaben &zuweisen", IDM_ACTION_ASSIGN_LETTER
-        MENUITEM "Laufwerksbuchstaben &entfernen", IDM_ACTION_REMOVE_LETTER
-        MENUITEM "Bereitstellungs&pfad aendern...", IDM_ACTION_CHANGE_MOUNT_PATH
-        MENUITEM "Bereitstellungspf&ad entfernen", IDM_ACTION_REMOVE_MOUNT_PATH
-        MENUITEM SEPARATOR
-        MENUITEM "&Online", IDM_ACTION_ONLINE
-        MENUITEM "&Offline", IDM_ACTION_OFFLINE
-        MENUITEM "Schreibschutz &setzen", IDM_ACTION_SET_READ_ONLY
-        MENUITEM "Schreibschutz &loeschen", IDM_ACTION_CLEAR_READ_ONLY
-        MENUITEM "Partition als &aktiv markieren", IDM_ACTION_MARK_ACTIVE
-        MENUITEM "Partition als &inaktiv markieren", IDM_ACTION_MARK_INACTIVE
-        MENUITEM SEPARATOR
-        MENUITEM "&Eigenschaften", IDM_ACTION_PROPERTIES
+        POPUP "Alle A&ufgaben"
+        BEGIN
+            MENUITEM "Datentraeger &initialisieren...", IDM_ACTION_INITIALIZE_DISK
+            MENUITEM "In &GPT-Datentraeger konvertieren", IDM_ACTION_CONVERT_GPT
+            MENUITEM "In &MBR-Datentraeger konvertieren", IDM_ACTION_CONVERT_MBR
+            MENUITEM "&Partition erstellen...", IDM_ACTION_CREATE_PARTITION
+            MENUITEM "&Volume loeschen", IDM_ACTION_DELETE_VOLUME
+            MENUITEM "Volume e&rweitern...", IDM_ACTION_EXTEND_VOLUME
+            MENUITEM "Volume ver&kleinern...", IDM_ACTION_SHRINK_VOLUME
+            MENUITEM "&Formatieren...", IDM_ACTION_FORMAT
+            MENUITEM "Laufwerkbuchstaben und -&pfade aendern...", IDM_ACTION_CHANGE_LETTER_PATHS
+            MENUITEM SEPARATOR
+            MENUITEM "&Online", IDM_ACTION_ONLINE
+            MENUITEM "&Offline", IDM_ACTION_OFFLINE
+            MENUITEM "Schreibschutz &setzen", IDM_ACTION_SET_READ_ONLY
+            MENUITEM "Schreibschutz &loeschen", IDM_ACTION_CLEAR_READ_ONLY
+            MENUITEM "Partition als &aktiv markieren", IDM_ACTION_MARK_ACTIVE
+            MENUITEM "Partition als &inaktiv markieren", IDM_ACTION_MARK_INACTIVE
+            MENUITEM SEPARATOR
+            MENUITEM "&Eigenschaften", IDM_ACTION_PROPERTIES
+        END
     END
     POPUP "&Ansicht"
     BEGIN
-        MENUITEM "&Oben", IDM_VIEW_TOP
-        MENUITEM "&Unten", IDM_VIEW_BOTTOM
-        MENUITEM "&Datentraegerliste", IDM_VIEW_DISK_LIST
+        POPUP "&Oben"
+        BEGIN
+            MENUITEM "&Datentraegerliste", IDM_VIEW_TOP_DISK_LIST
+            MENUITEM "&Volumeliste", IDM_VIEW_TOP_VOLUME_LIST
+            MENUITEM "&Grafische Ansicht", IDM_VIEW_TOP_GRAPHICAL
+        END
+        POPUP "&Unten"
+        BEGIN
+            MENUITEM "&Datentraegerliste", IDM_VIEW_BOTTOM_DISK_LIST
+            MENUITEM "&Volumeliste", IDM_VIEW_BOTTOM_VOLUME_LIST
+            MENUITEM "&Grafische Ansicht", IDM_VIEW_BOTTOM_GRAPHICAL
+            MENUITEM "&Ausgeblendet", IDM_VIEW_BOTTOM_HIDDEN
+        END
+        MENUITEM "Laufwerk&pfade...", IDM_VIEW_DRIVE_PATHS
     END
     POPUP "&Hilfe"
     BEGIN
@@ -120,8 +131,32 @@ BEGIN
     PUSHBUTTON "Abbrechen", IDCANCEL, 186, 98, 40, 14
 END
 
+IDD_CHANGE_LETTER_PATHS DIALOGEX 0, 0, 236, 142
+STYLE DS_MODALFRAME | DS_SHELLFONT | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Laufwerkbuchstaben und -pfade aendern"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "Zugriff auf dieses Volume mit folgendem Laufwerkbuchstaben und folgenden Pfaden zulassen:", IDC_CLP_PROMPT, 7, 7, 222, 16
+    LISTBOX IDC_CLP_LIST, 7, 26, 222, 70, LBS_NOTIFY | WS_VSCROLL | WS_BORDER | WS_TABSTOP
+    PUSHBUTTON "&Hinzufuegen...", IDC_CLP_ADD, 7, 101, 50, 14
+    PUSHBUTTON "&Aendern...", IDC_CLP_CHANGE, 61, 101, 50, 14
+    PUSHBUTTON "&Entfernen", IDC_CLP_REMOVE, 115, 101, 50, 14
+    DEFPUSHBUTTON "OK", IDOK, 125, 121, 50, 14
+    PUSHBUTTON "Abbrechen", IDCANCEL, 179, 121, 50, 14
+END
+
+IDD_DRIVE_PATHS DIALOGEX 0, 0, 260, 150
+STYLE DS_MODALFRAME | DS_SHELLFONT | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Laufwerkpfade"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_DP_LIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP, 7, 7, 246, 112
+    PUSHBUTTON "&Entfernen", IDC_DP_REMOVE, 149, 129, 50, 14
+    DEFPUSHBUTTON "Schliessen", IDCANCEL, 203, 129, 50, 14
+END
+
 IDD_SHRINK_VOLUME DIALOGEX 0, 0, 300, 170
-STYLE DS_MODALFRAME | DS_SHELLFONT | WS_POPUP | WS_CAPTION | WS_SYSMENU
+STYLE DS_MODALFRAME | DS_SHELLFONT | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Verkleinern"
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -193,6 +228,15 @@ END
 
 STRINGTABLE
 BEGIN
+    IDS_DP_COL_FOLDER "Bereitgestellter Ordner"
+    IDS_DP_COL_VOLUME "Volume"
+    IDS_DCOL_DISK "Datentraeger"
+    IDS_DCOL_TYPE "Typ"
+    IDS_DCOL_CAPACITY "Kapazitaet"
+    IDS_DCOL_UNALLOCATED "Nicht zugeordneter Speicher"
+    IDS_DCOL_STATUS "Status"
+    IDS_DCOL_DEVICE_TYPE "Geraetetyp"
+    IDS_DCOL_PARTITION_STYLE "Partitionsstil"
     IDS_SHRINK_TITLE "Verkleinern"
     IDS_SHRINK_CAPTION "%s verkleinern"
     IDS_EXTEND_CAPTION "Assistent zum Erweitern von Volumes"

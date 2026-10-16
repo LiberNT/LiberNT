@@ -54,6 +54,12 @@
 #define IDC_TREEVIEW     1002
 #define IDC_VOLUMEVIEW   1003
 #define IDC_DISKVIEW     1004
+#define IDC_DISKLISTVIEW 1005
+
+#define DM_PANE_DISK_LIST     0
+#define DM_PANE_VOLUME_LIST   1
+#define DM_PANE_GRAPHICAL     2
+#define DM_PANE_HIDDEN        3
 
 /* Polls for the volume of a freshly created partition so deferred drive
    letter / format settings can be applied once it arrives. */
@@ -90,6 +96,9 @@ typedef struct _MAIN_WND_INFO
     HWND hTreeView;
     HWND hVolumeView;
     HWND hDiskView;
+    HWND hDiskListView;
+    UINT TopView;
+    UINT BottomView;
     HMENU hMenu;
     HMENU hActiveContextMenu;
     int nCmdShow;

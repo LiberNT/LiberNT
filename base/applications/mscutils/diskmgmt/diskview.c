@@ -75,7 +75,7 @@ DmDiskViewDrawLabelPanel(
         return;
 
     FillRect(hdc, Rect, GetSysColorBrush(COLOR_BTNFACE));
-    FrameRect(hdc, Rect, GetSysColorBrush(COLOR_3DSHADOW));
+    DrawEdge(hdc, (LPRECT)Rect, BDR_RAISEDINNER, BF_RECT);
 }
 
 static COLORREF
@@ -462,30 +462,37 @@ DmDiskViewDrawRegion(
     FillBrush = CreateSolidBrush(RGB(255, 255, 255));
     BarBrush = CreateSolidBrush(DmDiskViewGetRegionBarColor(Region));
 
-    FillRect(hdc, Rect, FillBrush);
-    FrameRect(hdc, Rect, GetStockObject(BLACK_BRUSH));
-    if (Selected)
-    {
-        RECT InnerRect;
+    FillRect(hdc, Rect, GetSysColorBrush(COLOR_BTNFACE));
+    DrawEdge(hdc, (LPRECT)Rect, BDR_RAISEDINNER, BF_RECT);
 
-        InnerRect = *Rect;
-        InflateRect(&InnerRect, -1, -1);
-        FrameRect(hdc, &InnerRect, GetSysColorBrush(COLOR_3DSHADOW));
-    }
-
-    BarRect = *Rect;
+    BarRect.left = Rect->left + 1;
+    BarRect.top = Rect->top + 1;
+    BarRect.right = Rect->right - 1;
     BarRect.bottom = min(BarRect.top + DM_DISKVIEW_BAR_HEIGHT, Rect->bottom);
     FillRect(hdc, &BarRect, BarBrush);
+    BarRect.top = BarRect.bottom;
+    BarRect.bottom = min(BarRect.top + 1, Rect->bottom);
+    FillRect(hdc, &BarRect, GetSysColorBrush(COLOR_3DSHADOW));
 
-    FillRectArea = *Rect;
-    FillRectArea.top = BarRect.bottom;
-    InflateRect(&FillRectArea, -1, -1);
-    if (Selected)
-        DmDiskViewFillHatch(hdc, &FillRectArea);
+    FillRectArea.left = Rect->left + 4;
+    FillRectArea.top = Rect->top + DM_DISKVIEW_BAR_HEIGHT + 4;
+    FillRectArea.right = Rect->right - 3;
+    FillRectArea.bottom = Rect->bottom - 4;
+    if (FillRectArea.right > FillRectArea.left && FillRectArea.bottom > FillRectArea.top)
+    {
+        FillRect(hdc, &FillRectArea, FillBrush);
+        DrawEdge(hdc, &FillRectArea, BDR_SUNKENOUTER, BF_RECT);
+        if (Selected)
+        {
+            InflateRect(&FillRectArea, -1, -1);
+            DmDiskViewFillHatch(hdc, &FillRectArea);
+        }
+    }
 
-    TextRect = *Rect;
-    InflateRect(&TextRect, -6, -8);
-    TextRect.top = BarRect.bottom + 6;
+    TextRect.left = Rect->left + 8;
+    TextRect.top = Rect->top + DM_DISKVIEW_BAR_HEIGHT + 8;
+    TextRect.right = Rect->right - 4;
+    TextRect.bottom = Rect->bottom - 5;
 
     DmDiskViewBuildRegionTitle(Region, Title, ARRAYSIZE(Title));
     DmDiskViewBuildRegionDetail(Region, Detail, ARRAYSIZE(Detail));
@@ -508,8 +515,8 @@ DmDiskViewDrawRegion(
                   &TextRect,
                   DT_LEFT | DT_TOP | DT_SINGLELINE);
         SelectObject(hdc, Font);
-        TextRect.top += LineHeight;
     }
+    TextRect.top += LineHeight;
 
     DrawTextW(hdc,
               Detail,
@@ -615,7 +622,7 @@ DmDiskViewPaintEmptyState(
     SelectObject(hdc, OldFont);
 }
 
-static ULONGLONG
+ULONGLONG
 DmDiskViewGetShownDiskSize(
     _In_ const DM_DISK *Disk)
 {
@@ -649,6 +656,7 @@ DmDiskViewDrawDiskLabel(
     WCHAR Line2[48];
     WCHAR Line3[48];
     WCHAR Line4[48];
+    HICON Icon;
     HGDIOBJ OldFont;
     INT LineHeight;
 
@@ -657,7 +665,13 @@ DmDiskViewDrawDiskLabel(
     DmDiskViewDrawLabelPanel(hdc, Rect);
 
     TextRect = *Rect;
-    InflateRect(&TextRect, -8, -6);
+    TextRect.left += 9;
+    TextRect.top += 9;
+    TextRect.right -= 4;
+
+    Icon = LoadImageW(hInstance, MAKEINTRESOURCEW(IDI_DISKMGMT), IMAGE_ICON, 16, 16, LR_SHARED);
+    if (Icon != NULL)
+        DrawIconEx(hdc, Rect->left + 10, Rect->top + 9, Icon, 16, 16, 0, NULL, DI_NORMAL);
 
     StringCchPrintfW(Line1, ARRAYSIZE(Line1), L"Disk %lu", Disk->DiskNumber);
     DmDiskViewBuildDiskSummary(Disk, Line2, ARRAYSIZE(Line2));
@@ -671,7 +685,9 @@ DmDiskViewDrawDiskLabel(
 
     OldFont = SelectObject(hdc, BoldFont);
     LineHeight = DmDiskViewGetLineHeight(hdc);
+    TextRect.left = Rect->left + 27;
     DrawTextW(hdc, Line1, -1, &TextRect, DT_LEFT | DT_TOP | DT_SINGLELINE);
+    TextRect.left = Rect->left + 9;
     SelectObject(hdc, Font);
     TextRect.top += LineHeight;
     DrawTextW(hdc, Line2, -1, &TextRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -744,7 +760,7 @@ DmDiskViewFormatPercent(
     }
 
     Percent = (Free * 100ULL) / Total;
-    StringCchPrintfW(Buffer, cchBuffer, L"%I64u%%", Percent);
+    StringCchPrintfW(Buffer, cchBuffer, L"%I64u %%", Percent);
 }
 
 PCWSTR
@@ -855,7 +871,7 @@ DmDiskViewBuildRegionTitle(
         {
             StringCchPrintfW(Buffer,
                              cchBuffer,
-                             L"%C:",
+                             L"(%C:)",
                              towupper(Region->DriveLetter));
         }
 
@@ -1093,10 +1109,10 @@ DmDiskViewHitTest(
         if (Y >= ContentRect.bottom)
             break;
 
-        LabelRect.left = 6;
+        LabelRect.left = ContentRect.left;
         LabelRect.top = Y;
         LabelRect.right = min(LabelRect.left + DM_DISKVIEW_LABEL_WIDTH, ContentRect.right - 10);
-        LabelRect.bottom = min(Y + DM_DISKVIEW_DEFAULT_ROW_HEIGHT, ContentRect.bottom - 6);
+        LabelRect.bottom = min(Y + DM_DISKVIEW_DEFAULT_ROW_HEIGHT, ContentRect.bottom);
 
         if (Point->x >= LabelRect.left && Point->x < LabelRect.right &&
             Point->y >= LabelRect.top && Point->y < LabelRect.bottom)
@@ -1106,12 +1122,14 @@ DmDiskViewHitTest(
             return TRUE;
         }
 
-        RegionsOuterRect.left = min(LabelRect.right + 6, ContentRect.right - 6);
+        RegionsOuterRect.left = min(LabelRect.right + 2, ContentRect.right - 6);
         RegionsOuterRect.top = Y;
         RegionsOuterRect.right = ContentRect.right - 6;
         RegionsOuterRect.bottom = LabelRect.bottom;
-        RegionsRect = RegionsOuterRect;
-        InflateRect(&RegionsRect, -1, -1);
+        RegionsRect.left = RegionsOuterRect.left + 1;
+        RegionsRect.top = Y + 5;
+        RegionsRect.right = RegionsOuterRect.right - 3;
+        RegionsRect.bottom = max(LabelRect.bottom - 5, RegionsRect.top);
 
         if (Point->x >= RegionsRect.left && Point->x < RegionsRect.right &&
             Point->y >= RegionsRect.top && Point->y < RegionsRect.bottom)
@@ -1196,22 +1214,30 @@ DmDiskViewPaintDisk(
     BOOL DiskSelected;
     ULONG VisibleCount;
 
-    LabelRect.left = 6;
+    LabelRect.left = ClientRect->left;
     LabelRect.top = Y;
     LabelRect.right = min(LabelRect.left + DM_DISKVIEW_LABEL_WIDTH, ClientRect->right - 10);
-    LabelRect.bottom = min(Y + RowHeight, ClientRect->bottom - 6);
+    LabelRect.bottom = min(Y + RowHeight, ClientRect->bottom);
 
-    RegionsOuterRect.left = min(LabelRect.right + 6, ClientRect->right - 6);
+    RegionsOuterRect.left = min(LabelRect.right + 2, ClientRect->right - 6);
     RegionsOuterRect.top = Y;
     RegionsOuterRect.right = ClientRect->right - 6;
     RegionsOuterRect.bottom = LabelRect.bottom;
-    RegionsRect = RegionsOuterRect;
-    InflateRect(&RegionsRect, -2, -2);
+    RegionsRect.left = RegionsOuterRect.left + 1;
+    RegionsRect.top = Y + 5;
+    RegionsRect.right = RegionsOuterRect.right - 3;
+    RegionsRect.bottom = max(LabelRect.bottom - 5, RegionsRect.top);
 
     DiskSelected = (SelectedVolume != NULL && DmDiskViewDiskContainsVolume(Disk, SelectedVolume));
     DmDiskViewDrawDiskLabel(hdc, &LabelRect, Disk, DiskSelected, Font, BoldFont);
-    DmDiskViewDrawInsetPanel(hdc, &RegionsOuterRect, COLOR_BTNFACE);
-    FillRect(hdc, &RegionsRect, GetSysColorBrush(COLOR_WINDOW));
+    FillRect(hdc, &RegionsOuterRect, GetSysColorBrush(COLOR_BTNFACE));
+    {
+        RECT BorderRect = RegionsOuterRect;
+
+        BorderRect.top += 2;
+        BorderRect.right = BorderRect.left + 1;
+        FillRect(hdc, &BorderRect, GetSysColorBrush(COLOR_3DSHADOW));
+    }
 
     AvailableWidth = RegionsRect.right - RegionsRect.left;
     VisibleCount = DmDiskViewGetVisibleRegionCount(Disk);
@@ -1263,6 +1289,14 @@ DmDiskViewPaintDisk(
                                  (SelectedVolume != NULL && VisibleRegion->Volume == SelectedVolume),
                                  Font,
                                  BoldFont);
+            if (RegionIndex + 1 < VisibleCount)
+            {
+                RECT GapRect = RegionRect;
+
+                GapRect.left = RegionRect.right;
+                GapRect.right = RegionRect.right + DM_DISKVIEW_REGION_GAP;
+                FillRect(hdc, &GapRect, GetSysColorBrush(COLOR_3DSHADOW));
+            }
         }
 
         x = RegionRect.right + DM_DISKVIEW_REGION_GAP;

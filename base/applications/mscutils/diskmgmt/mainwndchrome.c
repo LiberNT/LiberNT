@@ -23,6 +23,7 @@ static const MENU_HINT DmMainMenuHintTable[] =
     { IDM_ACTION_REMOVE_LETTER,    IDS_HINT_ACTION_REMOVE_LETTER },
     { IDM_ACTION_CHANGE_MOUNT_PATH, IDS_HINT_ACTION_CHANGE_MOUNT_PATH },
     { IDM_ACTION_REMOVE_MOUNT_PATH, IDS_HINT_ACTION_REMOVE_MOUNT_PATH },
+    { IDM_ACTION_CHANGE_LETTER_PATHS, IDS_HINT_ACTION_ASSIGN_LETTER },
     { IDM_ACTION_ONLINE,           IDS_HINT_ACTION_ONLINE },
     { IDM_ACTION_OFFLINE,          IDS_HINT_ACTION_OFFLINE },
     { IDM_ACTION_SET_READ_ONLY,    IDS_HINT_ACTION_SET_READ_ONLY },
@@ -608,6 +609,45 @@ DmMainWndCreateVolumeView(
                                       LVS_EX_DOUBLEBUFFER);
 
     DmVolumeListInsertColumns(Info->hVolumeView, hInstance);
+
+    Info->hDiskListView = CreateWindowExW(WS_EX_CLIENTEDGE,
+                                          WC_LISTVIEWW,
+                                          NULL,
+                                          WS_CHILD | LVS_REPORT | LVS_SHOWSELALWAYS | WS_TABSTOP,
+                                          0, 0, 0, 0,
+                                          Info->hMainWnd,
+                                          (HMENU)IDC_DISKLISTVIEW,
+                                          hInstance,
+                                          NULL);
+    if (Info->hDiskListView != NULL)
+    {
+        static const struct { UINT Id; INT Width; } Columns[] =
+        {
+            { IDS_DCOL_DISK, 70 },
+            { IDS_DCOL_TYPE, 70 },
+            { IDS_DCOL_CAPACITY, 90 },
+            { IDS_DCOL_UNALLOCATED, 110 },
+            { IDS_DCOL_STATUS, 70 },
+            { IDS_DCOL_DEVICE_TYPE, 80 },
+            { IDS_DCOL_PARTITION_STYLE, 90 }
+        };
+        LVCOLUMNW Column;
+        WCHAR Text[64];
+        UINT Index;
+
+        ListView_SetExtendedListViewStyle(Info->hDiskListView,
+                                          LVS_EX_FULLROWSELECT | LVS_EX_LABELTIP | LVS_EX_DOUBLEBUFFER);
+        for (Index = 0; Index < ARRAYSIZE(Columns); Index++)
+        {
+            ZeroMemory(&Column, sizeof(Column));
+            LoadStringW(hInstance, Columns[Index].Id, Text, ARRAYSIZE(Text));
+            Column.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
+            Column.pszText = Text;
+            Column.cx = Columns[Index].Width;
+            Column.iSubItem = (INT)Index;
+            ListView_InsertColumn(Info->hDiskListView, (INT)Index, &Column);
+        }
+    }
 
     Info->hVolumeImageList = DmMainWndCreateMaskedBitmapImageList(DmMainVolumeListImages,
                                                                   ARRAYSIZE(DmMainVolumeListImages));

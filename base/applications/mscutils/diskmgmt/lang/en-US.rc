@@ -14,40 +14,51 @@ BEGIN
     END
     POPUP "&Action"
     BEGIN
+        MENUITEM "&Refresh", IDM_ACTION_REFRESH
         MENUITEM "Res&can Disks", IDM_ACTION_RESCAN
-        MENUITEM "&Refresh\tF5", IDM_ACTION_REFRESH
         MENUITEM SEPARATOR
-        MENUITEM "&Initialize Disk...", IDM_ACTION_INITIALIZE_DISK
-        MENUITEM "Convert to &GPT Disk", IDM_ACTION_CONVERT_GPT
-        MENUITEM "Convert to &MBR Disk", IDM_ACTION_CONVERT_MBR
-        MENUITEM "Cre&ate Partition...", IDM_ACTION_CREATE_PARTITION
-        MENUITEM "De&lete Volume", IDM_ACTION_DELETE_VOLUME
-        MENUITEM "E&xtend Volume...", IDM_ACTION_EXTEND_VOLUME
-        MENUITEM "Sh&rink Volume...", IDM_ACTION_SHRINK_VOLUME
-        MENUITEM "&Format...", IDM_ACTION_FORMAT
-        MENUITEM "Assi&gn Drive Letter", IDM_ACTION_ASSIGN_LETTER
-        MENUITEM "&Remove Drive Letter", IDM_ACTION_REMOVE_LETTER
-        MENUITEM "Change Mount &Path...", IDM_ACTION_CHANGE_MOUNT_PATH
-        MENUITEM "Remove Mount Pat&h", IDM_ACTION_REMOVE_MOUNT_PATH
-        MENUITEM SEPARATOR
-        MENUITEM "&Online", IDM_ACTION_ONLINE
-        MENUITEM "O&ffline", IDM_ACTION_OFFLINE
-        MENUITEM "Set &Read-only", IDM_ACTION_SET_READ_ONLY
-        MENUITEM "C&lear Read-only", IDM_ACTION_CLEAR_READ_ONLY
-        MENUITEM "Mark Partition &Active", IDM_ACTION_MARK_ACTIVE
-        MENUITEM "Mark Partition &Inactive", IDM_ACTION_MARK_INACTIVE
-        MENUITEM SEPARATOR
-        MENUITEM "&Properties", IDM_ACTION_PROPERTIES
+        POPUP "All Tas&ks"
+        BEGIN
+            MENUITEM "&Initialize Disk...", IDM_ACTION_INITIALIZE_DISK
+            MENUITEM "Convert to &GPT Disk", IDM_ACTION_CONVERT_GPT
+            MENUITEM "Convert to &MBR Disk", IDM_ACTION_CONVERT_MBR
+            MENUITEM "New &Simple Volume...", IDM_ACTION_CREATE_PARTITION
+            MENUITEM "De&lete Volume...", IDM_ACTION_DELETE_VOLUME
+            MENUITEM "E&xtend Volume...", IDM_ACTION_EXTEND_VOLUME
+            MENUITEM "Sh&rink Volume...", IDM_ACTION_SHRINK_VOLUME
+            MENUITEM "&Format...", IDM_ACTION_FORMAT
+            MENUITEM "Change Drive Letter and &Paths...", IDM_ACTION_CHANGE_LETTER_PATHS
+            MENUITEM SEPARATOR
+            MENUITEM "&Online", IDM_ACTION_ONLINE
+            MENUITEM "O&ffline", IDM_ACTION_OFFLINE
+            MENUITEM "Set &Read-only", IDM_ACTION_SET_READ_ONLY
+            MENUITEM "C&lear Read-only", IDM_ACTION_CLEAR_READ_ONLY
+            MENUITEM "Mark Partition as &Active", IDM_ACTION_MARK_ACTIVE
+            MENUITEM "Mark Partition &Inactive", IDM_ACTION_MARK_INACTIVE
+            MENUITEM SEPARATOR
+            MENUITEM "&Properties", IDM_ACTION_PROPERTIES
+        END
     END
     POPUP "&View"
     BEGIN
-        MENUITEM "&Top", IDM_VIEW_TOP
-        MENUITEM "&Bottom", IDM_VIEW_BOTTOM
-        MENUITEM "&Disk List", IDM_VIEW_DISK_LIST
+        POPUP "&Top"
+        BEGIN
+            MENUITEM "&Disk List", IDM_VIEW_TOP_DISK_LIST
+            MENUITEM "&Volume List", IDM_VIEW_TOP_VOLUME_LIST
+            MENUITEM "&Graphical View", IDM_VIEW_TOP_GRAPHICAL
+        END
+        POPUP "&Bottom"
+        BEGIN
+            MENUITEM "&Disk List", IDM_VIEW_BOTTOM_DISK_LIST
+            MENUITEM "&Volume List", IDM_VIEW_BOTTOM_VOLUME_LIST
+            MENUITEM "&Graphical View", IDM_VIEW_BOTTOM_GRAPHICAL
+            MENUITEM "&Hidden", IDM_VIEW_BOTTOM_HIDDEN
+        END
+        MENUITEM "Drive &Paths...", IDM_VIEW_DRIVE_PATHS
     END
     POPUP "&Help"
     BEGIN
-        MENUITEM "&About Disk Management", IDM_HELP_ABOUT
+        MENUITEM "&About Disk Management...", IDM_HELP_ABOUT
     END
 END
 
@@ -120,8 +131,32 @@ BEGIN
     PUSHBUTTON "Cancel", IDCANCEL, 186, 98, 40, 14
 END
 
+IDD_CHANGE_LETTER_PATHS DIALOGEX 0, 0, 236, 142
+STYLE DS_MODALFRAME | DS_SHELLFONT | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Change Drive Letter and Paths"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "Allow access to this volume by using the following drive letter and paths:", IDC_CLP_PROMPT, 7, 7, 222, 16
+    LISTBOX IDC_CLP_LIST, 7, 26, 222, 70, LBS_NOTIFY | WS_VSCROLL | WS_BORDER | WS_TABSTOP
+    PUSHBUTTON "&Add...", IDC_CLP_ADD, 7, 101, 50, 14
+    PUSHBUTTON "&Change...", IDC_CLP_CHANGE, 61, 101, 50, 14
+    PUSHBUTTON "&Remove", IDC_CLP_REMOVE, 115, 101, 50, 14
+    DEFPUSHBUTTON "OK", IDOK, 125, 121, 50, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 179, 121, 50, 14
+END
+
+IDD_DRIVE_PATHS DIALOGEX 0, 0, 260, 150
+STYLE DS_MODALFRAME | DS_SHELLFONT | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Drive Paths"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_DP_LIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP, 7, 7, 246, 112
+    PUSHBUTTON "&Remove", IDC_DP_REMOVE, 149, 129, 50, 14
+    DEFPUSHBUTTON "Close", IDCANCEL, 203, 129, 50, 14
+END
+
 IDD_SHRINK_VOLUME DIALOGEX 0, 0, 300, 170
-STYLE DS_MODALFRAME | DS_SHELLFONT | WS_POPUP | WS_CAPTION | WS_SYSMENU
+STYLE DS_MODALFRAME | DS_SHELLFONT | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Shrink"
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -193,6 +228,15 @@ END
 
 STRINGTABLE
 BEGIN
+    IDS_DP_COL_FOLDER "Mounted Folder"
+    IDS_DP_COL_VOLUME "Volume"
+    IDS_DCOL_DISK "Disk"
+    IDS_DCOL_TYPE "Type"
+    IDS_DCOL_CAPACITY "Capacity"
+    IDS_DCOL_UNALLOCATED "Unallocated Space"
+    IDS_DCOL_STATUS "Status"
+    IDS_DCOL_DEVICE_TYPE "Device Type"
+    IDS_DCOL_PARTITION_STYLE "Partition Style"
     IDS_SHRINK_TITLE "Shrink"
     IDS_SHRINK_CAPTION "Shrink %s"
     IDS_EXTEND_CAPTION "Extend Volume Wizard"

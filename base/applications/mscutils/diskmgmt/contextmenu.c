@@ -80,20 +80,20 @@ DmGetCreateMenuText(
     if (Region != NULL && Region->Type == DmRegionFree)
     {
         if (Region->IsLogical)
-            return L"Create &Logical Drive...";
+            return L"New &Simple Volume...";
 
         if (Disk != NULL && Disk->PartitionStyle == PARTITION_STYLE_GPT)
-            return L"Create &Volume...";
+            return L"New &Simple Volume...";
     }
 
-    return L"Cre&ate Partition...";
+    return L"New &Simple Volume...";
 }
 
 static PCWSTR
 DmGetDeleteMenuText(
     _In_opt_ const DM_VOLUME *Volume)
 {
-    return (Volume != NULL) ? L"De&lete Volume" : L"Delete &Partition";
+    return (Volume != NULL) ? L"De&lete Volume..." : L"Delete &Partition...";
 }
 
 static BOOL
@@ -252,6 +252,23 @@ DmGetCommandFlags(
         case IDM_ACTION_PROPERTIES:
             return (Kind == DmContextMenuBackground || Kind == DmContextMenuUnallocated) ? 0 : (DM_MENU_VISIBLE | MF_STRING);
 
+        case IDM_ACTION_CHANGE_LETTER_PATHS:
+            if (Kind != DmContextMenuPartition && Kind != DmContextMenuVolume)
+                return 0;
+            return DmCanRunCommand(CommandId, Disk, Region, Volume) ?
+                   (DM_MENU_VISIBLE | MF_STRING) :
+                   ((DM_MENU_VISIBLE | MF_STRING) | MF_GRAYED);
+
+        case IDM_ACTION_OPEN:
+        case IDM_ACTION_EXPLORE:
+            if (Kind != DmContextMenuPartition && Kind != DmContextMenuVolume)
+                return 0;
+            if (Volume == NULL && Region != NULL)
+                Volume = Region->Volume;
+            return (Volume != NULL && (Volume->HasDriveLetter || Volume->FolderMountPoint[0] != UNICODE_NULL)) ?
+                   (DM_MENU_VISIBLE | MF_STRING) :
+                   ((DM_MENU_VISIBLE | MF_STRING) | MF_GRAYED);
+
         case IDM_HELP_ABOUT:
             return (Kind == DmContextMenuBackground) ? (DM_MENU_VISIBLE | MF_STRING) : 0;
 
@@ -301,7 +318,7 @@ DmBuildBackgroundMenu(VOID)
     DmAppendCommandIfVisible(Menu, DmContextMenuBackground, IDM_ACTION_REFRESH, L"&Refresh", NULL, NULL, NULL);
     DmAppendCommandIfVisible(Menu, DmContextMenuBackground, IDM_ACTION_RESCAN, L"Res&can Disks", NULL, NULL, NULL);
     DmAppendSeparatorIfNeeded(Menu);
-    DmAppendCommandIfVisible(Menu, DmContextMenuBackground, IDM_HELP_ABOUT, L"&About Disk Management", NULL, NULL, NULL);
+    DmAppendCommandIfVisible(Menu, DmContextMenuBackground, IDM_HELP_ABOUT, L"&About Disk Management...", NULL, NULL, NULL);
 
     return Menu;
 }
@@ -346,28 +363,23 @@ DmBuildPartitionMenu(
 
     IsFreeRegion = DmIsFreeRegion(Region);
     Volume = (!IsFreeRegion && Region != NULL) ? Region->Volume : NULL;
-    DmAppendCommandIfVisible(Menu, IsFreeRegion ? DmContextMenuUnallocated : DmContextMenuPartition, IDM_ACTION_REFRESH, L"&Refresh", Disk, Region, NULL);
-    DmAppendSeparatorIfNeeded(Menu);
-    DmAppendCommandIfVisible(Menu,
-                             IsFreeRegion ? DmContextMenuUnallocated : DmContextMenuPartition,
-                             IsFreeRegion ? IDM_ACTION_CREATE_PARTITION : IDM_ACTION_DELETE_VOLUME,
-                             IsFreeRegion ? DmGetCreateMenuText(Disk, Region) : DmGetDeleteMenuText(Volume),
-                             Disk,
-                             Region,
-                             Volume);
     if (IsFreeRegion)
     {
-        DmAppendCommandIfVisible(Menu, DmContextMenuUnallocated, IDM_ACTION_DELETE_VOLUME, L"Delete &Partition", Disk, Region, NULL);
+        DmAppendCommandIfVisible(Menu, DmContextMenuUnallocated, IDM_ACTION_CREATE_PARTITION, DmGetCreateMenuText(Disk, Region), Disk, Region, NULL);
+        DmAppendCommandIfVisible(Menu, DmContextMenuUnallocated, IDM_ACTION_DELETE_VOLUME, L"Delete &Partition...", Disk, Region, NULL);
     }
     else
     {
+        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_OPEN, L"&Open", Disk, Region, Volume);
+        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_EXPLORE, L"&Explore", Disk, Region, Volume);
+        DmAppendSeparatorIfNeeded(Menu);
+        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_MARK_ACTIVE, L"Mark Partition as &Active", Disk, Region, NULL);
+        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_CHANGE_LETTER_PATHS, L"Change Drive Letter and &Paths...", Disk, Region, Volume);
+        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_FORMAT, L"&Format...", Disk, Region, Volume);
+        DmAppendSeparatorIfNeeded(Menu);
         DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_EXTEND_VOLUME, L"E&xtend Volume...", Disk, Region, Volume);
         DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_SHRINK_VOLUME, L"S&hrink Volume...", Disk, Region, Volume);
-        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_FORMAT, L"&Format...", Disk, Region, Volume);
-        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_CHANGE_MOUNT_PATH, L"Change Mount &Path...", Disk, Region, Volume);
-        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_REMOVE_MOUNT_PATH, L"Remove Mount Pat&h", Disk, Region, Volume);
-        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_MARK_ACTIVE, L"Mark Partition &Active", Disk, Region, NULL);
-        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_MARK_INACTIVE, L"Mark Partition &Inactive", Disk, Region, NULL);
+        DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_DELETE_VOLUME, DmGetDeleteMenuText(Volume), Disk, Region, Volume);
         DmAppendSeparatorIfNeeded(Menu);
         DmAppendCommandIfVisible(Menu, DmContextMenuPartition, IDM_ACTION_PROPERTIES, L"&Properties", Disk, Region, NULL);
     }
@@ -384,18 +396,16 @@ DmBuildVolumeMenu(
     if (Menu == NULL)
         return NULL;
 
-    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_REFRESH, L"&Refresh", NULL, NULL, Volume);
+    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_OPEN, L"&Open", NULL, NULL, Volume);
+    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_EXPLORE, L"&Explore", NULL, NULL, Volume);
     DmAppendSeparatorIfNeeded(Menu);
-    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_DELETE_VOLUME, L"De&lete Volume", NULL, NULL, Volume);
+    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_MARK_ACTIVE, L"Mark Partition as &Active", NULL, NULL, Volume);
+    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_CHANGE_LETTER_PATHS, L"Change Drive Letter and &Paths...", NULL, NULL, Volume);
+    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_FORMAT, L"&Format...", NULL, NULL, Volume);
+    DmAppendSeparatorIfNeeded(Menu);
     DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_EXTEND_VOLUME, L"E&xtend Volume...", NULL, NULL, Volume);
     DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_SHRINK_VOLUME, L"S&hrink Volume...", NULL, NULL, Volume);
-    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_FORMAT, L"&Format...", NULL, NULL, Volume);
-    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_ASSIGN_LETTER, L"Assi&gn Drive Letter", NULL, NULL, Volume);
-    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_REMOVE_LETTER, L"&Remove Drive Letter", NULL, NULL, Volume);
-    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_CHANGE_MOUNT_PATH, L"Change Mount &Path...", NULL, NULL, Volume);
-    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_REMOVE_MOUNT_PATH, L"Remove Mount Pat&h", NULL, NULL, Volume);
-    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_MARK_ACTIVE, L"Mark Partition &Active", NULL, NULL, Volume);
-    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_MARK_INACTIVE, L"Mark Partition &Inactive", NULL, NULL, Volume);
+    DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_DELETE_VOLUME, L"De&lete Volume...", NULL, NULL, Volume);
     DmAppendSeparatorIfNeeded(Menu);
     DmAppendCommandIfVisible(Menu, DmContextMenuVolume, IDM_ACTION_PROPERTIES, L"&Properties", NULL, NULL, Volume);
     return Menu;

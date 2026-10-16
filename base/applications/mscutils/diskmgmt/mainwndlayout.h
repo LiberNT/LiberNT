@@ -18,6 +18,12 @@ VOID
 DmMainWndLayoutMainWindow(
     _In_ PMAIN_WND_INFO Info);
 
+VOID
+DmMainWndSetPaneView(
+    _In_ PMAIN_WND_INFO Info,
+    _In_ BOOL Top,
+    _In_ UINT View);
+
 BOOL
 DmMainWndBeginSplitterDrag(
     _In_ PMAIN_WND_INFO Info,

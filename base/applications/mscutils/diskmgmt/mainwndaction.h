@@ -37,4 +37,13 @@ DmMainWndExecuteCommand(
     _In_ PMAIN_WND_INFO Info,
     _In_ UINT CommandId);
 
+VOID
+DmMainWndShowDrivePaths(
+    _In_ PMAIN_WND_INFO Info);
+
+VOID
+DmMainWndOpenVolume(
+    _In_ PMAIN_WND_INFO Info,
+    _In_ BOOL Explore);
+
 #endif /* DISKMGMT_MAINWNDACTION_H */

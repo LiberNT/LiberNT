@@ -18,16 +18,20 @@
 extern "C" {
 #endif
 
-#define DM_DISKVIEW_DEFAULT_ROW_HEIGHT  118
+#define DM_DISKVIEW_DEFAULT_ROW_HEIGHT   99
 #define DM_DISKVIEW_MIN_REGION_WIDTH    140
 #define DM_DISKVIEW_PARTITION_WIDTH     200
-#define DM_DISKVIEW_LABEL_WIDTH         112
+#define DM_DISKVIEW_LABEL_WIDTH         101
 #define DM_DISKVIEW_REGION_GAP            1
-#define DM_DISKVIEW_BAR_HEIGHT            8
-#define DM_DISKVIEW_ROW_SPACING           4
-#define DM_DISKVIEW_MARGIN_TOP            4
+#define DM_DISKVIEW_BAR_HEIGHT           13
+#define DM_DISKVIEW_ROW_SPACING           0
+#define DM_DISKVIEW_MARGIN_TOP            5
 #define DM_DISKVIEW_MARGIN_BOTTOM         4
 #define DM_DISKVIEW_LEGEND_HEIGHT        26
+
+ULONGLONG
+DmDiskViewGetShownDiskSize(
+    _In_ const DM_DISK *Disk);
 
 VOID
 DmDiskViewFormatSize(

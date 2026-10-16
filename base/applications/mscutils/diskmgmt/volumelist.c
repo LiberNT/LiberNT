@@ -13,14 +13,14 @@
 
 const DM_VOLUME_LIST_COLUMN DmVolumeListColumns[] =
 {
-    { IDS_COL_VOLUME,      150 },
-    { IDS_COL_LAYOUT,       72 },
-    { IDS_COL_TYPE,         70 },
-    { IDS_COL_FILESYSTEM,   88 },
-    { IDS_COL_STATUS,      330 },
-    { IDS_COL_CAPACITY,     92 },
-    { IDS_COL_FREE,         92 },
-    { IDS_COL_FREE_PCT,     58 }
+    { IDS_COL_VOLUME,      128 },
+    { IDS_COL_LAYOUT,       76 },
+    { IDS_COL_TYPE,         68 },
+    { IDS_COL_FILESYSTEM,   86 },
+    { IDS_COL_STATUS,       77 },
+    { IDS_COL_CAPACITY,     96 },
+    { IDS_COL_FREE,         66 },
+    { IDS_COL_FREE_PCT,     91 }
 };
 
 static const GUID DmGptEfiSystemPartitionGuid =
@@ -266,7 +266,7 @@ DmVolumeListFormatPercent(
 
     StringCchPrintfW(Buffer,
                      cchBuffer,
-                     L"%I64u%%",
+                     L"%I64u %%",
                      (FreeBytes * 100ULL) / TotalBytes);
 }
 
@@ -299,7 +299,7 @@ DmVolumeListBuildName(
         {
             StringCchPrintfW(Buffer,
                              cchBuffer,
-                             L"%C:",
+                             L"(%C:)",
                              towupper(Volume->DriveLetter));
         }
         return;
