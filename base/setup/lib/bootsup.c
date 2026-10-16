@@ -1214,7 +1214,7 @@ SetBcdElement(
     RtlInitUnicodeString(&KeyName, Path);
     InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
-    Status = NtOpenKey(&Key, KEY_SET_VALUE, &ObjectAttributes);
+    Status = NtCreateKey(&Key, KEY_SET_VALUE, &ObjectAttributes, 0, NULL, REG_OPTION_BACKUP_RESTORE, NULL);
     if (!NT_SUCCESS(Status))
         return Status;
 
