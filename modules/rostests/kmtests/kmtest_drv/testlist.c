@@ -89,6 +89,8 @@ KMT_TESTFUNC Test_IoCancelKM;
 KMT_TESTFUNC Test_PsProcessInfo;
 KMT_TESTFUNC Test_PsEnergy;
 KMT_TESTFUNC Test_PsTls;
+KMT_TESTFUNC Test_KseShim;
+KMT_TESTFUNC Test_KseDeviceData;
 KMT_TESTFUNC Test_PsModern;
 KMT_TESTFUNC Test_PsModernIdentity;
 KMT_TESTFUNC Test_PsModernPolicy;
@@ -582,6 +584,8 @@ const KMT_TEST TestList[] =
     { "PsNotify",                           Test_PsNotify },
     { "PsEnergy",                           Test_PsEnergy },
     { "PsTls",                              Test_PsTls },
+    { "KseShim",                            Test_KseShim },
+    { "KseDeviceData",                      Test_KseDeviceData },
     { "PsModern",                           Test_PsModern },
     { "PsModernIdentity",                   Test_PsModernIdentity },
     { "PsModernPolicy",                     Test_PsModernPolicy },
