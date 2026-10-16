@@ -890,3 +890,37 @@ void CSearchBar::TrySetFocus(UINT Source)
             SendMessage(WM_NEXTDLGCTL, (WPARAM)GetDlgItem(IDC_SEARCH_FILENAME), TRUE);
     }
 }
+
+HRESULT ShellFind_StartSearch(HWND hwndView, PCWSTR *rgszPaths, SIZE_T cPaths, PCWSTR pszQuery)
+{
+    CComHeapPtr<SearchStart> pSearchStart(static_cast<SearchStart *>(CoTaskMemAlloc(sizeof(SearchStart))));
+    size_t len = 0;
+
+    if (!pSearchStart)
+        return E_OUTOFMEMORY;
+    ZeroMemory(pSearchStart, sizeof(SearchStart));
+    pSearchStart->pPaths = BuildLocationList(rgszPaths, cPaths);
+    if (!pSearchStart->pPaths)
+        return E_OUTOFMEMORY;
+    ScopedFreeLocationItems FreeLocationsHelper(pSearchStart->pPaths);
+    StringCchCopyW(pSearchStart->szFileName, _countof(pSearchStart->szFileName), pszQuery);
+    if (FAILED(StringCchLengthW(pSearchStart->szFileName, MAX_PATH, &len)))
+        return E_INVALIDARG;
+    if (len > 0 && !wcspbrk(pSearchStart->szFileName, L"*?"))
+    {
+        WCHAR endchar = pSearchStart->szFileName[len - 1];
+        if (len < MAX_PATH - 1 && pSearchStart->szFileName[0] != L'*')
+        {
+            memmove(&pSearchStart->szFileName[1], &pSearchStart->szFileName[0], len * sizeof(WCHAR) + sizeof(WCHAR));
+            len++;
+            pSearchStart->szFileName[0] = L'*';
+        }
+        if (len < MAX_PATH - 1 && endchar != L'*')
+            StringCchCatW(pSearchStart->szFileName, MAX_PATH, L"*");
+    }
+    if (!::PostMessageW(hwndView, WM_SEARCH_START, 0, (LPARAM)(SearchStart *)pSearchStart))
+        return HRESULT_FROM_WIN32(GetLastError());
+    FreeLocationsHelper.Detach();
+    pSearchStart.Detach();
+    return S_OK;
+}

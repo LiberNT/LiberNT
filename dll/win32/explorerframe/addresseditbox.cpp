@@ -674,3 +674,96 @@ LRESULT CAddressEditBox::OnSettingChange(UINT uMsg, WPARAM wParam, LPARAM lParam
     RefreshAddress();
     return NO_ERROR;
 }
+
+BOOL WINAPI _ILIsPidlSimple(LPCITEMIDLIST pidl)
+{
+    LPCITEMIDLIST                           pidlnext;
+    WORD                                    length;
+    BOOL                                    ret;
+
+    ret = TRUE;
+    if (! _ILIsDesktop(pidl))
+    {
+        length = pidl->mkid.cb;
+        pidlnext =
+            reinterpret_cast<LPCITEMIDLIST>(
+                reinterpret_cast<const BYTE *>(pidl) + length);
+        if (pidlnext->mkid.cb != 0)
+            ret = FALSE;
+    }
+    return ret;
+}
+
+HRESULT WINAPI SHBindToFolderIDListParent(IShellFolder *unused, LPCITEMIDLIST pidl,
+    const IID *riid, LPVOID *ppv, LPITEMIDLIST *ppidlLast)
+{
+    CComPtr<IShellFolder>                   psf;
+    LPITEMIDLIST                            pidlChild;
+    LPITEMIDLIST                            pidlParent;
+    HRESULT                                 hResult;
+
+    hResult = E_FAIL;
+    if (ppv == NULL)
+        return E_POINTER;
+    *ppv = NULL;
+    if (ppidlLast != NULL)
+        *ppidlLast = NULL;
+    if (_ILIsPidlSimple(pidl))
+    {
+        if (ppidlLast != NULL)
+            *ppidlLast = ILClone(pidl);
+        hResult = SHGetDesktopFolder((IShellFolder **)ppv);
+    }
+    else
+    {
+        pidlChild = ILClone(ILFindLastID(pidl));
+        pidlParent = ILClone(pidl);
+        ILRemoveLastID(pidlParent);
+        hResult = SHGetDesktopFolder(&psf);
+        if (SUCCEEDED(hResult))
+            hResult = psf->BindToObject(pidlParent, NULL, *riid, ppv);
+        if (SUCCEEDED(hResult) && ppidlLast != NULL)
+            *ppidlLast = pidlChild;
+        else
+            ILFree(pidlChild);
+        ILFree(pidlParent);
+    }
+    return hResult;
+}
+
+HRESULT IEGetNameAndFlagsEx(LPITEMIDLIST pidl, SHGDNF uFlags, long param10,
+    LPWSTR pszBuf, UINT cchBuf, SFGAOF *rgfInOut)
+{
+    CComPtr<IShellFolder>                   parentFolder;
+    LPITEMIDLIST                            childPIDL = NULL;
+    STRRET                                  L108;
+    HRESULT                                 hResult;
+
+    hResult = SHBindToFolderIDListParent(NULL, pidl, &IID_PPV_ARG(IShellFolder, &parentFolder), &childPIDL);
+    if (FAILED(hResult))
+        goto cleanup;
+
+    hResult = parentFolder->GetDisplayNameOf(childPIDL, uFlags, &L108);
+    if (FAILED(hResult))
+        goto cleanup;
+
+    StrRetToBufW(&L108, childPIDL, pszBuf, cchBuf);
+    if (rgfInOut)
+    {
+        hResult = parentFolder->GetAttributesOf(1, const_cast<LPCITEMIDLIST *>(&childPIDL), rgfInOut);
+        if (FAILED(hResult))
+            goto cleanup;
+    }
+
+    hResult = S_OK;
+
+cleanup:
+    if (childPIDL)
+        ILFree(childPIDL);
+    return hResult;
+}
+
+HRESULT IEGetNameAndFlags(LPITEMIDLIST pidl, SHGDNF uFlags, LPWSTR pszBuf, UINT cchBuf, SFGAOF *rgfInOut)
+{
+    return IEGetNameAndFlagsEx(pidl, uFlags, 0, pszBuf, cchBuf, rgfInOut);
+}

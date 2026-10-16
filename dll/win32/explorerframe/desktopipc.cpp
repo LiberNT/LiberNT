@@ -344,17 +344,10 @@ cleanup0:
 static HRESULT ExplorerMessageLoop(IEThreadParamBlock * parameters)
 {
     HRESULT hResult;
-    MSG Msg;
-    BOOL Ret;
 
     // Tell the thread ref we are using it.
     if (parameters && parameters->pExplorerInstance)
         parameters->pExplorerInstance->AddRef();
-
-    /* Handle /e parameter */
-     UINT wFlags = 0;
-     if (parameters->dwFlags & SH_EXPLORER_CMDLINE_FLAG_E)
-        wFlags |= SBSP_EXPLOREMODE;
 
     /* Handle /select parameter */
     PUITEMID_CHILD pidlSelect = NULL;
@@ -365,65 +358,10 @@ static HRESULT ExplorerMessageLoop(IEThreadParamBlock * parameters)
         ILRemoveLastID(parameters->directoryPIDL);
     }
 
-    CComPtr<IShellBrowser> psb;
-#if 0
-    if (!(parameters->dwFlags & (SH_EXPLORER_CMDLINE_FLAG_E | SH_EXPLORER_CMDLINE_FLAG_NOREUSE)))
-    {
-        // TODO: IShellWindows::FindWindowSW(...) and reuse the existing IShellBrowser
-    }
-#endif
-    hResult = CShellBrowser_CreateInstance(IID_PPV_ARG(IShellBrowser, &psb));
-    if (FAILED_UNEXPECTEDLY(hResult))
-        return hResult;
-
-    if (parameters->dwFlags & SH_EXPLORER_CMDLINE_FLAG_EMBED)
-    {
-        CComPtr<IBrowserService> pbs;
-        if (SUCCEEDED(psb->QueryInterface(IID_PPV_ARG(IBrowserService, &pbs))))
-            pbs->SetFlags(BSF_UISETBYAUTOMATION, BSF_UISETBYAUTOMATION);
-    }
-
-    hResult = psb->BrowseObject(parameters->directoryPIDL, wFlags);
-    if (FAILED_UNEXPECTEDLY(hResult))
-        return hResult;
+    hResult = Cabinet_RunWindow(parameters->directoryPIDL, pidlSelect, parameters->offset8);
 
     if (pidlSelect != NULL)
-    {
-        CComPtr<IShellView> shellView;
-        hResult = psb->QueryActiveShellView(&shellView);
-        if (SUCCEEDED(hResult))
-        {
-            shellView->SelectItem(pidlSelect, SVSI_SELECT | SVSI_FOCUSED | SVSI_ENSUREVISIBLE);
-        }
         ILFree(pidlSelect);
-    }
-
-    CComPtr<IBrowserService2> browser;
-    hResult = psb->QueryInterface(IID_PPV_ARG(IBrowserService2, &browser));
-    if (FAILED_UNEXPECTEDLY(hResult))
-        return hResult;
-
-    psb.Release();
-
-    while ((Ret = GetMessage(&Msg, NULL, 0, 0)) != 0)
-    {
-        if (Ret == -1)
-        {
-            // Error: continue or exit?
-            break;
-        }
-
-        if (Msg.message == WM_QUIT)
-            break;
-
-        if (browser->v_MayTranslateAccelerator(&Msg) != S_OK)
-        {
-            TranslateMessage(&Msg);
-            DispatchMessage(&Msg);
-        }
-    }
-
-    ReleaseCComPtrExpectZero(browser);
 
     // Tell the thread ref we are not using it anymore.
     if (parameters && parameters->pExplorerInstance)

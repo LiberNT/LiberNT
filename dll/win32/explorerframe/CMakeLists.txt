@@ -22,11 +22,13 @@ list(APPEND SOURCE
     internettoolbar.cpp
     parsecmdline.cpp
     settings.cpp
-    shellbrowser.cpp
     toolsband.cpp
     travellog.cpp)
 
 list(APPEND PCH_SKIP_SOURCE
+    cabinet/entry.cpp
+    cabinet/site.cpp
+    cabinet/window.cpp
     browseui_main.c
     compcatcachedaemon.c
     dllinstall.c)
@@ -45,6 +47,7 @@ add_library(explorerframe MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/explorerframe.def)
 
 add_rc_deps(browseui.rc
+    ${CMAKE_CURRENT_SOURCE_DIR}/cabinet/cabinet.rc
     ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/01-back.ico
     ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/02-forward.ico
     ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/03-up.ico
@@ -59,8 +62,8 @@ add_rc_deps(browseui.rc
 
 set_module_type(explorerframe win32dll UNICODE)
 add_idl_reg_scripts(explorerframe registry browseui_classes.idl)
-target_link_libraries(explorerframe shellbars shellfind uuid wine wine_dll_register cpprt atl_classes)
-add_importlibs(explorerframe uxtheme shdocvw shlwapi shell32 comctl32 gdi32 ole32 oleaut32 user32 advapi32 mpr msvcrt kernel32 ntdll)
+target_link_libraries(explorerframe shellbars shellfind shellframe uuid wine wine_dll_register cpprt atl_classes)
+add_importlibs(explorerframe uxtheme shdocvw shlwapi shell32 comctl32 gdiplus dwmapi gdi32 ole32 oleaut32 user32 advapi32 mpr msvcrt kernel32 ntdll)
 add_pch(explorerframe precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET explorerframe DESTINATION reactos/system32 FOR all)
 

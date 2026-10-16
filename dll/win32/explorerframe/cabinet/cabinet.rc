@@ -1,0 +1,64 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include "cabinet_res.h"
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "New"
+    IDS_CAB_SORT "Sort"
+    IDS_CAB_VIEW "View"
+    IDS_CAB_DETAILS "Details"
+    IDS_CAB_SEARCH_IN "Search %s"
+    IDS_CAB_ITEMS "%u items"
+    IDS_CAB_ITEM "1 item"
+    IDS_CAB_SELECTED "%u items selected"
+    IDS_CAB_SELECTED_ONE "1 item selected"
+    IDS_CAB_SORT_NAME "Name"
+    IDS_CAB_SORT_DATE "Date modified"
+    IDS_CAB_SORT_TYPE "Type"
+    IDS_CAB_SORT_SIZE "Size"
+    IDS_CAB_SORT_ASCENDING "Ascending"
+    IDS_CAB_SORT_DESCENDING "Descending"
+    IDS_CAB_VIEW_XLARGE "Extra large icons"
+    IDS_CAB_VIEW_LARGE "Large icons"
+    IDS_CAB_VIEW_MEDIUM "Medium icons"
+    IDS_CAB_VIEW_SMALL "Small icons"
+    IDS_CAB_VIEW_LIST "List"
+    IDS_CAB_VIEW_DETAILS "Details"
+    IDS_CAB_VIEW_TILES "Tiles"
+    IDS_CAB_VIEW_CONTENT "Content"
+    IDS_CAB_SELECT_ALL "Select all"
+    IDS_CAB_SELECT_NONE "Select none"
+    IDS_CAB_INVERT_SELECTION "Invert selection"
+    IDS_CAB_PROPERTIES "Properties"
+    IDS_CAB_OPTIONS "Options"
+    IDS_CAB_OPEN_NEW_TAB "Open in new tab"
+    IDS_CAB_OPEN_NEW_WINDOW "Open in new window"
+    IDS_CAB_CLOSE_TAB "Close tab"
+    IDS_CAB_CLOSE_OTHER_TABS "Close other tabs"
+    IDS_CAB_SHOW "Show"
+    IDS_CAB_SHOW_NAVIGATION "Navigation pane"
+    IDS_CAB_SHOW_DETAILS "Details pane"
+    IDS_CAB_SHOW_CHECKBOXES "Item check boxes"
+    IDS_CAB_SHOW_EXTENSIONS "File name extensions"
+    IDS_CAB_SHOW_HIDDEN "Hidden items"
+    IDS_CAB_CUT "Cut"
+    IDS_CAB_COPY "Copy"
+    IDS_CAB_PASTE "Paste"
+    IDS_CAB_RENAME "Rename"
+    IDS_CAB_SHARE "Share"
+    IDS_CAB_DELETE "Delete"
+    IDS_CAB_BACK "Back"
+    IDS_CAB_FORWARD "Forward"
+    IDS_CAB_UP "Up"
+    IDS_CAB_REFRESH "Refresh"
+    IDS_CAB_MORE "See more"
+    IDS_CAB_NEW_TAB "New tab"
+END

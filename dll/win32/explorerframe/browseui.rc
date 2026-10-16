@@ -46,6 +46,8 @@ IDR_EXECUTEFOLDER REGISTRY "res/executefolder.rgs"
 
 #include <reactos/manifest_dll.rc>
 
+#include "cabinet/cabinet.rc"
+
 /*
  * Everything specific to any language goes
  * in one of the specific files.

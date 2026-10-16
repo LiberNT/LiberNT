@@ -34,7 +34,7 @@ HRESULT CSearchBar_CreateInstance(REFIID riid, LPVOID *ppv);
 HRESULT CInternetToolbar_CreateInstance(REFIID riid, void **ppv);
 HRESULT CMergedFolder_CreateInstance(REFIID riid, void **ppv);
 HRESULT CMenuBand_CreateInstance(REFIID iid, LPVOID *ppv);
-HRESULT CShellBrowser_CreateInstance(REFIID riid, void **ppv);
+HRESULT Cabinet_RunWindow(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd);
 HRESULT CTravelLog_CreateInstance(REFIID riid, void **ppv);
 HRESULT CBaseBar_CreateInstance(REFIID riid, void **ppv, BOOL vertical);
 HRESULT CBaseBarSite_CreateInstance(REFIID riid, void **ppv, BOOL bVertical);
