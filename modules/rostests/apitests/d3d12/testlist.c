@@ -12,6 +12,7 @@ extern void func_allocator(void);
 extern void func_budget(void);
 extern void func_blend(void);
 extern void func_bundle(void);
+extern void func_device(void);
 extern void func_features(void);
 extern void func_heaps(void);
 extern void func_interfaces(void);
@@ -31,6 +32,7 @@ const struct test winetest_testlist[] =
     { "budget", func_budget },
     { "blend", func_blend },
     { "bundle", func_bundle },
+    { "device", func_device },
     { "features", func_features },
     { "heaps", func_heaps },
     { "interfaces", func_interfaces },

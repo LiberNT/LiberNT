@@ -4,6 +4,7 @@ list(APPEND SOURCE
     budget.cpp
     blend.cpp
     bundle.cpp
+    device.cpp
     features.cpp
     heaps.cpp
     interfaces.cpp
