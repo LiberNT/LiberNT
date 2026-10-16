@@ -1887,6 +1887,76 @@ typedef struct D3D12_VIDEO_ENCODER_HEAP_DESC
     const D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC *pResolutionList;
 } D3D12_VIDEO_ENCODER_HEAP_DESC;
 
+typedef struct D3D12_FEATURE_DATA_VIDEO_ENCODER_CODEC
+{
+    UINT NodeIndex;                             
+    D3D12_VIDEO_ENCODER_CODEC Codec;            
+    BOOL IsSupported;                           
+} D3D12_FEATURE_DATA_VIDEO_ENCODER_CODEC;
+
+typedef struct D3D12_FEATURE_DATA_VIDEO_ENCODER_PROFILE_LEVEL
+{
+    UINT NodeIndex;                                      
+    D3D12_VIDEO_ENCODER_CODEC Codec;                     
+    D3D12_VIDEO_ENCODER_PROFILE_DESC Profile;            
+    BOOL IsSupported;                                    
+    D3D12_VIDEO_ENCODER_LEVEL_SETTING MinSupportedLevel; 
+    D3D12_VIDEO_ENCODER_LEVEL_SETTING MaxSupportedLevel; 
+} D3D12_FEATURE_DATA_VIDEO_ENCODER_PROFILE_LEVEL;
+
+typedef struct D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_RATIO_DESC
+{
+    UINT WidthRatio;
+    UINT HeightRatio;
+} D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_RATIO_DESC;
+
+typedef struct D3D12_FEATURE_DATA_VIDEO_ENCODER_OUTPUT_RESOLUTION_RATIOS_COUNT
+{
+    UINT NodeIndex;                                              
+    D3D12_VIDEO_ENCODER_CODEC Codec;                             
+    UINT ResolutionRatiosCount;                                  
+} D3D12_FEATURE_DATA_VIDEO_ENCODER_OUTPUT_RESOLUTION_RATIOS_COUNT;
+
+typedef struct D3D12_FEATURE_DATA_VIDEO_ENCODER_OUTPUT_RESOLUTION
+{
+    UINT NodeIndex;                                              
+    D3D12_VIDEO_ENCODER_CODEC Codec;                             
+    UINT ResolutionRatiosCount;                                 
+    BOOL IsSupported;                                           
+    D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC MinResolutionSupported; 
+    D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC MaxResolutionSupported; 
+    UINT ResolutionWidthMultipleRequirement;    
+    UINT ResolutionHeightMultipleRequirement;   
+    D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_RATIO_DESC* pResolutionRatios;
+} D3D12_FEATURE_DATA_VIDEO_ENCODER_OUTPUT_RESOLUTION;
+
+typedef struct D3D12_FEATURE_DATA_VIDEO_ENCODER_INPUT_FORMAT
+{
+    UINT NodeIndex;                                    
+    D3D12_VIDEO_ENCODER_CODEC Codec;                   
+    D3D12_VIDEO_ENCODER_PROFILE_DESC Profile;          
+    DXGI_FORMAT Format;                                
+    BOOL IsSupported;                                  
+} D3D12_FEATURE_DATA_VIDEO_ENCODER_INPUT_FORMAT;
+
+typedef struct D3D12_FEATURE_DATA_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE
+{
+    UINT NodeIndex;                                                         
+    D3D12_VIDEO_ENCODER_CODEC Codec;                                        
+    D3D12_VIDEO_ENCODER_PROFILE_DESC Profile;                               
+    D3D12_VIDEO_ENCODER_LEVEL_SETTING Level;                                
+    D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE SubregionMode;          
+    BOOL IsSupported;                                                       
+} D3D12_FEATURE_DATA_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE;
+
+typedef struct D3D12_FEATURE_DATA_VIDEO_ENCODER_HEAP_SIZE {
+  D3D12_VIDEO_ENCODER_HEAP_DESC HeapDesc;          
+  BOOL                          IsSupported;       
+  UINT64                        MemoryPoolL0Size;  
+  UINT64                        MemoryPoolL1Size;  
+} D3D12_FEATURE_DATA_VIDEO_ENCODER_HEAP_SIZE;
+
+
 typedef enum D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_SUPPORT_H264_FLAGS
 {
     D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_SUPPORT_H264_FLAG_NONE = 0x0,
