@@ -1244,7 +1244,7 @@ DwmWindowIsOpaque(const DWM_WIN *Window)
         return FALSE;
     if ((Window->LayerFlags & DWM_LWA_ALPHA) && Window->Alpha < 255)
         return FALSE;
-    if (Window->LayerFlags & DWM_WINDOW_PREMULTIPLIED_ALPHA)
+    if (Window->LayerFlags & (DWM_WINDOW_PREMULTIPLIED_ALPHA | DWM_WINDOW_FRAME_ALPHA))
         return FALSE;
     if (Window->BlurFlags & DWM_BLUR_ENABLE)
         return FALSE;
