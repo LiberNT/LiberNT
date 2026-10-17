@@ -65,6 +65,17 @@ GetInfString(
            SetupGetStringFieldW(&Context, 1, Value, cchValue, NULL);
 }
 
+static BOOL
+IsOobeAppPresent(
+    _In_ HINF hInf,
+    _In_ PCWSTR Section)
+{
+    WCHAR Path[MAX_PATH];
+
+    return GetInfString(hInf, Section, L"Detect", Path, ARRAYSIZE(Path)) &&
+           GetFileAttributesW(Path) != INVALID_FILE_ATTRIBUTES;
+}
+
 ULONG
 LoadOobeApps(
     _Out_ POOBE_APP* Apps)
@@ -124,6 +135,11 @@ LoadOobeApps(
             if (!App->Signer[0] && !App->Sha256[0])
             {
                 DPRINT1("Component %S has neither a signer nor a hash\n", AppSection);
+                continue;
+            }
+            if (IsOobeAppPresent(hInf, AppSection))
+            {
+                DPRINT("Component %S is already present\n", App->Name);
                 continue;
             }
 
@@ -491,6 +507,29 @@ RunPackage(
     return ExitCode;
 }
 
+VOID
+OobeResultText(
+    _In_ DWORD Result,
+    _Out_writes_(cchMessage) PWSTR Message,
+    _In_ SIZE_T cchMessage,
+    _Out_writes_(cchCode) PWSTR Code,
+    _In_ SIZE_T cchCode)
+{
+    SIZE_T Length;
+
+    if (!FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_MAX_WIDTH_MASK,
+                        NULL, Result, 0, Message, (DWORD)cchMessage, NULL) &&
+        !LoadStringW(GetModuleHandleW(NULL), IDS_OOBE_UNKNOWN_ERROR, Message, (INT)cchMessage))
+        Message[0] = UNICODE_NULL;
+    Length = wcslen(Message);
+    while (Length && (Message[Length - 1] == L' ' || Message[Length - 1] == L'\r' || Message[Length - 1] == L'\n'))
+        Message[--Length] = UNICODE_NULL;
+    if (Result & 0x80000000)
+        StringCchPrintfW(Code, cchCode, L"0x%08lx", Result);
+    else
+        StringCchPrintfW(Code, cchCode, L"%lu", Result);
+}
+
 DWORD
 InstallOobeApp(
     _Inout_ POOBE_APP App,
@@ -540,8 +579,16 @@ InstallOobeApp(
                       GetWindowLongPtrW(Progress->hwndProgress, GWL_STYLE) & ~PBS_MARQUEE);
     DeleteFileW(Path);
 
-    DPRINT1("Component %S installed with result %lu\n", App->Name, App->Result);
     if (IsInstallSuccess(App->Result))
+    {
+        DPRINT1("Component %S installed\n", App->Name);
         App->Result = ERROR_SUCCESS;
+    }
+    else
+    {
+        WCHAR Message[256], Code[16];
+        OobeResultText(App->Result, Message, ARRAYSIZE(Message), Code, ARRAYSIZE(Code));
+        DPRINT1("Component %S was not installed: %S (%S)\n", App->Name, Message, Code);
+    }
     return App->Result;
 }

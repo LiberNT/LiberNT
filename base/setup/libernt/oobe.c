@@ -543,7 +543,11 @@ ReportFinish(
     {
         if (!OobeApps[Index].Selected || OobeApps[Index].Result == ERROR_SUCCESS)
             continue;
-        LoadPrintfW(Line, ARRAYSIZE(Line), IDS_OOBE_APP_FAILED, OobeApps[Index].Name, OobeApps[Index].Result);
+        {
+            WCHAR Message[256], Code[16];
+            OobeResultText(OobeApps[Index].Result, Message, ARRAYSIZE(Message), Code, ARRAYSIZE(Code));
+            LoadPrintfW(Line, ARRAYSIZE(Line), IDS_OOBE_APP_FAILED, OobeApps[Index].Name, Message, Code);
+        }
         StringCchCatW(Text, ARRAYSIZE(Text), Line);
         StringCchCatW(Text, ARRAYSIZE(Text), L"\n");
     }

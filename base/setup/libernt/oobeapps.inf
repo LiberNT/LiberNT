@@ -50,6 +50,7 @@ Url = "https://dl.winehq.org/wine/wine-mono/11.3.0/wine-mono-11.3.0-x86.msi"
 File = "wine-mono-11.3.0-x86.msi"
 Type = "msi"
 Sha256 = "df2dfc1665c2511882e7cabd56eafd0c0a3d94e5a7e86f969277f6c189d418d3"
+Detect = "%10%\mono\mono-2.0\lib\mono\4.5\mscorlib.dll"
 
 [WineMono.arm64]
 Name = "Wine Mono 11.3.0 (.NET Framework, ARM64)"
@@ -57,6 +58,7 @@ Url = "https://dl.winehq.org/wine/wine-mono/11.3.0/wine-mono-11.3.0-arm64.msi"
 File = "wine-mono-11.3.0-arm64.msi"
 Type = "msi"
 Sha256 = "b0c47d374efaf22cbff76cb10488ac2d1627b067e085aef7acec573884120e0f"
+Detect = "%10%\mono\mono-2.0\lib\mono\4.5\mscorlib.dll"
 
 [WineGecko.x64]
 Name = "Wine Gecko 2.47.4 (HTML engine, x64)"
@@ -64,6 +66,7 @@ Url = "https://dl.winehq.org/wine/wine-gecko/2.47.4/wine-gecko-2.47.4-x86_64.msi
 File = "wine-gecko-2.47.4-x86_64.msi"
 Type = "msi"
 Sha256 = "e590b7d988a32d6aa4cf1d8aa3aa3d33766fdd4cf4c89c2dcc2095ecb28d066f"
+Detect = "%11%\gecko\2.47.4\wine_gecko\xul.dll"
 
 [WineGecko.x86]
 Name = "Wine Gecko 2.47.4 (HTML engine, x86)"
@@ -71,3 +74,4 @@ Url = "https://dl.winehq.org/wine/wine-gecko/2.47.4/wine-gecko-2.47.4-x86.msi"
 File = "wine-gecko-2.47.4-x86.msi"
 Type = "msi"
 Sha256 = "26cecc47706b091908f7f814bddb074c61beb8063318e9efc5a7f789857793d6"
+Detect = "%16425%\gecko\2.47.4\wine_gecko\xul.dll"

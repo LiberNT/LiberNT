@@ -10,7 +10,7 @@ BEGIN
     LTEXT "", IDC_FRAME_TITLE, 120, 10, 290, 14, SS_NOPREFIX
     LTEXT "", IDC_FRAME_SUBTITLE, 120, 26, 290, 18, SS_NOPREFIX
     LTEXT "", IDC_FRAME_PAGE, 120, 48, 290, 160, NOT WS_VISIBLE
-    CONTROL "", IDC_STATIC, "Static", SS_ETCHEDHORZ, 112, 212, 308, 1
+    CONTROL "", IDC_STATIC, "Static", SS_ETCHEDHORZ, 120, 212, 300, 1
     PUSHBUTTON "&Back", IDC_FRAME_BACK, 250, 219, 50, 14
     DEFPUSHBUTTON "&Next", IDC_FRAME_NEXT, 305, 219, 50, 14
     PUSHBUTTON "Cancel", IDCANCEL, 360, 219, 50, 14
@@ -255,9 +255,10 @@ BEGIN
     IDS_OOBE_APPLY_ACCOUNT "Creating your account..."
     IDS_OOBE_DOWNLOADING "Downloading %s..."
     IDS_OOBE_INSTALLING "Installing %s..."
-    IDS_OOBE_APP_FAILED "%s (0x%08lx)"
+    IDS_OOBE_APP_FAILED "%s: %s (%s)"
     IDS_OOBE_APPS_FAILED "Some components were not installed"
     IDS_OOBE_ACCOUNT_FAILED "LiberNT could not create your account (error %lu). LiberNT signs in to the built-in User account instead."
+    IDS_OOBE_UNKNOWN_ERROR "Unknown error"
 END
 
 /* Progress Strings */

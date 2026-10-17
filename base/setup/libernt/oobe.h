@@ -44,5 +44,13 @@ InstallOobeApp(
     _Inout_ POOBE_APP App,
     _In_ POOBE_PROGRESS Progress);
 
+VOID
+OobeResultText(
+    _In_ DWORD Result,
+    _Out_writes_(cchMessage) PWSTR Message,
+    _In_ SIZE_T cchMessage,
+    _Out_writes_(cchCode) PWSTR Code,
+    _In_ SIZE_T cchCode);
+
 extern POOBE_APP OobeApps;
 extern ULONG OobeAppCount;
