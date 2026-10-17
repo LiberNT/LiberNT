@@ -84,6 +84,7 @@ KMT_TESTFUNC Test_ExTimerInvalidAttributes;
 KMT_TESTFUNC Test_ExTimerCombinedAttributes;
 KMT_TESTFUNC Test_ExTimeZone;
 KMT_TESTFUNC Test_ExLicenseDif;
+KMT_TESTFUNC Test_IoArbiter;
 KMT_TESTFUNC Test_IoLargeMemoryResource;
 KMT_TESTFUNC Test_IoCancelKM;
 KMT_TESTFUNC Test_PsProcessInfo;
@@ -461,6 +462,7 @@ const KMT_TEST TestList[] =
     { "ExWddmRtl",                         Test_ExWddmRtl },
     { "ExWddmTls",                         Test_ExWddmTls },
     { "ExWddmWindow",                      Test_ExWddmWindow },
+    { "IoArbiter",                          Test_IoArbiter },
     { "IoLargeMemoryResource",              Test_IoLargeMemoryResource },
     { "IoCancelKM",                         Test_IoCancelKM },
     { "CmCallbacks",                        Test_CmCallbacks },

@@ -163,6 +163,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoDevicePropertyData.c
     ntos_io/IoBuildIoctlKM.c
     ntos_io/IoLargeMemoryResource.c
+    ntos_io/IoArbiter.c
     ntos_io/IoCancelKM.c
     ntos_io/IoContainerId.c
     ntos_io/IoCreateFile.c
@@ -386,7 +387,8 @@ add_library(kmtest_drv MODULE ${KMTEST_DRV_SOURCE})
 target_include_directories(kmtest_drv PRIVATE
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgmms2
-    ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/softgpu)
+    ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/softgpu
+    ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/arblib)
 if(KMTEST_DXGK_WDDM_ABI)
     target_compile_definitions(kmtest_drv PRIVATE
         KMT_DXGK_WDDM_ABI)
@@ -416,7 +418,7 @@ elseif(CMAKE_C_COMPILER_ID STREQUAL "Clang")
 else()
     target_link_options(kmtest_drv PRIVATE -Wl,--forceinteg)
 endif()
-target_link_libraries(kmtest_drv kmtest_printf chkstk memcmp poguid wdmguid ${PSEH_LIB})
+target_link_libraries(kmtest_drv kmtest_printf chkstk memcmp poguid wdmguid arblib ${PSEH_LIB})
 add_importlibs(kmtest_drv ksecdd ndis smclib ntoskrnl hal)
 if(REACTOS_USE_WDDM)
     add_importlibs(kmtest_drv dxgkrnl dxgmms2)
