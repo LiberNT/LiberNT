@@ -2428,22 +2428,9 @@ IntCompositionDamageFromGdi(VOID)
 static BOOL
 IntCompositionPaintOpen(_In_ REDIRECT_ENTRY *Entry, _In_ LONGLONG Now)
 {
-    return Entry->BatchOwner != NULL &&
-           Now - Entry->BatchStart < COMPOSITION_DC_HOLD_100NS;
-}
-
-static LONGLONG
-IntCompositionHeldPeriod(_In_ const WND_REDIRECT *Redirect)
-{
-    ULONG Hz = 0;
-
-    if (Redirect->FrontScaled)
-        return COMPOSITION_FRAME_HOLD_100NS;
-    if (gpmdev != NULL && gpmdev->ppdevGlobal != NULL)
-        Hz = gpmdev->ppdevGlobal->gdiinfo.ulVRefresh;
-    if (Hz < 24 || Hz > 480)
-        Hz = 60;
-    return 10000000LL / Hz;
+    return InterlockedCompareExchange(&Entry->PaintCount, 0, 0) != 0 ||
+           (Entry->BatchOwner != NULL &&
+            Now - Entry->BatchStart < COMPOSITION_DC_HOLD_100NS);
 }
 
 static BOOL
@@ -2464,7 +2451,7 @@ IntCompositionPublishHeld(_Inout_ REDIRECT_ENTRY *Entry, _In_ LONGLONG Now,
     {
         return FALSE;
     }
-    if (Now - Redirect->HeldTime < IntCompositionHeldPeriod(Redirect) &&
+    if (Now - Redirect->HeldTime < COMPOSITION_FRAME_HOLD_100NS &&
         IntCompositionTreeHasPendingPaint(Entry->Wnd))
     {
         return FALSE;
@@ -2933,9 +2920,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
             continue;
         if (IntCompositionPublishHeld(e, now, TRUE))
             InterlockedExchange(&g_CompositionDamaged, TRUE);
-        else if (e->Redirect.FrontHeld && !e->Redirect.FrontScaled &&
-                 now - e->Redirect.HeldTime < IntCompositionHeldPeriod(&e->Redirect))
-            DeferredDamage = TRUE;
+        else if (e->Redirect.FrontHeld)
+            PaintDamageDeferred = TRUE;
     }
 
     /* Consume only the damage that existed before this snapshot. A GDI draw
@@ -2996,13 +2982,12 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
              */
             BOOL bDxPublished = e->Redirect.DxGlobalShare != 0 &&
                                 e->Redirect.DxPublishedUpdateId != 0;
-            BOOL bFirstPaintPending = !e->Redirect.FrontValid &&
-                                      ((!bBackingDrawn && !bDxPublished) ||
-                                       bTreePending);
+            BOOL bPaintPending = (!e->Redirect.FrontValid && !bBackingDrawn && !bDxPublished) ||
+                                 bTreePending;
 
             if ((!e->Redirect.FrontValid || bBackingDirty) &&
                 !bBusy &&
-                !bFirstPaintPending && !e->Redirect.FrontHeld &&
+                !bPaintPending && !e->Redirect.FrontHeld &&
                 e->Redirect.psurf != NULL && e->Redirect.psurfFront != NULL)
             {
                 BOOL BackingPublished = FALSE;
@@ -3064,7 +3049,7 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
             }
             else if (e->Damaged && (!e->Redirect.FrontValid || bBackingDirty))
             {
-                if (bBusy || bFirstPaintPending ||
+                if (bBusy || bPaintPending ||
                     e->Redirect.FrontHeld)
                     PaintDeferred = TRUE;
                 else
