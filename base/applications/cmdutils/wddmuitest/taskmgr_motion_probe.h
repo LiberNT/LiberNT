@@ -10,52 +10,16 @@
 #define MOTION_POINTS 16
 #define MOTION_EVENTS 32
 
-typedef struct _PRIMARY_PROBE_INVALIDATE
-{
-    D3DKMT_HANDLE hDevice;
-    D3DKMT_HANDLE hAllocation;
-    ULONGLONG Offset;
-    ULONGLONG Length;
-} PRIMARY_PROBE_INVALIDATE;
-typedef NTSTATUS (APIENTRY *PRIMARY_PROBE_INVALIDATE_FN)(const PRIMARY_PROBE_INVALIDATE *);
-C_ASSERT(sizeof(PRIMARY_PROBE_INVALIDATE) == 24);
-
 typedef struct _MOTION_PRIMARY
 {
     D3DKMT_OPENADAPTERFROMHDC Adapter;
-    D3DKMT_CREATEDEVICE Device;
-    D3DKMT_OPENRESOURCE Resource;
-    D3DDDI_OPENALLOCATIONINFO Allocation;
-    D3DKMT_LOCK Lock;
-    PRIMARY_PROBE_INVALIDATE_FN Invalidate;
+    HDC Screen;
     LONG Width, Height;
-    BOOL Locked;
 } MOTION_PRIMARY;
 
 static void
 MotionClosePrimary(MOTION_PRIMARY *Primary)
 {
-    if (Primary->Locked)
-    {
-        D3DKMT_UNLOCK Unlock = {0};
-        Unlock.hDevice = Primary->Device.hDevice;
-        Unlock.NumAllocations = 1;
-        Unlock.phAllocations = &Primary->Allocation.hAllocation;
-        D3DKMTUnlock(&Unlock);
-    }
-    if (Primary->Resource.hResource)
-    {
-        D3DKMT_DESTROYALLOCATION Destroy = {0};
-        Destroy.hDevice = Primary->Device.hDevice;
-        Destroy.hResource = Primary->Resource.hResource;
-        D3DKMTDestroyAllocation(&Destroy);
-    }
-    if (Primary->Device.hDevice)
-    {
-        D3DKMT_DESTROYDEVICE Destroy = {0};
-        Destroy.hDevice = Primary->Device.hDevice;
-        D3DKMTDestroyDevice(&Destroy);
-    }
     if (Primary->Adapter.hAdapter)
     {
         D3DKMT_CLOSEADAPTER Close = {0};
@@ -67,69 +31,18 @@ MotionClosePrimary(MOTION_PRIMARY *Primary)
 static BOOL
 MotionOpenPrimary(MOTION_PRIMARY *Primary, HDC Screen)
 {
-    D3DKMT_GETSHAREDPRIMARYHANDLE Shared = {0};
-    D3DKMT_QUERYRESOURCEINFO Query = {0};
-    PVOID Runtime = NULL, Resource = NULL, Allocation = NULL;
-    NTSTATUS Status;
+    NTSTATUS Status = (NTSTATUS)0xC0000001L;
     BOOL Result = FALSE;
 
+    Primary->Screen = Screen;
     Primary->Width = GetDeviceCaps(Screen, HORZRES);
     Primary->Height = GetDeviceCaps(Screen, VERTRES);
-    Primary->Invalidate = (PRIMARY_PROBE_INVALIDATE_FN)GetProcAddress(
-        GetModuleHandleW(L"gdi32.dll"), "D3DKMTInvalidateCache");
-    if (!Primary->Invalidate || Primary->Width <= 0 || Primary->Height <= 0 ||
-        GetDeviceCaps(Screen, BITSPIXEL) != 32)
-        return FALSE;
-    Primary->Adapter.hDc = Screen;
-    Status = D3DKMTOpenAdapterFromHdc(&Primary->Adapter);
-    if (Status < 0) goto Done;
-    Primary->Device.hAdapter = Primary->Adapter.hAdapter;
-    Status = D3DKMTCreateDevice(&Primary->Device);
-    if (Status < 0) goto Done;
-    Shared.hAdapter = Primary->Adapter.hAdapter;
-    Shared.VidPnSourceId = Primary->Adapter.VidPnSourceId;
-    Status = D3DKMTGetSharedPrimaryHandle(&Shared);
-    if (Status < 0) goto Done;
-    Query.hDevice = Primary->Device.hDevice;
-    Query.hGlobalShare = Shared.hSharedPrimary;
-    Status = D3DKMTQueryResourceInfo(&Query);
-    if (Status < 0 || Query.NumAllocations != 1 ||
-        Query.PrivateRuntimeDataSize > 65536 ||
-        Query.ResourcePrivateDriverDataSize > 65536 ||
-        Query.TotalPrivateDriverDataSize > 65536) goto Done;
-    if (Query.PrivateRuntimeDataSize)
-        Runtime = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Query.PrivateRuntimeDataSize);
-    if (Query.ResourcePrivateDriverDataSize)
-        Resource = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Query.ResourcePrivateDriverDataSize);
-    if (Query.TotalPrivateDriverDataSize)
-        Allocation = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Query.TotalPrivateDriverDataSize);
-    if ((Query.PrivateRuntimeDataSize && !Runtime) ||
-        (Query.ResourcePrivateDriverDataSize && !Resource) ||
-        (Query.TotalPrivateDriverDataSize && !Allocation)) goto Done;
-    Primary->Resource.hDevice = Primary->Device.hDevice;
-    Primary->Resource.hGlobalShare = Shared.hSharedPrimary;
-    Primary->Resource.NumAllocations = 1;
-    Primary->Resource.pOpenAllocationInfo = &Primary->Allocation;
-    Primary->Resource.pPrivateRuntimeData = Runtime;
-    Primary->Resource.PrivateRuntimeDataSize = Query.PrivateRuntimeDataSize;
-    Primary->Resource.pResourcePrivateDriverData = Resource;
-    Primary->Resource.ResourcePrivateDriverDataSize = Query.ResourcePrivateDriverDataSize;
-    Primary->Resource.pTotalPrivateDriverDataBuffer = Allocation;
-    Primary->Resource.TotalPrivateDriverDataBufferSize = Query.TotalPrivateDriverDataSize;
-    Status = D3DKMTOpenResource(&Primary->Resource);
-    if (Status < 0) goto Done;
-    Primary->Lock.hDevice = Primary->Device.hDevice;
-    Primary->Lock.hAllocation = Primary->Allocation.hAllocation;
-    Primary->Lock.Flags.ReadOnly = 1;
-    Primary->Lock.Flags.LockEntire = 1;
-    Status = D3DKMTLock(&Primary->Lock);
-    if (Status < 0) goto Done;
-    Primary->Locked = TRUE;
-    Result = Primary->Lock.pData != NULL;
-Done:
-    if (Runtime) HeapFree(GetProcessHeap(), 0, Runtime);
-    if (Resource) HeapFree(GetProcessHeap(), 0, Resource);
-    if (Allocation) HeapFree(GetProcessHeap(), 0, Allocation);
+    if (Primary->Width > 0 && Primary->Height > 0)
+    {
+        Primary->Adapter.hDc = Screen;
+        Status = D3DKMTOpenAdapterFromHdc(&Primary->Adapter);
+        Result = Status >= 0;
+    }
     TestPrint("TASKMGR_FLICKER_PRIMARY status=%08lx mapped=%u width=%ld height=%ld\n",
               Status, Result, Primary->Width, Primary->Height);
     return Result;
@@ -138,18 +51,44 @@ Done:
 static BOOL
 MotionRead(MOTION_PRIMARY *Primary, SIZE_T Offset, PVOID Buffer, SIZE_T Length)
 {
-    PRIMARY_PROBE_INVALIDATE Invalidate = {0};
-    SIZE_T Read = 0;
-    SIZE_T Limit = (SIZE_T)Primary->Width * Primary->Height * sizeof(ULONG);
-    if (Offset > Limit || Length > Limit - Offset)
+    SIZE_T First = Offset / sizeof(ULONG), Count = Length / sizeof(ULONG);
+    SIZE_T Limit = (SIZE_T)Primary->Width * Primary->Height;
+    BITMAPINFO Info = {0};
+    ULONG *Bits = NULL;
+    HBITMAP Bitmap;
+    HGDIOBJ Old;
+    HDC Memory;
+    LONG Top, Rows;
+    BOOL Result = FALSE;
+
+    if ((Offset | Length) % sizeof(ULONG) || !Count || First > Limit || Count > Limit - First)
         return FALSE;
-    Invalidate.hDevice = Primary->Device.hDevice;
-    Invalidate.hAllocation = Primary->Allocation.hAllocation;
-    Invalidate.Offset = Offset;
-    Invalidate.Length = Length;
-    return Primary->Invalidate(&Invalidate) >= 0 &&
-           ReadProcessMemory(GetCurrentProcess(), (BYTE *)Primary->Lock.pData + Offset,
-                             Buffer, Length, &Read) && Read == Length;
+    Top = (LONG)(First / Primary->Width);
+    Rows = (LONG)((First + Count - 1) / Primary->Width) - Top + 1;
+    Info.bmiHeader.biSize = sizeof(Info.bmiHeader);
+    Info.bmiHeader.biWidth = Primary->Width;
+    Info.bmiHeader.biHeight = -Rows;
+    Info.bmiHeader.biPlanes = 1;
+    Info.bmiHeader.biBitCount = 32;
+    Info.bmiHeader.biCompression = BI_RGB;
+    Memory = CreateCompatibleDC(Primary->Screen);
+    Bitmap = CreateDIBSection(Primary->Screen, &Info, DIB_RGB_COLORS, (PVOID *)&Bits, NULL, 0);
+    if (Memory && Bitmap && Bits)
+    {
+        Old = SelectObject(Memory, Bitmap);
+        if (BitBlt(Memory, 0, 0, Primary->Width, Rows, Primary->Screen, 0, Top, SRCCOPY))
+        {
+            GdiFlush();
+            CopyMemory(Buffer, Bits + (First - (SIZE_T)Top * Primary->Width), Length);
+            Result = TRUE;
+        }
+        SelectObject(Memory, Old);
+    }
+    if (Bitmap)
+        DeleteObject(Bitmap);
+    if (Memory)
+        DeleteDC(Memory);
+    return Result;
 }
 
 static BOOL
