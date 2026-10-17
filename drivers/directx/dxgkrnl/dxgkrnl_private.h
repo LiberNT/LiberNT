@@ -3721,6 +3721,13 @@ DxgkVidPnQueryCurrentDisplayMode(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _Inout_ D3DKMT_CURRENTDISPLAYMODE *CurrentMode);
 
+BOOLEAN
+DxgkVidPnQueryMonitorPreferredMode(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height,
+    _Out_ PULONG RefreshRate);
+
 NTSTATUS
 NTAPI
 DxgkSetVidPnSourceOwner(

@@ -7528,6 +7528,51 @@ DxgkpInitializeDisplayMode(
     Mode->DisplayFixedOutput = 0;
 }
 
+BOOLEAN
+DxgkVidPnQueryMonitorPreferredMode(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height,
+    _Out_ PULONG RefreshRate)
+{
+    PDXGKP_MONITOR_SOURCE_MODESET MonitorSet;
+    CONST D3DKMDT_VIDEO_SIGNAL_INFO *Signal = NULL;
+    PDXGKP_VIDPN VidPn;
+    ULONG TargetIndex;
+    SIZE_T Index;
+
+    *Width = *Height = *RefreshRate = 0;
+
+    (VOID)KeWaitForSingleObject(&Adapter->VidPnMutex, Executive, KernelMode, FALSE, NULL);
+    VidPn = (PDXGKP_VIDPN)Adapter->VidPn;
+    if (VidPn != NULL && VidPn->NumPaths != 0)
+    {
+        TargetIndex = DxgkVidPnTargetIndexFromId(VidPn, VidPn->Paths[0].VidPnTargetId);
+        MonitorSet = TargetIndex != MAXULONG ? VidPn->MonitorModeSets[TargetIndex] : NULL;
+        for (Index = 0; MonitorSet != NULL && Index < MonitorSet->NumModes; Index++)
+        {
+            if (MonitorSet->Modes[Index].Preference == D3DKMDT_MP_PREFERRED &&
+                MonitorSet->Modes[Index].Origin == D3DKMDT_MCO_MONITORDESCRIPTOR)
+            {
+                Signal = &MonitorSet->Modes[Index].VideoSignalInfo;
+                break;
+            }
+        }
+        if (Signal != NULL && Signal->ActiveSize.cx != 0 && Signal->ActiveSize.cy != 0 &&
+            Signal->VSyncFreq.Denominator != 0)
+        {
+            *Width = Signal->ActiveSize.cx;
+            *Height = Signal->ActiveSize.cy;
+            *RefreshRate = (ULONG)(((ULONGLONG)Signal->VSyncFreq.Numerator +
+                                    Signal->VSyncFreq.Denominator / 2) /
+                                   Signal->VSyncFreq.Denominator);
+        }
+    }
+    KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
+
+    return *Width != 0;
+}
+
 NTSTATUS
 DxgkVidPnQueryCurrentDisplayMode(
     _In_ PDXGKRNL_ADAPTER Adapter,

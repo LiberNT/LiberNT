@@ -209,9 +209,12 @@ DxgkpDisplayPublishInitialMode(
     Status = ZwOpenKey(&Key, KEY_SET_VALUE, &Attributes);
     if (!NT_SUCCESS(Status))
         return;
-    Values[0] = Current.DisplayMode.Width;
-    Values[1] = Current.DisplayMode.Height;
-    Values[2] = Current.DisplayMode.IntegerRefreshRate;
+    if (!DxgkVidPnQueryMonitorPreferredMode(Adapter, &Values[0], &Values[1], &Values[2]))
+    {
+        Values[0] = Current.DisplayMode.Width;
+        Values[1] = Current.DisplayMode.Height;
+        Values[2] = Current.DisplayMode.IntegerRefreshRate;
+    }
     for (Index = 0; Index < RTL_NUMBER_OF(Names); ++Index)
     {
         Status = DxgkpRegWriteDword(Key, Names[Index], Values[Index]);
@@ -219,7 +222,7 @@ DxgkpDisplayPublishInitialMode(
             break;
     }
     ZwClose(Key);
-    if (NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status) && Adapter->VidPnCommitted)
         g_DisplayInitialModePending = FALSE;
 }
 
