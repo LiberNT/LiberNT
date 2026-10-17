@@ -789,17 +789,54 @@ FormatEnumerated(const PROPSCHEMA_ENTRY *Entry, const PROPVARIANT *Value, LPWSTR
     return S_OK;
 }
 
-static HRESULT WINAPI
-desc_FormatForDisplay(IPropertyDescription *iface, REFPROPVARIANT propvar, PROPDESC_FORMAT_FLAGS flags, LPWSTR *display)
+static HRESULT
+FormatFileAttributes(const PROPVARIANT *Value, LPWSTR *Out)
 {
-    const PROPSCHEMA_ENTRY *Entry = impl_from_description(iface)->Entry;
+    static const struct
+    {
+        ULONG Flag;
+        WCHAR Letter;
+    } Letters[] =
+    {
+        { FILE_ATTRIBUTE_READONLY, L'R' },
+        { FILE_ATTRIBUTE_HIDDEN, L'H' },
+        { FILE_ATTRIBUTE_SYSTEM, L'S' },
+        { FILE_ATTRIBUTE_DIRECTORY, L'D' },
+        { FILE_ATTRIBUTE_ARCHIVE, L'A' },
+        { FILE_ATTRIBUTE_NORMAL, L'N' },
+        { FILE_ATTRIBUTE_TEMPORARY, L'T' },
+        { FILE_ATTRIBUTE_REPARSE_POINT, L'L' },
+        { FILE_ATTRIBUTE_COMPRESSED, L'C' },
+        { FILE_ATTRIBUTE_OFFLINE, L'O' },
+        { FILE_ATTRIBUTE_NOT_CONTENT_INDEXED, L'I' },
+        { FILE_ATTRIBUTE_ENCRYPTED, L'E' },
+        { FILE_ATTRIBUTE_VIRTUAL, L'V' },
+        { FILE_ATTRIBUTE_RECALL_ON_OPEN, L'M' },
+        { FILE_ATTRIBUTE_PINNED, L'P' },
+        { FILE_ATTRIBUTE_UNPINNED, L'U' },
+        { FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS, L'M' },
+    };
+    WCHAR Text[ARRAY_SIZE(Letters) + 1];
+    ULONG Attributes, i, Length = 0;
+    HRESULT hr;
+
+    hr = PropVariantToUInt32(Value, &Attributes);
+    if (FAILED(hr))
+        return hr;
+    for (i = 0; i < ARRAY_SIZE(Letters); i++)
+    {
+        if (Attributes & Letters[i].Flag)
+            Text[Length++] = Letters[i].Letter;
+    }
+    Text[Length] = UNICODE_NULL;
+    return DupString(Text, Out);
+}
+
+static HRESULT
+FormatValue(const PROPSCHEMA_ENTRY *Entry, const PROPVARIANT *propvar, PROPDESC_FORMAT_FLAGS flags, LPWSTR *display)
+{
     WCHAR Buffer[64];
 
-    if (!display)
-        return E_POINTER;
-    *display = NULL;
-    if (!propvar)
-        return E_INVALIDARG;
     if (propvar->vt == VT_EMPTY)
         return DupString(L"", display);
     if (Entry->DisplayType == PDDT_ENUMERATED && Entry->EnumCount)
@@ -812,7 +849,42 @@ desc_FormatForDisplay(IPropertyDescription *iface, REFPROPVARIANT propvar, PROPD
         if (SUCCEEDED(PropVariantToUInt64(propvar, &Size)) && StrFormatByteSizeW((LONGLONG)Size, Buffer, ARRAY_SIZE(Buffer)))
             return DupString(Buffer, display);
     }
+    if (!wcscmp(Entry->CanonicalName, L"System.FileAttributes"))
+        return FormatFileAttributes(propvar, display);
     return PropVariantToStringAlloc(propvar, display);
+}
+
+static HRESULT WINAPI
+desc_FormatForDisplay(IPropertyDescription *iface, REFPROPVARIANT propvar, PROPDESC_FORMAT_FLAGS flags, LPWSTR *display)
+{
+    const PROPSCHEMA_ENTRY *Entry = impl_from_description(iface)->Entry;
+    LPWSTR Value = NULL, Name = NULL, Prefixed;
+    SIZE_T Length;
+    HRESULT hr;
+
+    if (!display)
+        return E_POINTER;
+    *display = NULL;
+    if (!propvar)
+        return E_INVALIDARG;
+    hr = FormatValue(Entry, propvar, flags, &Value);
+    if (FAILED(hr) || propvar->vt == VT_EMPTY || !(flags & PDFF_PREFIXNAME) ||
+        FAILED(desc_GetDisplayName(iface, &Name)) || !Name || !*Name)
+    {
+        CoTaskMemFree(Name);
+        *display = Value;
+        return hr;
+    }
+    Length = wcslen(Name) + 2 + wcslen(Value) + 1;
+    Prefixed = CoTaskMemAlloc(Length * sizeof(WCHAR));
+    if (Prefixed)
+        swprintf(Prefixed, Length, L"%s: %s", Name, Value);
+    CoTaskMemFree(Name);
+    CoTaskMemFree(Value);
+    if (!Prefixed)
+        return E_OUTOFMEMORY;
+    *display = Prefixed;
+    return S_OK;
 }
 
 static HRESULT WINAPI
