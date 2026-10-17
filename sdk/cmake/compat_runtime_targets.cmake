@@ -139,6 +139,7 @@ set(COMPAT_RUNTIME_MODULES
     profapi
     propsys
     psapi
+    qmgrprxy
     rasadhlp
     riched20
     riched32
@@ -161,6 +162,7 @@ set(COMPAT_RUNTIME_MODULES
     shlwapi
     slc
     sndvolsso
+    srclient
     sspicli
     sxs
     taskschd
@@ -199,6 +201,7 @@ set(COMPAT_RUNTIME_MODULES
     wshunix
     wtsapi32
     wsock32
+    wuapi
     xinput1_1
     xinput1_2
     xinput1_3
