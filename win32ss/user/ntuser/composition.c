@@ -983,11 +983,19 @@ static ULONGLONG g_DxUpdateSequence = 0;
 static ULONGLONG g_GdiUpdateSequence = 0;
 static ULONGLONG g_BaseUpdateSequence = 0;
 
+static BOOL
+IntCompositionDeviceBuffers(VOID)
+{
+    return InterlockedCompareExchangePointer(
+               (PVOID volatile *)&g_DwmGpuOutputWindow, NULL, NULL) != NULL;
+}
+
 /* FRONT buffer over a pageable section: win32k keeps a system-space view the
  * GDI surface wraps; dwm maps the same section read-only in user space and
  * composes straight from it — no per-frame pixel copies out of the kernel. */
 static PSURFACE
 IntCompositionCreateSharedBuffer(_In_ LONG cx, _In_ LONG cy,
+                                 _In_ BOOL DeviceBacked,
                                  _Out_ HBITMAP *phbmp,
                                  _Out_ PVOID *ppSection,
                                  _Out_ PVOID *ppView,
@@ -1015,7 +1023,8 @@ IntCompositionCreateSharedBuffer(_In_ LONG cx, _In_ LONG cy,
         return NULL;
 
     ppdev = IntCompositionReferenceDevice();
-    if (ppdev != NULL && ppdev->DriverFunctions.CreateDeviceBitmapEx != NULL)
+    if (DeviceBacked && ppdev != NULL &&
+        ppdev->DriverFunctions.CreateDeviceBitmapEx != NULL)
     {
         SIZEL Size = {cx, cy};
         HANDLE SharedSurface = NULL;
@@ -1150,7 +1159,9 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
         return r->psurf;
     }
 
-    psurfNew = IntCompositionCreateSharedBuffer(cx, cy, &hbmpNew,
+    psurfNew = IntCompositionCreateSharedBuffer(cx, cy,
+                                                IntCompositionDeviceBuffers(),
+                                                &hbmpNew,
                                                 &pBackSectionNew,
                                                 &pBackViewNew,
                                                 &cbBackViewNew,
@@ -1165,7 +1176,9 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
     bHold = r->FrontValid && r->psurfFront != NULL && IntCompositionIsCompositable(Wnd);
     if (!bHold)
     {
-        psurfNewFront = IntCompositionCreateSharedBuffer(cx, cy, &hbmpNewFront,
+        psurfNewFront = IntCompositionCreateSharedBuffer(cx, cy,
+                                                         IntCompositionDeviceBuffers(),
+                                                         &hbmpNewFront,
                                                          &pFrontSectionNew,
                                                          &pFrontViewNew,
                                                          &cbFrontViewNew,
@@ -2482,6 +2495,7 @@ IntCompositionPublishHeld(_Inout_ REDIRECT_ENTRY *Entry, _In_ LONGLONG Now,
 
     RtlZeroMemory(&New, sizeof(New));
     New.psurfFront = IntCompositionCreateSharedBuffer(Redirect->cx, Redirect->cy,
+                                                      IntCompositionDeviceBuffers(),
                                                       &New.hbmpFront,
                                                       &New.FrontSection,
                                                       &New.FrontView,
