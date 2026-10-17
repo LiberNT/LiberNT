@@ -16,6 +16,8 @@
 #include <stdio.h>
 
 #include <ntfsformat.h>
+#include <ntfslib_new.h>
+#include <ntfs_um.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -395,6 +397,104 @@ NtfsFormat(
     return NT_SUCCESS(Status);
 }
 
+typedef struct _NTFS_CHECK_CONTEXT
+{
+    PFMIFSCALLBACK Callback;
+    BOOLEAN Verbose;
+    ULONG Reported;
+} NTFS_CHECK_CONTEXT, *PNTFS_CHECK_CONTEXT;
+
+static
+VOID
+NtfsCheckReport(
+    IN PVOID Context,
+    IN NtfsCheckEvent Event,
+    IN UINT64 Argument1,
+    IN UINT64 Argument2)
+{
+    PNTFS_CHECK_CONTEXT Check = (PNTFS_CHECK_CONTEXT)Context;
+
+    if (Event != NtfsCheckLostClusters && !Check->Verbose && Check->Reported >= 32)
+        return;
+    Check->Reported++;
+
+    switch (Event)
+    {
+        case NtfsCheckRecordCorrupt:
+            NtfsFormatReport(Check->Callback, "File record segment %I64u is corrupt.\n", Argument1);
+            break;
+        case NtfsCheckRecordBitmap:
+            NtfsFormatReport(Check->Callback,
+                             Argument2 ? "File record segment %I64u is in use but marked free in the MFT bitmap.\n"
+                                       : "File record segment %I64u is free but marked in use in the MFT bitmap.\n",
+                             Argument1);
+            break;
+        case NtfsCheckBadRunList:
+            NtfsFormatReport(Check->Callback,
+                             "Attribute type 0x%I64x in file record segment %I64u has an invalid mapping pairs array.\n",
+                             Argument2, Argument1);
+            break;
+        case NtfsCheckClusterOutOfRange:
+            NtfsFormatReport(Check->Callback,
+                             "File record segment %I64u refers to cluster 0x%I64x beyond the end of the volume.\n",
+                             Argument1, Argument2);
+            break;
+        case NtfsCheckCrossLinked:
+            NtfsFormatReport(Check->Callback,
+                             "File record segment %I64u shares cluster 0x%I64x with another file.\n",
+                             Argument1, Argument2);
+            break;
+        case NtfsCheckIndexCorrupt:
+            NtfsFormatReport(Check->Callback,
+                             "Index $I30 of file %I64u is corrupt at VCN 0x%I64x.\n",
+                             Argument1, Argument2);
+            break;
+        case NtfsCheckIndexBadEntry:
+            NtfsFormatReport(Check->Callback,
+                             "An index entry in index $I30 of file %I64u points to unused or stale file 0x%I64x.\n",
+                             Argument1, Argument2);
+            break;
+        case NtfsCheckNameNotIndexed:
+            NtfsFormatReport(Check->Callback,
+                             "A name of file %I64u is missing from its parent index.\n",
+                             Argument1);
+            break;
+        case NtfsCheckUsedClustersFree:
+            NtfsFormatReport(Check->Callback,
+                             "Clusters 0x%I64x to 0x%I64x are in use but marked free in the volume bitmap.\n",
+                             Argument1, Argument1 + Argument2 - 1);
+            break;
+        case NtfsCheckLostClusters:
+            NtfsFormatReport(Check->Callback,
+                             "%I64u clusters are marked allocated in the volume bitmap but not in use.\n",
+                             Argument1);
+            break;
+        case NtfsCheckUsedClustersClaimed:
+            NtfsFormatReport(Check->Callback,
+                             "Marked clusters 0x%I64x to 0x%I64x as in use in the volume bitmap.\n",
+                             Argument1, Argument1 + Argument2 - 1);
+            break;
+        case NtfsCheckLostClustersFreed:
+            NtfsFormatReport(Check->Callback,
+                             "Freed clusters 0x%I64x to 0x%I64x in the volume bitmap.\n",
+                             Argument1, Argument1 + Argument2 - 1);
+            break;
+    }
+}
+
+static
+NTSTATUS
+NtfsCheckControl(
+    IN HANDLE Handle,
+    IN ULONG Code,
+    OUT PVOID Output,
+    IN ULONG OutputLength)
+{
+    IO_STATUS_BLOCK IoStatusBlock;
+
+    return NtFsControlFile(Handle, NULL, NULL, NULL, &IoStatusBlock, Code, NULL, 0, Output, OutputLength);
+}
+
 BOOLEAN
 NTAPI
 NtfsChkdsk(
@@ -410,12 +510,112 @@ NtfsChkdsk(
     IN PVOID pUnknown4,
     IN PULONG ExitStatus)
 {
-    /*
-     * There is no consistency checker yet: this reports "nothing to repair"
-     * without actually verifying the volume. Formatting does not depend on
-     * it, but a real chkdsk is still missing.
-     */
-    UNIMPLEMENTED;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    NTFS_CHECK_CONTEXT Check;
+    NtfsCheckResult Result;
+    PNtfsVolume Volume = NULL;
+    HANDLE Handle;
+    ULONG BytesPerSector = 0;
+    ULONG DirtyMask = 0;
+    USHORT Flags = 0;
+    BOOLEAN Locked = FALSE;
+    BOOLEAN Dirty;
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(ScanDrive);
+    UNREFERENCED_PARAMETER(pUnknown1);
+    UNREFERENCED_PARAMETER(pUnknown2);
+    UNREFERENCED_PARAMETER(pUnknown3);
+    UNREFERENCED_PARAMETER(pUnknown4);
+
+    *ExitStatus = (ULONG)STATUS_DISK_CORRUPT_ERROR;
+    RtlZeroMemory(&Check, sizeof(Check));
+    Check.Callback = Callback;
+    Check.Verbose = Verbose;
+
+    InitializeObjectAttributes(&ObjectAttributes, DriveRoot, 0, NULL, NULL);
+    Status = NtOpenFile(&Handle,
+                        FILE_GENERIC_READ | (FixErrors ? FILE_GENERIC_WRITE : 0) | SYNCHRONIZE,
+                        &ObjectAttributes,
+                        &IoStatusBlock,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        FILE_SYNCHRONOUS_IO_ALERT);
+    if (!NT_SUCCESS(Status))
+    {
+        NtfsFormatReport(Callback, "Unable to open the volume (status 0x%08lx).\n", Status);
+        return FALSE;
+    }
+
+    Status = NtfsCheckControl(Handle, FSCTL_IS_VOLUME_DIRTY, &DirtyMask, sizeof(DirtyMask));
+    Dirty = NT_SUCCESS(Status) && (DirtyMask & VOLUME_IS_DIRTY);
+    if (CheckOnlyIfDirty && NT_SUCCESS(Status) && !Dirty)
+    {
+        NtClose(Handle);
+        *ExitStatus = (ULONG)STATUS_SUCCESS;
+        return TRUE;
+    }
+    if (CheckOnlyIfDirty && Dirty && !FixErrors)
+    {
+        NtfsFormatReport(Callback, "The volume is dirty.\n");
+        NtClose(Handle);
+        return TRUE;
+    }
+
+    if (FixErrors)
+    {
+        Status = NtfsCheckControl(Handle, FSCTL_LOCK_VOLUME, NULL, 0);
+        Locked = NT_SUCCESS(Status);
+        if (!Locked)
+            NtfsFormatReport(Callback, "The volume is in use, so problems will be reported but not fixed.\n");
+    }
+
+    Status = NtfsDiskInitializeUm(Handle, &BytesPerSector);
+    if (NT_SUCCESS(Status))
+    {
+        NtfsSetReadOnlyMode(Locked ? FALSE : TRUE);
+        Status = NtfsProbePartitionAndOpenVolume(BytesPerSector, &Volume);
+        NtfsSetReadOnlyMode(FALSE);
+    }
+    if (NT_SUCCESS(Status) && NT_SUCCESS(NtfsVolumeQueryFlags(Volume, &Flags)) && (Flags & VOL_DIRTY))
+        Dirty = TRUE;
+    if (NT_SUCCESS(Status))
+    {
+        NtfsFormatReport(Callback, "Checking file records, indexes and the volume bitmap...\n");
+        Status = NtfsVolumeCheck(Volume, Locked, NtfsCheckReport, &Check, &Result);
+    }
+    if (NT_SUCCESS(Status) && Locked && Dirty && Result.Errors == 0)
+        Status = NtfsVolumeSetFlags(Volume, 0, VOL_DIRTY);
+
+    if (Volume)
+        NtfsVolumeDestroy(Volume);
+    if (Locked)
+    {
+        NtfsCheckControl(Handle, FSCTL_DISMOUNT_VOLUME, NULL, 0);
+        NtfsCheckControl(Handle, FSCTL_UNLOCK_VOLUME, NULL, 0);
+    }
+    NtClose(Handle);
+
+    if (!NT_SUCCESS(Status))
+    {
+        NtfsFormatReport(Callback, "The volume could not be checked (status 0x%08lx).\n", Status);
+        return FALSE;
+    }
+
+    NtfsFormatReport(Callback, "%I64u file records processed.\n", Result.FileRecords);
+    NtfsFormatReport(Callback, "%I64u index entries processed in %I64u directories.\n",
+                     Result.IndexEntries, Result.Directories);
+    if (Result.ClaimedClusters)
+        NtfsFormatReport(Callback, "%I64u clusters in use were marked allocated.\n", Result.ClaimedClusters);
+    if (Result.FreedClusters)
+        NtfsFormatReport(Callback, "%I64u clusters were returned to free space.\n", Result.FreedClusters);
+    if (Result.Errors)
+    {
+        NtfsFormatReport(Callback, "Problems were found on the volume.\n");
+        return TRUE;
+    }
+
+    NtfsFormatReport(Callback, "No problems were found on the volume.\n");
     *ExitStatus = (ULONG)STATUS_SUCCESS;
     return TRUE;
 }
