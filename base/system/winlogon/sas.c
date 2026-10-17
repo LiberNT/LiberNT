@@ -29,7 +29,6 @@
 #define IDHK_CTRL_ALT_DEL   0
 #define IDHK_CTRL_SHIFT_ESC 1
 #define IDHK_WIN_L          2
-#define IDHK_WIN_U          3
 
 // #define EWX_FLAGS_MASK  0x00000014
 // #define EWX_ACTION_MASK ~EWX_FLAGS_MASK
@@ -1752,11 +1751,6 @@ RegisterHotKeys(
     if (!Session->LockWkStaHotkey)
         WARN("WL: Unable to register Win+L hotkey\n");
 
-    /* Register Win+U "Accessibility Utility" hotkey (optional) */
-    Session->UtilManHotkey = RegisterHotKey(hwndSAS, IDHK_WIN_U, MOD_WIN, 'U');
-    if (!Session->UtilManHotkey)
-        WARN("WL: Unable to register Win+U hotkey\n");
-
     return TRUE;
 }
 
@@ -1774,9 +1768,6 @@ UnregisterHotKeys(
 
     if (Session->LockWkStaHotkey)
         UnregisterHotKey(hwndSAS, IDHK_WIN_L);
-
-    if (Session->UtilManHotkey)
-        UnregisterHotKey(hwndSAS, IDHK_WIN_U);
 
     return TRUE;
 }
@@ -1852,12 +1843,6 @@ SASWindowProc(
                 {
                     TRACE("SAS: WIN+L\n");
                     PostMessageW(Session->SASWindow, WM_LOGONNOTIFY, LN_LOCK_WORKSTATION, 0);
-                    return TRUE;
-                }
-                case IDHK_WIN_U:
-                {
-                    TRACE("SAS: WIN+U\n");
-                    // PostMessageW(Session->SASWindow, WM_LOGONNOTIFY, LN_ACCESSIBILITY, 0);
                     return TRUE;
                 }
             }

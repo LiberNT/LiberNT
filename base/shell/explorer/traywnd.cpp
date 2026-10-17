@@ -47,6 +47,7 @@ HRESULT TrayWindowCtxMenuCreator(ITrayWindow * TrayWnd, IN HWND hWndOwner, ICont
 #define IDHK_ACTIVATE_TASK 0x209
 #define IDHK_QUICK_SETTINGS 0x20a
 #define IDHK_SETTINGS 0x20b
+#define IDHK_ACCESSIBILITY 0x20c
 
 enum { NONE, TILED, CASCADED } g_Arrangement = NONE;
 
@@ -1002,6 +1003,9 @@ public:
             break;
         case IDHK_SETTINGS:
             ShellExecuteW(m_hWnd, NULL, L"ms-settings:", NULL, NULL, SW_NORMAL);
+            break;
+        case IDHK_ACCESSIBILITY:
+            ShellExecuteW(m_hWnd, NULL, L"ms-settings:easeofaccess", NULL, NULL, SW_NORMAL);
             break;
         case IDHK_QUICK_SETTINGS:
         {
@@ -2744,6 +2748,7 @@ ChangePos:
             MAKELONG(IDHK_PAGER,          MAKEWORD('B', MOD_WIN)),
             MAKELONG(IDHK_QUICK_SETTINGS, MAKEWORD('A', MOD_WIN)),
             MAKELONG(IDHK_SETTINGS,       MAKEWORD('I', MOD_WIN)),
+            MAKELONG(IDHK_ACCESSIBILITY,  MAKEWORD('U', MOD_WIN)),
         };
         static const UINT taskmods[] =
         {
