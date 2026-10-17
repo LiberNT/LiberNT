@@ -169,6 +169,9 @@ UserProcessMouseInput(PMOUSE_INPUT_DATA mid)
     /* If something has changed, send input to user */
     if (mi.dwFlags)
         UserSendMouseInput(&mi, FALSE);
+
+    if (mid->ButtonFlags & (MOUSE_LEFT_BUTTON_UP | MOUSE_RIGHT_BUTTON_UP | MOUSE_MIDDLE_BUTTON_UP))
+        UserAccessMouseButtonUp();
 }
 
 /*

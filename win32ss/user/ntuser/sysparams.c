@@ -107,6 +107,11 @@ static const WCHAR* KEY_SCRREAD = L"Control Panel\\Accessibility\\Blind Access";
 static const WCHAR* VAL_ON = L"On";
 
 static const WCHAR* KEY_MOUSEKEYS = L"Control Panel\\Accessibility\\MouseKeys";
+static const WCHAR* KEY_STICKYKEYS = L"Control Panel\\Accessibility\\StickyKeys";
+static const WCHAR* KEY_TOGGLEKEYS = L"Control Panel\\Accessibility\\ToggleKeys";
+static const WCHAR* KEY_KBDRESPONSE = L"Control Panel\\Accessibility\\Keyboard Response";
+static const WCHAR* KEY_HIGHCONTRAST = L"Control Panel\\Accessibility\\HighContrast";
+static WCHAR gawcHighContrastScheme[MAX_PATH];
 static const WCHAR* VAL_MOUSEKEYS_FLAGS = L"Flags";
 static const WCHAR* VAL_MOUSEKEYS_MAX = L"MaximumSpeed";
 static const WCHAR* VAL_MOUSEKEYS_TIMETOMAX = L"TimeToMaximumSpeed";
@@ -542,16 +547,28 @@ SpiUpdatePerUserSystemParameters(VOID)
 
     gspv.accesstimeout.cbSize = sizeof(ACCESSTIMEOUT);
     gspv.filterkeys.cbSize = sizeof(FILTERKEYS);
+    gspv.filterkeys.dwFlags = SpiLoadInt(KEY_KBDRESPONSE, L"Flags", 126);
+    gspv.filterkeys.iWaitMSec = SpiLoadInt(KEY_KBDRESPONSE, L"DelayBeforeAcceptance", 1000);
+    gspv.filterkeys.iDelayMSec = SpiLoadInt(KEY_KBDRESPONSE, L"AutoRepeatDelay", 1000);
+    gspv.filterkeys.iRepeatMSec = SpiLoadInt(KEY_KBDRESPONSE, L"AutoRepeatRate", 500);
+    gspv.filterkeys.iBounceMSec = SpiLoadInt(KEY_KBDRESPONSE, L"BounceTime", 0);
     gspv.togglekeys.cbSize = sizeof(TOGGLEKEYS);
+    gspv.togglekeys.dwFlags = SpiLoadInt(KEY_TOGGLEKEYS, L"Flags", 62);
     gspv.mousekeys.cbSize = sizeof(MOUSEKEYS);
     gspv.mousekeys.dwFlags = SpiLoadInt(KEY_MOUSEKEYS, VAL_MOUSEKEYS_FLAGS, 62);
     gspv.mousekeys.iMaxSpeed = SpiLoadInt(KEY_MOUSEKEYS, VAL_MOUSEKEYS_MAX, 80);
     gspv.mousekeys.iTimeToMaxSpeed = SpiLoadInt(KEY_MOUSEKEYS, VAL_MOUSEKEYS_TIMETOMAX, 3000);
     gspv.mousekeys.iCtrlSpeed = 8; // FIXME
     gspv.stickykeys.cbSize = sizeof(STICKYKEYS);
+    gspv.stickykeys.dwFlags = SpiLoadInt(KEY_STICKYKEYS, L"Flags", 510) & 0x0000FFFF;
     gspv.serialkeys.cbSize = sizeof(SERIALKEYS);
     gspv.soundsentry.cbSize = sizeof(SOUNDSENTRYW);
     gspv.highcontrast.cbSize = sizeof(HIGHCONTRASTW);
+    gspv.highcontrast.dwFlags = SpiLoadInt(KEY_HIGHCONTRAST, L"Flags", 126);
+    RtlZeroMemory(gawcHighContrastScheme, sizeof(gawcHighContrastScheme));
+    RegReadUserSetting(KEY_HIGHCONTRAST, L"High Contrast Scheme", REG_SZ, gawcHighContrastScheme,
+                       sizeof(gawcHighContrastScheme) - sizeof(WCHAR));
+    gspv.highcontrast.lpszDefaultScheme = gawcHighContrastScheme;
     gspv.animationinfo.cbSize = sizeof(ANIMATIONINFO);
     gspv.animationinfo.iMinAnimate = !!SpiLoadInt(KEY_METRIC, VAL_MINANIMATE, TRUE);
 
@@ -745,6 +762,58 @@ SpiSet(PVOID pvData, PVOID pvParam, ULONG cbSize, FLONG fl)
 {
     REQ_INTERACTIVE_WINSTA(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
     return SpiMemCopy(pvData, pvParam, cbSize, fl & SPIF_PROTECT);
+}
+
+static
+BOOL
+SpiCopyHighContrastScheme(PWSTR pwszDst, FLONG fl)
+{
+    SIZE_T cbSize = (wcslen(gawcHighContrastScheme) + 1) * sizeof(WCHAR);
+
+    if (fl & SPIF_PROTECT)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWrite(pwszDst, cbSize, sizeof(WCHAR));
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            SetLastNtError(_SEH2_GetExceptionCode());
+            _SEH2_YIELD(return FALSE);
+        }
+        _SEH2_END;
+    }
+    return SpiMemCopy(pwszDst, gawcHighContrastScheme, (ULONG)cbSize, fl & SPIF_PROTECT);
+}
+
+static
+BOOL
+SpiCaptureHighContrastScheme(PCWSTR pwszSrc, FLONG fl)
+{
+    WCHAR awcScheme[MAX_PATH];
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG i;
+
+    RtlZeroMemory(awcScheme, sizeof(awcScheme));
+    _SEH2_TRY
+    {
+        if (fl & SPIF_PROTECT)
+            ProbeForRead(pwszSrc, sizeof(WCHAR), sizeof(WCHAR));
+        for (i = 0; i < _countof(awcScheme) - 1 && pwszSrc[i]; i++)
+            awcScheme[i] = pwszSrc[i];
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    if (!NT_SUCCESS(Status))
+    {
+        SetLastNtError(Status);
+        return FALSE;
+    }
+    RtlCopyMemory(gawcHighContrastScheme, awcScheme, sizeof(awcScheme));
+    return TRUE;
 }
 
 static inline
@@ -1525,10 +1594,15 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
 
             if (!SpiSet(&gspv.filterkeys, pvParam, sizeof(FILTERKEYS), fl))
                 return 0;
+            UserAccessSettingsChanged();
 
             if (fl & SPIF_UPDATEINIFILE)
             {
-                // FIXME: What to do?
+                SpiStoreSzInt(KEY_KBDRESPONSE, L"Flags", gspv.filterkeys.dwFlags);
+                SpiStoreSzInt(KEY_KBDRESPONSE, L"DelayBeforeAcceptance", gspv.filterkeys.iWaitMSec);
+                SpiStoreSzInt(KEY_KBDRESPONSE, L"AutoRepeatDelay", gspv.filterkeys.iDelayMSec);
+                SpiStoreSzInt(KEY_KBDRESPONSE, L"AutoRepeatRate", gspv.filterkeys.iRepeatMSec);
+                SpiStoreSzInt(KEY_KBDRESPONSE, L"BounceTime", gspv.filterkeys.iBounceMSec);
             }
             return (UINT_PTR)KEY_DESKTOP;
         }
@@ -1561,7 +1635,7 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
 
             if (fl & SPIF_UPDATEINIFILE)
             {
-                // FIXME: What to do?
+                SpiStoreSzInt(KEY_TOGGLEKEYS, L"Flags", gspv.togglekeys.dwFlags);
             }
             return (UINT_PTR)KEY_DESKTOP;
         }
@@ -1582,6 +1656,7 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
         case SPI_SETMOUSEKEYS:
         {
             LPMOUSEKEYS MouseKeys = (LPMOUSEKEYS)pvParam;
+            DWORD State;
 
             if (uiParam != 0 && uiParam != sizeof(MOUSEKEYS))
                 return 0;
@@ -1589,12 +1664,18 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
             if (!MouseKeys || MouseKeys->cbSize != sizeof(MOUSEKEYS))
                 return 0;
 
+            State = gspv.mousekeys.dwFlags & (MKF_LEFTBUTTONDOWN | MKF_LEFTBUTTONSEL | MKF_MOUSEMODE |
+                                              MKF_RIGHTBUTTONDOWN | MKF_RIGHTBUTTONSEL);
             if (!SpiSet(&gspv.mousekeys, pvParam, sizeof(MOUSEKEYS), fl))
                 return 0;
+            gspv.mousekeys.dwFlags = (gspv.mousekeys.dwFlags & ~(MKF_LEFTBUTTONDOWN | MKF_LEFTBUTTONSEL |
+                                                                 MKF_MOUSEMODE | MKF_RIGHTBUTTONDOWN |
+                                                                 MKF_RIGHTBUTTONSEL)) | State;
+            UserAccessSettingsChanged();
 
             if (fl & SPIF_UPDATEINIFILE)
             {
-                SpiStoreSzInt(KEY_MOUSEKEYS, VAL_MOUSEKEYS_FLAGS, gspv.mousekeys.dwFlags);
+                SpiStoreSzInt(KEY_MOUSEKEYS, VAL_MOUSEKEYS_FLAGS, gspv.mousekeys.dwFlags & 0x0000FFFF);
                 SpiStoreSzInt(KEY_MOUSEKEYS, VAL_MOUSEKEYS_MAX, gspv.mousekeys.iMaxSpeed);
                 SpiStoreSzInt(KEY_MOUSEKEYS, VAL_MOUSEKEYS_TIMETOMAX, gspv.mousekeys.iTimeToMaxSpeed);
             }
@@ -1623,6 +1704,7 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
         case SPI_SETSTICKYKEYS:
         {
             LPSTICKYKEYS StickyKeys = (LPSTICKYKEYS)pvParam;
+            DWORD State;
 
             if (uiParam != 0 && uiParam != sizeof(STICKYKEYS))
                 return 0;
@@ -1630,12 +1712,15 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
             if (!StickyKeys || StickyKeys->cbSize != sizeof(STICKYKEYS))
                 return 0;
 
+            State = gspv.stickykeys.dwFlags & 0xFFFF0000;
             if (!SpiSet(&gspv.stickykeys, pvParam, sizeof(STICKYKEYS), fl))
                 return 0;
+            gspv.stickykeys.dwFlags = (gspv.stickykeys.dwFlags & 0x0000FFFF) | State;
+            UserAccessSettingsChanged();
 
             if (fl & SPIF_UPDATEINIFILE)
             {
-                // FIXME: What to do?
+                SpiStoreSzInt(KEY_STICKYKEYS, L"Flags", gspv.stickykeys.dwFlags & 0x0000FFFF);
             }
             return (UINT_PTR)KEY_DESKTOP;
         }
@@ -1746,6 +1831,7 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
         case SPI_GETHIGHCONTRAST:
         {
             LPHIGHCONTRASTW highcontrast = (LPHIGHCONTRASTW)pvParam;
+            HIGHCONTRASTW Request;
 
             if (uiParam != 0 && uiParam != sizeof(HIGHCONTRASTW))
                 return 0;
@@ -1753,12 +1839,18 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
             if (!highcontrast || highcontrast->cbSize != sizeof(HIGHCONTRASTW))
                 return 0;
 
-            return SpiGet(pvParam, &gspv.highcontrast, sizeof(HIGHCONTRASTW), fl);
+            if (!SpiSet(&Request, pvParam, sizeof(Request), fl))
+                return 0;
+            Request.dwFlags = gspv.highcontrast.dwFlags;
+            if (Request.lpszDefaultScheme && !SpiCopyHighContrastScheme(Request.lpszDefaultScheme, fl))
+                return 0;
+            return SpiGet(pvParam, &Request, sizeof(Request), fl);
         }
 
         case SPI_SETHIGHCONTRAST:
         {
             LPHIGHCONTRASTW highcontrast = (LPHIGHCONTRASTW)pvParam;
+            HIGHCONTRASTW Request;
 
             if (uiParam != 0 && uiParam != sizeof(HIGHCONTRASTW))
                 return 0;
@@ -1766,12 +1858,18 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
             if (!highcontrast || highcontrast->cbSize != sizeof(HIGHCONTRASTW))
                 return 0;
 
-            if (!SpiSet(&gspv.highcontrast, pvParam, sizeof(HIGHCONTRASTW), fl))
+            if (!SpiSet(&Request, pvParam, sizeof(Request), fl))
                 return 0;
+            if (Request.lpszDefaultScheme && !SpiCaptureHighContrastScheme(Request.lpszDefaultScheme, fl))
+                return 0;
+            gspv.highcontrast.dwFlags = (Request.dwFlags & ~(HCF_HOTKEYAVAILABLE | HCF_OPTION_NOTHEMECHANGE)) |
+                                        (gspv.highcontrast.dwFlags & HCF_HOTKEYAVAILABLE);
+            gspv.highcontrast.lpszDefaultScheme = gawcHighContrastScheme;
 
             if (fl & SPIF_UPDATEINIFILE)
             {
-                // FIXME: What to do?
+                SpiStoreSzInt(KEY_HIGHCONTRAST, L"Flags", gspv.highcontrast.dwFlags);
+                SpiStoreSz(KEY_HIGHCONTRAST, L"High Contrast Scheme", gawcHighContrastScheme);
             }
             return (UINT_PTR)KEY_DESKTOP;
         }

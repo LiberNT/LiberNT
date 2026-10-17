@@ -5603,12 +5603,40 @@ NTSTATUS WINAPI wow64_NtUserSystemParametersInfo( UINT *args )
             if (info32->cbSize != sizeof(*info32)) return FALSE;
             if (val == sizeof(*info32)) val = sizeof(info);
             info.cbSize = sizeof(info);
+#ifdef __REACTOS__
+            info.lpszDefaultScheme = ULongToPtr( info32->lpszDefaultScheme );
+            if (!NtUserSystemParametersInfo( action, val, &info, winini )) return FALSE;
+            info32->dwFlags = info.dwFlags;
+#else
             if (!NtUserSystemParametersInfo( action, val, &info, winini )) return FALSE;
             info32->dwFlags = info.dwFlags;
             info32->lpszDefaultScheme = PtrToUlong( info.lpszDefaultScheme );
+#endif
             return TRUE;
         }
         break;
+
+#ifdef __REACTOS__
+    case SPI_SETHIGHCONTRAST:
+        if (ptr)
+        {
+            struct
+            {
+                UINT  cbSize;
+                DWORD dwFlags;
+                ULONG lpszDefaultScheme;
+            } *info32 = ptr;
+            HIGHCONTRASTW info;
+
+            if (info32->cbSize != sizeof(*info32)) return FALSE;
+            if (val == sizeof(*info32)) val = sizeof(info);
+            info.cbSize = sizeof(info);
+            info.dwFlags = info32->dwFlags;
+            info.lpszDefaultScheme = ULongToPtr( info32->lpszDefaultScheme );
+            return NtUserSystemParametersInfo( action, val, &info, winini );
+        }
+        break;
+#endif
 
     case SPI_GETDEFAULTINPUTLANG:
         if (ptr)

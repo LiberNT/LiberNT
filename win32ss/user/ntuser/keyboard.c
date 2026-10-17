@@ -1527,14 +1527,14 @@ UserProcessKeyboardInput(
 
         KbdInput.time = 0;
         KbdInput.dwExtraInfo = pKbdInputData->ExtraInformation;
-        UserSendKeyboardInput(&KbdInput, FALSE);
+        UserAccessKeyboardInput(&KbdInput);
 
         /* E1 keys don't have break code */
         if (pKbdInputData->Flags & KEY_E1)
         {
             /* Send key up event */
             KbdInput.dwFlags |= KEYEVENTF_KEYUP;
-            UserSendKeyboardInput(&KbdInput, FALSE);
+            UserAccessKeyboardInput(&KbdInput);
         }
     }
 }

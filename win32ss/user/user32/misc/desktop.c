@@ -180,6 +180,33 @@ BOOL WINAPI SetDeskWallpaper(LPCSTR filename)
 	return SystemParametersInfoA(SPI_SETDESKWALLPAPER,0,(PVOID)filename,TRUE);
 }
 
+static BOOL
+GetHighContrastW(UINT uiParam, LPHIGHCONTRASTW HighContrast, UINT fWinIni)
+{
+    HIGHCONTRASTW Request;
+    WCHAR Scheme[MAX_PATH];
+    SIZE_T Size;
+    LPWSTR Copy;
+
+    if (!HighContrast || HighContrast->cbSize != sizeof(HIGHCONTRASTW))
+        return NtUserSystemParametersInfo(SPI_GETHIGHCONTRAST, uiParam, HighContrast, fWinIni);
+    Request.cbSize = sizeof(Request);
+    Request.dwFlags = 0;
+    Request.lpszDefaultScheme = Scheme;
+    Scheme[0] = UNICODE_NULL;
+    if (!NtUserSystemParametersInfo(SPI_GETHIGHCONTRAST, uiParam, &Request, fWinIni))
+        return FALSE;
+    Scheme[MAX_PATH - 1] = UNICODE_NULL;
+    Size = (wcslen(Scheme) + 1) * sizeof(WCHAR);
+    Copy = LocalAlloc(LMEM_FIXED, Size);
+    if (!Copy)
+        return FALSE;
+    RtlCopyMemory(Copy, Scheme, Size);
+    HighContrast->dwFlags = Request.dwFlags;
+    HighContrast->lpszDefaultScheme = Copy;
+    return TRUE;
+}
+
 BOOL WINAPI
 RealSystemParametersInfoA(UINT uiAction,
 		      UINT uiParam,
@@ -321,6 +348,62 @@ RealSystemParametersInfoA(UINT uiAction,
         return Ret;
       }
 
+      case SPI_GETHIGHCONTRAST:
+      {
+          LPHIGHCONTRASTA HighContrast = (LPHIGHCONTRASTA)pvParam;
+          HIGHCONTRASTW Wide;
+          UNICODE_STRING Scheme;
+          ANSI_STRING AnsiScheme;
+
+          if (!HighContrast || HighContrast->cbSize != sizeof(HIGHCONTRASTA))
+          {
+              SetLastError(ERROR_INVALID_PARAMETER);
+              return FALSE;
+          }
+          Wide.cbSize = sizeof(Wide);
+          if (!GetHighContrastW(sizeof(Wide), &Wide, fWinIni))
+              return FALSE;
+          RtlInitUnicodeString(&Scheme, Wide.lpszDefaultScheme);
+          AnsiScheme.Length = 0;
+          AnsiScheme.MaximumLength = (USHORT)RtlUnicodeStringToAnsiSize(&Scheme);
+          AnsiScheme.Buffer = LocalAlloc(LMEM_FIXED, AnsiScheme.MaximumLength);
+          if (AnsiScheme.Buffer)
+              RtlUnicodeStringToAnsiString(&AnsiScheme, &Scheme, FALSE);
+          LocalFree(Wide.lpszDefaultScheme);
+          if (!AnsiScheme.Buffer)
+              return FALSE;
+          HighContrast->dwFlags = Wide.dwFlags;
+          HighContrast->lpszDefaultScheme = AnsiScheme.Buffer;
+          return TRUE;
+      }
+
+      case SPI_SETHIGHCONTRAST:
+      {
+          LPHIGHCONTRASTA HighContrast = (LPHIGHCONTRASTA)pvParam;
+          HIGHCONTRASTW Wide;
+          UNICODE_STRING Scheme;
+          BOOL Ret;
+
+          if (!HighContrast || HighContrast->cbSize != sizeof(HIGHCONTRASTA))
+          {
+              SetLastError(ERROR_INVALID_PARAMETER);
+              return FALSE;
+          }
+          RtlInitEmptyUnicodeString(&Scheme, NULL, 0);
+          if (HighContrast->lpszDefaultScheme &&
+              !RtlCreateUnicodeStringFromAsciiz(&Scheme, HighContrast->lpszDefaultScheme))
+          {
+              SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+              return FALSE;
+          }
+          Wide.cbSize = sizeof(Wide);
+          Wide.dwFlags = HighContrast->dwFlags;
+          Wide.lpszDefaultScheme = Scheme.Buffer;
+          Ret = NtUserSystemParametersInfo(SPI_SETHIGHCONTRAST, sizeof(Wide), &Wide, fWinIni);
+          RtlFreeUnicodeString(&Scheme);
+          return Ret;
+      }
+
       case SPI_SETDESKWALLPAPER:
       {
           UNICODE_STRING ustrWallpaper;
@@ -355,6 +438,9 @@ RealSystemParametersInfoW(UINT uiAction,
 {
   switch(uiAction)
   {
+    case SPI_GETHIGHCONTRAST:
+      return GetHighContrastW(uiParam, pvParam, fWinIni);
+
 
     case SPI_SETDESKWALLPAPER:
       {

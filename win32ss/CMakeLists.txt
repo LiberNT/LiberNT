@@ -122,6 +122,7 @@ list(APPEND SOURCE
     user/ntuser/callback.c
     user/ntuser/callproc.c
     user/ntuser/caret.c
+    user/ntuser/access.c
     user/ntuser/class.c
     user/ntuser/classmenu.c
     user/ntuser/clipboard.c
