@@ -206,12 +206,14 @@ acpi_button_add (
 
 	switch (button->type) {
 	case ACPI_BUTTON_TYPE_POWERF:
+		AcpiClearEvent(ACPI_EVENT_POWER_BUTTON);
 		status = AcpiInstallFixedEventHandler (
 			ACPI_EVENT_POWER_BUTTON,
 			acpi_button_notify_fixed,
 			button);
 		break;
 	case ACPI_BUTTON_TYPE_SLEEPF:
+		AcpiClearEvent(ACPI_EVENT_SLEEP_BUTTON);
 		status = AcpiInstallFixedEventHandler (
 			ACPI_EVENT_SLEEP_BUTTON,
 			acpi_button_notify_fixed,
