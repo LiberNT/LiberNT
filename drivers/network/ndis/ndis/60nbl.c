@@ -270,16 +270,8 @@ NdisAllocateNetBufferListPool(
         Parameters->Header.Type != NDIS_OBJECT_TYPE_DEFAULT)
         return NULL;
 
-    if (Parameters->Header.Revision == NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1)
-    {
-        if (Parameters->Header.Size <
-            NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1)
-        {
-            return NULL;
-        }
-    }
 #if NDIS_SUPPORT_NDIS687
-    else if (Parameters->Header.Revision == NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_2)
+    if (Parameters->Header.Revision == NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_2)
     {
         if (Parameters->Header.Size <
             NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_2)
@@ -290,8 +282,9 @@ NdisAllocateNetBufferListPool(
         if ((Flags & ~NET_BUFFER_LIST_POOL_FLAG_VERIFY) != 0)
             return NULL;
     }
-#endif
     else
+#endif
+    if (Parameters->Header.Revision != NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1)
     {
         return NULL;
     }
