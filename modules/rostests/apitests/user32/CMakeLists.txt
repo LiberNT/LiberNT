@@ -76,6 +76,7 @@ list(APPEND SOURCE
     ScrollWindowEx.c
     UnhookWinEvent.c
     SendMessageTimeout.c
+    SendMessageTimeoutHung.c
     SetActiveWindow.c
     SetCursorPos.c
     SetFocus.c
