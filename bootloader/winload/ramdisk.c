@@ -469,6 +469,9 @@ OslBuildRamdisk(
             File.Size = 0;
     }
 
+    if (Path[0] == UNICODE_NULL && !HaveMedium && DkOpenBcdDevice(&Parent, Device))
+        return TRUE;
+
     if (Path[0] == UNICODE_NULL ? !HaveMedium : File.Size == 0)
     {
         FwPrint(L"The RAM disk source was not found.\r\n");
