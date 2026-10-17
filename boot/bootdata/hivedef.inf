@@ -190,6 +190,7 @@ HKCU,"Control Panel\Input Method\Hot Keys\00000202","Virtual Key",0x00030003,4c,
 ; International keys
 HKCU,"Control Panel\International",,0x00000012
 HKCU,"Control Panel\International\Geo",,0x00000012
+HKCU,"Control Panel\International\Geo","Nation",0x00000000,"244"
 
 ; Cursors Schemes
 HKCU,"Control Panel\Cursors",,,"LiberNT Default"
