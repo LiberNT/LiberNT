@@ -4047,8 +4047,10 @@ NtUserSetWindowPos(
    if (!(Window = UserGetWindowObject(hWnd)) ||
         UserIsDesktopWindow(Window) || UserIsMessageWindow(Window))
    {
-      ERR("SetWindowPos from %s: %p is %s\n", PsGetProcessImageFileName(PsGetCurrentProcess()), hWnd,
-          !Window ? "not a window" : UserIsDesktopWindow(Window) ? "the desktop window" : "a message-only window");
+      ERR("SetWindowPos from %s: %p is %s (after %p, %d,%d %dx%d, flags %#x)\n",
+          PsGetProcessImageFileName(PsGetCurrentProcess()), hWnd,
+          !Window ? "not a window" : UserIsDesktopWindow(Window) ? "the desktop window" : "a message-only window",
+          hWndInsertAfter, X, Y, cx, cy, uFlags);
       goto Exit; // Return FALSE
    }
 
