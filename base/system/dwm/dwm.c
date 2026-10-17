@@ -3294,6 +3294,18 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
                          (material->LayerFlags & DWM_WINDOW_PREMULTIPLIED_ALPHA) != 0;
     LONG matCx0 = 0, matCy0 = 0, matCx1 = 0, matCy1 = 0;
     ULONG lastColor = 0xFFFFFFFFu, lastKey = 0, lastWeight = 0;
+    BOOL useFrame = material != NULL && (material->LayerFlags & DWM_WINDOW_FRAME_ALPHA) != 0;
+    ULONG frameKey = 0, button;
+    RECTL frameInterior = { 0, 0, 0, 0 };
+    const ULONG *frameButtons[DWM_CAPTION_BUTTONS] = { NULL };
+
+    if (useFrame)
+    {
+        frameKey = DwmFrameKey(material);
+        DwmFrameInterior(material, &frameInterior);
+        for (button = 0; button < DWM_CAPTION_BUTTONS; ++button)
+            frameButtons[button] = DwmFrameButtonImage(material, button, frameKey);
+    }
 
     if (material != NULL &&
         material->BackdropType >= DWM_BACKDROP_MAIN &&
@@ -3420,6 +3432,34 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
                 s = ((((rb >> 16) & 0xFFFFu) * recip >> 16) << 16) |
                     ((((g >> 8) & 0xFFFFu) * recip >> 16) << 8) |
                     ((rb & 0xFFFFu) * recip >> 16);
+            }
+            if (useFrame &&
+                sx0 >= material->ClientX && sy0 >= material->ClientY &&
+                sx0 < material->ClientX + material->ClientWidth &&
+                sy0 < material->ClientY + material->ClientHeight &&
+                (sx0 < frameInterior.left || sy0 < frameInterior.top ||
+                 sx0 >= frameInterior.right || sy0 >= frameInterior.bottom))
+            {
+                ULONG frameInverse = 255u - min(255u, sourceAlpha * recip >> 16);
+                ULONG f = frameKey, red, green, blue;
+
+                for (button = 0; button < DWM_CAPTION_BUTTONS; ++button)
+                {
+                    const RECTL *Rect = &material->CaptionButtons[button];
+
+                    if (frameButtons[button] != NULL && sx0 >= Rect->left && sx0 < Rect->right &&
+                        sy0 >= Rect->top && sy0 < Rect->bottom)
+                    {
+                        f = frameButtons[button][(SIZE_T)(sy0 - Rect->top) * (ULONG)(Rect->right - Rect->left) +
+                                                 (ULONG)(sx0 - Rect->left)];
+                        break;
+                    }
+                }
+                red = ((s >> 16) & 0xFFu) + ((f >> 16) & 0xFFu) * frameInverse / 255u;
+                green = ((s >> 8) & 0xFFu) + ((f >> 8) & 0xFFu) * frameInverse / 255u;
+                blue = (s & 0xFFu) + (f & 0xFFu) * frameInverse / 255u;
+
+                s = (min(red, 255u) << 16) | (min(green, 255u) << 8) | min(blue, 255u);
             }
             if (premultiplied)
             {
