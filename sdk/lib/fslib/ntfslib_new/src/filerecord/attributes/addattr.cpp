@@ -4,6 +4,7 @@
  * PURPOSE:     NTFS filesystem driver
  * COPYRIGHT:   Copyright 2024 Carl Bialorucki <carl.bialorucki@reactos.org>
  *              Copyright 2024 Justin Miller <justin.miller@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include "ntfslib_new.h"

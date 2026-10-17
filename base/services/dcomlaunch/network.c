@@ -3,6 +3,7 @@
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     UUID initialization.
  * COPYRIGHT:   Copyright 2019 Pierre Schweitzer
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 /* INCLUDES *****************************************************************/

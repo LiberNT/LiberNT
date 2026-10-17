@@ -4,6 +4,7 @@
  * FILE:        lib/fslib/ntfslib/ntfslib.c
  * PURPOSE:     NTFS lib
  * PROGRAMMERS: Pierre Schweitzer
+ *              Ahmed ARIF
  */
 
 #define NTOS_MODE_USER
