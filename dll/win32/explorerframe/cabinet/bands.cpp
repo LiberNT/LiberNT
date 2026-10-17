@@ -13,6 +13,7 @@
 #define IDC_CRUMB(index) (0x200 + (index))
 #define IDC_CRUMB_CHEVRON(index) (0x300 + (index))
 #define IDC_CRUMB_ROOT 0x400
+#define IDC_CRUMB_ROOT_CHEVRON 0x401
 
 static COLORREF
 BlendColor(COLORREF base, COLORREF ink, int amount)
@@ -82,6 +83,37 @@ CabinetFillRound(HDC dc, const RECT &rc, int radius, COLORREF color)
     AddRoundRect(path, Gdiplus::RectF((float)rc.left, (float)rc.top, (float)(rc.right - rc.left),
                                       (float)(rc.bottom - rc.top)), (float)radius);
     graphics.FillPath(&brush, &path);
+}
+
+LRESULT
+CabinetToolbarCustomDraw(NMTBCUSTOMDRAW *draw, COLORREF base)
+{
+    CabinetPalette palette;
+    UINT state = draw->nmcd.uItemState;
+    int amount = 0;
+
+    if (draw->nmcd.dwDrawStage == CDDS_PREPAINT)
+        return CDRF_NOTIFYITEMDRAW;
+    if (draw->nmcd.dwDrawStage != CDDS_ITEMPREPAINT)
+        return CDRF_DODEFAULT;
+    if (!(state & CDIS_DISABLED))
+    {
+        if (state & CDIS_SELECTED)
+            amount = 0x10;
+        else if ((state & CDIS_HOT) && (state & CDIS_CHECKED))
+            amount = 0x24;
+        else if (state & CDIS_HOT)
+            amount = 0x18;
+        else if (state & CDIS_CHECKED)
+            amount = 0x14;
+    }
+    if (amount)
+    {
+        CabinetGetPalette(&palette);
+        CabinetFillRound(draw->nmcd.hdc, draw->nmcd.rc, MulDiv(4, GetDpiForWindow(draw->nmcd.hdr.hwndFrom), 96),
+                         BlendColor(base, palette.Text, amount));
+    }
+    return TBCDRF_NOBACKGROUND | TBCDRF_NOEDGES | TBCDRF_NOOFFSET;
 }
 
 static HIMAGELIST
@@ -302,10 +334,10 @@ CCabinetTabBand::NewRect() const
     RECT rc;
     int width = TabWidth();
 
-    rc.left = Scale(8) + m_Count * (width - Slant()) + Slant() - Scale(4);
-    rc.right = rc.left + Scale(27);
-    rc.top = Scale(18) + Scale(6);
-    rc.bottom = rc.top + Scale(14);
+    rc.left = Scale(8) + m_Count * (width - Slant()) + Slant() + Scale(4);
+    rc.right = rc.left + Scale(32);
+    rc.top = Scale(20);
+    rc.bottom = rc.top + Scale(24);
     return rc;
 }
 
@@ -428,18 +460,22 @@ CCabinetTabBand::Paint(HDC dc)
         Gdiplus::Font font(dc, &logFont);
 
         {
-            RECT add = NewRect();
-            Gdiplus::PointF points[4] =
+            RECT add = NewRect(), glyph;
+            if (m_HotNew)
             {
-                Gdiplus::PointF((float)add.left, (float)add.top),
-                Gdiplus::PointF((float)add.right - (float)Scale(5), (float)add.top),
-                Gdiplus::PointF((float)add.right, (float)add.bottom),
-                Gdiplus::PointF((float)add.left + (float)Scale(5), (float)add.bottom),
-            };
-            Gdiplus::SolidBrush fill(GlassColor(m_HotNew ? 0xE0 : 0x90, palette.Band));
-            Gdiplus::Pen border(GlassColor(0x90, palette.TabBorder), 1.0f);
-            graphics.FillPolygon(&fill, points, 4);
-            graphics.DrawPolygon(&border, points, 4);
+                Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
+                Gdiplus::SolidBrush fill(Gdiplus::Color(0x30, 0x30, 0x30, 0x30));
+                AddRoundRect(path, Gdiplus::RectF((float)add.left, (float)add.top, (float)(add.right - add.left),
+                                                  (float)(add.bottom - add.top)), (float)Scale(4));
+                graphics.FillPath(&fill, &path);
+            }
+            glyph.left = (add.left + add.right) / 2 - Scale(7);
+            glyph.top = (add.top + add.bottom) / 2 - Scale(7);
+            glyph.right = glyph.left + Scale(14);
+            glyph.bottom = glyph.top + Scale(14);
+            ShellFrame::FillIcon(graphics, L"add_16_regular",
+                                 Gdiplus::RectF((float)glyph.left, (float)glyph.top, (float)(glyph.right - glyph.left),
+                                                (float)(glyph.bottom - glyph.top)), RGB(255, 255, 255));
         }
         for (int order = m_Count - 1; order >= -1; order--)
         {
@@ -763,6 +799,9 @@ CCabinetAddressBand::Layout()
         button.fsState = TBSTATE_ENABLED;
         button.fsStyle = BTNS_BUTTON | BTNS_AUTOSIZE;
         SendMessageW(m_Toolbar, TB_ADDBUTTONSW, 1, (LPARAM)&button);
+        button.iBitmap = 0;
+        button.idCommand = IDC_CRUMB_ROOT_CHEVRON;
+        SendMessageW(m_Toolbar, TB_ADDBUTTONSW, 1, (LPARAM)&button);
         if (m_FirstVisible)
         {
             button.iBitmap = I_IMAGENONE;
@@ -866,14 +905,25 @@ CCabinetAddressBand::ShowChildren(int index)
     PCUITEMID_CHILD next = NULL;
     int count = 0;
     HMENU popup;
-    RECT anchor = ButtonScreenRect(IDC_CRUMB_CHEVRON(index));
+    RECT anchor = ButtonScreenRect(index < 0 ? IDC_CRUMB_ROOT_CHEVRON : IDC_CRUMB_CHEVRON(index));
+    PIDLIST_ABSOLUTE root = NULL;
     UINT command;
 
-    if (index < 0 || index >= m_CrumbCount)
+    if (index >= m_CrumbCount || !m_CrumbCount)
         return;
     if (index + 1 < m_CrumbCount)
         next = ILFindLastID(m_Crumbs[index + 1]);
-    if (FAILED(SHBindToObject(NULL, m_Crumbs[index], NULL, IID_PPV_ARG(IShellFolder, &folder))))
+    if (index < 0)
+    {
+        if (FAILED(SHGetFolderLocation(NULL, CSIDL_DESKTOP, NULL, 0, &root)) ||
+            FAILED(SHGetDesktopFolder(&folder)))
+        {
+            if (root)
+                ILFree(root);
+            return;
+        }
+    }
+    else if (FAILED(SHBindToObject(NULL, m_Crumbs[index], NULL, IID_PPV_ARG(IShellFolder, &folder))))
         return;
     if (folder->EnumObjects(m_hwnd, SHCONTF_FOLDERS, &items) == S_OK && items)
     {
@@ -907,7 +957,7 @@ CCabinetAddressBand::ShowChildren(int index)
     DestroyMenu(popup);
     if (command >= 1 && (int)command <= count)
     {
-        PIDLIST_ABSOLUTE target = ILCombine(m_Crumbs[index], children[command - 1]);
+        PIDLIST_ABSOLUTE target = ILCombine(index < 0 ? root : m_Crumbs[index], children[command - 1]);
         if (target)
         {
             m_Host->OnAddressNavigate(target);
@@ -916,6 +966,8 @@ CCabinetAddressBand::ShowChildren(int index)
     }
     for (int i = 0; i < count; i++)
         ILFree(children[i]);
+    if (root)
+        ILFree(root);
     folder->Release();
 }
 
@@ -1021,6 +1073,14 @@ CCabinetAddressBand::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_LBUTTONDOWN:
             BeginEdit();
             return 0;
+        case WM_NOTIFY:
+            if (((NMHDR *)lParam)->hwndFrom == m_Toolbar && ((NMHDR *)lParam)->code == NM_CUSTOMDRAW)
+            {
+                CabinetPalette palette;
+                CabinetGetPalette(&palette);
+                return CabinetToolbarCustomDraw((NMTBCUSTOMDRAW *)lParam, m_Editing ? palette.Window : palette.Box);
+            }
+            break;
         case WM_CTLCOLOREDIT:
         {
             CabinetPalette palette;
@@ -1041,6 +1101,8 @@ CCabinetAddressBand::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
                 ShowOverflow();
             else if (command == IDC_CRUMB_ROOT)
                 BeginEdit();
+            else if (command == IDC_CRUMB_ROOT_CHEVRON)
+                ShowChildren(-1);
             else if (command >= IDC_CRUMB(0) && command < IDC_CRUMB(CABINET_MAX_CRUMBS))
             {
                 int index = command - IDC_CRUMB(0);

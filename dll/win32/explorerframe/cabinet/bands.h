@@ -28,6 +28,7 @@ struct CabinetPalette
 void CabinetGetPalette(CabinetPalette *palette);
 HIMAGELIST CabinetGlyphImages(const LPCWSTR *names, UINT count, int size, COLORREF color);
 void CabinetFillRound(HDC dc, const RECT &rc, int radius, COLORREF color);
+LRESULT CabinetToolbarCustomDraw(NMTBCUSTOMDRAW *draw, COLORREF base);
 
 class ICabinetBandHost
 {
@@ -93,7 +94,7 @@ private:
     };
 
     int TabWidth() const;
-    int Slant() const { return Scale(14); }
+    int Slant() const { return Scale(8); }
     BOOL InTab(int index, POINT pt) const;
     RECT TabRect(int index) const;
     RECT CloseRect(int index) const;

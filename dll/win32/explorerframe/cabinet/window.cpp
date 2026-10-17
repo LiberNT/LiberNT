@@ -167,7 +167,7 @@ CCabinetWindow::LoadText(UINT id, LPWSTR buffer, int length)
 
 static HWND
 CreateToolbar(HWND parent, UINT id, HIMAGELIST images, HIMAGELIST disabled, const TBBUTTON *buttons, UINT count,
-              int width, int height)
+              int gap)
 {
     HWND toolbar = CreateWindowExW(TBSTYLE_EX_DOUBLEBUFFER, TOOLBARCLASSNAMEW, NULL,
                                    WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | TBSTYLE_FLAT | TBSTYLE_LIST |
@@ -183,7 +183,7 @@ CreateToolbar(HWND parent, UINT id, HIMAGELIST images, HIMAGELIST disabled, cons
     SendMessageW(toolbar, TB_SETIMAGELIST, 0, (LPARAM)images);
     if (disabled)
         SendMessageW(toolbar, TB_SETDISABLEDIMAGELIST, 0, (LPARAM)disabled);
-    SendMessageW(toolbar, TB_SETBUTTONSIZE, 0, MAKELONG(width, height));
+    SendMessageW(toolbar, TB_SETLISTGAP, gap, 0);
     SendMessageW(toolbar, TB_ADDBUTTONSW, count, (LPARAM)buttons);
     SendMessageW(toolbar, TB_AUTOSIZE, 0, 0);
     return toolbar;
@@ -239,7 +239,7 @@ CCabinetWindow::CreateBands()
             { 3, IDC_COMMAND(CabinetCommand::Refresh), TBSTATE_ENABLED, BTNS_BUTTON, { 0 }, 0, (INT_PTR)text[3] },
         };
         m_NavBar = CreateToolbar(m_hwnd, IDC_CABINET_NAVBAR, m_Images[0], m_Images[1], buttons, _countof(buttons),
-                                 Scale(48), Scale(32));
+                                 Scale(12));
     }
 
     m_AddressBand = new CCabinetAddressBand();
@@ -281,7 +281,7 @@ CCabinetWindow::CreateBands()
             { 8, IDC_COMMAND(CabinetCommand::More), TBSTATE_ENABLED, BTNS_BUTTON, { 0 }, 0, (INT_PTR)text[12] },
         };
         m_CommandBar = CreateToolbar(m_hwnd, IDC_CABINET_COMMANDS, m_Images[2], m_Images[3], buttons,
-                                     _countof(buttons), Scale(48), Scale(40));
+                                     _countof(buttons), Scale(10));
     }
     {
         TBBUTTON buttons[] =
@@ -290,7 +290,7 @@ CCabinetWindow::CreateBands()
               { 0 }, 0, (INT_PTR)text[13] },
         };
         m_DetailsBar = CreateToolbar(m_hwnd, IDC_CABINET_DETAILSBAR, m_Images[2], m_Images[3], buttons,
-                                     _countof(buttons), Scale(48), Scale(40));
+                                     _countof(buttons), Scale(10));
     }
 
     m_Status = CreateWindowExW(0, STATUSCLASSNAMEW, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
@@ -303,7 +303,7 @@ CCabinetWindow::CreateBands()
             { 1, IDC_COMMAND(CabinetCommand::ViewLarge), TBSTATE_ENABLED, BTNS_CHECK, { 0 }, 0, (INT_PTR)text[15] },
         };
         m_ViewBar = CreateToolbar(m_hwnd, IDC_CABINET_VIEWBAR, m_Images[4], NULL, buttons, _countof(buttons),
-                                  Scale(24), Scale(22));
+                                  Scale(4));
     }
 
     m_DetailsIcon = CreateWindowExW(0, WC_STATICW, NULL, WS_CHILD | SS_ICON | SS_CENTERIMAGE | SS_REALSIZEIMAGE,
@@ -437,20 +437,24 @@ CCabinetWindow::OnSize()
     GetClientRect(m_hwnd, &client);
     MoveWindow(m_TabBand->Window(), 0, 0, max(0, (int)client.right - CaptionButtonsWidth() - Scale(8)), TabStripHeight(),
                TRUE);
-    MoveWindow(m_NavBar, Scale(3), TabStripHeight() + Scale(8), Scale(48) * 4, Scale(32), TRUE);
+    size = ToolbarSize(m_NavBar);
+    MoveWindow(m_NavBar, Scale(3), TabStripHeight() + Scale(8) + (Scale(32) - size.cy) / 2, size.cx, size.cy, TRUE);
+    left = Scale(3) + size.cx + Scale(6);
     search = min(Scale(300), max(Scale(140), (int)(client.right - Scale(214)) / 3));
     if (m_SearchBox->Window())
         MoveWindow(m_SearchBox->Window(), client.right - Scale(13) - search, TabStripHeight() + Scale(8), search,
                    Scale(32), TRUE);
     if (m_AddressBand->Window())
-        MoveWindow(m_AddressBand->Window(), Scale(201), TabStripHeight() + Scale(8),
-                   max(0, (int)client.right - Scale(13) - search - Scale(10) - Scale(201)), Scale(32), TRUE);
+        MoveWindow(m_AddressBand->Window(), left, TabStripHeight() + Scale(8),
+                   max(0, (int)client.right - Scale(13) - search - Scale(10) - left), Scale(32), TRUE);
     size = ToolbarSize(m_DetailsBar);
-    row = AddressBottom() + (CommandBottom() - 1 - AddressBottom() - Scale(40)) / 2;
-    MoveWindow(m_DetailsBar, client.right - Scale(8) - size.cx, row, size.cx, Scale(40), TRUE);
+    row = AddressBottom() + (CommandBottom() - 1 - AddressBottom() - (int)size.cy) / 2;
+    MoveWindow(m_DetailsBar, client.right - Scale(8) - size.cx, row, size.cx, size.cy, TRUE);
     right = max(0, (int)client.right - Scale(8) - (int)size.cx - Scale(16) - Scale(8));
     FitCommandBar(right);
-    MoveWindow(m_CommandBar, Scale(8), row, right, Scale(40), TRUE);
+    size = ToolbarSize(m_CommandBar);
+    row = AddressBottom() + (CommandBottom() - 1 - AddressBottom() - (int)size.cy) / 2;
+    MoveWindow(m_CommandBar, Scale(8), row, right, size.cy, TRUE);
 
     SendMessageW(m_Status, WM_SIZE, 0, 0);
     GetWindowRect(m_Status, &status);
@@ -480,7 +484,7 @@ CCabinetWindow::OnSize()
     SetRect(&m_PaneRect, max(left, right), top, client.right, bottom);
     PlaceBrowsers();
     PlacePanes();
-    InvalidateRect(m_hwnd, NULL, TRUE);
+    RedrawWindow(m_hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 }
 
 void
@@ -1390,7 +1394,7 @@ int
 CCabinetWindow::AddTab(PCIDLIST_ABSOLUTE pidl, BOOL activate)
 {
     CabinetTab *tab;
-    FOLDERSETTINGS settings = { FVM_DETAILS, FWF_NOWEBVIEW };
+    FOLDERSETTINGS settings = { (UINT)FVM_AUTO, FWF_NOWEBVIEW };
     IObjectWithSite *withSite = NULL;
     RECT rc = { 0, 0, 0, 0 };
     int index;
@@ -2641,6 +2645,16 @@ CCabinetWindow::OnNotify(NMHDR *header)
 {
     switch (header->code)
     {
+        case NM_CUSTOMDRAW:
+            if (header->hwndFrom == m_NavBar || header->hwndFrom == m_CommandBar ||
+                header->hwndFrom == m_DetailsBar || header->hwndFrom == m_ViewBar)
+            {
+                CabinetPalette palette;
+                CabinetGetPalette(&palette);
+                return CabinetToolbarCustomDraw((NMTBCUSTOMDRAW *)header,
+                                                header->hwndFrom == m_NavBar ? palette.Band : palette.Command);
+            }
+            break;
         case TBN_DROPDOWN:
         {
             NMTOOLBARW *toolbar = (NMTOOLBARW *)header;
@@ -2783,6 +2797,23 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_XBUTTONUP:
             NavigateHistory(GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? -1 : 1);
             return TRUE;
+        case WM_APPCOMMAND:
+            switch (GET_APPCOMMAND_LPARAM(lParam))
+            {
+                case APPCOMMAND_BROWSER_BACKWARD:
+                    NavigateHistory(-1);
+                    return TRUE;
+                case APPCOMMAND_BROWSER_FORWARD:
+                    NavigateHistory(1);
+                    return TRUE;
+                case APPCOMMAND_BROWSER_REFRESH:
+                    Refresh();
+                    return TRUE;
+                case APPCOMMAND_BROWSER_SEARCH:
+                    SetFocus(m_SearchEdit);
+                    return TRUE;
+            }
+            break;
         case WM_ACTIVATE:
             if (LOWORD(wParam) == WA_INACTIVE)
             {
