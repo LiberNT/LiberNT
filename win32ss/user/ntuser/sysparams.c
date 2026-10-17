@@ -243,17 +243,17 @@ SpiLoadUserPrefMask(DWORD dValue)
 }
 
 static
-DWORD
-SpiLoadTimeOut(VOID)
+BOOL
+SpiLoadScreenSaverActive(VOID)
 {   // Must have the string!
     WCHAR szApplicationName[MAX_PATH];
     RtlZeroMemory(&szApplicationName, sizeof(szApplicationName));
     if (!RegReadUserSetting(KEY_DESKTOP, VAL_SCRNSV, REG_SZ, &szApplicationName, sizeof(szApplicationName)))
     {
-        return 0;
+        return FALSE;
     }
-    if (szApplicationName[0] == 0) return 0;
-    return SpiLoadInt(KEY_DESKTOP, VAL_SCRTO, 600);
+    if (szApplicationName[0] == 0) return FALSE;
+    return SpiLoadInt(KEY_DESKTOP, VAL_SCRACT, 0) != 0;
 }
 
 static
@@ -531,11 +531,11 @@ SpiUpdatePerUserSystemParameters(VOID)
     gspv.dwMenuShowDelay = SpiLoadInt(KEY_DESKTOP, L"MenuShowDelay", 400);
     gspv.dwForegroundFlashCount = 3;
 
-    gspv.iScrSaverTimeout = SpiLoadTimeOut();
-    gspv.bScrSaverActive = FALSE;
+    gspv.iScrSaverTimeout = SpiLoadInt(KEY_DESKTOP, VAL_SCRTO, 600);
+    gspv.bScrSaverActive = SpiLoadScreenSaverActive();
     gspv.bScrSaverRunning = FALSE;
 #if(WINVER >= 0x0600)
-    gspv.bScrSaverSecure = FALSE;
+    gspv.bScrSaverSecure = SpiLoadInt(KEY_DESKTOP, L"ScreenSaverIsSecure", 0) != 0;
 #endif
 
     gspv.bFastTaskSwitch = TRUE;
