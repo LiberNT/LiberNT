@@ -990,7 +990,6 @@ SmpTranslateSystemPartitionInformation(VOID)
     }
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("SMSS: Cannot find drive letter for system partition: 0x%x\n", Status);
 #if (NTDDI_VERSION > NTDDI_WIN7SP1) || defined(__REACTOS__)
         /* If we failed because no drive letter associated to the system
          * volume was found (none was assigned to it), fall back to using
@@ -998,12 +997,14 @@ SmpTranslateSystemPartitionInformation(VOID)
          * NOTE: This has been introduced in a post-SP1 Windows 7 update. */
         if (Status != STATUS_NO_MORE_ENTRIES)
         {
+            DPRINT1("SMSS: Cannot find drive letter for system partition: 0x%x\n", Status);
             RtlFreeHeap(RtlGetProcessHeap(), 0, DirInfo);
             return;
         }
         BootDrivePrefix[0] = SharedUserData->NtSystemRoot[0];
         BootDrivePrefix[1] = SharedUserData->NtSystemRoot[1]; // == L':';
 #else
+        DPRINT1("SMSS: Cannot find drive letter for system partition: 0x%x\n", Status);
         RtlFreeHeap(RtlGetProcessHeap(), 0, DirInfo);
         return;
 #endif
