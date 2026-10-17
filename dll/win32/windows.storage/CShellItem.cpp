@@ -71,7 +71,12 @@ HRESULT CShellItem::get_parent_shellfolder(IShellFolder **ppsf)
     {
         hr = SHGetDesktopFolder(&desktop);
         if (SUCCEEDED(hr))
-            hr = desktop->BindToObject(parent_pidl, NULL, IID_PPV_ARG(IShellFolder, ppsf));
+        {
+            if (_ILIsDesktop(parent_pidl))
+                hr = desktop->QueryInterface(IID_PPV_ARG(IShellFolder, ppsf));
+            else
+                hr = desktop->BindToObject(parent_pidl, NULL, IID_PPV_ARG(IShellFolder, ppsf));
+        }
         ILFree(parent_pidl);
     }
 

@@ -501,21 +501,6 @@ private:
             // Skip the current and parent directory nodes
             if (!strcmpW(FindData.cFileName, L".") || !strcmpW(FindData.cFileName, L".."))
                 return S_OK;
-
-            // Does this directory need special handling?
-            if ((FindData.dwFileAttributes & (FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_READONLY)) != 0)
-            {
-                WCHAR Tmp[MAX_PATH];
-                CLSID clsidFolder;
-
-                PathCombineW(Tmp, sParentDir, FindData.cFileName);
-
-                hr = SHELL32_GetCLSIDForDirectory(Tmp, L"CLSID", &clsidFolder);
-                if (SUCCEEDED(hr))
-                {
-                    ERR("Got CLSID override for '%S'\n", Tmp);
-                }
-            }
         }
         else
         {
@@ -1245,6 +1230,19 @@ HRESULT WINAPI CFSFolder::BindToObject(
     if (_ILIsPidlSimple(pidl) && (IsEqualIID(riid, IID_IPropertyStoreFactory) || IsEqualIID(riid, IID_IPropertyStore)))
         return CFSPropertyStoreFactory_CreateInstance(m_pidlRoot, this, pidl, pfti.szTargetParsingName, riid, ppvOut);
 
+    if (_ILIsPidlSimple(pidl) && _ILIsFolder(pidl) &&
+        (IsEqualIID(riid, IID_IPropertyBag) || IsEqualIID(riid, IID_IPropertyBag2)))
+    {
+        BIND_OPTS opts = { sizeof(opts) };
+        WCHAR szIniFile[MAX_PATH];
+
+        if (!pbc || FAILED(pbc->GetBindOptions(&opts)))
+            opts.grfMode = STGM_READ;
+        if (!PathCombineW(szIniFile, pfti.szTargetParsingName, L"desktop.ini"))
+            return E_INVALIDARG;
+        return SHCreatePropertyBagOnProfileSection(szIniFile, L"ViewState", opts.grfMode, riid, ppvOut);
+    }
+
     /* Get the CLSID to bind to */
     CLSID clsidFolder;
     if (_ILIsFolder(pidl))
@@ -1402,7 +1400,7 @@ HRESULT WINAPI CFSFolder::CreateViewObject(HWND hwndOwner,
         BOOL bIsDropTarget = IsEqualIID (riid, IID_IDropTarget);
         BOOL bIsShellView = !bIsDropTarget && IsEqualIID (riid, IID_IShellView);
 
-        if (bIsDropTarget || bIsShellView)
+        if ((bIsDropTarget || bIsShellView) && m_sPathTarget)
         {
             DWORD dwDirAttributes = _ILGetFileAttributes(ILFindLastID(m_pidlRoot), NULL, 0);
 
