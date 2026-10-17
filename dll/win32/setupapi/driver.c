@@ -748,6 +748,133 @@ done:
     return Result;
 }
 
+static LPCWSTR
+GetNativeInfArchitecture(VOID)
+{
+    SYSTEM_INFO SystemInfo;
+
+    GetNativeSystemInfo(&SystemInfo);
+    switch (SystemInfo.wProcessorArchitecture)
+    {
+        case PROCESSOR_ARCHITECTURE_AMD64:
+            return L"amd64";
+        case PROCESSOR_ARCHITECTURE_ARM:
+            return L"arm";
+        case PROCESSOR_ARCHITECTURE_ARM64:
+            return L"arm64";
+        case PROCESSOR_ARCHITECTURE_IA64:
+            return L"ia64";
+        case PROCESSOR_ARCHITECTURE_INTEL:
+            return L"x86";
+        case PROCESSOR_ARCHITECTURE_RISCV64:
+            return L"riscv64";
+        default:
+            return L"";
+    }
+}
+
+static BOOL
+IsExcludeFromSelectKey(
+    IN LPCWSTR Key,
+    IN LPCWSTR Architecture)
+{
+    static const WCHAR Base[] = L"ExcludeFromSelect";
+    static const WCHAR PlatformNT[] = L".NT";
+
+    if (strncmpiW(Key, Base, ARRAYSIZE(Base) - 1) != 0)
+        return FALSE;
+    Key += ARRAYSIZE(Base) - 1;
+    if (!*Key)
+        return TRUE;
+    if (strncmpiW(Key, PlatformNT, ARRAYSIZE(PlatformNT) - 1) != 0)
+        return FALSE;
+    Key += ARRAYSIZE(PlatformNT) - 1;
+    return !*Key || (*Architecture && strcmpiW(Key, Architecture) == 0);
+}
+
+static LPWSTR
+GetExcludeFromSelectList(
+    IN HINF hInf)
+{
+    LPCWSTR Architecture = GetNativeInfArchitecture();
+    INFCONTEXT Context;
+    WCHAR Key[LINE_LEN + 1];
+    WCHAR Id[LINE_LEN + 1];
+    LPWSTR List = NULL, Grown;
+    SIZE_T Used = 0, Capacity = 0;
+    DWORD FieldCount, Field;
+    BOOL Result;
+
+    for (Result = SetupFindFirstLineW(hInf, L"ControlFlags", NULL, &Context);
+         Result;
+         Result = SetupFindNextLine(&Context, &Context))
+    {
+        if (!SetupGetStringFieldW(&Context, 0, Key, ARRAYSIZE(Key), NULL) ||
+            !IsExcludeFromSelectKey(Key, Architecture))
+        {
+            continue;
+        }
+
+        FieldCount = SetupGetFieldCount(&Context);
+        for (Field = 1; Field <= FieldCount; Field++)
+        {
+            SIZE_T Length;
+
+            if (!SetupGetStringFieldW(&Context, Field, Id, ARRAYSIZE(Id), NULL) || !*Id)
+                continue;
+            Length = strlenW(Id) + 1;
+            if (Used + Length + 1 > Capacity)
+            {
+                Capacity = max(Capacity * 2, Used + Length + 64);
+                Grown = List ? HeapReAlloc(GetProcessHeap(), 0, List, Capacity * sizeof(WCHAR))
+                             : HeapAlloc(GetProcessHeap(), 0, Capacity * sizeof(WCHAR));
+                if (!Grown)
+                {
+                    HeapFree(GetProcessHeap(), 0, List);
+                    return NULL;
+                }
+                List = Grown;
+            }
+            memcpy(List + Used, Id, Length * sizeof(WCHAR));
+            Used += Length;
+            List[Used] = UNICODE_NULL;
+        }
+    }
+
+    return List;
+}
+
+static BOOL
+IsDeviceExcludedFromSelect(
+    IN LPCWSTR ExcludeList,
+    IN PINFCONTEXT ContextDevice)
+{
+    WCHAR Id[LINE_LEN + 1];
+    LPCWSTR Entry;
+    DWORD FieldCount, Field;
+
+    if (!ExcludeList)
+        return FALSE;
+    for (Entry = ExcludeList; *Entry; Entry += strlenW(Entry) + 1)
+    {
+        if (strcmpW(Entry, L"*") == 0)
+            return TRUE;
+    }
+
+    FieldCount = SetupGetFieldCount(ContextDevice);
+    for (Field = 2; Field <= FieldCount; Field++)
+    {
+        if (!SetupGetStringFieldW(ContextDevice, Field, Id, ARRAYSIZE(Id), NULL))
+            continue;
+        for (Entry = ExcludeList; *Entry; Entry += strlenW(Entry) + 1)
+        {
+            if (strcmpiW(Entry, Id) == 0)
+                return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 /***********************************************************************
  *		SetupDiBuildDriverInfoList (SETUPAPI.@)
  */
@@ -1084,13 +1211,7 @@ SetupDiBuildDriverInfoList(
                     }
                 }
 
-                if (InstallParams.FlagsEx & DI_FLAGSEX_ALLOWEXCLUDEDDRVS)
-                {
-                    /* Read ExcludeFromSelect control flags */
-                    /* FIXME */
-                }
-                else
-                    FIXME("ExcludeFromSelect list ignored\n");
+                ExcludeFromSelect = GetExcludeFromSelectList(currentInfFileDetails->hInf);
 
                 /* Get the manufacturers list */
                 Result = SetupFindFirstLineW(currentInfFileDetails->hInf, INF_MANUFACTURER, NULL, &ContextManufacturer);
@@ -1138,10 +1259,13 @@ SetupDiBuildDriverInfoList(
                     }
                     while (Result)
                     {
+                        BOOL Excluded = IsDeviceExcludedFromSelect(ExcludeFromSelect, &ContextDevice);
+                        PLIST_ENTRY PreviousDriver = pDriverListHead->Blink;
+
                         if (DriverType == SPDIT_CLASSDRIVER)
                         {
-                            /* FIXME: Check ExcludeFromSelect list */
-                            if (!AddDriverToList(
+                            if ((!Excluded || (InstallParams.FlagsEx & DI_FLAGSEX_ALLOWEXCLUDEDDRVS)) &&
+                                !AddDriverToList(
                                 pDriverListHead,
                                 DriverType,
                                 &ClassGuid,
@@ -1193,7 +1317,6 @@ SetupDiBuildDriverInfoList(
                                     HeapFree(GetProcessHeap(), 0, DeviceId);
                                     goto done;
                                 }
-                                /* FIXME: Check ExcludeFromSelect list */
                                 if (HardwareIDs)
                                 {
                                     for (DriverRank = 0, currentId = (LPCWSTR)HardwareIDs; *currentId; currentId += strlenW(currentId) + 1, DriverRank++)
@@ -1244,6 +1367,8 @@ SetupDiBuildDriverInfoList(
                                     BestRank);
                             }
                         }
+                        if (Excluded && pDriverListHead->Blink != PreviousDriver)
+                            CONTAINING_RECORD(pDriverListHead->Blink, struct DriverInfoElement, ListEntry)->Params.Flags |= DNF_EXCLUDEFROMLIST;
                         Result = SetupFindNextLine(&ContextDevice, &ContextDevice);
                     }
 
