@@ -197,6 +197,144 @@ StartUserShell(
     return ret;
 }
 
+static BOOL
+GetWinlogonShell(
+    IN HKEY hRootKey,
+    OUT PWSTR Shell,
+    IN DWORD cchShell)
+{
+    DWORD Size = (cchShell - 1) * sizeof(WCHAR);
+    DWORD Type;
+    HKEY hKey;
+    LONG rc;
+
+    if (RegOpenKeyExW(hRootKey,
+                      L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon",
+                      0,
+                      KEY_QUERY_VALUE,
+                      &hKey) != ERROR_SUCCESS)
+    {
+        return FALSE;
+    }
+
+    rc = RegQueryValueExW(hKey, L"Shell", NULL, &Type, (LPBYTE)Shell, &Size);
+    RegCloseKey(hKey);
+    if (rc != ERROR_SUCCESS || (Type != REG_SZ && Type != REG_EXPAND_SZ) || Size < sizeof(WCHAR))
+        return FALSE;
+
+    Shell[Size / sizeof(WCHAR)] = UNICODE_NULL;
+    return Shell[0] != UNICODE_NULL;
+}
+
+static BOOL
+IsAutoRestartShellEnabled(VOID)
+{
+    DWORD Value = 1;
+    DWORD Size = sizeof(Value);
+    DWORD Type;
+    HKEY hKey;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon",
+                      0,
+                      KEY_QUERY_VALUE,
+                      &hKey) == ERROR_SUCCESS)
+    {
+        if (RegQueryValueExW(hKey, L"AutoRestartShell", NULL, &Type, (LPBYTE)&Value, &Size) != ERROR_SUCCESS ||
+            Type != REG_DWORD)
+        {
+            Value = 1;
+        }
+        RegCloseKey(hKey);
+    }
+
+    return Value != 0;
+}
+
+static BOOL
+RestartUserShell(
+    IN OUT PWLSESSION Session)
+{
+    WCHAR Shell[MAX_PATH];
+    WCHAR CommandLine[MAX_PATH];
+    STARTUPINFOW StartupInfo;
+    PROCESS_INFORMATION ProcessInformation;
+    LPVOID lpEnvironment = NULL;
+    HANDLE hToken = NULL;
+    HKEY hKeyUser;
+    BOOLEAN Old;
+    BOOL Found = FALSE;
+    BOOL ret;
+
+    if (!IsAutoRestartShellEnabled())
+        return FALSE;
+
+    if (!Session->UserToken)
+        return StartSystemShell();
+
+    if (ImpersonateLoggedOnUser(Session->UserToken))
+    {
+        if (RegOpenCurrentUser(KEY_QUERY_VALUE, &hKeyUser) == ERROR_SUCCESS)
+        {
+            Found = GetWinlogonShell(hKeyUser, Shell, ARRAYSIZE(Shell));
+            RegCloseKey(hKeyUser);
+        }
+        RevertToSelf();
+    }
+    if (!Found && !GetWinlogonShell(HKEY_LOCAL_MACHINE, Shell, ARRAYSIZE(Shell)))
+        StringCchCopyW(Shell, ARRAYSIZE(Shell), L"explorer.exe");
+
+    if (!ExpandEnvironmentStringsForUserW(Session->UserToken, Shell, CommandLine, ARRAYSIZE(CommandLine)))
+    {
+        ERR("WL: Failed to expand the shell command line %s (error %lu)\n", debugstr_w(Shell), GetLastError());
+        return FALSE;
+    }
+
+    if (!DuplicateTokenEx(Session->UserToken, MAXIMUM_ALLOWED, NULL, SecurityImpersonation, TokenPrimary, &hToken))
+    {
+        ERR("WL: DuplicateTokenEx() failed with error %lu\n", GetLastError());
+        return FALSE;
+    }
+
+    if (!CreateEnvironmentBlock(&lpEnvironment, Session->UserToken, TRUE))
+    {
+        ERR("WL: CreateEnvironmentBlock() failed with error %lu\n", GetLastError());
+        CloseHandle(hToken);
+        return FALSE;
+    }
+
+    RtlAdjustPrivilege(SE_ASSIGNPRIMARYTOKEN_PRIVILEGE, TRUE, FALSE, &Old);
+
+    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+    StartupInfo.cb = sizeof(StartupInfo);
+    StartupInfo.lpDesktop = L"WinSta0\\Default";
+
+    ret = CreateProcessAsUserW(hToken,
+                               NULL,
+                               CommandLine,
+                               NULL,
+                               NULL,
+                               FALSE,
+                               CREATE_UNICODE_ENVIRONMENT,
+                               lpEnvironment,
+                               NULL,
+                               &StartupInfo,
+                               &ProcessInformation);
+    if (ret)
+    {
+        CloseHandle(ProcessInformation.hThread);
+        CloseHandle(ProcessInformation.hProcess);
+    }
+    else
+    {
+        ERR("WL: Failed to restart the shell %s (error %lu)\n", debugstr_w(CommandLine), GetLastError());
+    }
+
+    DestroyEnvironmentBlock(lpEnvironment);
+    CloseHandle(hToken);
+    return ret;
+}
+
 
 BOOL
 SetDefaultLanguage(
@@ -1885,7 +2023,7 @@ SASWindowProc(
             if (wParam == 1)
             {
                 KillTimer(hwndDlg, 1);
-                StartUserShell(Session);
+                RestartUserShell(Session);
             }
             break;
         }
