@@ -33,7 +33,7 @@ BEGIN
     IDS_SHV_COLUMN_MODIFIED "Modified"
     IDS_SHV_COLUMN_ATTRIBUTES "Attributes"
     IDS_DESKTOP "Desktop"
-    IDS_MYCOMPUTER "My Computer"
+    IDS_MYCOMPUTER "This PC"
     IDS_PERSONAL "My Documents"
     IDS_RECYCLEBIN_FOLDER_NAME "Recycle Bin"
     IDS_CONTROLPANEL "Control Panel"
