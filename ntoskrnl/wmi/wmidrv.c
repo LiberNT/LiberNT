@@ -542,8 +542,12 @@ WmipSystemControl(
   _Inout_  PDEVICE_OBJECT DeviceObject,
   _Inout_  PIRP Irp)
 {
-    UNIMPLEMENTED_DBGBREAK();
-    return STATUS_NOT_IMPLEMENTED;
+    NTSTATUS Status = Irp->IoStatus.Status;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
 }
 
 NTSTATUS

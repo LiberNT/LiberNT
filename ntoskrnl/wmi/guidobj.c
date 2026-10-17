@@ -100,6 +100,8 @@ WmipDeleteMethod(
         KeLeaveCriticalRegion();
     }
 
+    WmipGuidObjectDeleted(GuidObject);
+
     /* Check if the object is attached to an IRP */
     if (GuidObject->Irp != NULL)
     {
@@ -219,6 +221,7 @@ WmipCreateGuidObject(
     KeInitializeEvent(&GuidObject->Event, NotificationEvent, FALSE);
     InitializeListHead(&GuidObject->NotificationLink);
     GuidObject->Guid = *Guid;
+    WmipGuidObjectCreated(Guid);
 
     *OutGuidObject = GuidObject;
 

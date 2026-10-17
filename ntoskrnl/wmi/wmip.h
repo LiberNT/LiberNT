@@ -19,6 +19,7 @@ typedef struct _WMIP_GUID_OBJECT
     LIST_ENTRY NotificationLink;
     WMI_NOTIFICATION_CALLBACK NotificationCallback;
     PVOID NotificationContext;
+    BOOLEAN EventConsumer;
 } WMIP_GUID_OBJECT, *PWMIP_GUID_OBJECT;
 
 extern EX_PUSH_LOCK WmipNotificationLock;
@@ -67,3 +68,78 @@ WmipQueryRawSMBiosTables(
     _Inout_ ULONG *InOutBufferSize,
     _Out_opt_ PVOID OutBuffer);
 
+VOID
+NTAPI
+WmipInitializeProviders(
+    VOID);
+
+VOID
+NTAPI
+WmipGuidObjectCreated(
+    _In_ LPCGUID Guid);
+
+VOID
+NTAPI
+WmipGuidObjectDeleted(
+    _In_ PWMIP_GUID_OBJECT GuidObject);
+
+VOID
+NTAPI
+WmipSetEventConsumer(
+    _In_ PWMIP_GUID_OBJECT GuidObject,
+    _In_ BOOLEAN Consumer);
+
+PWNODE_HEADER
+NTAPI
+WmipNameEventInstance(
+    _In_ PWNODE_HEADER Wnode);
+
+NTSTATUS
+NTAPI
+WmipQueryAllData(
+    _In_ LPCGUID Guid,
+    _Inout_ PULONG InOutBufferSize,
+    _Out_opt_ PVOID OutBuffer);
+
+NTSTATUS
+NTAPI
+WmipQuerySingleInstance(
+    _In_ LPCGUID Guid,
+    _In_ PCUNICODE_STRING InstanceName,
+    _Inout_ PULONG InOutBufferSize,
+    _Out_opt_ PVOID OutBuffer);
+
+NTSTATUS
+NTAPI
+WmipSetInstance(
+    _In_ LPCGUID Guid,
+    _In_ PCUNICODE_STRING InstanceName,
+    _In_ BOOLEAN SingleItem,
+    _In_ ULONG DataItemId,
+    _In_ ULONG Version,
+    _In_ ULONG ValueBufferSize,
+    _In_reads_bytes_(ValueBufferSize) PVOID ValueBuffer);
+
+NTSTATUS
+NTAPI
+WmipExecuteMethod(
+    _In_ LPCGUID Guid,
+    _In_ PCUNICODE_STRING InstanceName,
+    _In_ ULONG MethodId,
+    _In_ ULONG InBufferSize,
+    _Inout_ PULONG OutBufferSize,
+    _Inout_ PUCHAR InOutBuffer);
+
+NTSTATUS
+NTAPI
+WmipDeviceObjectToInstanceName(
+    _In_ LPCGUID Guid,
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Out_ PUNICODE_STRING InstanceName);
+
+NTSTATUS
+NTAPI
+WmipAllocateInstanceIds(
+    _In_ LPCGUID Guid,
+    _In_ ULONG InstanceCount,
+    _Out_ PULONG FirstInstanceId);

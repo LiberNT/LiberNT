@@ -60,6 +60,8 @@ WmiInitialize(
     /* Capture the firmware SMBIOS entry point while the loader block lives */
     WmipCaptureSMBiosFromLoader(KeLoaderBlock);
 
+    WmipInitializeProviders();
+
     /* Initialize the GUID object type */
     Status = WmipInitializeGuidObjectType();
     if (!NT_SUCCESS(Status))
@@ -79,31 +81,16 @@ WmiInitialize(
     return TRUE;
 }
 
-/*
- * @unimplemented
- */
-NTSTATUS
-NTAPI
-IoWMIRegistrationControl(IN PDEVICE_OBJECT DeviceObject,
-                         IN ULONG Action)
-{
-    DPRINT("IoWMIRegistrationControl() called for DO %p, requesting %lu action, returning success\n",
-        DeviceObject, Action);
-
-    return STATUS_SUCCESS;
-}
-
-/*
- * @unimplemented
- */
 NTSTATUS
 NTAPI
 IoWMIAllocateInstanceIds(IN GUID *Guid,
                          IN ULONG InstanceCount,
                          OUT ULONG *FirstInstanceId)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    if (!Guid || !FirstInstanceId)
+        return STATUS_INVALID_PARAMETER;
+
+    return WmipAllocateInstanceIds(Guid, InstanceCount, FirstInstanceId);
 }
 
 /*
@@ -131,6 +118,8 @@ WmipDeliverEvent(
     PWMIP_EVENT_TARGET Targets = NULL;
     PLIST_ENTRY Entry;
     ULONG Count = 0, Index;
+
+    Delivery->Wnode = WmipNameEventInstance(Delivery->Wnode);
 
     KeEnterCriticalRegion();
     ExAcquirePushLockShared(&WmipNotificationLock);
@@ -235,8 +224,155 @@ IoWMIOpenBlock(
         return Status;
     }
 
-
+    ZwClose(GuidObjectHandle);
     return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+WmipQueryObjectAllData(
+    _In_ PWMIP_GUID_OBJECT GuidObject,
+    _Inout_ ULONG *InOutBufferSize,
+    _Out_opt_ PVOID OutBuffer)
+{
+    if (IsEqualGUID(&GuidObject->Guid, &MSSmBios_RawSMBiosTables_GUID))
+        return WmipQueryRawSMBiosTables(InOutBufferSize, OutBuffer);
+
+    return WmipQueryAllData(&GuidObject->Guid, InOutBufferSize, OutBuffer);
+}
+
+static
+NTSTATUS
+WmipChainResults(
+    _In_ ULONG Count,
+    _In_reads_(Count) PVOID *Results,
+    _In_reads_(Count) PULONG Sizes,
+    _Inout_ ULONG *InOutBufferSize,
+    _Out_opt_ PVOID OutBuffer)
+{
+    PWNODE_HEADER Header;
+    ULONG Index, Total = 0, Offset = 0, Last = MAXULONG, Node;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Results[Index])
+            Total = ALIGN_UP_BY(Total, sizeof(ULONGLONG)) + Sizes[Index];
+    }
+
+    if (!Total)
+        return STATUS_WMI_GUID_NOT_FOUND;
+
+    if (!OutBuffer || *InOutBufferSize < Total)
+    {
+        *InOutBufferSize = Total;
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (!Results[Index])
+            continue;
+
+        Offset = ALIGN_UP_BY(Offset, sizeof(ULONGLONG));
+        if (Last != MAXULONG)
+            ((PWNODE_HEADER)((PUCHAR)OutBuffer + Last))->Linkage = Offset - Last;
+        RtlCopyMemory((PUCHAR)OutBuffer + Offset, Results[Index], Sizes[Index]);
+
+        Node = Offset;
+        for (;;)
+        {
+            Header = (PWNODE_HEADER)((PUCHAR)OutBuffer + Node);
+            if (!Header->Linkage || Header->Linkage > Offset + Sizes[Index] - Node)
+            {
+                Header->Linkage = 0;
+                break;
+            }
+            Node += Header->Linkage;
+        }
+
+        Last = Node;
+        Offset += Sizes[Index];
+    }
+
+    *InOutBufferSize = Total;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+WmipQueryMultiple(
+    _In_ PVOID *DataBlockObjectList,
+    _In_opt_ PUNICODE_STRING InstanceNames,
+    _In_ ULONG ObjectCount,
+    _Inout_ ULONG *InOutBufferSize,
+    _Out_opt_ PVOID OutBuffer)
+{
+    PWMIP_GUID_OBJECT GuidObject;
+    PVOID *Results;
+    PULONG Sizes;
+    ULONG Index, Size;
+    NTSTATUS Status, LastError = STATUS_WMI_GUID_NOT_FOUND;
+
+    if (!DataBlockObjectList || !ObjectCount || !InOutBufferSize)
+        return STATUS_INVALID_PARAMETER;
+
+    Results = ExAllocatePoolZero(PagedPool, ObjectCount * (sizeof(PVOID) + sizeof(ULONG)), 'qimW');
+    if (!Results)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Sizes = (PULONG)&Results[ObjectCount];
+
+    for (Index = 0; Index < ObjectCount; Index++)
+    {
+        GuidObject = DataBlockObjectList[Index];
+        Status = ObReferenceObjectByPointer(GuidObject, WMIGUID_QUERY, WmipGuidObjectType, KernelMode);
+        if (!NT_SUCCESS(Status))
+        {
+            LastError = Status;
+            continue;
+        }
+
+        Size = 0;
+        Status = InstanceNames ?
+                 WmipQuerySingleInstance(&GuidObject->Guid, &InstanceNames[Index], &Size, NULL) :
+                 WmipQueryObjectAllData(GuidObject, &Size, NULL);
+        if ((Status == STATUS_BUFFER_TOO_SMALL || NT_SUCCESS(Status)) && Size)
+        {
+            Results[Index] = ExAllocatePoolWithTag(NonPagedPoolNx, Size, 'qimW');
+            if (!Results[Index])
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+            }
+            else
+            {
+                Sizes[Index] = Size;
+                Status = InstanceNames ?
+                         WmipQuerySingleInstance(&GuidObject->Guid, &InstanceNames[Index], &Sizes[Index], Results[Index]) :
+                         WmipQueryObjectAllData(GuidObject, &Sizes[Index], Results[Index]);
+                if (!NT_SUCCESS(Status))
+                {
+                    ExFreePoolWithTag(Results[Index], 'qimW');
+                    Results[Index] = NULL;
+                }
+            }
+        }
+
+        if (!NT_SUCCESS(Status))
+            LastError = Status;
+
+        ObDereferenceObject(GuidObject);
+    }
+
+    Status = WmipChainResults(ObjectCount, Results, Sizes, InOutBufferSize, OutBuffer);
+    if (Status == STATUS_WMI_GUID_NOT_FOUND)
+        Status = LastError;
+
+    for (Index = 0; Index < ObjectCount; Index++)
+    {
+        if (Results[Index])
+            ExFreePoolWithTag(Results[Index], 'qimW');
+    }
+    ExFreePoolWithTag(Results, 'qimW');
+    return Status;
 }
 
 /*
@@ -263,16 +399,7 @@ IoWMIQueryAllData(
     }
 
     GuidObject = DataBlockObject;
-
-    /* Huge HACK! */
-    if (IsEqualGUID(&GuidObject->Guid, &MSSmBios_RawSMBiosTables_GUID))
-    {
-        Status = WmipQueryRawSMBiosTables(InOutBufferSize, OutBuffer);
-    }
-    else
-    {
-        Status = STATUS_NOT_SUPPORTED;
-    }
+    Status = WmipQueryObjectAllData(GuidObject, InOutBufferSize, OutBuffer);
 
     ObDereferenceObject(DataBlockObject);
 
@@ -289,8 +416,7 @@ IoWMIQueryAllDataMultiple(IN PVOID *DataBlockObjectList,
                           IN OUT ULONG *InOutBufferSize,
                           OUT PVOID OutBuffer)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    return WmipQueryMultiple(DataBlockObjectList, NULL, ObjectCount, InOutBufferSize, OutBuffer);
 }
 
 /*
@@ -303,8 +429,23 @@ IoWMIQuerySingleInstance(IN PVOID DataBlockObject,
                          IN OUT ULONG *InOutBufferSize,
                          OUT PVOID OutBuffer)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    PWMIP_GUID_OBJECT GuidObject = DataBlockObject;
+    NTSTATUS Status;
+
+    if (!InstanceName || !InOutBufferSize)
+        return STATUS_INVALID_PARAMETER;
+
+    Status = ObReferenceObjectByPointer(DataBlockObject,
+                                        WMIGUID_QUERY,
+                                        WmipGuidObjectType,
+                                        KernelMode);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = WmipQuerySingleInstance(&GuidObject->Guid, InstanceName, InOutBufferSize, OutBuffer);
+
+    ObDereferenceObject(DataBlockObject);
+    return Status;
 }
 
 /*
@@ -318,8 +459,10 @@ IoWMIQuerySingleInstanceMultiple(IN PVOID *DataBlockObjectList,
                                  IN OUT ULONG *InOutBufferSize,
                                  OUT PVOID OutBuffer)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    if (!InstanceNames)
+        return STATUS_INVALID_PARAMETER;
+
+    return WmipQueryMultiple(DataBlockObjectList, InstanceNames, ObjectCount, InOutBufferSize, OutBuffer);
 }
 
 /*
@@ -333,8 +476,23 @@ IoWMISetSingleInstance(IN PVOID DataBlockObject,
                        IN ULONG ValueBufferSize,
                        IN PVOID ValueBuffer)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    PWMIP_GUID_OBJECT GuidObject = DataBlockObject;
+    NTSTATUS Status;
+
+    if (!InstanceName || (ValueBufferSize && !ValueBuffer))
+        return STATUS_INVALID_PARAMETER;
+
+    Status = ObReferenceObjectByPointer(DataBlockObject,
+                                        WMIGUID_SET,
+                                        WmipGuidObjectType,
+                                        KernelMode);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = WmipSetInstance(&GuidObject->Guid, InstanceName, FALSE, 0, Version, ValueBufferSize, ValueBuffer);
+
+    ObDereferenceObject(DataBlockObject);
+    return Status;
 }
 
 /*
@@ -349,8 +507,23 @@ IoWMISetSingleItem(IN PVOID DataBlockObject,
                    IN ULONG ValueBufferSize,
                    IN PVOID ValueBuffer)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    PWMIP_GUID_OBJECT GuidObject = DataBlockObject;
+    NTSTATUS Status;
+
+    if (!InstanceName || (ValueBufferSize && !ValueBuffer))
+        return STATUS_INVALID_PARAMETER;
+
+    Status = ObReferenceObjectByPointer(DataBlockObject,
+                                        WMIGUID_SET,
+                                        WmipGuidObjectType,
+                                        KernelMode);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = WmipSetInstance(&GuidObject->Guid, InstanceName, TRUE, DataItemId, Version, ValueBufferSize, ValueBuffer);
+
+    ObDereferenceObject(DataBlockObject);
+    return Status;
 }
 
 /*
@@ -365,9 +538,10 @@ IoWMIExecuteMethod(IN PVOID DataBlockObject,
                    IN OUT PULONG OutBufferSize,
                    IN OUT PUCHAR InOutBuffer)
 {
+    PWMIP_GUID_OBJECT GuidObject = DataBlockObject;
     NTSTATUS Status;
 
-    if (!InstanceName || !OutBufferSize)
+    if (!InstanceName || !OutBufferSize || ((InBufferSize || *OutBufferSize) && !InOutBuffer))
         return STATUS_INVALID_PARAMETER;
 
     Status = ObReferenceObjectByPointer(DataBlockObject,
@@ -377,8 +551,11 @@ IoWMIExecuteMethod(IN PVOID DataBlockObject,
     if (!NT_SUCCESS(Status))
         return Status;
 
+    Status = WmipExecuteMethod(&GuidObject->Guid, InstanceName, MethodId,
+                               InBufferSize, OutBufferSize, InOutBuffer);
+
     ObDereferenceObject(DataBlockObject);
-    return STATUS_WMI_GUID_NOT_FOUND;
+    return Status;
 }
 
 /*
@@ -418,6 +595,8 @@ IoWMISetNotificationCallback(IN PVOID Object,
     ExReleasePushLockExclusive(&WmipNotificationLock);
     KeLeaveCriticalRegion();
 
+    WmipSetEventConsumer(GuidObject, Callback != NULL);
+
     ObDereferenceObject(Object);
     return STATUS_SUCCESS;
 }
@@ -431,8 +610,29 @@ IoWMIHandleToInstanceName(IN PVOID DataBlockObject,
                           IN HANDLE FileHandle,
                           OUT PUNICODE_STRING InstanceName)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    PWMIP_GUID_OBJECT GuidObject = DataBlockObject;
+    PFILE_OBJECT FileObject;
+    NTSTATUS Status;
+
+    if (!InstanceName)
+        return STATUS_INVALID_PARAMETER;
+
+    Status = ObReferenceObjectByPointer(DataBlockObject, 0, WmipGuidObjectType, KernelMode);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ObReferenceObjectByHandle(FileHandle, 0, IoFileObjectType, KernelMode,
+                                       (PVOID *)&FileObject, NULL);
+    if (NT_SUCCESS(Status))
+    {
+        Status = WmipDeviceObjectToInstanceName(&GuidObject->Guid,
+                                                IoGetRelatedDeviceObject(FileObject),
+                                                InstanceName);
+        ObDereferenceObject(FileObject);
+    }
+
+    ObDereferenceObject(DataBlockObject);
+    return Status;
 }
 
 /*
@@ -444,8 +644,20 @@ IoWMIDeviceObjectToInstanceName(IN PVOID DataBlockObject,
                                 IN PDEVICE_OBJECT DeviceObject,
                                 OUT PUNICODE_STRING InstanceName)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    PWMIP_GUID_OBJECT GuidObject = DataBlockObject;
+    NTSTATUS Status;
+
+    if (!DeviceObject || !InstanceName)
+        return STATUS_INVALID_PARAMETER;
+
+    Status = ObReferenceObjectByPointer(DataBlockObject, 0, WmipGuidObjectType, KernelMode);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = WmipDeviceObjectToInstanceName(&GuidObject->Guid, DeviceObject, InstanceName);
+
+    ObDereferenceObject(DataBlockObject);
+    return Status;
 }
 
 /*
