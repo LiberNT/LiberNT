@@ -147,7 +147,7 @@ AddReg=Classes
 11,,scrrun.dll,1
 11,,sendmail.dll,1
 11,,sensorsapi.dll,1
-11,,shdocvw.dll,3
+11,,shdocvw.dll,1
 11,,shell32.dll,3
 11,,softpub.dll,1
 11,,sti.dll,1
@@ -187,7 +187,7 @@ AddReg=Classes
 11,,qcap.dll,1
 11,,qedit.dll,1
 11,,sendmail.dll,1
-11,,shdocvw.dll,3
+11,,shdocvw.dll,1
 11,,shell32.dll,3
 11,,softpub.dll,1
 11,,urlmon.dll,3
