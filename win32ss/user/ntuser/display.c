@@ -183,7 +183,9 @@ InitVideo(VOID)
         for (Attempt = 0; ; Attempt++)
         {
             Status = EngpUpdateGraphicsDeviceList();
-            if (Status != STATUS_OBJECT_NAME_NOT_FOUND || Attempt >= 150)
+            if ((Status != STATUS_OBJECT_NAME_NOT_FOUND &&
+                 (!NT_SUCCESS(Status) || EngpFindGraphicsDevice(NULL, 0) != NULL)) ||
+                Attempt >= 150)
                 break;
 
             /* Not ready yet — wait for the display driver to register. */

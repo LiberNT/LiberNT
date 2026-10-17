@@ -418,6 +418,7 @@ co_IntInitializeDesktopGraphics(VOID)
     PDESKTOP pdesk;
     LONG lRet;
 
+    EngpUpdateGraphicsDeviceList();
     lRet = PDEVOBJ_lChangeDisplaySettings(NULL, NULL, NULL, &gpmdev, TRUE);
     if (lRet != DISP_CHANGE_SUCCESSFUL && !gbBaseVideo)
     {
