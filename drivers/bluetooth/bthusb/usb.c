@@ -258,6 +258,7 @@ BthUsbReceive(
 {
     PBTHUSB_RX_STREAM Stream = &Dev->Rx[Kind];
     ULONG HeaderLength = Kind == BthUsbRxEvent ? 2 : 4;
+    ULONG Received = Length;
     BOOLEAN Queued = FALSE;
     KIRQL OldIrql;
 
@@ -299,6 +300,13 @@ BthUsbReceive(
             Stream->Length = 0;
             Stream->Discard = FALSE;
         }
+    }
+    if (Kind == BthUsbRxEvent && Received < Dev->EventPacketSize && Stream->Length)
+    {
+        DPRINT1("BTHUSB: %04x:%04x dropped %lu bytes of an event ended by a short packet\n",
+                Dev->VendorId, Dev->ProductId, Stream->Length);
+        Stream->Length = 0;
+        Stream->Discard = FALSE;
     }
     KeReleaseSpinLock(&Dev->Lock, OldIrql);
 
