@@ -800,7 +800,7 @@ CMP_RegisterNotification(
     DWORD dwError;
     CONFIGRET ret = CR_SUCCESS;
 
-    FIXME("CMP_RegisterNotification(%p %p %lu %p)\n",
+    TRACE("CMP_RegisterNotification(%p %p %lu %p)\n",
           hRecipient, lpvNotificationFilter, ulFlags, phDevNotify);
 
     if ((hRecipient == NULL) ||
@@ -830,7 +830,7 @@ CMP_RegisterNotification(
 
     if ((ulFlags & DEVICE_NOTIFY_SERVICE_HANDLE) == DEVICE_NOTIFY_WINDOW_HANDLE)
     {
-        FIXME("Register a window\n");
+        TRACE("Register a window\n");
 
         nLength = GetWindowTextW((HWND)hRecipient,
                                  szNameBuffer,
@@ -840,11 +840,11 @@ CMP_RegisterNotification(
             szNameBuffer[0] = UNICODE_NULL;
         }
 
-        FIXME("Register window: %S\n", szNameBuffer);
+        TRACE("Register window: %S\n", szNameBuffer);
     }
     else if ((ulFlags & DEVICE_NOTIFY_SERVICE_HANDLE) == DEVICE_NOTIFY_SERVICE_HANDLE)
     {
-        FIXME("Register a service\n");
+        TRACE("Register a service\n");
 
         dwError = I_ScPnPGetServiceName((SERVICE_STATUS_HANDLE)hRecipient,
                                         szNameBuffer,
@@ -855,7 +855,7 @@ CMP_RegisterNotification(
             return CR_INVALID_DATA;
         }
 
-        FIXME("Register service: %S\n", szNameBuffer);
+        TRACE("Register service: %S\n", szNameBuffer);
     }
 
     RpcTryExcept
