@@ -3,7 +3,7 @@
 @ stub BluetoothDisconnectDevice
 @ stdcall BluetoothEnableDiscovery(ptr long)
 @ stdcall BluetoothEnableIncomingConnections(ptr long)
-@ stub BluetoothEnumerateInstalledServices
+@ stdcall BluetoothEnumerateInstalledServices(ptr ptr ptr ptr)
 @ stub BluetoothEnumerateInstalledServicesEx
 @ stub BluetoothEnumerateLocalServices
 @ stub BluetoothFindBrowseGroupClose

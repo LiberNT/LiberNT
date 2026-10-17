@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Bluetooth APIs
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Local service publication (BluetoothSetLocalServiceInfo)
+ * PURPOSE:     Local service publication and installed service enumeration
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -10,6 +10,11 @@
 #include <winbase.h>
 #include <winternl.h>
 #include <winioctl.h>
+#include <winuser.h>
+#include <winreg.h>
+#include <setupapi.h>
+#include <cfgmgr32.h>
+#include <stdio.h>
 #include <bthsdpdef.h>
 #include <bluetoothapis.h>
 #include <reactos/drivers/bthlocal.h>
@@ -66,4 +71,57 @@ DWORD WINAPI BluetoothSetLocalServiceInfo( HANDLE radio, const GUID *class_guid,
     }
     if (own) CloseHandle( own );
     return ret;
+}
+
+static BOOL service_from_instance( const WCHAR *id, const WCHAR *address, GUID *guid )
+{
+    unsigned int d[11];
+    const WCHAR *instance = wcsrchr( id, '\\' );
+    int i;
+
+    if (_wcsnicmp( id, L"BTHENUM\\{", 9 ) || !instance || !wcsstr( instance, address )) return FALSE;
+    if (swscanf( id + 8, L"{%8x-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x}", &d[0], &d[1], &d[2], &d[3], &d[4],
+                 &d[5], &d[6], &d[7], &d[8], &d[9], &d[10] ) != 11)
+        return FALSE;
+    guid->Data1 = d[0];
+    guid->Data2 = (USHORT)d[1];
+    guid->Data3 = (USHORT)d[2];
+    for (i = 0; i < 8; i++) guid->Data4[i] = (BYTE)d[3 + i];
+    return TRUE;
+}
+
+DWORD WINAPI BluetoothEnumerateInstalledServices( HANDLE radio, BLUETOOTH_DEVICE_INFO *info, DWORD *count,
+                                                  GUID *services )
+{
+    SP_DEVINFO_DATA data = { sizeof(data) };
+    WCHAR id[MAX_DEVICE_ID_LEN], address[16];
+    DWORD index, found = 0, capacity, i;
+    HDEVINFO set;
+    GUID guid;
+
+    if (!info || info->dwSize != sizeof(*info) || !count) return ERROR_INVALID_PARAMETER;
+    capacity = services ? *count : 0;
+    swprintf( address, ARRAY_SIZE(address), L"%012I64X_C", info->Address.ullLong );
+
+    set = SetupDiGetClassDevsW( NULL, L"BTHENUM", NULL, DIGCF_ALLCLASSES | DIGCF_PRESENT );
+    if (set == INVALID_HANDLE_VALUE) return GetLastError();
+    for (index = 0; SetupDiEnumDeviceInfo( set, index, &data ); index++)
+    {
+        if (!SetupDiGetDeviceInstanceIdW( set, &data, id, ARRAY_SIZE(id), NULL )) continue;
+        if (!service_from_instance( id, address, &guid )) continue;
+        for (i = 0; i < found && i < capacity; i++)
+            if (IsEqualGUID( &services[i], &guid )) break;
+        if (i < found && i < capacity) continue;
+        if (found < capacity) services[found] = guid;
+        found++;
+    }
+    SetupDiDestroyDeviceInfoList( set );
+
+    if (services && found > capacity)
+    {
+        *count = capacity;
+        return ERROR_MORE_DATA;
+    }
+    *count = found;
+    return services || !found ? ERROR_SUCCESS : ERROR_MORE_DATA;
 }
