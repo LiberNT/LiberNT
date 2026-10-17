@@ -2830,7 +2830,12 @@ TREEVIEW_DrawItem(const TREEVIEW_INFO *infoPtr, HDC hdc, TREEVIEW_ITEM *item)
 	    SetTextAlign(hdc, align);
 
 	    /* Draw focus box around the selected item */
+#ifdef __REACTOS__
+	    if ((item == infoPtr->selectedItem) && inFocus &&
+	        !(SendMessageW(infoPtr->hwnd, WM_QUERYUISTATE, 0, 0) & UISF_HIDEFOCUS))
+#else
 	    if ((item == infoPtr->selectedItem) && inFocus)
+#endif
 	    {
 		DrawFocusRect(hdc,&rcText);
 	    }
