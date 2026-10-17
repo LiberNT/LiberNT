@@ -164,7 +164,7 @@ HRESULT GetNTObjectSymbolicLinkTarget(LPCWSTR path, LPCWSTR entryName, PUNICODE_
 
     StringCbCatW(buffer, sizeof(buffer), entryName);
 
-    DbgPrint("GetNTObjectSymbolicLinkTarget %d\n", buffer);
+    TRACE("GetNTObjectSymbolicLinkTarget %S\n", buffer);
 
     LinkTarget->Length = 0;
 

@@ -38,7 +38,7 @@ public:
                 return S_OK;
         }
 
-        DbgPrint("MessageSFVCB unimplemented %d %08x %08x\n", uMsg, wParam, lParam);
+        TRACE("MessageSFVCB %u %Ix %Ix not handled\n", uMsg, wParam, lParam);
         return E_NOTIMPL;
     }
 
