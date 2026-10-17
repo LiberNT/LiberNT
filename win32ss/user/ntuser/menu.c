@@ -2273,18 +2273,21 @@ static void FASTCALL MENU_FillFlatPopupBack(HDC hdc, const RECT *prc, INT cyTota
     NtGdiSelectPen(hdc, oldPen);
 }
 
-static void FASTCALL MENU_FillPopupHilite(HDC hdc, const RECT *prc, HBRUSH hilite, BOOL flat, INT cyTotal)
+static void FASTCALL MENU_FillHilite(HDC hdc, const RECT *prc, HBRUSH hilite, BOOL flat, BOOL menuBar, INT bkgnd,
+                                     INT cyTotal)
 {
     RECT pill = *prc;
     INT radius = MENU_Scale(MENU_POPUP_RADIUS) * 2;
     HBRUSH oldBrush;
     HPEN oldPen;
 
-    if (flat)
+    if (menuBar)
+        FillRect(hdc, prc, IntGetSysColorBrush(bkgnd));
+    else if (flat)
         MENU_FillFlatPopupBack(hdc, prc, cyTotal);
     else
         FillRect(hdc, prc, IntGetSysColorBrush(COLOR_MENU));
-    RECTL_vInflateRect(&pill, -MENU_Scale(MENU_POPUP_INSET), -MENU_Scale(1));
+    RECTL_vInflateRect(&pill, -MENU_Scale(menuBar ? 2 : MENU_POPUP_INSET), -MENU_Scale(menuBar ? 2 : 1));
     oldBrush = NtGdiSelectBrush(hdc, hilite);
     oldPen = NtGdiSelectPen(hdc, NtGdiGetStockObject(NULL_PEN));
     NtGdiRoundRect(hdc, pill.left, pill.top, pill.right + 1, pill.bottom + 1, radius, radius);
@@ -2325,16 +2328,11 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
 
     if (lpitem->fState & MF_HILITE)
     {
-        if(menuBar && !flat_menu) {
-            IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_MENUTEXT));
-            IntGdiSetBkColor(hdc, IntGetSysColor(COLOR_MENU));
-        } else {
-            if (lpitem->fState & MF_GRAYED)
-                IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_GRAYTEXT));
-            else
-                IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_HIGHLIGHTTEXT));
-            IntGdiSetBkColor(hdc, IntGetSysColor(COLOR_HIGHLIGHT));
-        }
+        if (lpitem->fState & MF_GRAYED)
+            IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_GRAYTEXT));
+        else
+            IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_HIGHLIGHTTEXT));
+        IntGdiSetBkColor(hdc, IntGetSysColor(COLOR_HIGHLIGHT));
     }
     else
     {
@@ -2410,29 +2408,8 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
 
     if (lpitem->fState & MF_HILITE)
     {
-        if (flat_menu && !menuBar)
-        {
-            MENU_FillPopupHilite(hdc, &rect, IntGetSysColorBrush(COLOR_MENUHILIGHT), TRUE, Height);
-        }
-        else if (flat_menu)
-        {
-            RECTL_vInflateRect (&rect, -1, -1);
-            FillRect(hdc, &rect, IntGetSysColorBrush(COLOR_MENUHILIGHT));
-            RECTL_vInflateRect (&rect, 1, 1);
-            FrameRect(hdc, &rect, IntGetSysColorBrush(COLOR_HIGHLIGHT));
-        }
-        else
-        {
-            if (menuBar)
-            {
-                FillRect(hdc, &rect, IntGetSysColorBrush(COLOR_MENU));
-                DrawEdge(hdc, &rect, BDR_SUNKENOUTER, BF_RECT);
-            }
-            else
-            {
-                MENU_FillPopupHilite(hdc, &rect, IntGetSysColorBrush(COLOR_HIGHLIGHT), FALSE, Height);
-            }
-        }
+        MENU_FillHilite(hdc, &rect, IntGetSysColorBrush(flat_menu ? COLOR_MENUHILIGHT : COLOR_HIGHLIGHT), flat_menu,
+                        menuBar, bkgnd, Height);
     }
     else
     {
