@@ -77,6 +77,7 @@ typedef struct _DU_VOLUME
     ULONGLONG Capacity;
     ULONGLONG Free;
     DWORD Serial;
+    DWORD FsFlags;
     ULONG DiskNumber;
     ULONGLONG Offset;
     BOOL HasFileSystem;

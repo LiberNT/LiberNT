@@ -401,7 +401,7 @@ DuEnumVolumes(
         if (GetVolumePathNamesForVolumeNameW(Name, Paths, ARRAYSIZE(Paths), &Returned) && Paths[0])
             StringCchCopyW(Volume->MountPath, ARRAYSIZE(Volume->MountPath), Paths);
         Volume->HasFileSystem = GetVolumeInformationW(Name, Volume->Label, ARRAYSIZE(Volume->Label),
-                                                      &Volume->Serial, NULL, NULL,
+                                                      &Volume->Serial, NULL, &Volume->FsFlags,
                                                       Volume->FileSystem, ARRAYSIZE(Volume->FileSystem));
         if (Volume->HasFileSystem && GetDiskFreeSpaceExW(Name, &Avail, &Total, &Free))
         {

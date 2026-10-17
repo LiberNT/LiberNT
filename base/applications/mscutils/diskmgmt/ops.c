@@ -754,7 +754,7 @@ WorkThread(
             if (!Ok)
             {
                 Work->Error = RtlNtStatusToDosError(Status);
-                Work->ErrorText = IDS_ERR_RESIZE;
+                Work->ErrorText = Status == STATUS_MEDIA_WRITE_PROTECTED ? IDS_ERR_READONLY : IDS_ERR_RESIZE;
             }
             break;
         }
@@ -1181,6 +1181,11 @@ DuResize(
 
     if (!DuCanResize(Sel))
         return FALSE;
+    if (Volume->FsFlags & FILE_READ_ONLY_VOLUME)
+    {
+        DuError(hwnd, IDS_ERR_READONLY, ERROR_WRITE_PROTECT);
+        return FALSE;
+    }
     RtlInitUnicodeString(&Path, Volume->DeviceName);
     Old = SetCursor(LoadCursorW(NULL, IDC_WAIT));
     Status = VolResizeQuery(&Path, &Info);

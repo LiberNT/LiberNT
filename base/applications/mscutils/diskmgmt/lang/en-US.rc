@@ -171,5 +171,6 @@ BEGIN
     IDS_ERR_NOROOM "This volume cannot be resized: there is no space to free and no free space after it."
     IDS_ERR_INUSE "The volume is in use. Close the programs using it and try again."
     IDS_ERR_BUSY "The cancelled check is still stopping. Try again in a moment."
+    IDS_ERR_READONLY "This volume is read-only and cannot be resized. If it holds a Windows installation that was hibernated or shut down with Fast Startup, start Windows and shut it down fully, then try again."
     IDS_CLOSE "Close"
 END

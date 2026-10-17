@@ -71,6 +71,7 @@
 #define IDS_ERR_PARTITION        2020
 #define IDS_ERR_RESIZE           2021
 #define IDS_ERR_BUSY             2022
+#define IDS_ERR_READONLY         2023
 #define IDS_INFO_DEVICE          2025
 #define IDS_INFO_DISKID          2026
 #define IDS_INFO_MOUNT           2029
