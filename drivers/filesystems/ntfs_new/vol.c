@@ -416,14 +416,20 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
                              &Size,
                              TRUE);
     if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Failed to query the disk geometry (Status %lx)\n", Status);
         goto Cleanup;
+    }
 
     // Set up NTFS library to use disk routines.
     Status = NtfsDiskPrepareMountKm(TargetDeviceObject,
                                     DiskGeometry.BytesPerSector);
 
     if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Failed to prepare the disk for mounting (Status %lx)\n", Status);
         goto Cleanup;
+    }
 
     /* Check if we're really NTFS. It's OK if we're not.
      * We're a boot driver, NT will try every possible filesystem.

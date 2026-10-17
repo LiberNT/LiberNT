@@ -71,6 +71,8 @@ NtfsProbePartition(
     {
         /* Mount requests are sent to every registered file system. Rejecting
          * a non-NTFS volume here is expected and must not pollute the log. */
+        if (RtlCompareMemory(PartitionBootSector->OEM_ID, "-FVE-FS-", 8) == 8)
+            DPRINT1("Volume is encrypted with BitLocker and cannot be mounted\n");
         return STATUS_UNRECOGNIZED_VOLUME;
     }
 
