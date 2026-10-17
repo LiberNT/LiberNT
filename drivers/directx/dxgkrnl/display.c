@@ -387,8 +387,6 @@ DxgkpPinSupportedPathTransformations(
                     D3DKMDT_VPPS_ASPECTRATIOCENTEREDMAX;
             else if (Path->ContentTransformation.ScalingSupport.Custom)
                 Path->ContentTransformation.Scaling = D3DKMDT_VPPS_CUSTOM;
-            else
-                return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
         }
 
         if (!DxgkpVidPnPathRotationIsPinned(Path))
