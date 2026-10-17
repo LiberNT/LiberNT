@@ -23,6 +23,14 @@ BlendColor(COLORREF base, COLORREF ink, int amount)
                GetBValue(base) + (GetBValue(ink) - GetBValue(base)) * amount / 255);
 }
 
+BOOL
+CabinetComposedFrame(VOID)
+{
+    BOOL composed = FALSE;
+
+    return IsAppThemed() && SUCCEEDED(DwmIsCompositionEnabled(&composed)) && composed;
+}
+
 void
 CabinetGetPalette(CabinetPalette *palette)
 {
@@ -474,6 +482,8 @@ CCabinetTabBand::Paint(HDC dc)
     void *bits = NULL;
     HBITMAP bitmap;
     BOOL active = GetActiveWindow() == GetAncestor(m_hwnd, GA_ROOT);
+    BOOL composed = CabinetComposedFrame();
+    COLORREF strip;
     int width, height;
 
     GetClientRect(m_hwnd, &client);
@@ -490,6 +500,15 @@ CCabinetTabBand::Paint(HDC dc)
         return;
     ZeroMemory(bits, width * height * 4);
     CabinetGetPalette(&palette);
+    strip = composed ? RGB(255, 255, 255) : palette.Text;
+    if (!composed)
+    {
+        COLORREF face = GetSysColor(COLOR_3DFACE);
+        ULONG pixel = 0xFF000000 | (GetRValue(face) << 16) | (GetGValue(face) << 8) | GetBValue(face);
+
+        for (int i = 0; i < width * height; i++)
+            ((ULONG *)bits)[i] = pixel;
+    }
     {
         Gdiplus::Bitmap surface(width, height, width * 4, PixelFormat32bppPARGB, (BYTE *)bits);
         Gdiplus::Graphics graphics(&surface);
@@ -539,7 +558,7 @@ CCabinetTabBand::Paint(HDC dc)
             glyph.bottom = glyph.top + Scale(16);
             ShellFrame::FillIcon(graphics, L"add_16_regular",
                                  Gdiplus::RectF((float)glyph.left, (float)glyph.top, (float)(glyph.right - glyph.left),
-                                                (float)(glyph.bottom - glyph.top)), RGB(255, 255, 255));
+                                                (float)(glyph.bottom - glyph.top)), strip);
         }
         for (int order = m_Count - 1; order >= -1; order--)
         {
@@ -584,7 +603,7 @@ CCabinetTabBand::Paint(HDC dc)
                 graphics.FillPath(&fill, &path);
             }
             {
-                Gdiplus::SolidBrush brush(GlassColor(selected ? 255 : inkAlpha, selected ? palette.Text : RGB(255, 255, 255)));
+                Gdiplus::SolidBrush brush(GlassColor(selected ? 255 : inkAlpha, selected ? palette.Text : strip));
                 float iconLeft = left + (float)Scale(12), textLeft = iconLeft + (float)iconSize + (float)Scale(8);
                 float textRight = ShowsClose(i) ? (float)close.left - (float)Scale(4) : right - (float)Scale(8);
                 int iconTop = (rc.top + rc.bottom - iconSize) / 2;
@@ -613,7 +632,7 @@ CCabinetTabBand::Paint(HDC dc)
                                      Gdiplus::RectF((float)glyph.left, (float)glyph.top,
                                                     (float)(glyph.right - glyph.left),
                                                     (float)(glyph.bottom - glyph.top)),
-                                     selected ? palette.Glyph : RGB(255, 255, 255));
+                                     selected ? palette.Glyph : strip);
             }
         }
     }

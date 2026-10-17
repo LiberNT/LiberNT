@@ -27,6 +27,7 @@ struct CabinetPalette
 };
 
 void CabinetGetPalette(CabinetPalette *palette);
+BOOL CabinetComposedFrame(VOID);
 HIMAGELIST CabinetGlyphImages(const LPCWSTR *names, UINT count, int size, COLORREF color);
 void CabinetFillRound(HDC dc, const RECT &rc, int radius, COLORREF color);
 LRESULT CabinetToolbarCustomDraw(NMTBCUSTOMDRAW *draw, COLORREF base);

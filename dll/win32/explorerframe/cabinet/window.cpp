@@ -441,7 +441,7 @@ CCabinetWindow::OnCreate()
 void
 CCabinetWindow::ExtendFrame()
 {
-    MARGINS margins = { 0, 0, TabStripHeight(), 0 };
+    MARGINS margins = { 0, 0, ClientCaption() ? TabStripHeight() : 0, 0 };
 
     DwmExtendFrameIntoClientArea(m_hwnd, &margins);
 }
@@ -449,9 +449,7 @@ CCabinetWindow::ExtendFrame()
 BOOL
 CCabinetWindow::ClientCaption()
 {
-    BOOL composed = FALSE;
-
-    return IsAppThemed() && SUCCEEDED(DwmIsCompositionEnabled(&composed)) && composed;
+    return CabinetComposedFrame();
 }
 
 int
@@ -478,7 +476,7 @@ CCabinetWindow::PaintBackground(HDC dc)
     GetClientRect(m_hwnd, &client);
     {
         RECT glass = { 0, 0, client.right, TabStripHeight() };
-        FillRect(dc, &glass, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        FillRect(dc, &glass, ClientCaption() ? (HBRUSH)GetStockObject(BLACK_BRUSH) : GetSysColorBrush(COLOR_3DFACE));
     }
     bands[0] = { TabStripHeight(), AddressBottom() - 1, palette.Band };
     bands[1] = { AddressBottom() - 1, AddressBottom(), palette.BandBottom };
@@ -3341,9 +3339,13 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             RestoreFocus();
             return 0;
         case WM_THEMECHANGED:
+            if (m_Status)
+                SendMessageW(m_Status, WM_THEMECHANGED, 0, 0);
             RefreshGlyphs();
+            ExtendFrame();
             SetWindowPos(m_hwnd, NULL, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            RedrawWindow(m_hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME);
             break;
         case WM_SYSCOLORCHANGE:
         case WM_SETTINGCHANGE:
