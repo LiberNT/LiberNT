@@ -1653,6 +1653,27 @@ static BOOL queue_copy_file( const WCHAR *source, const WCHAR *dest,
     if (op->dst_path && !create_full_pathW(op->dst_path))
         return FALSE;
 
+    if (op->dst_file && strchrW(op->dst_file, '\\'))
+    {
+        WCHAR *parent = HeapAlloc(GetProcessHeap(), 0, (strlenW(dest) + 1) * sizeof(WCHAR));
+        WCHAR *slash;
+        BOOL created;
+
+        if (!parent)
+        {
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return FALSE;
+        }
+        strcpyW(parent, dest);
+        slash = strrchrW(parent, '\\');
+        if (slash)
+            *slash = 0;
+        created = !slash || create_full_pathW(parent);
+        HeapFree(GetProcessHeap(), 0, parent);
+        if (!created)
+            return FALSE;
+    }
+
     if (!do_file_copyW(source, dest, op->style, handler, context) && GetLastError() != ERROR_SUCCESS)
     {
         if (!op->media->tag || !extract_cabinet_file(op->media->tag, op->media->root, op->src_file, dest))
