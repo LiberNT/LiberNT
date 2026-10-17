@@ -442,6 +442,74 @@ AddContrastThemes(PageBuilder &page)
                 [](int index) { ApplyContrastScheme(index - 1); }).Keywords = Str(IDS_CONTRAST_KEYWORDS);
 }
 
+static const COLORREF PointerColors[] =
+{
+    RGB(0xBF, 0x00, 0xFF), RGB(0xBF, 0xFF, 0x00), RGB(0xFA, 0xFA, 0x00), RGB(0xFF, 0xBF, 0x00),
+    RGB(0xFF, 0x00, 0xBF), RGB(0x00, 0xBF, 0xFF), RGB(0x00, 0xFF, 0xBF),
+};
+
+static const UINT PointerColorNames[] =
+{
+    IDS_POINTER_PURPLE, IDS_POINTER_LIME, IDS_POINTER_YELLOW, IDS_POINTER_GOLD,
+    IDS_POINTER_PINK, IDS_POINTER_BLUE, IDS_POINTER_MINT,
+};
+
+static void
+AddMousePointer(PageBuilder &page)
+{
+    COLORREF color = RGB(0xBF, 0xFF, 0x00);
+    PointerStyle style = page.Indexing ? PointerStyle::White : CurrentPointerStyle(&color);
+    std::vector<std::wstring> styles;
+
+    styles.push_back(Str(IDS_POINTER_WHITE));
+    styles.push_back(Str(IDS_POINTER_BLACK));
+    styles.push_back(Str(IDS_POINTER_INVERTED));
+    styles.push_back(Str(IDS_POINTER_CUSTOM));
+    page.Choice(Str(IDS_POINTER_STYLE), Str(IDS_POINTER_STYLE_DESC), L"color_20_regular", styles, (int)style,
+                [](int index)
+                {
+                    COLORREF current;
+
+                    CurrentPointerStyle(&current);
+                    ApplyPointer((PointerStyle)index, current, CurrentPointerSize());
+                }).Keywords = Str(IDS_POINTER_KEYWORDS);
+    if (style == PointerStyle::Custom)
+    {
+        std::vector<std::wstring> colors;
+        int selected = -1;
+
+        for (UINT i = 0; i < _countof(PointerColors); i++)
+        {
+            colors.push_back(Str(PointerColorNames[i]));
+            if (PointerColors[i] == (color & 0x00FFFFFF))
+                selected = (int)i;
+        }
+        if (selected < 0)
+        {
+            colors.push_back(Str(IDS_ACCENT_CUSTOM));
+            selected = (int)colors.size() - 1;
+        }
+        page.Choice(Str(IDS_POINTER_COLOR), std::wstring(), L"paint_brush_20_regular", colors, selected,
+                    [](int index)
+                    {
+                        if (index < (int)_countof(PointerColors))
+                            ApplyPointer(PointerStyle::Custom, PointerColors[index], CurrentPointerSize());
+                    });
+    }
+    {
+        SettingRow &row = page.Slider(Str(IDS_POINTER_SIZE), Str(IDS_POINTER_SIZE_DESC), L"cursor_20_regular", 1, 15,
+                                      page.Indexing ? 1 : CurrentPointerSize(),
+                                      [](int value)
+                                      {
+                                          COLORREF current;
+                                          PointerStyle style = CurrentPointerStyle(&current);
+
+                                          ApplyPointer(style, current, value);
+                                      });
+        row.Label = [](int value) { return Printf(L"%d", value); };
+    }
+}
+
 void
 BuildAccessibility(PageBuilder &page)
 {
@@ -451,6 +519,7 @@ BuildAccessibility(PageBuilder &page)
     caretSupported = page.Indexing || SystemParametersInfoW(SPI_GETCARETWIDTH, 0, &caret, 0);
 
     page.Group(Str(IDS_VISION));
+    AddMousePointer(page);
     {
         SettingRow &row = page.Slider(Str(IDS_CARET_WIDTH), Str(IDS_CARET_WIDTH_DESC), L"keyboard_20_regular", 1, 20,
                                       (int)caret, [](int value) { ApplySpi(SPI_SETCARETWIDTH, 0, (PVOID)(INT_PTR)value); });

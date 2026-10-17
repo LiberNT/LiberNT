@@ -220,6 +220,18 @@ bool Confirm(HWND owner, const std::wstring &title, const std::wstring &text, co
 int PickFromMenu(HWND owner, const std::vector<std::wstring> &options, int selected);
 bool PickDateTime(HWND owner, SYSTEMTIME &time);
 
+enum class PointerStyle
+{
+    White,
+    Black,
+    Inverted,
+    Custom
+};
+
+PointerStyle CurrentPointerStyle(COLORREF *color);
+int CurrentPointerSize();
+bool ApplyPointer(PointerStyle style, COLORREF color, int size);
+
 void BuildSystem(PageBuilder &page);
 void BuildDisplay(PageBuilder &page);
 void BuildSound(PageBuilder &page);
