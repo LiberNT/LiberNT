@@ -257,6 +257,7 @@ typedef struct _WLANSVC_PROFILE
     DWORD                   Flags;              /* WLAN_PROFILE_* */
     /* The original XML, returned verbatim by WlanGetProfile. */
     LPWSTR                  Xml;
+    WCHAR                   FileName[48];
 } WLANSVC_PROFILE, *PWLANSVC_PROFILE;
 
 /* One WLAN interface (one nwifi-presented dot11 adapter). */
@@ -264,6 +265,7 @@ typedef struct _WLANSVC_INTERFACE
 {
     LIST_ENTRY            ListEntry;
     GUID                  InterfaceGuid;
+    GUID                  AdapterGuid;
     /* nwifi-local identity (nwifi keys interfaces by index + LUID). */
     ULONG                 NwifiIndex;
     ULONG64               UpperLuid;
@@ -369,6 +371,9 @@ DWORD WlanSvcSetProfile(PWLANSVC_INTERFACE Iface, DWORD dwFlags, LPCWSTR Xml,
 DWORD WlanSvcGetProfile(PWLANSVC_INTERFACE Iface, LPCWSTR Name,
                         BOOL bPlaintextKey, LPWSTR *ppXml, PDWORD pdwFlags);
 DWORD WlanSvcDeleteProfile(PWLANSVC_INTERFACE Iface, LPCWSTR Name);
+VOID WlanSvcLoadProfiles(PWLANSVC_INTERFACE Iface);
+VOID WlanSvcLoadRadioState(PWLANSVC_INTERFACE Iface);
+VOID WlanSvcStoreRadioState(PWLANSVC_INTERFACE Iface);
 VOID  WlanSvcFreeProfile(PWLANSVC_PROFILE Profile);
 
 /* notify.c */

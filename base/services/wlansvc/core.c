@@ -58,13 +58,11 @@ WlanSvcSeedLinkState(PWLANSVC_INTERFACE Iface)
                         &Iface->MacAddress, &ls) != ERROR_SUCCESS)
     {
         Iface->State = wlan_interface_state_disconnected;
-        Iface->RadioOn = TRUE;
         return;
     }
 
     Iface->PhyType = (DOT11_PHY_TYPE)ls.PhyType;
     Iface->State = NwifiLinkStatusToWlan(ls.Status);
-    Iface->RadioOn = TRUE;
     Iface->Rssi = ls.Rssi;
 
     if (ls.Status == NwifiLinkConnectedOpen ||
@@ -116,6 +114,7 @@ WlanSvcPopulateInterfacesLocked(VOID)
         iface->NwifiIndex = ref->InterfaceIndex;
         iface->UpperLuid = ref->UpperLuid;
         iface->MacAddress = ref->MacAddress;
+        iface->AdapterGuid = ref->AdapterGuid;
         if (ref->InterfaceGuid.Data1 != 0)
             iface->InterfaceGuid = ref->InterfaceGuid;
         else
@@ -137,6 +136,8 @@ WlanSvcPopulateInterfacesLocked(VOID)
         iface->RadioOn = TRUE;
 
         WlanSvcSeedLinkState(iface);
+        WlanSvcLoadRadioState(iface);
+        WlanSvcLoadProfiles(iface);
 
         InsertTailList(&WlanSvcInterfaceListHead, &iface->ListEntry);
         DPRINT("wlansvc: added interface '%S' (nwifi idx %lu)\n",

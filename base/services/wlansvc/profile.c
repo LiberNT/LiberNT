@@ -12,9 +12,15 @@
  */
 
 #include "precomp.h"
+#include <winnls.h>
+#include <winreg.h>
+#include <wincrypt.h>
+#include <sddl.h>
 
 #define NDEBUG
 #include <debug.h>
+
+#define WLANSVC_PARAMETERS_KEY L"SYSTEM\\CurrentControlSet\\Services\\WlanSvc\\Parameters\\Interfaces"
 
 /*
  * Return a pointer just past the first "<tag ...>", or NULL.  Tag matching is
@@ -393,6 +399,308 @@ WlanSvcFindProfile(PWLANSVC_INTERFACE Iface, LPCWSTR Name)
     return NULL;
 }
 
+static VOID WlanSvcRedactKeyMaterial(LPWSTR Xml);
+
+static VOID
+WlanSvcGuidText(const GUID *Guid, LPWSTR Text, size_t Chars)
+{
+    _snwprintf(Text, Chars, L"{%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
+               Guid->Data1, Guid->Data2, Guid->Data3, Guid->Data4[0], Guid->Data4[1], Guid->Data4[2],
+               Guid->Data4[3], Guid->Data4[4], Guid->Data4[5], Guid->Data4[6], Guid->Data4[7]);
+    Text[Chars - 1] = L'\0';
+}
+
+static const GUID *
+WlanSvcStoreGuid(PWLANSVC_INTERFACE Iface)
+{
+    static const GUID Zero;
+
+    return memcmp(&Iface->AdapterGuid, &Zero, sizeof(Zero)) ? &Iface->AdapterGuid : &Iface->InterfaceGuid;
+}
+
+static BOOL
+WlanSvcProfileDirectory(PWLANSVC_INTERFACE Iface, LPWSTR Path, DWORD Chars, BOOL Create)
+{
+    static const LPCWSTR Parts[] = { L"\\Microsoft", L"\\Wlansvc", L"\\Profiles", L"\\Interfaces" };
+    SECURITY_ATTRIBUTES Security = { sizeof(Security) };
+    PSECURITY_DESCRIPTOR Descriptor = NULL;
+    WCHAR Guid[48];
+    DWORD Used;
+    UINT i;
+
+    Used = ExpandEnvironmentStringsW(L"%ProgramData%", Path, Chars);
+    if (!Used || Used + 96 > Chars || Path[0] == L'%')
+        return FALSE;
+    if (Create &&
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)", SDDL_REVISION_1,
+                                                             &Descriptor, NULL))
+        Security.lpSecurityDescriptor = Descriptor;
+    for (i = 0; i < ARRAYSIZE(Parts); i++)
+    {
+        wcscat(Path, Parts[i]);
+        if (Create)
+            CreateDirectoryW(Path, (i && Descriptor) ? &Security : NULL);
+    }
+    wcscat(Path, L"\\");
+    WlanSvcGuidText(WlanSvcStoreGuid(Iface), Guid, ARRAYSIZE(Guid));
+    wcscat(Path, Guid);
+    if (Create)
+        CreateDirectoryW(Path, Descriptor ? &Security : NULL);
+    if (Descriptor)
+        LocalFree(Descriptor);
+    return TRUE;
+}
+
+static BOOL
+WlanSvcProfilePath(PWLANSVC_INTERFACE Iface, LPCWSTR FileName, LPCWSTR Extension, BOOL Create, LPWSTR Path)
+{
+    LPWSTR Dot;
+
+    if (!WlanSvcProfileDirectory(Iface, Path, MAX_PATH, Create) || wcslen(Path) + wcslen(FileName) + 8 > MAX_PATH)
+        return FALSE;
+    wcscat(Path, L"\\");
+    wcscat(Path, FileName);
+    Dot = wcsrchr(Path, L'.');
+    if (Dot)
+        *Dot = L'\0';
+    wcscat(Path, Extension);
+    return TRUE;
+}
+
+static BOOL
+WlanSvcWriteFile(LPCWSTR Path, const VOID *Data, DWORD Size)
+{
+    HANDLE File = CreateFileW(Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    DWORD Written = 0;
+    BOOL Ok;
+
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+    Ok = WriteFile(File, Data, Size, &Written, NULL) && Written == Size;
+    CloseHandle(File);
+    if (!Ok)
+        DeleteFileW(Path);
+    return Ok;
+}
+
+static PBYTE
+WlanSvcReadFile(LPCWSTR Path, PDWORD Size)
+{
+    HANDLE File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    PBYTE Data = NULL;
+    DWORD Read = 0;
+
+    *Size = 0;
+    if (File == INVALID_HANDLE_VALUE)
+        return NULL;
+    *Size = GetFileSize(File, NULL);
+    if (*Size != INVALID_FILE_SIZE && *Size < 0x100000)
+        Data = HeapAlloc(GetProcessHeap(), 0, *Size + sizeof(WCHAR));
+    if (Data && (!ReadFile(File, Data, *Size, &Read, NULL) || Read != *Size))
+    {
+        HeapFree(GetProcessHeap(), 0, Data);
+        Data = NULL;
+    }
+    CloseHandle(File);
+    return Data;
+}
+
+static VOID
+WlanSvcStoreProfile(PWLANSVC_INTERFACE Iface, PWLANSVC_PROFILE Profile)
+{
+    WCHAR Path[MAX_PATH];
+    DATA_BLOB In, Out;
+    LPWSTR Xml;
+    LPSTR Utf8;
+    int Bytes;
+
+    if (Profile->Xml == NULL)
+        return;
+    if (!Profile->FileName[0])
+    {
+        UUID Id;
+
+        if (UuidCreate(&Id) != RPC_S_OK)
+            return;
+        WlanSvcGuidText(&Id, Profile->FileName, ARRAYSIZE(Profile->FileName) - 4);
+        wcscat(Profile->FileName, L".xml");
+    }
+    if (!WlanSvcProfilePath(Iface, Profile->FileName, L".xml", TRUE, Path))
+        return;
+
+    Xml = HeapAlloc(GetProcessHeap(), 0, (wcslen(Profile->Xml) + 1) * sizeof(WCHAR));
+    if (Xml == NULL)
+        return;
+    wcscpy(Xml, Profile->Xml);
+    WlanSvcRedactKeyMaterial(Xml);
+    Bytes = WideCharToMultiByte(CP_UTF8, 0, Xml, -1, NULL, 0, NULL, NULL);
+    Utf8 = Bytes > 0 ? HeapAlloc(GetProcessHeap(), 0, Bytes) : NULL;
+    if (Utf8 && WideCharToMultiByte(CP_UTF8, 0, Xml, -1, Utf8, Bytes, NULL, NULL) == Bytes)
+        WlanSvcWriteFile(Path, Utf8, Bytes - 1);
+    if (Utf8)
+        HeapFree(GetProcessHeap(), 0, Utf8);
+    HeapFree(GetProcessHeap(), 0, Xml);
+
+    if (!WlanSvcProfilePath(Iface, Profile->FileName, L".key", FALSE, Path))
+        return;
+    if (!Profile->KeyLength)
+    {
+        DeleteFileW(Path);
+        return;
+    }
+    In.cbData = Profile->KeyLength;
+    In.pbData = Profile->Key;
+    if (CryptProtectData(&In, NULL, NULL, NULL, NULL, CRYPTPROTECT_LOCAL_MACHINE | CRYPTPROTECT_UI_FORBIDDEN, &Out))
+    {
+        WlanSvcWriteFile(Path, Out.pbData, Out.cbData);
+        LocalFree(Out.pbData);
+    }
+}
+
+static VOID
+WlanSvcRemoveProfileFiles(PWLANSVC_INTERFACE Iface, PWLANSVC_PROFILE Profile)
+{
+    WCHAR Path[MAX_PATH];
+
+    if (!Profile->FileName[0])
+        return;
+    if (WlanSvcProfilePath(Iface, Profile->FileName, L".xml", FALSE, Path))
+        DeleteFileW(Path);
+    if (WlanSvcProfilePath(Iface, Profile->FileName, L".key", FALSE, Path))
+        DeleteFileW(Path);
+}
+
+static LPWSTR
+WlanSvcInsertKeyMaterial(LPCWSTR Xml, const BYTE *Key, DWORD KeyLength)
+{
+    LPCWSTR Insert = XmlFindOpen(Xml, L"keyMaterial");
+    size_t Prefix, Length;
+    LPWSTR Result;
+    DWORD i;
+
+    if (Insert == NULL)
+        return NULL;
+    Prefix = Insert - Xml;
+    Length = wcslen(Xml);
+    Result = HeapAlloc(GetProcessHeap(), 0, (Length + KeyLength + 1) * sizeof(WCHAR));
+    if (Result == NULL)
+        return NULL;
+    memcpy(Result, Xml, Prefix * sizeof(WCHAR));
+    for (i = 0; i < KeyLength; i++)
+        Result[Prefix + i] = (WCHAR)Key[i];
+    memcpy(Result + Prefix + KeyLength, Insert, (Length - Prefix + 1) * sizeof(WCHAR));
+    return Result;
+}
+
+VOID
+WlanSvcLoadProfiles(PWLANSVC_INTERFACE Iface)
+{
+    WCHAR Pattern[MAX_PATH], Path[MAX_PATH];
+    WIN32_FIND_DATAW Find;
+    HANDLE Search;
+
+    if (!WlanSvcProfileDirectory(Iface, Pattern, MAX_PATH, FALSE) || wcslen(Pattern) + 8 > MAX_PATH)
+        return;
+    wcscat(Pattern, L"\\*.xml");
+    Search = FindFirstFileW(Pattern, &Find);
+    if (Search == INVALID_HANDLE_VALUE)
+        return;
+    do
+    {
+        PWLANSVC_PROFILE Profile = NULL;
+        LPWSTR Xml = NULL, Keyed = NULL;
+        PBYTE Data, Protected;
+        DWORD Size, KeySize;
+        int Chars;
+
+        if (wcslen(Find.cFileName) >= ARRAYSIZE(Profile->FileName) ||
+            !WlanSvcProfilePath(Iface, Find.cFileName, L".xml", FALSE, Path))
+            continue;
+        Data = WlanSvcReadFile(Path, &Size);
+        if (Data == NULL)
+            continue;
+        Chars = MultiByteToWideChar(CP_UTF8, 0, (LPCSTR)Data, (int)Size, NULL, 0);
+        Xml = Chars > 0 ? HeapAlloc(GetProcessHeap(), 0, (Chars + 1) * sizeof(WCHAR)) : NULL;
+        if (Xml)
+        {
+            MultiByteToWideChar(CP_UTF8, 0, (LPCSTR)Data, (int)Size, Xml, Chars);
+            Xml[Chars] = L'\0';
+        }
+        HeapFree(GetProcessHeap(), 0, Data);
+        if (Xml == NULL)
+            continue;
+
+        if (WlanSvcProfilePath(Iface, Find.cFileName, L".key", FALSE, Path) &&
+            (Protected = WlanSvcReadFile(Path, &KeySize)) != NULL)
+        {
+            DATA_BLOB In = { KeySize, Protected }, Out;
+
+            if (CryptUnprotectData(&In, NULL, NULL, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &Out))
+            {
+                Keyed = WlanSvcInsertKeyMaterial(Xml, Out.pbData, Out.cbData);
+                SecureZeroMemory(Out.pbData, Out.cbData);
+                LocalFree(Out.pbData);
+            }
+            HeapFree(GetProcessHeap(), 0, Protected);
+        }
+
+        if (WlanSvcParseProfileXml(Keyed ? Keyed : Xml, &Profile) == ERROR_SUCCESS &&
+            WlanSvcFindProfile(Iface, Profile->Name) == NULL)
+        {
+            wcscpy(Profile->FileName, Find.cFileName);
+            InsertTailList(&Iface->ProfileListHead, &Profile->ListEntry);
+            Iface->ProfileCount++;
+        }
+        else if (Profile)
+        {
+            WlanSvcFreeProfile(Profile);
+        }
+        if (Keyed)
+        {
+            SecureZeroMemory(Keyed, wcslen(Keyed) * sizeof(WCHAR));
+            HeapFree(GetProcessHeap(), 0, Keyed);
+        }
+        HeapFree(GetProcessHeap(), 0, Xml);
+    } while (FindNextFileW(Search, &Find));
+    FindClose(Search);
+}
+
+static BOOL
+WlanSvcRadioKey(PWLANSVC_INTERFACE Iface, LPWSTR Path, size_t Chars)
+{
+    WCHAR Guid[48];
+
+    WlanSvcGuidText(WlanSvcStoreGuid(Iface), Guid, ARRAYSIZE(Guid));
+    _snwprintf(Path, Chars, L"%s\\%s", WLANSVC_PARAMETERS_KEY, Guid);
+    Path[Chars - 1] = L'\0';
+    return TRUE;
+}
+
+VOID
+WlanSvcLoadRadioState(PWLANSVC_INTERFACE Iface)
+{
+    WCHAR Path[MAX_PATH];
+    DWORD Off = 0, Size = sizeof(Off);
+
+    if (WlanSvcRadioKey(Iface, Path, ARRAYSIZE(Path)) &&
+        RegGetValueW(HKEY_LOCAL_MACHINE, Path, L"RadioOff", RRF_RT_REG_DWORD, NULL, &Off, &Size) == ERROR_SUCCESS)
+        Iface->RadioOn = (Off == 0);
+}
+
+VOID
+WlanSvcStoreRadioState(PWLANSVC_INTERFACE Iface)
+{
+    WCHAR Path[MAX_PATH];
+    DWORD Off = Iface->RadioOn ? 0 : 1;
+    HKEY Key;
+
+    if (!WlanSvcRadioKey(Iface, Path, ARRAYSIZE(Path)) ||
+        RegCreateKeyExW(HKEY_LOCAL_MACHINE, Path, 0, NULL, 0, KEY_SET_VALUE, NULL, &Key, NULL) != ERROR_SUCCESS)
+        return;
+    RegSetValueExW(Key, L"RadioOff", 0, REG_DWORD, (const BYTE *)&Off, sizeof(Off));
+    RegCloseKey(Key);
+}
+
 DWORD
 WlanSvcSetProfile(PWLANSVC_INTERFACE Iface,
                   DWORD dwFlags,
@@ -424,6 +732,7 @@ WlanSvcSetProfile(PWLANSVC_INTERFACE Iface,
             WlanSvcFreeProfile(prof);
             return ERROR_ALREADY_EXISTS;
         }
+        wcscpy(prof->FileName, existing->FileName);
         RemoveEntryList(&existing->ListEntry);
         Iface->ProfileCount--;
         WlanSvcFreeProfile(existing);
@@ -431,6 +740,7 @@ WlanSvcSetProfile(PWLANSVC_INTERFACE Iface,
 
     InsertTailList(&Iface->ProfileListHead, &prof->ListEntry);
     Iface->ProfileCount++;
+    WlanSvcStoreProfile(Iface, prof);
 
     WlanSvcIndicateAcm(Iface, wlan_notification_acm_profile_change);
     return ERROR_SUCCESS;
@@ -501,6 +811,7 @@ WlanSvcDeleteProfile(PWLANSVC_INTERFACE Iface, LPCWSTR Name)
 
     RemoveEntryList(&prof->ListEntry);
     Iface->ProfileCount--;
+    WlanSvcRemoveProfileFiles(Iface, prof);
     WlanSvcFreeProfile(prof);
 
     WlanSvcIndicateAcm(Iface, wlan_notification_acm_profile_change);

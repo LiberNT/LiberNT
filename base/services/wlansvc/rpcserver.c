@@ -305,6 +305,7 @@ DWORD _RpcSetInterface(
             if (on != iface->RadioOn)
             {
                 iface->RadioOn = on;
+                WlanSvcStoreRadioState(iface);
                 if (!on)
                 {
                     if (iface->Connected)
