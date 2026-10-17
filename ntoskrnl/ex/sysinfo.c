@@ -474,6 +474,7 @@ ExpGetRawSMBiosTable(
     PVOID DataBlockObject;
     PWNODE_ALL_DATA AllData;
     ULONG WMIBufSize;
+    ULONG DataOffset;
 
     ASSERT(OutSize != NULL);
     *OutSize = 0;
@@ -491,6 +492,8 @@ ExpGetRawSMBiosTable(
     /* Query the required buffer size */
     WMIBufSize = 0;
     Status = IoWMIQueryAllData(DataBlockObject, &WMIBufSize, NULL);
+    if (Status == STATUS_BUFFER_TOO_SMALL)
+        Status = STATUS_SUCCESS;
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("IoWMIOpenBlock failed: 0x%08lx\n", Status);
@@ -517,12 +520,26 @@ ExpGetRawSMBiosTable(
     }
 
     Status = STATUS_SUCCESS;
-    *OutSize = AllData->FixedInstanceSize;
-    if (Buffer != NULL)
+    if (AllData->WnodeHeader.Flags & WNODE_FLAG_FIXED_INSTANCE_SIZE)
+    {
+        *OutSize = AllData->FixedInstanceSize;
+        DataOffset = AllData->DataBlockOffset;
+    }
+    else
+    {
+        *OutSize = AllData->OffsetInstanceDataAndLength[0].LengthInstanceData;
+        DataOffset = AllData->OffsetInstanceDataAndLength[0].OffsetInstanceData;
+    }
+    if (DataOffset > WMIBufSize || *OutSize > WMIBufSize - DataOffset)
+    {
+        *OutSize = 0;
+        Status = STATUS_DEVICE_DATA_ERROR;
+    }
+    else if (Buffer != NULL)
     {
         if (BufferSize >= *OutSize)
         {
-            RtlMoveMemory(Buffer, AllData + 1, *OutSize);
+            RtlMoveMemory(Buffer, (PUCHAR)AllData + DataOffset, *OutSize);
         }
         else
         {

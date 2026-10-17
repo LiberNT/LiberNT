@@ -89,7 +89,7 @@ GetEntryPointData(
         BiosTablesHeader->Used20CallingMethod = 0;
         BiosTablesHeader->SmbiosMajorVersion = EntryPoint21->MajorVersion;
         BiosTablesHeader->SmbiosMinorVersion = EntryPoint21->MinorVersion;
-        BiosTablesHeader->DmiRevision = 2;
+        BiosTablesHeader->DmiRevision = EntryPoint21->BCDRevision;
         BiosTablesHeader->Size = EntryPoint21->TableLength;
         return TRUE;
     }
@@ -276,61 +276,59 @@ WmipQueryRawSMBiosTables(
     _Inout_ ULONG *InOutBufferSize,
     _Out_opt_ PVOID OutBuffer)
 {
+    static const WCHAR InstanceName[] = L"SMBiosData";
+    const ULONG NameBytes = sizeof(InstanceName) - sizeof(WCHAR);
+    const ULONG DataOffset = ALIGN_UP_BY(FIELD_OFFSET(WNODE_ALL_DATA, OffsetInstanceDataAndLength[1]), sizeof(ULONGLONG));
     NTSTATUS Status;
     PVOID TableData = NULL;
-    ULONG TableSize, ResultSize;
+    ULONG TableSize, NameOffsetsOffset, NameOffset, ResultSize;
     PWNODE_ALL_DATA AllData;
+    PUCHAR Base;
 
-    /* Get the table data */
-    Status = WmipGetRawSMBiosTableData(OutBuffer ? &TableData : NULL, &TableSize);
+    Status = WmipGetRawSMBiosTableData(NULL, &TableSize);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("WmipGetRawSMBiosTableData failed: 0x%08lx\n", Status);
         return Status;
     }
 
-    ResultSize = sizeof(WNODE_ALL_DATA) + TableSize;
-
-    /* Check if the caller provided a buffer */
-    if ((OutBuffer != NULL) && (*InOutBufferSize != 0))
+    NameOffsetsOffset = ALIGN_UP_BY(DataOffset + TableSize, sizeof(ULONG));
+    NameOffset = NameOffsetsOffset + sizeof(ULONG);
+    ResultSize = ALIGN_UP_BY(NameOffset + sizeof(USHORT) + NameBytes, sizeof(ULONGLONG));
+    if (OutBuffer == NULL || *InOutBufferSize < ResultSize)
     {
-        /* Check if the buffer is large enough */
-        if (*InOutBufferSize < ResultSize)
-        {
-            DPRINT1("Buffer too small. Got %lu, need %lu\n",
-                    *InOutBufferSize, ResultSize);
-            return STATUS_BUFFER_TOO_SMALL;
-        }
-
-        /// FIXME: most of this is fubar
-        AllData = OutBuffer;
-        AllData->WnodeHeader.BufferSize = ResultSize;
-        AllData->WnodeHeader.ProviderId = 0;
-        AllData->WnodeHeader.Version = 0;
-        AllData->WnodeHeader.Linkage = 0; // last entry
-        //AllData->WnodeHeader.CountLost;
-        AllData->WnodeHeader.KernelHandle = NULL;
-        //AllData->WnodeHeader.TimeStamp;
-        AllData->WnodeHeader.Guid = MSSmBios_RawSMBiosTables_GUID;
-        //AllData->WnodeHeader.ClientContext;
-        AllData->WnodeHeader.Flags = WNODE_FLAG_FIXED_INSTANCE_SIZE;
-        AllData->DataBlockOffset = sizeof(WNODE_ALL_DATA);
-        AllData->InstanceCount = 1;
-        //AllData->OffsetInstanceNameOffsets;
-        AllData->FixedInstanceSize = TableSize;
-
-        RtlCopyMemory(AllData + 1, TableData, TableSize);
+        *InOutBufferSize = ResultSize;
+        return STATUS_BUFFER_TOO_SMALL;
     }
 
-    /* Set the size */
-    *InOutBufferSize = ResultSize;
-
-    /* Free the table buffer */
-    if (TableData != NULL)
+    Status = WmipGetRawSMBiosTableData(&TableData, &TableSize);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (ALIGN_UP_BY(ALIGN_UP_BY(DataOffset + TableSize, sizeof(ULONG)) + sizeof(ULONG) + sizeof(USHORT) + NameBytes,
+                    sizeof(ULONGLONG)) != ResultSize)
     {
         ExFreePoolWithTag(TableData, 'BTMS');
+        return STATUS_DEVICE_DATA_ERROR;
     }
 
+    RtlZeroMemory(OutBuffer, ResultSize);
+    Base = OutBuffer;
+    AllData = OutBuffer;
+    AllData->WnodeHeader.BufferSize = ResultSize;
+    AllData->WnodeHeader.Guid = MSSmBios_RawSMBiosTables_GUID;
+    AllData->WnodeHeader.Flags = WNODE_FLAG_ALL_DATA | WNODE_FLAG_STATIC_INSTANCE_NAMES;
+    AllData->DataBlockOffset = DataOffset;
+    AllData->InstanceCount = 1;
+    AllData->OffsetInstanceNameOffsets = NameOffsetsOffset;
+    AllData->OffsetInstanceDataAndLength[0].OffsetInstanceData = DataOffset;
+    AllData->OffsetInstanceDataAndLength[0].LengthInstanceData = TableSize;
+    RtlCopyMemory(Base + DataOffset, TableData, TableSize);
+    *(PULONG)(Base + NameOffsetsOffset) = NameOffset;
+    *(PUSHORT)(Base + NameOffset) = (USHORT)NameBytes;
+    RtlCopyMemory(Base + NameOffset + sizeof(USHORT), InstanceName, NameBytes);
+    ExFreePoolWithTag(TableData, 'BTMS');
+
+    *InOutBufferSize = ResultSize;
     return STATUS_SUCCESS;
 }
 
