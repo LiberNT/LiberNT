@@ -23,6 +23,8 @@
 
 #include "dxgkrnl_private.h"
 #include "presenttrace.h"
+#include <ntimage.h>
+#include <ndk/ldrfuncs.h>
 #include <ndk/obfuncs.h>
 #include <ndk/psfuncs.h>
 #include "vidmm.h"
@@ -1060,6 +1062,167 @@ DxgkpQueryDriverStringValue(
 Cleanup:
     DxgkpFreeRegistryValue(ValueInfo);
     ZwClose(KeyHandle);
+    return Status;
+}
+
+static NTSTATUS
+DxgkpReadFileVersion(
+    _In_ PUNICODE_STRING Path,
+    _Out_ PLARGE_INTEGER Version)
+{
+    OBJECT_ATTRIBUTES Attributes;
+    IO_STATUS_BLOCK IoStatus;
+    LDR_RESOURCE_INFO ResourceInfo;
+    PIMAGE_RESOURCE_DATA_ENTRY ResourceEntry;
+    HANDLE FileHandle;
+    HANDLE SectionHandle;
+    PVOID Section;
+    PVOID Base = NULL;
+    PVOID Data;
+    SIZE_T ViewSize = 0;
+    ULONG DataSize;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    Version->QuadPart = 0;
+    InitializeObjectAttributes(&Attributes, Path, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwOpenFile(&FileHandle, FILE_READ_DATA | FILE_EXECUTE | SYNCHRONIZE, &Attributes, &IoStatus,
+                        FILE_SHARE_READ | FILE_SHARE_DELETE, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = ZwCreateSection(&SectionHandle, SECTION_MAP_READ, NULL, NULL, PAGE_READONLY, SEC_IMAGE, FileHandle);
+    ZwClose(FileHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = ObReferenceObjectByHandle(SectionHandle, SECTION_MAP_READ, NULL, KernelMode, &Section, NULL);
+    ZwClose(SectionHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = MmMapViewInSystemSpace(Section, &Base, &ViewSize);
+    ObDereferenceObject(Section);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    ResourceInfo.Type = 16;
+    ResourceInfo.Name = 1;
+    ResourceInfo.Language = 0;
+    _SEH2_TRY
+    {
+        if (NT_SUCCESS(LdrFindResource_U(Base, &ResourceInfo, RESOURCE_DATA_LEVEL, &ResourceEntry)) &&
+            NT_SUCCESS(LdrAccessResource(Base, ResourceEntry, &Data, &DataSize)) &&
+            DataSize > 0x5B &&
+            wcsncmp((PCWSTR)((PUCHAR)Data + 6), L"VS_VERSION_INFO", 16) == 0)
+        {
+            Version->HighPart = *(ULONG UNALIGNED *)((PUCHAR)Data + 0x30);
+            Version->LowPart = *(ULONG UNALIGNED *)((PUCHAR)Data + 0x34);
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    MmUnmapViewInSystemSpace(Base);
+    return Status;
+}
+
+static NTSTATUS
+DxgkpReadPrefixedFileVersion(
+    _In_ PCWSTR Prefix,
+    _In_ PCWSTR Name,
+    _Out_ PLARGE_INTEGER Version)
+{
+    UNICODE_STRING Path;
+    SIZE_T Bytes = (wcslen(Prefix) + wcslen(Name) + 1) * sizeof(WCHAR);
+    NTSTATUS Status;
+
+    if (Bytes > MAXUSHORT)
+        return STATUS_NAME_TOO_LONG;
+    Path.Buffer = ExAllocatePoolWithTag(PagedPool, Bytes, TAG_DXGK_CAPTURE);
+    if (Path.Buffer == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Path.Length = 0;
+    Path.MaximumLength = (USHORT)Bytes;
+    RtlAppendUnicodeToString(&Path, Prefix);
+    RtlAppendUnicodeToString(&Path, Name);
+    Status = DxgkpReadFileVersion(&Path, Version);
+    ExFreePoolWithTag(Path.Buffer, TAG_DXGK_CAPTURE);
+    return Status;
+}
+
+static NTSTATUS
+DxgkpGetUmdFileVersion(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Out_ PLARGE_INTEGER Version)
+{
+    WCHAR Name[MAX_PATH];
+    ULONG Index;
+
+    for (Index = 0; Index < NUM_KMTUMDVERSIONS; ++Index)
+    {
+        if (NT_SUCCESS(DxgkpQueryDriverStringValue(Adapter,
+                                                   DxgkpIsWow64Caller() ? L"UserModeDriverNameWow" : L"UserModeDriverName",
+                                                   Index, Name, ARRAYSIZE(Name))) &&
+            Name[0] != UNICODE_NULL && wcscmp(Name, L"<>") != 0)
+        {
+            return DxgkpReadPrefixedFileVersion(L"\\??\\", Name, Version);
+        }
+    }
+    return STATUS_OBJECT_NAME_NOT_FOUND;
+}
+
+static NTSTATUS
+DxgkpGetKmdFileVersion(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Out_ PLARGE_INTEGER Version)
+{
+    static const WCHAR ServicesKey[] = L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\";
+    PUNICODE_STRING ServiceName;
+    UNICODE_STRING KeyName, ValueName = RTL_CONSTANT_STRING(L"ImagePath");
+    OBJECT_ATTRIBUTES Attributes;
+    PKEY_VALUE_PARTIAL_INFORMATION Info = NULL;
+    HANDLE Key;
+    ULONG Size = 0;
+    PWSTR ImagePath;
+    NTSTATUS Status;
+
+    if (Adapter->FunctionalDeviceObject == NULL ||
+        Adapter->FunctionalDeviceObject->DriverObject->DriverExtension == NULL)
+        return STATUS_DEVICE_NOT_READY;
+    ServiceName = &Adapter->FunctionalDeviceObject->DriverObject->DriverExtension->ServiceKeyName;
+    if (ServiceName->Length == 0 || ServiceName->Length > MAXUSHORT - sizeof(ServicesKey))
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    KeyName.MaximumLength = (USHORT)(sizeof(ServicesKey) + ServiceName->Length);
+    KeyName.Length = 0;
+    KeyName.Buffer = ExAllocatePoolWithTag(PagedPool, KeyName.MaximumLength, TAG_DXGK_CAPTURE);
+    if (KeyName.Buffer == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlAppendUnicodeToString(&KeyName, ServicesKey);
+    RtlAppendUnicodeStringToString(&KeyName, ServiceName);
+    InitializeObjectAttributes(&Attributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwOpenKey(&Key, KEY_QUERY_VALUE, &Attributes);
+    ExFreePoolWithTag(KeyName.Buffer, TAG_DXGK_CAPTURE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = ZwQueryValueKey(Key, &ValueName, KeyValuePartialInformation, NULL, 0, &Size);
+    if ((Status == STATUS_BUFFER_TOO_SMALL || Status == STATUS_BUFFER_OVERFLOW) && Size != 0)
+    {
+        Info = ExAllocatePoolWithTag(PagedPool, Size + sizeof(WCHAR), TAG_DXGK_CAPTURE);
+        Status = Info == NULL ? STATUS_INSUFFICIENT_RESOURCES :
+                 ZwQueryValueKey(Key, &ValueName, KeyValuePartialInformation, Info, Size, &Size);
+    }
+    ZwClose(Key);
+    if (NT_SUCCESS(Status) &&
+        ((Info->Type != REG_SZ && Info->Type != REG_EXPAND_SZ) || Info->DataLength < sizeof(WCHAR)))
+        Status = STATUS_OBJECT_TYPE_MISMATCH;
+    if (NT_SUCCESS(Status))
+    {
+        ImagePath = (PWSTR)Info->Data;
+        ImagePath[Info->DataLength / sizeof(WCHAR)] = UNICODE_NULL;
+        Status = DxgkpReadPrefixedFileVersion(ImagePath[0] == L'\\' ? L"" : L"\\SystemRoot\\", ImagePath, Version);
+    }
+    if (Info != NULL)
+        ExFreePoolWithTag(Info, TAG_DXGK_CAPTURE);
     return Status;
 }
 
@@ -2689,6 +2852,7 @@ DxgkpQueryAdapterInfoMinimumLevel(
 
         case KMTQAITYPE_ADAPTERTYPE:
         case KMTQAITYPE_WDDM_1_2_CAPS:
+        case KMTQAITYPE_UMD_DRIVER_VERSION:
             *MinimumLevel = DXGK_CAPS_CORE_LEVEL_WDDM_1_2;
             return TRUE;
 
@@ -2712,6 +2876,7 @@ DxgkpQueryAdapterInfoMinimumLevel(
             return TRUE;
 
         case KMTQAITYPE_QUERYREGISTRY:
+        case KMTQAITYPE_KMD_DRIVER_VERSION:
         case KMTQAITYPE_ADAPTERREGISTRYINFO_RENDER:
         case KMTQAITYPE_ADAPTERTYPE_RENDER:
         case KMTQAITYPE_WDDM_1_2_CAPS_RENDER:
@@ -3336,6 +3501,34 @@ DxgkpQueryAdapterInfoCaptured(
             _SEH2_END;
 
             DXGKRNL_TRACE("DxgkQueryAdapterInfo: DRIVERVERSION -> %d\n", Version);
+            DXGKP_QUERY_RETURN(STATUS_SUCCESS);
+        }
+
+        case KMTQAITYPE_UMD_DRIVER_VERSION:
+        case KMTQAITYPE_KMD_DRIVER_VERSION:
+        {
+            LARGE_INTEGER FileVersion;
+            NTSTATUS Status;
+
+            if (pQueryAdapterInfo->pPrivateDriverData == NULL ||
+                pQueryAdapterInfo->PrivateDriverDataSize != sizeof(LARGE_INTEGER))
+            {
+                DXGKP_QUERY_RETURN(STATUS_INVALID_PARAMETER);
+            }
+            Status = pQueryAdapterInfo->Type == KMTQAITYPE_KMD_DRIVER_VERSION ?
+                     DxgkpGetKmdFileVersion(Adapter, &FileVersion) :
+                     DxgkpGetUmdFileVersion(Adapter, &FileVersion);
+            if (!NT_SUCCESS(Status))
+                DXGKP_QUERY_RETURN(Status);
+            _SEH2_TRY
+            {
+                *(PLARGE_INTEGER)pQueryAdapterInfo->pPrivateDriverData = FileVersion;
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                DXGKP_QUERY_RETURN(_SEH2_GetExceptionCode());
+            }
+            _SEH2_END;
             DXGKP_QUERY_RETURN(STATUS_SUCCESS);
         }
 
