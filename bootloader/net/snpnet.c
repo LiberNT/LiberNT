@@ -44,6 +44,7 @@
 #define SNP_TCP_WINDOW          (384 * 1024)
 #define SNP_TCP_WINDOW_SCALE    4
 #define SNP_TCP_ACK_SEGMENTS    8
+#define SNP_TCP_OOO_RANGES      16
 #define SNP_TCP_IDLE_POLLS      32
 #define SNP_TCP_SYN_ATTEMPTS    5
 #define SNP_TCP_REQUEST_RETRIES 5
@@ -70,6 +71,9 @@
 #define SNP_HTTP_REQUEST_BYTES  1400
 #define SNP_HTTP_ATTEMPTS       4
 #define SNP_AUTHORITY_CHARS     64
+#define SNP_MAX_ADAPTERS        16
+#define SNP_LINK_POLLS          100
+#define SNP_LINK_POLL_US        100000
 
 #define SNP_SEQ_LT(a, b)        ((LONG)((a) - (b)) < 0)
 #define SNP_SEQ_LEQ(a, b)       ((LONG)((a) - (b)) <= 0)
@@ -82,6 +86,12 @@ typedef enum _SNP_TCP_STATE
     SnpTcpSynSent,
     SnpTcpEstablished
 } SNP_TCP_STATE;
+
+typedef struct _SNP_TCP_RANGE
+{
+    ULONG Start;
+    ULONG End;
+} SNP_TCP_RANGE;
 
 typedef struct _SNP_TCP
 {
@@ -100,6 +110,8 @@ typedef struct _SNP_TCP
     BOOLEAN ResendSyn;
     ULONG PendingSegments;
     ULONG DataTick;
+    ULONG OooCount;
+    SNP_TCP_RANGE Ooo[SNP_TCP_OOO_RANGES];
 } SNP_TCP;
 
 typedef struct _SNP_HTTP
@@ -941,6 +953,93 @@ SnpHttpConsume(
 
 static
 VOID
+SnpTcpRemoveRange(
+    _In_ ULONG Index)
+{
+    SNP_TCP* Connection = &SnpNet.Tcp;
+
+    Connection->Ooo[Index] = Connection->Ooo[--Connection->OooCount];
+}
+
+static
+VOID
+SnpTcpStoreOutOfOrder(
+    _In_ ULONG Sequence,
+    _In_reads_bytes_(Length) const UCHAR* Data,
+    _In_ ULONG Length)
+{
+    SNP_TCP* Connection = &SnpNet.Tcp;
+    SNP_HTTP* Http = &SnpNet.Http;
+    SNP_TCP_RANGE Merged;
+    ULONG Offset, i;
+
+    if (!Http->HeaderDone || Http->Failed || !Http->Image || Length == 0 ||
+        Sequence - Connection->RcvNxt >= SNP_TCP_WINDOW)
+    {
+        return;
+    }
+
+    Offset = Http->Received + (Sequence - Connection->RcvNxt);
+    if (Offset >= Http->ImageSize || Length > Http->ImageSize - Offset)
+        return;
+
+    Merged.Start = Sequence;
+    Merged.End = Sequence + Length;
+    for (i = 0; i < Connection->OooCount;)
+    {
+        SNP_TCP_RANGE* Range = &Connection->Ooo[i];
+
+        if (SNP_SEQ_LEQ(Merged.Start, Range->End) && SNP_SEQ_LEQ(Range->Start, Merged.End))
+        {
+            if (SNP_SEQ_LT(Range->Start, Merged.Start))
+                Merged.Start = Range->Start;
+            if (SNP_SEQ_GT(Range->End, Merged.End))
+                Merged.End = Range->End;
+            SnpTcpRemoveRange(i);
+            continue;
+        }
+        i++;
+    }
+
+    if (Connection->OooCount == SNP_TCP_OOO_RANGES)
+        return;
+
+    RtlCopyMemory(Http->Image + Offset, Data, Length);
+    Connection->Ooo[Connection->OooCount++] = Merged;
+}
+
+static
+VOID
+SnpTcpAdvanceOutOfOrder(VOID)
+{
+    SNP_TCP* Connection = &SnpNet.Tcp;
+    ULONG i;
+
+    for (i = 0; i < Connection->OooCount;)
+    {
+        SNP_TCP_RANGE* Range = &Connection->Ooo[i];
+
+        if (SNP_SEQ_LEQ(Range->End, Connection->RcvNxt))
+        {
+            SnpTcpRemoveRange(i);
+            continue;
+        }
+
+        if (SNP_SEQ_LEQ(Range->Start, Connection->RcvNxt))
+        {
+            SnpNet.Http.Received += Range->End - Connection->RcvNxt;
+            Connection->RcvNxt = Range->End;
+            Connection->AckNow = TRUE;
+            SnpTcpRemoveRange(i);
+            i = 0;
+            continue;
+        }
+        i++;
+    }
+}
+
+static
+VOID
 SnpTcpInput(
     _In_ const UCHAR* Ip,
     _In_reads_bytes_(Length) const UCHAR* Tcp,
@@ -1030,6 +1129,8 @@ SnpTcpInput(
 
     if (SNP_SEQ_GT(Sequence, Connection->RcvNxt))
     {
+        if (!(Flags & SNP_TCP_FIN))
+            SnpTcpStoreOutOfOrder(Sequence, Tcp + HeaderLength, PayloadLength);
         Connection->AckNow = TRUE;
         return;
     }
@@ -1040,6 +1141,8 @@ SnpTcpInput(
         SnpHttpConsume(Tcp + HeaderLength + (Connection->RcvNxt - Sequence), End - Connection->RcvNxt);
         Connection->RcvNxt = End;
         Connection->DataTick = SnpNet.Ticks;
+        if (Connection->OooCount)
+            SnpTcpAdvanceOutOfOrder();
         if (++Connection->PendingSegments >= SNP_TCP_ACK_SEGMENTS)
             Connection->AckNow = TRUE;
     }
@@ -1484,13 +1587,18 @@ SnpClose(VOID)
 
 static
 EFI_STATUS
-SnpOpen(VOID)
+SnpOpen(
+    _In_reads_(ExcludedCount) EFI_SIMPLE_NETWORK_PROTOCOL** Excluded,
+    _In_ UINTN ExcludedCount)
 {
     EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
+    EFI_SIMPLE_NETWORK_PROTOCOL* Candidates[SNP_MAX_ADAPTERS];
+    EFI_SIMPLE_NETWORK_STATE States[SNP_MAX_ADAPTERS];
+    EFI_SIMPLE_NETWORK_STATE InitialState;
     EFI_SIMPLE_NETWORK_PROTOCOL* Snp;
     EFI_HANDLE* Handles;
     EFI_STATUS Status;
-    UINTN Count, i;
+    UINTN Count, Found = 0, Poll, i, j;
     TIME_FIELDS Time;
     ULONG Byte;
 
@@ -1500,7 +1608,7 @@ SnpOpen(VOID)
 
     FwPrint(L"Starting the network.\r\n");
 
-    for (i = 0; i < Count && !SnpNet.Snp; i++)
+    for (i = 0; i < Count && Found < SNP_MAX_ADAPTERS; i++)
     {
         if (EFI_ERROR(BootServices->HandleProtocol(Handles[i], &SnpGuid, (VOID**)&Snp)) ||
             Snp->Mode->HwAddressSize != SNP_MAC_BYTES ||
@@ -1509,13 +1617,18 @@ SnpOpen(VOID)
             continue;
         }
 
-        SnpNet.InitialState = Snp->Mode->State;
+        for (j = 0; j < ExcludedCount && Excluded[j] != Snp; j++)
+            ;
+        if (j < ExcludedCount)
+            continue;
+
+        InitialState = Snp->Mode->State;
         if (Snp->Mode->State == EfiSimpleNetworkStopped && EFI_ERROR(Snp->Start(Snp)))
             continue;
 
         if (Snp->Mode->State == EfiSimpleNetworkStarted && EFI_ERROR(Snp->Initialize(Snp, 0, 0)))
         {
-            if (SnpNet.InitialState == EfiSimpleNetworkStopped && Snp->Mode->State == EfiSimpleNetworkStarted)
+            if (InitialState == EfiSimpleNetworkStopped && Snp->Mode->State == EfiSimpleNetworkStarted)
                 Snp->Stop(Snp);
             continue;
         }
@@ -1523,34 +1636,53 @@ SnpOpen(VOID)
         if (Snp->Mode->State != EfiSimpleNetworkInitialized)
             continue;
 
-        if (Snp->Mode->MediaPresentSupported)
-        {
-            Snp->GetStatus(Snp, NULL, NULL);
-            if (!Snp->Mode->MediaPresent && SnpNet.InitialState != EfiSimpleNetworkInitialized)
-            {
-                Snp->Shutdown(Snp);
-                if (SnpNet.InitialState == EfiSimpleNetworkStopped)
-                    Snp->Stop(Snp);
-                continue;
-            }
-        }
+        UefiLattePandaFixMac(Snp);
+        Candidates[Found] = Snp;
+        States[Found] = InitialState;
+        Found++;
+    }
+    BootServices->FreePool(Handles);
 
-        Snp->ReceiveFilters(Snp,
-                            Snp->Mode->ReceiveFilterMask &
-                                (EFI_SIMPLE_NETWORK_RECEIVE_UNICAST | EFI_SIMPLE_NETWORK_RECEIVE_BROADCAST),
-                            0,
-                            FALSE,
-                            0,
-                            NULL);
-        SnpNet.Snp = Snp;
+    for (Poll = 0; Poll <= SNP_LINK_POLLS && !SnpNet.Snp; Poll++)
+    {
+        for (i = 0; i < Found && !SnpNet.Snp; i++)
+        {
+            Snp = Candidates[i];
+            if (Snp->Mode->MediaPresentSupported && States[i] != EfiSimpleNetworkInitialized)
+            {
+                Snp->GetStatus(Snp, NULL, NULL);
+                if (!Snp->Mode->MediaPresent)
+                    continue;
+            }
+            SnpNet.Snp = Snp;
+            SnpNet.InitialState = States[i];
+        }
+        if (!SnpNet.Snp && Found && Poll < SNP_LINK_POLLS)
+            BootServices->Stall(SNP_LINK_POLL_US);
     }
 
-    BootServices->FreePool(Handles);
+    for (i = 0; i < Found; i++)
+    {
+        if (Candidates[i] == SnpNet.Snp || States[i] == EfiSimpleNetworkInitialized)
+            continue;
+        Candidates[i]->Shutdown(Candidates[i]);
+        if (States[i] == EfiSimpleNetworkStopped)
+            Candidates[i]->Stop(Candidates[i]);
+    }
+
     if (!SnpNet.Snp)
     {
         FwPrint(L"No network adapter has a link.\r\n");
         return EFI_NO_MEDIA;
     }
+
+    SnpNet.Snp->ReceiveFilters(SnpNet.Snp,
+                               SnpNet.Snp->Mode->ReceiveFilterMask &
+                                   (EFI_SIMPLE_NETWORK_RECEIVE_UNICAST | EFI_SIMPLE_NETWORK_RECEIVE_BROADCAST),
+                               0,
+                               FALSE,
+                               0,
+                               NULL);
 
     RtlCopyMemory(SnpNet.Mac, SnpNet.Snp->Mode->CurrentAddress.Addr, SNP_MAC_BYTES);
     SnpNet.Mss = (USHORT)(min(SnpNet.Snp->Mode->MaxPacketSize, SNP_ETH_MTU) - SNP_IP_HEADER - SNP_TCP_HEADER);
@@ -1595,12 +1727,15 @@ SnpHttpDownload(
 {
     CHAR Authority[SNP_AUTHORITY_CHARS];
     UCHAR Server[SNP_IP_BYTES];
+    EFI_SIMPLE_NETWORK_PROTOCOL* Tried[SNP_MAX_ADAPTERS];
     UEFI_NET_CONTEXT Static;
+    BOOLEAN HaveStatic = FALSE;
     EFI_STATUS Status;
     EFI_TPL OldTpl;
     PCSTR Path;
     USHORT Port;
     ULONG Attempt, Start, Elapsed;
+    UINTN TriedCount = 0;
 
     *Image = NULL;
     *ImageSize = 0;
@@ -1608,7 +1743,6 @@ SnpHttpDownload(
     if (!SnpParseUrl(Url, Authority, &Path, Server, &Port))
         return EFI_UNSUPPORTED;
 
-    RtlZeroMemory(&SnpNet, sizeof(SnpNet));
     if (StaticIp && *StaticIp)
     {
         if (!UefiParseStaticIpConfiguration(StaticIp, &Static))
@@ -1616,30 +1750,50 @@ SnpHttpDownload(
             FwPrint(L"The static IPv4 configuration %hs is not valid.\r\n", StaticIp);
             return EFI_INVALID_PARAMETER;
         }
-
-        RtlCopyMemory(SnpNet.Address, Static.LocalAddress.Addr, SNP_IP_BYTES);
-        RtlCopyMemory(SnpNet.Mask, Static.SubnetMask.Addr, SNP_IP_BYTES);
-        RtlCopyMemory(SnpNet.Gateway, Static.Gateway.Addr, SNP_IP_BYTES);
+        HaveStatic = TRUE;
     }
 
-    Status = SnpOpen();
-    if (EFI_ERROR(Status))
-        return Status;
-
-    OldTpl = GlobalSystemTable->BootServices->RaiseTPL(TPL_CALLBACK);
-
-    if (SnpAddressIsZero(SnpNet.Address) && !SnpDhcp())
+    for (;;)
     {
-        FwPrint(L"No DHCP server answered.\r\n");
-        Status = EFI_NO_RESPONSE;
+        RtlZeroMemory(&SnpNet, sizeof(SnpNet));
+        if (HaveStatic)
+        {
+            RtlCopyMemory(SnpNet.Address, Static.LocalAddress.Addr, SNP_IP_BYTES);
+            RtlCopyMemory(SnpNet.Mask, Static.SubnetMask.Addr, SNP_IP_BYTES);
+            RtlCopyMemory(SnpNet.Gateway, Static.Gateway.Addr, SNP_IP_BYTES);
+        }
+
+        Status = SnpOpen(Tried, TriedCount);
+        if (EFI_ERROR(Status))
+            return TriedCount ? EFI_NO_MAPPING : Status;
+
+        OldTpl = GlobalSystemTable->BootServices->RaiseTPL(TPL_CALLBACK);
+        if (SnpAddressIsZero(SnpNet.Address) && !SnpDhcp())
+        {
+            FwPrint(L"No DHCP server answered.\r\n");
+            Status = EFI_NO_RESPONSE;
+        }
+        else if (!SnpResolve(Server))
+        {
+            FwPrint(L"The address %u.%u.%u.%u could not be resolved.\r\n",
+                    SnpNet.HopAddress[0], SnpNet.HopAddress[1], SnpNet.HopAddress[2], SnpNet.HopAddress[3]);
+            Status = EFI_NO_MAPPING;
+        }
+        else
+        {
+            break;
+        }
+        GlobalSystemTable->BootServices->RestoreTPL(OldTpl);
+
+        if (TriedCount == SNP_MAX_ADAPTERS)
+        {
+            SnpClose();
+            return Status;
+        }
+        Tried[TriedCount++] = SnpNet.Snp;
+        SnpClose();
     }
-    else if (!SnpResolve(Server))
-    {
-        FwPrint(L"The address %u.%u.%u.%u could not be resolved.\r\n",
-                SnpNet.HopAddress[0], SnpNet.HopAddress[1], SnpNet.HopAddress[2], SnpNet.HopAddress[3]);
-        Status = EFI_NO_MAPPING;
-    }
-    else
+
     {
         FwPrint(L"Address %u.%u.%u.%u, downloading %hs\r\n",
                 SnpNet.Address[0], SnpNet.Address[1], SnpNet.Address[2], SnpNet.Address[3], Url);

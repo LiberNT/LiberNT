@@ -58,12 +58,12 @@ typedef struct _UEFI_NETWORK_DRIVER
     UINT32 Features;
 } UEFI_NETWORK_DRIVER;
 
+static EFI_GUID EfiDevicePathGuid = EFI_DEVICE_PATH_PROTOCOL_GUID;
 static EFI_GUID EfiDhcp4ServiceBindingGuid = EFI_DHCP4_SERVICE_BINDING_PROTOCOL_GUID;
 static EFI_GUID EfiHash2Guid = EFI_HASH2_PROTOCOL_GUID;
 static EFI_GUID EfiHash2ServiceBindingGuid = EFI_HASH2_SERVICE_BINDING_PROTOCOL_GUID;
 static EFI_GUID EfiHttpServiceBindingGuid = EFI_HTTP_SERVICE_BINDING_PROTOCOL_GUID;
 static EFI_GUID EfiIp4Config2Guid = EFI_IP4_CONFIG2_PROTOCOL_GUID;
-static EFI_GUID EfiLoadedImageGuid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
 static EFI_GUID EfiNetworkInterfaceIdentifierGuid =
     EFI_NETWORK_INTERFACE_IDENTIFIER_PROTOCOL_GUID;
 static EFI_GUID EfiNetworkInterfaceIdentifier31Guid =
@@ -146,6 +146,7 @@ static const UEFI_NETWORK_DRIVER NetworkDrivers[] =
     {L"\\EFI\\BOOT\\drivers\\RngDxe.efi", FALSE, FALSE, UefiNetworkDriverBase, 0},
     {L"\\EFI\\BOOT\\drivers\\Hash2DxeCrypto.efi", FALSE, FALSE, UefiNetworkDriverBase, 0},
     {L"\\EFI\\BOOT\\drivers\\RtkUndiDxe.efi", TRUE, FALSE, UefiNetworkDriverBase, 0},
+    {L"\\EFI\\BOOT\\drivers\\IpxeDxe.efi", TRUE, FALSE, UefiNetworkDriverBase, 0},
     {L"\\EFI\\BOOT\\drivers\\SnpDxe.efi", TRUE, FALSE, UefiNetworkDriverBase, 0},
     {L"\\EFI\\BOOT\\drivers\\MnpDxe.efi", FALSE, FALSE, UefiNetworkDriverMnp, 0},
     {L"\\EFI\\BOOT\\drivers\\ArpDxe.efi", FALSE, FALSE, UefiNetworkDriverArp, 0},
@@ -334,13 +335,58 @@ UefiConnectAllControllers(
     GlobalSystemTable->BootServices->FreePool(Handles);
 }
 
+static EFI_DEVICE_PATH_PROTOCOL *
+UefiFileDevicePath(
+    _In_ EFI_HANDLE Device,
+    _In_ CHAR16 *Path)
+{
+    EFI_DEVICE_PATH_PROTOCOL *DevicePath, *Node, *FilePath;
+    UINTN DeviceSize, NodeSize, Length;
+    UINT8 *Buffer;
+
+    if (EFI_ERROR(GlobalSystemTable->BootServices->HandleProtocol(
+            Device, &EfiDevicePathGuid, (VOID **)&DevicePath)))
+    {
+        return NULL;
+    }
+
+    for (Node = DevicePath; !IsDevicePathEnd(Node); Node = NextDevicePathNode(Node))
+        ;
+    DeviceSize = (UINT8 *)Node - (UINT8 *)DevicePath;
+    for (Length = 0; Path[Length] != 0; Length++)
+        ;
+    NodeSize = sizeof(EFI_DEVICE_PATH_PROTOCOL) + (Length + 1) * sizeof(CHAR16);
+    if (NodeSize > 0xFFFF ||
+        EFI_ERROR(GlobalSystemTable->BootServices->AllocatePool(
+            EfiLoaderData, DeviceSize + NodeSize + sizeof(EFI_DEVICE_PATH_PROTOCOL), (VOID **)&Buffer)))
+    {
+        return NULL;
+    }
+
+    RtlCopyMemory(Buffer, DevicePath, DeviceSize);
+    FilePath = (EFI_DEVICE_PATH_PROTOCOL *)(Buffer + DeviceSize);
+    FilePath->Type = MEDIA_DEVICE_PATH;
+    FilePath->SubType = MEDIA_FILEPATH_DP;
+    FilePath->Length[0] = (UINT8)NodeSize;
+    FilePath->Length[1] = (UINT8)(NodeSize >> 8);
+    RtlCopyMemory(FilePath + 1, Path, (Length + 1) * sizeof(CHAR16));
+    Node = (EFI_DEVICE_PATH_PROTOCOL *)(Buffer + DeviceSize + NodeSize);
+    Node->Type = END_DEVICE_PATH_TYPE;
+    Node->SubType = END_ENTIRE_DEVICE_PATH_SUBTYPE;
+    Node->Length[0] = sizeof(EFI_DEVICE_PATH_PROTOCOL);
+    Node->Length[1] = 0;
+    return (EFI_DEVICE_PATH_PROTOCOL *)Buffer;
+}
+
 static BOOLEAN
 UefiLoadDxeImage(
     _In_ EFI_FILE_PROTOCOL *Root,
+    _In_ EFI_HANDLE BootDevice,
     _In_ CHAR16 *Path,
     _Out_ EFI_HANDLE *ImageHandle)
 {
     EFI_STATUS Status;
+    EFI_DEVICE_PATH_PROTOCOL *FilePath;
     EFI_FILE_PROTOCOL *File = NULL;
     EFI_FILE_INFO *Info = NULL;
     VOID *ImageBuffer = NULL;
@@ -380,13 +426,16 @@ UefiLoadDxeImage(
     if (EFI_ERROR(Status) || ImageSize != (UINTN)Info->FileSize)
         goto Cleanup;
 
+    FilePath = UefiFileDevicePath(BootDevice, Path);
     Status = GlobalSystemTable->BootServices->LoadImage(
         FALSE,
         GlobalImageHandle,
-        NULL,
+        FilePath,
         ImageBuffer,
         ImageSize,
         ImageHandle);
+    if (FilePath)
+        GlobalSystemTable->BootServices->FreePool(FilePath);
     Loaded = !EFI_ERROR(Status) && *ImageHandle != NULL;
 
 Cleanup:
@@ -444,7 +493,7 @@ UefiLoadNetworkDrivers(
     _In_ BOOLEAN IncludeNicDrivers)
 {
     EFI_STATUS Status;
-    EFI_LOADED_IMAGE_PROTOCOL *LoadedImage = NULL;
+    EFI_HANDLE BootDevice;
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem = NULL;
     EFI_FILE_PROTOCOL *Root = NULL;
     UINTN Index;
@@ -462,13 +511,12 @@ UefiLoadNetworkDrivers(
     NetworkDriversLoadedFeatures |= NetworkFeatures;
 
 
-    Status = GlobalSystemTable->BootServices->HandleProtocol(
-        GlobalImageHandle, &EfiLoadedImageGuid, (VOID **)&LoadedImage);
-    if (EFI_ERROR(Status) || !LoadedImage)
+    BootDevice = FwGetBootDeviceHandle();
+    if (!BootDevice)
         goto Cleanup;
 
     Status = GlobalSystemTable->BootServices->HandleProtocol(
-        LoadedImage->DeviceHandle,
+        BootDevice,
         &EfiSimpleFileSystemGuid,
         (VOID **)&FileSystem);
     if (EFI_ERROR(Status) || !FileSystem)
@@ -494,6 +542,7 @@ UefiLoadNetworkDrivers(
 
         UefiLoadDxeImage(
             Root,
+            BootDevice,
             NetworkDrivers[Index].Path,
             &NetworkDriverImages[Index]);
     }
@@ -504,6 +553,19 @@ Cleanup:
     if (Root)
         Root->Close(Root);
 
+}
+
+BOOLEAN
+UefiNetLoadNicDrivers(VOID)
+{
+    UefiConnectAllControllers(FALSE);
+    UefiLattePandaPrepareNic();
+    if (!(UefiGetNetworkStageMask(NULL) & NET_STAGE_SNP))
+    {
+        UefiLoadNetworkDrivers(TRUE);
+        UefiConnectAllControllers(FALSE);
+    }
+    return (UefiGetNetworkStageMask(NULL) & NET_STAGE_SNP) != 0;
 }
 
 static BOOLEAN

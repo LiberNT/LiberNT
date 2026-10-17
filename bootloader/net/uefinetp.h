@@ -70,6 +70,9 @@ UefiNetForceRebindHttp(
 VOID
 UefiLattePandaPrepareNic(VOID);
 
+BOOLEAN
+UefiNetLoadNicDrivers(VOID);
+
 VOID
 UefiLattePandaFixMac(
     _In_ EFI_SIMPLE_NETWORK_PROTOCOL *Snp);

@@ -1027,6 +1027,8 @@ FwDownloadFile(
 
     *Size = 0;
     Status = SnpHttpDownload(Url, Address, &Image, Size);
+    if (Status == EFI_NOT_FOUND && UefiNetLoadNicDrivers())
+        Status = SnpHttpDownload(Url, Address, &Image, Size);
     if (Status != EFI_NOT_FOUND && Status != EFI_UNSUPPORTED)
         return EFI_ERROR(Status) ? NULL : Image;
 
