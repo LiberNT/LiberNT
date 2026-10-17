@@ -1239,6 +1239,172 @@ Done:
     return Status;
 }
 
+NTSTATUS
+MasterFileTable::ReconnectFile(
+    _In_ PFileRecord File,
+    _In_ ULONGLONG OldParentReference,
+    _In_ PFileRecord NewParent,
+    _In_opt_ PWCHAR NewName)
+{
+    Directory NewParentIndex(DiskVolume);
+    ULONGLONG NewParentReference;
+    ULONGLONG FileReference;
+    ULONGLONG ExistingReference;
+    PAttribute NameAttribute;
+    PFileNameEx Value;
+    ULONG WalkOffset = 0;
+    ULONG Moved = 0;
+    NTSTATUS Status;
+
+    if (!File || !NewParent || !DiskVolume)
+        return STATUS_INVALID_PARAMETER;
+    if (DiskVolume->IsReadOnly)
+        return STATUS_ACCESS_DENIED;
+    if (!(NewParent->Header->Flags & FR_IS_DIRECTORY))
+        return STATUS_NOT_A_DIRECTORY;
+
+    NewParentReference = MakeFileReference(NewParent->Header);
+    FileReference = MakeFileReference(File->Header);
+
+    if (NewName)
+    {
+        UCHAR Source[FIELD_OFFSET(FileNameEx, NameLength)];
+        ULONG NameLength = (ULONG)NtfsWcsLen(NewName);
+        UCHAR NameType = NAME_TYPE_POSIX;
+        PAttribute NewAttribute;
+        PFileNameEx NewValue;
+
+        if (!NameLength || NameLength > NTFS_MAX_FILE_NAME_LENGTH)
+            return STATUS_OBJECT_NAME_INVALID;
+        Status = NewParentIndex.FindNextFile(NewParent, NewName, &ExistingReference);
+        if (NT_SUCCESS(Status))
+            return STATUS_OBJECT_NAME_COLLISION;
+        if (Status != STATUS_NOT_FOUND)
+            return Status;
+
+        for (;;)
+        {
+            WalkOffset = 0;
+            do
+            {
+                Status = EnumerateFileNames(File, &WalkOffset, &NameAttribute, &Value);
+            } while (NT_SUCCESS(Status) && NameAttribute &&
+                     Value->ParentFileReference != OldParentReference);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            if (!NameAttribute)
+                break;
+            if (!Moved || Value->NameType != NAME_TYPE_DOS)
+            {
+                RtlCopyMemory(Source, Value, sizeof(Source));
+                NameType = (Value->NameType & NAME_TYPE_WIN32) ? NAME_TYPE_WIN32 : NAME_TYPE_POSIX;
+            }
+            Status = File->RemoveAttributeRecord(NameAttribute);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            Moved++;
+        }
+        if (!Moved)
+            return STATUS_NOT_FOUND;
+
+        Status = EnsureFileNameSpace(File, NameLength, NewParent, NewParent);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Status = InsertFileNameLink(File,
+                                    reinterpret_cast<const FileNameEx*>(Source),
+                                    NewParentReference,
+                                    NewName,
+                                    NameLength,
+                                    &NewAttribute,
+                                    &NewValue);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        NewValue->NameType = NameType;
+        File->Header->HardLinkCount = (USHORT)(File->Header->HardLinkCount > Moved
+                                                   ? File->Header->HardLinkCount - Moved + 1
+                                                   : 1);
+        Status = WriteFileRecordToMFT(File);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        return NewParentIndex.AddFileToDirectory(NewParent, FileReference, NewValue);
+    }
+
+    for (;;)
+    {
+        Status = EnumerateFileNames(File, &WalkOffset, &NameAttribute, &Value);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (!NameAttribute)
+            break;
+        if (Value->ParentFileReference == OldParentReference)
+        {
+            Value->ParentFileReference = NewParentReference;
+            Moved++;
+        }
+    }
+    if (!Moved)
+        return STATUS_NOT_FOUND;
+
+    Status = WriteFileRecordToMFT(File);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    WalkOffset = 0;
+    for (;;)
+    {
+        Status = EnumerateFileNames(File, &WalkOffset, &NameAttribute, &Value);
+        if (!NT_SUCCESS(Status) || !NameAttribute)
+            return Status;
+        if (Value->ParentFileReference != NewParentReference)
+            continue;
+        Status = NewParentIndex.AddFileToDirectory(NewParent, FileReference, Value);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+}
+
+NTSTATUS
+MasterFileTable::RemoveFileNamesUnderParent(
+    _In_ PFileRecord File,
+    _In_ ULONGLONG ParentReference,
+    _Out_ PULONG Removed)
+{
+    PAttribute NameAttribute;
+    PFileNameEx Value;
+    ULONG WalkOffset;
+    NTSTATUS Status;
+
+    *Removed = 0;
+    if (!File || !DiskVolume)
+        return STATUS_INVALID_PARAMETER;
+    if (DiskVolume->IsReadOnly)
+        return STATUS_ACCESS_DENIED;
+
+    for (;;)
+    {
+        WalkOffset = 0;
+        do
+        {
+            Status = EnumerateFileNames(File, &WalkOffset, &NameAttribute, &Value);
+        } while (NT_SUCCESS(Status) && NameAttribute && Value->ParentFileReference != ParentReference);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (!NameAttribute)
+            break;
+        Status = File->RemoveAttributeRecord(NameAttribute);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        (*Removed)++;
+    }
+    if (!*Removed)
+        return STATUS_NOT_FOUND;
+
+    File->Header->HardLinkCount = File->Header->HardLinkCount > *Removed
+                                      ? (USHORT)(File->Header->HardLinkCount - *Removed)
+                                      : 1;
+    return WriteFileRecordToMFT(File);
+}
+
 /*
  * Splits a path into its final component and parent directory and resolves
  * the parent. ValidateName applies new-name character rules (creation,

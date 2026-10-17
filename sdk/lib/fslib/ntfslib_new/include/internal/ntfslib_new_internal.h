@@ -862,6 +862,15 @@ public:
         _In_reads_bytes_(BufferLength) const UCHAR* Buffer,
         _In_ ULONG BufferLength);
 
+    NTSTATUS
+    FilterAttributeList(
+        _In_ BOOLEAN (*Keep)(_In_ void* Context, _In_ const AttributeListEx* Entry),
+        _In_ void* Context,
+        _In_ BOOLEAN Commit,
+        _Out_ PULONG Dropped,
+        _Out_ PULONG DroppedNames,
+        _Out_ PBOOLEAN DroppedUnnamedData);
+
     NTSTATUS ReadSecurityDescriptor(
         _In_opt_ PUCHAR Buffer,
         _Inout_ PULONG BufferLength);
@@ -1695,6 +1704,19 @@ public:
     CreateHardLink(
         _Inout_ PWCHAR ExistingQuery,
         _Inout_ PWCHAR NewQuery);
+
+    NTSTATUS
+    ReconnectFile(
+        _In_ PFileRecord File,
+        _In_ ULONGLONG OldParentReference,
+        _In_ PFileRecord NewParent,
+        _In_opt_ PWCHAR NewName);
+
+    NTSTATUS
+    RemoveFileNamesUnderParent(
+        _In_ PFileRecord File,
+        _In_ ULONGLONG ParentReference,
+        _Out_ PULONG Removed);
 
     NTSTATUS
     GetPathFromFileReference(

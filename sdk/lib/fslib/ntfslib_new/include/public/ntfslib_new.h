@@ -1024,11 +1024,25 @@ typedef enum NtfsCheckEvent
     NtfsCheckCrossLinked,
     NtfsCheckIndexCorrupt,
     NtfsCheckIndexBadEntry,
+    NtfsCheckIndexStaleEntry,
+    NtfsCheckIndexEntryFixed,
+    NtfsCheckIndexEntryRemoved,
     NtfsCheckNameNotIndexed,
     NtfsCheckUsedClustersFree,
     NtfsCheckLostClusters,
     NtfsCheckLostClustersFreed,
-    NtfsCheckUsedClustersClaimed
+    NtfsCheckUsedClustersClaimed,
+    NtfsCheckRecordFreed,
+    NtfsCheckRecordBitmapFixed,
+    NtfsCheckNameRelinked,
+    NtfsCheckCrossLinkResolved,
+    NtfsCheckLostAndFound,
+    NtfsCheckFileRecovered,
+    NtfsCheckAttributeListBad,
+    NtfsCheckAttributeListFixed,
+    NtfsCheckDataAttributeInserted,
+    NtfsCheckIndexNameMissing,
+    NtfsCheckLostNameRemoved
 } NtfsCheckEvent;
 
 typedef struct NtfsCheckResult
@@ -1040,6 +1054,14 @@ typedef struct NtfsCheckResult
     UINT64 LostClusters;
     UINT64 FreedClusters;
     UINT64 ClaimedClusters;
+    UINT64 FixedIndexEntries;
+    UINT64 RemovedIndexEntries;
+    UINT64 RelinkedNames;
+    UINT64 FreedRecords;
+    UINT64 ResolvedCrossLinks;
+    UINT64 RecoveredFiles;
+    UINT64 RepairedAttributeLists;
+    UINT64 RemovedNames;
     UINT64 Errors;
 } NtfsCheckResult, *PNtfsCheckResult;
 

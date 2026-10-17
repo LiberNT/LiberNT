@@ -1378,6 +1378,142 @@ Done:
 }
 
 NTSTATUS
+FileRecord::FilterAttributeList(
+    _In_ BOOLEAN (*Keep)(_In_ void* Context, _In_ const AttributeListEx* Entry),
+    _In_ void* Context,
+    _In_ BOOLEAN Commit,
+    _Out_ PULONG Dropped,
+    _Out_ PULONG DroppedNames,
+    _Out_ PBOOLEAN DroppedUnnamedData)
+{
+    PAttribute ListAttribute;
+    PUCHAR NewList;
+    ULONG NewLength = 0;
+    ULONG Offset = 0;
+    ULONG WrittenLength;
+    LARGE_INTEGER ListOffset = {};
+    NTSTATUS Status;
+
+    *Dropped = 0;
+    *DroppedNames = 0;
+    *DroppedUnnamedData = FALSE;
+
+    Status = LoadAttributeList();
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!AttributeListData || AttributeListLength == 0)
+        return STATUS_SUCCESS;
+
+    NewList = new(PagedPool, TAG_FILE_RECORD) UCHAR[AttributeListLength];
+    if (!NewList)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    while (Offset < AttributeListLength)
+    {
+        PAttributeListEx Entry = reinterpret_cast<PAttributeListEx>(AttributeListData + Offset);
+
+        if (!IsWritableAttributeListEntryValid(Entry, AttributeListLength - Offset))
+        {
+            delete[] NewList;
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        if (Keep(Context, Entry))
+        {
+            RtlCopyMemory(NewList + NewLength, Entry, Entry->RecordLength);
+            NewLength += Entry->RecordLength;
+        }
+        else
+        {
+            (*Dropped)++;
+            if (Entry->Type == TypeFileName)
+                (*DroppedNames)++;
+            if (Entry->Type == TypeData && Entry->NameLength == 0)
+                *DroppedUnnamedData = TRUE;
+        }
+        Offset += Entry->RecordLength;
+    }
+
+    if (!Commit || *Dropped == 0)
+    {
+        delete[] NewList;
+        return STATUS_SUCCESS;
+    }
+
+    ListAttribute = FindAttributeInRecord(TypeAttributeList, NULL, NULL);
+    if (!ListAttribute)
+    {
+        Status = STATUS_FILE_CORRUPT_ERROR;
+    }
+    else if (!ListAttribute->IsNonResident)
+    {
+        Status = ReplaceResidentData(ListAttribute, NewList, NewLength);
+    }
+    else
+    {
+        WrittenLength = NewLength;
+        Status = WriteFileData(TypeAttributeList, NULL, NewList, &WrittenLength, &ListOffset);
+        if (NT_SUCCESS(Status) && WrittenLength != NewLength)
+            Status = STATUS_END_OF_FILE;
+        if (NT_SUCCESS(Status))
+        {
+            ListAttribute = FindAttributeInRecord(TypeAttributeList, NULL, NULL);
+            if (!ListAttribute || !ListAttribute->IsNonResident)
+            {
+                Status = STATUS_FILE_CORRUPT_ERROR;
+            }
+            else
+            {
+                ListAttribute->NonResident.DataSize = NewLength;
+                if (ListAttribute->NonResident.InitalizedDataSize > NewLength)
+                    ListAttribute->NonResident.InitalizedDataSize = NewLength;
+            }
+        }
+    }
+    delete[] NewList;
+    delete[] AttributeListData;
+    AttributeListData = NULL;
+    AttributeListLength = 0;
+    ClearExtentCache();
+    ClearDataRunCache();
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (*DroppedNames)
+    {
+        Header->HardLinkCount = Header->HardLinkCount > *DroppedNames
+                                    ? (USHORT)(Header->HardLinkCount - *DroppedNames)
+                                    : 0;
+    }
+    Status = DiskVolume->MFT->WriteFileRecordToMFT(this);
+    if (!NT_SUCCESS(Status) || !*DroppedUnnamedData || (Header->Flags & FR_IS_DIRECTORY))
+        return Status;
+
+    {
+        PFileRecord Extension = NULL;
+        PAttribute DataAttribute;
+        BOOLEAN OwnerReferenced = FALSE;
+
+        Status = DiskVolume->MFT->AllocateExtensionFileRecord(
+            ((ULONGLONG)Header->SequenceNumber << 48) | Header->MFTRecordNumber,
+            &Extension);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Status = Extension->SetAutomaticTimestampMask(0);
+        if (NT_SUCCESS(Status))
+            Status = Extension->InsertResidentAttribute(TypeData, NULL, &DataAttribute);
+        if (NT_SUCCESS(Status))
+            Status = DiskVolume->MFT->WriteFileRecordToMFT(Extension);
+        if (NT_SUCCESS(Status))
+            Status = InsertAttributeListEntry(DataAttribute, Extension, NTFS_BASIC_INFO_CHANGE_TIME, FALSE,
+                                              &OwnerReferenced);
+        if (!NT_SUCCESS(Status) && !OwnerReferenced)
+            DiskVolume->MFT->DeallocateExtensionFileRecord(Extension);
+        delete Extension;
+    }
+    return Status;
+}
+
+NTSTATUS
 FileRecord::CreateInitialAttributeList()
 {
     PAttribute Candidate = NULL;
