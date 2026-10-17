@@ -26,13 +26,6 @@ static EFI_GUID FwGraphicsOutputGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
 static EFI_GUID FwLoadedImageProtocolGuid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
 static EFI_GUID FwDevicePathGuid = EFI_DEVICE_PATH_PROTOCOL_GUID;
 static EFI_GUID FwEdidActiveGuid = EFI_EDID_ACTIVE_PROTOCOL_GUID;
-static EFI_GUID FwGlobalVariableGuid = EFI_GLOBAL_VARIABLE;
-
-#define FW_LOAD_OPTION_MAX       4096
-#define FW_LOAD_OPTION_HEADER    6
-#define FW_BOOT_ORDER_MAX        256
-#define FW_BOOT_VARIABLE_CHARS   16
-#define FW_VARIABLE_ATTRIBUTES   (EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_RUNTIME_ACCESS)
 
 static
 PVOID
@@ -236,142 +229,6 @@ FwStartImage(
     return !EFI_ERROR(BootServices->StartImage(Handle, NULL, NULL));
 }
 
-static
-BOOLEAN
-FwIsFileNode(
-    _In_ EFI_DEVICE_PATH_PROTOCOL* Node,
-    _In_ PCWSTR Path)
-{
-    PUCHAR Name = (PUCHAR)Node + sizeof(EFI_DEVICE_PATH_PROTOCOL);
-    ULONG Chars, i;
-    WCHAR Char;
-
-    if (DevicePathType(Node) != MEDIA_DEVICE_PATH || DevicePathSubType(Node) != MEDIA_FILEPATH_DP)
-        return FALSE;
-
-    Chars = (ULONG)(DevicePathNodeLength(Node) - sizeof(EFI_DEVICE_PATH_PROTOCOL)) / sizeof(WCHAR);
-    for (i = 0; i < Chars; i++)
-    {
-        Char = (WCHAR)(Name[i * 2] | (Name[i * 2 + 1] << 8));
-        if (towupper(Char) != towupper(Path[i]))
-            return FALSE;
-        if (Char == UNICODE_NULL)
-            return TRUE;
-    }
-
-    return Path[i] == UNICODE_NULL;
-}
-
-static
-BOOLEAN
-FwIsSamePartition(
-    _In_ EFI_DEVICE_PATH_PROTOCOL* Node,
-    _In_ const HARDDRIVE_DEVICE_PATH* Partition)
-{
-    return DevicePathType(Node) == MEDIA_DEVICE_PATH &&
-           DevicePathSubType(Node) == MEDIA_HARDDRIVE_DP &&
-           DevicePathNodeLength(Node) == sizeof(HARDDRIVE_DEVICE_PATH) &&
-           RtlEqualMemory(&((HARDDRIVE_DEVICE_PATH*)Node)->PartitionNumber,
-                          &Partition->PartitionNumber,
-                          sizeof(HARDDRIVE_DEVICE_PATH) - FIELD_OFFSET(HARDDRIVE_DEVICE_PATH, PartitionNumber));
-}
-
-static
-BOOLEAN
-FwOptionStartsFile(
-    _In_reads_bytes_(Size) PUCHAR Option,
-    _In_ UINTN Size,
-    _In_ const HARDDRIVE_DEVICE_PATH* Partition,
-    _In_ PCWSTR Path)
-{
-    EFI_DEVICE_PATH_PROTOCOL *Node, *Next;
-    PUCHAR End;
-    UINTN Offset = FW_LOAD_OPTION_HEADER;
-
-    if (Size < FW_LOAD_OPTION_HEADER)
-        return FALSE;
-
-    while (Offset + sizeof(WCHAR) <= Size && (Option[Offset] | Option[Offset + 1]) != 0)
-        Offset += sizeof(WCHAR);
-    Offset += sizeof(WCHAR);
-
-    End = Option + Offset + (Option[4] | (Option[5] << 8));
-    if (End > Option + Size)
-        return FALSE;
-
-    for (Node = (EFI_DEVICE_PATH_PROTOCOL*)(Option + Offset);
-         (PUCHAR)Node + sizeof(EFI_DEVICE_PATH_PROTOCOL) <= End && !IsDevicePathEnd(Node);
-         Node = Next)
-    {
-        if (DevicePathNodeLength(Node) < sizeof(EFI_DEVICE_PATH_PROTOCOL) ||
-            (PUCHAR)Node + DevicePathNodeLength(Node) > End)
-        {
-            return FALSE;
-        }
-
-        Next = NextDevicePathNode(Node);
-        if (FwIsSamePartition(Node, Partition) &&
-            (PUCHAR)Next + sizeof(EFI_DEVICE_PATH_PROTOCOL) <= End &&
-            (PUCHAR)Next + DevicePathNodeLength(Next) <= End &&
-            FwIsFileNode(Next, Path))
-        {
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
-static
-BOOLEAN
-FwFindBootOption(
-    _In_ EFI_DEVICE_PATH_PROTOCOL* DevicePath,
-    _In_ PCWSTR Path,
-    _Out_ PUINT16 Number)
-{
-    EFI_RUNTIME_SERVICES* RuntimeServices = GlobalSystemTable->RuntimeServices;
-    EFI_DEVICE_PATH_PROTOCOL* Node;
-    UINT16 Order[FW_BOOT_ORDER_MAX];
-    WCHAR Name[FW_BOOT_VARIABLE_CHARS];
-    PUCHAR Option;
-    UINTN Size, Count, i;
-    BOOLEAN Found = FALSE;
-
-    for (Node = DevicePath;
-         !IsDevicePathEnd(Node) &&
-         (DevicePathType(Node) != MEDIA_DEVICE_PATH || DevicePathSubType(Node) != MEDIA_HARDDRIVE_DP);
-         Node = NextDevicePathNode(Node))
-        ;
-
-    Size = sizeof(Order);
-    if (IsDevicePathEnd(Node) ||
-        DevicePathNodeLength(Node) != sizeof(HARDDRIVE_DEVICE_PATH) ||
-        EFI_ERROR(RuntimeServices->GetVariable(L"BootOrder", &FwGlobalVariableGuid, NULL, &Size, Order)))
-    {
-        return FALSE;
-    }
-
-    Option = FwAllocate(FW_LOAD_OPTION_MAX);
-    if (!Option)
-        return FALSE;
-
-    Count = Size / sizeof(UINT16);
-    for (i = 0; i < Count && !Found; i++)
-    {
-        RtlStringCchPrintfW(Name, RTL_NUMBER_OF(Name), L"Boot%04X", Order[i]);
-        Size = FW_LOAD_OPTION_MAX;
-        if (!EFI_ERROR(RuntimeServices->GetVariable(Name, &FwGlobalVariableGuid, NULL, &Size, Option)) &&
-            FwOptionStartsFile(Option, Size, (HARDDRIVE_DEVICE_PATH*)Node, Path))
-        {
-            *Number = Order[i];
-            Found = TRUE;
-        }
-    }
-
-    FwFree(Option);
-    return Found;
-}
-
 BOOLEAN
 FwStartFirmwareApplication(
     _In_ PVOID Device,
@@ -382,21 +239,10 @@ FwStartFirmwareApplication(
     EFI_HANDLE Handle;
     SIZE_T DeviceSize, NodeSize;
     PUCHAR Buffer;
-    UINT16 Number;
     ULONG i;
 
     if (EFI_ERROR(BootServices->HandleProtocol(Device, &FwDevicePathGuid, (VOID**)&DevicePath)))
         return FALSE;
-
-    if (FwFindBootOption(DevicePath, Path, &Number) &&
-        !EFI_ERROR(GlobalSystemTable->RuntimeServices->SetVariable(L"BootNext",
-                                                                   &FwGlobalVariableGuid,
-                                                                   FW_VARIABLE_ATTRIBUTES,
-                                                                   sizeof(Number),
-                                                                   &Number)))
-    {
-        GlobalSystemTable->RuntimeServices->ResetSystem(EfiResetCold, EFI_SUCCESS, 0, NULL);
-    }
 
     for (Node = DevicePath; !IsDevicePathEnd(Node); Node = NextDevicePathNode(Node))
         ;
