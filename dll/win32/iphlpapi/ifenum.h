@@ -95,6 +95,7 @@ DWORD getInterfaceIndexByName(const char *name, PDWORD index);
  */
 DWORD getInterfaceIPAddrByName(const char *name);
 DWORD getInterfaceIPAddrByIndex(DWORD index);
+DWORD getInterfaceIPAddrsByIndex(DWORD index, DWORD *addrs, DWORD *masks, DWORD count);
 DWORD getInterfaceMaskByName(const char *name);
 DWORD getInterfaceMaskByIndex(DWORD index);
 DWORD getInterfaceBCastAddrByName(const char *name);

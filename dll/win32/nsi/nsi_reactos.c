@@ -765,44 +765,73 @@ static void ipv4_unicast_origin(UINT index, DWORD address, struct nsi_ip_unicast
     RegCloseKey(key);
 }
 
+static DWORD interface_ipv4_addresses(DWORD index, DWORD **addresses, DWORD **masks)
+{
+    DWORD capacity = 16, total;
+
+    for (;;)
+    {
+        *addresses = HeapAlloc(GetProcessHeap(), 0, capacity * 2 * sizeof(DWORD));
+        if (!*addresses)
+        {
+            *masks = NULL;
+            return 0;
+        }
+        *masks = *addresses + capacity;
+        total = getInterfaceIPAddrsByIndex(index, *addresses, *masks, capacity);
+        if (total <= capacity)
+            return total;
+        HeapFree(GetProcessHeap(), 0, *addresses);
+        capacity = total;
+    }
+}
+
 static DWORD enumerate_ipv4_unicast(struct nsi_enumerate_all_ex *params)
 {
     InterfaceIndexTable *indexes = getInterfaceIndexTable();
     BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
     UINT_PTR i, count = 0, written = 0;
+    DWORD *addresses, *masks, total, j;
 
     for (i = 0; indexes && i < indexes->numIndexes; i++)
     {
-        DWORD address = getInterfaceIPAddrByIndex(indexes->indexes[i]);
-        DWORD mask = getInterfaceMaskByIndex(indexes->indexes[i]);
+        total = interface_ipv4_addresses(indexes->indexes[i], &addresses, &masks);
 
-        if (address == INADDR_ANY || address == INADDR_NONE) continue;
-        if (want_data && written < params->count)
+        for (j = 0; j < total; j++)
         {
-            if (params->key_data)
+            DWORD address = addresses[j];
+            DWORD mask = masks[j];
+
+            if (want_data && written < params->count)
             {
-                struct nsi_ipv4_unicast_key *key = (struct nsi_ipv4_unicast_key *)params->key_data + written;
-                memset(key, 0, sizeof(*key));
-                key->luid = interface_luid(indexes->indexes[i]);
-                key->addr.S_un.S_addr = address;
+                if (params->key_data)
+                {
+                    struct nsi_ipv4_unicast_key *key = (struct nsi_ipv4_unicast_key *)params->key_data + written;
+                    memset(key, 0, sizeof(*key));
+                    key->luid = interface_luid(indexes->indexes[i]);
+                    key->addr.S_un.S_addr = address;
+                }
+                if (params->rw_data)
+                {
+                    struct nsi_ip_unicast_rw *rw = (struct nsi_ip_unicast_rw *)params->rw_data + written;
+                    memset(rw, 0, sizeof(*rw));
+                    ipv4_unicast_origin(indexes->indexes[i], address, rw);
+                    rw->on_link_prefix = prefix_length(mask);
+                }
+                if (params->dynamic_data)
+                {
+                    struct nsi_ip_unicast_dynamic *dynamic = (struct nsi_ip_unicast_dynamic *)params->dynamic_data + written;
+                    memset(dynamic, 0, sizeof(*dynamic));
+                    dynamic->dad_state = IpDadStatePreferred;
+                }
+                if (params->static_data) memset((struct nsi_ip_unicast_static *)params->static_data + written, 0, sizeof(struct nsi_ip_unicast_static));
+                written++;
             }
-            if (params->rw_data)
-            {
-                struct nsi_ip_unicast_rw *rw = (struct nsi_ip_unicast_rw *)params->rw_data + written;
-                memset(rw, 0, sizeof(*rw));
-                ipv4_unicast_origin(indexes->indexes[i], address, rw);
-                rw->on_link_prefix = prefix_length(mask);
-            }
-            if (params->dynamic_data)
-            {
-                struct nsi_ip_unicast_dynamic *dynamic = (struct nsi_ip_unicast_dynamic *)params->dynamic_data + written;
-                memset(dynamic, 0, sizeof(*dynamic));
-                dynamic->dad_state = IpDadStatePreferred;
-            }
-            if (params->static_data) memset((struct nsi_ip_unicast_static *)params->static_data + written, 0, sizeof(struct nsi_ip_unicast_static));
-            written++;
+            count++;
         }
-        count++;
+
+        if (addresses)
+            HeapFree(GetProcessHeap(), 0, addresses);
     }
     free(indexes);
     return finish_enumeration(params, count, want_data);
@@ -926,47 +955,91 @@ static int __cdecl ipv4_route_compare(const void *left, const void *right)
     return 0;
 }
 
+struct ipv4_interface_addresses
+{
+    DWORD *addresses;
+    DWORD *masks;
+    DWORD count;
+    NET_LUID luid;
+};
+
+static BOOL ipv4_interface_has_address(const struct ipv4_interface_addresses *ifaddrs, DWORD address)
+{
+    DWORD i;
+
+    for (i = 0; i < ifaddrs->count; i++)
+        if (ifaddrs->addresses[i] == address) return TRUE;
+    return FALSE;
+}
+
+static BOOL ipv4_interface_has_local_route(const struct ipv4_interface_addresses *ifaddrs, DWORD limit, DWORD dest, DWORD mask)
+{
+    DWORD i;
+
+    for (i = 0; i < limit; i++)
+    {
+        DWORD address = ifaddrs->addresses[i], address_mask = ifaddrs->masks[i];
+
+        if (address_mask != INADDR_NONE && dest == (address & address_mask) && mask == address_mask) return TRUE;
+        if (dest == address && mask == INADDR_NONE) return TRUE;
+        if (prefix_length(address_mask) < 31 && dest == (address | ~address_mask) && mask == INADDR_NONE) return TRUE;
+    }
+    return FALSE;
+}
+
 static DWORD enumerate_ipv4_forward(struct nsi_enumerate_all_ex *params)
 {
     RouteTable *table = getRouteTable();
     InterfaceIndexTable *indexes = getInterfaceIndexTable();
     BOOL want_data = params->key_size || params->rw_size || params->dynamic_size || params->static_size;
-    UINT_PTR count = 0, i, j, capacity;
-    struct ipv4_route *routes;
-    DWORD *addresses, *masks;
-    NET_LUID *luids;
+    UINT_PTR count = 0, i, j, capacity, if_count = indexes ? indexes->numIndexes : 0;
+    struct ipv4_interface_addresses *ifaddrs;
+    struct ipv4_route *routes = NULL;
     DWORD error;
 
-    capacity = (table ? table->numRoutes : 0) + (indexes ? indexes->numIndexes : 0) * 5;
-    routes = HeapAlloc(GetProcessHeap(), 0, (capacity ? capacity : 1) * sizeof(*routes));
-    addresses = HeapAlloc(GetProcessHeap(), 0, ((indexes ? indexes->numIndexes : 0) + 1) * sizeof(DWORD));
-    masks = HeapAlloc(GetProcessHeap(), 0, ((indexes ? indexes->numIndexes : 0) + 1) * sizeof(DWORD));
-    luids = HeapAlloc(GetProcessHeap(), 0, ((indexes ? indexes->numIndexes : 0) + 1) * sizeof(NET_LUID));
-    if (!routes || !addresses || !masks || !luids)
+    ifaddrs = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (if_count + 1) * sizeof(*ifaddrs));
+    if (!ifaddrs)
     {
         error = ERROR_OUTOFMEMORY;
         goto done;
     }
 
-    for (i = 0; indexes && i < indexes->numIndexes; i++)
+    capacity = table ? table->numRoutes : 0;
+    for (i = 0; i < if_count; i++)
     {
-        DWORD index = indexes->indexes[i], address, mask;
+        ifaddrs[i].count = interface_ipv4_addresses(indexes->indexes[i], &ifaddrs[i].addresses, &ifaddrs[i].masks);
+        ifaddrs[i].luid = interface_luid(indexes->indexes[i]);
+        capacity += ifaddrs[i].count * 3 + 2;
+    }
 
-        addresses[i] = address = getInterfaceIPAddrByIndex(index);
-        masks[i] = mask = getInterfaceMaskByIndex(index);
-        luids[i] = interface_luid(index);
-        if (address == INADDR_ANY || address == INADDR_NONE) continue;
-        if (mask != INADDR_NONE)
-            add_ipv4_route(routes, &count, address & mask, mask, INADDR_ANY, index, luids[i], 256,
-                           MIB_IPPROTO_LOCAL, NlroManual, FALSE, FALSE);
-        add_ipv4_route(routes, &count, address, INADDR_NONE, INADDR_ANY, index, luids[i], 256,
-                       MIB_IPPROTO_LOCAL, NlroManual, TRUE, FALSE);
-        if (prefix_length(mask) < 31)
-            add_ipv4_route(routes, &count, address | ~mask, INADDR_NONE, INADDR_ANY, index, luids[i], 256,
+    routes = HeapAlloc(GetProcessHeap(), 0, (capacity ? capacity : 1) * sizeof(*routes));
+    if (!routes)
+    {
+        error = ERROR_OUTOFMEMORY;
+        goto done;
+    }
+
+    for (i = 0; i < if_count; i++)
+    {
+        DWORD index = indexes->indexes[i];
+
+        if (!ifaddrs[i].count) continue;
+        for (j = 0; j < ifaddrs[i].count; j++)
+        {
+            DWORD address = ifaddrs[i].addresses[j], mask = ifaddrs[i].masks[j];
+
+            if (mask != INADDR_NONE && !ipv4_interface_has_local_route(&ifaddrs[i], j, address & mask, mask))
+                add_ipv4_route(routes, &count, address & mask, mask, INADDR_ANY, index, ifaddrs[i].luid, 256,
+                               MIB_IPPROTO_LOCAL, NlroManual, FALSE, FALSE);
+            add_ipv4_route(routes, &count, address, INADDR_NONE, INADDR_ANY, index, ifaddrs[i].luid, 256,
                            MIB_IPPROTO_LOCAL, NlroManual, TRUE, FALSE);
+            if (prefix_length(mask) < 31 && !ipv4_interface_has_local_route(&ifaddrs[i], j, address | ~mask, INADDR_NONE))
+                add_ipv4_route(routes, &count, address | ~mask, INADDR_NONE, INADDR_ANY, index, ifaddrs[i].luid, 256,
+                               MIB_IPPROTO_LOCAL, NlroManual, TRUE, FALSE);
+        }
         add_ipv4_route(routes, &count, RtlUlongByteSwap(0xe0000000), RtlUlongByteSwap(0xf0000000), INADDR_ANY,
-                       index, luids[i], 256, MIB_IPPROTO_LOCAL, NlroWellKnown, FALSE, FALSE);
-        add_ipv4_route(routes, &count, INADDR_NONE, INADDR_NONE, INADDR_ANY, index, luids[i], 256,
+                       index, ifaddrs[i].luid, 256, MIB_IPPROTO_LOCAL, NlroWellKnown, FALSE, FALSE);
+        add_ipv4_route(routes, &count, INADDR_NONE, INADDR_NONE, INADDR_ANY, index, ifaddrs[i].luid, 256,
                        MIB_IPPROTO_LOCAL, NlroManual, TRUE, FALSE);
     }
 
@@ -974,19 +1047,18 @@ static DWORD enumerate_ipv4_forward(struct nsi_enumerate_all_ex *params)
     {
         RouteEntry *row = table->routes + i;
 
-        for (j = 0; indexes && j < indexes->numIndexes; j++)
+        for (j = 0; j < if_count; j++)
             if (indexes->indexes[j] == row->ifIndex) break;
-        if (!indexes || j == indexes->numIndexes) continue;
-        if (row->gateway == INADDR_ANY || row->gateway == addresses[j])
+        if (j == if_count) continue;
+        if (row->gateway == INADDR_ANY || ipv4_interface_has_address(&ifaddrs[j], row->gateway))
         {
-            if ((row->dest == (addresses[j] & masks[j]) && row->mask == masks[j]) ||
-                (row->dest == addresses[j] && row->mask == INADDR_NONE))
+            if (ipv4_interface_has_local_route(&ifaddrs[j], ifaddrs[j].count, row->dest, row->mask))
                 continue;
-            add_ipv4_route(routes, &count, row->dest, row->mask, INADDR_ANY, row->ifIndex, luids[j], row->metric,
+            add_ipv4_route(routes, &count, row->dest, row->mask, INADDR_ANY, row->ifIndex, ifaddrs[j].luid, row->metric,
                            MIB_IPPROTO_NETMGMT, NlroManual, FALSE, TRUE);
             continue;
         }
-        add_ipv4_route(routes, &count, row->dest, row->mask, row->gateway, row->ifIndex, luids[j], row->metric,
+        add_ipv4_route(routes, &count, row->dest, row->mask, row->gateway, row->ifIndex, ifaddrs[j].luid, row->metric,
                        MIB_IPPROTO_NETMGMT, NlroManual, FALSE, TRUE);
     }
 
@@ -996,9 +1068,9 @@ static DWORD enumerate_ipv4_forward(struct nsi_enumerate_all_ex *params)
     error = finish_enumeration(params, count, want_data);
 
 done:
-    HeapFree(GetProcessHeap(), 0, luids);
-    HeapFree(GetProcessHeap(), 0, masks);
-    HeapFree(GetProcessHeap(), 0, addresses);
+    for (i = 0; ifaddrs && i < if_count; i++)
+        if (ifaddrs[i].addresses) HeapFree(GetProcessHeap(), 0, ifaddrs[i].addresses);
+    HeapFree(GetProcessHeap(), 0, ifaddrs);
     HeapFree(GetProcessHeap(), 0, routes);
     free(indexes);
     HeapFree(GetProcessHeap(), 0, table);

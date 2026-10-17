@@ -543,6 +543,7 @@ ShowInfo(
     MIB_IFROW mibEntry;
     PIP_ADAPTER_INFO pAdapterInfo = NULL;
     PIP_ADAPTER_INFO pAdapter = NULL;
+    PIP_ADDR_STRING pIPAddr;
     ULONG adaptOutBufLen = 0;
     PFIXED_INFO pFixedInfo = NULL;
     ULONG netOutBufLen = 0;
@@ -709,8 +710,11 @@ ShowInfo(
             continue;
         }
 
-        ConResPrintf(StdOut, IDS_IPADDRESS, pAdapter->IpAddressList.IpAddress.String);
-        ConResPrintf(StdOut, IDS_SUBNETMASK, pAdapter->IpAddressList.IpMask.String);
+        for (pIPAddr = &pAdapter->IpAddressList; pIPAddr; pIPAddr = pIPAddr->Next)
+        {
+            ConResPrintf(StdOut, IDS_IPADDRESS, pIPAddr->IpAddress.String);
+            ConResPrintf(StdOut, IDS_SUBNETMASK, pIPAddr->IpMask.String);
+        }
 
         if (strcmp(pAdapter->GatewayList.IpAddress.String, "0.0.0.0"))
             ConResPrintf(StdOut, IDS_DEFAULTGATEWAY, pAdapter->GatewayList.IpAddress.String);
@@ -719,8 +723,6 @@ ShowInfo(
 
         if (bAll)
         {
-            PIP_ADDR_STRING pIPAddr;
-
             if (pAdapter->DhcpEnabled)
                 ConResPrintf(StdOut, IDS_DHCPSERVER, pAdapter->DhcpServer.IpAddress.String);
 

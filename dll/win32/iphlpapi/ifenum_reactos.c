@@ -502,6 +502,36 @@ DWORD getInterfaceIPAddrByIndex(DWORD index) {
     return getAddrByIndexOrName( 0, index, IPAAddr );
 }
 
+DWORD getInterfaceIPAddrsByIndex(DWORD index, DWORD *addrs, DWORD *masks, DWORD count) {
+    TDIEntityID ent;
+    IPAddrEntry *entries;
+    DWORD numEntries, total = 0, i;
+    HANDLE tcpFile;
+
+    if( !NT_SUCCESS(openTcpFile( &tcpFile, 0 )) )
+        return 0;
+
+    if( NT_SUCCESS(getIpEntityForIfIndex( tcpFile, index, &ent )) &&
+        NT_SUCCESS(tdiGetIpAddrsForIpEntity( tcpFile, &ent, &entries, &numEntries )) ) {
+        for( i = 0; i < numEntries; i++ ) {
+            if( entries[i].iae_index != index ||
+                entries[i].iae_addr == INADDR_ANY ||
+                entries[i].iae_addr == INADDR_NONE )
+                continue;
+            if( total < count ) {
+                addrs[total] = entries[i].iae_addr;
+                masks[total] = entries[i].iae_mask;
+            }
+            total++;
+        }
+        tdiFreeThingSet( entries );
+    }
+
+    closeTcpFile( tcpFile );
+
+    return total;
+}
+
 DWORD getInterfaceBCastAddrByName(const char *name) {
     return getAddrByIndexOrName( (char *)name, 0, IPABcast );
 }

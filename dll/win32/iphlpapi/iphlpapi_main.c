@@ -736,7 +736,7 @@ DWORD WINAPI GetAdaptersInfo( IP_ADAPTER_INFO *info, ULONG *size )
                 cursor = cursor->Next;
             }
             ConvertLengthToIpv4Mask( uni_rw[uni].on_link_prefix, &mask.s_addr );
-            ip_addr_string_init( cursor, &uni_keys[uni].addr, &mask, 0 );
+            ip_addr_string_init( cursor, &uni_keys[uni].addr, &mask, uni_keys[uni].addr.s_addr );
         }
         if (!cursor)
         {
@@ -756,7 +756,7 @@ DWORD WINAPI GetAdaptersInfo( IP_ADAPTER_INFO *info, ULONG *size )
                 break;
             }
         }
-        ip_addr_string_init( &info->GatewayList, &gw, &mask, 0 );
+        ip_addr_string_init( &info->GatewayList, &gw, &mask, gw.s_addr );
 
         ip_addr_string_init( &info->DhcpServer, NULL, NULL, 0 );
 
@@ -2198,7 +2198,7 @@ DWORD WINAPI GetIpAddrTable( MIB_IPADDRTABLE *table, ULONG *size, BOOL sort )
             row->dwBCastAddr = 1;
             row->dwReasmSize = 0xffff;
             row->unused1 = 0;
-            row->wType = MIB_IPADDR_PRIMARY;
+            row->wType = (i && keys[i - 1].luid.Value == keys[i].luid.Value) ? 0 : MIB_IPADDR_PRIMARY;
             row_num++;
         }
     }
