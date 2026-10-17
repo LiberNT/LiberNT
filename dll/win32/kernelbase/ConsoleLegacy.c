@@ -387,44 +387,6 @@ GetConsoleSelectionInfo(
     return ConsoleNotImplemented();
 }
 
-DWORD
-WINAPI
-GetConsoleAliasesA(
-    _Out_writes_(AliasBufferLength) LPSTR AliasBuffer,
-    _In_ DWORD AliasBufferLength,
-    _In_ LPCSTR ExeName)
-{
-    return ConsoleNotImplemented();
-}
-
-DWORD
-WINAPI
-GetConsoleAliasesW(
-    _Out_writes_(AliasBufferLength) LPWSTR AliasBuffer,
-    _In_ DWORD AliasBufferLength,
-    _In_ LPCWSTR ExeName)
-{
-    return ConsoleNotImplemented();
-}
-
-DWORD
-WINAPI
-GetConsoleAliasExesA(
-    _Out_writes_(ExeNameBufferLength) LPSTR ExeNameBuffer,
-    _In_ DWORD ExeNameBufferLength)
-{
-    return ConsoleNotImplemented();
-}
-
-DWORD
-WINAPI
-GetConsoleAliasExesW(
-    _Out_writes_(ExeNameBufferLength) LPWSTR ExeNameBuffer,
-    _In_ DWORD ExeNameBufferLength)
-{
-    return ConsoleNotImplemented();
-}
-
 BOOL
 WINAPI
 SetConsoleNumberOfCommandsA(

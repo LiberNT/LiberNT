@@ -449,15 +449,15 @@
 @ stdcall GetComputerNameExA(long ptr ptr) kernelbase.GetComputerNameExA
 @ stdcall GetComputerNameExW(long ptr ptr) kernelbase.GetComputerNameExW
 @ stdcall GetConsoleAliasA(str str long str) kernelbase.GetConsoleAliasA
-##@ stub GetConsoleAliasExesA
+@ stdcall GetConsoleAliasExesA(ptr long) kernelbase.GetConsoleAliasExesA
 @ stdcall GetConsoleAliasExesLengthA() kernelbase.GetConsoleAliasExesLengthA
 @ stdcall GetConsoleAliasExesLengthW() kernelbase.GetConsoleAliasExesLengthW
-##@ stub GetConsoleAliasExesW
+@ stdcall GetConsoleAliasExesW(ptr long) kernelbase.GetConsoleAliasExesW
 @ stdcall GetConsoleAliasW(wstr ptr long wstr) kernelbase.GetConsoleAliasW
-##@ stub GetConsoleAliasesA
+@ stdcall GetConsoleAliasesA(ptr long str) kernelbase.GetConsoleAliasesA
 @ stdcall GetConsoleAliasesLengthA(str) kernelbase.GetConsoleAliasesLengthA
 @ stdcall GetConsoleAliasesLengthW(wstr) kernelbase.GetConsoleAliasesLengthW
-##@ stub GetConsoleAliasesW
+@ stdcall GetConsoleAliasesW(ptr long wstr) kernelbase.GetConsoleAliasesW
 @ stdcall GetConsoleCP() kernelbase.GetConsoleCP
 @ stdcall GetConsoleCommandHistoryA(long long long) kernelbase.GetConsoleCommandHistoryA
 @ stdcall GetConsoleCommandHistoryLengthA(long) kernelbase.GetConsoleCommandHistoryLengthA

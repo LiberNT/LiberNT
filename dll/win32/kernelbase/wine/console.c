@@ -443,19 +443,182 @@ static BOOL init_console_std_handles( BOOL override_all )
 }
 
 
+#ifdef __REACTOS__
+static WCHAR *alias_wide( const char *str )
+{
+    UINT cp = GetConsoleCP();
+    WCHAR *ret;
+    int len;
+
+    if (!str) return NULL;
+    len = MultiByteToWideChar( cp, 0, str, -1, NULL, 0 );
+    if (!(ret = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) ))) return NULL;
+    MultiByteToWideChar( cp, 0, str, -1, ret, len );
+    return ret;
+}
+
+static struct condrv_alias_result *alias_request( DWORD code, const WCHAR *exe, const WCHAR *source,
+                                                  const WCHAR *target, DWORD capacity )
+{
+    HANDLE console = RtlGetCurrentPeb()->ProcessParameters->ConsoleHandle;
+    size_t exe_size = exe ? wcslen( exe ) * sizeof(WCHAR) : 0;
+    size_t source_size = source ? wcslen( source ) * sizeof(WCHAR) : 0;
+    size_t target_size = target ? wcslen( target ) * sizeof(WCHAR) : 0;
+    size_t size = offsetof( struct condrv_alias_params, buffer ) + exe_size + source_size + target_size;
+    size_t out_size = offsetof( struct condrv_alias_result, buffer ) + capacity;
+    struct condrv_alias_params *params = NULL;
+    struct condrv_alias_result *result;
+    DWORD read = 0;
+    BOOL ret;
+
+    if (!(result = HeapAlloc( GetProcessHeap(), 0, out_size )))
+    {
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return NULL;
+    }
+    if (code == IOCTL_CONDRV_GET_ALIAS_EXES)
+    {
+        ret = console_ioctl( console, code, NULL, 0, result, out_size, &read );
+    }
+    else
+    {
+        if (!(params = HeapAlloc( GetProcessHeap(), 0, size )))
+        {
+            HeapFree( GetProcessHeap(), 0, result );
+            SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+            return NULL;
+        }
+        params->exe_size = exe_size;
+        params->source_size = source_size;
+        params->target_size = target_size;
+        memcpy( params->buffer, exe, exe_size );
+        memcpy( (char *)params->buffer + exe_size, source, source_size );
+        memcpy( (char *)params->buffer + exe_size + source_size, target, target_size );
+        ret = console_ioctl( console, code, params, size, result, out_size, &read );
+        HeapFree( GetProcessHeap(), 0, params );
+    }
+    if (!ret || read < offsetof( struct condrv_alias_result, buffer ))
+    {
+        HeapFree( GetProcessHeap(), 0, result );
+        return NULL;
+    }
+    return result;
+}
+
+static BOOL alias_add( const WCHAR *source, const WCHAR *target, const WCHAR *exe )
+{
+    HANDLE console = RtlGetCurrentPeb()->ProcessParameters->ConsoleHandle;
+    size_t exe_size = wcslen( exe ) * sizeof(WCHAR);
+    size_t source_size = wcslen( source ) * sizeof(WCHAR);
+    size_t target_size = target ? wcslen( target ) * sizeof(WCHAR) : 0;
+    size_t size = offsetof( struct condrv_alias_params, buffer ) + exe_size + source_size + target_size;
+    struct condrv_alias_params *params;
+    BOOL ret;
+
+    if (!(params = HeapAlloc( GetProcessHeap(), 0, size )))
+    {
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return FALSE;
+    }
+    params->exe_size = exe_size;
+    params->source_size = source_size;
+    params->target_size = target_size;
+    memcpy( params->buffer, exe, exe_size );
+    memcpy( (char *)params->buffer + exe_size, source, source_size );
+    if (target_size) memcpy( (char *)params->buffer + exe_size + source_size, target, target_size );
+    ret = console_ioctl( console, IOCTL_CONDRV_ADD_ALIAS, params, size, NULL, 0, NULL );
+    HeapFree( GetProcessHeap(), 0, params );
+    return ret;
+}
+
+static struct condrv_alias_result *alias_list( DWORD code, const WCHAR *exe )
+{
+    struct condrv_alias_result *result;
+    DWORD size;
+
+    if (!(result = alias_request( code, exe, NULL, NULL, 0 ))) return NULL;
+    size = result->size;
+    HeapFree( GetProcessHeap(), 0, result );
+    return alias_request( code, exe, NULL, NULL, size );
+}
+
+static DWORD alias_list_length_a( DWORD code, const WCHAR *exe )
+{
+    struct condrv_alias_result *result;
+    DWORD len;
+
+    if (!(result = alias_list( code, exe ))) return 0;
+    len = result->size ? WideCharToMultiByte( GetConsoleCP(), 0, result->buffer, result->size / sizeof(WCHAR),
+                                              NULL, 0, NULL, NULL ) : 0;
+    HeapFree( GetProcessHeap(), 0, result );
+    return len;
+}
+
+static DWORD alias_list_a( DWORD code, const WCHAR *exe, char *buffer, DWORD len )
+{
+    struct condrv_alias_result *result;
+    DWORD needed;
+
+    if (!(result = alias_list( code, exe ))) return 0;
+    needed = result->size ? WideCharToMultiByte( GetConsoleCP(), 0, result->buffer, result->size / sizeof(WCHAR),
+                                                 NULL, 0, NULL, NULL ) : 0;
+    if (needed > len)
+    {
+        HeapFree( GetProcessHeap(), 0, result );
+        SetLastError( ERROR_BUFFER_OVERFLOW );
+        return 0;
+    }
+    if (needed)
+        WideCharToMultiByte( GetConsoleCP(), 0, result->buffer, result->size / sizeof(WCHAR), buffer, len, NULL, NULL );
+    HeapFree( GetProcessHeap(), 0, result );
+    return needed;
+}
+
+static DWORD alias_list_w( DWORD code, const WCHAR *exe, WCHAR *buffer, DWORD len )
+{
+    struct condrv_alias_result *result;
+    DWORD size;
+
+    if (!(result = alias_request( code, exe, NULL, NULL, len ))) return 0;
+    size = result->size;
+    if (size > len)
+    {
+        HeapFree( GetProcessHeap(), 0, result );
+        SetLastError( ERROR_BUFFER_OVERFLOW );
+        return 0;
+    }
+    memcpy( buffer, result->buffer, size );
+    HeapFree( GetProcessHeap(), 0, result );
+    return size;
+}
+#endif
+
 /******************************************************************
  *	AddConsoleAliasA   (kernelbase.@)
  */
 #ifdef __REACTOS__
 BOOL WINAPI AddConsoleAliasA( LPCSTR source, LPCSTR target, LPCSTR exename )
+{
+    WCHAR *wsource = alias_wide( source ), *wtarget = alias_wide( target ), *wexe = alias_wide( exename );
+    BOOL ret = FALSE;
+
+    if ((source && !wsource) || (target && !wtarget) || (exename && !wexe))
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+    else
+        ret = AddConsoleAliasW( wsource, wtarget, wexe );
+    HeapFree( GetProcessHeap(), 0, wsource );
+    HeapFree( GetProcessHeap(), 0, wtarget );
+    HeapFree( GetProcessHeap(), 0, wexe );
+    return ret;
+}
 #else
 BOOL WINAPI AddConsoleAliasA( LPSTR source, LPSTR target, LPSTR exename )
-#endif
 {
     FIXME( ": (%s, %s, %s) stub!\n", debugstr_a(source), debugstr_a(target), debugstr_a(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return FALSE;
 }
+#endif
 
 
 /******************************************************************
@@ -463,14 +626,24 @@ BOOL WINAPI AddConsoleAliasA( LPSTR source, LPSTR target, LPSTR exename )
  */
 #ifdef __REACTOS__
 BOOL WINAPI AddConsoleAliasW( LPCWSTR source, LPCWSTR target, LPCWSTR exename )
+{
+    TRACE( "(%s, %s, %s)\n", debugstr_w(source), debugstr_w(target), debugstr_w(exename) );
+
+    if (!source || !*source || !exename || !*exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return FALSE;
+    }
+    return alias_add( source, target && *target ? target : NULL, exename );
+}
 #else
 BOOL WINAPI AddConsoleAliasW( LPWSTR source, LPWSTR target, LPWSTR exename )
-#endif
 {
     FIXME( ": (%s, %s, %s) stub!\n", debugstr_w(source), debugstr_w(target), debugstr_w(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return FALSE;
 }
+#endif
 
 
 /******************************************************************
@@ -870,14 +1043,59 @@ BOOL WINAPI DECLSPEC_HOTPATCH GenerateConsoleCtrlEvent( DWORD event, DWORD group
  */
 #ifdef __REACTOS__
 DWORD WINAPI GetConsoleAliasA( LPCSTR source, LPSTR buffer, DWORD len, LPCSTR exename )
+{
+    struct condrv_alias_result *result = NULL;
+    WCHAR *wsource, *wexe;
+    DWORD ret = 0, needed;
+
+    if (!source || !exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    wsource = alias_wide( source );
+    wexe = alias_wide( exename );
+    if (!wsource || !wexe)
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+    else if (len <= MAXDWORD / sizeof(WCHAR) &&
+             (result = alias_request( IOCTL_CONDRV_GET_ALIAS, wexe, wsource, NULL, len * sizeof(WCHAR) )))
+    {
+        if (result->size == ~0u)
+        {
+            SetLastError( ERROR_GEN_FAILURE );
+        }
+        else
+        {
+            needed = result->size > len * sizeof(WCHAR) ? MAXDWORD :
+                     WideCharToMultiByte( GetConsoleCP(), 0, result->buffer, result->size / sizeof(WCHAR),
+                                          NULL, 0, NULL, NULL );
+            if (!buffer || needed >= len)
+            {
+                SetLastError( ERROR_INSUFFICIENT_BUFFER );
+                ret = len * sizeof(WCHAR);
+            }
+            else
+            {
+                WideCharToMultiByte( GetConsoleCP(), 0, result->buffer, result->size / sizeof(WCHAR),
+                                     buffer, len, NULL, NULL );
+                buffer[needed] = 0;
+                ret = needed + 1;
+            }
+        }
+        HeapFree( GetProcessHeap(), 0, result );
+    }
+    HeapFree( GetProcessHeap(), 0, wsource );
+    HeapFree( GetProcessHeap(), 0, wexe );
+    return ret;
+}
 #else
 DWORD WINAPI GetConsoleAliasA( LPSTR source, LPSTR buffer, DWORD len, LPSTR exename )
-#endif
 {
     FIXME( "(%s,%p,%ld,%s): stub\n", debugstr_a(source), buffer, len, debugstr_a(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return 0;
 }
+#endif
 
 
 /******************************************************************
@@ -885,14 +1103,44 @@ DWORD WINAPI GetConsoleAliasA( LPSTR source, LPSTR buffer, DWORD len, LPSTR exen
  */
 #ifdef __REACTOS__
 DWORD WINAPI GetConsoleAliasW( LPCWSTR source, LPWSTR buffer, DWORD len, LPCWSTR exename )
+{
+    struct condrv_alias_result *result;
+    DWORD size;
+
+    TRACE( "(%s,%p,%ld,%s)\n", debugstr_w(source), buffer, len, debugstr_w(exename) );
+
+    if (!source || !exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    if (!(result = alias_request( IOCTL_CONDRV_GET_ALIAS, exename, source, NULL, len ))) return 0;
+    size = result->size;
+    if (size == ~0u)
+    {
+        HeapFree( GetProcessHeap(), 0, result );
+        SetLastError( ERROR_GEN_FAILURE );
+        return 0;
+    }
+    if (!buffer || len < sizeof(WCHAR) || size > len - sizeof(WCHAR))
+    {
+        HeapFree( GetProcessHeap(), 0, result );
+        SetLastError( ERROR_INSUFFICIENT_BUFFER );
+        return len;
+    }
+    memcpy( buffer, result->buffer, size );
+    buffer[size / sizeof(WCHAR)] = 0;
+    HeapFree( GetProcessHeap(), 0, result );
+    return size + sizeof(WCHAR);
+}
 #else
 DWORD WINAPI GetConsoleAliasW( LPWSTR source, LPWSTR buffer, DWORD len, LPWSTR exename )
-#endif
 {
     FIXME( "(%s,%p,%ld,%s): stub\n", debugstr_w(source), buffer, len, debugstr_w(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return 0;
 }
+#endif
 
 
 /******************************************************************
@@ -900,9 +1148,13 @@ DWORD WINAPI GetConsoleAliasW( LPWSTR source, LPWSTR buffer, DWORD len, LPWSTR e
  */
 DWORD WINAPI GetConsoleAliasExesLengthA(void)
 {
+#ifdef __REACTOS__
+    return alias_list_length_a( IOCTL_CONDRV_GET_ALIAS_EXES, NULL );
+#else
     FIXME( ": stub\n" );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return 0;
+#endif
 }
 
 
@@ -911,9 +1163,19 @@ DWORD WINAPI GetConsoleAliasExesLengthA(void)
  */
 DWORD WINAPI GetConsoleAliasExesLengthW(void)
 {
+#ifdef __REACTOS__
+    struct condrv_alias_result *result;
+    DWORD size;
+
+    if (!(result = alias_request( IOCTL_CONDRV_GET_ALIAS_EXES, NULL, NULL, NULL, 0 ))) return 0;
+    size = result->size;
+    HeapFree( GetProcessHeap(), 0, result );
+    return size;
+#else
     FIXME( ": stub\n" );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return 0;
+#endif
 }
 
 
@@ -922,14 +1184,57 @@ DWORD WINAPI GetConsoleAliasExesLengthW(void)
  */
 #ifdef __REACTOS__
 DWORD WINAPI GetConsoleAliasesLengthA( LPCSTR unknown )
+{
+    WCHAR *wexe;
+    DWORD ret;
+
+    if (!unknown)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    if (!(wexe = alias_wide( unknown )))
+    {
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return 0;
+    }
+    ret = alias_list_length_a( IOCTL_CONDRV_GET_ALIASES, wexe );
+    HeapFree( GetProcessHeap(), 0, wexe );
+    return ret;
+}
+
+DWORD WINAPI GetConsoleAliasesA( LPSTR buffer, DWORD len, LPCSTR exename )
+{
+    WCHAR *wexe;
+    DWORD ret;
+
+    if (!exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    if (!(wexe = alias_wide( exename )))
+    {
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return 0;
+    }
+    ret = alias_list_a( IOCTL_CONDRV_GET_ALIASES, wexe, buffer, len );
+    HeapFree( GetProcessHeap(), 0, wexe );
+    return ret;
+}
+
+DWORD WINAPI GetConsoleAliasExesA( LPSTR buffer, DWORD len )
+{
+    return alias_list_a( IOCTL_CONDRV_GET_ALIAS_EXES, NULL, buffer, len );
+}
 #else
 DWORD WINAPI GetConsoleAliasesLengthA( LPSTR unknown )
-#endif
 {
     FIXME( ": (%s) stub!\n", debugstr_a(unknown) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return 0;
 }
+#endif
 
 
 /******************************************************************
@@ -937,14 +1242,43 @@ DWORD WINAPI GetConsoleAliasesLengthA( LPSTR unknown )
  */
 #ifdef __REACTOS__
 DWORD WINAPI GetConsoleAliasesLengthW( LPCWSTR unknown )
+{
+    struct condrv_alias_result *result;
+    DWORD size;
+
+    if (!unknown)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    if (!(result = alias_request( IOCTL_CONDRV_GET_ALIASES, unknown, NULL, NULL, 0 ))) return 0;
+    size = result->size;
+    HeapFree( GetProcessHeap(), 0, result );
+    return size;
+}
+
+DWORD WINAPI GetConsoleAliasesW( LPWSTR buffer, DWORD len, LPCWSTR exename )
+{
+    if (!exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    return alias_list_w( IOCTL_CONDRV_GET_ALIASES, exename, buffer, len );
+}
+
+DWORD WINAPI GetConsoleAliasExesW( LPWSTR buffer, DWORD len )
+{
+    return alias_list_w( IOCTL_CONDRV_GET_ALIAS_EXES, NULL, buffer, len );
+}
 #else
 DWORD WINAPI GetConsoleAliasesLengthW( LPWSTR unknown )
-#endif
 {
     FIXME( ": (%s) stub!\n", debugstr_w(unknown) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return 0;
 }
+#endif
 
 
 /******************************************************************
