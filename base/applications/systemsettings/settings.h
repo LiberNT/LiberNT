@@ -55,6 +55,7 @@ enum class PageId
     WiFiKnown,
     Adapter,
     Proxy,
+    NetworkAdvanced,
     Personalization,
     Background,
     Taskbar,
@@ -233,6 +234,7 @@ void BuildWiFi(PageBuilder &page);
 void BuildWiFiKnown(PageBuilder &page);
 void BuildAdapter(PageBuilder &page);
 void BuildProxy(PageBuilder &page);
+void BuildNetworkAdvanced(PageBuilder &page);
 void BuildPersonalization(PageBuilder &page);
 void BuildBackground(PageBuilder &page);
 void BuildTaskbar(PageBuilder &page);

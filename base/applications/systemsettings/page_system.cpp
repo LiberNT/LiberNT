@@ -847,8 +847,7 @@ BuildAbout(PageBuilder &page)
     page.Group(Str(IDS_RELATED));
     page.Navigate(Str(IDS_PAGE_ENVIRONMENT), Str(IDS_ENVIRONMENT_DESC), L"code_20_regular", PageId::Environment)
         .Keywords = Str(IDS_ENVIRONMENT_KEYWORDS);
-    page.Link(Str(IDS_DEVICE_MANAGER), Str(IDS_DEVICE_MANAGER_DESC), L"device_meeting_room_20_regular",
-              [](int) { Launch(L"devmgmt.exe"); });
+    page.Navigate(Str(IDS_PAGE_DEVICES), Str(IDS_DEVICES_DESC), L"device_meeting_room_20_regular", PageId::Devices);
 }
 
 #define SYSTEM_ENVIRONMENT_KEY L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"

@@ -7,16 +7,57 @@
 
 #include "settings.h"
 #include <mmsystem.h>
+#include <setupapi.h>
+#include <devguid.h>
+#include <tlhelp32.h>
 
 #define WINDOWS_NT_KEY L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
 #define ADVANCED_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"
 #define DATA_COLLECTION_KEY L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection"
 
+static std::wstring
+DriverValue(HKEY key, LPCWSTR name)
+{
+    WCHAR text[128] = L"";
+    DWORD size = sizeof(text);
+
+    if (RegGetValueW(key, NULL, name, RRF_RT_REG_SZ, NULL, text, &size) != ERROR_SUCCESS)
+        text[0] = UNICODE_NULL;
+    return text;
+}
+
+static void
+AddDisplayAdapters(PageBuilder &page)
+{
+    HDEVINFO set = SetupDiGetClassDevsW(&GUID_DEVCLASS_DISPLAY, NULL, NULL, DIGCF_PRESENT);
+    SP_DEVINFO_DATA data = { sizeof(data) };
+
+    if (set == INVALID_HANDLE_VALUE)
+        return;
+    for (DWORD i = 0; SetupDiEnumDeviceInfo(set, i, &data); i++, data.cbSize = sizeof(data))
+    {
+        WCHAR name[256] = L"";
+        HKEY key;
+
+        if (!SetupDiGetDeviceRegistryPropertyW(set, &data, SPDRP_FRIENDLYNAME, NULL, (PBYTE)name, sizeof(name), NULL) &&
+            !SetupDiGetDeviceRegistryPropertyW(set, &data, SPDRP_DEVICEDESC, NULL, (PBYTE)name, sizeof(name), NULL))
+            continue;
+        page.Info(Str(IDS_DISPLAY_ADAPTER), name, L"desktop_pulse_20_regular");
+        key = SetupDiOpenDevRegKey(set, &data, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_READ);
+        if (key == INVALID_HANDLE_VALUE)
+            continue;
+        page.Info(Str(IDS_DRIVER_PROVIDER), DriverValue(key, L"ProviderName"));
+        page.Info(Str(IDS_DRIVER_VERSION), DriverValue(key, L"DriverVersion"));
+        page.Info(Str(IDS_DRIVER_DATE), DriverValue(key, L"DriverDate"));
+        RegCloseKey(key);
+    }
+    SetupDiDestroyDeviceInfoList(set);
+}
+
 void
 BuildGaming(PageBuilder &page)
 {
     UINT count = page.Indexing ? 0 : joyGetNumDevs();
-    DISPLAY_DEVICEW display = { sizeof(display) };
     bool found = false;
 
     page.Group(Str(IDS_CONTROLLERS));
@@ -34,9 +75,8 @@ BuildGaming(PageBuilder &page)
         page.Text(Str(IDS_NO_CONTROLLERS));
 
     page.Group(Str(IDS_GRAPHICS));
-    if (!page.Indexing && EnumDisplayDevicesW(NULL, 0, &display, 0))
-        page.Info(Str(IDS_DISPLAY_ADAPTER), display.DeviceString, L"desktop_pulse_20_regular");
-    page.Link(Str(IDS_DXDIAG), Str(IDS_DXDIAG_DESC), L"desktop_pulse_20_regular", [](int) { Launch(L"dxdiag.exe"); });
+    if (!page.Indexing)
+        AddDisplayAdapters(page);
 }
 
 static void
@@ -106,6 +146,53 @@ AddBoolToggle(PageBuilder &page, UINT title, UINT detail, LPCWSTR icon, UINT get
                 [set](int on) { ApplySpi(set, 0, (PVOID)(INT_PTR)(on != 0)); }).Enabled = supported;
 }
 
+static DWORD
+FindProcess(LPCWSTR image)
+{
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    PROCESSENTRY32W entry = { sizeof(entry) };
+    DWORD id = 0;
+
+    if (snapshot == INVALID_HANDLE_VALUE)
+        return 0;
+    for (BOOL more = Process32FirstW(snapshot, &entry); more && !id; more = Process32NextW(snapshot, &entry))
+    {
+        if (!lstrcmpiW(entry.szExeFile, image))
+            id = entry.th32ProcessID;
+    }
+    CloseHandle(snapshot);
+    return id;
+}
+
+static BOOL CALLBACK
+CloseProcessWindow(HWND window, LPARAM parameter)
+{
+    DWORD id = 0;
+
+    GetWindowThreadProcessId(window, &id);
+    if (id == (DWORD)parameter && !GetWindow(window, GW_OWNER))
+        PostMessageW(window, WM_CLOSE, 0, 0);
+    return TRUE;
+}
+
+static void
+AddToolToggle(PageBuilder &page, UINT title, UINT detail, LPCWSTR icon, LPCWSTR image)
+{
+    SettingsHost *host = page.Host;
+    std::wstring name = image;
+
+    page.Toggle(Str(title), Str(detail), icon, !page.Indexing && FindProcess(image) != 0,
+                [host, name](int on)
+                {
+                    DWORD id = FindProcess(name.c_str());
+                    if (on && !id)
+                        Launch(name.c_str());
+                    else if (!on && id)
+                        EnumWindows(CloseProcessWindow, (LPARAM)id);
+                    host->SetTimerRefresh(1200);
+                });
+}
+
 void
 BuildAccessibility(PageBuilder &page)
 {
@@ -121,7 +208,7 @@ BuildAccessibility(PageBuilder &page)
         row.Enabled = caretSupported;
         row.Label = [](int value) { return Printf(L"%d", value); };
     }
-    page.Link(Str(IDS_MAGNIFIER), Str(IDS_MAGNIFIER_DESC), L"zoom_in_20_regular", [](int) { Launch(L"magnify.exe"); });
+    AddToolToggle(page, IDS_MAGNIFIER, IDS_MAGNIFIER_DESC, L"zoom_in_20_regular", L"magnify.exe");
 
     page.Group(Str(IDS_VISUAL_EFFECTS));
     AddBoolToggle(page, IDS_CLIENT_ANIMATIONS, IDS_CLIENT_ANIMATIONS_DESC, L"slide_text_20_regular",
@@ -130,7 +217,7 @@ BuildAccessibility(PageBuilder &page)
     page.Group(Str(IDS_INTERACTION_KEYBOARD));
     AddBoolToggle(page, IDS_KEYBOARD_CUES, IDS_KEYBOARD_CUES_DESC, L"keyboard_20_regular", SPI_GETKEYBOARDCUES,
                   SPI_SETKEYBOARDCUES);
-    page.Link(Str(IDS_OSK), Str(IDS_OSK_DESC), L"keyboard_20_regular", [](int) { Launch(L"osk.exe"); });
+    AddToolToggle(page, IDS_OSK, IDS_OSK_DESC, L"keyboard_20_regular", L"osk.exe");
 }
 
 void

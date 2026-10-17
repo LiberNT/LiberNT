@@ -43,6 +43,8 @@ static const PageInfo Pages[] =
     { PageId::Adapter, IDS_PAGE_ADAPTER, L"plug_connected_20_regular", PageId::Network, BuildAdapter,
       L"network-ethernet" },
     { PageId::Proxy, IDS_PAGE_PROXY, L"globe_20_regular", PageId::Network, BuildProxy, L"network-proxy" },
+    { PageId::NetworkAdvanced, IDS_ADVANCED_NETWORK, L"network_check_20_regular", PageId::Network, BuildNetworkAdvanced,
+      L"network-advancedsettings" },
     { PageId::Background, IDS_PAGE_BACKGROUND, L"image_20_regular", PageId::Personalization, BuildBackground,
       L"personalization-background" },
     { PageId::Taskbar, IDS_PAGE_TASKBAR, L"panel_bottom_20_regular", PageId::Personalization, BuildTaskbar,

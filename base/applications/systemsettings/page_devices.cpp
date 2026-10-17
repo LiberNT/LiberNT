@@ -391,9 +391,6 @@ BuildDevices(PageBuilder &page)
     page.Navigate(Str(IDS_PAGE_PRINTERS), Str(IDS_PRINTERS_DESC), L"print_20_regular", PageId::Printers);
     if (!page.Indexing)
         AddDeviceList(page);
-    page.Group(Str(IDS_RELATED));
-    page.Link(Str(IDS_DEVICE_MANAGER), Str(IDS_DEVICE_MANAGER_DESC), L"device_meeting_room_20_regular",
-              [](int) { Launch(L"devmgmt.exe"); });
 }
 
 static void
@@ -509,10 +506,7 @@ BuildPrinters(PageBuilder &page)
 
     page.Group(Str(IDS_PRINTERS));
     if (page.Indexing)
-    {
-        page.Link(Str(IDS_PRINTERS_FOLDER), Str(IDS_PRINTERS_FOLDER_DESC), L"print_20_regular", nullptr);
         return;
-    }
     GetDefaultPrinterW(defaultName, &defaultSize);
     EnumPrintersW(PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS, NULL, 2, NULL, 0, &needed, &count);
     if (needed)
@@ -556,7 +550,4 @@ BuildPrinters(PageBuilder &page)
             row.Actions.push_back(Str(IDS_SET_DEFAULT));
         row.Actions.push_back(Str(IDS_REMOVE));
     }
-    page.Group(Str(IDS_RELATED));
-    page.Link(Str(IDS_PRINTERS_FOLDER), Str(IDS_PRINTERS_FOLDER_DESC), L"print_20_regular",
-              [](int) { Launch(L"control.exe", L"printers"); });
 }

@@ -14,6 +14,8 @@
 #include <netcfgx.h>
 #include <netcfgx_undoc.h>
 #include <netcfgn_undoc.h>
+#include <setupapi.h>
+#include <cfgmgr32.h>
 #include <algorithm>
 #include <memory>
 
@@ -234,12 +236,137 @@ BuildNetwork(PageBuilder &page)
     page.Toggle(Str(IDS_AIRPLANE), Str(IDS_AIRPLANE_DESC), L"airplane_20_regular", !page.Indexing && AirplaneMode(),
                 [](int on) { SetAirplaneMode(on != 0); });
     page.Navigate(Str(IDS_PAGE_PROXY), Str(IDS_PROXY_DESC), L"globe_20_regular", PageId::Proxy);
+    page.Navigate(Str(IDS_ADVANCED_NETWORK), Str(IDS_ADVANCED_NETWORK_DESC), L"network_check_20_regular",
+                  PageId::NetworkAdvanced);
+}
 
-    page.Group(Str(IDS_ADVANCED_NETWORK));
-    page.Link(Str(IDS_NETWORK_ADAPTERS), Str(IDS_NETWORK_ADAPTERS_DESC), L"network_check_20_regular",
-              [](int) { Launch(L"control.exe", L"ncpa.cpl"); });
-    page.Link(Str(IDS_INTERNET_OPTIONS), Str(IDS_INTERNET_OPTIONS_DESC), L"globe_shield_20_regular",
-              [](int) { Launch(L"control.exe", L"inetcpl.cpl"); });
+#define NETWORK_CONNECTIONS_KEY L"SYSTEM\\CurrentControlSet\\Control\\Network\\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+
+struct NetworkConnection
+{
+    std::wstring Guid;
+    std::wstring Name;
+    std::wstring Instance;
+    std::wstring Description;
+    bool Disabled;
+};
+
+static std::vector<NetworkConnection>
+NetworkConnections()
+{
+    std::vector<NetworkConnection> list;
+    WCHAR guid[64];
+    HKEY key;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, NETWORK_CONNECTIONS_KEY, 0, KEY_READ, &key) != ERROR_SUCCESS)
+        return list;
+    for (DWORD i = 0;; i++)
+    {
+        DWORD length = _countof(guid);
+        if (RegEnumKeyExW(key, i, guid, &length, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        if (guid[0] != L'{')
+            continue;
+
+        std::wstring path = std::wstring(NETWORK_CONNECTIONS_KEY L"\\") + guid + L"\\Connection";
+        NetworkConnection connection;
+        DEVINST device;
+        ULONG status = 0, problem = 0, size;
+        WCHAR text[256];
+
+        connection.Guid = guid;
+        connection.Name = ReadString(HKEY_LOCAL_MACHINE, path.c_str(), L"Name");
+        connection.Instance = ReadString(HKEY_LOCAL_MACHINE, path.c_str(), L"PnpInstanceID");
+        if (connection.Instance.empty() ||
+            CM_Locate_DevNodeW(&device, (DEVINSTID_W)connection.Instance.c_str(), CM_LOCATE_DEVNODE_NORMAL) != CR_SUCCESS)
+            continue;
+        connection.Disabled = CM_Get_DevNode_Status(&status, &problem, device, 0) == CR_SUCCESS &&
+                              problem == CM_PROB_DISABLED;
+        size = sizeof(text);
+        if (CM_Get_DevNode_Registry_PropertyW(device, CM_DRP_FRIENDLYNAME, NULL, text, &size, 0) != CR_SUCCESS)
+        {
+            size = sizeof(text);
+            if (CM_Get_DevNode_Registry_PropertyW(device, CM_DRP_DEVICEDESC, NULL, text, &size, 0) != CR_SUCCESS)
+                text[0] = UNICODE_NULL;
+        }
+        connection.Description = text;
+        if (connection.Name.empty())
+            connection.Name = connection.Description;
+        list.push_back(connection);
+    }
+    RegCloseKey(key);
+    std::sort(list.begin(), list.end(),
+              [](const NetworkConnection &a, const NetworkConnection &b) { return lstrcmpiW(a.Name.c_str(), b.Name.c_str()) < 0; });
+    return list;
+}
+
+static DWORD
+SetDeviceEnabled(const std::wstring &instance, bool enable)
+{
+    HDEVINFO set = SetupDiCreateDeviceInfoList(NULL, NULL);
+    SP_DEVINFO_DATA data = { sizeof(data) };
+    SP_PROPCHANGE_PARAMS params = {};
+    DWORD error = ERROR_SUCCESS;
+
+    if (set == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    params.ClassInstallHeader.cbSize = sizeof(SP_CLASSINSTALL_HEADER);
+    params.ClassInstallHeader.InstallFunction = DIF_PROPERTYCHANGE;
+    params.StateChange = enable ? DICS_ENABLE : DICS_DISABLE;
+    params.Scope = DICS_FLAG_GLOBAL;
+    if (!SetupDiOpenDeviceInfoW(set, instance.c_str(), NULL, 0, &data) ||
+        !SetupDiSetClassInstallParamsW(set, &data, &params.ClassInstallHeader, sizeof(params)) ||
+        !SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, set, &data))
+        error = GetLastError();
+    SetupDiDestroyDeviceInfoList(set);
+    return error;
+}
+
+void
+BuildNetworkAdvanced(PageBuilder &page)
+{
+    SettingsHost *host = page.Host;
+    std::vector<NetworkConnection> connections;
+    bool admin = IsAdmin();
+
+    page.Group(Str(IDS_NETWORK_ADAPTERS));
+    if (page.Indexing)
+        return;
+    connections = NetworkConnections();
+    if (connections.empty())
+        page.Text(Str(IDS_NO_ADAPTERS));
+    for (size_t i = 0; i < connections.size(); i++)
+    {
+        NetworkConnection connection = connections[i];
+        std::wstring detail = connection.Description;
+        if (connection.Disabled)
+            detail += L" \u00b7 " + Str(IDS_ADAPTER_DISABLED);
+        SettingRow &row = page.Button(connection.Name, detail, L"plug_connected_20_regular", std::wstring(),
+                                      [host, connection](int action)
+                                      {
+                                          if (action == 1)
+                                          {
+                                              host->Open(PageId::Adapter, connection.Guid);
+                                              return;
+                                          }
+                                          std::shared_ptr<DWORD> result = std::make_shared<DWORD>(ERROR_SUCCESS);
+                                          host->RunJob([connection, result]()
+                                                       {
+                                                           *result = SetDeviceEnabled(connection.Instance,
+                                                                                      connection.Disabled);
+                                                       },
+                                                       [host, result]()
+                                                       {
+                                                           if (*result != ERROR_SUCCESS)
+                                                               ShowError(host->Window(), *result);
+                                                           host->Refresh();
+                                                       });
+                                      });
+        row.Actions.push_back(Str(connection.Disabled ? IDS_ENABLE : IDS_DISABLE));
+        if (!connection.Disabled)
+            row.Actions.push_back(Str(IDS_PROPERTIES));
+        row.Enabled = admin;
+    }
 }
 
 static void
