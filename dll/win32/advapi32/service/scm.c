@@ -3001,7 +3001,8 @@ StartServiceA(SC_HANDLE hService,
 
     if (dwError != ERROR_SUCCESS)
     {
-        ERR("RStartServiceA() failed (Error %lu)\n", dwError);
+        if (dwError != ERROR_SERVICE_ALREADY_RUNNING)
+            ERR("RStartServiceA() failed (Error %lu)\n", dwError);
         SetLastError(dwError);
         return FALSE;
     }
@@ -3039,7 +3040,8 @@ StartServiceW(SC_HANDLE hService,
 
     if (dwError != ERROR_SUCCESS)
     {
-        ERR("RStartServiceW() failed (Error %lu)\n", dwError);
+        if (dwError != ERROR_SERVICE_ALREADY_RUNNING)
+            ERR("RStartServiceW() failed (Error %lu)\n", dwError);
         SetLastError(dwError);
         return FALSE;
     }
