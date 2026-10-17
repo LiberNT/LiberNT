@@ -405,7 +405,8 @@ unsigned long NTAPI inet_addr(const char *AddrString)
 
 			if(c == '.')
 				{
-					i++;
+					if(++i > 3)
+						return -1;
 					continue;
 				}
 
