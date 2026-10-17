@@ -330,6 +330,54 @@ OslLoadNlsData(
     return TRUE;
 }
 
+static const PCWSTR OslLegacyBootServices[] =
+{
+    L"Floppy",
+    L"Vga",
+    L"VgaSave",
+    L"Sacdrv",
+    L"BusLogic",
+};
+
+static
+VOID
+OslDisableLegacyBootServices(VOID)
+{
+    UNICODE_STRING StartName = RTL_CONSTANT_STRING(L"Start");
+    HCELL_INDEX Services, Service, Cell;
+    PCM_KEY_NODE Node;
+    PCM_KEY_VALUE Value;
+    ULONG Length, Index;
+
+    Services = BlRegSubKey(OslSystemHive, OslControlSet, L"Services");
+    for (Index = 0; Index < RTL_NUMBER_OF(OslLegacyBootServices); Index++)
+    {
+        Service = BlRegSubKey(OslSystemHive, Services, OslLegacyBootServices[Index]);
+        if (Service == HCELL_NIL)
+            continue;
+
+        Node = (PCM_KEY_NODE)HvGetCell(OslSystemHive, Service);
+        if (!Node)
+            continue;
+        Cell = CmpFindValueByName(OslSystemHive, Node, &StartName);
+        HvReleaseCell(OslSystemHive, Service);
+        if (Cell == HCELL_NIL)
+            continue;
+
+        Value = (PCM_KEY_VALUE)HvGetCell(OslSystemHive, Cell);
+        if (!Value)
+            continue;
+        if (Value->Type == REG_DWORD &&
+            CmpIsKeyValueSmall(&Length, Value->DataLength) &&
+            Length == sizeof(ULONG) &&
+            Value->Data != SERVICE_DISABLED)
+        {
+            Value->Data = SERVICE_DISABLED;
+        }
+        HvReleaseCell(OslSystemHive, Cell);
+    }
+}
+
 BOOLEAN
 OslLoadBootDrivers(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock,
@@ -343,6 +391,8 @@ OslLoadBootDrivers(
     PBOOT_DRIVER_LIST_ENTRY Driver;
     PLDR_DATA_TABLE_ENTRY Module;
     PSTR FileName;
+
+    OslDisableLegacyBootServices();
 
     if (!CmpFindDrivers(OslSystemHive, OslControlSet, BootLoad, FsGetDriverName(Device), Head) ||
         !CmpSortDriverList(OslSystemHive, OslControlSet, Head) ||
