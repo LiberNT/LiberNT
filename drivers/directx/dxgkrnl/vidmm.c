@@ -10222,7 +10222,7 @@ DxgkpVidMmPrepareEvictionOwned(
     }
 
     Segment = &ADAPTER_SEGMENTS(Adapter)[Allocation->SegmentId - 1];
-    if (Segment->Flags.PitchAlignment)
+    if (Segment->Flags.PitchAlignment && !VidMmSegmentIsAperture(Segment))
         return STATUS_NOT_SUPPORTED;
     if (!VidMmSegmentIsAperture(Segment) &&
         InterlockedCompareExchange(&Allocation->UserModeMappingCount, 0, 0) != 0)
@@ -13725,8 +13725,6 @@ DxgkpVidMmPrepareAllocationApertureMappingOwned(
     Segment = &ADAPTER_SEGMENTS(Adapter)[Allocation->SegmentId - 1];
     if (!VidMmSegmentIsAperture(Segment))
         return STATUS_SUCCESS;
-    if (Segment->Flags.PitchAlignment)
-        return STATUS_NOT_SUPPORTED;
     if (Allocation->ApertureMapped || Allocation->ApertureMdl != NULL)
         return STATUS_SUCCESS;
     if (Allocation->SystemMemory == NULL)
@@ -14558,10 +14556,10 @@ DxgkpVidMmTransferAllocationContent(
     }
 
     Segment = &ADAPTER_SEGMENTS(Adapter)[Allocation->SegmentId - 1];
-    if (Segment->Flags.PitchAlignment)
-        return STATUS_NOT_SUPPORTED;
     if (VidMmSegmentIsAperture(Segment))
         return STATUS_SUCCESS;
+    if (Segment->Flags.PitchAlignment)
+        return STATUS_NOT_SUPPORTED;
 
     /* Only the miniport can convert a swizzled allocation's layout. */
     LayoutChange = Allocation->Swizzled &&
@@ -15277,7 +15275,7 @@ DxgkpVidMmBuildAllocationUserMdl(
             return STATUS_INVALID_PARAMETER;
 
         Segment = &ADAPTER_SEGMENTS(Adapter)[Allocation->SegmentId - 1];
-        if (Segment->Flags.PitchAlignment)
+        if (Segment->Flags.PitchAlignment && !VidMmSegmentIsAperture(Segment))
             return STATUS_NOT_SUPPORTED;
         if (VidMmSegmentIsAperture(Segment))
         {
@@ -16052,7 +16050,7 @@ DxgkVidMmMapAllocationCpu(
     }
 
     Segment = &ADAPTER_SEGMENTS(Adapter)[Allocation->SegmentId - 1];
-    if (Segment->Flags.PitchAlignment)
+    if (Segment->Flags.PitchAlignment && !VidMmSegmentIsAperture(Segment))
         return STATUS_NOT_SUPPORTED;
 
     /* A swizzled placement with a range: the CPU sees it linear there. */
