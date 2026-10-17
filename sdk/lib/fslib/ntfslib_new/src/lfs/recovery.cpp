@@ -1525,11 +1525,14 @@ LogRecovery::ApplyToIndexBuffer(_In_ const LogAction& Action)
 
     if (Action.Operation == UpdateNonResidentAttributeValue)
     {
-        if (!Action.Data || Position > Size || Length > Size - Position)
+        if (Position > Size || Length > Size - Position)
             return STATUS_FILE_CORRUPT_ERROR;
         if (!Valid)
             RtlZeroMemory(Block, Size);
-        RtlCopyMemory(Block + Position, Action.Data, Length);
+        if (Action.Data)
+            RtlCopyMemory(Block + Position, Action.Data, Length);
+        else
+            RtlZeroMemory(Block + Position, Length);
         Count(Action);
         return StoreStructure(Action, Size, Lsn);
     }
@@ -1611,12 +1614,15 @@ LogRecovery::ApplyToClusters(_In_ const LogAction& Action)
         ULONG Position = Action.ClusterBlockOffset * LogBlockSize +
                          Action.RecordOffset + Action.AttributeOffset;
 
-        if (!Action.Data || Position > Size || Action.Length > Size - Position)
+        if (Position > Size || Action.Length > Size - Position)
             return STATUS_FILE_CORRUPT_ERROR;
         Status = LoadBlock(Action, Position, Action.Length);
         if (!NT_SUCCESS(Status))
             return Status;
-        RtlCopyMemory(Block, Action.Data, Action.Length);
+        if (Action.Data)
+            RtlCopyMemory(Block, Action.Data, Action.Length);
+        else
+            RtlZeroMemory(Block, Action.Length);
         Count(Action);
         return StoreBlock(Action, Position, Action.Length);
     }
