@@ -597,7 +597,7 @@ private:
         RECT rc;
         rc.left = m_Theme.Scale(12);
         rc.right = m_Theme.Scale(300);
-        rc.top = NavTop() + index * m_Theme.Scale(38) - m_NavScroll;
+        rc.top = NavTop() + index * m_Theme.Scale(40) - m_NavScroll;
         rc.bottom = rc.top + m_Theme.Scale(36);
         return rc;
     }
@@ -892,7 +892,7 @@ private:
         view = client.bottom - HeaderBottom() + m_Theme.Scale(0);
         m_Scroll = max(0, min(m_Scroll, max(0, m_ContentHeight - HeaderBottom() - view)));
         navView = client.bottom - NavTop() - m_Theme.Scale(8);
-        navHeight = (int)Categories().size() * m_Theme.Scale(38);
+        navHeight = (int)Categories().size() * m_Theme.Scale(40);
         m_NavScroll = max(0, min(m_NavScroll, max(0, navHeight - navView)));
     }
 
