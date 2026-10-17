@@ -1670,10 +1670,9 @@ void WINAPI InstallHinfSectionW( HWND hwnd, HINSTANCE handle, LPCWSTR cmdline, I
     path = s;
 
     if (mode & 0x80)
-    {
-        FIXME("default path of the installation not changed\n");
         mode &= ~0x80;
-    }
+    else
+        FIXME("system-provided INF source path not supported, using the INF directory\n");
 
     hinf = SetupOpenInfFileW( path, NULL, INF_STYLE_WIN4, NULL );
     if (hinf == INVALID_HANDLE_VALUE)
