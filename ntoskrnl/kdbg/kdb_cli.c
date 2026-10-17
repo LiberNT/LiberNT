@@ -115,6 +115,7 @@ static BOOLEAN KdbpCmdTss(ULONG Argc, PCHAR Argv[]);
 #endif
 
 static BOOLEAN KdbpCmdBugCheck(ULONG Argc, PCHAR Argv[]);
+static BOOLEAN KdbpCmdAnalyze(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdReboot(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdFilter(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdSet(ULONG Argc, PCHAR Argv[]);
@@ -566,7 +567,7 @@ static const struct
     { "mod", "mod [address]", "List all modules or the one containing address.", KdbpCmdMod },
     { "gdt", "gdt", "Display the global descriptor table.", KdbpCmdGdtLdtIdt },
     { "ldt", "ldt", "Display the local descriptor table.", KdbpCmdGdtLdtIdt },
-    { "idt", "idt", "Display the interrupt descriptor table.", KdbpCmdGdtLdtIdt },
+    { "idt", "idt [address]", "Display the interrupt descriptor table, or only the vectors handled on the page of address.", KdbpCmdGdtLdtIdt },
     { "pcr", "pcr", "Display the processor control region.", KdbpCmdPcr },
     { "version", "version", "Display kernel, architecture and debugger version information.", KdbpCmdVersion },
     { "cpu", "cpu [number|current]", "List processors or inspect a frozen processor context.", KdbpCmdCpu },
@@ -577,6 +578,7 @@ static const struct
     /* Others */
     { NULL, NULL, "Others", NULL },
     { "bugcheck", "bugcheck", "Bugchecks the system.", KdbpCmdBugCheck },
+    { "!analyze", "!analyze", "Explain the current crash: decode the stop code or exception and inspect what it points at.", KdbpCmdAnalyze },
     { "reboot", "reboot", "Reboots the system.", KdbpCmdReboot},
     { "filter", "filter [error|warning|trace|info|level]+|-[componentname|default]", "Enable/disable debug channels.", KdbpCmdFilter },
     { "set", "set [var] [value]", "Sets var to value or displays value of var.", KdbpCmdSet },
@@ -7323,18 +7325,26 @@ static BOOLEAN
 KdbpCmdGdtLdtIdt(ULONG Argc, PCHAR Argv[])
 {
 #if defined(_M_ARM64)
+    if (Argc > 1)
+        return TRUE;
     KdbpPrint("%s is not an ARM64 descriptor-table command.\n", Argv[0]);
     return TRUE;
 #elif defined(_M_RISCV64)
+    if (Argc > 1)
+        return TRUE;
     KdbpPrint("%s: descriptor tables are not supported on RISC-V.\n", Argv[0]);
     return TRUE;
 #elif defined(_M_AMD64)
     KDESCRIPTOR Reg;
     ULONG Offset;
+    ULONG_PTR Filter = 0;
+    ULONG Matches = 0;
 
-    UNREFERENCED_PARAMETER(Argc);
     if (Argv[0][0] == 'i')
     {
+        if (Argc > 1 && !KdbpEvaluateAddress(Argv[1], KdbPromptStr.Length + (Argv[1] - Argv[0]), &Filter))
+            return TRUE;
+
         __sidt(&Reg.Limit);
         if (Reg.Limit + 1 < sizeof(KIDTENTRY64))
         {
@@ -7357,15 +7367,22 @@ KdbpCmdGdtLdtIdt(ULONG Argc, PCHAR Argv[])
             }
 
             Type = Entry.Type == 0xE ? "INTGATE" : Entry.Type == 0xF ? "TRAPGATE" : "UNKNOWN";
+            Handler = Entry.OffsetLow | ((ULONG64)Entry.OffsetMiddle << 16) | ((ULONG64)Entry.OffsetHigh << 32);
+            if (Argc > 1 && (!Entry.Present || PAGE_ALIGN(Handler) != PAGE_ALIGN(Filter)))
+                continue;
+
             if (!Entry.Present)
             {
                 KdbpPrint("  %03lu  %-9s  [NP]\n", Offset / sizeof(Entry), Type);
                 continue;
             }
 
-            Handler = Entry.OffsetLow | ((ULONG64)Entry.OffsetMiddle << 16) | ((ULONG64)Entry.OffsetHigh << 32);
+            Matches++;
             KdbpPrint("  %03lu  %-9s  0x%04x    %p  %02u   %u\n", Offset / sizeof(Entry), Type, Entry.Selector, (PVOID)(ULONG_PTR)Handler, Entry.Dpl, Entry.IstIndex);
         }
+
+        if (Argc > 1 && Matches == 0)
+            KdbpPrint("No vector of this processor is handled on that page.\n");
     }
     else
     {
@@ -7468,9 +7485,14 @@ KdbpCmdGdtLdtIdt(ULONG Argc, PCHAR Argv[])
     UCHAR Type, Dpl;
     INT i;
     ULONG ul;
+    ULONG_PTR Filter = 0;
+    ULONG Matches = 0;
 
     if (Argv[0][0] == 'i')
     {
+        if (Argc > 1 && !KdbpEvaluateAddress(Argv[1], KdbPromptStr.Length + (Argv[1] - Argv[0]), &Filter))
+            return TRUE;
+
         /* Read IDTR */
         __sidt(&Reg.Limit);
 
@@ -7505,6 +7527,17 @@ KdbpCmdGdtLdtIdt(ULONG Argc, PCHAR Argv[])
             else
                 SegType = "UNKNOWN";
 
+            if (Argc > 1)
+            {
+                SegBase = (SegDesc[1] & 0xffff0000) | (SegDesc[0] & 0x0000ffff);
+                if ((SegDesc[1] & (1 << 15)) == 0 || (SegDesc[1] & 0x1f00) == 0x0500 ||
+                    PAGE_ALIGN(SegBase) != PAGE_ALIGN(Filter))
+                {
+                    continue;
+                }
+                Matches++;
+            }
+
             if ((SegDesc[1] & (1 << 15)) == 0) /* not present */
             {
                 KdbpPrint("  %03d  %-10s  [NP]       [NP]        %02d\n", i / 8, SegType, Dpl);
@@ -7521,6 +7554,9 @@ KdbpCmdGdtLdtIdt(ULONG Argc, PCHAR Argv[])
                 KdbpPrint("  %03d  %-10s  0x%04x     0x%08x  %02d\n", i / 8, SegType, SegSel, SegBase, Dpl);
             }
         }
+
+        if (Argc > 1 && Matches == 0)
+            KdbpPrint("No vector of this processor is handled on that page.\n");
     }
     else
     {
@@ -9318,6 +9354,474 @@ Done:
     return Continue;
 }
 
+static
+VOID
+KdbpAddFaultAddress(
+    _Inout_updates_(3) PULONG_PTR Addresses,
+    _Inout_ PULONG Count,
+    _In_ ULONG_PTR Address)
+{
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKTHREAD Thread = KdbCurrentThread ? &KdbCurrentThread->Tcb : NULL;
+    ULONG Index;
+
+    if (*Count >= 3 || Address < (ULONG_PTR)MmSystemRangeStart ||
+        KdbpSymFindModule((PVOID)Address, -1, &LdrEntry))
+    {
+        return;
+    }
+
+    if (Thread && Address >= (ULONG_PTR)Thread->StackLimit && Address < (ULONG_PTR)Thread->InitialStack)
+        return;
+
+    for (Index = 0; Index < *Count; Index++)
+    {
+        if (PAGE_ALIGN(Addresses[Index]) == PAGE_ALIGN(Address))
+            return;
+    }
+
+    Addresses[(*Count)++] = Address;
+}
+
+static
+VOID
+KdbpDumpFaultContext(VOID)
+{
+    ULONG_PTR Stack = KeGetContextStackRegister(KdbCurrentTrapFrame);
+    ULONG_PTR Addresses[3];
+    ULONG_PTR Value;
+    ULONG Count = 0;
+    ULONG Index;
+    CHAR Command[64];
+
+    KdbPrintf("\nStack:\n");
+    sprintf(Command, "dps 0x%p L 16", (PVOID)Stack);
+    KdbpDoCommand(Command);
+
+    if (KdbCurrentExceptionRecord.ExceptionCode == STATUS_ACCESS_VIOLATION &&
+        KdbCurrentExceptionRecord.NumberParameters >= 2)
+    {
+        KdbpAddFaultAddress(Addresses, &Count, (ULONG_PTR)KdbCurrentExceptionRecord.ExceptionInformation[1]);
+    }
+
+    KdbpAddFaultAddress(Addresses, &Count, (ULONG_PTR)KeGetContextPc(KdbCurrentTrapFrame));
+    for (Index = 0; Index < 16; Index++)
+    {
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Value, (PVOID)(Stack + Index * sizeof(Value)), sizeof(Value))))
+            break;
+
+        KdbpAddFaultAddress(Addresses, &Count, Value);
+    }
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        KdbPrintf("\nAddress %p is outside every module:\n", (PVOID)Addresses[Index]);
+        sprintf(Command, "!pool 0x%p", (PVOID)Addresses[Index]);
+        KdbpDoCommand(Command);
+        sprintf(Command, "idt 0x%p", (PVOID)Addresses[Index]);
+        KdbpDoCommand(Command);
+    }
+}
+
+typedef enum _KDB_CRASH_ROLE
+{
+    KdbRoleValue,
+    KdbRoleAddress,
+    KdbRoleIp,
+    KdbRoleIrql,
+    KdbRoleAccess,
+    KdbRoleStatus,
+    KdbRoleIrp,
+    KdbRoleDevice,
+    KdbRoleProcess,
+    KdbRoleContext,
+    KdbRoleTrapFrame,
+    KdbRoleExceptionRecord,
+    KdbRoleProcessor,
+    KdbRoleSourceLine
+} KDB_CRASH_ROLE;
+
+typedef struct _KDB_BUGCHECK_INFO
+{
+    ULONG Code;
+    PCSTR Name;
+    UCHAR Role[4];
+} KDB_BUGCHECK_INFO;
+
+#define KDB_ROLES(a, b, c, d) { KdbRole##a, KdbRole##b, KdbRole##c, KdbRole##d }
+
+static const KDB_BUGCHECK_INFO KdbpBugCheckInfo[] =
+{
+    { 0x01, "APC_INDEX_MISMATCH", KDB_ROLES(Ip, Value, Value, Value) },
+    { 0x0A, "IRQL_NOT_LESS_OR_EQUAL", KDB_ROLES(Address, Irql, Access, Ip) },
+    { 0x18, "REFERENCE_BY_POINTER", KDB_ROLES(Value, Address, Value, Value) },
+    { 0x19, "BAD_POOL_HEADER", KDB_ROLES(Value, Address, Value, Value) },
+    { 0x1A, "MEMORY_MANAGEMENT", KDB_ROLES(Value, Value, Value, Value) },
+    { 0x1E, "KMODE_EXCEPTION_NOT_HANDLED", KDB_ROLES(Status, Ip, Value, Address) },
+    { 0x23, "FAT_FILE_SYSTEM", KDB_ROLES(SourceLine, ExceptionRecord, Context, Value) },
+    { 0x24, "NTFS_FILE_SYSTEM", KDB_ROLES(SourceLine, ExceptionRecord, Context, Value) },
+    { 0x3B, "SYSTEM_SERVICE_EXCEPTION", KDB_ROLES(Status, Ip, Context, Value) },
+    { 0x4A, "IRQL_GT_ZERO_AT_SYSTEM_SERVICE", KDB_ROLES(Ip, Irql, Value, Value) },
+    { 0x50, "PAGE_FAULT_IN_NONPAGED_AREA", KDB_ROLES(Address, Value, Ip, Value) },
+    { 0x7E, "SYSTEM_THREAD_EXCEPTION_NOT_HANDLED", KDB_ROLES(Status, Ip, ExceptionRecord, Context) },
+    { 0x7F, "UNEXPECTED_KERNEL_MODE_TRAP", KDB_ROLES(Value, Value, Value, Value) },
+    { 0x8E, "KERNEL_MODE_EXCEPTION_NOT_HANDLED", KDB_ROLES(Status, Ip, TrapFrame, Value) },
+    { 0x9F, "DRIVER_POWER_STATE_FAILURE", KDB_ROLES(Value, Device, Value, Irp) },
+    { 0xBE, "ATTEMPTED_WRITE_TO_READONLY_MEMORY", KDB_ROLES(Address, Value, TrapFrame, Value) },
+    { 0xC2, "BAD_POOL_CALLER", KDB_ROLES(Value, Value, Value, Value) },
+    { 0xC4, "DRIVER_VERIFIER_DETECTED_VIOLATION", KDB_ROLES(Value, Value, Value, Value) },
+    { 0xC5, "DRIVER_CORRUPTED_EXPOOL", KDB_ROLES(Address, Irql, Access, Ip) },
+    { 0xC9, "DRIVER_VERIFIER_IOMANAGER_VIOLATION", KDB_ROLES(Value, Value, Value, Value) },
+    { 0xCE, "DRIVER_UNLOADED_WITHOUT_CANCELLING_PENDING_OPERATIONS", KDB_ROLES(Address, Value, Ip, Value) },
+    { 0xD1, "DRIVER_IRQL_NOT_LESS_OR_EQUAL", KDB_ROLES(Address, Irql, Access, Ip) },
+    { 0xD5, "DRIVER_PAGE_FAULT_IN_FREED_SPECIAL_POOL", KDB_ROLES(Address, Value, Ip, Value) },
+    { 0xE2, "MANUALLY_INITIATED_CRASH", KDB_ROLES(Value, Value, Value, Value) },
+    { 0xEF, "CRITICAL_PROCESS_DIED", KDB_ROLES(Process, Value, Value, Value) },
+    { 0xF4, "CRITICAL_OBJECT_TERMINATION", KDB_ROLES(Value, Process, Value, Value) },
+    { 0xFC, "ATTEMPTED_EXECUTE_OF_NOEXECUTE_MEMORY", KDB_ROLES(Address, Value, Value, Value) },
+    { 0x101, "CLOCK_WATCHDOG_TIMEOUT", KDB_ROLES(Value, Value, Value, Processor) },
+    { 0x133, "DPC_WATCHDOG_VIOLATION", KDB_ROLES(Value, Value, Value, Value) },
+    { 0x139, "KERNEL_SECURITY_CHECK_FAILURE", KDB_ROLES(Value, TrapFrame, ExceptionRecord, Value) },
+};
+
+static
+VOID
+KdbpRunCommand(
+    _In_ PCSTR Format,
+    _In_ ULONG_PTR Value)
+{
+    CHAR Command[64];
+
+    sprintf(Command, Format, (PVOID)Value);
+    KdbpDoCommand(Command);
+}
+
+static
+BOOLEAN
+KdbpIsKernelAddress(
+    _In_ ULONG_PTR Address)
+{
+    UCHAR Byte;
+
+    return Address >= (ULONG_PTR)MmSystemRangeStart &&
+           NT_SUCCESS(KdbpSafeReadMemory(&Byte, (PVOID)Address, sizeof(Byte)));
+}
+
+static
+CSHORT
+KdbpReadObjectType(
+    _In_ ULONG_PTR Address)
+{
+    CSHORT Type = 0;
+
+    if (!KdbpIsKernelAddress(Address) ||
+        !NT_SUCCESS(KdbpSafeReadMemory(&Type, (PVOID)Address, sizeof(Type))))
+    {
+        return 0;
+    }
+
+    return Type;
+}
+
+static
+VOID
+KdbpPrintProcessObject(
+    _In_ ULONG_PTR Address)
+{
+    DISPATCHER_HEADER Header;
+    PEPROCESS Process = (PEPROCESS)Address;
+    PETHREAD Thread = (PETHREAD)Address;
+    CLIENT_ID Cid;
+    PKPROCESS Owner;
+    UCHAR Name[16] = {0};
+
+    if (!KdbpIsKernelAddress(Address) ||
+        !NT_SUCCESS(KdbpSafeReadMemory(&Header, (PVOID)Address, sizeof(Header))))
+    {
+        KdbPrintf("\n");
+        return;
+    }
+
+    if (Header.Type == ProcessObject)
+    {
+        KdbpSafeReadMemory(Name, Process->ImageFileName, sizeof(Process->ImageFileName));
+        KdbPrintf("process %s\n", Name);
+        return;
+    }
+
+    if (Header.Type == ThreadObject &&
+        NT_SUCCESS(KdbpSafeReadMemory(&Cid, &Thread->Cid, sizeof(Cid))) &&
+        NT_SUCCESS(KdbpSafeReadMemory(&Owner, &Thread->Tcb.Process, sizeof(Owner))))
+    {
+        KdbpSafeReadMemory(Name, ((PEPROCESS)Owner)->ImageFileName, sizeof(((PEPROCESS)Owner)->ImageFileName));
+        KdbPrintf("thread %p.%p of %s\n", Cid.UniqueProcess, Cid.UniqueThread, Name);
+        return;
+    }
+
+    KdbPrintf("object type %u\n", Header.Type);
+}
+
+static
+VOID
+KdbpAnalyzeAddress(
+    _In_ ULONG_PTR Address)
+{
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+
+    if (KdbpSymFindModule((PVOID)Address, -1, &LdrEntry))
+    {
+        KdbSymPrintAddress((PVOID)Address, NULL);
+        KdbPrintf("\n");
+        return;
+    }
+
+    KdbPrintf("outside every module\n");
+    if (Address < (ULONG_PTR)MmSystemRangeStart)
+        return;
+
+    KdbpRunCommand("!pool 0x%p", Address);
+    KdbpRunCommand("!pte 0x%p", Address);
+}
+
+static
+VOID
+KdbpAnalyzeParameter(
+    _In_ ULONG Index,
+    _In_ UCHAR Role,
+    _In_ ULONG_PTR Value)
+{
+    KdbPrintf("P%lu %p ", Index + 1, (PVOID)Value);
+    switch (Role)
+    {
+        case KdbRoleIp:
+            KdbPrintf("instruction ");
+            KdbpAnalyzeAddress(Value);
+            if (KdbpIsKernelAddress(Value))
+                KdbpRunCommand("u 0x%p L 1", Value);
+            break;
+
+        case KdbRoleAddress:
+            KdbPrintf("address ");
+            KdbpAnalyzeAddress(Value);
+            break;
+
+        case KdbRoleIrql:
+            KdbPrintf("IRQL %lu\n", (ULONG)Value);
+            break;
+
+        case KdbRoleAccess:
+            KdbPrintf("%s%s access\n", (Value & 1) ? "write" : "read", (Value & 8) ? " execute" : "");
+            break;
+
+        case KdbRoleStatus:
+            KdbPrintf("status 0x%08lx\n", (ULONG)Value);
+            break;
+
+        case KdbRoleIrp:
+            if (KdbpReadObjectType(Value) != IO_TYPE_IRP)
+            {
+                KdbPrintf("\n");
+                break;
+            }
+            KdbPrintf("IRP\n");
+            KdbpRunCommand("!irp 0x%p", Value);
+            break;
+
+        case KdbRoleDevice:
+            if (KdbpReadObjectType(Value) != IO_TYPE_DEVICE)
+            {
+                KdbPrintf("\n");
+                break;
+            }
+            KdbPrintf("device object\n");
+            KdbpRunCommand("!devstack 0x%p", Value);
+            break;
+
+        case KdbRoleProcess:
+            KdbpPrintProcessObject(Value);
+            break;
+
+        case KdbRoleContext:
+            KdbPrintf("context record\n");
+            if (!KdbpIsKernelAddress(Value))
+                break;
+            KdbpRunCommand(".cxr 0x%p", Value);
+            KdbpDoCommand("bt");
+            KdbpDoCommand(".cxr");
+            break;
+
+        case KdbRoleTrapFrame:
+            KdbPrintf("trap frame\n");
+            if (!KdbpIsKernelAddress(Value))
+                break;
+            KdbpRunCommand(".trap 0x%p", Value);
+            KdbpDoCommand("bt");
+            KdbpDoCommand(".trap");
+            break;
+
+        case KdbRoleExceptionRecord:
+            KdbPrintf("exception record\n");
+            if (KdbpIsKernelAddress(Value))
+                KdbpRunCommand(".exr 0x%p", Value);
+            break;
+
+        case KdbRoleProcessor:
+            KdbPrintf("processor %lu\n", (ULONG)Value);
+            KdbpRunCommand("!prcb 0x%p", Value);
+            break;
+
+        case KdbRoleSourceLine:
+            KdbPrintf("source file 0x%lx line %lu\n", (ULONG)(Value >> 16), (ULONG)(Value & 0xFFFF));
+            break;
+
+        default:
+            KdbPrintf("\n");
+            break;
+    }
+}
+
+static
+VOID
+KdbpPrintPackedName(
+    _In_ PCSTR Label,
+    _In_ ULONG_PTR Value)
+{
+    CHAR Name[sizeof(ULONG_PTR) + 1] = {0};
+    ULONG Index;
+
+    for (Index = 0; Index < sizeof(ULONG_PTR); Index++)
+    {
+        CHAR Character = (CHAR)(Value >> (Index * 8));
+
+        if (Character == 0)
+            break;
+        Name[Index] = (Character >= ' ' && Character <= '~') ? Character : '?';
+    }
+
+    KdbPrintf("%s driver \"%s\"\n", Label, Name);
+}
+
+static
+VOID
+KdbpAnalyzeLateCompletion(VOID)
+{
+    ULONG64 State = (ULONG64)KiBugCheckData[1];
+
+    KdbPrintf("kind 0x%02lx%s%s%s%s%s%s%s\n",
+              (ULONG)(State & 0xFF),
+              (State & (1ULL << 8)) ? " PendingReturned" : "",
+              (State & (1ULL << 9)) ? " completer-is-current-thread" : "",
+              (State & (1ULL << 10)) ? " apc-inserted" : "",
+              (State & (1ULL << 11)) ? " SpecialApcDisable" : "",
+              (State & (1ULL << 52)) ? " completed" : "",
+              (State & (1ULL << 53)) ? " KernelApcPending" : "",
+              (State & (1ULL << 54)) ? " KernelApcDisable" : "");
+    KdbPrintf("completer IRQL %lu cpu %lu, current IRQL %lu cpu %lu, location %lu of %lu, top major 0x%02lx\n",
+              (ULONG)((State >> 12) & 0xF),
+              (ULONG)((State >> 16) & 0xFF),
+              (ULONG)((State >> 48) & 0xF),
+              (ULONG)((State >> 24) & 0xFF),
+              (ULONG)((State >> 32) & 0xFF),
+              (ULONG)((State >> 40) & 0xFF),
+              (ULONG)(State >> 56));
+    KdbPrintf("P2 %p\n", (PVOID)KiBugCheckData[2]);
+    KdbpPrintPackedName("current", KiBugCheckData[3]);
+    KdbpPrintPackedName("bottom", KiBugCheckData[4]);
+    KdbpDoCommand("!thread");
+    KdbpDoCommand("!apc");
+}
+
+static
+VOID
+KdbpAnalyzeBugCheck(VOID)
+{
+    ULONG Code = (ULONG)KiBugCheckData[0];
+    const KDB_BUGCHECK_INFO* Info = NULL;
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(KdbpBugCheckInfo); Index++)
+    {
+        if (KdbpBugCheckInfo[Index].Code == Code)
+        {
+            Info = &KdbpBugCheckInfo[Index];
+            break;
+        }
+    }
+
+    KdbPrintf("\nANALYSIS: stop 0x%08lx %s\n", Code, Info ? Info->Name : "(no decoder)");
+    if (Code == 0xC9)
+    {
+        KdbpAnalyzeLateCompletion();
+        return;
+    }
+
+    for (Index = 0; Index < 4; Index++)
+        KdbpAnalyzeParameter(Index, Info ? Info->Role[Index] : KdbRoleValue, KiBugCheckData[Index + 1]);
+
+    if (Code == 0x01 || Code == 0x4A)
+        KdbpDoCommand("!apc");
+    else if (Code == 0x133)
+        KdbpDoCommand("!dpc");
+}
+
+static
+VOID
+KdbpAnalyzeException(VOID)
+{
+    ULONG_PTR Pc = (ULONG_PTR)KeGetContextPc(KdbCurrentTrapFrame);
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+
+    KdbPrintf("\nANALYSIS: exception 0x%08lx at ", KdbCurrentExceptionRecord.ExceptionCode);
+    KdbpAnalyzeAddress(Pc);
+
+    if (KdbCurrentExceptionRecord.ExceptionCode == STATUS_ACCESS_VIOLATION &&
+        KdbCurrentExceptionRecord.NumberParameters >= 2)
+    {
+        ULONG_PTR Access = (ULONG_PTR)KdbCurrentExceptionRecord.ExceptionInformation[0];
+        ULONG_PTR Address = (ULONG_PTR)KdbCurrentExceptionRecord.ExceptionInformation[1];
+
+        KdbPrintf("%s of %p: ", Access == 8 ? "execute" : Access == 1 ? "write" : "read", (PVOID)Address);
+        KdbpAnalyzeAddress(Address);
+    }
+
+    if (KdbpSymFindModule((PVOID)Pc, -1, &LdrEntry))
+        KdbpRunCommand("u 0x%p L 1", Pc);
+    else
+        KdbpDumpFaultContext();
+}
+
+static
+BOOLEAN
+KdbpCmdAnalyze(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    UNREFERENCED_PARAMETER(Argc);
+    UNREFERENCED_PARAMETER(Argv);
+
+    if (KdbCurrentThread)
+    {
+        UCHAR Name[16] = {0};
+
+        if (KdbCurrentProcess)
+            KdbpSafeReadMemory(Name, KdbCurrentProcess->ImageFileName, sizeof(KdbCurrentProcess->ImageFileName));
+        KdbPrintf("\nThread %p.%p of %s on cpu %lu\n",
+                  KdbCurrentThread->Cid.UniqueProcess,
+                  KdbCurrentThread->Cid.UniqueThread,
+                  Name,
+                  KeGetCurrentProcessorNumber());
+    }
+
+    if (KiBugCheckData[0])
+        KdbpAnalyzeBugCheck();
+    else if (KdbCurrentExceptionRecordValid)
+        KdbpAnalyzeException();
+    else
+        KdbPrintf("No crash to analyze.\n");
+
+    return TRUE;
+}
+
 /*!\brief KDB Main Loop.
  *
  * \param EnteredOnSingleStep  TRUE if KDB was entered on single step.
@@ -9333,10 +9837,17 @@ KdbpCliMainLoop(
     KdbpDoCommand("regs");
     KdbpDoCommand("bt");
 
+    if (!EnteredOnSingleStep &&
+        (KiBugCheckData[0] ||
+         (KdbCurrentExceptionRecordValid &&
+          KdbCurrentExceptionRecord.ExceptionCode != STATUS_BREAKPOINT &&
+          KdbCurrentExceptionRecord.ExceptionCode != STATUS_SINGLE_STEP)))
+    {
+        KdbpDoCommand("!analyze");
+    }
+
     if (!EnteredOnSingleStep && KiBugCheckData[0])
     {
-        KdbpDoCommand("!thread");
-        KdbpDoCommand("!apc");
         KdbPrintf("\n*** Fatal System Error: 0x%08lx (0x%p,0x%p,0x%p,0x%p)\n",
                   (ULONG)KiBugCheckData[0],
                   (PVOID)KiBugCheckData[1],
