@@ -3,7 +3,10 @@ if(PkgConfig_FOUND)
     pkg_check_modules(FUSE3 QUIET IMPORTED_TARGET fuse3)
 endif()
 
-add_executable(ntfslib_fuse ntfslib_fuse.cpp)
+set(NTFSLIB_EXPAND_DIR "${NTFSLIB_ROOT}/../../../../base/applications/cmdutils/lntexpandstorage")
+
+add_executable(ntfslib_fuse ntfslib_fuse.cpp "${NTFSLIB_EXPAND_DIR}/expandcore.c")
+target_include_directories(ntfslib_fuse PRIVATE "${NTFSLIB_EXPAND_DIR}")
 target_link_libraries(ntfslib_fuse PRIVATE ntfslib_linux ntfslib_format_host)
 
 if(NTFSLIB_STATIC_CXX_RUNTIME AND

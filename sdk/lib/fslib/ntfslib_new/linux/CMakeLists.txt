@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(ntfslib_linux LANGUAGES CXX)
+project(ntfslib_linux LANGUAGES C CXX)
 
 include(CTest)
 
