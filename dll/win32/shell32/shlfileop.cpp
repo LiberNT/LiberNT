@@ -2009,8 +2009,7 @@ static HRESULT rename_files(FILE_OPERATION *op,  const FILE_LIST *flFrom, const 
 static void check_flags(FILEOP_FLAGS fFlags)
 {
     WORD wUnsupportedFlags = FOF_NO_CONNECTED_ELEMENTS |
-        FOF_NOCOPYSECURITYATTRIBS | FOF_NORECURSEREPARSE |
-        FOF_WANTMAPPINGHANDLE;
+        FOF_NORECURSEREPARSE | FOF_WANTMAPPINGHANDLE;
 
     if (fFlags & wUnsupportedFlags)
         FIXME("Unsupported flags: %04x\n", fFlags);
