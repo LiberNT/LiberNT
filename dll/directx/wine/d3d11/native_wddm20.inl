@@ -251,7 +251,7 @@ static UINT NativeWddm20RefreshCount(UINT count, UINT base, UINT capacity)
 }
 
 #define NATIVE_WDDM20_REFRESH_RANGE(Name, Stage, Method, Member, Capacity) \
-static void APIENTRY NativeWddm20State##Name(D3D10DDI_HRTCORELAYER layer, UINT count, UINT base) \
+static void APIENTRY NativeWddm20State##Name(D3D10DDI_HRTCORELAYER layer, UINT base, UINT count) \
 { \
     NativeContext *context = static_cast<NativeDevice *>(layer.handle)->context; \
     count = NativeWddm20RefreshCount(count, base, Capacity); \
@@ -300,7 +300,7 @@ NATIVE_WDDM20_REFRESH(DsShader, DSSetShader(context->domain_shader, NULL, 0))
 NATIVE_WDDM20_REFRESH(CsShader, CSSetShader(context->compute_shader, NULL, 0))
 #undef NATIVE_WDDM20_REFRESH
 
-static void APIENTRY NativeWddm20StateIaVertexBuf(D3D10DDI_HRTCORELAYER layer, UINT count, UINT base)
+static void APIENTRY NativeWddm20StateIaVertexBuf(D3D10DDI_HRTCORELAYER layer, UINT base, UINT count)
 {
     NativeContext *context = static_cast<NativeDevice *>(layer.handle)->context;
     count = NativeWddm20RefreshCount(count, base, 32);
@@ -308,7 +308,7 @@ static void APIENTRY NativeWddm20StateIaVertexBuf(D3D10DDI_HRTCORELAYER layer, U
             &context->vertex_strides[base], &context->vertex_offsets[base]);
 }
 
-static void APIENTRY NativeWddm20StateCsUav(D3D10DDI_HRTCORELAYER layer, UINT count, UINT base)
+static void APIENTRY NativeWddm20StateCsUav(D3D10DDI_HRTCORELAYER layer, UINT base, UINT count)
 {
     NativeContext *context = static_cast<NativeDevice *>(layer.handle)->context;
     count = NativeWddm20RefreshCount(count, base, 8);
