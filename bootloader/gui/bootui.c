@@ -1068,7 +1068,7 @@ BootUiDisplayMenu(PCSTR Header, PCSTR Footer, PCSTR Items[], ULONG Count,
     MACH_POINTER_STATE Previous;
     ULONG Key, I, Second, Hit, Pressed = MAXULONG;
     LONG DragY = 0;
-    BOOLEAN Extended, Redraw = TRUE, Timer, Dragged = FALSE, Result = TRUE;
+    BOOLEAN Extended, Redraw = TRUE, Timer, Dragged = FALSE, Result = TRUE, Busy, Changed;
     if (!Count || !Items)
         return FALSE;
     if (Default >= Count || !Items[Default])
@@ -1142,7 +1142,7 @@ BootUiDisplayMenu(PCSTR Header, PCSTR Footer, PCSTR Items[], ULONG Count,
                 continue;
             if (Key == KEY_HOME || Key == KEY_END)
             {
-                I = Key == KEY_HOME ? 0 : Count - 1;
+                I = Key == KEY_HOME ? 0 : Menu.MenuItemCount - 1;
                 while (!Items[I])
                     I = Key == KEY_HOME ? I + 1 : I - 1;
                 Menu.SelectedMenuItem = I;
@@ -1216,7 +1216,14 @@ CheckTimeout:
             Timer = MachSetInputTimer(TimeOut > 0 ? 1000 : 0);
             Redraw = TRUE;
         }
-        if (!Redraw)
+        Changed = FALSE;
+        Busy = UiMenuIdle && UiMenuIdle(&Menu, &Changed);
+        if (Changed)
+        {
+            Layout.Valid = FALSE;
+            Redraw = TRUE;
+        }
+        if (!Busy && !Redraw)
             MachHwIdle();
     }
     MachSetInputTimer(0);

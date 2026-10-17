@@ -146,6 +146,7 @@ FwOpenBlockDevice(
 
 static EFI_HANDLE* FwDiskHandles;
 static UINTN FwDiskHandleCount;
+static BOOLEAN FwDisksConnected;
 
 BOOLEAN
 FwGetDisk(
@@ -174,15 +175,27 @@ FwGetDisk(
     return FALSE;
 }
 
+static
+VOID
+FwSetDisksConnected(VOID)
+{
+    if (FwDiskHandles)
+    {
+        GlobalSystemTable->BootServices->FreePool(FwDiskHandles);
+        FwDiskHandles = NULL;
+    }
+
+    FwDisksConnected = TRUE;
+}
+
 BOOLEAN
 FwRescanDisks(VOID)
 {
-    static BOOLEAN Connected;
     EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
     EFI_HANDLE* Handles;
     UINTN Count, i;
 
-    if (Connected ||
+    if (FwDisksConnected ||
         EFI_ERROR(BootServices->LocateHandleBuffer(AllHandles, NULL, NULL, &Count, &Handles)))
     {
         return FALSE;
@@ -192,14 +205,7 @@ FwRescanDisks(VOID)
         BootServices->ConnectController(Handles[i], NULL, NULL, TRUE);
 
     BootServices->FreePool(Handles);
-
-    if (FwDiskHandles)
-    {
-        BootServices->FreePool(FwDiskHandles);
-        FwDiskHandles = NULL;
-    }
-
-    Connected = TRUE;
+    FwSetDisksConnected();
     return TRUE;
 }
 
@@ -389,44 +395,82 @@ FwReadBootFile(
     return FwReadDeviceFile(FwGetBootDeviceHandle(), Path, Size);
 }
 
-ULONG
-FwFindFileVolumes(
+BOOLEAN
+FwScanFileVolumes(
     _In_ PCWSTR Path,
-    _Out_writes_(MaxDevices) PVOID* Devices,
-    _In_ ULONG MaxDevices)
+    _Inout_ PFW_VOLUME_SCAN Scan,
+    _Out_ PVOID* Device)
 {
     EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* FileSystem;
     EFI_FILE_PROTOCOL* Root;
     EFI_FILE_PROTOCOL* File;
     EFI_HANDLE* Handles;
-    UINTN HandleCount, i;
-    ULONG Count = 0;
+    EFI_HANDLE Handle;
+    UINTN HandleCount;
 
-    FwRescanDisks();
+    *Device = NULL;
 
-    if (EFI_ERROR(BootServices->LocateHandleBuffer(ByProtocol, &FwFileSystemGuid, NULL, &HandleCount, &Handles)))
-        return 0;
+    if (Scan->State == FwVolumeScanConnect && FwDisksConnected && !Scan->Handles)
+        Scan->State = FwVolumeScanVolumes;
 
-    for (i = 0; i < HandleCount && Count < MaxDevices; i++)
+    if (Scan->State == FwVolumeScanDone)
+        return FALSE;
+
+    if (!Scan->Handles)
     {
-        if (EFI_ERROR(BootServices->HandleProtocol(Handles[i], &FwFileSystemGuid, (VOID**)&FileSystem)) ||
-            EFI_ERROR(FileSystem->OpenVolume(FileSystem, &Root)))
+        if (EFI_ERROR(BootServices->LocateHandleBuffer(Scan->State == FwVolumeScanConnect ? AllHandles : ByProtocol,
+                                                       Scan->State == FwVolumeScanConnect ? NULL : &FwFileSystemGuid,
+                                                       NULL,
+                                                       &HandleCount,
+                                                       &Handles)))
         {
-            continue;
+            Scan->State = (Scan->State == FwVolumeScanConnect) ? FwVolumeScanVolumes : FwVolumeScanDone;
+            return Scan->State != FwVolumeScanDone;
         }
 
-        if (!EFI_ERROR(Root->Open(Root, &File, (CHAR16*)Path, EFI_FILE_MODE_READ, 0)))
-        {
-            File->Close(File);
-            Devices[Count++] = Handles[i];
-        }
-
-        Root->Close(Root);
+        Scan->Handles = Handles;
+        Scan->HandleCount = (ULONG)HandleCount;
+        Scan->Index = 0;
+        return TRUE;
     }
 
-    BootServices->FreePool(Handles);
-    return Count;
+    if (Scan->Index < Scan->HandleCount)
+    {
+        Handle = Scan->Handles[Scan->Index++];
+
+        if (Scan->State == FwVolumeScanConnect)
+        {
+            if (!FwDisksConnected)
+                BootServices->ConnectController(Handle, NULL, NULL, TRUE);
+        }
+        else if (!EFI_ERROR(BootServices->HandleProtocol(Handle, &FwFileSystemGuid, (VOID**)&FileSystem)) &&
+                 !EFI_ERROR(FileSystem->OpenVolume(FileSystem, &Root)))
+        {
+            if (!EFI_ERROR(Root->Open(Root, &File, (CHAR16*)Path, EFI_FILE_MODE_READ, 0)))
+            {
+                File->Close(File);
+                *Device = Handle;
+            }
+
+            Root->Close(Root);
+        }
+
+        return TRUE;
+    }
+
+    BootServices->FreePool(Scan->Handles);
+    Scan->Handles = NULL;
+
+    if (Scan->State == FwVolumeScanConnect)
+    {
+        FwSetDisksConnected();
+        Scan->State = FwVolumeScanVolumes;
+        return TRUE;
+    }
+
+    Scan->State = FwVolumeScanDone;
+    return FALSE;
 }
 
 EFI_STATUS

@@ -94,6 +94,12 @@ BOOLEAN
     IN ULONG SelectedMenuItem,
     IN PVOID Context OPTIONAL);
 
+typedef
+BOOLEAN
+(*UiMenuIdleCallback)(
+    IN OUT PUI_MENU_INFO MenuInfo,
+    OUT PBOOLEAN Changed);
+
 typedef struct tagUIVTBL
 {
     BOOLEAN (*Initialize)(VOID);
@@ -138,6 +144,7 @@ extern const UIVTBL FbGuiVtbl;
 extern ULONG UiScreenWidth;
 extern ULONG UiScreenHeight;
 extern BOOLEAN UiKeepFirmwareScreen;
+extern UiMenuIdleCallback UiMenuIdle;
 extern UI_PROGRESS_BAR UiProgressBar;
 extern BOOLEAN UiShowTime;
 extern BOOLEAN UiMenuBox;

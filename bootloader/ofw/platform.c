@@ -781,16 +781,16 @@ FwReadDeviceFile(
     return NULL;
 }
 
-ULONG
-FwFindFileVolumes(
+BOOLEAN
+FwScanFileVolumes(
     _In_ PCWSTR Path,
-    _Out_writes_(MaxDevices) PVOID* Devices,
-    _In_ ULONG MaxDevices)
+    _Inout_ PFW_VOLUME_SCAN Scan,
+    _Out_ PVOID* Device)
 {
     UNREFERENCED_PARAMETER(Path);
-    UNREFERENCED_PARAMETER(Devices);
-    UNREFERENCED_PARAMETER(MaxDevices);
-    return 0;
+    Scan->State = FwVolumeScanDone;
+    *Device = NULL;
+    return FALSE;
 }
 
 BOOLEAN

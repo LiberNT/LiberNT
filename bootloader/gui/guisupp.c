@@ -48,6 +48,7 @@ C_ASSERT(sizeof(GUI_BMP_INFO_HEADER) == 40);
 ULONG UiScreenWidth;
 ULONG UiScreenHeight;
 BOOLEAN UiKeepFirmwareScreen;
+UiMenuIdleCallback UiMenuIdle;
 UI_PROGRESS_BAR UiProgressBar;
 BOOLEAN UiShowTime;
 BOOLEAN UiMenuBox;

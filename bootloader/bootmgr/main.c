@@ -25,7 +25,6 @@ static const PCWSTR BmStorePaths[] =
 };
 
 static BM_ENTRY BmEntries[BM_MAX_ENTRIES];
-static BM_ENTRY BmWindowsEntries[BM_MAX_ENTRIES];
 static CHAR BmNames[BM_MAX_ENTRIES][BM_NAME_CHARS];
 static PCSTR BmMenuNames[BM_MAX_ENTRIES + BM_EXTRA_ITEMS];
 static UI_MENU_ICON BmMenuIcons[BM_MAX_ENTRIES + BM_EXTRA_ITEMS];
@@ -34,8 +33,10 @@ static ULONG BmStartupEntries[BM_MAX_ENTRIES];
 static PCWSTR BmTextNames[BM_MAX_ENTRIES];
 static WCHAR BmStorePath[BM_PATH_CHARS];
 static WCHAR BmTitle[BM_DESCRIPTION_CHARS];
+static PVOID BmStore;
+static ULONG BmStoreSize;
+static FW_VOLUME_SCAN BmScan;
 static ULONG BmCount;
-static ULONG BmWindowsCount;
 static ULONG BmSelected;
 
 static
@@ -108,21 +109,100 @@ BmGetWindowsDescription(
 }
 
 static
-VOID
-BmFindWindows(VOID)
+BOOLEAN
+BmAddWindows(
+    _In_ PVOID Device)
 {
-    PVOID Devices[BM_MAX_ENTRIES];
     PBM_ENTRY Entry;
-    ULONG Count, i;
 
-    Count = FwFindFileVolumes(BM_WINDOWS_MANAGER, Devices, RTL_NUMBER_OF(Devices));
-    for (i = 0; i < Count; i++)
+    if (BmCount >= RTL_NUMBER_OF(BmEntries))
+        return FALSE;
+
+    Entry = &BmEntries[BmCount];
+    RtlZeroMemory(Entry, sizeof(*Entry));
+    Entry->FirmwareDevice = Device;
+    Entry->FirmwarePath = BM_WINDOWS_MANAGER;
+    BmGetWindowsDescription(Device, Entry->Description, RTL_NUMBER_OF(Entry->Description));
+
+    if (BmStore)
+        BcdOpenStore(BmStore, BmStoreSize);
+
+    BmCount++;
+    return TRUE;
+}
+
+static
+BOOLEAN
+BmScanStep(
+    _Out_ PBOOLEAN Added)
+{
+    PVOID Device;
+    BOOLEAN More;
+
+    More = FwScanFileVolumes(BM_WINDOWS_MANAGER, &BmScan, &Device);
+    *Added = Device && BmAddWindows(Device);
+    return More;
+}
+
+static
+VOID
+BmFinishScan(VOID)
+{
+    BOOLEAN Added;
+
+    while (BmScanStep(&Added))
+        ;
+}
+
+static
+VOID
+BmBuildMenu(VOID)
+{
+    ULONG i, j;
+
+    for (i = 0; i < BmCount; i++)
     {
-        Entry = &BmWindowsEntries[BmWindowsCount++];
-        Entry->FirmwareDevice = Devices[i];
-        Entry->FirmwarePath = BM_WINDOWS_MANAGER;
-        BmGetWindowsDescription(Devices[i], Entry->Description, RTL_NUMBER_OF(Entry->Description));
+        for (j = 0; j < BM_NAME_CHARS - 1 && BmEntries[i].Description[j] != UNICODE_NULL; j++)
+            BmNames[i][j] = BmEntries[i].Description[j] <= 0x7F ? (CHAR)BmEntries[i].Description[j] : '?';
+
+        BmNames[i][j] = ANSI_NULL;
+        BmMenuNames[i] = BmNames[i];
+        BmMenuIcons[i] = BmEntries[i].FirmwareDevice ? UiMenuIconDesktop : UiMenuIconLiberNT;
     }
+
+    BmMenuNames[BmCount] = NULL;
+    BmMenuNames[BmCount + 1] = "Startup options";
+    BmMenuNames[BmCount + 2] = "Settings";
+    BmMenuIcons[BmCount] = UiMenuIconNone;
+    BmMenuIcons[BmCount + 1] = UiMenuIconNone;
+    BmMenuIcons[BmCount + 2] = UiMenuIconNone;
+}
+
+static
+BOOLEAN
+BmMenuIdle(
+    IN OUT PUI_MENU_INFO MenuInfo,
+    OUT PBOOLEAN Changed)
+{
+    ULONG Entries;
+    BOOLEAN More, Added;
+
+    *Changed = FALSE;
+    if (MenuInfo->MenuItemList != BmMenuNames)
+        return FALSE;
+
+    Entries = MenuInfo->MenuItemCount - BM_EXTRA_ITEMS;
+    More = BmScanStep(&Added);
+    if (Added)
+    {
+        BmBuildMenu();
+        if (MenuInfo->SelectedMenuItem >= Entries)
+            MenuInfo->SelectedMenuItem += BmCount - Entries;
+        MenuInfo->MenuItemCount = BmCount + BM_EXTRA_ITEMS;
+        *Changed = TRUE;
+    }
+
+    return More;
 }
 
 static
@@ -264,24 +344,8 @@ BmRunGuiMenu(
     _In_ LONG Timeout)
 {
     ULONG Item = BmSelected;
-    ULONG i, j;
 
-    for (i = 0; i < BmCount; i++)
-    {
-        for (j = 0; j < BM_NAME_CHARS - 1 && BmEntries[i].Description[j] != UNICODE_NULL; j++)
-            BmNames[i][j] = BmEntries[i].Description[j] <= 0x7F ? (CHAR)BmEntries[i].Description[j] : '?';
-
-        BmNames[i][j] = ANSI_NULL;
-        BmMenuNames[i] = BmNames[i];
-        BmMenuIcons[i] = BmEntries[i].FirmwareDevice ? UiMenuIconDesktop : UiMenuIconLiberNT;
-    }
-
-    BmMenuNames[BmCount] = NULL;
-    BmMenuNames[BmCount + 1] = "Startup options";
-    BmMenuNames[BmCount + 2] = "Settings";
-    BmMenuIcons[BmCount] = UiMenuIconNone;
-    BmMenuIcons[BmCount + 1] = UiMenuIconNone;
-    BmMenuIcons[BmCount + 2] = UiMenuIconNone;
+    BmBuildMenu();
 
     for (;;)
     {
@@ -387,11 +451,14 @@ BmRunMenu(
     if (GuiInitialize())
     {
         UiKeepFirmwareScreen = (Timeout > 0);
+        UiMenuIdle = BmMenuIdle;
         BmRunGuiMenu(Timeout);
+        UiMenuIdle = NULL;
         FbGuiVtbl.UnInitialize();
         return;
     }
 
+    BmFinishScan();
     BmRunTextMenu(Timeout);
 }
 
@@ -399,10 +466,9 @@ VOID
 BlMain(VOID)
 {
     PVOID Store;
-    ULONG Size, Default = 0, i;
+    ULONG Size, Default = 0;
 
     Store = BmReadStore(BmStorePath, RTL_NUMBER_OF(BmStorePath), &Size);
-    BmFindWindows();
 
     RtlStringCchCopyW(BmTitle, RTL_NUMBER_OF(BmTitle), BM_DEFAULT_TITLE);
 
@@ -412,14 +478,16 @@ BlMain(VOID)
     }
     else
     {
+        BmStore = Store;
+        BmStoreSize = Size;
         BmGetDescription(BmTitle, RTL_NUMBER_OF(BmTitle));
         BmCount = BmEnumerateEntries(BmEntries, RTL_NUMBER_OF(BmEntries), &Default);
         if (BmCount == 0)
             FwPrint(L"The Boot Configuration Data store has no operating system entry.\r\n");
     }
 
-    for (i = 0; i < BmWindowsCount && BmCount < RTL_NUMBER_OF(BmEntries); i++)
-        BmEntries[BmCount++] = BmWindowsEntries[i];
+    if (BmCount == 0)
+        BmFinishScan();
 
     if (BmCount == 0)
         return;

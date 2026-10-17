@@ -9,6 +9,21 @@
 
 extern const USHORT FwApplicationSubsystem;
 
+typedef enum _FW_VOLUME_SCAN_STATE
+{
+    FwVolumeScanConnect,
+    FwVolumeScanVolumes,
+    FwVolumeScanDone
+} FW_VOLUME_SCAN_STATE;
+
+typedef struct _FW_VOLUME_SCAN
+{
+    FW_VOLUME_SCAN_STATE State;
+    PVOID* Handles;
+    ULONG HandleCount;
+    ULONG Index;
+} FW_VOLUME_SCAN, *PFW_VOLUME_SCAN;
+
 PVOID
 FwAllocate(
     _In_ SIZE_T Size);
@@ -33,11 +48,11 @@ FwReadDeviceFile(
     _In_ PCWSTR Path,
     _Out_ PULONG Size);
 
-ULONG
-FwFindFileVolumes(
+BOOLEAN
+FwScanFileVolumes(
     _In_ PCWSTR Path,
-    _Out_writes_(MaxDevices) PVOID* Devices,
-    _In_ ULONG MaxDevices);
+    _Inout_ PFW_VOLUME_SCAN Scan,
+    _Out_ PVOID* Device);
 
 BOOLEAN
 FwStartFirmwareApplication(
