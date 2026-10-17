@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <dwmapi.h>
+#include <commctrl.h>
 #include <gdiplus.h>
 
 #ifndef SHELLFRAME_CUSTOM_CAPTION_BUTTONS
@@ -126,7 +127,36 @@ BOOL Startup();
 void Shutdown();
 Gdiplus::GraphicsPath *IconPath(LPCWSTR name, float *viewBox);
 HICON CreateGlyphIcon(LPCWSTR name, int size, COLORREF color);
+void FillRoundSmooth(HDC hdc, const RECT &rc, float radius, COLORREF color);
+void FillRoundGlass(HDC hdc, const RECT &rc, float radius, COLORREF color, BYTE opacity);
 void FillIcon(Gdiplus::Graphics &graphics, LPCWSTR name, const Gdiplus::RectF &rc, COLORREF color);
+
+class NavigationButtons
+{
+public:
+    NavigationButtons();
+    ~NavigationButtons();
+
+    BOOL Create(HWND parent, const Theme &theme, UINT backId, UINT forwardId, LPCWSTR backTip, LPCWSTR forwardTip,
+                COLORREF glyph, COLORREF disabled);
+    void Destroy();
+    void Place(int left, int centerY);
+    void Enable(BOOL back, BOOL forward);
+    BOOL OnNotify(const NMHDR *header, LRESULT *result, COLORREF background);
+    HWND Window() const { return m_hwnd; }
+
+private:
+    HWND m_hwnd;
+    HIMAGELIST m_Images;
+    HIMAGELIST m_Disabled;
+    UINT m_BackId;
+    UINT m_ForwardId;
+    int m_Button;
+    int m_Glyph;
+    int m_PadX;
+    int m_PadY;
+    float m_Radius;
+};
 
 enum class CaptionButton
 {

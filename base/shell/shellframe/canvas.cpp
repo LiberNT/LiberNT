@@ -92,6 +92,68 @@ Canvas::FillRound(const RECT &rc, float radius, COLORREF color)
 }
 
 void
+FillRoundSmooth(HDC hdc, const RECT &rc, float radius, COLORREF color)
+{
+    Gdiplus::Graphics graphics(hdc);
+    Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
+    Gdiplus::SolidBrush brush(ToColor(color));
+
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+    AddRoundRect(path, Gdiplus::RectF((float)rc.left, (float)rc.top, (float)(rc.right - rc.left),
+                                      (float)(rc.bottom - rc.top)), radius);
+    graphics.FillPath(&brush, &path);
+}
+
+void
+FillRoundGlass(HDC hdc, const RECT &rc, float radius, COLORREF color, BYTE opacity)
+{
+    BITMAPINFO info = { };
+    void *bits = NULL;
+    int width = rc.right - rc.left, height = rc.bottom - rc.top;
+    HDC memory;
+    HBITMAP bitmap;
+    HGDIOBJ old;
+
+    if (width <= 0 || height <= 0)
+        return;
+    info.bmiHeader.biSize = sizeof(info.bmiHeader);
+    info.bmiHeader.biWidth = width;
+    info.bmiHeader.biHeight = -height;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    memory = CreateCompatibleDC(hdc);
+    bitmap = CreateDIBSection(hdc, &info, DIB_RGB_COLORS, &bits, NULL, 0);
+    if (!memory || !bitmap || !bits)
+    {
+        if (bitmap)
+            DeleteObject(bitmap);
+        if (memory)
+            DeleteDC(memory);
+        return;
+    }
+    old = SelectObject(memory, bitmap);
+    BitBlt(memory, 0, 0, width, height, hdc, rc.left, rc.top, SRCCOPY);
+    GdiFlush();
+    {
+        Gdiplus::Bitmap surface(width, height, width * 4, PixelFormat32bppPARGB, (BYTE *)bits);
+        Gdiplus::Graphics graphics(&surface);
+        Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
+        Gdiplus::SolidBrush brush(Gdiplus::Color(opacity, GetRValue(color), GetGValue(color), GetBValue(color)));
+
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        AddRoundRect(path, Gdiplus::RectF(0.0f, 0.0f, (float)width, (float)height), radius);
+        graphics.FillPath(&brush, &path);
+    }
+    BitBlt(hdc, rc.left, rc.top, width, height, memory, 0, 0, SRCCOPY);
+    SelectObject(memory, old);
+    DeleteObject(bitmap);
+    DeleteDC(memory);
+}
+
+void
 Canvas::FrameRound(const RECT &rc, float radius, COLORREF color, float width)
 {
     Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);

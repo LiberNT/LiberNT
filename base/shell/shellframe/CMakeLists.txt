@@ -10,6 +10,7 @@ add_custom_command(
 list(APPEND SOURCE
     canvas.cpp
     icons.cpp
+    navigation.cpp
     theme.cpp
     window.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/shellframe_icons.cpp)
