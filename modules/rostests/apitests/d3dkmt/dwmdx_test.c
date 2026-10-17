@@ -103,7 +103,7 @@ RunningOnReactOS(void)
             Type == REG_SZ)
         {
             Product[ARRAYSIZE(Product) - 1] = L'\0';
-            if (wcsstr(Product, L"ReactOS") != NULL)
+            if (wcsstr(Product, L"LiberNT") != NULL)
                 Cached = 1;
         }
         RegCloseKey(Key);

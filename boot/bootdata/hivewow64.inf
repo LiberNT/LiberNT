@@ -390,7 +390,7 @@ HKLM,"SOFTWARE\Wow6432Node\Microsoft\Command Processor","PathCompletionChar",0x0
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall",,0x00000012
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers",,0x00000012
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion","InstallDate",0x00010003,0
-HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion","ProductName",2,"ReactOS"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion","ProductName",2,"LiberNT"
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion","SoftwareType",2,"System"
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug","UserDebuggerHotKey",0x00010001,0x00000000
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Accessibility",,0x00000012
