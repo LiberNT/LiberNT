@@ -498,9 +498,9 @@ VidInitialize(
         VidpCharacterHeight = BOOTVID_FALLBACK_CELL_HEIGHT;
     }
 
-    if (BootFontInitializeWithPixelHeight(&BootVidCompactFont,
-                                          max(ScreenHeight / BOOTVID_COMPACT_FONT_ROWS,
-                                              (ULONG)BOOTVID_COMPACT_FONT_MIN_PIXEL_HEIGHT)))
+    if (BootFontInitializeMonochrome(&BootVidCompactFont,
+                                     max(ScreenHeight / BOOTVID_COMPACT_FONT_ROWS,
+                                         (ULONG)BOOTVID_COMPACT_FONT_MIN_PIXEL_HEIGHT)))
     {
         CompactCellHeight = BootVidCompactFont.CellHeight;
     }

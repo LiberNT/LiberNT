@@ -49,7 +49,7 @@ BootFontInitialize(
     unsigned long ScreenHeight);
 
 int
-BootFontInitializeWithPixelHeight(
+BootFontInitializeMonochrome(
     PBOOT_FONT_RENDERER Renderer,
     unsigned long PixelHeight);
 
