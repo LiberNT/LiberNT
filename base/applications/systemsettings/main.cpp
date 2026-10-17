@@ -1673,18 +1673,17 @@ private:
                 RECT control = ScreenBox(where.Control);
                 POINT pt = { control.left, control.bottom };
                 HMENU menu = CreatePopupMenu();
+                std::function<void(int)> change = row.Change;
+                int selected = row.Selected;
                 int chosen;
 
                 for (size_t i = 0; i < row.Options.size(); i++)
-                    AppendMenuW(menu, MF_STRING | ((int)i == row.Selected ? MF_CHECKED : 0), i + 1, row.Options[i].c_str());
+                    AppendMenuW(menu, MF_STRING | ((int)i == selected ? MF_CHECKED : 0), i + 1, row.Options[i].c_str());
                 ClientToScreen(m_hwnd, &pt);
                 chosen = (int)TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, m_hwnd, NULL);
                 DestroyMenu(menu);
-                if (chosen > 0 && chosen - 1 != row.Selected && row.Change)
-                {
-                    std::function<void(int)> change = row.Change;
+                if (chosen > 0 && chosen - 1 != selected && change)
                     change(chosen - 1);
-                }
                 Rebuild(FALSE);
                 return;
             }
