@@ -2451,8 +2451,8 @@ DxgkpRefreshHotPlugEdid(
     return STATUS_SUCCESS;
 }
 
-static VOID
-DxgkpRefreshConnectedChildEdids(
+VOID
+DxgkVidPnRefreshConnectedChildEdids(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
     PDXGKDDI_QUERY_DEVICE_DESCRIPTOR QueryDeviceDescriptor;
@@ -3598,7 +3598,7 @@ DxgkpVidPnRebuildForHotPlugGeneration(
         goto Cleanup;
     }
     DxgkpBindVidPnTargetsToChildren(Adapter, (PDXGKP_VIDPN)OldVidPn);
-    DxgkpRefreshConnectedChildEdids(Adapter);
+    DxgkVidPnRefreshConnectedChildEdids(Adapter);
     Status = DxgkpSnapshotHotPlugMonitor(Adapter, (PDXGKP_VIDPN)OldVidPn, ExpectedGeneration, Snapshot);
     if (!NT_SUCCESS(Status))
         goto Cleanup;

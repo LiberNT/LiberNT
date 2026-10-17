@@ -15872,6 +15872,7 @@ DxgkpCallMiniportSetPowerState(
  */
 static VOID
 DxgkpChildApplyDevicePower(
+    _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PDXGK_CHILD_PDO_EXTENSION Child,
     _In_ DEVICE_POWER_STATE NewState,
     _In_ POWER_ACTION Action)
@@ -15922,7 +15923,7 @@ DxgkpChildApplyDevicePower(
 
     Child->DevicePowerState = NewState;
     State.DeviceState = NewState;
-    PoSetPowerState(Child->DeviceObject, DevicePowerState, State);
+    PoSetPowerState(DeviceObject, DevicePowerState, State);
 }
 
 typedef struct _DXGKP_CHILD_POWER_WORK
@@ -15945,7 +15946,8 @@ DxgkpChildPowerWorker(
 
     Stack = IoGetCurrentIrpStackLocation(Work->Irp);
     DxgkpChildApplyDevicePower(
-        (PDXGK_CHILD_PDO_EXTENSION)DeviceObject->DeviceExtension,
+        DeviceObject,
+        ((PDXGK_CHILD_PDO_OBJECT)DeviceObject->DeviceExtension)->Child,
         Stack->Parameters.Power.State.DeviceState,
         Stack->Parameters.Power.ShutdownType);
 
@@ -15969,7 +15971,8 @@ DxgkpChildPowerDispatch(
         if (KeGetCurrentIrql() == PASSIVE_LEVEL)
         {
             DxgkpChildApplyDevicePower(
-                (PDXGK_CHILD_PDO_EXTENSION)DeviceObject->DeviceExtension,
+                DeviceObject,
+                ((PDXGK_CHILD_PDO_OBJECT)DeviceObject->DeviceExtension)->Child,
                 Stack->Parameters.Power.State.DeviceState,
                 Stack->Parameters.Power.ShutdownType);
         }

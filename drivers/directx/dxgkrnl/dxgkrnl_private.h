@@ -3532,6 +3532,10 @@ DxgkVidPnQueueHotPlugRebuild(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
 VOID
+DxgkVidPnRefreshConnectedChildEdids(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
 DxgkVidPnQueryFirmwareTiming(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ D3DKMDT_HVIDPN hVidPn);

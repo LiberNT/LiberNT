@@ -110,7 +110,16 @@ typedef struct _DXGK_CHILD_PDO_EXTENSION
     BOOLEAN                 Joined;
     ULONG                   JoinedInto;
 
+    BOOLEAN                 Reported;
+
 } DXGK_CHILD_PDO_EXTENSION, *PDXGK_CHILD_PDO_EXTENSION;
+
+typedef struct _DXGK_CHILD_PDO_OBJECT
+{
+    ULONG                       Signature;
+    PDXGK_CHILD_PDO_EXTENSION   Child;
+    UNICODE_STRING              MonitorInterfaceName;
+} DXGK_CHILD_PDO_OBJECT, *PDXGK_CHILD_PDO_OBJECT;
 
 /*
  * DxgkPnpReadEdidExtensions
