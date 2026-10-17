@@ -1420,6 +1420,10 @@ PortFdoPnp(
             }
             break;
 
+        case IRP_MN_QUERY_INTERFACE: /* 0x08 */
+            DPRINT("IRP_MJ_PNP / IRP_MN_QUERY_INTERFACE\n");
+            return ForwardIrpAndForget(DeviceExtension->LowerDevice, Irp);
+
         case IRP_MN_QUERY_CAPABILITIES: /* 0x09 */
             DPRINT("IRP_MJ_PNP / IRP_MN_QUERY_CAPABILITIES\n");
             return ForwardIrpAndForget(DeviceExtension->LowerDevice, Irp);

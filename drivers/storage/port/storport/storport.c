@@ -3364,13 +3364,13 @@ StorPortSetBusDataByOffset(
     PBUS_INTERFACE_STANDARD Interface;
     ULONG ReturnLength;
 
-    DPRINT1("StorPortSetBusData(%p %lu %lu %lu %p %lu %lu)\n",
+    DPRINT("StorPortSetBusData(%p %lu %lu %lu %p %lu %lu)\n",
             DeviceExtension, BusDataType, SystemIoBusNumber, SlotNumber, Buffer, Offset, Length);
 
     MiniportExtension = CONTAINING_RECORD(DeviceExtension,
                                           MINIPORT_DEVICE_EXTENSION,
                                           HwDeviceExtension);
-    DPRINT1("DeviceExtension %p  MiniportExtension %p\n",
+    DPRINT("DeviceExtension %p  MiniportExtension %p\n",
             DeviceExtension, MiniportExtension);
 
     Interface = &MiniportExtension->Miniport->DeviceExtension->BusInterface;
@@ -3384,7 +3384,7 @@ StorPortSetBusDataByOffset(
                                          Buffer,
                                          Offset,
                                          Length);
-    DPRINT1("ReturnLength: %lu\n", ReturnLength);
+    DPRINT("ReturnLength: %lu\n", ReturnLength);
 
     return ReturnLength;
 }
