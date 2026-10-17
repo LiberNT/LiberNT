@@ -133,6 +133,19 @@ static int runCmd(LPWSTR cmdline, LPCWSTR dir, BOOL wait, BOOL minimized)
  * bSynchronous tells whether we should wait for the prog to complete before
  *      going on to the next prog.
  */
+static BOOL IsStartupDisabled(HKEY hkRoot, LPCWSTR szApprovedKey, LPCWSTR szName)
+{
+    BYTE Data[32];
+    DWORD cbData = sizeof(Data);
+
+    if (RegGetValueW(hkRoot, szApprovedKey, szName, RRF_RT_REG_BINARY, NULL, Data, &cbData) != ERROR_SUCCESS ||
+        cbData < 1)
+    {
+        return FALSE;
+    }
+    return (Data[0] & 1) != 0;
+}
+
 static BOOL ProcessRunKeys(HKEY hkRoot, LPCWSTR szKeyName, BOOL bDelete,
         BOOL bSynchronous)
 {
@@ -253,6 +266,12 @@ static BOOL ProcessRunKeys(HKEY hkRoot, LPCWSTR szKeyName, BOOL bDelete,
 
         /* safe mode - force to run if prefixed with asterisk */
         if (GetSystemMetrics(SM_CLEANBOOT) && (szValue[0] != L'*')) continue;
+
+        if (!bDelete &&
+            IsStartupDisabled(hkRoot, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run", szValue))
+        {
+            continue;
+        }
 
         if (bDelete && (res = RegDeleteValueW(hkRun, szValue)) != ERROR_SUCCESS)
         {
@@ -424,6 +443,13 @@ AutoStartupApplications(INT nCSIDL_Folder)
         // Don't run hidden files
         if (FoundData.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)
             continue;
+
+        if (IsStartupDisabled(nCSIDL_Folder == CSIDL_STARTUP ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE,
+                              L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\StartupFolder",
+                              FoundData.cFileName))
+        {
+            continue;
+        }
 
         // Build the path
         szPath[cchPathLen + 1] = UNICODE_NULL;

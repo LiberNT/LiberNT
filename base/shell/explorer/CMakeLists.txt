@@ -51,8 +51,8 @@ add_rc_deps(explorer.rc ${explorer_rc_deps}
     ${REACTOS_SOURCE_DIR}/dll/shellext/stobject/resources/tray/speaker_3.ico
     ${REACTOS_SOURCE_DIR}/dll/shellext/stobject/resources/tray/speaker_mute.ico)
 add_executable(explorer ${SOURCE} explorer.rc)
-target_link_libraries(explorer uuid wine cpprt atl_classes)
+target_link_libraries(explorer shellframe uuid wine cpprt atl_classes)
 set_module_type(explorer win32gui UNICODE)
-add_importlibs(explorer setupapi advapi32 gdi32 user32 comctl32 ole32 oleaut32 shell32 explorerframe shlwapi shdocvw version uxtheme winmm iphlpapi msvcrt kernel32 ntdll)
+add_importlibs(explorer setupapi advapi32 gdi32 gdiplus user32 comctl32 ole32 oleaut32 shell32 explorerframe shlwapi shdocvw version uxtheme winmm iphlpapi msvcrt kernel32 ntdll)
 add_pch(explorer precomp.h SOURCE)
 add_cd_file(TARGET explorer DESTINATION reactos FOR all)

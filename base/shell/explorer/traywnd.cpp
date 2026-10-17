@@ -45,6 +45,8 @@ HRESULT TrayWindowCtxMenuCreator(ITrayWindow * TrayWnd, IN HWND hWndOwner, ICont
 #define IDHK_DESKTOP 0x1fe
 #define IDHK_PAGER 0x1ff
 #define IDHK_ACTIVATE_TASK 0x209
+#define IDHK_QUICK_SETTINGS 0x20a
+#define IDHK_SETTINGS 0x20b
 
 enum { NONE, TILED, CASCADED } g_Arrangement = NONE;
 
@@ -871,7 +873,7 @@ public:
         switch (uiCmd)
         {
         case ID_SHELL_CMD_PROPERTIES:
-            DisplayProperties();
+            ShellExecuteW(m_hWnd, NULL, L"ms-settings:taskbar", NULL, NULL, SW_NORMAL);
             break;
 
         case ID_SHELL_CMD_OPEN_ALL_USERS:
@@ -938,7 +940,7 @@ public:
             break;
 
         case ID_SHELL_CMD_ADJUST_DAT:
-            ShellExecuteW(m_hWnd, NULL, L"timedate.cpl", NULL, NULL, SW_NORMAL);
+            ShellExecuteW(m_hWnd, NULL, L"ms-settings:dateandtime", NULL, NULL, SW_NORMAL);
             break;
 
         case ID_SHELL_CMD_RESTORE_ALL:
@@ -996,8 +998,20 @@ public:
             SHFindComputer(NULL, NULL);
             break;
         case IDHK_SYS_PROPERTIES:
-            ShellExecuteW(m_hWnd, NULL, L"sysdm.cpl", NULL, NULL, SW_NORMAL);
+            ShellExecuteW(m_hWnd, NULL, L"ms-settings:about", NULL, NULL, SW_NORMAL);
             break;
+        case IDHK_SETTINGS:
+            ShellExecuteW(m_hWnd, NULL, L"ms-settings:", NULL, NULL, SW_NORMAL);
+            break;
+        case IDHK_QUICK_SETTINGS:
+        {
+            HWND hwndButton = m_TrayNotify ? FindWindowExW(m_TrayNotify, NULL, L"TrayQuickSettingsButton", NULL) : NULL;
+            RECT rc;
+
+            if (hwndButton && ::GetWindowRect(hwndButton, &rc))
+                TrayQuickSettings_Toggle(hwndButton, &rc);
+            break;
+        }
         case IDHK_NEXT_TASK:
             break;
         case IDHK_PREV_TASK:
@@ -1058,13 +1072,13 @@ public:
                 ToggleDesktop();
                 break;
             case TRAYCMD_DATE_AND_TIME:
-                ShellExecuteW(m_hWnd, NULL, L"timedate.cpl", NULL, NULL, SW_NORMAL);
+                ShellExecuteW(m_hWnd, NULL, L"ms-settings:dateandtime", NULL, NULL, SW_NORMAL);
                 break;
             case TRAYCMD_EJECT:
                 SHCreateThread(EjectThreadProc, NULL, CTF_INSIST, NULL);
                 break;
             case TRAYCMD_TASKBAR_PROPERTIES:
-                DisplayProperties();
+                ShellExecuteW(m_hWnd, NULL, L"ms-settings:taskbar", NULL, NULL, SW_NORMAL);
                 break;
             case TRAYCMD_MINIMIZE_ALL:
                 MinimizeAll();
@@ -2725,6 +2739,8 @@ ChangePos:
             MAKELONG(IDHK_SYS_PROPERTIES, MAKEWORD(VK_PAUSE, MOD_WIN)),
             MAKELONG(IDHK_DESKTOP,        MAKEWORD('D', MOD_WIN)),
             MAKELONG(IDHK_PAGER,          MAKEWORD('B', MOD_WIN)),
+            MAKELONG(IDHK_QUICK_SETTINGS, MAKEWORD('A', MOD_WIN)),
+            MAKELONG(IDHK_SETTINGS,       MAKEWORD('I', MOD_WIN)),
         };
         static const UINT taskmods[] =
         {
@@ -2818,6 +2834,17 @@ ChangePos:
             UpdateFonts();
             AlignControls(NULL);
             CheckTrayWndPosition();
+        }
+
+        if (lParam && lstrcmpiW((LPCWSTR)lParam, L"TraySettings") == 0)
+        {
+            TaskbarSettings newSettings = g_TaskbarSettings;
+            if (newSettings.Load())
+            {
+                SendMessageW(TWM_SETTINGSCHANGED, 0, (LPARAM)&newSettings);
+                g_TaskbarSettings = newSettings;
+                g_TaskbarSettings.Save();
+            }
         }
 
         if (m_StartMenuPopup && lstrcmpiW((LPCWSTR)lParam, L"TraySettings") == 0)

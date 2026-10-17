@@ -920,7 +920,7 @@ LRESULT CTrayClockWnd::OnLButtonDblClick(UINT uMsg, WPARAM wParam, LPARAM lParam
 {
     if (IsWindowVisible())
     {
-        ShellExecuteW(m_hWnd, NULL, L"timedate.cpl", NULL, NULL, SW_NORMAL);
+        ShellExecuteW(m_hWnd, NULL, L"ms-settings:dateandtime", NULL, NULL, SW_NORMAL);
     }
     return TRUE;
 }

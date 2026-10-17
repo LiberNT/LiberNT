@@ -638,7 +638,7 @@ SM2ExecRightCmd(int nCmd)
         case SM2C_MUSIC:     SM2OpenCsidlFolder(CSIDL_MYMUSIC); break;
         case SM2C_GAMES:     SM2OpenGames(); break;
         case SM2C_COMPUTER:  SM2OpenCsidlIdList(CSIDL_DRIVES); break;
-        case SM2C_CONTROL:   SM2OpenCsidlIdList(CSIDL_CONTROLS); break;
+        case SM2C_CONTROL:   ShellExecuteW(NULL, NULL, L"ms-settings:", NULL, NULL, SW_SHOWNORMAL); break;
         case SM2C_PRINTERS:  SM2OpenCsidlIdList(CSIDL_PRINTERS); break;
         case SM2C_ASSIST:    ShellExecuteW(NULL, NULL, L"netassist.exe", NULL, NULL, SW_SHOWNORMAL); break;
     }
@@ -659,7 +659,7 @@ static const SM2RIGHTDEF g_SM2RightDefs[] =
     { L"Games",                SM2C_GAMES },
     { L"Computer",             SM2C_COMPUTER },
     { NULL,                    SM2C_GAP },
-    { L"Control Panel",        SM2C_CONTROL },
+    { L"Settings",             SM2C_CONTROL },
     { L"Devices and Printers", SM2C_PRINTERS },
     { L"Network Assistance",   SM2C_ASSIST },
 };
