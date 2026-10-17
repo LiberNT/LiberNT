@@ -291,7 +291,7 @@ RtlIpv4AddressToStringExW(
     if (!NT_SUCCESS(Status))
         return STATUS_INVALID_PARAMETER;
 
-    Length = End - AddressString;
+    Length = End - Buffer;
     if (*AddressStringLength > Length)
     {
         Status = RtlStringCchCopyW(AddressString,
