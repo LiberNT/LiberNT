@@ -1687,7 +1687,18 @@ LoadAndBootWindows(
     {
         /* Load the RAM disk */
         Status = RamDiskInitialize(FALSE, BootOptions, SystemPartition);
-        if (Status != ESUCCESS)
+        ArgValue = strchr(BootPath, ')');
+        if (Status == ENOMEM && !(FileName && (FileNameLength > 7)) &&
+            ArgValue && _strnicmp(BootPath, "ramdisk(", 8) == 0)
+        {
+            ERR("The RAM disk does not fit in memory, booting from '%s'\n", SystemPartition);
+            UiDrawStatusText("Not enough memory for the RAM disk - booting from local media");
+            RtlStringCbCopyA(FilePath, sizeof(FilePath), ArgValue + 1);
+            RtlStringCbCopyA(BootPath, sizeof(BootPath), SystemPartition);
+            RtlStringCbCatA(BootPath, sizeof(BootPath), FilePath);
+            TRACE("BootPath without RAM disk: '%s'\n", BootPath);
+        }
+        else if (Status != ESUCCESS)
         {
             if (FileName && (FileNameLength > 7))
             {
