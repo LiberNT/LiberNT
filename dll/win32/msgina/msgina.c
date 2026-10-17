@@ -357,6 +357,12 @@ WlxScreenSaverNotify(
 
     *pSecure = TRUE;
 
+    if (pgContext->UserToken == NULL)
+    {
+        *pSecure = FALSE;
+        return FALSE;
+    }
+
     /*
      * Policy setting:
      *    HKLM\Software\Policies\Microsoft\Windows\Control Panel\Desktop : ScreenSaverIsSecure
