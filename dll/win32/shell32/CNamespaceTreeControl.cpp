@@ -192,6 +192,7 @@ private:
     {
         DWORD Cookie;
         CComPtr<INameSpaceTreeControlEvents> Events;
+        CComPtr<INameSpaceTreeControlCustomDraw> CustomDraw;
 
         EventEntry() : Cookie(0)
         {
@@ -485,6 +486,8 @@ private:
         Insert.item.lParam = reinterpret_cast<LPARAM>(Data);
         Insert.item.cChildren = ((Attributes & SFGAO_HASSUBFOLDER) &&
                                  !(Attributes & SFGAO_STREAM)) ? 1 : 0;
+        if (IsRoot && !(Root->EnumFlags & (SHCONTF_FOLDERS | SHCONTF_NONFOLDERS)))
+            Insert.item.cChildren = 0;
 
         HTREEITEM TreeItem = TreeView_InsertItem(m_Tree, &Insert);
         if (!TreeItem)
@@ -555,13 +558,12 @@ private:
                 hr = InsertTreeItem(Root, Parent, TVI_LAST, Item, AbsolutePidl, FALSE, NULL);
                 if (hr == S_OK)
                     ++Count;
-                else if (hr == S_FALSE)
-                    hr = S_OK;
             }
 
             RelativePidl.Free();
-            if (FAILED(hr))
+            if (hr == E_OUTOFMEMORY)
                 break;
+            hr = S_OK;
         }
         SendMessageW(m_Tree, WM_SETREDRAW, TRUE, 0);
 
@@ -759,6 +761,183 @@ private:
         return 0;
     }
 
+    static COLORREF BlendTreeColor(COLORREF Base, COLORREF Ink, UINT Amount)
+    {
+        return RGB(GetRValue(Base) + ((INT)GetRValue(Ink) - (INT)GetRValue(Base)) * (INT)Amount / 255,
+                   GetGValue(Base) + ((INT)GetGValue(Ink) - (INT)GetGValue(Base)) * (INT)Amount / 255,
+                   GetBValue(Base) + ((INT)GetBValue(Ink) - (INT)GetBValue(Base)) * (INT)Amount / 255);
+    }
+
+    COLORREF TreeBackColor() const
+    {
+        COLORREF Color = TreeView_GetBkColor(m_Tree);
+        return Color == (COLORREF)-1 ? GetSysColor(COLOR_WINDOW) : Color;
+    }
+
+    COLORREF TreeTextColor() const
+    {
+        COLORREF Color = TreeView_GetTextColor(m_Tree);
+        return Color == (COLORREF)-1 ? GetSysColor(COLOR_WINDOWTEXT) : Color;
+    }
+
+    UINT TreeHighlightAmount(UINT State) const
+    {
+        BOOL Focus = ::GetFocus() == m_Tree;
+
+        if ((State & CDIS_SELECTED) && (State & CDIS_HOT))
+            return 0x2C;
+        if (State & CDIS_SELECTED)
+            return Focus ? 0x24 : 0x1C;
+        if (State & CDIS_HOT)
+            return 0x14;
+        return 0;
+    }
+
+    void RoundTreeHighlight(HDC Dc, const RECT &Item, COLORREF Fill, COLORREF Back)
+    {
+        UINT Dpi = GetDpiForWindow(m_Tree);
+        INT InsetX = MulDiv(4, Dpi, 96), InsetY = MulDiv(2, Dpi, 96), Radius = MulDiv(4, Dpi, 96);
+        RECT Box = { Item.left + InsetX, Item.top + InsetY, Item.right - InsetX, Item.bottom - InsetY };
+        RECT Strip;
+        HBRUSH Brush = CreateSolidBrush(Back);
+
+        Strip = Item; Strip.right = Box.left; FillRect(Dc, &Strip, Brush);
+        Strip = Item; Strip.left = Box.right; FillRect(Dc, &Strip, Brush);
+        Strip = Item; Strip.bottom = Box.top; FillRect(Dc, &Strip, Brush);
+        Strip = Item; Strip.top = Box.bottom; FillRect(Dc, &Strip, Brush);
+        DeleteObject(Brush);
+        if (Box.right - Box.left < Radius * 2 || Box.bottom - Box.top < Radius * 2)
+            return;
+        for (INT y = 0; y < Radius; y++)
+        {
+            for (INT x = 0; x < Radius; x++)
+            {
+                UINT Inside = 0;
+                COLORREF Color;
+
+                for (INT sy = 0; sy < 4; sy++)
+                {
+                    for (INT sx = 0; sx < 4; sx++)
+                    {
+                        INT dx = Radius * 8 - (x * 8 + sx * 2 + 1);
+                        INT dy = Radius * 8 - (y * 8 + sy * 2 + 1);
+                        if (dx * dx + dy * dy <= Radius * 8 * Radius * 8)
+                            Inside++;
+                    }
+                }
+                if (Inside == 16)
+                    continue;
+                Color = BlendTreeColor(Back, Fill, Inside * 255 / 16);
+                SetPixel(Dc, Box.left + x, Box.top + y, Color);
+                SetPixel(Dc, Box.right - 1 - x, Box.top + y, Color);
+                SetPixel(Dc, Box.left + x, Box.bottom - 1 - y, Color);
+                SetPixel(Dc, Box.right - 1 - x, Box.bottom - 1 - y, Color);
+            }
+        }
+    }
+
+    BOOL FillCustomDrawItem(NMTVCUSTOMDRAW *Draw, NSTCCUSTOMDRAW *Item, PWSTR Text, UINT TextLength)
+    {
+        TVITEMW TreeItem = {0};
+        TreeItemData *Data = GetTreeItemData((HTREEITEM)Draw->nmcd.dwItemSpec);
+
+        if (!Data)
+            return FALSE;
+        TreeItem.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_STATE;
+        TreeItem.hItem = (HTREEITEM)Draw->nmcd.dwItemSpec;
+        TreeItem.stateMask = TVIS_SELECTED | TVIS_EXPANDED;
+        TreeItem.pszText = Text;
+        TreeItem.cchTextMax = (int)TextLength;
+        Text[0] = UNICODE_NULL;
+        TreeView_GetItem(m_Tree, &TreeItem);
+        Item->psi = Data->Item;
+        Item->uItemState = Draw->nmcd.uItemState;
+        Item->nstcis = NSTCIS_NONE;
+        if (TreeItem.state & TVIS_SELECTED)
+            Item->nstcis |= NSTCIS_SELECTED;
+        if (TreeItem.state & TVIS_EXPANDED)
+            Item->nstcis |= NSTCIS_EXPANDED;
+        Item->pszText = Text;
+        Item->iImage = TreeItem.iImage;
+        Item->himl = TreeView_GetImageList(m_Tree, TVSIL_NORMAL);
+        Item->iLevel = Draw->iLevel;
+        Item->iIndent = (int)TreeView_GetIndent(m_Tree);
+        return TRUE;
+    }
+
+    LRESULT OnTreeCustomDraw(NMTVCUSTOMDRAW *Draw)
+    {
+        UINT Amount;
+        COLORREF Fill;
+        LRESULT Result;
+        NSTCCUSTOMDRAW Item;
+        WCHAR Text[MAX_PATH];
+        RECT Bounds;
+        POSITION Position;
+
+        switch (Draw->nmcd.dwDrawStage)
+        {
+            case CDDS_PREPAINT:
+                ::GetClientRect(m_Tree, &Bounds);
+                for (Position = m_Events.GetHeadPosition(); Position;)
+                {
+                    EventEntry &Entry = m_Events.GetNext(Position);
+                    LRESULT Unused = CDRF_DODEFAULT;
+                    if (Entry.CustomDraw)
+                        Entry.CustomDraw->PrePaint(Draw->nmcd.hdc, &Bounds, &Unused);
+                }
+                return CDRF_NOTIFYITEMDRAW | CDRF_NOTIFYPOSTPAINT;
+
+            case CDDS_POSTPAINT:
+                ::GetClientRect(m_Tree, &Bounds);
+                for (Position = m_Events.GetHeadPosition(); Position;)
+                {
+                    EventEntry &Entry = m_Events.GetNext(Position);
+                    if (Entry.CustomDraw)
+                        Entry.CustomDraw->PostPaint(Draw->nmcd.hdc, &Bounds);
+                }
+                return CDRF_DODEFAULT;
+
+            case CDDS_ITEMPREPAINT:
+                Amount = TreeHighlightAmount(Draw->nmcd.uItemState);
+                Result = CDRF_NOTIFYPOSTPAINT;
+                if (Amount)
+                {
+                    SelectObject(Draw->nmcd.hdc, (HFONT)::SendMessageW(m_Tree, WM_GETFONT, 0, 0));
+                    Draw->clrText = TreeTextColor();
+                    Draw->clrTextBk = BlendTreeColor(TreeBackColor(), Draw->clrText, Amount);
+                    Result |= CDRF_NEWFONT;
+                }
+                for (Position = m_Events.GetHeadPosition(); Position;)
+                {
+                    EventEntry &Entry = m_Events.GetNext(Position);
+                    LRESULT ItemResult = CDRF_DODEFAULT;
+                    if (!Entry.CustomDraw || !FillCustomDrawItem(Draw, &Item, Text, _countof(Text)))
+                        continue;
+                    if (SUCCEEDED(Entry.CustomDraw->ItemPrePaint(Draw->nmcd.hdc, &Draw->nmcd.rc, &Item, &Draw->clrText,
+                                                                 &Draw->clrTextBk, &ItemResult)) &&
+                        (ItemResult & CDRF_SKIPDEFAULT))
+                        return CDRF_SKIPDEFAULT;
+                }
+                return Result;
+
+            case CDDS_ITEMPOSTPAINT:
+                Amount = TreeHighlightAmount(Draw->nmcd.uItemState);
+                Fill = Amount && (::GetWindowLongPtrW(m_Tree, GWL_STYLE) & TVS_FULLROWSELECT) ?
+                       BlendTreeColor(TreeBackColor(), TreeTextColor(), Amount) : TreeBackColor();
+                if (Amount && (::GetWindowLongPtrW(m_Tree, GWL_STYLE) & TVS_FULLROWSELECT))
+                    RoundTreeHighlight(Draw->nmcd.hdc, Draw->nmcd.rc, Fill, TreeBackColor());
+                for (Position = m_Events.GetHeadPosition(); Position;)
+                {
+                    EventEntry &Entry = m_Events.GetNext(Position);
+                    if (Entry.CustomDraw && FillCustomDrawItem(Draw, &Item, Text, _countof(Text)))
+                        Entry.CustomDraw->ItemPostPaint(Draw->nmcd.hdc, &Draw->nmcd.rc, &Item);
+                }
+                return CDRF_DODEFAULT;
+        }
+        return CDRF_DODEFAULT;
+    }
+
     LRESULT OnNotify(UINT, WPARAM, LPARAM lParam, BOOL&)
     {
         NMHDR *Header = reinterpret_cast<NMHDR *>(lParam);
@@ -768,6 +947,13 @@ private:
 
         switch (Header->code)
         {
+            case NM_SETCURSOR:
+                ::SetCursor(::LoadCursorW(NULL, (LPCWSTR)IDC_ARROW));
+                return TRUE;
+
+            case NM_CUSTOMDRAW:
+                return OnTreeCustomDraw(reinterpret_cast<NMTVCUSTOMDRAW *>(lParam));
+
             case TVN_ITEMEXPANDINGW:
             {
                 NMTREEVIEWW *Notify = reinterpret_cast<NMTREEVIEWW *>(lParam);
@@ -919,6 +1105,7 @@ public:
         hr = Unknown->QueryInterface(IID_PPV_ARG(INameSpaceTreeControlEvents, &Entry.Events));
         if (FAILED(hr))
             return hr;
+        Unknown->QueryInterface(IID_PPV_ARG(INameSpaceTreeControlCustomDraw, &Entry.CustomDraw));
 
         do
             ++m_NextCookie;
