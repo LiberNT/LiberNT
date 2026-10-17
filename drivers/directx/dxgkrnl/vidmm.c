@@ -1763,7 +1763,7 @@ DxgkVidMmCreateVirtualDmaBufferBacking(
         PDXGKRNL_SEGMENT Segment = &ADAPTER_SEGMENTS(Adapter)[Index];
 
         if ((SegmentSet == 0 || (SegmentSet & (1UL << Index)) != 0) &&
-            VidMmSegmentIsAperture(Segment) && !Segment->Flags.PitchAlignment)
+            VidMmSegmentIsAperture(Segment))
             ApertureSet |= 1UL << Index;
     }
     if (ApertureSet == 0)
@@ -1783,6 +1783,7 @@ DxgkVidMmCreateVirtualDmaBufferBacking(
     Backing->Device = Device;
     RtlZeroMemory(&Info, sizeof(Info));
     Info.Size = Size;
+    Info.PitchAlignedSize = Size;
     Info.Alignment = PAGE_SIZE;
     Info.SupportedReadSegmentSet = ApertureSet;
     Info.SupportedWriteSegmentSet = ApertureSet;
