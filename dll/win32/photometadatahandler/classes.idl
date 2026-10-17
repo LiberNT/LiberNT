@@ -16,3 +16,13 @@ coclass ImagePropertyHandler
 {
     interface IPropertyStore;
 }
+
+[
+    helpstring("Photo Thumbnail Provider"),
+    uuid(c7657c4a-9f68-40fa-a4df-96bc08eb3551),
+    threading(both)
+]
+coclass PhotoThumbnailProvider
+{
+    interface IThumbnailProvider;
+}

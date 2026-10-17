@@ -10,6 +10,7 @@
 #include <initguid.h>
 
 DEFINE_GUID(CLSID_ImagePropertyHandler, 0xa38b883c, 0x1682, 0x497e, 0x97, 0xb0, 0x0a, 0x3a, 0x9e, 0x80, 0x16, 0x82);
+DEFINE_GUID(CLSID_PhotoThumbnailProvider, 0xc7657c4a, 0x9f68, 0x40fa, 0xa4, 0xdf, 0x96, 0xbc, 0x08, 0xeb, 0x35, 0x51);
 
 LONG ModuleObjects;
 static LONG ModuleLocks;
@@ -88,6 +89,7 @@ static const IClassFactoryVtbl ClassFactoryVtbl =
 };
 
 static CLASS_FACTORY ImagePropertyHandlerFactory = { { &ClassFactoryVtbl }, ImagePropertyHandler_Create };
+static CLASS_FACTORY PhotoThumbnailProviderFactory = { { &ClassFactoryVtbl }, PhotoThumbnailProvider_Create };
 
 HRESULT WINAPI
 DllGetClassObject(REFCLSID rclsid, REFIID riid, void **ppv)
@@ -97,6 +99,8 @@ DllGetClassObject(REFCLSID rclsid, REFIID riid, void **ppv)
     *ppv = NULL;
     if (IsEqualCLSID(rclsid, &CLSID_ImagePropertyHandler))
         return IClassFactory_QueryInterface(&ImagePropertyHandlerFactory.IClassFactory_iface, riid, ppv);
+    if (IsEqualCLSID(rclsid, &CLSID_PhotoThumbnailProvider))
+        return IClassFactory_QueryInterface(&PhotoThumbnailProviderFactory.IClassFactory_iface, riid, ppv);
     return CLASS_E_CLASSNOTAVAILABLE;
 }
 

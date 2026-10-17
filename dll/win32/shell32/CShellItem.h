@@ -30,13 +30,16 @@ class CShellItem :
     public IPersistStream,
     public IParentAndItem,
     public IMarshal,
-    public IObjectWithBackReferences
+    public IObjectWithBackReferences,
+    public IShellItemImageFactory
 {
 private:
     LPITEMIDLIST        m_pidl;
 
     HRESULT GetDefaultPropertyStore(IPropertyStore **ppStore);
     HRESULT GetPresentProperty(REFPROPERTYKEY key, PROPVARIANT *ppropvar);
+    HRESULT GetIconImage(SIZE size, HBITMAP *phbm);
+    HRESULT GetThumbnailImage(SIZE size, SIIGBF flags, HBITMAP *phbm);
 
 public:
     CShellItem();
@@ -88,6 +91,8 @@ public:
 
     STDMETHOD(RemoveBackReferences)() override;
 
+    STDMETHOD(GetImage)(SIZE size, SIIGBF flags, HBITMAP *phbm) override;
+
 DECLARE_NO_REGISTRY()
 DECLARE_NOT_AGGREGATABLE(CShellItem)
 
@@ -102,6 +107,7 @@ BEGIN_COM_MAP(CShellItem)
     COM_INTERFACE_ENTRY_IID(IID_IParentAndItem, IParentAndItem)
     COM_INTERFACE_ENTRY_IID(IID_IMarshal, IMarshal)
     COM_INTERFACE_ENTRY_IID(IID_IObjectWithBackReferences, IObjectWithBackReferences)
+    COM_INTERFACE_ENTRY_IID(IID_IShellItemImageFactory, IShellItemImageFactory)
 END_COM_MAP()
 };
 

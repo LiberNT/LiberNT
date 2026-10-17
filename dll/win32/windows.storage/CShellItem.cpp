@@ -22,6 +22,7 @@
 
 #include "precomp.h"
 #include <propvarutil.h>
+#include <thumbcache.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
 
@@ -144,6 +145,19 @@ HRESULT WINAPI CShellItem::BindToHandler(IBindCtx *pbc, REFGUID rbhid, REFIID ri
         if (FAILED(ret))
             return ret;
         return psf_parent->BindToObject(ILFindLastID(m_pidl), pbc, riid, ppvOut);
+    }
+    else if (IsEqualGUID(rbhid, BHID_ThumbnailHandler))
+    {
+        CComPtr<IShellFolder> psf_parent;
+        if (_ILIsDesktop(m_pidl))
+            return MK_E_NOOBJECT;
+        ret = get_parent_shellfolder(&psf_parent);
+        if (FAILED(ret))
+            return ret;
+
+        LPCITEMIDLIST pidl = ILFindLastID(m_pidl);
+        ret = psf_parent->GetUIObjectOf(NULL, 1, &pidl, riid, NULL, ppvOut);
+        return ret == E_NOINTERFACE ? E_NOTIMPL : ret;
     }
 
     FIXME("Unsupported BHID %s.\n", debugstr_guid(&rbhid));
@@ -1298,4 +1312,187 @@ EXTERN_C HRESULT WINAPI SHGetFolderPathEx(REFKNOWNFOLDERID rfid, DWORD dwFlags, 
         return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
 
     return StringCchCopyW(pszPath, cchPath, path);
+}
+
+static HBITMAP
+CreateImageBitmap(LONG cx, LONG cy, void **ppBits)
+{
+    BITMAPINFO bmi = { { sizeof(BITMAPINFOHEADER), cx, -cy, 1, 32, BI_RGB } };
+    return CreateDIBSection(NULL, &bmi, DIB_RGB_COLORS, ppBits, NULL, 0);
+}
+
+static HBITMAP
+ShrinkImageBitmap(HBITMAP hbmSource, LONG cx, LONG cy)
+{
+    BITMAP bm;
+    if (!GetObjectW(hbmSource, sizeof(bm), &bm) || bm.bmWidth <= 0 || !bm.bmHeight)
+        return NULL;
+
+    LONG cxSource = bm.bmWidth, cySource = abs(bm.bmHeight);
+    BITMAPINFO bmi = { { sizeof(BITMAPINFOHEADER), cxSource, -cySource, 1, 32, BI_RGB } };
+    CHeapPtr<DWORD> pSource;
+    if (!pSource.Allocate(cxSource * cySource))
+        return NULL;
+
+    HDC hdc = GetDC(NULL);
+    INT lines = GetDIBits(hdc, hbmSource, 0, cySource, pSource, &bmi, DIB_RGB_COLORS);
+    ReleaseDC(NULL, hdc);
+    if (lines != cySource)
+        return NULL;
+
+    DWORD *pTarget;
+    HBITMAP hbm = CreateImageBitmap(cx, cy, (void **)&pTarget);
+    if (!hbm)
+        return NULL;
+
+    for (LONG y = 0; y < cy; y++)
+    {
+        LONG y0 = y * cySource / cy, y1 = max(y0 + 1, (y + 1) * cySource / cy);
+        for (LONG x = 0; x < cx; x++)
+        {
+            LONG x0 = x * cxSource / cx, x1 = max(x0 + 1, (x + 1) * cxSource / cx);
+            ULONG sum[4] = { 0, 0, 0, 0 }, count = 0;
+            for (LONG sy = y0; sy < y1; sy++)
+            {
+                for (LONG sx = x0; sx < x1; sx++)
+                {
+                    DWORD pixel = pSource[sy * cxSource + sx];
+                    for (UINT channel = 0; channel < 4; channel++)
+                        sum[channel] += (pixel >> (channel * 8)) & 0xFF;
+                    count++;
+                }
+            }
+            DWORD value = 0;
+            for (UINT channel = 0; channel < 4; channel++)
+                value |= ((sum[channel] + count / 2) / count) << (channel * 8);
+            pTarget[y * cx + x] = value;
+        }
+    }
+    return hbm;
+}
+
+HRESULT CShellItem::GetIconImage(SIZE size, HBITMAP *phbm)
+{
+    CComPtr<IShellFolder> psf;
+    HRESULT hr;
+
+    if (_ILIsDesktop(m_pidl))
+        hr = SHGetDesktopFolder(&psf);
+    else
+        hr = get_parent_shellfolder(&psf);
+    if (FAILED(hr))
+        return hr;
+
+    LPCITEMIDLIST pidlChild = ILFindLastID(m_pidl);
+    CComPtr<IExtractIconW> pei;
+    hr = psf->GetUIObjectOf(NULL, 1, &pidlChild, IID_NULL_PPV_ARG(IExtractIconW, &pei));
+    if (FAILED(hr))
+        return hr;
+
+    WCHAR szLocation[MAX_PATH];
+    INT iIndex = 0;
+    UINT uFlags = 0;
+    hr = pei->GetIconLocation(GIL_FORSHELL, szLocation, _countof(szLocation), &iIndex, &uFlags);
+    if (FAILED(hr))
+        return hr;
+
+    UINT cxIcon = max(size.cx, size.cy);
+    HICON hIcon = NULL;
+    hr = pei->Extract(szLocation, iIndex, &hIcon, NULL, MAKELONG(cxIcon, 16));
+    if (hr != S_OK)
+    {
+        hIcon = NULL;
+        if (!(uFlags & GIL_NOTFILENAME))
+            PrivateExtractIconsW(szLocation, iIndex, cxIcon, cxIcon, &hIcon, NULL, 1, 0);
+    }
+    if (!hIcon)
+        return E_FAIL;
+
+    void *pBits;
+    HBITMAP hbm = CreateImageBitmap(size.cx, size.cy, &pBits);
+    if (!hbm)
+    {
+        DestroyIcon(hIcon);
+        return E_OUTOFMEMORY;
+    }
+
+    HDC hdc = CreateCompatibleDC(NULL);
+    HGDIOBJ hbmOld = SelectObject(hdc, hbm);
+    DrawIconEx(hdc, 0, 0, hIcon, size.cx, size.cy, 0, NULL, DI_NORMAL);
+    SelectObject(hdc, hbmOld);
+    DeleteDC(hdc);
+    DestroyIcon(hIcon);
+
+    *phbm = hbm;
+    return S_OK;
+}
+
+HRESULT CShellItem::GetThumbnailImage(SIZE size, SIIGBF flags, HBITMAP *phbm)
+{
+    UINT cxThumb = max(size.cx, size.cy);
+    WTS_ALPHATYPE alpha = WTSAT_UNKNOWN;
+    HBITMAP hbm = NULL;
+    HRESULT hr;
+
+    CComPtr<IThumbnailCache> pCache;
+    hr = CoCreateInstance(CLSID_LocalThumbnailCache, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARG(IThumbnailCache, &pCache));
+    if (SUCCEEDED(hr))
+    {
+        CComPtr<ISharedBitmap> pShared;
+        hr = pCache->GetThumbnail(static_cast<IShellItem *>(this), cxThumb,
+                                  (flags & SIIGBF_INCACHEONLY) ? WTS_INCACHEONLY : WTS_EXTRACT,
+                                  &pShared, NULL, NULL);
+        if (SUCCEEDED(hr))
+            hr = pShared->Detach(&hbm);
+    }
+    else if (!(flags & SIIGBF_INCACHEONLY))
+    {
+        CComPtr<IThumbnailProvider> pProvider;
+        hr = BindToHandler(NULL, BHID_ThumbnailHandler, IID_PPV_ARG(IThumbnailProvider, &pProvider));
+        if (SUCCEEDED(hr))
+            hr = pProvider->GetThumbnail(cxThumb, &hbm, &alpha);
+    }
+    if (FAILED(hr) || !hbm)
+        return WTS_E_FAILEDEXTRACTION;
+
+    BITMAP bm;
+    if (!(flags & SIIGBF_BIGGERSIZEOK) && GetObjectW(hbm, sizeof(bm), &bm) &&
+        (bm.bmWidth > size.cx || abs(bm.bmHeight) > size.cy))
+    {
+        LONG cySource = abs(bm.bmHeight);
+        LONG cx = size.cx, cy = MulDiv(cySource, size.cx, bm.bmWidth);
+        if (cy > size.cy)
+        {
+            cy = size.cy;
+            cx = MulDiv(bm.bmWidth, size.cy, cySource);
+        }
+        HBITMAP hbmShrunk = ShrinkImageBitmap(hbm, max(cx, 1), max(cy, 1));
+        DeleteObject(hbm);
+        if (!hbmShrunk)
+            return E_OUTOFMEMORY;
+        hbm = hbmShrunk;
+    }
+
+    *phbm = hbm;
+    return S_OK;
+}
+
+HRESULT WINAPI CShellItem::GetImage(SIZE size, SIIGBF flags, HBITMAP *phbm)
+{
+    HRESULT hr;
+
+    if (!phbm)
+        return E_POINTER;
+    *phbm = NULL;
+    if (size.cx <= 0 || size.cy <= 0 || !m_pidl)
+        return E_INVALIDARG;
+
+    if (!(flags & SIIGBF_ICONONLY))
+    {
+        hr = GetThumbnailImage(size, flags, phbm);
+        if (SUCCEEDED(hr) || (flags & SIIGBF_THUMBNAILONLY))
+            return hr;
+    }
+
+    return GetIconImage(size, phbm);
 }

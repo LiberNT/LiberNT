@@ -1,0 +1,28 @@
+/*
+ * PROJECT:     LiberNT Thumbnail Cache
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Registered classes
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep register
+
+[
+    helpstring("Local Thumbnail Cache"),
+    uuid(50ef4544-ac9f-4a8e-b21b-8a26180db13f),
+    threading(both)
+]
+coclass LocalThumbnailCache
+{
+    interface IThumbnailCache;
+}
+
+[
+    helpstring("Shared Bitmap Object"),
+    uuid(4db26476-6787-4046-b836-e8412a9e8a27),
+    threading(both)
+]
+coclass SharedBitmap
+{
+    interface ISharedBitmap;
+}

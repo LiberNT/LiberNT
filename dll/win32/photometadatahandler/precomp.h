@@ -20,5 +20,6 @@
 extern LONG ModuleObjects;
 
 HRESULT ImagePropertyHandler_Create(REFIID riid, void **ppv);
+HRESULT PhotoThumbnailProvider_Create(REFIID riid, void **ppv);
 
 #endif

@@ -72,21 +72,29 @@ static HKEY OpenKeyFromFileType(LPCWSTR pExtension, LPCWSTR KeyName)
         return hkey;
 
     res = RegGetValueW(HKEY_CLASSES_ROOT, pExtension, NULL, RRF_RT_REG_SZ, NULL, FullName, &dwSize);
-    if (res)
+    if (!res)
     {
-        WARN("Failed to get progid for extension %S (%x), error %d\n", pExtension, pExtension, res);
-        return NULL;
+        wcscat(FullName, L"\\");
+        wcscat(FullName, KeyName);
+        if (!RegOpenKeyExW(HKEY_CLASSES_ROOT, FullName, 0, KEY_READ, &hkey))
+            return hkey;
     }
 
-    wcscat(FullName, L"\\");
-    wcscat(FullName, KeyName);
+    wsprintf(FullName, L"SystemFileAssociations\\%s\\%s", pExtension, KeyName);
+    if (!RegOpenKeyExW(HKEY_CLASSES_ROOT, FullName, 0, KEY_READ, &hkey))
+        return hkey;
 
-    hkey = NULL;
-    res = RegOpenKeyExW(HKEY_CLASSES_ROOT, FullName, 0, KEY_READ, &hkey);
-    if (res)
-        WARN("Could not open key %S for extension %S\n", KeyName, pExtension);
+    WCHAR PerceivedType[MAX_PATH];
+    dwSize = sizeof(PerceivedType);
+    if (!RegGetValueW(HKEY_CLASSES_ROOT, pExtension, L"PerceivedType", RRF_RT_REG_SZ, NULL, PerceivedType, &dwSize))
+    {
+        wsprintf(FullName, L"SystemFileAssociations\\%s\\%s", PerceivedType, KeyName);
+        if (!RegOpenKeyExW(HKEY_CLASSES_ROOT, FullName, 0, KEY_READ, &hkey))
+            return hkey;
+    }
 
-    return hkey;
+    WARN("Could not open key %S for extension %S\n", KeyName, pExtension);
+    return NULL;
 }
 
 static LPCWSTR ExtensionFromPidl(PCUIDLIST_RELATIVE pidl, LPWSTR Buf, UINT cchMax, BOOL AllowFolder = FALSE)
@@ -2214,6 +2222,8 @@ HRESULT CFSFolder::_CreateShellExtInstance(const CLSID *pclsid, LPCITEMIDLIST pi
         return hr;
 
     CComPtr<IInitializeWithItem> pInitItem;
+    CComPtr<IInitializeWithStream> pInitStream;
+    CComPtr<IInitializeWithFile> pInitFile;
     CComPtr<IPersistFile> pp;
     if (SUCCEEDED(punk->QueryInterface(IID_PPV_ARG(IInitializeWithItem, &pInitItem))))
     {
@@ -2222,6 +2232,22 @@ HRESULT CFSFolder::_CreateShellExtInstance(const CLSID *pclsid, LPCITEMIDLIST pi
         if (FAILED_UNEXPECTEDLY(hr))
             return hr;
         hr = pInitItem->Initialize(psi, STGM_READ);
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+    }
+    else if (SUCCEEDED(punk->QueryInterface(IID_PPV_ARG(IInitializeWithStream, &pInitStream))))
+    {
+        CComPtr<IStream> pStream;
+        hr = SHCreateStreamOnFileEx(wszPath, STGM_READ | STGM_SHARE_DENY_NONE, FILE_ATTRIBUTE_NORMAL, FALSE, NULL, &pStream);
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+        hr = pInitStream->Initialize(pStream, STGM_READ);
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+    }
+    else if (SUCCEEDED(punk->QueryInterface(IID_PPV_ARG(IInitializeWithFile, &pInitFile))))
+    {
+        hr = pInitFile->Initialize(wszPath, STGM_READ);
         if (FAILED_UNEXPECTEDLY(hr))
             return hr;
     }
