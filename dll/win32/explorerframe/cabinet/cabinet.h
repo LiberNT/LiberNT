@@ -166,6 +166,7 @@ private:
     void FitCommandBar(int width);
     void UpdateViewToggles();
     int CaptionButtonsWidth();
+    BOOL ClientCaption();
     int TabStripHeight() const { return Scale(46); }
     int AddressBottom() const { return TabStripHeight() + Scale(48); }
     int CommandBottom() const { return AddressBottom() + Scale(55); }

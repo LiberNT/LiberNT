@@ -193,6 +193,7 @@ protected:
     void PaintCaptionButtons(Canvas &canvas, const RECT &client, COLORREF background);
     RECT CaptionButtonRect(CaptionButton button) const;
     int CaptionButtonsWidth() const;
+    BOOL ClientCaption() const;
     BOOL IsActive() const { return m_Active; }
 
     HWND m_hwnd;

@@ -445,11 +445,21 @@ CCabinetWindow::ExtendFrame()
     DwmExtendFrameIntoClientArea(m_hwnd, &margins);
 }
 
+BOOL
+CCabinetWindow::ClientCaption()
+{
+    BOOL composed = FALSE;
+
+    return IsAppThemed() && SUCCEEDED(DwmIsCompositionEnabled(&composed)) && composed;
+}
+
 int
 CCabinetWindow::CaptionButtonsWidth()
 {
     RECT bounds;
 
+    if (!ClientCaption())
+        return 0;
     if (SUCCEEDED(DwmGetWindowAttribute(m_hwnd, DWMWA_CAPTION_BUTTON_BOUNDS, &bounds, sizeof(bounds))) &&
         bounds.right > bounds.left)
         return bounds.right - bounds.left;
@@ -3150,7 +3160,7 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             SetWindowPos(m_hwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
             return 0;
         case WM_NCCALCSIZE:
-            if (wParam)
+            if (wParam && ClientCaption())
             {
                 NCCALCSIZE_PARAMS *params = (NCCALCSIZE_PARAMS *)lParam;
                 LONG top = params->rgrc[0].top;
@@ -3174,7 +3184,7 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
                 return hit;
             ScreenToClient(m_hwnd, &pt);
             GetClientRect(m_hwnd, &client);
-            if (!IsZoomed(m_hwnd) && pt.y < border)
+            if (ClientCaption() && !IsZoomed(m_hwnd) && pt.y < border)
             {
                 if (pt.x < border * 2)
                     return HTTOPLEFT;
@@ -3188,6 +3198,8 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         }
         case WM_DWMCOMPOSITIONCHANGED:
             ExtendFrame();
+            SetWindowPos(m_hwnd, NULL, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
             break;
         case WM_SIZE:
             OnSize();
@@ -3316,6 +3328,8 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
         case WM_THEMECHANGED:
             RefreshGlyphs();
+            SetWindowPos(m_hwnd, NULL, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
             break;
         case WM_SYSCOLORCHANGE:
         case WM_SETTINGCHANGE:

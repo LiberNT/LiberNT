@@ -6,6 +6,7 @@
  */
 
 #include "shellframe.h"
+#include <uxtheme.h>
 
 namespace ShellFrame
 {
@@ -108,6 +109,14 @@ FrameWindow::ApplyFrameAttributes()
     DwmSetWindowAttribute(m_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
 }
 
+BOOL
+FrameWindow::ClientCaption() const
+{
+    BOOL composed = FALSE;
+
+    return IsAppThemed() && SUCCEEDED(DwmIsCompositionEnabled(&composed)) && composed;
+}
+
 int
 FrameWindow::CaptionButtonsWidth() const
 {
@@ -116,6 +125,8 @@ FrameWindow::CaptionButtonsWidth() const
 #else
     RECT bounds;
 
+    if (!ClientCaption())
+        return 0;
     if (SUCCEEDED(DwmGetWindowAttribute(m_hwnd, DWMWA_CAPTION_BUTTON_BOUNDS, &bounds, sizeof(bounds))) &&
         bounds.right > bounds.left)
         return bounds.right - bounds.left;
@@ -130,7 +141,8 @@ FrameWindow::ClearCaptionButtons(Canvas &canvas)
     RECT bounds, window;
     POINT origin = { 0, 0 };
 
-    if (FAILED(DwmGetWindowAttribute(m_hwnd, DWMWA_CAPTION_BUTTON_BOUNDS, &bounds, sizeof(bounds))) ||
+    if (!ClientCaption() ||
+        FAILED(DwmGetWindowAttribute(m_hwnd, DWMWA_CAPTION_BUTTON_BOUNDS, &bounds, sizeof(bounds))) ||
         !GetWindowRect(m_hwnd, &window) || !ClientToScreen(m_hwnd, &origin))
         return;
     OffsetRect(&bounds, window.left - origin.x, window.top - origin.y);
@@ -203,7 +215,7 @@ FrameWindow::HitTest(POINT screen)
             return Hits[i];
     }
 #endif
-    if (!IsZoomed(m_hwnd) && pt.y < border)
+    if (ClientCaption() && !IsZoomed(m_hwnd) && pt.y < border)
     {
         if (pt.x < border * 2)
             return HTTOPLEFT;
@@ -277,7 +289,7 @@ FrameWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
 
         case WM_NCCALCSIZE:
-            if (wParam)
+            if (wParam && ClientCaption())
             {
                 NCCALCSIZE_PARAMS *params = (NCCALCSIZE_PARAMS *)lParam;
                 LONG top = params->rgrc[0].top;
@@ -409,6 +421,7 @@ FrameWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 
         case WM_SYSCOLORCHANGE:
         case WM_THEMECHANGED:
+        case WM_DWMCOMPOSITIONCHANGED:
         case WM_SETTINGCHANGE:
             if (msg != WM_SETTINGCHANGE || wParam == SPI_SETHIGHCONTRAST ||
                 (lParam && !lstrcmpiW((LPCWSTR)lParam, L"ImmersiveColorSet")))
@@ -416,6 +429,8 @@ FrameWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
                 RECT client;
                 m_Theme.Update(m_hwnd);
                 ApplyFrameAttributes();
+                SetWindowPos(m_hwnd, NULL, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
                 OnThemeChanged();
                 GetClientRect(m_hwnd, &client);
                 OnLayout(client);
