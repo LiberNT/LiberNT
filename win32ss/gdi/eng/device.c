@@ -170,6 +170,56 @@ EngpUnlinkGraphicsDevice(
     }
 }
 
+static
+BOOLEAN
+EngpIsGraphicsDeviceRegistered(
+    _In_ PCWSTR pwszNtDeviceName)
+{
+    PGRAPHICS_DEVICE pGraphicsDevice;
+    BOOLEAN bFound = FALSE;
+
+    EngAcquireSemaphoreShared(ghsemGraphicsDeviceList);
+
+    for (pGraphicsDevice = gpGraphicsDeviceFirst;
+         pGraphicsDevice && !bFound;
+         pGraphicsDevice = pGraphicsDevice->pNextGraphicsDevice)
+    {
+        bFound = _wcsicmp(pGraphicsDevice->szNtDeviceName, pwszNtDeviceName) == 0 ||
+                 (pGraphicsDevice->pVgaDevice &&
+                  _wcsicmp(pGraphicsDevice->pVgaDevice->szNtDeviceName, pwszNtDeviceName) == 0);
+    }
+
+    EngReleaseSemaphore(ghsemGraphicsDeviceList);
+
+    return bFound;
+}
+
+static
+VOID
+EngpFreeGraphicsDevice(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice)
+{
+    PDEVMODEINFO pdminfo, pdmiNext;
+    ULONG i;
+
+    for (pdminfo = pGraphicsDevice->pdevmodeInfo; pdminfo; pdminfo = pdmiNext)
+    {
+        pdmiNext = pdminfo->pdmiNext;
+        ExFreePoolWithTag(pdminfo, GDITAG_DEVMODE);
+    }
+    if (pGraphicsDevice->pDevModeList)
+        ExFreePoolWithTag(pGraphicsDevice->pDevModeList, GDITAG_GDEVICE);
+
+    for (i = 0; i < pGraphicsDevice->dwMonCnt; i++)
+        ObDereferenceObject(pGraphicsDevice->pvMonDev[i].pdo);
+    if (pGraphicsDevice->pvMonDev)
+        ExFreePoolWithTag(pGraphicsDevice->pvMonDev, GDITAG_GDEVICE);
+
+    ObDereferenceObject(pGraphicsDevice->FileObject);
+    ExFreePoolWithTag(pGraphicsDevice->pDiplayDrivers, GDITAG_DRVSUP);
+    ExFreePoolWithTag(pGraphicsDevice, GDITAG_GDEVICE);
+}
+
 /* Goal of this function is to:
  * - detect new graphic devices (from registry) and initialize them
  * - link primary device and VGA device (if available) using pVgaDevice field
@@ -182,8 +232,7 @@ NTSTATUS
 EngpUpdateGraphicsDeviceList(VOID)
 {
     ULONG iDevNum, ulMaxObjectNumber = 0;
-    WCHAR awcDeviceName[20], awcWinDeviceName[20];
-    UNICODE_STRING ustrDeviceName;
+    WCHAR awcDeviceName[20];
     WCHAR awcBuffer[256];
     NTSTATUS Status;
     PGRAPHICS_DEVICE pGraphicsDevice, pNewPrimaryGraphicsDevice = NULL;
@@ -212,13 +261,8 @@ EngpUpdateGraphicsDeviceList(VOID)
         /* Create the adapter's key name */
         _swprintf(awcDeviceName, L"\\Device\\Video%lu", iDevNum);
 
-        /* Create the display device name */
-        _swprintf(awcWinDeviceName, L"\\\\.\\DISPLAY%lu", iDevNum + 1);
-        RtlInitUnicodeString(&ustrDeviceName, awcWinDeviceName);
-
         /* Check if the device exists already */
-        pGraphicsDevice = EngpFindGraphicsDevice(&ustrDeviceName, iDevNum);
-        if (pGraphicsDevice != NULL)
+        if (EngpIsGraphicsDeviceRegistered(awcDeviceName))
         {
             continue;
         }
@@ -277,9 +321,13 @@ EngpUpdateGraphicsDeviceList(VOID)
                 EngpUnlinkGraphicsDevice(pGraphicsDevice);
                 pGraphicsDevice = pGraphicsDevice->pNextGraphicsDevice;
 
+                if (gpPrimaryGraphicsDevice == pToDelete)
+                    gpPrimaryGraphicsDevice = NULL;
+                if (gpVgaGraphicsDevice == pToDelete)
+                    gpVgaGraphicsDevice = NULL;
+
                 /* Free memory */
-                ExFreePoolWithTag(pToDelete->pDiplayDrivers, GDITAG_DRVSUP);
-                ExFreePoolWithTag(pToDelete, GDITAG_GDEVICE);
+                EngpFreeGraphicsDevice(pToDelete);
             }
             else
             {
