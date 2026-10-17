@@ -2079,7 +2079,7 @@ AddDiskToList(
         }
     }
 
-    if (!DiskEntry->BiosFound)
+    if (!DiskEntry->BiosFound && !IsUefiFirmware())
     {
         DPRINT1("WARNING: Setup could not find a matching BIOS disk entry. Disk %lu may not be bootable by the BIOS!\n", DiskNumber);
     }
@@ -2462,7 +2462,8 @@ CreatePartitionList(VOID)
      * Enumerate the disks seen by the BIOS; this will be used later
      * to map drives seen by NTOS with their corresponding BIOS names.
      */
-    EnumerateBiosDiskEntries(List);
+    if (!IsUefiFirmware())
+        EnumerateBiosDiskEntries(List);
 
     /* Enumerate disks seen by NTOS */
     Status = NtQuerySystemInformation(SystemDeviceInformation,

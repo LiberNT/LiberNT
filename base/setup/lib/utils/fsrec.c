@@ -255,13 +255,6 @@ InferFileSystemWorker(
     }
 
 Quit:
-    if (*FileSystemName && _wcsicmp(FileSystemName, L"NTFS") == 0)
-    {
-        // WARNING: We cannot write on this FS yet!
-        DPRINT1("Recognized file system '%S' that doesn't have write support yet!\n",
-                FileSystemName);
-    }
-
     return Status;
 }
 
