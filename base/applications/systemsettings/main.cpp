@@ -1612,8 +1612,8 @@ private:
         }
         if (m_DragPlace >= 0)
         {
-            ReleaseCapture();
             EndSliderDrag(TRUE);
+            ReleaseCapture();
             return;
         }
         place = PlaceFromPoint(x, y, &part, &action);
