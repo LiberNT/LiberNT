@@ -890,7 +890,7 @@ NdisOpenConfigurationKeyByIndex(
 
     *KeyHandle = NULL;
 
-    *Status = ZwEnumerateKey(ConfigurationHandle, Index, KeyBasicInformation, NULL, 0, &KeyInformationLength);
+    *Status = ZwEnumerateKey(((PMINIPORT_CONFIGURATION_CONTEXT)ConfigurationHandle)->Handle, Index, KeyBasicInformation, NULL, 0, &KeyInformationLength);
     if(*Status != STATUS_BUFFER_TOO_SMALL && *Status != STATUS_BUFFER_OVERFLOW && *Status != STATUS_SUCCESS)
     {
         NDIS_DbgPrint(MIN_TRACE, ("ZwEnumerateKey failed (%x)\n", *Status));
@@ -906,7 +906,7 @@ NdisOpenConfigurationKeyByIndex(
         return;
     }
 
-    *Status = ZwEnumerateKey(ConfigurationHandle, Index, KeyBasicInformation, KeyInformation,
+    *Status = ZwEnumerateKey(((PMINIPORT_CONFIGURATION_CONTEXT)ConfigurationHandle)->Handle, Index, KeyBasicInformation, KeyInformation,
         KeyInformationLength + sizeof(KEY_BASIC_INFORMATION), &KeyInformationLength);
 
     if(*Status != STATUS_SUCCESS)
@@ -921,7 +921,7 @@ NdisOpenConfigurationKeyByIndex(
     wcsncpy(KeyName->Buffer, KeyInformation->Name, KeyName->MaximumLength/sizeof(WCHAR));
     KeyName->Length = (USHORT)min(KeyInformation->NameLength, KeyName->MaximumLength);
 
-    InitializeObjectAttributes(&KeyAttributes, KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, ConfigurationHandle, NULL);
+    InitializeObjectAttributes(&KeyAttributes, KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, ((PMINIPORT_CONFIGURATION_CONTEXT)ConfigurationHandle)->Handle, NULL);
 
     *Status = ZwOpenKey(&RegKeyHandle, KEY_ALL_ACCESS, &KeyAttributes);
 
@@ -984,7 +984,7 @@ NdisOpenConfigurationKeyByName(
 
     *KeyHandle = NULL;
 
-    InitializeObjectAttributes(&KeyAttributes, KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, ConfigurationHandle, 0);
+    InitializeObjectAttributes(&KeyAttributes, KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, ((PMINIPORT_CONFIGURATION_CONTEXT)ConfigurationHandle)->Handle, 0);
     *Status = ZwOpenKey(&RegKeyHandle, KEY_ALL_ACCESS, &KeyAttributes);
 
     if(*Status != STATUS_SUCCESS)
