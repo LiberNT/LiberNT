@@ -1078,6 +1078,10 @@ BOOL
 IntValidateParent(PWND Child, PREGION ValidateRgn)
 {
    PWND ParentWnd = Child->spwndParent;
+   PREGION ScreenRgn = IntSysCreateRectpRgn(0, 0, 0, 0);
+
+   if (!ScreenRgn)
+      return FALSE;
 
    while (ParentWnd)
    {
@@ -1086,14 +1090,17 @@ IntValidateParent(PWND Child, PREGION ValidateRgn)
 
       if (ParentWnd->hrgnUpdate != 0)
       {
+         IntGdiCombineRgn(ScreenRgn, ValidateRgn, NULL, RGN_COPY);
+         REGION_bOffsetRgn(ScreenRgn, Child->rcWindow.left, Child->rcWindow.top);
          IntInvalidateWindows( ParentWnd,
-                               ValidateRgn,
+                               ScreenRgn,
                                RDW_VALIDATE | RDW_NOCHILDREN);
       }
 
       ParentWnd = ParentWnd->spwndParent;
    }
 
+   REGION_Delete(ScreenRgn);
    return TRUE;
 }
 
