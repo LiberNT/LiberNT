@@ -4795,6 +4795,11 @@ KdbpCmdThread(ULONG Argc, PCHAR Argv[])
 #undef KDB_THREAD_PRIORITY_FORMAT
 #undef KDB_THREAD_WAIT_FORMAT
 
+        KdbpPrint("  APC Disable:     kernel %d, special %d, state index %u\n",
+                  ThreadSnapshot.Tcb.KernelApcDisable,
+                  ThreadSnapshot.Tcb.SpecialApcDisable,
+                  ThreadSnapshot.Tcb.ApcStateIndex);
+
         if (ThreadSnapshot.Terminated)
         {
             KdbpPrint("  Exit:            time 0x%I64x, status 0x%08lx\n", ThreadSnapshot.ExitTime.QuadPart, ThreadSnapshot.ExitStatus);
@@ -9327,6 +9332,18 @@ KdbpCliMainLoop(
 
     KdbpDoCommand("regs");
     KdbpDoCommand("bt");
+
+    if (!EnteredOnSingleStep && KiBugCheckData[0])
+    {
+        KdbpDoCommand("!thread");
+        KdbpDoCommand("!apc");
+        KdbPrintf("\n*** Fatal System Error: 0x%08lx (0x%p,0x%p,0x%p,0x%p)\n",
+                  (ULONG)KiBugCheckData[0],
+                  (PVOID)KiBugCheckData[1],
+                  (PVOID)KiBugCheckData[2],
+                  (PVOID)KiBugCheckData[3],
+                  (PVOID)KiBugCheckData[4]);
+    }
 
     if (EnteredOnSingleStep)
     {
