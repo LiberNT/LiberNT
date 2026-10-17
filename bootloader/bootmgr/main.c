@@ -29,6 +29,8 @@ static BM_ENTRY BmWindowsEntries[BM_MAX_ENTRIES];
 static CHAR BmNames[BM_MAX_ENTRIES][BM_NAME_CHARS];
 static PCSTR BmMenuNames[BM_MAX_ENTRIES + BM_EXTRA_ITEMS];
 static UI_MENU_ICON BmMenuIcons[BM_MAX_ENTRIES + BM_EXTRA_ITEMS];
+static PCSTR BmStartupNames[BM_MAX_ENTRIES];
+static ULONG BmStartupEntries[BM_MAX_ENTRIES];
 static PCWSTR BmTextNames[BM_MAX_ENTRIES];
 static WCHAR BmStorePath[BM_PATH_CHARS];
 static WCHAR BmTitle[BM_DESCRIPTION_CHARS];
@@ -210,11 +212,50 @@ BmMenuKeyFilter(
             return TRUE;
 
         case KEY_F8:
-            BmStartEntry(BmSelected, TRUE);
+            if (!BmEntries[BmSelected].FirmwareDevice)
+                BmStartEntry(BmSelected, TRUE);
             return TRUE;
     }
 
     return FALSE;
+}
+
+static
+VOID
+BmStartupOptions(VOID)
+{
+    ULONG Count = 0, Selected = 0, i;
+
+    for (i = 0; i < BmCount; i++)
+    {
+        if (BmEntries[i].FirmwareDevice)
+            continue;
+
+        if (i == BmSelected)
+            Selected = Count;
+
+        BmStartupEntries[Count] = i;
+        BmStartupNames[Count++] = BmMenuNames[i];
+    }
+
+    if (Count == 0)
+        return;
+
+    if (Count == 1 ||
+        UiDisplayMenu("Startup options / Choose a system",
+                      NULL,
+                      BmStartupNames,
+                      Count,
+                      Selected,
+                      -1,
+                      &Selected,
+                      TRUE,
+                      NULL,
+                      NULL))
+    {
+        BmSelected = BmStartupEntries[Selected];
+        BmStartEntry(BmSelected, TRUE);
+    }
 }
 
 static
@@ -263,21 +304,7 @@ BmRunGuiMenu(
 
         if (Item == BmCount + 1)
         {
-            if (BmCount == 1 ||
-                UiDisplayMenu("Startup options / Choose a system",
-                              NULL,
-                              BmMenuNames,
-                              BmCount,
-                              BmSelected,
-                              -1,
-                              &BmSelected,
-                              TRUE,
-                              NULL,
-                              NULL))
-            {
-                BmStartEntry(BmSelected, TRUE);
-            }
-
+            BmStartupOptions();
             Item = BmSelected;
             continue;
         }
