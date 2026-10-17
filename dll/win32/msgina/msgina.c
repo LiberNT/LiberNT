@@ -346,7 +346,6 @@ WlxScreenSaverNotify(
     PVOID pWlxContext,
     BOOL  *pSecure)
 {
-#if 0
     PGINA_CONTEXT pgContext = (PGINA_CONTEXT)pWlxContext;
     WCHAR szBuffer[2];
     HKEY hKeyCurrentUser, hKey;
@@ -412,9 +411,6 @@ WlxScreenSaverNotify(
     RevertToSelf();
 
     TRACE("*pSecure: %ld\n", *pSecure);
-#endif
-
-    *pSecure = FALSE;
 
     return TRUE;
 }
