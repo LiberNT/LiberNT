@@ -1854,6 +1854,14 @@ static INT FASTCALL MENU_Scale(INT Value)
     return EngMulDiv(Value, (gpsi && gpsi->dmLogPixels) ? gpsi->dmLogPixels : 96, 96);
 }
 
+static BOOL FASTCALL MENU_Themed(VOID)
+{
+    BOOL flat = FALSE;
+
+    UserSystemParametersInfo(SPI_GETFLATMENU, 0, &flat, 0);
+    return flat;
+}
+
 static void FASTCALL MENU_CalcItemSize( HDC hdc, PITEM lpitem, PMENU Menu, PWND pwndOwner,
                  INT orgX, INT orgY, BOOL menuBar, BOOL textandbmp)
 {
@@ -2008,7 +2016,7 @@ static void FASTCALL MENU_CalcItemSize( HDC hdc, PITEM lpitem, PMENU Menu, PWND 
             }
             lpitem->cxItem  += 2 + txtwidth;
             itemheight = max( itemheight,
-				    max( txtheight + 2, MenuCharSize.cy + MENU_Scale(MENU_POPUP_ITEM_PAD)));
+				    max( txtheight + 2, MenuCharSize.cy + (MENU_Themed() ? MENU_Scale(MENU_POPUP_ITEM_PAD) : 4)));
         }
         if (hfontOld)
         {
@@ -2067,7 +2075,7 @@ static void FASTCALL MENU_PopupMenuCalcSize(PMENU Menu, PWND WndOwner)
       orgX = maxX;
       if( lpitem->fType & (MF_MENUBREAK | MF_MENUBARBREAK))
           orgX += MENU_COL_SPACE;
-      orgY = MENU_Scale(MENU_POPUP_VPAD);
+      orgY = MENU_Themed() ? MENU_Scale(MENU_POPUP_VPAD) : 0;
 
       maxTab = maxTabWidth = 0;
       /* Parse items until column break or end of menu */
@@ -2095,7 +2103,7 @@ static void FASTCALL MENU_PopupMenuCalcSize(PMENU Menu, PWND WndOwner)
            if (IS_STRING_ITEM(lpitem->fType) && lpitem->dxTab)
                lpitem->dxTab = maxTab;
       }
-      Menu->cyMenu = max(Menu->cyMenu, orgY + MENU_Scale(MENU_POPUP_VPAD));
+      Menu->cyMenu = max(Menu->cyMenu, orgY + (MENU_Themed() ? MENU_Scale(MENU_POPUP_VPAD) : 0));
     }
 
     Menu->cxMenu  = maxX;
@@ -2273,8 +2281,7 @@ static void FASTCALL MENU_FillFlatPopupBack(HDC hdc, const RECT *prc, INT cyTota
     NtGdiSelectPen(hdc, oldPen);
 }
 
-static void FASTCALL MENU_FillHilite(HDC hdc, const RECT *prc, HBRUSH hilite, BOOL flat, BOOL menuBar, INT bkgnd,
-                                     INT cyTotal)
+static void FASTCALL MENU_FillHilite(HDC hdc, const RECT *prc, HBRUSH hilite, BOOL menuBar, INT bkgnd, INT cyTotal)
 {
     RECT pill = *prc;
     INT radius = MENU_Scale(MENU_POPUP_RADIUS) * 2;
@@ -2283,10 +2290,8 @@ static void FASTCALL MENU_FillHilite(HDC hdc, const RECT *prc, HBRUSH hilite, BO
 
     if (menuBar)
         FillRect(hdc, prc, IntGetSysColorBrush(bkgnd));
-    else if (flat)
-        MENU_FillFlatPopupBack(hdc, prc, cyTotal);
     else
-        FillRect(hdc, prc, IntGetSysColorBrush(COLOR_MENU));
+        MENU_FillFlatPopupBack(hdc, prc, cyTotal);
     RECTL_vInflateRect(&pill, -MENU_Scale(menuBar ? 2 : MENU_POPUP_INSET), -MENU_Scale(menuBar ? 2 : 1));
     oldBrush = NtGdiSelectBrush(hdc, hilite);
     oldPen = NtGdiSelectPen(hdc, NtGdiGetStockObject(NULL_PEN));
@@ -2328,11 +2333,16 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
 
     if (lpitem->fState & MF_HILITE)
     {
-        if (lpitem->fState & MF_GRAYED)
-            IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_GRAYTEXT));
-        else
-            IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_HIGHLIGHTTEXT));
-        IntGdiSetBkColor(hdc, IntGetSysColor(COLOR_HIGHLIGHT));
+        if(menuBar && !flat_menu) {
+            IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_MENUTEXT));
+            IntGdiSetBkColor(hdc, IntGetSysColor(COLOR_MENU));
+        } else {
+            if (lpitem->fState & MF_GRAYED)
+                IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_GRAYTEXT));
+            else
+                IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_HIGHLIGHTTEXT));
+            IntGdiSetBkColor(hdc, IntGetSysColor(COLOR_HIGHLIGHT));
+        }
     }
     else
     {
@@ -2408,8 +2418,22 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
 
     if (lpitem->fState & MF_HILITE)
     {
-        MENU_FillHilite(hdc, &rect, IntGetSysColorBrush(flat_menu ? COLOR_MENUHILIGHT : COLOR_HIGHLIGHT), flat_menu,
-                        menuBar, bkgnd, Height);
+        if (flat_menu)
+        {
+            MENU_FillHilite(hdc, &rect, IntGetSysColorBrush(COLOR_MENUHILIGHT), menuBar, bkgnd, Height);
+        }
+        else
+        {
+            if (menuBar)
+            {
+                FillRect(hdc, &rect, IntGetSysColorBrush(COLOR_MENU));
+                DrawEdge(hdc, &rect, BDR_SUNKENOUTER, BF_RECT);
+            }
+            else
+            {
+                FillRect(hdc, &rect, IntGetSysColorBrush(COLOR_HIGHLIGHT));
+            }
+        }
     }
     else
     {
@@ -2448,8 +2472,8 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
         HPEN oldPen;
         RECT rc = rect;
 
-        rc.left += menuBar ? 1 : MENU_Scale(MENU_POPUP_INSET * 2);
-        rc.right -= menuBar ? 1 : MENU_Scale(MENU_POPUP_INSET * 2);
+        rc.left += menuBar || !flat_menu ? 1 : MENU_Scale(MENU_POPUP_INSET * 2);
+        rc.right -= menuBar || !flat_menu ? 1 : MENU_Scale(MENU_POPUP_INSET * 2);
         rc.top = (rc.top + rc.bottom) / 2 - 1;
         if (flat_menu)
         {

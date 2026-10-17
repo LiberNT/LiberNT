@@ -196,6 +196,7 @@ IntCompositionCornerRadius(_In_ PWND Wnd)
     BYTE Alpha;
     COLORREF Key;
     DWORD Flags = 0;
+    BOOL ClassicFrame, FlatMenu = FALSE;
 
     if (Radius != 0 && Radius <= 64)
         return (ULONG)Radius;
@@ -207,19 +208,23 @@ IntCompositionCornerRadius(_In_ PWND Wnd)
         return 0;
     if (AtomDwmCornerPreference != 0)
         Preference = (ULONG_PTR)UserGetProp(Wnd, AtomDwmCornerPreference, FALSE);
+    ClassicFrame = (Wnd->style & WS_CAPTION) == WS_CAPTION &&
+                   (AtomDwmThemedFrame == 0 || UserGetProp(Wnd, AtomDwmThemedFrame, FALSE) == NULL);
     switch (Preference)
     {
         case DWM_CORNER_DONOTROUND:
             return 0;
         case DWM_CORNER_ROUND:
-            return DWM_CORNER_RADIUS_96 * Dpi / 96;
+            return ClassicFrame ? 0 : DWM_CORNER_RADIUS_96 * Dpi / 96;
         case DWM_CORNER_ROUNDSMALL:
-            return DWM_CORNER_RADIUS_SMALL_96 * Dpi / 96;
+            return ClassicFrame ? 0 : DWM_CORNER_RADIUS_SMALL_96 * Dpi / 96;
         default:
             if (Wnd->fnid == FNID_MENU)
-                return DWM_CORNER_RADIUS_SMALL_96 * Dpi / 96;
-            return (Wnd->style & WS_CAPTION) == WS_CAPTION && AtomDwmThemedFrame != 0 &&
-                   UserGetProp(Wnd, AtomDwmThemedFrame, FALSE) != NULL ?
+            {
+                UserSystemParametersInfo(SPI_GETFLATMENU, 0, &FlatMenu, 0);
+                return FlatMenu ? DWM_CORNER_RADIUS_SMALL_96 * Dpi / 96 : 0;
+            }
+            return (Wnd->style & WS_CAPTION) == WS_CAPTION && !ClassicFrame ?
                    DWM_CORNER_RADIUS_96 * Dpi / 96 : 0;
     }
 }
