@@ -5004,6 +5004,8 @@ static BOOLEAN
 DxgkpMmioFlipUsesMpo3(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
+    if (Adapter->SupportMultiPlaneOverlay && Adapter->MaxOverlayPlanes != 0 && DxgkMpo3Supported(Adapter))
+        return TRUE;
     if (DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress) != NULL)
         return FALSE;
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)

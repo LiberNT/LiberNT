@@ -908,6 +908,8 @@ struct _DXGKRNL_ADAPTER
     BOOLEAN                     SupportPerEngineTdr;
     BOOLEAN                     HybridDiscrete;
     BOOLEAN                     HybridIntegrated;
+    BOOLEAN                     SupportMultiPlaneOverlay;
+    UINT                        MaxOverlayPlanes;
     BOOLEAN                     SurpriseRemovalHandled;
 
     /*

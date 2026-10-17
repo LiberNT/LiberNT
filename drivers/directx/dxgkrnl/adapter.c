@@ -13701,6 +13701,8 @@ DxgkAdapterStart(
         PDXGK_DRIVERCAPS Caps;
         NTSTATUS CapsStatus = STATUS_SUCCESS;
 
+        Adapter->SupportMultiPlaneOverlay = FALSE;
+        Adapter->MaxOverlayPlanes = 0;
         Caps = ExAllocatePoolWithTag(NonPagedPool, DXGKP_DRIVERCAPS_QUERY_SIZE, TAG_DXGK_ADAPTER);
         if (Caps != NULL)
         {
@@ -13732,6 +13734,11 @@ DxgkAdapterStart(
                                 (ULONGLONG)Caps->HighestAcceptableAddress.QuadPart, Adapter->NodeCount, Caps->SchedulingCaps.Value);
                     Adapter->SchedulingCaps.Value = Caps->SchedulingCaps.Value;
                     Adapter->FlipCaps.Value = Caps->FlipCaps.Value;
+                    if (DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_1_3))
+                    {
+                        Adapter->SupportMultiPlaneOverlay = Caps->SupportMultiPlaneOverlay;
+                        Adapter->MaxOverlayPlanes = Caps->MaxOverlayPlanes;
+                    }
                     DXGKRNL_TRACE("DxgkAdapterStart: %lu GPU node(s) reported\n", Adapter->NodeCount);
                 }
             }
