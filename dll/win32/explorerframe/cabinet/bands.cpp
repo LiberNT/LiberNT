@@ -1380,8 +1380,9 @@ CCabinetSearchBox::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_SIZE:
         {
             int height = Scale(20);
-            MoveWindow(m_Edit, Scale(12), (HIWORD(lParam) - height) / 2, max(0, (int)LOWORD(lParam) - Scale(44)),
-                       height, TRUE);
+            if (m_Edit)
+                MoveWindow(m_Edit, Scale(12), (HIWORD(lParam) - height) / 2, max(0, (int)LOWORD(lParam) - Scale(44)),
+                           height, TRUE);
             return 0;
         }
         case WM_LBUTTONDOWN:

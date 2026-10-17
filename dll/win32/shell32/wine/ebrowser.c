@@ -348,11 +348,17 @@ static void update_layout(ExplorerBrowserImpl *This)
 static void size_panes(ExplorerBrowserImpl *This)
 {
     int splitter_width = MulDiv(SPLITTER_WIDTH, This->dpix, USER_DEFAULT_SCREEN_DPI);
+#ifdef __REACTOS__
+    if (This->navpane.hwnd_splitter)
+#endif
     MoveWindow(This->navpane.hwnd_splitter,
                This->navpane.rc.right - splitter_width, This->navpane.rc.top,
                splitter_width, This->navpane.rc.bottom - This->navpane.rc.top,
                TRUE);
 
+#ifdef __REACTOS__
+    if (This->hwnd_sv)
+#endif
     MoveWindow(This->hwnd_sv,
                This->sv_rc.left, This->sv_rc.top,
                This->sv_rc.right - This->sv_rc.left, This->sv_rc.bottom - This->sv_rc.top,
