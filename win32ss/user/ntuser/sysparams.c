@@ -1089,8 +1089,9 @@ SpiSetWallpaper(PVOID pvParam, FLONG fl)
         hbmp = UserLoadImage(ustr.Buffer);
         if (!hbmp)
         {
-            ERR("UserLoadImage failed\n");
-            return 0;
+            gspv.cxWallpaper = 0;
+            gspv.cyWallpaper = 0;
+            goto ReplaceWallpaper;
         }
 
         /* Try to get the size of the wallpaper */
@@ -1118,6 +1119,7 @@ SpiSetWallpaper(PVOID pvParam, FLONG fl)
         hbmp = 0;
     }
 
+ReplaceWallpaper:
     /* Take care of the old wallpaper, if any */
     hOldBitmap = gspv.hbmWallpaper;
     if(hOldBitmap != NULL)
