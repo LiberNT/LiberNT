@@ -29,6 +29,7 @@
 
 #define HCI_EVENT_COMMAND_COMPLETE  0x0E
 #define HCI_EVENT_COMMAND_STATUS    0x0F
+#define HCI_COMMAND_RESET           0x0C03
 
 typedef enum _BTHUSB_RX_KIND
 {

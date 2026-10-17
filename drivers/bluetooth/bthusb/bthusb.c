@@ -178,6 +178,10 @@ BthUsbThread(
     PBTHUSB_DEVICE Dev = Context;
     NTSTATUS Status;
 
+    Status = BthUsbHciCommand(Dev, HCI_COMMAND_RESET, NULL, 0, NULL, 0, NULL);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("BTHUSB: %04x:%04x HCI reset failed 0x%08lx\n", Dev->VendorId, Dev->ProductId, Status);
+
     Status = RtkBtLoadPatch(BthUsbHciCommand, Dev, RtkBtBusUsb, &Dev->Version);
     if (!NT_SUCCESS(Status))
     {
