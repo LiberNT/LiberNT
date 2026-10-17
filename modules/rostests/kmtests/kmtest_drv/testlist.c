@@ -138,6 +138,7 @@ KMT_TESTFUNC Test_IoContainerId;
 KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoDeviceInterface;
 KMT_TESTFUNC Test_IoEvent;
+KMT_TESTFUNC Test_IoWmiAcpi;
 KMT_TESTFUNC Test_IoFilesystem;
 KMT_TESTFUNC Test_IoInterrupt;
 KMT_TESTFUNC Test_IoIommu;
@@ -435,6 +436,7 @@ const KMT_TEST TestList[] =
     { "HalSystemInfo",                      Test_HalSystemInfo },
     { "IoContainerId",                      Test_IoContainerId },
     { "IoCreateFile",                       Test_IoCreateFile },
+    { "IoWmiAcpi",                          Test_IoWmiAcpi },
     { "IoDeviceInterface",                  Test_IoDeviceInterface },
     { "IoEvent",                            Test_IoEvent },
     { "IoFilesystem",                       Test_IoFilesystem },
