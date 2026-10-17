@@ -504,6 +504,8 @@ typedef struct _DXGKVMM_ALLOCATION
     BOOLEAN             ContextAllocation;
     PVOID               ContextAllocationHandle;
     BOOLEAN             SysMemContiguousWc;
+    BOOLEAN             SysMemContiguousCached;
+    BOOLEAN             PhysicallyContiguous;
     BOOLEAN             SysMem64KBacking;
     PMDL                SysMemPagesMdl;
 

@@ -461,6 +461,20 @@ DxgkpVidMmAllocateBacking(
     if (Allocation->Adapter != NULL && Allocation->Adapter->HighestAcceptableAddress.QuadPart > 0)
         High = Allocation->Adapter->HighestAcceptableAddress;
     Mdl = NULL;
+    if (Allocation->PhysicallyContiguous)
+    {
+        PHYSICAL_ADDRESS Boundary;
+
+        Boundary.QuadPart = 0;
+        Va = MmAllocateContiguousMemorySpecifyCache(Bytes, Low, High, Boundary, CacheType);
+        if (Va == NULL)
+            return NULL;
+        if (CacheType == MmCached)
+            Allocation->SysMemContiguousCached = TRUE;
+        else
+            Allocation->SysMemContiguousWc = TRUE;
+        return Va;
+    }
     if (Allocation->Adapter != NULL &&
         Allocation->Adapter->GpuMmuCapsValid &&
         Allocation->Adapter->GpuMmuCaps.SysMem64KBPageSupported &&
@@ -4227,6 +4241,14 @@ DxgkpVidMmReleaseSystemBacking(
         Allocation->SysMemContiguousWc = FALSE;
         return;
     }
+    if (Allocation->SysMemContiguousCached && Allocation->SystemMemory != NULL)
+    {
+        MmFreeContiguousMemorySpecifyCache(Allocation->SystemMemory, Allocation->Size, MmCached);
+        Allocation->SystemMemory = NULL;
+        Allocation->CpuAddress = NULL;
+        Allocation->SysMemContiguousCached = FALSE;
+        return;
+    }
 
     if (Allocation->SysMemMdl != NULL)
     {
@@ -5837,6 +5859,7 @@ DxgkpVidMmCreateAllocationTracked(
     _In_opt_  HANDLE                   ResourceHandle,
     _In_      DXGK_CREATEALLOCATIONFLAGS CreateFlags,
     _In_      D3DDDI_VIDEO_PRESENT_SOURCE_ID PrimaryVidPnSourceId,
+    _In_      BOOLEAN                  PhysicallyContiguous,
     _Out_     PHANDLE                  OutHandle,
     _Out_opt_ PHANDLE                  OutResourceHandle,
     _Out_opt_ PDXGKVMM_ALLOCATION     *OutAllocation)
@@ -6068,6 +6091,7 @@ DxgkpVidMmCreateAllocationTracked(
      * ----------------------------------------------------------------------- */
     Alloc->Size               = RoundedAllocationSize;
     Alloc->PitchAlignedSize   = RoundedPitchAlignedSize;
+    Alloc->PhysicallyContiguous = PhysicallyContiguous;
     Alloc->Alignment          = (AllocInfo->Alignment != 0)
                                 ? (SIZE_T)AllocInfo->Alignment
                                 : PAGE_SIZE;
@@ -6352,6 +6376,7 @@ DxgkVidMmCreateAllocation(
                                                 ResourceHandle,
                                                 CreateFlags,
                                                 PrimaryVidPnSourceId,
+                                                FALSE,
                                                 OutHandle,
                                                 OutResourceHandle,
                                                 &Allocation);
@@ -8250,7 +8275,13 @@ typedef struct _DXGKP_ALLOCATION_INFO_VIEW
 C_ASSERT(sizeof(D3DKMT_CREATEALLOCATIONFLAGS) == sizeof(UINT));
 #define DXGKP_CA_FLAG_CREATE_RESOURCE       0x00000001U
 #define DXGKP_CA_FLAG_CREATE_SHARED         0x00000002U
+#define DXGKP_CA_FLAG_NON_SECURE            0x00000004U
 #define DXGKP_CA_FLAG_RESTRICT_SHARED_ACCESS 0x00000010U
+#define DXGKP_CA_FLAG_READ_ONLY             0x00000080U
+#define DXGKP_CA_FLAG_SWAPCHAIN_BACK_BUFFER 0x00000400U
+#define DXGKP_CA_FLAG_PHYSICALLY_CONTIGUOUS 0x00080000U
+#define DXGKP_CA_FLAG_SHARED_DISPLAYABLE    0x00200000U
+#define DXGKP_CA_FLAG_NO_IMPLICIT_SYNC      0x00400000U
 #define DXGKP_CA_FLAG_NT_SECURITY_SHARING   0x00000040U
 #define DXGKP_CA_FLAG_EXISTING_SYSMEM       0x00000020U
 #define DXGKP_CA_FLAG_CROSS_ADAPTER         0x00000800U
@@ -8268,7 +8299,9 @@ C_ASSERT(sizeof(D3DKMT_CREATEALLOCATIONFLAGS) == sizeof(UINT));
 /* Keep documented-but-unimplemented inputs out of this mask so they reach the
  * STATUS_NOT_SUPPORTED gate instead of being misclassified as malformed. */
 #define DXGKP_CA_INVALID_INPUT_FLAGS_MASK   0x00001308U
-#define DXGKP_CA_SUPPORTED_BASE_FLAGS_MASK  (DXGKP_CA_FLAG_CREATE_RESOURCE | DXGKP_CA_FLAG_CREATE_SHARED | DXGKP_CA_FLAG_NT_SECURITY_SHARING | DXGKP_CA_FLAG_RESTRICT_SHARED_ACCESS | DXGKP_CA_FLAG_ALLOW_NOT_ZEROED)
+#define DXGKP_CA_SUPPORTED_BASE_FLAGS_MASK  (DXGKP_CA_FLAG_CREATE_RESOURCE | DXGKP_CA_FLAG_CREATE_SHARED | DXGKP_CA_FLAG_NT_SECURITY_SHARING | DXGKP_CA_FLAG_RESTRICT_SHARED_ACCESS | DXGKP_CA_FLAG_ALLOW_NOT_ZEROED | \
+                                             DXGKP_CA_FLAG_NON_SECURE | DXGKP_CA_FLAG_READ_ONLY | DXGKP_CA_FLAG_SWAPCHAIN_BACK_BUFFER | \
+                                             DXGKP_CA_FLAG_PHYSICALLY_CONTIGUOUS | DXGKP_CA_FLAG_SHARED_DISPLAYABLE | DXGKP_CA_FLAG_NO_IMPLICIT_SYNC)
 #define DXGKP_CA_STANDARD_REQUIRED_MASK     (DXGKP_CA_FLAG_CREATE_SHARED | DXGKP_CA_FLAG_CROSS_ADAPTER | DXGKP_CA_FLAG_STANDARD_ALLOCATION)
 #define DXGKP_CA_STANDARD_SOURCE_MASK       (DXGKP_CA_FLAG_EXISTING_SYSMEM | DXGKP_CA_FLAG_EXISTING_SECTION)
 
@@ -8457,7 +8490,7 @@ DxgkpValidateAllocationInfo2(
         return STATUS_INVALID_PARAMETER;
     if ((Info->Flags.Value & 0x2U) != 0 && (Info->Flags.Value & 0x1U) == 0)
         return STATUS_INVALID_PARAMETER;
-    if (CheckImplemented && (Info->Flags.Value & (KnownFlags & ~0x1U)) != 0)
+    if (CheckImplemented && (Info->Flags.Value & (KnownFlags & 0x2U)) != 0)
         return STATUS_NOT_SUPPORTED;
     /* CreateAllocation2 is also valid for physical-addressing adapters. Zero
      * records that common-prefix result; it is not a process GPUVA mapping. */
@@ -9196,6 +9229,7 @@ DxgkpCreateAllocationCaptured(
                                                            Resource->MiniportHandle,
                                                            CreateFlags,
                                                            PrimaryVidPnSourceId,
+                                                           pCreateAllocation->Flags.PhysicallyContiguous != 0,
                                                            &AllocationHandle,
                                                            &MiniportResourceHandle,
                                                            &TrackedAlloc);
@@ -9211,6 +9245,7 @@ DxgkpCreateAllocationCaptured(
                                                            NULL,
                                                            CreateFlags,
                                                            PrimaryVidPnSourceId,
+                                                           pCreateAllocation->Flags.PhysicallyContiguous != 0,
                                                            &AllocationHandle,
                                                            &MiniportResourceHandle,
                                                            &TrackedAlloc);
@@ -9235,6 +9270,11 @@ DxgkpCreateAllocationCaptured(
         /* The synthetic system-allocation path has no miniport callback;
          * both paths publish the identity before clearing Initializing. */
         TrackedAlloc->PrimaryVidPnSourceId = PrimaryVidPnSourceId;
+        if (InfoVersion == DxgkpAllocationInfoVersion2 &&
+            pCreateAllocation->pAllocationInfo2[i].Flags.OverridePriority)
+        {
+            TrackedAlloc->AllocationPriority = pCreateAllocation->pAllocationInfo2[i].Priority;
+        }
 
         if (AllocationInfo.pSystemMem != NULL)
         {
