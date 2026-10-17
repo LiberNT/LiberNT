@@ -4045,7 +4045,8 @@ NtUserSetWindowPos(
    if (!(Window = UserGetWindowObject(hWnd)) ||
         UserIsDesktopWindow(Window) || UserIsMessageWindow(Window))
    {
-      ERR("NtUserSetWindowPos bad window handle!\n");
+      ERR("SetWindowPos from %s: %p is %s\n", PsGetProcessImageFileName(PsGetCurrentProcess()), hWnd,
+          !Window ? "not a window" : UserIsDesktopWindow(Window) ? "the desktop window" : "a message-only window");
       goto Exit; // Return FALSE
    }
 

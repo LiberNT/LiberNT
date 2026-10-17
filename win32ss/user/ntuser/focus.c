@@ -1407,7 +1407,8 @@ co_UserSetFocus(PWND Window)
 
       if (Window->head.pti->MessageQueue != ThreadQueue)
       {
-         ERR("SetFocus Must have the same Q!\n");
+         ERR("SetFocus from %s: %p belongs to another thread's input queue\n",
+             PsGetProcessImageFileName(PsGetCurrentProcess()), UserHMGetHandle(Window));
          return 0;
       }
 
