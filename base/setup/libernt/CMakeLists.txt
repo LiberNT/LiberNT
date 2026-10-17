@@ -32,7 +32,7 @@ set_module_type(libernt win32gui UNICODE)
 target_link_libraries(libernt uuid tzlib volresize)
 add_delay_importlibs(libernt setuplib)
 add_importlibs(libernt advapi32 gdi32 user32 comctl32 dwmapi shlwapi setupapi ole32 oleaut32 msvcrt kernel32 ntdll)
-add_cd_file(TARGET libernt DESTINATION reactos NO_CAB FOR bootcd)
+add_cd_file(TARGET libernt DESTINATION reactos NO_CAB FOR bootcd livecd)
 add_cd_file(TARGET libernt DESTINATION ${ARCH} FOR preinstall)
 
 list(APPEND OOBE_SOURCE

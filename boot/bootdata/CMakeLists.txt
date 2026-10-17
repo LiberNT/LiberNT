@@ -103,7 +103,7 @@ add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/livecd/unattend.inf DESTINATION rea
 add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/preinstall/unattend.inf DESTINATION reactos FOR preinstall)
 
 # Keep a blank hook for commands added manually before building the image.
-add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/app_launcher.cmd DESTINATION "reactos/system32" FOR preinstall)
+add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/app_launcher.cmd DESTINATION "reactos/system32" FOR preinstall livecd)
 
 # LiveImage shortcuts
 add_custom_target(livecd_links)
