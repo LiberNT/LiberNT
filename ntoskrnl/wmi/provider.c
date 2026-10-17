@@ -1156,6 +1156,31 @@ WmipSetMatches(
     return TRUE;
 }
 
+BOOLEAN
+WmipIsGuidRegistered(
+    _In_ LPCGUID Guid)
+{
+    PLIST_ENTRY ProviderEntry, SetEntry;
+    PWMIP_PROVIDER Provider;
+    BOOLEAN Found = FALSE;
+
+    WmipAcquireShared();
+    for (ProviderEntry = WmipProviderList.Flink;
+         !Found && ProviderEntry != &WmipProviderList;
+         ProviderEntry = ProviderEntry->Flink)
+    {
+        Provider = CONTAINING_RECORD(ProviderEntry, WMIP_PROVIDER, Link);
+        for (SetEntry = Provider->InstanceSets.Flink;
+             !Found && SetEntry != &Provider->InstanceSets;
+             SetEntry = SetEntry->Flink)
+        {
+            Found = WmipSetMatches(CONTAINING_RECORD(SetEntry, WMIP_INSTANCE_SET, Link), Guid, FALSE);
+        }
+    }
+    WmipRelease();
+    return Found;
+}
+
 static
 PWMIP_SET_LIST
 WmipSnapshotSets(

@@ -375,6 +375,13 @@ WmipQueryMultiple(
     return Status;
 }
 
+BOOLEAN
+WmipIsDataBlockRegistered(
+    _In_ LPCGUID Guid)
+{
+    return IsEqualGUID(Guid, &MSSmBios_RawSMBiosTables_GUID) || WmipIsGuidRegistered(Guid);
+}
+
 /*
  * @unimplemented
  */

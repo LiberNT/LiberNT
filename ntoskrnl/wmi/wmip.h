@@ -94,6 +94,14 @@ NTAPI
 WmipNameEventInstance(
     _In_ PWNODE_HEADER Wnode);
 
+BOOLEAN
+WmipIsGuidRegistered(
+    _In_ LPCGUID Guid);
+
+BOOLEAN
+WmipIsDataBlockRegistered(
+    _In_ LPCGUID Guid);
+
 NTSTATUS
 NTAPI
 WmipQueryAllData(

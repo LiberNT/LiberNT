@@ -435,6 +435,277 @@ WmipOpenGuidForEvents(
 
 static
 NTSTATUS
+WmipReferenceWnodeObject(
+    _In_ PVOID Buffer,
+    _In_ ULONG InputLength,
+    _In_ ULONG MinimumLength,
+    _In_ ACCESS_MASK DesiredAccess,
+    _Out_ PVOID *GuidObject)
+{
+    PWNODE_HEADER Header = Buffer;
+
+    *GuidObject = NULL;
+    if (InputLength < MinimumLength || Header->BufferSize < MinimumLength || Header->BufferSize > InputLength)
+        return STATUS_INVALID_PARAMETER;
+    return ObReferenceObjectByHandle(Header->KernelHandle,
+                                     DesiredAccess,
+                                     WmipGuidObjectType,
+                                     ExGetPreviousMode(),
+                                     GuidObject,
+                                     NULL);
+}
+
+static
+NTSTATUS
+WmipCaptureWnodeInstanceName(
+    _In_ PVOID Buffer,
+    _In_ ULONG Length,
+    _In_ ULONG Offset,
+    _Out_ PUNICODE_STRING Name)
+{
+    USHORT NameLength;
+
+    RtlZeroMemory(Name, sizeof(*Name));
+    if (Offset < sizeof(WNODE_HEADER) || Offset > Length - sizeof(USHORT))
+        return STATUS_INVALID_PARAMETER;
+    NameLength = *(USHORT UNALIGNED *)((PUCHAR)Buffer + Offset);
+    if ((NameLength & 1) != 0 || NameLength > Length - Offset - sizeof(USHORT))
+        return STATUS_INVALID_PARAMETER;
+    Name->Buffer = ExAllocatePoolWithTag(PagedPool, NameLength + sizeof(WCHAR), 'nImW');
+    if (Name->Buffer == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlCopyMemory(Name->Buffer, (PUCHAR)Buffer + Offset + sizeof(USHORT), NameLength);
+    Name->Buffer[NameLength / sizeof(WCHAR)] = UNICODE_NULL;
+    Name->Length = NameLength;
+    Name->MaximumLength = NameLength + sizeof(WCHAR);
+    return STATUS_SUCCESS;
+}
+
+static
+BOOLEAN
+WmipWnodeRangeValid(
+    _In_ ULONG Length,
+    _In_ ULONG Offset,
+    _In_ ULONG Size)
+{
+    return Size == 0 || (Offset >= sizeof(WNODE_HEADER) && Offset <= Length && Size <= Length - Offset);
+}
+
+static
+NTSTATUS
+WmipFinishQuery(
+    _In_ NTSTATUS Status,
+    _In_ ULONG Needed,
+    _Out_writes_bytes_(OutputLength) PVOID Buffer,
+    _In_ ULONG OutputLength,
+    _Out_ PULONG Information)
+{
+    *Information = 0;
+    if (NT_SUCCESS(Status))
+    {
+        *Information = Needed;
+        return Status;
+    }
+    if (Status != STATUS_BUFFER_TOO_SMALL || OutputLength < sizeof(ULONG))
+        return Status;
+    *(PULONG)Buffer = Needed;
+    *Information = sizeof(ULONG);
+    return STATUS_BUFFER_OVERFLOW;
+}
+
+static
+NTSTATUS
+WmipIoctlQueryAllData(
+    _Inout_ PVOID Buffer,
+    _In_ ULONG InputLength,
+    _In_ ULONG OutputLength,
+    _Out_ PULONG Information)
+{
+    PVOID GuidObject;
+    ULONG Size = OutputLength;
+    NTSTATUS Status;
+
+    *Information = 0;
+    Status = WmipReferenceWnodeObject(Buffer, InputLength, sizeof(WNODE_HEADER), WMIGUID_QUERY, &GuidObject);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = IoWMIQueryAllData(GuidObject, &Size, OutputLength ? Buffer : NULL);
+    ObDereferenceObject(GuidObject);
+    return WmipFinishQuery(Status, Size, Buffer, OutputLength, Information);
+}
+
+static
+NTSTATUS
+WmipIoctlQuerySingleInstance(
+    _Inout_ PVOID Buffer,
+    _In_ ULONG InputLength,
+    _In_ ULONG OutputLength,
+    _Out_ PULONG Information)
+{
+    PWNODE_SINGLE_INSTANCE Wnode = Buffer;
+    UNICODE_STRING Name;
+    PVOID GuidObject;
+    ULONG Size = OutputLength;
+    NTSTATUS Status;
+
+    *Information = 0;
+    Status = WmipReferenceWnodeObject(Buffer, InputLength, sizeof(WNODE_SINGLE_INSTANCE), WMIGUID_QUERY, &GuidObject);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = WmipCaptureWnodeInstanceName(Buffer, Wnode->WnodeHeader.BufferSize, Wnode->OffsetInstanceName, &Name);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IoWMIQuerySingleInstance(GuidObject, &Name, &Size, OutputLength ? Buffer : NULL);
+        ExFreePoolWithTag(Name.Buffer, 'nImW');
+    }
+    ObDereferenceObject(GuidObject);
+    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_TOO_SMALL)
+        return Status;
+    return WmipFinishQuery(Status, Size, Buffer, OutputLength, Information);
+}
+
+static
+NTSTATUS
+WmipIoctlSetSingleInstance(
+    _In_ PVOID Buffer,
+    _In_ ULONG InputLength,
+    _Out_ PULONG Information)
+{
+    PWNODE_SINGLE_INSTANCE Wnode = Buffer;
+    UNICODE_STRING Name;
+    PVOID GuidObject;
+    NTSTATUS Status;
+
+    *Information = 0;
+    Status = WmipReferenceWnodeObject(Buffer, InputLength, sizeof(WNODE_SINGLE_INSTANCE), WMIGUID_SET, &GuidObject);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!WmipWnodeRangeValid(Wnode->WnodeHeader.BufferSize, Wnode->DataBlockOffset, Wnode->SizeDataBlock))
+        Status = STATUS_INVALID_PARAMETER;
+    else
+        Status = WmipCaptureWnodeInstanceName(Buffer, Wnode->WnodeHeader.BufferSize, Wnode->OffsetInstanceName, &Name);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IoWMISetSingleInstance(GuidObject, &Name, Wnode->WnodeHeader.Version, Wnode->SizeDataBlock,
+                                        (PUCHAR)Buffer + Wnode->DataBlockOffset);
+        ExFreePoolWithTag(Name.Buffer, 'nImW');
+    }
+    ObDereferenceObject(GuidObject);
+    return Status;
+}
+
+static
+NTSTATUS
+WmipIoctlSetSingleItem(
+    _In_ PVOID Buffer,
+    _In_ ULONG InputLength,
+    _Out_ PULONG Information)
+{
+    PWNODE_SINGLE_ITEM Wnode = Buffer;
+    UNICODE_STRING Name;
+    PVOID GuidObject;
+    NTSTATUS Status;
+
+    *Information = 0;
+    Status = WmipReferenceWnodeObject(Buffer, InputLength, sizeof(WNODE_SINGLE_ITEM), WMIGUID_SET, &GuidObject);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!WmipWnodeRangeValid(Wnode->WnodeHeader.BufferSize, Wnode->DataBlockOffset, Wnode->SizeDataItem))
+        Status = STATUS_INVALID_PARAMETER;
+    else
+        Status = WmipCaptureWnodeInstanceName(Buffer, Wnode->WnodeHeader.BufferSize, Wnode->OffsetInstanceName, &Name);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IoWMISetSingleItem(GuidObject, &Name, Wnode->ItemId, Wnode->WnodeHeader.Version, Wnode->SizeDataItem,
+                                    (PUCHAR)Buffer + Wnode->DataBlockOffset);
+        ExFreePoolWithTag(Name.Buffer, 'nImW');
+    }
+    ObDereferenceObject(GuidObject);
+    return Status;
+}
+
+static
+NTSTATUS
+WmipIoctlExecuteMethod(
+    _Inout_ PVOID Buffer,
+    _In_ ULONG InputLength,
+    _In_ ULONG OutputLength,
+    _Out_ PULONG Information)
+{
+    PWNODE_METHOD_ITEM Wnode = Buffer;
+    UNICODE_STRING Name;
+    PVOID GuidObject;
+    PUCHAR Data = NULL;
+    ULONG InSize = 0, OutSize = OutputLength, Capacity;
+    NTSTATUS Status;
+
+    *Information = 0;
+    Status = WmipReferenceWnodeObject(Buffer, InputLength, sizeof(WNODE_METHOD_ITEM), WMIGUID_EXECUTE, &GuidObject);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!WmipWnodeRangeValid(Wnode->WnodeHeader.BufferSize, Wnode->DataBlockOffset, Wnode->SizeDataBlock))
+        Status = STATUS_INVALID_PARAMETER;
+    else
+        Status = WmipCaptureWnodeInstanceName(Buffer, Wnode->WnodeHeader.BufferSize, Wnode->OffsetInstanceName, &Name);
+    if (NT_SUCCESS(Status))
+    {
+        InSize = Wnode->SizeDataBlock;
+        Capacity = max(InSize, OutputLength);
+        if (Capacity != 0)
+        {
+            Data = ExAllocatePoolWithTag(PagedPool, Capacity, 'mImW');
+            if (Data == NULL)
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+            else if (InSize != 0)
+                RtlCopyMemory(Data, (PUCHAR)Buffer + Wnode->DataBlockOffset, InSize);
+        }
+        if (NT_SUCCESS(Status))
+            Status = IoWMIExecuteMethod(GuidObject, &Name, Wnode->MethodId, InSize, &OutSize, Data);
+        if (NT_SUCCESS(Status) && OutSize != 0)
+            RtlCopyMemory(Buffer, Data, OutSize);
+        if (Data != NULL)
+            ExFreePoolWithTag(Data, 'mImW');
+        ExFreePoolWithTag(Name.Buffer, 'nImW');
+    }
+    ObDereferenceObject(GuidObject);
+    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_TOO_SMALL)
+        return Status;
+    return WmipFinishQuery(Status, OutSize, Buffer, OutputLength, Information);
+}
+
+static
+NTSTATUS
+WmipOpenBlock(
+    PVOID Buffer,
+    ULONG InputLength,
+    PULONG OutputLength)
+{
+    PWMIP_RESULT2 Result = (PWMIP_RESULT2)Buffer;
+    PWMIP_GUID_OBJECT GuidObject;
+    HANDLE Handle;
+    NTSTATUS Status;
+
+    Status = WmipOpenGuidForEvents(Buffer, InputLength, OutputLength);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Handle = Result->Handle;
+    Status = ObReferenceObjectByHandle(Handle, 0, WmipGuidObjectType, ExGetPreviousMode(), (PVOID *)&GuidObject, NULL);
+    if (NT_SUCCESS(Status))
+    {
+        if (!WmipIsDataBlockRegistered(&GuidObject->Guid))
+            Status = STATUS_WMI_GUID_NOT_FOUND;
+        ObDereferenceObject(GuidObject);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        ObCloseHandle(Handle, ExGetPreviousMode());
+        Result->Handle = NULL;
+    }
+    return Status;
+}
+
+static
+NTSTATUS
 WmiSetMark(
     PWMI_SET_MARK Buffer,
     ULONG Length)
@@ -494,10 +765,46 @@ WmipIoControl(
             break;
         }
 
+        case IOCTL_WMI_QUERY_ALL_DATA:
+        {
+            Status = WmipIoctlQueryAllData(Buffer, InputLength, OutputLength, &OutputLength);
+            break;
+        }
+
+        case IOCTL_WMI_SINGLE_INSTANCE:
+        {
+            Status = WmipIoctlQuerySingleInstance(Buffer, InputLength, OutputLength, &OutputLength);
+            break;
+        }
+
+        case IOCTL_WMI_SET_SINGLE_INSTANCE:
+        {
+            Status = WmipIoctlSetSingleInstance(Buffer, InputLength, &OutputLength);
+            break;
+        }
+
+        case IOCTL_WMI_SET_SINGLE_ITEM:
+        {
+            Status = WmipIoctlSetSingleItem(Buffer, InputLength, &OutputLength);
+            break;
+        }
+
+        case IOCTL_WMI_EXECUTE_METHOD:
+        {
+            Status = WmipIoctlExecuteMethod(Buffer, InputLength, OutputLength, &OutputLength);
+            break;
+        }
+
         case 0x228168:
         {
             DPRINT1("IOCTL 0x228168 is unimplemented, ignoring\n");
             Status = STATUS_SUCCESS;
+            break;
+        }
+
+        case IOCTL_WMI_OPEN_BLOCK:
+        {
+            Status = WmipOpenBlock(Buffer, InputLength, &OutputLength);
             break;
         }
 
@@ -522,7 +829,6 @@ WmipIoControl(
         default:
             DPRINT1("Unsupported yet IOCTL: 0x%lx\n", IoControlCode);
             Status = STATUS_INVALID_DEVICE_REQUEST;
-            __debugbreak();
             break;
     }
 
@@ -530,7 +836,7 @@ WmipIoControl(
         return Status;
 
     Irp->IoStatus.Status = Status;
-    Irp->IoStatus.Information = NT_SUCCESS(Status) ? OutputLength : 0;
+    Irp->IoStatus.Information = !NT_ERROR(Status) ? OutputLength : 0;
 
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return Status;
