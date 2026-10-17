@@ -82,6 +82,10 @@ BuildPersonalization(PageBuilder &page)
     page.Group();
     page.Navigate(Str(IDS_PAGE_BACKGROUND), Str(IDS_BACKGROUND_DESC), L"image_20_regular", PageId::Background)
         .Keywords = Str(IDS_BACKGROUND_KEYWORDS);
+    page.Navigate(Str(IDS_PAGE_COLORS), Str(IDS_COLORS_DESC), L"color_20_regular", PageId::Colors)
+        .Keywords = Str(IDS_COLORS_KEYWORDS);
+    page.Navigate(Str(IDS_PAGE_LOCKSCREEN), Str(IDS_LOCKSCREEN_DESC), L"lock_closed_20_regular", PageId::LockScreen)
+        .Keywords = Str(IDS_LOCKSCREEN_KEYWORDS);
     page.Navigate(Str(IDS_PAGE_TASKBAR), Str(IDS_TASKBAR_DESC), L"panel_bottom_20_regular", PageId::Taskbar);
     page.Navigate(Str(IDS_PAGE_FONTS), Str(IDS_FONTS_DESC), L"text_font_20_regular", PageId::Fonts);
 }
@@ -306,6 +310,228 @@ BuildBackground(PageBuilder &page)
                             SetBackgroundColor(BackgroundColors[index]);
                     });
     }
+}
+
+#define ACCENT_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent"
+
+static const BYTE DefaultAccentPalette[32] =
+{
+    0x99, 0xEB, 0xFF, 0x00, 0x4C, 0xC2, 0xFF, 0x00, 0x00, 0x91, 0xF8, 0x00, 0x00, 0x78, 0xD4, 0x00,
+    0x00, 0x67, 0xC0, 0x00, 0x00, 0x3E, 0x92, 0x00, 0x00, 0x1A, 0x68, 0x00, 0xF7, 0x63, 0x0C, 0x00,
+};
+
+static const COLORREF AccentColors[] =
+{
+    RGB(0x00, 0x78, 0xD4), RGB(0x87, 0x64, 0xB8), RGB(0xE3, 0x00, 0x8C), RGB(0xD1, 0x34, 0x38),
+    RGB(0xF7, 0x63, 0x0C), RGB(0xFF, 0xB9, 0x00), RGB(0x10, 0x7C, 0x10), RGB(0x76, 0x76, 0x76),
+};
+
+static const UINT AccentNames[] =
+{
+    IDS_ACCENT_BLUE, IDS_ACCENT_PURPLE, IDS_ACCENT_PINK, IDS_ACCENT_RED, IDS_ACCENT_ORANGE, IDS_ACCENT_YELLOW,
+    IDS_ACCENT_GREEN, IDS_ACCENT_GRAPHITE,
+};
+
+static COLORREF
+MixColor(COLORREF color, COLORREF with, UINT percent)
+{
+    return RGB((GetRValue(color) * (100 - percent) + GetRValue(with) * percent + 50) / 100,
+               (GetGValue(color) * (100 - percent) + GetGValue(with) * percent + 50) / 100,
+               (GetBValue(color) * (100 - percent) + GetBValue(with) * percent + 50) / 100);
+}
+
+static void
+SetAccentColor(UINT index)
+{
+    static const UINT Mix[] = { 70, 45, 20, 0, 15, 45, 70 };
+    BYTE palette[32];
+    HKEY key;
+
+    if (index == 0)
+    {
+        CopyMemory(palette, DefaultAccentPalette, sizeof(palette));
+    }
+    else
+    {
+        ZeroMemory(palette, sizeof(palette));
+        for (UINT i = 0; i < 8; i++)
+        {
+            COLORREF color = AccentColors[index];
+
+            if (i < 3)
+                color = MixColor(color, RGB(0xFF, 0xFF, 0xFF), Mix[i]);
+            else if (i > 3 && i < 7)
+                color = MixColor(color, RGB(0x00, 0x00, 0x00), Mix[i]);
+            palette[i * 4] = GetRValue(color);
+            palette[i * 4 + 1] = GetGValue(color);
+            palette[i * 4 + 2] = GetBValue(color);
+        }
+    }
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, ACCENT_KEY, 0, NULL, 0, KEY_SET_VALUE, NULL, &key, NULL) != ERROR_SUCCESS)
+        return;
+    RegSetValueExW(key, L"AccentPalette", 0, REG_BINARY, palette, sizeof(palette));
+    RegCloseKey(key);
+    BroadcastSetting(L"ImmersiveColorSet");
+}
+
+static int
+CurrentAccent()
+{
+    BYTE palette[32];
+    DWORD size = sizeof(palette);
+
+    if (RegGetValueW(HKEY_CURRENT_USER, ACCENT_KEY, L"AccentPalette", RRF_RT_REG_BINARY, NULL, palette, &size) !=
+            ERROR_SUCCESS || size < sizeof(palette))
+        return 0;
+    for (UINT i = 0; i < _countof(AccentColors); i++)
+    {
+        if (RGB(palette[12], palette[13], palette[14]) == AccentColors[i])
+            return (int)i;
+    }
+    return -1;
+}
+
+void
+BuildColors(PageBuilder &page)
+{
+    std::vector<std::wstring> names;
+    int current = page.Indexing ? 0 : CurrentAccent();
+
+    for (UINT i = 0; i < _countof(AccentNames); i++)
+        names.push_back(Str(AccentNames[i]));
+    if (current < 0)
+    {
+        names.push_back(Str(IDS_ACCENT_CUSTOM));
+        current = (int)names.size() - 1;
+    }
+    page.Group();
+    page.Choice(Str(IDS_ACCENT_COLOR), Str(IDS_ACCENT_COLOR_DESC), L"color_20_regular", names, current,
+                [](int index)
+                {
+                    if (index < (int)_countof(AccentColors))
+                        SetAccentColor((UINT)index);
+                }).Keywords = Str(IDS_COLORS_KEYWORDS);
+}
+
+struct ScreenSaver
+{
+    std::wstring Path;
+    std::wstring Name;
+};
+
+static std::vector<ScreenSaver>
+ScreenSavers()
+{
+    std::vector<ScreenSaver> savers;
+    WCHAR directory[MAX_PATH];
+    WIN32_FIND_DATAW data;
+    HANDLE find;
+
+    if (!GetSystemDirectoryW(directory, _countof(directory)))
+        return savers;
+    find = FindFirstFileW((std::wstring(directory) + L"\\*.scr").c_str(), &data);
+    if (find == INVALID_HANDLE_VALUE)
+        return savers;
+    do
+    {
+        ScreenSaver saver;
+        WCHAR name[256];
+        HMODULE module;
+
+        saver.Path = std::wstring(directory) + L"\\" + data.cFileName;
+        saver.Name = data.cFileName;
+        saver.Name.erase(saver.Name.rfind(L'.'));
+        module = LoadLibraryExW(saver.Path.c_str(), NULL, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+        if (module)
+        {
+            if (LoadStringW(module, 1, name, _countof(name)) > 0)
+                saver.Name = name;
+            FreeLibrary(module);
+        }
+        savers.push_back(saver);
+    } while (FindNextFileW(find, &data));
+    FindClose(find);
+    std::sort(savers.begin(), savers.end(),
+              [](const ScreenSaver &a, const ScreenSaver &b) { return lstrcmpiW(a.Name.c_str(), b.Name.c_str()) < 0; });
+    return savers;
+}
+
+static const UINT ScreenSaverMinutes[] = { 1, 2, 3, 5, 10, 15, 20, 30, 45, 60 };
+
+static void
+SetScreenSaver(const std::wstring &path)
+{
+    if (path.empty())
+    {
+        HKEY key;
+
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, DESKTOP_KEY, 0, KEY_SET_VALUE, &key) == ERROR_SUCCESS)
+        {
+            RegDeleteValueW(key, L"SCRNSAVE.EXE");
+            RegCloseKey(key);
+        }
+    }
+    else
+    {
+        WriteString(HKEY_CURRENT_USER, DESKTOP_KEY, L"SCRNSAVE.EXE", path);
+    }
+    SystemParametersInfoW(SPI_SETSCREENSAVEACTIVE, !path.empty(), NULL, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+}
+
+void
+BuildLockScreen(PageBuilder &page)
+{
+    std::vector<ScreenSaver> savers;
+    std::vector<std::wstring> names, waits;
+    std::wstring current;
+    BOOL active = FALSE, secure = FALSE;
+    UINT timeout = 600;
+    int selected = 0, wait = 0;
+
+    if (!page.Indexing)
+    {
+        savers = ScreenSavers();
+        current = ReadString(HKEY_CURRENT_USER, DESKTOP_KEY, L"SCRNSAVE.EXE");
+        SystemParametersInfoW(SPI_GETSCREENSAVEACTIVE, 0, &active, 0);
+        SystemParametersInfoW(SPI_GETSCREENSAVETIMEOUT, 0, &timeout, 0);
+        SystemParametersInfoW(SPI_GETSCREENSAVESECURE, 0, &secure, 0);
+    }
+    names.push_back(Str(IDS_NONE));
+    for (size_t i = 0; i < savers.size(); i++)
+    {
+        names.push_back(savers[i].Name);
+        if (active && !lstrcmpiW(savers[i].Path.c_str(), current.c_str()))
+            selected = (int)i + 1;
+    }
+    for (UINT i = 0; i < _countof(ScreenSaverMinutes); i++)
+    {
+        waits.push_back(Format(ScreenSaverMinutes[i] == 1 ? IDS_MINUTE : IDS_MINUTES, (ULONG)ScreenSaverMinutes[i]));
+        if (ScreenSaverMinutes[i] * 60 <= timeout)
+            wait = (int)i;
+    }
+
+    page.Group(Str(IDS_SCREEN_SAVER));
+    page.Choice(Str(IDS_SCREEN_SAVER), Str(IDS_SCREEN_SAVER_DESC), L"desktop_20_regular", names, selected,
+                [savers](int index)
+                {
+                    SetScreenSaver(index > 0 && index <= (int)savers.size() ? savers[index - 1].Path : std::wstring());
+                }).Keywords = Str(IDS_LOCKSCREEN_KEYWORDS);
+    if (selected == 0)
+        return;
+    page.Choice(Str(IDS_SCREEN_SAVER_WAIT), Str(IDS_SCREEN_SAVER_WAIT_DESC), L"clock_20_regular", waits, wait,
+                [](int index)
+                {
+                    SystemParametersInfoW(SPI_SETSCREENSAVETIMEOUT, ScreenSaverMinutes[index] * 60, NULL,
+                                          SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+                });
+    page.Toggle(Str(IDS_SCREEN_SAVER_SECURE), Str(IDS_SCREEN_SAVER_SECURE_DESC), L"lock_closed_20_regular",
+                secure != FALSE,
+                [](int on)
+                {
+                    SystemParametersInfoW(SPI_SETSCREENSAVESECURE, on != 0, NULL, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+                });
+    page.Button(Str(IDS_PREVIEW), Str(IDS_SCREEN_SAVER_PREVIEW_DESC), L"desktop_20_regular", Str(IDS_PREVIEW),
+                [current](int) { Launch(current.c_str(), L"/s"); });
 }
 
 static void

@@ -60,6 +60,8 @@ enum class PageId
     Personalization,
     Background,
     Taskbar,
+    Colors,
+    LockScreen,
     Fonts,
     Apps,
     InstalledApps,
@@ -239,6 +241,8 @@ void BuildNetworkAdvanced(PageBuilder &page);
 void BuildPersonalization(PageBuilder &page);
 void BuildBackground(PageBuilder &page);
 void BuildTaskbar(PageBuilder &page);
+void BuildColors(PageBuilder &page);
+void BuildLockScreen(PageBuilder &page);
 void BuildFonts(PageBuilder &page);
 void BuildApps(PageBuilder &page);
 void BuildInstalledApps(PageBuilder &page);
