@@ -320,10 +320,11 @@ CmBattGetStaData(IN PDEVICE_OBJECT DeviceObject,
         if (CmBattDebug & 0x440)
             DbgPrint("CmBattGetStaData: _STA method returned %x \n", *StaData);
     }
-    else if (CmBattDebug & 0x44C)
+    else
     {
         /* Failure */
-        DbgPrint("CmBattGetStaData: Failed _STA method - Status (0x%x)\n", Status);
+        if (CmBattDebug & 0x44C)
+            DbgPrint("CmBattGetStaData: Failed _STA method - Status (0x%x)\n", Status);
         Status = STATUS_NO_SUCH_DEVICE;
     }
 
@@ -366,10 +367,11 @@ CmBattGetUniqueId(IN PDEVICE_OBJECT DeviceObject,
         if (CmBattDebug & 0x440)
             DbgPrint("CmBattGetUniqueId: _UID method returned %x \n", *UniqueId);
     }
-    else if (CmBattDebug & 0x44C)
+    else
     {
         /* Failure */
-        DbgPrint("CmBattGetUniqueId: Failed _UID method - Status (0x%x)\n", Status);
+        if (CmBattDebug & 0x44C)
+            DbgPrint("CmBattGetUniqueId: Failed _UID method - Status (0x%x)\n", Status);
         Status = STATUS_NO_SUCH_DEVICE;
     }
 
