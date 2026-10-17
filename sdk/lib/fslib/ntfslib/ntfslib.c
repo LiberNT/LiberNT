@@ -421,42 +421,57 @@ NtfsCheckReport(
     switch (Event)
     {
         case NtfsCheckRecordCorrupt:
-            NtfsFormatReport(Check->Callback, "File record segment %I64u is corrupt.\n", Argument1);
+            NtfsFormatReport(Check->Callback, "File record segment %I64X is corrupt.\n", Argument1);
             break;
         case NtfsCheckRecordBitmap:
             NtfsFormatReport(Check->Callback,
-                             Argument2 ? "File record segment %I64u is in use but marked free in the MFT bitmap.\n"
-                                       : "File record segment %I64u is free but marked in use in the MFT bitmap.\n",
+                             Argument2 ? "File record segment %I64X is in use but marked free in the MFT bitmap.\n"
+                                       : "File record segment %I64X is free but marked in use in the MFT bitmap.\n",
                              Argument1);
             break;
         case NtfsCheckBadRunList:
             NtfsFormatReport(Check->Callback,
-                             "Attribute type 0x%I64x in file record segment %I64u has an invalid mapping pairs array.\n",
+                             "Attribute type 0x%I64x in file record segment %I64X has an invalid mapping pairs array.\n",
                              Argument2, Argument1);
             break;
         case NtfsCheckClusterOutOfRange:
             NtfsFormatReport(Check->Callback,
-                             "File record segment %I64u refers to cluster 0x%I64x beyond the end of the volume.\n",
+                             "File record segment %I64X refers to cluster 0x%I64x beyond the end of the volume.\n",
                              Argument1, Argument2);
             break;
         case NtfsCheckCrossLinked:
             NtfsFormatReport(Check->Callback,
-                             "File record segment %I64u shares cluster 0x%I64x with another file.\n",
+                             "File record segment %I64X shares cluster 0x%I64x with another file.\n",
                              Argument1, Argument2);
             break;
         case NtfsCheckIndexCorrupt:
             NtfsFormatReport(Check->Callback,
-                             "Index $I30 of file %I64u is corrupt at VCN 0x%I64x.\n",
+                             "Index $I30 of file %I64X is corrupt at VCN 0x%I64x.\n",
                              Argument1, Argument2);
             break;
         case NtfsCheckIndexBadEntry:
             NtfsFormatReport(Check->Callback,
-                             "An index entry in index $I30 of file %I64u points to unused or stale file 0x%I64x.\n",
+                             "An index entry in index $I30 of file %I64X points to unused or stale file 0x%I64x.\n",
                              Argument1, Argument2);
+            break;
+        case NtfsCheckIndexStaleEntry:
+            NtfsFormatReport(Check->Callback,
+                             "An index entry in index $I30 of file %I64X has a stale reference 0x%I64x.\n",
+                             Argument1, Argument2);
+            break;
+        case NtfsCheckIndexEntryFixed:
+            NtfsFormatReport(Check->Callback,
+                             "Corrected %I64u index entries in index $I30 of file %I64X.\n",
+                             Argument2, Argument1);
+            break;
+        case NtfsCheckIndexEntryRemoved:
+            NtfsFormatReport(Check->Callback,
+                             "Deleted the index entry for file 0x%I64x from index $I30 of file %I64X.\n",
+                             Argument2, Argument1);
             break;
         case NtfsCheckNameNotIndexed:
             NtfsFormatReport(Check->Callback,
-                             "A name of file %I64u is missing from its parent index.\n",
+                             "A name of file %I64X is missing from its parent index.\n",
                              Argument1);
             break;
         case NtfsCheckUsedClustersFree:
@@ -474,10 +489,59 @@ NtfsCheckReport(
                              "Marked clusters 0x%I64x to 0x%I64x as in use in the volume bitmap.\n",
                              Argument1, Argument1 + Argument2 - 1);
             break;
+        case NtfsCheckRecordFreed:
+            NtfsFormatReport(Check->Callback, "Deleted corrupt file record segment %I64X.\n", Argument1);
+            break;
+        case NtfsCheckRecordBitmapFixed:
+            NtfsFormatReport(Check->Callback, "Corrected %I64u bits in the MFT bitmap.\n", Argument1);
+            break;
+        case NtfsCheckNameRelinked:
+            NtfsFormatReport(Check->Callback,
+                             "Recovered orphaned file %I64X into directory file %I64X.\n",
+                             Argument1, Argument2);
+            break;
         case NtfsCheckLostClustersFreed:
             NtfsFormatReport(Check->Callback,
                              "Freed clusters 0x%I64x to 0x%I64x in the volume bitmap.\n",
                              Argument1, Argument1 + Argument2 - 1);
+            break;
+        case NtfsCheckCrossLinkResolved:
+            NtfsFormatReport(Check->Callback,
+                             "Moved the shared clusters of file %I64X to cluster 0x%I64x.\n",
+                             Argument1, Argument2);
+            break;
+        case NtfsCheckLostAndFound:
+            NtfsFormatReport(Check->Callback,
+                             "Recovering the remaining unindexed files. Lost and found is located at \\found.%03I64u\n",
+                             Argument2);
+            break;
+        case NtfsCheckFileRecovered:
+            NtfsFormatReport(Check->Callback,
+                             "Recovered file %I64X into directory file %I64X.\n",
+                             Argument1, Argument2);
+            break;
+        case NtfsCheckAttributeListBad:
+            NtfsFormatReport(Check->Callback,
+                             "%I64u attribute list entries in file %I64X refer to corrupt or unused file record segments.\n",
+                             Argument2, Argument1);
+            break;
+        case NtfsCheckAttributeListFixed:
+            NtfsFormatReport(Check->Callback,
+                             "Deleted %I64u corrupt attribute list entries in file %I64X.\n",
+                             Argument2, Argument1);
+            break;
+        case NtfsCheckDataAttributeInserted:
+            NtfsFormatReport(Check->Callback, "Inserting data attribute into file %I64X.\n", Argument1);
+            break;
+        case NtfsCheckLostNameRemoved:
+            NtfsFormatReport(Check->Callback,
+                             "Removed %I64u names of file %I64X that belonged to a deleted directory.\n",
+                             Argument2, Argument1);
+            break;
+        case NtfsCheckIndexNameMissing:
+            NtfsFormatReport(Check->Callback,
+                             "An index entry in index $I30 of file %I64X names file 0x%I64x, which does not have that name.\n",
+                             Argument1, Argument2);
             break;
     }
 }
