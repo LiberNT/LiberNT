@@ -56,8 +56,8 @@ HTHEME WINAPI OpenThemeDataFromFile(HTHEMEFILE theme_file, HWND hwnd,
     }
     if (!dpi)
         dpi = GetDpiForSystem();
-    if (flags)
-        FIXME("unhandled flags: %#lx\n", flags);
+    if (flags & ~OTD_NONCLIENT)
+        FIXME("unhandled flags: %#lx\n", flags & ~OTD_NONCLIENT);
 
     theme = MSSTYLES_OpenThemeClassFromFile(theme_file, NULL, class_list, dpi);
     SetLastError(theme ? ERROR_SUCCESS : E_PROP_ID_UNSUPPORTED);
