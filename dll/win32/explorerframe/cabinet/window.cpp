@@ -437,12 +437,13 @@ CCabinetWindow::OnSize()
     GetClientRect(m_hwnd, &client);
     MoveWindow(m_TabBand->Window(), 0, 0, max(0, (int)client.right - CaptionButtonsWidth() - Scale(8)), TabStripHeight(),
                TRUE);
-    MoveWindow(m_NavBar, Scale(3), Scale(48), Scale(48) * 4, Scale(32), TRUE);
+    MoveWindow(m_NavBar, Scale(3), TabStripHeight() + Scale(8), Scale(48) * 4, Scale(32), TRUE);
     search = min(Scale(300), max(Scale(140), (int)(client.right - Scale(214)) / 3));
     if (m_SearchBox->Window())
-        MoveWindow(m_SearchBox->Window(), client.right - Scale(13) - search, Scale(48), search, Scale(32), TRUE);
+        MoveWindow(m_SearchBox->Window(), client.right - Scale(13) - search, TabStripHeight() + Scale(8), search,
+                   Scale(32), TRUE);
     if (m_AddressBand->Window())
-        MoveWindow(m_AddressBand->Window(), Scale(201), Scale(48),
+        MoveWindow(m_AddressBand->Window(), Scale(201), TabStripHeight() + Scale(8),
                    max(0, (int)client.right - Scale(13) - search - Scale(10) - Scale(201)), Scale(32), TRUE);
     size = ToolbarSize(m_DetailsBar);
     row = AddressBottom() + (CommandBottom() - 1 - AddressBottom() - Scale(40)) / 2;

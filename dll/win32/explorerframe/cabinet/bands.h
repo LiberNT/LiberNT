@@ -93,6 +93,8 @@ private:
     };
 
     int TabWidth() const;
+    int Slant() const { return Scale(14); }
+    BOOL InTab(int index, POINT pt) const;
     RECT TabRect(int index) const;
     RECT CloseRect(int index) const;
     RECT NewRect() const;

@@ -263,22 +263,23 @@ CCabinetTabBand::TabWidth() const
     int available;
 
     GetClientRect(m_hwnd, &client);
-    available = client.right - Scale(8) - Scale(48);
+    available = client.right - Scale(8) - Scale(40) - Slant();
     if (m_Count <= 0)
         return Scale(240);
-    return max(Scale(72), min(Scale(240), available / m_Count));
+    return max(Scale(72), min(Scale(240), available / m_Count + Slant()));
 }
 
 RECT
 CCabinetTabBand::TabRect(int index) const
 {
-    RECT rc;
+    RECT rc, client;
     int width = TabWidth();
 
-    rc.left = Scale(8) + index * width;
+    GetClientRect(m_hwnd, &client);
+    rc.left = Scale(8) + index * (width - Slant());
     rc.right = rc.left + width;
-    rc.top = Scale(8);
-    rc.bottom = Scale(40);
+    rc.top = Scale(18);
+    rc.bottom = client.bottom;
     return rc;
 }
 
@@ -288,10 +289,10 @@ CCabinetTabBand::CloseRect(int index) const
     RECT tab = TabRect(index), rc;
     int middle = (tab.top + tab.bottom) / 2;
 
-    rc.left = tab.right - Scale(34);
-    rc.right = tab.right - Scale(10);
-    rc.top = middle - Scale(12);
-    rc.bottom = middle + Scale(12);
+    rc.right = tab.right - Slant() - Scale(2);
+    rc.left = rc.right - Scale(18);
+    rc.top = middle - Scale(9);
+    rc.bottom = middle + Scale(9);
     return rc;
 }
 
@@ -299,23 +300,37 @@ RECT
 CCabinetTabBand::NewRect() const
 {
     RECT rc;
-    int right = Scale(8) + m_Count * TabWidth();
+    int width = TabWidth();
 
-    rc.left = right + Scale(6);
-    rc.right = rc.left + Scale(32);
-    rc.top = Scale(9);
-    rc.bottom = Scale(39);
+    rc.left = Scale(8) + m_Count * (width - Slant()) + Slant() - Scale(4);
+    rc.right = rc.left + Scale(27);
+    rc.top = Scale(18) + Scale(6);
+    rc.bottom = rc.top + Scale(14);
     return rc;
+}
+
+BOOL
+CCabinetTabBand::InTab(int index, POINT pt) const
+{
+    RECT rc = TabRect(index);
+    int slant;
+
+    if (pt.y < rc.top || pt.y >= rc.bottom)
+        return FALSE;
+    slant = MulDiv(Slant(), rc.bottom - pt.y, max(1, (int)(rc.bottom - rc.top)));
+    return pt.x >= rc.left + slant && pt.x < rc.right - slant;
 }
 
 int
 CCabinetTabBand::HitTab(POINT pt, BOOL *close) const
 {
     *close = FALSE;
-    for (int i = 0; i < m_Count; i++)
+    for (int order = -1; order < m_Count; order++)
     {
-        RECT rc = TabRect(i);
-        if (PtInRect(&rc, pt))
+        int i = order < 0 ? m_Active : order;
+        if (i < 0 || i >= m_Count || (order >= 0 && i == m_Active))
+            continue;
+        if (InTab(i, pt))
         {
             RECT button = CloseRect(i);
             *close = PtInRect(&button, pt);
@@ -360,6 +375,16 @@ DrawSmallIcon(Gdiplus::Graphics &graphics, int index, int x, int y, int size)
     DestroyIcon(icon);
 }
 
+static void
+TabOutline(Gdiplus::GraphicsPath &path, float left, float top, float right, float bottom, float slant, BOOL close)
+{
+    path.AddBezier(left, bottom, left + slant * 0.35f, bottom, left + slant * 0.65f, top, left + slant, top);
+    path.AddLine(left + slant, top, right - slant, top);
+    path.AddBezier(right - slant, top, right - slant * 0.65f, top, right - slant * 0.35f, bottom, right, bottom);
+    if (close)
+        path.CloseFigure();
+}
+
 void
 CCabinetTabBand::Paint(HDC dc)
 {
@@ -369,7 +394,6 @@ CCabinetTabBand::Paint(HDC dc)
     void *bits = NULL;
     HBITMAP bitmap;
     BOOL active = GetActiveWindow() == GetAncestor(m_hwnd, GA_ROOT);
-    COLORREF glassText = RGB(255, 255, 255);
     int width, height;
 
     GetClientRect(m_hwnd, &client);
@@ -392,6 +416,7 @@ CCabinetTabBand::Paint(HDC dc)
         LOGFONTW logFont;
         Gdiplus::StringFormat format;
         int iconSize = GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForWindow(m_hwnd));
+        float slant = (float)Slant();
 
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
@@ -402,52 +427,56 @@ CCabinetTabBand::Paint(HDC dc)
         GetObjectW(m_Font ? m_Font : GetStockObject(DEFAULT_GUI_FONT), sizeof(logFont), &logFont);
         Gdiplus::Font font(dc, &logFont);
 
-        for (int i = 0; i < m_Count; i++)
         {
-            RECT rc = TabRect(i), close = CloseRect(i);
-            BOOL selected = i == m_Active;
-            COLORREF ink = selected ? palette.Text : glassText;
-            BYTE inkAlpha = selected ? 255 : (active ? 235 : 150);
-            float left = (float)rc.left, top = (float)rc.top, right = (float)rc.right, bottom = (float)rc.bottom;
-            float radius = (float)Scale(8), foot = (float)Scale(4);
+            RECT add = NewRect();
+            Gdiplus::PointF points[4] =
+            {
+                Gdiplus::PointF((float)add.left, (float)add.top),
+                Gdiplus::PointF((float)add.right - (float)Scale(5), (float)add.top),
+                Gdiplus::PointF((float)add.right, (float)add.bottom),
+                Gdiplus::PointF((float)add.left + (float)Scale(5), (float)add.bottom),
+            };
+            Gdiplus::SolidBrush fill(GlassColor(m_HotNew ? 0xE0 : 0x90, palette.Band));
+            Gdiplus::Pen border(GlassColor(0x90, palette.TabBorder), 1.0f);
+            graphics.FillPolygon(&fill, points, 4);
+            graphics.DrawPolygon(&border, points, 4);
+        }
+        for (int order = m_Count - 1; order >= -1; order--)
+        {
+            int i = order < 0 ? m_Active : order;
+            RECT rc, close;
+            BOOL selected;
+            float left, top, right, bottom;
+            BYTE fillAlpha, inkAlpha;
 
-            if (selected)
+            if (i < 0 || i >= m_Count || (order >= 0 && i == m_Active))
+                continue;
+            rc = TabRect(i);
+            close = CloseRect(i);
+            selected = i == m_Active;
+            left = (float)rc.left;
+            top = (float)rc.top;
+            right = (float)rc.right;
+            bottom = (float)rc.bottom;
+            fillAlpha = selected ? 255 : (i == m_HotTab ? 0xE0 : 0xA0);
+            inkAlpha = selected ? 255 : (active ? 0xD0 : 0x90);
             {
-                Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
-                Gdiplus::SolidBrush fill(GlassColor(255, palette.Band));
-                Gdiplus::Pen border(GlassColor(255, palette.TabBorder), 1.0f);
+                Gdiplus::GraphicsPath fillPath(Gdiplus::FillModeAlternate);
+                Gdiplus::GraphicsPath edgePath(Gdiplus::FillModeAlternate);
+                Gdiplus::SolidBrush fill(GlassColor(fillAlpha, palette.Band));
+                Gdiplus::Pen border(GlassColor(selected ? 255 : 0xA0, palette.TabBorder), 1.0f);
 
-                path.AddArc(left - foot * 2.0f, bottom - foot * 2.0f, foot * 2.0f, foot * 2.0f, 90.0f, -90.0f);
-                path.AddArc(left, top, radius * 2.0f, radius * 2.0f, 180.0f, 90.0f);
-                path.AddArc(right - radius * 2.0f, top, radius * 2.0f, radius * 2.0f, 270.0f, 90.0f);
-                path.AddArc(right, bottom - foot * 2.0f, foot * 2.0f, foot * 2.0f, 180.0f, -90.0f);
-                graphics.FillPath(&fill, &path);
-                graphics.DrawPath(&border, &path);
-                graphics.FillRectangle(&fill, left - foot, bottom - 1.0f, right - left + foot * 2.0f, 2.0f);
+                TabOutline(fillPath, left, top + 0.5f, right, bottom + 1.0f, slant, TRUE);
+                TabOutline(edgePath, left, top + 0.5f, right, bottom + 1.0f, slant, FALSE);
+                graphics.FillPath(&fill, &fillPath);
+                graphics.DrawPath(&border, &edgePath);
             }
-            else
+            DrawSmallIcon(graphics, m_Tabs[i].IconIndex, rc.left + Slant() + Scale(2),
+                          (rc.top + rc.bottom - iconSize) / 2, iconSize);
             {
-                if (i == m_HotTab)
-                {
-                    Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
-                    Gdiplus::SolidBrush fill(Gdiplus::Color(0x30, 0x30, 0x30, 0x30));
-                    AddRoundRect(path, Gdiplus::RectF(left + 2.0f, top + 2.0f, right - left - 4.0f,
-                                                      bottom - top - 6.0f), (float)Scale(6));
-                    graphics.FillPath(&fill, &path);
-                }
-                if (i + 1 != m_Active && i + 1 < m_Count && i != m_HotTab && i + 1 != m_HotTab)
-                {
-                    Gdiplus::SolidBrush line(Gdiplus::Color(0x50, 0x50, 0x50, 0x50));
-                    graphics.FillRectangle(&line, right - 0.5f, top + (float)Scale(8), 1.0f,
-                                           bottom - top - (float)Scale(18));
-                }
-            }
-            DrawSmallIcon(graphics, m_Tabs[i].IconIndex, rc.left + Scale(10),
-                          (rc.top + rc.bottom - iconSize) / 2 - Scale(1), iconSize);
-            {
-                Gdiplus::SolidBrush brush(GlassColor(inkAlpha, ink));
-                Gdiplus::RectF text(left + (float)Scale(37), top, (float)(close.left - rc.left - Scale(37)),
-                                    bottom - top - (float)Scale(2));
+                Gdiplus::SolidBrush brush(GlassColor(inkAlpha, palette.Text));
+                float textLeft = left + slant + (float)(Scale(2) + iconSize + Scale(6));
+                Gdiplus::RectF text(textLeft, top, (float)close.left - textLeft - (float)Scale(2), bottom - top);
                 graphics.DrawString(m_Tabs[i].Title, -1, &font, text, &format, &brush);
             }
             if (selected || i == m_HotTab)
@@ -455,39 +484,17 @@ CCabinetTabBand::Paint(HDC dc)
                 RECT glyph = close;
                 if (i == m_HotTab && m_HotClose)
                 {
-                    Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
-                    Gdiplus::SolidBrush fill(selected ? GlassColor(255, palette.BandLine) :
-                                             Gdiplus::Color(0x40, 0x40, 0x40, 0x40));
-                    AddRoundRect(path, Gdiplus::RectF((float)close.left, (float)close.top,
-                                                      (float)(close.right - close.left),
-                                                      (float)(close.bottom - close.top)), (float)Scale(4));
-                    graphics.FillPath(&fill, &path);
+                    Gdiplus::SolidBrush fill(GlassColor(255, palette.BandBottom));
+                    graphics.FillEllipse(&fill, (float)close.left, (float)close.top, (float)(close.right - close.left),
+                                         (float)(close.bottom - close.top));
                 }
-                InflateRect(&glyph, -Scale(6), -Scale(6));
+                InflateRect(&glyph, -Scale(5), -Scale(5));
                 ShellFrame::FillIcon(graphics, L"dismiss_16_regular",
                                      Gdiplus::RectF((float)glyph.left, (float)glyph.top,
                                                     (float)(glyph.right - glyph.left),
                                                     (float)(glyph.bottom - glyph.top)),
-                                     selected ? palette.Glyph : glassText);
+                                     palette.Glyph);
             }
-        }
-        {
-            RECT add = NewRect(), glyph;
-            if (m_HotNew)
-            {
-                Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
-                Gdiplus::SolidBrush fill(Gdiplus::Color(0x30, 0x30, 0x30, 0x30));
-                AddRoundRect(path, Gdiplus::RectF((float)add.left, (float)add.top, (float)(add.right - add.left),
-                                                  (float)(add.bottom - add.top)), (float)Scale(4));
-                graphics.FillPath(&fill, &path);
-            }
-            glyph.left = (add.left + add.right) / 2 - Scale(6);
-            glyph.top = (add.top + add.bottom) / 2 - Scale(6);
-            glyph.right = glyph.left + Scale(12);
-            glyph.bottom = glyph.top + Scale(12);
-            ShellFrame::FillIcon(graphics, L"add_16_regular",
-                                 Gdiplus::RectF((float)glyph.left, (float)glyph.top, (float)(glyph.right - glyph.left),
-                                                (float)(glyph.bottom - glyph.top)), glassText);
         }
     }
     {
@@ -541,7 +548,7 @@ CCabinetTabBand::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             index = HitTab(pt, &close);
             if (m_DragTab >= 0 && (wParam & MK_LBUTTON) && GetCapture() == m_hwnd)
             {
-                int target = max(0, min(m_Count - 1, (int)((pt.x - Scale(8)) / max(1, TabWidth()))));
+                int target = max(0, min(m_Count - 1, (int)((pt.x - Scale(8)) / max(1, TabWidth() - Slant()))));
                 if (target != m_DragTab)
                 {
                     int from = m_DragTab;

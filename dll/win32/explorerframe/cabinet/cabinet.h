@@ -164,9 +164,9 @@ private:
     void FitCommandBar(int width);
     void UpdateViewToggles();
     int CaptionButtonsWidth();
-    int TabStripHeight() const { return Scale(40); }
-    int AddressBottom() const { return Scale(88); }
-    int CommandBottom() const { return Scale(143); }
+    int TabStripHeight() const { return Scale(46); }
+    int AddressBottom() const { return TabStripHeight() + Scale(48); }
+    int CommandBottom() const { return AddressBottom() + Scale(55); }
 
     HWND m_hwnd;
     CabinetTab m_Tabs[CABINET_MAX_TABS];
