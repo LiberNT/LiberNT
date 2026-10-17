@@ -8,6 +8,8 @@
 /* INCLUDES *****************************************************************/
 
 /* PSDK/NDK Headers */
+#include <stdio.h>
+
 #define WIN32_NO_STATUS
 #include <windef.h>
 #include <winbase.h>
@@ -16,6 +18,9 @@
 #include <ntddndis.h>
 
 #include <ndk/exfuncs.h>
+#include <ndk/iofuncs.h>
+#include <ndk/obfuncs.h>
+#include <ndk/rtlfuncs.h>
 #include <ntsecapi.h>
 
 #define NDEBUG
@@ -26,11 +31,95 @@
 /* FUNCTIONS ****************************************************************/
 
 static BOOLEAN
+QueryPermanentAddress(PCWSTR InstanceId, UCHAR * MacAddress)
+{
+    WCHAR DeviceName[64];
+    UNICODE_STRING Name;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    NDIS_OID Oid = OID_802_3_PERMANENT_ADDRESS;
+    UCHAR Address[SEED_BUFFER_SIZE];
+    HANDLE Handle;
+    NTSTATUS Status;
+    ULONG Index;
+
+    if (_snwprintf(DeviceName, ARRAYSIZE(DeviceName) - 1, L"\\Device\\%s", InstanceId) < 0)
+        return FALSE;
+    DeviceName[ARRAYSIZE(DeviceName) - 1] = UNICODE_NULL;
+    RtlInitUnicodeString(&Name, DeviceName);
+    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+
+    Status = NtOpenFile(&Handle,
+                        SYNCHRONIZE | FILE_READ_DATA,
+                        &ObjectAttributes,
+                        &IoStatusBlock,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    Status = NtDeviceIoControlFile(Handle,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   &IoStatusBlock,
+                                   IOCTL_NDIS_QUERY_GLOBAL_STATS,
+                                   &Oid,
+                                   sizeof(Oid),
+                                   Address,
+                                   sizeof(Address));
+    NtClose(Handle);
+    if (!NT_SUCCESS(Status) || IoStatusBlock.Information < sizeof(Address))
+        return FALSE;
+
+    for (Index = 0; Index < sizeof(Address); Index++)
+    {
+        if (Address[Index])
+        {
+            memcpy(MacAddress, Address, sizeof(Address));
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static BOOLEAN
 getMacAddress(UCHAR * MacAddress)
 {
-    /* FIXME: query NDIS for all the interfaces */
-    UNIMPLEMENTED;
-    return FALSE;
+    WCHAR SubKey[64], InstanceId[64];
+    DWORD Index, Length, Type, Size;
+    BOOLEAN Found = FALSE;
+    HKEY ClassKey, AdapterKey;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"SYSTEM\\CurrentControlSet\\Control\\Class\\{4D36E972-E325-11CE-BFC1-08002BE10318}",
+                      0,
+                      KEY_ENUMERATE_SUB_KEYS,
+                      &ClassKey) != ERROR_SUCCESS)
+    {
+        return FALSE;
+    }
+
+    for (Index = 0; !Found; Index++)
+    {
+        Length = ARRAYSIZE(SubKey);
+        if (RegEnumKeyExW(ClassKey, Index, SubKey, &Length, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        if (RegOpenKeyExW(ClassKey, SubKey, 0, KEY_QUERY_VALUE, &AdapterKey) != ERROR_SUCCESS)
+            continue;
+
+        Size = sizeof(InstanceId) - sizeof(WCHAR);
+        if (RegQueryValueExW(AdapterKey, L"NetCfgInstanceId", NULL, &Type, (LPBYTE)InstanceId, &Size) == ERROR_SUCCESS &&
+            Type == REG_SZ)
+        {
+            InstanceId[Size / sizeof(WCHAR)] = UNICODE_NULL;
+            Found = QueryPermanentAddress(InstanceId, MacAddress);
+        }
+        RegCloseKey(AdapterKey);
+    }
+
+    RegCloseKey(ClassKey);
+    return Found;
 }
 
 static VOID
