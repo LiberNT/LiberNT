@@ -15,7 +15,9 @@ FrameWindow::FrameWindow() :
     m_HotButton(CaptionButton::None),
     m_PressedButton(CaptionButton::None),
     m_Active(TRUE),
-    m_TrackingLeave(FALSE)
+    m_TrackingLeave(FALSE),
+    m_GlassWidth(-1),
+    m_GlassTop(-1)
 {
 }
 
@@ -100,6 +102,8 @@ FrameWindow::ApplyFrameAttributes()
 #endif
     DWORD corner = 2;
 
+    m_GlassWidth = GlassWidth();
+    m_GlassTop = GlassTop();
     DwmExtendFrameIntoClientArea(m_hwnd, &margins);
     DwmSetWindowAttribute(m_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
 }
@@ -366,6 +370,8 @@ FrameWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             RECT client;
             GetClientRect(m_hwnd, &client);
             OnLayout(client);
+            if (GlassWidth() != m_GlassWidth || GlassTop() != m_GlassTop)
+                ApplyFrameAttributes();
             Invalidate(NULL);
             break;
         }

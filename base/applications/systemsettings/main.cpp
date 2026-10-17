@@ -22,11 +22,16 @@ using namespace ShellFrame;
 
 #define IDC_SEARCH 100
 #define IDC_SCROLL 101
+#define IDC_BACK 102
+#define IDC_FORWARD 103
+#define IDC_NAVTREE 104
+#define IDC_CRUMBS 105
 #define IDC_ROW_FIRST 1000
 #define BAR_ACTION (-2)
 #define TIMER_REFRESH 1
 #define TIMER_SETTING 2
 #define WM_SETTINGS_CONTROL (WM_APP + 16)
+#define WM_SETTINGS_NAVIGATE (WM_APP + 17)
 
 enum class GlassTone
 {
@@ -196,12 +201,16 @@ public:
         m_Page(PageId::System),
         m_Scroll(0),
         m_ContentHeight(0),
-        m_HotNav(-1),
-        m_HotBack(FALSE),
-        m_HotForward(FALSE),
         m_HotAccount(FALSE),
-        m_HotCrumb(-1),
         m_TrackingClient(FALSE),
+        m_NavTool(NULL),
+        m_NavTree(NULL),
+        m_Crumbs(NULL),
+        m_ToolImages(NULL),
+        m_ToolDisabled(NULL),
+        m_NavImages(NULL),
+        m_PageBrush(NULL),
+        m_PageColor(CLR_NONE),
         m_Search(NULL),
         m_ScrollBar(NULL),
         m_CardBrush(NULL),
@@ -278,8 +287,8 @@ protected:
 
     BOOL IsCaptionClient(POINT pt) override
     {
-        RECT back = BackRect(), forward = ForwardRect();
-        return PtInRect(&back, pt) || PtInRect(&forward, pt);
+        UNREFERENCED_PARAMETER(pt);
+        return FALSE;
     }
 
     void OnCreate() override
@@ -299,6 +308,7 @@ protected:
         m_ScrollBar = CreateWindowExW(0, WC_SCROLLBARW, L"", WS_CHILD | SBS_VERT, 0, 0, 0, 0, m_hwnd,
                                       (HMENU)IDC_SCROLL, Instance, NULL);
         SetWindowSubclass(m_Search, SearchProc, 0, (DWORD_PTR)this);
+        CreateChrome();
         StringCchCopyW(cue, _countof(cue), Str(IDS_FIND_SETTING).c_str());
         SendMessageW(m_Search, EM_SETCUEBANNER, FALSE, (LPARAM)cue);
         OnThemeChanged();
@@ -364,6 +374,7 @@ protected:
             MoveWindow(m_Search, box.left, box.top + (box.bottom - box.top - height) / 2, box.right - box.left, height,
                        TRUE);
         }
+        LayoutChrome(client);
         LayoutContent();
     }
 
@@ -389,7 +400,6 @@ protected:
         }
         PaintCaption(canvas);
         PaintAccount(canvas);
-        PaintNavigation(canvas, client);
         PaintContent(canvas, client);
 #if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
         PaintCaptionButtons(canvas, client, c.Window);
@@ -405,7 +415,7 @@ protected:
                 break;
             case WM_MOUSELEAVE:
                 m_TrackingClient = FALSE;
-                SetHot(-1, FALSE, FALSE, FALSE, -1);
+                SetHot(FALSE);
                 break;
             case WM_LBUTTONUP:
                 OnButtonUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
@@ -430,12 +440,7 @@ protected:
                 break;
             case WM_MOUSEWHEEL:
             {
-                POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-                ScreenToClient(m_hwnd, &pt);
-                if (pt.x < PanelLeft())
-                    m_NavScroll -= MulDiv(GET_WHEEL_DELTA_WPARAM(wParam), m_Theme.Scale(40), WHEEL_DELTA);
-                else
-                    m_Scroll -= MulDiv(GET_WHEEL_DELTA_WPARAM(wParam), m_Theme.Scale(64), WHEEL_DELTA);
+                m_Scroll -= MulDiv(GET_WHEEL_DELTA_WPARAM(wParam), m_Theme.Scale(64), WHEEL_DELTA);
                 ClampScroll();
                 Invalidate(NULL);
                 return 0;
@@ -478,13 +483,59 @@ protected:
                 int index = ControlIndex((HWND)lParam);
                 if (LOWORD(wParam) == IDC_SEARCH && HIWORD(wParam) == EN_CHANGE)
                     OnSearchChanged();
+                if ((HWND)lParam == m_NavTool && LOWORD(wParam) == IDC_BACK)
+                    GoBack();
+                if ((HWND)lParam == m_NavTool && LOWORD(wParam) == IDC_FORWARD)
+                    GoForward();
                 if (index >= 0 && HIWORD(wParam) == BN_CLICKED)
                     PostMessageW(m_hwnd, WM_SETTINGS_CONTROL, index, 0);
                 if (index >= 0 && HIWORD(wParam) == CBN_SELCHANGE)
                     PostMessageW(m_hwnd, WM_SETTINGS_CONTROL, index, SendMessageW((HWND)lParam, CB_GETCURSEL, 0, 0));
                 break;
             }
+            case WM_NOTIFY:
+            {
+                NMHDR *header = (NMHDR *)lParam;
+                if (header->hwndFrom == m_NavTree && header->code == NM_CUSTOMDRAW)
+                    return DrawNavItem((NMTVCUSTOMDRAW *)lParam);
+                if (header->hwndFrom == m_NavTree && header->code == TVN_SELCHANGEDW)
+                {
+                    NMTREEVIEWW *tree = (NMTREEVIEWW *)lParam;
+                    if (tree->action == TVC_BYMOUSE || tree->action == TVC_BYKEYBOARD)
+                        PostMessageW(m_hwnd, WM_SETTINGS_NAVIGATE, (WPARAM)tree->itemNew.lParam, 0);
+                    return 0;
+                }
+                if (header->hwndFrom == m_Crumbs && (header->code == NM_CLICK || header->code == NM_RETURN))
+                {
+                    std::vector<std::pair<PageId, std::wstring>> crumbs = Breadcrumb();
+                    int link = ((NMLINK *)lParam)->item.iLink;
+                    if (link >= 0 && link < (int)crumbs.size())
+                        PostMessageW(m_hwnd, WM_SETTINGS_NAVIGATE, (WPARAM)crumbs[link].first, 0);
+                    return 0;
+                }
+                break;
+            }
+            case WM_SETTINGS_NAVIGATE:
+                Navigate((PageId)wParam, std::wstring(), TRUE);
+                return 0;
+            case WM_DRAWITEM:
+            {
+                DRAWITEMSTRUCT *item = (DRAWITEMSTRUCT *)lParam;
+                int index = ControlIndex(item->hwndItem);
+                if (item->CtlType == ODT_BUTTON && index >= 0)
+                {
+                    DrawRowButton(index, item);
+                    return TRUE;
+                }
+                break;
+            }
             case WM_CTLCOLORSTATIC:
+                if ((HWND)lParam == m_Crumbs)
+                {
+                    SetTextColor((HDC)wParam, m_Theme.Colors().Text);
+                    SetBkColor((HDC)wParam, m_Theme.Colors().Window);
+                    return (LRESULT)PageBrush();
+                }
             case WM_CTLCOLORBTN:
                 if (ControlIndex((HWND)lParam) >= 0 || (HWND)lParam == m_ScrollBar)
                 {
@@ -494,15 +545,13 @@ protected:
                 }
                 break;
             case WM_PRINTCLIENT:
-            {
-                RECT box;
-                if (GetClipBox((HDC)wParam, &box) != NULLREGION && InControls(box))
-                {
-                    FillRect((HDC)wParam, &box, CardBrush());
+                if (PaintChildBackground((HDC)wParam))
                     return 0;
-                }
                 break;
-            }
+            case WM_ERASEBKGND:
+                if (WindowFromDC((HDC)wParam) != m_hwnd && PaintChildBackground((HDC)wParam))
+                    return 1;
+                break;
             case WM_SETTINGS_CONTROL:
                 ActivateControl((int)wParam, (int)lParam);
                 return 0;
@@ -594,6 +643,16 @@ protected:
                 if (m_CardBrush)
                     DeleteObject(m_CardBrush);
                 m_CardBrush = NULL;
+                if (m_PageBrush)
+                    DeleteObject(m_PageBrush);
+                m_PageBrush = NULL;
+                if (m_ToolImages)
+                    ImageList_Destroy(m_ToolImages);
+                if (m_ToolDisabled)
+                    ImageList_Destroy(m_ToolDisabled);
+                if (m_NavImages)
+                    ImageList_Destroy(m_NavImages);
+                m_ToolImages = m_ToolDisabled = m_NavImages = NULL;
                 if (m_SmallIcon)
                     DestroyIcon(m_SmallIcon);
                 if (m_BigIcon)
@@ -627,18 +686,6 @@ private:
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 
-    RECT BackRect() const
-    {
-        RECT rc = { m_Theme.Scale(6), m_Theme.Scale(8), m_Theme.Scale(38), m_Theme.Scale(40) };
-        return rc;
-    }
-
-    RECT ForwardRect() const
-    {
-        RECT rc = { m_Theme.Scale(40), m_Theme.Scale(8), m_Theme.Scale(72), m_Theme.Scale(40) };
-        return rc;
-    }
-
     RECT SearchRect() const
     {
         RECT rc = { m_Theme.Scale(16), m_Theme.Scale(56), PanelLeft() - m_Theme.Scale(16), m_Theme.Scale(88) };
@@ -652,16 +699,6 @@ private:
     }
 
     int NavTop() const { return m_Theme.Scale(172); }
-
-    RECT NavRect(int index) const
-    {
-        RECT rc;
-        rc.left = m_Theme.Scale(12);
-        rc.right = PanelLeft() - m_Theme.Scale(12);
-        rc.top = NavTop() + index * m_Theme.Scale(40) - m_NavScroll;
-        rc.bottom = rc.top + m_Theme.Scale(36);
-        return rc;
-    }
 
     int ContentLeft() const
     {
@@ -748,6 +785,7 @@ private:
         }
         LayoutContent();
         CreateControls();
+        UpdateChrome();
         for (size_t i = 0; i < m_Controls.size() && focusPlace >= 0; i++)
         {
             if (m_Controls[i].Place == focusPlace && m_Controls[i].Action == focusAction)
@@ -974,14 +1012,11 @@ private:
     void ClampScroll()
     {
         RECT client;
-        int view, navView, navHeight;
+        int view;
 
         GetClientRect(m_hwnd, &client);
         view = client.bottom - HeaderBottom() + m_Theme.Scale(0);
         m_Scroll = max(0, min(m_Scroll, max(0, m_ContentHeight - HeaderBottom() - view)));
-        navView = client.bottom - NavTop() - m_Theme.Scale(8);
-        navHeight = (int)Categories().size() * m_Theme.Scale(40);
-        m_NavScroll = max(0, min(m_NavScroll, max(0, navHeight - navView)));
         if (m_ScrollBar)
         {
             SCROLLINFO info = { sizeof(info), SIF_RANGE | SIF_PAGE | SIF_POS };
@@ -1008,16 +1043,8 @@ private:
 
     void PaintCaption(Canvas &canvas)
     {
-        RECT back = BackRect(), forward = ForwardRect(), title;
-        int size = m_Theme.Scale(16);
+        RECT title;
 
-        if (m_HotBack && !m_Back.empty())
-            GlassFill(canvas, back, m_Theme.Scale(4), GlassColor(m_Theme, GlassTone::Hover), CLR_NONE);
-        if (m_HotForward && !m_Forward.empty())
-            GlassFill(canvas, forward, m_Theme.Scale(4), GlassColor(m_Theme, GlassTone::Hover), CLR_NONE);
-        CenterIcon(canvas, back, size, L"arrow_left_16_regular", !m_Back.empty() ? GlassColor(m_Theme, GlassTone::Text) : GlassColor(m_Theme, GlassTone::TextDisabled));
-        CenterIcon(canvas, forward, size, L"arrow_right_16_regular",
-                   !m_Forward.empty() ? GlassColor(m_Theme, GlassTone::Text) : GlassColor(m_Theme, GlassTone::TextDisabled));
         title.left = m_Theme.Scale(82);
         title.top = 0;
         title.right = PanelLeft();
@@ -1057,70 +1084,19 @@ private:
                     m_Theme.Font(TextStyle::Caption), GlassColor(m_Theme, GlassTone::TextSecondary), DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     }
 
-    void PaintNavigation(Canvas &canvas, const RECT &client)
-    {
-        const Palette &c = m_Theme.Colors();
-        std::vector<PageId> pages = Categories();
-        PageId current = TopLevel(m_Page);
-        HRGN clip = CreateRectRgn(0, NavTop() - m_Theme.Scale(4), PanelLeft(), client.bottom);
-
-        SelectClipRgn(canvas.Dc(), clip);
-        canvas.Graphics().SetClip(Gdiplus::Rect(0, NavTop() - m_Theme.Scale(4), PanelLeft(),
-                                                client.bottom - NavTop() + m_Theme.Scale(4)));
-        for (int i = 0; i < (int)pages.size(); i++)
-        {
-            const PageInfo *info = FindPage(pages[i]);
-            RECT rc = NavRect(i), glyph, label;
-            int size = m_Theme.Scale(18);
-
-            if (rc.bottom < NavTop() - m_Theme.Scale(4) || rc.top > client.bottom)
-                continue;
-            if (pages[i] == current)
-            {
-                RECT pill = { rc.left, rc.top + m_Theme.Scale(10), rc.left + m_Theme.Scale(3), rc.bottom - m_Theme.Scale(10) };
-                GlassFill(canvas, rc, m_Theme.Scale(6), GlassColor(m_Theme, GlassTone::Selected), CLR_NONE);
-                canvas.FillRound(pill, m_Theme.ScaleF(1.5f), c.Accent);
-            }
-            else if (i == m_HotNav)
-            {
-                GlassFill(canvas, rc, m_Theme.Scale(6), GlassColor(m_Theme, GlassTone::Hover), CLR_NONE);
-            }
-            glyph.left = rc.left + m_Theme.Scale(14);
-            glyph.top = rc.top + (rc.bottom - rc.top - size) / 2;
-            glyph.right = glyph.left + size;
-            glyph.bottom = glyph.top + size;
-            canvas.Icon(info->Icon, glyph, GlassColor(m_Theme, GlassTone::Text));
-            label = rc;
-            label.left = rc.left + m_Theme.Scale(46);
-            canvas.Text(Str(info->Title).c_str(), label, m_Theme.Font(TextStyle::Body), GlassColor(m_Theme, GlassTone::Text),
-                        DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
-        }
-        canvas.Graphics().ResetClip();
-        SelectClipRgn(canvas.Dc(), NULL);
-        DeleteObject(clip);
-    }
-
     void PaintHeader(Canvas &canvas)
     {
-        const Palette &c = m_Theme.Colors();
-        std::vector<std::pair<PageId, std::wstring>> crumbs = Breadcrumb();
-        RECT rc = { ContentLeft(), ContentTop() + m_Theme.Scale(16), ContentRight(), ContentTop() + m_Theme.Scale(60) };
-        HFONT font = m_Theme.Font(TextStyle::Title);
+        RECT rc = HeaderRect();
 
-        m_CrumbRects.clear();
-        for (size_t i = 0; i < crumbs.size(); i++)
-        {
-            int width = MeasureWidth(crumbs[i].second, font);
-            RECT part = { rc.left, rc.top, rc.left + width, rc.bottom }, chevron;
-            canvas.Text(crumbs[i].second.c_str(), part, font, (int)i == m_HotCrumb ? c.Text : c.TextSecondary,
-                        DT_SINGLELINE | DT_VCENTER | DT_LEFT);
-            m_CrumbRects.push_back(part);
-            SetRect(&chevron, part.right + m_Theme.Scale(10), (rc.top + rc.bottom) / 2 - m_Theme.Scale(7),
-                    part.right + m_Theme.Scale(24), (rc.top + rc.bottom) / 2 + m_Theme.Scale(7));
-            canvas.Icon(L"chevron_right_16_regular", chevron, c.TextSecondary);
-            rc.left = chevron.right + m_Theme.Scale(10);
-        }
-        canvas.Text(m_Title.c_str(), rc, font, c.Text, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS);
+        if (Breadcrumb().empty())
+            canvas.Text(m_Title.c_str(), rc, m_Theme.Font(TextStyle::Title), m_Theme.Colors().Text,
+                        DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS);
+    }
+
+    RECT HeaderRect() const
+    {
+        RECT rc = { ContentLeft(), ContentTop() + m_Theme.Scale(16), ContentRight(), ContentTop() + m_Theme.Scale(60) };
+        return rc;
     }
 
     void PaintContent(Canvas &canvas, const RECT &client)
@@ -1285,49 +1261,17 @@ private:
                     DT_SINGLELINE | DT_TOP | DT_LEFT | DT_END_ELLIPSIS);
     }
 
-    int NavFromPoint(int x, int y) const
+    void SetHot(BOOL account)
     {
-        POINT pt = { x, y };
-        std::vector<PageId> pages = Categories();
-
-        if (y < NavTop() - m_Theme.Scale(4))
-            return -1;
-        for (int i = 0; i < (int)pages.size(); i++)
-        {
-            RECT rc = NavRect(i);
-            if (PtInRect(&rc, pt))
-                return i;
-        }
-        return -1;
-    }
-
-    int CrumbFromPoint(int x, int y) const
-    {
-        POINT pt = { x, y };
-        for (size_t i = 0; i < m_CrumbRects.size(); i++)
-        {
-            if (PtInRect(&m_CrumbRects[i], pt))
-                return (int)i;
-        }
-        return -1;
-    }
-
-    void SetHot(int nav, BOOL back, BOOL forward, BOOL account, int crumb)
-    {
-        if (nav == m_HotNav && back == m_HotBack && forward == m_HotForward && account == m_HotAccount &&
-            crumb == m_HotCrumb)
+        if (account == m_HotAccount)
             return;
-        m_HotNav = nav;
-        m_HotBack = back;
-        m_HotForward = forward;
         m_HotAccount = account;
-        m_HotCrumb = crumb;
         Invalidate(NULL);
     }
 
     void OnMouseMove(int x, int y)
     {
-        RECT back = BackRect(), forward = ForwardRect(), account = AccountRect();
+        RECT account = AccountRect();
         POINT pt = { x, y };
 
         if (!m_TrackingClient)
@@ -1335,42 +1279,337 @@ private:
             TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, m_hwnd, 0 };
             m_TrackingClient = TrackMouseEvent(&tme);
         }
-        SetHot(NavFromPoint(x, y), PtInRect(&back, pt), PtInRect(&forward, pt), PtInRect(&account, pt),
-               CrumbFromPoint(x, y));
+        SetHot(PtInRect(&account, pt));
     }
 
     void OnButtonUp(int x, int y)
     {
-        RECT back = BackRect(), forward = ForwardRect(), account = AccountRect();
+        RECT account = AccountRect();
         POINT pt = { x, y };
-        int nav = NavFromPoint(x, y), crumb = CrumbFromPoint(x, y);
 
-        if (PtInRect(&back, pt))
-        {
-            GoBack();
-            return;
-        }
-        if (PtInRect(&forward, pt))
-        {
-            GoForward();
-            return;
-        }
         if (PtInRect(&account, pt))
-        {
             Navigate(PageId::Accounts, std::wstring(), TRUE);
-            return;
-        }
-        if (nav >= 0)
+    }
+
+    HIMAGELIST GlyphList(const LPCWSTR *names, size_t count, int size, COLORREF color)
+    {
+        HIMAGELIST list = ImageList_Create(size, size, ILC_COLOR32, (int)count, 0);
+
+        for (size_t i = 0; list && i < count; i++)
         {
-            Navigate(Categories()[nav], std::wstring(), TRUE);
-            return;
+            HICON icon = CreateGlyphIcon(names[i], size, color);
+            ImageList_AddIcon(list, icon);
+            if (icon)
+                DestroyIcon(icon);
         }
-        if (crumb >= 0)
+        return list;
+    }
+
+    void CreateChrome()
+    {
+        static const LPCWSTR Arrows[] = { L"arrow_left_16_regular", L"arrow_right_16_regular" };
+        std::vector<PageId> pages = Categories();
+        std::vector<LPCWSTR> icons;
+        std::wstring back = Str(IDS_BACK), forward = Str(IDS_FORWARD);
+        TBBUTTON buttons[2] = { };
+        int glyph = m_Theme.Scale(16);
+
+        m_NavTool = CreateWindowExW(0, TOOLBARCLASSNAMEW, L"", WS_CHILD | WS_VISIBLE | TBSTYLE_FLAT | TBSTYLE_TRANSPARENT |
+                                    TBSTYLE_TOOLTIPS | CCS_NODIVIDER | CCS_NOPARENTALIGN | CCS_NORESIZE, 0, 0, 0, 0, m_hwnd,
+                                    NULL, Instance, NULL);
+        if (m_NavTool)
         {
-            std::vector<std::pair<PageId, std::wstring>> crumbs = Breadcrumb();
-            if (crumb < (int)crumbs.size())
-                Navigate(crumbs[crumb].first, std::wstring(), TRUE);
+            SendMessageW(m_NavTool, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
+            SendMessageW(m_NavTool, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_MIXEDBUTTONS);
+            m_ToolImages = GlyphList(Arrows, _countof(Arrows), glyph, GlassColor(m_Theme, GlassTone::Text));
+            m_ToolDisabled = GlyphList(Arrows, _countof(Arrows), glyph, GlassColor(m_Theme, GlassTone::TextDisabled));
+            SendMessageW(m_NavTool, TB_SETIMAGELIST, 0, (LPARAM)m_ToolImages);
+            SendMessageW(m_NavTool, TB_SETDISABLEDIMAGELIST, 0, (LPARAM)m_ToolDisabled);
+            buttons[0].iBitmap = 0;
+            buttons[0].idCommand = IDC_BACK;
+            buttons[0].fsStyle = BTNS_BUTTON;
+            buttons[0].iString = (INT_PTR)back.c_str();
+            buttons[1].iBitmap = 1;
+            buttons[1].idCommand = IDC_FORWARD;
+            buttons[1].fsStyle = BTNS_BUTTON;
+            buttons[1].iString = (INT_PTR)forward.c_str();
+            SendMessageW(m_NavTool, TB_ADDBUTTONSW, 2, (LPARAM)buttons);
+            SendMessageW(m_NavTool, TB_SETBUTTONSIZE, 0, MAKELPARAM(m_Theme.Scale(32), m_Theme.Scale(32)));
         }
+
+        m_NavTree = CreateWindowExW(0, WC_TREEVIEWW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | TVS_FULLROWSELECT |
+                                    TVS_SHOWSELALWAYS | TVS_TRACKSELECT | TVS_NOHSCROLL, 0, 0, 0, 0, m_hwnd,
+                                    (HMENU)IDC_NAVTREE, Instance, NULL);
+        if (m_NavTree)
+        {
+            for (PageId page : pages)
+                icons.push_back(FindPage(page)->Icon);
+            m_NavImages = GlyphList(icons.data(), icons.size(), m_Theme.Scale(18), GlassColor(m_Theme, GlassTone::Text));
+            SendMessageW(m_NavTree, WM_SETFONT, (WPARAM)m_Theme.Font(TextStyle::Body), FALSE);
+            SendMessageW(m_NavTree, TVM_SETIMAGELIST, TVSIL_NORMAL, (LPARAM)m_NavImages);
+            SendMessageW(m_NavTree, TVM_SETITEMHEIGHT, m_Theme.Scale(40), 0);
+            SendMessageW(m_NavTree, TVM_SETBKCOLOR, 0, GlassColor(m_Theme, GlassTone::Clear));
+            SendMessageW(m_NavTree, TVM_SETTEXTCOLOR, 0, GlassColor(m_Theme, GlassTone::Text));
+            for (size_t i = 0; i < pages.size(); i++)
+            {
+                TVINSERTSTRUCTW insert = { };
+                std::wstring title = Str(FindPage(pages[i])->Title);
+
+                insert.hParent = TVI_ROOT;
+                insert.hInsertAfter = TVI_LAST;
+                insert.item.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_SELECTEDIMAGE | TVIF_PARAM;
+                insert.item.pszText = (LPWSTR)title.c_str();
+                insert.item.iImage = insert.item.iSelectedImage = (int)i;
+                insert.item.lParam = (LPARAM)pages[i];
+                SendMessageW(m_NavTree, TVM_INSERTITEMW, 0, (LPARAM)&insert);
+            }
+        }
+
+        m_Crumbs = CreateWindowExW(0, WC_LINK, L"", WS_CHILD | WS_TABSTOP, 0, 0, 0, 0, m_hwnd, (HMENU)IDC_CRUMBS, Instance,
+                                   NULL);
+        if (m_Crumbs)
+            SendMessageW(m_Crumbs, WM_SETFONT, (WPARAM)m_Theme.Font(TextStyle::Title), FALSE);
+    }
+
+    void LayoutChrome(const RECT &client)
+    {
+        RECT header = HeaderRect();
+
+        if (m_NavTool)
+            SetWindowPos(m_NavTool, NULL, m_Theme.Scale(6), m_Theme.Scale(8), m_Theme.Scale(68), m_Theme.Scale(32),
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        if (m_NavTree)
+            SetWindowPos(m_NavTree, NULL, m_Theme.Scale(12), NavTop() - m_Theme.Scale(4), PanelLeft() - m_Theme.Scale(24),
+                         max(0, (int)client.bottom - NavTop() - m_Theme.Scale(4)), SWP_NOZORDER | SWP_NOACTIVATE);
+        if (m_Crumbs)
+            SetWindowPos(m_Crumbs, NULL, header.left, header.top, header.right - header.left, header.bottom - header.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    void UpdateChrome()
+    {
+        std::vector<std::pair<PageId, std::wstring>> crumbs = Breadcrumb();
+        PageId current = TopLevel(m_Page);
+        HTREEITEM item;
+
+        if (m_NavTool)
+        {
+            SendMessageW(m_NavTool, TB_ENABLEBUTTON, IDC_BACK, MAKELONG(!m_Back.empty(), 0));
+            SendMessageW(m_NavTool, TB_ENABLEBUTTON, IDC_FORWARD, MAKELONG(!m_Forward.empty(), 0));
+        }
+        if (m_NavTree)
+        {
+            for (item = (HTREEITEM)SendMessageW(m_NavTree, TVM_GETNEXTITEM, TVGN_ROOT, 0); item;
+                 item = (HTREEITEM)SendMessageW(m_NavTree, TVM_GETNEXTITEM, TVGN_NEXT, (LPARAM)item))
+            {
+                TVITEMW data = { TVIF_PARAM, item };
+
+                SendMessageW(m_NavTree, TVM_GETITEMW, 0, (LPARAM)&data);
+                if ((PageId)data.lParam == current)
+                    break;
+            }
+            SendMessageW(m_NavTree, TVM_SELECTITEM, TVGN_CARET, (LPARAM)item);
+        }
+        if (m_Crumbs)
+        {
+            std::wstring markup;
+
+            for (size_t i = 0; i < crumbs.size(); i++)
+                markup += L"<a>" + crumbs[i].second + L"</a>  \x203A  ";
+            markup += m_Title;
+            SetWindowTextW(m_Crumbs, markup.c_str());
+            ShowWindow(m_Crumbs, crumbs.empty() ? SW_HIDE : SW_SHOWNA);
+        }
+    }
+
+    BOOL PaintChildBackground(HDC hdc)
+    {
+        RECT box;
+        HBRUSH glass;
+
+        if (GetClipBox(hdc, &box) == NULLREGION || GetClipBox(hdc, &box) == ERROR)
+            return FALSE;
+        if (InControls(box))
+        {
+            FillRect(hdc, &box, CardBrush());
+            return TRUE;
+        }
+        if (box.left < PanelLeft() || box.top < CaptionHeight())
+        {
+            glass = CreateSolidBrush(GlassColor(m_Theme, GlassTone::Clear));
+            FillRect(hdc, &box, glass);
+            DeleteObject(glass);
+            return TRUE;
+        }
+        if (box.top < HeaderBottom())
+        {
+            FillRect(hdc, &box, PageBrush());
+            return TRUE;
+        }
+        return FALSE;
+    }
+
+    HBRUSH PageBrush()
+    {
+        COLORREF color = m_Theme.Colors().Window;
+
+        if (!m_PageBrush || color != m_PageColor)
+        {
+            if (m_PageBrush)
+                DeleteObject(m_PageBrush);
+            m_PageBrush = CreateSolidBrush(color);
+            m_PageColor = color;
+        }
+        return m_PageBrush;
+    }
+
+    static LRESULT CALLBACK RowButtonProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR id, DWORD_PTR data)
+    {
+        SettingsWindow *window = (SettingsWindow *)data;
+
+        UNREFERENCED_PARAMETER(id);
+        if (msg == WM_MOUSEMOVE && window->m_HotRow != hwnd)
+        {
+            TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hwnd, 0 };
+            HWND old = window->m_HotRow;
+
+            window->m_HotRow = hwnd;
+            TrackMouseEvent(&tme);
+            if (old)
+                InvalidateRect(old, NULL, FALSE);
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        else if (msg == WM_MOUSELEAVE && window->m_HotRow == hwnd)
+        {
+            window->m_HotRow = NULL;
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        else if (msg == WM_NCDESTROY)
+        {
+            if (window->m_HotRow == hwnd)
+                window->m_HotRow = NULL;
+            RemoveWindowSubclass(hwnd, RowButtonProc, 0);
+        }
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
+    }
+
+    void FillRounded(HDC hdc, const RECT &rc, int radius, COLORREF color)
+    {
+        HBRUSH brush = CreateSolidBrush(color);
+        HGDIOBJ oldBrush = SelectObject(hdc, brush), oldPen = SelectObject(hdc, GetStockObject(NULL_PEN));
+
+        RoundRect(hdc, rc.left, rc.top, rc.right + 1, rc.bottom + 1, radius * 2, radius * 2);
+        SelectObject(hdc, oldPen);
+        SelectObject(hdc, oldBrush);
+        DeleteObject(brush);
+    }
+
+    void DrawLabel(HDC hdc, const std::wstring &text, RECT rc, HFONT font, COLORREF color, UINT format)
+    {
+        HGDIOBJ old = SelectObject(hdc, font);
+
+        SetTextColor(hdc, color);
+        ::DrawTextW(hdc, text.c_str(), (int)text.length(), &rc, format | DT_NOPREFIX);
+        SelectObject(hdc, old);
+    }
+
+    void DrawRowButton(int index, const DRAWITEMSTRUCT *item)
+    {
+        const Palette &c = m_Theme.Colors();
+        const RowControl &control = m_Controls[index];
+        const RowPlace &where = m_Places[control.Place];
+        const SettingRow &row = m_Groups[where.Group].Rows[where.Row];
+        HDC hdc = item->hDC;
+        RECT rc = item->rcItem, text;
+        BOOL enabled = !(item->itemState & ODS_DISABLED);
+        HICON icon = row.Image ? row.Image : control.Image;
+        COLORREF title = enabled ? c.Text : c.TextDisabled, detail = enabled ? c.TextSecondary : c.TextDisabled;
+        int left = rc.left + m_Theme.Scale(14), right = rc.right - m_Theme.Scale(12), size = m_Theme.Scale(20);
+        int middle = (rc.top + rc.bottom) / 2;
+
+        FillRect(hdc, &rc, CardBrush());
+        if (enabled && ((item->itemState & ODS_SELECTED) || item->hwndItem == m_HotRow))
+            FillRounded(hdc, rc, m_Theme.Scale(4), (item->itemState & ODS_SELECTED) ? c.SubtlePressed : c.CardHover);
+        SetBkMode(hdc, TRANSPARENT);
+        if (icon)
+            DrawIconEx(hdc, left - (row.Image ? m_Theme.Scale(2) : 0), middle - size / 2, icon, size, size, 0, NULL,
+                       DI_NORMAL);
+        if (icon || m_GroupIcons[where.Group])
+            left += size + m_Theme.Scale(18);
+        if (!row.Value.empty())
+        {
+            int width = min(MeasureWidth(row.Value, m_Theme.Font(TextStyle::Body)), (right - left) / 2);
+            SetRect(&text, right - width, rc.top, right, rc.bottom);
+            DrawLabel(hdc, row.Value, text, m_Theme.Font(TextStyle::Body), detail,
+                     DT_SINGLELINE | DT_VCENTER | DT_RIGHT | DT_END_ELLIPSIS);
+            right -= width + m_Theme.Scale(16);
+        }
+        if (row.Detail.empty())
+        {
+            SetRect(&text, left, rc.top, right, rc.bottom);
+            DrawLabel(hdc, row.Title, text, m_Theme.Font(TextStyle::Body), title,
+                     DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS);
+        }
+        else
+        {
+            if (row.Bar)
+                middle -= m_Theme.Scale(10);
+            SetRect(&text, left, middle - m_Theme.Scale(21), right, middle);
+            DrawLabel(hdc, row.Title, text, m_Theme.Font(TextStyle::Body), title,
+                     DT_SINGLELINE | DT_BOTTOM | DT_LEFT | DT_END_ELLIPSIS);
+            SetRect(&text, left, middle + m_Theme.Scale(1), right, middle + m_Theme.Scale(20));
+            DrawLabel(hdc, row.Detail, text, m_Theme.Font(TextStyle::Caption), detail,
+                     DT_SINGLELINE | DT_TOP | DT_LEFT | DT_END_ELLIPSIS);
+        }
+        if ((item->itemState & ODS_FOCUS) && !(item->itemState & ODS_NOFOCUSRECT))
+        {
+            RECT focus = rc;
+            InflateRect(&focus, -m_Theme.Scale(2), -m_Theme.Scale(2));
+            DrawFocusRect(hdc, &focus);
+        }
+    }
+
+    LRESULT DrawNavItem(NMTVCUSTOMDRAW *draw)
+    {
+        if (draw->nmcd.dwDrawStage == CDDS_PREPAINT)
+            return CDRF_NOTIFYITEMDRAW;
+        if (draw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT)
+        {
+            HDC hdc = draw->nmcd.hdc;
+            RECT rc = draw->nmcd.rc, pill, label;
+            WCHAR title[128] = L"";
+            TVITEMW data = { TVIF_TEXT | TVIF_IMAGE | TVIF_STATE, (HTREEITEM)draw->nmcd.dwItemSpec, 0, TVIS_SELECTED, title,
+                             _countof(title) };
+            HBRUSH glass = CreateSolidBrush(GlassColor(m_Theme, GlassTone::Clear));
+            int size = m_Theme.Scale(18);
+            BOOL selected, hot = (draw->nmcd.uItemState & CDIS_HOT) != 0;
+
+            SendMessageW(m_NavTree, TVM_GETITEMW, 0, (LPARAM)&data);
+            selected = (data.state & TVIS_SELECTED) != 0;
+            FillRect(hdc, &rc, glass);
+            DeleteObject(glass);
+            pill = rc;
+            InflateRect(&pill, -m_Theme.Scale(2), -m_Theme.Scale(2));
+            if (selected || hot)
+                FillRounded(hdc, pill, m_Theme.Scale(6), GlassColor(m_Theme, selected ? GlassTone::Selected : GlassTone::Hover));
+            if (selected)
+            {
+                RECT bar = { pill.left, pill.top + m_Theme.Scale(10), pill.left + m_Theme.Scale(3), pill.bottom - m_Theme.Scale(10) };
+                FillRounded(hdc, bar, m_Theme.Scale(1), m_Theme.Colors().Accent);
+            }
+            ImageList_Draw(m_NavImages, data.iImage, hdc, pill.left + m_Theme.Scale(14), (rc.top + rc.bottom - size) / 2,
+                           ILD_TRANSPARENT);
+            label = pill;
+            label.left += m_Theme.Scale(46);
+            SetBkMode(hdc, TRANSPARENT);
+            DrawLabel(hdc, title, label, m_Theme.Font(TextStyle::Body), GlassColor(m_Theme, GlassTone::Text),
+                     DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS);
+            if ((draw->nmcd.uItemState & CDIS_FOCUS) && GetFocus() == m_NavTree &&
+                !(SendMessageW(m_hwnd, WM_QUERYUISTATE, 0, 0) & UISF_HIDEFOCUS))
+                DrawFocusRect(hdc, &pill);
+            return CDRF_SKIPDEFAULT;
+        }
+        return CDRF_DODEFAULT;
     }
 
     HBRUSH CardBrush()
@@ -1507,23 +1746,14 @@ private:
                     break;
                 case RowKind::Navigate:
                 case RowKind::Link:
-                    hwnd = AddControl(WC_BUTTONW, row.Title.c_str(), WS_TABSTOP | BS_COMMANDLINK, (int)i, -1);
+                    hwnd = AddControl(WC_BUTTONW, row.Title.c_str(), WS_TABSTOP | BS_OWNERDRAW, (int)i, -1);
                     if (hwnd)
                     {
-                        std::wstring note = row.Detail;
                         LPCWSTR icon = row.Icon ? row.Icon : (row.Kind == RowKind::Link ? L"open_16_regular" : NULL);
 
-                        if (!row.Value.empty())
-                            note = note.empty() ? row.Value : note + L" \x00B7 " + row.Value;
-                        if (!note.empty())
-                            SendMessageW(hwnd, BCM_SETNOTE, 0, (LPARAM)note.c_str());
-                        if (row.Image)
-                            SendMessageW(hwnd, BM_SETIMAGE, IMAGE_ICON, (LPARAM)row.Image);
-                        else if (icon)
-                        {
+                        if (!row.Image && icon)
                             m_Controls.back().Image = CreateGlyphIcon(icon, m_Theme.Scale(20), c.Glyph);
-                            SendMessageW(hwnd, BM_SETIMAGE, IMAGE_ICON, (LPARAM)m_Controls.back().Image);
-                        }
+                        SetWindowSubclass(hwnd, RowButtonProc, 0, (DWORD_PTR)this);
                     }
                     break;
                 default:
@@ -1889,17 +2119,20 @@ private:
     std::vector<RECT> m_GroupBoxes;
     std::vector<RECT> m_GroupTitles;
     std::vector<bool> m_GroupIcons;
-    std::vector<RECT> m_CrumbRects;
     std::vector<SearchEntry> m_Index;
     int m_Scroll;
-    int m_NavScroll = 0;
     int m_ContentHeight;
-    int m_HotNav;
-    BOOL m_HotBack;
-    BOOL m_HotForward;
     BOOL m_HotAccount;
-    int m_HotCrumb;
     BOOL m_TrackingClient;
+    HWND m_NavTool;
+    HWND m_NavTree;
+    HWND m_HotRow = NULL;
+    HWND m_Crumbs;
+    HIMAGELIST m_ToolImages;
+    HIMAGELIST m_ToolDisabled;
+    HIMAGELIST m_NavImages;
+    HBRUSH m_PageBrush;
+    COLORREF m_PageColor;
     std::vector<RowControl> m_Controls;
     BOOL m_Admin = FALSE;
     HANDLE m_AddressNotify = NULL;
@@ -1958,7 +2191,8 @@ PageFromCommandLine(LPCWSTR commandLine, PageId *page, std::wstring *param)
 int WINAPI
 wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR commandLine, int showCmd)
 {
-    INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_STANDARD_CLASSES | ICC_DATE_CLASSES };
+    INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_STANDARD_CLASSES | ICC_DATE_CLASSES | ICC_BAR_CLASSES |
+                                 ICC_PROGRESS_CLASS | ICC_TREEVIEW_CLASSES | ICC_LINK_CLASS };
     SettingsWindow window;
     PageId page;
     std::wstring param;

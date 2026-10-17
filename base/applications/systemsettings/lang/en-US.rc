@@ -11,6 +11,8 @@ STRINGTABLE
 BEGIN
     IDS_APP_TITLE "Settings"
     IDS_FIND_SETTING "Find a setting"
+    IDS_BACK "Back"
+    IDS_FORWARD "Forward"
     IDS_SEARCH_RESULTS "Search results"
     IDS_NO_RESULTS "No settings match your search."
     IDS_LIBERNT "LiberNT"

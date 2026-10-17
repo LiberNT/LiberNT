@@ -182,6 +182,8 @@ private:
     CaptionButton m_PressedButton;
     BOOL m_Active;
     BOOL m_TrackingLeave;
+    int m_GlassWidth;
+    int m_GlassTop;
 };
 
 }
