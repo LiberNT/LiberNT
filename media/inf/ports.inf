@@ -30,6 +30,7 @@ HKR, , Installer32,    0, "msports.dll,PortsClassInstaller"
 %*PNP0501.DeviceDesc% = ComPort_Inst, *PNP0501
 %*PNP0400.DeviceDesc% = LptPort_Inst, *PNP0400, *PNP0401
 %*PNP0401.DeviceDesc% = LptPort_Inst, *PNP0401
+%BthComPort.DeviceDesc% = BthComPort_Inst, BTHENUM\{00001101-0000-1000-8000-00805f9b34fb}
 
 ;---------------------------- LPT PORT DRIVER ---------------------------
 
@@ -73,6 +74,15 @@ HKR, , "UpperFilters", 0x00010000, "serenum"
 AddService = serial, 0x00000002, serial_Service_Inst
 AddService = serenum, , serenum_Service_Inst
 
+[BthComPort_Inst.NT]
+AddReg = BthComPort_AddReg.NT
+
+[BthComPort_AddReg.NT]
+HKR, , "PortSubClass", 1, 01
+
+[BthComPort_Inst.NT.Services]
+AddService = , 0x00000002
+
 [serial_Service_Inst]
 ServiceType   = 1
 StartType     = 3
@@ -101,6 +111,7 @@ StdMfg = "(Standard ports)"
 *PNP0501.DeviceDesc = "Serial communication port"
 *PNP0400.DeviceDesc = "Standard LPT printer port"
 *PNP0401.DeviceDesc = "ECP printer port"
+BthComPort.DeviceDesc = "Standard Serial over Bluetooth link"
 
 [Strings.0405]
 PortsClassName = "Sériové a paralelní porty"
