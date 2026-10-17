@@ -1905,6 +1905,7 @@ DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
         Pixels < CurrentArea / 2 ||
         !DwmSelectBackdropCache(Window, Width, Height))
     {
+        DptCount(&g_DwmPresentTrace, DPT_BLUR_FILTER, Pixels * 4);
         DwmApplyBlur(Composition, Composition, Width, Height,
                      ClipLeft, ClipTop, ClipRight, ClipBottom,
                      Window, Rectangles, Radius);
@@ -1938,6 +1939,8 @@ DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
     if (Reuse && DwmRectContains(&g_backdropCache->Bounds, &Current))
     {
         DwmBackdropStoreScene(Window, Lower, LowerCount);
+        DptCount(&g_DwmPresentTrace, DPT_BLUR_HIT,
+                 (ULONGLONG)(Current.right - Current.left) * (Current.bottom - Current.top) * 4);
         if (g_frameStats) ++g_statBackdropCacheHits;
         if (Direct)
             return g_backdropCache->Output;
@@ -1959,6 +1962,8 @@ DwmApplyBackdropBlurCached(ULONG *Composition, LONG Width, LONG Height,
     CacheWindow.BlurFlags = DWM_BLUR_ENABLE |
                             DWM_BLUR_REGION_ENTIRE_WINDOW;
     CacheWindow.BlurRectCount = 0;
+    DptCount(&g_DwmPresentTrace, DPT_BLUR_FILTER,
+             (ULONGLONG)(Current.right - Current.left) * (Current.bottom - Current.top) * 4);
     if (!Reuse)
     {
         DwmApplyBlur(g_backdropCache->Input, g_backdropCache->Output,
@@ -4681,6 +4686,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     else
                     {
                         g_lastFrameQpc = (ULONGLONG)statFrameStart.QuadPart;
+                        DptCount(&g_DwmPresentTrace, DPT_FRAME, (ULONGLONG)(pr - pl) * (pb - pt) * 4);
                         for (i = 0; i < hdr->Count; ++i)
                         {
                             /* Native GPU textures have no linear CPU view.
