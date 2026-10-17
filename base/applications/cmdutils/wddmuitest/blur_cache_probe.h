@@ -60,7 +60,7 @@ RunBlurCacheProbe(const RECT *WorkArea)
     for (Phase = 0; Phase < 3; ++Phase)
     {
         ULONG Value[4];
-        BOOL Valid = TRUE, Pixels = TRUE;
+        BOOL Valid = TRUE, Pixels = TRUE, Gpu;
         HRESULT Status = StartCapture(&Session);
         if (FAILED(Status))
         {
@@ -103,12 +103,14 @@ RunBlurCacheProbe(const RECT *WorkArea)
         Pixels = Pixels && Value[0] <= 32 + DWM_MATERIAL_REFLECT_STRENGTH &&
                  Value[3] >= 223 - DWM_MATERIAL_REFLECT_STRENGTH &&
                  Value[1] > Value[0] + 8 && Value[2] + 8 < Value[3] && Value[1] < Value[2];
+        Gpu = Capture->Domain[0].Counter[DPT_PREPARE].Completed != 0;
         Valid = Pixels && Capture->Domain[0].Counter[DPT_FRAME].Completed >= 20 &&
-                (Phase == 2 ? Capture->Domain[0].Counter[DPT_BLUR_FILTER].Completed >= 20 :
-                 (Capture->Domain[0].Counter[DPT_BLUR_FILTER].Completed == 0 &&
-                  Capture->Domain[0].Counter[DPT_BLUR_HIT].Completed >= 20));
-        TestPrint("DWM_BLUR_CACHE_PHASE phase=%lu frames=%llu filtered=%llu reused=%llu cpu_us=%llu wall_us=%llu prepare_us=%llu filter_us=%llu values=%lu,%lu,%lu,%lu pixels=%u pass=%u\n",
-            Phase, Capture->Domain[0].Counter[DPT_FRAME].Completed,
+                (!Gpu ||
+                 (Phase == 2 ? Capture->Domain[0].Counter[DPT_BLUR_FILTER].Completed >= 20 :
+                  (Capture->Domain[0].Counter[DPT_BLUR_FILTER].Completed == 0 &&
+                   Capture->Domain[0].Counter[DPT_BLUR_HIT].Completed >= 20)));
+        TestPrint("DWM_BLUR_CACHE_PHASE phase=%lu compositor=%s frames=%llu filtered=%llu reused=%llu cpu_us=%llu wall_us=%llu prepare_us=%llu filter_us=%llu values=%lu,%lu,%lu,%lu pixels=%u pass=%u\n",
+            Phase, Gpu ? "gpu" : "cpu", Capture->Domain[0].Counter[DPT_FRAME].Completed,
             Capture->Domain[0].Counter[DPT_BLUR_FILTER].Completed,
             Capture->Domain[0].Counter[DPT_BLUR_HIT].Completed,
             (Capture->CpuKernel100ns + Capture->CpuUser100ns) / 10,

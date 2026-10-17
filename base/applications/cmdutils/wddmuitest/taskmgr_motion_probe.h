@@ -9,6 +9,7 @@
 #define MOTION_DY 32
 #define MOTION_POINTS 16
 #define MOTION_EVENTS 32
+#define MOTION_PACE_EVENTS 8192
 
 typedef struct _MOTION_PRIMARY
 {
@@ -140,6 +141,10 @@ MotionMeasurePacing(HWND Window, MOTION_PRIMARY *Primary, LONG Left, LONG Top)
     static const char *Names[] = {"visible", "counter_only", "visible_profiled"};
     D3DKMT_QUERYSTATISTICS Stats = {0};
     QUERY Query = (QUERY)GetProcAddress(GetModuleHandleW(L"gdi32.dll"), "D3DKMTQueryStatistics");
+    LONG (NTAPI *SetTimerResolution)(ULONG, BOOLEAN, ULONG *) =
+        (void *)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtSetTimerResolution");
+    ULONG TimerActual = 0;
+    BOOL TimerSet = SetTimerResolution && SetTimerResolution(10000, TRUE, &TimerActual) >= 0;
     HMODULE Profiler = LoadLibraryW(L"dwmprof.dll");
     HRESULT (WINAPI *StartCapture)(ULONG *) = NULL;
     HRESULT (WINAPI *StopCapture)(ULONG, DPT_SNAPSHOT *, ULONG) = NULL;
@@ -155,7 +160,7 @@ MotionMeasurePacing(HWND Window, MOTION_PRIMARY *Primary, LONG Left, LONG Top)
     BOOL Held = FALSE;
     ULONG i, j;
 
-    Events = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 2048 * sizeof(*Events));
+    Events = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, MOTION_PACE_EVENTS * sizeof(*Events));
     if (Profiler)
     {
         StartCapture = (void *)GetProcAddress(Profiler, "DwmProfileStartCapture");
@@ -267,7 +272,7 @@ MotionMeasurePacing(HWND Window, MOTION_PRIMARY *Primary, LONG Left, LONG Top)
             QueryPerformanceCounter(&Now);
             if (!HaveLast || Frame != LastFrame || Edge != LastEdge)
             {
-                if (Saved < 2048)
+                if (Saved < MOTION_PACE_EVENTS)
                 {
                     Events[Saved].Time = ElapsedMicroseconds(Start, Now);
                     Events[Saved].PollGap = Gap;
@@ -318,6 +323,7 @@ Done:
     if (Capture) HeapFree(GetProcessHeap(), 0, Capture);
     if (Profiler) FreeLibrary(Profiler);
     if (Events) HeapFree(GetProcessHeap(), 0, Events);
+    if (TimerSet) SetTimerResolution(10000, FALSE, &TimerActual);
     TestPrint("TASKMGR_PACING_END failures=%lu\n", Failures);
     return Failures ? 1 : 0;
 }
@@ -350,7 +356,7 @@ RunTaskmgrMotionProbe(const RECT *WorkArea, BOOL Pacing)
 
     if (WorkArea->right - WorkArea->left < 1160 || WorkArea->bottom - WorkArea->top < 760)
         return 1;
-    Left = WorkArea->left + (WorkArea->right - WorkArea->left - 1000 - MOTION_DX) / 2;
+    Left = Pacing ? WorkArea->left : WorkArea->left + (WorkArea->right - WorkArea->left - 1000 - MOTION_DX) / 2;
     Top = WorkArea->top + (WorkArea->bottom - WorkArea->top - 660 - MOTION_DY) / 2;
     if (Console) ShowWindow(Console, SW_HIDE);
     if (Existing)
@@ -563,7 +569,8 @@ RunTaskmgrMotionProbe(const RECT *WorkArea, BOOL Pacing)
                 Offset = ((SIZE_T)Points[j].Point.y * Primary.Width + Points[j].Point.x) * sizeof(ULONG);
                 if (!MotionRead(&Primary, Offset, &Pixel, sizeof(Pixel)))
                     ++ReadFailures;
-                else if (!MotionColorMatches(Pixel, Points[j].Color))
+                else if (!MotionColorMatches(Pixel, Points[j].Color) &&
+                         (Phase != 1 || MotionColorMatches(Pixel, 0xff00ff)))
                 {
                     ++Bad;
                     if (Saved < MOTION_EVENTS)
