@@ -430,6 +430,15 @@ BthEnumEvtPdoCleanup(
 }
 
 static
+VOID
+NTAPI
+BthEnumInterfaceNoOp(
+    _In_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+}
+
+static
 NTSTATUS
 BthEnumCreatePdo(
     _In_ PBTHMINI_DEVICE Dev,
@@ -550,8 +559,8 @@ BthEnumCreatePdo(
     Interface.Interface.Size = sizeof(Interface);
     Interface.Interface.Version = BTHDDI_PROFILE_DRIVER_INTERFACE_VERSION_FOR_QI;
     Interface.Interface.Context = Dev;
-    Interface.Interface.InterfaceReference = WdfDeviceInterfaceReferenceNoOp;
-    Interface.Interface.InterfaceDereference = WdfDeviceInterfaceDereferenceNoOp;
+    Interface.Interface.InterfaceReference = BthEnumInterfaceNoOp;
+    Interface.Interface.InterfaceDereference = BthEnumInterfaceNoOp;
     Interface.BthAllocateBrb = BthEnumAllocateBrb;
     Interface.BthFreeBrb = BthEnumFreeBrb;
     Interface.BthInitializeBrb = BthEnumInitializeBrb;
@@ -939,8 +948,8 @@ BthEnumCreateLocalPdo(
     Interface.Interface.Size = sizeof(Interface);
     Interface.Interface.Version = BTHDDI_PROFILE_DRIVER_INTERFACE_VERSION_FOR_QI;
     Interface.Interface.Context = Dev;
-    Interface.Interface.InterfaceReference = WdfDeviceInterfaceReferenceNoOp;
-    Interface.Interface.InterfaceDereference = WdfDeviceInterfaceDereferenceNoOp;
+    Interface.Interface.InterfaceReference = BthEnumInterfaceNoOp;
+    Interface.Interface.InterfaceDereference = BthEnumInterfaceNoOp;
     Interface.BthAllocateBrb = BthEnumAllocateBrb;
     Interface.BthFreeBrb = BthEnumFreeBrb;
     Interface.BthInitializeBrb = BthEnumInitializeBrb;
