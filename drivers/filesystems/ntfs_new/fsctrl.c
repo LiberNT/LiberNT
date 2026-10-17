@@ -1657,6 +1657,72 @@ NtfsExtendVolume(
 
 static
 NTSTATUS
+NtfsIsVolumeDirty(
+    _In_ PDEVICE_OBJECT VolumeDeviceObject,
+    _Inout_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IrpSp)
+{
+    PFileContextBlock FileCB = NtfsGetFileContext(IrpSp->FileObject);
+    PVolumeContextBlock VolCB =
+        (PVolumeContextBlock)VolumeDeviceObject->DeviceExtension;
+    USHORT Flags = 0;
+    ULONG Result = 0;
+    NTSTATUS Status;
+
+    Irp->IoStatus.Information = 0;
+    if (!FileCB || !FileCB->IsVolumeOpen || !VolCB || !VolCB->DiskVolume)
+        return STATUS_INVALID_PARAMETER;
+    if (IrpSp->Parameters.FileSystemControl.OutputBufferLength < sizeof(ULONG) ||
+        !Irp->AssociatedIrp.SystemBuffer)
+    {
+        return STATUS_INVALID_USER_BUFFER;
+    }
+    if (VolCB->Dismounted)
+        return STATUS_VOLUME_DISMOUNTED;
+
+    KeEnterCriticalRegion();
+    NtfsAcquireMetadata(VolCB);
+    Status = NtfsVolumeQueryFlags(VolCB->DiskVolume, &Flags);
+    NtfsReleaseMetadata(VolCB);
+    KeLeaveCriticalRegion();
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (Flags & VOL_DIRTY)
+        Result |= VOLUME_IS_DIRTY;
+    if (Flags & VOL_UPGRADE_ON_MNT)
+        Result |= VOLUME_UPGRADE_SCHEDULED;
+    *(PULONG)Irp->AssociatedIrp.SystemBuffer = Result;
+    Irp->IoStatus.Information = sizeof(ULONG);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NtfsMarkVolumeDirty(
+    _In_ PDEVICE_OBJECT VolumeDeviceObject,
+    _In_ PIO_STACK_LOCATION IrpSp)
+{
+    PFileContextBlock FileCB = NtfsGetFileContext(IrpSp->FileObject);
+    PVolumeContextBlock VolCB =
+        (PVolumeContextBlock)VolumeDeviceObject->DeviceExtension;
+    NTSTATUS Status;
+
+    if (!FileCB || !FileCB->IsVolumeOpen || !VolCB || !VolCB->DiskVolume)
+        return STATUS_INVALID_PARAMETER;
+    if (VolCB->Dismounted)
+        return STATUS_VOLUME_DISMOUNTED;
+
+    KeEnterCriticalRegion();
+    NtfsAcquireMetadata(VolCB);
+    Status = NtfsVolumeSetFlags(VolCB->DiskVolume, VOL_DIRTY, 0);
+    NtfsReleaseMetadata(VolCB);
+    KeLeaveCriticalRegion();
+    return Status;
+}
+
+static
+NTSTATUS
 NtfsShrinkVolume(
     _In_ PDEVICE_OBJECT VolumeDeviceObject,
     _Inout_ PIRP Irp,
@@ -2145,6 +2211,21 @@ NtfsFsdFileSystemControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                             NtfsExtendVolume(
                                 VolumeDeviceObject,
                                 Irp,
+                                IrpSp);
+                        break;
+
+                    case FSCTL_IS_VOLUME_DIRTY:
+                        Irp->IoStatus.Status =
+                            NtfsIsVolumeDirty(
+                                VolumeDeviceObject,
+                                Irp,
+                                IrpSp);
+                        break;
+
+                    case FSCTL_MARK_VOLUME_DIRTY:
+                        Irp->IoStatus.Status =
+                            NtfsMarkVolumeDirty(
+                                VolumeDeviceObject,
                                 IrpSp);
                         break;
 
