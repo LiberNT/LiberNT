@@ -320,6 +320,27 @@ config ENABLE_ROSV
     help
       Build the ROSV VMX hypervisor driver and its user-mode tools.
 
+config RDPSERVER_DIR
+    prompt "RDP console server build directory"
+    type string
+    default ""
+    depends ARCH=amd64
+    help
+      Install directory of a MinGW build of base/services/rdpserver
+      (bin/ and licenses/). The live and preinstalled images then carry the
+      server and start it with the interactive desktop; its in-tree
+      rdpserver.ini keeps it disabled. Empty leaves the server out.
+
+config RDPSERVER_CONFIG_DIR
+    prompt "RDP console server private configuration directory"
+    type string
+    default ""
+    depends ARCH=amd64
+    help
+      Directory outside the source tree with an rdpserver.ini that enables
+      the server, and its TLS certificate and key. Empty keeps the
+      disabled in-tree configuration.
+
 endmenu
 
 menu "Graphics"

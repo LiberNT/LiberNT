@@ -279,6 +279,11 @@ option(ENABLE_RT2800USB "Whether to build the Ralink RT2870/RT2770 USB Wi-Fi dri
 
 option(ENABLE_RTW8852BS "Whether to build the Realtek RTL8852BS SDIO Wi-Fi driver." OFF)
 
+set(RDPSERVER_DIR "" CACHE PATH
+    "MinGW build of the RDP console server (install directory) to stage into the live and preinstalled images")
+set(RDPSERVER_CONFIG_DIR "" CACHE PATH
+    "Directory with a private rdpserver.ini and its TLS certificate/key for the RDP console server")
+
 cmake_dependent_option(ENABLE_ROSV
                        "Whether to build the ROSV VMX hypervisor driver and its user-mode tools." OFF
                        "ARCH STREQUAL amd64" OFF)
