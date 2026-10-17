@@ -319,14 +319,21 @@ static const struct
 VOID LoadUserCursors(VOID)
 {
     WCHAR Path[MAX_PATH], Expanded[MAX_PATH];
+    DWORD BaseSize = 0, BaseSizeLength = sizeof(BaseSize), Type;
     HKEY Key = NULL;
     UINT i;
 
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\Cursors", 0, KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
         Key = NULL;
+    if (!Key ||
+        RegQueryValueExW(Key, L"CursorBaseSize", NULL, &Type, (PBYTE)&BaseSize, &BaseSizeLength) != ERROR_SUCCESS ||
+        Type != REG_DWORD || BaseSize < 32 || BaseSize > 256)
+    {
+        BaseSize = 0;
+    }
     for (i = 0; i < ARRAYSIZE(UserCursorScheme); i++)
     {
-        DWORD Size = sizeof(Path) - sizeof(WCHAR), Type;
+        DWORD Size = sizeof(Path) - sizeof(WCHAR);
         HCURSOR Cursor = NULL;
 
         if (Key &&
@@ -335,10 +342,10 @@ VOID LoadUserCursors(VOID)
         {
             Path[Size / sizeof(WCHAR)] = UNICODE_NULL;
             if (Path[0] && ExpandEnvironmentStringsW(Path, Expanded, ARRAYSIZE(Expanded)))
-                Cursor = LoadImageW(NULL, Expanded, IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+                Cursor = LoadImageW(NULL, Expanded, IMAGE_CURSOR, BaseSize, BaseSize, LR_LOADFROMFILE | LR_DEFAULTSIZE);
         }
         if (!Cursor)
-            Cursor = LoadImageW(NULL, UserCursorScheme[i].Resource, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE);
+            Cursor = LoadImageW(NULL, UserCursorScheme[i].Resource, IMAGE_CURSOR, BaseSize, BaseSize, LR_DEFAULTSIZE);
         if (Cursor && !NtUserSetSystemCursor(Cursor, UserCursorScheme[i].Id))
             DestroyCursor(Cursor);
     }

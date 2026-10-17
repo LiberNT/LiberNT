@@ -195,6 +195,7 @@ HKCU,"Control Panel\International\Geo","Nation",0x00000000,"244"
 ; Cursors Schemes
 HKCU,"Control Panel\Cursors",,,"LiberNT Default"
 HKCU,"Control Panel\Cursors","Scheme Source",0x00010001,0x00000002
+HKCU,"Control Panel\Cursors","CursorBaseSize",0x00010001,0x00000020
 
 ; CMD Settings
 HKCU,"SOFTWARE\Microsoft\Command Processor","CompletionChar",0x00010001,0x09
