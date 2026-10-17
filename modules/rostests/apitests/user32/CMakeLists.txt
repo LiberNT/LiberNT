@@ -17,6 +17,7 @@ list(APPEND SOURCE
     CreateIconFromResourceEx.c
     CreateWindowEx.c
     DeferWindowPos.c
+    DeskWallpaper.c
     DestroyCursorIcon.c
     DestroyWindow.c
     DialogDpiChangeBehavior.c
@@ -113,7 +114,7 @@ add_executable(user32_apitest
 
 target_link_libraries(user32_apitest wine ${PSEH_LIB})
 set_module_type(user32_apitest win32cui)
-add_importlibs(user32_apitest advapi32 imm32 gdi32 user32 msvcrt kernel32 ntdll)
+add_importlibs(user32_apitest advapi32 imm32 gdi32 gdiplus user32 msvcrt kernel32 ntdll)
 add_pch(user32_apitest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET user32_apitest)
 

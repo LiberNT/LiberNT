@@ -15,6 +15,7 @@ extern void func_CreateDialog(void);
 extern void func_CreateIconFromResourceEx(void);
 extern void func_CreateWindowEx(void);
 extern void func_DeferWindowPos(void);
+extern void func_DeskWallpaper(void);
 extern void func_DestroyCursorIcon(void);
 extern void func_DestroyWindow(void);
 extern void func_DialogDpiChangeBehavior(void);
@@ -117,6 +118,7 @@ const struct test winetest_testlist[] =
     { "CreateIconFromResourceEx", func_CreateIconFromResourceEx },
     { "CreateWindowEx", func_CreateWindowEx },
     { "DeferWindowPos", func_DeferWindowPos },
+    { "DeskWallpaper", func_DeskWallpaper },
     { "DestroyCursorIcon", func_DestroyCursorIcon },
     { "DestroyWindow", func_DestroyWindow },
     { "DialogDpiChangeBehavior", func_DialogDpiChangeBehavior },
