@@ -97,6 +97,8 @@ HRESULT dxgi_get_wddm_adapter_desc(LUID luid, DXGI_ADAPTER_DESC3 *desc)
     D3DKMT_QUERYADAPTERINFO query = {0};
     D3DKMT_QUERY_DEVICE_IDS ids = {0};
     D3DKMT_ADAPTERREGISTRYINFO registry = {0};
+    D3DKMT_DRIVER_DESCRIPTION *driver_desc;
+    BOOL have_description = FALSE;
     D3DKMT_SEGMENTSIZEINFO segments = {0};
     D3DKMT_ADAPTERTYPE type = {0};
     HRESULT hr = E_FAIL;
@@ -128,10 +130,22 @@ HRESULT dxgi_get_wddm_adapter_desc(LUID luid, DXGI_ADAPTER_DESC3 *desc)
         desc->Revision = 0;
     }
     desc->Flags = type.SoftwareDevice ? DXGI_ADAPTER_FLAG3_SOFTWARE : 0;
+    if ((driver_desc = calloc(1, sizeof(*driver_desc))))
+    {
+        query.Type = KMTQAITYPE_DRIVER_DESCRIPTION;
+        query.pPrivateDriverData = driver_desc;
+        query.PrivateDriverDataSize = sizeof(*driver_desc);
+        if (NT_SUCCESS(D3DKMTQueryAdapterInfo(&query)) && driver_desc->DriverDescription[0])
+        {
+            lstrcpynW(desc->Description, driver_desc->DriverDescription, ARRAY_SIZE(desc->Description));
+            have_description = TRUE;
+        }
+        free(driver_desc);
+    }
     query.Type = KMTQAITYPE_ADAPTERREGISTRYINFO;
     query.pPrivateDriverData = &registry;
     query.PrivateDriverDataSize = sizeof(registry);
-    if (NT_SUCCESS(D3DKMTQueryAdapterInfo(&query)) && registry.AdapterString[0])
+    if (!have_description && NT_SUCCESS(D3DKMTQueryAdapterInfo(&query)) && registry.AdapterString[0])
         lstrcpynW(desc->Description, registry.AdapterString, ARRAY_SIZE(desc->Description));
     query.Type = KMTQAITYPE_GETSEGMENTSIZE;
     query.pPrivateDriverData = &segments;
