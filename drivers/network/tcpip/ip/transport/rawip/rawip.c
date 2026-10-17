@@ -257,10 +257,18 @@ NTSTATUS RawIPSendDatagram(
     }
     else
     {
-        NCE = NBLocateNeighbor( &LocalAddress, NULL );
-        if(!NCE) {
+        PIP_INTERFACE Interface = AddrLocateInterface(&LocalAddress);
+
+        if (!Interface) {
             UnlockObject(AddrFile);
             return STATUS_INVALID_PARAMETER;
+        }
+
+        NCE = RouteGetRouteOnInterface(&RemoteAddress, Interface);
+        IPDereferenceInterface(Interface);
+        if (!NCE) {
+            UnlockObject(AddrFile);
+            return STATUS_NETWORK_UNREACHABLE;
         }
     }
 
