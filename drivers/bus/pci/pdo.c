@@ -3796,6 +3796,7 @@ PdoQueryInterface(
              * interface to give. */
             if (Status == STATUS_NOT_FOUND)
                 Status = STATUS_NOT_SUPPORTED;
+            return Status;
         }
     }
     else if (RtlCompareMemory(IrpSp->Parameters.QueryInterface.InterfaceType,
