@@ -2145,6 +2145,7 @@ DxgkVidMmCreateContextAllocation(
 
     RtlZeroMemory(&AllocInfo, sizeof(AllocInfo));
     AllocInfo.Size = Size;
+    AllocInfo.PitchAlignedSize = Size;
     AllocInfo.Alignment = Alignment;
     AllocInfo.HintedBank = HintedBank;
     AllocInfo.PreferredSegment = PreferredSegment;
