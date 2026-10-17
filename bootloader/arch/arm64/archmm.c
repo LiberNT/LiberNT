@@ -11,6 +11,7 @@
 #include "../../winload/winload.h"
 
 const PFN_NUMBER MmArchMaxLoaderPage = MM_MAX_PAGE_LOADER;
+const PFN_NUMBER MmArchMaxRamdiskPage = MM_MAX_PAGE_LOADER;
 
 void _exituefi(VOID);
 void _changestack(VOID);

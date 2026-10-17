@@ -9,6 +9,7 @@
 #include "../../winload/winload.h"
 
 #define AMD64_LOADER_PAGES   0x100000
+#define AMD64_RAMDISK_PAGES  0x8000000
 #define AMD64_GDT_ENTRIES    128
 #define AMD64_IDT_ENTRIES    256
 #define AMD64_TABLE_MASK     0x1FF
@@ -39,6 +40,7 @@ Amd64LoadDescriptorTables(
     _In_ PVOID Idtr);
 
 const PFN_NUMBER MmArchMaxLoaderPage = AMD64_LOADER_PAGES;
+const PFN_NUMBER MmArchMaxRamdiskPage = AMD64_RAMDISK_PAGES;
 const PCSTR OslArchSystemIdentifier = "AT/AT COMPATIBLE";
 
 static PHARDWARE_PTE Amd64Pml4;

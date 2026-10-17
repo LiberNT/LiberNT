@@ -13,6 +13,7 @@ void _changestack(VOID);
 void _exituefi(VOID);
 
 const PFN_NUMBER MmArchMaxLoaderPage = MM_MAX_PAGE_LOADER;
+const PFN_NUMBER MmArchMaxRamdiskPage = MM_MAX_PAGE_LOADER;
 const PCSTR OslArchSystemIdentifier = "RISC-V processor family";
 
 PVOID

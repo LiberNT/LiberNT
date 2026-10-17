@@ -350,6 +350,8 @@ RdCreateVolume(
 
     RdBase = MmAllocateMemoryWithType((SIZE_T)RdSize, LoaderXIPRom);
     if (!RdBase)
+        RdBase = MmAllocateHighMemoryWithType((SIZE_T)RdSize, LoaderXIPRom);
+    if (!RdBase)
     {
         FwPrint(L"Not enough memory for a %I64u MB RAM disk.\r\n", RdSize >> 20);
         return FALSE;

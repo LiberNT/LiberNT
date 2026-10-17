@@ -128,10 +128,12 @@ MmInitializeMemoryManager(VOID)
     return MmSynchronizeFirmwareMap();
 }
 
+static
 PVOID
-MmAllocateMemoryWithType(
+MmAllocateMemoryBelow(
     SIZE_T MemorySize,
-    TYPE_OF_MEMORY MemoryType)
+    TYPE_OF_MEMORY MemoryType,
+    PFN_NUMBER MaxPage)
 {
     PFN_NUMBER Pages = MM_SIZE_TO_PAGES(MemorySize);
     PFN_NUMBER Page;
@@ -141,7 +143,7 @@ MmAllocateMemoryWithType(
         return NULL;
 
     Memory = FwAllocatePagesBelow((SIZE_T)Pages << MM_PAGE_SHIFT,
-                                  (ULONGLONG)MmArchMaxLoaderPage << MM_PAGE_SHIFT);
+                                  (ULONGLONG)MaxPage << MM_PAGE_SHIFT);
     if (!Memory)
         return NULL;
 
@@ -149,6 +151,22 @@ MmAllocateMemoryWithType(
     MmMarkPages(Page, Pages, MemoryType, TRUE);
     MmLoaderPagesSpanned = max(MmLoaderPagesSpanned, Page + Pages);
     return Memory;
+}
+
+PVOID
+MmAllocateMemoryWithType(
+    SIZE_T MemorySize,
+    TYPE_OF_MEMORY MemoryType)
+{
+    return MmAllocateMemoryBelow(MemorySize, MemoryType, MmArchMaxLoaderPage);
+}
+
+PVOID
+MmAllocateHighMemoryWithType(
+    SIZE_T MemorySize,
+    TYPE_OF_MEMORY MemoryType)
+{
+    return MmAllocateMemoryBelow(MemorySize, MemoryType, MmArchMaxRamdiskPage);
 }
 
 PVOID

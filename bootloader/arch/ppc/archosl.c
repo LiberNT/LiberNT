@@ -97,6 +97,7 @@ ExecuteLoaderCleanly(
     PVOID PreviousStack);
 
 const PFN_NUMBER MmArchMaxLoaderPage = PPC_LOADER_KSEG0_SIZE >> MM_PAGE_SHIFT;
+const PFN_NUMBER MmArchMaxRamdiskPage = PPC_LOADER_KSEG0_SIZE >> MM_PAGE_SHIFT;
 const PCSTR OslArchSystemIdentifier = "PowerPC";
 
 static PPC_LOADER_STATE PpcLoaderState;

@@ -32,6 +32,7 @@ extern PFN_NUMBER MmLowestPhysicalPage;
 extern PFN_NUMBER MmHighestPhysicalPage;
 
 extern const PFN_NUMBER MmArchMaxLoaderPage;
+extern const PFN_NUMBER MmArchMaxRamdiskPage;
 
 BOOLEAN
 MmInitializeMemoryManager(VOID);
@@ -42,6 +43,11 @@ MmSynchronizeFirmwareMap(VOID);
 PVOID
 MmHeapAllocate(
     SIZE_T Size);
+
+PVOID
+MmAllocateHighMemoryWithType(
+    SIZE_T MemorySize,
+    TYPE_OF_MEMORY MemoryType);
 
 PVOID
 MmAllocateMemoryWithType(
