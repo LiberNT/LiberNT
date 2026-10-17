@@ -147,5 +147,8 @@ BOOL WINAPI UpdatePerUserImmEnabling(VOID);
 VOID APIENTRY CliImmInitializeHotKeys(DWORD dwAction, HKL hKL);
 VOID IntLoadPreloadKeyboardLayouts(VOID);
 VOID LoadUserCursors(VOID);
+BOOL UserTranscodeWallpaper(PCWSTR Source, PWSTR Transcoded);
+VOID UserStoreWallpaperSource(PCWSTR Source, UINT WinIni);
+VOID UserMapWallpaperSource(PWSTR Wallpaper, UINT Capacity);
 
 /* EOF */

@@ -208,6 +208,9 @@ GetHighContrastW(UINT uiParam, LPHIGHCONTRASTW HighContrast, UINT fWinIni)
 }
 
 BOOL WINAPI
+RealSystemParametersInfoW(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni);
+
+BOOL WINAPI
 RealSystemParametersInfoA(UINT uiAction,
 		      UINT uiParam,
 		      PVOID pvParam,
@@ -342,6 +345,8 @@ RealSystemParametersInfoA(UINT uiAction,
         ANSI_STRING astrWallpaper;
 
         Ret = NtUserSystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, awc, fWinIni);
+        if (Ret)
+            UserMapWallpaperSource(awc, MAX_PATH);
         RtlInitUnicodeString(&ustrWallpaper, awc);
         RtlInitEmptyAnsiString(&astrWallpaper, pvParam, uiParam);
         RtlUnicodeStringToAnsiString(&astrWallpaper, &ustrWallpaper, FALSE);
@@ -419,7 +424,8 @@ RealSystemParametersInfoA(UINT uiAction,
             pvParam = &ustrWallpaper;
           }
 
-          Ret = NtUserSystemParametersInfo(SPI_SETDESKWALLPAPER, uiParam, pvParam, fWinIni);
+          Ret = RealSystemParametersInfoW(SPI_SETDESKWALLPAPER, uiParam,
+                                          pvParam ? ustrWallpaper.Buffer : NULL, fWinIni);
 
           if (pvParam)
             RtlFreeUnicodeString(&ustrWallpaper);
@@ -448,10 +454,26 @@ RealSystemParametersInfoW(UINT uiAction,
     case SPI_SETDESKWALLPAPER:
       {
           UNICODE_STRING ustrWallpaper;
+          WCHAR Transcoded[MAX_PATH];
+
+          if (pvParam && UserTranscodeWallpaper(pvParam, Transcoded))
+          {
+              RtlInitUnicodeString(&ustrWallpaper, Transcoded);
+              if (!NtUserSystemParametersInfo(SPI_SETDESKWALLPAPER, uiParam, &ustrWallpaper, fWinIni))
+                  return FALSE;
+              UserStoreWallpaperSource(pvParam, fWinIni);
+              return TRUE;
+          }
 
           RtlInitUnicodeString(&ustrWallpaper, pvParam);
           return NtUserSystemParametersInfo(SPI_SETDESKWALLPAPER, uiParam, &ustrWallpaper, fWinIni);
       }
+
+    case SPI_GETDESKWALLPAPER:
+      if (!NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni))
+          return FALSE;
+      UserMapWallpaperSource(pvParam, uiParam);
+      return TRUE;
   }
   return NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
 }

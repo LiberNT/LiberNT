@@ -39,6 +39,7 @@ list(APPEND SOURCE
     misc/usrapihk.c
     misc/winhelp.c
     misc/winsta.c
+    misc/wallpaper.c
     windows/accel.c
     windows/caret.c
     windows/class.c
