@@ -202,9 +202,6 @@ add_livecd_shortcut("Service Manager"
 add_livecd_shortcut("System Configuration"
     "shell:system\\msconfig.exe" ICON_INDEX 0
     DESTINATION "${dir_startmenu_admintools}")
-add_livecd_shortcut("Accessibility Utility Manager"
-    "shell:system\\utilman.exe" ICON_INDEX 0
-    DESTINATION "${dir_startmenu_accessibility}")
 add_livecd_shortcut("Magnify"
     "shell:system\\magnify.exe" ICON_INDEX 0
     DESTINATION "${dir_startmenu_accessibility}")
@@ -222,9 +219,6 @@ add_livecd_shortcut("Multimedia Player"
 add_livecd_shortcut("Sound Recorder"
     "shell:system\\sndrec32.exe" ICON_INDEX 0
     WORKDIR "${envvar_homedrive}${envvar_homepath}"
-    DESTINATION "${dir_startmenu_entertainment}")
-add_livecd_shortcut("Volume Control"
-    "shell:system\\sndvol32.exe" ICON_INDEX 0
     DESTINATION "${dir_startmenu_entertainment}")
 add_livecd_shortcut("Character Map"
     "shell:system\\charmap.exe" ICON_INDEX 0
