@@ -46,6 +46,7 @@ enum class PageId
     Multitasking,
     About,
     Environment,
+    Recovery,
     Devices,
     Bluetooth,
     Mouse,
@@ -227,6 +228,7 @@ void BuildStorage(PageBuilder &page);
 void BuildMultitasking(PageBuilder &page);
 void BuildAbout(PageBuilder &page);
 void BuildEnvironment(PageBuilder &page);
+void BuildRecovery(PageBuilder &page);
 void BuildDevices(PageBuilder &page);
 void BuildBluetooth(PageBuilder &page);
 void BuildMouse(PageBuilder &page);

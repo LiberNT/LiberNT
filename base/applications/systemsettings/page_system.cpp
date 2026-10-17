@@ -847,6 +847,8 @@ BuildAbout(PageBuilder &page)
     page.Group(Str(IDS_RELATED));
     page.Navigate(Str(IDS_PAGE_ENVIRONMENT), Str(IDS_ENVIRONMENT_DESC), L"code_20_regular", PageId::Environment)
         .Keywords = Str(IDS_ENVIRONMENT_KEYWORDS);
+    page.Navigate(Str(IDS_PAGE_RECOVERY), Str(IDS_RECOVERY_DESC), L"storage_20_regular", PageId::Recovery)
+        .Keywords = Str(IDS_RECOVERY_KEYWORDS);
     page.Navigate(Str(IDS_PAGE_DEVICES), Str(IDS_DEVICES_DESC), L"device_meeting_room_20_regular", PageId::Devices);
 }
 
@@ -962,4 +964,172 @@ BuildEnvironment(PageBuilder &page)
     page.Text(Str(IDS_ENVIRONMENT_INTRO));
     AddEnvironmentGroup(page, IDS_USER_VARIABLES, HKEY_CURRENT_USER, L"Environment", true);
     AddEnvironmentGroup(page, IDS_SYSTEM_VARIABLES, HKEY_LOCAL_MACHINE, SYSTEM_ENVIRONMENT_KEY, IsAdmin());
+}
+
+#define MEMORY_MANAGEMENT_KEY L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management"
+#define CRASH_CONTROL_KEY L"SYSTEM\\CurrentControlSet\\Control\\CrashControl"
+
+static std::wstring
+ReadFirstPagingFile(bool *present)
+{
+    WCHAR data[512];
+    DWORD size = sizeof(data);
+
+    *present = RegGetValueW(HKEY_LOCAL_MACHINE, MEMORY_MANAGEMENT_KEY, L"PagingFiles", RRF_RT_REG_MULTI_SZ, NULL, data,
+                            &size) == ERROR_SUCCESS;
+    if (!*present || size < sizeof(WCHAR))
+        return std::wstring();
+    data[_countof(data) - 1] = UNICODE_NULL;
+    return data;
+}
+
+static bool
+WritePagingFile(const std::wstring &entry)
+{
+    std::vector<WCHAR> data(entry.begin(), entry.end());
+    HKEY key;
+    LONG error;
+
+    data.push_back(UNICODE_NULL);
+    if (!entry.empty())
+        data.push_back(UNICODE_NULL);
+    error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, MEMORY_MANAGEMENT_KEY, 0, KEY_SET_VALUE, &key);
+    if (error == ERROR_SUCCESS)
+    {
+        error = RegSetValueExW(key, L"PagingFiles", 0, REG_MULTI_SZ, (const BYTE *)data.data(),
+                               (DWORD)(data.size() * sizeof(WCHAR)));
+        RegCloseKey(key);
+    }
+    return error == ERROR_SUCCESS;
+}
+
+static std::wstring
+SystemPagingFile()
+{
+    WCHAR windows[MAX_PATH];
+
+    if (!GetWindowsDirectoryW(windows, _countof(windows)))
+        return L"C:\\pagefile.sys";
+    return std::wstring(windows, 2) + L"\\pagefile.sys";
+}
+
+struct DumpType
+{
+    UINT Name;
+    DWORD Enabled;
+    DWORD Filter;
+};
+
+static const DumpType DumpTypes[] =
+{
+    { IDS_NONE, 0, 0 },
+    { IDS_DUMP_AUTOMATIC, 7, 0 },
+    { IDS_DUMP_KERNEL, 2, 0 },
+    { IDS_DUMP_COMPLETE, 1, 0 },
+    { IDS_DUMP_ACTIVE, 1, 1 },
+};
+
+void
+BuildRecovery(PageBuilder &page)
+{
+    SettingsHost *host = page.Host;
+    std::vector<std::wstring> paging, dumps;
+    std::wstring entry, args;
+    ULONG minimum = 0, maximum = 0;
+    bool present = false;
+    int pagingIndex = 0, dumpIndex = 1;
+    DWORD enabled = 7, filter = 0, reboot = 1;
+
+    if (!page.Indexing)
+    {
+        entry = ReadFirstPagingFile(&present);
+        enabled = ReadDword(HKEY_LOCAL_MACHINE, CRASH_CONTROL_KEY, L"CrashDumpEnabled", 7);
+        filter = ReadDword(HKEY_LOCAL_MACHINE, CRASH_CONTROL_KEY, L"FilterPages", 0);
+        reboot = ReadDword(HKEY_LOCAL_MACHINE, CRASH_CONTROL_KEY, L"AutoReboot", 1);
+    }
+    if (entry.empty())
+        pagingIndex = present ? 3 : 0;
+    else if (entry[0] == L'?')
+        pagingIndex = 0;
+    else
+    {
+        size_t space = entry.find(L' ');
+
+        pagingIndex = 1;
+        if (space != std::wstring::npos)
+        {
+            args = entry.substr(space + 1);
+            if (swscanf(args.c_str(), L"%lu %lu", &minimum, &maximum) >= 1 && minimum)
+                pagingIndex = 2;
+        }
+    }
+    paging.push_back(Str(IDS_PAGING_AUTO));
+    paging.push_back(Format(IDS_PAGING_SYSTEM, SystemPagingFile().substr(0, 2).c_str()));
+    paging.push_back(pagingIndex == 2 ? Format(IDS_PAGING_CUSTOM_FORMAT, minimum, max(minimum, maximum))
+                                      : Str(IDS_PAGING_CUSTOM));
+    paging.push_back(Str(IDS_PAGING_NONE));
+    for (UINT i = 0; i < _countof(DumpTypes); i++)
+    {
+        dumps.push_back(Str(DumpTypes[i].Name));
+        if (DumpTypes[i].Enabled == enabled && DumpTypes[i].Filter == (enabled == 1 && filter ? 1u : 0u))
+            dumpIndex = (int)i;
+    }
+
+    page.Group(Str(IDS_VIRTUAL_MEMORY));
+    page.Choice(Str(IDS_PAGING_FILE), Str(IDS_PAGING_FILE_DESC), L"storage_20_regular", paging, pagingIndex,
+                [host, minimum, maximum](int index)
+                {
+                    std::wstring value;
+
+                    if (index == 0)
+                        value = L"?:\\pagefile.sys";
+                    else if (index == 1)
+                        value = SystemPagingFile();
+                    else if (index == 2)
+                    {
+                        std::vector<std::wstring> labels, values;
+                        std::vector<bool> secret(2, false);
+                        ULONG low, high;
+
+                        labels.push_back(Str(IDS_INITIAL_SIZE));
+                        labels.push_back(Str(IDS_MAXIMUM_SIZE));
+                        values.push_back(minimum ? Printf(L"%lu", minimum) : std::wstring());
+                        values.push_back(maximum ? Printf(L"%lu", maximum) : std::wstring());
+                        if (!InputFields(host->Window(), Str(IDS_PAGING_CUSTOM), labels, values, secret))
+                            return;
+                        low = wcstoul(values[0].c_str(), NULL, 10);
+                        high = wcstoul(values[1].c_str(), NULL, 10);
+                        if (!low || high < low)
+                        {
+                            ShowError(host->Window(), ERROR_INVALID_PARAMETER);
+                            return;
+                        }
+                        value = SystemPagingFile() + Printf(L" %lu %lu", low, high);
+                    }
+                    if (!WritePagingFile(value))
+                    {
+                        ShowError(host->Window(), ERROR_ACCESS_DENIED);
+                        return;
+                    }
+                    PromptRestart(host->Window(), Str(IDS_RESTART_RECOVERY));
+                }).Enabled = IsAdmin();
+
+    page.Group(Str(IDS_STARTUP_RECOVERY));
+    page.Choice(Str(IDS_DUMP_TYPE), Str(IDS_DUMP_TYPE_DESC), L"document_20_regular", dumps, dumpIndex,
+                [host](int index)
+                {
+                    if (!WriteDword(HKEY_LOCAL_MACHINE, CRASH_CONTROL_KEY, L"CrashDumpEnabled", DumpTypes[index].Enabled) ||
+                        !WriteDword(HKEY_LOCAL_MACHINE, CRASH_CONTROL_KEY, L"FilterPages", DumpTypes[index].Filter))
+                    {
+                        ShowError(host->Window(), ERROR_ACCESS_DENIED);
+                        return;
+                    }
+                    PromptRestart(host->Window(), Str(IDS_RESTART_RECOVERY));
+                }).Enabled = IsAdmin();
+    page.Toggle(Str(IDS_AUTO_RESTART), Str(IDS_AUTO_RESTART_DESC), L"arrow_counterclockwise_20_regular", reboot != 0,
+                [host](int on)
+                {
+                    if (!WriteDword(HKEY_LOCAL_MACHINE, CRASH_CONTROL_KEY, L"AutoReboot", on != 0))
+                        ShowError(host->Window(), ERROR_ACCESS_DENIED);
+                }).Enabled = IsAdmin();
 }
