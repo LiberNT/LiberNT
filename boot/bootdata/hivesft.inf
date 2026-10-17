@@ -978,8 +978,6 @@ HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib\009",,0x00000012
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib\CurrentLanguage",,0x00000012
 
 ; Auto-Execute (AE) Debugger
-HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug","Auto",2,"0"
-HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug","Debugger",2,"drwtsn32 -p %ld -e %ld -g"
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug","UserDebuggerHotKey",0x00010001,0x00000000
 
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Accessibility",,0x00000012

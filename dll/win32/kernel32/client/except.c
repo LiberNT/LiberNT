@@ -659,7 +659,12 @@ UnhandledExceptionFilter(IN PEXCEPTION_POINTERS ExceptionInfo)
     // Also see Vostokov's book "Memory Dump Analysis Anthology Collector's Edition, Volume 1"
     // at: https://books.google.fr/books?id=9w2x6NHljg4C&pg=PA115&lpg=PA115
 
-    if (!(AeDebugPath && AeDebugAuto))
+    if (!AeDebugPath)
+    {
+        Status = STATUS_SUCCESS;
+        ErrorResponse = ResponseOk;
+    }
+    else if (!AeDebugAuto)
     {
         /*
          * Either there is no debugger specified, or the debugger should
