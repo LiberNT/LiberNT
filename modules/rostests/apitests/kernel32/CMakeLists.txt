@@ -5,6 +5,7 @@ add_subdirectory(redirptest)
 add_message_headers(ANSI FormatMessage.mc)
 
 list(APPEND SOURCE
+    ConsoleAlias.c
     ApiSetCoreSynch.c
     Arm64ThreadContext.c
     ConsoleCP.c
