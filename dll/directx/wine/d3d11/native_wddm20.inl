@@ -14,6 +14,29 @@ static NativeDevice *NativeWddm20Device(D3D10DDI_HDEVICE handle)
     return (static_cast<NativeWddm20DeviceHeader *>(handle.pDrvPrivate) - 1)->device;
 }
 
+template<typename Table> static Table &NativeDriverFunctions(NativeDevice *device);
+template<> D3DWDDM2_0DDI_DEVICEFUNCS &NativeDriverFunctions<D3DWDDM2_0DDI_DEVICEFUNCS>(NativeDevice *device)
+{
+    return device->wddm20_functions;
+}
+template<> D3D11_1DDI_DEVICEFUNCS &NativeDriverFunctions<D3D11_1DDI_DEVICEFUNCS>(NativeDevice *device)
+{
+    return device->ddi11_1_functions;
+}
+
+template<typename Table, typename Pfn> struct NativeLiveCall;
+template<typename Table, typename R, typename... A> struct NativeLiveCall<Table, R (APIENTRY *)(D3D10DDI_HDEVICE, A...)>
+{
+    template<R (APIENTRY *Table::*Member)(D3D10DDI_HDEVICE, A...)>
+    static R APIENTRY Call(D3D10DDI_HDEVICE h, A... args)
+    {
+        return (NativeDriverFunctions<Table>(NativeWddm20Device(h)).*Member)(h, args...);
+    }
+};
+
+#define NATIVE_LIVE(Table, Name) \
+    (NativeLiveCall<Table, decltype(Table::pfn##Name)>::template Call<&Table::pfn##Name>)
+
 #define NATIVE_WDDM20_CONSTANT_BUFFERS(Name) \
 static void APIENTRY NativeWddm20##Name(D3D10DDI_HDEVICE h, UINT start, UINT count, const D3D10DDI_HRESOURCE *resources) \
 { \
@@ -395,20 +418,21 @@ static void NativeDdi11_1BridgeFunctions(NativeDevice *device)
     const auto &d = device->ddi11_1_functions;
     auto &m = device->wddm20_functions;
 #define SAME(Name) m.pfn##Name = d.pfn##Name
-    SAME(DefaultConstantBufferUpdateSubresourceUP); SAME(VsSetConstantBuffers); SAME(PsSetShaderResources);
-    SAME(PsSetShader); SAME(PsSetSamplers); SAME(VsSetShader); SAME(DrawIndexed); SAME(Draw);
-    SAME(DynamicIABufferMapNoOverwrite); SAME(DynamicIABufferUnmap); SAME(DynamicConstantBufferMapDiscard);
-    SAME(DynamicIABufferMapDiscard); SAME(DynamicConstantBufferUnmap); SAME(PsSetConstantBuffers);
-    SAME(IaSetInputLayout); SAME(IaSetVertexBuffers); SAME(IaSetIndexBuffer); SAME(DrawIndexedInstanced);
-    SAME(DrawInstanced); SAME(DynamicResourceMapDiscard); SAME(DynamicResourceUnmap); SAME(GsSetConstantBuffers);
-    SAME(GsSetShader); SAME(IaSetTopology); SAME(StagingResourceMap); SAME(StagingResourceUnmap);
-    SAME(VsSetShaderResources); SAME(VsSetSamplers); SAME(GsSetShaderResources); SAME(GsSetSamplers);
-    SAME(SetRenderTargets); SAME(ShaderResourceViewReadAfterWriteHazard); SAME(ResourceReadAfterWriteHazard);
-    SAME(SetBlendState); SAME(SetDepthStencilState); SAME(SetRasterizerState); SAME(QueryEnd); SAME(QueryBegin);
-    SAME(ResourceCopyRegion); SAME(ResourceUpdateSubresourceUP); SAME(SoSetTargets); SAME(DrawAuto);
-    SAME(SetViewports); SAME(SetScissorRects); SAME(ClearRenderTargetView); SAME(ClearDepthStencilView);
-    SAME(SetPredication); SAME(QueryGetData); SAME(GenMips); SAME(ResourceCopy); SAME(ResourceResolveSubresource);
-    SAME(ResourceMap); SAME(ResourceUnmap); SAME(ResourceIsStagingBusy); SAME(CalcPrivateResourceSize);
+#define LIVE(Name) m.pfn##Name = d.pfn##Name ? NATIVE_LIVE(D3D11_1DDI_DEVICEFUNCS, Name) : NULL
+    LIVE(DefaultConstantBufferUpdateSubresourceUP); LIVE(VsSetConstantBuffers); LIVE(PsSetShaderResources);
+    LIVE(PsSetShader); LIVE(PsSetSamplers); LIVE(VsSetShader); LIVE(DrawIndexed); LIVE(Draw);
+    LIVE(DynamicIABufferMapNoOverwrite); LIVE(DynamicIABufferUnmap); LIVE(DynamicConstantBufferMapDiscard);
+    LIVE(DynamicIABufferMapDiscard); LIVE(DynamicConstantBufferUnmap); LIVE(PsSetConstantBuffers);
+    LIVE(IaSetInputLayout); LIVE(IaSetVertexBuffers); LIVE(IaSetIndexBuffer); LIVE(DrawIndexedInstanced);
+    LIVE(DrawInstanced); LIVE(DynamicResourceMapDiscard); LIVE(DynamicResourceUnmap); LIVE(GsSetConstantBuffers);
+    LIVE(GsSetShader); LIVE(IaSetTopology); LIVE(StagingResourceMap); LIVE(StagingResourceUnmap);
+    LIVE(VsSetShaderResources); LIVE(VsSetSamplers); LIVE(GsSetShaderResources); LIVE(GsSetSamplers);
+    LIVE(SetRenderTargets); LIVE(ShaderResourceViewReadAfterWriteHazard); LIVE(ResourceReadAfterWriteHazard);
+    LIVE(SetBlendState); LIVE(SetDepthStencilState); LIVE(SetRasterizerState); LIVE(QueryEnd); LIVE(QueryBegin);
+    LIVE(ResourceCopyRegion); LIVE(ResourceUpdateSubresourceUP); LIVE(SoSetTargets); LIVE(DrawAuto);
+    LIVE(SetViewports); LIVE(SetScissorRects); LIVE(ClearRenderTargetView); LIVE(ClearDepthStencilView);
+    LIVE(SetPredication); LIVE(QueryGetData); LIVE(GenMips); LIVE(ResourceCopy); LIVE(ResourceResolveSubresource);
+    LIVE(ResourceMap); LIVE(ResourceUnmap); LIVE(ResourceIsStagingBusy); SAME(CalcPrivateResourceSize);
     SAME(CalcPrivateOpenedResourceSize); SAME(CreateResource); SAME(OpenResource); SAME(DestroyResource);
     SAME(DestroyShaderResourceView); SAME(DestroyRenderTargetView); SAME(CalcPrivateDepthStencilViewSize);
     SAME(CreateDepthStencilView); SAME(DestroyDepthStencilView); SAME(CalcPrivateElementLayoutSize);
@@ -419,21 +443,22 @@ static void NativeDdi11_1BridgeFunctions(NativeDevice *device)
     SAME(CalcPrivateGeometryShaderWithStreamOutput); SAME(CreateGeometryShaderWithStreamOutput); SAME(DestroyShader);
     SAME(CalcPrivateSamplerSize); SAME(CreateSampler); SAME(DestroySampler); SAME(DestroyQuery);
     SAME(CheckFormatSupport); SAME(CheckCounterInfo); SAME(CheckCounter); SAME(DestroyDevice);
-    SAME(SetTextFilterSize); SAME(ResourceConvert); SAME(ResourceConvertRegion); SAME(DrawIndexedInstancedIndirect);
-    SAME(DrawInstancedIndirect); SAME(CommandListExecute); SAME(HsSetShaderResources); SAME(HsSetShader);
-    SAME(HsSetSamplers); SAME(HsSetConstantBuffers); SAME(DsSetShaderResources); SAME(DsSetShader);
-    SAME(DsSetSamplers); SAME(DsSetConstantBuffers); SAME(CreateHullShader); SAME(CreateDomainShader);
-    SAME(CheckDeferredContextHandleSizes); SAME(CalcDeferredContextHandleSize); SAME(CalcPrivateDeferredContextSize);
-    SAME(CreateDeferredContext); SAME(AbandonCommandList); SAME(CalcPrivateCommandListSize); SAME(CreateCommandList);
-    SAME(DestroyCommandList); SAME(CalcPrivateTessellationShaderSize); SAME(PsSetShaderWithIfaces);
-    SAME(VsSetShaderWithIfaces); SAME(GsSetShaderWithIfaces); SAME(HsSetShaderWithIfaces);
-    SAME(DsSetShaderWithIfaces); SAME(CsSetShaderWithIfaces); SAME(CreateComputeShader); SAME(CsSetShader);
-    SAME(CsSetShaderResources); SAME(CsSetSamplers); SAME(CsSetConstantBuffers); SAME(DestroyUnorderedAccessView);
-    SAME(ClearUnorderedAccessViewUint); SAME(ClearUnorderedAccessViewFloat); SAME(CsSetUnorderedAccessViews);
-    SAME(Dispatch); SAME(DispatchIndirect); SAME(SetResourceMinLOD); SAME(CopyStructureCount);
-    SAME(RecycleCommandList); SAME(RecycleCreateCommandList); SAME(RecycleCreateDeferredContext);
-    SAME(RecycleDestroyCommandList); SAME(Discard); SAME(AssignDebugBinary);
-    SAME(DynamicConstantBufferMapNoOverwrite); SAME(CheckDirectFlipSupport); SAME(ClearView);
+    LIVE(SetTextFilterSize); LIVE(ResourceConvert); LIVE(ResourceConvertRegion); LIVE(DrawIndexedInstancedIndirect);
+    LIVE(DrawInstancedIndirect); LIVE(CommandListExecute); LIVE(HsSetShaderResources); LIVE(HsSetShader);
+    LIVE(HsSetSamplers); LIVE(HsSetConstantBuffers); LIVE(DsSetShaderResources); LIVE(DsSetShader);
+    LIVE(DsSetSamplers); LIVE(DsSetConstantBuffers); SAME(CreateHullShader); SAME(CreateDomainShader);
+    SAME(CheckDeferredContextHandleSizes); LIVE(CalcDeferredContextHandleSize); SAME(CalcPrivateDeferredContextSize);
+    SAME(CreateDeferredContext); LIVE(AbandonCommandList); SAME(CalcPrivateCommandListSize); SAME(CreateCommandList);
+    SAME(DestroyCommandList); SAME(CalcPrivateTessellationShaderSize); LIVE(PsSetShaderWithIfaces);
+    LIVE(VsSetShaderWithIfaces); LIVE(GsSetShaderWithIfaces); LIVE(HsSetShaderWithIfaces);
+    LIVE(DsSetShaderWithIfaces); LIVE(CsSetShaderWithIfaces); SAME(CreateComputeShader); LIVE(CsSetShader);
+    LIVE(CsSetShaderResources); LIVE(CsSetSamplers); LIVE(CsSetConstantBuffers); SAME(DestroyUnorderedAccessView);
+    LIVE(ClearUnorderedAccessViewUint); LIVE(ClearUnorderedAccessViewFloat); LIVE(CsSetUnorderedAccessViews);
+    LIVE(Dispatch); LIVE(DispatchIndirect); LIVE(SetResourceMinLOD); LIVE(CopyStructureCount);
+    LIVE(RecycleCommandList); LIVE(RecycleCreateCommandList); LIVE(RecycleCreateDeferredContext);
+    LIVE(RecycleDestroyCommandList); LIVE(Discard); LIVE(AssignDebugBinary);
+    LIVE(DynamicConstantBufferMapNoOverwrite); SAME(CheckDirectFlipSupport); LIVE(ClearView);
+#undef LIVE
 #undef SAME
     m.pfnFlush = d.pfnFlush ? NativeDdi11_1Flush : NULL;
     m.pfnCheckMultisampleQualityLevels = d.pfnCheckMultisampleQualityLevels ? NativeDdi11_1CheckMultisampleQualityLevels : NULL;
@@ -459,54 +484,54 @@ static void NativeWddm20InstallFunctions(NativeDevice *device)
 {
     /* Copy only identical signatures. Changed slots use typed adapters below;
      * an unsupported API must never call a newer DDI through an older type. */
-    device->functions.pfnPsSetShaderResources = device->wddm20_functions.pfnPsSetShaderResources;
-    device->functions.pfnPsSetShader = device->wddm20_functions.pfnPsSetShader;
-    device->functions.pfnPsSetSamplers = device->wddm20_functions.pfnPsSetSamplers;
-    device->functions.pfnVsSetShader = device->wddm20_functions.pfnVsSetShader;
-    device->functions.pfnDrawIndexed = device->wddm20_functions.pfnDrawIndexed;
-    device->functions.pfnDraw = device->wddm20_functions.pfnDraw;
-    device->functions.pfnDynamicIABufferMapNoOverwrite = device->wddm20_functions.pfnDynamicIABufferMapNoOverwrite;
-    device->functions.pfnDynamicIABufferUnmap = device->wddm20_functions.pfnDynamicIABufferUnmap;
-    device->functions.pfnDynamicConstantBufferMapDiscard = device->wddm20_functions.pfnDynamicConstantBufferMapDiscard;
-    device->functions.pfnDynamicIABufferMapDiscard = device->wddm20_functions.pfnDynamicIABufferMapDiscard;
-    device->functions.pfnDynamicConstantBufferUnmap = device->wddm20_functions.pfnDynamicConstantBufferUnmap;
-    device->functions.pfnIaSetInputLayout = device->wddm20_functions.pfnIaSetInputLayout;
-    device->functions.pfnIaSetVertexBuffers = device->wddm20_functions.pfnIaSetVertexBuffers;
-    device->functions.pfnIaSetIndexBuffer = device->wddm20_functions.pfnIaSetIndexBuffer;
-    device->functions.pfnDrawIndexedInstanced = device->wddm20_functions.pfnDrawIndexedInstanced;
-    device->functions.pfnDrawInstanced = device->wddm20_functions.pfnDrawInstanced;
-    device->functions.pfnDynamicResourceMapDiscard = device->wddm20_functions.pfnDynamicResourceMapDiscard;
-    device->functions.pfnDynamicResourceUnmap = device->wddm20_functions.pfnDynamicResourceUnmap;
-    device->functions.pfnGsSetShader = device->wddm20_functions.pfnGsSetShader;
-    device->functions.pfnIaSetTopology = device->wddm20_functions.pfnIaSetTopology;
-    device->functions.pfnStagingResourceMap = device->wddm20_functions.pfnStagingResourceMap;
-    device->functions.pfnStagingResourceUnmap = device->wddm20_functions.pfnStagingResourceUnmap;
-    device->functions.pfnVsSetShaderResources = device->wddm20_functions.pfnVsSetShaderResources;
-    device->functions.pfnVsSetSamplers = device->wddm20_functions.pfnVsSetSamplers;
-    device->functions.pfnGsSetShaderResources = device->wddm20_functions.pfnGsSetShaderResources;
-    device->functions.pfnGsSetSamplers = device->wddm20_functions.pfnGsSetSamplers;
-    device->functions.pfnSetRenderTargets = device->wddm20_functions.pfnSetRenderTargets;
-    device->functions.pfnShaderResourceViewReadAfterWriteHazard = device->wddm20_functions.pfnShaderResourceViewReadAfterWriteHazard;
-    device->functions.pfnResourceReadAfterWriteHazard = device->wddm20_functions.pfnResourceReadAfterWriteHazard;
-    device->functions.pfnSetBlendState = device->wddm20_functions.pfnSetBlendState;
-    device->functions.pfnSetDepthStencilState = device->wddm20_functions.pfnSetDepthStencilState;
-    device->functions.pfnSetRasterizerState = device->wddm20_functions.pfnSetRasterizerState;
-    device->functions.pfnQueryEnd = device->wddm20_functions.pfnQueryEnd;
-    device->functions.pfnQueryBegin = device->wddm20_functions.pfnQueryBegin;
-    device->functions.pfnSoSetTargets = device->wddm20_functions.pfnSoSetTargets;
-    device->functions.pfnDrawAuto = device->wddm20_functions.pfnDrawAuto;
-    device->functions.pfnSetViewports = device->wddm20_functions.pfnSetViewports;
-    device->functions.pfnSetScissorRects = device->wddm20_functions.pfnSetScissorRects;
-    device->functions.pfnClearRenderTargetView = device->wddm20_functions.pfnClearRenderTargetView;
-    device->functions.pfnClearDepthStencilView = device->wddm20_functions.pfnClearDepthStencilView;
-    device->functions.pfnSetPredication = device->wddm20_functions.pfnSetPredication;
-    device->functions.pfnQueryGetData = device->wddm20_functions.pfnQueryGetData;
-    device->functions.pfnGenMips = device->wddm20_functions.pfnGenMips;
-    device->functions.pfnResourceCopy = device->wddm20_functions.pfnResourceCopy;
-    device->functions.pfnResourceResolveSubresource = device->wddm20_functions.pfnResourceResolveSubresource;
-    device->functions.pfnResourceMap = device->wddm20_functions.pfnResourceMap;
-    device->functions.pfnResourceUnmap = device->wddm20_functions.pfnResourceUnmap;
-    device->functions.pfnResourceIsStagingBusy = device->wddm20_functions.pfnResourceIsStagingBusy;
+    device->functions.pfnPsSetShaderResources = device->wddm20_functions.pfnPsSetShaderResources ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, PsSetShaderResources) : NULL;
+    device->functions.pfnPsSetShader = device->wddm20_functions.pfnPsSetShader ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, PsSetShader) : NULL;
+    device->functions.pfnPsSetSamplers = device->wddm20_functions.pfnPsSetSamplers ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, PsSetSamplers) : NULL;
+    device->functions.pfnVsSetShader = device->wddm20_functions.pfnVsSetShader ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, VsSetShader) : NULL;
+    device->functions.pfnDrawIndexed = device->wddm20_functions.pfnDrawIndexed ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DrawIndexed) : NULL;
+    device->functions.pfnDraw = device->wddm20_functions.pfnDraw ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, Draw) : NULL;
+    device->functions.pfnDynamicIABufferMapNoOverwrite = device->wddm20_functions.pfnDynamicIABufferMapNoOverwrite ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DynamicIABufferMapNoOverwrite) : NULL;
+    device->functions.pfnDynamicIABufferUnmap = device->wddm20_functions.pfnDynamicIABufferUnmap ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DynamicIABufferUnmap) : NULL;
+    device->functions.pfnDynamicConstantBufferMapDiscard = device->wddm20_functions.pfnDynamicConstantBufferMapDiscard ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DynamicConstantBufferMapDiscard) : NULL;
+    device->functions.pfnDynamicIABufferMapDiscard = device->wddm20_functions.pfnDynamicIABufferMapDiscard ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DynamicIABufferMapDiscard) : NULL;
+    device->functions.pfnDynamicConstantBufferUnmap = device->wddm20_functions.pfnDynamicConstantBufferUnmap ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DynamicConstantBufferUnmap) : NULL;
+    device->functions.pfnIaSetInputLayout = device->wddm20_functions.pfnIaSetInputLayout ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, IaSetInputLayout) : NULL;
+    device->functions.pfnIaSetVertexBuffers = device->wddm20_functions.pfnIaSetVertexBuffers ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, IaSetVertexBuffers) : NULL;
+    device->functions.pfnIaSetIndexBuffer = device->wddm20_functions.pfnIaSetIndexBuffer ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, IaSetIndexBuffer) : NULL;
+    device->functions.pfnDrawIndexedInstanced = device->wddm20_functions.pfnDrawIndexedInstanced ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DrawIndexedInstanced) : NULL;
+    device->functions.pfnDrawInstanced = device->wddm20_functions.pfnDrawInstanced ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DrawInstanced) : NULL;
+    device->functions.pfnDynamicResourceMapDiscard = device->wddm20_functions.pfnDynamicResourceMapDiscard ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DynamicResourceMapDiscard) : NULL;
+    device->functions.pfnDynamicResourceUnmap = device->wddm20_functions.pfnDynamicResourceUnmap ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DynamicResourceUnmap) : NULL;
+    device->functions.pfnGsSetShader = device->wddm20_functions.pfnGsSetShader ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, GsSetShader) : NULL;
+    device->functions.pfnIaSetTopology = device->wddm20_functions.pfnIaSetTopology ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, IaSetTopology) : NULL;
+    device->functions.pfnStagingResourceMap = device->wddm20_functions.pfnStagingResourceMap ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, StagingResourceMap) : NULL;
+    device->functions.pfnStagingResourceUnmap = device->wddm20_functions.pfnStagingResourceUnmap ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, StagingResourceUnmap) : NULL;
+    device->functions.pfnVsSetShaderResources = device->wddm20_functions.pfnVsSetShaderResources ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, VsSetShaderResources) : NULL;
+    device->functions.pfnVsSetSamplers = device->wddm20_functions.pfnVsSetSamplers ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, VsSetSamplers) : NULL;
+    device->functions.pfnGsSetShaderResources = device->wddm20_functions.pfnGsSetShaderResources ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, GsSetShaderResources) : NULL;
+    device->functions.pfnGsSetSamplers = device->wddm20_functions.pfnGsSetSamplers ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, GsSetSamplers) : NULL;
+    device->functions.pfnSetRenderTargets = device->wddm20_functions.pfnSetRenderTargets ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, SetRenderTargets) : NULL;
+    device->functions.pfnShaderResourceViewReadAfterWriteHazard = device->wddm20_functions.pfnShaderResourceViewReadAfterWriteHazard ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ShaderResourceViewReadAfterWriteHazard) : NULL;
+    device->functions.pfnResourceReadAfterWriteHazard = device->wddm20_functions.pfnResourceReadAfterWriteHazard ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ResourceReadAfterWriteHazard) : NULL;
+    device->functions.pfnSetBlendState = device->wddm20_functions.pfnSetBlendState ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, SetBlendState) : NULL;
+    device->functions.pfnSetDepthStencilState = device->wddm20_functions.pfnSetDepthStencilState ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, SetDepthStencilState) : NULL;
+    device->functions.pfnSetRasterizerState = device->wddm20_functions.pfnSetRasterizerState ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, SetRasterizerState) : NULL;
+    device->functions.pfnQueryEnd = device->wddm20_functions.pfnQueryEnd ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, QueryEnd) : NULL;
+    device->functions.pfnQueryBegin = device->wddm20_functions.pfnQueryBegin ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, QueryBegin) : NULL;
+    device->functions.pfnSoSetTargets = device->wddm20_functions.pfnSoSetTargets ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, SoSetTargets) : NULL;
+    device->functions.pfnDrawAuto = device->wddm20_functions.pfnDrawAuto ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DrawAuto) : NULL;
+    device->functions.pfnSetViewports = device->wddm20_functions.pfnSetViewports ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, SetViewports) : NULL;
+    device->functions.pfnSetScissorRects = device->wddm20_functions.pfnSetScissorRects ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, SetScissorRects) : NULL;
+    device->functions.pfnClearRenderTargetView = device->wddm20_functions.pfnClearRenderTargetView ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ClearRenderTargetView) : NULL;
+    device->functions.pfnClearDepthStencilView = device->wddm20_functions.pfnClearDepthStencilView ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ClearDepthStencilView) : NULL;
+    device->functions.pfnSetPredication = device->wddm20_functions.pfnSetPredication ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, SetPredication) : NULL;
+    device->functions.pfnQueryGetData = device->wddm20_functions.pfnQueryGetData ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, QueryGetData) : NULL;
+    device->functions.pfnGenMips = device->wddm20_functions.pfnGenMips ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, GenMips) : NULL;
+    device->functions.pfnResourceCopy = device->wddm20_functions.pfnResourceCopy ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ResourceCopy) : NULL;
+    device->functions.pfnResourceResolveSubresource = device->wddm20_functions.pfnResourceResolveSubresource ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ResourceResolveSubresource) : NULL;
+    device->functions.pfnResourceMap = device->wddm20_functions.pfnResourceMap ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ResourceMap) : NULL;
+    device->functions.pfnResourceUnmap = device->wddm20_functions.pfnResourceUnmap ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ResourceUnmap) : NULL;
+    device->functions.pfnResourceIsStagingBusy = device->wddm20_functions.pfnResourceIsStagingBusy ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ResourceIsStagingBusy) : NULL;
     device->functions.pfnCalcPrivateResourceSize = device->wddm20_functions.pfnCalcPrivateResourceSize;
     device->functions.pfnCalcPrivateOpenedResourceSize = device->wddm20_functions.pfnCalcPrivateOpenedResourceSize;
     device->functions.pfnCreateResource = device->wddm20_functions.pfnCreateResource;
@@ -534,47 +559,47 @@ static void NativeWddm20InstallFunctions(NativeDevice *device)
     device->functions.pfnCheckCounterInfo = device->wddm20_functions.pfnCheckCounterInfo;
     device->functions.pfnCheckCounter = device->wddm20_functions.pfnCheckCounter;
     device->functions.pfnDestroyDevice = device->wddm20_functions.pfnDestroyDevice;
-    device->functions.pfnSetTextFilterSize = device->wddm20_functions.pfnSetTextFilterSize;
-    device->functions.pfnResourceConvert = device->wddm20_functions.pfnResourceConvert;
-    device->functions.pfnDrawIndexedInstancedIndirect = device->wddm20_functions.pfnDrawIndexedInstancedIndirect;
-    device->functions.pfnDrawInstancedIndirect = device->wddm20_functions.pfnDrawInstancedIndirect;
-    device->functions.pfnCommandListExecute = device->wddm20_functions.pfnCommandListExecute;
-    device->functions.pfnHsSetShaderResources = device->wddm20_functions.pfnHsSetShaderResources;
-    device->functions.pfnHsSetShader = device->wddm20_functions.pfnHsSetShader;
-    device->functions.pfnHsSetSamplers = device->wddm20_functions.pfnHsSetSamplers;
-    device->functions.pfnDsSetShaderResources = device->wddm20_functions.pfnDsSetShaderResources;
-    device->functions.pfnDsSetShader = device->wddm20_functions.pfnDsSetShader;
-    device->functions.pfnDsSetSamplers = device->wddm20_functions.pfnDsSetSamplers;
+    device->functions.pfnSetTextFilterSize = device->wddm20_functions.pfnSetTextFilterSize ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, SetTextFilterSize) : NULL;
+    device->functions.pfnResourceConvert = device->wddm20_functions.pfnResourceConvert ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ResourceConvert) : NULL;
+    device->functions.pfnDrawIndexedInstancedIndirect = device->wddm20_functions.pfnDrawIndexedInstancedIndirect ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DrawIndexedInstancedIndirect) : NULL;
+    device->functions.pfnDrawInstancedIndirect = device->wddm20_functions.pfnDrawInstancedIndirect ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DrawInstancedIndirect) : NULL;
+    device->functions.pfnCommandListExecute = device->wddm20_functions.pfnCommandListExecute ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, CommandListExecute) : NULL;
+    device->functions.pfnHsSetShaderResources = device->wddm20_functions.pfnHsSetShaderResources ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, HsSetShaderResources) : NULL;
+    device->functions.pfnHsSetShader = device->wddm20_functions.pfnHsSetShader ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, HsSetShader) : NULL;
+    device->functions.pfnHsSetSamplers = device->wddm20_functions.pfnHsSetSamplers ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, HsSetSamplers) : NULL;
+    device->functions.pfnDsSetShaderResources = device->wddm20_functions.pfnDsSetShaderResources ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DsSetShaderResources) : NULL;
+    device->functions.pfnDsSetShader = device->wddm20_functions.pfnDsSetShader ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DsSetShader) : NULL;
+    device->functions.pfnDsSetSamplers = device->wddm20_functions.pfnDsSetSamplers ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DsSetSamplers) : NULL;
     device->functions.pfnCheckDeferredContextHandleSizes = device->wddm20_functions.pfnCheckDeferredContextHandleSizes;
-    device->functions.pfnCalcDeferredContextHandleSize = device->wddm20_functions.pfnCalcDeferredContextHandleSize;
+    device->functions.pfnCalcDeferredContextHandleSize = device->wddm20_functions.pfnCalcDeferredContextHandleSize ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, CalcDeferredContextHandleSize) : NULL;
     device->functions.pfnCalcPrivateDeferredContextSize = device->wddm20_functions.pfnCalcPrivateDeferredContextSize;
     device->functions.pfnCreateDeferredContext = device->wddm20_functions.pfnCreateDeferredContext;
-    device->functions.pfnAbandonCommandList = device->wddm20_functions.pfnAbandonCommandList;
+    device->functions.pfnAbandonCommandList = device->wddm20_functions.pfnAbandonCommandList ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, AbandonCommandList) : NULL;
     device->functions.pfnCalcPrivateCommandListSize = device->wddm20_functions.pfnCalcPrivateCommandListSize;
     device->functions.pfnCreateCommandList = device->wddm20_functions.pfnCreateCommandList;
     device->functions.pfnDestroyCommandList = device->wddm20_functions.pfnDestroyCommandList;
-    device->functions.pfnPsSetShaderWithIfaces = device->wddm20_functions.pfnPsSetShaderWithIfaces;
-    device->functions.pfnVsSetShaderWithIfaces = device->wddm20_functions.pfnVsSetShaderWithIfaces;
-    device->functions.pfnGsSetShaderWithIfaces = device->wddm20_functions.pfnGsSetShaderWithIfaces;
-    device->functions.pfnHsSetShaderWithIfaces = device->wddm20_functions.pfnHsSetShaderWithIfaces;
-    device->functions.pfnDsSetShaderWithIfaces = device->wddm20_functions.pfnDsSetShaderWithIfaces;
-    device->functions.pfnCsSetShaderWithIfaces = device->wddm20_functions.pfnCsSetShaderWithIfaces;
+    device->functions.pfnPsSetShaderWithIfaces = device->wddm20_functions.pfnPsSetShaderWithIfaces ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, PsSetShaderWithIfaces) : NULL;
+    device->functions.pfnVsSetShaderWithIfaces = device->wddm20_functions.pfnVsSetShaderWithIfaces ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, VsSetShaderWithIfaces) : NULL;
+    device->functions.pfnGsSetShaderWithIfaces = device->wddm20_functions.pfnGsSetShaderWithIfaces ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, GsSetShaderWithIfaces) : NULL;
+    device->functions.pfnHsSetShaderWithIfaces = device->wddm20_functions.pfnHsSetShaderWithIfaces ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, HsSetShaderWithIfaces) : NULL;
+    device->functions.pfnDsSetShaderWithIfaces = device->wddm20_functions.pfnDsSetShaderWithIfaces ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DsSetShaderWithIfaces) : NULL;
+    device->functions.pfnCsSetShaderWithIfaces = device->wddm20_functions.pfnCsSetShaderWithIfaces ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, CsSetShaderWithIfaces) : NULL;
     device->functions.pfnCreateComputeShader = device->wddm20_functions.pfnCreateComputeShader;
-    device->functions.pfnCsSetShader = device->wddm20_functions.pfnCsSetShader;
-    device->functions.pfnCsSetShaderResources = device->wddm20_functions.pfnCsSetShaderResources;
-    device->functions.pfnCsSetSamplers = device->wddm20_functions.pfnCsSetSamplers;
+    device->functions.pfnCsSetShader = device->wddm20_functions.pfnCsSetShader ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, CsSetShader) : NULL;
+    device->functions.pfnCsSetShaderResources = device->wddm20_functions.pfnCsSetShaderResources ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, CsSetShaderResources) : NULL;
+    device->functions.pfnCsSetSamplers = device->wddm20_functions.pfnCsSetSamplers ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, CsSetSamplers) : NULL;
     device->functions.pfnDestroyUnorderedAccessView = device->wddm20_functions.pfnDestroyUnorderedAccessView;
-    device->functions.pfnClearUnorderedAccessViewUint = device->wddm20_functions.pfnClearUnorderedAccessViewUint;
-    device->functions.pfnClearUnorderedAccessViewFloat = device->wddm20_functions.pfnClearUnorderedAccessViewFloat;
-    device->functions.pfnCsSetUnorderedAccessViews = device->wddm20_functions.pfnCsSetUnorderedAccessViews;
-    device->functions.pfnDispatch = device->wddm20_functions.pfnDispatch;
-    device->functions.pfnDispatchIndirect = device->wddm20_functions.pfnDispatchIndirect;
-    device->functions.pfnSetResourceMinLOD = device->wddm20_functions.pfnSetResourceMinLOD;
-    device->functions.pfnCopyStructureCount = device->wddm20_functions.pfnCopyStructureCount;
-    device->functions.pfnRecycleCommandList = device->wddm20_functions.pfnRecycleCommandList;
-    device->functions.pfnRecycleCreateCommandList = device->wddm20_functions.pfnRecycleCreateCommandList;
-    device->functions.pfnRecycleCreateDeferredContext = device->wddm20_functions.pfnRecycleCreateDeferredContext;
-    device->functions.pfnRecycleDestroyCommandList = device->wddm20_functions.pfnRecycleDestroyCommandList;
+    device->functions.pfnClearUnorderedAccessViewUint = device->wddm20_functions.pfnClearUnorderedAccessViewUint ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ClearUnorderedAccessViewUint) : NULL;
+    device->functions.pfnClearUnorderedAccessViewFloat = device->wddm20_functions.pfnClearUnorderedAccessViewFloat ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, ClearUnorderedAccessViewFloat) : NULL;
+    device->functions.pfnCsSetUnorderedAccessViews = device->wddm20_functions.pfnCsSetUnorderedAccessViews ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, CsSetUnorderedAccessViews) : NULL;
+    device->functions.pfnDispatch = device->wddm20_functions.pfnDispatch ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, Dispatch) : NULL;
+    device->functions.pfnDispatchIndirect = device->wddm20_functions.pfnDispatchIndirect ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, DispatchIndirect) : NULL;
+    device->functions.pfnSetResourceMinLOD = device->wddm20_functions.pfnSetResourceMinLOD ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, SetResourceMinLOD) : NULL;
+    device->functions.pfnCopyStructureCount = device->wddm20_functions.pfnCopyStructureCount ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, CopyStructureCount) : NULL;
+    device->functions.pfnRecycleCommandList = device->wddm20_functions.pfnRecycleCommandList ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, RecycleCommandList) : NULL;
+    device->functions.pfnRecycleCreateCommandList = device->wddm20_functions.pfnRecycleCreateCommandList ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, RecycleCreateCommandList) : NULL;
+    device->functions.pfnRecycleCreateDeferredContext = device->wddm20_functions.pfnRecycleCreateDeferredContext ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, RecycleCreateDeferredContext) : NULL;
+    device->functions.pfnRecycleDestroyCommandList = device->wddm20_functions.pfnRecycleDestroyCommandList ? NATIVE_LIVE(D3DWDDM2_0DDI_DEVICEFUNCS, RecycleDestroyCommandList) : NULL;
     device->functions.pfnVsSetConstantBuffers = device->wddm20_functions.pfnVsSetConstantBuffers ? NativeWddm20VsSetConstantBuffers : NULL;
     device->functions.pfnPsSetConstantBuffers = device->wddm20_functions.pfnPsSetConstantBuffers ? NativeWddm20PsSetConstantBuffers : NULL;
     device->functions.pfnGsSetConstantBuffers = device->wddm20_functions.pfnGsSetConstantBuffers ? NativeWddm20GsSetConstantBuffers : NULL;
