@@ -997,9 +997,6 @@ NdisSetOptionalHandlers(
                     return NDIS_STATUS_INVALID_LENGTH;
                 }
 
-                if (Pnp->Flags != 0)
-                    return NDIS_STATUS_INVALID_PARAMETER;
-
                 RtlZeroMemory(&MiniportDriver->PnpCharacteristics, sizeof(MiniportDriver->PnpCharacteristics));
                 RtlCopyMemory(&MiniportDriver->PnpCharacteristics, Pnp, Pnp->Header.Size);
                 MiniportDriver->PnpCharacteristicsValid = TRUE;
