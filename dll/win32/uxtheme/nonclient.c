@@ -1122,7 +1122,17 @@ ThemeDwmPublishCaptionButtons(HWND hWnd, const WINDOWINFO *wi, DWORD htHot, DWOR
             if (Buttons[i] != CLOSEBUTTON &&
                 ((wi->dwExStyle & WS_EX_TOOLWINDOW) || !(wi->dwStyle & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX))))
                 continue;
-            Spans[i] = DWM_CAPTION_PACK(Rect->left, Rect->right);
+            if (pwndData->CaptionButtonLeft[Buttons[i]])
+            {
+                Spans[i] = DWM_CAPTION_PACK(Rect->left, Rect->right);
+            }
+            else
+            {
+                LONG Width = wi->rcWindow.right - wi->rcWindow.left;
+
+                Spans[i] = DWM_CAPTION_PACK(Width - Rect->right, Width - Rect->left);
+                State |= DWM_CAPTION_STATE_RIGHT(i);
+            }
             if (htHot == HitTest[i])
                 State |= DWM_CAPTION_STATE_HOT(i);
             if (htDown == HitTest[i])

@@ -163,8 +163,16 @@ IntCompositionReadFrameExtension(_In_ PWND Wnd, _Inout_ PDWM_WIN Window)
         Span = IntCompositionFrameProperty(Wnd, Buttons[Index]);
         if (Span == 0)
             continue;
-        Window->CaptionButtons[Index].left = (SHORT)LOWORD(Span);
-        Window->CaptionButtons[Index].right = (SHORT)HIWORD(Span);
+        if (State & DWM_CAPTION_STATE_RIGHT(Index))
+        {
+            Window->CaptionButtons[Index].left = (LONG)Window->cx - (SHORT)HIWORD(Span);
+            Window->CaptionButtons[Index].right = (LONG)Window->cx - (SHORT)LOWORD(Span);
+        }
+        else
+        {
+            Window->CaptionButtons[Index].left = (SHORT)LOWORD(Span);
+            Window->CaptionButtons[Index].right = (SHORT)HIWORD(Span);
+        }
         Window->CaptionButtons[Index].top = (SHORT)LOWORD(Row);
         Window->CaptionButtons[Index].bottom = (SHORT)HIWORD(Row);
     }

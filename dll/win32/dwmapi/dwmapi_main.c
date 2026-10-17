@@ -318,12 +318,16 @@ static BOOL dwm_get_caption_button_bounds(HWND hwnd, RECT *rect)
     {
         DWM_PROP_CAPTION_CLOSE, DWM_PROP_CAPTION_MAXIMIZE, DWM_PROP_CAPTION_MINIMIZE
     };
-    ULONG_PTR row, span;
+    ULONG_PTR row, span, state;
+    RECT window;
+    LONG width;
     UINT i;
 
     row = (ULONG_PTR)GetPropW(hwnd, DWM_PROP_CAPTION_ROW);
-    if (!row)
+    if (!row || !GetWindowRect(hwnd, &window))
         return FALSE;
+    state = (ULONG_PTR)GetPropW(hwnd, DWM_PROP_CAPTION_STATE);
+    width = window.right - window.left;
     SetRectEmpty(rect);
     for (i = 0; i < ARRAYSIZE(buttons); i++)
     {
@@ -332,7 +336,11 @@ static BOOL dwm_get_caption_button_bounds(HWND hwnd, RECT *rect)
         span = (ULONG_PTR)GetPropW(hwnd, buttons[i]);
         if (!span)
             continue;
-        SetRect(&button, (SHORT)LOWORD(span), (SHORT)LOWORD(row), (SHORT)HIWORD(span), (SHORT)HIWORD(row));
+        if (state & DWM_CAPTION_STATE_RIGHT(i))
+            SetRect(&button, width - (SHORT)HIWORD(span), (SHORT)LOWORD(row), width - (SHORT)LOWORD(span),
+                    (SHORT)HIWORD(row));
+        else
+            SetRect(&button, (SHORT)LOWORD(span), (SHORT)LOWORD(row), (SHORT)HIWORD(span), (SHORT)HIWORD(row));
         UnionRect(rect, rect, &button);
     }
     return !IsRectEmpty(rect);
