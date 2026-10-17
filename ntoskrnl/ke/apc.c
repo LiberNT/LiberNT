@@ -784,6 +784,16 @@ KeInsertQueueApc(IN PKAPC Apc,
     /* Release the APC lock and return success */
     KiReleaseApcLockFromSynchLevel(&ApcLock);
     KiExitDispatcher(ApcLock.OldIrql);
+
+    if (State &&
+        (ApcLock.OldIrql == PASSIVE_LEVEL) &&
+        (Thread == KeGetCurrentThread()) &&
+        (Thread->ApcState.KernelApcPending) &&
+        !(Thread->SpecialApcDisable))
+    {
+        KiCheckForKernelApcDelivery();
+    }
+
     return State;
 }
 
