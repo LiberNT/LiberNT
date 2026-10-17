@@ -11851,8 +11851,10 @@ XHCI_SubmitSgTransfer(
     ULONG Chunk;
     ULONGLONG BufferAddress;
     PXHCI_TRB Trb = NULL;
+    PXHCI_TRB FirstTrb = NULL;
     ULONGLONG PhysicalAddress = 0;
     ULONG Control;
+    ULONG FirstControl = 0;
     MPSTATUS Status = MP_STATUS_SUCCESS;
     KIRQL OldIrql;
     ULONG IsoPayloadLimit = 0;
@@ -11991,7 +11993,9 @@ XHCI_SubmitSgTransfer(
         ASSERT((Control & XHCI_TRB_IOC) != 0);
         IocTrbCount++;
 #endif
-        XHCI_PublishTrbControl(Trb, Control);
+        FirstTrb = Trb;
+        FirstControl = Control;
+        XHCI_PublishTrbControl(Trb, Control ^ XHCI_TRB_CYCLE);
         XHCI_AdvanceTransferRing(Ring);
 
         Transfer->CompletionTrbPointer = PhysicalAddress;
@@ -12007,6 +12011,7 @@ XHCI_SubmitSgTransfer(
             {
                 XHCI_ArmTransferPoll(Extension, Transfer);
             }
+            XHCI_PublishTrbControl(FirstTrb, FirstControl);
             KeMemoryBarrier();
             XHCI_RingEndpointDoorbell(Extension,
                                        Endpoint->SlotId,
@@ -12153,6 +12158,12 @@ XHCI_SubmitSgTransfer(
             if (ShortPacketOk)
                 Control |= XHCI_TRB_ISP;
 
+            if (FirstTrb == NULL)
+            {
+                FirstTrb = Trb;
+                FirstControl = Control;
+                Control ^= XHCI_TRB_CYCLE;
+            }
             XHCI_PublishTrbControl(Trb, Control);
             XHCI_AdvanceTransferRing(Ring);
 
@@ -12230,6 +12241,12 @@ XHCI_SubmitSgTransfer(
                 if (ShortPacketOk)
                     Control |= XHCI_TRB_ISP;
 
+                if (FirstTrb == NULL)
+                {
+                    FirstTrb = Trb;
+                    FirstControl = Control;
+                    Control ^= XHCI_TRB_CYCLE;
+                }
                 XHCI_PublishTrbControl(Trb, Control);
                 XHCI_AdvanceTransferRing(Ring);
 
@@ -12313,6 +12330,8 @@ XHCI_SubmitSgTransfer(
         {
             XHCI_ArmTransferPoll(Extension, Transfer);
         }
+        if (FirstTrb != NULL)
+            XHCI_PublishTrbControl(FirstTrb, FirstControl);
         KeMemoryBarrier();
         XHCI_RingEndpointDoorbell(Extension,
                                    Endpoint->SlotId,
@@ -12323,6 +12342,8 @@ XHCI_SubmitSgTransfer(
     return MP_STATUS_SUCCESS;
 
 Failure:
+    if (FirstTrb != NULL)
+        XHCI_PublishTrbControl(FirstTrb, FirstControl);
     XHCI_FreeIsoTransferContext(Transfer);
     XHCI_ReleaseBounceBuffer(Transfer);
     XHCI_DisarmTransferPoll(Extension, Transfer);
