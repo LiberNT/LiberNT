@@ -228,6 +228,7 @@ BthConnLoadPaired(
         RtlCopyMemory(Remote->LinkKey, (PUCHAR)Value + Value->DataOffset, sizeof(Remote->LinkKey));
         Remote->HasLinkKey = TRUE;
         Remote->Flags |= BDIF_PAIRED | BDIF_PERSONAL;
+        BthTdiRemoteKeyed(Dev, Address, TRUE);
 
         BthConnLoadDevice(Remote);
     }
@@ -478,6 +479,7 @@ BthConnRemoveDevice(
     BthConnDeleteDevice(Dev, Remote);
     BthEnumRemoveDevice(Dev, Remote->Address);
     Remote->HasLinkKey = FALSE;
+    BthTdiRemoteKeyed(Dev, Remote->Address, FALSE);
     RtlZeroMemory(Remote->LinkKey, sizeof(Remote->LinkKey));
     Remote->Flags &= ~(BDIF_PAIRED | BDIF_PERSONAL | BDIF_SSP_PAIRED | BDIF_SSP_MITM_PROTECTED);
     BthRadioReportInRange(Dev, Remote, Previous);
@@ -796,6 +798,7 @@ BthConnEvent(
             RtlCopyMemory(Remote->LinkKey, Parameters + 6, sizeof(Remote->LinkKey));
             Remote->LinkKeyType = Parameters[22];
             Remote->HasLinkKey = TRUE;
+            BthTdiRemoteKeyed(Dev, Remote->Address, TRUE);
             Remote->Flags |= BDIF_PAIRED | BDIF_PERSONAL;
             if (Remote->LinkKeyType >= 0x04)
                 Remote->Flags |= BDIF_SSP_PAIRED;

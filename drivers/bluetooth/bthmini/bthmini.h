@@ -519,6 +519,9 @@ struct _BTHMINI_DEVICE
     LIST_ENTRY CommandsSent;
     ULONG CommandCredits;
     BOOLEAN Ready;
+    LIST_ENTRY TdiIrps;
+    LIST_ENTRY TdiSyncs;
+    LIST_ENTRY TdiActive;
 
     BTH_ADDR Address;
     UCHAR HciVersion;
@@ -903,6 +906,12 @@ BthTdiRadioStopping(
 VOID
 BthTdiProcess(
     _In_ PBTHMINI_DEVICE Dev);
+
+VOID
+BthTdiRemoteKeyed(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ BTH_ADDR Address,
+    _In_ BOOLEAN Keyed);
 
 NTSTATUS
 BthSdpQueryRfcommChannel(

@@ -19,6 +19,8 @@
 #define BTHTDI_TX_LIMIT         0x8000
 #define BTHTDI_BACKLOG          8
 #define BTHTDI_SYNC_TIMEOUT_MS  10000
+#define BTHTDI_MAX_RADIOS       4
+#define BTHTDI_MAX_KEYED        64
 
 typedef enum _BTHTDI_FILE_TYPE
 {
@@ -43,7 +45,8 @@ typedef struct _BTHTDI_ADDRESS
     UCHAR Channel;
     BOOLEAN Closing;
     BOOLEAN Listening;
-    PBTHMINI_RFCOMM_SERVER Server;
+    BTH_ADDR LocalRadio;
+    PBTHMINI_RFCOMM_SERVER Servers[BTHTDI_MAX_RADIOS];
     LIST_ENTRY ListenIrps;
     LIST_ENTRY Pending;
     ULONG PendingCount;
@@ -54,6 +57,7 @@ typedef struct _BTHTDI_CONNECTION
     LONG RefCount;
     LIST_ENTRY Link;
     PBTHTDI_ADDRESS Address;
+    PBTHMINI_DEVICE Dev;
     BOOLEAN Internal;
     BOOLEAN Cleanup;
     BOOLEAN RemoteClosed;
@@ -88,14 +92,19 @@ typedef struct _BTHTDI_SYNC
     NTSTATUS Status;
 } BTHTDI_SYNC, *PBTHTDI_SYNC;
 
+typedef struct _BTHTDI_KEYED
+{
+    PBTHMINI_DEVICE Dev;
+    BTH_ADDR Address;
+} BTHTDI_KEYED;
+
 static const GUID BthTdiNullGuid;
 static WDFDEVICE BthTdiDevice;
 static KSPIN_LOCK BthTdiLock;
 static PBTHMINI_DEVICE BthTdiRadio;
-static LIST_ENTRY BthTdiIrpQueue;
-static LIST_ENTRY BthTdiSyncQueue;
+static PBTHMINI_DEVICE BthTdiRadios[BTHTDI_MAX_RADIOS];
+static BTHTDI_KEYED BthTdiKeyed[BTHTDI_MAX_KEYED];
 static LIST_ENTRY BthTdiAddresses;
-static LIST_ENTRY BthTdiActive;
 
 static BTHMINI_DLC_EVENT BthTdiDlcOpened;
 static BTHMINI_DLC_RECEIVE BthTdiDlcReceive;
@@ -172,6 +181,103 @@ BthTdiAllocateConnection(VOID)
     InitializeListHead(&Connection->Sends);
     InitializeListHead(&Connection->ActiveLink);
     return Connection;
+}
+
+static
+LONG
+BthTdiRadioIndexLocked(
+    _In_opt_ PBTHMINI_DEVICE Dev)
+{
+    ULONG Index;
+
+    for (Index = 0; Dev && Index < BTHTDI_MAX_RADIOS; Index++)
+    {
+        if (BthTdiRadios[Index] == Dev)
+            return (LONG)Index;
+    }
+    return -1;
+}
+
+static
+PBTHMINI_DEVICE
+BthTdiRadioByAddressLocked(
+    _In_ BTH_ADDR Address)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < BTHTDI_MAX_RADIOS; Index++)
+    {
+        if (BthTdiRadios[Index] && BthTdiRadios[Index]->Address == Address)
+            return BthTdiRadios[Index];
+    }
+    return NULL;
+}
+
+static
+PBTHMINI_DEVICE
+BthTdiRadioForRemoteLocked(
+    _In_ BTH_ADDR Address)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < BTHTDI_MAX_KEYED; Index++)
+    {
+        if (BthTdiKeyed[Index].Dev && BthTdiKeyed[Index].Address == Address &&
+            BthTdiRadioIndexLocked(BthTdiKeyed[Index].Dev) >= 0)
+        {
+            return BthTdiKeyed[Index].Dev;
+        }
+    }
+    return NULL;
+}
+
+static
+ULONG
+BthTdiSnapshotRadios(
+    _Out_writes_(BTHTDI_MAX_RADIOS) PBTHMINI_DEVICE *Radios)
+{
+    ULONG Index, Count = 0;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&BthTdiLock, &OldIrql);
+    for (Index = 0; Index < BTHTDI_MAX_RADIOS; Index++)
+    {
+        if (BthTdiRadios[Index])
+            Radios[Count++] = BthTdiRadios[Index];
+    }
+    KeReleaseSpinLock(&BthTdiLock, OldIrql);
+    return Count;
+}
+
+VOID
+BthTdiRemoteKeyed(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ BTH_ADDR Address,
+    _In_ BOOLEAN Keyed)
+{
+    LONG Free = -1;
+    ULONG Index;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&BthTdiLock, &OldIrql);
+    for (Index = 0; Index < BTHTDI_MAX_KEYED; Index++)
+    {
+        if (BthTdiKeyed[Index].Dev == Dev && BthTdiKeyed[Index].Address == Address)
+        {
+            if (!Keyed)
+                BthTdiKeyed[Index].Dev = NULL;
+            KeReleaseSpinLock(&BthTdiLock, OldIrql);
+            return;
+        }
+        if (!BthTdiKeyed[Index].Dev && Free < 0)
+            Free = (LONG)Index;
+    }
+    if (Keyed && Free >= 0)
+    {
+        BthTdiKeyed[Free].Dev = Dev;
+        BthTdiKeyed[Free].Address = Address;
+    }
+    KeReleaseSpinLock(&BthTdiLock, OldIrql);
 }
 
 static
@@ -366,17 +472,19 @@ BthTdiFailListens(
 static
 VOID
 BthTdiAttachDlc(
+    _In_ PBTHMINI_DEVICE Dev,
     _Inout_ PBTHTDI_CONNECTION Connection,
     _In_ PBTHMINI_DLC Dlc)
 {
     Dlc->Callbacks = &BthTdiDlcCallbacks;
     Dlc->Context = Connection;
+    Connection->Dev = Dev;
     Connection->Dlc = Dlc;
     Connection->RemoteAddress = Dlc->Session->Remote->Address;
     Connection->RemotePort = Dlc->Dlci >> 1;
     Connection->State = BthTdiConnected;
     if (IsListEmpty(&Connection->ActiveLink))
-        InsertTailList(&BthTdiActive, &Connection->ActiveLink);
+        InsertTailList(&Dev->TdiActive, &Connection->ActiveLink);
     BthTdiReferenceConnection(Connection);
 }
 
@@ -534,8 +642,9 @@ BthTdiDlcOpened(
         return;
     }
     Connection->State = BthTdiConnected;
+    Connection->Dev = Dev;
     if (IsListEmpty(&Connection->ActiveLink))
-        InsertTailList(&BthTdiActive, &Connection->ActiveLink);
+        InsertTailList(&Dev->TdiActive, &Connection->ActiveLink);
     Irp = Connection->AcceptedListen;
     Connection->AcceptedListen = NULL;
     if (Connection->Cleanup)
@@ -597,14 +706,21 @@ BthTdiDlcClosed(
 {
     PBTHTDI_CONNECTION Connection = Dlc->Context;
 
+    BOOLEAN Unlinked = FALSE;
+    KIRQL OldIrql;
+
     BthTdiConnectionDown(Dev, Connection, Status);
+    KeAcquireSpinLock(&BthTdiLock, &OldIrql);
     if (Connection->Internal && Connection->Address && !IsListEmpty(&Connection->Link))
     {
         RemoveEntryList(&Connection->Link);
         InitializeListHead(&Connection->Link);
         Connection->Address->PendingCount--;
-        BthTdiDereferenceConnection(Connection);
+        Unlinked = TRUE;
     }
+    KeReleaseSpinLock(&BthTdiLock, OldIrql);
+    if (Unlinked)
+        BthTdiDereferenceConnection(Connection);
     BthTdiDereferenceConnection(Connection);
 }
 
@@ -627,20 +743,24 @@ BthTdiAccept(
 {
     PBTHTDI_ADDRESS Address = Context;
     PBTHTDI_CONNECTION Connection;
+    BOOLEAN Full;
+    KIRQL OldIrql;
     PIRP Irp;
 
-    UNREFERENCED_PARAMETER(Dev);
     if (Address->Closing || !Address->Listening)
         return FALSE;
     Irp = BthTdiTake(&Address->ListenIrps);
     if (Irp)
     {
         Connection = Irp->Tail.Overlay.DriverContext[0];
-        BthTdiAttachDlc(Connection, Dlc);
+        BthTdiAttachDlc(Dev, Connection, Dlc);
         Connection->AcceptedListen = Irp;
         return TRUE;
     }
-    if (Address->PendingCount >= BTHTDI_BACKLOG)
+    KeAcquireSpinLock(&BthTdiLock, &OldIrql);
+    Full = Address->PendingCount >= BTHTDI_BACKLOG;
+    KeReleaseSpinLock(&BthTdiLock, OldIrql);
+    if (Full)
         return FALSE;
     Connection = BthTdiAllocateConnection();
     if (!Connection)
@@ -648,9 +768,11 @@ BthTdiAccept(
     Connection->Internal = TRUE;
     BthTdiReferenceAddress(Address);
     Connection->Address = Address;
-    BthTdiAttachDlc(Connection, Dlc);
+    BthTdiAttachDlc(Dev, Connection, Dlc);
+    KeAcquireSpinLock(&BthTdiLock, &OldIrql);
     InsertTailList(&Address->Pending, &Connection->Link);
     Address->PendingCount++;
+    KeReleaseSpinLock(&BthTdiLock, OldIrql);
     return TRUE;
 }
 
@@ -677,10 +799,11 @@ BthTdiAdopt(
         Connection->Dlc = Pending->Dlc;
         Connection->Dlc->Context = Connection;
         Pending->Dlc = NULL;
+        Connection->Dev = Dev;
         BthTdiReferenceConnection(Connection);
         BthTdiDereferenceConnection(Pending);
         if (IsListEmpty(&Connection->ActiveLink))
-            InsertTailList(&BthTdiActive, &Connection->ActiveLink);
+            InsertTailList(&Dev->TdiActive, &Connection->ActiveLink);
         BthRfcommGrantCredits(Dev, Connection->Dlc);
     }
     if (!IsListEmpty(&Pending->ActiveLink))
@@ -694,17 +817,22 @@ static
 NTSTATUS
 BthTdiRegister(
     _In_ PBTHMINI_DEVICE Dev,
-    _Inout_ PBTHTDI_ADDRESS Address)
+    _Inout_ PBTHTDI_ADDRESS Address,
+    _In_ LONG Slot)
 {
     NTSTATUS Status;
 
-    if (Address->Server)
+    if (Slot < 0)
+        return STATUS_DEVICE_NOT_CONNECTED;
+    if (Address->Servers[Slot])
         return STATUS_SUCCESS;
-    Status = BthRfcommRegisterServer(Dev, Address->Channel, BthTdiAccept, Address, &Address->Server);
+    if (Address->LocalRadio && Address->LocalRadio != Dev->Address)
+        return STATUS_INVALID_ADDRESS;
+    Status = BthRfcommRegisterServer(Dev, Address->Channel, BthTdiAccept, Address, &Address->Servers[Slot]);
     if (NT_SUCCESS(Status))
     {
-        Address->Channel = Address->Server->Channel;
-        DPRINT1("BTHMINI: RFCOMM socket bound to channel %u\n", Address->Channel);
+        Address->Channel = Address->Servers[Slot]->Channel;
+        DPRINT1("BTHMINI: RFCOMM socket bound to channel %u on radio %012I64x\n", Address->Channel, Dev->Address);
     }
     return Status;
 }
@@ -713,11 +841,29 @@ static
 VOID
 BthTdiUnregister(
     _In_opt_ PBTHMINI_DEVICE Dev,
-    _Inout_ PBTHTDI_ADDRESS Address)
+    _Inout_ PBTHTDI_ADDRESS Address,
+    _In_ LONG Slot)
 {
-    if (Dev && Address->Server)
-        BthRfcommUnregisterServer(Dev, Address->Server);
-    Address->Server = NULL;
+    if (Slot < 0)
+        return;
+    if (Dev && Address->Servers[Slot])
+        BthRfcommUnregisterServer(Dev, Address->Servers[Slot]);
+    Address->Servers[Slot] = NULL;
+}
+
+static
+BOOLEAN
+BthTdiRegistered(
+    _In_ PBTHTDI_ADDRESS Address)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < BTHTDI_MAX_RADIOS; Index++)
+    {
+        if (Address->Servers[Index])
+            return TRUE;
+    }
+    return FALSE;
 }
 
 static
@@ -733,14 +879,19 @@ BthTdiRunSync(
             PBTHTDI_ADDRESS Address = Sync->Object;
             KIRQL OldIrql;
             NTSTATUS Status;
+            LONG Slot;
 
             if (!Dev)
                 return STATUS_DEVICE_NOT_CONNECTED;
-            Status = BthTdiRegister(Dev, Address);
+            KeAcquireSpinLock(&BthTdiLock, &OldIrql);
+            Slot = BthTdiRadioIndexLocked(Dev);
+            KeReleaseSpinLock(&BthTdiLock, OldIrql);
+            Status = BthTdiRegister(Dev, Address, Slot);
             if (NT_SUCCESS(Status))
             {
                 KeAcquireSpinLock(&BthTdiLock, &OldIrql);
-                InsertTailList(&BthTdiAddresses, &Address->Link);
+                if (IsListEmpty(&Address->Link))
+                    InsertTailList(&BthTdiAddresses, &Address->Link);
                 KeReleaseSpinLock(&BthTdiLock, OldIrql);
             }
             return Status;
@@ -749,26 +900,36 @@ BthTdiRunSync(
         case BthTdiSyncCleanupAddress:
         {
             PBTHTDI_ADDRESS Address = Sync->Object;
+            LIST_ENTRY Owned;
+            PLIST_ENTRY Entry;
             KIRQL OldIrql;
+            LONG Slot;
 
-            Address->Closing = TRUE;
+            if (!Dev)
+                return STATUS_SUCCESS;
+            InitializeListHead(&Owned);
             KeAcquireSpinLock(&BthTdiLock, &OldIrql);
-            if (!IsListEmpty(&Address->Link))
+            Slot = BthTdiRadioIndexLocked(Dev);
+            for (Entry = Address->Pending.Flink; Entry != &Address->Pending;)
             {
-                RemoveEntryList(&Address->Link);
-                InitializeListHead(&Address->Link);
+                PBTHTDI_CONNECTION Pending = CONTAINING_RECORD(Entry, BTHTDI_CONNECTION, Link);
+
+                Entry = Entry->Flink;
+                if (Pending->Dev != Dev)
+                    continue;
+                RemoveEntryList(&Pending->Link);
+                InsertTailList(&Owned, &Pending->Link);
+                Address->PendingCount--;
             }
             KeReleaseSpinLock(&BthTdiLock, OldIrql);
-            BthTdiUnregister(Dev, Address);
-            BthTdiFailList(&Address->ListenIrps, STATUS_CANCELLED);
-            while (!IsListEmpty(&Address->Pending))
+            BthTdiUnregister(Dev, Address, Slot);
+            while (!IsListEmpty(&Owned))
             {
-                PBTHTDI_CONNECTION Pending = CONTAINING_RECORD(RemoveHeadList(&Address->Pending), BTHTDI_CONNECTION, Link);
+                PBTHTDI_CONNECTION Pending = CONTAINING_RECORD(RemoveHeadList(&Owned), BTHTDI_CONNECTION, Link);
 
                 InitializeListHead(&Pending->Link);
-                Address->PendingCount--;
                 Pending->Cleanup = TRUE;
-                if (Dev && Pending->Dlc)
+                if (Pending->Dlc)
                     BthRfcommDisconnect(Dev, Pending->Dlc);
                 BthTdiDereferenceConnection(Pending);
             }
@@ -785,7 +946,7 @@ BthTdiRunSync(
             BthTdiFailList(&Connection->ConnectIrps, STATUS_CANCELLED);
             BthTdiFailList(&Connection->Receives, STATUS_CANCELLED);
             BthTdiFailList(&Connection->Sends, STATUS_CANCELLED);
-            if (Dev && Connection->Dlc)
+            if (Dev && Connection->Dlc && Connection->Dev == Dev)
                 BthRfcommDisconnect(Dev, Connection->Dlc);
             if (Connection->State == BthTdiConnected)
                 Connection->State = BthTdiClosed;
@@ -797,12 +958,12 @@ BthTdiRunSync(
 
 static
 NTSTATUS
-BthTdiSync(
+BthTdiSyncOn(
+    _In_opt_ PBTHMINI_DEVICE Dev,
     _In_ BTHTDI_SYNC_OPERATION Operation,
     _In_ PVOID Object)
 {
     LARGE_INTEGER Timeout;
-    PBTHMINI_DEVICE Dev;
     BTHTDI_SYNC Sync;
     KIRQL OldIrql;
 
@@ -811,14 +972,15 @@ BthTdiSync(
     Sync.Object = Object;
     KeInitializeEvent(&Sync.Done, NotificationEvent, FALSE);
     KeAcquireSpinLock(&BthTdiLock, &OldIrql);
-    Dev = BthTdiRadio;
+    if (BthTdiRadioIndexLocked(Dev) < 0)
+        Dev = NULL;
     if (Dev && Dev->Thread == KeGetCurrentThread())
     {
         KeReleaseSpinLock(&BthTdiLock, OldIrql);
         return BthTdiRunSync(Dev, &Sync);
     }
     if (Dev)
-        InsertTailList(&BthTdiSyncQueue, &Sync.Link);
+        InsertTailList(&Dev->TdiSyncs, &Sync.Link);
     KeReleaseSpinLock(&BthTdiLock, OldIrql);
     if (!Dev)
         return BthTdiRunSync(NULL, &Sync);
@@ -837,6 +999,87 @@ BthTdiSync(
         KeWaitForSingleObject(&Sync.Done, Executive, KernelMode, FALSE, NULL);
     }
     return Sync.Status;
+}
+
+static
+NTSTATUS
+BthTdiBind(
+    _Inout_ PBTHTDI_ADDRESS Address)
+{
+    PBTHMINI_DEVICE Radios[BTHTDI_MAX_RADIOS];
+    NTSTATUS Status = STATUS_DEVICE_NOT_CONNECTED, Result;
+    ULONG Count, Index;
+
+    Count = BthTdiSnapshotRadios(Radios);
+    for (Index = 0; Index < Count; Index++)
+    {
+        Result = BthTdiSyncOn(Radios[Index], BthTdiSyncBind, Address);
+        if (NT_SUCCESS(Result))
+            Status = STATUS_SUCCESS;
+        else if (!NT_SUCCESS(Status) && Result != STATUS_INVALID_ADDRESS)
+            Status = Result;
+        else if (Result != STATUS_INVALID_ADDRESS)
+            DPRINT1("BTHMINI: RFCOMM socket channel %u not bound on radio %012I64x 0x%08lx\n",
+                    Address->Channel, Radios[Index]->Address, Result);
+    }
+    return Status;
+}
+
+static
+VOID
+BthTdiCleanupAddress(
+    _Inout_ PBTHTDI_ADDRESS Address)
+{
+    PBTHMINI_DEVICE Radios[BTHTDI_MAX_RADIOS];
+    LIST_ENTRY Left;
+    ULONG Count, Index;
+    KIRQL OldIrql;
+
+    Address->Closing = TRUE;
+    Count = BthTdiSnapshotRadios(Radios);
+    for (Index = 0; Index < Count; Index++)
+        BthTdiSyncOn(Radios[Index], BthTdiSyncCleanupAddress, Address);
+
+    InitializeListHead(&Left);
+    KeAcquireSpinLock(&BthTdiLock, &OldIrql);
+    if (!IsListEmpty(&Address->Link))
+    {
+        RemoveEntryList(&Address->Link);
+        InitializeListHead(&Address->Link);
+    }
+    while (!IsListEmpty(&Address->Pending))
+        InsertTailList(&Left, RemoveHeadList(&Address->Pending));
+    Address->PendingCount = 0;
+    KeReleaseSpinLock(&BthTdiLock, OldIrql);
+    BthTdiFailList(&Address->ListenIrps, STATUS_CANCELLED);
+    while (!IsListEmpty(&Left))
+    {
+        PBTHTDI_CONNECTION Pending = CONTAINING_RECORD(RemoveHeadList(&Left), BTHTDI_CONNECTION, Link);
+
+        InitializeListHead(&Pending->Link);
+        Pending->Cleanup = TRUE;
+        BthTdiDereferenceConnection(Pending);
+    }
+}
+
+static
+VOID
+BthTdiCleanupConnection(
+    _Inout_ PBTHTDI_CONNECTION Connection)
+{
+    PBTHMINI_DEVICE Radios[BTHTDI_MAX_RADIOS];
+    ULONG Count, Index;
+
+    if (Connection->Dev)
+    {
+        BthTdiSyncOn(Connection->Dev, BthTdiSyncCleanupConnection, Connection);
+        return;
+    }
+    Count = BthTdiSnapshotRadios(Radios);
+    if (!Count)
+        BthTdiSyncOn(NULL, BthTdiSyncCleanupConnection, Connection);
+    for (Index = 0; Index < Count; Index++)
+        BthTdiSyncOn(Radios[Index], BthTdiSyncCleanupConnection, Connection);
 }
 
 static
@@ -880,6 +1123,7 @@ BthTdiProcessConnect(
         BthTdiComplete(Irp, STATUS_INSUFFICIENT_RESOURCES, 0);
         return;
     }
+    Connection->Dev = Dev;
     Connection->RemoteAddress = Bth->btAddr;
     Connection->RemotePort = (Bth->port && Bth->port != BT_PORT_ANY) ? Bth->port : 0;
     Connection->ServiceClass = Bth->serviceClassId;
@@ -956,19 +1200,24 @@ BthTdiProcessListen(
     _Inout_ PIRP Irp)
 {
     PBTHTDI_ADDRESS Address = Connection->Address;
+    PBTHTDI_CONNECTION Pending = NULL;
+    PBTHMINI_DEVICE Owner;
     NTSTATUS Status;
+    KIRQL OldIrql;
+    LONG Slot;
 
     if (!Address || Connection->State != BthTdiIdle || Connection->Cleanup)
     {
         BthTdiComplete(Irp, Address ? STATUS_CONNECTION_ACTIVE : STATUS_INVALID_ADDRESS, 0);
         return;
     }
-    if (!Address->Server)
+    KeAcquireSpinLock(&BthTdiLock, &OldIrql);
+    Slot = BthTdiRadioIndexLocked(Dev);
+    KeReleaseSpinLock(&BthTdiLock, OldIrql);
+    if (!BthTdiRegistered(Address) || (Slot >= 0 && !Address->Servers[Slot]))
     {
-        KIRQL OldIrql;
-
-        Status = BthTdiRegister(Dev, Address);
-        if (!NT_SUCCESS(Status))
+        Status = BthTdiRegister(Dev, Address, Slot);
+        if (!NT_SUCCESS(Status) && !BthTdiRegistered(Address))
         {
             BthTdiComplete(Irp, Status, 0);
             return;
@@ -979,12 +1228,29 @@ BthTdiProcessListen(
         KeReleaseSpinLock(&BthTdiLock, OldIrql);
     }
     Address->Listening = TRUE;
+    KeAcquireSpinLock(&BthTdiLock, &OldIrql);
     if (!IsListEmpty(&Address->Pending))
     {
-        PBTHTDI_CONNECTION Pending = CONTAINING_RECORD(RemoveHeadList(&Address->Pending), BTHTDI_CONNECTION, Link);
+        Pending = CONTAINING_RECORD(Address->Pending.Flink, BTHTDI_CONNECTION, Link);
+        Owner = Pending->Dev;
+        if (Owner && Owner != Dev && BthTdiRadioIndexLocked(Owner) >= 0)
+        {
+            BOOLEAN Parked = BthTdiParkLocked(&Owner->TdiIrps, Irp);
 
+            KeReleaseSpinLock(&BthTdiLock, OldIrql);
+            if (Parked)
+                KeSetEvent(&Owner->WorkEvent, IO_NO_INCREMENT, FALSE);
+            else
+                BthTdiComplete(Irp, STATUS_CANCELLED, 0);
+            return;
+        }
+        RemoveEntryList(&Pending->Link);
         InitializeListHead(&Pending->Link);
         Address->PendingCount--;
+    }
+    KeReleaseSpinLock(&BthTdiLock, OldIrql);
+    if (Pending)
+    {
         BthTdiAdopt(Dev, Connection, Pending);
         BthTdiDereferenceConnection(Pending);
         BthTdiCompleteListen(Irp, Connection);
@@ -1100,9 +1366,9 @@ BthTdiProcess(
         PBTHTDI_SYNC Sync = NULL;
 
         KeAcquireSpinLock(&BthTdiLock, &OldIrql);
-        if (!IsListEmpty(&BthTdiSyncQueue))
+        if (!IsListEmpty(&Dev->TdiSyncs))
         {
-            Sync = CONTAINING_RECORD(RemoveHeadList(&BthTdiSyncQueue), BTHTDI_SYNC, Link);
+            Sync = CONTAINING_RECORD(RemoveHeadList(&Dev->TdiSyncs), BTHTDI_SYNC, Link);
             InitializeListHead(&Sync->Link);
         }
         KeReleaseSpinLock(&BthTdiLock, OldIrql);
@@ -1111,9 +1377,9 @@ BthTdiProcess(
         Sync->Status = BthTdiRunSync(Dev, Sync);
         KeSetEvent(&Sync->Done, IO_NO_INCREMENT, FALSE);
     }
-    while ((Irp = BthTdiTake(&BthTdiIrpQueue)) != NULL)
+    while ((Irp = BthTdiTake(&Dev->TdiIrps)) != NULL)
         BthTdiProcessIrp(Dev, Irp);
-    for (Entry = BthTdiActive.Flink; Entry != &BthTdiActive;)
+    for (Entry = Dev->TdiActive.Flink; Entry != &Dev->TdiActive;)
     {
         PBTHTDI_CONNECTION Connection = CONTAINING_RECORD(Entry, BTHTDI_CONNECTION, ActiveLink);
 
@@ -1128,19 +1394,41 @@ BthTdiRadioReady(
 {
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
+    LONG Slot = -1;
+    ULONG Index;
 
     KeAcquireSpinLock(&BthTdiLock, &OldIrql);
-    if (BthTdiRadio)
+    if (BthTdiRadioIndexLocked(Dev) >= 0)
     {
         KeReleaseSpinLock(&BthTdiLock, OldIrql);
         return;
     }
-    BthTdiRadio = Dev;
+    InitializeListHead(&Dev->TdiIrps);
+    InitializeListHead(&Dev->TdiSyncs);
+    InitializeListHead(&Dev->TdiActive);
+    for (Index = 0; Index < BTHTDI_MAX_RADIOS && Slot < 0; Index++)
+    {
+        if (!BthTdiRadios[Index])
+            Slot = (LONG)Index;
+    }
+    if (Slot < 0)
+    {
+        KeReleaseSpinLock(&BthTdiLock, OldIrql);
+        DPRINT1("BTHMINI: radio %012I64x has no RFCOMM socket slot\n", Dev->Address);
+        return;
+    }
+    BthTdiRadios[Slot] = Dev;
+    if (!BthTdiRadio)
+        BthTdiRadio = Dev;
     for (Entry = BthTdiAddresses.Flink; Entry != &BthTdiAddresses; Entry = Entry->Flink)
     {
         PBTHTDI_ADDRESS Address = CONTAINING_RECORD(Entry, BTHTDI_ADDRESS, Link);
+        NTSTATUS Status;
 
-        if (Address->Channel && !Address->Closing && !NT_SUCCESS(BthTdiRegister(Dev, Address)))
+        if (!Address->Channel || Address->Closing)
+            continue;
+        Status = BthTdiRegister(Dev, Address, Slot);
+        if (!NT_SUCCESS(Status) && Status != STATUS_INVALID_ADDRESS)
             DPRINT1("BTHMINI: RFCOMM socket channel %u not restored\n", Address->Channel);
     }
     KeReleaseSpinLock(&BthTdiLock, OldIrql);
@@ -1152,17 +1440,31 @@ BthTdiRadioStopping(
 {
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
+    LONG Slot;
+    ULONG Index;
     PIRP Irp;
 
     KeAcquireSpinLock(&BthTdiLock, &OldIrql);
-    if (BthTdiRadio != Dev)
+    Slot = BthTdiRadioIndexLocked(Dev);
+    if (Slot < 0)
     {
         KeReleaseSpinLock(&BthTdiLock, OldIrql);
         return;
     }
     for (Entry = BthTdiAddresses.Flink; Entry != &BthTdiAddresses; Entry = Entry->Flink)
-        BthTdiUnregister(Dev, CONTAINING_RECORD(Entry, BTHTDI_ADDRESS, Link));
-    BthTdiRadio = NULL;
+        BthTdiUnregister(Dev, CONTAINING_RECORD(Entry, BTHTDI_ADDRESS, Link), Slot);
+    BthTdiRadios[Slot] = NULL;
+    if (BthTdiRadio == Dev)
+    {
+        BthTdiRadio = NULL;
+        for (Index = 0; Index < BTHTDI_MAX_RADIOS && !BthTdiRadio; Index++)
+            BthTdiRadio = BthTdiRadios[Index];
+    }
+    for (Index = 0; Index < BTHTDI_MAX_KEYED; Index++)
+    {
+        if (BthTdiKeyed[Index].Dev == Dev)
+            BthTdiKeyed[Index].Dev = NULL;
+    }
     KeReleaseSpinLock(&BthTdiLock, OldIrql);
 
     for (;;)
@@ -1170,9 +1472,9 @@ BthTdiRadioStopping(
         PBTHTDI_SYNC Sync = NULL;
 
         KeAcquireSpinLock(&BthTdiLock, &OldIrql);
-        if (!IsListEmpty(&BthTdiSyncQueue))
+        if (!IsListEmpty(&Dev->TdiSyncs))
         {
-            Sync = CONTAINING_RECORD(RemoveHeadList(&BthTdiSyncQueue), BTHTDI_SYNC, Link);
+            Sync = CONTAINING_RECORD(RemoveHeadList(&Dev->TdiSyncs), BTHTDI_SYNC, Link);
             InitializeListHead(&Sync->Link);
         }
         KeReleaseSpinLock(&BthTdiLock, OldIrql);
@@ -1181,11 +1483,11 @@ BthTdiRadioStopping(
         Sync->Status = BthTdiRunSync(NULL, Sync);
         KeSetEvent(&Sync->Done, IO_NO_INCREMENT, FALSE);
     }
-    while ((Irp = BthTdiTake(&BthTdiIrpQueue)) != NULL)
+    while ((Irp = BthTdiTake(&Dev->TdiIrps)) != NULL)
         BthTdiComplete(Irp, STATUS_DEVICE_NOT_CONNECTED, 0);
-    while (!IsListEmpty(&BthTdiActive))
+    while (!IsListEmpty(&Dev->TdiActive))
     {
-        PBTHTDI_CONNECTION Connection = CONTAINING_RECORD(RemoveHeadList(&BthTdiActive), BTHTDI_CONNECTION, ActiveLink);
+        PBTHTDI_CONNECTION Connection = CONTAINING_RECORD(RemoveHeadList(&Dev->TdiActive), BTHTDI_CONNECTION, ActiveLink);
 
         InitializeListHead(&Connection->ActiveLink);
         BthTdiConnectionDown(NULL, Connection, STATUS_DEVICE_NOT_CONNECTED);
@@ -1224,13 +1526,14 @@ BthTdiCreate(
             return STATUS_INSUFFICIENT_RESOURCES;
         Address->RefCount = 1;
         Address->Port = Bth->port;
+        Address->LocalRadio = Bth->btAddr;
         Address->Channel = (Bth->port && Bth->port != BT_PORT_ANY) ? (UCHAR)Bth->port : 0;
         InitializeListHead(&Address->Link);
         InitializeListHead(&Address->ListenIrps);
         InitializeListHead(&Address->Pending);
         if (Bth->port)
         {
-            Status = BthTdiSync(BthTdiSyncBind, Address);
+            Status = BthTdiBind(Address);
             if (!NT_SUCCESS(Status))
             {
                 ExFreePoolWithTag(Address, BTHTDI_TAG);
@@ -1292,6 +1595,12 @@ BthTdiQueryInformation(
     PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
     PTDI_REQUEST_KERNEL_QUERY_INFORMATION Query = (PTDI_REQUEST_KERNEL_QUERY_INFORMATION)&IoStack->Parameters;
     PBTHMINI_DEVICE Radio = BthTdiRadio;
+
+    if ((ULONG_PTR)FileObject->FsContext2 == BthTdiFileConnection && FileObject->FsContext &&
+        ((PBTHTDI_CONNECTION)FileObject->FsContext)->Dev)
+    {
+        Radio = ((PBTHTDI_CONNECTION)FileObject->FsContext)->Dev;
+    }
     PVOID Buffer;
     ULONG Length;
 
@@ -1346,6 +1655,47 @@ BthTdiQueryInformation(
 }
 
 static
+PBTHMINI_DEVICE
+BthTdiRouteLocked(
+    _In_ PBTHTDI_CONNECTION Connection,
+    _In_ PIRP Irp)
+{
+    PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
+    PBTHTDI_ADDRESS Address = Connection->Address;
+    PBTHMINI_DEVICE Dev;
+
+    if (BthTdiRadioIndexLocked(Connection->Dev) >= 0)
+        return Connection->Dev;
+    if (IoStack->MinorFunction == TDI_CONNECT)
+    {
+        PTDI_REQUEST_KERNEL_CONNECT Connect = (PTDI_REQUEST_KERNEL_CONNECT)&IoStack->Parameters;
+        PTDI_CONNECTION_INFORMATION Info = Connect->RequestConnectionInformation;
+        PTA_ADDRESS Remote = Info ? BthTdiFindAddress(Info->RemoteAddress, Info->RemoteAddressLength) : NULL;
+
+        if (Address && Address->LocalRadio)
+        {
+            Dev = BthTdiRadioByAddressLocked(Address->LocalRadio);
+            if (Dev)
+                return Dev;
+        }
+        if (Remote)
+        {
+            Dev = BthTdiRadioForRemoteLocked(((PTDI_ADDRESS_BTH)Remote->Address)->btAddr);
+            if (Dev)
+                return Dev;
+        }
+    }
+    if (IoStack->MinorFunction == TDI_LISTEN && Address && !IsListEmpty(&Address->Pending))
+    {
+        PBTHTDI_CONNECTION Pending = CONTAINING_RECORD(Address->Pending.Flink, BTHTDI_CONNECTION, Link);
+
+        if (BthTdiRadioIndexLocked(Pending->Dev) >= 0)
+            return Pending->Dev;
+    }
+    return BthTdiRadio;
+}
+
+static
 NTSTATUS
 BthTdiInternalControl(
     _Inout_ PIRP Irp)
@@ -1389,11 +1739,16 @@ BthTdiInternalControl(
                 Status = STATUS_INVALID_DEVICE_REQUEST;
                 break;
             }
+            if (IoStack->MinorFunction == TDI_LISTEN && Connection->Address && !Connection->Address->Closing &&
+                KeGetCurrentIrql() == PASSIVE_LEVEL)
+            {
+                BthTdiBind(Connection->Address);
+            }
             IoMarkIrpPending(Irp);
             KeAcquireSpinLock(&BthTdiLock, &OldIrql);
-            Dev = BthTdiRadio;
+            Dev = BthTdiRouteLocked(Connection, Irp);
             Status = !Dev ? STATUS_DEVICE_NOT_CONNECTED :
-                     BthTdiParkLocked(&BthTdiIrpQueue, Irp) ? STATUS_PENDING : STATUS_CANCELLED;
+                     BthTdiParkLocked(&Dev->TdiIrps, Irp) ? STATUS_PENDING : STATUS_CANCELLED;
             KeReleaseSpinLock(&BthTdiLock, OldIrql);
             if (Status == STATUS_PENDING)
                 KeSetEvent(&Dev->WorkEvent, IO_NO_INCREMENT, FALSE);
@@ -1429,9 +1784,9 @@ BthTdiPreprocess(
 
         case IRP_MJ_CLEANUP:
             if ((ULONG_PTR)FileObject->FsContext2 == BthTdiFileAddress && FileObject->FsContext)
-                BthTdiSync(BthTdiSyncCleanupAddress, FileObject->FsContext);
+                BthTdiCleanupAddress(FileObject->FsContext);
             else if ((ULONG_PTR)FileObject->FsContext2 == BthTdiFileConnection && FileObject->FsContext)
-                BthTdiSync(BthTdiSyncCleanupConnection, FileObject->FsContext);
+                BthTdiCleanupConnection(FileObject->FsContext);
             break;
 
         case IRP_MJ_CLOSE:
@@ -1467,10 +1822,7 @@ BthTdiInitialize(
     ULONG Index;
 
     KeInitializeSpinLock(&BthTdiLock);
-    InitializeListHead(&BthTdiIrpQueue);
-    InitializeListHead(&BthTdiSyncQueue);
     InitializeListHead(&BthTdiAddresses);
-    InitializeListHead(&BthTdiActive);
     Init = WdfControlDeviceInitAllocate(Driver, &SDDL_DEVOBJ_SYS_ALL_ADM_RWX_WORLD_RW_RES_R);
     if (!Init)
         return STATUS_INSUFFICIENT_RESOURCES;
