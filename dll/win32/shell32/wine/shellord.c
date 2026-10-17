@@ -3070,6 +3070,10 @@ void WINAPI SHAddToRecentDocs (UINT uFlags,LPCVOID pv)
     if (ret != 0)
         return;
 
+    if (pv && !SHRegGetBoolUSValueW(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                                    L"Start_TrackDocs", FALSE, TRUE))
+        return;
+
     /* store to szTargetPath */
     szTargetPath[0] = 0;
     if (pv)
