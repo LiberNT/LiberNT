@@ -106,3 +106,90 @@ Volume::SetVolumeLabel(_In_ PWSTR VolumeLabel,
     delete VolumeFile;
     return Status;
 }
+
+NTSTATUS
+Volume::QueryVolumeFlags(_Out_ PUSHORT Flags)
+{
+    NTSTATUS Status;
+    PFileRecord VolumeFile;
+    PAttribute InfoAttr;
+    VolumeInformationEx Info;
+    ULONG BytesRemaining;
+
+    if (!Flags)
+        return STATUS_INVALID_PARAMETER;
+
+    Status = MFT->GetFileAttributeFromFileRecordNumber(TypeVolumeInformation,
+                                                       NULL,
+                                                       _Volume,
+                                                       &VolumeFile,
+                                                       &InfoAttr);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (InfoAttr->IsNonResident ||
+        GetAttributeDataSize(InfoAttr) < FIELD_OFFSET(VolumeInformationEx, Reserved2))
+    {
+        delete VolumeFile;
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+
+    BytesRemaining = FIELD_OFFSET(VolumeInformationEx, Reserved2);
+    Status = VolumeFile->CopyData(InfoAttr, reinterpret_cast<PUCHAR>(&Info), &BytesRemaining);
+    delete VolumeFile;
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (BytesRemaining != 0)
+        return STATUS_END_OF_FILE;
+
+    *Flags = Info.Flags;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+Volume::SetVolumeFlags(_In_ USHORT Set,
+                       _In_ USHORT Clear)
+{
+    NTSTATUS Status;
+    FileRecord* VolumeFile;
+    PAttribute InfoAttr;
+    UCHAR Data[sizeof(VolumeInformationEx) + 64];
+    PVolumeInformationEx Info = reinterpret_cast<PVolumeInformationEx>(Data);
+    ULONG Length, BytesRemaining;
+
+    if (IsReadOnly)
+        return STATUS_MEDIA_WRITE_PROTECTED;
+
+    Status = MFT->GetFileAttributeFromFileRecordNumber(TypeVolumeInformation,
+                                                       NULL,
+                                                       _Volume,
+                                                       &VolumeFile,
+                                                       &InfoAttr);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Length = (ULONG)GetAttributeDataSize(InfoAttr);
+    if (InfoAttr->IsNonResident || Length < FIELD_OFFSET(VolumeInformationEx, Reserved2) ||
+        Length > sizeof(Data))
+    {
+        delete VolumeFile;
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+
+    BytesRemaining = Length;
+    Status = VolumeFile->CopyData(InfoAttr, Data, &BytesRemaining);
+    if (NT_SUCCESS(Status) && BytesRemaining != 0)
+        Status = STATUS_END_OF_FILE;
+    if (NT_SUCCESS(Status) && (Info->Flags & (Set | Clear)) != Set)
+    {
+        Info->Flags = (USHORT)((Info->Flags & ~Clear) | Set);
+        Status = VolumeFile->ReplaceResidentData(InfoAttr, Data, Length);
+        if (NT_SUCCESS(Status))
+            Status = MFT->WriteFileRecordToMFT(VolumeFile);
+        if (NT_SUCCESS(Status))
+            Status = FlushVolume();
+    }
+
+    delete VolumeFile;
+    return Status;
+}

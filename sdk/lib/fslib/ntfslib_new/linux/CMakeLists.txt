@@ -21,6 +21,7 @@ add_library(ntfslib_linux STATIC
     "${NTFSLIB_ROOT}/src/btree/directory/find.cpp"
     "${NTFSLIB_ROOT}/src/btree/directory/get.cpp"
     "${NTFSLIB_ROOT}/src/btree/btree.cpp"
+    "${NTFSLIB_ROOT}/src/check/check.cpp"
     "${NTFSLIB_ROOT}/src/capi/btree.cpp"
     "${NTFSLIB_ROOT}/src/capi/filerecord.cpp"
     "${NTFSLIB_ROOT}/src/capi/lfs.cpp"

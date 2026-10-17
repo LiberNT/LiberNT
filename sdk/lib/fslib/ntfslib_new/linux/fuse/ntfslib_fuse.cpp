@@ -633,6 +633,13 @@ OpenImageWithMode(const char* Image,
     return Status;
 }
 
+static void
+PrintCheckEvent(void* Context, NtfsCheckEvent Event, UINT64 Argument1, UINT64 Argument2)
+{
+    (void)Context;
+    printf("event %d %" PRIx64 " %" PRIx64 "\n", (int)Event, (uint64_t)Argument1, (uint64_t)Argument2);
+}
+
 static NTSTATUS
 OpenImage(const char* Image,
           bool ShowMetadata,
@@ -4626,6 +4633,7 @@ PrintUsage(const char* Program)
             "  %s [--show-metadata] --security IMAGE PATH\n"
             "  %s [--show-metadata] --basic IMAGE PATH\n"
             "  %s --recover IMAGE\n"
+            "  %s --check IMAGE [--fix]\n"
             "  %s --set-label IMAGE LABEL\n"
             "  %s --set-basic IMAGE PATH CREATION ACCESS WRITE CHANGE ATTRS\n"
             "  %s --set-security IMAGE PATH SOURCE\n"
@@ -4657,6 +4665,7 @@ PrintUsage(const char* Program)
             "  %s [--show-metadata] --streams IMAGE PATH\n"
             "  %s [--show-metadata] [--writable] IMAGE MOUNTPOINT"
             " [FUSE options]\n",
+            Program,
             Program,
             Program,
             Program,
@@ -5049,6 +5058,48 @@ main(int Argc, char** Argv)
         printf("%s\n", Result ? "read-only" : "writable");
         CloseImage(&State);
         return Result;
+    }
+
+    if (strcmp(Argv[First], "--check") == 0)
+    {
+        NtfsCheckResult Check;
+        USHORT Flags = 0;
+        bool Fix = First + 3 == Argc && strcmp(Argv[First + 2], "--fix") == 0;
+
+        if ((First + 2 != Argc && !Fix) || ShowMetadata)
+        {
+            PrintUsage(Argv[0]);
+            return 2;
+        }
+        Status = Fix ? OpenImageWritable(Argv[First + 1], &State)
+                     : OpenImage(Argv[First + 1], false, &State);
+        if (NT_SUCCESS(Status))
+            Status = NtfsVolumeQueryFlags(State.Volume, &Flags);
+        if (NT_SUCCESS(Status))
+            Status = NtfsVolumeCheck(State.Volume, Fix ? TRUE : FALSE, PrintCheckEvent, NULL, &Check);
+        if (NT_SUCCESS(Status) && Fix && Check.Errors == 0 && (Flags & VOL_DIRTY))
+            Status = NtfsVolumeSetFlags(State.Volume, 0, VOL_DIRTY);
+        if (!NT_SUCCESS(Status))
+        {
+            fprintf(stderr,
+                    "%s: ntfslib status 0x%08" PRIx32 " (%s)\n",
+                    Argv[First + 1],
+                    (uint32_t)Status,
+                    strerror(NtStatusToErrno(Status)));
+            if (State.Volume)
+                CloseImage(&State);
+            return 1;
+        }
+        printf("dirty=%u records=%" PRIu64 " directories=%" PRIu64 " entries=%" PRIu64
+               " used=%" PRIu64 " lost=%" PRIu64 " freed=%" PRIu64 " claimed=%" PRIu64 " errors=%" PRIu64 "\n",
+               (Flags & VOL_DIRTY) ? 1u : 0u,
+               (uint64_t)Check.FileRecords, (uint64_t)Check.Directories,
+               (uint64_t)Check.IndexEntries, (uint64_t)Check.UsedClusters,
+               (uint64_t)Check.LostClusters, (uint64_t)Check.FreedClusters,
+               (uint64_t)Check.ClaimedClusters,
+               (uint64_t)Check.Errors);
+        CloseImage(&State);
+        return Check.Errors ? 3 : 0;
     }
 
     if (strcmp(Argv[First], "--set-label") == 0)

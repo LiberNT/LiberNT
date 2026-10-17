@@ -234,6 +234,23 @@ NtfsVolumeSetVolumeLabel(
     return reinterpret_cast<PVolume>(DiskVolume)->SetVolumeLabel(VolumeLabel, Length);
 }
 
+NTSTATUS
+NtfsVolumeQueryFlags(
+    _In_ PNtfsVolume DiskVolume,
+    _Out_ PUSHORT Flags)
+{
+    return reinterpret_cast<PVolume>(DiskVolume)->QueryVolumeFlags(Flags);
+}
+
+NTSTATUS
+NtfsVolumeSetFlags(
+    _In_ PNtfsVolume DiskVolume,
+    _In_ USHORT Set,
+    _In_ USHORT Clear)
+{
+    return reinterpret_cast<PVolume>(DiskVolume)->SetVolumeFlags(Set, Clear);
+}
+
 #ifdef __cplusplus
 }
 #endif

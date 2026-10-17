@@ -1015,6 +1015,59 @@ NtfsVolumeSetVolumeLabel(
     _In_ PWSTR VolumeLabel,
     _In_ ULONG Length);
 
+typedef enum NtfsCheckEvent
+{
+    NtfsCheckRecordCorrupt,
+    NtfsCheckRecordBitmap,
+    NtfsCheckBadRunList,
+    NtfsCheckClusterOutOfRange,
+    NtfsCheckCrossLinked,
+    NtfsCheckIndexCorrupt,
+    NtfsCheckIndexBadEntry,
+    NtfsCheckNameNotIndexed,
+    NtfsCheckUsedClustersFree,
+    NtfsCheckLostClusters,
+    NtfsCheckLostClustersFreed,
+    NtfsCheckUsedClustersClaimed
+} NtfsCheckEvent;
+
+typedef struct NtfsCheckResult
+{
+    UINT64 FileRecords;
+    UINT64 Directories;
+    UINT64 IndexEntries;
+    UINT64 UsedClusters;
+    UINT64 LostClusters;
+    UINT64 FreedClusters;
+    UINT64 ClaimedClusters;
+    UINT64 Errors;
+} NtfsCheckResult, *PNtfsCheckResult;
+
+typedef void (*PNtfsCheckCallback)(
+    _In_opt_ void* Context,
+    _In_ NtfsCheckEvent Event,
+    _In_ UINT64 Argument1,
+    _In_ UINT64 Argument2);
+
+NTSTATUS
+NtfsVolumeCheck(
+    _In_ PNtfsVolume DiskVolume,
+    _In_ BOOLEAN Repair,
+    _In_opt_ PNtfsCheckCallback Callback,
+    _In_opt_ void* Context,
+    _Out_ PNtfsCheckResult Result);
+
+NTSTATUS
+NtfsVolumeQueryFlags(
+    _In_ PNtfsVolume DiskVolume,
+    _Out_ PUSHORT Flags);
+
+NTSTATUS
+NtfsVolumeSetFlags(
+    _In_ PNtfsVolume DiskVolume,
+    _In_ USHORT Set,
+    _In_ USHORT Clear);
+
 #ifdef __cplusplus
 }
 #endif

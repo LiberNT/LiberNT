@@ -707,6 +707,13 @@ public:
     SetVolumeLabel(_In_ PWSTR VolumeLabel,
                    _In_ ULONG Length);
 
+    NTSTATUS
+    QueryVolumeFlags(_Out_ PUSHORT Flags);
+
+    NTSTATUS
+    SetVolumeFlags(_In_ USHORT Set,
+                   _In_ USHORT Clear);
+
     /**
      * Copies a specified number of bytes into a buffer from the volume at a
      * given offset. The offset and length do not have to be sector aligned.
