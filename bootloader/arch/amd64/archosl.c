@@ -47,6 +47,8 @@ static PHARDWARE_PTE Amd64Pml4;
 static PUCHAR Amd64Gdt;
 static PKTSS64 Amd64Tss;
 static BOOLEAN Amd64Ready;
+static HARDWARE_PTE Amd64FirmwareLow[256];
+static HARDWARE_PTE Amd64LoaderLow[256];
 
 PVOID
 VaToPa(
@@ -318,7 +320,44 @@ OslArchSwitchStack(VOID)
 VOID
 FwExitBootServices(VOID)
 {
-    UefiExitBootServices();
+    UefiLeaveBootServices();
+}
+
+static
+VOID
+Amd64SaveFirmwareIdentity(VOID)
+{
+    PHARDWARE_PTE Pml4 = (PHARDWARE_PTE)(ULONG_PTR)(__readcr3() & 0x000FFFFFFFFFF000ULL);
+
+    RtlCopyMemory(Amd64FirmwareLow, Pml4, sizeof(Amd64FirmwareLow));
+}
+
+static
+VOID
+Amd64UseFirmwareIdentity(
+    _In_ BOOLEAN Enable)
+{
+    ULONG64 Cr4;
+    ULONG i;
+
+    for (i = 0; i < RTL_NUMBER_OF(Amd64FirmwareLow); i++)
+    {
+        if (!Enable)
+        {
+            Amd64Pml4[i] = Amd64LoaderLow[i];
+        }
+        else
+        {
+            Amd64LoaderLow[i] = Amd64Pml4[i];
+            if (Amd64FirmwareLow[i].Valid)
+                Amd64Pml4[i] = Amd64FirmwareLow[i];
+        }
+    }
+
+    Cr4 = __readcr4();
+    __writecr4(Cr4 & ~(ULONG64)CR4_PGE);
+    __writecr4(Cr4);
+    __writecr3(__readcr3());
 }
 
 BOOLEAN
@@ -331,7 +370,11 @@ OslArchPrepareHandoff(
         return FALSE;
 
     FwExitBootServices();
+    Amd64SaveFirmwareIdentity();
     WinLdrSetProcessorContext(OSL_NT_VERSION);
+    Amd64UseFirmwareIdentity(TRUE);
+    FwSetVirtualAddressMap();
+    Amd64UseFirmwareIdentity(FALSE);
     return TRUE;
 }
 

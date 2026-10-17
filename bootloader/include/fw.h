@@ -123,6 +123,9 @@ FwGetMemoryMap(
 VOID
 FwExitBootServices(VOID);
 
+VOID
+FwSetVirtualAddressMap(VOID);
+
 struct _EFI_FIRMWARE_INFORMATION;
 struct _VIRTUAL_EFI_RUNTIME_SERVICES;
 

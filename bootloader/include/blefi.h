@@ -30,5 +30,8 @@ VOID
 UefiExitBootServices(VOID);
 
 VOID
+UefiLeaveBootServices(VOID);
+
+VOID
 UefiSerialPutChar(
     _In_ UCHAR Character);

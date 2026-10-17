@@ -28,6 +28,8 @@ static UEFI_RUNTIME_RANGE UefiRuntimeRanges[UEFI_MAX_RUNTIME_RANGES];
 static ULONG UefiRuntimeRangeCount;
 static PEFI_FIRMWARE_INFORMATION UefiRuntimeInformation;
 static PVIRTUAL_EFI_RUNTIME_SERVICES UefiRuntimeServices;
+static UINTN UefiExitMapSize;
+static UINTN UefiExitDescriptorSize;
 
 static
 TYPE_OF_MEMORY
@@ -305,15 +307,15 @@ UefiSetVirtualAddressMap(
 }
 
 VOID
-UefiExitBootServices(VOID)
+UefiLeaveBootServices(VOID)
 {
-    UINTN MapKey, MapSize, DescriptorSize;
+    UINTN MapKey;
     BOOLEAN MayAllocate = TRUE;
     ULONG Retry;
 
     for (Retry = 0; Retry < UEFI_MAP_RETRIES; Retry++)
     {
-        if (!UefiReadMemoryMap(MayAllocate, &MapKey, &MapSize, &DescriptorSize))
+        if (!UefiReadMemoryMap(MayAllocate, &MapKey, &UefiExitMapSize, &UefiExitDescriptorSize))
             break;
 
         MayAllocate = FALSE;
@@ -321,10 +323,22 @@ UefiExitBootServices(VOID)
         if (!EFI_ERROR(GlobalSystemTable->BootServices->ExitBootServices(GlobalImageHandle, MapKey)))
         {
             BootServicesExitedFlag = TRUE;
-            UefiSetVirtualAddressMap(MapSize, DescriptorSize);
             return;
         }
     }
 
     FwHalt();
+}
+
+VOID
+FwSetVirtualAddressMap(VOID)
+{
+    UefiSetVirtualAddressMap(UefiExitMapSize, UefiExitDescriptorSize);
+}
+
+VOID
+UefiExitBootServices(VOID)
+{
+    UefiLeaveBootServices();
+    FwSetVirtualAddressMap();
 }
