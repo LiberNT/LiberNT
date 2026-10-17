@@ -23,6 +23,7 @@ typedef struct _SETUP_FRAME
     INT Current;
     HBITMAP hWatermark;
     SIZE Watermark;
+    INT Corner;
 } SETUP_FRAME;
 
 static SETUP_FRAME Frame;
@@ -284,6 +285,76 @@ FrameCancel(VOID)
 }
 
 static VOID
+FramePaintPanelEdge(
+    _In_ HDC hdc,
+    _In_ INT x,
+    _In_ INT y,
+    _In_ INT cx,
+    _In_ INT cy,
+    _In_ INT Radius,
+    _In_ COLORREF Color)
+{
+    BITMAPINFO bmi;
+    PULONG Bits = NULL;
+    HBITMAP hbm;
+    HDC hdcMem;
+    LONG Limit = (LONG)Radius * 8 * (LONG)Radius * 8;
+    INT i, j, sx, sy;
+
+    if (cx <= 0 || cy <= 0)
+        return;
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+    bmi.bmiHeader.biWidth = cx;
+    bmi.bmiHeader.biHeight = -cy;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    hbm = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, (PVOID*)&Bits, NULL, 0);
+    if (!hbm)
+        return;
+    for (j = 0; j < cy; j++)
+    {
+        for (i = 0; i < cx; i++)
+        {
+            ULONG Alpha = 255;
+
+            if (i < Radius && j < Radius)
+            {
+                ULONG Inside = 0;
+
+                for (sy = 0; sy < 4; sy++)
+                {
+                    for (sx = 0; sx < 4; sx++)
+                    {
+                        LONG dx = Radius * 8 - (i * 8 + sx * 2 + 1);
+                        LONG dy = Radius * 8 - (j * 8 + sy * 2 + 1);
+
+                        if (dx * dx + dy * dy <= Limit)
+                            Inside++;
+                    }
+                }
+                Alpha = Inside * 255 / 16;
+            }
+            Bits[(SIZE_T)j * cx + i] = (Alpha << 24) |
+                                       ((GetRValue(Color) * Alpha / 255) << 16) |
+                                       ((GetGValue(Color) * Alpha / 255) << 8) |
+                                       (GetBValue(Color) * Alpha / 255);
+        }
+    }
+    hdcMem = CreateCompatibleDC(hdc);
+    if (hdcMem)
+    {
+        HGDIOBJ hOld = SelectObject(hdcMem, hbm);
+
+        BitBlt(hdc, x, y, cx, cy, hdcMem, 0, 0, SRCCOPY);
+        SelectObject(hdcMem, hOld);
+        DeleteDC(hdcMem);
+    }
+    DeleteObject(hbm);
+}
+
+static VOID
 FramePaintColumn(
     _In_ HWND hwnd)
 {
@@ -308,6 +379,12 @@ FramePaintColumn(
             DeleteDC(hdcMem);
         }
     }
+
+    GetClientRect(hwnd, &rc);
+    FramePaintPanelEdge(hdc, Frame.Watermark.cx, 0, rc.right - Frame.Watermark.cx, Frame.Corner, Frame.Corner,
+                        GetSysColor(COLOR_3DFACE));
+    FramePaintPanelEdge(hdc, Frame.Watermark.cx, Frame.Corner, Frame.Corner, rc.bottom - Frame.Corner, 0,
+                        GetSysColor(COLOR_3DFACE));
 
     EndPaint(hwnd, &ps);
 }
@@ -364,7 +441,14 @@ SetupFrameProc(
                 Frame.Watermark.cx = bm.bmWidth;
                 Frame.Watermark.cy = bm.bmHeight;
             }
-            Margins.cxLeftWidth = Frame.Watermark.cx;
+            {
+                HDC hdc = GetDC(hwnd);
+                Frame.Corner = MulDiv(8, hdc ? GetDeviceCaps(hdc, LOGPIXELSX) : 96, 96);
+                if (hdc)
+                    ReleaseDC(hwnd, hdc);
+            }
+            Margins.cxLeftWidth = Frame.Watermark.cx + Frame.Corner;
+            Margins.cyTopHeight = Frame.Corner;
             DwmExtendFrameIntoClientArea(hwnd, &Margins);
 
             GetWindowRect(GetDlgItem(hwnd, IDC_FRAME_PAGE), &rc);

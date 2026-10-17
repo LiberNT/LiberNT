@@ -166,7 +166,8 @@ public:
 
 protected:
     int CaptionHeight() const override { return m_Theme.Scale(48); }
-    int GlassWidth() const override { return ContentLeft() - m_Theme.Scale(12); }
+    int GlassWidth() const override { return PanelLeft() + PanelRadius(); }
+    int GlassTop() const override { return CaptionHeight() + PanelRadius(); }
 
     BOOL IsCaptionClient(POINT pt) override
     {
@@ -228,6 +229,18 @@ protected:
         canvas.Fill(client, c.Window);
         canvas.Fill(glass, RGB(0, 0, 0));
         canvas.Fill(caption, RGB(0, 0, 0));
+        {
+            Gdiplus::GraphicsPath panel(Gdiplus::FillModeAlternate);
+            Gdiplus::SolidBrush fill(Gdiplus::Color(255, GetRValue(c.Window), GetGValue(c.Window), GetBValue(c.Window)));
+            float left = (float)PanelLeft(), top = (float)CaptionHeight(), diameter = (float)(PanelRadius() * 2);
+
+            panel.AddLine(left, (float)client.bottom, left, top + diameter / 2.0f);
+            panel.AddArc(left, top, diameter, diameter, 180.0f, 90.0f);
+            panel.AddLine(left + diameter / 2.0f, top, (float)client.right, top);
+            panel.AddLine((float)client.right, top, (float)client.right, (float)client.bottom);
+            panel.CloseFigure();
+            canvas.Graphics().FillPath(&fill, &panel);
+        }
         PaintCaption(canvas);
         PaintAccount(canvas);
         PaintSearch(canvas);
@@ -321,6 +334,8 @@ private:
     }
 
     int ContentLeft() const { return m_Theme.Scale(324); }
+    int PanelLeft() const { return ContentLeft() - m_Theme.Scale(12); }
+    int PanelRadius() const { return m_Theme.Scale(8); }
 
     RECT CardRect(int index) const
     {

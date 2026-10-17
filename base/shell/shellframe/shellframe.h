@@ -150,6 +150,7 @@ protected:
     virtual BOOL IsCaptionClient(POINT pt) { UNREFERENCED_PARAMETER(pt); return FALSE; }
     virtual int CaptionHeight() const = 0;
     virtual int GlassWidth() const { return 0; }
+    virtual int GlassTop() const { return CaptionHeight(); }
     virtual int CaptionButtonHeight() const { return m_Theme.Scale(32); }
 
     LRESULT DefaultProc(UINT msg, WPARAM wParam, LPARAM lParam);
