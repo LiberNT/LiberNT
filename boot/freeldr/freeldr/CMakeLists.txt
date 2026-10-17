@@ -66,6 +66,7 @@ if(FREELDR_WIM_RAMDISK)
         lib/wim/wim_freeldr.c)
 
     add_library(freeldr_wimcore STATIC
+        ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/lzx.c
         ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/sha1.c
         ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/wimcore.c
         ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/xpress_huff.c)

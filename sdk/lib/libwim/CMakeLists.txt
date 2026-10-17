@@ -1,6 +1,7 @@
 set(LIBWIM_PUBLIC_INCLUDE ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libwim)
 
 set(LIBWIM_CORE_SOURCE
+    lzx.c
     sha1.c
     wimcore.c
     xpress_huff.c)

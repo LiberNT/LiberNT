@@ -9,11 +9,15 @@
 #include "wimcore.h"
 #include "sha1.h"
 #include "xpress_huff.h"
+#include "lzx.h"
 
 #include <stdlib.h>
 #include <string.h>
 
 #define WIMCORE_DEFAULT_CHUNK_SIZE 32768u
+#define WIMCORE_DECOMPRESS_WORKSPACE_SIZE \
+    (XPRESS_DECOMPRESS_WORKSPACE_SIZE > LZX_DECOMPRESS_WORKSPACE_SIZE ? \
+     XPRESS_DECOMPRESS_WORKSPACE_SIZE : LZX_DECOMPRESS_WORKSPACE_SIZE)
 #define WIMCORE_DENTRY_FIXED_SIZE  102u
 
 static void
@@ -409,13 +413,25 @@ core_read_resource_into(
         }
         else
         {
-            XpressStatus status = xpress_huff_decompress_static(
-                comp_data + chunk_start,
-                (uint32_t)chunk_len,
-                out_data + out_offset,
-                this_chunk,
-                ctx->DecompressWorkspace);
-            if (status != XPRESS_OK)
+            int decoded;
+
+            if (ctx->Header.flags & WIM_HDR_FLAG_COMPRESS_LZX)
+            {
+                decoded = lzx_decompress_static(comp_data + chunk_start,
+                                                (uint32_t)chunk_len,
+                                                out_data + out_offset,
+                                                this_chunk,
+                                                ctx->DecompressWorkspace) == LZX_OK;
+            }
+            else
+            {
+                decoded = xpress_huff_decompress_static(comp_data + chunk_start,
+                                                        (uint32_t)chunk_len,
+                                                        out_data + out_offset,
+                                                        this_chunk,
+                                                        ctx->DecompressWorkspace) == XPRESS_OK;
+            }
+            if (!decoded)
             {
                 core_free(ctx, resource_owned);
                 return -1;
@@ -1068,7 +1084,7 @@ wimcore_open(
     ctx->ReadContext = read_context;
     ctx->ImageSize = image_size;
 
-    ctx->DecompressWorkspace = core_alloc(ctx, XPRESS_DECOMPRESS_WORKSPACE_SIZE);
+    ctx->DecompressWorkspace = core_alloc(ctx, WIMCORE_DECOMPRESS_WORKSPACE_SIZE);
     if (!ctx->DecompressWorkspace)
         return -1;
 
@@ -1102,7 +1118,7 @@ wimcore_open_memory(
     ctx->MemoryBase = (const uint8_t*)image_base;
     ctx->ImageSize = image_size;
 
-    ctx->DecompressWorkspace = core_alloc(ctx, XPRESS_DECOMPRESS_WORKSPACE_SIZE);
+    ctx->DecompressWorkspace = core_alloc(ctx, WIMCORE_DECOMPRESS_WORKSPACE_SIZE);
     if (!ctx->DecompressWorkspace)
         return -1;
 

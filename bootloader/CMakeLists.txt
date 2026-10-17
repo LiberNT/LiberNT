@@ -237,6 +237,7 @@ if(WINLOAD_ASM_SOURCE)
     add_asm_files(winload_asm ${WINLOAD_ASM_SOURCE})
 
     add_library(bootwim
+        ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/lzx.c
         ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/sha1.c
         ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/wimcore.c
         ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/xpress_huff.c)
