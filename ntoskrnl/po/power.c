@@ -1420,6 +1420,13 @@ PopQueryBatteryState(
                                    sizeof(Wait),
                                    &BatteryQueryInfo.BatteryTag,
                                    sizeof(BatteryQueryInfo.BatteryTag));
+    if (Status == STATUS_NO_SUCH_DEVICE)
+    {
+        RtlZeroMemory(BatteryState, sizeof(*BatteryState));
+        BatteryState->AcOnLine = TRUE;
+        Status = STATUS_SUCCESS;
+        goto Exit;
+    }
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Failed to query battery tag: Status: 0x%08lX\n", Status);
