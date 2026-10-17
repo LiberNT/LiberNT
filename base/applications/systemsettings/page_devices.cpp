@@ -6,6 +6,7 @@
  */
 
 #include "settings.h"
+#include <initguid.h>
 #include <bthdef.h>
 #include <bluetoothapis.h>
 #include <setupapi.h>
@@ -185,12 +186,92 @@ PairDevice(SettingsHost *host, BLUETOOTH_DEVICE_INFO device)
                  });
 }
 
+static SRWLOCK DiscoveredLock = SRWLOCK_INIT;
+static std::vector<BLUETOOTH_DEVICE_INFO> Discovered;
+static HCMNOTIFICATION DiscoveryNotify;
+static HANDLE DiscoveryRadio;
+
+static void
+AddFoundDevice(const BLUETOOTH_DEVICE_INFO &device)
+{
+    for (size_t i = 0; i < FoundDevices.size(); i++)
+    {
+        if (FoundDevices[i].Address.ullLong == device.Address.ullLong)
+        {
+            if (device.szName[0] || !FoundDevices[i].szName[0])
+                FoundDevices[i] = device;
+            return;
+        }
+    }
+    FoundDevices.push_back(device);
+}
+
+static DWORD CALLBACK
+DeviceInRange(HCMNOTIFICATION notify, PVOID context, CM_NOTIFY_ACTION action, PCM_NOTIFY_EVENT_DATA data, DWORD size)
+{
+    const BTH_RADIO_IN_RANGE *range;
+    BLUETOOTH_DEVICE_INFO device = { sizeof(device) };
+
+    if (action != CM_NOTIFY_ACTION_DEVICECUSTOMEVENT ||
+        size < FIELD_OFFSET(CM_NOTIFY_EVENT_DATA, u.DeviceHandle.Data) + sizeof(BTH_RADIO_IN_RANGE) ||
+        !IsEqualGUID(data->u.DeviceHandle.EventGuid, GUID_BLUETOOTH_RADIO_IN_RANGE) ||
+        data->u.DeviceHandle.DataSize < sizeof(BTH_RADIO_IN_RANGE))
+        return ERROR_SUCCESS;
+    range = (const BTH_RADIO_IN_RANGE *)data->u.DeviceHandle.Data;
+    if (!(range->deviceInfo.flags & BDIF_ADDRESS) || (range->deviceInfo.flags & BDIF_PAIRED))
+        return ERROR_SUCCESS;
+    device.Address.ullLong = range->deviceInfo.address;
+    device.ulClassofDevice = range->deviceInfo.classOfDevice;
+    device.fConnected = (range->deviceInfo.flags & BDIF_CONNECTED) != 0;
+    device.fRemembered = (range->deviceInfo.flags & BDIF_PERSONAL) != 0;
+    if (range->deviceInfo.flags & BDIF_NAME)
+        MultiByteToWideChar(CP_UTF8, 0, range->deviceInfo.name, -1, device.szName, BLUETOOTH_MAX_NAME_SIZE);
+    AcquireSRWLockExclusive(&DiscoveredLock);
+    Discovered.push_back(device);
+    ReleaseSRWLockExclusive(&DiscoveredLock);
+    PostMessageW((HWND)context, WM_SETTINGS_REFRESH, 0, 0);
+    return ERROR_SUCCESS;
+}
+
+static void
+WatchDiscovery(SettingsHost *host, bool on)
+{
+    if (on && !DiscoveryNotify)
+    {
+        CM_NOTIFY_FILTER filter = { sizeof(filter) };
+
+        DiscoveryRadio = OpenRadio(NULL);
+        if (!DiscoveryRadio)
+            return;
+        filter.FilterType = CM_NOTIFY_FILTER_TYPE_DEVICEHANDLE;
+        filter.u.DeviceHandle.hTarget = DiscoveryRadio;
+        if (CM_Register_Notification(&filter, host->Window(), DeviceInRange, &DiscoveryNotify) != CR_SUCCESS)
+            DiscoveryNotify = NULL;
+    }
+    else if (!on)
+    {
+        if (DiscoveryNotify)
+            CM_Unregister_Notification(DiscoveryNotify);
+        DiscoveryNotify = NULL;
+        AcquireSRWLockExclusive(&DiscoveredLock);
+        Discovered.clear();
+        ReleaseSRWLockExclusive(&DiscoveredLock);
+    }
+    if (!DiscoveryNotify && DiscoveryRadio)
+    {
+        CloseHandle(DiscoveryRadio);
+        DiscoveryRadio = NULL;
+    }
+}
+
 static void
 SearchDevices(SettingsHost *host)
 {
     std::vector<BLUETOOTH_DEVICE_INFO> *found = new std::vector<BLUETOOTH_DEVICE_INFO>();
 
     Searching = true;
+    FoundDevices.clear();
+    WatchDiscovery(host, true);
     host->Refresh();
     host->RunJob([found]()
                  {
@@ -203,7 +284,9 @@ SearchDevices(SettingsHost *host)
                  },
                  [host, found]()
                  {
-                     FoundDevices = *found;
+                     WatchDiscovery(host, false);
+                     for (size_t i = 0; i < found->size(); i++)
+                         AddFoundDevice((*found)[i]);
                      delete found;
                      Searching = false;
                      Searched = true;
@@ -229,6 +312,11 @@ BuildBluetooth(PageBuilder &page)
             .Keywords = Str(IDS_BT_KEYWORDS);
         return;
     }
+    AcquireSRWLockExclusive(&DiscoveredLock);
+    for (size_t i = 0; i < Discovered.size(); i++)
+        AddFoundDevice(Discovered[i]);
+    Discovered.clear();
+    ReleaseSRWLockExclusive(&DiscoveredLock);
     radio = OpenRadio(&info);
     if (!radio)
     {

@@ -23,6 +23,6 @@ target_include_directories(systemsettings PRIVATE ${REACTOS_SOURCE_DIR}/base/sys
 set_module_type(systemsettings win32gui UNICODE)
 target_link_libraries(systemsettings shellframe cppstl cpprt uuid)
 add_importlibs(systemsettings advapi32 user32 gdi32 gdiplus shell32 shlwapi comctl32 comdlg32 dwmapi uxtheme ole32
-               oleaut32 secur32 netapi32 powrprof wlanapi iphlpapi ws2_32 wininet bluetoothapis setupapi winspool winmm
+               oleaut32 secur32 netapi32 powrprof wlanapi iphlpapi ws2_32 wininet bluetoothapis setupapi cfgmgr32 winspool winmm
                version msvcrt kernel32 ntdll)
 add_cd_file(TARGET systemsettings DESTINATION reactos/ImmersiveControlPanel FOR all)
