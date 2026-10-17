@@ -107,25 +107,6 @@ struct JobData
     HWND Window;
 };
 
-static void
-GlassFill(Canvas &canvas, const RECT &rc, int radius, COLORREF color, COLORREF stroke)
-{
-    HDC dc = canvas.Dc();
-    HBRUSH brush = CreateSolidBrush(color);
-    HPEN pen = stroke != CLR_NONE ? CreatePen(PS_SOLID, 1, stroke) : NULL;
-    HGDIOBJ oldBrush, oldPen;
-
-    canvas.Graphics().Flush(Gdiplus::FlushIntentionSync);
-    oldBrush = SelectObject(dc, brush);
-    oldPen = SelectObject(dc, pen ? (HGDIOBJ)pen : GetStockObject(NULL_PEN));
-    RoundRect(dc, rc.left, rc.top, rc.right + (pen ? 0 : 1), rc.bottom + (pen ? 0 : 1), radius * 2, radius * 2);
-    SelectObject(dc, oldPen);
-    SelectObject(dc, oldBrush);
-    if (pen)
-        DeleteObject(pen);
-    DeleteObject(brush);
-}
-
 static DWORD WINAPI
 JobThread(LPVOID parameter)
 {
@@ -203,11 +184,8 @@ public:
         m_ContentHeight(0),
         m_HotAccount(FALSE),
         m_TrackingClient(FALSE),
-        m_NavTool(NULL),
         m_NavTree(NULL),
         m_Crumbs(NULL),
-        m_ToolImages(NULL),
-        m_ToolDisabled(NULL),
         m_NavImages(NULL),
         m_PageBrush(NULL),
         m_PageColor(CLR_NONE),
@@ -483,9 +461,9 @@ protected:
                 int index = ControlIndex((HWND)lParam);
                 if (LOWORD(wParam) == IDC_SEARCH && HIWORD(wParam) == EN_CHANGE)
                     OnSearchChanged();
-                if ((HWND)lParam == m_NavTool && LOWORD(wParam) == IDC_BACK)
+                if ((HWND)lParam == m_NavButtons.Window() && LOWORD(wParam) == IDC_BACK)
                     GoBack();
-                if ((HWND)lParam == m_NavTool && LOWORD(wParam) == IDC_FORWARD)
+                if ((HWND)lParam == m_NavButtons.Window() && LOWORD(wParam) == IDC_FORWARD)
                     GoForward();
                 if (index >= 0 && HIWORD(wParam) == BN_CLICKED)
                     PostMessageW(m_hwnd, WM_SETTINGS_CONTROL, index, 0);
@@ -496,6 +474,9 @@ protected:
             case WM_NOTIFY:
             {
                 NMHDR *header = (NMHDR *)lParam;
+                LRESULT result;
+                if (m_NavButtons.OnNotify(header, &result, GlassColor(m_Theme, GlassTone::Clear)))
+                    return result;
                 if (header->hwndFrom == m_NavTree && header->code == NM_CUSTOMDRAW)
                     return DrawNavItem((NMTVCUSTOMDRAW *)lParam);
                 if (header->hwndFrom == m_NavTree && header->code == TVN_SELCHANGEDW)
@@ -646,13 +627,10 @@ protected:
                 if (m_PageBrush)
                     DeleteObject(m_PageBrush);
                 m_PageBrush = NULL;
-                if (m_ToolImages)
-                    ImageList_Destroy(m_ToolImages);
-                if (m_ToolDisabled)
-                    ImageList_Destroy(m_ToolDisabled);
+                m_NavButtons.Destroy();
                 if (m_NavImages)
                     ImageList_Destroy(m_NavImages);
-                m_ToolImages = m_ToolDisabled = m_NavImages = NULL;
+                m_NavImages = NULL;
                 if (m_SmallIcon)
                     DestroyIcon(m_SmallIcon);
                 if (m_BigIcon)
@@ -694,18 +672,18 @@ private:
 
     RECT AccountRect() const
     {
-        RECT rc = { m_Theme.Scale(12), m_Theme.Scale(100), PanelLeft() - m_Theme.Scale(12), m_Theme.Scale(160) };
+        RECT rc = { m_Theme.Scale(12), m_Theme.Scale(98), PanelLeft() - m_Theme.Scale(12), m_Theme.Scale(142) };
         return rc;
     }
 
-    int NavTop() const { return m_Theme.Scale(172); }
+    int NavTop() const { return m_Theme.Scale(152); }
 
     int ContentLeft() const
     {
         RECT client;
 
         GetClientRect(m_hwnd, &client);
-        return client.right < m_Theme.Scale(900) ? m_Theme.Scale(264) : m_Theme.Scale(328);
+        return min(max((int)client.right * 34 / 100, m_Theme.Scale(264)), m_Theme.Scale(376));
     }
 
     int PanelLeft() const { return ContentLeft() - m_Theme.Scale(16); }
@@ -1067,14 +1045,16 @@ private:
     {
         RECT tile = AccountRect(), avatar, name, kind;
 
+        canvas.Graphics().Flush(Gdiplus::FlushIntentionSync);
         if (m_HotAccount || TopLevel(m_Page) == PageId::Accounts)
-            GlassFill(canvas, tile, m_Theme.Scale(6), m_HotAccount ? GlassColor(m_Theme, GlassTone::Hover) : GlassColor(m_Theme, GlassTone::Selected), CLR_NONE);
-        SetRect(&avatar, tile.left + m_Theme.Scale(6), tile.top + m_Theme.Scale(6), tile.left + m_Theme.Scale(54),
-                tile.top + m_Theme.Scale(54));
-        GlassFill(canvas, avatar, m_Theme.Scale(24), GlassColor(m_Theme, GlassTone::Selected), CLR_NONE);
-        CenterIcon(canvas, avatar, m_Theme.Scale(24), L"person_20_regular", GlassColor(m_Theme, GlassTone::Text));
-        SetRect(&name, avatar.right + m_Theme.Scale(12), tile.top + m_Theme.Scale(10), tile.right - m_Theme.Scale(8),
-                tile.top + m_Theme.Scale(32));
+            FillRoundGlass(canvas.Dc(), tile, m_Theme.ScaleF(6.0f), RGB(255, 255, 255),
+                           TopLevel(m_Page) == PageId::Accounts ? 26 : 13);
+        SetRect(&avatar, tile.left + m_Theme.Scale(6), tile.top + m_Theme.Scale(6), tile.left + m_Theme.Scale(38),
+                tile.top + m_Theme.Scale(38));
+        FillRoundGlass(canvas.Dc(), avatar, m_Theme.ScaleF(16.0f), RGB(255, 255, 255), 26);
+        CenterIcon(canvas, avatar, m_Theme.Scale(18), L"person_20_regular", GlassColor(m_Theme, GlassTone::Text));
+        SetRect(&name, avatar.right + m_Theme.Scale(10), tile.top + m_Theme.Scale(4), tile.right - m_Theme.Scale(8),
+                tile.top + m_Theme.Scale(22));
         canvas.Text(m_User, name, m_Theme.Font(TextStyle::BodyStrong), GlassColor(m_Theme, GlassTone::Text),
                     DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
         kind = name;
@@ -1149,11 +1129,6 @@ private:
         COLORREF title = row.Enabled ? c.Text : c.TextDisabled, detail = row.Enabled ? c.TextSecondary : c.TextDisabled;
         int textLeft = rc.left + m_Theme.Scale(16), textRight;
 
-        if (where.Row > 0)
-        {
-            RECT line = { rc.left + m_Theme.Scale(16), rc.top, rc.right - m_Theme.Scale(16), rc.top + 1 };
-            canvas.Fill(line, c.Divider);
-        }
         if (row.Kind == RowKind::Navigate || row.Kind == RowKind::Link)
             return;
         if (row.Kind == RowKind::Hero)
@@ -1307,35 +1282,12 @@ private:
 
     void CreateChrome()
     {
-        static const LPCWSTR Arrows[] = { L"arrow_left_16_regular", L"arrow_right_16_regular" };
         std::vector<PageId> pages = Categories();
         std::vector<LPCWSTR> icons;
         std::wstring back = Str(IDS_BACK), forward = Str(IDS_FORWARD);
-        TBBUTTON buttons[2] = { };
-        int glyph = m_Theme.Scale(16);
 
-        m_NavTool = CreateWindowExW(0, TOOLBARCLASSNAMEW, L"", WS_CHILD | WS_VISIBLE | TBSTYLE_FLAT | TBSTYLE_TRANSPARENT |
-                                    TBSTYLE_TOOLTIPS | CCS_NODIVIDER | CCS_NOPARENTALIGN | CCS_NORESIZE, 0, 0, 0, 0, m_hwnd,
-                                    NULL, Instance, NULL);
-        if (m_NavTool)
-        {
-            SendMessageW(m_NavTool, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
-            SendMessageW(m_NavTool, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_MIXEDBUTTONS);
-            m_ToolImages = GlyphList(Arrows, _countof(Arrows), glyph, GlassColor(m_Theme, GlassTone::Text));
-            m_ToolDisabled = GlyphList(Arrows, _countof(Arrows), glyph, GlassColor(m_Theme, GlassTone::TextDisabled));
-            SendMessageW(m_NavTool, TB_SETIMAGELIST, 0, (LPARAM)m_ToolImages);
-            SendMessageW(m_NavTool, TB_SETDISABLEDIMAGELIST, 0, (LPARAM)m_ToolDisabled);
-            buttons[0].iBitmap = 0;
-            buttons[0].idCommand = IDC_BACK;
-            buttons[0].fsStyle = BTNS_BUTTON;
-            buttons[0].iString = (INT_PTR)back.c_str();
-            buttons[1].iBitmap = 1;
-            buttons[1].idCommand = IDC_FORWARD;
-            buttons[1].fsStyle = BTNS_BUTTON;
-            buttons[1].iString = (INT_PTR)forward.c_str();
-            SendMessageW(m_NavTool, TB_ADDBUTTONSW, 2, (LPARAM)buttons);
-            SendMessageW(m_NavTool, TB_SETBUTTONSIZE, 0, MAKELPARAM(m_Theme.Scale(32), m_Theme.Scale(32)));
-        }
+        m_NavButtons.Create(m_hwnd, m_Theme, IDC_BACK, IDC_FORWARD, back.c_str(), forward.c_str(),
+                            GlassColor(m_Theme, GlassTone::Text), GlassColor(m_Theme, GlassTone::TextDisabled));
 
         m_NavTree = CreateWindowExW(0, WC_TREEVIEWW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | TVS_FULLROWSELECT |
                                     TVS_SHOWSELALWAYS | TVS_TRACKSELECT | TVS_NOHSCROLL, 0, 0, 0, 0, m_hwnd,
@@ -1375,9 +1327,7 @@ private:
     {
         RECT header = HeaderRect();
 
-        if (m_NavTool)
-            SetWindowPos(m_NavTool, NULL, m_Theme.Scale(6), m_Theme.Scale(8), m_Theme.Scale(68), m_Theme.Scale(32),
-                         SWP_NOZORDER | SWP_NOACTIVATE);
+        m_NavButtons.Place(m_Theme.Scale(6), CaptionHeight() / 2);
         if (m_NavTree)
             SetWindowPos(m_NavTree, NULL, m_Theme.Scale(12), NavTop() - m_Theme.Scale(4), PanelLeft() - m_Theme.Scale(24),
                          max(0, (int)client.bottom - NavTop() - m_Theme.Scale(4)), SWP_NOZORDER | SWP_NOACTIVATE);
@@ -1392,11 +1342,7 @@ private:
         PageId current = TopLevel(m_Page);
         HTREEITEM item;
 
-        if (m_NavTool)
-        {
-            SendMessageW(m_NavTool, TB_ENABLEBUTTON, IDC_BACK, MAKELONG(!m_Back.empty(), 0));
-            SendMessageW(m_NavTool, TB_ENABLEBUTTON, IDC_FORWARD, MAKELONG(!m_Forward.empty(), 0));
-        }
+        m_NavButtons.Enable(!m_Back.empty(), !m_Forward.empty());
         if (m_NavTree)
         {
             for (item = (HTREEITEM)SendMessageW(m_NavTree, TVM_GETNEXTITEM, TVGN_ROOT, 0); item;
@@ -1493,17 +1439,6 @@ private:
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 
-    void FillRounded(HDC hdc, const RECT &rc, int radius, COLORREF color)
-    {
-        HBRUSH brush = CreateSolidBrush(color);
-        HGDIOBJ oldBrush = SelectObject(hdc, brush), oldPen = SelectObject(hdc, GetStockObject(NULL_PEN));
-
-        RoundRect(hdc, rc.left, rc.top, rc.right + 1, rc.bottom + 1, radius * 2, radius * 2);
-        SelectObject(hdc, oldPen);
-        SelectObject(hdc, oldBrush);
-        DeleteObject(brush);
-    }
-
     void DrawLabel(HDC hdc, const std::wstring &text, RECT rc, HFONT font, COLORREF color, UINT format)
     {
         HGDIOBJ old = SelectObject(hdc, font);
@@ -1529,7 +1464,7 @@ private:
 
         FillRect(hdc, &rc, CardBrush());
         if (enabled && ((item->itemState & ODS_SELECTED) || item->hwndItem == m_HotRow))
-            FillRounded(hdc, rc, m_Theme.Scale(4), (item->itemState & ODS_SELECTED) ? c.SubtlePressed : c.CardHover);
+            FillRoundSmooth(hdc, rc, m_Theme.ScaleF(4.0f), (item->itemState & ODS_SELECTED) ? c.SubtlePressed : c.CardHover);
         SetBkMode(hdc, TRANSPARENT);
         if (icon)
             DrawIconEx(hdc, left - (row.Image ? m_Theme.Scale(2) : 0), middle - size / 2, icon, size, size, 0, NULL,
@@ -1589,14 +1524,11 @@ private:
             FillRect(hdc, &rc, glass);
             DeleteObject(glass);
             pill = rc;
-            InflateRect(&pill, -m_Theme.Scale(2), -m_Theme.Scale(2));
+            pill.top += m_Theme.Scale(2);
+            pill.bottom -= m_Theme.Scale(2);
+            pill.right -= m_Theme.Scale(4);
             if (selected || hot)
-                FillRounded(hdc, pill, m_Theme.Scale(6), GlassColor(m_Theme, selected ? GlassTone::Selected : GlassTone::Hover));
-            if (selected)
-            {
-                RECT bar = { pill.left, pill.top + m_Theme.Scale(10), pill.left + m_Theme.Scale(3), pill.bottom - m_Theme.Scale(10) };
-                FillRounded(hdc, bar, m_Theme.Scale(1), m_Theme.Colors().Accent);
-            }
+                FillRoundGlass(hdc, pill, m_Theme.ScaleF(6.0f), RGB(255, 255, 255), selected ? 26 : 13);
             ImageList_Draw(m_NavImages, data.iImage, hdc, pill.left + m_Theme.Scale(14), (rc.top + rc.bottom - size) / 2,
                            ILD_TRANSPARENT);
             label = pill;
@@ -2124,12 +2056,10 @@ private:
     int m_ContentHeight;
     BOOL m_HotAccount;
     BOOL m_TrackingClient;
-    HWND m_NavTool;
+    NavigationButtons m_NavButtons;
     HWND m_NavTree;
     HWND m_HotRow = NULL;
     HWND m_Crumbs;
-    HIMAGELIST m_ToolImages;
-    HIMAGELIST m_ToolDisabled;
     HIMAGELIST m_NavImages;
     HBRUSH m_PageBrush;
     COLORREF m_PageColor;
