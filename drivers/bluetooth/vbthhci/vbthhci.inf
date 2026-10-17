@@ -1,0 +1,45 @@
+; LiberNT Virtual Bluetooth Controller
+; Software-only Bluetooth HCI controller with simulated peers for testing;
+; root-enumerated, installed manually for ROOT\VBTHHCI.
+; Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = Bluetooth
+ClassGUID   = {e0cbf06c-cd8b-4647-bb8a-263b43f0f974}
+Provider    = %LiberNT%
+DriverVer   = 10/17/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%LiberNT% = Models,NTamd64,NTARM64
+
+[Models]
+%VBthHci.DeviceDesc% = VBthHci.Dev, ROOT\VBTHHCI
+
+[Models.NTamd64]
+%VBthHci.DeviceDesc% = VBthHci.Dev, ROOT\VBTHHCI
+
+[Models.NTARM64]
+%VBthHci.DeviceDesc% = VBthHci.Dev, ROOT\VBTHHCI
+
+[VBthHci.Dev.NT]
+CopyFiles = VBthHci.Files
+
+[VBthHci.Dev.NT.Services]
+AddService = VBthHci, 0x00000002, VBthHci.Service
+
+[VBthHci.Service]
+ServiceType    = 1
+StartType      = 3
+ErrorControl   = 1
+ServiceBinary  = %12%\vbthhci.sys
+
+[VBthHci.Files]
+vbthhci.sys
+
+[Strings]
+LiberNT = "LiberNT Project"
+VBthHci.DeviceDesc = "LiberNT Virtual Bluetooth Controller"
