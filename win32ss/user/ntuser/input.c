@@ -28,6 +28,8 @@ INT paiCount = 0;
 HANDLE ghKeyboardDevice = NULL;
 
 static DWORD LastInputTick = 0;
+static DWORD ScreenSaverRequestTick = 0;
+static BOOL ScreenSaverRequested = FALSE;
 static HANDLE ghMouseDevice;
 
 /* FUNCTIONS *****************************************************************/
@@ -84,9 +86,11 @@ DoTheScreenSaver(VOID)
                     ERR("Screensaver is Idle\n");
                 }
             }
-            else
+            else if (!ScreenSaverRequested || ScreenSaverRequestTick != LastInputTick)
             {
                 PUSER_MESSAGE_QUEUE ForegroundQueue = IntGetFocusMessageQueue();
+                ScreenSaverRequested = TRUE;
+                ScreenSaverRequestTick = LastInputTick;
                 if (ForegroundQueue && ForegroundQueue->spwndActive)
                     UserPostMessage(hwndSAS, WM_LOGONNOTIFY, LN_START_SCREENSAVE, 1); // lParam 1 == Secure
                 else
