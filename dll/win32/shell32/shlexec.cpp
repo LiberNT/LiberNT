@@ -2359,7 +2359,7 @@ static WCHAR *expand_environment( const WCHAR *str )
 static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
 {
     static const DWORD unsupportedFlags =
-        SEE_MASK_CONNECTNETDRV | SEE_MASK_FLAG_DDEWAIT | SEE_MASK_ASYNCOK;
+        SEE_MASK_CONNECTNETDRV | SEE_MASK_ASYNCOK;
 
     DWORD len;
     UINT_PTR retval = SE_ERR_NOASSOC;
