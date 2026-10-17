@@ -5039,34 +5039,6 @@ DxgkDisplayRegister(
             goto Cleanup;
         }
 
-        /* Publish the object only after IoCreateDevice has succeeded. */
-        Status = DxgkpRegWriteString(hVideoMap,
-                                     DeviceValueName,
-                                     DriverKeyBuf);
-        if (!NT_SUCCESS(Status))
-            goto Cleanup;
-        DeviceMapEntryWritten = TRUE;
-
-        /*
-         * Update MaxObjectNumber.  It must cover ALL registered devices:
-         * both any pre-existing videoprt devices AND our new device.
-         */
-        {
-            ULONG NewMax = DeviceNumber;
-            if (ExistingMax != (ULONG)-1 && ExistingMax > NewMax)
-                NewMax = ExistingMax;
-            Status = DxgkpRegWriteDword(hVideoMap,
-                                        L"MaxObjectNumber",
-                                        NewMax);
-            if (!NT_SUCCESS(Status))
-                goto Cleanup;
-            DXGKRNL_TRACE("DxgkDisplayRegister: MaxObjectNumber set to %lu\n",
-                          NewMax);
-        }
-
-        DXGKRNL_TRACE("DxgkDisplayRegister: DEVICEMAP\\VIDEO\\%ls -> %ls\n",
-                      DeviceValueName, DriverKeyBuf);
-
         /* Create/open the driver settings key */
         RtlInitUnicodeString(&KeyName, DriverKeyBuf);
         InitializeObjectAttributes(&ObjectAttributes, &KeyName,
@@ -5195,6 +5167,34 @@ DxgkDisplayRegister(
                 goto Cleanup;
             }
         }
+
+        /* Publish the object only after IoCreateDevice has succeeded. */
+        Status = DxgkpRegWriteString(hVideoMap,
+                                     DeviceValueName,
+                                     DriverKeyBuf);
+        if (!NT_SUCCESS(Status))
+            goto Cleanup;
+        DeviceMapEntryWritten = TRUE;
+
+        /*
+         * Update MaxObjectNumber.  It must cover ALL registered devices:
+         * both any pre-existing videoprt devices AND our new device.
+         */
+        {
+            ULONG NewMax = DeviceNumber;
+            if (ExistingMax != (ULONG)-1 && ExistingMax > NewMax)
+                NewMax = ExistingMax;
+            Status = DxgkpRegWriteDword(hVideoMap,
+                                        L"MaxObjectNumber",
+                                        NewMax);
+            if (!NT_SUCCESS(Status))
+                goto Cleanup;
+            DXGKRNL_TRACE("DxgkDisplayRegister: MaxObjectNumber set to %lu\n",
+                          NewMax);
+        }
+
+        DXGKRNL_TRACE("DxgkDisplayRegister: DEVICEMAP\\VIDEO\\%ls -> %ls\n",
+                      DeviceValueName, DriverKeyBuf);
     }
 
     DXGKRNL_INFO("DISPLAY_BRIDGE: adapter %p desktop ready %lux%lu (%s)\n",
