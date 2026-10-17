@@ -145,8 +145,12 @@ STDMETHODIMP CFontExt::EnumSearches(IEnumExtraSearch **ppenum)
 
 STDMETHODIMP CFontExt::GetDefaultColumn(DWORD dwReserved, ULONG *pSort, ULONG *pDisplay)
 {
-    ERR("%s() UNIMPLEMENTED\n", __FUNCTION__);
-    return E_NOTIMPL;
+    if (!pSort || !pDisplay)
+        return E_POINTER;
+
+    *pSort = FONTEXT_COL_NAME;
+    *pDisplay = FONTEXT_COL_NAME;
+    return S_OK;
 }
 
 STDMETHODIMP CFontExt::GetDefaultColumnState(UINT iColumn, SHCOLSTATEF *pcsFlags)
@@ -160,8 +164,69 @@ STDMETHODIMP CFontExt::GetDefaultColumnState(UINT iColumn, SHCOLSTATEF *pcsFlags
 
 STDMETHODIMP CFontExt::GetDetailsEx(PCUITEMID_CHILD pidl, const SHCOLUMNID *pscid, VARIANT *pv)
 {
-    ERR("%s() UNIMPLEMENTED\n", __FUNCTION__);
-    return E_NOTIMPL;
+    if (!pidl || !pscid || !pv)
+        return E_INVALIDARG;
+
+    const FontPidlEntry* fontEntry = _FontFromIL(pidl);
+    if (!fontEntry)
+        return E_INVALIDARG;
+
+    if (IsEqualGUID(pscid->fmtid, FMTID_Storage) && pscid->pid == PID_STG_NAME)
+    {
+        STRRET str;
+        HRESULT hr = GetDisplayNameOf(pidl, SHGDN_NORMAL | SHGDN_INFOLDER, &str);
+        if (FAILED(hr))
+            return hr;
+        hr = StrRetToBSTR(&str, pidl, &V_BSTR(pv));
+        if (SUCCEEDED(hr))
+            V_VT(pv) = VT_BSTR;
+        return hr;
+    }
+
+    auto info = g_FontCache->Find(fontEntry);
+    if (info == nullptr)
+        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+
+    if (IsEqualGUID(pscid->fmtid, PKEY_FileName.fmtid) && pscid->pid == PKEY_FileName.pid)
+    {
+        V_BSTR(pv) = SysAllocString(PathFindFileNameW(info->File()));
+        if (!V_BSTR(pv))
+            return E_OUTOFMEMORY;
+        V_VT(pv) = VT_BSTR;
+        return S_OK;
+    }
+
+    if (IsEqualGUID(pscid->fmtid, FMTID_Storage))
+    {
+        switch (pscid->pid)
+        {
+        case PID_STG_SIZE:
+            V_VT(pv) = VT_UI8;
+            V_UI8(pv) = info->FileSize().QuadPart;
+            return S_OK;
+        case PID_STG_ATTRIBUTES:
+            V_VT(pv) = VT_UI4;
+            V_UI4(pv) = info->FileAttributes();
+            return S_OK;
+        case PID_STG_WRITETIME:
+        {
+            FILETIME local;
+            SYSTEMTIME time;
+            if (!FileTimeToLocalFileTime(&info->FileWriteTime(), &local) ||
+                !FileTimeToSystemTime(&local, &time) ||
+                !SystemTimeToVariantTime(&time, &V_DATE(pv)))
+            {
+                return E_FAIL;
+            }
+            V_VT(pv) = VT_DATE;
+            return S_OK;
+        }
+        default:
+            break;
+        }
+    }
+
+    return E_INVALIDARG;
 }
 
 STDMETHODIMP CFontExt::GetDetailsOf(PCUITEMID_CHILD pidl, UINT iColumn, SHELLDETAILS *psd)
@@ -245,8 +310,35 @@ STDMETHODIMP CFontExt::GetDetailsOf(PCUITEMID_CHILD pidl, UINT iColumn, SHELLDET
 
 STDMETHODIMP CFontExt::MapColumnToSCID(UINT iColumn, SHCOLUMNID *pscid)
 {
-    //ERR("%s() UNIMPLEMENTED\n", __FUNCTION__);
-    return E_NOTIMPL;
+    if (!pscid)
+        return E_POINTER;
+
+    switch (iColumn)
+    {
+    case FONTEXT_COL_NAME:
+        pscid->fmtid = FMTID_Storage;
+        pscid->pid = PID_STG_NAME;
+        return S_OK;
+    case FONTEXT_COL_FILENAME:
+        pscid->fmtid = PKEY_FileName.fmtid;
+        pscid->pid = PKEY_FileName.pid;
+        return S_OK;
+    case FONTEXT_COL_SIZE:
+        pscid->fmtid = FMTID_Storage;
+        pscid->pid = PID_STG_SIZE;
+        return S_OK;
+    case FONTEXT_COL_MODIFIED:
+        pscid->fmtid = FMTID_Storage;
+        pscid->pid = PID_STG_WRITETIME;
+        return S_OK;
+    case FONTEXT_COL_ATTR:
+        pscid->fmtid = FMTID_Storage;
+        pscid->pid = PID_STG_ATTRIBUTES;
+        return S_OK;
+    default:
+        break;
+    }
+    return E_INVALIDARG;
 }
 
 // *** IShellFolder2 methods ***
@@ -308,8 +400,14 @@ STDMETHODIMP CFontExt::EnumObjects(HWND hwndOwner, DWORD dwFlags, LPENUMIDLIST *
 
 STDMETHODIMP CFontExt::BindToObject(PCUIDLIST_RELATIVE pidl, LPBC pbcReserved, REFIID riid, LPVOID *ppvOut)
 {
-    ERR("%s(riid=%S) UNIMPLEMENTED\n", __FUNCTION__, g2s(riid));
-    return E_NOTIMPL;
+    if (!ppvOut)
+        return E_POINTER;
+
+    *ppvOut = NULL;
+    if (!pidl || !_FontFromIL(pidl))
+        return E_INVALIDARG;
+
+    return E_NOINTERFACE;
 }
 
 STDMETHODIMP CFontExt::BindToStorage(PCUIDLIST_RELATIVE pidl, LPBC pbcReserved, REFIID riid, LPVOID *ppvOut)

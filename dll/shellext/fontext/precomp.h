@@ -24,6 +24,8 @@
 #include <atlstr.h>
 #include <wine/debug.h>
 #include <shellutils.h>
+#include <ntquery.h>
+#include <propkey.h>
 
 extern const GUID CLSID_CFontExt;
 extern LONG g_ModuleRefCnt;
