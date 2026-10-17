@@ -4,6 +4,7 @@
  * PURPOSE:          System parameters functions
  * FILE:             win32ss/user/ntuser/sysparams.c
  * PROGRAMER:        Timo Kreuzer (timo.kreuzer@reactos.org)
+ *                   Ahmed ARIF (arif.ing@outlook.com)
  */
 
 // TODO:
@@ -998,7 +999,7 @@ SpiLoadWallpaperMode(VOID)
 
 static
 UINT_PTR
-SpiSetWallpaper(PVOID pvParam, FLONG fl)
+SpiSetWallpaper(PVOID pvParam, FLONG fl, HBITMAP hbmSupplied)
 {
     UNICODE_STRING ustr;
 #ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
@@ -1040,6 +1041,29 @@ SpiSetWallpaper(PVOID pvParam, FLONG fl)
     }
     awcCaptured[ustr.Length / sizeof(WCHAR)] = UNICODE_NULL;
 
+    if (hbmSupplied)
+    {
+        if (ustr.Length == 0 || GreGetObjectOwner(hbmSupplied) != GDI_OBJ_HMGR_POWNED)
+        {
+            EngSetLastError(ERROR_INVALID_PARAMETER);
+            return 0;
+        }
+        psurfBmp = SURFACE_ShareLockSurface(hbmSupplied);
+        if (!psurfBmp)
+        {
+            EngSetLastError(ERROR_INVALID_HANDLE);
+            return 0;
+        }
+        bResult = !psurfBmp->hSecure && !psurfBmp->hDIBSection && !psurfBmp->hdc &&
+                  psurfBmp->SurfObj.sizlBitmap.cx > 0 && psurfBmp->SurfObj.sizlBitmap.cy > 0;
+        SURFACE_ShareUnlockSurface(psurfBmp);
+        if (!bResult)
+        {
+            EngSetLastError(ERROR_INVALID_PARAMETER);
+            return 0;
+        }
+    }
+
 #ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
     CapturedWallpaper.Buffer = awcCaptured;
     CapturedWallpaper.Length = ustr.Length;
@@ -1065,6 +1089,8 @@ SpiSetWallpaper(PVOID pvParam, FLONG fl)
 #ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
     if (ReuseEarlyWallpaper)
     {
+        if (hbmSupplied)
+            GreDeleteObject(hbmSupplied);
         gspv.WallpaperMode = SpiLoadWallpaperMode();
         TRACE("EARLY_SPLASH: WIN32K_WALLPAPER_REUSED path=%S mode=%u\n", gspv.awcWallpaper, gspv.WallpaperMode);
         NtUserRedrawWindow(UserGetShellWindow(), NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
@@ -1086,7 +1112,7 @@ SpiSetWallpaper(PVOID pvParam, FLONG fl)
         }
 
         /* Load the Bitmap */
-        hbmp = UserLoadImage(ustr.Buffer);
+        hbmp = hbmSupplied ? hbmSupplied : UserLoadImage(ustr.Buffer);
         if (!hbmp)
         {
             gspv.cxWallpaper = 0;
@@ -1338,7 +1364,10 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
             return SpiGet(pvParam, gspv.awcWallpaper, uiParam, fl);
 
         case SPI_SETDESKWALLPAPER:
-            return SpiSetWallpaper(pvParam, fl);
+            return SpiSetWallpaper(pvParam, fl, NULL);
+
+        case SPI_ROS_SETDESKWALLPAPERBITMAP:
+            return SpiSetWallpaper(pvParam, fl, LongToHandle((LONG)uiParam));
 
 #ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
         case REACTOS_SPI_SET_EARLY_WALLPAPER:
@@ -2714,7 +2743,7 @@ UserSystemParametersInfo(
             /* Send WM_SETTINGCHANGE to all toplevel windows */
             co_IntSendMessageTimeout(HWND_BROADCAST,
                                      WM_SETTINGCHANGE,
-                                     (WPARAM)uiAction,
+                                     (WPARAM)(uiAction == SPI_ROS_SETDESKWALLPAPERBITMAP ? SPI_SETDESKWALLPAPER : uiAction),
                                      (LPARAM)ulResult,
                                      SMTO_NORMAL,
                                      100,
