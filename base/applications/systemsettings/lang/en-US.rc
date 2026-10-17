@@ -259,6 +259,7 @@ BEGIN
     IDS_WIFI_SCAN "Scan for networks"
     IDS_WIFI_SCAN_DESC "Refresh the list of nearby networks"
     IDS_REFRESH "Refresh"
+    IDS_WIFI_CANT_CONNECT "Can't connect to this network"
     IDS_WIFI_NO_NETWORKS "No networks are in range."
     IDS_WIFI_SECURED "Secured · %lu%% signal"
     IDS_WIFI_OPEN "Open · %lu%% signal"

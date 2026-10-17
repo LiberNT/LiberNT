@@ -14,6 +14,7 @@ extern "C"
 {
 #include <netioapi.h>
 }
+#include <wlanapi.h>
 #include <secext.h>
 #include <algorithm>
 
@@ -109,6 +110,40 @@ static VOID WINAPI
 InterfaceChanged(PVOID context, PMIB_IPINTERFACE_ROW row, MIB_NOTIFICATION_TYPE type)
 {
     PostMessageW((HWND)context, WM_SETTINGS_REFRESH, 0, 0);
+}
+
+static VOID WINAPI
+WlanChanged(PWLAN_NOTIFICATION_DATA data, PVOID context)
+{
+    if (!data || data->NotificationSource != WLAN_NOTIFICATION_SOURCE_ACM)
+        return;
+    if (data->NotificationCode == wlan_notification_acm_connection_attempt_fail &&
+        data->dwDataSize >= sizeof(WLAN_CONNECTION_NOTIFICATION_DATA) && data->pData)
+    {
+        const WLAN_CONNECTION_NOTIFICATION_DATA *connection = (const WLAN_CONNECTION_NOTIFICATION_DATA *)data->pData;
+        std::wstring *name = new std::wstring();
+
+        for (ULONG i = 0; i < connection->dot11Ssid.uSSIDLength && i < DOT11_SSID_MAX_LENGTH; i++)
+            name->push_back((WCHAR)connection->dot11Ssid.ucSSID[i]);
+        if (name->empty())
+            *name = connection->strProfileName;
+        if (!PostMessageW((HWND)context, WM_SETTINGS_WIFI_FAILED, 0, (LPARAM)name))
+            delete name;
+    }
+    switch (data->NotificationCode)
+    {
+        case wlan_notification_acm_connection_attempt_fail:
+        case wlan_notification_acm_scan_complete:
+        case wlan_notification_acm_scan_fail:
+        case wlan_notification_acm_connection_complete:
+        case wlan_notification_acm_disconnected:
+        case wlan_notification_acm_interface_arrival:
+        case wlan_notification_acm_interface_removal:
+            PostMessageW((HWND)context, WM_SETTINGS_REFRESH, 0, 0);
+            break;
+        default:
+            break;
+    }
 }
 
 static void PageFromCommandLine(LPCWSTR commandLine, PageId *page, std::wstring *param);
@@ -236,6 +271,13 @@ protected:
         OnThemeChanged();
         NotifyUnicastIpAddressChange(AF_UNSPEC, AddressChanged, m_hwnd, FALSE, &m_AddressNotify);
         NotifyIpInterfaceChange(AF_UNSPEC, InterfaceChanged, m_hwnd, FALSE, &m_InterfaceNotify);
+        {
+            DWORD version = 0;
+            if (WlanOpenHandle(2, NULL, &version, &m_Wlan) == ERROR_SUCCESS)
+                WlanRegisterNotification(m_Wlan, WLAN_NOTIFICATION_SOURCE_ACM, TRUE, WlanChanged, m_hwnd, NULL, NULL);
+            else
+                m_Wlan = NULL;
+        }
         Rebuild(TRUE);
     }
 
@@ -399,6 +441,23 @@ protected:
                 }
                 return TRUE;
             }
+            case WM_SETTINGS_WIFI_FAILED:
+            {
+                std::wstring *name = (std::wstring *)lParam;
+                TASKDIALOGCONFIG config = { sizeof(config) };
+                std::wstring title = Str(IDS_APP_TITLE), heading = Str(IDS_WIFI_CANT_CONNECT);
+
+                config.hwndParent = m_hwnd;
+                config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW;
+                config.dwCommonButtons = TDCBF_OK_BUTTON;
+                config.pszWindowTitle = title.c_str();
+                config.pszMainIcon = TD_ERROR_ICON;
+                config.pszMainInstruction = heading.c_str();
+                config.pszContent = name->c_str();
+                TaskDialogIndirect(&config, NULL, NULL, NULL);
+                delete name;
+                return 0;
+            }
             case WM_SETTINGS_JOB:
             {
                 JobData *job = (JobData *)lParam;
@@ -435,6 +494,12 @@ protected:
                 if (m_InterfaceNotify)
                     CancelMibChangeNotify2(m_InterfaceNotify);
                 m_AddressNotify = m_InterfaceNotify = NULL;
+                if (m_Wlan)
+                {
+                    WlanRegisterNotification(m_Wlan, WLAN_NOTIFICATION_SOURCE_NONE, TRUE, NULL, NULL, NULL, NULL);
+                    WlanCloseHandle(m_Wlan, NULL);
+                    m_Wlan = NULL;
+                }
                 if (m_SearchFont)
                     DeleteObject(m_SearchFont);
                 m_SearchFont = NULL;
@@ -1827,6 +1892,7 @@ private:
     BOOL m_Admin = FALSE;
     HANDLE m_AddressNotify = NULL;
     HANDLE m_InterfaceNotify = NULL;
+    HANDLE m_Wlan = NULL;
     HWND m_Search;
     HFONT m_SearchFont;
     HICON m_SmallIcon;

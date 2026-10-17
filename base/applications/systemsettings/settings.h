@@ -33,6 +33,7 @@
 
 #define WM_SETTINGS_REFRESH (WM_APP + 1)
 #define WM_SETTINGS_JOB     (WM_APP + 2)
+#define WM_SETTINGS_WIFI_FAILED (WM_APP + 3)
 
 enum class PageId
 {

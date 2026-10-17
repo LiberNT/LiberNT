@@ -497,6 +497,16 @@ BuildWiFi(PageBuilder &page)
             return;
         }
         on = wlan.RadioOn();
+        if (on)
+        {
+            static ULONGLONG LastScan;
+            ULONGLONG now = GetTickCount64();
+            if (!LastScan || now - LastScan > 15000)
+            {
+                WlanScan(wlan.Handle(), wlan.Interface(), NULL, NULL, NULL);
+                LastScan = now;
+            }
+        }
         if (on && WlanGetAvailableNetworkList(wlan.Handle(), wlan.Interface(), 0, NULL, &list) == ERROR_SUCCESS && list)
         {
             for (DWORD i = 0; i < list->dwNumberOfItems; i++)
