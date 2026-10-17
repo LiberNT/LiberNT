@@ -706,6 +706,7 @@ Bus_InitializePdo (
 
     switch (acpistate)
     {
+    case ACPI_STATE_UNKNOWN:
     case ACPI_STATE_D0: ntState = PowerDeviceD0; break;
     case ACPI_STATE_D1: ntState = PowerDeviceD1; break;
     case ACPI_STATE_D2: ntState = PowerDeviceD2; break;
