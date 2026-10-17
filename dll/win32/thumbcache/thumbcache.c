@@ -22,6 +22,18 @@ DEFINE_GUID(CLSID_LocalThumbnailCache, 0x50ef4544, 0xac9f, 0x4a8e, 0xb2, 0x1b, 0
 DEFINE_GUID(CLSID_SharedBitmap, 0x4db26476, 0x6787, 0x4046, 0xb8, 0x36, 0xe8, 0x41, 0x2a, 0x9e, 0x8a, 0x27);
 
 #define CACHE_ENTRIES 256
+#define CACHE_FILE_MAGIC 0x4248544c
+#define CACHE_FILE_VERSION 1
+#define CACHE_MAX_SIZE 2560
+
+typedef struct _CACHE_FILE_HEADER
+{
+    DWORD Magic;
+    DWORD Version;
+    LONG Width;
+    LONG Height;
+    DWORD Alpha;
+} CACHE_FILE_HEADER;
 
 typedef struct _CACHE_ENTRY
 {
@@ -269,6 +281,130 @@ ItemThumbnailId(IShellItem *Item, WTS_THUMBNAILID *Id)
     return S_OK;
 }
 
+static BOOL
+CacheFilePath(const WTS_THUMBNAILID *Id, UINT Size, BOOL Create, LPWSTR Path, DWORD Length)
+{
+    WCHAR Directory[MAX_PATH];
+    DWORD Used;
+    UINT i;
+
+    Used = GetEnvironmentVariableW(L"LOCALAPPDATA", Directory, MAX_PATH);
+    if (!Used || Used >= MAX_PATH - 64)
+        return FALSE;
+    lstrcatW(Directory, L"\\Microsoft");
+    if (Create)
+        CreateDirectoryW(Directory, NULL);
+    lstrcatW(Directory, L"\\Windows");
+    if (Create)
+        CreateDirectoryW(Directory, NULL);
+    lstrcatW(Directory, L"\\Explorer");
+    if (Create)
+        CreateDirectoryW(Directory, NULL);
+    lstrcatW(Directory, L"\\thumbcache");
+    if (Create)
+        CreateDirectoryW(Directory, NULL);
+    if (Length < MAX_PATH)
+        return FALSE;
+    lstrcpyW(Path, Directory);
+    lstrcatW(Path, L"\\");
+    Used = lstrlenW(Path);
+    for (i = 0; i < sizeof(Id->rgbKey); i++)
+        wsprintfW(Path + Used + i * 2, L"%02x", Id->rgbKey[i]);
+    wsprintfW(Path + lstrlenW(Path), L"-%u.dat", Size);
+    return TRUE;
+}
+
+static HBITMAP
+CacheFileRead(const WTS_THUMBNAILID *Id, UINT Size, WTS_ALPHATYPE *Alpha)
+{
+    BITMAPINFO Info = { { sizeof(BITMAPINFOHEADER) } };
+    CACHE_FILE_HEADER Header;
+    WCHAR Path[MAX_PATH];
+    HBITMAP Bitmap = NULL;
+    DWORD Read, Bytes;
+    HANDLE File;
+    void *Bits;
+
+    if (!CacheFilePath(Id, Size, FALSE, Path, MAX_PATH))
+        return NULL;
+    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return NULL;
+    if (ReadFile(File, &Header, sizeof(Header), &Read, NULL) && Read == sizeof(Header) &&
+        Header.Magic == CACHE_FILE_MAGIC && Header.Version == CACHE_FILE_VERSION &&
+        Header.Width > 0 && Header.Height > 0 && Header.Width <= CACHE_MAX_SIZE && Header.Height <= CACHE_MAX_SIZE)
+    {
+        Info.bmiHeader.biWidth = Header.Width;
+        Info.bmiHeader.biHeight = -Header.Height;
+        Info.bmiHeader.biPlanes = 1;
+        Info.bmiHeader.biBitCount = 32;
+        Info.bmiHeader.biCompression = BI_RGB;
+        Bytes = (DWORD)Header.Width * (DWORD)Header.Height * 4;
+        Bitmap = CreateDIBSection(NULL, &Info, DIB_RGB_COLORS, &Bits, NULL, 0);
+        if (Bitmap && (!ReadFile(File, Bits, Bytes, &Read, NULL) || Read != Bytes))
+        {
+            DeleteObject(Bitmap);
+            Bitmap = NULL;
+        }
+        *Alpha = (WTS_ALPHATYPE)Header.Alpha;
+    }
+    CloseHandle(File);
+    return Bitmap;
+}
+
+static void
+CacheFileWrite(const WTS_THUMBNAILID *Id, UINT Size, HBITMAP Bitmap, WTS_ALPHATYPE Alpha)
+{
+    BITMAPINFO Info = { { sizeof(BITMAPINFOHEADER) } };
+    CACHE_FILE_HEADER Header;
+    WCHAR Path[MAX_PATH], Temporary[MAX_PATH];
+    BITMAP Object;
+    DWORD Bytes, Written;
+    HANDLE File;
+    BYTE *Bits;
+    BOOL Ok;
+    HDC Dc;
+
+    if (!GetObjectW(Bitmap, sizeof(Object), &Object) || Object.bmWidth <= 0 || !Object.bmHeight ||
+        Object.bmWidth > CACHE_MAX_SIZE || abs(Object.bmHeight) > CACHE_MAX_SIZE ||
+        !CacheFilePath(Id, Size, TRUE, Path, MAX_PATH))
+        return;
+    Header.Magic = CACHE_FILE_MAGIC;
+    Header.Version = CACHE_FILE_VERSION;
+    Header.Width = Object.bmWidth;
+    Header.Height = abs(Object.bmHeight);
+    Header.Alpha = Alpha;
+    Bytes = (DWORD)Header.Width * (DWORD)Header.Height * 4;
+    Bits = HeapAlloc(GetProcessHeap(), 0, Bytes);
+    if (!Bits)
+        return;
+    Info.bmiHeader.biWidth = Header.Width;
+    Info.bmiHeader.biHeight = -Header.Height;
+    Info.bmiHeader.biPlanes = 1;
+    Info.bmiHeader.biBitCount = 32;
+    Info.bmiHeader.biCompression = BI_RGB;
+    Dc = GetDC(NULL);
+    Ok = GetDIBits(Dc, Bitmap, 0, Header.Height, Bits, &Info, DIB_RGB_COLORS) == Header.Height;
+    ReleaseDC(NULL, Dc);
+    wsprintfW(Temporary, L"%s.%lx", Path, GetCurrentThreadId());
+    if (Ok)
+    {
+        File = CreateFileW(Temporary, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        Ok = File != INVALID_HANDLE_VALUE;
+        if (Ok)
+        {
+            Ok = WriteFile(File, &Header, sizeof(Header), &Written, NULL) && Written == sizeof(Header) &&
+                 WriteFile(File, Bits, Bytes, &Written, NULL) && Written == Bytes;
+            CloseHandle(File);
+            if (!Ok || !MoveFileExW(Temporary, Path, MOVEFILE_REPLACE_EXISTING))
+                DeleteFileW(Temporary);
+        }
+    }
+    HeapFree(GetProcessHeap(), 0, Bits);
+}
+
+static void CacheStoreMemory(const WTS_THUMBNAILID *Id, UINT Size, HBITMAP Bitmap, WTS_ALPHATYPE Alpha);
+
 static HRESULT
 CacheLookup(const WTS_THUMBNAILID *Id, UINT Size, ISharedBitmap **ppvThumb)
 {
@@ -294,7 +430,18 @@ CacheLookup(const WTS_THUMBNAILID *Id, UINT Size, ISharedBitmap **ppvThumb)
     LeaveCriticalSection(&CacheLock);
 
     if (!Found)
-        return STG_E_FILENOTFOUND;
+    {
+        HBITMAP Disk = CacheFileRead(Id, Size, &Alpha);
+        if (!Disk)
+            return STG_E_FILENOTFOUND;
+        CacheStoreMemory(Id, Size, Disk, Alpha);
+        if (!ppvThumb)
+        {
+            DeleteObject(Disk);
+            return S_OK;
+        }
+        Copy = Disk;
+    }
     if (!ppvThumb)
         return S_OK;
     if (!Copy)
@@ -306,7 +453,7 @@ CacheLookup(const WTS_THUMBNAILID *Id, UINT Size, ISharedBitmap **ppvThumb)
 }
 
 static void
-CacheStore(const WTS_THUMBNAILID *Id, UINT Size, HBITMAP Bitmap, WTS_ALPHATYPE Alpha)
+CacheStoreMemory(const WTS_THUMBNAILID *Id, UINT Size, HBITMAP Bitmap, WTS_ALPHATYPE Alpha)
 {
     HBITMAP Copy = CopyBitmap(Bitmap);
     UINT i, Slot = 0;
@@ -334,6 +481,13 @@ CacheStore(const WTS_THUMBNAILID *Id, UINT Size, HBITMAP Bitmap, WTS_ALPHATYPE A
     Cache[Slot].Alpha = Alpha;
     Cache[Slot].Stamp = ++CacheClock;
     LeaveCriticalSection(&CacheLock);
+}
+
+static void
+CacheStore(const WTS_THUMBNAILID *Id, UINT Size, HBITMAP Bitmap, WTS_ALPHATYPE Alpha)
+{
+    CacheStoreMemory(Id, Size, Bitmap, Alpha);
+    CacheFileWrite(Id, Size, Bitmap, Alpha);
 }
 
 static inline THUMBNAIL_CACHE *
