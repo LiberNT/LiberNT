@@ -280,7 +280,8 @@ co_IntGetScrollInfo(PWND Window, INT nBar, PSBDATA pSBData, LPSCROLLINFO lpsi)
 
    if (!Window->pSBInfo)
    {
-      ERR("IntGetScrollInfo No window scrollbar info\n");
+      TRACE("IntGetScrollInfo No window scrollbar info\n");
+      EngSetLastError(ERROR_NO_SCROLLBARS);
       return FALSE;
    }
 
