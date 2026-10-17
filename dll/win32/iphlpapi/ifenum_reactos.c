@@ -693,7 +693,7 @@ NTSTATUS addIPAddress( IPAddr Address, IPMask Mask, DWORD IfIndex,
   }
 
   if (!NT_SUCCESS(status)) {
-      ERR("addIPAddress for if %d returning 0x%lx\n", IfIndex, status);
+      TRACE("addIPAddress for if %d returning 0x%lx\n", IfIndex, status);
   }
 
   return status;
@@ -724,7 +724,7 @@ NTSTATUS deleteIpAddress( ULONG NteContext )
   closeTcpFile( tcpFile );
 
   if (!NT_SUCCESS(status)) {
-      ERR("deleteIpAddress(%lu) returning 0x%lx\n", NteContext, status);
+      TRACE("deleteIpAddress(%lu) returning 0x%lx\n", NteContext, status);
   }
 
   return status;
