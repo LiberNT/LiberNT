@@ -9,9 +9,11 @@
 #include <apitest.h>
 
 extern void func_DelNode(void);
+extern void func_RegInstall(void);
 
 const struct test winetest_testlist[] =
 {
     { "DelNode", func_DelNode },
+    { "RegInstall", func_RegInstall },
     { 0, 0 }
 };

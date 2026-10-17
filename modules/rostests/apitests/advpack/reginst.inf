@@ -1,0 +1,9 @@
+[Version]
+Signature="$Chicago$"
+
+[Probe]
+AddReg=Probe.Reg
+
+[Probe.Reg]
+HKCU,"Software\LiberNTRegInstallProbe","ModPath",,"%_MOD_PATH%"
+HKCU,"Software\LiberNTRegInstallProbe","SysModPath",,"%_SYS_MOD_PATH%"
