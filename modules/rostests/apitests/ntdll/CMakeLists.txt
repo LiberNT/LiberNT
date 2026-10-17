@@ -123,6 +123,7 @@ list(APPEND SOURCE
     NtWriteFile.c
     probelib.c
     RtlAllocateHeap.c
+    RtlCreateTagHeap.c
     RtlBitmap.c
     RtlSList.c
     RtlComputePrivatizedDllName_U.c
