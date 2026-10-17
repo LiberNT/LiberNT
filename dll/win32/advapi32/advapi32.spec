@@ -715,14 +715,14 @@
 @ stdcall -version=0x502 UpdateTraceW(double wstr ptr) ntdll.EtwUpdateTraceW
 @ stdcall -version=0x600+ UpdateTraceW(double wstr ptr) EtwUpdateTraceW
 @ stub WdmWmiServiceMain
-@ stub WmiCloseBlock
+@ stdcall WmiCloseBlock(ptr)
 @ stub WmiCloseTraceWithCursor
 @ stub WmiConvertTimestamp
 @ stub WmiDevInstToInstanceNameA
 @ stub WmiDevInstToInstanceNameW
 @ stub WmiEnumerateGuids
-@ stub WmiExecuteMethodA
-@ stub WmiExecuteMethodW
+@ stdcall WmiExecuteMethodA(ptr str long long ptr ptr ptr)
+@ stdcall WmiExecuteMethodW(ptr wstr long long ptr ptr ptr)
 @ stub WmiFileHandleToInstanceNameA
 @ stub WmiFileHandleToInstanceNameW
 @ stub WmiFreeBuffer
@@ -735,26 +735,26 @@
 @ stdcall -stub -version=0x600+ WmiNotificationRegistrationA(ptr long ptr long long) # EtwNotificationRegistrationA
 @ stdcall -version=0x502 WmiNotificationRegistrationW(ptr long ptr long long) ntdll.EtwNotificationRegistrationW
 @ stdcall -stub -version=0x600+ WmiNotificationRegistrationW(ptr long ptr long long) # EtwNotificationRegistrationW
-@ stub WmiOpenBlock
+@ stdcall WmiOpenBlock(ptr long ptr)
 @ stub WmiOpenTraceWithCursor
 @ stub WmiParseTraceEvent
 @ stub WmiQueryAllDataA
 @ stub WmiQueryAllDataMultipleA
 @ stub WmiQueryAllDataMultipleW
-@ stub WmiQueryAllDataW
+@ stdcall WmiQueryAllDataW(ptr ptr ptr)
 @ stub WmiQueryGuidInformation
 @ stub WmiQuerySingleInstanceA
 @ stub WmiQuerySingleInstanceMultipleA
 @ stub WmiQuerySingleInstanceMultipleW
-@ stub WmiQuerySingleInstanceW
+@ stdcall WmiQuerySingleInstanceW(ptr wstr ptr ptr)
 @ stdcall -version=0x502 WmiReceiveNotificationsA(long long long long) ntdll.EtwReceiveNotificationsA
 @ stdcall -stub -version=0x600+ WmiReceiveNotificationsA(long long long long) # EtwReceiveNotificationsA
 @ stdcall -version=0x502 WmiReceiveNotificationsW(long long long long) ntdll.EtwReceiveNotificationsW
 @ stdcall -stub -version=0x600+ WmiReceiveNotificationsW(long long long long) # EtwReceiveNotificationsW
-@ stub WmiSetSingleInstanceA
-@ stub WmiSetSingleInstanceW
-@ stub WmiSetSingleItemA
-@ stub WmiSetSingleItemW
+@ stdcall WmiSetSingleInstanceA(ptr str long long ptr)
+@ stdcall WmiSetSingleInstanceW(ptr wstr long long ptr)
+@ stdcall WmiSetSingleItemA(ptr str long long long ptr)
+@ stdcall WmiSetSingleItemW(ptr wstr long long long ptr)
 @ stub Wow64Win32ApiEntry
 @ stdcall WriteEncryptedFileRaw(ptr ptr ptr)
 @ stdcall -version=0x600+ RegLoadMUIStringW(ptr wstr wstr long ptr long wstr) kernelbase.RegLoadMUIStringW
