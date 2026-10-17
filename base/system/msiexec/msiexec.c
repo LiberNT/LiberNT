@@ -411,7 +411,14 @@ static int custom_action_server(const WCHAR *arg)
 {
     GUID guid, *thread_guid;
     DWORD64 thread64;
+#ifdef __REACTOS__
+    WCHAR buffer[48];
+    USHORT process_machine, native_machine;
+    IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)GetModuleHandleW(NULL);
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)((BYTE *)dos + dos->e_lfanew);
+#else
     WCHAR buffer[24];
+#endif
     HANDLE thread;
     HANDLE pipe;
     DWORD size;
@@ -424,6 +431,12 @@ static int custom_action_server(const WCHAR *arg)
         return 1;
     }
 
+#ifdef __REACTOS__
+    if (sizeof(void *) == 8 && IsWow64Process2(GetCurrentProcess(), &process_machine, &native_machine) &&
+        nt->FileHeader.Machine != native_machine)
+        swprintf(buffer, ARRAY_SIZE(buffer), L"\\\\.\\pipe\\msica_%x_64_%04x", client_pid, nt->FileHeader.Machine);
+    else
+#endif
     swprintf(buffer, ARRAY_SIZE(buffer), L"\\\\.\\pipe\\msica_%x_%d", client_pid, sizeof(void *) * 8);
     pipe = CreateFileW(buffer, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
     if (pipe == INVALID_HANDLE_VALUE)

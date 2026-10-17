@@ -372,6 +372,10 @@ static void MSI_FreePackage( MSIOBJECTHDR *arg)
         custom_stop_server(package->custom_server_32_process, package->custom_server_32_pipe);
     if (package->custom_server_64_process)
         custom_stop_server(package->custom_server_64_process, package->custom_server_64_pipe);
+#ifdef __REACTOS__
+    if (package->custom_server_emulated_process)
+        custom_stop_server(package->custom_server_emulated_process, package->custom_server_emulated_pipe);
+#endif
 
     if (package->delete_on_close) DeleteFileW( package->localfile );
     free( package->localfile );
@@ -1857,6 +1861,11 @@ static INT internal_ui_handler(MSIPACKAGE *package, INSTALLMESSAGE eMessageType,
         case 1:
             /* do nothing */
             return 0;
+#ifdef __REACTOS__
+        case 2:
+            msi_dialog_show_cancel(package, MSI_RecordGetInteger(record, 2) != 0);
+            return 1;
+#endif
         default:
             /* fall through */
             ;

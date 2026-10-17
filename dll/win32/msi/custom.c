@@ -406,6 +406,9 @@ typedef struct
     INT type;
     GUID guid;
     DWORD arch;
+#ifdef __REACTOS__
+    USHORT emulated_machine;
+#endif
 } custom_action_info;
 
 static void free_custom_action_data( custom_action_info *info )
@@ -610,22 +613,107 @@ static HANDLE get_admin_token(void)
     return linked.LinkedToken;
 }
 
+#ifdef __REACTOS__
+static USHORT get_image_machine( const WCHAR *name )
+{
+    IMAGE_DOS_HEADER dos;
+    IMAGE_FILE_HEADER file;
+    DWORD signature, size;
+    USHORT machine = 0;
+    HANDLE hfile;
+
+    hfile = CreateFileW( name, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0 );
+    if (hfile == INVALID_HANDLE_VALUE)
+        return 0;
+    if (ReadFile( hfile, &dos, sizeof(dos), &size, NULL ) && size == sizeof(dos) &&
+        dos.e_magic == IMAGE_DOS_SIGNATURE &&
+        SetFilePointer( hfile, dos.e_lfanew, NULL, FILE_BEGIN ) != INVALID_SET_FILE_POINTER &&
+        ReadFile( hfile, &signature, sizeof(signature), &size, NULL ) && size == sizeof(signature) &&
+        signature == IMAGE_NT_SIGNATURE &&
+        ReadFile( hfile, &file, sizeof(file), &size, NULL ) && size == sizeof(file))
+    {
+        machine = file.Machine;
+    }
+    CloseHandle( hfile );
+    return machine;
+}
+
+static BOOL get_emulated_server_path( USHORT machine, WCHAR *path, DWORD count )
+{
+    UINT len;
+
+    if (machine != IMAGE_FILE_MACHINE_AMD64)
+        return FALSE;
+    len = GetSystemWindowsDirectoryW( path, count );
+    if (!len || len >= count - ARRAY_SIZE(L"\\System32\\amd64_msiexec.exe"))
+        return FALSE;
+    lstrcatW( path, L"\\System32\\amd64_msiexec.exe" );
+    return TRUE;
+}
+
+static USHORT get_emulated_server_machine( const WCHAR *name, DWORD arch )
+{
+    USHORT process_machine, native_machine, machine;
+    MACHINE_ATTRIBUTES attributes;
+    WCHAR path[MAX_PATH];
+    DWORD attrs;
+    void *cookie;
+
+    if (arch != SCS_64BIT_BINARY ||
+        !IsWow64Process2( GetCurrentProcess(), &process_machine, &native_machine ))
+        return 0;
+    machine = get_image_machine( name );
+    if (!machine || machine == native_machine)
+        return 0;
+    if (FAILED(GetMachineTypeAttributes( machine, &attributes )) || !(attributes & UserEnabled))
+        return 0;
+    if (!get_emulated_server_path( machine, path, ARRAY_SIZE(path) ))
+        return 0;
+    if (is_wow64 && !Wow64DisableWow64FsRedirection( &cookie ))
+        return 0;
+    attrs = GetFileAttributesW( path );
+    if (is_wow64)
+        Wow64RevertWow64FsRedirection( cookie );
+    return attrs != INVALID_FILE_ATTRIBUTES ? machine : 0;
+}
+
+static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch, USHORT emulated_machine)
+#else
 static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch)
+#endif
 {
     WCHAR path[MAX_PATH], cmdline[MAX_PATH + 23];
     PROCESS_INFORMATION pi = {0};
     STARTUPINFOW si = {0};
+#ifdef __REACTOS__
+    WCHAR buffer[48];
+#else
     WCHAR buffer[24];
+#endif
     DWORD error, len;
     HANDLE token;
     void *cookie;
     HANDLE pipe;
     BOOL ret;
 
+#ifdef __REACTOS__
+    if (emulated_machine)
+    {
+        if (package->custom_server_emulated_process)
+            return ERROR_SUCCESS;
+    }
+    else
+#endif
     if ((arch == SCS_32BIT_BINARY && package->custom_server_32_process) ||
         (arch == SCS_64BIT_BINARY && package->custom_server_64_process))
         return ERROR_SUCCESS;
 
+#ifdef __REACTOS__
+    if (emulated_machine)
+        swprintf(buffer, ARRAY_SIZE(buffer), L"\\\\.\\pipe\\msica_%x_64_%04x",
+                 GetCurrentProcessId(), emulated_machine);
+    else
+#endif
     swprintf(buffer, ARRAY_SIZE(buffer), L"\\\\.\\pipe\\msica_%x_%d",
              GetCurrentProcessId(), arch == SCS_32BIT_BINARY ? 32 : 64);
     pipe = CreateNamedPipeW(buffer, PIPE_ACCESS_DUPLEX, 0, 1, sizeof(DWORD64),
@@ -649,8 +737,21 @@ static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch)
             return error;
         }
     }
+#ifdef __REACTOS__
+    else if (emulated_machine)
+    {
+        if (!get_emulated_server_path(emulated_machine, path, ARRAY_SIZE(path)))
+        {
+            CloseHandle(pipe);
+            return ERROR_INSUFFICIENT_BUFFER;
+        }
+    }
+#endif
     else
         wcscpy(path, sysdir);
+#ifdef __REACTOS__
+    if (!emulated_machine)
+#endif
     lstrcatW(path, L"\\msiexec.exe");
     swprintf(cmdline, ARRAY_SIZE(cmdline), L"%s -Embedding %d", path, GetCurrentProcessId());
 
@@ -700,6 +801,14 @@ static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch)
         return error;
     }
 
+#ifdef __REACTOS__
+    if (emulated_machine)
+    {
+        package->custom_server_emulated_process = pi.hProcess;
+        package->custom_server_emulated_pipe = pipe;
+    }
+    else
+#endif
     if (arch == SCS_32BIT_BINARY)
     {
         package->custom_server_32_process = pi.hProcess;
@@ -736,6 +845,14 @@ static DWORD WINAPI custom_client_thread(void *arg)
 
     CoInitializeEx(NULL, COINIT_MULTITHREADED); /* needed to marshal streams */
 
+#ifdef __REACTOS__
+    if (info->emulated_machine)
+    {
+        process = info->package->custom_server_emulated_process;
+        pipe = info->package->custom_server_emulated_pipe;
+    }
+    else
+#endif
     if (info->arch == SCS_32BIT_BINARY)
     {
         process = info->package->custom_server_32_process;
@@ -885,7 +1002,12 @@ static custom_action_info *do_msidbCustomActionTypeDll(
         return NULL;
     }
 
+#ifdef __REACTOS__
+    info->emulated_machine = get_emulated_server_machine(source, info->arch);
+    if (custom_start_server(package, info->arch, info->emulated_machine) != ERROR_SUCCESS)
+#else
     if (custom_start_server(package, info->arch) != ERROR_SUCCESS)
+#endif
     {
         free_custom_action_data( info );
         return NULL;

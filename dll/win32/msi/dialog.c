@@ -4419,6 +4419,19 @@ static INT event_do_dialog( MSIPACKAGE *package, const WCHAR *name, msi_dialog *
     else return 0;
 }
 
+#ifdef __REACTOS__
+void msi_dialog_show_cancel( MSIPACKAGE *package, BOOL show )
+{
+    struct control *control;
+
+    if (!package->dialog || !package->dialog->control_cancel)
+        return;
+    control = dialog_find_control( package->dialog, package->dialog->control_cancel );
+    if (control && control->hwnd)
+        ShowWindow( control->hwnd, show ? SW_SHOW : SW_HIDE );
+}
+#endif
+
 /* end a modal dialog box */
 static UINT event_end_dialog( msi_dialog *dialog, const WCHAR *argument )
 {

@@ -456,6 +456,10 @@ typedef struct tagMSIPACKAGE
     HANDLE custom_server_64_process;
     HANDLE custom_server_32_pipe;
     HANDLE custom_server_64_pipe;
+#ifdef __REACTOS__
+    HANDLE custom_server_emulated_process;
+    HANDLE custom_server_emulated_pipe;
+#endif
 
     LPWSTR PackagePath;
     LPWSTR ProductCode;
@@ -989,6 +993,9 @@ extern LONG msi_reg_set_subkey_val( HKEY hkey, LPCWSTR path, LPCWSTR name, LPCWS
 /* msi dialog interface */
 extern void msi_dialog_check_messages( HANDLE );
 extern void msi_dialog_destroy( msi_dialog* );
+#ifdef __REACTOS__
+extern void msi_dialog_show_cancel( MSIPACKAGE *, BOOL );
+#endif
 extern void msi_dialog_unregister_class( void );
 
 /* summary information */

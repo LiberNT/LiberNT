@@ -7,6 +7,7 @@ set(FEX_AMD64_COMMAND_TARGETS
     glgears
     glmark2
     glmark2_runner
+    msiexec
     wglgears_runner)
 
 set(FEX_AMD64_COMMAND_ALIASES)
