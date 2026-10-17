@@ -59,5 +59,8 @@ IDR_THUMBNAIL REGISTRY "res/rgs/thumbnail.rgs"
 IDR_SHELLFOLDERVIEWOC REGISTRY "res/rgs/shellfolderviewoc.rgs"
 IDR_CDBURN REGISTRY "res/rgs/cdburn.rgs"
 IDR_SHELL32TYPELIB REGISTRY "res/rgs/shell32typelib.rgs"
+// enumerableobjectcollection.rgs and destinationlist.rgs are licensed in their .license files; RGS does not accept comments.
+IDR_ENUMERABLEOBJECTCOLLECTION REGISTRY "res/rgs/enumerableobjectcollection.rgs"
+IDR_DESTINATIONLIST REGISTRY "res/rgs/destinationlist.rgs"
 /* Derived from Wine 11.14 shell32_classes.idl, Copyright 2011 Alexandre Julliard, LGPL-2.1-or-later. */
 IDR_WINECLASSES REGISTRY "res/rgs/wineclasses.rgs"
