@@ -19,10 +19,10 @@ list(APPEND INF_FILES
     machine.inf
     monitor.inf
     msmouse.inf
+    msports.inf
     ndisuio.inf
     NET_NIC.inf
     nettcpip.inf
-    ports.inf
     scsi.inf
     shortcuts.inf
     unknown.inf

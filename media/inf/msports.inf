@@ -1,4 +1,4 @@
-; PORTS.INF
+; MSPORTS.INF
 
 ; Installation file for communication ports
 
@@ -96,6 +96,44 @@ StartType     = 3
 ErrorControl  = 1
 ServiceBinary = %12%\serenum.sys
 LoadOrderGroup = PNP Filter
+
+[ComPort.NT]
+CopyFiles = ComPort_CopyFiles.NT
+AddReg = ComPort.AddReg, ComPort.NT.AddReg
+
+[ComPort.NT.HW]
+AddReg = ComPort.NT.HW.AddReg
+
+[ComPort.AddReg]
+HKR, , "PortSubClass", 1, 01
+
+[ComPort.NT.AddReg]
+HKR, , "EnumPropPages32", 0, "msports.dll,SerialPortPropPageProvider"
+
+[ComPort.NT.HW.AddReg]
+HKR, , "UpperFilters", 0x00010000, "serenum"
+
+[ComPort.NT.Services]
+AddService = serial, 0x00000002, serial_Service_Inst
+AddService = serenum, , serenum_Service_Inst
+
+[Serial.NT]
+CopyFiles = Serial.NT.Copy
+
+[Serial.NT.Copy]
+serial.sys
+
+[Serial.NT.Services]
+AddService = serial, , serial_Service_Inst
+
+[SerialEnumerator.NT]
+CopyFiles = SerialEnumerator.NT.Copy
+
+[SerialEnumerator.NT.Copy]
+serenum.sys
+
+[SerialEnumerator.NT.Services]
+AddService = serenum, , serenum_Service_Inst
 
 ;-------------------------------- STRINGS -------------------------------
 

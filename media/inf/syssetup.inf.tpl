@@ -27,7 +27,7 @@ machine.inf
 monitor.inf
 msmouse.inf
 NET_NIC.inf
-ports.inf
+msports.inf
 scsi.inf
 unknown.inf
 usbport.inf
