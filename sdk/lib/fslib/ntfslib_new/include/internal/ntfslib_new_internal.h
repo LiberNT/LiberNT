@@ -123,6 +123,15 @@ NtfsAllocatePoolWithTag(_In_ POOL_TYPE PoolType,
 void
 NtfsFreePool(_In_ void* pObject);
 
+void
+NtfsInitializeMutex(_Out_ PFAST_MUTEX Mutex);
+
+void
+NtfsAcquireMutex(_Inout_ PFAST_MUTEX Mutex);
+
+void
+NtfsReleaseMutex(_Inout_ PFAST_MUTEX Mutex);
+
 BOOLEAN
 NtfsIsNameInExpression(_In_     PUNICODE_STRING Expression,
                        _In_     PUNICODE_STRING Name,

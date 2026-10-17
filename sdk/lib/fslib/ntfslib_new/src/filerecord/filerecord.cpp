@@ -20,7 +20,7 @@ FileRecord::FileRecord(_In_ PVolume DiskVolume,
     Data = NULL;
     if (DiskVolume && FileRecordSize >= sizeof(PUCHAR))
     {
-        ExAcquireFastMutex(&DiskVolume->RecordPoolMutex);
+        NtfsAcquireMutex(&DiskVolume->RecordPoolMutex);
         if (DiskVolume->RecordPoolHead &&
             DiskVolume->RecordPoolBufferSize == FileRecordSize)
         {
@@ -28,7 +28,7 @@ FileRecord::FileRecord(_In_ PVolume DiskVolume,
             DiskVolume->RecordPoolHead = *(PUCHAR*)Data;
             DiskVolume->RecordPoolCount--;
         }
-        ExReleaseFastMutex(&DiskVolume->RecordPoolMutex);
+        NtfsReleaseMutex(&DiskVolume->RecordPoolMutex);
     }
     if (!Data)
         Data = new(PagedPool, TAG_FILE_RECORD) UCHAR[FileRecordSize];
@@ -74,7 +74,7 @@ FileRecord::~FileRecord()
 
         if (DiskVolume && RecordBufferSize >= sizeof(PUCHAR))
         {
-            ExAcquireFastMutex(&DiskVolume->RecordPoolMutex);
+            NtfsAcquireMutex(&DiskVolume->RecordPoolMutex);
             if (DiskVolume->RecordPoolCount < 512 &&
                 (DiskVolume->RecordPoolCount == 0 ||
                  DiskVolume->RecordPoolBufferSize == RecordBufferSize))
@@ -85,7 +85,7 @@ FileRecord::~FileRecord()
                 DiskVolume->RecordPoolCount++;
                 Pooled = TRUE;
             }
-            ExReleaseFastMutex(&DiskVolume->RecordPoolMutex);
+            NtfsReleaseMutex(&DiskVolume->RecordPoolMutex);
         }
         if (!Pooled)
             delete[] Data;

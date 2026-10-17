@@ -261,7 +261,7 @@ NTSTATUS
 Volume::Initialize(_In_ PUCHAR BootSectorData,
                    _In_opt_ void* Context)
 {
-    ExInitializeFastMutex(&RecordPoolMutex);
+    NtfsInitializeMutex(&RecordPoolMutex);
 
     BootSector* PartitionBootSector;
     PVolumeInformationEx VolumeInfo;

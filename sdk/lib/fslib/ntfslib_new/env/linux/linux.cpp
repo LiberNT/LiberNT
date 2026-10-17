@@ -127,6 +127,24 @@ NtfsFreePool(void* Object)
     free(Object);
 }
 
+extern "C" void
+NtfsInitializeMutex(_Out_ PFAST_MUTEX Mutex)
+{
+    ExInitializeFastMutex(Mutex);
+}
+
+extern "C" void
+NtfsAcquireMutex(_Inout_ PFAST_MUTEX Mutex)
+{
+    ExAcquireFastMutex(Mutex);
+}
+
+extern "C" void
+NtfsReleaseMutex(_Inout_ PFAST_MUTEX Mutex)
+{
+    ExReleaseFastMutex(Mutex);
+}
+
 extern "C" NTSTATUS
 NtfsQuerySystemTime(_Out_ PULONGLONG NtfsTime)
 {

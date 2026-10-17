@@ -22,7 +22,7 @@ NtfsAcquireRecordScratch(_In_ PVolume DiskVolume, _In_ ULONG Size)
 
     if (DiskVolume && Size >= sizeof(PUCHAR))
     {
-        ExAcquireFastMutex(&DiskVolume->RecordPoolMutex);
+        NtfsAcquireMutex(&DiskVolume->RecordPoolMutex);
         if (DiskVolume->RecordPoolHead &&
             DiskVolume->RecordPoolBufferSize == Size)
         {
@@ -30,7 +30,7 @@ NtfsAcquireRecordScratch(_In_ PVolume DiskVolume, _In_ ULONG Size)
             DiskVolume->RecordPoolHead = *(PUCHAR*)Buffer;
             DiskVolume->RecordPoolCount--;
         }
-        ExReleaseFastMutex(&DiskVolume->RecordPoolMutex);
+        NtfsReleaseMutex(&DiskVolume->RecordPoolMutex);
     }
     if (!Buffer)
         Buffer = new(PagedPool, TAG_FILE_RECORD) UCHAR[Size];
@@ -47,7 +47,7 @@ NtfsReleaseRecordScratch(_In_ PVolume DiskVolume, _In_opt_ PUCHAR Buffer, _In_ U
         return;
     if (DiskVolume && Size >= sizeof(PUCHAR))
     {
-        ExAcquireFastMutex(&DiskVolume->RecordPoolMutex);
+        NtfsAcquireMutex(&DiskVolume->RecordPoolMutex);
         if (DiskVolume->RecordPoolCount < 512 &&
             (DiskVolume->RecordPoolCount == 0 ||
              DiskVolume->RecordPoolBufferSize == Size))
@@ -58,7 +58,7 @@ NtfsReleaseRecordScratch(_In_ PVolume DiskVolume, _In_opt_ PUCHAR Buffer, _In_ U
             DiskVolume->RecordPoolCount++;
             Pooled = TRUE;
         }
-        ExReleaseFastMutex(&DiskVolume->RecordPoolMutex);
+        NtfsReleaseMutex(&DiskVolume->RecordPoolMutex);
     }
     if (!Pooled)
         delete[] Buffer;

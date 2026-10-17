@@ -809,7 +809,7 @@ ScanAgain:
 
         /* Record-sized scratch comes from the volume's free list; a pool
          * round trip per create costs more than the sequence check. */
-        ExAcquireFastMutex(&DiskVolume->RecordPoolMutex);
+        NtfsAcquireMutex(&DiskVolume->RecordPoolMutex);
         if (DiskVolume->RecordPoolHead &&
             DiskVolume->RecordPoolBufferSize == FileRecordSize)
         {
@@ -817,7 +817,7 @@ ScanAgain:
             DiskVolume->RecordPoolHead = *(PUCHAR*)RawRecord;
             DiskVolume->RecordPoolCount--;
         }
-        ExReleaseFastMutex(&DiskVolume->RecordPoolMutex);
+        NtfsReleaseMutex(&DiskVolume->RecordPoolMutex);
         if (!RawRecord)
         {
             RawRecord = new(PagedPool, TAG_MFT) UCHAR[FileRecordSize];
@@ -853,7 +853,7 @@ ScanAgain:
         {
             BOOLEAN Pooled = FALSE;
 
-            ExAcquireFastMutex(&DiskVolume->RecordPoolMutex);
+            NtfsAcquireMutex(&DiskVolume->RecordPoolMutex);
             if (DiskVolume->RecordPoolCount < 512 &&
                 (DiskVolume->RecordPoolCount == 0 ||
                  DiskVolume->RecordPoolBufferSize == FileRecordSize))
@@ -864,7 +864,7 @@ ScanAgain:
                 DiskVolume->RecordPoolCount++;
                 Pooled = TRUE;
             }
-            ExReleaseFastMutex(&DiskVolume->RecordPoolMutex);
+            NtfsReleaseMutex(&DiskVolume->RecordPoolMutex);
             if (!Pooled)
                 delete[] RawRecord;
         }

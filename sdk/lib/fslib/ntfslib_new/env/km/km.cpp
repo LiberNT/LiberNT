@@ -28,6 +28,24 @@ void NtfsFreePool(void* pObject)
     ExFreePool(pObject);
 }
 
+void
+NtfsInitializeMutex(PFAST_MUTEX Mutex)
+{
+    ExInitializeFastMutex(Mutex);
+}
+
+void
+NtfsAcquireMutex(PFAST_MUTEX Mutex)
+{
+    ExAcquireFastMutex(Mutex);
+}
+
+void
+NtfsReleaseMutex(PFAST_MUTEX Mutex)
+{
+    ExReleaseFastMutex(Mutex);
+}
+
 unsigned long long
 NtfsQueryTicks(void)
 {
