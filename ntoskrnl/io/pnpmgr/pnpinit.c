@@ -20,19 +20,7 @@ INTERFACE_TYPE PnpDefaultInterfaceType;
 BOOLEAN PnPBootDriversLoaded = FALSE;
 BOOLEAN PnPBootDriversInitialized = FALSE;
 
-ARBITER_INSTANCE IopRootBusNumberArbiter;
-ARBITER_INSTANCE IopRootIrqArbiter;
-ARBITER_INSTANCE IopRootDmaArbiter;
-ARBITER_INSTANCE IopRootMemArbiter;
-ARBITER_INSTANCE IopRootPortArbiter;
-
 extern KEVENT PiEnumerationFinished;
-
-NTSTATUS NTAPI IopArbPortInitialize(VOID);
-NTSTATUS NTAPI IopArbMemInitialize(VOID);
-NTSTATUS NTAPI IopArbDmaInitialize(VOID);
-NTSTATUS NTAPI IopArbIrqInitialize(VOID);
-NTSTATUS NTAPI IopArbBusNumberInitialize(VOID);
 
 /* FUNCTIONS ******************************************************************/
 
@@ -42,49 +30,6 @@ IopDetermineDefaultInterfaceType(VOID)
 {
     /* FIXME: ReactOS doesn't support MicroChannel yet */
     return Isa;
-}
-
-NTSTATUS
-NTAPI
-IopInitializeArbiters(VOID)
-{
-    NTSTATUS Status;
-
-    Status = IopArbPortInitialize();
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("IopArbPortInitialize() return %X\n", Status);
-        return Status;
-    }
-
-    Status = IopArbMemInitialize();
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("IopArbMemInitialize() return %X\n", Status);
-        return Status;
-    }
-
-    Status = IopArbDmaInitialize();
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("IopArbDmaInitialize() return %X\n", Status);
-        return Status;
-    }
-
-    Status = IopArbIrqInitialize();
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("IopArbIrqInitialize() return %X\n", Status);
-        return Status;
-    }
-
-    Status = IopArbBusNumberInitialize();
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("IopArbBusNumberInitialize() return %X\n", Status);
-    }
-
-    return Status;
 }
 
 

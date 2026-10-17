@@ -692,6 +692,10 @@ IopInitializeSystemResourceMap(
 
 NTSTATUS
 NTAPI
+IopInitializeArbiters(VOID);
+
+NTSTATUS
+NTAPI
 IopFixupResourceListWithRequirements(IN PIO_RESOURCE_REQUIREMENTS_LIST RequirementsList, OUT PCM_RESOURCE_LIST *ResourceList, _In_opt_ PDEVICE_NODE DeviceNode);
 
 NTSTATUS

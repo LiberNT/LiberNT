@@ -18,7 +18,7 @@
 #include <ndk/halfuncs.h>
 #include <ndk/rtlfuncs.h>
 #include <ndk/vffuncs.h>
-#include <arbiter.h>
+#include <arblib.h>
 #include <cmreslist.h>
 
 //

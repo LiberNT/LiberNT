@@ -1,6 +1,6 @@
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/arbiter
+    ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/arblib
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
 
 list(APPEND SOURCE
@@ -47,7 +47,7 @@ add_library(pcix MODULE
     pci.rc)
 
 set_module_type(pcix kernelmodedriver)
-target_link_libraries(pcix arbiter)
+target_link_libraries(pcix arblib)
 if(MSVC)
     target_link_options(pcix PRIVATE /SECTION:.rsrc,!D)
 else()

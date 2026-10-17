@@ -164,7 +164,7 @@
 #include "hdl.h"
 #include "icif.h"
 #include "arch/intrin_i.h"
-#include <arbiter.h>
+#include <arblib.h>
 
 /*
  * Use IsPointerOffset to test whether a pointer should be interpreted as an offset

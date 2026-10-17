@@ -26,7 +26,7 @@ function(add_hal _halname)
         ${CMAKE_CURRENT_BINARY_DIR}/hal.def)
 
     if(${_halname} STREQUAL "hal")
-        target_link_libraries(${_halname} halcommon libcntpr setjmp arbiter fast486 ${PSEH_LIB})
+        target_link_libraries(${_halname} halcommon libcntpr setjmp arblib fast486 ${PSEH_LIB})
     else()
         target_link_libraries(${_halname} halcommon libcntpr setjmp fast486 ${PSEH_LIB})
     endif()
