@@ -4272,8 +4272,11 @@ RtlQueryTagHeap(IN PVOID HeapHandle,
                 IN BOOLEAN ResetCounters,
                 OUT PRTL_HEAP_TAG_INFO HeapTagInfo)
 {
-    /* TODO */
-    UNIMPLEMENTED;
+    UNREFERENCED_PARAMETER(HeapHandle);
+    UNREFERENCED_PARAMETER(Flags);
+    UNREFERENCED_PARAMETER(TagIndex);
+    UNREFERENCED_PARAMETER(ResetCounters);
+    UNREFERENCED_PARAMETER(HeapTagInfo);
     return NULL;
 }
 
@@ -4296,8 +4299,10 @@ RtlCreateTagHeap(_In_ HANDLE HeapHandle,
                  _In_opt_ PWSTR TagName,
                  _In_ PWSTR TagSubName)
 {
-    /* TODO */
-    UNIMPLEMENTED;
+    UNREFERENCED_PARAMETER(HeapHandle);
+    UNREFERENCED_PARAMETER(Flags);
+    UNREFERENCED_PARAMETER(TagName);
+    UNREFERENCED_PARAMETER(TagSubName);
     return 0;
 }
 
