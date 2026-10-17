@@ -2035,7 +2035,8 @@ PnpcpuDeclareCapabilities(
     Status = PnpcpuEvaluateCapabilities(DeviceExtension, InputBuffer, sizeof(InputStorage), &Errors);
     if (NT_SUCCESS(Status))
     {
-        DPRINT1("PNPCPU: _OSC capabilities 0x%lx errors 0x%lx\n", Capabilities, Errors);
+        if (Errors)
+            DPRINT1("PNPCPU: _OSC capabilities 0x%lx errors 0x%lx\n", Capabilities, Errors);
         return;
     }
     if (Status != STATUS_OBJECT_NAME_NOT_FOUND)
