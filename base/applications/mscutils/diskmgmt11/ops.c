@@ -41,9 +41,12 @@ typedef struct _DU_WORK
     BOOL FormatOk;
     DWORD Error;
     UINT ErrorText;
+    LONG Refs;
+    volatile LONG Cancel;
 } DU_WORK, *PDU_WORK;
 
 static PDU_WORK DuCurrentWork;
+static volatile LONG DuWorkActive;
 
 static PDU_DISK
 SelDisk(
@@ -409,13 +412,13 @@ FindVolume(
 
 static BOOL
 WaitForRoot(
-    _In_ PCWSTR Root)
+    _In_ PDU_WORK Work)
 {
     ULONG Attempt;
 
-    for (Attempt = 0; Attempt < 60; Attempt++)
+    for (Attempt = 0; Attempt < 60 && !Work->Cancel; Attempt++)
     {
-        UINT Type = GetDriveTypeW(Root);
+        UINT Type = GetDriveTypeW(Work->Root);
 
         if (Type != DRIVE_UNKNOWN && Type != DRIVE_NO_ROOT_DIR)
             return TRUE;
@@ -435,6 +438,8 @@ DuFmifsCallback(
     UNREFERENCED_PARAMETER(SubAction);
     if (!Work)
         return TRUE;
+    if (Work->Cancel)
+        return FALSE;
     switch (Command)
     {
         case PROGRESS:
@@ -456,7 +461,8 @@ DuFmifsCallback(
             if (Text)
             {
                 MultiByteToWideChar(CP_OEMCP, 0, Output->Output, -1, Text, Length);
-                PostMessageW(Work->hDlg, WM_DU_WORK_OUTPUT, 0, (LPARAM)Text);
+                if (!PostMessageW(Work->hDlg, WM_DU_WORK_OUTPUT, 0, (LPARAM)Text))
+                    HeapFree(GetProcessHeap(), 0, Text);
             }
             break;
         }
@@ -550,9 +556,9 @@ WorkAcquireRoot(
         Work->TempLetter = !Wanted;
     }
     StringCchPrintfW(Work->Root, ARRAYSIZE(Work->Root), L"%c:\\", towupper(Letter));
-    if (!WaitForRoot(Work->Root))
+    if (!WaitForRoot(Work))
     {
-        Work->Error = ERROR_NOT_READY;
+        Work->Error = Work->Cancel ? ERROR_CANCELLED : ERROR_NOT_READY;
         Work->ErrorText = IDS_ERR_LETTER;
         return FALSE;
     }
@@ -609,6 +615,14 @@ WorkCreate(
         Work->TempLetter = TRUE;
     WorkReleaseRoot(Work);
     return Ok;
+}
+
+static VOID
+WorkRelease(
+    _In_ PDU_WORK Work)
+{
+    if (!InterlockedDecrement(&Work->Refs))
+        HeapFree(GetProcessHeap(), 0, Work);
 }
 
 static DWORD WINAPI
@@ -746,7 +760,10 @@ WorkThread(
         }
     }
     CoUninitialize();
-    PostMessageW(Work->hDlg, WM_DU_WORK_DONE, Ok, 0);
+    if (!Work->Cancel)
+        PostMessageW(Work->hDlg, WM_DU_WORK_DONE, Ok, 0);
+    InterlockedDecrement(&DuWorkActive);
+    WorkRelease(Work);
     return 0;
 }
 
@@ -794,11 +811,14 @@ WorkDlgProc(
             SetWindowTextW(hDlg, Text);
             SetDlgItemTextW(hDlg, IDC_WORK_TEXT, Text);
             SendDlgItemMessageW(hDlg, IDC_WORK_PROGRESS, PBM_SETMARQUEE, TRUE, 30);
-            EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
+            InterlockedIncrement(&Work->Refs);
+            InterlockedIncrement(&DuWorkActive);
             Thread = CreateThread(NULL, 0, WorkThread, Work, 0, NULL);
             if (!Thread)
             {
                 Work->Error = GetLastError();
+                InterlockedDecrement(&DuWorkActive);
+                InterlockedDecrement(&Work->Refs);
                 EndDialog(hDlg, FALSE);
                 return TRUE;
             }
@@ -840,21 +860,41 @@ WorkDlgProc(
                 EndDialog(hDlg, wParam);
                 return TRUE;
             }
-            EnableWindow(GetDlgItem(hDlg, IDOK), TRUE);
-            SetFocus(GetDlgItem(hDlg, IDOK));
+            DuLoadString(IDS_CLOSE, Text, ARRAYSIZE(Text));
+            SetDlgItemTextW(hDlg, IDCANCEL, Text);
+            SendMessageW(hDlg, DM_SETDEFID, IDCANCEL, 0);
+            SetFocus(GetDlgItem(hDlg, IDCANCEL));
             SetWindowLongPtrW(hDlg, GWLP_USERDATA, 1 + wParam);
             return TRUE;
         }
 
         case WM_COMMAND:
-            if ((LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) && GetWindowLongPtrW(hDlg, GWLP_USERDATA))
-                EndDialog(hDlg, GetWindowLongPtrW(hDlg, GWLP_USERDATA) - 1);
+            if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
+            {
+                if (GetWindowLongPtrW(hDlg, GWLP_USERDATA))
+                {
+                    EndDialog(hDlg, GetWindowLongPtrW(hDlg, GWLP_USERDATA) - 1);
+                }
+                else if (LOWORD(wParam) == IDCANCEL && Work->Kind == DuWorkCheck)
+                {
+                    InterlockedExchange(&Work->Cancel, TRUE);
+                    EndDialog(hDlg, FALSE);
+                }
+            }
             return TRUE;
 
         case WM_CLOSE:
-            if (GetWindowLongPtrW(hDlg, GWLP_USERDATA))
-                EndDialog(hDlg, GetWindowLongPtrW(hDlg, GWLP_USERDATA) - 1);
+            SendMessageW(hDlg, WM_COMMAND, IDCANCEL, 0);
             return TRUE;
+
+        case WM_DESTROY:
+        {
+            MSG Msg;
+
+            while (PeekMessageW(&Msg, hDlg, WM_DU_WORK_OUTPUT, WM_DU_WORK_OUTPUT, PM_REMOVE))
+                HeapFree(GetProcessHeap(), 0, (PVOID)Msg.lParam);
+            return FALSE;
+        }
     }
     return FALSE;
 }
@@ -862,14 +902,31 @@ WorkDlgProc(
 static BOOL
 RunWork(
     _In_ HWND hwnd,
-    _In_ PDU_WORK Work)
+    _In_ const DU_WORK *Request)
 {
-    BOOL Ok = (BOOL)DialogBoxParamW(g_hInstance,
-                                    MAKEINTRESOURCEW(Work->Kind == DuWorkCheck ? IDD_CHECK : IDD_WORK),
-                                    hwnd, WorkDlgProc, (LPARAM)Work);
+    PDU_WORK Work;
+    BOOL Ok;
 
-    if (!Ok && Work->ErrorText && Work->Kind != DuWorkCheck)
+    if (DuWorkActive)
+    {
+        DuError(hwnd, IDS_ERR_BUSY, ERROR_BUSY);
+        return FALSE;
+    }
+    Work = HeapAlloc(GetProcessHeap(), 0, sizeof(*Work));
+    if (!Work)
+    {
+        DuError(hwnd, IDS_STATUS_FAILED, ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+    *Work = *Request;
+    Work->Refs = 1;
+    Work->Cancel = FALSE;
+    Ok = (BOOL)DialogBoxParamW(g_hInstance,
+                               MAKEINTRESOURCEW(Work->Kind == DuWorkCheck ? IDD_CHECK : IDD_WORK),
+                               hwnd, WorkDlgProc, (LPARAM)Work);
+    if (!Ok && Work->Kind != DuWorkCheck && Work->ErrorText)
         DuError(hwnd, Work->ErrorText, Work->Error);
+    WorkRelease(Work);
     return Ok;
 }
 

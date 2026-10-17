@@ -84,7 +84,7 @@ BEGIN
     LTEXT "", IDC_WORK_STATUS, 12, 24, 296, 10
     CONTROL "", IDC_WORK_PROGRESS, PROGRESS_CLASSA, PBS_MARQUEE, 12, 38, 296, 10
     EDITTEXT IDC_WORK_OUTPUT, 12, 54, 296, 140, ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL
-    DEFPUSHBUTTON "Done", IDOK, 250, 202, 58, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 250, 202, 58, 14
 END
 
 STRINGTABLE
@@ -170,4 +170,6 @@ BEGIN
     IDS_ERR_RESIZE "The volume could not be resized."
     IDS_ERR_NOROOM "This volume cannot be resized: there is no space to free and no free space after it."
     IDS_ERR_INUSE "The volume is in use. Close the programs using it and try again."
+    IDS_ERR_BUSY "The cancelled check is still stopping. Try again in a moment."
+    IDS_CLOSE "Close"
 END

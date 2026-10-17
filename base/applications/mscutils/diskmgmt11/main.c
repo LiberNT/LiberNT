@@ -53,11 +53,15 @@ typedef struct _DU_MAIN
     HWND InfoLabel[DU_INFO_MAX];
     HWND InfoValue[DU_INFO_MAX];
     INT InfoCount;
+    INT InfoLabelWidth;
+    INT InfoValueWidth[DU_INFO_MAX];
     INT ButtonWidth[ARRAYSIZE(Commands)];
     HIMAGELIST SmallImages;
     HFONT Font;
     HFONT TitleFont;
     INT Dpi;
+    INT LineHeight;
+    INT TitleHeight;
     INT SidebarWidth;
     INT Corner;
     BOOL ShowParts;
@@ -261,9 +265,13 @@ SetInfo(
     _In_ INT Count)
 {
     WCHAR Name[128];
+    HDC hdc = GetDC(Main.hwnd);
+    HGDIOBJ Old = SelectObject(hdc, Main.Font);
+    SIZE Size;
     INT i;
 
     Main.InfoCount = 0;
+    Main.InfoLabelWidth = 0;
     for (i = 0; i < Count && Main.InfoCount < DU_INFO_MAX; i++)
     {
         if (!Values[i][0])
@@ -271,8 +279,14 @@ SetInfo(
         DuLoadString(Names[i], Name, ARRAYSIZE(Name));
         SetWindowTextW(Main.InfoLabel[Main.InfoCount], Name);
         SetWindowTextW(Main.InfoValue[Main.InfoCount], Values[i]);
+        if (GetTextExtentPoint32W(hdc, Name, lstrlenW(Name), &Size))
+            Main.InfoLabelWidth = max(Main.InfoLabelWidth, Size.cx);
+        Main.InfoValueWidth[Main.InfoCount] =
+            GetTextExtentPoint32W(hdc, Values[i], lstrlenW(Values[i]), &Size) ? Size.cx : 0;
         Main.InfoCount++;
     }
+    SelectObject(hdc, Old);
+    ReleaseDC(Main.hwnd, hdc);
 }
 
 static VOID
@@ -480,7 +494,9 @@ static VOID
 Layout(VOID)
 {
     RECT rc;
-    INT Left, Right, Width, x, y, i, Rows, Height, Half, Label, Row, PerColumn;
+    INT Left, Right, Width, x, y, i, Rows, Height, Label, Row, PerColumn, Second;
+    UINT Flags = SWP_NOZORDER | SWP_NOACTIVATE;
+    UINT TextFlags = Flags | SWP_NOCOPYBITS;
     HDWP Defer;
 
     if (!Main.Tree)
@@ -489,19 +505,19 @@ Layout(VOID)
     Left = Main.SidebarWidth + S(14);
     Right = rc.right - S(16);
     Width = max(Right - Left, S(200));
-    Row = S(18);
+    Row = Main.LineHeight + S(2);
     PerColumn = (Main.InfoCount + 1) / 2;
 
     Defer = BeginDeferWindowPos(40);
-    Defer = DeferWindowPos(Defer, Main.Tree, NULL, S(8), S(8), Main.SidebarWidth - S(12), rc.bottom - S(16), SWP_NOZORDER | SWP_NOACTIVATE);
+    Defer = DeferWindowPos(Defer, Main.Tree, NULL, S(8), S(8), Main.SidebarWidth - S(12), rc.bottom - S(16), Flags);
 
     y = Main.Corner + S(8);
-    Defer = DeferWindowPos(Defer, Main.Title, NULL, Left, y, Width, S(22), SWP_NOZORDER | SWP_NOACTIVATE);
-    y += S(24);
-    Defer = DeferWindowPos(Defer, Main.Sub1, NULL, Left, y, Width, S(16), SWP_NOZORDER | SWP_NOACTIVATE);
-    y += S(16);
-    Defer = DeferWindowPos(Defer, Main.Sub2, NULL, Left, y, Width, S(16), SWP_NOZORDER | SWP_NOACTIVATE);
-    y += S(26);
+    Defer = DeferWindowPos(Defer, Main.Title, NULL, Left, y, Width, Main.TitleHeight, TextFlags);
+    y += Main.TitleHeight + S(2);
+    Defer = DeferWindowPos(Defer, Main.Sub1, NULL, Left, y, Width, Main.LineHeight, TextFlags);
+    y += Main.LineHeight;
+    Defer = DeferWindowPos(Defer, Main.Sub2, NULL, Left, y, Width, Main.LineHeight, TextFlags);
+    y += Main.LineHeight + S(10);
 
     x = Left;
     for (i = 0; i < (INT)ARRAYSIZE(Commands); i++)
@@ -510,7 +526,7 @@ Layout(VOID)
 
         if (Commands[i].Command == IDC_REFRESH)
             x = Right - w;
-        Defer = DeferWindowPos(Defer, GetDlgItem(Main.hwnd, Commands[i].Command), NULL, x, y, w, S(23), SWP_NOZORDER | SWP_NOACTIVATE);
+        Defer = DeferWindowPos(Defer, GetDlgItem(Main.hwnd, Commands[i].Command), NULL, x, y, w, S(23), Flags);
         x += w + S(6);
     }
     y += S(23) + S(10);
@@ -520,27 +536,31 @@ Layout(VOID)
         Rows = max(ListView_GetItemCount(Main.Parts), 1);
         Height = ListHeaderHeight() + Rows * ListRowHeight() + S(6);
         Height = min(Height, max(S(80), rc.bottom - y - PerColumn * Row - S(24)));
-        Defer = DeferWindowPos(Defer, Main.Parts, NULL, Left, y, Width, Height, SWP_NOZORDER | SWP_NOACTIVATE);
+        Defer = DeferWindowPos(Defer, Main.Parts, NULL, Left, y, Width, Height, Flags);
         y += Height + S(10);
     }
 
     if (Main.ShowUsage)
     {
-        Defer = DeferWindowPos(Defer, Main.Usage, NULL, Left, y, Width, S(12), SWP_NOZORDER | SWP_NOACTIVATE);
-        Defer = DeferWindowPos(Defer, Main.UsageText, NULL, Left, y + S(16), Width, S(16), SWP_NOZORDER | SWP_NOACTIVATE);
-        y += S(40);
+        Defer = DeferWindowPos(Defer, Main.Usage, NULL, Left, y, Width, S(12), Flags);
+        Defer = DeferWindowPos(Defer, Main.UsageText, NULL, Left, y + S(16), Width, Main.LineHeight, TextFlags);
+        y += S(16) + Main.LineHeight + S(8);
     }
 
-    Half = (Width - S(24)) / 2;
-    Label = S(100);
+    Label = Main.InfoLabelWidth + S(12);
+    Second = 0;
+    for (i = 0; i < PerColumn; i++)
+        Second = max(Second, Main.InfoValueWidth[i]);
+    Second = min(Left + Label + Second + S(32), Left + Width / 2);
     for (i = 0; i < Main.InfoCount; i++)
     {
         INT Top = y + (i % PerColumn) * Row;
-        INT Column = (i < PerColumn) ? Left : Left + Half + S(24);
-        INT ColumnWidth = (i < PerColumn) ? Half : Width - Half - S(24);
+        INT Column = (i < PerColumn) ? Left : Second;
+        INT Limit = (i < PerColumn) ? Second - S(16) : Right;
+        INT Value = max(0, min(Main.InfoValueWidth[i] + S(2), Limit - Column - Label));
 
-        Defer = DeferWindowPos(Defer, Main.InfoLabel[i], NULL, Column, Top, Label, Row, SWP_NOZORDER | SWP_NOACTIVATE);
-        Defer = DeferWindowPos(Defer, Main.InfoValue[i], NULL, Column + Label, Top, ColumnWidth - Label, Row, SWP_NOZORDER | SWP_NOACTIVATE);
+        Defer = DeferWindowPos(Defer, Main.InfoLabel[i], NULL, Column, Top, Main.InfoLabelWidth + S(2), Main.LineHeight, TextFlags);
+        Defer = DeferWindowPos(Defer, Main.InfoValue[i], NULL, Column + Label, Top, Value, Main.LineHeight, TextFlags);
     }
     EndDeferWindowPos(Defer);
 
@@ -871,16 +891,23 @@ OnCreate(
 {
     MARGINS Margins = { 0, 0, 0, 0 };
     SHFILEINFOW File;
+    TEXTMETRICW Metrics;
     HDC hdc = GetDC(hwnd);
+    HGDIOBJ Old;
     INT i;
 
     Main.hwnd = hwnd;
     Main.Dpi = GetDeviceCaps(hdc, LOGPIXELSX);
-    ReleaseDC(hwnd, hdc);
     Main.SidebarWidth = S(220);
     Main.Corner = S(8);
     Main.Font = CreateUiFont(0, FW_NORMAL);
     Main.TitleFont = CreateUiFont(12, FW_BOLD);
+    Old = SelectObject(hdc, Main.Font);
+    Main.LineHeight = GetTextMetricsW(hdc, &Metrics) ? Metrics.tmHeight + Metrics.tmExternalLeading : S(16);
+    SelectObject(hdc, Main.TitleFont);
+    Main.TitleHeight = GetTextMetricsW(hdc, &Metrics) ? Metrics.tmHeight + Metrics.tmExternalLeading : S(22);
+    SelectObject(hdc, Old);
+    ReleaseDC(hwnd, hdc);
 
     Margins.cxLeftWidth = Main.SidebarWidth + Main.Corner;
     Margins.cyTopHeight = Main.Corner;

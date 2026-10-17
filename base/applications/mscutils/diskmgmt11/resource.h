@@ -70,6 +70,7 @@
 #define IDS_ERR_NOVOLUME         2019
 #define IDS_ERR_PARTITION        2020
 #define IDS_ERR_RESIZE           2021
+#define IDS_ERR_BUSY             2022
 #define IDS_INFO_DEVICE          2025
 #define IDS_INFO_DISKID          2026
 #define IDS_INFO_MOUNT           2029
@@ -130,3 +131,4 @@
 #define IDS_COL_CAPACITY         2103
 #define IDS_COL_FREE             2104
 #define IDS_USAGE                2105
+#define IDS_CLOSE                2106
