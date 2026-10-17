@@ -792,6 +792,21 @@ MMixerInitialize(
         return MM_STATUS_INVALID_PARAMETER;
     }
 
+    MixerList = (PMIXER_LIST)MixerContext->MixerContext;
+    if (MixerList)
+    {
+        for (Entry = MixerList->MixerData.Flink; Entry != &MixerList->MixerData; Entry = Entry->Flink)
+        {
+            MixerData = (LPMIXER_DATA)CONTAINING_RECORD(Entry, MIXER_DATA, Entry);
+            if (MixerData->hDevice)
+                MixerContext->Close(MixerData->hDevice);
+            if (MixerData->hDeviceInterfaceKey)
+                MixerContext->CloseKey(MixerData->hDeviceInterfaceKey);
+            MixerData->hDevice = NULL;
+            MixerData->hDeviceInterfaceKey = NULL;
+        }
+    }
+
     /* allocate a mixer list */
     MixerList = (PMIXER_LIST)MixerContext->Alloc(sizeof(MIXER_LIST));
     if (!MixerList)
