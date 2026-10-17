@@ -3358,6 +3358,237 @@ static NTSTATUS screen_buffer_ioctl( struct screen_buffer *screen_buffer, unsign
     }
 }
 
+#ifdef __REACTOS__
+static WCHAR *alias_string( const WCHAR *str, size_t size, BOOL lower )
+{
+    size_t count = size / sizeof(WCHAR);
+    WCHAR *copy;
+
+    if (!(copy = malloc( (count + 1) * sizeof(WCHAR) ))) return NULL;
+    memcpy( copy, str, count * sizeof(WCHAR) );
+    copy[count] = 0;
+    if (lower && count) CharLowerBuffW( copy, count );
+    return copy;
+}
+
+static struct console_alias_exe *find_alias_exe( struct console *console, const WCHAR *name )
+{
+    struct console_alias_exe *exe;
+
+    for (exe = console->alias_exes; exe; exe = exe->next)
+        if (!wcscmp( exe->name, name )) return exe;
+    return NULL;
+}
+
+static struct console_alias **find_alias( struct console_alias_exe *exe, const WCHAR *source )
+{
+    struct console_alias **alias;
+
+    for (alias = &exe->aliases; *alias; alias = &(*alias)->next)
+        if (!wcscmp( (*alias)->source, source )) break;
+    return alias;
+}
+
+static NTSTATUS get_alias_strings( const void *in_data, size_t in_size, WCHAR **exe_name, WCHAR **source,
+                                   WCHAR **target )
+{
+    const struct condrv_alias_params *params = in_data;
+    const WCHAR *data;
+    size_t header = offsetof( struct condrv_alias_params, buffer );
+
+    *exe_name = *source = NULL;
+    if (target) *target = NULL;
+    if (in_size < header) return STATUS_INVALID_PARAMETER;
+    if ((params->exe_size | params->source_size | params->target_size) & 1 ||
+        (size_t)params->exe_size + params->source_size + params->target_size > in_size - header ||
+        !params->exe_size)
+        return STATUS_INVALID_PARAMETER;
+
+    data = params->buffer;
+    *exe_name = alias_string( data, params->exe_size, TRUE );
+    *source = alias_string( data + params->exe_size / sizeof(WCHAR), params->source_size, TRUE );
+    if (target && params->target_size)
+        *target = alias_string( data + (params->exe_size + params->source_size) / sizeof(WCHAR),
+                                params->target_size, FALSE );
+    if (!*exe_name || !*source || (target && params->target_size && !*target))
+    {
+        free( *exe_name );
+        free( *source );
+        if (target) free( *target );
+        return STATUS_NO_MEMORY;
+    }
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS add_console_alias( struct console *console, const void *in_data, size_t in_size )
+{
+    struct console_alias_exe *exe;
+    struct console_alias **link, *alias;
+    WCHAR *exe_name, *source, *target;
+    NTSTATUS status;
+
+    if ((status = get_alias_strings( in_data, in_size, &exe_name, &source, &target ))) return status;
+    if (!*source)
+    {
+        status = STATUS_INVALID_PARAMETER;
+        goto done;
+    }
+
+    if (!(exe = find_alias_exe( console, exe_name )))
+    {
+        struct console_alias_exe **tail;
+
+        if (!target) goto done;
+        if (!(exe = calloc( 1, sizeof(*exe) )))
+        {
+            status = STATUS_NO_MEMORY;
+            goto done;
+        }
+        exe->name = exe_name;
+        exe_name = NULL;
+        for (tail = &console->alias_exes; *tail; tail = &(*tail)->next);
+        *tail = exe;
+    }
+
+    link = find_alias( exe, source );
+    if (!target)
+    {
+        if ((alias = *link))
+        {
+            *link = alias->next;
+            free( alias->source );
+            free( alias->target );
+            free( alias );
+        }
+        goto done;
+    }
+
+    if ((alias = *link))
+    {
+        free( alias->target );
+        alias->target = target;
+        target = NULL;
+        goto done;
+    }
+    if (!(alias = malloc( sizeof(*alias) )))
+    {
+        status = STATUS_NO_MEMORY;
+        goto done;
+    }
+    alias->next = NULL;
+    alias->source = source;
+    alias->target = target;
+    source = target = NULL;
+    *link = alias;
+
+done:
+    free( exe_name );
+    free( source );
+    free( target );
+    return status;
+}
+
+static NTSTATUS write_alias_result( const WCHAR *data, size_t size, size_t *out_size )
+{
+    size_t header = offsetof( struct condrv_alias_result, buffer );
+    struct condrv_alias_result *result;
+    size_t copy;
+
+    if (*out_size < header) return STATUS_INVALID_PARAMETER;
+    copy = min( size, *out_size - header );
+    if (!(result = alloc_ioctl_buffer( header + copy ))) return STATUS_NO_MEMORY;
+    result->size = size;
+    if (copy) memcpy( result->buffer, data, copy );
+    *out_size = header + copy;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS get_console_alias( struct console *console, const void *in_data, size_t in_size,
+                                   size_t *out_size )
+{
+    struct console_alias_exe *exe;
+    struct console_alias *alias = NULL;
+    WCHAR *exe_name, *source;
+    NTSTATUS status;
+
+    if ((status = get_alias_strings( in_data, in_size, &exe_name, &source, NULL ))) return status;
+    if ((exe = find_alias_exe( console, exe_name ))) alias = *find_alias( exe, source );
+    free( exe_name );
+    free( source );
+
+    if (!alias)
+    {
+        size_t header = offsetof( struct condrv_alias_result, buffer );
+        struct condrv_alias_result *result;
+
+        if (*out_size < header || !(result = alloc_ioctl_buffer( header ))) return STATUS_INVALID_PARAMETER;
+        result->size = ~0u;
+        *out_size = header;
+        return STATUS_SUCCESS;
+    }
+    return write_alias_result( alias->target, wcslen( alias->target ) * sizeof(WCHAR), out_size );
+}
+
+static NTSTATUS get_console_aliases( struct console *console, const void *in_data, size_t in_size,
+                                     size_t *out_size )
+{
+    struct console_alias_exe *exe;
+    struct console_alias *alias;
+    WCHAR *exe_name, *source, *list, *pos;
+    size_t size = 0;
+    NTSTATUS status;
+
+    if ((status = get_alias_strings( in_data, in_size, &exe_name, &source, NULL ))) return status;
+    exe = find_alias_exe( console, exe_name );
+    free( exe_name );
+    free( source );
+
+    if (exe)
+        for (alias = exe->aliases; alias; alias = alias->next)
+            size += (wcslen( alias->source ) + 1 + wcslen( alias->target ) + 1) * sizeof(WCHAR);
+    if (!size) return write_alias_result( NULL, 0, out_size );
+    if (!(list = malloc( size ))) return STATUS_NO_MEMORY;
+
+    for (pos = list, alias = exe->aliases; alias; alias = alias->next)
+    {
+        size_t len = wcslen( alias->source );
+        memcpy( pos, alias->source, len * sizeof(WCHAR) );
+        pos += len;
+        *pos++ = '=';
+        len = wcslen( alias->target );
+        memcpy( pos, alias->target, len * sizeof(WCHAR) );
+        pos += len;
+        *pos++ = 0;
+    }
+    status = write_alias_result( list, size, out_size );
+    free( list );
+    return status;
+}
+
+static NTSTATUS get_console_alias_exes( struct console *console, size_t *out_size )
+{
+    struct console_alias_exe *exe;
+    WCHAR *list, *pos;
+    size_t size = 0;
+    NTSTATUS status;
+
+    for (exe = console->alias_exes; exe; exe = exe->next)
+        size += (wcslen( exe->name ) + 1) * sizeof(WCHAR);
+    if (!size) return write_alias_result( NULL, 0, out_size );
+    if (!(list = malloc( size ))) return STATUS_NO_MEMORY;
+
+    for (pos = list, exe = console->alias_exes; exe; exe = exe->next)
+    {
+        size_t len = wcslen( exe->name ) + 1;
+        memcpy( pos, exe->name, len * sizeof(WCHAR) );
+        pos += len;
+    }
+    status = write_alias_result( list, size, out_size );
+    free( list );
+    return status;
+}
+#endif
+
 static NTSTATUS console_input_ioctl( struct console *console, unsigned int code, const void *in_data,
                                      size_t in_size, size_t *out_size )
 {
@@ -3533,6 +3764,22 @@ static NTSTATUS console_input_ioctl( struct console *console, unsigned int code,
         TRACE( "flush\n" );
         console->record_count = 0;
         return STATUS_SUCCESS;
+
+#ifdef __REACTOS__
+    case IOCTL_CONDRV_ADD_ALIAS:
+        if (*out_size) return STATUS_INVALID_PARAMETER;
+        return add_console_alias( console, in_data, in_size );
+
+    case IOCTL_CONDRV_GET_ALIAS:
+        return get_console_alias( console, in_data, in_size, out_size );
+
+    case IOCTL_CONDRV_GET_ALIASES:
+        return get_console_aliases( console, in_data, in_size, out_size );
+
+    case IOCTL_CONDRV_GET_ALIAS_EXES:
+        if (in_size) return STATUS_INVALID_PARAMETER;
+        return get_console_alias_exes( console, out_size );
+#endif
 
     default:
         WARN( "unsupported ioctl %x\n", code );

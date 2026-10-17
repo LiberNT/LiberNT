@@ -46,6 +46,12 @@
 #define IOCTL_CONDRV_GET_PROCESS_LIST      CTL_CODE(FILE_DEVICE_CONSOLE, 23, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_CONDRV_READ_CONSOLE_CONTROL  CTL_CODE(FILE_DEVICE_CONSOLE, 24, METHOD_BUFFERED, FILE_READ_ACCESS)
 #define IOCTL_CONDRV_GET_INPUT_COUNT       CTL_CODE(FILE_DEVICE_CONSOLE, 25, METHOD_BUFFERED, FILE_READ_ACCESS)
+#ifdef __REACTOS__
+#define IOCTL_CONDRV_ADD_ALIAS             CTL_CODE(FILE_DEVICE_CONSOLE, 26, METHOD_BUFFERED, FILE_WRITE_ACCESS)
+#define IOCTL_CONDRV_GET_ALIAS             CTL_CODE(FILE_DEVICE_CONSOLE, 27, METHOD_BUFFERED, FILE_READ_ACCESS)
+#define IOCTL_CONDRV_GET_ALIASES           CTL_CODE(FILE_DEVICE_CONSOLE, 28, METHOD_BUFFERED, FILE_READ_ACCESS)
+#define IOCTL_CONDRV_GET_ALIAS_EXES        CTL_CODE(FILE_DEVICE_CONSOLE, 29, METHOD_BUFFERED, FILE_READ_ACCESS)
+#endif
 
 /* console output ioctls */
 #define IOCTL_CONDRV_WRITE_CONSOLE         CTL_CODE(FILE_DEVICE_CONSOLE, 30, METHOD_BUFFERED, FILE_WRITE_ACCESS)
@@ -165,6 +171,24 @@ struct condrv_title_params
     unsigned int title_len;
     WCHAR buffer[1];
 };
+
+#ifdef __REACTOS__
+/* IOCTL_CONDRV_ADD_ALIAS and IOCTL_CONDRV_GET_ALIAS params */
+struct condrv_alias_params
+{
+    unsigned int exe_size;
+    unsigned int source_size;
+    unsigned int target_size;
+    WCHAR buffer[1];
+};
+
+/* IOCTL_CONDRV_GET_ALIAS, IOCTL_CONDRV_GET_ALIASES and IOCTL_CONDRV_GET_ALIAS_EXES result */
+struct condrv_alias_result
+{
+    unsigned int size;
+    WCHAR buffer[1];
+};
+#endif
 
 /* IOCTL_CONDRV_FILL_OUTPUT params */
 struct condrv_fill_output_params

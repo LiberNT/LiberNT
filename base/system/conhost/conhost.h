@@ -71,6 +71,22 @@ struct edit_line
     unsigned int           ctrl_mask;           /* mask for ctrl characters for completion */
 };
 
+#ifdef __REACTOS__
+struct console_alias
+{
+    struct console_alias *next;
+    WCHAR                *source;
+    WCHAR                *target;
+};
+
+struct console_alias_exe
+{
+    struct console_alias_exe *next;
+    WCHAR                    *name;
+    struct console_alias     *aliases;
+};
+#endif
+
 struct console
 {
     HANDLE                 server;              /* console server handle */
@@ -110,6 +126,9 @@ struct console
     unsigned int           tty_cursor_y;
     unsigned int           tty_attr;            /* current tty char attributes */
     int                    tty_cursor_visible;  /* tty cursor visibility flag */
+#ifdef __REACTOS__
+    struct console_alias_exe *alias_exes;
+#endif
 };
 
 #ifdef __REACTOS__
