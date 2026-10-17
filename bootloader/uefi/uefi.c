@@ -177,15 +177,13 @@ FwGetDisk(
 
 static
 VOID
-FwSetDisksConnected(VOID)
+FwFreeDiskHandles(VOID)
 {
     if (FwDiskHandles)
     {
         GlobalSystemTable->BootServices->FreePool(FwDiskHandles);
         FwDiskHandles = NULL;
     }
-
-    FwDisksConnected = TRUE;
 }
 
 BOOLEAN
@@ -205,7 +203,8 @@ FwRescanDisks(VOID)
         BootServices->ConnectController(Handles[i], NULL, NULL, TRUE);
 
     BootServices->FreePool(Handles);
-    FwSetDisksConnected();
+    FwFreeDiskHandles();
+    FwDisksConnected = TRUE;
     return TRUE;
 }
 
@@ -419,8 +418,8 @@ FwScanFileVolumes(
 
     if (!Scan->Handles)
     {
-        if (EFI_ERROR(BootServices->LocateHandleBuffer(Scan->State == FwVolumeScanConnect ? AllHandles : ByProtocol,
-                                                       Scan->State == FwVolumeScanConnect ? NULL : &FwFileSystemGuid,
+        if (EFI_ERROR(BootServices->LocateHandleBuffer(ByProtocol,
+                                                       Scan->State == FwVolumeScanConnect ? &FwBlockIoGuid : &FwFileSystemGuid,
                                                        NULL,
                                                        &HandleCount,
                                                        &Handles)))
@@ -464,7 +463,7 @@ FwScanFileVolumes(
 
     if (Scan->State == FwVolumeScanConnect)
     {
-        FwSetDisksConnected();
+        FwFreeDiskHandles();
         Scan->State = FwVolumeScanVolumes;
         return TRUE;
     }
