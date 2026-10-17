@@ -350,7 +350,7 @@ CCabinetTabBand::TabRect(int index) const
     GetClientRect(m_hwnd, &client);
     rc.left = Scale(8) + index * width;
     rc.right = rc.left + width;
-    rc.top = Scale(10);
+    rc.top = Scale(8);
     rc.bottom = client.bottom;
     return rc;
 }

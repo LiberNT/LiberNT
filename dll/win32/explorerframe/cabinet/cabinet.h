@@ -167,7 +167,7 @@ private:
     void UpdateViewToggles();
     int CaptionButtonsWidth();
     BOOL ClientCaption();
-    int TabStripHeight() const { return Scale(46); }
+    int TabStripHeight() const { return Scale(40); }
     int AddressBottom() const { return TabStripHeight() + Scale(48); }
     int CommandBottom() const { return AddressBottom() + Scale(55); }
 
