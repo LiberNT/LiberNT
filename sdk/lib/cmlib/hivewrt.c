@@ -597,7 +597,6 @@ HvSyncHive(
 }
 
 /**
- * @unimplemented
  * @brief
  * Determines whether a registry hive needs
  * to be shrinked or not based on its overall
@@ -617,8 +616,7 @@ CMAPI
 HvHiveWillShrink(
     _In_ PHHIVE RegistryHive)
 {
-    /* No shrinking yet */
-    UNIMPLEMENTED_ONCE;
+    UNREFERENCED_PARAMETER(RegistryHive);
     return FALSE;
 }
 
