@@ -4875,6 +4875,13 @@ void WINAPI SHFlushSFCache(void)
  */
 HRESULT WINAPI SHGetImageList(int iImageList, REFIID riid, void **ppv)
 {
+#ifdef __REACTOS__
+    HIMAGELIST hList = SIC_GetImageList(iImageList);
+
+    if (!hList)
+        return E_FAIL;
+    return IImageList2_QueryInterface((IImageList2 *)hList, riid, ppv);
+#else
     HIMAGELIST hLarge, hSmall;
     HIMAGELIST hNew;
     HRESULT ret = E_FAIL;
@@ -4887,7 +4894,6 @@ HRESULT WINAPI SHGetImageList(int iImageList, REFIID riid, void **ppv)
     }
 
     Shell_GetImageLists(&hLarge, &hSmall);
-#ifndef __REACTOS__
     hNew = ImageList_Duplicate(iImageList == SHIL_LARGE ? hLarge : hSmall);
 
     /* Get the interface for the new image list */
@@ -4896,15 +4902,9 @@ HRESULT WINAPI SHGetImageList(int iImageList, REFIID riid, void **ppv)
         ret = HIMAGELIST_QueryInterface(hNew, riid, ppv);
         ImageList_Destroy(hNew);
     }
-#else
-    /* Duplicating the imagelist causes the start menu items not to draw on
-     * the first show. Was the Duplicate necessary for some reason? I believe
-     * Windows returns the raw pointer here. */
-    hNew = (iImageList == SHIL_LARGE ? hLarge : hSmall);
-    ret = IImageList2_QueryInterface((IImageList2 *) hNew, riid, ppv);
-#endif
 
     return ret;
+#endif
 }
 
 #ifndef __REACTOS__
