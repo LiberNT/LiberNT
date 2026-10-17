@@ -2493,16 +2493,13 @@ NtUserGetCursorFrameInfo(
  * @implemented
  */
 static
-BOOL
-IntReplaceCursorImage(
+VOID
+IntSwapCursorImage(
     _Inout_ PCURICON_OBJECT pcurDst,
     _Inout_ PCURICON_OBJECT pcurSrc)
 {
-    CURICON_OBJECT Image;
+    CURICON_OBJECT Image = *pcurDst;
 
-    if ((pcurDst->CURSORF_flags | pcurSrc->CURSORF_flags) & CURSORF_ACON)
-        return FALSE;
-    Image = *pcurDst;
     pcurDst->xHotspot = pcurSrc->xHotspot;
     pcurDst->yHotspot = pcurSrc->yHotspot;
     pcurDst->hbmMask = pcurSrc->hbmMask;
@@ -2523,6 +2520,76 @@ IntReplaceCursorImage(
     pcurSrc->bpp = Image.bpp;
     pcurSrc->cx = Image.cx;
     pcurSrc->cy = Image.cy;
+}
+
+static
+BOOL
+IntReplaceCursorImage(
+    _Inout_ PCURICON_OBJECT pcurDst,
+    _Inout_ PCURICON_OBJECT pcurSrc,
+    _Out_ PBOOL pbAdopted)
+{
+    PACON paconDst = (PACON)pcurDst, paconSrc = (PACON)pcurSrc;
+    PPROCESSINFO ppiFrames;
+    PCURICON_OBJECT *aspcur;
+    UINT i;
+
+    *pbAdopted = FALSE;
+    if (!(pcurDst->CURSORF_flags & CURSORF_ACON))
+    {
+        if (pcurSrc->CURSORF_flags & CURSORF_ACON)
+            pcurSrc = paconSrc->aspcur[paconSrc->aicur[0]];
+        IntSwapCursorImage(pcurDst, pcurSrc);
+        return TRUE;
+    }
+
+    ppiFrames = paconDst->aspcur[0]->head.ppi;
+    if (pcurSrc->CURSORF_flags & CURSORF_ACON)
+    {
+        ACON Frames = *paconDst;
+
+        paconDst->cpcur = paconSrc->cpcur;
+        paconDst->cicur = paconSrc->cicur;
+        paconDst->aspcur = paconSrc->aspcur;
+        paconDst->aicur = paconSrc->aicur;
+        paconDst->ajifRate = paconSrc->ajifRate;
+        paconDst->iicur = 0;
+        paconSrc->cpcur = Frames.cpcur;
+        paconSrc->cicur = Frames.cicur;
+        paconSrc->aspcur = Frames.aspcur;
+        paconSrc->aicur = Frames.aicur;
+        paconSrc->ajifRate = Frames.ajifRate;
+        paconSrc->iicur = 0;
+        for (i = 0; i < paconDst->cpcur; i++)
+            UserSetProcMarkObjectOwner(paconDst->aspcur[i], ppiFrames);
+        return TRUE;
+    }
+
+    if (pcurSrc->CURSORF_flags & CURSORF_LINKED)
+        return FALSE;
+
+    aspcur = ExAllocatePoolWithTag(PagedPool, sizeof(PCURICON_OBJECT) + sizeof(DWORD) + sizeof(INT), USERTAG_CURSOR);
+    if (!aspcur)
+        return FALSE;
+    for (i = 0; i < paconDst->cpcur; i++)
+    {
+        UserDereferenceObject(paconDst->aspcur[i]);
+        NT_VERIFY(IntDestroyCurIconObject(paconDst->aspcur[i]) == TRUE);
+    }
+    ExFreePoolWithTag(paconDst->aspcur, USERTAG_CURSOR);
+
+    pcurSrc->CURSORF_flags |= CURSORF_ACONFRAME;
+    UserSetProcMarkObjectOwner(pcurSrc, ppiFrames);
+    aspcur[0] = pcurSrc;
+    paconDst->cpcur = 1;
+    paconDst->cicur = 1;
+    paconDst->aspcur = aspcur;
+    paconDst->aicur = (DWORD *)&aspcur[1];
+    paconDst->ajifRate = (INT *)&paconDst->aicur[1];
+    paconDst->aicur[0] = 0;
+    paconDst->ajifRate[0] = 0;
+    paconDst->iicur = 0;
+    *pbAdopted = TRUE;
     return TRUE;
 }
 
@@ -2579,11 +2646,21 @@ NtUserSetSystemCursor(
         }
         if (pcurOrig)
         {
-           if (IntReplaceCursorImage(pcurOrig, pcur))
+           BOOL bAdopted;
+
+           if (IntReplaceCursorImage(pcurOrig, pcur, &bAdopted))
            {
-               IntDestroyCurIconObject(pcur);
-               UserDereferenceObject(pcur);
-               IntUpdateCursorImage();
+               HDC hdcScreen;
+
+               if (!bAdopted)
+               {
+                   IntDestroyCurIconObject(pcur);
+                   UserDereferenceObject(pcur);
+               }
+               if (IntGetSysCursorInfo()->CurrentCursorObject == pcurOrig && (hdcScreen = IntGetScreenDC()))
+                   IntSetPointerShape(hdcScreen, pcurOrig);
+               else
+                   IntUpdateCursorImage();
                Ret = TRUE;
            }
            else

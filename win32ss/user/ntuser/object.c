@@ -652,6 +652,38 @@ UserCreateObject( PUSER_HANDLE_TABLE ht,
    return Object;
 }
 
+VOID
+FASTCALL
+UserSetProcMarkObjectOwner(
+    _Inout_ PVOID Object,
+    _In_ PPROCESSINFO ppi)
+{
+    PPROCMARKHEAD ObjHead = Object;
+    PPROCESSINFO ppiOld = ObjHead->ppi;
+    PUSER_HANDLE_ENTRY entry;
+
+    ASSERT(UserIsEnteredExclusive());
+    if (!ppi || !ppiOld || ppi == ppiOld)
+        return;
+
+    UserDomainLockExclusive(DLT_HANDLEMANAGER);
+    entry = handle_to_entry(gHandleTable, ObjHead->h);
+    if (entry && entry->ptr == Object && entry->pi == ppiOld)
+    {
+#if DBG
+        ppiOld->DbgHandleCount[entry->type]--;
+        ppi->DbgHandleCount[entry->type]++;
+#endif
+        entry->pi = ppi;
+        IntReferenceProcessInfo(ppi);
+        ppi->UserHandleCount++;
+        ObjHead->ppi = ppi;
+        ppiOld->UserHandleCount--;
+        IntDereferenceProcessInfo(ppiOld);
+    }
+    UserDomainUnlockExclusive(DLT_HANDLEMANAGER);
+}
+
 BOOL
 FASTCALL
 UserMarkObjectDestroy(PVOID Object)
