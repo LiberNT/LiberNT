@@ -24,12 +24,41 @@ using namespace ShellFrame;
 #define TIMER_REFRESH 1
 #define TIMER_SETTING 2
 
-#define GLASS_TEXT RGB(255, 255, 255)
-#define GLASS_TEXT_SECONDARY RGB(0xC8, 0xC8, 0xC8)
-#define GLASS_TEXT_DISABLED RGB(0x80, 0x80, 0x80)
-#define GLASS_HOVER RGB(0x1C, 0x1C, 0x1C)
-#define GLASS_SELECTED RGB(0x30, 0x30, 0x30)
-#define GLASS_STROKE RGB(0x60, 0x60, 0x60)
+enum class GlassTone
+{
+    Text,
+    TextSecondary,
+    TextDisabled,
+    Hover,
+    Selected,
+    Stroke,
+    Clear,
+};
+
+static COLORREF
+GlassColor(const Theme &theme, GlassTone tone)
+{
+    static const COLORREF Tones[] =
+    {
+        RGB(255, 255, 255), RGB(0xC8, 0xC8, 0xC8), RGB(0x80, 0x80, 0x80), RGB(0x1C, 0x1C, 0x1C),
+        RGB(0x30, 0x30, 0x30), RGB(0x60, 0x60, 0x60), RGB(0, 0, 0),
+    };
+    const Palette &c = theme.Colors();
+
+    if (!theme.IsHighContrast())
+        return Tones[(int)tone];
+    switch (tone)
+    {
+        case GlassTone::Text:
+        case GlassTone::TextSecondary:
+        case GlassTone::Stroke:
+            return c.Text;
+        case GlassTone::TextDisabled:
+            return c.TextDisabled;
+        default:
+            return c.Window;
+    }
+}
 
 HINSTANCE Instance;
 
@@ -316,8 +345,8 @@ protected:
         RECT glass = { 0, 0, GlassWidth(), client.bottom }, caption = { 0, 0, client.right, CaptionHeight() };
 
         canvas.Fill(client, c.Window);
-        canvas.Fill(glass, RGB(0, 0, 0));
-        canvas.Fill(caption, RGB(0, 0, 0));
+        canvas.Fill(glass, GlassColor(m_Theme, GlassTone::Clear));
+        canvas.Fill(caption, GlassColor(m_Theme, GlassTone::Clear));
         {
             Gdiplus::GraphicsPath panel(Gdiplus::FillModeAlternate);
             Gdiplus::SolidBrush fill(Gdiplus::Color(255, GetRValue(c.Window), GetGValue(c.Window), GetBValue(c.Window)));
@@ -416,9 +445,10 @@ protected:
                     Invalidate(NULL);
                 break;
             case WM_CTLCOLOREDIT:
-                SetTextColor((HDC)wParam, GLASS_TEXT);
-                SetBkColor((HDC)wParam, RGB(0, 0, 0));
-                return (LRESULT)GetStockObject(BLACK_BRUSH);
+                SetTextColor((HDC)wParam, GlassColor(m_Theme, GlassTone::Text));
+                SetBkColor((HDC)wParam, GlassColor(m_Theme, GlassTone::Clear));
+                SetDCBrushColor((HDC)wParam, GlassColor(m_Theme, GlassTone::Clear));
+                return (LRESULT)GetStockObject(DC_BRUSH);
             case WM_TIMER:
                 if (wParam == TIMER_REFRESH || wParam == TIMER_SETTING)
                 {
@@ -879,18 +909,18 @@ private:
         int size = m_Theme.Scale(16);
 
         if (m_HotBack && !m_Back.empty())
-            GlassFill(canvas, back, m_Theme.Scale(4), GLASS_HOVER, CLR_NONE);
+            GlassFill(canvas, back, m_Theme.Scale(4), GlassColor(m_Theme, GlassTone::Hover), CLR_NONE);
         if (m_HotForward && !m_Forward.empty())
-            GlassFill(canvas, forward, m_Theme.Scale(4), GLASS_HOVER, CLR_NONE);
-        CenterIcon(canvas, back, size, L"arrow_left_16_regular", !m_Back.empty() ? GLASS_TEXT : GLASS_TEXT_DISABLED);
+            GlassFill(canvas, forward, m_Theme.Scale(4), GlassColor(m_Theme, GlassTone::Hover), CLR_NONE);
+        CenterIcon(canvas, back, size, L"arrow_left_16_regular", !m_Back.empty() ? GlassColor(m_Theme, GlassTone::Text) : GlassColor(m_Theme, GlassTone::TextDisabled));
         CenterIcon(canvas, forward, size, L"arrow_right_16_regular",
-                   !m_Forward.empty() ? GLASS_TEXT : GLASS_TEXT_DISABLED);
+                   !m_Forward.empty() ? GlassColor(m_Theme, GlassTone::Text) : GlassColor(m_Theme, GlassTone::TextDisabled));
         title.left = m_Theme.Scale(82);
         title.top = 0;
         title.right = m_Theme.Scale(300);
         title.bottom = CaptionHeight();
         canvas.Text(Str(IDS_APP_TITLE).c_str(), title, m_Theme.Font(TextStyle::Caption),
-                    IsActive() ? GLASS_TEXT : GLASS_TEXT_SECONDARY, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                    IsActive() ? GlassColor(m_Theme, GlassTone::Text) : GlassColor(m_Theme, GlassTone::TextSecondary), DT_SINGLELINE | DT_VCENTER | DT_LEFT);
     }
 
     void CenterIcon(Canvas &canvas, const RECT &box, int size, LPCWSTR name, COLORREF color)
@@ -909,7 +939,7 @@ private:
         RECT box = SearchRect(), glyph;
         int size = m_Theme.Scale(16);
 
-        GlassFill(canvas, box, m_Theme.Scale(4), RGB(0, 0, 0), GLASS_STROKE);
+        GlassFill(canvas, box, m_Theme.Scale(4), GlassColor(m_Theme, GlassTone::Clear), GlassColor(m_Theme, GlassTone::Stroke));
         if (GetFocus() == m_Search)
         {
             RECT line = { box.left + 1, box.bottom - m_Theme.Scale(2), box.right - 1, box.bottom };
@@ -919,7 +949,7 @@ private:
         glyph.left = glyph.right - size;
         glyph.top = box.top + (box.bottom - box.top - size) / 2;
         glyph.bottom = glyph.top + size;
-        canvas.Icon(L"search_16_regular", glyph, GLASS_TEXT_SECONDARY);
+        canvas.Icon(L"search_16_regular", glyph, GlassColor(m_Theme, GlassTone::TextSecondary));
     }
 
     void PaintAccount(Canvas &canvas)
@@ -927,20 +957,20 @@ private:
         RECT tile = AccountRect(), avatar, name, kind;
 
         if (m_HotAccount || TopLevel(m_Page) == PageId::Accounts)
-            GlassFill(canvas, tile, m_Theme.Scale(6), m_HotAccount ? GLASS_HOVER : GLASS_SELECTED, CLR_NONE);
+            GlassFill(canvas, tile, m_Theme.Scale(6), m_HotAccount ? GlassColor(m_Theme, GlassTone::Hover) : GlassColor(m_Theme, GlassTone::Selected), CLR_NONE);
         SetRect(&avatar, tile.left + m_Theme.Scale(6), tile.top + m_Theme.Scale(6), tile.left + m_Theme.Scale(54),
                 tile.top + m_Theme.Scale(54));
-        GlassFill(canvas, avatar, m_Theme.Scale(24), GLASS_SELECTED, CLR_NONE);
-        CenterIcon(canvas, avatar, m_Theme.Scale(24), L"person_20_regular", GLASS_TEXT);
+        GlassFill(canvas, avatar, m_Theme.Scale(24), GlassColor(m_Theme, GlassTone::Selected), CLR_NONE);
+        CenterIcon(canvas, avatar, m_Theme.Scale(24), L"person_20_regular", GlassColor(m_Theme, GlassTone::Text));
         SetRect(&name, avatar.right + m_Theme.Scale(12), tile.top + m_Theme.Scale(10), tile.right - m_Theme.Scale(8),
                 tile.top + m_Theme.Scale(32));
-        canvas.Text(m_User, name, m_Theme.Font(TextStyle::BodyStrong), GLASS_TEXT,
+        canvas.Text(m_User, name, m_Theme.Font(TextStyle::BodyStrong), GlassColor(m_Theme, GlassTone::Text),
                     DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
         kind = name;
         kind.top = name.bottom;
         kind.bottom = kind.top + m_Theme.Scale(18);
         canvas.Text(Str(m_Admin ? IDS_ACCOUNT_ADMIN_LOCAL : IDS_ACCOUNT_STANDARD_LOCAL).c_str(), kind,
-                    m_Theme.Font(TextStyle::Caption), GLASS_TEXT_SECONDARY, DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+                    m_Theme.Font(TextStyle::Caption), GlassColor(m_Theme, GlassTone::TextSecondary), DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     }
 
     void PaintNavigation(Canvas &canvas, const RECT &client)
@@ -964,21 +994,21 @@ private:
             if (pages[i] == current)
             {
                 RECT pill = { rc.left, rc.top + m_Theme.Scale(10), rc.left + m_Theme.Scale(3), rc.bottom - m_Theme.Scale(10) };
-                GlassFill(canvas, rc, m_Theme.Scale(6), GLASS_SELECTED, CLR_NONE);
+                GlassFill(canvas, rc, m_Theme.Scale(6), GlassColor(m_Theme, GlassTone::Selected), CLR_NONE);
                 canvas.FillRound(pill, m_Theme.ScaleF(1.5f), c.Accent);
             }
             else if (i == m_HotNav)
             {
-                GlassFill(canvas, rc, m_Theme.Scale(6), GLASS_HOVER, CLR_NONE);
+                GlassFill(canvas, rc, m_Theme.Scale(6), GlassColor(m_Theme, GlassTone::Hover), CLR_NONE);
             }
             glyph.left = rc.left + m_Theme.Scale(14);
             glyph.top = rc.top + (rc.bottom - rc.top - size) / 2;
             glyph.right = glyph.left + size;
             glyph.bottom = glyph.top + size;
-            canvas.Icon(info->Icon, glyph, GLASS_TEXT);
+            canvas.Icon(info->Icon, glyph, GlassColor(m_Theme, GlassTone::Text));
             label = rc;
             label.left = rc.left + m_Theme.Scale(46);
-            canvas.Text(Str(info->Title).c_str(), label, m_Theme.Font(TextStyle::Body), GLASS_TEXT,
+            canvas.Text(Str(info->Title).c_str(), label, m_Theme.Font(TextStyle::Body), GlassColor(m_Theme, GlassTone::Text),
                         DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
         }
         canvas.Graphics().ResetClip();

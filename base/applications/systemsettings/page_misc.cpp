@@ -10,6 +10,8 @@
 #include <setupapi.h>
 #include <devguid.h>
 #include <tlhelp32.h>
+#include <uxtheme.h>
+#include <uxundoc.h>
 
 #define WINDOWS_NT_KEY L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
 #define ADVANCED_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"
@@ -193,6 +195,253 @@ AddToolToggle(PageBuilder &page, UINT title, UINT detail, LPCWSTR icon, LPCWSTR 
                 });
 }
 
+template <typename T>
+static T
+GetAccess(UINT action)
+{
+    T value;
+
+    ZeroMemory(&value, sizeof(value));
+    value.cbSize = sizeof(value);
+    SystemParametersInfoW(action, sizeof(value), &value, 0);
+    return value;
+}
+
+template <typename T>
+static void
+SetAccess(UINT action, T value)
+{
+    value.cbSize = sizeof(value);
+    SystemParametersInfoW(action, sizeof(value), &value, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+}
+
+template <typename T>
+static SettingRow &
+AddAccessFlag(PageBuilder &page, UINT title, UINT detail, LPCWSTR icon, UINT get, UINT set, DWORD flag)
+{
+    T value = page.Indexing ? T() : GetAccess<T>(get);
+
+    return page.Toggle(Str(title), detail ? Str(detail) : std::wstring(), icon, (value.dwFlags & flag) != 0,
+                       [get, set, flag](int on)
+                       {
+                           T current = GetAccess<T>(get);
+                           current.dwFlags = on ? (current.dwFlags | flag) : (current.dwFlags & ~flag);
+                           SetAccess<T>(set, current);
+                       });
+}
+
+static void
+AddStickyKeys(PageBuilder &page)
+{
+    STICKYKEYS sticky = page.Indexing ? STICKYKEYS() : GetAccess<STICKYKEYS>(SPI_GETSTICKYKEYS);
+
+    AddAccessFlag<STICKYKEYS>(page, IDS_STICKY_KEYS, IDS_STICKY_KEYS_DESC, L"keyboard_shift_20_regular",
+                              SPI_GETSTICKYKEYS, SPI_SETSTICKYKEYS, SKF_STICKYKEYSON).Keywords = Str(IDS_STICKY_KEYWORDS);
+    if (!(sticky.dwFlags & SKF_STICKYKEYSON))
+        return;
+    AddAccessFlag<STICKYKEYS>(page, IDS_STICKY_LOCK, 0, NULL, SPI_GETSTICKYKEYS, SPI_SETSTICKYKEYS, SKF_TRISTATE);
+    AddAccessFlag<STICKYKEYS>(page, IDS_STICKY_TWOKEYS, 0, NULL, SPI_GETSTICKYKEYS, SPI_SETSTICKYKEYS, SKF_TWOKEYSOFF);
+    AddAccessFlag<STICKYKEYS>(page, IDS_STICKY_SOUND, 0, NULL, SPI_GETSTICKYKEYS, SPI_SETSTICKYKEYS,
+                              SKF_AUDIBLEFEEDBACK);
+}
+
+static const DWORD FilterTimes[] = { 300, 500, 1000, 1500, 2000 };
+
+static void
+AddFilterKeys(PageBuilder &page)
+{
+    FILTERKEYS filter = page.Indexing ? FILTERKEYS() : GetAccess<FILTERKEYS>(SPI_GETFILTERKEYS);
+    std::vector<std::wstring> modes, times;
+    DWORD current;
+    int time = 0;
+
+    AddAccessFlag<FILTERKEYS>(page, IDS_FILTER_KEYS, IDS_FILTER_KEYS_DESC, L"filter_20_regular", SPI_GETFILTERKEYS,
+                              SPI_SETFILTERKEYS, FKF_FILTERKEYSON).Keywords = Str(IDS_FILTER_KEYWORDS);
+    if (!(filter.dwFlags & FKF_FILTERKEYSON))
+        return;
+    modes.push_back(Str(IDS_FILTER_SLOW));
+    modes.push_back(Str(IDS_FILTER_BOUNCE));
+    current = filter.iBounceMSec ? filter.iBounceMSec : filter.iWaitMSec;
+    for (UINT i = 0; i < _countof(FilterTimes); i++)
+    {
+        times.push_back(Printf(L"%u.%u s", FilterTimes[i] / 1000, (FilterTimes[i] % 1000) / 100));
+        if (FilterTimes[i] <= current)
+            time = (int)i;
+    }
+    page.Choice(Str(IDS_FILTER_MODE), std::wstring(), NULL, modes, filter.iBounceMSec ? 1 : 0,
+                [](int index)
+                {
+                    FILTERKEYS value = GetAccess<FILTERKEYS>(SPI_GETFILTERKEYS);
+                    DWORD time = value.iBounceMSec ? value.iBounceMSec : value.iWaitMSec;
+
+                    if (!time)
+                        time = 1000;
+                    value.iBounceMSec = index == 1 ? time : 0;
+                    value.iWaitMSec = index == 1 ? 0 : time;
+                    value.iDelayMSec = index == 1 ? 0 : 1000;
+                    value.iRepeatMSec = index == 1 ? 0 : 500;
+                    SetAccess(SPI_SETFILTERKEYS, value);
+                });
+    page.Choice(Str(IDS_FILTER_TIME), Str(filter.iBounceMSec ? IDS_FILTER_TIME_BOUNCE : IDS_FILTER_TIME_SLOW), NULL,
+                times, time,
+                [](int index)
+                {
+                    FILTERKEYS value = GetAccess<FILTERKEYS>(SPI_GETFILTERKEYS);
+
+                    if (value.iBounceMSec)
+                        value.iBounceMSec = FilterTimes[index];
+                    else
+                        value.iWaitMSec = FilterTimes[index];
+                    SetAccess(SPI_SETFILTERKEYS, value);
+                });
+}
+
+static void
+AddMouseKeys(PageBuilder &page)
+{
+    MOUSEKEYS mouse = page.Indexing ? MOUSEKEYS() : GetAccess<MOUSEKEYS>(SPI_GETMOUSEKEYS);
+
+    AddAccessFlag<MOUSEKEYS>(page, IDS_MOUSE_KEYS, IDS_MOUSE_KEYS_DESC, L"cursor_20_regular", SPI_GETMOUSEKEYS,
+                             SPI_SETMOUSEKEYS, MKF_MOUSEKEYSON).Keywords = Str(IDS_MOUSE_KEYWORDS);
+    if (!(mouse.dwFlags & MKF_MOUSEKEYSON))
+        return;
+    AddAccessFlag<MOUSEKEYS>(page, IDS_MOUSE_KEYS_NUMLOCK, 0, NULL, SPI_GETMOUSEKEYS, SPI_SETMOUSEKEYS,
+                             MKF_REPLACENUMBERS);
+    AddAccessFlag<MOUSEKEYS>(page, IDS_MOUSE_KEYS_MODIFIERS, 0, NULL, SPI_GETMOUSEKEYS, SPI_SETMOUSEKEYS,
+                             MKF_MODIFIERS);
+    {
+        SettingRow &row = page.Slider(Str(IDS_MOUSE_KEYS_SPEED), std::wstring(), NULL, 10, 360,
+                                      (int)max(10, min(360, (int)mouse.iMaxSpeed)),
+                                      [](int value)
+                                      {
+                                          MOUSEKEYS current = GetAccess<MOUSEKEYS>(SPI_GETMOUSEKEYS);
+                                          current.iMaxSpeed = (DWORD)value;
+                                          SetAccess(SPI_SETMOUSEKEYS, current);
+                                      });
+        row.Label = [](int value) { return Printf(L"%d", value); };
+    }
+}
+
+#define APPEARANCE_SCHEMES_KEY L"Control Panel\\Appearance\\New Schemes"
+#define LIBERNT_SETTINGS_KEY L"Software\\LiberNT\\Settings"
+#define THEME_MANAGER_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\ThemeManager"
+
+static const UINT ContrastSchemes[] = { 4, 5, 6, 7 };
+
+static const LPCWSTR SystemColorNames[] =
+{
+    L"Scrollbar", L"Background", L"ActiveTitle", L"InactiveTitle", L"Menu", L"Window", L"WindowFrame",
+    L"MenuText", L"WindowText", L"TitleText", L"ActiveBorder", L"InactiveBorder", L"AppWorkSpace", L"Hilight",
+    L"HilightText", L"ButtonFace", L"ButtonShadow", L"GrayText", L"ButtonText", L"InactiveTitleText",
+    L"ButtonHilight", L"ButtonDkShadow", L"ButtonLight", L"InfoText", L"InfoWindow", L"ButtonAlternateFace",
+    L"HotTrackingColor", L"GradientActiveTitle", L"GradientInactiveTitle", L"MenuHilight", L"MenuBar",
+};
+
+static std::wstring
+ContrastSchemeName(UINT scheme)
+{
+    return ReadString(HKEY_CURRENT_USER, Printf(APPEARANCE_SCHEMES_KEY L"\\%u", scheme).c_str(), L"LegacyName");
+}
+
+static void
+SetHighContrast(DWORD flags, LPCWSTR scheme)
+{
+    HIGHCONTRASTW contrast = { sizeof(contrast) };
+
+    contrast.dwFlags = flags;
+    contrast.lpszDefaultScheme = (LPWSTR)scheme;
+    SystemParametersInfoW(SPI_SETHIGHCONTRAST, sizeof(contrast), &contrast, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+}
+
+static void
+ApplyContrastScheme(int index)
+{
+    HIGHCONTRASTW contrast = { sizeof(contrast) };
+    INT elements[_countof(SystemColorNames)];
+    COLORREF colors[_countof(SystemColorNames)];
+    std::wstring key, name;
+    BOOL on;
+
+    if (!SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0))
+        return;
+    if (contrast.lpszDefaultScheme)
+        LocalFree(contrast.lpszDefaultScheme);
+    on = (contrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
+
+    if (index < 0)
+    {
+        std::wstring style, color, size;
+        WCHAR windows[MAX_PATH];
+
+        if (!on)
+            return;
+        SetHighContrast(contrast.dwFlags & ~HCF_HIGHCONTRASTON, NULL);
+        style = ReadString(HKEY_CURRENT_USER, LIBERNT_SETTINGS_KEY, L"VisualStyle");
+        color = ReadString(HKEY_CURRENT_USER, LIBERNT_SETTINGS_KEY, L"VisualStyleColor");
+        size = ReadString(HKEY_CURRENT_USER, LIBERNT_SETTINGS_KEY, L"VisualStyleSize");
+        if (style.empty() && GetWindowsDirectoryW(windows, _countof(windows)))
+            style = std::wstring(windows) + L"\\Resources\\Themes\\Aero\\aero.msstyles";
+        SetSystemVisualStyle(style.c_str(), color.c_str(), size.c_str(), 0);
+        return;
+    }
+
+    if (!on)
+    {
+        if (ReadString(HKEY_CURRENT_USER, THEME_MANAGER_KEY, L"ThemeActive") == L"1")
+        {
+            WriteString(HKEY_CURRENT_USER, LIBERNT_SETTINGS_KEY, L"VisualStyle",
+                        ReadString(HKEY_CURRENT_USER, THEME_MANAGER_KEY, L"DllName"));
+            WriteString(HKEY_CURRENT_USER, LIBERNT_SETTINGS_KEY, L"VisualStyleColor",
+                        ReadString(HKEY_CURRENT_USER, THEME_MANAGER_KEY, L"ColorName"));
+            WriteString(HKEY_CURRENT_USER, LIBERNT_SETTINGS_KEY, L"VisualStyleSize",
+                        ReadString(HKEY_CURRENT_USER, THEME_MANAGER_KEY, L"SizeName"));
+        }
+        SetSystemVisualStyle(NULL, NULL, NULL, 0);
+    }
+
+    key = Printf(APPEARANCE_SCHEMES_KEY L"\\%u\\Sizes\\0", ContrastSchemes[index]);
+    for (UINT i = 0; i < _countof(SystemColorNames); i++)
+    {
+        DWORD value = ReadDword(HKEY_CURRENT_USER, key.c_str(), Printf(L"Color #%u", i).c_str(), GetSysColor(i));
+
+        elements[i] = (INT)i;
+        colors[i] = value & 0x00FFFFFF;
+        WriteString(HKEY_CURRENT_USER, L"Control Panel\\Colors", SystemColorNames[i],
+                    Printf(L"%u %u %u", GetRValue(colors[i]), GetGValue(colors[i]), GetBValue(colors[i])));
+    }
+    SetSysColors(_countof(SystemColorNames), elements, colors);
+    name = ContrastSchemeName(ContrastSchemes[index]);
+    SetHighContrast(contrast.dwFlags | HCF_HIGHCONTRASTON, name.c_str());
+}
+
+static void
+AddContrastThemes(PageBuilder &page)
+{
+    HIGHCONTRASTW contrast = { sizeof(contrast) };
+    std::vector<std::wstring> names;
+    std::wstring current;
+    int selected = 0;
+
+    if (!page.Indexing && SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0))
+    {
+        if ((contrast.dwFlags & HCF_HIGHCONTRASTON) && contrast.lpszDefaultScheme)
+            current = contrast.lpszDefaultScheme;
+        if (contrast.lpszDefaultScheme)
+            LocalFree(contrast.lpszDefaultScheme);
+    }
+    names.push_back(Str(IDS_NONE));
+    for (UINT i = 0; i < _countof(ContrastSchemes); i++)
+    {
+        std::wstring name = page.Indexing ? std::wstring() : ContrastSchemeName(ContrastSchemes[i]);
+
+        names.push_back(name);
+        if (!current.empty() && !lstrcmpiW(name.c_str(), current.c_str()))
+            selected = (int)i + 1;
+    }
+    page.Choice(Str(IDS_CONTRAST_THEMES), Str(IDS_CONTRAST_THEMES_DESC), L"dark_theme_20_regular", names, selected,
+                [](int index) { ApplyContrastScheme(index - 1); }).Keywords = Str(IDS_CONTRAST_KEYWORDS);
+}
+
 void
 BuildAccessibility(PageBuilder &page)
 {
@@ -209,6 +458,7 @@ BuildAccessibility(PageBuilder &page)
         row.Label = [](int value) { return Printf(L"%d", value); };
     }
     AddToolToggle(page, IDS_MAGNIFIER, IDS_MAGNIFIER_DESC, L"zoom_in_20_regular", L"magnify.exe");
+    AddContrastThemes(page);
 
     page.Group(Str(IDS_VISUAL_EFFECTS));
     AddBoolToggle(page, IDS_CLIENT_ANIMATIONS, IDS_CLIENT_ANIMATIONS_DESC, L"slide_text_20_regular",
@@ -218,6 +468,13 @@ BuildAccessibility(PageBuilder &page)
     AddBoolToggle(page, IDS_KEYBOARD_CUES, IDS_KEYBOARD_CUES_DESC, L"keyboard_20_regular", SPI_GETKEYBOARDCUES,
                   SPI_SETKEYBOARDCUES);
     AddToolToggle(page, IDS_OSK, IDS_OSK_DESC, L"keyboard_20_regular", L"osk.exe");
+    AddStickyKeys(page);
+    AddFilterKeys(page);
+    AddAccessFlag<TOGGLEKEYS>(page, IDS_TOGGLE_KEYS, IDS_TOGGLE_KEYS_DESC, L"speaker_2_20_regular", SPI_GETTOGGLEKEYS,
+                              SPI_SETTOGGLEKEYS, TKF_TOGGLEKEYSON);
+
+    page.Group(Str(IDS_INTERACTION_MOUSE));
+    AddMouseKeys(page);
 }
 
 void

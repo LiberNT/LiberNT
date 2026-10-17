@@ -96,7 +96,7 @@ FrameWindow::ApplyFrameAttributes()
 #if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
     MARGINS margins = { 0, 0, 0, 0 };
 #else
-    MARGINS margins = { GlassWidth(), 0, GlassTop(), 0 };
+    MARGINS margins = { m_Theme.IsHighContrast() ? 0 : GlassWidth(), 0, m_Theme.IsHighContrast() ? 0 : GlassTop(), 0 };
 #endif
     DWORD corner = 2;
 
@@ -401,11 +401,15 @@ FrameWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
         }
 
+        case WM_SYSCOLORCHANGE:
+        case WM_THEMECHANGED:
         case WM_SETTINGCHANGE:
-            if (lParam && !lstrcmpiW((LPCWSTR)lParam, L"ImmersiveColorSet"))
+            if (msg != WM_SETTINGCHANGE || wParam == SPI_SETHIGHCONTRAST ||
+                (lParam && !lstrcmpiW((LPCWSTR)lParam, L"ImmersiveColorSet")))
             {
                 RECT client;
                 m_Theme.Update(m_hwnd);
+                ApplyFrameAttributes();
                 OnThemeChanged();
                 GetClientRect(m_hwnd, &client);
                 OnLayout(client);

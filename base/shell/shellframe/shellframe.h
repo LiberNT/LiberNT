@@ -68,8 +68,9 @@ public:
     void SetDpi(UINT dpi);
     BOOL UpdateMaterial(HWND hwnd);
 
-    BOOL IsDark() const { return m_Material ? m_MaterialDark : m_Dark; }
-    BOOL HasMaterial() const { return m_Material; }
+    BOOL IsDark() const { return m_HighContrast ? m_HighContrastDark : m_Material ? m_MaterialDark : m_Dark; }
+    BOOL HasMaterial() const { return m_Material && !m_HighContrast; }
+    BOOL IsHighContrast() const { return m_HighContrast; }
     UINT Dpi() const { return m_Dpi; }
     int Scale(int value) const { return MulDiv(value, (int)m_Dpi, 96); }
     float ScaleF(float value) const { return value * (float)m_Dpi / 96.0f; }
@@ -82,6 +83,8 @@ private:
     void BuildPalette();
 
     BOOL m_Dark;
+    BOOL m_HighContrast;
+    BOOL m_HighContrastDark;
     BOOL m_Material;
     BOOL m_MaterialDark;
     COLORREF m_MaterialKey;

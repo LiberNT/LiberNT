@@ -44,6 +44,8 @@ AccentFromPalette(BOOL dark)
 
 Theme::Theme() :
     m_Dark(FALSE),
+    m_HighContrast(FALSE),
+    m_HighContrastDark(FALSE),
     m_Material(FALSE),
     m_MaterialDark(FALSE),
     m_MaterialKey(0),
@@ -85,10 +87,18 @@ void
 Theme::Update(HWND hwnd)
 {
     DWORD light = 1;
+    HIGHCONTRASTW contrast = { sizeof(contrast) };
+    COLORREF window;
 
     ReadDword(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
               L"AppsUseLightTheme", &light);
     m_Dark = !light;
+    m_HighContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
+                     (contrast.dwFlags & HCF_HIGHCONTRASTON);
+    if (contrast.lpszDefaultScheme)
+        LocalFree(contrast.lpszDefaultScheme);
+    window = GetSysColor(COLOR_WINDOW);
+    m_HighContrastDark = GetRValue(window) * 299 + GetGValue(window) * 587 + GetBValue(window) * 114 < 128000;
     BuildPalette();
 
     if (hwnd)
@@ -109,6 +119,19 @@ Theme::BuildPalette()
     COLORREF window, white = RGB(255, 255, 255), black = RGB(0, 0, 0);
 
     Palette &c = m_Colors;
+    if (m_HighContrast)
+    {
+        window = GetSysColor(COLOR_WINDOW);
+        c.Window = c.TabStrip = c.TabSelected = c.ToolbarBand = c.Content = window;
+        c.Card = c.CardHover = c.ControlFill = c.ControlFillFocus = window;
+        c.SubtleHover = c.SubtlePressed = c.Selected = window;
+        c.Text = c.TextSecondary = c.TextTertiary = c.Glyph = GetSysColor(COLOR_WINDOWTEXT);
+        c.TextDisabled = GetSysColor(COLOR_GRAYTEXT);
+        c.CardBorder = c.Divider = c.ControlStroke = c.ControlStrongStroke = GetSysColor(COLOR_WINDOWTEXT);
+        c.Accent = c.CloseHover = GetSysColor(COLOR_HIGHLIGHT);
+        c.AccentText = c.CloseText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+        return;
+    }
     if (m_Dark)
     {
         window = RGB(32, 32, 32);
