@@ -16,3 +16,13 @@ PIP_INTERFACE FindOnLinkInterface(PIP_ADDRESS Address);
 PIP_INTERFACE GetDefaultInterface(VOID);
 PIP_INTERFACE GetMulticastInterface(ULONG Selector);
 BOOLEAN HasPrefix(PIP_ADDRESS Address, PIP_ADDRESS Prefix, UINT Length);
+NTSTATUS IPAddInterfaceAddress( PIP_INTERFACE Interface, IPv4_RAW_ADDRESS Address,
+                                IPv4_RAW_ADDRESS Netmask, PULONG Context, PULONG Instance );
+NTSTATUS IPDeleteInterfaceAddress( ULONG Context );
+VOID IPDeleteInterfaceAddresses( PIP_INTERFACE Interface );
+BOOLEAN IsInterfaceAddress( PIP_INTERFACE Interface, PIP_ADDRESS Address );
+BOOLEAN IsInterfaceBroadcast( PIP_INTERFACE Interface, PIP_ADDRESS Address );
+BOOLEAN IsInterfaceOnLink( PIP_INTERFACE Interface, PIP_ADDRESS Address );
+BOOLEAN GetInterfaceSourceAddress( PIP_INTERFACE Interface, PIP_ADDRESS Destination, PIP_ADDRESS NextHop,
+                                   PIP_ADDRESS Source );
+UINT CopyInterfaceAddresses( PIP_INTERFACE Interface, PIPADDR_ENTRY Entries, UINT Count );

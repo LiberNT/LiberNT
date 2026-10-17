@@ -114,7 +114,26 @@ BOOLEAN AddrIsBroadcastMatch(
     PIP_ADDRESS BroadcastAddress ) {
     KIRQL OldIrql;
     BOOLEAN Match = FALSE;
+    PLIST_ENTRY Entry;
     IF_LIST_ITER(IF);
+
+    TcpipAcquireSpinLock(&NetTableListLock, &OldIrql);
+
+    for (Entry = NetTableListHead.Flink; Entry != &NetTableListHead; Entry = Entry->Flink) {
+        PIP_NTE Nte = CONTAINING_RECORD(Entry, IP_NTE, ListEntry);
+
+        if ((AddrIsUnspecified(UnicastAddress) ||
+             AddrIsEqual(&Nte->Unicast, UnicastAddress)) &&
+            (AddrIsEqual(&Nte->Broadcast, BroadcastAddress))) {
+            Match = TRUE;
+            break;
+        }
+    }
+
+    TcpipReleaseSpinLock(&NetTableListLock, OldIrql);
+
+    if (Match)
+        return TRUE;
 
     TcpipAcquireSpinLock(&InterfaceListLock, &OldIrql);
 

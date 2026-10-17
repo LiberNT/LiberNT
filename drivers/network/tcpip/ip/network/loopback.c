@@ -126,13 +126,9 @@ NDIS_STATUS LoopRegisterAdapter(
   Loopback->Name.MaximumLength = Loopback->Name.Length =
       (USHORT)wcslen(Loopback->Name.Buffer) * sizeof(WCHAR);
 
-  AddrInitIPv4(&Loopback->Unicast, LOOPBACK_ADDRESS_IPv4);
-  AddrInitIPv4(&Loopback->Netmask, LOOPBACK_ADDRMASK_IPv4);
-  AddrInitIPv4(&Loopback->Broadcast, LOOPBACK_BCASTADDR_IPv4);
-
   IPRegisterInterface(Loopback);
 
-  IPAddInterfaceRoute(Loopback);
+  IPAddInterfaceAddress(Loopback, LOOPBACK_ADDRESS_IPv4, LOOPBACK_ADDRMASK_IPv4, NULL, NULL);
 
   TI_DbgPrint(MAX_TRACE, ("Leaving.\n"));
 

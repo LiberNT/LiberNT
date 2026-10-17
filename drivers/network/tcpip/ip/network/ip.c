@@ -18,6 +18,7 @@ LIST_ENTRY InterfaceListHead;
 KSPIN_LOCK InterfaceListLock;
 LIST_ENTRY NetTableListHead;
 KSPIN_LOCK NetTableListLock;
+FAST_MUTEX NetTableMutex;
 BOOLEAN IPInitialized = FALSE;
 BOOLEAN IpWorkItemQueued = FALSE;
 /* Work around calling timer at Dpc level */
@@ -226,7 +227,7 @@ PIP_INTERFACE IPCreateInterface(
 	IF->Unicast.Type = IP_ADDRESS_V4;
 	IF->PointToPoint.Type = IP_ADDRESS_V4;
 	IF->Netmask.Type = IP_ADDRESS_V4;
-	IF->Broadcast.Type = IP_ADDRESS_V4;
+	AddrInitIPv4(&IF->Broadcast, 0xFFFFFFFF);
 
     TcpipInitializeSpinLock(&IF->Lock);
     ExInitializeRundownProtection(&IF->Rundown);
@@ -275,35 +276,6 @@ VOID IPDestroyInterface(
     ExFreePoolWithTag(IF, IP_INTERFACE_TAG);
 }
 
-VOID IPAddInterfaceRoute( PIP_INTERFACE IF ) {
-    PNEIGHBOR_CACHE_ENTRY NCE;
-    IP_ADDRESS NetworkAddress;
-
-    /* Add a permanent neighbor for this NTE */
-    NCE = NBAddNeighbor(IF, &IF->Unicast,
-			IF->Address, IF->AddressLength,
-			NUD_PERMANENT, 0);
-    if (!NCE) {
-	TI_DbgPrint(MIN_TRACE, ("Could not create NCE.\n"));
-        return;
-    }
-
-    AddrWidenAddress( &NetworkAddress, &IF->Unicast, &IF->Netmask );
-
-    if (!RouterAddRoute(&NetworkAddress, &IF->Netmask, NCE, 1)) {
-	TI_DbgPrint(MIN_TRACE, ("Could not add route due to insufficient resources.\n"));
-    }
-
-    NBDereferenceNeighbor(NCE);
-
-    /* Send a gratuitous ARP packet to update the route caches of
-     * other computers */
-    if (IF != Loopback)
-       ARPTransmit(NULL, NULL, IF);
-
-    TCPUpdateInterfaceIPInformation(IF);
-}
-
 BOOLEAN IPRegisterInterface(
     PIP_INTERFACE IF)
 /*
@@ -345,25 +317,6 @@ BOOLEAN IPRegisterInterface(
     return TRUE;
 }
 
-VOID IPRemoveInterfaceRoute( PIP_INTERFACE IF ) {
-    PNEIGHBOR_CACHE_ENTRY NCE;
-    IP_ADDRESS GeneralRoute;
-
-    NCE = NBLocateNeighbor(&IF->Unicast, IF);
-    if (NCE)
-    {
-       TI_DbgPrint(DEBUG_IP,("Removing interface Addr %s\n", A2S(&IF->Unicast)));
-       TI_DbgPrint(DEBUG_IP,("                   Mask %s\n", A2S(&IF->Netmask)));
-
-       AddrWidenAddress(&GeneralRoute,&IF->Unicast,&IF->Netmask);
-
-       RouterRemoveRoute(&GeneralRoute, &IF->Unicast);
-
-       NBRemoveNeighbor(NCE);
-       NBDereferenceNeighbor(NCE);
-    }
-}
-
 VOID IPUnregisterInterface(
     PIP_INTERFACE IF)
 /*
@@ -392,6 +345,8 @@ VOID IPUnregisterInterface(
 
     IF->RundownStarted = TRUE;
     ExWaitForRundownProtectionRelease(&IF->Rundown);
+
+    IPDeleteInterfaceAddresses(IF);
 }
 
 
@@ -488,6 +443,7 @@ NTSTATUS IPStartup(PUNICODE_STRING RegistryPath)
     /* Initialize NTE list and protecting lock */
     InitializeListHead(&NetTableListHead);
     TcpipInitializeSpinLock(&NetTableListLock);
+    ExInitializeFastMutex(&NetTableMutex);
 
     /* Initialize reassembly list and protecting lock */
     InitializeListHead(&ReassemblyListHead);

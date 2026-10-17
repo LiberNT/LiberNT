@@ -111,6 +111,7 @@ VOID ICMPReply(
     IP_PACKET NewPacket;
     ADDRESS_FILE FakeAddrFile;
     PNEIGHBOR_CACHE_ENTRY NCE;
+    IP_ADDRESS Source;
 
     TI_DbgPrint(DEBUG_ICMP, ("Called. Type (%d)  Code (%d).\n", Type, Code));
 
@@ -123,12 +124,17 @@ VOID ICMPReply(
         return;
     }
 
+    if (IsInterfaceAddress(Interface, &IPPacket->DstAddr))
+        Source = IPPacket->DstAddr;
+    else
+        GetInterfaceSourceAddress(Interface, &IPPacket->SrcAddr, &NCE->Address, &Source);
+
     /* This is the only data needed to generate a packet */
     FakeAddrFile.Protocol = IPPROTO_ICMP;
     FakeAddrFile.TTL = 128;
 
     if (!NT_SUCCESS(BuildRawIpPacket(
-        &FakeAddrFile, &NewPacket, &IPPacket->SrcAddr, 0, &Interface->Unicast, 0, IPPacket->Data, DataSize)))
+        &FakeAddrFile, &NewPacket, &IPPacket->SrcAddr, 0, &Source, 0, IPPacket->Data, DataSize)))
     {
         NBDereferenceNeighbor(NCE);
         return;

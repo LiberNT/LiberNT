@@ -10,6 +10,16 @@
 
 #define IOCTL_IP_RESOLVE_NEIGHBOR _TCP_CTL_CODE(0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
+#define IOCTL_IP_GET_BEST_SOURCE _TCP_CTL_CODE(0x803, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+typedef struct _IP_BEST_SOURCE
+{
+    ULONG Destination;
+    ULONG InterfaceIndex;
+    ULONG Source;
+    ULONG NextHop;
+} IP_BEST_SOURCE, *PIP_BEST_SOURCE;
+
 typedef enum _IP6_TABLE_ID
 {
     Ip6TableInterfaces,

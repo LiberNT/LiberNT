@@ -211,6 +211,12 @@ VOID
 TCPUpdateInterfaceIPInformation(PIP_INTERFACE IF);
 
 VOID
+TCPAddInterfaceAddress(PIP_NTE Nte);
+
+VOID
+TCPRemoveInterfaceAddress(PIP_NTE Nte);
+
+VOID
 FlushListenQueue(PCONNECTION_ENDPOINT Connection, const NTSTATUS Status);
 
 VOID

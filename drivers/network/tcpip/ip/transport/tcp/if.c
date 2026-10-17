@@ -272,23 +272,152 @@ TCPUnregisterInterface(PIP_INTERFACE IF)
 VOID
 TCPUpdateInterfaceIPInformation(PIP_INTERFACE IF)
 {
-    ip4_addr_t ipaddr;
-    ip4_addr_t netmask;
-    ip4_addr_t gw;
+    struct netif *Netif = IF->TCPContext;
 
+    netif_set_up(Netif);
+    if (!ip4_addr_isany_val(*netif_ip4_addr(Netif)))
+        netif_set_default(Netif);
+}
+
+static
+err_t
+TCPAliasInterfaceInit(struct netif *netif)
+{
+    PIP_INTERFACE IF = netif->state;
+
+    netif->output = TCPSendDataCallback;
+    netif->output_ip6 = TCPLoopbackOutput6;
+    netif->mtu = IF->MTU;
+    netif->name[0] = 'e';
+    netif->name[1] = 'a';
+    netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_LINK_UP;
+
+    return ERR_OK;
+}
+
+static
+VOID
+TCPSelectDefaultInterface(VOID)
+{
+    struct netif *Netif, *Alias = NULL, *Other = NULL;
+
+    if (netif_default && netif_is_up(netif_default) && !ip4_addr_isany_val(*netif_ip4_addr(netif_default)))
+        return;
+
+    NETIF_FOREACH(Netif)
+    {
+        if (!netif_is_up(Netif) || ip4_addr_isany_val(*netif_ip4_addr(Netif)))
+            continue;
+        if (Netif->state && Netif->hwaddr_len)
+        {
+            netif_set_default(Netif);
+            return;
+        }
+        if (!Netif->state && !Alias)
+            Alias = Netif;
+        else if (!Other)
+            Other = Netif;
+    }
+
+    if (Alias)
+        netif_set_default(Alias);
+    else if (Other)
+        netif_set_default(Other);
+}
+
+struct tcp_address_msg
+{
+    PIP_NTE Nte;
+    struct netif *Alias;
+};
+
+static
+void
+TCPAddInterfaceAddressCallback(void *arg)
+{
+    struct tcp_address_msg *msg = arg;
+    PIP_NTE Nte = msg->Nte;
+    PIP_INTERFACE IF = Nte->Interface;
+    struct netif *Netif = IF->TCPContext;
+    ip4_addr_t ipaddr, netmask, gw;
+
+    ipaddr.addr = Nte->Unicast.Address.IPv4Address;
+    netmask.addr = Nte->Netmask.Address.IPv4Address;
     gw.addr = 0;
 
-    GetInterfaceIPv4Address(IF,
-                            ADE_UNICAST,
-                            (PULONG)&ipaddr.addr);
+    if (ip4_addr_isany_val(*netif_ip4_addr(Netif)))
+    {
+        netif_set_addr(Netif, &ipaddr, &netmask, &gw);
+        netif_set_up(Netif);
+        netif_set_default(Netif);
+        Nte->TCPContext = Netif;
+        return;
+    }
 
-    GetInterfaceIPv4Address(IF,
-                            ADE_ADDRMASK,
-                            (PULONG)&netmask.addr);
+    if (!msg->Alias)
+        return;
 
-    netif_set_addr(IF->TCPContext, &ipaddr, &netmask, &gw);
+    netmask.addr = 0xFFFFFFFF;
+    if (!netif_add(msg->Alias, &ipaddr, &netmask, &gw, IF, TCPAliasInterfaceInit, tcpip_input))
+        return;
 
-    netif_set_up(IF->TCPContext);
-    if (ipaddr.addr != 0)
-        netif_set_default(IF->TCPContext);
+    msg->Alias->state = NULL;
+    netif_set_up(msg->Alias);
+    Nte->TCPContext = msg->Alias;
+    msg->Alias = NULL;
+    TCPSelectDefaultInterface();
+}
+
+VOID
+TCPAddInterfaceAddress(PIP_NTE Nte)
+{
+    struct tcp_address_msg msg;
+
+    msg.Nte = Nte;
+    msg.Alias = ExAllocatePoolZero(NonPagedPool, sizeof(struct netif), NTE_TAG);
+
+    (void)tcpip_callback_wait(TCPAddInterfaceAddressCallback, &msg);
+
+    if (msg.Alias)
+        ExFreePoolWithTag(msg.Alias, NTE_TAG);
+}
+
+static
+void
+TCPRemoveInterfaceAddressCallback(void *arg)
+{
+    struct tcp_address_msg *msg = arg;
+    PIP_NTE Nte = msg->Nte;
+    struct netif *Netif = Nte->TCPContext;
+
+    if (!Netif)
+        return;
+
+    Nte->TCPContext = NULL;
+
+    if (Netif == Nte->Interface->TCPContext)
+    {
+        netif_set_addr(Netif, IP4_ADDR_ANY4, IP4_ADDR_ANY4, IP4_ADDR_ANY4);
+    }
+    else
+    {
+        netif_remove(Netif);
+        msg->Alias = Netif;
+    }
+
+    TCPSelectDefaultInterface();
+}
+
+VOID
+TCPRemoveInterfaceAddress(PIP_NTE Nte)
+{
+    struct tcp_address_msg msg;
+
+    msg.Nte = Nte;
+    msg.Alias = NULL;
+
+    (void)tcpip_callback_wait(TCPRemoveInterfaceAddressCallback, &msg);
+
+    if (msg.Alias)
+        ExFreePoolWithTag(msg.Alias, NTE_TAG);
 }

@@ -178,6 +178,18 @@ typedef struct _IP_INTERFACE {
     SEND_RECV_STATS Stats;        /* Send/Receive statistics */
 } IP_INTERFACE, *PIP_INTERFACE;
 
+typedef struct _IP_NTE {
+    LIST_ENTRY ListEntry;
+    PIP_INTERFACE Interface;
+    IP_ADDRESS Unicast;
+    IP_ADDRESS Netmask;
+    IP_ADDRESS Broadcast;
+    ULONG Context;
+    ULONG Instance;
+    BOOLEAN RouteOwner;
+    PVOID TCPContext;
+} IP_NTE, *PIP_NTE;
+
 typedef struct _IP_SET_ADDRESS {
     ULONG NteIndex;
     IPv4_RAW_ADDRESS Address;
@@ -212,6 +224,7 @@ extern LIST_ENTRY InterfaceListHead;
 extern KSPIN_LOCK InterfaceListLock;
 extern LIST_ENTRY NetTableListHead;
 extern KSPIN_LOCK NetTableListLock;
+extern FAST_MUTEX NetTableMutex;
 
 PIP_PACKET IPCreatePacket(
   ULONG Type);
@@ -227,12 +240,6 @@ BOOLEAN IPReferenceInterface(
     PIP_INTERFACE IF);
 
 VOID IPDereferenceInterface(
-    PIP_INTERFACE IF);
-
-VOID IPAddInterfaceRoute(
-    PIP_INTERFACE IF);
-
-VOID IPRemoveInterfaceRoute(
     PIP_INTERFACE IF);
 
 VOID IPDestroyInterface(

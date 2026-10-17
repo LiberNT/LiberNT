@@ -597,7 +597,7 @@ PNEIGHBOR_CACHE_ENTRY NBFindOrCreateNeighbor(
   if (NCE == NULL)
     {
         TI_DbgPrint(MID_TRACE,("BCAST: %s\n", A2S(&Interface->Broadcast)));
-        if( AddrIsEqual(Address, &Interface->Broadcast) ||
+        if( IsInterfaceBroadcast(Interface, Address) ||
             AddrIsUnspecified(Address) ) {
             TI_DbgPrint(MID_TRACE,("Packet targeted at broadcast addr\n"));
             NCE = NBAddNeighbor(Interface, Address, NULL,
@@ -732,7 +732,7 @@ ULONG NBCopyNeighbors
 	   CurNCE;
 	   CurNCE = CurNCE->Next ) {
 	  if( CurNCE->Interface == Interface &&
-              !AddrIsEqual( &CurNCE->Address, &CurNCE->Interface->Unicast ) ) {
+              !IsInterfaceAddress( Interface, &CurNCE->Address ) ) {
 	      if( ArpTable ) {
 		  ArpTable[Size].Index = Interface->Index;
 		  ArpTable[Size].AddrSize = CurNCE->LinkAddressLength;

@@ -658,7 +658,7 @@ NTSTATUS addIPAddress( IPAddr Address, IPMask Mask, DWORD IfIndex,
   closeTcpFile( tcpFile );
 
   if( NT_SUCCESS(status) ) {
-      *NteContext = Iosb.Information;
+      *NteContext = Data.NteContext;
       *NteInstance = Data.NewAddress;
   }
 
@@ -687,7 +687,7 @@ NTSTATUS deleteIpAddress( ULONG NteContext )
                                   &Iosb,
                                   IOCTL_DELETE_IP_ADDRESS,
                                   &NteContext,
-                                  sizeof(USHORT),
+                                  sizeof(NteContext),
                                   NULL,
                                   0 );
 

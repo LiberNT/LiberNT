@@ -225,7 +225,7 @@ NTSTATUS RawIPSendDatagram(
             UnlockObject(AddrFile);
             return STATUS_NETWORK_UNREACHABLE;
         }
-        if (AddrIsUnspecified(&LocalAddress)) LocalAddress = NCE->Interface->Unicast;
+        if (AddrIsUnspecified(&LocalAddress)) GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &LocalAddress);
     }
     else if (AddrFile->UnicastInterface)
     {
@@ -239,7 +239,7 @@ NTSTATUS RawIPSendDatagram(
             UnlockObject(AddrFile);
             return STATUS_INVALID_ADDRESS;
         }
-        if (AddrIsUnspecified(&LocalAddress)) LocalAddress = NCE->Interface->Unicast;
+        if (AddrIsUnspecified(&LocalAddress)) GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &LocalAddress);
     }
     else if (AddrIsUnspecified(&LocalAddress))
     {
@@ -253,7 +253,7 @@ NTSTATUS RawIPSendDatagram(
             return STATUS_NETWORK_UNREACHABLE;
         }
 
-        LocalAddress = NCE->Interface->Unicast;
+        GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &LocalAddress);
     }
     else
     {

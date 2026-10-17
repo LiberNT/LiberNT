@@ -396,7 +396,7 @@ NTSTATUS TCPConnect
             return STATUS_NETWORK_UNREACHABLE;
         }
 
-        AddrInitIPv4(&BindAddress, NCE->Interface->Unicast.Address.IPv4Address);
+        GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &BindAddress);
         NBDereferenceNeighbor(NCE);
     }
     else

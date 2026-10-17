@@ -554,6 +554,47 @@ VOID NTAPI ProtocolReceive(
     }
 }
 
+static PKEY_VALUE_PARTIAL_INFORMATION ReadIpConfigurationValue(HANDLE KeyHandle, PUNICODE_STRING ValueName)
+{
+    PKEY_VALUE_PARTIAL_INFORMATION Information;
+    ULONG Length = 0;
+    NTSTATUS Status;
+
+    Status = ZwQueryValueKey(KeyHandle, ValueName, KeyValuePartialInformation, NULL, 0, &Length);
+    if (Status != STATUS_BUFFER_TOO_SMALL && Status != STATUS_BUFFER_OVERFLOW)
+        return NULL;
+
+    Information = ExAllocatePoolWithTag(PagedPool, Length + 2 * sizeof(WCHAR), KEY_VALUE_TAG);
+    if (!Information)
+        return NULL;
+
+    Status = ZwQueryValueKey(KeyHandle, ValueName, KeyValuePartialInformation, Information, Length, &Length);
+    if (!NT_SUCCESS(Status) ||
+        (Information->Type != REG_SZ && Information->Type != REG_MULTI_SZ))
+    {
+        ExFreePoolWithTag(Information, KEY_VALUE_TAG);
+        return NULL;
+    }
+
+    RtlZeroMemory(Information->Data + Information->DataLength, 2 * sizeof(WCHAR));
+    return Information;
+}
+
+static BOOLEAN ParseIpConfigurationAddress(PCWSTR String, PIPv4_RAW_ADDRESS Address)
+{
+    UNICODE_STRING StringU;
+    ANSI_STRING StringA;
+
+    RtlInitUnicodeString(&StringU, String);
+    if (!NT_SUCCESS(RtlUnicodeStringToAnsiString(&StringA, &StringU, TRUE)))
+        return FALSE;
+
+    *Address = inet_addr(StringA.Buffer);
+    RtlFreeAnsiString(&StringA);
+
+    return *Address != 0xFFFFFFFF;
+}
+
 BOOLEAN ReadIpConfiguration(PIP_INTERFACE Interface)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -568,8 +609,6 @@ BOOLEAN ReadIpConfiguration(PIP_INTERFACE Interface)
     UNICODE_STRING InterfaceMetric = RTL_CONSTANT_STRING(L"InterfaceMetric");
     UNICODE_STRING Prefix = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\");
     UNICODE_STRING TcpipRegistryPath;
-    UNICODE_STRING RegistryDataU;
-    ANSI_STRING RegistryDataA;
     ULONG Unused;
     NTSTATUS Status;
     IP_ADDRESS DefaultMask, Router;
@@ -633,82 +672,48 @@ BOOLEAN ReadIpConfiguration(PIP_INTERFACE Interface)
                                  &Unused);
         if (NT_SUCCESS(Status) && KeyValueInfo->DataLength == sizeof(ULONG) && (*(PULONG)KeyValueInfo->Data) == 0)
         {
-            RegistryDataU.MaximumLength = KeyValueInfoLength - FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data);
-            RegistryDataU.Buffer = (PWCHAR)KeyValueInfo->Data;
+            PKEY_VALUE_PARTIAL_INFORMATION AddressInfo, MaskInfo, GatewayInfo;
+            PCWSTR AddressString, MaskString, AddressEnd, MaskEnd;
+            IPv4_RAW_ADDRESS AddressValue, MaskValue, RouterValue;
 
-            /* Read the IP address */
-            Status = ZwQueryValueKey(ParameterHandle,
-                                     &IPAddress,
-                                     KeyValuePartialInformation,
-                                     KeyValueInfo,
-                                     KeyValueInfoLength,
-                                     &Unused);
-            if (NT_SUCCESS(Status))
+            AddressInfo = ReadIpConfigurationValue(ParameterHandle, &IPAddress);
+            MaskInfo = ReadIpConfigurationValue(ParameterHandle, &Netmask);
+            if (AddressInfo && MaskInfo)
             {
-                RegistryDataU.Length = KeyValueInfo->DataLength;
+                AddressString = (PCWSTR)AddressInfo->Data;
+                AddressEnd = (PCWSTR)(AddressInfo->Data + AddressInfo->DataLength);
+                MaskString = (PCWSTR)MaskInfo->Data;
+                MaskEnd = (PCWSTR)(MaskInfo->Data + MaskInfo->DataLength);
 
-                Status = RtlUnicodeStringToAnsiString(&RegistryDataA,
-                                                      &RegistryDataU,
-                                                      TRUE);
-                if (NT_SUCCESS(Status))
+                while (AddressString < AddressEnd && *AddressString &&
+                       MaskString < MaskEnd && *MaskString)
                 {
-                    AddrInitIPv4(&Interface->Unicast,
-                                 inet_addr(RegistryDataA.Buffer));
-                    RtlFreeAnsiString(&RegistryDataA);
+                    if (ParseIpConfigurationAddress(AddressString, &AddressValue) &&
+                        ParseIpConfigurationAddress(MaskString, &MaskValue) &&
+                        AddressValue != 0)
+                    {
+                        IPAddInterfaceAddress(Interface, AddressValue, MaskValue, NULL, NULL);
+                    }
+
+                    AddressString += wcslen(AddressString) + 1;
+                    MaskString += wcslen(MaskString) + 1;
                 }
             }
-
-            Status = ZwQueryValueKey(ParameterHandle,
-                                     &Netmask,
-                                     KeyValuePartialInformation,
-                                     KeyValueInfo,
-                                     KeyValueInfoLength,
-                                     &Unused);
-            if (NT_SUCCESS(Status))
-            {
-                RegistryDataU.Length = KeyValueInfo->DataLength;
-
-                Status = RtlUnicodeStringToAnsiString(&RegistryDataA,
-                                                      &RegistryDataU,
-                                                      TRUE);
-                if (NT_SUCCESS(Status))
-                {
-                    AddrInitIPv4(&Interface->Netmask,
-                                 inet_addr(RegistryDataA.Buffer));
-                    RtlFreeAnsiString(&RegistryDataA);
-                }
-            }
-
-            /* We have to wait until both IP address and subnet mask
-             * are read to add the interface route, but we must do it
-             * before we add the default gateway */
-            if (!AddrIsUnspecified(&Interface->Unicast) &&
-                !AddrIsUnspecified(&Interface->Netmask))
-                IPAddInterfaceRoute(Interface);
+            if (AddressInfo)
+                ExFreePoolWithTag(AddressInfo, KEY_VALUE_TAG);
+            if (MaskInfo)
+                ExFreePoolWithTag(MaskInfo, KEY_VALUE_TAG);
 
             /* Read default gateway info */
-            Status = ZwQueryValueKey(ParameterHandle,
-                                     &Gateway,
-                                     KeyValuePartialInformation,
-                                     KeyValueInfo,
-                                     KeyValueInfoLength,
-                                     &Unused);
-            if (NT_SUCCESS(Status))
+            GatewayInfo = ReadIpConfigurationValue(ParameterHandle, &Gateway);
+            if (GatewayInfo)
             {
-                RegistryDataU.Length = KeyValueInfo->DataLength;
-
-                Status = RtlUnicodeStringToAnsiString(&RegistryDataA,
-                                                      &RegistryDataU,
-                                                      TRUE);
-                if (NT_SUCCESS(Status))
+                if (ParseIpConfigurationAddress((PCWSTR)GatewayInfo->Data, &RouterValue) && RouterValue != 0)
                 {
-                    AddrInitIPv4(&Router, inet_addr(RegistryDataA.Buffer));
-
-                    if (!AddrIsUnspecified(&Router))
-                        RouterCreateRoute(&DefaultMask, &DefaultMask, &Router, Interface);
-
-                    RtlFreeAnsiString(&RegistryDataA);
+                    AddrInitIPv4(&Router, RouterValue);
+                    RouterCreateRoute(&DefaultMask, &DefaultMask, &Router, Interface);
                 }
+                ExFreePoolWithTag(GatewayInfo, KEY_VALUE_TAG);
             }
         }
 
@@ -732,11 +737,6 @@ BOOLEAN ReconfigureAdapter(PRECONFIGURE_CONTEXT Context)
          * while no address is assigned. */
         if (AddrIsUnspecified(&Interface->Unicast))
             ReadIpConfiguration(Interface);
-
-        /* Compute the broadcast address */
-        Interface->Broadcast.Type = IP_ADDRESS_V4;
-        Interface->Broadcast.Address.IPv4Address = Interface->Unicast.Address.IPv4Address |
-                                                  ~Interface->Netmask.Address.IPv4Address;
     }
     else if (!Context->Adapter->CompletingReset)
     {

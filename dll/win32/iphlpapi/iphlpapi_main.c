@@ -146,6 +146,8 @@ static void if_counted_string_copy( WCHAR *dst, unsigned int len, IF_COUNTED_STR
 DWORD WINAPI AddIPAddress(IPAddr Address, IPMask IpMask, DWORD IfIndex, PULONG NTEContext, PULONG NTEInstance)
 {
 #ifdef __REACTOS__
+  if (!NTEContext || !NTEInstance)
+    return ERROR_INVALID_PARAMETER;
   return RtlNtStatusToDosError(addIPAddress(Address, IpMask, IfIndex, NTEContext, NTEInstance));
 #else
   FIXME(":stub\n");

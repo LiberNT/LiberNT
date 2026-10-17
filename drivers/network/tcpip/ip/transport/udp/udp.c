@@ -204,8 +204,8 @@ UDPIsBroadcastAddress(
     _In_ PIP_ADDRESS Address)
 {
     BOOLEAN IsBroadcast = FALSE;
+    PLIST_ENTRY Entry;
     KIRQL OldIrql;
-    IF_LIST_ITER(CurrentIF);
 
     if (Address->Type != IP_ADDRESS_V4)
         return FALSE;
@@ -213,17 +213,19 @@ UDPIsBroadcastAddress(
     if (Address->Address.IPv4Address == 0xFFFFFFFF)
         return TRUE;
 
-    TcpipAcquireSpinLock(&InterfaceListLock, &OldIrql);
+    TcpipAcquireSpinLock(&NetTableListLock, &OldIrql);
 
-    ForEachInterface(CurrentIF) {
-        if (CurrentIF != Loopback && AddrIsEqual(&CurrentIF->Broadcast, Address))
+    for (Entry = NetTableListHead.Flink; Entry != &NetTableListHead; Entry = Entry->Flink) {
+        PIP_NTE Nte = CONTAINING_RECORD(Entry, IP_NTE, ListEntry);
+
+        if (Nte->Interface != Loopback && AddrIsEqual(&Nte->Broadcast, Address))
         {
             IsBroadcast = TRUE;
             break;
         }
-    } EndFor(CurrentIF);
+    }
 
-    TcpipReleaseSpinLock(&InterfaceListLock, OldIrql);
+    TcpipReleaseSpinLock(&NetTableListLock, OldIrql);
 
     return IsBroadcast;
 }
@@ -262,7 +264,7 @@ static NTSTATUS UDPSendToAddress(
             UnlockObject(AddrFile);
             return STATUS_NETWORK_UNREACHABLE;
         }
-        if (AddrIsUnspecified(&LocalAddress)) LocalAddress = NCE->Interface->Unicast;
+        if (AddrIsUnspecified(&LocalAddress)) GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &LocalAddress);
     }
     else if (AddrFile->UnicastInterface)
     {
@@ -276,7 +278,7 @@ static NTSTATUS UDPSendToAddress(
             UnlockObject(AddrFile);
             return STATUS_INVALID_ADDRESS;
         }
-        if (AddrIsUnspecified(&LocalAddress)) LocalAddress = NCE->Interface->Unicast;
+        if (AddrIsUnspecified(&LocalAddress)) GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &LocalAddress);
     }
     else if (AddrIsUnspecified(&LocalAddress))
     {
@@ -289,7 +291,7 @@ static NTSTATUS UDPSendToAddress(
             return STATUS_NETWORK_UNREACHABLE;
         }
 
-        LocalAddress = NCE->Interface->Unicast;
+        GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &LocalAddress);
     }
     else
     {

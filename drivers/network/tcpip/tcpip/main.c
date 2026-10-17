@@ -574,6 +574,10 @@ TiDispatch(
                 Status = DispTdiDeleteIPAddress(Irp, IrpSp);
                 break;
 
+            case IOCTL_IP_GET_BEST_SOURCE:
+                Status = DispTdiGetBestSource(Irp, IrpSp);
+                break;
+
             case IOCTL_IP_RESOLVE_NEIGHBOR:
                 TI_DbgPrint(MIN_TRACE, ("QUERY_IP_HW_ADDRESS\n"));
                 Status = DispTdiQueryIpHwAddress(DeviceObject, Irp, IrpSp);

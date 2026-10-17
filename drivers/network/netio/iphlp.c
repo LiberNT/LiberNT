@@ -13,10 +13,12 @@
 #include <netioapi.h>
 #include <tdiinfo.h>
 #include <tcpioctl.h>
+#include <tcpip_undoc.h>
 
 #define NETIO_IPHLP_TAG 'hIeN'
 #define NETIO_MAX_ENTITIES 256
 #define NETIO_MAX_ROUTES 128
+#define NETIO_MAX_ADDRESSES 64
 
 typedef struct _NETIO_TDI_ROUTE
 {
@@ -257,9 +259,11 @@ GetBestRoute2(
     HANDLE Tcp;
     TDIEntityID *Entities;
     PNETIO_TDI_ROUTE Routes;
+    IPAddrEntry *Addresses;
     IPAddrEntry Address;
+    IP_BEST_SOURCE Query;
     NETIO_TDI_ROUTE Best;
-    ULONG Destination, Returned, EntityCount, RouteCount, i, j, Prefix, BestPrefix = 0;
+    ULONG Destination, Returned, EntityCount, RouteCount, AddressCount, i, j, k, Prefix, BestPrefix = 0;
     ULONG BestAddress = 0, BestIndex = 0;
     BOOLEAN Found = FALSE;
     NTSTATUS Status;
@@ -286,7 +290,8 @@ GetBestRoute2(
 
     Entities = ExAllocatePoolWithTag(PagedPool, NETIO_MAX_ENTITIES * sizeof(TDIEntityID), NETIO_IPHLP_TAG);
     Routes = ExAllocatePoolWithTag(PagedPool, NETIO_MAX_ROUTES * sizeof(NETIO_TDI_ROUTE), NETIO_IPHLP_TAG);
-    if (Entities == NULL || Routes == NULL)
+    Addresses = ExAllocatePoolWithTag(PagedPool, NETIO_MAX_ADDRESSES * sizeof(IPAddrEntry), NETIO_IPHLP_TAG);
+    if (Entities == NULL || Routes == NULL || Addresses == NULL)
     {
         Status = STATUS_INSUFFICIENT_RESOURCES;
         goto Done;
@@ -304,23 +309,36 @@ GetBestRoute2(
             continue;
 
         if (!NT_SUCCESS(NetioTcpQuery(Tcp, CL_NL_ENTITY, Entities[i].tei_instance, INFO_CLASS_PROTOCOL,
-                                      IP_MIB_ADDRTABLE_ENTRY_ID, &Address, sizeof(Address), &Returned)) ||
-            Returned < sizeof(Address) || Address.iae_addr == 0)
+                                      IP_MIB_ADDRTABLE_ENTRY_ID, Addresses,
+                                      NETIO_MAX_ADDRESSES * sizeof(IPAddrEntry), &Returned)) ||
+            Returned > NETIO_MAX_ADDRESSES * sizeof(IPAddrEntry))
         {
             continue;
         }
+        AddressCount = Returned / sizeof(IPAddrEntry);
+
+        for (k = 0; k < AddressCount; k++)
+        {
+            if (Addresses[k].iae_addr == 0)
+                continue;
+            if (SourceAddress != NULL && SourceAddress->si_family == AF_INET &&
+                SourceAddress->Ipv4.sin_addr.s_addr != 0 &&
+                SourceAddress->Ipv4.sin_addr.s_addr != Addresses[k].iae_addr)
+            {
+                continue;
+            }
+            break;
+        }
+        if (k == AddressCount)
+            continue;
+        Address = Addresses[k];
         if (InterfaceIndex != 0 && Address.iae_index != InterfaceIndex)
             continue;
-        if (SourceAddress != NULL && SourceAddress->si_family == AF_INET &&
-            SourceAddress->Ipv4.sin_addr.s_addr != 0 &&
-            SourceAddress->Ipv4.sin_addr.s_addr != Address.iae_addr)
-        {
-            continue;
-        }
 
         if (!NT_SUCCESS(NetioTcpQuery(Tcp, CL_NL_ENTITY, Entities[i].tei_instance, INFO_CLASS_PROTOCOL,
                                       IP_MIB_ARPTABLE_ENTRY_ID, Routes,
-                                      NETIO_MAX_ROUTES * sizeof(NETIO_TDI_ROUTE), &Returned)))
+                                      NETIO_MAX_ROUTES * sizeof(NETIO_TDI_ROUTE), &Returned)) ||
+            Returned > NETIO_MAX_ROUTES * sizeof(NETIO_TDI_ROUTE))
         {
             continue;
         }
@@ -362,12 +380,27 @@ GetBestRoute2(
     BestRoute->Publish = FALSE;
     BestRoute->Immortal = FALSE;
 
+    if (SourceAddress == NULL || SourceAddress->si_family != AF_INET || SourceAddress->Ipv4.sin_addr.s_addr == 0)
+    {
+        RtlZeroMemory(&Query, sizeof(Query));
+        Query.Destination = Destination;
+        Query.InterfaceIndex = BestIndex;
+        if (NT_SUCCESS(ZwDeviceIoControlFile(Tcp, NULL, NULL, NULL, &Io, IOCTL_IP_GET_BEST_SOURCE,
+                                             &Query, sizeof(Query), &Query, sizeof(Query))) &&
+            Query.Source != 0)
+        {
+            BestAddress = Query.Source;
+        }
+    }
+
     RtlZeroMemory(BestSourceAddress, sizeof(*BestSourceAddress));
     BestSourceAddress->si_family = AF_INET;
     BestSourceAddress->Ipv4.sin_addr.s_addr = BestAddress;
     Status = STATUS_SUCCESS;
 
 Done:
+    if (Addresses)
+        ExFreePoolWithTag(Addresses, NETIO_IPHLP_TAG);
     if (Routes)
         ExFreePoolWithTag(Routes, NETIO_IPHLP_TAG);
     if (Entities)

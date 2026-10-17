@@ -13,6 +13,7 @@
 
 #include <datagram.h>
 #include <pseh/pseh2.h>
+#include <tcpip_undoc.h>
 
 typedef struct _QUERY_HW_WORK_ITEM {
     PIO_WORKITEM WorkItem;
@@ -1731,19 +1732,20 @@ NTSTATUS DispTdiSetInformationEx(
     return Status;
 }
 
-/* TODO: Support multiple addresses per interface.
- * For now just set the nte context to the interface index.
- *
- * Later on, create an NTE context and NTE instance
- */
-
 NTSTATUS DispTdiSetIPAddress( PIRP Irp, PIO_STACK_LOCATION IrpSp ) {
-    NTSTATUS Status = STATUS_DEVICE_DOES_NOT_EXIST;
+    NTSTATUS Status = STATUS_OBJECT_NAME_NOT_FOUND;
     KIRQL OldIrql;
     PIP_SET_ADDRESS IpAddrChange =
         (PIP_SET_ADDRESS)Irp->AssociatedIrp.SystemBuffer;
     PIP_INTERFACE TargetIF = NULL;
+    ULONG Context, Instance;
     IF_LIST_ITER(IF);
+
+    if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(IP_SET_ADDRESS) ||
+        IrpSp->Parameters.DeviceIoControl.OutputBufferLength < sizeof(IP_SET_ADDRESS)) {
+        Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
+        return STATUS_INVALID_PARAMETER;
+    }
 
     TI_DbgPrint(MID_TRACE,("Setting IP Address for adapter %d\n",
 			   IpAddrChange->NteIndex));
@@ -1751,10 +1753,6 @@ NTSTATUS DispTdiSetIPAddress( PIRP Irp, PIO_STACK_LOCATION IrpSp ) {
     ForEachInterface(IF) {
 	TI_DbgPrint(MID_TRACE,("Looking at adapter %d\n", IF->Index));
 
-        if( IF->Unicast.Address.IPv4Address == IpAddrChange->Address ) {
-            Status = STATUS_DUPLICATE_OBJECTID;
-            break;
-        }
         if( IF->Index == IpAddrChange->NteIndex ) {
             if (IPReferenceInterface(IF))
                 TargetIF = IF;
@@ -1764,29 +1762,16 @@ NTSTATUS DispTdiSetIPAddress( PIRP Irp, PIO_STACK_LOCATION IrpSp ) {
     TcpipReleaseSpinLock(&InterfaceListLock, OldIrql);
 
     if (TargetIF) {
-        IPRemoveInterfaceRoute(TargetIF);
-
-        TargetIF->Unicast.Type = IP_ADDRESS_V4;
-        TargetIF->Unicast.Address.IPv4Address = IpAddrChange->Address;
-
-        TargetIF->Netmask.Type = IP_ADDRESS_V4;
-        TargetIF->Netmask.Address.IPv4Address = IpAddrChange->Netmask;
-
-        TargetIF->Broadcast.Type = IP_ADDRESS_V4;
-	TargetIF->Broadcast.Address.IPv4Address =
-	    TargetIF->Unicast.Address.IPv4Address |
-	    ~TargetIF->Netmask.Address.IPv4Address;
-
-        TI_DbgPrint(MID_TRACE,("New Unicast Address: %x\n",
-                               TargetIF->Unicast.Address.IPv4Address));
-        TI_DbgPrint(MID_TRACE,("New Netmask        : %x\n",
-                               TargetIF->Netmask.Address.IPv4Address));
-
-        IPAddInterfaceRoute(TargetIF);
-
-        IpAddrChange->Address = TargetIF->Index;
-        Status = STATUS_SUCCESS;
-        Irp->IoStatus.Information = TargetIF->Index;
+        Status = IPAddInterfaceAddress(TargetIF,
+                                       IpAddrChange->Address,
+                                       IpAddrChange->Netmask,
+                                       &Context,
+                                       &Instance);
+        if (NT_SUCCESS(Status)) {
+            IpAddrChange->NteIndex = Context;
+            IpAddrChange->Address = Instance;
+            Irp->IoStatus.Information = sizeof(IP_SET_ADDRESS);
+        }
         IPDereferenceInterface(TargetIF);
     }
 
@@ -1795,35 +1780,63 @@ NTSTATUS DispTdiSetIPAddress( PIRP Irp, PIO_STACK_LOCATION IrpSp ) {
 }
 
 NTSTATUS DispTdiDeleteIPAddress( PIRP Irp, PIO_STACK_LOCATION IrpSp ) {
-    NTSTATUS Status = STATUS_UNSUCCESSFUL;
+    NTSTATUS Status;
+
+    if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(ULONG))
+        Status = STATUS_INVALID_PARAMETER;
+    else
+        Status = IPDeleteInterfaceAddress(*(PULONG)Irp->AssociatedIrp.SystemBuffer);
+
+    Irp->IoStatus.Status = Status;
+    return Status;
+}
+
+NTSTATUS DispTdiGetBestSource( PIRP Irp, PIO_STACK_LOCATION IrpSp ) {
+    PIP_BEST_SOURCE Request = Irp->AssociatedIrp.SystemBuffer;
+    PNEIGHBOR_CACHE_ENTRY NCE = NULL;
+    PIP_INTERFACE Interface = NULL;
+    IP_ADDRESS Destination, Source;
+    NTSTATUS Status;
     KIRQL OldIrql;
-    PUSHORT NteIndex = Irp->AssociatedIrp.SystemBuffer;
-    PIP_INTERFACE TargetIF = NULL;
     IF_LIST_ITER(IF);
 
-    TcpipAcquireSpinLock(&InterfaceListLock, &OldIrql);
-    ForEachInterface(IF) {
-        if( IF->Index == *NteIndex ) {
-            if (IPReferenceInterface(IF))
-                TargetIF = IF;
-            break;
+    if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(IP_BEST_SOURCE) ||
+        IrpSp->Parameters.DeviceIoControl.OutputBufferLength < sizeof(IP_BEST_SOURCE)) {
+        Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    AddrInitIPv4(&Destination, Request->Destination);
+
+    if (Request->InterfaceIndex) {
+        TcpipAcquireSpinLock(&InterfaceListLock, &OldIrql);
+        ForEachInterface(IF) {
+            if (IF->Index == Request->InterfaceIndex) {
+                if (IPReferenceInterface(IF))
+                    Interface = IF;
+                break;
+            }
+        } EndFor(IF);
+        TcpipReleaseSpinLock(&InterfaceListLock, OldIrql);
+
+        if (Interface) {
+            NCE = RouteGetRouteOnInterface(&Destination, Interface);
+            IPDereferenceInterface(Interface);
         }
-    } EndFor(IF);
-    TcpipReleaseSpinLock(&InterfaceListLock, OldIrql);
+    } else {
+        NCE = RouteGetRouteToDestination(&Destination);
+    }
 
-    if (TargetIF) {
-        IPRemoveInterfaceRoute(TargetIF);
-        TargetIF->Unicast.Type = IP_ADDRESS_V4;
-        TargetIF->Unicast.Address.IPv4Address = 0;
-
-        TargetIF->Netmask.Type = IP_ADDRESS_V4;
-        TargetIF->Netmask.Address.IPv4Address = 0;
-
-        TargetIF->Broadcast.Type = IP_ADDRESS_V4;
-        TargetIF->Broadcast.Address.IPv4Address = 0;
-
+    if (NCE) {
+        GetInterfaceSourceAddress(NCE->Interface, &Destination, &NCE->Address, &Source);
+        Request->InterfaceIndex = NCE->Interface->Index;
+        Request->Source = Source.Address.IPv4Address;
+        Request->NextHop = NCE->Address.Address.IPv4Address;
+        NBDereferenceNeighbor(NCE);
+        Irp->IoStatus.Information = sizeof(IP_BEST_SOURCE);
         Status = STATUS_SUCCESS;
-        IPDereferenceInterface(TargetIF);
+    } else {
+        Status = STATUS_NETWORK_UNREACHABLE;
     }
 
     Irp->IoStatus.Status = Status;

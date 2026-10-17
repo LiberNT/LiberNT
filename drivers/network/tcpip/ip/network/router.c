@@ -399,8 +399,7 @@ PNEIGHBOR_CACHE_ENTRY RouteGetRouteOnInterface(PIP_ADDRESS Destination, PIP_INTE
     if (Destination->Type != IP_ADDRESS_V4)
         return NULL;
 
-    if (Destination->Address.IPv4Address == 0xFFFFFFFF ||
-        AddrIsEqual(Destination, &Interface->Broadcast))
+    if (IsInterfaceBroadcast(Interface, Destination))
     {
         NCE = NBLocateNeighbor(Destination, Interface);
         if (!NCE)
@@ -409,8 +408,7 @@ PNEIGHBOR_CACHE_ENTRY RouteGetRouteOnInterface(PIP_ADDRESS Destination, PIP_INTE
         return NCE;
     }
 
-    if (!AddrIsUnspecified(&Interface->Unicast) &&
-        HasPrefix(Destination, &Interface->Unicast, AddrCountPrefixBits(&Interface->Netmask)))
+    if (IsInterfaceOnLink(Interface, Destination))
     {
         return NBFindOrCreateNeighbor(Interface, Destination, FALSE);
     }
