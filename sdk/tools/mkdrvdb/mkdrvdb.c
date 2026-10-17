@@ -603,7 +603,7 @@ HasDirectoryId(const char *Text)
 }
 
 static void
-EmitAddRegSection(INF_SET *Set, const char *Section, const char *Prefix)
+EmitAddRegSection(INF_SET *Set, const char *Section, const char *Prefix, const char *FriendlyNameKey)
 {
     PINFCONTEXT Context;
     char *Root, *SubKey, *Name, *Data, *Key;
@@ -633,17 +633,24 @@ EmitAddRegSection(INF_SET *Set, const char *Section, const char *Prefix)
         if (SubKey)
             NormalizeKeyPath(SubKey);
         Key = (SubKey && *SubKey) ? Format("%s\\%s", Prefix, SubKey) : Duplicate(Prefix);
-        free(SubKey);
 
         if (Count < 3)
         {
             PutValue(Key, NULL, FLG_ADDREG_KEYONLY);
             fputc('\n', Out);
+            free(SubKey);
             free(Key);
             continue;
         }
 
         Name = Field(Context, 3);
+        if (FriendlyNameKey && (!SubKey || !*SubKey) && Name && Equal(Name, "FriendlyName"))
+        {
+            free(Key);
+            Key = Duplicate(FriendlyNameKey);
+            Name[0] = 0;
+        }
+        free(SubKey);
         PutValue(Key, Name, (unsigned long)Flags);
         for (Index = 5; Index <= Count; Index++)
         {
@@ -667,7 +674,7 @@ EmitAddRegSection(INF_SET *Set, const char *Section, const char *Prefix)
 }
 
 static void
-EmitAddRegList(INF_SET *Set, const char *Section, const char *Prefix)
+EmitAddRegList(INF_SET *Set, const char *Section, const char *Prefix, const char *FriendlyNameKey)
 {
     PINFCONTEXT Context;
     long Count, Index;
@@ -684,7 +691,7 @@ EmitAddRegList(INF_SET *Set, const char *Section, const char *Prefix)
         {
             Name = Field(Context, (ULONG)Index);
             if (Name && *Name)
-                EmitAddRegSection(Set, Name, Prefix);
+                EmitAddRegSection(Set, Name, Prefix, FriendlyNameKey);
             free(Name);
         }
     }
@@ -742,14 +749,14 @@ EmitRelativeRegistry(INF_SET *Set, const char *Section, const char *Prefix)
             {
                 Name = Field(Context, (ULONG)Index);
                 if (Name && *Name)
-                    EmitAddRegList(Set, Name, Prefix);
+                    EmitAddRegList(Set, Name, Prefix, NULL);
                 free(Name);
             }
         }
         InfHostFreeContext(Context);
     }
 
-    EmitAddRegList(Set, Section, Prefix);
+    EmitAddRegList(Set, Section, Prefix, NULL);
 }
 
 static void
@@ -916,6 +923,37 @@ EmitFilter(HINF Inf, const char *ConfigurationKey, PINFCONTEXT AddFilter)
 }
 
 static void
+EmitInterface(INF_SET *Set, const char *ConfigurationKey, PINFCONTEXT AddInterface)
+{
+    char *Guid = Field(AddInterface, 1), *Reference = Field(AddInterface, 2), *Section = Field(AddInterface, 3);
+    char *Key, *Prefix, *FriendlyNameKey, *Cursor;
+
+    if (Guid && *Guid)
+    {
+        for (Cursor = Guid; *Cursor; Cursor++)
+            *Cursor = (char)tolower((unsigned char)*Cursor);
+        if (Reference && *Reference)
+            Key = Format("%s\\Interfaces\\%s#%s", ConfigurationKey, Guid, Reference);
+        else
+            Key = Format("%s\\Interfaces\\%s", ConfigurationKey, Guid);
+        PutValue(Key, NULL, FLG_ADDREG_KEYONLY);
+        fputc('\n', Out);
+        if (Section && *Section)
+        {
+            Prefix = Format("%s\\Device", Key);
+            FriendlyNameKey = Format("%s\\Properties\\{026e516e-b814-414b-83cd-856d6fef4822}\\0002", Key);
+            EmitAddRegList(Set, Section, Prefix, FriendlyNameKey);
+            free(FriendlyNameKey);
+            free(Prefix);
+        }
+        free(Key);
+    }
+    free(Section);
+    free(Reference);
+    free(Guid);
+}
+
+static void
 EmitConfiguration(INF_FILE *File, const char *PackageKey, const char *Section)
 {
     STRING_LIST Included = { NULL, 0 };
@@ -977,6 +1015,15 @@ EmitConfiguration(INF_FILE *File, const char *PackageKey, const char *Section)
     {
         for (Found = 1; Found; Found = FindNextMatch(Context, "AddFilter"))
             EmitFilter(File->Inf, Key, Context);
+        InfHostFreeContext(Context);
+    }
+    free(Path);
+
+    Path = Format("%s.Interfaces", Section);
+    if (FindFirst(File->Inf, Path, "AddInterface", &Context))
+    {
+        for (Found = 1; Found; Found = FindNextMatch(Context, "AddInterface"))
+            EmitInterface(&Set, Key, Context);
         InfHostFreeContext(Context);
     }
     free(Path);

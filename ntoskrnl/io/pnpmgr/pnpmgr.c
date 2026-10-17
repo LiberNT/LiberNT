@@ -807,10 +807,155 @@ IopApplyDriverDatabaseFilters(
 }
 
 static
+VOID
+IopApplyDriverDatabaseInterface(
+    _In_ PCUNICODE_STRING InstancePath,
+    _In_ HANDLE Interface,
+    _In_ PCUNICODE_STRING Name)
+{
+    UNICODE_STRING ClassesU = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\DeviceClasses");
+    UNICODE_STRING FriendlyNameKeyU = RTL_CONSTANT_STRING(L"Properties\\{026e516e-b814-414b-83cd-856d6fef4822}\\0002");
+    UNICODE_STRING DeviceU = RTL_CONSTANT_STRING(L"Device");
+    UNICODE_STRING ParametersU = RTL_CONSTANT_STRING(L"Device Parameters");
+    UNICODE_STRING FriendlyNameU = RTL_CONSTANT_STRING(L"FriendlyName");
+    UNICODE_STRING EmptyU = RTL_CONSTANT_STRING(L"");
+    UNICODE_STRING Guid, Reference, KeyName;
+    PKEY_VALUE_FULL_INFORMATION Value;
+    HANDLE Classes, Class = NULL, Key = NULL, ReferenceKey = NULL, Parameters = NULL, Source;
+    USHORT Index, Length;
+    NTSTATUS Status;
+
+    Guid.Buffer = Name->Buffer;
+    Guid.Length = Guid.MaximumLength = 38 * sizeof(WCHAR);
+    if (Name->Length < Guid.Length || Name->Buffer[0] != L'{' || Name->Buffer[37] != L'}')
+        return;
+    Reference.Buffer = Name->Buffer + 38;
+    Reference.Length = Reference.MaximumLength = Name->Length - Guid.Length;
+    if (Reference.Length)
+    {
+        if (Reference.Buffer[0] != L'#')
+            return;
+        Reference.Buffer++;
+        Reference.Length -= sizeof(WCHAR);
+        Reference.MaximumLength = Reference.Length;
+    }
+
+    Length = (USHORT)(4 * sizeof(WCHAR) + InstancePath->Length + sizeof(WCHAR) + Guid.Length);
+    if (Length < Guid.Length + sizeof(WCHAR) + Reference.Length)
+        Length = Guid.Length + sizeof(WCHAR) + Reference.Length;
+    KeyName.Buffer = ExAllocatePoolWithTag(PagedPool, Length, TAG_IO);
+    if (!KeyName.Buffer)
+        return;
+    KeyName.Length = 0;
+    KeyName.MaximumLength = Length;
+
+    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&Classes, NULL, &ClassesU, KEY_CREATE_SUB_KEY)))
+        goto Cleanup;
+    Status = IopCreateRegistryKeyEx(&Class, Classes, &Guid, KEY_CREATE_SUB_KEY, REG_OPTION_NON_VOLATILE, NULL);
+    ZwClose(Classes);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+
+    RtlAppendUnicodeToString(&KeyName, L"##?#");
+    Index = KeyName.Length / sizeof(WCHAR);
+    RtlAppendUnicodeStringToString(&KeyName, InstancePath);
+    for (; Index < KeyName.Length / sizeof(WCHAR); Index++)
+    {
+        if (KeyName.Buffer[Index] == L'\\')
+            KeyName.Buffer[Index] = L'#';
+    }
+    RtlAppendUnicodeToString(&KeyName, L"#");
+    RtlAppendUnicodeStringToString(&KeyName, &Guid);
+    if (!NT_SUCCESS(IopCreateRegistryKeyEx(&Key, Class, &KeyName, KEY_CREATE_SUB_KEY, REG_OPTION_NON_VOLATILE, NULL)))
+        goto Cleanup;
+
+    KeyName.Length = 0;
+    RtlAppendUnicodeToString(&KeyName, L"#");
+    RtlAppendUnicodeStringToString(&KeyName, &Reference);
+    if (!NT_SUCCESS(IopCreateRegistryKeyEx(&ReferenceKey, Key, &KeyName, KEY_CREATE_SUB_KEY, REG_OPTION_NON_VOLATILE, NULL)) ||
+        !NT_SUCCESS(IopCreateRegistryKeyEx(&Parameters, ReferenceKey, &ParametersU, KEY_ALL_ACCESS, REG_OPTION_NON_VOLATILE, NULL)))
+    {
+        goto Cleanup;
+    }
+
+    if (NT_SUCCESS(IopOpenRegistryKeyEx(&Source, Interface, &DeviceU, KEY_READ)))
+    {
+        IopCopyRegistryTree(Source, Parameters, 0);
+        ZwClose(Source);
+    }
+
+    if (NT_SUCCESS(IopOpenRegistryKeyEx(&Source, Interface, &FriendlyNameKeyU, KEY_READ)))
+    {
+        Status = IopGetRegistryValue(Source, EmptyU.Buffer, &Value);
+        if (NT_SUCCESS(Status))
+        {
+            if ((Value->Type == REG_SZ || Value->Type == (0xFFFF0000 | DEVPROP_TYPE_STRING)) && Value->DataLength)
+            {
+                ZwSetValueKey(Parameters, &FriendlyNameU, 0, REG_SZ,
+                              (PUCHAR)Value + Value->DataOffset, Value->DataLength);
+            }
+            ExFreePool(Value);
+        }
+        ZwClose(Source);
+    }
+
+Cleanup:
+    if (Parameters)
+        ZwClose(Parameters);
+    if (ReferenceKey)
+        ZwClose(ReferenceKey);
+    if (Key)
+        ZwClose(Key);
+    if (Class)
+        ZwClose(Class);
+    ExFreePoolWithTag(KeyName.Buffer, TAG_IO);
+}
+
+static
+VOID
+IopApplyDriverDatabaseInterfaces(
+    _In_ PCUNICODE_STRING InstancePath,
+    _In_ HANDLE Configuration)
+{
+    UNICODE_STRING InterfacesU = RTL_CONSTANT_STRING(L"Interfaces");
+    PKEY_BASIC_INFORMATION KeyInformation;
+    HANDLE Interfaces, Interface;
+    UNICODE_STRING Name;
+    ULONG Index, Length;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&Interfaces, Configuration, &InterfacesU, KEY_READ)))
+        return;
+
+    for (Index = 0; ; Index++)
+    {
+        Status = ZwEnumerateKey(Interfaces, Index, KeyBasicInformation, NULL, 0, &Length);
+        if (Status != STATUS_BUFFER_OVERFLOW && Status != STATUS_BUFFER_TOO_SMALL)
+            break;
+        KeyInformation = ExAllocatePool(PagedPool, Length);
+        if (!KeyInformation)
+            break;
+        if (NT_SUCCESS(ZwEnumerateKey(Interfaces, Index, KeyBasicInformation, KeyInformation, Length, &Length)))
+        {
+            Name.Buffer = KeyInformation->Name;
+            Name.Length = Name.MaximumLength = (USHORT)KeyInformation->NameLength;
+            if (NT_SUCCESS(IopOpenRegistryKeyEx(&Interface, Interfaces, &Name, KEY_READ)))
+            {
+                IopApplyDriverDatabaseInterface(InstancePath, Interface, &Name);
+                ZwClose(Interface);
+            }
+        }
+        ExFreePool(KeyInformation);
+    }
+    ZwClose(Interfaces);
+}
+
+static
 BOOLEAN
 IopApplyDriverDatabaseMatch(
     _In_ HANDLE Database,
     _In_ HANDLE InstanceKey,
+    _In_ PCUNICODE_STRING InstancePath,
     _In_ PIOP_DRIVER_DATABASE_MATCH Match)
 {
     UNICODE_STRING DeviceU = RTL_CONSTANT_STRING(L"Device");
@@ -893,6 +1038,7 @@ IopApplyDriverDatabaseMatch(
     }
 
     IopApplyDriverDatabaseFilters(InstanceKey, Configuration);
+    IopApplyDriverDatabaseInterfaces(InstancePath, Configuration);
     IopApplyDriverDatabaseDriverKey(InstanceKey, Configuration, Match, Config);
     IopApplyDriverDatabaseServices(Configuration, Config);
 
@@ -975,7 +1121,7 @@ IopConfigureDeviceFromDriverDatabase(
     }
 
     if (Matches[0].Found)
-        Applied = IopApplyDriverDatabaseMatch(Database, InstanceKey, &Matches[0]);
+        Applied = IopApplyDriverDatabaseMatch(Database, InstanceKey, &DeviceNode->InstancePath, &Matches[0]);
 
     for (List = 0; List < RTL_NUMBER_OF(Ids); List++)
     {
