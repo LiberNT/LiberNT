@@ -21,8 +21,12 @@ extern "C"
 using namespace ShellFrame;
 
 #define IDC_SEARCH 100
+#define IDC_SCROLL 101
+#define IDC_ROW_FIRST 1000
+#define BAR_ACTION (-2)
 #define TIMER_REFRESH 1
 #define TIMER_SETTING 2
+#define WM_SETTINGS_CONTROL (WM_APP + 16)
 
 enum class GlassTone
 {
@@ -62,21 +66,23 @@ GlassColor(const Theme &theme, GlassTone tone)
 
 HINSTANCE Instance;
 
-enum class Part
-{
-    None,
-    Row,
-    Control,
-    Action
-};
-
 struct RowPlace
 {
     int Group;
     int Row;
     RECT Box;
     RECT Control;
+    RECT Bar;
     std::vector<RECT> Actions;
+};
+
+struct RowControl
+{
+    HWND Window;
+    int Place;
+    int Action;
+    int Height;
+    HICON Image;
 };
 
 struct SearchEntry
@@ -191,21 +197,15 @@ public:
         m_Scroll(0),
         m_ContentHeight(0),
         m_HotNav(-1),
-        m_HotPlace(-1),
-        m_HotPart(Part::None),
-        m_HotAction(-1),
-        m_PressedPlace(-1),
-        m_PressedPart(Part::None),
-        m_PressedAction(-1),
-        m_DragPlace(-1),
         m_HotBack(FALSE),
         m_HotForward(FALSE),
         m_HotAccount(FALSE),
         m_HotCrumb(-1),
-        m_DragScroll(FALSE),
-        m_DragOffset(0),
         m_TrackingClient(FALSE),
         m_Search(NULL),
+        m_ScrollBar(NULL),
+        m_CardBrush(NULL),
+        m_CardColor(CLR_NONE),
         m_SearchFont(NULL),
         m_SmallIcon(NULL),
         m_BigIcon(NULL),
@@ -219,6 +219,7 @@ public:
                 m_User[0] = UNICODE_NULL;
         }
         m_Admin = IsAdmin();
+        m_Theme.SetFollowSystemColors(TRUE);
     }
 
     void SetInitialPage(PageId page, const std::wstring &param)
@@ -292,8 +293,11 @@ protected:
         SendMessageW(m_hwnd, WM_SETICON, ICON_SMALL, (LPARAM)m_SmallIcon);
         SendMessageW(m_hwnd, WM_SETICON, ICON_BIG, (LPARAM)m_BigIcon);
 
-        m_Search = CreateWindowExW(0, WC_EDITW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, 0, 0, 0, 0,
-                                   m_hwnd, (HMENU)IDC_SEARCH, Instance, NULL);
+        PlaceWindow();
+        m_Search = CreateWindowExW(WS_EX_CLIENTEDGE, WC_EDITW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+                                   0, 0, 0, 0, m_hwnd, (HMENU)IDC_SEARCH, Instance, NULL);
+        m_ScrollBar = CreateWindowExW(0, WC_SCROLLBARW, L"", WS_CHILD | SBS_VERT, 0, 0, 0, 0, m_hwnd,
+                                      (HMENU)IDC_SCROLL, Instance, NULL);
         SetWindowSubclass(m_Search, SearchProc, 0, (DWORD_PTR)this);
         StringCchCopyW(cue, _countof(cue), Str(IDS_FIND_SETTING).c_str());
         SendMessageW(m_Search, EM_SETCUEBANNER, FALSE, (LPARAM)cue);
@@ -325,6 +329,22 @@ protected:
         }
     }
 
+    void PlaceWindow()
+    {
+        MONITORINFO monitor = { sizeof(monitor) };
+        RECT work, frame;
+        int width, height;
+
+        if (!GetMonitorInfoW(MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTONEAREST), &monitor))
+            return;
+        work = monitor.rcWork;
+        GetWindowRect(m_hwnd, &frame);
+        width = min((int)(frame.right - frame.left), (int)(work.right - work.left) - m_Theme.Scale(24));
+        height = min((int)(frame.bottom - frame.top), (int)(work.bottom - work.top) - m_Theme.Scale(24));
+        SetWindowPos(m_hwnd, NULL, work.left + (work.right - work.left - width) / 2,
+                     work.top + (work.bottom - work.top - height) / 2, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
     void OnLayout(const RECT &client) override
     {
         RECT box = SearchRect();
@@ -332,9 +352,17 @@ protected:
         UNREFERENCED_PARAMETER(client);
         if (m_Search)
         {
-            int inset = m_Theme.Scale(11), height = m_Theme.Scale(20);
-            MoveWindow(m_Search, box.left + inset, box.top + (box.bottom - box.top - height) / 2,
-                       box.right - box.left - inset - m_Theme.Scale(36), height, TRUE);
+            TEXTMETRICW tm;
+            HDC dc = GetDC(m_Search);
+            HGDIOBJ old = SelectObject(dc, m_SearchFont ? m_SearchFont : m_Theme.Font(TextStyle::Body));
+            int height;
+
+            GetTextMetricsW(dc, &tm);
+            SelectObject(dc, old);
+            ReleaseDC(m_Search, dc);
+            height = tm.tmHeight + 2 * GetSystemMetricsForDpi(SM_CYEDGE, m_Theme.Dpi()) + m_Theme.Scale(8);
+            MoveWindow(m_Search, box.left, box.top + (box.bottom - box.top - height) / 2, box.right - box.left, height,
+                       TRUE);
         }
         LayoutContent();
     }
@@ -360,7 +388,6 @@ protected:
             canvas.Graphics().FillPath(&fill, &panel);
         }
         PaintCaption(canvas);
-        PaintSearch(canvas);
         PaintAccount(canvas);
         PaintNavigation(canvas, client);
         PaintContent(canvas, client);
@@ -378,20 +405,11 @@ protected:
                 break;
             case WM_MOUSELEAVE:
                 m_TrackingClient = FALSE;
-                if (m_DragPlace < 0 && !m_DragScroll)
-                    SetHot(-1, -1, Part::None, -1, FALSE, FALSE, FALSE, -1);
+                SetHot(-1, FALSE, FALSE, FALSE, -1);
                 break;
-            case WM_LBUTTONDOWN:
-                OnButtonDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-                return 0;
             case WM_LBUTTONUP:
                 OnButtonUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
                 return 0;
-            case WM_CAPTURECHANGED:
-                if (m_DragPlace >= 0 && (HWND)lParam != m_hwnd)
-                    EndSliderDrag(FALSE);
-                m_DragScroll = FALSE;
-                break;
             case WM_XBUTTONUP:
                 if (GET_XBUTTON_WPARAM(wParam) == XBUTTON1)
                     GoBack();
@@ -422,6 +440,23 @@ protected:
                 Invalidate(NULL);
                 return 0;
             }
+            case WM_VSCROLL:
+                if ((HWND)lParam == m_ScrollBar)
+                {
+                    OnScrollBar(LOWORD(wParam));
+                    return 0;
+                }
+                break;
+            case WM_HSCROLL:
+            {
+                int index = ControlIndex((HWND)lParam);
+                if (index >= 0)
+                {
+                    OnSlider(index, LOWORD(wParam));
+                    return 0;
+                }
+                break;
+            }
             case WM_KEYDOWN:
                 if (OnKey((UINT)wParam))
                     return 0;
@@ -439,16 +474,38 @@ protected:
                 }
                 break;
             case WM_COMMAND:
+            {
+                int index = ControlIndex((HWND)lParam);
                 if (LOWORD(wParam) == IDC_SEARCH && HIWORD(wParam) == EN_CHANGE)
                     OnSearchChanged();
-                if (LOWORD(wParam) == IDC_SEARCH && (HIWORD(wParam) == EN_SETFOCUS || HIWORD(wParam) == EN_KILLFOCUS))
-                    Invalidate(NULL);
+                if (index >= 0 && HIWORD(wParam) == BN_CLICKED)
+                    PostMessageW(m_hwnd, WM_SETTINGS_CONTROL, index, 0);
+                if (index >= 0 && HIWORD(wParam) == CBN_SELCHANGE)
+                    PostMessageW(m_hwnd, WM_SETTINGS_CONTROL, index, SendMessageW((HWND)lParam, CB_GETCURSEL, 0, 0));
                 break;
-            case WM_CTLCOLOREDIT:
-                SetTextColor((HDC)wParam, GlassColor(m_Theme, GlassTone::Text));
-                SetBkColor((HDC)wParam, GlassColor(m_Theme, GlassTone::Clear));
-                SetDCBrushColor((HDC)wParam, GlassColor(m_Theme, GlassTone::Clear));
-                return (LRESULT)GetStockObject(DC_BRUSH);
+            }
+            case WM_CTLCOLORSTATIC:
+            case WM_CTLCOLORBTN:
+                if (ControlIndex((HWND)lParam) >= 0 || (HWND)lParam == m_ScrollBar)
+                {
+                    SetTextColor((HDC)wParam, m_Theme.Colors().Text);
+                    SetBkColor((HDC)wParam, m_Theme.Colors().Card);
+                    return (LRESULT)CardBrush();
+                }
+                break;
+            case WM_PRINTCLIENT:
+            {
+                RECT box;
+                if (GetClipBox((HDC)wParam, &box) != NULLREGION && InControls(box))
+                {
+                    FillRect((HDC)wParam, &box, CardBrush());
+                    return 0;
+                }
+                break;
+            }
+            case WM_SETTINGS_CONTROL:
+                ActivateControl((int)wParam, (int)lParam);
+                return 0;
             case WM_TIMER:
                 if (wParam == TIMER_REFRESH || wParam == TIMER_SETTING)
                 {
@@ -499,8 +556,8 @@ protected:
             case WM_GETMINMAXINFO:
             {
                 MINMAXINFO *info = (MINMAXINFO *)lParam;
-                info->ptMinTrackSize.x = m_Theme.Scale(760);
-                info->ptMinTrackSize.y = m_Theme.Scale(560);
+                info->ptMinTrackSize.x = m_Theme.Scale(600);
+                info->ptMinTrackSize.y = m_Theme.Scale(440);
                 return 0;
             }
             case WM_SETTINGS_REFRESH:
@@ -533,6 +590,10 @@ protected:
                 if (m_SearchFont)
                     DeleteObject(m_SearchFont);
                 m_SearchFont = NULL;
+                DestroyControls();
+                if (m_CardBrush)
+                    DeleteObject(m_CardBrush);
+                m_CardBrush = NULL;
                 if (m_SmallIcon)
                     DestroyIcon(m_SmallIcon);
                 if (m_BigIcon)
@@ -580,13 +641,13 @@ private:
 
     RECT SearchRect() const
     {
-        RECT rc = { m_Theme.Scale(16), m_Theme.Scale(56), m_Theme.Scale(296), m_Theme.Scale(88) };
+        RECT rc = { m_Theme.Scale(16), m_Theme.Scale(56), PanelLeft() - m_Theme.Scale(16), m_Theme.Scale(88) };
         return rc;
     }
 
     RECT AccountRect() const
     {
-        RECT rc = { m_Theme.Scale(12), m_Theme.Scale(100), m_Theme.Scale(300), m_Theme.Scale(160) };
+        RECT rc = { m_Theme.Scale(12), m_Theme.Scale(100), PanelLeft() - m_Theme.Scale(12), m_Theme.Scale(160) };
         return rc;
     }
 
@@ -596,13 +657,20 @@ private:
     {
         RECT rc;
         rc.left = m_Theme.Scale(12);
-        rc.right = m_Theme.Scale(300);
+        rc.right = PanelLeft() - m_Theme.Scale(12);
         rc.top = NavTop() + index * m_Theme.Scale(40) - m_NavScroll;
         rc.bottom = rc.top + m_Theme.Scale(36);
         return rc;
     }
 
-    int ContentLeft() const { return m_Theme.Scale(328); }
+    int ContentLeft() const
+    {
+        RECT client;
+
+        GetClientRect(m_hwnd, &client);
+        return client.right < m_Theme.Scale(900) ? m_Theme.Scale(264) : m_Theme.Scale(328);
+    }
+
     int PanelLeft() const { return ContentLeft() - m_Theme.Scale(16); }
     int PanelRadius() const { return m_Theme.Scale(8); }
 
@@ -610,7 +678,8 @@ private:
     {
         RECT client;
         GetClientRect(m_hwnd, &client);
-        return min((int)client.right - m_Theme.Scale(32), ContentLeft() + m_Theme.Scale(1000));
+        return min((int)client.right - m_Theme.Scale(16) - GetSystemMetricsForDpi(SM_CXVSCROLL, m_Theme.Dpi()),
+                   ContentLeft() + m_Theme.Scale(1000));
     }
 
     int ContentTop() const { return CaptionHeight() + m_Theme.Scale(4); }
@@ -655,7 +724,14 @@ private:
     {
         const PageInfo *info = FindPage(m_Page);
         PageBuilder page(this, m_Param, false);
+        int focusPlace = -1, focusAction = -1, focus = ControlIndex(GetFocus());
 
+        if (focus >= 0)
+        {
+            focusPlace = m_Controls[focus].Place;
+            focusAction = m_Controls[focus].Action;
+        }
+        DestroyControls();
         FreeImages();
         if (m_Page == PageId::Search)
             BuildSearch(page);
@@ -668,14 +744,15 @@ private:
         if (resetScroll)
         {
             m_Scroll = 0;
-            m_HotPlace = -1;
-            m_HotPart = Part::None;
+            focusPlace = -1;
         }
-        m_PressedPlace = -1;
-        m_PressedPart = Part::None;
         LayoutContent();
-        if (m_HotPlace >= (int)m_Places.size())
-            m_HotPlace = -1;
+        CreateControls();
+        for (size_t i = 0; i < m_Controls.size() && focusPlace >= 0; i++)
+        {
+            if (m_Controls[i].Place == focusPlace && m_Controls[i].Action == focusAction)
+                SetFocus(m_Controls[i].Window);
+        }
         Invalidate(NULL);
     }
 
@@ -817,7 +894,11 @@ private:
                 place.Row = (int)r;
                 SetRect(&place.Box, left, y, right, y + height);
                 SetRectEmpty(&place.Control);
+                SetRectEmpty(&place.Bar);
                 LayoutControl(row, place);
+                if (row.Bar)
+                    SetRect(&place.Bar, left + m_Theme.Scale(icons ? 56 : 16), y + height - m_Theme.Scale(24),
+                            right - m_Theme.Scale(16), y + height - m_Theme.Scale(12));
                 m_Places.push_back(place);
                 y += height;
             }
@@ -831,6 +912,11 @@ private:
         ClampScroll();
     }
 
+    int ControlWidth(int share, int preferred) const
+    {
+        return min(preferred, max(m_Theme.Scale(96), (ContentRight() - ContentLeft()) * share / 100));
+    }
+
     void LayoutControl(const SettingRow &row, RowPlace &place)
     {
         RECT &rc = place.Box, &control = place.Control;
@@ -839,19 +925,20 @@ private:
         switch (row.Kind)
         {
             case RowKind::Toggle:
-                SetRect(&control, right - m_Theme.Scale(40), middle - m_Theme.Scale(10), right, middle + m_Theme.Scale(10));
+                SetRect(&control, right - m_Theme.Scale(20), middle - m_Theme.Scale(10), right, middle + m_Theme.Scale(10));
                 break;
             case RowKind::Choice:
             {
                 int width = m_Theme.Scale(120);
                 for (size_t i = 0; i < row.Options.size(); i++)
-                    width = max(width, MeasureWidth(row.Options[i], m_Theme.Font(TextStyle::Body)) + m_Theme.Scale(48));
-                width = min(width, m_Theme.Scale(300));
-                SetRect(&control, right - width, middle - m_Theme.Scale(16), right, middle + m_Theme.Scale(16));
+                    width = max(width, MeasureWidth(row.Options[i], m_Theme.Font(TextStyle::Body)) + m_Theme.Scale(40));
+                width = min(width, ControlWidth(45, m_Theme.Scale(300)));
+                SetRect(&control, right - width, middle - m_Theme.Scale(14), right, middle + m_Theme.Scale(14));
                 break;
             }
             case RowKind::Slider:
-                SetRect(&control, right - m_Theme.Scale(220), middle - m_Theme.Scale(12), right, middle + m_Theme.Scale(12));
+                SetRect(&control, right - ControlWidth(35, m_Theme.Scale(220)), middle - m_Theme.Scale(14), right,
+                        middle + m_Theme.Scale(14));
                 break;
             case RowKind::Hero:
             case RowKind::Button:
@@ -863,7 +950,7 @@ private:
                 {
                     int width = max(m_Theme.Scale(96), MeasureWidth(actions[i], m_Theme.Font(TextStyle::Body)) +
                                                         m_Theme.Scale(32));
-                    RECT button = { right - width, middle - m_Theme.Scale(16), right, middle + m_Theme.Scale(16) };
+                    RECT button = { right - width, middle - m_Theme.Scale(14), right, middle + m_Theme.Scale(14) };
                     place.Actions.insert(place.Actions.begin(), button);
                     right -= width + m_Theme.Scale(8);
                 }
@@ -876,7 +963,8 @@ private:
             }
             case RowKind::Navigate:
             case RowKind::Link:
-                SetRect(&control, right - m_Theme.Scale(16), middle - m_Theme.Scale(8), right, middle + m_Theme.Scale(8));
+                SetRect(&control, rc.left + m_Theme.Scale(4), rc.top + m_Theme.Scale(4), rc.right - m_Theme.Scale(4),
+                        rc.bottom - m_Theme.Scale(4));
                 break;
             default:
                 break;
@@ -894,6 +982,21 @@ private:
         navView = client.bottom - NavTop() - m_Theme.Scale(8);
         navHeight = (int)Categories().size() * m_Theme.Scale(40);
         m_NavScroll = max(0, min(m_NavScroll, max(0, navHeight - navView)));
+        if (m_ScrollBar)
+        {
+            SCROLLINFO info = { sizeof(info), SIF_RANGE | SIF_PAGE | SIF_POS };
+            int width = GetSystemMetricsForDpi(SM_CXVSCROLL, m_Theme.Dpi());
+
+            info.nMax = max(0, m_ContentHeight - HeaderBottom() - 1);
+            info.nPage = (UINT)max(0, view);
+            info.nPos = m_Scroll;
+            SetScrollInfo(m_ScrollBar, SB_CTL, &info, TRUE);
+            SetWindowPos(m_ScrollBar, NULL, client.right - width - m_Theme.Scale(2), HeaderBottom(), width,
+                         max(0, (int)client.bottom - HeaderBottom() - m_Theme.Scale(4)),
+                         SWP_NOZORDER | SWP_NOACTIVATE |
+                         (m_ContentHeight - HeaderBottom() > view ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+        }
+        PositionControls();
     }
 
     RECT ScreenBox(const RECT &rc) const
@@ -917,7 +1020,7 @@ private:
                    !m_Forward.empty() ? GlassColor(m_Theme, GlassTone::Text) : GlassColor(m_Theme, GlassTone::TextDisabled));
         title.left = m_Theme.Scale(82);
         title.top = 0;
-        title.right = m_Theme.Scale(300);
+        title.right = PanelLeft();
         title.bottom = CaptionHeight();
         canvas.Text(Str(IDS_APP_TITLE).c_str(), title, m_Theme.Font(TextStyle::Caption),
                     IsActive() ? GlassColor(m_Theme, GlassTone::Text) : GlassColor(m_Theme, GlassTone::TextSecondary), DT_SINGLELINE | DT_VCENTER | DT_LEFT);
@@ -931,25 +1034,6 @@ private:
         glyph.right = glyph.left + size;
         glyph.bottom = glyph.top + size;
         canvas.Icon(name, glyph, color);
-    }
-
-    void PaintSearch(Canvas &canvas)
-    {
-        const Palette &c = m_Theme.Colors();
-        RECT box = SearchRect(), glyph;
-        int size = m_Theme.Scale(16);
-
-        GlassFill(canvas, box, m_Theme.Scale(4), GlassColor(m_Theme, GlassTone::Clear), GlassColor(m_Theme, GlassTone::Stroke));
-        if (GetFocus() == m_Search)
-        {
-            RECT line = { box.left + 1, box.bottom - m_Theme.Scale(2), box.right - 1, box.bottom };
-            canvas.Fill(line, c.Accent);
-        }
-        glyph.right = box.right - m_Theme.Scale(10);
-        glyph.left = glyph.right - size;
-        glyph.top = box.top + (box.bottom - box.top - size) / 2;
-        glyph.bottom = glyph.top + size;
-        canvas.Icon(L"search_16_regular", glyph, GlassColor(m_Theme, GlassTone::TextSecondary));
     }
 
     void PaintAccount(Canvas &canvas)
@@ -1078,73 +1162,6 @@ private:
         canvas.Graphics().ResetClip();
         SelectClipRgn(canvas.Dc(), NULL);
         DeleteObject(clip);
-        PaintScrollBar(canvas, client);
-    }
-
-    RECT ScrollTrack() const
-    {
-        RECT client, rc;
-        GetClientRect(m_hwnd, &client);
-        SetRect(&rc, client.right - m_Theme.Scale(10), HeaderBottom(), client.right - m_Theme.Scale(4),
-                client.bottom - m_Theme.Scale(8));
-        return rc;
-    }
-
-    RECT ScrollThumb() const
-    {
-        RECT track = ScrollTrack(), thumb = track;
-        int view = track.bottom - track.top, total = m_ContentHeight - HeaderBottom();
-        int length, offset;
-
-        if (total <= view || view <= 0)
-        {
-            SetRectEmpty(&thumb);
-            return thumb;
-        }
-        length = max(m_Theme.Scale(32), MulDiv(view, view, total));
-        offset = MulDiv(m_Scroll, view - length, max(1, total - view));
-        thumb.top = track.top + offset;
-        thumb.bottom = thumb.top + length;
-        return thumb;
-    }
-
-    void PaintScrollBar(Canvas &canvas, const RECT &client)
-    {
-        const Palette &c = m_Theme.Colors();
-        RECT thumb = ScrollThumb();
-
-        UNREFERENCED_PARAMETER(client);
-        if (IsRectEmpty(&thumb))
-            return;
-        if (!m_DragScroll && m_HotPart != Part::None)
-            thumb.left += m_Theme.Scale(2);
-        canvas.FillRound(thumb, (float)(thumb.right - thumb.left) / 2.0f, c.ControlStrongStroke);
-    }
-
-    void ClipRowHighlight(Canvas &canvas, int place, const RECT &rc, COLORREF color)
-    {
-        RECT box = ScreenBox(m_GroupBoxes[m_Places[place].Group]);
-        Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
-        Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
-        float r = m_Theme.ScaleF(8.0f), d = r * 2.0f;
-        Gdiplus::RectF b((float)box.left + 1.0f, (float)box.top + 1.0f, (float)(box.right - box.left) - 2.0f,
-                         (float)(box.bottom - box.top) - 2.0f);
-        Gdiplus::Region region(Gdiplus::RectF((float)rc.left, (float)rc.top, (float)(rc.right - rc.left),
-                                               (float)(rc.bottom - rc.top)));
-
-        path.AddArc(b.X, b.Y, d, d, 180.0f, 90.0f);
-        path.AddArc(b.X + b.Width - d, b.Y, d, d, 270.0f, 90.0f);
-        path.AddArc(b.X + b.Width - d, b.Y + b.Height - d, d, d, 0.0f, 90.0f);
-        path.AddArc(b.X, b.Y + b.Height - d, d, d, 90.0f, 90.0f);
-        path.CloseFigure();
-        region.Intersect(&path);
-        canvas.Graphics().FillRegion(&brush, &region);
-    }
-
-    bool RowActivatable(const SettingRow &row) const
-    {
-        return row.Enabled && (row.Kind == RowKind::Navigate || row.Kind == RowKind::Link ||
-                               row.Kind == RowKind::Toggle || row.Kind == RowKind::Choice);
     }
 
     void PaintRow(Canvas &canvas, int place)
@@ -1155,15 +1172,14 @@ private:
         RECT rc = ScreenBox(where.Box), control = ScreenBox(where.Control), text;
         COLORREF title = row.Enabled ? c.Text : c.TextDisabled, detail = row.Enabled ? c.TextSecondary : c.TextDisabled;
         int textLeft = rc.left + m_Theme.Scale(16), textRight;
-        bool hot = place == m_HotPlace && RowActivatable(row);
 
-        if (hot)
-            ClipRowHighlight(canvas, place, rc, m_PressedPlace == place && m_PressedPart == Part::Row ? c.SubtlePressed : c.CardHover);
         if (where.Row > 0)
         {
             RECT line = { rc.left + m_Theme.Scale(16), rc.top, rc.right - m_Theme.Scale(16), rc.top + 1 };
             canvas.Fill(line, c.Divider);
         }
+        if (row.Kind == RowKind::Navigate || row.Kind == RowKind::Link)
+            return;
         if (row.Kind == RowKind::Hero)
         {
             PaintHero(canvas, place, row, rc);
@@ -1197,16 +1213,13 @@ private:
         if (m_GroupIcons[where.Group])
             textLeft = rc.left + m_Theme.Scale(56);
         textRight = !IsRectEmpty(&where.Control) ? control.left - m_Theme.Scale(16) : rc.right - m_Theme.Scale(16);
-        if (row.Kind == RowKind::Info || row.Kind == RowKind::Navigate)
+        if (row.Kind == RowKind::Info)
         {
             int valueWidth = row.Value.empty() ? 0 : min(MeasureWidth(row.Value, m_Theme.Font(TextStyle::Body)),
                                                           (rc.right - textLeft) / 2);
             RECT value = { textRight - valueWidth, rc.top, textRight, rc.bottom };
-            if (row.Kind == RowKind::Info)
-            {
-                value.right = rc.right - m_Theme.Scale(16);
-                value.left = value.right - valueWidth;
-            }
+            value.right = rc.right - m_Theme.Scale(16);
+            value.left = value.right - valueWidth;
             if (valueWidth)
             {
                 canvas.Text(row.Value.c_str(), value, m_Theme.Font(TextStyle::Body), detail,
@@ -1234,47 +1247,13 @@ private:
         }
         else
         {
-            int middle = (rc.top + rc.bottom) / 2 - (row.Bar ? m_Theme.Scale(8) : 0);
-            if (row.Bar)
-            {
-                RECT track = { textLeft, rc.bottom - m_Theme.Scale(20), textRight, rc.bottom - m_Theme.Scale(14) };
-                RECT used = track;
-                used.right = track.left + MulDiv(track.right - track.left, max(0, min(row.Max, row.Position)),
-                                                 max(1, row.Max));
-                canvas.FillRound(track, m_Theme.ScaleF(3.0f), c.ControlStrongStroke);
-                if (used.right > used.left)
-                    canvas.FillRound(used, m_Theme.ScaleF(3.0f), row.Position * 10 >= row.Max * 9 ? RGB(0xC4, 0x2B, 0x1C) :
-                                                                                                     c.Accent);
-            }
+            int middle = (rc.top + rc.bottom) / 2 - (row.Bar ? m_Theme.Scale(10) : 0);
             SetRect(&text, textLeft, middle - m_Theme.Scale(21), textRight, middle);
             canvas.Text(row.Title.c_str(), text, m_Theme.Font(TextStyle::Body), title,
                         DT_SINGLELINE | DT_BOTTOM | DT_LEFT | DT_END_ELLIPSIS);
             SetRect(&text, textLeft, middle + m_Theme.Scale(1), textRight, middle + m_Theme.Scale(20));
             canvas.Text(row.Detail.c_str(), text, m_Theme.Font(TextStyle::Caption), detail,
                         DT_SINGLELINE | DT_TOP | DT_LEFT | DT_END_ELLIPSIS);
-        }
-        switch (row.Kind)
-        {
-            case RowKind::Toggle:
-                PaintToggle(canvas, control, row.Checked, row.Enabled, hot);
-                break;
-            case RowKind::Choice:
-                PaintChoice(canvas, place, row, control);
-                break;
-            case RowKind::Slider:
-                PaintSlider(canvas, place, row, control);
-                break;
-            case RowKind::Button:
-                PaintButtons(canvas, place, row);
-                break;
-            case RowKind::Navigate:
-                canvas.Icon(L"chevron_right_16_regular", control, row.Enabled ? c.TextSecondary : c.TextDisabled);
-                break;
-            case RowKind::Link:
-                canvas.Icon(L"open_16_regular", control, row.Enabled ? c.TextSecondary : c.TextDisabled);
-                break;
-            default:
-                break;
         }
     }
 
@@ -1297,160 +1276,13 @@ private:
             CenterIcon(canvas, badge, m_Theme.Scale(28), row.Icon ? row.Icon : L"info_20_regular", c.AccentText);
         }
         if (!m_Places[place].Actions.empty())
-        {
             textRight = ScreenBox(m_Places[place].Actions.front()).left - m_Theme.Scale(16);
-            PaintButtons(canvas, place, row);
-        }
         SetRect(&text, badge.right + m_Theme.Scale(16), rc.top + m_Theme.Scale(20), textRight, rc.top + m_Theme.Scale(50));
         canvas.Text(row.Title.c_str(), text, m_Theme.Font(TextStyle::Subtitle), c.Text,
                     DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS);
         SetRect(&text, text.left, text.bottom, textRight, rc.bottom - m_Theme.Scale(16));
         canvas.Text(row.Detail.c_str(), text, m_Theme.Font(TextStyle::Body), c.TextSecondary,
                     DT_SINGLELINE | DT_TOP | DT_LEFT | DT_END_ELLIPSIS);
-    }
-
-    void PaintToggle(Canvas &canvas, const RECT &rc, bool on, bool enabled, bool hot)
-    {
-        const Palette &c = m_Theme.Colors();
-        int knob = m_Theme.Scale(hot ? 14 : 12), middle = (rc.top + rc.bottom) / 2;
-        RECT dot;
-
-        if (on)
-        {
-            canvas.FillRound(rc, (float)(rc.bottom - rc.top) / 2.0f, enabled ? c.Accent : c.TextDisabled);
-            SetRect(&dot, rc.right - m_Theme.Scale(4) - knob, middle - knob / 2, rc.right - m_Theme.Scale(4),
-                    middle - knob / 2 + knob);
-            canvas.FillEllipse(dot, c.AccentText);
-        }
-        else
-        {
-            canvas.FillRound(rc, (float)(rc.bottom - rc.top) / 2.0f, c.ControlFill);
-            canvas.FrameRound(rc, (float)(rc.bottom - rc.top) / 2.0f, enabled ? c.ControlStrongStroke : c.TextDisabled);
-            SetRect(&dot, rc.left + m_Theme.Scale(4), middle - knob / 2, rc.left + m_Theme.Scale(4) + knob,
-                    middle - knob / 2 + knob);
-            canvas.FillEllipse(dot, enabled ? c.TextSecondary : c.TextDisabled);
-        }
-    }
-
-    void PaintChoice(Canvas &canvas, int place, const SettingRow &row, const RECT &rc)
-    {
-        const Palette &c = m_Theme.Colors();
-        RECT text = rc, chevron;
-        bool hot = place == m_HotPlace && row.Enabled;
-
-        canvas.FillRound(rc, m_Theme.ScaleF(4.0f), hot ? c.CardHover : c.ControlFill);
-        canvas.FrameRound(rc, m_Theme.ScaleF(4.0f), c.ControlStroke);
-        text.left += m_Theme.Scale(12);
-        text.right -= m_Theme.Scale(34);
-        if (row.Selected >= 0 && row.Selected < (int)row.Options.size())
-            canvas.Text(row.Options[row.Selected].c_str(), text, m_Theme.Font(TextStyle::Body),
-                        row.Enabled ? c.Text : c.TextDisabled, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS);
-        SetRect(&chevron, rc.right - m_Theme.Scale(24), (rc.top + rc.bottom) / 2 - m_Theme.Scale(6),
-                rc.right - m_Theme.Scale(12), (rc.top + rc.bottom) / 2 + m_Theme.Scale(6));
-        canvas.Icon(L"chevron_down_12_regular", chevron, row.Enabled ? c.TextSecondary : c.TextDisabled);
-    }
-
-    void PaintSlider(Canvas &canvas, int place, const SettingRow &row, const RECT &rc)
-    {
-        const Palette &c = m_Theme.Colors();
-        int middle = (rc.top + rc.bottom) / 2, x = SliderX(row, rc);
-        RECT track = { rc.left + m_Theme.Scale(10), middle - m_Theme.Scale(2), rc.right - m_Theme.Scale(10),
-                       middle + m_Theme.Scale(2) }, fill = track, thumb, dot;
-        int outer = m_Theme.Scale(10), inner = m_Theme.Scale(place == m_HotPlace || place == m_DragPlace ? 7 : 6);
-
-        canvas.FillRound(track, m_Theme.ScaleF(2.0f), c.ControlStrongStroke);
-        fill.right = x;
-        if (fill.right > fill.left)
-            canvas.FillRound(fill, m_Theme.ScaleF(2.0f), row.Enabled ? c.Accent : c.TextDisabled);
-        SetRect(&thumb, x - outer, middle - outer, x + outer, middle + outer);
-        canvas.FillEllipse(thumb, c.ControlFillFocus);
-        canvas.FrameRound(thumb, (float)outer, c.ControlStroke);
-        SetRect(&dot, x - inner, middle - inner, x + inner, middle + inner);
-        canvas.FillEllipse(dot, row.Enabled ? c.Accent : c.TextDisabled);
-    }
-
-    int SliderX(const SettingRow &row, const RECT &rc) const
-    {
-        int left = rc.left + m_Theme.Scale(10), right = rc.right - m_Theme.Scale(10);
-        int span = max(1, row.Max - row.Min);
-        return left + MulDiv(max(row.Min, min(row.Max, row.Position)) - row.Min, right - left, span);
-    }
-
-    int SliderValue(const SettingRow &row, const RECT &rc, int x) const
-    {
-        int left = rc.left + m_Theme.Scale(10), right = rc.right - m_Theme.Scale(10);
-        int value = row.Min + MulDiv(x - left, row.Max - row.Min, max(1, right - left));
-        return max(row.Min, min(row.Max, value));
-    }
-
-    void PaintButtons(Canvas &canvas, int place, const SettingRow &row)
-    {
-        const Palette &c = m_Theme.Colors();
-        std::vector<std::wstring> actions = row.Actions;
-
-        if (!row.Action.empty())
-            actions.insert(actions.begin(), row.Action);
-        for (size_t i = 0; i < m_Places[place].Actions.size() && i < actions.size(); i++)
-        {
-            RECT rc = ScreenBox(m_Places[place].Actions[i]);
-            bool hot = place == m_HotPlace && m_HotPart == Part::Action && m_HotAction == (int)i && row.Enabled;
-            bool pressed = hot && m_PressedPlace == place && m_PressedAction == (int)i;
-            bool accent = row.Accent && i == 0;
-            COLORREF fill = accent ? c.Accent : (pressed ? c.SubtlePressed : (hot ? c.CardHover : c.ControlFill));
-
-            if (!row.Enabled)
-                fill = c.ControlFill;
-            if (accent && hot && row.Enabled)
-                fill = RGB(GetRValue(c.Accent) * 9 / 10, GetGValue(c.Accent) * 9 / 10, GetBValue(c.Accent) * 9 / 10);
-            canvas.FillRound(rc, m_Theme.ScaleF(4.0f), fill);
-            if (!accent)
-                canvas.FrameRound(rc, m_Theme.ScaleF(4.0f), c.ControlStroke);
-            canvas.Text(actions[i].c_str(), rc, m_Theme.Font(TextStyle::Body),
-                        !row.Enabled ? c.TextDisabled : (accent ? c.AccentText : c.Text),
-                        DT_SINGLELINE | DT_VCENTER | DT_CENTER);
-        }
-    }
-
-    int PlaceFromPoint(int x, int y, Part *part, int *action) const
-    {
-        POINT pt = { x, y + m_Scroll };
-        RECT client;
-
-        GetClientRect(m_hwnd, &client);
-        *part = Part::None;
-        *action = -1;
-        if (x < ContentLeft() - m_Theme.Scale(8) || y < HeaderBottom() - m_Theme.Scale(8))
-            return -1;
-        for (size_t i = 0; i < m_Places.size(); i++)
-        {
-            const RowPlace &place = m_Places[i];
-            const SettingRow &row = m_Groups[place.Group].Rows[place.Row];
-            if (!PtInRect(&place.Box, pt))
-                continue;
-            for (size_t a = 0; a < place.Actions.size(); a++)
-            {
-                if (PtInRect(&place.Actions[a], pt))
-                {
-                    *part = Part::Action;
-                    *action = (int)a;
-                    return (int)i;
-                }
-            }
-            if (row.Kind == RowKind::Slider)
-            {
-                RECT hit = place.Control;
-                InflateRect(&hit, m_Theme.Scale(4), m_Theme.Scale(8));
-                *part = PtInRect(&hit, pt) ? Part::Control : Part::None;
-                return *part == Part::None ? -1 : (int)i;
-            }
-            if (RowActivatable(row))
-            {
-                *part = Part::Row;
-                return (int)i;
-            }
-            return -1;
-        }
-        return -1;
     }
 
     int NavFromPoint(int x, int y) const
@@ -1480,15 +1312,12 @@ private:
         return -1;
     }
 
-    void SetHot(int nav, int place, Part part, int action, BOOL back, BOOL forward, BOOL account, int crumb)
+    void SetHot(int nav, BOOL back, BOOL forward, BOOL account, int crumb)
     {
-        if (nav == m_HotNav && place == m_HotPlace && part == m_HotPart && action == m_HotAction && back == m_HotBack &&
-            forward == m_HotForward && account == m_HotAccount && crumb == m_HotCrumb)
+        if (nav == m_HotNav && back == m_HotBack && forward == m_HotForward && account == m_HotAccount &&
+            crumb == m_HotCrumb)
             return;
         m_HotNav = nav;
-        m_HotPlace = place;
-        m_HotPart = part;
-        m_HotAction = action;
         m_HotBack = back;
         m_HotForward = forward;
         m_HotAccount = account;
@@ -1500,126 +1329,22 @@ private:
     {
         RECT back = BackRect(), forward = ForwardRect(), account = AccountRect();
         POINT pt = { x, y };
-        Part part;
-        int action, place;
 
         if (!m_TrackingClient)
         {
             TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, m_hwnd, 0 };
             m_TrackingClient = TrackMouseEvent(&tme);
         }
-        if (m_DragScroll)
-        {
-            RECT track = ScrollTrack(), thumb = ScrollThumb();
-            int view = track.bottom - track.top, total = m_ContentHeight - HeaderBottom();
-            int length = thumb.bottom - thumb.top;
-            m_Scroll = MulDiv(y - m_DragOffset - track.top, max(1, total - view), max(1, view - length));
-            ClampScroll();
-            Invalidate(NULL);
-            return;
-        }
-        if (m_DragPlace >= 0)
-        {
-            RowPlace &where = m_Places[m_DragPlace];
-            SettingRow &row = m_Groups[where.Group].Rows[where.Row];
-            int value = SliderValue(row, ScreenBox(where.Control), x);
-            if (value != row.Position)
-            {
-                row.Position = value;
-                if (row.Live && row.Change)
-                    row.Change(value);
-                Invalidate(NULL);
-            }
-            return;
-        }
-        place = PlaceFromPoint(x, y, &part, &action);
-        SetHot(NavFromPoint(x, y), place, part, action, PtInRect(&back, pt), PtInRect(&forward, pt),
-               PtInRect(&account, pt), CrumbFromPoint(x, y));
-    }
-
-    void OnButtonDown(int x, int y)
-    {
-        RECT thumb = ScrollThumb();
-        POINT pt = { x, y };
-        Part part;
-        int action;
-
-        if (!IsRectEmpty(&thumb))
-        {
-            RECT hit = thumb;
-            InflateRect(&hit, m_Theme.Scale(4), 0);
-            if (PtInRect(&hit, pt))
-            {
-                m_DragScroll = TRUE;
-                m_DragOffset = y - thumb.top;
-                SetCapture(m_hwnd);
-                return;
-            }
-        }
-        m_PressedPlace = PlaceFromPoint(x, y, &part, &action);
-        m_PressedPart = part;
-        m_PressedAction = action;
-        if (m_PressedPlace >= 0 && part == Part::Control)
-        {
-            RowPlace &where = m_Places[m_PressedPlace];
-            SettingRow &row = m_Groups[where.Group].Rows[where.Row];
-            if (row.Kind == RowKind::Slider && row.Enabled)
-            {
-                m_DragPlace = m_PressedPlace;
-                m_DragStart = row.Position;
-                row.Position = SliderValue(row, ScreenBox(where.Control), x);
-                if (row.Live && row.Change)
-                    row.Change(row.Position);
-                SetCapture(m_hwnd);
-            }
-        }
-        Invalidate(NULL);
-    }
-
-    void EndSliderDrag(BOOL commit)
-    {
-        int place = m_DragPlace;
-
-        m_DragPlace = -1;
-        if (place < 0 || place >= (int)m_Places.size())
-            return;
-        {
-            RowPlace &where = m_Places[place];
-            SettingRow &row = m_Groups[where.Group].Rows[where.Row];
-            if (commit && row.Change && (!row.Live || row.Position != m_DragStart))
-            {
-                std::function<void(int)> change = row.Change;
-                change(row.Position);
-                Rebuild(FALSE);
-            }
-        }
+        SetHot(NavFromPoint(x, y), PtInRect(&back, pt), PtInRect(&forward, pt), PtInRect(&account, pt),
+               CrumbFromPoint(x, y));
     }
 
     void OnButtonUp(int x, int y)
     {
         RECT back = BackRect(), forward = ForwardRect(), account = AccountRect();
         POINT pt = { x, y };
-        Part part;
-        int action, nav = NavFromPoint(x, y), crumb = CrumbFromPoint(x, y);
-        int place, pressed = m_PressedPlace, pressedAction = m_PressedAction;
-        Part pressedPart = m_PressedPart;
+        int nav = NavFromPoint(x, y), crumb = CrumbFromPoint(x, y);
 
-        if (m_DragScroll)
-        {
-            m_DragScroll = FALSE;
-            ReleaseCapture();
-            return;
-        }
-        if (m_DragPlace >= 0)
-        {
-            EndSliderDrag(TRUE);
-            ReleaseCapture();
-            return;
-        }
-        place = PlaceFromPoint(x, y, &part, &action);
-        m_PressedPlace = -1;
-        m_PressedPart = Part::None;
-        m_PressedAction = -1;
         if (PtInRect(&back, pt))
         {
             GoBack();
@@ -1645,80 +1370,347 @@ private:
             std::vector<std::pair<PageId, std::wstring>> crumbs = Breadcrumb();
             if (crumb < (int)crumbs.size())
                 Navigate(crumbs[crumb].first, std::wstring(), TRUE);
-            return;
         }
-        if (place >= 0 && place == pressed && part == pressedPart && action == pressedAction)
-            Activate(place, part, action);
-        else
-            Invalidate(NULL);
     }
 
-    void Activate(int place, Part part, int action)
+    HBRUSH CardBrush()
     {
-        RowPlace where = m_Places[place];
-        SettingRow &row = m_Groups[where.Group].Rows[where.Row];
+        COLORREF color = m_Theme.Colors().Card;
 
-        if (!row.Enabled)
-            return;
-        if (part == Part::Action)
+        if (!m_CardBrush || color != m_CardColor)
         {
-            std::function<void(int)> invoke = row.Invoke;
-            if (invoke)
-                invoke(action);
-            Rebuild(FALSE);
+            if (m_CardBrush)
+                DeleteObject(m_CardBrush);
+            m_CardBrush = CreateSolidBrush(color);
+            m_CardColor = color;
+        }
+        return m_CardBrush;
+    }
+
+    int ControlIndex(HWND hwnd) const
+    {
+        for (size_t i = 0; hwnd && i < m_Controls.size(); i++)
+        {
+            if (m_Controls[i].Window == hwnd)
+                return (int)i;
+        }
+        return -1;
+    }
+
+    RECT ControlRect(const RowControl &control) const
+    {
+        const RowPlace &where = m_Places[control.Place];
+        RECT rc;
+
+        if (control.Action >= 0)
+            rc = where.Actions[control.Action];
+        else if (control.Action == BAR_ACTION)
+            rc = where.Bar;
+        else
+            rc = where.Control;
+        if (control.Height)
+        {
+            rc.top = (rc.top + rc.bottom - control.Height) / 2;
+            rc.bottom = rc.top + control.Height;
+        }
+        return rc;
+    }
+
+    BOOL InControls(const RECT &box) const
+    {
+        for (const RowControl &control : m_Controls)
+        {
+            RECT rc = ControlRect(control), overlap;
+
+            OffsetRect(&rc, 0, -m_Scroll);
+            if (IntersectRect(&overlap, &rc, &box))
+                return TRUE;
+        }
+        return FALSE;
+    }
+
+    HWND AddControl(LPCWSTR className, LPCWSTR text, DWORD style, int place, int action)
+    {
+        HWND hwnd = CreateWindowExW(0, className, text, WS_CHILD | WS_CLIPSIBLINGS | style, 0, 0, 0, 0, m_hwnd,
+                                    (HMENU)(INT_PTR)(IDC_ROW_FIRST + m_Controls.size()), Instance, NULL);
+        RowControl control = { hwnd, place, action, 0, NULL };
+
+        if (!hwnd)
+            return NULL;
+        SendMessageW(hwnd, WM_SETFONT, (WPARAM)m_Theme.Font(TextStyle::Body), FALSE);
+        m_Controls.push_back(control);
+        return hwnd;
+    }
+
+    void DestroyControls()
+    {
+        for (const RowControl &control : m_Controls)
+        {
+            DestroyWindow(control.Window);
+            if (control.Image)
+                DestroyIcon(control.Image);
+        }
+        m_Controls.clear();
+    }
+
+    void CreateControls()
+    {
+        const Palette &c = m_Theme.Colors();
+
+        DestroyControls();
+        for (size_t i = 0; i < m_Places.size(); i++)
+        {
+            const RowPlace &where = m_Places[i];
+            const SettingRow &row = m_Groups[where.Group].Rows[where.Row];
+            std::vector<std::wstring> actions = row.Actions;
+            HWND hwnd = NULL;
+
+            if (!row.Action.empty())
+                actions.insert(actions.begin(), row.Action);
+            for (size_t a = 0; a < where.Actions.size() && a < actions.size(); a++)
+            {
+                HWND button = AddControl(WC_BUTTONW, actions[a].c_str(), WS_TABSTOP |
+                                         (row.Accent && a == 0 ? BS_DEFPUSHBUTTON : BS_PUSHBUTTON), (int)i, (int)a);
+                if (button && !row.Enabled)
+                    EnableWindow(button, FALSE);
+            }
+            switch (row.Kind)
+            {
+                case RowKind::Toggle:
+                    hwnd = AddControl(WC_BUTTONW, L"", WS_TABSTOP | BS_CHECKBOX, (int)i, -1);
+                    if (hwnd)
+                        SendMessageW(hwnd, BM_SETCHECK, row.Checked ? BST_CHECKED : BST_UNCHECKED, 0);
+                    break;
+                case RowKind::Choice:
+                    hwnd = AddControl(WC_COMBOBOXW, L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, (int)i, -1);
+                    if (hwnd)
+                    {
+                        RECT rc = where.Control, field;
+
+                        for (const std::wstring &option : row.Options)
+                            SendMessageW(hwnd, CB_ADDSTRING, 0, (LPARAM)option.c_str());
+                        SendMessageW(hwnd, CB_SETCURSEL, row.Selected, 0);
+                        SetWindowPos(hwnd, NULL, 0, 0, rc.right - rc.left, m_Theme.Scale(240), SWP_NOZORDER | SWP_NOMOVE);
+                        GetWindowRect(hwnd, &field);
+                        m_Controls.back().Height = field.bottom - field.top;
+                    }
+                    break;
+                case RowKind::Slider:
+                    hwnd = AddControl(TRACKBAR_CLASSW, row.Title.c_str(), WS_TABSTOP | TBS_HORZ | TBS_NOTICKS, (int)i, -1);
+                    if (hwnd)
+                    {
+                        SendMessageW(hwnd, TBM_SETRANGEMIN, FALSE, row.Min);
+                        SendMessageW(hwnd, TBM_SETRANGEMAX, FALSE, row.Max);
+                        SendMessageW(hwnd, TBM_SETPAGESIZE, 0, max(1, (row.Max - row.Min) / 10));
+                        SendMessageW(hwnd, TBM_SETPOS, TRUE, row.Position);
+                    }
+                    break;
+                case RowKind::Navigate:
+                case RowKind::Link:
+                    hwnd = AddControl(WC_BUTTONW, row.Title.c_str(), WS_TABSTOP | BS_COMMANDLINK, (int)i, -1);
+                    if (hwnd)
+                    {
+                        std::wstring note = row.Detail;
+                        LPCWSTR icon = row.Icon ? row.Icon : (row.Kind == RowKind::Link ? L"open_16_regular" : NULL);
+
+                        if (!row.Value.empty())
+                            note = note.empty() ? row.Value : note + L" \x00B7 " + row.Value;
+                        if (!note.empty())
+                            SendMessageW(hwnd, BCM_SETNOTE, 0, (LPARAM)note.c_str());
+                        if (row.Image)
+                            SendMessageW(hwnd, BM_SETIMAGE, IMAGE_ICON, (LPARAM)row.Image);
+                        else if (icon)
+                        {
+                            m_Controls.back().Image = CreateGlyphIcon(icon, m_Theme.Scale(20), c.Glyph);
+                            SendMessageW(hwnd, BM_SETIMAGE, IMAGE_ICON, (LPARAM)m_Controls.back().Image);
+                        }
+                    }
+                    break;
+                default:
+                    break;
+            }
+            if (hwnd && !row.Enabled)
+                EnableWindow(hwnd, FALSE);
+            if (row.Bar)
+            {
+                HWND bar = AddControl(PROGRESS_CLASSW, L"", 0, (int)i, BAR_ACTION);
+                if (bar)
+                {
+                    SendMessageW(bar, PBM_SETRANGE32, 0, max(1, row.Max));
+                    SendMessageW(bar, PBM_SETPOS, max(0, min(row.Max, row.Position)), 0);
+                    if (row.Position * 10 >= row.Max * 9)
+                        SendMessageW(bar, PBM_SETSTATE, PBST_ERROR, 0);
+                    SetWindowPos(bar, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
+            }
+        }
+        PositionControls();
+    }
+
+    void PositionControls()
+    {
+        RECT client, view;
+        HDWP defer;
+
+        if (m_Controls.empty())
+            return;
+        GetClientRect(m_hwnd, &client);
+        SetRect(&view, ContentLeft() - m_Theme.Scale(8), HeaderBottom() - m_Theme.Scale(8), client.right, client.bottom);
+        defer = BeginDeferWindowPos((int)m_Controls.size());
+        for (const RowControl &control : m_Controls)
+        {
+            RECT rc = ControlRect(control), visible;
+            BOOL shown;
+            int height;
+
+            OffsetRect(&rc, 0, -m_Scroll);
+            shown = IntersectRect(&visible, &rc, &view);
+            if (shown)
+            {
+                OffsetRect(&visible, -rc.left, -rc.top);
+                SetWindowRgn(control.Window, CreateRectRgnIndirect(&visible), FALSE);
+            }
+            height = control.Height ? m_Theme.Scale(240) : rc.bottom - rc.top;
+            if (defer)
+                defer = DeferWindowPos(defer, control.Window, control.Action == BAR_ACTION ? HWND_TOP : NULL, rc.left,
+                                       rc.top, rc.right - rc.left, height,
+                                       (control.Action == BAR_ACTION ? 0 : SWP_NOZORDER) | SWP_NOACTIVATE |
+                                       (shown ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+        }
+        if (defer)
+            EndDeferWindowPos(defer);
+    }
+
+    void OnScrollBar(UINT code)
+    {
+        SCROLLINFO info = { sizeof(info), SIF_ALL };
+        RECT client;
+        int line = m_Theme.Scale(48);
+
+        GetScrollInfo(m_ScrollBar, SB_CTL, &info);
+        GetClientRect(m_hwnd, &client);
+        switch (code)
+        {
+            case SB_LINEUP:
+                m_Scroll -= line;
+                break;
+            case SB_LINEDOWN:
+                m_Scroll += line;
+                break;
+            case SB_PAGEUP:
+                m_Scroll -= (int)info.nPage;
+                break;
+            case SB_PAGEDOWN:
+                m_Scroll += (int)info.nPage;
+                break;
+            case SB_THUMBTRACK:
+            case SB_THUMBPOSITION:
+                m_Scroll = info.nTrackPos;
+                break;
+            case SB_TOP:
+                m_Scroll = 0;
+                break;
+            case SB_BOTTOM:
+                m_Scroll = m_ContentHeight;
+                break;
+            default:
+                return;
+        }
+        ClampScroll();
+        Invalidate(NULL);
+    }
+
+    void OnSlider(int index, UINT code)
+    {
+        const RowControl &control = m_Controls[index];
+        RowPlace &where = m_Places[control.Place];
+        SettingRow &row = m_Groups[where.Group].Rows[where.Row];
+        int value = (int)SendMessageW(control.Window, TBM_GETPOS, 0, 0);
+
+        if (code == TB_ENDTRACK)
+        {
+            PostMessageW(m_hwnd, WM_SETTINGS_CONTROL, index, value);
             return;
         }
-        switch (row.Kind)
-        {
-            case RowKind::Navigate:
-                if (row.Invoke)
-                {
-                    std::function<void(int)> invoke = row.Invoke;
-                    invoke(0);
-                }
-                else if (row.Target != PageId::None)
-                {
-                    PageId target = row.Target;
-                    std::wstring param = row.Param;
-                    Navigate(target, param, TRUE);
-                }
-                return;
-            case RowKind::Link:
-                if (row.Invoke)
-                {
-                    std::function<void(int)> invoke = row.Invoke;
-                    invoke(0);
-                }
-                return;
-            case RowKind::Toggle:
-                if (row.Change)
-                {
-                    std::function<void(int)> change = row.Change;
-                    change(row.Checked ? 0 : 1);
-                }
-                Rebuild(FALSE);
-                return;
-            case RowKind::Choice:
-            {
-                RECT control = ScreenBox(where.Control);
-                POINT pt = { control.left, control.bottom };
-                HMENU menu = CreatePopupMenu();
-                std::function<void(int)> change = row.Change;
-                int selected = row.Selected;
-                int chosen;
+        if (value == row.Position)
+            return;
+        row.Position = value;
+        if (row.Live && row.Change)
+            row.Change(value);
+        Invalidate(NULL);
+    }
 
-                for (size_t i = 0; i < row.Options.size(); i++)
-                    AppendMenuW(menu, MF_STRING | ((int)i == selected ? MF_CHECKED : 0), i + 1, row.Options[i].c_str());
-                ClientToScreen(m_hwnd, &pt);
-                chosen = (int)TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, m_hwnd, NULL);
-                DestroyMenu(menu);
-                if (chosen > 0 && chosen - 1 != selected && change)
-                    change(chosen - 1);
+    void ActivateControl(int index, int value)
+    {
+        RowControl control;
+        RowPlace where;
+
+        if (index < 0 || index >= (int)m_Controls.size())
+            return;
+        control = m_Controls[index];
+        where = m_Places[control.Place];
+        {
+            SettingRow &row = m_Groups[where.Group].Rows[where.Row];
+
+            if (!row.Enabled)
+                return;
+            if (control.Action >= 0)
+            {
+                std::function<void(int)> invoke = row.Invoke;
+                if (invoke)
+                    invoke(control.Action);
                 Rebuild(FALSE);
                 return;
             }
-            default:
-                return;
+            switch (row.Kind)
+            {
+                case RowKind::Navigate:
+                    if (row.Invoke)
+                    {
+                        std::function<void(int)> invoke = row.Invoke;
+                        invoke(0);
+                    }
+                    else if (row.Target != PageId::None)
+                    {
+                        PageId target = row.Target;
+                        std::wstring param = row.Param;
+                        Navigate(target, param, TRUE);
+                    }
+                    return;
+                case RowKind::Link:
+                    if (row.Invoke)
+                    {
+                        std::function<void(int)> invoke = row.Invoke;
+                        invoke(0);
+                    }
+                    return;
+                case RowKind::Toggle:
+                    if (row.Change)
+                    {
+                        std::function<void(int)> change = row.Change;
+                        change(row.Checked ? 0 : 1);
+                    }
+                    Rebuild(FALSE);
+                    return;
+                case RowKind::Choice:
+                    if (value >= 0 && value != row.Selected && row.Change)
+                    {
+                        std::function<void(int)> change = row.Change;
+                        change(value);
+                    }
+                    Rebuild(FALSE);
+                    return;
+                case RowKind::Slider:
+                    if (!row.Live && row.Change)
+                    {
+                        std::function<void(int)> change = row.Change;
+                        change(value);
+                    }
+                    Rebuild(FALSE);
+                    return;
+                default:
+                    return;
+            }
         }
     }
 
@@ -1903,26 +1895,20 @@ private:
     int m_NavScroll = 0;
     int m_ContentHeight;
     int m_HotNav;
-    int m_HotPlace;
-    Part m_HotPart;
-    int m_HotAction;
-    int m_PressedPlace;
-    Part m_PressedPart;
-    int m_PressedAction;
-    int m_DragPlace;
-    int m_DragStart = 0;
     BOOL m_HotBack;
     BOOL m_HotForward;
     BOOL m_HotAccount;
     int m_HotCrumb;
-    BOOL m_DragScroll;
-    int m_DragOffset;
     BOOL m_TrackingClient;
+    std::vector<RowControl> m_Controls;
     BOOL m_Admin = FALSE;
     HANDLE m_AddressNotify = NULL;
     HANDLE m_InterfaceNotify = NULL;
     HANDLE m_Wlan = NULL;
     HWND m_Search;
+    HWND m_ScrollBar;
+    HBRUSH m_CardBrush;
+    COLORREF m_CardColor;
     HFONT m_SearchFont;
     HICON m_SmallIcon;
     HICON m_BigIcon;
@@ -2005,6 +1991,8 @@ wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR commandLine, int showCmd
     }
     while (GetMessageW(&msg, NULL, 0, 0))
     {
+        if (msg.message == WM_KEYDOWN && msg.wParam == VK_TAB && IsDialogMessageW(window.Window(), &msg))
+            continue;
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }

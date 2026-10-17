@@ -66,6 +66,7 @@ public:
 
     void Update(HWND hwnd);
     void SetDpi(UINT dpi);
+    void SetFollowSystemColors(BOOL follow) { m_FollowSystem = follow; }
     BOOL UpdateMaterial(HWND hwnd);
 
     BOOL IsDark() const { return m_HighContrast ? m_HighContrastDark : m_Material ? m_MaterialDark : m_Dark; }
@@ -83,6 +84,7 @@ private:
     void BuildPalette();
 
     BOOL m_Dark;
+    BOOL m_FollowSystem;
     BOOL m_HighContrast;
     BOOL m_HighContrastDark;
     BOOL m_Material;

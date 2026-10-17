@@ -44,6 +44,7 @@ AccentFromPalette(BOOL dark)
 
 Theme::Theme() :
     m_Dark(FALSE),
+    m_FollowSystem(FALSE),
     m_HighContrast(FALSE),
     m_HighContrastDark(FALSE),
     m_Material(FALSE),
@@ -92,13 +93,13 @@ Theme::Update(HWND hwnd)
 
     ReadDword(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
               L"AppsUseLightTheme", &light);
-    m_Dark = !light;
     m_HighContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
                      (contrast.dwFlags & HCF_HIGHCONTRASTON);
     if (contrast.lpszDefaultScheme)
         LocalFree(contrast.lpszDefaultScheme);
     window = GetSysColor(COLOR_WINDOW);
     m_HighContrastDark = GetRValue(window) * 299 + GetGValue(window) * 587 + GetBValue(window) * 114 < 128000;
+    m_Dark = m_FollowSystem ? m_HighContrastDark : !light;
     BuildPalette();
 
     if (hwnd)
