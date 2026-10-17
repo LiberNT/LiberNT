@@ -3474,6 +3474,10 @@ static WCHAR *get_proxy_autoconfig_url(void)
     return ret;
 }
 
+#ifdef __REACTOS__
+static LONG connected_state = INTERNET_STATE_CONNECTED;
+
+#endif
 static DWORD query_global_option(DWORD option, void *buffer, DWORD *size, BOOL unicode)
 {
     /* FIXME: This function currently handles more options than it should. Options requiring
@@ -3493,12 +3497,18 @@ static DWORD query_global_option(DWORD option, void *buffer, DWORD *size, BOOL u
         return ERROR_SUCCESS;
 
     case INTERNET_OPTION_CONNECTED_STATE:
+#ifndef __REACTOS__
         FIXME("INTERNET_OPTION_CONNECTED_STATE: semi-stub\n");
+#endif
 
         if (*size < sizeof(ULONG))
             return ERROR_INSUFFICIENT_BUFFER;
 
+#ifdef __REACTOS__
+        *(ULONG*)buffer = (ULONG)InterlockedCompareExchange(&connected_state, 0, 0);
+#else
         *(ULONG*)buffer = INTERNET_STATE_CONNECTED;
+#endif
         *size = sizeof(ULONG);
 
         return ERROR_SUCCESS;
@@ -4124,8 +4134,25 @@ BOOL WINAPI InternetSetOptionW(HINTERNET hInternet, DWORD dwOption,
         free_authorization_cache();
         break;
     case INTERNET_OPTION_CONNECTED_STATE:
+#ifdef __REACTOS__
+    {
+        INTERNET_CONNECTED_INFO *info = lpBuffer;
+
+        if (!info || dwBufferLength < sizeof(*info) ||
+            (info->dwConnectedState != INTERNET_STATE_CONNECTED &&
+             info->dwConnectedState != INTERNET_STATE_DISCONNECTED_BY_USER))
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            ret = FALSE;
+            break;
+        }
+        InterlockedExchange(&connected_state, (LONG)info->dwConnectedState);
+        break;
+    }
+#else
         FIXME("Option INTERNET_OPTION_CONNECTED_STATE: STUB\n");
         break;
+#endif
     case INTERNET_OPTION_DISABLE_PASSPORT_AUTH:
 	TRACE("Option INTERNET_OPTION_DISABLE_PASSPORT_AUTH: harmless stub, since not enabled\n");
 	break;
