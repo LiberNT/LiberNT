@@ -1396,7 +1396,7 @@ DxgkpVidMmCreateSystemAllocation(
     {
         if (AllocInfo->pPrivateDriverData == NULL)
         {
-            ExFreePoolWithTag(Alloc->SystemMemory, TAG_VIDMM_ALLOC);
+            DxgkpVidMmReleaseSystemBacking(Alloc);
             ExFreePoolWithTag(Alloc, TAG_VIDMM_ALLOC);
             return STATUS_INVALID_PARAMETER;
         }
@@ -1407,7 +1407,7 @@ DxgkpVidMmCreateSystemAllocation(
             TAG_VIDMM_ALLOC);
         if (Alloc->PrivateDriverData == NULL)
         {
-            ExFreePoolWithTag(Alloc->SystemMemory, TAG_VIDMM_ALLOC);
+            DxgkpVidMmReleaseSystemBacking(Alloc);
             ExFreePoolWithTag(Alloc, TAG_VIDMM_ALLOC);
             return STATUS_INSUFFICIENT_RESOURCES;
         }
@@ -6317,8 +6317,7 @@ FailMiniportAllocation:
     }
     if (Alloc->Resident)
         DxgkpVidMmReleaseSegmentPlacement(Alloc);
-    if (Alloc->SystemMemory != NULL)
-        ExFreePoolWithTag(Alloc->SystemMemory, TAG_VIDMM_ALLOC);
+    DxgkpVidMmReleaseSystemBacking(Alloc);
     if (Alloc->PrivateDriverData != NULL)
         ExFreePoolWithTag(Alloc->PrivateDriverData, TAG_VIDMM_ALLOC);
     DxgkpVidMmFreeDestroyBatch(RollbackBatch);
