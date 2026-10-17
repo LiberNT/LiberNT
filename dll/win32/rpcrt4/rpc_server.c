@@ -618,6 +618,32 @@ static DWORD CALLBACK RPCRT4_worker_thread(LPVOID the_arg)
   return 0;
 }
 
+#ifdef __REACTOS__
+static PTP_POOL server_pool;
+
+static void CALLBACK RPCRT4_pool_worker(PTP_CALLBACK_INSTANCE instance, void *context)
+{
+  RPCRT4_worker_thread(context);
+}
+
+static BOOL RPCRT4_queue_worker(RpcPacket *packet)
+{
+  TP_CALLBACK_ENVIRON environment;
+  PTP_POOL pool = InterlockedCompareExchangePointer((void **)&server_pool, NULL, NULL);
+
+  if (!pool)
+    return QueueUserWorkItem(RPCRT4_worker_thread, packet, WT_EXECUTELONGFUNCTION);
+
+  memset(&environment, 0, sizeof(environment));
+  environment.Version = 3;
+  environment.Pool = pool;
+  environment.u.s.LongFunction = 1;
+  environment.CallbackPriority = TP_CALLBACK_PRIORITY_NORMAL;
+  environment.Size = sizeof(environment);
+  return TrySubmitThreadpoolCallback(RPCRT4_pool_worker, packet, &environment);
+}
+#endif
+
 static DWORD CALLBACK RPCRT4_io_thread(LPVOID the_arg)
 {
   RpcConnection* conn = the_arg;
@@ -666,7 +692,11 @@ static DWORD CALLBACK RPCRT4_io_thread(LPVOID the_arg)
       packet->msg = msg;
       packet->auth_data = auth_data;
       packet->auth_length = auth_length;
+#ifdef __REACTOS__
+      if (!RPCRT4_queue_worker(packet)) {
+#else
       if (!QueueUserWorkItem(RPCRT4_worker_thread, packet, WT_EXECUTELONGFUNCTION)) {
+#endif
         ERR("couldn't queue work item for worker thread, error was %ld\n", GetLastError());
         free(packet);
         status = RPC_S_OUT_OF_RESOURCES;
@@ -1914,8 +1944,33 @@ RPC_STATUS WINAPI RpcMgmtSetAuthorizationFn(RPC_MGMT_AUTHORIZATION_FN fn)
  */
 RPC_STATUS WINAPI RpcMgmtSetServerStackSize(ULONG ThreadStackSize)
 {
+#ifdef __REACTOS__
+  TP_POOL_STACK_INFORMATION stack;
+  RPC_STATUS status = RPC_S_OK;
+
+  TRACE("(0x%lx)\n", ThreadStackSize);
+
+  EnterCriticalSection(&server_cs);
+  if (!server_pool)
+    server_pool = CreateThreadpool(NULL);
+  if (!server_pool || !QueryThreadpoolStackInformation(server_pool, &stack))
+  {
+    status = RPC_S_OUT_OF_RESOURCES;
+  }
+  else
+  {
+    stack.StackCommit = ThreadStackSize;
+    if (stack.StackReserve < stack.StackCommit)
+      stack.StackReserve = stack.StackCommit;
+    if (!SetThreadpoolStackInformation(server_pool, &stack))
+      status = RPC_S_OUT_OF_RESOURCES;
+  }
+  LeaveCriticalSection(&server_cs);
+  return status;
+#else
   FIXME("(0x%lx): stub\n", ThreadStackSize);
   return RPC_S_OK;
+#endif
 }
 
 /***********************************************************************
