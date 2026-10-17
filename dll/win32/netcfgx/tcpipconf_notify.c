@@ -554,9 +554,6 @@ ExtractParameterValue(
         length = pEnd - pStart;
     TRACE("length %d\n", length);
 
-    if (length == 0)
-        return NULL;
-
     pBuffer = (PWSTR)CoTaskMemAlloc((length + 1) * sizeof(WCHAR));
     if (pBuffer)
     {
@@ -3739,6 +3736,9 @@ LoadGatewaySettings(
 
     pStart1 = pszBuffer1;
     pStart2 = pszBuffer2;
+    if (*pStart1 == UNICODE_NULL)
+        goto done;
+
     for (;;)
     {
         TRACE("Start1: %S\n", pStart1);
@@ -4615,6 +4615,9 @@ INetCfgComponentControl_fnApplyPnpChanges(
             }
         }
 
+        if (pAdapter->NewDhcpEnabled && !pAdapter->OldDhcpEnabled)
+            DhcpNotifyConfigChange(NULL, pAdapter->AdapterName, FALSE, 0, 0, 0, 1);
+
 #if 0
         /* Notify the DHCP client of the changed alternate configuration */
         if (!RtlEqualMemory(&pCurrentConfig->AltConfig, &pOldConfig->AltConfig, sizeof(AlternateConfiguration)))
@@ -4928,8 +4931,11 @@ ITcpipProperties_fnUnknown2(
     if (pAdapter->NewDhcpEnabled)
     {
         TRACE("DHCP\n");
-        pAdapter->NewIp->IpAddress = 0;
-        pAdapter->NewIp->u.SubnetMask = 0;
+        if (pAdapter->NewIp != NULL)
+        {
+            pAdapter->NewIp->IpAddress = 0;
+            pAdapter->NewIp->u.SubnetMask = 0;
+        }
     }
     else
     {
@@ -4986,7 +4992,8 @@ ITcpipProperties_fnUnknown2(
         TRACE("Metric: %S\n", pszMetric);
         if ((wcslen(pszGateway) == 0) && (wcslen(pszMetric) == 0))
         {
-            FIXME("Delete Gateway and Metric!\n");
+            FreeIPAddr(pAdapter->NewGw);
+            pAdapter->NewGw = NULL;
         }
         else
         {
@@ -5028,41 +5035,39 @@ ITcpipProperties_fnUnknown2(
     pszDns = ExtractParameterValue(pProperties->pszParameters, L"DNS");
     if (pszDns)
     {
+        IP_ADDR *pNewNs = NULL, **ppLast = &pNewNs;
+        PCWSTR pszCurrent = pszDns;
+
         TRACE("DNS: %S\n", pszDns);
-        if (wcslen(pszDns) == 0)
+        while (*pszCurrent)
         {
-            FIXME("Delete DNS!\n");
-        }
-        else
-        {
-            Status = RtlIpv4StringToAddressW((PCWSTR)pszDns,
+            Status = RtlIpv4StringToAddressW(pszCurrent,
                                             TRUE,
                                             &Term,
                                             &Dns);
-            if (Status != 0 /*STATUS_SUCCESS*/)
+            if (Status != 0 /*STATUS_SUCCESS*/ || (*Term != UNICODE_NULL && *Term != L','))
             {
+                FreeIPAddr(pNewNs);
                 hr = E_FAIL;
                 goto done;
             }
 
-            TRACE("Dns: %u.%u.%u.%u\n",
-                  Dns.S_un.S_un_b.s_b1, Dns.S_un.S_un_b.s_b2, Dns.S_un.S_un_b.s_b3, Dns.S_un.S_un_b.s_b4);
-
-            TRACE("pAdapter->NewNs %p\n", pAdapter->NewNs);
-            if (pAdapter->NewNs == NULL)
+            *ppLast = CoTaskMemAlloc(sizeof(IP_ADDR));
+            if (*ppLast == NULL)
             {
-                pAdapter->NewNs = CoTaskMemAlloc(sizeof(IP_ADDR));
-                if (pAdapter->NewNs == NULL)
-                {
-                    hr = E_OUTOFMEMORY;
-                    goto done;
-                }
-
-                ZeroMemory(pAdapter->NewNs, sizeof(IP_ADDR));
+                FreeIPAddr(pNewNs);
+                hr = E_OUTOFMEMORY;
+                goto done;
             }
 
-            pAdapter->NewNs->IpAddress = ntohl(Dns.S_un.S_addr);
+            ZeroMemory(*ppLast, sizeof(IP_ADDR));
+            (*ppLast)->IpAddress = ntohl(Dns.S_un.S_addr);
+            ppLast = &(*ppLast)->Next;
+            pszCurrent = (*Term == L',') ? Term + 1 : Term;
         }
+
+        FreeIPAddr(pAdapter->NewNs);
+        pAdapter->NewNs = pNewNs;
     }
 
     /*
