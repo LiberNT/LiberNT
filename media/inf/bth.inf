@@ -30,6 +30,7 @@ bthci.dll
 [ReactOS]
 %BTUSB.DeviceDesc%=BthUsb.Dev, USB\Class_E0&SubClass_01&Prot_01
 %BthMini.DeviceDesc%=BthMini.Dev, MS_BTHX_BTHMINI
+%BthAuth.DeviceDesc%=BthAuth.Dev, BTH\WINEBTHAUTH
 
 [BthUsb.Dev.NT]
 CopyFiles=BthUsb.Files
@@ -61,6 +62,11 @@ ServiceBinary  = %12%\bthmini.sys
 [BthMini.Files]
 bthmini.sys
 
+[BthAuth.Dev.NT]
+
+[BthAuth.Dev.NT.Services]
+AddService = , 0x00000002
+
 ;-------------------------------- STRINGS -------------------------------
 
 [Strings]
@@ -70,6 +76,7 @@ ReactOS = "LiberNT Project"
 ; Localizable
 BTUSB.DeviceDesc="Generic USB Bluetooth Radio"
 BthMini.DeviceDesc="Generic Bluetooth Radio"
+BthAuth.DeviceDesc="Bluetooth pairing requests"
 BluetoothClassName="Bluetooth Radios"
 
 [Strings.0404]
