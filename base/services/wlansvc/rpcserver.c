@@ -438,8 +438,6 @@ WlanSvcScanInterface(const GUID *pInterfaceGuid, PDOT11_SSID pDot11Ssid)
     {
         dwResult = WlanSvcApplyBssCache(iface, bssList);
     }
-    if (iface != NULL && dwResult == ERROR_SUCCESS)
-        WlanSvcIndicateAcm(iface, wlan_notification_acm_scan_complete);
     if (iface != NULL && dwResult == ERROR_SUCCESS && !iface->Connected)
         WlanSvcTryAutoConnect(iface);
     LeaveCriticalSection(&WlanSvcLock);
