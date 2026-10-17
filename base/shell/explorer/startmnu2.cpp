@@ -61,6 +61,7 @@ struct SM2PALETTE
     COLORREF ShutFill, ShutHot, ShutBorder;
     COLORREF SearchBg, SearchBrd, Cue, Tri, Scroll, ScrollHot;
     COLORREF PicEdge, PicBg, PicFg;
+    COLORREF LeftHotText, RightHotText;
 };
 
 static const SM2PALETTE g_SM2PalLight =
@@ -71,7 +72,8 @@ static const SM2PALETTE g_SM2PalLight =
     RGB( 77, 110, 142), RGB(104, 137, 168), RGB(171, 192, 212),
     RGB(255, 255, 255), RGB(163, 163, 163), RGB(121, 121, 121),
     RGB( 68,  68,  68), RGB(205, 205, 205), RGB(166, 166, 166),
-    RGB(180, 187, 194), RGB(129, 154, 178), RGB(238, 242, 246)
+    RGB(180, 187, 194), RGB(129, 154, 178), RGB(238, 242, 246),
+    RGB( 34,  34,  34), RGB(255, 255, 255)
 };
 
 static const SM2PALETTE g_SM2PalDark =
@@ -82,7 +84,8 @@ static const SM2PALETTE g_SM2PalDark =
     RGB( 36,  50,  64), RGB( 58,  76,  94), RGB(112, 132, 152),
     RGB( 30,  30,  30), RGB( 92,  92,  92), RGB(150, 150, 150),
     RGB(204, 204, 204), RGB( 88,  88,  88), RGB(124, 124, 124),
-    RGB( 70,  70,  70), RGB( 58,  74,  90), RGB(222, 228, 234)
+    RGB( 70,  70,  70), RGB( 58,  74,  90), RGB(222, 228, 234),
+    RGB(235, 235, 235), RGB(240, 240, 240)
 };
 
 static SM2PALETTE g_SM2Pal = g_SM2PalLight;
@@ -110,6 +113,8 @@ static HBRUSH g_SM2EditBrush = NULL;
 #define SM2_CLR_PIC_EDGE    (g_SM2Pal.PicEdge)
 #define SM2_CLR_PIC_BG      (g_SM2Pal.PicBg)
 #define SM2_CLR_PIC_FG      (g_SM2Pal.PicFg)
+#define SM2_CLR_LEFT_HOT_TEXT  (g_SM2Pal.LeftHotText)
+#define SM2_CLR_RIGHT_HOT_TEXT (g_SM2Pal.RightHotText)
 
 static BOOL
 SM2IsDarkTheme(VOID)
@@ -126,9 +131,41 @@ SM2IsDarkTheme(VOID)
 }
 
 static VOID
+SM2ClassicPalette(SM2PALETTE *pPal)
+{
+    pPal->Border = GetSysColor(COLOR_3DDKSHADOW);
+    pPal->LeftBg = GetSysColor(COLOR_WINDOW);
+    pPal->LeftText = GetSysColor(COLOR_WINDOWTEXT);
+    pPal->Sep = GetSysColor(COLOR_3DSHADOW);
+    pPal->HotFill = GetSysColor(COLOR_HIGHLIGHT);
+    pPal->HotBorder = GetSysColor(COLOR_HIGHLIGHT);
+    pPal->RightBg = GetSysColor(COLOR_MENU);
+    pPal->RightText = GetSysColor(COLOR_MENUTEXT);
+    pPal->RightHot = GetSysColor(COLOR_HIGHLIGHT);
+    pPal->RightSep = GetSysColor(COLOR_3DSHADOW);
+    pPal->ShutFill = GetSysColor(COLOR_3DFACE);
+    pPal->ShutHot = GetSysColor(COLOR_3DLIGHT);
+    pPal->ShutBorder = GetSysColor(COLOR_3DSHADOW);
+    pPal->SearchBg = GetSysColor(COLOR_WINDOW);
+    pPal->SearchBrd = GetSysColor(COLOR_3DSHADOW);
+    pPal->Cue = GetSysColor(COLOR_GRAYTEXT);
+    pPal->Tri = GetSysColor(COLOR_WINDOWTEXT);
+    pPal->Scroll = GetSysColor(COLOR_3DSHADOW);
+    pPal->ScrollHot = GetSysColor(COLOR_3DDKSHADOW);
+    pPal->PicEdge = GetSysColor(COLOR_3DSHADOW);
+    pPal->PicBg = GetSysColor(COLOR_3DFACE);
+    pPal->PicFg = GetSysColor(COLOR_BTNTEXT);
+    pPal->LeftHotText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+    pPal->RightHotText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+}
+
+static VOID
 SM2SelectPalette(VOID)
 {
-    g_SM2Pal = SM2IsDarkTheme() ? g_SM2PalDark : g_SM2PalLight;
+    if (IsAppThemed())
+        g_SM2Pal = SM2IsDarkTheme() ? g_SM2PalDark : g_SM2PalLight;
+    else
+        SM2ClassicPalette(&g_SM2Pal);
     if (g_SM2EditBrush)
         DeleteObject(g_SM2EditBrush);
     g_SM2EditBrush = CreateSolidBrush(g_SM2Pal.SearchBg);
@@ -857,7 +894,7 @@ public:
             }
             RECT rcText = rcItem;
             rcText.left += Sc(12);
-            SetTextColor(hdcMem, SM2_CLR_RIGHT_TEXT);
+            SetTextColor(hdcMem, (int)i == m_iHot ? SM2_CLR_RIGHT_HOT_TEXT : SM2_CLR_RIGHT_TEXT);
             DrawTextW(hdcMem, c_Items[i].pszLabel, -1, &rcText,
                       DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
         }
@@ -1570,7 +1607,7 @@ public:
                                    row.pItem->hLargeIcon, Sc(32), Sc(32), 0, NULL, DI_NORMAL);
                     }
                     RECT rcText = { rc.left + Sc(46), rc.top, rc.right - Sc(6), rc.bottom };
-                    DrawItemText(hdc, row.pItem->szName, rcText, SM2_CLR_LEFT_TEXT);
+                    DrawItemText(hdc, row.pItem->szName, rcText, SM2Mix(SM2_CLR_LEFT_TEXT, SM2_CLR_LEFT_HOT_TEXT, alpha));
                     break;
                 }
                 case SM2R_TREE:
@@ -1596,7 +1633,7 @@ public:
                                    p->hSmallIcon, Sc(16), Sc(16), 0, NULL, DI_NORMAL);
                     }
                     RECT rcText = { rc.left + indent + Sc(38), rc.top, rc.right - Sc(4), rc.bottom };
-                    DrawItemText(hdc, p->szName, rcText, SM2_CLR_LEFT_TEXT);
+                    DrawItemText(hdc, p->szName, rcText, SM2Mix(SM2_CLR_LEFT_TEXT, SM2_CLR_LEFT_HOT_TEXT, alpha));
                     break;
                 }
                 case SM2R_ALLPROGRAMS:
@@ -1610,7 +1647,7 @@ public:
                     RECT rcText = { rc.left + Sc(28), rc.top, rc.right - Sc(4), rc.bottom };
                     DrawItemText(hdc,
                                  row.nType == SM2R_ALLPROGRAMS ? L"All Programs" : L"Back",
-                                 rcText, SM2_CLR_LEFT_TEXT);
+                                 rcText, SM2Mix(SM2_CLR_LEFT_TEXT, SM2_CLR_LEFT_HOT_TEXT, alpha));
                     break;
                 }
             }
@@ -1681,7 +1718,7 @@ public:
                     if (row.nData == SM2C_PROFILE)
                     {
                         HGDIOBJ hPrev = SelectObject(hdc, m_hFontUser);
-                        DrawItemText(hdc, m_szUser, rcText, SM2_CLR_RIGHT_TEXT);
+                        DrawItemText(hdc, m_szUser, rcText, SM2Mix(SM2_CLR_RIGHT_TEXT, SM2_CLR_RIGHT_HOT_TEXT, alpha));
                         SelectObject(hdc, hPrev);
                     }
                     else
@@ -1696,7 +1733,7 @@ public:
                             }
                         }
                         if (psz)
-                            DrawItemText(hdc, psz, rcText, SM2_CLR_RIGHT_TEXT);
+                            DrawItemText(hdc, psz, rcText, SM2Mix(SM2_CLR_RIGHT_TEXT, SM2_CLR_RIGHT_HOT_TEXT, alpha));
                     }
                     break;
                 }
