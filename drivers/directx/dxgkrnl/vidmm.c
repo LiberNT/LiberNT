@@ -3464,6 +3464,8 @@ DxgkVidMmCreateOpenResource(
     Adapter = Device->Adapter;
     if (BackingResource->Adapter != Adapter || BackingResource->BackingResource != NULL || DXGK_CB_FULL(Adapter, DxgkDdiOpenAllocation) == NULL || DXGK_CB_FULL(Adapter, DxgkDdiCloseAllocation) == NULL)
         return STATUS_NOT_SUPPORTED;
+    if (BackingResource->SharedAccessProcess != NULL && BackingResource->SharedAccessProcess != Device->OwnerProcess)
+        return STATUS_ACCESS_DENIED;
     if ((SIZE_T)AllocationCount > MAXULONG_PTR / sizeof(*OpenInfo) || (SIZE_T)AllocationCount > MAXULONG_PTR / sizeof(*Resource->OpenAllocations) || (SIZE_T)AllocationCount > MAXULONG_PTR / sizeof(*Resource->OpenBindingScratch))
         return STATUS_INTEGER_OVERFLOW;
     if (!DxgkBeginKmdTransaction(Adapter))
@@ -4419,6 +4421,8 @@ DxgkpVidMmFinalizeResource(
         ExFreePoolWithTag(Resource->ResourcePrivateDriverData, TAG_VIDMM_RESOURCE);
     if (Resource->PrivateRuntimeData != NULL)
         ExFreePoolWithTag(Resource->PrivateRuntimeData, TAG_VIDMM_RESOURCE);
+    if (Resource->SharedAccessProcess != NULL)
+        ObDereferenceObject(Resource->SharedAccessProcess);
     DxgkpVidMmReleaseBacking(Adapter);
     ExFreePoolWithTag(Resource, TAG_VIDMM_RESOURCE);
 }
@@ -8247,6 +8251,7 @@ typedef struct _DXGKP_ALLOCATION_INFO_VIEW
 C_ASSERT(sizeof(D3DKMT_CREATEALLOCATIONFLAGS) == sizeof(UINT));
 #define DXGKP_CA_FLAG_CREATE_RESOURCE       0x00000001U
 #define DXGKP_CA_FLAG_CREATE_SHARED         0x00000002U
+#define DXGKP_CA_FLAG_RESTRICT_SHARED_ACCESS 0x00000010U
 #define DXGKP_CA_FLAG_NT_SECURITY_SHARING   0x00000040U
 #define DXGKP_CA_FLAG_EXISTING_SYSMEM       0x00000020U
 #define DXGKP_CA_FLAG_CROSS_ADAPTER         0x00000800U
@@ -8264,7 +8269,7 @@ C_ASSERT(sizeof(D3DKMT_CREATEALLOCATIONFLAGS) == sizeof(UINT));
 /* Keep documented-but-unimplemented inputs out of this mask so they reach the
  * STATUS_NOT_SUPPORTED gate instead of being misclassified as malformed. */
 #define DXGKP_CA_INVALID_INPUT_FLAGS_MASK   0x00001308U
-#define DXGKP_CA_SUPPORTED_BASE_FLAGS_MASK  (DXGKP_CA_FLAG_CREATE_RESOURCE | DXGKP_CA_FLAG_CREATE_SHARED | DXGKP_CA_FLAG_NT_SECURITY_SHARING | DXGKP_CA_FLAG_ALLOW_NOT_ZEROED)
+#define DXGKP_CA_SUPPORTED_BASE_FLAGS_MASK  (DXGKP_CA_FLAG_CREATE_RESOURCE | DXGKP_CA_FLAG_CREATE_SHARED | DXGKP_CA_FLAG_NT_SECURITY_SHARING | DXGKP_CA_FLAG_RESTRICT_SHARED_ACCESS | DXGKP_CA_FLAG_ALLOW_NOT_ZEROED)
 #define DXGKP_CA_STANDARD_REQUIRED_MASK     (DXGKP_CA_FLAG_CREATE_SHARED | DXGKP_CA_FLAG_CROSS_ADAPTER | DXGKP_CA_FLAG_STANDARD_ALLOCATION)
 #define DXGKP_CA_STANDARD_SOURCE_MASK       (DXGKP_CA_FLAG_EXISTING_SYSMEM | DXGKP_CA_FLAG_EXISTING_SECTION)
 
@@ -9255,6 +9260,11 @@ DxgkpCreateAllocationCaptured(
             }
             Resource->NtSecuritySharing =
                 pCreateAllocation->Flags.NtSecuritySharing != 0;
+            if (pCreateAllocation->Flags.RestrictSharedAccess)
+            {
+                Resource->SharedAccessProcess = Device != NULL ? Device->OwnerProcess : PsGetCurrentProcess();
+                ObReferenceObject(Resource->SharedAccessProcess);
+            }
             TrackedAlloc->DestroyMiniportResource = FALSE;
 
             CreatedResource = TRUE;

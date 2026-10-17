@@ -220,6 +220,7 @@ typedef struct _DXGKVMM_RESOURCE
 
     /* TRUE when sharing uses a secured NT object instead of hGlobalShare. */
     BOOLEAN            NtSecuritySharing;
+    PEPROCESS          SharedAccessProcess;
 
     /* Runtime-private data copied from D3DKMT_CREATEALLOCATION. */
     PVOID              PrivateRuntimeData;
