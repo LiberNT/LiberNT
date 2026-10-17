@@ -31,9 +31,12 @@ list(APPEND SOURCE
     PathMakeUniqueName.cpp
     PathProcessCommand.cpp
     PathResolve.cpp
+    PreviewHandler.cpp
     ProgramFilesDir.cpp
     RealShellExecuteEx.cpp
+    RecentDocs.cpp
     RegItemParse.cpp
+    SearchFolder.cpp
     SHAppBarMessage.cpp
     SHChangeNotify.cpp
     SHCreateDataObject.cpp
@@ -62,6 +65,7 @@ list(APPEND SOURCE
     SHLimitInputEdit.cpp
     SHSetUnreadMailCountW.cpp
     StrRStr.cpp
+    Thumbnails.cpp
     menu.cpp
     shelltest.cpp)
 

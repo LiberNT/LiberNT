@@ -71,12 +71,20 @@ extern void func_StartMenuPin(void);
 extern void func_Win81Ordinals(void);
 
 extern void func_ModernShell(void);
+extern void func_Thumbnails(void);
 extern void func_ShellItemProperties(void);
+extern void func_SearchFolder(void);
+extern void func_RecentDocs(void);
+extern void func_PreviewHandler(void);
 
 const struct test winetest_testlist[] =
 {
     { "ModernShell", func_ModernShell },
+    { "Thumbnails", func_Thumbnails },
     { "ShellItemProperties", func_ShellItemProperties },
+    { "SearchFolder", func_SearchFolder },
+    { "RecentDocs", func_RecentDocs },
+    { "PreviewHandler", func_PreviewHandler },
     { "WindowPropertyStore", func_WindowPropertyStore },
     { "StartMenuPin", func_StartMenuPin },
     { "AddCommas", func_AddCommas },
