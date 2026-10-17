@@ -441,6 +441,9 @@ RealSystemParametersInfoW(UINT uiAction,
     case SPI_GETHIGHCONTRAST:
       return GetHighContrastW(uiParam, pvParam, fWinIni);
 
+    case SPI_SETCURSORS:
+      LoadUserCursors();
+      break;
 
     case SPI_SETDESKWALLPAPER:
       {

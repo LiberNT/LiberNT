@@ -1956,8 +1956,7 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
             return SpiSetBool(&gspv.bPwrOffActive, uiParam, KEY_DESKTOP, L"PowerOffActive", fl);
 
         case SPI_SETCURSORS:
-            ERR("SPI_SETCURSORS is unimplemented\n");
-            break;
+            return (UINT_PTR)KEY_DESKTOP;
 
         case SPI_SETICONS:
             ERR("SPI_SETICONS is unimplemented\n");

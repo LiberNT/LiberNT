@@ -293,6 +293,59 @@ VOID LoadSystemCursors(VOID)
    }
 }
 
+static const struct
+{
+    LPCWSTR Name;
+    LPCWSTR Resource;
+    DWORD Id;
+} UserCursorScheme[] =
+{
+    { L"Arrow", IDC_ARROW, OCR_NORMAL },
+    { L"IBeam", IDC_IBEAM, OCR_IBEAM },
+    { L"Wait", IDC_WAIT, OCR_WAIT },
+    { L"Crosshair", IDC_CROSS, OCR_CROSS },
+    { L"UpArrow", IDC_UPARROW, OCR_UP },
+    { L"SizeNWSE", IDC_SIZENWSE, OCR_SIZENWSE },
+    { L"SizeNESW", IDC_SIZENESW, OCR_SIZENESW },
+    { L"SizeWE", IDC_SIZEWE, OCR_SIZEWE },
+    { L"SizeNS", IDC_SIZENS, OCR_SIZENS },
+    { L"SizeAll", IDC_SIZEALL, OCR_SIZEALL },
+    { L"No", IDC_NO, OCR_NO },
+    { L"Hand", IDC_HAND, OCR_HAND },
+    { L"AppStarting", IDC_APPSTARTING, OCR_APPSTARTING },
+    { L"Help", IDC_HELP, OCR_HELP },
+};
+
+VOID LoadUserCursors(VOID)
+{
+    WCHAR Path[MAX_PATH], Expanded[MAX_PATH];
+    HKEY Key = NULL;
+    UINT i;
+
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\Cursors", 0, KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
+        Key = NULL;
+    for (i = 0; i < ARRAYSIZE(UserCursorScheme); i++)
+    {
+        DWORD Size = sizeof(Path) - sizeof(WCHAR), Type;
+        HCURSOR Cursor = NULL;
+
+        if (Key &&
+            RegQueryValueExW(Key, UserCursorScheme[i].Name, NULL, &Type, (PBYTE)Path, &Size) == ERROR_SUCCESS &&
+            (Type == REG_SZ || Type == REG_EXPAND_SZ))
+        {
+            Path[Size / sizeof(WCHAR)] = UNICODE_NULL;
+            if (Path[0] && ExpandEnvironmentStringsW(Path, Expanded, ARRAYSIZE(Expanded)))
+                Cursor = LoadImageW(NULL, Expanded, IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+        }
+        if (!Cursor)
+            Cursor = LoadImageW(NULL, UserCursorScheme[i].Resource, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE);
+        if (Cursor && !NtUserSetSystemCursor(Cursor, UserCursorScheme[i].Id))
+            DestroyCursor(Cursor);
+    }
+    if (Key)
+        RegCloseKey(Key);
+}
+
 /* This callback routine is called directly after switching to gui mode */
 NTSTATUS
 WINAPI

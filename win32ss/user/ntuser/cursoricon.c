@@ -2492,6 +2492,40 @@ NtUserGetCursorFrameInfo(
 /*
  * @implemented
  */
+static
+BOOL
+IntReplaceCursorImage(
+    _Inout_ PCURICON_OBJECT pcurDst,
+    _Inout_ PCURICON_OBJECT pcurSrc)
+{
+    CURICON_OBJECT Image;
+
+    if ((pcurDst->CURSORF_flags | pcurSrc->CURSORF_flags) & CURSORF_ACON)
+        return FALSE;
+    Image = *pcurDst;
+    pcurDst->xHotspot = pcurSrc->xHotspot;
+    pcurDst->yHotspot = pcurSrc->yHotspot;
+    pcurDst->hbmMask = pcurSrc->hbmMask;
+    pcurDst->hbmColor = pcurSrc->hbmColor;
+    pcurDst->hbmAlpha = pcurSrc->hbmAlpha;
+    pcurDst->rcBounds = pcurSrc->rcBounds;
+    pcurDst->hbmUserAlpha = pcurSrc->hbmUserAlpha;
+    pcurDst->bpp = pcurSrc->bpp;
+    pcurDst->cx = pcurSrc->cx;
+    pcurDst->cy = pcurSrc->cy;
+    pcurSrc->xHotspot = Image.xHotspot;
+    pcurSrc->yHotspot = Image.yHotspot;
+    pcurSrc->hbmMask = Image.hbmMask;
+    pcurSrc->hbmColor = Image.hbmColor;
+    pcurSrc->hbmAlpha = Image.hbmAlpha;
+    pcurSrc->rcBounds = Image.rcBounds;
+    pcurSrc->hbmUserAlpha = Image.hbmUserAlpha;
+    pcurSrc->bpp = Image.bpp;
+    pcurSrc->cx = Image.cx;
+    pcurSrc->cy = Image.cy;
+    return TRUE;
+}
+
 BOOL
 APIENTRY
 NtUserSetSystemCursor(
@@ -2545,7 +2579,17 @@ NtUserSetSystemCursor(
         }
         if (pcurOrig)
         {
-           FIXME("Need to copy cursor data or do something! pcurOrig %p new pcur %p\n",pcurOrig,pcur);
+           if (IntReplaceCursorImage(pcurOrig, pcur))
+           {
+               IntDestroyCurIconObject(pcur);
+               UserDereferenceObject(pcur);
+               IntUpdateCursorImage();
+               Ret = TRUE;
+           }
+           else
+           {
+               FIXME("Need to copy cursor data or do something! pcurOrig %p new pcur %p\n",pcurOrig,pcur);
+           }
         }
     }
 Exit:

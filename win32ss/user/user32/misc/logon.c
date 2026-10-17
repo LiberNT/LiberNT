@@ -110,5 +110,9 @@ UpdatePerUserSystemParameters(DWORD dwReserved,
     /* Load Preload keyboard layouts */
     IntLoadPreloadKeyboardLayouts();
 
-    return NtUserUpdatePerUserSystemParameters(dwReserved, bEnable);
+    if (!NtUserUpdatePerUserSystemParameters(dwReserved, bEnable))
+        return FALSE;
+    if (bEnable)
+        LoadUserCursors();
+    return TRUE;
 }
