@@ -570,28 +570,36 @@ void setup_adapter( PDHCP_ADAPTER Adapter, struct client_lease *new_lease ) {
     CHAR AddressBuffer[32];
     struct in_addr addr;
     HKEY hkey;
+    BOOL HaveMask = new_lease->options[DHO_SUBNET_MASK].len == (int)sizeof(ULONG);
+    ULONG NewAddress = *((ULONG*)new_lease->address.iabuf);
+    ULONG NewMask = HaveMask ? *((ULONG*)new_lease->options[DHO_SUBNET_MASK].data) : 0;
+    BOOL KeepAddress = HaveMask && Adapter->NteContext == NewAddress && Adapter->NteNetmask == NewMask;
 
     strcat(Buffer, Adapter->DhclientInfo.name);
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, Buffer, 0, KEY_WRITE, &hkey) != ERROR_SUCCESS)
         hkey = NULL;
 
 
-    if( Adapter->NteContext )
+    if( Adapter->NteContext && !KeepAddress )
     {
         DeleteIPAddress( Adapter->NteContext );
         Adapter->NteContext = 0;
     }
 
     /* Set up our default router if we got one from the DHCP server */
-    if( new_lease->options[DHO_SUBNET_MASK].len == (int)sizeof(ULONG) ) {
-        DWORD err;
+    if( HaveMask ) {
+        DWORD err = NO_ERROR;
 
-        err = AddIPAddress
-            ( *((ULONG*)new_lease->address.iabuf),
-              *((ULONG*)new_lease->options[DHO_SUBNET_MASK].data),
-              Adapter->IfMib.dwIndex,
-              &Adapter->NteContext,
-              &Adapter->NteInstance );
+        if( !KeepAddress ) {
+            err = AddIPAddress
+                ( NewAddress,
+                  NewMask,
+                  Adapter->IfMib.dwIndex,
+                  &Adapter->NteContext,
+                  &Adapter->NteInstance );
+            if (err == NO_ERROR)
+                Adapter->NteNetmask = NewMask;
+        }
         if (hkey && err == NO_ERROR) {
             RegSetValueExA(hkey, "DhcpIPAddress", 0, REG_SZ, (LPBYTE)piaddr(new_lease->address), strlen(piaddr(new_lease->address))+1);
             addr.S_un.S_addr = *((ULONG*)new_lease->options[DHO_SUBNET_MASK].data);
@@ -622,25 +630,29 @@ void setup_adapter( PDHCP_ADAPTER Adapter, struct client_lease *new_lease ) {
     }
 
     if( new_lease->options[DHO_ROUTERS].len > (int)0 && new_lease->options[DHO_ROUTERS].len % (int)sizeof(ULONG) == 0 ) {
-        DWORD err;
+        DWORD err = NO_ERROR;
+        ULONG NewRouter = *((ULONG*)new_lease->options[DHO_ROUTERS].data);
 
-        Adapter->RouterMib.dwForwardDest = 0; /* Default route */
-        Adapter->RouterMib.dwForwardMask = 0;
-        Adapter->RouterMib.dwForwardMetric1 = 1;
-        Adapter->RouterMib.dwForwardIfIndex = Adapter->IfMib.dwIndex;
+        if( Adapter->RouterMib.dwForwardNextHop != NewRouter ) {
+            Adapter->RouterMib.dwForwardDest = 0; /* Default route */
+            Adapter->RouterMib.dwForwardMask = 0;
+            Adapter->RouterMib.dwForwardMetric1 = 1;
+            Adapter->RouterMib.dwForwardIfIndex = Adapter->IfMib.dwIndex;
 
-        if( Adapter->RouterMib.dwForwardNextHop ) {
-            /* If we set a default route before, delete it before continuing */
-            DeleteIpForwardEntry( &Adapter->RouterMib );
+            if( Adapter->RouterMib.dwForwardNextHop ) {
+                /* If we set a default route before, delete it before continuing */
+                DeleteIpForwardEntry( &Adapter->RouterMib );
+            }
+
+            Adapter->RouterMib.dwForwardNextHop = NewRouter;
+
+            err = CreateIpForwardEntry( &Adapter->RouterMib );
+
+            if( err != NO_ERROR ) {
+                warning("CreateIpForwardEntry: %lu\n", err);
+                Adapter->RouterMib.dwForwardNextHop = 0;
+            }
         }
-
-        Adapter->RouterMib.dwForwardNextHop =
-            *((ULONG*)new_lease->options[DHO_ROUTERS].data);
-
-        err = CreateIpForwardEntry( &Adapter->RouterMib );
-
-        if( err != NO_ERROR )
-            warning("CreateIpForwardEntry: %lu\n", err);
 
         if (hkey && err == NO_ERROR) {
             addr.S_un.S_addr = *((ULONG*)new_lease->options[DHO_ROUTERS].data);
@@ -1267,7 +1279,13 @@ state_panic(void *ipp)
                                   &Adapter->NteContext,
                                   &Adapter->NteInstance);
             if (!NT_SUCCESS(Status))
+            {
                 DH_DbgPrint(MID_TRACE,("AddIPAddress: %lx\n", Status));
+            }
+            else
+            {
+                Adapter->NteNetmask = htonl(Adapter->AlternateConfiguration->SubnetMask);
+            }
 
             /* DefaultGateway */
             if (Adapter->AlternateConfiguration->DefaultGateway != 0)
@@ -1375,7 +1393,13 @@ state_panic(void *ipp)
                                           &Adapter->NteContext,
                                           &Adapter->NteInstance);
                     if (!NT_SUCCESS(Status))
+                    {
                         DH_DbgPrint(MID_TRACE,("AddIPAddress: %lx\n", Status));
+                    }
+                    else
+                    {
+                        Adapter->NteNetmask = htonl(0xFFFF0000);
+                    }
 
                     if (hKey)
                     {

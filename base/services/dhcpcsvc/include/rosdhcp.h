@@ -82,7 +82,7 @@ typedef struct _DHCP_ADAPTER
     MIB_IPFORWARDROW RouterMib;
     MIB_IPADDRROW  IfAddr;
     SOCKADDR       Address;
-    ULONG NteContext,NteInstance;
+    ULONG NteContext,NteInstance,NteNetmask;
     struct interface_info DhclientInfo;
     struct client_state DhclientState;
     struct client_config DhclientConfig;

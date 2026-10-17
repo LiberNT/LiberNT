@@ -458,7 +458,6 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
 
                         /* These are already invalid since the media state change */
                         Adapter->RouterMib.dwForwardNextHop = 0;
-                        Adapter->NteContext = 0;
 
                         add_protocol(Adapter->DhclientInfo.name,
                                      Adapter->DhclientInfo.rfdesc,

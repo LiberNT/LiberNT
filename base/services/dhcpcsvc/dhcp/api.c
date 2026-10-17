@@ -359,6 +359,8 @@ Server_StaticRefreshParams(
                        AdapterIndex,
                        &Adapter->NteContext,
                        &Adapter->NteInstance);
+    if (ret == NO_ERROR)
+        Adapter->NteNetmask = Netmask;
 
     if (hAdapterStateChangedEvent != NULL)
         SetEvent(hAdapterStateChangedEvent);
