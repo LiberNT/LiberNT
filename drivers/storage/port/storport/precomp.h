@@ -125,6 +125,8 @@ typedef struct _FDO_DEVICE_EXTENSION
     SLIST_HEADER FreeSrbExtensions;
     PVOID SrbExtensionPool;
     ULONG PortNumber;
+    ULONG RaidPortNumber;
+    BOOLEAN ScsiPortLinked;
     ULONG BusNumber;
     ULONG SlotNumber;
     PCM_RESOURCE_LIST AllocatedResources;
@@ -323,6 +325,16 @@ NTSTATUS PortSrbStatusToNtStatus(_In_ UCHAR SrbStatus);
 VOID PortFreeDumpContext(_In_opt_ PPORT_DUMP_CONTEXT DumpContext);
 
 NTSTATUS PortGetDumpInterface(_In_ PPDO_DEVICE_EXTENSION PdoExtension, _Out_ PROS_STORAGE_DUMP_INTERFACE Interface);
+
+/* devmap.c */
+
+VOID PortCreateScsiPortLinks(_Inout_ PFDO_DEVICE_EXTENSION DeviceExtension);
+
+VOID PortDeleteScsiPortLinks(_Inout_ PFDO_DEVICE_EXTENSION DeviceExtension);
+
+VOID PortRegisterAdapterMap(_In_ PFDO_DEVICE_EXTENSION DeviceExtension);
+
+VOID PortRegisterLunMap(_In_ PPDO_DEVICE_EXTENSION PdoExtension);
 
 /* fdo.c */
 

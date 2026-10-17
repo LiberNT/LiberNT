@@ -602,6 +602,8 @@ PortAddDevice(
     DeviceExtension->Device = Fdo;
     DeviceExtension->PhysicalDevice = PhysicalDeviceObject;
     DeviceExtension->PortNumber = Number;
+    DeviceExtension->RaidPortNumber = Number;
+    PortCreateScsiPortLinks(DeviceExtension);
 
     DeviceExtension->PnpState = dsStopped;
 
@@ -641,6 +643,7 @@ PortAddDevice(
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("IoAttachDeviceToDeviceStackSafe() failed (Status 0x%08lx)\n", Status);
+        PortDeleteScsiPortLinks(DeviceExtension);
         IoDeleteDevice(Fdo);
         return Status;
     }

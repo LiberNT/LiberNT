@@ -5,6 +5,7 @@ include_directories(
     ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/sptilib)
 
 list(APPEND SOURCE
+    devmap.c
     dma.c
     fdo.c
     miniport.c

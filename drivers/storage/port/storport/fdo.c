@@ -338,6 +338,10 @@ PortFdoStartDevice(
         DPRINT1("FdoStartMiniport() failed (Status 0x%08lx)\n", Status);
         DeviceExtension->PnpState = dsStopped;
     }
+    else
+    {
+        PortRegisterAdapterMap(DeviceExtension);
+    }
 
     return Status;
 }
@@ -775,6 +779,7 @@ PortScanLun(
     }
 
     PortReadSerialNumber(PdoExtension);
+    PortRegisterLunMap(PdoExtension);
     DPRINT("VendorId: %.8s\n", PdoExtension->InquiryBuffer->VendorId);
     DPRINT("ProductId: %.16s\n", PdoExtension->InquiryBuffer->ProductId);
     DPRINT("ProductRevisionLevel: %.4s\n", PdoExtension->InquiryBuffer->ProductRevisionLevel);
@@ -1323,6 +1328,7 @@ PortFdoRemoveDevice(
     Status = IoCallDriver(LowerDevice, Irp);
 
     IoDetachDevice(LowerDevice);
+    PortDeleteScsiPortLinks(DeviceExtension);
     IoDeleteDevice(DeviceExtension->Device);
     return Status;
 }
