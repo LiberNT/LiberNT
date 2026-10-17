@@ -1326,9 +1326,12 @@ public:
             return;
         }
 
-        SendMessage(m_Rebar, WM_SETFONT, (WPARAM) m_Font, TRUE);
-        SendMessage(m_TaskSwitch, WM_SETFONT, (WPARAM) m_Font, TRUE);
-        SendMessage(m_TrayNotify, WM_SETFONT, (WPARAM) m_Font, TRUE);
+        if (m_Rebar)
+            SendMessage(m_Rebar, WM_SETFONT, (WPARAM) m_Font, TRUE);
+        if (m_TaskSwitch)
+            SendMessage(m_TaskSwitch, WM_SETFONT, (WPARAM) m_Font, TRUE);
+        if (m_TrayNotify)
+            SendMessage(m_TrayNotify, WM_SETFONT, (WPARAM) m_Font, TRUE);
     }
 
     HMONITOR GetScreenRectFromRect(
