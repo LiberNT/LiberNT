@@ -218,6 +218,7 @@
 @ stdcall EnumDependentServicesA(long long ptr long ptr ptr)
 @ stdcall EnumDependentServicesW(long long ptr long ptr ptr)
 @ stdcall EnumServiceGroupW(ptr long long ptr long ptr ptr ptr wstr)
+@ stdcall EnumDynamicTimeZoneInformation(long ptr) kernelbase.EnumDynamicTimeZoneInformation
 @ stdcall EnumServicesStatusA(long long long ptr long ptr ptr ptr)
 @ stdcall EnumServicesStatusExA(long long long long ptr long ptr ptr ptr str)
 @ stdcall EnumServicesStatusExW(long long long long ptr long ptr ptr ptr wstr)

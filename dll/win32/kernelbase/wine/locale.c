@@ -1835,6 +1835,25 @@ invalid:
 }
 
 
+#ifdef __REACTOS__
+static const WCHAR *get_geo_friendly_name( const struct geo_id *geo )
+{
+    UINT i;
+
+    for (i = 0; i < locale_table->nb_lcnames; i++)
+    {
+        const NLS_LOCALE_DATA *locale;
+
+        if (!lcnames_index[i].name || (lcnames_index[i].id & 0x80000000)) continue;
+        locale = get_locale_data( lcnames_index[i].idx );
+        if (!locale->inotneutral || locale->igeoid != geo->id) continue;
+        if (!locale_strings[locale->sengcountry]) continue;
+        return locale_strings + locale->sengcountry + 1;
+    }
+    return NULL;
+}
+
+#endif
 /* get geo information from the locale.nls file */
 static int get_geo_info( const struct geo_id *geo, enum SYSGEOTYPE type,
                          WCHAR *buffer, int len, LANGID lang )
@@ -1878,6 +1897,23 @@ static int get_geo_info( const struct geo_id *geo, enum SYSGEOTYPE type,
     case GEO_CURRENCYSYMBOL:
         str = geo->currsymbol;
         break;
+#ifdef __REACTOS__
+    case GEO_NAME:
+        str = geo->iso2;
+        break;
+    case GEO_FRIENDLYNAME:
+        if (!(str = get_geo_friendly_name( geo )))
+        {
+            SetLastError( ERROR_INVALID_PARAMETER );
+            return 0;
+        }
+        break;
+    case GEO_RFC1766:
+    case GEO_LCID:
+    case GEO_OFFICIALNAME:
+    case GEO_TIMEZONES:
+    case GEO_OFFICIALLANGUAGES:
+#else
     case GEO_RFC1766:
     case GEO_LCID:
     case GEO_FRIENDLYNAME:
@@ -1885,6 +1921,7 @@ static int get_geo_info( const struct geo_id *geo, enum SYSGEOTYPE type,
     case GEO_TIMEZONES:
     case GEO_OFFICIALLANGUAGES:
     case GEO_NAME:
+#endif
         FIXME( "type %u is not supported\n", type );
         SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
         return 0;

@@ -111,6 +111,7 @@
 @ stdcall EnumCalendarInfoExEx(ptr wstr long wstr long long)
 @ stdcall EnumCalendarInfoExW(ptr long long long)
 @ stdcall EnumCalendarInfoW(ptr long long long)
+@ stdcall EnumDynamicTimeZoneInformation(long ptr)
 @ stdcall EnumResourceLanguagesExA(long str str ptr long long long) kernel32.EnumResourceLanguagesExA
 @ stdcall EnumResourceLanguagesExW(long wstr wstr ptr long long long) kernel32.EnumResourceLanguagesExW
 @ stdcall EnumResourceNamesExA(long str ptr long long long) kernel32.EnumResourceNamesExA
