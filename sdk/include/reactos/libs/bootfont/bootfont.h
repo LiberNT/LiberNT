@@ -48,6 +48,11 @@ BootFontInitialize(
     unsigned long ScreenWidth,
     unsigned long ScreenHeight);
 
+int
+BootFontInitializeWithPixelHeight(
+    PBOOT_FONT_RENDERER Renderer,
+    unsigned long PixelHeight);
+
 void
 BootFontCleanup(
     PBOOT_FONT_RENDERER Renderer);

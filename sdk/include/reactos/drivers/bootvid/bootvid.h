@@ -88,6 +88,10 @@ NTAPI
 VidSetTextColor(
     _In_ ULONG Color);
 
+BOOLEAN
+NTAPI
+VidUseCompactFont(VOID);
+
 VOID
 NTAPI
 VidBitBlt(

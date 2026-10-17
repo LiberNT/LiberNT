@@ -329,20 +329,19 @@ BootFontCleanup(
     memset(Renderer, 0, sizeof(*Renderer));
 }
 
-int
-BootFontInitialize(
+static
+BOOLEAN
+BootFontCreate(
     _Inout_ PBOOT_FONT_RENDERER Renderer,
     _In_ ULONG ScreenWidth,
-    _In_ ULONG ScreenHeight)
+    _In_ ULONG ScreenHeight,
+    _In_ ULONG PixelHeight)
 {
     FT_Library Library = NULL;
     FT_Face Face = NULL;
     FT_Error Error;
     ULONG BitmapSize;
     BOOLEAN Success = FALSE;
-
-    if (!Renderer || !ScreenWidth || !ScreenHeight)
-        return FALSE;
 
     BootFontCleanup(Renderer);
 
@@ -362,13 +361,25 @@ BootFontInitialize(
     if (Error != FT_Err_Ok)
         goto Cleanup;
 
-    if (!BootFontChooseMetrics(Face,
-                               ScreenWidth,
-                               ScreenHeight,
-                               &Renderer->PixelHeight,
-                               &Renderer->CellWidth,
-                               &Renderer->CellHeight,
-                               &Renderer->Baseline))
+    if (PixelHeight)
+    {
+        if (!BootFontMeasure(Face,
+                             PixelHeight,
+                             &Renderer->CellWidth,
+                             &Renderer->CellHeight,
+                             &Renderer->Baseline))
+        {
+            goto Cleanup;
+        }
+        Renderer->PixelHeight = PixelHeight;
+    }
+    else if (!BootFontChooseMetrics(Face,
+                                    ScreenWidth,
+                                    ScreenHeight,
+                                    &Renderer->PixelHeight,
+                                    &Renderer->CellWidth,
+                                    &Renderer->CellHeight,
+                                    &Renderer->Baseline))
     {
         goto Cleanup;
     }
@@ -403,6 +414,29 @@ Cleanup:
         BootFontCleanup(Renderer);
 
     return Success;
+}
+
+int
+BootFontInitialize(
+    _Inout_ PBOOT_FONT_RENDERER Renderer,
+    _In_ ULONG ScreenWidth,
+    _In_ ULONG ScreenHeight)
+{
+    if (!Renderer || !ScreenWidth || !ScreenHeight)
+        return FALSE;
+
+    return BootFontCreate(Renderer, ScreenWidth, ScreenHeight, 0);
+}
+
+int
+BootFontInitializeWithPixelHeight(
+    _Inout_ PBOOT_FONT_RENDERER Renderer,
+    _In_ ULONG PixelHeight)
+{
+    if (!Renderer || !PixelHeight)
+        return FALSE;
+
+    return BootFontCreate(Renderer, 0, 0, PixelHeight);
 }
 
 const BOOT_FONT_GLYPH*

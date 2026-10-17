@@ -399,6 +399,13 @@ VidFadeToBlack(
     UNREFERENCED_PARAMETER(Steps);
 }
 
+BOOLEAN
+NTAPI
+VidUseCompactFont(VOID)
+{
+    return FALSE;
+}
+
 VOID
 NTAPI
 VidCleanUp(VOID)

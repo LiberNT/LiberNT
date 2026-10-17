@@ -13,3 +13,4 @@
 @ stdcall VidSetTextColor(long)
 @ stdcall VidSetVirtualFrameBuffer(ptr)
 @ stdcall VidSolidColorFill(long long long long long)
+@ stdcall VidUseCompactFont()

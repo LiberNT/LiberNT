@@ -22,6 +22,8 @@
 #define BOOTVID_FALLBACK_FONT_SCALE 2
 #define BOOTVID_FALLBACK_CELL_WIDTH (BOOTCHAR_WIDTH * BOOTVID_FALLBACK_FONT_SCALE)
 #define BOOTVID_FALLBACK_CELL_HEIGHT ((BOOTCHAR_HEIGHT + 1) * BOOTVID_FALLBACK_FONT_SCALE)
+#define BOOTVID_COMPACT_FONT_ROWS 80
+#define BOOTVID_COMPACT_FONT_MIN_PIXEL_HEIGHT 12
 
 #define BB_PIXEL(x, y) \
     (BackBuffer + (ULONG_PTR)(y) * VidpDisplayWidth + (x))
@@ -43,6 +45,8 @@ static SIZE_T BackBufferSize;
 static RGBQUAD CachedPalette[BV_MAX_COLORS];
 static UCHAR CachedBlendPalette[BV_MAX_COLORS][BV_MAX_COLORS][MAXUCHAR + 1];
 static BOOT_FONT_RENDERER BootVidFont;
+static BOOT_FONT_RENDERER BootVidCompactFont;
+static BOOLEAN VidpCompactFont = FALSE;
 
 NTSTATUS
 NTAPI
@@ -351,7 +355,8 @@ VidInitialize(
     ULONG BusNumber;
     ULONG Dpi, ReadableDpi, MaximumDpi;
     ULONG LogicalWidth, LogicalHeight, ScrollWidth;
-    SIZE_T BackBufferHeight;
+    ULONG CompactCellHeight;
+    SIZE_T BackBufferHeight, CompactBackBufferSize;
     NTSTATUS Status;
 
     /* Find boot-time framebuffer display information from the LoaderBlock */
@@ -493,6 +498,18 @@ VidInitialize(
         VidpCharacterHeight = BOOTVID_FALLBACK_CELL_HEIGHT;
     }
 
+    if (BootFontInitializeWithPixelHeight(&BootVidCompactFont,
+                                          max(ScreenHeight / BOOTVID_COMPACT_FONT_ROWS,
+                                              (ULONG)BOOTVID_COMPACT_FONT_MIN_PIXEL_HEIGHT)))
+    {
+        CompactCellHeight = BootVidCompactFont.CellHeight;
+    }
+    else
+    {
+        DPRINT1("Could not initialize the compact boot console font\n");
+        CompactCellHeight = BOOTCHAR_HEIGHT + 1;
+    }
+
     /*
      * Text scrolling must end on a character boundary, but that is a
      * property of the console region rather than of the display mode.
@@ -587,6 +604,9 @@ VidInitialize(
     }
     BackBufferSize = (SIZE_T)VidpDisplayWidth * BackBufferHeight;
 
+    CompactBackBufferSize = (SIZE_T)ScreenWidth * ((SIZE_T)ScreenHeight + CompactCellHeight);
+    BackBufferSize = max(BackBufferSize, CompactBackBufferSize);
+
     /*
      * Keep the backbuffer in cached system RAM. Reading from the GOP
      * framebuffer is often extremely slow, even when writes are combined.
@@ -618,12 +638,52 @@ VidInitialize(
 Failure:
     RtlZeroMemory(&VidpFrameBufferInfo, sizeof(VidpFrameBufferInfo));
     BootFontCleanup(&BootVidFont);
+    BootFontCleanup(&BootVidCompactFont);
 
     /* We failed somewhere; unmap the framebuffer if we mapped it */
     if (FrameBufferBase && (AddressSpace == 0))
         MmUnmapIoSpace(FrameBufferBase, MappedSize);
 
     return FALSE;
+}
+
+BOOLEAN
+NTAPI
+VidUseCompactFont(VOID)
+{
+    ULONG CellWidth, CellHeight;
+
+    if (!BackBuffer || VidpCompactFont)
+        return FALSE;
+
+    if (BootVidCompactFont.Enabled)
+    {
+        CellWidth = BootVidCompactFont.CellWidth;
+        CellHeight = BootVidCompactFont.CellHeight;
+    }
+    else
+    {
+        CellWidth = BOOTCHAR_WIDTH;
+        CellHeight = BOOTCHAR_HEIGHT + 1;
+    }
+
+    if ((SIZE_T)ScreenWidth * ((SIZE_T)ScreenHeight + CellHeight) > BackBufferSize)
+        return FALSE;
+
+    VidpCompactFont = TRUE;
+    VidpDisplayWidth = ScreenWidth;
+    VidpDisplayHeight = ScreenHeight;
+    VidpDisplayDpi = LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT;
+    VidpCharacterWidth = CellWidth;
+    VidpCharacterHeight = CellHeight;
+    VidpScrollRegion.Left = 0;
+    VidpScrollRegion.Top = 0;
+    VidpScrollRegion.Right = ScreenWidth - (ScreenWidth % CellWidth) - 1;
+    VidpScrollRegion.Bottom = ScreenHeight - 1;
+    VidpCurrentX = 0;
+    VidpCurrentY = 0;
+    RtlZeroMemory(BackBuffer, BackBufferSize);
+    return TRUE;
 }
 
 VOID
@@ -921,6 +981,7 @@ DisplayCharacter(
     _In_ ULONG TextColor,
     _In_ ULONG BackColor)
 {
+    const BOOT_FONT_RENDERER* Font = VidpCompactFont ? &BootVidCompactFont : &BootVidFont;
     const BOOT_FONT_GLYPH* Glyph;
     const UCHAR* Bitmap;
     const BOOLEAN Opaque = (BackColor < BV_COLOR_NONE);
@@ -933,7 +994,7 @@ DisplayCharacter(
     if (TextColor >= BV_MAX_COLORS)
         return;
 
-    Glyph = BootFontGetGlyph(&BootVidFont, (UCHAR)Character);
+    Glyph = BootFontGetGlyph(Font, (UCHAR)Character);
     if (!Glyph)
     {
         DisplayBitmapCharacter(Character, Left, Top, TextColor, BackColor);
@@ -949,11 +1010,11 @@ DisplayCharacter(
             RtlFillMemory(BB_PIXEL(Left, Top + Row), Width, (UCHAR)BackColor);
     }
 
-    Bitmap = BootFontGetGlyphBitmap(&BootVidFont, Glyph);
+    Bitmap = BootFontGetGlyphBitmap(Font, Glyph);
     if (Bitmap && Glyph->Width && Glyph->Height)
     {
         LONG RelativeX = max((LONG)Glyph->Left, 0L);
-        LONG RelativeY = (LONG)BootVidFont.Baseline - Glyph->Top;
+        LONG RelativeY = (LONG)Font->Baseline - Glyph->Top;
 
         for (Row = 0; Row < Glyph->Height; ++Row)
         {
