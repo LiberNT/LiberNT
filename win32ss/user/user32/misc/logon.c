@@ -101,6 +101,8 @@ WINAPI
 UpdatePerUserSystemParameters(DWORD dwReserved,
                               BOOL bEnable)
 {
+    BOOL Ret;
+
     // Update Imm support and load Imm32.dll.
     UpdatePerUserImmEnabling();
 
@@ -110,9 +112,8 @@ UpdatePerUserSystemParameters(DWORD dwReserved,
     /* Load Preload keyboard layouts */
     IntLoadPreloadKeyboardLayouts();
 
-    if (!NtUserUpdatePerUserSystemParameters(dwReserved, bEnable))
-        return FALSE;
+    Ret = NtUserUpdatePerUserSystemParameters(dwReserved, bEnable);
     if (bEnable)
         LoadUserCursors();
-    return TRUE;
+    return Ret;
 }
