@@ -872,6 +872,13 @@ DWORD WINAPI WNetOpenEnumW( DWORD dwScope, DWORD dwType, DWORD dwUsage,
                             *lphEnum = _createRememberedEnumerator(dwScope, dwType, remembered);
                             ret = *lphEnum ? WN_SUCCESS : WN_OUT_OF_MEMORY;
                         }
+#ifdef __REACTOS__
+                        else
+                        {
+                            *lphEnum = _createRememberedEnumerator(dwScope, dwType, NULL);
+                            ret = *lphEnum ? WN_SUCCESS : WN_OUT_OF_MEMORY;
+                        }
+#endif
 
                         RegCloseKey(user_profile);
                     }

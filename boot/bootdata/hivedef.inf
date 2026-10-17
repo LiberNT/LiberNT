@@ -1898,6 +1898,7 @@ HKCU,"Control Panel\Sound","Beep",2,"yes"
 HKCU,"Control Panel\Sound","ExtendedSounds",2,"yes"
 
 HKCU,"Environment",,0x00000012
+HKCU,"Network",,0x00000012
 HKCU,"Environment","TEMP",0x00020000,"%TEMP_DIR%"
 HKCU,"Environment","TMP",0x00020000,"%TEMP_DIR%"
 
