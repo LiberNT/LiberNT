@@ -519,7 +519,9 @@ KspScanBus(
     /* TODO clear reference marks */
 
     /* construct device entries */
+    KeWaitForSingleObject(&BusDeviceExtension->BusMutex, Executive, KernelMode, FALSE, NULL);
     Status = KspEnumerateBusRegistryKeys(hKey, NULL, KspCreateDeviceReferenceTrampoline, BusDeviceExtension, NULL);
+    KeReleaseMutex(&BusDeviceExtension->BusMutex, FALSE);
 
     /* TODO: delete unreferenced devices */
 
@@ -1140,6 +1142,8 @@ KspInstallBusEnumInterface(
     // FIXME: We may need to check for success here, and properly fail...
     ASSERT(NT_SUCCESS(Status));
 
+    KeWaitForSingleObject(&Context->BusDeviceExtension->BusMutex, Executive, KernelMode, FALSE, NULL);
+
     /* acquire device entry lock */
     KeAcquireSpinLock(&Context->BusDeviceExtension->Lock, &OldLevel);
 
@@ -1174,6 +1178,7 @@ KspInstallBusEnumInterface(
 
     /* release device entry lock */
     KeReleaseSpinLock(&Context->BusDeviceExtension->Lock, OldLevel);
+    KeReleaseMutex(&Context->BusDeviceExtension->BusMutex, FALSE);
 
     /* signal that bus driver relations has changed */
     IoInvalidateDeviceRelations(Context->BusDeviceExtension->PhysicalDeviceObject, BusRelations);
@@ -1606,6 +1611,7 @@ KsCreateBusEnumObject(
 
     /* initialize lock */
     KeInitializeSpinLock(&BusDeviceExtension->Lock);
+    KeInitializeMutex(&BusDeviceExtension->BusMutex, 0);
 
     /* initialize timer */
     KeInitializeTimer(&BusDeviceExtension->Timer);
@@ -1678,6 +1684,8 @@ KsCreateBusEnumObject(
         return Status;
     }
 
+    KeWaitForSingleObject(&BusDeviceExtension->BusMutex, Executive, KernelMode, FALSE, NULL);
+
     /* acquire device entry lock */
     KeAcquireSpinLock(&BusDeviceExtension->Lock, &OldLevel);
 
@@ -1707,6 +1715,7 @@ KsCreateBusEnumObject(
 
     /* release device entry lock */
     KeReleaseSpinLock(&BusDeviceExtension->Lock, OldLevel);
+    KeReleaseMutex(&BusDeviceExtension->BusMutex, FALSE);
 
 
     /* invalidate device relations */
@@ -1967,7 +1976,9 @@ KsServiceBusEnumCreateRequest(
     else
     {
         /* time to create PDO */
-        Status = KspCreatePDO(BusDeviceExtension, DeviceEntry, &DeviceEntry->PDO);
+        KeWaitForSingleObject(&BusDeviceExtension->BusMutex, Executive, KernelMode, FALSE, NULL);
+        Status = DeviceEntry->PDO ? STATUS_SUCCESS : KspCreatePDO(BusDeviceExtension, DeviceEntry, &DeviceEntry->PDO);
+        KeReleaseMutex(&BusDeviceExtension->BusMutex, FALSE);
 
         if (!NT_SUCCESS(Status))
         {

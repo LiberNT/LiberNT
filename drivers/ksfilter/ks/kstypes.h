@@ -224,6 +224,7 @@ typedef struct __BUS_ENUM_DEVICE_EXTENSION__
     WORK_QUEUE_ITEM WorkItem;
     ULONG DeviceAttached;
     UNICODE_STRING ServicePath;
+    KMUTEX BusMutex;
 
     WCHAR BusIdentifier[1];
 }BUS_ENUM_DEVICE_EXTENSION, *PBUS_ENUM_DEVICE_EXTENSION;
