@@ -186,7 +186,7 @@ static HWND
 CreateToolbar(HWND parent, UINT id, HIMAGELIST images, HIMAGELIST disabled, const TBBUTTON *buttons, UINT count,
               int gap)
 {
-    HWND toolbar = CreateWindowExW(TBSTYLE_EX_DOUBLEBUFFER, TOOLBARCLASSNAMEW, NULL,
+    HWND toolbar = CreateWindowExW(0, TOOLBARCLASSNAMEW, NULL,
                                    WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | TBSTYLE_FLAT | TBSTYLE_LIST |
                                    TBSTYLE_TOOLTIPS | TBSTYLE_TRANSPARENT | CCS_NODIVIDER | CCS_NOPARENTALIGN |
                                    CCS_NORESIZE | CCS_TOP,
@@ -196,7 +196,8 @@ CreateToolbar(HWND parent, UINT id, HIMAGELIST images, HIMAGELIST disabled, cons
     SendMessageW(toolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
     SendMessageW(toolbar, TB_SETMAXTEXTROWS, 1, 0);
     SendMessageW(toolbar, TB_SETEXTENDEDSTYLE, 0,
-                 TBSTYLE_EX_MIXEDBUTTONS | TBSTYLE_EX_DRAWDDARROWS | TBSTYLE_EX_HIDECLIPPEDBUTTONS);
+                 TBSTYLE_EX_MIXEDBUTTONS | TBSTYLE_EX_DRAWDDARROWS | TBSTYLE_EX_HIDECLIPPEDBUTTONS |
+                 TBSTYLE_EX_DOUBLEBUFFER);
     SendMessageW(toolbar, TB_SETIMAGELIST, 0, (LPARAM)images);
     if (disabled)
         SendMessageW(toolbar, TB_SETDISABLEDIMAGELIST, 0, (LPARAM)disabled);
