@@ -2850,6 +2850,9 @@ BOOL WINAPI ReleaseSemaphore(HANDLE,LONG,LPLONG);
 VOID WINAPI ReleaseSRWLockExclusive(PSRWLOCK);
 VOID WINAPI ReleaseSRWLockShared(PSRWLOCK);
 #endif
+#if (_WIN32_WINNT >= 0x0502)
+HANDLE WINAPI ReOpenFile(_In_ HANDLE, _In_ DWORD, _In_ DWORD, _In_ DWORD);
+#endif
 BOOL WINAPI RemoveDirectoryA(LPCSTR);
 BOOL WINAPI RemoveDirectoryW(LPCWSTR);
 #if (_WIN32_WINNT >= 0x0500)

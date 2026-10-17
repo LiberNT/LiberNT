@@ -1083,6 +1083,9 @@ DWORD WINAPI BluetoothAuthenticateDeviceEx( HWND parent, HANDLE handle_radio, BL
     BTH_ADDR device_addr;
     BOOL success;
     DWORD ret, bytes;
+#ifdef __REACTOS__
+    HANDLE auth_radio;
+#endif
 
     FIXME( "(%p, %p, %p, %p, %d): semi-stub!\n", parent, handle_radio, device_info, oob_info, auth_req );
 
@@ -1146,6 +1149,29 @@ DWORD WINAPI BluetoothAuthenticateDeviceEx( HWND parent, HANDLE handle_radio, BL
     }
     ReleaseSRWLockExclusive( &bluetooth_auth_lock );
 
+#ifdef __REACTOS__
+    auth_radio = ReOpenFile( handle_radio, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                             FILE_FLAG_OVERLAPPED );
+    if (auth_radio == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    ovl.hEvent = CreateEventW( NULL, TRUE, FALSE, NULL );
+    device_addr = RtlUlonglongByteSwap( device_info->Address.ullLong ) >> 16;
+    success = DeviceIoControl( auth_radio, IOCTL_WINEBTH_RADIO_START_AUTH, &device_addr, sizeof( device_addr ),
+                               NULL, 0, &bytes, &ovl );
+    ret = ERROR_SUCCESS;
+    if (!success)
+    {
+        ret = GetLastError();
+        if (ret == ERROR_IO_PENDING)
+        {
+            ret = ERROR_SUCCESS;
+            if (!GetOverlappedResult( auth_radio, &ovl, &bytes, TRUE ))
+                ret = GetLastError();
+        }
+    }
+    CloseHandle( ovl.hEvent );
+    CloseHandle( auth_radio );
+#else
     ovl.hEvent = CreateEventW( NULL, TRUE, FALSE, NULL );
     device_addr = RtlUlonglongByteSwap( device_info->Address.ullLong ) >> 16;
     success = DeviceIoControl( handle_radio, IOCTL_WINEBTH_RADIO_START_AUTH, &device_addr, sizeof( device_addr ),
@@ -1162,6 +1188,7 @@ DWORD WINAPI BluetoothAuthenticateDeviceEx( HWND parent, HANDLE handle_radio, BL
         }
     }
     CloseHandle( ovl.hEvent );
+#endif
 
     return ret;
 }
