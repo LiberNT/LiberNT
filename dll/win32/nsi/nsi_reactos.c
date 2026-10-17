@@ -107,6 +107,61 @@ static void init_counted_string(IF_COUNTED_STRING *string, const char *source)
     if (length > 0) string->Length = (length - 1) * sizeof(WCHAR);
 }
 
+static void init_counted_string_w(IF_COUNTED_STRING *string, const WCHAR *source)
+{
+    size_t length = wcslen(source);
+
+    if (length >= ARRAY_SIZE(string->String)) length = ARRAY_SIZE(string->String) - 1;
+    memset(string, 0, sizeof(*string));
+    memcpy(string->String, source, length * sizeof(WCHAR));
+    string->Length = (USHORT)(length * sizeof(WCHAR));
+}
+
+static void guid_text(const GUID *guid, WCHAR *text, size_t count)
+{
+    _snwprintf(text, count, L"{%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}", guid->Data1, guid->Data2,
+               guid->Data3, guid->Data4[0], guid->Data4[1], guid->Data4[2], guid->Data4[3], guid->Data4[4],
+               guid->Data4[5], guid->Data4[6], guid->Data4[7]);
+    text[count - 1] = 0;
+}
+
+static BOOL interface_alias(const GUID *guid, WCHAR *alias, DWORD size)
+{
+    WCHAR id[40], path[MAX_PATH];
+
+    guid_text(guid, id, ARRAY_SIZE(id));
+    _snwprintf(path, ARRAY_SIZE(path),
+               L"SYSTEM\\CurrentControlSet\\Control\\Network\\{4D36E972-E325-11CE-BFC1-08002BE10318}\\%s\\Connection", id);
+    path[ARRAY_SIZE(path) - 1] = 0;
+    return !RegGetValueW(HKEY_LOCAL_MACHINE, path, L"Name", RRF_RT_REG_SZ, NULL, alias, &size) && alias[0];
+}
+
+static BOOL interface_description(const GUID *guid, WCHAR *description, DWORD size)
+{
+    WCHAR id[40], name[64], instance[40];
+    DWORD index, length, instance_size;
+    BOOL found = FALSE;
+    HKEY key;
+
+    guid_text(guid, id, ARRAY_SIZE(id));
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Class\\{4D36E972-E325-11CE-BFC1-08002BE10318}",
+                      0, KEY_READ, &key))
+        return FALSE;
+    for (index = 0, length = ARRAY_SIZE(name); !RegEnumKeyExW(key, index, name, &length, NULL, NULL, NULL, NULL);
+         index++, length = ARRAY_SIZE(name))
+    {
+        instance_size = sizeof(instance);
+        if (!RegGetValueW(key, name, L"NetCfgInstanceId", RRF_RT_REG_SZ, NULL, instance, &instance_size) &&
+            !_wcsicmp(instance, id))
+        {
+            found = !RegGetValueW(key, name, L"DriverDesc", RRF_RT_REG_SZ, NULL, description, &size) && description[0];
+            break;
+        }
+    }
+    RegCloseKey(key);
+    return found;
+}
+
 static UINT oper_status(DWORD status)
 {
     if (status == MIB_IF_OPER_STATUS_OPERATIONAL || status == MIB_IF_OPER_STATUS_CONNECTED) return NET_IF_OPER_STATUS_UP;
@@ -146,7 +201,9 @@ static BOOL fill_ndis_entry(UINT index, NET_LUID *key, struct nsi_ndis_ifinfo_rw
     DWORD type = MIB_IF_TYPE_OTHER, physical_length = 0, description_length;
     BYTE physical[IF_MAX_PHYS_ADDRESS_LENGTH] = {0};
     char description[MAXLEN_IFDESCR + 1];
-    BOOL found;
+    WCHAR alias[IF_MAX_STRING_SIZE + 1], driver[IF_MAX_STRING_SIZE + 1];
+    BOOL found, has_alias = FALSE, has_driver = FALSE;
+    GUID guid;
 
     memset(&row, 0, sizeof(row));
     row.dwIndex = index;
@@ -161,13 +218,20 @@ static BOOL fill_ndis_entry(UINT index, NET_LUID *key, struct nsi_ndis_ifinfo_rw
         description[description_length] = 0;
         name = description;
     }
+    guid = interface_guid(index, name);
+    if (type != MIB_IF_TYPE_LOOPBACK && (rw || stat))
+    {
+        has_alias = interface_alias(&guid, alias, sizeof(alias));
+        has_driver = interface_description(&guid, driver, sizeof(driver));
+    }
     if (key) *key = make_luid(index, type);
     if (rw)
     {
         memset(rw, 0, sizeof(*rw));
-        rw->network_guid = interface_guid(index, name);
+        rw->network_guid = guid;
         rw->admin_status = row.dwAdminStatus == 2 ? NET_IF_ADMIN_STATUS_DOWN : NET_IF_ADMIN_STATUS_UP;
-        init_counted_string(&rw->alias, name);
+        if (has_alias) init_counted_string_w(&rw->alias, alias);
+        else init_counted_string(&rw->alias, name);
         rw->phys_addr.Length = physical_length;
         memcpy(rw->phys_addr.Address, physical, physical_length);
         init_counted_string(&rw->name2, name);
@@ -197,11 +261,12 @@ static BOOL fill_ndis_entry(UINT index, NET_LUID *key, struct nsi_ndis_ifinfo_rw
     {
         memset(stat, 0, sizeof(*stat));
         stat->if_index = index;
-        init_counted_string(&stat->descr, name);
+        if (has_driver) init_counted_string_w(&stat->descr, driver);
+        else init_counted_string(&stat->descr, name);
         stat->type = type;
         stat->access_type = type == MIB_IF_TYPE_LOOPBACK ? NET_IF_ACCESS_LOOPBACK : NET_IF_ACCESS_BROADCAST;
         stat->conn_type = NET_IF_CONNECTION_DEDICATED;
-        stat->if_guid = interface_guid(index, name);
+        stat->if_guid = guid;
         stat->conn_present = type != MIB_IF_TYPE_LOOPBACK;
         stat->perm_phys_addr.Length = physical_length;
         memcpy(stat->perm_phys_addr.Address, physical, stat->perm_phys_addr.Length);

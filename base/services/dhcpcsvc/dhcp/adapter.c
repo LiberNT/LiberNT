@@ -245,13 +245,20 @@ done:
     return dwError;
 }
 
+static const WCHAR *AdapterGuidName( PDHCP_ADAPTER Adapter ) {
+    const WCHAR *Name = wcschr(Adapter->IfMib.wszName, L'{');
+
+    return Name ? Name : Adapter->IfMib.wszName;
+}
+
 BOOL PrepareAdapterForService( PDHCP_ADAPTER Adapter ) {
     HKEY AdapterKey;
     DWORD Error = ERROR_SUCCESS, DhcpEnabled, Length = sizeof(DWORD);
 
     Adapter->DhclientState.config = &Adapter->DhclientConfig;
-    strncpy(Adapter->DhclientInfo.name, (char*)Adapter->IfMib.bDescr,
-            sizeof(Adapter->DhclientInfo.name));
+    WideCharToMultiByte(CP_ACP, 0, AdapterGuidName(Adapter), -1, Adapter->DhclientInfo.name,
+                        sizeof(Adapter->DhclientInfo.name), NULL, NULL);
+    Adapter->DhclientInfo.name[sizeof(Adapter->DhclientInfo.name) - 1] = 0;
 
     AdapterKey = FindAdapterKey( Adapter );
     if( AdapterKey )
@@ -624,14 +631,12 @@ PDHCP_ADAPTER AdapterFindIndex( unsigned int indx ) {
 PDHCP_ADAPTER AdapterFindName( const WCHAR *name ) {
     PDHCP_ADAPTER Adapter;
     PLIST_ENTRY ListEntry;
-    WCHAR UnicodeName[45];
 
     for( ListEntry = AdapterList.Flink;
          ListEntry != &AdapterList;
          ListEntry = ListEntry->Flink ) {
         Adapter = CONTAINING_RECORD( ListEntry, DHCP_ADAPTER, ListEntry );
-        mbstowcs(UnicodeName, (const CHAR *)Adapter->IfMib.bDescr, strlen((const CHAR *)Adapter->IfMib.bDescr) + 1);
-        if( !wcsicmp(UnicodeName, name ) ) return Adapter;
+        if( !wcsicmp(AdapterGuidName(Adapter), name ) ) return Adapter;
     }
 
     return NULL;
