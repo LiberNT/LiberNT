@@ -3,5 +3,5 @@
   <VisualAttributes>
     <Icon File="%windir%\system32\shell32.dll" Index="8" />
   </VisualAttributes>
-  <RosLaunch File="%windir%\explorer.exe" Parameters="/E,shell:::{20D04FE0-3AEA-1069-A2D8-08002B30309D}" />
+  <RosLaunch File="%windir%\system32\diskmgmt.exe" />
 </MMC_ConsoleFile>

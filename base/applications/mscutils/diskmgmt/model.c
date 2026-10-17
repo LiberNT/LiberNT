@@ -5,7 +5,7 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#include "diskmgmt11.h"
+#include "diskmgmt.h"
 
 static const GUID DuRecoveryGuid =
     { 0xDE94BBA4, 0x06D1, 0x4D40, { 0xA1, 0x6A, 0xBF, 0xD5, 0x01, 0x79, 0xD6, 0xAC } };

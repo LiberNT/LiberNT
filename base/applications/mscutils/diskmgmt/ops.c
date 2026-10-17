@@ -5,7 +5,7 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#include "diskmgmt11.h"
+#include "diskmgmt.h"
 
 #define DU_MIN_VOLUME   (16ull * DU_MEGABYTE)
 #define DU_MSR_SIZE     (16ull * DU_MEGABYTE)

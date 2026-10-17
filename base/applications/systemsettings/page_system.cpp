@@ -680,7 +680,7 @@ BuildStorage(PageBuilder &page)
     AddCleanup(page);
     page.Group(Str(IDS_STORAGE_MANAGEMENT));
     page.Link(Str(IDS_DISK_MANAGEMENT), Str(IDS_DISK_MANAGEMENT_DESC), L"hard_drive_20_regular",
-              [](int) { Launch(L"diskmgmt11.exe"); });
+              [](int) { Launch(L"diskmgmt.exe"); });
 }
 
 static bool
