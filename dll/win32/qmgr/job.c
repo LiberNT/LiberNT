@@ -285,6 +285,59 @@ static ULONG WINAPI BackgroundCopyJob_Release(IBackgroundCopyJob4 *iface)
 
 /*** IBackgroundCopyJob methods ***/
 
+#ifdef __REACTOS__
+static BOOL is_valid_name_segments(const WCHAR *name, const WCHAR *separators)
+{
+    const WCHAR *segment = name, *p;
+
+    for (p = name; ; p++)
+    {
+        if (!*p || wcschr(separators, *p))
+        {
+            if (p - segment > MAX_PATH)
+                return FALSE;
+            if (!*p)
+                return TRUE;
+            segment = p + 1;
+        }
+    }
+}
+
+static BOOL is_unc_path(const WCHAR *name)
+{
+    return name[0] == '\\' && name[1] == '\\' && name[2] && name[2] != '?' && name[2] != '.';
+}
+
+static BOOL is_drive_path(const WCHAR *name)
+{
+    return iswalpha(name[0]) && name[1] == ':' && name[2] == '\\';
+}
+
+static BOOL is_valid_remote_name(const WCHAR *name)
+{
+    if (!name || !*name || wcslen(name) > 2200)
+        return FALSE;
+    if (!_wcsnicmp(name, L"http://", 7) || !_wcsnicmp(name, L"https://", 8))
+        return is_valid_name_segments(name, L"/");
+    if (!_wcsnicmp(name, L"file://", 7))
+        return !wcspbrk(name + 7, L"*?") && is_valid_name_segments(name + 7, L"/\\");
+    if (is_unc_path(name) || is_drive_path(name))
+        return !wcspbrk(name, L"*?") && is_valid_name_segments(name, L"/\\");
+    return FALSE;
+}
+
+static BOOL is_valid_local_name(const WCHAR *name)
+{
+    if (!name || !*name || wcslen(name) > MAX_PATH || wcspbrk(name, L"*?\"<>|"))
+        return FALSE;
+    if (is_drive_path(name))
+        return !wcschr(name + 2, ':');
+    if (is_unc_path(name))
+        return !wcschr(name, ':');
+    return FALSE;
+}
+#endif
+
 static HRESULT WINAPI BackgroundCopyJob_AddFileSet(IBackgroundCopyJob4 *iface, ULONG cFileCount, BG_FILE_INFO *pFileSet)
 {
     BackgroundCopyJobImpl *job = impl_from_IBackgroundCopyJob4(iface);
@@ -295,12 +348,30 @@ static HRESULT WINAPI BackgroundCopyJob_AddFileSet(IBackgroundCopyJob4 *iface, U
 
     EnterCriticalSection(&job->cs);
 
+#ifdef __REACTOS__
+    if (job->type != BG_JOB_TYPE_DOWNLOAD && (cFileCount > 1 || job->jobProgress.FilesTotal + cFileCount > 1))
+    {
+        LeaveCriticalSection(&job->cs);
+        return BG_E_TOO_MANY_FILES;
+    }
+    for (i = 0; i < cFileCount; ++i)
+    {
+        if (!is_valid_remote_name(pFileSet[i].RemoteName) || !is_valid_local_name(pFileSet[i].LocalName))
+        {
+            LeaveCriticalSection(&job->cs);
+            return E_INVALIDARG;
+        }
+    }
+#endif
+
     for (i = 0; i < cFileCount; ++i)
     {
         BackgroundCopyFileImpl *file;
 
+#ifndef __REACTOS__
         /* We should return E_INVALIDARG in these cases. */
         FIXME("Check for valid filenames and supported protocols\n");
+#endif
 
         hr = BackgroundCopyFileConstructor(job, pFileSet[i].RemoteName, pFileSet[i].LocalName, &file);
         if (hr != S_OK) break;
