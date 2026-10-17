@@ -2382,7 +2382,8 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
 
                 REGION_bOffsetRgn( DirtyRgn, Window->rcWindow.left, Window->rcWindow.top);
 
-                if ( (Window->style & WS_CHILD) && (Parent) && !(Parent->style & WS_CLIPCHILDREN))
+                if ( (Window->style & WS_CHILD) && (Parent) &&
+                     (!(Parent->style & WS_CLIPCHILDREN) || (Window->ExStyle & WS_EX_TRANSPARENT)))
                 {
                    IntInvalidateWindows( Parent, DirtyRgn, RDW_ERASE | RDW_INVALIDATE);
                 }
