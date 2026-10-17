@@ -924,7 +924,7 @@ SaveTargetHive(
 
     RtlInitUnicodeString(&KeyName, LiveKeyName);
     InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE, NULL, NULL);
-    Status = NtOpenKey(&KeyHandle, KEY_READ, &ObjectAttributes);
+    Status = NtOpenKeyEx(&KeyHandle, KEY_READ, &ObjectAttributes, REG_OPTION_BACKUP_RESTORE);
     if (NT_SUCCESS(Status))
     {
         InitializeObjectAttributes(&ObjectAttributes, &NtPath, OBJ_CASE_INSENSITIVE, NULL, NULL);
