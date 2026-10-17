@@ -482,6 +482,11 @@ IntelPmcStartHardware(
     NTSTATUS Status;
 
     Status = IntelPmcGetProcessorModel(&DeviceExtension->ProcessorModel);
+    if (Status == STATUS_NOT_SUPPORTED)
+    {
+        DPRINT("INTELPMC: no S0ix support for this processor\n");
+        return STATUS_SUCCESS;
+    }
     if (!NT_SUCCESS(Status))
         return Status;
     Status = IntelPmcFindLpitBase(&DeviceExtension->PhysicalBase);
@@ -513,8 +518,11 @@ IntelPmcStopHardware(
     _Inout_ PINTELPMC_DEVICE_EXTENSION DeviceExtension)
 {
     DeviceExtension->Started = FALSE;
-    if (!NT_SUCCESS(IoSetDeviceInterfaceState(&DeviceExtension->InterfaceName, FALSE)))
+    if (DeviceExtension->RegisterBase &&
+        !NT_SUCCESS(IoSetDeviceInterfaceState(&DeviceExtension->InterfaceName, FALSE)))
+    {
         DPRINT1("IoSetDeviceInterfaceState(%wZ) failed\n", &DeviceExtension->InterfaceName);
+    }
     IntelPmcRestoreSleep(DeviceExtension);
     if (DeviceExtension->RegisterBase)
     {
