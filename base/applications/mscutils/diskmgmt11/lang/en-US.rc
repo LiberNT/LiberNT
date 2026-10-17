@@ -1,0 +1,173 @@
+/*
+ * PROJECT:     LiberNT Disk Management
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     English (United States) resources
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+IDD_NEWVOLUME DIALOGEX 0, 0, 360, 200
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "New Volume"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT "", IDC_SZ_TITLE, 12, 10, 336, 12
+    LTEXT "Choose how much of the free space the new volume uses.", -1, 12, 24, 336, 10
+    CONTROL "", IDC_SZ_SLIDER, TRACKBAR_CLASSA, TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, 8, 42, 344, 20
+    LTEXT "", IDC_SZ_SUMMARY, 12, 74, 336, 10
+    LTEXT "&Size (MB):", -1, 12, 94, 74, 10
+    EDITTEXT IDC_SZ_SIZE, 90, 92, 80, 14, ES_NUMBER
+    CONTROL "", IDC_SZ_SPIN, UPDOWN_CLASSA, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 0, 0, 0, 0
+    LTEXT "", IDC_SZ_RANGE, 178, 94, 170, 10
+    LTEXT "&Name:", -1, 12, 114, 74, 10
+    EDITTEXT IDC_SZ_NAME, 90, 112, 150, 14, ES_AUTOHSCROLL
+    LTEXT "&Format:", -1, 12, 134, 74, 10
+    COMBOBOX IDC_SZ_FS, 90, 132, 100, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT "&Drive letter:", -1, 12, 154, 74, 10
+    COMBOBOX IDC_SZ_LETTER, 90, 152, 100, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON "Add", IDOK, 232, 178, 58, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 294, 178, 58, 14
+END
+
+IDD_RESIZE DIALOGEX 0, 0, 360, 136
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Resize Volume"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT "", IDC_SZ_TITLE, 12, 10, 336, 12
+    LTEXT "Shrink the volume, or grow it into the free space after it.", -1, 12, 24, 336, 10
+    CONTROL "", IDC_SZ_SLIDER, TRACKBAR_CLASSA, TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, 8, 42, 344, 20
+    LTEXT "", IDC_SZ_SUMMARY, 12, 74, 336, 10
+    LTEXT "&Size (MB):", -1, 12, 94, 74, 10
+    EDITTEXT IDC_SZ_SIZE, 90, 92, 80, 14, ES_NUMBER
+    CONTROL "", IDC_SZ_SPIN, UPDOWN_CLASSA, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 0, 0, 0, 0
+    LTEXT "", IDC_SZ_RANGE, 178, 94, 170, 10
+    DEFPUSHBUTTON "Resize", IDOK, 232, 114, 58, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 294, 114, 58, 14
+END
+
+IDD_ERASE DIALOGEX 0, 0, 300, 150
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Erase"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT "", IDC_ER_TITLE, 12, 10, 276, 12
+    LTEXT "Erasing deletes all data stored on it and cannot be undone. Enter a name and choose a format.", -1, 12, 26, 276, 18
+    LTEXT "&Name:", -1, 12, 54, 64, 10
+    EDITTEXT IDC_ER_NAME, 80, 52, 150, 14, ES_AUTOHSCROLL
+    LTEXT "&Format:", -1, 12, 74, 64, 10
+    COMBOBOX IDC_ER_FS, 80, 72, 100, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT "&Scheme:", IDC_ER_SCHEME_LABEL, 12, 94, 64, 10
+    COMBOBOX IDC_ER_SCHEME, 80, 92, 150, 60, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX "&Quick erase", IDC_ER_QUICK, 80, 94, 150, 10
+    DEFPUSHBUTTON "Erase", IDOK, 174, 126, 58, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 236, 126, 58, 14
+END
+
+IDD_WORK DIALOGEX 0, 0, 260, 64
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION ""
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT "", IDC_WORK_TEXT, 12, 10, 236, 10
+    LTEXT "", IDC_WORK_STATUS, 12, 24, 236, 10
+    CONTROL "", IDC_WORK_PROGRESS, PROGRESS_CLASSA, PBS_MARQUEE, 12, 40, 236, 10
+END
+
+IDD_CHECK DIALOGEX 0, 0, 320, 224
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION ""
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT "", IDC_WORK_TEXT, 12, 10, 296, 10
+    LTEXT "", IDC_WORK_STATUS, 12, 24, 296, 10
+    CONTROL "", IDC_WORK_PROGRESS, PROGRESS_CLASSA, PBS_MARQUEE, 12, 38, 296, 10
+    EDITTEXT IDC_WORK_OUTPUT, 12, 54, 296, 140, ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL
+    DEFPUSHBUTTON "Done", IDOK, 250, 202, 58, 14
+END
+
+STRINGTABLE
+BEGIN
+    IDS_APPTITLE "Disk Management"
+    IDS_CAT_INTERNAL "Internal"
+    IDS_CAT_EXTERNAL "External"
+    IDS_CAT_IMAGE "Disk Images"
+    IDS_DISK_N "Disk %lu"
+    IDS_UNKNOWN "Unknown"
+    IDS_UNTITLED "Untitled"
+    IDS_NONE "None"
+    IDS_RAW "RAW"
+    IDS_KIND_DATA "Basic data partition"
+    IDS_KIND_PRIMARY "Primary partition"
+    IDS_KIND_ESP "EFI System Partition"
+    IDS_KIND_MSR "Microsoft Reserved"
+    IDS_KIND_RECOVERY "Recovery Partition"
+    IDS_KIND_OTHER "Partition"
+    IDS_KIND_FREE "Unallocated"
+    IDS_SCHEME_GPT "GUID Partition Table"
+    IDS_SCHEME_MBR "Master Boot Record"
+    IDS_SCHEME_RAW "Not initialized"
+    IDS_SYSTEM_VOLUME "LiberNT system volume"
+    IDS_BOOT_PARTITION "Used by the boot manager"
+    IDS_CAPTION_PARTITIONS "%lu partitions"
+    IDS_LOCATION "Disk %lu, partition %lu"
+    IDS_USAGE "%s used • %s free"
+    IDS_COL_NAME "Name"
+    IDS_COL_TYPE "Type"
+    IDS_COL_FS "File System"
+    IDS_COL_CAPACITY "Capacity"
+    IDS_COL_FREE "Free"
+    IDS_INFO_UNALLOCATED "Unallocated:"
+    IDS_INFO_SECTOR "Sector size:"
+    IDS_INFO_DEVICE "Device:"
+    IDS_INFO_DISKID "Disk identifier:"
+    IDS_INFO_SERIAL "Serial number:"
+    IDS_INFO_MOUNT "Mount point:"
+    IDS_INFO_OFFSET "Offset:"
+    IDS_INFO_VOLSERIAL "Volume serial:"
+    IDS_TB_NEW "&New"
+    IDS_TB_DELETE "&Delete"
+    IDS_TB_CHECK "Chec&k"
+    IDS_TB_RESIZE "&Resize"
+    IDS_TB_ERASE "&Erase"
+    IDS_TB_MOUNT "&Mount"
+    IDS_TB_UNMOUNT "Un&mount"
+    IDS_TB_INFO "&Info"
+    IDS_TB_REFRESH "Re&fresh"
+    IDS_NEW_VOLUME "New Volume"
+    IDS_NEW_TITLE "Add a volume to %s"
+    IDS_RESIZE_TITLE "Resize %s"
+    IDS_SIZE_RANGE "Between %s and %s"
+    IDS_RESIZE_GROW "%s (grows by %s)"
+    IDS_RESIZE_SHRINK "%s (frees %s)"
+    IDS_LETTER_AUTO "Automatic"
+    IDS_LETTER_NONE "None"
+    IDS_DELETE_MAIN "Delete %s?"
+    IDS_DELETE_CONTENT "The partition is removed from the disk and all data stored on it is lost."
+    IDS_ERASE_TITLE "Erase %s"
+    IDS_ERASE_MAIN "Erase %s?"
+    IDS_ERASE_CONTENT "All data stored on this volume is lost."
+    IDS_ERASE_DISK_CONTENT "Every partition on this disk is removed and all data stored on it is lost."
+    IDS_WORK_CREATE "Creating the volume"
+    IDS_WORK_ERASE "Erasing"
+    IDS_WORK_CHECK "Checking the volume"
+    IDS_WORK_SHRINK "Shrinking the volume"
+    IDS_WORK_EXTEND "Extending the volume"
+    IDS_STATUS_PARTITION "Writing the partition table..."
+    IDS_STATUS_WAITING "Waiting for the volume to appear..."
+    IDS_STATUS_FORMATTING "Formatting..."
+    IDS_STATUS_ERASING "Erasing the disk..."
+    IDS_STATUS_SHRINKING "Moving data and shrinking..."
+    IDS_STATUS_EXTENDING "Extending..."
+    IDS_STATUS_DONE "Done."
+    IDS_STATUS_FAILED "The operation failed."
+    IDS_ERR_PARTITION "The partition table could not be updated."
+    IDS_ERR_NOVOLUME "The new volume did not appear."
+    IDS_ERR_FORMAT "The volume could not be formatted."
+    IDS_ERR_LETTER "The drive letter could not be changed."
+    IDS_ERR_CHECK "The check found problems on the volume."
+    IDS_ERR_RESIZE "The volume could not be resized."
+    IDS_ERR_NOROOM "This volume cannot be resized: there is no space to free and no free space after it."
+    IDS_ERR_INUSE "The volume is in use. Close the programs using it and try again."
+END
