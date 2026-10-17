@@ -392,6 +392,42 @@ BasepLoadLibraryAsDatafile(PWSTR Path, LPCWSTR Name, DWORD Flags, HMODULE *hModu
     return STATUS_SUCCESS;
 }
 
+static
+BOOLEAN
+BasepIsMissingPrivateDll(IN LPCWSTR lpLibFileName,
+                         IN NTSTATUS Status)
+{
+    static const PCWSTR SystemDirectories[] = { L"\\System32\\", L"\\SysWOW64\\" };
+    UNICODE_STRING FileName, Prefix;
+    WCHAR Buffer[MAX_PATH];
+    RTL_PATH_TYPE PathType;
+    ULONG Index;
+
+    if (Status != STATUS_DLL_NOT_FOUND || !lpLibFileName)
+        return FALSE;
+
+    PathType = RtlDetermineDosPathNameType_U(lpLibFileName);
+    if (PathType != RtlPathTypeDriveAbsolute && PathType != RtlPathTypeUncAbsolute)
+        return FALSE;
+
+    if (RtlDoesFileExists_U(lpLibFileName))
+        return FALSE;
+
+    RtlInitUnicodeString(&FileName, lpLibFileName);
+    for (Index = 0; Index < RTL_NUMBER_OF(SystemDirectories); Index++)
+    {
+        RtlInitEmptyUnicodeString(&Prefix, Buffer, sizeof(Buffer));
+        if (!NT_SUCCESS(RtlAppendUnicodeToString(&Prefix, SharedUserData->NtSystemRoot)) ||
+            !NT_SUCCESS(RtlAppendUnicodeToString(&Prefix, SystemDirectories[Index])) ||
+            RtlPrefixUnicodeString(&Prefix, &FileName, TRUE))
+        {
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
 /*
  * @implemented
  */
@@ -537,8 +573,12 @@ done:
         PVOID Callers[4] = { NULL };
         ULONG CallerCount, Frame;
 
-        DPRINT1("LoadLibraryExW(%ls, dwFlags 0x%lx) failing with status %lx\n",
-                lpLibFileName, dwFlags, Status);
+        if (BasepIsMissingPrivateDll(lpLibFileName, Status))
+            DPRINT("LoadLibraryExW(%ls, dwFlags 0x%lx) failing with status %lx\n",
+                   lpLibFileName, dwFlags, Status);
+        else
+            DPRINT1("LoadLibraryExW(%ls, dwFlags 0x%lx) failing with status %lx\n",
+                    lpLibFileName, dwFlags, Status);
 
         /* Log the caller chain, so the log identifies who issued the load */
         CallerCount = RtlWalkFrameChain(Callers, RTL_NUMBER_OF(Callers), 0);
