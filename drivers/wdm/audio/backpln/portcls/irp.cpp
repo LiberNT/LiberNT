@@ -31,6 +31,35 @@ PortClsCreate(
     return KsDispatchIrp(DeviceObject, Irp);
 }
 
+static
+VOID
+PcDisableSubdeviceInterfaces(
+    IN PPCLASS_DEVICE_EXTENSION DeviceExt)
+{
+    PSUBDEVICE_DESCRIPTOR Descriptor;
+    PSYMBOLICLINK_ENTRY SymLinkEntry;
+    ISubdevice *SubDevice;
+    PLIST_ENTRY Entry;
+    ULONG Index;
+
+    if (!DeviceExt->CreateItems)
+        return;
+
+    for (Index = 0; Index < DeviceExt->MaxSubDevices; Index++)
+    {
+        SubDevice = (ISubdevice *)DeviceExt->CreateItems[Index].Context;
+        if (!SubDevice || !NT_SUCCESS(SubDevice->GetDescriptor(&Descriptor)))
+            continue;
+
+        for (Entry = Descriptor->SymbolicLinkList.Flink; Entry != &Descriptor->SymbolicLinkList; Entry = Entry->Flink)
+        {
+            SymLinkEntry = CONTAINING_RECORD(Entry, SYMBOLICLINK_ENTRY, Entry);
+            if (!NT_SUCCESS(IoSetDeviceInterfaceState(&SymLinkEntry->SymbolicLink, FALSE)))
+                DPRINT1("IoSetDeviceInterfaceState(%wZ) failed\n", &SymLinkEntry->SymbolicLink);
+        }
+    }
+}
+
 NTSTATUS
 NTAPI
 PortClsPnp(
@@ -152,12 +181,17 @@ PortClsPnp(
             IoDeleteDevice(DeviceObject);
             return Status;
 
+        case IRP_MN_SURPRISE_REMOVAL:
+            PcDisableSubdeviceInterfaces(DeviceExt);
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            IoSkipCurrentIrpStackLocation(Irp);
+            return IoCallDriver(DeviceExt->PrevDeviceObject, Irp);
+
         case IRP_MN_QUERY_REMOVE_DEVICE:
         case IRP_MN_CANCEL_REMOVE_DEVICE:
         case IRP_MN_QUERY_STOP_DEVICE:
         case IRP_MN_CANCEL_STOP_DEVICE:
         case IRP_MN_STOP_DEVICE:
-        case IRP_MN_SURPRISE_REMOVAL:
             /*
              * PortCls does not own policy for these requests.  Preserve the
              * status and stack contract established by the bus driver rather
