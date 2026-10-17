@@ -607,7 +607,7 @@ NdisMSetMiniportAttributes(
                 &MiniportAttributes->RegistrationAttributes;
             ULONG RequiredSize;
 
-            if (Ext->RegistrationAttrsValid || Ext->GeneralAttrsValid)
+            if (Ext->GeneralAttrsValid)
                 return NDIS_STATUS_INVALID_STATE;
 
             switch (Reg->Header.Revision)
