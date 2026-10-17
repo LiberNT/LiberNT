@@ -104,8 +104,6 @@ Theme::Update(HWND hwnd)
 
     if (hwnd)
     {
-        BOOL dark = !light;
-        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
         SetDpi(GetDpiForWindow(hwnd));
     }
     else
