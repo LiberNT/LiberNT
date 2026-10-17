@@ -185,10 +185,27 @@ static HRESULT write_predefined_strings(HMODULE hm, LPCWSTR ini_path)
         lstrcatW(sys_mod_path, mod_path + 1 + lstrlenW(sys_root));
     }
     else
+#ifdef __REACTOS__
+    {
+        WCHAR program_files[MAX_PATH];
+
+        *program_files = '\0';
+        GetEnvironmentVariableW(L"ProgramFiles", program_files, ARRAY_SIZE(program_files));
+        if (*program_files && !wcsnicmp(program_files, mod_path + 1, lstrlenW(program_files)))
+        {
+            *sys_mod_path = '\"';
+            lstrcpyW(sys_mod_path + 1, L"%ProgramFiles%");
+            lstrcatW(sys_mod_path, mod_path + 1 + lstrlenW(program_files));
+        }
+        else
+            lstrcpyW(sys_mod_path, mod_path);
+    }
+#else
     {
         FIXME("SYS_MOD_PATH needs more work\n");
         lstrcpyW(sys_mod_path, mod_path);
     }
+#endif
 
     WritePrivateProfileStringW(L"Strings", L"_SYS_MOD_PATH", sys_mod_path, ini_path);
 
