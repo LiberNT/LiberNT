@@ -308,8 +308,6 @@ KdpDebugLogInit(
 
         if (!NT_SUCCESS(Status))
         {
-            DPRINT1("Failed to open log file: 0x%08lx\n", Status);
-
             /* The final retry is issued after the I/O manager replaces the ARC-form \SystemRoot link. */
             if (Status == STATUS_OBJECT_NAME_NOT_FOUND ||
                 Status == STATUS_OBJECT_PATH_NOT_FOUND)
@@ -320,6 +318,7 @@ KdpDebugLogInit(
                     return Status;
                 }
             }
+            DPRINT1("Failed to open log file: 0x%08lx\n", Status);
             goto Failure;
         }
 
