@@ -8414,6 +8414,70 @@ NdisMSetMiniportAttributes(
   _In_ NDIS_HANDLE NdisMiniportAdapterHandle,
   _In_ PNDIS_MINIPORT_ADAPTER_ATTRIBUTES MiniportAttributes);
 
+#if (NDIS_SUPPORT_NDIS630)
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+NDIS_STATUS
+NDISAPI
+NdisMEnableVirtualization(
+  _In_ NDIS_HANDLE NdisMiniportHandle,
+  _In_ USHORT NumVFs,
+  _In_ BOOLEAN EnableVFMigration,
+  _In_ BOOLEAN EnableMigrationInterrupt,
+  _In_ BOOLEAN EnableVirtualization);
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
+ULONG
+NDISAPI
+NdisMGetVirtualFunctionBusData(
+  _In_ NDIS_HANDLE NdisMiniportHandle,
+  _In_ NDIS_SRIOV_FUNCTION_ID VFId,
+  _Out_writes_bytes_(Length) PVOID Buffer,
+  _In_ ULONG Offset,
+  _In_ ULONG Length);
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
+ULONG
+NDISAPI
+NdisMSetVirtualFunctionBusData(
+  _In_ NDIS_HANDLE NdisMiniportHandle,
+  _In_ NDIS_SRIOV_FUNCTION_ID VFId,
+  _In_reads_bytes_(Length) PVOID Buffer,
+  _In_ ULONG Offset,
+  _In_ ULONG Length);
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+VOID
+NDISAPI
+NdisMGetVirtualFunctionLocation(
+  _In_ NDIS_HANDLE NdisMiniportHandle,
+  _In_ NDIS_SRIOV_FUNCTION_ID VFId,
+  _Out_ PUSHORT SegmentNumber,
+  _Out_ PUCHAR BusNumber,
+  _Out_ PUCHAR FunctionNumber);
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+NDIS_STATUS
+NDISAPI
+NdisMQueryProbedBars(
+  _In_ NDIS_HANDLE NdisMiniportHandle,
+  _Out_writes_(PCI_TYPE0_ADDRESSES) PULONG BaseRegisterValues);
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
+VOID
+NDISAPI
+NdisMIdleNotificationComplete(
+  _In_ NDIS_HANDLE MiniportAdapterHandle);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID
+NDISAPI
+NdisMIdleNotificationConfirm(
+  _In_ NDIS_HANDLE MiniportAdapterHandle,
+  _In_ NDIS_DEVICE_POWER_STATE IdlePowerState);
+
+#endif /* NDIS_SUPPORT_NDIS630 */
+
 VOID
 NDISAPI
 NdisMSendNetBufferListsComplete(

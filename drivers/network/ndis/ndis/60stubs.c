@@ -3389,4 +3389,103 @@ NdisOpenConfigurationEx(
     return NDIS_STATUS_SUCCESS;
 }
 
+/* ------------------------------------------------------------------ */
+/*  SR-IOV and selective suspend (NDIS 6.30).                         */
+/* ------------------------------------------------------------------ */
+
+NDIS_STATUS
+EXPORT
+NdisMEnableVirtualization(
+    _In_ NDIS_HANDLE NdisMiniportHandle,
+    _In_ USHORT NumVFs,
+    _In_ BOOLEAN EnableVFMigration,
+    _In_ BOOLEAN EnableMigrationInterrupt,
+    _In_ BOOLEAN EnableVirtualization)
+{
+    UNREFERENCED_PARAMETER(NdisMiniportHandle);
+    UNREFERENCED_PARAMETER(NumVFs);
+    UNREFERENCED_PARAMETER(EnableVFMigration);
+    UNREFERENCED_PARAMETER(EnableMigrationInterrupt);
+    return EnableVirtualization ? NDIS_STATUS_NOT_SUPPORTED : NDIS_STATUS_SUCCESS;
+}
+
+ULONG
+EXPORT
+NdisMGetVirtualFunctionBusData(
+    _In_ NDIS_HANDLE NdisMiniportHandle,
+    _In_ NDIS_SRIOV_FUNCTION_ID VFId,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Offset,
+    _In_ ULONG Length)
+{
+    UNREFERENCED_PARAMETER(NdisMiniportHandle);
+    UNREFERENCED_PARAMETER(VFId);
+    UNREFERENCED_PARAMETER(Buffer);
+    UNREFERENCED_PARAMETER(Offset);
+    UNREFERENCED_PARAMETER(Length);
+    return 0;
+}
+
+ULONG
+EXPORT
+NdisMSetVirtualFunctionBusData(
+    _In_ NDIS_HANDLE NdisMiniportHandle,
+    _In_ NDIS_SRIOV_FUNCTION_ID VFId,
+    _In_reads_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Offset,
+    _In_ ULONG Length)
+{
+    UNREFERENCED_PARAMETER(NdisMiniportHandle);
+    UNREFERENCED_PARAMETER(VFId);
+    UNREFERENCED_PARAMETER(Buffer);
+    UNREFERENCED_PARAMETER(Offset);
+    UNREFERENCED_PARAMETER(Length);
+    return 0;
+}
+
+VOID
+EXPORT
+NdisMGetVirtualFunctionLocation(
+    _In_ NDIS_HANDLE NdisMiniportHandle,
+    _In_ NDIS_SRIOV_FUNCTION_ID VFId,
+    _Out_ PUSHORT SegmentNumber,
+    _Out_ PUCHAR BusNumber,
+    _Out_ PUCHAR FunctionNumber)
+{
+    UNREFERENCED_PARAMETER(NdisMiniportHandle);
+    UNREFERENCED_PARAMETER(VFId);
+    *SegmentNumber = 0;
+    *BusNumber = 0;
+    *FunctionNumber = 0;
+}
+
+NDIS_STATUS
+EXPORT
+NdisMQueryProbedBars(
+    _In_ NDIS_HANDLE NdisMiniportHandle,
+    _Out_writes_(PCI_TYPE0_ADDRESSES) PULONG BaseRegisterValues)
+{
+    UNREFERENCED_PARAMETER(NdisMiniportHandle);
+    RtlZeroMemory(BaseRegisterValues, PCI_TYPE0_ADDRESSES * sizeof(ULONG));
+    return NDIS_STATUS_NOT_SUPPORTED;
+}
+
+VOID
+EXPORT
+NdisMIdleNotificationComplete(
+    _In_ NDIS_HANDLE MiniportAdapterHandle)
+{
+    UNREFERENCED_PARAMETER(MiniportAdapterHandle);
+}
+
+VOID
+EXPORT
+NdisMIdleNotificationConfirm(
+    _In_ NDIS_HANDLE MiniportAdapterHandle,
+    _In_ NDIS_DEVICE_POWER_STATE IdlePowerState)
+{
+    UNREFERENCED_PARAMETER(MiniportAdapterHandle);
+    UNREFERENCED_PARAMETER(IdlePowerState);
+}
+
 /* EOF */
