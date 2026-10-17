@@ -28,6 +28,7 @@ typedef struct
     ULONG NumberOfKsAudioDevices;                       // number of audio devices
 
     LIST_ENTRY KsAudioDeviceList;                       // audio device list
+    LIST_ENTRY RemovedKsAudioDeviceList;
     PVOID KsAudioNotificationEntry;                     // ks audio notification hook
     PVOID EchoCancelNotificationEntry;                  // ks echo cancel notification hook
     KSPIN_LOCK Lock;                                    // audio device list mutex

@@ -79,6 +79,14 @@ SysAudio_Shutdown(
         FreeItem(DeviceEntry);
     }
 
+    while (!IsListEmpty(&DeviceExtension->RemovedKsAudioDeviceList))
+    {
+        Entry = RemoveHeadList(&DeviceExtension->RemovedKsAudioDeviceList);
+        DeviceEntry = (PKSAUDIO_DEVICE_ENTRY)CONTAINING_RECORD(Entry, KSAUDIO_DEVICE_ENTRY, Entry);
+        RtlFreeUnicodeString(&DeviceEntry->DeviceName);
+        FreeItem(DeviceEntry);
+    }
+
     Irp->IoStatus.Information = 0;
     Irp->IoStatus.Status = STATUS_SUCCESS;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -166,6 +174,7 @@ SysAudio_AddDevice(
 
     /* Initialize the ks audio device list */
     InitializeListHead(&DeviceExtension->KsAudioDeviceList);
+    InitializeListHead(&DeviceExtension->RemovedKsAudioDeviceList);
 
     /* Allocate kernel streaming device header */
     Status = SysAudioAllocateDeviceHeader(DeviceExtension);

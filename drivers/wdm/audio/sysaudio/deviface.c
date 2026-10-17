@@ -145,6 +145,68 @@ cleanup:
 }
 
 
+static
+BOOLEAN
+IsAudioDeviceName(
+    IN PUNICODE_STRING EntryName,
+    IN PUNICODE_STRING DeviceName)
+{
+    UNICODE_STRING Name = *EntryName;
+    UNICODE_STRING Prefix = RTL_CONSTANT_STRING(L"\\??\\");
+
+    if (RtlEqualUnicodeString(&Name, DeviceName, TRUE))
+        return TRUE;
+    if (Name.Length <= Prefix.Length)
+        return FALSE;
+    Name.Length = Prefix.Length;
+    if (!RtlEqualUnicodeString(&Name, &Prefix, TRUE))
+        return FALSE;
+    Name.Buffer += Prefix.Length / sizeof(WCHAR);
+    Name.Length = EntryName->Length - Prefix.Length;
+    Name.MaximumLength = Name.Length;
+    return RtlEqualUnicodeString(&Name, DeviceName, TRUE);
+}
+
+static
+VOID
+RemoveAudioDevice(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PUNICODE_STRING DeviceName)
+{
+    PSYSAUDIODEVEXT DeviceExtension = (PSYSAUDIODEVEXT)DeviceObject->DeviceExtension;
+    PKSAUDIO_DEVICE_ENTRY DeviceEntry = NULL;
+    PFILE_OBJECT FileObject;
+    PLIST_ENTRY Entry;
+    HANDLE Handle;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&DeviceExtension->Lock, &OldIrql);
+    for (Entry = DeviceExtension->KsAudioDeviceList.Flink; Entry != &DeviceExtension->KsAudioDeviceList; Entry = Entry->Flink)
+    {
+        PKSAUDIO_DEVICE_ENTRY Current = CONTAINING_RECORD(Entry, KSAUDIO_DEVICE_ENTRY, Entry);
+
+        if (IsAudioDeviceName(&Current->DeviceName, DeviceName))
+        {
+            DeviceEntry = Current;
+            RemoveEntryList(&DeviceEntry->Entry);
+            InsertTailList(&DeviceExtension->RemovedKsAudioDeviceList, &DeviceEntry->Entry);
+            InterlockedDecrement((PLONG)&DeviceExtension->NumberOfKsAudioDevices);
+            break;
+        }
+    }
+    KeReleaseSpinLock(&DeviceExtension->Lock, OldIrql);
+
+    if (!DeviceEntry)
+        return;
+
+    FileObject = InterlockedExchangePointer((PVOID*)&DeviceEntry->FileObject, NULL);
+    Handle = InterlockedExchangePointer(&DeviceEntry->Handle, NULL);
+    if (FileObject)
+        ObDereferenceObject(FileObject);
+    if (Handle)
+        ZwClose(Handle);
+}
+
 NTSTATUS
 NTAPI
 DeviceInterfaceChangeCallback(
@@ -168,8 +230,8 @@ DeviceInterfaceChangeCallback(
     }
     else
     {
-        DPRINT("Remove interface to audio device!\n");
-        UNIMPLEMENTED;
+        if (IsEqualGUIDAligned(&Event->Event, &GUID_DEVICE_INTERFACE_REMOVAL))
+            RemoveAudioDevice(DeviceObject, Event->SymbolicLinkName);
         return STATUS_SUCCESS;
     }
 
