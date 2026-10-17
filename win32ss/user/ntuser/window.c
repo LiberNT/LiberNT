@@ -749,7 +749,6 @@ LRESULT co_UserFreeWindow(PWND Window,
       {
          pDeskInfo->spwndShell = NULL;
          pDeskInfo->hShellWindow = NULL;
-         pDeskInfo->ppiShellProcess = NULL;
       }
       if (pDeskInfo->spwndBkGnd == Window)
          pDeskInfo->spwndBkGnd = NULL;
