@@ -448,6 +448,7 @@ KdpScreenAcquire(VOID)
 
     if (InbvIsBootDriverInstalled())
     {
+        InbvUseCompactFont();
         InbvQueryDisplayInfo(&DisplayInfo);
         if (DisplayInfo.CharacterWidth)
         {

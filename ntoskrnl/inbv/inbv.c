@@ -593,6 +593,24 @@ InbvSetScrollRegion(
 
 VOID
 NTAPI
+InbvUseCompactFont(VOID)
+{
+    VID_DISPLAY_INFO DisplayInfo;
+
+    if (!InbvBootDriverInstalled)
+        return;
+
+    if (VidUseCompactFont() &&
+        (InbvDisplayState == INBV_DISPLAY_STATE_OWNED) &&
+        VidQueryDisplayInfo(&DisplayInfo))
+    {
+        VidSolidColorFill(0, 0, DisplayInfo.Width - 1, DisplayInfo.Height - 1, BV_COLOR_BLACK);
+        VidSetScrollRegion(0, 0, DisplayInfo.Width - 1, DisplayInfo.Height - 1);
+    }
+}
+
+VOID
+NTAPI
 InbvSetTextColor(
     _In_ ULONG Color)
 {

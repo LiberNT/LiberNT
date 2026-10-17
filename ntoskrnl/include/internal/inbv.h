@@ -34,6 +34,10 @@ InbvQueryDisplayInfo(_Out_ PVID_DISPLAY_INFO DisplayInfo);
 
 VOID
 NTAPI
+InbvUseCompactFont(VOID);
+
+VOID
+NTAPI
 InbvAcquireLock(VOID);
 
 VOID

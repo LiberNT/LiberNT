@@ -1488,6 +1488,8 @@ KeBugCheckWithTf(IN ULONG BugCheckCode,
     Prcb->DebuggerSavedIRQL = KeGetCurrentIrql();
     InterlockedIncrement((PLONG)&KiHardwareTrigger);
 
+    InbvUseCompactFont();
+
     /* Capture the CPU Context */
     RtlCaptureContext(&Prcb->ProcessorState.ContextFrame);
     KiSaveProcessorControlState(&Prcb->ProcessorState);
