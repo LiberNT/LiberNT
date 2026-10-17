@@ -240,7 +240,7 @@ config FREELDR_HTTP_BOOT
 config BOOTLOADER_KERNEL_DEBUG
     prompt "Kernel debug output by default"
     type bool
-    default n
+    default y
     help
       Starts the default boot entry with kernel debug output on the first
       serial port (115200 baud), on the screen and in the debug log file,

@@ -7,7 +7,7 @@
 
 set(BOOTLOADER_TIMEOUT 3 CACHE STRING "Seconds the boot menu waits before starting the default entry")
 option(BOOTLOADER_DISPLAY_MENU "Show the boot menu even with a single entry" ON)
-option(BOOTLOADER_KERNEL_DEBUG "Start the kernel with debug output on serial, screen and log file, and verbose loading; debug builds always keep the serial port" OFF)
+option(BOOTLOADER_KERNEL_DEBUG "Start the kernel with debug output on serial, screen and log file, and verbose loading; debug builds always keep the serial port" ON)
 set(BOOTLOADER_LOAD_OPTIONS "KDWATCHDOG=0" CACHE STRING "Extra kernel load options of the default entry")
 set(BOOTLOADER_KERNEL "ntkrnlmp.exe" CACHE STRING "Kernel image of the default entry")
 if(ARCH STREQUAL "i386")
