@@ -5648,6 +5648,18 @@ NTSTATUS WINAPI wow64_NtUserSystemParametersInfo( UINT *args )
             return TRUE;
         }
         break;
+
+#ifdef __REACTOS__
+    case SPI_SETDESKWALLPAPER:
+    case ROS_SPI_SETDESKWALLPAPERBITMAP:
+        if (ptr)
+        {
+            UNICODE_STRING str;
+
+            return NtUserSystemParametersInfo( action, val, unicode_str_32to64( &str, ptr ), winini );
+        }
+        break;
+#endif
     }
 
     return NtUserSystemParametersInfo( action, val, ptr, winini );

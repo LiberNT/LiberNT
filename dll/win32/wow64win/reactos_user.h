@@ -5,6 +5,7 @@
 
 #define ROS_WOW64_FNID_NUM 31
 #define ROS_NOPARAM_ROUTINE_GETCURRENTHOOK 0xffff0003
+#define ROS_SPI_SETDESKWALLPAPERBITMAP 0x80000003
 
 W32KAPI BOOL WINAPI NtUserGetImeInfoEx(void *info, UINT search_type);
 W32KAPI DWORD WINAPI NtUserSetThreadLayoutHandles(HKL new_layout, HKL old_layout);
