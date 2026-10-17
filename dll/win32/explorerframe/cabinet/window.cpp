@@ -15,6 +15,8 @@
 #include <wincodec.h>
 #include <windowsx.h>
 #include <dwmapi.h>
+#include <shellframe.h>
+#include <propsys.h>
 
 #define IDC_CABINET_NAVBAR 103
 #define IDC_CABINET_COMMANDS 107
@@ -68,7 +70,7 @@ SystemIconIndex(PCIDLIST_ABSOLUTE pidl)
 static HICON
 JumboIcon(PCIDLIST_ABSOLUTE pidl)
 {
-    static const int Lists[] = { SHIL_EXTRALARGE, SHIL_LARGE };
+    static const int Lists[] = { SHIL_JUMBO, SHIL_EXTRALARGE, SHIL_LARGE };
     SHFILEINFOW info;
     HICON icon = NULL;
 
@@ -108,8 +110,13 @@ CCabinetWindow::CCabinetWindow() :
     m_PreviewImage(NULL),
     m_PreviewLabel(NULL),
     m_Font(NULL),
+    m_TitleFont(NULL),
+    m_DetailsType(NULL),
     m_Navigation(NULL),
     m_NavigationWindow(NULL),
+    m_NavigationRootCount(0),
+    m_PinnedCount(0),
+    m_PinIcon(NULL),
     m_FocusSave(NULL),
     m_DetailsPane(FALSE),
     m_PreviewPane(FALSE),
@@ -117,6 +124,7 @@ CCabinetWindow::CCabinetWindow() :
     m_PreviewBitmap(NULL),
     m_PreviewPidl(NULL),
     m_DetailsIconHandle(NULL),
+    m_DetailsBitmap(NULL),
     m_InHistoryNavigation(FALSE),
     m_FocusViewOnNavigate(FALSE),
     m_ChangeNotify(0),
@@ -127,6 +135,7 @@ CCabinetWindow::CCabinetWindow() :
 {
     m_SearchQuery[0] = UNICODE_NULL;
     ZeroMemory(m_Images, sizeof(m_Images));
+    ZeroMemory(m_NavigationRoots, sizeof(m_NavigationRoots));
     ZeroMemory(m_Tabs, sizeof(m_Tabs));
     SetRectEmpty(&m_ViewRect);
     SetRectEmpty(&m_PaneRect);
@@ -137,6 +146,14 @@ CCabinetWindow::~CCabinetWindow()
     ClearPreview();
     if (m_DetailsIconHandle)
         DestroyIcon(m_DetailsIconHandle);
+    if (m_DetailsBitmap)
+        DeleteObject(m_DetailsBitmap);
+    if (m_TitleFont)
+        DeleteObject(m_TitleFont);
+    if (m_PinIcon)
+        DestroyIcon(m_PinIcon);
+    for (UINT i = 0; i < m_NavigationRootCount; i++)
+        m_NavigationRoots[i]->Release();
     for (UINT i = 0; i < _countof(m_Images); i++)
     {
         if (m_Images[i])
@@ -198,8 +215,17 @@ ToolbarSize(HWND toolbar)
     return size;
 }
 
+static BOOL CALLBACK
+ForwardToChild(HWND child, LPARAM param)
+{
+    const MSG *message = (const MSG *)param;
+
+    SendMessageW(child, message->message, message->wParam, message->lParam);
+    return TRUE;
+}
+
 void
-CCabinetWindow::CreateBands()
+CCabinetWindow::RefreshGlyphs()
 {
     static const LPCWSTR NavGlyphs[] =
     {
@@ -213,15 +239,50 @@ CCabinetWindow::CreateBands()
     };
     static const LPCWSTR ViewGlyphs[] = { L"text_bullet_list_ltr_16_regular", L"grid_16_regular" };
     CabinetPalette palette;
-    WCHAR text[16][64];
+    HIMAGELIST old[_countof(m_Images)];
     int glyph = Scale(16), command = Scale(20);
 
+    CopyMemory(old, m_Images, sizeof(old));
     CabinetGetPalette(&palette);
     m_Images[0] = CabinetGlyphImages(NavGlyphs, _countof(NavGlyphs), glyph, palette.Glyph);
     m_Images[1] = CabinetGlyphImages(NavGlyphs, _countof(NavGlyphs), glyph, palette.GlyphDisabled);
     m_Images[2] = CabinetGlyphImages(CommandGlyphs, _countof(CommandGlyphs), command, palette.Glyph);
     m_Images[3] = CabinetGlyphImages(CommandGlyphs, _countof(CommandGlyphs), command, palette.GlyphDisabled);
     m_Images[4] = CabinetGlyphImages(ViewGlyphs, _countof(ViewGlyphs), glyph, palette.Glyph);
+    if (m_PinIcon)
+        DestroyIcon(m_PinIcon);
+    m_PinIcon = ShellFrame::CreateGlyphIcon(L"pin_16_regular", glyph, palette.GlyphDisabled);
+    if (m_NavBar)
+    {
+        SendMessageW(m_NavBar, TB_SETIMAGELIST, 0, (LPARAM)m_Images[0]);
+        SendMessageW(m_NavBar, TB_SETDISABLEDIMAGELIST, 0, (LPARAM)m_Images[1]);
+        SendMessageW(m_CommandBar, TB_SETIMAGELIST, 0, (LPARAM)m_Images[2]);
+        SendMessageW(m_CommandBar, TB_SETDISABLEDIMAGELIST, 0, (LPARAM)m_Images[3]);
+        SendMessageW(m_DetailsBar, TB_SETIMAGELIST, 0, (LPARAM)m_Images[2]);
+        SendMessageW(m_DetailsBar, TB_SETDISABLEDIMAGELIST, 0, (LPARAM)m_Images[3]);
+        SendMessageW(m_ViewBar, TB_SETIMAGELIST, 0, (LPARAM)m_Images[4]);
+        ListView_SetBkColor(m_DetailsList, GetSysColor(COLOR_WINDOW));
+        ListView_SetTextBkColor(m_DetailsList, GetSysColor(COLOR_WINDOW));
+        ListView_SetTextColor(m_DetailsList, GetSysColor(COLOR_WINDOWTEXT));
+        if (m_AddressBand)
+            m_AddressBand->RefreshGlyphs();
+        if (m_SearchBox)
+            m_SearchBox->RefreshGlyphs();
+        RedrawWindow(m_hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+    }
+    for (UINT i = 0; i < _countof(old); i++)
+    {
+        if (old[i])
+            ImageList_Destroy(old[i]);
+    }
+}
+
+void
+CCabinetWindow::CreateBands()
+{
+    WCHAR text[16][64];
+
+    RefreshGlyphs();
 
     m_TabBand = new CCabinetTabBand();
     m_TabBand->Create(m_hwnd, this, m_Font);
@@ -266,22 +327,29 @@ CCabinetWindow::CreateBands()
         {
             { 0, IDC_COMMAND(CabinetCommand::NewItem), TBSTATE_ENABLED,
               BTNS_WHOLEDROPDOWN | BTNS_SHOWTEXT | BTNS_AUTOSIZE, { 0 }, 0, (INT_PTR)text[4] },
-            { 0, IDC_SEPARATOR(0), 0, BTNS_SEP, { 0 }, 0, 0 },
+            { I_IMAGENONE, IDC_SEPARATOR(0), 0, BTNS_BUTTON, { 0 }, 0, 0 },
             { 1, IDC_COMMAND(CabinetCommand::Cut), 0, BTNS_BUTTON, { 0 }, 0, (INT_PTR)text[5] },
             { 2, IDC_COMMAND(CabinetCommand::Copy), 0, BTNS_BUTTON, { 0 }, 0, (INT_PTR)text[6] },
             { 3, IDC_COMMAND(CabinetCommand::Paste), 0, BTNS_BUTTON, { 0 }, 0, (INT_PTR)text[7] },
             { 4, IDC_COMMAND(CabinetCommand::Rename), 0, BTNS_BUTTON, { 0 }, 0, (INT_PTR)text[8] },
             { 5, IDC_COMMAND(CabinetCommand::Delete), 0, BTNS_BUTTON, { 0 }, 0, (INT_PTR)text[9] },
-            { 0, IDC_SEPARATOR(1), 0, BTNS_SEP, { 0 }, 0, 0 },
+            { I_IMAGENONE, IDC_SEPARATOR(1), 0, BTNS_BUTTON, { 0 }, 0, 0 },
             { 6, IDC_COMMAND(CabinetCommand::Sort), TBSTATE_ENABLED,
               BTNS_WHOLEDROPDOWN | BTNS_SHOWTEXT | BTNS_AUTOSIZE, { 0 }, 0, (INT_PTR)text[10] },
             { 7, IDC_COMMAND(CabinetCommand::View), TBSTATE_ENABLED,
               BTNS_WHOLEDROPDOWN | BTNS_SHOWTEXT | BTNS_AUTOSIZE, { 0 }, 0, (INT_PTR)text[11] },
-            { 0, IDC_SEPARATOR(2), 0, BTNS_SEP, { 0 }, 0, 0 },
+            { I_IMAGENONE, IDC_SEPARATOR(2), 0, BTNS_BUTTON, { 0 }, 0, 0 },
             { 8, IDC_COMMAND(CabinetCommand::More), TBSTATE_ENABLED, BTNS_BUTTON, { 0 }, 0, (INT_PTR)text[12] },
         };
         m_CommandBar = CreateToolbar(m_hwnd, IDC_CABINET_COMMANDS, m_Images[2], m_Images[3], buttons,
                                      _countof(buttons), Scale(10));
+        for (int i = 0; i < 3; i++)
+        {
+            TBBUTTONINFOW info = { sizeof(info), TBIF_SIZE };
+            info.cx = (WORD)Scale(9);
+            SendMessageW(m_CommandBar, TB_SETBUTTONINFOW, IDC_SEPARATOR(i), (LPARAM)&info);
+        }
+        SendMessageW(m_CommandBar, TB_AUTOSIZE, 0, 0);
     }
     {
         TBBUTTON buttons[] =
@@ -306,17 +374,32 @@ CCabinetWindow::CreateBands()
                                   Scale(4));
     }
 
-    m_DetailsIcon = CreateWindowExW(0, WC_STATICW, NULL, WS_CHILD | SS_ICON | SS_CENTERIMAGE | SS_REALSIZEIMAGE,
+    m_DetailsIcon = CreateWindowExW(0, WC_STATICW, NULL, WS_CHILD | SS_OWNERDRAW,
                                     0, 0, 0, 0, m_hwnd, NULL, g_hInstance, NULL);
     m_DetailsName = CreateWindowExW(0, WC_STATICW, NULL, WS_CHILD | SS_CENTER | SS_NOPREFIX | SS_ENDELLIPSIS,
                                     0, 0, 0, 0, m_hwnd, NULL, g_hInstance, NULL);
+    m_DetailsType = CreateWindowExW(0, WC_STATICW, NULL, WS_CHILD | SS_CENTER | SS_NOPREFIX | SS_ENDELLIPSIS,
+                                    0, 0, 0, 0, m_hwnd, NULL, g_hInstance, NULL);
+    {
+        LOGFONTW title;
+        if (GetObjectW(m_Font, sizeof(title), &title))
+        {
+            title.lfHeight = title.lfHeight * 4 / 3;
+            title.lfWeight = FW_SEMIBOLD;
+            m_TitleFont = CreateFontIndirectW(&title);
+        }
+    }
+    SendMessageW(m_DetailsType, WM_SETFONT, (WPARAM)m_Font, FALSE);
     m_DetailsList = CreateWindowExW(0, WC_LISTVIEWW, NULL,
                                     WS_CHILD | LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_SINGLESEL | LVS_NOSORTHEADER,
                                     0, 0, 0, 0, m_hwnd, (HMENU)IDC_CABINET_DETAILS, g_hInstance, NULL);
-    SendMessageW(m_DetailsName, WM_SETFONT, (WPARAM)m_Font, FALSE);
+    SendMessageW(m_DetailsName, WM_SETFONT, (WPARAM)(m_TitleFont ? m_TitleFont : m_Font), FALSE);
     SendMessageW(m_DetailsList, WM_SETFONT, (WPARAM)m_Font, FALSE);
     SetWindowTheme(m_DetailsList, L"Explorer", NULL);
     ListView_SetExtendedListViewStyle(m_DetailsList, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+    ListView_SetBkColor(m_DetailsList, GetSysColor(COLOR_WINDOW));
+    ListView_SetTextBkColor(m_DetailsList, GetSysColor(COLOR_WINDOW));
+    ListView_SetTextColor(m_DetailsList, GetSysColor(COLOR_WINDOWTEXT));
     {
         LVCOLUMNW column = { LVCF_WIDTH };
         column.cx = Scale(110);
@@ -351,6 +434,7 @@ CCabinetWindow::OnCreate()
     CreateBands();
     CreateNavigationPane();
     ExtendFrame();
+    SendMessageW(m_hwnd, WM_CHANGEUISTATE, MAKEWPARAM(UIS_INITIALIZE, 0), 0);
 }
 
 void
@@ -395,6 +479,24 @@ CCabinetWindow::PaintBackground(HDC dc)
         RECT rc = { 0, bands[i].Top, client.right, bands[i].Bottom };
         HBRUSH brush = CreateSolidBrush(bands[i].Color);
         FillRect(dc, &rc, brush);
+        DeleteObject(brush);
+    }
+    if (m_Status && IsWindowVisible(m_Status))
+    {
+        RECT status;
+        int saved = SaveDC(dc);
+        GetWindowRect(m_Status, &status);
+        MapWindowPoints(NULL, m_hwnd, (POINT *)&status, 2);
+        OffsetWindowOrgEx(dc, -status.left, -status.top, NULL);
+        IntersectClipRect(dc, 0, 0, status.right - status.left, status.bottom - status.top);
+        SendMessageW(m_Status, WM_PRINTCLIENT, (WPARAM)dc, PRF_CLIENT | PRF_ERASEBKGND);
+        RestoreDC(dc, saved);
+    }
+    if ((m_DetailsPane || m_PreviewPane) && !IsRectEmpty(&m_PaneRect))
+    {
+        RECT line = { m_PaneRect.left, m_PaneRect.top, m_PaneRect.left + 1, m_PaneRect.bottom };
+        HBRUSH brush = CreateSolidBrush(palette.BandLine);
+        FillRect(dc, &line, brush);
         DeleteObject(brush);
     }
 }
@@ -484,29 +586,43 @@ CCabinetWindow::OnSize()
     SetRect(&m_PaneRect, max(left, right), top, client.right, bottom);
     PlaceBrowsers();
     PlacePanes();
-    RedrawWindow(m_hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+    {
+        RECT chrome = { 0, 0, client.right, CommandBottom() };
+        RECT footer = { 0, bottom, client.right, client.bottom };
+        RedrawWindow(m_hwnd, &chrome, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+        RedrawWindow(m_hwnd, &footer, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+        if (!IsRectEmpty(&m_PaneRect))
+            RedrawWindow(m_hwnd, &m_PaneRect, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_NOCHILDREN);
+    }
 }
 
 void
 CCabinetWindow::PlacePanes()
 {
     RECT rc = m_PaneRect;
-    int margin = Scale(10), icon = Scale(64);
+    int margin = Scale(10), icon = Scale(160);
     BOOL details = m_DetailsPane && !IsRectEmpty(&rc), preview = m_PreviewPane && !IsRectEmpty(&rc);
 
     InflateRect(&rc, -margin, -margin);
     ShowWindow(m_DetailsIcon, details ? SW_SHOW : SW_HIDE);
     ShowWindow(m_DetailsName, details ? SW_SHOW : SW_HIDE);
+    ShowWindow(m_DetailsType, details ? SW_SHOW : SW_HIDE);
     ShowWindow(m_DetailsList, details ? SW_SHOW : SW_HIDE);
     if (details)
     {
-        int width = rc.right - rc.left - GetSystemMetrics(SM_CXVSCROLL);
+        RECT inner = rc;
+        int width, y = rc.top + Scale(8);
+        inner.left += Scale(4);
+        width = inner.right - inner.left - GetSystemMetrics(SM_CXVSCROLL);
         ListView_SetColumnWidth(m_DetailsList, 0, width * 2 / 5);
         ListView_SetColumnWidth(m_DetailsList, 1, width - width * 2 / 5);
-        MoveWindow(m_DetailsIcon, rc.left, rc.top, rc.right - rc.left, icon, TRUE);
-        MoveWindow(m_DetailsName, rc.left, rc.top + icon + margin, rc.right - rc.left, Scale(20), TRUE);
-        MoveWindow(m_DetailsList, rc.left, rc.top + icon + margin * 2 + Scale(20), rc.right - rc.left,
-                   max(0, rc.bottom - (rc.top + icon + margin * 2 + Scale(20))), TRUE);
+        MoveWindow(m_DetailsIcon, inner.left, y, inner.right - inner.left, icon, TRUE);
+        y += icon + Scale(12);
+        MoveWindow(m_DetailsName, inner.left, y, inner.right - inner.left, Scale(26), TRUE);
+        y += Scale(26);
+        MoveWindow(m_DetailsType, inner.left, y, inner.right - inner.left, Scale(20), TRUE);
+        y += Scale(20) + Scale(16);
+        MoveWindow(m_DetailsList, inner.left, y, inner.right - inner.left, max(0, (int)inner.bottom - y), TRUE);
     }
     if (!preview)
     {
@@ -529,34 +645,324 @@ CCabinetWindow::PlacePanes()
     }
 }
 
+static BOOL
+IsImageFile(PCWSTR path)
+{
+    PERCEIVED type = PERCEIVED_TYPE_UNSPECIFIED;
+    PERCEIVEDFLAG flags = 0;
+    PCWSTR extension = path ? PathFindExtensionW(path) : NULL;
+
+    return extension && extension[0] && SUCCEEDED(AssocGetPerceivedType(extension, &type, &flags, NULL)) &&
+           type == PERCEIVED_TYPE_IMAGE;
+}
+
+static HBITMAP
+CreateImageBitmap(PCWSTR path, UINT maxWidth, UINT maxHeight, COLORREF back)
+{
+    IWICImagingFactory *factory = NULL;
+    IWICBitmapDecoder *decoder = NULL;
+    IWICBitmapFrameDecode *frame = NULL;
+    IWICBitmapScaler *scaler = NULL;
+    IWICFormatConverter *converter = NULL;
+    UINT width = 0, height = 0;
+    HBITMAP bitmap = NULL, result = NULL;
+
+    if (!path || !maxWidth || !maxHeight ||
+        FAILED(CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARG(IWICImagingFactory, &factory))))
+        return NULL;
+    if (SUCCEEDED(factory->CreateDecoderFromFilename(path, NULL, GENERIC_READ, WICDecodeMetadataCacheOnDemand,
+                                                     &decoder)) &&
+        SUCCEEDED(decoder->GetFrame(0, &frame)) && SUCCEEDED(frame->GetSize(&width, &height)) && width && height)
+    {
+        if (width > maxWidth)
+        {
+            height = max(1u, (UINT)((ULONGLONG)height * maxWidth / width));
+            width = maxWidth;
+        }
+        if (height > maxHeight)
+        {
+            width = max(1u, (UINT)((ULONGLONG)width * maxHeight / height));
+            height = maxHeight;
+        }
+        if (SUCCEEDED(factory->CreateBitmapScaler(&scaler)) &&
+            SUCCEEDED(scaler->Initialize(frame, width, height, WICBitmapInterpolationModeFant)) &&
+            SUCCEEDED(factory->CreateFormatConverter(&converter)) &&
+            SUCCEEDED(converter->Initialize(scaler, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, NULL, 0,
+                                            WICBitmapPaletteTypeCustom)))
+        {
+            BITMAPINFO info = { { sizeof(BITMAPINFOHEADER) } };
+            BYTE *bits = NULL;
+            info.bmiHeader.biWidth = (LONG)width;
+            info.bmiHeader.biHeight = -(LONG)height;
+            info.bmiHeader.biPlanes = 1;
+            info.bmiHeader.biBitCount = 32;
+            bitmap = CreateDIBSection(NULL, &info, DIB_RGB_COLORS, (void **)&bits, NULL, 0);
+            if (bitmap && SUCCEEDED(converter->CopyPixels(NULL, width * 4, width * height * 4, bits)))
+            {
+                for (UINT i = 0; i < width * height; i++)
+                {
+                    BYTE *pixel = bits + i * 4;
+                    UINT inverse = 255 - pixel[3];
+                    pixel[0] = (BYTE)(pixel[0] + GetBValue(back) * inverse / 255);
+                    pixel[1] = (BYTE)(pixel[1] + GetGValue(back) * inverse / 255);
+                    pixel[2] = (BYTE)(pixel[2] + GetRValue(back) * inverse / 255);
+                    pixel[3] = 255;
+                }
+                result = bitmap;
+                bitmap = NULL;
+            }
+        }
+    }
+    if (bitmap)
+        DeleteObject(bitmap);
+    if (converter)
+        converter->Release();
+    if (scaler)
+        scaler->Release();
+    if (frame)
+        frame->Release();
+    if (decoder)
+        decoder->Release();
+    factory->Release();
+    return result;
+}
+
+static void
+AddDetailsRow(HWND list, LPCWSTR label, LPCWSTR text)
+{
+    LVFINDINFOW find = { LVFI_STRING };
+    LVITEMW row = { LVIF_TEXT };
+
+    find.psz = label;
+    if (!label || !label[0] || !text || !text[0] || ListView_FindItem(list, -1, &find) >= 0)
+        return;
+    row.iItem = ListView_GetItemCount(list);
+    row.pszText = (LPWSTR)label;
+    row.iItem = ListView_InsertItem(list, &row);
+    ListView_SetItemText(list, row.iItem, 1, (LPWSTR)text);
+}
+
+static void
+AddDetailsKeyRow(HWND list, REFPROPERTYKEY key, LPCWSTR text)
+{
+    IPropertyDescription *desc = NULL;
+    PWSTR label = NULL;
+
+    if (SUCCEEDED(PSGetPropertyDescription(key, IID_PPV_ARG(IPropertyDescription, &desc))) &&
+        SUCCEEDED(desc->GetDisplayName(&label)))
+        AddDetailsRow(list, label, text);
+    CoTaskMemFree(label);
+    if (desc)
+        desc->Release();
+}
+
+static void
+AddImageDetails(HWND list, PCWSTR path)
+{
+    IWICImagingFactory *factory = NULL;
+    IWICBitmapDecoder *decoder = NULL;
+    IWICBitmapFrameDecode *frame = NULL;
+    IWICComponentInfo *component = NULL;
+    IWICPixelFormatInfo *format = NULL;
+    WICPixelFormatGUID pixelFormat;
+    UINT width = 0, height = 0, bits = 0;
+    double dpiX = 0.0, dpiY = 0.0;
+    WCHAR text[64];
+
+    if (!IsImageFile(path) ||
+        FAILED(CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARG(IWICImagingFactory, &factory))))
+        return;
+    if (SUCCEEDED(factory->CreateDecoderFromFilename(path, NULL, GENERIC_READ, WICDecodeMetadataCacheOnDemand,
+                                                     &decoder)) &&
+        SUCCEEDED(decoder->GetFrame(0, &frame)))
+    {
+        if (SUCCEEDED(frame->GetSize(&width, &height)) && width && height)
+        {
+            StringCchPrintfW(text, _countof(text), L"%u x %u", width, height);
+            AddDetailsKeyRow(list, PKEY_Image_Dimensions, text);
+        }
+        if (SUCCEEDED(frame->GetPixelFormat(&pixelFormat)) &&
+            SUCCEEDED(factory->CreateComponentInfo(pixelFormat, &component)) &&
+            SUCCEEDED(component->QueryInterface(IID_PPV_ARG(IWICPixelFormatInfo, &format))) &&
+            SUCCEEDED(format->GetBitsPerPixel(&bits)) && bits)
+        {
+            StringCchPrintfW(text, _countof(text), L"%u", bits);
+            AddDetailsKeyRow(list, PKEY_Image_BitDepth, text);
+        }
+        if (SUCCEEDED(frame->GetResolution(&dpiX, &dpiY)) && dpiX > 0.0 && dpiY > 0.0)
+        {
+            StringCchPrintfW(text, _countof(text), L"%u dpi", (UINT)(dpiX + 0.5));
+            AddDetailsKeyRow(list, PKEY_Image_HorizontalResolution, text);
+            StringCchPrintfW(text, _countof(text), L"%u dpi", (UINT)(dpiY + 0.5));
+            AddDetailsKeyRow(list, PKEY_Image_VerticalResolution, text);
+        }
+    }
+    if (format)
+        format->Release();
+    if (component)
+        component->Release();
+    if (frame)
+        frame->Release();
+    if (decoder)
+        decoder->Release();
+    factory->Release();
+}
+
+static void
+AddVersionDetails(HWND list, PCWSTR path)
+{
+    static const struct { LPCWSTR Name; const PROPERTYKEY *Key; } Strings[] =
+    {
+        { L"FileDescription", &PKEY_FileDescription },
+        { L"FileVersion", &PKEY_FileVersion },
+        { L"ProductName", &PKEY_Software_ProductName },
+        { L"CompanyName", &PKEY_Company },
+        { L"LegalCopyright", &PKEY_Copyright },
+    };
+    DWORD handle = 0, size;
+    BYTE *data;
+    struct { WORD Language; WORD CodePage; } *translation = NULL;
+    UINT length = 0;
+
+    if (!path || !(size = GetFileVersionInfoSizeW(path, &handle)))
+        return;
+    data = (BYTE *)HeapAlloc(GetProcessHeap(), 0, size);
+    if (!data)
+        return;
+    if (GetFileVersionInfoW(path, 0, size, data) &&
+        VerQueryValueW(data, L"\\VarFileInfo\\Translation", (void **)&translation, &length) &&
+        length >= sizeof(*translation))
+    {
+        for (UINT i = 0; i < _countof(Strings); i++)
+        {
+            WCHAR query[96];
+            PWSTR value = NULL;
+            UINT valueLength = 0;
+
+            StringCchPrintfW(query, _countof(query), L"\\StringFileInfo\\%04x%04x\\%s", translation->Language,
+                             translation->CodePage, Strings[i].Name);
+            if (VerQueryValueW(data, query, (void **)&value, &valueLength) && value && valueLength > 1)
+                AddDetailsKeyRow(list, *Strings[i].Key, value);
+        }
+    }
+    HeapFree(GetProcessHeap(), 0, data);
+}
+
+static void
+AddDetailsProperty(HWND list, IShellItem2 *item, IPropertyDescription *desc)
+{
+    PROPERTYKEY key;
+    PROPVARIANT value;
+    PWSTR label = NULL, text = NULL;
+
+    PropVariantInit(&value);
+    if (SUCCEEDED(desc->GetPropertyKey(&key)) && SUCCEEDED(item->GetProperty(key, &value)) &&
+        value.vt != VT_EMPTY && SUCCEEDED(desc->FormatForDisplay(value, PDFF_DEFAULT, &text)) &&
+        SUCCEEDED(desc->GetDisplayName(&label)))
+        AddDetailsRow(list, label, text);
+    CoTaskMemFree(label);
+    CoTaskMemFree(text);
+    PropVariantClear(&value);
+}
+
+static PWSTR
+DetailsPropertyText(IShellItem2 *item, REFPROPERTYKEY key)
+{
+    IPropertyDescription *desc = NULL;
+    PROPVARIANT value;
+    PWSTR text = NULL;
+
+    if (FAILED(PSGetPropertyDescription(key, IID_PPV_ARG(IPropertyDescription, &desc))))
+        return NULL;
+    PropVariantInit(&value);
+    if (FAILED(item->GetProperty(key, &value)) || value.vt == VT_EMPTY ||
+        FAILED(desc->FormatForDisplay(value, PDFF_DEFAULT, &text)))
+        text = NULL;
+    PropVariantClear(&value);
+    desc->Release();
+    return text;
+}
+
 void
 CCabinetWindow::UpdateDetails()
 {
+    static const PROPERTYKEY *Fallback[] =
+    {
+        &PKEY_ItemTypeText, &PKEY_Size, &PKEY_DateModified, &PKEY_DateCreated, &PKEY_DateAccessed,
+        &PKEY_FileAttributes, &PKEY_Capacity, &PKEY_FreeSpace, &PKEY_Volume_FileSystem,
+        &PKEY_ItemFolderPathDisplay
+    };
     CabinetTab *tab = ActiveTab();
     IShellView *view;
     IFolderView *folderView = NULL;
     IShellItem2 *item = NULL;
     IPropertyDescriptionList *list = NULL;
     PIDLIST_ABSOLUTE pidl = NULL;
-    int selected = 0;
+    int selected = 0, total = 0;
     UINT count = 0;
-    WCHAR name[MAX_PATH] = L"";
+    WCHAR name[MAX_PATH] = L"", subtitle[MAX_PATH] = L"", format[64];
 
     ListView_DeleteAllItems(m_DetailsList);
     if (m_DetailsIconHandle)
         DestroyIcon(m_DetailsIconHandle);
     m_DetailsIconHandle = NULL;
+    if (m_DetailsBitmap)
+        DeleteObject(m_DetailsBitmap);
+    m_DetailsBitmap = NULL;
     if (!m_DetailsPane || !tab || !tab->Pidl)
         return;
     view = CurrentView();
     if (view && SUCCEEDED(view->QueryInterface(IID_PPV_ARG(IFolderView, &folderView))))
+    {
         folderView->ItemCount(SVGIO_SELECTION, &selected);
+        folderView->ItemCount(SVGIO_ALLVIEW, &total);
+    }
     if (selected > 1)
     {
-        WCHAR format[64];
+        IShellItemArray *items = NULL;
+        ULONGLONG size = 0;
+        BOOL haveSize = FALSE;
+
         LoadText(IDS_CAB_SELECTED, format, _countof(format));
         StringCchPrintfW(name, _countof(name), format, selected);
         m_DetailsIconHandle = JumboIcon(tab->Pidl);
+        if (SUCCEEDED(folderView->Items(SVGIO_SELECTION, IID_PPV_ARG(IShellItemArray, &items))))
+        {
+            DWORD itemCount = 0;
+            items->GetCount(&itemCount);
+            for (DWORD i = 0; i < itemCount && i < 4096; i++)
+            {
+                IShellItem *one = NULL;
+                IShellItem2 *one2 = NULL;
+                ULONGLONG oneSize = 0;
+                if (SUCCEEDED(items->GetItemAt(i, &one)) &&
+                    SUCCEEDED(one->QueryInterface(IID_PPV_ARG(IShellItem2, &one2))) &&
+                    SUCCEEDED(one2->GetUInt64(PKEY_Size, &oneSize)))
+                {
+                    size += oneSize;
+                    haveSize = TRUE;
+                }
+                if (one2)
+                    one2->Release();
+                if (one)
+                    one->Release();
+            }
+            items->Release();
+        }
+        if (haveSize)
+        {
+            IPropertyDescription *desc = NULL;
+            PWSTR label = NULL;
+            WCHAR text[64];
+            if (SUCCEEDED(PSGetPropertyDescription(PKEY_Size, IID_PPV_ARG(IPropertyDescription, &desc))) &&
+                SUCCEEDED(desc->GetDisplayName(&label)) && StrFormatByteSizeW((LONGLONG)size, text, _countof(text)))
+                AddDetailsRow(m_DetailsList, label, text);
+            CoTaskMemFree(label);
+            if (desc)
+                desc->Release();
+        }
     }
     else
     {
@@ -574,6 +980,13 @@ CCabinetWindow::UpdateDetails()
                 items->Release();
             }
         }
+        else if (total == 1)
+            LoadText(IDS_CAB_ITEM, subtitle, _countof(subtitle));
+        else
+        {
+            LoadText(IDS_CAB_ITEMS, format, _countof(format));
+            StringCchPrintfW(subtitle, _countof(subtitle), format, total);
+        }
         if (!item)
             SHCreateItemFromIDList(tab->Pidl, IID_PPV_ARG(IShellItem2, &item));
         if (item && SUCCEEDED(SHGetIDListFromObject(item, &pidl)))
@@ -587,6 +1000,36 @@ CCabinetWindow::UpdateDetails()
             }
             ILFree(pidl);
         }
+        if (item && selected == 1)
+        {
+            PWSTR path = NULL;
+            IShellItemImageFactory *factory = NULL;
+            RECT header;
+            GetClientRect(m_DetailsIcon, &header);
+            if (header.right > 0 && header.bottom > 0 &&
+                SUCCEEDED(item->QueryInterface(IID_PPV_ARG(IShellItemImageFactory, &factory))))
+            {
+                SIZE size = { header.right, header.bottom };
+                if (FAILED(factory->GetImage(size, SIIGBF_THUMBNAILONLY, &m_DetailsBitmap)))
+                    m_DetailsBitmap = NULL;
+                factory->Release();
+            }
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
+            {
+                AddImageDetails(m_DetailsList, path);
+                AddVersionDetails(m_DetailsList, path);
+                CoTaskMemFree(path);
+            }
+        }
+        if (item && selected == 1)
+        {
+            PWSTR type = DetailsPropertyText(item, PKEY_ItemTypeText);
+            if (type)
+            {
+                StringCchCopyW(subtitle, _countof(subtitle), type);
+                CoTaskMemFree(type);
+            }
+        }
         if (item && SUCCEEDED(item->GetPropertyDescriptionList(PKEY_PropList_PreviewDetails,
                                                                 IID_PPV_ARG(IPropertyDescriptionList, &list))))
         {
@@ -594,29 +1037,22 @@ CCabinetWindow::UpdateDetails()
             for (UINT i = 0; i < count; i++)
             {
                 IPropertyDescription *desc = NULL;
-                PROPERTYKEY key;
-                PROPVARIANT value;
-                PWSTR label = NULL, text = NULL;
-
-                if (FAILED(list->GetAt(i, IID_PPV_ARG(IPropertyDescription, &desc))))
-                    continue;
-                PropVariantInit(&value);
-                if (SUCCEEDED(desc->GetPropertyKey(&key)) && SUCCEEDED(item->GetProperty(key, &value)) &&
-                    value.vt != VT_EMPTY && SUCCEEDED(desc->FormatForDisplay(value, PDFF_DEFAULT, &text)) &&
-                    text && text[0] && SUCCEEDED(desc->GetDisplayName(&label)))
+                if (SUCCEEDED(list->GetAt(i, IID_PPV_ARG(IPropertyDescription, &desc))))
                 {
-                    LVITEMW row = { LVIF_TEXT };
-                    row.iItem = ListView_GetItemCount(m_DetailsList);
-                    row.pszText = label;
-                    row.iItem = ListView_InsertItem(m_DetailsList, &row);
-                    ListView_SetItemText(m_DetailsList, row.iItem, 1, text);
+                    AddDetailsProperty(m_DetailsList, item, desc);
+                    desc->Release();
                 }
-                CoTaskMemFree(label);
-                CoTaskMemFree(text);
-                PropVariantClear(&value);
-                desc->Release();
             }
             list->Release();
+        }
+        for (UINT i = 0; item && i < _countof(Fallback); i++)
+        {
+            IPropertyDescription *desc = NULL;
+            if (SUCCEEDED(PSGetPropertyDescription(*Fallback[i], IID_PPV_ARG(IPropertyDescription, &desc))))
+            {
+                AddDetailsProperty(m_DetailsList, item, desc);
+                desc->Release();
+            }
         }
         if (item)
             item->Release();
@@ -626,7 +1062,8 @@ CCabinetWindow::UpdateDetails()
     if (view)
         view->Release();
     SetWindowTextW(m_DetailsName, name);
-    SendMessageW(m_DetailsIcon, STM_SETICON, (WPARAM)m_DetailsIconHandle, 0);
+    SetWindowTextW(m_DetailsType, subtitle);
+    InvalidateRect(m_DetailsIcon, NULL, TRUE);
 }
 
 void
@@ -634,11 +1071,8 @@ CCabinetWindow::SetPane(BOOL details, BOOL preview)
 {
     m_DetailsPane = details;
     m_PreviewPane = preview;
-    if (m_CommandBar)
-    {
-        SendMessageW(m_CommandBar, TB_CHECKBUTTON, IDC_COMMAND(CabinetCommand::Details), MAKELONG(details, 0));
-        SendMessageW(m_CommandBar, TB_CHECKBUTTON, IDC_COMMAND(CabinetCommand::Preview), MAKELONG(preview, 0));
-    }
+    if (m_DetailsBar)
+        SendMessageW(m_DetailsBar, TB_CHECKBUTTON, IDC_COMMAND(CabinetCommand::Details), MAKELONG(details, 0));
     OnSize();
     UpdateDetails();
     UpdatePreview();
@@ -776,83 +1210,17 @@ CCabinetWindow::ShowPreviewThumbnail(IShellItem *item)
 BOOL
 CCabinetWindow::ShowPreviewImage(PCWSTR path)
 {
-    PERCEIVED type = PERCEIVED_TYPE_UNSPECIFIED;
-    PERCEIVEDFLAG flags = 0;
-    PCWSTR extension = path ? PathFindExtensionW(path) : NULL;
-    IWICImagingFactory *factory = NULL;
-    IWICBitmapDecoder *decoder = NULL;
-    IWICBitmapFrameDecode *frame = NULL;
-    IWICBitmapScaler *scaler = NULL;
-    IWICFormatConverter *converter = NULL;
-    UINT width = 0, height = 0, maxWidth, maxHeight;
-    HBITMAP bitmap = NULL;
-    BOOL result = FALSE;
+    HBITMAP bitmap;
 
-    if (!extension || !extension[0] || FAILED(AssocGetPerceivedType(extension, &type, &flags, NULL)) ||
-        type != PERCEIVED_TYPE_IMAGE)
+    if (!IsImageFile(path))
         return FALSE;
-    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
-                                IID_PPV_ARG(IWICImagingFactory, &factory))))
+    bitmap = CreateImageBitmap(path, (UINT)max(m_PaneRect.right - m_PaneRect.left - Scale(20), Scale(64)),
+                               (UINT)max(m_PaneRect.bottom - m_PaneRect.top - Scale(20), Scale(64)),
+                               GetSysColor(COLOR_WINDOW));
+    if (!bitmap)
         return FALSE;
-    if (SUCCEEDED(factory->CreateDecoderFromFilename(path, NULL, GENERIC_READ, WICDecodeMetadataCacheOnDemand,
-                                                     &decoder)) &&
-        SUCCEEDED(decoder->GetFrame(0, &frame)) && SUCCEEDED(frame->GetSize(&width, &height)) && width && height)
-    {
-        maxWidth = (UINT)max(m_PaneRect.right - m_PaneRect.left - Scale(20), Scale(64));
-        maxHeight = (UINT)max(m_PaneRect.bottom - m_PaneRect.top - Scale(20), Scale(64));
-        if (width > maxWidth)
-        {
-            height = (UINT)((ULONGLONG)height * maxWidth / width);
-            width = maxWidth;
-        }
-        if (height > maxHeight)
-        {
-            width = (UINT)((ULONGLONG)width * maxHeight / height);
-            height = maxHeight;
-        }
-        if (width && height && SUCCEEDED(factory->CreateBitmapScaler(&scaler)) &&
-            SUCCEEDED(scaler->Initialize(frame, width, height, WICBitmapInterpolationModeFant)) &&
-            SUCCEEDED(factory->CreateFormatConverter(&converter)) &&
-            SUCCEEDED(converter->Initialize(scaler, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, NULL, 0,
-                                            WICBitmapPaletteTypeCustom)))
-        {
-            BITMAPINFO info = { { sizeof(BITMAPINFOHEADER) } };
-            BYTE *bits = NULL;
-            info.bmiHeader.biWidth = (LONG)width;
-            info.bmiHeader.biHeight = -(LONG)height;
-            info.bmiHeader.biPlanes = 1;
-            info.bmiHeader.biBitCount = 32;
-            bitmap = CreateDIBSection(NULL, &info, DIB_RGB_COLORS, (void **)&bits, NULL, 0);
-            if (bitmap && SUCCEEDED(converter->CopyPixels(NULL, width * 4, width * height * 4, bits)))
-            {
-                COLORREF back = GetSysColor(COLOR_WINDOW);
-                for (UINT i = 0; i < width * height; i++)
-                {
-                    BYTE *pixel = bits + i * 4;
-                    UINT inverse = 255 - pixel[3];
-                    pixel[0] = (BYTE)(pixel[0] + GetBValue(back) * inverse / 255);
-                    pixel[1] = (BYTE)(pixel[1] + GetGValue(back) * inverse / 255);
-                    pixel[2] = (BYTE)(pixel[2] + GetRValue(back) * inverse / 255);
-                    pixel[3] = 255;
-                }
-                SetPreviewBitmap(bitmap);
-                bitmap = NULL;
-                result = TRUE;
-            }
-        }
-    }
-    if (bitmap)
-        DeleteObject(bitmap);
-    if (converter)
-        converter->Release();
-    if (scaler)
-        scaler->Release();
-    if (frame)
-        frame->Release();
-    if (decoder)
-        decoder->Release();
-    factory->Release();
-    return result;
+    SetPreviewBitmap(bitmap);
+    return TRUE;
 }
 
 BOOL
@@ -1354,22 +1722,28 @@ CCabinetWindow::CreateNavigationPane()
         m_Navigation = NULL;
         return;
     }
+    m_Navigation->SetTheme(L"Explorer");
     for (UINT i = 0; i < _countof(QuickAccess); i++)
     {
         IShellItem *item;
         if (SUCCEEDED(SHGetKnownFolderItem(*QuickAccess[i], KF_FLAG_DEFAULT, NULL, IID_PPV_ARG(IShellItem, &item))))
         {
-            m_Navigation->AppendRoot(item, SHCONTF_FOLDERS, NSTCRS_VISIBLE, NULL);
-            item->Release();
+            if (SUCCEEDED(m_Navigation->AppendRoot(item, 0, NSTCRS_VISIBLE, NULL)))
+                m_NavigationRoots[m_NavigationRootCount++] = item;
+            else
+                item->Release();
         }
     }
+    m_PinnedCount = m_NavigationRootCount;
     for (UINT i = 0; i < _countof(Locations); i++)
     {
         IShellItem *item;
         if (SUCCEEDED(SHGetKnownFolderItem(*Locations[i], KF_FLAG_DEFAULT, NULL, IID_PPV_ARG(IShellItem, &item))))
         {
-            m_Navigation->AppendRoot(item, SHCONTF_FOLDERS, NSTCRS_VISIBLE, NULL);
-            item->Release();
+            if (SUCCEEDED(m_Navigation->AppendRoot(item, SHCONTF_FOLDERS, NSTCRS_VISIBLE, NULL)))
+                m_NavigationRoots[m_NavigationRootCount++] = item;
+            else
+                item->Release();
         }
     }
     if (SUCCEEDED(CabinetNavigation_Create(this, &events)))
@@ -1744,6 +2118,41 @@ CCabinetWindow::OnDefaultCommand(IShellView *view)
 {
     UNREFERENCED_PARAMETER(view);
     return S_FALSE;
+}
+
+void
+CCabinetWindow::PaintNavigationItem(HDC dc, const RECT &rc, const NSTCCUSTOMDRAW *item)
+{
+    CabinetPalette palette;
+    UINT index;
+    int order;
+
+    if (!item || !item->psi || item->iLevel)
+        return;
+    for (index = 0; index < m_NavigationRootCount; index++)
+    {
+        if (m_NavigationRoots[index] == item->psi ||
+            (SUCCEEDED(m_NavigationRoots[index]->Compare(item->psi, SICHINT_CANONICAL, &order)) && !order))
+            break;
+    }
+    if (index >= m_NavigationRootCount)
+        return;
+    if (index < m_PinnedCount)
+    {
+        if (m_PinIcon)
+            DrawIconEx(dc, rc.right - Scale(28), rc.top + (rc.bottom - rc.top - Scale(16)) / 2, m_PinIcon,
+                       Scale(16), Scale(16), 0, NULL, DI_NORMAL);
+    }
+    else if (index == m_PinnedCount && index)
+    {
+        RECT line = { rc.left + Scale(12), rc.top, rc.right - Scale(12), rc.top + 1 };
+        HBRUSH brush;
+
+        CabinetGetPalette(&palette);
+        brush = CreateSolidBrush(palette.BandLine);
+        FillRect(dc, &line, brush);
+        DeleteObject(brush);
+    }
 }
 
 void
@@ -2646,13 +3055,49 @@ CCabinetWindow::OnNotify(NMHDR *header)
     switch (header->code)
     {
         case NM_CUSTOMDRAW:
+            if (header->hwndFrom == m_DetailsList)
+            {
+                NMLVCUSTOMDRAW *draw = (NMLVCUSTOMDRAW *)header;
+                COLORREF window = GetSysColor(COLOR_WINDOW), text = GetSysColor(COLOR_WINDOWTEXT);
+                if (draw->nmcd.dwDrawStage == CDDS_PREPAINT)
+                    return CDRF_NOTIFYITEMDRAW;
+                if (draw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT)
+                    return CDRF_NOTIFYSUBITEMDRAW;
+                if (draw->nmcd.dwDrawStage == (CDDS_ITEMPREPAINT | CDDS_SUBITEM))
+                {
+                    draw->clrText = draw->iSubItem ? text :
+                                    RGB((GetRValue(window) + GetRValue(text) * 2) / 3,
+                                        (GetGValue(window) + GetGValue(text) * 2) / 3,
+                                        (GetBValue(window) + GetBValue(text) * 2) / 3);
+                    draw->clrTextBk = window;
+                    return CDRF_NEWFONT;
+                }
+                return CDRF_DODEFAULT;
+            }
             if (header->hwndFrom == m_NavBar || header->hwndFrom == m_CommandBar ||
                 header->hwndFrom == m_DetailsBar || header->hwndFrom == m_ViewBar)
             {
+                NMTBCUSTOMDRAW *draw = (NMTBCUSTOMDRAW *)header;
                 CabinetPalette palette;
+                UINT id = (UINT)draw->nmcd.dwItemSpec;
+
                 CabinetGetPalette(&palette);
-                return CabinetToolbarCustomDraw((NMTBCUSTOMDRAW *)header,
-                                                header->hwndFrom == m_NavBar ? palette.Band : palette.Command);
+                if (draw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT && id >= IDC_SEPARATOR(0) && id < IDC_SEPARATOR(3))
+                {
+                    RECT line = draw->nmcd.rc;
+                    HBRUSH brush = CreateSolidBrush(RGB(
+                        GetRValue(palette.Command) + (GetRValue(palette.Text) - GetRValue(palette.Command)) * 0x28 / 255,
+                        GetGValue(palette.Command) + (GetGValue(palette.Text) - GetGValue(palette.Command)) * 0x28 / 255,
+                        GetBValue(palette.Command) + (GetBValue(palette.Text) - GetBValue(palette.Command)) * 0x28 / 255));
+                    line.left = (line.left + line.right) / 2;
+                    line.right = line.left + 1;
+                    line.top = (line.top + line.bottom) / 2 - Scale(10);
+                    line.bottom = line.top + Scale(20);
+                    FillRect(draw->nmcd.hdc, &line, brush);
+                    DeleteObject(brush);
+                    return CDRF_SKIPDEFAULT;
+                }
+                return CabinetToolbarCustomDraw(draw, header->hwndFrom == m_NavBar ? palette.Band : palette.Command);
             }
             break;
         case TBN_DROPDOWN:
@@ -2760,7 +3205,50 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
                 return 0;
             }
             break;
+        case WM_DRAWITEM:
+            if (((DRAWITEMSTRUCT *)lParam)->hwndItem == m_DetailsIcon)
+            {
+                DRAWITEMSTRUCT *draw = (DRAWITEMSTRUCT *)lParam;
+                ICONINFO info;
+                BITMAP bitmap;
+                int size = Scale(96);
+                FillRect(draw->hDC, &draw->rcItem, GetSysColorBrush(COLOR_WINDOW));
+                if (m_DetailsBitmap && GetObjectW(m_DetailsBitmap, sizeof(bitmap), &bitmap))
+                {
+                    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+                    HDC memory = CreateCompatibleDC(draw->hDC);
+                    HGDIOBJ old = SelectObject(memory, m_DetailsBitmap);
+                    GdiAlphaBlend(draw->hDC, (draw->rcItem.left + draw->rcItem.right - bitmap.bmWidth) / 2,
+                                  (draw->rcItem.top + draw->rcItem.bottom - bitmap.bmHeight) / 2, bitmap.bmWidth,
+                                  bitmap.bmHeight, memory, 0, 0, bitmap.bmWidth, bitmap.bmHeight, blend);
+                    SelectObject(memory, old);
+                    DeleteDC(memory);
+                }
+                else if (m_DetailsIconHandle && GetIconInfo(m_DetailsIconHandle, &info))
+                {
+                    if (GetObjectW(info.hbmColor ? info.hbmColor : info.hbmMask, sizeof(bitmap), &bitmap))
+                        size = min(size, (int)bitmap.bmWidth * 2);
+                    if (info.hbmColor)
+                        DeleteObject(info.hbmColor);
+                    if (info.hbmMask)
+                        DeleteObject(info.hbmMask);
+                    DrawIconEx(draw->hDC, (draw->rcItem.left + draw->rcItem.right - size) / 2,
+                               (draw->rcItem.top + draw->rcItem.bottom - size) / 2, m_DetailsIconHandle, size, size, 0,
+                               NULL, DI_NORMAL);
+                }
+                return TRUE;
+            }
+            break;
         case WM_CTLCOLORSTATIC:
+            if ((HWND)lParam == m_DetailsType)
+            {
+                COLORREF window = GetSysColor(COLOR_WINDOW), text = GetSysColor(COLOR_WINDOWTEXT);
+                SetTextColor((HDC)wParam, RGB((GetRValue(window) + GetRValue(text) * 2) / 3,
+                                              (GetGValue(window) + GetGValue(text) * 2) / 3,
+                                              (GetBValue(window) + GetBValue(text) * 2) / 3));
+                SetBkMode((HDC)wParam, TRANSPARENT);
+                return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+            }
             if ((HWND)lParam == m_PreviewText || (HWND)lParam == m_PreviewHost || (HWND)lParam == m_PreviewImage ||
                 (HWND)lParam == m_PreviewLabel || (HWND)lParam == m_DetailsIcon || (HWND)lParam == m_DetailsName)
             {
@@ -2827,9 +3315,17 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             RestoreFocus();
             return 0;
         case WM_THEMECHANGED:
-        case WM_SYSCOLORCHANGE:
-            InvalidateRect(m_hwnd, NULL, TRUE);
+            RefreshGlyphs();
             break;
+        case WM_SYSCOLORCHANGE:
+        case WM_SETTINGCHANGE:
+        {
+            MSG message = { m_hwnd, msg, wParam, lParam };
+            EnumChildWindows(m_hwnd, ForwardToChild, (LPARAM)&message);
+            if (msg == WM_SYSCOLORCHANGE || (lParam && !lstrcmpiW((LPCWSTR)lParam, L"ImmersiveColorSet")))
+                RefreshGlyphs();
+            break;
+        }
         case WM_CLOSE:
             SavePlacement();
             while (m_TabCount > 1)

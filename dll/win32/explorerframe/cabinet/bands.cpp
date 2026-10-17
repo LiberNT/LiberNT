@@ -116,6 +116,26 @@ CabinetToolbarCustomDraw(NMTBCUSTOMDRAW *draw, COLORREF base)
     return TBCDRF_NOBACKGROUND | TBCDRF_NOEDGES | TBCDRF_NOOFFSET;
 }
 
+static HICON
+RotatedGlyphIcon(LPCWSTR name, int size, COLORREF color, float angle)
+{
+    Gdiplus::Bitmap bitmap(size, size, PixelFormat32bppARGB);
+    HICON icon = NULL;
+
+    {
+        Gdiplus::Graphics graphics(&bitmap);
+        graphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        graphics.TranslateTransform(size / 2.0f, size / 2.0f);
+        graphics.RotateTransform(angle);
+        graphics.TranslateTransform(-size / 2.0f, -size / 2.0f);
+        ShellFrame::FillIcon(graphics, name, Gdiplus::RectF(0.0f, 0.0f, (float)size, (float)size), color);
+    }
+    bitmap.GetHICON(&icon);
+    return icon;
+}
+
 static HIMAGELIST
 SmallSystemImages()
 {
@@ -295,10 +315,10 @@ CCabinetTabBand::TabWidth() const
     int available;
 
     GetClientRect(m_hwnd, &client);
-    available = client.right - Scale(8) - Scale(40) - Slant();
+    available = client.right - Scale(8) - Scale(52);
     if (m_Count <= 0)
         return Scale(240);
-    return max(Scale(72), min(Scale(240), available / m_Count + Slant()));
+    return max(Scale(72), min(Scale(240), available / m_Count));
 }
 
 RECT
@@ -308,9 +328,9 @@ CCabinetTabBand::TabRect(int index) const
     int width = TabWidth();
 
     GetClientRect(m_hwnd, &client);
-    rc.left = Scale(8) + index * (width - Slant());
+    rc.left = Scale(8) + index * width;
     rc.right = rc.left + width;
-    rc.top = Scale(18);
+    rc.top = Scale(10);
     rc.bottom = client.bottom;
     return rc;
 }
@@ -321,36 +341,38 @@ CCabinetTabBand::CloseRect(int index) const
     RECT tab = TabRect(index), rc;
     int middle = (tab.top + tab.bottom) / 2;
 
-    rc.right = tab.right - Slant() - Scale(2);
-    rc.left = rc.right - Scale(18);
-    rc.top = middle - Scale(9);
-    rc.bottom = middle + Scale(9);
+    rc.right = tab.right - Scale(8);
+    rc.left = rc.right - Scale(24);
+    rc.top = middle - Scale(12);
+    rc.bottom = middle + Scale(12);
     return rc;
 }
 
 RECT
 CCabinetTabBand::NewRect() const
 {
-    RECT rc;
-    int width = TabWidth();
+    RECT rc, tab = TabRect(0);
+    int middle = (tab.top + tab.bottom) / 2;
 
-    rc.left = Scale(8) + m_Count * (width - Slant()) + Slant() + Scale(4);
+    rc.left = Scale(8) + m_Count * TabWidth() + Scale(8);
     rc.right = rc.left + Scale(32);
-    rc.top = Scale(20);
-    rc.bottom = rc.top + Scale(24);
+    rc.top = middle - Scale(14);
+    rc.bottom = middle + Scale(14);
     return rc;
+}
+
+BOOL
+CCabinetTabBand::ShowsClose(int index) const
+{
+    return index == m_Active || index == m_HotTab || TabWidth() >= Scale(110);
 }
 
 BOOL
 CCabinetTabBand::InTab(int index, POINT pt) const
 {
     RECT rc = TabRect(index);
-    int slant;
 
-    if (pt.y < rc.top || pt.y >= rc.bottom)
-        return FALSE;
-    slant = MulDiv(Slant(), rc.bottom - pt.y, max(1, (int)(rc.bottom - rc.top)));
-    return pt.x >= rc.left + slant && pt.x < rc.right - slant;
+    return PtInRect(&rc, pt);
 }
 
 int
@@ -365,7 +387,7 @@ CCabinetTabBand::HitTab(POINT pt, BOOL *close) const
         if (InTab(i, pt))
         {
             RECT button = CloseRect(i);
-            *close = PtInRect(&button, pt);
+            *close = ShowsClose(i) && PtInRect(&button, pt);
             return i;
         }
     }
@@ -408,11 +430,25 @@ DrawSmallIcon(Gdiplus::Graphics &graphics, int index, int x, int y, int size)
 }
 
 static void
-TabOutline(Gdiplus::GraphicsPath &path, float left, float top, float right, float bottom, float slant, BOOL close)
+AddCorner(Gdiplus::GraphicsPath &path, float x0, float y0, float cx, float cy, float x1, float y1)
 {
-    path.AddBezier(left, bottom, left + slant * 0.35f, bottom, left + slant * 0.65f, top, left + slant, top);
-    path.AddLine(left + slant, top, right - slant, top);
-    path.AddBezier(right - slant, top, right - slant * 0.65f, top, right - slant * 0.35f, bottom, right, bottom);
+    path.AddBezier(x0, y0, x0 + (cx - x0) * 2.0f / 3.0f, y0 + (cy - y0) * 2.0f / 3.0f,
+                   x1 + (cx - x1) * 2.0f / 3.0f, y1 + (cy - y1) * 2.0f / 3.0f, x1, y1);
+}
+
+static void
+TabOutline(Gdiplus::GraphicsPath &path, float left, float top, float right, float bottom, float radius, float foot,
+           BOOL close)
+{
+    if (foot > 0.0f)
+        AddCorner(path, left - foot, bottom, left, bottom, left, bottom - foot);
+    path.AddLine(left, bottom - foot, left, top + radius);
+    AddCorner(path, left, top + radius, left, top, left + radius, top);
+    path.AddLine(left + radius, top, right - radius, top);
+    AddCorner(path, right - radius, top, right, top, right, top + radius);
+    path.AddLine(right, top + radius, right, bottom - foot);
+    if (foot > 0.0f)
+        AddCorner(path, right, bottom - foot, right, bottom, right + foot, bottom);
     if (close)
         path.CloseFigure();
 }
@@ -448,7 +484,8 @@ CCabinetTabBand::Paint(HDC dc)
         LOGFONTW logFont;
         Gdiplus::StringFormat format;
         int iconSize = GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForWindow(m_hwnd));
-        float slant = (float)Slant();
+        float radius = (float)Scale(8), foot = (float)Scale(8);
+        BYTE inkAlpha = active ? 0xE0 : 0x90;
 
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
@@ -459,20 +496,35 @@ CCabinetTabBand::Paint(HDC dc)
         GetObjectW(m_Font ? m_Font : GetStockObject(DEFAULT_GUI_FONT), sizeof(logFont), &logFont);
         Gdiplus::Font font(dc, &logFont);
 
+        for (int i = 0; i <= m_Count; i++)
+        {
+            RECT rc = i < m_Count ? TabRect(i) : NewRect();
+            BOOL quiet = i < m_Count ? (i != m_Active && i != m_HotTab) : !m_HotNew;
+            BOOL previousQuiet = i > 0 && i - 1 != m_Active && i - 1 != m_HotTab;
+            float x = (float)(i < m_Count ? rc.left : rc.left - Scale(8)), middle;
+
+            if (!i || !quiet || !previousQuiet)
+                continue;
+            middle = (float)(TabRect(0).top + TabRect(0).bottom) / 2.0f;
+            {
+                Gdiplus::Pen line(GlassColor(0x60, palette.Text), 1.0f);
+                graphics.DrawLine(&line, x, middle - (float)Scale(8), x, middle + (float)Scale(8));
+            }
+        }
         {
             RECT add = NewRect(), glyph;
             if (m_HotNew)
             {
                 Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
-                Gdiplus::SolidBrush fill(Gdiplus::Color(0x30, 0x30, 0x30, 0x30));
+                Gdiplus::SolidBrush fill(GlassColor(m_PressedNew ? 0x50 : 0x38, palette.Band));
                 AddRoundRect(path, Gdiplus::RectF((float)add.left, (float)add.top, (float)(add.right - add.left),
                                                   (float)(add.bottom - add.top)), (float)Scale(4));
                 graphics.FillPath(&fill, &path);
             }
-            glyph.left = (add.left + add.right) / 2 - Scale(7);
-            glyph.top = (add.top + add.bottom) / 2 - Scale(7);
-            glyph.right = glyph.left + Scale(14);
-            glyph.bottom = glyph.top + Scale(14);
+            glyph.left = (add.left + add.right) / 2 - Scale(8);
+            glyph.top = (add.top + add.bottom) / 2 - Scale(8);
+            glyph.right = glyph.left + Scale(16);
+            glyph.bottom = glyph.top + Scale(16);
             ShellFrame::FillIcon(graphics, L"add_16_regular",
                                  Gdiplus::RectF((float)glyph.left, (float)glyph.top, (float)(glyph.right - glyph.left),
                                                 (float)(glyph.bottom - glyph.top)), RGB(255, 255, 255));
@@ -481,55 +533,71 @@ CCabinetTabBand::Paint(HDC dc)
         {
             int i = order < 0 ? m_Active : order;
             RECT rc, close;
-            BOOL selected;
+            BOOL selected, hot;
             float left, top, right, bottom;
-            BYTE fillAlpha, inkAlpha;
 
             if (i < 0 || i >= m_Count || (order >= 0 && i == m_Active))
                 continue;
             rc = TabRect(i);
             close = CloseRect(i);
             selected = i == m_Active;
+            hot = i == m_HotTab;
             left = (float)rc.left;
             top = (float)rc.top;
             right = (float)rc.right;
             bottom = (float)rc.bottom;
-            fillAlpha = selected ? 255 : (i == m_HotTab ? 0xE0 : 0xA0);
-            inkAlpha = selected ? 255 : (active ? 0xD0 : 0x90);
+            if (selected)
             {
                 Gdiplus::GraphicsPath fillPath(Gdiplus::FillModeAlternate);
                 Gdiplus::GraphicsPath edgePath(Gdiplus::FillModeAlternate);
-                Gdiplus::SolidBrush fill(GlassColor(fillAlpha, palette.Band));
-                Gdiplus::Pen border(GlassColor(selected ? 255 : 0xA0, palette.TabBorder), 1.0f);
+                Gdiplus::SolidBrush fill(GlassColor(255, palette.Band));
+                Gdiplus::Pen border(GlassColor(255, palette.TabBorder), 1.0f);
 
-                TabOutline(fillPath, left, top + 0.5f, right, bottom + 1.0f, slant, TRUE);
-                TabOutline(edgePath, left, top + 0.5f, right, bottom + 1.0f, slant, FALSE);
+                TabOutline(fillPath, left, top + 0.5f, right, bottom + 1.0f, radius, foot, TRUE);
+                TabOutline(edgePath, left, top + 0.5f, right, bottom + 1.0f, radius, foot, FALSE);
                 graphics.FillPath(&fill, &fillPath);
                 graphics.DrawPath(&border, &edgePath);
             }
-            DrawSmallIcon(graphics, m_Tabs[i].IconIndex, rc.left + Slant() + Scale(2),
-                          (rc.top + rc.bottom - iconSize) / 2, iconSize);
+            else if (hot)
             {
-                Gdiplus::SolidBrush brush(GlassColor(inkAlpha, palette.Text));
-                float textLeft = left + slant + (float)(Scale(2) + iconSize + Scale(6));
-                Gdiplus::RectF text(textLeft, top, (float)close.left - textLeft - (float)Scale(2), bottom - top);
-                graphics.DrawString(m_Tabs[i].Title, -1, &font, text, &format, &brush);
+                Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
+                Gdiplus::SolidBrush fill(GlassColor(m_PressedTab == i ? 0x60 : 0x40, palette.Band));
+                AddRoundRect(path, Gdiplus::RectF(left + (float)Scale(2), top + (float)Scale(2),
+                                                  right - left - (float)Scale(4), bottom - top - (float)Scale(6)),
+                             radius - 2.0f);
+                graphics.FillPath(&fill, &path);
             }
-            if (selected || i == m_HotTab)
+            {
+                Gdiplus::SolidBrush brush(GlassColor(selected ? 255 : inkAlpha, selected ? palette.Text : RGB(255, 255, 255)));
+                float iconLeft = left + (float)Scale(12), textLeft = iconLeft + (float)iconSize + (float)Scale(8);
+                float textRight = ShowsClose(i) ? (float)close.left - (float)Scale(4) : right - (float)Scale(8);
+                int iconTop = (rc.top + rc.bottom - iconSize) / 2;
+
+                DrawSmallIcon(graphics, m_Tabs[i].IconIndex, (int)iconLeft, iconTop, iconSize);
+                if (textRight > textLeft)
+                {
+                    Gdiplus::RectF text(textLeft, top, textRight - textLeft, bottom - top);
+                    graphics.DrawString(m_Tabs[i].Title, -1, &font, text, &format, &brush);
+                }
+            }
+            if (ShowsClose(i))
             {
                 RECT glyph = close;
-                if (i == m_HotTab && m_HotClose)
+                if (hot && m_HotClose)
                 {
-                    Gdiplus::SolidBrush fill(GlassColor(255, palette.BandBottom));
-                    graphics.FillEllipse(&fill, (float)close.left, (float)close.top, (float)(close.right - close.left),
-                                         (float)(close.bottom - close.top));
+                    Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
+                    Gdiplus::SolidBrush fill(GlassColor(selected ? 255 : 0x60, selected ? palette.BandBottom : palette.Band));
+                    AddRoundRect(path, Gdiplus::RectF((float)close.left, (float)close.top,
+                                                      (float)(close.right - close.left),
+                                                      (float)(close.bottom - close.top)), (float)Scale(4));
+                    graphics.FillPath(&fill, &path);
                 }
-                InflateRect(&glyph, -Scale(5), -Scale(5));
+                InflateRect(&glyph, -Scale(4), -Scale(4));
                 ShellFrame::FillIcon(graphics, L"dismiss_16_regular",
                                      Gdiplus::RectF((float)glyph.left, (float)glyph.top,
                                                     (float)(glyph.right - glyph.left),
                                                     (float)(glyph.bottom - glyph.top)),
-                                     palette.Glyph);
+                                     selected ? palette.Glyph : RGB(255, 255, 255));
             }
         }
     }
@@ -584,7 +652,7 @@ CCabinetTabBand::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             index = HitTab(pt, &close);
             if (m_DragTab >= 0 && (wParam & MK_LBUTTON) && GetCapture() == m_hwnd)
             {
-                int target = max(0, min(m_Count - 1, (int)((pt.x - Scale(8)) / max(1, TabWidth() - Slant()))));
+                int target = max(0, min(m_Count - 1, (int)((pt.x - Scale(8)) / max(1, TabWidth()))));
                 if (target != m_DragTab)
                 {
                     int from = m_DragTab;
@@ -660,7 +728,9 @@ CCabinetAddressBand::CCabinetAddressBand() :
     m_CrumbCount(0),
     m_FirstVisible(0),
     m_Editing(FALSE),
-    m_BoxBrush(NULL)
+    m_BoxBrush(NULL),
+    m_DismissId(0),
+    m_DismissTick(0)
 {
     ZeroMemory(m_Crumbs, sizeof(m_Crumbs));
 }
@@ -674,22 +744,51 @@ CCabinetAddressBand::~CCabinetAddressBand()
         DeleteObject(m_BoxBrush);
 }
 
-BOOL
-CCabinetAddressBand::Create(HWND parent, ICabinetBandHost *host, HFONT font)
+void
+CCabinetAddressBand::RefreshGlyphs()
 {
     CabinetPalette palette;
     static const LPCWSTR Glyphs[] = { L"chevron_right_16_regular" };
+    HIMAGELIST old = m_Images;
     int size;
 
-    m_Host = host;
-    m_Font = font;
-    if (!CreateBand(parent, L"LiberNTExplorerAddressBand"))
-        return FALSE;
     CabinetGetPalette(&palette);
     size = GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForWindow(m_hwnd));
     m_Images = CabinetGlyphImages(Glyphs, _countof(Glyphs), size, palette.Glyph);
     if (m_Images)
+    {
         ImageList_SetImageCount(m_Images, 2);
+        for (int frame = 1; frame <= 3; frame++)
+        {
+            HICON icon = RotatedGlyphIcon(Glyphs[0], size, palette.Glyph, 30.0f * frame);
+            ImageList_AddIcon(m_Images, icon);
+            if (icon)
+                DestroyIcon(icon);
+        }
+        {
+            HICON icon = ShellFrame::CreateGlyphIcon(L"more_horizontal_20_regular", size, palette.Glyph);
+            ImageList_AddIcon(m_Images, icon);
+            if (icon)
+                DestroyIcon(icon);
+        }
+    }
+    if (m_Toolbar)
+    {
+        SendMessageW(m_Toolbar, TB_SETIMAGELIST, 0, (LPARAM)m_Images);
+        Layout();
+    }
+    if (old)
+        ImageList_Destroy(old);
+}
+
+BOOL
+CCabinetAddressBand::Create(HWND parent, ICabinetBandHost *host, HFONT font)
+{
+    m_Host = host;
+    m_Font = font;
+    if (!CreateBand(parent, L"LiberNTExplorerAddressBand"))
+        return FALSE;
+    RefreshGlyphs();
     m_Toolbar = CreateWindowExW(0, TOOLBARCLASSNAMEW, NULL,
                                 WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | TBSTYLE_FLAT | TBSTYLE_LIST |
                                 TBSTYLE_TRANSPARENT | CCS_NODIVIDER | CCS_NOPARENTALIGN | CCS_NORESIZE,
@@ -804,12 +903,11 @@ CCabinetAddressBand::Layout()
         SendMessageW(m_Toolbar, TB_ADDBUTTONSW, 1, (LPARAM)&button);
         if (m_FirstVisible)
         {
-            button.iBitmap = I_IMAGENONE;
+            button.iBitmap = 5;
             button.idCommand = IDC_CRUMB_OVERFLOW;
-            button.fsStyle = BTNS_BUTTON | BTNS_SHOWTEXT | BTNS_AUTOSIZE;
-            button.iString = (INT_PTR)L"\x2026";
-            SendMessageW(m_Toolbar, TB_ADDBUTTONSW, 1, (LPARAM)&button);
+            button.fsStyle = BTNS_BUTTON | BTNS_AUTOSIZE;
             button.iString = 0;
+            SendMessageW(m_Toolbar, TB_ADDBUTTONSW, 1, (LPARAM)&button);
         }
         for (int i = m_FirstVisible; i < m_CrumbCount; i++)
         {
@@ -821,9 +919,20 @@ CCabinetAddressBand::Layout()
                 SendMessageW(m_Toolbar, TB_ADDBUTTONSW, 1, (LPARAM)&button);
             button.iBitmap = I_IMAGENONE;
             button.idCommand = IDC_CRUMB(i);
-            button.fsStyle = BTNS_BUTTON | BTNS_SHOWTEXT | BTNS_AUTOSIZE | BTNS_NOPREFIX;
+            button.fsStyle = BTNS_BUTTON | BTNS_SHOWTEXT | BTNS_NOPREFIX;
             button.iString = (INT_PTR)names[i];
             SendMessageW(m_Toolbar, TB_ADDBUTTONSW, 1, (LPARAM)&button);
+            {
+                TBBUTTONINFOW info = { sizeof(info), TBIF_SIZE };
+                SIZE extent = { 0, 0 };
+                HDC dc = GetDC(m_Toolbar);
+                HGDIOBJ old = SelectObject(dc, m_Font);
+                GetTextExtentPoint32W(dc, names[i], lstrlenW(names[i]), &extent);
+                SelectObject(dc, old);
+                ReleaseDC(m_Toolbar, dc);
+                info.cx = (WORD)(extent.cx + Scale(16));
+                SendMessageW(m_Toolbar, TB_SETBUTTONINFOW, IDC_CRUMB(i), (LPARAM)&info);
+            }
         }
         if (m_CrumbCount)
         {
@@ -896,6 +1005,40 @@ CCabinetAddressBand::ButtonScreenRect(UINT id)
 }
 
 void
+CCabinetAddressBand::AnimateChevron(UINT id, BOOL open)
+{
+    static const int Frames[] = { 2, 3, 4 };
+
+    SendMessageW(m_Toolbar, TB_PRESSBUTTON, id, MAKELONG(open, 0));
+    for (int i = 0; i < (int)_countof(Frames); i++)
+    {
+        int frame = open ? Frames[i] : (i + 1 < (int)_countof(Frames) ? Frames[_countof(Frames) - 2 - i] : 0);
+        SendMessageW(m_Toolbar, TB_CHANGEBITMAP, id, MAKELPARAM(frame, 0));
+        UpdateWindow(m_Toolbar);
+        if (i + 1 < (int)_countof(Frames))
+            Sleep(16);
+    }
+}
+
+void
+CCabinetAddressBand::NoteMenuDismiss(UINT id)
+{
+    RECT rc = { 0, 0, 0, 0 };
+    POINT pt;
+
+    m_DismissId = 0;
+    if (!m_Toolbar || !(GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0x8000))
+        return;
+    GetCursorPos(&pt);
+    ScreenToClient(m_Toolbar, &pt);
+    if (SendMessageW(m_Toolbar, TB_GETRECT, id, (LPARAM)&rc) && PtInRect(&rc, pt))
+    {
+        m_DismissId = id;
+        m_DismissTick = GetTickCount();
+    }
+}
+
+void
 CCabinetAddressBand::ShowChildren(int index)
 {
     IShellFolder *folder = NULL;
@@ -952,8 +1095,18 @@ CCabinetAddressBand::ShowChildren(int index)
         if (next && folder->CompareIDs(0, children[i], next) == 0)
             SetMenuDefaultItem(popup, 1 + i, FALSE);
     }
-    command = count ? TrackPopupMenuEx(popup, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN, anchor.left, anchor.bottom,
-                                       m_hwnd, NULL) : 0;
+    if (count)
+    {
+        UINT id = index < 0 ? IDC_CRUMB_ROOT_CHEVRON : IDC_CRUMB_CHEVRON(index);
+        AnimateChevron(id, TRUE);
+        command = TrackPopupMenuEx(popup, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN, anchor.left, anchor.bottom,
+                                   m_hwnd, NULL);
+        NoteMenuDismiss(id);
+        if (m_Toolbar)
+            AnimateChevron(id, FALSE);
+    }
+    else
+        command = 0;
     DestroyMenu(popup);
     if (command >= 1 && (int)command <= count)
     {
@@ -989,6 +1142,7 @@ CCabinetAddressBand::ShowOverflow()
     }
     command = TrackPopupMenuEx(popup, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN, anchor.left, anchor.bottom,
                                m_hwnd, NULL);
+    NoteMenuDismiss(IDC_CRUMB_OVERFLOW);
     DestroyMenu(popup);
     if (command >= 1 && (int)command <= m_FirstVisible)
     {
@@ -1076,9 +1230,30 @@ CCabinetAddressBand::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_NOTIFY:
             if (((NMHDR *)lParam)->hwndFrom == m_Toolbar && ((NMHDR *)lParam)->code == NM_CUSTOMDRAW)
             {
+                NMTBCUSTOMDRAW *draw = (NMTBCUSTOMDRAW *)lParam;
                 CabinetPalette palette;
+                LRESULT result;
+                UINT id = (UINT)draw->nmcd.dwItemSpec;
+
                 CabinetGetPalette(&palette);
-                return CabinetToolbarCustomDraw((NMTBCUSTOMDRAW *)lParam, m_Editing ? palette.Window : palette.Box);
+                result = CabinetToolbarCustomDraw(draw, m_Editing ? palette.Window : palette.Box);
+                if (draw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT && id >= IDC_CRUMB(0) &&
+                    id < IDC_CRUMB(CABINET_MAX_CRUMBS))
+                {
+                    WCHAR text[MAX_PATH];
+                    RECT rc = draw->nmcd.rc;
+                    HGDIOBJ old;
+                    if (SendMessageW(m_Toolbar, TB_GETBUTTONTEXTW, id, (LPARAM)text) < 0)
+                        text[0] = UNICODE_NULL;
+                    old = SelectObject(draw->nmcd.hdc, m_Font);
+                    SetBkMode(draw->nmcd.hdc, TRANSPARENT);
+                    SetTextColor(draw->nmcd.hdc, palette.Text);
+                    DrawTextW(draw->nmcd.hdc, text, -1, &rc,
+                              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+                    SelectObject(draw->nmcd.hdc, old);
+                    return CDRF_SKIPDEFAULT;
+                }
+                return result;
             }
             break;
         case WM_CTLCOLOREDIT:
@@ -1097,6 +1272,12 @@ CCabinetAddressBand::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             UINT command = LOWORD(wParam);
             if ((HWND)lParam != m_Toolbar)
                 break;
+            if (m_DismissId && command == m_DismissId && GetTickCount() - m_DismissTick < 600)
+            {
+                m_DismissId = 0;
+                return 0;
+            }
+            m_DismissId = 0;
             if (command == IDC_CRUMB_OVERFLOW)
                 ShowOverflow();
             else if (command == IDC_CRUMB_ROOT)
@@ -1143,15 +1324,25 @@ CCabinetSearchBox::~CCabinetSearchBox()
         DeleteObject(m_BoxBrush);
 }
 
-BOOL
-CCabinetSearchBox::Create(HWND parent, HFONT font)
+void
+CCabinetSearchBox::RefreshGlyphs()
 {
     CabinetPalette palette;
 
-    if (!CreateBand(parent, L"LiberNTExplorerSearchBox"))
-        return FALSE;
+    if (m_Glyph)
+        DestroyIcon(m_Glyph);
     CabinetGetPalette(&palette);
     m_Glyph = ShellFrame::CreateGlyphIcon(L"search_16_regular", Scale(16), palette.Glyph);
+    if (m_hwnd)
+        InvalidateRect(m_hwnd, NULL, TRUE);
+}
+
+BOOL
+CCabinetSearchBox::Create(HWND parent, HFONT font)
+{
+    if (!CreateBand(parent, L"LiberNTExplorerSearchBox"))
+        return FALSE;
+    RefreshGlyphs();
     m_Edit = CreateWindowExW(0, WC_EDITW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, 0, 0, 0, 0,
                              m_hwnd, NULL, CabinetModule(), NULL);
     SendMessageW(m_Edit, WM_SETFONT, (WPARAM)font, FALSE);

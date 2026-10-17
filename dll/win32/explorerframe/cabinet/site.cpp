@@ -127,7 +127,7 @@ CabinetSite_Create(CCabinetWindow *window, IExplorerBrowser *browser, IUnknown *
     return S_OK;
 }
 
-class CCabinetNavigation : public INameSpaceTreeControlEvents
+class CCabinetNavigation : public INameSpaceTreeControlEvents, public INameSpaceTreeControlCustomDraw
 {
 public:
     CCabinetNavigation(CCabinetWindow *window) :
@@ -143,6 +143,12 @@ public:
         if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_INameSpaceTreeControlEvents))
         {
             *ppv = static_cast<INameSpaceTreeControlEvents *>(this);
+            AddRef();
+            return S_OK;
+        }
+        if (IsEqualIID(riid, IID_INameSpaceTreeControlCustomDraw))
+        {
+            *ppv = static_cast<INameSpaceTreeControlCustomDraw *>(this);
             AddRef();
             return S_OK;
         }
@@ -244,6 +250,40 @@ public:
         UNREFERENCED_PARAMETER(defaultIcon);
         UNREFERENCED_PARAMETER(openIcon);
         return E_NOTIMPL;
+    }
+
+    STDMETHODIMP PrePaint(HDC hdc, RECT *prc, LRESULT *plres) override
+    {
+        UNREFERENCED_PARAMETER(hdc);
+        UNREFERENCED_PARAMETER(prc);
+        *plres = CDRF_DODEFAULT;
+        return S_OK;
+    }
+
+    STDMETHODIMP PostPaint(HDC hdc, RECT *prc) override
+    {
+        UNREFERENCED_PARAMETER(hdc);
+        UNREFERENCED_PARAMETER(prc);
+        return S_OK;
+    }
+
+    STDMETHODIMP ItemPrePaint(HDC hdc, RECT *prc, NSTCCUSTOMDRAW *item, COLORREF *text, COLORREF *textBack,
+                              LRESULT *plres) override
+    {
+        UNREFERENCED_PARAMETER(hdc);
+        UNREFERENCED_PARAMETER(prc);
+        UNREFERENCED_PARAMETER(item);
+        UNREFERENCED_PARAMETER(text);
+        UNREFERENCED_PARAMETER(textBack);
+        *plres = CDRF_DODEFAULT;
+        return S_OK;
+    }
+
+    STDMETHODIMP ItemPostPaint(HDC hdc, RECT *prc, NSTCCUSTOMDRAW *item) override
+    {
+        if (m_Window && prc)
+            m_Window->PaintNavigationItem(hdc, *prc, item);
+        return S_OK;
     }
 
 private:

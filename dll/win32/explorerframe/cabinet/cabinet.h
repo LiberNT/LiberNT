@@ -89,6 +89,7 @@ public:
     void OnSelectionChanged();
     HRESULT OnDefaultCommand(IShellView *view);
     void OnNavigationItem(IShellItem *item, BOOL newTab);
+    void PaintNavigationItem(HDC dc, const RECT &rc, const NSTCCUSTOMDRAW *item);
     void OnViewEvent(DISPID dispid);
 
     void OnTabSelect(int index) override;
@@ -160,6 +161,7 @@ private:
     void CycleFocus();
     void SavePlacement();
     void ExtendFrame();
+    void RefreshGlyphs();
     void PaintBackground(HDC dc);
     void FitCommandBar(int width);
     void UpdateViewToggles();
@@ -191,8 +193,14 @@ private:
     HWND m_PreviewLabel;
     HIMAGELIST m_Images[8];
     HFONT m_Font;
+    HFONT m_TitleFont;
+    HWND m_DetailsType;
     INameSpaceTreeControl *m_Navigation;
     HWND m_NavigationWindow;
+    IShellItem *m_NavigationRoots[8];
+    UINT m_NavigationRootCount;
+    UINT m_PinnedCount;
+    HICON m_PinIcon;
     HWND m_FocusSave;
     RECT m_ViewRect;
     RECT m_PaneRect;
@@ -202,6 +210,7 @@ private:
     HBITMAP m_PreviewBitmap;
     PIDLIST_ABSOLUTE m_PreviewPidl;
     HICON m_DetailsIconHandle;
+    HBITMAP m_DetailsBitmap;
     BOOL m_InHistoryNavigation;
     BOOL m_FocusViewOnNavigate;
     ULONG m_ChangeNotify;

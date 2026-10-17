@@ -969,7 +969,11 @@ static HRESULT WINAPI IExplorerBrowser_fnInitialize(IExplorerBrowser *iface,
 
     This->navpane.width = MulDiv(NP_DEFAULT_WIDTH, This->dpix, USER_DEFAULT_SCREEN_DPI);
 
+#ifdef __REACTOS__
+    style = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+#else
     style = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS;
+#endif
     if (!(This->eb_options & EBO_NOBORDER))
         style |= WS_BORDER;
     This->hwnd_main = CreateWindowExW(WS_EX_CONTROLPARENT, L"ExplorerBrowserControl", NULL, style,

@@ -94,8 +94,8 @@ private:
     };
 
     int TabWidth() const;
-    int Slant() const { return Scale(8); }
     BOOL InTab(int index, POINT pt) const;
+    BOOL ShowsClose(int index) const;
     RECT TabRect(int index) const;
     RECT CloseRect(int index) const;
     RECT NewRect() const;
@@ -128,6 +128,7 @@ public:
     void BeginEdit();
     void EndEdit();
     BOOL IsEditing() const { return m_Editing; }
+    void RefreshGlyphs();
     HWND EditWindow() const { return m_Edit; }
 
 protected:
@@ -137,6 +138,8 @@ private:
     static LRESULT CALLBACK EditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR id, DWORD_PTR data);
     void FreeCrumbs();
     void Layout();
+    void AnimateChevron(UINT id, BOOL open);
+    void NoteMenuDismiss(UINT id);
     void ShowChildren(int index);
     void ShowOverflow();
     RECT ButtonScreenRect(UINT id);
@@ -150,6 +153,8 @@ private:
     int m_FirstVisible;
     BOOL m_Editing;
     HBRUSH m_BoxBrush;
+    UINT m_DismissId;
+    DWORD m_DismissTick;
 };
 
 class CCabinetSearchBox : public CCabinetBand
@@ -160,6 +165,7 @@ public:
 
     BOOL Create(HWND parent, HFONT font);
     HWND EditWindow() const { return m_Edit; }
+    void RefreshGlyphs();
 
 protected:
     LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
