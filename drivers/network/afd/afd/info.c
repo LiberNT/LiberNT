@@ -296,13 +296,45 @@ AfdReportConnectedSource(
     _SEH2_END;
 }
 
+static
+NTSTATUS
+AfdQuerySockName(
+    _In_ PFILE_OBJECT FileObject,
+    _In_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IrpSp)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+    PMDL Mdl;
+
+    Mdl = IoAllocateMdl( Irp->UserBuffer,
+                         IrpSp->Parameters.DeviceIoControl.OutputBufferLength,
+                         FALSE,
+                         FALSE,
+                         NULL );
+    if( Mdl == NULL )
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    _SEH2_TRY {
+        MmProbeAndLockPages( Mdl, Irp->RequestorMode, IoModifyAccess );
+    } _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) {
+        AFD_DbgPrint(MIN_TRACE, ("MmProbeAndLockPages() failed.\n"));
+        Status = _SEH2_GetExceptionCode();
+    } _SEH2_END;
+
+    if( !NT_SUCCESS(Status) ) {
+        IoFreeMdl( Mdl );
+        return Status;
+    }
+
+    return TdiQueryInformation( FileObject, TDI_QUERY_ADDRESS_INFO, Mdl );
+}
+
 NTSTATUS NTAPI
 AfdGetSockName( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 PIO_STACK_LOCATION IrpSp ) {
-    NTSTATUS Status = STATUS_SUCCESS;
+    NTSTATUS Status;
     PFILE_OBJECT FileObject = IrpSp->FileObject;
     PAFD_FCB FCB = FileObject->FsContext;
-    PMDL Mdl = NULL;
 
     UNREFERENCED_PARAMETER(DeviceObject);
     ASSERT(Irp->MdlAddress == NULL);
@@ -313,47 +345,21 @@ AfdGetSockName( PDEVICE_OBJECT DeviceObject, PIRP Irp,
          return UnlockAndMaybeComplete( FCB, STATUS_INVALID_PARAMETER, Irp, 0 );
     }
 
-    Mdl = IoAllocateMdl( Irp->UserBuffer,
-                         IrpSp->Parameters.DeviceIoControl.OutputBufferLength,
-                         FALSE,
-                         FALSE,
-                         NULL );
+    Status = AfdQuerySockName( FCB->Connection.Object
+                                 ? FCB->Connection.Object
+                                 : FCB->AddressFile.Object,
+                               Irp,
+                               IrpSp );
 
-    if( Mdl != NULL ) {
-        _SEH2_TRY {
-            MmProbeAndLockPages( Mdl, Irp->RequestorMode, IoModifyAccess );
-        } _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) {
-            AFD_DbgPrint(MIN_TRACE, ("MmProbeAndLockPages() failed.\n"));
-            Status = _SEH2_GetExceptionCode();
-        } _SEH2_END;
+    if( !NT_SUCCESS(Status) && FCB->Connection.Object && FCB->AddressFile.Object ) {
+        Status = AfdQuerySockName( FCB->AddressFile.Object, Irp, IrpSp );
+    }
 
-        if( NT_SUCCESS(Status) ) {
-                Status = TdiQueryInformation( FCB->Connection.Object
-                                                ? FCB->Connection.Object
-                                                : FCB->AddressFile.Object,
-                                              TDI_QUERY_ADDRESS_INFO,
-                                              Mdl );
-
-                if( !NT_SUCCESS(Status) && FCB->Connection.Object &&
-                    FCB->AddressFile.Object ) {
-                    Status = TdiQueryInformation( FCB->AddressFile.Object,
-                                                  TDI_QUERY_ADDRESS_INFO,
-                                                  Mdl );
-                }
-
-                if (NT_SUCCESS(Status) && (FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS) &&
-                    FCB->RemoteAddress && FCB->ConnectedSourceAddress)
-                {
-                    AfdReportConnectedSource(FCB, Irp, IrpSp);
-                }
-        }
-
-        /* Check if MmProbeAndLockPages or TdiQueryInformation failed and
-         * clean up Mdl */
-        if (!NT_SUCCESS(Status) && Irp->MdlAddress != Mdl)
-            IoFreeMdl(Mdl);
-    } else
-        Status = STATUS_INSUFFICIENT_RESOURCES;
+    if (NT_SUCCESS(Status) && (FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS) &&
+        FCB->RemoteAddress && FCB->ConnectedSourceAddress)
+    {
+        AfdReportConnectedSource(FCB, Irp, IrpSp);
+    }
 
     return UnlockAndMaybeComplete( FCB, Status, Irp, 0 );
 }
