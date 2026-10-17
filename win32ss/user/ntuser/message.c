@@ -1856,6 +1856,7 @@ co_IntSendMessageTimeoutSingle( HWND hWnd,
         // FIXME: Set window hung and add to a list.
         /* FIXME: Set a LastError? */
         ERR("Window %p (%p) (pti %p) is hung!\n", hWnd, Window, ptiSendTo);
+        EngSetLastError(ERROR_TIMEOUT);
         goto Cleanup; // Return FALSE
     }
 
