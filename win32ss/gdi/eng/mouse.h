@@ -14,7 +14,8 @@ _Requires_lock_held_(*ppdev->hsemDevLock)
 BOOL
 NTAPI
 MouseSafetyOnDrawEnd(
-    _Inout_ PPDEVOBJ ppdev);
+    _Inout_ PPDEVOBJ ppdev,
+    _In_ BOOL Wrote);
 
 ULONG
 NTAPI

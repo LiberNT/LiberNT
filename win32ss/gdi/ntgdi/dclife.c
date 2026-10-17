@@ -656,7 +656,7 @@ DC_vFinishBlitInternal(PDC pdc1, PDC pdc2, BOOL WriteDest)
     if (pdc1->dctype == DCTYPE_DIRECT)
     {
         if (!(pdc1->fs & DC_REDIRECTION))
-            MouseSafetyOnDrawEnd(pdc1->ppdev);
+            MouseSafetyOnDrawEnd(pdc1->ppdev, WriteDest);
         EngReleaseSemaphore(pdc1->ppdev->hsemDevLock);
     }
 #if DBG
@@ -668,7 +668,7 @@ DC_vFinishBlitInternal(PDC pdc1, PDC pdc2, BOOL WriteDest)
         if (pdc2->dctype == DCTYPE_DIRECT)
         {
             if (!(pdc2->fs & DC_REDIRECTION))
-                MouseSafetyOnDrawEnd(pdc2->ppdev);
+                MouseSafetyOnDrawEnd(pdc2->ppdev, FALSE);
             EngReleaseSemaphore(pdc2->ppdev->hsemDevLock);
         }
 #if DBG

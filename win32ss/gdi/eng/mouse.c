@@ -111,10 +111,12 @@ _Requires_lock_held_(*ppdev->hsemDevLock)
 BOOL
 NTAPI
 MouseSafetyOnDrawEnd(
-    _Inout_ PPDEVOBJ ppdev)
+    _Inout_ PPDEVOBJ ppdev,
+    _In_ BOOL Wrote)
 {
     GDIPOINTER *pgp;
     SURFOBJ *psoSafetyBatch;
+    BOOL Changed;
 
     ASSERT(ppdev != NULL);
     ASSERT(ppdev->pSurface != NULL);
@@ -126,10 +128,18 @@ MouseSafetyOnDrawEnd(
         return FALSE;
     }
 
+    if (Wrote)
+        ppdev->SafetyWrote = TRUE;
+
     if (--ppdev->SafetyRemoveCount >= ppdev->SafetyRemoveLevel)
     {
+        if (ppdev->SafetyRemoveCount == 0)
+            ppdev->SafetyWrote = FALSE;
         return FALSE;
     }
+
+    Changed = ppdev->SafetyWrote;
+    ppdev->SafetyWrote = FALSE;
 
     psoSafetyBatch = pgp->psoSafetyBatch;
 
@@ -149,8 +159,9 @@ MouseSafetyOnDrawEnd(
         RECTL rcl = pgp->Exclude;
 
         pgp->psoSafetyBatch = NULL;
-        GDIDEVFUNCS(psoSafetyBatch).SynchronizeSurface(
-            psoSafetyBatch, &rcl, DSS_RESERVED | DSS_FLUSH_EVENT);
+        if (Changed)
+            GDIDEVFUNCS(psoSafetyBatch).SynchronizeSurface(
+                psoSafetyBatch, &rcl, DSS_RESERVED | DSS_FLUSH_EVENT);
     }
 
     ppdev->SafetyRemoveLevel = 0;
@@ -263,7 +274,8 @@ IntEndMousePointerBatch(
     _In_ BOOL bNew)
 {
     ppdev->Pointer.psoCursorBatch = NULL;
-    IntSynchronizeMousePointerRects(pso, prclOld, bOld, prclNew, bNew, DSS_RESERVED | DSS_FLUSH_EVENT);
+    if (ppdev->Pointer.psoSafetyBatch != pso)
+        IntSynchronizeMousePointerRects(pso, prclOld, bOld, prclNew, bNew, DSS_RESERVED | DSS_FLUSH_EVENT);
 }
 
 static BOOL
