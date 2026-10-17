@@ -257,7 +257,12 @@ HICON
 CreateGlyphIcon(LPCWSTR name, int size, COLORREF color)
 {
     Gdiplus::Bitmap bitmap(size, size, PixelFormat32bppARGB);
-    HICON icon = NULL;
+    Gdiplus::BitmapData data;
+    Gdiplus::Rect rect(0, 0, size, size);
+    BITMAPINFO info = {};
+    ICONINFO icon = {};
+    PBYTE colors = NULL, mask;
+    HICON result = NULL;
 
     {
         Gdiplus::Graphics graphics(&bitmap);
@@ -266,8 +271,31 @@ CreateGlyphIcon(LPCWSTR name, int size, COLORREF color)
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
         FillIcon(graphics, name, Gdiplus::RectF(0.0f, 0.0f, (float)size, (float)size), color);
     }
-    bitmap.GetHICON(&icon);
-    return icon;
+
+    info.bmiHeader.biSize = sizeof(info.bmiHeader);
+    info.bmiHeader.biWidth = size;
+    info.bmiHeader.biHeight = -size;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    mask = (PBYTE)calloc(size, ((size + 15) / 16) * 2);
+    icon.fIcon = TRUE;
+    icon.hbmColor = CreateDIBSection(NULL, &info, DIB_RGB_COLORS, (void **)&colors, NULL, 0);
+    icon.hbmMask = mask ? CreateBitmap(size, size, 1, 1, mask) : NULL;
+    if (icon.hbmColor && icon.hbmMask &&
+        bitmap.LockBits(&rect, Gdiplus::ImageLockModeRead, PixelFormat32bppARGB, &data) == Gdiplus::Ok)
+    {
+        for (int y = 0; y < size; y++)
+            CopyMemory(colors + y * size * 4, (PBYTE)data.Scan0 + y * data.Stride, size * 4);
+        bitmap.UnlockBits(&data);
+        result = CreateIconIndirect(&icon);
+    }
+    if (icon.hbmColor)
+        DeleteObject(icon.hbmColor);
+    if (icon.hbmMask)
+        DeleteObject(icon.hbmMask);
+    free(mask);
+    return result;
 }
 
 BOOL
