@@ -20,7 +20,6 @@ static CMHIVE OslHive;
 
 PHHIVE OslSystemHive;
 HCELL_INDEX OslControlSet = HCELL_NIL;
-BOOLEAN OslSystemHiveRecovered;
 
 static
 PVOID
@@ -160,7 +159,6 @@ OslLoadSystemHive(
         Recovered = TRUE;
     }
 
-    OslSystemHiveRecovered = Recovered;
     ((PHBASE_BLOCK)Hive)->BootRecover = Recovered ? HBOOT_BOOT_RECOVERED_BY_HIVE_LOG
                                                   : HBOOT_NO_BOOT_RECOVER;
 

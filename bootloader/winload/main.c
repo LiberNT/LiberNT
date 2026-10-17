@@ -284,9 +284,6 @@ OslMain(VOID)
         return;
     }
 
-    if (OslParameters.Verbose)
-        FwPrint(L"Loading the operating system from %hs\r\n", SystemRoot);
-
     PeSetSystemRoot(SystemRoot);
     RtlStringCbPrintfA(Directory, sizeof(Directory), "%ssystem32\\", SystemRoot);
 
@@ -304,9 +301,6 @@ OslMain(VOID)
         FwPrint(L"The SYSTEM registry hive is missing or corrupt.\r\n");
         return;
     }
-
-    if (OslSystemHiveRecovered && OslParameters.Verbose)
-        FwPrint(L"The SYSTEM registry hive was recovered from its log.\r\n");
 
     Kernel = OslLoadCoreImage(LoaderBlock,
                               &OsDevice,
@@ -357,9 +351,6 @@ OslMain(VOID)
         FwPrint(L"The operating system partition has no partition number.\r\n");
         return;
     }
-
-    if (OslParameters.Verbose)
-        FwPrint(L"Starting the kernel\r\n");
 
     if (!OslArchPrepareHandoff(LoaderBlock))
     {

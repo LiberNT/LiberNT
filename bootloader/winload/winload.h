@@ -35,7 +35,6 @@ extern POSL_SYSTEM_BLOCK OslSystemBlock;
 extern PCM_FRAMEBUF_DEVICE_DATA FrameBufferData;
 extern PHHIVE OslSystemHive;
 extern HCELL_INDEX OslControlSet;
-extern BOOLEAN OslSystemHiveRecovered;
 
 VOID
 OslConvertList(

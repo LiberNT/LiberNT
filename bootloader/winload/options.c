@@ -63,8 +63,6 @@ OslGetParameters(
     }
 
     Parameters->LoadOptions[0] = UNICODE_NULL;
-    Parameters->Verbose = FALSE;
-    BcdGetBoolean(Object, BcdOSLoaderBoolean_VerboseObjectLoadMode, &Parameters->Verbose);
 
     if (!BcdGetString(Object,
                       BcdOSLoaderString_KernelPath,
