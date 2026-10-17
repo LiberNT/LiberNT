@@ -213,7 +213,6 @@ VOID LoadSettings(VOID)
     LONG lResult;
 
     /* Initialize the registry application settings */
-    Globals.bShowWarning = TRUE;
     Globals.bIsEnhancedKeyboard = TRUE;
     Globals.bAlwaysOnTop = TRUE;
     Globals.bSoundClick = FALSE;
@@ -224,11 +223,6 @@ VOID LoadSettings(VOID)
 
     /* Set font value defaults */
     Globals.FontHeight = DEFAULT_FONTSIZE;
-
-    /* Warning dialog registry setting */
-    lResult = LoadDWORDFromRegistry(L"ShowWarning", &dwValue);
-    if (lResult == NO_ERROR)
-        Globals.bShowWarning = (dwValue != 0);
 
     /* Enhanced keyboard switch dialog registry setting */
     lResult = LoadDWORDFromRegistry(L"IsEnhancedKeyboard", &dwValue);
@@ -274,9 +268,6 @@ VOID SaveSettings(VOID)
     /* Initialize the window placement structure */
     wp.length = sizeof(WINDOWPLACEMENT);
     GetWindowPlacement(Globals.hMainWnd, &wp);
-
-    /* Warning dialog registry setting */
-    SaveDWORDToRegistry(L"ShowWarning", Globals.bShowWarning);
 
     /* Enhanced keyboard switch dialog registry setting */
     SaveDWORDToRegistry(L"IsEnhancedKeyboard", Globals.bIsEnhancedKeyboard);

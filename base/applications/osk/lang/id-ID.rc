@@ -47,18 +47,6 @@ BEGIN
     END
 END
 
-IDD_WARNINGDIALOG_OSK DIALOGEX 0, 0, 250, 97
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
-CAPTION "Papan Ketik Layar"
-FONT 8, "MS Shell Dlg", 400, 0, 0x1
-BEGIN
-    DEFPUSHBUTTON "OK", IDOK, 193, 76, 50, 14
-    ICON IDI_OSK, IDC_STATIC, 7, 17, 20, 20
-    LTEXT "Papan Ketik Layar menyediakan fungsionalitas minimum bagi pengguna yang mengalami keterbatasan gerak. Keterbatasan gerak pengguna tentu membutuhkan program utilitas dengan fungsionalitas tinggi untuk penggunaan sehari-hari.", IDC_STATIC, 36, 7, 207, 33
-    CONTROL "Jangan tampilkan pesan ini lagi", IDC_SHOWWARNINGCHECK, "Button",
-            BS_AUTOCHECKBOX | WS_TABSTOP, 43, 80, 137, 10
-END
-
 STRINGTABLE
 BEGIN
     IDS_OSK "Papan Ketik Layar"

@@ -76,61 +76,6 @@ void OSK_SetText(int IdDlgItem, int IdResource)
 }
 /***********************************************************************
  *
- *          OSK_WarningProc
- *
- *  Function handler for the warning dialog box on startup
- */
-INT_PTR CALLBACK OSK_WarningProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
-{
-    UNREFERENCED_PARAMETER(lParam);
-
-    switch (Msg)
-    {
-        case WM_INITDIALOG:
-        {
-            return TRUE;
-        }
-
-        case WM_COMMAND:
-        {
-            switch (LOWORD(wParam))
-            {
-                case IDC_SHOWWARNINGCHECK:
-                {
-                    Globals.bShowWarning = !IsDlgButtonChecked(hDlg, IDC_SHOWWARNINGCHECK);
-                    return TRUE;
-                }
-
-                case IDOK:
-                case IDCANCEL:
-                {
-                    EndDialog(hDlg, LOWORD(wParam));
-                    return TRUE;
-                }
-            }
-            break;
-        }
-    }
-
-    return FALSE;
-}
-
-/***********************************************************************
- *
- *          OSK_WarningDlgThread
- *
- *  Thread procedure routine for the warning dialog box
- */
-DWORD WINAPI OSK_WarningDlgThread(LPVOID lpParameter)
-{
-    HINSTANCE hInstance = (HINSTANCE)lpParameter;
-
-    DialogBoxW(hInstance, MAKEINTRESOURCEW(IDD_WARNINGDIALOG_OSK), Globals.hMainWnd, OSK_WarningProc);
-    return 0;
-}
-
-/***********************************************************************
- *
  *          OSK_About
  *
  *  Initializes the "About" dialog box
@@ -462,16 +407,6 @@ LRESULT OSK_Create(HWND hwnd)
 
     /* Set a timer for periodic tasks */
     Globals.iTimer = SetTimer(hwnd, 0, 100, NULL);
-
-    /* If the member of the struct (bShowWarning) is set then display the dialog box */
-    if (Globals.bShowWarning)
-    {
-        /* If for whatever reason the thread fails to be created then handle the dialog box in main thread... */
-        if (CreateThread(NULL, 0, OSK_WarningDlgThread, (PVOID)Globals.hInstance, 0, NULL) == NULL)
-        {
-            DialogBoxW(Globals.hInstance, MAKEINTRESOURCEW(IDD_WARNINGDIALOG_OSK), Globals.hMainWnd, OSK_WarningProc);
-        }
-    }
 
     return 0;
 }

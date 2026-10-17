@@ -47,18 +47,6 @@ BEGIN
     END
 END
 
-IDD_WARNINGDIALOG_OSK DIALOGEX 0, 0, 250, 97
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
-CAPTION "Ekran Klavyesi"
-FONT 8, "MS Shell Dlg", 400, 0, 0x1
-BEGIN
-    DEFPUSHBUTTON "Tamam", IDOK, 193, 76, 50, 14
-    ICON IDI_OSK, IDC_STATIC, 7, 17, 20, 20
-    LTEXT "Ekran Klavyesi, hareket güçlüğü çeken kullanıcılar için minimum düzeyde işlevsellik sağlar. Hareket güçlüğü çeken kullanıcılar, günlük kullanım için daha yüksek işlevselliğe sahip bir yardımcı programa ihtiyaç duyacaktır.", IDC_STATIC, 36, 7, 207, 33
-    CONTROL "Bu mesajı yeniden gösterme", IDC_SHOWWARNINGCHECK, "Button",
-            BS_AUTOCHECKBOX | WS_TABSTOP, 43, 80, 137, 10
-END
-
 STRINGTABLE
 BEGIN 
     IDS_OSK "Ekran Klavyesi"

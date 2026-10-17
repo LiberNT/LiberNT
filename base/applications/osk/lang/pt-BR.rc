@@ -46,18 +46,6 @@ BEGIN
     END
 END
 
-IDD_WARNINGDIALOG_OSK DIALOGEX 0, 0, 250, 97
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
-CAPTION "Teclado Virtual"
-FONT 8, "MS Shell Dlg", 400, 0, 0x1
-BEGIN
-    DEFPUSHBUTTON "OK", IDOK, 193, 76, 50, 14
-    ICON IDI_OSK, IDC_STATIC, 7, 17, 20, 20
-    LTEXT "O Teclado Virtual fornece um nível de funcionalidade para usuários com necessidades especiais. Usuários com dificuldades motoras necessitam de um software para uso diário.", IDC_STATIC, 36, 7, 207, 33
-    CONTROL "Não exibir esta mensagem novamente", IDC_SHOWWARNINGCHECK, "Button",
-            BS_AUTOCHECKBOX | WS_TABSTOP, 43, 80, 137, 10
-END
-
 STRINGTABLE
 BEGIN
     IDS_OSK "Teclado Virtual"

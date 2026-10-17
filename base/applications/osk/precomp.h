@@ -59,7 +59,6 @@ typedef struct
     WCHAR      szTitle[MAX_PATH];
 
     /* On-Screen Keyboard registry settings */
-    BOOL       bShowWarning;
     BOOL       bIsEnhancedKeyboard;
     BOOL       bSoundClick;
     BOOL       bAlwaysOnTop;
@@ -91,11 +90,9 @@ int OSK_Timer(void);
 BOOL OSK_Command(WPARAM wCommand, HWND hWndControl);
 BOOL OSK_ReleaseKey(WORD ScanCode);
 LRESULT APIENTRY OSK_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-DWORD WINAPI OSK_WarningDlgThread(LPVOID lpParameter);
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int);
 VOID OSK_RestoreDlgPlacement(HWND hDlg);
 VOID OSK_RefreshLEDKeys(VOID);
-INT_PTR CALLBACK OSK_WarningProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 
 /* settings.c */
 LONG LoadDWORDFromRegistry(IN LPCWSTR lpValueDataName,
