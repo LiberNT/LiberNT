@@ -552,6 +552,8 @@ struct _BTHMINI_DEVICE
     USHORT AclCredits;
     BTH_COD ClassOfDevice;
     UCHAR ScanEnable;
+    BOOLEAN DiscoverableBefore;
+    LIST_ENTRY DiscoveryOwners;
     CHAR Name[BTH_MAX_NAME_SIZE];
 
     BOOLEAN Discovering;
@@ -654,6 +656,15 @@ PBTHMINI_REMOTE
 BthRadioGetRemote(
     _In_ PBTHMINI_DEVICE Dev,
     _In_ BTH_ADDR Address);
+
+VOID
+BthRadioFileClosed(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFFILEOBJECT FileObject);
+
+VOID
+BthRadioCleanup(
+    _In_ PBTHMINI_DEVICE Dev);
 
 BOOLEAN
 BthRadioRequestName(

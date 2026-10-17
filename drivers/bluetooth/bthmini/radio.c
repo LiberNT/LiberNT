@@ -10,6 +10,12 @@
 #define NDEBUG
 #include <debug.h>
 
+typedef struct _BTHMINI_DISCOVERY_OWNER
+{
+    LIST_ENTRY Link;
+    WDFFILEOBJECT FileObject;
+} BTHMINI_DISCOVERY_OWNER, *PBTHMINI_DISCOVERY_OWNER;
+
 BTH_ADDR
 BthReadAddress(
     _In_reads_(6) const UCHAR *Data)
@@ -478,6 +484,9 @@ BthRadioSetFlag(
     _In_ PBTHMINI_DEVICE Dev,
     _In_ WDFREQUEST Request)
 {
+    WDFFILEOBJECT FileObject = WdfRequestGetFileObject(Request);
+    PBTHMINI_DISCOVERY_OWNER Owner;
+    PLIST_ENTRY Entry;
     PULONG Flags;
     UCHAR ScanEnable = Dev->ScanEnable;
     NTSTATUS Status;
@@ -489,9 +498,29 @@ BthRadioSetFlag(
     {
         case LOCAL_RADIO_DISCOVERABLE:
             if (*Flags & 0x4)
+            {
+                for (Entry = Dev->DiscoveryOwners.Flink; FileObject && Entry != &Dev->DiscoveryOwners; Entry = Entry->Flink)
+                {
+                    if (CONTAINING_RECORD(Entry, BTHMINI_DISCOVERY_OWNER, Link)->FileObject == FileObject)
+                        break;
+                }
+                if (FileObject && Entry == &Dev->DiscoveryOwners)
+                {
+                    Owner = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Owner), BTHMINI_TAG);
+                    if (!Owner)
+                        return STATUS_INSUFFICIENT_RESOURCES;
+                    if (IsListEmpty(&Dev->DiscoveryOwners))
+                        Dev->DiscoverableBefore = (Dev->ScanEnable & HCI_SCAN_INQUIRY) != 0;
+                    Owner->FileObject = FileObject;
+                    InsertTailList(&Dev->DiscoveryOwners, &Owner->Link);
+                }
                 ScanEnable |= HCI_SCAN_INQUIRY | HCI_SCAN_PAGE;
+            }
             else
+            {
+                BthRadioCleanup(Dev);
                 ScanEnable &= ~HCI_SCAN_INQUIRY;
+            }
             break;
 
         case LOCAL_RADIO_CONNECTABLE:
@@ -502,6 +531,36 @@ BthRadioSetFlag(
             return STATUS_INVALID_PARAMETER;
     }
     return ScanEnable == Dev->ScanEnable ? STATUS_SUCCESS : BthHciWriteScanEnable(Dev, ScanEnable);
+}
+
+VOID
+BthRadioFileClosed(
+    _In_ PBTHMINI_DEVICE Dev,
+    _In_ WDFFILEOBJECT FileObject)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = Dev->DiscoveryOwners.Flink; Entry != &Dev->DiscoveryOwners; Entry = Entry->Flink)
+    {
+        PBTHMINI_DISCOVERY_OWNER Owner = CONTAINING_RECORD(Entry, BTHMINI_DISCOVERY_OWNER, Link);
+
+        if (Owner->FileObject != FileObject)
+            continue;
+        RemoveEntryList(&Owner->Link);
+        ExFreePoolWithTag(Owner, BTHMINI_TAG);
+        if (IsListEmpty(&Dev->DiscoveryOwners) && !Dev->DiscoverableBefore && (Dev->ScanEnable & HCI_SCAN_INQUIRY))
+            BthHciWriteScanEnable(Dev, Dev->ScanEnable & ~HCI_SCAN_INQUIRY);
+        return;
+    }
+}
+
+VOID
+BthRadioCleanup(
+    _In_ PBTHMINI_DEVICE Dev)
+{
+    while (!IsListEmpty(&Dev->DiscoveryOwners))
+        ExFreePoolWithTag(CONTAINING_RECORD(RemoveHeadList(&Dev->DiscoveryOwners), BTHMINI_DISCOVERY_OWNER, Link),
+                          BTHMINI_TAG);
 }
 
 static

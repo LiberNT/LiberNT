@@ -594,6 +594,60 @@ BOOL WINAPI BluetoothIsDiscoverable( HANDLE radio )
     }
 }
 
+#ifdef __REACTOS__
+struct discovery_lease
+{
+    struct list entry;
+    ULONGLONG address;
+    HANDLE handle;
+};
+
+static struct list discovery_leases = LIST_INIT( discovery_leases );
+static SRWLOCK discovery_leases_lock = SRWLOCK_INIT;
+
+static HANDLE discovery_lease( HANDLE radio, BOOL enable )
+{
+    BLUETOOTH_RADIO_INFO info = {.dwSize = sizeof( info )};
+    struct discovery_lease *lease, *found = NULL;
+    HANDLE handle = NULL;
+
+    if (BluetoothGetRadioInfo( radio, &info ))
+        return NULL;
+    AcquireSRWLockExclusive( &discovery_leases_lock );
+    LIST_FOR_EACH_ENTRY( lease, &discovery_leases, struct discovery_lease, entry )
+    {
+        if (lease->address == info.address.ullLong)
+        {
+            found = lease;
+            break;
+        }
+    }
+    if (enable && !found && (found = calloc( 1, sizeof( *found ) )))
+    {
+        found->address = info.address.ullLong;
+        found->handle = ReOpenFile( radio, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0 );
+        if (found->handle == INVALID_HANDLE_VALUE)
+        {
+            free( found );
+            found = NULL;
+        }
+        else
+            list_add_tail( &discovery_leases, &found->entry );
+    }
+    if (found)
+    {
+        handle = found->handle;
+        if (!enable)
+        {
+            list_remove( &found->entry );
+            free( found );
+        }
+    }
+    ReleaseSRWLockExclusive( &discovery_leases_lock );
+    return handle;
+}
+#endif
+
 /*********************************************************************
  *  BluetoothEnableDiscovery
  */
@@ -635,9 +689,24 @@ BOOL WINAPI BluetoothEnableDiscovery( HANDLE radio, BOOL enabled )
 
         params.flag = LOCAL_RADIO_DISCOVERABLE;
         params.enable = !!enabled;
+#ifdef __REACTOS__
+        {
+            HANDLE lease = discovery_lease( radio, enabled );
+
+            if (enabled && !lease)
+                return FALSE;
+            ret = DeviceIoControl( lease ? lease : radio, IOCTL_WINEBTH_RADIO_SET_FLAG, &params, sizeof( params ),
+                                   NULL, 0, &bytes, NULL );
+            if (!ret)
+                ERR("DeviceIoControl failed: %#lx\n", GetLastError());
+            if (!enabled && lease)
+                CloseHandle( lease );
+        }
+#else
         ret = DeviceIoControl( radio, IOCTL_WINEBTH_RADIO_SET_FLAG, &params, sizeof( params ), NULL, 0, &bytes, NULL );
         if (!ret)
             ERR("DeviceIoControl failed: %#lx\n", GetLastError());
+#endif
         return ret;
     }
 }

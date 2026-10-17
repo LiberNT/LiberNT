@@ -958,6 +958,7 @@ BthSdpClientTick(
                 BthSdpClientDetach(Dev, Connection);
         }
         BthSdpRemoveOwnedRecords(Dev, Closed->FileObject);
+        BthRadioFileClosed(Dev, Closed->FileObject);
         WdfObjectDereference(Closed->FileObject);
         ExFreePoolWithTag(Closed, BTHMINI_TAG);
     }

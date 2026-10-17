@@ -431,6 +431,7 @@ BthMiniEvtCleanup(
     BthEnumFlush(Dev);
     BthBrbCleanup(Dev);
     BthSdpCleanup(Dev);
+    BthRadioCleanup(Dev);
 }
 
 static
@@ -510,6 +511,7 @@ BthMiniEvtDeviceAdd(
     InitializeListHead(&Dev->CommandsPending);
     InitializeListHead(&Dev->CommandsSent);
     InitializeListHead(&Dev->Remotes);
+    InitializeListHead(&Dev->DiscoveryOwners);
     InitializeListHead(&Dev->Channels);
     InitializeListHead(&Dev->Sessions);
     InitializeListHead(&Dev->RfcommServers);
