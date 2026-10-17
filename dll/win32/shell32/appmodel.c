@@ -25,14 +25,40 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
 
+extern HINSTANCE shell32_hInstance;
+INT WINAPI Shell_GetCachedImageIndexW(LPCWSTR szPath, INT nIndex, UINT bSimulateDoc);
+
 HRESULT WINAPI SHGetStockIconInfo(SHSTOCKICONID siid, UINT uFlags, SHSTOCKICONINFO *psii)
 {
-    FIXME("(%d, 0x%x, %p): stub\n", siid, uFlags, psii);
+    UINT resource;
 
-    if (psii == NULL || psii->cbSize != sizeof(*psii))
+    TRACE("(%d, 0x%x, %p)\n", siid, uFlags, psii);
+
+    if (psii == NULL || psii->cbSize != sizeof(*psii) || siid < 0 || siid >= SIID_MAX_ICONS)
         return E_INVALIDARG;
 
-    return E_NOTIMPL;
+    resource = (UINT)siid + 1;
+    if (!FindResourceW(shell32_hInstance, MAKEINTRESOURCEW(resource), (LPCWSTR)RT_GROUP_ICON))
+        resource = 1;
+    if (!GetModuleFileNameW(shell32_hInstance, psii->szPath, ARRAYSIZE(psii->szPath)))
+        return HRESULT_FROM_WIN32(GetLastError());
+    psii->iIcon = -(INT)resource;
+    psii->iSysImageIndex = -1;
+    psii->hIcon = NULL;
+
+    if (uFlags & SHGSI_SYSICONINDEX)
+        psii->iSysImageIndex = Shell_GetCachedImageIndexW(psii->szPath, psii->iIcon, 0);
+    if (uFlags & SHGSI_ICON)
+    {
+        BOOL smallicon = (uFlags & SHGSI_SMALLICON) != 0;
+
+        psii->hIcon = LoadImageW(shell32_hInstance, MAKEINTRESOURCEW(resource), IMAGE_ICON,
+                                 GetSystemMetrics(smallicon ? SM_CXSMICON : SM_CXICON),
+                                 GetSystemMetrics(smallicon ? SM_CYSMICON : SM_CYICON), 0);
+        if (!psii->hIcon)
+            return HRESULT_FROM_WIN32(GetLastError());
+    }
+    return S_OK;
 }
 
 HRESULT WINAPI ApplicationAssociationRegistration_Constructor(IUnknown *, REFIID, void **);
