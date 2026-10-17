@@ -310,7 +310,7 @@ IntGetNCUpdateRgn(PWND Window, BOOL Validate)
             GreDeleteObject(Window->hrgnUpdate);
             Window->state &= ~WNDS_UPDATEDIRTY;
             Window->hrgnUpdate = NULL;
-            if (!(Window->state & WNDS_INTERNALPAINT))
+            if (!(Window->state & WNDS_INTERNALPAINT) && (Window->style & WS_VISIBLE))
                MsqDecPaintCountQueue(Window->head.pti);
          }
       }
@@ -523,7 +523,7 @@ co_IntUpdateWindows(PWND Wnd, ULONG Flags, BOOL Recurse)
       {
           Wnd->state &= ~WNDS_INTERNALPAINT;
 
-          if (Wnd->hrgnUpdate == NULL)
+          if (Wnd->hrgnUpdate == NULL && (Wnd->style & WS_VISIBLE))
              MsqDecPaintCountQueue(Wnd->head.pti);
       }
 
@@ -1123,6 +1123,19 @@ IntIsWindowDirty(PWND Wnd)
              Wnd->state & WNDS_INTERNALPAINT ) );
 }
 
+VOID FASTCALL
+IntUpdatePaintCountVisibility(PWND Wnd, BOOL Visible)
+{
+   if (!(Wnd->style & WS_VISIBLE) == !Visible)
+      return;
+   if (Wnd->hrgnUpdate == NULL && !(Wnd->state & WNDS_INTERNALPAINT))
+      return;
+   if (Visible)
+      MsqIncPaintCountQueue(Wnd->head.pti);
+   else
+      MsqDecPaintCountQueue(Wnd->head.pti);
+}
+
 /*
    Conditions to paint any window:
 
@@ -1508,7 +1521,8 @@ IntBeginPaint(PWND Window, PPAINTSTRUCT Ps)
    RECTL_vSetEmptyRect(&rcUpdate);
    if (Window->hrgnUpdate != NULL)
    {
-      MsqDecPaintCountQueue(Window->head.pti);
+      if (Window->style & WS_VISIBLE)
+         MsqDecPaintCountQueue(Window->head.pti);
       IntGdiSetRegionOwner(Window->hrgnUpdate, GDI_OBJ_HMGR_POWNED);
       if (bParentDC)
       {
@@ -1520,7 +1534,7 @@ IntBeginPaint(PWND Window, PPAINTSTRUCT Ps)
    }
    else
    {
-      if (Window->state & WNDS_INTERNALPAINT)
+      if ((Window->state & WNDS_INTERNALPAINT) && (Window->style & WS_VISIBLE))
          MsqDecPaintCountQueue(Window->head.pti);
    }
 

@@ -148,6 +148,8 @@ IntSetStyle( PWND pwnd, ULONG set_bits, ULONG clear_bits )
     styleOld = pwnd->style;
     styleNew = (pwnd->style | set_bits) & ~clear_bits;
     if (styleNew == styleOld) return styleNew;
+    if ((styleOld ^ styleNew) & WS_VISIBLE)
+        IntUpdatePaintCountVisibility(pwnd, (styleNew & WS_VISIBLE) != 0);
     pwnd->style = styleNew;
     if ((styleOld ^ styleNew) & WS_VISIBLE) // State Change.
     {
@@ -642,6 +644,7 @@ LRESULT co_UserFreeWindow(PWND Window,
       }
 
       Window->state2 |= WNDS2_INDESTROY;
+      IntUpdatePaintCountVisibility(Window, FALSE);
       Window->style &= ~WS_VISIBLE;
       IntUipiFreeWindowFilters(Window);
       Window->head.pti->cVisWindows--;
@@ -775,7 +778,8 @@ LRESULT co_UserFreeWindow(PWND Window,
    //// Now kill those remaining "PAINTING BUG: Thread marked as containing dirty windows" spam!!!
    if ( Window->hrgnUpdate != NULL || Window->state & WNDS_INTERNALPAINT )
    {
-      MsqDecPaintCountQueue(Window->head.pti);
+      if (Window->style & WS_VISIBLE)
+         MsqDecPaintCountQueue(Window->head.pti);
       if (Window->hrgnUpdate > HRGN_WINDOW && GreIsHandleValid(Window->hrgnUpdate))
       {
          IntGdiSetRegionOwner(Window->hrgnUpdate, GDI_OBJ_HMGR_POWNED);
@@ -4274,6 +4278,7 @@ co_IntSetWindowLongPtr(HWND hWnd, DWORD Index, LONG_PTR NewValue, BOOL Ansi, ULO
                if (Style.styleOld & WS_VISIBLE) Window->head.pti->cVisWindows--;
                if (Style.styleNew & WS_VISIBLE) Window->head.pti->cVisWindows++;
                DceResetActiveDCEs( Window );
+               IntUpdatePaintCountVisibility(Window, (Style.styleNew & WS_VISIBLE) != 0);
             }
             Window->style = (DWORD)Style.styleNew;
 

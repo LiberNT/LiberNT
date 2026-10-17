@@ -1685,6 +1685,7 @@ IntHideDesktop(PDESKTOP Desktop)
     {
         return ERROR_INVALID_WINDOW_HANDLE;
     }
+    IntUpdatePaintCountVisibility(DesktopWnd, FALSE);
     DesktopWnd->style &= ~WS_VISIBLE;
 
     return STATUS_SUCCESS;

@@ -2076,6 +2076,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
       if (UserIsDesktopWindow(Window->spwndParent))
          co_IntShellHookNotify(HSHELL_WINDOWDESTROYED, (WPARAM)UserHMGetHandle(Window), 0);
 
+      IntUpdatePaintCountVisibility(Window, FALSE);
       Window->style &= ~WS_VISIBLE; //IntSetStyle( Window, 0, WS_VISIBLE );
       Window->head.pti->cVisWindows--;
       IntNotifyWinEvent(EVENT_OBJECT_HIDE, Window, OBJID_WINDOW, CHILDID_SELF, WEF_SETBYWNDPTI);
@@ -2104,6 +2105,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
          }
       }
 
+      IntUpdatePaintCountVisibility(Window, TRUE);
       Window->style |= WS_VISIBLE; //IntSetStyle( Window, WS_VISIBLE, 0 );
       Window->head.pti->cVisWindows++;
       IntNotifyWinEvent(EVENT_OBJECT_SHOW, Window, OBJID_WINDOW, CHILDID_SELF, WEF_SETBYWNDPTI);
