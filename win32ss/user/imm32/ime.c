@@ -650,7 +650,7 @@ ImmGetDescriptionA(
 
     if (!ImmGetImeInfoEx(&info, ImeInfoExKeyboardLayout, &hKL))
     {
-        ERR("\n");
+        TRACE("%p is not an IME layout\n", hKL);
         return 0;
     }
 
@@ -678,7 +678,7 @@ ImmGetDescriptionW(
 
     if (!IS_IME_HKL(hKL) || !ImmGetImeInfoEx(&info, ImeInfoExKeyboardLayout, &hKL))
     {
-        ERR("\n");
+        TRACE("%p is not an IME layout\n", hKL);
         return 0;
     }
 
