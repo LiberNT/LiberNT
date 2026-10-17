@@ -363,7 +363,7 @@ SonyHid_SendOutputReport(
     if (!Irp)
         return STATUS_INSUFFICIENT_RESOURCES;
 
-    Irp->UserBuffer = Report;
+    Irp->AssociatedIrp.SystemBuffer = Report;
     Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
 
     IoStack = IoGetNextIrpStackLocation(Irp);
