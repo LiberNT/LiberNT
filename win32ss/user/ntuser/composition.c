@@ -216,6 +216,8 @@ IntCompositionCornerRadius(_In_ PWND Wnd)
         case DWM_CORNER_ROUNDSMALL:
             return DWM_CORNER_RADIUS_SMALL_96 * Dpi / 96;
         default:
+            if (Wnd->fnid == FNID_MENU)
+                return DWM_CORNER_RADIUS_SMALL_96 * Dpi / 96;
             return (Wnd->style & WS_CAPTION) == WS_CAPTION && AtomDwmThemedFrame != 0 &&
                    UserGetProp(Wnd, AtomDwmThemedFrame, FALSE) != NULL ?
                    DWM_CORNER_RADIUS_96 * Dpi / 96 : 0;

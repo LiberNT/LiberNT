@@ -75,6 +75,10 @@ BOOL fInEndMenu = FALSE;
 #define MENU_BAR_ITEMS_SPACE (12)
 #define SEPARATOR_HEIGHT (5)
 #define MENU_TAB_SPACE (8)
+#define MENU_POPUP_INSET (4)
+#define MENU_POPUP_VPAD (4)
+#define MENU_POPUP_ITEM_PAD (12)
+#define MENU_POPUP_RADIUS (4)
 
 typedef struct
 {
@@ -1845,6 +1849,11 @@ IntGetDialogBaseUnits(VOID)
  *
  * Calculate the size of the menu item and store it in lpitem->rect.
  */
+static INT FASTCALL MENU_Scale(INT Value)
+{
+    return EngMulDiv(Value, (gpsi && gpsi->dmLogPixels) ? gpsi->dmLogPixels : 96, 96);
+}
+
 static void FASTCALL MENU_CalcItemSize( HDC hdc, PITEM lpitem, PMENU Menu, PWND pwndOwner,
                  INT orgX, INT orgY, BOOL menuBar, BOOL textandbmp)
 {
@@ -1999,7 +2008,7 @@ static void FASTCALL MENU_CalcItemSize( HDC hdc, PITEM lpitem, PMENU Menu, PWND 
             }
             lpitem->cxItem  += 2 + txtwidth;
             itemheight = max( itemheight,
-				    max( txtheight + 2, MenuCharSize.cy + 4));
+				    max( txtheight + 2, MenuCharSize.cy + MENU_Scale(MENU_POPUP_ITEM_PAD)));
         }
         if (hfontOld)
         {
@@ -2058,7 +2067,7 @@ static void FASTCALL MENU_PopupMenuCalcSize(PMENU Menu, PWND WndOwner)
       orgX = maxX;
       if( lpitem->fType & (MF_MENUBREAK | MF_MENUBARBREAK))
           orgX += MENU_COL_SPACE;
-      orgY = 0;
+      orgY = MENU_Scale(MENU_POPUP_VPAD);
 
       maxTab = maxTabWidth = 0;
       /* Parse items until column break or end of menu */
@@ -2086,7 +2095,7 @@ static void FASTCALL MENU_PopupMenuCalcSize(PMENU Menu, PWND WndOwner)
            if (IS_STRING_ITEM(lpitem->fType) && lpitem->dxTab)
                lpitem->dxTab = maxTab;
       }
-      Menu->cyMenu = max(Menu->cyMenu, orgY);
+      Menu->cyMenu = max(Menu->cyMenu, orgY + MENU_Scale(MENU_POPUP_VPAD));
     }
 
     Menu->cxMenu  = maxX;
@@ -2264,6 +2273,27 @@ static void FASTCALL MENU_FillFlatPopupBack(HDC hdc, const RECT *prc, INT cyTota
     NtGdiSelectPen(hdc, oldPen);
 }
 
+static void FASTCALL MENU_FillPopupHilite(HDC hdc, const RECT *prc, HBRUSH hilite, BOOL flat, INT cyTotal)
+{
+    RECT pill = *prc;
+    INT radius = MENU_Scale(MENU_POPUP_RADIUS) * 2;
+    HBRUSH oldBrush;
+    HPEN oldPen;
+
+    if (flat)
+        MENU_FillFlatPopupBack(hdc, prc, cyTotal);
+    else
+        FillRect(hdc, prc, IntGetSysColorBrush(COLOR_MENU));
+    RECTL_vInflateRect(&pill, -MENU_Scale(MENU_POPUP_INSET), -MENU_Scale(1));
+    oldBrush = NtGdiSelectBrush(hdc, hilite);
+    oldPen = NtGdiSelectPen(hdc, NtGdiGetStockObject(NULL_PEN));
+    NtGdiRoundRect(hdc, pill.left, pill.top, pill.right + 1, pill.bottom + 1, radius, radius);
+    if (oldPen)
+        NtGdiSelectPen(hdc, oldPen);
+    if (oldBrush)
+        NtGdiSelectBrush(hdc, oldBrush);
+}
+
 static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC hdc,
                  PITEM lpitem, UINT Height, BOOL menuBar, UINT odaction)
 {
@@ -2380,7 +2410,11 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
 
     if (lpitem->fState & MF_HILITE)
     {
-        if (flat_menu)
+        if (flat_menu && !menuBar)
+        {
+            MENU_FillPopupHilite(hdc, &rect, IntGetSysColorBrush(COLOR_MENUHILIGHT), TRUE, Height);
+        }
+        else if (flat_menu)
         {
             RECTL_vInflateRect (&rect, -1, -1);
             FillRect(hdc, &rect, IntGetSysColorBrush(COLOR_MENUHILIGHT));
@@ -2396,7 +2430,7 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
             }
             else
             {
-                FillRect(hdc, &rect, IntGetSysColorBrush(COLOR_HIGHLIGHT));
+                MENU_FillPopupHilite(hdc, &rect, IntGetSysColorBrush(COLOR_HIGHLIGHT), FALSE, Height);
             }
         }
     }
@@ -2437,8 +2471,8 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
         HPEN oldPen;
         RECT rc = rect;
 
-        rc.left++;
-        rc.right--;
+        rc.left += menuBar ? 1 : MENU_Scale(MENU_POPUP_INSET * 2);
+        rc.right -= menuBar ? 1 : MENU_Scale(MENU_POPUP_INSET * 2);
         rc.top = (rc.top + rc.bottom) / 2 - 1;
         if (flat_menu)
         {
