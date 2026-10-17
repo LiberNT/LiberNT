@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT user32
  * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
- * PURPOSE:     Desktop wallpaper transcoding for image formats win32k cannot load
+ * PURPOSE:     Desktop wallpaper decoding for image formats win32k cannot load
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -12,13 +12,15 @@
 
 typedef GpStatus (WINGDIPAPI *PGDIPLUS_STARTUP)(ULONG_PTR*, const struct GdiplusStartupInput*, struct GdiplusStartupOutput*);
 typedef VOID (WINGDIPAPI *PGDIPLUS_SHUTDOWN)(ULONG_PTR);
-typedef GpStatus (WINGDIPAPI *PGDIP_LOAD_IMAGE)(GDIPCONST WCHAR*, GpImage**);
+typedef GpStatus (WINGDIPAPI *PGDIP_CREATE_BITMAP_FROM_FILE)(GDIPCONST WCHAR*, GpBitmap**);
 typedef GpStatus (WINGDIPAPI *PGDIP_DISPOSE_IMAGE)(GpImage*);
+typedef GpStatus (WINGDIPAPI *PGDIP_GET_IMAGE_SIZE)(GpImage*, UINT*);
+typedef GpStatus (WINGDIPAPI *PGDIP_LOCK_BITS)(GpBitmap*, GDIPCONST GpRect*, UINT, PixelFormat, BitmapData*);
+typedef GpStatus (WINGDIPAPI *PGDIP_UNLOCK_BITS)(GpBitmap*, BitmapData*);
+typedef GpStatus (WINGDIPAPI *PGDIP_GET_RAW_FORMAT)(GpImage*, GUID*);
 typedef GpStatus (WINGDIPAPI *PGDIP_ENCODERS_SIZE)(UINT*, UINT*);
 typedef GpStatus (WINGDIPAPI *PGDIP_ENCODERS)(UINT, UINT, ImageCodecInfo*);
 typedef GpStatus (WINGDIPAPI *PGDIP_SAVE_IMAGE)(GpImage*, GDIPCONST WCHAR*, GDIPCONST CLSID*, GDIPCONST EncoderParameters*);
-
-static const WCHAR DesktopKey[] = L"Control Panel\\Desktop";
 
 static
 BOOL
@@ -67,149 +69,138 @@ UserIsBitmapFile(
 }
 
 static
-BOOL
-UserGetBitmapEncoder(
-    _In_ HMODULE Gdiplus,
-    _Out_ CLSID* Encoder)
+HBITMAP
+UserCreateWallpaperBitmap(
+    _In_ const BitmapData* Data)
 {
+    BITMAPINFO Info = { { 0 } };
+    HBITMAP Bitmap;
+    HDC Dc;
+
+    Info.bmiHeader.biSize = sizeof(Info.bmiHeader);
+    Info.bmiHeader.biWidth = Data->Width;
+    Info.bmiHeader.biHeight = -(LONG)Data->Height;
+    Info.bmiHeader.biPlanes = 1;
+    Info.bmiHeader.biBitCount = 32;
+    Info.bmiHeader.biCompression = BI_RGB;
+
+    Dc = GetDC(NULL);
+    if (!Dc)
+        return NULL;
+    Bitmap = CreateDIBitmap(Dc, &Info.bmiHeader, CBM_INIT, Data->Scan0, &Info, DIB_RGB_COLORS);
+    ReleaseDC(NULL, Dc);
+    return Bitmap;
+}
+
+static
+VOID
+UserSaveTranscodedWallpaper(
+    _In_ HMODULE Gdiplus,
+    _In_ GpImage* Image,
+    _In_ PCWSTR Transcoded)
+{
+    PGDIP_GET_RAW_FORMAT GetRawFormat = (PGDIP_GET_RAW_FORMAT)GetProcAddress(Gdiplus, "GdipGetImageRawFormat");
     PGDIP_ENCODERS_SIZE GetSize = (PGDIP_ENCODERS_SIZE)GetProcAddress(Gdiplus, "GdipGetImageEncodersSize");
     PGDIP_ENCODERS GetEncoders = (PGDIP_ENCODERS)GetProcAddress(Gdiplus, "GdipGetImageEncoders");
+    PGDIP_SAVE_IMAGE SaveImage = (PGDIP_SAVE_IMAGE)GetProcAddress(Gdiplus, "GdipSaveImageToFile");
     ImageCodecInfo* Codecs;
     UINT Count = 0, Size = 0, Index;
-    BOOL Found = FALSE;
+    GUID Format;
 
-    if (!GetSize || !GetEncoders || GetSize(&Count, &Size) != Ok || Size == 0)
-        return FALSE;
+    if (!GetRawFormat || !GetSize || !GetEncoders || !SaveImage ||
+        GetRawFormat(Image, &Format) != Ok || GetSize(&Count, &Size) != Ok || Size == 0)
+    {
+        return;
+    }
 
     Codecs = HeapAlloc(GetProcessHeap(), 0, Size);
     if (!Codecs)
-        return FALSE;
+        return;
 
     if (GetEncoders(Count, Size, Codecs) == Ok)
     {
         for (Index = 0; Index < Count; Index++)
         {
-            if (Codecs[Index].MimeType && lstrcmpiW(Codecs[Index].MimeType, L"image/bmp") == 0)
+            if (IsEqualGUID(&Codecs[Index].FormatID, &Format))
             {
-                *Encoder = Codecs[Index].Clsid;
-                Found = TRUE;
+                SetFileAttributesW(Transcoded, FILE_ATTRIBUTE_NORMAL);
+                SaveImage(Image, Transcoded, &Codecs[Index].Clsid, NULL);
                 break;
             }
         }
     }
 
     HeapFree(GetProcessHeap(), 0, Codecs);
-    return Found;
 }
 
-static
-VOID
-UserCountTranscodedWallpaper(VOID)
-{
-    HKEY Key;
-    DWORD Count = 0, Size = sizeof(Count), Type;
-
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, DesktopKey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &Key) != ERROR_SUCCESS)
-        return;
-    if (RegQueryValueExW(Key, L"TranscodedImageCount", NULL, &Type, (PBYTE)&Count, &Size) != ERROR_SUCCESS ||
-        Type != REG_DWORD)
-    {
-        Count = 0;
-    }
-    Count++;
-    RegSetValueExW(Key, L"TranscodedImageCount", 0, REG_DWORD, (PBYTE)&Count, sizeof(Count));
-    RegCloseKey(Key);
-}
-
-BOOL
-UserTranscodeWallpaper(
+HBITMAP
+UserLoadWallpaperBitmap(
     _In_ PCWSTR Source,
-    _Out_writes_(MAX_PATH) PWSTR Transcoded)
+    _In_ UINT WinIni)
 {
     PGDIPLUS_STARTUP Startup;
     PGDIPLUS_SHUTDOWN Shutdown;
-    PGDIP_LOAD_IMAGE LoadImage;
+    PGDIP_CREATE_BITMAP_FROM_FILE CreateBitmap;
     PGDIP_DISPOSE_IMAGE DisposeImage;
-    PGDIP_SAVE_IMAGE SaveImage;
+    PGDIP_GET_IMAGE_SIZE GetWidth, GetHeight;
+    PGDIP_LOCK_BITS LockBits;
+    PGDIP_UNLOCK_BITS UnlockBits;
     struct GdiplusStartupInput Input = { 1, NULL, FALSE, FALSE };
+    WCHAR Transcoded[MAX_PATH];
     ULONG_PTR Token = 0;
-    GpImage* Image = NULL;
+    GpBitmap* Image = NULL;
+    BitmapData Data;
+    GpRect Rect;
     HMODULE Gdiplus;
-    CLSID Encoder;
-    BOOL Readable, Saved = FALSE;
+    HBITMAP Bitmap = NULL;
+    UINT Width, Height;
+    BOOL Readable;
 
-    if (!Source || !*Source || UserIsBitmapFile(Source, &Readable) || !Readable)
-        return FALSE;
-    if (!UserGetTranscodedWallpaperPath(Transcoded, TRUE) || lstrcmpiW(Source, Transcoded) == 0)
-        return FALSE;
+    if (!*Source || UserIsBitmapFile(Source, &Readable) || !Readable)
+        return NULL;
 
     Gdiplus = LoadLibraryW(L"gdiplus.dll");
     if (!Gdiplus)
-        return FALSE;
+        return NULL;
 
     Startup = (PGDIPLUS_STARTUP)GetProcAddress(Gdiplus, "GdiplusStartup");
     Shutdown = (PGDIPLUS_SHUTDOWN)GetProcAddress(Gdiplus, "GdiplusShutdown");
-    LoadImage = (PGDIP_LOAD_IMAGE)GetProcAddress(Gdiplus, "GdipLoadImageFromFile");
+    CreateBitmap = (PGDIP_CREATE_BITMAP_FROM_FILE)GetProcAddress(Gdiplus, "GdipCreateBitmapFromFile");
     DisposeImage = (PGDIP_DISPOSE_IMAGE)GetProcAddress(Gdiplus, "GdipDisposeImage");
-    SaveImage = (PGDIP_SAVE_IMAGE)GetProcAddress(Gdiplus, "GdipSaveImageToFile");
+    GetWidth = (PGDIP_GET_IMAGE_SIZE)GetProcAddress(Gdiplus, "GdipGetImageWidth");
+    GetHeight = (PGDIP_GET_IMAGE_SIZE)GetProcAddress(Gdiplus, "GdipGetImageHeight");
+    LockBits = (PGDIP_LOCK_BITS)GetProcAddress(Gdiplus, "GdipBitmapLockBits");
+    UnlockBits = (PGDIP_UNLOCK_BITS)GetProcAddress(Gdiplus, "GdipBitmapUnlockBits");
 
-    if (Startup && Shutdown && LoadImage && DisposeImage && SaveImage &&
+    if (Startup && Shutdown && CreateBitmap && DisposeImage && GetWidth && GetHeight && LockBits && UnlockBits &&
         Startup(&Token, &Input, NULL) == Ok)
     {
-        if (LoadImage(Source, &Image) == Ok)
+        if (CreateBitmap(Source, &Image) == Ok)
         {
-            Saved = UserGetBitmapEncoder(Gdiplus, &Encoder) &&
-                    SaveImage(Image, Transcoded, &Encoder, NULL) == Ok;
-            DisposeImage(Image);
+            if (GetWidth((GpImage*)Image, &Width) == Ok && GetHeight((GpImage*)Image, &Height) == Ok &&
+                Width && Height && Width <= MAXLONG / 4 && Height <= MAXLONG)
+            {
+                Rect.X = 0;
+                Rect.Y = 0;
+                Rect.Width = Width;
+                Rect.Height = Height;
+                if (LockBits(Image, &Rect, ImageLockModeRead, PixelFormat32bppRGB, &Data) == Ok)
+                {
+                    if (Data.Stride == (INT)(Width * 4))
+                        Bitmap = UserCreateWallpaperBitmap(&Data);
+                    UnlockBits(Image, &Data);
+                }
+            }
+            if (Bitmap && (WinIni & SPIF_UPDATEINIFILE) && UserGetTranscodedWallpaperPath(Transcoded, TRUE) &&
+                lstrcmpiW(Source, Transcoded) != 0)
+            {
+                UserSaveTranscodedWallpaper(Gdiplus, (GpImage*)Image, Transcoded);
+            }
+            DisposeImage((GpImage*)Image);
         }
         Shutdown(Token);
     }
 
     FreeLibrary(Gdiplus);
-    if (Saved)
-        UserCountTranscodedWallpaper();
-    return Saved;
-}
-
-VOID
-UserStoreWallpaperSource(
-    _In_ PCWSTR Source,
-    _In_ UINT WinIni)
-{
-    HKEY Key;
-
-    if (!(WinIni & SPIF_UPDATEINIFILE))
-        return;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, DesktopKey, 0, KEY_SET_VALUE, &Key) != ERROR_SUCCESS)
-        return;
-    RegSetValueExW(Key, L"Wallpaper", 0, REG_SZ, (const BYTE*)Source,
-                   (DWORD)(wcslen(Source) + 1) * sizeof(WCHAR));
-    RegCloseKey(Key);
-}
-
-VOID
-UserMapWallpaperSource(
-    _Inout_updates_(Capacity) PWSTR Wallpaper,
-    _In_ UINT Capacity)
-{
-    WCHAR Transcoded[MAX_PATH];
-    WCHAR Source[MAX_PATH];
-    DWORD Size = sizeof(Source), Type;
-    HKEY Key;
-
-    if (!Wallpaper || !Capacity || !UserGetTranscodedWallpaperPath(Transcoded, FALSE) ||
-        lstrcmpiW(Wallpaper, Transcoded) != 0)
-    {
-        return;
-    }
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, DesktopKey, 0, KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
-        return;
-    if (RegQueryValueExW(Key, L"Wallpaper", NULL, &Type, (PBYTE)Source, &Size) == ERROR_SUCCESS &&
-        (Type == REG_SZ || Type == REG_EXPAND_SZ) && Size >= sizeof(WCHAR))
-    {
-        Source[ARRAYSIZE(Source) - 1] = UNICODE_NULL;
-        if (Source[0] && lstrcmpiW(Source, Transcoded) != 0)
-            StringCchCopyW(Wallpaper, Capacity, Source);
-    }
-    RegCloseKey(Key);
+    return Bitmap;
 }

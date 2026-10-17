@@ -345,8 +345,6 @@ RealSystemParametersInfoA(UINT uiAction,
         ANSI_STRING astrWallpaper;
 
         Ret = NtUserSystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, awc, fWinIni);
-        if (Ret)
-            UserMapWallpaperSource(awc, MAX_PATH);
         RtlInitUnicodeString(&ustrWallpaper, awc);
         RtlInitEmptyAnsiString(&astrWallpaper, pvParam, uiParam);
         RtlUnicodeStringToAnsiString(&astrWallpaper, &ustrWallpaper, FALSE);
@@ -454,26 +452,18 @@ RealSystemParametersInfoW(UINT uiAction,
     case SPI_SETDESKWALLPAPER:
       {
           UNICODE_STRING ustrWallpaper;
-          WCHAR Transcoded[MAX_PATH];
-
-          if (pvParam && UserTranscodeWallpaper(pvParam, Transcoded))
-          {
-              RtlInitUnicodeString(&ustrWallpaper, Transcoded);
-              if (!NtUserSystemParametersInfo(SPI_SETDESKWALLPAPER, uiParam, &ustrWallpaper, fWinIni))
-                  return FALSE;
-              UserStoreWallpaperSource(pvParam, fWinIni);
-              return TRUE;
-          }
+          HBITMAP Bitmap;
 
           RtlInitUnicodeString(&ustrWallpaper, pvParam);
+          Bitmap = pvParam ? UserLoadWallpaperBitmap(pvParam, fWinIni) : NULL;
+          if (Bitmap)
+          {
+              if (NtUserSystemParametersInfo(SPI_ROS_SETDESKWALLPAPERBITMAP, HandleToUlong(Bitmap), &ustrWallpaper, fWinIni))
+                  return TRUE;
+              DeleteObject(Bitmap);
+          }
           return NtUserSystemParametersInfo(SPI_SETDESKWALLPAPER, uiParam, &ustrWallpaper, fWinIni);
       }
-
-    case SPI_GETDESKWALLPAPER:
-      if (!NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni))
-          return FALSE;
-      UserMapWallpaperSource(pvParam, uiParam);
-      return TRUE;
   }
   return NtUserSystemParametersInfo(uiAction, uiParam, pvParam, fWinIni);
 }
