@@ -54,6 +54,7 @@ typedef struct _FDO_EXTENSION
     SINGLE_LIST_ENTRY PartitionList;
     UINT32 EnumeratedPartitionsTotal;
     BOOLEAN IsSuperFloppy;
+    volatile LONG VerifyGeneration;
 
     struct {
         UINT64 DiskSize;
@@ -107,6 +108,7 @@ typedef struct _PARTITION_EXTENSION
     UINT64 StartingOffset;
     UINT64 PartitionLength;
     SINGLE_LIST_ENTRY ListEntry;
+    volatile LONG VerifyGeneration;
 
     UINT32 VolumeNumber; // Volume number in the "\Device\HarddiskVolumeN" device name
     UINT32 DetectedNumber;

@@ -1723,6 +1723,39 @@ PartMgrReadWriteCompletion(
 
 static
 NTSTATUS
+PartitionCheckVerify(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp)
+{
+    PPARTITION_EXTENSION partExt = DeviceObject->DeviceExtension;
+    PFDO_EXTENSION fdoExtension = partExt->LowerDevice->DeviceExtension;
+    PDEVICE_OBJECT diskDevice = fdoExtension->LowerDevice;
+    LONG generation;
+
+    if (diskDevice->Flags & DO_VERIFY_VOLUME)
+    {
+        InterlockedAnd((PLONG)&diskDevice->Flags, ~DO_VERIFY_VOLUME);
+        InterlockedIncrement(&fdoExtension->VerifyGeneration);
+    }
+
+    generation = fdoExtension->VerifyGeneration;
+    if (InterlockedExchange(&partExt->VerifyGeneration, generation) != generation &&
+        DeviceObject->Vpb != NULL &&
+        (DeviceObject->Vpb->Flags & VPB_MOUNTED))
+    {
+        InterlockedOr((PLONG)&DeviceObject->Flags, DO_VERIFY_VOLUME);
+    }
+
+    if (!(DeviceObject->Flags & DO_VERIFY_VOLUME))
+        return STATUS_SUCCESS;
+
+    if (Irp->Tail.Overlay.Thread != NULL)
+        IoSetHardErrorOrVerifyDevice(Irp, DeviceObject);
+    return STATUS_VERIFY_REQUIRED;
+}
+
+static
+NTSTATUS
 NTAPI
 PartMgrReadWrite(
     _In_ PDEVICE_OBJECT DeviceObject,
@@ -1748,6 +1781,13 @@ PartMgrReadWrite(
              length > partExt->PartitionLength - offset))
         {
             return PartMgrFailIrp(Irp, STATUS_INVALID_PARAMETER);
+        }
+
+        if (!(ioStack->Flags & SL_OVERRIDE_VERIFY_VOLUME))
+        {
+            NTSTATUS status = PartitionCheckVerify(DeviceObject, Irp);
+            if (!NT_SUCCESS(status))
+                return PartMgrFailIrp(Irp, status);
         }
 
         ioStack->Parameters.Read.ByteOffset.QuadPart += partExt->StartingOffset;

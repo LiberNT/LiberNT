@@ -65,6 +65,7 @@ PartitionCreateDevice(
 
     partExt->DeviceObject = partitionDevice;
     partExt->LowerDevice = FDObject;
+    partExt->VerifyGeneration = ((PFDO_EXTENSION)FDObject->DeviceExtension)->VerifyGeneration;
     ObReferenceObject(FDObject);
     IoInitializeRemoveLock(&partExt->RemoveLock, TAG_PARTMGR, 0, 0);
 
