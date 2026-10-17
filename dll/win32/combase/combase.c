@@ -1057,6 +1057,7 @@ HRESULT WINAPI CoCreateGuid(GUID *guid)
 
 #ifdef __REACTOS__
 DWORD com_default_imp_level = RPC_C_IMP_LEVEL_IDENTIFY;
+static LONG com_security_initialized;
 
 #endif
 /******************************************************************************
@@ -1199,6 +1200,21 @@ HRESULT WINAPI CoInitializeSecurity(PSECURITY_DESCRIPTOR sd, LONG cAuthSvc,
         SOLE_AUTHENTICATION_SERVICE *asAuthSvc, void *reserved1, DWORD authn_level,
         DWORD imp_level, void *reserved2, DWORD capabilities, void *reserved3)
 {
+#ifdef __REACTOS__
+    TRACE("%p, %ld, %p, %p, %ld, %ld, %p, %ld, %p\n", sd, cAuthSvc, asAuthSvc, reserved1, authn_level,
+          imp_level, reserved2, capabilities, reserved3);
+
+    if (InterlockedCompareExchange(&com_security_initialized, TRUE, FALSE))
+        return RPC_E_TOO_LATE;
+
+    if (sd || authn_level > RPC_C_AUTHN_LEVEL_NONE || capabilities != EOAC_NONE)
+        FIXME("security descriptor %p, authentication level %ld and capabilities %#lx are not enforced\n",
+              sd, authn_level, capabilities);
+
+    if (imp_level >= RPC_C_IMP_LEVEL_ANONYMOUS && imp_level <= RPC_C_IMP_LEVEL_DELEGATE)
+        com_default_imp_level = imp_level;
+    return S_OK;
+#else
     static LONG warned;
 
     if (!InterlockedCompareExchange(&warned, 1, 0))
@@ -1208,11 +1224,8 @@ HRESULT WINAPI CoInitializeSecurity(PSECURITY_DESCRIPTOR sd, LONG cAuthSvc,
         TRACE("%p, %ld, %p, %p, %ld, %ld, %p, %ld, %p stub\n", sd, cAuthSvc, asAuthSvc, reserved1, authn_level,
               imp_level, reserved2, capabilities, reserved3);
 
-#ifdef __REACTOS__
-    if (imp_level >= RPC_C_IMP_LEVEL_ANONYMOUS && imp_level <= RPC_C_IMP_LEVEL_DELEGATE)
-        com_default_imp_level = imp_level;
-#endif
     return S_OK;
+#endif
 }
 
 /***********************************************************************
