@@ -610,12 +610,8 @@ if(PREINSTALL_WINE_GECKO)
     endwhile()
 endif()
 
-set(_wine_mono_default OFF)
-if(ARCH MATCHES "^(i386|amd64|arm64)$")
-    set(_wine_mono_default ON)
-endif()
 option(PREINSTALL_WINE_MONO
-       "Preinstall the Wine Mono runtime that mscoree uses in the preinstalled disk image" ${_wine_mono_default})
+       "Preinstall the Wine Mono runtime that mscoree uses in the preinstalled disk image" OFF)
 if(PREINSTALL_WINE_MONO)
     set(_wine_mono_version 11.3.0)
     if(ARCH STREQUAL "arm64")
