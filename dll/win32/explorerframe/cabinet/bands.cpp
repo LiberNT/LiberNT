@@ -30,6 +30,7 @@ CabinetGetPalette(CabinetPalette *palette)
 
     palette->Window = window;
     palette->Band = BlendColor(window, text, 7);
+    palette->BandShade = BlendColor(palette->Band, RGB(0, 0, 0), 14);
     palette->BandLine = BlendColor(window, text, 15);
     palette->BandBottom = BlendColor(window, text, 34);
     palette->Box = BlendColor(window, text, 2);
@@ -280,8 +281,19 @@ CCabinetTabBand::CCabinetTabBand() :
     m_PressedTab(-1),
     m_PressedClose(FALSE),
     m_PressedNew(FALSE),
-    m_Font(NULL)
+    m_Font(NULL),
+    m_ShadeBottom(0)
 {
+}
+
+void
+CCabinetTabBand::SetShadeBottom(int bottom)
+{
+    if (bottom == m_ShadeBottom)
+        return;
+    m_ShadeBottom = bottom;
+    if (m_hwnd)
+        InvalidateRect(m_hwnd, NULL, FALSE);
 }
 
 BOOL
@@ -550,7 +562,11 @@ CCabinetTabBand::Paint(HDC dc)
             {
                 Gdiplus::GraphicsPath fillPath(Gdiplus::FillModeAlternate);
                 Gdiplus::GraphicsPath edgePath(Gdiplus::FillModeAlternate);
-                Gdiplus::SolidBrush fill(GlassColor(255, palette.Band));
+                Gdiplus::LinearGradientBrush fill(Gdiplus::PointF(0.0f, 0.0f),
+                                                  Gdiplus::PointF(0.0f, (float)max(m_ShadeBottom, height) + 1.0f),
+                                                  GlassColor(255, palette.Band),
+                                                  GlassColor(255, IsAppThemed() && m_ShadeBottom > 0 ?
+                                                                     palette.BandShade : palette.Band));
                 Gdiplus::Pen border(GlassColor(255, palette.TabBorder), 1.0f);
 
                 TabOutline(fillPath, left, top + 0.5f, right, bottom + 1.0f, radius, foot, TRUE);

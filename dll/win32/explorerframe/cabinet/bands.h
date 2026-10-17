@@ -12,6 +12,7 @@
 struct CabinetPalette
 {
     COLORREF Band;
+    COLORREF BandShade;
     COLORREF BandLine;
     COLORREF BandBottom;
     COLORREF Box;
@@ -82,6 +83,7 @@ public:
 
     BOOL Create(HWND parent, ICabinetBandHost *host, HFONT font);
     void SetTabs(const CabinetTabItem *tabs, int count, int active);
+    void SetShadeBottom(int bottom);
 
 protected:
     LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
@@ -115,6 +117,7 @@ private:
     BOOL m_PressedClose;
     BOOL m_PressedNew;
     HFONT m_Font;
+    int m_ShadeBottom;
 };
 
 class CCabinetAddressBand : public CCabinetBand

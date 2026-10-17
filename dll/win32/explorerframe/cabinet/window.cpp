@@ -492,6 +492,18 @@ CCabinetWindow::PaintBackground(HDC dc)
         FillRect(dc, &rc, brush);
         DeleteObject(brush);
     }
+    if (IsAppThemed())
+    {
+        Gdiplus::Graphics graphics(dc);
+        Gdiplus::LinearGradientBrush shade(Gdiplus::PointF(0.0f, 0.0f),
+                                           Gdiplus::PointF(0.0f, (float)(AddressBottom() - 1) + 1.0f),
+                                           Gdiplus::Color(255, GetRValue(palette.Band), GetGValue(palette.Band),
+                                                          GetBValue(palette.Band)),
+                                           Gdiplus::Color(255, GetRValue(palette.BandShade),
+                                                          GetGValue(palette.BandShade), GetBValue(palette.BandShade)));
+
+        graphics.FillRectangle(&shade, 0, TabStripHeight(), (INT)client.right, AddressBottom() - 1 - TabStripHeight());
+    }
     if (m_Status && IsWindowVisible(m_Status))
     {
         RECT status;
@@ -550,6 +562,7 @@ CCabinetWindow::OnSize()
     GetClientRect(m_hwnd, &client);
     MoveWindow(m_TabBand->Window(), 0, 0, max(0, (int)client.right - CaptionButtonsWidth() - Scale(8)), TabStripHeight(),
                TRUE);
+    m_TabBand->SetShadeBottom(AddressBottom() - 1);
     size = ToolbarSize(m_NavBar);
     MoveWindow(m_NavBar, Scale(3), TabStripHeight() + Scale(8) + (Scale(32) - size.cy) / 2, size.cx, size.cy, TRUE);
     left = Scale(3) + size.cx + Scale(6);
