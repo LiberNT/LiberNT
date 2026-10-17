@@ -30,6 +30,7 @@ set(COMPAT_RUNTIME_MODULES
     compstui
     credui
     crypt32
+    cryptbase
     cryptnet
     cryptsp
     cryptui
@@ -65,6 +66,7 @@ set(COMPAT_RUNTIME_MODULES
     dxva2
     evr
     explorerframe
+    faultrep
     fmifs
     fontsub
     gdi32
