@@ -145,6 +145,8 @@ struct screen_buffer
     struct vt_state       *vt;
     struct cell_color     *colors;
     unsigned int           vt_cursor_size;
+    unsigned char         *wrapped;
+    unsigned int           wrapped_rows;
 #endif
 };
 
@@ -166,6 +168,14 @@ void vt_destroy( struct screen_buffer *screen_buffer );
 unsigned int console_char_width( unsigned int ch );
 #define PUT_CELLS_LEFT  1
 #define PUT_CELLS_RIGHT 2
+
+#define ROW_WRAPPED        1
+#define ROW_WRAPPED_PADDED 2
+
+void set_row_wrapped( struct screen_buffer *screen_buffer, unsigned int y, unsigned char wrapped );
+void move_wrapped_rows( struct screen_buffer *screen_buffer, unsigned int dst, unsigned int src, unsigned int count );
+BOOL reflow_screen_buffer( struct screen_buffer *screen_buffer, unsigned int new_width );
+BOOL vt_main_screen( struct screen_buffer *screen_buffer );
 
 int break_wide_cell( struct screen_buffer *screen_buffer, unsigned int index );
 unsigned int put_char_cells( struct screen_buffer *screen_buffer, unsigned int index, WCHAR lead, WCHAR trail,

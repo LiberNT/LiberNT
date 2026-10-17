@@ -106,6 +106,11 @@ void vt_destroy( struct screen_buffer *screen_buffer )
     screen_buffer->vt = NULL;
 }
 
+BOOL vt_main_screen( struct screen_buffer *screen_buffer )
+{
+    return !screen_buffer->vt || !screen_buffer->vt->main_data;
+}
+
 void resize_cell_colors( struct screen_buffer *screen_buffer, unsigned int new_width, unsigned int new_height )
 {
     unsigned int copy_width = min( screen_buffer->width, new_width );
@@ -183,13 +188,23 @@ static void vt_scroll_rows( struct screen_buffer *screen_buffer, unsigned int to
     {
         memmove( &data[top * width], &data[(top + n) * width], (rows - n) * width * sizeof(*data) );
         move_cell_colors( screen_buffer, top * width, (top + n) * width, (rows - n) * width );
-        for (y = bottom - n + 1; y <= bottom; y++) vt_fill( screen_buffer, y, 0, width - 1, rect );
+        move_wrapped_rows( screen_buffer, top, top + n, rows - n );
+        for (y = bottom - n + 1; y <= bottom; y++)
+        {
+            vt_fill( screen_buffer, y, 0, width - 1, rect );
+            set_row_wrapped( screen_buffer, y, 0 );
+        }
     }
     else
     {
         memmove( &data[(top + n) * width], &data[top * width], (rows - n) * width * sizeof(*data) );
         move_cell_colors( screen_buffer, (top + n) * width, top * width, (rows - n) * width );
-        for (y = top; y < top + n; y++) vt_fill( screen_buffer, y, 0, width - 1, rect );
+        move_wrapped_rows( screen_buffer, top + n, top, rows - n );
+        for (y = top; y < top + n; y++)
+        {
+            vt_fill( screen_buffer, y, 0, width - 1, rect );
+            set_row_wrapped( screen_buffer, y, 0 );
+        }
     }
     vt_touch( rect, 0, top, width - 1, bottom );
 }
@@ -254,6 +269,7 @@ static void vt_put_cells( struct screen_buffer *screen_buffer, struct vt_state *
     {
         if (screen_buffer->mode & ENABLE_WRAP_AT_EOL_OUTPUT)
         {
+            set_row_wrapped( screen_buffer, screen_buffer->cursor_y, ROW_WRAPPED );
             screen_buffer->cursor_x = 0;
             vt_index( screen_buffer, vt, rect );
         }
@@ -268,6 +284,7 @@ static void vt_put_cells( struct screen_buffer *screen_buffer, struct vt_state *
             vt_color_cells( screen_buffer, index, 1 );
             vt_touch( rect, screen_buffer->cursor_x - 1, screen_buffer->cursor_y,
                       screen_buffer->cursor_x, screen_buffer->cursor_y );
+            set_row_wrapped( screen_buffer, screen_buffer->cursor_y, ROW_WRAPPED_PADDED );
             screen_buffer->cursor_x = 0;
             vt_index( screen_buffer, vt, rect );
         }
@@ -907,6 +924,7 @@ static BOOL vt_control( struct screen_buffer *screen_buffer, struct vt_state *vt
     case '\n':
     case '\v':
     case '\f':
+        set_row_wrapped( screen_buffer, screen_buffer->cursor_y, 0 );
         if (!(screen_buffer->mode & DISABLE_NEWLINE_AUTO_RETURN)) screen_buffer->cursor_x = 0;
         else screen_buffer->cursor_x = get_bounded_cursor_x( screen_buffer );
         vt_index( screen_buffer, vt, rect );

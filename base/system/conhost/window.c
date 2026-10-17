@@ -74,6 +74,8 @@ struct console_window
     BOOL              backdrop_set;
     WCHAR            *title;
     BOOL              title_pending;
+    BOOL              size_from_window;
+    BOOL              in_size_move;
 #endif
 };
 
@@ -754,6 +756,9 @@ static void update_window( struct console *console )
 
         dx += r.right - r.left;
         dy += r.bottom - r.top;
+#ifdef __REACTOS__
+        if (!console->window->size_from_window && !console->window->in_size_move)
+#endif
         SetWindowPos( console->win, 0, 0, 0, dx, dy, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE );
 
         SystemParametersInfoW( SPI_GETWORKAREA, 0, &r, 0 );
@@ -2212,6 +2217,19 @@ static BOOL config_dialog( struct console *console, BOOL current )
 static void resize_window( struct console *console, int width, int height )
 {
     struct console_config config;
+#ifdef __REACTOS__
+    struct screen_buffer *screen_buffer = console->active;
+    int cursor_row = -1;
+
+    if (screen_buffer->width != width && vt_main_screen( screen_buffer ))
+    {
+        if ((int)screen_buffer->cursor_y >= screen_buffer->win.top &&
+            (int)screen_buffer->cursor_y <= screen_buffer->win.bottom)
+            cursor_row = screen_buffer->cursor_y - screen_buffer->win.top;
+        if (!reflow_screen_buffer( screen_buffer, width ))
+            cursor_row = -1;
+    }
+#endif
 
     current_config( console, &config );
     config.win_width  = width;
@@ -2222,6 +2240,13 @@ static void resize_window( struct console *console, int width, int height )
         config.sb_width = config.win_width;
     if (config.sb_height < config.win_height)
         config.sb_height = config.win_height;
+#ifdef __REACTOS__
+    if (cursor_row >= 0)
+    {
+        config.win_pos.X = 0;
+        config.win_pos.Y = max( (int)screen_buffer->cursor_y - min( cursor_row, height - 1 ), 0 );
+    }
+#endif
 
     /* and reset window pos so that we don't display outside of the screen-buffer */
     if (config.win_pos.X + config.win_width > config.sb_width)
@@ -2359,6 +2384,25 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
                     console->active->win.left * console->active->font.width,
                     console->active->win.top  * console->active->font.height,
                     SRCCOPY );
+#ifdef __REACTOS__
+            {
+                int cx = (console->active->win.right - console->active->win.left + 1) * console->active->font.width;
+                int cy = (console->active->win.bottom - console->active->win.top + 1) * console->active->font.height;
+                RECT client, strip;
+                HBRUSH brush;
+
+                GetClientRect( console->win, &client );
+                if (client.right > cx || client.bottom > cy)
+                {
+                    brush = CreateSolidBrush( console->active->color_map[(console->active->attr >> 4) & 0x0f] );
+                    SetRect( &strip, cx, 0, client.right, client.bottom );
+                    FillRect( ps.hdc, &strip, brush );
+                    SetRect( &strip, 0, cy, cx, client.bottom );
+                    FillRect( ps.hdc, &strip, brush );
+                    DeleteObject( brush );
+                }
+            }
+#endif
             if (console->window->in_selection) update_selection( console, ps.hdc );
             EndPaint( console->win, &ps );
             break;
@@ -2509,11 +2553,68 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 #endif
         break;
 
+#ifdef __REACTOS__
+    case WM_ENTERSIZEMOVE:
+        if (console->window) console->window->in_size_move = TRUE;
+        break;
+
+    case WM_EXITSIZEMOVE:
+        if (console->window)
+        {
+            RECT client;
+            int width, height;
+
+            console->window->in_size_move = FALSE;
+            GetClientRect( hwnd, &client );
+            width  = max( client.right / console->active->font.width, 20 );
+            height = max( client.bottom / console->active->font.height, 20 );
+            if (width != console->active->win.right - console->active->win.left + 1 ||
+                height != console->active->win.bottom - console->active->win.top + 1)
+            {
+                console->window->size_from_window = TRUE;
+                resize_window( console, width, height );
+                console->window->size_from_window = FALSE;
+            }
+        }
+        break;
+
+    case WM_GETMINMAXINFO:
+        if (console && console->window && console->active->font.width && console->active->font.height)
+        {
+            MINMAXINFO *info = (MINMAXINFO *)lparam;
+            RECT window, client;
+
+            GetWindowRect( hwnd, &window );
+            GetClientRect( hwnd, &client );
+            info->ptMinTrackSize.x = max( info->ptMinTrackSize.x, 20 * console->active->font.width +
+                                          (window.right - window.left) - client.right );
+            info->ptMinTrackSize.y = max( info->ptMinTrackSize.y, 20 * console->active->font.height +
+                                          (window.bottom - window.top) - client.bottom );
+        }
+        break;
+#endif
+
     case WM_SIZE:
+#ifdef __REACTOS__
+        if (console->window && console->window->update_state != UPDATE_BUSY)
+        {
+            int width  = max( LOWORD(lparam) / console->active->font.width, 20 );
+            int height = max( HIWORD(lparam) / console->active->font.height, 20 );
+
+            if (width != console->active->win.right - console->active->win.left + 1 ||
+                height != console->active->win.bottom - console->active->win.top + 1)
+            {
+                console->window->size_from_window = TRUE;
+                resize_window( console, width, height );
+                console->window->size_from_window = FALSE;
+            }
+        }
+#else
         if (console->window && console->window->update_state != UPDATE_BUSY)
             resize_window( console,
                            max( LOWORD(lparam) / console->active->font.width, 20 ),
                            max( HIWORD(lparam) / console->active->font.height, 20 ));
+#endif
         break;
 
     case WM_HSCROLL:

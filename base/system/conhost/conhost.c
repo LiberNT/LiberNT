@@ -76,6 +76,7 @@ static void destroy_screen_buffer( struct screen_buffer *screen_buffer )
     free( screen_buffer->font.face_name );
 #ifdef __REACTOS__
     vt_destroy( screen_buffer );
+    free( screen_buffer->wrapped );
 #endif
     free( screen_buffer->data );
     free( screen_buffer );
@@ -440,6 +441,8 @@ static void new_line( struct screen_buffer *screen_buffer, RECT *update_rect )
 #ifdef __REACTOS__
     move_cell_colors( screen_buffer, 0, screen_buffer->width, screen_buffer->width * (screen_buffer->height - 1) );
     reset_cell_colors( screen_buffer, screen_buffer->width * (screen_buffer->height - 1), screen_buffer->width );
+    move_wrapped_rows( screen_buffer, 0, 1, screen_buffer->height - 1 );
+    set_row_wrapped( screen_buffer, screen_buffer->height - 1, 0 );
 #endif
     if (is_active( screen_buffer ))
     {
@@ -511,6 +514,7 @@ static void write_text_char( struct screen_buffer *screen_buffer, WCHAR lead, WC
     if (width == 2 && screen_buffer->width < 2) width = 1;
     if (screen_buffer->cursor_x == screen_buffer->width)
     {
+        set_row_wrapped( screen_buffer, screen_buffer->cursor_y, ROW_WRAPPED );
         screen_buffer->cursor_x = 0;
         screen_buffer->cursor_y++;
     }
@@ -540,6 +544,7 @@ static void write_text_char( struct screen_buffer *screen_buffer, WCHAR lead, WC
             update_rect->top    = min( update_rect->top,    screen_buffer->cursor_y );
             update_rect->right  = max( update_rect->right,  screen_buffer->cursor_x );
             update_rect->bottom = max( update_rect->bottom, screen_buffer->cursor_y );
+            set_row_wrapped( screen_buffer, screen_buffer->cursor_y, ROW_WRAPPED_PADDED );
             screen_buffer->cursor_x = 0;
             if (++screen_buffer->cursor_y == screen_buffer->height)
             {
@@ -1505,6 +1510,9 @@ static void update_read_output( struct console *console, BOOL newline )
         offset = edit_line_string_width( ctx->buf, ctx->len );
         screen_buffer->cursor_x = 0;
         screen_buffer->cursor_y = ctx->home_y + (ctx->home_x + offset) / screen_buffer->width;
+#ifdef __REACTOS__
+        set_row_wrapped( screen_buffer, screen_buffer->cursor_y, 0 );
+#endif
         if (++screen_buffer->cursor_y >= screen_buffer->height)
             new_line( screen_buffer, &update_rect );
     }
@@ -2221,6 +2229,13 @@ NTSTATUS change_screen_buffer_size( struct screen_buffer *screen_buffer, int new
     }
 #ifdef __REACTOS__
     resize_cell_colors( screen_buffer, new_width, new_height );
+    if (screen_buffer->wrapped)
+    {
+        if (new_width != old_width)
+            memset( screen_buffer->wrapped, 0, screen_buffer->wrapped_rows );
+        else if ((unsigned int)new_height < screen_buffer->wrapped_rows)
+            memset( screen_buffer->wrapped + new_height, 0, screen_buffer->wrapped_rows - new_height );
+    }
 #endif
     free( screen_buffer->data );
     screen_buffer->data   = new_data;
@@ -2228,6 +2243,222 @@ NTSTATUS change_screen_buffer_size( struct screen_buffer *screen_buffer, int new
     screen_buffer->height = new_height;
     return STATUS_SUCCESS;
 }
+
+#ifdef __REACTOS__
+void set_row_wrapped( struct screen_buffer *screen_buffer, unsigned int y, unsigned char wrapped )
+{
+    unsigned char *rows;
+
+    if (y >= screen_buffer->height) return;
+    if (y >= screen_buffer->wrapped_rows)
+    {
+        if (!wrapped || !(rows = realloc( screen_buffer->wrapped, screen_buffer->height ))) return;
+        memset( rows + screen_buffer->wrapped_rows, 0, screen_buffer->height - screen_buffer->wrapped_rows );
+        screen_buffer->wrapped = rows;
+        screen_buffer->wrapped_rows = screen_buffer->height;
+    }
+    screen_buffer->wrapped[y] = wrapped;
+}
+
+static void copy_row_wrapped( struct screen_buffer *screen_buffer, unsigned int dst, unsigned int src )
+{
+    if (dst < screen_buffer->wrapped_rows)
+        screen_buffer->wrapped[dst] = src < screen_buffer->wrapped_rows ? screen_buffer->wrapped[src] : 0;
+}
+
+void move_wrapped_rows( struct screen_buffer *screen_buffer, unsigned int dst, unsigned int src, unsigned int count )
+{
+    unsigned int i;
+
+    if (!screen_buffer->wrapped) return;
+    if (dst < src)
+        for (i = 0; i < count; i++) copy_row_wrapped( screen_buffer, dst + i, src + i );
+    else
+        for (i = count; i-- > 0;) copy_row_wrapped( screen_buffer, dst + i, src + i );
+}
+
+static BOOL reflow_cell_blank( struct screen_buffer *screen_buffer, unsigned int index )
+{
+    const struct cell_color *color = screen_buffer->colors ? &screen_buffer->colors[index] : NULL;
+
+    return screen_buffer->data[index].ch == ' ' && screen_buffer->data[index].attr == screen_buffer->attr &&
+           (!color || (color->fg == CLR_INVALID && color->bg == CLR_INVALID && color->underline == CLR_INVALID));
+}
+
+static unsigned int reflow_row_length( struct screen_buffer *screen_buffer, unsigned int y )
+{
+    unsigned int length = screen_buffer->width;
+
+    while (length && reflow_cell_blank( screen_buffer, y * screen_buffer->width + length - 1 )) length--;
+    return length;
+}
+
+static unsigned char reflow_row_continues( struct screen_buffer *screen_buffer, unsigned int y )
+{
+    if (y + 1 >= screen_buffer->height || y >= screen_buffer->wrapped_rows || !screen_buffer->wrapped[y] ||
+        !reflow_row_length( screen_buffer, y ))
+        return 0;
+    return screen_buffer->wrapped[y];
+}
+
+struct reflow_target
+{
+    unsigned int *x;
+    unsigned int *y;
+    unsigned int  index;
+    BOOL          active;
+    BOOL          pending;
+};
+
+BOOL reflow_screen_buffer( struct screen_buffer *screen_buffer, unsigned int new_width )
+{
+    unsigned int old_width = screen_buffer->width, height = screen_buffer->height;
+    struct edit_line *ctx = &screen_buffer->console->edit_line;
+    char_info_t fill = { ' ', screen_buffer->attr }, *data, *final_data;
+    struct cell_color *colors = NULL, *final_colors = NULL;
+    struct reflow_target targets[2];
+    unsigned int last, capacity, row, col, y, end, r, x, count, index, prefix, i, drop, kept;
+    unsigned char *wrapped;
+
+    if (new_width < 2 || new_width == old_width || !height) return FALSE;
+
+    memset( targets, 0, sizeof(targets) );
+    targets[0].x = &screen_buffer->cursor_x;
+    targets[0].y = &screen_buffer->cursor_y;
+    targets[0].active = screen_buffer->cursor_y < height;
+    targets[1].x = &ctx->home_x;
+    targets[1].y = &ctx->home_y;
+    targets[1].active = screen_buffer->console->active == screen_buffer && ctx->buf &&
+                        ctx->status == STATUS_PENDING && ctx->home_y < height;
+
+    last = targets[0].active ? screen_buffer->cursor_y : 0;
+    if (targets[1].active) last = max( last, ctx->home_y );
+    for (y = height; y-- > last + 1;)
+        if (reflow_row_length( screen_buffer, y )) { last = y; break; }
+
+    capacity = (last + 1) * (old_width / (new_width - 1) + 2) + 2 * (old_width / new_width + 2);
+    capacity = max( capacity, height );
+    data = malloc( capacity * new_width * sizeof(*data) );
+    final_data = malloc( height * new_width * sizeof(*final_data) );
+    wrapped = calloc( capacity, 1 );
+    if (screen_buffer->colors)
+    {
+        colors = malloc( capacity * new_width * sizeof(*colors) );
+        final_colors = malloc( height * new_width * sizeof(*final_colors) );
+    }
+    if (!data || !final_data || !wrapped || (screen_buffer->colors && (!colors || !final_colors)))
+    {
+        free( data );
+        free( final_data );
+        free( wrapped );
+        free( colors );
+        free( final_colors );
+        return FALSE;
+    }
+    for (i = 0; i < capacity * new_width; i++) data[i] = fill;
+    if (colors) memset( colors, 0xff, capacity * new_width * sizeof(*colors) );
+
+    row = 0;
+    for (y = 0; y <= last && row < capacity; y = end + 1)
+    {
+        for (end = y; end < last && reflow_row_continues( screen_buffer, end ); end++);
+
+        for (i = 0; i < ARRAY_SIZE(targets); i++)
+        {
+            targets[i].pending = FALSE;
+            if (!targets[i].active || *targets[i].y < y || *targets[i].y > end) continue;
+            for (prefix = 0, r = y; r < *targets[i].y; r++)
+                prefix += old_width - (reflow_row_continues( screen_buffer, r ) == ROW_WRAPPED_PADDED);
+            count = old_width - (*targets[i].y < end &&
+                                 reflow_row_continues( screen_buffer, *targets[i].y ) == ROW_WRAPPED_PADDED);
+            targets[i].index = prefix + (*targets[i].y < end ? min( *targets[i].x, count ) : *targets[i].x);
+            targets[i].pending = TRUE;
+        }
+
+        col = 0;
+        index = 0;
+        for (r = y; r <= end; r++)
+        {
+            count = r < end ? old_width - (reflow_row_continues( screen_buffer, r ) == ROW_WRAPPED_PADDED)
+                            : reflow_row_length( screen_buffer, r );
+            for (x = 0; x < count; x++, index++)
+            {
+                const char_info_t *cell = &screen_buffer->data[r * old_width + x];
+
+                if (col == new_width)
+                {
+                    if (row + 1 >= capacity) goto done;
+                    wrapped[row++] = ROW_WRAPPED;
+                    col = 0;
+                }
+                if ((cell->attr & COMMON_LVB_LEADING_BYTE) && col == new_width - 1)
+                {
+                    if (row + 1 >= capacity) goto done;
+                    wrapped[row++] = ROW_WRAPPED_PADDED;
+                    col = 0;
+                }
+                for (i = 0; i < ARRAY_SIZE(targets); i++)
+                {
+                    if (!targets[i].pending || targets[i].index != index) continue;
+                    *targets[i].x = col;
+                    *targets[i].y = row;
+                    targets[i].pending = FALSE;
+                }
+                data[row * new_width + col] = *cell;
+                if (colors) colors[row * new_width + col] = screen_buffer->colors[r * old_width + x];
+                col++;
+            }
+        }
+
+        for (i = 0; i < ARRAY_SIZE(targets); i++)
+        {
+            unsigned int offset, target_row;
+
+            if (!targets[i].pending) continue;
+            offset = col + (targets[i].index - index);
+            target_row = min( row + offset / new_width, capacity - 1 );
+            while (row < target_row) wrapped[row++] = ROW_WRAPPED;
+            *targets[i].x = offset % new_width;
+            *targets[i].y = target_row;
+            targets[i].pending = FALSE;
+        }
+        row++;
+    }
+
+done:
+    row = min( row, capacity );
+    drop = row > height ? row - height : 0;
+    kept = row - drop;
+    for (i = 0; i < height * new_width; i++) final_data[i] = fill;
+    memcpy( final_data, &data[drop * new_width], kept * new_width * sizeof(*data) );
+    free( data );
+    free( screen_buffer->data );
+    screen_buffer->data = final_data;
+    if (colors)
+    {
+        memset( final_colors, 0xff, height * new_width * sizeof(*final_colors) );
+        memcpy( final_colors, &colors[drop * new_width], kept * new_width * sizeof(*colors) );
+        free( colors );
+        free( screen_buffer->colors );
+        screen_buffer->colors = final_colors;
+    }
+    memmove( wrapped, wrapped + drop, kept );
+    memset( wrapped + kept, 0, capacity - kept );
+    free( screen_buffer->wrapped );
+    screen_buffer->wrapped = wrapped;
+    screen_buffer->wrapped_rows = height;
+    screen_buffer->width = new_width;
+
+    for (i = 0; i < ARRAY_SIZE(targets); i++)
+    {
+        if (!targets[i].active) continue;
+        *targets[i].y = *targets[i].y >= drop ? *targets[i].y - drop : 0;
+        if (*targets[i].y >= height) *targets[i].y = height - 1;
+        if (*targets[i].x >= new_width) *targets[i].x = new_width - 1;
+    }
+    return TRUE;
+}
+#endif
 
 static NTSTATUS set_output_info( struct screen_buffer *screen_buffer,
                                  const struct condrv_output_info_params *params, size_t in_size )
@@ -2425,6 +2656,9 @@ static NTSTATUS write_console( struct screen_buffer *screen_buffer, const WCHAR 
                 while (j--) write_char( screen_buffer, ' ', &update_rect, NULL );
                 continue;
             case '\n':
+#ifdef __REACTOS__
+                set_row_wrapped( screen_buffer, screen_buffer->cursor_y, 0 );
+#endif
                 screen_buffer->cursor_x = 0;
                 if (++screen_buffer->cursor_y == screen_buffer->height)
                     new_line( screen_buffer, &update_rect );
@@ -2464,6 +2698,9 @@ static NTSTATUS write_console( struct screen_buffer *screen_buffer, const WCHAR 
         {
             if (!(screen_buffer->mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING))
             {
+#ifdef __REACTOS__
+                set_row_wrapped( screen_buffer, screen_buffer->cursor_y, ROW_WRAPPED );
+#endif
                 screen_buffer->cursor_x = 0;
                 if (++screen_buffer->cursor_y == screen_buffer->height)
                     new_line( screen_buffer, &update_rect );
