@@ -2530,7 +2530,7 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
     BOOL usePixelAlpha = usePremultiplied || (w->BlurFlags & DWM_BLUR_ENABLE) != 0;
     BOOL useBackdrop = w->BackdropType >= DWM_BACKDROP_MAIN &&
                        w->BackdropType <= DWM_BACKDROP_TABBED &&
-                       w->BackdropRegion != 0;
+                       w->BackdropRegion != 0 && w->BackdropOpacity < 255;
     LONG ncBottom = DwmBackdropNcBottom(w);
     LONG ncLeft = DwmBackdropNcLeft(w);
     LONG ncRight = DwmBackdropInteriorRight(w);
@@ -2695,7 +2695,7 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
             w->BackdropType == DWM_BACKDROP_TRANSIENT &&
             (w->BackdropRegion == DWM_BACKDROP_REGION_NONCLIENT ||
              w->BackdropRegion == DWM_BACKDROP_REGION_WINDOW) &&
-            w->BackdropOpacity <= 255 && g_reflectLut != NULL &&
+            w->BackdropOpacity < 255 && g_reflectLut != NULL &&
             reflectStart >= 0 && reflectStart <= g_reflectLen - width)
         {
             LONG Radius = (LONG)w->CornerRadius;
