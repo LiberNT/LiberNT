@@ -924,7 +924,7 @@ IntCreateWindowStation(
 
     if (Session && Session->InputWindowStation == WindowStation)
     {
-        ERR("Initializing input window station\n");
+        TRACE("Initializing input window station\n");
 
         if (Session == gpDisplaySession)
             InitCursorImpl();

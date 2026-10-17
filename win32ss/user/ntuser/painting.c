@@ -1482,7 +1482,7 @@ IntBeginPaint(PWND Window, PPAINTSTRUCT Ps)
 
    if (Window->state2 & WNDS2_ENDPAINTINVALIDATE)
    {
-      ERR("BP: Another thread invalidated this window\n");
+      TRACE("BP: Another thread invalidated this window\n");
    }
 
    bParentDC = FALSE;
