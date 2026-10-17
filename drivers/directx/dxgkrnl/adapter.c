@@ -424,6 +424,22 @@ DxgkpRetainAndStopBasicDisplayFallback(
         return STATUS_DEVICE_BUSY;
     }
 
+    (VOID)KeWaitForSingleObject(&Owner->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
+    OwnerInUse = DxgkIsDisplayAdapter(Owner) &&
+                 (InterlockedCompareExchange(&Owner->ShadowFbMapCount, 0, 0) > 0 ||
+                  Owner->RetiredShadowFb != NULL ||
+                  Owner->RetiredShadowAllocationFb != NULL);
+    KeReleaseMutex(&Owner->SharedPrimaryMutex, FALSE);
+    if (OwnerInUse)
+    {
+        DXGKRNL_WARN("POSTDISPLAY_HANDOFF: win32k still maps the desktop of "
+                     "BasicDisplay adapter %p; claimant %p cannot take ownership\n",
+                     Owner,
+                     Claimant);
+        ExReleaseRundownProtection(&Owner->RemoveRundownRef);
+        return STATUS_DEVICE_BUSY;
+    }
+
     Status = DxgkpStopPostDisplayOwner(Owner,
                                        ReleasedPostDisplayInformation,
                                        ReleasedByDriver);
