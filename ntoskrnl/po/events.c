@@ -21,6 +21,7 @@ typedef struct _SYS_BUTTON_CONTEXT
     ULONG SysButton;            /* the request's buffer */
     ULONG LidState;             /* 1 open, 0 closed */
     BOOLEAN LidStatePending;    /* LidState not yet published */
+    BOOLEAN PowerButtonPending;
 } SYS_BUTTON_CONTEXT, *PSYS_BUTTON_CONTEXT;
 
 typedef struct _POP_POWER_SETTING_CACHE_ENTRY
@@ -633,9 +634,7 @@ PopGetSysButtonCompletion(
         if (SysButton & SYS_BUTTON_POWER)
         {
             /* FIXME: Read registry for the action we should perform here */
-            DPRINT1("Initiating shutdown after power button event\n");
-
-            ZwShutdownSystem(ShutdownNoReboot);
+            SysButtonContext->PowerButtonPending = TRUE;
         }
     }
 
@@ -678,6 +677,13 @@ PopGetSysButton(
     {
         SysButtonContext->LidStatePending = FALSE;
         PopPublishLidSwitchState(SysButtonContext->LidState);
+    }
+
+    if (SysButtonContext->PowerButtonPending)
+    {
+        SysButtonContext->PowerButtonPending = FALSE;
+        DPRINT1("Initiating shutdown after power button event\n");
+        ZwShutdownSystem(ShutdownNoReboot);
     }
 
     /* Get button pressed (IOCTL_GET_SYS_BUTTON_EVENT).  The request is
