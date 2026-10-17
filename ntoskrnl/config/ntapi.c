@@ -452,8 +452,7 @@ CmpOpenKey(OUT PHANDLE KeyHandle,
     NTSTATUS Status;
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PAGED_CODE();
-    /* Backup/restore privilege semantics are not implemented yet. */
-    if (OpenOptions & ~REG_OPTION_OPEN_LINK)
+    if (OpenOptions & ~(REG_OPTION_OPEN_LINK | REG_OPTION_BACKUP_RESTORE))
         return STATUS_NOT_SUPPORTED;
 
     ParseContext.CreateOptions = OpenOptions;
