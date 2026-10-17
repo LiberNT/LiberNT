@@ -164,6 +164,22 @@ FlushBackBufferRect(
 
     Width = min(Width, VidpDisplayWidth - Left);
     Height = min(Height, VidpDisplayHeight - Top);
+    if ((FrameBufferRotation == LoaderFramebufferRotationIdentity) &&
+        (VidpDisplayWidth == ScreenWidth) &&
+        (VidpDisplayHeight == ScreenHeight))
+    {
+        for (y = Top; y < Top + Height; ++y)
+        {
+            PUCHAR Back = BB_PIXEL(Left, y);
+            PULONG Pixel = FramePixel(Left, y);
+
+            for (x = 0; x < Width; ++x)
+                Pixel[x] = CachedPalette[Back[x]];
+        }
+        FlushFrameRect(Left, Top, Left + Width, Top + Height);
+        return;
+    }
+
     NativeLeft = LogicalToPhysicalX(Left);
     NativeRight = LogicalToPhysicalX(Left + Width);
 
