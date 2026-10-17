@@ -4536,7 +4536,7 @@ HRESULT WINAPI CDefView::GetItemObject(UINT uItem, REFIID riid, LPVOID *ppvOut)
 
 FOLDERVIEWMODE CDefView::GetDefaultViewMode()
 {
-    FOLDERVIEWMODE mode = ((m_FolderSettings.fFlags & FWF_DESKTOP) || !IsOS(OS_SERVERADMINUI)) ? FVM_ICON : FVM_DETAILS;
+    FOLDERVIEWMODE mode = (m_FolderSettings.fFlags & FWF_DESKTOP) ? FVM_ICON : FVM_DETAILS;
     FOLDERVIEWMODE temp = mode;
     if (SUCCEEDED(_DoFolderViewCB(SFVM_DEFVIEWMODE, 0, (LPARAM)&temp)) && IsSupportedFolderViewMode(temp))
         mode = temp;
