@@ -49,14 +49,32 @@ DecryptFileA(LPCSTR lpFileName,
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 BOOL WINAPI
 DecryptFileW(LPCWSTR lpFileName,
              DWORD dwReserved)
 {
-    FIXME("%s(%S) not implemented!\n", __FUNCTION__, lpFileName);
-    return TRUE;
+    DWORD dwAttributes;
+
+    TRACE("(%s, %lx)\n", debugstr_w(lpFileName), dwReserved);
+
+    dwAttributes = GetFileAttributesW(lpFileName);
+    if (dwAttributes == INVALID_FILE_ATTRIBUTES)
+        return FALSE;
+
+    if (!(dwAttributes & FILE_ATTRIBUTE_ENCRYPTED))
+        return TRUE;
+
+    if (!(dwAttributes & FILE_ATTRIBUTE_DIRECTORY) && (dwAttributes & FILE_ATTRIBUTE_READONLY))
+    {
+        SetLastError(ERROR_FILE_READ_ONLY);
+        return FALSE;
+    }
+
+    FIXME("%s is encrypted, and decryption is not supported\n", debugstr_w(lpFileName));
+    SetLastError(ERROR_NOT_SUPPORTED);
+    return FALSE;
 }
 
 
