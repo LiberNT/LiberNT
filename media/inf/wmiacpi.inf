@@ -18,16 +18,24 @@ DefaultDestDir = 12
 %GenericMfg% = GenericMfg
 
 [GenericMfg]
-%*PNP0C14.DeviceDesc% = NO_DRV,,*PNP0C14
+%*PNP0C14.DeviceDesc% = WmiAcpi_Inst,*PNP0C14,PNP0C14
 
-;------------------- WE DO NOT HAVE WMIACPI.SYS YET---------------------
+[WmiAcpi_Inst.NT]
+CopyFiles = WmiAcpi_CopyFiles
 
-[NO_DRV]
+[WmiAcpi_CopyFiles]
+wmiacpi.sys
 
-[NO_DRV.Services]
-AddService = , 0x00000002
+[WmiAcpi_Inst.NT.Services]
+AddService = WmiAcpi, 0x00000002, WmiAcpi_Service
 
-[NO_DRV.HW]
+[WmiAcpi_Service]
+DisplayName = %WmiAcpi.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\wmiacpi.sys
+LoadOrderGroup = Extended Base
 
 ;-------------------------------- STRINGS -------------------------------
 
@@ -38,6 +46,7 @@ ReactOS = "LiberNT Project"
 ; Localizable
 GenericMfg = "(Generic system devices)"
 *PNP0C14.DeviceDesc = "WMI for ACPI"
+WmiAcpi.ServiceDesc = "Windows Management Interface for ACPI"
 
 [Strings.0404]
 GenericMfg = "(標準系統裝置)"

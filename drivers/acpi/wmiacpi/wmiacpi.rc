@@ -1,0 +1,5 @@
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION  "LiberNT ACPI WMI Mapping Driver"
+#define REACTOS_STR_INTERNAL_NAME     "wmiacpi"
+#define REACTOS_STR_ORIGINAL_FILENAME "wmiacpi.sys"
+#include <reactos/version.rc>
