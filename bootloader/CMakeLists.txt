@@ -139,8 +139,19 @@ target_include_directories(bootgui PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(bootgui setjmp freetype)
 add_dependencies(bootgui bugcodes asm xdk)
 
+add_library(bootwim
+    ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/lzx.c
+    ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/sha1.c
+    ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/wimcore.c
+    ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/xpress_huff.c)
+set_property(TARGET bootwim PROPERTY C_STANDARD 11)
+target_include_directories(bootwim PRIVATE ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libwim)
+target_compile_definitions(bootwim PRIVATE XPRESS_HUFF_DECOMPRESS_ONLY=1)
+add_dependencies(bootwim xdk)
+
 add_executable(bootmgfw
     bootmgr/app.c
+    bootmgr/logo.c
     bootmgr/main.c
     bootmgr/startup.c)
 if(ARCH STREQUAL "ppc")
@@ -149,7 +160,7 @@ if(ARCH STREQUAL "ppc")
 else()
     bootloader_efi_application(bootmgfw EfiEntry)
 endif()
-target_link_libraries(bootmgfw bootgui)
+target_link_libraries(bootmgfw bootgui bootwim)
 
 add_custom_target(bootloader DEPENDS bootmgfw)
 
@@ -235,16 +246,6 @@ endif()
 
 if(WINLOAD_ASM_SOURCE)
     add_asm_files(winload_asm ${WINLOAD_ASM_SOURCE})
-
-    add_library(bootwim
-        ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/lzx.c
-        ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/sha1.c
-        ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/wimcore.c
-        ${REACTOS_SOURCE_DIR}/sdk/lib/libwim/xpress_huff.c)
-    set_property(TARGET bootwim PROPERTY C_STANDARD 11)
-    target_include_directories(bootwim PRIVATE ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libwim)
-    target_compile_definitions(bootwim PRIVATE XPRESS_HUFF_DECOMPRESS_ONLY=1)
-    add_dependencies(bootwim xdk)
 
     add_executable(winload
         ${winload_asm}

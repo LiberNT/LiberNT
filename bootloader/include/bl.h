@@ -192,6 +192,13 @@ BmChooseStartupSettings(
     _In_ BOOLEAN Graphical,
     _Out_ PBM_STARTUP Startup);
 
+struct _UI_IMAGE;
+
+BOOLEAN
+BmLoadWindowsLogo(
+    _In_ PVOID Device,
+    _Out_ struct _UI_IMAGE* Image);
+
 BOOLEAN
 OslGetParameters(
     _In_ PBM_ENTRY Entry,

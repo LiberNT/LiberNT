@@ -259,6 +259,40 @@ BootUiIcon(LONG X, LONG Y, ULONG Index)
 }
 
 static VOID
+BootUiImage(LONG X, LONG Y, ULONG Size, const UI_IMAGE* Image)
+{
+    ULONG Row, Col, SourceY, SourceX;
+    for (Row = 0; Row < Size; ++Row)
+    {
+        ULONG Top = Row * Image->Height / Size;
+        ULONG Bottom = max(Top + 1, (Row + 1) * Image->Height / Size);
+        for (Col = 0; Col < Size; ++Col)
+        {
+            ULONG Left = Col * Image->Width / Size;
+            ULONG Right = max(Left + 1, (Col + 1) * Image->Width / Size);
+            ULONG Alpha = 0, Red = 0, Green = 0, Blue = 0;
+            for (SourceY = Top; SourceY < Bottom; ++SourceY)
+            {
+                for (SourceX = Left; SourceX < Right; ++SourceX)
+                {
+                    ULONG Pixel = Image->Pixels[SourceY * Image->Width + SourceX];
+                    ULONG PixelAlpha = Pixel >> 24;
+                    Alpha += PixelAlpha;
+                    Red += ((Pixel >> 16) & 0xFF) * PixelAlpha;
+                    Green += ((Pixel >> 8) & 0xFF) * PixelAlpha;
+                    Blue += (Pixel & 0xFF) * PixelAlpha;
+                }
+            }
+            if (!Alpha)
+                continue;
+            BootUiPixel(X + Col, Y + Row,
+                        ((Red / Alpha) << 16) | ((Green / Alpha) << 8) | (Blue / Alpha),
+                        Alpha / ((Bottom - Top) * (Right - Left)));
+        }
+    }
+}
+
+static VOID
 BootUiCursor(VOID)
 {
     if (BootUiPointerVisible)
@@ -946,6 +980,12 @@ BootUiRenderMenu(PUI_MENU_INFO Menu, LONG TimeOut, BOOLEAN CanEscape, BOOTUI_MEN
         if (Menu->MenuItemIcons && Menu->MenuItemIcons[I] == UiMenuIconLiberNT)
         {
             BootUiLogo(Left + 20, Y + (RowHeight - 21) / 2, 2);
+            TextInset = 64;
+        }
+        else if (Menu->MenuItemIcons && Menu->MenuItemIcons[I] == UiMenuIconImage &&
+                 UiMenuImages && UiMenuImages[I])
+        {
+            BootUiImage(Left + 20, Y + (RowHeight - 24) / 2, 24, UiMenuImages[I]);
             TextInset = 64;
         }
         else if (Menu->MenuItemIcons && Menu->MenuItemIcons[I] == UiMenuIconDesktop)

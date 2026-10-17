@@ -69,8 +69,16 @@ typedef enum
 {
     UiMenuIconNone,
     UiMenuIconLiberNT,
-    UiMenuIconDesktop
+    UiMenuIconDesktop,
+    UiMenuIconImage
 } UI_MENU_ICON;
+
+typedef struct _UI_IMAGE
+{
+    ULONG Width;
+    ULONG Height;
+    PULONG Pixels;
+} UI_IMAGE, *PUI_IMAGE;
 
 typedef struct tagUI_MENU_INFO
 {
@@ -145,6 +153,7 @@ extern ULONG UiScreenWidth;
 extern ULONG UiScreenHeight;
 extern BOOLEAN UiKeepFirmwareScreen;
 extern UiMenuIdleCallback UiMenuIdle;
+extern const UI_IMAGE* const* UiMenuImages;
 extern UI_PROGRESS_BAR UiProgressBar;
 extern BOOLEAN UiShowTime;
 extern BOOLEAN UiMenuBox;

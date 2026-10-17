@@ -49,6 +49,7 @@ ULONG UiScreenWidth;
 ULONG UiScreenHeight;
 BOOLEAN UiKeepFirmwareScreen;
 UiMenuIdleCallback UiMenuIdle;
+const UI_IMAGE* const* UiMenuImages;
 UI_PROGRESS_BAR UiProgressBar;
 BOOLEAN UiShowTime;
 BOOLEAN UiMenuBox;

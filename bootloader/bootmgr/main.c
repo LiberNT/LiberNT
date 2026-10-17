@@ -28,6 +28,8 @@ static BM_ENTRY BmEntries[BM_MAX_ENTRIES];
 static CHAR BmNames[BM_MAX_ENTRIES][BM_NAME_CHARS];
 static PCSTR BmMenuNames[BM_MAX_ENTRIES + BM_EXTRA_ITEMS];
 static UI_MENU_ICON BmMenuIcons[BM_MAX_ENTRIES + BM_EXTRA_ITEMS];
+static UI_IMAGE BmLogos[BM_MAX_ENTRIES];
+static const UI_IMAGE* BmMenuImages[BM_MAX_ENTRIES + BM_EXTRA_ITEMS];
 static PCSTR BmStartupNames[BM_MAX_ENTRIES];
 static ULONG BmStartupEntries[BM_MAX_ENTRIES];
 static PCWSTR BmTextNames[BM_MAX_ENTRIES];
@@ -123,6 +125,8 @@ BmAddWindows(
     Entry->FirmwareDevice = Device;
     Entry->FirmwarePath = BM_WINDOWS_MANAGER;
     BmGetWindowsDescription(Device, Entry->Description, RTL_NUMBER_OF(Entry->Description));
+    if (!BmLoadWindowsLogo(Device, &BmLogos[BmCount]))
+        RtlZeroMemory(&BmLogos[BmCount], sizeof(BmLogos[BmCount]));
 
     if (BmStore)
         BcdOpenStore(BmStore, BmStoreSize);
@@ -167,7 +171,9 @@ BmBuildMenu(VOID)
 
         BmNames[i][j] = ANSI_NULL;
         BmMenuNames[i] = BmNames[i];
-        BmMenuIcons[i] = BmEntries[i].FirmwareDevice ? UiMenuIconDesktop : UiMenuIconLiberNT;
+        BmMenuIcons[i] = !BmEntries[i].FirmwareDevice ? UiMenuIconLiberNT :
+                         BmLogos[i].Pixels ? UiMenuIconImage : UiMenuIconDesktop;
+        BmMenuImages[i] = BmLogos[i].Pixels ? &BmLogos[i] : NULL;
     }
 
     BmMenuNames[BmCount] = NULL;
@@ -452,7 +458,9 @@ BmRunMenu(
     {
         UiKeepFirmwareScreen = (Timeout > 0);
         UiMenuIdle = BmMenuIdle;
+        UiMenuImages = BmMenuImages;
         BmRunGuiMenu(Timeout);
+        UiMenuImages = NULL;
         UiMenuIdle = NULL;
         FbGuiVtbl.UnInitialize();
         return;
