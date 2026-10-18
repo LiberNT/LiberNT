@@ -197,6 +197,80 @@ BcdFindElement(
     return NULL;
 }
 
+static
+PVOID
+BcdReadFile(
+    _In_opt_ PVOID Device,
+    _In_ PCWSTR Path,
+    _Out_ PULONG Size)
+{
+    return Device ? FwReadDeviceFile(Device, Path, Size) : FwReadBootFile(Path, Size);
+}
+
+static
+BOOLEAN
+BcdApplyLog(
+    _In_opt_ PVOID Device,
+    _In_ PCWSTR Path,
+    _In_ PCWSTR Suffix,
+    _Inout_ PVOID* Store,
+    _Inout_ PULONG Size)
+{
+    WCHAR LogPath[BCD_PATH_CHARS];
+    PVOID Log, Grown;
+    ULONG LogSize, Required, NewSize;
+    BOOLEAN Applied = FALSE;
+
+    if (!NT_SUCCESS(RtlStringCchPrintfW(LogPath, RTL_NUMBER_OF(LogPath), L"%s%s", Path, Suffix)))
+        return FALSE;
+
+    Log = BcdReadFile(Device, LogPath, &LogSize);
+    if (!Log)
+        return FALSE;
+
+    if (HvpApplyIncrementalLog(*Store, 0, Log, LogSize, FALSE, NULL, &Required))
+    {
+        NewSize = HBLOCK_SIZE + Required;
+        if (NewSize > *Size)
+        {
+            Grown = FwAllocatePages(NewSize);
+            if (Grown)
+            {
+                RtlCopyMemory(Grown, *Store, *Size);
+                RtlZeroMemory((PUCHAR)Grown + *Size, NewSize - *Size);
+                FwFreePages(*Store, *Size);
+                *Store = Grown;
+                *Size = NewSize;
+            }
+        }
+
+        if (NewSize <= *Size)
+            Applied = HvpApplyIncrementalLog(*Store, Required, Log, LogSize, TRUE, NULL, &Required);
+    }
+
+    FwFreePages(Log, LogSize);
+    return Applied;
+}
+
+PVOID
+BcdReadStoreFile(
+    _In_opt_ PVOID Device,
+    _In_ PCWSTR Path,
+    _Out_ PULONG Size)
+{
+    PVOID Store = BcdReadFile(Device, Path, Size);
+
+    if (Store &&
+        *Size >= HBLOCK_SIZE &&
+        ((PHBASE_BLOCK)Store)->Sequence1 != ((PHBASE_BLOCK)Store)->Sequence2 &&
+        !BcdApplyLog(Device, Path, L".LOG1", &Store, Size))
+    {
+        BcdApplyLog(Device, Path, L".LOG2", &Store, Size);
+    }
+
+    return Store;
+}
+
 BOOLEAN
 BcdOpenStore(
     _In_reads_bytes_(Size) PVOID HiveBase,

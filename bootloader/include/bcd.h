@@ -73,6 +73,12 @@ typedef struct _BCD_DEVICE
     WCHAR RamdiskPath[BCD_PATH_CHARS];
 } BCD_DEVICE, *PBCD_DEVICE;
 
+PVOID
+BcdReadStoreFile(
+    _In_opt_ PVOID Device,
+    _In_ PCWSTR Path,
+    _Out_ PULONG Size);
+
 BOOLEAN
 BcdOpenStore(
     _In_reads_bytes_(Size) PVOID HiveBase,

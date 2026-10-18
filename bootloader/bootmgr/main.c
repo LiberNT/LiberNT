@@ -54,14 +54,14 @@ BmReadStore(
     if (FwGetImageDirectory(Path, Chars) &&
         NT_SUCCESS(RtlStringCchCatW(Path, Chars, BM_STORE_NAME)))
     {
-        Store = FwReadBootFile(Path, Size);
+        Store = BcdReadStoreFile(NULL, Path, Size);
         if (Store)
             return Store;
     }
 
     for (i = 0; i < RTL_NUMBER_OF(BmStorePaths); i++)
     {
-        Store = FwReadBootFile(BmStorePaths[i], Size);
+        Store = BcdReadStoreFile(NULL, BmStorePaths[i], Size);
         if (Store)
         {
             RtlStringCchCopyW(Path, Chars, BmStorePaths[i]);
@@ -86,7 +86,7 @@ BmGetWindowsDescription(
 
     RtlStringCchCopyW(Description, Chars, BM_WINDOWS_TITLE);
 
-    Store = FwReadDeviceFile(Device, BM_WINDOWS_STORE, &Size);
+    Store = BcdReadStoreFile(Device, BM_WINDOWS_STORE, &Size);
     if (!Store)
         return;
 
@@ -470,11 +470,32 @@ BmRunMenu(
     BmRunTextMenu(Timeout);
 }
 
+static
+LONG
+BmGetTimeout(VOID)
+{
+    BCD_OBJECT BootMgr;
+    ULONGLONG Seconds;
+
+    if (!BmStore)
+        return BM_BOOT_TIMEOUT;
+
+    if (!BcdOpenObject(BCD_ID_BOOTMGR, &BootMgr) ||
+        !BcdGetInteger(&BootMgr, BcdBootMgrInteger_Timeout, &Seconds))
+    {
+        return -1;
+    }
+
+    return (LONG)min(Seconds, (ULONGLONG)MAXLONG);
+}
+
 VOID
 BlMain(VOID)
 {
+    BM_STARTUP Startup;
     PVOID Store;
     ULONG Size, Default = 0;
+    LONG Timeout;
 
     Store = BmReadStore(BmStorePath, RTL_NUMBER_OF(BmStorePath), &Size);
 
@@ -501,5 +522,13 @@ BlMain(VOID)
         return;
 
     BmSelected = Default;
-    BmRunMenu(BM_BOOT_TIMEOUT);
+    Timeout = BmGetTimeout();
+    if (Timeout == 0)
+    {
+        RtlZeroMemory(&Startup, sizeof(Startup));
+        BmStartApplication(&BmEntries[Default], BmStorePath, &Startup);
+        Timeout = -1;
+    }
+
+    BmRunMenu(Timeout);
 }

@@ -125,10 +125,10 @@ OslSelectEntry(VOID)
     }
 
     if (StorePath[0] != UNICODE_NULL)
-        Store = FwReadBootFile(StorePath, &Size);
+        Store = BcdReadStoreFile(NULL, StorePath, &Size);
 
     for (i = 0; i < RTL_NUMBER_OF(OslStorePaths) && !Store; i++)
-        Store = FwReadBootFile(OslStorePaths[i], &Size);
+        Store = BcdReadStoreFile(NULL, OslStorePaths[i], &Size);
 
     if (!Store || !BcdOpenStore(Store, Size))
     {
