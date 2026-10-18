@@ -1190,7 +1190,7 @@ DriverEntry(
     NDIS_MINIPORT_DRIVER_CHARACTERISTICS MiniportChars;
 
     DPRINT1("USBRNDIS: ========== DRIVER ENTRY ==========\n");
-    DPRINT1("USBRNDIS: ReactOS USB RNDIS NDIS 6.x Driver\n");
+    DPRINT1("USBRNDIS: LiberNT USB RNDIS NDIS 6.x Driver\n");
     DPRINT1("USBRNDIS: NDIS Version: %u.%u\n", NDIS_MINIPORT_MAJOR_VERSION, NDIS_MINIPORT_MINOR_VERSION);
 
     /* Initialize miniport characteristics structure */
@@ -1269,7 +1269,7 @@ RndisInitPerCpuStats(
     /*
      * Get active processor count. KeQueryActiveProcessors returns a bitmask.
      * Count the set bits to get the number of processors.
-     * Use simpler approach for ReactOS compatibility.
+     * Use simpler approach for LiberNT compatibility.
      */
     {
         KAFFINITY AffinityMask = KeQueryActiveProcessors();
