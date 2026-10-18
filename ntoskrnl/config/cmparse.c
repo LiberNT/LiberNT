@@ -239,6 +239,8 @@ CmpDoCreateChild(IN PHHIVE Hive,
         ParentDescriptor = ParentCopy;
     }
     if (ParentDescriptor &&
+        !((ParseContext->CreateOptions & REG_OPTION_BACKUP_RESTORE) &&
+          SeSinglePrivilegeCheck(SeRestorePrivilege, EffectiveMode)) &&
         !SeAccessCheck(ParentDescriptor, &AccessState->SubjectSecurityContext,
                        FALSE, KEY_CREATE_SUB_KEY, 0, NULL,
                        &CmpKeyObjectType->TypeInfo.GenericMapping, EffectiveMode,
