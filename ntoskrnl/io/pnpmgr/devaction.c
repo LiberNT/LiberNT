@@ -2639,6 +2639,7 @@ PiCloseRemovedDevice(
     _In_ PDEVICE_NODE DeviceNode)
 {
     PDEVICE_NODE Parent = DeviceNode->Parent;
+    PDEVICE_OBJECT DeviceObject = DeviceNode->PhysicalDeviceObject;
 
     if (DeviceNode->State != DeviceNodeRemovePendingCloses ||
         DeviceNode->Child != NULL ||
@@ -2654,8 +2655,10 @@ PiCloseRemovedDevice(
 
     InterlockedDecrement(&PiRemovePendingCloses);
     PiSetDevNodeState(DeviceNode, DeviceNodeAwaitingQueuedRemoval);
-    IopSendRemoveDevice(DeviceNode->PhysicalDeviceObject);
+    ObReferenceObject(DeviceObject);
+    IopSendRemoveDevice(DeviceObject);
     IopQueueTargetDeviceEvent(&GUID_DEVICE_SAFE_REMOVAL, &DeviceNode->InstancePath);
+    ObDereferenceObject(DeviceObject);
 
     if (Parent != NULL)
         PiQueueDeviceAction(Parent->PhysicalDeviceObject, PiActionCloseRemovedDevice, NULL, NULL);
@@ -3000,6 +3003,9 @@ PiEnumerateDevice(
     {
         if (!(child->Flags & (DNF_ENUMERATED|DNF_DEVICE_GONE)))
         {
+            if (child->State == DeviceNodeRemoved)
+                ObReferenceObject(child->PhysicalDeviceObject);
+
             // this flag indicates that this is a surprise removal
             PiSetDevNodeFlag(child, DNF_DEVICE_GONE);
             PiSetDevNodeState(child, DeviceNodeAwaitingQueuedRemoval);
