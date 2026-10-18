@@ -541,6 +541,21 @@ CreateTargetAccount(
                                     &UserHandle,
                                     &GrantedAccess,
                                     &RelativeId);
+    if (Status == STATUS_USER_EXISTS)
+    {
+        PULONG RelativeIds = NULL;
+        PSID_NAME_USE Use = NULL;
+
+        Status = SamLookupNamesInDomain(DomainHandle, 1, &AccountName, &RelativeIds, &Use);
+        if (NT_SUCCESS(Status))
+        {
+            RelativeId = RelativeIds[0];
+            Status = (Use[0] == SidTypeUser) ? SamOpenUser(DomainHandle, USER_ALL_ACCESS, RelativeId, &UserHandle)
+                                             : STATUS_USER_EXISTS;
+            SamFreeMemory(RelativeIds);
+            SamFreeMemory(Use);
+        }
+    }
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("SamCreateUser2InDomain() failed (Status 0x%08lx)\n", Status);
@@ -591,6 +606,8 @@ CreateTargetAccount(
     *RtlSubAuthoritySid(UserSid, SubAuthorityCount) = RelativeId;
 
     Status = SamAddMemberToAlias(AliasHandle, UserSid);
+    if (Status == STATUS_MEMBER_IN_ALIAS)
+        Status = STATUS_SUCCESS;
 
 done:
     if (UserSid)

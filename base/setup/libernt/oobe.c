@@ -41,6 +41,7 @@ static const SETUP_PAGE_INFO ComponentPages[] =
 };
 
 static BOOL ComponentsOnly;
+static BOOL FirstBootRun;
 
 static const SETUP_PAGE_INFO OobePages[] =
 {
@@ -462,6 +463,27 @@ CreateAccount(
     return NERR_Success;
 }
 
+static DWORD
+DisableSetupAccount(VOID)
+{
+    WCHAR Name[UNLEN + 1];
+    DWORD cchName = ARRAYSIZE(Name);
+    PUSER_INFO_1 Info;
+    USER_INFO_1008 Flags;
+    NET_API_STATUS Status;
+
+    if (!GetUserNameW(Name, &cchName))
+        return GetLastError();
+
+    Status = NetUserGetInfo(NULL, Name, 1, (LPBYTE *)&Info);
+    if (Status != NERR_Success)
+        return Status;
+    Flags.usri1008_flags = Info->usri1_flags | UF_ACCOUNTDISABLE;
+    NetApiBufferFree(Info);
+
+    return NetUserSetInfo(NULL, Name, 1008, (LPBYTE)&Flags, NULL);
+}
+
 typedef struct _FINISH_CONTEXT
 {
     HWND hwndDlg;
@@ -505,6 +527,11 @@ FinishThread(
     {
         PostMessageW(Context->hwndDlg, PM_INSTALL_DONE, Error, 0);
         return Error;
+    }
+    if (FirstBootRun)
+    {
+        Error = DisableSetupAccount();
+        DPRINT1("Setup account disabled with result %lu\n", Error);
     }
 
 Components:
@@ -657,19 +684,21 @@ HasAutomationPayload(VOID)
     return FALSE;
 }
 
-static VOID
+static BOOL
 EndFirstBootSetup(VOID)
 {
     HKEY hKey;
+    LONG Error;
 
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
                       0, KEY_SET_VALUE, &hKey) != ERROR_SUCCESS)
     {
-        return;
+        return FALSE;
     }
 
-    RegDeleteValueW(hKey, L"OOBE");
+    Error = RegDeleteValueW(hKey, L"OOBE");
     RegCloseKey(hKey);
+    return Error == ERROR_SUCCESS;
 }
 
 int WINAPI
@@ -686,7 +715,7 @@ wWinMain(
     ProcessHeap = GetProcessHeap();
     SetupData.hInstance = hInst;
 
-    EndFirstBootSetup();
+    FirstBootRun = EndFirstBootSetup();
     if (IsUnattendedFirstBoot() || HasAutomationPayload())
         return OOBE_SKIPPED;
 
