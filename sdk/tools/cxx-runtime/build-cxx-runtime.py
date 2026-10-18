@@ -15,7 +15,8 @@ import subprocess
 TARGETS = {
     ('amd64', False): ('x86_64-w64-mingw32', 'x86_64', 'x86_64', '-mlong-double-64', []),
     ('i386', False): ('i686-w64-mingw32', 'i686', 'i386', '-mlong-double-64', []),
-    ('arm64', False): ('aarch64-w64-mingw32', 'aarch64', 'aarch64', '-marm64x', []),
+    ('arm64', False): ('aarch64-w64-mingw32', 'aarch64', 'aarch64', '-marm64x',
+                       ['-DCOMPILER_RT_HAS_AARCH64_SME=OFF']),
     ('arm', False): ('arm-w64-mingw32', 'arm', 'arm', '', []),
     ('riscv64', False): ('riscv64-w64-mingw32', 'riscv64', 'riscv64',
                          '-march=rv64gc -mabi=lp64 -mcmodel=medany -mno-relax', []),
