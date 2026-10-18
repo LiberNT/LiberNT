@@ -862,7 +862,6 @@ PNP_ValidateDeviceInstance(
     HKEY hDeviceKey = NULL;
 
     UNREFERENCED_PARAMETER(hBinding);
-    UNREFERENCED_PARAMETER(ulFlags);
 
     DPRINT("PNP_ValidateDeviceInstance(%p %S 0x%08lx)\n",
            hBinding, pDeviceID, ulFlags);
@@ -881,7 +880,8 @@ PNP_ValidateDeviceInstance(
         goto Done;
     }
 
-    /* FIXME: add more tests */
+    if (!(ulFlags & CM_LOCATE_DEVNODE_PHANTOM) && !IsPresentDeviceInstanceID(pDeviceID))
+        ret = CR_NO_SUCH_DEVNODE;
 
 Done:
     if (hDeviceKey != NULL)

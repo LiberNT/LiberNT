@@ -120,7 +120,8 @@ SETUP_CreateDevicesList(
     IN OUT struct DeviceInfoSet *list,
     IN PCWSTR MachineName OPTIONAL,
     IN CONST GUID *Class OPTIONAL,
-    IN PCWSTR Enumerator OPTIONAL)
+    IN PCWSTR Enumerator OPTIONAL,
+    IN BOOL OnlyPresent)
 {
     PWCHAR Buffer = NULL;
     DWORD BufferLength = 4096;
@@ -178,7 +179,7 @@ SETUP_CreateDevicesList(
         TRACE("Checking %S\n", InstancePath);
         cr = CM_Locate_DevNode_Ex(&dnDevInst,
                                   (DEVINSTID_W)InstancePath,
-                                  CM_LOCATE_DEVNODE_NORMAL,
+                                  OnlyPresent ? CM_LOCATE_DEVNODE_NORMAL : CM_LOCATE_DEVNODE_PHANTOM,
                                   list->hMachine);
         if (cr != CR_SUCCESS)
         {

@@ -2805,7 +2805,7 @@ HDEVINFO WINAPI SetupDiGetClassDevsExW(
             SetLastError(ERROR_INVALID_PARAMETER);
             goto cleanup;
         }
-        rc = SETUP_CreateDevicesList(list, machine, pClassGuid, enumstr);
+        rc = SETUP_CreateDevicesList(list, machine, pClassGuid, enumstr, flags & DIGCF_PRESENT);
     }
     if (rc != ERROR_SUCCESS)
     {
