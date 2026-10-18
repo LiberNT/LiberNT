@@ -497,10 +497,11 @@
 @ stdcall GetDllDirectoryW(long ptr)
 @ stdcall GetDriveTypeA(str)
 @ stdcall GetDriveTypeW(wstr)
-@ stdcall -version=0x601+ -ret64 -arch=i386,x86_64 GetEnabledXStateFeatures()
+@ stdcall -version=0x601+ -ret64 GetEnabledXStateFeatures()
 @ stub -version=0x600+ GetDurationFormat
 @ stub -version=0x600+ GetDurationFormatEx
 @ stdcall -version=0x600+ GetDynamicTimeZoneInformation(ptr)
+@ stdcall -version=0x602+ GetDynamicTimeZoneInformationEffectiveYears(ptr ptr ptr)
 @ stdcall GetEnvironmentStrings()
 @ stdcall GetEnvironmentStringsA() GetEnvironmentStrings
 @ stdcall GetEnvironmentStringsW()

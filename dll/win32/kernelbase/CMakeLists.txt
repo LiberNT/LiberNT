@@ -13,12 +13,14 @@ add_subdirectory(wine)
 spec2def(kernelbase.dll kernelbase.spec ADD_IMPORTLIB)
 
 add_library(kernelbase MODULE
+    ApiSetQuery.c
     AppContainer.c
     CancelSynchronousIo.c
     ConsoleLegacy.c
     CpuSets.c
     DllMain.c
     AppModelToken.c
+    MemoryApi.c
     PackageFamily.c
     PssSnapshot.c
     Security.c
@@ -26,6 +28,7 @@ add_library(kernelbase MODULE
     VirtualAlloc2.c
     VolumeInformation.c
     WerRuntime.c
+    Wow64Directory.c
     XState.c
     ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/wcsnlen.c
     ${CMAKE_CURRENT_BINARY_DIR}/kernelbase_stubs.c

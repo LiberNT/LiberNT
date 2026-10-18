@@ -45,6 +45,11 @@ BOOL WINAPI InitializeContext(void *buffer, DWORD flags, CONTEXT **context, DWOR
     return InitializeContext2(buffer, flags, context, length, ~(ULONG64)0);
 }
 
+BOOL WINAPI CopyContext(CONTEXT *dst, DWORD context_flags, CONTEXT *src)
+{
+    return set_ntstatus(RtlCopyContext(dst, context_flags, src));
+}
+
 #endif
 
 #ifdef __x86_64__

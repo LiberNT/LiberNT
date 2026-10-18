@@ -58,6 +58,97 @@ VirtualAlloc2(
   _In_ ULONG PageProtection,
   _Inout_updates_opt_(ParameterCount) MEM_EXTENDED_PARAMETER *ExtendedParameters,
   _In_ ULONG ParameterCount);
+
+WINBASEAPI
+PVOID
+WINAPI
+MapViewOfFile3(
+  _In_ HANDLE FileMapping,
+  _In_opt_ HANDLE Process,
+  _In_opt_ PVOID BaseAddress,
+  _In_ ULONG64 Offset,
+  _In_ SIZE_T ViewSize,
+  _In_ ULONG AllocationType,
+  _In_ ULONG PageProtection,
+  _Inout_updates_opt_(ParameterCount) MEM_EXTENDED_PARAMETER *ExtendedParameters,
+  _In_ ULONG ParameterCount);
+
+WINBASEAPI
+PVOID
+WINAPI
+VirtualAlloc2FromApp(
+  _In_opt_ HANDLE Process,
+  _In_opt_ PVOID BaseAddress,
+  _In_ SIZE_T Size,
+  _In_ ULONG AllocationType,
+  _In_ ULONG PageProtection,
+  _Inout_updates_opt_(ParameterCount) MEM_EXTENDED_PARAMETER *ExtendedParameters,
+  _In_ ULONG ParameterCount);
+#endif
+
+#if (NTDDI_VERSION >= NTDDI_WIN10_RS1)
+typedef enum WIN32_MEMORY_INFORMATION_CLASS {
+  MemoryRegionInfo
+} WIN32_MEMORY_INFORMATION_CLASS;
+
+WINBASEAPI
+BOOL
+WINAPI
+QueryVirtualMemoryInformation(
+  _In_ HANDLE Process,
+  _In_ const VOID *VirtualAddress,
+  _In_ WIN32_MEMORY_INFORMATION_CLASS MemoryInformationClass,
+  _Out_writes_bytes_(MemoryInformationSize) PVOID MemoryInformation,
+  _In_ SIZE_T MemoryInformationSize,
+  _Out_opt_ PSIZE_T ReturnSize);
+#endif
+
+WINBASEAPI
+BOOL
+WINAPI
+UnmapViewOfFile2(
+  _In_ HANDLE Process,
+  _In_ PVOID BaseAddress,
+  _In_ ULONG UnmapFlags);
+
+#if (_WIN32_WINNT >= 0x0602)
+WINBASEAPI
+HANDLE
+WINAPI
+CreateFileMappingFromApp(
+  _In_ HANDLE hFile,
+  _In_opt_ PSECURITY_ATTRIBUTES SecurityAttributes,
+  _In_ ULONG PageProtection,
+  _In_ ULONG64 MaximumSize,
+  _In_opt_ PCWSTR Name);
+
+WINBASEAPI
+PVOID
+WINAPI
+MapViewOfFileFromApp(
+  _In_ HANDLE hFileMappingObject,
+  _In_ ULONG DesiredAccess,
+  _In_ ULONG64 FileOffset,
+  _In_ SIZE_T NumberOfBytesToMap);
+#endif
+
+#if (_WIN32_WINNT >= 0x0A00)
+WINBASEAPI
+PVOID
+WINAPI
+VirtualAllocFromApp(
+  _In_opt_ PVOID BaseAddress,
+  _In_ SIZE_T Size,
+  _In_ ULONG AllocationType,
+  _In_ ULONG Protection);
+
+WINBASEAPI
+HANDLE
+WINAPI
+OpenFileMappingFromApp(
+  _In_ ULONG DesiredAccess,
+  _In_ BOOL InheritHandle,
+  _In_ PCWSTR Name);
 #endif
 
 #if (_WIN32_WINNT >= 0x0501)

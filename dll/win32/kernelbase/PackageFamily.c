@@ -298,3 +298,16 @@ AppXFreeMemory(
     if (Memory)
         HeapFree(GetProcessHeap(), 0, Memory);
 }
+
+HMODULE
+WINAPI
+LoadPackagedLibrary(
+    _In_ LPCWSTR lpwLibFileName,
+    _Reserved_ DWORD Reserved)
+{
+    UNREFERENCED_PARAMETER(lpwLibFileName);
+    UNREFERENCED_PARAMETER(Reserved);
+
+    SetLastError(APPMODEL_ERROR_NO_PACKAGE);
+    return NULL;
+}

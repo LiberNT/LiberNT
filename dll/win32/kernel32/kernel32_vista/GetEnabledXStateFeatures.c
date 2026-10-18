@@ -2,8 +2,6 @@
 
 /* Taken from Wine 11.14 kernelbase/memory.c. */
 
-#if defined(_AMD64_) || defined(_X86_)
-
 NTSYSAPI
 ULONG64
 NTAPI
@@ -17,5 +15,3 @@ DWORD64 WINAPI GetEnabledXStateFeatures(void)
 {
     return RtlGetEnabledExtendedFeatures(~(ULONG64)0);
 }
-
-#endif

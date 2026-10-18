@@ -203,6 +203,46 @@ GetTimeZoneInformationForYear(
     return TRUE;
 }
 
+DWORD
+WINAPI
+GetDynamicTimeZoneInformationEffectiveYears(
+    _In_ CONST DYNAMIC_TIME_ZONE_INFORMATION *lpTimeZoneInformation,
+    _Out_ LPDWORD FirstYear,
+    _Out_ LPDWORD LastYear)
+{
+    UNICODE_STRING DynamicName = RTL_CONSTANT_STRING(L"Dynamic DST");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE Key;
+    HANDLE DynamicKey;
+    DWORD First;
+    DWORD Last;
+    NTSTATUS Status;
+
+    if (!lpTimeZoneInformation || !FirstYear || !LastYear)
+        return ERROR_INVALID_PARAMETER;
+
+    Status = K32OpenTimeZoneKey(lpTimeZoneInformation->TimeZoneKeyName, &Key);
+    if (!NT_SUCCESS(Status))
+        return ERROR_FILE_NOT_FOUND;
+
+    InitializeObjectAttributes(&ObjectAttributes, &DynamicName, OBJ_CASE_INSENSITIVE, Key, NULL);
+    Status = NtOpenKey(&DynamicKey, KEY_QUERY_VALUE, &ObjectAttributes);
+    NtClose(Key);
+    if (!NT_SUCCESS(Status))
+        return ERROR_FILE_NOT_FOUND;
+
+    Status = K32QueryValue(DynamicKey, L"FirstEntry", REG_DWORD, &First, sizeof(First));
+    if (NT_SUCCESS(Status))
+        Status = K32QueryValue(DynamicKey, L"LastEntry", REG_DWORD, &Last, sizeof(Last));
+    NtClose(DynamicKey);
+    if (!NT_SUCCESS(Status))
+        return ERROR_FILE_NOT_FOUND;
+
+    *FirstYear = First;
+    *LastYear = Last;
+    return ERROR_SUCCESS;
+}
+
 BOOL
 WINAPI
 SetDynamicTimeZoneInformation(
