@@ -12,6 +12,7 @@
 #include <winnls.h>
 #include <tzlib.h>
 #include <objbase.h>
+#include <ndk/setypes.h>
 
 #define DELAYIMP_INSECURE_WRITABLE_HOOKS
 #include <delayimp.h>
@@ -898,6 +899,142 @@ SelectListEntryById(
 }
 
 static BOOL
+ReadInstalledLanguage(
+    _In_ PCWSTR HivePath,
+    _Out_writes_(cchLocale) PWSTR Locale,
+    _In_ DWORD cchLocale,
+    _Out_writes_(cchLayout) PWSTR Layout,
+    _In_ DWORD cchLayout)
+{
+    WCHAR TempPath[MAX_PATH];
+    WCHAR Copy[MAX_PATH];
+    WCHAR Log[MAX_PATH];
+    BOOLEAN Restore, Backup;
+    DWORD cbData;
+    BOOL Found = FALSE;
+
+    if (!GetTempPathW(ARRAYSIZE(TempPath), TempPath) ||
+        !GetTempFileNameW(TempPath, L"hiv", 0, Copy))
+    {
+        return FALSE;
+    }
+
+    if (CopyFileW(HivePath, Copy, FALSE))
+    {
+        RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, TRUE, FALSE, &Restore);
+        RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, TRUE, FALSE, &Backup);
+        if (RegLoadKeyW(HKEY_USERS, L"LiberNTSetupDetect", Copy) == ERROR_SUCCESS)
+        {
+            cbData = cchLocale * sizeof(WCHAR);
+            Found = RegGetValueW(HKEY_USERS, L"LiberNTSetupDetect\\Control Panel\\International", L"Locale",
+                                 RRF_RT_REG_SZ, NULL, Locale, &cbData) == ERROR_SUCCESS;
+            cbData = cchLayout * sizeof(WCHAR);
+            if (RegGetValueW(HKEY_USERS, L"LiberNTSetupDetect\\Keyboard Layout\\Preload", L"1",
+                             RRF_RT_REG_SZ, NULL, Layout, &cbData) != ERROR_SUCCESS)
+            {
+                *Layout = UNICODE_NULL;
+            }
+            RegUnLoadKeyW(HKEY_USERS, L"LiberNTSetupDetect");
+        }
+        RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, Backup, FALSE, &Backup);
+        RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, Restore, FALSE, &Restore);
+    }
+
+    DeleteFileW(Copy);
+    if (SUCCEEDED(StringCchPrintfW(Log, ARRAYSIZE(Log), L"%s.LOG1", Copy)))
+        DeleteFileW(Log);
+    return Found;
+}
+
+static LCID
+GetFirmwareLanguage(VOID)
+{
+    CHAR Ascii[LOCALE_NAME_MAX_LENGTH];
+    WCHAR Name[LOCALE_NAME_MAX_LENGTH];
+    BOOLEAN Enabled;
+    DWORD Size, Index;
+
+    RtlAdjustPrivilege(SE_SYSTEM_ENVIRONMENT_PRIVILEGE, TRUE, FALSE, &Enabled);
+    Size = GetFirmwareEnvironmentVariableW(L"PlatformLang", L"{8BE4DF61-93CA-11D2-AA0D-00E098032B8C}",
+                                           Ascii, sizeof(Ascii) - 1);
+    RtlAdjustPrivilege(SE_SYSTEM_ENVIRONMENT_PRIVILEGE, Enabled, FALSE, &Enabled);
+
+    for (Index = 0; Index < Size && Ascii[Index]; Index++)
+        Name[Index] = (WCHAR)(UCHAR)Ascii[Index];
+    Name[Index] = UNICODE_NULL;
+    DPRINT1("Firmware language '%S'\n", Name);
+
+    return Index ? LocaleNameToLCID(Name, 0) : 0;
+}
+
+static VOID
+GetLocaleKeyboardLayout(
+    _In_ PSETUPDATA pSetupData,
+    _In_ LCID Lcid,
+    _Out_writes_(cchLayout) PWSTR Layout,
+    _In_ SIZE_T cchLayout)
+{
+    WCHAR Keyboards[256];
+    PWSTR Colon, End;
+
+    if (GetLocaleInfoW(Lcid, LOCALE_SKEYBOARDSTOINSTALL, Keyboards, ARRAYSIZE(Keyboards)) &&
+        (Colon = wcschr(Keyboards, L':')) != NULL)
+    {
+        End = wcschr(Colon, L';');
+        if (End)
+            *End = UNICODE_NULL;
+        StringCchCopyW(Layout, cchLayout, Colon + 1);
+        if (SelectListEntryById(pSetupData->USetupData.LayoutList, Layout))
+            return;
+    }
+
+    StringCchPrintfW(Layout, cchLayout, L"%08lX", (ULONG)LANGIDFROMLCID(Lcid));
+}
+
+static VOID
+DetectLanguageDefaults(
+    _Inout_ PSETUPDATA pSetupData)
+{
+    PLIST_ENTRY Entry;
+    PVOLENTRY Volume;
+    WCHAR Path[MAX_PATH];
+    WCHAR Locale[ARRAYSIZE(pSetupData->DefaultLanguage)];
+    WCHAR Layout[ARRAYSIZE(pSetupData->DefaultKBLayout)];
+    LCID Lcid = 0;
+
+    for (Entry = pSetupData->PartitionList->VolumesList.Flink;
+         Entry != &pSetupData->PartitionList->VolumesList && Lcid == 0;
+         Entry = Entry->Flink)
+    {
+        Volume = CONTAINING_RECORD(Entry, VOLENTRY, ListEntry);
+        if (SUCCEEDED(StringCchPrintfW(Path, ARRAYSIZE(Path),
+                                       L"\\\\?\\GLOBALROOT%s\\Windows\\System32\\config\\DEFAULT",
+                                       Volume->Info.DeviceName)) &&
+            ReadInstalledLanguage(Path, Locale, ARRAYSIZE(Locale), Layout, ARRAYSIZE(Layout)))
+        {
+            Lcid = wcstoul(Locale, NULL, 16);
+            DPRINT1("Installed language %S, keyboard %S on %S\n", Locale, Layout, Volume->Info.DeviceName);
+        }
+    }
+
+    if (Lcid == 0)
+    {
+        Lcid = GetFirmwareLanguage();
+        *Layout = UNICODE_NULL;
+    }
+    if (Lcid == 0)
+        return;
+
+    StringCchPrintfW(Locale, ARRAYSIZE(Locale), L"%08lX", Lcid);
+    if (!*Layout || !SelectListEntryById(pSetupData->USetupData.LayoutList, Layout))
+        GetLocaleKeyboardLayout(pSetupData, Lcid, Layout, ARRAYSIZE(Layout));
+
+    ApplyLanguageChoice(pSetupData, Locale, Layout);
+    if (!LoadKeyboardLayoutW(pSetupData->DefaultKBLayout, KLF_ACTIVATE | KLF_SETFORPROCESS))
+        DPRINT1("LoadKeyboardLayoutW(%S) failed, error %lu\n", pSetupData->DefaultKBLayout, GetLastError());
+}
+
+static BOOL
 LoadSetupData(
     _Inout_ PSETUPDATA pSetupData)
 {
@@ -941,6 +1078,8 @@ LoadSetupData(
     SelectListEntryById(pSetupData->USetupData.LanguageList, pSetupData->DefaultLanguage);
     SelectListEntryById(pSetupData->USetupData.LayoutList,
                         pSetupData->bUnattend ? pSetupData->DefaultLanguage : pSetupData->DefaultKBLayout);
+    if (!pSetupData->bUnattend)
+        DetectLanguageDefaults(pSetupData);
 
     return TRUE;
 }
