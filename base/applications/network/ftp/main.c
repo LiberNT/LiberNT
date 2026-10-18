@@ -465,26 +465,11 @@ S1:
 	case '\0':
 		goto OUT1;	/* end of token */
 
-	case '\\':
-		sb++; goto S2;	/* slurp next character */
-
 	case '"':
 		sb++; goto S3;	/* slurp quoted string */
 
 	default:
 		*ap++ = *sb++;	/* add character to token */
-		got_one = 1;
-		goto S1;
-	}
-
-S2:
-	switch (*sb) {
-
-	case '\0':
-		goto OUT1;
-
-	default:
-		*ap++ = *sb++;
 		got_one = 1;
 		goto S1;
 	}
