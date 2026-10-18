@@ -323,7 +323,7 @@ RndisQueryOid(
     QueryMsg.RequestId = RNDIS_GET_REQUEST_ID(Adapter);
     QueryMsg.Oid = Oid;
     QueryMsg.InformationBufferLength = 0;
-    QueryMsg.InformationBufferOffset = 20; /* Offset from RequestId */
+    QueryMsg.InformationBufferOffset = 0;
     QueryMsg.DeviceVcHandle = 0;
 
     /* Send query and get response */
