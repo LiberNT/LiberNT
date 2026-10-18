@@ -3847,31 +3847,20 @@ XHCI_PerformEndpointResetSequence(
     /*
      * After Stop/Reset and resetting the software ring, re-sync the hardware TR
      * Dequeue Pointer so the endpoint resumes from the correct ring head.
-     *
-     * QEMU's xHCI (1B36:000D) can wedge if SetTRDequeue is issued against the
-     * static EP0 ring while the startup HCE quirk is active; skip in that case.
      */
     if (CanSetDequeue)
     {
-        BOOLEAN SkipSetDequeue =
-            Endpoint->UsesStaticRing &&
-            Endpoint->DefaultControl &&
-            ((Extension->Quirks & XHCI_QUIRK_IGNORE_STARTUP_HCE) != 0);
-
-        if (!SkipSetDequeue)
+        MPSTATUS DeqStatus = XHCI_SetEndpointDequeue(Extension,
+                                                      Endpoint->Slot,
+                                                      Endpoint->EndpointId,
+                                                      &Endpoint->TransferRing);
+        if (DeqStatus != MP_STATUS_SUCCESS)
         {
-            MPSTATUS DeqStatus = XHCI_SetEndpointDequeue(Extension,
-                                                          Endpoint->Slot,
-                                                          Endpoint->EndpointId,
-                                                          &Endpoint->TransferRing);
-            if (DeqStatus != MP_STATUS_SUCCESS)
-            {
-                DPRINT1("usbxhci: EndpointResetSequence slot=%u ep=%u SET_TR_DEQUEUE failed (status=%lu)\n",
-                        Endpoint->SlotId,
-                        Endpoint->EndpointId,
-                        DeqStatus);
-                return;
-            }
+            DPRINT1("usbxhci: EndpointResetSequence slot=%u ep=%u SET_TR_DEQUEUE failed (status=%lu)\n",
+                    Endpoint->SlotId,
+                    Endpoint->EndpointId,
+                    DeqStatus);
+            return;
         }
     }
 
