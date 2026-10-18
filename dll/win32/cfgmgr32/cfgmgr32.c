@@ -682,6 +682,11 @@ LSTATUS query_device_interface_property( HKEY hkey, const struct device_interfac
     if (!memcmp( &DEVPKEY_DeviceInterface_ClassGuid, &prop->key, sizeof(prop->key) ))
         return return_property( prop, DEVPROP_TYPE_GUID, &iface->class_guid, sizeof(iface->class_guid) );
 #ifdef __REACTOS__
+    if (!memcmp( &DEVPKEY_DeviceInterface_ReferenceString, &prop->key, sizeof(prop->key) ))
+    {
+        if (!iface->refstr[1]) return ERROR_NOT_FOUND;
+        return return_property( prop, DEVPROP_TYPE_STRING, iface->refstr + 1, (wcslen( iface->refstr + 1 ) + 1) * sizeof(WCHAR) );
+    }
     if (!memcmp( &DEVPKEY_Device_ContainerId, &prop->key, sizeof(prop->key) ))
     {
         WCHAR instance_id[MAX_DEVICE_ID_LEN];
@@ -747,6 +752,11 @@ LSTATUS enum_device_interface_property_keys( HKEY hkey, const struct device_inte
     else buffer[count - 1] = DEVPKEY_DeviceInterface_ClassGuid;
 
 #ifdef __REACTOS__
+    if (iface->refstr[1])
+    {
+        if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
+        else buffer[count - 1] = DEVPKEY_DeviceInterface_ReferenceString;
+    }
     {
         struct property prop;
         DEVPROPTYPE type;
@@ -798,6 +808,7 @@ LSTATUS enum_device_interface_property_keys( HKEY hkey, const struct device_inte
                 if (!memcmp( &key, &DEVPKEY_DeviceInterface_Enabled, sizeof(key) ) ||
                     !memcmp( &key, &DEVPKEY_Device_InstanceId, sizeof(key) ) ||
                     !memcmp( &key, &DEVPKEY_DeviceInterface_ClassGuid, sizeof(key) ) ||
+                    !memcmp( &key, &DEVPKEY_DeviceInterface_ReferenceString, sizeof(key) ) ||
                     !memcmp( &key, &DEVPKEY_Device_ContainerId, sizeof(key) )) continue;
                 for (k = 0; k < ARRAY_SIZE(device_interface_properties); k++)
                     if (!memcmp( device_interface_properties[k].key, &key, sizeof(key) )) break;
