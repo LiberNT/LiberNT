@@ -29,6 +29,7 @@ extern PKWIN32_SESSION_CALLOUT ExpDesktopObjectDelete;
 extern PKWIN32_SESSION_CALLOUT ExpDesktopObjectOpen;
 extern PKWIN32_SESSION_CALLOUT ExpDesktopObjectClose;
 extern PKWIN32_POWEREVENT_CALLOUT PopEventCallout;
+extern PKWIN32_POWERSTATE_CALLOUT PopStateCallout;
 
 /* PRIVATE FUNCTIONS *********************************************************/
 
@@ -156,6 +157,7 @@ PsEstablishWin32Callouts(IN PWIN32_CALLOUTS_FPNS CalloutData)
     ExpDesktopObjectOpen = CalloutData->DesktopOpenProcedure;
     ExpDesktopObjectClose = CalloutData->DesktopCloseProcedure;
     PopEventCallout = CalloutData->PowerEventCallout;
+    PopStateCallout = CalloutData->PowerStateCallout;
     KeGdiFlushUserBatch = CalloutData->BatchFlushRoutine;
 }
 

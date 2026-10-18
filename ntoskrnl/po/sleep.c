@@ -52,6 +52,7 @@ static LIST_ENTRY PopSleepDisableList;
 static POP_SLEEP_DISABLE PopAoAcDisable;
 volatile LONG64 PopLastSleepTime;
 volatile LONG64 PopLastWakeTime;
+PKWIN32_POWERSTATE_CALLOUT PopStateCallout;
 
 static
 VOID
@@ -552,6 +553,31 @@ PopSleepSendDevices(
 }
 
 static
+VOID
+PopSleepCallWin32(
+    _In_ POWERSTATETASK Task,
+    _In_ POWER_ACTION SystemAction,
+    _In_ SYSTEM_POWER_STATE SystemState,
+    _In_ ULONG Flags)
+{
+    WIN32_POWERSTATE_PARAMETERS Parameters;
+    NTSTATUS Status;
+
+    if (PopStateCallout == NULL)
+        return;
+
+    RtlZeroMemory(&Parameters, sizeof(Parameters));
+    Parameters.SystemAction = SystemAction;
+    Parameters.MinSystemState = SystemState;
+    Parameters.Flags = Flags;
+    Parameters.PowerStateTask = Task;
+
+    Status = PopStateCallout(&Parameters);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("Win32 power state task %u failed: 0x%08lx\n", Task, Status);
+}
+
+static
 ULONG_PTR
 NTAPI
 PopSleepIpiWorker(
@@ -600,6 +626,12 @@ PopSleepSystem(
         return STATUS_DEVICE_BUSY;
 
     DPRINT1("Entering sleep state S%u\n", SystemState - PowerSystemWorking);
+
+    if (PopLockConsoleOnWake())
+        Flags |= POWER_ACTION_LOCK_CONSOLE;
+
+    PopSleepCallWin32(PowerState_NotifyWL, SystemAction, SystemState, Flags);
+    PopSleepCallWin32(PowerState_SuspendApps, SystemAction, SystemState, Flags);
 
     if (NT_SUCCESS(IopGetSystemPowerDeviceObject(&PowerPdo)))
     {
@@ -656,6 +688,8 @@ PopSleepSystem(
 
 Done:
     ExNotifyCallback(PowerStateCallback, (PVOID)PO_CB_SYSTEM_STATE_LOCK, (PVOID)1);
+
+    PopSleepCallWin32(PowerState_ResumeApps, SystemAction, SystemState, Flags);
 
     if (PowerDevice)
         ObDereferenceObject(PowerDevice);

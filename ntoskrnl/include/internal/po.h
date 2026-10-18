@@ -376,6 +376,12 @@ PopQuerySleepDisableReasons(
 extern volatile LONG64 PopLastSleepTime;
 extern volatile LONG64 PopLastWakeTime;
 
+BOOLEAN
+NTAPI
+PopLockConsoleOnWake(
+    VOID
+);
+
 VOID
 NTAPI
 PopCleanupPowerState(

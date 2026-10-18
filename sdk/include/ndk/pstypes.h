@@ -793,22 +793,19 @@ typedef enum _PSPOWEREVENTTYPE
 //
 typedef enum _POWERSTATETASK
 {
-    PowerState_BlockSessionSwitch = 0,
-    PowerState_Init = 1,
-    PowerState_QueryApps = 2,
-    PowerState_QueryServices = 3,
-    PowerState_QueryAppsFailed = 4,
-    PowerState_QueryServicesFailed = 5,
-    PowerState_SuspendApps = 6,
-    PowerState_SuspendServices = 7,
-    PowerState_ShowUI = 8,
-    PowerState_NotifyWL = 9,
-    PowerState_ResumeApps = 10,
-    PowerState_ResumeServices = 11,
-    PowerState_UnBlockSessionSwitch = 12,
-    PowerState_End = 13,
-    PowerState_BlockInput = 14,
-    PowerState_UnblockInput = 15,
+    PowerState_BlockSessionSwitch,
+    PowerState_Init,
+    PowerState_SuspendApps,
+    PowerState_SuspendServices,
+    PowerState_NotifyWL,
+    PowerState_ResumeApps,
+    PowerState_ResumeServices,
+    PowerState_UnBlockSessionSwitch,
+    PowerState_End,
+    PowerState_Flush,
+    PowerState_StartPartitionReplace,
+    PowerState_EndPartitionReplace,
+    PowerState_MonitorOff
 } POWERSTATETASK;
 
 //

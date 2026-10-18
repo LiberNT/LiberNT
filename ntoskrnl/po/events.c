@@ -678,6 +678,23 @@ PopGetPowerButtonAction(VOID)
     return Action;
 }
 
+BOOLEAN
+NTAPI
+PopLockConsoleOnWake(VOID)
+{
+    PPOP_POWER_SETTING_CACHE_ENTRY CacheEntry;
+    BOOLEAN Lock = TRUE;
+
+    PAGED_CODE();
+
+    KeAcquireGuardedMutex(&PopPowerSettingLock);
+    CacheEntry = PopFindPowerSettingCacheEntry(&GUID_LOCK_CONSOLE_ON_WAKE, PopCurrentPowerCondition);
+    if (CacheEntry && CacheEntry->ValueLength == sizeof(ULONG))
+        Lock = *(PULONG)CacheEntry->Value != 0;
+    KeReleaseGuardedMutex(&PopPowerSettingLock);
+    return Lock;
+}
+
 static VOID
 NTAPI
 PopGetSysButton(
