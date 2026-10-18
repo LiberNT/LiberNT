@@ -933,10 +933,9 @@ cleanup:
     FreeWlxMprInfo(&Session->MprNotifyInfo);
     ZeroMemory(&Session->MprNotifyInfo, sizeof(Session->MprNotifyInfo));
 
-    RemoveStatusMessage(Session);
-
     if (!ret)
     {
+        RemoveStatusMessage(Session);
         RtlFreeHeap(RtlGetProcessHeap(), 0, Session->UserName);
         RtlFreeHeap(RtlGetProcessHeap(), 0, Session->Domain);
         Session->UserName = Session->Domain = NULL;
@@ -974,6 +973,7 @@ cleanup:
 #else
         SwitchDesktop(Session->ApplicationDesktop);
 #endif
+        RemoveStatusMessage(Session);
         Session->LogonState = STATE_LOGGED_ON;
     }
     return ret;
@@ -1604,6 +1604,7 @@ DoGenericAction(
             {
                 CallNotificationDlls(Session, UnlockHandler);
                 SwitchDesktop(Session->ApplicationDesktop);
+                RemoveStatusMessage(Session);
                 Session->LogonState = STATE_LOGGED_ON;
             }
             break;

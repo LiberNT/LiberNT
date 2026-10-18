@@ -26,6 +26,12 @@ LogonUiRun(
     _Inout_ PGINA_CONTEXT pgContext,
     _In_ LOGONUI_MODE Mode);
 
+VOID
+LogonUiRemoveCover(VOID);
+
+BOOL
+LogonUiCoverShown(VOID);
+
 DWORD
 LogonUiPowerDialog(
     _In_opt_ HWND Parent,

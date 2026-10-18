@@ -108,6 +108,9 @@ GUIDisplayStatusMessage(
     TRACE("GUIDisplayStatusMessage(%ws)\n", pMessage);
     UNREFERENCED_PARAMETER(pTitle);
 
+    if (LogonUiCoverShown())
+        return TRUE;
+
     if (!pgContext->hStatusWindow)
     {
         /*
@@ -170,11 +173,12 @@ static BOOL
 GUIRemoveStatusMessage(
     IN PGINA_CONTEXT pgContext)
 {
-    if (pgContext->hStatusWindow)
+    if (pgContext->hStatusWindow && !pgContext->bAutoAdminLogon)
     {
         SendMessageW(pgContext->hStatusWindow, WM_CLOSE, 0, 0);
         pgContext->hStatusWindow = NULL;
     }
+    LogonUiRemoveCover();
 
     return TRUE;
 }

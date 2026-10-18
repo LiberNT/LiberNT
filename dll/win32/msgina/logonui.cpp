@@ -31,6 +31,7 @@ extern "C" {
 #define LOGONUI_ACCENT_HOT      RGB(0, 120, 215)
 #define LOGONUI_PASSWORD_CHAR   0x2022
 #define LOGONUI_CUE_PROP        L"LiberNTLogonCue"
+#define LOGONUI_COVER_CLASS     L"LiberNTLogonCover"
 
 enum class Page
 {
@@ -125,6 +126,9 @@ static const PowerChoice PowerChoices[] =
 static Backdrop g_Backdrops[2];
 static ULONG_PTR g_GdiplusToken;
 static WNDPROC g_EditProc;
+static HWND g_Cover;
+static HBITMAP g_CoverBitmap;
+static HWND g_LockWindow;
 
 static HBITMAP
 CreateDib(int Width, int Height, UINT32 **Bits)
@@ -138,6 +142,43 @@ CreateDib(int Width, int Height, UINT32 **Bits)
     Info.bmiHeader.biBitCount = 32;
     Info.bmiHeader.biCompression = BI_RGB;
     return CreateDIBSection(NULL, &Info, DIB_RGB_COLORS, (PVOID *)Bits, NULL, 0);
+}
+
+static LRESULT CALLBACK
+CoverWindowProc(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam)
+{
+    switch (Message)
+    {
+        case WM_ERASEBKGND:
+            return TRUE;
+
+        case WM_PAINT:
+        {
+            PAINTSTRUCT Paint;
+            HDC Dc = BeginPaint(Window, &Paint);
+            HDC Source = CreateCompatibleDC(Dc);
+            HGDIOBJ Old = SelectObject(Source, g_CoverBitmap);
+            RECT Client;
+
+            GetClientRect(Window, &Client);
+            BitBlt(Dc, 0, 0, Client.right, Client.bottom, Source, 0, 0, SRCCOPY);
+            SelectObject(Source, Old);
+            DeleteDC(Source);
+            EndPaint(Window, &Paint);
+            return 0;
+        }
+
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+
+        case WM_DESTROY:
+            DeleteObject(g_CoverBitmap);
+            g_CoverBitmap = NULL;
+            g_Cover = NULL;
+            return 0;
+    }
+
+    return DefWindowProcW(Window, Message, wParam, lParam);
 }
 
 static float
@@ -545,11 +586,12 @@ public:
     HDC BackdropDc = NULL;
     HBITMAP FrameBitmap = NULL;
     HBITMAP LayerBitmap = NULL;
+    HBITMAP BeforeBitmap = NULL;
     HGDIOBJ OldFrame = NULL;
     HGDIOBJ OldLayer = NULL;
-    HGDIOBJ OldBackdrop = NULL;
     UINT32 *FrameBits = NULL;
     UINT32 *LayerBits = NULL;
+    UINT32 *BeforeBits = NULL;
     HFONT ClockFont = NULL;
     HFONT DateFont = NULL;
     HFONT NameFont = NULL;
@@ -563,6 +605,7 @@ public:
     HWND NewEdit = NULL;
     HWND ConfirmEdit = NULL;
     WCHAR Users[LOGONUI_MAX_USERS][UNLEN + 1] = {};
+    BOOL NoPassword[LOGONUI_MAX_USERS] = {};
     int UserCount = 0;
     int Selected = 0;
     WCHAR Message[512] = L"";
@@ -611,6 +654,11 @@ public:
         return Selected >= UserCount;
     }
 
+    BOOL Passwordless() const
+    {
+        return !OtherUser() && NoPassword[Selected];
+    }
+
     PCWSTR SelectedName() const
     {
         if (Mode == LogonUiUnlock && !OtherUser())
@@ -644,34 +692,66 @@ public:
         return Edit;
     }
 
+    void LoadBlankDefaultUser(PWSTR User, DWORD Count)
+    {
+        HKEY Key;
+        DWORD Value = 0, Type, Size = 2 * sizeof(WCHAR);
+        WCHAR Password[2] = L"";
+
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon", 0,
+                          KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
+            return;
+        if (ReadRegDwordValue(Key, L"AutoAdminLogon", &Value) == ERROR_SUCCESS && Value &&
+            RegQueryValueExW(Key, L"DefaultPassword", NULL, &Type, (PBYTE)Password, &Size) == ERROR_SUCCESS &&
+            Type == REG_SZ && !Password[0])
+        {
+            Size = (Count - 1) * sizeof(WCHAR);
+            if (RegQueryValueExW(Key, L"DefaultUserName", NULL, &Type, (PBYTE)User, &Size) != ERROR_SUCCESS ||
+                Type != REG_SZ)
+                User[0] = UNICODE_NULL;
+        }
+        RegCloseKey(Key);
+    }
+
     void LoadUsers()
     {
-        PUSER_INFO_1 Info = NULL;
-        DWORD Read = 0, Total = 0, i;
+        PUSER_INFO_1 Info;
+        DWORD Read, Total, Resume = 0, i;
+        NET_API_STATUS Status;
         int Default = -1;
+        WCHAR Blank[UNLEN + 1] = L"";
 
         if (Mode == LogonUiUnlock)
         {
             StringCchCopyW(Users[0], _countof(Users[0]), Context->UserName);
+            NoPassword[0] = !Context->Password[0];
             UserCount = 1;
             Selected = 0;
             return;
         }
 
-        if (NetUserEnum(NULL, 1, FILTER_NORMAL_ACCOUNT, (LPBYTE *)&Info, MAX_PREFERRED_LENGTH, &Read, &Total, NULL) ==
-            NERR_Success && Info)
+        LoadBlankDefaultUser(Blank, _countof(Blank));
+        do
         {
-            for (i = 0; i < Read && UserCount < LOGONUI_MAX_USERS; i++)
+            Info = NULL;
+            Read = 0;
+            Status = NetUserEnum(NULL, 1, FILTER_NORMAL_ACCOUNT, (LPBYTE *)&Info, MAX_PREFERRED_LENGTH, &Read, &Total,
+                                 &Resume);
+            if (Status != NERR_Success && Status != ERROR_MORE_DATA)
+                break;
+            for (i = 0; Info && i < Read && UserCount < LOGONUI_MAX_USERS; i++)
             {
                 if (Info[i].usri1_flags & UF_ACCOUNTDISABLE)
                     continue;
                 StringCchCopyW(Users[UserCount], _countof(Users[UserCount]), Info[i].usri1_name);
+                NoPassword[UserCount] = Blank[0] && !_wcsicmp(Users[UserCount], Blank);
                 if (!_wcsicmp(Users[UserCount], Context->UserName))
                     Default = UserCount;
                 UserCount++;
             }
-            NetApiBufferFree(Info);
-        }
+            if (Info)
+                NetApiBufferFree(Info);
+        } while (Status == ERROR_MORE_DATA && Read);
 
         if (Context->bDontDisplayLastUserName || !UserCount)
             Selected = UserCount;
@@ -763,11 +843,11 @@ public:
         ReleaseDC(NULL, ScreenDc);
         FrameBitmap = CreateDib(Width, Height, &FrameBits);
         LayerBitmap = CreateDib(Width, Height, &LayerBits);
+        BeforeBitmap = CreateDib(Width, Height, &BeforeBits);
         if (!FrameDc || !LayerDc || !BackdropDc || !FrameBitmap || !LayerBitmap)
             return FALSE;
         OldFrame = SelectObject(FrameDc, FrameBitmap);
         OldLayer = SelectObject(LayerDc, LayerBitmap);
-        OldBackdrop = SelectObject(BackdropDc, Wall->Sharp);
 
         ClockFont = MakeFont(L"Selawik Light", 132);
         DateFont = MakeFont(L"Selawik Semilight", 32);
@@ -826,26 +906,30 @@ public:
         CapsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
         SetTimer(Window, LOGONUI_TIMER_CLOCK, LOGONUI_CLOCK_MS, NULL);
         Layout(0);
-        Start(Anim::Enter, Current == Page::Lock ? 520 : 300);
-        if (Mode == LogonUiSignIn && Current == Page::SignIn && Context->bAutoAdminLogon)
-            AutoLogon();
+        if ((Mode == LogonUiSignIn || Mode == LogonUiUnlock) && g_LockWindow && IsWindowVisible(g_LockWindow))
+            Start(Anim::Dismiss, 340);
+        else if (Current != Page::Lock)
+        {
+            SaveScreen();
+            Start(Anim::Enter, 300);
+        }
+        SetWindowPos(Window, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        UpdateWindow(Window);
+        LogonUiRemoveCover();
+        if (Current == Page::Lock)
+        {
+            g_LockWindow = Window;
+            ShowFields(TRUE);
+        }
+        if (Pending)
+            PostMessageW(Window, WM_LOGONUI_DONE, 0, (LPARAM)Pending);
         return TRUE;
-    }
-
-    void AutoLogon()
-    {
-        LogonJob *Request = NewJob(Job::Logon);
-
-        if (!Request)
-            return;
-        StringCchCopyW(Request->User, _countof(Request->User), Context->UserName);
-        StringCchCopyW(Request->Domain, _countof(Request->Domain), Context->DomainName);
-        StringCchCopyW(Request->Password, _countof(Request->Password), Context->Password);
-        BeginJob(Request);
     }
 
     void Destroy()
     {
+        if (g_LockWindow == Window)
+            g_LockWindow = NULL;
         if (Worker)
         {
             WaitForSingleObject(Worker, INFINITE);
@@ -869,14 +953,13 @@ public:
             DeleteDC(LayerDc);
         }
         if (BackdropDc)
-        {
-            SelectObject(BackdropDc, OldBackdrop);
             DeleteDC(BackdropDc);
-        }
         if (FrameBitmap)
             DeleteObject(FrameBitmap);
         if (LayerBitmap)
             DeleteObject(LayerBitmap);
+        if (BeforeBitmap)
+            DeleteObject(BeforeBitmap);
         HFONT Fonts[] = {ClockFont, DateFont, NameFont, BodyFont, SmallFont, OptionFont};
         for (HFONT Font : Fonts)
         {
@@ -912,7 +995,7 @@ public:
         AnimationStart = GetTickCount64();
         AnimationLength = Length;
         Progress = 0.0f;
-        if (Kind == Anim::Enter || Kind == Anim::Leave)
+        if (Kind == Anim::Enter || Kind == Anim::Dismiss || Kind == Anim::Leave)
             ShowFields(FALSE);
         SetTimer(Window, LOGONUI_TIMER_ANIMATION, LOGONUI_FRAME_MS, NULL);
         InvalidateRect(Window, NULL, FALSE);
@@ -937,13 +1020,8 @@ public:
             KillTimer(Window, LOGONUI_TIMER_ANIMATION);
         InvalidateRect(Window, NULL, FALSE);
 
-        if (Finished == Anim::Enter)
+        if (Finished == Anim::Enter || Finished == Anim::Dismiss)
             ShowFields(TRUE);
-        else if (Finished == Anim::Dismiss)
-        {
-            Dismissed = TRUE;
-            Context->pWlxFuncs->WlxSasNotify(Context->hWlx, WLX_SAS_TYPE_CTRL_ALT_DEL);
-        }
     }
 
     int ShakeOffset() const
@@ -956,7 +1034,7 @@ public:
     void ShowFields(BOOL Show)
     {
         HWND Edits[] = {UserEdit, PasswordEdit, OldEdit, NewEdit, ConfirmEdit};
-        BOOL Visible[] = {Current == Page::SignIn && OtherUser(), Current == Page::SignIn,
+        BOOL Visible[] = {Current == Page::SignIn && OtherUser(), Current == Page::SignIn && !Passwordless(),
                           Current == Page::Password && !ExpiredFlow, Current == Page::Password,
                           Current == Page::Password};
         HWND First = NULL;
@@ -1022,6 +1100,9 @@ public:
             OffsetRect(&UserField, Offset, 0);
             OffsetRect(&PasswordField, Offset, 0);
             SetRect(&Submit, PasswordField.right - S(42), PasswordField.top, PasswordField.right, PasswordField.bottom);
+            if (Passwordless())
+                SetRect(&Submit, Center - S(66) + Offset, PasswordField.top, Center + S(66) + Offset,
+                        PasswordField.bottom);
             SetRect(&MessageRect, Center - S(260), PasswordField.bottom + S(16), Center + S(260),
                     PasswordField.bottom + S(16) + S(64));
             for (i = 0; i <= UserCount; i++)
@@ -1085,8 +1166,27 @@ public:
         }
     }
 
+    void SaveScreen()
+    {
+        HDC ScreenDc;
+        HGDIOBJ Old;
+
+        if (!BeforeBitmap)
+            return;
+        ScreenDc = GetDC(NULL);
+        Old = SelectObject(BackdropDc, BeforeBitmap);
+        BitBlt(BackdropDc, 0, 0, Width, Height, ScreenDc, 0, 0, SRCCOPY);
+        SelectObject(BackdropDc, Old);
+        ReleaseDC(NULL, ScreenDc);
+    }
+
     void SwitchPage(Page Next)
     {
+        if (BeforeBitmap)
+        {
+            GdiFlush();
+            CopyMemory(BeforeBits, FrameBits, (SIZE_T)Width * Height * sizeof(UINT32));
+        }
         Current = Next;
         Message[0] = UNICODE_NULL;
         Hover = HitNone;
@@ -1321,6 +1421,18 @@ public:
                                                                  : IDS_LOGONUI_CHANGE_FAILED;
         }
 
+        if (Current == Page::SignIn && Passwordless())
+        {
+            if (Error == IDS_LOGONUI_WRONG_PASSWORD)
+            {
+                NoPassword[Selected] = FALSE;
+                Layout(0);
+            }
+            else
+            {
+                Retry = NULL;
+            }
+        }
         ShowFields(TRUE);
         Fail(Error, Done->Kind == Job::Unlock ? Context->UserName : NULL, Retry);
         Release(Done);
@@ -1332,6 +1444,40 @@ public:
         HeapFree(GetProcessHeap(), 0, Done);
     }
 
+    void KeepFrame(BOOL Welcome)
+    {
+        WNDCLASSW Class = {};
+        UINT32 *Bits;
+
+        LogonUiRemoveCover();
+        if (Welcome)
+            Busy = TRUE;
+        Animation = Anim::None;
+        Layout(0);
+        Render();
+        GdiFlush();
+        g_CoverBitmap = CreateDib(Width, Height, &Bits);
+        if (!g_CoverBitmap)
+            return;
+        CopyMemory(Bits, FrameBits, (SIZE_T)Width * Height * sizeof(UINT32));
+
+        Class.lpfnWndProc = CoverWindowProc;
+        Class.hInstance = hDllInstance;
+        Class.hCursor = LoadCursorW(NULL, IDC_ARROW);
+        Class.lpszClassName = LOGONUI_COVER_CLASS;
+        RegisterClassW(&Class);
+        g_Cover = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, LOGONUI_COVER_CLASS, L"",
+                                  WS_POPUP, 0, 0, Width, Height, NULL, NULL, hDllInstance, NULL);
+        if (!g_Cover)
+        {
+            DeleteObject(g_CoverBitmap);
+            g_CoverBitmap = NULL;
+            return;
+        }
+        SetWindowPos(g_Cover, HWND_TOPMOST, 0, 0, Width, Height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        UpdateWindow(g_Cover);
+    }
+
     void Finish(INT Action, LogonJob *Done)
     {
         if (Done)
@@ -1339,14 +1485,22 @@ public:
         KillTimer(Window, LOGONUI_TIMER_ANIMATION);
         KillTimer(Window, LOGONUI_TIMER_CLOCK);
         KillTimer(Window, LOGONUI_TIMER_FINISH);
+        if (Mode == LogonUiSignIn || Mode == LogonUiUnlock)
+        {
+            if (Action == WLX_SAS_ACTION_LOGON || Action == WLX_SAS_ACTION_UNLOCK_WKSTA)
+                KeepFrame(TRUE);
+            else if (Action == WLX_SAS_ACTION_NONE)
+                KeepFrame(FALSE);
+        }
         EndDialog(Window, Action);
     }
 
     void Dismiss()
     {
-        if (Current != Page::Lock || CadRequired || Animation == Anim::Dismiss || Dismissed)
+        if (Current != Page::Lock || CadRequired || Dismissed)
             return;
-        Start(Anim::Dismiss, 340);
+        Dismissed = TRUE;
+        Context->pWlxFuncs->WlxSasNotify(Context->hWlx, WLX_SAS_TYPE_CTRL_ALT_DEL);
     }
 
     void PowerMenu()
@@ -1680,7 +1834,18 @@ public:
         {
             if (OtherUser())
                 DrawField(Graphics, UserEdit, UserField, FALSE);
-            DrawField(Graphics, PasswordEdit, PasswordField, TRUE);
+            if (Passwordless())
+            {
+                WCHAR Label[64];
+
+                FillRound(Graphics, Submit, (float)S(8), 255, Hover == HitSubmit ? LOGONUI_ACCENT_HOT : LOGONUI_ACCENT);
+                LoadText(IDS_LOGONUI_SIGN_IN, Label, _countof(Label));
+                Text(Dc, BodyFont, Label, Submit, DT_CENTER | DT_SINGLELINE | DT_VCENTER, RGB(255, 255, 255));
+            }
+            else
+            {
+                DrawField(Graphics, PasswordEdit, PasswordField, TRUE);
+            }
             DrawMessage(Dc);
         }
 
@@ -1717,7 +1882,7 @@ public:
         {
             Text(Dc, SmallFont, Message, MessageRect, DT_CENTER | DT_WORDBREAK, RGB(255, 255, 255));
         }
-        else if (CapsLock)
+        else if (CapsLock && (Current != Page::SignIn || !Passwordless()))
         {
             LoadText(IDS_LOGONUI_CAPSLOCK, Caps, _countof(Caps));
             Text(Dc, SmallFont, Caps, MessageRect, DT_CENTER | DT_SINGLELINE, RGB(236, 236, 236));
@@ -1824,8 +1989,7 @@ public:
             case Page::Lock:
                 Graphics.ResetTransform();
                 DrawLock(Dc, Shift);
-                if (Animation != Anim::Dismiss && !Dismissed)
-                    DrawPower(Graphics);
+                DrawPower(Graphics);
                 break;
             case Page::SignIn:
                 ShiftRects(Shift);
@@ -1868,6 +2032,14 @@ public:
             OffsetRect(&OptionRows[i], 0, Shift);
     }
 
+    void CopyBackdrop(HDC Target, HBITMAP Source)
+    {
+        HGDIOBJ Old = SelectObject(BackdropDc, Source);
+
+        BitBlt(Target, 0, 0, Width, Height, BackdropDc, 0, 0, SRCCOPY);
+        SelectObject(BackdropDc, Old);
+    }
+
     void Render()
     {
         BOOL Sharp = Current == Page::Lock;
@@ -1878,29 +2050,25 @@ public:
         {
             int Offset = (int)(EaseInOut(Progress) * Height);
 
-            SelectObject(BackdropDc, Wall->Soft);
-            BitBlt(FrameDc, 0, 0, Width, Height, BackdropDc, 0, 0, SRCCOPY);
-            SelectObject(BackdropDc, Wall->Sharp);
-            BitBlt(LayerDc, 0, 0, Width, Height, BackdropDc, 0, 0, SRCCOPY);
-            DrawContent(LayerDc, 0);
+            CopyBackdrop(FrameDc, Wall->Soft);
+            DrawContent(FrameDc, 0);
+            CopyBackdrop(LayerDc, Wall->Sharp);
+            DrawLock(LayerDc, 0);
             BitBlt(FrameDc, 0, -Offset, Width, Height, LayerDc, 0, 0, SRCCOPY);
+            Gdiplus::Graphics Graphics(FrameDc);
+
+            Graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            Graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+            DrawPower(Graphics);
             return;
         }
 
-        if (Dismissed)
-        {
-            SelectObject(BackdropDc, Wall->Soft);
-            BitBlt(FrameDc, 0, 0, Width, Height, BackdropDc, 0, 0, SRCCOPY);
-            return;
-        }
-
-        SelectObject(BackdropDc, Sharp ? Wall->Sharp : Wall->Soft);
-        BitBlt(FrameDc, 0, 0, Width, Height, BackdropDc, 0, 0, SRCCOPY);
+        CopyBackdrop(FrameDc, Sharp ? Wall->Sharp : Wall->Soft);
         if (Animation == Anim::Enter)
         {
             float Eased = EaseOut(Progress);
 
-            Shift = (int)((1.0f - Eased) * S(Sharp ? 36 : 22));
+            Shift = (int)((1.0f - Eased) * S(22));
             Alpha = (BYTE)(255 * min(1.0f, Progress * 1.6f));
         }
         if (Alpha == 255)
@@ -1911,6 +2079,11 @@ public:
 
         BitBlt(LayerDc, 0, 0, Width, Height, FrameDc, 0, 0, SRCCOPY);
         DrawContent(LayerDc, Shift);
+        if (Animation == Anim::Enter && BeforeBitmap)
+        {
+            GdiFlush();
+            CopyMemory(FrameBits, BeforeBits, (SIZE_T)Width * Height * sizeof(UINT32));
+        }
         BLENDFUNCTION Blend = {AC_SRC_OVER, 0, Alpha, 0};
         GdiAlphaBlend(FrameDc, 0, 0, Width, Height, LayerDc, 0, 0, Width, Height, Blend);
     }
@@ -1939,6 +2112,24 @@ public:
     }
 };
 
+static VOID
+RunLogon(PGINA_CONTEXT Context, LogonJob *Pending)
+{
+    Pending->Status = DoLoginTasks(Context, Pending->User, Pending->Domain, Pending->Password, &Pending->SubStatus);
+    if (NT_SUCCESS(Pending->Status))
+    {
+        if (CreateProfile(Context, Pending->User, Pending->Domain, Pending->Password))
+        {
+            SecureZeroMemory(Context->Password, sizeof(Context->Password));
+            StringCchCopyW(Context->Password, _countof(Context->Password), Pending->Password);
+        }
+        else
+        {
+            Pending->Status = STATUS_UNSUCCESSFUL;
+        }
+    }
+}
+
 static DWORD WINAPI
 LogonJobThread(PVOID Parameter)
 {
@@ -1948,19 +2139,7 @@ LogonJobThread(PVOID Parameter)
 
     if (Pending->Kind == Job::Logon)
     {
-        Pending->Status = DoLoginTasks(Context, Pending->User, Pending->Domain, Pending->Password, &Pending->SubStatus);
-        if (NT_SUCCESS(Pending->Status))
-        {
-            if (CreateProfile(Context, Pending->User, Pending->Domain, Pending->Password))
-            {
-                SecureZeroMemory(Context->Password, sizeof(Context->Password));
-                StringCchCopyW(Context->Password, _countof(Context->Password), Pending->Password);
-            }
-            else
-            {
-                Pending->Status = STATUS_UNSUCCESSFUL;
-            }
-        }
+        RunLogon(Context, Pending);
     }
     else if (Pending->Kind == Job::Unlock)
     {
@@ -2094,7 +2273,7 @@ LogonUiDialogProc(HWND Dialog, UINT Message, WPARAM wParam, LPARAM lParam)
             return TRUE;
 
         case WM_ACTIVATE:
-            if (LOWORD(wParam) != WA_INACTIVE && Screen->Animation != Anim::Enter)
+            if (LOWORD(wParam) != WA_INACTIVE && Screen->Animation != Anim::Enter && Screen->Animation != Anim::Dismiss)
                 Screen->ShowFields(TRUE);
             return FALSE;
 
@@ -2117,12 +2296,32 @@ NoLockScreen(VOID)
                         RRF_RT_REG_DWORD, NULL, &Value, &Size) == ERROR_SUCCESS && Value;
 }
 
+static BOOL
+HasLegalNotice(VOID)
+{
+    PCWSTR Names[] = {L"LegalNoticeCaption", L"LegalNoticeText"};
+    WCHAR Text[2];
+    DWORD Size;
+    LSTATUS Error;
+
+    for (PCWSTR Name : Names)
+    {
+        Size = sizeof(Text);
+        Error = RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon", Name,
+                             RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_NOEXPAND, NULL, Text, &Size);
+        if ((Error != ERROR_SUCCESS && Error != ERROR_MORE_DATA) || Size <= sizeof(WCHAR))
+            return FALSE;
+    }
+    return TRUE;
+}
+
 extern "C" INT
 LogonUiRun(
     _Inout_ PGINA_CONTEXT pgContext,
     _In_ LOGONUI_MODE Mode)
 {
     LogonScreen *Screen;
+    LogonJob *Failed = NULL;
     INT Result;
 
     if ((Mode == LogonUiSignIn || Mode == LogonUiUnlock) && pgContext->nPendingAction)
@@ -2138,9 +2337,41 @@ LogonUiRun(
         return WLX_SAS_ACTION_NONE;
     }
 
+    if (Mode == LogonUiSignIn && pgContext->bAutoAdminLogon && !HasLegalNotice())
+    {
+        Failed = (LogonJob *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(LogonJob));
+        if (Failed)
+        {
+            DWORD Length = _countof(Failed->Domain);
+
+            Failed->Kind = Job::Logon;
+            StringCchCopyW(Failed->User, _countof(Failed->User), pgContext->UserName);
+            StringCchCopyW(Failed->Domain, _countof(Failed->Domain), pgContext->DomainName);
+            StringCchCopyW(Failed->Password, _countof(Failed->Password), pgContext->Password);
+            if (!Failed->Domain[0])
+                GetComputerNameW(Failed->Domain, &Length);
+            RunLogon(pgContext, Failed);
+            pgContext->bAutoAdminLogon = FALSE;
+            if (NT_SUCCESS(Failed->Status))
+            {
+                SecureZeroMemory(Failed, sizeof(*Failed));
+                HeapFree(GetProcessHeap(), 0, Failed);
+                return WLX_SAS_ACTION_LOGON;
+            }
+        }
+    }
+
     Screen = new LogonScreen(pgContext, Mode);
     if (!Screen)
+    {
+        if (Failed)
+        {
+            SecureZeroMemory(Failed, sizeof(*Failed));
+            HeapFree(GetProcessHeap(), 0, Failed);
+        }
         return WLX_SAS_ACTION_NONE;
+    }
+    Screen->Pending = Failed;
     Result = pgContext->pWlxFuncs->WlxDialogBoxParam(pgContext->hWlx,
                                                      pgContext->hDllInstance,
                                                      MAKEINTRESOURCEW(IDD_LOGONUI),
@@ -2160,6 +2391,19 @@ LogonUiRun(
     if (Result < WLX_SAS_ACTION_LOGON || Result > WLX_SAS_ACTION_SWITCH_CONSOLE)
         return WLX_SAS_ACTION_NONE;
     return Result;
+}
+
+extern "C" VOID
+LogonUiRemoveCover(VOID)
+{
+    if (g_Cover)
+        SendMessageW(g_Cover, WM_CLOSE, 0, 0);
+}
+
+extern "C" BOOL
+LogonUiCoverShown(VOID)
+{
+    return g_Cover != NULL;
 }
 
 extern "C" DWORD

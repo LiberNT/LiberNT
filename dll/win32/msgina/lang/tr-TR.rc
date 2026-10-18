@@ -56,4 +56,5 @@ BEGIN
     IDS_LOGONUI_CHANGED "Your password has been changed."
     IDS_LOGONUI_EMERGENCY_TITLE "Emergency restart"
     IDS_LOGONUI_EMERGENCY_TEXT "Select OK to restart right away. Anything you haven't saved will be lost. Use this only as a last resort."
+    IDS_LOGONUI_SIGN_IN "Sign in"
 END
