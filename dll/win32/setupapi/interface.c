@@ -64,6 +64,23 @@ DestroyDeviceInterface(
     return HeapFree(GetProcessHeap(), 0, deviceInterface);
 }
 
+static BOOL
+SETUP_IsInterfaceLinked(
+    HKEY hReferenceKey)
+{
+    DWORD LinkedValue = 0, dwLength = sizeof(LinkedValue), dwRegType;
+    HKEY hControlKey;
+    BOOL Result = FALSE;
+
+    if (RegOpenKeyExW(hReferenceKey, Control, 0, KEY_QUERY_VALUE, &hControlKey) == ERROR_SUCCESS)
+    {
+        Result = RegQueryValueExW(hControlKey, Linked, NULL, &dwRegType, (LPBYTE)&LinkedValue, &dwLength) == ERROR_SUCCESS &&
+                 dwRegType == REG_DWORD && LinkedValue != 0;
+        RegCloseKey(hControlKey);
+    }
+    return Result;
+}
+
 LONG
 SETUP_CreateInterfaceList(
     struct DeviceInfoSet *list,
@@ -235,6 +252,8 @@ SETUP_CreateInterfaceList(
                 rc = ERROR_GEN_FAILURE;
                 goto cleanup;
             }
+            if (OnlyPresentInterfaces && !SETUP_IsInterfaceLinked(hReferenceKey))
+                continue;
 
             /* We have found a device */
             /* Step 1. Create a device info element */
