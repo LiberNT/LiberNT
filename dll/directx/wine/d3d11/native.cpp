@@ -4729,7 +4729,7 @@ static UINT NativeSignatureSystemValue(UINT name, UINT index)
         case D3D_NAME_FINAL_LINE_DENSITY_TESSFACTOR:
             return D3D11_SB_NAME_FINAL_LINE_DENSITY_TESSFACTOR;
         default:
-            return name;
+            return name < D3D_NAME_TARGET ? name : D3D10_SB_NAME_UNDEFINED;
     }
 }
 
