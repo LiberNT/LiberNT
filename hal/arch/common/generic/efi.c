@@ -33,6 +33,7 @@ typedef ULONG_PTR (*PHALP_EFI_SET_VARIABLE)(PWSTR VariableName,
 
 static VIRTUAL_EFI_RUNTIME_SERVICES HalpEfiRuntimeServices;
 static KGUARDED_MUTEX HalpEfiRuntimeLock;
+static BOOLEAN HalpEfiFirmwareResources;
 
 VOID
 NTAPI
@@ -40,6 +41,7 @@ HalpInitializeEfiRuntime(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     PVIRTUAL_EFI_RUNTIME_SERVICES Services;
+    PLIST_ENTRY Resources;
 
     KeInitializeGuardedMutex(&HalpEfiRuntimeLock);
 
@@ -49,6 +51,16 @@ HalpInitializeEfiRuntime(
     Services = LoaderBlock->FirmwareInformation.u.EfiInformation.VirtualEfiRuntimeServices;
     if (Services)
         HalpEfiRuntimeServices = *Services;
+
+    Resources = &LoaderBlock->FirmwareInformation.u.EfiInformation.FirmwareResourceList;
+    HalpEfiFirmwareResources = Resources->Flink && !IsListEmpty(Resources);
+}
+
+BOOLEAN
+NTAPI
+HalpEfiHasFirmwareResources(VOID)
+{
+    return HalpEfiFirmwareResources;
 }
 
 static

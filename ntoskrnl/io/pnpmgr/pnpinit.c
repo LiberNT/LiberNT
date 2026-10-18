@@ -9,6 +9,7 @@
 /* INCLUDES *******************************************************************/
 
 #include <ntoskrnl.h>
+#include <loader_firmware.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -232,6 +233,82 @@ Quickie:
 }
 
 CODE_SEG("INIT")
+static
+VOID
+PiSetFirmwareResourceValue(
+    _In_ HANDLE KeyHandle,
+    _In_ PCWSTR Name,
+    _In_ ULONG Value)
+{
+    UNICODE_STRING ValueName;
+
+    RtlInitUnicodeString(&ValueName, Name);
+    ZwSetValueKey(KeyHandle, &ValueName, 0, REG_DWORD, &Value, sizeof(Value));
+}
+
+static
+VOID
+PiInitFirmwareResources(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    UNICODE_STRING HardwareName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\HARDWARE");
+    UNICODE_STRING EsrtName = RTL_CONSTANT_STRING(L"UEFI\\ESRT");
+    UNICODE_STRING ResourceName;
+    PLOADER_FIRMWARE_RESOURCE Resource;
+    PLIST_ENTRY ListHead, Entry;
+    HANDLE HardwareHandle, EsrtHandle, ResourceHandle;
+    WCHAR Name[39];
+    NTSTATUS Status;
+
+    if (!LoaderBlock || !LoaderBlock->FirmwareInformation.FirmwareTypeEfi)
+        return;
+
+    ListHead = &LoaderBlock->FirmwareInformation.u.EfiInformation.FirmwareResourceList;
+    if (!ListHead->Flink || IsListEmpty(ListHead))
+        return;
+
+    Status = IopOpenRegistryKeyEx(&HardwareHandle, NULL, &HardwareName, KEY_ALL_ACCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Status = IopCreateRegistryKeyEx(&EsrtHandle, HardwareHandle, &EsrtName, KEY_ALL_ACCESS, REG_OPTION_VOLATILE, NULL);
+    ZwClose(HardwareHandle);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    for (Entry = ListHead->Flink; Entry != ListHead; Entry = Entry->Flink)
+    {
+        Resource = CONTAINING_RECORD(Entry, LOADER_FIRMWARE_RESOURCE, ListEntry);
+        RtlStringCchPrintfW(Name,
+                            RTL_NUMBER_OF(Name),
+                            L"{%08lx-%04hx-%04hx-%02x%02x-%02x%02x%02x%02x%02x%02x}",
+                            Resource->FirmwareClass.Data1,
+                            Resource->FirmwareClass.Data2,
+                            Resource->FirmwareClass.Data3,
+                            Resource->FirmwareClass.Data4[0],
+                            Resource->FirmwareClass.Data4[1],
+                            Resource->FirmwareClass.Data4[2],
+                            Resource->FirmwareClass.Data4[3],
+                            Resource->FirmwareClass.Data4[4],
+                            Resource->FirmwareClass.Data4[5],
+                            Resource->FirmwareClass.Data4[6],
+                            Resource->FirmwareClass.Data4[7]);
+        RtlInitUnicodeString(&ResourceName, Name);
+        Status = IopCreateRegistryKeyEx(&ResourceHandle, EsrtHandle, &ResourceName, KEY_ALL_ACCESS, REG_OPTION_VOLATILE, NULL);
+        if (!NT_SUCCESS(Status))
+            continue;
+
+        PiSetFirmwareResourceValue(ResourceHandle, L"Type", Resource->FirmwareType);
+        PiSetFirmwareResourceValue(ResourceHandle, L"Version", Resource->FirmwareVersion);
+        PiSetFirmwareResourceValue(ResourceHandle, L"LowestSupportedVersion", Resource->LowestSupportedFirmwareVersion);
+        PiSetFirmwareResourceValue(ResourceHandle, L"LastAttemptVersion", Resource->LastAttemptVersion);
+        PiSetFirmwareResourceValue(ResourceHandle, L"LastAttemptStatus", Resource->LastAttemptStatus);
+        ZwClose(ResourceHandle);
+    }
+
+    ZwClose(EsrtHandle);
+}
+
 NTSTATUS
 NTAPI
 IopInitializePlugPlayServices(VOID)
@@ -263,6 +340,7 @@ IopInitializePlugPlayServices(VOID)
     if (!NT_SUCCESS(Status)) return Status;
 
     IopInitializeSystemResourceMap(KeLoaderBlock);
+    PiInitFirmwareResources(KeLoaderBlock);
 
     /* Setup the group cache */
     Status = PiInitCacheGroupInformation();

@@ -10,6 +10,7 @@
 
 #include <hal.h>
 #include <halpnp.h>
+#include <halefi.h>
 
 #include <initguid.h>
 #include <wdmguid.h>
@@ -28,7 +29,8 @@ typedef enum _EXTENSION_TYPE
 typedef enum _PDO_TYPE
 {
     AcpiPdo = 0x80,
-    WdPdo
+    WdPdo,
+    UefiPdo
 } PDO_TYPE;
 
 typedef enum _HALP_PNP_STATE
@@ -229,6 +231,12 @@ HalpAddDevice(IN PDRIVER_OBJECT DriverObject,
         IoDetachDevice(AttachedDevice);
         IoDeleteDevice(DeviceObject);
         return Status;
+    }
+
+    if (HalpEfiHasFirmwareResources() &&
+        !NT_SUCCESS(HalpCreatePdo(DriverObject, FdoExtension, UefiPdo)))
+    {
+        DPRINT1("HAL: Could not create the UEFI device object\n");
     }
 
     /* Find the ACPI watchdog table */
@@ -555,7 +563,7 @@ HalpQueryResources(IN PDEVICE_OBJECT DeviceObject,
 
         return STATUS_SUCCESS;
     }
-    else if (DeviceExtension->PdoType == WdPdo)
+    else if (DeviceExtension->PdoType == WdPdo || DeviceExtension->PdoType == UefiPdo)
     {
         /* Watchdog doesn't */
         return STATUS_NOT_SUPPORTED;
@@ -581,7 +589,7 @@ HalpQueryResourceRequirements(IN PDEVICE_OBJECT DeviceObject,
         /* Query ACPI requirements */
         return HalpQueryAcpiResourceRequirements(Requirements);
     }
-    else if (DeviceExtension->PdoType == WdPdo)
+    else if (DeviceExtension->PdoType == WdPdo || DeviceExtension->PdoType == UefiPdo)
     {
         /* Watchdog doesn't */
         return STATUS_NOT_SUPPORTED;
@@ -621,6 +629,11 @@ HalpQueryIdPdo(IN PDEVICE_OBJECT DeviceObject,
             CompatibleId = L"*PNP0C18";
             break;
 
+        case UefiPdo:
+            DeviceId = L"ACPI_HAL\\UEFI";
+            CompatibleId = NULL;
+            break;
+
         default:
             return STATUS_NOT_SUPPORTED;
     }
@@ -641,7 +654,7 @@ HalpQueryIdPdo(IN PDEVICE_OBJECT DeviceObject,
 
             /* Hardware IDs are a multi-string */
             MultiSz = TRUE;
-            IdCount = 2;
+            IdCount = CompatibleId ? 2 : 1;
             Ids[0] = DeviceId;
             Ids[1] = CompatibleId;
             break;

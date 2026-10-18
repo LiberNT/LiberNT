@@ -11,3 +11,7 @@ VOID
 NTAPI
 HalpInitializeEfiRuntime(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+BOOLEAN
+NTAPI
+HalpEfiHasFirmwareResources(VOID);
