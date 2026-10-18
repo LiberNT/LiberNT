@@ -223,6 +223,9 @@ FdoEnumerateDevices(
                     {
                         PciConfig.VendorID = 0xDEAD;
                         PciConfig.DeviceID = 0xBEEF;
+                        PciConfig.BaseClass = PCI_CLASS_NOT_DEFINED;
+                        PciConfig.SubClass = 0;
+                        PciConfig.ProgIf = 0;
                     }
                 }
 
