@@ -548,7 +548,9 @@ NTAPI
 KdRestore(
     _In_ BOOLEAN SleepTransition)
 {
-    /* Nothing to do */
+    if (SleepTransition && KdpDebugMode.Serial)
+        KdPortInitializeEx(&SerialPortInfo, SerialPortNumber);
+
     return STATUS_SUCCESS;
 }
 

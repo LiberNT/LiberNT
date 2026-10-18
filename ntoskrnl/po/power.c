@@ -5,6 +5,7 @@
  * PURPOSE:         Power Manager
  * PROGRAMMERS:     Casper S. Hornstrup (chorns@users.sourceforge.net)
  *                  Hervé Poussineau (hpoussin@reactos.com)
+ *                  Ahmed ARIF (arif.ing@outlook.com)
  */
 
 /* INCLUDES ******************************************************************/
@@ -753,6 +754,7 @@ PoInitSystem(IN ULONG BootPhase)
 
     /* Initialize the power capabilities */
     RtlZeroMemory(&PopCapabilities, sizeof(SYSTEM_POWER_CAPABILITIES));
+    PopInitializeSleepSupport();
     PopInitializeEventSupport();
     PopInitializeThermalRequests();
 
@@ -1365,9 +1367,32 @@ PoUnregisterSystemState(IN PVOID StateHandle)
     UNIMPLEMENTED;
 }
 
-/*
- * @unimplemented
- */
+typedef struct _POP_INITIATE_POWER_ACTION
+{
+    WORK_QUEUE_ITEM WorkItem;
+    POWER_ACTION SystemAction;
+    SYSTEM_POWER_STATE LightestSystemState;
+    ULONG Flags;
+} POP_INITIATE_POWER_ACTION, *PPOP_INITIATE_POWER_ACTION;
+
+static
+VOID
+NTAPI
+PopInitiatePowerActionWorker(
+    _In_ PVOID Parameter)
+{
+    PPOP_INITIATE_POWER_ACTION Request = Parameter;
+    NTSTATUS Status;
+
+    Status = ZwSetSystemPowerState(Request->SystemAction,
+                                   Request->LightestSystemState,
+                                   Request->Flags);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("Power action %u failed: 0x%08lx\n", Request->SystemAction, Status);
+
+    ExFreePoolWithTag(Request, POP_PROCESSOR_POWER_TAG);
+}
+
 NTSTATUS
 NTAPI
 NtInitiatePowerAction(IN POWER_ACTION SystemAction,
@@ -1375,8 +1400,48 @@ NtInitiatePowerAction(IN POWER_ACTION SystemAction,
                       IN ULONG Flags,
                       IN BOOLEAN Asynchronous)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    KPROCESSOR_MODE PreviousMode = KeGetPreviousMode();
+    PPOP_INITIATE_POWER_ACTION Request;
+
+    PAGED_CODE();
+
+    if ((MinSystemState >= PowerSystemMaximum) ||
+        (MinSystemState <= PowerSystemUnspecified) ||
+        (SystemAction > PowerActionWarmEject) ||
+        (SystemAction < PowerActionReserved) ||
+        (Flags & ~(POWER_ACTION_QUERY_ALLOWED  |
+                   POWER_ACTION_UI_ALLOWED     |
+                   POWER_ACTION_OVERRIDE_APPS  |
+                   POWER_ACTION_LIGHTEST_FIRST |
+                   POWER_ACTION_LOCK_CONSOLE   |
+                   POWER_ACTION_DISABLE_WAKES  |
+                   POWER_ACTION_CRITICAL)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (PreviousMode != KernelMode &&
+        !SeSinglePrivilegeCheck(SeShutdownPrivilege, PreviousMode))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    if (SystemAction == PowerActionNone)
+        return STATUS_SUCCESS;
+
+    if (!Asynchronous)
+        return ZwSetSystemPowerState(SystemAction, MinSystemState, Flags);
+
+    Request = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Request), POP_PROCESSOR_POWER_TAG);
+    if (!Request)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Request->SystemAction = SystemAction;
+    Request->LightestSystemState = MinSystemState;
+    Request->Flags = Flags;
+    ExInitializeWorkItem(&Request->WorkItem, PopInitiatePowerActionWorker, Request);
+    ExQueueWorkItem(&Request->WorkItem, DelayedWorkQueue);
+    return STATUS_SUCCESS;
 }
 
 static
@@ -1664,6 +1729,19 @@ NtPowerInformation(IN POWER_INFORMATION_LEVEL PowerInformationLevel,
             if (!InputBuffer || OutputBuffer || OutputBufferLength != 0)
                 return STATUS_INVALID_PARAMETER;
             Status = PopRegisterProcessorStateHandler2(InputBuffer, InputBufferLength);
+            break;
+        }
+
+        case SystemPowerStateHandler:
+        {
+            if (PreviousMode != KernelMode)
+                return STATUS_ACCESS_DENIED;
+            if (!InputBuffer || InputBufferLength != sizeof(POWER_STATE_HANDLER) ||
+                OutputBuffer || OutputBufferLength != 0)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+            Status = PopRegisterPowerStateHandler(InputBuffer);
             break;
         }
 
@@ -2079,6 +2157,13 @@ NtSetSystemPowerState(IN POWER_ACTION SystemAction,
 
         /* Do it as a kernel-mode caller for consistency with system state */
         return ZwSetSystemPowerState(SystemAction, MinSystemState, Flags);
+    }
+
+    if ((SystemAction == PowerActionSleep) || (SystemAction == PowerActionHibernate))
+    {
+        if (PopShutdownInProgress)
+            return STATUS_SHUTDOWN_IN_PROGRESS;
+        return PopSleepSystem(SystemAction, MinSystemState, Flags);
     }
 
     if (((SystemAction == PowerActionShutdown) ||

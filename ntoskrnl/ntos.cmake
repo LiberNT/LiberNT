@@ -235,6 +235,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntoskrnl/po/pofx.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/po/power.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/po/powerlimit.c
+    ${REACTOS_SOURCE_DIR}/ntoskrnl/po/sleep.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/po/thermal.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/po/ttm.c
     ${REACTOS_SOURCE_DIR}/ntoskrnl/ps/apiset.c

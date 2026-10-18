@@ -100,7 +100,9 @@ NTSTATUS
 NTAPI
 KdRestore(IN BOOLEAN SleepTransition)
 {
-    /* Nothing to do on COM ports */
+    if (SleepTransition && KdComPort.Address != NULL)
+        CpInitialize(&KdComPort, KdComPort.Address, KdComPort.BaudRate);
+
     return STATUS_SUCCESS;
 }
 

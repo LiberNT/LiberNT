@@ -332,6 +332,40 @@ PopSetSystemPowerState(
     POWER_ACTION PowerAction
 );
 
+NTSTATUS
+PopSendQuerySystemPowerState(
+    PDEVICE_OBJECT DeviceObject,
+    SYSTEM_POWER_STATE SystemState,
+    POWER_ACTION PowerAction
+);
+
+NTSTATUS
+PopSendSetSystemPowerState(
+    PDEVICE_OBJECT DeviceObject,
+    SYSTEM_POWER_STATE SystemState,
+    POWER_ACTION PowerAction
+);
+
+VOID
+NTAPI
+PopInitializeSleepSupport(
+    VOID
+);
+
+NTSTATUS
+NTAPI
+PopRegisterPowerStateHandler(
+    _In_ PPOWER_STATE_HANDLER PowerStateHandler
+);
+
+NTSTATUS
+NTAPI
+PopSleepSystem(
+    _In_ POWER_ACTION SystemAction,
+    _In_ SYSTEM_POWER_STATE LightestSystemState,
+    _In_ ULONG Flags
+);
+
 VOID
 NTAPI
 PopCleanupPowerState(

@@ -351,8 +351,32 @@ NTAPI
 ExUpdateSystemTimeFromCmos(IN BOOLEAN UpdateInterruptTime,
                            IN ULONG MaxSepInSeconds)
 {
-    /* FIXME: TODO */
-    return;
+    TIME_FIELDS TimeFields;
+    LARGE_INTEGER CmosTime, SystemTime, OldTime;
+    ULONGLONG Separation;
+
+    UNREFERENCED_PARAMETER(UpdateInterruptTime);
+
+    if (!HalQueryRealTimeClock(&TimeFields) ||
+        !RtlTimeFieldsToTime(&TimeFields, &CmosTime))
+    {
+        return;
+    }
+
+    if (!ExpRealTimeIsUniversal)
+        CmosTime.QuadPart += ExpTimeZoneBias.QuadPart;
+
+    KeQuerySystemTime(&SystemTime);
+    if (CmosTime.QuadPart > SystemTime.QuadPart)
+        Separation = CmosTime.QuadPart - SystemTime.QuadPart;
+    else
+        Separation = SystemTime.QuadPart - CmosTime.QuadPart;
+
+    if (Separation <= (ULONGLONG)MaxSepInSeconds * 10000000ULL)
+        return;
+
+    KeSetSystemTime(&CmosTime, &OldTime, FALSE, NULL);
+    PoNotifySystemTimeSet();
 }
 
 BOOLEAN
