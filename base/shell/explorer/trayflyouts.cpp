@@ -8289,8 +8289,7 @@ public:
     LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
     {
         KillTimer(TFY_TIMER_ANIM);
-        if (m_Tip.m_hWnd)
-            m_Tip.DestroyWindow();
+        m_Tip.Detach();
         if (::IsWindow(m_hwndOwner))
             ::InvalidateRect(m_hwndOwner, NULL, TRUE);
         return 0;
