@@ -315,7 +315,6 @@ protected:
             m_SearchFont = CreateFontIndirectW(&lf);
             SendMessageW(m_Search, WM_SETFONT, (WPARAM)m_SearchFont, TRUE);
         }
-        ApplyControlTheme(m_Search);
         ApplyControlTheme(m_ScrollBar);
         if (m_Crumbs)
             SendMessageW(m_Crumbs, WM_SETFONT, (WPARAM)m_Theme.Font(TextStyle::Title), TRUE);
@@ -544,7 +543,7 @@ protected:
                 break;
             case WM_CTLCOLOREDIT:
             case WM_CTLCOLORLISTBOX:
-                if (LightControls())
+                if (LightControls() && (HWND)lParam != m_Search)
                 {
                     SetTextColor((HDC)wParam, m_Theme.Colors().Text);
                     SetBkColor((HDC)wParam, m_Theme.Colors().Card);
