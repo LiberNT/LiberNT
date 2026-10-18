@@ -1973,7 +1973,9 @@ RndisInterruptComplete(
 
     RndisDecrementPendingIo(Adapter);
 
-    if (!Adapter->Halting && Status != STATUS_CANCELLED)
+    if (!Adapter->Halting &&
+        Status != STATUS_CANCELLED &&
+        Status != STATUS_DEVICE_NOT_CONNECTED)
     {
         KeInsertQueueDpc(&Adapter->InterruptResubmitDpc, NULL, NULL);
     }
@@ -2075,6 +2077,10 @@ RndisRxComplete(
              * Without this delay, the driver would spin at 100% CPU.
              */
             UseDelayedResubmit = TRUE;
+        }
+        else if (Status == STATUS_DEVICE_NOT_CONNECTED)
+        {
+            ShouldResubmit = FALSE;
         }
         else
         {
