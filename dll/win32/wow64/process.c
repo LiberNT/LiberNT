@@ -1597,6 +1597,9 @@ NTSTATUS WINAPI wow64_NtSetInformationThread( UINT *args )
     case ThreadWorkOnBehalfTicket:  /* ALPC_WORK_ON_BEHALF_TICKET */
     case ThreadDbgkWerReportActive:  /* ULONG */
     case ThreadWorkloadClass:  /* ULONG */
+    case ThreadIoPriority:  /* ULONG */
+    case ThreadPagePriority:  /* PAGE_PRIORITY_INFORMATION */
+    case ThreadActualBasePriority:  /* LONG */
 #endif
         return NtSetInformationThread( handle, class, ptr, len );
 
