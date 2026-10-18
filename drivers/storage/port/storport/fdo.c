@@ -3,6 +3,7 @@
  * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Storport FDO code
  * COPYRIGHT:   Copyright 2017 Eric Kohl (eric.kohl@reactos.org)
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 /* INCLUDES *******************************************************************/
@@ -1462,6 +1463,236 @@ PortFdoPnp(
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return Status;
+}
+
+
+static
+VOID
+PortFdoRestartAdapter(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
+{
+    STOR_LOCK_HANDLE LockHandle;
+    NTSTATUS Status;
+
+    if (DeviceExtension->PnpState != dsStarted)
+        return;
+
+    if (MiniportAdapterControl(&DeviceExtension->Miniport, ScsiRestartAdapter, NULL) == ScsiAdapterControlSuccess)
+        return;
+
+    Status = MiniportFindAdapter(&DeviceExtension->Miniport);
+    if (NT_SUCCESS(Status))
+    {
+        PortAcquireSpinLock(DeviceExtension, InterruptLock, NULL, &LockHandle);
+        Status = MiniportHwInitialize(&DeviceExtension->Miniport);
+        PortReleaseSpinLock(DeviceExtension, &LockHandle);
+    }
+
+    if (NT_SUCCESS(Status) &&
+        DeviceExtension->HwPassiveInitRoutine != NULL &&
+        !DeviceExtension->HwPassiveInitRoutine(&DeviceExtension->Miniport.MiniportExtension->HwDeviceExtension))
+    {
+        Status = STATUS_UNSUCCESSFUL;
+    }
+
+    if (!NT_SUCCESS(Status))
+        DPRINT1("Reinitializing the adapter after power-up failed (Status 0x%08lx)\n", Status);
+}
+
+
+static IO_WORKITEM_ROUTINE PortFdoPowerUpWorker;
+
+static
+VOID
+NTAPI
+PortFdoPowerUpWorker(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PVOID Context)
+{
+    PFDO_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    PIRP Irp = Context;
+    PIO_WORKITEM WorkItem = Irp->Tail.Overlay.DriverContext[0];
+    POWER_STATE PowerState;
+
+    PortFdoRestartAdapter(DeviceExtension);
+
+    PowerState.DeviceState = PowerDeviceD0;
+    DeviceExtension->DevicePowerState = PowerDeviceD0;
+    PoSetPowerState(DeviceObject, DevicePowerState, PowerState);
+    PortFdoReleaseRequests(DeviceExtension, STATUS_SUCCESS);
+
+    PoStartNextPowerIrp(Irp);
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    IoFreeWorkItem(WorkItem);
+}
+
+
+static IO_COMPLETION_ROUTINE PortFdoPowerUpCompletion;
+
+static
+NTSTATUS
+NTAPI
+PortFdoPowerUpCompletion(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_opt_ PVOID Context)
+{
+    PFDO_DEVICE_EXTENSION DeviceExtension = Context;
+    PIO_WORKITEM WorkItem;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    if (NT_SUCCESS(Irp->IoStatus.Status))
+    {
+        WorkItem = IoAllocateWorkItem(DeviceExtension->Device);
+        if (WorkItem != NULL)
+        {
+            Irp->Tail.Overlay.DriverContext[0] = WorkItem;
+            IoQueueWorkItem(WorkItem, PortFdoPowerUpWorker, CriticalWorkQueue, Irp);
+            return STATUS_MORE_PROCESSING_REQUIRED;
+        }
+
+        Irp->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    PortFdoReleaseRequests(DeviceExtension, Irp->IoStatus.Status);
+    PoStartNextPowerIrp(Irp);
+    return STATUS_CONTINUE_COMPLETION;
+}
+
+
+static REQUEST_POWER_COMPLETE PortFdoDevicePowerRequestComplete;
+
+static
+VOID
+NTAPI
+PortFdoDevicePowerRequestComplete(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ UCHAR MinorFunction,
+    _In_ POWER_STATE PowerState,
+    _In_opt_ PVOID Context,
+    _In_ PIO_STATUS_BLOCK IoStatus)
+{
+    PIRP SystemIrp = Context;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(MinorFunction);
+    UNREFERENCED_PARAMETER(PowerState);
+
+    SystemIrp->IoStatus.Status = IoStatus->Status;
+    PoStartNextPowerIrp(SystemIrp);
+    IoCompleteRequest(SystemIrp, IO_NO_INCREMENT);
+}
+
+
+static IO_COMPLETION_ROUTINE PortFdoSystemPowerCompletion;
+
+static
+NTSTATUS
+NTAPI
+PortFdoSystemPowerCompletion(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_opt_ PVOID Context)
+{
+    PFDO_DEVICE_EXTENSION DeviceExtension = Context;
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    POWER_STATE PowerState;
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    if (!NT_SUCCESS(Irp->IoStatus.Status))
+    {
+        PoStartNextPowerIrp(Irp);
+        return STATUS_CONTINUE_COMPLETION;
+    }
+
+    PowerState.DeviceState = (Stack->Parameters.Power.State.SystemState == PowerSystemWorking) ?
+                             PowerDeviceD0 : PowerDeviceD3;
+    if (PowerState.DeviceState == DeviceExtension->DevicePowerState ||
+        (PowerState.DeviceState == PowerDeviceD0 &&
+         DeviceExtension->DevicePowerState == PowerDeviceUnspecified))
+    {
+        PoStartNextPowerIrp(Irp);
+        return STATUS_CONTINUE_COMPLETION;
+    }
+
+    Status = PoRequestPowerIrp(DeviceExtension->Device,
+                               IRP_MN_SET_POWER,
+                               PowerState,
+                               PortFdoDevicePowerRequestComplete,
+                               Irp,
+                               NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        Irp->IoStatus.Status = Status;
+        PoStartNextPowerIrp(Irp);
+        return STATUS_CONTINUE_COMPLETION;
+    }
+
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+
+NTSTATUS
+NTAPI
+PortFdoPower(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp)
+{
+    PFDO_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    DEVICE_POWER_STATE NewState;
+
+    if (Stack->MinorFunction != IRP_MN_SET_POWER || DeviceExtension->PnpState != dsStarted)
+    {
+        PoStartNextPowerIrp(Irp);
+        IoSkipCurrentIrpStackLocation(Irp);
+        return PoCallDriver(DeviceExtension->LowerDevice, Irp);
+    }
+
+    if (Stack->Parameters.Power.Type == SystemPowerState)
+    {
+        DeviceExtension->SystemPowerState = Stack->Parameters.Power.State.SystemState;
+        IoMarkIrpPending(Irp);
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        IoSetCompletionRoutine(Irp, PortFdoSystemPowerCompletion, DeviceExtension, TRUE, TRUE, TRUE);
+        PoCallDriver(DeviceExtension->LowerDevice, Irp);
+        return STATUS_PENDING;
+    }
+
+    NewState = Stack->Parameters.Power.State.DeviceState;
+    if (NewState == PowerDeviceD0)
+    {
+        if (DeviceExtension->DevicePowerState == PowerDeviceD0 ||
+            DeviceExtension->DevicePowerState == PowerDeviceUnspecified)
+        {
+            PoStartNextPowerIrp(Irp);
+            IoSkipCurrentIrpStackLocation(Irp);
+            return PoCallDriver(DeviceExtension->LowerDevice, Irp);
+        }
+
+        IoMarkIrpPending(Irp);
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        IoSetCompletionRoutine(Irp, PortFdoPowerUpCompletion, DeviceExtension, TRUE, TRUE, TRUE);
+        PoCallDriver(DeviceExtension->LowerDevice, Irp);
+        return STATUS_PENDING;
+    }
+
+    if (DeviceExtension->DevicePowerState == PowerDeviceD0 ||
+        DeviceExtension->DevicePowerState == PowerDeviceUnspecified)
+    {
+        PortFdoHoldRequests(DeviceExtension, TRUE);
+        MiniportAdapterControl(&DeviceExtension->Miniport, ScsiStopAdapter, NULL);
+    }
+
+    DeviceExtension->DevicePowerState = NewState;
+    PoSetPowerState(DeviceObject, DevicePowerState, Stack->Parameters.Power.State);
+
+    PoStartNextPowerIrp(Irp);
+    IoSkipCurrentIrpStackLocation(Irp);
+    return PoCallDriver(DeviceExtension->LowerDevice, Irp);
 }
 
 /* EOF */

@@ -1132,11 +1132,7 @@ PortDispatchPower(
     DeviceExtension = (PFDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
 
     if (DeviceExtension->ExtensionType == FdoExtension)
-    {
-        PoStartNextPowerIrp(Irp);
-        IoSkipCurrentIrpStackLocation(Irp);
-        return PoCallDriver(DeviceExtension->LowerDevice, Irp);
-    }
+        return PortFdoPower(DeviceObject, Irp);
 
     Stack = IoGetCurrentIrpStackLocation(Irp);
 

@@ -202,6 +202,8 @@ typedef struct _FDO_DEVICE_EXTENSION
     ULONG RequestLimit;
     KDPC RequestRestartDpc;
     KEVENT RequestsDrained;
+    DEVICE_POWER_STATE DevicePowerState;
+    SYSTEM_POWER_STATE SystemPowerState;
 } FDO_DEVICE_EXTENSION, *PFDO_DEVICE_EXTENSION;
 
 NTSTATUS PortInitializeDma(_In_ PFDO_DEVICE_EXTENSION FdoExtension,
@@ -347,6 +349,12 @@ PortFdoScsi(
 NTSTATUS
 NTAPI
 PortFdoPnp(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp);
+
+NTSTATUS
+NTAPI
+PortFdoPower(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PIRP Irp);
 
