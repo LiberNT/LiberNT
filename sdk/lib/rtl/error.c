@@ -32,7 +32,7 @@ struct error_table
     const DWORD *table;
 };
 
-static const struct error_table error_table[26];
+static const struct error_table error_table[27];
 
 /**************************************************************************
  *           RtlNtStatusToDosErrorNoTeb (NTDLL.@)
@@ -1570,6 +1570,11 @@ static const DWORD table_c0000716[] =
     ERROR_NO_UNICODE_TRANSLATION          /* c0000717 (STATUS_NO_UNICODE_TRANSLATION) */
 };
 
+static const DWORD table_c01d0001[] =
+{
+    ERROR_MONITOR_NO_DESCRIPTOR
+};
+
 static const struct error_table error_table[] =
 {
     { 0x00000102, 0x00000122, table_00000102 },
@@ -1597,5 +1602,6 @@ static const struct error_table error_table[] =
     { 0xc00b0001, 0xc00b0007, table_c00b0001 },
     { 0xc0130001, 0xc0130017, table_c0130001 },
     { 0xc0150001, 0xc0150028, table_c0150001 },
+    { 0xc01d0001, 0xc01d0002, table_c01d0001 },
     { 0, 0, NULL }  /* last entry */
 };
