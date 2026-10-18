@@ -243,19 +243,32 @@ NTAPI
 UserSetKeyboardTypematic(VOID)
 {
     KEYBOARD_TYPEMATIC_PARAMETERS Typematic;
+    UNICODE_STRING DeviceName = RTL_CONSTANT_STRING(L"\\Device\\KeyboardClass0");
+    OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK Block;
+    HANDLE Handle;
     ULONG Delay, Rate;
     NTSTATUS Status;
 
     if (!ghKeyboardDevice)
         return;
 
+    InitializeObjectAttributes(&ObjectAttributes, &DeviceName, OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwOpenFile(&Handle, SYNCHRONIZE | FILE_READ_DATA, &ObjectAttributes, &Block,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status))
+    {
+        WARN("Opening the keyboard for IOCTL_KEYBOARD_SET_TYPEMATIC failed: 0x%08lx\n", Status);
+        return;
+    }
+
     UserGetKeyboardTypematic(&Delay, &Rate);
     Typematic.UnitId = 0;
     Typematic.Delay = (USHORT)Delay;
     Typematic.Rate = (USHORT)Rate;
-    Status = ZwDeviceIoControlFile(ghKeyboardDevice, NULL, NULL, NULL, &Block, IOCTL_KEYBOARD_SET_TYPEMATIC,
+    Status = ZwDeviceIoControlFile(Handle, NULL, NULL, NULL, &Block, IOCTL_KEYBOARD_SET_TYPEMATIC,
                                    &Typematic, sizeof(Typematic), NULL, 0);
+    ZwClose(Handle);
     if (!NT_SUCCESS(Status))
         WARN("IOCTL_KEYBOARD_SET_TYPEMATIC failed: 0x%08lx\n", Status);
 }
