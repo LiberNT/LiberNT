@@ -737,4 +737,13 @@ BEGIN
     IDS_BOOT_SAFE_MINIMAL "Minimal"
     IDS_BOOT_SAFE_NETWORK "With networking"
     IDS_BOOT_SAFE_SHELL "With command prompt"
+    IDS_SIGNIN_SCREEN "Sign-in screen"
+    IDS_SHOW_LOCK_SCREEN "Show the lock screen"
+    IDS_SHOW_LOCK_SCREEN_DESC "Show the clock and date before the sign-in screen"
+    IDS_REQUIRE_CAD "Require Ctrl+Alt+Delete"
+    IDS_REQUIRE_CAD_DESC "Press Ctrl+Alt+Delete before signing in or unlocking"
+    IDS_SHOW_LAST_USER "Show the last signed-in account"
+    IDS_SHOW_LAST_USER_DESC "Select it on the sign-in screen instead of asking for an account name"
+    IDS_SIGNIN_POWER "Power button"
+    IDS_SIGNIN_POWER_DESC "Shut down or restart from the lock and sign-in screens"
 END

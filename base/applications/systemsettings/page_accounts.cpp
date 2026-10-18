@@ -9,6 +9,9 @@
 #include <lm.h>
 #include <algorithm>
 
+#define WINLOGON_KEY L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon"
+#define PERSONALIZATION_POLICY_KEY L"SOFTWARE\\Policies\\Microsoft\\Windows\\Personalization"
+
 static std::wstring
 CurrentUser()
 {
@@ -18,6 +21,21 @@ CurrentUser()
     if (!GetUserNameW(name, &size))
         name[0] = UNICODE_NULL;
     return name;
+}
+
+static void
+SignInScreenToggle(PageBuilder &page, UINT title, UINT detail, LPCWSTR icon, LPCWSTR key, LPCWSTR value,
+                   DWORD fallback, DWORD whenOn)
+{
+    SettingsHost *host = page.Host;
+    DWORD current = page.Indexing ? fallback : ReadDword(HKEY_LOCAL_MACHINE, key, value, fallback);
+
+    page.Toggle(Str(title), Str(detail), icon, (current != 0) == (whenOn != 0),
+                [host, key, value, whenOn](int on)
+                {
+                    if (!WriteDword(HKEY_LOCAL_MACHINE, key, value, on ? whenOn : !whenOn))
+                        ShowError(host->Window(), ERROR_ACCESS_DENIED);
+                }).Enabled = IsAdmin();
 }
 
 static std::wstring
@@ -143,6 +161,16 @@ BuildSignIn(PageBuilder &page)
                     SystemParametersInfoW(SPI_SETSCREENSAVESECURE, on != 0, NULL, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
                 });
     page.Link(Str(IDS_LOCK_NOW), Str(IDS_LOCK_NOW_DESC), L"lock_closed_20_regular", [](int) { LockWorkStation(); });
+
+    page.Group(Str(IDS_SIGNIN_SCREEN));
+    SignInScreenToggle(page, IDS_SHOW_LOCK_SCREEN, IDS_SHOW_LOCK_SCREEN_DESC, L"lock_closed_20_regular",
+                       PERSONALIZATION_POLICY_KEY, L"NoLockScreen", 0, 0);
+    SignInScreenToggle(page, IDS_REQUIRE_CAD, IDS_REQUIRE_CAD_DESC, L"keyboard_20_regular", WINLOGON_KEY,
+                       L"DisableCAD", 1, 0);
+    SignInScreenToggle(page, IDS_SHOW_LAST_USER, IDS_SHOW_LAST_USER_DESC, L"person_20_regular", WINLOGON_KEY,
+                       L"DontDisplayLastUserName", 0, 0);
+    SignInScreenToggle(page, IDS_SIGNIN_POWER, IDS_SIGNIN_POWER_DESC, L"power_20_regular", WINLOGON_KEY,
+                       L"ShutdownWithoutLogon", 1, 1);
 }
 
 static void

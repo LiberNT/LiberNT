@@ -735,3 +735,12 @@
 #define IDS_BOOT_SAFE_MINIMAL          825
 #define IDS_BOOT_SAFE_NETWORK          826
 #define IDS_BOOT_SAFE_SHELL            827
+#define IDS_SIGNIN_SCREEN              828
+#define IDS_SHOW_LOCK_SCREEN           829
+#define IDS_SHOW_LOCK_SCREEN_DESC      830
+#define IDS_REQUIRE_CAD                831
+#define IDS_REQUIRE_CAD_DESC           832
+#define IDS_SHOW_LAST_USER             833
+#define IDS_SHOW_LAST_USER_DESC        834
+#define IDS_SIGNIN_POWER               835
+#define IDS_SIGNIN_POWER_DESC          836
