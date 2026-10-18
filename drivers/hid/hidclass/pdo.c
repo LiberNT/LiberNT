@@ -415,6 +415,25 @@ HidClassPDO_SetInterfaceProperty(
 }
 
 static
+PUNICODE_STRING
+HidClassPDO_GetInterfaceReference(
+    IN PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension)
+{
+    static UNICODE_STRING KeyboardReference = RTL_CONSTANT_STRING(L"KBD");
+    PHIDP_COLLECTION_DESC CollectionDescription;
+
+    CollectionDescription = HidClassPDO_GetCollectionDescription(&PDODeviceExtension->Common.DeviceDescription,
+                                                                 PDODeviceExtension->CollectionNumber);
+    if (CollectionDescription &&
+        CollectionDescription->UsagePage == HID_USAGE_PAGE_GENERIC &&
+        CollectionDescription->Usage == HID_USAGE_GENERIC_KEYBOARD)
+    {
+        return &KeyboardReference;
+    }
+    return NULL;
+}
+
+static
 VOID
 HidClassPDO_PublishInterfaceProperties(
     IN PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension)
@@ -645,7 +664,7 @@ HidClassPDO_PnP(
             //
             Status = IoRegisterDeviceInterface(DeviceObject,
                                                PDODeviceExtension->IsXInput ? &GUID_DEVINTERFACE_WINEXINPUT : &GUID_DEVINTERFACE_HID,
-                                               NULL,
+                                               PDODeviceExtension->IsXInput ? NULL : HidClassPDO_GetInterfaceReference(PDODeviceExtension),
                                                &PDODeviceExtension->DeviceInterface);
             DPRINT("[HIDCLASS] IoRegisterDeviceInterfaceState Status %x\n", Status);
             if (NT_SUCCESS(Status))
