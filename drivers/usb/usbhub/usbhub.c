@@ -2552,40 +2552,14 @@ USBH_ProcessPortStateChange(IN PUSBHUB_FDO_EXTENSION HubExtension,
         }
         else
         {
-            /*
-             * New device connected or reconnection: mark for enumeration.
-             *
-             * If the previous enumeration on this port failed with a
-             * permanent error (e.g. malformed descriptors), do not keep
-             * retrying enumeration on every connect-change storm. Instead
-             * honour the failure state recorded by USBH_FdoQueryBusRelations
-             * (DeviceFailedEnumeration / DeviceGeneralFailure) until a real
-             * disconnect happens and clears ConnectionStatus back to
-             * NoDeviceConnected.
-             */
-            if (PortData->ConnectionStatus == DeviceFailedEnumeration ||
-                PortData->ConnectionStatus == DeviceGeneralFailure)
-            {
-                /* Log only the first suppressed connect per failure epoch. */
-                if (!(PortData->LogFlags & 0x1))
-                {
-                    PortData->LogFlags |= 0x1;
-                    DPRINT_ENUM("USBH_ProcessPortStateChange: Port %u connect while in failure state (%u) -> suppress re-enumeration\n",
-                                Port,
-                                PortData->ConnectionStatus);
-                }
-            }
-            else
-            {
-                PortData->ConnectionStatus = DeviceConnected;
-                PortData->LogFlags = 0;
+            PortData->ConnectionStatus = DeviceConnected;
+            PortData->LogFlags = 0;
 
-                DPRINT("USBH_ProcessPortStateChange: Port %u connect -> enumerate\n",
-                            Port);
+            DPRINT("USBH_ProcessPortStateChange: Port %u connect -> enumerate\n",
+                        Port);
 
-                HubExtension->HubFlags |= USBHUB_FDO_FLAG_DO_ENUMERATION;
-                IoInvalidateDeviceRelations(HubExtension->LowerPDO, BusRelations);
-            }
+            HubExtension->HubFlags |= USBHUB_FDO_FLAG_DO_ENUMERATION;
+            IoInvalidateDeviceRelations(HubExtension->LowerPDO, BusRelations);
         }
     }
 
@@ -3069,7 +3043,9 @@ Enum:
                     }
 
                     if (PortStatus.PortChange.AsUshort16 == 0 &&
-                        IsBitSet(Bitmap, Port))
+                        IsBitSet(Bitmap, Port) &&
+                        HubExtension->PortData[Port - 1].ConnectionStatus != DeviceFailedEnumeration &&
+                        HubExtension->PortData[Port - 1].ConnectionStatus != DeviceGeneralFailure)
                     {
                         PDEVICE_OBJECT ExistingDevice = HubExtension->PortData[Port - 1].DeviceObject;
 
