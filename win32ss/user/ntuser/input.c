@@ -150,9 +150,9 @@ RawInputThreadMain(VOID)
     PFILE_OBJECT pKbdDevice = NULL, pMouDevice = NULL;
     LARGE_INTEGER ByteOffset;
     //LARGE_INTEGER WaitTimeout;
-    PVOID WaitObjects[4], pSignaledObject = NULL;
+    PVOID WaitObjects[6 + HIDINPUT_MAX_DEVICES], pSignaledObject = NULL;
     KWAIT_BLOCK WaitBlockArray[RTL_NUMBER_OF(WaitObjects)];
-    ULONG cWaitObjects = 0, cMaxWaitObjects = 2, MouseInputCount, i;
+    ULONG cWaitObjects = 0, cMaxWaitObjects = 2, cExpectedWaitObjects, MouseInputCount, i;
     MOUSE_INPUT_DATA MouseInput[MOUSE_INPUT_BUFFER_SIZE];
     KEYBOARD_INPUT_DATA KeyInput;
     PVOID ShutdownEvent;
@@ -192,6 +192,8 @@ RawInputThreadMain(VOID)
     UserEnterExclusive();
     StartTheTimers();
     UserLeave();
+
+    HidInputStart();
 
     NT_ASSERT(ghMouseDevice == NULL);
     NT_ASSERT(ghKeyboardDevice == NULL);
@@ -241,6 +243,7 @@ RawInputThreadMain(VOID)
         cWaitObjects = 0;
         WaitObjects[cWaitObjects++] = ShutdownEvent;
         WaitObjects[cWaitObjects++] = MasterTimer;
+        cExpectedWaitObjects = cMaxWaitObjects + HidInputPrepareWait(WaitObjects, &cWaitObjects);
 
         if (ghMouseDevice)
         {
@@ -283,7 +286,7 @@ RawInputThreadMain(VOID)
         }
 
         /* If all objects are pending, wait for them */
-        if (cWaitObjects == cMaxWaitObjects)
+        if (cWaitObjects == cExpectedWaitObjects)
         {
             Status = KeWaitForMultipleObjects(cWaitObjects,
                                               WaitObjects,
@@ -327,7 +330,10 @@ RawInputThreadMain(VOID)
                 {
                     break;
                 }
-                else ASSERT(FALSE);
+                else if (!HidInputSignaled(pSignaledObject))
+                {
+                    ASSERT(FALSE);
+                }
             }
         }
 
@@ -389,6 +395,9 @@ RawInputThreadMain(VOID)
         else if (KbdStatus != STATUS_PENDING)
             ERR("Failed to read from keyboard: %x.\n", KbdStatus);
 
+        if (HidInputProcess())
+            IntLastInputTick(TRUE);
+
         /* A display-only synchronization can copy a whole frame. Do not
          * hold USER across it or delay input already in this batch. */
         if (SyncDisplay)
@@ -410,6 +419,8 @@ RawInputThreadMain(VOID)
         ObDereferenceObject(pKbdDevice);
         ghKeyboardDevice = NULL;
     }
+
+    HidInputStop();
 
     TRACE("Raw Input Thread Exit!\n");
 }

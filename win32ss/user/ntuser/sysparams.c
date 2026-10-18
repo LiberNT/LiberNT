@@ -615,6 +615,7 @@ NtUserUpdatePerUserSystemParameters(
     UserEnterExclusive();
 
     SpiUpdatePerUserSystemParameters();
+    UserSetKeyboardTypematic();
     if(bEnable)
         g_PaintDesktopVersion = SpiLoadDWord(KEY_DESKTOP, VAL_PAINTDESKVER, 0);
     else
@@ -1335,7 +1336,13 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
             return SpiGetInt(pvParam, &gspv.dwKbdSpeed, fl);
 
         case SPI_SETKEYBOARDSPEED:
-            return SpiSetInt(&gspv.dwKbdSpeed, uiParam, KEY_KBD, VAL_KBDSPD, fl);
+        {
+            UINT_PTR Result = SpiSetInt(&gspv.dwKbdSpeed, uiParam, KEY_KBD, VAL_KBDSPD, fl);
+
+            if (Result)
+                UserSetKeyboardTypematic();
+            return Result;
+        }
 
         case SPI_LANGDRIVER:
             ERR("SPI_LANGDRIVER is unimplemented\n");
@@ -1382,7 +1389,13 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
             return SpiGetInt(pvParam, &gspv.iKbdDelay, fl);
 
         case SPI_SETKEYBOARDDELAY:
-            return SpiSetInt(&gspv.iKbdDelay, uiParam, KEY_KBD, VAL_KBDDELAY, fl);
+        {
+            UINT_PTR Result = SpiSetInt(&gspv.iKbdDelay, uiParam, KEY_KBD, VAL_KBDDELAY, fl);
+
+            if (Result)
+                UserSetKeyboardTypematic();
+            return Result;
+        }
 
         case SPI_ICONHORIZONTALSPACING:
             if (pvParam)

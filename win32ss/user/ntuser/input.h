@@ -67,6 +67,8 @@ VOID FASTCALL DoTheScreenSaver(VOID);
 /* Keyboard */
 CODE_SEG("INIT") NTSTATUS NTAPI InitKeyboardImpl(VOID);
 VOID NTAPI UserInitKeyboard(HANDLE hKeyboardDevice);
+VOID NTAPI UserGetKeyboardTypematic(PULONG Delay, PULONG Rate);
+VOID NTAPI UserSetKeyboardTypematic(VOID);
 PKL W32kGetDefaultKeyLayout(VOID);
 VOID NTAPI UserProcessKeyboardInput(PKEYBOARD_INPUT_DATA pKeyInput);
 BOOL NTAPI UserSendKeyboardInput(KEYBDINPUT *pKbdInput, BOOL bInjected);
@@ -95,6 +97,15 @@ BOOL FASTCALL RawInputIsNoLegacy(PPROCESSINFO ppi, DWORD dwType);
 VOID FASTCALL RawInputSetThreadData(PTHREADINFO pti, PUSER_MESSAGE Message, BOOL bRemove);
 VOID FASTCALL RawInputCleanupThread(PTHREADINFO pti);
 VOID FASTCALL RawInputCleanupProcess(PPROCESSINFO ppi);
+
+/* HID consumer controls */
+#define HIDINPUT_MAX_DEVICES 8
+NTSTATUS NTAPI InitHidInputImpl(PDRIVER_OBJECT DriverObject);
+VOID NTAPI HidInputStart(VOID);
+VOID NTAPI HidInputStop(VOID);
+ULONG NTAPI HidInputPrepareWait(PVOID *WaitObjects, PULONG WaitCount);
+BOOLEAN NTAPI HidInputSignaled(PVOID Object);
+BOOLEAN NTAPI HidInputProcess(VOID);
 
 /* IMM */
 UINT FASTCALL IntImmProcessKey(

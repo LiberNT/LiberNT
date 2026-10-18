@@ -224,6 +224,40 @@ UserInitKeyboard(HANDLE hKeyboardDevice)
              gKeyboardInfo.KeyboardIdentifier.Type,
              gKeyboardInfo.KeyboardIdentifier.Subtype,
              gKeyboardInfo.NumberOfFunctionKeys);
+
+    UserSetKeyboardTypematic();
+}
+
+VOID
+NTAPI
+UserGetKeyboardTypematic(
+    _Out_ PULONG Delay,
+    _Out_ PULONG Rate)
+{
+    *Delay = (((ULONG)gspv.iKbdDelay & 3) + 1) * 250;
+    *Rate = 2 + (min(gspv.dwKbdSpeed, 31) * 28 + 15) / 31;
+}
+
+VOID
+NTAPI
+UserSetKeyboardTypematic(VOID)
+{
+    KEYBOARD_TYPEMATIC_PARAMETERS Typematic;
+    IO_STATUS_BLOCK Block;
+    ULONG Delay, Rate;
+    NTSTATUS Status;
+
+    if (!ghKeyboardDevice)
+        return;
+
+    UserGetKeyboardTypematic(&Delay, &Rate);
+    Typematic.UnitId = 0;
+    Typematic.Delay = (USHORT)Delay;
+    Typematic.Rate = (USHORT)Rate;
+    Status = ZwDeviceIoControlFile(ghKeyboardDevice, NULL, NULL, NULL, &Block, IOCTL_KEYBOARD_SET_TYPEMATIC,
+                                   &Typematic, sizeof(Typematic), NULL, 0);
+    if (!NT_SUCCESS(Status))
+        WARN("IOCTL_KEYBOARD_SET_TYPEMATIC failed: 0x%08lx\n", Status);
 }
 
 /*
