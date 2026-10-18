@@ -1021,8 +1021,8 @@ public:
 const CStartMenu2Flyout::FLYITEM CStartMenu2Flyout::c_Items[3] =
 {
     { L"Restart", SM2F_RESTART },
-    { L"Log off (soon)", SM2F_LOGOFF },
-    { L"Lock (soon)",    SM2F_LOCK },
+    { L"Log off", SM2F_LOGOFF },
+    { L"Lock",    SM2F_LOCK },
 };
 
 class CStartMenu2Wnd :
