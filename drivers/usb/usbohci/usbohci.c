@@ -834,7 +834,6 @@ OHCI_StartController(IN PVOID ohciExtension,
     Interrupts.FrameNumberOverflow = 1;
     Interrupts.OwnershipChange = 1;
     Interrupts.RootHubStatusChange = 1;
-    Interrupts.MasterInterruptEnable = 1;
 
     WRITE_REGISTER_ULONG(InterruptEnableReg, Interrupts.AsULONG);
 
