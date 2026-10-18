@@ -6,6 +6,8 @@
  *              into the primary. See sdk/include/reactos/dwmframe.h.
  */
 
+#include <ntstatus.h>
+#define WIN32_NO_STATUS
 #include <windows.h>
 #include <math.h>
 #include <stdio.h>
@@ -3962,6 +3964,8 @@ DwmCreateSurfaces(HDC hdcScreen, LONG W, LONG H)
     return TRUE;
 }
 
+static BOOL g_composeDetached;
+
 static void
 DwmComposeLoop(HANDLE hStopEvent)
 {
@@ -4173,6 +4177,12 @@ DwmComposeLoop(HANDLE hStopEvent)
         DptEnd(&g_DwmPresentTrace, FetchTrace, st >= 0, 0);
         DwmStatCounter(&statFetchEnd);
         g_frameFetchTicks = (ULONGLONG)(statFetchEnd.QuadPart - statFetchStart.QuadPart);
+        if (st == STATUS_ACCESS_DENIED)
+        {
+            DwmLog("DWM: composition was detached; attaching again\n");
+            g_composeDetached = TRUE;
+            break;
+        }
         if (st < 0)
         {
             Sleep(50);
@@ -4730,6 +4740,10 @@ DwmComposeLoop(HANDLE hStopEvent)
 DWORD WINAPI
 DwmCoreCompositorThread(LPVOID Parameter)
 {
-    DwmComposeLoop((HANDLE)Parameter);
+    do
+    {
+        g_composeDetached = FALSE;
+        DwmComposeLoop((HANDLE)Parameter);
+    } while (g_composeDetached && WaitForSingleObject((HANDLE)Parameter, 0) != WAIT_OBJECT_0);
     return 0;
 }

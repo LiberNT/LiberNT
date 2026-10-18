@@ -2855,10 +2855,10 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
     RECTL rcContent = {0, 0, 0, 0};
     NTSTATUS Status = STATUS_SUCCESS;
 
-    if (!gbCompositionEnabled)
-        return STATUS_DEVICE_NOT_READY;
     if (PsGetCurrentProcess() != g_DwmProcess)
         return STATUS_ACCESS_DENIED;
+    if (!gbCompositionEnabled)
+        return STATUS_DEVICE_NOT_READY;
 
     _SEH2_TRY
     {
