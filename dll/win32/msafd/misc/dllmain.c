@@ -966,7 +966,7 @@ ok:
         HeapFree(GlobalHeap, 0, Socket->SharedData);
     }
     HeapFree(GlobalHeap, 0, Socket);
-    return MsafdReturnWithErrno(Status, lpErrno, 0, NULL);
+    return MsafdReturnWithErrno(STATUS_SUCCESS, lpErrno, 0, NULL);
 }
 
 
