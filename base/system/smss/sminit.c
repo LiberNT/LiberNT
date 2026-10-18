@@ -867,6 +867,53 @@ SmpQueryDirectoryObjectEntry(
     }
 }
 
+static
+VOID
+SmpLoadBootConfigurationStore(
+    _In_ PUNICODE_STRING SystemPartition)
+{
+    static const PCWSTR StorePaths[] = { L"\\EFI\\LiberNT\\Boot\\BCD", L"\\Boot\\BCD" };
+    static BOOLEAN Attempted;
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\BCD00000000");
+    OBJECT_ATTRIBUTES KeyAttributes, FileAttributes;
+    FILE_BASIC_INFORMATION BasicInfo;
+    UNICODE_STRING FileName;
+    WCHAR Buffer[MAX_PATH];
+    BOOLEAN OldState;
+    NTSTATUS Status;
+    ULONG i;
+
+    if (Attempted)
+        return;
+    Attempted = TRUE;
+
+    InitializeObjectAttributes(&KeyAttributes, &KeyName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    for (i = 0; i < RTL_NUMBER_OF(StorePaths); i++)
+    {
+        RtlInitEmptyUnicodeString(&FileName, Buffer, sizeof(Buffer));
+        if (!NT_SUCCESS(RtlAppendUnicodeStringToString(&FileName, SystemPartition)) ||
+            !NT_SUCCESS(RtlAppendUnicodeToString(&FileName, StorePaths[i])))
+        {
+            continue;
+        }
+
+        InitializeObjectAttributes(&FileAttributes, &FileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+        if (!NT_SUCCESS(NtQueryAttributesFile(&FileAttributes, &BasicInfo)))
+            continue;
+
+        Status = RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, TRUE, FALSE, &OldState);
+        if (NT_SUCCESS(Status))
+        {
+            Status = NtLoadKey(&KeyAttributes, &FileAttributes);
+            RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, OldState, FALSE, &OldState);
+        }
+
+        if (!NT_SUCCESS(Status))
+            DPRINT1("SMSS: Cannot load the boot configuration store %wZ: 0x%x\n", &FileName, Status);
+        return;
+    }
+}
+
 VOID
 NTAPI
 SmpTranslateSystemPartitionInformation(VOID)
@@ -922,6 +969,8 @@ SmpTranslateSystemPartitionInformation(VOID)
                        SystemPartition.MaximumLength,
                        &StrLength);
     SystemPartition.Length = (USHORT)StrLength;
+
+    SmpLoadBootConfigurationStore(&SystemPartition);
 
     /* Enumerate the directory looking for the symbolic link string */
     RtlInitUnicodeString(&SymLinkU, L"SymbolicLink");
