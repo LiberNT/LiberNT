@@ -184,6 +184,10 @@ static unsigned int type_memsize(ITypeInfo *typeinfo, TYPEDESC *desc, unsigned i
     case VT_PTR:
     case VT_UNKNOWN:
     case VT_DISPATCH:
+#ifdef __REACTOS__
+    case VT_LPSTR:
+    case VT_LPWSTR:
+#endif
         size = align = sizeof(void *);
         break;
     case VT_VARIANT:
@@ -777,7 +781,12 @@ static size_t write_pointer_tfs(ITypeInfo *typeinfo, unsigned char *str,
         ref = write_type_tfs(typeinfo, str, len, desc, FALSE, FALSE);
 
         if (onstack) flags |= FC_ALLOCED_ON_STACK;
+#ifdef __REACTOS__
+        if (desc->vt == VT_PTR || desc->vt == VT_UNKNOWN || desc->vt == VT_DISPATCH ||
+            desc->vt == VT_LPSTR || desc->vt == VT_LPWSTR)
+#else
         if (desc->vt == VT_PTR || desc->vt == VT_UNKNOWN || desc->vt == VT_DISPATCH)
+#endif
             flags |= FC_POINTER_DEREF;
 
         off = *len;
@@ -809,6 +818,16 @@ static size_t write_type_tfs(ITypeInfo *typeinfo, unsigned char *str,
         return write_pointer_tfs(typeinfo, str, len, desc->lptdesc, toplevel, onstack);
     case VT_CARRAY:
         return write_array_tfs(typeinfo, str, len, desc->lpadesc);
+#ifdef __REACTOS__
+    case VT_LPSTR:
+    case VT_LPWSTR:
+        off = *len;
+        WRITE_CHAR(str, *len, toplevel ? FC_RP : FC_UP);
+        WRITE_CHAR(str, *len, FC_SIMPLE_POINTER);
+        WRITE_CHAR(str, *len, desc->vt == VT_LPWSTR ? FC_C_WSTRING : FC_C_CSTRING);
+        WRITE_CHAR(str, *len, FC_PAD);
+        break;
+#endif
     case VT_USERDEFINED:
         ITypeInfo_GetRefTypeInfo(typeinfo, desc->hreftype, &refinfo);
         ITypeInfo_GetTypeAttr(refinfo, &attr);
@@ -942,6 +961,13 @@ static HRESULT get_param_pointer_info(ITypeInfo *typeinfo, TYPEDESC *tdesc, int 
         *server_size = type_memsize(typeinfo, tdesc, NULL);
         *tfs_tdesc = tdesc;
         break;
+#ifdef __REACTOS__
+    case VT_LPSTR:
+    case VT_LPWSTR:
+        *flags |= MustFree;
+        *server_size = sizeof(void *);
+        break;
+#endif
     case VT_USERDEFINED:
         ITypeInfo_GetRefTypeInfo(typeinfo, tdesc->hreftype, &refinfo);
         ITypeInfo_GetTypeAttr(refinfo, &attr);
@@ -1019,6 +1045,10 @@ static HRESULT get_param_info(ITypeInfo *typeinfo, TYPEDESC *tdesc, int is_in,
     case VT_UNKNOWN:
     case VT_DISPATCH:
     case VT_CARRAY:
+#ifdef __REACTOS__
+    case VT_LPSTR:
+    case VT_LPWSTR:
+#endif
         *flags |= MustFree;
         break;
     case VT_PTR:
