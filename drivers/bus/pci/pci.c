@@ -3,6 +3,7 @@
  * FILE:            pci.c
  * PURPOSE:         Driver entry
  * PROGRAMMERS:     Casper S. Hornstrup (chorns@users.sourceforge.net)
+ *                  Ahmed ARIF (arif.ing@outlook.com)
  * UPDATE HISTORY:
  *      10-09-2001  CSH  Created
  */
@@ -526,6 +527,62 @@ PciAcpiQueryNotifyInterface(
 }
 
 NTSTATUS
+PciAcpiQueryChildNotifyInterface(
+    _In_ ULONG Segment,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _In_ ULONG ChildAcpiUid,
+    _Out_ PACPI_INTERFACE_STANDARD2 Interface)
+{
+    union
+    {
+        ACPI_PCI_CHILD_NOTIFY_INTERFACE_INPUT Input;
+        ACPI_INTERFACE_STANDARD2 Output;
+    } Buffer;
+    KEVENT Event;
+    IO_STATUS_BLOCK IoStatusBlock;
+    PIRP Irp;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = PciOpenAcpiInterface();
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&Buffer, sizeof(Buffer));
+    Buffer.Input.Signature = ACPI_PCI_CHILD_NOTIFY_INTERFACE_INPUT_SIGNATURE;
+    Buffer.Input.Segment = Segment;
+    Buffer.Input.Bus = Bus;
+    Buffer.Input.Device = Device;
+    Buffer.Input.Function = Function;
+    Buffer.Input.ChildAcpiUid = ChildAcpiUid;
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_ACPI_QUERY_PCI_CHILD_NOTIFY_INTERFACE,
+                                        AcpiInterfaceDeviceObject,
+                                        &Buffer, sizeof(Buffer.Input),
+                                        &Buffer, sizeof(Buffer.Output),
+                                        TRUE, &Event, &IoStatusBlock);
+    if (!Irp)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = IoCallDriver(AcpiInterfaceDeviceObject, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatusBlock.Status;
+    }
+    if (NT_SUCCESS(Status))
+    {
+        if (IoStatusBlock.Information < sizeof(Buffer.Output))
+            return STATUS_INVALID_BUFFER_SIZE;
+        *Interface = Buffer.Output;
+    }
+    return Status;
+}
+
+NTSTATUS
 PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State)
 {
     ACPI_PCI_SET_POWER_INPUT_BUFFER InputBuffer;
@@ -634,6 +691,50 @@ PciDispatchDeviceControl(
                 break;
             }
 
+            case IOCTL_ACPI_QUERY_PCI_CHILD_NOTIFY_INTERFACE:
+            {
+                PPDO_DEVICE_EXTENSION PdoExtension;
+                PACPI_PCI_CHILD_NOTIFY_INTERFACE_INPUT ChildInput;
+                ACPI_INTERFACE_STANDARD2 Interface;
+                ULONG Segment = 0;
+
+                if (Irp->RequestorMode != KernelMode)
+                {
+                    Status = STATUS_ACCESS_DENIED;
+                    break;
+                }
+                if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(*ChildInput) ||
+                    IrpSp->Parameters.DeviceIoControl.OutputBufferLength < sizeof(Interface) ||
+                    Irp->AssociatedIrp.SystemBuffer == NULL)
+                {
+                    Status = STATUS_BUFFER_TOO_SMALL;
+                    break;
+                }
+                ChildInput = Irp->AssociatedIrp.SystemBuffer;
+                if (ChildInput->Signature != ACPI_PCI_CHILD_NOTIFY_INTERFACE_INPUT_SIGNATURE)
+                {
+                    Status = STATUS_INVALID_PARAMETER;
+                    break;
+                }
+
+                PdoExtension = (PPDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
+                if (PdoExtension->Fdo != NULL)
+                    Segment = ((PFDO_DEVICE_EXTENSION)PdoExtension->Fdo->DeviceExtension)->BusSegment;
+                Status = PciAcpiQueryChildNotifyInterface(
+                    Segment,
+                    PdoExtension->PciDevice->BusNumber,
+                    PdoExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
+                    PdoExtension->PciDevice->SlotNumber.u.bits.FunctionNumber,
+                    ChildInput->ChildAcpiUid,
+                    &Interface);
+                if (NT_SUCCESS(Status))
+                {
+                    RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &Interface, sizeof(Interface));
+                    Irp->IoStatus.Information = sizeof(Interface);
+                }
+                break;
+            }
+
             case IOCTL_ACPI_EVAL_METHOD_FOR_PCI_CHILD:
             {
                 PPDO_DEVICE_EXTENSION PdoExtension;
@@ -665,7 +766,7 @@ PciDispatchDeviceControl(
                     ChildInput->InputBufferSize >
                         InputLength - ChildInput->InputBufferOffset ||
                     ChildInput->InputBufferSize <
-                        sizeof(ACPI_EVAL_INPUT_BUFFER_COMPLEX))
+                        sizeof(ACPI_EVAL_INPUT_BUFFER))
                 {
                     Status = STATUS_INVALID_PARAMETER;
                     break;

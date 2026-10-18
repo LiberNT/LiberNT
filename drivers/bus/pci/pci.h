@@ -346,6 +346,15 @@ NTSTATUS
 PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State);
 
 NTSTATUS
+PciAcpiQueryChildNotifyInterface(
+    _In_ ULONG Segment,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _In_ ULONG ChildAcpiUid,
+    _Out_ PACPI_INTERFACE_STANDARD2 Interface);
+
+NTSTATUS
 PciAcpiQueryNotifyInterface(
     _In_ ULONG Segment,
     _In_ ULONG Bus,

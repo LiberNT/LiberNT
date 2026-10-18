@@ -200,6 +200,17 @@ AcpiQueryPciNotifyInterfaceIoctl(
     _Inout_ PIRP Irp,
     _In_ PIO_STACK_LOCATION IrpSp);
 
+NTSTATUS
+AcpiQueryPciChildNotifyInterfaceIoctl(
+    _Inout_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IrpSp);
+
+NTSTATUS
+EvalFindDisplayChildByAcpiUid(
+    _In_ ACPI_HANDLE AdapterHandle,
+    _In_ ULONG ChildAcpiUid,
+    _Out_ ACPI_HANDLE *ChildHandle);
+
 BOOLEAN
 NTAPI
 AcpiFindPciDeviceInNamespace(

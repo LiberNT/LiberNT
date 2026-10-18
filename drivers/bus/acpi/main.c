@@ -562,6 +562,11 @@ ACPIDispatchInternalDeviceControl(
     {
         Status = AcpiQueryPciNotifyInterfaceIoctl(Irp, IrpSp);
     }
+    else if (CommonData != NULL && CommonData->IsFDO &&
+             IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_ACPI_QUERY_PCI_CHILD_NOTIFY_INTERFACE)
+    {
+        Status = AcpiQueryPciChildNotifyInterfaceIoctl(Irp, IrpSp);
+    }
     Irp->IoStatus.Status = Status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return Status;

@@ -14426,6 +14426,13 @@ DxgkDispatchDeviceControl(
     if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_RXGK_QUERY_MONITOR_DESCRIPTOR)
         return DxgkpChildQueryMonitorDescriptor(DeviceObject, Irp);
 
+    if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_ACPI_EVAL_METHOD &&
+        DeviceObject->DeviceExtension != NULL &&
+        *(PULONG)DeviceObject->DeviceExtension == DXGK_CHILD_PDO_SIGNATURE)
+    {
+        return DxgkpChildEvalAcpiMethod(DeviceObject, Irp);
+    }
+
     DXGKRNL_VERBOSE("DxgkDispatchDeviceControl: IoControlCode=0x%lX\n",
                     Stack->Parameters.DeviceIoControl.IoControlCode);
 

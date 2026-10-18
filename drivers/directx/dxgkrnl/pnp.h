@@ -267,6 +267,11 @@ DxgkpChildPdoPnpDispatch(
     _In_ PIRP           Irp);
 
 NTSTATUS
+DxgkpChildEvalAcpiMethod(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP           Irp);
+
+NTSTATUS
 DxgkpChildQueryMonitorDescriptor(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PIRP           Irp);

@@ -4,6 +4,7 @@
  * PURPOSE:     PnP dispatch for the dxgkrnl control device object and
  *              child PDO enumeration (monitor/output device objects)
  * COPYRIGHT:   Copyright 2024 LiberNT WDDM Team
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  *
  * This file contains:
  *   1. DxgkDispatchPnp / DxgkDispatchPower — handlers for dxgkrnl's own
@@ -25,6 +26,78 @@
 #include "hotplug_work_core.h"
 #include <ntstrsafe.h>
 #include <reactos/rddm/rxgkmonitor.h>
+#include <acpiioct.h>
+#include <reactos/drivers/acpi/acpipci.h>
+
+static CONST GUID DxgkpGuidDevinterfaceBrightness =
+    { 0xFDE5BBA4, 0xB3F9, 0x46FB, { 0xBD, 0xAA, 0x07, 0x28, 0xCE, 0x31, 0x00, 0xB4 } };
+static CONST GUID DxgkpGuidDevinterfaceBrightness2 =
+    { 0x148A3C98, 0x0ECD, 0x465A, { 0xB6, 0x34, 0xB0, 0x5F, 0x19, 0x5F, 0x77, 0x39 } };
+static CONST GUID DxgkpGuidChildAcpiInterfaceStandard2 =
+    { 0xE8695F63, 0x1831, 0x4870, { 0xA8, 0xCF, 0x9C, 0x2F, 0x03, 0xF9, 0xDC, 0xB5 } };
+
+static NTSTATUS
+DxgkpChildQueryAcpiInterface(
+    _In_ PDXGK_CHILD_PDO_EXTENSION ChildExt,
+    _In_ PIO_STACK_LOCATION Stack)
+{
+    PDXGKRNL_ADAPTER Adapter = ChildExt->ParentAdapter;
+    ACPI_PCI_CHILD_NOTIFY_INTERFACE_INPUT Input;
+    ACPI_INTERFACE_STANDARD2 Interface;
+    IO_STATUS_BLOCK IoStatus;
+    KEVENT Event;
+    PIRP Irp;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Stack->Parameters.QueryInterface.Version < 1 ||
+        Stack->Parameters.QueryInterface.Size < sizeof(ACPI_INTERFACE_STANDARD2) ||
+        Stack->Parameters.QueryInterface.Interface == NULL ||
+        Adapter == NULL || Adapter->PhysicalDeviceObject == NULL)
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    if (!ExAcquireRundownProtection(&Adapter->RemoveRundownRef))
+        return STATUS_NOT_SUPPORTED;
+
+    RtlZeroMemory(&Input, sizeof(Input));
+    RtlZeroMemory(&IoStatus, sizeof(IoStatus));
+    Input.Signature = ACPI_PCI_CHILD_NOTIFY_INTERFACE_INPUT_SIGNATURE;
+    Input.ChildAcpiUid = ChildExt->Descriptor.AcpiUid;
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_ACPI_QUERY_PCI_CHILD_NOTIFY_INTERFACE,
+                                        Adapter->PhysicalDeviceObject,
+                                        &Input,
+                                        sizeof(Input),
+                                        &Interface,
+                                        sizeof(Interface),
+                                        FALSE,
+                                        &Event,
+                                        &IoStatus);
+    if (Irp == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    else
+    {
+        Status = IoCallDriver(Adapter->PhysicalDeviceObject, Irp);
+        if (Status == STATUS_PENDING)
+        {
+            KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+            Status = IoStatus.Status;
+        }
+        if (NT_SUCCESS(Status) && IoStatus.Information < sizeof(Interface))
+            Status = STATUS_INVALID_BUFFER_SIZE;
+        if (NT_SUCCESS(Status))
+            RtlCopyMemory(Stack->Parameters.QueryInterface.Interface, &Interface, sizeof(Interface));
+    }
+    ExReleaseRundownProtection(&Adapter->RemoveRundownRef);
+
+    DXGKRNL_TRACE("DxgkpChildQueryAcpiInterface: ChildUid=%lu AcpiUid=0x%lx -> 0x%08lX\n",
+                  ChildExt->Descriptor.ChildUid, ChildExt->Descriptor.AcpiUid, Status);
+    return NT_SUCCESS(Status) ? Status : STATUS_NOT_SUPPORTED;
+}
 
 typedef struct _DXGKP_POLL_CHILD_SNAPSHOT
 {
@@ -1986,6 +2059,90 @@ DxgkpChildQueryMonitorDescriptor(
     return Status;
 }
 
+NTSTATUS
+DxgkpChildEvalAcpiMethod(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP           Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    PDXGK_CHILD_PDO_EXTENSION ChildExt = ((PDXGK_CHILD_PDO_OBJECT)DeviceObject->DeviceExtension)->Child;
+    PDXGKRNL_ADAPTER Adapter = ChildExt != NULL ? ChildExt->ParentAdapter : NULL;
+    PACPI_PCI_CHILD_EVAL_INPUT_BUFFER ChildInput;
+    ULONG InputSize = Stack->Parameters.DeviceIoControl.InputBufferLength;
+    ULONG OutputSize = Stack->Parameters.DeviceIoControl.OutputBufferLength;
+    ULONG ChildInputSize;
+    IO_STATUS_BLOCK IoStatus;
+    KEVENT Event;
+    PIRP AcpiIrp;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(&IoStatus, sizeof(IoStatus));
+    if (Irp->RequestorMode != KernelMode || Adapter == NULL || Adapter->PhysicalDeviceObject == NULL)
+    {
+        Status = STATUS_INVALID_DEVICE_REQUEST;
+    }
+    else if (InputSize < sizeof(ACPI_EVAL_INPUT_BUFFER) || InputSize > MAXULONG - sizeof(*ChildInput) ||
+             Irp->AssociatedIrp.SystemBuffer == NULL)
+    {
+        Status = STATUS_INVALID_PARAMETER;
+    }
+    else if (!ExAcquireRundownProtection(&Adapter->RemoveRundownRef))
+    {
+        Status = STATUS_DEVICE_NOT_READY;
+    }
+    else
+    {
+        ChildInputSize = sizeof(*ChildInput) + InputSize;
+        ChildInput = ExAllocatePoolZero(PagedPool, ChildInputSize, TAG_DXGK_RESOURCES);
+        if (ChildInput == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+        else
+        {
+            ChildInput->Signature = ACPI_PCI_CHILD_EVAL_INPUT_BUFFER_SIGNATURE;
+            ChildInput->ChildAcpiUid = ChildExt->Descriptor.AcpiUid;
+            ChildInput->TotalSize = ChildInputSize;
+            ChildInput->InputBufferOffset = sizeof(*ChildInput);
+            ChildInput->InputBufferSize = InputSize;
+            RtlCopyMemory(ACPI_PCI_CHILD_EVAL_GET_INPUT_BUFFER(ChildInput), Irp->AssociatedIrp.SystemBuffer, InputSize);
+
+            KeInitializeEvent(&Event, NotificationEvent, FALSE);
+            AcpiIrp = IoBuildDeviceIoControlRequest(IOCTL_ACPI_EVAL_METHOD_FOR_PCI_CHILD,
+                                                    Adapter->PhysicalDeviceObject,
+                                                    ChildInput,
+                                                    ChildInputSize,
+                                                    Irp->AssociatedIrp.SystemBuffer,
+                                                    OutputSize,
+                                                    FALSE,
+                                                    &Event,
+                                                    &IoStatus);
+            if (AcpiIrp == NULL)
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+            }
+            else
+            {
+                Status = IoCallDriver(Adapter->PhysicalDeviceObject, AcpiIrp);
+                if (Status == STATUS_PENDING)
+                {
+                    KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+                    Status = IoStatus.Status;
+                }
+            }
+            ExFreePoolWithTag(ChildInput, TAG_DXGK_RESOURCES);
+        }
+        ExReleaseRundownProtection(&Adapter->RemoveRundownRef);
+    }
+
+    Irp->IoStatus.Status = Status;
+    Irp->IoStatus.Information = NT_ERROR(Status) ? 0 : min(IoStatus.Information, OutputSize);
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
+}
+
 static VOID
 DxgkpChildWithdrawMonitor(
     _In_ PDEVICE_OBJECT Pdo)
@@ -2277,9 +2434,21 @@ DxgkpChildPdoPnpDispatch(
              * provides for that child, named by its UID.  A PDO has nothing
              * below it, so an unanswered query completes as it arrived.
              */
-            Status = DxgkpMiniportQueryInterface(ChildExt->ParentAdapter,
-                                                 ChildExt->Descriptor.ChildUid,
-                                                 Stack);
+            if (IsEqualGUID(Stack->Parameters.QueryInterface.InterfaceType,
+                            &DxgkpGuidChildAcpiInterfaceStandard2))
+            {
+                Status = DxgkpChildQueryAcpiInterface(ChildExt, Stack);
+            }
+            else
+            {
+                Status = DxgkpMiniportQueryInterface(ChildExt->ParentAdapter,
+                                                     (IsEqualGUID(Stack->Parameters.QueryInterface.InterfaceType,
+                                                                  &DxgkpGuidDevinterfaceBrightness) ||
+                                                      IsEqualGUID(Stack->Parameters.QueryInterface.InterfaceType,
+                                                                  &DxgkpGuidDevinterfaceBrightness2)) ?
+                                                         DISPLAY_ADAPTER_HW_ID : ChildExt->Descriptor.ChildUid,
+                                                     Stack);
+            }
             if (Status == STATUS_NOT_SUPPORTED)
                 Status = Irp->IoStatus.Status;
             Irp->IoStatus.Status = Status;

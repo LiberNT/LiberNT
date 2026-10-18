@@ -1498,7 +1498,7 @@ EvalMethodOnHandleInternal(
     return Status;
 }
 
-static NTSTATUS
+NTSTATUS
 EvalFindDisplayChildByAcpiUid(
     _In_ ACPI_HANDLE AdapterHandle,
     _In_ ULONG ChildAcpiUid,

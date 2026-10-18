@@ -1375,27 +1375,11 @@ AcpiPciNotifyGpeObject(PVOID Context, PVOID ObjectContext)
     return STATUS_NOT_SUPPORTED;
 }
 
-NTSTATUS
-AcpiQueryPciNotifyInterfaceIoctl(PIRP Irp, PIO_STACK_LOCATION IrpSp)
+static NTSTATUS
+AcpiReturnNotifyInterface(PIRP Irp, ACPI_HANDLE Handle)
 {
-    PACPI_PCI_NOTIFY_INTERFACE_INPUT Input;
     PACPI_INTERFACE_STANDARD2 Interface;
     PACPI_PCI_NOTIFY_CONTEXT Notify;
-    ACPI_HANDLE Handle;
-
-    PAGED_CODE();
-
-    if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(*Input) ||
-        IrpSp->Parameters.DeviceIoControl.OutputBufferLength < sizeof(*Interface) ||
-        Irp->AssociatedIrp.SystemBuffer == NULL)
-    {
-        return STATUS_BUFFER_TOO_SMALL;
-    }
-    Input = (PACPI_PCI_NOTIFY_INTERFACE_INPUT)Irp->AssociatedIrp.SystemBuffer;
-    if (Input->Signature != ACPI_PCI_NOTIFY_INTERFACE_INPUT_SIGNATURE)
-        return STATUS_INVALID_PARAMETER;
-    if (!AcpiFindPciDeviceInNamespace(Input->Segment, Input->Bus, Input->Device, Input->Function, &Handle))
-        return STATUS_NOT_FOUND;
 
     Notify = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Notify), ACPI_NOTIFY_TAG);
     if (Notify == NULL)
@@ -1423,4 +1407,54 @@ AcpiQueryPciNotifyInterfaceIoctl(PIRP Irp, PIO_STACK_LOCATION IrpSp)
     Interface->UnregisterForDeviceNotifications = AcpiPciNotifyUnregister;
     Irp->IoStatus.Information = sizeof(*Interface);
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+AcpiQueryPciNotifyInterfaceIoctl(PIRP Irp, PIO_STACK_LOCATION IrpSp)
+{
+    PACPI_PCI_NOTIFY_INTERFACE_INPUT Input;
+    ACPI_HANDLE Handle;
+
+    PAGED_CODE();
+
+    if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(*Input) ||
+        IrpSp->Parameters.DeviceIoControl.OutputBufferLength < sizeof(ACPI_INTERFACE_STANDARD2) ||
+        Irp->AssociatedIrp.SystemBuffer == NULL)
+    {
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+    Input = (PACPI_PCI_NOTIFY_INTERFACE_INPUT)Irp->AssociatedIrp.SystemBuffer;
+    if (Input->Signature != ACPI_PCI_NOTIFY_INTERFACE_INPUT_SIGNATURE)
+        return STATUS_INVALID_PARAMETER;
+    if (!AcpiFindPciDeviceInNamespace(Input->Segment, Input->Bus, Input->Device, Input->Function, &Handle))
+        return STATUS_NOT_FOUND;
+
+    return AcpiReturnNotifyInterface(Irp, Handle);
+}
+
+NTSTATUS
+AcpiQueryPciChildNotifyInterfaceIoctl(PIRP Irp, PIO_STACK_LOCATION IrpSp)
+{
+    PACPI_PCI_CHILD_NOTIFY_INTERFACE_INPUT Input;
+    ACPI_HANDLE AdapterHandle, ChildHandle;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (IrpSp->Parameters.DeviceIoControl.InputBufferLength < sizeof(*Input) ||
+        IrpSp->Parameters.DeviceIoControl.OutputBufferLength < sizeof(ACPI_INTERFACE_STANDARD2) ||
+        Irp->AssociatedIrp.SystemBuffer == NULL)
+    {
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+    Input = (PACPI_PCI_CHILD_NOTIFY_INTERFACE_INPUT)Irp->AssociatedIrp.SystemBuffer;
+    if (Input->Signature != ACPI_PCI_CHILD_NOTIFY_INTERFACE_INPUT_SIGNATURE)
+        return STATUS_INVALID_PARAMETER;
+    if (!AcpiFindPciDeviceInNamespace(Input->Segment, Input->Bus, Input->Device, Input->Function, &AdapterHandle))
+        return STATUS_NOT_FOUND;
+    Status = EvalFindDisplayChildByAcpiUid(AdapterHandle, Input->ChildAcpiUid, &ChildHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    return AcpiReturnNotifyInterface(Irp, ChildHandle);
 }
