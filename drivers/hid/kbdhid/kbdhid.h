@@ -125,6 +125,11 @@ typedef struct
     //
     KEYBOARD_TYPEMATIC_PARAMETERS KeyboardTypematic;
 
+    KSPIN_LOCK InputLock;
+    KTIMER RepeatTimer;
+    KDPC RepeatDpc;
+    USAGE_AND_PAGE RepeatUsage;
+
 } KBDHID_DEVICE_EXTENSION, *PKBDHID_DEVICE_EXTENSION;
 
 /* defaults from kbfiltr.h */

@@ -6,6 +6,7 @@
  * PROGRAMMERS:
  *              Michael Martin (michael.martin@reactos.org)
  *              Johannes Anderwald (johannes.anderwald@reactos.org)
+ *              Ahmed ARIF (arif.ing@outlook.com)
  */
 
 #include "kbdhid.h"
@@ -104,6 +105,86 @@ KbdHid_InsertScanCodes(
 }
 
 
+static
+VOID
+KbdHid_ArmRepeat(
+    IN PKBDHID_DEVICE_EXTENSION DeviceExtension,
+    IN BOOLEAN First)
+{
+    LARGE_INTEGER DueTime;
+    USHORT Delay = DeviceExtension->KeyboardTypematic.Delay;
+    USHORT Rate = DeviceExtension->KeyboardTypematic.Rate;
+
+    if (!Delay)
+        Delay = KEYBOARD_TYPEMATIC_DELAY_DEFAULT;
+    if (!Rate)
+        Rate = KEYBOARD_TYPEMATIC_RATE_DEFAULT;
+
+    DueTime.QuadPart = First ? -(LONGLONG)Delay * 10000 : -10000000LL / Rate;
+    KeSetTimer(&DeviceExtension->RepeatTimer, DueTime, &DeviceExtension->RepeatDpc);
+}
+
+static
+VOID
+NTAPI
+KbdHid_RepeatDpc(
+    IN PKDPC Dpc,
+    IN PVOID DeferredContext,
+    IN PVOID SystemArgument1,
+    IN PVOID SystemArgument2)
+{
+    PKBDHID_DEVICE_EXTENSION DeviceExtension = DeferredContext;
+    USAGE_AND_PAGE Usage;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    KeAcquireSpinLockAtDpcLevel(&DeviceExtension->InputLock);
+    Usage = DeviceExtension->RepeatUsage;
+    if (Usage.Usage && !DeviceExtension->StopReadReport &&
+        HidP_TranslateUsageAndPagesToI8042ScanCodes(&Usage, 1, HidP_Keyboard_Make, &DeviceExtension->ModifierState,
+                                                    KbdHid_InsertScanCodes, DeviceExtension) == HIDP_STATUS_SUCCESS)
+    {
+        KbdHid_ArmRepeat(DeviceExtension, FALSE);
+    }
+    KeReleaseSpinLockFromDpcLevel(&DeviceExtension->InputLock);
+}
+
+static
+VOID
+KbdHid_UpdateRepeat(
+    IN PKBDHID_DEVICE_EXTENSION DeviceExtension)
+{
+    ULONG Index;
+    PUSAGE_AND_PAGE Last = NULL;
+
+    for (Index = 0; Index < DeviceExtension->UsageListLength && DeviceExtension->BreakUsageList[Index].Usage; Index++)
+    {
+        if (DeviceExtension->BreakUsageList[Index].Usage == DeviceExtension->RepeatUsage.Usage &&
+            DeviceExtension->BreakUsageList[Index].UsagePage == DeviceExtension->RepeatUsage.UsagePage)
+        {
+            DeviceExtension->RepeatUsage.Usage = 0;
+            KeCancelTimer(&DeviceExtension->RepeatTimer);
+        }
+    }
+
+    for (Index = 0; Index < DeviceExtension->UsageListLength && DeviceExtension->MakeUsageList[Index].Usage; Index++)
+        Last = &DeviceExtension->MakeUsageList[Index];
+
+    if (Last && Last->UsagePage == HID_USAGE_PAGE_KEYBOARD &&
+        Last->Usage != 0x48 && Last->Usage != 0x90 && Last->Usage != 0x91)
+    {
+        DeviceExtension->RepeatUsage = *Last;
+        KbdHid_ArmRepeat(DeviceExtension, TRUE);
+    }
+    else if (Last)
+    {
+        DeviceExtension->RepeatUsage.Usage = 0;
+        KeCancelTimer(&DeviceExtension->RepeatTimer);
+    }
+}
+
 NTSTATUS
 NTAPI
 KbdHid_ReadCompletion(
@@ -114,6 +195,7 @@ KbdHid_ReadCompletion(
     PKBDHID_DEVICE_EXTENSION DeviceExtension;
     NTSTATUS Status;
     ULONG ButtonLength;
+    KIRQL OldIrql;
 
     /* get device extension */
     DeviceExtension = Context;
@@ -190,6 +272,8 @@ KbdHid_ReadCompletion(
                   DeviceExtension->CurrentUsageList,
                   sizeof(USAGE_AND_PAGE) * DeviceExtension->UsageListLength);
 
+    KeAcquireSpinLock(&DeviceExtension->InputLock, &OldIrql);
+
     /* translate break usage list */
     Status = HidP_TranslateUsageAndPagesToI8042ScanCodes(DeviceExtension->BreakUsageList,
                                                          DeviceExtension->UsageListLength,
@@ -209,6 +293,9 @@ KbdHid_ReadCompletion(
                                                          DeviceExtension);
     if (Status != HIDP_STATUS_SUCCESS)
         DPRINT1("[KBDHID] make translation failed with %x\n", Status);
+
+    KbdHid_UpdateRepeat(DeviceExtension);
+    KeReleaseSpinLock(&DeviceExtension->InputLock, OldIrql);
 
     /* re-init read */
     KbdHid_InitiateRead(DeviceExtension);
@@ -269,6 +356,14 @@ VOID
 KbdHid_StopRead(
     IN PKBDHID_DEVICE_EXTENSION DeviceExtension)
 {
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&DeviceExtension->InputLock, &OldIrql);
+    DeviceExtension->RepeatUsage.Usage = 0;
+    KeCancelTimer(&DeviceExtension->RepeatTimer);
+    KeReleaseSpinLock(&DeviceExtension->InputLock, OldIrql);
+    KeFlushQueuedDpcs();
+
     if (!DeviceExtension->ReadReportActive)
         return;
 
@@ -1051,6 +1146,9 @@ KbdHid_AddDevice(
     /* init device extension */
     DeviceExtension->NextDeviceObject = NextDeviceObject;
     KeInitializeEvent(&DeviceExtension->ReadCompletionEvent, NotificationEvent, FALSE);
+    KeInitializeSpinLock(&DeviceExtension->InputLock);
+    KeInitializeTimer(&DeviceExtension->RepeatTimer);
+    KeInitializeDpc(&DeviceExtension->RepeatDpc, KbdHid_RepeatDpc, DeviceExtension);
 
     /* init keyboard attributes */
     DeviceExtension->Attributes.KeyboardIdentifier.Type = KEYBOARD_TYPE_UNKNOWN;
