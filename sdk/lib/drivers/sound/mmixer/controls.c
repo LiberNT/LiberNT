@@ -276,6 +276,7 @@ MMixerAddMixerControl(
 
         RtlZeroMemory(VolumeData, AllocationSize);
         VolumeData->Header.dwControlID = MixerControl->Control.dwControlID;
+        VolumeData->CachedMask = 0;
         VolumeData->RangeCount = RangeCount;
         if (Status == MM_STATUS_SUCCESS)
         {

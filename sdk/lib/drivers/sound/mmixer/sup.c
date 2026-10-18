@@ -717,7 +717,26 @@ MMixerSetGetVolumeControlDetails(
         if (Status != MM_STATUS_SUCCESS)
             return Status;
 
-        if (!bSet)
+        if (bSet)
+        {
+            if (Channel < MIXER_VOLUME_CACHED_CHANNELS)
+            {
+                VolumeData->CachedMask &= ~(1UL << Channel);
+                if (MMixerSetGetControlDetails(MixerContext, MixerControl->hDevice, NodeId, FALSE, KSPROPERTY_AUDIO_VOLUMELEVEL, Channel, &Value) == MM_STATUS_SUCCESS)
+                {
+                    VolumeData->CachedValue[Channel] = Value;
+                    VolumeData->CachedLogical[Channel] = (ULONG)LogicalValue;
+                    VolumeData->CachedMask |= 1UL << Channel;
+                }
+            }
+        }
+        else if (Channel < MIXER_VOLUME_CACHED_CHANNELS &&
+                 (VolumeData->CachedMask & (1UL << Channel)) &&
+                 VolumeData->CachedValue[Channel] == Value)
+        {
+            Input[Channel].dwValue = VolumeData->CachedLogical[Channel];
+        }
+        else
         {
             if (Value < Range->Bounds.SignedMinimum)
                 Value = Range->Bounds.SignedMinimum;
