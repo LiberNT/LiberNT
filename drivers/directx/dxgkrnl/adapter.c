@@ -63,6 +63,7 @@
 #include "adapter_start_core.h"
 
 #include <ndk/inbvfuncs.h>
+#include <ntpoapi.h>
 #include <drivers/acpi/acpi.h>
 #include <drivers/acpi/acpisystem.h>
 #include <reactos/arc/arc.h>
@@ -1511,6 +1512,9 @@ static LONG DxgkpInitialized = 0;
 static NTSTATUS DxgkpInitializationStatus = STATUS_UNSUCCESSFUL;
 static FAST_MUTEX DxgkpMapMemoryMutex;
 static LIST_ENTRY DxgkpMapMemoryList;
+static FAST_MUTEX DxgkpSleepDisableMutex;
+static ULONG DxgkpBasicDisplayAdapterCount;
+static PVOID DxgkpSleepDisableToken;
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_4)
 static FAST_MUTEX DxgkpCallbackMemoryMutex;
 static LIST_ENTRY DxgkpCallbackMemoryList;
@@ -4262,6 +4266,7 @@ DxgkpEnsureGlobalInitialization(VOID)
     KeInitializeMutex(&g_MiniportRegistrationMutex, 0);
     ExInitializeFastMutex(&DxgkpMapMemoryMutex);
     InitializeListHead(&DxgkpMapMemoryList);
+    ExInitializeFastMutex(&DxgkpSleepDisableMutex);
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_4)
     ExInitializeFastMutex(&DxgkpCallbackMemoryMutex);
     InitializeListHead(&DxgkpCallbackMemoryList);
@@ -13271,6 +13276,52 @@ DxgkRearmVsyncInterrupt(
     return DxgkpSetVsyncInterruptState(Adapter, DXGK_VSYNC_ENABLE);
 }
 
+static VOID
+DxgkpHoldSleepDisable(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (!Adapter->MiniportContext->IsBasicDisplayFallback || Adapter->SleepDisableHeld)
+        return;
+
+    ExAcquireFastMutex(&DxgkpSleepDisableMutex);
+    if (DxgkpBasicDisplayAdapterCount++ == 0)
+    {
+        Status = PoDisableSleepStates(PoSleepDisableReasonVideo,
+                                      PO_REASON_STATE_STANDBY,
+                                      &DxgkpSleepDisableToken);
+        if (!NT_SUCCESS(Status))
+        {
+            DXGKRNL_WARN("DxgkAdapterStart: PoDisableSleepStates failed 0x%08lX\n", Status);
+            DxgkpSleepDisableToken = NULL;
+        }
+    }
+    Adapter->SleepDisableHeld = TRUE;
+    ExReleaseFastMutex(&DxgkpSleepDisableMutex);
+}
+
+static VOID
+DxgkpReleaseSleepDisable(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PAGED_CODE();
+
+    if (!Adapter->SleepDisableHeld)
+        return;
+
+    ExAcquireFastMutex(&DxgkpSleepDisableMutex);
+    Adapter->SleepDisableHeld = FALSE;
+    if (--DxgkpBasicDisplayAdapterCount == 0 && DxgkpSleepDisableToken != NULL)
+    {
+        PoReenableSleepStates(DxgkpSleepDisableToken);
+        DxgkpSleepDisableToken = NULL;
+    }
+    ExReleaseFastMutex(&DxgkpSleepDisableMutex);
+}
+
 /*
  * DxgkAdapterStart
  *
@@ -14178,6 +14229,7 @@ DxgkAdapterStart(
     /* Subscribe to ACPI and power-state events last: every rollback point
      * is behind us, and start is still serialised against stop. */
     DxgkAcpiEventsStart(Adapter);
+    DxgkpHoldSleepDisable(Adapter);
 
     Status = STATUS_SUCCESS;
     DxgkpCompleteAdapterStart(Adapter, StartGeneration, Status, TRUE);
@@ -14914,6 +14966,7 @@ DxgkpAdapterStopInternal(
     /* No more ACPI or power-state events once the miniport is stopping;
      * this also waits out a delivery already in progress. */
     DxgkAcpiEventsStop(Adapter);
+    DxgkpReleaseSleepDisable(Adapter);
 
     /* Stop the TDR watchdog before the miniport goes away. */
     DxgkpStopTdrWatchdog(Adapter);
@@ -15142,6 +15195,7 @@ DxgkAdapterRemove(
     else if (Adapter->State == DxgkAdapterStateSurpriseRemoved)
     {
         DxgkAcpiEventsStop(Adapter);
+        DxgkpReleaseSleepDisable(Adapter);
         DxgkpStopTdrWatchdog(Adapter);
         DxgkPresentTeardown(Adapter);
         VidSchPrepareForStop(Adapter);

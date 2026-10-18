@@ -1461,6 +1461,7 @@ struct _DXGKRNL_ADAPTER
 
     /* ACPI and power-state event subscriptions (acpievent.c). */
     DXGKP_ACPI_EVENTS           AcpiEvents;
+    BOOLEAN                     SleepDisableHeld;
 
     /*
      * Linkage in the per-miniport AdapterListHead AND in the global
