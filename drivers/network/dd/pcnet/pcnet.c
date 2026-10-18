@@ -1074,6 +1074,21 @@ MiTestCard(
 }
 #endif
 
+static BOOLEAN
+NTAPI
+MiSyncInitChip(
+    IN PVOID SynchronizeContext)
+{
+  PADAPTER Adapter = (PADAPTER)SynchronizeContext;
+
+  MiInitChip(Adapter);
+#if DBG
+  if(!MiTestCard(Adapter))
+    ASSERT(0);
+#endif
+  return TRUE;
+}
+
 static VOID
 NTAPI
 MiniportShutdownEx(
@@ -1310,12 +1325,8 @@ MiniportInitializeEx(
   DPRINT("Interrupt registered successfully\n");
 
   NdisAcquireSpinLock(&Adapter->Lock);
-  MiInitChip(Adapter);
+  NdisMSynchronizeWithInterruptEx(Adapter->InterruptHandle, 0, MiSyncInitChip, Adapter);
   Adapter->ChipStarted = TRUE;
-#if DBG
-  if(!MiTestCard(Adapter))
-    ASSERT(0);
-#endif
   NdisReleaseSpinLock(&Adapter->Lock);
 
   Status = MiSetGeneralAttributes(Adapter);
