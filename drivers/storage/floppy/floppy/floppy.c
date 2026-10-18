@@ -1541,6 +1541,30 @@ SignalMediaChanged(PDRIVE_INFO DriveInfo, PIRP Irp)
 }
 
 
+BOOLEAN NTAPI
+HandleDiskChange(PDRIVE_INFO DriveInfo, PIRP Irp)
+{
+    NTSTATUS Status = ResetChangeFlag(DriveInfo);
+
+    if (Status == STATUS_SUCCESS && (IoGetCurrentIrpStackLocation(Irp)->Flags & SL_OVERRIDE_VERIFY_VOLUME))
+    {
+        DriveInfo->DiskChangeCount++;
+        StartMotor(DriveInfo);
+        return FALSE;
+    }
+
+    SignalMediaChanged(DriveInfo, Irp);
+    if (Status == STATUS_NO_MEDIA_IN_DEVICE)
+    {
+        Irp->IoStatus.Status = STATUS_NO_MEDIA_IN_DEVICE;
+        Irp->IoStatus.Information = 0;
+        if (Irp->Tail.Overlay.Thread)
+            IoSetHardErrorOrVerifyDevice(Irp, DriveInfo->DeviceObject);
+    }
+
+    return TRUE;
+}
+
 static VOID NTAPI
 QueueThread(PVOID Context)
 /*

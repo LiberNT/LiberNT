@@ -93,6 +93,9 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath);
 VOID NTAPI
 SignalMediaChanged(PDRIVE_INFO DriveInfo, PIRP Irp);
 
+BOOLEAN NTAPI
+HandleDiskChange(PDRIVE_INFO DriveInfo, PIRP Irp);
+
 NTSTATUS NTAPI
 WaitForControllerInterrupt(PCONTROLLER_INFO ControllerInfo, PLARGE_INTEGER Timeout);
 
