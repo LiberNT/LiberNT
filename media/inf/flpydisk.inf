@@ -27,8 +27,8 @@ HKR, , NoInstallClass, , 1
 
 [GenericMfg]
 ;FIXME: We do not have a driver yet
-%Floppy.DeviceDesc% = NO_DRV, GenFloppyDisk
-;%Floppy.DeviceDesc% = floppy_Inst, GenFloppyDisk
+%Floppy.DeviceDesc% = floppy_Inst, GenFloppyDisk
+;%Floppy.DeviceDesc% = NO_DRV, GenFloppyDisk
 
 ;------------------------------ FDC DRIVER ------------------------------
 
@@ -38,7 +38,7 @@ CopyFiles = floppy_CopyFiles.NT
 [floppy_CopyFiles.NT]
 flpydisk.sys
 
-[flopy_Inst.NT.Services]
+[floppy_Inst.NT.Services]
 AddService = flpydisk, 0x00000002, floppy_Service_Inst
 
 [floppy_Service_Inst]

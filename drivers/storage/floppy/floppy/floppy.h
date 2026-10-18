@@ -45,6 +45,7 @@ typedef struct _DRIVE_INFO
     UCHAR                    UnitNumber; /* 0,1,2,3 */
     LARGE_INTEGER            MotorStartTime;
     PDEVICE_OBJECT           DeviceObject;
+    PDEVICE_OBJECT           Pdo;
     CM_FLOPPY_DEVICE_DATA    FloppyDeviceData;
     DISK_GEOMETRY            DiskGeometry;
     UCHAR                    BytesPerSectorCode;
@@ -90,7 +91,7 @@ NTSTATUS NTAPI
 DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath);
 
 VOID NTAPI
-SignalMediaChanged(PDEVICE_OBJECT DeviceObject, PIRP Irp);
+SignalMediaChanged(PDRIVE_INFO DriveInfo, PIRP Irp);
 
 NTSTATUS NTAPI
 WaitForControllerInterrupt(PCONTROLLER_INFO ControllerInfo, PLARGE_INTEGER Timeout);

@@ -468,7 +468,7 @@ ReadWritePassive(PDRIVE_INFO DriveInfo, PIRP Irp)
      * Check the change line, and if it's set, return
      */
     StartMotor(DriveInfo);
-    if(HwDiskChanged(DeviceObject->DeviceExtension, &DiskChanged) != STATUS_SUCCESS)
+    if(HwDiskChanged(DriveInfo, &DiskChanged) != STATUS_SUCCESS)
     {
         WARN_(FLOPPY, "ReadWritePassive(): unable to detect disk change; Completing with STATUS_UNSUCCESSFUL\n");
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -481,7 +481,7 @@ ReadWritePassive(PDRIVE_INFO DriveInfo, PIRP Irp)
         INFO_(FLOPPY, "ReadWritePhase1(): detected disk changed: signalling media change and completing\n");
 
         /* The following call sets IoStatus.Status and IoStatus.Information */
-        SignalMediaChanged(DeviceObject, Irp);
+        SignalMediaChanged(DriveInfo, Irp);
         ResetChangeFlag(DriveInfo);
 
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -598,7 +598,7 @@ ReadWritePassive(PDRIVE_INFO DriveInfo, PIRP Irp)
 
     /* Get map registers for DMA */
     KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
-    Status = IoAllocateAdapterChannel(DriveInfo->ControllerInfo->AdapterObject, DeviceObject,
+    Status = IoAllocateAdapterChannel(DriveInfo->ControllerInfo->AdapterObject, DriveInfo->Pdo,
                                       DriveInfo->ControllerInfo->MapRegisters, MapRegisterCallback, DriveInfo->ControllerInfo);
     KeLowerIrql(OldIrql);
 
