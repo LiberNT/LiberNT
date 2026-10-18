@@ -296,6 +296,50 @@ FileRecord::FindAttributeFromList(_In_ AttributeType Type,
 }
 
 NTSTATUS
+FileRecord::FindNextAttributeFromList(_In_ AttributeType Type,
+                                      _Inout_ PULONG ListOffset,
+                                      _Out_ PAttribute* Attribute)
+{
+    ULONG Offset = *ListOffset;
+    NTSTATUS Status;
+
+    *Attribute = NULL;
+
+    Status = LoadAttributeList();
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    while (Offset < AttributeListLength)
+    {
+        PAttributeListEx Entry = (PAttributeListEx)(AttributeListData + Offset);
+        FileRecord* TargetRecord;
+
+        if (!IsAttributeListEntryValid(Entry, AttributeListLength - Offset))
+            return STATUS_FILE_CORRUPT_ERROR;
+
+        Offset += Entry->RecordLength;
+        if (Entry->Type != (ULONG)Type || Entry->FirstVCN != 0)
+            continue;
+
+        TargetRecord = GetFRNFromFileRef(Entry->BaseFileRef) == Header->MFTRecordNumber
+            ? this
+            : GetExtentRecord(Entry->BaseFileRef);
+        if (!TargetRecord)
+            return STATUS_FILE_CORRUPT_ERROR;
+
+        *Attribute = TargetRecord->FindAttributeInRecord(Type, NULL, &Entry->AttributeId);
+        if (!*Attribute)
+            return STATUS_FILE_CORRUPT_ERROR;
+
+        *ListOffset = Offset;
+        return STATUS_SUCCESS;
+    }
+
+    *ListOffset = Offset;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 FileRecord::LoadAttributeList()
 {
     PAttribute ListAttribute;

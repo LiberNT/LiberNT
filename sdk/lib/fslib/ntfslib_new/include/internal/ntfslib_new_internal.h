@@ -1062,6 +1062,11 @@ private:
     FindAttributeFromList(_In_ AttributeType Type,
                           _In_opt_ PWSTR Name);
 
+    NTSTATUS
+    FindNextAttributeFromList(_In_ AttributeType Type,
+                              _Inout_ PULONG ListOffset,
+                              _Out_ PAttribute* Attribute);
+
     FileRecord*
     GetExtentRecord(_In_ ULONGLONG FileReference);
 
@@ -1778,7 +1783,8 @@ private:
         _In_ PFileRecord File,
         _Inout_ PULONG Offset,
         _Out_ PAttribute* Attribute,
-        _Out_ PFileNameEx* FileName);
+        _Out_ PFileNameEx* FileName,
+        _In_ BOOLEAN FollowAttributeList = FALSE);
 
     NTSTATUS
     FindFileNamePair(
@@ -1788,7 +1794,8 @@ private:
         _Out_ PAttribute* NameAttribute,
         _Out_ PFileNameEx* NameValue,
         _Out_ PAttribute* AliasAttribute,
-        _Out_ PFileNameEx* AliasValue);
+        _Out_ PFileNameEx* AliasValue,
+        _In_ BOOLEAN FollowAttributeList = FALSE);
 
     NTSTATUS
     RemoveFileNameFromRecord(

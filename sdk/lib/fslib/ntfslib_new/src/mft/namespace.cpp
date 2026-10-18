@@ -72,6 +72,32 @@ CaptureAlias(
     return NtfsMakeCountedUnicodeString(AliasNameBuffer, Bytes);
 }
 
+static NTSTATUS
+GetResidentFileName(
+    _In_ PAttribute Candidate,
+    _Out_ PFileNameEx* FileName)
+{
+    PFileNameEx Value;
+
+    if (Candidate->IsNonResident ||
+        Candidate->Resident.DataOffset < 0x18 ||
+        Candidate->Resident.DataOffset > Candidate->Length ||
+        Candidate->Resident.DataLength >
+            Candidate->Length - Candidate->Resident.DataOffset ||
+        Candidate->Resident.DataLength < FIELD_OFFSET(FileNameEx, Name))
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+    Value = reinterpret_cast<PFileNameEx>(GetResidentDataPointer(Candidate));
+    if (Value->NameLength * sizeof(WCHAR) >
+        Candidate->Resident.DataLength - FIELD_OFFSET(FileNameEx, Name))
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+    *FileName = Value;
+    return STATUS_SUCCESS;
+}
+
 /*
  * Walks the resident $FILE_NAME attributes of one base record. Offset
  * starts at zero and advances across calls; a NULL attribute result
@@ -82,13 +108,29 @@ MasterFileTable::EnumerateFileNames(
     _In_ PFileRecord File,
     _Inout_ PULONG Offset,
     _Out_ PAttribute* Attribute,
-    _Out_ PFileNameEx* FileName)
+    _Out_ PFileNameEx* FileName,
+    _In_ BOOLEAN FollowAttributeList)
 {
     PFileRecordHeader Header = File->Header;
     PUCHAR Data = File->Data;
+    NTSTATUS Status;
 
     *Attribute = NULL;
     *FileName = NULL;
+
+    if (FollowAttributeList &&
+        File->FindAttributeInRecord(TypeAttributeList, NULL, NULL))
+    {
+        PAttribute Candidate;
+
+        Status = File->FindNextAttributeFromList(TypeFileName, Offset, &Candidate);
+        if (!NT_SUCCESS(Status) || !Candidate)
+            return Status;
+        Status = GetResidentFileName(Candidate, FileName);
+        if (NT_SUCCESS(Status))
+            *Attribute = Candidate;
+        return Status;
+    }
 
     if (*Offset == 0)
         *Offset = Header->AttributeOffset;
@@ -130,37 +172,11 @@ MasterFileTable::EnumerateFileNames(
                 (ULONG)TypeFileName &&
             !Candidate->IsNonResident)
         {
-            PFileNameEx Value;
-
-            if (Candidate->Resident.DataOffset <
-                    0x18 ||
-                Candidate->Resident.DataOffset >
-                    Candidate->Length ||
-                Candidate->Resident.DataLength >
-                    Candidate->Length -
-                    Candidate->
-                        Resident.DataOffset ||
-                Candidate->Resident.DataLength <
-                    FIELD_OFFSET(FileNameEx,
-                                 Name))
-            {
-                return STATUS_FILE_CORRUPT_ERROR;
-            }
-            Value =
-                reinterpret_cast<PFileNameEx>(
-                    GetResidentDataPointer(
-                        Candidate));
-            if (Value->NameLength *
-                    sizeof(WCHAR) >
-                Candidate->Resident.DataLength -
-                    FIELD_OFFSET(FileNameEx,
-                                 Name))
-            {
-                return STATUS_FILE_CORRUPT_ERROR;
-            }
+            Status = GetResidentFileName(Candidate, FileName);
+            if (!NT_SUCCESS(Status))
+                return Status;
             *Offset += Candidate->Length;
             *Attribute = Candidate;
-            *FileName = Value;
             return STATUS_SUCCESS;
         }
         *Offset += Candidate->Length;
@@ -180,7 +196,8 @@ MasterFileTable::FindFileNamePair(
     _Out_ PAttribute* NameAttribute,
     _Out_ PFileNameEx* NameValue,
     _Out_ PAttribute* AliasAttribute,
-    _Out_ PFileNameEx* AliasValue)
+    _Out_ PFileNameEx* AliasValue,
+    _In_ BOOLEAN FollowAttributeList)
 {
     ULONG Offset = 0;
     NTSTATUS Status;
@@ -201,7 +218,8 @@ MasterFileTable::FindFileNamePair(
             File,
             &Offset,
             &Attribute,
-            &Value);
+            &Value,
+            FollowAttributeList);
         if (!NT_SUCCESS(Status))
             return Status;
         if (!Attribute)
@@ -254,7 +272,7 @@ MasterFileTable::FindFileNamePair(
         PFileNameEx Value;
         UCHAR NameType = (*NameValue)->NameType;
 
-        Status = EnumerateFileNames(File, &Offset, &Attribute, &Value);
+        Status = EnumerateFileNames(File, &Offset, &Attribute, &Value, FollowAttributeList);
         if (!NT_SUCCESS(Status))
             return Status;
         if (!Attribute)
@@ -1973,7 +1991,7 @@ MasterFileTable::GetPathFromFileReference(
 
         for (;;)
         {
-            Status = EnumerateFileNames(File, &Offset, &Attribute, &FileName);
+            Status = EnumerateFileNames(File, &Offset, &Attribute, &FileName, TRUE);
             if (!NT_SUCCESS(Status) || !FileName)
                 break;
             if (FileName->NameType != NAME_TYPE_DOS)
@@ -2031,7 +2049,7 @@ MasterFileTable::GetLinkName(
 
     RtlZeroMemory(LinkName, sizeof(*LinkName));
     Status = FindFileNamePair(File, ParentReference, Name,
-                             &NameAttribute, &NameValue, &AliasAttribute, &AliasValue);
+                             &NameAttribute, &NameValue, &AliasAttribute, &AliasValue, TRUE);
     if (!NT_SUCCESS(Status))
         return Status;
     if (NameValue->NameType == NAME_TYPE_DOS && AliasValue)
@@ -2056,7 +2074,7 @@ MasterFileTable::GetLinkShortName(
 
     RtlZeroMemory(ShortName, sizeof(*ShortName));
     Status = FindFileNamePair(File, ParentReference, Name,
-                             &NameAttribute, &NameValue, &AliasAttribute, &AliasValue);
+                             &NameAttribute, &NameValue, &AliasAttribute, &AliasValue, TRUE);
     if (!NT_SUCCESS(Status))
         return Status;
     if (NameValue->NameType != NAME_TYPE_DOS)
@@ -2112,7 +2130,7 @@ MasterFileTable::IsDescendantDirectory(
         }
         for (;;)
         {
-            Status = EnumerateFileNames(File, &Offset, &Attribute, &NameValue);
+            Status = EnumerateFileNames(File, &Offset, &Attribute, &NameValue, TRUE);
             if (!NT_SUCCESS(Status) || !NameValue)
                 break;
             if (ParentReference && ParentReference != NameValue->ParentFileReference)
