@@ -118,6 +118,19 @@ CreateSystemThreads(PVOID pParam)
     return 0;
 }
 
+ULONG
+NTAPI
+UserPowerRequestThread(PVOID pParam)
+{
+    while (NT_SUCCESS(NtWaitForSingleObject(ghPowerRequestEvent, FALSE, NULL)))
+    {
+        NtUserCallNoParam(NOPARAM_ROUTINE_USERPWRCALLOUTWORKER);
+    }
+
+    RtlExitUserThread(0);
+    return 0;
+}
+
 /* API_NUMBER: UserpCreateSystemThreads */
 CSR_API(SrvCreateSystemThreads)
 {
@@ -285,6 +298,13 @@ CSR_SERVER_DLL_INIT(UserServerDllInitialization)
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtUserInitialize failed with Status 0x%08x\n", Status);
+        return Status;
+    }
+
+    Status = CsrExecServerThread(UserPowerRequestThread, 0);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Power request thread creation failed with Status 0x%08x\n", Status);
         return Status;
     }
 

@@ -77,6 +77,12 @@ NtUserCallNoParam(DWORD Routine)
 
     TRACE("Enter NtUserCallNoParam\n");
 
+    if (Routine == NOPARAM_ROUTINE_USERPWRCALLOUTWORKER)
+    {
+        IntUserPowerCalloutWorker();
+        return 0;
+    }
+
     /* Read-only routines only need a shared lock; the rest stay exclusive */
     switch (Routine)
     {

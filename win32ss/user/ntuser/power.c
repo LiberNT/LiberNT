@@ -3,6 +3,7 @@
  * LICENSE:         GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
  * PURPOSE:         Power management of the Win32 kernel-mode subsystem
  * COPYRIGHT:       Copyright 2024 George Bișoc <george.bisoc@reactos.org>
+ *                  Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 /* INCLUDES ******************************************************************/
@@ -61,6 +62,132 @@ IntHandlePowerEventWorker(
             break;
         }
     }
+}
+
+static
+VOID
+IntBroadcastPowerMessage(
+    _In_ WPARAM Event)
+{
+    PWINSTATION_OBJECT WinSta;
+    PLIST_ENTRY Entry;
+    PDESKTOP *Desktops;
+    ULONG Count = 0;
+    ULONG i, j;
+    HWND *List;
+    PWND pwnd;
+    ULONG_PTR Result;
+    ULONGLONG Deadline;
+    ULONGLONG Now;
+
+    WinSta = gpDisplaySession ? gpDisplaySession->InputWindowStation : NULL;
+    if (WinSta == NULL)
+        return;
+
+    for (Entry = WinSta->DesktopListHead.Flink; Entry != &WinSta->DesktopListHead; Entry = Entry->Flink)
+        Count++;
+    if (Count == 0)
+        return;
+
+    Desktops = ExAllocatePoolWithTag(PagedPool, Count * sizeof(PDESKTOP), USERTAG_POWER);
+    if (Desktops == NULL)
+        return;
+
+    i = 0;
+    for (Entry = WinSta->DesktopListHead.Flink; Entry != &WinSta->DesktopListHead; Entry = Entry->Flink)
+    {
+        Desktops[i] = CONTAINING_RECORD(Entry, DESKTOP, ListEntry);
+        ObReferenceObject(Desktops[i]);
+        i++;
+    }
+
+    Deadline = KeQueryInterruptTime() + 2000ULL * 10000ULL;
+
+    for (i = 0; i < Count; i++)
+    {
+        if (Desktops[i]->pDeskInfo != NULL && Desktops[i]->pDeskInfo->spwnd != NULL)
+        {
+            List = IntWinListChildren(Desktops[i]->pDeskInfo->spwnd);
+            if (List != NULL)
+            {
+                for (j = 0; List[j]; j++)
+                {
+                    pwnd = UserGetWindowObject(List[j]);
+                    if (!pwnd ||
+                        pwnd->fnid == FNID_MENU ||
+                        pwnd->pcls->atomClassName == gpsi->atomSysClass[ICLS_SWITCH])
+                    {
+                        continue;
+                    }
+
+                    Now = KeQueryInterruptTime();
+                    if (Now >= Deadline)
+                    {
+                        UserSendNotifyMessage(List[j], WM_POWERBROADCAST, Event, 0);
+                        continue;
+                    }
+
+                    co_IntSendMessageTimeout(List[j],
+                                             WM_POWERBROADCAST,
+                                             Event,
+                                             0,
+                                             SMTO_ABORTIFHUNG,
+                                             (UINT)max((Deadline - Now) / 10000ULL, 1ULL),
+                                             &Result);
+                }
+                ExFreePoolWithTag(List, USERTAG_WINDOWLIST);
+            }
+        }
+        ObDereferenceObject(Desktops[i]);
+    }
+
+    ExFreePoolWithTag(Desktops, USERTAG_POWER);
+}
+
+static
+NTSTATUS
+IntHandlePowerStateWorker(
+    _In_ PWIN32_POWERSTATE_PARAMETERS pParameters)
+{
+    ULONG_PTR Result;
+
+    switch (pParameters->PowerStateTask)
+    {
+        case PowerState_NotifyWL:
+        {
+            if ((pParameters->Flags & POWER_ACTION_LOCK_CONSOLE) && hwndSAS != NULL)
+            {
+                co_IntSendMessageTimeout(hwndSAS,
+                                         WM_LOGONNOTIFY,
+                                         LN_LOCK_WORKSTATION,
+                                         0,
+                                         SMTO_NOTIMEOUTIFNOTHUNG,
+                                         2000,
+                                         &Result);
+            }
+            break;
+        }
+
+        case PowerState_SuspendApps:
+        {
+            IntBroadcastPowerMessage(PBT_APMSUSPEND);
+            break;
+        }
+
+        case PowerState_ResumeApps:
+        {
+            IntBroadcastPowerMessage(PBT_APMRESUMEAUTOMATIC);
+            IntBroadcastPowerMessage(PBT_APMRESUMESUSPEND);
+            break;
+        }
+
+        default:
+        {
+            break;
+        }
+    }
+
+    return STATUS_SUCCESS;
 }
 
 /**
@@ -175,26 +302,28 @@ IntDeployPowerCallout(VOID)
      */
 
     /* Deploy all the pending power callouts to the appropriate callout workers */
-    IntAcquirePowerCalloutLock();
-    for (pWin32PwrCallout = IntGetNextPowerCallout(NULL);
-         pWin32PwrCallout != NULL;
-         pWin32PwrCallout = IntGetNextPowerCallout(pWin32PwrCallout))
+    for (;;)
     {
+        IntAcquirePowerCalloutLock();
+        pWin32PwrCallout = IntGetNextPowerCallout(NULL);
+        IntReleasePowerCalloutLock();
+        if (pWin32PwrCallout == NULL)
+            break;
+
         if (pWin32PwrCallout->Type == POWER_CALLOUT_EVENT)
         {
             IntHandlePowerEventWorker(&pWin32PwrCallout->Params);
+
+            /* We are done with this power callout */
+            ExFreePoolWithTag(pWin32PwrCallout, USERTAG_POWER);
         }
         else // POWER_CALLOUT_STATE
         {
-            ERR("Power state callout management is currently not implemented!\n");
+            pWin32PwrCallout->Status = IntHandlePowerStateWorker(&pWin32PwrCallout->StateParams);
+            KeSetEvent(&pWin32PwrCallout->CompletionEvent, IO_NO_INCREMENT, FALSE);
         }
-
-        /* We are done with this power callout */
-        ExFreePoolWithTag(pWin32PwrCallout, USERTAG_POWER);
     }
 
-    /* Release what we locked */
-    IntReleasePowerCalloutLock();
     UserLeave();
 }
 
@@ -326,10 +455,15 @@ IntWin32PowerManagementCleanup(VOID)
      * apart during Win32k cleanup, so future power callouts would not
      * be allowed anyway, therefore we are safe.
      */
-    for (pWin32PwrCallout = IntGetNextPowerCallout(NULL);
-         pWin32PwrCallout != NULL;
-         pWin32PwrCallout = IntGetNextPowerCallout(pWin32PwrCallout))
+    while ((pWin32PwrCallout = IntGetNextPowerCallout(NULL)) != NULL)
     {
+        if (pWin32PwrCallout->Type == POWER_CALLOUT_STATE)
+        {
+            pWin32PwrCallout->Status = STATUS_UNSUCCESSFUL;
+            KeSetEvent(&pWin32PwrCallout->CompletionEvent, IO_NO_INCREMENT, FALSE);
+            continue;
+        }
+
         ExFreePoolWithTag(pWin32PwrCallout, USERTAG_POWER);
     }
 
@@ -419,9 +553,45 @@ NTAPI
 IntHandlePowerState(
     _In_ PWIN32_POWERSTATE_PARAMETERS pWin32PwrStateParams)
 {
-    /* FIXME */
-    ERR("IntHandlePowerState is UNIMPLEMENTED\n");
-    return STATUS_NOT_IMPLEMENTED;
+    PWIN32POWERCALLOUT pWin32PwrCallout;
+    NTSTATUS Status;
+
+    if (!gpDisplaySession || !gpDisplaySession->CsrProcess)
+    {
+        TRACE("CSRSS is not running, bailing out\n");
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    pWin32PwrCallout = ExAllocatePoolZero(NonPagedPool,
+                                          sizeof(WIN32POWERCALLOUT),
+                                          USERTAG_POWER);
+    if (pWin32PwrCallout == NULL)
+    {
+        ERR("Allocating memory for Win32 power callout failed\n");
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    pWin32PwrCallout->Type = POWER_CALLOUT_STATE;
+    pWin32PwrCallout->StateParams = *pWin32PwrStateParams;
+    pWin32PwrCallout->Status = STATUS_PENDING;
+    KeInitializeEvent(&pWin32PwrCallout->CompletionEvent, NotificationEvent, FALSE);
+
+    IntEnlistPowerCallout(pWin32PwrCallout);
+    KeWaitForSingleObject(&pWin32PwrCallout->CompletionEvent, Executive, KernelMode, FALSE, NULL);
+
+    Status = pWin32PwrCallout->Status;
+    ExFreePoolWithTag(pWin32PwrCallout, USERTAG_POWER);
+    return Status;
+}
+
+VOID
+NTAPI
+IntUserPowerCalloutWorker(VOID)
+{
+    if (!UserIsCsrProcess(PsGetCurrentProcess()))
+        return;
+
+    IntDeployPowerCallout();
 }
 
 /* EOF */

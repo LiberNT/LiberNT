@@ -32,6 +32,10 @@ typedef struct tagWIN32POWERCALLOUT
 
     /* The captured Win32 power event parameters (the params are set to none if Type == POWER_STATE) */
     WIN32_POWEREVENT_PARAMETERS Params;
+
+    WIN32_POWERSTATE_PARAMETERS StateParams;
+    KEVENT CompletionEvent;
+    NTSTATUS Status;
 } WIN32POWERCALLOUT, *PWIN32POWERCALLOUT;
 
 //
@@ -69,6 +73,10 @@ NTSTATUS
 NTAPI
 IntHandlePowerState(
     _In_ PWIN32_POWERSTATE_PARAMETERS pWin32PwrStateParams);
+
+VOID
+NTAPI
+IntUserPowerCalloutWorker(VOID);
 
 //
 // Power Callout locking mechanism
