@@ -1939,6 +1939,8 @@ HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced","StartMenuLog
 ; "Hidden" to be changed to 2 if we later want to have "Hide hidden files by default"
 HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced","Hidden",0x00010003,1
 HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced","ShowSuperHidden",0x00010003,0
+HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize","AppsUseLightTheme",0x00010003,0x00000000
+HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize","SystemUsesLightTheme",0x00010003,0x00000000
 HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CabinetState",,0x00000012
 HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CabinetState","FullPath",0x00010003,0
 HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CabinetState","FullPathAddress",0x00010003,1

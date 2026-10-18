@@ -7,6 +7,7 @@
 
 #include "shellframe.h"
 #include <reactos/dwmframe.h>
+#include <reactos/dwmsettings.h>
 
 namespace ShellFrame
 {
@@ -87,7 +88,7 @@ Theme::UpdateMaterial(HWND hwnd)
 void
 Theme::Update(HWND hwnd)
 {
-    DWORD light = 1;
+    DWORD light = DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT;
     HIGHCONTRASTW contrast = { sizeof(contrast) };
     COLORREF window;
 

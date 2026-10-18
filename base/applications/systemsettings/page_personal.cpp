@@ -59,7 +59,8 @@ BuildPersonalization(PageBuilder &page)
 {
     std::vector<std::wstring> modes;
     DWORD effects = DWM_EFFECT_ALL;
-    bool dark = ReadDword(HKEY_CURRENT_USER, PERSONALIZE_KEY, L"AppsUseLightTheme", 1) == 0;
+    bool dark = ReadDword(HKEY_CURRENT_USER, PERSONALIZE_KEY, L"AppsUseLightTheme",
+                          DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT) == 0;
 
     if (!page.Indexing)
         DwmSettingsRead(&effects);

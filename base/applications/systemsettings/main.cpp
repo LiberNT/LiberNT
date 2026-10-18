@@ -206,7 +206,7 @@ public:
                 m_User[0] = UNICODE_NULL;
         }
         m_Admin = IsAdmin();
-        m_Theme.SetFollowSystemColors(TRUE);
+        m_Theme.SetFollowSystemColors(!IsThemeActive());
     }
 
     void SetInitialPage(PageId page, const std::wstring &param)
@@ -315,6 +315,19 @@ protected:
             m_SearchFont = CreateFontIndirectW(&lf);
             SendMessageW(m_Search, WM_SETFONT, (WPARAM)m_SearchFont, TRUE);
         }
+        ApplyControlTheme(m_Search);
+        ApplyControlTheme(m_ScrollBar);
+    }
+
+    bool LightControls() const
+    {
+        return IsThemeActive() && !m_Theme.IsHighContrast() && !m_Theme.IsDark();
+    }
+
+    void ApplyControlTheme(HWND hwnd)
+    {
+        if (hwnd)
+            SetWindowTheme(hwnd, LightControls() ? L"ContentLight" : NULL, NULL);
     }
 
     void PlaceWindow()
@@ -525,6 +538,15 @@ protected:
                     return (LRESULT)CardBrush();
                 }
                 break;
+            case WM_CTLCOLOREDIT:
+            case WM_CTLCOLORLISTBOX:
+                if (LightControls())
+                {
+                    SetTextColor((HDC)wParam, m_Theme.Colors().Text);
+                    SetBkColor((HDC)wParam, m_Theme.Colors().Card);
+                    return (LRESULT)CardBrush();
+                }
+                break;
             case WM_PRINTCLIENT:
                 if (PaintChildBackground((HDC)wParam))
                     return 0;
@@ -600,7 +622,10 @@ protected:
             case WM_THEMECHANGED:
             case WM_SETTINGCHANGE:
             {
-                LRESULT result = FrameWindow::HandleMessage(msg, wParam, lParam);
+                LRESULT result;
+
+                m_Theme.SetFollowSystemColors(!IsThemeActive());
+                result = FrameWindow::HandleMessage(msg, wParam, lParam);
                 SetTimer(m_hwnd, TIMER_SETTING, 300, NULL);
                 Invalidate(NULL);
                 return result;
@@ -1608,6 +1633,7 @@ private:
 
         if (!hwnd)
             return NULL;
+        ApplyControlTheme(hwnd);
         SendMessageW(hwnd, WM_SETFONT, (WPARAM)m_Theme.Font(TextStyle::Body), FALSE);
         m_Controls.push_back(control);
         return hwnd;
