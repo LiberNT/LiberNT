@@ -609,11 +609,16 @@ PrintDirectoryHeader(LPCTSTR szPath, LPDIRSWITCHFLAGS lpFlags)
     szFullDir = szPath;
 
     /* Get the media ID of the drive */
-    if (!GetVolumePathName(szFullDir, szRootName, ARRAYSIZE(szRootName)) ||
-        !GetVolumeInformation(szRootName, szVolName, ARRAYSIZE(szVolName),
-                              &dwSerialNr, NULL, NULL, NULL, 0))
+    if (!GetVolumePathName(szFullDir, szRootName, ARRAYSIZE(szRootName)))
     {
         return TRUE;
+    }
+
+    if (!GetVolumeInformation(szRootName, szVolName, ARRAYSIZE(szVolName),
+                              &dwSerialNr, NULL, NULL, NULL, 0))
+    {
+        ErrorMessage(GetLastError(), NULL);
+        return FALSE;
     }
 
     /* Print drive info */
