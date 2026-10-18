@@ -56,11 +56,7 @@ static VOID LlmnrJoinInterfaces(PLLMNR_STATE State)
     struct ipv6_mreq Request6;
 
     if (GetAdaptersAddresses(AF_UNSPEC, Flags, NULL, NULL, &Size) != ERROR_BUFFER_OVERFLOW)
-    {
-        DPRINT1("LLMNRDIAG gaa size fail\n");
         return;
-    }
-    DPRINT1("LLMNRDIAG scan\n");
     Addresses = HeapAlloc(GetProcessHeap(), 0, Size);
     if (!Addresses)
         return;
@@ -88,12 +84,8 @@ static VOID LlmnrJoinInterfaces(PLLMNR_STATE State)
                     continue;
                 Request4.imr_multiaddr.s_addr = htonl(LLMNR_GROUP4);
                 Request4.imr_interface.s_addr = Address;
-                {
-                    int r = setsockopt(State->Socket4, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char *)&Request4, sizeof(Request4));
-                    DPRINT1("LLMNRDIAG join4 %08lx -> %d err %d\n", Address, r, r ? WSAGetLastError() : 0);
-                    if (!r)
-                        State->Joined4[State->Joined4Count++] = Address;
-                }
+                if (!setsockopt(State->Socket4, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char *)&Request4, sizeof(Request4)))
+                    State->Joined4[State->Joined4Count++] = Address;
             }
             if (!HasIpv6 || !Adapter->Ipv6IfIndex || State->Socket6 == INVALID_SOCKET ||
                 !LlmnrRemember(State->Joined6, &State->Joined6Count, Adapter->Ipv6IfIndex))
