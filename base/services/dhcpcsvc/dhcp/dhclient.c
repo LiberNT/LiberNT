@@ -710,6 +710,7 @@ reset_adapter( PDHCP_ADAPTER Adapter) {
 
     if( Adapter->RouterMib.dwForwardNextHop ) {
         DeleteIpForwardEntry( &Adapter->RouterMib );
+        Adapter->RouterMib.dwForwardNextHop = 0;
     }
 
     if (hkey) {
