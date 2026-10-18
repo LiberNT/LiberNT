@@ -65,27 +65,24 @@ static VOID LlmnrJoinInterfaces(PLLMNR_STATE State)
         for (Adapter = Addresses; Adapter; Adapter = Adapter->Next)
         {
             BOOL HasIpv6 = FALSE;
+            ULONG Address = INADDR_ANY;
 
             if (Adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK || Adapter->OperStatus != IfOperStatusUp)
                 continue;
             for (Unicast = Adapter->FirstUnicastAddress; Unicast; Unicast = Unicast->Next)
             {
-                ULONG Address;
-
                 if (Unicast->Address.lpSockaddr->sa_family == AF_INET6)
-                {
                     HasIpv6 = TRUE;
-                    continue;
-                }
-                if (Unicast->Address.lpSockaddr->sa_family != AF_INET || State->Socket4 == INVALID_SOCKET)
-                    continue;
-                Address = ((SOCKADDR_IN *)Unicast->Address.lpSockaddr)->sin_addr.s_addr;
-                if (!LlmnrRemember(State->Joined4, &State->Joined4Count, Address))
-                    continue;
+                else if (Unicast->Address.lpSockaddr->sa_family == AF_INET && Address == INADDR_ANY)
+                    Address = ((SOCKADDR_IN *)Unicast->Address.lpSockaddr)->sin_addr.s_addr;
+            }
+            if (Address != INADDR_ANY && State->Socket4 != INVALID_SOCKET &&
+                LlmnrRemember(State->Joined4, &State->Joined4Count, Adapter->IfIndex))
+            {
                 Request4.imr_multiaddr.s_addr = htonl(LLMNR_GROUP4);
                 Request4.imr_interface.s_addr = Address;
                 if (!setsockopt(State->Socket4, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char *)&Request4, sizeof(Request4)))
-                    State->Joined4[State->Joined4Count++] = Address;
+                    State->Joined4[State->Joined4Count++] = Adapter->IfIndex;
             }
             if (!HasIpv6 || !Adapter->Ipv6IfIndex || State->Socket6 == INVALID_SOCKET ||
                 !LlmnrRemember(State->Joined6, &State->Joined6Count, Adapter->Ipv6IfIndex))
