@@ -157,7 +157,7 @@ WmipCaptureGuidObjectAttributes(
 
         /* Fix pointers */
         CapturedObjectName->Buffer = ObjectNameBuffer;
-        GuidObjectAttributes->ObjectName = CapturedObjectName;
+        CapuredObjectAttributes->ObjectName = CapturedObjectName;
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -166,6 +166,58 @@ WmipCaptureGuidObjectAttributes(
     }
     _SEH2_END;
 
+    return STATUS_SUCCESS;
+}
+
+static
+BOOLEAN
+WmipIs32BitCaller(
+    _In_ PIRP Irp)
+{
+    return sizeof(PVOID) != sizeof(ULONG) &&
+           Irp->RequestorMode != KernelMode &&
+           PsGetCurrentProcessWow64Process() != NULL;
+}
+
+static
+NTSTATUS
+WmipCaptureGuidObjectAttributes32(
+    _In_ ULONG GuidObjectAttributes,
+    _Out_ POBJECT_ATTRIBUTES CapturedObjectAttributes,
+    _Out_ PUNICODE_STRING CapturedObjectName,
+    _Out_ PWSTR ObjectNameBuffer)
+{
+    OBJECT_ATTRIBUTES32 Attributes32;
+    UNICODE_STRING32 Name32;
+
+    _SEH2_TRY
+    {
+        ProbeForRead(ULongToPtr(GuidObjectAttributes), sizeof(OBJECT_ATTRIBUTES32), sizeof(ULONG));
+        Attributes32 = *(POBJECT_ATTRIBUTES32)ULongToPtr(GuidObjectAttributes);
+        ProbeForRead(ULongToPtr(Attributes32.ObjectName), sizeof(UNICODE_STRING32), sizeof(ULONG));
+        Name32 = *(PUNICODE_STRING32)ULongToPtr(Attributes32.ObjectName);
+        if (Name32.Length != 45 * sizeof(WCHAR))
+        {
+            _SEH2_YIELD(return STATUS_INVALID_PARAMETER);
+        }
+        ProbeForRead(ULongToPtr(Name32.Buffer), Name32.Length, sizeof(WCHAR));
+        RtlCopyMemory(ObjectNameBuffer, ULongToPtr(Name32.Buffer), Name32.Length);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    CapturedObjectName->Length = Name32.Length;
+    CapturedObjectName->MaximumLength = Name32.Length;
+    CapturedObjectName->Buffer = ObjectNameBuffer;
+    InitializeObjectAttributes(CapturedObjectAttributes,
+                               CapturedObjectName,
+                               Attributes32.Attributes,
+                               ULongToHandle(Attributes32.RootDirectory),
+                               ULongToPtr(Attributes32.SecurityDescriptor));
+    CapturedObjectAttributes->SecurityQualityOfService = ULongToPtr(Attributes32.SecurityQualityOfService);
     return STATUS_SUCCESS;
 }
 
@@ -378,36 +430,70 @@ typedef struct _WMIP_RESULT2
     ULONG Unknown0C;
 } WMIP_RESULT2, *PWMIP_RESULT2;
 
+typedef struct _WMI_OPEN_GUID_FOR_EVENTS32
+{
+    ULONG ObjectAttributes;
+    ACCESS_MASK DesiredAccess;
+    ULONG Unknown08;
+    ULONG Unknown0C;
+} WMI_OPEN_GUID_FOR_EVENTS32, *PWMI_OPEN_GUID_FOR_EVENTS32;
+
+typedef struct _WMIP_RESULT2_32
+{
+    ULONG Unknown00;
+    ULONG Unknown04;
+    ULONG Handle;
+    ULONG Unknown0C;
+} WMIP_RESULT2_32, *PWMIP_RESULT2_32;
+
 static
 NTSTATUS
 WmipOpenGuidForEvents(
     PVOID Buffer,
     ULONG InputLength,
-    PULONG OutputLength)
+    PULONG OutputLength,
+    BOOLEAN Is32Bit)
 {
     PWMI_OPEN_GUID_FOR_EVENTS OpenGuidForEvents = Buffer;
+    PWMI_OPEN_GUID_FOR_EVENTS32 OpenGuidForEvents32 = Buffer;
     PWMIP_RESULT2 Result = (PWMIP_RESULT2)Buffer;
     OBJECT_ATTRIBUTES LocalObjectAttributes;
     UNICODE_STRING LocalObjectName;
     WCHAR LocalObjectNameBuffer[45 + 1];
     KPROCESSOR_MODE PreviousMode;
+    ACCESS_MASK DesiredAccess;
     HANDLE GuidObjectHandle;
     PVOID GuidObject;
     NTSTATUS Status;
 
-    if ((InputLength != sizeof(WMI_OPEN_GUID_FOR_EVENTS)) ||
-        (*OutputLength != sizeof(WMIP_RESULT2)))
-    {
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    /* Capture object attributes */
     PreviousMode = ExGetPreviousMode();
-    Status = WmipCaptureGuidObjectAttributes(OpenGuidForEvents->ObjectAttributes,
-                                             &LocalObjectAttributes,
-                                             &LocalObjectName,
-                                             LocalObjectNameBuffer,
-                                             PreviousMode);
+    if (Is32Bit)
+    {
+        if ((InputLength != sizeof(WMI_OPEN_GUID_FOR_EVENTS32)) ||
+            (*OutputLength != sizeof(WMIP_RESULT2_32)))
+        {
+            return STATUS_UNSUCCESSFUL;
+        }
+        DesiredAccess = OpenGuidForEvents32->DesiredAccess;
+        Status = WmipCaptureGuidObjectAttributes32(OpenGuidForEvents32->ObjectAttributes,
+                                                   &LocalObjectAttributes,
+                                                   &LocalObjectName,
+                                                   LocalObjectNameBuffer);
+    }
+    else
+    {
+        if ((InputLength != sizeof(WMI_OPEN_GUID_FOR_EVENTS)) ||
+            (*OutputLength != sizeof(WMIP_RESULT2)))
+        {
+            return STATUS_UNSUCCESSFUL;
+        }
+        DesiredAccess = OpenGuidForEvents->DesiredAccess;
+        Status = WmipCaptureGuidObjectAttributes(OpenGuidForEvents->ObjectAttributes,
+                                                 &LocalObjectAttributes,
+                                                 &LocalObjectName,
+                                                 LocalObjectNameBuffer,
+                                                 PreviousMode);
+    }
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("ProbeAndCaptureGuidObjectAttributes failed: 0x%lx\n", Status);
@@ -416,7 +502,7 @@ WmipOpenGuidForEvents(
 
     /* Open a new GUID object */
     Status = WmipOpenGuidObjectByName(&LocalObjectAttributes,
-                                      OpenGuidForEvents->DesiredAccess,
+                                      DesiredAccess,
                                       PreviousMode,
                                       &GuidObjectHandle,
                                       &GuidObject);
@@ -426,7 +512,10 @@ WmipOpenGuidForEvents(
         return Status;
     }
 
-    Result->Handle = GuidObjectHandle;
+    if (Is32Bit)
+        ((PWMIP_RESULT2_32)Buffer)->Handle = HandleToUlong(GuidObjectHandle);
+    else
+        Result->Handle = GuidObjectHandle;
 
     ObDereferenceObject(GuidObject);
 
@@ -678,17 +767,18 @@ NTSTATUS
 WmipOpenBlock(
     PVOID Buffer,
     ULONG InputLength,
-    PULONG OutputLength)
+    PULONG OutputLength,
+    BOOLEAN Is32Bit)
 {
     PWMIP_RESULT2 Result = (PWMIP_RESULT2)Buffer;
     PWMIP_GUID_OBJECT GuidObject;
     HANDLE Handle;
     NTSTATUS Status;
 
-    Status = WmipOpenGuidForEvents(Buffer, InputLength, OutputLength);
+    Status = WmipOpenGuidForEvents(Buffer, InputLength, OutputLength, Is32Bit);
     if (!NT_SUCCESS(Status))
         return Status;
-    Handle = Result->Handle;
+    Handle = Is32Bit ? ULongToHandle(((PWMIP_RESULT2_32)Buffer)->Handle) : Result->Handle;
     Status = ObReferenceObjectByHandle(Handle, 0, WmipGuidObjectType, ExGetPreviousMode(), (PVOID *)&GuidObject, NULL);
     if (NT_SUCCESS(Status))
     {
@@ -699,7 +789,10 @@ WmipOpenBlock(
     if (!NT_SUCCESS(Status))
     {
         ObCloseHandle(Handle, ExGetPreviousMode());
-        Result->Handle = NULL;
+        if (Is32Bit)
+            ((PWMIP_RESULT2_32)Buffer)->Handle = 0;
+        else
+            Result->Handle = NULL;
     }
     return Status;
 }
@@ -804,13 +897,13 @@ WmipIoControl(
 
         case IOCTL_WMI_OPEN_BLOCK:
         {
-            Status = WmipOpenBlock(Buffer, InputLength, &OutputLength);
+            Status = WmipOpenBlock(Buffer, InputLength, &OutputLength, WmipIs32BitCaller(Irp));
             break;
         }
 
         case IOCTL_WMI_OPEN_GUID_FOR_EVENTS:
         {
-            Status = WmipOpenGuidForEvents(Buffer, InputLength, &OutputLength);
+            Status = WmipOpenGuidForEvents(Buffer, InputLength, &OutputLength, WmipIs32BitCaller(Irp));
             break;
         }
 
