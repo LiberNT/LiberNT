@@ -31,6 +31,8 @@
 #define TPADHID_BUTTON_LEFT 0x01
 #define TPADHID_BUTTON_RIGHT 0x02
 
+#define TPADHID_USAGE_CERTIFICATION_STATUS ((USAGE)0xC5)
+
 #define TPADHID_REPORT_PAD 0x01
 #define TPADHID_REPORT_LEFT 0x02
 #define TPADHID_REPORT_RIGHT 0x04
@@ -132,6 +134,8 @@ typedef struct _TPADHID_DEVICE_EXTENSION
     BOOLEAN InputModeValid;
     UCHAR InputModeReportId;
     UCHAR InputMode;
+    BOOLEAN SelectiveReportingValid;
+    UCHAR SelectiveReportingReportId;
     UCHAR SinkKeys;
     SYSTEM_POWER_STATE SystemState;
     PIO_WORKITEM ModeWorkItem;
@@ -165,6 +169,9 @@ typedef struct _TPADHID_DEVICE_EXTENSION
     ULONGLONG ExtentX;
     ULONGLONG ExtentY;
 
+    BOOLEAN ContactMaximumValid;
+    ULONG ContactMaximum;
+    ULONG FrameDiscard;
     ULONG FrameExpected;
     ULONG FrameReceived;
     ULONG FrameContactCount;
@@ -253,6 +260,87 @@ TpadWriteInputMode(
     Status = HidP_InitializeReportForID(HidP_Feature, DeviceExtension->InputModeReportId, DeviceExtension->PreparsedData, Report, Length);
     if (Status == HIDP_STATUS_SUCCESS)
         Status = HidP_SetUsageValue(HidP_Feature, HID_USAGE_PAGE_DIGITIZER, 0, HID_USAGE_DIGITIZER_DEVICE_MODE, Mode, DeviceExtension->PreparsedData, Report, Length);
+    if (Status == HIDP_STATUS_SUCCESS)
+        Status = TpadSendIoctl(DeviceExtension->NextDeviceObject, IOCTL_HID_SET_FEATURE, Report, Length, NULL, 0);
+
+    ExFreePoolWithTag(Report, TPADHID_TAG);
+    return Status;
+}
+
+static
+BOOLEAN
+TpadFindFeature(
+    _In_ PTPADHID_DEVICE_EXTENSION DeviceExtension,
+    _In_ USAGE UsagePage,
+    _In_ USAGE Usage,
+    _Out_ PUCHAR ReportId)
+{
+    HIDP_BUTTON_CAPS ButtonCaps;
+    HIDP_VALUE_CAPS ValueCaps;
+    NTSTATUS Status;
+    USHORT One = 1;
+
+    Status = HidP_GetSpecificValueCaps(HidP_Feature, UsagePage, 0, Usage, &ValueCaps, &One, DeviceExtension->PreparsedData);
+    if (Status == HIDP_STATUS_SUCCESS || Status == HIDP_STATUS_BUFFER_TOO_SMALL)
+    {
+        *ReportId = ValueCaps.ReportID;
+        return TRUE;
+    }
+
+    One = 1;
+    Status = HidP_GetSpecificButtonCaps(HidP_Feature, UsagePage, 0, Usage, &ButtonCaps, &One, DeviceExtension->PreparsedData);
+    if (Status == HIDP_STATUS_SUCCESS || Status == HIDP_STATUS_BUFFER_TOO_SMALL)
+    {
+        *ReportId = ButtonCaps.ReportID;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+static
+NTSTATUS
+TpadGetFeature(
+    _In_ PTPADHID_DEVICE_EXTENSION DeviceExtension,
+    _In_ UCHAR ReportId,
+    _Out_writes_bytes_(Length) PCHAR Report,
+    _In_ ULONG Length)
+{
+    NTSTATUS Status;
+
+    Status = HidP_InitializeReportForID(HidP_Feature, ReportId, DeviceExtension->PreparsedData, Report, Length);
+    if (Status != HIDP_STATUS_SUCCESS)
+        return Status;
+
+    return TpadSendIoctl(DeviceExtension->NextDeviceObject, IOCTL_HID_GET_FEATURE, NULL, 0, Report, Length);
+}
+
+static
+NTSTATUS
+TpadWriteSelectiveReporting(
+    _In_ PTPADHID_DEVICE_EXTENSION DeviceExtension)
+{
+    static const USAGE Switches[2] = { HID_USAGE_DIGITIZER_SURFACE_SWITCH, HID_USAGE_DIGITIZER_BUTTON_SWITCH };
+    ULONG Length = DeviceExtension->Caps.FeatureReportByteLength;
+    ULONG Index, UsageLength;
+    NTSTATUS Status;
+    USAGE Usage;
+    PCHAR Report;
+
+    Report = ExAllocatePoolWithTag(NonPagedPool, Length, TPADHID_TAG);
+    if (!Report)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = HidP_InitializeReportForID(HidP_Feature, DeviceExtension->SelectiveReportingReportId, DeviceExtension->PreparsedData, Report, Length);
+    for (Index = 0; Index < RTL_NUMBER_OF(Switches) && Status == HIDP_STATUS_SUCCESS; Index++)
+    {
+        Usage = Switches[Index];
+        UsageLength = 1;
+        if (HidP_SetUsages(HidP_Feature, HID_USAGE_PAGE_DIGITIZER, 0, &Usage, &UsageLength, DeviceExtension->PreparsedData, Report, Length) == HIDP_STATUS_SUCCESS)
+            continue;
+        if (HidP_SetUsageValue(HidP_Feature, HID_USAGE_PAGE_DIGITIZER, 0, Usage, 1, DeviceExtension->PreparsedData, Report, Length) != HIDP_STATUS_SUCCESS)
+            DPRINT1("TPADHID: the selective reporting report has no usage 0x%x\n", Usage);
+    }
     if (Status == HIDP_STATUS_SUCCESS)
         Status = TpadSendIoctl(DeviceExtension->NextDeviceObject, IOCTL_HID_SET_FEATURE, Report, Length, NULL, 0);
 
@@ -455,6 +543,12 @@ TpadUpdateSiblings(
                 {
                     DPRINT1("TPADHID: setting input mode %u failed, status=0x%08lx\n", Mode, Status);
                     Configuration->InputMode = TPADHID_MODE_UNKNOWN;
+                }
+                else if (Mode == TPADHID_MODE_TOUCHPAD && Configuration->SelectiveReportingValid)
+                {
+                    Status = TpadWriteSelectiveReporting(Configuration);
+                    if (!NT_SUCCESS(Status))
+                        DPRINT1("TPADHID: selecting surface and button reports failed, status=0x%08lx\n", Status);
                 }
             }
         }
@@ -1171,6 +1265,7 @@ TpadResetGestures(
         DeviceExtension->ClassService(DeviceExtension->ClassDeviceObject, &Data, &Data + 1, &Consumed);
 
     DeviceExtension->FrameExpected = 0;
+    DeviceExtension->FrameDiscard = 0;
     DeviceExtension->ActiveCount = 0;
     DeviceExtension->TapCandidate = FALSE;
     DeviceExtension->TouchMode = TpadTouchNone;
@@ -1239,6 +1334,24 @@ TpadProcessReport(
     if (DeviceExtension->HasContactCount &&
         HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_DIGITIZER, 0, HID_USAGE_DIGITIZER_CONTACT_COUNT, &Count, DeviceExtension->PreparsedData, DeviceExtension->Report, DeviceExtension->ReportLength) != HIDP_STATUS_SUCCESS)
     {
+        return;
+    }
+
+    if (DeviceExtension->FrameDiscard)
+    {
+        if (!Count)
+        {
+            DeviceExtension->FrameDiscard -= min(DeviceExtension->FrameDiscard, DeviceExtension->FingerCount);
+            return;
+        }
+
+        DeviceExtension->FrameDiscard = 0;
+    }
+
+    if (DeviceExtension->HasContactCount && DeviceExtension->ContactMaximumValid && Count > DeviceExtension->ContactMaximum)
+    {
+        DeviceExtension->FrameExpected = 0;
+        DeviceExtension->FrameDiscard = Count > DeviceExtension->FingerCount ? Count - DeviceExtension->FingerCount : 0;
         return;
     }
 
@@ -1422,6 +1535,47 @@ TpadFreeResources(
 
 static
 NTSTATUS
+TpadReadDeviceFeatures(
+    _In_ PTPADHID_DEVICE_EXTENSION DeviceExtension,
+    _In_ UCHAR CertificationId)
+{
+    ULONG Length = DeviceExtension->Caps.FeatureReportByteLength;
+    UCHAR CapabilitiesId;
+    NTSTATUS Status;
+    ULONG Maximum;
+    PCHAR Report;
+
+    Report = ExAllocatePoolWithTag(NonPagedPool, Length, TPADHID_TAG);
+    if (!Report)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    DeviceExtension->ContactMaximumValid = FALSE;
+    if (TpadFindFeature(DeviceExtension, HID_USAGE_PAGE_DIGITIZER, HID_USAGE_DIGITIZER_CONTACT_COUNT_MAXIMUM, &CapabilitiesId))
+    {
+        Status = TpadGetFeature(DeviceExtension, CapabilitiesId, Report, Length);
+        if (NT_SUCCESS(Status) &&
+            HidP_GetUsageValue(HidP_Feature, HID_USAGE_PAGE_DIGITIZER, 0, HID_USAGE_DIGITIZER_CONTACT_COUNT_MAXIMUM, &Maximum, DeviceExtension->PreparsedData, Report, Length) == HIDP_STATUS_SUCCESS &&
+            Maximum)
+        {
+            DeviceExtension->ContactMaximum = Maximum;
+            DeviceExtension->ContactMaximumValid = TRUE;
+        }
+        else
+        {
+            DPRINT1("TPADHID: reading the device capabilities failed, status=0x%08lx\n", Status);
+        }
+    }
+
+    Status = TpadGetFeature(DeviceExtension, CertificationId, Report, Length);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("TPADHID: reading the certification status failed, status=0x%08lx\n", Status);
+
+    ExFreePoolWithTag(Report, TPADHID_TAG);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 TpadStartTouchpad(
     _In_ PTPADHID_DEVICE_EXTENSION DeviceExtension)
 {
@@ -1430,7 +1584,11 @@ TpadStartTouchpad(
     HIDP_BUTTON_CAPS ButtonCaps;
     HIDP_VALUE_CAPS AxisCaps;
     ULONG TouchListLength;
+    UCHAR CertificationId;
     NTSTATUS Status;
+
+    if (!TpadFindFeature(DeviceExtension, HID_USAGE_PAGE_VENDOR_DEFINED_BEGIN, TPADHID_USAGE_CERTIFICATION_STATUS, &CertificationId))
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
 
     Status = HidP_GetSpecificValueCaps(HidP_Input, HID_USAGE_PAGE_DIGITIZER, 0, HID_USAGE_DIGITIZER_CONTACT_IDENTIFIER, ValueCaps, &Count, DeviceExtension->PreparsedData);
     if (Status == HIDP_STATUS_BUFFER_TOO_SMALL)
@@ -1461,6 +1619,10 @@ TpadStartTouchpad(
     One = 1;
     Status = HidP_GetSpecificButtonCaps(HidP_Input, HID_USAGE_PAGE_DIGITIZER, DeviceExtension->FingerCollection[0], HID_USAGE_DIGITIZER_CONFIDENCE, &ButtonCaps, &One, DeviceExtension->PreparsedData);
     DeviceExtension->HasConfidence = Status == HIDP_STATUS_SUCCESS || Status == HIDP_STATUS_BUFFER_TOO_SMALL;
+
+    Status = TpadReadDeviceFeatures(DeviceExtension, CertificationId);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     TouchListLength = HidP_MaxUsageListLength(HidP_Input, HID_USAGE_PAGE_DIGITIZER, DeviceExtension->PreparsedData);
     DeviceExtension->ButtonListLength = HidP_MaxUsageListLength(HidP_Input, HID_USAGE_PAGE_BUTTON, DeviceExtension->PreparsedData);
@@ -1533,6 +1695,9 @@ TpadStartDevice(
         DeviceExtension->InputModeValid = TRUE;
     }
 
+    DeviceExtension->SelectiveReportingValid = DeviceExtension->Caps.FeatureReportByteLength &&
+        TpadFindFeature(DeviceExtension, HID_USAGE_PAGE_DIGITIZER, HID_USAGE_DIGITIZER_SURFACE_SWITCH, &DeviceExtension->SelectiveReportingReportId);
+
     return STATUS_SUCCESS;
 }
 
@@ -1554,6 +1719,7 @@ TpadStopDevice(
     }
 
     DeviceExtension->InputModeValid = FALSE;
+    DeviceExtension->SelectiveReportingValid = FALSE;
     TpadFreeResources(DeviceExtension);
 }
 

@@ -6,6 +6,7 @@
  * PROGRAMMERS:
  *              Michael Martin (michael.martin@reactos.org)
  *              Johannes Anderwald (johannes.anderwald@reactos.org)
+ *              Ahmed ARIF (arif.ing@outlook.com)
  */
 
 #include "parser.h"
@@ -1156,6 +1157,143 @@ HidParser_TranslateUsagesToI8042ScanCodes(
     return STATUS_NOT_IMPLEMENTED;
 }
 
+static
+ULONG
+HidParser_ReadReportBits(
+    IN PCHAR Report,
+    IN ULONG BitOffset,
+    IN ULONG BitCount)
+{
+    ULONG BitIndex, Value = 0;
+
+    for (BitIndex = 0; BitIndex < BitCount; BitIndex++)
+    {
+        if (((PUCHAR)Report)[(BitOffset + BitIndex) >> 3] & (1u << ((BitOffset + BitIndex) & 7)))
+            Value |= 1u << BitIndex;
+    }
+
+    return Value;
+}
+
+static
+VOID
+HidParser_WriteReportBits(
+    IN OUT PCHAR Report,
+    IN ULONG BitOffset,
+    IN ULONG BitCount,
+    IN ULONG Value)
+{
+    ULONG BitIndex;
+
+    for (BitIndex = 0; BitIndex < BitCount; BitIndex++)
+    {
+        UCHAR Mask = (UCHAR)(1u << ((BitOffset + BitIndex) & 7));
+        PUCHAR Byte = (PUCHAR)Report + ((BitOffset + BitIndex) >> 3);
+
+        if (Value & (1u << BitIndex))
+            *Byte |= Mask;
+        else
+            *Byte &= (UCHAR)~Mask;
+    }
+}
+
+static
+NTSTATUS
+HidParser_SetButtonUsage(
+    IN PVOID CollectionContext,
+    IN ULONG InternalType,
+    IN USAGE UsagePage,
+    IN USHORT LinkCollection,
+    IN USAGE Usage,
+    IN OUT PCHAR Report,
+    IN ULONG ReportLength)
+{
+    PHID_REPORT_ITEM ReportItem;
+    PHID_REPORT HidReport;
+    ULONG ReportCount, ReportIndex, ItemIndex;
+    ULONG BitOffset, Current, Value;
+    ULONG FreeBitOffset = 0, FreeBitCount = 0, FreeValue = 0;
+    USAGE UsageMinimum, UsageMaximum;
+    BOOLEAN UsageFound = FALSE;
+    BOOLEAN IncompatibleId = FALSE;
+    BOOLEAN FreeSlot = FALSE;
+
+    ReportCount = HidParser_GetReportCountInCollection(CollectionContext);
+    for (ReportIndex = 0; ReportIndex < ReportCount; ReportIndex++)
+    {
+        HidReport = HidParser_GetReportByIndex(CollectionContext, ReportIndex);
+        if (!HidReport || HidReport->Type != InternalType)
+            continue;
+
+        for (ItemIndex = 0; ItemIndex < HidReport->ItemCount; ItemIndex++)
+        {
+            ReportItem = &HidReport->Items[ItemIndex];
+            if (!ReportItem->HasData || ReportItem->BitCount == 0 || (!ReportItem->Array && ReportItem->BitCount != 1))
+                continue;
+
+            UsageMinimum = (USAGE)(ReportItem->UsageMinimum & 0xffff);
+            UsageMaximum = (USAGE)(ReportItem->UsageMaximum & 0xffff);
+            if (UsageMaximum < UsageMinimum)
+                UsageMaximum = UsageMinimum;
+
+            if ((USHORT)(ReportItem->UsageMinimum >> 16) != UsagePage ||
+                (LinkCollection != HIDP_LINK_COLLECTION_UNSPECIFIED &&
+                 ReportItem->LinkCollection != LinkCollection) ||
+                Usage < UsageMinimum || Usage > UsageMaximum)
+            {
+                continue;
+            }
+
+            UsageFound = TRUE;
+            if (Report[0] && Report[0] != HidReport->ReportID)
+            {
+                IncompatibleId = TRUE;
+                continue;
+            }
+
+            BitOffset = 8 + ReportItem->ByteOffset * 8 + ReportItem->Shift;
+            if (BitOffset > ReportLength * 8 ||
+                ReportItem->BitCount > ReportLength * 8 - BitOffset ||
+                ReportItem->BitCount > 32)
+            {
+                return HIDP_STATUS_INVALID_REPORT_LENGTH;
+            }
+
+            if (!ReportItem->Array)
+            {
+                HidParser_WriteReportBits(Report, BitOffset, 1, 1);
+                return HIDP_STATUS_SUCCESS;
+            }
+
+            Value = ReportItem->Minimum + (Usage - UsageMinimum);
+            Current = HidParser_ReadReportBits(Report, BitOffset, ReportItem->BitCount);
+            if (Current == Value)
+                return HIDP_STATUS_SUCCESS;
+
+            if (!FreeSlot &&
+                (Current < ReportItem->Minimum || Current > ReportItem->Maximum ||
+                 UsageMinimum + (Current - ReportItem->Minimum) == 0))
+            {
+                FreeSlot = TRUE;
+                FreeBitOffset = BitOffset;
+                FreeBitCount = ReportItem->BitCount;
+                FreeValue = Value;
+            }
+        }
+    }
+
+    if (FreeSlot)
+    {
+        HidParser_WriteReportBits(Report, FreeBitOffset, FreeBitCount, FreeValue);
+        return HIDP_STATUS_SUCCESS;
+    }
+
+    if (!UsageFound)
+        return HIDP_STATUS_USAGE_NOT_FOUND;
+
+    return IncompatibleId ? HIDP_STATUS_INCOMPATIBLE_REPORT_ID : HIDP_STATUS_BUFFER_TOO_SMALL;
+}
+
 HIDAPI
 NTSTATUS
 NTAPI
@@ -1169,9 +1307,55 @@ HidParser_SetUsages(
     IN OUT PCHAR  Report,
     IN ULONG  ReportLength)
 {
-    UNIMPLEMENTED;
-    ASSERT(FALSE);
-    return STATUS_NOT_IMPLEMENTED;
+    PHID_REPORT HidReport;
+    ULONG ReportCount, ReportIndex, UsageIndex;
+    ULONG ExpectedLength = 0;
+    ULONG InternalType;
+    BOOLEAN ReportTypeFound = FALSE;
+    NTSTATUS Status;
+
+    if (!HidParser_IsCollectionContext(CollectionContext))
+        return HIDP_STATUS_INVALID_PREPARSED_DATA;
+    if (!Report || !ReportLength)
+        return HIDP_STATUS_INVALID_REPORT_LENGTH;
+
+    switch (ReportType)
+    {
+        case HidP_Input:   InternalType = HID_REPORT_TYPE_INPUT; break;
+        case HidP_Output:  InternalType = HID_REPORT_TYPE_OUTPUT; break;
+        case HidP_Feature: InternalType = HID_REPORT_TYPE_FEATURE; break;
+        default:           return HIDP_STATUS_INVALID_REPORT_TYPE;
+    }
+
+    ReportCount = HidParser_GetReportCountInCollection(CollectionContext);
+    for (ReportIndex = 0; ReportIndex < ReportCount; ReportIndex++)
+    {
+        HidReport = HidParser_GetReportByIndex(CollectionContext, ReportIndex);
+        if (HidReport && HidReport->Type == InternalType)
+        {
+            ULONG Length = (HidReport->ReportSize + 7) / 8 + 1;
+
+            ReportTypeFound = TRUE;
+            if (Length > ExpectedLength)
+                ExpectedLength = Length;
+        }
+    }
+    if (!ReportTypeFound)
+        return HIDP_STATUS_REPORT_DOES_NOT_EXIST;
+    if (ReportLength != ExpectedLength)
+        return HIDP_STATUS_INVALID_REPORT_LENGTH;
+
+    for (UsageIndex = 0; UsageIndex < *UsageLength; UsageIndex++)
+    {
+        Status = HidParser_SetButtonUsage(CollectionContext, InternalType, UsagePage, LinkCollection, UsageList[UsageIndex], Report, ReportLength);
+        if (Status != HIDP_STATUS_SUCCESS)
+        {
+            *UsageLength = UsageIndex;
+            return Status;
+        }
+    }
+
+    return HIDP_STATUS_SUCCESS;
 }
 
 HIDAPI

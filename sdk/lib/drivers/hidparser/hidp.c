@@ -914,9 +914,20 @@ HidP_SetUsages(
     IN OUT PCHAR  Report,
     IN ULONG  ReportLength)
 {
-    UNIMPLEMENTED;
-    ASSERT(FALSE);
-    return STATUS_NOT_IMPLEMENTED;
+    PVOID ParserContext;
+
+    ParserContext = HidP_GetParserContext(PreparsedData);
+    if (!ParserContext)
+        return HIDP_STATUS_INVALID_PREPARSED_DATA;
+
+    return HidParser_SetUsages(ParserContext,
+                               ReportType,
+                               UsagePage,
+                               LinkCollection,
+                               UsageList,
+                               UsageLength,
+                               Report,
+                               ReportLength);
 }
 
 HIDAPI
