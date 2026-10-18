@@ -94,12 +94,51 @@ ComputeFatLayout(IN ULONG TotalSectors,
 
 static
 BOOLEAN
+SelectFatLayout(IN ULONG TotalSectors,
+                OUT ULONG *SectorsPerCluster,
+                OUT ULONG *FatSizeSectors,
+                OUT ULONG *DataSectors,
+                OUT ULONG *ClusterCount)
+{
+    static const UCHAR ClusterCandidates[] = { 128, 64, 32, 16, 8, 4, 2, 1 };
+    ULONG CandidateIndex;
+
+    if (TotalSectors <= (DEFAULT_RESERVED_SECTORS + DEFAULT_NUM_FATS))
+        return FALSE;
+
+    for (CandidateIndex = 0; CandidateIndex < ARRAYSIZE(ClusterCandidates); ++CandidateIndex)
+    {
+        ULONG Candidate = ClusterCandidates[CandidateIndex];
+
+        if (!ComputeFatLayout(TotalSectors,
+                              DEFAULT_RESERVED_SECTORS,
+                              DEFAULT_BYTES_PER_SECTOR,
+                              DEFAULT_NUM_FATS,
+                              Candidate,
+                              FatSizeSectors,
+                              DataSectors,
+                              ClusterCount))
+        {
+            continue;
+        }
+
+        if (*ClusterCount >= FAT32_MIN_CLUSTERS && *ClusterCount < FAT32_MAX_CLUSTERS)
+        {
+            *SectorsPerCluster = Candidate;
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static
+BOOLEAN
 FormatFat32Volume(IN PUCHAR VolumeBase,
                   IN ULONGLONG VolumeSize,
                   IN ULONG HiddenSectors,
                   OUT PRAMDISK_FAT32_LAYOUT Layout)
 {
-    static const UCHAR ClusterCandidates[] = { 128, 64, 32, 16, 8, 4, 2, 1 };
     PFAT32_BOOTSECTOR BootSector;
     PFAT32_FSINFO_RECORD FsInfo;
     ULONG BytesPerSector = DEFAULT_BYTES_PER_SECTOR;
@@ -111,7 +150,6 @@ FormatFat32Volume(IN PUCHAR VolumeBase,
     ULONG ClusterCount = 0;
     ULONG SectorsPerCluster = 0;
     ULONG FirstDataSector;
-    ULONG CandidateIndex;
     SIZE_T ByteSize;
     PUCHAR Buffer;
     PULONG FatTable;
@@ -126,33 +164,8 @@ FormatFat32Volume(IN PUCHAR VolumeBase,
         return FALSE;
 
     TotalSectors = (ULONG)(VolumeSize / BytesPerSector);
-    if (TotalSectors <= (ReservedSectors + NumberOfFats))
-        return FALSE;
-
-    for (CandidateIndex = 0; CandidateIndex < ARRAYSIZE(ClusterCandidates); ++CandidateIndex)
-    {
-        ULONG Candidate = ClusterCandidates[CandidateIndex];
-
-        if (!ComputeFatLayout(TotalSectors,
-                              ReservedSectors,
-                              BytesPerSector,
-                              NumberOfFats,
-                              Candidate,
-                              &FatSize,
-                              &DataSectors,
-                              &ClusterCount))
-        {
-            continue;
-        }
-
-        if (ClusterCount >= FAT32_MIN_CLUSTERS && ClusterCount < FAT32_MAX_CLUSTERS)
-        {
-            SectorsPerCluster = Candidate;
-            break;
-        }
-    }
-
-    if (SectorsPerCluster == 0)
+    if (!SelectFatLayout(TotalSectors, &SectorsPerCluster, &FatSize,
+                         &DataSectors, &ClusterCount))
         return FALSE;
 
     ByteSize = (SIZE_T)VolumeSize;
@@ -294,5 +307,32 @@ RamDiskFormatFat32(IN PVOID BaseAddress,
     MasterBootRecord->PartitionTable[0].PartitionSectorCount = PartitionSectors;
     MasterBootRecord->MasterBootRecordMagic = 0xAA55;
 
+    return TRUE;
+}
+
+BOOLEAN
+RamDiskQueryFat32Capacity(IN ULONGLONG DiskSize,
+                          OUT PULONG BytesPerCluster,
+                          OUT PULONGLONG DataBytes)
+{
+    ULONGLONG VolumeSize;
+    ULONG SectorsPerCluster;
+    ULONG FatSize;
+    ULONG DataSectors;
+    ULONG ClusterCount;
+
+    if (DiskSize <= DEFAULT_BYTES_PER_SECTOR)
+        return FALSE;
+
+    VolumeSize = DiskSize - DEFAULT_BYTES_PER_SECTOR;
+    if (VolumeSize > MAXULONG)
+        return FALSE;
+
+    if (!SelectFatLayout((ULONG)(VolumeSize / DEFAULT_BYTES_PER_SECTOR),
+                         &SectorsPerCluster, &FatSize, &DataSectors, &ClusterCount))
+        return FALSE;
+
+    *BytesPerCluster = SectorsPerCluster * DEFAULT_BYTES_PER_SECTOR;
+    *DataBytes = (ULONGLONG)ClusterCount * *BytesPerCluster;
     return TRUE;
 }

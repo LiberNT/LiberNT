@@ -1883,6 +1883,180 @@ RamDiskPopulateFatFromWim(
 }
 #endif
 
+#define RAMDISK_FAT32_CLUSTER_CLASSES 8
+#define RAMDISK_FAT32_DIRENT_SIZE     32
+
+typedef struct _ISO_PAYLOAD_SIZE
+{
+    ULONGLONG Bytes[RAMDISK_FAT32_CLUSTER_CLASSES];
+} ISO_PAYLOAD_SIZE, *PISO_PAYLOAD_SIZE;
+
+static
+BOOLEAN
+IsoMeasureDirectory(
+    _In_ PISO_SOURCE Source,
+    _In_ ULONG StartSector,
+    _In_ ULONG DirectoryLength,
+    _In_ BOOLEAN Root,
+    _Inout_ PISO_PAYLOAD_SIZE Payload);
+
+static
+BOOLEAN
+IsoMeasureDirectoryRecords(
+    _In_ PISO_SOURCE Source,
+    _In_reads_bytes_(DirectoryLength) PUCHAR DirectoryBuffer,
+    _In_ ULONG DirectoryLength,
+    _In_ BOOLEAN Root,
+    _Out_writes_(ISO_NAME_BUFFER_SIZE) PCHAR NameBuffer,
+    _Inout_ PISO_PAYLOAD_SIZE Payload)
+{
+    ULONGLONG Slots = Root ? 0 : 2;
+    ULONG MaxSlots = 1;
+    ULONG Offset = 0;
+    ULONG Index;
+
+    while (Offset + FIELD_OFFSET(DIR_RECORD, FileId) <= DirectoryLength)
+    {
+        PDIR_RECORD Record = (PDIR_RECORD)(DirectoryBuffer + Offset);
+        ULONG EntrySlots;
+
+        if (Record->RecordLength == 0)
+        {
+            Offset = ROUND_UP(Offset + 1, ISO_SECTOR_SIZE);
+            continue;
+        }
+
+        if (Record->RecordLength < FIELD_OFFSET(DIR_RECORD, FileId) ||
+            Offset + Record->RecordLength > DirectoryLength)
+            break;
+
+        Offset += Record->RecordLength;
+        if (!IsoExtractName(Record, NameBuffer, ISO_NAME_BUFFER_SIZE))
+            continue;
+
+        EntrySlots = (ULONG)((strlen(NameBuffer) + 12) / 13) + 1;
+        Slots += EntrySlots;
+        if (EntrySlots > MaxSlots)
+            MaxSlots = EntrySlots;
+
+        if (Record->FileFlags & 0x02)
+        {
+            if (!IsoMeasureDirectory(Source, Record->ExtentLocationL,
+                                     Record->DataLengthL, FALSE, Payload))
+                return FALSE;
+            continue;
+        }
+
+        for (Index = 0; Index < RAMDISK_FAT32_CLUSTER_CLASSES; ++Index)
+            Payload->Bytes[Index] += ALIGN_UP_BY_ULL((ULONGLONG)Record->DataLengthL,
+                                                     512ULL << Index);
+    }
+
+    for (Index = 0; Index < RAMDISK_FAT32_CLUSTER_CLASSES; ++Index)
+    {
+        ULONG ClusterBytes = 512UL << Index;
+        ULONG ClusterSlots = ClusterBytes / RAMDISK_FAT32_DIRENT_SIZE;
+        ULONG UsableSlots = (ClusterSlots > MaxSlots) ? ClusterSlots - MaxSlots + 1 : 1;
+
+        Payload->Bytes[Index] += ((Slots + UsableSlots - 1) / UsableSlots) * ClusterBytes;
+    }
+
+    return TRUE;
+}
+
+static
+BOOLEAN
+IsoMeasureDirectory(
+    _In_ PISO_SOURCE Source,
+    _In_ ULONG StartSector,
+    _In_ ULONG DirectoryLength,
+    _In_ BOOLEAN Root,
+    _Inout_ PISO_PAYLOAD_SIZE Payload)
+{
+    ULONGLONG DirectoryOffset = (ULONGLONG)StartSector * ISO_SECTOR_SIZE;
+    PUCHAR DirectoryBuffer;
+    PCHAR NameBuffer;
+    BOOLEAN Result = FALSE;
+
+    if (DirectoryLength == 0 ||
+        DirectoryLength > ISO_DIRECTORY_MAX_SIZE ||
+        DirectoryOffset >= Source->Size ||
+        DirectoryLength > Source->Size - DirectoryOffset)
+        return FALSE;
+
+    DirectoryBuffer = FrLdrTempAlloc(DirectoryLength, TAG_ISO_BUFFER);
+    NameBuffer = FrLdrTempAlloc(ISO_NAME_BUFFER_SIZE, TAG_ISO_BUFFER);
+    if (DirectoryBuffer && NameBuffer &&
+        IsoSourceRead(Source, DirectoryOffset, DirectoryBuffer, DirectoryLength))
+    {
+        Result = IsoMeasureDirectoryRecords(Source, DirectoryBuffer, DirectoryLength,
+                                            Root, NameBuffer, Payload);
+    }
+
+    if (NameBuffer)
+        FrLdrTempFree(NameBuffer, TAG_ISO_BUFFER);
+    if (DirectoryBuffer)
+        FrLdrTempFree(DirectoryBuffer, TAG_ISO_BUFFER);
+    return Result;
+}
+
+static
+BOOLEAN
+RamDiskMeasureIsoTarget(
+    _In_ PISO_SOURCE Source,
+    _In_ ULONGLONG ExtraBytes,
+    _Inout_ PULONGLONG DiskSize,
+    _Out_ PULONGLONG PayloadBytes)
+{
+    ISO_PAYLOAD_SIZE Payload;
+    UCHAR DescriptorBuffer[ISO_SECTOR_SIZE];
+    PPVD PrimaryVolumeDescriptor = (PPVD)DescriptorBuffer;
+    ULONGLONG Size = ALIGN_UP_BY_ULL(*DiskSize, RAMDISK_ALLOCATION_ALIGNMENT);
+    ULONG Iteration;
+
+    RtlZeroMemory(&Payload, sizeof(Payload));
+    if (Source->Size < (17 * ISO_SECTOR_SIZE) ||
+        !IsoSourceRead(Source, (ULONGLONG)16 * ISO_SECTOR_SIZE,
+                       DescriptorBuffer, sizeof(DescriptorBuffer)) ||
+        PrimaryVolumeDescriptor->VdType != 1 ||
+        !RtlEqualMemory(PrimaryVolumeDescriptor->StandardId, "CD001", 5) ||
+        !IsoMeasureDirectory(Source,
+                             PrimaryVolumeDescriptor->RootDirRecord.ExtentLocationL,
+                             PrimaryVolumeDescriptor->RootDirRecord.DataLengthL,
+                             TRUE, &Payload))
+    {
+        return FALSE;
+    }
+
+    for (Iteration = 0; Iteration < 16; ++Iteration)
+    {
+        ULONG ClusterBytes;
+        ULONGLONG DataBytes;
+        ULONG Class = 0;
+        ULONGLONG Needed;
+
+        if (!RamDiskQueryFat32Capacity(Size, &ClusterBytes, &DataBytes))
+            return FALSE;
+
+        while ((512UL << Class) < ClusterBytes && Class + 1 < RAMDISK_FAT32_CLUSTER_CLASSES)
+            ++Class;
+
+        Needed = Payload.Bytes[Class] + ExtraBytes;
+        if (DataBytes >= Needed)
+        {
+            TRACE("RamDiskMeasureIsoTarget: payload %llu bytes in %lu-byte clusters, disk %llu bytes\n",
+                  Payload.Bytes[Class], ClusterBytes, Size);
+            *DiskSize = Size;
+            *PayloadBytes = Payload.Bytes[Class];
+            return TRUE;
+        }
+
+        Size = ALIGN_UP_BY_ULL(Size + (Needed - DataBytes), RAMDISK_ALLOCATION_ALIGNMENT);
+    }
+
+    return FALSE;
+}
+
 BOOLEAN
 RamDiskBuildWritableImage(
     IN PISO_SOURCE Source,
@@ -1946,10 +2120,15 @@ RamDiskBuildWritableImage(
     else
 #endif
     {
+        ULONGLONG RequestedExtra = (RequestedSize > SourceSize) ? (RequestedSize - SourceSize) : 0;
+
+        if (RequestedExtra < RAMDISK_MINIMUM_EXTRA_SPACE)
+            RequestedExtra = RAMDISK_MINIMUM_EXTRA_SPACE;
+
         /* Leave some slack to account for ISO9660 metadata and future writes */
-        RequiredSize = RequestedSize;
-        if (RequiredSize < SourceSize + RAMDISK_MINIMUM_EXTRA_SPACE)
-            RequiredSize = SourceSize + RAMDISK_MINIMUM_EXTRA_SPACE;
+        RequiredSize = SourceSize + RequestedExtra;
+        if (!RamDiskMeasureIsoTarget(Source, RequestedExtra, &RequiredSize, &MinimumPayloadSize))
+            WARN("RamDiskBuildWritableImage: unable to measure the ISO payload, using the image size\n");
     }
 
     AllocationLimit = RamDiskWritableAllocationLimit();

@@ -49,6 +49,11 @@ RamDiskFormatFat32(IN PVOID BaseAddress,
                    IN ULONGLONG DiskSize,
                    OUT PRAMDISK_FAT32_LAYOUT Layout OPTIONAL);
 
+BOOLEAN
+RamDiskQueryFat32Capacity(IN ULONGLONG DiskSize,
+                          OUT PULONG BytesPerCluster,
+                          OUT PULONGLONG DataBytes);
+
 extern PVOID gInitRamDiskBase;
 extern ULONG gInitRamDiskSize;
 
