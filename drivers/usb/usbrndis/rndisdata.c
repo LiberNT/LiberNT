@@ -139,6 +139,7 @@ RndisBuildNcmNtbMulti(
     ULONG DataOffset;
     ULONG TotalLength;
     USHORT NdpLength;
+    BOOLEAN ShortPacketPad;
     ULONG i;
 
     if (DatagramCount == 0 || DatagramCount > NCM_MAX_TX_DATAGRAMS)
@@ -201,6 +202,12 @@ RndisBuildNcmNtbMulti(
         return 0;
     }
 
+    ShortPacketPad = Adapter->BulkOutEndpoint.MaxPacketSize &&
+                     (TotalLength % Adapter->BulkOutEndpoint.MaxPacketSize) == 0 &&
+                     TotalLength < Adapter->NcmNtbOutMaxSize;
+    if (ShortPacketPad)
+        TotalLength++;
+
     /* Zero the header portion of the buffer */
     NdisZeroMemory(OutputBuffer, NdpOffset + NdpLength);
 
@@ -242,6 +249,9 @@ RndisBuildNcmNtbMulti(
     /* Terminator entry: both fields zero */
     Ndp16->Datagram[DatagramCount].wDatagramIndex = 0;
     Ndp16->Datagram[DatagramCount].wDatagramLength = 0;
+
+    if (ShortPacketPad)
+        OutputBuffer[TotalLength - 1] = 0;
 
     return TotalLength;
 }
@@ -1149,6 +1159,11 @@ RndisSendNetBufferListsInternal(
             /* CDC-ECM: Copy Ethernet frame directly */
             NdisMoveMemory(Adapter->TxHot.TxBuffer, VirtualAddress, DataLength);
             TotalLength = DataLength;
+            if (Adapter->BulkOutEndpoint.MaxPacketSize &&
+                (TotalLength % Adapter->BulkOutEndpoint.MaxPacketSize) == 0)
+            {
+                Adapter->TxHot.TxBuffer[TotalLength++] = 0;
+            }
         }
         else if (Adapter->IsCdcEem)
         {
