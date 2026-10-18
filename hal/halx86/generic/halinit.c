@@ -176,6 +176,8 @@ HalInitSystem(
 
         /* Initialize Phase 0 of the x86 emulator */
         HalInitializeBios(0, LoaderBlock);
+
+        HalpReserveMapBuffers(LoaderBlock);
     }
     else if (BootPhase == 1)
     {

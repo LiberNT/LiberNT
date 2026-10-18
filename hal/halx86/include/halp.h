@@ -305,6 +305,7 @@ VOID NTAPI HalpRegisterInterruptOverride(_In_ ULONG SourceIrq, _In_ ULONG Global
 BOOLEAN NTAPI HalpQueryMadtRteHints(_In_ ULONG Gsi, _Out_ PBOOLEAN ActiveLow, _Out_ PBOOLEAN LevelTriggered);
 
 /* dma.c */
+CODE_SEG("INIT") VOID HalpReserveMapBuffers(IN PLOADER_PARAMETER_BLOCK LoaderBlock);
 CODE_SEG("INIT") VOID HalpInitDma (VOID);
 
 /* Non-generic initialization */

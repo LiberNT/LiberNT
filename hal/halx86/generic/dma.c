@@ -87,6 +87,8 @@ static BOOLEAN HalpEisaDma;
 #ifndef _MINIHAL_
 static PADAPTER_OBJECT HalpMasterAdapter;
 static PADAPTER_OBJECT HalpMasterAdapter32;
+static PHYSICAL_ADDRESS HalpMapBufferPhysicalAddress;
+static ULONG HalpMapBufferSize;
 #endif
 
 static const ULONG_PTR HalpEisaPortPage[8] = {
@@ -419,6 +421,18 @@ static DMA_OPERATIONS HalpDmaOperations = {
 #ifndef _MINIHAL_
 CODE_SEG("INIT")
 VOID
+HalpReserveMapBuffers(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    HalpMapBufferPhysicalAddress.QuadPart = HalpAllocPhysicalMemory(LoaderBlock,
+                                                                    0x1000000,
+                                                                    BYTES_TO_PAGES(0x10000),
+                                                                    TRUE);
+    if (HalpMapBufferPhysicalAddress.QuadPart)
+        HalpMapBufferSize = 0x10000;
+}
+
+CODE_SEG("INIT")
+VOID
 HalpInitDma(VOID)
 {
     /*
@@ -537,11 +551,26 @@ HalpGrowMapBuffers(IN PADAPTER_OBJECT AdapterObject,
     LowestAcceptableAddress.LowPart = HighestAcceptableAddress.LowPart == 0xFFFFFFFF ? 0x1000000 : 0;
     BoundryAddressMultiple.QuadPart = 0;
 
-    VirtualAddress = MmAllocateContiguousMemorySpecifyCache(MapRegisterCount << PAGE_SHIFT,
-                                                            LowestAcceptableAddress,
-                                                            HighestAcceptableAddress,
-                                                            BoundryAddressMultiple,
-                                                            MmNonCached);
+    VirtualAddress = NULL;
+    if (!AdapterObject->Dma32BitAddresses &&
+        HalpMapBufferSize &&
+        (MapRegisterCount << PAGE_SHIFT) <= HalpMapBufferSize)
+    {
+        VirtualAddress = MmMapIoSpace(HalpMapBufferPhysicalAddress,
+                                      MapRegisterCount << PAGE_SHIFT,
+                                      MmNonCached);
+        if (VirtualAddress)
+            HalpMapBufferSize = 0;
+    }
+
+    if (!VirtualAddress)
+    {
+        VirtualAddress = MmAllocateContiguousMemorySpecifyCache(MapRegisterCount << PAGE_SHIFT,
+                                                                LowestAcceptableAddress,
+                                                                HighestAcceptableAddress,
+                                                                BoundryAddressMultiple,
+                                                                MmNonCached);
+    }
     if (!(VirtualAddress) && (LowestAcceptableAddress.LowPart))
     {
         LowestAcceptableAddress.LowPart = 0;
