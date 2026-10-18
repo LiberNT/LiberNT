@@ -90,86 +90,89 @@ IopOpenPropertyDataKeyFromParent(
     _In_ BOOLEAN Create,
     _Out_ PHANDLE PropertyDataKey)
 {
-    HANDLE PropertiesKey = NULL;
-    HANDLE GuidKey = NULL;
+    ACCESS_MASK Access = Create ? (KEY_READ | KEY_WRITE) : KEY_READ;
+    HANDLE PropertiesKey, GuidKey;
     UNICODE_STRING GuidString;
     WCHAR PropertyLeaf[32];
     NTSTATUS Status;
 
     *PropertyDataKey = NULL;
 
-    Status = IopOpenRelativeKey(ParentKey,
-                                L"Properties",
-                                Create ? (KEY_READ | KEY_WRITE) : KEY_READ,
-                                Create,
-                                &PropertiesKey);
+    if (Lcid == LOCALE_NEUTRAL)
+        Status = RtlStringCchPrintfW(PropertyLeaf, RTL_NUMBER_OF(PropertyLeaf), L"%04lX", PropertyKey->pid);
+    else
+        Status = RtlStringCchPrintfW(PropertyLeaf, RTL_NUMBER_OF(PropertyLeaf), L"%08lx.%08lx", PropertyKey->pid, Lcid);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = IopOpenRelativeKey(ParentKey, L"Properties", Access, Create, &PropertiesKey);
     if (!NT_SUCCESS(Status))
         return Status;
 
     Status = RtlStringFromGUID(&PropertyKey->fmtid, &GuidString);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IopOpenRelativeKey(PropertiesKey, GuidString.Buffer, Access, Create, &GuidKey);
+        RtlFreeUnicodeString(&GuidString);
+    }
+    ZwClose(PropertiesKey);
     if (!NT_SUCCESS(Status))
-        goto Cleanup;
+        return Status;
 
-    Status = IopOpenRelativeKey(PropertiesKey,
-                                GuidString.Buffer,
-                                Create ? (KEY_READ | KEY_WRITE) : KEY_READ,
-                                Create,
-                                &GuidKey);
-    RtlFreeUnicodeString(&GuidString);
-    if (!NT_SUCCESS(Status))
-        goto Cleanup;
-
-    Status = RtlStringCchPrintfW(PropertyLeaf,
-                                 RTL_NUMBER_OF(PropertyLeaf),
-                                 L"%08lx.%08lx",
-                                 PropertyKey->pid,
-                                 Lcid);
-    if (!NT_SUCCESS(Status))
-        goto Cleanup;
-
-    Status = IopOpenRelativeKey(GuidKey,
-                                PropertyLeaf,
-                                Create ? (KEY_READ | KEY_WRITE) : KEY_READ,
-                                Create,
-                                PropertyDataKey);
-
-Cleanup:
-    if (GuidKey)
-        ZwClose(GuidKey);
-    if (PropertiesKey)
-        ZwClose(PropertiesKey);
-
+    Status = IopOpenRelativeKey(GuidKey, PropertyLeaf, Access, Create, PropertyDataKey);
+    ZwClose(GuidKey);
     return Status;
 }
 
 static
 NTSTATUS
 NTAPI
-IopOpenDevicePropertyDataKey(
-    _In_ PDEVICE_OBJECT Pdo,
-    _In_ CONST DEVPROPKEY *PropertyKey,
-    _In_ LCID Lcid,
-    _In_ BOOLEAN Create,
-    _Out_ PHANDLE PropertyDataKey)
+IopOpenParametersParentKey(
+    _In_ HANDLE ParametersKey,
+    _In_ ACCESS_MASK DesiredAccess,
+    _Out_ PHANDLE ParentKey)
 {
-    HANDLE DeviceKey;
+    UNICODE_STRING ParametersName = RTL_CONSTANT_STRING(L"\\Device Parameters");
+    UNICODE_STRING ParentName, Suffix;
+    PKEY_NAME_INFORMATION NameInformation;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    ULONG Length = 0;
     NTSTATUS Status;
 
-    *PropertyDataKey = NULL;
+    *ParentKey = NULL;
 
-    Status = IoOpenDeviceRegistryKey(Pdo,
-                                     PLUGPLAY_REGKEY_DEVICE,
-                                     Create ? (KEY_READ | KEY_WRITE) : KEY_READ,
-                                     &DeviceKey);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    Status = ZwQueryKey(ParametersKey, KeyNameInformation, NULL, 0, &Length);
+    if (Status != STATUS_BUFFER_TOO_SMALL && Status != STATUS_BUFFER_OVERFLOW)
+        return NT_SUCCESS(Status) ? STATUS_OBJECT_PATH_NOT_FOUND : Status;
 
-    Status = IopOpenPropertyDataKeyFromParent(DeviceKey,
-                                              PropertyKey,
-                                              Lcid,
-                                              Create,
-                                              PropertyDataKey);
-    ZwClose(DeviceKey);
+    NameInformation = ExAllocatePoolWithTag(PagedPool, Length, TAG_IOVP);
+    if (!NameInformation)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = ZwQueryKey(ParametersKey, KeyNameInformation, NameInformation, Length, &Length);
+    if (NT_SUCCESS(Status))
+    {
+        ParentName.Buffer = NameInformation->Name;
+        ParentName.Length = ParentName.MaximumLength = (USHORT)NameInformation->NameLength;
+        Status = STATUS_OBJECT_PATH_NOT_FOUND;
+        if (ParentName.Length > ParametersName.Length)
+        {
+            Suffix.Buffer = (PWCHAR)((PUCHAR)ParentName.Buffer + ParentName.Length - ParametersName.Length);
+            Suffix.Length = Suffix.MaximumLength = ParametersName.Length;
+            if (RtlEqualUnicodeString(&Suffix, &ParametersName, TRUE))
+            {
+                ParentName.Length -= ParametersName.Length;
+                InitializeObjectAttributes(&ObjectAttributes,
+                                           &ParentName,
+                                           OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                                           NULL,
+                                           NULL);
+                Status = ZwOpenKey(ParentKey, DesiredAccess, &ObjectAttributes);
+            }
+        }
+    }
+
+    ExFreePoolWithTag(NameInformation, TAG_IOVP);
     return Status;
 }
 
@@ -183,22 +186,22 @@ IopOpenInterfacePropertyDataKey(
     _In_ BOOLEAN Create,
     _Out_ PHANDLE PropertyDataKey)
 {
-    HANDLE InterfaceKey;
+    ACCESS_MASK Access = Create ? (KEY_READ | KEY_WRITE) : KEY_READ;
+    HANDLE ParametersKey, InterfaceKey;
     NTSTATUS Status;
 
     *PropertyDataKey = NULL;
 
-    Status = IoOpenDeviceInterfaceRegistryKey(SymbolicLinkName,
-                                              Create ? (KEY_READ | KEY_WRITE) : KEY_READ,
-                                              &InterfaceKey);
+    Status = IoOpenDeviceInterfaceRegistryKey(SymbolicLinkName, KEY_READ, &ParametersKey);
     if (!NT_SUCCESS(Status))
         return Status;
 
-    Status = IopOpenPropertyDataKeyFromParent(InterfaceKey,
-                                              PropertyKey,
-                                              Lcid,
-                                              Create,
-                                              PropertyDataKey);
+    Status = IopOpenParametersParentKey(ParametersKey, Access, &InterfaceKey);
+    ZwClose(ParametersKey);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = IopOpenPropertyDataKeyFromParent(InterfaceKey, PropertyKey, Lcid, Create, PropertyDataKey);
     ZwClose(InterfaceKey);
     return Status;
 }
@@ -206,113 +209,55 @@ IopOpenInterfacePropertyDataKey(
 static
 NTSTATUS
 NTAPI
-IopWritePropertyData(
+IopWriteDevicePropertyValue(
     _In_ HANDLE PropertyDataKey,
     _In_ DEVPROPTYPE Type,
     _In_ ULONG Size,
-    _In_reads_bytes_opt_(Size) PVOID Data)
+    _In_reads_bytes_(Size) PVOID Data)
 {
-    UNICODE_STRING ValueName;
-    ULONG TypeValue;
-    NTSTATUS Status;
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"");
 
-    TypeValue = Type;
-    RtlInitUnicodeString(&ValueName, L"Type");
-    Status = ZwSetValueKey(PropertyDataKey,
-                           &ValueName,
-                           0,
-                           REG_DWORD,
-                           &TypeValue,
-                           sizeof(TypeValue));
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    RtlInitUnicodeString(&ValueName, L"Data");
-    return ZwSetValueKey(PropertyDataKey,
-                         &ValueName,
-                         0,
-                         REG_BINARY,
-                         Data,
-                         Size);
+    return ZwSetValueKey(PropertyDataKey, &ValueName, 0, 0xFFFF0000 | (Type & 0xFFFF), Data, Size);
 }
 
 static
 NTSTATUS
 NTAPI
-IopReadPropertyData(
+IopReadDevicePropertyValue(
     _In_ HANDLE PropertyDataKey,
     _In_ ULONG Size,
     _Out_writes_bytes_opt_(Size) PVOID Data,
     _Out_ PULONG RequiredSize,
     _Out_ PDEVPROPTYPE Type)
 {
-    UNICODE_STRING ValueName;
-    ULONG ResultLength;
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"");
+    PKEY_VALUE_PARTIAL_INFORMATION Information;
+    ULONG Length = 0;
     NTSTATUS Status;
-    UCHAR TypeBuffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
-    PKEY_VALUE_PARTIAL_INFORMATION TypeInfo;
-    PKEY_VALUE_PARTIAL_INFORMATION DataInfo = NULL;
 
-    TypeInfo = (PKEY_VALUE_PARTIAL_INFORMATION)TypeBuffer;
+    Status = ZwQueryValueKey(PropertyDataKey, &ValueName, KeyValuePartialInformation, NULL, 0, &Length);
+    if (Status != STATUS_BUFFER_TOO_SMALL && Status != STATUS_BUFFER_OVERFLOW)
+        return NT_SUCCESS(Status) ? STATUS_OBJECT_NAME_NOT_FOUND : Status;
 
-    RtlInitUnicodeString(&ValueName, L"Type");
-    Status = ZwQueryValueKey(PropertyDataKey,
-                             &ValueName,
-                             KeyValuePartialInformation,
-                             TypeInfo,
-                             sizeof(TypeBuffer),
-                             &ResultLength);
-    if (!NT_SUCCESS(Status) ||
-        TypeInfo->Type != REG_DWORD ||
-        TypeInfo->DataLength != sizeof(ULONG))
-    {
-        return STATUS_OBJECT_NAME_NOT_FOUND;
-    }
-
-    RtlInitUnicodeString(&ValueName, L"Data");
-    ResultLength = 0;
-    Status = ZwQueryValueKey(PropertyDataKey,
-                             &ValueName,
-                             KeyValuePartialInformation,
-                             NULL,
-                             0,
-                             &ResultLength);
-    if (Status != STATUS_BUFFER_TOO_SMALL &&
-        Status != STATUS_BUFFER_OVERFLOW)
-    {
-        return Status;
-    }
-
-    DataInfo = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePoolWithTag(PagedPool,
-                                                                     ResultLength,
-                                                                     TAG_IOVP);
-    if (!DataInfo)
+    Information = ExAllocatePoolWithTag(PagedPool, Length, TAG_IOVP);
+    if (!Information)
         return STATUS_INSUFFICIENT_RESOURCES;
 
-    Status = ZwQueryValueKey(PropertyDataKey,
-                             &ValueName,
-                             KeyValuePartialInformation,
-                             DataInfo,
-                             ResultLength,
-                             &ResultLength);
-    if (!NT_SUCCESS(Status))
-        goto Cleanup;
+    Status = ZwQueryValueKey(PropertyDataKey, &ValueName, KeyValuePartialInformation, Information, Length, &Length);
+    if (NT_SUCCESS(Status) && (Information->Type & 0xFFFF0000) != 0xFFFF0000)
+        Status = STATUS_OBJECT_NAME_NOT_FOUND;
 
-    *RequiredSize = DataInfo->DataLength;
-    *Type = *(PULONG)TypeInfo->Data;
-
-    if (DataInfo->DataLength != 0 &&
-        (Data == NULL || Size < DataInfo->DataLength))
+    if (NT_SUCCESS(Status))
     {
-        Status = STATUS_BUFFER_TOO_SMALL;
-        goto Cleanup;
+        *RequiredSize = Information->DataLength;
+        *Type = Information->Type & 0xFFFF;
+        if (Information->DataLength != 0 && (Data == NULL || Size < Information->DataLength))
+            Status = STATUS_BUFFER_TOO_SMALL;
+        else if (Information->DataLength != 0)
+            RtlCopyMemory(Data, Information->Data, Information->DataLength);
     }
 
-    if (DataInfo->DataLength != 0)
-        RtlCopyMemory(Data, DataInfo->Data, DataInfo->DataLength);
-
-Cleanup:
-    ExFreePoolWithTag(DataInfo, TAG_IOVP);
+    ExFreePoolWithTag(Information, TAG_IOVP);
     return Status;
 }
 
@@ -358,6 +303,7 @@ static
 NTSTATUS
 IopOpenDeviceInstanceKey(
     _In_ PDEVICE_OBJECT Pdo,
+    _In_ ACCESS_MASK DesiredAccess,
     _Out_ PHANDLE KeyHandle)
 {
     static const WCHAR EnumRoot[] = L"\\Registry\\Machine\\System\\CurrentControlSet\\Enum\\";
@@ -384,8 +330,32 @@ IopOpenDeviceInstanceKey(
                                OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
                                NULL,
                                NULL);
-    Status = ZwOpenKey(KeyHandle, KEY_READ, &ObjectAttributes);
+    Status = ZwOpenKey(KeyHandle, DesiredAccess, &ObjectAttributes);
     ExFreePoolWithTag(KeyName.Buffer, TAG_IOVP);
+    return Status;
+}
+
+static
+NTSTATUS
+NTAPI
+IopOpenDevicePropertyDataKey(
+    _In_ PDEVICE_OBJECT Pdo,
+    _In_ CONST DEVPROPKEY *PropertyKey,
+    _In_ LCID Lcid,
+    _In_ BOOLEAN Create,
+    _Out_ PHANDLE PropertyDataKey)
+{
+    HANDLE InstanceKey;
+    NTSTATUS Status;
+
+    *PropertyDataKey = NULL;
+
+    Status = IopOpenDeviceInstanceKey(Pdo, Create ? (KEY_READ | KEY_WRITE) : KEY_READ, &InstanceKey);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = IopOpenPropertyDataKeyFromParent(InstanceKey, PropertyKey, Lcid, Create, PropertyDataKey);
+    ZwClose(InstanceKey);
     return Status;
 }
 
@@ -413,7 +383,7 @@ IopQueryDeviceRegistryValueData(
     if (DriverKey)
         Status = IoOpenDeviceRegistryKey(Pdo, PLUGPLAY_REGKEY_DRIVER, KEY_READ, &DeviceKey);
     else
-        Status = IopOpenDeviceInstanceKey(Pdo, &DeviceKey);
+        Status = IopOpenDeviceInstanceKey(Pdo, KEY_READ, &DeviceKey);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -1016,8 +986,21 @@ IoSetDevicePropertyData(
 
     UNREFERENCED_PARAMETER(Flags);
 
-    if (!Pdo || !PropertyKey || (Size != 0 && Data == NULL))
+    if (!Pdo || !PropertyKey)
         return STATUS_INVALID_PARAMETER;
+
+    if (!Data)
+    {
+        Status = IopOpenDevicePropertyDataKey(Pdo, PropertyKey, Lcid, FALSE, &PropertyDataKey);
+        if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+            return STATUS_SUCCESS;
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        Status = ZwDeleteKey(PropertyDataKey);
+        ZwClose(PropertyDataKey);
+        return Status;
+    }
 
     Status = IopOpenDevicePropertyDataKey(Pdo,
                                           PropertyKey,
@@ -1027,7 +1010,7 @@ IoSetDevicePropertyData(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    Status = IopWritePropertyData(PropertyDataKey, Type, Size, Data);
+    Status = IopWriteDevicePropertyValue(PropertyDataKey, Type, Size, Data);
     ZwClose(PropertyDataKey);
     return Status;
 }
@@ -1067,11 +1050,11 @@ IoGetDevicePropertyData(
                                           &PropertyDataKey);
     if (NT_SUCCESS(Status))
     {
-        Status = IopReadPropertyData(PropertyDataKey,
-                                     Size,
-                                     Data,
-                                     RequiredSize,
-                                     Type);
+        Status = IopReadDevicePropertyValue(PropertyDataKey,
+                                            Size,
+                                            Data,
+                                            RequiredSize,
+                                            Type);
         ZwClose(PropertyDataKey);
         if (NT_SUCCESS(Status) || Status == STATUS_BUFFER_TOO_SMALL)
             return Status;
@@ -1117,7 +1100,7 @@ IoSetDeviceInterfacePropertyData(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    Status = IopWritePropertyData(PropertyDataKey, Type, Size, Data);
+    Status = IopWriteDevicePropertyValue(PropertyDataKey, Type, Size, Data);
     ZwClose(PropertyDataKey);
     return Status;
 }
@@ -1164,11 +1147,11 @@ IoGetDeviceInterfacePropertyData(
 
     *RequiredSize = 0;
     *Type = DEVPROP_TYPE_EMPTY;
-    Status = IopReadPropertyData(PropertyDataKey,
-                                 Size,
-                                 Data,
-                                 RequiredSize,
-                                 Type);
+    Status = IopReadDevicePropertyValue(PropertyDataKey,
+                                        Size,
+                                        Data,
+                                        RequiredSize,
+                                        Type);
     ZwClose(PropertyDataKey);
     return Status;
 }

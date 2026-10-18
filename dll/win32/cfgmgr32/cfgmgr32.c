@@ -778,6 +778,38 @@ LSTATUS enum_device_interface_property_keys( HKEY hkey, const struct device_inte
     }
 
     swprintf( path, ARRAY_SIZE(path), L"%s\\Properties", iface->refstr );
+#ifdef __REACTOS__
+    if (!open_key( hkey, path, KEY_ENUMERATE_SUB_KEYS, TRUE, &props_key ))
+    {
+        WCHAR guid[39], pid[16], name[64];
+        for (ULONG i = 0, len = ARRAY_SIZE(guid); !RegEnumKeyExW( props_key, i, guid, &len, NULL, NULL, NULL, NULL ); i++, len = ARRAY_SIZE(guid))
+        {
+            HKEY guid_key;
+
+            if (RegOpenKeyExW( props_key, guid, 0, KEY_ENUMERATE_SUB_KEYS, &guid_key )) continue;
+            for (ULONG j = 0, pid_len = ARRAY_SIZE(pid); !RegEnumKeyExW( guid_key, j, pid, &pid_len, NULL, NULL, NULL, NULL ); j++, pid_len = ARRAY_SIZE(pid))
+            {
+                DEVPROPKEY key;
+                UINT k;
+
+                if (pid_len != 4) continue;
+                swprintf( name, ARRAY_SIZE(name), L"%s\\%s", guid, pid );
+                if (propkey_from_string( name, &key )) continue;
+                if (!memcmp( &key, &DEVPKEY_DeviceInterface_Enabled, sizeof(key) ) ||
+                    !memcmp( &key, &DEVPKEY_Device_InstanceId, sizeof(key) ) ||
+                    !memcmp( &key, &DEVPKEY_DeviceInterface_ClassGuid, sizeof(key) ) ||
+                    !memcmp( &key, &DEVPKEY_Device_ContainerId, sizeof(key) )) continue;
+                for (k = 0; k < ARRAY_SIZE(device_interface_properties); k++)
+                    if (!memcmp( device_interface_properties[k].key, &key, sizeof(key) )) break;
+                if (k < ARRAY_SIZE(device_interface_properties)) continue;
+                if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
+                else buffer[count - 1] = key;
+            }
+            RegCloseKey( guid_key );
+        }
+        RegCloseKey( props_key );
+    }
+#else
     if (!open_key( hkey, path, KEY_ENUMERATE_SUB_KEYS, TRUE, &props_key ))
     {
         WCHAR name[MAX_PATH];
@@ -788,6 +820,7 @@ LSTATUS enum_device_interface_property_keys( HKEY hkey, const struct device_inte
         }
         RegCloseKey( props_key );
     }
+#endif
 
     *size = count;
     return err;
@@ -1217,28 +1250,45 @@ LSTATUS enum_device_property_keys( HKEY hkey, const struct device *dev, DEVPROPK
     }
 #endif
 
+#ifdef __REACTOS__
+    if (!open_key( hkey, L"Properties", KEY_ENUMERATE_SUB_KEYS, TRUE, &props_key ))
+    {
+        WCHAR guid[39], pid[16], name[64];
+        for (ULONG i = 0, len = ARRAY_SIZE(guid); !RegEnumKeyExW( props_key, i, guid, &len, NULL, NULL, NULL, NULL ); i++, len = ARRAY_SIZE(guid))
+        {
+            HKEY guid_key;
+
+            if (RegOpenKeyExW( props_key, guid, 0, KEY_ENUMERATE_SUB_KEYS, &guid_key )) continue;
+            for (ULONG j = 0, pid_len = ARRAY_SIZE(pid); !RegEnumKeyExW( guid_key, j, pid, &pid_len, NULL, NULL, NULL, NULL ); j++, pid_len = ARRAY_SIZE(pid))
+            {
+                DEVPROPKEY key;
+                UINT k;
+
+                if (pid_len != 4) continue;
+                swprintf( name, ARRAY_SIZE(name), L"%s\\%s", guid, pid );
+                if (propkey_from_string( name, &key )) continue;
+                for (k = 0; k < ARRAY_SIZE(device_properties); k++)
+                    if (!memcmp( device_properties[k].key, &key, sizeof(key) )) break;
+                if (k < ARRAY_SIZE(device_properties)) continue;
+                if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
+                else buffer[count - 1] = key;
+            }
+            RegCloseKey( guid_key );
+        }
+        RegCloseKey( props_key );
+    }
+#else
     if (!open_key( hkey, L"Properties", KEY_ENUMERATE_SUB_KEYS, TRUE, &props_key ))
     {
         WCHAR name[MAX_PATH];
         for (ULONG i = 0, len = ARRAY_SIZE(name); !RegEnumValueW( props_key, i, name, &len, 0, NULL, NULL, NULL ); i++, len = ARRAY_SIZE(name))
         {
-#ifdef __REACTOS__
-            DEVPROPKEY key;
-            UINT j;
-
-            if (propkey_from_string( name, &key )) continue;
-            for (j = 0; j < ARRAY_SIZE(device_properties); j++)
-                if (!memcmp( device_properties[j].key, &key, sizeof(key) )) break;
-            if (j < ARRAY_SIZE(device_properties)) continue;
-            if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
-            else buffer[count - 1] = key;
-#else
             if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
             else err = propkey_from_string( name, buffer + count - 1 );
-#endif
         }
         RegCloseKey( props_key );
     }
+#endif
 
     *size = count;
     return err;
