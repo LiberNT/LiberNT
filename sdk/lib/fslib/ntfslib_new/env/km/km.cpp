@@ -4,6 +4,7 @@
  * PURPOSE:     Kernelmode glue
  * COPYRIGHT:   Copyright 2024 Justin Miller <justin.miller@reactos.org>
  *              Copyright 2024 Carl Bialorucki <carl.bialorucki@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntifs.h>
@@ -97,6 +98,7 @@ static NTSTATUS WriteDisk(_In_ PDEVICE_OBJECT DeviceObject, _In_ ULONGLONG Offse
 #define NTFS_CACHE_WAYS        2
 #define NTFS_CACHE_SETS        (NTFS_CACHE_SLOTS / NTFS_CACHE_WAYS)
 #define NTFS_CACHE_SET_MASK    (NTFS_CACHE_SETS - 1)
+#define NTFS_DISK_IO_CHUNK_SIZE 0x100000UL
 
 typedef struct _NTFS_CACHE_SLOT
 {
@@ -823,11 +825,23 @@ ReadDisk(_In_ PDEVICE_OBJECT DeviceObject,
          _In_ ULONG Length,
          _Out_ PUCHAR Buffer)
 {
-    return NtfsPerformDiskIo(IRP_MJ_READ,
-                             DeviceObject,
-                             Offset,
-                             Length,
-                             Buffer);
+    NTSTATUS Status;
+
+    do
+    {
+        ULONG Chunk = min(Length, NTFS_DISK_IO_CHUNK_SIZE);
+
+        Status = NtfsPerformDiskIo(IRP_MJ_READ,
+                                   DeviceObject,
+                                   Offset,
+                                   Chunk,
+                                   Buffer);
+        Offset += Chunk;
+        Buffer += Chunk;
+        Length -= Chunk;
+    } while (NT_SUCCESS(Status) && Length);
+
+    return Status;
 }
 
 NTSTATUS
@@ -836,11 +850,23 @@ WriteDisk(_In_ PDEVICE_OBJECT DeviceObject,
           _In_ ULONG Length,
           _In_ PUCHAR Buffer)
 {
-    return NtfsPerformDiskIo(IRP_MJ_WRITE,
-                             DeviceObject,
-                             Offset,
-                             Length,
-                             Buffer);
+    NTSTATUS Status;
+
+    do
+    {
+        ULONG Chunk = min(Length, NTFS_DISK_IO_CHUNK_SIZE);
+
+        Status = NtfsPerformDiskIo(IRP_MJ_WRITE,
+                                   DeviceObject,
+                                   Offset,
+                                   Chunk,
+                                   Buffer);
+        Offset += Chunk;
+        Buffer += Chunk;
+        Length -= Chunk;
+    } while (NT_SUCCESS(Status) && Length);
+
+    return Status;
 }
 
 #ifdef __cplusplus
@@ -944,21 +970,36 @@ NtfsReadVolumeContext(_In_opt_ void* Context,
 
     else
     {
+        ULONG Skip = (ULONG)(Offset - SectorAlignedOffset);
+        ULONG Chunk = min(SectorAlignedLength, NTFS_DISK_IO_CHUNK_SIZE);
+        ULONG Done = 0;
+
         // Create the read buffer
-        ReadBuffer = new(NonPagedPool) UCHAR[SectorAlignedLength];
+        ReadBuffer = new(NonPagedPool) UCHAR[Chunk];
+        if (!ReadBuffer)
+            return STATUS_INSUFFICIENT_RESOURCES;
 
-        // Fill the read buffer.
-        Status = ReadDisk(DeviceObject,
-                          SectorAlignedOffset,
-                          SectorAlignedLength,
-                          ReadBuffer);
-
-        if (NT_SUCCESS(Status))
+        Status = STATUS_SUCCESS;
+        while (NT_SUCCESS(Status) && Done < SectorAlignedLength)
         {
-            // Copy the contents we need into the supplied buffer.
-            RtlCopyMemory(Buffer,
-                          ReadBuffer + (Offset % SectorBytes),
-                          Length);
+            ULONG Piece = min(Chunk, SectorAlignedLength - Done);
+            ULONG From = max(Done, Skip);
+            ULONG To = min(Done + Piece, Skip + Length);
+
+            // Fill the read buffer.
+            Status = ReadDisk(DeviceObject,
+                              SectorAlignedOffset + Done,
+                              Piece,
+                              ReadBuffer);
+
+            if (NT_SUCCESS(Status) && To > From)
+            {
+                // Copy the contents we need into the supplied buffer.
+                RtlCopyMemory(Buffer + (From - Skip),
+                              ReadBuffer + (From - Done),
+                              To - From);
+            }
+            Done += Piece;
         }
 
         // Free read buffer
@@ -1123,27 +1164,42 @@ NtfsWriteVolumeContext(_In_opt_ void* Context,
 
     else
     {
+        ULONG Skip = (ULONG)(Offset - SectorAlignedOffset);
+        ULONG Chunk = min(SectorAlignedLength, NTFS_DISK_IO_CHUNK_SIZE);
+        ULONG Done = 0;
+
         // Create the write buffer
-        WriteBuffer = new(NonPagedPool) UCHAR[SectorAlignedLength];
+        WriteBuffer = new(NonPagedPool) UCHAR[Chunk];
+        if (!WriteBuffer)
+            return STATUS_INSUFFICIENT_RESOURCES;
 
-        // Fill the write buffer with what's on disk.
-        Status = ReadDisk(DeviceObject,
-                          SectorAlignedOffset,
-                          SectorAlignedLength,
-                          WriteBuffer);
-
-        if (NT_SUCCESS(Status))
+        Status = STATUS_SUCCESS;
+        while (NT_SUCCESS(Status) && Done < SectorAlignedLength)
         {
-            // Copy the buffer contents we want to write into the write buffer.
-            RtlCopyMemory(WriteBuffer + (Offset % SectorBytes),
-                          Buffer,
-                          Length);
+            ULONG Piece = min(Chunk, SectorAlignedLength - Done);
+            ULONG From = max(Done, Skip);
+            ULONG To = min(Done + Piece, Skip + Length);
 
-            // Write to the disk.
-            Status = WriteDisk(DeviceObject,
-                               SectorAlignedOffset,
-                               SectorAlignedLength,
-                               WriteBuffer);
+            // Fill the write buffer with what's on disk.
+            Status = ReadDisk(DeviceObject,
+                              SectorAlignedOffset + Done,
+                              Piece,
+                              WriteBuffer);
+
+            if (NT_SUCCESS(Status))
+            {
+                // Copy the buffer contents we want to write into the write buffer.
+                RtlCopyMemory(WriteBuffer + (From - Done),
+                              Buffer + (From - Skip),
+                              To - From);
+
+                // Write to the disk.
+                Status = WriteDisk(DeviceObject,
+                                   SectorAlignedOffset + Done,
+                                   Piece,
+                                   WriteBuffer);
+            }
+            Done += Piece;
         }
 
         // Free write buffer
