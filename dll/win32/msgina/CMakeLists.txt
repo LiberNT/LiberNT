@@ -11,7 +11,7 @@ list(APPEND SOURCE
     utils.c)
 
 list(APPEND PCH_SKIP_SOURCE
-    dimmedwindow.cpp
+    logonui.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/msgina_stubs.c)
 
 add_library(msgina MODULE
@@ -21,8 +21,8 @@ add_library(msgina MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/msgina.def)
 
 set_module_type(msgina win32dll UNICODE)
-target_link_libraries(msgina wine uuid bootstatus ${PSEH_LIB} cpprt atl_classes)
-add_delay_importlibs(msgina secur32)
+target_link_libraries(msgina wine uuid bootstatus shellframe ${PSEH_LIB} cpprt)
+add_delay_importlibs(msgina secur32 netapi32 gdiplus)
 add_importlibs(msgina advapi32 user32 gdi32 userenv msvcrt kernel32 ntdll)
 add_pch(msgina msgina.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET msgina DESTINATION reactos/system32 FOR all)

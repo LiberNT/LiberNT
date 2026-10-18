@@ -508,42 +508,6 @@ BEGIN
     ICON "", 12301, 50, 89, 21, 20, SS_REALSIZECONTROL
 END
 
-IDD_LOG_OFF DIALOGEX 0, 0, 188, 60
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUPWINDOW | WS_CAPTION
-CAPTION "Log Off"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    ICON IDI_SHELL_LOGOFF, IDC_STATIC, 8, 6, 21, 20
-    LTEXT "Sigur faceţi Log Off?", -1, 49, 15, 132, 8
-    DEFPUSHBUTTON "&Log Off", IDOK, 49, 38, 53, 14
-    PUSHBUTTON "Revocare", IDCANCEL, 109, 38, 53, 14
-END
-
-IDD_LOG_OFF_FANCY DIALOGEX 0, 0, 208, 122
-STYLE NOT WS_VISIBLE | DS_CENTER | DS_SHELLFONT | WS_BORDER | WS_POPUP
-FONT 8, "MS Shell Dlg"
-BEGIN
-    CONTROL IDB_DLG_BG, IDC_STATIC, "STATIC", SS_BITMAP | SS_REALSIZECONTROL, 0, 0, 208, 122
-    CONTROL IDB_REACTOS_FLAG, IDC_STATIC, "STATIC", SS_BITMAP, 176, 1, 32, 26
-    PUSHBUTTON "&Comutare utilizatori", IDC_SWITCH_USER_BUTTON, 55, 46, 22, 20, BS_OWNERDRAW | WS_DISABLED | WS_GROUP
-    PUSHBUTTON "&Log Off", IDC_LOG_OFF_BUTTON, 132, 46, 22, 20, BS_OWNERDRAW
-    PUSHBUTTON "Revocare", IDCANCEL, 162, 103, 40, 12, WS_GROUP | BS_FLAT
-    LTEXT "Log Off din LiberNT", IDC_LOG_OFF_TEXT_STATIC, 4, 7, 130, 19
-    CTEXT "Comutare utilizatori", IDC_SWITCH_USER_STATIC, 31, 70, 71, 11
-    CTEXT "Log Off", IDC_LOG_OFF_STATIC, 118, 70, 51, 11
-END
-
-IDD_DISCONNECT DIALOGEX 0, 0, 188, 60
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUPWINDOW | WS_CAPTION
-CAPTION "Deconectare LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    ICON IDI_SHELL_DISCONN, IDC_STATIC, 8, 6, 21, 20
-    LTEXT "Sigur vă deconectaţi?", -1, 49, 15, 131, 8
-    DEFPUSHBUTTON "&Deconectare", IDOK, 47, 38, 47, 14
-    PUSHBUTTON "Revocare", IDCANCEL, 99, 38, 47, 14
-END
-
 IDD_AUTOPLAY1 DIALOGEX 0, 0, 227, 218
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUPWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CAPTION
 CAPTION "Autolansare"
@@ -599,20 +563,6 @@ BEGIN
     AUTOCHECKBOX "&Efectuează mereu aceeaşi acțiune", 1004, 32, 143, 190, 8
     DEFPUSHBUTTON "OK", IDOK, 94, 160, 60, 14
     PUSHBUTTON "Revocare", IDCANCEL, 159, 160, 60, 14
-END
-
-IDD_SHUTDOWN DIALOGEX 0, 0, 211, 103
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUPWINDOW | WS_CAPTION
-CAPTION "Închidere LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    ICON 8240, -1, 6, 6, 21, 20, SS_REALSIZECONTROL | WS_GROUP
-    LTEXT "Ce acţiune va face computerul?", -1, 39, 7, 167, 10
-    COMBOBOX 8224, 39, 20, 165, 200, CBS_DROPDOWNLIST | WS_VSCROLL
-    LTEXT "Menţine sesiunea deschisă, lăsând computerul să funcţioneze la un nivel de energie scăzut, datele rămânând în memorie. Computerul se reactivează când se apasă o tastă sau când se acţionează mausul.", 8225, 39, 40, 167, 37
-    DEFPUSHBUTTON "OK", 1, 7, 82, 60, 14, WS_GROUP
-    PUSHBUTTON "Revocare", IDCANCEL, 75, 82, 60, 14
-    PUSHBUTTON "Aj&utor", IDHELP, 144, 82, 60, 14
 END
 
 IDD_FORMAT_DRIVE DIALOGEX 50, 50, 184, 218
@@ -1094,11 +1044,6 @@ BEGIN
 
     IDS_SYSTEMFOLDER "Folder de sistem"
 
-    /* For IDD_LOG_OFF_FANCY */
-    IDS_LOG_OFF_DESC "Închide programele şi încheie sesiunea LiberNT."
-    IDS_SWITCH_USER_DESC "Permite unui alt utilizator să facă Log on în timp ce programele şi fişierele vă rămân deschise.\r\n\r\n(De asemenea, este posibil să comutaţi între utilizatori apăsând tasta Windows logo + L.)"
-    IDS_LOG_OFF_TITLE "&Log Off"
-    IDS_SWITCH_USER_TITLE "Comutare utilizatori"
 END
 
 STRINGTABLE

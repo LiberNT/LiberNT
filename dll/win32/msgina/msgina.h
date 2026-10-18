@@ -48,6 +48,7 @@ typedef struct
     BOOL bRefreshSettings;
 
     ULONG nShutdownAction;
+    INT nPendingAction;
 
     /* Information to be filled during logon */
     WCHAR UserName[256];
@@ -99,6 +100,15 @@ MyLogonUser(
     LPWSTR lpszPassword,
     PHANDLE phToken,
     PNTSTATUS SubStatus);
+
+NTSTATUS
+MyChangePassword(
+    HANDLE LsaHandle,
+    ULONG AuthenticationPackage,
+    LPWSTR lpszDomain,
+    LPWSTR lpszUsername,
+    LPWSTR lpszOldPassword,
+    LPWSTR lpszNewPassword);
 
 /* msgina.c */
 
@@ -156,12 +166,6 @@ GetAllowedShutdownOptions(
     _In_opt_ HKEY hKeyCurrentUser,
     _In_opt_ HANDLE hUserToken);
 
-INT_PTR
-ShutdownDialog(
-    IN HWND hwndDlg,
-    IN DWORD ShutdownOptions,
-    IN PGINA_CONTEXT pgContext);
-
 /* utils.c */
 
 LONG
@@ -190,7 +194,6 @@ TestTokenPrivilege(
 PWSTR
 DuplicateString(
     _In_opt_ PCWSTR Str);
-
 
 #ifdef __cplusplus
 } // extern "C"

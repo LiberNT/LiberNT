@@ -9,21 +9,6 @@
 #define REACTOS_STR_ORIGINAL_FILENAME "msgina.dll"
 #include <reactos/version.rc>
 
-/* Icons */
-IDI_NOT_CONNECTED ICON "resources/13.ico"
-IDI_LOGOFF ICON "resources/21.ico"
-IDI_SHUTDOWN ICON "resources/22.ico"
-IDI_KEYBOARD ICON "resources/109.ico"
-IDI_HARDWARE ICON "resources/110.ico"
-IDI_LOCKICON ICON "resources/115.ico"
-
-/* Bitmaps */
-IDI_ROSLOGO BITMAP "resources/reactos.bmp"
-IDI_ROSLOGO_FLAG BITMAP "resources/reactos_flag.bmp"
-IDI_BAR BITMAP "resources/line.bmp"
-IDI_DLG_BG BITMAP "resources/dlg_bg.bmp"
-IDB_IMAGE_STRIP BITMAP "resources/image_strip.bmp"
-
 /* UTF-8 */
 #pragma code_page(65001)
 
@@ -96,3 +81,12 @@ IDB_IMAGE_STRIP BITMAP "resources/image_strip.bmp"
 #ifdef LANGUAGE_ZH_TW
     #include "lang/zh-TW.rc"
 #endif
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+
+IDD_LOGONUI DIALOGEX 0, 0, 320, 200
+STYLE DS_SETFONT | WS_POPUP | WS_CLIPCHILDREN
+EXSTYLE WS_EX_TOPMOST
+FONT 9, "Selawik"
+BEGIN
+END

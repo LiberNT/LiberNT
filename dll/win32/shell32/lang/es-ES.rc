@@ -509,42 +509,6 @@ BEGIN
     ICON "", 12301, 50, 89, 21, 20, SS_REALSIZECONTROL
 END
 
-IDD_LOG_OFF DIALOGEX 0, 0, 212, 60
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUPWINDOW | WS_CAPTION
-CAPTION "Cerrar sesión de LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    ICON IDI_SHELL_LOGOFF, IDC_STATIC, 8, 6, 21, 20
-    LTEXT "¿Esta seguro de que quiere cerrar la sesión?", -1, 49, 15, 156, 8
-    DEFPUSHBUTTON "&Cerrar sesión", IDOK, 49, 38, 53, 14
-    PUSHBUTTON "Cancelar", IDCANCEL, 109, 38, 53, 14
-END
-
-IDD_LOG_OFF_FANCY DIALOGEX 0, 0, 208, 122
-STYLE NOT WS_VISIBLE | DS_CENTER | DS_SHELLFONT | WS_BORDER | WS_POPUP
-FONT 8, "MS Shell Dlg"
-BEGIN
-    CONTROL IDB_DLG_BG, IDC_STATIC, "STATIC", SS_BITMAP | SS_REALSIZECONTROL, 0, 0, 208, 122
-    CONTROL IDB_REACTOS_FLAG, IDC_STATIC, "STATIC", SS_BITMAP, 176, 1, 32, 26
-    PUSHBUTTON "&Switch User", IDC_SWITCH_USER_BUTTON, 55, 46, 22, 20, BS_OWNERDRAW | WS_DISABLED | WS_GROUP
-    PUSHBUTTON "&Cerrar sesión", IDC_LOG_OFF_BUTTON, 132, 46, 22, 20, BS_OWNERDRAW
-    PUSHBUTTON "Cancelar", IDCANCEL, 162, 103, 40, 12, WS_GROUP | BS_FLAT
-    LTEXT "Cerrar sesión de LiberNT", IDC_LOG_OFF_TEXT_STATIC, 4, 7, 165, 19
-    CTEXT "Switch User", IDC_SWITCH_USER_STATIC, 41, 70, 51, 11
-    CTEXT "Cerrar sesión", IDC_LOG_OFF_STATIC, 118, 70, 51, 11
-END
-
-IDD_DISCONNECT DIALOGEX 0, 0, 188, 60
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUPWINDOW | WS_CAPTION
-CAPTION "Desconectar LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    ICON IDI_SHELL_DISCONN, IDC_STATIC, 8, 6, 21, 20
-    LTEXT "¿Está seguro que desea desconectar?", -1, 49, 15, 131, 8
-    DEFPUSHBUTTON "&Desconectar", IDOK, 47, 38, 47, 14
-    PUSHBUTTON "Cancelar", IDCANCEL, 99, 38, 47, 14
-END
-
 IDD_AUTOPLAY1 DIALOGEX 0, 0, 227, 218
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUPWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CAPTION
 CAPTION "Reproducción automática"
@@ -600,20 +564,6 @@ BEGIN
     AUTOCHECKBOX "&Realizar siempre la acción seleccionada", 1004, 32, 143, 190, 8
     DEFPUSHBUTTON "Aceptar", IDOK, 94, 160, 60, 14
     PUSHBUTTON "Cancelar", IDCANCEL, 159, 160, 60, 14
-END
-
-IDD_SHUTDOWN DIALOGEX 0, 0, 211, 103
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUPWINDOW | WS_CAPTION
-CAPTION "Apagar LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    ICON 8240, -1, 6, 6, 21, 20, SS_REALSIZECONTROL | WS_GROUP
-    LTEXT "¿Que desea que haga el equipo?", -1, 39, 7, 167, 10
-    COMBOBOX 8224, 39, 20, 165, 200, CBS_DROPDOWNLIST | WS_VSCROLL
-    LTEXT "Mantener su sesión, manteniendo el equipo en bajo consumo con los datos aún en memoria. El equipo se restaura cuando presione una tecla o mueva el ratón.", 8225, 39, 40, 167, 37
-    DEFPUSHBUTTON "Aceptar", 1, 7, 82, 60, 14, WS_GROUP
-    PUSHBUTTON "Cancelar", IDCANCEL, 75, 82, 60, 14
-    PUSHBUTTON "&Ayuda", IDHELP, 144, 82, 60, 14
 END
 
 IDD_FORMAT_DRIVE DIALOGEX 50, 50, 184, 218
@@ -1095,11 +1045,6 @@ BEGIN
 
     IDS_SYSTEMFOLDER "Carpeta del Sistema"
 
-    /* For IDD_LOG_OFF_FANCY */
-    IDS_LOG_OFF_DESC "Cierra tus programas y finaliza la sesión de LiberNT."
-    IDS_SWITCH_USER_DESC "Permite a otro usuario iniciar sesión mientras tu sesión sigue abierta.\r\n\r\n(Puedes cambiar de usuarios presionando las teclas Windows + L.)"
-    IDS_LOG_OFF_TITLE "Cerrar sesión"
-    IDS_SWITCH_USER_TITLE "Cambiar de usuario"
 END
 
 STRINGTABLE

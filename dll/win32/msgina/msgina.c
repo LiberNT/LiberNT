@@ -174,12 +174,10 @@ GetRegistrySettings(PGINA_CONTEXT pgContext)
     TRACE("bAutoAdminLogon: %s\n", pgContext->bAutoAdminLogon ? "TRUE" : "FALSE");
 
     // TODO: What to do also depends whether we are on Terminal Services.
+    pgContext->bDisableCAD = TRUE;
     rc = ReadRegDwordValue(hKey, L"DisableCAD", &dwDisableCAD);
     if (rc == ERROR_SUCCESS)
-    {
-        if (dwDisableCAD != 0)
-            pgContext->bDisableCAD = TRUE;
-    }
+        pgContext->bDisableCAD = (dwDisableCAD != 0);
     TRACE("bDisableCAD: %s\n", pgContext->bDisableCAD ? "TRUE" : "FALSE");
 
     // NOTE: The default value is always read from the registry (Workstation: TRUE; Server: FALSE).
@@ -725,7 +723,7 @@ DoAdminUnlock(
                          UserName,
                          Domain,
                          Password,
-                         &pgContext->UserToken,
+                         &hToken,
                          &SubStatus);
     if (!NT_SUCCESS(Status))
     {
@@ -998,12 +996,6 @@ WlxDisplaySASNotice(
         pgContext->bAutoAdminLogon = FALSE;
     }
 
-    if (pgContext->bDisableCAD)
-    {
-        pgContext->pWlxFuncs->WlxSasNotify(pgContext->hWlx, WLX_SAS_TYPE_CTRL_ALT_DEL);
-        return;
-    }
-
     pGinaUI->DisplaySASNotice(pgContext);
 
     TRACE("WlxDisplaySASNotice() done\n");
@@ -1075,12 +1067,6 @@ WlxDisplayLockedNotice(PVOID pWlxContext)
     PGINA_CONTEXT pgContext = (PGINA_CONTEXT)pWlxContext;
 
     TRACE("WlxDisplayLockedNotice()\n");
-
-    if (pgContext->bDisableCAD)
-    {
-        pgContext->pWlxFuncs->WlxSasNotify(pgContext->hWlx, WLX_SAS_TYPE_CTRL_ALT_DEL);
-        return;
-    }
 
     pGinaUI->DisplayLockedNotice(pgContext);
 }

@@ -38,10 +38,6 @@
 #define IDB_SHELL_EDIT_SM           227
 #define IDB_SHELL_EDIT_SM_HOT       228
 
-/* Bitmaps for fancy log off dialog box */
-#define IDB_DLG_BG                  500
-#define IDB_REACTOS_FLAG            501
-#define IDB_IMAGE_STRIP             502
 
 /* Strings */
 
@@ -394,10 +390,6 @@
 #define IDS_SEARCHBAND_COMMAND                      12708
 #define IDS_FOLDERSHORTCUT_TYPE                     10540
 
-#define IDS_LOG_OFF_DESC                            35000
-#define IDS_SWITCH_USER_DESC                        35001
-#define IDS_LOG_OFF_TITLE                           35010
-#define IDS_SWITCH_USER_TITLE                       35011
 
 /* Dialogs */
 
@@ -558,12 +550,6 @@
 #define IDC_VIEW_TREEVIEW                   14003
 #define IDC_VIEW_RESTORE_DEFAULTS           14004
 
-/* Control IDs for IDD_LOG_OFF_FANCY dialog */
-#define IDC_LOG_OFF_BUTTON                  15001
-#define IDC_SWITCH_USER_BUTTON              15002
-#define IDC_LOG_OFF_STATIC                  15003
-#define IDC_SWITCH_USER_STATIC              15004
-#define IDC_LOG_OFF_TEXT_STATIC             15005
 
 /* Other dialogs */
 #define IDD_OPEN_WITH    24
@@ -591,14 +577,10 @@
 #define IDC_LINK_PROBLEM_LABEL2             14010
 
 /* Not used dialogs */
-#define IDD_SHUTDOWN             29
-#define IDD_LOG_OFF              30
-#define IDD_DISCONNECT           31
 #define IDD_CONFIRM_FILE_REPLACE 32
 #define IDD_AUTOPLAY1            33
 #define IDD_MIXED_CONTENT1       34
 #define IDD_MIXED_CONTENT2       35
-#define IDD_LOG_OFF_FANCY        600
 
 /* Icons */
 #define IDI_SHELL_DOCUMENT           1

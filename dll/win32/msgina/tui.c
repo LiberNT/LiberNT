@@ -98,7 +98,11 @@ TUIDisplaySASNotice(
 {
     TRACE("TUIDisplaySASNotice()\n");
 
-    UNREFERENCED_PARAMETER(pgContext);
+    if (pgContext->bDisableCAD)
+    {
+        pgContext->pWlxFuncs->WlxSasNotify(pgContext->hWlx, WLX_SAS_TYPE_CTRL_ALT_DEL);
+        return;
+    }
 
     DisplayResourceText(IDS_LOGGEDOUTSAS, TRUE);
     DisplayResourceText(IDS_PRESSCTRLALTDELETE, TRUE);
@@ -271,6 +275,8 @@ static VOID
 TUIDisplayLockedNotice(
     IN OUT PGINA_CONTEXT pgContext)
 {
+    if (pgContext->bDisableCAD)
+        pgContext->pWlxFuncs->WlxSasNotify(pgContext->hWlx, WLX_SAS_TYPE_CTRL_ALT_DEL);
 }
 
 GINA_UI GinaTextUI = {

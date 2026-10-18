@@ -271,4 +271,71 @@ done:
     return Status;
 }
 
+NTSTATUS
+MyChangePassword(
+    HANDLE LsaHandle,
+    ULONG AuthenticationPackage,
+    LPWSTR lpszDomain,
+    LPWSTR lpszUsername,
+    LPWSTR lpszOldPassword,
+    LPWSTR lpszNewPassword)
+{
+    PMSV1_0_CHANGEPASSWORD_REQUEST RequestBuffer;
+    PMSV1_0_CHANGEPASSWORD_RESPONSE ResponseBuffer = NULL;
+    UNICODE_STRING *Fields[4];
+    LPWSTR Values[4] = {lpszDomain, lpszUsername, lpszOldPassword, lpszNewPassword};
+    ULONG RequestBufferSize, ResponseBufferSize = 0, i;
+    NTSTATUS ProtocolStatus = STATUS_SUCCESS;
+    NTSTATUS Status;
+    LPWSTR Ptr;
+
+    RequestBufferSize = sizeof(MSV1_0_CHANGEPASSWORD_REQUEST);
+    for (i = 0; i < _countof(Values); i++)
+        RequestBufferSize += (ULONG)((wcslen(Values[i]) + 1) * sizeof(WCHAR));
+
+    RequestBuffer = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, RequestBufferSize);
+    if (RequestBuffer == NULL)
+        return STATUS_NO_MEMORY;
+
+    RequestBuffer->MessageType = MsV1_0ChangePassword;
+    RequestBuffer->Impersonating = TRUE;
+
+    Fields[0] = &RequestBuffer->DomainName;
+    Fields[1] = &RequestBuffer->AccountName;
+    Fields[2] = &RequestBuffer->OldPassword;
+    Fields[3] = &RequestBuffer->NewPassword;
+
+    Ptr = (LPWSTR)(RequestBuffer + 1);
+    for (i = 0; i < _countof(Values); i++)
+    {
+        Fields[i]->Length = (USHORT)(wcslen(Values[i]) * sizeof(WCHAR));
+        Fields[i]->MaximumLength = Fields[i]->Length + sizeof(WCHAR);
+        Fields[i]->Buffer = Ptr;
+        RtlCopyMemory(Ptr, Values[i], Fields[i]->MaximumLength);
+        Ptr = (LPWSTR)((ULONG_PTR)Ptr + Fields[i]->MaximumLength);
+    }
+
+    Status = LsaCallAuthenticationPackage(LsaHandle,
+                                          AuthenticationPackage,
+                                          RequestBuffer,
+                                          RequestBufferSize,
+                                          (PVOID*)&ResponseBuffer,
+                                          &ResponseBufferSize,
+                                          &ProtocolStatus);
+
+    SecureZeroMemory(RequestBuffer, RequestBufferSize);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, RequestBuffer);
+
+    if (ResponseBuffer != NULL)
+        LsaFreeReturnBuffer(ResponseBuffer);
+
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("LsaCallAuthenticationPackage failed (Status 0x%08lx)\n", Status);
+        return Status;
+    }
+
+    return ProtocolStatus;
+}
+
 /* EOF */

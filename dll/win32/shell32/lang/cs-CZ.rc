@@ -508,42 +508,6 @@ BEGIN
     ICON "", 12301, 50, 89, 21, 20, SS_REALSIZECONTROL
 END
 
-IDD_LOG_OFF DIALOGEX 0, 0, 188, 60
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUPWINDOW | WS_CAPTION
-CAPTION "Odhlásit se ze systému LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    ICON IDI_SHELL_LOGOFF, IDC_STATIC, 8, 6, 21, 20
-    LTEXT "Opravdu se chcete odhlásit?", -1, 49, 15, 132, 8
-    DEFPUSHBUTTON "&Odhlásit", IDOK, 49, 38, 43, 14
-    PUSHBUTTON "Storno", IDCANCEL, 99, 38, 43, 14
-END
-
-IDD_DISCONNECT DIALOGEX 0, 0, 188, 60
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUPWINDOW | WS_CAPTION
-CAPTION "Odpojit se od systému LiberNT" //jak to prelozit, kde to v realu uvidim?
-FONT 8, "MS Shell Dlg"
-BEGIN
-    ICON IDI_SHELL_DISCONN, IDC_STATIC, 8, 6, 21, 20
-    LTEXT "Opravdu se chcete odpojit?", -1, 49, 15, 131, 8
-    DEFPUSHBUTTON "&Odpojit", IDOK, 47, 38, 47, 14
-    PUSHBUTTON "Storno", IDCANCEL, 99, 38, 47, 14
-END
-
-IDD_LOG_OFF_FANCY DIALOGEX 0, 0, 208, 122
-STYLE NOT WS_VISIBLE | DS_CENTER | DS_SHELLFONT | WS_BORDER | WS_POPUP
-FONT 8, "MS Shell Dlg"
-BEGIN
-    CONTROL IDB_DLG_BG, IDC_STATIC, "STATIC", SS_BITMAP | SS_REALSIZECONTROL, 0, 0, 208, 122
-    CONTROL IDB_REACTOS_FLAG, IDC_STATIC, "STATIC", SS_BITMAP, 176, 1, 32, 26
-    PUSHBUTTON "&Switch User", IDC_SWITCH_USER_BUTTON, 55, 46, 22, 20, BS_OWNERDRAW | WS_DISABLED | WS_GROUP
-    PUSHBUTTON "&Odpojit", IDC_LOG_OFF_BUTTON, 132, 46, 22, 20, BS_OWNERDRAW
-    PUSHBUTTON "Storno", IDCANCEL, 162, 103, 40, 12, WS_GROUP | BS_FLAT
-    LTEXT "Odpojit", IDC_LOG_OFF_TEXT_STATIC, 4, 7, 130, 19
-    CTEXT "Switch User", IDC_SWITCH_USER_STATIC, 41, 70, 51, 11
-    CTEXT "Odpojit", IDC_LOG_OFF_STATIC, 118, 70, 51, 11
-END
-
 IDD_AUTOPLAY1 DIALOGEX 0, 0, 227, 218
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUPWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CAPTION
 CAPTION "Autopřehrávání"
@@ -599,20 +563,6 @@ BEGIN
     AUTOCHECKBOX "Zvolenou akci provést &vždy", 1004, 32, 143, 190, 8
     DEFPUSHBUTTON "OK", IDOK, 94, 160, 60, 14
     PUSHBUTTON "Storno", IDCANCEL, 159, 160, 60, 14
-END
-
-IDD_SHUTDOWN DIALOGEX 0, 0, 211, 103
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUPWINDOW | WS_CAPTION
-CAPTION "Vypnout LiberNT"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    ICON 8240, -1, 6, 6, 21, 20, SS_REALSIZECONTROL | WS_GROUP
-    LTEXT "Co má počítač provést?", -1, 39, 7, 167, 10
-    COMBOBOX 8224, 39, 20, 165, 200, CBS_DROPDOWNLIST | WS_VSCROLL
-    LTEXT "Uchová toto sezení, počítač poběží se sníženou spotřebou s daty stále v paměti. Probudí se při stisknutí klávesu nebo pohybu myši.", 8225, 39, 40, 167, 37
-    DEFPUSHBUTTON "OK", 1, 7, 82, 60, 14, WS_GROUP
-    PUSHBUTTON "Storno", IDCANCEL, 75, 82, 60, 14
-    PUSHBUTTON "&Nápověda", IDHELP, 144, 82, 60, 14
 END
 
 IDD_FORMAT_DRIVE DIALOGEX 50, 50, 184, 218
@@ -1094,11 +1044,6 @@ BEGIN
 
     IDS_SYSTEMFOLDER "System Folder"
 
-    /* For IDD_LOG_OFF_FANCY */
-    IDS_LOG_OFF_DESC "Closes your programs and ends your LiberNT session."
-    IDS_SWITCH_USER_DESC "Lets another user log on while your programs and files remain open.\r\n\r\n(You can also switch users by pressing the Windows logo key + L.)"
-    IDS_LOG_OFF_TITLE "Odpojit"
-    IDS_SWITCH_USER_TITLE "Switch User"
 END
 
 STRINGTABLE
