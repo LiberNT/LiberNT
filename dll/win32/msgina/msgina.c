@@ -436,6 +436,7 @@ WlxStartApplication(
     PROCESS_INFORMATION ProcessInformation;
     WCHAR CurrentDirectory[MAX_PATH];
     HANDLE hAppToken;
+    PWSTR CommandLine;
     UINT len;
     BOOL ret;
 
@@ -446,10 +447,16 @@ WlxStartApplication(
         return FALSE;
     }
 
+    CommandLine = HeapAlloc(GetProcessHeap(), 0, (wcslen(pszCmdLine) + 1) * sizeof(WCHAR));
+    if (!CommandLine)
+        return FALSE;
+    wcscpy(CommandLine, pszCmdLine);
+
     ret = DuplicateTokenEx(pgContext->UserToken, MAXIMUM_ALLOWED, NULL, SecurityImpersonation, TokenPrimary, &hAppToken);
     if (!ret)
     {
         ERR("DuplicateTokenEx() failed with error %lu\n", GetLastError());
+        HeapFree(GetProcessHeap(), 0, CommandLine);
         return FALSE;
     }
 
@@ -465,12 +472,14 @@ WlxStartApplication(
     if (len == 0 || len > MAX_PATH)
     {
         ERR("GetWindowsDirectoryW() failed\n");
+        HeapFree(GetProcessHeap(), 0, CommandLine);
+        CloseHandle(hAppToken);
         return FALSE;
     }
     ret = CreateProcessAsUserW(
         hAppToken,
-        pszCmdLine,
         NULL,
+        CommandLine,
         NULL,
         NULL,
         FALSE,
@@ -479,11 +488,12 @@ WlxStartApplication(
         CurrentDirectory,
         &StartupInfo,
         &ProcessInformation);
+    if (!ret)
+        ERR("CreateProcessAsUserW() failed with error %lu\n", GetLastError());
     CloseHandle(ProcessInformation.hProcess);
     CloseHandle(ProcessInformation.hThread);
     CloseHandle(hAppToken);
-    if (!ret)
-        ERR("CreateProcessAsUserW() failed with error %lu\n", GetLastError());
+    HeapFree(GetProcessHeap(), 0, CommandLine);
     return ret;
 }
 
