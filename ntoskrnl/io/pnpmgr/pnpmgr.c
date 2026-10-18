@@ -1595,7 +1595,7 @@ IopGetParentIdPrefix(PDEVICE_NODE DeviceNode,
 
     RtlStringCbPrintfW((PWSTR)ParentIdPrefixInformation,
                        KeyNameBufferLength,
-                       L"%lx&%lx",
+                       L"%lx&%lx&0",
                        DeviceNode->Parent->Level,
                        crc32);
     RtlInitUnicodeString(&KeyValue, (PWSTR)ParentIdPrefixInformation);
