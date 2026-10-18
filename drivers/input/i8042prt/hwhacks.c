@@ -203,7 +203,7 @@ i8042InitializeHwHacks(
     /* Query the required buffer size */
     BufferSize = 0;
     Status = IoWMIQueryAllData(DataBlockObject, &BufferSize, NULL);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_TOO_SMALL)
     {
         DPRINT1("IoWMIOpenBlock failed: 0x%08lx\n", Status);
         return;
