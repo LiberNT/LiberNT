@@ -1771,7 +1771,14 @@ BOOL co_IntGetShellMinRect(HWND hWnd, RECTL *prc)
 VOID co_IntShellHookNotify(WPARAM Message, WPARAM wParam, LPARAM lParam)
 {
     PDESKTOP Desktop = IntGetActiveDesktop();
+    PWND Window;
     HWND* HwndList;
+
+    if (Message != HSHELL_APPCOMMAND && Message != HSHELL_LANGUAGE && wParam != 0 &&
+        (Window = ValidateHwndNoErr((HWND)wParam)) != NULL && Window->head.rpdesk != NULL)
+    {
+        Desktop = Window->head.rpdesk;
+    }
 
     if (!gpsi->uiShellMsg)
     {
