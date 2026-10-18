@@ -1,0 +1,60 @@
+#pragma once
+
+#define IDS_HEADER                  100
+#define IDS_ERROR_DECIMAL           101
+#define IDS_ERROR_HEX               102
+#define IDS_LOG_LOCATION            103
+#define IDS_UNRECOGNIZED_TOKEN      104
+#define IDS_UNKNOWN_OPTION          105
+#define IDS_MISSING_OPTION          106
+#define IDS_OPTIONS_CONFLICT        107
+#define IDS_OPTION_REQUIRED         108
+#define IDS_IMAGE_NOT_FOUND         109
+#define IDS_INVALID_ARGUMENTS       110
+
+#define IDS_DETAILS                 200
+#define IDS_INDEX                   201
+#define IDS_NAME                    202
+#define IDS_DESCRIPTION             203
+#define IDS_SIZE                    204
+#define IDS_WIM_BOOTABLE            205
+#define IDS_ARCHITECTURE            206
+#define IDS_HAL                     207
+#define IDS_VERSION                 208
+#define IDS_SP_BUILD                209
+#define IDS_SP_LEVEL                210
+#define IDS_EDITION                 211
+#define IDS_INSTALLATION            212
+#define IDS_PRODUCT_TYPE            213
+#define IDS_PRODUCT_SUITE           214
+#define IDS_SYSTEM_ROOT             215
+#define IDS_DIRECTORIES             216
+#define IDS_FILES                   217
+#define IDS_CREATED                 218
+#define IDS_MODIFIED                219
+#define IDS_LANGUAGES               220
+#define IDS_LANGUAGES_UNDEFINED     221
+#define IDS_LANGUAGE                222
+#define IDS_LANGUAGE_DEFAULT        223
+#define IDS_UNDEFINED               224
+#define IDS_YES                     225
+#define IDS_NO                      226
+
+#define IDS_APPLYING                300
+#define IDS_SAVING                  301
+#define IDS_EXPORTING               302
+#define IDS_MOUNTED_IMAGES          303
+#define IDS_NO_MOUNTED_IMAGES       304
+
+#define IDS_HELP_GENERAL            400
+#define IDS_HELP_GET_IMAGEINFO      401
+#define IDS_HELP_GET_WIMINFO        402
+#define IDS_HELP_LIST_IMAGE         403
+#define IDS_HELP_APPLY_IMAGE        404
+#define IDS_HELP_CAPTURE_IMAGE      405
+#define IDS_HELP_APPEND_IMAGE       406
+#define IDS_HELP_EXPORT_IMAGE       407
+#define IDS_HELP_DELETE_IMAGE       408
+#define IDS_HELP_SPLIT_IMAGE        409
+#define IDS_HELP_GET_MOUNTED        410
+#define IDS_HELP_CLEANUP            411

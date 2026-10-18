@@ -1,0 +1,240 @@
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+STRINGTABLE
+BEGIN
+    IDS_HEADER "\nDeployment Image Servicing and Management tool\nVersion: %s\n\n"
+    IDS_ERROR_DECIMAL "\nError: %lu\n\n"
+    IDS_ERROR_HEX "\nError: 0x%08lx\n\n"
+    IDS_LOG_LOCATION "\nThe DISM log file can be found at %s\n"
+    IDS_UNRECOGNIZED_TOKEN "DISM doesn't recognize the command-line option ""%s"". \nFor more information, refer to the help by running DISM.exe /?.\n"
+    IDS_UNKNOWN_OPTION "The %s option is unknown. \nFor more information, refer to the help by running DISM.exe /?.\n"
+    IDS_MISSING_OPTION "The command-line is missing the %s option.\nFor more information, refer to the help.\n"
+    IDS_OPTIONS_CONFLICT "The %s and %s options cannot be used together on the command-line.\nFor more information, refer to the help.\n"
+    IDS_OPTION_REQUIRED "A required option is missing from the command-line.\nEnsure that %s or %s is specified.\n"
+    IDS_IMAGE_NOT_FOUND "The specified image does not exist in the specified image container.\nCheck the image container first for existing images.\n"
+    IDS_INVALID_ARGUMENTS "An error occurred while processing the command.\nEnsure that the command-line arguments are valid. For more information, review the log file.\n"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_DETAILS "Details for image : %s\n\n"
+    IDS_INDEX "Index : %d\n"
+    IDS_NAME "Name : %s\n"
+    IDS_DESCRIPTION "Description : %s\n"
+    IDS_SIZE "Size : %s bytes\n"
+    IDS_WIM_BOOTABLE "WIM Bootable : %s\n"
+    IDS_ARCHITECTURE "Architecture : %s\n"
+    IDS_HAL "Hal : %s\n"
+    IDS_VERSION "Version : %s\n"
+    IDS_SP_BUILD "ServicePack Build : %s\n"
+    IDS_SP_LEVEL "ServicePack Level : %s\n"
+    IDS_EDITION "Edition : %s\n"
+    IDS_INSTALLATION "Installation : %s\n"
+    IDS_PRODUCT_TYPE "ProductType : %s\n"
+    IDS_PRODUCT_SUITE "ProductSuite : %s\n"
+    IDS_SYSTEM_ROOT "System Root : %s\n"
+    IDS_DIRECTORIES "Directories : %s\n"
+    IDS_FILES "Files : %s\n"
+    IDS_CREATED "Created : %s\n"
+    IDS_MODIFIED "Modified : %s\n"
+    IDS_LANGUAGES "Languages :\n"
+    IDS_LANGUAGES_UNDEFINED "Languages : <undefined>\n"
+    IDS_LANGUAGE "\t%s\n"
+    IDS_LANGUAGE_DEFAULT "\t%s (Default)\n"
+    IDS_UNDEFINED "<undefined>"
+    IDS_YES "Yes"
+    IDS_NO "No"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_APPLYING "Applying image\n"
+    IDS_SAVING "Saving image\n"
+    IDS_EXPORTING "Exporting image\n"
+    IDS_MOUNTED_IMAGES "Mounted images:\n\n\n"
+    IDS_NO_MOUNTED_IMAGES "No mounted images found.\n\n"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_HELP_GENERAL "\nDISM.exe [dism_options] {Imaging_command} [<Imaging_arguments>]\n\
+\n\
+DESCRIPTION:\n\
+\n\
+  DISM captures, applies, exports, splits and inspects Windows image (WIM,\n\
+  ESD and SWM) files.\n\
+\n\
+WIM COMMANDS:\n\
+\n\
+  /List-Image             - Lists the files and folders of an image.\n\
+  /Delete-Image           - Removes an image from a WIM file that holds\n\
+                            several images.\n\
+  /Export-Image           - Copies an image into another WIM or ESD file.\n\
+  /Append-Image           - Captures a directory as a new image of an\n\
+                            existing WIM file.\n\
+  /Capture-Image          - Captures a directory into a new WIM file.\n\
+  /Get-MountedWimInfo     - Lists the mounted WIM images.\n\
+  /Get-WimInfo            - Shows the images of a WIM file.\n\
+  /Cleanup-Wim            - Removes resources left by broken WIM mounts.\n\
+\n\
+GENERIC IMAGING COMMANDS:\n\
+\n\
+  /Split-Image            - Splits a WIM file into read-only split WIM\n\
+                            (SWM) files.\n\
+  /Apply-Image            - Applies an image to a directory.\n\
+  /Get-MountedImageInfo   - Lists the mounted images.\n\
+  /Get-ImageInfo          - Shows the images of a WIM, ESD or SWM file.\n\
+  /Cleanup-Mountpoints    - Removes resources left by broken mounts.\n\
+\n\
+DISM OPTIONS:\n\
+\n\
+  /English                - Shows the command-line output in English.\n\
+  /LogPath                - Sets the log file path.\n\
+  /Quiet                  - Shows error messages only.\n\
+\n\
+For help on a command, specify the command immediately before /?.\n\
+\n\
+  Examples:\n\
+    DISM.exe /Apply-Image /?\n\
+    DISM.exe /Get-ImageInfo /?\n\
+\n"
+    IDS_HELP_GET_IMAGEINFO "\n/Get-ImageInfo /ImageFile:<image_file> [/Index:<image_index> | /Name:<image_name>]\n\
+\n\
+  Shows the images of a WIM, ESD or SWM file. With /Index or /Name, shows\n\
+  the details of that image.\n\
+\n\
+    Examples:\n\
+      DISM.exe /Get-ImageInfo /ImageFile:C:\\images\\install.wim\n\
+      DISM.exe /Get-ImageInfo /ImageFile:C:\\images\\install.esd /Index:1\n\
+\n"
+    IDS_HELP_GET_WIMINFO "\n/Get-WimInfo /WimFile:<WIM_file> [/Index:<image_index> | /Name:<image_name>]\n\
+\n\
+  Shows the images of a WIM file. With /Index or /Name, shows the details\n\
+  of that image.\n\
+\n\
+    Examples:\n\
+      DISM.exe /Get-WimInfo /WimFile:C:\\images\\install.wim\n\
+      DISM.exe /Get-WimInfo /WimFile:C:\\images\\install.wim /Index:1\n\
+\n"
+    IDS_HELP_LIST_IMAGE "\n/List-Image /ImageFile:<path_to_image_file>\n\
+  [/Index:<image_index> | /Name:<image_name>]\n\
+\n\
+  Lists the files and folders of an image.\n\
+  A file holding several images needs /Index or /Name.\n\
+\n\
+    Example:\n\
+      DISM.exe /List-Image /ImageFile:install.wim /Index:1\n\
+\n"
+    IDS_HELP_APPLY_IMAGE "\n/Apply-Image /ImageFile:<path_to_image_file> /ApplyDir:<target_directory>\n\
+  [/Index:<image_index> | /Name:<image_name>] [/CheckIntegrity] [/Verify]\n\
+  [/NoRpFix] [/SWMFile:<pattern>] [/Compact] [/WIMBoot] [/EA]\n\
+\n\
+  Applies an image to an existing directory.\n\
+  Use /CheckIntegrity to stop when the WIM file integrity table does not match.\n\
+  Use /Verify to check the applied data.\n\
+  Use /NoRpFix to keep reparse points as they were captured.\n\
+  Use /SWMFile to name the parts of a split WIM, as a path and a pattern.\n\
+  Use /Compact to apply the files compressed.\n\
+  Use /WIMBoot to apply the image in WIMBoot mode.\n\
+  Use /EA to apply extended attributes.\n\
+  A file holding several images needs /Index or /Name.\n\
+\n\
+    Examples:\n\
+      DISM.exe /Apply-Image /ImageFile:install.wim /Index:1 /ApplyDir:D:\\\n\
+\n\
+      DISM.exe /Apply-Image /ImageFile:install.swm /SWMFile:install*.swm\n\
+        /ApplyDir:D:\\ /Index:1\n\
+\n"
+    IDS_HELP_CAPTURE_IMAGE "\n/Capture-Image /ImageFile:<path_to_image_file> /CaptureDir:<source_directory>\n\
+  /Name:<Name>\n\
+  [/Description:Description] [/ConfigFile:<wimscript.ini>]\n\
+  [/Compress:{fast|max|none}] [/Bootable] [/CheckIntegrity] [/Verify]\n\
+  [/NoRpFix] [/EA]\n\
+\n\
+  Captures a directory, with all its subfolders, into a new WIM file.\n\
+  Use /ConfigFile to name a file listing the paths to exclude from the\n\
+  capture and from compression.\n\
+  Use /Compress to choose the compression. fast is the default.\n\
+  Use /Bootable to mark the image as the boot image.\n\
+  Use /CheckIntegrity to store an integrity table in the WIM file.\n\
+  Use /Verify to check the written WIM file.\n\
+  Use /NoRpFix to keep reparse points as they are.\n\
+  Use /EA to capture extended attributes.\n\
+\n\
+    Example:\n\
+      DISM.exe /Capture-Image /ImageFile:install.wim /CaptureDir:D:\\\n\
+        /Name:Drive-D\n\
+\n"
+    IDS_HELP_APPEND_IMAGE "\n/Append-Image /ImageFile:<path_to_image_file> /CaptureDir:<source_directory>\n\
+  /Name:<Name>\n\
+  [/Description:Description] [/ConfigFile:<wimscript.ini>]\n\
+  [/Bootable] [/CheckIntegrity] [/Verify] [/NoRpFix] [/EA]\n\
+\n\
+  Captures a directory as a new image of an existing WIM file.\n\
+  Use /ConfigFile to name a file listing the paths to exclude from the\n\
+  capture and from compression.\n\
+  Use /Bootable to mark the image as the boot image.\n\
+  Use /CheckIntegrity to store an integrity table in the WIM file.\n\
+  Use /Verify to check the written WIM file.\n\
+  Use /NoRpFix to keep reparse points as they are.\n\
+  Use /EA to capture extended attributes.\n\
+\n\
+    Example:\n\
+      DISM.exe /Append-Image /ImageFile:install.wim /CaptureDir:D:\\\n\
+        /Name:Drive-D\n\
+\n"
+    IDS_HELP_EXPORT_IMAGE "\n/Export-Image /SourceImageFile:<path_to_image_file> [/SWMFile:<pattern>]\n\
+  [/SourceIndex:<image_index> | /SourceName:<image_name>]\n\
+  /DestinationImageFile:<path_to_image_file> [/DestinationName:<Name>]\n\
+  [/Compress:{fast|max|none|recovery}] [/Bootable] [/CheckIntegrity]\n\
+  A file holding several images needs /SourceIndex or /SourceName.\n\
+\n\
+  Copies an image into another WIM or ESD file. An existing destination\n\
+  file receives the image as a new one.\n\
+  Use /SWMFile to name the parts of a split WIM, as a path and a pattern.\n\
+  Use /Compress to choose the compression of a new destination file.\n\
+  recovery writes a solid ESD file. Without it, the destination uses the\n\
+  compression of the source.\n\
+  Use /Bootable to mark the image as the boot image.\n\
+  Use /CheckIntegrity to store an integrity table in the destination.\n\
+\n\
+    Example:\n\
+      DISM.exe /Export-Image /SourceImageFile:install.wim /SourceIndex:1\n\
+        /DestinationImageFile:install2.wim\n\
+\n"
+    IDS_HELP_DELETE_IMAGE "\n/Delete-Image /ImageFile:<path_to_image_file>\n\
+  {/Index:<image_index> | /Name:<image_name>} [/CheckIntegrity]\n\
+\n\
+  Removes an image from a WIM file that holds several images.\n\
+  Use /CheckIntegrity to check and update the integrity table.\n\
+\n\
+    Example:\n\
+      DISM.exe /Delete-Image /ImageFile:install.wim /Index:1\n\
+\n"
+    IDS_HELP_SPLIT_IMAGE "\n/Split-Image\n\
+  /ImageFile:<path_to_image_file> /SWMFile:<path_to_swm> /FileSize:<MB-Size>\n\
+  [/CheckIntegrity]\n\
+\n\
+  Splits a WIM file into read-only split WIM files.\n\
+  Use /FileSize to set the largest size, in megabytes (MB), of each part.\n\
+  Use /CheckIntegrity to store an integrity table in each part.\n\
+\n\
+    Example:\n\
+      DISM.exe /Split-Image /ImageFile:install.wim /SWMFile:split.swm\n\
+        /FileSize:650\n\
+\n"
+    IDS_HELP_GET_MOUNTED "\n/Get-MountedImageInfo\n\
+\n\
+  Lists the mounted images and their state.\n\
+\n\
+    Example:\n\
+      DISM.exe /Get-MountedImageInfo\n\
+\n"
+    IDS_HELP_CLEANUP "\n/Cleanup-Mountpoints\n\
+\n\
+  Removes the resources left by broken image mounts.\n\
+\n\
+    Example:\n\
+      DISM.exe /Cleanup-Mountpoints\n\
+\n"
+END

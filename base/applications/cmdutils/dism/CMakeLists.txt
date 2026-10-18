@@ -1,0 +1,5 @@
+add_executable(dism dism.c dism.rc)
+set_module_type(dism win32cui UNICODE)
+target_link_libraries(dism conutils wimlib ${PSEH_LIB})
+add_importlibs(dism msvcrt user32 advapi32 kernel32 ntdll)
+add_cd_file(TARGET dism DESTINATION reactos/system32 FOR all)
