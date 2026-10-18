@@ -2922,8 +2922,6 @@ BuspBuildStableInstanceId(
         return n;
     }
 
-    /* Last resort: "0" */
-    if (MaxChars >= 2) { Out[0] = L'0'; Out[1] = UNICODE_NULL; return 1; }
     return 0;
 }
 
@@ -3356,6 +3354,11 @@ Bus_PDO_QueryDeviceId(
 
         BOOLEAN isFFB = (DeviceData->AcpiHandle == NULL);
         length = BuspBuildStableInstanceId(Device, DeviceData, isFFB, temp, RTL_NUMBER_OF(temp));
+        if (length == 0 && (!Device || !Device->flags.unique_id))
+        {
+            status = STATUS_NOT_SUPPORTED;
+            break;
+        }
         if (length == 0)
         {
             /* Fallback */
