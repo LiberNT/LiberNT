@@ -36,6 +36,8 @@ typedef enum _BCD_ELEMENT
     BcdOSLoaderBoolean_DisableBootDisplay    = 0x26000041,
     BcdOSLoaderBoolean_UseBootProcessorOnly  = 0x26000060,
     BcdOSLoaderInteger_NumberOfProcessors    = 0x25000061,
+    BcdOSLoaderInteger_SafeBoot              = 0x25000080,
+    BcdOSLoaderBoolean_SafeBootAlternateShell = 0x26000081,
     BcdOSLoaderBoolean_BootLogInitialization = 0x26000090,
     BcdOSLoaderBoolean_VerboseObjectLoadMode = 0x26000091,
     BcdOSLoaderBoolean_KernelDebuggerEnabled = 0x260000a0,

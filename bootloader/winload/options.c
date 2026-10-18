@@ -24,6 +24,13 @@ static const struct
     {BcdOSLoaderBoolean_EmsEnabled,            L" REDIRECT"},
 };
 
+static const PCWSTR OslSafeBootModes[] =
+{
+    L"MINIMAL",
+    L"NETWORK",
+    L"DSREPAIR",
+};
+
 static
 VOID
 OslAppend(
@@ -88,6 +95,13 @@ OslGetParameters(
 
     if (BcdGetInteger(Object, BcdOSLoaderInteger_NumberOfProcessors, &Integer))
         OslAppend(Parameters, L" NUMPROC=%I64u", Integer);
+
+    if (BcdGetInteger(Object, BcdOSLoaderInteger_SafeBoot, &Integer) && Integer < RTL_NUMBER_OF(OslSafeBootModes))
+    {
+        OslAppend(Parameters, L" SAFEBOOT:%s", OslSafeBootModes[Integer]);
+        if (BcdGetBoolean(Object, BcdOSLoaderBoolean_SafeBootAlternateShell, &Enabled) && Enabled)
+            OslAppend(Parameters, L"(ALTERNATESHELL)");
+    }
 
     if (BcdGetBoolean(Object, BcdOSLoaderBoolean_KernelDebuggerEnabled, &Enabled) && Enabled)
     {
