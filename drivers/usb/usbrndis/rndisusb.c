@@ -1885,7 +1885,8 @@ RndisInterruptComplete(
 
     RndisMaybeDeferIrpFree(Adapter, Irp, &Adapter->InterruptIrpToFree);
 
-    if (NT_SUCCESS(Status) && TransferLength >= sizeof(USB_CDC_NOTIFICATION))
+    if (NT_SUCCESS(Status) && TransferLength >= sizeof(USB_CDC_NOTIFICATION) &&
+        ((PUSB_CDC_NOTIFICATION)Adapter->InterruptBuffer)->bmRequestType == USB_CDC_NOTIFICATION_REQUEST_TYPE)
     {
         PUSB_CDC_NOTIFICATION Notification;
         UCHAR NotifyType;
