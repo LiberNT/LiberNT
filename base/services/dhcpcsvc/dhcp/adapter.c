@@ -400,6 +400,23 @@ FreeAdapter(
     free(Adapter);
 }
 
+static
+VOID
+AdapterRemove(
+    PDHCP_ADAPTER Adapter)
+{
+    struct protocol *proto = find_protocol_by_adapter(&Adapter->DhclientInfo);
+
+    if (proto)
+        remove_protocol(proto);
+    cancel_timeout(send_discover, &Adapter->DhclientInfo);
+    cancel_timeout(send_request, &Adapter->DhclientInfo);
+    cancel_timeout(state_selecting, &Adapter->DhclientInfo);
+    cancel_timeout(state_bound, &Adapter->DhclientInfo);
+    RemoveEntryList(&Adapter->ListEntry);
+    FreeAdapter(Adapter);
+}
+
 /*
  * XXX Figure out the way to bind a specific adapter to a socket.
  */
@@ -410,6 +427,8 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
     HANDLE hStopEvent = (HANDLE)Context;
     struct interface_info *ifi = NULL;
     struct protocol *proto;
+    PLIST_ENTRY ListEntry, NextEntry;
+    DWORD Entry;
     int i, Broadcast;
 
     while (TRUE)
@@ -432,13 +451,29 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
 
        DH_DbgPrint(MID_TRACE,("Got Adapter List (%d entries)\n", Table->dwNumEntries));
 
+       ApiLock();
+       for (ListEntry = AdapterList.Flink; ListEntry != &AdapterList; ListEntry = NextEntry)
+       {
+           NextEntry = ListEntry->Flink;
+           Adapter = CONTAINING_RECORD(ListEntry, DHCP_ADAPTER, ListEntry);
+           for (Entry = 0; Entry < Table->dwNumEntries; Entry++)
+           {
+               if (Table->table[Entry].dwIndex == Adapter->IfMib.dwIndex &&
+                   !wcsicmp(Table->table[Entry].wszName, Adapter->IfMib.wszName))
+                   break;
+           }
+           if (Entry == Table->dwNumEntries)
+               AdapterRemove(Adapter);
+       }
+       ApiUnlock();
+
        for( i = Table->dwNumEntries - 1; i >= 0; i-- ) {
             DH_DbgPrint(MID_TRACE,("Getting adapter %d attributes\n",
                                    Table->table[i].dwIndex));
 
             ApiLock();
 
-            if ((Adapter = AdapterFindByHardwareAddress(Table->table[i].bPhysAddr, Table->table[i].dwPhysAddrLen)))
+            if ((Adapter = AdapterFindIndex(Table->table[i].dwIndex)))
             {
                 proto = find_protocol_by_adapter(&Adapter->DhclientInfo);
 
@@ -468,12 +503,8 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
                     }
 
                 } else {
-                    if (proto)
-                        remove_protocol(proto);
-
                     /* We've lost our link so out we go */
-                    RemoveEntryList(&Adapter->ListEntry);
-                    free(Adapter);
+                    AdapterRemove(Adapter);
                 }
 
                 ApiUnlock();
