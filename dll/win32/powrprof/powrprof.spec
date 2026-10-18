@@ -24,6 +24,8 @@
 @ stdcall PowerRegisterForEffectivePowerModeNotifications(long ptr ptr ptr)
 @ stdcall PowerRegisterSuspendResumeNotification(long ptr ptr)
 @ stdcall PowerUnregisterSuspendResumeNotification(ptr)
+@ stdcall PowerSettingAccessCheck(long ptr)
+@ stdcall PowerSettingAccessCheckEx(long ptr long)
 @ stdcall PowerSettingRegisterNotification(ptr long ptr ptr)
 @ stdcall PowerSettingUnregisterNotification(ptr)
 @ stdcall PowerWriteACValueIndex(ptr ptr ptr ptr long)

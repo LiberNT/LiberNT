@@ -638,6 +638,73 @@ POWRPROF_ApplyScheme(
     (void)POWRPROF_PersistActiveScheme(&OldScheme, OldLegacyId, UpdateLegacy);
     return Error;
 }
+
+static const WCHAR szPowerSettingsPolicy[] = L"Software\\Policies\\Microsoft\\Power\\PowerSettings";
+
+DWORD WINAPI
+PowerSettingAccessCheckEx(
+    POWER_DATA_ACCESSOR AccessFlags,
+    const GUID *PowerGuid,
+    REGSAM AccessType)
+{
+    WCHAR Path[RTL_NUMBER_OF(szPowerSettingsPolicy) + 39];
+    WCHAR Guid[39];
+    LPCWSTR KeyPath = szPowerSettingsPolicy;
+    LPCWSTR Value;
+    HKEY Key;
+    DWORD Error;
+
+    TRACE("(%d,%s,0x%lx)\n", AccessFlags, debugstr_guid(PowerGuid), AccessType);
+
+    switch (AccessFlags)
+    {
+        case ACCESS_AC_POWER_SETTING_INDEX:
+            Value = szAcSettingIndex;
+            break;
+
+        case ACCESS_DC_POWER_SETTING_INDEX:
+            Value = szDcSettingIndex;
+            break;
+
+        case ACCESS_ACTIVE_SCHEME:
+            Value = szActivePowerScheme;
+            break;
+
+        case ACCESS_SCHEME:
+        case ACCESS_CREATE_SCHEME:
+            return ERROR_SUCCESS;
+
+        default:
+            return ERROR_INVALID_PARAMETER;
+    }
+
+    if (AccessFlags != ACCESS_ACTIVE_SCHEME)
+    {
+        if (!PowerGuid)
+            return ERROR_SUCCESS;
+
+        POWRPROF_FormatGuid(Guid, PowerGuid);
+        Guid[37] = UNICODE_NULL;
+        swprintf(Path, L"%s\\%s", szPowerSettingsPolicy, Guid + 1);
+        KeyPath = Path;
+    }
+
+    Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, KeyPath, 0, KEY_QUERY_VALUE, &Key);
+    if (Error != ERROR_SUCCESS)
+        return ERROR_SUCCESS;
+
+    Error = RegQueryValueExW(Key, Value, NULL, NULL, NULL, NULL);
+    RegCloseKey(Key);
+    return Error == ERROR_SUCCESS ? ERROR_ACCESS_DISABLED_BY_POLICY : ERROR_SUCCESS;
+}
+
+DWORD WINAPI
+PowerSettingAccessCheck(
+    POWER_DATA_ACCESSOR AccessFlags,
+    const GUID *PowerGuid)
+{
+    return PowerSettingAccessCheckEx(AccessFlags, PowerGuid, KEY_READ);
+}
 #endif
 
 

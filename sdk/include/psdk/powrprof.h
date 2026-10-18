@@ -180,6 +180,12 @@ DWORD   WINAPI PowerReadDCValueIndex(_In_opt_ HKEY, _In_opt_ const GUID *, _In_o
 #endif
 DWORD   WINAPI PowerRegisterSuspendResumeNotification(DWORD, HANDLE, PHPOWERNOTIFY);
 DWORD   WINAPI PowerUnregisterSuspendResumeNotification(HPOWERNOTIFY);
+#if (NTDDI_VERSION >= NTDDI_VISTA)
+DWORD   WINAPI PowerSettingAccessCheck(_In_ POWER_DATA_ACCESSOR, _In_opt_ const GUID *);
+#endif
+#if (NTDDI_VERSION >= NTDDI_WIN7)
+DWORD   WINAPI PowerSettingAccessCheckEx(_In_ POWER_DATA_ACCESSOR, _In_opt_ const GUID *, _In_ REGSAM);
+#endif
 DWORD   WINAPI PowerSettingRegisterNotification(const GUID *, DWORD, HANDLE, PHPOWERNOTIFY);
 DWORD   WINAPI PowerSettingUnregisterNotification(HPOWERNOTIFY);
 DWORD   WINAPI PowerCreatePossibleSetting(_In_opt_ HKEY, _In_ const GUID *, _In_ const GUID *, _In_ ULONG);
