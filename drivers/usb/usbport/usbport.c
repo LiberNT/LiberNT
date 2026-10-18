@@ -4468,6 +4468,8 @@ USBPORT_SubmitMapTransfer(IN PDEVICE_OBJECT FdoDevice)
 
         if (!NT_SUCCESS(Status))
         {
+            PUSBPORT_DEVICE_HANDLE DeviceHandle = Transfer->Urb->UrbHeader.UsbdDeviceHandle;
+
             DPRINT1("USBPORT_FlushMapTransfers: AllocateAdapterChannel failed (0x%lx)\n", Status);
             if (NT_SUCCESS(FlushStatus))
                 FlushStatus = Status;
@@ -4475,6 +4477,7 @@ USBPORT_SubmitMapTransfer(IN PDEVICE_OBJECT FdoDevice)
             USBPORT_QueueDoneTransfer(Transfer,
                                       USBD_STATUS_INSUFFICIENT_RESOURCES,
                                       TRUE);
+            InterlockedDecrement(&DeviceHandle->DeviceHandleLock);
             continue;
         }
 
