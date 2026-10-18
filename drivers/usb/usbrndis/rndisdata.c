@@ -30,6 +30,9 @@ RndisSendNetBufferListsInternal(
  * Keep this reasonable to avoid excessive latency and buffer usage.
  */
 #define NCM_MAX_TX_DATAGRAMS 32
+#define NCM_TX_HEADER_RESERVE (NCM_NTH16_LENGTH + 8 + (NCM_MAX_TX_DATAGRAMS + 1) * 4 + 64)
+
+C_ASSERT(NCM_TX_HEADER_RESERVE + NCM_DEFAULT_NTB_MAX_SIZE + 64 <= RNDIS_TX_BUFFER_SIZE);
 
 /*
  * NCM TX Datagram descriptor for batching.
@@ -185,7 +188,7 @@ RndisBuildNcmNtbMulti(
     /*
      * Validate total length.
      */
-    if (TotalLength > Adapter->NcmNtbOutMaxSize || TotalLength > RNDIS_MAX_TRANSFER_SIZE)
+    if (TotalLength > Adapter->NcmNtbOutMaxSize || TotalLength > RNDIS_TX_BUFFER_SIZE)
     {
         DPRINT1("USBRNDIS: NCM NTB too large (%lu bytes, max=%lu)\n",
                 TotalLength, Adapter->NcmNtbOutMaxSize);
@@ -1207,7 +1210,7 @@ RndisSendNetBufferListsInternal(
              * NDP overhead: 8-byte header + 4 bytes per datagram entry + 4-byte terminator
              * Plus some alignment padding.
              */
-            NdpOverhead = NCM_NTH16_LENGTH + 8 + (NCM_MAX_TX_DATAGRAMS + 1) * 4 + 64;
+            NdpOverhead = NCM_TX_HEADER_RESERVE;
             TempDataArea = Adapter->TxHot.TxBuffer + NdpOverhead;
             TempDataOffset = 0;
             StopBatching = FALSE;
@@ -1259,7 +1262,7 @@ RndisSendNetBufferListsInternal(
                 /* Check if adding this datagram would exceed NTB size limit */
                 EstimatedNtbSize = NdpOverhead + TempDataOffset + BatchDataLen + 64;
                 if (EstimatedNtbSize > Adapter->NcmNtbOutMaxSize ||
-                    EstimatedNtbSize > RNDIS_MAX_TRANSFER_SIZE)
+                    EstimatedNtbSize > RNDIS_TX_BUFFER_SIZE)
                 {
                     /* Would exceed limits, stop batching entirely */
                     StopBatching = TRUE;
@@ -1347,7 +1350,7 @@ RndisSendNetBufferListsInternal(
                     /* Check if adding this datagram would exceed NTB size limit */
                     EstimatedNtbSize = NdpOverhead + TempDataOffset + BatchDataLen + 64;
                     if (EstimatedNtbSize > Adapter->NcmNtbOutMaxSize ||
-                        EstimatedNtbSize > RNDIS_MAX_TRANSFER_SIZE)
+                        EstimatedNtbSize > RNDIS_TX_BUFFER_SIZE)
                     {
                         /* Would exceed limits, stop batching entirely */
                         StopBatching = TRUE;
@@ -1848,7 +1851,7 @@ RndisNcmContinueTx(
     }
     NdisReleaseSpinLock(&Adapter->TxLock);
 
-    NdpOverhead = NCM_NTH16_LENGTH + 8 + (NCM_MAX_TX_DATAGRAMS + 1) * 4 + 64;
+    NdpOverhead = NCM_TX_HEADER_RESERVE;
     TempDataArea = Adapter->TxHot.TxBuffer + NdpOverhead;
     TempDataOffset = 0;
 
@@ -1864,7 +1867,7 @@ RndisNcmContinueTx(
 
         EstimatedNtbSize = NdpOverhead + TempDataOffset + BatchDataLen + 64;
         if (EstimatedNtbSize > Adapter->NcmNtbOutMaxSize ||
-            EstimatedNtbSize > RNDIS_MAX_TRANSFER_SIZE)
+            EstimatedNtbSize > RNDIS_TX_BUFFER_SIZE)
         {
             break;
         }

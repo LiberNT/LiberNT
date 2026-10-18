@@ -1486,8 +1486,8 @@ RndisNcmGetNtbParameters(
          */
         Adapter->NcmNtbMaxSize = (Params->dwNtbInMaxSize < RNDIS_MAX_TRANSFER_SIZE) ?
                                   Params->dwNtbInMaxSize : RNDIS_MAX_TRANSFER_SIZE;
-        Adapter->NcmNtbOutMaxSize = (Params->dwNtbOutMaxSize < RNDIS_MAX_TRANSFER_SIZE) ?
-                                    Params->dwNtbOutMaxSize : RNDIS_MAX_TRANSFER_SIZE;
+        Adapter->NcmNtbOutMaxSize = (Params->dwNtbOutMaxSize < NCM_DEFAULT_NTB_MAX_SIZE) ?
+                                    Params->dwNtbOutMaxSize : NCM_DEFAULT_NTB_MAX_SIZE;
         Adapter->NcmNdpDivisor = Params->wNdpOutDivisor;
         Adapter->NcmNdpRemainder = Params->wNdpOutPayloadRemainder;
         Adapter->NcmNdpAlignment = Params->wNdpOutAlignment;

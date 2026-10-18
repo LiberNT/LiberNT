@@ -533,7 +533,7 @@ RndisMiniportInitializeEx(
     /* Allocate transmit buffer */
     Adapter->TxHot.TxBuffer = NdisAllocateMemoryWithTagPriority(
         NdisMiniportHandle,
-        RNDIS_MAX_TRANSFER_SIZE,
+        RNDIS_TX_BUFFER_SIZE,
         USBRNDIS_TAG,
         NormalPoolPriority);
     if (!Adapter->TxHot.TxBuffer)
