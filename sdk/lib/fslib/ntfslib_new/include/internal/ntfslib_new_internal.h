@@ -1175,6 +1175,14 @@ private:
     RemoveAttributeRecord(_In_ PAttribute TargetAttribute);
 
     NTSTATUS
+    RemoveListedAttribute(_In_ PAttribute TargetAttribute);
+
+    NTSTATUS
+    ReplaceAttributeList(
+        _In_reads_bytes_(NewLength) PUCHAR NewList,
+        _In_ ULONG NewLength);
+
+    NTSTATUS
     CreateNamedDataStream(
         _In_ PWSTR StreamName,
         _In_opt_ PUCHAR Buffer,
@@ -1783,8 +1791,7 @@ private:
         _In_ PFileRecord File,
         _Inout_ PULONG Offset,
         _Out_ PAttribute* Attribute,
-        _Out_ PFileNameEx* FileName,
-        _In_ BOOLEAN FollowAttributeList = FALSE);
+        _Out_ PFileNameEx* FileName);
 
     NTSTATUS
     FindFileNamePair(
@@ -1794,8 +1801,7 @@ private:
         _Out_ PAttribute* NameAttribute,
         _Out_ PFileNameEx* NameValue,
         _Out_ PAttribute* AliasAttribute,
-        _Out_ PFileNameEx* AliasValue,
-        _In_ BOOLEAN FollowAttributeList = FALSE);
+        _Out_ PFileNameEx* AliasValue);
 
     NTSTATUS
     RemoveFileNameFromRecord(
@@ -1818,8 +1824,23 @@ private:
         _In_ ULONGLONG ParentReference,
         _In_reads_(NameLength) PWCHAR Name,
         _In_ ULONG NameLength,
+        _In_ UCHAR NameType,
         _Out_ PAttribute* NewAttribute,
         _Out_ PFileNameEx* NewValue);
+
+    NTSTATUS
+    PlaceFileNameValue(
+        _In_ PFileRecord Record,
+        _In_reads_bytes_(Length) PUCHAR Value,
+        _In_ ULONG Length,
+        _Out_ PAttribute* Inserted);
+
+    NTSTATUS
+    InsertFileNameAttribute(
+        _In_ PFileRecord File,
+        _In_reads_bytes_(Length) PUCHAR Value,
+        _In_ ULONG Length,
+        _Out_ PAttribute* NewAttribute);
 
     NTSTATUS
     CollectReleasableRuns(

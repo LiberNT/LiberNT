@@ -108,8 +108,7 @@ MasterFileTable::EnumerateFileNames(
     _In_ PFileRecord File,
     _Inout_ PULONG Offset,
     _Out_ PAttribute* Attribute,
-    _Out_ PFileNameEx* FileName,
-    _In_ BOOLEAN FollowAttributeList)
+    _Out_ PFileNameEx* FileName)
 {
     PFileRecordHeader Header = File->Header;
     PUCHAR Data = File->Data;
@@ -118,8 +117,7 @@ MasterFileTable::EnumerateFileNames(
     *Attribute = NULL;
     *FileName = NULL;
 
-    if (FollowAttributeList &&
-        File->FindAttributeInRecord(TypeAttributeList, NULL, NULL))
+    if (File->FindAttributeInRecord(TypeAttributeList, NULL, NULL))
     {
         PAttribute Candidate;
 
@@ -196,8 +194,7 @@ MasterFileTable::FindFileNamePair(
     _Out_ PAttribute* NameAttribute,
     _Out_ PFileNameEx* NameValue,
     _Out_ PAttribute* AliasAttribute,
-    _Out_ PFileNameEx* AliasValue,
-    _In_ BOOLEAN FollowAttributeList)
+    _Out_ PFileNameEx* AliasValue)
 {
     ULONG Offset = 0;
     NTSTATUS Status;
@@ -218,8 +215,7 @@ MasterFileTable::FindFileNamePair(
             File,
             &Offset,
             &Attribute,
-            &Value,
-            FollowAttributeList);
+            &Value);
         if (!NT_SUCCESS(Status))
             return Status;
         if (!Attribute)
@@ -272,7 +268,7 @@ MasterFileTable::FindFileNamePair(
         PFileNameEx Value;
         UCHAR NameType = (*NameValue)->NameType;
 
-        Status = EnumerateFileNames(File, &Offset, &Attribute, &Value, FollowAttributeList);
+        Status = EnumerateFileNames(File, &Offset, &Attribute, &Value);
         if (!NT_SUCCESS(Status))
             return Status;
         if (!Attribute)
@@ -325,7 +321,7 @@ MasterFileTable::RemoveFileNameFromRecord(
     if (HasAlias)
         AliasString = CaptureAlias(AliasValue, AliasName);
 
-    Status = File->RemoveAttributeRecord(NameAttribute);
+    Status = File->RemoveListedAttribute(NameAttribute);
     if (!NT_SUCCESS(Status))
         return Status;
     if (!HasAlias)
@@ -341,7 +337,7 @@ MasterFileTable::RemoveFileNameFromRecord(
         &AliasValue);
     if (!NT_SUCCESS(Status))
         return Status;
-    return File->RemoveAttributeRecord(NameAttribute);
+    return File->RemoveListedAttribute(NameAttribute);
 }
 
 /* Rename temporarily keeps both names. A resident data stream can fill the
@@ -368,6 +364,8 @@ MasterFileTable::EnsureFileNameSpace(
     }
     /* A directory makes room by pushing its index root down on insert. */
     if (File->Header->Flags & FR_IS_DIRECTORY)
+        return STATUS_SUCCESS;
+    if (File->FindAttributeInRecord(TypeAttributeList, NULL, NULL))
         return STATUS_SUCCESS;
     if (File->Header->ActualSize > File->Header->AllocatedSize)
         return STATUS_FILE_CORRUPT_ERROR;
@@ -415,6 +413,7 @@ MasterFileTable::InsertFileNameLink(
     _In_ ULONGLONG ParentReference,
     _In_reads_(NameLength) PWCHAR Name,
     _In_ ULONG NameLength,
+    _In_ UCHAR NameType,
     _Out_ PAttribute* NewAttribute,
     _Out_ PFileNameEx* NewValue)
 {
@@ -442,7 +441,7 @@ MasterFileTable::InsertFileNameLink(
         FIELD_OFFSET(FileNameEx, NameLength));
     Value->ParentFileReference = ParentReference;
     Value->NameLength = (UCHAR)NameLength;
-    Value->NameType = NAME_TYPE_POSIX;
+    Value->NameType = NameType;
     if (!(File->Header->Flags & FR_IS_DIRECTORY))
     {
         PAttribute DataAttribute =
@@ -502,27 +501,118 @@ MasterFileTable::InsertFileNameLink(
 
     PAttribute Inserted;
 
-    Status = File->InsertResidentAttribute(
-        TypeFileName,
-        NULL,
-        &Inserted);
-    if (NT_SUCCESS(Status))
-    {
-        Status = File->ReplaceResidentData(
-            Inserted,
-            NewData,
-            NewDataLength);
-        if (!NT_SUCCESS(Status))
-            (void)File->RemoveAttributeRecord(Inserted);
-    }
+    Status = InsertFileNameAttribute(File, NewData, NewDataLength, &Inserted);
     delete[] NewData;
     if (!NT_SUCCESS(Status))
         return Status;
-    Inserted->Resident.IndexedFlag = 1;
     *NewAttribute = Inserted;
     *NewValue =
         reinterpret_cast<PFileNameEx>(
             GetResidentDataPointer(Inserted));
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+MasterFileTable::PlaceFileNameValue(
+    _In_ PFileRecord Record,
+    _In_reads_bytes_(Length) PUCHAR Value,
+    _In_ ULONG Length,
+    _Out_ PAttribute* Inserted)
+{
+    NTSTATUS Status;
+
+    Status = Record->InsertResidentAttribute(TypeFileName, NULL, Inserted);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = Record->ReplaceResidentData(*Inserted, Value, Length);
+    if (!NT_SUCCESS(Status))
+    {
+        (void)Record->RemoveAttributeRecord(*Inserted);
+        *Inserted = NULL;
+        return Status;
+    }
+    (*Inserted)->Resident.IndexedFlag = 1;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+MasterFileTable::InsertFileNameAttribute(
+    _In_ PFileRecord File,
+    _In_reads_bytes_(Length) PUCHAR Value,
+    _In_ ULONG Length,
+    _Out_ PAttribute* NewAttribute)
+{
+    ULONGLONG ExtentReferences[64];
+    ULONGLONG OwnerReference;
+    ULONG ExtentCount = 0;
+    PFileRecord Owner = File;
+    PFileRecord Allocated = NULL;
+    PAttribute Inserted = NULL;
+    USHORT AttributeId;
+    BOOLEAN OwnerReferenced = FALSE;
+    NTSTATUS Status;
+
+    *NewAttribute = NULL;
+    Status = PlaceFileNameValue(File, Value, Length, &Inserted);
+    if (!File->FindAttributeInRecord(TypeAttributeList, NULL, NULL))
+    {
+        *NewAttribute = Inserted;
+        return Status;
+    }
+
+    if (Status == STATUS_BUFFER_TOO_SMALL)
+    {
+        Status = CollectDistinctExtentReferences(File, ExtentReferences, RTL_NUMBER_OF(ExtentReferences),
+                                                 &ExtentCount);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Status = STATUS_BUFFER_TOO_SMALL;
+        for (ULONG Index = 0; Index < ExtentCount && Status == STATUS_BUFFER_TOO_SMALL; Index++)
+        {
+            Owner = File->GetExtentRecord(ExtentReferences[Index]);
+            if (!Owner)
+                return STATUS_FILE_CORRUPT_ERROR;
+            Status = PlaceFileNameValue(Owner, Value, Length, &Inserted);
+        }
+    }
+    if (Status == STATUS_BUFFER_TOO_SMALL)
+    {
+        Status = AllocateExtensionFileRecord(MakeFileReference(File->Header), &Allocated);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Owner = Allocated;
+        Status = Owner->SetAutomaticTimestampMask(0);
+        if (NT_SUCCESS(Status))
+            Status = PlaceFileNameValue(Owner, Value, Length, &Inserted);
+    }
+
+    if (NT_SUCCESS(Status) && Owner != File)
+        Status = WriteFileRecordToMFT(Owner);
+    if (NT_SUCCESS(Status))
+    {
+        AttributeId = Inserted->AttributeID;
+        OwnerReference = MakeFileReference(Owner->Header);
+        Status = File->InsertAttributeListEntry(Inserted, Owner, 0, FALSE, &OwnerReferenced);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        if (Inserted && NT_SUCCESS(Owner->RemoveAttributeRecord(Inserted)) && Owner != File && !Allocated)
+            (void)WriteFileRecordToMFT(Owner);
+        if (Allocated && !OwnerReferenced)
+            (void)DeallocateExtensionFileRecord(Allocated);
+        delete Allocated;
+        return Status;
+    }
+
+    if (Allocated)
+    {
+        delete Allocated;
+        Owner = File->GetExtentRecord(OwnerReference);
+        Inserted = Owner ? Owner->FindAttributeInRecord(TypeFileName, NULL, &AttributeId) : NULL;
+        if (!Inserted)
+            return STATUS_FILE_CORRUPT_ERROR;
+    }
+    *NewAttribute = Inserted;
     return STATUS_SUCCESS;
 }
 
@@ -1207,6 +1297,7 @@ MasterFileTable::CreateHardLink(
         NewParentReference,
         NewName,
         NewNameLength,
+        NAME_TYPE_POSIX,
         &NewAttribute,
         &NewValue);
     if (!NT_SUCCESS(Status))
@@ -1317,7 +1408,7 @@ MasterFileTable::ReconnectFile(
                 RtlCopyMemory(Source, Value, sizeof(Source));
                 NameType = (Value->NameType & NAME_TYPE_WIN32) ? NAME_TYPE_WIN32 : NAME_TYPE_POSIX;
             }
-            Status = File->RemoveAttributeRecord(NameAttribute);
+            Status = File->RemoveListedAttribute(NameAttribute);
             if (!NT_SUCCESS(Status))
                 return Status;
             Moved++;
@@ -1333,11 +1424,11 @@ MasterFileTable::ReconnectFile(
                                     NewParentReference,
                                     NewName,
                                     NameLength,
+                                    NameType,
                                     &NewAttribute,
                                     &NewValue);
         if (!NT_SUCCESS(Status))
             return Status;
-        NewValue->NameType = NameType;
         File->Header->HardLinkCount = (USHORT)(File->Header->HardLinkCount > Moved
                                                    ? File->Header->HardLinkCount - Moved + 1
                                                    : 1);
@@ -1356,8 +1447,16 @@ MasterFileTable::ReconnectFile(
             break;
         if (Value->ParentFileReference == OldParentReference)
         {
+            PFileRecord Owner = File->GetAttributeOwner(NameAttribute);
+
             Value->ParentFileReference = NewParentReference;
             Moved++;
+            if (Owner != File)
+            {
+                Status = Owner ? WriteFileRecordToMFT(Owner) : STATUS_FILE_CORRUPT_ERROR;
+                if (!NT_SUCCESS(Status))
+                    return Status;
+            }
         }
     }
     if (!Moved)
@@ -1409,7 +1508,7 @@ MasterFileTable::RemoveFileNamesUnderParent(
             return Status;
         if (!NameAttribute)
             break;
-        Status = File->RemoveAttributeRecord(NameAttribute);
+        Status = File->RemoveListedAttribute(NameAttribute);
         if (!NT_SUCCESS(Status))
             return Status;
         (*Removed)++;
@@ -1720,6 +1819,7 @@ MasterFileTable::RenameFile(
         NewParentReference,
         NewName,
         NewNameLength,
+        ShortNameLength ? NAME_TYPE_WIN32 : (OwnShortName ? NAME_TYPE_WIN32_AND_DOS : NAME_TYPE_POSIX),
         &NewAttribute,
         &NewValue);
     if (Status == STATUS_BUFFER_TOO_SMALL &&
@@ -1747,16 +1847,13 @@ MasterFileTable::RenameFile(
                 NewParentReference,
                 NewName,
                 NewNameLength,
+                ShortNameLength ? NAME_TYPE_WIN32 : (OwnShortName ? NAME_TYPE_WIN32_AND_DOS : NAME_TYPE_POSIX),
                 &NewAttribute,
                 &NewValue);
         }
     }
     if (!NT_SUCCESS(Status))
         goto Done;
-    if (ShortNameLength)
-        NewValue->NameType = NAME_TYPE_WIN32;
-    else if (OwnShortName)
-        NewValue->NameType = NAME_TYPE_WIN32_AND_DOS;
     Status = WriteFileRecordToMFT(Child);
     if (!NT_SUCCESS(Status))
         goto Done;
@@ -1824,6 +1921,7 @@ MasterFileTable::RenameFile(
                 NewParentReference,
                 ShortName,
                 ShortNameLength,
+                NAME_TYPE_DOS,
                 &NewAttribute,
                 &NewValue);
         }
@@ -1852,13 +1950,13 @@ MasterFileTable::RenameFile(
                     NewParentReference,
                     ShortName,
                     ShortNameLength,
+                    NAME_TYPE_DOS,
                     &NewAttribute,
                     &NewValue);
             }
         }
         if (!NT_SUCCESS(Status))
             goto Done;
-        NewValue->NameType = NAME_TYPE_DOS;
         Child->Header->HardLinkCount++;
     }
     Status = Child->StampChangeTime();
@@ -1888,7 +1986,7 @@ MasterFileTable::RenameFile(
                 NameValue);
         }
         if (!NT_SUCCESS(Status) && NameAttribute &&
-            NT_SUCCESS(Child->RemoveAttributeRecord(NameAttribute)))
+            NT_SUCCESS(Child->RemoveListedAttribute(NameAttribute)))
         {
             Child->Header->HardLinkCount--;
             (void)WriteFileRecordToMFT(Child);
@@ -1991,7 +2089,7 @@ MasterFileTable::GetPathFromFileReference(
 
         for (;;)
         {
-            Status = EnumerateFileNames(File, &Offset, &Attribute, &FileName, TRUE);
+            Status = EnumerateFileNames(File, &Offset, &Attribute, &FileName);
             if (!NT_SUCCESS(Status) || !FileName)
                 break;
             if (FileName->NameType != NAME_TYPE_DOS)
@@ -2049,7 +2147,7 @@ MasterFileTable::GetLinkName(
 
     RtlZeroMemory(LinkName, sizeof(*LinkName));
     Status = FindFileNamePair(File, ParentReference, Name,
-                             &NameAttribute, &NameValue, &AliasAttribute, &AliasValue, TRUE);
+                             &NameAttribute, &NameValue, &AliasAttribute, &AliasValue);
     if (!NT_SUCCESS(Status))
         return Status;
     if (NameValue->NameType == NAME_TYPE_DOS && AliasValue)
@@ -2074,7 +2172,7 @@ MasterFileTable::GetLinkShortName(
 
     RtlZeroMemory(ShortName, sizeof(*ShortName));
     Status = FindFileNamePair(File, ParentReference, Name,
-                             &NameAttribute, &NameValue, &AliasAttribute, &AliasValue, TRUE);
+                             &NameAttribute, &NameValue, &AliasAttribute, &AliasValue);
     if (!NT_SUCCESS(Status))
         return Status;
     if (NameValue->NameType != NAME_TYPE_DOS)
@@ -2130,7 +2228,7 @@ MasterFileTable::IsDescendantDirectory(
         }
         for (;;)
         {
-            Status = EnumerateFileNames(File, &Offset, &Attribute, &NameValue, TRUE);
+            Status = EnumerateFileNames(File, &Offset, &Attribute, &NameValue);
             if (!NT_SUCCESS(Status) || !NameValue)
                 break;
             if (ParentReference && ParentReference != NameValue->ParentFileReference)

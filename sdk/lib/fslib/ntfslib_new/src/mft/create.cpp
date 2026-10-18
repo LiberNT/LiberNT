@@ -475,11 +475,11 @@ MasterFileTable::CreateFileInDirectory(
                                     MakeFileReference(Parent->Header),
                                     ShortName,
                                     ShortNameLength,
+                                    NAME_TYPE_DOS,
                                     &ShortAttribute,
                                     &ShortValue);
         if (!NT_SUCCESS(Status))
             goto Rollback;
-        ShortValue->NameType = NAME_TYPE_DOS;
         NewFile->Header->HardLinkCount = 2;
 
         FileName = NULL;

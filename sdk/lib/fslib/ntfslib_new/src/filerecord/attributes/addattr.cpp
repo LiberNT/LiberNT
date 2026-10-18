@@ -1018,17 +1018,17 @@ FileRecord::InsertAttributeListEntry(
     if (!TargetAttribute || !AttributeOwner ||
         !AttributeOwner->Header ||
         !AttributeOwner->Data ||
-        AttributeOwner == this ||
         TimestampFields &
             ~NTFS_AUTOMATIC_TIMESTAMP_FIELDS)
     {
         return STATUS_INVALID_PARAMETER;
     }
-    if (GetFRNFromFileRef(
-            AttributeOwner->
-                Header->BaseFileRecord) !=
-            Header->MFTRecordNumber ||
-        AttributeOwner->Header->SequenceNumber == 0)
+    if (AttributeOwner != this &&
+        (GetFRNFromFileRef(
+             AttributeOwner->
+                 Header->BaseFileRecord) !=
+             Header->MFTRecordNumber ||
+         AttributeOwner->Header->SequenceNumber == 0))
     {
         return STATUS_FILE_CORRUPT_ERROR;
     }
@@ -1187,6 +1187,12 @@ FileRecord::InsertAttributeListEntry(
         {
             return STATUS_INVALID_PARAMETER;
         }
+        if (Comparison == 0 &&
+            GetFRNFromFileRef(Entry->BaseFileRef) >
+                AttributeOwner->Header->MFTRecordNumber)
+        {
+            Comparison = -1;
+        }
         if (Comparison < 0 &&
             InsertionOffset ==
                 AttributeListLength)
@@ -1270,7 +1276,8 @@ FileRecord::InsertAttributeListEntry(
     BaseFileReference =
         ((ULONGLONG)Header->SequenceNumber << 48) |
         Header->MFTRecordNumber;
-    if (AttributeOwner->
+    if (AttributeOwner != this &&
+        AttributeOwner->
             Header->BaseFileRecord !=
         BaseFileReference)
     {
@@ -1387,12 +1394,9 @@ FileRecord::FilterAttributeList(
     _Out_ PULONG DroppedNames,
     _Out_ PBOOLEAN DroppedUnnamedData)
 {
-    PAttribute ListAttribute;
     PUCHAR NewList;
     ULONG NewLength = 0;
     ULONG Offset = 0;
-    ULONG WrittenLength;
-    LARGE_INTEGER ListOffset = {};
     NTSTATUS Status;
 
     *Dropped = 0;
@@ -1440,42 +1444,8 @@ FileRecord::FilterAttributeList(
         return STATUS_SUCCESS;
     }
 
-    ListAttribute = FindAttributeInRecord(TypeAttributeList, NULL, NULL);
-    if (!ListAttribute)
-    {
-        Status = STATUS_FILE_CORRUPT_ERROR;
-    }
-    else if (!ListAttribute->IsNonResident)
-    {
-        Status = ReplaceResidentData(ListAttribute, NewList, NewLength);
-    }
-    else
-    {
-        WrittenLength = NewLength;
-        Status = WriteFileData(TypeAttributeList, NULL, NewList, &WrittenLength, &ListOffset);
-        if (NT_SUCCESS(Status) && WrittenLength != NewLength)
-            Status = STATUS_END_OF_FILE;
-        if (NT_SUCCESS(Status))
-        {
-            ListAttribute = FindAttributeInRecord(TypeAttributeList, NULL, NULL);
-            if (!ListAttribute || !ListAttribute->IsNonResident)
-            {
-                Status = STATUS_FILE_CORRUPT_ERROR;
-            }
-            else
-            {
-                ListAttribute->NonResident.DataSize = NewLength;
-                if (ListAttribute->NonResident.InitalizedDataSize > NewLength)
-                    ListAttribute->NonResident.InitalizedDataSize = NewLength;
-            }
-        }
-    }
+    Status = ReplaceAttributeList(NewList, NewLength);
     delete[] NewList;
-    delete[] AttributeListData;
-    AttributeListData = NULL;
-    AttributeListLength = 0;
-    ClearExtentCache();
-    ClearDataRunCache();
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -1511,6 +1481,125 @@ FileRecord::FilterAttributeList(
             DiskVolume->MFT->DeallocateExtensionFileRecord(Extension);
         delete Extension;
     }
+    return Status;
+}
+
+NTSTATUS
+FileRecord::ReplaceAttributeList(
+    _In_reads_bytes_(NewLength) PUCHAR NewList,
+    _In_ ULONG NewLength)
+{
+    PAttribute ListAttribute;
+    ULONG WrittenLength;
+    LARGE_INTEGER ListOffset = {};
+    NTSTATUS Status;
+
+    ListAttribute = FindAttributeInRecord(TypeAttributeList, NULL, NULL);
+    if (!ListAttribute)
+    {
+        Status = STATUS_FILE_CORRUPT_ERROR;
+    }
+    else if (!ListAttribute->IsNonResident)
+    {
+        Status = ReplaceResidentData(ListAttribute, NewList, NewLength);
+    }
+    else
+    {
+        WrittenLength = NewLength;
+        Status = WriteFileData(TypeAttributeList, NULL, NewList, &WrittenLength, &ListOffset);
+        if (NT_SUCCESS(Status) && WrittenLength != NewLength)
+            Status = STATUS_END_OF_FILE;
+        if (NT_SUCCESS(Status))
+        {
+            ListAttribute = FindAttributeInRecord(TypeAttributeList, NULL, NULL);
+            if (!ListAttribute || !ListAttribute->IsNonResident)
+            {
+                Status = STATUS_FILE_CORRUPT_ERROR;
+            }
+            else
+            {
+                ListAttribute->NonResident.DataSize = NewLength;
+                if (ListAttribute->NonResident.InitalizedDataSize > NewLength)
+                    ListAttribute->NonResident.InitalizedDataSize = NewLength;
+            }
+        }
+    }
+    delete[] AttributeListData;
+    AttributeListData = NULL;
+    AttributeListLength = 0;
+    ClearExtentCache();
+    ClearDataRunCache();
+    return Status;
+}
+
+NTSTATUS
+FileRecord::RemoveListedAttribute(
+    _In_ PAttribute TargetAttribute)
+{
+    FileRecord* Owner = GetAttributeOwner(TargetAttribute);
+    ULONG AttributeType;
+    USHORT AttributeId;
+    PUCHAR NewList;
+    ULONG NewLength = 0;
+    ULONG Offset = 0;
+    ULONG Matches = 0;
+    NTSTATUS Status;
+
+    if (!Owner)
+        return STATUS_INVALID_PARAMETER;
+    if (!FindAttributeInRecord(TypeAttributeList, NULL, NULL))
+        return Owner == this ? RemoveAttributeRecord(TargetAttribute) : STATUS_FILE_CORRUPT_ERROR;
+
+    Status = LoadAttributeList();
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    AttributeType = TargetAttribute->AttributeType;
+    AttributeId = TargetAttribute->AttributeID;
+    NewList = new(PagedPool, TAG_FILE_RECORD) UCHAR[AttributeListLength];
+    if (!NewList)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    while (Offset < AttributeListLength)
+    {
+        PAttributeListEx Entry = reinterpret_cast<PAttributeListEx>(AttributeListData + Offset);
+
+        if (!IsWritableAttributeListEntryValid(Entry, AttributeListLength - Offset))
+        {
+            delete[] NewList;
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        if (Entry->Type == AttributeType &&
+            Entry->AttributeId == AttributeId &&
+            GetFRNFromFileRef(Entry->BaseFileRef) == Owner->Header->MFTRecordNumber)
+        {
+            Matches++;
+        }
+        else
+        {
+            RtlCopyMemory(NewList + NewLength, Entry, Entry->RecordLength);
+            NewLength += Entry->RecordLength;
+        }
+        Offset += Entry->RecordLength;
+    }
+    if (Matches != 1)
+    {
+        delete[] NewList;
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+
+    Status = Owner->RemoveAttributeRecord(TargetAttribute);
+    if (NT_SUCCESS(Status) && Owner != this)
+    {
+        PAttribute First = reinterpret_cast<PAttribute>(Owner->Data + Owner->Header->AttributeOffset);
+
+        Status = First->AttributeType == TypeAttributeEndMarker
+            ? DiskVolume->MFT->DeallocateExtensionFileRecord(Owner)
+            : DiskVolume->MFT->WriteFileRecordToMFT(Owner);
+    }
+    if (NT_SUCCESS(Status))
+        Status = ReplaceAttributeList(NewList, NewLength);
+    delete[] NewList;
     return Status;
 }
 
