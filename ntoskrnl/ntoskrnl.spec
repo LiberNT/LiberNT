@@ -2825,7 +2825,7 @@
 @ stub -arch=win64 PoDeletePowerRequest
 @ stub -arch=arm64 PoDirectedDripsClearDeviceFlags
 @ stub -arch=arm64 PoDirectedDripsSetDeviceFlags
-@ stub -arch=win64 PoDisableSleepStates
+@ stdcall PoDisableSleepStates(long long ptr)
 @ stub -arch=win64 PoEndDeviceBusy
 @ stub -arch=win64 PoEnergyEstimationEnabled
 @ stub -arch=arm64 PoFxAddDeviceRelation
@@ -2853,7 +2853,7 @@
 @ stdcall PoNotifyVSyncChange(long)
 @ stdcall PoQueryPowerLimitAttributes(ptr long ptr ptr)
 @ stdcall PoQueryPowerLimitValue(ptr long ptr)
-@ stub -arch=win64 PoReenableSleepStates
+@ stdcall PoReenableSleepStates(ptr)
 @ stub -arch=win64 PoRegisterCoalescingCallback
 @ stub -arch=win64 PoRegisterForEffectivePowerModeNotifications
 @ stub -arch=win64 PoSetDeviceBusyEx

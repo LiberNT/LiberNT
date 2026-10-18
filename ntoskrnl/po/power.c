@@ -1844,6 +1844,53 @@ NtPowerInformation(IN POWER_INFORMATION_LEVEL PowerInformationLevel,
             break;
         }
 
+        case SystemPowerStateLogging:
+        {
+            if (InputBuffer != NULL || OutputBuffer == NULL || OutputBufferLength == 0)
+                return STATUS_INVALID_PARAMETER;
+
+            Status = PopQuerySleepDisableReasons(OutputBuffer, OutputBufferLength);
+            break;
+        }
+
+        case SystemPowerLoggingEntry:
+        {
+            if (PreviousMode != KernelMode)
+                return STATUS_ACCESS_DENIED;
+
+            Status = STATUS_NOT_IMPLEMENTED;
+            break;
+        }
+
+        case LastSleepTime:
+        case LastWakeTime:
+        {
+            ULONGLONG Time;
+
+            if (InputBuffer != NULL)
+                return STATUS_INVALID_PARAMETER;
+            if (OutputBufferLength < sizeof(ULONGLONG))
+                return STATUS_BUFFER_TOO_SMALL;
+
+            Time = (ULONGLONG)InterlockedCompareExchange64(PowerInformationLevel == LastSleepTime ?
+                                                           &PopLastSleepTime : &PopLastWakeTime,
+                                                           0,
+                                                           0);
+
+            _SEH2_TRY
+            {
+                RtlCopyMemory(OutputBuffer, &Time, sizeof(Time));
+                Status = STATUS_SUCCESS;
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+
+            break;
+        }
+
         case SystemPowerCapabilities:
         {
             PSYSTEM_POWER_CAPABILITIES PowerCapabilities = (PSYSTEM_POWER_CAPABILITIES)OutputBuffer;

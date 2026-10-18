@@ -366,6 +366,16 @@ PopSleepSystem(
     _In_ ULONG Flags
 );
 
+NTSTATUS
+NTAPI
+PopQuerySleepDisableReasons(
+    _Out_writes_bytes_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength
+);
+
+extern volatile LONG64 PopLastSleepTime;
+extern volatile LONG64 PopLastWakeTime;
+
 VOID
 NTAPI
 PopCleanupPowerState(

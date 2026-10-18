@@ -36,17 +36,211 @@ typedef struct _POP_SLEEP_IRP_CONTEXT
     PDEVICE_OBJECT TopDeviceObject;
 } POP_SLEEP_IRP_CONTEXT, *PPOP_SLEEP_IRP_CONTEXT;
 
+typedef struct _POP_SLEEP_DISABLE
+{
+    LIST_ENTRY Link;
+    SYSTEM_POWER_STATE_DISABLE_REASON Reason;
+    ULONG Information[2];
+} POP_SLEEP_DISABLE, *PPOP_SLEEP_DISABLE;
+
 #define POP_SLEEP_TAG 'lSoP'
 
 static POWER_STATE_HANDLER PopStateHandlers[PowerStateMaximum];
 static KGUARDED_MUTEX PopStateHandlerLock;
 static volatile LONG PopSleepInProgress;
+static LIST_ENTRY PopSleepDisableList;
+static POP_SLEEP_DISABLE PopAoAcDisable;
+volatile LONG64 PopLastSleepTime;
+volatile LONG64 PopLastWakeTime;
+
+static
+VOID
+PopSetAffectedStates(
+    _Out_ PSYSTEM_POWER_STATE_DISABLE_REASON Reason,
+    _In_ ULONG SleepMask)
+{
+    Reason->AffectedState[PoDisabledStateSleeping1] = (SleepMask & PO_REASON_STATE_S1) != 0;
+    Reason->AffectedState[PoDisabledStateSleeping2] = (SleepMask & PO_REASON_STATE_S2) != 0;
+    Reason->AffectedState[PoDisabledStateSleeping3] = (SleepMask & PO_REASON_STATE_S3) != 0;
+    Reason->AffectedState[PoDisabledStateSleeping4] = (SleepMask & PO_REASON_STATE_S4) != 0;
+    Reason->AffectedState[PoDisabledStateSleeping0Idle] = (SleepMask & PO_REASON_STATE_S0IDLE) != 0;
+    Reason->AffectedState[PoDisabledStateSleeping4Firmware] = (SleepMask & PO_REASON_STATE_S4FIRM) != 0;
+}
+
+static
+VOID
+PopUpdateSleepCapabilities(VOID)
+{
+    BOOLEAN Disabled[POWER_STATE_DISABLED_TYPE_MAX] = {FALSE};
+    PPOP_SLEEP_DISABLE Disable;
+    PLIST_ENTRY Entry;
+    ULONG i;
+
+    for (Entry = PopSleepDisableList.Flink; Entry != &PopSleepDisableList; Entry = Entry->Flink)
+    {
+        Disable = CONTAINING_RECORD(Entry, POP_SLEEP_DISABLE, Link);
+        for (i = 0; i < POWER_STATE_DISABLED_TYPE_MAX; i++)
+            Disabled[i] |= Disable->Reason.AffectedState[i];
+    }
+
+    PopCapabilities.SystemS1 = PopStateHandlers[PowerStateSleeping1].Handler != NULL &&
+                               !Disabled[PoDisabledStateSleeping1];
+    PopCapabilities.SystemS2 = PopStateHandlers[PowerStateSleeping2].Handler != NULL &&
+                               !Disabled[PoDisabledStateSleeping2];
+    PopCapabilities.SystemS3 = PopStateHandlers[PowerStateSleeping3].Handler != NULL &&
+                               !Disabled[PoDisabledStateSleeping3];
+}
+
+static
+BOOLEAN
+PopIsSleepStateEnabled(
+    _In_ SYSTEM_POWER_STATE SystemState)
+{
+    switch (SystemState)
+    {
+        case PowerSystemSleeping1:
+            return PopCapabilities.SystemS1;
+        case PowerSystemSleeping2:
+            return PopCapabilities.SystemS2;
+        case PowerSystemSleeping3:
+            return PopCapabilities.SystemS3;
+        default:
+            return FALSE;
+    }
+}
 
 VOID
 NTAPI
 PopInitializeSleepSupport(VOID)
 {
     KeInitializeGuardedMutex(&PopStateHandlerLock);
+    InitializeListHead(&PopSleepDisableList);
+
+    PopAoAcDisable.Reason.PowerReasonCode = SPSD_REASON_AOAC_NOBIOSSUPPORT;
+    PopSetAffectedStates(&PopAoAcDisable.Reason, PO_REASON_STATE_S0IDLE);
+    InsertTailList(&PopSleepDisableList, &PopAoAcDisable.Link);
+}
+
+NTSTATUS
+NTAPI
+PoDisableSleepStates(
+    _In_ PO_SLEEP_DISABLE_REASON Reason,
+    _In_ ULONG SleepMask,
+    _Outptr_ PVOID *Token)
+{
+    PPOP_SLEEP_DISABLE Disable;
+
+    PAGED_CODE();
+
+    if ((ULONG)Reason >= PoSleepDisableReasonMax ||
+        SleepMask == 0 ||
+        (SleepMask & ~(PO_REASON_STATE_ALL | PO_REASON_STATE_S0IDLE)) != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Disable = ExAllocatePoolZero(PagedPool, sizeof(*Disable), POP_SLEEP_TAG);
+    if (Disable == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Disable->Reason.PowerReasonCode = SPSD_REASON_INTERNALLYDISABLED;
+    Disable->Reason.PowerReasonLength = sizeof(Disable->Information);
+    Disable->Information[0] = Reason;
+    Disable->Information[1] = SleepMask;
+    PopSetAffectedStates(&Disable->Reason, SleepMask);
+
+    KeAcquireGuardedMutex(&PopStateHandlerLock);
+    InsertTailList(&PopSleepDisableList, &Disable->Link);
+    PopUpdateSleepCapabilities();
+    KeReleaseGuardedMutex(&PopStateHandlerLock);
+
+    DPRINT1("Sleep states 0x%lx disabled, reason %u\n", SleepMask, Reason);
+    *Token = Disable;
+    return STATUS_SUCCESS;
+}
+
+VOID
+NTAPI
+PoReenableSleepStates(
+    _In_ PVOID Token)
+{
+    PPOP_SLEEP_DISABLE Disable = Token;
+
+    PAGED_CODE();
+
+    KeAcquireGuardedMutex(&PopStateHandlerLock);
+    RemoveEntryList(&Disable->Link);
+    PopUpdateSleepCapabilities();
+    KeReleaseGuardedMutex(&PopStateHandlerLock);
+
+    DPRINT1("Sleep states 0x%lx reenabled, reason %lu\n",
+            Disable->Information[1], Disable->Information[0]);
+    ExFreePoolWithTag(Disable, POP_SLEEP_TAG);
+}
+
+NTSTATUS
+NTAPI
+PopQuerySleepDisableReasons(
+    _Out_writes_bytes_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    PPOP_SLEEP_DISABLE Disable;
+    PLIST_ENTRY Entry;
+    PUCHAR Snapshot;
+    ULONG RecordLength;
+    ULONG Length;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    KeAcquireGuardedMutex(&PopStateHandlerLock);
+
+    Length = sizeof(ULONG);
+    for (Entry = PopSleepDisableList.Flink; Entry != &PopSleepDisableList; Entry = Entry->Flink)
+    {
+        Disable = CONTAINING_RECORD(Entry, POP_SLEEP_DISABLE, Link);
+        Length += sizeof(Disable->Reason) + Disable->Reason.PowerReasonLength;
+    }
+
+    if (OutputBufferLength < Length)
+    {
+        KeReleaseGuardedMutex(&PopStateHandlerLock);
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    Snapshot = ExAllocatePoolWithTag(PagedPool, Length, POP_SLEEP_TAG);
+    if (Snapshot == NULL)
+    {
+        KeReleaseGuardedMutex(&PopStateHandlerLock);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    *(PULONG)Snapshot = Length;
+    RecordLength = sizeof(ULONG);
+    for (Entry = PopSleepDisableList.Flink; Entry != &PopSleepDisableList; Entry = Entry->Flink)
+    {
+        Disable = CONTAINING_RECORD(Entry, POP_SLEEP_DISABLE, Link);
+        RtlCopyMemory(Snapshot + RecordLength, &Disable->Reason, sizeof(Disable->Reason));
+        RecordLength += sizeof(Disable->Reason);
+        RtlCopyMemory(Snapshot + RecordLength, Disable->Information, Disable->Reason.PowerReasonLength);
+        RecordLength += Disable->Reason.PowerReasonLength;
+    }
+
+    KeReleaseGuardedMutex(&PopStateHandlerLock);
+
+    _SEH2_TRY
+    {
+        RtlCopyMemory(OutputBuffer, Snapshot, Length);
+        Status = STATUS_SUCCESS;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    ExFreePoolWithTag(Snapshot, POP_SLEEP_TAG);
+    return Status;
 }
 
 NTSTATUS
@@ -69,15 +263,12 @@ PopRegisterPowerStateHandler(
     switch (PowerStateHandler->Type)
     {
         case PowerStateSleeping1:
-            PopCapabilities.SystemS1 = TRUE;
             SystemState = PowerSystemSleeping1;
             break;
         case PowerStateSleeping2:
-            PopCapabilities.SystemS2 = TRUE;
             SystemState = PowerSystemSleeping2;
             break;
         case PowerStateSleeping3:
-            PopCapabilities.SystemS3 = TRUE;
             SystemState = PowerSystemSleeping3;
             break;
         case PowerStateShutdownOff:
@@ -94,6 +285,7 @@ PopRegisterPowerStateHandler(
         PopCapabilities.RtcWake = SystemState;
     }
 
+    PopUpdateSleepCapabilities();
     KeReleaseGuardedMutex(&PopStateHandlerLock);
 
     DPRINT1("Power state handler %u registered\n", PowerStateHandler->Type);
@@ -121,7 +313,7 @@ PopChooseSleepState(
     for (State = LightestSystemState; State <= PowerSystemSleeping3; State++)
     {
         Type = PowerStateSleeping1 + (State - PowerSystemSleeping1);
-        if (PopStateHandlers[Type].Handler == NULL)
+        if (!PopIsSleepStateEnabled(State))
             continue;
 
         Chosen = State;
@@ -439,12 +631,16 @@ PopSleepSystem(
         Call.NumberProcessors = KeNumberProcessors;
         Call.Number = 0;
         Call.Status = STATUS_UNSUCCESSFUL;
+        InterlockedExchange64(&PopLastSleepTime, (LONG64)KeQueryInterruptTime());
         KdSave(TRUE);
         KeIpiGenericCall(PopSleepIpiWorker, (ULONG_PTR)&Call);
         KdRestore(TRUE);
         Status = Call.Status;
         if (NT_SUCCESS(Status))
+        {
+            InterlockedExchange64(&PopLastWakeTime, (LONG64)KeQueryInterruptTime());
             DPRINT1("Resumed from sleep state S%u\n", SystemState - PowerSystemWorking);
+        }
         else
             DPRINT1("The platform did not enter S%u: 0x%08lx\n",
                     SystemState - PowerSystemWorking, Status);

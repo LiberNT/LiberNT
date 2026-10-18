@@ -638,6 +638,99 @@ typedef struct {
   ULONG DefaultAlert2;
 } SYSTEM_BATTERY_STATE, *PSYSTEM_BATTERY_STATE;
 
+#define SPSD_REASON_NONE                  0x00000000
+#define SPSD_REASON_NOBIOSSUPPORT         0x00000001
+#define SPSD_REASON_BIOSINCOMPATIBLE      0x00000002
+#define SPSD_REASON_NOOSPM                0x00000003
+#define SPSD_REASON_LEGACYDRIVER          0x00000004
+#define SPSD_REASON_HIBERSTACK            0x00000005
+#define SPSD_REASON_HIBERFILE             0x00000006
+#define SPSD_REASON_POINTERNAL            0x00000007
+#define SPSD_REASON_MEMORYLIMIT           0x00000008
+#define SPSD_REASON_MPOVERRIDE            0x00000009
+#define SPSD_REASON_DRIVERDOWNGRADE       0x0000000A
+#define SPSD_REASON_PREVIOUSATTEMPTFAILED 0x0000000B
+#define SPSD_REASON_UNKNOWN               0x0000000C
+#define SPSD_REASON_INTERNALLYDISABLED    0x0000000D
+#define SPSD_REASON_DISABLEDBYPOLICY      0x0000000E
+#define SPSD_REASON_UPGRADEINPROGRESS     0x0000000F
+#define SPSD_REASON_WINPEMODE             0x00000010
+#define SPSD_REASON_OSOVERRIDE            0x00000011
+#define SPSD_REASON_HYPERVISOR            0x00000012
+#define SPSD_REASON_AOAC_NOBIOSSUPPORT    0x00000013
+#define SPSD_REASON_AOAC_HARDWARECHECKS   0x00000014
+#define SPSD_REASON_DEVICE_GUARD          0x00000015
+#define SPSD_REASON_HIBERNATE_NOT_SUPPORTED 0x00000016
+#define SPSD_REASON_BOOTVA_RESOURCE       0x00000017
+#define SPSD_REASON_HIBERNATE_CONTEXT_RESOURCE 0x00000018
+#define SPSD_REASON_HIBERNATE_MEM_PREALLOCATE 0x00000019
+#define SPSD_REASON_MAX                   SPSD_REASON_HIBERNATE_MEM_PREALLOCATE
+
+#define PO_REASON_STATE_S1                0x00000001
+#define PO_REASON_STATE_S2                0x00000002
+#define PO_REASON_STATE_S3                0x00000004
+#define PO_REASON_STATE_S4                0x00000008
+#define PO_REASON_STATE_S4FIRM            0x00000010
+#define PO_REASON_STATE_S0IDLE            0x00000020
+
+#define PO_REASON_STATE_STANDBY           (PO_REASON_STATE_S1 | \
+                                           PO_REASON_STATE_S2 | \
+                                           PO_REASON_STATE_S3)
+
+#define PO_REASON_STATE_ALL               (PO_REASON_STATE_STANDBY | \
+                                           PO_REASON_STATE_S4 | \
+                                           PO_REASON_STATE_S4FIRM)
+
+typedef enum {
+  PoDisabledStateSleeping1 = 0,
+  PoDisabledStateSleeping2 = 1,
+  PoDisabledStateSleeping3 = 2,
+  PoDisabledStateSleeping4 = 3,
+  PoDisabledStateSleeping0Idle = 4,
+  PoDisabledStateReserved5 = 5,
+  PoDisabledStateSleeping4Firmware = 6,
+  PoDisabledStateMaximum = 7
+} POWER_STATE_DISABLED_TYPE, PPOWER_STATE_DISABLED_TYPE;
+
+#define POWER_STATE_DISABLED_TYPE_MAX     8
+
+typedef struct _SYSTEM_POWER_LOGGING_ENTRY {
+  ULONG Reason;
+  ULONG States;
+} SYSTEM_POWER_LOGGING_ENTRY, *PSYSTEM_POWER_LOGGING_ENTRY;
+
+typedef struct _SYSTEM_POWER_STATE_DISABLE_REASON {
+  BOOLEAN AffectedState[POWER_STATE_DISABLED_TYPE_MAX];
+  ULONG PowerReasonCode;
+  ULONG PowerReasonLength;
+} SYSTEM_POWER_STATE_DISABLE_REASON, *PSYSTEM_POWER_STATE_DISABLE_REASON;
+
+typedef enum _PO_SLEEP_DISABLE_REASON {
+  PoSleepDisableReasonVideo = 0,
+  PoSleepDisableReasonHypervisor,
+  PoSleepDisableReasonVhdBoot,
+  PoSleepDisableReasonPortableWorkspace,
+  PoSleepDisableReasonPolicy,
+  PoSleepDisableReasonGuardedHost,
+  PoSleepDisableReasonMax
+} PO_SLEEP_DISABLE_REASON, *PPO_SLEEP_DISABLE_REASON;
+
+_IRQL_requires_max_(APC_LEVEL)
+NTKERNELAPI
+NTSTATUS
+NTAPI
+PoDisableSleepStates(
+  _In_ PO_SLEEP_DISABLE_REASON Reason,
+  _In_ ULONG SleepMask,
+  _Outptr_ PVOID *Token);
+
+_IRQL_requires_max_(APC_LEVEL)
+NTKERNELAPI
+VOID
+NTAPI
+PoReenableSleepStates(
+  _In_ PVOID Token);
+
 typedef struct _PROCESSOR_POWER_INFORMATION {
   ULONG Number;
   ULONG MaxMhz;
