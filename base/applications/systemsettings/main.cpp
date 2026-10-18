@@ -317,6 +317,10 @@ protected:
         }
         ApplyControlTheme(m_Search);
         ApplyControlTheme(m_ScrollBar);
+        if (m_Crumbs)
+            SendMessageW(m_Crumbs, WM_SETFONT, (WPARAM)m_Theme.Font(TextStyle::Title), TRUE);
+        if (m_NavTree)
+            SendMessageW(m_NavTree, WM_SETFONT, (WPARAM)m_Theme.Font(TextStyle::Body), TRUE);
     }
 
     bool LightControls() const
@@ -2144,6 +2148,65 @@ PageFromCommandLine(LPCWSTR commandLine, PageId *page, std::wstring *param)
     }
 }
 
+class DumpHost : public SettingsHost
+{
+public:
+    HWND Window() const override { return NULL; }
+    void Refresh() override {}
+    void Open(PageId page, const std::wstring &param) override {}
+    void Back() override {}
+    void RunJob(std::function<void()> work, std::function<void()> done) override
+    {
+        if (work)
+            work();
+        if (done)
+            done();
+    }
+    void SetTimerRefresh(UINT milliseconds) override {}
+};
+
+static int
+DumpSettingRows(VOID)
+{
+    DumpHost host;
+    const PageInfo *pages;
+    UINT count, i;
+
+    pages = PageTable(&count);
+    for (i = 0; i < count; i++)
+    {
+        PageBuilder page(&host, std::wstring(), false);
+
+        if (!pages[i].Build || pages[i].Id == PageId::BootEntry)
+            continue;
+        pages[i].Build(page);
+        for (const SettingGroup &group : page.Groups)
+        {
+            for (const SettingRow &row : group.Rows)
+            {
+                std::wstring value;
+
+                if (row.Kind == RowKind::Toggle)
+                    value = row.Checked ? L"on" : L"off";
+                else if (row.Kind == RowKind::Choice)
+                    value = row.Selected >= 0 && row.Selected < (int)row.Options.size() ? row.Options[row.Selected]
+                                                                                       : L"(none)";
+                else if (row.Kind == RowKind::Slider)
+                    value = Printf(L"%d", row.Position);
+                else if (row.Kind == RowKind::Info)
+                    value = row.Value;
+                else
+                    continue;
+                OutputDebugStringW(Printf(L"SETDUMP: %s | %s | %s | %s%s\r\n", pages[i].Uri ? pages[i].Uri : L"-",
+                                          group.Title.c_str(), row.Title.c_str(), value.c_str(),
+                                          row.Enabled ? L"" : L" (disabled)").c_str());
+            }
+        }
+    }
+    OutputDebugStringW(L"SETDUMP: DONE\r\n");
+    return 0;
+}
+
 int WINAPI
 wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR commandLine, int showCmd)
 {
@@ -2162,7 +2225,18 @@ wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR commandLine, int showCmd
     argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argv && argc >= 3 && !lstrcmpiW(argv[1], L"/selftest"))
     {
-        int failures = RunBootLoaderSelfTest(argv[2], argc >= 4 ? argv[3] : NULL);
+        int failures;
+
+        if (!lstrcmpiW(argv[2], L"settings-dump"))
+        {
+            CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+            failures = DumpSettingRows();
+            CoUninitialize();
+        }
+        else
+        {
+            failures = RunBootLoaderSelfTest(argv[2], argc >= 4 ? argv[3] : NULL);
+        }
 
         LocalFree(argv);
         return failures;
