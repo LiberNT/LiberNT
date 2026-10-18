@@ -588,7 +588,7 @@ HalpGrowMapBuffers(IN PADAPTER_OBJECT AdapterObject,
                 PreviousEntry = CurrentEntry - 1;
                 if ((PreviousEntry->PhysicalAddress.LowPart + PAGE_SIZE) == PhysicalAddress.LowPart)
                 {
-                    if (!HalpEisaDma)
+                    if (!HalpEisaDma && !AdapterObject->Dma32BitAddresses)
                     {
                         if ((PreviousEntry->PhysicalAddress.LowPart ^ PhysicalAddress.LowPart) & 0xFFFF0000)
                         {
