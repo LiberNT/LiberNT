@@ -68,7 +68,8 @@ MonitorCreateClose(
     _In_ PDEVICE_OBJECT DeviceObject,
     _Inout_ PIRP Irp)
 {
-    UNREFERENCED_PARAMETER(DeviceObject);
+    if (DeviceObject->DeviceType == FILE_DEVICE_VIDEO)
+        return MonitorLcdDispatch(DeviceObject, Irp);
     return MonitorCompleteRequest(Irp, STATUS_SUCCESS, 0);
 }
 
@@ -79,8 +80,18 @@ MonitorDeviceControl(
     _In_ PDEVICE_OBJECT DeviceObject,
     _Inout_ PIRP Irp)
 {
-    UNREFERENCED_PARAMETER(DeviceObject);
-    return MonitorCompleteRequest(Irp, STATUS_NOT_SUPPORTED, 0);
+    PMONITOR_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    NTSTATUS Status;
+
+    if (DeviceObject->DeviceType == FILE_DEVICE_VIDEO)
+        return MonitorLcdDispatch(DeviceObject, Irp);
+
+    Status = IoAcquireRemoveLock(&DeviceExtension->RemoveLock, Irp);
+    if (!NT_SUCCESS(Status))
+        return MonitorCompleteRequest(Irp, Status, 0);
+    Status = MonitorBrightnessDeviceControl(DeviceExtension, Irp);
+    IoReleaseRemoveLock(&DeviceExtension->RemoveLock, Irp);
+    return MonitorCompleteRequest(Irp, Status, Irp->IoStatus.Information);
 }
 
 static
@@ -140,13 +151,17 @@ MonitorPnp(
         case IRP_MN_START_DEVICE:
             Status = MonitorForwardSynchronously(DeviceExtension, Irp);
             if (NT_SUCCESS(Status))
+            {
+                MonitorBrightnessStart(DeviceExtension);
                 MonitorWmiRegister(DeviceExtension);
+            }
             IoReleaseRemoveLock(&DeviceExtension->RemoveLock, Irp);
             return MonitorCompleteRequest(Irp, Status, Irp->IoStatus.Information);
 
         case IRP_MN_REMOVE_DEVICE:
             MonitorWmiDeregister(DeviceExtension);
             IoReleaseRemoveLockAndWait(&DeviceExtension->RemoveLock, Irp);
+            MonitorBrightnessStop(DeviceExtension);
             Irp->IoStatus.Status = STATUS_SUCCESS;
             IoSkipCurrentIrpStackLocation(Irp);
             Status = IoCallDriver(DeviceExtension->LowerDevice, Irp);
@@ -273,6 +288,7 @@ DriverEntry(
     MonitorRegistryPath.Length = RegistryPath->Length;
     MonitorRegistryPath.MaximumLength = RegistryPath->Length + sizeof(WCHAR);
     MonitorRegistryPath.Buffer[RegistryPath->Length / sizeof(WCHAR)] = UNICODE_NULL;
+    MonitorBrightnessInitialize();
 
     for (Index = 0; Index <= IRP_MJ_MAXIMUM_FUNCTION; Index++)
         DriverObject->MajorFunction[Index] = MonitorUnsupported;

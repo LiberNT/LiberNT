@@ -61,9 +61,11 @@ static const GUID *MonitorWmiGuids[MonitorWmiBlockCount] =
     &WmiMonitorColorCharacteristics_GUID,
     &WmiMonitorListedSupportedSourceModes_GUID,
     &WmiMonitorDescriptorMethods_GUID,
+    &WmiMonitorBrightness_GUID,
+    &WmiMonitorBrightnessMethods_GUID,
+    &WmiMonitorBrightnessEvent_GUID,
 };
 
-static
 NTSTATUS
 MonitorQueryDescriptor(
     _In_ PMONITOR_DEVICE_EXTENSION DeviceExtension,
@@ -604,6 +606,41 @@ MonitorQueryWmiDataBlock(
     if (InstanceIndex != 0 || InstanceCount != 1)
         return WmiCompleteRequest(DeviceObject, Irp, STATUS_WMI_INSTANCE_NOT_FOUND, 0, IO_NO_INCREMENT);
 
+    if (DeviceExtension->Blocks[GuidIndex] == MonitorWmiBrightness)
+    {
+        PWmiMonitorBrightness Block = (PWmiMonitorBrightness)Buffer;
+        UCHAR Current, Levels[101];
+        ULONG Count;
+
+        Status = MonitorBrightnessQuery(DeviceExtension, &Current, Levels, sizeof(Levels), &Count);
+        if (NT_SUCCESS(Status))
+        {
+            Needed = FIELD_OFFSET(WmiMonitorBrightness, Level) + Count;
+            if (!Buffer || BufferAvail < Needed)
+            {
+                Status = STATUS_BUFFER_TOO_SMALL;
+            }
+            else
+            {
+                Block->CurrentBrightness = Current;
+                Block->Levels = Count;
+                RtlCopyMemory(Block->Level, Levels, Count);
+                if (InstanceLengthArray)
+                    InstanceLengthArray[0] = Needed;
+            }
+        }
+        return WmiCompleteRequest(DeviceObject, Irp, Status, Needed, IO_NO_INCREMENT);
+    }
+    if (DeviceExtension->Blocks[GuidIndex] == MonitorWmiBrightnessMethods)
+    {
+        Needed = 0;
+        if (InstanceLengthArray)
+            InstanceLengthArray[0] = 0;
+        return WmiCompleteRequest(DeviceObject, Irp, STATUS_SUCCESS, Needed, IO_NO_INCREMENT);
+    }
+    if (DeviceExtension->Blocks[GuidIndex] == MonitorWmiBrightnessEvent)
+        return WmiCompleteRequest(DeviceObject, Irp, STATUS_WMI_GUID_NOT_FOUND, 0, IO_NO_INCREMENT);
+
     Status = MonitorQueryDescriptor(DeviceExtension, &Descriptor);
     if (!NT_SUCCESS(Status))
         return WmiCompleteRequest(DeviceObject, Irp, Status, 0, IO_NO_INCREMENT);
@@ -647,6 +684,34 @@ MonitorExecuteWmiMethod(
 
     if (GuidIndex >= DeviceExtension->WmiLibContext.GuidCount || InstanceIndex != 0)
         return WmiCompleteRequest(DeviceObject, Irp, STATUS_WMI_INSTANCE_NOT_FOUND, 0, IO_NO_INCREMENT);
+    if (DeviceExtension->Blocks[GuidIndex] == MonitorWmiBrightnessMethods)
+    {
+        switch (MethodId)
+        {
+            case WmiSetBrightness:
+                if (InBufferSize < WmiSetBrightness_IN_SIZE)
+                    Status = STATUS_INVALID_PARAMETER;
+                else if (((PWmiSetBrightness_IN)Buffer)->Brightness > 100)
+                    Status = STATUS_INVALID_PARAMETER;
+                else
+                    Status = MonitorBrightnessSetCurrent(DeviceExtension, ((PWmiSetBrightness_IN)Buffer)->Brightness);
+                break;
+
+            case WmiRevertToPolicyBrightness:
+                Status = MonitorBrightnessRevert(DeviceExtension);
+                break;
+
+            case WmiSetALSBrightnessState:
+            case WmiSetALSBrightness:
+                Status = STATUS_NOT_SUPPORTED;
+                break;
+
+            default:
+                Status = STATUS_WMI_ITEMID_NOT_FOUND;
+                break;
+        }
+        return WmiCompleteRequest(DeviceObject, Irp, Status, 0, IO_NO_INCREMENT);
+    }
     if (DeviceExtension->Blocks[GuidIndex] != MonitorWmiDescriptorMethods)
         return WmiCompleteRequest(DeviceObject, Irp, STATUS_INVALID_DEVICE_REQUEST, 0, IO_NO_INCREMENT);
     if (MethodId != WmiGetMonitorRawEEdidV1Block)
@@ -679,6 +744,47 @@ MonitorExecuteWmiMethod(
     }
     ExFreePoolWithTag(Descriptor, MONITOR_TAG);
     return WmiCompleteRequest(DeviceObject, Irp, Status, Needed, IO_NO_INCREMENT);
+}
+
+static
+NTSTATUS
+NTAPI
+MonitorWmiFunctionControl(
+    _Inout_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp,
+    _In_ ULONG GuidIndex,
+    _In_ WMIENABLEDISABLECONTROL Function,
+    _In_ BOOLEAN Enable)
+{
+    PMONITOR_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+
+    PAGED_CODE();
+
+    if (GuidIndex < DeviceExtension->WmiLibContext.GuidCount && Function == WmiEventControl &&
+        DeviceExtension->Blocks[GuidIndex] == MonitorWmiBrightnessEvent)
+    {
+        DeviceExtension->BrightnessEvents = Enable;
+    }
+    return WmiCompleteRequest(DeviceObject, Irp, STATUS_SUCCESS, 0, IO_NO_INCREMENT);
+}
+
+VOID
+MonitorWmiBrightnessChanged(
+    _In_ PMONITOR_DEVICE_EXTENSION DeviceExtension,
+    _In_ UCHAR Level)
+{
+    PWmiMonitorBrightnessEvent Event;
+
+    PAGED_CODE();
+
+    if (!DeviceExtension->WmiRegistered || !DeviceExtension->BrightnessEvents)
+        return;
+
+    Event = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Event), MONITOR_TAG);
+    if (!Event)
+        return;
+    Event->Brightness = Level;
+    WmiFireEvent(DeviceExtension->DeviceObject, (LPGUID)&WmiMonitorBrightnessEvent_GUID, 0, sizeof(*Event), Event);
 }
 
 VOID
@@ -717,18 +823,26 @@ MonitorWmiRegister(
         DeviceExtension->Blocks[Count++] = MonitorWmiConnectionParams;
     }
     ExFreePoolWithTag(Descriptor, MONITOR_TAG);
+    if (MonitorBrightnessSupported(DeviceExtension))
+    {
+        DeviceExtension->Blocks[Count++] = MonitorWmiBrightness;
+        DeviceExtension->Blocks[Count++] = MonitorWmiBrightnessMethods;
+        DeviceExtension->Blocks[Count++] = MonitorWmiBrightnessEvent;
+    }
 
     for (Index = 0; Index < Count; Index++)
     {
         DeviceExtension->GuidList[Index].Guid = MonitorWmiGuids[DeviceExtension->Blocks[Index]];
         DeviceExtension->GuidList[Index].InstanceCount = 1;
-        DeviceExtension->GuidList[Index].Flags = 0;
+        DeviceExtension->GuidList[Index].Flags =
+            DeviceExtension->Blocks[Index] == MonitorWmiBrightnessEvent ? WMIREG_FLAG_EVENT_ONLY_GUID : 0;
     }
     DeviceExtension->WmiLibContext.GuidCount = Count;
     DeviceExtension->WmiLibContext.GuidList = DeviceExtension->GuidList;
     DeviceExtension->WmiLibContext.QueryWmiRegInfo = MonitorQueryWmiRegInfo;
     DeviceExtension->WmiLibContext.QueryWmiDataBlock = MonitorQueryWmiDataBlock;
     DeviceExtension->WmiLibContext.ExecuteWmiMethod = MonitorExecuteWmiMethod;
+    DeviceExtension->WmiLibContext.WmiFunctionControl = MonitorWmiFunctionControl;
 
     DeviceExtension->WmiRegistered = TRUE;
     Status = IoWMIRegistrationControl(DeviceExtension->DeviceObject, WMIREG_ACTION_REGISTER);
