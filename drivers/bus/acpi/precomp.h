@@ -19,6 +19,7 @@
 #include <reactos/hal/acpi_pci.h>
 #include <reactos/drivers/acpi/acpipci.h>
 #include <reactos/drivers/acpi/acpisystem.h>
+#include <reactos/drivers/acpi/acpipm.h>
 
 BOOLEAN
 OslInitializeExecQueue(VOID);

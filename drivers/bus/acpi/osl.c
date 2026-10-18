@@ -1480,6 +1480,9 @@ AcpiOsEnterSleep(
     UINT32 RegaValue,
     UINT32 RegbValue)
 {
+    if (AcpiPmHalSleep)
+        return AE_CTRL_TERMINATE;
+
 #if defined(_M_IX86) || defined(_M_AMD64)
     ASSERT((__readeflags() & 0x200) == 0);
 #endif

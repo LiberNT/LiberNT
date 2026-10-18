@@ -594,6 +594,7 @@ Bus_StartFdo (
     }
 
     Bus_RegisterControllerNotifications(FdoData);
+    AcpiPmRegisterWithHal();
 
     DPRINT("Bus_StartFdo: Calling ACPIEnumerateDevices\n");
     status = ACPIEnumerateDevices(FdoData);

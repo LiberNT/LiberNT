@@ -294,6 +294,11 @@ DbgDeviceRelationString(
      DEVICE_RELATION_TYPE Type
     );
 
+extern BOOLEAN AcpiPmHalSleep;
+
+VOID
+AcpiPmRegisterWithHal(VOID);
+
 NTSTATUS
 Bus_FDO_Power (
     PFDO_DEVICE_DATA    FdoData,
