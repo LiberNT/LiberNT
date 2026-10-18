@@ -49,6 +49,8 @@ enum BcdElement : DWORD
     BcdUseVgaDriver = 0x26000040,
     BcdDisableBootDisplay = 0x26000041,
     BcdBootProcessorOnly = 0x26000060,
+    BcdSafeBoot = 0x25000080,
+    BcdSafeBootAlternateShell = 0x26000081,
     BcdBootLog = 0x26000090,
     BcdVerboseLoad = 0x26000091,
     BcdKernelDebugger = 0x260000a0
@@ -699,6 +701,37 @@ SetEntryOption(HKEY root, const std::wstring &id, DWORD element, bool value)
     return Commit(root, WriteBoolean(root, id, element, value));
 }
 
+static int
+SafeModeIndex(HKEY root, const std::wstring &id)
+{
+    ULONGLONG mode;
+
+    if (!ElementInteger(root, id, BcdSafeBoot, &mode) || mode > 1)
+        return 0;
+    if (mode == 1)
+        return 2;
+    return ElementBoolean(root, id, BcdSafeBootAlternateShell) ? 3 : 1;
+}
+
+static DWORD
+SetSafeMode(HKEY root, const std::wstring &id, int index)
+{
+    DWORD error;
+
+    if (index <= 0)
+    {
+        error = DeleteElement(root, id, BcdSafeBoot);
+        if (error == ERROR_SUCCESS)
+            error = DeleteElement(root, id, BcdSafeBootAlternateShell);
+        return Commit(root, error);
+    }
+    error = WriteInteger(root, id, BcdSafeBoot, index == 2 ? 1 : 0);
+    if (error == ERROR_SUCCESS)
+        error = index == 3 ? WriteBoolean(root, id, BcdSafeBootAlternateShell, true)
+                           : DeleteElement(root, id, BcdSafeBootAlternateShell);
+    return Commit(root, error);
+}
+
 static DWORD
 SetKernelOptions(HKEY root, const std::wstring &id, const std::wstring &options)
 {
@@ -1047,6 +1080,15 @@ BuildBootEntry(PageBuilder &page)
                     ElementBoolean(root, entry.Id, element),
                     [host, root, entry, element](int on) { Report(host, SetEntryOption(root, entry.Id, element, on != 0)); });
     }
+    std::vector<std::wstring> safeModes;
+
+    safeModes.push_back(Str(IDS_BOOT_SAFE_OFF));
+    safeModes.push_back(Str(IDS_BOOT_SAFE_MINIMAL));
+    safeModes.push_back(Str(IDS_BOOT_SAFE_NETWORK));
+    safeModes.push_back(Str(IDS_BOOT_SAFE_SHELL));
+    page.Choice(Str(IDS_BOOT_SAFE), Str(IDS_BOOT_SAFE_DESC), L"shield_20_regular", safeModes,
+                SafeModeIndex(root, entry.Id),
+                [host, root, entry](int index) { Report(host, SetSafeMode(root, entry.Id, index)); });
     options = ElementString(root, entry.Id, BcdLoadOptions);
     page.Button(Str(IDS_BOOT_KERNEL_OPTIONS), options.empty() ? Str(IDS_NONE) : options, L"code_20_regular",
                 Str(IDS_EDIT),
@@ -1212,6 +1254,11 @@ TestStoreOperations(SelfTest &test, HKEY root)
         test.Check(SetEntryOption(root, copy, element, before) == ERROR_SUCCESS &&
                    ElementBoolean(root, copy, element) == before, L"option %08lx restored", element);
     }
+    for (int mode = 3; mode >= 0; mode--)
+    {
+        test.Check(SetSafeMode(root, copy, mode) == ERROR_SUCCESS && SafeModeIndex(root, copy) == mode &&
+                   SafeModeIndex(root, defaultId) == 0, L"safe mode %d on the copy only", mode);
+    }
     test.Check(SetKernelOptions(root, copy, SELFTEST_TOKEN L"=1") == ERROR_SUCCESS &&
                ElementString(root, copy, BcdLoadOptions) == SELFTEST_TOKEN L"=1", L"kernel options set");
     test.Check(SetKernelOptions(root, copy, std::wstring()) == ERROR_SUCCESS &&
@@ -1244,17 +1291,19 @@ TestStoreOperations(SelfTest &test, HKEY root)
 }
 
 static void
-ArmBootCheck(SelfTest &test, HKEY root, bool menu)
+ArmBootCheck(SelfTest &test, HKEY root, bool menu, bool safe)
 {
     BootState state = ReadState(root);
     std::wstring id;
     HKEY key;
-    DWORD hasTimeout = state.HasTimeout, armedMenu = menu;
+    DWORD hasTimeout = state.HasTimeout, armedMenu = menu, armedSafe = safe;
 
     test.Check(CopyEntry(root, state.Default, L"Boot loader self-test", &id) == ERROR_SUCCESS, L"create the boot entry");
     test.Check(SetEntryOption(root, id, BcdBootLog, true) == ERROR_SUCCESS &&
                SetEntryOption(root, id, BcdVerboseLoad, true) == ERROR_SUCCESS &&
                SetKernelOptions(root, id, SELFTEST_TOKEN) == ERROR_SUCCESS, L"set boot log, sos and kernel options");
+    if (safe)
+        test.Check(SetSafeMode(root, id, 1) == ERROR_SUCCESS, L"set minimal safe mode");
     test.Check(SetDefaultEntry(root, id) == ERROR_SUCCESS && SetMenuTimeout(root, menu, 1) == ERROR_SUCCESS,
                menu ? L"make it the default and always show the menu" : L"make it the default with a 1 second countdown");
     if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, SELFTEST_KEY, 0, NULL, 0, KEY_SET_VALUE, NULL, &key, NULL) == ERROR_SUCCESS)
@@ -1265,6 +1314,7 @@ ArmBootCheck(SelfTest &test, HKEY root, bool menu)
         RegSetValueExW(key, L"HasTimeout", 0, REG_DWORD, (const BYTE *)&hasTimeout, sizeof(hasTimeout));
         RegSetValueExW(key, L"Timeout", 0, REG_QWORD, (const BYTE *)&state.Timeout, sizeof(state.Timeout));
         RegSetValueExW(key, L"Menu", 0, REG_DWORD, (const BYTE *)&armedMenu, sizeof(armedMenu));
+        RegSetValueExW(key, L"Safe", 0, REG_DWORD, (const BYTE *)&armedSafe, sizeof(armedSafe));
         RegFlushKey(key);
         RegCloseKey(key);
     }
@@ -1281,6 +1331,7 @@ VerifyBootCheck(SelfTest &test, HKEY root)
     ULONGLONG timeout = 0;
     DWORD hasTimeout = ReadDword(HKEY_LOCAL_MACHINE, SELFTEST_KEY, L"HasTimeout", 1), size = sizeof(timeout);
     bool menu = ReadDword(HKEY_LOCAL_MACHINE, SELFTEST_KEY, L"Menu", 0) != 0;
+    bool safe = ReadDword(HKEY_LOCAL_MACHINE, SELFTEST_KEY, L"Safe", 0) != 0;
     BootState state = ReadState(root);
 
     test.Line(L"INFO SystemStartOptions" + options);
@@ -1291,6 +1342,12 @@ VerifyBootCheck(SelfTest &test, HKEY root)
     test.Check(options.find(L" " SELFTEST_TOKEN L" ") != std::wstring::npos, L"kernel options reached the kernel");
     test.Check(options.find(L" BOOTLOG ") != std::wstring::npos, L"boot log option reached the kernel");
     test.Check(options.find(L" SOS ") != std::wstring::npos, L"sos option reached the kernel");
+    if (safe)
+    {
+        test.Check(options.find(L" SAFEBOOT:MINIMAL ") != std::wstring::npos, L"safe mode option reached the kernel");
+        test.Check(GetSystemMetrics(SM_CLEANBOOT) == 1, L"system runs in minimal safe mode (SM_CLEANBOOT %d)",
+                   GetSystemMetrics(SM_CLEANBOOT));
+    }
     RegGetValueW(HKEY_LOCAL_MACHINE, SELFTEST_KEY, L"Timeout", RRF_RT_REG_QWORD, NULL, &timeout, &size);
     test.Check(!savedDefault.empty() && SetDefaultEntry(root, savedDefault) == ERROR_SUCCESS &&
                SetMenuTimeout(root, !hasTimeout, timeout) == ERROR_SUCCESS && DeleteEntry(root, id) == ERROR_SUCCESS,
@@ -1316,9 +1373,11 @@ RunBootLoaderSelfTest(LPCWSTR mode, LPCWSTR log)
     if (!lstrcmpiW(mode, L"bootloader"))
         TestStoreOperations(test, root);
     else if (!lstrcmpiW(mode, L"bootloader-arm"))
-        ArmBootCheck(test, root, false);
+        ArmBootCheck(test, root, false, false);
     else if (!lstrcmpiW(mode, L"bootloader-arm-menu"))
-        ArmBootCheck(test, root, true);
+        ArmBootCheck(test, root, true, false);
+    else if (!lstrcmpiW(mode, L"bootloader-arm-safe"))
+        ArmBootCheck(test, root, false, true);
     else if (!lstrcmpiW(mode, L"bootloader-verify"))
         VerifyBootCheck(test, root);
     else

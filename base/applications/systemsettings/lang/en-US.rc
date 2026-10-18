@@ -731,4 +731,10 @@ BEGIN
     IDS_BOOT_DEVICE_RAMDISK "RAM disk"
     IDS_BOOT_DEVICE_UNMOUNTED "Partition without a drive letter"
     IDS_BOOT_DEVICE_UNKNOWN "Unknown device"
+    IDS_BOOT_SAFE "Safe mode"
+    IDS_BOOT_SAFE_DESC "Start with only the drivers and services needed to run"
+    IDS_BOOT_SAFE_OFF "Off"
+    IDS_BOOT_SAFE_MINIMAL "Minimal"
+    IDS_BOOT_SAFE_NETWORK "With networking"
+    IDS_BOOT_SAFE_SHELL "With command prompt"
 END

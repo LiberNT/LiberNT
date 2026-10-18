@@ -729,3 +729,9 @@
 #define IDS_BOOT_DEVICE_RAMDISK        819
 #define IDS_BOOT_DEVICE_UNMOUNTED      820
 #define IDS_BOOT_DEVICE_UNKNOWN        821
+#define IDS_BOOT_SAFE                  822
+#define IDS_BOOT_SAFE_DESC             823
+#define IDS_BOOT_SAFE_OFF              824
+#define IDS_BOOT_SAFE_MINIMAL          825
+#define IDS_BOOT_SAFE_NETWORK          826
+#define IDS_BOOT_SAFE_SHELL            827
