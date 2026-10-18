@@ -1535,6 +1535,7 @@ DoGenericAction(
                 {
                     Session->LogonState = STATE_LOCKED;
                     SwitchDesktop(Session->WinlogonDesktop);
+                    ReplyMessage(TRUE);
                     /* We may be on the Logged-On SAS dialog, in which case
                      * we need to close it if the lock action came via Win-L */
                     CloseAllDialogWindows();
