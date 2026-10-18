@@ -554,6 +554,7 @@ USBSTOR_PdoHandlePnp(
 {
     PIO_STACK_LOCATION IoStack;
     PPDO_DEVICE_EXTENSION DeviceExtension;
+    PFDO_DEVICE_EXTENSION FDODeviceExtension;
     NTSTATUS Status;
     PDEVICE_CAPABILITIES Caps;
     ULONG bDelete;
@@ -646,7 +647,9 @@ USBSTOR_PdoHandlePnp(
                 {
                     // check if no unique id
                     Caps = (PDEVICE_CAPABILITIES)IoStack->Parameters.DeviceCapabilities.Capabilities;
-                    Caps->UniqueID = FALSE; // no unique id is supported
+                    FDODeviceExtension = DeviceExtension->LowerDeviceObject->DeviceExtension;
+                    Caps->UniqueID = Caps->UniqueID && FDODeviceExtension->SerialNumber &&
+                                     FDODeviceExtension->SerialNumber->bLength >= sizeof(USB_COMMON_DESCRIPTOR) + sizeof(WCHAR);
                     Caps->Removable = TRUE; //FIXME
                 }
             }
