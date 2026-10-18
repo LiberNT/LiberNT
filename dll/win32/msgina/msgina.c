@@ -1076,6 +1076,19 @@ WlxDisplayLockedNotice(PVOID pWlxContext)
  * @implemented
  */
 BOOL WINAPI
+WlxIsLockOk(
+    PVOID pWlxContext)
+{
+    TRACE("WlxIsLockOk()\n");
+    UNREFERENCED_PARAMETER(pWlxContext);
+    return TRUE;
+}
+
+
+/*
+ * @implemented
+ */
+BOOL WINAPI
 WlxIsLogoffOk(
     PVOID pWlxContext)
 {

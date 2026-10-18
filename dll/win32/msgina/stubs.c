@@ -15,20 +15,6 @@
  * @unimplemented
  */
 BOOL WINAPI
-WlxIsLockOk(
-    PVOID pWlxContext)
-{
-    UNREFERENCED_PARAMETER(pWlxContext);
-
-    UNIMPLEMENTED;
-    return TRUE;
-}
-
-
-/*
- * @unimplemented
- */
-BOOL WINAPI
 WlxGetStatusMessage(
     PVOID pWlxContext,
     DWORD *pdwOptions,
