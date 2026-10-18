@@ -633,6 +633,40 @@ ApicInitializeIOApic(VOID)
     ApicWriteIORedirectionEntry(APIC_CLOCK_INDEX, ReDirReg);
 }
 
+static ULONG HalpSavedIoApicId;
+static IOAPIC_REDIRECTION_REGISTER HalpSavedIoApicEntries[APIC_MAX_GSI_PINS];
+
+VOID
+HalpSaveInterruptControllers(VOID)
+{
+    UCHAR Index;
+
+    HalpSavedIoApicId = IOApicRead(IOAPIC_ID);
+    for (Index = 0; Index < HalpIoApicMaxIrq; Index++)
+        HalpSavedIoApicEntries[Index] = ApicReadIORedirectionEntry(Index);
+}
+
+VOID
+HalpRestoreInterruptControllers(VOID)
+{
+    IOAPIC_REDIRECTION_REGISTER ReDirReg;
+    UCHAR Index;
+
+    ASSERT(!(__readeflags() & EFLAGS_INTERRUPT_MASK));
+
+    HalpInitializeLegacyPICs();
+
+    IOApicWrite(IOAPIC_ID, HalpSavedIoApicId);
+    for (Index = 0; Index < HalpIoApicMaxIrq; Index++)
+    {
+        ReDirReg = HalpSavedIoApicEntries[Index];
+        ReDirReg.Mask = 1;
+        ApicWriteIORedirectionEntry(Index, ReDirReg);
+        if (!HalpSavedIoApicEntries[Index].Mask)
+            ApicWriteIORedirectionEntry(Index, HalpSavedIoApicEntries[Index]);
+    }
+}
+
 VOID
 NTAPI
 HalpInitializePICs(IN BOOLEAN EnableInterrupts)

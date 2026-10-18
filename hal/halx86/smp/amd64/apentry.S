@@ -32,6 +32,9 @@ PUBLIC HalpAPEntryGdtr
 PUBLIC HalpAPEntryGdt
 PUBLIC HalpAPEntry16End
 PUBLIC HalpAPEntry64
+PUBLIC HalpSleepSaveContext
+PUBLIC HalpSleepReadXcr0
+PUBLIC HalpSleepResume64
 
 .equ OFF_PROCSTATE, HalpAPEntryProcState - HalpAPEntry16
 .equ OFF_HIGH, HalpAPEntryHigh - HalpAPEntry16
@@ -226,4 +229,167 @@ HalpAPEntry64:
     /* retfq (REX.W RETF) */
     .byte HEX(48)
     .byte HEX(CB)
+
+/* ULONG HalpSleepSaveContext(PHALP_SLEEP_PROCESSOR State): 0 when saved, 1 when resumed */
+HalpSleepSaveContext:
+    mov [rcx + PsContextFrame + CxRbx], rbx
+    mov [rcx + PsContextFrame + CxRbp], rbp
+    mov [rcx + PsContextFrame + CxRsi], rsi
+    mov [rcx + PsContextFrame + CxRdi], rdi
+    mov [rcx + PsContextFrame + CxR12], r12
+    mov [rcx + PsContextFrame + CxR13], r13
+    mov [rcx + PsContextFrame + CxR14], r14
+    mov [rcx + PsContextFrame + CxR15], r15
+    movdqu [rcx + PsContextFrame + CxXmm6], xmm6
+    movdqu [rcx + PsContextFrame + CxXmm7], xmm7
+    movdqu [rcx + PsContextFrame + CxXmm8], xmm8
+    movdqu [rcx + PsContextFrame + CxXmm9], xmm9
+    movdqu [rcx + PsContextFrame + CxXmm10], xmm10
+    movdqu [rcx + PsContextFrame + CxXmm11], xmm11
+    movdqu [rcx + PsContextFrame + CxXmm12], xmm12
+    movdqu [rcx + PsContextFrame + CxXmm13], xmm13
+    movdqu [rcx + PsContextFrame + CxXmm14], xmm14
+    movdqu [rcx + PsContextFrame + CxXmm15], xmm15
+    stmxcsr [rcx + PsContextFrame + CxMxCsr]
+    lea rax, [rsp + 8]
+    mov [rcx + PsContextFrame + CxRsp], rax
+    mov rax, [rsp]
+    mov [rcx + PsContextFrame + CxRip], rax
+
+    /* Extended state, mask and area follow the KPROCESSOR_STATE */
+    mov r9, [rcx + ProcessorStateLength + 8]
+    mov rax, [rcx + ProcessorStateLength]
+    test rax, rax
+    jz HalpSleepSaveFxsr
+    mov r10, [rcx + ProcessorStateLength + 16]
+    test r10, r10
+    jnz HalpSleepSaveSupervisor
+    mov rdx, rax
+    shr rdx, 32
+    xsave64 [r9]
+    jmp HalpSleepSaveDone
+HalpSleepSaveSupervisor:
+    or rax, r10
+    mov rdx, rax
+    shr rdx, 32
+    xsaves64 [r9]
+    jmp HalpSleepSaveDone
+HalpSleepSaveFxsr:
+    fxsave64 [r9]
+HalpSleepSaveDone:
+    xor eax, eax
+    ret
+
+/* ULONG64 HalpSleepReadXcr0(VOID) */
+HalpSleepReadXcr0:
+    xor ecx, ecx
+    xgetbv
+    shl rdx, 32
+    or rax, rdx
+    ret
+
+/* Entered from the low stub in long mode: rcx = PHALP_SLEEP_PROCESSOR */
+HalpSleepResume64:
+    mov rax, [rcx + PsSpecialRegisters + SrCr3]
+    mov cr3, rax
+    mov rax, [rcx + PsSpecialRegisters + SrCr4]
+    mov cr4, rax
+    mov rax, [rcx + PsSpecialRegisters + SrCr0]
+    mov cr0, rax
+
+    lgdt [rcx + PsSpecialRegisters + SrGdtr + 6]
+    lidt [rcx + PsSpecialRegisters + SrIdtr + 6]
+
+    mov ax, KGDT64_R0_DATA
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov gs, ax
+    xor ax, ax
+    mov fs, ax
+
+    /* The saved TSS descriptor is still marked busy: make it available */
+    movzx eax, word ptr [rcx + PsSpecialRegisters + SrTr]
+    and eax, HEX(FFF8)
+    add rax, [rcx + PsSpecialRegisters + SrGdtr + 8]
+    and byte ptr [rax + 5], HEX(FD)
+    ltr word ptr [rcx + PsSpecialRegisters + SrTr]
+
+    mov r8, rcx
+    mov ecx, HEX(C0000101)
+    mov eax, [r8 + PsSpecialRegisters + SrMsrGsBase]
+    mov edx, [r8 + PsSpecialRegisters + SrMsrGsBase + 4]
+    wrmsr
+    mov ecx, HEX(C0000102)
+    mov eax, [r8 + PsSpecialRegisters + SrMsrGsSwap]
+    mov edx, [r8 + PsSpecialRegisters + SrMsrGsSwap + 4]
+    wrmsr
+    mov rcx, r8
+
+    /* Reload CS from the kernel GDT */
+    lea rax, [rip+HalpSleepResumeKernelCs]
+    push KGDT64_R0_CODE
+    push rax
+    .byte HEX(48)
+    .byte HEX(CB)
+
+HalpSleepResumeKernelCs:
+    mov r8, rcx
+    mov r9, [r8 + ProcessorStateLength + 8]
+    mov rax, [r8 + ProcessorStateLength]
+    test rax, rax
+    jz HalpSleepRestoreFxsr
+    mov rdx, rax
+    shr rdx, 32
+    xor ecx, ecx
+    xsetbv
+    mov r10, [r8 + ProcessorStateLength + 16]
+    test r10, r10
+    jnz HalpSleepRestoreSupervisor
+    mov rax, [r8 + ProcessorStateLength]
+    mov rdx, rax
+    shr rdx, 32
+    xrstor64 [r9]
+    jmp HalpSleepRestoreDone
+HalpSleepRestoreSupervisor:
+    mov ecx, HEX(0DA0)
+    mov rax, r10
+    mov rdx, r10
+    shr rdx, 32
+    wrmsr
+    mov rax, [r8 + ProcessorStateLength]
+    or rax, r10
+    mov rdx, rax
+    shr rdx, 32
+    xrstors64 [r9]
+    jmp HalpSleepRestoreDone
+HalpSleepRestoreFxsr:
+    fxrstor64 [r9]
+HalpSleepRestoreDone:
+    mov rcx, r8
+
+    mov rbx, [rcx + PsContextFrame + CxRbx]
+    mov rbp, [rcx + PsContextFrame + CxRbp]
+    mov rsi, [rcx + PsContextFrame + CxRsi]
+    mov rdi, [rcx + PsContextFrame + CxRdi]
+    mov r12, [rcx + PsContextFrame + CxR12]
+    mov r13, [rcx + PsContextFrame + CxR13]
+    mov r14, [rcx + PsContextFrame + CxR14]
+    mov r15, [rcx + PsContextFrame + CxR15]
+    movdqu xmm6, [rcx + PsContextFrame + CxXmm6]
+    movdqu xmm7, [rcx + PsContextFrame + CxXmm7]
+    movdqu xmm8, [rcx + PsContextFrame + CxXmm8]
+    movdqu xmm9, [rcx + PsContextFrame + CxXmm9]
+    movdqu xmm10, [rcx + PsContextFrame + CxXmm10]
+    movdqu xmm11, [rcx + PsContextFrame + CxXmm11]
+    movdqu xmm12, [rcx + PsContextFrame + CxXmm12]
+    movdqu xmm13, [rcx + PsContextFrame + CxXmm13]
+    movdqu xmm14, [rcx + PsContextFrame + CxXmm14]
+    movdqu xmm15, [rcx + PsContextFrame + CxXmm15]
+    ldmxcsr [rcx + PsContextFrame + CxMxCsr]
+    mov rsp, [rcx + PsContextFrame + CxRsp]
+    mov rax, [rcx + PsContextFrame + CxRip]
+    push rax
+    mov eax, 1
+    ret
 END

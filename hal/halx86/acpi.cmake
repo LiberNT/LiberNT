@@ -15,7 +15,11 @@ if(ARCH STREQUAL "amd64")
     list(APPEND HAL_ACPI_SOURCE
         acpi/msi.c
         apic/msivec.c
-        acpi/pcidiscovery.c)
+        acpi/pcidiscovery.c
+        acpi/sleep.c
+        smp/amd64/lowstub.c)
+    list(APPEND HAL_ACPI_ASM_SOURCE
+        smp/amd64/apentry.S)
 endif()
 
 # Needed to compile while using ACPICA
@@ -23,9 +27,10 @@ if(ARCH STREQUAL "amd64")
     add_definitions(-DWIN64)
 endif()
 
-add_library(lib_hal_acpi OBJECT ${HAL_ACPI_SOURCE})
+add_asm_files(lib_hal_acpi_asm ${HAL_ACPI_ASM_SOURCE})
+add_library(lib_hal_acpi OBJECT ${HAL_ACPI_SOURCE} ${lib_hal_acpi_asm})
 # pcidiscovery.c names devices from the shared PCI tables
 target_include_directories(lib_hal_acpi PRIVATE $<TARGET_PROPERTY:halcommon,INTERFACE_INCLUDE_DIRECTORIES>)
-add_dependencies(lib_hal_acpi halcommon)
+add_dependencies(lib_hal_acpi halcommon asm)
 add_pch(lib_hal_acpi include/hal.h ${HAL_ACPI_SOURCE})
 add_dependencies(lib_hal_acpi bugcodes xdk)

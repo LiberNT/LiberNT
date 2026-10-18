@@ -151,6 +151,23 @@ HalpInitializeClock(VOID)
 }
 
 VOID
+HalpRestoreClock(VOID)
+{
+    UCHAR RegisterB;
+
+    HalpAcquireCmosSpinLock();
+    RegisterB = HalpReadCmos(RTC_REGISTER_B);
+    HalpWriteCmos(RTC_REGISTER_B, RegisterB | RTC_REG_B_PI);
+    HalpReleaseCmosSpinLock();
+
+    RtcSetClockRate(HalpCurrentClockRate);
+
+    HalpAcquireCmosSpinLock();
+    HalpReadCmos(RTC_REGISTER_C);
+    HalpReleaseCmosSpinLock();
+}
+
+VOID
 FASTCALL
 HalpClockInterruptHandler(IN PKTRAP_FRAME TrapFrame)
 {

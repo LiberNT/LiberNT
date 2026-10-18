@@ -266,7 +266,27 @@ KIRQL
 FASTCALL
 HalpMsiVectorToIrql(
     _In_ UCHAR Vector);
+
+NTSTATUS
+NTAPI
+HalpInitPowerManagement(
+    _In_ PPM_DISPATCH_TABLE PmDriverDispatchTable,
+    _Out_ PPM_DISPATCH_TABLE *PmHalDispatchTable);
 #endif /* _M_AMD64 */
+
+VOID
+NTAPI
+ApicInitializeLocalApic(
+    _In_ ULONG Cpu);
+
+VOID
+HalpSaveInterruptControllers(VOID);
+
+VOID
+HalpRestoreInterruptControllers(VOID);
+
+VOID
+HalpRestoreClock(VOID);
 
 /* profil.c */
 extern BOOLEAN HalpProfilingStopped;

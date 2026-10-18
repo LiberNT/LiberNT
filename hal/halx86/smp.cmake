@@ -12,8 +12,6 @@ if(ARCH STREQUAL "i386")
     list(APPEND HAL_SMP_SOURCE
         smp/i386/spinup.c)
 elseif(ARCH STREQUAL "amd64")
-    list(APPEND HAL_SMP_ASM_SOURCE
-        smp/amd64/apentry.S)
     list(APPEND HAL_SMP_SOURCE
         smp/amd64/spinup.c)
 endif()

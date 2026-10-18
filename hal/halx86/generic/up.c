@@ -67,4 +67,13 @@ HalSendSoftwareInterrupt(
     NOTHING;
 }
 
+BOOLEAN
+HalpRestartProcessor(
+    _In_ ULONG NTProcessorNumber,
+    _In_ PKPROCESSOR_STATE ProcessorState,
+    _In_ PVOID Entry)
+{
+    return FALSE;
+}
+
 #endif // _M_AMD64

@@ -89,4 +89,15 @@ HalpSendSoftwareInterrupt(
     _In_ KAFFINITY TargetSet,
     _In_ KIRQL Irql);
 
+ULONG
+HalpPrepareLowStub(
+    _In_ PKPROCESSOR_STATE ProcessorState,
+    _In_ PVOID HighEntry);
+
+BOOLEAN
+HalpRestartProcessor(
+    _In_ ULONG NTProcessorNumber,
+    _In_ PKPROCESSOR_STATE ProcessorState,
+    _In_ PVOID Entry);
+
 #endif // _M_AMD64
