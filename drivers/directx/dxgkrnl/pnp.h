@@ -266,6 +266,11 @@ DxgkpChildPdoPnpDispatch(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PIRP           Irp);
 
+NTSTATUS
+DxgkpChildQueryMonitorDescriptor(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP           Irp);
+
 /*
  * DxgkpBuildDeviceInfo
  *   Populate a DXGK_DEVICE_INFO from the adapter's PCI resources and the

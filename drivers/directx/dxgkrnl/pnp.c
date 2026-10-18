@@ -24,6 +24,7 @@
 #include "vidsch.h"
 #include "hotplug_work_core.h"
 #include <ntstrsafe.h>
+#include <reactos/rddm/rxgkmonitor.h>
 
 typedef struct _DXGKP_POLL_CHILD_SNAPSHOT
 {
@@ -1943,6 +1944,46 @@ DxgkpChildPublishMonitor(
     if (!NT_SUCCESS(Status))
         DXGKRNL_WARN("DxgkpChildPublishMonitor: enabling the monitor interface for ChildUid %lu: 0x%08lX\n",
                      ChildExt->Descriptor.ChildUid, Status);
+}
+
+NTSTATUS
+DxgkpChildQueryMonitorDescriptor(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP           Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    PULONG Signature = (PULONG)DeviceObject->DeviceExtension;
+    PDXGK_CHILD_PDO_EXTENSION ChildExt;
+    PRXGK_MONITOR_DESCRIPTOR Descriptor;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG_PTR Information = 0;
+
+    PAGED_CODE();
+
+    if (Stack->MajorFunction != IRP_MJ_INTERNAL_DEVICE_CONTROL || Irp->RequestorMode != KernelMode ||
+        Signature == NULL || *Signature != DXGK_CHILD_PDO_SIGNATURE)
+    {
+        Status = STATUS_INVALID_DEVICE_REQUEST;
+    }
+    else if (Stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(RXGK_MONITOR_DESCRIPTOR))
+    {
+        Status = STATUS_BUFFER_TOO_SMALL;
+    }
+    else
+    {
+        C_ASSERT(RXGK_MONITOR_EDID_MAX_SIZE >= 128 * (1 + DXGKP_EDID_MAX_EXTENSIONS));
+        ChildExt = ((PDXGK_CHILD_PDO_OBJECT)DeviceObject->DeviceExtension)->Child;
+        Descriptor = Irp->AssociatedIrp.SystemBuffer;
+        RtlZeroMemory(Descriptor, sizeof(*Descriptor));
+        Descriptor->VideoOutputTechnology = ChildExt->Descriptor.ChildCapabilities.Type.VideoOutput.InterfaceTechnology;
+        DxgkpChildCopyEdid(ChildExt, Descriptor->Edid, &Descriptor->EdidLength);
+        Information = sizeof(*Descriptor);
+    }
+
+    Irp->IoStatus.Status = Status;
+    Irp->IoStatus.Information = Information;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
 }
 
 static VOID

@@ -34,6 +34,7 @@
 #include "present.h"
 #include "pnp.h"
 #include <reactos/rddm/rxgkadvcolor.h>
+#include <reactos/rddm/rxgkmonitor.h>
 #include "caps_core.h"
 #include "paging_core.h"
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3200)
@@ -14421,6 +14422,9 @@ DxgkDispatchDeviceControl(
      */
     if (DxgkDisplayDispatchIoctl(DeviceObject, Irp))
         return STATUS_SUCCESS;
+
+    if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_RXGK_QUERY_MONITOR_DESCRIPTOR)
+        return DxgkpChildQueryMonitorDescriptor(DeviceObject, Irp);
 
     DXGKRNL_VERBOSE("DxgkDispatchDeviceControl: IoControlCode=0x%lX\n",
                     Stack->Parameters.DeviceIoControl.IoControlCode);
