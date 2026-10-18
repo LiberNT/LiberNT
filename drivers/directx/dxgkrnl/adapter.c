@@ -13411,6 +13411,8 @@ DxgkAdapterStart(
 
                 if (Adapter->InterruptMessageBased)
                 {
+                    ULONG mi;
+
                     Adapter->InterruptVector =
                         Desc->u.MessageInterrupt.Translated.Vector;
                     Adapter->InterruptLevel =
@@ -13420,6 +13422,19 @@ DxgkAdapterStart(
                     Adapter->InterruptShared = FALSE;
                     Adapter->InterruptMode = Latched;
                     Adapter->InterruptMessageCount = 1;
+
+                    for (mi = ri + 1; mi < PartialList->Count; mi++)
+                    {
+                        PCM_PARTIAL_RESOURCE_DESCRIPTOR Message = &PartialList->PartialDescriptors[mi];
+
+                        if (Message->Type == CmResourceTypeInterrupt &&
+                            (Message->Flags & CM_RESOURCE_INTERRUPT_MESSAGE) &&
+                            (KIRQL)Message->u.MessageInterrupt.Translated.Level > Adapter->InterruptLevel)
+                        {
+                            Adapter->InterruptLevel =
+                                (KIRQL)Message->u.MessageInterrupt.Translated.Level;
+                        }
+                    }
 
                     DXGKRNL_TRACE("DxgkAdapterStart: saved MSI interrupt — "
                                   "BaseVector=%lu Count=%lu IRQL=%u\n",
