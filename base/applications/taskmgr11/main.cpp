@@ -936,6 +936,20 @@ static LRESULT CALLBACK FrameProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
 typedef BOOL (WINAPI *PFN_SetProcessDPIAware)(void);
 
+static void EnableDebugPrivilege(void)
+{
+    TOKEN_PRIVILEGES tp;
+    HANDLE token;
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token))
+        return;
+    tp.PrivilegeCount = 1;
+    tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    if (LookupPrivilegeValueW(NULL, SE_DEBUG_NAME, &tp.Privileges[0].Luid))
+        AdjustTokenPrivileges(token, FALSE, &tp, 0, NULL, NULL);
+    CloseHandle(token);
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int nCmdShow)
 {
     (void)hPrev;
@@ -957,6 +971,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
 
     /* Match Windows Task Manager's process priority. */
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+    EnableDebugPrivilege();
 
     /* dpi awareness (dynamic; ancient user32 may lack it) */
     {

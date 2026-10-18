@@ -16,6 +16,7 @@
 #include <setupapi.h>
 
 #include "battery_telemetry.h"
+#include <aclapi.h>
 
 namespace Data {
 
@@ -2865,14 +2866,42 @@ static void DevicePathToDos(WCHAR* path, int cch)
     }
 }
 
-static void WellKnownUser(const WCHAR* image, WCHAR* buf, int cch)
+static BOOL SidToAccountName(PSID sid, WCHAR* buf, int cch)
 {
-    if (NameInList(image, s_criticalProcs, _countof(s_criticalProcs)) ||
-        lstrcmpiW(image, L"svchost.exe") == 0 ||
-        lstrcmpiW(image, L"System Idle Process") == 0)
-        StringCchCopyW(buf, cch, L"SYSTEM");
+    WCHAR name[96] = L"", dom[96] = L"";
+    DWORD cn = _countof(name), cd = _countof(dom);
+    SID_NAME_USE use;
+
+    if (!sid || !LookupAccountSidW(NULL, sid, name, &cn, dom, &cd, &use))
+        return FALSE;
+    if (g_app.st.fullAcctName && dom[0])
+        StringCchPrintfW(buf, cch, L"%s\\%s", dom, name);
     else
-        buf[0] = 0;
+        StringCchCopyW(buf, cch, name);
+    return TRUE;
+}
+
+static void ProcessOwnerName(DWORD pid, WCHAR* buf, int cch)
+{
+    BYTE system[SECURITY_MAX_SID_SIZE];
+    DWORD cb = sizeof(system);
+    PSECURITY_DESCRIPTOR sd = NULL;
+    PSID owner = NULL;
+    HANDLE h = OpenProcess(READ_CONTROL, FALSE, pid);
+
+    if (h)
+    {
+        if (GetSecurityInfo(h, SE_KERNEL_OBJECT, OWNER_SECURITY_INFORMATION,
+                            &owner, NULL, NULL, NULL, &sd) == ERROR_SUCCESS)
+            SidToAccountName(owner, buf, cch);
+        if (sd)
+            LocalFree(sd);
+        CloseHandle(h);
+    }
+    else if (CreateWellKnownSid(WinLocalSystemSid, NULL, system, &cb))
+    {
+        SidToAccountName(system, buf, cch);
+    }
 }
 
 static void ResolveExtra(ProcRow& p)
@@ -2918,19 +2947,7 @@ static void ResolveExtra(ProcRow& p)
             BYTE tuBuf[256];
             DWORD cb = 0;
             if (GetTokenInformation(tok, TokenUser, tuBuf, sizeof(tuBuf), &cb))
-            {
-                TOKEN_USER* tu = (TOKEN_USER*)tuBuf;
-                WCHAR name[96] = L"", dom[96] = L"";
-                DWORD cn = _countof(name), cd = _countof(dom);
-                SID_NAME_USE use;
-                if (LookupAccountSidW(NULL, tu->User.Sid, name, &cn, dom, &cd, &use))
-                {
-                    if (g_app.st.fullAcctName && dom[0])
-                        StringCchPrintfW(x->user, _countof(x->user), L"%s\\%s", dom, name);
-                    else
-                        StringCchCopyW(x->user, _countof(x->user), name);
-                }
-            }
+                SidToAccountName(((TOKEN_USER*)tuBuf)->User.Sid, x->user, _countof(x->user));
             CloseHandle(tok);
         }
 
@@ -2969,7 +2986,7 @@ static void ResolveExtra(ProcRow& p)
     }
 
     if (!x->user[0])
-        WellKnownUser(p.image, x->user, _countof(x->user));
+        ProcessOwnerName(p.pid, x->user, _countof(x->user));
 
     if (x->path[0])
     {
