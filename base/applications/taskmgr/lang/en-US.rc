@@ -380,7 +380,7 @@ BEGIN
     IDS_TAB_STATUS "Status"
     IDS_TAB_IMAGENAME "Image Name"
     IDS_TAB_PID "PID"
-    IDS_TAB_USERNAME "Username"
+    IDS_TAB_USERNAME "User Name"
     IDS_TAB_SESSIONID "Session ID"
     IDS_TAB_CPU "CPU"
     IDS_TAB_CPUTIME "CPU Time"
