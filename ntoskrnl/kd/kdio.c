@@ -47,6 +47,11 @@ static CHAR KdpScreenLineBuffer[KdpScreenLineLengthMaximum + 1] = "";
 static ULONG KdpScreenLineBufferPos = 0, KdpScreenLineLength = 0;
 static ULONG KdpScreenLineCapacity = KdpScreenLineLengthDefault;
 static BOOLEAN KdpScreenInitialized = FALSE;
+#define KdpScreenHistorySize (64 * 1024)
+static CHAR KdpScreenHistory[KdpScreenHistorySize];
+static ULONG KdpScreenHistoryEnd = 0;
+static BOOLEAN KdpScreenHistoryWrapped = FALSE;
+static KSPIN_LOCK KdpScreenSpinLock;
 
 KDP_DEBUG_MODE KdpDebugMode;
 LIST_ENTRY KdProviders = {&KdProviders, &KdProviders};
@@ -438,13 +443,14 @@ KdpSerialInit(
 
 /* SCREEN FUNCTIONS **********************************************************/
 
-BOOLEAN
-KdpScreenAcquire(VOID)
+static BOOLEAN
+KdpScreenAcquireDisplay(
+    _Out_ PBOOLEAN InitializeDisplay)
 {
     BOOLEAN DisplayAcquired = FALSE;
-    BOOLEAN InitializeDisplay;
     VID_DISPLAY_INFO DisplayInfo;
 
+    *InitializeDisplay = FALSE;
     if (InbvIsBootDriverInstalled())
     {
         InbvUseCompactFont();
@@ -457,11 +463,11 @@ KdpScreenAcquire(VOID)
             KdpScreenLineCapacity = KdpScreenLineLengthDefault;
 
         DisplayAcquired = (InbvGetDisplayState() != INBV_DISPLAY_STATE_OWNED);
-        InitializeDisplay = DisplayAcquired || !KdpScreenInitialized;
+        *InitializeDisplay = DisplayAcquired || !KdpScreenInitialized;
 
         /* Acquire ownership and initialize a new screen session */
         InbvAcquireDisplayOwnership();
-        if (InitializeDisplay)
+        if (*InitializeDisplay)
         {
             InbvResetDisplay();
             InbvSolidColorFill(0, 0, DisplayInfo.Width - 1, DisplayInfo.Height - 1, BV_COLOR_BLACK);
@@ -470,7 +476,7 @@ KdpScreenAcquire(VOID)
         InbvSetTextColor(BV_COLOR_WHITE);
         InbvInstallDisplayStringFilter(NULL);
         InbvEnableDisplayString(TRUE);
-        if (InitializeDisplay)
+        if (*InitializeDisplay)
         {
             InbvSetScrollRegion(0, 0, DisplayInfo.Width - 1, DisplayInfo.Height - 1);
         }
@@ -546,8 +552,7 @@ KdpScreenRelease(
 }
 
 static VOID
-NTAPI
-KdpScreenPrint(
+KdpScreenOutput(
     _In_ PCCH String,
     _In_ ULONG Length)
 {
@@ -597,6 +602,134 @@ KdpScreenPrint(
     }
 }
 
+static ULONG
+KdpScreenRecord(
+    _In_ PCCH String,
+    _In_ ULONG Length)
+{
+    ULONG Recorded = 0;
+    ULONG Chunk;
+
+    while ((Recorded < Length) && String[Recorded])
+        ++Recorded;
+
+    for (Length = Recorded; Length != 0; Length -= Chunk)
+    {
+        Chunk = min(Length, KdpScreenHistorySize - KdpScreenHistoryEnd);
+        RtlCopyMemory(KdpScreenHistory + KdpScreenHistoryEnd, String, Chunk);
+        String += Chunk;
+        KdpScreenHistoryEnd += Chunk;
+        if (KdpScreenHistoryEnd == KdpScreenHistorySize)
+        {
+            KdpScreenHistoryEnd = 0;
+            KdpScreenHistoryWrapped = TRUE;
+        }
+    }
+
+    return Recorded;
+}
+
+static ULONG
+KdpScreenLineRows(
+    _In_ ULONG LineLength)
+{
+    ULONG Rows = (LineLength + KdpScreenLineCapacity - 1) / KdpScreenLineCapacity;
+
+    return Rows ? Rows : 1;
+}
+
+static VOID
+KdpScreenReplay(VOID)
+{
+    VID_DISPLAY_INFO DisplayInfo;
+    ULONG Size, First, Start, Index, LineLength, Rows, MaxRows, Chunk;
+
+    InbvQueryDisplayInfo(&DisplayInfo);
+    MaxRows = DisplayInfo.CharacterHeight ? DisplayInfo.Height / DisplayInfo.CharacterHeight : 0;
+    if (MaxRows != 0)
+        --MaxRows;
+
+    Size = KdpScreenHistoryWrapped ? KdpScreenHistorySize : KdpScreenHistoryEnd;
+    First = KdpScreenHistoryWrapped ? KdpScreenHistoryEnd : 0;
+    Start = Size;
+    Rows = 0;
+    LineLength = 0;
+
+    for (Index = Size; Index != 0; --Index)
+    {
+        if (KdpScreenHistory[(First + Index - 1) % KdpScreenHistorySize] != '\n')
+        {
+            ++LineLength;
+        }
+        else if (Index != Size)
+        {
+            Rows += KdpScreenLineRows(LineLength);
+            if (Rows > MaxRows)
+                break;
+
+            Start = Index;
+            LineLength = 0;
+        }
+    }
+
+    if ((Index == 0) && !KdpScreenHistoryWrapped &&
+        (Rows + KdpScreenLineRows(LineLength) <= MaxRows))
+    {
+        Start = 0;
+    }
+
+    KdpScreenLineBuffer[0] = '\0';
+    KdpScreenLineLength = KdpScreenLineBufferPos = 0;
+
+    Index = (First + Start) % KdpScreenHistorySize;
+    Size -= Start;
+    Chunk = min(Size, KdpScreenHistorySize - Index);
+    KdpScreenOutput(KdpScreenHistory + Index, Chunk);
+    if (Size > Chunk)
+        KdpScreenOutput(KdpScreenHistory, Size - Chunk);
+}
+
+BOOLEAN
+KdpScreenAcquire(VOID)
+{
+    BOOLEAN DisplayAcquired, InitializeDisplay, LockAcquired;
+    KIRQL OldIrql;
+
+    LockAcquired = KdbpAcquireLock(&KdpScreenSpinLock, &OldIrql);
+
+    DisplayAcquired = KdpScreenAcquireDisplay(&InitializeDisplay);
+    if (InitializeDisplay)
+        KdpScreenReplay();
+
+    KdbpReleaseLock(&KdpScreenSpinLock, OldIrql, LockAcquired);
+    return DisplayAcquired;
+}
+
+static VOID
+NTAPI
+KdpScreenPrint(
+    _In_ PCCH String,
+    _In_ ULONG Length)
+{
+    BOOLEAN LockAcquired, InitializeDisplay;
+    KIRQL OldIrql;
+
+    LockAcquired = KdbpAcquireLock(&KdpScreenSpinLock, &OldIrql);
+
+    Length = KdpScreenRecord(String, Length);
+    if (!KdpScreenInitialized && InbvIsBootDriverInstalled())
+    {
+        (VOID)KdpScreenAcquireDisplay(&InitializeDisplay);
+        KdpScreenReplay();
+    }
+    else
+    {
+        KdpScreenOutput(String, Length);
+    }
+
+    KdbpReleaseLock(&KdpScreenSpinLock, OldIrql, LockAcquired);
+}
+
 NTSTATUS
 NTAPI
 KdpScreenInit(
@@ -610,6 +743,7 @@ KdpScreenInit(
     {
         /* Write out the functions that we support for now */
         DispatchTable->KdpPrintRoutine = KdpScreenPrint;
+        KeInitializeSpinLock(&KdpScreenSpinLock);
 
         /* Register for BootPhase 1 initialization and as a Provider */
         DispatchTable->KdpInitRoutine = KdpScreenInit;
