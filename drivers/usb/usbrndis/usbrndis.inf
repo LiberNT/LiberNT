@@ -13,9 +13,9 @@ DriverVer   = 01/24/2026,1.0.0.0
 DefaultDestDir = 12
 
 [Manufacturer]
-%Generic% = GenericDevices,NTx86,NTamd64
-%VBox% = VBoxDevices,NTx86,NTamd64
-%Realtek% = RealtekDevices,NTx86,NTamd64
+%Generic% = GenericDevices,NTx86,NTamd64,NTarm64,NTRISCV64
+%VBox% = VBoxDevices,NTx86,NTamd64,NTarm64,NTRISCV64
+%Realtek% = RealtekDevices,NTx86,NTamd64,NTarm64,NTRISCV64
 
 ; Generic RNDIS devices
 [GenericDevices.NTx86]
@@ -28,6 +28,16 @@ DefaultDestDir = 12
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_E0&SubClass_01&Prot_03
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_EF&SubClass_01&Prot_01
 
+[GenericDevices.NTarm64]
+%RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_02&Prot_FF
+%RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_E0&SubClass_01&Prot_03
+%RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_EF&SubClass_01&Prot_01
+
+[GenericDevices.NTRISCV64]
+%RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_02&Prot_FF
+%RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_E0&SubClass_01&Prot_03
+%RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_EF&SubClass_01&Prot_01
+
 ; VirtualBox USB Ethernet
 [VBoxDevices.NTx86]
 %VBox.DeviceDesc% = RNDIS.Install, USB\VID_80EE&PID_0040
@@ -35,11 +45,23 @@ DefaultDestDir = 12
 [VBoxDevices.NTamd64]
 %VBox.DeviceDesc% = RNDIS.Install, USB\VID_80EE&PID_0040
 
+[VBoxDevices.NTarm64]
+%VBox.DeviceDesc% = RNDIS.Install, USB\VID_80EE&PID_0040
+
+[VBoxDevices.NTRISCV64]
+%VBox.DeviceDesc% = RNDIS.Install, USB\VID_80EE&PID_0040
+
 ; Realtek RTL815x devices with CDC-ECM configuration
 [RealtekDevices.NTx86]
 %RTL8153.DeviceDesc% = RNDIS.Install, USB\VID_0BDA&PID_8153
 
 [RealtekDevices.NTamd64]
+%RTL8153.DeviceDesc% = RNDIS.Install, USB\VID_0BDA&PID_8153
+
+[RealtekDevices.NTarm64]
+%RTL8153.DeviceDesc% = RNDIS.Install, USB\VID_0BDA&PID_8153
+
+[RealtekDevices.NTRISCV64]
 %RTL8153.DeviceDesc% = RNDIS.Install, USB\VID_0BDA&PID_8153
 
 [RNDIS.Install]
