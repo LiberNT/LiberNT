@@ -5,21 +5,13 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#include <ntddk.h>
+#include "monitor.h"
 #include <ntddvdeo.h>
 
 #define NDEBUG
 #include <debug.h>
 
-#define MONITOR_TAG 'noMM'
-
-typedef struct _MONITOR_DEVICE_EXTENSION
-{
-    PDEVICE_OBJECT DeviceObject;
-    PDEVICE_OBJECT PhysicalDevice;
-    PDEVICE_OBJECT LowerDevice;
-    IO_REMOVE_LOCK RemoveLock;
-} MONITOR_DEVICE_EXTENSION, *PMONITOR_DEVICE_EXTENSION;
+UNICODE_STRING MonitorRegistryPath;
 
 static
 NTSTATUS
@@ -99,9 +91,33 @@ MonitorSystemControl(
     _Inout_ PIRP Irp)
 {
     PMONITOR_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    SYSCTL_IRP_DISPOSITION Disposition = IrpForward;
+    NTSTATUS Status;
 
-    IoSkipCurrentIrpStackLocation(Irp);
-    return IoCallDriver(DeviceExtension->LowerDevice, Irp);
+    Status = IoAcquireRemoveLock(&DeviceExtension->RemoveLock, Irp);
+    if (!NT_SUCCESS(Status))
+        return MonitorCompleteRequest(Irp, Status, 0);
+
+    if (DeviceExtension->WmiRegistered)
+        Status = WmiSystemControl(&DeviceExtension->WmiLibContext, DeviceObject, Irp, &Disposition);
+
+    switch (Disposition)
+    {
+        case IrpProcessed:
+            break;
+
+        case IrpNotCompleted:
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            break;
+
+        default:
+            IoSkipCurrentIrpStackLocation(Irp);
+            Status = IoCallDriver(DeviceExtension->LowerDevice, Irp);
+            break;
+    }
+
+    IoReleaseRemoveLock(&DeviceExtension->RemoveLock, Irp);
+    return Status;
 }
 
 static
@@ -123,10 +139,13 @@ MonitorPnp(
     {
         case IRP_MN_START_DEVICE:
             Status = MonitorForwardSynchronously(DeviceExtension, Irp);
+            if (NT_SUCCESS(Status))
+                MonitorWmiRegister(DeviceExtension);
             IoReleaseRemoveLock(&DeviceExtension->RemoveLock, Irp);
             return MonitorCompleteRequest(Irp, Status, Irp->IoStatus.Information);
 
         case IRP_MN_REMOVE_DEVICE:
+            MonitorWmiDeregister(DeviceExtension);
             IoReleaseRemoveLockAndWait(&DeviceExtension->RemoveLock, Irp);
             Irp->IoStatus.Status = STATUS_SUCCESS;
             IoSkipCurrentIrpStackLocation(Irp);
@@ -234,6 +253,9 @@ MonitorUnload(
     _In_ PDRIVER_OBJECT DriverObject)
 {
     UNREFERENCED_PARAMETER(DriverObject);
+
+    if (MonitorRegistryPath.Buffer)
+        ExFreePoolWithTag(MonitorRegistryPath.Buffer, MONITOR_TAG);
 }
 
 NTSTATUS
@@ -244,7 +266,14 @@ DriverEntry(
 {
     ULONG Index;
 
-    UNREFERENCED_PARAMETER(RegistryPath);
+    MonitorRegistryPath.Buffer = ExAllocatePoolWithTag(NonPagedPoolNx, RegistryPath->Length + sizeof(WCHAR), MONITOR_TAG);
+    if (!MonitorRegistryPath.Buffer)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlCopyMemory(MonitorRegistryPath.Buffer, RegistryPath->Buffer, RegistryPath->Length);
+    MonitorRegistryPath.Length = RegistryPath->Length;
+    MonitorRegistryPath.MaximumLength = RegistryPath->Length + sizeof(WCHAR);
+    MonitorRegistryPath.Buffer[RegistryPath->Length / sizeof(WCHAR)] = UNICODE_NULL;
+
     for (Index = 0; Index <= IRP_MJ_MAXIMUM_FUNCTION; Index++)
         DriverObject->MajorFunction[Index] = MonitorUnsupported;
     DriverObject->MajorFunction[IRP_MJ_CREATE] = MonitorCreateClose;
