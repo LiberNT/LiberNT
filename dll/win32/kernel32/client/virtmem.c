@@ -104,7 +104,7 @@ VirtualFreeEx(IN HANDLE hProcess,
     PVOID ReleasedAddress = lpAddress;
 
     /* Validate size and flags */
-    if (!(dwSize) || !(dwFreeType & MEM_RELEASE))
+    if (!(dwSize) || (dwFreeType != MEM_RELEASE))
     {
         /* Free the memory */
         Status = NtFreeVirtualMemory(hProcess,
