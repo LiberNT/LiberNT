@@ -748,7 +748,8 @@ static const PCSTR WinLdrNetworkDebugExtensions[] =
     "kd_02_8086.dll",
     "kd_8003_1055.dll",
     "kd_8003_1de4.dll",
-    "kd_fdt_spacemit_k1x-emac.dll"
+    "kd_fdt_spacemit_k1x-emac.dll",
+    "kd_usbnet.dll"
 };
 
 static
