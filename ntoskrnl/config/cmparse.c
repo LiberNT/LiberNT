@@ -2006,6 +2006,7 @@ CmpParseKey(IN PVOID ParseObject,
     HCELL_INDEX CellToRelease = HCELL_NIL;
     UNICODE_STRING Current, NextName;
     PCM_PARSE_CONTEXT ParseContext = Context;
+    PCM_PARSE_CONTEXT OpenContext = NULL;
     ULONG TotalRemainingSubkeys = 0, MatchRemainSubkeyLevel = 0, TotalSubkeys = 0;
     ULONG LockedKcbArray[CMP_KCBS_IN_ARRAY_LIMIT];
     PULONG LockedKcbs;
@@ -2045,6 +2046,9 @@ CmpParseKey(IN PVOID ParseObject,
     /* Check if this is a create */
     if (!ParseContext || !ParseContext->CreateOperation)
     {
+        if (ParseContext && (ParseContext->CreateOptions & REG_OPTION_BACKUP_RESTORE))
+            OpenContext = ParseContext;
+
         /* It isn't, so no context */
         ParseContext = NULL;
     }
@@ -2270,7 +2274,7 @@ KeyCachedOpenNow:
                                            AccessState,
                                            AccessMode,
                                            Attributes,
-                                           ParseContext,
+                                           ParseContext ? ParseContext : OpenContext,
                                            IsKeyCached ? CMP_OPEN_KCB_NO_CREATE : CMP_CREATE_KCB_KCB_LOCKED,
                                            &Kcb,
                                            LockedKcbs,
@@ -2457,7 +2461,7 @@ KeyCachedOpenNow:
                                AccessState,
                                AccessMode,
                                Attributes,
-                               ParseContext,
+                               ParseContext ? ParseContext : OpenContext,
                                CMP_OPEN_KCB_NO_CREATE,
                                &Kcb,
                                LockedKcbs,
