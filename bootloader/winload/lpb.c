@@ -66,6 +66,30 @@ OslAllocateLoaderBlock(VOID)
 
 static
 VOID
+OslAddFirmwareResources(
+    _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    PLIST_ENTRY ListHead = &LoaderBlock->FirmwareInformation.u.EfiInformation.FirmwareResourceList;
+    LOADER_FIRMWARE_RESOURCE Resource;
+    PLOADER_FIRMWARE_RESOURCE Entry;
+    ULONG Index;
+
+    InitializeListHead(ListHead);
+    for (Index = 0; FwGetFirmwareResource(Index, &Resource); Index++)
+    {
+        Entry = MmHeapAllocate(sizeof(*Entry));
+        if (!Entry)
+            break;
+
+        *Entry = Resource;
+        InsertTailList(ListHead, &Entry->ListEntry);
+    }
+
+    OslConvertList(ListHead);
+}
+
+static
+VOID
 OslAddArcDisk(
     _In_reads_bytes_(OSL_SECTOR_SIZE) const UCHAR* Sector,
     _In_opt_ PDK_DEVICE Disk,
@@ -215,6 +239,7 @@ OslFinalizeLoaderBlock(
     if (OslAcpiPresent)
         Extension->AcpiTable = (PVOID)1;
     Extension->SMBiosEPSHeader = FwGetSmbiosEntryPoint();
+    OslAddFirmwareResources(LoaderBlock);
     OslSetFrameBuffer(Extension);
 
     Extension->LoaderPerformanceData = PaToVa(&OslSystemBlock->LoaderPerformanceData);

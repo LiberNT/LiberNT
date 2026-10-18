@@ -12,6 +12,7 @@
 #include <drivers/acpi/acpi.h>
 #include <drivers/bootvid/framebuf.h>
 #include <loader_framebuffer.h>
+#include <loader_firmware.h>
 
 #define OSL_PATH_CHARS    260
 #define OSL_OPTIONS_CHARS BM_LOAD_OPTIONS_CHARS

@@ -146,6 +146,13 @@ FwGetAcpiRootPointer(VOID);
 PVOID
 FwGetSmbiosEntryPoint(VOID);
 
+struct _LOADER_FIRMWARE_RESOURCE;
+
+BOOLEAN
+FwGetFirmwareResource(
+    _In_ ULONG Index,
+    _Out_ struct _LOADER_FIRMWARE_RESOURCE* Resource);
+
 struct _CM_FRAMEBUF_DEVICE_DATA;
 
 BOOLEAN

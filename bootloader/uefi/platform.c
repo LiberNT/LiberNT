@@ -9,6 +9,8 @@
 #include <arc/loaderblk.h>
 #include <drivers/bootvid/framebuf.h>
 #include <EdidActive.h>
+#include <SystemResourceTable.h>
+#include <loader_firmware.h>
 
 #define FW_COLOR_BITS  32
 #define FW_MASK_RED    0x000000FF
@@ -26,6 +28,7 @@ static EFI_GUID FwGraphicsOutputGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
 static EFI_GUID FwLoadedImageProtocolGuid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
 static EFI_GUID FwDevicePathGuid = EFI_DEVICE_PATH_PROTOCOL_GUID;
 static EFI_GUID FwEdidActiveGuid = EFI_EDID_ACTIVE_PROTOCOL_GUID;
+static EFI_GUID FwSystemResourceTableGuid = EFI_SYSTEM_RESOURCE_TABLE_GUID;
 
 static
 PVOID
@@ -57,6 +60,34 @@ FwGetSmbiosEntryPoint(VOID)
     PVOID Table = FwFindConfigurationTable(&FwSmbios3Guid);
 
     return Table ? Table : FwFindConfigurationTable(&FwSmbiosGuid);
+}
+
+BOOLEAN
+FwGetFirmwareResource(
+    _In_ ULONG Index,
+    _Out_ PLOADER_FIRMWARE_RESOURCE Resource)
+{
+    EFI_SYSTEM_RESOURCE_TABLE* Table = FwFindConfigurationTable(&FwSystemResourceTableGuid);
+    EFI_SYSTEM_RESOURCE_ENTRY* Entry;
+
+    if (!Table ||
+        Table->FwResourceVersion != EFI_SYSTEM_RESOURCE_TABLE_FIRMWARE_RESOURCE_VERSION ||
+        Table->FwResourceCount > Table->FwResourceCountMax ||
+        Index >= Table->FwResourceCount)
+    {
+        return FALSE;
+    }
+
+    Entry = &((EFI_SYSTEM_RESOURCE_ENTRY*)(Table + 1))[Index];
+    RtlZeroMemory(Resource, sizeof(*Resource));
+    RtlCopyMemory(&Resource->FirmwareClass, &Entry->FwClass, sizeof(Resource->FirmwareClass));
+    Resource->FirmwareType = Entry->FwType;
+    Resource->FirmwareVersion = Entry->FwVersion;
+    Resource->LowestSupportedFirmwareVersion = Entry->LowestSupportedFwVersion;
+    Resource->CapsuleFlags = Entry->CapsuleFlags;
+    Resource->LastAttemptVersion = Entry->LastAttemptVersion;
+    Resource->LastAttemptStatus = Entry->LastAttemptStatus;
+    return TRUE;
 }
 
 BOOLEAN

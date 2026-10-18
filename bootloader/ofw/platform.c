@@ -835,6 +835,16 @@ FwGetSmbiosEntryPoint(VOID)
     return NULL;
 }
 
+BOOLEAN
+FwGetFirmwareResource(
+    _In_ ULONG Index,
+    _Out_ struct _LOADER_FIRMWARE_RESOURCE* Resource)
+{
+    UNREFERENCED_PARAMETER(Index);
+    UNREFERENCED_PARAMETER(Resource);
+    return FALSE;
+}
+
 static
 OFW_HANDLE
 OfwFindDisplay(
