@@ -55,6 +55,13 @@
  */
 static CONTROLLER_INFO gControllerInfo[MAX_CONTROLLERS];
 static ULONG gNumberOfControllers = 0;
+static BOOLEAN gControllersQueried = FALSE;
+
+typedef struct _FDC_FDO_EXTENSION
+{
+    PDEVICE_OBJECT LowerDevice;
+    PCONTROLLER_INFO ControllerInfo;
+} FDC_FDO_EXTENSION, *PFDC_FDO_EXTENSION;
 
 NTSYSAPI
 NTSTATUS
@@ -69,9 +76,53 @@ static KEVENT QueueThreadTerminate;
 static PVOID QueueThreadObject;
 
 static VOID
+CleanupController(PCONTROLLER_INFO ControllerInfo)
+{
+    ULONG j;
+
+    PAGED_CODE();
+
+    for (j = 0; j < ControllerInfo->NumberOfDrives; j++)
+    {
+        if (!ControllerInfo->DriveInfo[j].Initialized)
+            continue;
+
+        if (ControllerInfo->DriveInfo[j].DeviceObject)
+        {
+            UNICODE_STRING Link;
+
+            RtlInitUnicodeString(&Link, ControllerInfo->DriveInfo[j].ArcPathBuffer);
+            IoDeassignArcName(&Link);
+
+            IoDeleteDevice(ControllerInfo->DriveInfo[j].DeviceObject);
+            ControllerInfo->DriveInfo[j].DeviceObject = NULL;
+            IoGetConfigurationInformation()->FloppyCount--;
+        }
+
+        ControllerInfo->DriveInfo[j].Initialized = FALSE;
+    }
+
+    if (ControllerInfo->InterruptObject)
+    {
+        IoDisconnectInterrupt(ControllerInfo->InterruptObject);
+        ControllerInfo->InterruptObject = NULL;
+    }
+
+    if (ControllerInfo->Initialized)
+    {
+        if (HwPowerOff(ControllerInfo) != STATUS_SUCCESS)
+        {
+            WARN_(FLOPPY, "cleanup: warning: HwPowerOff failed\n");
+        }
+
+        ControllerInfo->Initialized = FALSE;
+    }
+}
+
+static VOID
 Cleanup(PDRIVER_OBJECT DriverObject)
 {
-    ULONG i, j;
+    ULONG i;
 
     PAGED_CODE();
     UNREFERENCED_PARAMETER(DriverObject);
@@ -85,42 +136,7 @@ Cleanup(PDRIVER_OBJECT DriverObject)
     }
 
     for (i = 0; i < gNumberOfControllers; i++)
-    {
-        for (j = 0; j < gControllerInfo[i].NumberOfDrives; j++)
-        {
-            if (!gControllerInfo[i].DriveInfo[j].Initialized)
-                continue;
-
-            if (gControllerInfo[i].DriveInfo[j].DeviceObject)
-            {
-                UNICODE_STRING Link;
-
-                RtlInitUnicodeString(&Link, gControllerInfo[i].DriveInfo[j].ArcPathBuffer);
-                IoDeassignArcName(&Link);
-
-                IoDeleteDevice(gControllerInfo[i].DriveInfo[j].DeviceObject);
-                gControllerInfo[i].DriveInfo[j].DeviceObject = NULL;
-            }
-
-            gControllerInfo[i].DriveInfo[j].Initialized = FALSE;
-        }
-
-        if (gControllerInfo[i].InterruptObject)
-        {
-            IoDisconnectInterrupt(gControllerInfo[i].InterruptObject);
-            gControllerInfo[i].InterruptObject = NULL;
-        }
-
-        if (gControllerInfo[i].Initialized)
-        {
-            if (HwPowerOff(&gControllerInfo[i]) != STATUS_SUCCESS)
-            {
-                WARN_(FLOPPY, "cleanup: warning: HwPowerOff failed\n");
-            }
-
-            gControllerInfo[i].Initialized = FALSE;
-        }
-    }
+        CleanupController(&gControllerInfo[i]);
 }
 
 
@@ -267,9 +283,15 @@ static NTSTATUS NTAPI CreateClose(PDEVICE_OBJECT DeviceObject,
  * TODO: Figure out why this isn't getting called
  */
 {
-    UNREFERENCED_PARAMETER(DeviceObject);
-
     TRACE_(FLOPPY, "CreateClose called\n");
+
+    if (DeviceObject->DeviceType == FILE_DEVICE_CONTROLLER)
+    {
+        Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_INVALID_DEVICE_REQUEST;
+    }
 
     Irp->IoStatus.Status = STATUS_SUCCESS;
     Irp->IoStatus.Information = FILE_OPENED;
@@ -928,8 +950,14 @@ ReportToMountMgr(UCHAR ControlerId, UCHAR DriveId)
 }
 
 
-static BOOLEAN NTAPI
-AddControllers(PDRIVER_OBJECT DriverObject)
+static PCONTROLLER_INFO NTAPI
+AddControllers(PDRIVER_OBJECT DriverObject,
+               PUCHAR Port,
+               ULONG Dma,
+               ULONG MappedVector,
+               KIRQL MappedLevel,
+               KINTERRUPT_MODE InterruptMode,
+               KAFFINITY Affinity)
 /*
  * FUNCTION: Called on initialization to find our controllers and build device and controller objects for them
  * ARGUMENTS:
@@ -949,22 +977,26 @@ AddControllers(PDRIVER_OBJECT DriverObject)
     INTERFACE_TYPE InterfaceType = Isa;
     CONFIGURATION_TYPE ControllerType = DiskController;
     CONFIGURATION_TYPE PeripheralType = FloppyDiskPeripheral;
-    KAFFINITY Affinity;
     DEVICE_DESCRIPTION DeviceDescription;
+    PCONTROLLER_INFO Started = NULL;
     UCHAR i;
     UCHAR j;
 
     PAGED_CODE();
 
     /* Find our controllers on all ISA buses */
-    IoQueryDeviceDescription(&InterfaceType,
-                             NULL,
-                             &ControllerType,
-                             NULL,
-                             &PeripheralType,
-                             NULL,
-                             ConfigCallback,
-                             NULL);
+    if (!gControllersQueried)
+    {
+        gControllersQueried = TRUE;
+        IoQueryDeviceDescription(&InterfaceType,
+                                 NULL,
+                                 &ControllerType,
+                                 NULL,
+                                 &PeripheralType,
+                                 NULL,
+                                 ConfigCallback,
+                                 NULL);
+    }
 
     /*
      * w2k breaks the return val from ConfigCallback, so we have to hack around it, rather than just
@@ -973,19 +1005,23 @@ AddControllers(PDRIVER_OBJECT DriverObject)
     if(!gControllerInfo[0].Populated)
     {
         WARN_(FLOPPY, "AddControllers: failed to get controller info from registry\n");
-        return FALSE;
+        return NULL;
     }
 
     /* Now that we have a controller, set it up with the system */
     for(i = 0; i < gNumberOfControllers && gControllerInfo[i].NumberOfDrives > 0; i++)
     {
+        if (gControllerInfo[i].BaseAddress != Port || gControllerInfo[i].Initialized)
+            continue;
+
         /* 0: Report resource usage to the kernel, to make sure they aren't assigned to anyone else */
         /* FIXME: Implement me. */
 
         /* 1: Set up interrupt */
-        gControllerInfo[i].MappedVector = HalGetInterruptVector(gControllerInfo[i].InterfaceType, gControllerInfo[i].BusNumber,
-                                          gControllerInfo[i].Level, gControllerInfo[i].Vector,
-                                          &gControllerInfo[i].MappedLevel, &Affinity);
+        gControllerInfo[i].MappedVector = MappedVector;
+        gControllerInfo[i].MappedLevel = MappedLevel;
+        gControllerInfo[i].InterruptMode = InterruptMode;
+        gControllerInfo[i].Dma = Dma;
 
         /* Must set up the DPC before we connect the interrupt */
         KeInitializeDpc(&gControllerInfo[i].Dpc, DpcForIsr, &gControllerInfo[i]);
@@ -1116,11 +1152,207 @@ AddControllers(PDRIVER_OBJECT DriverObject)
             RWDetermineMediaType(&gControllerInfo[i].DriveInfo[j], TRUE);
             StopMotor(gControllerInfo[i].DriveInfo[j].ControllerInfo);
         }
+
+        Started = &gControllerInfo[i];
+        break;
     }
 
     INFO_(FLOPPY, "AddControllers: --------------------------------------------> finished adding controllers\n");
 
-    return (IoGetConfigurationInformation()->FloppyCount != 0);
+    return Started;
+}
+
+static NTSTATUS
+StartController(PDEVICE_OBJECT DeviceObject,
+                PCM_RESOURCE_LIST Raw,
+                PCM_RESOURCE_LIST Translated)
+{
+    PFDC_FDO_EXTENSION Extension = DeviceObject->DeviceExtension;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR RawDescriptor;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+    KINTERRUPT_MODE InterruptMode = Latched;
+    KAFFINITY Affinity = 0;
+    BOOLEAN HaveInterrupt = FALSE;
+    PUCHAR Port = NULL;
+    ULONG Dma = MAXULONG;
+    ULONG Vector = 0;
+    KIRQL Level = 0;
+    ULONG i;
+
+    PAGED_CODE();
+
+    if (!Raw || !Translated || Raw->Count != 1 || Translated->Count != 1 ||
+        Raw->List[0].PartialResourceList.Count != Translated->List[0].PartialResourceList.Count)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    for (i = 0; i < Translated->List[0].PartialResourceList.Count; i++)
+    {
+        RawDescriptor = &Raw->List[0].PartialResourceList.PartialDescriptors[i];
+        Descriptor = &Translated->List[0].PartialResourceList.PartialDescriptors[i];
+
+        switch (Descriptor->Type)
+        {
+            case CmResourceTypePort:
+                if (Descriptor->u.Port.Length >= 6)
+                    Port = (PUCHAR)(ULONG_PTR)Descriptor->u.Port.Start.QuadPart;
+                break;
+
+            case CmResourceTypeInterrupt:
+                Vector = Descriptor->u.Interrupt.Vector;
+                Level = (KIRQL)Descriptor->u.Interrupt.Level;
+                Affinity = Descriptor->u.Interrupt.Affinity;
+                InterruptMode = (Descriptor->Flags & CM_RESOURCE_INTERRUPT_LATCHED) ? Latched : LevelSensitive;
+                HaveInterrupt = TRUE;
+                break;
+
+            case CmResourceTypeDma:
+                Dma = RawDescriptor->u.Dma.Channel;
+                break;
+        }
+    }
+
+    if (!Port || !HaveInterrupt || Dma == MAXULONG)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Extension->ControllerInfo = AddControllers(DeviceObject->DriverObject,
+                                               Port,
+                                               Dma,
+                                               Vector,
+                                               Level,
+                                               InterruptMode,
+                                               Affinity);
+    if (!Extension->ControllerInfo)
+        WARN_(FLOPPY, "StartController: no drive is configured on the controller at %p\n", Port);
+
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS NTAPI
+AddDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject)
+{
+    PFDC_FDO_EXTENSION Extension;
+    PDEVICE_OBJECT DeviceObject;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = IoCreateDevice(DriverObject, sizeof(FDC_FDO_EXTENSION), NULL,
+                            FILE_DEVICE_CONTROLLER, FILE_DEVICE_SECURE_OPEN, FALSE, &DeviceObject);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Extension = DeviceObject->DeviceExtension;
+    RtlZeroMemory(Extension, sizeof(*Extension));
+    Extension->LowerDevice = IoAttachDeviceToDeviceStack(DeviceObject, PhysicalDeviceObject);
+    if (!Extension->LowerDevice)
+    {
+        IoDeleteDevice(DeviceObject);
+        return STATUS_NO_SUCH_DEVICE;
+    }
+
+    DeviceObject->Flags |= DO_POWER_PAGABLE;
+    DeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS NTAPI
+DispatchPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    PFDC_FDO_EXTENSION Extension = DeviceObject->DeviceExtension;
+    NTSTATUS Status;
+
+    if (DeviceObject->DeviceType != FILE_DEVICE_CONTROLLER)
+    {
+        Status = Irp->IoStatus.Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return Status;
+    }
+
+    switch (Stack->MinorFunction)
+    {
+        case IRP_MN_START_DEVICE:
+            Status = IoForwardIrpSynchronously(Extension->LowerDevice, Irp) ?
+                     Irp->IoStatus.Status : STATUS_UNSUCCESSFUL;
+            if (NT_SUCCESS(Status))
+            {
+                Status = StartController(DeviceObject,
+                                         Stack->Parameters.StartDevice.AllocatedResources,
+                                         Stack->Parameters.StartDevice.AllocatedResourcesTranslated);
+            }
+            Irp->IoStatus.Status = Status;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return Status;
+
+        case IRP_MN_QUERY_STOP_DEVICE:
+            Irp->IoStatus.Status = STATUS_UNSUCCESSFUL;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return STATUS_UNSUCCESSFUL;
+
+        case IRP_MN_SURPRISE_REMOVAL:
+        case IRP_MN_REMOVE_DEVICE:
+            if (Extension->ControllerInfo)
+            {
+                CleanupController(Extension->ControllerInfo);
+                Extension->ControllerInfo = NULL;
+            }
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            if (Stack->MinorFunction == IRP_MN_REMOVE_DEVICE)
+            {
+                PDEVICE_OBJECT LowerDevice = Extension->LowerDevice;
+
+                IoSkipCurrentIrpStackLocation(Irp);
+                Status = IoCallDriver(LowerDevice, Irp);
+                IoDetachDevice(LowerDevice);
+                IoDeleteDevice(DeviceObject);
+                return Status;
+            }
+            break;
+
+        case IRP_MN_QUERY_REMOVE_DEVICE:
+        case IRP_MN_CANCEL_REMOVE_DEVICE:
+        case IRP_MN_CANCEL_STOP_DEVICE:
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            break;
+    }
+
+    IoSkipCurrentIrpStackLocation(Irp);
+    return IoCallDriver(Extension->LowerDevice, Irp);
+}
+
+static NTSTATUS NTAPI
+DispatchPower(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    NTSTATUS Status;
+
+    PoStartNextPowerIrp(Irp);
+    if (DeviceObject->DeviceType != FILE_DEVICE_CONTROLLER)
+    {
+        Status = Irp->IoStatus.Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return Status;
+    }
+
+    IoSkipCurrentIrpStackLocation(Irp);
+    return PoCallDriver(((PFDC_FDO_EXTENSION)DeviceObject->DeviceExtension)->LowerDevice, Irp);
+}
+
+static NTSTATUS NTAPI
+DispatchSystemControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    NTSTATUS Status;
+
+    if (DeviceObject->DeviceType != FILE_DEVICE_CONTROLLER)
+    {
+        Status = Irp->IoStatus.Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return Status;
+    }
+
+    IoSkipCurrentIrpStackLocation(Irp);
+    return IoCallDriver(((PFDC_FDO_EXTENSION)DeviceObject->DeviceExtension)->LowerDevice, Irp);
 }
 
 
@@ -1266,7 +1498,11 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
     DriverObject->MajorFunction[IRP_MJ_READ]           = (PDRIVER_DISPATCH)ReadWrite;
     DriverObject->MajorFunction[IRP_MJ_WRITE]          = (PDRIVER_DISPATCH)ReadWrite;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = (PDRIVER_DISPATCH)DeviceIoctl;
+    DriverObject->MajorFunction[IRP_MJ_PNP]            = DispatchPnp;
+    DriverObject->MajorFunction[IRP_MJ_POWER]          = DispatchPower;
+    DriverObject->MajorFunction[IRP_MJ_SYSTEM_CONTROL] = DispatchSystemControl;
 
+    DriverObject->DriverExtension->AddDevice = AddDevice;
     DriverObject->DriverUnload = Unload;
 
     /*
@@ -1328,16 +1564,6 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
      * need it, as handles are process-specific.
      */
     ZwClose(ThreadHandle);
-
-    /*
-     * Start the device discovery process.  Returns STATUS_SUCCESS if
-     * it finds even one drive attached to one controller.
-     */
-    if(!AddControllers(DriverObject))
-    {
-        Cleanup(DriverObject);
-        return STATUS_NO_SUCH_DEVICE;
-    }
 
     return STATUS_SUCCESS;
 }
