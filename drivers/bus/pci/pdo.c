@@ -3,6 +3,7 @@
  * FILE:            pdo.c
  * PURPOSE:         Child device object dispatch routines
  * PROGRAMMERS:     Casper S. Hornstrup (chorns@users.sourceforge.net)
+ *                  Ahmed ARIF (arif.ing@outlook.com)
  * UPDATE HISTORY:
  *      10-09-2001  CSH  Created
  */
@@ -4900,6 +4901,107 @@ PciRestoreDeviceConfig(
 }
 
 
+static
+VOID
+PciSaveMsiState(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension)
+{
+    PPCI_DEVICE Device = DeviceExtension->PciDevice;
+    PHYSICAL_ADDRESS TableAddress;
+    PPCI_MSIX_TABLE_ENTRY Table;
+    ULONG Length;
+
+    if (Device->MsiCapability)
+    {
+        PciReadDeviceConfig(Device, &Device->SavedMsiControl, Device->MsiCapability + PCI_MSI_FLAGS, sizeof(USHORT));
+        PciReadDeviceConfig(Device, &Device->SavedMsiAddressLow, Device->MsiCapability + PCI_MSI_ADDRESS_LO, sizeof(ULONG));
+        if (Device->SavedMsiControl & PCI_MSI_FLAGS_64BIT)
+        {
+            PciReadDeviceConfig(Device, &Device->SavedMsiAddressHigh, Device->MsiCapability + PCI_MSI_ADDRESS_HI, sizeof(ULONG));
+            PciReadDeviceConfig(Device, &Device->SavedMsiData, Device->MsiCapability + PCI_MSI_DATA_64, sizeof(USHORT));
+        }
+        else
+        {
+            PciReadDeviceConfig(Device, &Device->SavedMsiData, Device->MsiCapability + PCI_MSI_DATA_32, sizeof(USHORT));
+        }
+    }
+
+    Device->SavedMsixEntries = 0;
+    if (Device->MsixCapability == 0 || Device->MsixTableSize == 0)
+        return;
+
+    PciReadDeviceConfig(Device, &Device->SavedMsixControl, Device->MsixCapability + PCI_MSIX_FLAGS, sizeof(USHORT));
+    if (!(Device->SavedMsixControl & PCI_MSIX_FLAGS_ENABLE) ||
+        !PciPdoGetMsixTableAddress(DeviceExtension, &TableAddress))
+    {
+        return;
+    }
+
+    Length = Device->MsixTableSize * sizeof(PCI_MSIX_TABLE_ENTRY);
+    if (Device->SavedMsixTable == NULL)
+    {
+        Device->SavedMsixTable = ExAllocatePoolWithTag(NonPagedPool, Length, TAG_PCI);
+        if (Device->SavedMsixTable == NULL)
+            return;
+    }
+
+    Table = MmMapIoSpace(TableAddress, Length, MmNonCached);
+    if (Table == NULL)
+        return;
+
+    READ_REGISTER_BUFFER_ULONG((PULONG)Table, Device->SavedMsixTable, Length / sizeof(ULONG));
+    MmUnmapIoSpace(Table, Length);
+    Device->SavedMsixEntries = Device->MsixTableSize;
+}
+
+static
+VOID
+PciRestoreMsiState(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension)
+{
+    PPCI_DEVICE Device = DeviceExtension->PciDevice;
+    PHYSICAL_ADDRESS TableAddress;
+    PPCI_MSIX_TABLE_ENTRY Table;
+    USHORT Control;
+    ULONG Length;
+
+    if (Device->MsiCapability && (Device->SavedMsiControl & PCI_MSI_FLAGS_ENABLE))
+    {
+        Control = Device->SavedMsiControl & ~PCI_MSI_FLAGS_ENABLE;
+        PciWriteDeviceConfig(Device, &Control, Device->MsiCapability + PCI_MSI_FLAGS, sizeof(USHORT));
+        PciWriteDeviceConfig(Device, &Device->SavedMsiAddressLow, Device->MsiCapability + PCI_MSI_ADDRESS_LO, sizeof(ULONG));
+        if (Device->SavedMsiControl & PCI_MSI_FLAGS_64BIT)
+        {
+            PciWriteDeviceConfig(Device, &Device->SavedMsiAddressHigh, Device->MsiCapability + PCI_MSI_ADDRESS_HI, sizeof(ULONG));
+            PciWriteDeviceConfig(Device, &Device->SavedMsiData, Device->MsiCapability + PCI_MSI_DATA_64, sizeof(USHORT));
+        }
+        else
+        {
+            PciWriteDeviceConfig(Device, &Device->SavedMsiData, Device->MsiCapability + PCI_MSI_DATA_32, sizeof(USHORT));
+        }
+        PciWriteDeviceConfig(Device, &Device->SavedMsiControl, Device->MsiCapability + PCI_MSI_FLAGS, sizeof(USHORT));
+    }
+
+    if (Device->SavedMsixEntries == 0 || Device->SavedMsixTable == NULL)
+        return;
+
+    Control = Device->SavedMsixControl | PCI_MSIX_FLAGS_MASKALL;
+    PciWriteDeviceConfig(Device, &Control, Device->MsixCapability + PCI_MSIX_FLAGS, sizeof(USHORT));
+
+    if (PciPdoGetMsixTableAddress(DeviceExtension, &TableAddress))
+    {
+        Length = Device->SavedMsixEntries * sizeof(PCI_MSIX_TABLE_ENTRY);
+        Table = MmMapIoSpace(TableAddress, Length, MmNonCached);
+        if (Table != NULL)
+        {
+            WRITE_REGISTER_BUFFER_ULONG((PULONG)Table, Device->SavedMsixTable, Length / sizeof(ULONG));
+            MmUnmapIoSpace(Table, Length);
+        }
+    }
+
+    PciWriteDeviceConfig(Device, &Device->SavedMsixControl, Device->MsixCapability + PCI_MSIX_FLAGS, sizeof(USHORT));
+}
+
 NTSTATUS
 PdoPowerControl(
     PDEVICE_OBJECT DeviceObject,
@@ -4962,6 +5064,8 @@ PdoPowerControl(
                         {
                             PciDecodeEnable(Device, (PVOID)(ULONG_PTR)TRUE);
                         }
+
+                        PciRestoreMsiState(DeviceExtension);
                     }
                     Status = STATUS_SUCCESS;
                 }
@@ -4971,6 +5075,7 @@ PdoPowerControl(
                     if (DeviceExtension->PciDevice)
                     {
                         PciSaveDeviceConfig(DeviceExtension->PciDevice);
+                        PciSaveMsiState(DeviceExtension);
                         PciSetPowerLevel(DeviceExtension->PciDevice, NewState);
                     }
                     Status = STATUS_SUCCESS;
@@ -4982,8 +5087,31 @@ PdoPowerControl(
             }
             else if (IrpSp->Parameters.Power.Type == SystemPowerState)
             {
+                PPCI_DEVICE Device = DeviceExtension->PciDevice;
+
                 DPRINT("PDO IRP_MN_SET_POWER: System state S%d\n",
                        IrpSp->Parameters.Power.State.SystemState - PowerSystemWorking);
+
+                if (Device && !Device->IsDebuggingDevice)
+                {
+                    if (IrpSp->Parameters.Power.State.SystemState == PowerSystemWorking)
+                    {
+                        if (Device->SleepStateSaved)
+                        {
+                            Device->SleepStateSaved = FALSE;
+                            PciRestoreDeviceConfig(Device);
+                            PciDecodeEnable(Device, (PVOID)(ULONG_PTR)TRUE);
+                            PciRestoreMsiState(DeviceExtension);
+                        }
+                    }
+                    else if (IrpSp->Parameters.Power.State.SystemState != PowerSystemShutdown &&
+                             DeviceExtension->Common.DevicePowerState == PowerDeviceD0)
+                    {
+                        PciSaveDeviceConfig(Device);
+                        PciSaveMsiState(DeviceExtension);
+                        Device->SleepStateSaved = TRUE;
+                    }
+                }
                 Status = STATUS_SUCCESS;
             }
             break;

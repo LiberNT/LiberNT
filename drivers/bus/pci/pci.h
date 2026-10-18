@@ -66,6 +66,14 @@ typedef struct _PCI_DEVICE
     BOOLEAN MsiAllocated;
     // Number of MSI messages currently allocated
     ULONG MsiMessageCount;
+    USHORT SavedMsiControl;
+    USHORT SavedMsiData;
+    ULONG SavedMsiAddressLow;
+    ULONG SavedMsiAddressHigh;
+    USHORT SavedMsixControl;
+    ULONG SavedMsixEntries;
+    PVOID SavedMsixTable;
+    BOOLEAN SleepStateSaved;
 } PCI_DEVICE, *PPCI_DEVICE;
 
 
