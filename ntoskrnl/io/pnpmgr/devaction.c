@@ -3182,7 +3182,8 @@ PiDevNodeStateMachine(
             case DeviceNodeInitialized:
                 DPRINT("DeviceNodeInitialized %wZ\n", &currentNode->InstancePath);
                 status = PiCallDriverAddDevice(currentNode, PnPBootDriversInitialized);
-                doProcessAgain = NT_SUCCESS(status);
+                doProcessAgain = NT_SUCCESS(status) ||
+                                 currentNode->State == DeviceNodeAwaitingQueuedRemoval;
                 break;
             case DeviceNodeDriversAdded:
                 DPRINT("DeviceNodeDriversAdded %wZ\n", &currentNode->InstancePath);
