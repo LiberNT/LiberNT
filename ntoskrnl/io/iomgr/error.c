@@ -525,7 +525,6 @@ IopRaiseHardError(IN PVOID NormalContext,
     UNIMPLEMENTED;
 
     /* FIXME: UNIMPLEMENTED */
-    Irp->IoStatus.Status = STATUS_NOT_IMPLEMENTED;
     Irp->IoStatus.Information = 0;
     IoCompleteRequest(Irp, IO_DISK_INCREMENT);
 }
