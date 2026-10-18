@@ -226,6 +226,114 @@ IopOpenSafeBootKey(
     return Status;
 }
 
+static
+BOOLEAN
+IopSafeBootRegistryString(
+    _In_ HANDLE KeyHandle,
+    _In_ PWSTR ValueName,
+    _Out_ PKEY_VALUE_FULL_INFORMATION *Info,
+    _Out_ PUNICODE_STRING String)
+{
+    if (!NT_SUCCESS(IopGetRegistryValue(KeyHandle, ValueName, Info)))
+        return FALSE;
+
+    if (((*Info)->Type == REG_SZ) &&
+        ((*Info)->DataLength >= sizeof(WCHAR)) &&
+        ((*Info)->DataLength <= UNICODE_STRING_MAX_BYTES) &&
+        (((*Info)->DataLength % sizeof(WCHAR)) == 0))
+    {
+        IopInitRegistryString(String, *Info);
+        return TRUE;
+    }
+
+    ExFreePool(*Info);
+    return FALSE;
+}
+
+static
+BOOLEAN
+IopSafeBootScanDevices(
+    _In_ HANDLE KeyHandle,
+    _In_ ULONG Depth,
+    _In_ PCUNICODE_STRING ServiceName,
+    _In_ HANDLE SafeBootHandle)
+{
+    ULONGLONG Buffer[(sizeof(KEY_BASIC_INFORMATION) + 256 * sizeof(WCHAR)) / sizeof(ULONGLONG) + 1];
+    PKEY_BASIC_INFORMATION BasicInfo = (PKEY_BASIC_INFORMATION)Buffer;
+    PKEY_VALUE_FULL_INFORMATION ServiceInfo, ClassInfo;
+    UNICODE_STRING Name, ClassGuid;
+    BOOLEAN Allowed = FALSE;
+    HANDLE SubKeyHandle;
+    ULONG Index, Length;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Depth == 0)
+    {
+        if (!IopSafeBootRegistryString(KeyHandle, L"Service", &ServiceInfo, &Name))
+            return FALSE;
+
+        if (RtlEqualUnicodeString(&Name, ServiceName, TRUE) &&
+            IopSafeBootRegistryString(KeyHandle, L"ClassGUID", &ClassInfo, &ClassGuid))
+        {
+            Allowed = IopHasSafeBootEntry(SafeBootHandle, &ClassGuid);
+            ExFreePool(ClassInfo);
+        }
+        ExFreePool(ServiceInfo);
+        return Allowed;
+    }
+
+    for (Index = 0; !Allowed; Index++)
+    {
+        Status = ZwEnumerateKey(KeyHandle, Index, KeyBasicInformation, BasicInfo, sizeof(Buffer), &Length);
+        if (Status == STATUS_NO_MORE_ENTRIES)
+            break;
+        if (!NT_SUCCESS(Status))
+            continue;
+
+        Name.Buffer = BasicInfo->Name;
+        Name.Length = Name.MaximumLength = (USHORT)BasicInfo->NameLength;
+        if (!NT_SUCCESS(IopOpenRegistryKeyEx(&SubKeyHandle, KeyHandle, &Name, KEY_READ)))
+            continue;
+
+        Allowed = IopSafeBootScanDevices(SubKeyHandle, Depth - 1, ServiceName, SafeBootHandle);
+        ZwClose(SubKeyHandle);
+    }
+
+    return Allowed;
+}
+
+static
+BOOLEAN
+IopSafeBootAllowsServiceDevices(
+    _In_ HANDLE ServiceHandle)
+{
+    static UNICODE_STRING EnumRoot =
+        RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Enum");
+    UNICODE_STRING ServiceName = { 0 };
+    HANDLE RootHandle, SafeBootHandle;
+    BOOLEAN Allowed = FALSE;
+
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(IopGetServiceKeyName(ServiceHandle, &ServiceName)))
+        return FALSE;
+
+    if (NT_SUCCESS(IopOpenSafeBootKey(&SafeBootHandle)))
+    {
+        if (NT_SUCCESS(IopOpenRegistryKeyEx(&RootHandle, NULL, &EnumRoot, KEY_READ)))
+        {
+            Allowed = IopSafeBootScanDevices(RootHandle, 3, &ServiceName, SafeBootHandle);
+            ZwClose(RootHandle);
+        }
+        ZwClose(SafeBootHandle);
+    }
+
+    ExFreePoolWithTag(ServiceName.Buffer, TAG_IO);
+    return Allowed;
+}
+
 NTSTATUS
 IopCheckSafeBootDriver(
     _In_ HANDLE ServiceHandle)
@@ -318,7 +426,7 @@ IopCheckSafeBootDriver(
     }
 
     ZwClose(SafeBootHandle);
-    return STATUS_NOT_SAFE_MODE_DRIVER;
+    return IopSafeBootAllowsServiceDevices(ServiceHandle) ? STATUS_SUCCESS : STATUS_NOT_SAFE_MODE_DRIVER;
 }
 
 NTSTATUS
@@ -2928,13 +3036,6 @@ IopLoadDriverWithImage(
     PLDR_DATA_TABLE_ENTRY ModuleObject;
     PVOID BaseAddress;
 
-    Status = IopCheckSafeBootDriver(ServiceHandle);
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("Driver blocked by SafeBoot policy (Status %lx)\n", Status);
-        return Status;
-    }
-
     Status = IopGetDriverImagePath(ServiceHandle, &ImagePath);
     if (!NT_SUCCESS(Status)) return Status;
 
@@ -3052,10 +3153,14 @@ IopLoadUnloadDriverWorker(
         {
             NTSTATUS driverEntryStatus = STATUS_SUCCESS;
 
-            LoadParams->Status = IopLoadDriverWithImage(serviceHandle,
-                                                        NULL,
-                                                        &LoadParams->DriverObject,
-                                                        &driverEntryStatus);
+            LoadParams->Status = IopCheckSafeBootDriver(serviceHandle);
+            if (!NT_SUCCESS(LoadParams->Status))
+                DPRINT1("Driver blocked by SafeBoot policy (Status %lx)\n", LoadParams->Status);
+            else
+                LoadParams->Status = IopLoadDriverWithImage(serviceHandle,
+                                                            NULL,
+                                                            &LoadParams->DriverObject,
+                                                            &driverEntryStatus);
             if ((LoadParams->Status == STATUS_FAILED_DRIVER_ENTRY) &&
                 !NT_SUCCESS(driverEntryStatus))
             {
