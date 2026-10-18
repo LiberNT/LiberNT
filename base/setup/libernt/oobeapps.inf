@@ -7,6 +7,9 @@ VCRedist.x86
 WineMono.x86
 WineGecko.x64
 WineGecko.x86
+Chrome.x64
+Firefox.x64
+Steam.x64
 
 [Apps.arm64]
 VCRedist.arm64
@@ -14,11 +17,15 @@ VCRedist.x64
 VCRedist.x86
 WineMono.arm64
 WineGecko.x86
+Chrome.arm64
+Firefox.arm64
 
 [Apps.x86]
 VCRedist.x86
 WineMono.x86
 WineGecko.x86
+Chrome.x86
+Firefox.x86
 
 [VCRedist.x64]
 Name = "Microsoft Visual C++ Redistributable (x64)"
@@ -75,3 +82,66 @@ File = "wine-gecko-2.47.4-x86.msi"
 Type = "msi"
 Sha256 = "26cecc47706b091908f7f814bddb074c61beb8063318e9efc5a7f789857793d6"
 Detect = "%16425%\gecko\2.47.4\wine_gecko\xul.dll"
+
+[Chrome.x64]
+Name = "Google Chrome"
+Url = "https://dl.google.com/tag/s/appguid%%3D%%7B8A69D345-D564-463C-AFF1-A69D9E530F96%%7D%%26appname%%3DGoogle%%2520Chrome%%26needsadmin%%3Dprefers/chrome/install/ChromeStandaloneSetup64.exe"
+File = "ChromeStandaloneSetup64.exe"
+Type = "exe"
+Arguments = "/silent /install"
+Signer = "Google LLC"
+Detect = "%16422%\Google\Chrome\Application\chrome.exe"
+
+[Chrome.arm64]
+Name = "Google Chrome (ARM64)"
+Url = "https://dl.google.com/tag/s/appguid%%3D%%7B8A69D345-D564-463C-AFF1-A69D9E530F96%%7D%%26appname%%3DGoogle%%2520Chrome%%26needsadmin%%3Dprefers/chrome/install/ChromeStandaloneSetupArm64.exe"
+File = "ChromeStandaloneSetupArm64.exe"
+Type = "exe"
+Arguments = "/silent /install"
+Signer = "Google LLC"
+Detect = "%16422%\Google\Chrome\Application\chrome.exe"
+
+[Chrome.x86]
+Name = "Google Chrome"
+Url = "https://dl.google.com/tag/s/appguid%%3D%%7B8A69D345-D564-463C-AFF1-A69D9E530F96%%7D%%26appname%%3DGoogle%%2520Chrome%%26needsadmin%%3Dprefers/chrome/install/ChromeStandaloneSetup.exe"
+File = "ChromeStandaloneSetup.exe"
+Type = "exe"
+Arguments = "/silent /install"
+Signer = "Google LLC"
+Detect = "%16422%\Google\Chrome\Application\chrome.exe"
+
+[Firefox.x64]
+Name = "Mozilla Firefox"
+Url = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US"
+File = "FirefoxSetup.exe"
+Type = "exe"
+Arguments = "/S"
+Signer = "Mozilla Corporation"
+Detect = "%16422%\Mozilla Firefox\firefox.exe"
+
+[Firefox.arm64]
+Name = "Mozilla Firefox (ARM64)"
+Url = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64-aarch64&lang=en-US"
+File = "FirefoxSetup.exe"
+Type = "exe"
+Arguments = "/S"
+Signer = "Mozilla Corporation"
+Detect = "%16422%\Mozilla Firefox\firefox.exe"
+
+[Firefox.x86]
+Name = "Mozilla Firefox"
+Url = "https://download.mozilla.org/?product=firefox-latest-ssl&os=win&lang=en-US"
+File = "FirefoxSetup.exe"
+Type = "exe"
+Arguments = "/S"
+Signer = "Mozilla Corporation"
+Detect = "%16422%\Mozilla Firefox\firefox.exe"
+
+[Steam.x64]
+Name = "Steam"
+Url = "https://cdn.fastly.steamstatic.com/client/installer/SteamSetup.exe"
+File = "SteamSetup.exe"
+Type = "exe"
+Arguments = "/S"
+Signer = "Valve Corp."
+Detect = "%16422%\Steam\steam.exe"
