@@ -506,10 +506,16 @@ InbvNotifyDisplayOwnershipLost(
         (KeGetCurrentIrql() <= DISPATCH_LEVEL) &&
         (KeBugCheckActive == 0))
     {
+        BOOLEAN Fade;
+
         InbvAcquireLock();
-        if (InbvDisplayState == INBV_DISPLAY_STATE_OWNED)
-            VidFadeToBlack(InbvBootFadeSteps);
+        Fade = (InbvDisplayState == INBV_DISPLAY_STATE_OWNED);
+        if (Fade)
+            InbvDisplayDebugStrings = FALSE;
         InbvReleaseLock();
+
+        if (Fade)
+            VidFadeToBlack(InbvBootFadeSteps);
     }
 
     /* Check if we're installed */
