@@ -77,9 +77,8 @@ static UCHAR BcdSecurity[] =
     // SECURITY_DESCRIPTOR_RELATIVE
     0x01,                   // Revision
     0x00,                   // Sbz1
-    0x04, 0x94,             // Control: SE_SELF_RELATIVE        (0x8000) |
+    0x04, 0x90,             // Control: SE_SELF_RELATIVE        (0x8000) |
                             //          SE_DACL_PROTECTED       (0x1000) |
-                            //          SE_DACL_AUTO_INHERITED  (0x0400) |
                             //          SE_DACL_PRESENT         (0x0004)
     0x48, 0x00, 0x00, 0x00, // Owner
     0x58, 0x00, 0x00, 0x00, // Group
@@ -95,7 +94,7 @@ static UCHAR BcdSecurity[] =
 
     // (1st ACE)
     0x00,                   // AceType : ACCESS_ALLOWED_ACE_TYPE
-    0x02,                   // AceFlags: CONTAINER_INHERIT_ACE
+    0x00,                   // AceFlags: none
     0x18, 0x00,             // AceSize
     0x19, 0x00, 0x06, 0x00, // ACCESS_MASK: "Write DAC"         (0x00040000) |
                             //              "Read Control"      (0x00020000) |
@@ -110,7 +109,7 @@ static UCHAR BcdSecurity[] =
 
     // (2nd ACE)
     0x00,                   // AceType : ACCESS_ALLOWED_ACE_TYPE
-    0x02,                   // AceFlags: CONTAINER_INHERIT_ACE
+    0x00,                   // AceFlags: none
     0x14, 0x00,             // AceSize
     0x3F, 0x00, 0x0F, 0x00, // ACCESS_MASK: "Full Control" (0x000F003F)
     // (SidStart: S-1-5-18 "Local System")
@@ -124,14 +123,10 @@ static UCHAR BcdSecurity[] =
     0x20, 0x00, 0x00, 0x00,
     0x20, 0x02, 0x00, 0x00,
 
-    // Group SID (S-1-5-21-domain-513 "Domain Users")
-    0x01, 0x05, 0x00, 0x00,
+    // Group SID (S-1-5-18 "Local System")
+    0x01, 0x01, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x05,
-    0x15, 0x00, 0x00, 0x00,
-    0xAC, 0xD0, 0x49, 0xCB,
-    0xE6, 0x52, 0x47, 0x9C,
-    0xE4, 0x31, 0xDB, 0x5C,
-    0x01, 0x02, 0x00, 0x00
+    0x12, 0x00, 0x00, 0x00
 };
 
 static UCHAR SoftwareSecurity[] =
