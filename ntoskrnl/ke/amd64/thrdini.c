@@ -190,6 +190,13 @@ KiSwapContextResume(
     PKIPCR Pcr = (PKIPCR)KeGetPcr();
     PKPROCESS OldProcess, NewProcess;
     PVOID CompatTeb = NULL;
+    USHORT StackSegment;
+
+    __asm__ __volatile__("mov %%ss, %0" : "=r"(StackSegment));
+    if (StackSegment != KGDT64_R0_DATA)
+    {
+        __asm__ __volatile__("mov %0, %%ss" :: "r"((USHORT)KGDT64_R0_DATA) : "memory");
+    }
 
     /* Setup ring 0 stack pointer */
     Pcr->TssBase->Rsp0 = (ULONG64)NewThread->InitialStack;
