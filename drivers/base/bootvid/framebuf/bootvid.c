@@ -24,6 +24,9 @@
 #define BOOTVID_FALLBACK_CELL_HEIGHT ((BOOTCHAR_HEIGHT + 1) * BOOTVID_FALLBACK_FONT_SCALE)
 #define BOOTVID_COMPACT_FONT_ROWS 80
 #define BOOTVID_COMPACT_FONT_MIN_PIXEL_HEIGHT 12
+#define BOOTVID_COMPACT_FONT_DECIPOINTS 75
+#define BOOTVID_DECIPOINTS_PER_INCH 720
+#define BOOTVID_TENTH_MILLIMETERS_PER_INCH 254
 
 #define BB_PIXEL(x, y) \
     (BackBuffer + (ULONG_PTR)(y) * VidpDisplayWidth + (x))
@@ -356,6 +359,31 @@ DisplayBitmapCharacter(
     FlushBackBufferRect(Left, Top, Width, Height);
 }
 
+static ULONG
+CompactFontPixelHeight(
+    _In_ ULONG Dpi,
+    _In_ const CM_MONITOR_DEVICE_DATA* MonitorData)
+{
+    ULONG PixelHeight;
+
+    if (MonitorData->VerticalScreenSize != 0)
+    {
+        Dpi = max(Dpi,
+                  (ULONG)(((ULONGLONG)FrameBufferHeight * BOOTVID_TENTH_MILLIMETERS_PER_INCH) /
+                          ((ULONG)MonitorData->VerticalScreenSize * 10)));
+    }
+
+    PixelHeight = (ULONG)(((ULONGLONG)Dpi * BOOTVID_COMPACT_FONT_DECIPOINTS +
+                           BOOTVID_DECIPOINTS_PER_INCH / 2) /
+                          BOOTVID_DECIPOINTS_PER_INCH);
+
+    if (MonitorData->VerticalScreenSize == 0)
+        PixelHeight = max(PixelHeight, ScreenHeight / BOOTVID_COMPACT_FONT_ROWS);
+
+    return min(max(PixelHeight, (ULONG)BOOTVID_COMPACT_FONT_MIN_PIXEL_HEIGHT),
+               (ULONG)BOOT_FONT_MAX_PIXEL_HEIGHT);
+}
+
 /* PUBLIC FUNCTIONS **********************************************************/
 
 BOOLEAN
@@ -367,11 +395,12 @@ VidInitialize(
     PHYSICAL_ADDRESS VramAddress;
     ULONG VramSize;
     CM_FRAMEBUF_DEVICE_DATA VideoConfigData; /* Configuration data from hardware tree */
+    CM_MONITOR_DEVICE_DATA MonitorConfigData;
     INTERFACE_TYPE Interface;
     ULONG BusNumber;
     ULONG Dpi, ReadableDpi, MaximumDpi;
     ULONG LogicalWidth, LogicalHeight, ScrollWidth;
-    ULONG CompactCellHeight;
+    ULONG CompactPixelHeight, CompactCellHeight;
     SIZE_T BackBufferHeight, CompactBackBufferSize;
     NTSTATUS Status;
 
@@ -379,7 +408,7 @@ VidInitialize(
     Status = FindBootDisplay(&VramAddress,
                              &VramSize,
                              &VideoConfigData,
-                             NULL, // MonitorConfigData
+                             &MonitorConfigData,
                              &Interface,
                              &BusNumber);
     if (!NT_SUCCESS(Status))
@@ -478,6 +507,8 @@ VidInitialize(
         Dpi = LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT;
     }
 
+    CompactPixelHeight = CompactFontPixelHeight(Dpi, &MonitorConfigData);
+
     /*
      * The UEFI console chooses its font to retain about 38 visible rows.
      * Preserve that minimum physical text size after the kernel takes over;
@@ -514,9 +545,7 @@ VidInitialize(
         VidpCharacterHeight = BOOTVID_FALLBACK_CELL_HEIGHT;
     }
 
-    if (BootFontInitializeMonochrome(&BootVidCompactFont,
-                                     max(ScreenHeight / BOOTVID_COMPACT_FONT_ROWS,
-                                         (ULONG)BOOTVID_COMPACT_FONT_MIN_PIXEL_HEIGHT)))
+    if (BootFontInitializeMonochrome(&BootVidCompactFont, CompactPixelHeight))
     {
         CompactCellHeight = BootVidCompactFont.CellHeight;
     }

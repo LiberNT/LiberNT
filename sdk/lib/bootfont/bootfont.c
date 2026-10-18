@@ -73,9 +73,9 @@ BootFontLoadGlyph(
 
     return FT_Load_Glyph(Face,
                          GlyphIndex,
-                         (Monochrome ? FT_LOAD_TARGET_MONO : FT_LOAD_DEFAULT) |
-                         FT_LOAD_NO_BITMAP |
-                         FT_LOAD_NO_AUTOHINT) == FT_Err_Ok;
+                         (Monochrome ? FT_LOAD_TARGET_MONO | FT_LOAD_FORCE_AUTOHINT :
+                                       FT_LOAD_DEFAULT | FT_LOAD_NO_AUTOHINT) |
+                         FT_LOAD_NO_BITMAP) == FT_Err_Ok;
 }
 
 static
