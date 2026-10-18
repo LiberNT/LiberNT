@@ -5202,6 +5202,679 @@ PNP_FreeResDes(
 }
 
 
+typedef struct _RES_DES_LOCATION
+{
+    ULONG ResType;
+    ULONG Tag;
+    ULONG Count;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Partial;
+    PIO_RESOURCE_DESCRIPTOR Io;
+} RES_DES_LOCATION, *PRES_DES_LOCATION;
+
+
+static
+ULONG
+GetResDesType(
+    _In_ UCHAR CmType)
+{
+    switch (CmType)
+    {
+        case CmResourceTypeNull:
+            return ResType_None;
+        case CmResourceTypePort:
+            return ResType_IO;
+        case CmResourceTypeInterrupt:
+            return ResType_IRQ;
+        case CmResourceTypeMemory:
+            return ResType_Mem;
+        case CmResourceTypeDma:
+            return ResType_DMA;
+        case CmResourceTypeBusNumber:
+            return ResType_BusNumber;
+        case CmResourceTypeMemoryLarge:
+            return ResType_MemLarge;
+        case CmResourceTypeDevicePrivate:
+            return ResType_DevicePrivate;
+        default:
+            return (ULONG)-1;
+    }
+}
+
+
+static
+ULONG
+GetMemoryDesFlags(
+    _In_ USHORT Flags)
+{
+    ULONG Result = 0;
+
+    if (!(Flags & CM_RESOURCE_MEMORY_READ_ONLY))
+        Result |= fMD_RAM;
+    if (!(Flags & CM_RESOURCE_MEMORY_24))
+        Result |= fMD_32;
+    if (Flags & CM_RESOURCE_MEMORY_PREFETCHABLE)
+        Result |= fMD_PrefetchAllowed;
+    if (Flags & CM_RESOURCE_MEMORY_WRITE_ONLY)
+        Result |= fMD_ReadDisallowed;
+    if (Flags & CM_RESOURCE_MEMORY_COMBINEDWRITE)
+        Result |= fMD_CombinedWriteAllowed;
+    if (Flags & CM_RESOURCE_MEMORY_CACHEABLE)
+        Result |= fMD_Cacheable;
+    if (Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE)
+        Result |= fMD_WINDOW_DECODE;
+    if (Flags & CM_RESOURCE_MEMORY_BAR)
+        Result |= fMD_MEMORY_BAR;
+    return Result;
+}
+
+
+static
+ULONG
+GetDmaDesFlags(
+    _In_ USHORT Flags)
+{
+    ULONG Result = fDD_BYTE;
+
+    if (Flags & CM_RESOURCE_DMA_8_AND_16)
+        Result = fDD_BYTE_AND_WORD;
+    else if (Flags & CM_RESOURCE_DMA_32)
+        Result = fDD_DWORD;
+    else if (Flags & CM_RESOURCE_DMA_16)
+        Result = fDD_WORD;
+    if (Flags & CM_RESOURCE_DMA_BUS_MASTER)
+        Result |= fDD_BusMaster;
+    if (Flags & CM_RESOURCE_DMA_TYPE_A)
+        Result |= fDD_TypeA;
+    if (Flags & CM_RESOURCE_DMA_TYPE_B)
+        Result |= fDD_TypeB;
+    if (Flags & CM_RESOURCE_DMA_TYPE_F)
+        Result |= fDD_TypeF;
+    return Result;
+}
+
+
+static
+USHORT
+GetIrqDesFlags(
+    _In_ UCHAR ShareDisposition,
+    _In_ USHORT Flags)
+{
+    return ((Flags & CM_RESOURCE_INTERRUPT_LATCHED) ? fIRQD_Edge : fIRQD_Level) |
+           ((ShareDisposition == CmResourceShareShared) ? fIRQD_Share : fIRQD_Exclusive);
+}
+
+
+static
+ULONG
+GetLargeMemoryShift(
+    _In_ USHORT Flags)
+{
+    if (Flags & CM_RESOURCE_MEMORY_LARGE_40)
+        return 8;
+    if (Flags & CM_RESOURCE_MEMORY_LARGE_48)
+        return 16;
+    if (Flags & CM_RESOURCE_MEMORY_LARGE_64)
+        return 32;
+    return 0;
+}
+
+
+static
+BOOL
+NextPartialDescriptor(
+    _Inout_ PCM_PARTIAL_RESOURCE_DESCRIPTOR *Partial,
+    _In_ LPBYTE End)
+{
+    LPBYTE Next = (LPBYTE)(*Partial + 1);
+
+    if (Next > End)
+        return FALSE;
+    if ((*Partial)->Type == CmResourceTypeDeviceSpecific)
+    {
+        if ((*Partial)->u.DeviceSpecificData.DataSize > (ULONG)(End - Next))
+            return FALSE;
+        Next += (*Partial)->u.DeviceSpecificData.DataSize;
+    }
+    *Partial = (PCM_PARTIAL_RESOURCE_DESCRIPTOR)Next;
+    return TRUE;
+}
+
+
+static
+BOOL
+FindAllocatedResDes(
+    _In_reads_bytes_(DataSize) LPBYTE Data,
+    _In_ ULONG DataSize,
+    _In_ ULONG LogConfTag,
+    _In_ RESOURCEID ResourceID,
+    _In_ ULONG StartTag,
+    _Out_ PRES_DES_LOCATION Location)
+{
+    PCM_RESOURCE_LIST List = (PCM_RESOURCE_LIST)Data;
+    PCM_FULL_RESOURCE_DESCRIPTOR Full;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Partial, Current;
+    LPBYTE End = Data + DataSize;
+    ULONG FullIndex, Index, Type;
+
+    if (DataSize < FIELD_OFFSET(CM_RESOURCE_LIST, List) || LogConfTag >= List->Count)
+        return FALSE;
+
+    Full = List->List;
+    for (FullIndex = 0;; FullIndex++)
+    {
+        if ((LPBYTE)Full + FIELD_OFFSET(CM_FULL_RESOURCE_DESCRIPTOR, PartialResourceList.PartialDescriptors) > End)
+            return FALSE;
+        Partial = Full->PartialResourceList.PartialDescriptors;
+        if (FullIndex == LogConfTag)
+            break;
+        for (Index = 0; Index < Full->PartialResourceList.Count; Index++)
+        {
+            if (!NextPartialDescriptor(&Partial, End))
+                return FALSE;
+        }
+        Full = (PCM_FULL_RESOURCE_DESCRIPTOR)Partial;
+    }
+
+    for (Index = 0; Index < Full->PartialResourceList.Count; Index++)
+    {
+        Current = Partial;
+        if (!NextPartialDescriptor(&Partial, End))
+            return FALSE;
+        Type = GetResDesType(Current->Type);
+        if (Index < StartTag || Type == (ULONG)-1)
+            continue;
+        if (ResourceID != ResType_All && ResourceID != Type)
+            continue;
+        Location->ResType = Type;
+        Location->Tag = Index;
+        Location->Count = 1;
+        Location->Partial = Current;
+        Location->Io = NULL;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+
+static
+BOOL
+FindRequiredResDes(
+    _In_reads_bytes_(DataSize) LPBYTE Data,
+    _In_ ULONG DataSize,
+    _In_ ULONG LogConfTag,
+    _In_ RESOURCEID ResourceID,
+    _In_ ULONG StartTag,
+    _Out_ PRES_DES_LOCATION Location)
+{
+    PIO_RESOURCE_REQUIREMENTS_LIST Requirements = (PIO_RESOURCE_REQUIREMENTS_LIST)Data;
+    PIO_RESOURCE_LIST IoList;
+    PIO_RESOURCE_DESCRIPTOR Descriptor;
+    LPBYTE End = Data + DataSize;
+    ULONG ListIndex, Index, Count, Type;
+
+    if (DataSize < FIELD_OFFSET(IO_RESOURCE_REQUIREMENTS_LIST, List) ||
+        LogConfTag >= Requirements->AlternativeLists)
+    {
+        return FALSE;
+    }
+
+    IoList = Requirements->List;
+    for (ListIndex = 0;; ListIndex++)
+    {
+        if ((LPBYTE)IoList + FIELD_OFFSET(IO_RESOURCE_LIST, Descriptors) > End ||
+            IoList->Count > (ULONG)(End - (LPBYTE)IoList->Descriptors) / sizeof(IO_RESOURCE_DESCRIPTOR))
+        {
+            return FALSE;
+        }
+        if (ListIndex == LogConfTag)
+            break;
+        IoList = (PIO_RESOURCE_LIST)(IoList->Descriptors + IoList->Count);
+    }
+
+    for (Index = 0; Index < IoList->Count; Index += Count)
+    {
+        Descriptor = &IoList->Descriptors[Index];
+        Count = 1;
+        while (Index + Count < IoList->Count &&
+               (IoList->Descriptors[Index + Count].Option & IO_RESOURCE_ALTERNATIVE) &&
+               IoList->Descriptors[Index + Count].Type == Descriptor->Type)
+        {
+            Count++;
+        }
+        Type = GetResDesType(Descriptor->Type);
+        if (Index < StartTag || Type == (ULONG)-1 || Type == ResType_None)
+            continue;
+        if (ResourceID != ResType_All && ResourceID != Type)
+            continue;
+        Location->ResType = Type;
+        Location->Tag = Index;
+        Location->Count = Count;
+        Location->Partial = NULL;
+        Location->Io = Descriptor;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+
+static
+CONFIGRET
+LoadLogConfData(
+    _In_ LPWSTR pDeviceID,
+    _In_ ULONG ulLogConfType,
+    _Out_ PULONG pulRegDataType,
+    _Out_ PULONG pulDataSize,
+    _Out_ LPBYTE *ppData)
+{
+    HKEY hConfigKey = NULL;
+    CONFIGRET ret;
+
+    *ppData = NULL;
+    *pulDataSize = 0;
+
+    if (OpenConfigurationKey(pDeviceID, ulLogConfType, &hConfigKey) != CR_SUCCESS)
+        return CR_NO_MORE_LOG_CONF;
+
+    ret = GetConfigurationData(hConfigKey, ulLogConfType, pulRegDataType, pulDataSize, ppData, 0, NULL);
+    RegCloseKey(hConfigKey);
+
+    if (ret != CR_SUCCESS || *pulDataSize == 0 || *ppData == NULL)
+    {
+        if (*ppData != NULL)
+            HeapFree(GetProcessHeap(), 0, *ppData);
+        *ppData = NULL;
+        return CR_NO_MORE_LOG_CONF;
+    }
+
+    return CR_SUCCESS;
+}
+
+
+static
+BOOL
+FindResDes(
+    _In_ ULONG RegDataType,
+    _In_reads_bytes_(DataSize) LPBYTE Data,
+    _In_ ULONG DataSize,
+    _In_ ULONG LogConfTag,
+    _In_ RESOURCEID ResourceID,
+    _In_ ULONG StartTag,
+    _Out_ PRES_DES_LOCATION Location)
+{
+    if (RegDataType == REG_RESOURCE_LIST)
+        return FindAllocatedResDes(Data, DataSize, LogConfTag, ResourceID, StartTag, Location);
+    if (RegDataType == REG_RESOURCE_REQUIREMENTS_LIST)
+        return FindRequiredResDes(Data, DataSize, LogConfTag, ResourceID, StartTag, Location);
+    return FALSE;
+}
+
+
+static
+ULONG
+BuildAllocatedResDes(
+    _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Partial,
+    _In_ BOOL Wide,
+    _Out_writes_bytes_opt_(return) LPBYTE Buffer)
+{
+    ULONG Size;
+    ULONG Shift;
+
+    switch (Partial->Type)
+    {
+        case CmResourceTypePort:
+        {
+            PIO_RESOURCE Io = (PIO_RESOURCE)Buffer;
+
+            Size = sizeof(IO_RESOURCE);
+            if (Io == NULL)
+                return Size;
+            ZeroMemory(Io, Size);
+            Io->IO_Header.IOD_Type = IOType_Range;
+            Io->IO_Header.IOD_Alloc_Base = Partial->u.Port.Start.QuadPart;
+            Io->IO_Header.IOD_Alloc_End = Partial->u.Port.Start.QuadPart + Partial->u.Port.Length - 1;
+            Io->IO_Header.IOD_DesFlags = Partial->Flags;
+            return Size;
+        }
+
+        case CmResourceTypeInterrupt:
+        {
+            ULONG Flags = MAKELONG(GetIrqDesFlags(Partial->ShareDisposition, Partial->Flags),
+                                   HIWORD(Partial->u.Interrupt.Level));
+
+            if (Wide)
+            {
+                PIRQ_RESOURCE_64 Irq = (PIRQ_RESOURCE_64)Buffer;
+
+                Size = sizeof(IRQ_RESOURCE_64);
+                if (Irq == NULL)
+                    return Size;
+                ZeroMemory(Irq, Size);
+                Irq->IRQ_Header.IRQD_Type = IRQType_Range;
+                Irq->IRQ_Header.IRQD_Flags = Flags;
+                Irq->IRQ_Header.IRQD_Alloc_Num = Partial->u.Interrupt.Vector;
+                Irq->IRQ_Header.IRQD_Affinity = (ULONG64)Partial->u.Interrupt.Affinity;
+            }
+            else
+            {
+                PIRQ_RESOURCE_32 Irq = (PIRQ_RESOURCE_32)Buffer;
+
+                Size = sizeof(IRQ_RESOURCE_32);
+                if (Irq == NULL)
+                    return Size;
+                ZeroMemory(Irq, Size);
+                Irq->IRQ_Header.IRQD_Type = IRQType_Range;
+                Irq->IRQ_Header.IRQD_Flags = Flags;
+                Irq->IRQ_Header.IRQD_Alloc_Num = Partial->u.Interrupt.Vector;
+                Irq->IRQ_Header.IRQD_Affinity = (ULONG32)Partial->u.Interrupt.Affinity;
+            }
+            return Size;
+        }
+
+        case CmResourceTypeMemory:
+        {
+            PMEM_RESOURCE Mem = (PMEM_RESOURCE)Buffer;
+
+            Size = sizeof(MEM_RESOURCE);
+            if (Mem == NULL)
+                return Size;
+            ZeroMemory(Mem, Size);
+            Mem->MEM_Header.MD_Type = MType_Range;
+            Mem->MEM_Header.MD_Alloc_Base = Partial->u.Memory.Start.QuadPart;
+            Mem->MEM_Header.MD_Alloc_End = Partial->u.Memory.Start.QuadPart + Partial->u.Memory.Length - 1;
+            Mem->MEM_Header.MD_Flags = GetMemoryDesFlags(Partial->Flags);
+            return Size;
+        }
+
+        case CmResourceTypeMemoryLarge:
+        {
+            PMEM_LARGE_RESOURCE Mem = (PMEM_LARGE_RESOURCE)Buffer;
+
+            Size = sizeof(MEM_LARGE_RESOURCE);
+            if (Mem == NULL)
+                return Size;
+            Shift = GetLargeMemoryShift(Partial->Flags);
+            ZeroMemory(Mem, Size);
+            Mem->MEM_LARGE_Header.MLD_Type = MLType_Range;
+            Mem->MEM_LARGE_Header.MLD_Alloc_Base = Partial->u.Memory40.Start.QuadPart;
+            Mem->MEM_LARGE_Header.MLD_Alloc_End = Partial->u.Memory40.Start.QuadPart +
+                                                  ((ULONGLONG)Partial->u.Memory40.Length40 << Shift) - 1;
+            Mem->MEM_LARGE_Header.MLD_Flags = GetMemoryDesFlags(Partial->Flags &
+                                                                ~(CM_RESOURCE_MEMORY_LARGE_40 |
+                                                                  CM_RESOURCE_MEMORY_LARGE_48 |
+                                                                  CM_RESOURCE_MEMORY_LARGE_64));
+            return Size;
+        }
+
+        case CmResourceTypeDma:
+        {
+            PDMA_RESOURCE Dma = (PDMA_RESOURCE)Buffer;
+
+            Size = sizeof(DMA_RESOURCE);
+            if (Dma == NULL)
+                return Size;
+            ZeroMemory(Dma, Size);
+            Dma->DMA_Header.DD_Type = DType_Range;
+            Dma->DMA_Header.DD_Flags = GetDmaDesFlags(Partial->Flags);
+            Dma->DMA_Header.DD_Alloc_Chan = Partial->u.Dma.Channel;
+            return Size;
+        }
+
+        case CmResourceTypeBusNumber:
+        {
+            PBUSNUMBER_RESOURCE Bus = (PBUSNUMBER_RESOURCE)Buffer;
+
+            Size = sizeof(BUSNUMBER_RESOURCE);
+            if (Bus == NULL)
+                return Size;
+            ZeroMemory(Bus, Size);
+            Bus->BusNumber_Header.BUSD_Type = BusNumberType_Range;
+            Bus->BusNumber_Header.BUSD_Flags = Partial->Flags;
+            Bus->BusNumber_Header.BUSD_Alloc_Base = Partial->u.BusNumber.Start;
+            Bus->BusNumber_Header.BUSD_Alloc_End = Partial->u.BusNumber.Start + Partial->u.BusNumber.Length - 1;
+            return Size;
+        }
+
+        case CmResourceTypeDevicePrivate:
+        {
+            PDEVPRIVATE_RESOURCE Private = (PDEVPRIVATE_RESOURCE)Buffer;
+
+            Size = sizeof(DEVPRIVATE_RESOURCE);
+            if (Private == NULL)
+                return Size;
+            ZeroMemory(Private, Size);
+            Private->PRV_Header.PD_Type = PType_Range;
+            Private->PRV_Header.PD_Data1 = Partial->u.DevicePrivate.Data[0];
+            Private->PRV_Header.PD_Data2 = Partial->u.DevicePrivate.Data[1];
+            Private->PRV_Header.PD_Data3 = Partial->u.DevicePrivate.Data[2];
+            Private->PRV_Header.PD_Flags = Partial->Flags;
+            return Size;
+        }
+
+        default:
+            return 0;
+    }
+}
+
+
+static
+ULONG
+BuildRequiredResDes(
+    _In_reads_(Count) PIO_RESOURCE_DESCRIPTOR Descriptors,
+    _In_ ULONG Count,
+    _In_ BOOL Wide,
+    _Out_writes_bytes_opt_(return) LPBYTE Buffer)
+{
+    ULONG Index, Shift, Size;
+
+    switch (Descriptors->Type)
+    {
+        case CmResourceTypePort:
+        {
+            PIO_RESOURCE Io = (PIO_RESOURCE)Buffer;
+
+            Size = sizeof(IO_DES) + Count * sizeof(IO_RANGE);
+            if (Io == NULL)
+                return Size;
+            ZeroMemory(Io, Size);
+            Io->IO_Header.IOD_Count = Count;
+            Io->IO_Header.IOD_Type = IOType_Range;
+            for (Index = 0; Index < Count; Index++)
+            {
+                Io->IO_Data[Index].IOR_Align = ~((ULONGLONG)Descriptors[Index].u.Port.Alignment - 1);
+                Io->IO_Data[Index].IOR_nPorts = Descriptors[Index].u.Port.Length;
+                Io->IO_Data[Index].IOR_Min = Descriptors[Index].u.Port.MinimumAddress.QuadPart;
+                Io->IO_Data[Index].IOR_Max = Descriptors[Index].u.Port.MaximumAddress.QuadPart;
+                Io->IO_Data[Index].IOR_RangeFlags = Descriptors[Index].Flags;
+            }
+            return Size;
+        }
+
+        case CmResourceTypeInterrupt:
+        {
+            PIRQ_RANGE Ranges;
+
+            Size = (Wide ? sizeof(IRQ_DES_64) : sizeof(IRQ_DES_32)) + Count * sizeof(IRQ_RANGE);
+            if (Buffer == NULL)
+                return Size;
+            ZeroMemory(Buffer, Size);
+            if (Wide)
+            {
+                ((PIRQ_DES_64)Buffer)->IRQD_Count = Count;
+                ((PIRQ_DES_64)Buffer)->IRQD_Type = IRQType_Range;
+                Ranges = ((PIRQ_RESOURCE_64)Buffer)->IRQ_Data;
+            }
+            else
+            {
+                ((PIRQ_DES_32)Buffer)->IRQD_Count = Count;
+                ((PIRQ_DES_32)Buffer)->IRQD_Type = IRQType_Range;
+                Ranges = ((PIRQ_RESOURCE_32)Buffer)->IRQ_Data;
+            }
+            for (Index = 0; Index < Count; Index++)
+            {
+                Ranges[Index].IRQR_Min = Descriptors[Index].u.Interrupt.MinimumVector;
+                Ranges[Index].IRQR_Max = Descriptors[Index].u.Interrupt.MaximumVector;
+                Ranges[Index].IRQR_Flags = GetIrqDesFlags(Descriptors[Index].ShareDisposition, Descriptors[Index].Flags);
+            }
+            return Size;
+        }
+
+        case CmResourceTypeMemory:
+        {
+            PMEM_RESOURCE Mem = (PMEM_RESOURCE)Buffer;
+
+            Size = sizeof(MEM_DES) + Count * sizeof(MEM_RANGE);
+            if (Mem == NULL)
+                return Size;
+            ZeroMemory(Mem, Size);
+            Mem->MEM_Header.MD_Count = Count;
+            Mem->MEM_Header.MD_Type = MType_Range;
+            for (Index = 0; Index < Count; Index++)
+            {
+                Mem->MEM_Data[Index].MR_Align = ~((ULONGLONG)Descriptors[Index].u.Memory.Alignment - 1);
+                Mem->MEM_Data[Index].MR_nBytes = Descriptors[Index].u.Memory.Length;
+                Mem->MEM_Data[Index].MR_Min = Descriptors[Index].u.Memory.MinimumAddress.QuadPart;
+                Mem->MEM_Data[Index].MR_Max = Descriptors[Index].u.Memory.MaximumAddress.QuadPart;
+                Mem->MEM_Data[Index].MR_Flags = GetMemoryDesFlags(Descriptors[Index].Flags);
+            }
+            return Size;
+        }
+
+        case CmResourceTypeMemoryLarge:
+        {
+            PMEM_LARGE_RESOURCE Mem = (PMEM_LARGE_RESOURCE)Buffer;
+
+            Size = sizeof(MEM_LARGE_DES) + Count * sizeof(MEM_LARGE_RANGE);
+            if (Mem == NULL)
+                return Size;
+            ZeroMemory(Mem, Size);
+            Mem->MEM_LARGE_Header.MLD_Count = Count;
+            Mem->MEM_LARGE_Header.MLD_Type = MLType_Range;
+            for (Index = 0; Index < Count; Index++)
+            {
+                Shift = GetLargeMemoryShift(Descriptors[Index].Flags);
+                Mem->MEM_LARGE_Data[Index].MLR_Align = ~(((ULONGLONG)Descriptors[Index].u.Memory40.Alignment40 << Shift) - 1);
+                Mem->MEM_LARGE_Data[Index].MLR_nBytes = (ULONGLONG)Descriptors[Index].u.Memory40.Length40 << Shift;
+                Mem->MEM_LARGE_Data[Index].MLR_Min = Descriptors[Index].u.Memory40.MinimumAddress.QuadPart;
+                Mem->MEM_LARGE_Data[Index].MLR_Max = Descriptors[Index].u.Memory40.MaximumAddress.QuadPart;
+                Mem->MEM_LARGE_Data[Index].MLR_Flags = GetMemoryDesFlags(Descriptors[Index].Flags &
+                                                                         ~(CM_RESOURCE_MEMORY_LARGE_40 |
+                                                                           CM_RESOURCE_MEMORY_LARGE_48 |
+                                                                           CM_RESOURCE_MEMORY_LARGE_64));
+            }
+            return Size;
+        }
+
+        case CmResourceTypeDma:
+        {
+            PDMA_RESOURCE Dma = (PDMA_RESOURCE)Buffer;
+
+            Size = sizeof(DMA_DES) + Count * sizeof(DMA_RANGE);
+            if (Dma == NULL)
+                return Size;
+            ZeroMemory(Dma, Size);
+            Dma->DMA_Header.DD_Count = Count;
+            Dma->DMA_Header.DD_Type = DType_Range;
+            for (Index = 0; Index < Count; Index++)
+            {
+                Dma->DMA_Data[Index].DR_Min = Descriptors[Index].u.Dma.MinimumChannel;
+                Dma->DMA_Data[Index].DR_Max = Descriptors[Index].u.Dma.MaximumChannel;
+                Dma->DMA_Data[Index].DR_Flags = GetDmaDesFlags(Descriptors[Index].Flags);
+            }
+            return Size;
+        }
+
+        case CmResourceTypeBusNumber:
+        {
+            PBUSNUMBER_RESOURCE Bus = (PBUSNUMBER_RESOURCE)Buffer;
+
+            Size = sizeof(BUSNUMBER_DES) + Count * sizeof(BUSNUMBER_RANGE);
+            if (Bus == NULL)
+                return Size;
+            ZeroMemory(Bus, Size);
+            Bus->BusNumber_Header.BUSD_Count = Count;
+            Bus->BusNumber_Header.BUSD_Type = BusNumberType_Range;
+            for (Index = 0; Index < Count; Index++)
+            {
+                Bus->BusNumber_Data[Index].BUSR_Min = Descriptors[Index].u.BusNumber.MinBusNumber;
+                Bus->BusNumber_Data[Index].BUSR_Max = Descriptors[Index].u.BusNumber.MaxBusNumber;
+                Bus->BusNumber_Data[Index].BUSR_nBusNumbers = Descriptors[Index].u.BusNumber.Length;
+                Bus->BusNumber_Data[Index].BUSR_Flags = Descriptors[Index].Flags;
+            }
+            return Size;
+        }
+
+        case CmResourceTypeDevicePrivate:
+        {
+            PDEVPRIVATE_RESOURCE Private = (PDEVPRIVATE_RESOURCE)Buffer;
+
+            Size = sizeof(DEVPRIVATE_DES) + Count * sizeof(DEVPRIVATE_RANGE);
+            if (Private == NULL)
+                return Size;
+            ZeroMemory(Private, Size);
+            Private->PRV_Header.PD_Count = Count;
+            Private->PRV_Header.PD_Type = PType_Range;
+            for (Index = 0; Index < Count; Index++)
+            {
+                Private->PRV_Data[Index].PR_Data1 = Descriptors[Index].u.DevicePrivate.Data[0];
+                Private->PRV_Data[Index].PR_Data2 = Descriptors[Index].u.DevicePrivate.Data[1];
+                Private->PRV_Data[Index].PR_Data3 = Descriptors[Index].u.DevicePrivate.Data[2];
+            }
+            return Size;
+        }
+
+        default:
+            return 0;
+    }
+}
+
+
+static
+ULONG
+BuildResDes(
+    _In_ PRES_DES_LOCATION Location,
+    _In_ BOOL Wide,
+    _Out_writes_bytes_opt_(return) LPBYTE Buffer)
+{
+    if (Location->Partial != NULL)
+        return BuildAllocatedResDes(Location->Partial, Wide, Buffer);
+    return BuildRequiredResDes(Location->Io, Location->Count, Wide, Buffer);
+}
+
+
+static
+CONFIGRET
+LookupResDes(
+    _In_ LPWSTR pDeviceID,
+    _In_ DWORD ulLogConfTag,
+    _In_ DWORD ulLogConfType,
+    _In_ RESOURCEID ResourceID,
+    _In_ DWORD ulResourceTag,
+    _Out_ LPBYTE *ppData,
+    _Out_ PRES_DES_LOCATION Location)
+{
+    DWORD RegDataType = 0;
+    ULONG ulDataSize = 0;
+
+    if (!IsValidDeviceInstanceID(pDeviceID))
+        return CR_INVALID_DEVINST;
+
+    if (LoadLogConfData(pDeviceID, ulLogConfType, &RegDataType, &ulDataSize, ppData) != CR_SUCCESS)
+        return CR_INVALID_RES_DES;
+
+    if (!FindResDes(RegDataType, *ppData, ulDataSize, ulLogConfTag, ResourceID, ulResourceTag, Location) ||
+        Location->Tag != ulResourceTag)
+    {
+        HeapFree(GetProcessHeap(), 0, *ppData);
+        *ppData = NULL;
+        return CR_INVALID_RES_DES;
+    }
+
+    return CR_SUCCESS;
+}
+
+
 /* Function 49 */
 DWORD
 WINAPI
@@ -5216,20 +5889,22 @@ PNP_GetNextResDes(
     DWORD *pulNextResTag,
     DWORD ulFlags)
 {
-    HKEY hConfigKey = NULL;
+    RES_DES_LOCATION Location;
     DWORD RegDataType = 0;
     ULONG ulDataSize = 0;
+    ULONG StartTag = 0;
     LPBYTE lpData = NULL;
     CONFIGRET ret = CR_SUCCESS;
 
-    DPRINT1("PNP_GetNextResDes(%p %S 0x%lx %lu %lu %ul %p %p 0x%08lx)\n",
+    DPRINT("PNP_GetNextResDes(%p %S 0x%lx %lu %lu %lu %p %p 0x%08lx)\n",
            hBinding, pDeviceID, ulLogConfTag, ulLogConfType, ResourceID,
            ulResourceTag, pulNextResType, pulNextResTag, ulFlags);
 
-    if (pulNextResType == NULL)
+    if (pulNextResType == NULL || pulNextResTag == NULL)
         return CR_INVALID_POINTER;
 
     *pulNextResType = 0;
+    *pulNextResTag = 0;
 
     if (ulFlags != 0)
         return CR_INVALID_FLAG;
@@ -5237,63 +5912,38 @@ PNP_GetNextResDes(
     if (!IsValidDeviceInstanceID(pDeviceID))
         return CR_INVALID_DEVINST;
 
-    ret = OpenConfigurationKey(pDeviceID,
-                               ulLogConfType,
-                               &hConfigKey);
-    if (ret != CR_SUCCESS)
+    if (LoadLogConfData(pDeviceID, ulLogConfType, &RegDataType, &ulDataSize, &lpData) != CR_SUCCESS)
+        return CR_NO_MORE_RES_DES;
+
+    if (ulResourceTag != (DWORD)-1)
     {
-        DPRINT1("OpenConfigurationKey() failed (Error %lu)\n", ret);
-        ret = CR_NO_MORE_LOG_CONF;
-        goto done;
+        if (!FindResDes(RegDataType, lpData, ulDataSize, ulLogConfTag, ResType_All, ulResourceTag, &Location) ||
+            Location.Tag != ulResourceTag)
+        {
+            ret = CR_INVALID_RES_DES;
+        }
+        else
+        {
+            StartTag = ulResourceTag + Location.Count;
+        }
     }
 
-    ret = GetConfigurationData(hConfigKey,
-                               ulLogConfType,
-                               &RegDataType,
-                               &ulDataSize,
-                               &lpData,
-                               0,
-                               NULL);
-    if (ret != CR_SUCCESS)
+    if (ret == CR_SUCCESS)
     {
-        DPRINT1("GetConfigurationData() failed (Error %lu)\n", ret);
-        ret = CR_NO_MORE_LOG_CONF;
-        goto done;
+        if (FindResDes(RegDataType, lpData, ulDataSize, ulLogConfTag, ResourceID, StartTag, &Location))
+        {
+            *pulNextResType = Location.ResType;
+            *pulNextResTag = Location.Tag;
+        }
+        else
+        {
+            ret = CR_NO_MORE_RES_DES;
+        }
     }
 
-    DPRINT1("Data size %lu\n", ulDataSize);
+    HeapFree(GetProcessHeap(), 0, lpData);
 
-    if (ulDataSize == 0 || lpData == NULL)
-    {
-        DPRINT1("No config data available!\n");
-        ret = CR_NO_MORE_LOG_CONF;
-        goto done;
-    }
-
-    /* Get the next resource descriptor */
-    if (RegDataType == REG_RESOURCE_LIST)
-    {
-        DPRINT1("FIXME: REG_RESOURCE_LIST\n");
-        /* FIXME */
-        ret = CR_NO_MORE_LOG_CONF;
-        goto done;
-    }
-    else if (RegDataType == REG_RESOURCE_REQUIREMENTS_LIST)
-    {
-        DPRINT1("FIXME: REG_RESOURCE_REQUIREMENTS_LIST\n");
-        /* FIXME */
-        ret = CR_NO_MORE_LOG_CONF;
-        goto done;
-    }
-
-done:
-    if (lpData != NULL)
-        HeapFree(GetProcessHeap(), 0, lpData);
-
-    if (hConfigKey != NULL)
-        RegCloseKey(hConfigKey);
-
-    DPRINT1("PNP_GetNextResDes() returns %lu\n", ret);
+    DPRINT("PNP_GetNextResDes() returns %lu\n", ret);
 
     return ret;
 }
@@ -5313,8 +5963,33 @@ PNP_GetResDesData(
     PNP_RPC_BUFFER_SIZE BufferLen,
     DWORD ulFlags)
 {
-    UNIMPLEMENTED;
-    return CR_CALL_NOT_IMPLEMENTED;
+    RES_DES_LOCATION Location;
+    LPBYTE lpData = NULL;
+    ULONG Size;
+    BOOL Wide;
+    CONFIGRET ret;
+
+    DPRINT("PNP_GetResDesData(%p %S 0x%lx %lu %lu %lu %p %lu 0x%08lx)\n",
+           hBinding, pDeviceID, ulLogConfTag, ulLogConfType, ResourceID,
+           ulResourceTag, Buffer, BufferLen, ulFlags);
+
+    if ((ulFlags & ~CM_RESDES_WIDTH_BITS) || (ulFlags & CM_RESDES_WIDTH_BITS) == CM_RESDES_WIDTH_BITS)
+        return CR_INVALID_FLAG;
+
+    ret = LookupResDes(pDeviceID, ulLogConfTag, ulLogConfType, ResourceID, ulResourceTag, &lpData, &Location);
+    if (ret != CR_SUCCESS)
+        return ret;
+
+    Wide = (ulFlags & CM_RESDES_WIDTH_BITS) != CM_RESDES_WIDTH_32;
+    Size = BuildResDes(&Location, Wide, NULL);
+    if (BufferLen < Size)
+        ret = CR_BUFFER_SMALL;
+    else if (Size != 0)
+        BuildResDes(&Location, Wide, Buffer);
+
+    HeapFree(GetProcessHeap(), 0, lpData);
+
+    return ret;
 }
 
 
@@ -5331,8 +6006,31 @@ PNP_GetResDesDataSize(
     DWORD *pulSize,
     DWORD ulFlags)
 {
-    UNIMPLEMENTED;
-    return CR_CALL_NOT_IMPLEMENTED;
+    RES_DES_LOCATION Location;
+    LPBYTE lpData = NULL;
+    CONFIGRET ret;
+
+    DPRINT("PNP_GetResDesDataSize(%p %S 0x%lx %lu %lu %lu %p 0x%08lx)\n",
+           hBinding, pDeviceID, ulLogConfTag, ulLogConfType, ResourceID,
+           ulResourceTag, pulSize, ulFlags);
+
+    if (pulSize == NULL)
+        return CR_INVALID_POINTER;
+
+    *pulSize = 0;
+
+    if ((ulFlags & ~CM_RESDES_WIDTH_BITS) || (ulFlags & CM_RESDES_WIDTH_BITS) == CM_RESDES_WIDTH_BITS)
+        return CR_INVALID_FLAG;
+
+    ret = LookupResDes(pDeviceID, ulLogConfTag, ulLogConfType, ResourceID, ulResourceTag, &lpData, &Location);
+    if (ret != CR_SUCCESS)
+        return ret;
+
+    *pulSize = BuildResDes(&Location, (ulFlags & CM_RESDES_WIDTH_BITS) != CM_RESDES_WIDTH_32, NULL);
+
+    HeapFree(GetProcessHeap(), 0, lpData);
+
+    return CR_SUCCESS;
 }
 
 

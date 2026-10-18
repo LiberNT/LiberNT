@@ -4090,7 +4090,7 @@ CM_Get_Next_Res_Des_Ex(
     DEVINST dnDevInst;
     CONFIGRET ret = 0;
 
-    FIXME("CM_Get_Next_Res_Des_Ex(%p %p %lu %p %lx %p)\n",
+    TRACE("CM_Get_Next_Res_Des_Ex(%p %p %lu %p %lx %p)\n",
           prdResDes, rdResDes, ForResource, pResourceID, ulFlags, hMachine);
 
     if (prdResDes == NULL)
@@ -4098,7 +4098,6 @@ CM_Get_Next_Res_Des_Ex(
 
     if (IsValidLogConf((PLOG_CONF_INFO)rdResDes))
     {
-        FIXME("LogConf found!\n");
         dnDevInst = ((PLOG_CONF_INFO)rdResDes)->dnDevInst;
         ulLogConfTag = ((PLOG_CONF_INFO)rdResDes)->ulTag;
         ulLogConfType = ((PLOG_CONF_INFO)rdResDes)->ulType;
@@ -4106,7 +4105,6 @@ CM_Get_Next_Res_Des_Ex(
     }
     else if (IsValidResDes((PRES_DES_INFO)rdResDes))
     {
-        FIXME("ResDes found!\n");
         dnDevInst = ((PRES_DES_INFO)rdResDes)->dnDevInst;
         ulLogConfTag = ((PRES_DES_INFO)rdResDes)->ulLogConfTag;
         ulLogConfType = ((PRES_DES_INFO)rdResDes)->ulLogConfType;
@@ -4147,8 +4145,8 @@ CM_Get_Next_Res_Des_Ex(
                                 ulLogConfType,
                                 ForResource,
                                 ulResDesTag,
-                                &ulNextResDesTag,
                                 &ulNextResDesType,
+                                &ulNextResDesTag,
                                 0);
     }
     RpcExcept(EXCEPTION_EXECUTE_HANDLER)
@@ -4169,7 +4167,7 @@ CM_Get_Next_Res_Des_Ex(
         if (pNewResDesInfo == NULL)
             return CR_OUT_OF_MEMORY;
 
-        pNewResDesInfo->ulMagic = LOG_CONF_MAGIC;
+        pNewResDesInfo->ulMagic = RES_DES_MAGIC;
         pNewResDesInfo->dnDevInst = dnDevInst;
         pNewResDesInfo->ulLogConfType = ulLogConfType;
         pNewResDesInfo->ulLogConfTag = ulLogConfTag;
@@ -4307,10 +4305,61 @@ CM_Get_Res_Des_Data_Ex(
     _In_ ULONG ulFlags,
     _In_opt_ HMACHINE hMachine)
 {
-    FIXME("CM_Get_Res_Des_Data_Ex(%p %p %lu %lx %p)\n",
+    RPC_BINDING_HANDLE BindingHandle = NULL;
+    PRES_DES_INFO pResDesInfo = (PRES_DES_INFO)rdResDes;
+    LPWSTR lpDevInst;
+    CONFIGRET ret;
+
+    TRACE("CM_Get_Res_Des_Data_Ex(%p %p %lu %lx %p)\n",
           rdResDes, Buffer, BufferLen, ulFlags, hMachine);
 
-    return CR_CALL_NOT_IMPLEMENTED;
+    if (!IsValidResDes(pResDesInfo))
+        return CR_INVALID_RES_DES;
+
+    if (Buffer == NULL)
+        return CR_INVALID_POINTER;
+
+    if (ulFlags & ~CM_RESDES_WIDTH_BITS)
+        return CR_INVALID_FLAG;
+
+    if ((ulFlags & CM_RESDES_WIDTH_BITS) == CM_RESDES_WIDTH_DEFAULT)
+        ulFlags |= (sizeof(PVOID) == sizeof(ULONG64)) ? CM_RESDES_WIDTH_64 : CM_RESDES_WIDTH_32;
+
+    if (hMachine != NULL)
+    {
+        BindingHandle = ((PMACHINE_INFO)hMachine)->BindingHandle;
+        if (BindingHandle == NULL)
+            return CR_FAILURE;
+    }
+    else
+    {
+        if (!PnpGetLocalHandles(&BindingHandle))
+            return CR_FAILURE;
+    }
+
+    lpDevInst = CmpIdFromDevInst(pResDesInfo->dnDevInst);
+    if (lpDevInst == NULL)
+        return CR_INVALID_DEVNODE;
+
+    RpcTryExcept
+    {
+        ret = PNP_GetResDesData(BindingHandle,
+                                lpDevInst,
+                                pResDesInfo->ulLogConfTag,
+                                pResDesInfo->ulLogConfType,
+                                pResDesInfo->ulResDesType,
+                                pResDesInfo->ulResDesTag,
+                                Buffer,
+                                BufferLen,
+                                ulFlags);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        ret = RpcStatusToCmStatus(RpcExceptionCode());
+    }
+    RpcEndExcept;
+
+    return ret;
 }
 
 
@@ -4342,10 +4391,60 @@ CM_Get_Res_Des_Data_Size_Ex(
     _In_ ULONG ulFlags,
     _In_opt_ HMACHINE hMachine)
 {
+    RPC_BINDING_HANDLE BindingHandle = NULL;
+    PRES_DES_INFO pResDesInfo = (PRES_DES_INFO)rdResDes;
+    LPWSTR lpDevInst;
+    CONFIGRET ret;
+
     TRACE("CM_Get_Res_Des_Data_Size_Ex(%p %p %lx %p)\n",
           pulSize, rdResDes, ulFlags, hMachine);
 
-    return CR_CALL_NOT_IMPLEMENTED;
+    if (pulSize == NULL)
+        return CR_INVALID_POINTER;
+
+    if (!IsValidResDes(pResDesInfo))
+        return CR_INVALID_RES_DES;
+
+    if (ulFlags & ~CM_RESDES_WIDTH_BITS)
+        return CR_INVALID_FLAG;
+
+    if ((ulFlags & CM_RESDES_WIDTH_BITS) == CM_RESDES_WIDTH_DEFAULT)
+        ulFlags |= (sizeof(PVOID) == sizeof(ULONG64)) ? CM_RESDES_WIDTH_64 : CM_RESDES_WIDTH_32;
+
+    if (hMachine != NULL)
+    {
+        BindingHandle = ((PMACHINE_INFO)hMachine)->BindingHandle;
+        if (BindingHandle == NULL)
+            return CR_FAILURE;
+    }
+    else
+    {
+        if (!PnpGetLocalHandles(&BindingHandle))
+            return CR_FAILURE;
+    }
+
+    lpDevInst = CmpIdFromDevInst(pResDesInfo->dnDevInst);
+    if (lpDevInst == NULL)
+        return CR_INVALID_DEVNODE;
+
+    RpcTryExcept
+    {
+        ret = PNP_GetResDesDataSize(BindingHandle,
+                                    lpDevInst,
+                                    pResDesInfo->ulLogConfTag,
+                                    pResDesInfo->ulLogConfType,
+                                    pResDesInfo->ulResDesType,
+                                    pResDesInfo->ulResDesTag,
+                                    pulSize,
+                                    ulFlags);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        ret = RpcStatusToCmStatus(RpcExceptionCode());
+    }
+    RpcEndExcept;
+
+    return ret;
 }
 
 
