@@ -68,6 +68,7 @@ KdNetArchGetDeviceTree(
 
 #define KDNET_MODULE_NAME_SIZE  64
 #define KDNET_PATH_SIZE         64
+#define KDNET_PCI_PROGIF_XHCI   0x30
 
 typedef struct _KDNET_PLATFORM_DEVICE
 {

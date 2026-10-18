@@ -473,6 +473,15 @@ KdpStartController(VOID)
 }
 
 static
+BOOLEAN
+KdpIsUsbController(
+    _In_ PPCI_COMMON_HEADER Config)
+{
+    return Config->BaseClass == PCI_CLASS_SERIAL_BUS_CTLR && Config->SubClass == PCI_SUBCLASS_SB_USB &&
+           Config->ProgIf == KDNET_PCI_PROGIF_XHCI;
+}
+
+static
 NTSTATUS
 KdpStartDevice(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
@@ -493,7 +502,11 @@ KdpStartDevice(
     KdNicDevice.ProgIf = Config->ProgIf;
     KdNicDevice.NameSpace = KdNameSpacePCI;
 
-    _snwprintf(Name, RTL_NUMBER_OF(Name), L"kd_%02x_%04x.dll", Config->BaseClass, Config->VendorID);
+    if (KdpIsUsbController(Config))
+        _snwprintf(Name, RTL_NUMBER_OF(Name), L"kd_usbnet.dll");
+    else
+        _snwprintf(Name, RTL_NUMBER_OF(Name), L"kd_%02x_%04x.dll", Config->BaseClass, Config->VendorID);
+
     Name[RTL_NUMBER_OF(Name) - 1] = UNICODE_NULL;
     Status = KdpPrepareDevice(LoaderBlock, Name);
     if (!NT_SUCCESS(Status))
@@ -689,13 +702,16 @@ KdpReserveDevice(VOID)
     ZwClose(Key);
 }
 
-NTSTATUS
-KdNicInitialize(
-    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+static
+BOOLEAN
+KdpScanPci(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
+    _In_ BOOLEAN Usb,
+    _Inout_ PNTSTATUS Status)
 {
     PCI_COMMON_HEADER Config;
     PCI_SLOT_NUMBER Slot;
-    NTSTATUS Status = STATUS_NO_SUCH_DEVICE, Result;
+    NTSTATUS Result;
     ULONG Bus, Device, Function, Length;
 
     for (Bus = 0; Bus < PCI_MAX_BRIDGE_NUMBER + 1; Bus++)
@@ -721,7 +737,7 @@ KdNicInitialize(
                 }
 
                 if (PCI_CONFIGURATION_TYPE(&Config) == PCI_DEVICE_TYPE &&
-                    Config.BaseClass == PCI_CLASS_NETWORK_CTLR &&
+                    (Usb ? KdpIsUsbController(&Config) : Config.BaseClass == PCI_CLASS_NETWORK_CTLR) &&
                     (!KdNetOptions.HaveLocation ||
                      (KdNetOptions.Bus == Bus && KdNetOptions.Device == Device &&
                       KdNetOptions.Function == Function)))
@@ -732,7 +748,7 @@ KdNicInitialize(
                         KdpDropSavedDevice();
                         KdpNicStarted = TRUE;
                         KdpReserveDevice();
-                        return STATUS_SUCCESS;
+                        return TRUE;
                     }
 
                     if (NT_SUCCESS(Result))
@@ -744,7 +760,7 @@ KdNicInitialize(
                     }
                     else
                     {
-                        Status = Result;
+                        *Status = Result;
                     }
                 }
 
@@ -755,6 +771,18 @@ KdNicInitialize(
 NextBus:
         NOTHING;
     }
+
+    return FALSE;
+}
+
+NTSTATUS
+KdNicInitialize(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    NTSTATUS Status = STATUS_NO_SUCH_DEVICE;
+
+    if (KdpScanPci(LoaderBlock, TRUE, &Status) || KdpScanPci(LoaderBlock, FALSE, &Status))
+        return STATUS_SUCCESS;
 
     if (KdpSavedValid)
     {

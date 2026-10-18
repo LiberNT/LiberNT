@@ -2,6 +2,7 @@
 add_subdirectory(kd_02_10ec)
 add_subdirectory(kd_02_1af4)
 add_subdirectory(kd_02_8086)
+add_subdirectory(kd_usbnet)
 if((ARCH STREQUAL "arm64") AND RPI3_SUPPORT)
     add_subdirectory(kd_8003_1055)
 endif()
