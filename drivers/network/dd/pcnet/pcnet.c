@@ -1627,13 +1627,47 @@ MiEthernetCrc(UCHAR *Address)
     {
       Value ^= *Address++;
       for (Counter = 0; Counter < 8; Counter++)
-        {
-          Value >>= 1;
-          Value ^= (Value & 1) * 0xedb88320;
-        }
+        Value = (Value >> 1) ^ ((Value & 1) * 0xedb88320);
     }
 
   return Value;
+}
+
+static BOOLEAN
+NTAPI
+MiSyncLoadLogicalAddressFilter(
+    IN PVOID SynchronizeContext)
+{
+  PADAPTER Adapter = (PADAPTER)SynchronizeContext;
+  PUCHAR Ladr = Adapter->InitializationBlockVirt->LADR;
+  USHORT Rap;
+  USHORT Csr5;
+  USHORT Data;
+  UINT Index;
+
+  NdisRawReadPortUshort(Adapter->PortOffset + RAP, &Rap);
+  NdisRawWritePortUshort(Adapter->PortOffset + RAP, CSR5);
+  NdisRawReadPortUshort(Adapter->PortOffset + RDP, &Csr5);
+  Csr5 &= ~(CSR5_SINT | CSR5_SLPINT | CSR5_EXDINT | CSR5_MPINT);
+  NdisRawWritePortUshort(Adapter->PortOffset + RDP, Csr5 | CSR5_SPND);
+  for (Index = 0; Index < 2000; Index++)
+    {
+      NdisRawReadPortUshort(Adapter->PortOffset + RDP, &Data);
+      if (Data & CSR5_SPND)
+        break;
+      NdisStallExecution(1);
+    }
+
+  for (Index = 0; Index < 4; Index++)
+    {
+      NdisRawWritePortUshort(Adapter->PortOffset + RAP, CSR8 + Index);
+      NdisRawWritePortUshort(Adapter->PortOffset + RDP, Ladr[Index * 2] | (Ladr[Index * 2 + 1] << 8));
+    }
+
+  NdisRawWritePortUshort(Adapter->PortOffset + RAP, CSR5);
+  NdisRawWritePortUshort(Adapter->PortOffset + RDP, Csr5 & ~CSR5_SPND);
+  NdisRawWritePortUshort(Adapter->PortOffset + RAP, Rap);
+  return TRUE;
 }
 
 NDIS_STATUS
@@ -1650,11 +1684,12 @@ MiSetMulticast(
   for (Index = 0; Index < AddressCount; Index++)
     {
       CrcIndex = MiEthernetCrc(Addresses) >> 26;
-      Adapter->InitializationBlockVirt->LADR[CrcIndex >> 3] |= 1 << (CrcIndex & 15);
+      Adapter->InitializationBlockVirt->LADR[CrcIndex >> 3] |= 1 << (CrcIndex & 7);
       Addresses += 6;
     }
 
-  /* FIXME: The specification mentions we need to reload the init block here. */
+  if (Adapter->InterruptHandle)
+    NdisMSynchronizeWithInterruptEx(Adapter->InterruptHandle, 0, MiSyncLoadLogicalAddressFilter, Adapter);
 
   return NDIS_STATUS_SUCCESS;
 }
