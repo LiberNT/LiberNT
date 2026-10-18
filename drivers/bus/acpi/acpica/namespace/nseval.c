@@ -248,7 +248,9 @@ AcpiNsEvaluate (
          */
         AcpiExEnterInterpreter ();
         Status = AcpiPsExecuteMethod (Info);
+#ifndef __REACTOS__
         AcpiExExitInterpreter ();
+#endif
         break;
 
     default:
@@ -280,10 +282,15 @@ AcpiNsEvaluate (
 
         Status = AcpiExResolveNodeToValue (ACPI_CAST_INDIRECT_PTR (
             ACPI_NAMESPACE_NODE, &Info->ReturnObject), NULL);
+#ifndef __REACTOS__
         AcpiExExitInterpreter ();
+#endif
 
         if (ACPI_FAILURE (Status))
         {
+#ifdef __REACTOS__
+            AcpiExExitInterpreter ();
+#endif
             Info->ReturnObject = NULL;
             goto Cleanup;
         }
@@ -329,6 +336,10 @@ AcpiNsEvaluate (
             Info->ReturnObject = NULL;
         }
     }
+
+#ifdef __REACTOS__
+    AcpiExExitInterpreter ();
+#endif
 
     ACPI_DEBUG_PRINT ((ACPI_DB_NAMES,
         "*** Completed evaluation of object %s ***\n",

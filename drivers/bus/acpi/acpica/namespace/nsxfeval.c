@@ -457,6 +457,10 @@ AcpiEvaluateObject (
         goto CleanupReturnObject;
     }
 
+#ifdef __REACTOS__
+    AcpiExEnterInterpreter ();
+#endif
+
     /* Dereference Index and RefOf references */
 
     AcpiNsResolveReferences (Info);
@@ -490,6 +494,12 @@ AcpiEvaluateObject (
                 Info->ReturnObject, ReturnBuffer);
         }
     }
+
+#ifdef __REACTOS__
+    AcpiUtRemoveReference (Info->ReturnObject);
+    AcpiExExitInterpreter ();
+    goto Cleanup;
+#endif
 
 CleanupReturnObject:
 
