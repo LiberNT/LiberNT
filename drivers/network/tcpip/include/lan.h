@@ -44,6 +44,7 @@ typedef struct LAN_ADAPTER {
     LIST_ENTRY ReconfigureQueue;            /* Status indications in arrival order */
     BOOLEAN ReconfigureActive;              /* One worker drains this adapter's queue */
     EX_RUNDOWN_REF WorkRundown;             /* Protects queued adapter work */
+    EX_RUNDOWN_REF RequestRundown;
     volatile LONG Closing;                  /* New callbacks must not queue work */
     BOOLEAN Listed;                         /* Adapter is on the global list */
     UCHAR State, OldState;                  /* State of the adapter */

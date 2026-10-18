@@ -66,6 +66,8 @@ NDIS_STATUS NDISCall(
     LAN_REQUEST Context;
     PNDIS_OID_REQUEST Request = &Context.Request;
     NDIS_STATUS NdisStatus;
+    NDIS_HANDLE NdisHandle;
+    KIRQL OldIrql;
 
     RtlZeroMemory(&Context, sizeof(Context));
     KeInitializeEvent(&Context.Event, NotificationEvent, FALSE);
@@ -84,8 +86,15 @@ NDIS_STATUS NDISCall(
         Request->DATA.QUERY_INFORMATION.InformationBufferLength = Length;
     }
 
-    if (Adapter->State != LAN_STATE_RESETTING) {
-        NdisStatus = NdisOidRequest(Adapter->NdisHandle, Request);
+    if (!ExAcquireRundownProtection(&Adapter->RequestRundown))
+        return NDIS_STATUS_ADAPTER_REMOVED;
+
+    TcpipAcquireSpinLock(&Adapter->Lock, &OldIrql);
+    NdisHandle = Adapter->NdisHandle;
+    TcpipReleaseSpinLock(&Adapter->Lock, OldIrql);
+
+    if (NdisHandle && Adapter->State != LAN_STATE_RESETTING) {
+        NdisStatus = NdisOidRequest(NdisHandle, Request);
     } else {
         NdisStatus = NDIS_STATUS_NOT_ACCEPTED;
     }
@@ -100,6 +109,7 @@ NDIS_STATUS NDISCall(
         NdisStatus = Context.Status;
     }
 
+    ExReleaseRundownProtection(&Adapter->RequestRundown);
     return NdisStatus;
 }
 
@@ -1481,10 +1491,12 @@ VOID UnbindAdapter(
  *     Adapter = Pointer to LAN_ADAPTER structure
  */
 {
+    PIP_INTERFACE IF = Adapter->Context;
+
     TI_DbgPrint(DEBUG_DATALINK, ("Called.\n"));
 
-    if (Adapter->State == LAN_STATE_STARTED) {
-        PIP_INTERFACE IF = Adapter->Context;
+    if (IF) {
+        Adapter->Context = NULL;
 
         IPUnregisterInterface(IF);
 
@@ -1541,6 +1553,7 @@ NDIS_STATUS LANRegisterAdapter(
 
     RtlZeroMemory(IF, sizeof(LAN_ADAPTER));
     ExInitializeRundownProtection(&IF->WorkRundown);
+    ExInitializeRundownProtection(&IF->RequestRundown);
 
     /* Put adapter in stopped state */
     IF->State = LAN_STATE_STOPPED;
@@ -1672,6 +1685,8 @@ NDIS_STATUS LANUnregisterAdapter(
         Adapter->Listed = FALSE;
     }
     TcpipReleaseSpinLock(&AdapterListLock, OldIrql);
+
+    ExWaitForRundownProtectionRelease(&Adapter->RequestRundown);
 
     TcpipAcquireSpinLock(&Adapter->Lock, &OldIrql);
     NdisHandle = Adapter->NdisHandle;
