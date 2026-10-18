@@ -5,6 +5,9 @@
 #include <reactos/dwmframe.h>
 #include <bluetoothapis.h>
 #include <shellframe.h>
+#include <winioctl.h>
+#include <ntddvdeo.h>
+#include <reactos/rddm/rxgkmonitor.h>
 
 static VOID TfyW11Position(HWND hwndOwner, const RECT *prcAnchor, SIZE size, BOOL bCenter, POINT *ppt);
 static VOID TrayNotifCenter_Open(HWND hwndCalendar);
@@ -3617,6 +3620,133 @@ VOID TrayVolume_SetCachedState(int nPercent, BOOL bMute)
     InterlockedExchange(&g_TfyAudioMute, bMute);
 }
 
+#define TFY_WM_VOLUMECHANGED (WM_APP + 43)
+
+static VOID
+TfyBroadcastVolume(VOID)
+{
+    static const LPCWSTR s_Classes[] = { L"TrayVolumeFlyout", L"TrayQuickSettingsFlyout", L"ROSVolumeMixer" };
+
+    for (UINT i = 0; i < _countof(s_Classes); i++)
+    {
+        HWND hwnd = NULL;
+        while ((hwnd = FindWindowExW(NULL, hwnd, s_Classes[i], NULL)) != NULL)
+            PostMessageW(hwnd, TFY_WM_VOLUMECHANGED, 0, 0);
+    }
+}
+
+class CTfyVolumeWatch :
+    public IAudioEndpointVolumeCallback,
+    public IMMNotificationClient
+{
+public:
+    HANDLE m_hDeviceChanged;
+
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppv)
+    {
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_IAudioEndpointVolumeCallback))
+            *ppv = static_cast<IAudioEndpointVolumeCallback *>(this);
+        else if (IsEqualIID(riid, IID_IMMNotificationClient))
+            *ppv = static_cast<IMMNotificationClient *>(this);
+        else
+        {
+            *ppv = NULL;
+            return E_NOINTERFACE;
+        }
+        return S_OK;
+    }
+
+    STDMETHODIMP_(ULONG) AddRef() { return 2; }
+    STDMETHODIMP_(ULONG) Release() { return 1; }
+
+    STDMETHODIMP OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify)
+    {
+        if (pNotify)
+        {
+            TrayVolume_SetCachedState((int)(pNotify->fMasterVolume * 100.0f + 0.5f), pNotify->bMuted);
+            TfyBroadcastVolume();
+        }
+        return S_OK;
+    }
+
+    STDMETHODIMP OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState)
+    {
+        SetEvent(m_hDeviceChanged);
+        return S_OK;
+    }
+
+    STDMETHODIMP OnDeviceAdded(LPCWSTR pwstrDeviceId) { return S_OK; }
+
+    STDMETHODIMP OnDeviceRemoved(LPCWSTR pwstrDeviceId)
+    {
+        SetEvent(m_hDeviceChanged);
+        return S_OK;
+    }
+
+    STDMETHODIMP OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDeviceId)
+    {
+        if (flow == eRender && role == eMultimedia)
+            SetEvent(m_hDeviceChanged);
+        return S_OK;
+    }
+
+    STDMETHODIMP OnPropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key) { return S_OK; }
+};
+
+static CTfyVolumeWatch g_TfyVolumeWatch;
+
+static DWORD WINAPI
+TfyVolumeWatchThread(LPVOID lpParameter)
+{
+    CComPtr<IMMDeviceEnumerator> pEnum;
+
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARG(IMMDeviceEnumerator, &pEnum))))
+    {
+        return 0;
+    }
+    pEnum->RegisterEndpointNotificationCallback(&g_TfyVolumeWatch);
+
+    for (;;)
+    {
+        CComPtr<IMMDevice> pDevice;
+        CComPtr<IAudioEndpointVolume> pVolume;
+        float fLevel = 0.0f;
+        BOOL bMute = FALSE;
+
+        if (SUCCEEDED(pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice)) &&
+            SUCCEEDED(pDevice->Activate(IID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, (void **)&pVolume)))
+        {
+            pVolume->RegisterControlChangeNotify(&g_TfyVolumeWatch);
+            if (SUCCEEDED(pVolume->GetMasterVolumeLevelScalar(&fLevel)) && SUCCEEDED(pVolume->GetMute(&bMute)))
+            {
+                TrayVolume_SetCachedState((int)(fLevel * 100.0f + 0.5f), bMute);
+                TfyBroadcastVolume();
+            }
+        }
+
+        WaitForSingleObject(g_TfyVolumeWatch.m_hDeviceChanged, INFINITE);
+        if (pVolume)
+            pVolume->UnregisterControlChangeNotify(&g_TfyVolumeWatch);
+    }
+}
+
+VOID TrayVolume_StartWatch(VOID)
+{
+    static LONG s_bStarted = FALSE;
+    HANDLE hThread;
+
+    if (InterlockedExchange(&s_bStarted, TRUE))
+        return;
+    g_TfyVolumeWatch.m_hDeviceChanged = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (!g_TfyVolumeWatch.m_hDeviceChanged)
+        return;
+    hThread = CreateThread(NULL, 0, TfyVolumeWatchThread, NULL, 0, NULL);
+    if (hThread)
+        CloseHandle(hThread);
+}
+
 struct TFYAUDIODEV
 {
     WCHAR szId[256];
@@ -3798,6 +3928,481 @@ TfyRequestMaster(IMMDevice *pDevice, int nPercent, int nMute)
     return TRUE;
 }
 
+#define TFY_TIMER_OSDHIDE  0x53
+#define TFY_OSD_VISIBLE_MS 2000
+
+struct TFYMEDIA
+{
+    HWND hwndSession;
+    BOOL bPlaying;
+    WCHAR szTitle[160];
+    WCHAR szArtist[160];
+    WCHAR szApp[96];
+    HICON hIcon;
+};
+
+HWND TrayMedia_FindSession(BOOL *pbPlaying)
+{
+    HWND hwnd = NULL, hwndBest = NULL;
+    BOOL bBestPlaying = FALSE;
+    DWORD dwBestTick = 0;
+
+    while ((hwnd = FindWindowExW(HWND_MESSAGE, hwnd, L"LiberNTMediaSession", NULL)) != NULL)
+    {
+        ULONG_PTR Status = (ULONG_PTR)GetPropW(hwnd, L"LiberNTMediaStatus");
+        DWORD dwTick = (DWORD)(ULONG_PTR)GetPropW(hwnd, L"LiberNTMediaTick");
+        BOOL bPlaying = (Status == 4);
+
+        if (!Status)
+            continue;
+        if (!hwndBest || (bPlaying && !bBestPlaying) ||
+            (bPlaying == bBestPlaying && (LONG)(dwTick - dwBestTick) > 0))
+        {
+            hwndBest = hwnd;
+            bBestPlaying = bPlaying;
+            dwBestTick = dwTick;
+        }
+    }
+    if (pbPlaying)
+        *pbPlaying = bBestPlaying;
+    return hwndBest;
+}
+
+static VOID
+TfyMediaFree(TFYMEDIA *pMedia)
+{
+    if (pMedia->hIcon)
+        DestroyIcon(pMedia->hIcon);
+    ZeroMemory(pMedia, sizeof(*pMedia));
+}
+
+static BOOL
+TfyMediaQuery(TFYMEDIA *pMedia)
+{
+    WCHAR szText[340], szPath[MAX_PATH];
+    DWORD dwPid = 0, cchPath = _countof(szPath);
+    HANDLE hProcess;
+    LPWSTR pszSep;
+
+    TfyMediaFree(pMedia);
+    pMedia->hwndSession = TrayMedia_FindSession(&pMedia->bPlaying);
+    if (!pMedia->hwndSession)
+        return FALSE;
+
+    szText[0] = UNICODE_NULL;
+    InternalGetWindowText(pMedia->hwndSession, szText, _countof(szText));
+    pszSep = wcschr(szText, L'\n');
+    if (pszSep)
+    {
+        *pszSep = UNICODE_NULL;
+        StringCchCopyW(pMedia->szArtist, _countof(pMedia->szArtist), pszSep + 1);
+    }
+    StringCchCopyW(pMedia->szTitle, _countof(pMedia->szTitle), szText);
+
+    GetWindowThreadProcessId(pMedia->hwndSession, &dwPid);
+    hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dwPid);
+    if (hProcess)
+    {
+        if (QueryFullProcessImageNameW(hProcess, 0, szPath, &cchPath))
+        {
+            if (!GetVersionInfoString(szPath, L"FileDescription", pMedia->szApp, sizeof(pMedia->szApp) - sizeof(WCHAR)) ||
+                !pMedia->szApp[0])
+            {
+                StringCchCopyW(pMedia->szApp, _countof(pMedia->szApp), PathFindFileNameW(szPath));
+                PathRemoveExtensionW(pMedia->szApp);
+            }
+            ExtractIconExW(szPath, 0, NULL, &pMedia->hIcon, 1);
+        }
+        CloseHandle(hProcess);
+    }
+    if (!pMedia->szTitle[0])
+        StringCchCopyW(pMedia->szTitle, _countof(pMedia->szTitle), pMedia->szApp);
+    return TRUE;
+}
+
+typedef CWinTraits<WS_POPUP,
+                   WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE> CTrayOsdTraits;
+
+class CTrayOsdWnd :
+    public CWindowImpl<CTrayOsdWnd, CWindow, CTrayOsdTraits>,
+    public CTrayFlyoutAnimation
+{
+public:
+    DECLARE_WND_CLASS_EX(L"TrayOsdFlyout", CS_DROPSHADOW, COLOR_WINDOW)
+
+    SM2_FLYOUT_PALETTE m_Pal;
+    HFONT m_hFont;
+    UINT m_uIcon;
+    LPCWSTR m_pszGlyph;
+    BOOL m_bFrameStarted;
+    int m_nPercent;
+    BOOL m_bHover;
+    SIZE m_size;
+    RECT m_rcIcon, m_rcBar, m_rcValue;
+
+    CTrayOsdWnd() : m_hFont(NULL), m_uIcon(0), m_pszGlyph(NULL), m_bFrameStarted(FALSE),
+                    m_nPercent(0), m_bHover(FALSE)
+    {
+        ZeroMemory(&m_Pal, sizeof(m_Pal));
+        ZeroMemory(&m_size, sizeof(m_size));
+    }
+
+    int Sc(int v) const { return ShellScaleForDpi(v); }
+
+    VOID Layout()
+    {
+        m_size.cx = Sc(192);
+        m_size.cy = Sc(47);
+        SetRect(&m_rcIcon, Sc(13), (m_size.cy - Sc(16)) / 2, Sc(29), (m_size.cy - Sc(16)) / 2 + Sc(16));
+        SetRect(&m_rcBar, Sc(42), (m_size.cy - Sc(4)) / 2, Sc(152), (m_size.cy - Sc(4)) / 2 + Sc(4));
+        SetRect(&m_rcValue, Sc(152), 0, Sc(180), m_size.cy);
+    }
+
+    VOID Show(UINT uIcon, LPCWSTR pszGlyph, int nPercent)
+    {
+        HWND hwndTray = FindWindowW(L"Shell_TrayWnd", NULL);
+        MONITORINFO mi = { sizeof(mi) };
+        RECT rcBar;
+        POINT pt;
+
+        m_uIcon = uIcon;
+        m_pszGlyph = pszGlyph;
+        if (!m_bFrameStarted)
+            m_bFrameStarted = ShellFrame::Startup();
+        m_nPercent = max(0, min(nPercent, 100));
+        SetTimer(TFY_TIMER_OSDHIDE, TFY_OSD_VISIBLE_MS, NULL);
+
+        if (IsWindowVisible() && m_AnimPhase != TFY_CLOSE)
+        {
+            InvalidateRect(NULL, FALSE);
+            UpdateWindow();
+            return;
+        }
+
+        StartMenu2_GetFlyoutPalette(&m_Pal);
+        if (!m_hFont)
+            m_hFont = TfyCreateFont(14, FW_NORMAL);
+        Layout();
+        if (!hwndTray || !::GetWindowRect(hwndTray, &rcBar))
+            SetRectEmpty(&rcBar);
+        GetMonitorInfoW(MonitorFromRect(&rcBar, MONITOR_DEFAULTTOPRIMARY), &mi);
+        pt.x = (mi.rcMonitor.left + mi.rcMonitor.right - m_size.cx) / 2;
+        if (hwndTray && rcBar.top > (mi.rcMonitor.top + mi.rcMonitor.bottom) / 2)
+            pt.y = rcBar.top - Sc(15) - m_size.cy;
+        else
+            pt.y = mi.rcWork.bottom - Sc(15) - m_size.cy;
+        BeginFlyoutOpen(m_hWnd, pt.x, pt.y, m_size.cx, m_size.cy, m_Pal.PanelBg, FALSE);
+    }
+
+    LRESULT OnPaint(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(&ps);
+        RECT rc;
+        WCHAR szValue[8];
+
+        GetClientRect(&rc);
+        HDC hdcMem = CreateCompatibleDC(hdc);
+        HBITMAP hbm = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
+        HGDIOBJ hbmOld = SelectObject(hdcMem, hbm);
+
+        HBRUSH hbr = CreateSolidBrush(m_Pal.PanelBg);
+        FillRect(hdcMem, &rc, hbr);
+        DeleteObject(hbr);
+
+        if (m_pszGlyph)
+        {
+            int cx = m_rcIcon.right - m_rcIcon.left;
+            HICON hGlyph = m_bFrameStarted ? ShellFrame::CreateGlyphIcon(m_pszGlyph, cx, m_Pal.PanelText) : NULL;
+
+            if (hGlyph)
+            {
+                DrawIconEx(hdcMem, m_rcIcon.left, m_rcIcon.top, hGlyph, cx, cx, 0, NULL, DI_NORMAL);
+                DestroyIcon(hGlyph);
+            }
+        }
+        else
+        {
+            TfyDrawFluent(hdcMem, &m_rcIcon, m_uIcon);
+        }
+
+        RECT rcFill = m_rcBar;
+        rcFill.right = m_rcBar.left + MulDiv(m_nPercent, m_rcBar.right - m_rcBar.left, 100);
+        if (m_bFrameStarted)
+        {
+            ShellFrame::FillRoundSmooth(hdcMem, m_rcBar, (float)Sc(2), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 128));
+            if (rcFill.right > rcFill.left)
+                ShellFrame::FillRoundSmooth(hdcMem, rcFill, (float)Sc(2), m_Pal.AccentBg);
+        }
+        else
+        {
+            hbr = CreateSolidBrush(TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 128));
+            FillRect(hdcMem, &m_rcBar, hbr);
+            DeleteObject(hbr);
+            hbr = CreateSolidBrush(m_Pal.AccentBg);
+            FillRect(hdcMem, &rcFill, hbr);
+            DeleteObject(hbr);
+        }
+
+        SetBkMode(hdcMem, TRANSPARENT);
+        SetTextColor(hdcMem, m_Pal.PanelText);
+        HGDIOBJ hFontOld = SelectObject(hdcMem, m_hFont);
+        StringCchPrintfW(szValue, _countof(szValue), L"%d", m_nPercent);
+        DrawTextW(hdcMem, szValue, -1, &m_rcValue, DT_SINGLELINE | DT_VCENTER | DT_RIGHT | DT_NOPREFIX);
+        SelectObject(hdcMem, hFontOld);
+
+        BitBlt(hdc, 0, 0, rc.right, rc.bottom, hdcMem, 0, 0, SRCCOPY);
+        SelectObject(hdcMem, hbmOld);
+        DeleteObject(hbm);
+        DeleteDC(hdcMem);
+        EndPaint(&ps);
+        return 0;
+    }
+
+    LRESULT OnEraseBkgnd(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        return 1;
+    }
+
+    LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        if (HandleFlyoutAnimation(m_hWnd, wParam))
+            return 0;
+        if (wParam == TFY_TIMER_OSDHIDE && !m_bHover)
+        {
+            KillTimer(TFY_TIMER_OSDHIDE);
+            BeginFlyoutClose(m_hWnd);
+        }
+        return 0;
+    }
+
+    LRESULT OnMouseMove(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        if (!m_bHover)
+        {
+            TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, m_hWnd, 0 };
+            m_bHover = TrackMouseEvent(&tme);
+        }
+        return 0;
+    }
+
+    LRESULT OnMouseLeave(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        m_bHover = FALSE;
+        SetTimer(TFY_TIMER_OSDHIDE, TFY_OSD_VISIBLE_MS, NULL);
+        return 0;
+    }
+
+    LRESULT OnMouseActivate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        return MA_NOACTIVATE;
+    }
+
+    LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        KillTimer(TFY_TIMER_ANIM);
+        KillTimer(TFY_TIMER_OSDHIDE);
+        if (m_hFont) { DeleteObject(m_hFont); m_hFont = NULL; }
+        if (m_bFrameStarted)
+        {
+            ShellFrame::Shutdown();
+            m_bFrameStarted = FALSE;
+        }
+        return 0;
+    }
+
+    virtual void OnFinalMessage(HWND hWnd) override;
+
+    BEGIN_MSG_MAP(CTrayOsdWnd)
+        MESSAGE_HANDLER(WM_PAINT, OnPaint)
+        MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBkgnd)
+        MESSAGE_HANDLER(WM_TIMER, OnTimer)
+        MESSAGE_HANDLER(WM_MOUSEMOVE, OnMouseMove)
+        MESSAGE_HANDLER(WM_MOUSELEAVE, OnMouseLeave)
+        MESSAGE_HANDLER(WM_MOUSEACTIVATE, OnMouseActivate)
+        MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
+    END_MSG_MAP()
+};
+
+static CTrayOsdWnd *g_pTrayOsd = NULL;
+
+void CTrayOsdWnd::OnFinalMessage(HWND hWnd)
+{
+    if (g_pTrayOsd == this)
+        g_pTrayOsd = NULL;
+    delete this;
+}
+
+static VOID
+TrayOsd_Show(UINT uIcon, LPCWSTR pszGlyph, int nPercent)
+{
+    if (g_pTrayOsd && g_pTrayOsd->IsWindow() && g_pTrayOsd->m_AnimPhase == TFY_CLOSE)
+    {
+        ::DestroyWindow(g_pTrayOsd->m_hWnd);
+        g_pTrayOsd = NULL;
+    }
+
+    if (!g_pTrayOsd)
+    {
+        CTrayOsdWnd *pOsd = new CTrayOsdWnd();
+        if (!pOsd)
+            return;
+        if (!pOsd->Create(NULL, CWindow::rcDefault, NULL))
+        {
+            delete pOsd;
+            return;
+        }
+        g_pTrayOsd = pOsd;
+    }
+
+    g_pTrayOsd->Show(uIcon, pszGlyph, nPercent);
+}
+
+#define TFY_WM_BRIGHTNESSCHANGED (WM_APP + 44)
+
+static volatile LONG g_TfyBrightness = -1;
+static volatile LONG g_TfyBrightnessSelfTick;
+static HWND g_hwndTfyBrightnessSink;
+
+static HANDLE
+TfyOpenLcd(VOID)
+{
+    return CreateFileW(L"\\\\.\\LCD", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                       OPEN_EXISTING, 0, NULL);
+}
+
+static BOOL
+TfyBrightnessQuery(int *pnPercent)
+{
+    DISPLAY_BRIGHTNESS Display;
+    HANDLE hLcd = TfyOpenLcd();
+    DWORD cb = 0;
+    BOOL bRet;
+
+    if (hLcd == INVALID_HANDLE_VALUE)
+        return FALSE;
+    bRet = DeviceIoControl(hLcd, IOCTL_VIDEO_QUERY_DISPLAY_BRIGHTNESS, NULL, 0, &Display, sizeof(Display), &cb, NULL) &&
+           cb >= sizeof(Display);
+    CloseHandle(hLcd);
+    if (bRet)
+        *pnPercent = (Display.ucDisplayPolicy & DISPLAYPOLICY_DC) ? Display.ucDCBrightness : Display.ucACBrightness;
+    return bRet;
+}
+
+static BOOL
+TfyBrightnessSet(int nPercent)
+{
+    DISPLAY_BRIGHTNESS Display;
+    HANDLE hLcd = TfyOpenLcd();
+    DWORD cb = 0;
+    BOOL bRet = FALSE;
+
+    if (hLcd == INVALID_HANDLE_VALUE)
+        return FALSE;
+    if (DeviceIoControl(hLcd, IOCTL_VIDEO_QUERY_DISPLAY_BRIGHTNESS, NULL, 0, &Display, sizeof(Display), &cb, NULL) &&
+        cb >= sizeof(Display))
+    {
+        nPercent = max(0, min(nPercent, 100));
+        if (Display.ucDisplayPolicy & DISPLAYPOLICY_DC)
+        {
+            Display.ucDisplayPolicy = DISPLAYPOLICY_DC;
+            Display.ucDCBrightness = (UCHAR)nPercent;
+        }
+        else
+        {
+            Display.ucDisplayPolicy = DISPLAYPOLICY_AC;
+            Display.ucACBrightness = (UCHAR)nPercent;
+        }
+        InterlockedExchange(&g_TfyBrightnessSelfTick, (LONG)GetTickCount());
+        bRet = DeviceIoControl(hLcd, IOCTL_VIDEO_SET_DISPLAY_BRIGHTNESS, &Display, sizeof(Display), NULL, 0, &cb, NULL);
+    }
+    CloseHandle(hLcd);
+    return bRet;
+}
+
+static LRESULT CALLBACK
+TfyBrightnessSinkProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == TFY_WM_BRIGHTNESSCHANGED)
+    {
+        HWND hwndQs = NULL;
+
+        while ((hwndQs = FindWindowExW(NULL, hwndQs, L"TrayQuickSettingsFlyout", NULL)) != NULL)
+            PostMessageW(hwndQs, TFY_WM_BRIGHTNESSCHANGED, 0, 0);
+        if (wParam)
+            TrayOsd_Show(0, L"brightness_high_20_regular", (int)lParam);
+        return 0;
+    }
+    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+}
+
+static DWORD WINAPI
+TfyBrightnessWatchThread(LPVOID lpParameter)
+{
+    HANDLE hEvent = (HANDLE)lpParameter;
+    int nKnown = (int)InterlockedCompareExchange(&g_TfyBrightness, 0, 0);
+
+    for (;;)
+    {
+        int nPercent;
+        BOOL bShow;
+
+        WaitForSingleObject(hEvent, INFINITE);
+        if (!TfyBrightnessQuery(&nPercent))
+            continue;
+        InterlockedExchange(&g_TfyBrightness, nPercent);
+        bShow = (nPercent != nKnown) &&
+                (GetTickCount() - (DWORD)InterlockedCompareExchange(&g_TfyBrightnessSelfTick, 0, 0)) > 1000;
+        nKnown = nPercent;
+        PostMessageW(g_hwndTfyBrightnessSink, TFY_WM_BRIGHTNESSCHANGED, bShow, nPercent);
+    }
+}
+
+VOID TrayBrightness_StartWatch(VOID)
+{
+    WNDCLASSEXW wc = { sizeof(wc) };
+    HANDLE hEvent, hThread;
+    int nPercent;
+
+    if (g_hwndTfyBrightnessSink || !TfyBrightnessQuery(&nPercent))
+        return;
+    InterlockedExchange(&g_TfyBrightness, nPercent);
+
+    hEvent = OpenEventW(SYNCHRONIZE, FALSE, L"Global\\" RXGK_MONITOR_BRIGHTNESS_EVENT);
+    if (!hEvent)
+        return;
+
+    wc.lpfnWndProc = TfyBrightnessSinkProc;
+    wc.hInstance = hExplorerInstance;
+    wc.lpszClassName = L"TrayBrightnessSink";
+    RegisterClassExW(&wc);
+    g_hwndTfyBrightnessSink = CreateWindowExW(0, wc.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL,
+                                              hExplorerInstance, NULL);
+    if (!g_hwndTfyBrightnessSink)
+    {
+        CloseHandle(hEvent);
+        return;
+    }
+
+    hThread = CreateThread(NULL, 0, TfyBrightnessWatchThread, hEvent, 0, NULL);
+    if (hThread)
+        CloseHandle(hThread);
+}
+
+static UINT
+TfyVolumeIcon(int nPercent, BOOL bMute)
+{
+    if (bMute)
+        return IDI_FLU_SPKMUTE;
+    if (nPercent == 0)
+        return IDI_FLU_SPK0;
+    if (nPercent < 34)
+        return IDI_FLU_SPK1;
+    if (nPercent < 67)
+        return IDI_FLU_SPK2;
+    return IDI_FLU_SPK3;
+}
+
 BOOL TrayVolume_HandleAppCommand(UINT uAppCmd)
 {
     CComPtr<IMMDeviceEnumerator> pEnum;
@@ -3805,6 +4410,7 @@ BOOL TrayVolume_HandleAppCommand(UINT uAppCmd)
     CComPtr<IAudioEndpointVolume> pVolume;
     BOOL bMute = FALSE;
     float fLevel = 0.0f;
+    int nPercent;
     HRESULT hr;
 
     if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
@@ -3823,17 +4429,26 @@ BOOL TrayVolume_HandleAppCommand(UINT uAppCmd)
                 hr = pVolume->SetMute(!bMute, NULL);
             break;
         case APPCOMMAND_VOLUME_UP:
-            hr = pVolume->VolumeStepUp(NULL);
-            break;
         case APPCOMMAND_VOLUME_DOWN:
-            hr = pVolume->VolumeStepDown(NULL);
+            hr = pVolume->GetMasterVolumeLevelScalar(&fLevel);
+            if (FAILED(hr))
+                break;
+            nPercent = (int)(fLevel * 100.0f + 0.5f) + (uAppCmd == APPCOMMAND_VOLUME_UP ? 2 : -2);
+            nPercent = max(0, min(nPercent, 100));
+            hr = pVolume->SetMasterVolumeLevelScalar((float)nPercent / 100.0f, NULL);
+            if (SUCCEEDED(hr) && SUCCEEDED(pVolume->GetMute(&bMute)) && bMute)
+                hr = pVolume->SetMute(FALSE, NULL);
             break;
         default:
             return FALSE;
     }
 
     if (SUCCEEDED(pVolume->GetMasterVolumeLevelScalar(&fLevel)) && SUCCEEDED(pVolume->GetMute(&bMute)))
-        TrayVolume_SetCachedState((int)(fLevel * 100.0f + 0.5f), bMute);
+    {
+        nPercent = (int)(fLevel * 100.0f + 0.5f);
+        TrayVolume_SetCachedState(nPercent, bMute);
+        TrayOsd_Show(TfyVolumeIcon(nPercent, bMute), NULL, nPercent);
+    }
     return SUCCEEDED(hr);
 }
 
@@ -4500,9 +5115,21 @@ public:
         return 0;
     }
 
+    LRESULT OnVolumeChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        if (m_iDragRow != -1)
+        {
+            m_nMaster = (int)InterlockedCompareExchange(&g_TfyAudioPercent, 0, 0);
+            m_bMasterMute = InterlockedCompareExchange(&g_TfyAudioMute, 0, 0) != 0;
+            InvalidateRect(NULL, FALSE);
+        }
+        return 0;
+    }
+
     virtual void OnFinalMessage(HWND hWnd) override;
 
     BEGIN_MSG_MAP(CTrayVolumeWnd)
+        MESSAGE_HANDLER(TFY_WM_VOLUMECHANGED, OnVolumeChanged)
         MESSAGE_HANDLER(WM_PAINT, OnPaint)
         MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBkgnd)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)
@@ -5511,9 +6138,21 @@ public:
         SetTimer(TFY_TIMER_AUDIOLOAD, TFY_ANIM_OPEN_MS + TFY_ANIM_INTERVAL, NULL);
     }
 
+    LRESULT OnVolumeChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        if (m_iDragCol != -1)
+        {
+            m_nMaster = (int)InterlockedCompareExchange(&g_TfyAudioPercent, 0, 0);
+            m_bMasterMute = InterlockedCompareExchange(&g_TfyAudioMute, 0, 0) != 0;
+            InvalidateRect(NULL, FALSE);
+        }
+        return 0;
+    }
+
     virtual void OnFinalMessage(HWND hWnd) override;
 
     BEGIN_MSG_MAP(CVolumeMixerWnd)
+        MESSAGE_HANDLER(TFY_WM_VOLUMECHANGED, OnVolumeChanged)
         MESSAGE_HANDLER(WM_PAINT, OnPaint)
         MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBkgnd)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)
@@ -8514,6 +9153,7 @@ enum
 #define TFY_QSHIT_SOUNDMORE 0x202
 #define TFY_QSHIT_BATTERY   0x203
 #define TFY_QSHIT_SETTINGS  0x204
+#define TFY_QSHIT_BRIGHTNESS 0x205
 
 #define TFY_TIMER_QSTHEME   0x51
 
@@ -8636,6 +9276,9 @@ TfyQsOpenSettings(LPCWSTR pszUri)
     ShellExecuteW(NULL, L"open", pszUri, NULL, NULL, SW_SHOWNORMAL);
 }
 
+static VOID TrayMediaCard_Open(HWND hwndOwner, const RECT *prcQuickSettings);
+static VOID TrayMediaCard_Close(VOID);
+
 class CTrayQuickSettingsWnd :
     public CWindowImpl<CTrayQuickSettingsWnd, CWindow, CTrayFlyoutTraits>,
     public CTrayFlyoutAnimation
@@ -8667,6 +9310,9 @@ public:
     int m_nMaster;
     BOOL m_bMute;
     BOOL m_bDragSlider;
+    int m_nBrightness;
+    BOOL m_bDragBrightness;
+    RECT m_rcBright, m_rcBrightTitle, m_rcBrightIcon, m_rcBrightSlider;
     SYSTEM_POWER_STATUS m_sps;
     BOOL m_bBattery;
     int m_iHot;
@@ -8678,7 +9324,8 @@ public:
     CTrayQuickSettingsWnd() : m_hwndOwner(NULL), m_hFont(NULL), m_hFontTitle(NULL), m_hFontSmall(NULL),
                               m_cTiles(0), m_bHasWlan(FALSE), m_bWifiOn(FALSE), m_bHasBluetooth(FALSE),
                               m_bNetConnected(FALSE), m_bDark(FALSE), m_bComVolume(FALSE), m_bLoaded(FALSE), m_bFrameStarted(FALSE),
-                              m_nMaster(0), m_bMute(FALSE), m_bDragSlider(FALSE), m_bBattery(FALSE),
+                              m_nMaster(0), m_bMute(FALSE), m_bDragSlider(FALSE),
+                              m_nBrightness(-1), m_bDragBrightness(FALSE), m_bBattery(FALSE),
                               m_iHot(TFY_QSHIT_NONE), m_iPressed(TFY_QSHIT_NONE), m_bTracking(FALSE)
     {
         ZeroMemory(&m_Pal, sizeof(m_Pal));
@@ -8689,6 +9336,12 @@ public:
         m_szPowerPlan[0] = UNICODE_NULL;
         m_nMaster = (int)InterlockedCompareExchange(&g_TfyAudioPercent, 0, 0);
         m_bMute = InterlockedCompareExchange(&g_TfyAudioMute, 0, 0) != 0;
+        ZeroMemory(&m_rcBright, sizeof(m_rcBright));
+        ZeroMemory(&m_rcBrightTitle, sizeof(m_rcBrightTitle));
+        ZeroMemory(&m_rcBrightIcon, sizeof(m_rcBrightIcon));
+        ZeroMemory(&m_rcBrightSlider, sizeof(m_rcBrightSlider));
+        if (!TfyBrightnessQuery(&m_nBrightness))
+            m_nBrightness = -1;
     }
 
     int Sc(int v) const { return ShellScaleForDpi(v); }
@@ -8785,6 +9438,18 @@ public:
         }
         rows = (int)(m_cTiles + 1) / 2;
         y += rows * (tileH + gap);
+
+        if (m_nBrightness >= 0)
+        {
+            SetRect(&m_rcBright, pad, y, m_size.cx - pad, y + Sc(88));
+            SetRect(&m_rcBrightTitle, m_rcBright.left + Sc(16), m_rcBright.top + Sc(10), m_rcBright.right - Sc(16),
+                    m_rcBright.top + Sc(34));
+            SetRect(&m_rcBrightIcon, m_rcBright.left + Sc(8), m_rcBright.top + Sc(40), m_rcBright.left + Sc(44),
+                    m_rcBright.top + Sc(76));
+            SetRect(&m_rcBrightSlider, m_rcBrightIcon.right + Sc(10), (m_rcBrightIcon.top + m_rcBrightIcon.bottom) / 2 - Sc(2),
+                    m_rcBright.right - Sc(54), (m_rcBrightIcon.top + m_rcBrightIcon.bottom) / 2 + Sc(2));
+            y = m_rcBright.bottom + gap;
+        }
 
         SetRect(&m_rcSound, pad, y, m_size.cx - pad, y + Sc(88));
         SetRect(&m_rcSoundTitle, m_rcSound.left + Sc(16), m_rcSound.top + Sc(10), m_rcSound.right - Sc(16),
@@ -8888,6 +9553,10 @@ public:
         SetPropW(m_hWnd, DWM_PROP_CORNER_RADIUS, (HANDLE)(ULONG_PTR)Sc(TFY_FLYOUT_RADIUS));
         SetTimer(TFY_TIMER_AUDIOLOAD, TFY_ANIM_OPEN_MS + TFY_ANIM_INTERVAL, NULL);
         ::InvalidateRect(m_hwndOwner, NULL, FALSE);
+        {
+            RECT rcQuickSettings = { pt.x, pt.y, pt.x + m_size.cx, pt.y + m_size.cy };
+            TrayMediaCard_Open(m_hWnd, &rcQuickSettings);
+        }
     }
 
     VOID FadeOut();
@@ -8946,6 +9615,24 @@ public:
         return w > 0 ? MulDiv(x - m_rcSlider.left, 100, w) : 0;
     }
 
+    int BrightnessFromX(int x)
+    {
+        int w = m_rcBrightSlider.right - m_rcBrightSlider.left;
+        return w > 0 ? max(0, min(MulDiv(x - m_rcBrightSlider.left, 100, w), 100)) : 0;
+    }
+
+    VOID ApplyBrightness(int nPercent)
+    {
+        int nActual;
+
+        if (!TfyBrightnessSet(nPercent))
+            return;
+        m_nBrightness = TfyBrightnessQuery(&nActual) ? nActual : nPercent;
+        InterlockedExchange(&g_TfyBrightness, m_nBrightness);
+        InvalidateRect(NULL, FALSE);
+        UpdateWindow();
+    }
+
     int HitTest(POINT pt)
     {
         RECT rcSliderHit = m_rcSlider;
@@ -8961,6 +9648,13 @@ public:
         InflateRect(&rcSliderHit, Sc(4), Sc(14));
         if (PtInRect(&rcSliderHit, pt))
             return TFY_QSHIT_SLIDER;
+        if (m_nBrightness >= 0)
+        {
+            rcSliderHit = m_rcBrightSlider;
+            InflateRect(&rcSliderHit, Sc(4), Sc(14));
+            if (PtInRect(&rcSliderHit, pt))
+                return TFY_QSHIT_BRIGHTNESS;
+        }
         if (PtInRect(&m_rcMute, pt))
             return TFY_QSHIT_MUTE;
         if (PtInRect(&m_rcSoundMore, pt))
@@ -9061,19 +9755,39 @@ public:
 
     VOID DrawSlider(ShellFrame::Canvas &canvas)
     {
-        int xFill = m_rcSlider.left + MulDiv(m_nMaster, m_rcSlider.right - m_rcSlider.left, 100);
-        int cyMid = (m_rcSlider.top + m_rcSlider.bottom) / 2;
-        BOOL bHot = (m_iHot == TFY_QSHIT_SLIDER || m_bDragSlider);
-        RECT rcFill = m_rcSlider, rcThumb, rcDot;
+        DrawSliderAt(canvas, m_rcSlider, m_nMaster, m_iHot == TFY_QSHIT_SLIDER || m_bDragSlider);
+    }
+
+    VOID DrawSliderAt(ShellFrame::Canvas &canvas, const RECT &rcSlider, int nPercent, BOOL bHot)
+    {
+        int xFill = rcSlider.left + MulDiv(nPercent, rcSlider.right - rcSlider.left, 100);
+        int cyMid = (rcSlider.top + rcSlider.bottom) / 2;
+        RECT rcFill = rcSlider, rcThumb, rcDot;
         int rOuter = Sc(10), rInner = bHot ? Sc(7) : Sc(6);
 
-        canvas.FillRound(m_rcSlider, (float)Sc(2), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 90));
+        canvas.FillRound(rcSlider, (float)Sc(2), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 90));
         rcFill.right = max(xFill, rcFill.left + Sc(4));
         canvas.FillRound(rcFill, (float)Sc(2), m_Pal.AccentBg);
         SetRect(&rcThumb, xFill - rOuter, cyMid - rOuter, xFill + rOuter, cyMid + rOuter);
         canvas.FillEllipse(rcThumb, TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 60));
         SetRect(&rcDot, xFill - rInner, cyMid - rInner, xFill + rInner, cyMid + rInner);
         canvas.FillEllipse(rcDot, m_Pal.AccentBg);
+    }
+
+    VOID DrawBrightness(ShellFrame::Canvas &canvas)
+    {
+        WCHAR szValue[8];
+        RECT rcValue;
+
+        if (m_nBrightness < 0)
+            return;
+        canvas.FillRound(m_rcBright, (float)Sc(18), CardFill(FALSE, FALSE));
+        canvas.Text(L"Brightness", m_rcBrightTitle, m_hFontTitle, m_Pal.PanelText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        CenterGlyph(canvas, &m_rcBrightIcon, Sc(20), L"brightness_high_20_regular", m_Pal.PanelText);
+        DrawSliderAt(canvas, m_rcBrightSlider, m_nBrightness, m_iHot == TFY_QSHIT_BRIGHTNESS || m_bDragBrightness);
+        SetRect(&rcValue, m_rcBrightSlider.right + Sc(8), m_rcBrightIcon.top, m_rcBright.right - Sc(8), m_rcBrightIcon.bottom);
+        StringCchPrintfW(szValue, _countof(szValue), L"%d", m_nBrightness);
+        canvas.Text(szValue, rcValue, m_hFont, m_Pal.PanelText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
 
     VOID DrawSound(ShellFrame::Canvas &canvas)
@@ -9110,6 +9824,7 @@ public:
             canvas.Fill(rc, m_Pal.PanelBg);
             for (UINT i = 0; i < m_cTiles; i++)
                 DrawTile(canvas, i);
+            DrawBrightness(canvas);
             DrawSound(canvas);
             canvas.Fill(m_rcFooter, TfyMix(m_Pal.PanelBg, RGB(0, 0, 0), 60));
             if (m_bBattery)
@@ -9169,6 +9884,11 @@ public:
             ApplyVolume(PercentFromX(pt.x));
             return 0;
         }
+        if (m_bDragBrightness)
+        {
+            ApplyBrightness(BrightnessFromX(pt.x));
+            return 0;
+        }
         if (iHit != m_iHot)
         {
             m_iHot = iHit;
@@ -9180,7 +9900,7 @@ public:
     LRESULT OnMouseLeave(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
     {
         m_bTracking = FALSE;
-        if (m_iHot != TFY_QSHIT_NONE && !m_bDragSlider)
+        if (m_iHot != TFY_QSHIT_NONE && !m_bDragSlider && !m_bDragBrightness)
         {
             m_iHot = TFY_QSHIT_NONE;
             InvalidateRect(NULL, FALSE);
@@ -9198,6 +9918,12 @@ public:
             m_bDragSlider = TRUE;
             SetCapture();
             ApplyVolume(PercentFromX(pt.x));
+        }
+        else if (m_iPressed == TFY_QSHIT_BRIGHTNESS)
+        {
+            m_bDragBrightness = TRUE;
+            SetCapture();
+            ApplyBrightness(BrightnessFromX(pt.x));
         }
         InvalidateRect(NULL, FALSE);
         return 0;
@@ -9281,9 +10007,10 @@ public:
         HWND hwndOwner = m_hwndOwner;
 
         m_iPressed = TFY_QSHIT_NONE;
-        if (m_bDragSlider)
+        if (m_bDragSlider || m_bDragBrightness)
         {
             m_bDragSlider = FALSE;
+            m_bDragBrightness = FALSE;
             ReleaseCapture();
             InvalidateRect(NULL, FALSE);
             return 0;
@@ -9376,6 +10103,7 @@ public:
         KillTimer(TFY_TIMER_ANIM);
         KillTimer(TFY_TIMER_AUDIOLOAD);
         KillTimer(TFY_TIMER_QSTHEME);
+        TrayMediaCard_Close();
         if (m_hFont)
         {
             DeleteObject(m_hFont);
@@ -9402,9 +10130,32 @@ public:
         return 0;
     }
 
+    LRESULT OnVolumeChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        if (!m_bDragSlider)
+        {
+            m_nMaster = (int)InterlockedCompareExchange(&g_TfyAudioPercent, 0, 0);
+            m_bMute = InterlockedCompareExchange(&g_TfyAudioMute, 0, 0) != 0;
+            InvalidateRect(NULL, FALSE);
+        }
+        return 0;
+    }
+
     virtual void OnFinalMessage(HWND hWnd) override;
 
+    LRESULT OnBrightnessChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        if (!m_bDragBrightness && m_nBrightness >= 0)
+        {
+            m_nBrightness = (int)InterlockedCompareExchange(&g_TfyBrightness, 0, 0);
+            InvalidateRect(NULL, FALSE);
+        }
+        return 0;
+    }
+
     BEGIN_MSG_MAP(CTrayQuickSettingsWnd)
+        MESSAGE_HANDLER(TFY_WM_VOLUMECHANGED, OnVolumeChanged)
+        MESSAGE_HANDLER(TFY_WM_BRIGHTNESSCHANGED, OnBrightnessChanged)
         MESSAGE_HANDLER(WM_PAINT, OnPaint)
         MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBkgnd)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)
@@ -9434,6 +10185,7 @@ VOID CTrayQuickSettingsWnd::FadeOut()
 {
     if (!BeginFlyoutClose(m_hWnd))
         return;
+    TrayMediaCard_Close();
     g_QuickSettingsDismissTick = m_AnimT0;
     if (::IsWindow(m_hwndOwner))
         ::InvalidateRect(m_hwndOwner, NULL, FALSE);
@@ -9471,6 +10223,286 @@ VOID TrayQuickSettings_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor)
     }
     g_pTrayQuickSettings = pQuickSettings;
     pQuickSettings->Toggle(hwndOwner, prcAnchor);
+}
+
+#define TFY_TIMER_MEDIAPOLL 0x55
+
+class CTrayMediaCardWnd :
+    public CWindowImpl<CTrayMediaCardWnd, CWindow, CTrayOsdTraits>,
+    public CTrayFlyoutAnimation
+{
+public:
+    DECLARE_WND_CLASS_EX(L"TrayMediaFlyout", CS_DROPSHADOW, COLOR_WINDOW)
+
+    SM2_FLYOUT_PALETTE m_Pal;
+    HFONT m_hFontApp;
+    HFONT m_hFontTitle;
+    BOOL m_bFrameStarted;
+    BOOL m_bTracking;
+    TFYMEDIA m_Media;
+    SIZE m_size;
+    RECT m_rcIcon, m_rcApp, m_rcTitle, m_rcArtist, m_rcButtons[3];
+    int m_iHot;
+    int m_iPressed;
+
+    CTrayMediaCardWnd() : m_hFontApp(NULL), m_hFontTitle(NULL), m_bFrameStarted(FALSE), m_bTracking(FALSE),
+                          m_iHot(-1), m_iPressed(-1)
+    {
+        ZeroMemory(&m_Pal, sizeof(m_Pal));
+        ZeroMemory(&m_Media, sizeof(m_Media));
+        ZeroMemory(&m_size, sizeof(m_size));
+    }
+
+    int Sc(int v) const { return ShellScaleForDpi(v); }
+
+    VOID Layout(int cx)
+    {
+        int xMid = cx / 2, yMid = Sc(137);
+
+        m_size.cx = cx;
+        m_size.cy = Sc(178);
+        SetRect(&m_rcIcon, Sc(24), Sc(21), Sc(40), Sc(37));
+        SetRect(&m_rcApp, Sc(50), Sc(17), cx - Sc(16), Sc(41));
+        SetRect(&m_rcTitle, Sc(25), Sc(57), cx - Sc(25), Sc(78));
+        SetRect(&m_rcArtist, Sc(25), Sc(78), cx - Sc(25), Sc(97));
+        for (int i = 0; i < 3; i++)
+        {
+            int x = xMid + (i - 1) * Sc(66);
+            SetRect(&m_rcButtons[i], x - Sc(20), yMid - Sc(20), x + Sc(20), yMid + Sc(20));
+        }
+    }
+
+    BOOL Open(const RECT *prcQuickSettings)
+    {
+        if (!TfyMediaQuery(&m_Media))
+            return FALSE;
+
+        StartMenu2_GetFlyoutPalette(&m_Pal);
+        if (!m_hFontApp)
+            m_hFontApp = TfyCreateFont(12, FW_NORMAL);
+        if (!m_hFontTitle)
+            m_hFontTitle = TfyCreateFont(14, FW_SEMIBOLD);
+        if (!m_bFrameStarted)
+            m_bFrameStarted = ShellFrame::Startup();
+        Layout(prcQuickSettings->right - prcQuickSettings->left);
+        BeginFlyoutOpen(m_hWnd, prcQuickSettings->left, prcQuickSettings->top - Sc(12) - m_size.cy,
+                        m_size.cx, m_size.cy, m_Pal.PanelBg, FALSE);
+        SetTimer(TFY_TIMER_MEDIAPOLL, 1000, NULL);
+        return TRUE;
+    }
+
+    int HitTest(POINT pt)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            if (PtInRect(&m_rcButtons[i], pt))
+                return i;
+        }
+        return -1;
+    }
+
+    VOID Refresh()
+    {
+        if (!TfyMediaQuery(&m_Media))
+        {
+            BeginFlyoutClose(m_hWnd);
+            return;
+        }
+        InvalidateRect(NULL, FALSE);
+    }
+
+    LRESULT OnPaint(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        static const LPCWSTR s_Glyphs[3] = { L"previous_20_filled", NULL, L"next_20_filled" };
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(&ps);
+        RECT rc;
+
+        GetClientRect(&rc);
+        {
+            ShellFrame::Canvas canvas(hdc, rc);
+
+            canvas.Fill(rc, m_Pal.PanelBg);
+            canvas.Text(m_Media.szApp, m_rcApp, m_hFontApp, m_Pal.DimText,
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+            canvas.Text(m_Media.szTitle, m_rcTitle, m_hFontTitle, m_Pal.PanelText,
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+            canvas.Text(m_Media.szArtist, m_rcArtist, m_hFontApp, m_Pal.DimText,
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+            for (int i = 0; i < 3; i++)
+            {
+                LPCWSTR pszGlyph = s_Glyphs[i] ? s_Glyphs[i] :
+                                   (m_Media.bPlaying ? L"pause_20_filled" : L"play_20_filled");
+                RECT rcGlyph;
+
+                if (m_iHot == i)
+                {
+                    canvas.FillRound(m_rcButtons[i], (float)Sc(6),
+                                     TfyMix(m_Pal.PanelBg, m_Pal.PanelText, m_iPressed == i ? 22 : 36));
+                }
+                rcGlyph.left = (m_rcButtons[i].left + m_rcButtons[i].right - Sc(16)) / 2;
+                rcGlyph.top = (m_rcButtons[i].top + m_rcButtons[i].bottom - Sc(16)) / 2;
+                rcGlyph.right = rcGlyph.left + Sc(16);
+                rcGlyph.bottom = rcGlyph.top + Sc(16);
+                canvas.Icon(pszGlyph, rcGlyph, m_Pal.PanelText);
+            }
+            canvas.Graphics().Flush(Gdiplus::FlushIntentionSync);
+            if (m_Media.hIcon)
+            {
+                DrawIconEx(canvas.Dc(), m_rcIcon.left, m_rcIcon.top, m_Media.hIcon,
+                           m_rcIcon.right - m_rcIcon.left, m_rcIcon.bottom - m_rcIcon.top, 0, NULL, DI_NORMAL);
+            }
+        }
+        EndPaint(&ps);
+        return 0;
+    }
+
+    LRESULT OnEraseBkgnd(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        return 1;
+    }
+
+    LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        if (HandleFlyoutAnimation(m_hWnd, wParam))
+            return 0;
+        if (wParam == TFY_TIMER_MEDIAPOLL && m_AnimPhase != TFY_CLOSE)
+        {
+            SetTimer(TFY_TIMER_MEDIAPOLL, 1000, NULL);
+            Refresh();
+        }
+        return 0;
+    }
+
+    LRESULT OnMouseMove(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        int iHit = HitTest(pt);
+
+        if (!m_bTracking)
+        {
+            TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, m_hWnd, 0 };
+            m_bTracking = TrackMouseEvent(&tme);
+        }
+        if (iHit != m_iHot)
+        {
+            m_iHot = iHit;
+            InvalidateRect(NULL, FALSE);
+        }
+        return 0;
+    }
+
+    LRESULT OnMouseLeave(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        m_bTracking = FALSE;
+        m_iHot = -1;
+        m_iPressed = -1;
+        InvalidateRect(NULL, FALSE);
+        return 0;
+    }
+
+    LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+
+        m_iPressed = HitTest(pt);
+        InvalidateRect(NULL, FALSE);
+        return 0;
+    }
+
+    LRESULT OnLButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        static const UINT s_Commands[3] = { APPCOMMAND_MEDIA_PREVIOUSTRACK, APPCOMMAND_MEDIA_PLAY_PAUSE,
+                                            APPCOMMAND_MEDIA_NEXTTRACK };
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        int iHit = HitTest(pt);
+
+        if (iHit >= 0 && iHit == m_iPressed && m_Media.hwndSession)
+        {
+            ::PostMessageW(m_Media.hwndSession, WM_APPCOMMAND, (WPARAM)m_hWnd,
+                           MAKELPARAM(0, FAPPCOMMAND_MOUSE | s_Commands[iHit]));
+            SetTimer(TFY_TIMER_MEDIAPOLL, 300, NULL);
+        }
+        m_iPressed = -1;
+        InvalidateRect(NULL, FALSE);
+        return 0;
+    }
+
+    LRESULT OnMouseActivate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        return MA_NOACTIVATE;
+    }
+
+    LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        KillTimer(TFY_TIMER_ANIM);
+        KillTimer(TFY_TIMER_MEDIAPOLL);
+        TfyMediaFree(&m_Media);
+        if (m_hFontApp) { DeleteObject(m_hFontApp); m_hFontApp = NULL; }
+        if (m_hFontTitle) { DeleteObject(m_hFontTitle); m_hFontTitle = NULL; }
+        if (m_bFrameStarted)
+        {
+            ShellFrame::Shutdown();
+            m_bFrameStarted = FALSE;
+        }
+        return 0;
+    }
+
+    virtual void OnFinalMessage(HWND hWnd) override;
+
+    BEGIN_MSG_MAP(CTrayMediaCardWnd)
+        MESSAGE_HANDLER(WM_PAINT, OnPaint)
+        MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBkgnd)
+        MESSAGE_HANDLER(WM_TIMER, OnTimer)
+        MESSAGE_HANDLER(WM_MOUSEMOVE, OnMouseMove)
+        MESSAGE_HANDLER(WM_MOUSELEAVE, OnMouseLeave)
+        MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLButtonDown)
+        MESSAGE_HANDLER(WM_LBUTTONUP, OnLButtonUp)
+        MESSAGE_HANDLER(WM_MOUSEACTIVATE, OnMouseActivate)
+        MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
+    END_MSG_MAP()
+};
+
+static CTrayMediaCardWnd *g_pTrayMediaCard = NULL;
+
+void CTrayMediaCardWnd::OnFinalMessage(HWND hWnd)
+{
+    if (g_pTrayMediaCard == this)
+        g_pTrayMediaCard = NULL;
+    delete this;
+}
+
+static VOID
+TrayMediaCard_Close(VOID)
+{
+    if (g_pTrayMediaCard && g_pTrayMediaCard->IsWindow())
+        g_pTrayMediaCard->BeginFlyoutClose(g_pTrayMediaCard->m_hWnd);
+}
+
+static VOID
+TrayMediaCard_Open(HWND hwndOwner, const RECT *prcQuickSettings)
+{
+    CTrayMediaCardWnd *pCard;
+
+    if (g_pTrayMediaCard && g_pTrayMediaCard->IsWindow())
+    {
+        ::DestroyWindow(g_pTrayMediaCard->m_hWnd);
+        g_pTrayMediaCard = NULL;
+    }
+    if (!TrayMedia_FindSession(NULL))
+        return;
+
+    pCard = new CTrayMediaCardWnd();
+    if (!pCard)
+        return;
+    if (!pCard->Create(hwndOwner, CWindow::rcDefault, NULL))
+    {
+        delete pCard;
+        return;
+    }
+    g_pTrayMediaCard = pCard;
+    if (!pCard->Open(prcQuickSettings))
+        ::DestroyWindow(pCard->m_hWnd);
 }
 
 static VOID
@@ -9923,6 +10955,9 @@ VOID TrayFlyoutsAux_Destroy(VOID)
     if (g_pTrayVolume && g_pTrayVolume->IsWindow())
         ::DestroyWindow(g_pTrayVolume->m_hWnd);
     g_pTrayVolume = NULL;
+    if (g_pTrayOsd && g_pTrayOsd->IsWindow())
+        ::DestroyWindow(g_pTrayOsd->m_hWnd);
+    g_pTrayOsd = NULL;
     if (g_pTrayNetwork && g_pTrayNetwork->IsWindow())
         ::DestroyWindow(g_pTrayNetwork->m_hWnd);
     g_pTrayNetwork = NULL;

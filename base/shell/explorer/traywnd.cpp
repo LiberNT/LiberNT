@@ -2682,6 +2682,8 @@ ChangePos:
 #else
         StartMenu2_Create(this, m_hWnd);
 #endif
+        TrayVolume_StartWatch();
+        TrayBrightness_StartWatch();
 
         /* Create the task band */
         hRet = CTaskBand_CreateInstance(this, m_StartButton.m_hWnd, IID_PPV_ARG(IDeskBand, &m_TaskBand));

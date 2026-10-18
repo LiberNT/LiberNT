@@ -3187,6 +3187,14 @@ public:
         return bResult;
     }
 
+    BOOL RouteMediaAppCommand(IN UINT uAppCmd)
+    {
+        HWND hwndSession = TrayMedia_FindSession(NULL);
+
+        return hwndSession &&
+               ::PostMessageW(hwndSession, WM_APPCOMMAND, (WPARAM)m_hWnd, MAKELPARAM(0, FAPPCOMMAND_KEY | uAppCmd));
+    }
+
     BOOL HandleAppCommand(IN WPARAM wParam, IN LPARAM lParam)
     {
         const UINT uAppCmd = GET_APPCOMMAND_LPARAM(lParam);
@@ -3199,6 +3207,13 @@ public:
             case APPCOMMAND_VOLUME_UP:
                 TrayVolume_HandleAppCommand(uAppCmd);
                 return TRUE;
+            case APPCOMMAND_MEDIA_PLAY_PAUSE:
+            case APPCOMMAND_MEDIA_PLAY:
+            case APPCOMMAND_MEDIA_PAUSE:
+            case APPCOMMAND_MEDIA_STOP:
+            case APPCOMMAND_MEDIA_NEXTTRACK:
+            case APPCOMMAND_MEDIA_PREVIOUSTRACK:
+                return RouteMediaAppCommand(uAppCmd);
             case APPCOMMAND_BROWSER_SEARCH:
                 return SHFindFiles(NULL, NULL);
         }

@@ -85,17 +85,21 @@ Files used, copied unmodified and drawn from their path data at run time:
 - assets/Music Note 2/SVG/ic_fluent_music_note_2_20_regular.svg
 - assets/Navigation/SVG/ic_fluent_navigation_16_regular.svg
 - assets/Network Check/SVG/ic_fluent_network_check_20_regular.svg
+- assets/Next/SVG/ic_fluent_next_20_filled.svg
 - assets/Open/SVG/ic_fluent_open_16_regular.svg
 - assets/Paint Brush/SVG/ic_fluent_paint_brush_20_regular.svg
 - assets/Panel Bottom/SVG/ic_fluent_panel_bottom_20_regular.svg
 - assets/Panel Right/SVG/ic_fluent_panel_right_20_regular.svg
+- assets/Pause/SVG/ic_fluent_pause_20_filled.svg
 - assets/People/SVG/ic_fluent_people_20_regular.svg
 - assets/Person/SVG/ic_fluent_person_20_regular.svg
 - assets/Person Add/SVG/ic_fluent_person_add_20_regular.svg
 - assets/Phone Laptop/SVG/ic_fluent_phone_laptop_20_regular.svg
 - assets/Pin/SVG/ic_fluent_pin_16_regular.svg
+- assets/Play/SVG/ic_fluent_play_20_filled.svg
 - assets/Plug Connected/SVG/ic_fluent_plug_connected_20_regular.svg
 - assets/Power/SVG/ic_fluent_power_20_regular.svg
+- assets/Previous/SVG/ic_fluent_previous_20_filled.svg
 - assets/Print/SVG/ic_fluent_print_20_regular.svg
 - assets/Rename/SVG/ic_fluent_rename_20_regular.svg
 - assets/Rocket/SVG/ic_fluent_rocket_20_regular.svg
