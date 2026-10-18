@@ -2757,6 +2757,7 @@ SoftGpuDdiQueryChildRelations(
     RtlZeroMemory(ChildRelations, sizeof(DXGK_CHILD_DESCRIPTOR));
     ChildRelations[0].ChildDeviceType                = TypeVideoOutput;
     ChildRelations[0].ChildCapabilities.HpdAwareness = HpdAwarenessAlwaysConnected;
+    ChildRelations[0].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = D3DKMDT_VOT_OTHER;
     ChildRelations[0].ChildUid                       = SOFTGPU_CHILD_UID;
 
     return STATUS_SUCCESS;
