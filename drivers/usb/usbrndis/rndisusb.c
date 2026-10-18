@@ -174,8 +174,16 @@ RndisUsbConfigurationHasNetworkInterface(
             }
 
             if (InterfaceDesc->bInterfaceClass == USB_CLASS_MISC &&
-                InterfaceDesc->bInterfaceSubClass == 0x01 &&
+                (InterfaceDesc->bInterfaceSubClass == 0x01 || InterfaceDesc->bInterfaceSubClass == 0x04) &&
                 InterfaceDesc->bInterfaceProtocol == 0x01)
+            {
+                return TRUE;
+            }
+
+            if (InterfaceDesc->bInterfaceClass == USB_CLASS_COMM &&
+                InterfaceDesc->bInterfaceSubClass == USB_CDC_SUBCLASS_EEM &&
+                InterfaceDesc->bInterfaceProtocol == USB_CDC_PROTOCOL_EEM &&
+                InterfaceDesc->bNumEndpoints >= 2)
             {
                 return TRUE;
             }
@@ -639,7 +647,7 @@ RndisUsbParseConfiguration(
             }
             /* Pattern 3: Miscellaneous class (ActiveSync RNDIS) */
             else if (InterfaceDesc->bInterfaceClass == USB_CLASS_MISC &&
-                     InterfaceDesc->bInterfaceSubClass == 0x01 &&
+                     (InterfaceDesc->bInterfaceSubClass == 0x01 || InterfaceDesc->bInterfaceSubClass == 0x04) &&
                      InterfaceDesc->bInterfaceProtocol == 0x01)
             {
                 DPRINT("Found RNDIS interface (Miscellaneous/ActiveSync)\n");
@@ -673,6 +681,19 @@ RndisUsbParseConfiguration(
                 FoundControlInterface = TRUE;
                 RndisUsbFindCdcEthernetDescriptor(Adapter, InterfaceDesc, DescEnd);
                 RndisUsbFindEndpoints(Adapter, InterfaceDesc, DescEnd, FALSE);
+            }
+            else if (InterfaceDesc->bInterfaceClass == USB_CLASS_COMM &&
+                     InterfaceDesc->bInterfaceSubClass == USB_CDC_SUBCLASS_EEM &&
+                     InterfaceDesc->bInterfaceProtocol == USB_CDC_PROTOCOL_EEM &&
+                     InterfaceDesc->bNumEndpoints >= 2)
+            {
+                DPRINT1("Found CDC-EEM interface (Ethernet Emulation Model)\n");
+                Adapter->ControlInterfaceNumber = InterfaceDesc->bInterfaceNumber;
+                Adapter->DataInterfaceNumber = InterfaceDesc->bInterfaceNumber;
+                Adapter->DataAlternateSetting = InterfaceDesc->bAlternateSetting;
+                Adapter->IsCdcEem = TRUE;
+                FoundControlInterface = TRUE;
+                RndisUsbFindEndpoints(Adapter, InterfaceDesc, DescEnd, TRUE);
             }
             /* Check for CDC Data interface */
             else if (InterfaceDesc->bInterfaceClass == USB_CLASS_CDC_DATA)
@@ -2439,6 +2460,87 @@ RndisTxComplete(
     RndisDecrementPendingIo(Adapter);
 
     return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+typedef struct _RNDIS_EEM_ECHO
+{
+    URB Urb;
+    PRNDIS_ADAPTER Adapter;
+    UCHAR Data[EEM_HEADER_SIZE * 2 + EEM_COMMAND_PARAMETER_MASK];
+} RNDIS_EEM_ECHO, *PRNDIS_EEM_ECHO;
+
+static
+NTSTATUS
+NTAPI
+RndisEemEchoComplete(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PIRP Irp,
+    IN PVOID Context)
+{
+    PRNDIS_EEM_ECHO Echo = (PRNDIS_EEM_ECHO)Context;
+    PRNDIS_ADAPTER Adapter = Echo->Adapter;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    IoFreeIrp(Irp);
+    ExFreePoolWithTag(Echo, USBRNDIS_TAG);
+    RndisDecrementPendingIo(Adapter);
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+NTSTATUS
+RndisUsbSubmitEemEchoResponse(
+    IN PRNDIS_ADAPTER Adapter,
+    IN PUCHAR Data,
+    IN ULONG Length)
+{
+    PRNDIS_EEM_ECHO Echo;
+    USHORT Header;
+    ULONG TotalLength;
+    NTSTATUS Status;
+
+    if (!Adapter->BulkOutEndpoint.PipeHandle || Adapter->Halting ||
+        Length > EEM_COMMAND_PARAMETER_MASK)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Echo = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Echo), USBRNDIS_TAG);
+    if (!Echo)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Header = (USHORT)(EEM_HEADER_COMMAND | (EEM_COMMAND_ECHO_RESPONSE << EEM_COMMAND_SHIFT) | Length);
+    Echo->Adapter = Adapter;
+    Echo->Data[0] = (UCHAR)Header;
+    Echo->Data[1] = (UCHAR)(Header >> 8);
+    RtlCopyMemory(Echo->Data + EEM_HEADER_SIZE, Data, Length);
+    TotalLength = EEM_HEADER_SIZE + Length;
+    if (Adapter->BulkOutEndpoint.MaxPacketSize &&
+        (TotalLength % Adapter->BulkOutEndpoint.MaxPacketSize) == 0)
+    {
+        Echo->Data[TotalLength] = 0;
+        Echo->Data[TotalLength + 1] = 0;
+        TotalLength += EEM_HEADER_SIZE;
+    }
+
+    RtlZeroMemory(&Echo->Urb, sizeof(Echo->Urb));
+    UsbBuildInterruptOrBulkTransferRequest(&Echo->Urb,
+                                           sizeof(struct _URB_BULK_OR_INTERRUPT_TRANSFER),
+                                           Adapter->BulkOutEndpoint.PipeHandle,
+                                           Echo->Data,
+                                           NULL,
+                                           TotalLength,
+                                           USBD_TRANSFER_DIRECTION_OUT,
+                                           NULL);
+
+    Status = RndisAsyncUrbRequest(Adapter, &Echo->Urb, RndisEemEchoComplete, Echo, NULL);
+    if (Status == STATUS_INSUFFICIENT_RESOURCES)
+    {
+        ExFreePoolWithTag(Echo, USBRNDIS_TAG);
+    }
+    return Status;
 }
 
 /*

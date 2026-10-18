@@ -336,6 +336,18 @@ RndisAllocateNblPool(
     return NDIS_STATUS_SUCCESS;
 }
 
+static
+PCSTR
+RndisCdcModeName(
+    _In_ PRNDIS_ADAPTER Adapter)
+{
+    if (Adapter->IsCdcNcm)
+        return "CDC-NCM";
+    if (Adapter->IsCdcEem)
+        return "CDC-EEM";
+    return "CDC-ECM";
+}
+
 /*
  * RndisMiniportInitializeEx
  *
@@ -387,6 +399,7 @@ RndisMiniportInitializeEx(
     Adapter->PendingIoCount = 0;
     Adapter->IsCdcEcm = FALSE;
     Adapter->IsCdcNcm = FALSE;
+    Adapter->IsCdcEem = FALSE;
     Adapter->InterruptIrp = NULL;
     Adapter->InterruptSubmitted = FALSE;
     Adapter->InterruptBuffer = NULL;
@@ -574,7 +587,7 @@ RndisMiniportInitializeEx(
         goto Cleanup;
     }
 
-    if (Adapter->IsCdcEcm || Adapter->IsCdcNcm)
+    if (Adapter->IsCdcEcm || Adapter->IsCdcNcm || Adapter->IsCdcEem)
     {
         /* CDC-ECM/NCM mode: No RNDIS initialization needed */
         if (Adapter->IsCdcNcm)
@@ -596,7 +609,7 @@ RndisMiniportInitializeEx(
         }
         else
         {
-            DPRINT1("USBRNDIS: CDC-ECM mode - skipping RNDIS initialization\n");
+            DPRINT1("USBRNDIS: %s mode - skipping RNDIS initialization\n", RndisCdcModeName(Adapter));
         }
 
         Adapter->MaxTransferSize = RNDIS_MAX_TRANSFER_SIZE;
@@ -631,7 +644,7 @@ RndisMiniportInitializeEx(
         NdisMoveMemory(Adapter->CurrentMacAddress, Adapter->PermanentMacAddress, 6);
 
         DPRINT1("USBRNDIS: %s MAC Address: %02X:%02X:%02X:%02X:%02X:%02X\n",
-                Adapter->IsCdcNcm ? "CDC-NCM" : "CDC-ECM",
+                RndisCdcModeName(Adapter),
                 Adapter->PermanentMacAddress[0], Adapter->PermanentMacAddress[1],
                 Adapter->PermanentMacAddress[2], Adapter->PermanentMacAddress[3],
                 Adapter->PermanentMacAddress[4], Adapter->PermanentMacAddress[5]);
@@ -647,7 +660,7 @@ RndisMiniportInitializeEx(
         if (!NT_SUCCESS(NtStatus))
         {
             DPRINT1("USBRNDIS: %s: Failed to set default packet filter (0x%08X), continuing\n",
-                    Adapter->IsCdcNcm ? "CDC-NCM" : "CDC-ECM", NtStatus);
+                    RndisCdcModeName(Adapter), NtStatus);
             /*
              * Even if this fails, set PacketFilter so NDIS sees consistent state.
              * The device may receive all packets anyway (common for virtual NICs).
@@ -696,11 +709,11 @@ RndisMiniportInitializeEx(
     }
 
     /* Query/set media connect status */
-    if (Adapter->IsCdcEcm || Adapter->IsCdcNcm)
+    if (Adapter->IsCdcEcm || Adapter->IsCdcNcm || Adapter->IsCdcEem)
     {
         Adapter->MediaState = MediaConnectStateConnected;
         DPRINT1("USBRNDIS: %s media state: Connected (assumed)\n",
-                Adapter->IsCdcNcm ? "CDC-NCM" : "CDC-ECM");
+                RndisCdcModeName(Adapter));
     }
     else
     {
@@ -836,7 +849,7 @@ RndisMiniportHaltEx(
     KeWaitForSingleObject(&Adapter->ControlMutex, Executive, KernelMode, FALSE, NULL);
 
     /* Send RNDIS halt message (skip for CDC-ECM/NCM) */
-    if (Adapter->State >= RndisStateInitialized && !Adapter->IsCdcEcm && !Adapter->IsCdcNcm)
+    if (Adapter->State >= RndisStateInitialized && !Adapter->IsCdcEcm && !Adapter->IsCdcNcm && !Adapter->IsCdcEem)
     {
         RndisHaltDevice(Adapter);
     }
@@ -1080,7 +1093,7 @@ RndisMiniportShutdownEx(
     DPRINT1("USBRNDIS: RndisMiniportShutdownEx (Action=%d)\n", ShutdownAction);
 
     if (!Adapter || Adapter->State < RndisStateInitialized ||
-        Adapter->IsCdcEcm || Adapter->IsCdcNcm)
+        Adapter->IsCdcEcm || Adapter->IsCdcNcm || Adapter->IsCdcEem)
     {
         return;
     }

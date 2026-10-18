@@ -22,21 +22,37 @@ DefaultDestDir = 12
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_02&Prot_FF
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_E0&SubClass_01&Prot_03
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_EF&SubClass_01&Prot_01
+%RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_EF&SubClass_04&Prot_01
+%ECM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_06&Prot_00
+%NCM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_0D&Prot_00
+%EEM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_0C&Prot_07
 
 [GenericDevices.NTamd64]
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_02&Prot_FF
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_E0&SubClass_01&Prot_03
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_EF&SubClass_01&Prot_01
+%RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_EF&SubClass_04&Prot_01
+%ECM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_06&Prot_00
+%NCM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_0D&Prot_00
+%EEM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_0C&Prot_07
 
 [GenericDevices.NTarm64]
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_02&Prot_FF
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_E0&SubClass_01&Prot_03
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_EF&SubClass_01&Prot_01
+%RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_EF&SubClass_04&Prot_01
+%ECM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_06&Prot_00
+%NCM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_0D&Prot_00
+%EEM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_0C&Prot_07
 
 [GenericDevices.NTRISCV64]
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_02&Prot_FF
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_E0&SubClass_01&Prot_03
 %RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_EF&SubClass_01&Prot_01
+%RNDIS.DeviceDesc% = RNDIS.Install, USB\Class_EF&SubClass_04&Prot_01
+%ECM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_06&Prot_00
+%NCM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_0D&Prot_00
+%EEM.DeviceDesc% = RNDIS.Install, USB\Class_02&SubClass_0C&Prot_07
 
 ; VirtualBox USB Ethernet
 [VBoxDevices.NTx86]
@@ -111,6 +127,9 @@ Generic            = "Generic"
 VBox               = "Oracle VirtualBox"
 Realtek            = "Realtek"
 RNDIS.DeviceDesc   = "USB RNDIS Network Adapter"
+ECM.DeviceDesc     = "USB CDC Ethernet Adapter"
+NCM.DeviceDesc     = "USB CDC NCM Network Adapter"
+EEM.DeviceDesc     = "USB CDC EEM Network Adapter"
 VBox.DeviceDesc    = "VirtualBox USB Ethernet Adapter"
 RTL8153.DeviceDesc = "Realtek RTL8153 USB Ethernet Adapter"
 RNDIS.ServiceDesc  = "USB RNDIS Network Driver"

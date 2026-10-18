@@ -238,6 +238,7 @@ C_ASSERT(sizeof(USB_CDC_SPEED_CHANGE) == 8);
 #define USB_CDC_SUBCLASS_ACM            0x02  /* Abstract Control Model (used by RNDIS) */
 #define USB_CDC_SUBCLASS_ECM            0x06  /* Ethernet Control Model (CDC-ECM) */
 #define USB_CDC_SUBCLASS_NCM            0x0D  /* Network Control Model (CDC-NCM) */
+#define USB_CDC_SUBCLASS_EEM            0x0C
 
 /*
  * USB CDC Protocol for RNDIS
@@ -245,6 +246,18 @@ C_ASSERT(sizeof(USB_CDC_SPEED_CHANGE) == 8);
  */
 #define USB_CDC_PROTOCOL_RNDIS          0xFF
 #define USB_CDC_PROTOCOL_NONE           0x00
+#define USB_CDC_PROTOCOL_EEM            0x07
+
+#define EEM_HEADER_SIZE                 2
+#define EEM_CRC_SIZE                    4
+#define EEM_SENTINEL_CRC                0xDEADBEEF
+#define EEM_HEADER_COMMAND              0x8000
+#define EEM_HEADER_LENGTH_MASK          0x3FFF
+#define EEM_COMMAND_SHIFT               11
+#define EEM_COMMAND_MASK                0x7
+#define EEM_COMMAND_PARAMETER_MASK      0x07FF
+#define EEM_COMMAND_ECHO                0
+#define EEM_COMMAND_ECHO_RESPONSE       1
 
 /*
  * USB CDC Functional Descriptor Types
@@ -792,6 +805,7 @@ typedef struct _RNDIS_ADAPTER {
     ULONG MaxPacketsPerMessage;
     BOOLEAN IsCdcEcm;               /* TRUE if CDC-ECM mode (no RNDIS messages) */
     BOOLEAN IsCdcNcm;               /* TRUE if CDC-NCM mode (NTB framing) */
+    BOOLEAN IsCdcEem;
     UCHAR CdcMacAddressIndex;       /* USB string descriptor index for MAC address (CDC-ECM/NCM) */
 
     /* CDC-NCM Parameters (only valid if IsCdcNcm is TRUE) */
@@ -978,6 +992,12 @@ RndisUsbSubmitBulkRead(
 
 NTSTATUS
 RndisUsbSubmitBulkWrite(
+    IN PRNDIS_ADAPTER Adapter,
+    IN PUCHAR Data,
+    IN ULONG Length);
+
+NTSTATUS
+RndisUsbSubmitEemEchoResponse(
     IN PRNDIS_ADAPTER Adapter,
     IN PUCHAR Data,
     IN ULONG Length);

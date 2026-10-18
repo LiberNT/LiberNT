@@ -778,7 +778,7 @@ RndisSetInformation(
                     break;
                 }
             }
-            else
+            else if (!Adapter->IsCdcEem)
             {
                 RndisSetOid(Adapter, RNDIS_OID_802_3_MULTICAST_LIST,
                             Adapter->MulticastList,

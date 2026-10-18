@@ -473,6 +473,12 @@ RndisSetPacketFilter(
 
     DPRINT("USBRNDIS: Setting packet filter to 0x%08X\n", PacketFilter);
 
+    if (Adapter->IsCdcEem)
+    {
+        Adapter->PacketFilter = PacketFilter;
+        return STATUS_SUCCESS;
+    }
+
     if (Adapter->IsCdcEcm || Adapter->IsCdcNcm)
     {
         CdcFilter = 0;

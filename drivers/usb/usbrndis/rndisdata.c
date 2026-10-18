@@ -624,6 +624,63 @@ RndisProcessNcmNtb(
     return (FramesProcessed > 0);
 }
 
+static
+VOID
+RndisProcessEemData(
+    IN PRNDIS_ADAPTER Adapter,
+    IN PUCHAR Data,
+    IN ULONG Length)
+{
+    ULONG Offset = 0;
+    ULONG PacketLength;
+    ULONG Command;
+    USHORT Header;
+
+    while (Offset + EEM_HEADER_SIZE <= Length)
+    {
+        Header = (USHORT)(Data[Offset] | (Data[Offset + 1] << 8));
+        Offset += EEM_HEADER_SIZE;
+
+        if (Header & EEM_HEADER_COMMAND)
+        {
+            Command = (Header >> EEM_COMMAND_SHIFT) & EEM_COMMAND_MASK;
+            if (Command == EEM_COMMAND_ECHO || Command == EEM_COMMAND_ECHO_RESPONSE)
+            {
+                PacketLength = Header & EEM_COMMAND_PARAMETER_MASK;
+                if (Offset + PacketLength > Length)
+                    break;
+                if (Command == EEM_COMMAND_ECHO)
+                    RndisUsbSubmitEemEchoResponse(Adapter, Data + Offset, PacketLength);
+                Offset += PacketLength;
+            }
+            continue;
+        }
+
+        PacketLength = Header & EEM_HEADER_LENGTH_MASK;
+        if (!PacketLength)
+            continue;
+
+        if (PacketLength < EEM_CRC_SIZE || Offset + PacketLength > Length)
+        {
+            DPRINT1("USBRNDIS: Malformed CDC-EEM packet (%lu bytes at %lu of %lu)\n",
+                    PacketLength, Offset, Length);
+            Adapter->RxErrorCount++;
+            break;
+        }
+
+        if (PacketLength - EEM_CRC_SIZE >= ETHERNET_HEADER_SIZE &&
+            PacketLength - EEM_CRC_SIZE <= ETHERNET_MAX_FRAME_SIZE)
+        {
+            RndisIndicateReceiveNbl(Adapter, Data + Offset, PacketLength - EEM_CRC_SIZE);
+        }
+        else
+        {
+            Adapter->RxErrorCount++;
+        }
+        Offset += PacketLength;
+    }
+}
+
 /*
  * RndisProcessReceivedPacket
  *
@@ -655,6 +712,12 @@ RndisProcessReceivedPacket(
     if (Adapter->IsCdcNcm)
     {
         RndisProcessNcmNtb(Adapter, Data, Length);
+        return;
+    }
+
+    if (Adapter->IsCdcEem)
+    {
+        RndisProcessEemData(Adapter, Data, Length);
         return;
     }
 
@@ -1083,6 +1146,26 @@ RndisSendNetBufferListsInternal(
             /* CDC-ECM: Copy Ethernet frame directly */
             NdisMoveMemory(Adapter->TxHot.TxBuffer, VirtualAddress, DataLength);
             TotalLength = DataLength;
+        }
+        else if (Adapter->IsCdcEem)
+        {
+            PUCHAR Frame = Adapter->TxHot.TxBuffer;
+            USHORT Header = (USHORT)(DataLength + EEM_CRC_SIZE);
+
+            Frame[0] = (UCHAR)Header;
+            Frame[1] = (UCHAR)(Header >> 8);
+            NdisMoveMemory(Frame + EEM_HEADER_SIZE, VirtualAddress, DataLength);
+            TotalLength = EEM_HEADER_SIZE + DataLength;
+            Frame[TotalLength++] = (UCHAR)(EEM_SENTINEL_CRC >> 24);
+            Frame[TotalLength++] = (UCHAR)(EEM_SENTINEL_CRC >> 16);
+            Frame[TotalLength++] = (UCHAR)(EEM_SENTINEL_CRC >> 8);
+            Frame[TotalLength++] = (UCHAR)EEM_SENTINEL_CRC;
+            if (Adapter->BulkOutEndpoint.MaxPacketSize &&
+                (TotalLength % Adapter->BulkOutEndpoint.MaxPacketSize) == 0)
+            {
+                Frame[TotalLength++] = 0;
+                Frame[TotalLength++] = 0;
+            }
         }
         else if (Adapter->IsCdcNcm)
         {
