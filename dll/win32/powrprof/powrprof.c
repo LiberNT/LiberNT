@@ -2399,7 +2399,24 @@ SetSuspendState(BOOLEAN Hibernate,
                 BOOLEAN ForceCritical,
                 BOOLEAN DisableWakeEvent)
 {
-    FIXME("(%d, %d, %d) stub!\n", Hibernate, ForceCritical, DisableWakeEvent);
+    ULONG Flags = POWER_ACTION_QUERY_ALLOWED | POWER_ACTION_UI_ALLOWED;
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(ForceCritical);
+
+    if (DisableWakeEvent)
+        Flags |= POWER_ACTION_DISABLE_WAKES;
+
+    Status = NtInitiatePowerAction(Hibernate ? PowerActionHibernate : PowerActionSleep,
+                                   Hibernate ? PowerSystemHibernate : PowerSystemSleeping1,
+                                   Flags,
+                                   FALSE);
+    if (!NT_SUCCESS(Status))
+    {
+        SetLastError(RtlNtStatusToDosError(Status));
+        return FALSE;
+    }
+
     return TRUE;
 }
 
