@@ -458,8 +458,14 @@ PDO_HandlePnp(
             FDODeviceExtension = PDODeviceExtension->FDODeviceExtension;
             FDODeviceObject = PDODeviceExtension->NextDeviceObject;
 
-            PDODeviceExtension->Present = FALSE;
             PDODeviceExtension->Removed = TRUE;
+            if (PDODeviceExtension->Present && !FDODeviceExtension->Removing)
+            {
+                Status = STATUS_SUCCESS;
+                break;
+            }
+
+            PDODeviceExtension->Present = FALSE;
 
             Found = FALSE;
             if (FDODeviceExtension->ChildPDO)
@@ -518,6 +524,7 @@ PDO_HandlePnp(
             // no-op for PDO
             //
             DPRINT("[USBCCGP] PDO IRP_MN_START\n");
+            PDODeviceExtension->Removed = FALSE;
             Status = STATUS_SUCCESS;
             break;
         }

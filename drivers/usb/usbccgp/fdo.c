@@ -169,6 +169,29 @@ USBCCGP_FdoMarkChildPdosMissing(
     return MissingPdos;
 }
 
+static VOID
+USBCCGP_FdoDeleteRemovedChildPdos(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN OUT PFDO_DEVICE_EXTENSION FDODeviceExtension)
+{
+    ULONG Index;
+    PDEVICE_OBJECT ChildPdo;
+
+    if (!FDODeviceExtension->ChildPDO)
+        return;
+
+    for (Index = 0; Index < FDODeviceExtension->ChildPDOCount; Index++)
+    {
+        ChildPdo = FDODeviceExtension->ChildPDO[Index];
+        if (ChildPdo && ((PPDO_DEVICE_EXTENSION)ChildPdo->DeviceExtension)->Removed)
+        {
+            FDODeviceExtension->ChildPDO[Index] = NULL;
+            IoDeleteDevice(ChildPdo);
+            ObDereferenceObject(DeviceObject);
+        }
+    }
+}
+
 VOID
 USBCCGP_FdoReleaseResources(
     IN OUT PFDO_DEVICE_EXTENSION FDODeviceExtension,
@@ -803,6 +826,7 @@ FDO_HandlePnp(
                 IoInvalidateDeviceRelations(FDODeviceExtension->PhysicalDeviceObject,
                                             BusRelations);
             }
+            USBCCGP_FdoDeleteRemovedChildPdos(DeviceObject, FDODeviceExtension);
             USBCCGP_FdoCleanup(DeviceObject, FALSE);
 
             /* Forward remove IRP down the stack */
