@@ -445,7 +445,6 @@ RndisIndicateReceiveNblEx(
         if (NblChecksumInfo.Value != 0)
         {
             NET_BUFFER_LIST_INFO(Nbl, TcpIpChecksumNetBufferListInfo) = NblChecksumInfo.Value;
-            DPRINT("USBRNDIS: Set RX checksum info: 0x%08X\n", NblChecksumInfo.Value);
         }
     }
 
@@ -545,9 +544,6 @@ RndisProcessNcmNtb(
         return TRUE;
     }
 
-    DPRINT("USBRNDIS: Processing NCM NTB: seq=%u len=%u ndp@%lu\n",
-           Nth16->wSequence, Nth16->wBlockLength, NdpOffset);
-
     /* Process each NDP16 in the chain */
     while (NdpOffset != 0)
     {
@@ -588,9 +584,6 @@ RndisProcessNcmNtb(
          */
         MaxEntries = (Ndp16->wLength - 8) / sizeof(NCM_NDP16_ENTRY);
 
-        DPRINT("USBRNDIS: NDP16 at offset %lu: sig=0x%08X len=%u max_entries=%lu\n",
-               NdpOffset, Ndp16->dwSignature, Ndp16->wLength, MaxEntries);
-
         /* Process datagram entries */
         for (EntryIndex = 0; EntryIndex < MaxEntries; EntryIndex++)
         {
@@ -617,9 +610,6 @@ RndisProcessNcmNtb(
                 continue;
             }
 
-            DPRINT("USBRNDIS: NCM datagram[%lu]: offset=%u length=%u\n",
-                   EntryIndex, Entry->wDatagramIndex, Entry->wDatagramLength);
-
             /* Indicate the Ethernet frame to NDIS via NBL */
             RndisIndicateReceiveNbl(
                 Adapter,
@@ -633,7 +623,6 @@ RndisProcessNcmNtb(
         NdpOffset = Ndp16->wNextNdpIndex;
     }
 
-    DPRINT("USBRNDIS: NCM NTB processing complete: %lu frames\n", FramesProcessed);
     return (FramesProcessed > 0);
 }
 
@@ -821,9 +810,6 @@ RndisProcessReceivedPacket(
             ULONG PpiEndOffset = PpiOffset + PacketMsg->PerPacketInfoLength;
             PRNDIS_PER_PACKET_INFO PpiEntry;
 
-            DPRINT("USBRNDIS: RNDIS packet has per-packet info: offset=%u length=%u\n",
-                   PacketMsg->PerPacketInfoOffset, PacketMsg->PerPacketInfoLength);
-
             /* Validate per-packet info bounds against BOTH MessageLength AND actual buffer Length */
             if (PpiEndOffset <= PacketMsg->MessageLength && PpiEndOffset <= Length)
             {
@@ -844,9 +830,6 @@ RndisProcessReceivedPacket(
                         break;
                     }
 
-                    DPRINT("USBRNDIS: Per-packet info type=%u size=%u\n",
-                           PpiEntry->Type, PpiEntry->Size);
-
                     /* Process based on type */
                     switch (PpiEntry->Type)
                     {
@@ -863,7 +846,6 @@ RndisProcessReceivedPacket(
                                 ChecksumInfo.Value = CsumData->Value;
                                 pChecksumInfo = &ChecksumInfo;
 
-                                DPRINT("USBRNDIS: Checksum info from device: 0x%08X\n", ChecksumInfo.Value);
                             }
                             break;
 
@@ -887,8 +869,6 @@ RndisProcessReceivedPacket(
                         PpiEndOffset, PacketMsg->MessageLength);
             }
         }
-
-        DPRINT("USBRNDIS: Received RNDIS Ethernet frame (%u bytes)\n", EthernetLength);
 
         /* Indicate Ethernet frame to NDIS using NBL with checksum info */
         RndisIndicateReceiveNblEx(Adapter, EthernetData, EthernetLength, pChecksumInfo);
@@ -943,8 +923,6 @@ RndisSendNetBufferListsInternal(
     BOOLEAN DispatchLevel;
     BOOLEAN FirstPacketSent = FALSE;
     BOOLEAN TxSyncComplete = FALSE;
-
-    DPRINT("USBRNDIS: RndisSendNetBufferLists called\n");
 
     DispatchLevel = NDIS_TEST_SEND_AT_DISPATCH_LEVEL(SendFlags);
 
@@ -1540,8 +1518,6 @@ FailCurrentNbl:
                                                   DataLength,
                                                   Adapter->TxHot.TxBuffer);
 
-            DPRINT("USBRNDIS: RNDIS TX packet (%lu bytes, frame %lu bytes)\n",
-                   TotalLength, DataLength);
         }
 
         /* Send via USB bulk endpoint - async operation */
@@ -1553,7 +1529,6 @@ FailCurrentNbl:
              * URB submitted successfully, will complete asynchronously.
              * NdisMSendNetBufferListsComplete will be called from completion routine.
              */
-            DPRINT("USBRNDIS: TX submitted async (%lu bytes)\n", TotalLength);
             /*
              * Update TxBytes only for non-NCM paths.
              * NCM batching already updated TxBytes with TotalDataLength above.
@@ -1572,7 +1547,6 @@ FailCurrentNbl:
              * The completion routine has ALREADY run and completed all NBLs.
              * No additional completion needed here.
              */
-            DPRINT("USBRNDIS: TX completed sync (%lu bytes)\n", TotalLength);
             /*
              * Update TxBytes only for non-NCM paths.
              * NCM batching already updated TxBytes with TotalDataLength above.
@@ -1689,8 +1663,6 @@ RndisReturnNetBufferLists(
     PUCHAR DataBuffer;
 
     UNREFERENCED_PARAMETER(ReturnFlags);
-
-    DPRINT("USBRNDIS: RndisReturnNetBufferLists called\n");
 
     /* Process returned NBLs */
     for (CurrentNbl = NetBufferLists; CurrentNbl != NULL; CurrentNbl = NextNbl)
@@ -1948,7 +1920,6 @@ RndisNcmContinueTx(
 
     if (Status == STATUS_PENDING || NT_SUCCESS(Status))
     {
-        DPRINT("USBRNDIS: NCM partial TX submitted (%lu bytes)\n", TotalLength);
         return;
     }
 

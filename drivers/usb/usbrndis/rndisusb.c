@@ -2071,7 +2071,6 @@ RndisRxComplete(
             Status == STATUS_IO_TIMEOUT)
         {
             /* Not a real error - just no data available */
-            DPRINT("RX NAK (no data available)\n");
             Adapter->RxHot.RxConsecutiveErrors = 0;  /* Reset counter for NAKs */
             /*
              * Use delayed resubmission to prevent infinite tight loop.
@@ -2394,7 +2393,6 @@ RndisTxComplete(
     /* Update statistics and determine NDIS status */
     if (NT_SUCCESS(Status))
     {
-        DPRINT("TX complete, %lu packet(s) sent successfully\n", NblCount ? NblCount : 1);
         /*
          * For NCM batching, update TxOkCount for each NBL in the batch.
          * If NblCount is 0, it's a non-batched send (single NBL).
@@ -2575,8 +2573,6 @@ RndisUsbSubmitBulkWrite(
     {
         return STATUS_DEVICE_NOT_READY;
     }
-
-    DPRINT("Submitting async bulk write (%u bytes)\n", Length);
 
     /* Build the URB */
     Urb = &Adapter->TxHot.TxUrb;
