@@ -12,6 +12,7 @@ list(APPEND SOURCE
     page_time.cpp
     page_misc.cpp
     pointer.cpp
+    bootloader.cpp
     ${REACTOS_SOURCE_DIR}/base/system/dwm/settings.c)
 
 file(GLOB systemsettings_rc_deps res/*.* lang/*.rc)

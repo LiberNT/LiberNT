@@ -2128,9 +2128,21 @@ wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR commandLine, int showCmd
     std::wstring param;
     HWND existing;
     MSG msg;
+    LPWSTR *argv;
+    int argc;
 
     UNREFERENCED_PARAMETER(previous);
     Instance = instance;
+    argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv && argc >= 3 && !lstrcmpiW(argv[1], L"/selftest"))
+    {
+        int failures = RunBootLoaderSelfTest(argv[2], argc >= 4 ? argv[3] : NULL);
+
+        LocalFree(argv);
+        return failures;
+    }
+    if (argv)
+        LocalFree(argv);
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     existing = FindWindowW(L"LiberNTSettingsWindow", NULL);
     if (existing)

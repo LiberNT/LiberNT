@@ -81,6 +81,8 @@ BuildSystem(PageBuilder &page)
     page.Navigate(Str(IDS_PAGE_STORAGE), Str(IDS_STORAGE_DESC), L"storage_20_regular", PageId::Storage);
     page.Navigate(Str(IDS_PAGE_MULTITASKING), Str(IDS_MULTITASKING_DESC), L"window_multiple_20_regular",
                   PageId::Multitasking);
+    page.Navigate(Str(IDS_PAGE_BOOTLOADER), Str(IDS_BOOTLOADER_DESC), L"power_20_regular", PageId::BootLoader).Keywords =
+        Str(IDS_BOOTLOADER_KEYWORDS);
     page.Navigate(Str(IDS_PAGE_ABOUT), Str(IDS_ABOUT_DESC), L"info_20_regular", PageId::About);
 }
 

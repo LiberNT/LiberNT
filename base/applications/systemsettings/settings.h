@@ -47,6 +47,8 @@ enum class PageId
     About,
     Environment,
     Recovery,
+    BootLoader,
+    BootEntry,
     Devices,
     Bluetooth,
     Mouse,
@@ -241,6 +243,9 @@ void BuildMultitasking(PageBuilder &page);
 void BuildAbout(PageBuilder &page);
 void BuildEnvironment(PageBuilder &page);
 void BuildRecovery(PageBuilder &page);
+void BuildBootLoader(PageBuilder &page);
+void BuildBootEntry(PageBuilder &page);
+int RunBootLoaderSelfTest(LPCWSTR mode, LPCWSTR log);
 void BuildDevices(PageBuilder &page);
 void BuildBluetooth(PageBuilder &page);
 void BuildMouse(PageBuilder &page);

@@ -65,6 +65,8 @@ static const PageInfo Pages[] =
     { PageId::User, IDS_PAGE_USER, L"person_20_regular", PageId::OtherUsers, BuildUser, NULL },
     { PageId::Environment, IDS_PAGE_ENVIRONMENT, L"code_20_regular", PageId::About, BuildEnvironment, NULL },
     { PageId::Recovery, IDS_PAGE_RECOVERY, L"storage_20_regular", PageId::About, BuildRecovery, NULL },
+    { PageId::BootLoader, IDS_PAGE_BOOTLOADER, L"power_20_regular", PageId::System, BuildBootLoader, L"bootloader" },
+    { PageId::BootEntry, IDS_PAGE_BOOT_ENTRY, L"desktop_20_regular", PageId::BootLoader, BuildBootEntry, NULL },
     { PageId::Controller, IDS_PAGE_CONTROLLER, L"games_20_regular", PageId::Gaming, BuildController, NULL },
     { PageId::DateTime, IDS_PAGE_DATETIME, L"calendar_clock_20_regular", PageId::Time, BuildDateTime,
       L"dateandtime" },
