@@ -654,7 +654,8 @@ PrepareAndDoCopyThread(
                                                   &pSetupData->USetupData.SystemRootPath,
                                                   &pSetupData->USetupData.SourceRootPath,
                                                   &pSetupData->USetupData.DestinationArcPath,
-                                                  (pSetupData->USetupData.BootLoaderLocation == 2) ? 1 : 0);
+                                                  ((pSetupData->USetupData.BootLoaderLocation == 2) ? 1 : 0) |
+                                                  (pSetupData->bWindowsFirst ? BOOT_OPTION_AFTER_WINDOWS : 0));
         if (Status != STATUS_SUCCESS)
         {
             ReportStepFailure(IDS_INSTALL_BOOTLOADER, Status);
@@ -1305,7 +1306,7 @@ wWinMain(
     SetupData.hInstance = hInst;
 
     iccx.dwSize = sizeof(iccx);
-    iccx.dwICC = ICC_LISTVIEW_CLASSES | ICC_PROGRESS_CLASS | ICC_UPDOWN_CLASS;
+    iccx.dwICC = ICC_LISTVIEW_CLASSES | ICC_PROGRESS_CLASS | ICC_UPDOWN_CLASS | ICC_BAR_CLASSES;
     InitCommonControlsEx(&iccx);
 
     Error = InitializeSetup(&SetupData.USetupData, NULL, &SpFileExports, &SpInfExports);

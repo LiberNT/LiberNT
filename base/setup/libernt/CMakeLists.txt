@@ -10,6 +10,7 @@ list(APPEND SOURCE
     spapisup/fileqsup.c
     spapisup/infsupp.c
     account.c
+    alongside.c
     diskinfo.c
     diskpage.c
     frame.c
@@ -31,7 +32,7 @@ add_pch(libernt libernt.h SOURCE)
 set_module_type(libernt win32gui UNICODE)
 target_link_libraries(libernt uuid tzlib volresize)
 add_delay_importlibs(libernt setuplib)
-add_importlibs(libernt advapi32 gdi32 user32 comctl32 dwmapi shlwapi setupapi ole32 oleaut32 msvcrt kernel32 ntdll)
+add_importlibs(libernt advapi32 gdi32 user32 comctl32 dwmapi shlwapi setupapi ole32 oleaut32 version msvcrt kernel32 ntdll)
 add_cd_file(TARGET libernt DESTINATION reactos NO_CAB FOR bootcd livecd)
 add_cd_file(TARGET libernt DESTINATION ${ARCH} FOR preinstall)
 

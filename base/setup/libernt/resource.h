@@ -70,6 +70,20 @@
 #define IDD_APPSPAGE         2260
 #define IDC_APPLIST          2261
 
+#define IDD_INSTALLTYPEPAGE      2280
+#define IDC_TYPE_FOUND           2281
+#define IDC_TYPE_ALONGSIDE       2282
+#define IDC_TYPE_MANUAL          2283
+#define IDC_TYPE_SPLIT           2284
+#define IDC_TYPE_WINSIZE         2285
+#define IDC_TYPE_LNTSIZE         2286
+#define IDC_TYPE_DEFAULT_LABEL   2287
+#define IDC_TYPE_DEFAULT_LIBERNT 2288
+#define IDC_TYPE_DEFAULT_WINDOWS 2289
+#define IDC_TYPE_WARNICON        2290
+#define IDC_TYPE_WARNING         2291
+#define IDC_TYPE_NOTE            2292
+
 #define IDD_READYPAGE        2240
 #define IDC_READY_SUMMARY    2241
 #define IDC_READY_WARNING    2242
@@ -273,3 +287,22 @@
 #define IDS_OOBE_APPS_FAILED        5615
 #define IDS_OOBE_ACCOUNT_FAILED     5616
 #define IDS_OOBE_UNKNOWN_ERROR      5617
+
+#define IDS_TYPETITLE               5700
+#define IDS_TYPESUBTITLE            5701
+#define IDS_TYPE_FOUND              5702
+#define IDS_TYPE_ALONGSIDE          5703
+#define IDS_TYPE_SPLITSIZE          5704
+#define IDS_TYPE_SHRINKNOTE         5705
+#define IDS_TYPE_HIBERNATED         5706
+#define IDS_TYPE_NOSPACE            5707
+#define IDS_TYPE_NORESIZE           5708
+#define IDS_TYPE_PLANNED            5709
+#define IDS_TYPE_WARNING            5710
+#define IDS_TYPE_CONFIRM_TITLE      5711
+#define IDS_TYPE_CONFIRM            5712
+#define IDS_TYPE_WINDOWS11          5713
+#define IDS_TYPE_WINDOWS10          5714
+#define IDS_TYPE_WINDOWS            5715
+#define IDS_READY_DEFAULTOS         5716
+#define IDS_TYPE_LIBERNT            5717

@@ -132,3 +132,43 @@ BEGIN
     IDS_WARN_DELETE_PARTITION "Sigur vreți să ștergeți partiția selectată?"
     IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "Sigur vreți să ștergeți partiția selectată extinsă și TOATE partițiile logice pe care le conține?"
 END
+
+IDD_INSTALLTYPEPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_TYPE_FOUND, 0, 0, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    AUTORADIOBUTTON "", IDC_TYPE_ALONGSIDE, 0, 13, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&Something else: create, resize or choose partitions yourself", IDC_TYPE_MANUAL, 0, 25, 290, 10
+    CONTROL "", IDC_TYPE_SPLIT, TRACKBAR_CLASS, TBS_HORZ | TBS_NOTICKS | TBS_BOTH | WS_GROUP | WS_TABSTOP, 6, 40, 284, 16
+    LTEXT "", IDC_TYPE_WINSIZE, 12, 57, 136, 9, SS_NOPREFIX
+    RTEXT "", IDC_TYPE_LNTSIZE, 148, 57, 136, 9, SS_NOPREFIX
+    LTEXT "Start by default:", IDC_TYPE_DEFAULT_LABEL, 12, 73, 62, 9
+    AUTORADIOBUTTON "&LiberNT", IDC_TYPE_DEFAULT_LIBERNT, 76, 72, 70, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "", IDC_TYPE_DEFAULT_WINDOWS, 150, 72, 120, 10
+    ICON "", IDC_TYPE_WARNICON, 12, 87, 10, 10, SS_ICON | SS_REALSIZEIMAGE
+    LTEXT "", IDC_TYPE_WARNING, 28, 87, 262, 36, SS_NOPREFIX
+    LTEXT "", IDC_TYPE_NOTE, 0, 126, 290, 32, SS_NOPREFIX
+END
+
+STRINGTABLE
+BEGIN
+    IDS_TYPETITLE "Installation type"
+    IDS_TYPESUBTITLE "Choose how LiberNT shares this computer."
+    IDS_TYPE_FOUND "This computer has %s on %s."
+    IDS_TYPE_ALONGSIDE "Install LiberNT &alongside %s"
+    IDS_TYPE_SPLITSIZE "%s: %s"
+    IDS_TYPE_SHRINKNOTE "Drag the slider to share the space. %s keeps its programs and files. Its partition shrinks as soon as you select Next."
+    IDS_TYPE_HIBERNATED "%s is hibernated or was shut down with Fast startup, so its partition cannot be resized safely. Start %s, choose Restart from the Start menu, then start Setup again. You can also turn off Fast startup in Control Panel > Power Options."
+    IDS_TYPE_NOSPACE "%s does not have enough free space to make room for LiberNT, which needs at least %I64u GB. Free some space in it, or choose Something else."
+    IDS_TYPE_NORESIZE "The %s partition cannot be resized. Choose Something else to pick another place for LiberNT."
+    IDS_TYPE_PLANNED "%s was resized to %s. LiberNT will be installed in the new %s partition."
+    IDS_TYPE_WARNING "%s starts by default. To start LiberNT, you must open the computer's boot menu while it starts, usually with F12, F11, F9 or Esc, and choose LiberNT Boot Manager. In Windows you can also use Settings > System > Recovery > Advanced startup > Use a device."
+    IDS_TYPE_CONFIRM_TITLE "Resize %s now?"
+    IDS_TYPE_CONFIRM "%s shrinks from %s to %s right away, before the rest of the installation, and LiberNT gets %s. Make sure the files you want to keep are backed up."
+    IDS_TYPE_WINDOWS11 "Windows 11"
+    IDS_TYPE_WINDOWS10 "Windows 10"
+    IDS_TYPE_WINDOWS "Windows"
+    IDS_READY_DEFAULTOS "Starts by default: %s"
+    IDS_TYPE_LIBERNT "LiberNT"
+END

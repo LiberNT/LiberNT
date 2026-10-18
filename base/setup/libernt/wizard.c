@@ -22,7 +22,10 @@ static INT_PTR CALLBACK DonePageProc(HWND, UINT, WPARAM, LPARAM);
 static const SETUP_PAGE_INFO SetupPages[SETUP_PAGE_COUNT] =
 {
     { IDD_LANGUAGEPAGE, LanguagePageProc, IDS_LANGUAGETITLE, IDS_LANGUAGESUBTITLE,    SETUP_PAGE_SKIP_UNATTEND },
-    { IDD_DISKPAGE,     DiskPageProc,     IDS_DRIVETITLE,    IDS_DISKSUBTITLE,        SETUP_PAGE_BACK },
+    { IDD_INSTALLTYPEPAGE, InstallTypePageProc, IDS_TYPETITLE, IDS_TYPESUBTITLE,
+      SETUP_PAGE_BACK | SETUP_PAGE_SKIP_UNATTEND | SETUP_PAGE_OPTIONAL },
+    { IDD_DISKPAGE,     DiskPageProc,     IDS_DRIVETITLE,    IDS_DISKSUBTITLE,
+      SETUP_PAGE_BACK | SETUP_PAGE_OPTIONAL },
     { IDD_ACCOUNTPAGE,  AccountPageProc,  IDS_ACCOUNTTITLE,  IDS_ACCOUNTZONESUBTITLE, SETUP_PAGE_BACK | SETUP_PAGE_SKIP_UNATTEND },
     { IDD_READYPAGE,    ReadyPageProc,    IDS_READYTITLE,    IDS_READYSUBTITLE,       SETUP_PAGE_BACK | SETUP_PAGE_SKIP_UNATTEND },
     { IDD_PROCESSPAGE,  InstallPageProc,  IDS_PROCESSTITLE,  IDS_PROCESSSUBTITLE,     0 },
@@ -97,6 +100,15 @@ FillSummary(
         StringCchCatW(Text, ARRAYSIZE(Text), Changes);
     else
         AppendLine(Text, ARRAYSIZE(Text), IDS_READY_NOCHANGES);
+
+    if (pSetupData->bAlongside)
+    {
+        WCHAR LiberNT[32];
+
+        LoadStringW(pSetupData->hInstance, IDS_TYPE_LIBERNT, LiberNT, ARRAYSIZE(LiberNT));
+        AppendLine(Text, ARRAYSIZE(Text), IDS_READY_DEFAULTOS,
+                   pSetupData->bWindowsFirst ? pSetupData->WindowsName : LiberNT);
+    }
 
     StringCchCatW(Text, ARRAYSIZE(Text), L"\r\n");
     AppendLine(Text, ARRAYSIZE(Text), IDS_READY_LANGUAGE,

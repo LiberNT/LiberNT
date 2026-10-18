@@ -109,6 +109,9 @@ typedef struct _SETUPDATA
 
     PPARTLIST PartitionList;
     BOOL bInstalled;
+    BOOL bAlongside;
+    BOOL bWindowsFirst;
+    WCHAR WindowsName[32];
 
     /* txtsetup.sif data */
     // LONG DefaultLang;     // default language (table index)
@@ -162,6 +165,7 @@ typedef struct _VOL_CREATE_INFO
 typedef enum _SETUP_PAGE
 {
     SETUP_PAGE_LANGUAGE,
+    SETUP_PAGE_TYPE,
     SETUP_PAGE_DISK,
     SETUP_PAGE_ACCOUNT,
     SETUP_PAGE_READY,
@@ -175,6 +179,7 @@ typedef enum _SETUP_PAGE
 #define SETUP_PAGE_SKIP_UNATTEND    0x2
 #define SETUP_PAGE_NO_CANCEL        0x4
 #define SETUP_PAGE_CLOSE            0x8
+#define SETUP_PAGE_OPTIONAL         0x10
 
 typedef struct _SETUP_PAGE_INFO
 {
@@ -193,6 +198,7 @@ typedef struct _SETUP_PAGE_INFO
 #define SPN_WIZNEXT         (WM_APP + 0x102)
 #define SPN_WIZBACK         (WM_APP + 0x103)
 #define SPN_QUERYCANCEL     (WM_APP + 0x104)
+#define SPN_QUERYSKIP       (WM_APP + 0x105)
 
 PVOL_CREATE_INFO
 FindVolumeFormatPlan(
@@ -218,6 +224,32 @@ DescribeDiskChanges(
 INT_PTR
 CALLBACK
 DiskPageProc(
+    _In_ HWND hwndDlg,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam);
+
+PPARTENTRY
+FindPartitionAt(
+    _In_ PPARTLIST List,
+    _In_ ULONG DiskNumber,
+    _In_ ULONGLONG StartSector);
+
+ULONGLONG
+GetFollowingFreeBytes(
+    _In_ PPARTENTRY PartEntry);
+
+BOOLEAN
+PlanAlongsideInstall(
+    _In_ HWND hwndDlg,
+    _Inout_ PSETUPDATA pSetupData,
+    _In_ ULONG DiskNumber,
+    _In_ ULONGLONG StartSector,
+    _In_ ULONGLONG ShrinkBytes);
+
+INT_PTR
+CALLBACK
+InstallTypePageProc(
     _In_ HWND hwndDlg,
     _In_ UINT uMsg,
     _In_ WPARAM wParam,

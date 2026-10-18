@@ -216,15 +216,22 @@ SetupFrameGoTo(
     FrameShowPage(Page);
 }
 
+static BOOL
+FrameSkipPage(
+    _In_ INT Page)
+{
+    if (Frame.SetupData->bUnattend && (Frame.PageInfo[Page].Flags & SETUP_PAGE_SKIP_UNATTEND))
+        return TRUE;
+    return (Frame.PageInfo[Page].Flags & SETUP_PAGE_OPTIONAL) &&
+           SendMessageW(Frame.Pages[Page], SPN_QUERYSKIP, 0, 0);
+}
+
 static INT
 FrameNextPage(
     _In_ INT Page)
 {
-    while (Page < Frame.PageCount && Frame.SetupData->bUnattend &&
-           (Frame.PageInfo[Page].Flags & SETUP_PAGE_SKIP_UNATTEND))
-    {
+    while (Page < Frame.PageCount && FrameSkipPage(Page))
         Page++;
-    }
     return Page;
 }
 
@@ -251,6 +258,7 @@ FrameBack(VOID)
 {
     HWND hBack = GetDlgItem(Frame.hwnd, IDC_FRAME_BACK);
     INT Current = Frame.Current;
+    INT Page;
 
     if (!IsWindowVisible(hBack) || !IsWindowEnabled(hBack))
         return;
@@ -258,8 +266,11 @@ FrameBack(VOID)
     if (SendMessageW(Frame.Pages[Current], SPN_WIZBACK, 0, 0) == -1 || Frame.Current != Current)
         return;
 
-    if (Current > 0)
-        FrameShowPage(Current - 1);
+    Page = Current - 1;
+    while (Page > 0 && FrameSkipPage(Page))
+        Page--;
+    if (Page >= 0)
+        FrameShowPage(Page);
 }
 
 static VOID

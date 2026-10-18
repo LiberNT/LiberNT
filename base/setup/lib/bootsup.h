@@ -7,6 +7,8 @@
 
 #pragma once
 
+#define BOOT_OPTION_AFTER_WINDOWS   0x100
+
 NTSTATUS
 NTAPI
 InstallBootManagerAndBootEntries(

@@ -462,7 +462,7 @@ IsResizableVolume(
     return _wcsicmp(Volume->Info.FileSystem, L"NTFS") == 0 || IsUnformatted(&Volume->Info);
 }
 
-static ULONGLONG
+ULONGLONG
 GetFollowingFreeBytes(
     _In_ PPARTENTRY PartEntry)
 {
@@ -606,25 +606,61 @@ RedrawDiskList(
 }
 
 static VOID
-ReloadDiskList(
-    _In_ HWND hwndDlg,
+ResetPartitionList(
     _Inout_ PSETUPDATA pSetupData)
 {
-    HCURSOR OldCursor = SetCursor(LoadCursorW(NULL, IDC_WAIT));
-
     ForgetVolumePlans(NULL, NULL, FALSE);
     ErasedDisks = 0;
     DeletedCount = 0;
     InstallPartition = NULL;
     SystemPartition = NULL;
 
-    ListView_DeleteAllItems(GetDlgItem(hwndDlg, IDC_DISKLIST));
     DestroyPartitionList(pSetupData->PartitionList);
     pSetupData->PartitionList = CreatePartitionList();
     DiskInfoRefresh();
+}
+
+static VOID
+ReloadDiskList(
+    _In_ HWND hwndDlg,
+    _Inout_ PSETUPDATA pSetupData)
+{
+    HCURSOR OldCursor = SetCursor(LoadCursorW(NULL, IDC_WAIT));
+
+    ListView_DeleteAllItems(GetDlgItem(hwndDlg, IDC_DISKLIST));
+    ResetPartitionList(pSetupData);
 
     RedrawDiskList(hwndDlg, pSetupData, FindDefaultInstallRegion(pSetupData->PartitionList));
     SetCursor(OldCursor);
+}
+
+PPARTENTRY
+FindPartitionAt(
+    _In_ PPARTLIST List,
+    _In_ ULONG DiskNumber,
+    _In_ ULONGLONG StartSector)
+{
+    PLIST_ENTRY DiskLink, PartLink;
+
+    for (DiskLink = List->DiskListHead.Flink; DiskLink != &List->DiskListHead; DiskLink = DiskLink->Flink)
+    {
+        PDISKENTRY DiskEntry = CONTAINING_RECORD(DiskLink, DISKENTRY, ListEntry);
+
+        if (DiskEntry->DiskNumber != DiskNumber)
+            continue;
+
+        for (PartLink = DiskEntry->PrimaryPartListHead.Flink;
+             PartLink != &DiskEntry->PrimaryPartListHead;
+             PartLink = PartLink->Flink)
+        {
+            PPARTENTRY PartEntry = CONTAINING_RECORD(PartLink, PARTENTRY, ListEntry);
+
+            if (PartEntry->IsPartitioned && PartEntry->StartSector.QuadPart == StartSector)
+                return PartEntry;
+        }
+    }
+
+    return NULL;
 }
 
 static BOOLEAN
@@ -1041,6 +1077,56 @@ DoResizePartition(
     ReloadDiskList(hwndDlg, pSetupData);
 }
 
+BOOLEAN
+PlanAlongsideInstall(
+    _In_ HWND hwndDlg,
+    _Inout_ PSETUPDATA pSetupData,
+    _In_ ULONG DiskNumber,
+    _In_ ULONGLONG StartSector,
+    _In_ ULONGLONG ShrinkBytes)
+{
+    PPARTENTRY Windows = FindPartitionAt(pSetupData->PartitionList, DiskNumber, StartSector);
+    PPARTENTRY Region = NULL;
+    UNICODE_STRING VolumePath;
+    HCURSOR OldCursor;
+    NTSTATUS Status = STATUS_SUCCESS;
+    WCHAR Text[256];
+
+    if (!Windows || !Windows->Volume)
+        return FALSE;
+
+    OldCursor = SetCursor(LoadCursorW(NULL, IDC_WAIT));
+    if (ShrinkBytes)
+    {
+        RtlInitUnicodeString(&VolumePath, Windows->Volume->Info.DeviceName);
+        Status = VolResizeShrink(&VolumePath, ShrinkBytes, NULL, NULL);
+    }
+    ResetPartitionList(pSetupData);
+
+    Windows = FindPartitionAt(pSetupData->PartitionList, DiskNumber, StartSector);
+    if (NT_SUCCESS(Status) && Windows &&
+        Windows->ListEntry.Flink != &Windows->DiskEntry->PrimaryPartListHead)
+    {
+        Region = CONTAINING_RECORD(Windows->ListEntry.Flink, PARTENTRY, ListEntry);
+        if (Region->IsPartitioned)
+            Region = NULL;
+    }
+    SetCursor(OldCursor);
+
+    if (!Region)
+    {
+        LoadStringW(pSetupData->hInstance, IDS_RESIZE_FAILED, Text, ARRAYSIZE(Text));
+        SetupMessage(GetParent(hwndDlg), TD_ERROR_ICON, TDCBF_OK_BUTTON, IDOK, NULL, Text);
+        return FALSE;
+    }
+
+    if (!CreateRegionPartition(hwndDlg, pSetupData, &Region, 0ULL, FALSE))
+        return FALSE;
+
+    InstallPartition = Region;
+    return TRUE;
+}
+
 static BOOLEAN
 VolumeHasDirectory(
     _In_ PVOLENTRY Volume,
@@ -1243,7 +1329,6 @@ DiskPageProc(
             }
 
             DiskInfoRefresh();
-            RedrawDiskList(hwndDlg, pSetupData, FindDefaultInstallRegion(pSetupData->PartitionList));
             return FALSE;
         }
 
@@ -1300,11 +1385,20 @@ DiskPageProc(
             break;
         }
 
+        case SPN_QUERYSKIP:
+            SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, pSetupData->bAlongside);
+            return TRUE;
+
+        case SPN_KILLACTIVE:
+            ListView_DeleteAllItems(GetDlgItem(hwndDlg, IDC_DISKLIST));
+            return TRUE;
+
         case SPN_SETACTIVE:
         {
             HWND hList = GetDlgItem(hwndDlg, IDC_DISKLIST);
 
-            UpdateDiskButtons(hwndDlg, pSetupData);
+            RedrawDiskList(hwndDlg, pSetupData,
+                           InstallPartition ? InstallPartition : FindDefaultInstallRegion(pSetupData->PartitionList));
             SetFocus(hList);
 
             if (pSetupData->bUnattend && !pSetupData->bUnattendTried)
