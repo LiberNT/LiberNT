@@ -558,6 +558,7 @@ USBPORT_SetEndpointState(IN PUSBPORT_ENDPOINT Endpoint,
          */
         if ((Endpoint->Flags & ENDPOINT_FLAG_ABORTING) &&
             State == USBPORT_ENDPOINT_REMOVE &&
+            (Packet->MiniPortFlags & USB_MINIPORT_FLAGS_USB3) &&
             !USBPORT_EndpointHasAsyncState(Endpoint, Packet))
         {
             DPRINT("USBPORT_SetEndpointState: ABORTING+REMOVE fast path Endpoint=%p\n",
