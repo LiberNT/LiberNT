@@ -379,7 +379,8 @@ CAdapterCommon::ChooseSubdeviceName(UCHAR DefaultDevice, UCHAR Wave, OUT LPWSTR 
         L"eSpdifIn",          // 0xC
         L"eDigitalOtherIn",   // 0xD
         L"eReserved",         // 0xE
-        L"eOther"             // 0xF
+        L"eOther",            // 0xF
+        L"eHDMIOut"
     };
 
     UCHAR Ordinal = ++m_SubdeviceNames[Wave ? 1 : 0][DefaultDevice];
@@ -401,6 +402,21 @@ CAdapterCommon::ChooseSubdeviceName(UCHAR DefaultDevice, UCHAR Wave, OUT LPWSTR 
     RtlCopyMemory(Name, Buffer, wcslen(Buffer) * sizeof(WCHAR));
     *OutSubdeviceName = Name;
     return STATUS_SUCCESS;
+}
+
+UCHAR
+NTAPI
+CAdapterCommon::GetSubdeviceType(IN PVOID Node, IN ULONG PinNode, IN UCHAR DefaultDevice)
+{
+    CFunctionGroupNode *OutNode = (CFunctionGroupNode *)Node;
+    PIN_CAPABILITIES PinCaps;
+
+    if (DefaultDevice == 0x5 && NT_SUCCESS(OutNode->GetPinCapabilities(PinNode, &PinCaps)) &&
+        (PinCaps.HdmiCapable || PinCaps.DisplayPortCapable))
+    {
+        return HDAUDIO_SUBDEVICE_HDMI_OUT;
+    }
+    return DefaultDevice;
 }
 
 NTSTATUS
@@ -1417,7 +1433,8 @@ CAdapterCommon::ProcessOutputNodes(
                 if (AssociatedPins)
                     ExFreePoolWithTag(AssociatedPins, TAG_HDAUDIO);
             }
-            Status = ProcessDacNodes(DeviceObject, Irp, ResourceList, PinConfiguration.DefaultDevice,
+            Status = ProcessDacNodes(DeviceObject, Irp, ResourceList,
+                                     GetSubdeviceType((PVOID)OutNode, PinNodes[NodeIndex], PinConfiguration.DefaultDevice),
                                      DacNodeCount ? DacNodeCount : OutputNodeCount,
                                      DacNodeCount ? DacNodes : OutputNodes, (PVOID)OutNode);
             if (DacNodes)
@@ -1772,7 +1789,7 @@ CAdapterCommon::BuildInstallFilter(
             if (PinConfiguration.PortConnectivity != 0x1) // pin is connected
             {
                 bSet = TRUE;
-                DefaultDevice = PinConfiguration.DefaultDevice;
+                DefaultDevice = GetSubdeviceType((PVOID)OutNode, AssociatedPins[Index], PinConfiguration.DefaultDevice);
             }
         }
     }

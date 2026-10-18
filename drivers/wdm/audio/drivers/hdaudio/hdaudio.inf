@@ -303,6 +303,30 @@ AddInterface=%KSCATEGORY_REALTIME%,%KSNAME_eHDMIOutWave%, HdAudModel.HDMIOutputW
 AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_eHDMIOutTopo%, HdAudModel.HDMIOutputTopo
 AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_eHDMIOutTopo%, HdAudModel.HDMIOutputTopo
 
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_eHDMIOut2Wave%, HdAudModel.HDMIOutput2Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_eHDMIOut2Wave%, HdAudModel.HDMIOutput2Wave
+AddInterface=%KSCATEGORY_REALTIME%,%KSNAME_eHDMIOut2Wave%, HdAudModel.HDMIOutput2Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_eHDMIOut2Topo%, HdAudModel.HDMIOutput2Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_eHDMIOut2Topo%, HdAudModel.HDMIOutput2Topo
+
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_eHDMIOut3Wave%, HdAudModel.HDMIOutput3Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_eHDMIOut3Wave%, HdAudModel.HDMIOutput3Wave
+AddInterface=%KSCATEGORY_REALTIME%,%KSNAME_eHDMIOut3Wave%, HdAudModel.HDMIOutput3Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_eHDMIOut3Topo%, HdAudModel.HDMIOutput3Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_eHDMIOut3Topo%, HdAudModel.HDMIOutput3Topo
+
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_eHDMIOut4Wave%, HdAudModel.HDMIOutput4Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_eHDMIOut4Wave%, HdAudModel.HDMIOutput4Wave
+AddInterface=%KSCATEGORY_REALTIME%,%KSNAME_eHDMIOut4Wave%, HdAudModel.HDMIOutput4Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_eHDMIOut4Topo%, HdAudModel.HDMIOutput4Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_eHDMIOut4Topo%, HdAudModel.HDMIOutput4Topo
+
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_eHDMIOut5Wave%, HdAudModel.HDMIOutput5Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_eHDMIOut5Wave%, HdAudModel.HDMIOutput5Wave
+AddInterface=%KSCATEGORY_REALTIME%,%KSNAME_eHDMIOut5Wave%, HdAudModel.HDMIOutput5Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_eHDMIOut5Topo%, HdAudModel.HDMIOutput5Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_eHDMIOut5Topo%, HdAudModel.HDMIOutput5Topo
+
 
 AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_eSlavedHpSpeakerWave%, HdAudModel.SlavedHpSpeakerWave
 AddInterface=%KSCATEGORY_RENDER%,%KSNAME_eSlavedHpSpeakerWave%, HdAudModel.SlavedHpSpeakerWave
@@ -766,6 +790,46 @@ AddReg = HdAudModel.HDMIOutputTopo.AddReg, HDAudio.SysFx.Render
 [HdAudModel.HDMIOutputTopo.AddReg]
 HKR,,FriendlyName,,%HDMIOutputTopoDeviceName%
 HKR,,CLSID,,%Proxy.CLSID%
+[HdAudModel.HDMIOutput2Wave]
+AddReg = HdAudModel.HDMIOutput2Wave.AddReg
+[HdAudModel.HDMIOutput2Wave.AddReg]
+HKR,,FriendlyName,,%HDMIOutput2WaveDeviceName%
+HKR,,CLSID,,%Proxy.CLSID%
+[HdAudModel.HDMIOutput2Topo]
+AddReg = HdAudModel.HDMIOutput2Topo.AddReg, HDAudio.SysFx.Render
+[HdAudModel.HDMIOutput2Topo.AddReg]
+HKR,,FriendlyName,,%HDMIOutput2TopoDeviceName%
+HKR,,CLSID,,%Proxy.CLSID%
+[HdAudModel.HDMIOutput3Wave]
+AddReg = HdAudModel.HDMIOutput3Wave.AddReg
+[HdAudModel.HDMIOutput3Wave.AddReg]
+HKR,,FriendlyName,,%HDMIOutput3WaveDeviceName%
+HKR,,CLSID,,%Proxy.CLSID%
+[HdAudModel.HDMIOutput3Topo]
+AddReg = HdAudModel.HDMIOutput3Topo.AddReg, HDAudio.SysFx.Render
+[HdAudModel.HDMIOutput3Topo.AddReg]
+HKR,,FriendlyName,,%HDMIOutput3TopoDeviceName%
+HKR,,CLSID,,%Proxy.CLSID%
+[HdAudModel.HDMIOutput4Wave]
+AddReg = HdAudModel.HDMIOutput4Wave.AddReg
+[HdAudModel.HDMIOutput4Wave.AddReg]
+HKR,,FriendlyName,,%HDMIOutput4WaveDeviceName%
+HKR,,CLSID,,%Proxy.CLSID%
+[HdAudModel.HDMIOutput4Topo]
+AddReg = HdAudModel.HDMIOutput4Topo.AddReg, HDAudio.SysFx.Render
+[HdAudModel.HDMIOutput4Topo.AddReg]
+HKR,,FriendlyName,,%HDMIOutput4TopoDeviceName%
+HKR,,CLSID,,%Proxy.CLSID%
+[HdAudModel.HDMIOutput5Wave]
+AddReg = HdAudModel.HDMIOutput5Wave.AddReg
+[HdAudModel.HDMIOutput5Wave.AddReg]
+HKR,,FriendlyName,,%HDMIOutput5WaveDeviceName%
+HKR,,CLSID,,%Proxy.CLSID%
+[HdAudModel.HDMIOutput5Topo]
+AddReg = HdAudModel.HDMIOutput5Topo.AddReg, HDAudio.SysFx.Render
+[HdAudModel.HDMIOutput5Topo.AddReg]
+HKR,,FriendlyName,,%HDMIOutput5TopoDeviceName%
+HKR,,CLSID,,%Proxy.CLSID%
 
 
 [HdAudModel.SlavedHpSpeakerWave]
@@ -1174,6 +1238,14 @@ DigitalOutputTopoDeviceName =   "HD Audio SPDIF out mixer"
 
 HDMIOutputWaveDeviceName =   "HD Audio HDMI out"       
 HDMIOutputTopoDeviceName =   "HD Audio HDMI out mixer" 
+HDMIOutput2WaveDeviceName =   "HD Audio HDMI out 2"
+HDMIOutput2TopoDeviceName =   "HD Audio HDMI out mixer 2"
+HDMIOutput3WaveDeviceName =   "HD Audio HDMI out 3"
+HDMIOutput3TopoDeviceName =   "HD Audio HDMI out mixer 3"
+HDMIOutput4WaveDeviceName =   "HD Audio HDMI out 4"
+HDMIOutput4TopoDeviceName =   "HD Audio HDMI out mixer 4"
+HDMIOutput5WaveDeviceName =   "HD Audio HDMI out 5"
+HDMIOutput5TopoDeviceName =   "HD Audio HDMI out mixer 5"
 
 
 SlavedHpSpeakerWaveDeviceName = "HD Audio Headphone/Speakers"       
@@ -1296,6 +1368,14 @@ KSNAME_eSpdifOutTopo = "eSpdifOutTopo"
 
 KSNAME_eHDMIOutWave = "eHDMIOutWave" 
 KSNAME_eHDMIOutTopo = "eHDMIOutTopo" 
+KSNAME_eHDMIOut2Wave = "eHDMIOut2Wave"
+KSNAME_eHDMIOut2Topo = "eHDMIOut2Topo"
+KSNAME_eHDMIOut3Wave = "eHDMIOut3Wave"
+KSNAME_eHDMIOut3Topo = "eHDMIOut3Topo"
+KSNAME_eHDMIOut4Wave = "eHDMIOut4Wave"
+KSNAME_eHDMIOut4Topo = "eHDMIOut4Topo"
+KSNAME_eHDMIOut5Wave = "eHDMIOut5Wave"
+KSNAME_eHDMIOut5Topo = "eHDMIOut5Topo"
 
 KSNAME_eSpdifOutSpeakerWave = "eSpdifOutSpeakerWave" 
 KSNAME_eSpdifOutSpeakerTopo = "eSpdifOutSpeakerTopo" 

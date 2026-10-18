@@ -899,6 +899,8 @@ CFunctionGroupNode::GetPinCapabilities(
     PinCaps->OutputCapable = (Response >> 4) & 0x1;
     PinCaps->HeadphoneDriveCapable = (Response >> 3) & 0x1;
     PinCaps->PresenceDetectCapable = (Response >> 2) & 0x1;
+    PinCaps->HdmiCapable = (Response >> 7) & 0x1;
+    PinCaps->DisplayPortCapable = (Response >> 24) & 0x1;
     return STATUS_SUCCESS;
 }
 

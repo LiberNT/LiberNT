@@ -20,6 +20,7 @@
 
 #define TAG_HDAUDIO 'UADH'
 #define HDAUDIO_MAX_FORMAT_RANGES 3
+#define HDAUDIO_SUBDEVICE_HDMI_OUT 0x10
 
 PVOID
 __cdecl
@@ -92,6 +93,8 @@ typedef struct
     UCHAR OutputCapable : 1;
     UCHAR HeadphoneDriveCapable : 1;
     UCHAR PresenceDetectCapable : 1;
+    UCHAR HdmiCapable : 1;
+    UCHAR DisplayPortCapable : 1;
 } PIN_CAPABILITIES, *PPIN_CAPABILITIES;
 
 template <typename... Interfaces> class CUnknownImpl : public Interfaces...
@@ -151,6 +154,7 @@ class CAdapterCommon : public CUnknownImpl<IAdapterPowerManagement>
         IN PPCFILTER_DESCRIPTOR FilterDescription,
         OUT PUNKNOWN *OutPortUnknown);
     NTSTATUS NTAPI ChooseSubdeviceName(UCHAR DefaultDevice, UCHAR Wave, OUT LPWSTR *OutSubdeviceName);
+    UCHAR NTAPI GetSubdeviceType(IN PVOID Node, IN ULONG PinNode, IN UCHAR DefaultDevice);
     NTSTATUS NTAPI
     BuildWaveOutFormat(
         IN ULONG AssociatedPinCount,
@@ -332,7 +336,7 @@ class CAdapterCommon : public CUnknownImpl<IAdapterPowerManagement>
     PCFILTER_DESCRIPTOR m_WaveOutFilterDescription;
     ULONG m_ClaimedConverters[32];
     ULONG m_ClaimedConverterCount;
-    UCHAR m_SubdeviceNames[2][16];
+    UCHAR m_SubdeviceNames[2][HDAUDIO_SUBDEVICE_HDMI_OUT + 1];
     DEVICE_POWER_STATE m_PowerState;
 };
 
