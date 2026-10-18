@@ -44,6 +44,7 @@ BEGIN
     IDS_VOL_OPEN "&Abrir o Control de volume"
     IDS_VOL_RUN "SNDVOL32.EXE"
     IDS_VOL_MUTED "Volume (em mute)"
+    IDS_VOL_NODEVICE "No Audio Output Device is installed."
 
     //Keyboard-Mouse related strings
     IDS_KEYS_STICKY "StickyKeys"

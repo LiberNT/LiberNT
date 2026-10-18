@@ -52,6 +52,7 @@ BEGIN
     IDS_VOL_OPEN "&Otwórz regulację głośności"
     IDS_VOL_RUN "SNDVOL32.EXE"
     IDS_VOL_MUTED "Głośność (wyciszona)"
+    IDS_VOL_NODEVICE "No Audio Output Device is installed."
 
     //Keyboard-Mouse related strings
     IDS_KEYS_STICKY "Klawisze Trwałe"

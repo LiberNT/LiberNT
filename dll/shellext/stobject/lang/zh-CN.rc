@@ -46,6 +46,7 @@ BEGIN
     IDS_VOL_OPEN "打开音量控制(&O)"
     IDS_VOL_RUN "SNDVOL32.EXE"
     IDS_VOL_MUTED "（静音）"
+    IDS_VOL_NODEVICE "No Audio Output Device is installed."
 
     //Keyboard-Mouse related strings
     IDS_KEYS_STICKY "粘滞键"

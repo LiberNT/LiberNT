@@ -44,6 +44,7 @@ BEGIN
     IDS_VOL_OPEN "音量調整を開く(&O)"
     IDS_VOL_RUN "SNDVOL32.EXE"
     IDS_VOL_MUTED "音量 (ミュート中)"
+    IDS_VOL_NODEVICE "No Audio Output Device is installed."
 
     //Keyboard-Mouse related strings
     IDS_KEYS_STICKY "スティッキー キー"

@@ -31,6 +31,7 @@ static DWORD g_volMaximum = 0xFFFF;
 static int g_VolLevel = 2;
 static int g_VolPercent = 50;
 static BOOL g_VolCacheValid = FALSE;
+static BOOL g_NoDevice = FALSE;
 static HICON g_hIconVolume0 = NULL;
 static HICON g_hIconVolume1 = NULL;
 static HICON g_hIconVolume3 = NULL;
@@ -88,6 +89,11 @@ static IAudioEndpointVolume *Volume_Endpoint()
     }
     pEnumerator->Release();
     return g_pEndpointVolume;
+}
+
+static BOOL Volume_NoDevice()
+{
+    return !Volume_Endpoint() && waveOutGetNumDevs() == 0;
 }
 
 static HRESULT __stdcall Volume_FindMixerControl(CSysTray * pSysTray)
@@ -261,6 +267,12 @@ static VOID Volume_Tooltip(_Out_writes_(cch) LPWSTR pszTip, _In_ UINT cch)
 {
     WCHAR szLabel[96];
 
+    if (g_NoDevice)
+    {
+        LoadStringW(g_hInstance, IDS_VOL_NODEVICE, pszTip, cch);
+        return;
+    }
+
     if (g_IsMute || !g_VolCacheValid)
     {
         LoadStringW(g_hInstance, g_IsMute ? IDS_VOL_MUTED : IDS_VOL_VOLUME, pszTip, cch);
@@ -273,7 +285,7 @@ static VOID Volume_Tooltip(_Out_writes_(cch) LPWSTR pszTip, _In_ UINT cch)
 
 static HICON Volume_PickIcon()
 {
-    if (g_IsMute)
+    if (g_NoDevice || g_IsMute)
         return g_hIconMute;
     if (g_VolLevel == 0 && g_hIconVolume0)
         return g_hIconVolume0;
@@ -340,6 +352,7 @@ HRESULT STDMETHODCALLTYPE Volume_Init(_In_ CSysTray * pSysTray)
     g_hIconVolume1 = StoLoadTrayIcon(g_hInstance, IDI_VOLUME1);
     g_hIconVolume3 = StoLoadTrayIcon(g_hInstance, IDI_VOLUME3);
 
+    g_NoDevice = Volume_NoDevice();
     Volume_IsMute();
     g_VolLevel = Volume_Level();
 
@@ -357,11 +370,14 @@ HRESULT STDMETHODCALLTYPE Volume_Update(_In_ CSysTray * pSysTray)
 
     int PrevLevel = g_VolLevel;
     int PrevPercent = g_VolPercent;
+    BOOL PrevNoDevice = g_NoDevice;
     PrevState = g_IsMute;
+    g_NoDevice = Volume_NoDevice();
     Volume_IsMute();
     g_VolLevel = Volume_Level();
 
-    if (PrevState != g_IsMute || PrevLevel != g_VolLevel || PrevPercent != g_VolPercent)
+    if (PrevState != g_IsMute || PrevLevel != g_VolLevel || PrevPercent != g_VolPercent ||
+        PrevNoDevice != g_NoDevice)
     {
         WCHAR strTooltip[128];
         HICON icon = Volume_PickIcon();
@@ -399,9 +415,8 @@ HRESULT STDMETHODCALLTYPE Volume_Shutdown(_In_ CSysTray * pSysTray)
 HRESULT Volume_OnDeviceChange(_In_ CSysTray * pSysTray, WPARAM wParam, LPARAM lParam)
 {
     HRESULT hr = Volume_FindMixerControl(pSysTray);
-    if (SUCCEEDED(hr))
-        return Volume_Update(pSysTray);
-    return hr;
+    HRESULT hrUpdate = Volume_Update(pSysTray);
+    return FAILED(hr) ? hr : hrUpdate;
 }
 
 static void _RunVolume(BOOL bTray)
