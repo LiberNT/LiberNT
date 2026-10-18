@@ -662,6 +662,22 @@ PopGetSysButtonCompletion(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
+static POWER_ACTION
+PopGetPowerButtonAction(VOID)
+{
+    PPOP_POWER_SETTING_CACHE_ENTRY CacheEntry;
+    POWER_ACTION Action = PowerActionShutdownOff;
+
+    PAGED_CODE();
+
+    KeAcquireGuardedMutex(&PopPowerSettingLock);
+    CacheEntry = PopFindPowerSettingCacheEntry(&GUID_POWERBUTTON_ACTION, PopCurrentPowerCondition);
+    if (CacheEntry && CacheEntry->ValueLength == sizeof(POWER_ACTION_POLICY))
+        Action = ((PPOWER_ACTION_POLICY)CacheEntry->Value)->Action;
+    KeReleaseGuardedMutex(&PopPowerSettingLock);
+    return Action;
+}
+
 static VOID
 NTAPI
 PopGetSysButton(
@@ -681,9 +697,27 @@ PopGetSysButton(
 
     if (SysButtonContext->PowerButtonPending)
     {
+        POWER_ACTION Action = PopGetPowerButtonAction();
+        NTSTATUS ActionStatus = STATUS_SUCCESS;
+
         SysButtonContext->PowerButtonPending = FALSE;
-        DPRINT1("Initiating shutdown after power button event\n");
-        ZwShutdownSystem(ShutdownNoReboot);
+        DPRINT1("Power button action %d\n", Action);
+        switch (Action)
+        {
+            case PowerActionNone:
+                break;
+            case PowerActionSleep:
+                ActionStatus = ZwInitiatePowerAction(PowerActionSleep, PowerSystemSleeping1, 0, TRUE);
+                break;
+            case PowerActionHibernate:
+                ActionStatus = ZwInitiatePowerAction(PowerActionHibernate, PowerSystemHibernate, 0, TRUE);
+                break;
+            default:
+                ZwShutdownSystem(ShutdownNoReboot);
+                break;
+        }
+        if (!NT_SUCCESS(ActionStatus))
+            DPRINT1("Power button action %d failed: 0x%08lx\n", Action, ActionStatus);
     }
 
     /* Get button pressed (IOCTL_GET_SYS_BUTTON_EVENT).  The request is

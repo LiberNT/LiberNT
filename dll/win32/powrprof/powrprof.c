@@ -61,6 +61,9 @@ static const GUID PowrProfVideoPowerdownTimeout = { 0x3C0BC021, 0xC8A8, 0x4E07, 
 static const GUID PowrProfSleepSubgroup = { 0x238C9FA8, 0x0AAD, 0x41ED, { 0x83, 0xF4, 0x97, 0xBE, 0x24, 0x2C, 0x8F, 0x20 } };
 static const GUID PowrProfStandbyTimeout = { 0x29F6C1DB, 0x86DA, 0x48C5, { 0x9F, 0xDB, 0xF2, 0xB6, 0x7B, 0x1F, 0x44, 0xDA } };
 static const GUID PowrProfHibernateTimeout = { 0x9D7815A6, 0x7EE4, 0x497E, { 0x88, 0x88, 0x51, 0x5A, 0x05, 0xF0, 0x23, 0x64 } };
+static const GUID PowrProfButtonSubgroup = { 0x4F971E89, 0xEEBD, 0x4455, { 0xA8, 0xDE, 0x9E, 0x59, 0x04, 0x0E, 0x73, 0x47 } };
+static const GUID PowrProfPowerButtonAction = { 0x7648EFA3, 0xDD9C, 0x4E3E, { 0xB5, 0x66, 0x50, 0xF9, 0x29, 0x38, 0x62, 0x80 } };
+static const POWER_ACTION PowrProfButtonActions[] = { PowerActionNone, PowerActionSleep, PowerActionHibernate, PowerActionShutdownOff };
 
 typedef struct _POWRPROF_SCHEME_DEFAULTS
 {
@@ -320,6 +323,13 @@ POWRPROF_GetBuiltinSettingDefaults(
             *Value = 0;
         else
             return ERROR_FILE_NOT_FOUND;
+        return ERROR_SUCCESS;
+    }
+    if (IsEqualGUID(Subgroup, &PowrProfButtonSubgroup))
+    {
+        if (!IsEqualGUID(Setting, &PowrProfPowerButtonAction))
+            return ERROR_FILE_NOT_FOUND;
+        *Value = 3;
         return ERROR_SUCCESS;
     }
     if (!IsEqualGUID(Subgroup, &GUID_PROCESSOR_SETTINGS_SUBGROUP))
@@ -602,6 +612,20 @@ POWRPROF_ApplyScheme(
 
     for (PowerCondition = PoAc; PowerCondition <= PoDc && Error == ERROR_SUCCESS; PowerCondition++)
         Error = POWRPROF_ApplyProcessorPolicyValues(Scheme, PowerCondition, &Values[PowerCondition]);
+    for (PowerCondition = PoAc; PowerCondition <= PoDc && Error == ERROR_SUCCESS; PowerCondition++)
+    {
+        POWER_ACTION_POLICY ButtonPolicy = { 0 };
+        DWORD ButtonIndex;
+
+        Error = POWRPROF_ReadValueIndex(Scheme, &PowrProfButtonSubgroup, &PowrProfPowerButtonAction,
+                                        PowerCondition == PoAc, &ButtonIndex);
+        if (Error == ERROR_SUCCESS && ButtonIndex < _countof(PowrProfButtonActions))
+        {
+            ButtonPolicy.Action = PowrProfButtonActions[ButtonIndex];
+            Error = POWRPROF_ApplySettingValue(&PowrProfPowerButtonAction, PowerCondition, &ButtonPolicy,
+                                               sizeof(ButtonPolicy));
+        }
+    }
     if (Error == ERROR_SUCCESS)
         Error = POWRPROF_PersistActiveScheme(Scheme, Defaults->LegacyId, UpdateLegacy);
     if (Error == ERROR_SUCCESS)
