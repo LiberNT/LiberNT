@@ -307,6 +307,32 @@ Return Value:
 
     DevMarkedForVerify = BooleanFlagOn(Vcb->Vpb->RealDevice->Flags, DO_VERIFY_VOLUME);
 
+    if (!DevMarkedForVerify &&
+        FlagOn(Vcb->VcbState, VCB_STATE_FLAG_REMOVABLE_MEDIA) &&
+        (IrpContext->MajorFunction == IRP_MJ_CREATE) &&
+        (Vcb->VcbCondition == VcbGood)) {
+
+        NTSTATUS Status;
+
+        Status = FatPerformDevIoCtrl( IrpContext,
+                                      IOCTL_DISK_CHECK_VERIFY,
+                                      Vcb->TargetDeviceObject,
+                                      NULL,
+                                      0,
+                                      NULL,
+                                      0,
+                                      FALSE,
+                                      FALSE,
+                                      NULL );
+
+        if (!NT_SUCCESS( Status ) && (Status != STATUS_VERIFY_REQUIRED)) {
+
+            FatNormalizeAndRaiseStatus( IrpContext, Status );
+        }
+
+        DevMarkedForVerify = BooleanFlagOn(Vcb->Vpb->RealDevice->Flags, DO_VERIFY_VOLUME);
+    }
+
     //
     //  We ALWAYS force CREATE requests on unmounted volumes through the
     //  verify path.  These requests could have been in limbo between
