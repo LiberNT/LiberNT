@@ -1296,7 +1296,6 @@ WmipInsertStaticNames(
 
     NewWnode->OffsetInstanceNameOffsets = OffsetsOffset;
     NewWnode->WnodeHeader.BufferSize = Size;
-    NewWnode->WnodeHeader.Flags &= ~WNODE_FLAG_STATIC_INSTANCE_NAMES;
 
     ExFreePoolWithTag(Wnode, TAG_WMI_BUFFER);
     *InOutWnode = NewWnode;
