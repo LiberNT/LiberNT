@@ -351,6 +351,25 @@ static LSTATUS open_classes_key(HKEY hkey, const WCHAR *name, REGSAM access, HKE
     OBJECT_ATTRIBUTES attr;
     UNICODE_STRING nameW;
 
+#ifdef __REACTOS__
+    if (hkey == HKEY_CLASSES_ROOT)
+    {
+        WCHAR *user_name;
+        SIZE_T length = (wcslen(L"Software\\Classes\\") + wcslen(name) + 1) * sizeof(WCHAR);
+        LSTATUS res = ERROR_FILE_NOT_FOUND;
+
+        if ((user_name = malloc(length)))
+        {
+            wcscpy(user_name, L"Software\\Classes\\");
+            wcscat(user_name, name);
+            res = RegOpenKeyExW(HKEY_CURRENT_USER, user_name, 0, access, retkey);
+            free(user_name);
+        }
+        if (res == ERROR_SUCCESS)
+            return res;
+    }
+
+#endif
     if (!(hkey = get_classes_root_hkey(hkey, access)))
         return ERROR_INVALID_HANDLE;
 
@@ -378,6 +397,24 @@ HRESULT open_key_for_clsid(REFCLSID clsid, const WCHAR *keyname, REGSAM access, 
 
     lstrcpyW(path, clsidW);
     StringFromGUID2(clsid, path + lstrlenW(clsidW), CHARS_IN_GUID);
+#ifdef __REACTOS__
+    if (keyname)
+    {
+        WCHAR *full_path;
+        SIZE_T length = (wcslen(path) + wcslen(keyname) + 2) * sizeof(WCHAR);
+
+        if ((full_path = malloc(length)))
+        {
+            wcscpy(full_path, path);
+            wcscat(full_path, L"\\");
+            wcscat(full_path, keyname);
+            res = open_classes_key(HKEY_CLASSES_ROOT, full_path, access, subkey);
+            free(full_path);
+            if (res == ERROR_SUCCESS)
+                return S_OK;
+        }
+    }
+#endif
     res = open_classes_key(HKEY_CLASSES_ROOT, path, access, &key);
     if (res == ERROR_FILE_NOT_FOUND)
         return REGDB_E_CLASSNOTREG;
