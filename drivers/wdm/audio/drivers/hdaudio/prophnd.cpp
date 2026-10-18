@@ -303,7 +303,7 @@ HDAUDIO_RestoreMasterSettings(
     HaveMute = HdaQuerySetting(Key, L"MasterMute", &Mute);
     Key->Release();
 
-    if ((!HaveLevel && !HaveMute) || !NT_SUCCESS(HdaGetMasterAmps(Node, &Nids, &Count, &Caps)))
+    if (!NT_SUCCESS(HdaGetMasterAmps(Node, &Nids, &Count, &Caps)))
         return;
 
     for (Index = 0; Index < Count; Index++)
@@ -316,8 +316,8 @@ HDAUDIO_RestoreMasterSettings(
                 continue;
             if (HaveLevel && Caps.NumSteps)
                 Gain = HdaGainFromLevel((LONG)Level, &Caps);
-            if (HaveMute && Caps.MuteCapable)
-                CurrentMute = Mute ? 1 : 0;
+            if (Caps.MuteCapable)
+                CurrentMute = (HaveMute && Mute) ? 1 : 0;
             Node->SetAmplifierGainMute(Nids[Index], 0, Right, CurrentMute, Gain);
         }
     }
