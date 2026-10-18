@@ -159,7 +159,7 @@ AcpiPrtResolveLink(
     ACPI_STATUS Status;
     BOOLEAN Resolved = FALSE;
 
-    Status = AcpiGetCurrentResources(LinkHandle, &ResourceBuffer);
+    Status = BuspGetCurrentResources(LinkHandle, &ResourceBuffer);
     if (ACPI_FAILURE(Status) || !ResourceBuffer.Pointer)
     {
         if (Status != AE_NOT_FOUND)
@@ -237,7 +237,7 @@ AcpiPrtBuildForHandle(
     ULONG MaxGsi = 0;
 
     /* Pre-scan _CRS for type-4 IRQ encodings so we can map them later. */
-    Status = AcpiGetCurrentResources(Handle, &CrsBuffer);
+    Status = BuspGetCurrentResources(Handle, &CrsBuffer);
     if (ACPI_SUCCESS(Status) && CrsBuffer.Pointer)
     {
         for (CrsResource = (ACPI_RESOURCE *)CrsBuffer.Pointer;
@@ -257,7 +257,7 @@ AcpiPrtBuildForHandle(
         }
     }
 
-    Status = AcpiGetIrqRoutingTable(Handle, &Buffer);
+    Status = BuspGetIrqRoutingTable(Handle, &Buffer);
     if (ACPI_FAILURE(Status))
     {
         if (Status != AE_NOT_FOUND)

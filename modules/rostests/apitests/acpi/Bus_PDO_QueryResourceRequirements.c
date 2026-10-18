@@ -144,6 +144,8 @@ AcpiGetPossibleResources (
     return AE_OK;
 }
 
+#define BuspGetCurrentResources AcpiGetCurrentResources
+#define BuspGetPossibleResources AcpiGetPossibleResources
 #define BuspGpioInterruptCount(DeviceData, Resource) 0
 #define BuspGpioInterruptVector(DeviceData, Resource, ResourceIndex, PinIndex, Gsiv) FALSE
 

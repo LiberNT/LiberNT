@@ -571,7 +571,7 @@ acpi_ec_add(struct acpi_device *device)
 	ec->handle = device->handle;
 	acpi_ec_initialize(ec);
 
-	status = AcpiWalkResources(ec->handle, METHOD_NAME__CRS,
+	status = BuspWalkResources(ec->handle, METHOD_NAME__CRS,
 				   acpi_ec_io_ports, ec);
 	if (ACPI_FAILURE(status) || ec->command_addr == 0 || ec->data_addr == 0) {
 		DPRINT1("Failed to get EC port resources: %s\n",

@@ -656,7 +656,7 @@ BuspLogPciRootResources(
     Buffer.Length = ACPI_ALLOCATE_BUFFER;
     Buffer.Pointer = NULL;
 
-    Status = AcpiGetCurrentResources(Device->handle, &Buffer);
+    Status = BuspGetCurrentResources(Device->handle, &Buffer);
     if (ACPI_FAILURE(Status))
     {
         ACPI_PCIROOT_TRACE("  |_ Failed to evaluate _CRS (Status=0x%08x)\n", Status);

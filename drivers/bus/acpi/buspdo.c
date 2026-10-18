@@ -798,7 +798,7 @@ BuspAreConnectionControllersReady(
 
     if (!DeviceData->AcpiHandle || !DeviceData->ParentFdo)
         return TRUE;
-    if (ACPI_FAILURE(AcpiGetCurrentResources(DeviceData->AcpiHandle, &Buffer)))
+    if (ACPI_FAILURE(BuspGetCurrentResources(DeviceData->AcpiHandle, &Buffer)))
         return TRUE;
 
     FdoData = DeviceData->ParentFdo->DeviceExtension;
@@ -3744,7 +3744,7 @@ Bus_PDO_QueryResources(
 
     Buffer.Length = 0;
     Buffer.Pointer = NULL;
-    AcpiStatus = AcpiGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
+    AcpiStatus = BuspGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
     if ((!ACPI_SUCCESS(AcpiStatus) && AcpiStatus != AE_BUFFER_OVERFLOW) || Buffer.Length == 0)
         return Irp->IoStatus.Status;
 
@@ -3752,7 +3752,7 @@ Bus_PDO_QueryResources(
     if (!Buffer.Pointer)
         return STATUS_INSUFFICIENT_RESOURCES;
 
-    AcpiStatus = AcpiGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
+    AcpiStatus = BuspGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
     if (!ACPI_SUCCESS(AcpiStatus))
     {
         DPRINT1("AcpiGetCurrentResources #2 failed (0x%x)\n", AcpiStatus);
@@ -3816,7 +3816,7 @@ Bus_PDO_QueryResourceRequirements(
 
         Buffer.Length = 0;
         Buffer.Pointer = NULL;
-        AcpiStatus = AcpiGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
+        AcpiStatus = BuspGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
         if ((!ACPI_SUCCESS(AcpiStatus) && AcpiStatus != AE_BUFFER_OVERFLOW) ||
             Buffer.Length == 0)
         {
@@ -3831,9 +3831,9 @@ Bus_PDO_QueryResourceRequirements(
             Buffer.Pointer = NULL;
 
             if (CurrentRes)
-                AcpiStatus = AcpiGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
+                AcpiStatus = BuspGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
             else
-                AcpiStatus = AcpiGetPossibleResources(DeviceData->AcpiHandle, &Buffer);
+                AcpiStatus = BuspGetPossibleResources(DeviceData->AcpiHandle, &Buffer);
 
             if ((!ACPI_SUCCESS(AcpiStatus) && AcpiStatus != AE_BUFFER_OVERFLOW) ||
                 Buffer.Length == 0)
@@ -3856,9 +3856,9 @@ Bus_PDO_QueryResourceRequirements(
         return STATUS_INSUFFICIENT_RESOURCES;
 
     if (CurrentRes)
-        AcpiStatus = AcpiGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
+        AcpiStatus = BuspGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
     else
-        AcpiStatus = AcpiGetPossibleResources(DeviceData->AcpiHandle, &Buffer);
+        AcpiStatus = BuspGetPossibleResources(DeviceData->AcpiHandle, &Buffer);
 
     if (!ACPI_SUCCESS(AcpiStatus))
     {

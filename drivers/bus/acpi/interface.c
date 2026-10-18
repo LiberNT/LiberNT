@@ -250,7 +250,7 @@ AcpiGetDmaWindows(
         }
 
         RtlZeroMemory(&WindowContext, sizeof(WindowContext));
-        Status = AcpiWalkResources(CurrentHandle, METHOD_NAME__DMA, AcpiDmaResourceCallback, &WindowContext);
+        Status = BuspWalkResources(CurrentHandle, METHOD_NAME__DMA, AcpiDmaResourceCallback, &WindowContext);
         if (ACPI_FAILURE(Status) || WindowContext.Overflow || !WindowContext.WindowCount)
         {
             DPRINT1("ACPI: inherited _DMA is invalid (Status 0x%08lx, windows %lu, overflow %u)\n", Status, WindowContext.WindowCount, WindowContext.Overflow);

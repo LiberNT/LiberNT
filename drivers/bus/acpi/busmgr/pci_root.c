@@ -707,7 +707,7 @@ AcpiPciRootExtractResources(
     AcpiPciRootInitWindow(&RootInfo->PrefetchWindow);
     RootInfo->MaxGsi = 0;
 
-    Status = AcpiGetCurrentResources(Handle, &ResourceBuffer);
+    Status = BuspGetCurrentResources(Handle, &ResourceBuffer);
     if (ACPI_FAILURE(Status))
     {
         if (Status != AE_NOT_FOUND)

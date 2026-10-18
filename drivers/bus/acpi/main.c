@@ -14,6 +14,62 @@ DRIVER_ADD_DEVICE Bus_AddDevice;
 extern struct acpi_device *sleep_button;
 extern struct acpi_device *power_button;
 
+static KGUARDED_MUTEX BuspResourceLock;
+
+ACPI_STATUS
+BuspGetCurrentResources(
+    _In_ ACPI_HANDLE Handle,
+    _Inout_ ACPI_BUFFER *Buffer)
+{
+    ACPI_STATUS Status;
+
+    KeAcquireGuardedMutex(&BuspResourceLock);
+    Status = AcpiGetCurrentResources(Handle, Buffer);
+    KeReleaseGuardedMutex(&BuspResourceLock);
+    return Status;
+}
+
+ACPI_STATUS
+BuspGetPossibleResources(
+    _In_ ACPI_HANDLE Handle,
+    _Inout_ ACPI_BUFFER *Buffer)
+{
+    ACPI_STATUS Status;
+
+    KeAcquireGuardedMutex(&BuspResourceLock);
+    Status = AcpiGetPossibleResources(Handle, Buffer);
+    KeReleaseGuardedMutex(&BuspResourceLock);
+    return Status;
+}
+
+ACPI_STATUS
+BuspGetIrqRoutingTable(
+    _In_ ACPI_HANDLE Handle,
+    _Inout_ ACPI_BUFFER *Buffer)
+{
+    ACPI_STATUS Status;
+
+    KeAcquireGuardedMutex(&BuspResourceLock);
+    Status = AcpiGetIrqRoutingTable(Handle, Buffer);
+    KeReleaseGuardedMutex(&BuspResourceLock);
+    return Status;
+}
+
+ACPI_STATUS
+BuspWalkResources(
+    _In_ ACPI_HANDLE Handle,
+    _In_ char *Name,
+    _In_ ACPI_WALK_RESOURCE_CALLBACK Callback,
+    _In_opt_ void *Context)
+{
+    ACPI_STATUS Status;
+
+    KeAcquireGuardedMutex(&BuspResourceLock);
+    Status = AcpiWalkResources(Handle, Name, Callback, Context);
+    KeReleaseGuardedMutex(&BuspResourceLock);
+    return Status;
+}
+
 static
 NTSTATUS
 AcpiGetSystemTableIoctl(
@@ -1089,6 +1145,8 @@ DriverEntry (
 {
     NTSTATUS Status;
     DPRINT("Driver Entry \n");
+
+    KeInitializeGuardedMutex(&BuspResourceLock);
 
     Status = GetProcessorInformation();
     if (!NT_SUCCESS(Status))
