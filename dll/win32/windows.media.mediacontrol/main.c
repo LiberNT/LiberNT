@@ -21,10 +21,20 @@
 #include "private.h"
 
 #include "wine/debug.h"
+#ifdef __REACTOS__
+#include "winuser.h"
+#include "wine/list.h"
+
+#define MEDIA_SESSION_CLASS L"LiberNTMediaSession"
+#define MEDIA_SESSION_STATUS L"LiberNTMediaStatus"
+#define MEDIA_SESSION_TICK L"LiberNTMediaTick"
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(mediacontrol);
 
+#ifndef __REACTOS__
 static EventRegistrationToken dummy_token = {.value = 0xdeadbeef};
+#endif
 
 struct media_control_statics
 {
@@ -324,6 +334,10 @@ struct display_updater
     LONG ref;
 
     MediaPlaybackType playback_type;
+#ifdef __REACTOS__
+    HWND session;
+    struct music_properties *music;
+#endif
 };
 
 static inline struct display_updater *impl_from_ISystemMediaTransportControlsDisplayUpdater( ISystemMediaTransportControlsDisplayUpdater *iface )
@@ -367,9 +381,34 @@ static ULONG WINAPI display_updater_Release( ISystemMediaTransportControlsDispla
 
     TRACE( "iface %p decreasing refcount to %lu.\n", iface, ref );
 
+#ifdef __REACTOS__
+    if (!ref)
+    {
+        if (impl->music) IMusicDisplayProperties_Release( &impl->music->IMusicDisplayProperties_iface );
+        free( impl );
+    }
+#else
     if (!ref) free( impl );
+#endif
     return ref;
 }
+
+#ifdef __REACTOS__
+static void display_updater_publish( struct display_updater *impl )
+{
+    const WCHAR *title = L"", *artist = L"";
+    WCHAR text[512];
+
+    if (!impl->session) return;
+    if (impl->music)
+    {
+        title = WindowsGetStringRawBuffer( impl->music->title, NULL );
+        artist = WindowsGetStringRawBuffer( impl->music->artist, NULL );
+    }
+    swprintf( text, ARRAY_SIZE(text), L"%s\n%s", title, artist );
+    SendMessageTimeoutW( impl->session, WM_SETTEXT, 0, (LPARAM)text, SMTO_ABORTIFHUNG, 200, NULL );
+}
+#endif
 
 static HRESULT WINAPI display_updater_GetIids( ISystemMediaTransportControlsDisplayUpdater *iface, ULONG *iid_count, IID **iids )
 {
@@ -439,15 +478,30 @@ static HRESULT WINAPI display_updater_put_Thumbnail( ISystemMediaTransportContro
 static HRESULT WINAPI display_updater_get_MusicProperties( ISystemMediaTransportControlsDisplayUpdater *iface, IMusicDisplayProperties **value )
 {
     struct music_properties *impl;
+#ifdef __REACTOS__
+    struct display_updater *updater = impl_from_ISystemMediaTransportControlsDisplayUpdater( iface );
+#endif
 
     TRACE( "iface %p, value %p\n", iface, value );
 
+#ifdef __REACTOS__
+    if (updater->music)
+    {
+        *value = &updater->music->IMusicDisplayProperties_iface;
+        IMusicDisplayProperties_AddRef( *value );
+        return S_OK;
+    }
+#endif
     if (!(impl = calloc( 1, sizeof(*impl) ))) return E_OUTOFMEMORY;
 
     impl->IMusicDisplayProperties_iface.lpVtbl = &music_properties_vtbl;
     impl->IMusicDisplayProperties2_iface.lpVtbl = &music_properties2_vtbl;
     impl->ref = 1;
 
+#ifdef __REACTOS__
+    updater->music = impl;
+    IMusicDisplayProperties_AddRef( &impl->IMusicDisplayProperties_iface );
+#endif
     *value = &impl->IMusicDisplayProperties_iface;
     TRACE( "created IMusicDisplayProperties %p.\n", *value );
     return S_OK;
@@ -474,13 +528,33 @@ static HRESULT WINAPI display_updater_CopyFromFileAsync( ISystemMediaTransportCo
 
 static HRESULT WINAPI display_updater_ClearAll( ISystemMediaTransportControlsDisplayUpdater *iface )
 {
+#ifdef __REACTOS__
+    struct display_updater *impl = impl_from_ISystemMediaTransportControlsDisplayUpdater( iface );
+
+    TRACE( "iface %p\n", iface );
+
+    if (impl->music)
+    {
+        WindowsDeleteString( impl->music->album_title );
+        WindowsDeleteString( impl->music->artist );
+        WindowsDeleteString( impl->music->title );
+        impl->music->album_title = impl->music->artist = impl->music->title = NULL;
+    }
+    display_updater_publish( impl );
+#else
     FIXME( "iface %p stub!\n", iface );
+#endif
     return S_OK;
 }
 
 static HRESULT WINAPI display_updater_Update( ISystemMediaTransportControlsDisplayUpdater *iface )
 {
+#ifdef __REACTOS__
+    TRACE( "iface %p\n", iface );
+    display_updater_publish( impl_from_ISystemMediaTransportControlsDisplayUpdater( iface ) );
+#else
     FIXME( "iface %p stub!\n", iface );
+#endif
     return S_OK;
 }
 
@@ -521,12 +595,290 @@ struct media_control
     boolean is_previous_enabled;
     boolean is_next_enabled;
     boolean is_enabled;
+#ifdef __REACTOS__
+    HWND session;
+    struct list button_handlers;
+    struct display_updater *updater;
+#endif
 };
 
 static inline struct media_control *impl_from_ISystemMediaTransportControls( ISystemMediaTransportControls *iface )
 {
     return CONTAINING_RECORD( iface, struct media_control, ISystemMediaTransportControls_iface );
 }
+
+#ifdef __REACTOS__
+static CRITICAL_SECTION session_cs;
+static CRITICAL_SECTION_DEBUG session_cs_debug =
+{
+    0, 0, &session_cs,
+    { &session_cs_debug.ProcessLocksList, &session_cs_debug.ProcessLocksList },
+      0, 0, { (DWORD_PTR)(__FILE__ ": session_cs") }
+};
+static CRITICAL_SECTION session_cs = { &session_cs_debug, -1, 0, 0, 0, 0 };
+static EventRegistrationToken next_button_token = {.value = 1};
+
+struct button_handler
+{
+    struct list entry;
+    EventRegistrationToken token;
+    ITypedEventHandler_SystemMediaTransportControls_SystemMediaTransportControlsButtonPressedEventArgs *handler;
+};
+
+struct button_args
+{
+    ISystemMediaTransportControlsButtonPressedEventArgs ISystemMediaTransportControlsButtonPressedEventArgs_iface;
+    LONG ref;
+    SystemMediaTransportControlsButton button;
+};
+
+static inline struct button_args *impl_from_ISystemMediaTransportControlsButtonPressedEventArgs( ISystemMediaTransportControlsButtonPressedEventArgs *iface )
+{
+    return CONTAINING_RECORD( iface, struct button_args, ISystemMediaTransportControlsButtonPressedEventArgs_iface );
+}
+
+static HRESULT WINAPI button_args_QueryInterface( ISystemMediaTransportControlsButtonPressedEventArgs *iface, REFIID iid, void **out )
+{
+    struct button_args *impl = impl_from_ISystemMediaTransportControlsButtonPressedEventArgs( iface );
+
+    TRACE( "iface %p, iid %s, out %p.\n", iface, debugstr_guid( iid ), out );
+
+    if (IsEqualGUID( iid, &IID_IUnknown ) ||
+        IsEqualGUID( iid, &IID_IInspectable ) ||
+        IsEqualGUID( iid, &IID_IAgileObject ) ||
+        IsEqualGUID( iid, &IID_ISystemMediaTransportControlsButtonPressedEventArgs ))
+    {
+        *out = &impl->ISystemMediaTransportControlsButtonPressedEventArgs_iface;
+        IInspectable_AddRef( *out );
+        return S_OK;
+    }
+
+    FIXME( "%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid( iid ) );
+    *out = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI button_args_AddRef( ISystemMediaTransportControlsButtonPressedEventArgs *iface )
+{
+    struct button_args *impl = impl_from_ISystemMediaTransportControlsButtonPressedEventArgs( iface );
+    return InterlockedIncrement( &impl->ref );
+}
+
+static ULONG WINAPI button_args_Release( ISystemMediaTransportControlsButtonPressedEventArgs *iface )
+{
+    struct button_args *impl = impl_from_ISystemMediaTransportControlsButtonPressedEventArgs( iface );
+    ULONG ref = InterlockedDecrement( &impl->ref );
+
+    if (!ref) free( impl );
+    return ref;
+}
+
+static HRESULT WINAPI button_args_GetIids( ISystemMediaTransportControlsButtonPressedEventArgs *iface, ULONG *iid_count, IID **iids )
+{
+    FIXME( "iface %p, iid_count %p, iids %p stub!\n", iface, iid_count, iids );
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI button_args_GetRuntimeClassName( ISystemMediaTransportControlsButtonPressedEventArgs *iface, HSTRING *class_name )
+{
+    FIXME( "iface %p, class_name %p stub!\n", iface, class_name );
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI button_args_GetTrustLevel( ISystemMediaTransportControlsButtonPressedEventArgs *iface, TrustLevel *trust_level )
+{
+    FIXME( "iface %p, trust_level %p stub!\n", iface, trust_level );
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI button_args_get_Button( ISystemMediaTransportControlsButtonPressedEventArgs *iface, SystemMediaTransportControlsButton *value )
+{
+    struct button_args *impl = impl_from_ISystemMediaTransportControlsButtonPressedEventArgs( iface );
+
+    TRACE( "iface %p, value %p\n", iface, value );
+
+    *value = impl->button;
+    return S_OK;
+}
+
+static const struct ISystemMediaTransportControlsButtonPressedEventArgsVtbl button_args_vtbl =
+{
+    button_args_QueryInterface,
+    button_args_AddRef,
+    button_args_Release,
+    /* IInspectable methods */
+    button_args_GetIids,
+    button_args_GetRuntimeClassName,
+    button_args_GetTrustLevel,
+    /* ISystemMediaTransportControlsButtonPressedEventArgs methods */
+    button_args_get_Button,
+};
+
+static void session_update( struct media_control *impl, BOOL activity )
+{
+    if (!impl->session) return;
+
+    if (impl->is_enabled)
+        SetPropW( impl->session, MEDIA_SESSION_STATUS, (HANDLE)(ULONG_PTR)(impl->media_playback_status + 1) );
+    else
+        RemovePropW( impl->session, MEDIA_SESSION_STATUS );
+    if (activity)
+        SetPropW( impl->session, MEDIA_SESSION_TICK, (HANDLE)(ULONG_PTR)GetTickCount() );
+}
+
+static BOOL session_button( struct media_control *impl, UINT command, SystemMediaTransportControlsButton *button )
+{
+    if (!impl->is_enabled) return FALSE;
+
+    switch (command)
+    {
+    case APPCOMMAND_MEDIA_PLAY_PAUSE:
+        if (impl->media_playback_status == MediaPlaybackStatus_Playing)
+        {
+            *button = SystemMediaTransportControlsButton_Pause;
+            return impl->is_pause_enabled;
+        }
+        *button = SystemMediaTransportControlsButton_Play;
+        return impl->is_play_enabled;
+    case APPCOMMAND_MEDIA_PLAY:
+        *button = SystemMediaTransportControlsButton_Play;
+        return impl->is_play_enabled;
+    case APPCOMMAND_MEDIA_PAUSE:
+        *button = SystemMediaTransportControlsButton_Pause;
+        return impl->is_pause_enabled;
+    case APPCOMMAND_MEDIA_STOP:
+        *button = SystemMediaTransportControlsButton_Stop;
+        return impl->is_stop_enabled;
+    case APPCOMMAND_MEDIA_NEXTTRACK:
+        *button = SystemMediaTransportControlsButton_Next;
+        return impl->is_next_enabled;
+    case APPCOMMAND_MEDIA_PREVIOUSTRACK:
+        *button = SystemMediaTransportControlsButton_Previous;
+        return impl->is_previous_enabled;
+    }
+    return FALSE;
+}
+
+static void session_notify( struct media_control *impl, SystemMediaTransportControlsButton button )
+{
+    struct button_handler *entry, *next, *copy;
+    struct list copies = LIST_INIT( copies );
+    struct button_args *args;
+
+    if (!(args = calloc( 1, sizeof(*args) ))) return;
+    args->ISystemMediaTransportControlsButtonPressedEventArgs_iface.lpVtbl = &button_args_vtbl;
+    args->ref = 1;
+    args->button = button;
+
+    EnterCriticalSection( &session_cs );
+    LIST_FOR_EACH_ENTRY( entry, &impl->button_handlers, struct button_handler, entry )
+    {
+        if (!(copy = calloc( 1, sizeof(*copy) ))) continue;
+        copy->handler = entry->handler;
+        ITypedEventHandler_SystemMediaTransportControls_SystemMediaTransportControlsButtonPressedEventArgs_AddRef( copy->handler );
+        list_add_tail( &copies, &copy->entry );
+    }
+    LeaveCriticalSection( &session_cs );
+
+    LIST_FOR_EACH_ENTRY_SAFE( entry, next, &copies, struct button_handler, entry )
+    {
+        ITypedEventHandler_SystemMediaTransportControls_SystemMediaTransportControlsButtonPressedEventArgs_Invoke( entry->handler,
+            &impl->ISystemMediaTransportControls_iface, &args->ISystemMediaTransportControlsButtonPressedEventArgs_iface );
+        ITypedEventHandler_SystemMediaTransportControls_SystemMediaTransportControlsButtonPressedEventArgs_Release( entry->handler );
+        list_remove( &entry->entry );
+        free( entry );
+    }
+
+    ISystemMediaTransportControlsButtonPressedEventArgs_Release( &args->ISystemMediaTransportControlsButtonPressedEventArgs_iface );
+}
+
+static LRESULT CALLBACK session_wndproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
+{
+    SystemMediaTransportControlsButton button;
+    struct media_control *impl;
+    LONG ref;
+
+    if (msg != WM_APPCOMMAND) return DefWindowProcW( hwnd, msg, wparam, lparam );
+
+    EnterCriticalSection( &session_cs );
+    impl = (struct media_control *)GetWindowLongPtrW( hwnd, GWLP_USERDATA );
+    while (impl)
+    {
+        if (!(ref = impl->ref)) impl = NULL;
+        else if (InterlockedCompareExchange( &impl->ref, ref + 1, ref ) == ref) break;
+    }
+    LeaveCriticalSection( &session_cs );
+    if (!impl) return 0;
+
+    TRACE( "session %p command %u\n", hwnd, GET_APPCOMMAND_LPARAM( lparam ) );
+    if (session_button( impl, GET_APPCOMMAND_LPARAM( lparam ), &button ))
+    {
+        session_update( impl, TRUE );
+        session_notify( impl, button );
+    }
+    ISystemMediaTransportControls_Release( &impl->ISystemMediaTransportControls_iface );
+    return TRUE;
+}
+
+static BOOL WINAPI session_register_class( INIT_ONCE *once, void *param, void **context )
+{
+    WNDCLASSEXW wc = { sizeof(wc) };
+
+    GetModuleHandleExW( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                        (const WCHAR *)session_wndproc, &wc.hInstance );
+    wc.lpfnWndProc = session_wndproc;
+    wc.lpszClassName = MEDIA_SESSION_CLASS;
+    return RegisterClassExW( &wc ) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+}
+
+static void session_create( struct media_control *impl )
+{
+    static INIT_ONCE once = INIT_ONCE_STATIC_INIT;
+    HINSTANCE instance = NULL;
+
+    list_init( &impl->button_handlers );
+    if (!InitOnceExecuteOnce( &once, session_register_class, NULL, NULL )) return;
+
+    GetModuleHandleExW( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                        (const WCHAR *)session_wndproc, &instance );
+    impl->session = CreateWindowExW( 0, MEDIA_SESSION_CLASS, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, instance, NULL );
+    if (!impl->session) return;
+    SetWindowLongPtrW( impl->session, GWLP_USERDATA, (LONG_PTR)impl );
+    session_update( impl, TRUE );
+}
+
+static void session_destroy( struct media_control *impl )
+{
+    struct button_handler *entry, *next;
+
+    if (impl->session)
+    {
+        EnterCriticalSection( &session_cs );
+        SetWindowLongPtrW( impl->session, GWLP_USERDATA, 0 );
+        LeaveCriticalSection( &session_cs );
+        RemovePropW( impl->session, MEDIA_SESSION_STATUS );
+        RemovePropW( impl->session, MEDIA_SESSION_TICK );
+        if (GetWindowThreadProcessId( impl->session, NULL ) == GetCurrentThreadId())
+            DestroyWindow( impl->session );
+        else
+            PostMessageW( impl->session, WM_CLOSE, 0, 0 );
+    }
+
+    LIST_FOR_EACH_ENTRY_SAFE( entry, next, &impl->button_handlers, struct button_handler, entry )
+    {
+        list_remove( &entry->entry );
+        ITypedEventHandler_SystemMediaTransportControls_SystemMediaTransportControlsButtonPressedEventArgs_Release( entry->handler );
+        free( entry );
+    }
+
+    if (impl->updater)
+    {
+        impl->updater->session = NULL;
+        ISystemMediaTransportControlsDisplayUpdater_Release( &impl->updater->ISystemMediaTransportControlsDisplayUpdater_iface );
+        impl->updater = NULL;
+    }
+}
+#endif
 
 static HRESULT WINAPI media_control_QueryInterface( ISystemMediaTransportControls *iface, REFIID iid, void **out )
 {
@@ -564,7 +916,15 @@ static ULONG WINAPI media_control_Release( ISystemMediaTransportControls *iface 
 
     TRACE( "iface %p decreasing refcount to %lu.\n", iface, ref );
 
+#ifdef __REACTOS__
+    if (!ref)
+    {
+        session_destroy( impl );
+        free( impl );
+    }
+#else
     if (!ref) free( impl );
+#endif
     return ref;
 }
 
@@ -603,20 +963,45 @@ static HRESULT WINAPI media_control_put_PlaybackStatus( ISystemMediaTransportCon
     TRACE( "iface %p, value %d\n", iface, value );
 
     if (value < MediaPlaybackStatus_Closed || value > MediaPlaybackStatus_Paused) return E_INVALIDARG;
+#ifdef __REACTOS__
+    if (impl->media_playback_status != value)
+    {
+        impl->media_playback_status = value;
+        session_update( impl, value == MediaPlaybackStatus_Playing );
+    }
+#else
     impl->media_playback_status = value;
+#endif
     return S_OK;
 }
 
 static HRESULT WINAPI media_control_get_DisplayUpdater( ISystemMediaTransportControls *iface, ISystemMediaTransportControlsDisplayUpdater **value )
 {
     struct display_updater *impl;
+#ifdef __REACTOS__
+    struct media_control *control = impl_from_ISystemMediaTransportControls( iface );
 
+    TRACE( "iface %p, value %p\n", iface, value );
+
+    if (control->updater)
+    {
+        *value = &control->updater->ISystemMediaTransportControlsDisplayUpdater_iface;
+        ISystemMediaTransportControlsDisplayUpdater_AddRef( *value );
+        return S_OK;
+    }
+#else
     FIXME( "iface %p, value %p semi-stub!\n", iface, value );
+#endif
 
     if (!(impl = calloc( 1, sizeof(*impl) ))) return E_OUTOFMEMORY;
 
     impl->ISystemMediaTransportControlsDisplayUpdater_iface.lpVtbl = &display_updater_vtbl;
     impl->ref = 1;
+#ifdef __REACTOS__
+    impl->session = control->session;
+    control->updater = impl;
+    ISystemMediaTransportControlsDisplayUpdater_AddRef( &impl->ISystemMediaTransportControlsDisplayUpdater_iface );
+#endif
 
     *value = &impl->ISystemMediaTransportControlsDisplayUpdater_iface;
     TRACE( "created ISystemMediaTransportControlsDisplayUpdater %p.\n", *value );
@@ -646,6 +1031,9 @@ static HRESULT WINAPI media_control_put_IsEnabled( ISystemMediaTransportControls
     TRACE( "iface %p, value %d\n", iface, value );
 
     impl->is_enabled = value;
+#ifdef __REACTOS__
+    session_update( impl, value );
+#endif
     return S_OK;
 }
 
@@ -812,15 +1200,55 @@ static HRESULT WINAPI media_control_put_IsChannelDownEnabled( ISystemMediaTransp
 static HRESULT WINAPI media_control_add_ButtonPressed( ISystemMediaTransportControls *iface,
     ITypedEventHandler_SystemMediaTransportControls_SystemMediaTransportControlsButtonPressedEventArgs *handler, EventRegistrationToken *token )
 {
+#ifdef __REACTOS__
+    struct media_control *impl = impl_from_ISystemMediaTransportControls( iface );
+    struct button_handler *entry;
+
+    TRACE( "iface %p, handler %p, token %p\n", iface, handler, token );
+
+    if (!handler || !token) return E_POINTER;
+    if (!(entry = calloc( 1, sizeof(*entry) ))) return E_OUTOFMEMORY;
+    entry->handler = handler;
+    ITypedEventHandler_SystemMediaTransportControls_SystemMediaTransportControlsButtonPressedEventArgs_AddRef( handler );
+
+    EnterCriticalSection( &session_cs );
+    *token = entry->token = next_button_token;
+    next_button_token.value++;
+    list_add_tail( &impl->button_handlers, &entry->entry );
+    LeaveCriticalSection( &session_cs );
+    return S_OK;
+#else
     FIXME( "iface %p, handler %p, token %p stub!\n", iface, handler, token );
     *token = dummy_token;
     return S_OK;
+#endif
 }
 
 static HRESULT WINAPI media_control_remove_ButtonPressed( ISystemMediaTransportControls *iface, EventRegistrationToken token )
 {
+#ifdef __REACTOS__
+    struct media_control *impl = impl_from_ISystemMediaTransportControls( iface );
+    struct button_handler *entry;
+    BOOL found = FALSE;
+
+    TRACE( "iface %p, token %#I64x\n", iface, token.value );
+
+    EnterCriticalSection( &session_cs );
+    LIST_FOR_EACH_ENTRY( entry, &impl->button_handlers, struct button_handler, entry )
+        if ((found = (entry->token.value == token.value))) break;
+    if (found) list_remove( &entry->entry );
+    LeaveCriticalSection( &session_cs );
+
+    if (found)
+    {
+        ITypedEventHandler_SystemMediaTransportControls_SystemMediaTransportControlsButtonPressedEventArgs_Release( entry->handler );
+        free( entry );
+    }
+    return S_OK;
+#else
     FIXME( "iface %p, token %#I64x stub!\n", iface, token.value );
     return S_OK;
+#endif
 }
 
 static HRESULT WINAPI media_control_add_PropertyChanged( ISystemMediaTransportControls *iface,
@@ -893,6 +1321,9 @@ static HRESULT WINAPI media_control_statics_GetForWindow( ISystemMediaTransportC
     impl->ISystemMediaTransportControls_iface.lpVtbl = &media_control_vtbl;
     impl->ref = 2;
     impl->window = window;
+#ifdef __REACTOS__
+    session_create( impl );
+#endif
 
     TRACE( "created ISystemMediaTransportControls %p.\n", *control );
 
