@@ -169,7 +169,6 @@ AddReg=Classes
 11,,zipfldr.dll,1
 
 [OleControlDllsCode]
-11,,explorerframe.dll,1
 11,,cryptdlg.dll,1
 11,,cryptnet.dll,1
 11,,winegstreamer.dll,1
