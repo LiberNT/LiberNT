@@ -76,6 +76,17 @@
 #define IDI_FLU_LOCK         352
 #define IDI_FLU_AIRPLANE     353
 #define IDI_FLU_WIFIWARN     354
+#define IDI_FLU_WIFI1_LIGHT        1300
+#define IDI_FLU_WIFI2_LIGHT        1301
+#define IDI_FLU_WIFI3_LIGHT        1302
+#define IDI_FLU_WIFI4_LIGHT        1303
+#define IDI_FLU_WIFIOFF_LIGHT      1304
+#define IDI_FLU_SPK0_LIGHT         1309
+#define IDI_FLU_SPK1_LIGHT         1310
+#define IDI_FLU_SPK2_LIGHT         1311
+#define IDI_FLU_SPKMUTE_LIGHT      1312
+#define IDI_FLU_SPK3_LIGHT         1313
+#define IDI_FLU_WIFIWARN_LIGHT     1354
 #define IDI_FLU_BATT0        355
 #define IDI_FLU_BATT1        356
 #define IDI_FLU_BATT2        357

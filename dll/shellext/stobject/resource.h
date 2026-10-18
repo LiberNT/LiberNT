@@ -60,6 +60,26 @@
 
 #define IDI_HOTPLUG_ERR           420
 #define IDI_HOTPLUG_OK            421
+#define IDI_VOLUME_LIGHT           1230
+#define IDI_VOLMUTE_LIGHT          1231
+#define IDI_VOLUME0_LIGHT          1232
+#define IDI_VOLUME1_LIGHT          1233
+#define IDI_VOLUME3_LIGHT          1234
+#define IDI_BATTCAP0_LIGHT         1400
+#define IDI_BATTCAP1_LIGHT         1401
+#define IDI_BATTCAP2_LIGHT         1402
+#define IDI_BATTCAP3_LIGHT         1403
+#define IDI_BATTCAP4_LIGHT         1404
+#define IDI_BATTCAP5_LIGHT         1405
+#define IDI_BATTCHA0_LIGHT         1406
+#define IDI_BATTCHA1_LIGHT         1407
+#define IDI_BATTCHA2_LIGHT         1408
+#define IDI_BATTCHA3_LIGHT         1409
+#define IDI_BATTCHA4_LIGHT         1410
+#define IDI_BATTCAP_ERR_LIGHT      1412
+#define IDI_POWER_AC_LIGHT         1413
+#define IDI_HOTPLUG_ERR_LIGHT      1420
+#define IDI_HOTPLUG_OK_LIGHT       1421
 
 #define IDI_MOUSE_DISABLED        440
 #define IDI_MOUSE_NOBTN           441

@@ -251,6 +251,21 @@ HRESULT STDMETHODCALLTYPE Hotplug_Message(_In_ CSysTray * pSysTray, UINT uMsg, W
 
     switch (uMsg)
     {
+        case WM_SETTINGCHANGE:
+            if (lParam && !lstrcmpiW((LPCWSTR)lParam, L"ImmersiveColorSet") &&
+                pSysTray->IsServiceEnabled(HOTPLUG_SERVICE_FLAG) && g_hIconHotplug)
+            {
+                HICON hOld = g_hIconHotplug;
+                HRESULT hr;
+
+                g_hIconHotplug = StoLoadTrayIcon(g_hInstance, IDI_HOTPLUG_OK);
+                hr = pSysTray->NotifyIcon(NIM_MODIFY, ID_ICON_HOTPLUG, g_hIconHotplug, g_strHotplugTooltip,
+                                          g_devList.GetSize() > 0 ? 0 : NIS_HIDDEN);
+                DestroyIcon(hOld);
+                return hr;
+            }
+            return S_FALSE;
+
         case WM_USER + 220:
             TRACE("Hotplug_Message: WM_USER+220\n");
             if (wParam == HOTPLUG_SERVICE_FLAG)

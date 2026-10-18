@@ -361,16 +361,75 @@ ShellGetTrayPillRect(IN const RECT *prcClient, OUT RECT *prcPill)
 }
 
 VOID
+ShellDrawIconTinted(IN HDC hdc, IN INT x, IN INT y, IN HICON hIcon, IN INT cx, IN INT cy, IN COLORREF crInk)
+{
+    BLENDFUNCTION Blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+    ICONINFO Info;
+    BITMAP bm;
+    BITMAPINFO bmi;
+    PULONG pBits = NULL;
+    HBITMAP hbm = NULL;
+    HDC hdcMem;
+    HGDIOBJ hbmOld;
+    INT i;
+
+    if (!GetIconInfo(hIcon, &Info))
+        return;
+    hdcMem = CreateCompatibleDC(hdc);
+    if (hdcMem && Info.hbmColor && GetObjectW(Info.hbmColor, sizeof(bm), &bm) && bm.bmWidth > 0 && bm.bmHeight > 0)
+    {
+        ZeroMemory(&bmi, sizeof(bmi));
+        bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+        bmi.bmiHeader.biWidth = bm.bmWidth;
+        bmi.bmiHeader.biHeight = -bm.bmHeight;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        hbm = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, (PVOID *)&pBits, NULL, 0);
+    }
+    if (hbm && pBits &&
+        GetDIBits(hdcMem, Info.hbmColor, 0, bm.bmHeight, pBits, &bmi, DIB_RGB_COLORS) == bm.bmHeight)
+    {
+        for (i = 0; i < bm.bmWidth * bm.bmHeight; i++)
+        {
+            ULONG px = pBits[i], a = px >> 24;
+            ULONG r = (px >> 16) & 0xFF, g = (px >> 8) & 0xFF, b = px & 0xFF;
+
+            if (max(r, max(g, b)) - min(r, min(g, b)) <= 24)
+            {
+                r = GetRValue(crInk);
+                g = GetGValue(crInk);
+                b = GetBValue(crInk);
+            }
+            pBits[i] = (a << 24) | ((r * a / 255) << 16) | ((g * a / 255) << 8) | (b * a / 255);
+        }
+        hbmOld = SelectObject(hdcMem, hbm);
+        GdiAlphaBlend(hdc, x, y, cx, cy, hdcMem, 0, 0, bm.bmWidth, bm.bmHeight, Blend);
+        SelectObject(hdcMem, hbmOld);
+    }
+    if (hbm)
+        DeleteObject(hbm);
+    if (hdcMem)
+        DeleteDC(hdcMem);
+    if (Info.hbmColor)
+        DeleteObject(Info.hbmColor);
+    if (Info.hbmMask)
+        DeleteObject(Info.hbmMask);
+}
+
+VOID
 ShellDrawTrayGlyph(IN HDC hdc, IN const RECT *prc, IN UINT nIconId)
 {
     INT cx = GetSystemMetrics(SM_CXSMICON), cy = GetSystemMetrics(SM_CYSMICON);
     HICON hIcon = (HICON)LoadImageW(hExplorerInstance, MAKEINTRESOURCEW(nIconId),
                                     IMAGE_ICON, cx, cy, LR_SHARED);
+    INT x = prc->left + (prc->right - prc->left - cx) / 2;
+    INT y = prc->top + (prc->bottom - prc->top - cy) / 2;
 
-    if (hIcon)
-    {
-        DrawIconEx(hdc, prc->left + (prc->right - prc->left - cx) / 2,
-                   prc->top + (prc->bottom - prc->top - cy) / 2,
-                   hIcon, cx, cy, 0, NULL, DI_NORMAL);
-    }
+    if (!hIcon)
+        return;
+    if (ShellTaskbarIsLight())
+        ShellDrawIconTinted(hdc, x, y, hIcon, cx, cy, RGB(25, 25, 25));
+    else
+        DrawIconEx(hdc, x, y, hIcon, cx, cy, 0, NULL, DI_NORMAL);
 }

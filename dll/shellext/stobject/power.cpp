@@ -300,6 +300,12 @@ HRESULT STDMETHODCALLTYPE Power_Message(_In_ CSysTray * pSysTray, UINT uMsg, WPA
 
     switch (uMsg)
     {
+        case WM_SETTINGCHANGE:
+            if (lParam && !lstrcmpiW((LPCWSTR)lParam, L"ImmersiveColorSet") &&
+                pSysTray->IsServiceEnabled(POWER_SERVICE_FLAG) && g_bPowerIconShown)
+                return Power_Update(pSysTray);
+            return S_FALSE;
+
         case WM_USER + 220:
             TRACE("Power_Message: WM_USER+220\n");
             if (wParam == POWER_SERVICE_FLAG)

@@ -469,7 +469,7 @@ public:
                 {
                     if (state & BST_PUSHED)
                     {
-                        cr = ShellLiftColor(cr, 14);
+                        cr = ShellLiftColor(cr, ShellColorIsLight(cr) ? -14 : 14);
                         iImage = PBS_PRESSED - 1;
                     }
                     else if (state & BST_HOT)
@@ -2432,8 +2432,28 @@ ChangePos:
 
         if (m_Theme)
         {
+            COLORREF crMaterial;
+
             GetClientRect(&rect);
-            DrawThemeBackground(m_Theme, hdc, iSBkgndPart[m_Position], 0, &rect, 0);
+            if (ShellGetTaskbarMaterial(&crMaterial) && ShellColorIsLight(crMaterial))
+            {
+                HBRUSH hbr = CreateSolidBrush(crMaterial);
+
+                FillRect(hdc, &rect, hbr);
+                DeleteObject(hbr);
+                if (m_Position == ABE_BOTTOM || m_Position == ABE_TOP)
+                {
+                    RECT rcEdge = { rect.left, rect.top, rect.right, rect.top + 1 };
+
+                    hbr = CreateSolidBrush(RGB(190, 190, 190));
+                    FillRect(hdc, &rcEdge, hbr);
+                    DeleteObject(hbr);
+                }
+            }
+            else
+            {
+                DrawThemeBackground(m_Theme, hdc, iSBkgndPart[m_Position], 0, &rect, 0);
+            }
         }
 
         return 0;
@@ -2837,6 +2857,9 @@ ChangePos:
 
     LRESULT OnSettingChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
+        if (lParam && lstrcmpiW((LPCWSTR)lParam, L"ImmersiveColorSet") == 0)
+            OnThemeChanged(WM_THEMECHANGED, 0, 0, bHandled);
+
         if (wParam == SPI_SETNONCLIENTMETRICS)
         {
             SendMessage(m_TrayNotify, uMsg, wParam, lParam);

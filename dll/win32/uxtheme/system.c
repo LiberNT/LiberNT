@@ -33,6 +33,7 @@
 #include "winnls.h"
 #include "resource.h"
 #include <reactos/dwmframe.h>
+#include <reactos/trayicons.h>
 #include <dwmapi.h>
 #endif
 
@@ -764,7 +765,18 @@ static void UXTHEME_ApplyLiquidProperties(HWND hwnd, LPCWSTR classList,
     if (!role)
         return;
 
-    liquid = bThemeActive ? MSSTYLES_OpenThemeClass(role, L"Liquid", dpi) : NULL;
+    liquid = NULL;
+    if (bThemeActive && !lstrcmpW(role, L"Taskbar") && ShellSystemUsesLightTheme())
+    {
+        liquid = MSSTYLES_OpenThemeClass(L"TaskbarLight", L"Liquid", dpi);
+        if (liquid && (FAILED(GetThemeBool(liquid, 0, 0, TMT_COMPOSITED, &composited)) || !composited))
+        {
+            MSSTYLES_CloseThemeClass(liquid);
+            liquid = NULL;
+        }
+    }
+    if (!liquid && bThemeActive)
+        liquid = MSSTYLES_OpenThemeClass(role, L"Liquid", dpi);
     if (!liquid || FAILED(GetThemeBool(liquid, 0, 0, TMT_COMPOSITED,
                                        &composited)) || !composited ||
         FAILED(GetThemeInt(liquid, 0, 0, TMT_OPACITY, &opacity)) ||

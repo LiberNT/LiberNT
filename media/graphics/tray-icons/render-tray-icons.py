@@ -19,6 +19,8 @@ WHITE = (0xFF, 0xFF, 0xFF, 0xFF)
 RED = (0xE8, 0x11, 0x23, 0xFF)
 YELLOW = (0xFF, 0xC8, 0x00, 0xFF)
 INK = (0x10, 0x10, 0x10, 0xFF)
+LIGHT_HALO = (0xFF, 0xFF, 0xFF, 0x99)
+LIGHT_GLYPH = (0x19, 0x19, 0x19, 0xFF)
 BASE = ("white", "dim", "dark")
 BADGE = ("red", "yellow")
 MARK = ("bwhite", "ink")
@@ -97,7 +99,7 @@ def prune(c, least, cut):
                 c.px[name] -= part
 
 
-def compose(c):
+def compose(c, light):
     s = c.s
     badge = c.px["red"] | c.px["yellow"]
     if badge:
@@ -112,7 +114,8 @@ def compose(c):
         for i in range(s):
             p = (i, j)
             px = (0, 0, 0, 0)
-            for name, rgba in (("halo", HALO), ("dim", DIM), ("white", WHITE), ("red", RED),
+            for name, rgba in (("halo", LIGHT_HALO if light else HALO), ("dim", DIM),
+                               ("white", LIGHT_GLYPH if light else WHITE), ("red", RED),
                                ("yellow", YELLOW), ("bwhite", WHITE), ("ink", INK)):
                 if p in (halo if name == "halo" else c.px[name]):
                     px = rgba
@@ -380,14 +383,14 @@ ICONS = (
 )
 
 
-def render(draw, s):
+def render(draw, s, light=False):
     c = Canvas(s)
     draw(c)
     for name, pts in c.px.items():
         for i, j in pts:
             if not (c.h <= i < s - c.h and c.h <= j < s - c.h):
                 raise ValueError("%s at %d px leaves the frame at %d,%d" % (name, s, i, j))
-    return compose(c)
+    return compose(c, light)
 
 
 def ico(frames):
@@ -456,6 +459,7 @@ def main():
         out = root / name
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(ico([(s, render(draw, s)) for s in SIZES]))
+        out.with_name(out.stem + "_light.ico").write_bytes(ico([(s, render(draw, s, True)) for s in SIZES]))
 
 
 if __name__ == "__main__":

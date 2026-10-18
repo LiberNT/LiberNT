@@ -219,6 +219,8 @@ LRESULT CTrayClockWnd::OnThemeChanged()
         hFont = CreateFontIndirectW(&clockFont);
 
         GetThemeColor(clockTheme, CLP_TIME, 0, TMT_TEXTCOLOR, &textColor);
+        if (ShellTaskbarIsLight())
+            textColor = RGB(25, 25, 25);
 
         if (this->hFont != NULL)
             DeleteObject(this->hFont);
@@ -233,7 +235,10 @@ LRESULT CTrayClockWnd::OnThemeChanged()
 
 LRESULT CTrayClockWnd::OnThemeChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 {
-    return OnThemeChanged();
+    LRESULT Result = OnThemeChanged();
+
+    Invalidate(TRUE);
+    return Result;
 }
 
 BOOL CTrayClockWnd::MeasureLines()

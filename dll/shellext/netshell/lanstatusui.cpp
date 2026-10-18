@@ -620,7 +620,7 @@ UpdateLanStatus(HWND hwndDlg, LANSTATUSUI_CONTEXT * pContext)
         if (nid.uFlags & NIF_ICON)
         {
             nid.hIcon = (HICON)LoadImageW(netshell_hInstance,
-                                          MAKEINTRESOURCEW(pContext->Status),
+                                          MAKEINTRESOURCEW(ShellTrayIconId(netshell_hInstance, pContext->Status)),
                                           IMAGE_ICON,
                                           ShellTrayIconRenderSize(),
                                           ShellTrayIconRenderSize(), 0);
@@ -1419,6 +1419,15 @@ LANStatusDlg(
             }
             break;
 
+        case WM_SETTINGCHANGE:
+            pContext = (LANSTATUSUI_CONTEXT*)GetWindowLongPtr(hwndDlg, DWLP_USER);
+            if (pContext && lParam && !lstrcmpiW((LPCWSTR)lParam, L"ImmersiveColorSet"))
+            {
+                pContext->TrayStatus = 0;
+                UpdateLanStatus(pContext->hwndDlg, pContext);
+            }
+            break;
+
         case WM_NETSTATUSCHANGED:
         {
             MSG Msg;
@@ -1628,13 +1637,13 @@ CLanStatus::EnumerateTrayConnections()
             nid.dwStateMask = NIS_HIDDEN;
             nid.uFlags |= NIF_STATE;
             nid.hIcon = (HICON)LoadImage(netshell_hInstance,
-                                         MAKEINTRESOURCE(NetShellTrayIcon(
+                                         MAKEINTRESOURCE(ShellTrayIconId(netshell_hInstance, NetShellTrayIcon(
                                              IF_TYPE_ETHERNET_CSMACD,
                                              pProps->Status == NCS_CONNECTED ?
                                                  MIB_IF_OPER_STATUS_CONNECTED :
                                                  MIB_IF_OPER_STATUS_DISCONNECTED,
                                              NetShellGetConnectivity(pContext, &pProps->guidId),
-                                             NS_WIFI_NOINFO)),
+                                             NS_WIFI_NOINFO))),
                                          IMAGE_ICON,
                                          ShellTrayIconRenderSize(),
                                          ShellTrayIconRenderSize(), 0);

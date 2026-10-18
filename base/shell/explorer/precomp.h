@@ -82,6 +82,30 @@ ShellScaleForDpi(INT Value)
 #define SHELL_TMT_FILLCOLOR  3802
 #define SHELL_TMT_OPACITY    2430
 
+static inline HTHEME
+ShellOpenTaskbarMaterial(VOID)
+{
+    HTHEME hTheme;
+    BOOL bComposited;
+
+    if (ShellSystemUsesLightTheme())
+    {
+        hTheme = OpenThemeData(NULL, L"TaskbarLight::Liquid");
+        bComposited = FALSE;
+        if (hTheme && SUCCEEDED(GetThemeBool(hTheme, 0, 0, SHELL_TMT_COMPOSITED, &bComposited)) && bComposited)
+            return hTheme;
+        if (hTheme)
+            CloseThemeData(hTheme);
+    }
+    return OpenThemeData(NULL, L"TaskBar::Liquid");
+}
+
+static inline BOOL
+ShellColorIsLight(COLORREF cr)
+{
+    return (GetRValue(cr) * 299 + GetGValue(cr) * 587 + GetBValue(cr) * 114) / 1000 >= 128;
+}
+
 static inline BOOL
 ShellGetTaskbarMaterial(COLORREF *pcr, INT *pcyTaskRow = NULL)
 {
@@ -95,7 +119,7 @@ ShellGetTaskbarMaterial(COLORREF *pcr, INT *pcyTaskRow = NULL)
 
     if (!IsThemeActive())
         return FALSE;
-    hTheme = OpenThemeData(NULL, L"TaskBar::Liquid");
+    hTheme = ShellOpenTaskbarMaterial();
     if (!hTheme)
         return FALSE;
     hr = GetThemeBool(hTheme, 0, 0, SHELL_TMT_COMPOSITED, &bComposited);
@@ -122,9 +146,17 @@ ShellGetTaskbarMaterial(COLORREF *pcr, INT *pcyTaskRow = NULL)
 static inline COLORREF
 ShellLiftColor(COLORREF cr, INT lift)
 {
-    return RGB(min(255, GetRValue(cr) + lift),
-               min(255, GetGValue(cr) + lift),
-               min(255, GetBValue(cr) + lift));
+    return RGB(max(0, min(255, GetRValue(cr) + lift)),
+               max(0, min(255, GetGValue(cr) + lift)),
+               max(0, min(255, GetBValue(cr) + lift)));
+}
+
+static inline BOOL
+ShellTaskbarIsLight(VOID)
+{
+    COLORREF cr;
+
+    return ShellGetTaskbarMaterial(&cr) && ShellColorIsLight(cr);
 }
 
 #define ASSERT(cond) \
@@ -191,6 +223,7 @@ BOOL GetVersionInfoString(IN LPCWSTR szFileName, IN LPCWSTR szVersionInfo, OUT L
 VOID ShellDrawTrayPill(IN HDC hdc, IN const RECT *prc, IN INT iState);
 VOID ShellGetTrayPillRect(IN const RECT *prcClient, OUT RECT *prcPill);
 VOID ShellDrawTrayGlyph(IN HDC hdc, IN const RECT *prc, IN UINT nIconId);
+VOID ShellDrawIconTinted(IN HDC hdc, IN INT x, IN INT y, IN HICON hIcon, IN INT cx, IN INT cy, IN COLORREF crInk);
 
 /*
  *  rshell.c

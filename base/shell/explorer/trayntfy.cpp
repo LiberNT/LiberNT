@@ -532,6 +532,11 @@ public:
             ContentMargin.cyBottomHeight = ShellScaleForDpi(2);
         }
 
+        if (m_hwndClock)
+            ::SendMessageW(m_hwndClock, WM_THEMECHANGED, 0, 0);
+        if (m_Chevron.m_hWnd)
+            m_Chevron.Invalidate(FALSE);
+
         return TRUE;
     }
 

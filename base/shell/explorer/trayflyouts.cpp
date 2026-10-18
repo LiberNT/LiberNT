@@ -115,7 +115,7 @@ public:
 
     static VOID InheritTaskbarMaterial(HWND hWnd)
     {
-        HTHEME hTheme = OpenThemeData(NULL, L"TaskBar::Liquid");
+        HTHEME hTheme = ShellOpenTaskbarMaterial();
         BOOL bComposited = FALSE;
         COLORREF crFill;
         INT nOpacity;
@@ -287,7 +287,23 @@ TfyDrawFluent(HDC hdc, const RECT *prc, UINT nId)
     int cy = prc->bottom - prc->top;
     int n = TfyFluentNativeSize(min(cx, cy));
     HICON hIcon = TfyFluentIcon(nId, n);
+    SM2_FLYOUT_PALETTE Pal;
 
+    if (!hIcon)
+        return;
+    StartMenu2_GetFlyoutPalette(&Pal);
+    if (ShellColorIsLight(Pal.PanelBg))
+    {
+        if (FindResourceW(hExplorerInstance, MAKEINTRESOURCEW(nId + SHELL_TRAY_ICON_LIGHT), (LPCWSTR)RT_GROUP_ICON))
+        {
+            hIcon = TfyFluentIcon(nId + SHELL_TRAY_ICON_LIGHT, n);
+        }
+        else
+        {
+            ShellDrawIconTinted(hdc, prc->left + (cx - n) / 2, prc->top + (cy - n) / 2, hIcon, n, n, Pal.PanelText);
+            return;
+        }
+    }
     if (hIcon)
         DrawIconEx(hdc, prc->left + (cx - n) / 2, prc->top + (cy - n) / 2,
                    hIcon, n, n, 0, NULL, DI_NORMAL);

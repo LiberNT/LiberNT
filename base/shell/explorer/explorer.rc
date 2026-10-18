@@ -103,6 +103,17 @@ IDI_FLU_BELLUNREAD  ICON "res/ico/fluent/tray_alert_unread.ico"
 IDI_FLU_TRAYACCESS  ICON "res/ico/fluent/tray_accessibility.ico"
 IDI_FLU_TRAYCHEVRIGHT ICON "res/ico/fluent/tray_chevron_right.ico"
 IDI_FLU_TRAYDISMISS ICON "res/ico/fluent/tray_dismiss.ico"
+IDI_FLU_WIFI1_LIGHT ICON "../../../dll/shellext/netshell/res/tray/wifi_1_light.ico"
+IDI_FLU_WIFI2_LIGHT ICON "../../../dll/shellext/netshell/res/tray/wifi_2_light.ico"
+IDI_FLU_WIFI3_LIGHT ICON "../../../dll/shellext/netshell/res/tray/wifi_3_light.ico"
+IDI_FLU_WIFI4_LIGHT ICON "../../../dll/shellext/netshell/res/tray/wifi_4_light.ico"
+IDI_FLU_WIFIOFF_LIGHT ICON "../../../dll/shellext/netshell/res/tray/wifi_x_light.ico"
+IDI_FLU_SPK0_LIGHT ICON "../../../dll/shellext/stobject/resources/tray/speaker_0_light.ico"
+IDI_FLU_SPK1_LIGHT ICON "../../../dll/shellext/stobject/resources/tray/speaker_1_light.ico"
+IDI_FLU_SPK2_LIGHT ICON "../../../dll/shellext/stobject/resources/tray/speaker_2_light.ico"
+IDI_FLU_SPKMUTE_LIGHT ICON "../../../dll/shellext/stobject/resources/tray/speaker_mute_light.ico"
+IDI_FLU_SPK3_LIGHT ICON "../../../dll/shellext/stobject/resources/tray/speaker_3_light.ico"
+IDI_FLU_WIFIWARN_LIGHT ICON "../../../dll/shellext/netshell/res/tray/wifi_warn_light.ico"
 
 
 /*******************************************************************************\

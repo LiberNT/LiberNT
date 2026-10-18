@@ -3937,9 +3937,9 @@ public:
                 for (i = 0; i < w * h; i++)
                 {
                     DWORD px = pBits[i];
-                    INT r = min(255, (INT)((px >> 16) & 0xFF) + tint);
-                    INT g = min(255, (INT)((px >> 8) & 0xFF) + tint);
-                    INT b = min(255, (INT)(px & 0xFF) + tint);
+                    INT r = max(0, min(255, (INT)((px >> 16) & 0xFF) + tint));
+                    INT g = max(0, min(255, (INT)((px >> 8) & 0xFF) + tint));
+                    INT b = max(0, min(255, (INT)(px & 0xFF) + tint));
 
                     pBits[i] = ((DWORD)r << 16) | ((DWORD)g << 8) | (DWORD)b;
                 }
@@ -3972,7 +3972,7 @@ public:
         if (prc->right <= prc->left || prc->bottom <= prc->top)
             return;
 
-        if (tint > 0)
+        if (tint != 0)
             TintWell(hdc, prc, radius, tint);
 
         hpenEdge = CreatePen(PS_SOLID, 1, ShellLiftColor(m_crMaterial, liftEdge));
@@ -4009,6 +4009,7 @@ public:
             BOOL bFlash = (uState & CDIS_MARKED) != 0;
             RECT rcWell = rcFace;
             INT radius = ShellScaleForDpi(3);
+            INT sign = ShellColorIsLight(m_crMaterial) ? -1 : 1;
             INT tint, liftEdge, i;
 
             /* The transparent toolbar has already painted the parent backdrop
@@ -4029,10 +4030,10 @@ public:
                 if (!saved)
                     continue;
                 IntersectClipRect(hdc, rcBack.right - nStep, rcBack.top, rcBack.right, rcBack.bottom);
-                DrawWin7Well(hdc, &rcBack, radius, 0, max(0, liftEdge - i * 6));
+                DrawWin7Well(hdc, &rcBack, radius, 0, sign * max(0, liftEdge - i * 6));
                 RestoreDC(hdc, saved);
             }
-            DrawWin7Well(hdc, &rcWell, radius, tint, liftEdge);
+            DrawWin7Well(hdc, &rcWell, radius, sign * tint, sign * liftEdge);
             bFill = TRUE;
         }
         else if (bPressed || bChecked)
