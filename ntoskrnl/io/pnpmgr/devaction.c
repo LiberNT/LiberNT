@@ -2212,7 +2212,7 @@ IopSendRemoveDevice(IN PDEVICE_OBJECT DeviceObject)
     PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
     KeMemoryBarrier();
     if (InterlockedExchange(&PiDuplicateInstancePending, 0))
-        PiQueueDeviceAction(IopRootDeviceNode->PhysicalDeviceObject, PiActionEnumRootDevices, NULL, NULL);
+        PiQueueDeviceAction(IopRootDeviceNode->PhysicalDeviceObject, PiActionEnumDeviceTree, NULL, NULL);
     if (!Notified)
         PiNotifyTargetDeviceChange(&GUID_TARGET_DEVICE_REMOVE_COMPLETE, DeviceObject, NULL);
     if (Undocked)
