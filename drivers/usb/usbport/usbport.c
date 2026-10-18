@@ -230,6 +230,11 @@ USBPORT_SetupTransferBounceBuffer(IN PDEVICE_OBJECT FdoDevice,
     else
     {
         NeedsBounce = USBPORT_MdlNeedsBounce(OriginalMdl, TransferLength);
+        if (!NeedsBounce && FdoExtension)
+        {
+            NeedsBounce = ADDRESS_AND_SIZE_TO_SPAN_PAGES(MmGetMdlVirtualAddress(OriginalMdl),
+                                                         TransferLength) > FdoExtension->NumberMapRegs;
+        }
         if (!NeedsBounce)
         {
             NeedsBounce = USBPORT_UhciNeedsPacketAlignedBounce(FdoExtension,
@@ -4219,12 +4224,19 @@ USBPORT_MapTransfer(IN PDEVICE_OBJECT FdoDevice,
         WriteToDevice = Transfer->Direction == USBPORT_DMA_DIRECTION_TO_DEVICE;
         ASSERT(Transfer->Direction != 0);
 
-        PhAddress = DmaOperations->MapTransfer(DmaAdapter,
-                                               Mdl,
-                                               MapRegisterBase,
-                                               (PVOID)CurrentVa,
-                                               &TransferLength,
-                                               WriteToDevice);
+        if (Transfer->Flags & TRANSFER_FLAG_BOUNCE)
+        {
+            PhAddress.QuadPart = Transfer->BounceBuffer->PhysicalAddress + CurrentLength;
+        }
+        else
+        {
+            PhAddress = DmaOperations->MapTransfer(DmaAdapter,
+                                                   Mdl,
+                                                   MapRegisterBase,
+                                                   (PVOID)CurrentVa,
+                                                   &TransferLength,
+                                                   WriteToDevice);
+        }
 
         DPRINT_CORE("USBPORT_MapTransfer: PhAddress.LowPart - %p, PhAddress.HighPart - %x, TransferLength - %x\n",
                PhAddress.LowPart,
@@ -4244,43 +4256,29 @@ USBPORT_MapTransfer(IN PDEVICE_OBJECT FdoDevice,
 
         SgCurrentLength = TransferLength;
 
-        if (Transfer->Flags & TRANSFER_FLAG_BOUNCE)
+        do
         {
-            sgList->SgElement[ix].SgPhysicalAddress = PhAddress;
-            sgList->SgElement[ix].SgTransferLength = SgCurrentLength;
-            sgList->SgElement[ix].SgOffset = CurrentLength;
+            ElementLength = PAGE_SIZE - (PhAddress.LowPart & (PAGE_SIZE - 1));
 
-            PhAddress.QuadPart += SgCurrentLength;
-            SgCurrentLength = 0;
+            if (ElementLength > SgCurrentLength)
+                ElementLength = SgCurrentLength;
+
+            DPRINT_CORE("USBPORT_MapTransfer: PhAddress.LowPart - %p, HighPart - %x, ElementLength - %x\n",
+                   PhAddress.LowPart,
+                   PhAddress.HighPart,
+                   ElementLength);
+
+            sgList->SgElement[ix].SgPhysicalAddress = PhAddress;
+            sgList->SgElement[ix].SgTransferLength = ElementLength;
+            sgList->SgElement[ix].SgOffset = CurrentLength +
+                                             (TransferLength - SgCurrentLength);
+
+            PhAddress.QuadPart += ElementLength;
+            SgCurrentLength -= ElementLength;
 
             ++ix;
         }
-        else
-        {
-            do
-            {
-                ElementLength = PAGE_SIZE - (PhAddress.LowPart & (PAGE_SIZE - 1));
-
-                if (ElementLength > SgCurrentLength)
-                    ElementLength = SgCurrentLength;
-
-                DPRINT_CORE("USBPORT_MapTransfer: PhAddress.LowPart - %p, HighPart - %x, ElementLength - %x\n",
-                       PhAddress.LowPart,
-                       PhAddress.HighPart,
-                       ElementLength);
-
-                sgList->SgElement[ix].SgPhysicalAddress = PhAddress;
-                sgList->SgElement[ix].SgTransferLength = ElementLength;
-                sgList->SgElement[ix].SgOffset = CurrentLength +
-                                                 (TransferLength - SgCurrentLength);
-
-                PhAddress.QuadPart += ElementLength;
-                SgCurrentLength -= ElementLength;
-
-                ++ix;
-            }
-            while (SgCurrentLength);
-        }
+        while (SgCurrentLength);
 
         CurrentLength += TransferLength;
         CurrentVa += TransferLength;
@@ -4446,8 +4444,11 @@ USBPORT_SubmitMapTransfer(IN PDEVICE_OBJECT FdoDevice)
                    (PVOID)VirtualAddr);
         }
 
-        NumMapRegisters = ADDRESS_AND_SIZE_TO_SPAN_PAGES(VirtualAddr,
-                                                         TransferBufferLength);
+        if (Transfer->Flags & TRANSFER_FLAG_BOUNCE)
+            NumMapRegisters = 0;
+        else
+            NumMapRegisters = ADDRESS_AND_SIZE_TO_SPAN_PAGES(VirtualAddr,
+                                                             TransferBufferLength);
 
         Transfer->NumberOfMapRegisters = NumMapRegisters;
 
