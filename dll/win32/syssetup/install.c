@@ -1425,6 +1425,10 @@ InitializeProgramFilesDir(VOID)
     WCHAR szProgramFilesDirPath[MAX_PATH];
     WCHAR szCommonFilesDirPath[MAX_PATH];
     WCHAR szBuffer[MAX_PATH];
+#ifdef _WIN64
+    WCHAR szNativeProgramFilesDirPath[MAX_PATH];
+    WCHAR szNativeCommonFilesDirPath[MAX_PATH];
+#endif
 
     /* Load 'Program Files' location */
     if (!LoadStringW(hDllInstance,
@@ -1575,10 +1579,52 @@ InitializeProgramFilesDir(VOID)
         return TRUE;
     }
 
+    wcscpy(szNativeProgramFilesDirPath, szProgramFilesDirPath);
+    wcscpy(szNativeCommonFilesDirPath, szCommonFilesDirPath);
     wcscat(szProgramFilesDirPath, L" (x86)");
     wcscpy(szCommonFilesDirPath, szProgramFilesDirPath);
     wcscat(szCommonFilesDirPath, L"\\");
     wcscat(szCommonFilesDirPath, szBuffer);
+
+    Error = RegCreateKeyExW(HKEY_LOCAL_MACHINE,
+                            L"SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion",
+                            0,
+                            NULL,
+                            0,
+                            KEY_SET_VALUE,
+                            NULL,
+                            &hKey,
+                            NULL);
+    if (Error == ERROR_SUCCESS)
+    {
+        const struct
+        {
+            PCWSTR Name;
+            PCWSTR Value;
+        } Values[] =
+        {
+            { L"ProgramFilesDir", szProgramFilesDirPath },
+            { L"CommonFilesDir", szCommonFilesDirPath },
+            { L"ProgramFilesDir (x86)", szProgramFilesDirPath },
+            { L"CommonFilesDir (x86)", szCommonFilesDirPath },
+            { L"ProgramW6432Dir", szNativeProgramFilesDirPath },
+            { L"CommonW6432Dir", szNativeCommonFilesDirPath },
+        };
+        ULONG Index;
+
+        for (Index = 0; Index < ARRAYSIZE(Values); Index++)
+        {
+            dwLength = (wcslen(Values[Index].Value) + 1) * sizeof(WCHAR);
+            Error = RegSetValueExW(hKey, Values[Index].Name, 0, REG_SZ, (LPBYTE)Values[Index].Value, dwLength);
+            if (Error != ERROR_SUCCESS)
+                DPRINT1("Warning: %lu\n", Error);
+        }
+        RegCloseKey(hKey);
+    }
+    else
+    {
+        DPRINT1("Warning: %lu\n", Error);
+    }
 
     Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
                           L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion",
