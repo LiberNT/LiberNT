@@ -21,6 +21,7 @@ typedef struct
 {
     INetConnection *pNet;
     INetworkListManager *pNetworkListManager;
+    DWORD dwConnectivityCookie;
     HWND hwndStatusDlg;         /* LanStatusDlg window */
     HWND hwndDlg;               /* status dialog window */
     DWORD dwAdapterIndex;

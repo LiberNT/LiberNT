@@ -24,6 +24,67 @@ static struct
     BOOL Shown;
 } g_Tray[NETSHELL_MAX_TRAY];
 
+class CNetShellConnectivitySink :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public INetworkConnectionEvents
+{
+    public:
+        HWND m_hwnd;
+
+        STDMETHOD(NetworkConnectionConnectivityChanged)(GUID connectionId, NLM_CONNECTIVITY newConnectivity) override
+        {
+            PostMessageW(m_hwnd, WM_NETSTATUSCHANGED, 0, 0);
+            return S_OK;
+        }
+
+        STDMETHOD(NetworkConnectionPropertyChanged)(GUID connectionId, NLM_CONNECTION_PROPERTY_CHANGE flags) override
+        {
+            return S_OK;
+        }
+
+        BEGIN_COM_MAP(CNetShellConnectivitySink)
+            COM_INTERFACE_ENTRY_IID(IID_INetworkConnectionEvents, INetworkConnectionEvents)
+        END_COM_MAP()
+};
+
+static VOID
+NetShellAdviseConnectivity(LANSTATUSUI_CONTEXT *pContext)
+{
+    CComPtr<IConnectionPointContainer> pContainer;
+    CComPtr<IConnectionPoint> pPoint;
+    CComObject<CNetShellConnectivitySink> *pSink;
+
+    if (FAILED(pContext->pNetworkListManager->QueryInterface(IID_PPV_ARG(IConnectionPointContainer, &pContainer))) ||
+        FAILED(pContainer->FindConnectionPoint(IID_INetworkConnectionEvents, &pPoint)) ||
+        FAILED(CComObject<CNetShellConnectivitySink>::CreateInstance(&pSink)))
+    {
+        return;
+    }
+
+    pSink->m_hwnd = pContext->hwndStatusDlg;
+    pSink->AddRef();
+    if (FAILED(pPoint->Advise(pSink, &pContext->dwConnectivityCookie)))
+        pContext->dwConnectivityCookie = 0;
+    pSink->Release();
+}
+
+static VOID
+NetShellUnadviseConnectivity(LANSTATUSUI_CONTEXT *pContext)
+{
+    CComPtr<IConnectionPointContainer> pContainer;
+    CComPtr<IConnectionPoint> pPoint;
+
+    if (!pContext->dwConnectivityCookie)
+        return;
+
+    if (SUCCEEDED(pContext->pNetworkListManager->QueryInterface(IID_PPV_ARG(IConnectionPointContainer, &pContainer))) &&
+        SUCCEEDED(pContainer->FindConnectionPoint(IID_INetworkConnectionEvents, &pPoint)))
+    {
+        pPoint->Unadvise(pContext->dwConnectivityCookie);
+    }
+    pContext->dwConnectivityCookie = 0;
+}
+
 
 static NLM_CONNECTIVITY
 NetShellGetConnectivity(LANSTATUSUI_CONTEXT *pContext, const GUID *pAdapterId)
@@ -35,10 +96,13 @@ NetShellGetConnectivity(LANSTATUSUI_CONTEXT *pContext, const GUID *pAdapterId)
         return Result;
     /* Keep the manager on the status window's thread. Creating it on every
        timer tick also recreates its interface/address/route notification threads. */
-    if (!pContext->pNetworkListManager &&
-        FAILED(CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_ALL,
-                                IID_PPV_ARG(INetworkListManager, &pContext->pNetworkListManager))))
-        return Result;
+    if (!pContext->pNetworkListManager)
+    {
+        if (FAILED(CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_ALL,
+                                    IID_PPV_ARG(INetworkListManager, &pContext->pNetworkListManager))))
+            return Result;
+        NetShellAdviseConnectivity(pContext);
+    }
     if (FAILED(pContext->pNetworkListManager->GetNetworkConnections(&pEnum)))
         return Result;
 
@@ -1339,6 +1403,7 @@ LANStatusDlg(
             }
             if (pContext && pContext->pNetworkListManager)
             {
+                NetShellUnadviseConnectivity(pContext);
                 pContext->pNetworkListManager->Release();
                 pContext->pNetworkListManager = NULL;
             }
