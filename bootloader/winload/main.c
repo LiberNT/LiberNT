@@ -17,6 +17,9 @@
 #define OSL_DOWNLOAD_URL_OPTION "HTTPBOOTURL="
 #define OSL_DOWNLOAD_ADDRESS_OPTION "HTTPBOOTIP="
 #define OSL_ADDRESS_CHARS 64
+#define OSL_DEBUG_PORT_OPTION "DEBUGPORT="
+#define OSL_DEBUG_MODULE  "kdcom.dll"
+#define OSL_NETWORK_DEBUG_FILE "kdnet.dll"
 #define OSL_STARTUP_PREFIX_CHARS (RTL_NUMBER_OF(BM_STARTUP_OPTION) - 1)
 
 PVOID BasicStack;
@@ -27,6 +30,16 @@ static const PCWSTR OslStorePaths[] =
     L"\\EFI\\LiberNT\\Boot\\BCD",
     L"\\EFI\\Microsoft\\Boot\\BCD",
     L"\\Boot\\BCD",
+};
+
+static const PCSTR OslNetworkDebugExtensions[] =
+{
+    "kd_02_10ec.dll",
+    "kd_02_1af4.dll",
+    "kd_02_8086.dll",
+    "kd_8003_1055.dll",
+    "kd_8003_1de4.dll",
+    "kd_fdt_spacemit_k1x-emac.dll"
 };
 
 static BM_ENTRY OslEntries[OSL_MAX_ENTRIES];
@@ -191,6 +204,61 @@ OslGetOption(
 }
 
 static
+BOOLEAN
+OslHasDebugPort(
+    _In_ PCSTR Options,
+    _In_ PCSTR Port)
+{
+    SIZE_T Length = strlen(Port);
+    PCSTR Text;
+
+    for (Text = strstr(Options, OSL_DEBUG_PORT_OPTION); Text; Text = strstr(Text, OSL_DEBUG_PORT_OPTION))
+    {
+        Text += RTL_NUMBER_OF(OSL_DEBUG_PORT_OPTION) - 1;
+        if (_strnicmp(Text, Port, Length) == 0 && (Text[Length] == ANSI_NULL || Text[Length] == ' '))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+static
+VOID
+OslLoadNetworkDebugger(
+    _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock,
+    _In_ PDK_DEVICE Device,
+    _In_ PCSTR Directory)
+{
+    PLDR_DATA_TABLE_ENTRY Entry;
+    ULONG i;
+
+    if (!PeLoadModule(&LoaderBlock->LoadOrderListHead,
+                      Device,
+                      Directory,
+                      OSL_NETWORK_DEBUG_FILE,
+                      OSL_DEBUG_MODULE,
+                      LoaderSystemCode,
+                      LDRP_DRIVER_DEPENDENT_DLL,
+                      &Entry))
+    {
+        FwPrint(L"%hs could not be loaded.\r\n", OSL_NETWORK_DEBUG_FILE);
+        return;
+    }
+
+    for (i = 0; i < RTL_NUMBER_OF(OslNetworkDebugExtensions); i++)
+    {
+        PeLoadModule(&LoaderBlock->LoadOrderListHead,
+                     Device,
+                     Directory,
+                     OslNetworkDebugExtensions[i],
+                     OslNetworkDebugExtensions[i],
+                     LoaderSystemCode,
+                     LDRP_DRIVER_DEPENDENT_DLL,
+                     &Entry);
+    }
+}
+
+static
 PLDR_DATA_TABLE_ENTRY
 OslLoadCoreImage(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock,
@@ -315,6 +383,9 @@ OslMain(VOID)
                                     OSL_HAL_MODULE,
                                     LoaderHalCode)
                  : NULL;
+    if (Hal && OslHasDebugPort(Options, "NET"))
+        OslLoadNetworkDebugger(LoaderBlock, &OsDevice, Directory);
+
     if (!Hal ||
         (FrameBufferData &&
          !PeLoadModule(&LoaderBlock->LoadOrderListHead,
