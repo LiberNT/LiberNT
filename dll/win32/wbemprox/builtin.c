@@ -43,6 +43,11 @@
 #include "devguid.h"
 #include <poclass.h>
 #include <acpiioct.h>
+#ifdef __REACTOS__
+#include <wmistr.h>
+#include <wmium.h>
+#include <wmidata.h>
+#endif
 
 #include "wine/debug.h"
 #include "wbemprox_private.h"
@@ -5530,9 +5535,350 @@ static struct table cimv2_builtin_classes[] =
     { L"Win32_WinSAT", C(col_winsat), D(data_winsat) },
 };
 
+#ifdef __REACTOS__
+static const struct column col_wmimonitoranalogvideoinputparams[] =
+{
+    { L"Active",                    CIM_BOOLEAN },
+    { L"CompositeSyncSupported",    CIM_UINT8 },
+    { L"InstanceName",              CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"SeparateSyncsSupported",    CIM_UINT8 },
+    { L"SerrationOfVsyncRequired",  CIM_UINT8 },
+    { L"SetupExpected",             CIM_UINT8 },
+    { L"SignalLevelStandard",       CIM_UINT8 },
+    { L"SyncOnGreenVideoSupported", CIM_UINT8 },
+};
+static const struct column col_wmimonitorbasicdisplayparams[] =
+{
+    { L"Active",                        CIM_BOOLEAN },
+    { L"DisplayTransferCharacteristic", CIM_UINT8 },
+    { L"InstanceName",                  CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"MaxHorizontalImageSize",        CIM_UINT8 },
+    { L"MaxVerticalImageSize",          CIM_UINT8 },
+    { L"VideoInputType",                CIM_UINT8 },
+};
+static const struct column col_wmimonitorconnectionparams[] =
+{
+    { L"Active",                CIM_BOOLEAN },
+    { L"InstanceName",          CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"VideoOutputTechnology", CIM_UINT32 },
+};
+static const struct column col_wmimonitordigitalvideoinputparams[] =
+{
+    { L"Active",            CIM_BOOLEAN },
+    { L"InstanceName",      CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"IsDFP1xCompatible", CIM_BOOLEAN },
+};
+static const struct column col_wmimonitorid[] =
+{
+    { L"Active",                 CIM_BOOLEAN },
+    { L"InstanceName",           CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"ManufacturerName",       CIM_UINT16|CIM_FLAG_ARRAY|COL_FLAG_DYNAMIC },
+    { L"ProductCodeID",          CIM_UINT16|CIM_FLAG_ARRAY|COL_FLAG_DYNAMIC },
+    { L"SerialNumberID",         CIM_UINT16|CIM_FLAG_ARRAY|COL_FLAG_DYNAMIC },
+    { L"UserFriendlyName",       CIM_UINT16|CIM_FLAG_ARRAY|COL_FLAG_DYNAMIC },
+    { L"UserFriendlyNameLength", CIM_UINT16 },
+    { L"WeekOfManufacture",      CIM_UINT8 },
+    { L"YearOfManufacture",      CIM_UINT16 },
+};
+
+#pragma pack(push,1)
+struct record_wmimonitoranalogvideoinputparams
+{
+    int          active;
+    UINT8        composite_sync_supported;
+    const WCHAR *instance_name;
+    UINT8        separate_syncs_supported;
+    UINT8        serration_of_vsync_required;
+    UINT8        setup_expected;
+    UINT8        signal_level_standard;
+    UINT8        sync_on_green_video_supported;
+};
+struct record_wmimonitorbasicdisplayparams
+{
+    int          active;
+    UINT8        display_transfer_characteristic;
+    const WCHAR *instance_name;
+    UINT8        max_horizontal_image_size;
+    UINT8        max_vertical_image_size;
+    UINT8        video_input_type;
+};
+struct record_wmimonitorconnectionparams
+{
+    int          active;
+    const WCHAR *instance_name;
+    UINT32       video_output_technology;
+};
+struct record_wmimonitordigitalvideoinputparams
+{
+    int          active;
+    const WCHAR *instance_name;
+    int          is_dfp1x_compatible;
+};
+struct record_wmimonitorid
+{
+    int                 active;
+    const WCHAR        *instance_name;
+    const struct array *manufacturer_name;
+    const struct array *product_code_id;
+    const struct array *serial_number_id;
+    const struct array *user_friendly_name;
+    UINT16              user_friendly_name_length;
+    UINT8               week_of_manufacture;
+    UINT16              year_of_manufacture;
+};
+#pragma pack(pop)
+
+struct wmi_instance
+{
+    WCHAR      *name;
+    const BYTE *data;
+    ULONG       size;
+};
+
+static BYTE *query_wmi_block( const GUID *guid, ULONG *size )
+{
+    WMIHANDLE handle;
+    BYTE *buf = NULL;
+
+    *size = 0;
+    if (WmiOpenBlock( (GUID *)guid, WMIGUID_QUERY, &handle )) return NULL;
+    if (WmiQueryAllDataW( handle, size, NULL ) == ERROR_INSUFFICIENT_BUFFER && *size && (buf = malloc( *size )))
+    {
+        if (WmiQueryAllDataW( handle, size, buf ))
+        {
+            free( buf );
+            buf = NULL;
+        }
+    }
+    WmiCloseBlock( handle );
+    return buf;
+}
+
+static BOOL get_wmi_instance( const WNODE_ALL_DATA *node, UINT index, struct wmi_instance *instance )
+{
+    ULONG total = node->WnodeHeader.BufferSize, data_offset, data_size, name_offset;
+    USHORT name_len;
+
+    if (node->WnodeHeader.Flags & WNODE_FLAG_FIXED_INSTANCE_SIZE)
+    {
+        data_offset = node->DataBlockOffset + index * ((node->FixedInstanceSize + 7) & ~7);
+        data_size = node->FixedInstanceSize;
+    }
+    else
+    {
+        if (FIELD_OFFSET( WNODE_ALL_DATA, OffsetInstanceDataAndLength[index + 1] ) > total) return FALSE;
+        data_offset = node->OffsetInstanceDataAndLength[index].OffsetInstanceData;
+        data_size = node->OffsetInstanceDataAndLength[index].LengthInstanceData;
+    }
+    if (data_offset > total || data_size > total - data_offset) return FALSE;
+    if (!node->OffsetInstanceNameOffsets || node->OffsetInstanceNameOffsets > total ||
+        (index + 1) * sizeof(ULONG) > total - node->OffsetInstanceNameOffsets) return FALSE;
+    name_offset = ((const ULONG *)((const BYTE *)node + node->OffsetInstanceNameOffsets))[index];
+    if (name_offset > total - sizeof(USHORT)) return FALSE;
+    name_len = *(const USHORT *)((const BYTE *)node + name_offset);
+    if (name_len > total - name_offset - sizeof(USHORT)) return FALSE;
+    if (!(instance->name = malloc( name_len + sizeof(WCHAR) ))) return FALSE;
+    memcpy( instance->name, (const BYTE *)node + name_offset + sizeof(USHORT), name_len );
+    instance->name[name_len / sizeof(WCHAR)] = 0;
+    instance->data = (const BYTE *)node + data_offset;
+    instance->size = data_size;
+    return TRUE;
+}
+
+static UINT get_wmi_instances( const BYTE *buf, ULONG size, struct wmi_instance **ret )
+{
+    struct wmi_instance *instances = NULL, *tmp, instance;
+    const WNODE_ALL_DATA *node;
+    ULONG offset = 0;
+    UINT count = 0, i;
+
+    while (offset <= size && size - offset >= sizeof(WNODE_ALL_DATA))
+    {
+        node = (const WNODE_ALL_DATA *)(buf + offset);
+        if (node->WnodeHeader.BufferSize > size - offset) break;
+        for (i = 0; i < node->InstanceCount && get_wmi_instance( node, i, &instance ); i++)
+        {
+            if (!(tmp = realloc( instances, (count + 1) * sizeof(*instances) )))
+            {
+                free( instance.name );
+                break;
+            }
+            instances = tmp;
+            instances[count++] = instance;
+        }
+        if (!node->WnodeHeader.Linkage) break;
+        offset += node->WnodeHeader.Linkage;
+    }
+    *ret = instances;
+    return count;
+}
+
+static struct array *get_wmi_uint16_array( const USHORT *src, UINT count )
+{
+    struct array *ret;
+    UINT16 *ptr;
+
+    if (!(ret = malloc( sizeof(*ret) ))) return NULL;
+    if (!(ptr = malloc( count ? count * sizeof(*ptr) : 1 )))
+    {
+        free( ret );
+        return NULL;
+    }
+    memcpy( ptr, src, count * sizeof(*ptr) );
+    ret->elem_size = sizeof(*ptr);
+    ret->count     = count;
+    ret->ptr       = ptr;
+    return ret;
+}
+
+static enum fill_status fill_wmi_block( struct table *table, const struct expr *cond, const GUID *guid, ULONG min_size,
+                                        UINT record_size, void (*fill_record)( BYTE *, const struct wmi_instance * ) )
+{
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+    struct wmi_instance *instances;
+    UINT row = 0, count, i;
+    ULONG size;
+    BYTE *buf;
+
+    if (!(buf = query_wmi_block( guid, &size )))
+    {
+        table->num_rows = 0;
+        return status;
+    }
+    count = get_wmi_instances( buf, size, &instances );
+    if (!resize_table( table, count, record_size ))
+    {
+        for (i = 0; i < count; i++) free( instances[i].name );
+        free( instances );
+        free( buf );
+        return FILL_STATUS_FAILED;
+    }
+    for (i = 0; i < count; i++)
+    {
+        if (instances[i].size < min_size)
+        {
+            free( instances[i].name );
+            continue;
+        }
+        fill_record( table->data + row * record_size, &instances[i] );
+        if (!match_row( table, row, cond, &status )) free_row_values( table, row );
+        else row++;
+    }
+    free( instances );
+    free( buf );
+
+    TRACE("created %u rows\n", row);
+    table->num_rows = row;
+    return status;
+}
+
+static void fill_record_wmimonitoranalogvideoinputparams( BYTE *data, const struct wmi_instance *instance )
+{
+    struct record_wmimonitoranalogvideoinputparams *rec = (struct record_wmimonitoranalogvideoinputparams *)data;
+    const WmiMonitorAnalogVideoInputParams *params = (const WmiMonitorAnalogVideoInputParams *)instance->data;
+
+    rec->active                        = -1;
+    rec->composite_sync_supported      = params->CompositeSyncSupported;
+    rec->instance_name                 = instance->name;
+    rec->separate_syncs_supported      = params->SeparateSyncsSupported;
+    rec->serration_of_vsync_required   = params->SerrationOfVsyncRequired;
+    rec->setup_expected                = params->SetupExpected;
+    rec->signal_level_standard         = params->SignalLevelStandard;
+    rec->sync_on_green_video_supported = params->SyncOnGreenVideoSupported;
+}
+
+static enum fill_status fill_wmimonitoranalogvideoinputparams( struct table *table, const struct expr *cond )
+{
+    return fill_wmi_block( table, cond, &WmiMonitorAnalogVideoInputParams_GUID, WmiMonitorAnalogVideoInputParams_SIZE,
+                           sizeof(struct record_wmimonitoranalogvideoinputparams),
+                           fill_record_wmimonitoranalogvideoinputparams );
+}
+
+static void fill_record_wmimonitorbasicdisplayparams( BYTE *data, const struct wmi_instance *instance )
+{
+    struct record_wmimonitorbasicdisplayparams *rec = (struct record_wmimonitorbasicdisplayparams *)data;
+    const WmiMonitorBasicDisplayParams *params = (const WmiMonitorBasicDisplayParams *)instance->data;
+
+    rec->active                          = -1;
+    rec->display_transfer_characteristic = params->DisplayTransferCharacteristic;
+    rec->instance_name                   = instance->name;
+    rec->max_horizontal_image_size       = params->MaxHorizontalImageSize;
+    rec->max_vertical_image_size         = params->MaxVerticalImageSize;
+    rec->video_input_type                = params->VideoInputType;
+}
+
+static enum fill_status fill_wmimonitorbasicdisplayparams( struct table *table, const struct expr *cond )
+{
+    return fill_wmi_block( table, cond, &WmiMonitorBasicDisplayParams_GUID, WmiMonitorBasicDisplayParams_SIZE,
+                           sizeof(struct record_wmimonitorbasicdisplayparams), fill_record_wmimonitorbasicdisplayparams );
+}
+
+static void fill_record_wmimonitorconnectionparams( BYTE *data, const struct wmi_instance *instance )
+{
+    struct record_wmimonitorconnectionparams *rec = (struct record_wmimonitorconnectionparams *)data;
+
+    rec->active                  = -1;
+    rec->instance_name           = instance->name;
+    rec->video_output_technology = ((const WmiMonitorConnectionParams *)instance->data)->VideoOutputTechnology;
+}
+
+static enum fill_status fill_wmimonitorconnectionparams( struct table *table, const struct expr *cond )
+{
+    return fill_wmi_block( table, cond, &WmiMonitorConnectionParams_GUID, WmiMonitorConnectionParams_SIZE,
+                           sizeof(struct record_wmimonitorconnectionparams), fill_record_wmimonitorconnectionparams );
+}
+
+static void fill_record_wmimonitordigitalvideoinputparams( BYTE *data, const struct wmi_instance *instance )
+{
+    struct record_wmimonitordigitalvideoinputparams *rec = (struct record_wmimonitordigitalvideoinputparams *)data;
+
+    rec->active              = -1;
+    rec->instance_name       = instance->name;
+    rec->is_dfp1x_compatible = ((const WmiMonitorDigitalVideoInputParams *)instance->data)->IsDFP1xCompatible ? -1 : 0;
+}
+
+static enum fill_status fill_wmimonitordigitalvideoinputparams( struct table *table, const struct expr *cond )
+{
+    return fill_wmi_block( table, cond, &WmiMonitorDigitalVideoInputParams_GUID, WmiMonitorDigitalVideoInputParams_SIZE,
+                           sizeof(struct record_wmimonitordigitalvideoinputparams),
+                           fill_record_wmimonitordigitalvideoinputparams );
+}
+
+static void fill_record_wmimonitorid( BYTE *data, const struct wmi_instance *instance )
+{
+    struct record_wmimonitorid *rec = (struct record_wmimonitorid *)data;
+    const WmiMonitorID *id = (const WmiMonitorID *)instance->data;
+    UINT name_len = min( id->UserFriendlyNameLength,
+                         (instance->size - FIELD_OFFSET( WmiMonitorID, UserFriendlyName )) / sizeof(USHORT) );
+
+    rec->active                    = -1;
+    rec->instance_name             = instance->name;
+    rec->manufacturer_name         = get_wmi_uint16_array( id->ManufacturerName, ARRAY_SIZE(id->ManufacturerName) );
+    rec->product_code_id           = get_wmi_uint16_array( id->ProductCodeID, ARRAY_SIZE(id->ProductCodeID) );
+    rec->serial_number_id          = get_wmi_uint16_array( id->SerialNumberID, ARRAY_SIZE(id->SerialNumberID) );
+    rec->user_friendly_name        = get_wmi_uint16_array( id->UserFriendlyName, name_len );
+    rec->user_friendly_name_length = id->UserFriendlyNameLength;
+    rec->week_of_manufacture       = id->WeekOfManufacture;
+    rec->year_of_manufacture       = id->YearOfManufacture;
+}
+
+static enum fill_status fill_wmimonitorid( struct table *table, const struct expr *cond )
+{
+    return fill_wmi_block( table, cond, &WmiMonitorID_GUID, FIELD_OFFSET( WmiMonitorID, UserFriendlyName ),
+                           sizeof(struct record_wmimonitorid), fill_record_wmimonitorid );
+}
+#endif
+
 static struct table wmi_builtin_classes[] =
 {
     { L"MSSMBios_RawSMBiosTables", C(col_rawsmbiostables), 0, 0, NULL, fill_rawbiosdata },
+#ifdef __REACTOS__
+    { L"WmiMonitorAnalogVideoInputParams", C(col_wmimonitoranalogvideoinputparams), 0, 0, NULL, fill_wmimonitoranalogvideoinputparams },
+    { L"WmiMonitorBasicDisplayParams", C(col_wmimonitorbasicdisplayparams), 0, 0, NULL, fill_wmimonitorbasicdisplayparams },
+    { L"WmiMonitorConnectionParams", C(col_wmimonitorconnectionparams), 0, 0, NULL, fill_wmimonitorconnectionparams },
+    { L"WmiMonitorDigitalVideoInputParams", C(col_wmimonitordigitalvideoinputparams), 0, 0, NULL, fill_wmimonitordigitalvideoinputparams },
+    { L"WmiMonitorID", C(col_wmimonitorid), 0, 0, NULL, fill_wmimonitorid },
+#endif
 };
 
 #ifdef __REACTOS__
