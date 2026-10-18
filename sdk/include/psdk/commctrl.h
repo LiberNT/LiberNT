@@ -4965,6 +4965,10 @@ typedef struct {
 #define LIS_FOCUSED 0x1
 #define LIS_ENABLED 0x2
 #define LIS_VISITED 0x4
+#if (NTDDI_VERSION >= NTDDI_VISTA)
+#define LIS_HOTTRACK 0x8
+#define LIS_DEFAULTCOLORS 0x10
+#endif
 
   typedef struct tagLITEM {
     UINT mask;

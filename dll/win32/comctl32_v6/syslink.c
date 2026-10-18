@@ -44,7 +44,11 @@ typedef struct
 } DOC_TEXTBLOCK, *PDOC_TEXTBLOCK;
 
 #define LIF_FLAGSMASK   (LIF_STATE | LIF_ITEMID | LIF_URL)
+#ifdef __REACTOS__
+#define LIS_MASK        (LIS_FOCUSED | LIS_ENABLED | LIS_VISITED | LIS_DEFAULTCOLORS)
+#else
 #define LIS_MASK        (LIS_FOCUSED | LIS_ENABLED | LIS_VISITED)
+#endif
 
 typedef enum
 {
@@ -1339,6 +1343,9 @@ static LRESULT SYSLINK_Draw (const SYSLINK_INFO *infoPtr, HDC hdc)
     PDOC_ITEM Current;
     HFONT hOldFont;
     COLORREF OldTextColor, OldBkColor;
+#ifdef __REACTOS__
+    COLORREF TextColor;
+#endif
     HBRUSH hBrush;
     UINT text_flags = ETO_CLIPPED;
     UINT mode = GetBkMode( hdc );
@@ -1355,6 +1362,9 @@ static LRESULT SYSLINK_Draw (const SYSLINK_INFO *infoPtr, HDC hdc)
 
     hBrush = (HBRUSH)SendMessageW(infoPtr->Notify, WM_CTLCOLORSTATIC,
                                   (WPARAM)hdc, (LPARAM)infoPtr->Self);
+#ifdef __REACTOS__
+    TextColor = GetTextColor(hdc);
+#endif
     if (!(infoPtr->Style & LWS_TRANSPARENT))
     {
         FillRect(hdc, &rc, hBrush);
@@ -1381,7 +1391,11 @@ static LRESULT SYSLINK_Draw (const SYSLINK_INFO *infoPtr, HDC hdc)
             if(Current->Type == slText)
             {
                  SelectObject(hdc, infoPtr->Font);
+#ifdef __REACTOS__
+                 SetTextColor(hdc, TextColor);
+#else
                  SetTextColor(hdc, infoPtr->TextColor);
+#endif
             }
             else
             {
@@ -1389,6 +1403,11 @@ static LRESULT SYSLINK_Draw (const SYSLINK_INFO *infoPtr, HDC hdc)
                  BOOL Highlight = (Current == infoPtr->HotItem) ||
                                   ((Current->u.Link.state & LIS_FOCUSED) && infoPtr->HasFocus);
                  SelectObject(hdc, Highlight ? infoPtr->LinkFont : infoPtr->Font);
+#ifdef __REACTOS__
+                 if (Current->u.Link.state & LIS_DEFAULTCOLORS)
+                     SetTextColor(hdc, TextColor);
+                 else
+#endif
                  SetTextColor(hdc, (!(Current->u.Link.state & LIS_VISITED) ? infoPtr->LinkColor : infoPtr->VisitedColor));
             }
 
