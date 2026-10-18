@@ -1726,6 +1726,20 @@ DispatchSAS(
     }
 
     DoGenericAction(Session, wlxAction);
+
+    if (dwSasType != WLX_SAS_TYPE_CTRL_ALT_DEL)
+        return;
+
+    if (Session->LogonState == STATE_LOGGED_ON_SAS)
+    {
+        SwitchDesktop(Session->ApplicationDesktop);
+        Session->LogonState = STATE_LOGGED_ON;
+    }
+    else if (Session->LogonState == STATE_LOCKED_SAS)
+    {
+        Session->LogonState = STATE_LOCKED;
+        Session->Gina.Functions.WlxDisplayLockedNotice(Session->Gina.Context);
+    }
 }
 
 static
