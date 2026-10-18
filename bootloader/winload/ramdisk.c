@@ -12,6 +12,7 @@
 #define RD_SECTOR_SIZE        512
 #define RD_MAX_SIZE           0xFFFFF000ULL
 #define RD_MINIMUM_EXTRA      (64ULL * 1024 * 1024)
+#define RD_MAX_CLUSTER        (128 * RD_SECTOR_SIZE)
 #define RD_READ_CHUNK         0x1000000
 #define RD_PATH_CHARS         260
 #define RD_NAME_CHARS         256
@@ -120,7 +121,8 @@ RdCopyIsoDirectory(
     _In_ PRD_SOURCE Source,
     _In_ ULONG Block,
     _In_ ULONG Length,
-    _In_ PCSTR Path)
+    _In_ PCSTR Path,
+    _Inout_opt_ PULONGLONG Measure)
 {
     CHAR Name[RD_NAME_CHARS];
     CHAR Child[RD_PATH_CHARS];
@@ -135,6 +137,9 @@ RdCopyIsoDirectory(
 
     if (!RdRead(Source, (ULONGLONG)Block * ISO_BLOCK_SIZE, Directory, Length))
         goto Done;
+
+    if (Measure)
+        *Measure += ALIGN_UP_BY((ULONGLONG)Length * 4, RD_MAX_CLUSTER);
 
     while (Offset + ISO_RECORD_NAME < Length)
     {
@@ -167,11 +172,15 @@ RdCopyIsoDirectory(
 
         if (Record[ISO_RECORD_FLAGS] & ISO_FLAG_DIRECTORY)
         {
-            if (!Fat32CreateDirectory(&RdWriter, Child) ||
-                !RdCopyIsoDirectory(Source, LeUlong(Record + ISO_RECORD_EXTENT), Size, Child))
+            if ((!Measure && !Fat32CreateDirectory(&RdWriter, Child)) ||
+                !RdCopyIsoDirectory(Source, LeUlong(Record + ISO_RECORD_EXTENT), Size, Child, Measure))
             {
                 goto Done;
             }
+        }
+        else if (Measure)
+        {
+            *Measure += ALIGN_UP_BY((ULONGLONG)Size, RD_MAX_CLUSTER);
         }
         else if (!Fat32CreateFileEx(&RdWriter, Child, Size, &Data) ||
                  (Size != 0 &&
@@ -371,12 +380,14 @@ static
 BOOLEAN
 RdCopyIso(
     _In_ PRD_SOURCE Source,
-    _In_reads_bytes_(ISO_BLOCK_SIZE) const UCHAR* Descriptor)
+    _In_reads_bytes_(ISO_BLOCK_SIZE) const UCHAR* Descriptor,
+    _Inout_opt_ PULONGLONG Measure)
 {
     return RdCopyIsoDirectory(Source,
                               LeUlong(Descriptor + ISO_ROOT_RECORD + ISO_RECORD_EXTENT),
                               LeUlong(Descriptor + ISO_ROOT_RECORD + ISO_RECORD_LENGTH),
-                              "");
+                              "",
+                              Measure);
 }
 
 static
@@ -400,10 +411,12 @@ RdBuildFromWim(
         WimLoaderQuerySelectedImageStats(&Wim, &Stats) == ESUCCESS)
     {
         Payload = Stats.FileBytes;
-        if (Medium && Medium->Size > File->Size)
-            Payload += Medium->Size - File->Size;
+        RdSkipRootName = FileName;
+        Success = !Medium || RdCopyIso(Medium, Descriptor, &Payload);
+        RdSkipRootName = NULL;
 
-        Success = RdCreateVolume(Payload, ExtraBytes) &&
+        Success = Success &&
+                  RdCreateVolume(Payload, ExtraBytes) &&
                   WimLoaderExtractToFat(&Wim, &RdWriter, RdWimProgress, NULL) == ESUCCESS;
     }
 
@@ -412,7 +425,7 @@ RdBuildFromWim(
     if (Success && Medium)
     {
         RdSkipRootName = FileName;
-        Success = RdCopyIso(Medium, Descriptor);
+        Success = RdCopyIso(Medium, Descriptor, NULL);
         RdSkipRootName = NULL;
     }
 
@@ -434,6 +447,7 @@ OslBuildRamdisk(
     RD_SOURCE Medium, File;
     PCWSTR Path = Image ? L"\\" : BcdDevice->RamdiskPath;
     PCWSTR Leaf;
+    ULONGLONG Payload;
     ULONG FileSize = 0;
     ULONG i;
     BOOLEAN HaveMedium = FALSE;
@@ -480,7 +494,10 @@ OslBuildRamdisk(
 
     if (Path[0] == UNICODE_NULL)
     {
-        Success = RdCreateVolume(Medium.Size, ExtraBytes) && RdCopyIso(&Medium, Descriptor);
+        Payload = 0;
+        Success = RdCopyIso(&Medium, Descriptor, &Payload) &&
+                  RdCreateVolume(Payload, ExtraBytes) &&
+                  RdCopyIso(&Medium, Descriptor, NULL);
     }
     else if (File.Size > sizeof(RdWimMagic) &&
              RtlEqualMemory(File.Memory, RdWimMagic, sizeof(RdWimMagic)))
@@ -504,9 +521,11 @@ OslBuildRamdisk(
     else
     {
         FileSize = (ULONG)File.Size;
+        Payload = 0;
         Success = RdOpenIso(&File, Descriptor) &&
-                  RdCreateVolume(File.Size, ExtraBytes) &&
-                  RdCopyIso(&File, Descriptor);
+                  RdCopyIso(&File, Descriptor, &Payload) &&
+                  RdCreateVolume(Payload, ExtraBytes) &&
+                  RdCopyIso(&File, Descriptor, NULL);
         File.Size = FileSize;
     }
 
