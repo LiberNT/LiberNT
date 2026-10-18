@@ -15,6 +15,13 @@
 #define NDEBUG
 #include <debug.h>
 
+static const DEVPROPKEY HidClassInterfaceUsagePage = { { 0xcbf38310, 0x4a17, 0x4310, { 0xa1, 0xeb, 0x24, 0x7f, 0x0b, 0x67, 0x59, 0x3b } }, 2 };
+static const DEVPROPKEY HidClassInterfaceUsageId = { { 0xcbf38310, 0x4a17, 0x4310, { 0xa1, 0xeb, 0x24, 0x7f, 0x0b, 0x67, 0x59, 0x3b } }, 3 };
+static const DEVPROPKEY HidClassInterfaceIsReadOnly = { { 0xcbf38310, 0x4a17, 0x4310, { 0xa1, 0xeb, 0x24, 0x7f, 0x0b, 0x67, 0x59, 0x3b } }, 4 };
+static const DEVPROPKEY HidClassInterfaceVendorId = { { 0xcbf38310, 0x4a17, 0x4310, { 0xa1, 0xeb, 0x24, 0x7f, 0x0b, 0x67, 0x59, 0x3b } }, 5 };
+static const DEVPROPKEY HidClassInterfaceProductId = { { 0xcbf38310, 0x4a17, 0x4310, { 0xa1, 0xeb, 0x24, 0x7f, 0x0b, 0x67, 0x59, 0x3b } }, 6 };
+static const DEVPROPKEY HidClassInterfaceVersionNumber = { { 0xcbf38310, 0x4a17, 0x4310, { 0xa1, 0xeb, 0x24, 0x7f, 0x0b, 0x67, 0x59, 0x3b } }, 7 };
+
 PHIDP_COLLECTION_DESC
 HidClassPDO_GetCollectionDescription(
     PHIDP_DEVICE_DESC DeviceDescription,
@@ -391,6 +398,61 @@ HidClassPDO_HandleQueryCompatibleId(
     return STATUS_SUCCESS;
 }
 
+static
+VOID
+HidClassPDO_SetInterfaceProperty(
+    IN PUNICODE_STRING Interface,
+    IN const DEVPROPKEY *PropertyKey,
+    IN DEVPROPTYPE Type,
+    IN ULONG Size,
+    IN PVOID Data)
+{
+    NTSTATUS Status;
+
+    Status = IoSetDeviceInterfacePropertyData(Interface, PropertyKey, LOCALE_NEUTRAL, 0, Type, Size, Data);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("[HIDCLASS] interface property %lu failed 0x%08lx\n", PropertyKey->pid, Status);
+}
+
+static
+VOID
+HidClassPDO_PublishInterfaceProperties(
+    IN PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension)
+{
+    PUNICODE_STRING Interface = &PDODeviceExtension->DeviceInterface;
+    PHIDP_COLLECTION_DESC CollectionDescription;
+    DEVPROP_BOOLEAN IsReadOnly;
+    USHORT UsagePage, UsageId;
+
+    CollectionDescription = HidClassPDO_GetCollectionDescription(&PDODeviceExtension->Common.DeviceDescription,
+                                                                 PDODeviceExtension->CollectionNumber);
+    if (!CollectionDescription)
+        return;
+
+    UsagePage = CollectionDescription->UsagePage;
+    UsageId = CollectionDescription->Usage;
+    IsReadOnly = (UsagePage == HID_USAGE_PAGE_GENERIC && UsageId == HID_USAGE_GENERIC_MOUSE) ? DEVPROP_TRUE : DEVPROP_FALSE;
+
+    HidClassPDO_SetInterfaceProperty(Interface, &HidClassInterfaceUsagePage, DEVPROP_TYPE_UINT16, sizeof(UsagePage), &UsagePage);
+    HidClassPDO_SetInterfaceProperty(Interface, &HidClassInterfaceUsageId, DEVPROP_TYPE_UINT16, sizeof(UsageId), &UsageId);
+    HidClassPDO_SetInterfaceProperty(Interface, &HidClassInterfaceIsReadOnly, DEVPROP_TYPE_BOOLEAN, sizeof(IsReadOnly), &IsReadOnly);
+    HidClassPDO_SetInterfaceProperty(Interface,
+                                     &HidClassInterfaceVendorId,
+                                     DEVPROP_TYPE_UINT16,
+                                     sizeof(PDODeviceExtension->Common.Attributes.VendorID),
+                                     &PDODeviceExtension->Common.Attributes.VendorID);
+    HidClassPDO_SetInterfaceProperty(Interface,
+                                     &HidClassInterfaceProductId,
+                                     DEVPROP_TYPE_UINT16,
+                                     sizeof(PDODeviceExtension->Common.Attributes.ProductID),
+                                     &PDODeviceExtension->Common.Attributes.ProductID);
+    HidClassPDO_SetInterfaceProperty(Interface,
+                                     &HidClassInterfaceVersionNumber,
+                                     DEVPROP_TYPE_UINT16,
+                                     sizeof(PDODeviceExtension->Common.Attributes.VersionNumber),
+                                     &PDODeviceExtension->Common.Attributes.VersionNumber);
+}
+
 NTSTATUS
 HidClassPDO_PnP(
     IN PDEVICE_OBJECT DeviceObject,
@@ -588,6 +650,9 @@ HidClassPDO_PnP(
             DPRINT("[HIDCLASS] IoRegisterDeviceInterfaceState Status %x\n", Status);
             if (NT_SUCCESS(Status))
             {
+                if (!PDODeviceExtension->IsXInput)
+                    HidClassPDO_PublishInterfaceProperties(PDODeviceExtension);
+
                 //
                 // enable device interface
                 //
