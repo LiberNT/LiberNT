@@ -1,0 +1,54 @@
+[Version]
+Signature = "$WINDOWS NT$"
+;Signature  = "$ReactOS$"
+LayoutFile = layout.inf
+Class     = Firmware
+ClassGuid = {f2e7dd72-6468-4e36-b6f1-6488f42c1b52}
+Provider  = %ReactOS%
+DriverVer = 10/18/2026,1.00
+
+[ClassInstall32]
+AddReg = ClassInstall_AddReg
+AddReg = FirmwareInstall_AddReg
+
+[ClassInstall_AddReg]
+HKR, , , 0, %FirmwareClassName%
+HKR, , NoInstallClass, 0, 1
+HKR, , IconPath, 0x00010000, "%%SystemRoot%%\System32\setupapi.dll,-159"
+HKR, , "Default Service", 0, ""
+HKR, , BootCritical, 0, 1
+
+[FirmwareInstall_AddReg]
+HKR, , FirmwareMaxRetryCount, 0x00010001, 2
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[Manufacturer]
+%GenericMfg% = GenericMfg
+
+[GenericMfg]
+%FirmwareResource.DeviceDesc% = FirmwareResource_Inst, , GenFirmwareResource
+%SystemFirmware.DeviceDesc%   = FirmwareResource_Inst, , UEFI\CC_00010001, GenSystemFirmware
+%DeviceFirmware.DeviceDesc%   = FirmwareResource_Inst, , UEFI\CC_00010002, GenDeviceFirmware
+%FirmwareDriver.DeviceDesc%   = FirmwareResource_Inst, , UEFI\CC_00010003
+
+[FirmwareResource_Inst.NT]
+
+[FirmwareResource_Inst.NT.Hw]
+AddReg = FirmwareResource_AddReg
+
+[FirmwareResource_AddReg]
+HKR, , FirmwareVersion, 0x00010001, 0
+
+[Strings]
+; Non-localizable
+ReactOS = "LiberNT Project"
+
+; Localizable
+FirmwareClassName = "Firmware"
+GenericMfg = "(Standard firmware resources)"
+FirmwareResource.DeviceDesc = "Firmware Resource"
+SystemFirmware.DeviceDesc = "System Firmware"
+DeviceFirmware.DeviceDesc = "Device Firmware"
+FirmwareDriver.DeviceDesc = "Firmware Driver"

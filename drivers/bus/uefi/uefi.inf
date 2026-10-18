@@ -1,0 +1,51 @@
+; UEFI.INF
+
+; Installation file for the UEFI bus driver
+
+[Version]
+Signature  = "$Windows NT$"
+;Signature  = "$ReactOS$"
+LayoutFile = layout.inf
+Class      = System
+ClassGUID  = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider   = %ReactOS%
+DriverVer  = 10/18/2026,1.00.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[Manufacturer]
+%GenericMfg% = GenericMfg
+
+[GenericMfg]
+%UEFI.DeviceDesc% = UEFI_Inst,ACPI_HAL\UEFI
+
+[UEFI_Inst.NT]
+CopyFiles = UEFI_CopyFiles
+
+[UEFI_CopyFiles]
+uefi.sys
+
+[UEFI_Inst.NT.Services]
+AddService = UEFI, 0x00000002, UEFI_Service
+
+[UEFI_Service]
+DisplayName = %UEFI.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\uefi.sys
+
+;-------------------------------- STRINGS -------------------------------
+
+[Strings]
+; Non-localizable
+ReactOS = "LiberNT Project"
+
+; Localizable
+GenericMfg = "(Generic system devices)"
+UEFI.DeviceDesc = "UEFI-Compliant System"
+UEFI.ServiceDesc = "UEFI Driver"
