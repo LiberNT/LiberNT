@@ -1,0 +1,52 @@
+; LiberNT Basic Display Adapter for display controllers without a vendor driver
+
+[Version]
+Signature="$Windows NT$"
+LayoutFile=layout.inf
+Class=Display
+ClassGUID={4D36E968-E325-11CE-BFC1-08002BE10318}
+Provider=%LiberNT%
+DriverVer=10/18/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%StdMfg%=StdMfg
+
+[StdMfg]
+%BasicDisplay.DeviceDesc%=BasicDisplay_Install,PCI\CC_0300
+%BasicDisplay.DeviceDesc%=BasicDisplay_Install,PCI\CC_0301
+%BasicDisplay.DeviceDesc%=BasicDisplay_Install,ACPI\CLS_0003&SUBCLS_0000
+%BasicDisplay.DeviceDesc%=BasicDisplay_Install,ACPI\CLS_0003&SUBCLS_0001
+%BasicDisplay.DeviceDesc%=BasicDisplay_Install,ACPI\CLS_0003&SUBCLS_0003
+
+[BasicDisplay_Install]
+AddReg=BasicDisplay_SoftwareSettings
+
+[BasicDisplay_SoftwareSettings]
+HKR,,InstalledDisplayDrivers,%REG_MULTI_SZ%,framebuf
+HKR,,VgaCompatible,%REG_DWORD%,0
+HKR,,UserModeDriverName,%REG_MULTI_SZ%,softgpuum.dll
+HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,softgpuum.dll
+HKR,,"Device Description",%REG_SZ%,"%BasicDisplay.DeviceDesc%"
+
+[BasicDisplay_Install.Services]
+AddService=BasicDisplay,0x00000002,BasicDisplay_Service
+
+[BasicDisplay_Service]
+DisplayName=%BasicDisplay.ServiceDesc%
+ServiceType=1
+StartType=1
+ErrorControl=0
+ServiceBinary=%12%\BasicDisplay.sys
+LoadOrderGroup=Video
+
+[Strings]
+LiberNT="LiberNT"
+StdMfg="(Standard display types)"
+BasicDisplay.DeviceDesc="LiberNT Basic Display Adapter"
+BasicDisplay.ServiceDesc="LiberNT Basic Display Driver"
+REG_MULTI_SZ=0x00010000
+REG_DWORD=0x00010001
+REG_SZ=0x00000000

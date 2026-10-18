@@ -2410,7 +2410,7 @@ DxgkpOpenAdapterByDisplayOrdinal(
         {
             PDXGKRNL_ADAPTER Adapter = Snapshot[i];
             BOOLEAN IsFallback = Adapter->MiniportContext == NULL ||
-                                 Adapter->MiniportContext->IsBasicDisplayFallback;
+                                 Adapter->IsBasicDisplayFallback;
             ULONG SourceCount = Adapter->NumberOfVideoPresentSources;
 
             if (DesktopOnly)

@@ -326,7 +326,7 @@ DxgkpStopPostDisplayOwner(
                   sizeof(*ReleasedPostDisplayInformation));
     *ReleasedByDriver = FALSE;
     DXGKRNL_TRACE("DxgkpStopPostDisplayOwner: stopping %s adapter %p while a new miniport acquires the boot display\n",
-                  (Owner->MiniportContext != NULL && Owner->MiniportContext->IsBasicDisplayFallback) ?
+                  (Owner->MiniportContext != NULL && Owner->IsBasicDisplayFallback) ?
                       "basic-display fallback" : "display",
                   Owner);
     Status = DxgkpAdapterStopInternal(Owner,
@@ -348,7 +348,7 @@ DxgkpSetBasicDisplayUiSuppressed(
 
     ASSERT(Adapter != NULL);
     ASSERT(Adapter->MiniportContext != NULL);
-    ASSERT(Adapter->MiniportContext->IsBasicDisplayFallback);
+    ASSERT(Adapter->IsBasicDisplayFallback);
 
     Previous = InterlockedExchange(&Adapter->BasicDisplayUiSuppressed,
                                    Suppressed ? 1 : 0);
@@ -384,10 +384,10 @@ DxgkpRetainAndStopBasicDisplayFallback(
 
     ASSERT(Claimant != NULL);
     ASSERT(Claimant->MiniportContext != NULL);
-    ASSERT(!Claimant->MiniportContext->IsBasicDisplayFallback);
+    ASSERT(!Claimant->IsBasicDisplayFallback);
     ASSERT(Owner != NULL);
     ASSERT(Owner->MiniportContext != NULL);
-    ASSERT(Owner->MiniportContext->IsBasicDisplayFallback);
+    ASSERT(Owner->IsBasicDisplayFallback);
     ASSERT(OwnerDeviceObject != NULL);
     ASSERT(*OwnerDeviceObject != NULL);
 
@@ -504,7 +504,7 @@ DxgkpShouldRegisterDisplayBridge(
     PAGED_CODE();
 
     if (Claimant->MiniportContext == NULL ||
-        Claimant->MiniportContext->IsBasicDisplayFallback)
+        Claimant->IsBasicDisplayFallback)
     {
         return TRUE;
     }
@@ -531,7 +531,7 @@ DxgkpShouldRegisterDisplayBridge(
     TakeOverFromFallback = !RegisterDisplayBridge &&
                            Owner != NULL &&
                            Owner->MiniportContext != NULL &&
-                           Owner->MiniportContext->IsBasicDisplayFallback;
+                           Owner->IsBasicDisplayFallback;
 
     if (OwnerDeviceObject != NULL)
         ObDereferenceObject(OwnerDeviceObject);
@@ -11856,9 +11856,9 @@ DxgkpAcquirePostDisplayOwnership(
         {
             RetainFallback =
                 Claimant->MiniportContext != NULL &&
-                !Claimant->MiniportContext->IsBasicDisplayFallback &&
+                !Claimant->IsBasicDisplayFallback &&
                 Owner->MiniportContext != NULL &&
-                Owner->MiniportContext->IsBasicDisplayFallback;
+                Owner->IsBasicDisplayFallback;
             if (!RetainFallback)
             {
                 DXGKRNL_TRACE("DxgkCbAcquirePostDisplayOwnership: boot display "
@@ -13805,7 +13805,7 @@ DxgkAdapterStart(
                  Adapter->AdapterLuid.LowPart,
                  &Adapter->MiniportContext->RegistryPath,
                  Adapter->NumberOfVideoPresentSources,
-                 Adapter->MiniportContext->IsBasicDisplayFallback ? "(basic display fallback)" :
+                 Adapter->IsBasicDisplayFallback ? "(basic display fallback)" :
                  Adapter->MiniportContext->IsDisplayOnlyDriver ? "(display only)" : "(full)");
     if (!Adapter->MiniportContext->IsDisplayOnlyDriver &&
         DXGK_CB_FULL(Adapter, DxgkDdiQueryAdapterInfo) != NULL)
@@ -15639,7 +15639,7 @@ DxgkpMiniportPnpDispatch(
         case IRP_MN_QUERY_PNP_DEVICE_STATE:
         {
             if (Adapter->MiniportContext != NULL &&
-                Adapter->MiniportContext->IsBasicDisplayFallback)
+                Adapter->IsBasicDisplayFallback)
             {
                 BOOLEAN Suppressed;
 
@@ -16492,6 +16492,33 @@ DxgkpClearMiniportRegistrationPayload(
     MpCtx->IsBasicDisplayFallback = FALSE;
 }
 
+static BOOLEAN
+DxgkpIsRootEnumeratedDevice(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject)
+{
+    UNICODE_STRING Root = RTL_CONSTANT_STRING(L"ROOT");
+    UNICODE_STRING Enumerator;
+    WCHAR Buffer[16];
+    ULONG Length = 0;
+
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(IoGetDeviceProperty(PhysicalDeviceObject,
+                                        DevicePropertyEnumeratorName,
+                                        sizeof(Buffer),
+                                        Buffer,
+                                        &Length)) ||
+        Length < sizeof(WCHAR))
+    {
+        return FALSE;
+    }
+
+    Enumerator.Buffer = Buffer;
+    Enumerator.Length = (USHORT)(Length - sizeof(WCHAR));
+    Enumerator.MaximumLength = (USHORT)Length;
+    return RtlEqualUnicodeString(&Enumerator, &Root, TRUE);
+}
+
 /*
  * DxgkpAddDevice
  *
@@ -16565,6 +16592,8 @@ DxgkpAddDeviceRegistered(
     Adapter->MiniportContext         = MpCtx;
     Adapter->FunctionalDeviceObject  = Fdo;
     Adapter->PhysicalDeviceObject    = PhysicalDeviceObject;
+    Adapter->IsBasicDisplayFallback  = MpCtx->IsBasicDisplayFallback &&
+                                       DxgkpIsRootEnumeratedDevice(PhysicalDeviceObject);
     Adapter->State                   = DxgkAdapterStateUninitialized;
     Adapter->DevicePowerState        = PowerDeviceD0;
     Adapter->SystemPowerState        = PowerSystemWorking;

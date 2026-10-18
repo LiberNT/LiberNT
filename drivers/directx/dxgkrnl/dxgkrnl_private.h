@@ -782,6 +782,7 @@ struct _DXGKRNL_ADAPTER
      * is disabled and expose it again if rollback restarts it.
      */
     volatile LONG               BasicDisplayUiSuppressed;
+    BOOLEAN                     IsBasicDisplayFallback;
     volatile LONG               MiniportStartFailed;
 
     /* Serializes concurrent PnP and boot-display handover stop requests. */
