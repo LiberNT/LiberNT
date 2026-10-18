@@ -528,7 +528,7 @@ INT ProcessStartupItems(BOOL bRunOnce)
     AutoStartupApplications(CSIDL_STARTUP);
 
     /* TODO: HKCU\RunOnce runs even if StartupHasBeenRun exists */
-    if (res && bNormalBoot && (SHRestricted(REST_NOCURRENTUSERRUNONCE) == 0))
+    if (res && (SHRestricted(REST_NOCURRENTUSERRUNONCE) == 0))
         res = ProcessRunKeys(HKEY_CURRENT_USER, L"RunOnce", TRUE, FALSE);
 
     TRACE("Operation done\n");
