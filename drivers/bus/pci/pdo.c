@@ -2220,7 +2220,7 @@ PdoGetRangeLength(PPDO_DEVICE_EXTENSION DeviceExtension,
 }
 
 
-static UCHAR
+UCHAR
 PciPdoRoutedInterruptLine(
     _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
     _In_ UCHAR InterruptPin,

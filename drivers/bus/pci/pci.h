@@ -449,6 +449,12 @@ VOID
 PciRestoreDeviceConfig(
     _In_ PPCI_DEVICE Device);
 
+UCHAR
+PciPdoRoutedInterruptLine(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ UCHAR InterruptPin,
+    _In_ UCHAR InterruptLine);
+
 
 /* config.c */
 

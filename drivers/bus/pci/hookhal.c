@@ -275,6 +275,41 @@ PciFindDeviceByLocation(
     return NULL;
 }
 
+static
+VOID
+PciRouteSlotInterrupt(
+    _In_ PPCI_DEVICE Device,
+    _Inout_ PCM_RESOURCE_LIST ResourceList)
+{
+    PCM_PARTIAL_RESOURCE_LIST PartialList;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+    ULONG Index;
+    UCHAR Line;
+
+    if (!Device->Pdo || !ResourceList || ResourceList->Count == 0 ||
+        PCI_CONFIGURATION_TYPE(&Device->PciConfig) != PCI_DEVICE_TYPE)
+    {
+        return;
+    }
+
+    Line = PciPdoRoutedInterruptLine(Device->Pdo->DeviceExtension,
+                                     Device->PciConfig.u.type0.InterruptPin,
+                                     Device->PciConfig.u.type0.InterruptLine);
+    if (Line == 0 || Line == 0xFF)
+        return;
+
+    PartialList = &ResourceList->List[0].PartialResourceList;
+    for (Index = 0; Index < PartialList->Count; Index++)
+    {
+        Descriptor = &PartialList->PartialDescriptors[Index];
+        if (Descriptor->Type != CmResourceTypeInterrupt)
+            continue;
+
+        Descriptor->u.Interrupt.Level = Line;
+        Descriptor->u.Interrupt.Vector = Line;
+    }
+}
+
 /*
  * PciAssignSlotResources
  *
@@ -298,6 +333,7 @@ PciAssignSlotResources(
     _Inout_ PCM_RESOURCE_LIST *AllocatedResources)
 {
     PPCI_DEVICE Device;
+    NTSTATUS Status;
 
     ASSERT(PcipSavedAssignSlotResources);
 
@@ -331,14 +367,18 @@ PciAssignSlotResources(
      * through PnP IRP_MN_START_DEVICE. The HAL fallback provides the
      * legacy resource assignment path that callers expect.
      */
-    return PcipSavedAssignSlotResources(RegistryPath,
-                                         DriverClassName,
-                                         DriverObject,
-                                         DeviceObject,
-                                         BusType,
-                                         BusNumber,
-                                         SlotNumber,
-                                         AllocatedResources);
+    Status = PcipSavedAssignSlotResources(RegistryPath,
+                                          DriverClassName,
+                                          DriverObject,
+                                          DeviceObject,
+                                          BusType,
+                                          BusNumber,
+                                          SlotNumber,
+                                          AllocatedResources);
+    if (NT_SUCCESS(Status))
+        PciRouteSlotInterrupt(Device, *AllocatedResources);
+
+    return Status;
 }
 
 VOID
