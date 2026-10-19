@@ -187,6 +187,67 @@ WlanContains(
     return PatternLength == 0;
 }
 
+static VOID WINAPI
+WlanMonitorNotify(PWLAN_NOTIFICATION_DATA Data, PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    if (Data == NULL)
+        return;
+
+    if (Data->NotificationSource == WLAN_NOTIFICATION_SOURCE_MSM &&
+        Data->NotificationCode == wlan_notification_msm_signal_quality_change &&
+        Data->pData != NULL && Data->dwDataSize >= sizeof(WLAN_SIGNAL_QUALITY))
+    {
+        wprintf(L"WLANCONN: msm %lu quality %lu\n", Data->NotificationCode, *(PWLAN_SIGNAL_QUALITY)Data->pData);
+    }
+    else if (Data->NotificationSource == WLAN_NOTIFICATION_SOURCE_MSM &&
+             Data->pData != NULL && Data->dwDataSize >= sizeof(WLAN_MSM_NOTIFICATION_DATA))
+    {
+        PWLAN_MSM_NOTIFICATION_DATA Msm = (PWLAN_MSM_NOTIFICATION_DATA)Data->pData;
+
+        wprintf(L"WLANCONN: msm %lu %02x:%02x:%02x:%02x:%02x:%02x reason %lu\n", Data->NotificationCode,
+                Msm->dot11MacAddr[0], Msm->dot11MacAddr[1], Msm->dot11MacAddr[2],
+                Msm->dot11MacAddr[3], Msm->dot11MacAddr[4], Msm->dot11MacAddr[5], Msm->wlanReasonCode);
+    }
+    else
+    {
+        wprintf(L"WLANCONN: %s %lu\n",
+                Data->NotificationSource == WLAN_NOTIFICATION_SOURCE_ACM ? L"acm" : L"msm",
+                Data->NotificationCode);
+    }
+}
+
+static int
+WlanMonitor(
+    _In_ DWORD Seconds)
+{
+    HANDLE hClient = NULL;
+    DWORD dwVersion = 0;
+    DWORD Result;
+
+    Result = WlanOpenHandle(2, NULL, &dwVersion, &hClient);
+    if (Result != ERROR_SUCCESS)
+    {
+        wprintf(L"WLANCONN: WlanOpenHandle failed %lu\n", Result);
+        return 1;
+    }
+
+    Result = WlanRegisterNotification(hClient, WLAN_NOTIFICATION_SOURCE_ACM | WLAN_NOTIFICATION_SOURCE_MSM,
+                                      FALSE, WlanMonitorNotify, NULL, NULL, NULL);
+    if (Result != ERROR_SUCCESS)
+    {
+        wprintf(L"WLANCONN: WlanRegisterNotification failed %lu\n", Result);
+        WlanCloseHandle(hClient, NULL);
+        return 1;
+    }
+
+    Sleep(Seconds * 1000);
+    WlanRegisterNotification(hClient, WLAN_NOTIFICATION_SOURCE_NONE, FALSE, NULL, NULL, NULL, NULL);
+    WlanCloseHandle(hClient, NULL);
+    return 0;
+}
+
 static int
 WlanDisconnectInterface(
     _In_opt_ PCWSTR InterfaceMatch)
@@ -300,6 +361,9 @@ wmain(int argc, WCHAR **argv)
     RtlZeroMemory(KeyXml, sizeof(KeyXml));
     RtlZeroMemory(ProfileXml, sizeof(ProfileXml));
 
+    if (argc == 3 && _wcsicmp(argv[1], L"--monitor") == 0)
+        return WlanMonitor(wcstoul(argv[2], NULL, 10));
+
     if (argc >= 2 && _wcsicmp(argv[1], L"--disconnect") == 0)
     {
         if (argc == 2)
@@ -342,7 +406,8 @@ wmain(int argc, WCHAR **argv)
     {
         wprintf(L"usage: wlanconn <ssid> <passphrase> [--interface <description>] [--wpa3] [--bssid <xx:xx:xx:xx:xx:xx>] [--no-scan]\n"
                 L"       wlanconn <ssid> --key-file <path> [--interface <description>] [--wpa3] [--bssid <xx:xx:xx:xx:xx:xx>] [--no-scan]\n"
-                L"       wlanconn --disconnect [--interface <description>]\n");
+                L"       wlanconn --disconnect [--interface <description>]\n"
+                L"       wlanconn --monitor <seconds>\n");
         return 1;
     }
 
