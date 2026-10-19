@@ -109,6 +109,7 @@ class PeImage:
             raise ValueError("%s is not a PE image" % path)
         nsec, optsize = struct.unpack_from("<H12xH", d, nt + 6)
         magic = struct.unpack_from("<H", d, nt + 24)[0]
+        self.platform = "win64" if magic == 0x20B else "win32"
         ddir = nt + 24 + (112 if magic == 0x20B else 96)
         self.rsrc_rva = struct.unpack_from("<I", d, ddir + 2 * 8)[0]
         self.sections = []
@@ -387,7 +388,7 @@ def script_ops(image, rtype, atl, warnings, label):
     ops = []
     replacements = {"MODULE": MODULE_MARK, "SystemRoot": SYSROOT_MARK}
     if atl:
-        replacements = {"Module": MODULE_MARK, "Module_Raw": MODULE_MARK, "APPID": ""}
+        replacements = {"Module": MODULE_MARK, "Module_Raw": MODULE_MARK, "APPID": "", "PLATFORM": image.platform}
     for name, data in image.resources(rtype):
         try:
             ops.extend(RgsScript(decode_script(data), replacements, atl).operations())
@@ -476,6 +477,8 @@ def build(inf, modules, wow64_modules, warnings):
     wow64 = Registry()
     for dirid, subdir, name, flags in entries:
         if name.lower() in code_names:
+            if name.lower() in wow64_modules:
+                register(wow64, wow64_modules, subdir, name, warnings, SYSWOW64)
             continue
         if dirid != "11" or int(flags or "1") & ~1:
             raise ValueError("%s must be registered at run time; add it to [OleControlDllsCode]" % name)
