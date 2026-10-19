@@ -148,6 +148,7 @@ set(WOW64_I386_MODULES ${COMPAT_RUNTIME_MODULES}
     wer
     windowscodecsext
     winedmo
+    winegstreamer
     winscard
     wintypes
     wmi
