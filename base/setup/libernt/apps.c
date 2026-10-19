@@ -84,6 +84,7 @@ LoadOobeApps(
     WCHAR Section[64];
     WCHAR AppSection[128];
     WCHAR Type[16];
+    WCHAR Space[16];
     INFCONTEXT Context;
     POOBE_APP Items = NULL, NewItems;
     ULONG Count = 0;
@@ -132,6 +133,8 @@ LoadOobeApps(
             GetInfString(hInf, AppSection, L"Arguments", App->Arguments, ARRAYSIZE(App->Arguments));
             GetInfString(hInf, AppSection, L"Signer", App->Signer, ARRAYSIZE(App->Signer));
             GetInfString(hInf, AppSection, L"Sha256", App->Sha256, ARRAYSIZE(App->Sha256));
+            if (GetInfString(hInf, AppSection, L"Space", Space, ARRAYSIZE(Space)))
+                App->SpaceMb = wcstoul(Space, NULL, 10);
             if (!App->Signer[0] && !App->Sha256[0])
             {
                 DPRINT1("Component %S has neither a signer nor a hash\n", AppSection);
@@ -153,6 +156,29 @@ LoadOobeApps(
     SetupCloseInfFile(hInf);
     *Apps = Items;
     return Count;
+}
+
+BOOL
+GetSystemDriveSpace(
+    _Out_opt_ PULONGLONG TotalMb,
+    _Out_ PULONGLONG FreeMb)
+{
+    ULARGE_INTEGER FreeBytes, TotalBytes;
+    WCHAR Root[MAX_PATH];
+
+    *FreeMb = 0;
+    if (TotalMb)
+        *TotalMb = 0;
+    if (GetWindowsDirectoryW(Root, ARRAYSIZE(Root)) < 3)
+        return FALSE;
+    Root[3] = UNICODE_NULL;
+    if (!GetDiskFreeSpaceExW(Root, &FreeBytes, &TotalBytes, NULL))
+        return FALSE;
+
+    *FreeMb = FreeBytes.QuadPart / (1024 * 1024);
+    if (TotalMb)
+        *TotalMb = TotalBytes.QuadPart / (1024 * 1024);
+    return TRUE;
 }
 
 static PCWSTR
@@ -208,6 +234,44 @@ FillAppList(
     }
 }
 
+static ULONG
+GetSelectedSpace(
+    _In_ HWND hList)
+{
+    INT iItem, Items = ListView_GetItemCount(hList);
+    ULONG SpaceMb = 0;
+    LVITEMW Item;
+
+    for (iItem = 0; iItem < Items; iItem++)
+    {
+        ZeroMemory(&Item, sizeof(Item));
+        Item.mask = LVIF_PARAM;
+        Item.iItem = iItem;
+        if (ListView_GetItem(hList, &Item) && (ULONG)Item.lParam < OobeAppCount &&
+            ListView_GetCheckState(hList, iItem))
+        {
+            SpaceMb += OobeApps[Item.lParam].SpaceMb;
+        }
+    }
+    return SpaceMb;
+}
+
+static VOID
+ShowAppSpace(
+    _In_ HWND hwndDlg)
+{
+    WCHAR Text[256];
+    ULONGLONG FreeMb;
+
+    Text[0] = UNICODE_NULL;
+    if (GetSystemDriveSpace(NULL, &FreeMb))
+    {
+        LoadPrintfW(Text, ARRAYSIZE(Text), IDS_OOBE_APPS_SPACE,
+                    GetSelectedSpace(GetDlgItem(hwndDlg, IDC_APPLIST)), FreeMb);
+    }
+    SetDlgItemTextW(hwndDlg, IDC_APPSPACE, Text);
+}
+
 INT_PTR
 CALLBACK
 AppsPageProc(
@@ -222,7 +286,13 @@ AppsPageProc(
     {
         case WM_INITDIALOG:
             FillAppList(hList);
+            ShowAppSpace(hwndDlg);
             return FALSE;
+
+        case WM_NOTIFY:
+            if (((LPNMHDR)lParam)->idFrom == IDC_APPLIST && ((LPNMHDR)lParam)->code == LVN_ITEMCHANGED)
+                ShowAppSpace(hwndDlg);
+            break;
 
         case SPN_SETACTIVE:
             if (OobeAppCount == 0)
@@ -230,13 +300,26 @@ AppsPageProc(
                 SetupFramePressNext(hwndDlg);
                 return TRUE;
             }
+            ShowAppSpace(hwndDlg);
             SetFocus(hList);
             return TRUE;
 
         case SPN_WIZNEXT:
         {
             INT iItem, Items = ListView_GetItemCount(hList);
+            ULONG SpaceMb = GetSelectedSpace(hList);
+            ULONGLONG FreeMb;
+            WCHAR Text[512];
             LVITEMW Item;
+
+            if (GetSystemDriveSpace(NULL, &FreeMb) && SpaceMb > FreeMb)
+            {
+                LoadPrintfW(Text, ARRAYSIZE(Text), IDS_OOBE_APPS_NOSPACE_TEXT, SpaceMb, FreeMb);
+                SetupMessage(GetParent(hwndDlg), TD_WARNING_ICON, TDCBF_OK_BUTTON, IDOK,
+                             MAKEINTRESOURCEW(IDS_OOBE_APPS_NOSPACE), Text);
+                SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, -1);
+                return TRUE;
+            }
 
             for (iItem = 0; iItem < Items; iItem++)
             {
@@ -537,8 +620,16 @@ InstallOobeApp(
 {
     WCHAR Folder[MAX_PATH];
     WCHAR Path[MAX_PATH];
+    ULONGLONG FreeMb;
     HRESULT hr;
     BOOL Trusted;
+
+    if (GetSystemDriveSpace(NULL, &FreeMb) && App->SpaceMb > FreeMb)
+    {
+        DPRINT1("Component %S needs %lu MB, drive has %I64u MB free\n", App->Name, App->SpaceMb, FreeMb);
+        App->Result = ERROR_DISK_FULL;
+        return App->Result;
+    }
 
     if (!GetTempPathW(ARRAYSIZE(Folder), Folder) ||
         FAILED(StringCchCatW(Folder, ARRAYSIZE(Folder), L"LiberNT Components")) ||

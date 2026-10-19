@@ -33,6 +33,7 @@ HANDLE ProcessHeap;
 SETUPDATA SetupData;
 
 static INT_PTR CALLBACK FinishPageProc(HWND, UINT, WPARAM, LPARAM);
+static INT_PTR CALLBACK StoragePageProc(HWND, UINT, WPARAM, LPARAM);
 
 static const SETUP_PAGE_INFO ComponentPages[] =
 {
@@ -45,6 +46,7 @@ static BOOL FirstBootRun;
 
 static const SETUP_PAGE_INFO OobePages[] =
 {
+    { IDD_STORAGEPAGE,  StoragePageProc,  IDS_OOBE_STORAGETITLE, IDS_OOBE_STORAGESUBTITLE, SETUP_PAGE_CLOSE },
     { IDD_LANGUAGEPAGE, LanguagePageProc, IDS_OOBE_REGIONTITLE, IDS_OOBE_REGIONSUBTITLE, SETUP_PAGE_CLOSE },
     { IDD_ACCOUNTPAGE,  AccountPageProc,  IDS_ACCOUNTTITLE,     IDS_ACCOUNTZONESUBTITLE, SETUP_PAGE_BACK | SETUP_PAGE_CLOSE },
     { IDD_APPSPAGE,     AppsPageProc,     IDS_APPSTITLE,        IDS_APPSSUBTITLE,        SETUP_PAGE_BACK | SETUP_PAGE_CLOSE },
@@ -701,6 +703,133 @@ EndFirstBootSetup(VOID)
     return Error == ERROR_SUCCESS;
 }
 
+static DWORD
+RunExpandStorage(
+    _In_ PCWSTR Arguments)
+{
+    STARTUPINFOW StartupInfo;
+    PROCESS_INFORMATION ProcessInfo;
+    WCHAR Path[MAX_PATH];
+    WCHAR CommandLine[MAX_PATH + 16];
+    DWORD ExitCode;
+
+    if (!GetSystemDirectoryW(Path, ARRAYSIZE(Path)) ||
+        FAILED(StringCchCatW(Path, ARRAYSIZE(Path), L"\\lntexpandstorage.exe")) ||
+        FAILED(StringCchPrintfW(CommandLine, ARRAYSIZE(CommandLine), L"\"%s\" %s", Path, Arguments)))
+    {
+        return ERROR_BUFFER_OVERFLOW;
+    }
+
+    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+    StartupInfo.cb = sizeof(StartupInfo);
+    if (!CreateProcessW(Path, CommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &StartupInfo, &ProcessInfo))
+        return GetLastError();
+
+    WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+    if (!GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode))
+        ExitCode = GetLastError();
+    CloseHandle(ProcessInfo.hThread);
+    CloseHandle(ProcessInfo.hProcess);
+    return ExitCode;
+}
+
+static VOID
+ScheduleFirstBootSetup(VOID)
+{
+    WCHAR Path[MAX_PATH];
+    DWORD Length;
+    HKEY hKey;
+
+    Length = GetModuleFileNameW(NULL, Path, ARRAYSIZE(Path));
+    if (Length == 0 || Length >= ARRAYSIZE(Path))
+        return;
+
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+                        0, NULL, 0, KEY_SET_VALUE, NULL, &hKey, NULL) != ERROR_SUCCESS)
+    {
+        return;
+    }
+
+    SetStringValue(hKey, L"OOBE", Path);
+    RegCloseKey(hKey);
+}
+
+static BOOL
+ExpandStorageAndRestart(
+    _In_ HWND hwndDlg)
+{
+    WCHAR Text[512];
+    HCURSOR hCursor;
+    DWORD Error;
+
+    if (SetupMessage(GetParent(hwndDlg), TD_INFORMATION_ICON, TDCBF_OK_BUTTON | TDCBF_CANCEL_BUTTON, IDOK,
+                     MAKEINTRESOURCEW(IDS_OOBE_EXPAND_RESTART),
+                     MAKEINTRESOURCEW(IDS_OOBE_EXPAND_RESTART_TEXT)) != IDOK)
+    {
+        return FALSE;
+    }
+
+    hCursor = SetCursor(LoadCursorW(NULL, IDC_WAIT));
+    Error = RunExpandStorage(L"/y");
+    SetCursor(hCursor);
+    DPRINT1("Storage expansion finished with exit code %lu\n", Error);
+    if (Error != ERROR_SUCCESS)
+    {
+        LoadPrintfW(Text, ARRAYSIZE(Text), IDS_OOBE_EXPAND_FAILED, Error);
+        SetupMessage(GetParent(hwndDlg), TD_ERROR_ICON, TDCBF_OK_BUTTON, IDOK, NULL, Text);
+        return TRUE;
+    }
+
+    ScheduleFirstBootSetup();
+    EnableTokenPrivilege(SE_SHUTDOWN_NAME);
+    if (!ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OPERATINGSYSTEM | SHTDN_REASON_MINOR_RECONFIG |
+                                   SHTDN_REASON_FLAG_PLANNED))
+    {
+        DPRINT1("Restart after the storage expansion failed, error %lu\n", GetLastError());
+        EndFirstBootSetup();
+        return TRUE;
+    }
+
+    EndDialog(GetParent(hwndDlg), IDCANCEL);
+    return FALSE;
+}
+
+static INT_PTR
+CALLBACK
+StoragePageProc(
+    _In_ HWND hwndDlg,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam)
+{
+    WCHAR Text[256];
+    ULONGLONG TotalMb, FreeMb;
+
+    switch (uMsg)
+    {
+        case WM_INITDIALOG:
+            if (GetSystemDriveSpace(&TotalMb, &FreeMb))
+            {
+                LoadPrintfW(Text, ARRAYSIZE(Text), IDS_OOBE_STORAGE_INFO, TotalMb, FreeMb);
+                SetDlgItemTextW(hwndDlg, IDC_STORAGEINFO, Text);
+            }
+            CheckRadioButton(hwndDlg, IDC_EXPANDNOW, IDC_EXPANDLATER, IDC_EXPANDNOW);
+            return FALSE;
+
+        case SPN_SETACTIVE:
+            SetFocus(GetDlgItem(hwndDlg, IDC_EXPANDNOW));
+            return TRUE;
+
+        case SPN_WIZNEXT:
+            SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT,
+                              (IsDlgButtonChecked(hwndDlg, IDC_EXPANDNOW) == BST_CHECKED &&
+                               !ExpandStorageAndRestart(hwndDlg)) ? -1 : 0);
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 int WINAPI
 wWinMain(
     HINSTANCE hInst,
@@ -710,6 +839,7 @@ wWinMain(
 {
     INITCOMMONCONTROLSEX iccx;
     HRESULT hrCom;
+    ULONG FirstPage;
 
     ComponentsOnly = (wcsstr(lpszCmdLine, L"/components") != NULL);
     ProcessHeap = GetProcessHeap();
@@ -735,7 +865,11 @@ wWinMain(
     DPRINT1("First-boot setup lists %lu components\n", OobeAppCount);
 
     if (!ComponentsOnly)
-        RunSetupFrame(&SetupData, OobePages, ARRAYSIZE(OobePages));
+    {
+        FirstPage = (RunExpandStorage(L"/n") == ERROR_SUCCESS) ? 0 : 1;
+        DPRINT1("Storage expansion %s\n", FirstPage == 0 ? "offered" : "not offered");
+        RunSetupFrame(&SetupData, &OobePages[FirstPage], ARRAYSIZE(OobePages) - FirstPage);
+    }
     else if (OobeAppCount != 0)
         RunSetupFrame(&SetupData, ComponentPages, ARRAYSIZE(ComponentPages));
 

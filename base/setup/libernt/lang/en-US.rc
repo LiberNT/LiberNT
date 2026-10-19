@@ -59,8 +59,20 @@ IDD_APPSPAGE DIALOGEX 0, 0, 290, 160
 STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
-    CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 118
+    CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 104
+    LTEXT "", IDC_APPSPACE, 0, 108, 290, 10, SS_NOPREFIX
     LTEXT "Clear a box to skip a component. The downloads use your internet connection, and each package is checked against its publisher's signature or checksum before it is installed.", IDC_STATIC, 0, 124, 290, 34
+END
+
+IDD_STORAGEPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
+    AUTORADIOBUTTON "&Expand drive C: now and restart", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&Not now", IDC_EXPANDLATER, 0, 42, 290, 10
+    LTEXT "LiberNT restarts once to finish, then this setup opens again.", IDC_STATIC, 0, 60, 290, 18
+    LTEXT "You can also do it later: run lntexpandstorage in Command Prompt as an administrator. The components this setup offers next need more than 1 GB of free space.", IDC_STATIC, 0, 124, 290, 34
 END
 
 IDD_ACCOUNTPAGE DIALOGEX 0, 0, 290, 160
@@ -259,6 +271,15 @@ BEGIN
     IDS_OOBE_APPS_FAILED "Some components were not installed"
     IDS_OOBE_ACCOUNT_FAILED "LiberNT could not create your account (error %lu). LiberNT signs in to the built-in User account instead."
     IDS_OOBE_UNKNOWN_ERROR "Unknown error"
+    IDS_OOBE_STORAGETITLE "Use all of your storage"
+    IDS_OOBE_STORAGESUBTITLE "LiberNT can grow drive C: to fill the storage device it runs from."
+    IDS_OOBE_STORAGE_INFO "Drive C: is %I64u MB with %I64u MB free. The rest of the storage device is not used yet."
+    IDS_OOBE_EXPAND_RESTART "LiberNT restarts to expand drive C:"
+    IDS_OOBE_EXPAND_RESTART_TEXT "Drive C: grows to fill the storage device, then LiberNT restarts. This setup opens again after the restart."
+    IDS_OOBE_EXPAND_FAILED "LiberNT could not expand drive C: (lntexpandstorage exit code %lu). Setup continues; you can try again later with lntexpandstorage in Command Prompt."
+    IDS_OOBE_APPS_SPACE "The selected components need about %lu MB. Drive C: has %I64u MB free."
+    IDS_OOBE_APPS_NOSPACE "Not enough free space for the selected components"
+    IDS_OOBE_APPS_NOSPACE_TEXT "They need about %lu MB, and drive C: has %I64u MB free. Clear some boxes to continue. To install them later, expand drive C: with lntexpandstorage in Command Prompt, then run %%SystemRoot%%\\system32\\oobe\\oobe.exe /components."
 END
 
 /* Progress Strings */

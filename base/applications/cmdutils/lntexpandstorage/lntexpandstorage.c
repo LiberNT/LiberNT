@@ -338,7 +338,7 @@ Usage(void)
     Print("  /p N     partition number to grow (default: the last one on the drive)\n");
     Print("  /pad MB  free space to leave at the end of the disk (default %u)\n", DEFAULT_PAD_MB);
     Print("  /min MB  minimum gain worth acting on (default %u)\n", DEFAULT_MIN_MB);
-    Print("  /n       report what would change and exit\n");
+    Print("  /n       report what would change and exit, with code 2 if nothing would\n");
     Print("  /y       do not ask for confirmation\n");
     Print("  /r       reboot once the disk has been updated\n");
 }
@@ -500,7 +500,7 @@ main(int argc, char* argv[])
         Print("Partition %lu already fills the disk, nothing to do.\n", Plan.PartitionNumber);
         VirtualFree(Disk.Scratch, 0, MEM_RELEASE);
         CloseHandle(Disk.Handle);
-        return 0;
+        return DryRun ? 2 : 0;
     }
 
     if (Status != EXPAND_OK)

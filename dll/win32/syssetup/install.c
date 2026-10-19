@@ -1222,46 +1222,6 @@ ScheduleFirstBootSetup(VOID)
 }
 
 static
-VOID
-ExpandSystemStorage(VOID)
-{
-    STARTUPINFOW StartupInfo;
-    PROCESS_INFORMATION ProcessInfo;
-    WCHAR Path[MAX_PATH];
-    WCHAR CommandLine[MAX_PATH + 8];
-    DWORD ExitCode = 0;
-    UINT Length;
-
-    Length = GetSystemDirectoryW(Path, ARRAYSIZE(Path));
-    if (Length == 0 || Length + wcslen(L"\\lntexpandstorage.exe") >= ARRAYSIZE(Path))
-        return;
-    wcscat(Path, L"\\lntexpandstorage.exe");
-    if (GetFileAttributesW(Path) == INVALID_FILE_ATTRIBUTES)
-        return;
-
-    wcscpy(CommandLine, L"\"");
-    wcscat(CommandLine, Path);
-    wcscat(CommandLine, L"\" /y");
-
-    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
-    StartupInfo.cb = sizeof(StartupInfo);
-    if (!CreateProcessW(Path, CommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &StartupInfo, &ProcessInfo))
-    {
-        DPRINT1("Could not start %S (error %lu)\n", Path, GetLastError());
-        return;
-    }
-
-    WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
-    if (!GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode))
-        ExitCode = GetLastError();
-    CloseHandle(ProcessInfo.hThread);
-    CloseHandle(ProcessInfo.hProcess);
-
-    if (ExitCode != 0)
-        DPRINT1("Growing the system partition to the storage device failed (exit code %lu)\n", ExitCode);
-}
-
-static
 LONG
 EndSystemSetup(VOID)
 {
@@ -1364,7 +1324,6 @@ InstallLiveCD(VOID)
         Status = CreateTargetAccount(UserName, L"");
         if (!NT_SUCCESS(Status) && Status != STATUS_USER_EXISTS)
             goto error;
-        ExpandSystemStorage();
         ScheduleFirstBootSetup();
         if (EndSystemSetup() != ERROR_SUCCESS)
             goto error;
