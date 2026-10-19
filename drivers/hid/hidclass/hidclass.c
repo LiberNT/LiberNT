@@ -961,8 +961,10 @@ HidClass_DispatchMiniDriverRequest(
     RtlZeroMemory(IoStack, sizeof(*IoStack));
     IoStack->MajorFunction = IRP_MJ_INTERNAL_DEVICE_CONTROL;
     IoStack->Parameters.DeviceIoControl.IoControlCode = IoControlCode;
-    IoStack->Parameters.DeviceIoControl.InputBufferLength = XferPacket->reportBufferLen;
-    IoStack->Parameters.DeviceIoControl.OutputBufferLength = XferPacket->reportBufferLen;
+    if (IoControlCode == IOCTL_HID_GET_FEATURE || IoControlCode == IOCTL_HID_GET_INPUT_REPORT)
+        IoStack->Parameters.DeviceIoControl.OutputBufferLength = sizeof(HID_XFER_PACKET);
+    else
+        IoStack->Parameters.DeviceIoControl.InputBufferLength = sizeof(HID_XFER_PACKET);
     IoStack->DeviceObject = FDODeviceObject;
 
     IoSetCompletionRoutine(SubIrp,
@@ -1066,7 +1068,7 @@ HidClass_TransferReport(
     PHIDP_COLLECTION_DESC CollectionDescription;
     HID_XFER_PACKET XferPacket;
     BOOLEAN UsesReportIds = FALSE, Found = FALSE;
-    ULONG Index;
+    ULONG Index, FoundLength = 0;
 
     *ReportLength = 0;
     *Information = 0;
@@ -1097,7 +1099,10 @@ HidClass_TransferReport(
         if (Report->ReportID)
             UsesReportIds = TRUE;
         if (Report->ReportID == Buffer[0] && Length)
+        {
             Found = TRUE;
+            FoundLength = Length;
+        }
     }
     if (UsesReportIds && !Found)
         return STATUS_INVALID_PARAMETER;
@@ -1111,6 +1116,10 @@ HidClass_TransferReport(
         XferPacket.reportId = 0;
         XferPacket.reportBuffer++;
         XferPacket.reportBufferLen--;
+    }
+    else if (!WholeBuffer && FoundLength)
+    {
+        XferPacket.reportBufferLen = FoundLength;
     }
 
     return HidClass_DispatchMiniDriverRequest(PDODeviceExtension, IoControlCode, &XferPacket, Information);
