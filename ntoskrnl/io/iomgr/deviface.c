@@ -1461,6 +1461,7 @@ IoRegisterDeviceInterface(IN PDEVICE_OBJECT PhysicalDeviceObject,
     OBJECT_ATTRIBUTES ObjectAttributes;
     ULONG i;
     NTSTATUS Status, SymLinkStatus;
+    ULONG Disposition;
     PEXTENDED_DEVOBJ_EXTENSION DeviceObjectExtension;
 
     ASSERT_IRQL_EQUAL(PASSIVE_LEVEL);
@@ -1675,7 +1676,7 @@ IoRegisterDeviceInterface(IN PDEVICE_OBJECT PhysicalDeviceObject,
         0, /* TileIndex */
         NULL, /* Class */
         REG_OPTION_NON_VOLATILE,
-        NULL); /* Disposition */
+        &Disposition);
 
     if (!NT_SUCCESS(Status))
     {
@@ -1727,13 +1728,12 @@ IoRegisterDeviceInterface(IN PDEVICE_OBJECT PhysicalDeviceObject,
     DPRINT("IoRegisterDeviceInterface(): creating symbolic link %wZ -> %wZ\n", SymbolicLinkName, &PdoNameInfo->Name);
     SymLinkStatus = IoCreateSymbolicLink(SymbolicLinkName, &PdoNameInfo->Name);
 
-    /* If the symbolic link already exists, return an informational success status */
     if (SymLinkStatus == STATUS_OBJECT_NAME_COLLISION)
     {
         /* HACK: Delete the existing symbolic link and update it to the new PDO name */
         IoDeleteSymbolicLink(SymbolicLinkName);
         IoCreateSymbolicLink(SymbolicLinkName, &PdoNameInfo->Name);
-        SymLinkStatus = STATUS_OBJECT_NAME_EXISTS;
+        SymLinkStatus = STATUS_SUCCESS;
     }
 
     if (!NT_SUCCESS(SymLinkStatus))
@@ -1782,7 +1782,9 @@ IoRegisterDeviceInterface(IN PDEVICE_OBJECT PhysicalDeviceObject,
     ExFreePool(InterfaceKeyName.Buffer);
     ExFreePool(BaseKeyName.Buffer);
 
-    return NT_SUCCESS(Status) ? SymLinkStatus : Status;
+    if (NT_SUCCESS(Status) && Disposition == REG_OPENED_EXISTING_KEY)
+        return STATUS_OBJECT_NAME_EXISTS;
+    return Status;
 }
 
 /*++
