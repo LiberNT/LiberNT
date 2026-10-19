@@ -1938,7 +1938,7 @@ CM_Disable_DevNode_Ex(
     if (dnDevInst == 0)
         return CR_INVALID_DEVINST;
 
-    if (ulFlags != 0)
+    if (ulFlags & ~CM_DISABLE_BITS)
         return CR_INVALID_FLAG;
 
     if (hMachine != NULL)

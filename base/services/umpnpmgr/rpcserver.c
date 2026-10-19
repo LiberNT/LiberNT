@@ -3516,6 +3516,33 @@ done:
 }
 
 
+static
+VOID
+UpdateDeviceConfigFlags(
+    _In_ LPWSTR pszDeviceID,
+    _In_ DWORD dwSetFlags,
+    _In_ DWORD dwClearFlags)
+{
+    HKEY hDeviceKey;
+    DWORD dwConfigFlags = 0;
+    DWORD dwNewFlags;
+    DWORD dwSize = sizeof(dwConfigFlags);
+    DWORD dwType;
+
+    if (RegOpenKeyExW(hEnumKey, pszDeviceID, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hDeviceKey) != ERROR_SUCCESS)
+        return;
+
+    if (RegQueryValueExW(hDeviceKey, L"ConfigFlags", NULL, &dwType, (LPBYTE)&dwConfigFlags, &dwSize) != ERROR_SUCCESS ||
+        dwType != REG_DWORD)
+        dwConfigFlags = 0;
+
+    dwNewFlags = (dwConfigFlags | dwSetFlags) & ~dwClearFlags;
+    if (dwNewFlags != dwConfigFlags)
+        RegSetValueExW(hDeviceKey, L"ConfigFlags", 0, REG_DWORD, (LPBYTE)&dwNewFlags, sizeof(dwNewFlags));
+    RegCloseKey(hDeviceKey);
+}
+
+
 static CONFIGRET
 EnableDeviceInstance(
     _In_ LPWSTR pszDeviceInstance)
@@ -3526,6 +3553,8 @@ EnableDeviceInstance(
     NTSTATUS Status;
 
     DPRINT("Enable device instance %S\n", pszDeviceInstance);
+
+    UpdateDeviceConfigFlags(pszDeviceInstance, 0, CONFIGFLAG_DISABLED);
 
     if (GetDeviceStatus(pszDeviceInstance, &ulStatus, &ulProblem) == CR_SUCCESS &&
         (ulStatus & DN_HAS_PROBLEM) &&
@@ -3764,6 +3793,8 @@ PNP_DisableDevInst(
     DWORD ulNameLength,
     DWORD ulFlags)
 {
+    CONFIGRET ret;
+
     UNREFERENCED_PARAMETER(hBinding);
 
     DPRINT1("PNP_DisableDevInst(%p %S %p %p %lu 0x%08lx)\n",
@@ -3776,10 +3807,14 @@ PNP_DisableDevInst(
         IsRootDeviceInstanceID(pDeviceID))
         return CR_INVALID_DEVINST;
 
-    return DisableDeviceInstance(pDeviceID,
-                                 pVetoType,
-                                 pszVetoName,
-                                 ulNameLength);
+    ret = DisableDeviceInstance(pDeviceID,
+                                pVetoType,
+                                pszVetoName,
+                                ulNameLength);
+    if (ret == CR_SUCCESS && (ulFlags & CM_DISABLE_PERSIST))
+        UpdateDeviceConfigFlags(pDeviceID, CONFIGFLAG_DISABLED, 0);
+
+    return ret;
 }
 
 

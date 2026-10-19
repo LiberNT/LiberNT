@@ -937,6 +937,23 @@ PiCallDriverAddDevice(
         return Status;
     }
 
+    Status = IopGetRegistryValue(SubKey, REGSTR_VAL_CONFIGFLAGS, &kvInfo);
+    if (NT_SUCCESS(Status))
+    {
+        ULONG configFlags = 0;
+
+        if (kvInfo->Type == REG_DWORD && kvInfo->DataLength == sizeof(ULONG))
+            configFlags = *(PULONG)((ULONG_PTR)kvInfo + kvInfo->DataOffset);
+        ExFreePool(kvInfo);
+        kvInfo = NULL;
+        if (configFlags & CONFIGFLAG_DISABLED)
+        {
+            ZwClose(SubKey);
+            PiSetDevNodeProblem(DeviceNode, CM_PROB_DISABLED);
+            return STATUS_UNSUCCESSFUL;
+        }
+    }
+
     // try to get the class GUID of an instance and its registry key
     Status = IopGetRegistryValue(SubKey, REGSTR_VAL_CLASSGUID, &kvInfo);
     if (NT_SUCCESS(Status))
