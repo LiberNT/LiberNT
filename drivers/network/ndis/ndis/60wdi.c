@@ -296,6 +296,7 @@ Ndis6WdiTaskCompletionCode(
         case WDI_TASK_DELETE_PORT: return NDIS_STATUS_WDI_INDICATION_DELETE_PORT_COMPLETE;
         case WDI_TASK_CHANGE_OPERATION_MODE: return NDIS_STATUS_WDI_INDICATION_CHANGE_OPERATION_MODE_COMPLETE;
         case WDI_TASK_ROAM: return NDIS_STATUS_WDI_INDICATION_ROAM_COMPLETE;
+        case WDI_TASK_SEND_RESPONSE_ACTION_FRAME: return NDIS_STATUS_WDI_INDICATION_SEND_RESPONSE_ACTION_FRAME_COMPLETE;
         default: return 0;
     }
 }
@@ -1004,7 +1005,7 @@ Ndis6WdiNextJob(
     return Job;
 }
 
-VOID
+BOOLEAN
 Ndis6WdiQueueInternalJob(
     _In_ PNDIS6_WDI_ADAPTER Wdi,
     _In_ NDIS6_WDI_INTERNAL_JOB Internal)
@@ -1014,7 +1015,7 @@ Ndis6WdiQueueInternalJob(
 
     Job = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Job), NDIS6_WDI_TAG);
     if (Job == NULL)
-        return;
+        return FALSE;
 
     RtlZeroMemory(Job, sizeof(*Job));
     Job->Internal = Internal;
@@ -1023,6 +1024,7 @@ Ndis6WdiQueueInternalJob(
     InsertTailList(&Wdi->JobList, &Job->Link);
     KeReleaseSpinLock(&Wdi->JobLock, OldIrql);
     KeSetEvent(&Wdi->WorkerEvent, IO_NO_INCREMENT, FALSE);
+    return TRUE;
 }
 
 static

@@ -70,6 +70,7 @@
 #define WDI_TLV_SET_CIPHER_KEY_INFO                 0x52
 #define WDI_TLV_DELETE_CIPHER_KEY_INFO              0x53
 #define WDI_TLV_DEFAULT_TX_KEY_ID_PARAMETERS        0x54
+#define WDI_TLV_ROAMING_NEEDED_PARAMETERS           0x55
 #define WDI_TLV_LINK_STATE_CHANGE_PARAMETERS        0x56
 #define WDI_TLV_CIPHER_KEY_WEP_KEY                  0x58
 #define WDI_TLV_PHY_TYPE_LIST                       0x19
@@ -83,8 +84,10 @@
 #define WDI_TLV_DATAPATH_CAPABILITIES               0xB9
 #define WDI_TLV_BSS_ENTRY_AGE_INFO                  0xBA
 #define WDI_TLV_DISASSOCIATION_INDICATION_PARAMETERS 0xBC
+#define WDI_TLV_ACTION_FRAME_BODY                   0xBE
 #define WDI_TLV_ALLOWED_BSSIDS_LIST                 0xC2
 #define WDI_TLV_LINK_QUALITY_BAR_MAP                0xD8
+#define WDI_TLV_SEND_ACTION_FRAME_RESPONSE_PARAMETERS 0xE2
 #define WDI_TLV_IHV_NON_WDI_OIDS_LIST               0x104
 #define WDI_TLV_PLDR_SUPPORT                        0x11A
 #define WDI_TLV_CIPHER_KEY_GCMP_KEY                 0x12F
@@ -96,6 +99,13 @@
 #define WDI_CONNECTION_QUALITY_AUTO_POWER_SAVE      1
 #define WDI_CONNECTION_QUALITY_LOW_LATENCY          2
 #define WDI_CONNECTION_QUALITY_NO_POWER_SAVE        4
+#define WDI_ROAM_TRIGGER_OTHER                      0
+#define WDI_ROAM_TRIGGER_CRITICAL_BSS_TRANSITION_REQUEST 1
+#define WDI_ACTION_FRAME_CATEGORY_WNM               10
+#define WDI_WNM_ACTION_BSS_TRANSITION_MANAGEMENT_REQUEST 7
+#define WDI_WNM_ACTION_BSS_TRANSITION_MANAGEMENT_RESPONSE 8
+#define WDI_BSS_TRANSITION_ACCEPT                   0
+#define WDI_BSS_TRANSITION_REJECT_NO_SUITABLE_BSS_CANDIDATES 7
 #define WDI_BAND_ID_2400                            1
 #define WDI_BAND_ID_5000                            2
 #define WDI_BAND_ID_6000                            5
@@ -137,6 +147,8 @@
 #define NDIS6_WDI_MAX_LIST          8
 #define NDIS6_WDI_MAX_MULTICAST     32
 #define NDIS6_WDI_MAX_NON_WDI_OIDS  64
+#define NDIS6_WDI_RECONNECT_ATTEMPTS 3
+#define NDIS6_WDI_RECONNECT_DELAY_MS 2000
 #define NDIS6_WDI_MAX_PEERS         16
 #define NDIS6_WDI_MAX_BANDS         4
 #define NDIS6_WDI_MAX_BAND_CHANNELS 64
@@ -199,7 +211,10 @@ typedef struct _NDIS6_WDI_COMMAND
 typedef enum _NDIS6_WDI_INTERNAL_JOB
 {
     Ndis6WdiJobNone = 0,
-    Ndis6WdiJobConnectionQuality
+    Ndis6WdiJobConnectionQuality,
+    Ndis6WdiJobRoam,
+    Ndis6WdiJobBssTransition,
+    Ndis6WdiJobReconnect
 } NDIS6_WDI_INTERNAL_JOB;
 
 typedef struct _NDIS6_WDI_JOB
@@ -309,6 +324,15 @@ typedef struct _NDIS6_WDI_DOT11
     BOOLEAN PeerConfigured;
     ULONG PowerSavingLevel;
     BOOLEAN MediaStreaming;
+    BOOLEAN RoamQueued;
+    BOOLEAN Roaming;
+    BOOLEAN Disconnecting;
+    ULONG RoamReason;
+    BOOLEAN BtmQueued;
+    UCHAR BtmToken;
+    UCHAR BtmMode;
+    ULONG BtmCandidateCount;
+    DOT11_MAC_ADDRESS BtmCandidates[NDIS6_WDI_MAX_CANDIDATES];
 } NDIS6_WDI_DOT11, *PNDIS6_WDI_DOT11;
 
 struct _NDIS6_WDI_ADAPTER
@@ -372,6 +396,7 @@ struct _NDIS6_WDI_ADAPTER
     ULONG MaxRxRateKbps;
     BOOLEAN HardwareRadioOn;
     BOOLEAN SoftwareRadioOn;
+    BOOLEAN BssTransitionSupported;
     WDI_TXRX_CAPABILITIES TxRxCaps;
     UCHAR MaxNumPeers;
     UCHAR MaxNumPorts;
@@ -467,7 +492,7 @@ NDIS_STATUS Ndis6WdiDot11SetGeneralAttributes(_In_ PNDIS6_WDI_ADAPTER Wdi);
 NDIS_STATUS Ndis6WdiDot11OidRequest(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ PNDIS_OID_REQUEST Request, _Out_ PBOOLEAN Queue);
 VOID Ndis6WdiDot11RunJob(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ PNDIS_OID_REQUEST Request);
 VOID Ndis6WdiDot11RunInternalJob(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ NDIS6_WDI_INTERNAL_JOB Internal);
-VOID Ndis6WdiQueueInternalJob(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ NDIS6_WDI_INTERNAL_JOB Internal);
+BOOLEAN Ndis6WdiQueueInternalJob(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ NDIS6_WDI_INTERNAL_JOB Internal);
 VOID Ndis6WdiDot11Indication(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ ULONG MessageId, _In_reads_bytes_(Length) PUCHAR Tlvs, _In_ ULONG Length);
 VOID Ndis6WdiDot11HaltDisconnect(_In_ PNDIS6_WDI_ADAPTER Wdi);
 

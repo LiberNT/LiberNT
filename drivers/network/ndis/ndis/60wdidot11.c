@@ -525,6 +525,8 @@ Ndis6WdiDot11ParseCapabilities(
                 Wdi->HardwareRadioOn = Caps[24] != 0;
                 Wdi->SoftwareRadioOn = Caps[25] != 0;
             }
+            if (Tlv.Length >= 50)
+                Wdi->BssTransitionSupported = Tlv.Value[49] != 0;
         }
 
         if (Ndis6WdiTlvFind(Container.Value, Container.Length, WDI_TLV_IHV_NON_WDI_OIDS_LIST, &Tlv))
@@ -1624,9 +1626,14 @@ ULONG
 Ndis6WdiBuildCandidates(
     _In_ PNDIS6_WDI_ADAPTER Wdi,
     _Inout_ PNDIS6_WDI_TLV_BUILDER Tlvs,
-    _Out_ PDOT11_SSID Ssid)
+    _Out_ PDOT11_SSID Ssid,
+    _In_reads_bytes_opt_(6) const UCHAR *Exclude,
+    _In_reads_opt_(PreferredCount) const DOT11_MAC_ADDRESS *Preferred,
+    _In_ ULONG PreferredCount,
+    _Out_writes_bytes_opt_(6) PUCHAR First)
 {
     PNDIS6_WDI_BSS Picked[NDIS6_WDI_MAX_CANDIDATES];
+    ULONG Rank[NDIS6_WDI_MAX_CANDIDATES];
     ULONGLONG Now = KeQueryInterruptTime();
     ULONG Count = 0;
     ULONG Offset;
@@ -1634,6 +1641,7 @@ Ndis6WdiBuildCandidates(
     KIRQL OldIrql;
     ULONG i;
     ULONG j;
+    ULONG k;
 
     RtlZeroMemory(Ssid, sizeof(*Ssid));
 
@@ -1644,31 +1652,51 @@ Ndis6WdiBuildCandidates(
 
         if (!Ndis6WdiBssFresh(Bss, Now) || !Ndis6WdiBssMatches(&Wdi->Dot11, Bss))
             continue;
+        if (Exclude != NULL && RtlEqualMemory(Bss->Bssid, Exclude, sizeof(DOT11_MAC_ADDRESS)))
+            continue;
+        for (i = 0; i < PreferredCount; i++)
+        {
+            if (RtlEqualMemory(Bss->Bssid, Preferred[i], sizeof(DOT11_MAC_ADDRESS)))
+                break;
+        }
+        if (PreferredCount != 0 && i == PreferredCount)
+            continue;
 
         if (Count < NDIS6_WDI_MAX_CANDIDATES)
         {
+            Rank[Count] = i;
             Picked[Count++] = Bss;
         }
         else
         {
-            for (i = 0, j = 0; i < Count; i++)
+            for (k = 0, j = 0; k < Count; k++)
             {
-                if (Picked[i]->Rssi < Picked[j]->Rssi)
-                    j = i;
+                if (Rank[k] > Rank[j] || (Rank[k] == Rank[j] && Picked[k]->Rssi < Picked[j]->Rssi))
+                    j = k;
             }
-            if (Bss->Rssi > Picked[j]->Rssi)
+            if (i < Rank[j] || (i == Rank[j] && Bss->Rssi > Picked[j]->Rssi))
+            {
+                Rank[j] = i;
                 Picked[j] = Bss;
+            }
         }
     }
 
     for (i = 1; i < Count; i++)
     {
         PNDIS6_WDI_BSS Key = Picked[i];
+        ULONG KeyRank = Rank[i];
 
-        for (j = i; j > 0 && Picked[j - 1]->Rssi < Key->Rssi; j--)
+        for (j = i; j > 0 && (Rank[j - 1] > KeyRank || (Rank[j - 1] == KeyRank && Picked[j - 1]->Rssi < Key->Rssi)); j--)
+        {
             Picked[j] = Picked[j - 1];
+            Rank[j] = Rank[j - 1];
+        }
         Picked[j] = Key;
+        Rank[j] = KeyRank;
     }
+    if (First != NULL && Count != 0)
+        RtlCopyMemory(First, Picked[0]->Bssid, sizeof(DOT11_MAC_ADDRESS));
 
     if (Wdi->Dot11.HaveDesiredSsid)
     {
@@ -1714,7 +1742,10 @@ VOID
 Ndis6WdiBuildConnectParameters(
     _In_ PNDIS6_WDI_ADAPTER Wdi,
     _Inout_ PNDIS6_WDI_TLV_BUILDER Tlvs,
-    _In_ PDOT11_SSID Ssid)
+    _In_ PDOT11_SSID Ssid,
+    _In_ BOOLEAN Roam,
+    _In_ ULONG RoamReason,
+    _In_ ULONG RoamTrigger)
 {
     PNDIS6_WDI_DOT11 Dot11 = &Wdi->Dot11;
     ULONG Outer;
@@ -1724,14 +1755,14 @@ Ndis6WdiBuildConnectParameters(
     Outer = Ndis6WdiTlvOpen(Tlvs, WDI_TLV_CONNECT_PARAMETERS);
 
     Inner = Ndis6WdiTlvOpen(Tlvs, WDI_TLV_CONNECTION_SETTINGS);
-    Ndis6WdiTlvAppend8(Tlvs, FALSE);
+    Ndis6WdiTlvAppend8(Tlvs, Roam);
     Ndis6WdiTlvAppend8(Tlvs, Dot11->HiddenNetwork);
     Ndis6WdiTlvAppend8(Tlvs, Dot11->ExcludeUnencrypted);
     Ndis6WdiTlvAppend8(Tlvs, FALSE);
     Ndis6WdiTlvAppend8(Tlvs, FALSE);
-    Ndis6WdiTlvAppend32(Tlvs, 0);
-    Ndis6WdiTlvAppend32(Tlvs, 0);
-    Ndis6WdiTlvAppend8(Tlvs, FALSE);
+    Ndis6WdiTlvAppend32(Tlvs, RoamReason);
+    Ndis6WdiTlvAppend32(Tlvs, RoamTrigger);
+    Ndis6WdiTlvAppend8(Tlvs, Wdi->BssTransitionSupported);
     Ndis6WdiTlvClose(Tlvs, Inner);
 
     Ndis6WdiTlvAdd(Tlvs, WDI_TLV_SSID, Ssid->ucSSID, Ssid->uSSIDLength);
@@ -1776,7 +1807,7 @@ Ndis6WdiJobConnect(
     Ndis6WdiConsumed(Request, Length);
 
     Ndis6WdiTlvInit(&Candidates);
-    Count = Ndis6WdiBuildCandidates(Wdi, &Candidates, &Ssid);
+    Count = Ndis6WdiBuildCandidates(Wdi, &Candidates, &Ssid, NULL, NULL, 0, NULL);
     if (Count == 0 && Wdi->Dot11.HaveDesiredSsid)
     {
         static const DOT11_MAC_ADDRESS Broadcast = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
@@ -1788,7 +1819,7 @@ Ndis6WdiJobConnect(
 
         Ndis6WdiTlvFree(&Candidates);
         Ndis6WdiTlvInit(&Candidates);
-        Count = Ndis6WdiBuildCandidates(Wdi, &Candidates, &Ssid);
+        Count = Ndis6WdiBuildCandidates(Wdi, &Candidates, &Ssid, NULL, NULL, 0, NULL);
     }
 
     RtlZeroMemory(&Start, sizeof(Start));
@@ -1809,7 +1840,7 @@ Ndis6WdiJobConnect(
     (VOID)Ndis6WdiSendPrivacyExemptions(Wdi);
 
     Ndis6WdiTlvInit(&Tlvs);
-    Ndis6WdiBuildConnectParameters(Wdi, &Tlvs, &Ssid);
+    Ndis6WdiBuildConnectParameters(Wdi, &Tlvs, &Ssid, FALSE, 0, WDI_ROAM_TRIGGER_OTHER);
     Ndis6WdiTlvAppend(&Tlvs, Candidates.Buffer, Candidates.Length);
     Ndis6WdiTlvFree(&Candidates);
 
@@ -1873,6 +1904,19 @@ Ndis6WdiTakeAssociation(
 
 static
 VOID
+Ndis6WdiSetDisconnecting(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_ BOOLEAN Disconnecting)
+{
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+    Wdi->Dot11.Disconnecting = Disconnecting;
+    KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+}
+
+static
+VOID
 Ndis6WdiDisconnectComplete(
     _In_ PNDIS6_WDI_ADAPTER Wdi,
     _In_ NDIS_STATUS Status,
@@ -1892,6 +1936,7 @@ Ndis6WdiDisconnectComplete(
         Ndis6WdiIndicateDisassociation(Wdi, Bssid, DOT11_ASSOC_STATUS_DISASSOCIATED_BY_OS);
         Ndis6WdiIndicateLinkState(Wdi, FALSE);
     }
+    Ndis6WdiSetDisconnecting(Wdi, FALSE);
     Ndis6WdiDataFlushQueue(Wdi, NDIS_STATUS_MEDIA_DISCONNECTED);
 }
 
@@ -1931,10 +1976,13 @@ Ndis6WdiJobDisconnect(
     if (!Wdi->Dot11.Associated && !Wdi->Dot11.Connecting)
         return NDIS_STATUS_SUCCESS;
 
+    Ndis6WdiSetDisconnecting(Wdi, TRUE);
     Ndis6WdiTlvInit(&Tlvs);
     Ndis6WdiBuildDisconnectTlvs(Wdi, &Tlvs);
     Status = Ndis6WdiTask(Wdi, WDI_TASK_DISCONNECT, Wdi->PortId, &Tlvs, FALSE, Ndis6WdiDisconnectComplete, NULL);
     Ndis6WdiTlvFree(&Tlvs);
+    if (Status != NDIS_STATUS_SUCCESS && Status != NDIS_STATUS_PENDING)
+        Ndis6WdiSetDisconnecting(Wdi, FALSE);
     return Status;
 }
 
@@ -1948,11 +1996,13 @@ Ndis6WdiDot11HaltDisconnect(
     if (!Wdi->Dot11.Associated)
         return;
 
+    Ndis6WdiSetDisconnecting(Wdi, TRUE);
     Ndis6WdiTlvInit(&Tlvs);
     Ndis6WdiBuildDisconnectTlvs(Wdi, &Tlvs);
     (VOID)Ndis6WdiTask(Wdi, WDI_TASK_DISCONNECT, Wdi->PortId, &Tlvs, TRUE, NULL, NULL);
     Ndis6WdiTlvFree(&Tlvs);
     (VOID)Ndis6WdiTakeAssociation(Wdi, Bssid);
+    Ndis6WdiSetDisconnecting(Wdi, FALSE);
 }
 
 static
@@ -1983,10 +2033,12 @@ Ndis6WdiJobReset(
     {
         Ndis6WdiTlvAdd(&Tlvs, WDI_TLV_CONFIGURED_MAC_ADDRESS, Reset->dot11MacAddress, sizeof(DOT11_MAC_ADDRESS));
     }
+    Ndis6WdiSetDisconnecting(Wdi, TRUE);
     Status = Ndis6WdiTask(Wdi, WDI_TASK_DOT11_RESET, Wdi->PortId, &Tlvs, TRUE, NULL, NULL);
     Ndis6WdiTlvFree(&Tlvs);
 
     (VOID)Ndis6WdiTakeAssociation(Wdi, Bssid);
+    Ndis6WdiSetDisconnecting(Wdi, FALSE);
     Ndis6WdiDataFlushQueue(Wdi, NDIS_STATUS_RESET_IN_PROGRESS);
 
     if (Status == NDIS_STATUS_SUCCESS && SetDefaultMib)
@@ -2437,6 +2489,365 @@ Ndis6WdiJobDefaultKeyId(
     return Status;
 }
 
+static
+BOOLEAN
+Ndis6WdiRoamAllowed(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_reads_bytes_(6) const UCHAR *Current,
+    _In_reads_(ListedCount) const DOT11_MAC_ADDRESS *Listed,
+    _In_ ULONG ListedCount)
+{
+    BOOLEAN Allowed;
+    KIRQL OldIrql;
+    ULONG i;
+    ULONG j;
+
+    KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+    Allowed = Wdi->Dot11.DesiredBssidCount == 0;
+    for (i = 0; !Allowed && i < Wdi->Dot11.DesiredBssidCount; i++)
+    {
+        if (RtlEqualMemory(Wdi->Dot11.DesiredBssids[i], Current, sizeof(DOT11_MAC_ADDRESS)))
+            continue;
+        if (ListedCount == 0)
+            Allowed = TRUE;
+        for (j = 0; !Allowed && j < ListedCount; j++)
+            Allowed = RtlEqualMemory(Wdi->Dot11.DesiredBssids[i], Listed[j], sizeof(DOT11_MAC_ADDRESS));
+    }
+    KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+
+    return Allowed;
+}
+
+static
+BOOLEAN
+Ndis6WdiRoamBegin(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_ ULONG Reason)
+{
+    DOT11_ROAMING_START_PARAMETERS Start;
+    BOOLEAN Associated;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+    Associated = Wdi->Dot11.Associated && !Wdi->Dot11.Connecting && !Wdi->Dot11.Roaming;
+    Wdi->Dot11.Roaming = Associated;
+    KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+    if (!Associated)
+        return FALSE;
+
+    RtlZeroMemory(&Start, sizeof(Start));
+    Start.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    Start.Header.Revision = DOT11_ROAMING_START_PARAMETERS_REVISION_1;
+    Start.Header.Size = sizeof(Start);
+    Start.uRoamingReason = Ndis6WdiAssocStatus(Reason, 0);
+    Ndis6WdiIndicateStatusUp(Wdi, NDIS_STATUS_DOT11_ROAMING_START, &Start, sizeof(Start));
+    return TRUE;
+}
+
+static
+NDIS_STATUS
+Ndis6WdiRoamAttempt(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _Inout_ PNDIS6_WDI_TLV_BUILDER Candidates,
+    _In_ ULONG Count,
+    _In_ PDOT11_SSID Ssid,
+    _In_reads_bytes_(6) const UCHAR *From,
+    _In_ ULONG Reason,
+    _In_ ULONG Trigger,
+    _In_ ULONG Task)
+{
+    NDIS6_WDI_TLV_BUILDER Tlvs;
+    NDIS_STATUS Status = NDIS_STATUS_NOT_ACCEPTED;
+
+    if (Count != 0 && !Candidates->Failed)
+    {
+        Ndis6WdiTlvInit(&Tlvs);
+        Ndis6WdiBuildConnectParameters(Wdi, &Tlvs, Ssid, TRUE, Reason, Trigger);
+        Ndis6WdiTlvAppend(&Tlvs, Candidates->Buffer, Candidates->Length);
+
+        DbgPrint("WDI: roaming from %02x:%02x:%02x:%02x:%02x:%02x (reason %lu) with %lu candidates\n",
+                 From[0], From[1], From[2], From[3], From[4], From[5], Reason, Count);
+        Status = Ndis6WdiTask(Wdi, Task, Wdi->PortId, &Tlvs, TRUE, NULL, NULL);
+        Ndis6WdiTlvFree(&Tlvs);
+    }
+    Ndis6WdiTlvFree(Candidates);
+    return Status;
+}
+
+static
+VOID
+Ndis6WdiRoamFinish(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_ NDIS_STATUS Status)
+{
+    DOT11_ROAMING_COMPLETION_PARAMETERS Completion;
+    DOT11_MAC_ADDRESS Current;
+    BOOLEAN Associated;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+    Wdi->Dot11.Roaming = FALSE;
+    Associated = Wdi->Dot11.Associated;
+    RtlCopyMemory(Current, Wdi->Dot11.Bssid, sizeof(Current));
+    KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+
+    DbgPrint("WDI: roam completed 0x%08lx, %s %02x:%02x:%02x:%02x:%02x:%02x\n", Status,
+             Associated ? "associated with" : "disconnected from",
+             Current[0], Current[1], Current[2], Current[3], Current[4], Current[5]);
+
+    RtlZeroMemory(&Completion, sizeof(Completion));
+    Completion.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    Completion.Header.Revision = DOT11_ROAMING_COMPLETION_PARAMETERS_REVISION_1;
+    Completion.Header.Size = sizeof(Completion);
+    Completion.uStatus = Associated ? DOT11_ASSOC_STATUS_SUCCESS : DOT11_ASSOC_STATUS_ROAMING_ASSOCIATION_LOST;
+    Ndis6WdiIndicateStatusUp(Wdi, NDIS_STATUS_DOT11_ROAMING_COMPLETION, &Completion, sizeof(Completion));
+
+    if (Associated)
+        Ndis6WdiDot11RunInternalJob(Wdi, Ndis6WdiJobConnectionQuality);
+    else
+        Ndis6WdiIndicateLinkState(Wdi, FALSE);
+}
+
+static
+VOID
+Ndis6WdiRoamTo(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _Inout_ PNDIS6_WDI_TLV_BUILDER Candidates,
+    _In_ ULONG Count,
+    _In_ PDOT11_SSID Ssid,
+    _In_reads_bytes_(6) const UCHAR *From,
+    _In_ ULONG Reason,
+    _In_ ULONG Trigger)
+{
+    if (!Ndis6WdiRoamBegin(Wdi, Reason))
+    {
+        Ndis6WdiTlvFree(Candidates);
+        return;
+    }
+    Ndis6WdiRoamFinish(Wdi, Ndis6WdiRoamAttempt(Wdi, Candidates, Count, Ssid, From, Reason, Trigger, WDI_TASK_ROAM));
+}
+
+static
+VOID
+Ndis6WdiRoamScan(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_ PDOT11_SSID Ssid)
+{
+    static const DOT11_MAC_ADDRESS Broadcast = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+    NDIS6_WDI_TLV_BUILDER Tlvs;
+
+    Ndis6WdiTlvInit(&Tlvs);
+    Ndis6WdiBuildScanTlvs(Wdi, &Tlvs, Broadcast, 1, Ssid, WDI_SCAN_TYPE_AUTO);
+    (VOID)Ndis6WdiTask(Wdi, WDI_TASK_SCAN, Wdi->PortId, &Tlvs, TRUE, NULL, NULL);
+    Ndis6WdiTlvFree(&Tlvs);
+}
+
+static
+VOID
+Ndis6WdiRoam(
+    _In_ PNDIS6_WDI_ADAPTER Wdi)
+{
+    NDIS6_WDI_TLV_BUILDER Candidates;
+    DOT11_MAC_ADDRESS Current;
+    DOT11_SSID Ssid;
+    ULONG Reason;
+    ULONG Count;
+    BOOLEAN Associated;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+    Wdi->Dot11.RoamQueued = FALSE;
+    Associated = Wdi->Dot11.Associated && !Wdi->Dot11.Connecting;
+    RtlCopyMemory(Current, Wdi->Dot11.Bssid, sizeof(Current));
+    Ssid = Wdi->Dot11.Ssid;
+    Reason = Wdi->Dot11.RoamReason;
+    KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+
+    if (!Associated)
+        return;
+
+    if (Ndis6WdiRoamAllowed(Wdi, Current, NULL, 0))
+        Ndis6WdiRoamScan(Wdi, &Ssid);
+
+    Ndis6WdiTlvInit(&Candidates);
+    Count = Ndis6WdiBuildCandidates(Wdi, &Candidates, &Ssid, Current, NULL, 0, NULL);
+    if (Count == 0 || Candidates.Failed)
+    {
+        DbgPrint("WDI: roaming needed (reason %lu) but no other candidate\n", Reason);
+        Ndis6WdiTlvFree(&Candidates);
+        return;
+    }
+
+    Ndis6WdiRoamTo(Wdi, &Candidates, Count, &Ssid, Current, Reason, WDI_ROAM_TRIGGER_OTHER);
+}
+
+static
+VOID
+Ndis6WdiReconnect(
+    _In_ PNDIS6_WDI_ADAPTER Wdi)
+{
+    NDIS6_WDI_TLV_BUILDER Candidates;
+    DOT11_MAC_ADDRESS From;
+    DOT11_SSID Ssid;
+    LARGE_INTEGER Delay;
+    NDIS_STATUS Status = NDIS_STATUS_NOT_ACCEPTED;
+    ULONG Attempt;
+    ULONG Count;
+    BOOLEAN Roaming;
+    BOOLEAN Pending;
+    KIRQL OldIrql;
+
+    for (Attempt = 0; Attempt < NDIS6_WDI_RECONNECT_ATTEMPTS; Attempt++)
+    {
+        KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+        Roaming = Wdi->Dot11.Roaming && !Wdi->Dot11.Associated;
+        RtlCopyMemory(From, Wdi->Dot11.Bssid, sizeof(From));
+        Ssid = Wdi->Dot11.Ssid;
+        KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+        if (!Roaming)
+            return;
+
+        if (Attempt != 0)
+        {
+            KeAcquireSpinLock(&Wdi->JobLock, &OldIrql);
+            Pending = !IsListEmpty(&Wdi->JobList);
+            KeReleaseSpinLock(&Wdi->JobLock, OldIrql);
+            if (Pending || Wdi->WorkerStop)
+                break;
+            Delay.QuadPart = -(LONGLONG)NDIS6_WDI_RECONNECT_DELAY_MS * 10000;
+            KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+        }
+
+        Ndis6WdiRoamScan(Wdi, &Ssid);
+
+        Ndis6WdiTlvInit(&Candidates);
+        Count = Ndis6WdiBuildCandidates(Wdi, &Candidates, &Ssid, NULL, NULL, 0, NULL);
+        if (Count == 0 || Candidates.Failed)
+            DbgPrint("WDI: association lost and no candidate to roam to\n");
+        Status = Ndis6WdiRoamAttempt(Wdi, &Candidates, Count, &Ssid, From,
+                                     WDI_ASSOC_STATUS_ROAMING_ASSOCIATION_LOST, WDI_ROAM_TRIGGER_OTHER, WDI_TASK_CONNECT);
+
+        KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+        Roaming = !Wdi->Dot11.Associated;
+        KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+        if (!Roaming)
+            break;
+    }
+
+    Ndis6WdiRoamFinish(Wdi, Status);
+}
+
+static
+VOID
+Ndis6WdiSendBssTransitionResponse(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_reads_bytes_(6) const UCHAR *Peer,
+    _In_ UCHAR Token,
+    _In_ UCHAR Status,
+    _In_reads_bytes_(6) const UCHAR *Target)
+{
+    NDIS6_WDI_TLV_BUILDER Tlvs;
+    PLIST_ENTRY Link;
+    UCHAR Body[11];
+    ULONG Channel = 0;
+    ULONG BandId;
+    ULONG Offset;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+    BandId = Wdi->Dot11.BandId;
+    for (Link = Wdi->BssList.Flink; Link != &Wdi->BssList; Link = Link->Flink)
+    {
+        PNDIS6_WDI_BSS Bss = CONTAINING_RECORD(Link, NDIS6_WDI_BSS, Link);
+
+        if (RtlEqualMemory(Bss->Bssid, Peer, sizeof(DOT11_MAC_ADDRESS)))
+        {
+            Channel = Bss->Channel;
+            BandId = Bss->BandId;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+
+    Body[0] = WDI_ACTION_FRAME_CATEGORY_WNM;
+    Body[1] = WDI_WNM_ACTION_BSS_TRANSITION_MANAGEMENT_RESPONSE;
+    Body[2] = Token;
+    Body[3] = Status;
+    Body[4] = 0;
+    RtlCopyMemory(Body + 5, Target, sizeof(DOT11_MAC_ADDRESS));
+
+    Ndis6WdiTlvInit(&Tlvs);
+    Offset = Ndis6WdiTlvOpen(&Tlvs, WDI_TLV_SEND_ACTION_FRAME_RESPONSE_PARAMETERS);
+    Ndis6WdiTlvAppend32(&Tlvs, Channel);
+    Ndis6WdiTlvAppend32(&Tlvs, BandId);
+    Ndis6WdiTlvAppend(&Tlvs, Peer, sizeof(DOT11_MAC_ADDRESS));
+    Ndis6WdiTlvAppend32(&Tlvs, 100);
+    Ndis6WdiTlvAppend32(&Tlvs, 0);
+    Ndis6WdiTlvClose(&Tlvs, Offset);
+    Ndis6WdiTlvAdd(&Tlvs, WDI_TLV_ACTION_FRAME_BODY, Body, Status == WDI_BSS_TRANSITION_ACCEPT ? sizeof(Body) : 5);
+    (VOID)Ndis6WdiTask(Wdi, WDI_TASK_SEND_RESPONSE_ACTION_FRAME, Wdi->PortId, &Tlvs, TRUE, NULL, NULL);
+    Ndis6WdiTlvFree(&Tlvs);
+}
+
+static
+VOID
+Ndis6WdiBssTransition(
+    _In_ PNDIS6_WDI_ADAPTER Wdi)
+{
+    DOT11_MAC_ADDRESS Listed[NDIS6_WDI_MAX_CANDIDATES];
+    DOT11_MAC_ADDRESS Current;
+    DOT11_MAC_ADDRESS Target;
+    NDIS6_WDI_TLV_BUILDER Candidates;
+    DOT11_SSID Ssid;
+    ULONG ListedCount;
+    ULONG Count;
+    UCHAR Token;
+    UCHAR Mode;
+    UCHAR Status;
+    BOOLEAN Associated;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+    Wdi->Dot11.BtmQueued = FALSE;
+    Associated = Wdi->Dot11.Associated && !Wdi->Dot11.Connecting && !Wdi->Dot11.Roaming;
+    RtlCopyMemory(Current, Wdi->Dot11.Bssid, sizeof(Current));
+    Ssid = Wdi->Dot11.Ssid;
+    Token = Wdi->Dot11.BtmToken;
+    Mode = Wdi->Dot11.BtmMode;
+    ListedCount = Wdi->Dot11.BtmCandidateCount;
+    RtlCopyMemory(Listed, Wdi->Dot11.BtmCandidates, ListedCount * sizeof(DOT11_MAC_ADDRESS));
+    KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+
+    if (!Associated)
+        return;
+
+    RtlZeroMemory(Target, sizeof(Target));
+    Ndis6WdiTlvInit(&Candidates);
+    Count = Ndis6WdiBuildCandidates(Wdi, &Candidates, &Ssid, Current, Listed, ListedCount, Target);
+    if ((Count == 0 || Candidates.Failed) && Ndis6WdiRoamAllowed(Wdi, Current, Listed, ListedCount))
+    {
+        Ndis6WdiTlvFree(&Candidates);
+        Ndis6WdiRoamScan(Wdi, &Ssid);
+        Ndis6WdiTlvInit(&Candidates);
+        Count = Ndis6WdiBuildCandidates(Wdi, &Candidates, &Ssid, Current, Listed, ListedCount, Target);
+    }
+    Status = (Count == 0 || Candidates.Failed) ? WDI_BSS_TRANSITION_REJECT_NO_SUITABLE_BSS_CANDIDATES : WDI_BSS_TRANSITION_ACCEPT;
+
+    DbgPrint("WDI: BSS transition request from %02x:%02x:%02x:%02x:%02x:%02x (mode 0x%02x, %lu listed), %s\n",
+             Current[0], Current[1], Current[2], Current[3], Current[4], Current[5], Mode, ListedCount,
+             Status == WDI_BSS_TRANSITION_ACCEPT ? "accepted" : "rejected, no suitable candidate");
+    Ndis6WdiSendBssTransitionResponse(Wdi, Current, Token, Status, Target);
+
+    if (Status != WDI_BSS_TRANSITION_ACCEPT)
+    {
+        Ndis6WdiTlvFree(&Candidates);
+        return;
+    }
+
+    Ndis6WdiRoamTo(Wdi, &Candidates, Count, &Ssid, Current, WDI_ASSOC_STATUS_ROAMING_BETTER_AP_FOUND,
+                   (Mode & 0x04) ? WDI_ROAM_TRIGGER_CRITICAL_BSS_TRANSITION_REQUEST : WDI_ROAM_TRIGGER_OTHER);
+}
+
 VOID
 Ndis6WdiDot11RunInternalJob(
     _In_ PNDIS6_WDI_ADAPTER Wdi,
@@ -2446,6 +2857,22 @@ Ndis6WdiDot11RunInternalJob(
     ULONG Hint;
     BOOLEAN Associated;
     KIRQL OldIrql;
+
+    if (Internal == Ndis6WdiJobRoam)
+    {
+        Ndis6WdiRoam(Wdi);
+        return;
+    }
+    if (Internal == Ndis6WdiJobBssTransition)
+    {
+        Ndis6WdiBssTransition(Wdi);
+        return;
+    }
+    if (Internal == Ndis6WdiJobReconnect)
+    {
+        Ndis6WdiReconnect(Wdi);
+        return;
+    }
 
     if (Internal != Ndis6WdiJobConnectionQuality)
         return;
@@ -2672,6 +3099,97 @@ Ndis6WdiHandleLinkState(
     Ndis6WdiIndicateLinkQuality(Wdi, Tlv.Value, Tlv.Value[14]);
 }
 
+static
+VOID
+Ndis6WdiHandleActionFrame(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_reads_bytes_(Length) PUCHAR Tlvs,
+    _In_ ULONG Length)
+{
+    DOT11_MAC_ADDRESS Listed[NDIS6_WDI_MAX_CANDIDATES];
+    UCHAR Preference[NDIS6_WDI_MAX_CANDIDATES];
+    NDIS6_WDI_TLV Body;
+    NDIS6_WDI_TLV Source;
+    PUCHAR Cursor;
+    PUCHAR End;
+    ULONG Count = 0;
+    BOOLEAN Queue;
+    UCHAR Mode;
+    KIRQL OldIrql;
+
+    if (!Ndis6WdiTlvFind(Tlvs, Length, WDI_TLV_ACTION_FRAME_BODY, &Body) ||
+        !Ndis6WdiTlvFind(Tlvs, Length, WDI_TLV_BSSID, &Source) ||
+        Source.Length < sizeof(DOT11_MAC_ADDRESS) || Body.Length < 7 ||
+        Body.Value[0] != WDI_ACTION_FRAME_CATEGORY_WNM ||
+        Body.Value[1] != WDI_WNM_ACTION_BSS_TRANSITION_MANAGEMENT_REQUEST)
+    {
+        return;
+    }
+
+    Mode = Body.Value[3];
+    Cursor = Body.Value + 7;
+    End = Body.Value + Body.Length;
+    if (Mode & 0x08)
+    {
+        if (End - Cursor < 12)
+            return;
+        Cursor += 12;
+    }
+    if (Mode & 0x10)
+    {
+        if (End - Cursor < 1 || End - Cursor < 1 + Cursor[0])
+            return;
+        Cursor += 1 + Cursor[0];
+    }
+
+    while ((Mode & 0x01) && End - Cursor >= 2 && End - Cursor >= 2 + Cursor[1])
+    {
+        if (Cursor[0] == 52 && Cursor[1] >= 13)
+        {
+            PUCHAR Sub = Cursor + 2 + 13;
+            PUCHAR SubEnd = Cursor + 2 + Cursor[1];
+            UCHAR Value = 1;
+            ULONG i;
+
+            while (SubEnd - Sub >= 2 && SubEnd - Sub >= 2 + Sub[1])
+            {
+                if (Sub[0] == 3 && Sub[1] >= 1)
+                    Value = Sub[2];
+                Sub += 2 + Sub[1];
+            }
+
+            if (Value != 0 && Count < NDIS6_WDI_MAX_CANDIDATES)
+            {
+                for (i = Count; i > 0 && Preference[i - 1] < Value; i--)
+                {
+                    RtlCopyMemory(Listed[i], Listed[i - 1], sizeof(DOT11_MAC_ADDRESS));
+                    Preference[i] = Preference[i - 1];
+                }
+                RtlCopyMemory(Listed[i], Cursor + 2, sizeof(DOT11_MAC_ADDRESS));
+                Preference[i] = Value;
+                Count++;
+            }
+        }
+        Cursor += 2 + Cursor[1];
+    }
+
+    KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+    Queue = Wdi->Dot11.Associated && !Wdi->Dot11.Connecting && !Wdi->Dot11.Roaming && !Wdi->Dot11.BtmQueued &&
+            RtlEqualMemory(Wdi->Dot11.Bssid, Source.Value, sizeof(DOT11_MAC_ADDRESS));
+    if (Queue)
+    {
+        Wdi->Dot11.BtmQueued = TRUE;
+        Wdi->Dot11.BtmToken = Body.Value[2];
+        Wdi->Dot11.BtmMode = Mode;
+        Wdi->Dot11.BtmCandidateCount = Count;
+        RtlCopyMemory(Wdi->Dot11.BtmCandidates, Listed, Count * sizeof(DOT11_MAC_ADDRESS));
+    }
+    KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+
+    if (Queue)
+        Ndis6WdiQueueInternalJob(Wdi, Ndis6WdiJobBssTransition);
+}
+
 VOID
 Ndis6WdiDot11Indication(
     _In_ PNDIS6_WDI_ADAPTER Wdi,
@@ -2705,10 +3223,48 @@ Ndis6WdiDot11Indication(
             {
                 DOT11_MAC_ADDRESS Bssid;
                 BOOLEAN WasAssociated = Ndis6WdiTakeAssociation(Wdi, Bssid);
+                BOOLEAN Roaming;
+                BOOLEAN Lost;
+                KIRQL OldIrql;
+
+                KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+                Roaming = Wdi->Dot11.Roaming;
+                Lost = WasAssociated && !Roaming && !Wdi->Dot11.Connecting && !Wdi->Dot11.Disconnecting;
+                if (Lost)
+                    Wdi->Dot11.Roaming = TRUE;
+                KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+
+                if (Lost)
+                {
+                    DOT11_ROAMING_START_PARAMETERS Start;
+
+                    RtlZeroMemory(&Start, sizeof(Start));
+                    Start.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+                    Start.Header.Revision = DOT11_ROAMING_START_PARAMETERS_REVISION_1;
+                    Start.Header.Size = sizeof(Start);
+                    Start.uRoamingReason = DOT11_ASSOC_STATUS_ROAMING_ASSOCIATION_LOST;
+                    Ndis6WdiIndicateStatusUp(Wdi, NDIS_STATUS_DOT11_ROAMING_START, &Start, sizeof(Start));
+                }
 
                 DbgPrint("WDI: disassociated, reason %lu\n", Ndis6WdiRead32(Tlv.Value + 6));
                 Ndis6WdiIndicateDisassociation(Wdi, Tlv.Value, Ndis6WdiAssocStatus(Ndis6WdiRead32(Tlv.Value + 6), 0));
-                if (WasAssociated)
+                if (Lost && !Ndis6WdiQueueInternalJob(Wdi, Ndis6WdiJobReconnect))
+                {
+                    DOT11_ROAMING_COMPLETION_PARAMETERS Completion;
+
+                    KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+                    Wdi->Dot11.Roaming = FALSE;
+                    KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+                    RtlZeroMemory(&Completion, sizeof(Completion));
+                    Completion.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+                    Completion.Header.Revision = DOT11_ROAMING_COMPLETION_PARAMETERS_REVISION_1;
+                    Completion.Header.Size = sizeof(Completion);
+                    Completion.uStatus = DOT11_ASSOC_STATUS_ROAMING_ASSOCIATION_LOST;
+                    Ndis6WdiIndicateStatusUp(Wdi, NDIS_STATUS_DOT11_ROAMING_COMPLETION, &Completion, sizeof(Completion));
+                    Lost = FALSE;
+                    Roaming = FALSE;
+                }
+                if (WasAssociated && !Roaming && !Lost)
                     Ndis6WdiIndicateLinkState(Wdi, FALSE);
             }
             break;
@@ -2727,6 +3283,32 @@ Ndis6WdiDot11Indication(
             break;
 
         case WDI_INDICATION_ROAMING_NEEDED:
+        {
+            ULONG Reason = WDI_ASSOC_STATUS_ROAMING_ASSOCIATION_LOST;
+            BOOLEAN Queue;
+            KIRQL OldIrql;
+
+            if (Ndis6WdiTlvFind(Tlvs, Length, WDI_TLV_ROAMING_NEEDED_PARAMETERS, &Tlv) && Tlv.Length >= sizeof(ULONG))
+                Reason = Ndis6WdiRead32(Tlv.Value);
+
+            KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+            Queue = Wdi->Dot11.Associated && !Wdi->Dot11.Connecting && !Wdi->Dot11.Roaming && !Wdi->Dot11.RoamQueued;
+            if (Queue)
+            {
+                Wdi->Dot11.RoamQueued = TRUE;
+                Wdi->Dot11.RoamReason = Reason;
+            }
+            KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+
+            if (Queue)
+                Ndis6WdiQueueInternalJob(Wdi, Ndis6WdiJobRoam);
+            break;
+        }
+
+        case WDI_INDICATION_ACTION_FRAME_RECEIVED:
+            Ndis6WdiHandleActionFrame(Wdi, Tlvs, Length);
+            break;
+
         case WDI_INDICATION_IHV_EVENT:
         case WDI_INDICATION_ADAPTER_STATE:
             break;

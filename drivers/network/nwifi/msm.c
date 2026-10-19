@@ -995,6 +995,15 @@ NwifiMsmIndicateStatus(
 
             NwifiSupplicantResetSession(Msm);
             NdisAcquireSpinLock(&Msm->Lock);
+            if (Msm->Roaming)
+            {
+                Msm->State = NwifiMsmAssociating;
+                NdisReleaseSpinLock(&Msm->Lock);
+                NdisAcquireSpinLock(&Adapter->DataLock);
+                Adapter->Associated = FALSE;
+                NdisReleaseSpinLock(&Adapter->DataLock);
+                break;
+            }
             Msm->State = NwifiMsmIdle;
             NdisReleaseSpinLock(&Msm->Lock);
             NdisAcquireSpinLock(&Adapter->DataLock);
@@ -1012,6 +1021,42 @@ NwifiMsmIndicateStatus(
             /* A roam re-runs association; the new BSSID is learned from the
              * next ASSOCIATION_START/COMPLETION pair. */
             DPRINT("NWIFI: roaming indication 0x%08X\n", StatusIndication->StatusCode);
+            if (StatusIndication->StatusCode == NDIS_STATUS_DOT11_ROAMING_START)
+            {
+                NdisAcquireSpinLock(&Msm->Lock);
+                Msm->Roaming = TRUE;
+                NdisReleaseSpinLock(&Msm->Lock);
+                DPRINT1("NWIFI: roaming started\n");
+            }
+            else
+            {
+                DOT11_ASSOC_STATUS RoamStatus = DOT11_ASSOC_STATUS_FAILURE;
+                BOOLEAN Lost;
+
+                if (Buffer != NULL &&
+                    BufferSize >= sizeof(DOT11_ROAMING_COMPLETION_PARAMETERS))
+                {
+                    RoamStatus = ((PDOT11_ROAMING_COMPLETION_PARAMETERS)Buffer)->uStatus;
+                }
+                NdisAcquireSpinLock(&Msm->Lock);
+                Msm->Roaming = FALSE;
+                Lost = RoamStatus != DOT11_ASSOC_STATUS_SUCCESS;
+                if (Lost)
+                    Msm->State = NwifiMsmIdle;
+                NdisReleaseSpinLock(&Msm->Lock);
+                DPRINT1("NWIFI: roaming completed 0x%08X\n", RoamStatus);
+
+                if (Lost)
+                {
+                    NwifiSupplicantResetSession(Msm);
+                    NdisAcquireSpinLock(&Adapter->DataLock);
+                    Adapter->Associated = FALSE;
+                    NdisReleaseSpinLock(&Adapter->DataLock);
+                    NwifiIndicateLinkState(Adapter, FALSE);
+                    NwifiQueueNotification(Adapter->InterfaceIndex, NwifiNotifyDisconnected,
+                                           NDIS_STATUS_DOT11_ROAMING_COMPLETION);
+                }
+            }
             break;
 
         case NDIS_STATUS_DOT11_LINK_QUALITY:
