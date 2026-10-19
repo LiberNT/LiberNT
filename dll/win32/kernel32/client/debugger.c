@@ -723,6 +723,8 @@ VOID
 WINAPI
 OutputDebugStringA(IN LPCSTR _OutputString)
 {
+    DWORD LastError = GetLastError();
+
     _SEH2_TRY
     {
         ULONG_PTR a_nArgs[2];
@@ -929,6 +931,8 @@ OutputDebugStringA(IN LPCSTR _OutputString)
         _SEH2_END;
     }
     _SEH2_END;
+
+    SetLastError(LastError);
 }
 
 /*

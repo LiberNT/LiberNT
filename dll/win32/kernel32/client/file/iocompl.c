@@ -311,7 +311,6 @@ GetOverlappedResult(IN HANDLE hFile,
     }
 
     /* All done */
-    SetLastError(ERROR_SUCCESS);
     return TRUE;
 }
 
