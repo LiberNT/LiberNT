@@ -23,6 +23,7 @@
 @ cdecl mbedtls_ssl_set_hostname(ptr str)
 @ cdecl mbedtls_ssl_conf_max_version(ptr long long)
 @ cdecl mbedtls_ssl_conf_min_version(ptr long long)
+@ cdecl mbedtls_ssl_conf_renegotiation(ptr long)
 @ cdecl mbedtls_ssl_conf_rng(ptr ptr ptr)
 @ cdecl mbedtls_ssl_write(ptr ptr ptr)
 @ cdecl mbedtls_ssl_get_peer_cert(ptr)

@@ -939,6 +939,8 @@ static SECURITY_STATUS establish_context(
     int output_buffer_idx = -1;
     int idx, i;
     ULONG input_offset = 0, output_offset = 0;
+    SIZE_T consumed_size = 0;
+    SecBuffer consumed_buffer;
     SecBufferDesc input_desc, output_desc;
 
     if (ptsTimeStamp)
@@ -1046,7 +1048,8 @@ static SECURITY_STATUS establish_context(
         unsigned char *ptr;
 
         if (phContext && !(ctx = schan_get_object(phContext->dwLower, SCHAN_HANDLE_CTX))) return SEC_E_INVALID_HANDLE;
-        if (!pInput && !ctx->control_token && !is_dtls_context(ctx)) return SEC_E_INCOMPLETE_MESSAGE;
+        if (!pInput && !ctx->control_token && !is_dtls_context(ctx) && !ctx->post_handshake_size)
+            return SEC_E_INCOMPLETE_MESSAGE;
 
         if (!ctx->control_token && pInput)
         {
@@ -1105,6 +1108,16 @@ static SECURITY_STATUS establish_context(
         input_desc.pBuffers = &pInput->pBuffers[idx];
     }
 
+    if (ctx->post_handshake_size && input_desc.cBuffers && expected_size >= ctx->post_handshake_size)
+    {
+        consumed_size = ctx->post_handshake_size;
+        consumed_buffer = *input_desc.pBuffers;
+        consumed_buffer.pvBuffer = (BYTE *)consumed_buffer.pvBuffer + consumed_size;
+        consumed_buffer.cbBuffer -= consumed_size;
+        input_desc.pBuffers = &consumed_buffer;
+    }
+    ctx->post_handshake_size = 0;
+
     memset(&output_desc, 0, sizeof(output_desc));
     idx = schan_find_sec_buffer_idx(pOutput, 0, SECBUFFER_TOKEN);
     if (idx == -1)
@@ -1124,7 +1137,7 @@ static SECURITY_STATUS establish_context(
 
     params.session = ctx->session;
     params.input = pInput ? &input_desc : NULL;
-    params.input_size = expected_size;
+    params.input_size = expected_size - consumed_size;
     params.output = &output_desc;
     params.input_offset = &input_offset;
     params.output_buffer_idx = &output_buffer_idx;
@@ -1134,13 +1147,7 @@ static SECURITY_STATUS establish_context(
     params.alert_number = ctx->alert_number;
     ctx->control_token = CONTROL_TOKEN_NONE;
     ret = GNUTLS_CALL( handshake, &params );
-
-    if (ctx->post_handshake_size)
-    {
-        if (!input_offset && pInput)
-            input_offset = min(ctx->post_handshake_size, expected_size);
-        ctx->post_handshake_size = 0;
-    }
+    input_offset += consumed_size;
 
     if (output_buffer_idx != -1)
     {

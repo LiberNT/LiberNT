@@ -295,6 +295,9 @@ BOOL schan_imp_create_session(schan_imp_session *session, schan_credentials *cre
                                                                                        MBEDTLS_SSL_VERSION_TLS1_2);
     }
 
+    if (!(cred->credential_use & SECPKG_CRED_INBOUND))
+        mbedtls_ssl_conf_renegotiation(&s->conf, MBEDTLS_SSL_RENEGOTIATION_ENABLED);
+
     TRACE("MBEDTLS set authmode\n");
     mbedtls_ssl_conf_authmode(&s->conf, MBEDTLS_SSL_VERIFY_NONE);
 
@@ -755,6 +758,13 @@ SECURITY_STATUS schan_imp_recv(schan_imp_session session, void *buffer,
         TRACE("MBEDTLS schan_imp_recv: ret == %i.\n", ret);
 
         *length = ret;
+    }
+    else if ((ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE) &&
+             !mbedtls_ssl_is_handshake_over(&s->ssl))
+    {
+        *length = 0;
+        TRACE("MBEDTLS schan_imp_recv: renegotiation requested\n");
+        return SEC_I_RENEGOTIATE;
     }
     else if (ret == MBEDTLS_ERR_SSL_WANT_READ && s->ssl.in_msgtype == MBEDTLS_SSL_MSG_HANDSHAKE &&
              mbedtls_ssl_is_handshake_over(&s->ssl))
