@@ -1539,7 +1539,7 @@ LoadAndBootWindows(
 
     TRACE("BootPath: '%s'\n", BootPath);
 
-#ifndef UEFIBOOT
+#if !defined(UEFIBOOT) && !defined(OFWBOOT)
     WinLdrResumeFromHibernation(BootPath);
 #endif
 
