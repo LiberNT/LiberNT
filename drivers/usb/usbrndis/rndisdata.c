@@ -929,10 +929,9 @@ RndisSendNetBufferListsInternal(
     PNET_BUFFER_LIST NextNbl;
     PNET_BUFFER_LIST FailedNbls = NULL;
     PNET_BUFFER CurrentNb;
-    PMDL Mdl;
+    PUCHAR DataStorage;
     PVOID VirtualAddress;
     ULONG DataLength;
-    ULONG DataOffset;
     ULONG TotalLength;
     NTSTATUS Status;
     BOOLEAN DispatchLevel;
@@ -1104,8 +1103,6 @@ RndisSendNetBufferListsInternal(
 
         /* Get data length and MDL */
         DataLength = NET_BUFFER_DATA_LENGTH(CurrentNb);
-        Mdl = NET_BUFFER_CURRENT_MDL(CurrentNb);
-        DataOffset = NET_BUFFER_CURRENT_MDL_OFFSET(CurrentNb);
 
         if (DataLength > ETHERNET_MAX_FRAME_SIZE)
         {
@@ -1126,7 +1123,24 @@ RndisSendNetBufferListsInternal(
          * Use LowPagePriority for TX path - packet loss is acceptable under
          * memory pressure. This reduces system resource contention.
          */
-        VirtualAddress = MmGetSystemAddressForMdlSafe(Mdl, LowPagePriority);
+        if (Adapter->IsCdcEcm)
+        {
+            DataStorage = Adapter->TxHot.TxBuffer;
+        }
+        else if (Adapter->IsCdcEem)
+        {
+            DataStorage = Adapter->TxHot.TxBuffer + EEM_HEADER_SIZE;
+        }
+        else
+        {
+            DataStorage = Adapter->TxHot.TxBuffer + sizeof(RNDIS_PACKET_MSG);
+        }
+
+        VirtualAddress = DataStorage;
+        if (!Adapter->IsCdcNcm)
+        {
+            VirtualAddress = NdisGetDataBufferLowPriority(CurrentNb, DataLength, DataStorage, 1, 0);
+        }
         if (VirtualAddress == NULL)
         {
             DPRINT1("USBRNDIS: Failed to map MDL\n");
@@ -1139,8 +1153,6 @@ RndisSendNetBufferListsInternal(
             FailedNbls = CurrentNbl;
             continue;
         }
-
-        VirtualAddress = (PUCHAR)VirtualAddress + DataOffset;
 
         /*
          * Copy packet data to TX buffer and build protocol-specific header.
