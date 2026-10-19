@@ -4195,6 +4195,12 @@ RtlGetUserInfoHeap(IN PVOID HeapHandle,
     PHEAP_ENTRY_EXTRA Extra;
     BOOLEAN HeapLocked = FALSE, InfoReturned = FALSE;
 
+    if ((ULONG_PTR)BaseAddress & (HEAP_ENTRY_SIZE - 1))
+    {
+        RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
+        return FALSE;
+    }
+
     /* Force flags */
     Flags |= Heap->ForceFlags;
 
@@ -4239,16 +4245,13 @@ RtlGetUserInfoHeap(IN PVOID HeapHandle,
             InfoReturned = TRUE;
         }
     }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    _SEH2_FINALLY
     {
-        RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
-        InfoReturned = FALSE;
+        /* Release the heap lock if it was acquired */
+        if (HeapLocked)
+            RtlLeaveHeapLock(Heap->LockVariable);
     }
     _SEH2_END;
-
-    /* Release the heap lock if it was acquired */
-    if (HeapLocked)
-        RtlLeaveHeapLock(Heap->LockVariable);
 
     return InfoReturned;
 }
