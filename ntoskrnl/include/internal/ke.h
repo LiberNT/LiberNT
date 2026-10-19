@@ -123,6 +123,14 @@ VOID
 NTAPI
 KiSetTimeAdjustment(ULONG Adjustment, BOOLEAN Enabled);
 
+VOID
+NTAPI
+KiSuspendClockTime(VOID);
+
+VOID
+NTAPI
+KiResumeClockTime(ULONGLONG SleepTime);
+
 ULONGLONG
 NTAPI
 KiQueryInterruptTimePrecise(PULONG64 QpcTimeStamp, BOOLEAN Unbiased);

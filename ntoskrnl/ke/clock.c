@@ -39,6 +39,9 @@ static volatile ULONGLONG KiInterruptTimeIncrement[2];
 static volatile ULONGLONG KiSystemTimeFraction[2];
 static volatile ULONGLONG KiInterruptTimeFraction[2];
 static volatile ULONGLONG KiInterruptTimeBias[2];
+static ULONGLONG KiSuspendInterruptTime;
+static ULONGLONG KiSuspendSystemTime;
+static ULONGLONG KiSuspendCounter;
 static volatile UCHAR KiSystemTimeShift[2];
 static volatile UCHAR KiInterruptTimeShift[2];
 static ULONGLONG KiTimeCounterFrequency;
@@ -119,7 +122,8 @@ KiPublishTime(ULONG Increment,
               BOOLEAN UpdateSystem,
               PLARGE_INTEGER NewSystemTime,
               ULONG NewAdjustment,
-              ULONGLONG FrozenCounter)
+              ULONGLONG FrozenCounter,
+              PULONGLONG NewInterruptTime)
 {
     LARGE_INTEGER Counter, Frequency, Value;
     ULONGLONG SystemTime, InterruptTime, SystemFraction, InterruptFraction, InterruptCounter;
@@ -156,13 +160,21 @@ KiPublishTime(ULONG Increment,
         InterruptCounter = FrozenCounter ? max(FrozenCounter, KiInterruptTimeQpc[OldSlot]) : InterruptQpc;
         SystemTime = KiSystemTimeBase[OldSlot];
         SystemFraction = KiSystemTimeFraction[OldSlot];
-        InterruptTime = KiAdvanceTime(KiInterruptTimeBase[OldSlot],
-                                      InterruptCounter - KiInterruptTimeQpc[OldSlot],
-                                      InterruptIncrement,
-                                      InterruptShift,
-                                      KiInterruptTimeFraction[OldSlot],
-                                      &InterruptFraction);
-        if (UpdateSystem || NewAdjustment)
+        if (NewInterruptTime)
+        {
+            InterruptTime = *NewInterruptTime;
+            InterruptFraction = 0;
+        }
+        else
+        {
+            InterruptTime = KiAdvanceTime(KiInterruptTimeBase[OldSlot],
+                                          InterruptCounter - KiInterruptTimeQpc[OldSlot],
+                                          InterruptIncrement,
+                                          InterruptShift,
+                                          KiInterruptTimeFraction[OldSlot],
+                                          &InterruptFraction);
+        }
+        if ((UpdateSystem || NewAdjustment) && !NewSystemTime)
         {
             SystemTime = KiAdvanceTime(SystemTime,
                                        Counter.QuadPart - SystemQpc,
@@ -222,7 +234,7 @@ ULONGLONG
 NTAPI
 KiUpdateSharedTime(ULONG Increment, BOOLEAN UpdateSystem)
 {
-    return KiPublishTime(Increment, UpdateSystem, NULL, 0, 0);
+    return KiPublishTime(Increment, UpdateSystem, NULL, 0, 0, NULL);
 }
 
 VOID
@@ -238,9 +250,47 @@ NTAPI
 KiThawInterruptTime(VOID)
 {
     if (KiFrozenCounter)
-        KiPublishTime(0, FALSE, NULL, 0, KiFrozenCounter);
+        KiPublishTime(0, FALSE, NULL, 0, KiFrozenCounter, NULL);
 
     KiFrozenCounter = 0;
+}
+
+VOID
+NTAPI
+KiSuspendClockTime(VOID)
+{
+    if (!KiTimeInitialized)
+        return;
+
+    KiSuspendInterruptTime = KiPublishTime(0, TRUE, NULL, 0, 0, NULL);
+    KiSuspendSystemTime = KiReadSystemTime(&SharedUserData->SystemTime).QuadPart;
+    KiSuspendCounter = KeQueryPerformanceCounter(NULL).QuadPart;
+}
+
+VOID
+NTAPI
+KiResumeClockTime(ULONGLONG SleepTime)
+{
+    LARGE_INTEGER SystemTime;
+    ULONGLONG InterruptTime;
+
+    if (!KiTimeInitialized || KiSuspendInterruptTime == 0)
+        return;
+
+    MmWriteableSharedUserData->InterruptTimeBias += SleepTime;
+
+    if ((ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart >= KiSuspendCounter)
+    {
+        KiPublishTime(0, TRUE, NULL, 0, 0, NULL);
+    }
+    else
+    {
+        InterruptTime = KiSuspendInterruptTime + SleepTime;
+        SystemTime.QuadPart = KiSuspendSystemTime + SleepTime;
+        KiPublishTime(0, TRUE, &SystemTime, 0, 0, &InterruptTime);
+    }
+
+    KiSuspendInterruptTime = 0;
 }
 
 VOID
@@ -251,7 +301,7 @@ KiSetTimeAdjustment(ULONG Adjustment, BOOLEAN Enabled)
 
     KeSetSystemAffinityThread(1);
     KeRaiseIrql(HIGH_LEVEL, &OldIrql);
-    KiPublishTime(0, TRUE, NULL, Adjustment, 0);
+    KiPublishTime(0, TRUE, NULL, Adjustment, 0, NULL);
     KiTimeAdjustmentEnabled = Enabled;
     KeLowerIrql(OldIrql);
     KeRevertToUserAffinityThread();
@@ -321,7 +371,7 @@ KeSetSystemTime(IN PLARGE_INTEGER NewTime,
     KeQuerySystemTime(OldTime);
 
     /* Set the new system time (ordering of these operations is critical) */
-    KiPublishTime(0, TRUE, NewTime, 0, 0);
+    KiPublishTime(0, TRUE, NewTime, 0, 0, NULL);
 
     /* Check if this was for the HAL and set the RTC time */
     if (HalTime) ExCmosClockIsSane = HalSetRealTimeClock(&TimeFields);
