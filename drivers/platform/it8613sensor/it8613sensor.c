@@ -188,11 +188,17 @@ It8613DetectHardware(
     KeAcquireSpinLock(PortLock, &OldIrql);
     It8613EnterConfiguration(SuperIoPort);
     DeviceId = ((USHORT)It8613ReadIndexed(SuperIoPort, IT8613_SIO_DEVICE_ID_MSB) << 8) | It8613ReadIndexed(SuperIoPort, IT8613_SIO_DEVICE_ID_LSB);
+    if (DeviceId != IT8613_DEVICE_ID)
+    {
+        It8613ExitConfiguration(SuperIoPort);
+        KeReleaseSpinLock(PortLock, OldIrql);
+        return STATUS_NO_SUCH_DEVICE;
+    }
     It8613WriteIndexed(SuperIoPort, IT8613_SIO_DEVICE_SELECT, IT8613_LOGICAL_DEVICE);
     Active = It8613ReadIndexed(SuperIoPort, IT8613_SIO_ACTIVATE);
     HwmBase = ((USHORT)It8613ReadIndexed(SuperIoPort, IT8613_SIO_BASE_MSB) << 8) | It8613ReadIndexed(SuperIoPort, IT8613_SIO_BASE_LSB);
     It8613ExitConfiguration(SuperIoPort);
-    if (DeviceId != IT8613_DEVICE_ID || !(Active & 0x01) || (HwmBase & ~7) != IT8613_HWM_BASE)
+    if (!(Active & 0x01) || (HwmBase & ~7) != IT8613_HWM_BASE)
     {
         KeReleaseSpinLock(PortLock, OldIrql);
         return STATUS_NO_SUCH_DEVICE;
