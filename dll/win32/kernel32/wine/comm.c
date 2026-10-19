@@ -1145,35 +1145,7 @@ BOOL WINAPI GetCommProperties(
     HANDLE hFile,          /* [in] handle of the comm port */
     LPCOMMPROP lpCommProp) /* [out] pointer to struct to be filled */
 {
-    TRACE("(%p %p)\n",hFile,lpCommProp);
-    if(!lpCommProp)
-        return FALSE;
-
-    /*
-     * These values should be valid for LINUX's serial driver
-     * FIXME: Perhaps they deserve an #ifdef LINUX
-     */
-    memset(lpCommProp,0,sizeof(COMMPROP));
-    lpCommProp->wPacketLength       = 1;
-    lpCommProp->wPacketVersion      = 1;
-    lpCommProp->dwServiceMask       = SP_SERIALCOMM;
-    lpCommProp->dwMaxTxQueue        = 4096;
-    lpCommProp->dwMaxRxQueue        = 4096;
-    lpCommProp->dwMaxBaud           = BAUD_115200;
-    lpCommProp->dwProvSubType       = PST_RS232;
-    lpCommProp->dwProvCapabilities  = PCF_DTRDSR | PCF_PARITY_CHECK | PCF_RTSCTS | PCF_TOTALTIMEOUTS;
-    lpCommProp->dwSettableParams    = SP_BAUD | SP_DATABITS | SP_HANDSHAKING |
-                                      SP_PARITY | SP_PARITY_CHECK | SP_STOPBITS ;
-    lpCommProp->dwSettableBaud      = BAUD_075 | BAUD_110 | BAUD_134_5 | BAUD_150 |
-                BAUD_300 | BAUD_600 | BAUD_1200 | BAUD_1800 | BAUD_2400 | BAUD_4800 |
-                BAUD_9600 | BAUD_19200 | BAUD_38400 | BAUD_57600 | BAUD_115200 ;
-    lpCommProp->wSettableData       = DATABITS_5 | DATABITS_6 | DATABITS_7 | DATABITS_8 ;
-    lpCommProp->wSettableStopParity = STOPBITS_10 | STOPBITS_15 | STOPBITS_20 |
-                PARITY_NONE | PARITY_ODD |PARITY_EVEN | PARITY_MARK | PARITY_SPACE;
-    lpCommProp->dwCurrentTxQueue    = lpCommProp->dwMaxTxQueue;
-    lpCommProp->dwCurrentRxQueue    = lpCommProp->dwMaxRxQueue;
-
-    return TRUE;
+    return DeviceIoControl(hFile, IOCTL_SERIAL_GET_PROPERTIES, NULL, 0, lpCommProp, sizeof(*lpCommProp), NULL, NULL);
 }
 
 /***********************************************************************
