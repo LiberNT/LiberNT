@@ -1052,6 +1052,10 @@ PopHiberCaptureLoaderBlock(
             PopHiberQueueStart(POP_HIBER_START_CAPTURED);
         }
     }
+    else
+    {
+        PopHiberQueueStart(POP_HIBER_START_CAPTURED);
+    }
 }
 
 BOOLEAN

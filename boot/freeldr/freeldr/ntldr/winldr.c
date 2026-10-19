@@ -9,6 +9,7 @@
 #include <ndk/kefuncs.h> // For KeFindConfiguration*Entry()
 #include <ndk/ldrtypes.h>
 #include "winldr.h"
+#include "hiber.h"
 #include "ntldropts.h"
 #include "registry.h"
 #include <internal/cmboot.h>
@@ -1537,6 +1538,10 @@ LoadAndBootWindows(
         RtlStringCbCatA(BootPath, sizeof(BootPath), "\\");
 
     TRACE("BootPath: '%s'\n", BootPath);
+
+#ifndef UEFIBOOT
+    WinLdrResumeFromHibernation(BootPath);
+#endif
 
     /* Retrieve the boot options */
     *BootOptions = ANSI_NULL;

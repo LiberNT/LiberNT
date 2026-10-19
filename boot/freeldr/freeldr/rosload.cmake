@@ -23,6 +23,7 @@ list(APPEND ROSLOAD_SOURCE
     ntldr/inffile.c
     ntldr/ntldropts.c
     ntldr/registry.c
+    ntldr/resume.c
     ntldr/setupldr.c
     ntldr/winldr.c
     ntldr/wlmemory.c
@@ -34,18 +35,22 @@ if(ARCH STREQUAL "i386")
         arch/i386/halstub.c
         arch/i386/ntoskrnl.c
         disk/scsiport.c
+        ntldr/arch/i386/hiber.c
         ntldr/arch/i386/winldr.c)
 
     list(APPEND ROSLOAD_ASM_SOURCE
+        ${REACTOS_SOURCE_DIR}/bootloader/arch/i386/resume.S
         arch/i386/drvmap.S
         arch/i386/linux.S)
 
 elseif(ARCH STREQUAL "amd64")
 
     list(APPEND ROSLOAD_SOURCE
+        ntldr/arch/amd64/hiber.c
         ntldr/arch/amd64/winldr.c)
 
     list(APPEND ROSLOAD_ASM_SOURCE
+        ${REACTOS_SOURCE_DIR}/bootloader/arch/amd64/resume.S
         arch/amd64/misc.S
         arch/amd64/linux.S)
 

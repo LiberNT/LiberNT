@@ -47,6 +47,7 @@
 @ cdecl MmAllocateMemoryAtAddress()
 @ cdecl MmAllocateMemoryWithType()
 @ cdecl MmFreeMemory()
+@ cdecl MmFreeMemoryEx()
 @ cdecl MmGetBiosMemoryMap()
 @ cdecl MmGetHighestPhysicalPage()
 @ cdecl MmGetLoaderPagesSpanned()
