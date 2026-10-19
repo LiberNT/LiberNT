@@ -6,6 +6,7 @@ spec2def(mbedtls.dll mbedtls.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE
     _reactos_strsafe_wrapper.c
+    _reactos_threading_alt.c
     aes.c
     aesce.c
     aesni.c

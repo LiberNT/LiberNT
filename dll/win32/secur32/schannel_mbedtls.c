@@ -34,6 +34,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(schannel);
 
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
+#include <psa/crypto.h>
 
 typedef struct
 {
@@ -229,6 +230,9 @@ DWORD schan_imp_enabled_protocols(void)
 #ifdef MBEDTLS_SSL_PROTO_TLS1_2
         | SP_PROT_TLS1_2_CLIENT | SP_PROT_TLS1_2_SERVER
 #endif
+#ifdef MBEDTLS_SSL_PROTO_TLS1_3
+        | SP_PROT_TLS1_3_CLIENT | SP_PROT_TLS1_3_SERVER
+#endif
         ;
 }
 
@@ -239,7 +243,19 @@ static void schan_imp_debug(void *ctx, int level, const char *file, int line, co
 
 BOOL schan_imp_create_session(schan_imp_session *session, schan_credentials *cred)
 {
-    MBEDTLS_SESSION *s = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(MBEDTLS_SESSION));
+    MBEDTLS_SESSION *s;
+    BOOL server = !!(cred->credential_use & SECPKG_CRED_INBOUND);
+    DWORD tls12 = server ? SP_PROT_TLS1_2_SERVER : SP_PROT_TLS1_2_CLIENT;
+    DWORD tls13 = server ? SP_PROT_TLS1_3_SERVER : SP_PROT_TLS1_3_CLIENT;
+
+    if (psa_crypto_init() != PSA_SUCCESS)
+    {
+        ERR("Failed to initialize the PSA crypto core\n");
+        *session = NULL;
+        return FALSE;
+    }
+
+    s = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(MBEDTLS_SESSION));
 
     WARN("MBEDTLS schan_imp_create_session: %p %p %p\n", session, *session, cred);
 
@@ -270,6 +286,14 @@ BOOL schan_imp_create_session(schan_imp_session *session, schan_credentials *cre
     TRACE("MBEDTLS set endpoint to %s\n", (cred->credential_use & SECPKG_CRED_INBOUND) ? "server" : "client");
     mbedtls_ssl_conf_endpoint(&s->conf,   (cred->credential_use & SECPKG_CRED_INBOUND) ? MBEDTLS_SSL_IS_SERVER :
                                                                                          MBEDTLS_SSL_IS_CLIENT);
+
+    if (cred->enabled_protocols & (tls12 | tls13))
+    {
+        mbedtls_ssl_conf_min_tls_version(&s->conf, (cred->enabled_protocols & tls12) ? MBEDTLS_SSL_VERSION_TLS1_2 :
+                                                                                       MBEDTLS_SSL_VERSION_TLS1_3);
+        mbedtls_ssl_conf_max_tls_version(&s->conf, (cred->enabled_protocols & tls13) ? MBEDTLS_SSL_VERSION_TLS1_3 :
+                                                                                       MBEDTLS_SSL_VERSION_TLS1_2);
+    }
 
     TRACE("MBEDTLS set authmode\n");
     mbedtls_ssl_conf_authmode(&s->conf, MBEDTLS_SSL_VERIFY_NONE);
@@ -452,6 +476,10 @@ static DWORD schannel_get_protocol(const mbedtls_ssl_context *ssl, const mbedtls
         case MBEDTLS_SSL_VERSION_TLS1_2:
             return (mbedtls_ssl_conf_get_endpoint(conf) == MBEDTLS_SSL_IS_CLIENT) ? SP_PROT_TLS1_2_CLIENT :
                                                                                     SP_PROT_TLS1_2_SERVER;
+
+        case MBEDTLS_SSL_VERSION_TLS1_3:
+            return (mbedtls_ssl_conf_get_endpoint(conf) == MBEDTLS_SSL_IS_CLIENT) ? SP_PROT_TLS1_3_CLIENT :
+                                                                                    SP_PROT_TLS1_3_SERVER;
 
         default:
         {
@@ -727,6 +755,13 @@ SECURITY_STATUS schan_imp_recv(schan_imp_session session, void *buffer,
         TRACE("MBEDTLS schan_imp_recv: ret == %i.\n", ret);
 
         *length = ret;
+    }
+    else if (ret == MBEDTLS_ERR_SSL_WANT_READ && s->ssl.in_msgtype == MBEDTLS_SSL_MSG_HANDSHAKE &&
+             mbedtls_ssl_is_handshake_over(&s->ssl))
+    {
+        *length = 0;
+        TRACE("MBEDTLS schan_imp_recv: post-handshake message\n");
+        return SEC_I_RENEGOTIATE;
     }
     else if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE)
     {

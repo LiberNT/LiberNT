@@ -75,3 +75,4 @@
 @ cdecl mbedtls_rsa_complete(ptr)
 @ cdecl mbedtls_ssl_conf_sig_algs(ptr ptr)
 @ cdecl mbedtls_ssl_send_alert_message(ptr long long)
+@ cdecl psa_crypto_init()
