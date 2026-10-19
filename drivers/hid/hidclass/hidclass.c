@@ -1081,8 +1081,6 @@ HidClass_DeviceControl(
     {
         case IOCTL_HID_GET_COLLECTION_INFORMATION:
         {
-            ULONG CompositeLength;
-
             //
             // check if output buffer is big enough
             //
@@ -1113,10 +1111,6 @@ HidClass_DeviceControl(
             // init result buffer
             //
             CollectionInformation->DescriptorSize = CollectionDescription->PreparsedDataLength;
-            /* Kernel HID clients pass this buffer directly to HidP_* routines,
-             * so they also need the private parser context after the public KDR. */
-            if (Irp->RequestorMode == KernelMode && HidP_GetCompositePreparsedDataSize(CollectionDescription->PreparsedData, CollectionDescription->PreparsedDataLength, &CompositeLength))
-                CollectionInformation->DescriptorSize = CompositeLength;
             CollectionInformation->Polled = CommonDeviceExtension->DriverExtension->DevicesArePolled;
             CollectionInformation->VendorID = CommonDeviceExtension->Attributes.VendorID;
             CollectionInformation->ProductID = CommonDeviceExtension->Attributes.ProductID;
@@ -1132,19 +1126,12 @@ HidClass_DeviceControl(
         }
         case IOCTL_HID_GET_COLLECTION_DESCRIPTOR:
         {
-            ULONG CopyLength;
-            ULONG CompositeLength;
-
             //
             // get collection description
             //
             CollectionDescription = HidClassPDO_GetCollectionDescription(&CommonDeviceExtension->DeviceDescription,
                                                                          PDODeviceExtension->CollectionNumber);
             ASSERT(CollectionDescription);
-
-            CopyLength = CollectionDescription->PreparsedDataLength;
-            if (HidP_GetCompositePreparsedDataSize(CollectionDescription->PreparsedData, CollectionDescription->PreparsedDataLength, &CompositeLength) && IoStack->Parameters.DeviceIoControl.OutputBufferLength >= CompositeLength)
-                CopyLength = CompositeLength;
 
             //
             // check if output buffer is big enough
@@ -1170,7 +1157,7 @@ HidClass_DeviceControl(
                 _SEH2_TRY
                 {
                     ProbeForWrite(Irp->UserBuffer,
-                                  CopyLength,
+                                  CollectionDescription->PreparsedDataLength,
                                   sizeof(UCHAR));
                 }
                 _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -1189,12 +1176,12 @@ HidClass_DeviceControl(
 
             RtlCopyMemory(Irp->UserBuffer,
                           CollectionDescription->PreparsedData,
-                          CopyLength);
+                          CollectionDescription->PreparsedDataLength);
 
             //
             // complete request
             //
-            Irp->IoStatus.Information = CopyLength;
+            Irp->IoStatus.Information = CollectionDescription->PreparsedDataLength;
             Irp->IoStatus.Status = STATUS_SUCCESS;
             IoCompleteRequest(Irp, IO_NO_INCREMENT);
             return STATUS_SUCCESS;

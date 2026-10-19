@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <hidport.h>
 #include <pseh/pseh2.h>
-#include <reactos/hidp_private.h>
 
 #define HIDCLASS_TAG 'CdiH'
 

@@ -354,6 +354,9 @@ check Wine current sources first as it may already be fixed.
   sdk/lib/3rdparty/ldap               # Imported from Wine-11.14
   sdk/lib/3rdparty/strmbase           # Synced to Wine-11.14
 
+sdk/lib/drivers/hidparser/hidp.c    # Forked from Wine-11.13 (dlls/hid/hidp.c)
+sdk/lib/drivers/hidparser/hidp.h    # Forked from Wine-11.13 (include/wine/hid.h)
+sdk/lib/drivers/hidparser/parser.c  # Forked from Wine-11.13 (dlls/hidparse.sys/main.c)
 sdk/lib/rtl/actctx.c                # Synced to Wine-11.14
 sdk/lib/rtl/threadpool.c            # Synced to Wine-11.14
 

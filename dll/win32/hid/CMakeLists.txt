@@ -5,9 +5,6 @@ list(APPEND SOURCE
     hid.c
     precomp.h)
 
-include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/hidparser)
-
 add_library(hid MODULE
     ${SOURCE}
     hid.rc

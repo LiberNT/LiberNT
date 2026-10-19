@@ -33,60 +33,11 @@
 
 #define NDEBUG
 #include <debug.h>
-#include "hidp.h"
 
 HINSTANCE hDllInstance;
 
 /* device interface GUID for HIDClass devices */
 const GUID HidClassGuid = {0x4D1E55B2, 0xF16F, 0x11CF, {0x88,0xCB,0x00,0x11,0x11,0x00,0x00,0x30}};
-
-PVOID
-NTAPI
-AllocFunction(
-    IN ULONG ItemSize)
-{
-    return LocalAlloc(LPTR, ItemSize);
-}
-
-VOID
-NTAPI
-FreeFunction(
-    IN PVOID Item)
-{
-    LocalFree((HLOCAL)Item);
-}
-
-VOID
-NTAPI
-ZeroFunction(
-    IN PVOID Item,
-    IN ULONG ItemSize)
-{
-    memset(Item, 0, ItemSize);
-}
-
-VOID
-NTAPI
-CopyFunction(
-    IN PVOID Target,
-    IN PVOID Source,
-    IN ULONG Length)
-{
-    memcpy(Target, Source, Length);
-}
-
-VOID
-__cdecl
-DebugFunction(
-    IN LPCSTR FormatStr, ...)
-{
-#if 0
-    va_arg list;
-    va_start(list, FormatStr);
-    vDbgPrintEx(FormatStr, list);
-    va_end(list);
-#endif
-}
 
 BOOL WINAPI
 DllMain(HINSTANCE hinstDLL,
@@ -293,8 +244,6 @@ HidD_GetPreparsedData(IN HANDLE HidDeviceObject,
   HID_COLLECTION_INFORMATION hci;
   DWORD RetLen;
   PHIDP_PREPARSED_DATA NativeData;
-  PHIDP_PREPARSED_DATA CompositeData;
-  ULONG CompositeSize;
   BOOLEAN Ret;
 
   if(PreparsedData == NULL)
@@ -330,43 +279,7 @@ HidD_GetPreparsedData(IN HANDLE HidDeviceObject,
     return FALSE;
   }
 
-  if(HidP_GetCompositePreparsedDataSize(NativeData, hci.DescriptorSize, &CompositeSize))
-  {
-    CompositeData = LocalAlloc(LPTR, CompositeSize);
-    if(CompositeData == NULL)
-    {
-      LocalFree((HLOCAL)NativeData);
-      SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-      return FALSE;
-    }
-
-    Ret = DeviceIoControl(HidDeviceObject, IOCTL_HID_GET_COLLECTION_DESCRIPTOR, NULL, 0, CompositeData, CompositeSize, &RetLen, NULL) != 0;
-    LocalFree((HLOCAL)NativeData);
-    if(!Ret || RetLen != CompositeSize)
-    {
-      LocalFree((HLOCAL)CompositeData);
-      if(Ret)
-        SetLastError(ERROR_INVALID_DATA);
-      return FALSE;
-    }
-
-    *PreparsedData = CompositeData;
-    return TRUE;
-  }
-
-  Ret = HidP_CreatePreparsedData(NativeData, RetLen, PreparsedData, NULL, NULL);
-  LocalFree((HLOCAL)NativeData);
-  if(!Ret)
-  {
-    SetLastError(ERROR_INVALID_DATA);
-    return FALSE;
-  }
-#if 0
-  else
-  {
-    /* should we truncate the memory in case RetLen < hci.DescriptorSize? */
-  }
-#endif
+  *PreparsedData = NativeData;
 
   return Ret;
 }
