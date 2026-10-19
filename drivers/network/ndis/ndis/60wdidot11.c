@@ -1720,6 +1720,9 @@ Ndis6WdiBuildConnectParameters(
         Ndis6WdiTlvAppend32(Tlvs, (ULONG)Dot11->Unicast[i]);
     Ndis6WdiTlvClose(Tlvs, Inner);
 
+    if (Dot11->DesiredBssidCount != 0)
+        Ndis6WdiTlvAdd(Tlvs, WDI_TLV_ALLOWED_BSSIDS_LIST, Dot11->DesiredBssids, Dot11->DesiredBssidCount * sizeof(DOT11_MAC_ADDRESS));
+
     Ndis6WdiTlvClose(Tlvs, Outer);
 }
 

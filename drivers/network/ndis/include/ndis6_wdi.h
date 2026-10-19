@@ -82,6 +82,7 @@
 #define WDI_TLV_DATAPATH_CAPABILITIES               0xB9
 #define WDI_TLV_BSS_ENTRY_AGE_INFO                  0xBA
 #define WDI_TLV_DISASSOCIATION_INDICATION_PARAMETERS 0xBC
+#define WDI_TLV_ALLOWED_BSSIDS_LIST                 0xC2
 #define WDI_TLV_LINK_QUALITY_BAR_MAP                0xD8
 #define WDI_TLV_IHV_NON_WDI_OIDS_LIST               0x104
 #define WDI_TLV_PLDR_SUPPORT                        0x11A
