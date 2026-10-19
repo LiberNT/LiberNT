@@ -1165,6 +1165,41 @@ LdrpNextSearchPath(
 }
 
 /* NOTE: Not yet reviewed */
+static
+BOOLEAN
+LdrpResolveDllNameRedirected(PWSTR DllPath,
+                             PWSTR DllName,
+                             PUNICODE_STRING FullDllName,
+                             PUNICODE_STRING BaseDllName)
+{
+    PVOID OldRedirection;
+    BOOLEAN Restore, Result;
+
+    Restore = NT_SUCCESS(RtlWow64EnableFsRedirectionEx(NULL, &OldRedirection));
+    Result = LdrpResolveDllName(DllPath, DllName, FullDllName, BaseDllName);
+    if (Restore)
+        RtlWow64EnableFsRedirectionEx(OldRedirection, &OldRedirection);
+    return Result;
+}
+
+static
+NTSTATUS
+LdrpCreateDllSectionRedirected(IN PUNICODE_STRING FullName,
+                               IN HANDLE DllHandle,
+                               IN PULONG DllCharacteristics OPTIONAL,
+                               OUT PHANDLE SectionHandle)
+{
+    PVOID OldRedirection;
+    BOOLEAN Restore;
+    NTSTATUS Status;
+
+    Restore = NT_SUCCESS(RtlWow64EnableFsRedirectionEx(NULL, &OldRedirection));
+    Status = LdrpCreateDllSection(FullName, DllHandle, DllCharacteristics, SectionHandle);
+    if (Restore)
+        RtlWow64EnableFsRedirectionEx(OldRedirection, &OldRedirection);
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 LdrpMapDll(IN PWSTR SearchPath OPTIONAL,
@@ -1255,10 +1290,10 @@ SkipCheck:
     if (!SectionHandle)
     {
         /* It didn't, so try to resolve the name now */
-        if (LdrpResolveDllName(RemainingPath,
-                               DllName,
-                               &FullDllName,
-                               &BaseDllName))
+        if (LdrpResolveDllNameRedirected(RemainingPath,
+                                         DllName,
+                                         &FullDllName,
+                                         &BaseDllName))
         {
             /* Got a name, display a message */
             if (ShowSnaps)
@@ -1279,10 +1314,10 @@ SkipCheck:
             }
 
             /* Create a section for this dLL */
-            Status = LdrpCreateDllSection(&NtPathDllName,
-                                          DllHandle,
-                                          DllCharacteristics,
-                                          &SectionHandle);
+            Status = LdrpCreateDllSectionRedirected(&NtPathDllName,
+                                                    DllHandle,
+                                                    DllCharacteristics,
+                                                    &SectionHandle);
 
             /* Free the NT Name */
             RtlFreeHeap(RtlGetProcessHeap(), 0, NtPathDllName.Buffer);
