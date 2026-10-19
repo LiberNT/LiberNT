@@ -804,7 +804,7 @@ BaseInitializeContext(IN PCONTEXT Context,
     if (ContextType == 1)
     {
         /* For Threads */
-        Context->Esp -= 2 * sizeof(PVOID);
+        Context->Esp -= 3 * sizeof(PVOID);
         Context->Eip = (ULONG)RtlUserThreadStart;
     }
     else if (ContextType == 2)
@@ -832,7 +832,7 @@ BaseInitializeContext(IN PCONTEXT Context,
     else
     {
         /* For first thread in a Process */
-        Context->Esp -= 2 * sizeof(PVOID);
+        Context->Esp -= 3 * sizeof(PVOID);
         Context->Eip = (ULONG)RtlUserThreadStart;
     }
 
