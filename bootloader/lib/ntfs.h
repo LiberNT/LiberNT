@@ -264,3 +264,20 @@ NtfsReadFile(
     _In_ PNTFS_VOLUME_INFO Volume,
     _In_ PCSTR Path,
     _Out_ PULONG Size);
+
+PNTFS_FILE_HANDLE
+NtfsOpenFile(
+    _In_ PNTFS_VOLUME_INFO Volume,
+    _In_ PCSTR Path,
+    _Out_ PULONGLONG Size);
+
+BOOLEAN
+NtfsReadFileAt(
+    _In_ PNTFS_FILE_HANDLE FileHandle,
+    _In_ ULONGLONG Offset,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length);
+
+VOID
+NtfsCloseFile(
+    _In_ PNTFS_FILE_HANDLE FileHandle);

@@ -21,6 +21,9 @@
 #define I386_COM_STATUS      5
 #define I386_COM_READY       0x20
 #define I386_COM_SPINS       0x10000
+#define I386_HIBER_CODE      0x100
+#define I386_HIBER_STACK     0x100
+#define I386_HIBER_PAGES     0x100000
 
 #define I386_FLAT_LIMIT      0xFFFFF
 #define I386_FLAT_FLAGS      0xC0
@@ -38,6 +41,28 @@ typedef VOID (*PI386_TRANSFER)(VOID);
 
 void _changestack(VOID);
 
+typedef struct _I386_HIBER_JUMP
+{
+    ULONG64 Reserved0;
+    ULONG64 Operations;
+    ULONG64 Reserved1;
+    ULONG64 StubBase;
+    ULONG64 StubEntry;
+    USHORT Reserved[3];
+    USHORT StubGdtLimit;
+    ULONG64 StubGdtBase;
+} I386_HIBER_JUMP, *PI386_HIBER_JUMP;
+
+C_ASSERT(FIELD_OFFSET(I386_HIBER_JUMP, Operations) == 8);
+C_ASSERT(FIELD_OFFSET(I386_HIBER_JUMP, StubBase) == 24);
+C_ASSERT(FIELD_OFFSET(I386_HIBER_JUMP, StubEntry) == 32);
+C_ASSERT(FIELD_OFFSET(I386_HIBER_JUMP, StubGdtLimit) == 46);
+C_ASSERT(sizeof(I386_HIBER_JUMP) <= I386_HIBER_CODE);
+
+typedef VOID (__cdecl *PI386_HIBER_TRAMPOLINE)(PI386_HIBER_JUMP Jump);
+
+extern UCHAR OslHiberTrampoline[];
+extern UCHAR OslHiberTrampolineEnd[];
 extern UCHAR I386TransferStart[];
 extern UCHAR I386TransferEnd[];
 
@@ -60,6 +85,7 @@ static PUCHAR I386Gdt;
 static PKTSS I386Tss;
 static PI386_TRANSFER I386Transfer;
 static BOOLEAN I386Ready;
+static PI386_HIBER_JUMP I386HiberJump;
 
 PVOID
 VaToPa(
@@ -346,4 +372,49 @@ OslArchStartKernel(
     Idtr.Base = (ULONG_PTR)PaToVa(I386Gdt + I386_GDT_ENTRIES * sizeof(KGDTENTRY));
 
     I386EnterKernel(I386Transfer, I386Pde, &Gdtr.Limit, &Idtr.Limit, EntryPoint, LoaderBlock);
+}
+
+BOOLEAN
+OslArchPrepareResume(
+    _In_ PLNT_HIBER_HEADER Header,
+    _In_ ULONG64 HighestPage)
+{
+    SIZE_T CodeSize = (SIZE_T)(OslHiberTrampolineEnd - OslHiberTrampoline);
+    PI386_HIBER_JUMP Jump;
+    ULONG64 Frame;
+    PUCHAR Page;
+
+    if (HighestPage > I386_HIBER_PAGES ||
+        Header->HighestPage > I386_HIBER_PAGES ||
+        CodeSize > PAGE_SIZE - I386_HIBER_CODE - I386_HIBER_STACK)
+    {
+        return FALSE;
+    }
+
+    if (!OslHiberAllocatePage(&Frame))
+        return FALSE;
+    Page = (PUCHAR)(ULONG_PTR)(Frame << PAGE_SHIFT);
+
+    RtlZeroMemory(Page, PAGE_SIZE);
+    RtlCopyMemory(Page + I386_HIBER_CODE, OslHiberTrampoline, CodeSize);
+
+    Jump = (PI386_HIBER_JUMP)Page;
+    Jump->StubBase = Header->LowStubPhysical;
+    Jump->StubEntry = Header->LowStubPhysical + Header->LowStubProt32Offset;
+    Jump->StubGdtLimit = (USHORT)Header->LowStubGdtLimit;
+    Jump->StubGdtBase = Header->LowStubPhysical + Header->LowStubGdtOffset;
+    I386HiberJump = Jump;
+    return TRUE;
+}
+
+DECLSPEC_NORETURN
+VOID
+OslArchResume(
+    _In_ ULONG64 Operations)
+{
+    I386HiberJump->Operations = Operations;
+    ((PI386_HIBER_TRAMPOLINE)((PUCHAR)I386HiberJump + I386_HIBER_CODE))(I386HiberJump);
+
+    for (;;)
+        ;
 }

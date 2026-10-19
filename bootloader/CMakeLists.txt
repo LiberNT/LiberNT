@@ -216,12 +216,14 @@ elseif(ARCH STREQUAL "riscv64")
         arch/riscv64/winldr.c)
 elseif(ARCH STREQUAL "amd64")
     list(APPEND WINLOAD_ASM_SOURCE
+        arch/amd64/resume.S
         arch/amd64/uefiasm.S)
 
     list(APPEND WINLOAD_SOURCE
         arch/amd64/archosl.c)
 elseif(ARCH STREQUAL "i386")
     list(APPEND WINLOAD_ASM_SOURCE
+        arch/i386/resume.S
         arch/i386/uefiasm.S)
 
     list(APPEND WINLOAD_SOURCE
@@ -263,6 +265,7 @@ if(WINLOAD_ASM_SOURCE)
         winload/options.c
         winload/ramdisk.c
         winload/registry.c
+        winload/resume.c
         winload/smbios.c
         winload/startup.c)
     if(ARCH STREQUAL "ppc")

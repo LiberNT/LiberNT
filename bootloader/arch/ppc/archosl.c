@@ -556,3 +556,62 @@ OslArchStartKernel(
     PpcFlushCacheRange(&PpcLoaderState, sizeof(PpcLoaderState));
     PpcEnterKernel(&PpcLoaderState.Handoff);
 }
+
+BOOLEAN
+OslArchPrepareResume(
+    _In_ PLNT_HIBER_HEADER Header,
+    _In_ ULONG64 HighestPage)
+{
+    UNREFERENCED_PARAMETER(Header);
+    UNREFERENCED_PARAMETER(HighestPage);
+    return FALSE;
+}
+
+DECLSPEC_NORETURN
+VOID
+OslArchResume(
+    _In_ ULONG64 Operations)
+{
+    UNREFERENCED_PARAMETER(Operations);
+
+    for (;;)
+        ;
+}
+
+BOOLEAN
+FwHiberCheckMemoryMap(
+    _In_ PLNT_HIBER_HEADER Header,
+    _In_reads_(RangeCount) PLNT_HIBER_RANGE Ranges,
+    _In_ ULONG64 RangeCount,
+    _Out_ PULONG64 HighestPage)
+{
+    UNREFERENCED_PARAMETER(Header);
+    UNREFERENCED_PARAMETER(Ranges);
+    UNREFERENCED_PARAMETER(RangeCount);
+    *HighestPage = 0;
+    return FALSE;
+}
+
+VOID
+FwHiberClaimFreeMemory(
+    _In_reads_(RangeCount) PLNT_HIBER_RANGE Ranges,
+    _In_ ULONG64 RangeCount)
+{
+    UNREFERENCED_PARAMETER(Ranges);
+    UNREFERENCED_PARAMETER(RangeCount);
+}
+
+VOID
+FwHiberClaimPool(
+    _In_ ULONG64 PageCount)
+{
+    UNREFERENCED_PARAMETER(PageCount);
+}
+
+BOOLEAN
+FwHiberExitBootServices(
+    _In_ PLNT_HIBER_HEADER Header)
+{
+    UNREFERENCED_PARAMETER(Header);
+    return FALSE;
+}

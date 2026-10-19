@@ -13,10 +13,28 @@
 #include <drivers/bootvid/framebuf.h>
 #include <loader_framebuffer.h>
 #include <loader_firmware.h>
+#include <hiberfil.h>
 
 #define OSL_PATH_CHARS    260
 #define OSL_OPTIONS_CHARS BM_LOAD_OPTIONS_CHARS
 #define OSL_NT_VERSION    _WIN32_WINNT
+
+#define OSL_HIBER_OPERATIONS_PER_PAGE 255
+
+typedef struct _OSL_HIBER_OPERATION
+{
+    ULONG64 Destination;
+    ULONG64 Source;
+} OSL_HIBER_OPERATION, *POSL_HIBER_OPERATION;
+
+typedef struct _OSL_HIBER_OPERATION_PAGE
+{
+    ULONG64 Next;
+    ULONG64 Count;
+    OSL_HIBER_OPERATION Operation[OSL_HIBER_OPERATIONS_PER_PAGE];
+} OSL_HIBER_OPERATION_PAGE, *POSL_HIBER_OPERATION_PAGE;
+
+C_ASSERT(sizeof(OSL_HIBER_OPERATION_PAGE) == PAGE_SIZE);
 
 typedef struct _OSL_SYSTEM_BLOCK
 {
@@ -182,3 +200,51 @@ MempSetupPaging(
 
 VOID
 MempDump(VOID);
+
+VOID
+OslResumeFromHibernation(
+    _In_ PDK_DEVICE OsDevice);
+
+VOID
+OslHiberMarkOwned(
+    _In_ ULONG64 BasePage,
+    _In_ ULONG64 PageCount);
+
+VOID
+OslHiberAddPoolRun(
+    _In_ ULONG64 BasePage,
+    _In_ ULONG64 PageCount);
+
+BOOLEAN
+OslHiberAllocatePage(
+    _Out_ PULONG64 Page);
+
+BOOLEAN
+FwHiberCheckMemoryMap(
+    _In_ PLNT_HIBER_HEADER Header,
+    _In_reads_(RangeCount) PLNT_HIBER_RANGE Ranges,
+    _In_ ULONG64 RangeCount,
+    _Out_ PULONG64 HighestPage);
+
+VOID
+FwHiberClaimFreeMemory(
+    _In_reads_(RangeCount) PLNT_HIBER_RANGE Ranges,
+    _In_ ULONG64 RangeCount);
+
+VOID
+FwHiberClaimPool(
+    _In_ ULONG64 PageCount);
+
+BOOLEAN
+FwHiberExitBootServices(
+    _In_ PLNT_HIBER_HEADER Header);
+
+BOOLEAN
+OslArchPrepareResume(
+    _In_ PLNT_HIBER_HEADER Header,
+    _In_ ULONG64 HighestPage);
+
+DECLSPEC_NORETURN
+VOID
+OslArchResume(
+    _In_ ULONG64 Operations);

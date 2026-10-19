@@ -111,3 +111,24 @@ OslArchStartKernel(
     for (;;)
         ;
 }
+
+BOOLEAN
+OslArchPrepareResume(
+    _In_ PLNT_HIBER_HEADER Header,
+    _In_ ULONG64 HighestPage)
+{
+    UNREFERENCED_PARAMETER(Header);
+    UNREFERENCED_PARAMETER(HighestPage);
+    return FALSE;
+}
+
+DECLSPEC_NORETURN
+VOID
+OslArchResume(
+    _In_ ULONG64 Operations)
+{
+    UNREFERENCED_PARAMETER(Operations);
+
+    for (;;)
+        ;
+}

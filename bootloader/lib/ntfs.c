@@ -1080,6 +1080,59 @@ NtfsReadFile(
     return Data;
 }
 
+PNTFS_FILE_HANDLE
+NtfsOpenFile(
+    _In_ PNTFS_VOLUME_INFO Volume,
+    _In_ PCSTR Path,
+    _Out_ PULONGLONG Size)
+{
+    PNTFS_FILE_HANDLE FileHandle;
+    PNTFS_MFT_RECORD MftRecord;
+
+    *Size = 0;
+
+    FileHandle = FwAllocate(sizeof(NTFS_FILE_HANDLE) + Volume->MftRecordSize);
+    if (!FileHandle)
+        return NULL;
+    RtlZeroMemory(FileHandle, sizeof(NTFS_FILE_HANDLE) + Volume->MftRecordSize);
+    FileHandle->Volume = Volume;
+
+    MftRecord = (PNTFS_MFT_RECORD)(FileHandle + 1);
+    if (!NtfsLookupFile(Volume, Path, MftRecord, FileHandle))
+    {
+        FwFree(FileHandle);
+        return NULL;
+    }
+
+    if (FileHandle->DataContext->Record.Flags & NTFS_ATTR_COMPRESSED)
+    {
+        NtfsReleaseAttributeContext(FileHandle->DataContext);
+        FwFree(FileHandle);
+        return NULL;
+    }
+
+    *Size = NtfsGetAttributeSize(&FileHandle->DataContext->Record);
+    return FileHandle;
+}
+
+BOOLEAN
+NtfsReadFileAt(
+    _In_ PNTFS_FILE_HANDLE FileHandle,
+    _In_ ULONGLONG Offset,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length)
+{
+    return NtfsReadAttribute(FileHandle->Volume, FileHandle->DataContext, Offset, Buffer, Length) == Length;
+}
+
+VOID
+NtfsCloseFile(
+    _In_ PNTFS_FILE_HANDLE FileHandle)
+{
+    NtfsReleaseAttributeContext(FileHandle->DataContext);
+    FwFree(FileHandle);
+}
+
 PNTFS_VOLUME_INFO
 NtfsMount(
     _In_ PDK_DEVICE Device)

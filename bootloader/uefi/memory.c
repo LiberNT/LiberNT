@@ -28,6 +28,8 @@ static UEFI_RUNTIME_RANGE UefiRuntimeRanges[UEFI_MAX_RUNTIME_RANGES];
 static ULONG UefiRuntimeRangeCount;
 static PEFI_FIRMWARE_INFORMATION UefiRuntimeInformation;
 static PVIRTUAL_EFI_RUNTIME_SERVICES UefiRuntimeServices;
+static PVOID UefiRuntimeMapCopy;
+static UINTN UefiRuntimeMapCopyCapacity;
 static UINTN UefiExitMapSize;
 static UINTN UefiExitDescriptorSize;
 
@@ -196,6 +198,17 @@ FwPrepareRuntimeServices(
     if (!UefiReadMemoryMap(TRUE, &MapKey, &MapSize, &DescriptorSize))
         return FALSE;
 
+    UefiRuntimeMapCopyCapacity = UefiMapCapacity;
+    UefiRuntimeMapCopy = MmAllocateMemoryWithType(UefiRuntimeMapCopyCapacity, LoaderMemoryData);
+    if (!UefiRuntimeMapCopy ||
+        !MempSetupPaging((PFN_NUMBER)((ULONG_PTR)UefiRuntimeMapCopy >> EFI_PAGE_SHIFT),
+                         EFI_SIZE_TO_PAGES(UefiRuntimeMapCopyCapacity),
+                         TRUE))
+    {
+        UefiRuntimeMapCopy = NULL;
+        UefiRuntimeMapCopyCapacity = 0;
+    }
+
     for (i = 0; i < MapSize / DescriptorSize; i++)
     {
         Entry = UefiMapEntry(i, DescriptorSize);
@@ -304,6 +317,14 @@ UefiSetVirtualAddressMap(
 
     Information->SetVirtualAddressMapStatus = (ULONG)STATUS_SUCCESS;
     Information->VirtualEfiRuntimeServices = PaToVa(Services);
+
+    if (UefiRuntimeMapCopy && MapSize <= UefiRuntimeMapCopyCapacity)
+    {
+        RtlCopyMemory(UefiRuntimeMapCopy, UefiMap, MapSize);
+        Information->EfiMemoryMap = PaToVa(UefiRuntimeMapCopy);
+        Information->EfiMemoryMapSize = (ULONG)MapSize;
+        Information->EfiMemoryMapDescriptorSize = (ULONG)DescriptorSize;
+    }
 }
 
 VOID
@@ -334,6 +355,224 @@ VOID
 FwSetVirtualAddressMap(VOID)
 {
     UefiSetVirtualAddressMap(UefiExitMapSize, UefiExitDescriptorSize);
+}
+
+static
+ULONG64
+UefiHiberOverlap(
+    _In_reads_(RangeCount) PLNT_HIBER_RANGE Ranges,
+    _In_ ULONG64 RangeCount,
+    _In_ ULONG64 BasePage,
+    _In_ ULONG64 PageCount,
+    _In_ BOOLEAN Claim)
+{
+    ULONG64 End = BasePage + PageCount;
+    ULONG64 Low = 0, High = RangeCount, Middle;
+    ULONG64 Start, Stop, Total = 0;
+    EFI_PHYSICAL_ADDRESS Address;
+
+    while (Low < High)
+    {
+        Middle = Low + (High - Low) / 2;
+        if (Ranges[Middle].BasePage + Ranges[Middle].PageCount <= BasePage)
+            Low = Middle + 1;
+        else
+            High = Middle;
+    }
+
+    for (; Low < RangeCount && Ranges[Low].BasePage < End; Low++)
+    {
+        Start = max(Ranges[Low].BasePage, BasePage);
+        Stop = min(Ranges[Low].BasePage + Ranges[Low].PageCount, End);
+        if (Start >= Stop)
+            continue;
+
+        if (Claim)
+        {
+            Address = Start << EFI_PAGE_SHIFT;
+            if (EFI_ERROR(GlobalSystemTable->BootServices->AllocatePages(AllocateAddress,
+                                                                         EfiLoaderData,
+                                                                         Stop - Start,
+                                                                         &Address)))
+            {
+                continue;
+            }
+            OslHiberMarkOwned(Start, Stop - Start);
+        }
+
+        Total += Stop - Start;
+    }
+
+    return Total;
+}
+
+static
+BOOLEAN
+UefiHiberIsRam(
+    _In_ UINT32 Type)
+{
+    return (Type == EfiLoaderCode || Type == EfiLoaderData ||
+            Type == EfiBootServicesCode || Type == EfiBootServicesData ||
+            Type == EfiConventionalMemory);
+}
+
+BOOLEAN
+FwHiberCheckMemoryMap(
+    _In_ PLNT_HIBER_HEADER Header,
+    _In_reads_(RangeCount) PLNT_HIBER_RANGE Ranges,
+    _In_ ULONG64 RangeCount,
+    _Out_ PULONG64 HighestPage)
+{
+    EFI_MEMORY_DESCRIPTOR* Entry;
+    PLNT_HIBER_RUNTIME_RANGE Saved;
+    UINTN MapKey, MapSize, DescriptorSize, i;
+    ULONG64 BasePage, Covered = 0;
+    ULONG Matched = 0, j;
+
+    *HighestPage = 0;
+
+    if (BootServicesExitedFlag || !UefiReadMemoryMap(TRUE, &MapKey, &MapSize, &DescriptorSize))
+        return FALSE;
+
+    for (i = 0; i < MapSize / DescriptorSize; i++)
+    {
+        Entry = UefiMapEntry(i, DescriptorSize);
+        if (Entry->NumberOfPages == 0)
+            continue;
+
+        BasePage = Entry->PhysicalStart >> EFI_PAGE_SHIFT;
+
+        if (Entry->Attribute & EFI_MEMORY_RUNTIME)
+        {
+            for (j = 0; j < Header->RuntimeRangeCount; j++)
+            {
+                Saved = &Header->RuntimeRanges[j];
+                if (Saved->PhysicalStart == Entry->PhysicalStart &&
+                    Saved->PageCount == Entry->NumberOfPages &&
+                    Saved->Type == Entry->Type &&
+                    Saved->Attribute == Entry->Attribute)
+                {
+                    break;
+                }
+            }
+
+            if (j == Header->RuntimeRangeCount)
+                return FALSE;
+            Matched++;
+        }
+
+        if (!UefiHiberIsRam(Entry->Type))
+        {
+            if (UefiHiberOverlap(Ranges, RangeCount, BasePage, Entry->NumberOfPages, FALSE) != 0)
+                return FALSE;
+            continue;
+        }
+
+        Covered += UefiHiberOverlap(Ranges, RangeCount, BasePage, Entry->NumberOfPages, FALSE);
+        if (BasePage + Entry->NumberOfPages > *HighestPage)
+            *HighestPage = BasePage + Entry->NumberOfPages;
+    }
+
+    return Matched == Header->RuntimeRangeCount && Covered == Header->TargetPages;
+}
+
+VOID
+FwHiberClaimFreeMemory(
+    _In_reads_(RangeCount) PLNT_HIBER_RANGE Ranges,
+    _In_ ULONG64 RangeCount)
+{
+    EFI_MEMORY_DESCRIPTOR* Entry;
+    UINTN MapKey, MapSize, DescriptorSize, i;
+
+    if (!UefiReadMemoryMap(TRUE, &MapKey, &MapSize, &DescriptorSize))
+        return;
+
+    for (i = 0; i < MapSize / DescriptorSize; i++)
+    {
+        Entry = UefiMapEntry(i, DescriptorSize);
+        if (Entry->Type == EfiConventionalMemory && Entry->NumberOfPages != 0)
+        {
+            UefiHiberOverlap(Ranges, RangeCount, Entry->PhysicalStart >> EFI_PAGE_SHIFT,
+                             Entry->NumberOfPages, TRUE);
+        }
+    }
+}
+
+VOID
+FwHiberClaimPool(
+    _In_ ULONG64 PageCount)
+{
+    EFI_MEMORY_DESCRIPTOR* Entry;
+    EFI_PHYSICAL_ADDRESS Address;
+    UINTN MapKey, MapSize, DescriptorSize, i;
+    ULONG64 BasePage, Count;
+
+    if (!UefiReadMemoryMap(TRUE, &MapKey, &MapSize, &DescriptorSize))
+        return;
+
+    for (i = 0; i < MapSize / DescriptorSize && PageCount != 0; i++)
+    {
+        Entry = UefiMapEntry(i, DescriptorSize);
+        if (Entry->Type != EfiConventionalMemory)
+            continue;
+
+        BasePage = Entry->PhysicalStart >> EFI_PAGE_SHIFT;
+        Count = Entry->NumberOfPages;
+        if (BasePage == 0)
+        {
+            BasePage++;
+            Count = Count ? Count - 1 : 0;
+        }
+        Count = min(Count, PageCount);
+        if (Count == 0)
+            continue;
+
+        Address = BasePage << EFI_PAGE_SHIFT;
+        if (EFI_ERROR(GlobalSystemTable->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, Count, &Address)))
+            continue;
+
+        OslHiberAddPoolRun(BasePage, Count);
+        PageCount -= Count;
+    }
+}
+
+BOOLEAN
+FwHiberExitBootServices(
+    _In_ PLNT_HIBER_HEADER Header)
+{
+    EFI_MEMORY_DESCRIPTOR* Entry;
+    UINTN i;
+    ULONG j;
+
+    UefiLeaveBootServices();
+
+    for (i = 0; i < UefiExitMapSize / UefiExitDescriptorSize; i++)
+    {
+        Entry = UefiMapEntry(i, UefiExitDescriptorSize);
+        if (!(Entry->Attribute & EFI_MEMORY_RUNTIME) || Entry->NumberOfPages == 0)
+            continue;
+
+        for (j = 0; j < Header->RuntimeRangeCount; j++)
+        {
+            if (Header->RuntimeRanges[j].PhysicalStart == Entry->PhysicalStart &&
+                Header->RuntimeRanges[j].PageCount == Entry->NumberOfPages)
+            {
+                Entry->VirtualStart = Header->RuntimeRanges[j].VirtualStart;
+                break;
+            }
+        }
+
+        if (j == Header->RuntimeRangeCount)
+            return FALSE;
+    }
+
+    if (Header->RuntimeRangeCount == 0)
+        return TRUE;
+
+    return !EFI_ERROR(GlobalSystemTable->RuntimeServices->SetVirtualAddressMap(UefiExitMapSize,
+                                                                                UefiExitDescriptorSize,
+                                                                                UefiMapDescriptorVersion,
+                                                                                UefiMap));
 }
 
 VOID

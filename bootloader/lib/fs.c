@@ -14,6 +14,26 @@ static BOOLEAN FsMountedExFat;
 
 PVOID (*FsMemoryReader)(PCSTR Path, PULONG Size);
 
+static
+BOOLEAN
+FsMount(
+    _In_ PDK_DEVICE Device)
+{
+    if ((!FsMountedVolume && !FsMountedExFat) ||
+        FsMountedDevice.Firmware != Device->Firmware ||
+        FsMountedDevice.Offset != Device->Offset)
+    {
+        FsMountedVolume = NtfsMount(Device);
+        FsMountedExFat = !FsMountedVolume && ExFatMount(Device);
+        if (!FsMountedVolume && !FsMountedExFat)
+            return FALSE;
+
+        FsMountedDevice = *Device;
+    }
+
+    return TRUE;
+}
+
 PVOID
 FsReadFileA(
     _In_ PDK_DEVICE Device,
@@ -25,19 +45,41 @@ FsReadFileA(
     if (Device->Memory)
         return FsMemoryReader ? FsMemoryReader(Path, Size) : NULL;
 
-    if ((!FsMountedVolume && !FsMountedExFat) ||
-        FsMountedDevice.Firmware != Device->Firmware ||
-        FsMountedDevice.Offset != Device->Offset)
-    {
-        FsMountedVolume = NtfsMount(Device);
-        FsMountedExFat = !FsMountedVolume && ExFatMount(Device);
-        if (!FsMountedVolume && !FsMountedExFat)
-            return NULL;
-
-        FsMountedDevice = *Device;
-    }
+    if (!FsMount(Device))
+        return NULL;
 
     return FsMountedVolume ? NtfsReadFile(FsMountedVolume, Path, Size) : ExFatReadFile(Path, Size);
+}
+
+PVOID
+FsOpenFileA(
+    _In_ PDK_DEVICE Device,
+    _In_ PCSTR Path,
+    _Out_ PULONGLONG Size)
+{
+    *Size = 0;
+
+    if (Device->Memory || !FsMount(Device) || !FsMountedVolume)
+        return NULL;
+
+    return NtfsOpenFile(FsMountedVolume, Path, Size);
+}
+
+BOOLEAN
+FsReadFileAt(
+    _In_ PVOID File,
+    _In_ ULONGLONG Offset,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length)
+{
+    return NtfsReadFileAt(File, Offset, Buffer, Length);
+}
+
+VOID
+FsCloseFile(
+    _In_ PVOID File)
+{
+    NtfsCloseFile(File);
 }
 
 PVOID

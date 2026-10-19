@@ -352,6 +352,10 @@ OslMain(VOID)
         FwPrint(L"The operating system device was not found.\r\n");
         return;
     }
+    else
+    {
+        OslResumeFromHibernation(&OsDevice);
+    }
 
     PeSetSystemRoot(SystemRoot);
     RtlStringCbPrintfA(Directory, sizeof(Directory), "%ssystem32\\", SystemRoot);

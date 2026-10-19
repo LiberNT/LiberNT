@@ -49,6 +49,23 @@ FsReadFileA(
     _In_ PCSTR Path,
     _Out_ PULONG Size);
 
+PVOID
+FsOpenFileA(
+    _In_ PDK_DEVICE Device,
+    _In_ PCSTR Path,
+    _Out_ PULONGLONG Size);
+
+BOOLEAN
+FsReadFileAt(
+    _In_ PVOID File,
+    _In_ ULONGLONG Offset,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length);
+
+VOID
+FsCloseFile(
+    _In_ PVOID File);
+
 BOOLEAN
 GptGetDiskId(
     _In_ PDK_DEVICE Disk,
