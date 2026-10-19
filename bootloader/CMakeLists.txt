@@ -31,11 +31,7 @@ endfunction()
 function(bootloader_efi_application _target _entry)
     set_target_properties(${_target} PROPERTIES SUFFIX ".efi")
 
-    if(ARCH STREQUAL "arm64" OR ARCH STREQUAL "riscv64")
-        target_link_options(${_target} PRIVATE -Wl,--exclude-all-symbols,--file-alignment,0x200,--section-alignment,0x1000)
-    else()
-        target_link_options(${_target} PRIVATE -Wl,--exclude-all-symbols,--file-alignment,0x200,--section-alignment,0x200)
-    endif()
+    target_link_options(${_target} PRIVATE -Wl,--exclude-all-symbols,--file-alignment,0x200,--section-alignment,0x1000)
 
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
         target_link_options(${_target} PRIVATE -Wl,/driver)
