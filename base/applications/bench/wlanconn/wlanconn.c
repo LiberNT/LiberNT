@@ -292,6 +292,9 @@ wmain(int argc, WCHAR **argv)
     BOOL ProfileSet = FALSE;
     BOOL Connected = FALSE;
     ULONG Attempt;
+    DOT11_BSSID_LIST BssidList;
+    BOOL HaveBssid = FALSE;
+    BOOL SkipScan = FALSE;
 
     RtlZeroMemory(Key, sizeof(Key));
     RtlZeroMemory(KeyXml, sizeof(KeyXml));
@@ -312,13 +315,33 @@ wmain(int argc, WCHAR **argv)
             InterfaceMatch = argv[++Index];
         else if (_wcsicmp(argv[Index], L"--wpa3") == 0)
             Authentication = L"WPA3SAE";
+        else if (_wcsicmp(argv[Index], L"--no-scan") == 0)
+            SkipScan = TRUE;
+        else if (_wcsicmp(argv[Index], L"--bssid") == 0 && Index + 1 < (DWORD)argc)
+        {
+            UINT Octets[6];
+            UINT Octet;
+
+            if (swscanf(argv[++Index], L"%2x:%2x:%2x:%2x:%2x:%2x",
+                        &Octets[0], &Octets[1], &Octets[2], &Octets[3], &Octets[4], &Octets[5]) != 6)
+                break;
+            ZeroMemory(&BssidList, sizeof(BssidList));
+            BssidList.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+            BssidList.Header.Revision = DOT11_BSSID_LIST_REVISION_1;
+            BssidList.Header.Size = sizeof(BssidList);
+            BssidList.uNumOfEntries = 1;
+            BssidList.uTotalNumOfEntries = 1;
+            for (Octet = 0; Octet < 6; Octet++)
+                BssidList.BSSIDs[0][Octet] = (UCHAR)Octets[Octet];
+            HaveBssid = TRUE;
+        }
         else
             break;
     }
     if (argc < 3 || ArgIndex > (DWORD)argc || Index != (DWORD)argc)
     {
-        wprintf(L"usage: wlanconn <ssid> <passphrase> [--interface <description>] [--wpa3]\n"
-                L"       wlanconn <ssid> --key-file <path> [--interface <description>] [--wpa3]\n"
+        wprintf(L"usage: wlanconn <ssid> <passphrase> [--interface <description>] [--wpa3] [--bssid <xx:xx:xx:xx:xx:xx>] [--no-scan]\n"
+                L"       wlanconn <ssid> --key-file <path> [--interface <description>] [--wpa3] [--bssid <xx:xx:xx:xx:xx:xx>] [--no-scan]\n"
                 L"       wlanconn --disconnect [--interface <description>]\n");
         return 1;
     }
@@ -410,6 +433,9 @@ wmain(int argc, WCHAR **argv)
         goto Cleanup;
     }
 
+    if (SkipScan)
+        goto Profile;
+
     RtlZeroMemory(&ScanWait, sizeof(ScanWait));
     ScanWait.Event = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (ScanWait.Event == NULL)
@@ -442,6 +468,7 @@ wmain(int argc, WCHAR **argv)
                              FALSE, NULL, NULL, NULL, &PreviousSource);
     CloseHandle(ScanWait.Event);
 
+Profile:
     Result = WlanSetProfile(hClient, InterfaceGuid, 0, ProfileXml, NULL, TRUE, NULL, &Reason);
     wprintf(L"WLANCONN: WlanSetProfile 0x%lx (reason %lu)\n", Result, Reason);
     SecureZeroMemory(Key, sizeof(Key));
@@ -455,6 +482,8 @@ wmain(int argc, WCHAR **argv)
     Params.wlanConnectionMode = wlan_connection_mode_profile;
     Params.strProfile = Ssid;
     Params.dot11BssType = dot11_BSS_type_infrastructure;
+    if (HaveBssid)
+        Params.pDesiredBssidList = &BssidList;
 
     Result = WlanConnect(hClient, InterfaceGuid, &Params, NULL);
     wprintf(L"WLANCONN: WlanConnect 0x%lx\n", Result);
