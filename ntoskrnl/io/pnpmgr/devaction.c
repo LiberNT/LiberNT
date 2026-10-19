@@ -105,6 +105,11 @@ NTAPI
 IopGetBusTypeGuidIndex(LPGUID BusTypeGuid);
 
 NTSTATUS
+NTAPI
+PnpBusTypeGuidGet(IN USHORT Index,
+                  IN LPGUID BusTypeGuid);
+
+NTSTATUS
 IopSetDeviceInstanceData(HANDLE InstanceKey, PDEVICE_NODE DeviceNode);
 
 BOOLEAN
@@ -1212,6 +1217,35 @@ Cleanup:
     return Status;
 }
 
+static
+VOID
+PiUpdateRemovalPolicy(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    DEVICE_REMOVAL_POLICY Policy = RemovalPolicyExpectNoRemoval;
+    GUID BusTypeGuid;
+
+    if (DeviceNode->CapabilityFlags & 0x00000004)
+    {
+        Policy = RemovalPolicyExpectOrderlyRemoval;
+        if (NT_SUCCESS(PnpBusTypeGuidGet(DeviceNode->ChildBusTypeIndex, &BusTypeGuid)) &&
+            (IsEqualGUID(&BusTypeGuid, &GUID_BUS_TYPE_USB) ||
+             IsEqualGUID(&BusTypeGuid, &GUID_BUS_TYPE_1394) ||
+             IsEqualGUID(&BusTypeGuid, &GUID_BUS_TYPE_PCMCIA)))
+        {
+            Policy = RemovalPolicyExpectSurpriseRemoval;
+        }
+    }
+    else if (DeviceNode->Parent != NULL &&
+             DeviceNode->Parent->HardwareRemovalPolicy > RemovalPolicyExpectNoRemoval)
+    {
+        Policy = DeviceNode->Parent->HardwareRemovalPolicy;
+    }
+
+    DeviceNode->HardwareRemovalPolicy = (UCHAR)Policy;
+    DeviceNode->RemovalPolicy = (UCHAR)Policy;
+}
+
 NTSTATUS
 NTAPI
 IopQueryDeviceCapabilities(PDEVICE_NODE DeviceNode,
@@ -1284,6 +1318,8 @@ IopQueryDeviceCapabilities(PDEVICE_NODE DeviceNode,
         DeviceNode->UserFlags |= DNUF_DONT_SHOW_IN_UI;
     else
         DeviceNode->UserFlags &= ~DNUF_DONT_SHOW_IN_UI;
+
+    PiUpdateRemovalPolicy(DeviceNode);
 
     Status = IopCreateDeviceKeyPath(&DeviceNode->InstancePath, REG_OPTION_NON_VOLATILE, &InstanceKey);
     if (NT_SUCCESS(Status))
@@ -1775,6 +1811,8 @@ PiInitializeDevNode(
         DeviceNode->ChildInterfaceType = InterfaceTypeUndefined;
         DeviceNode->ChildBusTypeIndex = -1;
     }
+
+    PiUpdateRemovalPolicy(DeviceNode);
 
     PiQueryDevNodeResources(DeviceNode);
 

@@ -55,6 +55,8 @@ PipAllocateDeviceNode(
     DeviceNode->ChildInterfaceType = InterfaceTypeUndefined;
     DeviceNode->ChildBusNumber = -1;
     DeviceNode->ChildBusTypeIndex = -1;
+    DeviceNode->RemovalPolicy = RemovalPolicyExpectNoRemoval;
+    DeviceNode->HardwareRemovalPolicy = RemovalPolicyExpectNoRemoval;
     DeviceNode->State = DeviceNodeUninitialized;
 //    KeInitializeEvent(&DeviceNode->EnumerationMutex, SynchronizationEvent, TRUE);
     InitializeListHead(&DeviceNode->DeviceArbiterList);
