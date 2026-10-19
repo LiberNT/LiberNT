@@ -386,6 +386,24 @@ PopGetDisplayState(
     VOID
 );
 
+VOID
+NTAPI
+PopNoteDisplayActivity(
+    VOID
+);
+
+BOOLEAN
+NTAPI
+PopIsDisplayRequired(
+    VOID
+);
+
+ULONG
+NTAPI
+PopGetVideoTimeout(
+    VOID
+);
+
 NTSTATUS
 NTAPI
 PopRegisterPowerStateHandler(

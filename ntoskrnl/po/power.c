@@ -52,6 +52,7 @@ typedef struct _POP_POWER_REQUEST_ACTION
 } POP_POWER_REQUEST_ACTION, *PPOP_POWER_REQUEST_ACTION;
 
 static POBJECT_TYPE PopPowerRequestObjectType;
+static volatile LONG PopDisplayRequiredCount;
 static GENERIC_MAPPING PopPowerRequestMapping =
 {
     STANDARD_RIGHTS_READ,
@@ -130,6 +131,36 @@ PopPowerRequestOpen(
 }
 
 static
+VOID
+PopTrackDisplayRequired(
+    _In_ LONG OldCount,
+    _In_ LONG NewCount)
+{
+    if (OldCount <= 0 && NewCount > 0)
+        InterlockedIncrement(&PopDisplayRequiredCount);
+    else if (OldCount > 0 && NewCount <= 0)
+        InterlockedDecrement(&PopDisplayRequiredCount);
+}
+
+BOOLEAN
+NTAPI
+PopIsDisplayRequired(VOID)
+{
+    return InterlockedCompareExchange(&PopDisplayRequiredCount, 0, 0) > 0;
+}
+
+static
+VOID
+NTAPI
+PopPowerRequestDelete(
+    _In_ PVOID ObjectBody)
+{
+    PPOP_POWER_REQUEST PowerRequest = ObjectBody;
+
+    PopTrackDisplayRequired(PowerRequest->RequestCount[PowerRequestDisplayRequired], 0);
+}
+
+static
 NTSTATUS
 PopInitializePowerRequestObjectType(VOID)
 {
@@ -147,6 +178,7 @@ PopInitializePowerRequestObjectType(VOID)
     ObjectTypeInitializer.UseDefaultObject = TRUE;
     ObjectTypeInitializer.UnnamedObjectsOnly = TRUE;
     ObjectTypeInitializer.OpenProcedure = PopPowerRequestOpen;
+    ObjectTypeInitializer.DeleteProcedure = PopPowerRequestDelete;
     return ObCreateObjectType(&Name, &ObjectTypeInitializer, NULL, &PopPowerRequestObjectType);
 }
 
@@ -260,7 +292,9 @@ PopWriteThreadPowerState(
     _In_ EXECUTION_STATE State)
 {
     InterlockedExchange((PLONG)&PowerObject->RequestCount[PowerRequestSystemRequired], BooleanFlagOn(State, ES_SYSTEM_REQUIRED));
-    InterlockedExchange((PLONG)&PowerObject->RequestCount[PowerRequestDisplayRequired], BooleanFlagOn(State, ES_DISPLAY_REQUIRED));
+    PopTrackDisplayRequired(InterlockedExchange((PLONG)&PowerObject->RequestCount[PowerRequestDisplayRequired],
+                                                BooleanFlagOn(State, ES_DISPLAY_REQUIRED)),
+                            BooleanFlagOn(State, ES_DISPLAY_REQUIRED));
     InterlockedExchange((PLONG)&PowerObject->RequestCount[PowerRequestAwayModeRequired], BooleanFlagOn(State, POP_EXECUTION_AWAYMODE_REQUIRED));
 }
 
@@ -291,6 +325,8 @@ PopApplyPowerRequestAction(
                 break;
             }
         } while (InterlockedCompareExchange((PLONG)&PowerRequest->RequestCount[Action->RequestType], Count + 1, Count) != Count);
+        if (NT_SUCCESS(Status) && Action->RequestType == PowerRequestDisplayRequired)
+            PopTrackDisplayRequired(Count, Count + 1);
     }
     else
     {
@@ -303,6 +339,8 @@ PopApplyPowerRequestAction(
                 break;
             }
         } while (InterlockedCompareExchange((PLONG)&PowerRequest->RequestCount[Action->RequestType], Count - 1, Count) != Count);
+        if (NT_SUCCESS(Status) && Action->RequestType == PowerRequestDisplayRequired)
+            PopTrackDisplayRequired(Count, Count - 1);
     }
 
     ObDereferenceObject(PowerRequest);
@@ -2180,6 +2218,9 @@ NtSetThreadExecutionState(IN EXECUTION_STATE esFlags,
 
     /* Save the previous state, always masking in the continuous flag */
     PreviousState = PopReadThreadPowerState(PowerObject);
+
+    if (esFlags & ES_DISPLAY_REQUIRED)
+        PopNoteDisplayActivity();
 
     /* Check if we need to update the power state */
     if (esFlags & ES_CONTINUOUS)

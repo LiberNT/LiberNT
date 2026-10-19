@@ -626,6 +626,15 @@ POWRPROF_ApplyScheme(
                                                sizeof(ButtonPolicy));
         }
     }
+    for (PowerCondition = PoAc; PowerCondition <= PoDc && Error == ERROR_SUCCESS; PowerCondition++)
+    {
+        DWORD VideoTimeout;
+
+        Error = POWRPROF_ReadValueIndex(Scheme, &PowrProfVideoSubgroup, &PowrProfVideoPowerdownTimeout,
+                                        PowerCondition == PoAc, &VideoTimeout);
+        if (Error == ERROR_SUCCESS)
+            Error = POWRPROF_ApplyPowerSetting(&PowrProfVideoPowerdownTimeout, PowerCondition, VideoTimeout);
+    }
     if (Error == ERROR_SUCCESS)
         Error = POWRPROF_PersistActiveScheme(Scheme, Defaults->LegacyId, UpdateLegacy);
     if (Error == ERROR_SUCCESS)

@@ -28,6 +28,21 @@ static volatile LONG PopDisplayQueued;
 static volatile LONG PopDisplayTarget = PowerMonitorOn;
 static MONITOR_DISPLAY_STATE PopDisplayState = PowerMonitorOn;
 static LIST_ENTRY PopStandbyPausedList;
+static KTIMER PopDisplayIdleTimer;
+static KDPC PopDisplayIdleDpc;
+static WORK_QUEUE_ITEM PopDisplayIdleWorkItem;
+static volatile LONG PopDisplayIdleQueued;
+static volatile LONG PopDisplayActivityTick;
+
+static
+ULONG
+PopTickMilliseconds(VOID)
+{
+    LARGE_INTEGER TickCount;
+
+    KeQueryTickCount(&TickCount);
+    return (ULONG)KiTickCountToMs(TickCount);
+}
 
 BOOLEAN
 NTAPI
@@ -229,9 +244,73 @@ PopGetDisplayState(VOID)
 
 VOID
 NTAPI
+PopNoteDisplayActivity(VOID)
+{
+    InterlockedExchange(&PopDisplayActivityTick, (LONG)PopTickMilliseconds());
+    if (PopGetDisplayState() != PowerMonitorOn)
+        PopRequestDisplayState(PowerMonitorOn);
+}
+
+static
+VOID
+NTAPI
+PopDisplayIdleWorker(
+    _In_ PVOID Context)
+{
+    ULONG Timeout;
+    ULONG Now;
+    ULONG Idle;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    InterlockedExchange(&PopDisplayIdleQueued, 0);
+
+    Timeout = PopGetVideoTimeout();
+    if (Timeout == 0 || PopGetDisplayState() != PowerMonitorOn || PopIsDisplayRequired())
+        return;
+
+    Now = PopTickMilliseconds();
+    Idle = min(Now - SharedUserData->LastSystemRITEventTickCount,
+               Now - (ULONG)InterlockedCompareExchange(&PopDisplayActivityTick, 0, 0));
+    if (Idle / 1000 < Timeout)
+        return;
+
+    DPRINT1("The display idled out after %lu seconds\n", Timeout);
+    PopRequestDisplayState(PowerMonitorOff);
+}
+
+static
+VOID
+NTAPI
+PopDisplayIdleDpcRoutine(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(DeferredContext);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    if (InterlockedExchange(&PopDisplayIdleQueued, 1) == 0)
+        ExQueueWorkItem(&PopDisplayIdleWorkItem, DelayedWorkQueue);
+}
+
+VOID
+NTAPI
 PopInitializeStandby(VOID)
 {
+    LARGE_INTEGER DueTime;
+
     KeInitializeMutex(&PopDisplayLock, 0);
     ExInitializeWorkItem(&PopDisplayWorkItem, PopDisplayWorker, NULL);
     InitializeListHead(&PopStandbyPausedList);
+
+    PopDisplayActivityTick = (LONG)PopTickMilliseconds();
+    ExInitializeWorkItem(&PopDisplayIdleWorkItem, PopDisplayIdleWorker, NULL);
+    KeInitializeDpc(&PopDisplayIdleDpc, PopDisplayIdleDpcRoutine, NULL);
+    KeInitializeTimerEx(&PopDisplayIdleTimer, SynchronizationTimer);
+    DueTime.QuadPart = -10000000LL;
+    KeSetTimerEx(&PopDisplayIdleTimer, DueTime, 1000, &PopDisplayIdleDpc);
 }

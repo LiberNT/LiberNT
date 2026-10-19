@@ -681,6 +681,23 @@ PopGetPowerButtonAction(VOID)
     return Action;
 }
 
+ULONG
+NTAPI
+PopGetVideoTimeout(VOID)
+{
+    PPOP_POWER_SETTING_CACHE_ENTRY CacheEntry;
+    ULONG Timeout = 0;
+
+    PAGED_CODE();
+
+    KeAcquireGuardedMutex(&PopPowerSettingLock);
+    CacheEntry = PopFindPowerSettingCacheEntry(&GUID_VIDEO_POWERDOWN_TIMEOUT, PopCurrentPowerCondition);
+    if (CacheEntry && CacheEntry->ValueLength == sizeof(ULONG))
+        Timeout = *(PULONG)CacheEntry->Value;
+    KeReleaseGuardedMutex(&PopPowerSettingLock);
+    return Timeout;
+}
+
 BOOLEAN
 NTAPI
 PopLockConsoleOnWake(VOID)
