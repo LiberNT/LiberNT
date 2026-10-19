@@ -351,7 +351,7 @@ NetrServerGetInfo(
     LPSERVER_INFO *InfoStruct)
 {
     WCHAR szComputerName[MAX_COMPUTERNAME_LENGTH + 1];
-    DWORD dwComputerNameLength, dwSize;
+    DWORD dwComputerNameLength;
     PSERVER_INFO pServerInfo = NULL;
     OSVERSIONINFOW VersionInfo;
 
@@ -368,28 +368,36 @@ NetrServerGetInfo(
     switch (Level)
     {
         case 100:
-            dwSize = sizeof(SERVER_INFO_100) +
-                     dwComputerNameLength * sizeof(WCHAR);
-            pServerInfo = midl_user_allocate(dwSize);
+            pServerInfo = midl_user_allocate(sizeof(SERVER_INFO_100));
             if (pServerInfo == NULL)
                 return ERROR_NOT_ENOUGH_MEMORY;
 
+            pServerInfo->ServerInfo100.sv100_name = midl_user_allocate(dwComputerNameLength * sizeof(WCHAR));
+            if (pServerInfo->ServerInfo100.sv100_name == NULL)
+            {
+                midl_user_free(pServerInfo);
+                return ERROR_NOT_ENOUGH_MEMORY;
+            }
+
             pServerInfo->ServerInfo100.sv100_platform_id = PLATFORM_ID_NT;
-            pServerInfo->ServerInfo100.sv100_name = (LPWSTR)((ULONG_PTR)pServerInfo + sizeof(SERVER_INFO_100));
             wcscpy(pServerInfo->ServerInfo100.sv100_name, szComputerName);
 
             *InfoStruct = pServerInfo;
             break;
 
         case 101:
-            dwSize = sizeof(SERVER_INFO_101) +
-                     dwComputerNameLength * sizeof(WCHAR);
-            pServerInfo = midl_user_allocate(dwSize);
+            pServerInfo = midl_user_allocate(sizeof(SERVER_INFO_101));
             if (pServerInfo == NULL)
                 return ERROR_NOT_ENOUGH_MEMORY;
 
+            pServerInfo->ServerInfo101.sv101_name = midl_user_allocate(dwComputerNameLength * sizeof(WCHAR));
+            if (pServerInfo->ServerInfo101.sv101_name == NULL)
+            {
+                midl_user_free(pServerInfo);
+                return ERROR_NOT_ENOUGH_MEMORY;
+            }
+
             pServerInfo->ServerInfo101.sv101_platform_id = PLATFORM_ID_NT;
-            pServerInfo->ServerInfo101.sv101_name = (LPWSTR)((ULONG_PTR)pServerInfo + sizeof(SERVER_INFO_101));
             wcscpy(pServerInfo->ServerInfo101.sv101_name, szComputerName);
 
             pServerInfo->ServerInfo101.sv101_version_major = VersionInfo.dwMajorVersion;
@@ -401,14 +409,18 @@ NetrServerGetInfo(
             break;
 
         case 102:
-            dwSize = sizeof(SERVER_INFO_102) +
-                     dwComputerNameLength * sizeof(WCHAR);
-            pServerInfo = midl_user_allocate(dwSize);
+            pServerInfo = midl_user_allocate(sizeof(SERVER_INFO_102));
             if (pServerInfo == NULL)
                 return ERROR_NOT_ENOUGH_MEMORY;
 
+            pServerInfo->ServerInfo102.sv102_name = midl_user_allocate(dwComputerNameLength * sizeof(WCHAR));
+            if (pServerInfo->ServerInfo102.sv102_name == NULL)
+            {
+                midl_user_free(pServerInfo);
+                return ERROR_NOT_ENOUGH_MEMORY;
+            }
+
             pServerInfo->ServerInfo102.sv102_platform_id = PLATFORM_ID_NT;
-            pServerInfo->ServerInfo102.sv102_name = (LPWSTR)((ULONG_PTR)pServerInfo + sizeof(SERVER_INFO_102));
             wcscpy(pServerInfo->ServerInfo102.sv102_name, szComputerName);
 
             pServerInfo->ServerInfo102.sv102_version_major = VersionInfo.dwMajorVersion;
