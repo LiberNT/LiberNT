@@ -447,6 +447,100 @@ DbgkpWakeTarget(IN PDEBUG_EVENT DebugEvent)
     }
 }
 
+typedef struct _DBGK_PEB_LDR_DATA32
+{
+    ULONG Length;
+    BOOLEAN Initialized;
+    ULONG SsHandle;
+    LIST_ENTRY32 InLoadOrderModuleList;
+} DBGK_PEB_LDR_DATA32, *PDBGK_PEB_LDR_DATA32;
+
+typedef struct _DBGK_LDR_DATA_TABLE_ENTRY32
+{
+    LIST_ENTRY32 InLoadOrderLinks;
+    LIST_ENTRY32 InMemoryOrderLinks;
+    LIST_ENTRY32 InInitializationOrderLinks;
+    ULONG DllBase;
+} DBGK_LDR_DATA_TABLE_ENTRY32, *PDBGK_LDR_DATA_TABLE_ENTRY32;
+
+C_ASSERT(FIELD_OFFSET(DBGK_PEB_LDR_DATA32, InLoadOrderModuleList) == 0x0C);
+C_ASSERT(FIELD_OFFSET(DBGK_LDR_DATA_TABLE_ENTRY32, DllBase) == 0x18);
+
+static
+VOID
+DbgkpPostFakeModuleMessage(IN PEPROCESS Process,
+                           IN PETHREAD Thread,
+                           IN PDEBUG_OBJECT DebugObject,
+                           IN PVOID DllBase)
+{
+    DBGKM_MSG ApiMessage;
+    PDBGKM_LOAD_DLL LoadDll = &ApiMessage.LoadDll;
+    PIMAGE_NT_HEADERS NtHeader;
+    UNICODE_STRING ModuleName;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    NTSTATUS Status;
+
+    /* Setup the API Message */
+    RtlZeroMemory(&ApiMessage, sizeof(DBGKM_MSG));
+    ApiMessage.ApiNumber = DbgKmLoadDllApi;
+
+    /* Set base and clear the name */
+    LoadDll->BaseOfDll = DllBase;
+    LoadDll->NamePointer = NULL;
+
+    /* Get the NT Headers */
+    NtHeader = RtlImageNtHeader(LoadDll->BaseOfDll);
+    if (NtHeader)
+    {
+        /* Save debug data */
+        LoadDll->DebugInfoFileOffset = NtHeader->FileHeader.
+                                       PointerToSymbolTable;
+        LoadDll->DebugInfoSize = NtHeader->FileHeader.NumberOfSymbols;
+    }
+
+    /* Get the name of the DLL */
+    Status = MmGetFileNameForAddress(NtHeader, &ModuleName);
+    if (NT_SUCCESS(Status))
+    {
+        /* Setup the object attributes */
+        InitializeObjectAttributes(&ObjectAttributes,
+                                   &ModuleName,
+                                   OBJ_FORCE_ACCESS_CHECK |
+                                   OBJ_KERNEL_HANDLE |
+                                   OBJ_CASE_INSENSITIVE,
+                                   NULL,
+                                   NULL);
+
+        /* Open the file to get a handle to it */
+        Status = ZwOpenFile(&LoadDll->FileHandle,
+                            GENERIC_READ | SYNCHRONIZE,
+                            &ObjectAttributes,
+                            &IoStatusBlock,
+                            FILE_SHARE_READ |
+                            FILE_SHARE_WRITE |
+                            FILE_SHARE_DELETE,
+                            FILE_SYNCHRONOUS_IO_NONALERT);
+        if (!NT_SUCCESS(Status)) LoadDll->FileHandle = NULL;
+
+        /* Free the name now */
+        RtlFreeUnicodeString(&ModuleName);
+    }
+
+    /* Send the fake module load message */
+    Status = DbgkpQueueMessage(Process,
+                               Thread,
+                               &ApiMessage,
+                               DEBUG_EVENT_NOWAIT,
+                               DebugObject);
+    if (!NT_SUCCESS(Status))
+    {
+        /* Message send failed, close the file handle if we had one */
+        if (LoadDll->FileHandle) ObCloseHandle(LoadDll->FileHandle,
+                                               KernelMode);
+    }
+}
+
 NTSTATUS
 NTAPI
 DbgkpPostFakeModuleMessages(IN PEPROCESS Process,
@@ -457,14 +551,11 @@ DbgkpPostFakeModuleMessages(IN PEPROCESS Process,
     PPEB_LDR_DATA LdrData;
     PLDR_DATA_TABLE_ENTRY LdrEntry;
     PLIST_ENTRY ListHead, NextEntry;
-    DBGKM_MSG ApiMessage;
-    PDBGKM_LOAD_DLL LoadDll = &ApiMessage.LoadDll;
+    PEB32 *Peb32;
+    PDBGK_PEB_LDR_DATA32 LdrData32;
+    PDBGK_LDR_DATA_TABLE_ENTRY32 LdrEntry32;
+    ULONG ListHead32, NextEntry32;
     ULONG i;
-    PIMAGE_NT_HEADERS NtHeader;
-    UNICODE_STRING ModuleName;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    IO_STATUS_BLOCK IoStatusBlock;
-    NTSTATUS Status;
     UNICODE_STRING FullDllName;
     PAGED_CODE();
     DBGKTRACE(DBGK_PROCESS_DEBUG, "Process: %p Thread: %p DebugObject: %p\n",
@@ -504,73 +595,45 @@ DbgkpPostFakeModuleMessages(IN PEPROCESS Process,
                                          InLoadOrderLinks);
             ProbeForRead(LdrEntry, sizeof(*LdrEntry), 1);
 
-            /* Setup the API Message */
-            RtlZeroMemory(&ApiMessage, sizeof(DBGKM_MSG));
-            ApiMessage.ApiNumber = DbgKmLoadDllApi;
-
-            /* Set base and clear the name */
-            LoadDll->BaseOfDll = LdrEntry->DllBase;
-            LoadDll->NamePointer = NULL;
-
-            /* Get the NT Headers */
-            NtHeader = RtlImageNtHeader(LoadDll->BaseOfDll);
-            if (NtHeader)
-            {
-                /* Save debug data */
-                LoadDll->DebugInfoFileOffset = NtHeader->FileHeader.
-                                               PointerToSymbolTable;
-                LoadDll->DebugInfoSize = NtHeader->FileHeader.NumberOfSymbols;
-            }
-
             /* Trace */
             FullDllName = LdrEntry->FullDllName;
             ProbeForRead(FullDllName.Buffer, FullDllName.MaximumLength, 1);
             DBGKTRACE(DBGK_PROCESS_DEBUG, "Name: %wZ. Base: %p\n",
                       &FullDllName, LdrEntry->DllBase);
 
-            /* Get the name of the DLL */
-            Status = MmGetFileNameForAddress(NtHeader, &ModuleName);
-            if (NT_SUCCESS(Status))
-            {
-                /* Setup the object attributes */
-                InitializeObjectAttributes(&ObjectAttributes,
-                                           &ModuleName,
-                                           OBJ_FORCE_ACCESS_CHECK |
-                                           OBJ_KERNEL_HANDLE |
-                                           OBJ_CASE_INSENSITIVE,
-                                           NULL,
-                                           NULL);
-
-                /* Open the file to get a handle to it */
-                Status = ZwOpenFile(&LoadDll->FileHandle,
-                                    GENERIC_READ | SYNCHRONIZE,
-                                    &ObjectAttributes,
-                                    &IoStatusBlock,
-                                    FILE_SHARE_READ |
-                                    FILE_SHARE_WRITE |
-                                    FILE_SHARE_DELETE,
-                                    FILE_SYNCHRONOUS_IO_NONALERT);
-                if (!NT_SUCCESS(Status)) LoadDll->FileHandle = NULL;
-
-                /* Free the name now */
-                RtlFreeUnicodeString(&ModuleName);
-            }
-
-            /* Send the fake module load message */
-            Status = DbgkpQueueMessage(Process,
-                                       Thread,
-                                       &ApiMessage,
-                                       DEBUG_EVENT_NOWAIT,
-                                       DebugObject);
-            if (!NT_SUCCESS(Status))
-            {
-                /* Message send failed, close the file handle if we had one */
-                if (LoadDll->FileHandle) ObCloseHandle(LoadDll->FileHandle,
-                                                       KernelMode);
-            }
+            DbgkpPostFakeModuleMessage(Process, Thread, DebugObject, LdrEntry->DllBase);
 
             /* Go to the next module */
             NextEntry = NextEntry->Flink;
+            i++;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        NOTHING;
+    }
+    _SEH2_END;
+
+    if (!Process->WoW64Process || !Process->WoW64Process->Peb) return STATUS_SUCCESS;
+
+    _SEH2_TRY
+    {
+        Peb32 = Process->WoW64Process->Peb;
+        ProbeForRead(Peb32, sizeof(*Peb32), 1);
+        LdrData32 = (PDBGK_PEB_LDR_DATA32)(ULONG_PTR)Peb32->Ldr;
+        ProbeForRead(LdrData32, sizeof(*LdrData32), 1);
+        ListHead32 = PtrToUlong(&LdrData32->InLoadOrderModuleList);
+        NextEntry32 = LdrData32->InLoadOrderModuleList.Flink;
+
+        i = 0;
+        while ((NextEntry32 != ListHead32) && (i < 500))
+        {
+            LdrEntry32 = (PDBGK_LDR_DATA_TABLE_ENTRY32)(ULONG_PTR)NextEntry32;
+            ProbeForRead(LdrEntry32, sizeof(*LdrEntry32), 1);
+            if (i)
+                DbgkpPostFakeModuleMessage(Process, Thread, DebugObject, (PVOID)(ULONG_PTR)LdrEntry32->DllBase);
+
+            NextEntry32 = LdrEntry32->InLoadOrderLinks.Flink;
             i++;
         }
     }
