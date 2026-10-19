@@ -1782,7 +1782,7 @@ CCabinetWindow::CreateNavigationPane()
     {
         HWND tree = FindWindowExW(m_NavigationWindow, NULL, WC_TREEVIEWW, NULL);
         if (tree)
-            TreeView_SetItemHeight(tree, Scale(32));
+            TreeView_SetItemHeight(tree, Scale(26));
     }
 }
 
