@@ -323,7 +323,11 @@ WlanSvcQueryInterface(PWLANSVC_INTERFACE Iface,
 
         case wlan_intf_opcode_rssi:
         {
-            LONG rssi = Iface->Rssi;
+            LONG rssi;
+
+            if (Iface->Connected)
+                WlanSvcUpdateLinkState(Iface);
+            rssi = Iface->Rssi;
             return WlanSvcReturnBlob(&rssi, sizeof(rssi), ppData, pdwDataSize);
         }
 
@@ -331,6 +335,8 @@ WlanSvcQueryInterface(PWLANSVC_INTERFACE Iface,
         {
             WLAN_CONNECTION_ATTRIBUTES ca;
 
+            if (Iface->Connected)
+                WlanSvcUpdateLinkState(Iface);
             if (!Iface->Connected)
                 return ERROR_INVALID_STATE;
 
