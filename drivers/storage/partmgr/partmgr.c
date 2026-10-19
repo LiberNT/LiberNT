@@ -201,6 +201,10 @@ PartMgrSetDiskData(
 {
     PAGED_CODE();
 
+    BOOLEAN signatureChanged = FdoExtension->DiskData.PartitionStyle == PARTITION_STYLE_MBR &&
+                               Layout->PartitionStyle == PARTITION_STYLE_MBR &&
+                               FdoExtension->DiskData.Mbr.Signature != Layout->Mbr.Signature;
+
     FdoExtension->DiskData.PartitionStyle = Layout->PartitionStyle;
     if (Layout->PartitionStyle == PARTITION_STYLE_MBR)
         FdoExtension->DiskData.Mbr.Signature = Layout->Mbr.Signature;
@@ -208,6 +212,12 @@ PartMgrSetDiskData(
         FdoExtension->DiskData.Gpt.DiskId = Layout->Gpt.DiskId;
 
     FdoExtension->IsSuperFloppy = PartMgrIsDiskSuperFloppy(FdoExtension);
+
+    if (signatureChanged)
+    {
+        for (PSINGLE_LIST_ENTRY entry = FdoExtension->PartitionList.Next; entry; entry = entry->Next)
+            PartitionNotifyUniqueIdChange(CONTAINING_RECORD(entry, PARTITION_EXTENSION, ListEntry));
+    }
 }
 
 static

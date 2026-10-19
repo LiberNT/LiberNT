@@ -136,6 +136,7 @@ typedef struct _PARTITION_EXTENSION
     UNICODE_STRING PartitionInterfaceName;
     UNICODE_STRING VolumeInterfaceName;
     UNICODE_STRING DeviceName;
+    PIRP UniqueIdChangeIrp;
 } PARTITION_EXTENSION, *PPARTITION_EXTENSION;
 
 C_ASSERT(FIELD_OFFSET(FDO_EXTENSION, RemoveLock) == FIELD_OFFSET(PARTITION_EXTENSION, RemoveLock));
@@ -181,6 +182,14 @@ NTSTATUS
 PartitionHandleDeviceControl(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PIRP Irp);
+
+VOID
+PartitionNotifyUniqueIdChange(
+    _In_ PPARTITION_EXTENSION PartExt);
+
+VOID
+PartitionCancelUniqueIdChangeNotify(
+    _In_ PPARTITION_EXTENSION PartExt);
 
 NTSTATUS
 NTAPI

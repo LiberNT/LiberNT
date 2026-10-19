@@ -359,6 +359,7 @@ PartitionHandleRemove(
     }
 
     InterlockedExchange(&PartExt->Removed, TRUE);
+    PartitionCancelUniqueIdChangeNotify(PartExt);
     if (FinalRemove)
     {
         IoAcquireRemoveLock(&PartExt->RemoveLock, PartExt);
@@ -646,6 +647,131 @@ PartitionHandlePnp(
     Irp->IoStatus.Status = status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return status;
+}
+
+static
+USHORT
+PartitionGetBasicUniqueId(
+    _In_ PPARTITION_EXTENSION PartExt,
+    _In_ PFDO_EXTENSION FdoExtension,
+    _Out_ PBASIC_VOLUME_UNIQUE_ID UniqueId)
+{
+    if ((FdoExtension->DiskData.PartitionStyle == PARTITION_STYLE_MBR) &&
+        !FdoExtension->IsSuperFloppy)
+    {
+        UniqueId->Mbr.Signature = FdoExtension->DiskData.Mbr.Signature;
+        UniqueId->Mbr.StartingOffset = PartExt->StartingOffset;
+        return sizeof(UniqueId->Mbr);
+    }
+
+    if (FdoExtension->DiskData.PartitionStyle == PARTITION_STYLE_GPT)
+    {
+        UniqueId->Gpt.Signature = DMIO_ID_SIGNATURE;
+        UniqueId->Gpt.PartitionGuid = PartExt->Gpt.PartitionId;
+        return sizeof(UniqueId->Gpt);
+    }
+
+    return 0;
+}
+
+static
+NTSTATUS
+PartitionFillUniqueIdChange(
+    _Inout_ PIRP Irp,
+    _In_reads_bytes_(NewLength) PVOID NewId,
+    _In_ USHORT NewLength)
+{
+    PIO_STACK_LOCATION ioStack = IoGetCurrentIrpStackLocation(Irp);
+    PMOUNTDEV_UNIQUE_ID_CHANGE_NOTIFY_OUTPUT output = Irp->AssociatedIrp.SystemBuffer;
+    USHORT oldLength = ((PMOUNTDEV_UNIQUE_ID)output)->UniqueIdLength;
+    ULONG size = sizeof(*output) + oldLength + NewLength;
+
+    if (size > ioStack->Parameters.DeviceIoControl.OutputBufferLength)
+    {
+        output->Size = size;
+        Irp->IoStatus.Information = sizeof(output->Size);
+        return STATUS_BUFFER_OVERFLOW;
+    }
+
+    RtlMoveMemory((PUCHAR)output + sizeof(*output), ((PMOUNTDEV_UNIQUE_ID)output)->UniqueId, oldLength);
+    RtlCopyMemory((PUCHAR)output + sizeof(*output) + oldLength, NewId, NewLength);
+    output->Size = size;
+    output->OldUniqueIdOffset = sizeof(*output);
+    output->OldUniqueIdLength = oldLength;
+    output->NewUniqueIdOffset = (USHORT)(sizeof(*output) + oldLength);
+    output->NewUniqueIdLength = NewLength;
+    Irp->IoStatus.Information = size;
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+NTAPI
+PartitionCancelUniqueIdChange(
+    _Inout_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ _IRQL_uses_cancel_ PIRP Irp)
+{
+    PPARTITION_EXTENSION partExt = DeviceObject->DeviceExtension;
+
+    if (partExt->UniqueIdChangeIrp == Irp)
+        partExt->UniqueIdChangeIrp = NULL;
+    IoReleaseCancelSpinLock(Irp->CancelIrql);
+
+    Irp->IoStatus.Status = STATUS_CANCELLED;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+}
+
+static
+PIRP
+PartitionTakeUniqueIdChangeIrp(
+    _In_ PPARTITION_EXTENSION PartExt)
+{
+    KIRQL oldIrql;
+    PIRP irp;
+
+    IoAcquireCancelSpinLock(&oldIrql);
+    irp = PartExt->UniqueIdChangeIrp;
+    if (irp && IoSetCancelRoutine(irp, NULL))
+        PartExt->UniqueIdChangeIrp = NULL;
+    else
+        irp = NULL;
+    IoReleaseCancelSpinLock(oldIrql);
+    return irp;
+}
+
+VOID
+PartitionCancelUniqueIdChangeNotify(
+    _In_ PPARTITION_EXTENSION PartExt)
+{
+    PIRP irp = PartitionTakeUniqueIdChangeIrp(PartExt);
+
+    if (irp)
+    {
+        irp->IoStatus.Status = STATUS_CANCELLED;
+        irp->IoStatus.Information = 0;
+        IoCompleteRequest(irp, IO_NO_INCREMENT);
+    }
+}
+
+VOID
+PartitionNotifyUniqueIdChange(
+    _In_ PPARTITION_EXTENSION PartExt)
+{
+    BASIC_VOLUME_UNIQUE_ID uniqueId;
+    USHORT length;
+    PIRP irp;
+
+    length = PartitionGetBasicUniqueId(PartExt, PartExt->LowerDevice->DeviceExtension, &uniqueId);
+    if (length == 0)
+        return;
+
+    irp = PartitionTakeUniqueIdChangeIrp(PartExt);
+    if (!irp)
+        return;
+
+    irp->IoStatus.Status = PartitionFillUniqueIdChange(irp, &uniqueId, length);
+    IoCompleteRequest(irp, IO_NO_INCREMENT);
 }
 
 NTSTATUS
@@ -1150,10 +1276,60 @@ PartitionHandleDeviceControl(
         }
         case IOCTL_MOUNTDEV_UNIQUE_ID_CHANGE_NOTIFY:
         {
-            WARN("Ignored MountMgr notification: 0x%lX\n",
-                 ioStack->Parameters.DeviceIoControl.IoControlCode);
-            status = STATUS_NOT_IMPLEMENTED;
-            break;
+            PMOUNTDEV_UNIQUE_ID knownId = Irp->AssociatedIrp.SystemBuffer;
+            BASIC_VOLUME_UNIQUE_ID currentId;
+            USHORT currentLength;
+            KIRQL oldIrql;
+
+            if (!VerifyIrpInBufferSize(Irp, sizeof(MOUNTDEV_UNIQUE_ID)) ||
+                !VerifyIrpInBufferSize(Irp, FIELD_OFFSET(MOUNTDEV_UNIQUE_ID, UniqueId) + knownId->UniqueIdLength) ||
+                !VerifyIrpOutBufferSize(Irp, sizeof(MOUNTDEV_UNIQUE_ID_CHANGE_NOTIFY_OUTPUT)))
+            {
+                status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+
+            PartMgrAcquireLayoutLock(fdoExtension);
+
+            currentLength = PartitionGetBasicUniqueId(partExt, fdoExtension, &currentId);
+            if (currentLength == 0)
+            {
+                PartMgrReleaseLayoutLock(fdoExtension);
+                status = STATUS_NOT_SUPPORTED;
+                break;
+            }
+
+            if (knownId->UniqueIdLength != currentLength ||
+                !RtlEqualMemory(knownId->UniqueId, &currentId, currentLength))
+            {
+                PartMgrReleaseLayoutLock(fdoExtension);
+                status = PartitionFillUniqueIdChange(Irp, &currentId, currentLength);
+                break;
+            }
+
+            IoAcquireCancelSpinLock(&oldIrql);
+            if (partExt->UniqueIdChangeIrp)
+            {
+                IoReleaseCancelSpinLock(oldIrql);
+                PartMgrReleaseLayoutLock(fdoExtension);
+                status = STATUS_DEVICE_BUSY;
+                break;
+            }
+
+            IoSetCancelRoutine(Irp, PartitionCancelUniqueIdChange);
+            if (Irp->Cancel && IoSetCancelRoutine(Irp, NULL))
+            {
+                IoReleaseCancelSpinLock(oldIrql);
+                PartMgrReleaseLayoutLock(fdoExtension);
+                status = STATUS_CANCELLED;
+                break;
+            }
+
+            IoMarkIrpPending(Irp);
+            partExt->UniqueIdChangeIrp = Irp;
+            IoReleaseCancelSpinLock(oldIrql);
+            PartMgrReleaseLayoutLock(fdoExtension);
+            return STATUS_PENDING;
         }
         default:
             return ForwardIrpAndForget(DeviceObject, Irp);
