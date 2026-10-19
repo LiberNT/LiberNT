@@ -982,6 +982,9 @@ MiPfnZeroFreePages(
     ULONG Zeroed = 0;
     ULONG Taken;
 
+    if (MI_ATOMIC_READ32(&Db->ZeroingPaused))
+        return 0;
+
     do
     {
         ULONG Shard;
@@ -1037,6 +1040,120 @@ MiPfnListCount(
     }
 
     return Total;
+}
+
+UCHAR
+MiPfnHibernationClass(
+    _In_ PMI_PFN_DATABASE Db,
+    _In_ ULONG Frame)
+{
+    if (Frame >= Db->FrameCount)
+        return MI_HIBERNATE_SKIP;
+
+    switch (Db->Pfn[Frame].State)
+    {
+        case MiPageActive:
+        case MiPageTransition:
+        case MiPageStandby:
+        case MiPageModified:
+            return MI_HIBERNATE_SAVE;
+
+        case MiPageZeroed:
+        case MiPageCached:
+            return MI_HIBERNATE_ZERO;
+
+        default:
+            return MI_HIBERNATE_SKIP;
+    }
+}
+
+ULONG64
+MiPfnPurgeStandby(
+    _Inout_ PMI_PFN_DATABASE Db)
+{
+    ULONG64 Purged = 0;
+    ULONG Shard;
+
+    for (Shard = 0; Shard < MiPfnShardCount(Db); Shard++)
+    {
+        ULONG64 Budget = MI_PEEK(Db->Shard[Shard].List[MiPageStandby].Count);
+
+        while (Budget-- != 0)
+        {
+            BOOLEAN Taken;
+            KIRQL OldIrql;
+            ULONG Frame;
+
+            MI_SPIN_ACQUIRE(&Db->Shard[Shard].Lock, &OldIrql);
+            Frame = Db->Shard[Shard].List[MiPageStandby].Head;
+            MI_SPIN_RELEASE(&Db->Shard[Shard].Lock, OldIrql);
+
+            if (Frame == MI_FRAME_INVALID)
+                break;
+
+            OldIrql = MiPfnLock(Db, Frame);
+            Taken = Db->Pfn[Frame].ReferenceCount == 0 && MiPfnListRemove(Db, Frame, MiPageStandby);
+            if (Taken)
+            {
+                if (Db->Repurpose != NULL)
+                    Db->Repurpose(Db, Frame);
+                MiPfnRestoreCache(Db, Frame);
+                MiPfnListInsert(Db, Frame, MiPageFree, FALSE);
+                Purged++;
+            }
+            MiPfnUnlock(Db, Frame, OldIrql);
+
+            if (!Taken)
+                break;
+        }
+    }
+
+    if (Purged != 0 && Db->FreeNotify != NULL)
+        Db->FreeNotify(Db);
+
+    return Purged;
+}
+
+ULONG64
+MiPfnDemoteZeroed(
+    _Inout_ PMI_PFN_DATABASE Db)
+{
+    ULONG64 Moved = 0;
+    ULONG Shard;
+
+    MiPfnDrainCaches(Db);
+
+    for (Shard = 0; Shard < MiPfnShardCount(Db); Shard++)
+    {
+        for (;;)
+        {
+            KIRQL OldIrql;
+            ULONG Frame;
+
+            MI_SPIN_ACQUIRE(&Db->Shard[Shard].Lock, &OldIrql);
+            Frame = Db->Shard[Shard].List[MiPageZeroed].Head;
+            MI_SPIN_RELEASE(&Db->Shard[Shard].Lock, OldIrql);
+
+            if (Frame == MI_FRAME_INVALID || !MiPfnListRemove(Db, Frame, MiPageZeroed))
+                break;
+
+            MiPfnListInsert(Db, Frame, MiPageFree, FALSE);
+            Moved++;
+        }
+    }
+
+    return Moved;
+}
+
+VOID
+MiPfnPauseZeroing(
+    _Inout_ PMI_PFN_DATABASE Db,
+    _In_ BOOLEAN Pause)
+{
+    MI_ATOMIC_WRITE32(&Db->ZeroingPaused, Pause ? 1 : 0);
+
+    if (!Pause && Db->FreeNotify != NULL)
+        Db->FreeNotify(Db);
 }
 
 ULONG64

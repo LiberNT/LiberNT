@@ -239,6 +239,78 @@ PfnZeroPages(VOID)
     WorldDestroy(&World);
 }
 
+static ULONG PfnPurgedFrames;
+
+static
+VOID
+PfnCountPurge(PMI_PFN_DATABASE Db, ULONG Frame)
+{
+    UNREFERENCED_PARAMETER(Db);
+    UNREFERENCED_PARAMETER(Frame);
+    PfnPurgedFrames++;
+}
+
+static
+VOID
+PfnPurgeStandby(VOID)
+{
+    static TEST_WORLD World;
+    PMI_PFN_DATABASE Db;
+    ULONG Frames[24];
+    ULONG i;
+
+    WorldCreate(&World, 4096, 4, 100000);
+    Db = &World.System.Pfn;
+    Db->Repurpose = PfnCountPurge;
+    PfnLockIrql(Db);
+
+    for (i = 0; i < RTL_NUMBER_OF(Frames); i++)
+    {
+        Frames[i] = MiPfnAllocatePage(Db, MI_ALLOCATE_ZEROED);
+        CHECK(Frames[i] != MI_FRAME_INVALID);
+        MiPfnInitializePage(Db, Frames[i], 0x3000 + i * 8, 7, MiSoftMake(MiSoftDemandZero, MI_PROT_READWRITE, 0), 0);
+    }
+    for (i = 0; i < 16; i++)
+        MiPfnShareDecrement(Db, Frames[i], FALSE);
+    for (i = 16; i < 20; i++)
+    {
+        MiPfnSetModified(Db, Frames[i]);
+        MiPfnShareDecrement(Db, Frames[i], FALSE);
+    }
+    CHECK(MiPfnListCount(Db, MiPageStandby) == 16 && MiPfnListCount(Db, MiPageModified) == 4);
+
+    PfnPurgedFrames = 0;
+    CHECK(MiPfnPurgeStandby(Db) == 16);
+    CHECK(PfnPurgedFrames == 16);
+    CHECK(MiPfnListCount(Db, MiPageStandby) == 0 && MiPfnListCount(Db, MiPageModified) == 4);
+    for (i = 0; i < 16; i++)
+        CHECK(Db->Pfn[Frames[i]].State == MiPageFree && MiPfnHibernationClass(Db, Frames[i]) == MI_HIBERNATE_SKIP);
+    for (i = 16; i < 20; i++)
+        CHECK(Db->Pfn[Frames[i]].State == MiPageModified);
+    for (i = 20; i < 24; i++)
+        CHECK(Db->Pfn[Frames[i]].State == MiPageActive);
+    CHECK(MiPfnDbCheck(Db) == 0);
+    CHECK(MiPfnPurgeStandby(Db) == 0);
+
+    for (i = 20; i < 24; i++)
+        MiPfnShareDecrement(Db, Frames[i], TRUE);
+    CHECK(MiPfnDbCheck(Db) == 0);
+
+    MiPfnPauseZeroing(Db, TRUE);
+    CHECK(MiPfnZeroFreePages(Db, 64) == 0);
+    MiPfnPauseZeroing(Db, FALSE);
+    CHECK(MiPfnZeroFreePages(Db, 64) != 0);
+    CHECK(MiPfnListCount(Db, MiPageZeroed) != 0);
+    CHECK(MiPfnDemoteZeroed(Db) != 0);
+    CHECK(MiPfnListCount(Db, MiPageZeroed) == 0);
+    for (i = 0; i < Db->FrameCount; i++)
+        CHECK(MiPfnHibernationClass(Db, i) != MI_HIBERNATE_ZERO);
+    CHECK(MiPfnDbCheck(Db) == 0);
+    CHECK(MiPfnAllocatePage(Db, MI_ALLOCATE_ZEROED) != MI_FRAME_INVALID);
+    CHECK(MiPfnDbCheck(Db) == 0);
+    WorldDestroy(&World);
+}
+
 void
 TestPfn(void)
 {
@@ -250,6 +322,7 @@ TestPfn(void)
 
     PfnRegionRotation();
     PfnZeroPages();
+    PfnPurgeStandby();
 
     WorldCreate(&World, 4096, 4, 100000);
     Db = &World.System.Pfn;
@@ -287,6 +360,39 @@ TestPfn(void)
     }
     CHECK(MiPfnListCount(Db, MiPageStandby) == 16 && MiPfnListCount(Db, MiPageModified) == 16);
     CHECK(MiPfnDbCheck(Db) == 0);
+
+    {
+        ULONG Frame;
+        ULONG Saved = 0, Zeroed = 0;
+
+        for (Frame = 0; Frame < Db->FrameCount; Frame++)
+        {
+            UCHAR Class = MiPfnHibernationClass(Db, Frame);
+            UCHAR State = Db->Pfn[Frame].State;
+
+            if (State == MiPageActive || State == MiPageTransition ||
+                State == MiPageStandby || State == MiPageModified)
+            {
+                CHECK(Class == MI_HIBERNATE_SAVE);
+                Saved++;
+            }
+            else if (State == MiPageZeroed || State == MiPageCached)
+            {
+                CHECK(Class == MI_HIBERNATE_ZERO);
+                Zeroed++;
+            }
+            else
+            {
+                CHECK(Class == MI_HIBERNATE_SKIP);
+            }
+        }
+        CHECK(Saved >= 64);
+        CHECK(MiPfnHibernationClass(Db, Db->FrameCount) == MI_HIBERNATE_SKIP);
+        CHECK(MiPfnHibernationClass(Db, Frames[0]) == MI_HIBERNATE_SAVE);
+        CHECK(MiPfnHibernationClass(Db, Frames[16]) == MI_HIBERNATE_SAVE);
+        CHECK(MiPfnHibernationClass(Db, Frames[40]) == MI_HIBERNATE_SAVE);
+        (VOID)Zeroed;
+    }
 
     CHECK(!MiPfnReactivate(Db, Frames[0], 0xDEAD));
     CHECK(MiPfnReactivate(Db, Frames[0], 0x1000));

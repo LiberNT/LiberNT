@@ -413,6 +413,51 @@ BOOLEAN MmZeroPageFile;
 
 PFN_NUMBER
 NTAPI
+MmHibernationFrameLimit(VOID)
+{
+    return MiSystem.Pfn.FrameCount;
+}
+
+UCHAR
+NTAPI
+MmQueryHibernationFrame(
+    _In_ PFN_NUMBER Frame)
+{
+    C_ASSERT(MM_HIBERNATE_SKIP == MI_HIBERNATE_SKIP);
+    C_ASSERT(MM_HIBERNATE_ZERO == MI_HIBERNATE_ZERO);
+    C_ASSERT(MM_HIBERNATE_SAVE == MI_HIBERNATE_SAVE);
+
+    if (Frame >= MiSystem.Pfn.FrameCount)
+        return MI_HIBERNATE_SKIP;
+    return MiPfnHibernationClass(&MiSystem.Pfn, (ULONG)Frame);
+}
+
+VOID
+NTAPI
+MmPrepareHibernation(VOID)
+{
+    MiPfnPauseZeroing(&MiSystem.Pfn, TRUE);
+    MiPfnPurgeStandby(&MiSystem.Pfn);
+    MiPfnDemoteZeroed(&MiSystem.Pfn);
+}
+
+VOID
+NTAPI
+MmCompleteHibernation(VOID)
+{
+    MiPfnPauseZeroing(&MiSystem.Pfn, FALSE);
+}
+
+PVOID
+NTAPI
+MmMapHibernationFrame(
+    _In_ PFN_NUMBER Frame)
+{
+    return MiArchDebugMapFrame(Frame);
+}
+
+PFN_NUMBER
+NTAPI
 MmBuildDumpPageBitmap(
     _Inout_ PRTL_BITMAP Bitmap,
     _In_ BOOLEAN IncludeUserPages)

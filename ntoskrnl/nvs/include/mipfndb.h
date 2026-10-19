@@ -30,6 +30,10 @@ typedef ULONG_PTR MI_FRAME_NUMBER, *PMI_FRAME_NUMBER;
 #define MI_PFN_FLAG_ZEROED        0x40
 #define MI_PFN_FLAG_PINNED        0x80
 
+#define MI_HIBERNATE_SKIP         0
+#define MI_HIBERNATE_ZERO         1
+#define MI_HIBERNATE_SAVE         2
+
 #define MI_ALLOCATE_ZEROED        0x01
 #define MI_ALLOCATE_NO_RECLAIM    0x02
 #define MI_ALLOCATE_HIGH          0x04
@@ -138,6 +142,7 @@ typedef struct _MI_PFN_DATABASE
     ULONG ContiguousHint;
     volatile LONG64 ZeroedOnDemand;
     volatile LONG ModifiedCursor;
+    volatile LONG ZeroingPaused;
 } MI_PFN_DATABASE, *PMI_PFN_DATABASE;
 
 /* MDL aliases of managed RAM must retain the allocation's cache attributes.
@@ -221,6 +226,10 @@ BOOLEAN MiPfnWriteComplete(_Inout_ PMI_PFN_DATABASE Db, _In_ ULONG Frame, _In_ M
 VOID MiPfnFreePage(_Inout_ PMI_PFN_DATABASE Db, _In_ ULONG Frame);
 ULONG64 MiPfnListCount(_In_ PMI_PFN_DATABASE Db, _In_ UCHAR State);
 ULONG64 MiPfnAvailablePages(_In_ PMI_PFN_DATABASE Db);
+UCHAR MiPfnHibernationClass(_In_ PMI_PFN_DATABASE Db, _In_ ULONG Frame);
+ULONG64 MiPfnPurgeStandby(_Inout_ PMI_PFN_DATABASE Db);
+ULONG64 MiPfnDemoteZeroed(_Inout_ PMI_PFN_DATABASE Db);
+VOID MiPfnPauseZeroing(_Inout_ PMI_PFN_DATABASE Db, _In_ BOOLEAN Pause);
 ULONG64 MiPfnAllocationCount(_In_ PMI_PFN_DATABASE Db);
 VOID MiPfnDrainCaches(_Inout_ PMI_PFN_DATABASE Db);
 ULONG MiPfnZeroFreePages(_Inout_ PMI_PFN_DATABASE Db, _In_ ULONG MaximumPages);

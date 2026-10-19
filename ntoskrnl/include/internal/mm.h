@@ -550,6 +550,32 @@ MmBuildDumpPageBitmap(
     _Inout_ PRTL_BITMAP Bitmap,
     _In_ BOOLEAN IncludeUserPages);
 
+#define MM_HIBERNATE_SKIP 0
+#define MM_HIBERNATE_ZERO 1
+#define MM_HIBERNATE_SAVE 2
+
+PFN_NUMBER
+NTAPI
+MmHibernationFrameLimit(VOID);
+
+UCHAR
+NTAPI
+MmQueryHibernationFrame(
+    _In_ PFN_NUMBER Frame);
+
+PVOID
+NTAPI
+MmMapHibernationFrame(
+    _In_ PFN_NUMBER Frame);
+
+VOID
+NTAPI
+MmPrepareHibernation(VOID);
+
+VOID
+NTAPI
+MmCompleteHibernation(VOID);
+
 typedef struct _MMPFNLIST
 {
     PFN_NUMBER Total;
