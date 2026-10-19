@@ -827,7 +827,7 @@ static BOOL
 BrowseCursor(HWND hwndDlg)
 {
     TCHAR szFileName[MAX_PATH];
-    TCHAR szFilter[MAX_PATH];
+    TCHAR szFilter[MAX_PATH] = _T("");
     TCHAR szTitle[MAX_PATH];
     OPENFILENAME ofn;
     INT nSel;

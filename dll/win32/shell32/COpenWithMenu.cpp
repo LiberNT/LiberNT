@@ -1047,7 +1047,7 @@ VOID COpenWithDialog::AddApp(COpenWithList::SApp *pApp, BOOL bSelected)
 VOID COpenWithDialog::Browse()
 {
     WCHAR wszTitle[64];
-    WCHAR wszFilter[256];
+    WCHAR wszFilter[256] = L"";
     WCHAR wszPath[MAX_PATH];
     OPENFILENAMEW ofn;
 

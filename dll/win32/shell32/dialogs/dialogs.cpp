@@ -275,7 +275,7 @@ INT_PTR CALLBACK PickIconProc(
                 // Choose the module path
                 CStringW strTitle;
                 szText[0] = 0;
-                szFilter[0] = 0;
+                ZeroMemory(szFilter, sizeof(szFilter));
                 ZeroMemory(&ofn, sizeof(ofn));
                 ofn.lStructSize = sizeof(ofn);
                 ofn.hwndOwner = hwndDlg;
@@ -708,7 +708,7 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
                     HMODULE hComdlg = NULL;
                     LPFNOFN ofnProc = NULL;
                     WCHAR szFName[1024] = {0};
-                    WCHAR filter[MAX_PATH], szCaption[MAX_PATH];
+                    WCHAR filter[MAX_PATH] = L"", szCaption[MAX_PATH];
                     OPENFILENAMEW ofn;
 
                     LoadStringW(shell32_hInstance, IDS_RUNDLG_BROWSE_FILTER, filter, _countof(filter));

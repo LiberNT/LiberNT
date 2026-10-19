@@ -903,7 +903,7 @@ ActionDlg_OnBrowse(HWND hwndDlg, PACTION_DIALOG pNewAct, BOOL bEdit = FALSE)
     WCHAR szFile[MAX_PATH];
     szFile[0] = UNICODE_NULL;
 
-    WCHAR szFilter[MAX_PATH];
+    WCHAR szFilter[MAX_PATH] = L"";
     LoadStringW(shell32_hInstance, IDS_EXE_FILTER, szFilter, _countof(szFilter));
 
     CStringW strTitle(MAKEINTRESOURCEW(IDS_OPEN_WITH));
