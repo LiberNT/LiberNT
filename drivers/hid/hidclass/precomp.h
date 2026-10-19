@@ -134,6 +134,8 @@ typedef struct
 
     PIRP WaitWakeIrp;
 
+    BOOLEAN Removed;
+
 } HIDCLASS_PDO_DEVICE_EXTENSION, *PHIDCLASS_PDO_DEVICE_EXTENSION;
 
 #define HIDCLASS_WAKE_IDLE       0
@@ -208,6 +210,10 @@ VOID
 HidClassFDO_StopRead(
     IN PDEVICE_OBJECT FDODeviceObject,
     IN BOOLEAN Wait);
+
+VOID
+HidClassPDO_SurpriseRemoval(
+    IN PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension);
 
 /* pdo.c */
 NTSTATUS

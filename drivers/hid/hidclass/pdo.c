@@ -624,6 +624,8 @@ HidClassPDO_PnP(
         }
         case IRP_MN_START_DEVICE:
         {
+            PDODeviceExtension->Removed = FALSE;
+
             //
             // Polled HID miniports are not implemented by HIDCLASS yet.
             // Keep the PDO alive and let read dispatch fail explicitly.
@@ -692,6 +694,12 @@ HidClassPDO_PnP(
             }
 
             return STATUS_SUCCESS;
+        }
+        case IRP_MN_SURPRISE_REMOVAL:
+        {
+            HidClassPDO_SurpriseRemoval(PDODeviceExtension);
+            Status = STATUS_SUCCESS;
+            break;
         }
         case IRP_MN_QUERY_INTERFACE:
         {

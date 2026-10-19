@@ -634,6 +634,41 @@ HidClassFDO_StopRead(
     }
 }
 
+VOID
+HidClassPDO_SurpriseRemoval(
+    IN PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension)
+{
+    PHIDCLASS_FDO_EXTENSION FDODeviceExtension = PDODeviceExtension->FDODeviceExtension;
+    LIST_ENTRY CompleteList;
+    PLIST_ENTRY Entry;
+    KIRQL OldLevel;
+
+    InitializeListHead(&CompleteList);
+
+    KeAcquireSpinLock(&FDODeviceExtension->ReadLock, &OldLevel);
+    PDODeviceExtension->Removed = TRUE;
+    for (Entry = FDODeviceExtension->OpenFileList.Flink;
+         Entry != &FDODeviceExtension->OpenFileList;
+         Entry = Entry->Flink)
+    {
+        PHIDCLASS_FILEOP_CONTEXT FileContext = CONTAINING_RECORD(Entry, HIDCLASS_FILEOP_CONTEXT, FdoListEntry);
+        PIRP PendingIrp;
+
+        if (FileContext->DeviceExtension != PDODeviceExtension)
+            continue;
+
+        while ((PendingIrp = HidClass_RemovePendingRead(FDODeviceExtension, FileContext)) != NULL)
+        {
+            PendingIrp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
+            PendingIrp->IoStatus.Information = 0;
+            InsertTailList(&CompleteList, &PendingIrp->Tail.Overlay.ListEntry);
+        }
+    }
+    KeReleaseSpinLock(&FDODeviceExtension->ReadLock, OldLevel);
+
+    HidClass_CompleteReadList(&CompleteList);
+}
+
 NTSTATUS
 HidClassFDO_StartRead(
     IN PDEVICE_OBJECT FDODeviceObject)
@@ -800,6 +835,15 @@ HidClass_Read(
     FDODeviceExtension = Context->DeviceExtension->FDODeviceExtension;
 
     KeAcquireSpinLock(&FDODeviceExtension->ReadLock, &OldLevel);
+
+    if (Context->DeviceExtension->Removed)
+    {
+        KeReleaseSpinLock(&FDODeviceExtension->ReadLock, OldLevel);
+        Irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_DEVICE_NOT_CONNECTED;
+    }
 
     if (Context->StopInProgress || FDODeviceExtension->ReadStopped)
     {
@@ -1893,6 +1937,7 @@ HidClassDispatch(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp)
 {
+    PHIDCLASS_COMMON_DEVICE_EXTENSION CommonDeviceExtension;
     PIO_STACK_LOCATION IoStack;
 
     //
@@ -1900,6 +1945,21 @@ HidClassDispatch(
     //
     IoStack = IoGetCurrentIrpStackLocation(Irp);
     DPRINT("[HIDCLASS] Dispatch Major %x Minor %x\n", IoStack->MajorFunction, IoStack->MinorFunction);
+
+    CommonDeviceExtension = DeviceObject->DeviceExtension;
+    if (!CommonDeviceExtension->IsFDO &&
+        ((PHIDCLASS_PDO_DEVICE_EXTENSION)CommonDeviceExtension)->Removed &&
+        (IoStack->MajorFunction == IRP_MJ_CREATE ||
+         IoStack->MajorFunction == IRP_MJ_READ ||
+         IoStack->MajorFunction == IRP_MJ_WRITE ||
+         IoStack->MajorFunction == IRP_MJ_DEVICE_CONTROL ||
+         IoStack->MajorFunction == IRP_MJ_INTERNAL_DEVICE_CONTROL))
+    {
+        Irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_DEVICE_NOT_CONNECTED;
+    }
 
     //
     // dispatch request based on major function
