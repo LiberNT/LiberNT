@@ -5112,6 +5112,28 @@ DWORD WINAPI DECLSPEC_HOTPATCH EnumDynamicTimeZoneInformation( DWORD index,
 
     lstrcpyW( info->TimeZoneKeyName, tz.TimeZoneKeyName );
     info->DynamicDaylightTimeDisabled = FALSE;
+#ifdef __REACTOS__
+    {
+        HKEY key;
+
+        ret = RegOpenKeyExW( tz_key, tz.TimeZoneKeyName, 0, KEY_QUERY_VALUE, &key );
+        if (!ret)
+        {
+            ret = RegLoadMUIStringW( key, L"MUI_Std", info->StandardName,
+                                     sizeof(info->StandardName), NULL, 0, system_dir );
+            if (!ret)
+                ret = RegLoadMUIStringW( key, L"MUI_Dlt", info->DaylightName,
+                                         sizeof(info->DaylightName), NULL, 0, system_dir );
+            RegCloseKey( key );
+        }
+        if (ret)
+        {
+            info->StandardName[0] = 0;
+            info->DaylightName[0] = 0;
+        }
+        SetLastError( ret );
+    }
+#endif
     return 0;
 }
 
