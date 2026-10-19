@@ -4,42 +4,12 @@
  *
  ******************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 #include "acpi.h"
 #include "accommon.h"
@@ -96,6 +66,8 @@ const UINT8                 AcpiGbl_ResourceAmlSizes[] =
     ACPI_AML_SIZE_LARGE (AML_RESOURCE_PIN_GROUP),
     ACPI_AML_SIZE_LARGE (AML_RESOURCE_PIN_GROUP_FUNCTION),
     ACPI_AML_SIZE_LARGE (AML_RESOURCE_PIN_GROUP_CONFIG),
+    ACPI_AML_SIZE_LARGE (AML_RESOURCE_CLOCK_INPUT),
+
 };
 
 const UINT8                 AcpiGbl_ResourceAmlSerialBusSizes[] =
@@ -156,6 +128,7 @@ static const UINT8          AcpiGbl_ResourceTypes[] =
     ACPI_VARIABLE_LENGTH,           /* 10 PinGroup */
     ACPI_VARIABLE_LENGTH,           /* 11 PinGroupFunction */
     ACPI_VARIABLE_LENGTH,           /* 12 PinGroupConfig */
+    ACPI_VARIABLE_LENGTH,           /* 13 ClockInput */
 };
 
 
@@ -211,6 +184,29 @@ AcpiUtWalkAmlResources (
 
     while (Aml < EndAml)
     {
+        /*
+         * Validate that the remaining buffer space can hold enough
+         * bytes to safely access fields during validation.
+         * For large resource descriptors (bit 7 set), we need enough
+         * bytes to access the Type field in SerialBus resources.
+         * Small resource descriptors only need sizeof(AML_RESOURCE_END_TAG).
+         */
+        if ((ACPI_SIZE) (EndAml - Aml) < sizeof (AML_RESOURCE_END_TAG))
+        {
+            return_ACPI_STATUS (AE_AML_BUFFER_LENGTH);
+        }
+
+        /*
+         * For large resource descriptors, ensure enough space for
+         * the header plus SerialBus Type field access.
+         */
+        if ((ACPI_GET8 (Aml) & ACPI_RESOURCE_NAME_LARGE) &&
+            ((ACPI_SIZE) (EndAml - Aml) <
+                ACPI_OFFSET (AML_RESOURCE_COMMON_SERIALBUS, Type) + 1))
+        {
+            return_ACPI_STATUS (AE_AML_BUFFER_LENGTH);
+        }
+
         /* Validate the Resource Type and Resource Length */
 
         Status = AcpiUtValidateResource (WalkState, Aml, &ResourceIndex);
@@ -226,6 +222,15 @@ AcpiUtWalkAmlResources (
         /* Get the length of this descriptor */
 
         Length = AcpiUtGetDescriptorLength (Aml);
+
+        /*
+         * Validate that the descriptor length doesn't exceed the
+         * remaining buffer size to prevent reading beyond the end.
+         */
+        if (Length > (ACPI_SIZE) (EndAml - Aml))
+        {
+            return_ACPI_STATUS (AE_AML_BUFFER_LENGTH);
+        }
 
         /* Invoke the user function */
 

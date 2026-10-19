@@ -4,42 +4,12 @@
  *
  ******************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 #include "acpi.h"
 #include "accommon.h"
@@ -145,6 +115,50 @@ ACPI_RSCONVERT_INFO     AcpiRsConvertGpio[18] =
                         AML_OFFSET (Gpio.VendorOffset),
                         0},
 };
+
+/*******************************************************************************
+ *
+ * AcpiRsConvertClockInput
+ *
+ ******************************************************************************/
+
+ACPI_RSCONVERT_INFO     AcpiRsConvertClockInput[8] =
+{
+    {ACPI_RSC_INITGET,  ACPI_RESOURCE_TYPE_CLOCK_INPUT,
+                        ACPI_RS_SIZE (ACPI_RESOURCE_CLOCK_INPUT),
+                        ACPI_RSC_TABLE_SIZE (AcpiRsConvertClockInput)},
+
+    {ACPI_RSC_INITSET,  ACPI_RESOURCE_NAME_CLOCK_INPUT,
+                        sizeof (AML_RESOURCE_CLOCK_INPUT),
+                        0},
+
+    {ACPI_RSC_MOVE8,    ACPI_RS_OFFSET (Data.ClockInput.RevisionId),
+                        AML_OFFSET (ClockInput.RevisionId),
+                        1},
+
+    {ACPI_RSC_1BITFLAG, ACPI_RS_OFFSET (Data.ClockInput.Mode),
+                        AML_OFFSET (ClockInput.Flags),
+                        0},
+
+    {ACPI_RSC_2BITFLAG, ACPI_RS_OFFSET (Data.ClockInput.Scale),
+                        AML_OFFSET (ClockInput.Flags),
+                        1},
+
+    {ACPI_RSC_MOVE16,   ACPI_RS_OFFSET (Data.ClockInput.FrequencyDivisor),
+                        AML_OFFSET (ClockInput.FrequencyDivisor),
+                        2},
+
+    {ACPI_RSC_MOVE32,   ACPI_RS_OFFSET (Data.ClockInput.FrequencyNumerator),
+                        AML_OFFSET (ClockInput.FrequencyNumerator),
+                        4},
+
+    /* Resource Source */
+    {ACPI_RSC_SOURCE,    ACPI_RS_OFFSET (Data.ClockInput.ResourceSource),
+                        0,
+                        sizeof(AML_RESOURCE_CLOCK_INPUT)},
+
+};
+
 
 /*******************************************************************************
  *
@@ -295,7 +309,7 @@ ACPI_RSCONVERT_INFO     AcpiRsConvertCsi2SerialBus[14] =
  *
  ******************************************************************************/
 
-ACPI_RSCONVERT_INFO     AcpiRsConvertI2cSerialBus[17] =
+ACPI_RSCONVERT_INFO     AcpiRsConvertI2cSerialBus[18] =
 {
     {ACPI_RSC_INITGET,  ACPI_RESOURCE_TYPE_SERIAL_BUS,
                         ACPI_RS_SIZE (ACPI_RESOURCE_I2C_SERIALBUS),
@@ -362,6 +376,11 @@ ACPI_RSCONVERT_INFO     AcpiRsConvertI2cSerialBus[17] =
     {ACPI_RSC_1BITFLAG, ACPI_RS_OFFSET (Data.I2cSerialBus.AccessMode),
                         AML_OFFSET (I2cSerialBus.TypeSpecificFlags),
                         0},
+
+    /* Read LVR from Type Specific Flags, bits[15:8] */
+    {ACPI_RSC_MOVE8,    ACPI_RS_OFFSET (Data.I2cSerialBus.Lvr),
+                        AML_OFFSET (I2cSerialBus.TypeSpecificFlags) + 1,
+                        1},
 
     {ACPI_RSC_MOVE32,   ACPI_RS_OFFSET (Data.I2cSerialBus.ConnectionSpeed),
                         AML_OFFSET (I2cSerialBus.ConnectionSpeed),

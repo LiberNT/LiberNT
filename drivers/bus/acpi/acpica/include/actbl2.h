@@ -1,45 +1,15 @@
 /******************************************************************************
  *
- * Name: actbl2.h - ACPI Table Definitions (tables not in ACPI spec)
+ * Name: actbl2.h - ACPI Table Definitions
  *
  *****************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 #ifndef __ACTBL2_H__
 #define __ACTBL2_H__
@@ -65,13 +35,19 @@
 #define ACPI_SIG_BDAT           "BDAT"      /* BIOS Data ACPI Table */
 #define ACPI_SIG_CCEL           "CCEL"      /* CC Event Log Table */
 #define ACPI_SIG_CDAT           "CDAT"      /* Coherent Device Attribute Table */
+#define ACPI_SIG_ERDT           "ERDT"      /* Enhanced Resource Director Technology */
 #define ACPI_SIG_IORT           "IORT"      /* IO Remapping Table */
+#define ACPI_SIG_IOVT           "IOVT"      /* I/O Virtualization Table */
 #define ACPI_SIG_IVRS           "IVRS"      /* I/O Virtualization Reporting Structure */
+#define ACPI_SIG_KEYP           "KEYP"      /* Key Programming Interface for IDE */
 #define ACPI_SIG_LPIT           "LPIT"      /* Low Power Idle Table */
 #define ACPI_SIG_MADT           "APIC"      /* Multiple APIC Description Table */
 #define ACPI_SIG_MCFG           "MCFG"      /* PCI Memory Mapped Configuration table */
 #define ACPI_SIG_MCHI           "MCHI"      /* Management Controller Host Interface table */
+#define ACPI_SIG_MISC           "MISC"      /* Miscellaneous GUIDed Table */
+#define ACPI_SIG_MPAM           "MPAM"      /* Memory System Resource Partitioning and Monitoring Table */
 #define ACPI_SIG_MPST           "MPST"      /* Memory Power State Table */
+#define ACPI_SIG_MRRM           "MRRM"      /* Memory Range and Region Mapping table */
 #define ACPI_SIG_MSDM           "MSDM"      /* Microsoft Data Management Table */
 #define ACPI_SIG_NFIT           "NFIT"      /* NVDIMM Firmware Interface Table */
 #define ACPI_SIG_NHLT           "NHLT"      /* Non HD Audio Link Table */
@@ -82,12 +58,17 @@
 #define ACPI_SIG_PPTT           "PPTT"      /* Processor Properties Topology Table */
 #define ACPI_SIG_PRMT           "PRMT"      /* Platform Runtime Mechanism Table */
 #define ACPI_SIG_RASF           "RASF"      /* RAS Feature table */
+#define ACPI_SIG_RAS2           "RAS2"      /* RAS2 Feature table */
 #define ACPI_SIG_RGRT           "RGRT"      /* Regulatory Graphics Resource Table */
+#define ACPI_SIG_RHCT           "RHCT"      /* RISC-V Hart Capabilities Table */
+#define ACPI_SIG_RIMT           "RIMT"      /* RISC-V IO Mapping Table */
 #define ACPI_SIG_SBST           "SBST"      /* Smart Battery Specification Table */
 #define ACPI_SIG_SDEI           "SDEI"      /* Software Delegated Exception Interface Table */
 #define ACPI_SIG_SDEV           "SDEV"      /* Secure Devices table */
 #define ACPI_SIG_SVKL           "SVKL"      /* Storage Volume Key Location Table */
+#define ACPI_SIG_SWFT           "SWFT"      /* SoundWire File Table */
 #define ACPI_SIG_TDEL           "TDEL"      /* TD Event Log Table */
+#define ACPI_SIG_UBRT           "UBRT"      /* UnifiedBus Root Table */
 
 
 /*
@@ -121,13 +102,12 @@
 typedef struct acpi_table_aest
 {
     ACPI_TABLE_HEADER       Header;
-    void                    *NodeArray[];
 
 } ACPI_TABLE_AEST;
 
 /* Common Subtable header - one per Node Structure (Subtable) */
 
-typedef struct              acpi_aest_hdr
+typedef struct acpi_aest_hdr
 {
     UINT8                   Type;
     UINT16                  Length;
@@ -149,7 +129,9 @@ typedef struct              acpi_aest_hdr
 #define ACPI_AEST_SMMU_ERROR_NODE           2
 #define ACPI_AEST_VENDOR_ERROR_NODE         3
 #define ACPI_AEST_GIC_ERROR_NODE            4
-#define ACPI_AEST_NODE_TYPE_RESERVED        5 /* 5 and above are reserved */
+#define ACPI_AEST_PCIE_ERROR_NODE           5
+#define ACPI_AEST_PROXY_ERROR_NODE          6
+#define ACPI_AEST_NODE_TYPE_RESERVED        7 /* 7 and above are reserved */
 
 
 /*
@@ -158,7 +140,7 @@ typedef struct              acpi_aest_hdr
 
 /* 0: Processor Error */
 
-typedef struct              acpi_aest_processor
+typedef struct acpi_aest_processor
 {
     UINT32                  ProcessorId;
     UINT8                   ResourceType;
@@ -178,7 +160,7 @@ typedef struct              acpi_aest_processor
 
 /* 0R: Processor Cache Resource Substructure */
 
-typedef struct              acpi_aest_processor_cache
+typedef struct acpi_aest_processor_cache
 {
     UINT32                  CacheReference;
     UINT32                  Reserved;
@@ -194,7 +176,7 @@ typedef struct              acpi_aest_processor_cache
 
 /* 1R: Processor TLB Resource Substructure */
 
-typedef struct              acpi_aest_processor_tlb
+typedef struct acpi_aest_processor_tlb
 {
     UINT32                  TlbLevel;
     UINT32                  Reserved;
@@ -203,7 +185,7 @@ typedef struct              acpi_aest_processor_tlb
 
 /* 2R: Processor Generic Resource Substructure */
 
-typedef struct              acpi_aest_processor_generic
+typedef struct acpi_aest_processor_generic
 {
     UINT32                   Resource;
 
@@ -211,7 +193,7 @@ typedef struct              acpi_aest_processor_generic
 
 /* 1: Memory Error */
 
-typedef struct              acpi_aest_memory
+typedef struct acpi_aest_memory
 {
     UINT32                  SratProximityDomain;
 
@@ -219,7 +201,7 @@ typedef struct              acpi_aest_memory
 
 /* 2: Smmu Error */
 
-typedef struct              acpi_aest_smmu
+typedef struct acpi_aest_smmu
 {
     UINT32                  IortNodeReference;
     UINT32                  SubcomponentReference;
@@ -228,7 +210,7 @@ typedef struct              acpi_aest_smmu
 
 /* 3: Vendor Defined */
 
-typedef struct              acpi_aest_vendor
+typedef struct acpi_aest_vendor
 {
     UINT32                  AcpiHid;
     UINT32                  AcpiUid;
@@ -236,9 +218,19 @@ typedef struct              acpi_aest_vendor
 
 } ACPI_AEST_VENDOR;
 
+/* 3: Vendor Defined V2 */
+
+typedef struct acpi_aest_vendor_v2
+{
+    UINT64                  AcpiHid;
+    UINT32                  AcpiUid;
+    UINT8                   VendorSpecificData[16];
+
+} ACPI_AEST_VENDOR_V2;
+
 /* 4: Gic Error */
 
-typedef struct              acpi_aest_gic
+typedef struct acpi_aest_gic
 {
     UINT32                  InterfaceType;
     UINT32                  InstanceId;
@@ -253,10 +245,26 @@ typedef struct              acpi_aest_gic
 #define ACPI_AEST_GIC_ITS                   3
 #define ACPI_AEST_GIC_RESERVED              4   /* 4 and above are reserved */
 
+/* 5: PCIe Error */
+
+typedef struct acpi_aest_pcie
+{
+    UINT32                  IortNodeReference;
+
+} ACPI_AEST_PCIE;
+
+
+/* 6: Proxy Error */
+
+typedef struct acpi_aest_proxy
+{
+    UINT64                  NodeAddress;
+
+} ACPI_AEST_PROXY;
 
 /* Node Interface Structure */
 
-typedef struct              acpi_aest_node_interface
+typedef struct acpi_aest_node_interface
 {
     UINT8                   Type;
     UINT8                   Reserved[3];
@@ -270,15 +278,71 @@ typedef struct              acpi_aest_node_interface
 
 } ACPI_AEST_NODE_INTERFACE;
 
+/* Node Interface Structure V2*/
+
+typedef struct acpi_aest_node_interface_header
+{
+    UINT8                   Type;
+    UINT8                   GroupFormat;
+    UINT8                   Reserved[2];
+    UINT32                  Flags;
+    UINT64                  Address;
+    UINT32                  ErrorRecordIndex;
+    UINT32                  ErrorRecordCount;
+
+} ACPI_AEST_NODE_INTERFACE_HEADER;
+
+#define ACPI_AEST_NODE_GROUP_FORMAT_4K             0
+#define ACPI_AEST_NODE_GROUP_FORMAT_16K            1
+#define ACPI_AEST_NODE_GROUP_FORMAT_64K            2
+
+typedef struct acpi_aest_node_interface_common
+{
+    UINT32                             ErrorNodeDevice;
+    UINT32                             ProcessorAffinity;
+    UINT64                             ErrorGroupRegisterBase;
+    UINT64                             FaultInjectRegisterBase;
+    UINT64                             InterruptConfigRegisterBase;
+
+} ACPI_AEST_NODE_INTERFACE_COMMON;
+
+typedef struct acpi_aest_node_interface_4k
+{
+    UINT64                             ErrorRecordImplemented;
+    UINT64                             ErrorStatusReporting;
+    UINT64                             AddressingMode;
+    ACPI_AEST_NODE_INTERFACE_COMMON    Common;
+
+} ACPI_AEST_NODE_INTERFACE_4K;
+
+typedef struct acpi_aest_node_interface_16k
+{
+    UINT64                             ErrorRecordImplemented[4];
+    UINT64                             ErrorStatusReporting[4];
+    UINT64                             AddressingMode[4];
+    ACPI_AEST_NODE_INTERFACE_COMMON    Common;
+
+} ACPI_AEST_NODE_INTERFACE_16K;
+
+typedef struct acpi_aest_node_interface_64k
+{
+    INT64                              ErrorRecordImplemented[14];
+    UINT64                             ErrorStatusReporting[14];
+    UINT64                             AddressingMode[14];
+    ACPI_AEST_NODE_INTERFACE_COMMON    Common;
+
+} ACPI_AEST_NODE_INTERFACE_64K;
+
 /* Values for Type field above */
 
-#define ACPI_AEST_NODE_SYSTEM_REGISTER      0
-#define ACPI_AEST_NODE_MEMORY_MAPPED        1
-#define ACPI_AEST_XFACE_RESERVED            2   /* 2 and above are reserved */
+#define ACPI_AEST_NODE_SYSTEM_REGISTER                    0
+#define ACPI_AEST_NODE_MEMORY_MAPPED                      1
+#define ACPI_AEST_NODE_SINGLE_RECORD_MEMORY_MAPPED        2
+#define ACPI_AEST_XFACE_RESERVED                          3   /* 2 and above are reserved */
 
 /* Node Interrupt Structure */
 
-typedef struct              acpi_aest_node_interrupt
+typedef struct acpi_aest_node_interrupt
 {
     UINT8                   Type;
     UINT8                   Reserved[2];
@@ -288,6 +352,18 @@ typedef struct              acpi_aest_node_interrupt
     UINT8                   Reserved1[3];
 
 } ACPI_AEST_NODE_INTERRUPT;
+
+/* Node Interrupt Structure V2 */
+
+typedef struct acpi_aest_node_interrupt_v2
+{
+    UINT8                   Type;
+    UINT8                   Reserved[2];
+    UINT8                   Flags;
+    UINT32                  Gsiv;
+    UINT8                   Reserved1[4];
+
+} ACPI_AEST_NODE_INTERRUPT_V2;
 
 /* Values for Type field above */
 
@@ -435,10 +511,239 @@ typedef struct acpi_table_ccel
 
 /*******************************************************************************
  *
+ * ERDT - Enhanced Resource Director Technology (ERDT) table
+ *
+ * Conforms to "Intel Resource Director Technology Architecture Specification"
+ * Version 1.1, January 2025
+ *
+ ******************************************************************************/
+
+typedef struct acpi_table_erdt
+{
+    ACPI_TABLE_HEADER       Header;             /* Common ACPI table header */
+    UINT32                  MaxClos;            /* Maximum classes of service */
+    UINT8                   Reserved[24];
+    UINT8                   Erdt_Substructures[];
+
+} ACPI_TABLE_ERDT;
+
+
+/* Values for subtable type in ACPI_SUBTBL_HDR_16 */
+
+enum AcpiErdtType
+{
+    ACPI_ERDT_TYPE_RMDD                 = 0,
+    ACPI_ERDT_TYPE_CACD                 = 1,
+    ACPI_ERDT_TYPE_DACD                 = 2,
+    ACPI_ERDT_TYPE_CMRC                 = 3,
+    ACPI_ERDT_TYPE_MMRC                 = 4,
+    ACPI_ERDT_TYPE_MARC                 = 5,
+    ACPI_ERDT_TYPE_CARC                 = 6,
+    ACPI_ERDT_TYPE_CMRD                 = 7,
+    ACPI_ERDT_TYPE_IBRD                 = 8,
+    ACPI_ERDT_TYPE_IBAD                 = 9,
+    ACPI_ERDT_TYPE_CARD                 = 10,
+    ACPI_ERDT_TYPE_RESERVED             = 11    /* 11 and above are reserved */
+
+};
+
+/*
+ * ERDT Subtables, correspond to Type in ACPI_SUBTBL_HDR_16
+ */
+
+/* 0: RMDD - Resource Management Domain Description */
+
+typedef struct acpi_erdt_rmdd
+{
+    ACPI_SUBTBL_HDR_16      Header;
+    UINT16                  Flags;
+    UINT16                  IO_l3_Slices;       /* Number of slices in IO cache */
+    UINT8                   IO_l3_Sets;         /* Number of sets in IO cache */
+    UINT8                   IO_l3_Ways;         /* Number of ways in IO cache */
+    UINT64                  Reserved;
+    UINT16                  DomainId;           /* Unique domain ID */
+    UINT32                  MaxRmid;            /* Maximun RMID supported */
+    UINT64                  CregBase;           /* Control Register Base Address */
+    UINT16                  CregSize;           /* Control Register Size (4K pages) */
+    UINT8                   RmddStructs[];
+
+} ACPI_ERDT_RMDD;
+
+
+/* 1: CACD - CPU Agent Collection Description */
+
+typedef struct acpi_erdt_cacd
+{
+    ACPI_SUBTBL_HDR_16      Header;
+    UINT16                  Reserved;
+    UINT16                  DomainId;           /* Unique domain ID */
+    UINT32                  X2APICIDS[];
+
+} ACPI_ERDT_CACD;
+
+
+/* 2: DACD - Device Agent Collection Description */
+
+typedef struct acpi_erdt_dacd
+{
+    ACPI_SUBTBL_HDR_16      Header;
+    UINT16                  Reserved;
+    UINT16                  DomainId;           /* Unique domain ID */
+    UINT8                   DevPaths[];
+
+} ACPI_ERDT_DACD;
+
+typedef struct acpi_erdt_dacd_dev_paths
+{
+    ACPI_SUBTABLE_HEADER    Header;
+    UINT16                  Segment;
+    UINT8                   Reserved;
+    UINT8                   StartBus;
+    UINT8                   Path[];
+
+} ACPI_ERDT_DACD_PATHS;
+
+
+/* 3: CMRC - Cache Monitoring Registers for CPU Agents */
+
+typedef struct acpi_erdt_cmrc
+{
+    ACPI_SUBTBL_HDR_16      Header;
+    UINT32                  Reserved1;
+    UINT32                  Flags;
+    UINT8                   IndexFn;
+    UINT8                   Reserved2[11];
+    UINT64                  CmtRegBase;
+    UINT32                  CmtRegSize;
+    UINT16                  ClumpSize;
+    UINT16                  ClumpStride;
+    UINT64                  UpScale;
+
+} ACPI_ERDT_CMRC;
+
+
+/* 4: MMRC - Memory-bandwidth Monitoring Registers for CPU Agents */
+
+typedef struct acpi_erdt_mmrc
+{
+    ACPI_SUBTBL_HDR_16      Header;
+    UINT32                  Reserved1;
+    UINT32                  Flags;
+    UINT8                   IndexFn;
+    UINT8                   Reserved2[11];
+    UINT64                  RegBase;
+    UINT32                  RegSize;
+    UINT8                   CounterWidth;
+    UINT64                  UpScale;
+    UINT8                   Reserved3[7];
+    UINT32                  CorrFactorListLen;
+    UINT32                  CorrFactorList[];
+
+} ACPI_ERDT_MMRC;
+
+
+/* 5: MARC - Memory-bandwidth Allocation Registers for CPU Agents */
+
+typedef struct acpi_erdt_marc
+{
+    ACPI_SUBTBL_HDR_16      Header;
+    UINT16                  Reserved1;
+    UINT16                  Flags;
+    UINT8                   IndexFn;
+    UINT8                   Reserved2[7];
+    UINT64                  RegBaseOpt;
+    UINT64                  RegBaseMin;
+    UINT64                  RegBaseMax;
+    UINT32                  MbaRegSize;
+    UINT32                  MbaCtrlRange;
+
+} ACPI_ERDT_MARC;
+
+
+/* 6: CARC - Cache Allocation Registers for CPU Agents */
+
+typedef struct acpi_erdt_carc
+{
+    ACPI_SUBTBL_HDR_16      Header;
+
+} ACPI_ERDT_CARC;
+
+
+/* 7: CMRD - Cache Monitoring Registers for Device Agents */
+
+typedef struct acpi_erdt_cmrd
+{
+    ACPI_SUBTBL_HDR_16      Header;
+    UINT32                  Reserved1;
+    UINT32                  Flags;
+    UINT8                   IndexFn;
+    UINT8                   Reserved2[11];
+    UINT64                  RegBase;
+    UINT32                  RegSize;
+    UINT16                  CmtRegOff;
+    UINT16                  CmtClumpSize;
+    UINT64                  UpScale;
+
+} ACPI_ERDT_CMRD;
+
+
+/* 8: IBRD - Cache Monitoring Registers for Device Agents */
+
+typedef struct acpi_erdt_ibrd
+{
+    ACPI_SUBTBL_HDR_16      Header;
+    UINT32                  Reserved1;
+    UINT32                  Flags;
+    UINT8                   IndexFn;
+    UINT8                   Reserved2[11];
+    UINT64                  RegBase;
+    UINT32                  RegSize;
+    UINT16                  TotalBwOffset;
+    UINT16                  IOMissBwOffset;
+    UINT16                  TotalBwClump;
+    UINT16                  IOMissBwClump;
+    UINT8                   Reserved3[7];
+    UINT8                   CounterWidth;
+    UINT64                  UpScale;
+    UINT32                  CorrFactorListLen;
+    UINT32                  CorrFactorList[];
+
+} ACPI_ERDT_IBRD;
+
+
+/* 9: IBAD - IO bandwidth Allocation Registers for device agents */
+
+typedef struct acpi_erdt_ibad
+{
+    ACPI_SUBTBL_HDR_16      Header;
+
+} ACPI_ERDT_IBAD;
+
+
+/* 10: CARD - IO bandwidth Allocation Registers for Device Agents */
+
+typedef struct acpi_erdt_card
+{
+    ACPI_SUBTBL_HDR_16      Header;
+    UINT32                  Reserved1;
+    UINT32                  Flags;
+    UINT32                  ContentionMask;
+    UINT8                   IndexFn;
+    UINT8                   Reserved2[7];
+    UINT64                  RegBase;
+    UINT32                  RegSize;
+    UINT16                  CatRegOffset;
+    UINT16                  CatRegBlockSize;
+
+} ACPI_ERDT_CARD;
+
+
+/*******************************************************************************
+ *
  * IORT - IO Remapping Table
  *
  * Conforms to "IO Remapping Table System Software on ARM Platforms",
- * Document number: ARM DEN 0049E.e, Sep 2022
+ * Document number: ARM DEN 0049E.f, Apr 2024
  *
  ******************************************************************************/
 
@@ -463,7 +768,7 @@ typedef struct acpi_iort_node
     UINT32                  Identifier;
     UINT32                  MappingCount;
     UINT32                  MappingOffset;
-    char                    NodeData[1];
+    char                    NodeData[];
 
 } ACPI_IORT_NODE;
 
@@ -478,6 +783,7 @@ enum AcpiIortNodeType
     ACPI_IORT_NODE_SMMU_V3              = 0x04,
     ACPI_IORT_NODE_PMCG                 = 0x05,
     ACPI_IORT_NODE_RMR                  = 0x06,
+    ACPI_IORT_NODE_IWB                  = 0x07,
 };
 
 
@@ -521,6 +827,7 @@ typedef struct acpi_iort_memory_access
 
 #define ACPI_IORT_MF_COHERENCY          (1)
 #define ACPI_IORT_MF_ATTRIBUTES         (1<<1)
+#define ACPI_IORT_MF_CANWBS             (1<<2)
 
 
 /*
@@ -529,7 +836,7 @@ typedef struct acpi_iort_memory_access
 typedef struct acpi_iort_its_group
 {
     UINT32                  ItsCount;
-    UINT32                  Identifiers[1];         /* GIC ITS identifier array */
+    UINT32                  Identifiers[];          /* GIC ITS identifier array */
 
 } ACPI_IORT_ITS_GROUP;
 
@@ -539,7 +846,7 @@ typedef struct acpi_iort_named_component
     UINT32                  NodeFlags;
     UINT64                  MemoryProperties;       /* Memory access properties */
     UINT8                   MemoryAddressLimit;     /* Memory address size limit */
-    char                    DeviceName[1];          /* Path of namespace object */
+    char                    DeviceName[];           /* Path of namespace object */
 
 } ACPI_IORT_NAMED_COMPONENT;
 
@@ -555,7 +862,7 @@ typedef struct acpi_iort_root_complex
     UINT32                  PciSegmentNumber;
     UINT8                   MemoryAddressLimit;     /* Memory address size limit */
     UINT16                  PasidCapabilities;      /* PASID Capabilities */
-    UINT8                   Reserved[1];            /* Reserved, must be zero */
+    UINT8                   Reserved[];             /* Reserved, must be zero */
 
 } ACPI_IORT_ROOT_COMPLEX;
 
@@ -579,7 +886,7 @@ typedef struct acpi_iort_smmu
     UINT32                  ContextInterruptOffset;
     UINT32                  PmuInterruptCount;
     UINT32                  PmuInterruptOffset;
-    UINT64                  Interrupts[1];          /* Interrupt array */
+    UINT64                  Interrupts[];           /* Interrupt array */
 
 } ACPI_IORT_SMMU;
 
@@ -679,6 +986,100 @@ typedef struct acpi_iort_rmr_desc {
     UINT32 Reserved;
 
 } ACPI_IORT_RMR_DESC;
+
+typedef struct acpi_iort_iwb {
+    UINT64 BaseAddress;
+    UINT16 IwbIndex;           /* Unique IWB identifier matching with the IWB GSI namespace. */
+    char   DeviceName[];       /* Path of the IWB namespace object */
+
+} ACPI_IORT_IWB;
+
+
+/*******************************************************************************
+ *
+ * IOVT - I/O Virtualization Table
+ *
+ * Conforms to "LoongArch I/O Virtualization Table",
+ *        Version 0.1, October 2024
+ *
+ ******************************************************************************/
+
+typedef struct acpi_table_iovt
+{
+    ACPI_TABLE_HEADER       Header;             /* Common ACPI table header */
+    UINT16                  IommuCount;
+    UINT16                  IommuOffset;
+    UINT8                   Reserved[8];
+
+} ACPI_TABLE_IOVT;
+
+/* IOVT subtable header */
+
+typedef struct acpi_iovt_header
+{
+    UINT16                  Type;
+    UINT16                  Length;
+
+} ACPI_IOVT_HEADER;
+
+/* Values for Type field above */
+
+enum AcpiIovtIommuType
+{
+    ACPI_IOVT_IOMMU_V1         = 0x00,
+    ACPI_IOVT_IOMMU_RESERVED   = 0x01     /* 1 and greater are reserved */
+};
+
+/* IOVT subtables */
+
+typedef struct acpi_iovt_iommu
+{
+    ACPI_IOVT_HEADER        Header;
+    UINT32                  Flags;
+    UINT16                  Segment;
+    UINT16                  PhyWidth;            /* Physical Address Width */
+    UINT16                  VirtWidth;           /* Virtual Address Width */
+    UINT16                  MaxPageLevel;
+    UINT64                  PageSize;
+    UINT32                  DeviceId;
+    UINT64                  BaseAddress;
+    UINT32                  AddressSpaceSize;
+    UINT8                   InterruptType;
+    UINT8                   Reserved[3];
+    UINT32                  GsiNumber;
+    UINT32                  ProximityDomain;
+    UINT32                  MaxDeviceNum;
+    UINT32                  DeviceEntryNum;
+    UINT32                  DeviceEntryOffset;
+
+} ACPI_IOVT_IOMMU;
+
+/* Masks for Flags field above */
+
+#define ACPI_IOVT_IOMMU_PCI_DEVICE           (1<<0)
+#define ACPI_IOVT_IOMMU_PXM_VALID            (1<<1)
+#define ACPI_IOVT_IOMMU_MAGAGE_BY_SEGMENT    (1<<2)
+#define ACPI_IOVT_IOMMU_HW_CAP_SUPPORT       (1<<3)
+#define ACPI_IOVT_IOMMU_MSI_INT_BYPASS       (1<<4)
+
+typedef struct acpi_iovt_device_entry
+{
+    UINT8                   Type;
+    UINT8                   Length;
+    UINT8                   Flags;
+    UINT8                   Reserved[3];
+    UINT16                  DeviceId;
+
+} ACPI_IOVT_DEVICE_ENTRY;
+
+enum AcpiIovtDeviceEntryType
+{
+    ACPI_IOVT_DEVICE_ENTRY_SINGLE     = 0x00,
+    ACPI_IOVT_DEVICE_ENTRY_START      = 0x01,
+    ACPI_IOVT_DEVICE_ENTRY_END        = 0x02,
+    ACPI_IOVT_DEVICE_ENTRY_RESERVED   = 0x03     /* 3 and greater are reserved */
+};
+
 
 /*******************************************************************************
  *
@@ -914,6 +1315,70 @@ typedef struct acpi_ivrs_memory
 
 } ACPI_IVRS_MEMORY;
 
+/*******************************************************************************
+ *
+ * KEYP - Key Programming Interface for Root Complex Integrity and Data
+ *        Encryption (IDE)
+ *        Version 1
+ *
+ * Conforms to "Key Programming Interface for Root Complex Integrity and Data
+ * Encryption (IDE)" document. See under ACPI-Related Documents.
+ *
+ ******************************************************************************/
+typedef struct acpi_table_keyp {
+    ACPI_TABLE_HEADER       Header;             /* Common ACPI table header */
+    UINT32                  Reserved;
+} ACPI_TABLE_KEYP;
+
+/* KEYP common subtable header */
+
+typedef struct acpi_keyp_common_header {
+    UINT8                   Type;
+    UINT8                   Reserved;
+    UINT16                  Length;
+} ACPI_KEYP_COMMON_HEADER;
+
+/* Values for Type field above */
+
+enum AcpiKeypType
+{
+    ACPI_KEYP_TYPE_CONFIG_UNIT      = 0,
+    ACPI_KEYP_TYPE_RESERVED         = 1,
+};
+
+/* Root Port Information Structure */
+
+typedef struct acpi_keyp_rp_info {
+    UINT16                  Segment;
+    UINT8                   Bus;
+    UINT8                   Devfn;
+} ACPI_KEYP_RP_INFO;
+
+/* Key Configuration Unit Structure */
+
+typedef struct acpi_keyp_config_unit {
+    ACPI_KEYP_COMMON_HEADER           Header;
+    UINT8                             ProtocolType;
+    UINT8                             Version;
+    UINT8                             RootPortCount;
+    UINT8                             Flags;
+    UINT64                            RegisterBaseAddress;
+    ACPI_KEYP_RP_INFO                 RpInfo[];
+} ACPI_KEYP_CONFIG_UNIT;
+
+enum AcpiKeypProtocolType
+{
+    ACPI_KEYP_PROTO_TYPE_INVALID    = 0,
+    ACPI_KEYP_PROTO_TYPE_PCIE,
+    ACPI_KEYP_PROTO_TYPE_CXL,
+    ACPI_KEYP_PROTO_TYPE_RESERVED
+};
+
+/* Only version 1 of the KCU Structure is currently defined in the spec*/
+
+#define ACPI_KEYP_CONFIG_UNIT_VERSION   1
+
+#define ACPI_KEYP_F_TVM_USABLE      (1)
 
 /*******************************************************************************
  *
@@ -1026,7 +1491,14 @@ enum AcpiMadtType
     ACPI_MADT_TYPE_MSI_PIC                  = 21,
     ACPI_MADT_TYPE_BIO_PIC                  = 22,
     ACPI_MADT_TYPE_LPC_PIC                  = 23,
-    ACPI_MADT_TYPE_RESERVED                 = 24,   /* 24 to 0x7F are reserved */
+    ACPI_MADT_TYPE_RINTC                    = 24,
+    ACPI_MADT_TYPE_IMSIC                    = 25,
+    ACPI_MADT_TYPE_APLIC                    = 26,
+    ACPI_MADT_TYPE_PLIC                     = 27,
+    ACPI_MADT_TYPE_GICV5_IRS                = 28,
+    ACPI_MADT_TYPE_GICV5_ITS                = 29,
+    ACPI_MADT_TYPE_GICV5_ITS_TRANSLATE      = 30,
+    ACPI_MADT_TYPE_RESERVED                 = 31,   /* 31 to 0x7F are reserved */
     ACPI_MADT_TYPE_OEM_RESERVED             = 0x80  /* 0x80 to 0xFF are reserved for OEM use */
 };
 
@@ -1131,7 +1603,7 @@ typedef struct acpi_madt_local_sapic
     UINT8                   Reserved[3];        /* Reserved, must be zero */
     UINT32                  LapicFlags;
     UINT32                  Uid;                /* Numeric UID - ACPI 3.0 */
-    char                    UidString[1];       /* String UID  - ACPI 3.0 */
+    char                    UidString[];        /* String UID  - ACPI 3.0 */
 
 } ACPI_MADT_LOCAL_SAPIC;
 
@@ -1182,7 +1654,7 @@ typedef struct acpi_madt_local_x2apic_nmi
 } ACPI_MADT_LOCAL_X2APIC_NMI;
 
 
-/* 11: Generic Interrupt - GICC (ACPI 5.0 + ACPI 6.0 + ACPI 6.3 changes) */
+/* 11: Generic Interrupt - GICC (ACPI 5.0 + ACPI 6.0 + ACPI 6.3 + ACPI 6.5 + ACPI 6.7 changes) */
 
 typedef struct acpi_madt_generic_interrupt
 {
@@ -1203,6 +1675,9 @@ typedef struct acpi_madt_generic_interrupt
     UINT8                   EfficiencyClass;
     UINT8                   Reserved2[1];
     UINT16                  SpeInterrupt;       /* ACPI 6.3 */
+    UINT16                  TrbeInterrupt;      /* ACPI 6.5 */
+    UINT16                  Iaffid;             /* ACPI 6.7 */
+    UINT32                  IrsId;
 
 } ACPI_MADT_GENERIC_INTERRUPT;
 
@@ -1211,7 +1686,8 @@ typedef struct acpi_madt_generic_interrupt
 /* ACPI_MADT_ENABLED                    (1)      Processor is usable if set */
 #define ACPI_MADT_PERFORMANCE_IRQ_MODE  (1<<1)  /* 01: Performance Interrupt Mode */
 #define ACPI_MADT_VGIC_IRQ_MODE         (1<<2)  /* 02: VGIC Maintenance Interrupt mode */
-
+#define ACPI_MADT_GICC_ONLINE_CAPABLE   (1<<3)  /* 03: Processor is online capable  */
+#define ACPI_MADT_GICC_NON_COHERENT     (1<<4)  /* 04: GIC redistributor is not coherent */
 
 /* 12: Generic Distributor (ACPI 5.0 + ACPI 6.0 changes) */
 
@@ -1227,7 +1703,7 @@ typedef struct acpi_madt_generic_distributor
 
 } ACPI_MADT_GENERIC_DISTRIBUTOR;
 
-/* Values for Version field above */
+/* Values for Version field above and Version field in acpi_madt_gicv5_irs */
 
 enum AcpiMadtGicVersion
 {
@@ -1236,7 +1712,8 @@ enum AcpiMadtGicVersion
     ACPI_MADT_GIC_VERSION_V2            = 2,
     ACPI_MADT_GIC_VERSION_V3            = 3,
     ACPI_MADT_GIC_VERSION_V4            = 4,
-    ACPI_MADT_GIC_VERSION_RESERVED      = 5     /* 5 and greater are reserved */
+    ACPI_MADT_GIC_VERSION_V5            = 5,
+    ACPI_MADT_GIC_VERSION_RESERVED      = 6     /* 6 and greater are reserved */
 };
 
 
@@ -1264,26 +1741,31 @@ typedef struct acpi_madt_generic_msi_frame
 typedef struct acpi_madt_generic_redistributor
 {
     ACPI_SUBTABLE_HEADER    Header;
-    UINT16                  Reserved;           /* reserved - must be zero */
+    UINT8                   Flags;
+    UINT8                   Reserved;           /* reserved - must be zero */
     UINT64                  BaseAddress;
     UINT32                  Length;
 
 } ACPI_MADT_GENERIC_REDISTRIBUTOR;
 
+#define ACPI_MADT_GICR_NON_COHERENT     (1)
 
 /* 15: Generic Translator (ACPI 6.0) */
 
 typedef struct acpi_madt_generic_translator
 {
     ACPI_SUBTABLE_HEADER    Header;
-    UINT16                  Reserved;           /* reserved - must be zero */
+    UINT8                   Flags;
+    UINT8                   Reserved;           /* reserved - must be zero */
     UINT32                  TranslationId;
     UINT64                  BaseAddress;
     UINT32                  Reserved2;
 
 } ACPI_MADT_GENERIC_TRANSLATOR;
 
-/* 16: Multiprocessor wakeup (ACPI 6.4) */
+#define ACPI_MADT_ITS_NON_COHERENT      (1)
+
+/* 16: Multiprocessor wakeup (ACPI 6.6) */
 
 typedef struct acpi_madt_multiproc_wakeup
 {
@@ -1291,6 +1773,7 @@ typedef struct acpi_madt_multiproc_wakeup
     UINT16                  MailboxVersion;
     UINT32                  Reserved;           /* reserved - must be zero */
     UINT64                  BaseAddress;
+    UINT64                  ResetVector;
 
 } ACPI_MADT_MULTIPROC_WAKEUP;
 
@@ -1309,6 +1792,7 @@ typedef struct acpi_madt_multiproc_wakeup_mailbox
 } ACPI_MADT_MULTIPROC_WAKEUP_MAILBOX;
 
 #define ACPI_MP_WAKE_COMMAND_WAKEUP    1
+#define ACPI_MP_WAKE_COMMAND_TEST      2
 
 /* 17: CPU Core Interrupt Controller (ACPI 6.5) */
 
@@ -1438,11 +1922,115 @@ enum AcpiMadtLpcPicVersion {
     ACPI_MADT_LPC_PIC_VERSION_RESERVED   = 2	/* 2 and greater are reserved */
 };
 
+/* 24: RISC-V INTC */
+typedef struct acpi_madt_rintc {
+    ACPI_SUBTABLE_HEADER    Header;
+    UINT8                   Version;
+    UINT8                   Reserved;
+    UINT32                  Flags;
+    UINT64                  HartId;
+    UINT32                  Uid;                /* ACPI processor UID */
+    UINT32                  ExtIntcId;          /* External INTC Id */
+    UINT64                  ImsicAddr;          /* IMSIC base address */
+    UINT32                  ImsicSize;          /* IMSIC size */
+} ACPI_MADT_RINTC;
+
+/* Values for RISC-V INTC Version field above */
+
+enum AcpiMadtRintcVersion {
+    ACPI_MADT_RINTC_VERSION_NONE       = 0,
+    ACPI_MADT_RINTC_VERSION_V1         = 1,
+    ACPI_MADT_RINTC_VERSION_RESERVED   = 2	/* 2 and greater are reserved */
+};
+
+/* 25: RISC-V IMSIC */
+typedef struct acpi_madt_imsic {
+    ACPI_SUBTABLE_HEADER    Header;
+    UINT8                   Version;
+    UINT8                   Reserved;
+    UINT32                  Flags;
+    UINT16                  NumIds;
+    UINT16                  NumGuestIds;
+    UINT8                   GuestIndexBits;
+    UINT8                   HartIndexBits;
+    UINT8                   GroupIndexBits;
+    UINT8                   GroupIndexShift;
+} ACPI_MADT_IMSIC;
+
+/* 26: RISC-V APLIC */
+typedef struct acpi_madt_aplic {
+    ACPI_SUBTABLE_HEADER    Header;
+    UINT8                   Version;
+    UINT8                   Id;
+    UINT32                  Flags;
+    UINT8                   HwId[8];
+    UINT16                  NumIdcs;
+    UINT16                  NumSources;
+    UINT32                  GsiBase;
+    UINT64                  BaseAddr;
+    UINT32                  Size;
+} ACPI_MADT_APLIC;
+
+/* 27: RISC-V PLIC */
+typedef struct acpi_madt_plic {
+    ACPI_SUBTABLE_HEADER    Header;
+    UINT8                   Version;
+    UINT8                   Id;
+    UINT8                   HwId[8];
+    UINT16                  NumIrqs;
+    UINT16                  MaxPrio;
+    UINT32                  Flags;
+    UINT32                  Size;
+    UINT64                  BaseAddr;
+    UINT32                  GsiBase;
+} ACPI_MADT_PLIC;
+
+/* 28: Arm GICv5 IRS (ACPI 6.7) */
+typedef struct acpi_madt_gicv5_irs {
+    ACPI_SUBTABLE_HEADER    Header;
+    UINT8                   Version;
+    UINT8                   Reserved;
+    UINT32                  IrsId;
+    UINT32                  Flags;
+    UINT32                  Reserved2;
+    UINT64                  ConfigBaseAddress;
+    UINT64                  SetlpiBaseAddress;
+} ACPI_MADT_GICV5_IRS;
+
+#define ACPI_MADT_IRS_NON_COHERENT      (1)
+
+
+/* 29: Arm GICv5 ITS Config Frame (ACPI 6.7) */
+typedef struct acpi_madt_gicv5_translator
+{
+    ACPI_SUBTABLE_HEADER    Header;
+    UINT8                   Flags;
+    UINT8                   Reserved;           /* reserved - must be zero */
+    UINT32                  TranslatorId;
+    UINT64                  BaseAddress;
+
+} ACPI_MADT_GICv5_ITS;
+
+#define ACPI_MADT_GICV5_ITS_NON_COHERENT      (1)
+
+/* 30: Arm GICv5 ITS Translate Frame (ACPI 6.7) */
+typedef struct acpi_madt_gicv5_translate_frame
+{
+    ACPI_SUBTABLE_HEADER    Header;
+    UINT16                  Reserved;           /* reserved - must be zero */
+    UINT32                  LinkedTranslatorId;
+    UINT32                  TranslateFrameId;
+    UINT32                  Reserved2;
+    UINT64                  BaseAddress;
+
+} ACPI_MADT_GICv5_ITS_TRANSLATE;
+
+
 /* 80: OEM data */
 
 typedef struct acpi_madt_oem_data
 {
-    UINT8                   OemData[0];
+    ACPI_FLEX_ARRAY(UINT8,  OemData);
 } ACPI_MADT_OEM_DATA;
 
 
@@ -1531,6 +2119,163 @@ typedef struct acpi_table_mchi
 
 } ACPI_TABLE_MCHI;
 
+
+/*******************************************************************************
+ *
+ * MISC - Miscellaneous GUIDed Table
+ *
+ * Conforms to section "Miscellaneous GUIDed Table Entries" of ACPI
+ * Specification v6.5
+ *
+ ******************************************************************************/
+
+typedef struct acpi_misc_guid_entry {
+    UINT8       EntryGuid[16];
+    UINT32      EntryLength;
+    UINT32      Revision;
+    char        ProducerId[ACPI_NAMESEG_SIZE] ACPI_NONSTRING;   /* ACPI Vendor ID */
+    UINT8       Data[];
+} ACPI_MISC_GUID_ENTRY;
+
+/* Minimum length of a MISC entry (the header fields, without any Data) */
+
+#define ACPI_MISC_MIN_ENTRY_LENGTH  28
+
+
+typedef struct acpi_table_misc {
+    ACPI_TABLE_HEADER       Header;             /* Common ACPI table header */
+    /*
+     * Immediately followed by one or more variable-length entries:
+     * ACPI_MISC_GUID_ENTRY Entries[];
+     */
+} ACPI_TABLE_MISC;
+
+/*******************************************************************************
+ *
+ * MPAM - Memory System Resource Partitioning and Monitoring
+ *
+ * Conforms to "ACPI for Memory System Resource Partitioning and Monitoring 2.0"
+ * Document number: ARM DEN 0065, December, 2022.
+ *
+ ******************************************************************************/
+
+/* MPAM RIS locator types. Table 11, Location types */
+enum AcpiMpamLocatorType {
+    ACPI_MPAM_LOCATION_TYPE_PROCESSOR_CACHE    = 0,
+    ACPI_MPAM_LOCATION_TYPE_MEMORY             = 1,
+    ACPI_MPAM_LOCATION_TYPE_SMMU               = 2,
+    ACPI_MPAM_LOCATION_TYPE_MEMORY_CACHE       = 3,
+    ACPI_MPAM_LOCATION_TYPE_ACPI_DEVICE        = 4,
+    ACPI_MPAM_LOCATION_TYPE_INTERCONNECT       = 5,
+    ACPI_MPAM_LOCATION_TYPE_UNKNOWN            = 0xFF
+};
+
+/* MPAM Functional dependency descriptor. Table 10 */
+typedef struct acpi_mpam_func_deps
+{
+    UINT32                        Producer;
+    UINT32                        Reserved;
+} ACPI_MPAM_FUNC_DEPS;
+
+/* MPAM Processor cache locator descriptor. Table 13 */
+typedef struct acpi_mpam_resource_cache_locator
+{
+    UINT64                        CacheReference;
+    UINT32                        Reserved;
+} ACPI_MPAM_RESOURCE_CACHE_LOCATOR;
+
+/* MPAM Memory locator descriptor. Table 14 */
+typedef struct acpi_mpam_resource_memory_locator
+{
+    UINT64                        ProximityDomain;
+    UINT32                        Reserved;
+} ACPI_MPAM_RESOURCE_MEMORY_LOCATOR;
+
+/* MPAM SMMU locator descriptor. Table 15 */
+typedef struct acpi_mpam_resource_smmu_locator
+{
+    UINT64                        SmmuInterface;
+    UINT32                        Reserved;
+} ACPI_MPAM_RESOURCE_SMMU_INTERFACE;
+
+/* MPAM Memory-side cache locator descriptor. Table 16 */
+typedef struct acpi_mpam_resource_memcache_locator
+{
+    UINT8                         Reserved[7];
+    UINT8                         Level;
+    UINT32                        Reference;
+} ACPI_MPAM_RESOURCE_MEMCACHE_INTERFACE;
+
+/* MPAM ACPI device locator descriptor. Table 17 */
+typedef struct acpi_mpam_resource_acpi_locator
+{
+    UINT64                        AcpiHwId;
+    UINT32                        AcpiUniqueId;
+} ACPI_MPAM_RESOURCE_ACPI_INTERFACE;
+
+/* MPAM Interconnect locator descriptor. Table 18 */
+typedef struct acpi_mpam_resource_interconnect_locator
+{
+    UINT64                        InterConnectDescTblOff;
+    UINT32                        Reserved;
+} ACPI_MPAM_RESOURCE_INTERCONNECT_INTERFACE;
+
+/* MPAM Locator structure. Table 12 */
+typedef struct acpi_mpam_resource_generic_locator
+{
+    UINT64                        Descriptor1;
+    UINT32                        Descriptor2;
+} ACPI_MPAM_RESOURCE_GENERIC_LOCATOR;
+
+typedef union acpi_mpam_resource_locator
+{
+    ACPI_MPAM_RESOURCE_CACHE_LOCATOR             CacheLocator;
+    ACPI_MPAM_RESOURCE_MEMORY_LOCATOR            MemoryLocator;
+    ACPI_MPAM_RESOURCE_SMMU_INTERFACE            SmmuLocator;
+    ACPI_MPAM_RESOURCE_MEMCACHE_INTERFACE        MemCacheLocator;
+    ACPI_MPAM_RESOURCE_ACPI_INTERFACE            AcpiLocator;
+    ACPI_MPAM_RESOURCE_INTERCONNECT_INTERFACE    InterconnectIfcLocator;
+    ACPI_MPAM_RESOURCE_GENERIC_LOCATOR           GenericLocator;
+} ACPI_MPAM_RESOURCE_LOCATOR;
+
+/* Memory System Component Resource Node Structure Table 9 */
+typedef struct acpi_mpam_resource_node
+{
+    UINT32                        Identifier;
+    UINT8                         RISIndex;
+    UINT16                        Reserved1;
+    UINT8                         LocatorType;
+    ACPI_MPAM_RESOURCE_LOCATOR    Locator;
+    UINT32                        NumFunctionalDeps;
+} ACPI_MPAM_RESOURCE_NODE;
+
+/* Memory System Component (MSC) Node Structure. Table 4 */
+typedef struct acpi_mpam_msc_node
+{
+    UINT16                     Length;
+    UINT8                      InterfaceType;
+    UINT8                      Reserved;
+    UINT32                     Identifier;
+    UINT64                     BaseAddress;
+    UINT32                     MMIOSize;
+    UINT32                     OverflowInterrupt;
+    UINT32                     OverflowInterruptFlags;
+    UINT32                     Reserved1;
+    UINT32                     OverflowInterruptAffinity;
+    UINT32                     ErrorInterrupt;
+    UINT32                     ErrorInterruptFlags;
+    UINT32                     Reserved2;
+    UINT32                     ErrorInterruptAffinity;
+    UINT32                     MaxNrdyUsec;
+    UINT64                     HardwareIdLinkedDevice;
+    UINT32                     InstanceIdLinkedDevice;
+    UINT32                     NumResourceNodes;
+} ACPI_MPAM_MSC_NODE;
+
+typedef struct acpi_table_mpam
+{
+    ACPI_TABLE_HEADER         Header;          /* Common ACPI table header */
+} ACPI_TABLE_MPAM;
 
 /*******************************************************************************
  *
@@ -1684,6 +2429,52 @@ typedef struct acpi_msct_proximity
 
 /*******************************************************************************
  *
+ * MRRM - Memory Range and Region Mapping (MRRM) table
+ * Conforms to "Intel Resource Director Technology Architecture Specification"
+ * Version 1.1, January 2025
+ *
+ ******************************************************************************/
+
+typedef struct acpi_table_mrrm
+{
+    ACPI_TABLE_HEADER       Header;             /* Common ACPI table header */
+    UINT8                   MaxMemRegion;       /* Max Memory Regions supported */
+    UINT8                   Flags;              /* Region assignment type */
+    UINT8                   Reserved[26];
+    UINT8                   Memory_Range_Entry[];
+
+} ACPI_TABLE_MRRM;
+
+/* Flags */
+#define ACPI_MRRM_FLAGS_REGION_ASSIGNMENT_OS    (1<<0)
+
+/*******************************************************************************
+    *
+    * Memory Range entry - Memory Range entry in MRRM table
+    *
+    ******************************************************************************/
+
+typedef struct acpi_mrrm_mem_range_entry
+{
+    ACPI_SUBTBL_HDR_16      Header;
+    UINT32                  Reserved0;          /* Reserved */
+    UINT64                  AddrBase;           /* Base addr of the mem range */
+    UINT64                  AddrLen;            /* Length of the mem range */
+    UINT16                  RegionIdFlags;      /* Valid local or remote Region-ID */
+    UINT8                   LocalRegionId;      /* Platform-assigned static local Region-ID */
+    UINT8                   RemoteRegionId;     /* Platform-assigned static remote Region-ID */
+    UINT32                  Reserved1;          /* Reserved */
+    /* Region-ID Programming Registers[] */
+
+} ACPI_MRRM_MEM_RANGE_ENTRY;
+
+/* Values for RegionIdFlags above */
+#define ACPI_MRRM_VALID_REGION_ID_FLAGS_LOCAL   (1<<0)
+#define ACPI_MRRM_VALID_REGION_ID_FLAGS_REMOTE  (1<<1)
+
+
+/*******************************************************************************
+ *
  * MSDM - Microsoft Data Management table
  *
  * Conforms to "Microsoft Software Licensing Tables (SLIC and MSDM)",
@@ -1809,7 +2600,7 @@ typedef struct acpi_nfit_interleave
     UINT16                  Reserved;           /* Reserved, must be zero */
     UINT32                  LineCount;
     UINT32                  LineSize;
-    UINT32                  LineOffset[1];      /* Variable length */
+    UINT32                  LineOffset[];       /* Variable length */
 
 } ACPI_NFIT_INTERLEAVE;
 
@@ -1820,7 +2611,7 @@ typedef struct acpi_nfit_smbios
 {
     ACPI_NFIT_HEADER        Header;
     UINT32                  Reserved;           /* Reserved, must be zero */
-    UINT8                   Data[1];            /* Variable length */
+    UINT8                   Data[];             /* Variable length */
 
 } ACPI_NFIT_SMBIOS;
 
@@ -1886,7 +2677,7 @@ typedef struct acpi_nfit_flush_address
     UINT32                  DeviceHandle;
     UINT16                  HintCount;
     UINT8                   Reserved[6];        /* Reserved, must be zero */
-    UINT64                  HintAddress[1];     /* Variable length */
+    UINT64                  HintAddress[];      /* Variable length */
 
 } ACPI_NFIT_FLUSH_ADDRESS;
 
@@ -1962,319 +2753,211 @@ typedef struct nfit_device_handle
 
 /*******************************************************************************
  *
- * NHLT - Non HD Audio Link Table
- *
- * Conforms to: Intel Smart Sound Technology NHLT Specification
- * Version 0.8.1, January 2020.
+ * NHLT - Non HDAudio Link Table
+ *        Version 1
  *
  ******************************************************************************/
 
-/* Main table */
-
 typedef struct acpi_table_nhlt
 {
-    ACPI_TABLE_HEADER       Header;             /* Common ACPI table header */
-    UINT8                   EndpointCount;
+    ACPI_TABLE_HEADER              Header;          /* Common ACPI table header */
+    UINT8                          EndpointsCount;
+    /*
+     * ACPI_NHLT_ENDPOINT          Endpoints[];
+     * ACPI_NHLT_CONFIG            OEDConfig;
+     */
 
 } ACPI_TABLE_NHLT;
 
-typedef struct acpi_table_nhlt_endpoint_count
-{
-    UINT8                   EndpointCount;
-
-} ACPI_TABLE_NHLT_ENDPOINT_COUNT;
-
 typedef struct acpi_nhlt_endpoint
 {
-    UINT32                  DescriptorLength;
-    UINT8                   LinkType;
-    UINT8                   InstanceId;
-    UINT16                  VendorId;
-    UINT16                  DeviceId;
-    UINT16                  RevisionId;
-    UINT32                  SubsystemId;
-    UINT8                   DeviceType;
-    UINT8                   Direction;
-    UINT8                   VirtualBusId;
+    UINT32                         Length;
+    UINT8                          LinkType;
+    UINT8                          InstanceId;
+    UINT16                         VendorId;
+    UINT16                         DeviceId;
+    UINT16                         RevisionId;
+    UINT32                         SubsystemId;
+    UINT8                          DeviceType;
+    UINT8                          Direction;
+    UINT8                          VirtualBusId;
+    /*
+     * ACPI_NHLT_CONFIG            DeviceConfig;
+     * ACPI_NHLT_FORMATS_CONFIG    FormatsConfig;
+     * ACPI_NHLT_DEVICES_INFO      DevicesInfo;
+     */
 
 } ACPI_NHLT_ENDPOINT;
 
-/* Types for LinkType field above */
+/* Values for LinkType field above */
 
-#define ACPI_NHLT_RESERVED_HD_AUDIO         0
-#define ACPI_NHLT_RESERVED_DSP              1
-#define ACPI_NHLT_PDM                       2
-#define ACPI_NHLT_SSP                       3
-#define ACPI_NHLT_RESERVED_SLIMBUS          4
-#define ACPI_NHLT_RESERVED_SOUNDWIRE        5
-#define ACPI_NHLT_TYPE_RESERVED             6 /* 6 and above are reserved */
-
-/* All other values above are reserved */
+#define ACPI_NHLT_LINKTYPE_HDA               0
+#define ACPI_NHLT_LINKTYPE_DSP               1
+#define ACPI_NHLT_LINKTYPE_PDM               2
+#define ACPI_NHLT_LINKTYPE_SSP               3
+#define ACPI_NHLT_LINKTYPE_SLIMBUS           4
+#define ACPI_NHLT_LINKTYPE_SDW               5
+#define ACPI_NHLT_LINKTYPE_UAOL              6
 
 /* Values for DeviceId field above */
 
-#define ACPI_NHLT_PDM_DMIC                  0xAE20
-#define ACPI_NHLT_BT_SIDEBAND               0xAE30
-#define ACPI_NHLT_I2S_TDM_CODECS            0xAE23
+#define ACPI_NHLT_DEVICEID_DMIC              0xAE20
+#define ACPI_NHLT_DEVICEID_BT                0xAE30
+#define ACPI_NHLT_DEVICEID_I2S               0xAE34
 
 /* Values for DeviceType field above */
 
-/* SSP Link */
-
-#define ACPI_NHLT_LINK_BT_SIDEBAND          0
-#define ACPI_NHLT_LINK_FM                   1
-#define ACPI_NHLT_LINK_MODEM                2
-/* 3 is reserved */
-#define ACPI_NHLT_LINK_SSP_ANALOG_CODEC     4
-
-/* PDM Link */
-
-#define ACPI_NHLT_PDM_ON_CAVS_1P8           0
-#define ACPI_NHLT_PDM_ON_CAVS_1P5           1
+/* Device types unique to endpoint of LinkType=PDM */
+#define ACPI_NHLT_DEVICETYPE_PDM             0
+#define ACPI_NHLT_DEVICETYPE_PDM_SKL         1
+/* Device types unique to endpoint of LinkType=SSP */
+#define ACPI_NHLT_DEVICETYPE_BT              0
+#define ACPI_NHLT_DEVICETYPE_FM              1
+#define ACPI_NHLT_DEVICETYPE_MODEM           2
+#define ACPI_NHLT_DEVICETYPE_CODEC           4
 
 /* Values for Direction field above */
 
-#define ACPI_NHLT_DIR_RENDER                0
-#define ACPI_NHLT_DIR_CAPTURE               1
-#define ACPI_NHLT_DIR_RENDER_LOOPBACK       2
-#define ACPI_NHLT_DIR_RENDER_FEEDBACK       3
-#define ACPI_NHLT_DIR_RESERVED              4   /* 4 and above are reserved */
+#define ACPI_NHLT_DIR_RENDER                 0
+#define ACPI_NHLT_DIR_CAPTURE                1
 
-/* Capabilities = 2 */
-
-typedef struct acpi_nhlt_device_specific_config
+typedef struct acpi_nhlt_config
 {
-    UINT32                  CapabilitiesSize;
-    UINT8                   VirtualSlot;
-    UINT8                   ConfigType;
+    UINT32                         CapabilitiesSize;
+    UINT8                          Capabilities[1];
 
-} ACPI_NHLT_DEVICE_SPECIFIC_CONFIG;
+} ACPI_NHLT_CONFIG;
 
-/* Capabilities = 3 */
-
-typedef struct acpi_nhlt_device_specific_config_a
+typedef struct acpi_nhlt_gendevice_config
 {
-    UINT32                  CapabilitiesSize;
-    UINT8                   VirtualSlot;
-    UINT8                   ConfigType;
-    UINT8                   ArrayType;
+    UINT8                          VirtualSlot;
+    UINT8                          ConfigType;
 
-} ACPI_NHLT_DEVICE_SPECIFIC_CONFIG_A;
+} ACPI_NHLT_GENDEVICE_CONFIG;
 
-/* Capabilities = 3 */
+/* Values for ConfigType field above */
 
-typedef struct acpi_nhlt_device_specific_config_d
+#define ACPI_NHLT_CONFIGTYPE_GENERIC         0
+#define ACPI_NHLT_CONFIGTYPE_MICARRAY        1
+
+typedef struct acpi_nhlt_micdevice_config
 {
-    UINT8                   VirtualSlot;
-    UINT8                   ConfigType;
-    UINT8                   ArrayType;
+    UINT8                          VirtualSlot;
+    UINT8                          ConfigType;
+    UINT8                          ArrayType;
 
-} ACPI_NHLT_DEVICE_SPECIFIC_CONFIG_D;
+} ACPI_NHLT_MICDEVICE_CONFIG;
 
-/* Values for Config Type above */
+/* Values for ArrayType field above */
 
-#define ACPI_NHLT_CONFIG_TYPE_GENERIC              0x00
-#define ACPI_NHLT_CONFIG_TYPE_MIC_ARRAY            0x01
-#define ACPI_NHLT_CONFIG_TYPE_RENDER_FEEDBACK      0x03
-#define ACPI_NHLT_CONFIG_TYPE_RESERVED             0x04   /* 4 and above are reserved */
-
-/* Capabilities = 0 */
-
-typedef struct acpi_nhlt_device_specific_config_b
-{
-    UINT32                  CapabilitiesSize;
-
-} ACPI_NHLT_DEVICE_SPECIFIC_CONFIG_B;
-
-/* Capabilities = 1 */
-
-typedef struct acpi_nhlt_device_specific_config_c
-{
-    UINT32                  CapabilitiesSize;
-    UINT8                   VirtualSlot;
-
-} ACPI_NHLT_DEVICE_SPECIFIC_CONFIG_C;
-
-typedef struct acpi_nhlt_render_device_specific_config
-{
-    UINT32                  CapabilitiesSize;
-    UINT8                   VirtualSlot;
-
-} ACPI_NHLT_RENDER_DEVICE_SPECIFIC_CONFIG;
-
-typedef struct acpi_nhlt_wave_extensible
-{
-    UINT16                  FormatTag;
-    UINT16                  ChannelCount;
-    UINT32                  SamplesPerSec;
-    UINT32                  AvgBytesPerSec;
-    UINT16                  BlockAlign;
-    UINT16                  BitsPerSample;
-    UINT16                  ExtraFormatSize;
-    UINT16                  ValidBitsPerSample;
-    UINT32                  ChannelMask;
-    UINT8                   SubFormatGuid[16];
-
-} ACPI_NHLT_WAVE_EXTENSIBLE;
-
-/* Values for ChannelMask above */
-
-#define ACPI_NHLT_SPKR_FRONT_LEFT             0x1
-#define ACPI_NHLT_SPKR_FRONT_RIGHT            0x2
-#define ACPI_NHLT_SPKR_FRONT_CENTER           0x4
-#define ACPI_NHLT_SPKR_LOW_FREQ               0x8
-#define ACPI_NHLT_SPKR_BACK_LEFT              0x10
-#define ACPI_NHLT_SPKR_BACK_RIGHT             0x20
-#define ACPI_NHLT_SPKR_FRONT_LEFT_OF_CENTER   0x40
-#define ACPI_NHLT_SPKR_FRONT_RIGHT_OF_CENTER  0x80
-#define ACPI_NHLT_SPKR_BACK_CENTER            0x100
-#define ACPI_NHLT_SPKR_SIDE_LEFT              0x200
-#define ACPI_NHLT_SPKR_SIDE_RIGHT             0x400
-#define ACPI_NHLT_SPKR_TOP_CENTER             0x800
-#define ACPI_NHLT_SPKR_TOP_FRONT_LEFT         0x1000
-#define ACPI_NHLT_SPKR_TOP_FRONT_CENTER       0x2000
-#define ACPI_NHLT_SPKR_TOP_FRONT_RIGHT        0x4000
-#define ACPI_NHLT_SPKR_TOP_BACK_LEFT          0x8000
-#define ACPI_NHLT_SPKR_TOP_BACK_CENTER        0x10000
-#define ACPI_NHLT_SPKR_TOP_BACK_RIGHT         0x20000
-
-typedef struct acpi_nhlt_format_config
-{
-    ACPI_NHLT_WAVE_EXTENSIBLE   Format;
-    UINT32                      CapabilitySize;
-    UINT8                       Capabilities[];
-
-} ACPI_NHLT_FORMAT_CONFIG;
-
-typedef struct acpi_nhlt_formats_config
-{
-    UINT8                   FormatsCount;
-
-} ACPI_NHLT_FORMATS_CONFIG;
-
-typedef struct acpi_nhlt_device_specific_hdr
-{
-    UINT8                   VirtualSlot;
-    UINT8                   ConfigType;
-
-} ACPI_NHLT_DEVICE_SPECIFIC_HDR;
-
-/* Types for ConfigType above */
-
-#define ACPI_NHLT_GENERIC                   0
-#define ACPI_NHLT_MIC                       1
-#define ACPI_NHLT_RENDER                    3
-
-typedef struct acpi_nhlt_mic_device_specific_config
-{
-    ACPI_NHLT_DEVICE_SPECIFIC_HDR   DeviceConfig;
-    UINT8                           ArrayTypeExt;
-
-} ACPI_NHLT_MIC_DEVICE_SPECIFIC_CONFIG;
-
-/* Values for ArrayTypeExt above */
-
-#define ACPI_NHLT_ARRAY_TYPE_RESERVED               0x09    /* 9 and below are reserved */
-#define ACPI_NHLT_SMALL_LINEAR_2ELEMENT             0x0A
-#define ACPI_NHLT_BIG_LINEAR_2ELEMENT               0x0B
-#define ACPI_NHLT_FIRST_GEOMETRY_LINEAR_4ELEMENT    0x0C
-#define ACPI_NHLT_PLANAR_LSHAPED_4ELEMENT           0x0D
-#define ACPI_NHLT_SECOND_GEOMETRY_LINEAR_4ELEMENT   0x0E
-#define ACPI_NHLT_VENDOR_DEFINED                    0x0F
-#define ACPI_NHLT_ARRAY_TYPE_MASK                   0x0F
-#define ACPI_NHLT_ARRAY_TYPE_EXT_MASK               0x10
-
-#define ACPI_NHLT_NO_EXTENSION                      0x0
-#define ACPI_NHLT_MIC_SNR_SENSITIVITY_EXT           (1<<4)
-
-typedef struct acpi_nhlt_vendor_mic_count
-{
-    UINT8                           MicrophoneCount;
-
-} ACPI_NHLT_VENDOR_MIC_COUNT;
+#define ACPI_NHLT_ARRAYTYPE_LINEAR2_SMALL    0xA
+#define ACPI_NHLT_ARRAYTYPE_LINEAR2_BIG      0xB
+#define ACPI_NHLT_ARRAYTYPE_LINEAR4_GEO1     0xC
+#define ACPI_NHLT_ARRAYTYPE_PLANAR4_LSHAPED  0xD
+#define ACPI_NHLT_ARRAYTYPE_LINEAR4_GEO2     0xE
+#define ACPI_NHLT_ARRAYTYPE_VENDOR           0xF
 
 typedef struct acpi_nhlt_vendor_mic_config
 {
-    UINT8                   Type;
-    UINT8                   Panel;
-    UINT16                  SpeakerPositionDistance;    /* mm */
-    UINT16                  HorizontalOffset;           /* mm */
-    UINT16                  VerticalOffset;             /* mm */
-    UINT8                   FrequencyLowBand;           /* 5*Hz */
-    UINT8                   FrequencyHighBand;          /* 500*Hz */
-    UINT16                  DirectionAngle;             /* -180 - + 180 */
-    UINT16                  ElevationAngle;             /* -180 - + 180 */
-    UINT16                  WorkVerticalAngleBegin;     /* -180 - + 180 with 2 deg step */
-    UINT16                  WorkVerticalAngleEnd;       /* -180 - + 180 with 2 deg step */
-    UINT16                  WorkHorizontalAngleBegin;   /* -180 - + 180 with 2 deg step */
-    UINT16                  WorkHorizontalAngleEnd;     /* -180 - + 180 with 2 deg step */
+    UINT8                          Type;
+    UINT8                          Panel;
+    UINT16                         SpeakerPositionDistance;   /* mm */
+    UINT16                         HorizontalOffset;          /* mm */
+    UINT16                         VerticalOffset;            /* mm */
+    UINT8                          FrequencyLowBand;          /* 5*Hz */
+    UINT8                          FrequencyHighBand;         /* 500*Hz */
+    UINT16                         DirectionAngle;            /* -180 - +180 */
+    UINT16                         ElevationAngle;            /* -180 - +180 */
+    UINT16                         WorkVerticalAngleBegin;    /* -180 - +180 with 2 deg step */
+    UINT16                         WorkVerticalAngleEnd;      /* -180 - +180 with 2 deg step */
+    UINT16                         WorkHorizontalAngleBegin;  /* -180 - +180 with 2 deg step */
+    UINT16                         WorkHorizontalAngleEnd;    /* -180 - +180 with 2 deg step */
 
 } ACPI_NHLT_VENDOR_MIC_CONFIG;
 
 /* Values for Type field above */
 
-#define ACPI_NHLT_MIC_OMNIDIRECTIONAL       0
-#define ACPI_NHLT_MIC_SUBCARDIOID           1
-#define ACPI_NHLT_MIC_CARDIOID              2
-#define ACPI_NHLT_MIC_SUPER_CARDIOID        3
-#define ACPI_NHLT_MIC_HYPER_CARDIOID        4
-#define ACPI_NHLT_MIC_8_SHAPED              5
-#define ACPI_NHLT_MIC_RESERVED6             6   /* 6 is reserved */
-#define ACPI_NHLT_MIC_VENDOR_DEFINED        7
-#define ACPI_NHLT_MIC_RESERVED              8   /* 8 and above are reserved */
+#define ACPI_NHLT_MICTYPE_OMNIDIRECTIONAL    0
+#define ACPI_NHLT_MICTYPE_SUBCARDIOID        1
+#define ACPI_NHLT_MICTYPE_CARDIOID           2
+#define ACPI_NHLT_MICTYPE_SUPERCARDIOID      3
+#define ACPI_NHLT_MICTYPE_HYPERCARDIOID      4
+#define ACPI_NHLT_MICTYPE_8SHAPED            5
+#define ACPI_NHLT_MICTYPE_RESERVED           6
+#define ACPI_NHLT_MICTYPE_VENDORDEFINED      7
 
 /* Values for Panel field above */
 
-#define ACPI_NHLT_MIC_POSITION_TOP          0
-#define ACPI_NHLT_MIC_POSITION_BOTTOM       1
-#define ACPI_NHLT_MIC_POSITION_LEFT         2
-#define ACPI_NHLT_MIC_POSITION_RIGHT        3
-#define ACPI_NHLT_MIC_POSITION_FRONT        4
-#define ACPI_NHLT_MIC_POSITION_BACK         5
-#define ACPI_NHLT_MIC_POSITION_RESERVED     6   /* 6 and above are reserved */
+#define ACPI_NHLT_MICLOCATION_TOP             0
+#define ACPI_NHLT_MICLOCATION_BOTTOM          1
+#define ACPI_NHLT_MICLOCATION_LEFT            2
+#define ACPI_NHLT_MICLOCATION_RIGHT           3
+#define ACPI_NHLT_MICLOCATION_FRONT           4
+#define ACPI_NHLT_MICLOCATION_REAR            5
 
-typedef struct acpi_nhlt_vendor_mic_device_specific_config
+typedef struct acpi_nhlt_vendor_micdevice_config
 {
-    ACPI_NHLT_MIC_DEVICE_SPECIFIC_CONFIG    MicArrayDeviceConfig;
-    UINT8                                   NumberOfMicrophones;
-    ACPI_NHLT_VENDOR_MIC_CONFIG             MicConfig[];            /* Indexed by NumberOfMicrophones */
+    UINT8                          VirtualSlot;
+    UINT8                          ConfigType;
+    UINT8                          ArrayType;
+    UINT8                          MicsCount;
+    ACPI_NHLT_VENDOR_MIC_CONFIG    Mics[];
 
-} ACPI_NHLT_VENDOR_MIC_DEVICE_SPECIFIC_CONFIG;
+} ACPI_NHLT_VENDOR_MICDEVICE_CONFIG;
 
-/* Microphone SNR and Sensitivity extension */
-
-typedef struct acpi_nhlt_mic_snr_sensitivity_extension
+typedef union acpi_nhlt_device_config
 {
-    UINT32                  SNR;
-    UINT32                  Sensitivity;
+    UINT8                                VirtualSlot;
+    ACPI_NHLT_GENDEVICE_CONFIG           Gen;
+    ACPI_NHLT_MICDEVICE_CONFIG           Mic;
+    ACPI_NHLT_VENDOR_MICDEVICE_CONFIG    VendorMic;
 
-} ACPI_NHLT_MIC_SNR_SENSITIVITY_EXTENSION;
+} ACPI_NHLT_DEVICE_CONFIG;
 
-/* Render device with feedback */
-
-typedef struct acpi_nhlt_render_feedback_device_specific_config
+/* Inherited from Microsoft's WAVEFORMATEXTENSIBLE. */
+typedef struct acpi_nhlt_wave_formatext
 {
-    UINT8                               FeedbackVirtualSlot;        /* Render slot in case of capture */
-    UINT16                              FeedbackChannels;           /* Informative only */
-    UINT16                              FeedbackValidBitsPerSample;
+    UINT16                         FormatTag;
+    UINT16                         ChannelCount;
+    UINT32                         SamplesPerSec;
+    UINT32                         AvgBytesPerSec;
+    UINT16                         BlockAlign;
+    UINT16                         BitsPerSample;
+    UINT16                         ExtraFormatSize;
+    UINT16                         ValidBitsPerSample;
+    UINT32                         ChannelMask;
+    UINT8                          Subformat[16];
 
-} ACPI_NHLT_RENDER_FEEDBACK_DEVICE_SPECIFIC_CONFIG;
+} ACPI_NHLT_WAVE_FORMATEXT;
 
-/* Non documented structures */
-
-typedef struct acpi_nhlt_device_info_count
+typedef struct acpi_nhlt_format_config
 {
-    UINT8                               StructureCount;
+    ACPI_NHLT_WAVE_FORMATEXT       Format;
+    ACPI_NHLT_CONFIG               Config;
 
-} ACPI_NHLT_DEVICE_INFO_COUNT;
+} ACPI_NHLT_FORMAT_CONFIG;
+
+typedef struct acpi_nhlt_formats_config
+{
+    UINT8                          FormatsCount;
+    ACPI_NHLT_FORMAT_CONFIG        Formats[];
+
+} ACPI_NHLT_FORMATS_CONFIG;
 
 typedef struct acpi_nhlt_device_info
 {
-    UINT8                               DeviceId[16];
-    UINT8                               DeviceInstanceId;
-    UINT8                               DevicePortId;
+    UINT8                          Id[16];
+    UINT8                          InstanceId;
+    UINT8                          PortId;
 
 } ACPI_NHLT_DEVICE_INFO;
+
+typedef struct acpi_nhlt_devices_info
+{
+    UINT8                          DevicesCount;
+    ACPI_NHLT_DEVICE_INFO          Devices[];
+
+} ACPI_NHLT_DEVICES_INFO;
 
 
 /*******************************************************************************
@@ -2777,6 +3460,15 @@ typedef struct acpi_pptt_cache
 
 typedef struct acpi_pptt_cache_v1
 {
+    ACPI_SUBTABLE_HEADER    Header;
+    UINT16                  Reserved;
+    UINT32                  Flags;
+    UINT32                  NextLevelOfCache;
+    UINT32                  Size;
+    UINT32                  NumberOfSets;
+    UINT8                   Associativity;
+    UINT8                   Attributes;
+    UINT16                  LineSize;
     UINT32                  CacheId;
 
 } ACPI_PPTT_CACHE_V1;
@@ -2993,6 +3685,150 @@ enum AcpiRasfStatus
 
 /*******************************************************************************
  *
+ * RAS2 - RAS2 Feature Table (ACPI 6.5)
+ *        Version 1
+ *
+ *
+ ******************************************************************************/
+
+typedef struct acpi_table_ras2 {
+    ACPI_TABLE_HEADER       Header;             /* Common ACPI table header */
+    UINT16                  Reserved;
+    UINT16                  NumPccDescs;
+
+} ACPI_TABLE_RAS2;
+
+/* RAS2 Platform Communication Channel Descriptor */
+
+typedef struct acpi_ras2_pcc_desc {
+    UINT8                   ChannelId;
+    UINT16                  Reserved;
+    UINT8                   FeatureType;
+    UINT32                  Instance;
+
+} ACPI_RAS2_PCC_DESC;
+
+/* RAS2 Platform Communication Channel Shared Memory Region */
+
+typedef struct acpi_ras2_shmem {
+    UINT32                  Signature;
+    UINT16                  Command;
+    UINT16                  Status;
+    UINT16                  Version;
+    UINT8                   Features[16];
+    UINT8                   SetCaps[16];
+    UINT16                  NumParamBlks;
+    UINT32                  SetCapsStatus;
+
+} ACPI_RAS2_SHMEM;
+
+/* RAS2 Parameter Block Structure for PATROL_SCRUB */
+
+typedef struct acpi_ras2_parameter_block
+{
+    UINT16                  Type;
+    UINT16                  Version;
+    UINT16                  Length;
+
+} ACPI_RAS2_PARAMETER_BLOCK;
+
+/* RAS2 Parameter Block Structure for PATROL_SCRUB */
+
+typedef struct acpi_ras2_patrol_scrub_param {
+    ACPI_RAS2_PARAMETER_BLOCK   Header;
+    UINT16                      Command;
+    UINT64                      ReqAddrRange[2];
+    UINT64                      ActlAddrRange[2];
+    UINT32                      Flags;
+    UINT32                      ScrubParamsOut;
+    UINT32                      ScrubParamsIn;
+    UINT32                      ExtScrubParams;
+    UINT8                       ScrubRateDesc[256];
+
+} ACPI_RAS2_PATROL_SCRUB_PARAM;
+
+/* Masks for Flags field above */
+
+#define ACPI_RAS2_SCRUBBER_RUNNING      1
+
+/* RAS2 Parameter Block Structure for LA2PA_TRANSLATION */
+
+typedef struct acpi_ras2_la2pa_translation_parameter {
+    ACPI_RAS2_PARAMETER_BLOCK   Header;
+    UINT16                      AddrTranslationCommand;
+    UINT64                      SubInstId;
+    UINT64                      LogicalAddress;
+    UINT64                      PhysicalAddress;
+    UINT32                      Status;
+
+} ACPI_RAS2_LA2PA_TRANSLATION_PARAM;
+
+/* Channel Commands */
+
+enum AcpiRas2Commands
+{
+    ACPI_RAS2_EXECUTE_RAS2_COMMAND      = 1
+};
+
+/* Platform RAS2 Features */
+
+enum AcpiRas2Features
+{
+    ACPI_RAS2_PATROL_SCRUB_SUPPORTED    = 0,
+    ACPI_RAS2_LA2PA_TRANSLATION         = 1
+};
+
+/* RAS2 Patrol Scrub Commands */
+
+enum AcpiRas2PatrolScrubCommands
+{
+    ACPI_RAS2_GET_PATROL_PARAMETERS     = 1,
+    ACPI_RAS2_START_PATROL_SCRUBBER     = 2,
+    ACPI_RAS2_STOP_PATROL_SCRUBBER      = 3
+};
+
+/* RAS2 LA2PA Translation Commands */
+
+enum AcpiRas2La2PaTranslationCommands
+{
+    ACPI_RAS2_GET_LA2PA_TRANSLATION     = 1,
+};
+
+/* RAS2 LA2PA Translation Status values */
+
+enum AcpiRas2La2PaTranslationStatus
+{
+    ACPI_RAS2_LA2PA_TRANSLATION_SUCCESS = 0,
+    ACPI_RAS2_LA2PA_TRANSLATION_FAIL    = 1,
+};
+
+/* Channel Command flags */
+
+#define ACPI_RAS2_GENERATE_SCI          (1<<15)
+
+/* Status values */
+
+enum AcpiRas2Status
+{
+    ACPI_RAS2_SUCCESS                   = 0,
+    ACPI_RAS2_NOT_VALID                 = 1,
+    ACPI_RAS2_NOT_SUPPORTED             = 2,
+    ACPI_RAS2_BUSY                      = 3,
+    ACPI_RAS2_FAILED                    = 4,
+    ACPI_RAS2_ABORTED                   = 5,
+    ACPI_RAS2_INVALID_DATA              = 6
+};
+
+/* Status flags */
+
+#define ACPI_RAS2_COMMAND_COMPLETE      (1)
+#define ACPI_RAS2_SCI_DOORBELL          (1<<1)
+#define ACPI_RAS2_ERROR                 (1<<2)
+#define ACPI_RAS2_STATUS                (0x1F<<3)
+
+
+/*******************************************************************************
+ *
  * RGRT - Regulatory Graphics Resource Table
  *        Version 1
  *
@@ -3019,6 +3855,160 @@ enum AcpiRgrtImageType
     ACPI_RGRT_IMAGE_TYPE_PNG            = 1,
     ACPI_RGRT_TYPE_RESERVED             = 2     /* 2 and greater are reserved */
 };
+
+
+/*******************************************************************************
+ *
+ * RHCT - RISC-V Hart Capabilities Table
+ *        Version 1
+ *
+ ******************************************************************************/
+
+typedef struct acpi_table_rhct {
+    ACPI_TABLE_HEADER       Header;             /* Common ACPI table header */
+    UINT32                  Flags;              /* RHCT flags */
+    UINT64                  TimeBaseFreq;
+    UINT32                  NodeCount;
+    UINT32                  NodeOffset;
+} ACPI_TABLE_RHCT;
+
+/* RHCT Flags */
+
+#define ACPI_RHCT_TIMER_CANNOT_WAKEUP_CPU       (1)
+/*
+ * RHCT subtables
+ */
+typedef struct acpi_rhct_node_header {
+    UINT16                  Type;
+    UINT16                  Length;
+    UINT16                  Revision;
+} ACPI_RHCT_NODE_HEADER;
+
+/* Values for RHCT subtable Type above */
+
+enum acpi_rhct_node_type {
+    ACPI_RHCT_NODE_TYPE_ISA_STRING = 0x0000,
+    ACPI_RHCT_NODE_TYPE_CMO        = 0x0001,
+    ACPI_RHCT_NODE_TYPE_MMU        = 0x0002,
+    ACPI_RHCT_NODE_TYPE_RESERVED   = 0x0003,
+    ACPI_RHCT_NODE_TYPE_HART_INFO  = 0xFFFF,
+};
+
+/*
+ * RHCT node specific subtables
+ */
+
+/* ISA string node structure */
+typedef struct acpi_rhct_isa_string {
+    UINT16                  IsaLength;
+    char                    Isa[];
+} ACPI_RHCT_ISA_STRING;
+
+typedef struct acpi_rhct_cmo_node {
+    UINT8                  Reserved;           /* Must be zero */
+    UINT8                  CbomSize;           /* CBOM size in powerof 2 */
+    UINT8                  CbopSize;           /* CBOP size in powerof 2 */
+    UINT8                  CbozSize;           /* CBOZ size in powerof 2 */
+} ACPI_RHCT_CMO_NODE;
+
+typedef struct acpi_rhct_mmu_node {
+    UINT8                   Reserved;          /* Must be zero */
+    UINT8                   MmuType;           /* Virtual Address Scheme */
+} ACPI_RHCT_MMU_NODE;
+
+enum acpi_rhct_mmu_type {
+    ACPI_RHCT_MMU_TYPE_SV39 = 0,
+    ACPI_RHCT_MMU_TYPE_SV48 = 1,
+    ACPI_RHCT_MMU_TYPE_SV57 = 2
+};
+
+/* Hart Info node structure */
+typedef struct acpi_rhct_hart_info {
+    UINT16                  NumOffsets;
+    UINT32                  Uid;                /* ACPI processor UID */
+} ACPI_RHCT_HART_INFO;
+
+/*******************************************************************************
+ *
+ * RIMT - RISC-V IO Remapping Table
+ *
+ * https://github.com/riscv-non-isa/riscv-acpi-rimt
+ *
+ ******************************************************************************/
+
+typedef struct acpi_table_rimt {
+    ACPI_TABLE_HEADER Header;              /* Common ACPI table header */
+    UINT32            NumNodes;            /* Number of RIMT Nodes */
+    UINT32            NodeOffset;          /* Offset to RIMT Node Array */
+    UINT32            Reserved;
+} ACPI_TABLE_RIMT;
+
+typedef struct acpi_rimt_node {
+    UINT8             Type;
+    UINT8             Revision;
+    UINT16            Length;
+    UINT16            Reserved;
+    UINT16            Id;
+    char              NodeData[];
+} ACPI_RIMT_NODE;
+
+enum acpi_rimt_node_type {
+    ACPI_RIMT_NODE_TYPE_IOMMU             = 0x0,
+    ACPI_RIMT_NODE_TYPE_PCIE_ROOT_COMPLEX = 0x1,
+    ACPI_RIMT_NODE_TYPE_PLAT_DEVICE       = 0x2,
+};
+
+typedef struct acpi_rimt_iommu {
+    UINT8             HardwareId[8];       /* Hardware ID */
+    UINT64            BaseAddress;         /* Base Address */
+    UINT32            Flags;               /* Flags */
+    UINT32            ProximityDomain;     /* Proximity Domain */
+    UINT16            PcieSegmentNumber;   /* PCIe Segment number */
+    UINT16            PcieBdf;             /* PCIe B/D/F */
+    UINT16            NumInterruptWires;   /* Number of interrupt wires */
+    UINT16            InterruptWireOffset; /* Interrupt wire array offset */
+    UINT64            InterruptWire[];     /* Interrupt wire array */
+} ACPI_RIMT_IOMMU;
+
+/* IOMMU Node Flags */
+#define ACPI_RIMT_IOMMU_FLAGS_PCIE      (1)
+#define ACPI_RIMT_IOMMU_FLAGS_PXM_VALID (1 << 1)
+
+/* Interrupt Wire Structure */
+typedef struct acpi_rimt_iommu_wire_gsi {
+    UINT32             IrqNum;             /* Interrupt Number */
+    UINT32             Flags;              /* Flags */
+} ACPI_RIMT_IOMMU_WIRE_GSI;
+
+/* Interrupt Wire Flags */
+#define ACPI_RIMT_GSI_LEVEL_TRIGGERRED  (1)
+#define ACPI_RIMT_GSI_ACTIVE_HIGH       (1 << 1)
+
+typedef struct acpi_rimt_id_mapping {
+    UINT32              SourceIdBase;      /* Source ID Base */
+    UINT32              NumIds;            /* Number of IDs */
+    UINT32              DestIdBase;        /* Destination Device ID Base */
+    UINT32              DestOffset;        /* Destination IOMMU Offset */
+    UINT32              Flags;             /* Flags */
+} ACPI_RIMT_ID_MAPPING;
+
+typedef struct acpi_rimt_pcie_rc {
+    UINT32              Flags;             /* Flags */
+    UINT16              Reserved;          /* Reserved */
+    UINT16              PcieSegmentNumber; /* PCIe Segment number */
+    UINT16              IdMappingOffset;   /* ID mapping array offset */
+    UINT16              NumIdMappings;     /* Number of ID mappings */
+} ACPI_RIMT_PCIE_RC;
+
+/* PCIe Root Complex Node Flags */
+#define ACPI_RIMT_PCIE_ATS_SUPPORTED   (1)
+#define ACPI_RIMT_PCIE_PRI_SUPPORTED   (1 << 1)
+
+typedef struct acpi_rimt_platform_device {
+    UINT16              IdMappingOffset;   /* ID Mapping array offset */
+    UINT16              NumIdMappings;     /* Number of ID mappings */
+    char                DeviceName[];      /* Device Object Name */
+} ACPI_RIMT_PLATFORM_DEVICE;
 
 
 /*******************************************************************************
@@ -3220,6 +4210,29 @@ enum acpi_svkl_format
     ACPI_SVKL_FORMAT_RESERVED   = 1 /* 1 and greater are reserved */
 };
 
+/*******************************************************************************
+ *
+ * SWFT - SoundWire File Table
+ *        as described in Discovery and Configuration (DisCo) Specification
+ *        for SoundWire®
+ *        Version 1
+ *
+ ******************************************************************************/
+
+typedef struct acpi_table_swft
+{
+    ACPI_TABLE_HEADER       Header; /* Common ACPI table header */
+
+} ACPI_TABLE_SWFT;
+
+typedef struct acpi_swft_file
+{
+    UINT16                  VendorID;
+    UINT32                  FileID;
+    UINT16                  FileVersion;
+    UINT32                  FileLength;
+    UINT8                   FileData[];
+} ACPI_SWFT_FILE;
 
 /*******************************************************************************
  *
@@ -3238,6 +4251,176 @@ typedef struct acpi_table_tdel
     UINT64                  LogAreaStartAddress;
 
 } ACPI_TABLE_TDEL;
+
+
+/*******************************************************************************
+ *
+ * UBRT - UnifiedBus Root Table
+ *        Revision 1
+ *
+ * Conforms to "UnifiedBus Root Table (UBRT) Specification"
+ * Revision 1.0, Release Date 2026-03-05
+ *
+ ******************************************************************************/
+
+typedef struct acpi_table_ubrt
+{
+    ACPI_TABLE_HEADER       Header;             /* Common ACPI table header */
+    UINT32                  Count;              /* Number of sub-tables */
+
+} ACPI_TABLE_UBRT;
+
+/* UBRT sub-table entry (16 bytes) */
+
+typedef struct acpi_ubrt_subtable
+{
+    UINT8                   Type;               /* Sub-table type (0=UBC, 1=UMMU, 2=ReservedMem) */
+    UINT8                   Reserved[7];        /* Reserved, must be zero */
+    UINT64                  Pointer;            /* Physical address of the sub-table */
+
+} ACPI_UBRT_SUBTABLE;
+
+/* Values for Type field above */
+
+#define ACPI_UBRT_TYPE_UBC              0       /* UBC information sub-table */
+#define ACPI_UBRT_TYPE_UMMU             1       /* UMMU information sub-table */
+#define ACPI_UBRT_TYPE_RESERVED_MEM     2       /* UB reserved memory information sub-table */
+
+/*
+ * UBRT Sub-tables, correspond to Type in ACPI_UBRT_SUBTABLE.
+ * These are accessed via the physical Pointer field - not contiguous with UBRT.
+ */
+
+/* Common header for all UBRT sub-tables */
+
+typedef struct acpi_ubrt_header
+{
+    char                    Name[16];           /* Table name, null-terminated */
+    UINT32                  TotalSize;          /* Total size including header */
+    UINT8                   Version;            /* Version number */
+    UINT8                   Reserved[3];        /* Reserved, must be zero */
+    UINT32                  RemainingSize;      /* Remaining size of the sub-table */
+    UINT32                  Checksum;           /* Entire table must sum to zero */
+
+} ACPI_UBRT_HEADER;
+
+/* Type 0: UBC Information Table */
+
+typedef struct acpi_ubrt_ubc
+{
+    ACPI_UBRT_HEADER        Header;             /* Common sub-table header */
+    UINT32                  LocalCnaStart;      /* Start CNA available for local UBPU */
+    UINT32                  LocalCnaEnd;        /* End CNA available for local UBPU (included) */
+    UINT32                  LocalEidStart;      /* Start EID available for local UBPU */
+    UINT32                  LocalEidEnd;        /* End EID available for local UBPU (included) */
+    UINT8                   FeatureSets;        /* Features enabled for the UBC */
+    UINT8                   Reserved[3];        /* Reserved, must be zero */
+    UINT16                  ClusterMode;        /* System operating mode */
+    UINT16                  UbcCount;           /* Number of UBC structures */
+
+} ACPI_UBRT_UBC;
+
+/* Values for FeatureSets field above */
+
+#define ACPI_UBRT_UBC_FEAT_MMIO_TOKEN       (1<<0)  /* Bit 0: MMIO token value */
+#define ACPI_UBRT_UBC_FEAT_MCTP_UB          (1<<1)  /* Bit 1: MCTP over UB */
+
+/* Values for ClusterMode field above */
+
+#define ACPI_UBRT_CLUSTER_MODE_STANDALONE   0
+#define ACPI_UBRT_CLUSTER_MODE_SUPERPOD     1
+
+/* UBC Structure entry (one per UbcCount) */
+
+typedef struct acpi_ubrt_ubc_entry
+{
+    UINT32                  InterruptIdStart;       /* Start interrupt ID */
+    UINT32                  InterruptIdEnd;         /* End interrupt ID (included) */
+    UINT64                  HpaBase;                /* Base address of available HPA */
+    UINT64                  HpaSize;                /* Size of available HPA */
+    UINT8                   MemorySizeLimit;        /* Maximum address bit width */
+    UINT8                   DmaCca;                 /* DMA and cache coherent attribute */
+    UINT16                  UmmuMapping;            /* Mapping between UBC and UMMU */
+    UINT16                  ProximityDomain;        /* NUMA domain sequence number */
+    UINT16                  Reserved;               /* Reserved, must be zero */
+    UINT64                  MsgQueueBase;           /* MSG queue register base address */
+    UINT64                  MsgQueueSize;           /* MSG queue register size */
+    UINT16                  MsgQueueDepth;          /* MSG queue depth */
+    UINT16                  MsgQueueInterrupt;      /* MSG queue interrupt ID */
+    UINT8                   MsgQueueInterruptAttr;  /* MSG queue interrupt attribute */
+    UINT8                   Reserved1[59];          /* Reserved, must be zero */
+    UINT8                   Guid[16];               /* UBC GUID */
+    UINT8                   VendorInfo[256];        /* Vendor-defined information */
+
+} ACPI_UBRT_UBC_ENTRY;
+
+/* Values for DmaCca field above */
+
+#define ACPI_UBRT_UBC_DMA_ONLY               0
+#define ACPI_UBRT_UBC_DMA_CCA                1
+
+/* Values for MsgQueueInterruptAttr field above */
+
+#define ACPI_UBRT_UBC_MSG_INT_LEVEL          (0<<0)  /* Bit 0: level-triggered */
+#define ACPI_UBRT_UBC_MSG_INT_EDGE           (1<<0)  /* Bit 0: edge-triggered */
+#define ACPI_UBRT_UBC_MSG_INT_HIGH           (0<<1)  /* Bit 1: high level (rising edge) */
+#define ACPI_UBRT_UBC_MSG_INT_LOW            (1<<1)  /* Bit 1: low level (falling edge) */
+
+/* Type 1: UMMU Information Table */
+
+typedef struct acpi_ubrt_ummu
+{
+    ACPI_UBRT_HEADER        Header;             /* Common sub-table header */
+    UINT16                  UmmuCount;          /* Number of UMMU structures */
+    UINT8                   Reserved[6];        /* Reserved, must be zero */
+
+} ACPI_UBRT_UMMU;
+
+/* UMMU Structure entry (one per UmmuCount) */
+
+typedef struct acpi_ubrt_ummu_entry
+{
+    UINT64                  BaseAddress;        /* Base address of UMMU register */
+    UINT64                  Size;               /* Size of UMMU register */
+    UINT32                  Reserved;           /* Reserved, must be zero */
+    UINT16                  ProximityDomain;    /* NUMA domain sequence number */
+    UINT16                  Reserved1;          /* Reserved, must be zero */
+    UINT64                  PmuBaseAddress;     /* PMU register base address */
+    UINT64                  PmuSize;            /* PMU register size */
+    UINT32                  Reserved2;          /* Reserved, must be zero */
+    UINT32                  MinTokenId;         /* Minimum TokenID */
+    UINT32                  MaxTokenId;         /* Maximum TokenID */
+    UINT8                   Reserved3[26];      /* Reserved, must be zero */
+    UINT16                  VendorId;           /* Vendor ID */
+    UINT8                   VendorInfo[80];     /* Vendor-defined information */
+
+} ACPI_UBRT_UMMU_ENTRY;
+
+/* Type 2: UB Reserved Memory Information Table */
+
+typedef struct acpi_ubrt_reserved_mem
+{
+    ACPI_UBRT_HEADER        Header;                 /* Common sub-table header */
+    UINT16                  MemoryRangesCount;      /* Number of memory ranges */
+    UINT8                   Reserved[6];            /* Reserved, must be zero */
+
+} ACPI_UBRT_RESERVED_MEM;
+
+/* Memory Range entry (one per MemoryRangesCount) */
+
+typedef struct acpi_ubrt_mem_range
+{
+    UINT8                   Flags;              /* Memory segment flags */
+    UINT8                   Reserved[7];        /* Reserved, must be zero */
+    UINT64                  MemoryBase;         /* Base address of allocated UB memory (64KB aligned) */
+    UINT64                  MemorySize;         /* Size of allocated UB memory (64KB aligned) */
+
+} ACPI_UBRT_MEM_RANGE;
+
+/* Values for Flags field above */
+
+#define ACPI_UBRT_MEM_FLAG_1_1_MAPPING     (1<<0)  /* Bit 0: 1:1 mapped mode */
+
 
 /* Reset to default packing */
 

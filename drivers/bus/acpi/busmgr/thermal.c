@@ -565,13 +565,13 @@ acpi_thermal_update_active_policy(
             continue;
         result = acpi_fan_set_thermal_level(zone->CoolingDevices[i], zone, ACPI_FAN_THERMAL_LEVEL_OFF);
         if (result)
-            acpi_bus_set_power(zone->CoolingDevices[i], ACPI_STATE_D3);
+            acpi_bus_set_power(zone->CoolingDevices[i], ACPI_STATE_D3_HOT);
     }
 
     for (i = 0; i < count; i++) {
         result = acpi_fan_set_thermal_level(handles[i], zone, levels[i]);
         if (result)
-            result = acpi_bus_set_power(handles[i], levels[i] == ACPI_FAN_THERMAL_LEVEL_OFF ? ACPI_STATE_D3 : ACPI_STATE_D0);
+            result = acpi_bus_set_power(handles[i], levels[i] == ACPI_FAN_THERMAL_LEVEL_OFF ? ACPI_STATE_D3_HOT : ACPI_STATE_D0);
         if (levels[i] != ACPI_FAN_THERMAL_LEVEL_OFF) {
             if (!result)
                 activated++;
@@ -593,7 +593,7 @@ acpi_thermal_release_cooling_policy(
 
     for (i = 0; i < zone->CoolingDeviceCount; i++) {
         if (acpi_fan_set_thermal_level(zone->CoolingDevices[i], zone, ACPI_FAN_THERMAL_LEVEL_OFF))
-            acpi_bus_set_power(zone->CoolingDevices[i], ACPI_STATE_D3);
+            acpi_bus_set_power(zone->CoolingDevices[i], ACPI_STATE_D3_HOT);
     }
     acpi_fan_set_all_thermal_levels(&zone->CriticalEngaged, ACPI_FAN_THERMAL_LEVEL_OFF);
     zone->CoolingDeviceCount = 0;

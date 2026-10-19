@@ -3070,7 +3070,7 @@ Bus_PDO_PnP (
 
         if (DeviceData->AcpiHandle &&
             acpi_bus_power_manageable(DeviceData->AcpiHandle) &&
-            !ACPI_SUCCESS(acpi_bus_set_power(DeviceData->AcpiHandle, ACPI_STATE_D3)))
+            !ACPI_SUCCESS(acpi_bus_set_power(DeviceData->AcpiHandle, ACPI_STATE_D3_HOT)))
         {
             DPRINT1("Device %x failed to stop!\n", DeviceData->AcpiHandle);
             status = STATUS_UNSUCCESSFUL;
@@ -3115,7 +3115,7 @@ Bus_PDO_PnP (
 
         if (DeviceData->AcpiHandle &&
             acpi_bus_power_manageable(DeviceData->AcpiHandle) &&
-            !ACPI_SUCCESS(acpi_bus_set_power(DeviceData->AcpiHandle, ACPI_STATE_D3)))
+            !ACPI_SUCCESS(acpi_bus_set_power(DeviceData->AcpiHandle, ACPI_STATE_D3_HOT)))
         {
             DPRINT1("Device %x failed to enter D3!\n", DeviceData->AcpiHandle);
             state.DeviceState = PowerDeviceD3;
@@ -3217,7 +3217,7 @@ Bus_PDO_QueryDeviceCaps(
     deviceCapabilities->DeviceState[PowerSystemSleeping2] = PowerDeviceD3;
     deviceCapabilities->DeviceState[PowerSystemSleeping3] = PowerDeviceD3;
 
-    for (i = 0; i < ACPI_D_STATE_COUNT && device; i++)
+    for (i = 0; i <= ACPI_STATE_D3_HOT && device; i++)
     {
         if (!device->power.states[i].flags.valid)
             continue;
@@ -3238,7 +3238,7 @@ Bus_PDO_QueryDeviceCaps(
               deviceCapabilities->D2Latency = device->power.states[i].latency;
               break;
 
-           case ACPI_STATE_D3:
+           case ACPI_STATE_D3_HOT:
               deviceCapabilities->DeviceState[PowerSystemSleeping3] = PowerDeviceD3;
               deviceCapabilities->D3Latency = device->power.states[i].latency;
               break;

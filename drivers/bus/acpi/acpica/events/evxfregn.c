@@ -5,42 +5,12 @@
  *
  *****************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 #define EXPORT_ACPI_INTERFACES
 
@@ -55,13 +25,14 @@
 
 /*******************************************************************************
  *
- * FUNCTION:    AcpiInstallAddressSpaceHandler
+ * FUNCTION:    AcpiInstallAddressSpaceHandlerInternal
  *
  * PARAMETERS:  Device          - Handle for the device
  *              SpaceId         - The address space ID
  *              Handler         - Address of the handler
  *              Setup           - Address of the setup function
  *              Context         - Value passed to the handler on each access
+ *              Run_Reg         - Run _REG methods for this address space?
  *
  * RETURN:      Status
  *
@@ -72,16 +43,19 @@
  * are executed here, and these methods can only be safely executed after
  * the default handlers have been installed and the hardware has been
  * initialized (via AcpiEnableSubsystem.)
+ * To avoid this problem pass FALSE for Run_Reg and later on call
+ * AcpiExecuteRegMethods() to execute _REG.
  *
  ******************************************************************************/
 
-ACPI_STATUS
-AcpiInstallAddressSpaceHandler (
+static ACPI_STATUS
+AcpiInstallAddressSpaceHandlerInternal (
     ACPI_HANDLE             Device,
     ACPI_ADR_SPACE_TYPE     SpaceId,
     ACPI_ADR_SPACE_HANDLER  Handler,
     ACPI_ADR_SPACE_SETUP    Setup,
-    void                    *Context)
+    void                    *Context,
+    BOOLEAN                 Run_Reg)
 {
     ACPI_NAMESPACE_NODE     *Node;
     ACPI_STATUS             Status;
@@ -123,15 +97,41 @@ AcpiInstallAddressSpaceHandler (
 
     /* Run all _REG methods for this address space */
 
-    AcpiEvExecuteRegMethods (Node, SpaceId, ACPI_REG_CONNECT);
-
+    if (Run_Reg)
+    {
+        AcpiEvExecuteRegMethods (Node, SpaceId, ACPI_REG_CONNECT);
+    }
 
 UnlockAndExit:
     (void) AcpiUtReleaseMutex (ACPI_MTX_NAMESPACE);
     return_ACPI_STATUS (Status);
 }
 
+ACPI_STATUS
+AcpiInstallAddressSpaceHandler (
+    ACPI_HANDLE             Device,
+    ACPI_ADR_SPACE_TYPE     SpaceId,
+    ACPI_ADR_SPACE_HANDLER  Handler,
+    ACPI_ADR_SPACE_SETUP    Setup,
+    void                    *Context)
+{
+    return AcpiInstallAddressSpaceHandlerInternal (Device, SpaceId, Handler, Setup, Context, TRUE);
+}
+
 ACPI_EXPORT_SYMBOL (AcpiInstallAddressSpaceHandler)
+
+ACPI_STATUS
+AcpiInstallAddressSpaceHandlerNo_Reg (
+    ACPI_HANDLE             Device,
+    ACPI_ADR_SPACE_TYPE     SpaceId,
+    ACPI_ADR_SPACE_HANDLER  Handler,
+    ACPI_ADR_SPACE_SETUP    Setup,
+    void                    *Context)
+{
+    return AcpiInstallAddressSpaceHandlerInternal (Device, SpaceId, Handler, Setup, Context, FALSE);
+}
+
+ACPI_EXPORT_SYMBOL (AcpiInstallAddressSpaceHandlerNo_Reg)
 
 
 /*******************************************************************************
@@ -254,7 +254,6 @@ AcpiRemoveAddressSpaceHandler (
 
             /* Now we can delete the handler object */
 
-            AcpiOsReleaseMutex (HandlerObj->AddressSpace.ContextMutex);
             AcpiUtRemoveReference (HandlerObj);
             goto UnlockAndExit;
         }
@@ -279,3 +278,62 @@ UnlockAndExit:
 }
 
 ACPI_EXPORT_SYMBOL (AcpiRemoveAddressSpaceHandler)
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    AcpiExecuteRegMethods
+ *
+ * PARAMETERS:  Device          - Handle for the device
+ *              SpaceId         - The address space ID
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Execute _REG for all OpRegions of a given SpaceId.
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+AcpiExecuteRegMethods (
+    ACPI_HANDLE             Device,
+    ACPI_ADR_SPACE_TYPE     SpaceId)
+{
+    ACPI_NAMESPACE_NODE     *Node;
+    ACPI_STATUS             Status;
+
+
+    ACPI_FUNCTION_TRACE (AcpiExecuteRegMethods);
+
+
+    /* Parameter validation */
+
+    if (!Device)
+    {
+        return_ACPI_STATUS (AE_BAD_PARAMETER);
+    }
+
+    Status = AcpiUtAcquireMutex (ACPI_MTX_NAMESPACE);
+    if (ACPI_FAILURE (Status))
+    {
+        return_ACPI_STATUS (Status);
+    }
+
+    /* Convert and validate the device handle */
+
+    Node = AcpiNsValidateHandle (Device);
+    if (Node)
+    {
+        /* Run all _REG methods for this address space */
+
+        AcpiEvExecuteRegMethods (Node, SpaceId, ACPI_REG_CONNECT);
+    }
+    else
+    {
+        Status = AE_BAD_PARAMETER;
+    }
+
+    (void) AcpiUtReleaseMutex (ACPI_MTX_NAMESPACE);
+    return_ACPI_STATUS (Status);
+}
+
+ACPI_EXPORT_SYMBOL (AcpiExecuteRegMethods)

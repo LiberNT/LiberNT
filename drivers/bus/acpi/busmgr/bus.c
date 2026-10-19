@@ -301,7 +301,7 @@ acpi_bus_set_power (
 	if (result)
 		return_VALUE(result);
 
-	if ((state < ACPI_STATE_D0) || (state > ACPI_STATE_D3))
+	if ((state < ACPI_STATE_D0) || (state > ACPI_STATE_D3_HOT))
 		return_VALUE(AE_BAD_PARAMETER);
 	ExAcquireFastMutex(&device->power_lock);
 
@@ -441,7 +441,7 @@ acpi_bus_get_power_flags (
 	/*
 	 * Enumerate supported power management states
 	 */
-	for (i = ACPI_STATE_D0; i <= ACPI_STATE_D3; i++) {
+	for (i = ACPI_STATE_D0; i <= ACPI_STATE_D3_HOT; i++) {
 		struct acpi_device_power_state *ps = &device->power.states[i];
 		char		object_name[5] = {'_','P','R','0'+i,'\0'};
 
@@ -472,8 +472,8 @@ acpi_bus_get_power_flags (
 	/* Set defaults for D0 and D3 states (always valid) */
 	device->power.states[ACPI_STATE_D0].flags.valid = 1;
 	device->power.states[ACPI_STATE_D0].power = 100;
-	device->power.states[ACPI_STATE_D3].flags.valid = 1;
-	device->power.states[ACPI_STATE_D3].power = 0;
+	device->power.states[ACPI_STATE_D3_HOT].flags.valid = 1;
+	device->power.states[ACPI_STATE_D3_HOT].power = 0;
 
 	device->power.state = ACPI_STATE_UNKNOWN;
 

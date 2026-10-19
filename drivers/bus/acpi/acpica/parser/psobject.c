@@ -4,42 +4,12 @@
  *
  *****************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 #include "acpi.h"
 #include "accommon.h"
@@ -707,7 +677,8 @@ AcpiPsCompleteFinalOp (
     ACPI_PARSE_OBJECT       *Op,
     ACPI_STATUS             Status)
 {
-    ACPI_STATUS             Status2;
+    ACPI_STATUS             ReturnStatus = Status;
+    BOOLEAN                 Ascending = TRUE;
 
 
     ACPI_FUNCTION_TRACE_PTR (PsCompleteFinalOp, WalkState);
@@ -724,7 +695,7 @@ AcpiPsCompleteFinalOp (
     {
         if (Op)
         {
-            if (WalkState->AscendingCallback != NULL)
+            if (Ascending && WalkState->AscendingCallback != NULL)
             {
                 WalkState->Op = Op;
                 WalkState->OpInfo = AcpiPsGetOpcodeInfo (Op->Common.AmlOpcode);
@@ -743,41 +714,28 @@ AcpiPsCompleteFinalOp (
 
                 if (Status == AE_CTRL_TERMINATE)
                 {
-                    Status = AE_OK;
-
-                    /* Clean up */
-                    do
-                    {
-                        if (Op)
-                        {
-                            Status2 = AcpiPsCompleteThisOp (WalkState, Op);
-                            if (ACPI_FAILURE (Status2))
-                            {
-                                return_ACPI_STATUS (Status2);
-                            }
-                        }
-
-                        AcpiPsPopScope (&(WalkState->ParserState), &Op,
-                            &WalkState->ArgTypes, &WalkState->ArgCount);
-
-                    } while (Op);
-
-                    return_ACPI_STATUS (Status);
+                    Ascending = FALSE;
+                    ReturnStatus = AE_CTRL_TERMINATE;
                 }
 
                 else if (ACPI_FAILURE (Status))
                 {
                     /* First error is most important */
 
-                    (void) AcpiPsCompleteThisOp (WalkState, Op);
-                    return_ACPI_STATUS (Status);
+                    Ascending = FALSE;
+                    ReturnStatus = Status;
                 }
             }
 
-            Status2 = AcpiPsCompleteThisOp (WalkState, Op);
-            if (ACPI_FAILURE (Status2))
+            Status = AcpiPsCompleteThisOp (WalkState, Op);
+            if (ACPI_FAILURE (Status))
             {
-                return_ACPI_STATUS (Status2);
+                Ascending = FALSE;
+                if (ACPI_SUCCESS (ReturnStatus) ||
+                    ReturnStatus == AE_CTRL_TERMINATE)
+                {
+                    ReturnStatus = Status;
+                }
             }
         }
 
@@ -786,5 +744,5 @@ AcpiPsCompleteFinalOp (
 
     } while (Op);
 
-    return_ACPI_STATUS (Status);
+    return_ACPI_STATUS (ReturnStatus);
 }

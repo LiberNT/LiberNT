@@ -329,14 +329,14 @@ acpi_fan_apply_level_locked(
 
         DPRINT1("ACPI: Fan [%s] advanced control failed: %s; falling back to D%u\n",
                 acpi_device_bid(device), AcpiFormatException(status),
-                level == ACPI_FAN_LEVEL_OFF ? ACPI_STATE_D3 : ACPI_STATE_D0);
+                level == ACPI_FAN_LEVEL_OFF ? ACPI_STATE_D3_HOT : ACPI_STATE_D0);
     }
 
-    result = acpi_bus_set_power(device->handle, level == ACPI_FAN_LEVEL_OFF ? ACPI_STATE_D3 : ACPI_STATE_D0);
+    result = acpi_bus_set_power(device->handle, level == ACPI_FAN_LEVEL_OFF ? ACPI_STATE_D3_HOT : ACPI_STATE_D0);
     if (result) {
         DPRINT1("ACPI: Fan [%s] could not be set to D%u: 0x%x\n",
                 acpi_device_bid(device),
-                level == ACPI_FAN_LEVEL_OFF ? ACPI_STATE_D3 : ACPI_STATE_D0,
+                level == ACPI_FAN_LEVEL_OFF ? ACPI_STATE_D3_HOT : ACPI_STATE_D0,
                 result);
         return_VALUE(-15);
     }
@@ -344,7 +344,7 @@ acpi_fan_apply_level_locked(
     context->AppliedLevel = level;
     DPRINT("ACPI: Fan [%s] set to D%u for thermal level %ld\n",
             acpi_device_bid(device),
-            level == ACPI_FAN_LEVEL_OFF ? ACPI_STATE_D3 : ACPI_STATE_D0,
+            level == ACPI_FAN_LEVEL_OFF ? ACPI_STATE_D3_HOT : ACPI_STATE_D0,
             level);
     return_VALUE(0);
 }

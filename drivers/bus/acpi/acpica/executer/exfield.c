@@ -4,42 +4,12 @@
  *
  *****************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 #include "acpi.h"
 #include "accommon.h"
@@ -83,13 +53,13 @@ static const UINT8      AcpiProtocolLengths[] =
 
 /*
  * The following macros determine a given offset is a COMD field.
- * According to the specification, generic subspaces (types 0-2) contains a
- * 2-byte COMD field at offset 4 and master subspaces (type 3) contains a 4-byte
- * COMD field starting at offset 12.
+ * According to the specification, the PCC OperationRegion begins after
+ * the PCC signature. The raw shared memory COMD offsets of 4 for generic
+ * subspaces (types 0-2) and 12 for master subspaces (type 3) therefore
+ * appear at OperationRegion offsets 0 and 8.
  */
-#define GENERIC_SUBSPACE_COMMAND(a)     (4 == a || a == 5)
-#define MASTER_SUBSPACE_COMMAND(a)      (12 <= a && a <= 15)
-
+#define GENERIC_SUBSPACE_COMMAND(a)     (0 == a || a == 1)
+#define MASTER_SUBSPACE_COMMAND(a)      (8 <= a && a <= 11)
 
 /*******************************************************************************
  *
@@ -258,9 +228,32 @@ AcpiExReadDataFromField (
         ACPI_DEBUG_PRINT ((ACPI_DB_BFIELD,
             "PCC FieldRead bits %u\n", ObjDesc->Field.BitLength));
 
+        /*
+         * Ensure the field access does not exceed the bounds of the
+         * InternalPccBuffer. The buffer is allocated with the region length,
+         * so verify that BaseByteOffset + field byte length <= Region.Length.
+         */
+        if (!ObjDesc->Field.RegionObj->Field.InternalPccBuffer)
+        {
+            Status = AE_AML_NO_OPERAND;
+            goto Exit;
+        }
+
+        BufferLength = (ACPI_SIZE) ACPI_ROUND_BITS_UP_TO_BYTES (
+            ObjDesc->Field.BitLength);
+        if (ObjDesc->Field.BaseByteOffset + BufferLength >
+            ObjDesc->Field.RegionObj->Region.Length)
+        {
+            ACPI_ERROR ((AE_INFO,
+                "PCC field at offset %u length %u exceeds region size %u",
+                ObjDesc->Field.BaseByteOffset, BufferLength,
+                ObjDesc->Field.RegionObj->Region.Length));
+            Status = AE_AML_BUFFER_LIMIT;
+            goto Exit;
+        }
+
         memcpy (Buffer, ObjDesc->Field.RegionObj->Field.InternalPccBuffer +
-        ObjDesc->Field.BaseByteOffset, (ACPI_SIZE) ACPI_ROUND_BITS_UP_TO_BYTES (
-            ObjDesc->Field.BitLength));
+            ObjDesc->Field.BaseByteOffset, BufferLength);
 
         *RetBufferDesc = BufferDesc;
         return AE_OK;
@@ -379,9 +372,28 @@ AcpiExWriteDataToField (
          * implementation will use the offsets specified rather than the name
          * of the field. This is considered safer because some firmware tools
          * are known to obfiscate named objects.
+         *
+         * Ensure the field access does not exceed the bounds of the
+         * InternalPccBuffer.
          */
         DataLength = (ACPI_SIZE) ACPI_ROUND_BITS_UP_TO_BYTES (
             ObjDesc->Field.BitLength);
+
+        if (!ObjDesc->Field.RegionObj->Field.InternalPccBuffer)
+        {
+            return_ACPI_STATUS (AE_AML_NO_OPERAND);
+        }
+
+        if (ObjDesc->Field.BaseByteOffset + DataLength >
+            ObjDesc->Field.RegionObj->Region.Length)
+        {
+            ACPI_ERROR ((AE_INFO,
+                "PCC field at offset %u length %u exceeds region size %u",
+                ObjDesc->Field.BaseByteOffset, DataLength,
+                ObjDesc->Field.RegionObj->Region.Length));
+            return_ACPI_STATUS (AE_AML_BUFFER_LIMIT);
+        }
+
         memcpy (ObjDesc->Field.RegionObj->Field.InternalPccBuffer +
             ObjDesc->Field.BaseByteOffset,
             SourceDesc->Buffer.Pointer, DataLength);

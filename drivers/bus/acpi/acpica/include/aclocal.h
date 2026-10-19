@@ -4,42 +4,12 @@
  *
  *****************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 #ifndef __ACLOCAL_H__
 #define __ACLOCAL_H__
@@ -224,6 +194,7 @@ typedef struct acpi_namespace_node
 #define ANOBJ_IS_EXTERNAL               0x08    /* iASL only: This object created via External() */
 #define ANOBJ_METHOD_NO_RETVAL          0x10    /* iASL only: Method has no return value */
 #define ANOBJ_METHOD_SOME_NO_RETVAL     0x20    /* iASL only: Method has at least one return value */
+#define ANOBJ_IS_ALIAS                  0x40    /* iASL only: Node is an alias to another node */
 #define ANOBJ_IS_REFERENCED             0x80    /* iASL only: Object was referenced */
 
 
@@ -372,7 +343,7 @@ ACPI_STATUS (*ACPI_INTERNAL_METHOD) (
  */
 typedef struct acpi_name_info
 {
-    char                        Name[ACPI_NAMESEG_SIZE];
+    char                        Name[ACPI_NAMESEG_SIZE] ACPI_NONSTRING;
     UINT16                      ArgumentList;
     UINT8                       ExpectedBtypes;
 
@@ -460,7 +431,7 @@ typedef ACPI_STATUS (*ACPI_OBJECT_CONVERTER) (
 
 typedef struct acpi_simple_repair_info
 {
-    char                        Name[ACPI_NAMESEG_SIZE];
+    char                        Name[ACPI_NAMESEG_SIZE] ACPI_NONSTRING;
     UINT32                      UnexpectedBtypes;
     UINT32                      PackageIndex;
     ACPI_OBJECT_CONVERTER       ObjectConverter;
@@ -659,6 +630,15 @@ typedef struct acpi_field_info
 
 } ACPI_FIELD_INFO;
 
+/* Information about the interrupt ID and _EVT of a GED device */
+
+typedef struct acpi_ged_handler_info
+{
+    struct acpi_ged_handler_info    *Next;
+    UINT32                          IntId;      /* The interrupt ID that triggers the execution of the EvtMethod. */
+    ACPI_NAMESPACE_NODE             *EvtMethod; /* The _EVT method to be executed when an interrupt with ID = IntID is received */
+
+} ACPI_GED_HANDLER_INFO;
 
 /*****************************************************************************
  *
@@ -678,13 +658,13 @@ typedef struct acpi_field_info
     UINT8                           DescriptorType; /* To differentiate various internal objs */\
     UINT8                           Flags; \
     UINT16                          Value; \
-    UINT16                          State;
+    UINT16                          State
 
     /* There are 2 bytes available here until the next natural alignment boundary */
 
 typedef struct acpi_common_state
 {
-    ACPI_STATE_COMMON
+    ACPI_STATE_COMMON;
 } ACPI_COMMON_STATE;
 
 
@@ -693,7 +673,7 @@ typedef struct acpi_common_state
  */
 typedef struct acpi_update_state
 {
-    ACPI_STATE_COMMON
+    ACPI_STATE_COMMON;
     union acpi_operand_object       *Object;
 
 } ACPI_UPDATE_STATE;
@@ -704,7 +684,7 @@ typedef struct acpi_update_state
  */
 typedef struct acpi_pkg_state
 {
-    ACPI_STATE_COMMON
+    ACPI_STATE_COMMON;
     UINT32                          Index;
     union acpi_operand_object       *SourceObject;
     union acpi_operand_object       *DestObject;
@@ -721,7 +701,7 @@ typedef struct acpi_pkg_state
  */
 typedef struct acpi_control_state
 {
-    ACPI_STATE_COMMON
+    ACPI_STATE_COMMON;
     UINT16                          Opcode;
     union acpi_parse_object         *PredicateOp;
     UINT8                           *AmlPredicateStart;     /* Start of if/while predicate */
@@ -736,7 +716,7 @@ typedef struct acpi_control_state
  */
 typedef struct acpi_scope_state
 {
-    ACPI_STATE_COMMON
+    ACPI_STATE_COMMON;
     ACPI_NAMESPACE_NODE             *Node;
 
 } ACPI_SCOPE_STATE;
@@ -744,7 +724,7 @@ typedef struct acpi_scope_state
 
 typedef struct acpi_pscope_state
 {
-    ACPI_STATE_COMMON
+    ACPI_STATE_COMMON;
     UINT32                          ArgCount;               /* Number of fixed arguments */
     union acpi_parse_object         *Op;                    /* Current op being parsed */
     UINT8                           *ArgEnd;                /* Current argument end */
@@ -760,7 +740,7 @@ typedef struct acpi_pscope_state
  */
 typedef struct acpi_thread_state
 {
-    ACPI_STATE_COMMON
+    ACPI_STATE_COMMON;
     UINT8                           CurrentSyncLevel;       /* Mutex Sync (nested acquire) level */
     struct acpi_walk_state          *WalkStateList;         /* Head of list of WalkStates for this thread */
     union acpi_operand_object       *AcquiredMutexList;     /* List of all currently acquired mutexes */
@@ -775,7 +755,7 @@ typedef struct acpi_thread_state
  */
 typedef struct acpi_result_values
 {
-    ACPI_STATE_COMMON
+    ACPI_STATE_COMMON;
     union acpi_operand_object       *ObjDesc [ACPI_RESULTS_FRAME_OBJ_NUM];
 
 } ACPI_RESULT_VALUES;
@@ -806,11 +786,12 @@ typedef struct acpi_global_notify_handler
  */
 typedef struct acpi_notify_info
 {
-    ACPI_STATE_COMMON
+    ACPI_STATE_COMMON;
     UINT8                           HandlerListId;
     ACPI_NAMESPACE_NODE             *Node;
     union acpi_operand_object       *HandlerListHead;
     ACPI_GLOBAL_NOTIFY_HANDLER      *Global;
+    ACPI_OWNER_ID                   OwnerId;
 
 } ACPI_NOTIFY_INFO;
 
@@ -1295,6 +1276,8 @@ typedef struct acpi_port_info
 #define ACPI_ADDRESS_TYPE_IO_RANGE              1
 #define ACPI_ADDRESS_TYPE_BUS_NUMBER_RANGE      2
 
+#define ACPI_ADDRESS_TYPE_PCC_NUMBER            0xA
+
 /* Resource descriptor types and masks */
 
 #define ACPI_RESOURCE_NAME_LARGE                0x80
@@ -1344,7 +1327,8 @@ typedef struct acpi_port_info
 #define ACPI_RESOURCE_NAME_PIN_GROUP            0x90
 #define ACPI_RESOURCE_NAME_PIN_GROUP_FUNCTION   0x91
 #define ACPI_RESOURCE_NAME_PIN_GROUP_CONFIG     0x92
-#define ACPI_RESOURCE_NAME_LARGE_MAX            0x92
+#define ACPI_RESOURCE_NAME_CLOCK_INPUT          0x93
+#define ACPI_RESOURCE_NAME_LARGE_MAX            0x93
 
 
 /*****************************************************************************

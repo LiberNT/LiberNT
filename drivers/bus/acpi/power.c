@@ -290,7 +290,7 @@ Bus_PDO_Power (
                       break;
 
                     case PowerDeviceD3:
-                      error = acpi_bus_set_power(PdoData->AcpiHandle, ACPI_STATE_D3);
+                      error = acpi_bus_set_power(PdoData->AcpiHandle, ACPI_STATE_D3_HOT);
                       break;
 
                     default:

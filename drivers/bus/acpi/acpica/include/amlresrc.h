@@ -4,42 +4,12 @@
  *
  *****************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 /* acpisrc:StructDefs -- for acpisrc conversion */
 
@@ -105,6 +75,8 @@
 #define ACPI_RESTAG_TYPE                        "_TTP"  /* Translation(1), Static (0) */
 #define ACPI_RESTAG_XFERTYPE                    "_SIZ"  /* 8(0), 8And16(1), 16(2) */
 #define ACPI_RESTAG_VENDORDATA                  "_VEN"
+#define ACPI_RESTAG_FQN                         "_FQN"
+#define ACPI_RESTAG_FQD                         "_FQD"
 
 
 /* Default sizes for "small" resource descriptors */
@@ -393,7 +365,10 @@ typedef struct aml_resource_extended_irq
     AML_RESOURCE_LARGE_HEADER_COMMON
     UINT8                           Flags;
     UINT8                           InterruptCount;
-    UINT32                          Interrupts[1];
+    union {
+        UINT32                      Interrupt;
+        ACPI_FLEX_ARRAY(UINT32,     Interrupts);
+    };
     /* ResSourceIndex, ResSource optional fields follow */
 
 } AML_RESOURCE_EXTENDED_IRQ;
@@ -595,6 +570,23 @@ typedef struct aml_resource_pin_config
 
 } AML_RESOURCE_PIN_CONFIG;
 
+#define AML_RESOURCE_CLOCK_INPUT_REVISION      1       /* ACPI 6.5 */
+
+typedef struct aml_resource_clock_input
+{
+    AML_RESOURCE_LARGE_HEADER_COMMON
+    UINT8                           RevisionId;
+    UINT16                          Flags;
+    UINT16                          FrequencyDivisor;
+    UINT32                          FrequencyNumerator;
+    /*
+     * Optional fields follow immediately:
+     * 1) Resource Source index
+     * 2) Resource Source String
+     */
+} AML_RESOURCE_CLOCK_INPUT;
+
+
 #define AML_RESOURCE_PIN_CONFIG_REVISION      1       /* ACPI 6.2 */
 
 typedef struct aml_resource_pin_group
@@ -662,10 +654,6 @@ typedef struct aml_resource_pin_group_config
 
 #define AML_RESOURCE_PIN_GROUP_CONFIG_REVISION    1       /* ACPI 6.2 */
 
-/* restore default alignment */
-
-#pragma pack()
-
 /* Union of all resource descriptors, so we can allocate the worst case */
 
 typedef union aml_resource
@@ -711,6 +699,7 @@ typedef union aml_resource
     AML_RESOURCE_PIN_GROUP                  PinGroup;
     AML_RESOURCE_PIN_GROUP_FUNCTION         PinGroupFunction;
     AML_RESOURCE_PIN_GROUP_CONFIG           PinGroupConfig;
+    AML_RESOURCE_CLOCK_INPUT                ClockInput;
 
     /* Utility overlays */
 
@@ -721,6 +710,9 @@ typedef union aml_resource
 
 } AML_RESOURCE;
 
+/* restore default alignment */
+
+#pragma pack()
 
 /* Interfaces used by both the disassembler and compiler */
 

@@ -4,42 +4,12 @@
  *
  *****************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 #ifndef __ACTBL3_H__
 #define __ACTBL3_H__
@@ -135,10 +105,10 @@ typedef struct acpi_table_slit
 /*******************************************************************************
  *
  * SPCR - Serial Port Console Redirection table
- *        Version 2
+ *        Version 4
  *
  * Conforms to "Serial Port Console Redirection Table",
- * Version 1.03, August 10, 2015
+ * Version 1.10, Jan 5, 2023
  *
  ******************************************************************************/
 
@@ -156,7 +126,7 @@ typedef struct acpi_table_spcr
     UINT8                   StopBits;
     UINT8                   FlowControl;
     UINT8                   TerminalType;
-    UINT8                   Reserved1;
+    UINT8                   Language;
     UINT16                  PciDeviceId;
     UINT16                  PciVendorId;
     UINT8                   PciBus;
@@ -164,7 +134,11 @@ typedef struct acpi_table_spcr
     UINT8                   PciFunction;
     UINT32                  PciFlags;
     UINT8                   PciSegment;
-    UINT32                  Reserved2;
+    UINT32                  UartClkFreq;
+    UINT32                  PreciseBaudrate;
+    UINT16                  NameSpaceStringLength;
+    UINT16                  NameSpaceStringOffset;
+    char                    NameSpaceString[];
 
 } ACPI_TABLE_SPCR;
 
@@ -245,7 +219,8 @@ enum AcpiSratType
     ACPI_SRAT_TYPE_GIC_ITS_AFFINITY     = 4, /* ACPI 6.2 */
     ACPI_SRAT_TYPE_GENERIC_AFFINITY     = 5, /* ACPI 6.3 */
     ACPI_SRAT_TYPE_GENERIC_PORT_AFFINITY = 6, /* ACPI 6.4 */
-    ACPI_SRAT_TYPE_RESERVED              = 7  /* 7 and greater are reserved */
+    ACPI_SRAT_TYPE_RINTC_AFFINITY        = 7, /* ACPI 6.6 */
+    ACPI_SRAT_TYPE_RESERVED              = 8  /* 8 and greater are reserved */
 };
 
 /*
@@ -291,6 +266,7 @@ typedef struct acpi_srat_mem_affinity
 #define ACPI_SRAT_MEM_ENABLED       (1)         /* 00: Use affinity structure */
 #define ACPI_SRAT_MEM_HOT_PLUGGABLE (1<<1)      /* 01: Memory region is hot pluggable */
 #define ACPI_SRAT_MEM_NON_VOLATILE  (1<<2)      /* 02: Memory region is non-volatile */
+#define ACPI_SRAT_MEM_SPEC_PURPOSE  (1<<3)      /* 03: Memory is intended for specific-purpose usage */
 
 
 /* 2: Processor Local X2_APIC Affinity (ACPI 4.0) */
@@ -329,7 +305,7 @@ typedef struct acpi_srat_gicc_affinity
 #define ACPI_SRAT_GICC_ENABLED     (1)         /* 00: Use affinity structure */
 
 
-/* 4: GCC ITS Affinity (ACPI 6.2) */
+/* 4: GIC ITS Affinity (ACPI 6.2) */
 
 typedef struct acpi_srat_gic_its_affinity
 {
@@ -346,13 +322,15 @@ typedef struct acpi_srat_gic_its_affinity
  * 6: ACPI_SRAT_TYPE_GENERIC_PORT_AFFINITY
  */
 
+#define ACPI_SRAT_DEVICE_HANDLE_SIZE	16
+
 typedef struct acpi_srat_generic_affinity
 {
     ACPI_SUBTABLE_HEADER    Header;
     UINT8                   Reserved;
     UINT8                   DeviceHandleType;
     UINT32                  ProximityDomain;
-    UINT8                   DeviceHandle[16];
+    UINT8                   DeviceHandle[ACPI_SRAT_DEVICE_HANDLE_SIZE];
     UINT32                  Flags;
     UINT32                  Reserved1;
 
@@ -362,6 +340,23 @@ typedef struct acpi_srat_generic_affinity
 
 #define ACPI_SRAT_GENERIC_AFFINITY_ENABLED     (1)      /* 00: Use affinity structure */
 #define ACPI_SRAT_ARCHITECTURAL_TRANSACTIONS   (1<<1)   /* ACPI 6.4 */
+
+/* 7: RINTC Affinity Structure(ACPI 6.6) */
+
+typedef struct acpi_srat_rintc_affinity
+{
+    ACPI_SUBTABLE_HEADER    Header;
+    UINT16                  Reserved;
+    UINT32                  ProximityDomain;
+    UINT32                  AcpiProcessorUid;
+    UINT32                  Flags;
+    UINT32                  ClockDomain;
+
+} ACPI_SRAT_RINTC_AFFINITY;
+
+/* Flags for ACPI_SRAT_RINTC_AFFINITY */
+
+#define ACPI_SRAT_RINTC_ENABLED     (1)         /* 00: Use affinity structure */
 
 /*******************************************************************************
  *
@@ -523,6 +518,8 @@ typedef struct acpi_table_tpm2
 #define ACPI_TPM2_RESERVED10                        10
 #define ACPI_TPM2_COMMAND_BUFFER_WITH_ARM_SMC       11  /* V1.2 Rev 8 */
 #define ACPI_TPM2_RESERVED                          12
+#define ACPI_TPM2_COMMAND_BUFFER_WITH_PLUTON        13
+#define ACPI_TPM2_CRB_WITH_ARM_FFA                  15
 
 
 /* Optional trailer appears after any StartMethod subtables */

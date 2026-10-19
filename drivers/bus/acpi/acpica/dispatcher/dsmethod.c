@@ -4,42 +4,12 @@
  *
  *****************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 #include "acpi.h"
 #include "accommon.h"
@@ -538,8 +508,6 @@ AcpiDsCallControlMethod (
     ACPI_WALK_STATE         *NextWalkState = NULL;
     ACPI_OPERAND_OBJECT     *ObjDesc;
     ACPI_EVALUATE_INFO      *Info;
-    UINT32                  i;
-
 
     ACPI_FUNCTION_TRACE_PTR (DsCallControlMethod, ThisWalkState);
 
@@ -561,6 +529,23 @@ AcpiDsCallControlMethod (
     {
         return_ACPI_STATUS (AE_NULL_OBJECT);
     }
+
+    if (ThisWalkState->NumOperands < ObjDesc->Method.ParamCount)
+    {
+        ACPI_ERROR ((AE_INFO, "Missing argument(s) for method [%4.4s]", 
+            AcpiUtGetNodeName (MethodNode)));
+
+        return_ACPI_STATUS (AE_AML_TOO_FEW_ARGUMENTS);
+    }
+
+    else if (ThisWalkState->NumOperands > ObjDesc->Method.ParamCount)
+    {
+        ACPI_ERROR ((AE_INFO, "Too many arguments for method [%4.4s]",
+            AcpiUtGetNodeName (MethodNode)));
+
+        return_ACPI_STATUS (AE_AML_TOO_MANY_ARGUMENTS);
+    }
+
 
     /* Init for new method, possibly wait on method mutex */
 
@@ -597,7 +582,7 @@ AcpiDsCallControlMethod (
     if (!Info)
     {
         Status = AE_NO_MEMORY;
-        goto Cleanup;
+        goto PopWalkState;
     }
 
     Info->Parameters = &ThisWalkState->Operands[0];
@@ -609,7 +594,7 @@ AcpiDsCallControlMethod (
     ACPI_FREE (Info);
     if (ACPI_FAILURE (Status))
     {
-        goto Cleanup;
+        goto PopWalkState;
     }
 
     NextWalkState->MethodNestingDepth = ThisWalkState->MethodNestingDepth + 1;
@@ -618,15 +603,7 @@ AcpiDsCallControlMethod (
      * Delete the operands on the previous walkstate operand stack
      * (they were copied to new objects)
      */
-    for (i = 0; i < ObjDesc->Method.ParamCount; i++)
-    {
-        AcpiUtRemoveReference (ThisWalkState->Operands [i]);
-        ThisWalkState->Operands [i] = NULL;
-    }
-
-    /* Clear the operand stack */
-
-    ThisWalkState->NumOperands = 0;
+    AcpiDsClearOperands (ThisWalkState);
 
     ACPI_DEBUG_PRINT ((ACPI_DB_DISPATCH,
         "**** Begin nested execution of [%4.4s] **** WalkState=%p\n",
@@ -655,6 +632,12 @@ AcpiDsCallControlMethod (
 
     return_ACPI_STATUS (Status);
 
+
+PopWalkState:
+
+    /* On error, pop the walk state to be deleted from thread */
+
+    AcpiDsPopWalkState(Thread);
 
 Cleanup:
 
@@ -780,6 +763,8 @@ AcpiDsTerminateControlMethod (
     ACPI_OPERAND_OBJECT     *MethodDesc,
     ACPI_WALK_STATE         *WalkState)
 {
+    UINT32                  i;
+    ACPI_NAMESPACE_NODE     *RefNode;
 
     ACPI_FUNCTION_TRACE_PTR (DsTerminateControlMethod, WalkState);
 
@@ -793,6 +778,45 @@ AcpiDsTerminateControlMethod (
 
     if (WalkState)
     {
+        /*
+         * Check if the return value is a RefOf reference to a method local
+         * or argument. If so, clear the reference to avoid use-after-free
+         * when the walk state is deleted.
+         */
+        if (WalkState->ReturnDesc &&
+            (WalkState->ReturnDesc->Common.Type == ACPI_TYPE_LOCAL_REFERENCE) &&
+            (WalkState->ReturnDesc->Reference.Class == ACPI_REFCLASS_REFOF))
+        {
+            RefNode = WalkState->ReturnDesc->Reference.Object;
+            if (RefNode)
+            {
+                /* Check against method locals */
+                for (i = 0; i < ACPI_METHOD_NUM_LOCALS; i++)
+                {
+                    if (RefNode == &WalkState->LocalVariables[i])
+                    {
+                        AcpiUtRemoveReference (WalkState->ReturnDesc);
+                        WalkState->ReturnDesc = NULL;
+                        break;
+                    }
+                }
+
+                /* Check against method arguments if not already cleared */
+                if (WalkState->ReturnDesc)
+                {
+                    for (i = 0; i < ACPI_METHOD_NUM_ARGS; i++)
+                    {
+                        if (RefNode == &WalkState->Arguments[i])
+                        {
+                            AcpiUtRemoveReference (WalkState->ReturnDesc);
+                            WalkState->ReturnDesc = NULL;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         /* Delete all arguments and locals */
 
         AcpiDsMethodDataDeleteAll (WalkState);

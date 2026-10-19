@@ -4,42 +4,12 @@
  *
  *****************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 /*
  * Parse the AML and build an operation tree as most interpreters,
@@ -113,6 +83,10 @@ AcpiPsPeekOpcode (
 
 
     Aml = ParserState->Aml;
+    if (Aml >= ParserState->AmlEnd)
+    {
+        return (0xFFFF);
+    }
     Opcode = (UINT16) ACPI_GET8 (Aml);
 
     if (Opcode == AML_EXTENDED_PREFIX)
@@ -120,6 +94,10 @@ AcpiPsPeekOpcode (
         /* Extended opcode, get the second opcode byte */
 
         Aml++;
+        if (Aml >= ParserState->AmlEnd)
+        {
+            return (0xFFFF);
+        }
         Opcode = (UINT16) ((Opcode << 8) | ACPI_GET8 (Aml));
     }
 
@@ -341,6 +319,7 @@ AcpiPsNextParseState (
 {
     ACPI_PARSE_STATE        *ParserState = &WalkState->ParserState;
     ACPI_STATUS             Status = AE_CTRL_PENDING;
+    UINT8                   *Aml;
 
 
     ACPI_FUNCTION_TRACE_PTR (PsNextParseState, Op);
@@ -388,7 +367,15 @@ AcpiPsNextParseState (
          * Predicate of an IF was true, and we are at the matching ELSE.
          * Just close out this package
          */
+        Aml = ParserState->Aml;
+
         ParserState->Aml = AcpiPsGetNextPackageEnd (ParserState);
+        if ((ParserState->Aml > ParserState->AmlEnd) ||
+            (ParserState->Aml < Aml))
+        {
+            Status = AE_AML_PACKAGE_LIMIT;
+            break;
+        }
         Status = AE_CTRL_PENDING;
         break;
 

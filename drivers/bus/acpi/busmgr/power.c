@@ -285,7 +285,7 @@ acpi_power_off_device (
 	}
 
 	/* Update the power resource's _device_ power state */
-	resource->device->power.state = ACPI_STATE_D3;
+	resource->device->power.state = ACPI_STATE_D3_HOT;
 	ExFreePoolWithTag(ref, 'IPCA');
 	ExReleaseFastMutex(&resource->resource_lock);
 
@@ -473,7 +473,7 @@ acpi_power_get_inferred_state (
 	 * We know a device's inferred power state when all the resources
 	 * required for a given D-state are 'on'.
 	 */
-	for (i=ACPI_STATE_D0; i<ACPI_STATE_D3; i++) {
+	for (i=ACPI_STATE_D0; i<ACPI_STATE_D3_HOT; i++) {
 		list = &device->power.states[i].resources;
 		if (list->count < 1)
 			continue;
@@ -488,7 +488,7 @@ acpi_power_get_inferred_state (
 		}
 	}
 
-	device->power.state = ACPI_STATE_D3;
+	device->power.state = ACPI_STATE_D3_HOT;
 
 	return_VALUE(0);
 }
@@ -504,10 +504,10 @@ acpi_power_transition (
 	struct acpi_handle_list	*tl = NULL;	/* Target Resources */
 	unsigned int	i = 0;
 
-	if (!device || (state < ACPI_STATE_D0) || (state > ACPI_STATE_D3))
+	if (!device || (state < ACPI_STATE_D0) || (state > ACPI_STATE_D3_HOT))
 		return_VALUE(-1);
 
-	if ((device->power.state < ACPI_STATE_D0) || (device->power.state > ACPI_STATE_D3))
+	if ((device->power.state < ACPI_STATE_D0) || (device->power.state > ACPI_STATE_D3_HOT))
 		return_VALUE(-15);
 
 	cl = &device->power.states[device->power.state].resources;
@@ -598,7 +598,7 @@ acpi_power_add (
 		device->power.state = ACPI_STATE_D0;
 		break;
 	case ACPI_POWER_RESOURCE_STATE_OFF:
-		device->power.state = ACPI_STATE_D3;
+		device->power.state = ACPI_STATE_D3_HOT;
 		break;
 	default:
 		device->power.state = ACPI_STATE_UNKNOWN;

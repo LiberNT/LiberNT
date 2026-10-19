@@ -1821,7 +1821,7 @@ AcpiSetPowerForPciDeviceIoctl(_In_ PFDO_DEVICE_DATA FdoData, _Inout_ PIRP Irp)
         return STATUS_INFO_LENGTH_MISMATCH;
 
     InputBuffer = Irp->AssociatedIrp.SystemBuffer;
-    if (InputBuffer->Signature != ACPI_PCI_SET_POWER_INPUT_BUFFER_SIGNATURE || InputBuffer->State > ACPI_STATE_D3)
+    if (InputBuffer->Signature != ACPI_PCI_SET_POWER_INPUT_BUFFER_SIGNATURE || InputBuffer->State > ACPI_STATE_D3_HOT)
         return STATUS_INVALID_PARAMETER;
 
     if (!AcpiFindPciDeviceInNamespace(InputBuffer->Segment, InputBuffer->Bus, InputBuffer->Device, InputBuffer->Function, &AcpiHandle))

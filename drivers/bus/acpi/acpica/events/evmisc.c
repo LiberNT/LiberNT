@@ -4,42 +4,12 @@
  *
  *****************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 #include "acpi.h"
 #include "accommon.h"
@@ -117,6 +87,7 @@ AcpiEvQueueNotifyRequest (
     ACPI_GENERIC_STATE      *Info;
     UINT8                   HandlerListId = 0;
     ACPI_STATUS             Status = AE_OK;
+    ACPI_CPU_FLAGS          Flags;
 
 
     ACPI_FUNCTION_NAME (EvQueueNotifyRequest);
@@ -178,16 +149,40 @@ AcpiEvQueueNotifyRequest (
     Info->Notify.HandlerListId = HandlerListId;
     Info->Notify.HandlerListHead = HandlerListHead;
     Info->Notify.Global = &AcpiGbl_GlobalNotify[HandlerListId];
+    Info->Notify.OwnerId = Node->OwnerId;
 
     ACPI_DEBUG_PRINT ((ACPI_DB_INFO,
         "Dispatching Notify on [%4.4s] (%s) Value 0x%2.2X (%s) Node %p\n",
         AcpiUtGetNodeName (Node), AcpiUtGetTypeName (Node->Type),
         NotifyValue, AcpiUtGetNotifyName (NotifyValue, ACPI_TYPE_ANY), Node));
 
+    if (Node->OwnerId > 0 && Node->OwnerId < ACPI_NOTIFY_COUNT_MAX_OWNER)
+    {
+        Flags = AcpiOsAcquireLock (AcpiGbl_NotifyLock);
+
+        /* Reject if table is being unloaded — avoid use-after-free of Node */
+
+        if (AcpiGbl_NotifyUnloading[Node->OwnerId])
+        {
+            AcpiOsReleaseLock (AcpiGbl_NotifyLock, Flags);
+            AcpiUtDeleteGenericState (Info);
+            return (AE_OK);
+        }
+
+        AcpiGbl_NotifyExecuteCount[Node->OwnerId]++;
+        AcpiOsReleaseLock (AcpiGbl_NotifyLock, Flags);
+    }
+
     Status = AcpiOsExecute (OSL_NOTIFY_HANDLER,
         AcpiEvNotifyDispatch, Info);
     if (ACPI_FAILURE (Status))
     {
+        if (Node->OwnerId > 0 && Node->OwnerId < ACPI_NOTIFY_COUNT_MAX_OWNER)
+        {
+            Flags = AcpiOsAcquireLock (AcpiGbl_NotifyLock);
+            AcpiGbl_NotifyExecuteCount[Node->OwnerId]--;
+            AcpiOsReleaseLock (AcpiGbl_NotifyLock, Flags);
+        }
         AcpiUtDeleteGenericState (Info);
     }
 
@@ -214,6 +209,7 @@ AcpiEvNotifyDispatch (
 {
     ACPI_GENERIC_STATE      *Info = (ACPI_GENERIC_STATE *) Context;
     ACPI_OPERAND_OBJECT     *HandlerObj;
+    ACPI_CPU_FLAGS          Flags;
 
 
     ACPI_FUNCTION_ENTRY ();
@@ -241,6 +237,13 @@ AcpiEvNotifyDispatch (
     }
 
     /* All done with the info object */
+
+    if (Info->Notify.OwnerId > 0 && Info->Notify.OwnerId < ACPI_NOTIFY_COUNT_MAX_OWNER)
+    {
+        Flags = AcpiOsAcquireLock (AcpiGbl_NotifyLock);
+        AcpiGbl_NotifyExecuteCount[Info->Notify.OwnerId]--;
+        AcpiOsReleaseLock (AcpiGbl_NotifyLock, Flags);
+    }
 
     AcpiUtDeleteGenericState (Info);
 }

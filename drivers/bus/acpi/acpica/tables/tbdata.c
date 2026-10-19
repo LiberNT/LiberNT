@@ -4,42 +4,12 @@
  *
  *****************************************************************************/
 
-/*
- * Copyright (C) 2000 - 2022, Intel Corp.
- * All rights reserved.
+/******************************************************************************
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer,
- *    without modification.
- * 2. Redistributions in binary form must reproduce at minimum a disclaimer
- *    substantially similar to the "NO WARRANTY" disclaimer below
- *    ("Disclaimer") and any redistribution must be conditioned upon
- *    including a substantially similar Disclaimer requirement for further
- *    binary redistribution.
- * 3. Neither the names of the above-listed copyright holders nor the names
- *    of any contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * Copyright (c) 1999 - 2026, Intel Corp.
+ * SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-only
  *
- * Alternatively, this software may be distributed under the terms of the
- * GNU General Public License ("GPL") version 2 as published by the Free
- * Software Foundation.
- *
- * NO WARRANTY
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDERS OR CONTRIBUTORS BE LIABLE FOR SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGES.
- */
+ *****************************************************************************/
 
 #include "acpi.h"
 #include "accommon.h"
@@ -1183,6 +1153,13 @@ AcpiTbInstallAndLoadTable (
     }
 
     Status = AcpiTbLoadTable (i, AcpiGbl_RootNode);
+    if (ACPI_FAILURE (Status))
+    {
+        /* Table was installed but not loaded, uninstall to clean up */
+
+        AcpiTbUninstallTable (&AcpiGbl_RootTableList.Tables[i]);
+        goto Exit;
+    }
 
 Exit:
     *TableIndex = i;
@@ -1208,6 +1185,8 @@ AcpiTbUnloadTable (
 {
     ACPI_STATUS             Status = AE_OK;
     ACPI_TABLE_HEADER       *Table;
+    ACPI_OWNER_ID           OwnerId;
+    ACPI_CPU_FLAGS          Flags;
 
 
     ACPI_FUNCTION_TRACE (TbUnloadTable);
@@ -1228,9 +1207,59 @@ AcpiTbUnloadTable (
         AcpiTbNotifyTable (ACPI_TABLE_EVENT_UNLOAD, Table);
     }
 
+#if (!ACPI_REDUCED_HARDWARE)
+    /*
+     * Clear GPE dispatch for methods owned by the table being unloaded.
+     * If any matching GPE is currently dispatching, AE_ABORT_METHOD is
+     * returned and the unload cannot proceed.
+     */
+    Status = AcpiEvClearGpeDispatchByOwner (
+        AcpiGbl_RootTableList.Tables[TableIndex].OwnerId);
+    if (ACPI_FAILURE (Status))
+    {
+        return_ACPI_STATUS (Status);
+    }
+#endif /* !ACPI_REDUCED_HARDWARE */
+
+    /*
+     * Gate notify dispatch for this table's OwnerId so no new notifies
+     * are queued against namespace nodes that are about to be freed.
+     * If any notify dispatch is in-flight, abort the unload — the caller
+     * must retry after the dispatch completes.
+     */
+    OwnerId = AcpiGbl_RootTableList.Tables[TableIndex].OwnerId;
+    if (OwnerId > 0 && OwnerId < ACPI_NOTIFY_COUNT_MAX_OWNER)
+    {
+        Flags = AcpiOsAcquireLock (AcpiGbl_NotifyLock);
+        AcpiGbl_NotifyUnloading[OwnerId] = TRUE;
+
+        if (AcpiGbl_NotifyExecuteCount[OwnerId] > 0)
+        {
+            AcpiGbl_NotifyUnloading[OwnerId] = FALSE;
+            AcpiOsReleaseLock (AcpiGbl_NotifyLock, Flags);
+            return_ACPI_STATUS (AE_ABORT_METHOD);
+        }
+
+        AcpiOsReleaseLock (AcpiGbl_NotifyLock, Flags);
+    }
+
     /* Delete the portion of the namespace owned by this table */
 
     Status = AcpiTbDeleteNamespaceByOwner (TableIndex);
+
+    /*
+     * Clear the unloading gate. If namespace deletion failed the table
+     * remains loaded so notifies must be allowed again. If it succeeded
+     * the OwnerId is about to be released and may be reused — clear
+     * the gate before release to avoid a stale flag on the new owner.
+     */
+    if (OwnerId > 0 && OwnerId < ACPI_NOTIFY_COUNT_MAX_OWNER)
+    {
+        Flags = AcpiOsAcquireLock (AcpiGbl_NotifyLock);
+        AcpiGbl_NotifyUnloading[OwnerId] = FALSE;
+        AcpiOsReleaseLock (AcpiGbl_NotifyLock, Flags);
+    }
+
     if (ACPI_FAILURE (Status))
     {
         return_ACPI_STATUS (Status);

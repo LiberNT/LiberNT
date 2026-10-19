@@ -455,7 +455,7 @@ NTSTATUS AcpiThermalSetPower(ACPI_HANDLE Handle, BOOLEAN Engaged)
         RestoreForce = TRUE;
     }
 
-    Result = acpi_bus_set_power(Handle, Engaged ? ACPI_STATE_D0 : ACPI_STATE_D3);
+    Result = acpi_bus_set_power(Handle, Engaged ? ACPI_STATE_D0 : ACPI_STATE_D3_HOT);
     if (RestoreForce)
         Device->flags.force_power_state = ForcePowerState;
     return Result ? STATUS_UNSUCCESSFUL : STATUS_SUCCESS;
