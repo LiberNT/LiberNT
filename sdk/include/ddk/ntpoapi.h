@@ -369,7 +369,8 @@ typedef enum {
   PowerActionShutdown,
   PowerActionShutdownReset,
   PowerActionShutdownOff,
-  PowerActionWarmEject
+  PowerActionWarmEject,
+  PowerActionDisplayOff
 } POWER_ACTION, *PPOWER_ACTION;
 
 #if (NTDDI_VERSION >= NTDDI_WINXP) || !defined(_BATCLASS_)
@@ -609,10 +610,18 @@ typedef struct {
 #else
   UCHAR ProcessorMaxThrottle;
   BOOLEAN FastSystemS4;
-  UCHAR spare2[3];
+  BOOLEAN Hiberboot;
+  BOOLEAN WakeAlarmPresent;
+  BOOLEAN AoAc;
 #endif /* (NTDDI_VERSION < NTDDI_WINXP) */
   BOOLEAN DiskSpinDown;
+#if (NTDDI_VERSION < NTDDI_WINTHRESHOLD)
   UCHAR spare3[8];
+#else
+  UCHAR HiberFileType;
+  BOOLEAN AoAcConnectivitySupported;
+  UCHAR spare3[6];
+#endif
   BOOLEAN SystemBatteriesPresent;
   BOOLEAN BatteriesAreShortTerm;
   BATTERY_REPORTING_SCALE BatteryScale[3];

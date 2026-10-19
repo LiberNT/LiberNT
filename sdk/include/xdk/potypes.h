@@ -135,7 +135,8 @@ typedef enum {
   PowerActionShutdown,
   PowerActionShutdownReset,
   PowerActionShutdownOff,
-  PowerActionWarmEject
+  PowerActionWarmEject,
+  PowerActionDisplayOff
 } POWER_ACTION, *PPOWER_ACTION;
 
 typedef enum _DEVICE_POWER_STATE {
