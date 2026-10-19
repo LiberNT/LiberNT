@@ -78,6 +78,7 @@
 #define WDI_TLV_RADIO_STATE_PARAMETERS              0xA0
 #define WDI_TLV_RADIO_STATE                         0xA1
 #define WDI_TLV_DOT11_RESET_PARAMETERS              0xA2
+#define WDI_TLV_CONNECTION_QUALITY_PARAMETERS       0xA3
 #define WDI_TLV_DATAPATH_ATTRIBUTES                 0xB8
 #define WDI_TLV_DATAPATH_CAPABILITIES               0xB9
 #define WDI_TLV_BSS_ENTRY_AGE_INFO                  0xBA
@@ -92,6 +93,9 @@
 #define WDI_SCAN_TYPE_PASSIVE_ONLY                  2
 #define WDI_SCAN_TYPE_AUTO                          3
 #define WDI_SCAN_TRIGGER_MANUAL                     1
+#define WDI_CONNECTION_QUALITY_AUTO_POWER_SAVE      1
+#define WDI_CONNECTION_QUALITY_LOW_LATENCY          2
+#define WDI_CONNECTION_QUALITY_NO_POWER_SAVE        4
 #define WDI_BAND_ID_2400                            1
 #define WDI_BAND_ID_5000                            2
 #define WDI_BAND_ID_6000                            5
@@ -192,10 +196,17 @@ typedef struct _NDIS6_WDI_COMMAND
     PVOID CallbackContext;
 } NDIS6_WDI_COMMAND, *PNDIS6_WDI_COMMAND;
 
+typedef enum _NDIS6_WDI_INTERNAL_JOB
+{
+    Ndis6WdiJobNone = 0,
+    Ndis6WdiJobConnectionQuality
+} NDIS6_WDI_INTERNAL_JOB;
+
 typedef struct _NDIS6_WDI_JOB
 {
     LIST_ENTRY Link;
     PNDIS_OID_REQUEST Request;
+    NDIS6_WDI_INTERNAL_JOB Internal;
 } NDIS6_WDI_JOB, *PNDIS6_WDI_JOB;
 
 typedef struct _NDIS6_WDI_INDICATION
@@ -296,6 +307,8 @@ typedef struct _NDIS6_WDI_DOT11
     UCHAR LinkQuality;
     BOOLEAN Qos;
     BOOLEAN PeerConfigured;
+    ULONG PowerSavingLevel;
+    BOOLEAN MediaStreaming;
 } NDIS6_WDI_DOT11, *PNDIS6_WDI_DOT11;
 
 struct _NDIS6_WDI_ADAPTER
@@ -453,6 +466,8 @@ NDIS_STATUS Ndis6WdiDot11ParseCapabilities(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_read
 NDIS_STATUS Ndis6WdiDot11SetGeneralAttributes(_In_ PNDIS6_WDI_ADAPTER Wdi);
 NDIS_STATUS Ndis6WdiDot11OidRequest(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ PNDIS_OID_REQUEST Request, _Out_ PBOOLEAN Queue);
 VOID Ndis6WdiDot11RunJob(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ PNDIS_OID_REQUEST Request);
+VOID Ndis6WdiDot11RunInternalJob(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ NDIS6_WDI_INTERNAL_JOB Internal);
+VOID Ndis6WdiQueueInternalJob(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ NDIS6_WDI_INTERNAL_JOB Internal);
 VOID Ndis6WdiDot11Indication(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ ULONG MessageId, _In_reads_bytes_(Length) PUCHAR Tlvs, _In_ ULONG Length);
 VOID Ndis6WdiDot11HaltDisconnect(_In_ PNDIS6_WDI_ADAPTER Wdi);
 

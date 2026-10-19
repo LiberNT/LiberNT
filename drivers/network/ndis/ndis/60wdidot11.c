@@ -1211,11 +1211,41 @@ Ndis6WdiSet(
             Request->DATA.SET_INFORMATION.BytesRead = Length;
             return NDIS_STATUS_SUCCESS;
 
+        case OID_DOT11_POWER_MGMT_REQUEST:
+        case OID_DOT11_MEDIA_STREAMING_ENABLED:
+        {
+            BOOLEAN Changed;
+            BOOLEAN Associated;
+
+            if (Length < (Oid == OID_DOT11_POWER_MGMT_REQUEST ? sizeof(ULONG) : sizeof(BOOLEAN)))
+            {
+                Request->DATA.SET_INFORMATION.BytesNeeded = Oid == OID_DOT11_POWER_MGMT_REQUEST ? sizeof(ULONG) : sizeof(BOOLEAN);
+                return NDIS_STATUS_INVALID_LENGTH;
+            }
+
+            KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+            if (Oid == OID_DOT11_POWER_MGMT_REQUEST)
+            {
+                Changed = Dot11->PowerSavingLevel != *(PULONG)Buffer;
+                Dot11->PowerSavingLevel = *(PULONG)Buffer;
+            }
+            else
+            {
+                Changed = Dot11->MediaStreaming != (*(PBOOLEAN)Buffer != FALSE);
+                Dot11->MediaStreaming = *(PBOOLEAN)Buffer != FALSE;
+            }
+            Associated = Dot11->Associated;
+            KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+
+            if (Changed && Associated)
+                Ndis6WdiQueueInternalJob(Wdi, Ndis6WdiJobConnectionQuality);
+            Request->DATA.SET_INFORMATION.BytesRead = Length;
+            return NDIS_STATUS_SUCCESS;
+        }
+
         case OID_DOT11_OPERATIONAL_RATE_SET:
         case OID_DOT11_BEACON_PERIOD:
         case OID_DOT11_CURRENT_PHY_ID:
-        case OID_DOT11_POWER_MGMT_REQUEST:
-        case OID_DOT11_MEDIA_STREAMING_ENABLED:
         case OID_DOT11_UNICAST_USE_GROUP_ENABLED:
         case OID_DOT11_SAFE_MODE_ENABLED:
         case OID_DOT11_PMKID_LIST:
@@ -1550,6 +1580,7 @@ Ndis6WdiConnectComplete(
 
     if (Status == NDIS_STATUS_SUCCESS && Associated)
     {
+        Ndis6WdiQueueInternalJob(Wdi, Ndis6WdiJobConnectionQuality);
         Ndis6WdiIndicateConnectionCompletion(Wdi, DOT11_CONNECTION_STATUS_SUCCESS);
         Ndis6WdiIndicateLinkState(Wdi, TRUE);
         return;
@@ -2404,6 +2435,38 @@ Ndis6WdiJobDefaultKeyId(
         Wdi->Dot11.DefaultKeyId = *KeyId;
     Ndis6WdiConsumed(Request, sizeof(ULONG));
     return Status;
+}
+
+VOID
+Ndis6WdiDot11RunInternalJob(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_ NDIS6_WDI_INTERNAL_JOB Internal)
+{
+    NDIS6_WDI_TLV_BUILDER Tlvs;
+    ULONG Hint;
+    BOOLEAN Associated;
+    KIRQL OldIrql;
+
+    if (Internal != Ndis6WdiJobConnectionQuality)
+        return;
+
+    KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
+    Associated = Wdi->Dot11.Associated;
+    if (Wdi->Dot11.MediaStreaming)
+        Hint = WDI_CONNECTION_QUALITY_LOW_LATENCY;
+    else if (Wdi->Dot11.PowerSavingLevel == DOT11_POWER_SAVING_NO_POWER_SAVING)
+        Hint = WDI_CONNECTION_QUALITY_NO_POWER_SAVE;
+    else
+        Hint = WDI_CONNECTION_QUALITY_AUTO_POWER_SAVE;
+    KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
+
+    if (!Associated)
+        return;
+
+    Ndis6WdiTlvInit(&Tlvs);
+    Ndis6WdiTlvAdd(&Tlvs, WDI_TLV_CONNECTION_QUALITY_PARAMETERS, &Hint, sizeof(ULONG));
+    (VOID)Ndis6WdiProperty(Wdi, WDI_SET_CONNECTION_QUALITY, Wdi->PortId, &Tlvs, NULL, NULL);
+    Ndis6WdiTlvFree(&Tlvs);
 }
 
 VOID

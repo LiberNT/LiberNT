@@ -1004,6 +1004,27 @@ Ndis6WdiNextJob(
     return Job;
 }
 
+VOID
+Ndis6WdiQueueInternalJob(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_ NDIS6_WDI_INTERNAL_JOB Internal)
+{
+    PNDIS6_WDI_JOB Job;
+    KIRQL OldIrql;
+
+    Job = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Job), NDIS6_WDI_TAG);
+    if (Job == NULL)
+        return;
+
+    RtlZeroMemory(Job, sizeof(*Job));
+    Job->Internal = Internal;
+
+    KeAcquireSpinLock(&Wdi->JobLock, &OldIrql);
+    InsertTailList(&Wdi->JobList, &Job->Link);
+    KeReleaseSpinLock(&Wdi->JobLock, OldIrql);
+    KeSetEvent(&Wdi->WorkerEvent, IO_NO_INCREMENT, FALSE);
+}
+
 static
 VOID
 NTAPI
@@ -1039,7 +1060,10 @@ Ndis6WdiWorkerThread(
 
         while (!Wdi->WorkerStop && (Job = Ndis6WdiNextJob(Wdi)) != NULL)
         {
-            Ndis6WdiDot11RunJob(Wdi, Job->Request);
+            if (Job->Request != NULL)
+                Ndis6WdiDot11RunJob(Wdi, Job->Request);
+            else
+                Ndis6WdiDot11RunInternalJob(Wdi, Job->Internal);
             KeAcquireSpinLock(&Wdi->JobLock, &OldIrql);
             Wdi->RunningJob = NULL;
             KeReleaseSpinLock(&Wdi->JobLock, OldIrql);
@@ -1114,7 +1138,8 @@ Ndis6WdiStopWorker(
         KeReleaseSpinLock(&Wdi->JobLock, OldIrql);
 
         Job = CONTAINING_RECORD(Entry, NDIS6_WDI_JOB, Link);
-        NdisMOidRequestComplete(Wdi->Adapter, Job->Request, NDIS_STATUS_REQUEST_ABORTED);
+        if (Job->Request != NULL)
+            NdisMOidRequestComplete(Wdi->Adapter, Job->Request, NDIS_STATUS_REQUEST_ABORTED);
         ExFreePoolWithTag(Job, NDIS6_WDI_TAG);
     }
 }
@@ -1704,7 +1729,7 @@ Ndis6WdiMiniportCancelOidRequest(
     {
         PNDIS6_WDI_JOB Candidate = CONTAINING_RECORD(Entry, NDIS6_WDI_JOB, Link);
 
-        if (Candidate->Request->RequestId == RequestId)
+        if (Candidate->Request != NULL && Candidate->Request->RequestId == RequestId)
         {
             RemoveEntryList(&Candidate->Link);
             Job = Candidate;
