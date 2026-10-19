@@ -774,6 +774,7 @@ RegisterTargetComponents(VOID)
             DPRINT1("SetupInstallFromInfSectionW(RegistrationPhase2) failed (Error %lu)\n", GetLastError());
         }
 
+        RegisterWow64CodeDlls(hSysSetupInf, L"OleControlDllsCode");
         RegisterTypeLibraries(NULL, NULL, hSysSetupInf, L"TypeLibraries");
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)

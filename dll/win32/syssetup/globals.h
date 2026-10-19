@@ -81,6 +81,11 @@ InitializeDefaultUserLocale(VOID);
 DWORD
 SaveDefaultUserHive(VOID);
 
+VOID
+RegisterWow64CodeDlls(
+    _In_ HINF hinf,
+    _In_ LPCWSTR szSection);
+
 BOOL
 RegisterTypeLibraries(
     _In_ PITEMSDATA pItemsData,

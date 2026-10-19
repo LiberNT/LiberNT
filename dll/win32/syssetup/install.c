@@ -25,6 +25,7 @@
 #include <rpcproxy.h>
 #include <ndk/cmfuncs.h>
 #include <reactos/bootstatus.h>
+#include <strsafe.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -533,6 +534,71 @@ InstallSysSetupInfComponents(VOID)
 }
 
 
+
+VOID
+RegisterWow64CodeDlls(
+    _In_ HINF hinf,
+    _In_ LPCWSTR szSection)
+{
+    WCHAR Wow64Dir[MAX_PATH], Regsvr32[MAX_PATH], DllPath[MAX_PATH], CommandLine[3 * MAX_PATH];
+    WCHAR SubDir[MAX_PATH], FileName[MAX_PATH];
+    PROCESS_INFORMATION ProcessInformation;
+    STARTUPINFOW StartupInfo;
+    INFCONTEXT Context;
+    PCWSTR Switches;
+    INT DirId, Flags;
+    HRESULT hr;
+
+    if (!GetSystemWow64DirectoryW(Wow64Dir, ARRAYSIZE(Wow64Dir)))
+        return;
+    if (FAILED(StringCchPrintfW(Regsvr32, ARRAYSIZE(Regsvr32), L"%s\\regsvr32.exe", Wow64Dir)) ||
+        GetFileAttributesW(Regsvr32) == INVALID_FILE_ATTRIBUTES)
+    {
+        return;
+    }
+
+    if (!SetupFindFirstLineW(hinf, szSection, NULL, &Context))
+        return;
+
+    do
+    {
+        if (!SetupGetIntField(&Context, 1, &DirId) || DirId != 11 ||
+            !SetupGetStringFieldW(&Context, 3, FileName, ARRAYSIZE(FileName), NULL))
+        {
+            continue;
+        }
+        if (!SetupGetStringFieldW(&Context, 2, SubDir, ARRAYSIZE(SubDir), NULL))
+            SubDir[0] = UNICODE_NULL;
+        if (!SetupGetIntField(&Context, 4, &Flags))
+            Flags = 1;
+
+        if (SubDir[0])
+            hr = StringCchPrintfW(DllPath, ARRAYSIZE(DllPath), L"%s\\%s\\%s", Wow64Dir, SubDir, FileName);
+        else
+            hr = StringCchPrintfW(DllPath, ARRAYSIZE(DllPath), L"%s\\%s", Wow64Dir, FileName);
+        if (FAILED(hr) || GetFileAttributesW(DllPath) == INVALID_FILE_ATTRIBUTES)
+            continue;
+
+        Switches = (Flags & 2) ? ((Flags & 1) ? L"/s /i" : L"/s /n /i") : L"/s";
+        if (FAILED(StringCchPrintfW(CommandLine, ARRAYSIZE(CommandLine), L"\"%s\" %s \"%s\"",
+                                    Regsvr32, Switches, DllPath)))
+        {
+            continue;
+        }
+
+        ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+        StartupInfo.cb = sizeof(StartupInfo);
+        if (!CreateProcessW(Regsvr32, CommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL,
+                            &StartupInfo, &ProcessInformation))
+        {
+            DPRINT1("Could not start the 32-bit registration of %S (Error %lu)\n", DllPath, GetLastError());
+            continue;
+        }
+        WaitForSingleObject(ProcessInformation.hProcess, 60000);
+        CloseHandle(ProcessInformation.hThread);
+        CloseHandle(ProcessInformation.hProcess);
+    } while (SetupFindNextLine(&Context, &Context));
+}
 
 BOOL
 RegisterTypeLibraries(
@@ -1308,6 +1374,7 @@ InstallLiveCD(VOID)
         {
             DPRINT1("SetupInstallFromInfSectionW failed!\n");
         }
+        RegisterWow64CodeDlls(hSysSetupInf, L"OleControlDllsCode");
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
