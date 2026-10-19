@@ -187,6 +187,81 @@ WlanContains(
     return PatternLength == 0;
 }
 
+static int
+WlanDisconnectInterface(
+    _In_opt_ PCWSTR InterfaceMatch)
+{
+    HANDLE hClient = NULL;
+    DWORD dwVersion = 0;
+    PWLAN_INTERFACE_INFO_LIST pIfList = NULL;
+    const GUID *InterfaceGuid = NULL;
+    PWLAN_CONNECTION_ATTRIBUTES Attributes;
+    WLAN_OPCODE_VALUE_TYPE ValueType;
+    DWORD DataSize;
+    DWORD Result;
+    DWORD Index;
+    ULONG Attempt;
+    BOOL Disconnected = FALSE;
+
+    Result = WlanOpenHandle(2, NULL, &dwVersion, &hClient);
+    if (Result != ERROR_SUCCESS)
+    {
+        wprintf(L"WLANCONN: WlanOpenHandle failed %lu\n", Result);
+        return 1;
+    }
+
+    Result = WlanEnumInterfaces(hClient, NULL, &pIfList);
+    if (Result != ERROR_SUCCESS || pIfList == NULL || pIfList->dwNumberOfItems == 0)
+    {
+        wprintf(L"WLANCONN: no WLAN interface (%lu)\n", Result);
+        goto Cleanup;
+    }
+
+    for (Index = 0; Index < pIfList->dwNumberOfItems; Index++)
+    {
+        if (!InterfaceMatch || WlanContains(pIfList->InterfaceInfo[Index].strInterfaceDescription, InterfaceMatch))
+        {
+            InterfaceGuid = &pIfList->InterfaceInfo[Index].InterfaceGuid;
+            break;
+        }
+    }
+    if (InterfaceGuid == NULL)
+    {
+        wprintf(L"WLANCONN: no WLAN interface matches %s\n", InterfaceMatch);
+        goto Cleanup;
+    }
+
+    Result = WlanDisconnect(hClient, InterfaceGuid, NULL);
+    wprintf(L"WLANCONN: WlanDisconnect 0x%lx\n", Result);
+    if (Result != ERROR_SUCCESS)
+        goto Cleanup;
+
+    for (Attempt = 0; Attempt < 40 && !Disconnected; Attempt++)
+    {
+        DataSize = 0;
+        Attributes = NULL;
+        Result = WlanQueryInterface(hClient, InterfaceGuid, wlan_intf_opcode_current_connection,
+                                    NULL, &DataSize, (PVOID *)&Attributes, &ValueType);
+        if (Result != ERROR_SUCCESS ||
+            Attributes == NULL ||
+            Attributes->isState == wlan_interface_state_disconnected)
+        {
+            Disconnected = TRUE;
+        }
+        if (Attributes != NULL)
+            WlanFreeMemory(Attributes);
+        if (!Disconnected)
+            Sleep(250);
+    }
+    wprintf(Disconnected ? L"WLANCONN: disconnected\n" : L"WLANCONN: still connected after 10 seconds\n");
+
+Cleanup:
+    if (pIfList != NULL)
+        WlanFreeMemory(pIfList);
+    WlanCloseHandle(hClient, NULL);
+    return Disconnected ? 0 : 1;
+}
+
 int
 wmain(int argc, WCHAR **argv)
 {
@@ -222,6 +297,14 @@ wmain(int argc, WCHAR **argv)
     RtlZeroMemory(KeyXml, sizeof(KeyXml));
     RtlZeroMemory(ProfileXml, sizeof(ProfileXml));
 
+    if (argc >= 2 && _wcsicmp(argv[1], L"--disconnect") == 0)
+    {
+        if (argc == 2)
+            return WlanDisconnectInterface(NULL);
+        if (argc == 4 && _wcsicmp(argv[2], L"--interface") == 0)
+            return WlanDisconnectInterface(argv[3]);
+    }
+
     ArgIndex = (argc >= 3 && _wcsicmp(argv[2], L"--key-file") == 0) ? 4 : 3;
     for (Index = ArgIndex; Index < (DWORD)argc; Index++)
     {
@@ -235,7 +318,8 @@ wmain(int argc, WCHAR **argv)
     if (argc < 3 || ArgIndex > (DWORD)argc || Index != (DWORD)argc)
     {
         wprintf(L"usage: wlanconn <ssid> <passphrase> [--interface <description>] [--wpa3]\n"
-                L"       wlanconn <ssid> --key-file <path> [--interface <description>] [--wpa3]\n");
+                L"       wlanconn <ssid> --key-file <path> [--interface <description>] [--wpa3]\n"
+                L"       wlanconn --disconnect [--interface <description>]\n");
         return 1;
     }
 
