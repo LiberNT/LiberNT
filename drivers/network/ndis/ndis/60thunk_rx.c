@@ -785,6 +785,9 @@ NdisMIndicateStatusEx(
     if (Adapter == NULL || !Adapter->IsNdis6 || StatusIndication == NULL)
         return;
 
+    if (Ndis6WdiIndicateStatus(Adapter, StatusIndication))
+        return;
+
     Ndis6FilterDispatchStatus(Adapter, StatusIndication);
 }
 
@@ -984,6 +987,16 @@ Ndis6FilterTerminalStatus(
     case NDIS_STATUS_DOT11_ROAMING_START:
     case NDIS_STATUS_DOT11_ROAMING_COMPLETION:
     case NDIS_STATUS_DOT11_DISASSOCIATION:
+    case NDIS_STATUS_DOT11_TKIPMIC_FAILURE:
+    case NDIS_STATUS_DOT11_PMKID_CANDIDATE_LIST:
+    case NDIS_STATUS_DOT11_PHY_STATE_CHANGED:
+    case NDIS_STATUS_DOT11_LINK_QUALITY:
+    case NDIS_STATUS_DOT11_INCOMING_ASSOC_STARTED:
+    case NDIS_STATUS_DOT11_INCOMING_ASSOC_REQUEST_RECEIVED:
+    case NDIS_STATUS_DOT11_INCOMING_ASSOC_COMPLETION:
+    case NDIS_STATUS_DOT11_STOP_AP:
+    case NDIS_STATUS_DOT11_PHY_FREQUENCY_ADOPTED:
+    case NDIS_STATUS_DOT11_CAN_SUSTAIN_AP:
         /* 802.11 WLAN indications — no legacy WLAN stack in ReactOS, drop. */
         return;
 

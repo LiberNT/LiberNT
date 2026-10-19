@@ -52,6 +52,8 @@ set(NDIS6_SOURCE
     ndis/60adapter.c
     ndis/60wdf.c
     ndis/60wdi.c
+    ndis/60wdidata.c
+    ndis/60wdidot11.c
     ndis/60oid.c
     ndis/60thunk_tx.c
     ndis/60thunk_rx.c
@@ -59,7 +61,8 @@ set(NDIS6_SOURCE
     ndis/60util.c
     ndis/60ifprov.c
     ndis/60processor.c
-    include/ndis6_internal.h)
+    include/ndis6_internal.h
+    include/ndis6_wdi.h)
 set_source_files_properties(${NDIS6_SOURCE} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
 add_library(ndis MODULE

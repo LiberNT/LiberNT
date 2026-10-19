@@ -194,6 +194,7 @@ typedef struct _NDIS6_DRIVER_BLOCK
     NDIS_MINIPORT_DRIVER_CHARACTERISTICS    Characteristics;
     BOOLEAN                                 IsWdi;
     NDIS_MINIPORT_DRIVER_WDI_CHARACTERISTICS WdiCharacteristics;
+    NDIS_MINIPORT_DRIVER_CHARACTERISTICS    WdiMiniportCharacteristics;
     NDIS_MINIPORT_PNP_CHARACTERISTICS       PnpCharacteristics;
     BOOLEAN                                 PnpCharacteristicsValid;
 #if NDIS_SUPPORT_NDIS630
@@ -596,6 +597,17 @@ Ndis6RegisterMiniportDriverInternal(
     _In_opt_ PNDIS6_WDF_CX_DRIVER WdfCxDriver,
     _In_opt_ PNDIS_MINIPORT_DRIVER_WDI_CHARACTERISTICS WdiCharacteristics,
     _Out_ PNDIS_HANDLE NdisMiniportDriverHandle);
+
+BOOLEAN
+Ndis6WdiOidRequestComplete(
+    _In_ PLOGICAL_ADAPTER Adapter,
+    _In_ PNDIS_OID_REQUEST OidRequest,
+    _In_ NDIS_STATUS Status);
+
+BOOLEAN
+Ndis6WdiIndicateStatus(
+    _In_ PLOGICAL_ADAPTER Adapter,
+    _In_ PNDIS_STATUS_INDICATION StatusIndication);
 
 PNDIS6_DRIVER_BLOCK
 Ndis6FindDriverBlock(

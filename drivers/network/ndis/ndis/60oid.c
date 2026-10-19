@@ -376,6 +376,9 @@ NdisMOidRequestComplete(
     if (Adapter == NULL || !Adapter->IsNdis6 || OidRequest == NULL)
         return;
 
+    if (Ndis6WdiOidRequestComplete(Adapter, OidRequest, Status))
+        return;
+
     if (Ndis6FilterCompleteOidFromMiniport(Adapter, OidRequest, Status))
         return;
 
