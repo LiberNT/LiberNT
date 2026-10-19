@@ -810,6 +810,23 @@ RawInputRegisterDevice(PRAWINPUTDEVICE Devices, UINT *pcDevices, const RAWINPUTD
     *Pos = *Device;
 }
 
+static BOOL
+RawInputRegistersHid(const RAWINPUTDEVICE *Devices, UINT Count)
+{
+    UINT i;
+
+    for (i = 0; i < Count; i++)
+    {
+        if (Devices[i].dwFlags & RIDEV_REMOVE)
+            continue;
+        if (Devices[i].usUsagePage == HID_USAGE_PAGE_GENERIC &&
+            (Devices[i].usUsage == HID_USAGE_GENERIC_MOUSE || Devices[i].usUsage == HID_USAGE_GENERIC_KEYBOARD))
+            continue;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 BOOL
 APIENTRY
 NtUserRegisterRawInputDevices(
@@ -901,6 +918,8 @@ NtUserRegisterRawInputDevices(
 
 Leave:
     UserLeave();
+    if (Ret && RawInputRegistersHid(Local, uiNumDevices))
+        HidInputWaitRawInput();
 Free:
     if (Local)
         ExFreePoolWithTag(Local, USERTAG_HIDDESC);

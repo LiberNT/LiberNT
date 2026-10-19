@@ -56,6 +56,9 @@ typedef struct _HIDINPUT_STATE
     KEVENT ArrivalEvent;
     LONG DevicesChanged;
     LONG RawDirty;
+    LONG RawRequested;
+    LONG RawCompleted;
+    KEVENT RawSyncedEvent;
     FAST_MUTEX ArrivalLock;
     LIST_ENTRY Arrivals;
     PVOID NotificationEntry;
@@ -398,8 +401,32 @@ HidInputRawInputChanged(VOID)
 
     if (!State)
         return;
+    InterlockedIncrement(&State->RawRequested);
     InterlockedExchange(&State->RawDirty, 1);
     KeSetEvent(&State->ArrivalEvent, IO_NO_INCREMENT, FALSE);
+}
+
+VOID
+NTAPI
+HidInputWaitRawInput(VOID)
+{
+    PHIDINPUT_STATE State = gHidInput;
+    LARGE_INTEGER Timeout;
+    LONG Generation;
+
+    if (!State)
+        return;
+
+    Generation = InterlockedCompareExchange(&State->RawRequested, 0, 0);
+    Timeout.QuadPart = -1000LL * 10000;
+    while (InterlockedCompareExchange(&State->RawCompleted, 0, 0) - Generation < 0)
+    {
+        KeClearEvent(&State->RawSyncedEvent);
+        if (InterlockedCompareExchange(&State->RawCompleted, 0, 0) - Generation >= 0)
+            break;
+        if (KeWaitForSingleObject(&State->RawSyncedEvent, UserRequest, KernelMode, FALSE, &Timeout) == STATUS_TIMEOUT)
+            break;
+    }
 }
 
 static
@@ -733,6 +760,7 @@ HidInputStart(VOID)
         return;
 
     KeInitializeEvent(&State->ArrivalEvent, SynchronizationEvent, FALSE);
+    KeInitializeEvent(&State->RawSyncedEvent, NotificationEvent, FALSE);
     KeInitializeTimer(&State->RepeatTimer);
     ExInitializeFastMutex(&State->ArrivalLock);
     InitializeListHead(&State->Arrivals);
@@ -923,7 +951,13 @@ HidInputProcess(VOID)
     if (InterlockedExchange(&State->DevicesChanged, 0))
         RawInputUpdateDevices();
     if (InterlockedExchange(&State->RawDirty, 0))
+    {
+        LONG Generation = InterlockedCompareExchange(&State->RawRequested, 0, 0);
+
         HidInputSyncRawReaders(State);
+        InterlockedExchange(&State->RawCompleted, Generation);
+        KeSetEvent(&State->RawSyncedEvent, IO_NO_INCREMENT, FALSE);
+    }
 
     for (Index = 0; Index < HIDINPUT_MAX_RAW_DEVICES; Index++)
     {

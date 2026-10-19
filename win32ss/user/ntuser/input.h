@@ -117,6 +117,7 @@ struct _HIDP_CAPS;
 NTSTATUS NTAPI HidInputQueryCollection(PUNICODE_STRING Path, struct _HID_COLLECTION_INFORMATION *Information,
                                        struct _HIDP_PREPARSED_DATA **PreparsedData, struct _HIDP_CAPS *Caps);
 VOID NTAPI HidInputRawInputChanged(VOID);
+VOID NTAPI HidInputWaitRawInput(VOID);
 NTSTATUS NTAPI InitHidInputImpl(PDRIVER_OBJECT DriverObject);
 VOID NTAPI HidInputStart(VOID);
 VOID NTAPI HidInputStop(VOID);
