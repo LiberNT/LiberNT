@@ -38,6 +38,9 @@ typedef struct {
     HRESULT hres;
 
     LPWSTR cache_file;
+#ifdef __REACTOS__
+    BOOL locked;
+#endif
 } stgmed_buf_t;
 
 typedef struct _stgmed_obj_t stgmed_obj_t;
@@ -379,6 +382,10 @@ static ULONG WINAPI StgMedUnk_Release(IUnknown *iface)
     if(!ref) {
         if(This->file != INVALID_HANDLE_VALUE)
             CloseHandle(This->file);
+#ifdef __REACTOS__
+        if(This->locked)
+            IInternetProtocolEx_UnlockRequest(This->protocol);
+#endif
         IInternetProtocolEx_Release(This->protocol);
         free(This->cache_file);
         free(This);
@@ -404,6 +411,9 @@ static stgmed_buf_t *create_stgmed_buf(IInternetProtocolEx *protocol)
     ret->file = INVALID_HANDLE_VALUE;
     ret->hres = S_OK;
     ret->cache_file = NULL;
+#ifdef __REACTOS__
+    ret->locked = FALSE;
+#endif
 
     IInternetProtocolEx_AddRef(protocol);
     ret->protocol = protocol;
@@ -666,9 +676,21 @@ static void stgmed_stream_release(stgmed_obj_t *obj)
     IStream_Release(&stream->IStream_iface);
 }
 
+#ifdef __REACTOS__
+static void stgmed_buf_lock(stgmed_buf_t *buf)
+{
+    if(!buf->locked && SUCCEEDED(IInternetProtocolEx_LockRequest(buf->protocol, 0)))
+        buf->locked = TRUE;
+}
+
+#endif
 static HRESULT stgmed_stream_fill_stgmed(stgmed_obj_t *obj, STGMEDIUM *stgmed)
 {
     ProtocolStream *stream = (ProtocolStream*)obj;
+
+#ifdef __REACTOS__
+    stgmed_buf_lock(stream->buf);
+#endif
 
     stgmed->tymed = TYMED_ISTREAM;
     stgmed->pstm = &stream->IStream_iface;
@@ -684,6 +706,10 @@ static HRESULT stgmed_stream_get_result(stgmed_obj_t *obj, DWORD bindf, void **r
     if(!(bindf & BINDF_ASYNCHRONOUS) && stream->buf->file == INVALID_HANDLE_VALUE
        && stream->buf->hres != S_FALSE)
         return INET_E_DATA_NOT_AVAILABLE;
+
+#ifdef __REACTOS__
+    stgmed_buf_lock(stream->buf);
+#endif
 
     IStream_AddRef(&stream->IStream_iface);
     *result = &stream->IStream_iface;
