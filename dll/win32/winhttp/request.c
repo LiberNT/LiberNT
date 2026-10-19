@@ -3310,6 +3310,11 @@ done:
         request->state = REQUEST_STATE_RESPONSE_RECEIVED;
         if (request->netconn) netconn_set_timeout( request->netconn, FALSE, request->receive_timeout );
     }
+    else if (ret == ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED && request->netconn)
+    {
+        netconn_release( request->netconn );
+        request->netconn = NULL;
+    }
     if (async)
     {
         if (!ret) send_callback( &request->hdr, WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE, NULL, 0 );
