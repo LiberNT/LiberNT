@@ -1019,73 +1019,115 @@ acpi_pci_root_exit(VOID)
     }
 }
 
-/*
- * Context structure for walking ACPI namespace to find PCI devices
- */
-typedef struct _ACPI_PCI_DEVICE_SEARCH_CONTEXT
-{
-    ULONG Segment;
-    ULONG Bus;
-    ULONG Device;
-    ULONG Function;
-    ACPI_HANDLE RootHandle;
-    ACPI_HANDLE FoundHandle;
-} ACPI_PCI_DEVICE_SEARCH_CONTEXT, *PACPI_PCI_DEVICE_SEARCH_CONTEXT;
-
-/*
- * Callback for AcpiWalkNamespace to find a PCI device by _ADR
- *
- * The _ADR encoding for PCI devices is: (Device << 16) | Function
- */
 static
-ACPI_STATUS
-AcpiFindPciDeviceCallback(
-    _In_ ACPI_HANDLE Handle,
-    _In_ UINT32 Level,
-    _Inout_ void *Context,
-    _Inout_opt_ void **ReturnValue)
+BOOLEAN
+AcpiReadPciBridgeBuses(
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _Out_ PUCHAR Secondary,
+    _Out_ PUCHAR Subordinate)
 {
-    PACPI_PCI_DEVICE_SEARCH_CONTEXT SearchContext = Context;
-    ACPI_STATUS Status;
-    ACPI_OBJECT Result;
-    ACPI_BUFFER Buffer = { sizeof(Result), &Result };
-    ULONGLONG AdrValue;
-    ULONG ExpectedAdr;
+    PCI_SLOT_NUMBER Slot;
+    UCHAR HeaderType;
+    UCHAR Buses[2];
 
-    UNREFERENCED_PARAMETER(Level);
-    UNREFERENCED_PARAMETER(ReturnValue);
+    Slot.u.AsULONG = 0;
+    Slot.u.bits.DeviceNumber = Device;
+    Slot.u.bits.FunctionNumber = Function;
 
-    /* Evaluate _ADR method to get PCI address */
-    Status = AcpiEvaluateObjectTyped(Handle,
-                                     METHOD_NAME__ADR,
-                                     NULL,
-                                     &Buffer,
-                                     ACPI_TYPE_INTEGER);
-    if (ACPI_FAILURE(Status))
+    if (HalGetBusDataByOffset(PCIConfiguration, Bus, Slot.u.AsULONG, &HeaderType,
+                              FIELD_OFFSET(PCI_COMMON_CONFIG, HeaderType), sizeof(HeaderType)) != sizeof(HeaderType))
     {
-        /* No _ADR - not a PCI device, continue walking */
-        return AE_OK;
+        return FALSE;
     }
 
-    AdrValue = Result.Integer.Value;
+    HeaderType &= ~PCI_MULTIFUNCTION;
+    if (HeaderType != PCI_BRIDGE_TYPE && HeaderType != PCI_CARDBUS_BRIDGE_TYPE)
+        return FALSE;
 
-    /* _ADR encoding: (Device << 16) | Function */
-    ExpectedAdr = (SearchContext->Device << 16) | SearchContext->Function;
-
-    if ((ULONG)AdrValue == ExpectedAdr)
+    if (HalGetBusDataByOffset(PCIConfiguration, Bus, Slot.u.AsULONG, Buses,
+                              FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.SecondaryBus), sizeof(Buses)) != sizeof(Buses))
     {
-        /* Found it */
-        SearchContext->FoundHandle = Handle;
-        DPRINT1("ACPI: Found PCI device %lu:%lu:%lu:%lu at ACPI handle %p\n",
-                SearchContext->Segment,
-                SearchContext->Bus,
-                SearchContext->Device,
-                SearchContext->Function,
-                Handle);
-        return AE_CTRL_TERMINATE;
+        return FALSE;
     }
 
-    return AE_OK;
+    *Secondary = Buses[0];
+    *Subordinate = Buses[1];
+    return TRUE;
+}
+
+static
+BOOLEAN
+AcpiFindPciDeviceUnderRoot(
+    _In_ ACPI_HANDLE RootHandle,
+    _In_ ULONG RootBus,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _Out_ ACPI_HANDLE *OutHandle)
+{
+    ACPI_HANDLE Parent = RootHandle;
+    ULONG ParentBus = RootBus;
+
+    for (;;)
+    {
+        ACPI_HANDLE Child = NULL;
+        ACPI_HANDLE Wildcard = NULL;
+        ACPI_HANDLE Bridge = NULL;
+        ULONG BridgeBus = 0;
+
+        while (ACPI_SUCCESS(AcpiGetNextObject(ACPI_TYPE_DEVICE, Parent, Child, &Child)))
+        {
+            ACPI_OBJECT Result;
+            ACPI_BUFFER Buffer = { sizeof(Result), &Result };
+            ULONG ChildDevice, ChildFunction;
+            UCHAR Secondary, Subordinate;
+
+            if (ACPI_FAILURE(AcpiEvaluateObjectTyped(Child, METHOD_NAME__ADR, NULL, &Buffer, ACPI_TYPE_INTEGER)))
+                continue;
+
+            ChildDevice = (ULONG)(Result.Integer.Value >> 16) & 0xFFFF;
+            ChildFunction = (ULONG)Result.Integer.Value & 0xFFFF;
+
+            if (ParentBus == Bus)
+            {
+                if (ChildDevice != Device)
+                    continue;
+                if (ChildFunction == Function)
+                {
+                    *OutHandle = Child;
+                    return TRUE;
+                }
+                if (ChildFunction == 0xFFFF && Wildcard == NULL)
+                    Wildcard = Child;
+                continue;
+            }
+
+            if (ChildDevice >= PCI_MAX_DEVICES || ChildFunction >= PCI_MAX_FUNCTION)
+                continue;
+            if (!AcpiReadPciBridgeBuses(ParentBus, ChildDevice, ChildFunction, &Secondary, &Subordinate))
+                continue;
+            if (Secondary <= ParentBus || Bus < Secondary || Bus > Subordinate)
+                continue;
+
+            Bridge = Child;
+            BridgeBus = Secondary;
+            break;
+        }
+
+        if (ParentBus == Bus)
+        {
+            *OutHandle = Wildcard;
+            return Wildcard != NULL;
+        }
+
+        if (Bridge == NULL)
+            return FALSE;
+
+        Parent = Bridge;
+        ParentBus = BridgeBus;
+    }
 }
 
 /**
@@ -1116,7 +1158,7 @@ AcpiFindPciDeviceInNamespace(
 {
     PACPI_PCI_ROOT_TRACK_ENTRY Entry;
     PLIST_ENTRY Link;
-    ACPI_PCI_DEVICE_SEARCH_CONTEXT SearchContext;
+    BOOLEAN Found = FALSE;
 
     if (!OutHandle)
     {
@@ -1131,33 +1173,16 @@ AcpiFindPciDeviceInNamespace(
         return FALSE;
     }
 
-    /* Initialize search context */
-    SearchContext.Segment = Segment;
-    SearchContext.Bus = Bus;
-    SearchContext.Device = Device;
-    SearchContext.Function = Function;
-    SearchContext.RootHandle = NULL;
-    SearchContext.FoundHandle = NULL;
-
-    DPRINT1("ACPI: Searching for PCI device %lu:%lu:%lu:%lu in namespace\n",
-            Segment, Bus, Device, Function);
-
     ExAcquireFastMutex(&AcpiPciRootTrackLock);
 
-    /*
-     * Find the PCI root bridge that owns this bus.
-     * For now, we iterate through all tracked roots and search each one.
-     * A more sophisticated implementation would match Segment and Bus range.
-     */
     for (Link = AcpiPciRootTrackList.Flink;
-         Link != &AcpiPciRootTrackList;
+         Link != &AcpiPciRootTrackList && !Found;
          Link = Link->Flink)
     {
         Entry = CONTAINING_RECORD(Link,
                                   ACPI_PCI_ROOT_TRACK_ENTRY,
                                   ListEntry);
 
-        /* Check if this root bridge covers our segment and bus */
         if (Entry->Segment != Segment)
         {
             continue;
@@ -1168,47 +1193,14 @@ AcpiFindPciDeviceInNamespace(
             continue;
         }
 
-        SearchContext.RootHandle = Entry->Handle;
-
-        DPRINT1("ACPI: Searching under PCI root %p (Seg %lu Bus %lu-%lu)\n",
-                Entry->Handle,
-                Entry->Segment,
-                Entry->BusStart,
-                Entry->BusEnd);
-
-        /*
-         * Walk namespace under this root bridge to find the device.
-         * We search up to 2 levels deep:
-         *   Level 1: Direct children of root (Bus 0 devices)
-         *   Level 2: Children of bridges (for devices on secondary buses)
-         *
-         * For devices directly on the root bus (Bus == BusStart), search
-         * direct children. For devices on secondary buses, we would need
-         * to walk through PCI-to-PCI bridges (more complex, TODO).
-         *
-         * For now, we search all descendants up to a reasonable depth.
-         */
-        (void)AcpiWalkNamespace(ACPI_TYPE_DEVICE,
-                                Entry->Handle,
-                                4,  /* Max depth - handles bridges */
-                                AcpiFindPciDeviceCallback,
-                                NULL,
-                                &SearchContext,
-                                NULL);
-
-        if (SearchContext.FoundHandle != NULL)
-        {
-            *OutHandle = SearchContext.FoundHandle;
-            ExReleaseFastMutex(&AcpiPciRootTrackLock);
-            return TRUE;
-        }
+        Found = AcpiFindPciDeviceUnderRoot(Entry->Handle, Entry->BusStart, Bus, Device, Function, OutHandle);
     }
 
     ExReleaseFastMutex(&AcpiPciRootTrackLock);
 
-    DPRINT1("ACPI: PCI device %lu:%lu:%lu:%lu not found in namespace\n",
-            Segment, Bus, Device, Function);
-    return FALSE;
+    DPRINT("ACPI: PCI device %lu:%lu:%lu:%lu %s namespace node %p\n",
+           Segment, Bus, Device, Function, Found ? "has" : "has no", *OutHandle);
+    return Found;
 }
 
 /*
