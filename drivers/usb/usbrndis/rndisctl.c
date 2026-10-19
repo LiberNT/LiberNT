@@ -354,8 +354,8 @@ RndisQueryOid(
     DataLength = QueryCmplt->InformationBufferLength;
 
     /* Validate response data */
-    if (DataOffset + DataLength + 8 > BytesReceived ||
-        DataOffset + 8 > RNDIS_CONTROL_BUFFER_SIZE)
+    if (DataOffset > BytesReceived - 8 ||
+        DataLength > BytesReceived - 8 - DataOffset)
     {
         DPRINT1("USBRNDIS: Invalid QUERY response (offset=%u len=%u received=%u)\n",
                 DataOffset, DataLength, BytesReceived);

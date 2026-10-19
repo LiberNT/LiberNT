@@ -506,6 +506,7 @@ RndisProcessNcmNtb(
     ULONG FramesProcessed = 0;
     ULONG EntryIndex;
     ULONG MaxEntries;
+    ULONG NdpCount = 0;
 
     /* Validate minimum length for NTH16 */
     if (Length < NCM_NTH16_LENGTH)
@@ -554,6 +555,13 @@ RndisProcessNcmNtb(
     /* Process each NDP16 in the chain */
     while (NdpOffset != 0)
     {
+        if (++NdpCount > Length / NCM_NDP16_MIN_LENGTH)
+        {
+            DPRINT1("USBRNDIS: NDP16 chain loops at offset %lu\n", NdpOffset);
+            Adapter->RxErrorCount++;
+            break;
+        }
+
         /* Validate NDP16 offset and minimum size */
         if (NdpOffset + NCM_NDP16_MIN_LENGTH > Length)
         {
@@ -772,7 +780,8 @@ RndisProcessReceivedPacket(
         }
 
         /* Validate message length */
-        if (PacketMsg->MessageLength > Length)
+        if (PacketMsg->MessageLength > Length ||
+            PacketMsg->MessageLength < sizeof(RNDIS_PACKET_MSG))
         {
             DPRINT1("USBRNDIS: Message length %u exceeds received length %u\n",
                     PacketMsg->MessageLength, Length);
@@ -785,7 +794,8 @@ RndisProcessReceivedPacket(
         EthernetLength = PacketMsg->DataLength;
 
         /* Validate data bounds */
-        if (DataOffset + EthernetLength > PacketMsg->MessageLength)
+        if (PacketMsg->DataOffset > PacketMsg->MessageLength - 8 ||
+            EthernetLength > PacketMsg->MessageLength - DataOffset)
         {
             DPRINT1("USBRNDIS: Data extends past message end (offset=%u len=%u msglen=%u)\n",
                     DataOffset, EthernetLength, PacketMsg->MessageLength);
@@ -811,7 +821,9 @@ RndisProcessReceivedPacket(
          * IMPORTANT: Validate bounds against actual received Length, not just
          * MessageLength from the device. MessageLength is untrusted device input.
          */
-        if (PacketMsg->PerPacketInfoLength > 0 && PacketMsg->PerPacketInfoOffset > 0)
+        if (PacketMsg->PerPacketInfoLength > 0 && PacketMsg->PerPacketInfoOffset > 0 &&
+            PacketMsg->PerPacketInfoOffset <= PacketMsg->MessageLength &&
+            PacketMsg->PerPacketInfoLength <= PacketMsg->MessageLength)
         {
             ULONG PpiOffset = PacketMsg->PerPacketInfoOffset + 8; /* Offset from message start */
             ULONG PpiEndOffset = PpiOffset + PacketMsg->PerPacketInfoLength;
@@ -830,7 +842,7 @@ RndisProcessReceivedPacket(
 
                     /* Validate element size */
                     if (PpiEntry->Size < sizeof(RNDIS_PER_PACKET_INFO) ||
-                        PpiOffset + PpiEntry->Size > PpiEndOffset)
+                        PpiEntry->Size > PpiEndOffset - PpiOffset)
                     {
                         DPRINT1("USBRNDIS: Invalid per-packet info element size %u at offset %u\n",
                                 PpiEntry->Size, PpiOffset);
@@ -846,7 +858,7 @@ RndisProcessReceivedPacket(
                              * The data is at PerPacketInfoOffset within this element.
                              */
                             if (PpiEntry->PerPacketInfoOffset > 0 &&
-                                PpiEntry->PerPacketInfoOffset + sizeof(RNDIS_TCPIP_CSUM_INFO) <= PpiEntry->Size)
+                                PpiEntry->PerPacketInfoOffset <= PpiEntry->Size - sizeof(RNDIS_TCPIP_CSUM_INFO))
                             {
                                 PRNDIS_TCPIP_CSUM_INFO CsumData;
                                 CsumData = (PRNDIS_TCPIP_CSUM_INFO)((PUCHAR)PpiEntry + PpiEntry->PerPacketInfoOffset);
