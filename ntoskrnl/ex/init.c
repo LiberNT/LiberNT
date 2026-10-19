@@ -689,6 +689,33 @@ ExComputeTickCountMultiplier(IN ULONG ClockIncrement)
 }
 
 CODE_SEG("INIT")
+static
+ULONG
+ExpGetSuiteMask(VOID)
+{
+    PCWSTR Name, End;
+    ULONG SuiteMask = 0;
+
+    if (CmSuiteBufferType == REG_MULTI_SZ && CmSuiteBufferLength != (ULONG)-1)
+    {
+        End = CmSuiteBuffer + min(CmSuiteBufferLength, sizeof(CmSuiteBuffer)) / sizeof(WCHAR);
+        for (Name = CmSuiteBuffer; Name < End && *Name; Name += wcsnlen(Name, End - Name) + 1)
+        {
+            if (wcsnlen(Name, End - Name) == RTL_NUMBER_OF(L"Terminal Server") - 1 &&
+                !_wcsnicmp(Name, L"Terminal Server", RTL_NUMBER_OF(L"Terminal Server") - 1))
+            {
+                SuiteMask |= VER_SUITE_TERMINAL;
+            }
+        }
+    }
+
+    if ((SuiteMask & VER_SUITE_TERMINAL) && CmTsAppCompat != 1)
+        SuiteMask |= VER_SUITE_SINGLEUSERTS;
+
+    return SuiteMask;
+}
+
+CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 ExpInitSystemPhase0(VOID)
@@ -717,8 +744,7 @@ ExpInitSystemPhase0(VOID)
         ExpFirmwareType = FirmwareTypeBios;
     }
 
-    /* Set the suite mask to maximum and return */
-    ExSuiteMask = 0xFFFFFFFF;
+    ExSuiteMask = ExpGetSuiteMask();
     return TRUE;
 }
 
@@ -1458,6 +1484,7 @@ ExpInitializeExecutive(IN ULONG Cpu,
     MmWriteableSharedUserData->NtMajorVersion = NtMajorVersion;
     MmWriteableSharedUserData->NtMinorVersion = NtMinorVersion;
     MmWriteableSharedUserData->NtBuildNumber = NtBuildNumber & 0xFFFF;
+    MmWriteableSharedUserData->SuiteMask = ExSuiteMask;
 
     /* Set the machine type */
 #if defined(_M_ARM64)

@@ -30,6 +30,7 @@ ULONG CmInstallUILanguageIdType;
 WCHAR CmSuiteBuffer[128];
 ULONG CmSuiteBufferLength = sizeof(CmSuiteBuffer);
 ULONG CmSuiteBufferType;
+ULONG CmTsAppCompat;
 
 CMHIVE CmControlHive;
 
@@ -631,7 +632,7 @@ DATA_SEG("INITDATA") CM_SYSTEM_CONTROL_VECTOR CmControlVector[] =
     {
         L"Terminal Server",
         L"TSAppCompat",
-        &DummyData,
+        &CmTsAppCompat,
         NULL,
         NULL
     },

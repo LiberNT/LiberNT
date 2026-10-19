@@ -1380,7 +1380,7 @@ BaseProcessInitPostImport(VOID)
     DPRINT("Post-init called\n");
 
     /* Check if this is a terminal server */
-    if (SharedUserData->SuiteMask & VER_SUITE_TERMINAL)
+    if ((SharedUserData->SuiteMask & (VER_SUITE_TERMINAL | VER_SUITE_SINGLEUSERTS)) == VER_SUITE_TERMINAL)
     {
         /* Initialize TS pointers */
         return BasepInitializeTermsrvFpns();

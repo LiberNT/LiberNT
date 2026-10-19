@@ -614,8 +614,8 @@ BOOLEAN
 NTAPI
 ExVerifySuite(SUITE_TYPE SuiteType)
 {
-    if (SuiteType == Personal) return TRUE;
-    return FALSE;
+    if ((ULONG)SuiteType >= MaxSuiteType) return FALSE;
+    return (ExSuiteMask & (1UL << SuiteType)) != 0;
 }
 
 NTSTATUS

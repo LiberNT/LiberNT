@@ -225,6 +225,8 @@ RtlGetVersion(IN OUT PRTL_OSVERSIONINFOW lpVersionInformation)
         InfoEx->wServicePackMajor = (Peb->OSCSDVersion >> 8) & 0xFF;
         InfoEx->wServicePackMinor = Peb->OSCSDVersion & 0xFF;
         InfoEx->wSuiteMask = SharedUserData->SuiteMask & 0xFFFF;
+        if (InfoEx->wSuiteMask & VER_SUITE_SINGLEUSERTS)
+            InfoEx->wSuiteMask &= ~VER_SUITE_TERMINAL;
         InfoEx->wProductType = SharedUserData->NtProductType;
         InfoEx->wReserved = 0;
 
