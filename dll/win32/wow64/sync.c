@@ -83,38 +83,6 @@ static NTSTATUS put_port_message_header32( CSR_PORT_MESSAGE32 *out, const CSR_PO
 }
 
 
-static NTSTATUS lpc_message_32to64( CSR_PORT_MESSAGE64 *out, const CSR_PORT_MESSAGE32 *in )
-{
-    ULONG payload_size;
-
-    if (in->TotalLength < sizeof(*in) || in->DataLength + sizeof(*in) > in->TotalLength) return STATUS_INVALID_PARAMETER;
-    if (in->TotalLength + sizeof(*out) - sizeof(*in) > WOW64_LPC_MAX_MESSAGE_LENGTH) return STATUS_PORT_MESSAGE_TOO_LONG;
-    payload_size = in->TotalLength - sizeof(*in);
-    memset( out, 0, in->TotalLength + sizeof(*out) - sizeof(*in) );
-    put_port_message_header64( out, in );
-    out->DataLength = in->DataLength;
-    out->TotalLength = in->TotalLength + sizeof(*out) - sizeof(*in);
-    memcpy( out + 1, in + 1, payload_size );
-    return STATUS_SUCCESS;
-}
-
-
-static NTSTATUS lpc_message_64to32( CSR_PORT_MESSAGE32 *out, const CSR_PORT_MESSAGE64 *in )
-{
-    ULONG payload_size;
-    NTSTATUS status;
-
-    if (in->TotalLength < sizeof(*in) || in->DataLength + sizeof(*in) > in->TotalLength) return STATUS_INVALID_PARAMETER;
-    if (in->TotalLength > WOW64_LPC_MAX_MESSAGE_LENGTH) return STATUS_PORT_MESSAGE_TOO_LONG;
-    payload_size = in->TotalLength - sizeof(*in);
-    if ((status = put_port_message_header32( out, in ))) return status;
-    out->DataLength = in->DataLength;
-    out->TotalLength = in->TotalLength - sizeof(*in) + sizeof(*out);
-    memcpy( out + 1, in + 1, payload_size );
-    return STATUS_SUCCESS;
-}
-
-
 #ifdef __REACTOS__
 
 #define WOW64_CSR_API(server, api) (((ULONG)(server) << 16) | (ULONG)(api))
@@ -450,20 +418,99 @@ void put_section_image_info( SECTION_IMAGE_INFORMATION32 *info32, const SECTION_
 }
 
 
+static LPC_SECTION_WRITE *lpc_section_write_32to64( LPC_SECTION_WRITE *out, const LPC_SECTION_WRITE32 *in )
+{
+    if (!in) return NULL;
+    out->Length = sizeof(*out);
+    out->SectionHandle = LongToHandle( in->SectionHandle );
+    out->SectionOffset = in->SectionOffset;
+    out->ViewSize = in->ViewSize;
+    out->ViewBase = ULongToPtr( in->ViewBase );
+    out->TargetViewBase = ULongToPtr( in->TargetViewBase );
+    return out;
+}
+
+
+static void lpc_section_write_64to32( LPC_SECTION_WRITE32 *out, const LPC_SECTION_WRITE *in )
+{
+    if (!out) return;
+    out->SectionOffset = in->SectionOffset;
+    out->ViewSize = in->ViewSize;
+    out->ViewBase = PtrToUlong( in->ViewBase );
+    out->TargetViewBase = PtrToUlong( in->TargetViewBase );
+}
+
+
+static LPC_SECTION_READ *lpc_section_read_32to64( LPC_SECTION_READ *out, const LPC_SECTION_READ32 *in )
+{
+    if (!in) return NULL;
+    out->Length = sizeof(*out);
+    out->ViewSize = in->ViewSize;
+    out->ViewBase = ULongToPtr( in->ViewBase );
+    return out;
+}
+
+
+static void lpc_section_read_64to32( LPC_SECTION_READ32 *out, const LPC_SECTION_READ *in )
+{
+    if (!out) return;
+    out->ViewSize = in->ViewSize;
+    out->ViewBase = PtrToUlong( in->ViewBase );
+}
+
+
+static NTSTATUS secure_connect_port( ULONG *handle_ptr, UNICODE_STRING32 *name32, SECURITY_QUALITY_OF_SERVICE *qos,
+                                     LPC_SECTION_WRITE32 *write32, SID *sid, LPC_SECTION_READ32 *read32,
+                                     ULONG *max_len, void *info, ULONG *info_len )
+{
+    UNICODE_STRING name;
+    LPC_SECTION_WRITE write;
+    LPC_SECTION_READ read;
+    HANDLE handle = 0;
+    NTSTATUS status;
+
+    *handle_ptr = 0;
+    status = NtSecureConnectPort( &handle, unicode_str_32to64( &name, name32 ), qos,
+                                  lpc_section_write_32to64( &write, write32 ), sid,
+                                  lpc_section_read_32to64( &read, read32 ), max_len, info, info_len );
+    if (NT_SUCCESS(status))
+    {
+        put_handle( handle_ptr, handle );
+        lpc_section_write_64to32( write32, &write );
+        lpc_section_read_64to32( read32, &read );
+    }
+    return status;
+}
+
+
 /**********************************************************************
  *           wow64_NtAcceptConnectPort
  */
 NTSTATUS WINAPI wow64_NtAcceptConnectPort( UINT *args )
 {
     ULONG *handle_ptr = get_ptr( &args );
-    ULONG id = get_ulong( &args );
+    void *context = get_ptr( &args );
     LPC_MESSAGE *msg = get_ptr( &args );
     BOOLEAN accept = get_ulong( &args );
-    LPC_SECTION_WRITE *write = get_ptr( &args );
-    LPC_SECTION_READ *read = get_ptr( &args );
+    LPC_SECTION_WRITE32 *write32 = get_ptr( &args );
+    LPC_SECTION_READ32 *read32 = get_ptr( &args );
 
-    FIXME( "%p %lu %p %u %p %p: stub\n", handle_ptr, id, msg, accept, write, read );
-    return STATUS_NOT_IMPLEMENTED;
+    LPC_SECTION_WRITE write;
+    LPC_SECTION_READ read;
+    HANDLE handle = 0;
+    NTSTATUS status;
+
+    if (handle_ptr) *handle_ptr = 0;
+    status = NtAcceptConnectPort( handle_ptr ? &handle : NULL, context, msg, accept,
+                                  lpc_section_write_32to64( &write, write32 ),
+                                  lpc_section_read_32to64( &read, read32 ));
+    if (NT_SUCCESS(status))
+    {
+        if (handle_ptr) put_handle( handle_ptr, handle );
+        lpc_section_write_64to32( write32, &write );
+        lpc_section_read_64to32( read32, &read );
+    }
+    return status;
 }
 
 
@@ -521,14 +568,13 @@ NTSTATUS WINAPI wow64_NtConnectPort( UINT *args )
     ULONG *handle_ptr = get_ptr( &args );
     UNICODE_STRING32 *name32 = get_ptr( &args );
     SECURITY_QUALITY_OF_SERVICE *qos = get_ptr( &args );
-    LPC_SECTION_WRITE *write = get_ptr( &args );
-    LPC_SECTION_READ *read = get_ptr( &args );
+    LPC_SECTION_WRITE32 *write32 = get_ptr( &args );
+    LPC_SECTION_READ32 *read32 = get_ptr( &args );
     ULONG *max_len = get_ptr( &args );
     void *info = get_ptr( &args );
     ULONG *info_len = get_ptr( &args );
 
-    FIXME( "%p %p %p %p %p %p %p %p: stub\n", handle_ptr, name32, qos, write, read, max_len, info, info_len );
-    return STATUS_NOT_IMPLEMENTED;
+    return secure_connect_port( handle_ptr, name32, qos, write32, NULL, read32, max_len, info, info_len );
 }
 
 
@@ -1625,8 +1671,7 @@ NTSTATUS WINAPI wow64_NtReplyPort( UINT *args )
     HANDLE handle = get_handle( &args );
     LPC_MESSAGE *reply = get_ptr( &args );
 
-    FIXME( "%p %p: stub\n", handle, reply );
-    return STATUS_NOT_IMPLEMENTED;
+    return NtReplyPort( handle, reply );
 }
 
 
@@ -1636,12 +1681,16 @@ NTSTATUS WINAPI wow64_NtReplyPort( UINT *args )
 NTSTATUS WINAPI wow64_NtReplyWaitReceivePort( UINT *args )
 {
     HANDLE handle = get_handle( &args );
-    ULONG *id = get_ptr( &args );
+    ULONG *context32 = get_ptr( &args );
     LPC_MESSAGE *reply = get_ptr( &args );
     LPC_MESSAGE *msg = get_ptr( &args );
 
-    FIXME( "%p %p %p %p: stub\n", handle, id, reply, msg );
-    return STATUS_NOT_IMPLEMENTED;
+    void *context = NULL;
+    NTSTATUS status;
+
+    status = NtReplyWaitReceivePort( handle, context32 ? &context : NULL, reply, msg );
+    if (context32 && NT_SUCCESS(status)) *context32 = PtrToUlong( context );
+    return status;
 }
 
 
@@ -1669,19 +1718,8 @@ NTSTATUS WINAPI wow64_NtRequestWaitReplyPort( UINT *args )
     HANDLE handle = get_handle( &args );
     LPC_MESSAGE *msg_in = get_ptr( &args );
     LPC_MESSAGE *msg_out = get_ptr( &args );
-    WOW64_LPC_BUFFER request_buffer, reply_buffer;
-    CSR_PORT_MESSAGE32 *request32 = (CSR_PORT_MESSAGE32 *)msg_in;
-    CSR_PORT_MESSAGE32 *reply32 = (CSR_PORT_MESSAGE32 *)msg_out;
-    CSR_PORT_MESSAGE64 *request64 = (CSR_PORT_MESSAGE64 *)request_buffer.Data;
-    CSR_PORT_MESSAGE64 *reply64 = (CSR_PORT_MESSAGE64 *)reply_buffer.Data;
-    NTSTATUS status;
 
-    status = lpc_message_32to64( request64, request32 );
-    if (!NT_SUCCESS(status)) return status;
-    memset( &reply_buffer, 0, sizeof(reply_buffer) );
-    status = NtRequestWaitReplyPort( handle, (LPC_MESSAGE *)request64, (LPC_MESSAGE *)reply64 );
-    if (NT_SUCCESS(status)) status = lpc_message_64to32( reply32, reply64 );
-    return status;
+    return NtRequestWaitReplyPort( handle, msg_in, msg_out );
 }
 
 
@@ -1691,15 +1729,9 @@ NTSTATUS WINAPI wow64_NtRequestWaitReplyPort( UINT *args )
 NTSTATUS WINAPI wow64_NtRequestPort( UINT *args )
 {
     HANDLE handle = get_handle( &args );
-    CSR_PORT_MESSAGE32 *msg32 = get_ptr( &args );
+    LPC_MESSAGE *msg = get_ptr( &args );
 
-    WOW64_LPC_BUFFER buffer;
-    CSR_PORT_MESSAGE64 *msg64 = (CSR_PORT_MESSAGE64 *)buffer.Data;
-    NTSTATUS status;
-
-    status = lpc_message_32to64( msg64, msg32 );
-    if (!NT_SUCCESS(status)) return status;
-    return NtRequestPort( handle, (LPC_MESSAGE *)msg64 );
+    return NtRequestPort( handle, msg );
 }
 
 
@@ -1709,17 +1741,9 @@ NTSTATUS WINAPI wow64_NtRequestPort( UINT *args )
 NTSTATUS WINAPI wow64_NtReplyWaitReplyPort( UINT *args )
 {
     HANDLE handle = get_handle( &args );
-    CSR_PORT_MESSAGE32 *msg32 = get_ptr( &args );
+    LPC_MESSAGE *msg = get_ptr( &args );
 
-    WOW64_LPC_BUFFER buffer;
-    CSR_PORT_MESSAGE64 *msg64 = (CSR_PORT_MESSAGE64 *)buffer.Data;
-    NTSTATUS status;
-
-    status = lpc_message_32to64( msg64, msg32 );
-    if (!NT_SUCCESS(status)) return status;
-    status = NtReplyWaitReplyPort( handle, (LPC_MESSAGE *)msg64 );
-    if (NT_SUCCESS(status)) status = lpc_message_64to32( msg32, msg64 );
-    return status;
+    return NtReplyWaitReplyPort( handle, msg );
 }
 
 
@@ -1750,49 +1774,7 @@ NTSTATUS WINAPI wow64_NtSecureConnectPort( UINT *args )
     void *info = get_ptr( &args );
     ULONG *info_len = get_ptr( &args );
 
-    UNICODE_STRING name;
-    LPC_SECTION_WRITE write;
-    LPC_SECTION_READ read;
-    HANDLE handle = 0;
-    UNICODE_STRING *name_ptr;
-    NTSTATUS status;
-
-    *handle_ptr = 0;
-    if (write32)
-    {
-        write.Length = sizeof(write);
-        write.SectionHandle = LongToHandle( write32->SectionHandle );
-        write.SectionOffset = write32->SectionOffset;
-        write.ViewSize = write32->ViewSize;
-        write.ViewBase = ULongToPtr( write32->ViewBase );
-        write.TargetViewBase = ULongToPtr( write32->TargetViewBase );
-    }
-    if (read32)
-    {
-        read.Length = sizeof(read);
-        read.ViewSize = read32->ViewSize;
-        read.ViewBase = ULongToPtr( read32->ViewBase );
-    }
-
-    name_ptr = unicode_str_32to64( &name, name32 );
-    status = NtSecureConnectPort( &handle, name_ptr, qos, write32 ? &write : NULL, sid, read32 ? &read : NULL, max_len, info, info_len );
-    if (NT_SUCCESS(status))
-    {
-        put_handle( handle_ptr, handle );
-        if (write32)
-        {
-            write32->SectionOffset = write.SectionOffset;
-            write32->ViewSize = write.ViewSize;
-            write32->ViewBase = PtrToUlong( write.ViewBase );
-            write32->TargetViewBase = PtrToUlong( write.TargetViewBase );
-        }
-        if (read32)
-        {
-            read32->ViewSize = read.ViewSize;
-            read32->ViewBase = PtrToUlong( read.ViewBase );
-        }
-    }
-    return status;
+    return secure_connect_port( handle_ptr, name32, qos, write32, sid, read32, max_len, info, info_len );
 }
 
 
