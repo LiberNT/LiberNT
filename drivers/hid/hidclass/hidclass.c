@@ -251,10 +251,12 @@ HidClass_CopyReport(
     IN ULONG ReportLength)
 {
     PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
+    PHIDCLASS_FILEOP_CONTEXT Context = IoStack->FileObject ? IoStack->FileObject->FsContext : NULL;
     ULONG ReadLength = IoStack->Parameters.Read.Length;
     ULONG Offset = FDODeviceExtension->Common.DeviceDescription.ReportIDs[0].ReportID ? 0 : 1;
     PUCHAR Address = HidClass_GetReadBuffer(Irp);
-    ULONG CopyLength;
+    PHIDP_COLLECTION_DESC CollectionDescription = NULL;
+    ULONG CopyLength, TotalLength;
 
     Irp->IoStatus.Information = 0;
     if (!Address)
@@ -272,9 +274,18 @@ HidClass_CopyReport(
     if (Offset)
         Address[0] = 0;
 
-    CopyLength = min(ReportLength, ReadLength - Offset);
+    if (Context)
+        CollectionDescription = HidClassPDO_GetCollectionDescription(&FDODeviceExtension->Common.DeviceDescription,
+                                                                     Context->DeviceExtension->CollectionNumber);
+    TotalLength = ReadLength;
+    if (CollectionDescription && CollectionDescription->InputLength && CollectionDescription->InputLength < TotalLength)
+        TotalLength = CollectionDescription->InputLength;
+
+    CopyLength = min(ReportLength, TotalLength - Offset);
     RtlCopyMemory(&Address[Offset], Report, CopyLength);
-    Irp->IoStatus.Information = Offset + CopyLength;
+    if (Offset + CopyLength < TotalLength)
+        RtlZeroMemory(&Address[Offset + CopyLength], TotalLength - Offset - CopyLength);
+    Irp->IoStatus.Information = TotalLength;
     Irp->IoStatus.Status = STATUS_SUCCESS;
 }
 
@@ -371,6 +382,7 @@ HidClassFDO_RouteReport(
     PHIDP_DEVICE_DESC DeviceDescription = &FDODeviceExtension->Common.DeviceDescription;
     PLIST_ENTRY Entry;
     ULONG CollectionNumber = 0;
+    ULONG ExpectedLength = 0;
     ULONG Index;
 
     if (!ReportLength || !DeviceDescription->ReportIDsLength)
@@ -379,6 +391,7 @@ HidClassFDO_RouteReport(
     if (DeviceDescription->ReportIDs[0].ReportID == 0)
     {
         CollectionNumber = DeviceDescription->ReportIDs[0].CollectionNumber;
+        ExpectedLength = DeviceDescription->ReportIDs[0].InputLength;
     }
     else
     {
@@ -388,12 +401,13 @@ HidClassFDO_RouteReport(
                 DeviceDescription->ReportIDs[Index].InputLength)
             {
                 CollectionNumber = DeviceDescription->ReportIDs[Index].CollectionNumber;
+                ExpectedLength = DeviceDescription->ReportIDs[Index].InputLength;
                 break;
             }
         }
     }
 
-    if (!CollectionNumber)
+    if (!CollectionNumber || ReportLength < ExpectedLength)
         return;
 
     for (Entry = FDODeviceExtension->OpenFileList.Flink;
@@ -742,6 +756,7 @@ HidClass_Read(
     PHIDCLASS_FILEOP_CONTEXT Context;
     PHIDCLASS_COMMON_DEVICE_EXTENSION CommonDeviceExtension;
     PHIDCLASS_FDO_EXTENSION FDODeviceExtension;
+    PHIDP_COLLECTION_DESC CollectionDescription;
     PDEVICE_OBJECT FDODeviceObject;
     KIRQL OldLevel;
     NTSTATUS Status;
@@ -757,6 +772,17 @@ HidClass_Read(
     Context = IoStack->FileObject->FsContext;
     ASSERT(Context);
     ASSERT(Context->DeviceExtension);
+
+    CollectionDescription = HidClassPDO_GetCollectionDescription(&Context->DeviceExtension->Common.DeviceDescription,
+                                                                 Context->DeviceExtension->CollectionNumber);
+    if (!IoStack->Parameters.Read.Length || !CollectionDescription ||
+        IoStack->Parameters.Read.Length < CollectionDescription->InputLength)
+    {
+        Irp->IoStatus.Status = STATUS_INVALID_USER_BUFFER;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_INVALID_USER_BUFFER;
+    }
 
     //
     // Polled HID miniports are not implemented here. Do not assert in
