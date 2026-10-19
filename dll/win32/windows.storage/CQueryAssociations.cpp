@@ -834,6 +834,17 @@ HRESULT CQueryAssociations::GetExecutable(LPCWSTR pszExtra, LPWSTR path, DWORD p
         }
     }
 
+    if (!*len && *pszStart == '%')
+    {
+        DWORD tokenLen = wcscspn(pszStart, L" ");
+        if (tokenLen < pathlen)
+        {
+            memcpy(path, pszStart, tokenLen * sizeof(WCHAR));
+            path[tokenLen] = 0;
+            *len = tokenLen;
+        }
+    }
+
     HeapFree(GetProcessHeap(), 0, pszCommand);
     if (!*len)
     {
