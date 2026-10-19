@@ -160,6 +160,12 @@ GDIOBJ_LockObject(
 
 PGDIOBJ
 NTAPI
+GDIOBJ_LockObjectAnyOwner(
+    HGDIOBJ hobj,
+    UCHAR objt);
+
+PGDIOBJ
+NTAPI
 GDIOBJ_TryLockObject(
     HGDIOBJ hobj,
     UCHAR objt);

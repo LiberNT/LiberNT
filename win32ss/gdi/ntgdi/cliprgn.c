@@ -62,7 +62,7 @@ GdiSelectVisRgn(
 {
     DC *dc;
 
-    if (!(dc = DC_LockDc(hdc)))
+    if (!(dc = DC_LockDcAnyOwner(hdc)))
     {
         EngSetLastError(ERROR_INVALID_HANDLE);
         return;

@@ -845,11 +845,12 @@ GDIOBJ_TryLockObject(
     return pobj;
 }
 
+static
 PGDIOBJ
-NTAPI
-GDIOBJ_LockObject(
+GDIOBJ_LockObjectWithFlags(
     HGDIOBJ hobj,
-    UCHAR objt)
+    UCHAR objt,
+    FLONG fl)
 {
     PENTRY pentry;
     POBJ pobj;
@@ -867,7 +868,7 @@ GDIOBJ_LockObject(
     ASSERT_LOCK_ORDER(objt);
 
     /* Reference the handle entry */
-    pentry = ENTRY_ReferenceEntryByHandle(hobj, 0);
+    pentry = ENTRY_ReferenceEntryByHandle(hobj, fl);
     if (!pentry)
     {
         DPRINT("GDIOBJ: Requested handle 0x%p is not valid.\n", hobj);
@@ -897,6 +898,24 @@ GDIOBJ_LockObject(
 
     /* Return the object */
     return pobj;
+}
+
+PGDIOBJ
+NTAPI
+GDIOBJ_LockObject(
+    HGDIOBJ hobj,
+    UCHAR objt)
+{
+    return GDIOBJ_LockObjectWithFlags(hobj, objt, 0);
+}
+
+PGDIOBJ
+NTAPI
+GDIOBJ_LockObjectAnyOwner(
+    HGDIOBJ hobj,
+    UCHAR objt)
+{
+    return GDIOBJ_LockObjectWithFlags(hobj, objt, GDIOBJFLAG_IGNOREPID);
 }
 
 VOID

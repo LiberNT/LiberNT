@@ -993,9 +993,12 @@ DceResetActiveDCEs(PWND Window)
          else
          {
             if (!pDCE->hwndCurrent)
-               CurrentWindow = NULL;
-            else
-               CurrentWindow = UserGetWindowObject(pDCE->hwndCurrent);
+            {
+               if (Window == UserGetDesktopWindow() && !(pDCE->DCXFlags & DCX_PARENTCLIP))
+                  DceUpdateVisRgn(pDCE, NULL, pDCE->DCXFlags);
+               continue;
+            }
+            CurrentWindow = UserGetWindowObject(pDCE->hwndCurrent);
             if (NULL == CurrentWindow)
             {
                continue;
