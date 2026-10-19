@@ -322,7 +322,7 @@ ScmStartDriver(PSERVICE pService)
     DPRINT("ScmStartDriver(%p)\n", pService);
 
     dwError = ScmLoadDriver(pService);
-    if (dwError == ERROR_SUCCESS)
+    if (dwError == ERROR_SUCCESS || dwError == ERROR_SERVICE_ALREADY_RUNNING)
     {
         pService->Status.dwCurrentState = SERVICE_RUNNING;
         pService->Status.dwControlsAccepted = SERVICE_ACCEPT_STOP;

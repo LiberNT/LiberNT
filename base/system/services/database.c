@@ -2237,7 +2237,14 @@ ScmLoadService(PSERVICE Service,
 
     DPRINT("ScmLoadService() done (Error %lu)\n", dwError);
 
-    if (dwError == ERROR_SUCCESS)
+    if (dwError == ERROR_SERVICE_ALREADY_RUNNING)
+    {
+        if (Group != NULL)
+        {
+            Group->ServicesRunning = TRUE;
+        }
+    }
+    else if (dwError == ERROR_SUCCESS)
     {
         if (Group != NULL)
         {
