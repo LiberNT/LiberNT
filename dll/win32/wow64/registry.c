@@ -24,12 +24,309 @@
 #define WIN32_NO_STATUS
 #include "windef.h"
 #include "winbase.h"
+#include "winreg.h"
 #include "winnt.h"
 #include "winternl.h"
 #include "wow64_private.h"
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(wow);
+
+static const UNICODE_STRING wow6432node_str = RTL_CONSTANT_STRING( L"Wow6432Node" );
+static const UNICODE_STRING registry_str = RTL_CONSTANT_STRING( L"\\REGISTRY" );
+static const UNICODE_STRING classes_str = RTL_CONSTANT_STRING( L"\\REGISTRY\\MACHINE\\SOFTWARE\\Classes" );
+static const UNICODE_STRING classes_wow64_str = RTL_CONSTANT_STRING( L"\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\Wow6432Node" );
+
+static USHORT element_length( const UNICODE_STRING *name )
+{
+    USHORT len = 0;
+
+    while (len < name->Length && name->Buffer[len / sizeof(WCHAR)] != '\\') len += sizeof(WCHAR);
+    return len;
+}
+
+static void skip_element( UNICODE_STRING *name, USHORT len )
+{
+    while (len < name->Length && name->Buffer[len / sizeof(WCHAR)] == '\\') len += sizeof(WCHAR);
+    name->Buffer += len / sizeof(WCHAR);
+    name->Length -= len;
+    name->MaximumLength = name->Length;
+}
+
+static BOOL is_wow6432node_element( const UNICODE_STRING *name )
+{
+    UNICODE_STRING element = { element_length( name ), element_length( name ), name->Buffer };
+
+    return RtlEqualUnicodeString( &element, &wow6432node_str, TRUE );
+}
+
+static NTSTATUS open_relative( HANDLE *ret, HANDLE root, const UNICODE_STRING *name, ACCESS_MASK access )
+{
+    OBJECT_ATTRIBUTES attr;
+
+    InitializeObjectAttributes( &attr, (UNICODE_STRING *)name, OBJ_CASE_INSENSITIVE, root, NULL );
+    return NtOpenKeyEx( ret, access, &attr, 0 );
+}
+
+static HANDLE open_wow6432node( HANDLE key, ACCESS_MASK access )
+{
+    HANDLE ret;
+
+    if (open_relative( &ret, key, &wow6432node_str, access )) return 0;
+    return ret;
+}
+
+static NTSTATUS final_open( HANDLE *ret, ACCESS_MASK access, OBJECT_ATTRIBUTES *attr, ULONG options, HANDLE transaction )
+{
+    if (transaction) return NtOpenKeyTransactedEx( ret, access, attr, options, transaction );
+    return NtOpenKeyEx( ret, access, attr, options );
+}
+
+static NTSTATUS final_create( HANDLE *ret, ACCESS_MASK access, OBJECT_ATTRIBUTES *attr, ULONG index,
+                              UNICODE_STRING *class, ULONG options, HANDLE transaction, ULONG *dispos )
+{
+    if (transaction) return NtCreateKeyTransacted( ret, access, attr, index, class, options, transaction, dispos );
+    return NtCreateKey( ret, access, attr, index, class, options, dispos );
+}
+
+static NTSTATUS final_open_relative( HANDLE *ret, HANDLE root, const UNICODE_STRING *name, ACCESS_MASK access,
+                                     ULONG attributes, HANDLE transaction )
+{
+    OBJECT_ATTRIBUTES attr;
+
+    InitializeObjectAttributes( &attr, (UNICODE_STRING *)name, OBJ_CASE_INSENSITIVE | attributes, root, NULL );
+    return final_open( ret, access, &attr, 0, transaction );
+}
+
+static BOOL key_has_name( HANDLE key, const UNICODE_STRING *expect )
+{
+    char buffer[sizeof(KEY_NAME_INFORMATION) + 128 * sizeof(WCHAR)];
+    KEY_NAME_INFORMATION *info = (KEY_NAME_INFORMATION *)buffer;
+    UNICODE_STRING name;
+    ULONG len;
+
+    if (NtQueryKey( key, KeyNameInformation, info, sizeof(buffer), &len )) return FALSE;
+    name.Buffer = info->Name;
+    name.Length = name.MaximumLength = info->NameLength;
+    return RtlEqualUnicodeString( &name, expect, TRUE );
+}
+
+static NTSTATUS open_shared_classes( HANDLE *ret )
+{
+    return open_relative( ret, 0, &classes_str, MAXIMUM_ALLOWED );
+}
+
+static NTSTATUS open_view_by_name( HANDLE *ret, HANDLE key )
+{
+    char buffer[sizeof(KEY_NAME_INFORMATION) + 512 * sizeof(WCHAR)];
+    KEY_NAME_INFORMATION *info = (KEY_NAME_INFORMATION *)buffer;
+    UNICODE_STRING name, element;
+    HANDLE current, child, view;
+    NTSTATUS status;
+    ULONG len;
+
+    if ((status = NtQueryKey( key, KeyNameInformation, info, sizeof(buffer), &len ))) return status;
+    name.Buffer = info->Name;
+    name.Length = name.MaximumLength = info->NameLength;
+    element.Buffer = name.Buffer;
+    element.Length = element.MaximumLength = min( name.Length, registry_str.Length );
+    if (!RtlEqualUnicodeString( &element, &registry_str, TRUE )) return STATUS_OBJECT_NAME_NOT_FOUND;
+    if ((status = open_relative( &current, 0, &registry_str, MAXIMUM_ALLOWED ))) return status;
+    skip_element( &name, registry_str.Length );
+
+    while (name.Length)
+    {
+        BOOL descend = !is_wow6432node_element( &name );
+
+        element.Buffer = name.Buffer;
+        element.Length = element.MaximumLength = element_length( &name );
+        status = open_relative( &child, current, &element, MAXIMUM_ALLOWED );
+        NtClose( current );
+        if (status) return status;
+        skip_element( &name, element.Length );
+        if (descend && (!name.Length || !is_wow6432node_element( &name )) && (view = open_wow6432node( child, MAXIMUM_ALLOWED )))
+        {
+            NtClose( child );
+            child = view;
+        }
+        current = child;
+    }
+    *ret = current;
+    return STATUS_SUCCESS;
+}
+
+static BOOL is_valid_key_path( const UNICODE_STRING *name )
+{
+    UNICODE_STRING rest = *name;
+    USHORT len;
+
+    if ((name->Length & 1) || name->Length > name->MaximumLength || (name->Length && !name->Buffer)) return FALSE;
+    skip_element( &rest, 0 );
+    while (rest.Length)
+    {
+        len = element_length( &rest );
+        if (len > 255 * sizeof(WCHAR)) return FALSE;
+        skip_element( &rest, len );
+        if (!len && rest.Length) return FALSE;
+    }
+    return TRUE;
+}
+
+static NTSTATUS open_redirected_key( HANDLE *ret, ACCESS_MASK access, const OBJECT_ATTRIBUTES *attr, ULONG options,
+                                     BOOL create, ULONG index, UNICODE_STRING *class, HANDLE transaction, ULONG *dispos )
+{
+    ACCESS_MASK native_access = access & ~KEY_WOW64_RES;
+    UNICODE_STRING name, element;
+    OBJECT_ATTRIBUTES final_attr;
+    HANDLE current, owned = 0, child, view, shared;
+    BOOL final_is_wow6432node, wowshare;
+    NTSTATUS status;
+
+    if (!attr || !attr->ObjectName || !is_valid_key_path( attr->ObjectName )) return STATUS_NOT_SUPPORTED;
+    name = *attr->ObjectName;
+    current = attr->RootDirectory;
+
+    if (!current)
+    {
+        element.Buffer = name.Buffer;
+        element.Length = element.MaximumLength = min( name.Length, registry_str.Length );
+        if (!RtlEqualUnicodeString( &element, &registry_str, TRUE ) ||
+            (name.Length > registry_str.Length && name.Buffer[registry_str.Length / sizeof(WCHAR)] != '\\'))
+            return STATUS_NOT_SUPPORTED;
+        if (open_relative( &owned, 0, &registry_str, MAXIMUM_ALLOWED )) return STATUS_NOT_SUPPORTED;
+        current = owned;
+        skip_element( &name, registry_str.Length );
+    }
+    else if (name.Length && name.Buffer[0] == '\\')
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    else if (!name.Length || !is_wow6432node_element( &name ))
+    {
+        if (access & KEY_WOW64_32KEY)
+        {
+            if (!open_view_by_name( &view, current ))
+            {
+                owned = current = view;
+            }
+        }
+        else if (key_has_name( current, &classes_str ) && (view = open_wow6432node( current, MAXIMUM_ALLOWED )))
+        {
+            owned = current = view;
+        }
+    }
+
+    for (;;)
+    {
+        element.Buffer = name.Buffer;
+        element.Length = element.MaximumLength = element_length( &name );
+        skip_element( &name, element.Length );
+        if (!name.Length) break;
+
+        status = open_relative( &child, current, &element, MAXIMUM_ALLOWED );
+        if (status == STATUS_OBJECT_NAME_NOT_FOUND && key_has_name( current, &classes_wow64_str ) &&
+            !open_shared_classes( &shared ))
+        {
+            status = open_relative( &child, shared, &element, MAXIMUM_ALLOWED );
+            NtClose( shared );
+        }
+        if (status)
+        {
+            if (owned) NtClose( owned );
+            return status == STATUS_ACCESS_DENIED ? STATUS_NOT_SUPPORTED : status;
+        }
+        if (!is_wow6432node_element( &name ) && (view = open_wow6432node( child, MAXIMUM_ALLOWED )))
+        {
+            NtClose( child );
+            child = view;
+        }
+        if (owned) NtClose( owned );
+        owned = current = child;
+    }
+
+    final_is_wow6432node = element.Length && RtlEqualUnicodeString( &element, &wow6432node_str, TRUE );
+    InitializeObjectAttributes( &final_attr, &element, attr->Attributes, current, attr->SecurityDescriptor );
+    final_attr.SecurityQualityOfService = attr->SecurityQualityOfService;
+
+    if (create && (options & REG_OPTION_CREATE_LINK))
+    {
+        status = final_create( ret, native_access, &final_attr, index, class, options, transaction, dispos );
+        if (owned) NtClose( owned );
+        return status;
+    }
+
+    wowshare = key_has_name( current, &classes_wow64_str );
+    if (create && !wowshare)
+    {
+        status = final_create( ret, native_access, &final_attr, index, class, options, transaction, dispos );
+    }
+    else
+    {
+        status = final_open( ret, native_access, &final_attr, create ? 0 : options, transaction );
+        if (status == STATUS_OBJECT_NAME_NOT_FOUND && wowshare && !open_shared_classes( &shared ))
+        {
+            final_attr.RootDirectory = shared;
+            if (create) status = final_create( ret, native_access, &final_attr, index, class, options, transaction, dispos );
+            else status = final_open( ret, native_access, &final_attr, options, transaction );
+            final_attr.RootDirectory = current;
+            NtClose( shared );
+        }
+        else if (create && !status && dispos)
+        {
+            *dispos = REG_OPENED_EXISTING_KEY;
+        }
+    }
+
+    if (!status && !final_is_wow6432node)
+    {
+        if (key_has_name( *ret, &classes_wow64_str ))
+        {
+            if (!final_open_relative( &shared, 0, &classes_str, native_access, attr->Attributes & OBJ_INHERIT, transaction ))
+            {
+                NtClose( *ret );
+                *ret = shared;
+            }
+        }
+        else if (!final_open_relative( &view, *ret, &wow6432node_str, native_access, attr->Attributes & OBJ_INHERIT, transaction ))
+        {
+            if (key_has_name( view, &classes_wow64_str )) NtClose( view );
+            else
+            {
+                NtClose( *ret );
+                *ret = view;
+            }
+        }
+    }
+
+    if (owned) NtClose( owned );
+    return status;
+}
+
+static NTSTATUS wow64_open_key( HANDLE *ret, ACCESS_MASK access, OBJECT_ATTRIBUTES *attr, ULONG options,
+                                HANDLE transaction )
+{
+    NTSTATUS status;
+
+    if (!(access & KEY_WOW64_64KEY))
+    {
+        status = open_redirected_key( ret, access, attr, options, FALSE, 0, NULL, transaction, NULL );
+        if (status != STATUS_NOT_SUPPORTED) return status;
+    }
+    return final_open( ret, access, attr, options, transaction );
+}
+
+static NTSTATUS wow64_create_key( HANDLE *ret, ACCESS_MASK access, OBJECT_ATTRIBUTES *attr, ULONG index,
+                                  UNICODE_STRING *class, ULONG options, HANDLE transaction, ULONG *dispos )
+{
+    NTSTATUS status;
+
+    if (!(access & KEY_WOW64_64KEY))
+    {
+        status = open_redirected_key( ret, access, attr, options, TRUE, index, class, transaction, dispos );
+        if (status != STATUS_NOT_SUPPORTED) return status;
+    }
+    return final_create( ret, access, attr, index, class, options, transaction, dispos );
+}
 
 
 /**********************************************************************
@@ -51,7 +348,7 @@ NTSTATUS WINAPI wow64_NtCreateKey( UINT *args )
     NTSTATUS status;
 
     *handle_ptr = 0;
-    status = NtCreateKey( &handle, access, objattr_32to64( &attr, attr32 ), index, unicode_str_32to64( &class, class32 ), options, dispos );
+    status = wow64_create_key( &handle, access, objattr_32to64( &attr, attr32 ), index, unicode_str_32to64( &class, class32 ), options, NULL, dispos );
     put_handle( handle_ptr, handle );
     return status;
 }
@@ -77,7 +374,7 @@ NTSTATUS WINAPI wow64_NtCreateKeyTransacted( UINT *args )
     NTSTATUS status;
 
     *handle_ptr = 0;
-    status = NtCreateKeyTransacted( &handle, access, objattr_32to64( &attr, attr32 ), index, unicode_str_32to64( &class, class32 ), options, transacted, dispos );
+    status = wow64_create_key( &handle, access, objattr_32to64( &attr, attr32 ), index, unicode_str_32to64( &class, class32 ), options, transacted, dispos );
     put_handle( handle_ptr, handle );
     return status;
 }
@@ -270,7 +567,7 @@ NTSTATUS WINAPI wow64_NtOpenKey( UINT *args )
     NTSTATUS status;
 
     *handle_ptr = 0;
-    status = NtOpenKey( &handle, access, objattr_32to64( &attr, attr32 ));
+    status = wow64_open_key( &handle, access, objattr_32to64( &attr, attr32 ), 0, NULL );
     put_handle( handle_ptr, handle );
     return status;
 }
@@ -291,7 +588,7 @@ NTSTATUS WINAPI wow64_NtOpenKeyEx( UINT *args )
     NTSTATUS status;
 
     *handle_ptr = 0;
-    status = NtOpenKeyEx( &handle, access, objattr_32to64( &attr, attr32 ), options );
+    status = wow64_open_key( &handle, access, objattr_32to64( &attr, attr32 ), options, NULL );
     put_handle( handle_ptr, handle );
     return status;
 }
@@ -312,7 +609,7 @@ NTSTATUS WINAPI wow64_NtOpenKeyTransacted( UINT *args )
     NTSTATUS status;
 
     *handle_ptr = 0;
-    status = NtOpenKeyTransacted( &handle, access, objattr_32to64( &attr, attr32 ), transaction );
+    status = wow64_open_key( &handle, access, objattr_32to64( &attr, attr32 ), 0, transaction );
     put_handle( handle_ptr, handle );
     return status;
 }
@@ -334,7 +631,7 @@ NTSTATUS WINAPI wow64_NtOpenKeyTransactedEx( UINT *args )
     NTSTATUS status;
 
     *handle_ptr = 0;
-    status = NtOpenKeyTransactedEx( &handle, access, objattr_32to64( &attr, attr32 ), options, transaction );
+    status = wow64_open_key( &handle, access, objattr_32to64( &attr, attr32 ), options, transaction );
     put_handle( handle_ptr, handle );
     return status;
 }
