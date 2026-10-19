@@ -65,6 +65,7 @@ INT CommandAlias (LPTSTR);
 
 /* Prototypes for ASSOC.C */
 INT CommandAssoc (LPTSTR);
+INT CommandFType (LPTSTR);
 
 /* Prototypes for BEEP.C */
 INT cmd_beep (LPTSTR);

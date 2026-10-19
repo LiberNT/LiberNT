@@ -9,6 +9,13 @@ assoc (すべての関連付けを出力します)\n\
 assoc .拡張子 (特定の関連付けを出力します)\n\
 assoc .拡張子= (特定の関連付けを削除します)\n\
 assoc .拡張子=ファイルの種類 (新しい関連付けを追加します)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "エイリアスの設定や解除をしたり、エイリアスを表示したりします。\n\n\
 ALIAS [エイリアス=[コマンド]]\n\n\
   エイリアス   エイリアスとしてつける名前。\n\
@@ -447,6 +454,7 @@ RESTORE       ウィンドウを元のサイズに戻します。\n\
     STRING_COPY_OPTION "YNA"
     STRING_ALIAS_ERROR "エイリアス展開後のコマンド ラインが長すぎます!\n"
     STRING_ASSOC_ERROR "拡張子 %s に対するファイル関連付けが見つかりません。\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "バッチ ファイルを開くときにエラーが発生しました。\n"
     STRING_CHOICE_ERROR "無効なオプションです。期待される書式: /C[:]オプション\n"
     STRING_CHOICE_ERROR_TXT "無効なオプションです。期待される書式: /T[:]c,nn\n"

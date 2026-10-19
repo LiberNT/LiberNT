@@ -18,6 +18,13 @@ assoc (bütün ilişkileri yazdır)\n\
 assoc .uzantı (belirli ilişkilendirmeyi yazdır)\n\
 assoc .uzantı= (belirli bir ilişkiyi kaldır)\n\
 assoc .uzantı=DosyaTuru (yeni bir ilişki ekle)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Takma adları (ALIAS) ayarlar, kaldırır veya gösterir.\n\n\
 ALIAS [alias=[komut]]\n\n\
   alias    Takma ad.\n\
@@ -440,6 +447,7 @@ başlık        pencere için yeni başlık\n"
     STRING_COPY_OPTION "EHT"
     STRING_ALIAS_ERROR "Takma ad genişletmeden sonra komut satırı çok uzun!\n"
     STRING_ASSOC_ERROR "Uzantı için dosya ilişkilendirmesi bulunamadı. Uzantı: %s\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Toplu iş dosyası açılırken hata\n"
     STRING_CHOICE_ERROR "Geçersiz seçenek. Beklenen seçenek biçimi: /C[:]seçenekler\n"
     STRING_CHOICE_ERROR_TXT "Geçersiz seçenek. Beklenen seçenek biçimi: /T[:]c,nn\n"

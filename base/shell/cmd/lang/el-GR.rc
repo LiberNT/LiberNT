@@ -14,6 +14,13 @@ assoc (print all associations)\n\
 assoc .ext (print specific association)\n\
 assoc .ext= (remove specific association)\n\
 assoc .ext=FileType (add new association)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Θέτει,αφαιρεί ή εμφανίζει τα aliases.\n\n\
 ALIAS [alias=[εντολή]]\n\n\
   alias    Όνομα για το alias.\n\
@@ -444,6 +451,7 @@ title         new title\n"
     STRING_COPY_OPTION "YNA"
     STRING_ALIAS_ERROR "Command line too long after alias expansion!\n"
     STRING_ASSOC_ERROR "File association not found for extension %s\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Error opening batch file\n"
     STRING_CHOICE_ERROR "Μη έγκυρη επιλογή. Expected format: /C[:]options\n"
     STRING_CHOICE_ERROR_TXT "Μη έγκυρη επιλογή. Expected format: /T[:]c,nn\n"

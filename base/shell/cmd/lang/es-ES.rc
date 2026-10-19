@@ -11,6 +11,13 @@ assoc (muestra todas las asociaciones)\n\
 assoc .ext (muestra asociaciones especificas)\n\
 assoc .ext= (eliminar asociación especifica)\n\
 assoc .ext=FileType (añadir nueva asociación)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Pone, borra o muestra los alias.\n\n\
 ALIAS [alias=[command]]\n\n\
   alias    Nombre para un alias.\n\
@@ -447,6 +454,7 @@ title         Nuevo título\n"
     STRING_COPY_OPTION "SNT"
     STRING_ALIAS_ERROR "¡Línea de comandos demasiado larga tras la expansión del alias!\n"
     STRING_ASSOC_ERROR "No se ha encontrado ninguna asociación de archivos para la extensión %s\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Error abriendo el archivo por lotes\n"
     STRING_CHOICE_ERROR "Opción inválida. Se esperaba el formato: /C[:]options\n"
     STRING_CHOICE_ERROR_TXT "Opción inválida. Se esperaba el formato: /T[:]c,nn\n"

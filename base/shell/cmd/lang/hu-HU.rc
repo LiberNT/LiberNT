@@ -14,6 +14,13 @@ assoc (megjeleníti az összes társítást)\n\
 assoc .kit (megjeleníti a megadott társítást)\n\
 assoc .kit= (törli a megadott társítást)\n\
 assoc .kit=fájltípus (új társítás hozzáadása)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Aliasok megjelenítése, hozzáadása és törlése\n\n\
 ALIAS [alias=[parancs]]\n\n\
   alias    Alias neve.\n\
@@ -434,6 +441,7 @@ title         új cím\n"
     STRING_COPY_OPTION "INM"
     STRING_ALIAS_ERROR "A parancssor túl hosszú az alias kibontásakor!\n"
     STRING_ASSOC_ERROR "Nem található társítás ehhez a kiterjesztéshez: %s\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Hiba a batch állomány megnyitásakor\n"
     STRING_CHOICE_ERROR "Érvénytelen paraméter. Várt formátum: /C[:]opciók\n"
     STRING_CHOICE_ERROR_TXT "Érvénytelen paraméter. Várt formátum: /T[:]v,nn\n"

@@ -9,6 +9,13 @@ assoc (print all associations)\n\
 assoc .ext (print specific association)\n\
 assoc .ext= (remove specific association)\n\
 assoc .ext=FileType (add new association)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Setter, fjerner eller viser alias.\n\n\
 ALIAS [alias=[Kommando]]\n\n\
   alias    Navn for et alias.\n\
@@ -438,6 +445,7 @@ tittel        ny tittel\n"
     STRING_COPY_OPTION "YNA"
     STRING_ALIAS_ERROR "Kommando linje for lang etter alias utvidelse!\n"
     STRING_ASSOC_ERROR "Fil association ble ikke funnet for utvidelsen %s\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Feil ved åpning av satsvis fil\n"
     STRING_CHOICE_ERROR "Ugyldig  valg. Forventet format: /C[:]valg\n"
     STRING_CHOICE_ERROR_TXT "Ugyldig  valg. Forventet format: /T[:]c,nn\n"

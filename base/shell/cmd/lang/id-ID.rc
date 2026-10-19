@@ -11,6 +11,13 @@ assoc (print all associations)\n\
 assoc .ext (print specific association)\n\
 assoc .ext= (remove specific association)\n\
 assoc .ext=FileType (add new association)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Menyetel, menghapus atau menampilkan alias.\n\n\
 ALIAS [alias=[command]]\n\n\
   alias    Nama untuk alias.\n\
@@ -439,6 +446,7 @@ title         judul baru\n"
     STRING_COPY_OPTION "YTS"
     STRING_ALIAS_ERROR "Baris perintah terlalu panjang setelah ekspansi alias!\n"
     STRING_ASSOC_ERROR "File association not found for extension %s\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Kesalaham membuka file batch\n"
     STRING_CHOICE_ERROR "Opsi tidak benar. Format diharapkan: /C[:]options\n"
     STRING_CHOICE_ERROR_TXT "Opsi tidak benar. Format diharapkan: /T[:]c,nn\n"

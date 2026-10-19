@@ -18,6 +18,13 @@ assoc (輸出所有檔案關聯)\n\
 assoc .ext (輸出指定的檔案關聯)\n\
 assoc .ext= (刪除指定的檔案關聯)\n\
 assoc .ext=檔案類型 (新增新的檔案關聯)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "設定、刪除或顯示別名。\n\n\
 ALIAS [別名=[命令]]\n\n\
   別名    別名的名稱。\n\
@@ -424,6 +431,7 @@ RESTORE       恢復視窗\n\
     STRING_COPY_OPTION "YNA"
     STRING_ALIAS_ERROR "別名展開後的命令列太長！\n"
     STRING_ASSOC_ERROR "找不到副檔名 %s 的檔案關聯！\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "開啟批次檔案時出錯\n"
     STRING_CHOICE_ERROR "無效的選項。預期的格式：/C[:]選項\n"
     STRING_CHOICE_ERROR_TXT "無效的選項。預期的格式：/T[:]c,nn\n"

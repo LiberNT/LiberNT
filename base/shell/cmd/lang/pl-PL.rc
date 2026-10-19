@@ -19,6 +19,13 @@ assoc (wyświetla wszystkie skojarzenia)\n\
 assoc .ext (wyświetla określone skojarzenie)\n\
 assoc .ext= (usuwa określone skojarzenie)\n\
 assoc .ext=typPliku (dodaje nowe skojarzenie)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Ustawia, usuwa, a także wyświetla aliasy.\n\n\
 ALIAS [nazwa=[tekst]]\n\n\
   nazwa   Nazwa aliasu.\n\
@@ -446,6 +453,7 @@ title         nowy tytuł okna\n"
     STRING_COPY_OPTION "TNZ"
     STRING_ALIAS_ERROR "Linia poleceń zbyt długa po rozszerzeniu aliasa!\n"
     STRING_ASSOC_ERROR "Nie można odnaleźć skojarzenia pliku dla rozszerzenia %s\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Błąd podczas otwierania pliku wsadowego\n"
     STRING_CHOICE_ERROR "Parametr niepoprawny. Poprawna forma: /C[:]opcja\n"
     STRING_CHOICE_ERROR_TXT "Parametr niepoprawny. Poprawna forma: /T[:]c,nn\n"

@@ -65,6 +65,7 @@
 #define STRING_TYPE_ERROR          349
 #define STRING_WINDOW_ERROR        350
 #define STRING_ASSOC_ERROR         358
+#define STRING_FTYPE_ERROR         359
 
 #define STRING_ALIAS_HELP  601
 #define STRING_BEEP_HELP   602
@@ -82,6 +83,7 @@
 #define STRING_CMD_HELP8   615
 #define STRING_ASSOC_HELP  616
 #define STRING_MKLINK_HELP 617
+#define STRING_FTYPE_HELP  619
 
 #define STRING_CTTY_HELP   618
 

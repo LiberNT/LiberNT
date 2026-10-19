@@ -14,6 +14,13 @@ assoc (print all associations)\n\
 assoc .ext (print specific association)\n\
 assoc .ext= (remove specific association)\n\
 assoc .ext=FileType (add new association)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Sets, removes or shows aliases.\n\n\
 ALIAS [alias=[command]]\n\n\
   alias    Name for an alias.\n\
@@ -445,6 +452,7 @@ title         new title\n"
     STRING_COPY_OPTION "ANV"
     STRING_ALIAS_ERROR "Po rozšíření aliasů je příkaz příliš dlouhý!\n"
     STRING_ASSOC_ERROR "Pro příponu %s nebyly nalezeny žádné asociace\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Chyba při otevírání dávkového souboru\n"
     STRING_CHOICE_ERROR "Neplatná volba. Očekávaný formát: /C[:]volby\n"
     STRING_CHOICE_ERROR_TXT "Neplatná volba. Očekávaný formát: /T[:]c,nn\n"

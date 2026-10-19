@@ -25,6 +25,7 @@ list(APPEND SOURCE
     filecomp.c
     for.c
     free.c
+    ftype.c
     goto.c
     history.c
     if.c

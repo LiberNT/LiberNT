@@ -18,6 +18,13 @@ assoc (вывести все ассоциации)\n\
 assoc .ext (вывести выбранную ассоциацию)\n\
 assoc .ext= (удалить ассоциацию)\n\
 assoc .ext=FileType (добавить ассоциацию)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Вывод, установка или удаление псевдонимов.\n\n\
 ALIAS [псевдоним=[команда]]\n\n\
   псевдоним    Наименование псевдонима.\n\
@@ -457,6 +464,7 @@ RESTORE       восстанавливает окно\n\
     STRING_COPY_OPTION "YNA"
     STRING_ALIAS_ERROR "Командная строка слишком длинная после развертывания псевдонимов!\n"
     STRING_ASSOC_ERROR "Не найдено файловых ассоциаций для расширения %s\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Ошибка открытия командного файла\n"
     STRING_CHOICE_ERROR "Неверный параметр. Ожидается формат: /C[:]параметры\n"
     STRING_CHOICE_ERROR_TXT "Неверный параметр. Ожидается формат: /T[:]c,nn\n"

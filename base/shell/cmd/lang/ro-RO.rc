@@ -17,6 +17,13 @@ assoc (afișează toate asocierile)\n\
 assoc .ext (afișează o anumită asociere)\n\
 assoc .ext= (elimină o anumită asociere)\n\
 assoc .ext=tip_fișier (adaugă o nouă asociere)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Setează, șterge sau afișează alias.\n\n\
 ALIAS [alias=[comandă]]\n\n\
   alias    Numele pentru alias.\n\
@@ -480,6 +487,7 @@ titlu         Noul titlu.\n"
     STRING_COPY_OPTION "DNT"
     STRING_ALIAS_ERROR "Linia de comandă devine prea lungă după extinderea alias!\n"
     STRING_ASSOC_ERROR "Nu se poate găsi nici o aplicație asociată extensiei «%s»\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Eroare la deschiderea fișierului de comenzi\n"
     STRING_CHOICE_ERROR "Opțiune eronată. Vedeți formatul: /C[:]opțiuni\n"
     STRING_CHOICE_ERROR_TXT "Opțiune eronată. Vedeți formatul: /T[:]implicit,nn\n"

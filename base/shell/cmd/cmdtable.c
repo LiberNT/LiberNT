@@ -113,6 +113,10 @@ COMMAND cmds[] =
     {_T("free"), 0, CommandFree},
 #endif
 
+#ifdef INCLUDE_CMD_FTYPE
+    {_T("ftype"), 0, CommandFType},
+#endif
+
     {_T("goto"), CMD_BATCHONLY, cmd_goto},
 
 #ifdef FEATURE_HISTORY

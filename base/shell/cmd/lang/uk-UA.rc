@@ -17,6 +17,13 @@ assoc (друк всiх асоцiацiй)\n\
 assoc .рош (друк вiдповiдної асоцiацiї)\n\
 assoc .рош= (видалення вiдповiдної асоцiацiї)\n\
 assoc .рош=ФайлТип (додати нову асоцiацiю)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Встановлення, видалення або показ псевдонiмiв.\n\n\
 ALIAS [псевдонiм=[команда]]\n\n\
   псевдонiм    Iм'я псевдонiма.\n\
@@ -451,6 +458,7 @@ title         новий заголовок\n"
     STRING_COPY_OPTION "YNA"
     STRING_ALIAS_ERROR "Командний рядок занадто довгий пiсля розгортання псевдонiмiв!\n"
     STRING_ASSOC_ERROR "Не знайдено файлової асоцiацiї для розширення %s\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Помилка вiдкриття пакетного файлу\n"
     STRING_CHOICE_ERROR "Невiрний параметр. Очiкується формат: /C[:]параметри\n"
     STRING_CHOICE_ERROR_TXT "Невiрний параметр. Очiкується формат: /T[:]c,nn\n"

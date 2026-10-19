@@ -18,6 +18,13 @@ assoc （输出所有文件关联）\n\
 assoc .ext （输出指定的文件关联）\n\
 assoc .ext= （删除指定的文件关联）\n\
 assoc .ext=文件类型 （添加新的文件关联）\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "设置、删除或显示别名。\n\n\
 ALIAS [别名=[命令]]\n\n\
   别名    别名的名称。\n\
@@ -420,6 +427,7 @@ RESTORE       恢复窗口\n\
     STRING_COPY_OPTION "YNA"
     STRING_ALIAS_ERROR "别名展开后的命令行太长！\n"
     STRING_ASSOC_ERROR "扩展名 %s 的文件关联未找到！\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "打开批处理文件时出错\n"
     STRING_CHOICE_ERROR "无效选项。期望的格式：/C[:]选项\n"
     STRING_CHOICE_ERROR_TXT "无效选项。期望的格式：/T[:]c,nn\n"

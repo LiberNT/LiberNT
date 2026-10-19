@@ -13,6 +13,13 @@ assoc (shfaq të gjith asociacionet)\n\
 assoc .ext (shfaq asociacionet specifike)\n\
 assoc .ext= (hiq acosiacionet specifike)\n\
 assoc .ext=FileType (shto asociacione te reja)\n"
+    STRING_FTYPE_HELP "Displays or modifies the open command strings of file types.\n\n\
+FTYPE [FileType[=[OpenCommandString]]]\n\
+\n\
+ftype (print all file types with an open command)\n\
+ftype FileType (print the open command of a file type)\n\
+ftype FileType= (remove the open command of a file type)\n\
+ftype FileType=OpenCommandString (set the open command of a file type)\n"
     STRING_ALIAS_HELP "Vëndos, hew ose shfaq pseudonimin.\n\n\
 ALIAS [alias=[Komande]]\n\n\
   alias    Emri i pseudonimit.\n\
@@ -444,6 +451,7 @@ title         titull i ri\n"
     STRING_COPY_OPTION "YNA"
     STRING_ALIAS_ERROR "Rreshti i komandës shumë gjatë pas pseudonimit!\n"
     STRING_ASSOC_ERROR "Dokumentit perkates nuk u gjet për zgjatjen %s\n"
+    STRING_FTYPE_ERROR "File type '%s' not found or no open command associated with it.\n"
     STRING_BATCH_ERROR "Gabim gjatë hapjes së dokumentit batch\n"
     STRING_CHOICE_ERROR "Opsione invalide. Format i pritshem: /C[:]opsione\n"
     STRING_CHOICE_ERROR_TXT "Opsione invalide. Format i pritshem: /T[:]c,nn\n"
