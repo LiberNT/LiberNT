@@ -730,5 +730,41 @@
   "size": "64x64",
   "file": "64x64/apps/com.github.stsdc.monitor.svg",
   "sha256": "ae9d2922e53fb4eb3971ffc47de8af5037e35ecaa1e02b47d67190652f45a9c3"
+ },
+ {
+  "name": "system-os-installer",
+  "size": "16x16",
+  "file": "16x16/apps/ubiquity-kde.svg",
+  "sha256": "5b3098a4b072dc48f63e1a3f11a1f55d8bc8d2d329708fadfdd176b2e501b4f4"
+ },
+ {
+  "name": "system-os-installer",
+  "size": "22x22",
+  "file": "22x22/apps/ubiquity-kde.svg",
+  "sha256": "d730e0b9e7f708e7381cbeb48b2247b0d18a0b2607e1bab83001f26eb0197cd8"
+ },
+ {
+  "name": "system-os-installer",
+  "size": "24x24",
+  "file": "24x24/apps/ubiquity-kde.svg",
+  "sha256": "2b9d1f38dffcda6f5b15031b4d91ef2435c2a12a649cea094cfa60357ac363b8"
+ },
+ {
+  "name": "system-os-installer",
+  "size": "32x32",
+  "file": "32x32/apps/ubiquity-kde.svg",
+  "sha256": "cfd1b47c9bbc682c9630d745e63b5cc222d7e3edd63d0e98bd6cabfaa9bbc831"
+ },
+ {
+  "name": "system-os-installer",
+  "size": "48x48",
+  "file": "48x48/apps/ubiquity-kde.svg",
+  "sha256": "48634dfbd3e7323eb17ea86d3d34003fa17c838494bea9e3b05c03f0f09515dc"
+ },
+ {
+  "name": "system-os-installer",
+  "size": "64x64",
+  "file": "64x64/apps/ubiquity-kde.svg",
+  "sha256": "2b9de1b82ecc0bf4d421e9abd5a877c844c61679932b9622528b969251dcbbcd"
  }
 ]

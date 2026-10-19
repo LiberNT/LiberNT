@@ -14,7 +14,7 @@
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 
 /* Icons */
-IDI_MAIN        ICON "../../../win32ss/user/user32/resources/oic_reactos.ico"
+IDI_MAIN        ICON "res/libernt.ico"
 
 /* Bitmaps */
 IDB_WATERMARK   BITMAP "res/watermark.bmp"
