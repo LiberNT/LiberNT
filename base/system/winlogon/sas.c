@@ -1495,6 +1495,25 @@ HandleShutdown(
 
 static
 VOID
+HandleSuspend(
+    IN DWORD wlxAction)
+{
+    BOOLEAN Hibernate = (wlxAction == WLX_SAS_ACTION_SHUTDOWN_HIBERNATE);
+    NTSTATUS Status;
+    BOOLEAN Old;
+
+    RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &Old);
+    Status = NtInitiatePowerAction(Hibernate ? PowerActionHibernate : PowerActionSleep,
+                                   Hibernate ? PowerSystemHibernate : PowerSystemSleeping1,
+                                   POWER_ACTION_QUERY_ALLOWED | POWER_ACTION_UI_ALLOWED,
+                                   TRUE);
+    RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, Old, FALSE, &Old);
+    if (!NT_SUCCESS(Status))
+        ERR("Power action for SAS action 0x%lx failed, Status 0x%08lx\n", wlxAction, Status);
+}
+
+static
+VOID
 DoGenericAction(
     IN OUT PWLSESSION Session,
     IN DWORD wlxAction)
@@ -1598,6 +1617,12 @@ DoGenericAction(
                  * Logged-On SAS dialog (on the Winlogon desktop), stay there. */
                 StartTaskManager(Session);
             }
+            break;
+        case WLX_SAS_ACTION_SHUTDOWN_SLEEP: /* 0x0c */
+        case WLX_SAS_ACTION_SHUTDOWN_SLEEP2: /* 0x0d */
+        case WLX_SAS_ACTION_SHUTDOWN_HIBERNATE: /* 0x0e */
+            HandleSuspend(wlxAction);
+            DoGenericAction(Session, WLX_SAS_ACTION_NONE);
             break;
         case WLX_SAS_ACTION_UNLOCK_WKSTA: /* 0x08 */
             if ((Session->LogonState == STATE_LOCKED) ||

@@ -42,6 +42,7 @@
 #include <ndk/rtlfuncs.h>
 #include <ndk/exfuncs.h>
 #include <ndk/kefuncs.h>
+#include <ndk/pofuncs.h>
 #include <strsafe.h>
 
 /* PSEH for SEH Support */

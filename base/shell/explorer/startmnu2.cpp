@@ -1,6 +1,7 @@
 #include "precomp.h"
 #include <commctrl.h>
 #include <windowsx.h>
+#include <powrprof.h>
 
 #define SM2_RECENT_LINK_KEY L"Software\\ReactOS\\StartMenu2\\RecentApps\\Links"
 #define SM2_RECENT_EXE_KEY  L"Software\\ReactOS\\StartMenu2\\RecentApps\\Executables"
@@ -38,7 +39,9 @@ enum SM2SHUTCMD
     SM2F_SHUTDOWN = 1,
     SM2F_RESTART,
     SM2F_LOGOFF,
-    SM2F_LOCK
+    SM2F_LOCK,
+    SM2F_SLEEP,
+    SM2F_HIBERNATE
 };
 
 enum
@@ -544,6 +547,38 @@ SM2ExitWindows(UINT uFlags)
     return dwError;
 }
 
+static DWORD WINAPI
+SM2SuspendThread(LPVOID lpParameter)
+{
+    HANDLE hToken;
+    TOKEN_PRIVILEGES tp;
+
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
+    {
+        tp.PrivilegeCount = 1;
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        if (LookupPrivilegeValueW(NULL, SE_SHUTDOWN_NAME, &tp.Privileges[0].Luid))
+            AdjustTokenPrivileges(hToken, FALSE, &tp, 0, NULL, NULL);
+        CloseHandle(hToken);
+    }
+
+    SetSuspendState(lpParameter != NULL, FALSE, FALSE);
+    return 0;
+}
+
+static DWORD
+SM2Suspend(BOOL bHibernate)
+{
+    HANDLE hThread;
+
+    hThread = CreateThread(NULL, 0, SM2SuspendThread, bHibernate ? (LPVOID)1 : NULL, 0, NULL);
+    if (hThread == NULL)
+        return GetLastError();
+
+    CloseHandle(hThread);
+    return ERROR_SUCCESS;
+}
+
 static VOID
 SM2DoShutdownCmd(HWND hwndOwner, int nCmd)
 {
@@ -569,6 +604,12 @@ SM2DoShutdownCmd(HWND hwndOwner, int nCmd)
         case SM2F_LOCK:
             pszAction = L"Lock";
             break;
+        case SM2F_SLEEP:
+            pszAction = L"Sleep";
+            break;
+        case SM2F_HIBERNATE:
+            pszAction = L"Hibernate";
+            break;
         default:
             return;
     }
@@ -589,6 +630,12 @@ SM2DoShutdownCmd(HWND hwndOwner, int nCmd)
         case SM2F_LOCK:
             if (!LockWorkStation())
                 dwError = GetLastError();
+            break;
+        case SM2F_SLEEP:
+            dwError = SM2Suspend(FALSE);
+            break;
+        case SM2F_HIBERNATE:
+            dwError = SM2Suspend(TRUE);
             break;
     }
 
@@ -809,10 +856,13 @@ public:
     BOOL m_bTracking;
 
     struct FLYITEM { LPCWSTR pszLabel; int nCmd; };
-    static const FLYITEM c_Items[3];
+    static const FLYITEM c_Items[5];
+    UINT m_Visible[5];
+    UINT m_cItems;
 
     CStartMenu2Flyout() : m_hwndOwner(NULL), m_hFont(NULL), m_iDpi(96),
-                          m_iHot(-1), m_AnimT0(0), m_bTracking(FALSE) {}
+                          m_iHot(-1), m_AnimT0(0), m_bTracking(FALSE),
+                          m_cItems(0) {}
 
     int Sc(int v) const { return MulDiv(v, m_iDpi, 96); }
     int RowH() const { return Sc(26); }
@@ -823,8 +873,19 @@ public:
         m_hFont = hFont;
         m_iDpi = iDpi;
 
+        m_cItems = 0;
+        for (UINT i = 0; i < _countof(c_Items); i++)
+        {
+            if ((c_Items[i].nCmd == SM2F_SLEEP && !IsPwrSuspendAllowed()) ||
+                (c_Items[i].nCmd == SM2F_HIBERNATE && !IsPwrHibernateAllowed()))
+            {
+                continue;
+            }
+            m_Visible[m_cItems++] = i;
+        }
+
         int w = Sc(150);
-        int h = RowH() * _countof(c_Items) + Sc(10);
+        int h = RowH() * m_cItems + Sc(10);
         int x = prcAnchor->right - w;
         int y = prcAnchor->top - h - Sc(4);
 
@@ -843,7 +904,7 @@ public:
     {
         RECT rc;
         GetClientRect(&rc);
-        for (UINT i = 0; i < _countof(c_Items); i++)
+        for (UINT i = 0; i < m_cItems; i++)
         {
             RECT rcItem = { Sc(4), Sc(5) + RowH() * (int)i, rc.right - Sc(4), Sc(5) + RowH() * ((int)i + 1) };
             if (PtInRect(&rcItem, pt))
@@ -883,7 +944,7 @@ public:
         SetBkMode(hdcMem, TRANSPARENT);
         HGDIOBJ hFontOld = SelectObject(hdcMem, m_hFont);
 
-        for (UINT i = 0; i < _countof(c_Items); i++)
+        for (UINT i = 0; i < m_cItems; i++)
         {
             RECT rcItem = { Sc(4), Sc(5) + RowH() * (int)i, rc.right - Sc(4), Sc(5) + RowH() * ((int)i + 1) };
             if ((int)i == m_iHot)
@@ -895,7 +956,7 @@ public:
             RECT rcText = rcItem;
             rcText.left += Sc(12);
             SetTextColor(hdcMem, (int)i == m_iHot ? SM2_CLR_RIGHT_HOT_TEXT : SM2_CLR_RIGHT_TEXT);
-            DrawTextW(hdcMem, c_Items[i].pszLabel, -1, &rcText,
+            DrawTextW(hdcMem, c_Items[m_Visible[i]].pszLabel, -1, &rcText,
                       DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
         }
 
@@ -944,11 +1005,11 @@ public:
 
     VOID ActivateItem(int i)
     {
-        if (i < 0 || i >= (int)_countof(c_Items))
+        if (i < 0 || i >= (int)m_cItems)
             return;
 
         HWND hwndOwner = m_hwndOwner;
-        int nCmd = c_Items[i].nCmd;
+        int nCmd = c_Items[m_Visible[i]].nCmd;
         DestroyWindow();
         ::PostMessageW(hwndOwner, SM2M_FLYOUTCMD, nCmd, 0);
     }
@@ -970,7 +1031,7 @@ public:
         }
         else if (wParam == VK_UP || wParam == VK_DOWN || wParam == VK_HOME || wParam == VK_END)
         {
-            int count = (int)_countof(c_Items);
+            int count = (int)m_cItems;
             if (wParam == VK_HOME)
                 m_iHot = 0;
             else if (wParam == VK_END)
@@ -1018,11 +1079,13 @@ public:
     END_MSG_MAP()
 };
 
-const CStartMenu2Flyout::FLYITEM CStartMenu2Flyout::c_Items[3] =
+const CStartMenu2Flyout::FLYITEM CStartMenu2Flyout::c_Items[5] =
 {
-    { L"Restart", SM2F_RESTART },
-    { L"Log off", SM2F_LOGOFF },
-    { L"Lock",    SM2F_LOCK },
+    { L"Sleep",     SM2F_SLEEP },
+    { L"Hibernate", SM2F_HIBERNATE },
+    { L"Restart",   SM2F_RESTART },
+    { L"Log off",   SM2F_LOGOFF },
+    { L"Lock",      SM2F_LOCK },
 };
 
 class CStartMenu2Wnd :
