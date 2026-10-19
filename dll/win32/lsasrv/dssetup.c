@@ -69,10 +69,7 @@ DsRolepGetBasicInfo(
         return ERROR_OUTOFMEMORY;
     }
 
-    Size = sizeof(DSROLER_PRIMARY_DOMAIN_INFO_BASIC) +
-           PolicyInfo->PolicyAccountDomainInfo.DomainName.Length + sizeof(WCHAR);
-
-    Buffer = midl_user_allocate(Size);
+    Buffer = midl_user_allocate(sizeof(DSROLER_PRIMARY_DOMAIN_INFO_BASIC));
     if (Buffer == NULL)
     {
         LsaIFree_LSAPR_POLICY_INFORMATION(PolicyAccountDomainInformation,
@@ -80,9 +77,17 @@ DsRolepGetBasicInfo(
         return ERROR_OUTOFMEMORY;
     }
 
+    Size = PolicyInfo->PolicyAccountDomainInfo.DomainName.Length + sizeof(WCHAR);
+    Buffer->DomainNameFlat = midl_user_allocate(Size);
+    if (Buffer->DomainNameFlat == NULL)
+    {
+        midl_user_free(Buffer);
+        LsaIFree_LSAPR_POLICY_INFORMATION(PolicyAccountDomainInformation,
+                                          PolicyInfo);
+        return ERROR_OUTOFMEMORY;
+    }
+
     Buffer->MachineRole = DsRole_RoleStandaloneWorkstation;
-    Buffer->DomainNameFlat = (LPWSTR)((LPBYTE)Buffer +
-                                      sizeof(DSROLER_PRIMARY_DOMAIN_INFO_BASIC));
     if (PolicyInfo->PolicyAccountDomainInfo.DomainName.Length)
         RtlCopyMemory(Buffer->DomainNameFlat, PolicyInfo->PolicyAccountDomainInfo.DomainName.Buffer, PolicyInfo->PolicyAccountDomainInfo.DomainName.Length);
     Buffer->DomainNameFlat[PolicyInfo->PolicyAccountDomainInfo.DomainName.Length / sizeof(WCHAR)] = UNICODE_NULL;
