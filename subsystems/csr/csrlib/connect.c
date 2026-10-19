@@ -388,9 +388,8 @@ CsrClientCallServer(
      * header and data, including intermediate padding */
     ApiMessage->Header.u1.s1.DataLength = (CSHORT)DataLength +
         FIELD_OFFSET(CSR_API_MESSAGE, Data) - sizeof(ApiMessage->Header);
-    /* TotalLength = header_size + DataLength + any structure trailing padding */
-    ApiMessage->Header.u1.s1.TotalLength = (CSHORT)DataLength +
-        sizeof(CSR_API_MESSAGE) - sizeof(ApiMessage->Data);
+    ApiMessage->Header.u1.s1.TotalLength = ApiMessage->Header.u1.s1.DataLength +
+        sizeof(ApiMessage->Header);
 
     /* Fill out the CSR Header */
     ApiMessage->ApiNumber = ApiNumber;
