@@ -34,8 +34,15 @@ HRESULT WINAPI SHGetStockIconInfo(SHSTOCKICONID siid, UINT uFlags, SHSTOCKICONIN
 
     TRACE("(%d, 0x%x, %p)\n", siid, uFlags, psii);
 
-    if (psii == NULL || psii->cbSize != sizeof(*psii) || siid < 0 || siid >= SIID_MAX_ICONS)
+    if (psii == NULL || psii->cbSize != sizeof(*psii))
         return E_INVALIDARG;
+
+    if (siid < 0 || siid >= SIID_MAX_ICONS)
+    {
+        psii->iSysImageIndex = -1;
+        psii->iIcon = -1;
+        return E_INVALIDARG;
+    }
 
     resource = (UINT)siid + 1;
     if (!FindResourceW(shell32_hInstance, MAKEINTRESOURCEW(resource), (LPCWSTR)RT_GROUP_ICON))
