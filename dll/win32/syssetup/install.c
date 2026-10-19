@@ -530,6 +530,7 @@ InstallSysSetupInfComponents(VOID)
         while (SetupFindNextLine(&InfContext, &InfContext));
     }
 
+    RegisterWow64CodeDlls(hSysSetupInf, L"EarlyRegisterDlls");
     return TRUE;
 }
 
