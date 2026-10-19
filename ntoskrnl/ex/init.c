@@ -1466,6 +1466,7 @@ ExpInitializeExecutive(IN ULONG Cpu,
     MmWriteableSharedUserData->ImageNumberLow = IMAGE_FILE_MACHINE_NATIVE;
 #endif
     MmWriteableSharedUserData->ImageNumberHigh = IMAGE_FILE_MACHINE_NATIVE;
+    MmWriteableSharedUserData->NativeProcessorArchitecture = KeProcessorArchitecture;
 
     /* ReactOS magic */
     *(PULONG)((ULONG_PTR)MmWriteableSharedUserData + PAGE_SIZE - sizeof(ULONG)) = 0x8eac705;

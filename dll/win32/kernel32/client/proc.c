@@ -3109,7 +3109,9 @@ BasepCreateUserProcess(IN HANDLE UserToken,
     }
 
     if (CreateInfo.State != PsCreateSuccess || !CreateInfo.SuccessState.PebAddressNative ||
-        (ImageInformation.Machine == IMAGE_FILE_MACHINE_I386 && !CreateInfo.SuccessState.PebAddressWow64))
+        (ImageInformation.Machine == IMAGE_FILE_MACHINE_I386 &&
+         SharedUserData->NativeProcessorArchitecture != PROCESSOR_ARCHITECTURE_INTEL &&
+         !CreateInfo.SuccessState.PebAddressWow64))
     {
         Status = STATUS_INVALID_IMAGE_FORMAT;
         goto Failure;
