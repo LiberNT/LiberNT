@@ -1417,6 +1417,11 @@ NTAPI
 GlobalMemoryStatus(LPMEMORYSTATUS lpBuffer)
 {
     MEMORYSTATUSEX lpBufferEx;
+    PIMAGE_NT_HEADERS NtHeaders = RtlImageNtHeader(NtCurrentPeb()->ImageBaseAddress);
+    ULONGLONG PhysicalLimit = MAXULONG_PTR;
+
+    if (NtHeaders && !(NtHeaders->FileHeader.Characteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE))
+        PhysicalLimit = MAXLONG_PTR;
 
     /* Call the extended function */
     lpBufferEx.dwLength = sizeof(MEMORYSTATUSEX);
@@ -1425,8 +1430,8 @@ GlobalMemoryStatus(LPMEMORYSTATUS lpBuffer)
         /* Reset the right size and fill out the information */
         lpBuffer->dwLength = sizeof(MEMORYSTATUS);
         lpBuffer->dwMemoryLoad = lpBufferEx.dwMemoryLoad;
-        lpBuffer->dwTotalPhys = (SIZE_T)min(lpBufferEx.ullTotalPhys, MAXULONG_PTR);
-        lpBuffer->dwAvailPhys = (SIZE_T)min(lpBufferEx.ullAvailPhys, MAXULONG_PTR);
+        lpBuffer->dwTotalPhys = (SIZE_T)min(lpBufferEx.ullTotalPhys, PhysicalLimit);
+        lpBuffer->dwAvailPhys = (SIZE_T)min(lpBufferEx.ullAvailPhys, PhysicalLimit);
         lpBuffer->dwTotalPageFile = (SIZE_T)min(lpBufferEx.ullTotalPageFile, MAXULONG_PTR);
         lpBuffer->dwAvailPageFile = (SIZE_T)min(lpBufferEx.ullAvailPageFile, MAXULONG_PTR);
         lpBuffer->dwTotalVirtual = (SIZE_T)min(lpBufferEx.ullTotalVirtual, MAXULONG_PTR);
