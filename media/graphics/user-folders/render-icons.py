@@ -47,18 +47,13 @@ ICONS = (
     ("system-software-install", ("base/applications/rapps/res/main.ico", "base/applications/cmdutils/rosget/res/rosget.ico")),
     ("utilities-terminal", ("base/shell/cmd/res/terminal.ico",)),
     ("preferences-system-windows", ("base/applications/dwmsettings/res/dwm-settings.ico",)),
+    ("yast-vm-install", ("base/setup/libernt/res/libernt.ico",)),
 )
 SCREENS = {
     "computer": {16: (2, 3, 14, 11), 22: (1, 2, 21, 16), 24: (2, 3, 22, 17), 32: (3, 5, 29, 22), 48: (4, 6, 44, 34), 64: (6, 9, 58, 44)},
 }
 ON_SCREEN = (
     ("computer", "com.github.stsdc.monitor", ("base/applications/taskmgr/res/taskmgr.ico", "base/applications/taskmgr11/res/taskmgr11.ico")),
-)
-CARDS = {
-    "system-os-installer": {16: (2, 0, 14, 11), 22: (3, 1, 19, 14), 24: (4, 2, 20, 15), 32: (5, 2, 27, 21), 48: (8, 4, 40, 32), 64: (10, 4, 54, 43)},
-}
-ON_CARD = (
-    ("system-os-installer", "media/graphics/branding/libernt-mark.svg", ("base/setup/libernt/res/libernt.ico",)),
 )
 FLUENT = (
     ("input-mouse", ("dll/win32/setupapi/res/2.ico",)),
@@ -141,14 +136,11 @@ def write_bitmap(image, path):
     path.write_bytes(header + info + pixels)
 
 
-def render(svg, size, strokes_only=False, without_arrow=False, height=None):
+def render(svg, size, strokes_only=False):
     text = gzip.decompress(svg.read_bytes()).decode() if svg.suffix == ".svgz" else svg.read_text()
     if strokes_only:
         text = re.sub(r"<(?:path|rect)\b(?![^>]*stroke:)[^>]*/>", "", text)
-    if without_arrow:
-        text = re.sub(r"<path\b[^>]*transform=[^>]*/>", "", text)
-        text = re.sub(r'<rect\b(?=[^>]*#4caf50)(?=[^>]*width="([\d.]+)")(?=[^>]*height="\1")[^>]*/>', "", text)
-    png = bytes(resvg_py.svg_to_bytes(svg_string=text, width=size, height=height or size))
+    png = bytes(resvg_py.svg_to_bytes(svg_string=text, width=size, height=size))
     with Image.open(io.BytesIO(png)) as image:
         return image.convert("RGBA")
 
@@ -167,8 +159,8 @@ def main():
         available = sorted(designs[name])
         return next((d for d in available if d >= size), available[-1])
 
-    def draw(name, size, strokes_only=False, without_arrow=False):
-        return render(designs[name][pick(name, size)], size, strokes_only, without_arrow)
+    def draw(name, size, strokes_only=False):
+        return render(designs[name][pick(name, size)], size, strokes_only)
 
     for name, targets in ICONS:
         frames = [draw(name, size) for size in SIZES]
@@ -198,22 +190,6 @@ def main():
         for target in targets:
             write_frames(frames, root / target)
             print(f"{name} + {glyph} -> {target}")
-    for name, logo, targets in ON_CARD:
-        logo_width, logo_height = (float(value) for value in
-                                   re.search(r'width="([\d.]+)" height="([\d.]+)"', (root / logo).read_text()).groups())
-        frames = []
-        for size in SIZES:
-            frame = draw(name, size, without_arrow=True)
-            design = pick(name, size)
-            left, top, right, bottom = (edge * size / design for edge in CARDS[name][design])
-            width = min((right - left) * 0.55, (bottom - top) * 0.8 * logo_width / logo_height)
-            width, height = max(round(width), 4), max(round(width * logo_height / logo_width), 3)
-            frame.alpha_composite(render(root / logo, width, height=height),
-                                  (round((left + right - width) / 2), round((top + bottom - height) / 2)))
-            frames.append(frame)
-        for target in targets:
-            write_frames(frames, root / target)
-            print(f"{name} + {logo} -> {target}")
     fluent = {source["name"]: assets / "fluent" / source["file"]
               for source in json.loads((assets / "fluent/sources.json").read_text())}
     for name, targets in FLUENT:

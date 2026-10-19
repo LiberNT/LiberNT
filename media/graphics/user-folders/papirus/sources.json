@@ -732,39 +732,39 @@
   "sha256": "ae9d2922e53fb4eb3971ffc47de8af5037e35ecaa1e02b47d67190652f45a9c3"
  },
  {
-  "name": "system-os-installer",
+  "name": "yast-vm-install",
   "size": "16x16",
-  "file": "16x16/apps/ubiquity-kde.svg",
-  "sha256": "5b3098a4b072dc48f63e1a3f11a1f55d8bc8d2d329708fadfdd176b2e501b4f4"
+  "file": "16x16/apps/yast-vm-install.svg",
+  "sha256": "8ed6364485b55fa1ac6c70d61231ac556df425601f0b85b9cd2c5b810904ead5"
  },
  {
-  "name": "system-os-installer",
+  "name": "yast-vm-install",
   "size": "22x22",
-  "file": "22x22/apps/ubiquity-kde.svg",
-  "sha256": "d730e0b9e7f708e7381cbeb48b2247b0d18a0b2607e1bab83001f26eb0197cd8"
+  "file": "22x22/apps/yast-vm-install.svg",
+  "sha256": "0d3ba8b363d70b69e065c11186981348dc5c0b62ae52448ca9e23941261a319a"
  },
  {
-  "name": "system-os-installer",
+  "name": "yast-vm-install",
   "size": "24x24",
-  "file": "24x24/apps/ubiquity-kde.svg",
-  "sha256": "2b9d1f38dffcda6f5b15031b4d91ef2435c2a12a649cea094cfa60357ac363b8"
+  "file": "24x24/apps/yast-vm-install.svg",
+  "sha256": "e8a5cf412dde08a14ee5c0c7de1f2e06a957fd8cc2a2019873e7498c51dfe58e"
  },
  {
-  "name": "system-os-installer",
+  "name": "yast-vm-install",
   "size": "32x32",
-  "file": "32x32/apps/ubiquity-kde.svg",
-  "sha256": "cfd1b47c9bbc682c9630d745e63b5cc222d7e3edd63d0e98bd6cabfaa9bbc831"
+  "file": "32x32/apps/yast-vm-install.svg",
+  "sha256": "c67f8f0f97a797bec439442a38e59095bb399e10e27a8c5cdf97ddc615e623ba"
  },
  {
-  "name": "system-os-installer",
+  "name": "yast-vm-install",
   "size": "48x48",
-  "file": "48x48/apps/ubiquity-kde.svg",
-  "sha256": "48634dfbd3e7323eb17ea86d3d34003fa17c838494bea9e3b05c03f0f09515dc"
+  "file": "48x48/apps/yast-vm-install.svg",
+  "sha256": "073103166e3ac0232a5865b624b91bca8812514bd43d7294f73e6e5a6bee5d6d"
  },
  {
-  "name": "system-os-installer",
+  "name": "yast-vm-install",
   "size": "64x64",
-  "file": "64x64/apps/ubiquity-kde.svg",
-  "sha256": "2b9de1b82ecc0bf4d421e9abd5a877c844c61679932b9622528b969251dcbbcd"
+  "file": "64x64/apps/yast-vm-install.svg",
+  "sha256": "d448368070ce96ef22ffbde4184f59513eb58cc5cfc4e464fca5784a166a20ce"
  }
 ]

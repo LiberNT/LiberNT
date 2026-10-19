@@ -32,7 +32,7 @@ records the icon name, design size, file and SHA-256 of each one.
 | Command Prompt | `apps/utilities-terminal` | cmd.exe |
 | Task Manager | `devices/computer` with `apps/com.github.stsdc.monitor` centered on its screen | taskmgr.exe, taskmgr11.exe |
 | Device Manager | `devices/computer` with `emblems/emblem-system` over its bottom-right quarter | devmgmt.exe |
-| LiberNT Setup | `apps/system-os-installer` (`ubiquity-kde`) with the LiberNT mark on its card | libernt.exe, oobe.exe |
+| LiberNT Setup | `apps/yast-vm-install` | libernt.exe, oobe.exe |
 
 Every ICO holds 16, 20, 24, 32, 40, 48, 64, 96, 128 and 256 pixel frames as
 32-bit DIBs with alpha and legacy AND masks. Each frame is rasterized from the
@@ -54,12 +54,6 @@ centered on the monitor. At the user's request the Task Manager graph keeps
 only the stroked line and its shadow of `com.github.stsdc.monitor`; the
 generator leaves out its filled background tile when rendering, and the
 vendored SVG itself stays unmodified.
-
-The LiberNT Setup icon is the Papirus operating system installer icon with
-the LiberNT mark (`media/graphics/branding/libernt-mark.svg`), as the user
-asked. The generator leaves out the green arrow on the card when rendering
-and draws the unmodified mark centered on the card above the progress bar,
-at 55 percent of the card width.
 
 ## Device Manager
 
