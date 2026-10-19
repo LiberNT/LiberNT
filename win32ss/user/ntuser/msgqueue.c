@@ -423,10 +423,6 @@ IntMsqClearWakeMask(VOID)
    Win32Thread = PsGetCurrentThreadWin32Thread();
    if (Win32Thread == NULL || Win32Thread->MessageQueue == NULL)
       return FALSE;
-   // Very hacky, but that is what they do.
-   UserDomainLockExclusive(DLT_QUEUE);
-   Win32Thread->pcti->fsWakeBits = 0;
-   UserDomainUnlockExclusive(DLT_QUEUE);
 
    IdlePong();
 
