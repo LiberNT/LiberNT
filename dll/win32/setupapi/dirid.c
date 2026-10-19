@@ -280,6 +280,9 @@ static BOOL store_user_dirid( HINF hinf, int id, WCHAR *str )
 BOOL WINAPI SetupSetDirectoryIdA( HINF hinf, DWORD id, PCSTR dir )
 {
     UNICODE_STRING dirW;
+#ifdef __REACTOS__
+    WCHAR *str;
+#endif
     int i;
 
     if (!id)  /* clear everything */
@@ -300,7 +303,18 @@ BOOL WINAPI SetupSetDirectoryIdA( HINF hinf, DWORD id, PCSTR dir )
         SetLastError( ERROR_NOT_ENOUGH_MEMORY );
         return FALSE;
     }
+#ifdef __REACTOS__
+    str = wcsdup( dirW.Buffer );
+    RtlFreeUnicodeString( &dirW );
+    if (!str)
+    {
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return FALSE;
+    }
+    return store_user_dirid( hinf, id, str );
+#else
     return store_user_dirid( hinf, id, dirW.Buffer );
+#endif
 }
 
 
