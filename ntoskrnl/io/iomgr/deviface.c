@@ -64,8 +64,7 @@ IopFindEnabledInterface(
 static
 VOID
 IopTrackEnabledInterface(
-    _In_ PCUNICODE_STRING SymbolicLinkName,
-    _In_ BOOLEAN Enable)
+    _In_ PCUNICODE_STRING SymbolicLinkName)
 {
     PIOP_ENABLED_INTERFACE Interface;
     UNICODE_STRING Name;
@@ -76,7 +75,7 @@ IopTrackEnabledInterface(
     KeEnterCriticalRegion();
     ExAcquirePushLockExclusive(&IopEnabledInterfacesLock);
     Interface = IopFindEnabledInterface(&Name, NULL);
-    if (Enable && !Interface)
+    if (!Interface)
     {
         Interface = ExAllocatePoolWithTag(PagedPool, sizeof(*Interface) + Name.Length, TAG_IO);
         if (Interface)
@@ -86,11 +85,6 @@ IopTrackEnabledInterface(
             RtlCopyMemory(Interface->Name.Buffer, Name.Buffer, Name.Length);
             InsertTailList(&IopEnabledInterfaces, &Interface->ListEntry);
         }
-    }
-    else if (!Enable && Interface)
-    {
-        RemoveEntryList(&Interface->ListEntry);
-        ExFreePoolWithTag(Interface, TAG_IO);
     }
     ExReleasePushLockExclusive(&IopEnabledInterfacesLock);
     KeLeaveCriticalRegion();
@@ -2105,7 +2099,8 @@ IoSetDeviceInterfaceState(IN PUNICODE_STRING SymbolicLinkName,
         DPRINT1("Failed to write the Linked value\n");
         return Status;
     }
-    IopTrackEnabledInterface(SymbolicLinkName, Enable);
+    if (Enable)
+        IopTrackEnabledInterface(SymbolicLinkName);
 
     ASSERT(GuidString.Buffer >= LinkNameNoPrefix.Buffer + 1);
     DeviceInstance.Length = (USHORT)((GuidString.Buffer - LinkNameNoPrefix.Buffer - 1) * sizeof(WCHAR));
