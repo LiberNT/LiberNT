@@ -1075,7 +1075,11 @@ NTSTATUS WINAPI wow64_NtQueryInformationProcess( UINT *args )
             }
             return status;
         }
+#ifdef __REACTOS__
+        if (retlen) *retlen = sizeof(VM_COUNTERS32);
+#else
         if (retlen) *retlen = sizeof(VM_COUNTERS_EX32);
+#endif
         return STATUS_INFO_LENGTH_MISMATCH;
 
     case ProcessDebugPort:  /* ULONG_PTR */
