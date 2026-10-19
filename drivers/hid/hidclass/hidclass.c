@@ -195,6 +195,7 @@ HidClass_Create(
     //
     RtlZeroMemory(Context, sizeof(HIDCLASS_FILEOP_CONTEXT));
     Context->DeviceExtension = PDODeviceExtension;
+    Context->ReportQueueCapacity = HIDCLASS_QUEUED_REPORTS;
     InitializeListHead(&Context->PendingReads);
 
     CollectionDescription = HidClassPDO_GetCollectionDescription(&PDODeviceExtension->Common.DeviceDescription,
@@ -203,7 +204,7 @@ HidClass_Create(
     {
         Context->ReportSlotLength = sizeof(USHORT) + CollectionDescription->InputLength;
         Context->ReportQueue = ExAllocatePoolWithTag(NonPagedPool,
-                                                     Context->ReportSlotLength * HIDCLASS_QUEUED_REPORTS,
+                                                     Context->ReportSlotLength * Context->ReportQueueCapacity,
                                                      HIDCLASS_TAG);
         if (!Context->ReportQueue)
         {
@@ -418,13 +419,13 @@ HidClassFDO_RouteReport(
         if (!Context->ReportQueue || ReportLength > Context->ReportSlotLength - sizeof(USHORT))
             continue;
 
-        if (Context->ReportQueueCount == HIDCLASS_QUEUED_REPORTS)
+        if (Context->ReportQueueCount == Context->ReportQueueCapacity)
         {
-            Context->ReportQueueHead = (Context->ReportQueueHead + 1) % HIDCLASS_QUEUED_REPORTS;
+            Context->ReportQueueHead = (Context->ReportQueueHead + 1) % Context->ReportQueueCapacity;
             Context->ReportQueueCount--;
         }
 
-        SlotIndex = (Context->ReportQueueHead + Context->ReportQueueCount) % HIDCLASS_QUEUED_REPORTS;
+        SlotIndex = (Context->ReportQueueHead + Context->ReportQueueCount) % Context->ReportQueueCapacity;
         Slot = Context->ReportQueue + SlotIndex * Context->ReportSlotLength;
         Slot[0] = (UCHAR)ReportLength;
         Slot[1] = (UCHAR)(ReportLength >> 8);
@@ -788,7 +789,7 @@ HidClass_Read(
         PUCHAR Slot = Context->ReportQueue + Context->ReportQueueHead * Context->ReportSlotLength;
 
         HidClass_CopyReport(FDODeviceExtension, Irp, Slot + sizeof(USHORT), Slot[0] | ((ULONG)Slot[1] << 8));
-        Context->ReportQueueHead = (Context->ReportQueueHead + 1) % HIDCLASS_QUEUED_REPORTS;
+        Context->ReportQueueHead = (Context->ReportQueueHead + 1) % Context->ReportQueueCapacity;
         Context->ReportQueueCount--;
         KeReleaseSpinLock(&FDODeviceExtension->ReadLock, OldLevel);
 
@@ -1033,6 +1034,46 @@ HidClass_Write(
     return Status;
 }
 
+static
+NTSTATUS
+HidClass_SetReportQueueCapacity(
+    IN PHIDCLASS_FILEOP_CONTEXT Context,
+    IN ULONG Capacity)
+{
+    PHIDCLASS_FDO_EXTENSION FDODeviceExtension = Context->DeviceExtension->FDODeviceExtension;
+    PUCHAR NewQueue = NULL, OldQueue;
+    ULONG Index, Count, Skip;
+    KIRQL OldLevel;
+
+    if (Context->ReportSlotLength)
+    {
+        NewQueue = ExAllocatePoolWithTag(NonPagedPool, Context->ReportSlotLength * Capacity, HIDCLASS_TAG);
+        if (!NewQueue)
+            return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    KeAcquireSpinLock(&FDODeviceExtension->ReadLock, &OldLevel);
+    OldQueue = Context->ReportQueue;
+    Count = OldQueue ? min(Context->ReportQueueCount, Capacity) : 0;
+    Skip = Context->ReportQueueCount - Count;
+    for (Index = 0; Index < Count; Index++)
+    {
+        ULONG Slot = (Context->ReportQueueHead + Skip + Index) % Context->ReportQueueCapacity;
+        RtlCopyMemory(NewQueue + Index * Context->ReportSlotLength,
+                      OldQueue + Slot * Context->ReportSlotLength,
+                      Context->ReportSlotLength);
+    }
+    Context->ReportQueue = NewQueue;
+    Context->ReportQueueHead = 0;
+    Context->ReportQueueCount = Count;
+    Context->ReportQueueCapacity = Capacity;
+    KeReleaseSpinLock(&FDODeviceExtension->ReadLock, OldLevel);
+
+    if (OldQueue)
+        ExFreePoolWithTag(OldQueue, HIDCLASS_TAG);
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 HidClass_DeviceControl(
@@ -1123,6 +1164,46 @@ HidClass_DeviceControl(
             Irp->IoStatus.Status = STATUS_SUCCESS;
             IoCompleteRequest(Irp, IO_NO_INCREMENT);
             return STATUS_SUCCESS;
+        }
+        case IOCTL_GET_NUM_DEVICE_INPUT_BUFFERS:
+        {
+            PHIDCLASS_FILEOP_CONTEXT Context = IoStack->FileObject ? IoStack->FileObject->FsContext : NULL;
+
+            if (!Context || IoStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(ULONG))
+            {
+                Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
+                IoCompleteRequest(Irp, IO_NO_INCREMENT);
+                return STATUS_INVALID_PARAMETER;
+            }
+
+            *(PULONG)Irp->AssociatedIrp.SystemBuffer = Context->ReportQueueCapacity;
+            Irp->IoStatus.Information = sizeof(ULONG);
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return STATUS_SUCCESS;
+        }
+        case IOCTL_SET_NUM_DEVICE_INPUT_BUFFERS:
+        {
+            PHIDCLASS_FILEOP_CONTEXT Context = IoStack->FileObject ? IoStack->FileObject->FsContext : NULL;
+            ULONG Capacity;
+
+            if (!Context || IoStack->Parameters.DeviceIoControl.InputBufferLength < sizeof(ULONG))
+            {
+                Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
+                IoCompleteRequest(Irp, IO_NO_INCREMENT);
+                return STATUS_INVALID_PARAMETER;
+            }
+
+            Capacity = *(PULONG)Irp->AssociatedIrp.SystemBuffer;
+            if (Capacity < HIDCLASS_MIN_QUEUED_REPORTS || Capacity > HIDCLASS_MAX_QUEUED_REPORTS)
+                Status = STATUS_INVALID_PARAMETER;
+            else
+                Status = HidClass_SetReportQueueCapacity(Context, Capacity);
+
+            Irp->IoStatus.Information = 0;
+            Irp->IoStatus.Status = Status;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return Status;
         }
         case IOCTL_HID_GET_COLLECTION_DESCRIPTOR:
         {

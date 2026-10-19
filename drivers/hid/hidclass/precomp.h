@@ -150,6 +150,8 @@ HidClassPDO_CompleteWake(
     IN NTSTATUS Status);
 
 #define HIDCLASS_QUEUED_REPORTS 32
+#define HIDCLASS_MIN_QUEUED_REPORTS 2
+#define HIDCLASS_MAX_QUEUED_REPORTS 512
 
 typedef struct __HIDCLASS_FILEOP_CONTEXT__
 {
@@ -169,6 +171,7 @@ typedef struct __HIDCLASS_FILEOP_CONTEXT__
     ULONG ReportSlotLength;
     ULONG ReportQueueHead;
     ULONG ReportQueueCount;
+    ULONG ReportQueueCapacity;
 
     //
     // stop in progress indicator
