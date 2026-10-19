@@ -3440,9 +3440,10 @@ RegOpenKeyExW(HKEY hKey,
                                KeyHandle,
                                NULL);
 
-    Status = NtOpenKey((PHANDLE)phkResult,
-                       samDesired,
-                       &ObjectAttributes);
+    Status = NtOpenKeyEx((PHANDLE)phkResult,
+                         samDesired,
+                         &ObjectAttributes,
+                         ulOptions & REG_OPTION_BACKUP_RESTORE);
 
 Exit:
 
