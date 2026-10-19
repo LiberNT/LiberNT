@@ -7036,7 +7036,8 @@ InfIsFromOEMLocation(
             strcatW(Windir, BackSlash);
         strcatW(Windir, InfDirectory);
 
-        if (strncmpiW(FullName, Windir, last - FullName) == 0)
+        if ((SIZE_T)(last - FullName + 1) == strlenW(Windir) &&
+            strncmpiW(FullName, Windir, last - FullName + 1) == 0)
         {
             /* The path is %SYSTEMROOT%\Inf */
             *IsOEMLocation = FALSE;
