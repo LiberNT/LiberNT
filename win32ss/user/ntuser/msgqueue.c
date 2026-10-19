@@ -2158,7 +2158,18 @@ co_MsqPeekHardwareMessage(IN PTHREADINFO pti,
             pti->ptLast   = msg.pt;
             MessageQueue->ExtraInfo = ExtraInfo;
             if (pti->pClientInfo)
-               pti->pClientInfo->MsgSource = Source;
+            {
+               if ((msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST) ||
+                   (msg.message >= WM_MOUSEFIRST && msg.message <= WM_MOUSELAST))
+               {
+                  pti->pClientInfo->MsgSource = Source;
+               }
+               else
+               {
+                  pti->pClientInfo->MsgSource.deviceType = IMDT_UNAVAILABLE;
+                  pti->pClientInfo->MsgSource.originId = IMO_UNAVAILABLE;
+               }
+            }
             Ret = TRUE;
             break;
          }
