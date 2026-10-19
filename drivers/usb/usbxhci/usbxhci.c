@@ -15621,14 +15621,13 @@ XHCI_RH_ClearFeaturePortEnable(
 {
     PXHCI_EXTENSION Extension = MiniPortExtension;
 
-    if (!Extension)
+    if (!Extension || Port == 0 || Port > XHCI_MAX_PORTS)
         return MP_STATUS_ERROR;
 
-    return XHCI_ModifyPortBits(Extension,
-                               Port,
-                               XHCI_PORTSC_DR,
-                               0,
-                               XHCI_PORTSC_PEC);
+    if (Extension->PortProtocol[Port] >= 3)
+        return MP_STATUS_SUCCESS;
+
+    return XHCI_ModifyPortBits(Extension, Port, XHCI_PORTSC_PED, 0, 0);
 }
 
 static
