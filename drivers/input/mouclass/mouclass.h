@@ -11,6 +11,10 @@
 #define CLASS_TAG 'CuoM'
 #define DPFLTR_CLASS_NAME_ID DPFLTR_MOUCLASS_ID
 
+#define CLASS_WAKE_IDLE       0
+#define CLASS_WAKE_ARMED      1
+#define CLASS_WAKE_CANCELLING 2
+
 typedef enum
 {
 	dsStopped,
@@ -48,6 +52,12 @@ typedef struct _PORT_DEVICE_EXTENSION
 	PDEVICE_OBJECT ClassDO;
 	HANDLE FileHandle;
 	UNICODE_STRING InterfaceName;
+	PDEVICE_OBJECT Pdo;
+	SYSTEM_POWER_STATE SystemWake;
+	BOOLEAN WakeAllowed;
+	volatile LONG WakeState;
+	PIRP WakeIrp;
+	KEVENT WakeDone;
 } PORT_DEVICE_EXTENSION, *PPORT_DEVICE_EXTENSION;
 
 typedef struct _CLASS_DEVICE_EXTENSION

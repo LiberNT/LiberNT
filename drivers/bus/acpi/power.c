@@ -131,6 +131,19 @@ AcpiPmFinishWake(VOID)
         return;
 
     AcpiPmSleepState = ACPI_STATE_S0;
+    AcpiWakeCheckSources();
+
+    if (SleepState == ACPI_STATE_S4)
+    {
+        UINT32 SciEnabled = 0;
+
+        if (ACPI_SUCCESS(AcpiReadBitRegister(ACPI_BITREG_SCI_ENABLE, &SciEnabled)) && !SciEnabled &&
+            ACPI_FAILURE(AcpiEnable()))
+        {
+            DPRINT1("Re-entering ACPI mode after hibernation failed\n");
+        }
+    }
+
     AcpiLeaveSleepStatePrep(SleepState);
     AcpiLeaveSleepState(SleepState);
 }
@@ -171,6 +184,10 @@ Bus_FDO_Power (
             case PowerSystemSleeping2:
             case PowerSystemSleeping3:
                 status = AcpiPmPrepareSleep(ACPI_STATE_S1 + (powerState.SystemState - PowerSystemSleeping1));
+                break;
+
+            case PowerSystemHibernate:
+                status = AcpiPmPrepareSleep(ACPI_STATE_S4);
                 break;
 
             case PowerSystemShutdown:
@@ -240,6 +257,9 @@ Bus_PDO_Power (
     stack = IoGetCurrentIrpStackLocation (Irp);
     powerType = stack->Parameters.Power.Type;
     powerState = stack->Parameters.Power.State;
+
+    if (stack->MinorFunction == IRP_MN_WAIT_WAKE)
+        return AcpiWakeQueueIrp(PdoData, Irp);
 
     if (stack->MinorFunction == IRP_MN_SET_POWER &&
         powerType == DevicePowerState &&

@@ -961,6 +961,7 @@ acpi_bus_notify (
 	case ACPI_NOTIFY_DEVICE_WAKE:
 		DPRINT("Received DEVICE WAKE notification for device [%s]\n",
 			device ? device->pnp.bus_id : "n/a");
+		AcpiWakeSignal(handle);
 		acpi_bus_check_device(handle);
 		/*
 		 * TBD: We'll need to outsource certain events to non-ACPI
@@ -1593,6 +1594,8 @@ acpi_bus_add (
 			goto end;
 	}
 
+	AcpiWakeProbeDevice(device);
+
 	/*
 	 * Performance Management
 	 * ----------------------
@@ -1699,6 +1702,7 @@ acpi_bus_remove (
 	if (!device)
 		return_VALUE(AE_NOT_FOUND);
 
+	AcpiWakeRemoveDevice(device);
 	acpi_device_unregister(device);
 
 	if (device->pnp.cid_list)

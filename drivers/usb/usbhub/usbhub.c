@@ -5139,6 +5139,7 @@ USBH_PdoSetCapabilities(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
 
     if (PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_REMOTE_WAKEUP)
     {
+        PortExtension->Capabilities.SystemWake = HubExtension->SystemWake;
         PortExtension->Capabilities.DeviceWake = PowerDeviceD2;
 
         PortExtension->Capabilities.DeviceD1 = 1;

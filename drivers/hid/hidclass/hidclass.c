@@ -557,6 +557,8 @@ HidClassFDO_InitializeRead(
     PHIDCLASS_FDO_EXTENSION FDODeviceExtension = FDODeviceObject->DeviceExtension;
 
     KeInitializeSpinLock(&FDODeviceExtension->ReadLock);
+    KeInitializeSpinLock(&FDODeviceExtension->WakeLock);
+    KeInitializeEvent(&FDODeviceExtension->WakeDone, NotificationEvent, FALSE);
     InitializeListHead(&FDODeviceExtension->OpenFileList);
     KeInitializeEvent(&FDODeviceExtension->ReadIdleEvent, NotificationEvent, TRUE);
     KeInitializeDpc(&FDODeviceExtension->ReadDpc, HidClassFDO_ReadDpc, FDODeviceObject);
@@ -1429,6 +1431,176 @@ HidClass_InternalDeviceControl(
     return STATUS_INVALID_DEVICE_REQUEST;
 }
 
+static REQUEST_POWER_COMPLETE HidClassFDO_WakeComplete;
+static DRIVER_CANCEL HidClassPDO_WaitWakeCancel;
+
+static
+VOID
+HidClassFDO_ArmWake(
+    IN PHIDCLASS_FDO_EXTENSION FDODeviceExtension)
+{
+    POWER_STATE PowerState;
+
+    if (InterlockedCompareExchange(&FDODeviceExtension->WakeState, HIDCLASS_WAKE_ARMED, HIDCLASS_WAKE_IDLE) != HIDCLASS_WAKE_IDLE)
+        return;
+
+    PowerState.SystemState = FDODeviceExtension->Capabilities.SystemWake;
+    PoRequestPowerIrp(FDODeviceExtension->Common.HidDeviceExtension.PhysicalDeviceObject,
+                      IRP_MN_WAIT_WAKE,
+                      PowerState,
+                      HidClassFDO_WakeComplete,
+                      FDODeviceExtension,
+                      &FDODeviceExtension->WakeIrp);
+}
+
+VOID
+HidClassPDO_CompleteWake(
+    IN PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension,
+    IN NTSTATUS Status)
+{
+    PHIDCLASS_FDO_EXTENSION FDODeviceExtension = PDODeviceExtension->FDODeviceExtension;
+    KIRQL OldLevel;
+    PIRP Irp;
+
+    KeAcquireSpinLock(&FDODeviceExtension->WakeLock, &OldLevel);
+    Irp = PDODeviceExtension->WaitWakeIrp;
+    if (Irp != NULL && IoSetCancelRoutine(Irp, NULL) != NULL)
+        PDODeviceExtension->WaitWakeIrp = NULL;
+    else
+        Irp = NULL;
+    KeReleaseSpinLock(&FDODeviceExtension->WakeLock, OldLevel);
+
+    if (Irp == NULL)
+        return;
+
+    Irp->IoStatus.Status = Status;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+}
+
+static
+VOID
+NTAPI
+HidClassFDO_WakeComplete(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN UCHAR MinorFunction,
+    IN POWER_STATE PowerState,
+    IN PVOID Context,
+    IN PIO_STATUS_BLOCK IoStatus)
+{
+    PHIDCLASS_FDO_EXTENSION FDODeviceExtension = Context;
+    PDEVICE_RELATIONS Relations;
+    LONG PreviousState;
+    ULONG Index;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(MinorFunction);
+    UNREFERENCED_PARAMETER(PowerState);
+
+    PreviousState = InterlockedExchange(&FDODeviceExtension->WakeState, HIDCLASS_WAKE_IDLE);
+
+    Relations = FDODeviceExtension->DeviceRelations;
+    for (Index = 0; Relations != NULL && Index < Relations->Count; Index++)
+        HidClassPDO_CompleteWake(Relations->Objects[Index]->DeviceExtension, IoStatus->Status);
+
+    if (PreviousState == HIDCLASS_WAKE_CANCELLING)
+        KeSetEvent(&FDODeviceExtension->WakeDone, IO_NO_INCREMENT, FALSE);
+}
+
+VOID
+HidClassFDO_DisarmWake(
+    IN PHIDCLASS_FDO_EXTENSION FDODeviceExtension)
+{
+    KeClearEvent(&FDODeviceExtension->WakeDone);
+    if (InterlockedCompareExchange(&FDODeviceExtension->WakeState, HIDCLASS_WAKE_CANCELLING, HIDCLASS_WAKE_ARMED) == HIDCLASS_WAKE_ARMED)
+    {
+        IoCancelIrp(FDODeviceExtension->WakeIrp);
+        KeWaitForSingleObject(&FDODeviceExtension->WakeDone, Executive, KernelMode, FALSE, NULL);
+    }
+}
+
+static
+VOID
+NTAPI
+HidClassPDO_WaitWakeCancel(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PIRP Irp)
+{
+    PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension = DeviceObject->DeviceExtension;
+    PHIDCLASS_FDO_EXTENSION FDODeviceExtension = PDODeviceExtension->FDODeviceExtension;
+    KIRQL OldLevel;
+
+    IoReleaseCancelSpinLock(Irp->CancelIrql);
+
+    KeAcquireSpinLock(&FDODeviceExtension->WakeLock, &OldLevel);
+    if (PDODeviceExtension->WaitWakeIrp == Irp)
+        PDODeviceExtension->WaitWakeIrp = NULL;
+    KeReleaseSpinLock(&FDODeviceExtension->WakeLock, OldLevel);
+
+    Irp->IoStatus.Status = STATUS_CANCELLED;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+}
+
+static
+NTSTATUS
+HidClassPDO_WaitWake(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PIRP Irp)
+{
+    PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension = DeviceObject->DeviceExtension;
+    PHIDCLASS_FDO_EXTENSION FDODeviceExtension = PDODeviceExtension->FDODeviceExtension;
+    PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
+    NTSTATUS Status;
+    KIRQL OldLevel;
+
+    if (FDODeviceExtension->Capabilities.SystemWake <= PowerSystemWorking ||
+        FDODeviceExtension->Capabilities.DeviceWake == PowerDeviceUnspecified)
+    {
+        Status = STATUS_NOT_SUPPORTED;
+        goto Complete;
+    }
+
+    if (IoStack->Parameters.WaitWake.PowerState > FDODeviceExtension->Capabilities.SystemWake)
+    {
+        Status = STATUS_INVALID_DEVICE_STATE;
+        goto Complete;
+    }
+
+    KeAcquireSpinLock(&FDODeviceExtension->WakeLock, &OldLevel);
+    if (PDODeviceExtension->WaitWakeIrp != NULL)
+    {
+        KeReleaseSpinLock(&FDODeviceExtension->WakeLock, OldLevel);
+        Status = STATUS_DEVICE_BUSY;
+        goto Complete;
+    }
+
+    IoMarkIrpPending(Irp);
+    PDODeviceExtension->WaitWakeIrp = Irp;
+    IoSetCancelRoutine(Irp, HidClassPDO_WaitWakeCancel);
+    if (Irp->Cancel && IoSetCancelRoutine(Irp, NULL) != NULL)
+    {
+        PDODeviceExtension->WaitWakeIrp = NULL;
+        KeReleaseSpinLock(&FDODeviceExtension->WakeLock, OldLevel);
+        Irp->IoStatus.Status = STATUS_CANCELLED;
+        Irp->IoStatus.Information = 0;
+        PoStartNextPowerIrp(Irp);
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_PENDING;
+    }
+    KeReleaseSpinLock(&FDODeviceExtension->WakeLock, OldLevel);
+
+    PoStartNextPowerIrp(Irp);
+    HidClassFDO_ArmWake(FDODeviceExtension);
+    return STATUS_PENDING;
+
+Complete:
+    Irp->IoStatus.Status = Status;
+    PoStartNextPowerIrp(Irp);
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 HidClass_Power(
@@ -1442,6 +1614,10 @@ HidClass_Power(
     {
         IoCopyCurrentIrpStackLocationToNext(Irp);
         return HidClassFDO_DispatchRequest(DeviceObject, Irp);
+    }
+    else if (IoGetCurrentIrpStackLocation(Irp)->MinorFunction == IRP_MN_WAIT_WAKE)
+    {
+        return HidClassPDO_WaitWake(DeviceObject, Irp);
     }
     else
     {

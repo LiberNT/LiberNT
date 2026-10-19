@@ -1946,7 +1946,74 @@ PdoQueryBusInformation(
 }
 
 
-static NTSTATUS
+static
+VOID
+PdoCompleteWaitWake(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ NTSTATUS Status);
+
+static
+VOID
+PdoMergePlatformWake(
+    _Inout_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _Inout_ PDEVICE_CAPABILITIES DeviceCapabilities)
+{
+    ACPI_PCI_WAKE_INFORMATION Information;
+    DEVICE_POWER_STATE DeviceWake;
+    ULONG Index;
+
+    DeviceExtension->SystemWake = DeviceCapabilities->SystemWake;
+
+    if (!NT_SUCCESS(PciAcpiQueryWake(PciPdoGetSegment(DeviceExtension),
+                                     DeviceExtension->PciDevice->BusNumber,
+                                     DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
+                                     DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber,
+                                     &Information)))
+    {
+        return;
+    }
+
+    for (Index = PowerSystemSleeping1; Index < PowerSystemMaximum; Index++)
+    {
+        if (Information.DeviceState[Index] > PowerDeviceUnspecified && Information.DeviceState[Index] < PowerDeviceMaximum)
+            DeviceCapabilities->DeviceState[Index] = (DEVICE_POWER_STATE)Information.DeviceState[Index];
+    }
+
+    if (Information.SystemWake <= PowerSystemWorking ||
+        Information.DeviceWake <= PowerDeviceUnspecified ||
+        Information.DeviceWake >= PowerDeviceMaximum)
+    {
+        return;
+    }
+
+    DeviceWake = (DEVICE_POWER_STATE)Information.DeviceWake;
+    if (DeviceCapabilities->DeviceWake != PowerDeviceUnspecified && DeviceCapabilities->DeviceWake < DeviceWake)
+        DeviceWake = DeviceCapabilities->DeviceWake;
+
+    if (DeviceExtension->AcpiWakeIrp == NULL)
+    {
+        DeviceExtension->AcpiWakeWorkItem = IoAllocateWorkItem(DeviceExtension->Common.DeviceObject);
+        DeviceExtension->AcpiWakeIrp = DeviceExtension->AcpiWakeWorkItem ? PciAcpiAllocateWakeIrp() : NULL;
+        if (DeviceExtension->AcpiWakeIrp == NULL)
+        {
+            if (DeviceExtension->AcpiWakeWorkItem)
+                IoFreeWorkItem(DeviceExtension->AcpiWakeWorkItem);
+            DeviceExtension->AcpiWakeWorkItem = NULL;
+            return;
+        }
+    }
+
+    DeviceCapabilities->SystemWake = (SYSTEM_POWER_STATE)Information.SystemWake;
+    DeviceCapabilities->DeviceWake = DeviceWake;
+    DeviceCapabilities->WakeFromD0 = TRUE;
+    DeviceCapabilities->WakeFromD1 = DeviceCapabilities->DeviceD1 && DeviceWake >= PowerDeviceD1;
+    DeviceCapabilities->WakeFromD2 = DeviceCapabilities->DeviceD2 && DeviceWake >= PowerDeviceD2;
+    DeviceCapabilities->WakeFromD3 = DeviceWake >= PowerDeviceD3;
+    DeviceExtension->SystemWake = DeviceCapabilities->SystemWake;
+}
+
+static
+NTSTATUS
 PdoQueryCapabilities(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp,
@@ -2009,14 +2076,14 @@ PdoQueryCapabilities(
 
     PciPdoCacheMsiInfo(DeviceExtension);
     if (Device->PmCapability == 0)
-        return STATUS_SUCCESS;
+        goto Platform;
 
     BytesRead = PciPdoGetBusDataByOffset(DeviceExtension,
                                          &PmCapabilities,
                                          Device->PmCapability + PCI_PM_PMC,
                                          sizeof(PmCapabilities));
     if (BytesRead != sizeof(PmCapabilities))
-        return STATUS_SUCCESS;
+        goto Platform;
 
     DeviceCapabilities->DeviceD1 = !!(PmCapabilities & PCI_PM_CAP_D1);
     DeviceCapabilities->DeviceD2 = !!(PmCapabilities & PCI_PM_CAP_D2);
@@ -2046,6 +2113,8 @@ PdoQueryCapabilities(
     DeviceCapabilities->D2Latency = 2;
     DeviceCapabilities->D3Latency = 100;
 
+Platform:
+    PdoMergePlatformWake(DeviceExtension, DeviceCapabilities);
     return STATUS_SUCCESS;
 }
 
@@ -4686,6 +4755,7 @@ PdoPnpControl(
             break;
 
         case IRP_MN_REMOVE_DEVICE:
+            PdoCompleteWaitWake(DeviceExtension, STATUS_NO_SUCH_DEVICE);
             PciPdoDisableDecodes(DeviceExtension);
             PciPdoReleaseMessageRoutes(DeviceExtension);
             IoReleaseRemoveLockAndWait(&DeviceExtension->RemoveLock, Irp);
@@ -5002,6 +5072,253 @@ PciRestoreMsiState(
     PciWriteDeviceConfig(Device, &Device->SavedMsixControl, Device->MsixCapability + PCI_MSIX_FLAGS, sizeof(USHORT));
 }
 
+static
+VOID
+PdoSetPmeEnable(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ BOOLEAN Enable)
+{
+    USHORT Control;
+    ULONG Offset;
+
+    if (!DeviceExtension->PciDevice || DeviceExtension->PciDevice->PmCapability == 0)
+        return;
+
+    Offset = DeviceExtension->PciDevice->PmCapability + PCI_PM_CTRL;
+    if (PciPdoGetBusDataByOffset(DeviceExtension, &Control, Offset, sizeof(Control)) != sizeof(Control))
+        return;
+
+    Control &= ~PCI_PM_CTRL_PME_ENABLE;
+    Control |= PCI_PM_CTRL_PME_STATUS;
+    if (Enable)
+        Control |= PCI_PM_CTRL_PME_ENABLE;
+    PciPdoSetBusDataByOffset(DeviceExtension, &Control, Offset, sizeof(Control));
+}
+
+static IO_COMPLETION_ROUTINE PdoAcpiWakeComplete;
+static IO_WORKITEM_ROUTINE PdoAcpiWakeWorker;
+static DRIVER_CANCEL PdoWaitWakeCancel;
+
+static
+VOID
+NTAPI
+PdoAcpiWakeWorker(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PVOID Context)
+{
+    PPDO_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    SYSTEM_POWER_STATE SystemState;
+    BOOLEAN Send;
+    KIRQL OldIrql;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    KeAcquireSpinLock(&DeviceExtension->WaitWakeSpinLock, &OldIrql);
+    Send = (DeviceExtension->WaitWakeIrp != NULL);
+    if (Send)
+        SystemState = IoGetCurrentIrpStackLocation(DeviceExtension->WaitWakeIrp)->Parameters.WaitWake.PowerState;
+    else
+        DeviceExtension->AcpiWakeActive = FALSE;
+    KeReleaseSpinLock(&DeviceExtension->WaitWakeSpinLock, OldIrql);
+
+    if (!Send)
+        return;
+
+    RtlZeroMemory(&DeviceExtension->AcpiWakeInput, sizeof(DeviceExtension->AcpiWakeInput));
+    DeviceExtension->AcpiWakeInput.Signature = ACPI_PCI_WAKE_INPUT_BUFFER_SIGNATURE;
+    DeviceExtension->AcpiWakeInput.Segment = PciPdoGetSegment(DeviceExtension);
+    DeviceExtension->AcpiWakeInput.Bus = DeviceExtension->PciDevice->BusNumber;
+    DeviceExtension->AcpiWakeInput.Device = DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber;
+    DeviceExtension->AcpiWakeInput.Function = DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber;
+    DeviceExtension->AcpiWakeInput.SystemState = SystemState;
+
+    PciAcpiSendWaitWake(DeviceExtension->AcpiWakeIrp,
+                        &DeviceExtension->AcpiWakeInput,
+                        PdoAcpiWakeComplete,
+                        DeviceExtension);
+}
+
+static
+NTSTATUS
+NTAPI
+PdoAcpiWakeComplete(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP AcpiIrp,
+    _In_opt_ PVOID Context)
+{
+    PPDO_DEVICE_EXTENSION DeviceExtension = Context;
+    NTSTATUS Status = AcpiIrp->IoStatus.Status;
+    BOOLEAN Restart = FALSE;
+    KIRQL OldIrql;
+    PIRP Irp;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    KeAcquireSpinLock(&DeviceExtension->WaitWakeSpinLock, &OldIrql);
+    Irp = DeviceExtension->WaitWakeIrp;
+    if (Status == STATUS_CANCELLED && Irp != NULL)
+    {
+        Restart = TRUE;
+        Irp = NULL;
+    }
+    else
+    {
+        DeviceExtension->AcpiWakeActive = FALSE;
+        if (Irp != NULL && IoSetCancelRoutine(Irp, NULL) != NULL)
+            DeviceExtension->WaitWakeIrp = NULL;
+        else
+            Irp = NULL;
+    }
+    KeReleaseSpinLock(&DeviceExtension->WaitWakeSpinLock, OldIrql);
+
+    if (Restart)
+    {
+        IoQueueWorkItem(DeviceExtension->AcpiWakeWorkItem, PdoAcpiWakeWorker, DelayedWorkQueue, NULL);
+        return STATUS_MORE_PROCESSING_REQUIRED;
+    }
+
+    if (Irp != NULL)
+    {
+        PdoSetPmeEnable(DeviceExtension, FALSE);
+        Irp->IoStatus.Status = Status;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    }
+
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+static
+VOID
+NTAPI
+PdoWaitWakeCancel(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp)
+{
+    PPDO_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    BOOLEAN Active;
+    KIRQL OldIrql;
+
+    IoReleaseCancelSpinLock(Irp->CancelIrql);
+
+    KeAcquireSpinLock(&DeviceExtension->WaitWakeSpinLock, &OldIrql);
+    if (DeviceExtension->WaitWakeIrp == Irp)
+        DeviceExtension->WaitWakeIrp = NULL;
+    Active = DeviceExtension->AcpiWakeActive;
+    KeReleaseSpinLock(&DeviceExtension->WaitWakeSpinLock, OldIrql);
+
+    if (Active)
+        IoCancelIrp(DeviceExtension->AcpiWakeIrp);
+
+    PdoSetPmeEnable(DeviceExtension, FALSE);
+    Irp->IoStatus.Status = STATUS_CANCELLED;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+}
+
+static
+VOID
+PdoCompleteWaitWake(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ NTSTATUS Status)
+{
+    BOOLEAN Active = FALSE;
+    KIRQL OldIrql;
+    PIRP Irp;
+
+    KeAcquireSpinLock(&DeviceExtension->WaitWakeSpinLock, &OldIrql);
+    Irp = DeviceExtension->WaitWakeIrp;
+    if (Irp != NULL && IoSetCancelRoutine(Irp, NULL) != NULL)
+    {
+        DeviceExtension->WaitWakeIrp = NULL;
+        Active = DeviceExtension->AcpiWakeActive;
+    }
+    else
+    {
+        Irp = NULL;
+    }
+    KeReleaseSpinLock(&DeviceExtension->WaitWakeSpinLock, OldIrql);
+
+    if (Irp == NULL)
+        return;
+
+    if (Active)
+        IoCancelIrp(DeviceExtension->AcpiWakeIrp);
+
+    PdoSetPmeEnable(DeviceExtension, FALSE);
+    Irp->IoStatus.Status = Status;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+}
+
+static
+NTSTATUS
+PdoWaitWake(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PPDO_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    SYSTEM_POWER_STATE SystemState = IoGetCurrentIrpStackLocation(Irp)->Parameters.WaitWake.PowerState;
+    BOOLEAN StartAcpi = FALSE;
+    NTSTATUS Status;
+    KIRQL OldIrql;
+
+    PoStartNextPowerIrp(Irp);
+
+    if (!DeviceExtension->PciDevice ||
+        (DeviceExtension->PciDevice->PmCapability == 0 && DeviceExtension->AcpiWakeIrp == NULL) ||
+        DeviceExtension->SystemWake == PowerSystemUnspecified)
+    {
+        Status = STATUS_NOT_SUPPORTED;
+        goto Complete;
+    }
+
+    if (SystemState > DeviceExtension->SystemWake)
+    {
+        Status = STATUS_INVALID_DEVICE_STATE;
+        goto Complete;
+    }
+
+    KeAcquireSpinLock(&DeviceExtension->WaitWakeSpinLock, &OldIrql);
+    if (DeviceExtension->WaitWakeIrp != NULL)
+    {
+        KeReleaseSpinLock(&DeviceExtension->WaitWakeSpinLock, OldIrql);
+        Status = STATUS_DEVICE_BUSY;
+        goto Complete;
+    }
+
+    IoMarkIrpPending(Irp);
+    DeviceExtension->WaitWakeIrp = Irp;
+    IoSetCancelRoutine(Irp, PdoWaitWakeCancel);
+    if (Irp->Cancel && IoSetCancelRoutine(Irp, NULL) != NULL)
+    {
+        DeviceExtension->WaitWakeIrp = NULL;
+        KeReleaseSpinLock(&DeviceExtension->WaitWakeSpinLock, OldIrql);
+        Irp->IoStatus.Status = STATUS_CANCELLED;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_PENDING;
+    }
+
+    if (DeviceExtension->AcpiWakeIrp != NULL && !DeviceExtension->AcpiWakeActive)
+    {
+        DeviceExtension->AcpiWakeActive = TRUE;
+        StartAcpi = TRUE;
+    }
+    KeReleaseSpinLock(&DeviceExtension->WaitWakeSpinLock, OldIrql);
+
+    PdoSetPmeEnable(DeviceExtension, TRUE);
+    if (StartAcpi)
+        IoQueueWorkItem(DeviceExtension->AcpiWakeWorkItem, PdoAcpiWakeWorker, DelayedWorkQueue, NULL);
+
+    return STATUS_PENDING;
+
+Complete:
+    Irp->IoStatus.Status = Status;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
+}
+
 NTSTATUS
 PdoPowerControl(
     PDEVICE_OBJECT DeviceObject,
@@ -5123,51 +5440,7 @@ PdoPowerControl(
             break;
 
         case IRP_MN_WAIT_WAKE:
-        {
-            KIRQL OldIrql;
-
-            DPRINT("PDO IRP_MN_WAIT_WAKE\n");
-
-            /* Check if the device supports PME via PM capability */
-            if (!DeviceExtension->PciDevice ||
-                DeviceExtension->PciDevice->PmCapability == 0)
-            {
-                Status = STATUS_NOT_SUPPORTED;
-                break;
-            }
-
-            KeAcquireSpinLock(&DeviceExtension->WaitWakeSpinLock, &OldIrql);
-
-            if (DeviceExtension->WaitWakeState != 0)
-            {
-                /* Another Wait/Wake is already in progress */
-                KeReleaseSpinLock(&DeviceExtension->WaitWakeSpinLock, OldIrql);
-                Status = STATUS_DEVICE_BUSY;
-                break;
-            }
-
-            /* Arm the device for wake */
-            DeviceExtension->WaitWakeState = 2; /* armed */
-            DeviceExtension->WaitWakeIrp = Irp;
-            IoMarkIrpPending(Irp);
-
-            KeReleaseSpinLock(&DeviceExtension->WaitWakeSpinLock, OldIrql);
-
-            /* Increment parent FDO wait/wake child count */
-            if (DeviceExtension->Fdo)
-            {
-                PFDO_DEVICE_EXTENSION FdoExt =
-                    (PFDO_DEVICE_EXTENSION)DeviceExtension->Fdo->DeviceExtension;
-                InterlockedIncrement(&FdoExt->WaitWakeChildCount);
-            }
-
-            DPRINT("PDO: Wait/Wake armed for Bus %lu Dev %lu Func %lu\n",
-                   DeviceExtension->PciDevice->BusNumber,
-                   DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
-                   DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber);
-
-            return STATUS_PENDING;
-        }
+            return PdoWaitWake(DeviceObject, Irp);
 
         case IRP_MN_POWER_SEQUENCE:
             DPRINT("PDO IRP_MN_POWER_SEQUENCE\n");

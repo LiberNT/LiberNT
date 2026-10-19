@@ -262,6 +262,7 @@ struct acpi_device_wakeup {
 	struct acpi_device_wakeup_state state;
 	struct acpi_device_wakeup_flags flags;
 	int prepare_count;
+	void *context;
 };
 
 

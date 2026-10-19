@@ -672,6 +672,8 @@ ClassAddDevice(
 	DeviceExtension->Common.IsClassDO = FALSE;
 	DeviceExtension->DeviceObject = Fdo;
 	DeviceExtension->PnpState = dsStopped;
+	DeviceExtension->Pdo = Pdo;
+	KeInitializeEvent(&DeviceExtension->WakeDone, NotificationEvent, FALSE);
 	Status = IoAttachDeviceToDeviceStackSafe(Fdo, Pdo, &DeviceExtension->LowerDevice);
 	if (!NT_SUCCESS(Status))
 	{
@@ -831,6 +833,129 @@ HandleReadIrp(
 	return Status;
 }
 
+static REQUEST_POWER_COMPLETE ClassWaitWakeComplete;
+
+static VOID
+ClassArmWaitWake(
+	IN PPORT_DEVICE_EXTENSION DeviceExtension)
+{
+	POWER_STATE PowerState;
+
+	if (!DeviceExtension->WakeAllowed ||
+		InterlockedCompareExchange(&DeviceExtension->WakeState, CLASS_WAKE_ARMED, CLASS_WAKE_IDLE) != CLASS_WAKE_IDLE)
+	{
+		return;
+	}
+
+	PowerState.SystemState = DeviceExtension->SystemWake;
+	PoRequestPowerIrp(DeviceExtension->Pdo,
+					  IRP_MN_WAIT_WAKE,
+					  PowerState,
+					  ClassWaitWakeComplete,
+					  DeviceExtension,
+					  &DeviceExtension->WakeIrp);
+}
+
+static VOID NTAPI
+ClassWaitWakeComplete(
+	IN PDEVICE_OBJECT DeviceObject,
+	IN UCHAR MinorFunction,
+	IN POWER_STATE PowerState,
+	IN PVOID Context,
+	IN PIO_STATUS_BLOCK IoStatus)
+{
+	PPORT_DEVICE_EXTENSION DeviceExtension = Context;
+
+	UNREFERENCED_PARAMETER(DeviceObject);
+	UNREFERENCED_PARAMETER(MinorFunction);
+	UNREFERENCED_PARAMETER(PowerState);
+
+	if (InterlockedExchange(&DeviceExtension->WakeState, CLASS_WAKE_IDLE) == CLASS_WAKE_CANCELLING)
+	{
+		KeSetEvent(&DeviceExtension->WakeDone, IO_NO_INCREMENT, FALSE);
+		return;
+	}
+
+	if (NT_SUCCESS(IoStatus->Status))
+		ClassArmWaitWake(DeviceExtension);
+}
+
+static VOID
+ClassDisarmWaitWake(
+	IN PPORT_DEVICE_EXTENSION DeviceExtension)
+{
+	DeviceExtension->WakeAllowed = FALSE;
+	KeClearEvent(&DeviceExtension->WakeDone);
+	if (InterlockedCompareExchange(&DeviceExtension->WakeState, CLASS_WAKE_CANCELLING, CLASS_WAKE_ARMED) == CLASS_WAKE_ARMED)
+	{
+		IoCancelIrp(DeviceExtension->WakeIrp);
+		KeWaitForSingleObject(&DeviceExtension->WakeDone, Executive, KernelMode, FALSE, NULL);
+	}
+}
+
+static VOID
+ClassStartWaitWake(
+	IN PPORT_DEVICE_EXTENSION DeviceExtension)
+{
+	DEVICE_CAPABILITIES Capabilities;
+	IO_STATUS_BLOCK Iosb;
+	PIO_STACK_LOCATION Stack;
+	KEVENT Event;
+	HANDLE KeyHandle;
+	UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"WaitWakeEnabled");
+	UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + sizeof(ULONG)];
+	PKEY_VALUE_PARTIAL_INFORMATION Value = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+	ULONG Length;
+	NTSTATUS Status;
+	PIRP Irp;
+
+	RtlZeroMemory(&Capabilities, sizeof(Capabilities));
+	Capabilities.Size = sizeof(Capabilities);
+	Capabilities.Version = 1;
+	Capabilities.Address = MAXULONG;
+	Capabilities.UINumber = MAXULONG;
+
+	KeInitializeEvent(&Event, NotificationEvent, FALSE);
+	Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP, DeviceExtension->LowerDevice, NULL, 0, NULL, &Event, &Iosb);
+	if (Irp == NULL)
+		return;
+
+	Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+	Stack = IoGetNextIrpStackLocation(Irp);
+	Stack->MinorFunction = IRP_MN_QUERY_CAPABILITIES;
+	Stack->Parameters.DeviceCapabilities.Capabilities = &Capabilities;
+
+	Status = IoCallDriver(DeviceExtension->LowerDevice, Irp);
+	if (Status == STATUS_PENDING)
+	{
+		KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+		Status = Iosb.Status;
+	}
+
+	if (!NT_SUCCESS(Status) ||
+		Capabilities.SystemWake <= PowerSystemWorking ||
+		Capabilities.DeviceWake == PowerDeviceUnspecified)
+	{
+		return;
+	}
+
+	Status = IoOpenDeviceRegistryKey(DeviceExtension->Pdo, PLUGPLAY_REGKEY_DEVICE, KEY_READ, &KeyHandle);
+	if (NT_SUCCESS(Status))
+	{
+		Status = ZwQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation, Value, sizeof(Buffer), &Length);
+		ZwClose(KeyHandle);
+		if (NT_SUCCESS(Status) && Value->Type == REG_DWORD && Value->DataLength == sizeof(ULONG) &&
+			*(PULONG)Value->Data == 0)
+		{
+			return;
+		}
+	}
+
+	DeviceExtension->SystemWake = Capabilities.SystemWake;
+	DeviceExtension->WakeAllowed = TRUE;
+	ClassArmWaitWake(DeviceExtension);
+}
+
 static NTSTATUS NTAPI
 ClassPnp(
 	IN PDEVICE_OBJECT DeviceObject,
@@ -876,12 +1001,15 @@ ClassPnp(
 			if (DeviceExtension->InterfaceName.Length != 0)
 				if (!NT_SUCCESS(IoSetDeviceInterfaceState(&DeviceExtension->InterfaceName, TRUE)))
 				    DPRINT1("IoSetDeviceInterfaceState(%wZ) failed\n", &DeviceExtension->InterfaceName);
+			if (NT_SUCCESS(Status))
+				ClassStartWaitWake(DeviceExtension);
 			Irp->IoStatus.Status = Status;
 			IoCompleteRequest(Irp, IO_NO_INCREMENT);
 			return Status;
 
 		case IRP_MN_STOP_DEVICE:
 		case IRP_MN_SURPRISE_REMOVAL:
+			ClassDisarmWaitWake(DeviceExtension);
 			if (DeviceExtension->FileHandle)
 			{
 				ZwClose(DeviceExtension->FileHandle);
@@ -891,6 +1019,7 @@ ClassPnp(
 			break;
 
         case IRP_MN_REMOVE_DEVICE:
+			ClassDisarmWaitWake(DeviceExtension);
 			if (DeviceExtension->InterfaceName.Length != 0)
 				if (!NT_SUCCESS(IoSetDeviceInterfaceState(&DeviceExtension->InterfaceName, FALSE)))
 				    DPRINT1("IoSetDeviceInterfaceState(%wZ) failed\n", &DeviceExtension->InterfaceName);

@@ -616,6 +616,84 @@ PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULON
     return Status;
 }
 
+NTSTATUS
+PciAcpiQueryWake(
+    _In_ ULONG Segment,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _Out_ PACPI_PCI_WAKE_INFORMATION Information)
+{
+    ACPI_PCI_WAKE_INPUT_BUFFER InputBuffer;
+    KEVENT Event;
+    IO_STATUS_BLOCK IoStatusBlock;
+    PIRP Irp;
+    NTSTATUS Status;
+
+    RtlZeroMemory(Information, sizeof(*Information));
+
+    Status = PciOpenAcpiInterface();
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&InputBuffer, sizeof(InputBuffer));
+    InputBuffer.Signature = ACPI_PCI_WAKE_INPUT_BUFFER_SIGNATURE;
+    InputBuffer.Segment = Segment;
+    InputBuffer.Bus = Bus;
+    InputBuffer.Device = Device;
+    InputBuffer.Function = Function;
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_ACPI_QUERY_WAKE_FOR_PCI,
+                                        AcpiInterfaceDeviceObject,
+                                        &InputBuffer, sizeof(InputBuffer),
+                                        Information, sizeof(*Information),
+                                        FALSE, &Event, &IoStatusBlock);
+    if (!Irp)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = IoCallDriver(AcpiInterfaceDeviceObject, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatusBlock.Status;
+    }
+    if (NT_SUCCESS(Status) && IoStatusBlock.Information < sizeof(*Information))
+        Status = STATUS_INVALID_BUFFER_SIZE;
+    return Status;
+}
+
+PIRP
+PciAcpiAllocateWakeIrp(VOID)
+{
+    if (!NT_SUCCESS(PciOpenAcpiInterface()))
+        return NULL;
+
+    return IoAllocateIrp(AcpiInterfaceDeviceObject->StackSize, FALSE);
+}
+
+NTSTATUS
+PciAcpiSendWaitWake(
+    _Inout_ PIRP Irp,
+    _In_ PACPI_PCI_WAKE_INPUT_BUFFER InputBuffer,
+    _In_ PIO_COMPLETION_ROUTINE CompletionRoutine,
+    _In_ PVOID Context)
+{
+    PIO_STACK_LOCATION Stack;
+
+    IoReuseIrp(Irp, STATUS_NOT_SUPPORTED);
+    Irp->AssociatedIrp.SystemBuffer = InputBuffer;
+
+    Stack = IoGetNextIrpStackLocation(Irp);
+    Stack->MajorFunction = IRP_MJ_DEVICE_CONTROL;
+    Stack->Parameters.DeviceIoControl.IoControlCode = IOCTL_ACPI_WAIT_WAKE_FOR_PCI;
+    Stack->Parameters.DeviceIoControl.InputBufferLength = sizeof(*InputBuffer);
+    Stack->Parameters.DeviceIoControl.OutputBufferLength = 0;
+    Stack->FileObject = AcpiInterfaceFileObject;
+    IoSetCompletionRoutine(Irp, CompletionRoutine, Context, TRUE, TRUE, TRUE);
+
+    return IoCallDriver(AcpiInterfaceDeviceObject, Irp);
+}
+
 static NTSTATUS
 NTAPI
 PciDispatchDeviceControl(

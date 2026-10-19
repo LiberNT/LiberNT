@@ -3099,6 +3099,8 @@ Bus_PDO_PnP (
 
     case IRP_MN_REMOVE_DEVICE:
         AcpiThermalStop(DeviceData);
+        if (DeviceData->AcpiHandle)
+            AcpiWakeCancelDevice(DeviceData->AcpiHandle);
 
         if (DeviceData->InterfaceName.Length != 0)
         {
@@ -3216,49 +3218,43 @@ Bus_PDO_QueryDeviceCaps(
     deviceCapabilities->DeviceState[PowerSystemSleeping1] = PowerDeviceD3;
     deviceCapabilities->DeviceState[PowerSystemSleeping2] = PowerDeviceD3;
     deviceCapabilities->DeviceState[PowerSystemSleeping3] = PowerDeviceD3;
+    deviceCapabilities->DeviceState[PowerSystemHibernate] = PowerDeviceD3;
+    deviceCapabilities->DeviceState[PowerSystemShutdown] = PowerDeviceD3;
+    deviceCapabilities->DeviceD1 = FALSE;
+    deviceCapabilities->DeviceD2 = FALSE;
+    deviceCapabilities->WakeFromD0 = FALSE;
+    deviceCapabilities->WakeFromD1 = FALSE;
+    deviceCapabilities->WakeFromD2 = FALSE;
+    deviceCapabilities->WakeFromD3 = FALSE;
+    deviceCapabilities->SystemWake = PowerSystemUnspecified;
+    deviceCapabilities->DeviceWake = PowerDeviceUnspecified;
 
-    for (i = 0; i <= ACPI_STATE_D3_HOT && device; i++)
+    for (i = ACPI_STATE_D1; i <= ACPI_STATE_D3_HOT && device; i++)
     {
         if (!device->power.states[i].flags.valid)
             continue;
 
         switch (i)
         {
-           case ACPI_STATE_D0:
-              deviceCapabilities->DeviceState[PowerSystemWorking] = PowerDeviceD0;
-              break;
-
            case ACPI_STATE_D1:
-              deviceCapabilities->DeviceState[PowerSystemSleeping1] = PowerDeviceD1;
+              deviceCapabilities->DeviceD1 = TRUE;
               deviceCapabilities->D1Latency = device->power.states[i].latency;
               break;
 
            case ACPI_STATE_D2:
-              deviceCapabilities->DeviceState[PowerSystemSleeping2] = PowerDeviceD2;
+              deviceCapabilities->DeviceD2 = TRUE;
               deviceCapabilities->D2Latency = device->power.states[i].latency;
               break;
 
            case ACPI_STATE_D3_HOT:
-              deviceCapabilities->DeviceState[PowerSystemSleeping3] = PowerDeviceD3;
               deviceCapabilities->D3Latency = device->power.states[i].latency;
               break;
         }
     }
 
-    deviceCapabilities->DeviceWake = PowerDeviceD1;
-
-    deviceCapabilities->DeviceD1 =
-        (deviceCapabilities->DeviceState[PowerSystemSleeping1] == PowerDeviceD1);
-    deviceCapabilities->DeviceD2 =
-        (deviceCapabilities->DeviceState[PowerSystemSleeping2] == PowerDeviceD2);
-
-    deviceCapabilities->WakeFromD0 = FALSE;
-    deviceCapabilities->WakeFromD1 = TRUE;
-    deviceCapabilities->WakeFromD2 = FALSE;
-    deviceCapabilities->WakeFromD3 = FALSE;
-
     if (device)
     {
+       AcpiWakeQueryCapabilities(device, deviceCapabilities);
        deviceCapabilities->LockSupported = device->flags.lockable;
        deviceCapabilities->EjectSupported = device->flags.ejectable;
        deviceCapabilities->HardwareDisabled = !device->status.enabled && !device->status.functional;

@@ -412,6 +412,7 @@ USBPORT_PdoPower(IN PDEVICE_OBJECT PdoDevice,
               PdoExtension->WakeIrp = Irp;
 
               KeReleaseSpinLock(&FdoExtension->PowerWakeSpinLock, OldIrql);
+              USBPORT_ArmHcWake(FdoDevice);
               return STATUS_PENDING;
           }
           else
@@ -486,6 +487,71 @@ USBPORT_PdoPower(IN PDEVICE_OBJECT PdoDevice,
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
     return Status;
+}
+
+static REQUEST_POWER_COMPLETE USBPORT_HcWakeComplete;
+
+static
+VOID
+NTAPI
+USBPORT_HcWakeComplete(IN PDEVICE_OBJECT DeviceObject,
+                       IN UCHAR MinorFunction,
+                       IN POWER_STATE PowerState,
+                       IN PVOID Context,
+                       IN PIO_STATUS_BLOCK IoStatus)
+{
+    PDEVICE_OBJECT FdoDevice = Context;
+    PUSBPORT_DEVICE_EXTENSION FdoExtension = FdoDevice->DeviceExtension;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(MinorFunction);
+    UNREFERENCED_PARAMETER(PowerState);
+
+    if (InterlockedExchange(&FdoExtension->HcWakeState, 0) == 2)
+    {
+        KeSetEvent(&FdoExtension->HcWakeDone, IO_NO_INCREMENT, FALSE);
+        return;
+    }
+
+    if (NT_SUCCESS(IoStatus->Status))
+        USBPORT_CompletePdoWaitWake(FdoDevice);
+}
+
+VOID
+NTAPI
+USBPORT_ArmHcWake(IN PDEVICE_OBJECT FdoDevice)
+{
+    PUSBPORT_DEVICE_EXTENSION FdoExtension = FdoDevice->DeviceExtension;
+    POWER_STATE PowerState;
+
+    if (FdoExtension->Capabilities.SystemWake <= PowerSystemWorking ||
+        FdoExtension->Capabilities.DeviceWake == PowerDeviceUnspecified ||
+        InterlockedCompareExchange(&FdoExtension->HcWakeState, 1, 0) != 0)
+    {
+        return;
+    }
+
+    PowerState.SystemState = FdoExtension->Capabilities.SystemWake;
+    PoRequestPowerIrp(FdoExtension->CommonExtension.LowerPdoDevice,
+                      IRP_MN_WAIT_WAKE,
+                      PowerState,
+                      USBPORT_HcWakeComplete,
+                      FdoDevice,
+                      &FdoExtension->HcWakeIrp);
+}
+
+VOID
+NTAPI
+USBPORT_DisarmHcWake(IN PDEVICE_OBJECT FdoDevice)
+{
+    PUSBPORT_DEVICE_EXTENSION FdoExtension = FdoDevice->DeviceExtension;
+
+    KeClearEvent(&FdoExtension->HcWakeDone);
+    if (InterlockedCompareExchange(&FdoExtension->HcWakeState, 2, 1) == 1)
+    {
+        IoCancelIrp(FdoExtension->HcWakeIrp);
+        KeWaitForSingleObject(&FdoExtension->HcWakeDone, Executive, KernelMode, FALSE, NULL);
+    }
 }
 
 NTSTATUS

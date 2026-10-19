@@ -551,6 +551,9 @@ typedef struct _USBPORT_DEVICE_EXTENSION {
   /* Power */
   LONG SetPowerLockCounter;
   KSPIN_LOCK PowerWakeSpinLock;
+  volatile LONG HcWakeState;
+  PIRP HcWakeIrp;
+  KEVENT HcWakeDone;
   KSPIN_LOCK SetPowerD0SpinLock;
   KDPC WorkerRequestDpc;
   KDPC HcWakeDpc;
@@ -1488,6 +1491,16 @@ USBPORT_DoIdleNotificationCallback(
 VOID
 NTAPI
 USBPORT_CompletePdoWaitWake(
+  IN PDEVICE_OBJECT FdoDevice);
+
+VOID
+NTAPI
+USBPORT_ArmHcWake(
+  IN PDEVICE_OBJECT FdoDevice);
+
+VOID
+NTAPI
+USBPORT_DisarmHcWake(
   IN PDEVICE_OBJECT FdoDevice);
 
 VOID

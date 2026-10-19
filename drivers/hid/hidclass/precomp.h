@@ -92,6 +92,11 @@ typedef struct
     KEVENT ReadIdleEvent;
     KDPC ReadDpc;
 
+    KSPIN_LOCK WakeLock;
+    volatile LONG WakeState;
+    PIRP WakeIrp;
+    KEVENT WakeDone;
+
 } HIDCLASS_FDO_EXTENSION, *PHIDCLASS_FDO_EXTENSION;
 
 typedef struct
@@ -128,7 +133,22 @@ typedef struct
     //
     PHIDCLASS_FDO_EXTENSION FDODeviceExtension;
 
+    PIRP WaitWakeIrp;
+
 } HIDCLASS_PDO_DEVICE_EXTENSION, *PHIDCLASS_PDO_DEVICE_EXTENSION;
+
+#define HIDCLASS_WAKE_IDLE       0
+#define HIDCLASS_WAKE_ARMED      1
+#define HIDCLASS_WAKE_CANCELLING 2
+
+VOID
+HidClassFDO_DisarmWake(
+    IN PHIDCLASS_FDO_EXTENSION FDODeviceExtension);
+
+VOID
+HidClassPDO_CompleteWake(
+    IN PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension,
+    IN NTSTATUS Status);
 
 #define HIDCLASS_QUEUED_REPORTS 32
 

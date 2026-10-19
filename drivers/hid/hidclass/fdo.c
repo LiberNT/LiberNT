@@ -478,6 +478,7 @@ HidClassFDO_RemoveDevice(
 
     /* FIXME cleanup */
 
+    HidClassFDO_DisarmWake(FDODeviceExtension);
     HidClassFDO_StopRead(DeviceObject, FALSE);
 
     //

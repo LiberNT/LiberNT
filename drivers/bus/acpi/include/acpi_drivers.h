@@ -267,6 +267,8 @@ int acpi_pci_bind_root (struct acpi_device *device, struct acpi_pci_id *id, stru
 
 int acpi_power_get_inferred_state (struct acpi_device *device);
 int acpi_power_transition (struct acpi_device *device, int state);
+int acpi_enable_wakeup_device_power (struct acpi_device *dev, int sleep_state);
+int acpi_disable_wakeup_device_power (struct acpi_device *dev);
 int acpi_power_init (void);
 void acpi_power_exit (void);
 

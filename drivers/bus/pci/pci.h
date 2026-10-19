@@ -131,6 +131,11 @@ typedef struct _PDO_DEVICE_EXTENSION
     LONG WaitWakeState;
     // Spinlock protecting WaitWakeIrp and WaitWakeState
     KSPIN_LOCK WaitWakeSpinLock;
+    PIRP AcpiWakeIrp;
+    PIO_WORKITEM AcpiWakeWorkItem;
+    BOOLEAN AcpiWakeActive;
+    SYSTEM_POWER_STATE SystemWake;
+    ACPI_PCI_WAKE_INPUT_BUFFER AcpiWakeInput;
 } PDO_DEVICE_EXTENSION, *PPDO_DEVICE_EXTENSION;
 
 typedef struct _PCI_ROOT_BUS_INTERFACE
@@ -352,6 +357,24 @@ PciAcpiEvalMethodForChild(
 
 NTSTATUS
 PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State);
+
+NTSTATUS
+PciAcpiQueryWake(
+    _In_ ULONG Segment,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _Out_ PACPI_PCI_WAKE_INFORMATION Information);
+
+PIRP
+PciAcpiAllocateWakeIrp(VOID);
+
+NTSTATUS
+PciAcpiSendWaitWake(
+    _Inout_ PIRP Irp,
+    _In_ PACPI_PCI_WAKE_INPUT_BUFFER InputBuffer,
+    _In_ PIO_COMPLETION_ROUTINE CompletionRoutine,
+    _In_ PVOID Context);
 
 NTSTATUS
 PciAcpiQueryChildNotifyInterface(

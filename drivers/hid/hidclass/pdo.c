@@ -683,6 +683,8 @@ HidClassPDO_PnP(
         }
         case IRP_MN_REMOVE_DEVICE:
         {
+            HidClassPDO_CompleteWake(PDODeviceExtension, STATUS_NO_SUCH_DEVICE);
+
             /* Disable the device interface */
             if (PDODeviceExtension->DeviceInterface.Length != 0)
                 if (!NT_SUCCESS(IoSetDeviceInterfaceState(&PDODeviceExtension->DeviceInterface, FALSE)))

@@ -629,6 +629,14 @@ ACPIDispatchDeviceControl(
                 status = AcpiSetPowerForPciDeviceIoctl(fdoData, Irp);
                 break;
 
+            case IOCTL_ACPI_QUERY_WAKE_FOR_PCI:
+                status = AcpiQueryWakeForPciDeviceIoctl(Irp);
+                break;
+
+            case IOCTL_ACPI_WAIT_WAKE_FOR_PCI:
+                status = AcpiWaitWakeForPciDeviceIoctl(Irp);
+                break;
+
             default:
                 DPRINT("ACPI FDO: Unknown IOCTL 0x%X\n",
                        irpStack->Parameters.DeviceIoControl.IoControlCode);
@@ -1152,6 +1160,7 @@ DriverEntry (
     DPRINT("Driver Entry \n");
 
     KeInitializeGuardedMutex(&BuspResourceLock);
+    AcpiWakeInitialize();
 
     Status = GetProcessorInformation();
     if (!NT_SUCCESS(Status))

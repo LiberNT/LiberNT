@@ -211,6 +211,7 @@ list(APPEND ACPI_SOURCE
     pnp.c
     power.c
     thermal.c
+    wake.c
     buspdo.c
     main.c)
 

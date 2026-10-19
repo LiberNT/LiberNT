@@ -1751,6 +1751,7 @@ USBPORT_StartDevice(IN PDEVICE_OBJECT FdoDevice,
     InitializeListHead(&TtClearRundown->Queue);
     FdoExtension->Aux.TtClearRundown = TtClearRundown;
     KeInitializeSpinLock(&FdoExtension->PowerWakeSpinLock);
+    KeInitializeEvent(&FdoExtension->HcWakeDone, NotificationEvent, FALSE);
     KeInitializeSpinLock(&FdoExtension->SetPowerD0SpinLock);
     KeInitializeSpinLock(&FdoExtension->RootHubCallbackSpinLock);
     KeInitializeSpinLock(&FdoExtension->TtSpinLock);
@@ -2838,6 +2839,7 @@ Exit:
         case IRP_MN_REMOVE_DEVICE:
             DPRINT("USBPORT_FdoPnP: IRP_MN_REMOVE_DEVICE\n");
             FdoCommonExtension->PnpStateFlags |= USBPORT_PNP_STATE_FAILED;
+            USBPORT_DisarmHcWake(FdoDevice);
 
             USBPORT_FreeDumpContext(FdoExtension->Aux.DumpContext);
             FdoExtension->Aux.DumpContext = NULL;
