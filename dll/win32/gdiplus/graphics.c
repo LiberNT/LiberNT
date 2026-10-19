@@ -6343,13 +6343,8 @@ static void font_link_get_text_extent_point(struct gdip_format_string_info *info
             scale = 1.0f;
             get_font_hfont(info->graphics, section->font, NULL, &hfont, NULL, NULL);
         }
-        max_design = max_ext / scale;
-        if (!(max_design < (REAL)INT_MAX))
-            max_fit = INT_MAX;
-        else if (!(max_design > 0.0f))
-            max_fit = 0;
-        else
-            max_fit = (INT)max_design;
+        max_design = max(max_ext / scale, 0.0f);
+        max_fit = (INT)min(max_design, 2147483520.0f);
         oldhfont = SelectObject(info->hdc, hfont);
         GetTextExtentExPointW(info->hdc, &info->string[i], to_measure_length,
                               max_fit, &fitaux, NULL, &sizeaux);
