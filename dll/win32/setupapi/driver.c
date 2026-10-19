@@ -21,6 +21,8 @@
 
 #include "setupapi_private.h"
 
+#include <devguid.h>
+
 /* Unicode constants */
 static const WCHAR BackSlash[] = {'\\',0};
 static const WCHAR ClassGUID[]  = {'C','l','a','s','s','G','U','I','D',0};
@@ -2606,7 +2608,8 @@ static VOID
 DriverDatabaseRecordConfiguration(
     IN HINF hInf,
     IN HKEY Package,
-    IN PCWSTR Section)
+    IN PCWSTR Section,
+    IN const GUID *ClassGuid)
 {
     WCHAR Path[LINE_LEN + 32], Service[LINE_LEN], ServiceSection[LINE_LEN], Included[1024];
     DWORD IncludedLength = 0, Field, FieldCount;
@@ -2622,7 +2625,8 @@ DriverDatabaseRecordConfiguration(
     DriverDatabaseSetDword(Configuration, L"ConfigScope", 0xF7F);
     swprintf(Path, ARRAY_SIZE(Path), L"%s.CoInstallers", Section);
     DriverDatabaseSetDword(Configuration, L"ConfigFlags",
-                           SetupFindFirstLineW(hInf, Path, NULL, &Context) ? CONFIGFLAG_FINISH_INSTALL : 0);
+                           (SetupFindFirstLineW(hInf, Path, NULL, &Context) ||
+                            IsEqualGUID(ClassGuid, &GUID_DEVCLASS_NET)) ? CONFIGFLAG_FINISH_INSTALL : 0);
 
     Included[0] = UNICODE_NULL;
     for (Found = SetupFindFirstLineW(hInf, Section, L"Include", &Context);
@@ -2878,7 +2882,7 @@ SETUPAPI_RecordDriverDatabasePackage(
             }
 
             if (DriverDatabaseAddMultiSz(Configurations, ARRAY_SIZE(Configurations), &ConfigurationsLength, Section))
-                DriverDatabaseRecordConfiguration(hInf, Package, Section);
+                DriverDatabaseRecordConfiguration(hInf, Package, Section, &ClassGuid);
 
             FeatureScore = DriverDatabaseGetFeatureScore(hInf, Section);
             FieldCount = SetupGetFieldCount(&Model);
