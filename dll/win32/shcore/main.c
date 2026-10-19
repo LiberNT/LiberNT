@@ -112,7 +112,7 @@ HRESULT WINAPI GetDpiForMonitor(HMONITOR monitor, MONITOR_DPI_TYPE type, UINT *x
 
     error = GetLastError();
     if (error == ERROR_BAD_ARGUMENTS || error == ERROR_INVALID_ADDRESS ||
-        error == ERROR_INVALID_MONITOR_HANDLE)
+        error == ERROR_INVALID_MONITOR_HANDLE || error == ERROR_INVALID_HANDLE)
     {
         return E_INVALIDARG;
     }
