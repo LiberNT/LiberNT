@@ -3385,6 +3385,8 @@ KdbpContextIsUsable(IN PCONTEXT Context)
     return (KeGetContextPc(Context) != 0 && KeGetContextStackRegister(Context) != 0);
 }
 
+#define KDB_MAX_BACKTRACE_FRAMES 256
+
 #ifdef _WIN64
 
 #if defined(_M_RISCV64)
@@ -3400,8 +3402,17 @@ GetNextFrame(
 {
     ULONG64 Frame = Context->S0;
     ULONG64 FrameRecord[2];
+    UCHAR InstructionByte;
 
-    UNREFERENCED_PARAMETER(FirstFrame);
+    if (FirstFrame &&
+        !NT_SUCCESS(KdbpSafeReadMemory(&InstructionByte, (PVOID)(ULONG_PTR)Context->Pc, sizeof(InstructionByte))))
+    {
+        if ((Context->Ra == 0) || (Context->Ra == Context->Pc))
+            return FALSE;
+
+        Context->Pc = Context->Ra;
+        return TRUE;
+    }
 
     if ((Frame < sizeof(FrameRecord)) ||
         !NT_SUCCESS(KdbpSafeReadMemory(FrameRecord, (PVOID)(ULONG_PTR)(Frame - sizeof(FrameRecord)), sizeof(FrameRecord))))
@@ -3441,6 +3452,7 @@ GetNextFrame(
     ULONG64 OldSp = KeGetContextStackRegister(Context);
     ULONG64 LookupPc = OldPc;
     UCHAR InstructionByte;
+    BOOLEAN PcReadable;
 
     /*
      * The first frame contains an interrupted instruction pointer. Every
@@ -3456,13 +3468,14 @@ GetNextFrame(
         LookupPc -= KDB_CALL_SITE_BIAS;
     }
 
-    if (!NT_SUCCESS(KdbpSafeReadMemory(&InstructionByte, (PVOID)(ULONG_PTR)LookupPc, sizeof(InstructionByte))))
+    PcReadable = NT_SUCCESS(KdbpSafeReadMemory(&InstructionByte, (PVOID)(ULONG_PTR)LookupPc, sizeof(InstructionByte)));
+    if (!PcReadable && !FirstFrame)
         return FALSE;
 
     _SEH2_TRY
     {
         /* Lookup the FunctionEntry for the current PC */
-        FunctionEntry = RtlLookupFunctionEntry(LookupPc, &ImageBase, NULL);
+        FunctionEntry = PcReadable ? RtlLookupFunctionEntry(LookupPc, &ImageBase, NULL) : NULL;
         if (FunctionEntry == NULL)
         {
             /* No function entry, so this must be a leaf function.
@@ -3502,7 +3515,6 @@ GetNextFrame(
 
 #endif
 
-#define KDB_MAX_BACKTRACE_FRAMES 256
 #define KDB_MAX_BACKTRACE_PROCESSES 4096
 #define KDB_MAX_BACKTRACE_THREADS 65536
 
@@ -3520,7 +3532,7 @@ KdbpPrintBackTraceContext(IN PCONTEXT InputContext, IN BOOLEAN Verbose, IN BOOLE
         ULONG_PTR Sp = KeGetContextStackRegister(&Context);
         ULONG_PTR Fp = KeGetContextFrameRegister(&Context);
 
-        if (Pc == 0 || Sp == 0)
+        if ((Pc == 0 && FrameNumber != 0) || Sp == 0)
             break;
         if (KernelOnly &&
             (Pc < (ULONG_PTR)MM_SYSTEM_RANGE_START ||
@@ -3896,6 +3908,42 @@ KdbpCmdBackTrace(ULONG Argc, PCHAR Argv[])
     return TRUE;
 }
 #else
+static
+BOOLEAN
+GetNextFrame(
+    _Inout_ PCONTEXT Context,
+    _In_ BOOLEAN FirstFrame)
+{
+    ULONG_PTR Frame = KeGetContextFrameRegister(Context);
+    ULONG_PTR FrameRecord[2];
+    UCHAR InstructionByte;
+
+    if (FirstFrame &&
+        !NT_SUCCESS(KdbpSafeReadMemory(&InstructionByte, (PVOID)KeGetContextPc(Context), sizeof(InstructionByte))))
+    {
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&FrameRecord[1], (PVOID)KeGetContextStackRegister(Context), sizeof(FrameRecord[1]))) ||
+            FrameRecord[1] == 0)
+        {
+            return FALSE;
+        }
+
+        KeSetContextPc(Context, FrameRecord[1]);
+        return TRUE;
+    }
+
+    if (Frame == 0 ||
+        !NT_SUCCESS(KdbpSafeReadMemory(FrameRecord, (PVOID)Frame, sizeof(FrameRecord))) ||
+        FrameRecord[1] == 0 ||
+        (FrameRecord[0] != 0 && FrameRecord[0] <= Frame))
+    {
+        return FALSE;
+    }
+
+    KeSetContextFrameRegister(Context, FrameRecord[0]);
+    KeSetContextPc(Context, FrameRecord[1]);
+    return TRUE;
+}
+
 static BOOLEAN
 KdbpCmdFrame(ULONG Argc, PCHAR Argv[])
 {
@@ -9568,6 +9616,18 @@ KdbpAnalyzeAddress(
 {
     PLDR_DATA_TABLE_ENTRY LdrEntry;
 
+    if (Address < (ULONG_PTR)MM_LOWEST_USER_ADDRESS)
+    {
+        KdbPrintf("NULL + 0x%Ix\n", Address);
+        return;
+    }
+
+    if (Address == MAXULONG_PTR)
+    {
+        KdbPrintf("none reported (general protection: non-canonical address or protection fault)\n");
+        return;
+    }
+
     if (KdbpSymFindModule((PVOID)Address, -1, &LdrEntry))
     {
         KdbSymPrintAddress((PVOID)Address, NULL);
@@ -9575,12 +9635,108 @@ KdbpAnalyzeAddress(
         return;
     }
 
-    KdbPrintf("outside every module\n");
     if (Address < (ULONG_PTR)MmSystemRangeStart)
+    {
+        KdbPrintf("user address outside every module\n");
         return;
+    }
 
+    KdbPrintf("outside every module\n");
     KdbpRunCommand("!pool 0x%p", Address);
     KdbpRunCommand("!pte 0x%p", Address);
+}
+
+static
+VOID
+KdbpAnalyzeAccess(
+    _In_ ULONG_PTR Access,
+    _In_ ULONG_PTR Address)
+{
+    KdbPrintf("%s of %p: ", Access == 8 ? "execute" : Access == 1 ? "write" : "read", (PVOID)Address);
+    KdbpAnalyzeAddress(Address);
+}
+
+static
+BOOLEAN
+KdbpIsCoreModule(
+    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
+{
+    PLDR_DATA_TABLE_ENTRY CoreEntry;
+    INT Index;
+
+    for (Index = 0; Index < 2; Index++)
+    {
+        if (KdbpSymFindModule(NULL, Index, &CoreEntry) && CoreEntry == LdrEntry)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+static
+VOID
+KdbpPrintVerdictFrame(
+    _In_ PCSTR Label,
+    _In_ PCONTEXT Context)
+{
+    KdbPrintf("%s ", Label);
+    if (!KdbSymPrintAddress((PVOID)KeGetContextPc(Context), Context))
+        KdbPrintf("<%p>", (PVOID)KeGetContextPc(Context));
+    KdbPrintf("\n");
+}
+
+static
+VOID
+KdbpAnalyzeFaultContext(VOID)
+{
+    CONTEXT Context = *KdbCurrentTrapFrame;
+    ULONG_PTR Pc = KeGetContextPc(&Context);
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    BOOLEAN FirstFrame = TRUE;
+    ULONG Frame;
+
+    KdbPrintf("\nFAULT:\n");
+    if (KdbpSymFindModule((PVOID)Pc, -1, &LdrEntry))
+    {
+        KdbpPrintVerdictFrame("FAULTING IP:", &Context);
+        KdbpRunCommand("u 0x%p L 1", Pc);
+    }
+    else
+    {
+        KdbPrintf("BAD IP %p: %s\n",
+                  (PVOID)Pc,
+                  Pc < (ULONG_PTR)MM_LOWEST_USER_ADDRESS ? "call or jump through a NULL function pointer" :
+                  Pc < (ULONG_PTR)MmSystemRangeStart ? "kernel code jumped to a user address" :
+                  "no module here: freed pool, unloaded driver, or a corrupted pointer or return address");
+
+        if (!GetNextFrame(&Context, TRUE) ||
+            !KdbpSymFindModule((PVOID)KeGetContextPc(&Context), -1, &LdrEntry))
+        {
+            KdbPrintf("No caller found in a module; raw stack follows.\n");
+            KdbpDumpFaultContext();
+            return;
+        }
+
+        FirstFrame = FALSE;
+        KdbpPrintVerdictFrame("CALLED FROM:", &Context);
+    }
+
+    if (!KdbpIsCoreModule(LdrEntry))
+        return;
+
+    for (Frame = 0; Frame < KDB_MAX_BACKTRACE_FRAMES; Frame++)
+    {
+        if (!GetNextFrame(&Context, FirstFrame))
+            break;
+
+        FirstFrame = FALSE;
+        if (KdbpSymFindModule((PVOID)KeGetContextPc(&Context), -1, &LdrEntry) &&
+            !KdbpIsCoreModule(LdrEntry))
+        {
+            KdbpPrintVerdictFrame("FIRST DRIVER FRAME:", &Context);
+            return;
+        }
+    }
 }
 
 static
@@ -9647,6 +9803,7 @@ KdbpAnalyzeParameter(
                 break;
             KdbpRunCommand(".cxr 0x%p", Value);
             KdbpDoCommand("bt");
+            KdbpAnalyzeFaultContext();
             KdbpDoCommand(".cxr");
             break;
 
@@ -9656,14 +9813,26 @@ KdbpAnalyzeParameter(
                 break;
             KdbpRunCommand(".trap 0x%p", Value);
             KdbpDoCommand("bt");
+            KdbpAnalyzeFaultContext();
             KdbpDoCommand(".trap");
             break;
 
         case KdbRoleExceptionRecord:
+        {
+            EXCEPTION_RECORD Record;
+
             KdbPrintf("exception record\n");
-            if (KdbpIsKernelAddress(Value))
-                KdbpRunCommand(".exr 0x%p", Value);
+            if (!KdbpIsKernelAddress(Value))
+                break;
+            KdbpRunCommand(".exr 0x%p", Value);
+            if (NT_SUCCESS(KdbpSafeReadMemory(&Record, (PVOID)Value, sizeof(Record))) &&
+                Record.ExceptionCode == STATUS_ACCESS_VIOLATION &&
+                Record.NumberParameters >= 2)
+            {
+                KdbpAnalyzeAccess(Record.ExceptionInformation[0], Record.ExceptionInformation[1]);
+            }
             break;
+        }
 
         case KdbRoleProcessor:
             KdbPrintf("processor %lu\n", (ULONG)Value);
@@ -9768,26 +9937,16 @@ static
 VOID
 KdbpAnalyzeException(VOID)
 {
-    ULONG_PTR Pc = (ULONG_PTR)KeGetContextPc(KdbCurrentTrapFrame);
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
-
-    KdbPrintf("\nANALYSIS: exception 0x%08lx at ", KdbCurrentExceptionRecord.ExceptionCode);
-    KdbpAnalyzeAddress(Pc);
+    KdbPrintf("\nANALYSIS: exception 0x%08lx\n", KdbCurrentExceptionRecord.ExceptionCode);
 
     if (KdbCurrentExceptionRecord.ExceptionCode == STATUS_ACCESS_VIOLATION &&
         KdbCurrentExceptionRecord.NumberParameters >= 2)
     {
-        ULONG_PTR Access = (ULONG_PTR)KdbCurrentExceptionRecord.ExceptionInformation[0];
-        ULONG_PTR Address = (ULONG_PTR)KdbCurrentExceptionRecord.ExceptionInformation[1];
-
-        KdbPrintf("%s of %p: ", Access == 8 ? "execute" : Access == 1 ? "write" : "read", (PVOID)Address);
-        KdbpAnalyzeAddress(Address);
+        KdbpAnalyzeAccess((ULONG_PTR)KdbCurrentExceptionRecord.ExceptionInformation[0],
+                          (ULONG_PTR)KdbCurrentExceptionRecord.ExceptionInformation[1]);
     }
 
-    if (KdbpSymFindModule((PVOID)Pc, -1, &LdrEntry))
-        KdbpRunCommand("u 0x%p L 1", Pc);
-    else
-        KdbpDumpFaultContext();
+    KdbpAnalyzeFaultContext();
 }
 
 static
@@ -9802,14 +9961,19 @@ KdbpCmdAnalyze(
     if (KdbCurrentThread)
     {
         UCHAR Name[16] = {0};
+        PVOID StartAddress = NULL;
 
         if (KdbCurrentProcess)
             KdbpSafeReadMemory(Name, KdbCurrentProcess->ImageFileName, sizeof(KdbCurrentProcess->ImageFileName));
-        KdbPrintf("\nThread %p.%p of %s on cpu %lu\n",
+        KdbPrintf("\nThread %p.%p of %s on cpu %lu, start ",
                   KdbCurrentThread->Cid.UniqueProcess,
                   KdbCurrentThread->Cid.UniqueThread,
                   Name,
                   KeGetCurrentProcessorNumber());
+        KdbpSafeReadMemory(&StartAddress, &KdbCurrentThread->StartAddress, sizeof(StartAddress));
+        if (StartAddress == NULL || !KdbSymPrintAddress(StartAddress, NULL))
+            KdbPrintf("<%p>", StartAddress);
+        KdbPrintf("\n");
     }
 
     if (KiBugCheckData[0])
