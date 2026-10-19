@@ -2239,6 +2239,26 @@ IopUpdateResourceMapForPnPDevice(
 
 static
 VOID
+PiSetDeviceStackRemovePending(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _In_ BOOLEAN RemovePending)
+{
+    PDEVICE_OBJECT Device;
+    KIRQL OldIrql;
+
+    OldIrql = KeAcquireQueuedSpinLock(LockQueueIoDatabaseLock);
+    for (Device = PhysicalDeviceObject; Device != NULL; Device = Device->AttachedDevice)
+    {
+        if (RemovePending)
+            IoGetDevObjExtension(Device)->ExtensionFlags |= DOE_REMOVE_PENDING;
+        else
+            IoGetDevObjExtension(Device)->ExtensionFlags &= ~DOE_REMOVE_PENDING;
+    }
+    KeReleaseQueuedSpinLock(LockQueueIoDatabaseLock, OldIrql);
+}
+
+static
+VOID
 NTAPI
 IopSendRemoveDevice(IN PDEVICE_OBJECT DeviceObject)
 {
@@ -2252,6 +2272,8 @@ IopSendRemoveDevice(IN PDEVICE_OBJECT DeviceObject)
 
     /* Drivers should never fail a IRP_MN_REMOVE_DEVICE request */
     PiIrpSendRemoveCheckVpb(DeviceObject, IRP_MN_REMOVE_DEVICE);
+    PiSetDeviceStackRemovePending(DeviceObject, FALSE);
+    IopDisableDeviceInterfaces(DeviceNode);
 
     /* Keep the owner-aware database and RESOURCEMAP in sync. */
     IopResDbRelease(DeviceNode);
@@ -2332,6 +2354,7 @@ IopSendSurpriseRemoval(IN PDEVICE_OBJECT DeviceObject)
     ASSERT(IopGetDeviceNode(DeviceObject)->State == DeviceNodeAwaitingQueuedRemoval);
     /* Drivers should never fail a IRP_MN_SURPRISE_REMOVAL request */
     PiIrpSendRemoveCheckVpb(DeviceObject, IRP_MN_SURPRISE_REMOVAL);
+    PiSetDeviceStackRemovePending(DeviceObject, TRUE);
 }
 
 static
@@ -2624,6 +2647,7 @@ PiSurpriseRemoveChildDevices(PDEVICE_NODE ParentDeviceNode)
         IopSendSurpriseRemoval(ChildDeviceNode->PhysicalDeviceObject);
         IopQueueTargetDeviceEvent(&GUID_DEVICE_SURPRISE_REMOVAL, &ChildDeviceNode->InstancePath);
         PiNotifyTargetDeviceChange(&GUID_TARGET_DEVICE_REMOVE_COMPLETE, ChildDeviceNode->PhysicalDeviceObject, NULL);
+        IopDisableDeviceInterfaces(ChildDeviceNode);
         if (ChildDeviceNode->CapabilityFlags & 0x00000008)
             PiNotifyHardwareProfileChange(&GUID_HWPROFILE_CHANGE_COMPLETE);
         InterlockedIncrement(&PiRemovePendingCloses);
@@ -2745,6 +2769,7 @@ IopRemoveDevice(PDEVICE_NODE DeviceNode)
         if (NT_SUCCESS(Status))
         {
             PiNotifyTargetDeviceChange(&GUID_TARGET_DEVICE_REMOVE_COMPLETE, DeviceNode->PhysicalDeviceObject, NULL);
+            IopDisableDeviceInterfaces(DeviceNode);
             /* The dock is gone now, whenever its last handle closes. */
             if (DeviceNode->CapabilityFlags & 0x00000008) // CM_DEVCAP_DOCKDEVICE
                 PiNotifyHardwareProfileChange(&GUID_HWPROFILE_CHANGE_COMPLETE);

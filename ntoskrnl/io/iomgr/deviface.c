@@ -458,6 +458,32 @@ Quit:
  * for the specified symbolic link.
  **/
 static
+BOOLEAN
+IopIsDeviceInterfaceLinked(
+    _In_ HANDLE ControlKey)
+{
+    union
+    {
+        KEY_VALUE_PARTIAL_INFORMATION Info;
+        UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + sizeof(ULONG)];
+    } Linked;
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"Linked");
+    ULONG ResultLength;
+    NTSTATUS Status;
+
+    Status = ZwQueryValueKey(ControlKey,
+                             &ValueName,
+                             KeyValuePartialInformation,
+                             &Linked,
+                             sizeof(Linked),
+                             &ResultLength);
+    return NT_SUCCESS(Status) &&
+           Linked.Info.Type == REG_DWORD &&
+           Linked.Info.DataLength == sizeof(ULONG) &&
+           *(PULONG)Linked.Info.Data != 0;
+}
+
+static
 NTSTATUS
 OpenRegistryHandlesFromSymbolicLink(
     _In_ PCUNICODE_STRING SymbolicLinkName,
@@ -1462,6 +1488,7 @@ IoRegisterDeviceInterface(IN PDEVICE_OBJECT PhysicalDeviceObject,
     ULONG i;
     NTSTATUS Status, SymLinkStatus;
     ULONG Disposition;
+    BOOLEAN AlreadyLinked = FALSE;
     PEXTENDED_DEVOBJ_EXTENSION DeviceObjectExtension;
 
     ASSERT_IRQL_EQUAL(PASSIVE_LEVEL);
@@ -1688,6 +1715,18 @@ IoRegisterDeviceInterface(IN PDEVICE_OBJECT PhysicalDeviceObject,
         return Status;
     }
 
+    if (Disposition == REG_OPENED_EXISTING_KEY)
+    {
+        UNICODE_STRING ControlName = RTL_CONSTANT_STRING(L"Control");
+        HANDLE ControlKey;
+
+        if (NT_SUCCESS(IopOpenRegistryKeyEx(&ControlKey, SubKey, &ControlName, KEY_QUERY_VALUE)))
+        {
+            AlreadyLinked = IopIsDeviceInterfaceLinked(ControlKey);
+            ZwClose(ControlKey);
+        }
+    }
+
     /* Create symbolic link name: \??\ACPI#PNP0501#1#{GUID}\ReferenceString */
     SymbolicLinkName->Length = 0;
     SymbolicLinkName->MaximumLength = SymbolicLinkName->Length
@@ -1782,7 +1821,7 @@ IoRegisterDeviceInterface(IN PDEVICE_OBJECT PhysicalDeviceObject,
     ExFreePool(InterfaceKeyName.Buffer);
     ExFreePool(BaseKeyName.Buffer);
 
-    if (NT_SUCCESS(Status) && Disposition == REG_OPENED_EXISTING_KEY)
+    if (NT_SUCCESS(Status) && AlreadyLinked)
         return STATUS_OBJECT_NAME_EXISTS;
     return Status;
 }
@@ -1820,6 +1859,7 @@ IoSetDeviceInterfaceState(IN PUNICODE_STRING SymbolicLinkName,
     UNICODE_STRING KeyName, DeviceInstance;
     OBJECT_ATTRIBUTES ObjectAttributes;
     ULONG LinkedValue, Index;
+    BOOLEAN CurrentlyLinked;
     GUID DeviceGuid;
     UNICODE_STRING DosDevicesPrefix1 = RTL_CONSTANT_STRING(L"\\??\\");
     UNICODE_STRING DosDevicesPrefix2 = RTL_CONSTANT_STRING(L"\\\\?\\");
@@ -1894,7 +1934,7 @@ IoSetDeviceInterfaceState(IN PUNICODE_STRING SymbolicLinkName,
                                InstanceHandle,
                                NULL);
     Status = ZwCreateKey(&ControlHandle,
-                         KEY_SET_VALUE,
+                         KEY_SET_VALUE | KEY_QUERY_VALUE,
                          &ObjectAttributes,
                          0,
                          NULL,
@@ -1905,6 +1945,18 @@ IoSetDeviceInterfaceState(IN PUNICODE_STRING SymbolicLinkName,
     {
         DPRINT1("Failed to create the Control subkey\n");
         return Status;
+    }
+
+    CurrentlyLinked = IopIsDeviceInterfaceLinked(ControlHandle);
+    if (Enable && CurrentlyLinked)
+    {
+        ZwClose(ControlHandle);
+        return STATUS_OBJECT_NAME_EXISTS;
+    }
+    if (!Enable && !CurrentlyLinked)
+    {
+        ZwClose(ControlHandle);
+        return STATUS_OBJECT_NAME_NOT_FOUND;
     }
 
     LinkedValue = (Enable ? 1 : 0);
@@ -1972,6 +2024,112 @@ IoSetDeviceInterfaceState(IN PUNICODE_STRING SymbolicLinkName,
         ObDereferenceObject(PhysicalDeviceObject);
     DPRINT("Status %x\n", Status);
     return STATUS_SUCCESS;
+}
+
+VOID
+IopDisableDeviceInterfaces(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    const ULONG InfoSize = FIELD_OFFSET(KEY_BASIC_INFORMATION, Name) + 256 * sizeof(WCHAR);
+    PKEY_BASIC_INFORMATION ClassInfo, ReferenceInfo;
+    PKEY_VALUE_FULL_INFORMATION LinkInfo;
+    UNICODE_STRING BaseKeyU, KeyName, Link;
+    HANDLE ClassesKey, InterfaceKey, ReferenceKey;
+    ULONG ClassIndex, ReferenceIndex, Size, Index;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (DeviceNode->InstancePath.Length == 0)
+        return;
+
+    RtlInitUnicodeString(&BaseKeyU, BaseKeyString);
+    Status = IopOpenRegistryKeyEx(&ClassesKey, NULL, &BaseKeyU, KEY_ENUMERATE_SUB_KEYS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    ClassInfo = ExAllocatePoolWithTag(PagedPool, 2 * InfoSize, TAG_IO);
+    KeyName.MaximumLength = (USHORT)(2 * GUID_STRING_BYTES + DeviceNode->InstancePath.Length + 6 * sizeof(WCHAR));
+    KeyName.Buffer = ExAllocatePoolWithTag(PagedPool, KeyName.MaximumLength, TAG_IO);
+    if (ClassInfo == NULL || KeyName.Buffer == NULL)
+    {
+        if (ClassInfo)
+            ExFreePoolWithTag(ClassInfo, TAG_IO);
+        if (KeyName.Buffer)
+            ExFreePoolWithTag(KeyName.Buffer, TAG_IO);
+        ZwClose(ClassesKey);
+        return;
+    }
+    ReferenceInfo = (PKEY_BASIC_INFORMATION)((PUCHAR)ClassInfo + InfoSize);
+
+    for (ClassIndex = 0; ; ClassIndex++)
+    {
+        UNICODE_STRING ClassName;
+
+        Status = ZwEnumerateKey(ClassesKey, ClassIndex, KeyBasicInformation, ClassInfo, InfoSize, &Size);
+        if (Status == STATUS_NO_MORE_ENTRIES)
+            break;
+        if (!NT_SUCCESS(Status) || ClassInfo->NameLength != GUID_STRING_BYTES)
+            continue;
+        ClassName.Buffer = ClassInfo->Name;
+        ClassName.Length = ClassName.MaximumLength = (USHORT)ClassInfo->NameLength;
+
+        KeyName.Length = 0;
+        RtlAppendUnicodeStringToString(&KeyName, &ClassName);
+        RtlAppendUnicodeToString(&KeyName, L"\\##?#");
+        Index = KeyName.Length / sizeof(WCHAR);
+        RtlAppendUnicodeStringToString(&KeyName, &DeviceNode->InstancePath);
+        for (; Index < KeyName.Length / sizeof(WCHAR); Index++)
+        {
+            if (KeyName.Buffer[Index] == L'\\')
+                KeyName.Buffer[Index] = L'#';
+        }
+        RtlAppendUnicodeToString(&KeyName, L"#");
+        RtlAppendUnicodeStringToString(&KeyName, &ClassName);
+
+        Status = IopOpenRegistryKeyEx(&InterfaceKey, ClassesKey, &KeyName, KEY_ENUMERATE_SUB_KEYS);
+        if (!NT_SUCCESS(Status))
+            continue;
+
+        for (ReferenceIndex = 0; ; ReferenceIndex++)
+        {
+            UNICODE_STRING ReferenceName;
+
+            Status = ZwEnumerateKey(InterfaceKey, ReferenceIndex, KeyBasicInformation, ReferenceInfo, InfoSize, &Size);
+            if (Status == STATUS_NO_MORE_ENTRIES)
+                break;
+            if (!NT_SUCCESS(Status))
+                continue;
+
+            ReferenceName.Buffer = ReferenceInfo->Name;
+            ReferenceName.Length = ReferenceName.MaximumLength = (USHORT)ReferenceInfo->NameLength;
+            Status = IopOpenRegistryKeyEx(&ReferenceKey, InterfaceKey, &ReferenceName, KEY_QUERY_VALUE);
+            if (!NT_SUCCESS(Status))
+                continue;
+
+            Status = IopGetRegistryValue(ReferenceKey, L"SymbolicLink", &LinkInfo);
+            ZwClose(ReferenceKey);
+            if (!NT_SUCCESS(Status))
+                continue;
+
+            if (LinkInfo->Type == REG_SZ && LinkInfo->DataLength >= sizeof(WCHAR) && LinkInfo->DataLength <= MAXUSHORT)
+            {
+                Link.Buffer = (PWCHAR)((PUCHAR)LinkInfo + LinkInfo->DataOffset);
+                Link.Length = Link.MaximumLength = (USHORT)(LinkInfo->DataLength & ~(sizeof(WCHAR) - 1));
+                while (Link.Length && Link.Buffer[Link.Length / sizeof(WCHAR) - 1] == UNICODE_NULL)
+                    Link.Length -= sizeof(WCHAR);
+                Status = IoSetDeviceInterfaceState(&Link, FALSE);
+                if (!NT_SUCCESS(Status) && Status != STATUS_OBJECT_NAME_NOT_FOUND)
+                    DPRINT1("Failed to disable %wZ, Status 0x%08lx\n", &Link, Status);
+            }
+            ExFreePool(LinkInfo);
+        }
+        ZwClose(InterfaceKey);
+    }
+
+    ExFreePoolWithTag(KeyName.Buffer, TAG_IO);
+    ExFreePoolWithTag(ClassInfo, TAG_IO);
+    ZwClose(ClassesKey);
 }
 
 /* EOF */
