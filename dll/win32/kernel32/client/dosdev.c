@@ -912,10 +912,8 @@ QueryDosDeviceW(
                                     NameLength > ucchMax - Length ||
                                     ucchMax - NameLength - Length < sizeof(WCHAR))
                                 {
-                                    RtlFreeHeap(RtlGetProcessHeap(), 0, Buffer);
-                                    NtClose(DirectoryHandle);
-                                    BaseSetLastNTError(STATUS_BUFFER_TOO_SMALL);
-                                    return 0;
+                                    Status = STATUS_BUFFER_TOO_SMALL;
+                                    _SEH2_LEAVE;
                                 }
 
                                 /* Copy and NULL terminate string */
