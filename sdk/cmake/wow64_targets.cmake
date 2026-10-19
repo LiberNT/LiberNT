@@ -162,19 +162,96 @@ set(WOW64_I386_AUXILIARY_MODULES ${COMPAT_RUNTIME_AUXILIARY_MODULES} fusion fusi
 set(WOW64_I386_ALIASES ${COMPAT_RUNTIME_ALIASES})
 
 set(WOW64_I386_EXECUTABLES
+    arp
+    at
+    attrib
     autochk
+    cacls
+    calc
+    certutil
+    charmap
+    chcp
+    chkdsk
+    cleanmgr
+    clip
     cmd
+    cmd_help
+    comp
+    control
+    cscript
+    ctfmon
+    diskpart
+    dism
+    dllhost
+    doskey
+    dxdiag
+    eventcreate
+    eventvwr
+    expand
+    extrac32
+    fc
+    find
+    findstr
+    finger
+    fltmc
+    fontview
+    format
+    fsutil
+    ftp
     glgears
     glmark2
     glmark2_runner
+    hostname
+    infdefaultinstall
+    ipconfig
+    label
+    lodctr
+    magnify
+    mmc
+    mode
+    more
+    mshta
     msiexec
     msinfo32
+    mspaint
+    mstsc
+    net
+    netsh
+    netstat
     notepad
+    nslookup
+    ping
     reg
+    regedt32
     regsvr32
+    replace
+    route
+    runas
     rundll32
+    runonce
+    sc
+    schtasks
+    sdbinst
+    shutdown
+    sort
+    subst
+    svchost
+    taskkill
+    tasklist
+    taskmgr
+    tcpsvcs
+    timeout
+    tracert
+    tree
+    userinit
+    utilman
     wglgears_runner
-    winver)
+    where
+    whoami
+    winver
+    wscript
+    wusa
+    xcopy)
 
 if(ENABLE_ROSTESTS)
     list(APPEND WOW64_I386_EXECUTABLES
