@@ -1707,6 +1707,7 @@ static int get_value_base_by_lctype( LCTYPE lctype )
     return lctype == LOCALE_ILANGUAGE || lctype == LOCALE_IDEFAULTLANGUAGE ? 16 : 10;
 }
 
+#ifdef __REACTOS__
 static WCHAR get_font_signature_word( const WCHAR *hex )
 {
     WCHAR value = 0;
@@ -1723,6 +1724,7 @@ static WCHAR get_font_signature_word( const WCHAR *hex )
     }
     return value;
 }
+#endif
 
 /******************************************************************************
  *		GetLocaleInfoW (KERNEL32.@)
@@ -1837,7 +1839,11 @@ INT WINAPI GetLocaleInfoW( LCID lcid, LCTYPE lctype, LPWSTR buffer, INT len )
         else ret = i;
     }
     else
+#ifdef __REACTOS__
         ret = (lctype == LOCALE_FONTSIGNATURE) ? *p / 4 : *p + 1;
+#else
+        ret = (lctype == LOCALE_FONTSIGNATURE) ? *p : *p + 1;
+#endif
 
     if (!buffer) return ret;
 
@@ -1869,6 +1875,7 @@ INT WINAPI GetLocaleInfoW( LCID lcid, LCTYPE lctype, LPWSTR buffer, INT len )
     }
     else
     {
+#ifdef __REACTOS__
         if (lctype == LOCALE_FONTSIGNATURE)
         {
             for (i = 0; i < (unsigned int)ret; i++)
@@ -1879,6 +1886,10 @@ INT WINAPI GetLocaleInfoW( LCID lcid, LCTYPE lctype, LPWSTR buffer, INT len )
             memcpy( buffer, p + 1, ret * sizeof(WCHAR) );
             buffer[ret-1] = 0;
         }
+#else
+        memcpy( buffer, p + 1, ret * sizeof(WCHAR) );
+        if (lctype != LOCALE_FONTSIGNATURE) buffer[ret-1] = 0;
+#endif
 
         TRACE( "(lcid=0x%x,lctype=0x%x,%p,%d) returning %d %s\n",
                lcid, lctype, buffer, len, ret, debugstr_w(buffer) );
