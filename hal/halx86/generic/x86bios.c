@@ -185,7 +185,7 @@ x86BiosFreeBuffer(
     _In_ USHORT Offset)
 {
     /* Check if the system is initialized and if the address matches */
-    if (!x86BiosIsInitialized || (Segment != 0x2000) || (Offset != 0))
+    if (!x86BiosIsInitialized || (Segment != x86BiosBufferPhysical / 16) || (Offset != 0))
     {
         /* Something was wrong, fail */
         return STATUS_INVALID_PARAMETER;
