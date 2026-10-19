@@ -43,6 +43,7 @@ DriverEntry(
 	DriverObject->MajorFunction[IRP_MJ_CLEANUP] = SerialCleanup;
 	DriverObject->MajorFunction[IRP_MJ_READ] = SerialRead;
 	DriverObject->MajorFunction[IRP_MJ_WRITE] = SerialWrite;
+	DriverObject->MajorFunction[IRP_MJ_FLUSH_BUFFERS] = SerialFlush;
 	DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = SerialDeviceControl;
 	DriverObject->MajorFunction[IRP_MJ_QUERY_INFORMATION] = SerialQueryInformation;
 	DriverObject->MajorFunction[IRP_MJ_PNP] = SerialPnp;

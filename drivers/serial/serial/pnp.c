@@ -67,18 +67,27 @@ SerialAddDeviceInternal(
 		DeviceExtension->ComPort = *pComPortNumber;
 	DeviceExtension->Pdo = Pdo;
 	DeviceExtension->PnpState = dsStopped;
+	DeviceExtension->HandFlow.ControlHandShake = SERIAL_DTR_CONTROL;
+	DeviceExtension->HandFlow.FlowReplace = SERIAL_RTS_CONTROL;
+	DeviceExtension->HandFlow.XonLimit = SERIAL_DEFAULT_RX_QUEUE_SIZE / 2;
+	DeviceExtension->HandFlow.XoffLimit = SERIAL_DEFAULT_RX_QUEUE_SIZE / 8;
+	DeviceExtension->SpecialChars.XonChar = SERIAL_DEFAULT_XON_CHAR;
+	DeviceExtension->SpecialChars.XoffChar = SERIAL_DEFAULT_XOFF_CHAR;
+	DeviceExtension->PendingFlowChar = -1;
 	DeviceExtension->UartType = UartType;
-	Status = InitializeCircularBuffer(&DeviceExtension->InputBuffer, 16);
-	if (!NT_SUCCESS(Status)) goto ByeBye;
-	Status = InitializeCircularBuffer(&DeviceExtension->OutputBuffer, 16);
+	Status = InitializeCircularBuffer(&DeviceExtension->InputBuffer, SERIAL_DEFAULT_RX_QUEUE_SIZE);
 	if (!NT_SUCCESS(Status)) goto ByeBye;
 	IoInitializeRemoveLock(&DeviceExtension->RemoveLock, SERIAL_TAG, 0, 0);
 	KeInitializeSpinLock(&DeviceExtension->InputBufferLock);
+	InitializeListHead(&DeviceExtension->ReadList);
 	KeInitializeSpinLock(&DeviceExtension->OutputBufferLock);
+	InitializeListHead(&DeviceExtension->WriteQueue);
+	KeInitializeTimer(&DeviceExtension->WriteTimer);
+	KeInitializeDpc(&DeviceExtension->WriteTimeoutDpc, SerialWriteTimeout, DeviceExtension);
 	KeInitializeEvent(&DeviceExtension->InputBufferNotEmpty, NotificationEvent, FALSE);
 	KeInitializeDpc(&DeviceExtension->ReceivedByteDpc, SerialReceiveByte, DeviceExtension);
 	KeInitializeDpc(&DeviceExtension->SendByteDpc, SerialSendByte, DeviceExtension);
-	KeInitializeDpc(&DeviceExtension->CompleteIrpDpc, SerialCompleteIrp, DeviceExtension);
+	KeInitializeDpc(&DeviceExtension->CompleteIrpDpc, SerialCompleteWait, DeviceExtension);
 	Status = IoAttachDeviceToDeviceStackSafe(Fdo, Pdo, &DeviceExtension->LowerDevice);
 	if (!NT_SUCCESS(Status))
 	{
@@ -108,10 +117,50 @@ ByeBye:
 	if (Fdo)
 	{
 		FreeCircularBuffer(&DeviceExtension->InputBuffer);
-		FreeCircularBuffer(&DeviceExtension->OutputBuffer);
 		IoDeleteDevice(Fdo);
 	}
 	return Status;
+}
+
+static NTSTATUS
+SerialQueryPortNumber(
+	IN PDEVICE_OBJECT Pdo,
+	OUT PULONG pComPortNumber)
+{
+	UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + 17 * sizeof(WCHAR)];
+	PKEY_VALUE_PARTIAL_INFORMATION Information = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+	UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"PortName");
+	UNICODE_STRING Number;
+	HANDLE Key;
+	ULONG Length;
+	ULONG Value;
+	PWSTR Name;
+	NTSTATUS Status;
+
+	Status = IoOpenDeviceRegistryKey(Pdo, PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &Key);
+	if (!NT_SUCCESS(Status))
+		return Status;
+
+	Status = ZwQueryValueKey(Key, &ValueName, KeyValuePartialInformation, Information, sizeof(Buffer) - sizeof(WCHAR), &Length);
+	ZwClose(Key);
+	if (!NT_SUCCESS(Status))
+		return Status;
+
+	if (Information->Type != REG_SZ || Information->DataLength < 4 * sizeof(WCHAR))
+		return STATUS_OBJECT_TYPE_MISMATCH;
+
+	Name = (PWSTR)Information->Data;
+	Name[Information->DataLength / sizeof(WCHAR)] = UNICODE_NULL;
+	if (_wcsnicmp(Name, L"COM", 3) != 0)
+		return STATUS_OBJECT_NAME_INVALID;
+
+	RtlInitUnicodeString(&Number, Name + 3);
+	Status = RtlUnicodeStringToInteger(&Number, 10, &Value);
+	if (!NT_SUCCESS(Status) || Value == 0)
+		return STATUS_OBJECT_NAME_INVALID;
+
+	*pComPortNumber = Value;
+	return STATUS_SUCCESS;
 }
 
 NTSTATUS NTAPI
@@ -119,6 +168,8 @@ SerialAddDevice(
 	IN PDRIVER_OBJECT DriverObject,
 	IN PDEVICE_OBJECT Pdo)
 {
+	ULONG ComPortNumber;
+
 	/* Serial.sys is a legacy driver. AddDevice is called once
 	 * with a NULL Pdo just after the driver initialization.
 	 * Detect this case and return success.
@@ -129,7 +180,11 @@ SerialAddDevice(
 	/* We have here a PDO not null. It represents a real serial
 	 * port. So call the internal AddDevice function.
 	 */
-	return SerialAddDeviceInternal(DriverObject, Pdo, UartUnknown, NULL, NULL);
+	return SerialAddDeviceInternal(DriverObject,
+	                               Pdo,
+	                               UartUnknown,
+	                               NT_SUCCESS(SerialQueryPortNumber(Pdo, &ComPortNumber)) ? &ComPortNumber : NULL,
+	                               NULL);
 }
 
 NTSTATUS NTAPI
@@ -185,7 +240,7 @@ SerialPnpStartDevice(
 		return STATUS_REVISION_MISMATCH;
 	}
 
-	DeviceExtension->BaudRate = 19200;
+	DeviceExtension->BaudRate = 1200;
 	DeviceExtension->BaseAddress = 0;
 	Dirql = 0;
 	for (i = 0; i < ResourceList->List[0].PartialResourceList.Count; i++)
@@ -248,7 +303,7 @@ SerialPnpStartDevice(
 	/* Set line control */
 	DeviceExtension->SerialLineControl.StopBits = STOP_BIT_1;
 	DeviceExtension->SerialLineControl.Parity = NO_PARITY;
-	DeviceExtension->SerialLineControl.WordLength = 8;
+	DeviceExtension->SerialLineControl.WordLength = 7;
 	Status = SerialSetLineControl(DeviceExtension, &DeviceExtension->SerialLineControl);
 	if (!NT_SUCCESS(Status))
 	{
@@ -323,6 +378,44 @@ SerialPnpStartDevice(
 	/* We don't really care if the call succeeded or not... */
 
 	return STATUS_SUCCESS;
+}
+
+static VOID
+SerialReleaseHardware(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension)
+{
+	WCHAR LinkNameBuffer[32];
+	WCHAR DeviceNameBuffer[32];
+	UNICODE_STRING LinkName;
+	UNICODE_STRING DeviceName;
+	UNICODE_STRING KeyName;
+	OBJECT_ATTRIBUTES ObjectAttributes;
+	HANDLE hKey;
+
+	if (!NT_SUCCESS(IoSetDeviceInterfaceState(&DeviceExtension->SerialInterfaceName, FALSE)))
+		WARN_(SERIAL, "IoSetDeviceInterfaceState() failed\n");
+
+	if (DeviceExtension->Interrupt)
+	{
+		WRITE_PORT_UCHAR(SER_IER(ULongToPtr(DeviceExtension->BaseAddress)), 0);
+		IoDisconnectInterrupt(DeviceExtension->Interrupt);
+		DeviceExtension->Interrupt = NULL;
+	}
+
+	_swprintf(LinkNameBuffer, L"\\DosDevices\\COM%lu", DeviceExtension->ComPort);
+	RtlInitUnicodeString(&LinkName, LinkNameBuffer);
+	IoDeleteSymbolicLink(&LinkName);
+
+	_swprintf(DeviceNameBuffer, L"\\Device\\Serial%lu", DeviceExtension->SerialPortNumber);
+	RtlInitUnicodeString(&DeviceName, DeviceNameBuffer);
+	RtlInitUnicodeString(&KeyName, L"\\Registry\\Machine\\HARDWARE\\DeviceMap\\SERIALCOMM");
+	InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+
+	if (NT_SUCCESS(ZwOpenKey(&hKey, KEY_SET_VALUE, &ObjectAttributes)))
+	{
+		ZwDeleteValueKey(hKey, &DeviceName);
+		ZwClose(hKey);
+	}
 }
 
 NTSTATUS NTAPI
@@ -417,44 +510,63 @@ SerialPnp(
 		}
 		case IRP_MN_SURPRISE_REMOVAL: /* 0x17 */
 		{
-			WCHAR LinkNameBuffer[32];
-			WCHAR DeviceNameBuffer[32];
-			UNICODE_STRING LinkName;
-			UNICODE_STRING DeviceName;
-            UNICODE_STRING KeyName;
-			OBJECT_ATTRIBUTES ObjectAttributes;
-			HANDLE hKey;
-
 			TRACE_(SERIAL, "IRP_MJ_PNP / IRP_MN_SURPRISE_REMOVAL\n");
 
 			DeviceExtension = DeviceObject->DeviceExtension;
+			if (DeviceExtension->PnpState == dsStarted)
+				SerialReleaseHardware(DeviceExtension);
 			DeviceExtension->PnpState = dsSurpriseRemoved;
 
-			if (!NT_SUCCESS(IoSetDeviceInterfaceState(&DeviceExtension->SerialInterfaceName, FALSE)))
-				WARN_(SERIAL, "IoSetDeviceInterfaceState() failed\n");
-
-			if (DeviceExtension->Interrupt)
-			{
-				IoDisconnectInterrupt(DeviceExtension->Interrupt);
-				DeviceExtension->Interrupt = NULL;
-			}
-
-			_swprintf(LinkNameBuffer, L"\\DosDevices\\COM%lu", DeviceExtension->ComPort);
-			RtlInitUnicodeString(&LinkName, LinkNameBuffer);
-			IoDeleteSymbolicLink(&LinkName);
-
-			_swprintf(DeviceNameBuffer, L"\\Device\\Serial%lu", DeviceExtension->SerialPortNumber);
-			RtlInitUnicodeString(&DeviceName, DeviceNameBuffer);
-			RtlInitUnicodeString(&KeyName, L"\\Registry\\Machine\\HARDWARE\\DeviceMap\\SERIALCOMM");
-			InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
-
-			if (NT_SUCCESS(ZwOpenKey(&hKey, KEY_SET_VALUE, &ObjectAttributes)))
-			{
-				ZwDeleteValueKey(hKey, &DeviceName);
-				ZwClose(hKey);
-			}
-
+			Irp->IoStatus.Status = STATUS_SUCCESS;
 			return ForwardIrpAndForget(DeviceObject, Irp);
+		}
+		case IRP_MN_QUERY_REMOVE_DEVICE:
+		{
+			TRACE_(SERIAL, "IRP_MJ_PNP / IRP_MN_QUERY_REMOVE_DEVICE\n");
+
+			DeviceExtension = DeviceObject->DeviceExtension;
+			if (DeviceExtension->IsOpened)
+			{
+				Status = STATUS_DEVICE_BUSY;
+				break;
+			}
+			Irp->IoStatus.Status = STATUS_SUCCESS;
+			return ForwardIrpAndForget(DeviceObject, Irp);
+		}
+		case IRP_MN_CANCEL_REMOVE_DEVICE:
+		{
+			TRACE_(SERIAL, "IRP_MJ_PNP / IRP_MN_CANCEL_REMOVE_DEVICE\n");
+			Irp->IoStatus.Status = STATUS_SUCCESS;
+			return ForwardIrpAndForget(DeviceObject, Irp);
+		}
+		case IRP_MN_REMOVE_DEVICE:
+		{
+			PDEVICE_OBJECT LowerDevice;
+
+			TRACE_(SERIAL, "IRP_MJ_PNP / IRP_MN_REMOVE_DEVICE\n");
+
+			DeviceExtension = DeviceObject->DeviceExtension;
+			LowerDevice = DeviceExtension->LowerDevice;
+			IoAcquireRemoveLock(&DeviceExtension->RemoveLock, Irp);
+			if (DeviceExtension->PnpState == dsStarted)
+				SerialReleaseHardware(DeviceExtension);
+			DeviceExtension->PnpState = dsRemoved;
+			SerialCancelWrites(DeviceExtension);
+			SerialAbortReads(DeviceExtension);
+			SerialCancelWaitOnMask(DeviceExtension);
+			IoReleaseRemoveLockAndWait(&DeviceExtension->RemoveLock, Irp);
+			KeCancelTimer(&DeviceExtension->WriteTimer);
+			KeFlushQueuedDpcs();
+
+			Irp->IoStatus.Status = STATUS_SUCCESS;
+			IoSkipCurrentIrpStackLocation(Irp);
+			Status = IoCallDriver(LowerDevice, Irp);
+
+			IoDetachDevice(LowerDevice);
+			FreeCircularBuffer(&DeviceExtension->InputBuffer);
+			RtlFreeUnicodeString(&DeviceExtension->SerialInterfaceName);
+			IoDeleteDevice(DeviceObject);
+			return Status;
 		}
 		default:
 		{

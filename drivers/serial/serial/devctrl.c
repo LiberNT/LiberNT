@@ -46,41 +46,185 @@ SerialGetUserBuffers(
 	}
 }
 
+static BOOLEAN
+SerialGetDivisor(
+	IN ULONG BaudRate,
+	OUT PUSHORT Divisor)
+{
+	static const ULONG StandardRates[] =
+	{
+		75, 110, 134, 150, 300, 600, 1200, 1800, 2400, 4800, 7200, 9600,
+		14400, 19200, 38400, 56000, 57600, 115200
+	};
+	ULONG Clock = BAUD_CLOCK / CLOCKS_PER_BIT;
+	ULONGLONG Produced, Error;
+	ULONG Value;
+	ULONG Index;
+
+	if (BaudRate == 0 || BaudRate > Clock)
+		return FALSE;
+
+	Value = (Clock + BaudRate / 2) / BaudRate;
+	if (Value > MAXUSHORT)
+		Value = MAXUSHORT;
+	*Divisor = (USHORT)Value;
+
+	for (Index = 0; Index < ARRAYSIZE(StandardRates); Index++)
+	{
+		if (StandardRates[Index] == BaudRate)
+			return TRUE;
+	}
+	if (Value == MAXUSHORT)
+		return TRUE;
+
+	Produced = (ULONGLONG)Value * BaudRate;
+	Error = Produced > Clock ? Produced - Clock : Clock - Produced;
+	return Error * 1000 <= Produced * 11;
+}
+
+typedef struct _SERIAL_DIVISOR_UPDATE
+{
+	PUCHAR ComPortBase;
+	USHORT Divisor;
+} SERIAL_DIVISOR_UPDATE, *PSERIAL_DIVISOR_UPDATE;
+
+static BOOLEAN NTAPI
+SerialWriteDivisorSync(
+	IN PVOID SynchronizeContext)
+{
+	PSERIAL_DIVISOR_UPDATE Update = (PSERIAL_DIVISOR_UPDATE)SynchronizeContext;
+	UCHAR Lcr;
+
+	Lcr = READ_PORT_UCHAR(SER_LCR(Update->ComPortBase));
+	WRITE_PORT_UCHAR(SER_LCR(Update->ComPortBase), Lcr | SR_LCR_DLAB);
+	WRITE_PORT_UCHAR(SER_DLL(Update->ComPortBase), Update->Divisor & 0xff);
+	WRITE_PORT_UCHAR(SER_DLM(Update->ComPortBase), Update->Divisor >> 8);
+	WRITE_PORT_UCHAR(SER_LCR(Update->ComPortBase), Lcr);
+	return TRUE;
+}
+
 NTSTATUS NTAPI
 SerialSetBaudRate(
 	IN PSERIAL_DEVICE_EXTENSION DeviceExtension,
 	IN ULONG NewBaudRate)
 {
-	ULONG BaudRate;
 	USHORT divisor;
 	PUCHAR ComPortBase = ULongToPtr(DeviceExtension->BaseAddress);
 	NTSTATUS Status = STATUS_SUCCESS;
 
-	if (NewBaudRate == 0)
+	if (!SerialGetDivisor(NewBaudRate, &divisor))
 		return STATUS_INVALID_PARAMETER;
-
-	divisor = (USHORT)(BAUD_CLOCK / (CLOCKS_PER_BIT * NewBaudRate));
-	BaudRate = BAUD_CLOCK / (CLOCKS_PER_BIT * divisor);
 
 	Status = IoAcquireRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
 	if (NT_SUCCESS(Status))
 	{
-		UCHAR Lcr;
-		TRACE_(SERIAL, "SerialSetBaudRate(COM%lu, %lu Bauds)\n", DeviceExtension->ComPort, BaudRate);
-		/* Set Bit 7 of LCR to expose baud registers */
-		Lcr = READ_PORT_UCHAR(SER_LCR(ComPortBase));
-		WRITE_PORT_UCHAR(SER_LCR(ComPortBase), Lcr | SR_LCR_DLAB);
-		/* Write the baud rate */
-		WRITE_PORT_UCHAR(SER_DLL(ComPortBase), divisor & 0xff);
-		WRITE_PORT_UCHAR(SER_DLM(ComPortBase), divisor >> 8);
-		/* Switch back to normal registers */
-		WRITE_PORT_UCHAR(SER_LCR(ComPortBase), Lcr);
+		SERIAL_DIVISOR_UPDATE Update;
+		KIRQL Irql;
+		TRACE_(SERIAL, "SerialSetBaudRate(COM%lu, %lu Bauds)\n", DeviceExtension->ComPort, NewBaudRate);
+		Update.ComPortBase = ComPortBase;
+		Update.Divisor = divisor;
+		KeAcquireSpinLock(&DeviceExtension->InputBufferLock, &Irql);
+		KeAcquireSpinLockAtDpcLevel(&DeviceExtension->OutputBufferLock);
+		if (DeviceExtension->Interrupt)
+			KeSynchronizeExecution(DeviceExtension->Interrupt, SerialWriteDivisorSync, &Update);
+		else
+			SerialWriteDivisorSync(&Update);
+		KeReleaseSpinLockFromDpcLevel(&DeviceExtension->OutputBufferLock);
+		KeReleaseSpinLock(&DeviceExtension->InputBufferLock, Irql);
 
 		IoReleaseRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
 	}
 
 	if (NT_SUCCESS(Status))
-		DeviceExtension->BaudRate = BaudRate;
+		DeviceExtension->BaudRate = NewBaudRate;
+	return Status;
+}
+
+static NTSTATUS
+SerialSetHandFlow(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension,
+	IN PSERIAL_HANDFLOW HandFlow)
+{
+	PUCHAR ComPortBase = ULongToPtr(DeviceExtension->BaseAddress);
+	KIRQL Irql;
+	NTSTATUS Status;
+
+	if ((HandFlow->ControlHandShake & SERIAL_CONTROL_INVALID) ||
+	    (HandFlow->FlowReplace & SERIAL_FLOW_INVALID) ||
+	    (HandFlow->ControlHandShake & SERIAL_DTR_MASK) == SERIAL_DTR_MASK ||
+	    HandFlow->XonLimit < 0 ||
+	    HandFlow->XoffLimit < 0 ||
+	    (ULONG)HandFlow->XonLimit > DeviceExtension->InputBuffer.Length ||
+	    (ULONG)HandFlow->XoffLimit > DeviceExtension->InputBuffer.Length)
+	{
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	Status = IoAcquireRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
+	if (!NT_SUCCESS(Status))
+		return Status;
+
+	KeAcquireSpinLock(&DeviceExtension->InputBufferLock, &Irql);
+	DeviceExtension->HandFlow = *HandFlow;
+	DeviceExtension->ReceiveHeld = FALSE;
+	if (HandFlow->ControlHandShake & SERIAL_DTR_MASK)
+		DeviceExtension->MCR |= SR_MCR_DTR;
+	else
+		DeviceExtension->MCR &= ~SR_MCR_DTR;
+	switch (HandFlow->FlowReplace & SERIAL_RTS_MASK)
+	{
+		case SERIAL_RTS_CONTROL:
+		case SERIAL_RTS_HANDSHAKE:
+			DeviceExtension->MCR |= SR_MCR_RTS;
+			break;
+		default:
+			DeviceExtension->MCR &= ~SR_MCR_RTS;
+			break;
+	}
+	WRITE_PORT_UCHAR(SER_MCR(ComPortBase), DeviceExtension->MCR);
+	SerialUpdateReceiveFlow(DeviceExtension);
+	KeReleaseSpinLock(&DeviceExtension->InputBufferLock, Irql);
+	IoReleaseRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
+
+	KeInsertQueueDpc(&DeviceExtension->SendByteDpc, NULL, NULL);
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+SerialTransmitImmediate(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension,
+	IN UCHAR Character)
+{
+	PUCHAR ComPortBase = ULongToPtr(DeviceExtension->BaseAddress);
+	KIRQL Irql;
+	ULONG Wait;
+	NTSTATUS Status;
+
+	Status = IoAcquireRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
+	if (!NT_SUCCESS(Status))
+		return Status;
+
+	Status = STATUS_IO_TIMEOUT;
+	for (Wait = 0; Wait < 100 && Status == STATUS_IO_TIMEOUT; Wait++)
+	{
+		KeAcquireSpinLock(&DeviceExtension->OutputBufferLock, &Irql);
+		if (READ_PORT_UCHAR(SER_LSR(ComPortBase)) & SR_LSR_THR_EMPTY)
+		{
+			WRITE_PORT_UCHAR(SER_THR(ComPortBase), Character);
+			DeviceExtension->SerialPerfStats.TransmittedCount++;
+			DeviceExtension->TxEmptyPending = TRUE;
+			Status = STATUS_SUCCESS;
+		}
+		KeReleaseSpinLock(&DeviceExtension->OutputBufferLock, Irql);
+		if (Status == STATUS_IO_TIMEOUT)
+		{
+			LARGE_INTEGER Interval;
+			Interval.QuadPart = -10000;
+			KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+		}
+	}
+
+	IoReleaseRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
 	return Status;
 }
 
@@ -204,29 +348,20 @@ SerialGetCommProp(
 		pCommProp->PacketLength = sizeof(SERIAL_COMMPROP);
 	pCommProp->PacketVersion = 2;
 	pCommProp->ServiceMask = SERIAL_SP_SERIALCOMM;
-	pCommProp->MaxTxQueue = pCommProp->CurrentTxQueue = DeviceExtension->OutputBuffer.Length - 1;
-	pCommProp->MaxRxQueue = pCommProp->CurrentRxQueue = DeviceExtension->InputBuffer.Length - 1;
+	pCommProp->CurrentRxQueue = DeviceExtension->InputBuffer.Length;
 	pCommProp->ProvSubType = PST_RS232;
 	pCommProp->ProvCapabilities = SERIAL_PCF_DTRDSR | SERIAL_PCF_INTTIMEOUTS | SERIAL_PCF_PARITY_CHECK
-		| SERIAL_PCF_RTSCTS | SERIAL_PCF_SETXCHAR | SERIAL_PCF_SPECIALCHARS | SERIAL_PCF_TOTALTIMEOUTS
+		| SERIAL_PCF_RTSCTS | SERIAL_PCF_CD | SERIAL_PCF_SETXCHAR | SERIAL_PCF_TOTALTIMEOUTS
 		| SERIAL_PCF_XONXOFF;
 	pCommProp->SettableParams = SERIAL_SP_BAUD | SERIAL_SP_DATABITS | SERIAL_SP_HANDSHAKING
-		| SERIAL_SP_PARITY | SERIAL_SP_PARITY_CHECK | SERIAL_SP_STOPBITS;
+		| SERIAL_SP_PARITY | SERIAL_SP_PARITY_CHECK | SERIAL_SP_CARRIER_DETECT | SERIAL_SP_STOPBITS;
 
-	/* SettableBaud is related to Uart type */
 	pCommProp->SettableBaud = SERIAL_BAUD_075 | SERIAL_BAUD_110 | SERIAL_BAUD_134_5
 		| SERIAL_BAUD_150 | SERIAL_BAUD_300 | SERIAL_BAUD_600 | SERIAL_BAUD_1200
 		| SERIAL_BAUD_1800 | SERIAL_BAUD_2400 | SERIAL_BAUD_4800 | SERIAL_BAUD_7200
-		| SERIAL_BAUD_9600 | SERIAL_BAUD_USER;
+		| SERIAL_BAUD_9600 | SERIAL_BAUD_14400 | SERIAL_BAUD_19200 | SERIAL_BAUD_38400
+		| SERIAL_BAUD_56K | SERIAL_BAUD_57600 | SERIAL_BAUD_115200 | SERIAL_BAUD_USER;
 	pCommProp->MaxBaud = SERIAL_BAUD_USER;
-	if (DeviceExtension->UartType >= Uart16450)
-	{
-		pCommProp->SettableBaud |= SERIAL_BAUD_14400 | SERIAL_BAUD_19200 | SERIAL_BAUD_38400;
-	}
-	if (DeviceExtension->UartType >= Uart16550)
-	{
-		pCommProp->SettableBaud |= SERIAL_BAUD_56K | SERIAL_BAUD_57600 | SERIAL_BAUD_115200 | SERIAL_BAUD_128K;
-	}
 
 	pCommProp->SettableData = SERIAL_DATABITS_5 | SERIAL_DATABITS_6 | SERIAL_DATABITS_7 | SERIAL_DATABITS_8;
 	pCommProp->SettableStopParity = SERIAL_STOPBITS_10 | SERIAL_STOPBITS_15 | SERIAL_STOPBITS_20
@@ -259,16 +394,14 @@ SerialGetCommStatus(
 	if (DeviceExtension->SerialPerfStats.ParityErrorCount)
 		pSerialStatus->Errors |= SERIAL_ERROR_PARITY;
 
-	pSerialStatus->HoldReasons = 0; /* FIXME */
-
 	KeAcquireSpinLock(&DeviceExtension->InputBufferLock, &Irql);
 	pSerialStatus->AmountInInQueue = (DeviceExtension->InputBuffer.WritePosition + DeviceExtension->InputBuffer.Length
 		- DeviceExtension->InputBuffer.ReadPosition) % DeviceExtension->InputBuffer.Length;
 	KeReleaseSpinLock(&DeviceExtension->InputBufferLock, Irql);
 
 	KeAcquireSpinLock(&DeviceExtension->OutputBufferLock, &Irql);
-	pSerialStatus->AmountInOutQueue = (DeviceExtension->OutputBuffer.WritePosition + DeviceExtension->OutputBuffer.Length
-		- DeviceExtension->OutputBuffer.ReadPosition) % DeviceExtension->OutputBuffer.Length;
+	pSerialStatus->HoldReasons = SerialGetHoldReasons(DeviceExtension);
+	pSerialStatus->AmountInOutQueue = SerialQueuedWriteBytes(DeviceExtension);
 	KeReleaseSpinLock(&DeviceExtension->OutputBufferLock, Irql);
 
 	pSerialStatus->EofReceived = FALSE; /* always FALSE */
@@ -318,8 +451,11 @@ SerialDeviceControl(
 		case IOCTL_SERIAL_CLR_DTR:
 		{
 			TRACE_(SERIAL, "IOCTL_SERIAL_CLR_DTR\n");
-			/* FIXME: If the handshake flow control of the device is configured to
-			 * automatically use DTR, return STATUS_INVALID_PARAMETER */
+			if ((DeviceExtension->HandFlow.ControlHandShake & SERIAL_DTR_MASK) == SERIAL_DTR_HANDSHAKE)
+			{
+				Status = STATUS_INVALID_PARAMETER;
+				break;
+			}
 			Status = IoAcquireRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
 			if (NT_SUCCESS(Status))
 			{
@@ -332,8 +468,11 @@ SerialDeviceControl(
 		case IOCTL_SERIAL_CLR_RTS:
 		{
 			TRACE_(SERIAL, "IOCTL_SERIAL_CLR_RTS\n");
-			/* FIXME: If the handshake flow control of the device is configured to
-			 * automatically use RTS, return STATUS_INVALID_PARAMETER */
+			if ((DeviceExtension->HandFlow.FlowReplace & SERIAL_RTS_MASK) == SERIAL_RTS_HANDSHAKE)
+			{
+				Status = STATUS_INVALID_PARAMETER;
+				break;
+			}
 			Status = IoAcquireRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
 			if (NT_SUCCESS(Status))
 			{
@@ -376,22 +515,14 @@ SerialDeviceControl(
 		}
 		case IOCTL_SERIAL_GET_CHARS:
 		{
-			/* FIXME */
-			PSERIAL_CHARS pSerialChars;
-			ERR_(SERIAL, "IOCTL_SERIAL_GET_CHARS not implemented.\n");
+			TRACE_(SERIAL, "IOCTL_SERIAL_GET_CHARS\n");
 			if (LengthOut < sizeof(SERIAL_CHARS))
 				Status = STATUS_BUFFER_TOO_SMALL;
 			else if (BufferOut == NULL)
 				Status = STATUS_INVALID_PARAMETER;
 			else
 			{
-				pSerialChars = (PSERIAL_CHARS)BufferOut;
-				pSerialChars->EofChar = 0;
-				pSerialChars->ErrorChar = 0;
-				pSerialChars->BreakChar = 0;
-				pSerialChars->EventChar = 0;
-				pSerialChars->XonChar = 0;
-				pSerialChars->XoffChar = 0;
+				*(PSERIAL_CHARS)BufferOut = DeviceExtension->SpecialChars;
 				Information = sizeof(SERIAL_CHARS);
 				Status = STATUS_SUCCESS;
 			}
@@ -432,20 +563,14 @@ SerialDeviceControl(
 		}
 		case IOCTL_SERIAL_GET_HANDFLOW:
 		{
-			/* FIXME */
-			PSERIAL_HANDFLOW pSerialHandflow;
-			ERR_(SERIAL, "IOCTL_SERIAL_GET_HANDFLOW not implemented.\n");
+			TRACE_(SERIAL, "IOCTL_SERIAL_GET_HANDFLOW\n");
 			if (LengthOut < sizeof(SERIAL_HANDFLOW))
 				Status = STATUS_BUFFER_TOO_SMALL;
 			else if (BufferOut == NULL)
 				Status = STATUS_INVALID_PARAMETER;
 			else
 			{
-				pSerialHandflow = (PSERIAL_HANDFLOW)BufferOut;
-				pSerialHandflow->ControlHandShake = 0;
-				pSerialHandflow->FlowReplace = 0;
-				pSerialHandflow->XonLimit = 0;
-				pSerialHandflow->XoffLimit = 0;
+				*(PSERIAL_HANDFLOW)BufferOut = DeviceExtension->HandFlow;
 				Information = sizeof(SERIAL_HANDFLOW);
 				Status = STATUS_SUCCESS;
 			}
@@ -556,9 +681,11 @@ SerialDeviceControl(
 		}
 		case IOCTL_SERIAL_IMMEDIATE_CHAR:
 		{
-			/* FIXME */
-			ERR_(SERIAL, "IOCTL_SERIAL_IMMEDIATE_CHAR not implemented.\n");
-			Status = STATUS_NOT_IMPLEMENTED;
+			TRACE_(SERIAL, "IOCTL_SERIAL_IMMEDIATE_CHAR\n");
+			if (LengthIn < sizeof(UCHAR) || BufferIn == NULL)
+				Status = STATUS_INVALID_PARAMETER;
+			else
+				Status = SerialTransmitImmediate(DeviceExtension, *(PUCHAR)BufferIn);
 			break;
 		}
 		case IOCTL_SERIAL_LSRMST_INSERT:
@@ -572,8 +699,6 @@ SerialDeviceControl(
 		{
 			KIRQL Irql;
 			TRACE_(SERIAL, "IOCTL_SERIAL_PURGE\n");
-			/* FIXME: SERIAL_PURGE_RXABORT and SERIAL_PURGE_TXABORT
-			 * should stop current request */
 			if (LengthIn != sizeof(ULONG) || BufferIn == NULL)
 				Status = STATUS_INVALID_PARAMETER;
 			else
@@ -581,7 +706,10 @@ SerialDeviceControl(
 				ULONG PurgeMask = *(PULONG)BufferIn;
 
 				Status = STATUS_SUCCESS;
-				/* FIXME: use SERIAL_PURGE_RXABORT and SERIAL_PURGE_TXABORT flags */
+				if (PurgeMask & SERIAL_PURGE_TXABORT)
+					SerialCancelWrites(DeviceExtension);
+				if (PurgeMask & SERIAL_PURGE_RXABORT)
+					SerialAbortReads(DeviceExtension);
 				if (PurgeMask & SERIAL_PURGE_RXCLEAR)
 				{
 					KeAcquireSpinLock(&DeviceExtension->InputBufferLock, &Irql);
@@ -602,7 +730,6 @@ SerialDeviceControl(
 				if (PurgeMask & SERIAL_PURGE_TXCLEAR)
 				{
 					KeAcquireSpinLock(&DeviceExtension->OutputBufferLock, &Irql);
-					DeviceExtension->OutputBuffer.ReadPosition = DeviceExtension->OutputBuffer.WritePosition = 0;
 					if (DeviceExtension->UartType >= Uart16550A)
 					{
 						/* Clear also Uart FIFO */
@@ -620,9 +747,8 @@ SerialDeviceControl(
 		}
 		case IOCTL_SERIAL_RESET_DEVICE:
 		{
-			/* FIXME */
-			ERR_(SERIAL, "IOCTL_SERIAL_RESET_DEVICE not implemented.\n");
-			Status = STATUS_NOT_IMPLEMENTED;
+			TRACE_(SERIAL, "IOCTL_SERIAL_RESET_DEVICE\n");
+			Status = STATUS_SUCCESS;
 			break;
 		}
 		case IOCTL_SERIAL_SET_BAUD_RATE:
@@ -639,32 +765,42 @@ SerialDeviceControl(
 			break;
 		}
 		case IOCTL_SERIAL_SET_BREAK_OFF:
-		{
-			/* FIXME */
-			ERR_(SERIAL, "IOCTL_SERIAL_SET_BREAK_OFF not implemented.\n");
-			Status = STATUS_NOT_IMPLEMENTED;
-			break;
-		}
 		case IOCTL_SERIAL_SET_BREAK_ON:
 		{
-			/* FIXME */
-			ERR_(SERIAL, "IOCTL_SERIAL_SET_BREAK_ON not implemented.\n");
-			Status = STATUS_NOT_IMPLEMENTED;
+			TRACE_(SERIAL, "IOCTL_SERIAL_SET_BREAK_%s\n", IoControlCode == IOCTL_SERIAL_SET_BREAK_ON ? "ON" : "OFF");
+			Status = IoAcquireRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
+			if (NT_SUCCESS(Status))
+			{
+				UCHAR Lcr = READ_PORT_UCHAR(SER_LCR(ComPortBase));
+				if (IoControlCode == IOCTL_SERIAL_SET_BREAK_ON)
+					Lcr |= SR_LCR_BRK;
+				else
+					Lcr &= ~SR_LCR_BRK;
+				WRITE_PORT_UCHAR(SER_LCR(ComPortBase), Lcr);
+				IoReleaseRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
+			}
 			break;
 		}
 		case IOCTL_SERIAL_SET_CHARS:
 		{
-			/* FIXME */
-			ERR_(SERIAL, "IOCTL_SERIAL_SET_CHARS not implemented.\n");
-			Status = STATUS_SUCCESS;
+			TRACE_(SERIAL, "IOCTL_SERIAL_SET_CHARS\n");
+			if (LengthIn < sizeof(SERIAL_CHARS))
+				Status = STATUS_BUFFER_TOO_SMALL;
+			else if (BufferIn == NULL)
+				Status = STATUS_INVALID_PARAMETER;
+			else
+			{
+				DeviceExtension->SpecialChars = *(PSERIAL_CHARS)BufferIn;
+				Status = STATUS_SUCCESS;
+			}
 			break;
 		}
 		case IOCTL_SERIAL_SET_DTR:
 		{
-			/* FIXME: If the handshake flow control of the device is configured to
-			 * automatically use DTR, return STATUS_INVALID_PARAMETER */
 			TRACE_(SERIAL, "IOCTL_SERIAL_SET_DTR\n");
-			if (!(DeviceExtension->MCR & SR_MCR_DTR))
+			if ((DeviceExtension->HandFlow.ControlHandShake & SERIAL_DTR_MASK) == SERIAL_DTR_HANDSHAKE)
+				Status = STATUS_INVALID_PARAMETER;
+			else if (!(DeviceExtension->MCR & SR_MCR_DTR))
 			{
 				Status = IoAcquireRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
 				if (NT_SUCCESS(Status))
@@ -696,9 +832,13 @@ SerialDeviceControl(
 		}
 		case IOCTL_SERIAL_SET_HANDFLOW:
 		{
-			/* FIXME */
-			ERR_(SERIAL, "IOCTL_SERIAL_SET_HANDFLOW not implemented.\n");
-			Status = STATUS_SUCCESS;
+			TRACE_(SERIAL, "IOCTL_SERIAL_SET_HANDFLOW\n");
+			if (LengthIn < sizeof(SERIAL_HANDFLOW))
+				Status = STATUS_BUFFER_TOO_SMALL;
+			else if (BufferIn == NULL)
+				Status = STATUS_INVALID_PARAMETER;
+			else
+				Status = SerialSetHandFlow(DeviceExtension, (PSERIAL_HANDFLOW)BufferIn);
 			break;
 		}
 		case IOCTL_SERIAL_SET_LINE_CONTROL:
@@ -748,21 +888,15 @@ SerialDeviceControl(
 					Status = IncreaseCircularBufferSize(&DeviceExtension->InputBuffer, NewQueueSize->InSize);
 					KeReleaseSpinLock(&DeviceExtension->InputBufferLock, Irql);
 				}
-				if (NT_SUCCESS(Status) && NewQueueSize->OutSize > DeviceExtension->OutputBuffer.Length)
-				{
-					KeAcquireSpinLock(&DeviceExtension->OutputBufferLock, &Irql);
-					Status = IncreaseCircularBufferSize(&DeviceExtension->OutputBuffer, NewQueueSize->OutSize);
-					KeReleaseSpinLock(&DeviceExtension->OutputBufferLock, Irql);
-				}
 			}
 			break;
 		}
 		case IOCTL_SERIAL_SET_RTS:
 		{
-			/* FIXME: If the handshake flow control of the device is configured to
-			 * automatically use DTR, return STATUS_INVALID_PARAMETER */
 			TRACE_(SERIAL, "IOCTL_SERIAL_SET_RTS\n");
-			if (!(DeviceExtension->MCR & SR_MCR_RTS))
+			if ((DeviceExtension->HandFlow.FlowReplace & SERIAL_RTS_MASK) == SERIAL_RTS_HANDSHAKE)
+				Status = STATUS_INVALID_PARAMETER;
+			else if (!(DeviceExtension->MCR & SR_MCR_RTS))
 			{
 				Status = IoAcquireRemoveLock(&DeviceExtension->RemoveLock, ULongToPtr(DeviceExtension->ComPort));
 				if (NT_SUCCESS(Status))
@@ -795,58 +929,39 @@ SerialDeviceControl(
 
 			if (LengthIn != sizeof(ULONG) || BufferIn == NULL)
 				Status = STATUS_INVALID_PARAMETER;
-			else if (DeviceExtension->WaitOnMaskIrp) /* FIXME: Race condition ; field may be currently in modification */
-			{
-				WARN_(SERIAL, "An IRP is already currently processed\n");
-				Status = STATUS_INVALID_PARAMETER;
-			}
 			else
 			{
-				DeviceExtension->WaitMask = *pWaitMask;
+				SerialSetWaitMask(DeviceExtension, *pWaitMask);
 				Status = STATUS_SUCCESS;
 			}
 			break;
 		}
 		case IOCTL_SERIAL_SET_XOFF:
 		{
-			/* FIXME */
-			ERR_(SERIAL, "IOCTL_SERIAL_SET_XOFF not implemented.\n");
-			Status = STATUS_NOT_IMPLEMENTED;
+			TRACE_(SERIAL, "IOCTL_SERIAL_SET_XOFF\n");
+			DeviceExtension->TransmitHeld = TRUE;
+			Status = STATUS_SUCCESS;
 			break;
 		}
 		case IOCTL_SERIAL_SET_XON:
 		{
-			/* FIXME */
-			ERR_(SERIAL, "IOCTL_SERIAL_SET_XON not implemented.\n");
-			Status = STATUS_NOT_IMPLEMENTED;
+			TRACE_(SERIAL, "IOCTL_SERIAL_SET_XON\n");
+			DeviceExtension->TransmitHeld = FALSE;
+			KeInsertQueueDpc(&DeviceExtension->SendByteDpc, NULL, NULL);
+			Status = STATUS_SUCCESS;
 			break;
 		}
 		case IOCTL_SERIAL_WAIT_ON_MASK:
 		{
-			PIRP WaitingIrp;
 			TRACE_(SERIAL, "IOCTL_SERIAL_WAIT_ON_MASK\n");
 
 			if (LengthOut != sizeof(ULONG) || BufferOut == NULL)
 				Status = STATUS_INVALID_PARAMETER;
 			else
 			{
-				IoMarkIrpPending(Irp);
-
-				WaitingIrp = InterlockedCompareExchangePointer(
-					(PVOID*)&DeviceExtension->WaitOnMaskIrp,
-					Irp,
-					NULL);
-
-				/* Check if an Irp is already pending */
-				if (WaitingIrp != NULL)
-				{
-					/* Unable to have a 2nd pending IRP for this IOCTL */
-					WARN_(SERIAL, "Unable to pend a second IRP for IOCTL_SERIAL_WAIT_ON_MASK\n");
-					Irp->IoStatus.Information = 0;
-					Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
-					IoCompleteRequest(Irp, IO_NO_INCREMENT);
-				}
-				return STATUS_PENDING;
+				Status = SerialStartWait(DeviceExtension, Irp, (PULONG)BufferOut);
+				if (Status == STATUS_PENDING)
+					return STATUS_PENDING;
 			}
 			break;
 		}

@@ -45,6 +45,10 @@ typedef struct _CIRCULAR_BUFFER
 	ULONG WritePosition;
 } CIRCULAR_BUFFER, *PCIRCULAR_BUFFER;
 
+#define SERIAL_DEFAULT_RX_QUEUE_SIZE 4096
+#define SERIAL_DEFAULT_XON_CHAR 0x11
+#define SERIAL_DEFAULT_XOFF_CHAR 0x13
+
 typedef struct _SERIAL_DEVICE_EXTENSION
 {
 	PDEVICE_OBJECT Pdo;
@@ -65,6 +69,7 @@ typedef struct _SERIAL_DEVICE_EXTENSION
 	SERIAL_LINE_CONTROL SerialLineControl;
 	UART_TYPE UartType;
 	ULONG WaitMask;
+	ULONG HistoryMask;
 	PIRP WaitOnMaskIrp;
 
 	ULONG BreakInterruptErrorCount;
@@ -74,20 +79,35 @@ typedef struct _SERIAL_DEVICE_EXTENSION
 	KEVENT InputBufferNotEmpty;
 	CIRCULAR_BUFFER InputBuffer;
 	KSPIN_LOCK InputBufferLock;
-	CIRCULAR_BUFFER OutputBuffer;
+	LIST_ENTRY ReadList;
 	KSPIN_LOCK OutputBufferLock;
+	LIST_ENTRY WriteQueue;
+	PIRP CurrentWriteIrp;
+	KTIMER WriteTimer;
+	KDPC WriteTimeoutDpc;
+	ULONGLONG WriteDeadline;
 
 	UNICODE_STRING SerialInterfaceName;
 
 	/* Current values */
 	UCHAR MCR; /* Base+4, Modem Control Register */
 	UCHAR MSR; /* Base+6, Modem Status Register */
+	SERIAL_HANDFLOW HandFlow;
+	SERIAL_CHARS SpecialChars;
+	BOOLEAN TransmitHeld;
+	BOOLEAN ReceiveHeld;
+	BOOLEAN TxEmptyPending;
+	LONG PendingFlowChar;
 } SERIAL_DEVICE_EXTENSION, *PSERIAL_DEVICE_EXTENSION;
 
 typedef struct _WORKITEM_DATA
 {
 	PIRP Irp;
 	PIO_WORKITEM IoWorkItem;
+	LIST_ENTRY ListEntry;
+	KEVENT CancelEvent;
+	KEVENT CancelDoneEvent;
+	BOOLEAN Cancellable;
 
 	BOOLEAN UseIntervalTimeout;
 	BOOLEAN UseTotalTimeout;
@@ -119,6 +139,7 @@ typedef struct _WORKITEM_DATA
 #define   SER_DLM(x)   ((PUCHAR)(x)+1) /* Baud Rate Divisor MSB */
 #define   SER_IIR(x)   ((PUCHAR)(x)+2) /* Interrupt Identification Register */
 #define     SR_IIR_SELF           0x00
+#define     SR_IIR_NO_INTERRUPT   0x01
 #define     SR_IIR_ID_MASK        0x07
 #define     SR_IIR_MSR_CHANGE     SR_IIR_SELF
 #define     SR_IIR_THR_EMPTY     (SR_IIR_SELF | 2)
@@ -251,6 +272,14 @@ SerialReceiveByte(
 	IN PVOID Unused1,
 	IN PVOID Unused2);
 
+VOID
+SerialUpdateReceiveFlow(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension);
+
+ULONG
+SerialGetHoldReasons(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension);
+
 VOID NTAPI
 SerialSendByte(
 	IN PKDPC Dpc,
@@ -259,11 +288,26 @@ SerialSendByte(
 	IN PVOID Unused2);
 
 VOID NTAPI
-SerialCompleteIrp(
+SerialCompleteWait(
 	IN PKDPC Dpc,
 	IN PVOID pDeviceExtension, // real type PSERIAL_DEVICE_EXTENSION
-	IN PVOID pIrp, // real type PIRP
-	IN PVOID Unused);
+	IN PVOID Unused1,
+	IN PVOID Unused2);
+
+NTSTATUS
+SerialStartWait(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension,
+	IN PIRP Irp,
+	OUT PULONG Events);
+
+VOID
+SerialSetWaitMask(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension,
+	IN ULONG Mask);
+
+VOID
+SerialCancelWaitOnMask(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension);
 
 KSERVICE_ROUTINE SerialInterruptService;
 
@@ -295,5 +339,35 @@ DRIVER_DISPATCH SerialPower;
 
 DRIVER_DISPATCH SerialRead;
 DRIVER_DISPATCH SerialWrite;
+
+VOID
+SerialAbortReads(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension);
+DRIVER_DISPATCH SerialFlush;
+KDEFERRED_ROUTINE SerialWriteTimeout;
+
+PIRP
+SerialCurrentWrite(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension,
+	IN OUT PLIST_ENTRY CompletedList);
+
+VOID
+SerialFinishWrite(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension,
+	IN PIRP Irp,
+	IN NTSTATUS Status,
+	IN OUT PLIST_ENTRY CompletedList);
+
+VOID
+SerialCompleteWrites(
+	IN PLIST_ENTRY CompletedList);
+
+VOID
+SerialCancelWrites(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension);
+
+ULONG
+SerialQueuedWriteBytes(
+	IN PSERIAL_DEVICE_EXTENSION DeviceExtension);
 
 #endif /* _SERIAL_PCH_ */

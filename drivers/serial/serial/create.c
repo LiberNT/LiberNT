@@ -40,6 +40,12 @@ SerialCreate(
 
 	INFO_(SERIAL, "Open COM%lu: successfull\n", DeviceExtension->ComPort);
 	DeviceExtension->IsOpened = TRUE;
+	DeviceExtension->HandFlow.XonLimit = SERIAL_DEFAULT_RX_QUEUE_SIZE / 2;
+	DeviceExtension->HandFlow.XoffLimit = SERIAL_DEFAULT_RX_QUEUE_SIZE / 8;
+	DeviceExtension->TransmitHeld = FALSE;
+	DeviceExtension->ReceiveHeld = FALSE;
+	DeviceExtension->PendingFlowChar = -1;
+	SerialSetWaitMask(DeviceExtension, 0);
 	Status = STATUS_SUCCESS;
 
 ByeBye:
