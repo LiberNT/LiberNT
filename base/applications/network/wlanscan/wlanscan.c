@@ -64,6 +64,58 @@ SsidToString(const DOT11_SSID *Ssid, WCHAR *Buffer, int cch)
     Buffer[len] = L'\0';
 }
 
+static VOID
+ListBss(HANDLE hClient, const GUID *pGuid)
+{
+    PWLAN_BSS_LIST pBssList = NULL;
+    DWORD dwResult, i;
+    DWORD Count24 = 0, Count5 = 0, Count6 = 0;
+
+    dwResult = WlanGetNetworkBssList(hClient, pGuid, NULL, dot11_BSS_type_any, FALSE, NULL, &pBssList);
+    if (dwResult != ERROR_SUCCESS || pBssList == NULL)
+    {
+        wprintf(L"  WlanGetNetworkBssList failed: %lu\n", dwResult);
+        return;
+    }
+
+    wprintf(L"\n  %-32s %-17s  %6s  %4s  %s\n", L"SSID", L"BSSID", L"MHz", L"RSSI", L"Band");
+    wprintf(L"  ---------------------------------------------------------------------\n");
+    for (i = 0; i < pBssList->dwNumberOfItems; i++)
+    {
+        PWLAN_BSS_ENTRY Bss = &pBssList->wlanBssEntries[i];
+        ULONG Mhz = Bss->ulChCenterFrequency / 1000;
+        PCWSTR Band;
+        WCHAR szSsid[64];
+
+        if (Mhz >= 5925)
+        {
+            Band = L"6 GHz";
+            Count6++;
+        }
+        else if (Mhz >= 4900)
+        {
+            Band = L"5 GHz";
+            Count5++;
+        }
+        else
+        {
+            Band = L"2.4 GHz";
+            Count24++;
+        }
+
+        SsidToString(&Bss->dot11Ssid, szSsid, ARRAYSIZE(szSsid));
+        wprintf(L"  %-32.32s %02x:%02x:%02x:%02x:%02x:%02x  %6lu  %4ld  %s\n",
+                szSsid,
+                Bss->dot11Bssid[0], Bss->dot11Bssid[1], Bss->dot11Bssid[2],
+                Bss->dot11Bssid[3], Bss->dot11Bssid[4], Bss->dot11Bssid[5],
+                Mhz, Bss->lRssi, Band);
+    }
+    wprintf(L"  (%lu BSS: %lu on 2.4 GHz, %lu on 5 GHz, %lu on 6 GHz)\n",
+            pBssList->dwNumberOfItems, Count24, Count5, Count6);
+
+    WlanFreeMemory(pBssList);
+}
+
 static VOID WINAPI
 ScanNotify(PWLAN_NOTIFICATION_DATA Data, PVOID Context)
 {
@@ -137,6 +189,7 @@ ScanInterface(HANDLE hClient, const GUID *pGuid)
     }
 
     WlanFreeMemory(pNetList);
+    ListBss(hClient, pGuid);
     return ERROR_SUCCESS;
 }
 
