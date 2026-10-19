@@ -1378,7 +1378,6 @@ DwmReflection(LONG ScreenX, LONG ScreenY)
         return 0;
     return g_reflectLut[u];
 }
-#define DWM_MATERIAL_FRINGE 96u
 
 static ULONG
 DwmChannelDistance(ULONG a, ULONG b)
@@ -1393,6 +1392,27 @@ DwmChannelDistance(ULONG a, ULONG b)
     if (dg > dr) dr = dg;
     if (db > dr) dr = db;
     return (ULONG)dr;
+}
+
+static ULONG
+DwmMaterialWeight(ULONG Color, ULONG Key)
+{
+    ULONG Weight = 255, Shift;
+
+    for (Shift = 0; Shift < 24; Shift += 8)
+    {
+        ULONG c = (Color >> Shift) & 0xFFu, k = (Key >> Shift) & 0xFFu;
+        ULONG Distance = c < k ? k - c : c - k;
+        ULONG Extent = c < k ? k : 255u - k;
+        ULONG Channel;
+
+        if (Distance <= DWM_MATERIAL_TINT_BAND)
+            continue;
+        Channel = (Extent - Distance) * 255u / (Extent - DWM_MATERIAL_TINT_BAND);
+        if (Channel < Weight)
+            Weight = Channel;
+    }
+    return Weight;
 }
 
 static ULONG
@@ -2380,11 +2400,7 @@ DwmBlendGlassSpan(ULONG * __restrict Dest, const ULONG * __restrict Base,
         ULONG Weight, Shift;
         LONG Red, Green, Blue, Glow;
 
-        if (Other < Near) Near = Other;
-        Weight = Near <= DWM_MATERIAL_TINT_BAND ? 255 :
-                 Near < DWM_MATERIAL_FRINGE ?
-                 (DWM_MATERIAL_FRINGE - Near) * 255u /
-                 (DWM_MATERIAL_FRINGE - DWM_MATERIAL_TINT_BAND) : 0;
+        Weight = DwmMaterialWeight(Color, Key);
         Shift = (255u - Opacity) * Weight / 255u;
         Glow = DWM_MATERIAL_REFLECT_STRENGTH * Reflection[Index] * Weight /
                (255u * 255u);
@@ -2430,11 +2446,7 @@ DwmFrameMaterial(ULONG Source, ULONG Under, const DWM_WIN *Window,
                ((((Source >> 8) & 0xFFu) * Opacity + ((Base >> 8) & 0xFFu) * Inverse) / 255u << 8) |
                (((Source & 0xFFu) * Opacity + (Base & 0xFFu) * Inverse) / 255u);
     }
-    if (Near <= DWM_MATERIAL_TINT_BAND)
-        Weight = 255;
-    else if (Near < DWM_MATERIAL_FRINGE)
-        Weight = (DWM_MATERIAL_FRINGE - Near) * 255u /
-                 (DWM_MATERIAL_FRINGE - DWM_MATERIAL_TINT_BAND);
+    Weight = DwmMaterialWeight(Source, Key);
     if (Weight == 0)
         return Source;
 
@@ -2765,14 +2777,9 @@ next_segment:
 
                         if (Other < Near)
                         {
-                            Near = Other;
                             Key = colorizationKey;
                         }
-                        if (Near <= DWM_MATERIAL_TINT_BAND)
-                            Weight = 255;
-                        else if (Near < DWM_MATERIAL_FRINGE)
-                            Weight = (DWM_MATERIAL_FRINGE - Near) * 255u /
-                                     (DWM_MATERIAL_FRINGE - DWM_MATERIAL_TINT_BAND);
+                        Weight = DwmMaterialWeight(Color, Key);
                         DwmBlendConstantGlass(dstrow + x, baserow + x,
                                              End - x, Color, Key,
                                              w->BackdropOpacity, Weight, reflection + x);
@@ -2852,15 +2859,9 @@ next_segment:
                         materialPixel = TRUE;
                         materialWeight = 255;
                     }
-                    else if (Near <= DWM_MATERIAL_TINT_BAND)
+                    else
                     {
-                        materialWeight = 255;
-                    }
-                    else if (Near < DWM_MATERIAL_FRINGE)
-                    {
-                        materialWeight = (DWM_MATERIAL_FRINGE - Near) * 255u /
-                                         (DWM_MATERIAL_FRINGE -
-                                          DWM_MATERIAL_TINT_BAND);
+                        materialWeight = DwmMaterialWeight(s, materialKey);
                     }
                 }
             }
@@ -3505,14 +3506,9 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
                     Weight = 0;
                     if (Other < Near)
                     {
-                        Near = Other;
                         Key = matKey2;
                     }
-                    if (Near <= DWM_MATERIAL_TINT_BAND)
-                        Weight = 255;
-                    else if (Near < DWM_MATERIAL_FRINGE)
-                        Weight = (DWM_MATERIAL_FRINGE - Near) * 255u /
-                                 (DWM_MATERIAL_FRINGE - DWM_MATERIAL_TINT_BAND);
+                    Weight = DwmMaterialWeight(s, Key);
                     lastColor = s;
                     lastKey = Key;
                     lastWeight = Weight;
