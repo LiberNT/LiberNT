@@ -865,6 +865,8 @@ CmpHandleNotifyWorker(
         }
         HeapFree(GetProcessHeap(), 0, pEvent);
     }
+
+    return 0;
 }
 
 
