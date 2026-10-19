@@ -2380,8 +2380,8 @@ RndisTxComplete(
             NdisReleaseSpinLock(&Adapter->TxLock);
 
             NET_BUFFER_LIST_STATUS(PartialNbl) = NDIS_STATUS_FAILURE;
-            NdisMSendNetBufferListsComplete(
-                Adapter->MiniportAdapterHandle,
+            RndisCompleteSendNbls(
+                Adapter,
                 PartialNbl,
                 NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
         }
@@ -2437,8 +2437,8 @@ RndisTxComplete(
         }
 
         /* Complete the entire chain */
-        NdisMSendNetBufferListsComplete(
-            Adapter->MiniportAdapterHandle,
+        RndisCompleteSendNbls(
+            Adapter,
             Nbl,
             SendCompleteFlags);
     }

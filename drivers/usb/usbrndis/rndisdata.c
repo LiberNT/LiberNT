@@ -448,6 +448,13 @@ RndisIndicateReceiveNblEx(
         }
     }
 
+    InterlockedIncrement(&Adapter->RxOutstanding);
+    if (Adapter->Paused)
+    {
+        RndisReturnNetBufferLists(Adapter, Nbl, 0);
+        return;
+    }
+
     /* Update statistics */
     Adapter->RxOkCount++;
     Adapter->RxBytes += EthernetLength;
@@ -458,7 +465,7 @@ RndisIndicateReceiveNblEx(
         Nbl,
         0,      /* Port number */
         1,      /* Number of NBLs */
-        0       /* Flags - not at dispatch level from USB completion */
+        KeGetCurrentIrql() == DISPATCH_LEVEL ? NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL : 0
         );
 }
 
@@ -895,8 +902,16 @@ RndisSendNetBufferLists(
     _In_ ULONG SendFlags)
 {
     PRNDIS_ADAPTER Adapter = (PRNDIS_ADAPTER)MiniportAdapterContext;
+    PNET_BUFFER_LIST Nbl;
+    LONG Count = 0;
 
     UNREFERENCED_PARAMETER(PortNumber);
+
+    for (Nbl = NetBufferList; Nbl != NULL; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
+    {
+        Count++;
+    }
+    InterlockedAdd(&Adapter->TxOutstanding, Count);
 
     RndisSendNetBufferListsInternal(Adapter, NetBufferList, SendFlags, FALSE, FALSE);
 }
@@ -946,13 +961,12 @@ RndisSendNetBufferListsInternal(
         for (CurrentNbl = NetBufferList; CurrentNbl != NULL; CurrentNbl = NextNbl)
         {
             NextNbl = NET_BUFFER_LIST_NEXT_NBL(CurrentNbl);
-            NET_BUFFER_LIST_NEXT_NBL(CurrentNbl) = NULL;
             NET_BUFFER_LIST_STATUS(CurrentNbl) = Adapter->Paused ?
                                                  NDIS_STATUS_PAUSED : NDIS_STATUS_FAILURE;
         }
 
-        NdisMSendNetBufferListsComplete(
-            Adapter->MiniportAdapterHandle,
+        RndisCompleteSendNbls(
+            Adapter,
             NetBufferList,
             DispatchLevel ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
         return;
@@ -974,12 +988,11 @@ RndisSendNetBufferListsInternal(
         for (CurrentNbl = NetBufferList; CurrentNbl != NULL; CurrentNbl = NextNbl)
         {
             NextNbl = NET_BUFFER_LIST_NEXT_NBL(CurrentNbl);
-            NET_BUFFER_LIST_NEXT_NBL(CurrentNbl) = NULL;
             NET_BUFFER_LIST_STATUS(CurrentNbl) = NDIS_STATUS_FAILURE;
         }
 
-        NdisMSendNetBufferListsComplete(
-            Adapter->MiniportAdapterHandle,
+        RndisCompleteSendNbls(
+            Adapter,
             NetBufferList,
             DispatchLevel ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
         return;
@@ -1636,8 +1649,8 @@ FailCurrentNbl:
     /* Complete failed NBLs */
     if (FailedNbls != NULL)
     {
-        NdisMSendNetBufferListsComplete(
-            Adapter->MiniportAdapterHandle,
+        RndisCompleteSendNbls(
+            Adapter,
             FailedNbls,
             DispatchLevel ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
     }
@@ -1656,11 +1669,13 @@ RndisReturnNetBufferLists(
     _In_ PNET_BUFFER_LIST NetBufferLists,
     _In_ ULONG ReturnFlags)
 {
+    PRNDIS_ADAPTER Adapter = (PRNDIS_ADAPTER)MiniportAdapterContext;
     PNET_BUFFER_LIST CurrentNbl;
     PNET_BUFFER_LIST NextNbl;
     PNET_BUFFER Nb;
     PMDL Mdl;
     PUCHAR DataBuffer;
+    LONG Count = 0;
 
     UNREFERENCED_PARAMETER(ReturnFlags);
 
@@ -1692,6 +1707,12 @@ RndisReturnNetBufferLists(
         {
             NdisFreeMemory(DataBuffer, 0, 0);
         }
+        Count++;
+    }
+
+    if (InterlockedAdd(&Adapter->RxOutstanding, -Count) == 0)
+    {
+        RndisCheckPauseComplete(Adapter);
     }
 }
 
@@ -1789,8 +1810,8 @@ RndisCancelSend(
             NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_REQUEST_ABORTED;
         }
 
-        NdisMSendNetBufferListsComplete(
-            Adapter->MiniportAdapterHandle,
+        RndisCompleteSendNbls(
+            Adapter,
             CancelledNbl,
             NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
     }
@@ -1938,8 +1959,8 @@ FailPartialNbl:
     Adapter->TxErrorCount++;
 
     NET_BUFFER_LIST_STATUS(CurrentNbl) = NDIS_STATUS_FAILURE;
-    NdisMSendNetBufferListsComplete(
-        Adapter->MiniportAdapterHandle,
+    RndisCompleteSendNbls(
+        Adapter,
         CurrentNbl,
         DispatchLevel ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
 
@@ -2006,7 +2027,7 @@ RndisTxDrainChain(
     IN PRNDIS_ADAPTER Adapter,
     IN PNET_BUFFER_LIST NblChain)
 {
-    if (NblChain == NULL || Adapter->Halting)
+    if (NblChain == NULL)
     {
         return TRUE;
     }

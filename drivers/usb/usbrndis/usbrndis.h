@@ -850,6 +850,9 @@ typedef struct _RNDIS_ADAPTER {
     KEVENT RemoveEvent;             /* Signaled when PendingIoCount reaches zero */
     BOOLEAN Halting;                /* Set TRUE during halt to stop resubmission */
     BOOLEAN Paused;                 /* TRUE when adapter is in paused state */
+    volatile LONG TxOutstanding;
+    volatile LONG RxOutstanding;
+    volatile LONG PauseCompletePending;
 
     /* NDIS 6.x NET_BUFFER_LIST Pool */
     NDIS_HANDLE RxNblPool;          /* Pool for receive NBLs */
@@ -930,6 +933,16 @@ BOOLEAN
 RndisTxDrainChain(
     IN PRNDIS_ADAPTER Adapter,
     IN PNET_BUFFER_LIST NblChain);
+
+VOID
+RndisCheckPauseComplete(
+    IN PRNDIS_ADAPTER Adapter);
+
+VOID
+RndisCompleteSendNbls(
+    IN PRNDIS_ADAPTER Adapter,
+    IN PNET_BUFFER_LIST NblChain,
+    IN ULONG SendCompleteFlags);
 
 VOID
 NTAPI

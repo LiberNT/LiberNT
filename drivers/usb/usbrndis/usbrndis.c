@@ -896,8 +896,8 @@ RndisMiniportHaltEx(
     if (Adapter->TxHot.TxNcmPartialNbl != NULL)
     {
         NET_BUFFER_LIST_STATUS(Adapter->TxHot.TxNcmPartialNbl) = NDIS_STATUS_FAILURE;
-        NdisMSendNetBufferListsComplete(
-            Adapter->MiniportAdapterHandle,
+        RndisCompleteSendNbls(
+            Adapter,
             Adapter->TxHot.TxNcmPartialNbl,
             0);
         Adapter->TxHot.TxNcmPartialNbl = NULL;
@@ -917,8 +917,8 @@ RndisMiniportHaltEx(
             {
                 NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_FAILURE;
             }
-            NdisMSendNetBufferListsComplete(
-                Adapter->MiniportAdapterHandle,
+            RndisCompleteSendNbls(
+                Adapter,
                 Queued,
                 0);
         }
@@ -1036,6 +1036,8 @@ RndisMiniportPause(
     _In_ PNDIS_MINIPORT_PAUSE_PARAMETERS PauseParameters)
 {
     PRNDIS_ADAPTER Adapter = (PRNDIS_ADAPTER)MiniportAdapterContext;
+    PNET_BUFFER_LIST Queued;
+    PNET_BUFFER_LIST Nbl;
 
     UNREFERENCED_PARAMETER(PauseParameters);
 
@@ -1043,7 +1045,60 @@ RndisMiniportPause(
 
     Adapter->Paused = TRUE;
 
-    return NDIS_STATUS_SUCCESS;
+    Queued = RndisTxQueuePopAll(Adapter);
+    if (Queued != NULL)
+    {
+        for (Nbl = Queued; Nbl != NULL; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
+        {
+            NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_PAUSED;
+        }
+        RndisCompleteSendNbls(Adapter, Queued, 0);
+    }
+
+    InterlockedExchange(&Adapter->PauseCompletePending, 1);
+    if (Adapter->TxOutstanding == 0 &&
+        Adapter->RxOutstanding == 0 &&
+        InterlockedExchange(&Adapter->PauseCompletePending, 0) != 0)
+    {
+        return NDIS_STATUS_SUCCESS;
+    }
+
+    return NDIS_STATUS_PENDING;
+}
+
+VOID
+RndisCheckPauseComplete(
+    IN PRNDIS_ADAPTER Adapter)
+{
+    if (Adapter->PauseCompletePending != 0 &&
+        Adapter->TxOutstanding == 0 &&
+        Adapter->RxOutstanding == 0 &&
+        InterlockedExchange(&Adapter->PauseCompletePending, 0) != 0)
+    {
+        NdisMPauseComplete(Adapter->MiniportAdapterHandle);
+    }
+}
+
+VOID
+RndisCompleteSendNbls(
+    IN PRNDIS_ADAPTER Adapter,
+    IN PNET_BUFFER_LIST NblChain,
+    IN ULONG SendCompleteFlags)
+{
+    PNET_BUFFER_LIST Nbl;
+    LONG Count = 0;
+
+    for (Nbl = NblChain; Nbl != NULL; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
+    {
+        Count++;
+    }
+
+    NdisMSendNetBufferListsComplete(Adapter->MiniportAdapterHandle, NblChain, SendCompleteFlags);
+
+    if (InterlockedAdd(&Adapter->TxOutstanding, -Count) == 0)
+    {
+        RndisCheckPauseComplete(Adapter);
+    }
 }
 
 /*
