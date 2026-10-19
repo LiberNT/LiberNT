@@ -194,6 +194,18 @@ MiArchPteIsExecutable(_In_ MI_PTE Pte, _In_ BOOLEAN UserMode)
 }
 
 MI_PTE
+MiArchPteGrantUserExecute(_In_ MI_PTE Pte)
+{
+    return (Pte & MI_RISCV_PTE_EXECUTE) ? Pte : 0;
+}
+
+MI_PTE
+MiArchPteRevokeUserExecute(_In_ MI_PTE Pte)
+{
+    return Pte;
+}
+
+MI_PTE
 MiArchPteSetDirty(_In_ MI_PTE Pte, _In_ BOOLEAN Dirty)
 {
     if (!MiRiscvPteIsLeaf(Pte) || !(Pte & MI_RISCV_PTE_WRITE))

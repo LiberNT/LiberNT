@@ -84,6 +84,80 @@ MiArmExecutableWriteRangeLocked(
     }
 }
 
+static
+BOOLEAN
+MiRevokeUserExecuteRangeLocked(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 Start,
+    _In_ ULONG64 End)
+{
+    ULONG64 TableSpan = 1ULL << (Space->System->Arch->Level[0].Shift +
+                                Space->System->Arch->Level[0].IndexBits);
+    BOOLEAN Changed = FALSE;
+    ULONG64 Va = Start;
+
+    while (Va < End)
+    {
+        ULONG TableFrame;
+        PMI_PTE Slot = MiPtLookup(Space, Va, &TableFrame);
+        MI_PTE Pte;
+        MI_PTE Revoked;
+        KIRQL OldIrql;
+
+        if (Slot == NULL)
+        {
+            ULONG64 Step = TableSpan - (Va & (TableSpan - 1));
+
+            if (Step >= End - Va)
+                Va = End;
+            else
+                Va += Step;
+            continue;
+        }
+
+        OldIrql = MiPfnLock(&Space->System->Pfn, TableFrame);
+        do
+        {
+            Pte = MiArchPteRead(Slot);
+            Revoked = MiArchPteRevokeUserExecute(Pte);
+        } while (Revoked != Pte && !MiArchPteCompareExchange(Slot, Pte, Revoked));
+        MiPfnUnlock(&Space->System->Pfn, TableFrame, OldIrql);
+
+        if (Revoked != Pte)
+            Changed = TRUE;
+        Va += PAGE_SIZE;
+    }
+
+    return Changed;
+}
+
+VOID
+MiSetUserExecuteDataLocked(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ BOOLEAN Enable)
+{
+    PMI_VAD_NODE Node;
+    BOOLEAN Changed = FALSE;
+
+    if (Space->ExecuteData && !Enable)
+    {
+        for (Node = MiVadFirst(&Space->VadRoot); Node != NULL; Node = MiVadNext(Node))
+        {
+            PMI_VAD Vad = CONTAINING_RECORD(Node, MI_VAD, Node);
+
+            if (Vad->Type != MiVadLarge &&
+                MiRevokeUserExecuteRangeLocked(Space, MI_VAD_START(Vad), MI_VAD_END(Vad)))
+            {
+                Changed = TRUE;
+            }
+        }
+    }
+
+    Space->ExecuteData = Enable;
+    if (Changed)
+        MiArchTlbInvalidateAll(TRUE);
+}
+
 NTSTATUS
 MiSetExecutableWriteTracking(
     _Inout_ PMI_ADDRESS_SPACE Space,

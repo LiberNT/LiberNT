@@ -62,6 +62,7 @@ typedef struct _MI_ADDRESS_SPACE
     PVOID CommitOwner;
     BOOLEAN TrackExecutableWrites;
     BOOLEAN HasWriteWatch;
+    BOOLEAN ExecuteData;
 
     volatile LONG64 CommittedPages;
     volatile LONG64 ResidentPages;
@@ -368,7 +369,9 @@ NTSTATUS MiFaultWithWriteAllowance(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64
                                    _In_ BOOLEAN AllowExecutableWrite);
 NTSTATUS MiFaultForCopy(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress,
                         _In_ BOOLEAN UserMode, _In_ BOOLEAN WriteAccess);
+NTSTATUS MiGrantUserExecute(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress);
 NTSTATUS MiSetExecutableWriteTracking(_Inout_ PMI_ADDRESS_SPACE Space, _In_ BOOLEAN Enable);
+VOID MiSetUserExecuteDataLocked(_Inout_ PMI_ADDRESS_SPACE Space, _In_ BOOLEAN Enable);
 NTSTATUS MiWriteWatchAttach(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PMI_VAD Vad);
 NTSTATUS MiWriteWatchDuplicate(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PMI_VAD Vad);
 VOID MiWriteWatchRelease(_Inout_ PMI_VAD Vad);

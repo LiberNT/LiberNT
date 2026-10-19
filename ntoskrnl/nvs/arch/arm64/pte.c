@@ -197,6 +197,18 @@ MiArchPteIsExecutable(_In_ MI_PTE Pte, _In_ BOOLEAN UserMode)
 }
 
 MI_PTE
+MiArchPteGrantUserExecute(_In_ MI_PTE Pte)
+{
+    return (Pte & A64_UXN) ? 0 : Pte;
+}
+
+MI_PTE
+MiArchPteRevokeUserExecute(_In_ MI_PTE Pte)
+{
+    return Pte;
+}
+
+MI_PTE
 MiArchPteSetDirty(_In_ MI_PTE Pte, _In_ BOOLEAN Dirty)
 {
     if (!(Pte & A64_SW_WRITE))

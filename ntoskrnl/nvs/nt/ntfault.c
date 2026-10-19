@@ -178,6 +178,7 @@ MmAccessFaultEx(
     PEPROCESS Process;
     NTSTATUS Status;
     BOOLEAN AllowExecutableWrite = (PsGetCurrentThread()->ExecutableWriteAllowed != 0);
+    BOOLEAN ExecuteData = FALSE;
 
     UNREFERENCED_PARAMETER(AddressSpaceLocked);
 
@@ -215,6 +216,11 @@ MmAccessFaultEx(
             return STATUS_ACCESS_VIOLATION;
 
         Space = MiSpaceOfProcess(Process);
+        if (Access == MiFaultExecute && Mode != KernelMode && Space->ExecuteData)
+        {
+            Access = MiFaultRead;
+            ExecuteData = TRUE;
+        }
     }
 
     for (;;)
@@ -230,6 +236,9 @@ MmAccessFaultEx(
         if (!NT_SUCCESS(MiWaitForMemory(Status, &Attempts)))
             break;
     }
+
+    if (NT_SUCCESS(Status) && ExecuteData)
+        Status = MiGrantUserExecute(Space, (ULONG64)(ULONG_PTR)Address);
 
     if (Process != NULL)
     {

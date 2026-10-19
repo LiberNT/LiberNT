@@ -169,6 +169,18 @@ MiArchPteIsExecutable(_In_ MI_PTE Pte, _In_ BOOLEAN UserMode)
 }
 
 MI_PTE
+MiArchPteGrantUserExecute(_In_ MI_PTE Pte)
+{
+    return Pte;
+}
+
+MI_PTE
+MiArchPteRevokeUserExecute(_In_ MI_PTE Pte)
+{
+    return Pte;
+}
+
+MI_PTE
 MiArchPteSetDirty(_In_ MI_PTE Pte, _In_ BOOLEAN Dirty)
 {
     if (!MiArchPteIsValid(Pte) || !(Pte & MI_PPC_PTE_WRITE))

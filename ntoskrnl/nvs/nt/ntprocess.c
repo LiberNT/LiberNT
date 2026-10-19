@@ -267,6 +267,7 @@ MiInitializeExecuteOptions(
     }
 
     Process->Pcb.ExecuteOptions = Options;
+    MiSpaceOfProcess(Process)->ExecuteData = (BOOLEAN)((Options & MEM_EXECUTE_OPTION_ENABLE) != 0);
 }
 
 NTSTATUS

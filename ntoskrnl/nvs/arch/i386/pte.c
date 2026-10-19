@@ -161,6 +161,18 @@ MiArchPteIsExecutable(MI_PTE Pte, BOOLEAN UserMode)
 }
 
 MI_PTE
+MiArchPteGrantUserExecute(MI_PTE Pte)
+{
+    return Pte;
+}
+
+MI_PTE
+MiArchPteRevokeUserExecute(MI_PTE Pte)
+{
+    return Pte;
+}
+
+MI_PTE
 MiArchPteSetDirty(MI_PTE Pte, BOOLEAN Dirty)
 {
     if (!MiI386PteHas(Pte, MI_I386_PTE_WRITABLE))

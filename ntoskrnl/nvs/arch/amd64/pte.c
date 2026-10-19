@@ -169,7 +169,25 @@ BOOLEAN
 MiArchPteIsExecutable(_In_ MI_PTE Pte, _In_ BOOLEAN UserMode)
 {
     UNREFERENCED_PARAMETER(UserMode);
-    return (Pte & (MI_AMD64_PTE_PRESENT | MI_AMD64_PTE_NX)) == MI_AMD64_PTE_PRESENT;
+    return (Pte & (MI_AMD64_PTE_PRESENT | MI_AMD64_PTE_NX | MI_AMD64_PTE_EXECUTE_GRANT)) == MI_AMD64_PTE_PRESENT;
+}
+
+MI_PTE
+MiArchPteGrantUserExecute(_In_ MI_PTE Pte)
+{
+    if (!(Pte & MI_AMD64_PTE_NX))
+        return Pte;
+
+    return (Pte & ~MI_AMD64_PTE_NX) | MI_AMD64_PTE_EXECUTE_GRANT;
+}
+
+MI_PTE
+MiArchPteRevokeUserExecute(_In_ MI_PTE Pte)
+{
+    if (!(Pte & MI_AMD64_PTE_EXECUTE_GRANT))
+        return Pte;
+
+    return (Pte & ~MI_AMD64_PTE_EXECUTE_GRANT) | MI_AMD64_PTE_NX;
 }
 
 MI_PTE

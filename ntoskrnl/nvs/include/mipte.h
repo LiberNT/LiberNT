@@ -151,6 +151,8 @@ BOOLEAN MiArchIsSelfMapAddress(_In_ ULONG64 VirtualAddress);
 BOOLEAN MiArchTranslateWindow(_In_ ULONG64 VirtualAddress, _Out_ PULONG64 PhysicalAddress, _Out_opt_ PMI_PTE LeafPte);
 #endif
 BOOLEAN MiArchPteIsExecutable(_In_ MI_PTE Pte, _In_ BOOLEAN UserMode);
+MI_PTE MiArchPteGrantUserExecute(_In_ MI_PTE Pte);
+MI_PTE MiArchPteRevokeUserExecute(_In_ MI_PTE Pte);
 MI_PTE MiArchPteSetDirty(_In_ MI_PTE Pte, _In_ BOOLEAN Dirty);
 MI_PTE MiArchPteSetAccessed(_In_ MI_PTE Pte, _In_ BOOLEAN Accessed);
 BOOLEAN MiArchPteNeedsBreak(_In_ MI_PTE Old, _In_ MI_PTE New);

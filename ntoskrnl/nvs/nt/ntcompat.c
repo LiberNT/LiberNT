@@ -72,25 +72,35 @@ MmSetExecuteOptions(
     _In_ ULONG ExecuteOptions)
 {
     PEPROCESS Process = PsGetCurrentProcess();
+    NTSTATUS Status = STATUS_SUCCESS;
+    PMI_ADDRESS_SPACE Space;
     UCHAR Current;
     UCHAR Updated;
 
-    if (MiExecuteOptionsArePermanent(Process) || (ExecuteOptions & ~MEM_EXECUTE_OPTION_VALID_FLAGS))
-        return STATUS_INVALID_PARAMETER;
-
-    do
+    if (MiExecuteOptionsArePermanent(Process) || MI_PROCESS_OF(Process) == NULL ||
+        (ExecuteOptions & ~MEM_EXECUTE_OPTION_VALID_FLAGS))
     {
-        Current = ReadUCharAcquire(&Process->Pcb.ExecuteOptions);
-        if (Current & MEM_EXECUTE_OPTION_PERMANENT)
-            return STATUS_ACCESS_DENIED;
+        return STATUS_INVALID_PARAMETER;
+    }
 
+    Space = MiSpaceOfProcess(Process);
+    MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
+    Current = ReadUCharAcquire(&Process->Pcb.ExecuteOptions);
+    if (Current & MEM_EXECUTE_OPTION_PERMANENT)
+    {
+        Status = STATUS_ACCESS_DENIED;
+    }
+    else
+    {
         Updated = (UCHAR)((Current & ~(MEM_EXECUTE_OPTION_DISABLE | MEM_EXECUTE_OPTION_ENABLE)) | ExecuteOptions);
         if (!(ExecuteOptions & MEM_EXECUTE_OPTION_DISABLE))
             Updated |= Current & MEM_EXECUTE_OPTION_ENABLE;
-    } while ((UCHAR)_InterlockedCompareExchange8((char volatile *)&Process->Pcb.ExecuteOptions,
-                                                 (char)Updated, (char)Current) != Current);
+        WriteUCharRelease(&Process->Pcb.ExecuteOptions, Updated);
+        MiSetUserExecuteDataLocked(Space, (BOOLEAN)((Updated & MEM_EXECUTE_OPTION_ENABLE) != 0));
+    }
+    MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
 
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 NTSTATUS

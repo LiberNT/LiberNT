@@ -679,3 +679,50 @@ MiFaultForCopy(
 
     return Status;
 }
+
+NTSTATUS
+MiGrantUserExecute(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 VirtualAddress)
+{
+    PMI_SYSTEM System = Space->System;
+    ULONG64 PageVa = VirtualAddress & ~((ULONG64)PAGE_SIZE - 1);
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG TableFrame;
+    PMI_PTE Slot;
+    PMI_VAD Vad;
+    MI_PTE Pte;
+    MI_PTE Granted;
+    KIRQL OldIrql;
+
+    MI_RW_ACQUIRE_SHARED(&Space->Lock);
+    Vad = MiVadLocate(Space, PageVa);
+    if (Vad == NULL || Vad->Type == MiVadLarge || !Space->ExecuteData)
+    {
+        MI_RW_RELEASE_SHARED(&Space->Lock);
+        return STATUS_ACCESS_VIOLATION;
+    }
+
+    Slot = MiPtLookup(Space, PageVa, &TableFrame);
+    if (Slot != NULL)
+    {
+        OldIrql = MiPfnLock(&System->Pfn, TableFrame);
+        Pte = MiArchPteRead(Slot);
+        if (MiArchPteIsValid(Pte) && MiArchPteIsUser(Pte))
+        {
+            Granted = MiArchPteGrantUserExecute(Pte);
+            if (Granted == 0)
+            {
+                Status = STATUS_ACCESS_VIOLATION;
+            }
+            else if (Granted != Pte && MiArchPteCompareExchange(Slot, Pte, Granted))
+            {
+                MiArchTlbInvalidate(PageVa, 1, FALSE);
+            }
+        }
+        MiPfnUnlock(&System->Pfn, TableFrame, OldIrql);
+    }
+
+    MI_RW_RELEASE_SHARED(&Space->Lock);
+    return Status;
+}
