@@ -37,15 +37,31 @@ WINE_DEFAULT_DEBUG_CHANNEL(schannel);
 
 typedef struct
 {
+    mbedtls_x509_crt   cert;
+    mbedtls_pk_context key;
+} MBEDTLS_CREDENTIALS;
+
+typedef struct
+{
     mbedtls_ssl_context      ssl;
     mbedtls_ssl_config       conf;
     mbedtls_entropy_context  entropy;
     mbedtls_ctr_drbg_context ctr_drbg;
     struct schan_transport  *transport;
     char                   **alpn_protocols;
+    MBEDTLS_CREDENTIALS     *credentials;
 } MBEDTLS_SESSION, *PMBEDTLS_SESSION;
 
 typedef MBEDTLS_SESSION *schan_imp_session;
+
+static const uint16_t small_key_sig_algs[] =
+{
+    MBEDTLS_TLS1_3_SIG_ECDSA_SECP256R1_SHA256,
+    MBEDTLS_TLS1_3_SIG_RSA_PKCS1_SHA256,
+    MBEDTLS_TLS1_3_SIG_ECDSA_SHA1,
+    MBEDTLS_TLS1_3_SIG_RSA_PKCS1_SHA1,
+    MBEDTLS_TLS1_3_SIG_NONE
+};
 
 struct schan_buffers
 {
@@ -264,6 +280,28 @@ BOOL schan_imp_create_session(schan_imp_session *session, schan_credentials *cre
     TRACE("MBEDTLS set dbg\n");
     mbedtls_ssl_conf_dbg(&s->conf, schan_imp_debug, stdout);
 
+    if (cred->credentials)
+    {
+        MBEDTLS_CREDENTIALS *creds = (MBEDTLS_CREDENTIALS *)(ULONG_PTR)cred->credentials;
+
+        if (mbedtls_ssl_conf_own_cert(&s->conf, &creds->cert, &creds->key))
+        {
+            ERR("Failed to set the session certificate\n");
+            mbedtls_ssl_free(&s->ssl);
+            mbedtls_ssl_config_free(&s->conf);
+            mbedtls_ctr_drbg_free(&s->ctr_drbg);
+            mbedtls_entropy_free(&s->entropy);
+            HeapFree(GetProcessHeap(), 0, s);
+            *session = NULL;
+            return FALSE;
+        }
+
+        if (mbedtls_pk_get_bitlen(&creds->key) < 1024)
+            mbedtls_ssl_conf_sig_algs(&s->conf, small_key_sig_algs);
+
+        s->credentials = creds;
+    }
+
     TRACE("MBEDTLS setup\n");
     mbedtls_ssl_setup(&s->ssl, &s->conf);
 
@@ -387,14 +425,15 @@ static unsigned int schannel_get_mac_key_size(int ciphersuite_id)
     return md_size;
 }
 
-static unsigned int schannel_get_kx_key_size(const mbedtls_ssl_context *ssl, const mbedtls_ssl_config *conf, int ciphersuite_id)
+static unsigned int schannel_get_kx_key_size(const MBEDTLS_SESSION *s, int ciphersuite_id)
 {
     const mbedtls_ssl_ciphersuite_t *ssl_ciphersuite = mbedtls_ssl_ciphersuite_from_id(ciphersuite_id);
 
     /* if we are the server take ca_chain, if we are the client take the proper x509 peer certificate */
-    const mbedtls_x509_crt *server_cert = (conf->endpoint == MBEDTLS_SSL_IS_SERVER) ? conf->ca_chain : mbedtls_ssl_get_peer_cert(ssl);
+    const mbedtls_x509_crt *server_cert = (mbedtls_ssl_conf_get_endpoint(&s->conf) == MBEDTLS_SSL_IS_SERVER) ?
+                                          (s->credentials ? &s->credentials->cert : NULL) : mbedtls_ssl_get_peer_cert(&s->ssl);
 
-    if (ssl_ciphersuite->key_exchange != MBEDTLS_KEY_EXCHANGE_NONE)
+    if (server_cert && ssl_ciphersuite->key_exchange != MBEDTLS_KEY_EXCHANGE_NONE)
         return mbedtls_pk_get_len(&(server_cert->pk));
 
     TRACE("MBEDTLS schannel_get_kx_key_size: Unknown kx %#x, returning 0\n", ssl_ciphersuite->key_exchange);
@@ -606,7 +645,7 @@ SECURITY_STATUS schan_imp_get_connection_info(schan_imp_session session,
     info->aiHash           = schannel_get_mac_algid(ciphersuite_id);
     info->dwHashStrength   = schannel_get_mac_key_size(ciphersuite_id);
     info->aiExch           = schannel_get_kx_algid(ciphersuite_id);
-    info->dwExchStrength   = schannel_get_kx_key_size(&s->ssl, &s->conf, ciphersuite_id);
+    info->dwExchStrength   = schannel_get_kx_key_size(s, ciphersuite_id);
 
     return SEC_E_OK;
 }
@@ -721,7 +760,17 @@ BOOL schan_imp_allocate_certificate_credentials(schan_credentials *c)
 
 void schan_imp_free_certificate_credentials(schan_credentials *c)
 {
+    MBEDTLS_CREDENTIALS *creds = (MBEDTLS_CREDENTIALS *)(ULONG_PTR)c->credentials;
+
     TRACE("MBEDTLS schan_imp_free_certificate_credentials %p %p %d\n", c, c->credentials, c->credential_use);
+
+    if (creds)
+    {
+        mbedtls_x509_crt_free(&creds->cert);
+        mbedtls_pk_free(&creds->key);
+        HeapFree(GetProcessHeap(), 0, creds);
+        c->credentials = 0;
+    }
 }
 
 BOOL schan_imp_init(void)
@@ -740,16 +789,60 @@ static inline schan_imp_session session_from_handle(schan_session handle)
     return (schan_imp_session)(ULONG_PTR)handle;
 }
 
+static BOOL schan_import_rsa_key(mbedtls_pk_context *key, const BYTE *blob, ULONG size)
+{
+    const BCRYPT_RSAKEY_BLOB *hdr = (const BCRYPT_RSAKEY_BLOB *)blob;
+    const BYTE *exponent, *modulus, *prime1, *prime2, *private_exponent;
+    mbedtls_rsa_context *rsa;
+
+    if (!blob || size < sizeof(*hdr) || hdr->Magic != BCRYPT_RSAFULLPRIVATE_MAGIC)
+        return FALSE;
+    if (size - sizeof(*hdr) < (ULONGLONG)hdr->cbPublicExp + hdr->cbModulus * 2ULL +
+                              hdr->cbPrime1 * 3ULL + hdr->cbPrime2 * 2ULL)
+        return FALSE;
+
+    exponent = (const BYTE *)(hdr + 1);
+    modulus = exponent + hdr->cbPublicExp;
+    prime1 = modulus + hdr->cbModulus;
+    prime2 = prime1 + hdr->cbPrime1;
+    private_exponent = prime2 + hdr->cbPrime2 + hdr->cbPrime1 + hdr->cbPrime2 + hdr->cbPrime1;
+
+    if (mbedtls_pk_setup(key, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA)))
+        return FALSE;
+
+    rsa = mbedtls_pk_rsa(*key);
+    if (mbedtls_rsa_import_raw(rsa, modulus, hdr->cbModulus, prime1, hdr->cbPrime1, prime2, hdr->cbPrime2,
+                               private_exponent, hdr->cbModulus, exponent, hdr->cbPublicExp))
+        return FALSE;
+
+    return mbedtls_rsa_complete(rsa) == 0;
+}
+
 static NTSTATUS backend_allocate_certificate_credentials(void *args)
 {
     const struct allocate_certificate_credentials_params *params = args;
+    MBEDTLS_CREDENTIALS *creds;
 
-    if (params->cert_blob)
+    if (!params->cert_blob)
+        return schan_imp_allocate_certificate_credentials(params->c) ? STATUS_SUCCESS : STATUS_INTERNAL_ERROR;
+
+    if (!(creds = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*creds))))
+        return STATUS_NO_MEMORY;
+
+    mbedtls_x509_crt_init(&creds->cert);
+    mbedtls_pk_init(&creds->key);
+    if (mbedtls_x509_crt_parse_der(&creds->cert, params->cert_blob, params->cert_size) ||
+        !schan_import_rsa_key(&creds->key, params->key_blob, params->key_size))
     {
-        FIXME("certificate credentials are not supported by the mbedTLS backend\n");
-        return STATUS_NOT_SUPPORTED;
+        ERR("Failed to import the certificate or its private key\n");
+        mbedtls_x509_crt_free(&creds->cert);
+        mbedtls_pk_free(&creds->key);
+        HeapFree(GetProcessHeap(), 0, creds);
+        return STATUS_INTERNAL_ERROR;
     }
-    return schan_imp_allocate_certificate_credentials(params->c) ? STATUS_SUCCESS : STATUS_INTERNAL_ERROR;
+
+    params->c->credentials = (ULONG_PTR)creds;
+    return STATUS_SUCCESS;
 }
 
 static NTSTATUS backend_create_session(void *args)
@@ -822,7 +915,7 @@ static NTSTATUS backend_get_cipher_info(void *args)
     info->dwCipherLen = schannel_get_cipher_key_size(id);
     info->dwCipherBlockLen = schan_imp_get_session_cipher_block_size(session);
     info->dwHashLen = schannel_get_mac_key_size(id);
-    info->dwMinExchangeLen = schannel_get_kx_key_size(&session->ssl, &session->conf, id);
+    info->dwMinExchangeLen = schannel_get_kx_key_size(session, id);
     info->dwMaxExchangeLen = info->dwMinExchangeLen;
     MultiByteToWideChar(CP_ACP, 0, name, -1, info->szCipherSuite, ARRAY_SIZE(info->szCipherSuite));
     for (p = info->szCipherSuite; *p; p++)
@@ -960,15 +1053,15 @@ static NTSTATUS backend_handshake(void *args)
     init_schan_buffers(&transport.out, params->output);
     session->transport = &transport;
 
-    if (params->control_token == CONTROL_TOKEN_SHUTDOWN)
+    if (params->control_token == CONTROL_TOKEN_SHUTDOWN || params->control_token == CONTROL_TOKEN_ALERT)
     {
-        int ret = mbedtls_ssl_close_notify(&session->ssl);
+        int ret = mbedtls_ssl_send_alert_message(&session->ssl, (unsigned char)params->alert_type,
+                                                 (unsigned char)params->alert_number);
         status = !ret || ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE
                 ? SEC_E_OK : SEC_E_INTERNAL_ERROR;
     }
     else if (params->control_token)
     {
-        FIXME("explicit TLS alerts are not supported by the mbedTLS backend\n");
         status = SEC_E_UNSUPPORTED_FUNCTION;
     }
     else
