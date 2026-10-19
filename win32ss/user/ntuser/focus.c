@@ -850,6 +850,11 @@ co_IntSetForegroundMessageQueue(
       return FALSE;
    }
 
+   if (Wnd && gpdeskInputDesktop && Wnd->head.rpdesk != gpdeskInputDesktop)
+   {
+      return FALSE;
+   }
+
    if ( !gptiForeground || gptiForeground->TIF_flags & TIF_INCLEANUP )
       ptiPrev = NULL;
    else
@@ -1260,6 +1265,13 @@ IntUserSetActiveWindow(
    while (Wnd)
    {
       BOOL Ret, DoFG, AllowFG;
+
+      if (gpdeskInputDesktop && Wnd->head.rpdesk != gpdeskInputDesktop)
+      {
+         if (ThreadQueue == Wnd->head.pti->MessageQueue)
+            break;
+         return FALSE;
+      }
 
       if (ThreadQueue == Wnd->head.pti->MessageQueue)
       {
