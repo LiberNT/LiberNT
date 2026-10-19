@@ -532,6 +532,8 @@ AcpiQueryWakeForPciDeviceIoctl(
     Output->DeviceWake = Capabilities.DeviceWake;
     for (Index = 0; Index < PowerSystemMaximum; Index++)
         Output->DeviceState[Index] = Capabilities.DeviceState[Index];
+    Output->Removable = Device->flags.removable || Device->flags.ejectable;
+    Output->EjectSupported = Device->flags.ejectable;
 
     Irp->IoStatus.Information = sizeof(*Output);
     return STATUS_SUCCESS;

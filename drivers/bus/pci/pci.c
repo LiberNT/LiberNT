@@ -472,8 +472,10 @@ PciAcpiEvalMethodForChild(
  * itself on Windows as a filter beneath the device.  Sent as internal device
  * control: the interface carries kernel entry points.
  */
+static
 NTSTATUS
-PciAcpiQueryNotifyInterface(
+PciAcpiQueryNotifyInterfaceByCode(
+    _In_ ULONG IoControlCode,
     _In_ ULONG Segment,
     _In_ ULONG Bus,
     _In_ ULONG Device,
@@ -503,7 +505,7 @@ PciAcpiQueryNotifyInterface(
     Buffer.Input.Device = Device;
     Buffer.Input.Function = Function;
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
-    Irp = IoBuildDeviceIoControlRequest(IOCTL_ACPI_QUERY_PCI_NOTIFY_INTERFACE,
+    Irp = IoBuildDeviceIoControlRequest(IoControlCode,
                                         AcpiInterfaceDeviceObject,
                                         &Buffer, sizeof(Buffer.Input),
                                         &Buffer, sizeof(Buffer.Output),
@@ -524,6 +526,30 @@ PciAcpiQueryNotifyInterface(
         *Interface = Buffer.Output;
     }
     return Status;
+}
+
+NTSTATUS
+PciAcpiQueryNotifyInterface(
+    _In_ ULONG Segment,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _Out_ PACPI_INTERFACE_STANDARD2 Interface)
+{
+    return PciAcpiQueryNotifyInterfaceByCode(IOCTL_ACPI_QUERY_PCI_NOTIFY_INTERFACE,
+                                             Segment, Bus, Device, Function, Interface);
+}
+
+NTSTATUS
+PciAcpiQuerySlotNotifyInterface(
+    _In_ ULONG Segment,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _Out_ PACPI_INTERFACE_STANDARD2 Interface)
+{
+    return PciAcpiQueryNotifyInterfaceByCode(IOCTL_ACPI_QUERY_PCI_SLOT_NOTIFY_INTERFACE,
+                                             Segment, Bus, Device, Function, Interface);
 }
 
 NTSTATUS
@@ -1064,6 +1090,8 @@ PciAddDevice(
 
     DeviceExtension->Ldo = IoAttachDeviceToDeviceStack(Fdo,
                                                        PhysicalDeviceObject);
+    DeviceExtension->PhysicalDeviceObject = PhysicalDeviceObject;
+    InitializeListHead(&DeviceExtension->SlotNotifyListHead);
 
     DeviceExtension->State = PciNotStarted;
 

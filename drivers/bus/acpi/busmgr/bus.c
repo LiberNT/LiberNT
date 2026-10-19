@@ -935,6 +935,7 @@ acpi_bus_notify (
 	//	type, (void *)handle);
 
 	acpi_bus_get_device(handle, &device);
+	AcpiPciSlotNotify(handle, type);
 
 	switch (type) {
 

@@ -1973,6 +1973,9 @@ PdoMergePlatformWake(
         return;
     }
 
+    DeviceCapabilities->Removable = Information.Removable;
+    DeviceCapabilities->EjectSupported = Information.EjectSupported;
+
     for (Index = PowerSystemSleeping1; Index < PowerSystemMaximum; Index++)
     {
         if (Information.DeviceState[Index] > PowerDeviceUnspecified && Information.DeviceState[Index] < PowerDeviceMaximum)
@@ -4633,6 +4636,82 @@ PdoQueryDeviceRelations(
 }
 
 
+static
+NTSTATUS
+PdoEject(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension)
+{
+    PFDO_DEVICE_EXTENSION FdoExtension = DeviceExtension->Fdo->DeviceExtension;
+    ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER Input;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&Input, sizeof(Input));
+    Input.Signature = ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_SIGNATURE;
+    RtlCopyMemory(Input.MethodName, "_EJ0", sizeof(Input.MethodName));
+    Input.IntegerArgument = 1;
+
+    Status = PciAcpiEvalMethod(PciPdoGetSegment(DeviceExtension),
+                               DeviceExtension->PciDevice->BusNumber,
+                               DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
+                               DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber,
+                               (PACPI_EVAL_INPUT_BUFFER)&Input,
+                               sizeof(Input),
+                               NULL,
+                               0,
+                               NULL);
+    if (NT_SUCCESS(Status))
+        IoInvalidateDeviceRelations(FdoExtension->PhysicalDeviceObject, BusRelations);
+
+    return Status;
+}
+
+static
+BOOLEAN
+PdoUnlinkIfNotReported(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension)
+{
+    PFDO_DEVICE_EXTENSION FdoExtension = DeviceExtension->Fdo->DeviceExtension;
+    PPCI_DEVICE Device = DeviceExtension->PciDevice;
+    BOOLEAN Unlink;
+    KIRQL OldIrql;
+
+    KeEnterCriticalRegion();
+    KeWaitForSingleObject(&PciGlobalLock, Executive, KernelMode, FALSE, NULL);
+    Unlink = !Device->Reported && !DeviceExtension->AcpiWakeActive;
+    if (Unlink)
+    {
+        KeAcquireSpinLock(&FdoExtension->DeviceListLock, &OldIrql);
+        RemoveEntryList(&Device->ListEntry);
+        KeReleaseSpinLock(&FdoExtension->DeviceListLock, OldIrql);
+    }
+    KeSetEvent(&PciGlobalLock, IO_NO_INCREMENT, FALSE);
+    KeLeaveCriticalRegion();
+    return Unlink;
+}
+
+static
+VOID
+PdoDelete(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension)
+{
+    PPCI_DEVICE Device = DeviceExtension->PciDevice;
+
+    RtlFreeUnicodeString(&DeviceExtension->DeviceID);
+    RtlFreeUnicodeString(&DeviceExtension->InstanceID);
+    RtlFreeUnicodeString(&DeviceExtension->HardwareIDs);
+    RtlFreeUnicodeString(&DeviceExtension->CompatibleIDs);
+    RtlFreeUnicodeString(&DeviceExtension->DeviceDescription);
+    RtlFreeUnicodeString(&DeviceExtension->DeviceLocation);
+    if (DeviceExtension->AcpiWakeIrp != NULL)
+        IoFreeIrp(DeviceExtension->AcpiWakeIrp);
+    if (DeviceExtension->AcpiWakeWorkItem != NULL)
+        IoFreeWorkItem(DeviceExtension->AcpiWakeWorkItem);
+    if (Device->SavedMsixTable != NULL)
+        ExFreePoolWithTag(Device->SavedMsixTable, TAG_PCI);
+    ExFreePoolWithTag(Device, TAG_PCI);
+    IoDeleteDevice(DeviceExtension->Common.DeviceObject);
+}
+
 /*** PUBLIC ******************************************************************/
 
 NTSTATUS
@@ -4651,6 +4730,7 @@ PdoPnpControl(
     PPDO_DEVICE_EXTENSION DeviceExtension;
     PIO_STACK_LOCATION IrpSp;
     NTSTATUS Status;
+    BOOLEAN Gone;
 
     DPRINT("Called\n");
 
@@ -4676,7 +4756,7 @@ PdoPnpControl(
             break;
 
         case IRP_MN_EJECT:
-            DPRINT("Unimplemented IRP_MN_EJECT received\n");
+            Status = PdoEject(DeviceExtension);
             break;
 
         case IRP_MN_QUERY_BUS_INFORMATION:
@@ -4759,10 +4839,14 @@ PdoPnpControl(
             PciPdoDisableDecodes(DeviceExtension);
             PciPdoReleaseMessageRoutes(DeviceExtension);
             IoReleaseRemoveLockAndWait(&DeviceExtension->RemoveLock, Irp);
-            IoInitializeRemoveLock(&DeviceExtension->RemoveLock, TAG_PCI, 0, 0);
+            Gone = PdoUnlinkIfNotReported(DeviceExtension);
+            if (!Gone)
+                IoInitializeRemoveLock(&DeviceExtension->RemoveLock, TAG_PCI, 0, 0);
             Status = STATUS_SUCCESS;
             Irp->IoStatus.Status = Status;
             IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            if (Gone)
+                PdoDelete(DeviceExtension);
             return Status;
 
         case IRP_MN_QUERY_INTERFACE:

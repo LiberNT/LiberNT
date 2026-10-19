@@ -1237,7 +1237,12 @@ typedef struct _ACPI_PCI_NOTIFY_CONTEXT
     PDEVICE_NOTIFY_CALLBACK2 Callback;
     PVOID CallbackContext;
     BOOLEAN Installed;
+    BOOLEAN Slot;
+    LIST_ENTRY SlotLink;
 } ACPI_PCI_NOTIFY_CONTEXT, *PACPI_PCI_NOTIFY_CONTEXT;
+
+static LIST_ENTRY AcpiPciSlotList = { &AcpiPciSlotList, &AcpiPciSlotList };
+static KSPIN_LOCK AcpiPciSlotLock;
 
 static PACPI_PCI_NOTIFY_CONTEXT
 AcpiPciNotifyFromContext(PVOID Context)
@@ -1268,13 +1273,51 @@ AcpiPciNotifyThunk(ACPI_HANDLE Handle, UINT32 Value, PVOID Context)
         Callback(CallbackContext, Value);
 }
 
+VOID
+AcpiPciSlotNotify(ACPI_HANDLE Handle, UINT32 Value)
+{
+    PDEVICE_NOTIFY_CALLBACK2 Callback = NULL;
+    PVOID CallbackContext = NULL;
+    PLIST_ENTRY Link;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&AcpiPciSlotLock, &OldIrql);
+    for (Link = AcpiPciSlotList.Flink; Link != &AcpiPciSlotList; Link = Link->Flink)
+    {
+        PACPI_PCI_NOTIFY_CONTEXT Notify = CONTAINING_RECORD(Link, ACPI_PCI_NOTIFY_CONTEXT, SlotLink);
+
+        if (Notify->Handle == Handle)
+        {
+            Callback = Notify->Callback;
+            CallbackContext = Notify->CallbackContext;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&AcpiPciSlotLock, OldIrql);
+
+    if (Callback != NULL)
+        Callback(CallbackContext, Value);
+}
+
 static VOID
 AcpiPciNotifyRemoveHandlers(PACPI_PCI_NOTIFY_CONTEXT Notify)
 {
+    KIRQL OldIrql;
+
     if (!Notify->Installed)
         return;
-    AcpiRemoveNotifyHandler(Notify->Handle, ACPI_DEVICE_NOTIFY, AcpiPciNotifyThunk);
-    AcpiRemoveNotifyHandler(Notify->Handle, ACPI_SYSTEM_NOTIFY, AcpiPciNotifyThunk);
+    if (Notify->Slot)
+    {
+        KeAcquireSpinLock(&AcpiPciSlotLock, &OldIrql);
+        RemoveEntryList(&Notify->SlotLink);
+        KeReleaseSpinLock(&AcpiPciSlotLock, OldIrql);
+        AcpiOsWaitEventsComplete();
+    }
+    else
+    {
+        AcpiRemoveNotifyHandler(Notify->Handle, ACPI_DEVICE_NOTIFY, AcpiPciNotifyThunk);
+        AcpiRemoveNotifyHandler(Notify->Handle, ACPI_SYSTEM_NOTIFY, AcpiPciNotifyThunk);
+    }
     Notify->Installed = FALSE;
 }
 
@@ -1318,6 +1361,15 @@ AcpiPciNotifyRegister(PVOID Context, PDEVICE_NOTIFY_CALLBACK2 Handler, PVOID Han
     Notify->Callback = Handler;
     Notify->CallbackContext = HandlerContext;
     KeReleaseSpinLock(&Notify->Lock, OldIrql);
+
+    if (Notify->Slot)
+    {
+        KeAcquireSpinLock(&AcpiPciSlotLock, &OldIrql);
+        InsertTailList(&AcpiPciSlotList, &Notify->SlotLink);
+        KeReleaseSpinLock(&AcpiPciSlotLock, OldIrql);
+        Notify->Installed = TRUE;
+        return STATUS_SUCCESS;
+    }
 
     Status = AcpiInstallNotifyHandler(Notify->Handle, ACPI_SYSTEM_NOTIFY, AcpiPciNotifyThunk, Notify);
     if (ACPI_SUCCESS(Status))
@@ -1376,7 +1428,7 @@ AcpiPciNotifyGpeObject(PVOID Context, PVOID ObjectContext)
 }
 
 static NTSTATUS
-AcpiReturnNotifyInterface(PIRP Irp, ACPI_HANDLE Handle)
+AcpiReturnNotifyInterface(PIRP Irp, ACPI_HANDLE Handle, BOOLEAN Slot)
 {
     PACPI_INTERFACE_STANDARD2 Interface;
     PACPI_PCI_NOTIFY_CONTEXT Notify;
@@ -1388,6 +1440,7 @@ AcpiReturnNotifyInterface(PIRP Irp, ACPI_HANDLE Handle)
     Notify->Signature = ACPI_PCI_NOTIFY_CONTEXT_SIGNATURE;
     Notify->RefCount = 1;   /* the caller's */
     Notify->Handle = Handle;
+    Notify->Slot = Slot;
     KeInitializeSpinLock(&Notify->Lock);
 
     /* The buffered output overlays the input, which has been read. */
@@ -1429,7 +1482,9 @@ AcpiQueryPciNotifyInterfaceIoctl(PIRP Irp, PIO_STACK_LOCATION IrpSp)
     if (!AcpiFindPciDeviceInNamespace(Input->Segment, Input->Bus, Input->Device, Input->Function, &Handle))
         return STATUS_NOT_FOUND;
 
-    return AcpiReturnNotifyInterface(Irp, Handle);
+    return AcpiReturnNotifyInterface(Irp, Handle,
+                                     IrpSp->Parameters.DeviceIoControl.IoControlCode ==
+                                         IOCTL_ACPI_QUERY_PCI_SLOT_NOTIFY_INTERFACE);
 }
 
 NTSTATUS
@@ -1456,5 +1511,5 @@ AcpiQueryPciChildNotifyInterfaceIoctl(PIRP Irp, PIO_STACK_LOCATION IrpSp)
     if (!NT_SUCCESS(Status))
         return Status;
 
-    return AcpiReturnNotifyInterface(Irp, ChildHandle);
+    return AcpiReturnNotifyInterface(Irp, ChildHandle, FALSE);
 }

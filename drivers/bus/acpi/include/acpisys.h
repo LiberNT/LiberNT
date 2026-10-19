@@ -267,6 +267,7 @@ VOID AcpiWakeRemoveDevice(struct acpi_device *Device);
 VOID AcpiWakeQueryCapabilities(struct acpi_device *Device, PDEVICE_CAPABILITIES Capabilities);
 NTSTATUS AcpiWakeQueueIrp(PPDO_DEVICE_DATA PdoData, PIRP Irp);
 VOID AcpiWakeSignal(ACPI_HANDLE Handle);
+VOID AcpiPciSlotNotify(ACPI_HANDLE Handle, UINT32 Value);
 VOID AcpiWakeCancelDevice(ACPI_HANDLE Handle);
 VOID AcpiWakeCheckSources(VOID);
 NTSTATUS AcpiQueryWakeForPciDeviceIoctl(PIRP Irp);
