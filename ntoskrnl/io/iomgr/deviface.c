@@ -29,6 +29,135 @@ IopGetDeviceObjectFromDeviceInstance(PUNICODE_STRING DeviceInstance);
 
 static PCWSTR BaseKeyString = L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\DeviceClasses\\";
 
+typedef struct _IOP_ENABLED_INTERFACE
+{
+    LIST_ENTRY ListEntry;
+    UNICODE_STRING Name;
+} IOP_ENABLED_INTERFACE, *PIOP_ENABLED_INTERFACE;
+
+static LIST_ENTRY IopEnabledInterfaces = { &IopEnabledInterfaces, &IopEnabledInterfaces };
+static EX_PUSH_LOCK IopEnabledInterfacesLock;
+
+static
+PIOP_ENABLED_INTERFACE
+IopFindEnabledInterface(
+    _In_ PCUNICODE_STRING Name,
+    _Out_opt_ PULONG Rank)
+{
+    PLIST_ENTRY Entry;
+    ULONG Index = 0;
+
+    for (Entry = IopEnabledInterfaces.Flink; Entry != &IopEnabledInterfaces; Entry = Entry->Flink, Index++)
+    {
+        PIOP_ENABLED_INTERFACE Interface = CONTAINING_RECORD(Entry, IOP_ENABLED_INTERFACE, ListEntry);
+
+        if (RtlEqualUnicodeString(&Interface->Name, Name, TRUE))
+        {
+            if (Rank)
+                *Rank = Index;
+            return Interface;
+        }
+    }
+    return NULL;
+}
+
+static
+VOID
+IopTrackEnabledInterface(
+    _In_ PCUNICODE_STRING SymbolicLinkName,
+    _In_ BOOLEAN Enable)
+{
+    PIOP_ENABLED_INTERFACE Interface;
+    UNICODE_STRING Name;
+
+    Name.Buffer = SymbolicLinkName->Buffer + 4;
+    Name.Length = Name.MaximumLength = SymbolicLinkName->Length - 4 * sizeof(WCHAR);
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&IopEnabledInterfacesLock);
+    Interface = IopFindEnabledInterface(&Name, NULL);
+    if (Enable && !Interface)
+    {
+        Interface = ExAllocatePoolWithTag(PagedPool, sizeof(*Interface) + Name.Length, TAG_IO);
+        if (Interface)
+        {
+            Interface->Name.Buffer = (PWCHAR)(Interface + 1);
+            Interface->Name.Length = Interface->Name.MaximumLength = Name.Length;
+            RtlCopyMemory(Interface->Name.Buffer, Name.Buffer, Name.Length);
+            InsertTailList(&IopEnabledInterfaces, &Interface->ListEntry);
+        }
+    }
+    else if (!Enable && Interface)
+    {
+        RemoveEntryList(&Interface->ListEntry);
+        ExFreePoolWithTag(Interface, TAG_IO);
+    }
+    ExReleasePushLockExclusive(&IopEnabledInterfacesLock);
+    KeLeaveCriticalRegion();
+}
+
+static
+VOID
+IopOrderEnabledInterfaces(
+    _Inout_ PWSTR List)
+{
+    PWSTR *Entries, Copy, Entry, Out;
+    PULONG Ranks;
+    ULONG Count = 0, Index, Sorted;
+    SIZE_T Size;
+
+    for (Entry = List; *Entry; Entry += wcslen(Entry) + 1)
+        Count++;
+    if (Count < 2)
+        return;
+
+    Size = (SIZE_T)(Entry - List + 1) * sizeof(WCHAR);
+    Entries = ExAllocatePoolWithTag(PagedPool, Count * (sizeof(PWSTR) + sizeof(ULONG)) + Size, TAG_IO);
+    if (!Entries)
+        return;
+    Ranks = (PULONG)(Entries + Count);
+    Copy = (PWSTR)(Ranks + Count);
+    RtlCopyMemory(Copy, List, Size);
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockShared(&IopEnabledInterfacesLock);
+    for (Entry = Copy, Index = 0; *Entry; Entry += wcslen(Entry) + 1, Index++)
+    {
+        UNICODE_STRING Name;
+
+        RtlInitUnicodeString(&Name, Entry + 4);
+        Entries[Index] = Entry;
+        if (wcslen(Entry) <= 4 || !IopFindEnabledInterface(&Name, &Ranks[Index]))
+            Ranks[Index] = MAXULONG;
+    }
+    ExReleasePushLockShared(&IopEnabledInterfacesLock);
+    KeLeaveCriticalRegion();
+
+    for (Sorted = 1; Sorted < Count; Sorted++)
+    {
+        PWSTR CurrentEntry = Entries[Sorted];
+        ULONG CurrentRank = Ranks[Sorted];
+
+        for (Index = Sorted; Index > 0 && Ranks[Index - 1] > CurrentRank; Index--)
+        {
+            Entries[Index] = Entries[Index - 1];
+            Ranks[Index] = Ranks[Index - 1];
+        }
+        Entries[Index] = CurrentEntry;
+        Ranks[Index] = CurrentRank;
+    }
+
+    for (Index = 0, Out = List; Index < Count; Index++)
+    {
+        SIZE_T Length = wcslen(Entries[Index]) + 1;
+
+        RtlCopyMemory(Out, Entries[Index], Length * sizeof(WCHAR));
+        Out += Length;
+    }
+    *Out = UNICODE_NULL;
+    ExFreePoolWithTag(Entries, TAG_IO);
+}
+
 /**
  * @brief
  * Creates a new symbolic link from the specified format of the prefix, device string,
@@ -1410,6 +1539,8 @@ TerminateList:
         ReturnBuffer.Buffer = NewBuffer;
     }
     ReturnBuffer.Buffer[ReturnBuffer.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    if (!(Flags & DEVICE_INTERFACE_INCLUDE_NONACTIVE))
+        IopOrderEnabledInterfaces(ReturnBuffer.Buffer);
     *SymbolicLinkList = ReturnBuffer.Buffer;
     Status = STATUS_SUCCESS;
 
@@ -1974,6 +2105,7 @@ IoSetDeviceInterfaceState(IN PUNICODE_STRING SymbolicLinkName,
         DPRINT1("Failed to write the Linked value\n");
         return Status;
     }
+    IopTrackEnabledInterface(SymbolicLinkName, Enable);
 
     ASSERT(GuidString.Buffer >= LinkNameNoPrefix.Buffer + 1);
     DeviceInstance.Length = (USHORT)((GuidString.Buffer - LinkNameNoPrefix.Buffer - 1) * sizeof(WCHAR));

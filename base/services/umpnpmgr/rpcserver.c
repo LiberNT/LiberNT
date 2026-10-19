@@ -2743,7 +2743,8 @@ PNP_GetInterfaceDeviceList(
     DPRINT("PNP_GetInterfaceDeviceList(%p %p %S %p %p 0x%08lx)\n",
            hBinding, InterfaceGuid, pszDeviceID, Buffer, pulLength, ulFlags);
 
-    if (!IsValidDeviceInstanceID(pszDeviceID))
+    if (pszDeviceID != NULL && *pszDeviceID != UNICODE_NULL &&
+        !IsValidDeviceInstanceID(pszDeviceID))
         return CR_INVALID_DEVINST;
 
     RtlInitUnicodeString(&PlugPlayData.DeviceInstance,
@@ -2757,13 +2758,14 @@ PNP_GetInterfaceDeviceList(
     Status = NtPlugPlayControl(PlugPlayControlGetInterfaceDeviceList,
                                (PVOID)&PlugPlayData,
                                sizeof(PLUGPLAY_CONTROL_INTERFACE_DEVICE_LIST_DATA));
-    if (NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status) && PlugPlayData.BufferSize <= *pulLength)
     {
         *pulLength = PlugPlayData.BufferSize;
     }
     else
     {
-        ret = NtStatusToCrError(Status);
+        *pulLength = 0;
+        ret = NT_SUCCESS(Status) ? CR_BUFFER_SMALL : NtStatusToCrError(Status);
     }
 
     DPRINT("PNP_GetInterfaceDeviceList() done (returns %lx)\n", ret);
@@ -2790,7 +2792,8 @@ PNP_GetInterfaceDeviceListSize(
     DPRINT("PNP_GetInterfaceDeviceListSize(%p %p %p %S 0x%08lx)\n",
            hBinding, pulLen, InterfaceGuid, pszDeviceID, ulFlags);
 
-    if (!IsValidDeviceInstanceID(pszDeviceID))
+    if (pszDeviceID != NULL && *pszDeviceID != UNICODE_NULL &&
+        !IsValidDeviceInstanceID(pszDeviceID))
         return CR_INVALID_DEVINST;
 
     RtlInitUnicodeString(&PlugPlayData.DeviceInstance,

@@ -333,6 +333,67 @@ RpcStatusToCmStatus(
 }
 
 
+PWSTR
+CfgmgrGetPresentInterfaceList(
+    _In_ GUID *InterfaceGuid)
+{
+    RPC_BINDING_HANDLE BindingHandle = NULL;
+    PNP_RPC_BUFFER_SIZE BufferLength = 0;
+    PNP_RPC_BUFFER_SIZE AllocatedLength;
+    PWSTR List;
+    CONFIGRET ret;
+
+    if (!PnpGetLocalHandles(&BindingHandle))
+        return NULL;
+
+    RpcTryExcept
+    {
+        ret = PNP_GetInterfaceDeviceListSize(BindingHandle,
+                                             &BufferLength,
+                                             InterfaceGuid,
+                                             NULL,
+                                             CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        ret = RpcStatusToCmStatus(RpcExceptionCode());
+    }
+    RpcEndExcept;
+
+    if (ret != CR_SUCCESS || BufferLength < sizeof(WCHAR))
+        return NULL;
+
+    AllocatedLength = BufferLength + MAX_PATH * sizeof(WCHAR);
+    List = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, AllocatedLength + 2 * sizeof(WCHAR));
+    if (List == NULL)
+        return NULL;
+
+    BufferLength = AllocatedLength;
+    RpcTryExcept
+    {
+        ret = PNP_GetInterfaceDeviceList(BindingHandle,
+                                         InterfaceGuid,
+                                         NULL,
+                                         (PBYTE)List,
+                                         &BufferLength,
+                                         CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        ret = RpcStatusToCmStatus(RpcExceptionCode());
+    }
+    RpcEndExcept;
+
+    if (ret != CR_SUCCESS || BufferLength > AllocatedLength)
+    {
+        HeapFree(GetProcessHeap(), 0, List);
+        return NULL;
+    }
+
+    return List;
+}
+
+
 static
 ULONG
 GetRegistryPropertyType(

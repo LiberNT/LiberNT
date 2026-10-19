@@ -81,6 +81,85 @@ SETUP_IsInterfaceLinked(
     return Result;
 }
 
+static ULONG
+SETUP_GetDeviceInterfaceRank(
+    struct DeviceInfo *deviceInfo,
+    CONST GUID *InterfaceGuid,
+    PCWSTR Order)
+{
+    PLIST_ENTRY InterfaceEntry;
+    ULONG Best = MAXULONG;
+
+    for (InterfaceEntry = deviceInfo->InterfaceListHead.Flink; InterfaceEntry != &deviceInfo->InterfaceListHead; InterfaceEntry = InterfaceEntry->Flink)
+    {
+        struct DeviceInterface *interfaceInfo = CONTAINING_RECORD(InterfaceEntry, struct DeviceInterface, ListEntry);
+        PCWSTR Entry;
+        ULONG Rank;
+
+        if (!IsEqualIID(&interfaceInfo->InterfaceClassGuid, InterfaceGuid) || strlenW(interfaceInfo->SymbolicLink) <= 4)
+            continue;
+        for (Entry = Order, Rank = 0; *Entry && Rank < Best; Entry += strlenW(Entry) + 1, Rank++)
+        {
+            if (strlenW(Entry) > 4 && !strcmpiW(Entry + 4, interfaceInfo->SymbolicLink + 4))
+            {
+                Best = Rank;
+                break;
+            }
+        }
+    }
+    return Best;
+}
+
+static VOID
+SETUP_OrderPresentDevices(
+    struct DeviceInfoSet *list,
+    PLIST_ENTRY Last,
+    CONST GUID *InterfaceGuid)
+{
+    LIST_ENTRY Pending;
+    ULONG Length = 0;
+    PWSTR Order;
+
+    if (CM_Get_Device_Interface_List_SizeW(&Length, (LPGUID)InterfaceGuid, NULL, CM_GET_DEVICE_INTERFACE_LIST_PRESENT) != CR_SUCCESS || Length < 2)
+        return;
+    Order = HeapAlloc(GetProcessHeap(), 0, Length * sizeof(WCHAR));
+    if (!Order)
+        return;
+    if (CM_Get_Device_Interface_ListW((LPGUID)InterfaceGuid, NULL, Order, Length, CM_GET_DEVICE_INTERFACE_LIST_PRESENT) != CR_SUCCESS)
+    {
+        HeapFree(GetProcessHeap(), 0, Order);
+        return;
+    }
+
+    InitializeListHead(&Pending);
+    while (Last->Flink != &list->ListHead)
+    {
+        PLIST_ENTRY Entry = Last->Flink;
+
+        RemoveEntryList(Entry);
+        InsertTailList(&Pending, Entry);
+    }
+    while (!IsListEmpty(&Pending))
+    {
+        PLIST_ENTRY Entry, Best = NULL;
+        ULONG BestRank = MAXULONG;
+
+        for (Entry = Pending.Flink; Entry != &Pending; Entry = Entry->Flink)
+        {
+            ULONG Rank = SETUP_GetDeviceInterfaceRank(CONTAINING_RECORD(Entry, struct DeviceInfo, ListEntry), InterfaceGuid, Order);
+
+            if (!Best || Rank < BestRank)
+            {
+                Best = Entry;
+                BestRank = Rank;
+            }
+        }
+        RemoveEntryList(Best);
+        InsertTailList(&list->ListHead, Best);
+    }
+    HeapFree(GetProcessHeap(), 0, Order);
+}
+
 LONG
 SETUP_CreateInterfaceList(
     struct DeviceInfoSet *list,
@@ -106,6 +185,7 @@ SETUP_CreateInterfaceList(
     GUID ClassGuid;
     struct DeviceInfo *deviceInfo;
     PLIST_ENTRY ItemList;
+    PLIST_ENTRY Last = list->ListHead.Blink;
 
     hInterfaceKey = INVALID_HANDLE_VALUE;
     hDeviceInstanceKey = NULL;
@@ -319,6 +399,8 @@ SETUP_CreateInterfaceList(
             InsertTailList(&deviceInfo->InterfaceListHead, &interfaceInfo->ListEntry);
         }
     }
+    if (OnlyPresentInterfaces && (!MachineName || !*MachineName))
+        SETUP_OrderPresentDevices(list, Last, InterfaceGuid);
     rc = ERROR_SUCCESS;
 
 cleanup:

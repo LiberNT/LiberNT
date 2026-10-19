@@ -638,6 +638,82 @@ LSTATUS enum_device_interfaces( BOOL all, enum_objects_cb callback, void *contex
     return err;
 }
 
+#ifdef __REACTOS__
+struct interface_paths
+{
+    WCHAR **paths;
+    UINT count;
+    UINT capacity;
+};
+
+static LSTATUS collect_interface_path( HKEY hkey, const void *object, const WCHAR *path, UINT path_len, void *context )
+{
+    struct interface_paths *list = context;
+
+    if (list->count == list->capacity)
+    {
+        UINT capacity = list->capacity ? list->capacity * 2 : 16;
+        WCHAR **paths;
+
+        if (!(paths = realloc( list->paths, capacity * sizeof(*paths) ))) return ERROR_OUTOFMEMORY;
+        list->paths = paths;
+        list->capacity = capacity;
+    }
+    if (!(list->paths[list->count] = wcsdup( path ))) return ERROR_OUTOFMEMORY;
+    list->count++;
+    return ERROR_SUCCESS;
+}
+
+static UINT interface_rank( const WCHAR *order, const WCHAR *path )
+{
+    UINT rank = 0;
+
+    if (wcslen( path ) <= 4) return ~0u;
+    for (; *order; order += wcslen( order ) + 1, rank++)
+        if (wcslen( order ) > 4 && !wcsicmp( order + 4, path + 4 )) return rank;
+    return ~0u;
+}
+
+static LSTATUS enum_present_device_interfaces( GUID *class, HKEY class_key, struct device_interface *iface, DEVINSTID_W instance_id,
+                                               enum_objects_cb callback, void *context )
+{
+    struct interface_paths list = {0};
+    UINT *ranks = NULL, i, j;
+    WCHAR *order;
+    LSTATUS err;
+
+    if (!(order = CfgmgrGetPresentInterfaceList( class )))
+        return enum_class_device_interfaces( class_key, iface, instance_id, FALSE, callback, context );
+
+    err = enum_class_device_interfaces( class_key, iface, instance_id, FALSE, collect_interface_path, &list );
+    if (!err && list.count && !(ranks = malloc( list.count * sizeof(*ranks) ))) err = ERROR_OUTOFMEMORY;
+    if (!err)
+    {
+        for (i = 0; i < list.count; i++)
+        {
+            WCHAR *path = list.paths[i];
+            UINT rank = interface_rank( order, path );
+
+            for (j = i; j > 0 && ranks[j - 1] > rank; j--)
+            {
+                ranks[j] = ranks[j - 1];
+                list.paths[j] = list.paths[j - 1];
+            }
+            ranks[j] = rank;
+            list.paths[j] = path;
+        }
+        for (i = 0; !err && i < list.count; i++)
+            err = callback( NULL, NULL, list.paths[i], wcslen( list.paths[i] ) + 1, context );
+    }
+
+    for (i = 0; i < list.count; i++) free( list.paths[i] );
+    free( list.paths );
+    free( ranks );
+    HeapFree( GetProcessHeap(), 0, order );
+    return err;
+}
+#endif
+
 static LSTATUS enum_device_interface_list( GUID *class, DEVINSTID_W instance_id, BOOL all, enum_objects_cb callback, void *context )
 {
     struct device_interface iface;
@@ -655,6 +731,8 @@ static LSTATUS enum_device_interface_list( GUID *class, DEVINSTID_W instance_id,
         return ERROR_SUCCESS;
     }
     if (err) return err;
+    if (!all) err = enum_present_device_interfaces( class, class_key, &iface, instance_id, callback, context );
+    else
 #else
     if ((err = open_device_classes_key( HKEY_LOCAL_MACHINE, iface.class, KEY_ENUMERATE_SUB_KEYS, TRUE, &class_key ))) return err;
 #endif
