@@ -1741,7 +1741,8 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
     FullMiniportNegotiatesModes =
         Adapter->MiniportContext != NULL &&
         !Adapter->MiniportContext->IsDisplayOnlyDriver &&
-        !Adapter->MiniportContext->IsBasicDisplayFallback &&
+        (!Adapter->MiniportContext->IsBasicDisplayFallback ||
+         Adapter->MiniportContext->BasicDisplayNegotiatesModes) &&
         DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality) != NULL;
     NewCommittedWidth = Adapter->CommittedWidth;
     NewCommittedHeight = Adapter->CommittedHeight;
@@ -3882,7 +3883,8 @@ DxgkpDisplayDispatch(
                 Status = STATUS_NOT_SUPPORTED;
                 if (g_DisplayAdapter != NULL &&
                     g_DisplayAdapter->MiniportContext != NULL &&
-                    !g_DisplayAdapter->MiniportContext->IsBasicDisplayFallback)
+                    (!g_DisplayAdapter->MiniportContext->IsBasicDisplayFallback ||
+                     g_DisplayAdapter->MiniportContext->BasicDisplayNegotiatesModes))
                 {
                     DxgkVidPnDestroyDisplayModeCache(g_DisplayAdapter);
                     Status = DxgkVidPnQueryVideoModes(g_DisplayAdapter, NULL, 0, &NumModes->NumModes, FALSE);
@@ -3919,7 +3921,8 @@ DxgkpDisplayDispatch(
             {
                 if (g_DisplayAdapter != NULL &&
                     g_DisplayAdapter->MiniportContext != NULL &&
-                    !g_DisplayAdapter->MiniportContext->IsBasicDisplayFallback)
+                    (!g_DisplayAdapter->MiniportContext->IsBasicDisplayFallback ||
+                     g_DisplayAdapter->MiniportContext->BasicDisplayNegotiatesModes))
                 {
                     ULONG ModeCount;
 

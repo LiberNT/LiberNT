@@ -16559,6 +16559,7 @@ DxgkpClearMiniportRegistrationPayload(
     MpCtx->IsDisplayOnlyDriver = FALSE;
     MpCtx->UseDodLayout = FALSE;
     MpCtx->IsBasicDisplayFallback = FALSE;
+    MpCtx->BasicDisplayNegotiatesModes = FALSE;
 }
 
 static BOOLEAN
@@ -17590,7 +17591,13 @@ DxgkpInitializeMiniport(
 
             if (RtlEqualUnicodeString(&ServiceName, &FallbackName, TRUE))
             {
+                UNICODE_STRING FirmwareTypeName = RTL_CONSTANT_STRING(L"ExGetFirmwareType");
+                FIRMWARE_TYPE (NTAPI *GetFirmwareType)(VOID);
+
                 MpCtx->IsBasicDisplayFallback = TRUE;
+                GetFirmwareType = (FIRMWARE_TYPE (NTAPI *)(VOID))MmGetSystemRoutineAddress(&FirmwareTypeName);
+                MpCtx->BasicDisplayNegotiatesModes =
+                    GetFirmwareType != NULL && GetFirmwareType() == FirmwareTypeBios;
                 DXGKRNL_TRACE("DxgkInitializeEx: basic-display fallback "
                               "miniport (%wZ)\n", &ServiceName);
             }

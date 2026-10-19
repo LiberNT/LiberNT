@@ -7953,7 +7953,8 @@ DxgkpEnsureDisplayModeCacheLocked(
             goto Cleanup;
     }
     Cache->CanSetMode = Current->NumPaths == 1 && Adapter->MiniportContext != NULL &&
-                        !Adapter->MiniportContext->IsBasicDisplayFallback &&
+                        (!Adapter->MiniportContext->IsBasicDisplayFallback ||
+                         Adapter->MiniportContext->BasicDisplayNegotiatesModes) &&
                         DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality) != NULL;
     if (Cache->CanSetMode)
     {

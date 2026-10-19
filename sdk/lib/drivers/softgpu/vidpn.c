@@ -45,34 +45,93 @@ SoftGpuScheduleScanout(
  * =========================================================================
  */
 
+static ULONG
+SoftGpuDisplayModeCount(
+    _In_ PSOFTGPU_DEVICE Device)
+{
+    return Device->ModeCount != 0 ? Device->ModeCount : 1;
+}
+
+static VOID
+SoftGpuGetDisplayModeSize(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ ULONG Index,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height)
+{
+    if (Device->ModeCount != 0)
+    {
+        *Width = Device->Modes[Index].Width;
+        *Height = Device->Modes[Index].Height;
+    }
+    else
+    {
+        *Width = Device->Width;
+        *Height = Device->Height;
+    }
+}
+
+static BOOLEAN
+SoftGpuFindDisplayMode(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ LONG Width,
+    _In_ LONG Height,
+    _Out_opt_ PULONG ModeIndex)
+{
+    ULONG ModeWidth;
+    ULONG ModeHeight;
+    ULONG Index;
+
+    for (Index = 0; Index < SoftGpuDisplayModeCount(Device); Index++)
+    {
+        SoftGpuGetDisplayModeSize(Device, Index, &ModeWidth, &ModeHeight);
+        if (Width == (LONG)ModeWidth && Height == (LONG)ModeHeight)
+        {
+            if (ModeIndex != NULL)
+                *ModeIndex = Index;
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 static BOOLEAN
 SoftGpuSourceModeMatchesDisplay(
     _In_ PSOFTGPU_DEVICE Device,
-    _In_ const D3DKMDT_VIDPN_SOURCE_MODE *Mode)
+    _In_ const D3DKMDT_VIDPN_SOURCE_MODE *Mode,
+    _Out_opt_ PULONG ModeIndex)
 {
     return Mode->Type == D3DKMDT_RMT_GRAPHICS &&
-           Mode->Format.Graphics.PrimSurfSize.cx == (LONG)Device->Width &&
-           Mode->Format.Graphics.PrimSurfSize.cy == (LONG)Device->Height &&
            Mode->Format.Graphics.VisibleRegionSize.cx ==
-               (LONG)Device->Width &&
+               Mode->Format.Graphics.PrimSurfSize.cx &&
            Mode->Format.Graphics.VisibleRegionSize.cy ==
-               (LONG)Device->Height &&
+               Mode->Format.Graphics.PrimSurfSize.cy &&
+           Mode->Format.Graphics.PrimSurfSize.cx > 0 &&
            Mode->Format.Graphics.Stride ==
-               Device->Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL &&
+               (ULONG)Mode->Format.Graphics.PrimSurfSize.cx *
+                   SOFTGPU_DISPLAY_BYTES_PER_PIXEL &&
            (Mode->Format.Graphics.PixelFormat == D3DDDIFMT_X8R8G8B8 ||
             Mode->Format.Graphics.PixelFormat == D3DDDIFMT_A8R8G8B8) &&
-           Mode->Format.Graphics.PixelValueAccessMode == D3DKMDT_PVAM_DIRECT;
+           Mode->Format.Graphics.PixelValueAccessMode == D3DKMDT_PVAM_DIRECT &&
+           SoftGpuFindDisplayMode(Device,
+                                  Mode->Format.Graphics.PrimSurfSize.cx,
+                                  Mode->Format.Graphics.PrimSurfSize.cy,
+                                  ModeIndex);
 }
 
 static BOOLEAN
 SoftGpuTargetModeMatchesDisplay(
     _In_ PSOFTGPU_DEVICE Device,
-    _In_ const D3DKMDT_VIDPN_TARGET_MODE *Mode)
+    _In_ const D3DKMDT_VIDPN_TARGET_MODE *Mode,
+    _Out_opt_ PULONG ModeIndex)
 {
-    return Mode->VideoSignalInfo.ActiveSize.cx == (LONG)Device->Width &&
-           Mode->VideoSignalInfo.ActiveSize.cy == (LONG)Device->Height &&
-           Mode->VideoSignalInfo.ScanLineOrdering ==
-               D3DDDI_VSSLO_PROGRESSIVE;
+    return Mode->VideoSignalInfo.ScanLineOrdering ==
+               D3DDDI_VSSLO_PROGRESSIVE &&
+           SoftGpuFindDisplayMode(Device,
+                                  Mode->VideoSignalInfo.ActiveSize.cx,
+                                  Mode->VideoSignalInfo.ActiveSize.cy,
+                                  ModeIndex);
 }
 
 static NTSTATUS
@@ -123,7 +182,7 @@ SoftGpuCheckPinnedSourceMode(
     if (NT_SUCCESS(Status))
     {
         *Supported = PinnedMode == NULL ||
-                     SoftGpuSourceModeMatchesDisplay(Device, PinnedMode);
+                     SoftGpuSourceModeMatchesDisplay(Device, PinnedMode, NULL);
     }
 
     if (PinnedMode != NULL)
@@ -172,7 +231,7 @@ SoftGpuCheckPinnedTargetMode(
     if (NT_SUCCESS(Status))
     {
         *Supported = PinnedMode == NULL ||
-                     SoftGpuTargetModeMatchesDisplay(Device, PinnedMode);
+                     SoftGpuTargetModeMatchesDisplay(Device, PinnedMode, NULL);
     }
 
     if (PinnedMode != NULL)
@@ -194,7 +253,8 @@ static NTSTATUS
 SoftGpuValidateCommittedSourceMode(
     _In_ PSOFTGPU_DEVICE Device,
     _In_ D3DKMDT_HVIDPN hVidPn,
-    _In_ CONST DXGK_VIDPN_INTERFACE *VidPnInterface)
+    _In_ CONST DXGK_VIDPN_INTERFACE *VidPnInterface,
+    _Out_ PULONG ModeIndex)
 {
     D3DKMDT_HVIDPNSOURCEMODESET hModeSet = 0;
     CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *ModeSetInterface = NULL;
@@ -223,7 +283,7 @@ SoftGpuValidateCommittedSourceMode(
         Status = STATUS_GRAPHICS_MODE_NOT_PINNED;
         goto ReleaseModeInfo;
     }
-    if (!SoftGpuSourceModeMatchesDisplay(Device, PinnedMode))
+    if (!SoftGpuSourceModeMatchesDisplay(Device, PinnedMode, ModeIndex))
         Status = STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
 
 ReleaseModeInfo:
@@ -246,7 +306,8 @@ static NTSTATUS
 SoftGpuValidateCommittedTargetMode(
     _In_ PSOFTGPU_DEVICE Device,
     _In_ D3DKMDT_HVIDPN hVidPn,
-    _In_ CONST DXGK_VIDPN_INTERFACE *VidPnInterface)
+    _In_ CONST DXGK_VIDPN_INTERFACE *VidPnInterface,
+    _Out_ PULONG ModeIndex)
 {
     D3DKMDT_HVIDPNTARGETMODESET hModeSet = 0;
     CONST DXGK_VIDPNTARGETMODESET_INTERFACE *ModeSetInterface = NULL;
@@ -275,7 +336,7 @@ SoftGpuValidateCommittedTargetMode(
         Status = STATUS_GRAPHICS_MODE_NOT_PINNED;
         goto ReleaseModeInfo;
     }
-    if (!SoftGpuTargetModeMatchesDisplay(Device, PinnedMode))
+    if (!SoftGpuTargetModeMatchesDisplay(Device, PinnedMode, ModeIndex))
         Status = STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET_MODE;
 
 ReleaseModeInfo:
@@ -461,12 +522,17 @@ SoftGpuUpdateSourceModeSet(
     _In_ PSOFTGPU_DEVICE Device,
     _In_ D3DKMDT_HVIDPN hVidPn,
     _In_ CONST DXGK_VIDPN_INTERFACE *VidPnInterface,
-    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId)
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId,
+    _In_ ULONG RequiredWidth,
+    _In_ ULONG RequiredHeight)
 {
     D3DKMDT_HVIDPNSOURCEMODESET hModeSet = 0;
     CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *ModeSetInterface = NULL;
     CONST D3DKMDT_VIDPN_SOURCE_MODE *PinnedMode = NULL;
     D3DKMDT_VIDPN_SOURCE_MODE *NewMode = NULL;
+    ULONG Width;
+    ULONG Height;
+    ULONG Index;
     NTSTATUS Status;
 
     Status = VidPnInterface->pfnAcquireSourceModeSet(hVidPn, SourceId,
@@ -495,32 +561,33 @@ SoftGpuUpdateSourceModeSet(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    Status = ModeSetInterface->pfnCreateNewModeInfo(hModeSet, &NewMode);
-    if (!NT_SUCCESS(Status))
+    for (Index = 0; Index < SoftGpuDisplayModeCount(Device) && NT_SUCCESS(Status); Index++)
     {
-        VidPnInterface->pfnReleaseSourceModeSet(hVidPn, hModeSet);
-        return Status;
+        SoftGpuGetDisplayModeSize(Device, Index, &Width, &Height);
+        if (RequiredWidth != 0 && (Width != RequiredWidth || Height != RequiredHeight))
+            continue;
+
+        Status = ModeSetInterface->pfnCreateNewModeInfo(hModeSet, &NewMode);
+        if (!NT_SUCCESS(Status))
+            break;
+
+        NewMode->Type = D3DKMDT_RMT_GRAPHICS;
+        NewMode->Format.Graphics.PrimSurfSize.cx = Width;
+        NewMode->Format.Graphics.PrimSurfSize.cy = Height;
+        NewMode->Format.Graphics.VisibleRegionSize.cx = Width;
+        NewMode->Format.Graphics.VisibleRegionSize.cy = Height;
+        NewMode->Format.Graphics.Stride = Width * 4;
+        NewMode->Format.Graphics.PixelFormat = D3DDDIFMT_A8R8G8B8;
+        NewMode->Format.Graphics.ColorBasis = D3DKMDT_CB_SRGB;
+        NewMode->Format.Graphics.PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
+
+        Status = ModeSetInterface->pfnAddMode(hModeSet, NewMode);
+        if (!NT_SUCCESS(Status))
+            ModeSetInterface->pfnReleaseModeInfo(hModeSet, NewMode);
     }
 
-    NewMode->Type = D3DKMDT_RMT_GRAPHICS;
-    NewMode->Format.Graphics.PrimSurfSize.cx = Device->Width;
-    NewMode->Format.Graphics.PrimSurfSize.cy = Device->Height;
-    NewMode->Format.Graphics.VisibleRegionSize.cx = Device->Width;
-    NewMode->Format.Graphics.VisibleRegionSize.cy = Device->Height;
-    NewMode->Format.Graphics.Stride = Device->Width * 4;
-    NewMode->Format.Graphics.PixelFormat = D3DDDIFMT_A8R8G8B8;
-    NewMode->Format.Graphics.ColorBasis = D3DKMDT_CB_SRGB;
-    NewMode->Format.Graphics.PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
-
-    Status = ModeSetInterface->pfnAddMode(hModeSet, NewMode);
-    if (!NT_SUCCESS(Status))
-    {
-        ModeSetInterface->pfnReleaseModeInfo(hModeSet, NewMode);
-        VidPnInterface->pfnReleaseSourceModeSet(hVidPn, hModeSet);
-        return Status;
-    }
-
-    Status = VidPnInterface->pfnAssignSourceModeSet(hVidPn, SourceId, hModeSet);
+    if (NT_SUCCESS(Status))
+        Status = VidPnInterface->pfnAssignSourceModeSet(hVidPn, SourceId, hModeSet);
     if (!NT_SUCCESS(Status))
         VidPnInterface->pfnReleaseSourceModeSet(hVidPn, hModeSet);
 
@@ -533,12 +600,18 @@ SoftGpuUpdateTargetModeSet(
     _In_ PSOFTGPU_DEVICE Device,
     _In_ D3DKMDT_HVIDPN hVidPn,
     _In_ CONST DXGK_VIDPN_INTERFACE *VidPnInterface,
-    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _In_ ULONG RequiredWidth,
+    _In_ ULONG RequiredHeight)
 {
     D3DKMDT_HVIDPNTARGETMODESET hModeSet = 0;
     CONST DXGK_VIDPNTARGETMODESET_INTERFACE *ModeSetInterface = NULL;
     CONST D3DKMDT_VIDPN_TARGET_MODE *PinnedMode = NULL;
     D3DKMDT_VIDPN_TARGET_MODE *NewMode = NULL;
+    D3DKMDT_MODE_PREFERENCE Preference;
+    ULONG Width;
+    ULONG Height;
+    ULONG Index;
     NTSTATUS Status;
 
     Status = VidPnInterface->pfnAcquireTargetModeSet(hVidPn, TargetId,
@@ -567,47 +640,108 @@ SoftGpuUpdateTargetModeSet(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    Status = ModeSetInterface->pfnCreateNewModeInfo(hModeSet, &NewMode);
-    if (!NT_SUCCESS(Status))
+    for (Index = 0; Index < SoftGpuDisplayModeCount(Device) && NT_SUCCESS(Status); Index++)
     {
-        VidPnInterface->pfnReleaseTargetModeSet(hVidPn, hModeSet);
-        return Status;
-    }
+        SoftGpuGetDisplayModeSize(Device, Index, &Width, &Height);
+        if (RequiredWidth != 0 && (Width != RequiredWidth || Height != RequiredHeight))
+            continue;
 
-    NewMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-    NewMode->VideoSignalInfo.TotalSize.cx = Device->Width;
-    NewMode->VideoSignalInfo.TotalSize.cy = Device->Height;
-    NewMode->VideoSignalInfo.ActiveSize.cx = Device->Width;
-    NewMode->VideoSignalInfo.ActiveSize.cy = Device->Height;
-    NewMode->VideoSignalInfo.VSyncFreq.Numerator = 60;
-    NewMode->VideoSignalInfo.VSyncFreq.Denominator = 1;
-    NewMode->VideoSignalInfo.HSyncFreq.Numerator = 60 * Device->Height;
-    NewMode->VideoSignalInfo.HSyncFreq.Denominator = 1;
-    NewMode->VideoSignalInfo.PixelRate =
-        (SIZE_T)Device->Width * Device->Height * 60;
-    NewMode->VideoSignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+        Status = ModeSetInterface->pfnCreateNewModeInfo(hModeSet, &NewMode);
+        if (!NT_SUCCESS(Status))
+            break;
+
+        Preference = (Device->ModeCount == 0 || Index == Device->PreferredMode) ?
+                         D3DKMDT_MP_PREFERRED : D3DKMDT_MP_NOTPREFERRED;
+        NewMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
+        NewMode->VideoSignalInfo.TotalSize.cx = Width;
+        NewMode->VideoSignalInfo.TotalSize.cy = Height;
+        NewMode->VideoSignalInfo.ActiveSize.cx = Width;
+        NewMode->VideoSignalInfo.ActiveSize.cy = Height;
+        NewMode->VideoSignalInfo.VSyncFreq.Numerator = 60;
+        NewMode->VideoSignalInfo.VSyncFreq.Denominator = 1;
+        NewMode->VideoSignalInfo.HSyncFreq.Numerator = 60 * Height;
+        NewMode->VideoSignalInfo.HSyncFreq.Denominator = 1;
+        NewMode->VideoSignalInfo.PixelRate = (SIZE_T)Width * Height * 60;
+        NewMode->VideoSignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
-    NewMode->WireFormatAndPreference.Value = 0;
-    NewMode->WireFormatAndPreference.Preference = D3DKMDT_MP_PREFERRED;
-    NewMode->WireFormatAndPreference.Rgb =
-        D3DKMDT_BITS_PER_COMPONENT_08;
+        NewMode->WireFormatAndPreference.Value = 0;
+        NewMode->WireFormatAndPreference.Preference = Preference;
+        NewMode->WireFormatAndPreference.Rgb =
+            D3DKMDT_BITS_PER_COMPONENT_08;
 #else
-    NewMode->Preference = D3DKMDT_MP_PREFERRED;
+        NewMode->Preference = Preference;
 #endif
 
-    Status = ModeSetInterface->pfnAddMode(hModeSet, NewMode);
-    if (!NT_SUCCESS(Status))
-    {
-        ModeSetInterface->pfnReleaseModeInfo(hModeSet, NewMode);
-        VidPnInterface->pfnReleaseTargetModeSet(hVidPn, hModeSet);
-        return Status;
+        Status = ModeSetInterface->pfnAddMode(hModeSet, NewMode);
+        if (!NT_SUCCESS(Status))
+            ModeSetInterface->pfnReleaseModeInfo(hModeSet, NewMode);
     }
 
-    Status = VidPnInterface->pfnAssignTargetModeSet(hVidPn, TargetId, hModeSet);
+    if (NT_SUCCESS(Status))
+        Status = VidPnInterface->pfnAssignTargetModeSet(hVidPn, TargetId, hModeSet);
     if (!NT_SUCCESS(Status))
         VidPnInterface->pfnReleaseTargetModeSet(hVidPn, hModeSet);
 
     return Status;
+}
+
+static VOID
+SoftGpuQueryPinnedSourceSize(
+    _In_ D3DKMDT_HVIDPN hVidPn,
+    _In_ CONST DXGK_VIDPN_INTERFACE *VidPnInterface,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height)
+{
+    D3DKMDT_HVIDPNSOURCEMODESET hModeSet = 0;
+    CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *ModeSetInterface = NULL;
+    CONST D3DKMDT_VIDPN_SOURCE_MODE *PinnedMode = NULL;
+
+    *Width = 0;
+    *Height = 0;
+    if (!NT_SUCCESS(VidPnInterface->pfnAcquireSourceModeSet(hVidPn, SourceId, &hModeSet, &ModeSetInterface)))
+        return;
+
+    if (ModeSetInterface != NULL &&
+        NT_SUCCESS(ModeSetInterface->pfnAcquirePinnedModeInfo(hModeSet, &PinnedMode)) &&
+        PinnedMode != NULL)
+    {
+        if (PinnedMode->Type == D3DKMDT_RMT_GRAPHICS)
+        {
+            *Width = (ULONG)PinnedMode->Format.Graphics.PrimSurfSize.cx;
+            *Height = (ULONG)PinnedMode->Format.Graphics.PrimSurfSize.cy;
+        }
+        ModeSetInterface->pfnReleaseModeInfo(hModeSet, PinnedMode);
+    }
+    VidPnInterface->pfnReleaseSourceModeSet(hVidPn, hModeSet);
+}
+
+static VOID
+SoftGpuQueryPinnedTargetSize(
+    _In_ D3DKMDT_HVIDPN hVidPn,
+    _In_ CONST DXGK_VIDPN_INTERFACE *VidPnInterface,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height)
+{
+    D3DKMDT_HVIDPNTARGETMODESET hModeSet = 0;
+    CONST DXGK_VIDPNTARGETMODESET_INTERFACE *ModeSetInterface = NULL;
+    CONST D3DKMDT_VIDPN_TARGET_MODE *PinnedMode = NULL;
+
+    *Width = 0;
+    *Height = 0;
+    if (!NT_SUCCESS(VidPnInterface->pfnAcquireTargetModeSet(hVidPn, TargetId, &hModeSet, &ModeSetInterface)))
+        return;
+
+    if (ModeSetInterface != NULL &&
+        NT_SUCCESS(ModeSetInterface->pfnAcquirePinnedModeInfo(hModeSet, &PinnedMode)) &&
+        PinnedMode != NULL)
+    {
+        *Width = (ULONG)PinnedMode->VideoSignalInfo.ActiveSize.cx;
+        *Height = (ULONG)PinnedMode->VideoSignalInfo.ActiveSize.cy;
+        ModeSetInterface->pfnReleaseModeInfo(hModeSet, PinnedMode);
+    }
+    VidPnInterface->pfnReleaseTargetModeSet(hVidPn, hModeSet);
 }
 
 /*
@@ -633,6 +767,10 @@ SoftGpuDdiEnumVidPnCofuncModality(
     CONST D3DKMDT_VIDPN_PRESENT_PATH *NextPath = NULL;
     D3DKMDT_VIDPN_PRESENT_PATH UpdatedPath;
     SOFTGPU_VIDPN_TRANSFORM_POLICY TransformPolicy;
+    ULONG SourceWidth;
+    ULONG SourceHeight;
+    ULONG TargetWidth;
+    ULONG TargetHeight;
     NTSTATUS Status;
     NTSTATUS ReleaseStatus;
 
@@ -671,13 +809,26 @@ SoftGpuDdiEnumVidPnCofuncModality(
 
     while (Path != NULL)
     {
+        SoftGpuQueryPinnedSourceSize(EnumCofuncModality->hConstrainingVidPn,
+                                     VidPnInterface,
+                                     Path->VidPnSourceId,
+                                     &SourceWidth,
+                                     &SourceHeight);
+        SoftGpuQueryPinnedTargetSize(EnumCofuncModality->hConstrainingVidPn,
+                                     VidPnInterface,
+                                     Path->VidPnTargetId,
+                                     &TargetWidth,
+                                     &TargetHeight);
+
         if (!(EnumCofuncModality->EnumPivotType == D3DKMDT_EPT_VIDPNSOURCE &&
               EnumCofuncModality->EnumPivot.VidPnSourceId == Path->VidPnSourceId))
         {
             Status = SoftGpuUpdateSourceModeSet(Device,
                                                 EnumCofuncModality->hConstrainingVidPn,
                                                 VidPnInterface,
-                                                Path->VidPnSourceId);
+                                                Path->VidPnSourceId,
+                                                TargetWidth,
+                                                TargetHeight);
             if (!NT_SUCCESS(Status))
             {
                 return SoftGpuReleasePathInfo(TopologyInterface,
@@ -693,7 +844,9 @@ SoftGpuDdiEnumVidPnCofuncModality(
             Status = SoftGpuUpdateTargetModeSet(Device,
                                                 EnumCofuncModality->hConstrainingVidPn,
                                                 VidPnInterface,
-                                                Path->VidPnTargetId);
+                                                Path->VidPnTargetId,
+                                                SourceWidth,
+                                                SourceHeight);
             if (!NT_SUCCESS(Status))
             {
                 return SoftGpuReleasePathInfo(TopologyInterface,
@@ -791,13 +944,16 @@ static NTSTATUS
 SoftGpuValidateFunctionalVidPn(
     _In_ PSOFTGPU_DEVICE Device,
     _In_ D3DKMDT_HVIDPN hFunctionalVidPn,
-    _Out_opt_ PSIZE_T ValidatedPathCount)
+    _Out_opt_ PSIZE_T ValidatedPathCount,
+    _Out_ PULONG ModeIndex)
 {
     CONST DXGK_VIDPN_INTERFACE *VidPnInterface = NULL;
     D3DKMDT_HVIDPNTOPOLOGY hTopology = 0;
     CONST DXGK_VIDPNTOPOLOGY_INTERFACE *TopologyInterface = NULL;
     CONST D3DKMDT_VIDPN_PRESENT_PATH *Path = NULL;
     SIZE_T NumPaths;
+    ULONG SourceMode;
+    ULONG TargetMode;
     NTSTATUS Status;
 
     if (ValidatedPathCount != NULL)
@@ -806,6 +962,7 @@ SoftGpuValidateFunctionalVidPn(
     if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
         return STATUS_INVALID_PARAMETER;
 
+    *ModeIndex = Device->CurrentMode;
     if (hFunctionalVidPn == 0 ||
         Device->DxgkInterface.DxgkCbQueryVidPnInterface == NULL)
     {
@@ -868,14 +1025,69 @@ SoftGpuValidateFunctionalVidPn(
     Status = SoftGpuValidateCommittedSourceMode(
                  Device,
                  hFunctionalVidPn,
-                 VidPnInterface);
+                 VidPnInterface,
+                 &SourceMode);
     if (!NT_SUCCESS(Status))
         return Status;
 
     Status = SoftGpuValidateCommittedTargetMode(
                  Device,
                  hFunctionalVidPn,
-                 VidPnInterface);
+                 VidPnInterface,
+                 &TargetMode);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (SourceMode != TargetMode)
+        return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+
+    *ModeIndex = SourceMode;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+SoftGpuSetDisplayMode(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ ULONG ModeIndex)
+{
+    const SOFTGPU_DISPLAY_MODE *Mode;
+    KIRQL OldIrql;
+    NTSTATUS Status;
+
+    if (Device->ModeCount == 0 || ModeIndex == Device->CurrentMode)
+        return STATUS_SUCCESS;
+    if (ModeIndex >= Device->ModeCount || Device->PlatformSetMode == NULL)
+        return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+
+    Mode = &Device->Modes[ModeIndex];
+    Status = KeWaitForSingleObject(&Device->ScanoutMutex,
+                                   Executive,
+                                   KernelMode,
+                                   FALSE,
+                                   NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = Device->PlatformSetMode(Device, Mode);
+    if (NT_SUCCESS(Status))
+    {
+        KeAcquireSpinLock(&Device->ScanoutLock, &OldIrql);
+        Device->Width = Mode->Width;
+        Device->Height = Mode->Height;
+        Device->ScanoutPitch = Mode->Pitch;
+        Device->CurrentMode = ModeIndex;
+        Device->CurrentPrimaryValid = FALSE;
+        if (++Device->ScanoutGeneration == 0)
+            ++Device->ScanoutGeneration;
+        KeReleaseSpinLock(&Device->ScanoutLock, OldIrql);
+
+        if (Device->Scanout != NULL)
+            RtlZeroMemory(Device->Scanout, (SIZE_T)Mode->Pitch * Mode->Height);
+    }
+
+    KeReleaseMutex(&Device->ScanoutMutex, FALSE);
+    DPRINT("SOFTGPU: display mode %lux%lu pitch %lu: 0x%08lx\n",
+            Mode->Width, Mode->Height, Mode->Pitch, Status);
     return Status;
 }
 
@@ -900,6 +1112,8 @@ SoftGpuDdiCommitVidPn(
     _In_ CONST DXGKARG_COMMITVIDPN *CommitVidPn)
 {
     PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    SIZE_T PathCount;
+    ULONG ModeIndex;
     NTSTATUS Status;
 
     if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC ||
@@ -926,12 +1140,20 @@ SoftGpuDdiCommitVidPn(
     Status = SoftGpuValidateFunctionalVidPn(
                  Device,
                  CommitVidPn->hFunctionalVidPn,
-                 NULL);
+                 &PathCount,
+                 &ModeIndex);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("SOFTGPU: CommitVidPn rejected functional VidPN 0x%08lx\n",
                 Status);
         return Status;
+    }
+
+    if (PathCount != 0)
+    {
+        Status = SoftGpuSetDisplayMode(Device, ModeIndex);
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
 
     DPRINT("SOFTGPU: CommitVidPn: committed %lux%lu format=%d\n",
@@ -956,6 +1178,7 @@ SoftGpuDdiSetTimingsFromVidPn(
     PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
     DXGK_SET_TIMING_PATH_INFO *PathInfo = NULL;
     SIZE_T VidPnPathCount;
+    ULONG ModeIndex;
     BOOLEAN Active;
     KIRQL OldIrql;
     NTSTATUS Status;
@@ -975,7 +1198,8 @@ SoftGpuDdiSetTimingsFromVidPn(
     Status = SoftGpuValidateFunctionalVidPn(
                  Device,
                  SetTimings->hFunctionalVidPn,
-                 &VidPnPathCount);
+                 &VidPnPathCount,
+                 &ModeIndex);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -1023,6 +1247,10 @@ SoftGpuDdiSetTimingsFromVidPn(
             return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
         }
         Active = PathInfo->Input.Active ? TRUE : FALSE;
+
+        Status = SoftGpuSetDisplayMode(Device, ModeIndex);
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
 
     if (PathInfo != NULL)

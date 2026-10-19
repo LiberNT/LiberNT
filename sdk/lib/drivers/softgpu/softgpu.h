@@ -162,6 +162,23 @@ InbvGetGopFrameBufferInfo(
 #define SOFTGPU_POINTER_MAX_HEIGHT      64UL
 #define SOFTGPU_POINTER_PIXEL_COUNT     (SOFTGPU_POINTER_MAX_WIDTH * SOFTGPU_POINTER_MAX_HEIGHT)
 #define SOFTGPU_PRESENT_CHUNK_ROWS      SOFTGPU_POINTER_MAX_HEIGHT
+#define SOFTGPU_MAX_DISPLAY_MODES       32UL
+#define SOFTGPU_EDID_SIZE               128UL
+
+typedef struct _SOFTGPU_DISPLAY_MODE
+{
+    ULONG Width;
+    ULONG Height;
+    ULONG Pitch;
+    ULONG PlatformMode;
+} SOFTGPU_DISPLAY_MODE, *PSOFTGPU_DISPLAY_MODE;
+
+struct _SOFTGPU_DEVICE;
+
+typedef NTSTATUS
+(*PSOFTGPU_PLATFORM_SET_MODE)(
+    _Inout_ struct _SOFTGPU_DEVICE *Device,
+    _In_ const SOFTGPU_DISPLAY_MODE *Mode);
 
 #ifndef SOFTGPU_MAX_OVERLAYS
 #define SOFTGPU_MAX_OVERLAYS            0UL
@@ -335,6 +352,13 @@ typedef struct _SOFTGPU_DEVICE
     ULONG               Width;
     ULONG               Height;
     D3DDDIFORMAT        Format;
+    ULONG               ModeCount;
+    ULONG               CurrentMode;
+    ULONG               PreferredMode;
+    SOFTGPU_DISPLAY_MODE Modes[SOFTGPU_MAX_DISPLAY_MODES];
+    PSOFTGPU_PLATFORM_SET_MODE PlatformSetMode;
+    UCHAR               Edid[SOFTGPU_EDID_SIZE];
+    ULONG               EdidLength;
 
     /*
      * One lock for every node's fence state.  A single execution core serves
@@ -385,6 +409,12 @@ typedef struct _SOFTGPU_PLATFORM_CONFIG
     ULONGLONG           ScanoutSize;
     PHYSICAL_ADDRESS    HighestFrameBufferAddress;
     SIZE_T              MinimumAllocationSlabSize;
+    ULONG               ModeCount;
+    ULONG               CurrentMode;
+    SOFTGPU_DISPLAY_MODE Modes[SOFTGPU_MAX_DISPLAY_MODES];
+    PSOFTGPU_PLATFORM_SET_MODE SetMode;
+    UCHAR               Edid[SOFTGPU_EDID_SIZE];
+    ULONG               EdidLength;
 } SOFTGPU_PLATFORM_CONFIG, *PSOFTGPU_PLATFORM_CONFIG;
 
 /*

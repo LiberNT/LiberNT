@@ -2203,7 +2203,7 @@
 @ stdcall ExFreeToLookasideListEx(ptr ptr) ExpFreeToLookasideListExExport
 @ stdcall ExFreeToNPagedLookasideList(ptr ptr) ExpFreeToNPagedLookasideListExport
 @ stdcall ExGetFirmwareEnvironmentVariable(ptr ptr ptr ptr ptr)
-@ stdcall -arch=win64 ExGetFirmwareType()
+@ stdcall ExGetFirmwareType()
 @ stub -arch=win64 ExGetLicenseTamperState
 @ stub -arch=win64 ExGetPrmInterface
 @ stdcall -arch=win64 ExGetSystemFirmwareTable(long long ptr long ptr)

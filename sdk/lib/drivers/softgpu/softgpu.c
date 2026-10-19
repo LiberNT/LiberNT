@@ -885,6 +885,44 @@ SoftGpuDdiQueryInterface(
 }
 
 
+static BOOLEAN
+SoftGpuValidatePlatformModes(
+    _In_ const SOFTGPU_PLATFORM_CONFIG *Config)
+{
+    const SOFTGPU_DISPLAY_MODE *Mode;
+    ULONG Index;
+
+    if (Config->ModeCount == 0)
+        return TRUE;
+
+    if (Config->ModeCount > SOFTGPU_MAX_DISPLAY_MODES ||
+        Config->CurrentMode >= Config->ModeCount ||
+        Config->SetMode == NULL ||
+        Config->Modes[Config->CurrentMode].Width != Config->Width ||
+        Config->Modes[Config->CurrentMode].Height != Config->Height ||
+        Config->Modes[Config->CurrentMode].Pitch != Config->ScanoutPitch)
+    {
+        return FALSE;
+    }
+
+    for (Index = 0; Index < Config->ModeCount; Index++)
+    {
+        Mode = &Config->Modes[Index];
+        if (Mode->Width == 0 ||
+            Mode->Height == 0 ||
+            Mode->Width > SOFTGPU_MAX_DISPLAY_WIDTH ||
+            Mode->Height > SOFTGPU_MAX_DISPLAY_HEIGHT ||
+            Mode->Pitch < Mode->Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL ||
+            Mode->Pitch > SOFTGPU_MAX_DISPLAY_PITCH ||
+            (ULONGLONG)Mode->Pitch * Mode->Height > Config->ScanoutSize)
+        {
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
 /* =========================================================================
  * DxgkDdiStartDevice
  * =========================================================================
@@ -954,7 +992,8 @@ SoftGpuDdiStartDevice(
         PlatformConfig.Width >
             MAXULONG / SOFTGPU_DISPLAY_BYTES_PER_PIXEL ||
         (PlatformConfig.Format != D3DDDIFMT_X8R8G8B8 &&
-         PlatformConfig.Format != D3DDDIFMT_A8R8G8B8))
+         PlatformConfig.Format != D3DDDIFMT_A8R8G8B8) ||
+        !SoftGpuValidatePlatformModes(&PlatformConfig))
     {
         Status = STATUS_DEVICE_CONFIGURATION_ERROR;
         goto CleanupStart;
@@ -981,6 +1020,13 @@ SoftGpuDdiStartDevice(
     Device->Width = PlatformConfig.Width;
     Device->Height = PlatformConfig.Height;
     Device->Format = PlatformConfig.Format;
+    Device->ModeCount = PlatformConfig.ModeCount;
+    Device->CurrentMode = PlatformConfig.CurrentMode;
+    Device->PreferredMode = PlatformConfig.CurrentMode;
+    Device->PlatformSetMode = PlatformConfig.SetMode;
+    RtlCopyMemory(Device->Modes, PlatformConfig.Modes, sizeof(Device->Modes));
+    RtlCopyMemory(Device->Edid, PlatformConfig.Edid, sizeof(Device->Edid));
+    Device->EdidLength = min(PlatformConfig.EdidLength, (ULONG)sizeof(Device->Edid));
     Device->HighestDmaAddress =
         PlatformConfig.HighestFrameBufferAddress;
 

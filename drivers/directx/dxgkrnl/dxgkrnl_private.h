@@ -408,6 +408,7 @@ struct _DXGKRNL_MINIPORT_CONTEXT
      * DxgkCbAcquirePostDisplayOwnership).  OS-side policy knob only; no
      * miniport-visible contract is attached to it. */
     BOOLEAN                     IsBasicDisplayFallback;
+    BOOLEAN                     BasicDisplayNegotiatesModes;
 
     /*
      * Copy of the miniport's RegistryPath (NUL-terminated buffer
