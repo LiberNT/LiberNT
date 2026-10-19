@@ -465,6 +465,12 @@ KiClearDpcRequestState(
     Prcb->DpcInterruptRequested = FALSE;
 }
 
+#define KiPrcbDpcTimeCount(Prcb) ((Prcb)->DpcTimeCount)
+#define KiPrcbDpcTimeLimit(Prcb) ((Prcb)->DpcTimeLimitTicks)
+#define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchdogCount)
+#define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriodTicks)
+#define KiClockTickSuspended(Prcb) ((Prcb)->Sleeping != FALSE)
+
 #ifdef __cplusplus
 extern "C" {
 #endif

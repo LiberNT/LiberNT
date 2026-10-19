@@ -15,9 +15,12 @@
 
 /* GLOBALS ********************************************************************/
 
+#define KI_CLOCK_WATCHDOG_TIMEOUT 100000000UL
+
 LONG KiTickOffset;
 volatile ULONG KiTickPhase;
 static ULONGLONG KiLastClockInterruptTime;
+PKPRCB volatile KiClockOwnerPrcb;
 ULONG KeTimeAdjustment;
 BOOLEAN KiTimeAdjustmentEnabled = FALSE;
 
@@ -76,6 +79,94 @@ KiCheckForTimerExpiration(
             HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
         }
     }
+}
+
+FORCEINLINE
+VOID
+KiCheckClockWatchdog(
+    _In_ PKPRCB Prcb)
+{
+    PKPRCB TargetPrcb;
+    ULONG Number;
+    ULONG Timeout;
+
+    if (KdEnteredDebugger || KeBugCheckActive || (KeMaximumIncrement == 0))
+        return;
+
+    Timeout = KI_CLOCK_WATCHDOG_TIMEOUT / KeMaximumIncrement;
+    for (Number = 0; Number < (ULONG)KeNumberProcessors; Number++)
+    {
+        TargetPrcb = KiProcessorBlock[Number];
+        if ((TargetPrcb == NULL) || (TargetPrcb == Prcb) ||
+            !(KeActiveProcessors & TargetPrcb->SetMember) ||
+            KiClockTickSuspended(TargetPrcb))
+        {
+            continue;
+        }
+
+        if ((ULONG)InterlockedIncrement(&TargetPrcb->ClockKeepAlive) > Timeout)
+            KeBugCheckEx(CLOCK_WATCHDOG_TIMEOUT, Timeout, 0, (ULONG_PTR)TargetPrcb, Number);
+    }
+}
+
+FORCEINLINE
+VOID
+KiCheckClockOwnerWatchdog(
+    _In_ PKPRCB Prcb)
+{
+    PKPRCB OwnerPrcb;
+    KAFFINITY Watchers;
+    ULONG Timeout;
+
+    OwnerPrcb = KiClockOwnerPrcb;
+    if ((OwnerPrcb == NULL) || (OwnerPrcb == Prcb) ||
+        KdEnteredDebugger || KeBugCheckActive || (KeMaximumIncrement == 0) ||
+        KiClockTickSuspended(OwnerPrcb))
+    {
+        return;
+    }
+
+    Watchers = KeActiveProcessors & ~OwnerPrcb->SetMember;
+    if ((Watchers & (~Watchers + 1)) != Prcb->SetMember)
+        return;
+
+    Timeout = KI_CLOCK_WATCHDOG_TIMEOUT / KeMaximumIncrement;
+    if ((ULONG)InterlockedIncrement(&OwnerPrcb->ClockKeepAlive) > Timeout)
+        KeBugCheckEx(CLOCK_WATCHDOG_TIMEOUT, Timeout, 0, (ULONG_PTR)OwnerPrcb, OwnerPrcb->Number);
+}
+
+FORCEINLINE
+VOID
+KiUpdateDpcWatchdog(
+    _In_ PKPRCB Prcb,
+    _In_ PKTHREAD Thread,
+    _In_ KIRQL Irql)
+{
+    if ((Irql < DISPATCH_LEVEL) ||
+        ((Irql == DISPATCH_LEVEL) && !Prcb->DpcRoutineActive && (Thread == Prcb->IdleThread)))
+    {
+        KiPrcbDpcTimeCount(Prcb) = 0;
+        KiPrcbDpcWatchdogCount(Prcb) = 0;
+        return;
+    }
+
+    if (KdEnteredDebugger || KeBugCheckActive)
+        return;
+
+    if (Prcb->DpcRoutineActive)
+    {
+        KiPrcbDpcTimeCount(Prcb)++;
+        if ((KiPrcbDpcTimeLimit(Prcb) != 0) && (KiPrcbDpcTimeCount(Prcb) > KiPrcbDpcTimeLimit(Prcb)))
+            KeBugCheckEx(DPC_WATCHDOG_VIOLATION, 0, KiPrcbDpcTimeCount(Prcb), KiPrcbDpcTimeLimit(Prcb), 0);
+    }
+    else
+    {
+        KiPrcbDpcTimeCount(Prcb) = 0;
+    }
+
+    KiPrcbDpcWatchdogCount(Prcb)++;
+    if ((KiPrcbDpcWatchdogPeriod(Prcb) > 0) && (KiPrcbDpcWatchdogCount(Prcb) > KiPrcbDpcWatchdogPeriod(Prcb)))
+        KeBugCheckEx(DPC_WATCHDOG_VIOLATION, 1, KiPrcbDpcWatchdogPeriod(Prcb), 0, 0);
 }
 
 VOID
@@ -161,6 +252,10 @@ KeUpdateSystemTime(IN PKTRAP_FRAME TrapFrame,
         KiTickOffset = KeMaximumIncrement - (Increment - (ULONG)OldTickOffset) % KeMaximumIncrement;
         KiTickPhase = (ULONG)((ULONGLONG)InterruptTime.QuadPart % KeMaximumIncrement);
 
+        if (KiClockOwnerPrcb != Prcb)
+            KiClockOwnerPrcb = Prcb;
+        KiCheckClockWatchdog(Prcb);
+
         /* Update processor/thread runtime */
         KiUpdateRunTime(TrapFrame, Irql, Ticks);
     }
@@ -192,6 +287,9 @@ KiUpdateRunTime(IN PKTRAP_FRAME TrapFrame,
 {
     PKTHREAD Thread = KeGetCurrentThread();
     PKPRCB Prcb = KeGetCurrentPrcb();
+
+    InterlockedExchange(&Prcb->ClockKeepAlive, 0);
+    KiCheckClockOwnerWatchdog(Prcb);
 
     if (SmpDbgEnabled)
         SmpDbgRuntimeTick(Prcb->Number);
@@ -257,6 +355,8 @@ KiUpdateRunTime(IN PKTRAP_FRAME TrapFrame,
 #endif
         }
     }
+
+    KiUpdateDpcWatchdog(Prcb, Thread, Irql);
 
     /* Update DPC rates */
     Prcb->DpcRequestRate = ((Prcb->DpcData[0].DpcCount - Prcb->DpcLastCount) +

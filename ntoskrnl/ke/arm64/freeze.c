@@ -10,6 +10,8 @@
 
 #ifdef CONFIG_SMP
 
+#define KI_BUGCHECK_FREEZE_WAIT_US 1000000
+
 VOID
 NTAPI
 HalRequestDebugWakeIpi(
@@ -107,6 +109,7 @@ KiArm64WaitForFrozenTargets(
 {
     KAFFINITY Remaining = 0;
     ULONG64 Spins = 0;
+    ULONG Stalls = 0;
 
     for (ULONG i = 0; i < KeNumberProcessors; i++)
     {
@@ -131,6 +134,16 @@ KiArm64WaitForFrozenTargets(
 
         if (Remaining == 0)
             break;
+
+        if (KeBugCheckActive)
+        {
+            if (Stalls++ >= KI_BUGCHECK_FREEZE_WAIT_US)
+            {
+                KiFreezeTargetSet &= ~Remaining;
+                break;
+            }
+            KeStallExecutionProcessor(1);
+        }
 
         YieldProcessor();
         KeMemoryBarrier();

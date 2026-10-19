@@ -1750,12 +1750,26 @@ Language=English
 A fatal error occurred in the USB driver stack.
 .
 
+MessageId=0x101
+Severity=Success
+Facility=System
+SymbolicName=CLOCK_WATCHDOG_TIMEOUT
+Language=English
+A clock interrupt expected on a secondary processor was not received within
+the allocated interval.
+.
+
 MessageId=0x133
 Severity=Success
 Facility=System
 SymbolicName=DPC_WATCHDOG_VIOLATION
 Language=English
 A watchdog detected that the system stopped making forward progress.
+
+If Parameter1 is 0, a single DPC or ISR ran longer than its time allotment:
+Parameter2 is the DPC time count and Parameter3 the allotment, in clock ticks.
+If Parameter1 is 1, the processor stayed at DISPATCH_LEVEL or above for longer
+than the watchdog period in Parameter2.
 
 If Parameter1 is 2, the internal-debugger log made no progress for the number
 of seconds in Parameter2. Parameter3 is the configured timeout in seconds and

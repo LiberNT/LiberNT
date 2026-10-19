@@ -25,6 +25,8 @@ ULONG_PTR KiDoubleFaultStack = (ULONG_PTR)&KiDoubleFaultStackData[KERNEL_STACK_S
 KSPIN_LOCK KiFreezeExecutionLock;
 KSPIN_LOCK Ki486CompatibilityLock;
 
+ULONG KiDpcTimeCount[MAXIMUM_PROCESSORS];
+
 /* Perf */
 ULONG ProcessCount;
 ULONGLONG BootCycles, BootCyclesEnd;

@@ -36,7 +36,10 @@
 
 /* NOT INCLUDES ANYMORE ******************************************************/
 
+#define KI_BUGCHECK_FREEZE_WAIT_US 1000000
+
 PKPRCB KiFreezeOwner;
+static KAFFINITY KiFreezeTargetSet;
 
 static VOID KiFreezeWaitForThaw(_In_ PKPRCB CurrentPrcb);
 
@@ -170,6 +173,7 @@ KxFreezeExecution(
     VOID)
 {
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
+    ULONG Stalls = 0;
 
     /* Avoid blocking on recursive debug action */
     if (KiFreezeOwner == CurrentPrcb)
@@ -198,11 +202,15 @@ KxFreezeExecution(
     CurrentPrcb->IpiFrozen = IPI_FROZEN_STATE_OWNER | IPI_FROZEN_FLAG_ACTIVE;
 
     /* Loop all processors */
+    KiFreezeTargetSet = 0;
     for (ULONG i = 0; i < KeNumberProcessors; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
         if (TargetPrcb != CurrentPrcb)
         {
+            if (KeBugCheckActive && (TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_RUNNING))
+                continue;
+
             /* Only the active processor is allowed to change IpiFrozen */
             ASSERT(TargetPrcb->IpiFrozen == IPI_FROZEN_STATE_RUNNING);
 
@@ -211,6 +219,7 @@ KxFreezeExecution(
 
             /* Request target to freeze */
             TargetPrcb->IpiFrozen = IPI_FROZEN_STATE_TARGET_FREEZE;
+            KiFreezeTargetSet |= TargetPrcb->SetMember;
         }
     }
 
@@ -221,11 +230,20 @@ KxFreezeExecution(
     for (ULONG i = 0; i < KeNumberProcessors; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-        if (TargetPrcb != CurrentPrcb)
+        if ((TargetPrcb != CurrentPrcb) && (KiFreezeTargetSet & TargetPrcb->SetMember))
         {
             /* Wait for the target to be frozen */
             while (TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_FROZEN)
             {
+                if (KeBugCheckActive)
+                {
+                    if (Stalls++ >= KI_BUGCHECK_FREEZE_WAIT_US)
+                    {
+                        KiFreezeTargetSet &= ~TargetPrcb->SetMember;
+                        break;
+                    }
+                    KeStallExecutionProcessor(1);
+                }
                 YieldProcessor();
                 KeMemoryBarrier();
             }
@@ -247,7 +265,7 @@ KxThawExecution(
     for (ULONG i = 0; i < KeNumberProcessors; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-        if (TargetPrcb != CurrentPrcb)
+        if ((TargetPrcb != CurrentPrcb) && (KiFreezeTargetSet & TargetPrcb->SetMember))
         {
             /* Make sure they are still frozen */
             ASSERT(TargetPrcb->IpiFrozen == IPI_FROZEN_STATE_FROZEN);
@@ -261,7 +279,7 @@ KxThawExecution(
     for (ULONG i = 0; i < KeNumberProcessors; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-        if (TargetPrcb != CurrentPrcb)
+        if ((TargetPrcb != CurrentPrcb) && (KiFreezeTargetSet & TargetPrcb->SetMember))
         {
             /* Wait for the target to be running again */
             while (TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_RUNNING)

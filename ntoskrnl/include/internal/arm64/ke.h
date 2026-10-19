@@ -1047,4 +1047,10 @@ KiClearDpcRequestState(
     InterlockedAnd(&Prcb->DpcRequestSummary, ~(KI_DPC_NORMAL_PROCESSING_REQUESTED | KI_DPC_NORMAL_DPC_PRESENT));
 }
 
+#define KiPrcbDpcTimeCount(Prcb) ((Prcb)->DpcTimeCount)
+#define KiPrcbDpcTimeLimit(Prcb) ((Prcb)->DpcTimeLimitTicks)
+#define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchdogCount)
+#define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriodTicks)
+#define KiClockTickSuspended(Prcb) FALSE
+
 #define KiIsUserModeTrap(TrapFrame) ((TrapFrame)->PreviousMode == UserMode)

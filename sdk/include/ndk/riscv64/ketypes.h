@@ -219,6 +219,11 @@ struct _KPRCB
     LONG DpcSetEventRequest;
     KEVENT DpcEvent;
     KDPC CallDpc;
+    LONG ClockKeepAlive;
+    LONG DpcWatchdogPeriodTicks;
+    LONG DpcWatchdogCount;
+    ULONG DpcTimeCount;
+    ULONG DpcTimeLimitTicks;
     ULONG AdjustDpcThreshold;
     UCHAR SkipTick;
     KIRQL DebuggerSavedIRQL;

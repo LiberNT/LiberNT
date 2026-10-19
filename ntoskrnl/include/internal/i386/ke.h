@@ -1106,6 +1106,14 @@ KiClearDpcRequestState(
     Prcb->DpcInterruptRequested = FALSE;
 }
 
+extern ULONG KiDpcTimeCount[MAXIMUM_PROCESSORS];
+
+#define KiPrcbDpcTimeCount(Prcb) (KiDpcTimeCount[(Prcb)->Number])
+#define KiPrcbDpcTimeLimit(Prcb) ((Prcb)->DpcTimeLimit)
+#define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchDogCount)
+#define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriod)
+#define KiClockTickSuspended(Prcb) FALSE
+
 #define _KeIsExecutingDpc() ((BOOLEAN)__readfsbyte(FIELD_OFFSET(KIPCR, PrcbData.DpcRoutineActive)))
 
 /* The RPL of the saved code selector is the previous mode. */

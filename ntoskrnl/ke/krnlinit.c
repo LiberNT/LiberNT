@@ -15,6 +15,9 @@
 
 /* GLOBALS *******************************************************************/
 
+#define KI_DPC_TIME_LIMIT_TICKS 0x500
+#define KI_DPC_WATCHDOG_PERIOD_TICKS 0x1E00
+
 /* Portable CPU Features and Flags */
 USHORT KeProcessorArchitecture;
 USHORT KeProcessorLevel;
@@ -213,6 +216,8 @@ KiInitSpinLocks(IN PKPRCB Prcb,
     Prcb->MaximumDpcQueueDepth = KiMaximumDpcQueueDepth;
     Prcb->MinimumDpcRate = KiMinimumDpcRate;
     Prcb->AdjustDpcThreshold = KiAdjustDpcThreshold;
+    KiPrcbDpcTimeLimit(Prcb) = KI_DPC_TIME_LIMIT_TICKS;
+    KiPrcbDpcWatchdogPeriod(Prcb) = KI_DPC_WATCHDOG_PERIOD_TICKS;
     KeInitializeDpc(&Prcb->CallDpc, NULL, NULL);
     KeSetTargetProcessorDpc(&Prcb->CallDpc, Number);
     KeSetImportanceDpc(&Prcb->CallDpc, HighImportance);

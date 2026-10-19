@@ -673,6 +673,12 @@ KiClearDpcRequestState(
     Prcb->DpcInterruptRequested = FALSE;
 }
 
+#define KiPrcbDpcTimeCount(Prcb) ((Prcb)->DpcTimeCount)
+#define KiPrcbDpcTimeLimit(Prcb) ((Prcb)->DpcTimeLimit)
+#define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchdogCount)
+#define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriod)
+#define KiClockTickSuspended(Prcb) FALSE
+
 #define _KeIsExecutingDpc() ((BOOLEAN)__readgsbyte(FIELD_OFFSET(KIPCR, Prcb.DpcRoutineActive)))
 
 /* The RPL of the saved code selector is the previous mode. */

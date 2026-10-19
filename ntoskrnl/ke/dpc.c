@@ -47,6 +47,7 @@ static __inline__ VOID KiBeginDpcExecution(_In_ PKPRCB Prcb, _In_ PKDPC Dpc)
 {
     InterlockedOrAffinity((volatile LONG_PTR *)&Dpc->ProcessorHistory, (LONG_PTR)AFFINITY_MASK(Prcb->Number));
     InterlockedExchangePointer(&KiActiveDpc[Prcb->Number], Dpc);
+    KiPrcbDpcTimeCount(Prcb) = 0;
 }
 
 static __inline__ VOID KiEndDpcExecution(_In_ PKPRCB Prcb, _In_ PKDPC Dpc)
@@ -646,6 +647,7 @@ KiRetireDpcList(IN PKPRCB Prcb)
     {
         /* Set us as active */
         Prcb->DpcRoutineActive = TRUE;
+        KiPrcbDpcTimeCount(Prcb) = 0;
 
         /* Check if this is a timer expiration request */
         if (Prcb->TimerRequest)
@@ -1338,13 +1340,24 @@ NTAPI
 KeQueryDpcWatchdogInformation(
     _Out_ PKDPC_WATCHDOG_INFORMATION WatchdogInformation)
 {
+    PKPRCB Prcb;
+    ULONG TimeLimit, TimeCount, WatchdogLimit, WatchdogCount;
+
     /* Windows rejects callers below DISPATCH_LEVEL */
     if (KeGetCurrentIrql() < DISPATCH_LEVEL)
         return STATUS_UNSUCCESSFUL;
 
-    /* No DPC watchdog runs on this system: zeroed time and watchdog limits
-     * report the watchdog as disabled */
-    RtlZeroMemory(WatchdogInformation, sizeof(*WatchdogInformation));
+    Prcb = KeGetCurrentPrcb();
+    TimeLimit = KiPrcbDpcTimeLimit(Prcb);
+    TimeCount = KiPrcbDpcTimeCount(Prcb);
+    WatchdogLimit = (ULONG)KiPrcbDpcWatchdogPeriod(Prcb);
+    WatchdogCount = (ULONG)KiPrcbDpcWatchdogCount(Prcb);
+
+    WatchdogInformation->DpcTimeLimit = TimeLimit;
+    WatchdogInformation->DpcTimeCount = (TimeLimit > TimeCount) ? TimeLimit - TimeCount : 0;
+    WatchdogInformation->DpcWatchdogLimit = WatchdogLimit;
+    WatchdogInformation->DpcWatchdogCount = (WatchdogLimit > WatchdogCount) ? WatchdogLimit - WatchdogCount : 0;
+    WatchdogInformation->Reserved = 0;
     return STATUS_SUCCESS;
 }
 
