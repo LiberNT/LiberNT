@@ -345,7 +345,7 @@ HRESULT STDMETHODCALLTYPE CShellLink::Load(LPCOLESTR pszFileName, DWORD dwMode)
     TRACE("(%p, %s, %x)\n", this, debugstr_w(pszFileName), dwMode);
 
     if (dwMode == 0)
-        dwMode = STGM_READ | STGM_SHARE_DENY_WRITE;
+        dwMode = STGM_READ;
 
     CComPtr<IStream> stm;
     HRESULT hr = SHCreateStreamOnFileW(pszFileName, dwMode, &stm);
@@ -369,12 +369,16 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(LPCOLESTR pszFileName, BOOL fRemember
     TRACE("(%p)->(%s)\n", this, debugstr_w(pszFileName));
 
     if (!pszFileName)
-        return E_FAIL;
+    {
+        if (!m_sLinkPath)
+            return S_OK;
+        pszFileName = m_sLinkPath;
+    }
 
     bAlreadyExists = PathFileExistsW(pszFileName);
 
     CComPtr<IStream> stm;
-    HRESULT hr = SHCreateStreamOnFileW(pszFileName, STGM_READWRITE | STGM_CREATE | STGM_SHARE_EXCLUSIVE, &stm);
+    HRESULT hr = SHCreateStreamOnFileW(pszFileName, STGM_READWRITE | STGM_CREATE | STGM_SHARE_DENY_WRITE, &stm);
     if (SUCCEEDED(hr))
     {
         hr = Save(stm, FALSE);
@@ -387,10 +391,13 @@ HRESULT STDMETHODCALLTYPE CShellLink::Save(LPCOLESTR pszFileName, BOOL fRemember
             else
                 SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, szFullPath, NULL);
 
-            if (m_sLinkPath)
-                HeapFree(GetProcessHeap(), 0, m_sLinkPath);
+            if (pszFileName != m_sLinkPath)
+            {
+                if (m_sLinkPath)
+                    HeapFree(GetProcessHeap(), 0, m_sLinkPath);
 
-            m_sLinkPath = strdupW(pszFileName);
+                m_sLinkPath = strdupW(pszFileName);
+            }
             m_bDirty = FALSE;
         }
         else
@@ -2050,6 +2057,13 @@ HRESULT STDMETHODCALLTYPE CShellLink::SetIconLocation(LPCWSTR pszIconPath, INT i
             return E_OUTOFMEMORY;
 
         m_Header.dwFlags |= SLDF_HAS_ICONLOCATION;
+    }
+    else
+    {
+        m_Header.dwFlags &= ~(SLDF_HAS_ICONLOCATION | SLDF_HAS_EXP_ICON_SZ);
+        RemoveDataBlock(EXP_SZ_ICON_SIG);
+        HeapFree(GetProcessHeap(), 0, m_sIcoPath);
+        m_sIcoPath = NULL;
     }
 
     hr = S_OK;
