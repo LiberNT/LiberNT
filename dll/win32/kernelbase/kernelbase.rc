@@ -1,0 +1,12 @@
+/*
+ * PROJECT:     LiberNT KernelBase
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     Version resource
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION  "Base API client DLL"
+#define REACTOS_STR_INTERNAL_NAME     "kernelbase"
+#define REACTOS_STR_ORIGINAL_FILENAME "kernelbase.dll"
+#include <reactos/version.rc>

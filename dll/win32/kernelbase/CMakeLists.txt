@@ -31,6 +31,7 @@ add_library(kernelbase MODULE
     Wow64Directory.c
     XState.c
     ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/wcsnlen.c
+    kernelbase.rc
     ${CMAKE_CURRENT_BINARY_DIR}/kernelbase_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/kernelbase.def)
 
