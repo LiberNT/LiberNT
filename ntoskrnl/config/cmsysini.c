@@ -2487,12 +2487,29 @@ CmpSetVersionDataInKey(
 
     /* Set the 'CurrentVersion' value */
     RtlInitUnicodeString(&ValueName, L"CurrentVersion");
+    RtlInitUnicodeString(&ValueData, L"6.3");
     NtSetValueKey(CurrentVersionKeyHandle,
                   &ValueName,
                   0,
                   REG_SZ,
-                  CmVersionString.Buffer,
-                  CmVersionString.Length + sizeof(WCHAR));
+                  ValueData.Buffer,
+                  ValueData.Length + sizeof(WCHAR));
+
+    RtlInitUnicodeString(&ValueName, L"CurrentMajorVersionNumber");
+    NtSetValueKey(CurrentVersionKeyHandle,
+                  &ValueName,
+                  0,
+                  REG_DWORD,
+                  &NtMajorVersion,
+                  sizeof(NtMajorVersion));
+
+    RtlInitUnicodeString(&ValueName, L"CurrentMinorVersionNumber");
+    NtSetValueKey(CurrentVersionKeyHandle,
+                  &ValueName,
+                  0,
+                  REG_DWORD,
+                  &NtMinorVersion,
+                  sizeof(NtMinorVersion));
 
     /* Set the 'CurrentBuildNumber' value */
     RtlInitUnicodeString(&ValueName, L"CurrentBuildNumber");
@@ -2504,6 +2521,22 @@ CmpSetVersionDataInKey(
                   REG_SZ,
                   ValueData.Buffer,
                   ValueData.Length + sizeof(WCHAR));
+
+    RtlInitUnicodeString(&ValueName, L"CurrentBuild");
+    NtSetValueKey(CurrentVersionKeyHandle,
+                  &ValueName,
+                  0,
+                  REG_SZ,
+                  ValueData.Buffer,
+                  ValueData.Length + sizeof(WCHAR));
+
+    RtlInitUnicodeString(&ValueName, L"UBR");
+    NtSetValueKey(CurrentVersionKeyHandle,
+                  &ValueName,
+                  0,
+                  REG_DWORD,
+                  &CmNtSpBuildNumber,
+                  sizeof(CmNtSpBuildNumber));
 
     /* Set the 'BuildLab' value */
     RtlInitUnicodeString(&ValueName, L"BuildLab");

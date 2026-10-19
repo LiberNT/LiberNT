@@ -71,9 +71,20 @@ Winver_FormatCompatInfo(
     WCHAR szNtBuild[16];
     WCHAR szNtSpk[64];
     WCHAR szFormat[64] = L"";
+    DWORD dwMajor, dwMinor, dwType, dwSize = sizeof(DWORD);
 
     /* NOTE: Required info must be valid */
-    Winver_GetRegValueString(hKey, L"CurrentVersion", szNtVersion, _countof(szNtVersion));
+    if (RegQueryValueExW(hKey, L"CurrentMajorVersionNumber", NULL, &dwType, (LPBYTE)&dwMajor, &dwSize) == ERROR_SUCCESS &&
+        dwType == REG_DWORD &&
+        RegQueryValueExW(hKey, L"CurrentMinorVersionNumber", NULL, &dwType, (LPBYTE)&dwMinor, &dwSize) == ERROR_SUCCESS &&
+        dwType == REG_DWORD)
+    {
+        StringCchPrintfW(szNtVersion, _countof(szNtVersion), L"%lu.%lu", dwMajor, dwMinor);
+    }
+    else
+    {
+        Winver_GetRegValueString(hKey, L"CurrentVersion", szNtVersion, _countof(szNtVersion));
+    }
     Winver_GetRegValueString(hKey, L"CurrentBuildNumber", szNtBuild, _countof(szNtBuild));
     if (!szNtVersion[0] || !szNtBuild[0])
     {
