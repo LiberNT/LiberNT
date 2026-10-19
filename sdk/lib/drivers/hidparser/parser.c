@@ -694,7 +694,7 @@ static NTSTATUS fill_collection_desc(HIDP_DEVICE_DESC *device_desc, const UCHAR 
 {
     struct hid_preparsed_data *preparsed;
     HIDP_COLLECTION_DESC *desc;
-    ULONG i, len;
+    ULONG i, len = 0;
     NTSTATUS status;
 
     if (!(device_desc->CollectionDesc = HidpAllocate(pool_type, sizeof(*device_desc->CollectionDesc) * tlc_count)))
