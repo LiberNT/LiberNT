@@ -96,7 +96,6 @@ HidClassPDO_GetReportDescriptionByReportID(
     // failed to find report id
     //
     DPRINT1("[HIDCLASS] GetReportDescriptionByReportID ReportID %x not found\n", ReportID);
-    ASSERT(FALSE);
     return NULL;
 }
 

@@ -1193,6 +1193,13 @@ HidClass_DeviceControl(
             PHIDP_REPORT_IDS ReportDescription;
             PUCHAR ReportBuffer;
 
+            if (!Irp->MdlAddress)
+            {
+                Irp->IoStatus.Status = STATUS_INVALID_USER_BUFFER;
+                IoCompleteRequest(Irp, IO_NO_INCREMENT);
+                return STATUS_INVALID_USER_BUFFER;
+            }
+
             ReportBuffer = MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);
             if (!ReportBuffer)
             {
@@ -1263,6 +1270,13 @@ HidClass_DeviceControl(
             NTSTATUS Status;
             PHIDP_REPORT_IDS ReportDescription;
             PUCHAR ReportBuffer;
+
+            if (!Irp->MdlAddress)
+            {
+                Irp->IoStatus.Status = STATUS_INVALID_USER_BUFFER;
+                IoCompleteRequest(Irp, IO_NO_INCREMENT);
+                return STATUS_INVALID_USER_BUFFER;
+            }
 
             ReportBuffer = MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);
             if (!ReportBuffer)
