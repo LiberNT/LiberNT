@@ -4239,13 +4239,16 @@ RtlGetUserInfoHeap(IN PVOID HeapHandle,
             InfoReturned = TRUE;
         }
     }
-    _SEH2_FINALLY
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
-        /* Release the heap lock if it was acquired */
-        if (HeapLocked)
-            RtlLeaveHeapLock(Heap->LockVariable);
+        RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
+        InfoReturned = FALSE;
     }
     _SEH2_END;
+
+    /* Release the heap lock if it was acquired */
+    if (HeapLocked)
+        RtlLeaveHeapLock(Heap->LockVariable);
 
     return InfoReturned;
 }
