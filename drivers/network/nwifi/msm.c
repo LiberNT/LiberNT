@@ -610,6 +610,7 @@ NwifiMsmConnect(
     Msm->Connect = *Params;
     Msm->CurrentSsid = Params->Ssid;
     Msm->State = NwifiMsmAssociating;
+    Msm->Reassociating = FALSE;
     NdisReleaseSpinLock(&Msm->Lock);
 
     if (!NwifiAuthCipherSupported(Adapter, Params->AuthAlgorithm, Params->UnicastCipher))
@@ -771,6 +772,7 @@ NwifiMsmLinkUp(
     PNWIFI_ADAPTER Adapter = Msm->Adapter;
     DOT11_MAC_ADDRESS Bssid;
     DOT11_SSID Ssid;
+    BOOLEAN Reassociated;
 
     NdisAcquireSpinLock(&Msm->Lock);
     if (Msm->State != NwifiMsmAssociating &&
@@ -780,6 +782,8 @@ NwifiMsmLinkUp(
         return;
     }
     Msm->State = Secure ? NwifiMsmConnectedSecure : NwifiMsmConnectedOpen;
+    Reassociated = Msm->Reassociating;
+    Msm->Reassociating = FALSE;
     RtlCopyMemory(Bssid, Msm->CurrentBssid, IEEE80211_ADDR_LEN);
     Ssid = Msm->CurrentSsid;
     NdisReleaseSpinLock(&Msm->Lock);
@@ -791,7 +795,8 @@ NwifiMsmLinkUp(
     NdisReleaseSpinLock(&Adapter->DataLock);
 
     NwifiIndicateLinkState(Adapter, TRUE);
-    NwifiQueueNotification(Adapter->InterfaceIndex, NwifiNotifyConnectComplete,
+    NwifiQueueNotification(Adapter->InterfaceIndex,
+                           Reassociated ? NwifiNotifyLinkUp : NwifiNotifyConnectComplete,
                            NDIS_STATUS_SUCCESS);
 }
 
@@ -865,6 +870,7 @@ NwifiMsmIndicateStatus(
                 if (Msm->State == NwifiMsmIdle)
                     Msm->State = NwifiMsmAssociating;
                 NdisReleaseSpinLock(&Msm->Lock);
+                NwifiQueueNotification(Adapter->InterfaceIndex, NwifiNotifyAssociating, NDIS_STATUS_SUCCESS);
                 DPRINT("NWIFI: assoc start with %02x:%02x:%02x:%02x:%02x:%02x\n",
                        P->MacAddr[0], P->MacAddr[1], P->MacAddr[2],
                        P->MacAddr[3], P->MacAddr[4], P->MacAddr[5]);
@@ -888,7 +894,10 @@ NwifiMsmIndicateStatus(
                     RtlCopyMemory(Msm->CurrentBssid, P->MacAddr, IEEE80211_ADDR_LEN);
                     Msm->CurrentPhyType = NwifiPhyTypeFromId(0);
                     Secure = Msm->Connect.Secure;
+                    if (Msm->Roaming)
+                        Msm->Reassociating = TRUE;
                     NdisReleaseSpinLock(&Msm->Lock);
+                    NwifiQueueNotification(Adapter->InterfaceIndex, NwifiNotifyAssociated, NDIS_STATUS_SUCCESS);
 
                     if (!Secure)
                     {
@@ -933,6 +942,7 @@ NwifiMsmIndicateStatus(
                         NdisAcquireSpinLock(&Msm->Lock);
                         Msm->State = NwifiMsmHandshaking;
                         NdisReleaseSpinLock(&Msm->Lock);
+                        NwifiQueueNotification(Adapter->InterfaceIndex, NwifiNotifyAuthenticating, NDIS_STATUS_SUCCESS);
                         DPRINT1("NWIFI: associated, awaiting 4-way handshake\n");
                     }
                 }
@@ -1026,6 +1036,7 @@ NwifiMsmIndicateStatus(
                 NdisAcquireSpinLock(&Msm->Lock);
                 Msm->Roaming = TRUE;
                 NdisReleaseSpinLock(&Msm->Lock);
+                NwifiQueueNotification(Adapter->InterfaceIndex, NwifiNotifyRoamingStart, NDIS_STATUS_SUCCESS);
                 DPRINT1("NWIFI: roaming started\n");
             }
             else
@@ -1042,9 +1053,14 @@ NwifiMsmIndicateStatus(
                 Msm->Roaming = FALSE;
                 Lost = RoamStatus != DOT11_ASSOC_STATUS_SUCCESS;
                 if (Lost)
+                {
                     Msm->State = NwifiMsmIdle;
+                    Msm->Reassociating = FALSE;
+                }
                 NdisReleaseSpinLock(&Msm->Lock);
                 DPRINT1("NWIFI: roaming completed 0x%08X\n", RoamStatus);
+                NwifiQueueNotification(Adapter->InterfaceIndex, NwifiNotifyRoamingEnd,
+                                       Lost ? NDIS_STATUS_DOT11_ROAMING_COMPLETION : NDIS_STATUS_SUCCESS);
 
                 if (Lost)
                 {
@@ -1080,6 +1096,7 @@ NwifiMsmIndicateStatus(
                     NdisAcquireSpinLock(&Msm->Lock);
                     Msm->CurrentRssi = -100 + (LONG)(Quality / 2);
                     NdisReleaseSpinLock(&Msm->Lock);
+                    NwifiQueueNotification(Adapter->InterfaceIndex, NwifiNotifyLinkQuality, NDIS_STATUS_SUCCESS);
                 }
             }
             break;

@@ -409,6 +409,7 @@ NwifiDispatchNotification(const NWIFI_NOTIFICATION *pNotif)
                 if (pNotif->StatusCode == 0 /* NDIS_STATUS_SUCCESS */ &&
                     iface->Connected)
                 {
+                    WlanSvcIndicateMsm(iface, WLANSVC_NOTIFICATION_MSM_CONNECTED, WLAN_REASON_CODE_SUCCESS);
                     WlanSvcIndicateConnection(iface,
                         wlan_notification_acm_connection_complete,
                         (iface->ConnectedProfile[0] != L'\0')
@@ -448,13 +449,70 @@ NwifiDispatchNotification(const NWIFI_NOTIFICATION *pNotif)
                 iface->Rssi = -100;
                 iface->LinkQuality = 0;
                 if (!wasDisconnected)
+                {
+                    WlanSvcIndicateMsm(iface, WLANSVC_NOTIFICATION_MSM_DISCONNECTED, WLAN_REASON_CODE_UNKNOWN);
                     WlanSvcIndicateAcm(iface, wlan_notification_acm_disconnected);
+                }
             }
             break;
 
         case NwifiNotifyLinkUp:
             if (iface != NULL)
+            {
                 WlanSvcUpdateLinkState(iface);
+                if (iface->Connected)
+                    WlanSvcIndicateMsm(iface, WLANSVC_NOTIFICATION_MSM_CONNECTED, WLAN_REASON_CODE_SUCCESS);
+            }
+            break;
+
+        case NwifiNotifyAssociating:
+            if (iface != NULL)
+            {
+                WlanSvcUpdateLinkState(iface);
+                iface->State = wlan_interface_state_associating;
+                WlanSvcIndicateMsm(iface, WLANSVC_NOTIFICATION_MSM_ASSOCIATING, WLAN_REASON_CODE_SUCCESS);
+            }
+            break;
+
+        case NwifiNotifyAssociated:
+            if (iface != NULL)
+            {
+                WlanSvcUpdateLinkState(iface);
+                WlanSvcIndicateMsm(iface, WLANSVC_NOTIFICATION_MSM_ASSOCIATED, WLAN_REASON_CODE_SUCCESS);
+            }
+            break;
+
+        case NwifiNotifyAuthenticating:
+            if (iface != NULL)
+            {
+                iface->State = wlan_interface_state_authenticating;
+                WlanSvcIndicateMsm(iface, WLANSVC_NOTIFICATION_MSM_AUTHENTICATING, WLAN_REASON_CODE_SUCCESS);
+            }
+            break;
+
+        case NwifiNotifyRoamingStart:
+            if (iface != NULL)
+                WlanSvcIndicateMsm(iface, WLANSVC_NOTIFICATION_MSM_ROAMING_START, WLAN_REASON_CODE_SUCCESS);
+            break;
+
+        case NwifiNotifyRoamingEnd:
+            if (iface != NULL)
+            {
+                WlanSvcUpdateLinkState(iface);
+                WlanSvcIndicateMsm(iface, WLANSVC_NOTIFICATION_MSM_ROAMING_END,
+                                   pNotif->StatusCode == 0 ? WLAN_REASON_CODE_SUCCESS : WLAN_REASON_CODE_UNKNOWN);
+            }
+            break;
+
+        case NwifiNotifyLinkQuality:
+            if (iface != NULL && iface->Connected)
+            {
+                ULONG previous = iface->LinkQuality;
+
+                WlanSvcUpdateLinkState(iface);
+                if (iface->Connected && iface->LinkQuality != previous)
+                    WlanSvcIndicateSignalQuality(iface);
+            }
             break;
 
         case NwifiNotifyInterfaceArrival:

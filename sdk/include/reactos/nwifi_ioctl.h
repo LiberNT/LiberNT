@@ -176,7 +176,13 @@ typedef enum _NWIFI_NOTIFICATION_CODE
     NwifiNotifyLinkUp,
     NwifiNotifyLinkDown,
     NwifiNotifyInterfaceArrival,
-    NwifiNotifyInterfaceRemoval
+    NwifiNotifyInterfaceRemoval,
+    NwifiNotifyAssociating,
+    NwifiNotifyAssociated,
+    NwifiNotifyAuthenticating,
+    NwifiNotifyRoamingStart,
+    NwifiNotifyRoamingEnd,
+    NwifiNotifyLinkQuality
 } NWIFI_NOTIFICATION_CODE;
 
 typedef struct _NWIFI_NOTIFICATION

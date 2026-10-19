@@ -96,6 +96,39 @@ WlanSvcIndicateRadioState(PWLANSVC_INTERFACE Iface)
 }
 
 VOID
+WlanSvcIndicateMsm(PWLANSVC_INTERFACE Iface, DWORD NotificationCode, WLAN_REASON_CODE Reason)
+{
+    WLAN_MSM_NOTIFICATION_DATA md;
+
+    ZeroMemory(&md, sizeof(md));
+    md.wlanConnectionMode = (Iface->ConnectedProfile[0] != L'\0')
+                                ? wlan_connection_mode_profile
+                                : wlan_connection_mode_discovery_unsecure;
+    wcsncpy(md.strProfileName, Iface->ConnectedProfile, WLAN_MAX_NAME_LENGTH - 1);
+    md.dot11Ssid = Iface->ConnectedSsid;
+    md.dot11BssType = Iface->ConnectedBssType;
+    memcpy(&md.dot11MacAddr, &Iface->ConnectedBssid, sizeof(md.dot11MacAddr));
+    md.bSecurityEnabled = (Iface->ConnectedAuth != DOT11_AUTH_ALGO_80211_OPEN);
+    md.wlanReasonCode = Reason;
+
+    WlanSvcBroadcast(WLAN_NOTIFICATION_SOURCE_MSM,
+                     NotificationCode,
+                     &Iface->InterfaceGuid,
+                     &md, sizeof(md));
+}
+
+VOID
+WlanSvcIndicateSignalQuality(PWLANSVC_INTERFACE Iface)
+{
+    WLAN_SIGNAL_QUALITY quality = Iface->LinkQuality;
+
+    WlanSvcBroadcast(WLAN_NOTIFICATION_SOURCE_MSM,
+                     WLANSVC_NOTIFICATION_MSM_SIGNAL_QUALITY_CHANGE,
+                     &Iface->InterfaceGuid,
+                     &quality, sizeof(quality));
+}
+
+VOID
 WlanSvcIndicateConnection(PWLANSVC_INTERFACE Iface,
                           DWORD NotificationCode,
                           WLAN_CONNECTION_MODE Mode,

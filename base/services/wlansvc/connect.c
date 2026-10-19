@@ -247,10 +247,14 @@ WlanSvcDisconnect(PWLANSVC_INTERFACE Iface)
 
     WlanSvcIndicateAcm(Iface, wlan_notification_acm_disconnecting);
     Iface->State = wlan_interface_state_disconnecting;
+    if (Iface->Connected)
+        WlanSvcIndicateMsm(Iface, WLANSVC_NOTIFICATION_MSM_DISASSOCIATING, WLAN_REASON_CODE_SUCCESS);
 
     dwResult = NwifiDisconnect(Iface->NwifiIndex, Iface->UpperLuid,
                                &Iface->MacAddress);
 
+    if (Iface->Connected)
+        WlanSvcIndicateMsm(Iface, WLANSVC_NOTIFICATION_MSM_DISCONNECTED, WLAN_REASON_CODE_SUCCESS);
     Iface->Connected = FALSE;
     ZeroMemory(&Iface->ConnectedSsid, sizeof(DOT11_SSID));
     ZeroMemory(&Iface->ConnectedBssid, sizeof(DOT11_MAC_ADDRESS));
@@ -290,6 +294,10 @@ WlanSvcUpdateLinkState(PWLANSVC_INTERFACE Iface)
         Iface->Connected = TRUE;
         Iface->State = wlan_interface_state_connected;
         Iface->ConnectedSsid = ls.Ssid;
+        Iface->ConnectedBssid = ls.Bssid;
+    }
+    else if (ls.Status == NwifiLinkAssociating)
+    {
         Iface->ConnectedBssid = ls.Bssid;
     }
     else if (ls.Status == NwifiLinkDisconnected)

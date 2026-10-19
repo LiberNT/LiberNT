@@ -94,6 +94,15 @@
 
 /* wlan_notification_msm_radio_state_change from WLAN_NOTIFICATION_MSM. */
 #define WLANSVC_NOTIFICATION_MSM_RADIO_STATE_CHANGE 7U
+#define WLANSVC_NOTIFICATION_MSM_ASSOCIATING        1U
+#define WLANSVC_NOTIFICATION_MSM_ASSOCIATED         2U
+#define WLANSVC_NOTIFICATION_MSM_AUTHENTICATING     3U
+#define WLANSVC_NOTIFICATION_MSM_CONNECTED          4U
+#define WLANSVC_NOTIFICATION_MSM_ROAMING_START      5U
+#define WLANSVC_NOTIFICATION_MSM_ROAMING_END        6U
+#define WLANSVC_NOTIFICATION_MSM_SIGNAL_QUALITY_CHANGE 8U
+#define WLANSVC_NOTIFICATION_MSM_DISASSOCIATING     9U
+#define WLANSVC_NOTIFICATION_MSM_DISCONNECTED       10U
 
 /*
  * WIDL emits only the wlanapi.h types reachable from the RPC interface; the
@@ -379,6 +388,8 @@ VOID  WlanSvcFreeProfile(PWLANSVC_PROFILE Profile);
 /* notify.c */
 VOID WlanSvcIndicateAcm(PWLANSVC_INTERFACE Iface, DWORD NotificationCode);
 VOID WlanSvcIndicateRadioState(PWLANSVC_INTERFACE Iface);
+VOID WlanSvcIndicateMsm(PWLANSVC_INTERFACE Iface, DWORD NotificationCode, WLAN_REASON_CODE Reason);
+VOID WlanSvcIndicateSignalQuality(PWLANSVC_INTERFACE Iface);
 PWLANSVC_PROFILE WlanSvcMatchProfileForBss(PWLANSVC_INTERFACE Iface, PWLANSVC_BSS_ENTRY bss);
 DWORD WlanSvcTryAutoConnect(PWLANSVC_INTERFACE Iface);
 DWORD WlanSvcScanInterface(const GUID *pInterfaceGuid, PDOT11_SSID pDot11Ssid);

@@ -76,6 +76,7 @@ typedef struct _NWIFI_MSM
     NDIS_SPIN_LOCK   Lock;
     NWIFI_MSM_STATE  State;
     BOOLEAN          Roaming;
+    BOOLEAN          Reassociating;
 
     /* Currently-selected / associated BSS. */
     DOT11_MAC_ADDRESS CurrentBssid;
