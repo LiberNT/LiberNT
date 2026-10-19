@@ -27,8 +27,7 @@ HKR,,NoInstallClass,,1
 
 [GenericMfg]
 ;FIXME: We do not have a driver yet
-%*PNP0700.DeviceDesc% = fdc_Inst,*PNP0700
-;%*PNP0700.DeviceDesc% = NO_DRV,*PNP0700
+%*PNP0700.DeviceDesc% = NO_DRV,*PNP0700
 
 ;----------------------------- FDC DRIVER -----------------------------
 
