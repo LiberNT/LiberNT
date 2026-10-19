@@ -33,7 +33,11 @@ _strnicmp(
                 chr2 += ('a' - 'A');
 
             if (chr1 != chr2)
+            {
+                if (sizeof(void *) == sizeof(int))
+                    return (chr1 > chr2) - (chr1 < chr2);
                 return chr1 - chr2;
+            }
         }
         else if (chr1 == 0)
         {
