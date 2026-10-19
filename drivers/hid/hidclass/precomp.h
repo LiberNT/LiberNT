@@ -220,6 +220,10 @@ VOID
 HidClassPDO_SurpriseRemoval(
     IN PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension);
 
+VOID
+HidClassFDO_KickRead(
+    IN PDEVICE_OBJECT FDODeviceObject);
+
 /* pdo.c */
 NTSTATUS
 HidClassPDO_CreatePDO(

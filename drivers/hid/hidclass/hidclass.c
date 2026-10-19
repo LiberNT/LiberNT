@@ -225,6 +225,8 @@ HidClass_Create(
     ASSERT(IoStack->FileObject);
     IoStack->FileObject->FsContext = Context;
 
+    HidClassFDO_KickRead(PDODeviceExtension->FDODeviceObject);
+
     //
     // done
     //
@@ -476,6 +478,18 @@ HidClassFDO_RouteReport(
 
 static IO_COMPLETION_ROUTINE HidClassFDO_ReadCompletion;
 
+static BOOLEAN
+HidClassFDO_WantsRead(
+    IN PHIDCLASS_FDO_EXTENSION FDODeviceExtension)
+{
+    if (FDODeviceExtension->ReadStopped)
+        return FALSE;
+    if (FDODeviceExtension->WaitingReads)
+        return TRUE;
+    return !FDODeviceExtension->Common.DriverExtension->DevicesArePolled &&
+           !IsListEmpty(&FDODeviceExtension->OpenFileList);
+}
+
 static VOID
 HidClassFDO_SubmitRead(
     IN PDEVICE_OBJECT FDODeviceObject)
@@ -515,7 +529,7 @@ HidClassFDO_ReadDpc(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     KeAcquireSpinLock(&FDODeviceExtension->ReadLock, &OldLevel);
-    if (FDODeviceExtension->ReadStopped || !FDODeviceExtension->WaitingReads)
+    if (!HidClassFDO_WantsRead(FDODeviceExtension))
     {
         FDODeviceExtension->ReadActive = FALSE;
         KeSetEvent(&FDODeviceExtension->ReadIdleEvent, IO_NO_INCREMENT, FALSE);
@@ -577,7 +591,7 @@ HidClassFDO_ReadCompletion(
     HidClass_CompleteReadList(&CompleteList);
 
     KeAcquireSpinLock(&FDODeviceExtension->ReadLock, &OldLevel);
-    Continue = NT_SUCCESS(Status) && !FDODeviceExtension->ReadStopped && FDODeviceExtension->WaitingReads;
+    Continue = NT_SUCCESS(Status) && HidClassFDO_WantsRead(FDODeviceExtension);
     if (!Continue)
     {
         FDODeviceExtension->ReadActive = FALSE;
@@ -678,6 +692,30 @@ HidClassFDO_StopRead(
         ExFreePoolWithTag(FDODeviceExtension->ReadBuffer, HIDCLASS_TAG);
         FDODeviceExtension->ReadBuffer = NULL;
     }
+}
+
+VOID
+HidClassFDO_KickRead(
+    IN PDEVICE_OBJECT FDODeviceObject)
+{
+    PHIDCLASS_FDO_EXTENSION FDODeviceExtension = FDODeviceObject->DeviceExtension;
+    BOOLEAN Start = FALSE;
+    KIRQL OldLevel;
+
+    if (FDODeviceExtension->Common.DriverExtension->DevicesArePolled)
+        return;
+
+    KeAcquireSpinLock(&FDODeviceExtension->ReadLock, &OldLevel);
+    if (!FDODeviceExtension->ReadActive && FDODeviceExtension->ReadIrp && HidClassFDO_WantsRead(FDODeviceExtension))
+    {
+        FDODeviceExtension->ReadActive = TRUE;
+        KeClearEvent(&FDODeviceExtension->ReadIdleEvent);
+        Start = TRUE;
+    }
+    KeReleaseSpinLock(&FDODeviceExtension->ReadLock, OldLevel);
+
+    if (Start)
+        HidClassFDO_SubmitRead(FDODeviceObject);
 }
 
 VOID
