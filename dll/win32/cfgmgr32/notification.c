@@ -67,6 +67,13 @@ CALLBACK DWORD devnotify_callback( HANDLE handle, DWORD flags, DEV_BROADCAST_HDR
         action = CM_NOTIFY_ACTION_DEVICEINTERFACEARRIVAL;
         break;
     case DBT_DEVICEREMOVECOMPLETE:
+#ifdef __REACTOS__
+        if (header->dbch_devicetype == DBT_DEVTYP_HANDLE)
+        {
+            action = CM_NOTIFY_ACTION_DEVICEREMOVECOMPLETE;
+            break;
+        }
+#endif
         FIXME( "CM_NOTIFY_ACTION_DEVICEREMOVECOMPLETE not implemented\n" );
         action = CM_NOTIFY_ACTION_DEVICEINTERFACEREMOVAL;
         break;
@@ -99,6 +106,9 @@ CALLBACK DWORD devnotify_callback( HANDLE handle, DWORD flags, DEV_BROADCAST_HDR
         UINT data_size = handle->dbch_size - 2 * sizeof(WCHAR) - offsetof( DEV_BROADCAST_HANDLE, dbch_data );
 
         size = offsetof( CM_NOTIFY_EVENT_DATA, u.DeviceHandle.Data[data_size] );
+#ifdef __REACTOS__
+        if (action == CM_NOTIFY_ACTION_DEVICEREMOVECOMPLETE && size < sizeof(*event_data)) size = sizeof(*event_data);
+#endif
         if (!(event_data = calloc( 1, size ))) return 0;
 
         event_data->FilterType = CM_NOTIFY_FILTER_TYPE_DEVICEHANDLE;
