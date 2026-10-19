@@ -934,6 +934,43 @@ AreFilesIdentical(
 }
 
 static
+VOID
+GetEfiLoaderSourceDir(
+    _In_ PCUNICODE_STRING SourceRootPath,
+    _Out_writes_(Chars) PWSTR SrcDir,
+    _In_ SIZE_T Chars)
+{
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SYSTEM\\Setup");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"SystemPartition");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE KeyHandle;
+    NTSTATUS Status;
+    ULONG Length;
+    union
+    {
+        KEY_VALUE_PARTIAL_INFORMATION Info;
+        UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + MAX_PATH * sizeof(WCHAR)];
+    } Value;
+
+    CombinePaths(SrcDir, Chars, 2, SourceRootPath->Buffer, L"efi\\boot");
+    if (DoesDirExist(NULL, SrcDir))
+        return;
+
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    if (!NT_SUCCESS(NtOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes)))
+        return;
+
+    Status = NtQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation,
+                             &Value, sizeof(Value) - sizeof(WCHAR), &Length);
+    NtClose(KeyHandle);
+    if (!NT_SUCCESS(Status) || Value.Info.Type != REG_SZ || Value.Info.DataLength < sizeof(WCHAR))
+        return;
+
+    ((PWCHAR)Value.Info.Data)[Value.Info.DataLength / sizeof(WCHAR)] = UNICODE_NULL;
+    CombinePaths(SrcDir, Chars, 2, (PCWSTR)Value.Info.Data, L"EFI\\BOOT");
+}
+
+static
 NTSTATUS
 InstallEfiLoaderFiles(
     _In_ PCUNICODE_STRING SystemRootPath,
@@ -962,7 +999,7 @@ InstallEfiLoaderFiles(
     if (ForeignFilesKept)
         *ForeignFilesKept = FALSE;
 
-    CombinePaths(SrcDir, ARRAYSIZE(SrcDir), 2, SourceRootPath->Buffer, L"efi\\boot");
+    GetEfiLoaderSourceDir(SourceRootPath, SrcDir, ARRAYSIZE(SrcDir));
     CombinePaths(DstDir, ARRAYSIZE(DstDir), 2, SystemRootPath->Buffer, L"EFI\\BOOT");
     CombinePaths(OwnManagerPath, ARRAYSIZE(OwnManagerPath), 2, SystemRootPath->Buffer, &EFI_BOOT_MANAGER_FILE[1]);
 
@@ -1755,7 +1792,7 @@ InstallBcdFromTemplate(
     if (!DoesFileExist(NULL, TemplatePath))
         return FALSE;
 
-    CombinePaths(SrcDir, ARRAYSIZE(SrcDir), 2, SourceRootPath->Buffer, L"efi\\boot");
+    GetEfiLoaderSourceDir(SourceRootPath, SrcDir, ARRAYSIZE(SrcDir));
     RtlInitUnicodeString(&Name, SrcDir);
     InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
     *Status = NtOpenFile(&DirectoryHandle,
@@ -1807,7 +1844,7 @@ InstallEfiSystemPartition(
     WCHAR TemplatePath[MAX_PATH];
     BOOLEAN FallbackKept, FirmwareEntry;
 
-    CombinePaths(SrcDir, ARRAYSIZE(SrcDir), 2, SourceRootPath->Buffer, L"efi\\boot");
+    GetEfiLoaderSourceDir(SourceRootPath, SrcDir, ARRAYSIZE(SrcDir));
     if (!DoesDirExist(NULL, SrcDir))
     {
         DPRINT1("No EFI loader in %S\n", SrcDir);
