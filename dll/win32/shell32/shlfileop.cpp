@@ -1179,6 +1179,7 @@ int WINAPI SHFileOperationA(LPSHFILEOPSTRUCTA lpFileOp)
     nFileOp.hwnd = lpFileOp->hwnd;
     nFileOp.wFunc = lpFileOp->wFunc;
     nFileOp.fFlags = lpFileOp->fFlags;
+    nFileOp.fAnyOperationsAborted = lpFileOp->fAnyOperationsAborted;
 
     errCode = _ConvertAtoW(lpFileOp->pFrom, &nFileOp.pFrom, TRUE);
     if (errCode != 0)
@@ -1320,7 +1321,7 @@ static void parse_wildcard_files(FILE_LIST *flList, LPCWSTR szFile, LPDWORD pdwL
 }
 
 /* takes the null-separated file list and fills out the FILE_LIST */
-static HRESULT parse_file_list(FILE_LIST *flList, LPCWSTR szFiles)
+static HRESULT parse_file_list(FILE_LIST *flList, LPCWSTR szFiles, BOOL ParseWildcards = TRUE)
 {
     LPCWSTR ptr = szFiles;
     WCHAR szCurFile[MAX_PATH];
@@ -1335,9 +1336,8 @@ static HRESULT parse_file_list(FILE_LIST *flList, LPCWSTR szFiles)
     flList->num_alloc = 32;
     flList->dwNumFiles = 0;
 
-    /* empty list */
     if (!szFiles[0])
-        return ERROR_ACCESS_DENIED;
+        return S_OK;
 
     flList->feFiles = (FILE_ENTRY *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
                                 flList->num_alloc * sizeof(FILE_ENTRY));
@@ -1360,7 +1360,7 @@ static HRESULT parse_file_list(FILE_LIST *flList, LPCWSTR szFiles)
         }
 
         /* parse wildcard files if they are in the filename */
-        if (StrPBrkW(szCurFile, L"*?"))
+        if (ParseWildcards && StrPBrkW(szCurFile, L"*?"))
         {
             parse_wildcard_files(flList, szCurFile, &i);
             flList->bAnyFromWildcard = TRUE;
@@ -1370,6 +1370,7 @@ static HRESULT parse_file_list(FILE_LIST *flList, LPCWSTR szFiles)
         {
             FILE_ENTRY *file = &flList->feFiles[i];
             add_file_to_entry(file, szCurFile);
+            file->bFromWildcard = StrPBrkW(szCurFile, L"*?") != NULL;
             file->attributes = GetFileAttributesW( file->szFullPath );
             file->bExists = (file->attributes != INVALID_FILE_ATTRIBUTES);
 
@@ -1552,6 +1553,9 @@ static HRESULT copy_files(FILE_OPERATION *op, BOOL multiDest, const FILE_LIST *f
     const FILE_ENTRY *entryToCopy;
     const FILE_ENTRY *fileDest = &flTo->feFiles[0];
 
+    if (!flFrom->dwNumFiles)
+        return ERROR_SUCCESS;
+
     if (flFrom->bAnyDontExist)
         return ERROR_SHELL_INTERNAL_FILE_NOT_FOUND;
 
@@ -1725,6 +1729,9 @@ static HRESULT delete_files(FILE_OPERATION *op, const FILE_LIST *flFrom)
 
         if (fileEntry->attributes == (ULONG)-1)
         {
+            if (fileEntry->szDirectory && !IsAttribDir(GetFileAttributesW(fileEntry->szDirectory)))
+                return DE_INVALIDFILES;
+
             // This is a windows 2003 server specific value which has been removed.
             // Later versions of windows return ERROR_FILE_NOT_FOUND.
             return ERROR_SHELL_INTERNAL_FILE_NOT_FOUND;
@@ -1791,6 +1798,10 @@ static HRESULT delete_files(FILE_OPERATION *op, const FILE_LIST *flFrom)
                 // This is a windows 2003 server specific value which ahs been removed.
                 // Later versions of windows return ERROR_FILE_NOT_FOUND.
                 return ERROR_SHELL_INTERNAL_FILE_NOT_FOUND;
+            }
+            else if (ERROR_PATH_NOT_FOUND == err)
+            {
+                return DE_INVALIDFILES;
             }
             else
             {
@@ -1985,22 +1996,28 @@ static HRESULT rename_files(FILE_OPERATION *op,  const FILE_LIST *flFrom, const 
     const FILE_ENTRY *feFrom;
     const FILE_ENTRY *feTo;
 
-    if (flFrom->dwNumFiles != 1)
-        return ERROR_GEN_FAILURE;
-
-    if (flTo->dwNumFiles != 1)
-        return ERROR_CANCELLED;
+    if (flFrom->dwNumFiles != 1 || flFrom->bAnyFromWildcard)
+        return DE_MANYSRC1DEST;
 
     feFrom = &flFrom->feFiles[0];
-    feTo= &flTo->feFiles[0];
-
-    /* fail if destination doesn't exist */
     if (!feFrom->bExists)
         return ERROR_SHELL_INTERNAL_FILE_NOT_FOUND;
 
-    /* fail if destination already exists */
+    if (!flTo->dwNumFiles)
+        return DE_DIFFDIR;
+
+    feTo = &flTo->feFiles[0];
+    if (!feFrom->szDirectory || !feTo->szDirectory || lstrcmpiW(feFrom->szDirectory, feTo->szDirectory))
+        return DE_DIFFDIR;
+
     if (feTo->bExists)
-        return ERROR_ALREADY_EXISTS;
+    {
+        if (IsAttribDir(feFrom->attributes) != IsAttribDir(feTo->attributes))
+            return IsAttribDir(feTo->attributes) ? DE_FILEDESTISFLD : DE_FLDDESTISFILE;
+
+        if (!(op->req->fFlags & FOF_NOCONFIRMATION))
+            return ERROR_ALREADY_EXISTS;
+    }
 
     return SHNotifyMoveFileW(op, feFrom->szFullPath, feTo->szFullPath, IsAttribDir(feFrom->attributes));
 }
@@ -2016,6 +2033,35 @@ static void check_flags(FILEOP_FLAGS fFlags)
 }
 
 #define GET_FILENAME(fe) ((fe)->szFilename[0] ? (fe)->szFilename : (fe)->szFullPath)
+
+static DWORD check_target_list(const SHFILEOPSTRUCTW *lpFileOp, DWORD SourceCount)
+{
+    LPCWSTR Target;
+    DWORD Count = 1;
+    DWORD Index;
+
+    if (lpFileOp->wFunc == FO_DELETE)
+        return ERROR_SUCCESS;
+    if (!lpFileOp->pTo)
+        return ERROR_ACCESS_DENIED;
+
+    if (lpFileOp->fFlags & FOF_MULTIDESTFILES)
+    {
+        DWORD TargetCount = 0;
+
+        for (Target = lpFileOp->pTo; *Target; Target += lstrlenW(Target) + 1)
+            TargetCount++;
+        Count = min(SourceCount, TargetCount);
+    }
+
+    for (Index = 0, Target = lpFileOp->pTo; Index < Count && *Target; Index++, Target += lstrlenW(Target) + 1)
+    {
+        if (StrPBrkW(Target, L"*?"))
+            return ERROR_INVALID_NAME;
+    }
+
+    return ERROR_SUCCESS;
+}
 
 static DWORD
 validate_operation(FILE_OPERATION &op, FILE_LIST *flFrom, FILE_LIST *flTo)
@@ -2119,7 +2165,7 @@ int SHELL32_FileOperation(LPSHFILEOPSTRUCTW lpFileOp, FILEOPCALLBACK Callback, v
     FILE_LIST flFrom, flTo;
     int ret = 0;
 
-    if (!lpFileOp)
+    if (!lpFileOp || !lpFileOp->pFrom)
         return ERROR_INVALID_PARAMETER;
 
     ret = CoInitialize(NULL);
@@ -2128,6 +2174,13 @@ int SHELL32_FileOperation(LPSHFILEOPSTRUCTW lpFileOp, FILEOPCALLBACK Callback, v
 
     lpFileOp->fAnyOperationsAborted = FALSE;
     check_flags(lpFileOp->fFlags);
+
+    if (lpFileOp->wFunc != FO_MOVE && lpFileOp->wFunc != FO_COPY &&
+        lpFileOp->wFunc != FO_DELETE && lpFileOp->wFunc != FO_RENAME)
+    {
+        CoUninitialize();
+        return ERROR_INVALID_PARAMETER;
+    }
 
     ZeroMemory(&flFrom, sizeof(FILE_LIST));
     ZeroMemory(&flTo, sizeof(FILE_LIST));
@@ -2139,8 +2192,15 @@ int SHELL32_FileOperation(LPSHFILEOPSTRUCTW lpFileOp, FILEOPCALLBACK Callback, v
         return ret;
     }
 
+    if ((ret = check_target_list(lpFileOp, flFrom.dwNumFiles)))
+    {
+        destroy_file_list(&flFrom);
+        CoUninitialize();
+        return ret;
+    }
+
     if (lpFileOp->wFunc != FO_DELETE)
-        parse_file_list(&flTo, lpFileOp->pTo);
+        parse_file_list(&flTo, lpFileOp->pTo, FALSE);
 
     ZeroMemory(&op, sizeof(op));
     op.req = lpFileOp;
