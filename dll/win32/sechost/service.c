@@ -1992,6 +1992,11 @@ BOOL WINAPI DECLSPEC_HOTPATCH StartServiceCtrlDispatcherW( const SERVICE_TABLE_E
 
 static HANDLE device_notify_thread;
 static struct list device_notify_list = LIST_INIT(device_notify_list);
+#ifdef __REACTOS__
+static DWORD device_notify_thread_id;
+static struct device_notify *device_notify_delivering;
+static CONDITION_VARIABLE device_notify_delivered = CONDITION_VARIABLE_INIT;
+#endif
 
 #define DEVICE_NOTIFY_MAGIC 0xdecafbad
 
@@ -2002,6 +2007,11 @@ struct device_notify
     WCHAR *path;
     HANDLE handle;
     device_notify_callback callback;
+#ifdef __REACTOS__
+    struct device_notify *source;
+    LONG refs;
+    BOOL removed;
+#endif
     DEV_BROADCAST_HDR header[]; /* variable size */
 };
 
@@ -2015,6 +2025,10 @@ static struct device_notify *device_notify_copy( struct device_notify *notify, D
     event->magic = DEVICE_NOTIFY_MAGIC;
     event->handle = notify->handle;
     event->callback = notify->callback;
+#ifdef __REACTOS__
+    event->source = notify;
+    notify->refs++;
+#endif
     memcpy( event->header, header, header->dbch_size );
 
     if (header->dbch_devicetype == DBT_DEVTYP_HANDLE)
@@ -2062,6 +2076,9 @@ static DWORD WINAPI device_notify_proc( void *arg )
     BYTE *buf;
 
     SetThreadDescription( GetCurrentThread(), L"wine_sechost_device_notify" );
+#ifdef __REACTOS__
+    device_notify_thread_id = GetCurrentThreadId();
+#endif
 
     if ((err = RpcStringBindingComposeW( NULL, protseq, NULL, endpoint, NULL, &binding_str )))
     {
@@ -2125,7 +2142,28 @@ static DWORD WINAPI device_notify_proc( void *arg )
 
         LIST_FOR_EACH_ENTRY_SAFE( event, next, &events, struct device_notify, entry )
         {
+#ifdef __REACTOS__
+            struct device_notify *source = event->source;
+
+            EnterCriticalSection( &service_cs );
+            if (!source->removed)
+            {
+                device_notify_delivering = source;
+                LeaveCriticalSection( &service_cs );
+                event->callback( event->handle, code, event->header );
+                EnterCriticalSection( &service_cs );
+                device_notify_delivering = NULL;
+                WakeAllConditionVariable( &device_notify_delivered );
+            }
+            if (!--source->refs && source->removed)
+            {
+                free( source->path );
+                free( source );
+            }
+            LeaveCriticalSection( &service_cs );
+#else
             event->callback( event->handle, code, event->header );
+#endif
             list_remove( &event->entry );
             free( event );
         }
@@ -2224,8 +2262,20 @@ BOOL WINAPI I_ScUnregisterDeviceNotification( HDEVNOTIFY handle )
         else
         {
             list_remove( &notify->entry );
+#ifdef __REACTOS__
+            notify->magic = 0;
+            notify->removed = TRUE;
+            while (device_notify_delivering == notify && GetCurrentThreadId() != device_notify_thread_id)
+                SleepConditionVariableCS( &device_notify_delivered, &service_cs, INFINITE );
+            if (!notify->refs)
+            {
+                free( notify->path );
+                free( notify );
+            }
+#else
             free( notify->path );
             free( notify );
+#endif
         }
     }
     __EXCEPT_PAGE_FAULT
