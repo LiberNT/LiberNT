@@ -12,8 +12,6 @@
 #include "ndis6_internal.h"   /* PNDIS6_DRIVER_BLOCK + Ndis6InitializeImDeviceInstance */
 
 #include <atm.h>
-#include <ntimage.h>
-#include <ndk/rtlfuncs.h>
 
 /*
  * @unimplemented
@@ -124,63 +122,6 @@ NdisAllocateFromBlockPool(
     return NULL;
 }
 
-extern const IMAGE_DOS_HEADER __ImageBase;
-
-/*
- * @implemented
- */
-PVOID
-EXPORT
-NdisGetRoutineAddress(
-    IN PUNICODE_STRING  NdisRoutineName)
-{
-    PUCHAR Base = (PUCHAR)&__ImageBase;
-    PIMAGE_EXPORT_DIRECTORY Exports;
-    ANSI_STRING Name;
-    PULONG Names, Functions;
-    PUSHORT Ordinals;
-    PVOID Routine = NULL;
-    ULONG Size, Index, Rva;
-
-    PAGED_CODE();
-
-    if (NdisRoutineName == NULL ||
-        !NT_SUCCESS(RtlUnicodeStringToAnsiString(&Name, NdisRoutineName, TRUE)))
-    {
-        return NULL;
-    }
-
-    Exports = RtlImageDirectoryEntryToData(Base, TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &Size);
-    if (Exports != NULL)
-    {
-        Names = (PULONG)(Base + Exports->AddressOfNames);
-        Functions = (PULONG)(Base + Exports->AddressOfFunctions);
-        Ordinals = (PUSHORT)(Base + Exports->AddressOfNameOrdinals);
-        for (Index = 0; Index < Exports->NumberOfNames; Index++)
-        {
-            PCSTR ExportName = (PCSTR)(Base + Names[Index]);
-
-            if (strlen(ExportName) != Name.Length ||
-                !RtlEqualMemory(ExportName, Name.Buffer, Name.Length))
-            {
-                continue;
-            }
-            if (Ordinals[Index] < Exports->NumberOfFunctions)
-            {
-                Rva = Functions[Ordinals[Index]];
-                if (Rva < (ULONG)((PUCHAR)Exports - Base) ||
-                    Rva >= (ULONG)((PUCHAR)Exports - Base) + Size)
-                {
-                    Routine = Base + Rva;
-                }
-            }
-            break;
-        }
-    }
-
-    RtlFreeAnsiString(&Name);
-    return Routine;
-}
 
 /*
  * @unimplemented

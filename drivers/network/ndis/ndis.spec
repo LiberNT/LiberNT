@@ -299,9 +299,7 @@
  @ stdcall NdisScheduleWorkItem(ptr)
 
 ; ====================================================================
-; NDIS 6 / NDIS 6.20 stub exports (implemented in ndis/60stubs.c).
-; All entry points are functional stubs — registration succeeds, datapath
-; ops are no-ops. Added for the dev-nt6-1 branch (NT 5.2 -> NT 6.1 upgrade).
+; NDIS 6 / NDIS 6.20 exports.
 ; ====================================================================
  @ stdcall NdisAllocateNetBufferListPool(ptr ptr)
  @ stdcall NdisFreeNetBufferListPool(ptr)

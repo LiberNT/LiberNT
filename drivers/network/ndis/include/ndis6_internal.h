@@ -670,7 +670,7 @@ Ndis6TryDispatchAdapterFdoIrp(
     _In_  PIRP           Irp,
     _Out_ NTSTATUS*      OutStatus);
 
-/* 60stubs.c — TRUE if DeviceObject was created by NdisRegisterDeviceEx. */
+/* 60device.c — TRUE if DeviceObject was created by NdisRegisterDeviceEx. */
 BOOLEAN
 Ndis6DeviceIsControlDevice(
     _In_ PDEVICE_OBJECT DeviceObject);
@@ -1069,6 +1069,9 @@ typedef struct _NDIS6_FILTER_DRIVER_BLOCK
 extern LIST_ENTRY g_Ndis6FilterDriverList;
 extern KSPIN_LOCK g_Ndis6FilterDriverListLock;
 
+VOID
+Ndis6FilterDriverListInit(VOID);
+
 NDIS_STATUS
 Ndis6AttachFiltersToAdapter(
     _In_ PLOGICAL_ADAPTER Adapter);
@@ -1259,6 +1262,12 @@ Ndis6DereferenceTransmit(
 
 extern LIST_ENTRY g_Ndis6ProtocolDriverList;
 extern KSPIN_LOCK g_Ndis6ProtocolDriverListLock;
+
+NDIS_STATUS
+Ndis6BuildProtocolSection(
+    _In_ PNDIS6_PROTOCOL_DRIVER_BLOCK Block,
+    _In_ PLOGICAL_ADAPTER Adapter,
+    _Out_ PUNICODE_STRING ProtocolSection);
 
 VOID
 Ndis6UnbindAllProtocolsFromAdapter(
