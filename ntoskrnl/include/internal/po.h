@@ -452,6 +452,12 @@ PopHiberPlatformSupported(
     VOID
 );
 
+VOID
+NTAPI
+PopHiberPagingFileCreated(
+    VOID
+);
+
 BOOLEAN
 NTAPI
 PopHiberIsReady(

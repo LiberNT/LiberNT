@@ -67,6 +67,8 @@ static volatile LONG PopHiberStartState;
 #define POP_HIBER_START_CAPTURED    0x1
 #define POP_HIBER_START_PLATFORM    0x2
 #define POP_HIBER_START_QUEUED      0x4
+#define POP_HIBER_START_PAGEFILE    0x8
+#define POP_HIBER_START_NO_SPACE    0x10
 
 static
 BOOLEAN
@@ -938,6 +940,20 @@ PopHiberReserve(
 
 static
 VOID
+PopHiberQueueRetry(
+    _In_ LONG Bit)
+{
+    LONG Old = InterlockedOr(&PopHiberStartState, Bit);
+    LONG Ready = POP_HIBER_START_PAGEFILE | POP_HIBER_START_NO_SPACE;
+
+    if (((Old | Bit) & Ready) != Ready || (Old & Ready) == Ready)
+        return;
+
+    ExQueueWorkItem(&PopHiber.WorkItem, DelayedWorkQueue);
+}
+
+static
+VOID
 NTAPI
 PopHiberInitializeWorker(
     _In_ PVOID Parameter)
@@ -949,9 +965,14 @@ PopHiberInitializeWorker(
 
     PopHiberReadPolicy(&Enabled, &Percent);
     if (Enabled)
-        PopHiberReserve(TRUE);
+    {
+        if (PopHiberReserve(TRUE) == STATUS_DISK_FULL)
+            PopHiberQueueRetry(POP_HIBER_START_NO_SPACE);
+    }
     else
+    {
         PopHiberReserve(FALSE);
+    }
 }
 
 static
@@ -984,6 +1005,13 @@ NTAPI
 PopHiberPlatformSupported(VOID)
 {
     PopHiberQueueStart(POP_HIBER_START_PLATFORM);
+}
+
+VOID
+NTAPI
+PopHiberPagingFileCreated(VOID)
+{
+    PopHiberQueueRetry(POP_HIBER_START_PAGEFILE);
 }
 
 VOID

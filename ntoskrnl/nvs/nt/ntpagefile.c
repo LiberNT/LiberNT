@@ -387,6 +387,8 @@ NtCreatePagingFile(
     if (PagingFile->FileObject->DeviceObject->Flags & DO_SYSTEM_BOOT_PARTITION)
         IoInitializeCrashDump(PagingFile->FileHandle);
 
+    PopHiberPagingFileCreated();
+
     return STATUS_SUCCESS;
 }
 
