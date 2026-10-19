@@ -1376,10 +1376,12 @@ Quit:
     return Success;
 }
 
+static
 BOOL
-UpdateNamedObjectAccess(
+UpdateSessionDirectoryAccess(
     _In_ HANDLE UserToken,
-    _In_ BOOL Grant)
+    _In_ BOOL Grant,
+    _In_ PCWSTR DirectoryName)
 {
     WCHAR Buffer[64];
     UNICODE_STRING Name;
@@ -1423,13 +1425,13 @@ UpdateNamedObjectAccess(
     if (!LogonSid)
         goto Quit;
 
-    StringCchPrintfW(Buffer, ARRAYSIZE(Buffer), L"\\Sessions\\%lu\\BaseNamedObjects", SessionId);
+    StringCchPrintfW(Buffer, ARRAYSIZE(Buffer), L"\\Sessions\\%lu\\%s", SessionId, DirectoryName);
     RtlInitUnicodeString(&Name, Buffer);
     InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
     Status = NtOpenDirectoryObject(&Directory, READ_CONTROL | WRITE_DAC, &ObjectAttributes);
     if (!NT_SUCCESS(Status))
     {
-        ERR("UpdateNamedObjectAccess(): Failed to open %wZ (Status 0x%08lx)\n", &Name, Status);
+        ERR("UpdateSessionDirectoryAccess(): Failed to open %wZ (Status 0x%08lx)\n", &Name, Status);
         goto Quit;
     }
 
@@ -1487,7 +1489,7 @@ UpdateNamedObjectAccess(
     Status = NtSetSecurityObject(Directory, DACL_SECURITY_INFORMATION, &NewSd);
     if (!NT_SUCCESS(Status))
     {
-        ERR("UpdateNamedObjectAccess(): Failed to set the DACL (Status 0x%08lx)\n", Status);
+        ERR("UpdateSessionDirectoryAccess(): Failed to set the DACL (Status 0x%08lx)\n", Status);
         goto Quit;
     }
 
@@ -1504,6 +1506,18 @@ Quit:
         RtlFreeHeap(RtlGetProcessHeap(), 0, Groups);
     if (User)
         RtlFreeHeap(RtlGetProcessHeap(), 0, User);
+    return Success;
+}
+
+BOOL
+UpdateNamedObjectAccess(
+    _In_ HANDLE UserToken,
+    _In_ BOOL Grant)
+{
+    BOOL Success = UpdateSessionDirectoryAccess(UserToken, Grant, L"BaseNamedObjects");
+
+    if (!UpdateSessionDirectoryAccess(UserToken, Grant, L"AppContainerNamedObjects"))
+        Success = FALSE;
     return Success;
 }
 
