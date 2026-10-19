@@ -371,6 +371,13 @@ STDMETHODIMP CFileOperation::PerformOperations()
                 if (!m_Job->Name.IsEmpty()) request.fFlags |= FOF_MULTIDESTFILES;
                 m_CallbackResult = S_OK;
                 int error = SHELL32_FileOperation(&request, Callback, this, &progress);
+                if (error >= DE_SAMEFILE && error <= DE_SRC_IS_CDRECORD)
+                {
+                    m_Aborted = TRUE;
+                    error = ERROR_SUCCESS;
+                    if (m_CallbackResult == E_FAIL)
+                        m_CallbackResult = S_OK;
+                }
                 hr = FAILED(m_CallbackResult) ? m_CallbackResult : HRESULT_FROM_WIN32(error);
                 if (request.fAnyOperationsAborted && m_CallbackResult != E_ABORT) { m_Aborted = TRUE; if (SUCCEEDED(hr)) hr = HRESULT_FROM_WIN32(ERROR_CANCELLED); }
                 if (request.hNameMappings) SHFreeNameMappings(request.hNameMappings);
