@@ -57,7 +57,7 @@ ChangeUniqueIdRoutine(IN PWSTR ValueName,
                               DatabasePath,
                               ValueName,
                               REG_BINARY,
-                              NewUniqueId,
+                              NewUniqueId->UniqueId,
                               NewUniqueId->UniqueIdLength);
     }
 
