@@ -331,6 +331,9 @@ PpSetCustomTargetEvent(IN PDEVICE_OBJECT DeviceObject,
     PiNotifyTargetDeviceChange(&GUID_PNP_CUSTOM_NOTIFICATION, DeviceObject, NotificationStructure);
     IopQueueCustomTargetEvent(&IopGetDeviceNode(DeviceObject)->InstancePath, NotificationStructure);
 
+    if (Callback)
+        Callback(Context);
+
     if (SyncEvent)
     {
         KeSetEvent(SyncEvent, IO_NO_INCREMENT, FALSE);
@@ -758,5 +761,5 @@ IoReportTargetDeviceChangeAsynchronous(IN PDEVICE_OBJECT PhysicalDeviceObject,
     /* Finally, queue the item, our work here is done */
     ExQueueWorkItem(&(Item->WorkItem), DelayedWorkQueue);
 
-    return STATUS_PENDING;
+    return STATUS_SUCCESS;
 }
