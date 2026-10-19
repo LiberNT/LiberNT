@@ -577,10 +577,15 @@ ScControlService(PACTIVE_SERVICE lpService,
     }
     else if (lpService->HandlerFunctionEx)
     {
-        if (dwControl == SERVICE_CONTROL_DEVICEEVENT)
+        if ((dwControl == SERVICE_CONTROL_DEVICEEVENT ||
+             dwControl == SERVICE_CONTROL_HARDWAREPROFILECHANGE ||
+             dwControl == SERVICE_CONTROL_POWEREVENT ||
+             dwControl == SERVICE_CONTROL_SESSIONCHANGE) &&
+            ControlPacket->dwServiceNameOffset >= sizeof(SCM_CONTROL_PACKET) + sizeof(DWORD))
         {
             dwEventType = *(LPDWORD)((ULONG_PTR)ControlPacket + sizeof(SCM_CONTROL_PACKET));
-            pEventData = (PVOID)((ULONG_PTR)ControlPacket + sizeof(SCM_CONTROL_PACKET) + sizeof(DWORD));
+            if (ControlPacket->dwServiceNameOffset > sizeof(SCM_CONTROL_PACKET) + sizeof(DWORD))
+                pEventData = (PVOID)((ULONG_PTR)ControlPacket + sizeof(SCM_CONTROL_PACKET) + sizeof(DWORD));
         }
 
         _SEH2_TRY

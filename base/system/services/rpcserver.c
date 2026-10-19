@@ -6980,8 +6980,9 @@ RI_ScSendPnPMessage(
     }
 
     /* Calculate the total size of the control packet:
-     * initial structure, event type and event data */
-    PacketSize = sizeof(SCM_CONTROL_PACKET) + sizeof(DWORD) + dwEventSize;
+     * initial structure, event type, event data and service name */
+    PacketSize = ALIGN_UP(sizeof(SCM_CONTROL_PACKET) + sizeof(DWORD) + dwEventSize, DWORD);
+    PacketSize += (DWORD)((wcslen(pService->lpServiceName) + 1) * sizeof(WCHAR));
 
     /* Allocate the control packet */
     ControlPacket = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, PacketSize);
@@ -6990,6 +6991,8 @@ RI_ScSendPnPMessage(
 
     ControlPacket->dwSize = PacketSize;
     ControlPacket->dwControl = dwControl;
+    ControlPacket->hServiceStatus = pService->dwResumeCount;
+    ControlPacket->dwServiceTag = pService->dwServiceTag;
 
     /* Copy the event type and event data into the control packet */
     Ptr = ((ULONG_PTR)ControlPacket + sizeof(SCM_CONTROL_PACKET));
@@ -6999,6 +7002,10 @@ RI_ScSendPnPMessage(
         Ptr = Ptr + sizeof(dwEventType);
         RtlCopyMemory((PULONG)Ptr, pEventData, dwEventSize);
     }
+
+    /* Copy the service name after the event data */
+    ControlPacket->dwServiceNameOffset = ALIGN_UP(sizeof(SCM_CONTROL_PACKET) + sizeof(DWORD) + dwEventSize, DWORD);
+    wcscpy((PWSTR)((ULONG_PTR)ControlPacket + ControlPacket->dwServiceNameOffset), pService->lpServiceName);
 
     /* Send the control packet */
     dwError = ScmSendControlPacket(pService->lpImage->hControlPipe,

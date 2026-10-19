@@ -181,6 +181,21 @@ IntHandlePowerStateWorker(
             break;
         }
 
+        case PowerState_SuspendServices:
+        {
+            UserLeave();
+            IoPnPDeliverServicePowerNotification(pParameters->SystemAction, PBT_APMSUSPEND, 0, TRUE);
+            UserEnterExclusive();
+            break;
+        }
+
+        case PowerState_ResumeServices:
+        {
+            IoPnPDeliverServicePowerNotification(pParameters->SystemAction, PBT_APMRESUMEAUTOMATIC, 0, FALSE);
+            IoPnPDeliverServicePowerNotification(pParameters->SystemAction, PBT_APMRESUMESUSPEND, 0, FALSE);
+            break;
+        }
+
         default:
         {
             break;

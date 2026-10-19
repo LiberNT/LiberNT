@@ -12,6 +12,8 @@
 typedef struct _POP_SLEEP_CALL
 {
     POWER_STATE_HANDLER Handler;
+    PENTER_STATE_SYSTEM_HANDLER SystemHandler;
+    PVOID SystemContext;
     LONG NumberProcessors;
     volatile LONG Number;
     NTSTATUS Status;
@@ -272,6 +274,10 @@ PopRegisterPowerStateHandler(
         case PowerStateSleeping3:
             SystemState = PowerSystemSleeping3;
             break;
+        case PowerStateSleeping4:
+            PopCapabilities.SystemS4 = TRUE;
+            SystemState = PowerSystemHibernate;
+            break;
         case PowerStateShutdownOff:
             PopCapabilities.SystemS5 = TRUE;
             break;
@@ -289,8 +295,26 @@ PopRegisterPowerStateHandler(
     PopUpdateSleepCapabilities();
     KeReleaseGuardedMutex(&PopStateHandlerLock);
 
+    if (PowerStateHandler->Type == PowerStateSleeping4)
+        PopHiberPlatformSupported();
+
     DPRINT1("Power state handler %u registered\n", PowerStateHandler->Type);
     return STATUS_SUCCESS;
+}
+
+static
+BOOLEAN
+PopGetHibernateHandler(
+    _Out_ PPOWER_STATE_HANDLER Handler)
+{
+    BOOLEAN Found;
+
+    KeAcquireGuardedMutex(&PopStateHandlerLock);
+    Found = PopStateHandlers[PowerStateSleeping4].Handler != NULL && PopHiberIsReady();
+    if (Found)
+        *Handler = PopStateHandlers[PowerStateSleeping4];
+    KeReleaseGuardedMutex(&PopStateHandlerLock);
+    return Found;
 }
 
 static
@@ -478,7 +502,6 @@ PopSleepSendToLevel(
     if (InterlockedDecrement(&Traverse->Pending) != 0)
         KeWaitForSingleObject(&Traverse->Event, Executive, KernelMode, FALSE, NULL);
 }
-
 static
 NTSTATUS
 PopSleepSendToPowerDevice(
@@ -578,21 +601,45 @@ PopSleepCallWin32(
 }
 
 static
+VOID
+PopReadRealTimeClock(
+    _Out_ PLARGE_INTEGER Time)
+{
+    TIME_FIELDS TimeFields;
+
+    Time->QuadPart = 0;
+    if (HalQueryRealTimeClock(&TimeFields))
+        RtlTimeFieldsToTime(&TimeFields, Time);
+}
+
+static
 ULONG_PTR
 NTAPI
 PopSleepIpiWorker(
     _In_ ULONG_PTR Argument)
 {
     PPOP_SLEEP_CALL Call = (PPOP_SLEEP_CALL)Argument;
+    LARGE_INTEGER SleepStart = { { 0 } };
+    LARGE_INTEGER SleepEnd;
     NTSTATUS Status;
 
+    if (KeGetCurrentProcessorNumber() == 0)
+    {
+        PopReadRealTimeClock(&SleepStart);
+        KiSuspendClockTime();
+    }
+
     Status = Call->Handler.Handler(Call->Handler.Context,
-                                   NULL,
-                                   NULL,
+                                   Call->SystemHandler,
+                                   Call->SystemContext,
                                    Call->NumberProcessors,
                                    &Call->Number);
     if (KeGetCurrentProcessorNumber() == 0)
+    {
+        PopReadRealTimeClock(&SleepEnd);
+        KiResumeClockTime((SleepEnd.QuadPart > SleepStart.QuadPart) ? SleepEnd.QuadPart - SleepStart.QuadPart : 0);
         Call->Status = Status;
+    }
 
     return (ULONG_PTR)Status;
 }
@@ -610,20 +657,40 @@ PopSleepSystem(
     PDEVICE_OBJECT PowerDevice = NULL;
     NTSTATUS Status;
 
-    if (SystemAction != PowerActionSleep)
+    if (SystemAction != PowerActionSleep && SystemAction != PowerActionHibernate)
         return STATUS_NOT_SUPPORTED;
 
     RtlZeroMemory(&Call, sizeof(Call));
-    SystemState = PopChooseSleepState(LightestSystemState, Flags, &Call.Handler);
+    SystemState = PowerSystemUnspecified;
+    if (SystemAction == PowerActionSleep)
+        SystemState = PopChooseSleepState(LightestSystemState, Flags, &Call.Handler);
+
     if (SystemState == PowerSystemUnspecified)
     {
-        DPRINT1("No sleep state at or below S%u is available\n",
-                LightestSystemState - PowerSystemWorking);
-        return STATUS_NOT_SUPPORTED;
+        if (!PopGetHibernateHandler(&Call.Handler))
+        {
+            DPRINT1("No sleep state at or below S%u is available\n",
+                    LightestSystemState - PowerSystemWorking);
+            return STATUS_NOT_SUPPORTED;
+        }
+
+        SystemAction = PowerActionHibernate;
+        SystemState = PowerSystemHibernate;
     }
 
     if (InterlockedCompareExchange(&PopSleepInProgress, TRUE, FALSE) != FALSE)
         return STATUS_DEVICE_BUSY;
+
+    if (SystemState == PowerSystemHibernate)
+    {
+        Status = PopHiberPrepare(&Call.SystemContext);
+        if (!NT_SUCCESS(Status))
+        {
+            InterlockedExchange(&PopSleepInProgress, FALSE);
+            return Status;
+        }
+        Call.SystemHandler = PopHiberSystemHandler;
+    }
 
     DPRINT1("Entering sleep state S%u\n", SystemState - PowerSystemWorking);
 
@@ -632,6 +699,7 @@ PopSleepSystem(
 
     PopSleepCallWin32(PowerState_NotifyWL, SystemAction, SystemState, Flags);
     PopSleepCallWin32(PowerState_SuspendApps, SystemAction, SystemState, Flags);
+    PopSleepCallWin32(PowerState_SuspendServices, SystemAction, SystemState, Flags);
 
     if (NT_SUCCESS(IopGetSystemPowerDeviceObject(&PowerPdo)))
     {
@@ -645,6 +713,8 @@ PopSleepSystem(
 
     ExNotifyCallback(PowerStateCallback, (PVOID)PO_CB_SYSTEM_STATE_LOCK, (PVOID)0);
     PopFlushVolumes(TRUE);
+    if (SystemState == PowerSystemHibernate)
+        MmPrepareHibernation();
 
     if (Flags & POWER_ACTION_QUERY_ALLOWED)
     {
@@ -689,7 +759,15 @@ PopSleepSystem(
 Done:
     ExNotifyCallback(PowerStateCallback, (PVOID)PO_CB_SYSTEM_STATE_LOCK, (PVOID)1);
 
+    if (SystemState == PowerSystemHibernate)
+    {
+        MmCompleteHibernation();
+        PopHiberInvalidate();
+        PopHiberRelease();
+    }
+
     PopSleepCallWin32(PowerState_ResumeApps, SystemAction, SystemState, Flags);
+    PopSleepCallWin32(PowerState_ResumeServices, SystemAction, SystemState, Flags);
 
     if (PowerDevice)
         ObDereferenceObject(PowerDevice);

@@ -384,6 +384,60 @@ PopLockConsoleOnWake(
 
 VOID
 NTAPI
+PopHiberInitialize(
+    VOID
+);
+
+VOID
+NTAPI
+PopHiberCaptureLoaderBlock(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock
+);
+
+VOID
+NTAPI
+PopHiberPlatformSupported(
+    VOID
+);
+
+BOOLEAN
+NTAPI
+PopHiberIsReady(
+    VOID
+);
+
+NTSTATUS
+NTAPI
+PopHiberReserve(
+    _In_ BOOLEAN Enable
+);
+
+NTSTATUS
+NTAPI
+PopHiberPrepare(
+    _Out_ PVOID *SystemContext
+);
+
+VOID
+NTAPI
+PopHiberRelease(
+    VOID
+);
+
+VOID
+NTAPI
+PopHiberInvalidate(
+    VOID
+);
+
+NTSTATUS
+NTAPI
+PopHiberSystemHandler(
+    _In_ PVOID SystemContext
+);
+
+VOID
+NTAPI
 PopCleanupPowerState(
     IN PPOWER_STATE PowerState
 );

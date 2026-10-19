@@ -79,6 +79,16 @@ IoReportHalResourceUsage(
     _In_ PCM_RESOURCE_LIST TranslatedResourceList,
     _In_ ULONG ResourceListSize
 );
+
+NTKERNELAPI
+ULONG
+NTAPI
+IoPnPDeliverServicePowerNotification(
+    _In_ POWER_ACTION PowerOperation,
+    _In_ ULONG PowerNotificationCode,
+    _In_ ULONG PowerNotificationData,
+    _In_ BOOLEAN Synchronous
+);
 #endif
 
 //

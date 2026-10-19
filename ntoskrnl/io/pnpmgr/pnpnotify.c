@@ -350,19 +350,29 @@ PiNotifyTargetDeviceChange(
 
 /* PUBLIC FUNCTIONS **********************************************************/
 
-/*
- * @unimplemented
- */
 ULONG
 NTAPI
 IoPnPDeliverServicePowerNotification(
-    _In_ ULONG VetoedPowerOperation,
+    _In_ POWER_ACTION PowerOperation,
     _In_ ULONG PowerNotificationCode,
     _In_ ULONG PowerNotificationData,
     _In_ BOOLEAN Synchronous)
 {
-    UNIMPLEMENTED;
-    return 0;
+    LARGE_INTEGER Timeout;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    UNREFERENCED_PARAMETER(PowerOperation);
+
+    Timeout.QuadPart = -2000LL * 10000LL;
+    Status = IopQueuePowerEvent(PowerNotificationCode,
+                                PowerNotificationData,
+                                Synchronous ? &Timeout : NULL);
+    if (Status == STATUS_TIMEOUT)
+        DPRINT1("Services did not handle power event 0x%lx within two seconds\n", PowerNotificationCode);
+
+    return NT_SUCCESS(Status);
 }
 
 /*

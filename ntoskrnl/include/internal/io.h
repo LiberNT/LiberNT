@@ -898,6 +898,12 @@ IopQueueDeviceInstallEvent(
     _In_ PUNICODE_STRING DeviceId);
 
 NTSTATUS
+IopQueuePowerEvent(
+    _In_ ULONG NotificationCode,
+    _In_ ULONG NotificationData,
+    _In_opt_ PLARGE_INTEGER Timeout);
+
+NTSTATUS
 NTAPI
 IopOpenRegistryKeyEx(
     PHANDLE KeyHandle,

@@ -466,6 +466,66 @@ ProcessDeviceInstallEvent(
 }
 
 
+static
+VOID
+ProcessPowerEvent(
+    _In_ PPLUGPLAY_EVENT_BLOCK PnpEvent)
+{
+    LPENUM_SERVICE_STATUS_PROCESSW Services = NULL;
+    SERVICE_STATUS_HANDLE ServiceStatus;
+    SC_HANDLE Manager;
+    DWORD Needed = 0;
+    DWORD Count = 0;
+    DWORD Resume = 0;
+    DWORD Index;
+
+    DPRINT("ProcessPowerEvent(0x%lx)\n", PnpEvent->PowerNotification.NotificationCode);
+
+    Manager = OpenSCManagerW(NULL, SERVICES_ACTIVE_DATABASEW, SC_MANAGER_ENUMERATE_SERVICE);
+    if (Manager == NULL)
+        return;
+
+    if (!EnumServicesStatusExW(Manager, SC_ENUM_PROCESS_INFO, SERVICE_WIN32, SERVICE_ACTIVE,
+                               NULL, 0, &Needed, &Count, &Resume, NULL) &&
+        GetLastError() == ERROR_MORE_DATA)
+    {
+        Services = HeapAlloc(GetProcessHeap(), 0, Needed);
+        Resume = 0;
+        if (Services != NULL &&
+            EnumServicesStatusExW(Manager, SC_ENUM_PROCESS_INFO, SERVICE_WIN32, SERVICE_ACTIVE,
+                                  (LPBYTE)Services, Needed, &Needed, &Count, &Resume, NULL))
+        {
+            for (Index = 0; Index < Count; Index++)
+            {
+                if (Services[Index].ServiceStatusProcess.dwCurrentState != SERVICE_RUNNING ||
+                    !(Services[Index].ServiceStatusProcess.dwControlsAccepted & SERVICE_ACCEPT_POWEREVENT))
+                {
+                    continue;
+                }
+
+                if (I_ScValidatePnpService(NULL, Services[Index].lpServiceName, &ServiceStatus) != ERROR_SUCCESS)
+                    continue;
+
+                if (!I_ScSendPnPMessage(ServiceStatus,
+                                        SERVICE_CONTROL_POWEREVENT,
+                                        PnpEvent->PowerNotification.NotificationCode,
+                                        NULL))
+                {
+                    DPRINT1("Power event 0x%lx to %S failed (Error %lu)\n",
+                            PnpEvent->PowerNotification.NotificationCode,
+                            Services[Index].lpServiceName,
+                            GetLastError());
+                }
+            }
+        }
+    }
+
+    if (Services != NULL)
+        HeapFree(GetProcessHeap(), 0, Services);
+    CloseServiceHandle(Manager);
+}
+
+
 DWORD
 WINAPI
 PnpEventThread(
@@ -537,8 +597,11 @@ PnpEventThread(
                 ProcessDeviceInstallEvent(PnpEvent);
                 break;
 
+            case PowerEvent:
+                ProcessPowerEvent(PnpEvent);
+                break;
+
 //            case DeviceArrivalEvent:
-//            case PowerEvent:
 //            case VetoEvent:
 //            case BlockedDriverEvent:
 

@@ -718,6 +718,10 @@ PoInitSystem(IN ULONG BootPhase)
     if (BootPhase == 1)
     {
         NTSTATUS Status;
+
+        if (KeLoaderBlock)
+            PopHiberCaptureLoaderBlock(KeLoaderBlock);
+
         /* Register power button notification */
         Status = IoRegisterPlugPlayNotification(EventCategoryDeviceInterfaceChange,
                                                 PNPNOTIFY_DEVICE_INTERFACE_INCLUDE_EXISTING_INTERFACES,
@@ -755,6 +759,7 @@ PoInitSystem(IN ULONG BootPhase)
     /* Initialize the power capabilities */
     RtlZeroMemory(&PopCapabilities, sizeof(SYSTEM_POWER_CAPABILITIES));
     PopInitializeSleepSupport();
+    PopHiberInitialize();
     PopInitializeEventSupport();
     PopInitializeThermalRequests();
 
@@ -1841,6 +1846,38 @@ NtPowerInformation(IN POWER_INFORMATION_LEVEL PowerInformationLevel,
             }
             _SEH2_END;
 
+            break;
+        }
+
+        case SystemReserveHiberFile:
+        {
+            BOOLEAN Enable = FALSE;
+
+            if (InputBuffer == NULL || InputBufferLength != sizeof(BOOLEAN) ||
+                OutputBuffer != NULL || OutputBufferLength != 0)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+
+            if (PreviousMode != KernelMode &&
+                !SeSinglePrivilegeCheck(SeCreatePagefilePrivilege, PreviousMode))
+            {
+                return STATUS_PRIVILEGE_NOT_HELD;
+            }
+
+            _SEH2_TRY
+            {
+                Enable = *(volatile BOOLEAN *)InputBuffer;
+                Status = STATUS_SUCCESS;
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+
+            if (NT_SUCCESS(Status))
+                Status = PopHiberReserve(Enable);
             break;
         }
 

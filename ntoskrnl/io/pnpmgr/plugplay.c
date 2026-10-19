@@ -15,6 +15,7 @@
 typedef struct _PNP_EVENT_ENTRY
 {
     LIST_ENTRY ListEntry;
+    PKEVENT CompletionEvent;
     PLUGPLAY_EVENT_BLOCK Event;
 } PNP_EVENT_ENTRY, *PPNP_EVENT_ENTRY;
 
@@ -188,6 +189,67 @@ IopQueueTargetDeviceEvent(const GUID *Guid,
     IopInsertPlugPlayEvent(EventEntry);
 
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+IopQueuePowerEvent(
+    _In_ ULONG NotificationCode,
+    _In_ ULONG NotificationData,
+    _In_opt_ PLARGE_INTEGER Timeout)
+{
+    PPNP_EVENT_ENTRY EventEntry;
+    PLIST_ENTRY Entry;
+    KEVENT CompletionEvent;
+    ULONG TotalSize;
+    KIRQL OldIrql;
+    BOOLEAN Queued = FALSE;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    TotalSize = FIELD_OFFSET(PLUGPLAY_EVENT_BLOCK, PowerNotification) +
+                sizeof(EventEntry->Event.PowerNotification);
+
+    EventEntry = ExAllocatePool(NonPagedPool, TotalSize + FIELD_OFFSET(PNP_EVENT_ENTRY, Event));
+    if (!EventEntry)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(EventEntry, TotalSize + FIELD_OFFSET(PNP_EVENT_ENTRY, Event));
+
+    EventEntry->Event.EventCategory = PowerEvent;
+    EventEntry->Event.TotalSize = TotalSize;
+    EventEntry->Event.PowerNotification.NotificationCode = NotificationCode;
+    EventEntry->Event.PowerNotification.NotificationData = NotificationData;
+
+    if (!Timeout)
+    {
+        IopInsertPlugPlayEvent(EventEntry);
+        return STATUS_SUCCESS;
+    }
+
+    KeInitializeEvent(&CompletionEvent, NotificationEvent, FALSE);
+    EventEntry->CompletionEvent = &CompletionEvent;
+    IopInsertPlugPlayEvent(EventEntry);
+
+    Status = KeWaitForSingleObject(&CompletionEvent, Executive, KernelMode, FALSE, Timeout);
+    if (Status != STATUS_TIMEOUT)
+        return STATUS_SUCCESS;
+
+    KeAcquireSpinLock(&IopPnpEventQueueLock, &OldIrql);
+    for (Entry = IopPnpEventQueueHead.Flink; Entry != &IopPnpEventQueueHead; Entry = Entry->Flink)
+    {
+        if (Entry == &EventEntry->ListEntry)
+        {
+            EventEntry->CompletionEvent = NULL;
+            Queued = TRUE;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&IopPnpEventQueueLock, OldIrql);
+
+    if (!Queued)
+        KeWaitForSingleObject(&CompletionEvent, Executive, KernelMode, FALSE, NULL);
+
+    return STATUS_TIMEOUT;
 }
 
 NTSTATUS
@@ -445,6 +507,7 @@ IopRemovePlugPlayEvent(
     _In_ PPLUGPLAY_CONTROL_USER_RESPONSE_DATA ResponseData)
 {
     PPNP_EVENT_ENTRY EventEntry = NULL;
+    PKEVENT CompletionEvent = NULL;
     KIRQL OldIrql;
 
     UNREFERENCED_PARAMETER(ResponseData);
@@ -459,6 +522,7 @@ IopRemovePlugPlayEvent(
         EventEntry = CONTAINING_RECORD(RemoveTailList(&IopPnpEventQueueHead),
                                        PNP_EVENT_ENTRY,
                                        ListEntry);
+        CompletionEvent = EventEntry->CompletionEvent;
     }
 
     /* Signal the next pnp event in the queue */
@@ -471,6 +535,9 @@ IopRemovePlugPlayEvent(
 
     KeReleaseSpinLock(&IopPnpEventQueueLock, OldIrql);
     KeReleaseGuardedMutex(&IopPnpEventConsumerLock);
+
+    if (CompletionEvent != NULL)
+        KeSetEvent(CompletionEvent, IO_NO_INCREMENT, FALSE);
 
     if (EventEntry != NULL)
         ExFreePool(EventEntry);
