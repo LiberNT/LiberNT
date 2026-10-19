@@ -135,6 +135,14 @@ GetDeviceInstallState(PCWSTR DeviceInstance)
         {
             State = DeviceInstallFailed;
         }
+        else if (!(Value & CONFIGFLAG_FINISH_INSTALL) &&
+                 StatusResult == CR_SUCCESS &&
+                 (DeviceStatus & DN_HAS_PROBLEM) &&
+                 (DeviceProblem == CM_PROB_FAILED_START ||
+                  DeviceProblem == CM_PROB_FAILED_POST_START))
+        {
+            State = DeviceInstallComplete;
+        }
     }
 
 done:
