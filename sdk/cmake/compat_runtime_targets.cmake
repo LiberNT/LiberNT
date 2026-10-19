@@ -35,6 +35,7 @@ set(COMPAT_RUNTIME_MODULES
     cryptsp
     cryptui
     d3dwine
+    dbgcore
     dbghelp
     d3d10
     d3d10_1
