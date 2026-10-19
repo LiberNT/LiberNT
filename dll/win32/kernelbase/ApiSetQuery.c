@@ -14,13 +14,14 @@ IsApiSetImplemented(
     _In_ PCSTR Contract)
 {
     UNICODE_STRING Name;
+    BOOLEAN InSchema;
     BOOLEAN Present;
     NTSTATUS Status;
 
     if (!RtlCreateUnicodeStringFromAsciiz(&Name, Contract))
         return FALSE;
 
-    Status = ApiSetQueryApiSetPresence(&Name, &Present);
+    Status = ApiSetQueryApiSetPresenceEx(&Name, &InSchema, &Present);
     RtlFreeUnicodeString(&Name);
 
     return NT_SUCCESS(Status) && Present;

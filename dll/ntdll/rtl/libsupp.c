@@ -1266,6 +1266,16 @@ ApiSetQueryApiSetPresence(
     return STATUS_SUCCESS;
 }
 
+NTSTATUS
+NTAPI
+ApiSetQueryApiSetPresenceEx(
+    _In_ PCUNICODE_STRING Namespace,
+    _Out_ PBOOLEAN InSchema,
+    _Out_ PBOOLEAN Present)
+{
+    return ApiSetQuerySchemaPresence(LdrpApisetVersion(), Namespace, InSchema, Present);
+}
+
 NTSYSAPI
 NTSTATUS
 NTAPI

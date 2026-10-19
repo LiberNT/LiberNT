@@ -1,4 +1,5 @@
 @ stdcall ApiSetQueryApiSetPresence(ptr ptr)
+@ stdcall ApiSetQueryApiSetPresenceEx(ptr ptr ptr)
 @ stdcall -version=0x502 PropertyLengthAsVariant(ptr long long long)
 @ stdcall -version=0x502 RtlConvertPropertyToVariant(ptr long ptr ptr)
 @ stdcall -version=0x502 RtlConvertVariantToProperty(ptr long ptr ptr ptr long ptr)

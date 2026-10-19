@@ -17,6 +17,8 @@ typedef struct _ROS_APISET
 
 extern const ROS_APISET g_Apisets[];
 extern const LONG g_ApisetsCount;
+extern const ROS_APISET g_ApisetsNoHost[];
+extern const LONG g_ApisetsNoHostCount;
 
 #ifdef __cplusplus
 }

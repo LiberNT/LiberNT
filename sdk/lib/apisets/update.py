@@ -84,6 +84,13 @@ const ROS_APISET g_Apisets[] = {
 OUTPUT_FOOTER = """};
 
 const LONG g_ApisetsCount = RTL_NUMBER_OF(g_Apisets);
+
+const ROS_APISET g_ApisetsNoHost[] = {
+"""
+
+OUTPUT_NOHOST_FOOTER = """};
+
+const LONG g_ApisetsNoHostCount = RTL_NUMBER_OF(g_ApisetsNoHost);
 """
 
 def winver_to_name(version):
@@ -158,6 +165,13 @@ class CombinedSchemas:
                 apiset = self._apisets[lowername]
             apiset.add_version(schema.version)
 
+    def generate_no_host(self, output):
+        for key in sorted(self._apisets):
+            apiset = self._apisets[key]
+            if apiset.host == '':
+                version_str = ' | '.join(apiset.versions)
+                output.write(f'    {{ RTL_CONSTANT_STRING(L"{apiset.name[:-4]}"), RTL_CONSTANT_STRING(L""), {version_str} }},\n'.encode('utf-8'))
+
     def generate(self, output):
         # The newer feature-staging contract includes the original exports.
         # Keep the original contract available even in schema sets that only
@@ -184,6 +198,8 @@ def process_apisetschemas(input_dir: Path, output_file):
     output_file.write(OUTPUT_HEADER.encode('utf-8'))
     schemas.generate(output_file)
     output_file.write(OUTPUT_FOOTER.encode('utf-8'))
+    schemas.generate_no_host(output_file)
+    output_file.write(OUTPUT_NOHOST_FOOTER.encode('utf-8'))
 
 
 def usage():

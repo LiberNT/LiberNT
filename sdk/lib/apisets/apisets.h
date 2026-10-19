@@ -23,6 +23,9 @@ extern "C"
 NTSTATUS
 ApiSetResolveToHost(_In_ DWORD ApisetVersion, _In_ PCUNICODE_STRING ApiToResolve, _Out_ PBOOLEAN Resolved, _Out_ PUNICODE_STRING Output);
 
+NTSTATUS
+ApiSetQuerySchemaPresence(_In_ DWORD ApisetVersion, _In_ PCUNICODE_STRING ApiToQuery, _Out_ PBOOLEAN InSchema, _Out_ PBOOLEAN Present);
+
 #ifdef __cplusplus
 }
 #endif

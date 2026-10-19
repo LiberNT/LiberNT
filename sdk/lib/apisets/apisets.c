@@ -49,6 +49,93 @@ ApiSetContractName(
     return TRUE;
 }
 
+static
+ULONG
+ApiSetMinorVersion(
+    _In_ PCUNICODE_STRING Name,
+    _In_ PCUNICODE_STRING Contract)
+{
+    USHORT Index = Contract->Length / sizeof(WCHAR) + 1;
+    ULONG Minor = 0;
+
+    while (Index < Name->Length / sizeof(WCHAR))
+        Minor = Minor * 10 + (Name->Buffer[Index++] - L'0');
+    return Minor;
+}
+
+static
+VOID
+ApiSetScanContracts(
+    _In_ const ROS_APISET *Table,
+    _In_ LONG Count,
+    _In_ DWORD ApisetVersion,
+    _In_ PCUNICODE_STRING Contract,
+    _Inout_ PCUNICODE_STRING *Target,
+    _Inout_ PULONG TargetMinor)
+{
+    UNICODE_STRING Candidate;
+    ULONG CandidateMinor;
+    LONG Index;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (!(Table[Index].dwOsVersions & ApisetVersion) ||
+            !ApiSetContractName(&Table[Index].Name, &Candidate) ||
+            !RtlEqualUnicodeString(Contract, &Candidate, TRUE))
+        {
+            continue;
+        }
+        CandidateMinor = ApiSetMinorVersion(&Table[Index].Name, &Candidate);
+        if (*Target == NULL || CandidateMinor > *TargetMinor)
+        {
+            *Target = &Table[Index].Target;
+            *TargetMinor = CandidateMinor;
+        }
+    }
+}
+
+NTSTATUS
+ApiSetQuerySchemaPresence(
+    _In_ DWORD ApisetVersion,
+    _In_ PCUNICODE_STRING ApiToQuery,
+    _Out_ PBOOLEAN InSchema,
+    _Out_ PBOOLEAN Present)
+{
+    USHORT Length = ApiToQuery->Length / sizeof(WCHAR);
+    PCUNICODE_STRING Target = NULL;
+    UNICODE_STRING Contract;
+    ULONG Minor, TargetMinor = 0;
+    ULONGLONG Prefix;
+    USHORT Char;
+
+    for (Char = 0; Char < Length; Char++)
+    {
+        if (ApiToQuery->Buffer[Char] == L'.')
+            return STATUS_INVALID_PARAMETER;
+    }
+    if (ApiToQuery->Length <= PrefixSize)
+        return STATUS_INVALID_PARAMETER;
+    Prefix = ((ULONGLONG *)ApiToQuery->Buffer)[0] & 0xFFFFFFDFFFDFFFDF;
+    if (Prefix != API_ && Prefix != EXT_)
+        return STATUS_INVALID_PARAMETER;
+
+    *InSchema = FALSE;
+    *Present = FALSE;
+    if (!ApiSetContractName(ApiToQuery, &Contract))
+        return STATUS_SUCCESS;
+    Minor = ApiSetMinorVersion(ApiToQuery, &Contract);
+
+    ApiSetScanContracts(g_Apisets, g_ApisetsCount, ApisetVersion, &Contract, &Target, &TargetMinor);
+    ApiSetScanContracts(g_ApisetsNoHost, g_ApisetsNoHostCount, ApisetVersion, &Contract, &Target, &TargetMinor);
+
+    if (Target != NULL && Minor <= TargetMinor)
+    {
+        *InSchema = TRUE;
+        *Present = (Target->Length != 0);
+    }
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 ApiSetResolveToHost(
     _In_ DWORD ApisetVersion,

@@ -15,6 +15,16 @@ NTSTATUS NTAPI ChpeAutoApiSetQueryApiSetPresence(PVOID a0, PVOID a1)
     return ApiSetQueryApiSetPresence(a0, a1);
 }
 
+/* Native definition: dll/ntdll/rtl/libsupp.c */
+#ifdef ApiSetQueryApiSetPresenceEx
+#undef ApiSetQueryApiSetPresenceEx
+#endif
+NTSTATUS NTAPI ApiSetQueryApiSetPresenceEx(PVOID a0, PVOID a1, PVOID a2);
+NTSTATUS NTAPI ChpeAutoApiSetQueryApiSetPresenceEx(PVOID a0, PVOID a1, PVOID a2)
+{
+    return ApiSetQueryApiSetPresenceEx(a0, a1, a2);
+}
+
 /* Native definition: dll/ntdll/rtl/wnf.c */
 #ifdef RtlFlushHeaps
 #undef RtlFlushHeaps
