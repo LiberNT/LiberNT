@@ -1571,6 +1571,8 @@ DevInstallInternal(
                 &DevInstData->requiredSize);
         }
     }
+    if (!ret && GetLastError() == ERROR_INVALID_DATA)
+        ret = TRUE;
     if (!ret)
     {
         TRACE("SetupDiGetDeviceRegistryProperty() failed with error 0x%x (InstanceId %s)\n",
@@ -1851,6 +1853,8 @@ InstallDevInstEx(
         }
     }
 
+    if (!ret && GetLastError() == ERROR_INVALID_DATA)
+        ret = TRUE;
     if (!ret)
     {
         TRACE("SetupDiGetDeviceRegistryProperty() failed with error 0x%x (InstanceId %s)\n",
