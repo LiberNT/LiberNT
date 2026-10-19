@@ -1089,7 +1089,8 @@ static UINT SHELL_FindExecutable(LPCWSTR lpPath, LPCWSTR lpFile, LPCWSTR lpVerb,
         /* See if it's a program - if GetProfileString fails, we skip this
          * section. Actually, if GetProfileString fails, we've probably
          * got a lot more to worry about than running a program... */
-        if (GetProfileStringW(L"windows", L"programs", L"exe pif bat cmd com", wBuffer, ARRAY_SIZE(wBuffer)) > 0)
+        if ((!lpVerb || !*lpVerb) &&
+            GetProfileStringW(L"windows", L"programs", L"exe pif bat cmd com", wBuffer, ARRAY_SIZE(wBuffer)) > 0)
         {
             CharLowerW(wBuffer);
             tok = wBuffer;
@@ -2529,6 +2530,7 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
             DBG_UNREFERENCED_LOCAL_VARIABLE(Info);
             do_error_dialog(retval, sei_tmp.hwnd, wszApplicationName);
         }
+        sei->hInstApp = (HINSTANCE)(retval > 32 ? 33 : retval);
         return retval > 32;
     }
 
@@ -2579,20 +2581,12 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
         /* If the executable path is quoted, handle the rest of the command line as parameters. */
         if (sei_tmp.lpFile[0] == L'"')
         {
-            LPWSTR pszArgs = PathGetArgsW(wszApplicationName);
-            PathRemoveArgsW(wszApplicationName);
+            if (*PathGetArgsW(wszApplicationName))
+            {
+                SetLastError(ERROR_FILE_NOT_FOUND);
+                return ExecuteFailed(SE_ERR_FNF, *sei, sei_tmp.lpFile, FALSE) > 32;
+            }
             PathUnquoteSpacesW(wszApplicationName);
-            parametersLen = lstrlenW(pszArgs);
-            if (parametersLen < _countof(parametersBuffer))
-            {
-                StringCchCopyW(parametersBuffer, _countof(parametersBuffer), pszArgs);
-                wszParameters = parametersBuffer;
-            }
-            else
-            {
-                wszParamAlloc.Attach(StrDupW(pszArgs));
-                wszParameters = wszParamAlloc;
-            }
         }
         /* We have to test sei instead of sei_tmp because sei_tmp had its
          * input fMask modified above in SHELL_translate_idlist.
@@ -2634,7 +2628,7 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
     CHeapPtr<WCHAR, CLocalAllocator> wcmdAlloc;
 
     /* Only execute if it has an executable extension */
-    if (PathIsExeW(lpFile))
+    if (PathIsExeW(lpFile) && (!sei_tmp.lpVerb || !*sei_tmp.lpVerb))
     {
         WCHAR wszExePath[MAX_PATH];
         LPCWSTR SearchPaths[] = { sei_tmp.lpDirectory, NULL };

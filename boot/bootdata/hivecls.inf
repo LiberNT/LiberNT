@@ -116,6 +116,7 @@ HKCR,"batfile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\shell32.dll
 HKCR,"batfile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-153"
 HKCR,"batfile\shell\edit\command","",0x00020000,"%SystemRoot%\system32\notepad.exe ""%1"""
 HKCR,"batfile\shell\open\command","",0x00000000,"""%1"" %*"
+HKCR,"batfile\shell\runas\command","",0x00020000,"%SystemRoot%\System32\cmd.exe /C ""%1"" %*"
 HKCR,"batfile\shellex\DropHandler","",0x00000000,"{86C86720-42A0-1069-A2E8-08002B30309D}"
 
 ; Certificate
@@ -133,6 +134,7 @@ HKCR,"cmdfile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\shell32.dll
 HKCR,"cmdfile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-153"
 HKCR,"cmdfile\shell\edit\command","",0x00020000,"%SystemRoot%\system32\notepad.exe ""%1"""
 HKCR,"cmdfile\shell\open\command","",0x00000000,"""%1"" %*"
+HKCR,"cmdfile\shell\runas\command","",0x00020000,"%SystemRoot%\System32\cmd.exe /C ""%1"" %*"
 HKCR,"cmdfile\shellex\DropHandler","",0x00000000,"{86C86720-42A0-1069-A2E8-08002B30309D}"
 
 ; DOS Applications
@@ -498,6 +500,7 @@ HKCR,"piffile","",0x00000000,"NT VDM Program Information File"
 HKCR,"piffile","EditFlags",0x00010001,0x00000001
 HKCR,"piffile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\shell32.dll,-216"
 HKCR,"piffile","IsShortcut",0x00000000,"yes"
+HKCR,"piffile\shell\open\command","",0x00000000,"""%1"" %*"
 HKCR,"piffile","NeverShowExt",0x00000000,""
 
 ; Registration Entries
