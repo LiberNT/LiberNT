@@ -1073,7 +1073,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPWSTR cmdline, int cm
         return 1;
 
 #ifdef __REACTOS__
-    ext = wcsrchr(filepart, '.');
+    ext = filepart ? wcsrchr(filepart, '.') : NULL;
     if(ext && !lstrcmpiW(ext, L".wsf")) {
         return run_wsf(scriptFullName);
     }
