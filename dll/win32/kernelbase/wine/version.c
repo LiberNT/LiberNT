@@ -793,9 +793,20 @@ DWORD WINAPI GetFileVersionInfoSizeExW( DWORD flags, LPCWSTR filename, LPDWORD r
     }
     else
     {
+#ifdef __REACTOS__
+        DWORD error = GetLastError();
+#endif
         HANDLE handle = CreateFileW( filename, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                      NULL, OPEN_EXISTING, 0, 0 );
+#ifdef __REACTOS__
+        if (handle == INVALID_HANDLE_VALUE)
+        {
+            SetLastError( error );
+            return 0;
+        }
+#else
         if (handle == INVALID_HANDLE_VALUE) return 0;
+#endif
         magic = find_version_resource( handle, &len, &offset, flags );
         CloseHandle( handle );
     }
