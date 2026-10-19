@@ -48,6 +48,22 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dinput);
 
+#ifdef __REACTOS__
+static BOOL hid_write_report( HANDLE device, void *buffer, DWORD length )
+{
+    OVERLAPPED ovl = {0};
+    DWORD written;
+    BOOL ret;
+
+    if (!(ovl.hEvent = CreateEventW( NULL, TRUE, FALSE, NULL ))) return FALSE;
+    if (!(ret = WriteFile( device, buffer, length, NULL, &ovl )) && GetLastError() == ERROR_IO_PENDING)
+        ret = GetOverlappedResult( device, &ovl, &written, TRUE );
+    CloseHandle( ovl.hEvent );
+    return ret;
+}
+#define WriteFile( device, buffer, length, written, overlapped ) hid_write_report( device, buffer, length )
+#endif
+
 DEFINE_GUID( GUID_DEVINTERFACE_WINEXINPUT,0x6c53d5fd,0x6480,0x440f,0xb6,0x18,0x47,0x67,0x50,0xc5,0xe1,0xa6 );
 DEFINE_GUID( device_path_guid, 0x00000000, 0x0000, 0x0000, 0x8d, 0x4a, 0x23, 0x90, 0x3f, 0xb6, 0xbd, 0xf8 );
 
