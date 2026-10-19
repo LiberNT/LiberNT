@@ -577,8 +577,32 @@ static BOOLEAN parse_item(struct hid_parser_state *state, UCHAR item, ULONG valu
     }
 }
 
-static NTSTATUS parse_descriptor(const UCHAR *descriptor, ULONG length, POOL_TYPE pool_type,
-                                 struct hid_preparsed_data **preparsed, PULONG preparsed_size)
+struct report_lengths
+{
+    ULONG input[256];
+    ULONG output[256];
+    ULONG feature[256];
+    ULONG collection[256];
+    ULONG count;
+};
+
+static void add_report_lengths(struct report_lengths *lengths, ULONG bit_offset[3][256], ULONG collection)
+{
+    ULONG id;
+
+    for (id = 0; id < 256; ++id)
+    {
+        if (!bit_offset[HidP_Input][id] && !bit_offset[HidP_Output][id] && !bit_offset[HidP_Feature][id]) continue;
+        if (!lengths->input[id] && !lengths->output[id] && !lengths->feature[id]) lengths->count++;
+        if (lengths->input[id] < bit_offset[HidP_Input][id]) lengths->input[id] = bit_offset[HidP_Input][id];
+        if (lengths->output[id] < bit_offset[HidP_Output][id]) lengths->output[id] = bit_offset[HidP_Output][id];
+        if (lengths->feature[id] < bit_offset[HidP_Feature][id]) lengths->feature[id] = bit_offset[HidP_Feature][id];
+        lengths->collection[id] = collection;
+    }
+}
+
+static NTSTATUS parse_descriptor(const UCHAR *descriptor, ULONG length, POOL_TYPE pool_type, struct report_lengths *lengths,
+                                 ULONG collection, struct hid_preparsed_data **preparsed, PULONG preparsed_size)
 {
     const UCHAR *ptr, *end = descriptor + length;
     struct hid_parser_state *state;
@@ -601,6 +625,7 @@ static NTSTATUS parse_descriptor(const UCHAR *descriptor, ULONG length, POOL_TYP
     }
 
     if (NT_SUCCESS(state->status)) *preparsed = build_preparsed_data(state, pool_type, preparsed_size);
+    if (NT_SUCCESS(state->status)) add_report_lengths(lengths, state->bit_offset, collection);
     status = state->status;
     free_parser_state(state);
     return status;
@@ -664,33 +689,6 @@ static void free_device_desc(HIDP_DEVICE_DESC *device_desc)
     RtlZeroMemory(device_desc, sizeof(*device_desc));
 }
 
-struct report_lengths
-{
-    ULONG input[256];
-    ULONG output[256];
-    ULONG feature[256];
-    ULONG collection[256];
-    ULONG count;
-};
-
-static void add_report_lengths(struct report_lengths *lengths, const struct hid_value_caps *caps, const struct hid_value_caps *caps_end,
-                               HIDP_REPORT_TYPE type, ULONG collection)
-{
-    ULONG len;
-
-    for (; caps != caps_end; ++caps)
-    {
-        len = caps->start_byte * 8 + caps->start_bit + caps->bit_size * caps->report_count;
-        if (!lengths->input[caps->report_id] && (type == HidP_Input ||
-            (!lengths->output[caps->report_id] && (type == HidP_Output || !lengths->feature[caps->report_id]))))
-            lengths->count++;
-        if (type == HidP_Input && lengths->input[caps->report_id] < len) lengths->input[caps->report_id] = len;
-        if (type == HidP_Output && lengths->output[caps->report_id] < len) lengths->output[caps->report_id] = len;
-        if (type == HidP_Feature && lengths->feature[caps->report_id] < len) lengths->feature[caps->report_id] = len;
-        lengths->collection[caps->report_id] = collection;
-    }
-}
-
 static NTSTATUS fill_collection_desc(HIDP_DEVICE_DESC *device_desc, const UCHAR **tlcs, ULONG tlc_count, POOL_TYPE pool_type,
                                      struct report_lengths *lengths)
 {
@@ -704,7 +702,7 @@ static NTSTATUS fill_collection_desc(HIDP_DEVICE_DESC *device_desc, const UCHAR 
 
     for (i = 0; i < tlc_count; ++i)
     {
-        status = parse_descriptor(tlcs[i], (ULONG)(tlcs[i + 1] - tlcs[i]), pool_type, &preparsed, &len);
+        status = parse_descriptor(tlcs[i], (ULONG)(tlcs[i + 1] - tlcs[i]), pool_type, lengths, i, &preparsed, &len);
         if (!NT_SUCCESS(status)) return status;
 
         desc = &device_desc->CollectionDesc[i];
@@ -718,12 +716,6 @@ static NTSTATUS fill_collection_desc(HIDP_DEVICE_DESC *device_desc, const UCHAR 
         desc->PreparsedDataLength = (USHORT)len;
         desc->PreparsedData = (PHIDP_PREPARSED_DATA)preparsed;
 
-        add_report_lengths(lengths, HID_INPUT_VALUE_CAPS(preparsed),
-                           HID_INPUT_VALUE_CAPS(preparsed) + preparsed->input_caps_end - preparsed->input_caps_start, HidP_Input, i);
-        add_report_lengths(lengths, HID_OUTPUT_VALUE_CAPS(preparsed),
-                           HID_OUTPUT_VALUE_CAPS(preparsed) + preparsed->output_caps_end - preparsed->output_caps_start, HidP_Output, i);
-        add_report_lengths(lengths, HID_FEATURE_VALUE_CAPS(preparsed),
-                           HID_FEATURE_VALUE_CAPS(preparsed) + preparsed->feature_caps_end - preparsed->feature_caps_start, HidP_Feature, i);
     }
 
     return STATUS_SUCCESS;
