@@ -22,6 +22,7 @@
 #define READ_TIMEOUT_MS     250
 #define DBWIN_BUFFER_SIZE   4096
 #define LINE_BUFFER_SIZE    8192
+#define DEFAULT_LOG_FILE    L"dbglog.txt"
 
 typedef struct _LINE_STATE
 {
@@ -434,7 +435,10 @@ static VOID
 Usage(VOID)
 {
     fputws(L"Captures kernel debug prints (DbgPrint, DPRINT1) and OutputDebugString output.\n\n"
+           L"DBGLOG\n"
            L"DBGLOG [/K] [/W] [/G] [/B] [/L file [/A]] [/C] [/Q]\n\n"
+           L"  Without options, saves the kernel debug output captured since boot\n"
+           L"  to " DEFAULT_LOG_FILE L" in the current directory.\n\n"
            L"  /K       Capture kernel debug output (loads the DbgCap driver).\n"
            L"  /W       Capture Win32 OutputDebugString output of this session.\n"
            L"  /G       Capture Win32 output of all sessions (Global namespace).\n"
@@ -443,7 +447,7 @@ Usage(VOID)
            L"  /A       Append to the log file instead of replacing it.\n"
            L"  /C       Show clock time instead of seconds since capture start.\n"
            L"  /Q       Do not echo lines to the console.\n\n"
-           L"Without /K, /W or /G, kernel and Win32 output are both captured.\n"
+           L"With other options but without /K, /W or /G, kernel and Win32 output are both captured.\n"
            L"Press Ctrl+C to stop.\n", stdout);
 }
 
@@ -453,7 +457,9 @@ wmain(
     WCHAR *argv[])
 {
     BOOL Kernel = FALSE, Win32 = FALSE, Global = FALSE, Append = FALSE, StartedService = FALSE;
+    BOOL SaveBootLog = (argc == 1);
     PCWSTR LogPath = NULL;
+    WCHAR FullPath[MAX_PATH];
     HANDLE Threads[2], Device = INVALID_HANDLE_VALUE;
     DBWIN_CAPTURE Capture;
     DWORD ThreadCount = 0, Returned;
@@ -489,6 +495,12 @@ wmain(
                 Usage();
                 return Arg[1] == L'?' ? 0 : 1;
         }
+    }
+    if (SaveBootLog)
+    {
+        SinceBoot = TRUE;
+        Quiet = TRUE;
+        LogPath = DEFAULT_LOG_FILE;
     }
     if (SinceBoot)
     {
@@ -573,5 +585,11 @@ wmain(
         StopCaptureService();
     if (LogFile != INVALID_HANDLE_VALUE)
         CloseHandle(LogFile);
+    if (SaveBootLog)
+    {
+        if (!GetFullPathNameW(LogPath, ARRAYSIZE(FullPath), FullPath, NULL))
+            wcscpy(FullPath, LogPath);
+        wprintf(L"dbglog: %lu lines of the boot log saved to %s\n", Sequence, FullPath);
+    }
     return 0;
 }
