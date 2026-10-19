@@ -2362,7 +2362,6 @@ SSI_DEF(SystemExtendServiceTableInformation)
     PLDR_DATA_TABLE_ENTRY ModuleObject;
     NTSTATUS Status;
     PIMAGE_NT_HEADERS NtHeader;
-    DRIVER_OBJECT Win32k;
     PDRIVER_INITIALIZE DriverInit;
     PVOID ImageBase;
     ULONG_PTR EntryPoint;
@@ -2435,13 +2434,8 @@ SSI_DEF(SystemExtendServiceTableInformation)
     EntryPoint += (ULONG_PTR)ImageBase;
     DriverInit = (PDRIVER_INITIALIZE)EntryPoint;
 
-    /* Create a dummy device */
-    RtlZeroMemory(&Win32k, sizeof(Win32k));
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
-    Win32k.DriverStart = ImageBase;
-
-    /* Call it */
-    Status = (DriverInit)(&Win32k, NULL);
+    Status = IoCreateDriver(NULL, DriverInit);
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 
     /* Unload if we failed */
