@@ -138,11 +138,38 @@ SearchForExecutableSingle (LPCTSTR pFileName, LPTSTR pFullName, LPTSTR pPathExt,
 }
 
 
+static LPTSTR
+NextPathEntry(LPTSTR *ppszCursor)
+{
+    LPTSTR pszRead = *ppszCursor, pszWrite, pszEntry;
+    BOOL bQuoted = FALSE;
+
+    while (*pszRead == _T(';'))
+        pszRead++;
+    if (*pszRead == _T('\0'))
+        return NULL;
+
+    pszEntry = pszWrite = pszRead;
+    while (*pszRead && (bQuoted || *pszRead != _T(';')))
+    {
+        if (*pszRead == _T('"'))
+            bQuoted = !bQuoted;
+        else
+            *pszWrite++ = *pszRead;
+        pszRead++;
+    }
+    if (*pszRead)
+        pszRead++;
+    *pszWrite = _T('\0');
+    *ppszCursor = pszRead;
+    return pszEntry;
+}
+
 BOOL
 SearchForExecutable (LPCTSTR pFileName, LPTSTR pFullName)
 {
     static TCHAR pszDefaultPathExt[] = _T(".com;.exe;.bat;.cmd");
-    LPTSTR pszPathExt, pszPath;
+    LPTSTR pszPathExt, pszPath, pszCursor;
     LPTSTR pCh;
     DWORD  dwBuffer;
     TRACE ("SearchForExecutable: \'%s\'\n", debugstr_aw(pFileName));
@@ -218,16 +245,15 @@ SearchForExecutable (LPCTSTR pFileName, LPTSTR pFullName)
     TRACE ("SearchForExecutable(): Loaded PATH: %s\n", debugstr_aw(pszPath));
 
     /* search in PATH */
-    pCh = _tcstok(pszPath, _T(";"));
-    while (pCh)
+    pszCursor = pszPath;
+    while ((pCh = NextPathEntry(&pszCursor)) != NULL)
     {
-        if (SearchForExecutableSingle(pFileName, pFullName, pszPathExt, pCh))
+        if (*pCh && SearchForExecutableSingle(pFileName, pFullName, pszPathExt, pCh))
         {
             cmd_free(pszPath);
             cmd_free(pszPathExt);
             return TRUE;
         }
-        pCh = _tcstok(NULL, _T(";"));
     }
 
     cmd_free(pszPath);
