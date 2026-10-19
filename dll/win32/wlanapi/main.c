@@ -2,6 +2,7 @@
  * Wireless LAN API (wlanapi.dll)
  *
  * Copyright 2009 Christoph von Wittich (Christoph@ApiViewer.de)
+ * Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -443,6 +444,49 @@ WlanSetSecuritySettings(IN HANDLE hClientHandle,
         dwResult = WlanRpcStatusToWinError(RpcExceptionCode());
     }
     RpcEndExcept;
+
+    return dwResult;
+}
+
+DWORD
+WINAPI
+WlanGetSecuritySettings(IN HANDLE hClientHandle,
+                        IN WLAN_SECURABLE_OBJECT SecurableObject,
+                        OUT WLAN_OPCODE_VALUE_TYPE *pValueType OPTIONAL,
+                        OUT LPWSTR *pstrCurrentSDDL,
+                        OUT PDWORD pdwGrantedAccess)
+{
+    DWORD dwResult = ERROR_SUCCESS;
+    WLAN_OPCODE_VALUE_TYPE ValueType = wlan_opcode_value_type_invalid;
+    LPWSTR strSddl = NULL;
+    DWORD dwGrantedAccess = 0;
+
+    if ((hClientHandle == NULL) || (pstrCurrentSDDL == NULL) || (pdwGrantedAccess == NULL) || (SecurableObject >= WLAN_SECURABLE_OBJECT_COUNT))
+        return ERROR_INVALID_PARAMETER;
+
+    *pstrCurrentSDDL = NULL;
+
+    RpcTryExcept
+    {
+        dwResult = _RpcGetSecuritySettings(hClientHandle, SecurableObject, &ValueType, &strSddl, &dwGrantedAccess);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        dwResult = WlanRpcStatusToWinError(RpcExceptionCode());
+    }
+    RpcEndExcept;
+
+    if (dwResult == ERROR_SUCCESS)
+    {
+        *pstrCurrentSDDL = strSddl;
+        *pdwGrantedAccess = dwGrantedAccess;
+        if (pValueType != NULL)
+            *pValueType = ValueType;
+    }
+    else if (strSddl != NULL)
+    {
+        WlanFreeMemory(strSddl);
+    }
 
     return dwResult;
 }

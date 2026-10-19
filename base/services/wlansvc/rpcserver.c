@@ -4,9 +4,12 @@
  * FILE:        base/services/wlansvc/rpcserver.c
  * PURPOSE:     RPC server interface
  * COPYRIGHT:   Copyright 2009 Christoph von Wittich
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include "precomp.h"
+#include <winreg.h>
+#include <sddl.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -1095,13 +1098,161 @@ DWORD _RpcCancelPlap(
     return ERROR_CALL_NOT_IMPLEMENTED;
 }
 
+#define WLANSVC_SDDL_ADMIN L"O:SYG:SYD:(A;;CCRC;;;BU)(A;;CCRC;;;NO)(A;;CCDCWPSDRCWD;;;NO)(A;;CCRC;;;BA)(A;;CCDCWPSDRCWD;;;BA)(D;;FA;;;WD)"
+#define WLANSVC_SDDL_USER L"O:SYG:SYD:(A;;CCRC;;;BU)(A;;CCDCWPSDRCWD;;;BU)(A;;CCRC;;;NO)(A;;CCDCWPSDRCWD;;;NO)(A;;CCRC;;;BA)(A;;CCDCWPSDRCWD;;;BA)(D;;FA;;;WD)"
+
+static const PCWSTR WlanSvcDefaultSddl[WLAN_SECURABLE_OBJECT_COUNT] =
+{
+    WLANSVC_SDDL_ADMIN,
+    WLANSVC_SDDL_ADMIN,
+    WLANSVC_SDDL_ADMIN,
+    WLANSVC_SDDL_USER,
+    WLANSVC_SDDL_ADMIN,
+    WLANSVC_SDDL_USER,
+    WLANSVC_SDDL_ADMIN,
+    WLANSVC_SDDL_ADMIN,
+    WLANSVC_SDDL_USER,
+    L"O:SYG:SYD:(A;;CCRC;;;BU)(A;;CCWPRC;;;BU)(A;;CCDCWPSDRCWD;;;BU)(A;;CCRC;;;NO)(A;;CCWPRC;;;NO)(A;;CCDCWPSDRCWD;;;NO)(A;;CCRC;;;BA)(A;;CCWPRC;;;BA)(A;;CCDCWPSDRCWD;;;BA)(D;;FA;;;WD)",
+    WLANSVC_SDDL_USER,
+    L"O:SYG:SYD:(A;;CCRC;;;BU)(A;;CCDCWPSDRCWD;;;BU)(A;;CCRC;;;AC)(A;;CCDCWPSDRCWD;;;AC)(A;;CCRC;;;NO)(A;;CCDCWPSDRCWD;;;NO)(A;;CCRC;;;BA)(A;;CCDCWPSDRCWD;;;BA)(D;;FA;;;WD)",
+    WLANSVC_SDDL_ADMIN,
+    L"O:SYG:SYD:(A;;CCRC;;;BA)(A;;CCRC;;;NO)(A;;CCRC;;;SY)(D;;FA;;;WD)",
+    WLANSVC_SDDL_ADMIN,
+    WLANSVC_SDDL_ADMIN,
+    WLANSVC_SDDL_ADMIN,
+};
+
+static const PCWSTR WlanSvcPermissionName[WLAN_SECURABLE_OBJECT_COUNT] =
+{
+    L"Permit List",
+    L"Deny List",
+    L"AC Enabled",
+    L"BC Scan Enabled",
+    L"BSS Type",
+    L"Show Denied",
+    L"Interface Properties",
+    L"Ihv Control",
+    L"All User Profiles Order",
+    L"Add New All User Profiles",
+    L"Add New Per User Profiles",
+    L"Media Streaming Mode Enabled",
+    L"Current Operation Mode",
+    L"Get Plain Text Key",
+    L"Hosted Network Elevated Access",
+    L"Virtual Station Extensibility",
+    L"WFD Elevated Access",
+};
+
+#define WLANSVC_PERMISSIONS_KEY L"SYSTEM\\CurrentControlSet\\Services\\WlanSvc\\Parameters\\WlanAPIPermissions"
+
+static DWORD
+WlanSvcLoadObjectSecurity(WLAN_SECURABLE_OBJECT SecurableObject, PSECURITY_DESCRIPTOR *SecurityDescriptor)
+{
+    PCWSTR String = WlanSvcDefaultSddl[SecurableObject];
+    LPWSTR Stored = NULL;
+    DWORD Size = 0;
+    DWORD Type;
+    DWORD dwResult = ERROR_SUCCESS;
+    HKEY Key;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, WLANSVC_PERMISSIONS_KEY, 0, KEY_QUERY_VALUE, &Key) == ERROR_SUCCESS)
+    {
+        if (RegQueryValueExW(Key, WlanSvcPermissionName[SecurableObject], NULL, &Type, NULL, &Size) == ERROR_SUCCESS &&
+            Type == REG_SZ)
+        {
+            Stored = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Size + sizeof(WCHAR));
+            if (Stored != NULL &&
+                RegQueryValueExW(Key, WlanSvcPermissionName[SecurableObject], NULL, &Type, (LPBYTE)Stored, &Size) == ERROR_SUCCESS &&
+                Type == REG_SZ)
+            {
+                String = Stored;
+            }
+        }
+        RegCloseKey(Key);
+    }
+
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(String, SDDL_REVISION_1, SecurityDescriptor, NULL))
+        dwResult = GetLastError();
+
+    if (Stored != NULL)
+        HeapFree(GetProcessHeap(), 0, Stored);
+    return dwResult;
+}
+
+static DWORD
+WlanSvcClientObjectAccess(PSECURITY_DESCRIPTOR SecurityDescriptor)
+{
+    GENERIC_MAPPING Mapping = { WLAN_READ_ACCESS, WLAN_WRITE_ACCESS, WLAN_EXECUTE_ACCESS, WLAN_WRITE_ACCESS };
+    PRIVILEGE_SET PrivilegeSet;
+    DWORD PrivilegeSetLength = sizeof(PrivilegeSet);
+    DWORD GrantedAccess = 0;
+    BOOL AccessStatus = FALSE;
+    HANDLE Token;
+
+    if (RpcImpersonateClient(NULL) != RPC_S_OK)
+        return 0;
+
+    if (OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &Token))
+    {
+        if (!AccessCheck(SecurityDescriptor, Token, MAXIMUM_ALLOWED, &Mapping,
+                         &PrivilegeSet, &PrivilegeSetLength, &GrantedAccess, &AccessStatus) ||
+            !AccessStatus)
+        {
+            GrantedAccess = 0;
+        }
+        CloseHandle(Token);
+    }
+
+    RpcRevertToSelf();
+    return GrantedAccess & WLAN_WRITE_ACCESS;
+}
+
 DWORD _RpcSetSecuritySettings(
     WLANSVC_RPC_HANDLE hClientHandle,
     WLAN_SECURABLE_OBJECT SecurableObject,
     const wchar_t *strModifiedSDDL)
 {
-    UNIMPLEMENTED;
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    PSECURITY_DESCRIPTOR Current = NULL;
+    PSECURITY_DESCRIPTOR Modified = NULL;
+    DWORD dwResult;
+    HKEY Key;
+
+    if (strModifiedSDDL == NULL || (ULONG)SecurableObject >= WLAN_SECURABLE_OBJECT_COUNT)
+        return ERROR_INVALID_PARAMETER;
+
+    if (!WlanSvcValidateHandle(hClientHandle))
+        return ERROR_INVALID_HANDLE;
+
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(strModifiedSDDL, SDDL_REVISION_1, &Modified, NULL))
+        return ERROR_INVALID_PARAMETER;
+    LocalFree(Modified);
+
+    dwResult = WlanSvcLoadObjectSecurity(SecurableObject, &Current);
+    if (dwResult == ERROR_SUCCESS &&
+        !WlanSvcClientIsPrivileged() &&
+        (WlanSvcClientObjectAccess(Current) & WRITE_DAC) == 0)
+    {
+        dwResult = ERROR_ACCESS_DENIED;
+    }
+    if (Current != NULL)
+        LocalFree(Current);
+
+    if (dwResult == ERROR_SUCCESS)
+    {
+        dwResult = RegCreateKeyExW(HKEY_LOCAL_MACHINE, WLANSVC_PERMISSIONS_KEY, 0, NULL, 0, KEY_SET_VALUE, NULL, &Key, NULL);
+        if (dwResult == ERROR_SUCCESS)
+        {
+            dwResult = RegSetValueExW(Key,
+                                      WlanSvcPermissionName[SecurableObject],
+                                      0,
+                                      REG_SZ,
+                                      (const BYTE *)strModifiedSDDL,
+                                      (DWORD)((wcslen(strModifiedSDDL) + 1) * sizeof(WCHAR)));
+            RegCloseKey(Key);
+        }
+    }
+
+    return dwResult;
 }
 
 DWORD _RpcGetSecuritySettings(
@@ -1111,8 +1262,51 @@ DWORD _RpcGetSecuritySettings(
     wchar_t **pstrCurrentSDDL,
     LPDWORD pdwGrantedAccess)
 {
-    UNIMPLEMENTED;
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    PSECURITY_DESCRIPTOR Current = NULL;
+    LPWSTR Sddl = NULL;
+    DWORD dwGrantedAccess;
+    DWORD dwResult;
+    SIZE_T Size;
+
+    *pstrCurrentSDDL = NULL;
+
+    if ((ULONG)SecurableObject >= WLAN_SECURABLE_OBJECT_COUNT)
+        return ERROR_INVALID_PARAMETER;
+
+    if (!WlanSvcValidateHandle(hClientHandle))
+        return ERROR_INVALID_HANDLE;
+
+    dwResult = WlanSvcLoadObjectSecurity(SecurableObject, &Current);
+    if (dwResult != ERROR_SUCCESS)
+        return dwResult;
+
+    if (!ConvertSecurityDescriptorToStringSecurityDescriptorW(Current,
+                                                             SDDL_REVISION_1,
+                                                             OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                                                             &Sddl,
+                                                             NULL))
+    {
+        dwResult = GetLastError();
+        LocalFree(Current);
+        return dwResult;
+    }
+
+    dwGrantedAccess = WlanSvcClientIsPrivileged() ? WLAN_WRITE_ACCESS : WlanSvcClientObjectAccess(Current);
+    LocalFree(Current);
+
+    Size = (wcslen(Sddl) + 1) * sizeof(WCHAR);
+    *pstrCurrentSDDL = midl_user_allocate(Size);
+    if (*pstrCurrentSDDL == NULL)
+    {
+        LocalFree(Sddl);
+        return ERROR_NOT_ENOUGH_MEMORY;
+    }
+    RtlCopyMemory(*pstrCurrentSDDL, Sddl, Size);
+    LocalFree(Sddl);
+
+    *pValueType = wlan_opcode_value_type_set_by_user;
+    *pdwGrantedAccess = dwGrantedAccess;
+    return ERROR_SUCCESS;
 }
 
 void __RPC_FAR * __RPC_USER midl_user_allocate(SIZE_T len)
