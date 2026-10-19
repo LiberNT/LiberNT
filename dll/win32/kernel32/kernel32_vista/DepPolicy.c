@@ -37,11 +37,10 @@ SetProcessDEPPolicy(
         return FALSE;
     }
 
-    ExecuteFlags = MEM_EXECUTE_OPTION_PERMANENT;
     if (dwFlags & PROCESS_DEP_ENABLE)
-        ExecuteFlags |= MEM_EXECUTE_OPTION_DISABLE;
+        ExecuteFlags = MEM_EXECUTE_OPTION_DISABLE | MEM_EXECUTE_OPTION_PERMANENT;
     else
-        ExecuteFlags |= MEM_EXECUTE_OPTION_ENABLE;
+        ExecuteFlags = MEM_EXECUTE_OPTION_ENABLE;
 
     if (dwFlags & PROCESS_DEP_DISABLE_ATL_THUNK_EMULATION)
         ExecuteFlags |= MEM_EXECUTE_OPTION_DISABLE_THUNK_EMULATION;
@@ -88,10 +87,12 @@ GetProcessDEPPolicy(
     }
 
     *lpFlags = 0;
-    if (ExecuteFlags & MEM_EXECUTE_OPTION_DISABLE)
+    if (!(ExecuteFlags & MEM_EXECUTE_OPTION_ENABLE))
+    {
         *lpFlags |= PROCESS_DEP_ENABLE;
-    if (ExecuteFlags & MEM_EXECUTE_OPTION_DISABLE_THUNK_EMULATION)
-        *lpFlags |= PROCESS_DEP_DISABLE_ATL_THUNK_EMULATION;
+        if (ExecuteFlags & MEM_EXECUTE_OPTION_DISABLE_THUNK_EMULATION)
+            *lpFlags |= PROCESS_DEP_DISABLE_ATL_THUNK_EMULATION;
+    }
 
     *lpPermanent = (ExecuteFlags & MEM_EXECUTE_OPTION_PERMANENT) ? TRUE : FALSE;
     return TRUE;
