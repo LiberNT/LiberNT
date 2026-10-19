@@ -143,6 +143,7 @@ set(COMPAT_RUNTIME_MODULES
     psapi
     qmgrprxy
     rasadhlp
+    rasapi32
     riched20
     riched32
     rpcrt4
@@ -150,6 +151,7 @@ set(COMPAT_RUNTIME_MODULES
     rtworkq
     samlib
     schannel
+    scrrun
     sechost
     secur32
     sensapi
@@ -196,6 +198,7 @@ set(COMPAT_RUNTIME_MODULES
     winsta
     wintrust
     wkscli
+    wlanapi
     wldap32
     ws2_32
     ws2help
