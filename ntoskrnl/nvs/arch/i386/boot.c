@@ -109,9 +109,9 @@ MiInitializeKernelVaLayout(const LOADER_PARAMETER_BLOCK *LoaderBlock)
 
         if (Descriptor->PageCount == 0 || Descriptor->MemoryType == LoaderBad ||
             Descriptor->MemoryType == LoaderFirmwarePermanent || Descriptor->MemoryType == LoaderSpecialMemory ||
-            Descriptor->MemoryType == LoaderHALCachedMemory || Descriptor->MemoryType == LoaderBBTMemory)
+            Descriptor->MemoryType == LoaderBBTMemory)
             continue;
-        if (Descriptor->MemoryType == LoaderFree && End >= First)
+        if ((Descriptor->MemoryType == LoaderFree || Descriptor->MemoryType == LoaderHALCachedMemory) && End >= First)
         {
             if (First >= MI_I386_DIRECT_PAGES)
                 continue;
