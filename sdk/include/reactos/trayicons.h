@@ -47,12 +47,3 @@ ShellSystemUsesLightTheme(VOID)
     return RegGetValueW(HKEY_CURRENT_USER, L"Software\\ReactOS\\DWM", L"ColorScheme", RRF_RT_REG_DWORD, NULL,
                         &Value, &Size) == ERROR_SUCCESS && Value == 0;
 }
-
-static inline UINT
-ShellTrayIconId(HINSTANCE hInstance, UINT nId)
-{
-    if (ShellSystemUsesLightTheme() &&
-        FindResourceW(hInstance, MAKEINTRESOURCEW(nId + SHELL_TRAY_ICON_LIGHT), (LPCWSTR)RT_GROUP_ICON))
-        return nId + SHELL_TRAY_ICON_LIGHT;
-    return nId;
-}

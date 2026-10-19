@@ -481,35 +481,8 @@ static void _ShowContextMenu(CSysTray * pSysTray)
     }
 }
 
-static HRESULT Volume_ReloadIcons(_In_ CSysTray * pSysTray)
-{
-    HICON *Icons[] = { &g_hIconVolume, &g_hIconMute, &g_hIconVolume0, &g_hIconVolume1, &g_hIconVolume3 };
-    const UINT Ids[] = { IDI_VOLUME, IDI_VOLMUTE, IDI_VOLUME0, IDI_VOLUME1, IDI_VOLUME3 };
-    HICON Old[_countof(Icons)];
-    WCHAR strTooltip[128];
-    HRESULT hr;
-    UINT i;
-
-    for (i = 0; i < _countof(Icons); i++)
-    {
-        Old[i] = *Icons[i];
-        *Icons[i] = StoLoadTrayIcon(g_hInstance, Ids[i]);
-    }
-    Volume_Tooltip(strTooltip, _countof(strTooltip));
-    hr = pSysTray->NotifyIcon(NIM_MODIFY, ID_ICON_VOLUME, Volume_PickIcon(), strTooltip);
-    for (i = 0; i < _countof(Icons); i++)
-    {
-        if (Old[i])
-            DestroyIcon(Old[i]);
-    }
-    return hr;
-}
-
 HRESULT STDMETHODCALLTYPE Volume_Message(_In_ CSysTray * pSysTray, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT &lResult)
 {
-    if (uMsg == WM_SETTINGCHANGE && lParam && !lstrcmpiW((LPCWSTR)lParam, L"ImmersiveColorSet") &&
-        pSysTray->IsServiceEnabled(VOLUME_SERVICE_FLAG) && g_hIconVolume)
-        return Volume_ReloadIcons(pSysTray);
     if (uMsg == g_mmDeviceChange)
         return Volume_OnDeviceChange(pSysTray, wParam, lParam);
     if (uMsg == MM_MIXM_CONTROL_CHANGE || uMsg == MM_MIXM_LINE_CHANGE)

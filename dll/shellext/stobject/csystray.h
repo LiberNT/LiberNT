@@ -14,7 +14,7 @@ extern const GUID CLSID_SysTray;
 
 static inline HICON StoLoadTrayIcon(_In_ HINSTANCE hInstance, _In_ UINT nId)
 {
-    return (HICON)LoadImageW(hInstance, MAKEINTRESOURCEW(ShellTrayIconId(hInstance, nId)), IMAGE_ICON,
+    return (HICON)LoadImageW(hInstance, MAKEINTRESOURCEW(nId), IMAGE_ICON,
                              ShellTrayIconRenderSize(), ShellTrayIconRenderSize(), 0);
 }
 
