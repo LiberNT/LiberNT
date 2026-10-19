@@ -1555,6 +1555,18 @@ RndisTxKick(
         }
 
         /* PopAll already returns FIFO order - process directly */
-        RndisTxDrainChain(Adapter, Chain);
+        if (!RndisTxDrainChain(Adapter, Chain))
+        {
+            BOOLEAN Busy;
+
+            InterlockedExchange(&Adapter->TxHot.TxOwner, 0);
+            NdisAcquireSpinLock(&Adapter->TxLock);
+            Busy = Adapter->TxHot.TxBusy || Adapter->TxHot.TxNcmPartialNbl != NULL;
+            NdisReleaseSpinLock(&Adapter->TxLock);
+            if (Busy || InterlockedCompareExchange(&Adapter->TxHot.TxOwner, 1, 0) != 0)
+            {
+                break;
+            }
+        }
     }
 }

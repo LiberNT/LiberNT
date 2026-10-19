@@ -2001,14 +2001,14 @@ RndisTxDequeueAndSend(
  * Called from RndisTxKick as part of the owner-drain pattern.
  * The chain is already in FIFO order after reversal.
  */
-VOID
+BOOLEAN
 RndisTxDrainChain(
     IN PRNDIS_ADAPTER Adapter,
     IN PNET_BUFFER_LIST NblChain)
 {
     if (NblChain == NULL || Adapter->Halting)
     {
-        return;
+        return TRUE;
     }
 
     /*
@@ -2021,7 +2021,7 @@ RndisTxDrainChain(
         NdisReleaseSpinLock(&Adapter->TxLock);
         /* Re-queue the chain - another thread is handling TX */
         RndisTxQueuePushChain(Adapter, NblChain);
-        return;
+        return FALSE;
     }
     Adapter->TxHot.TxBusy = TRUE;
     NdisReleaseSpinLock(&Adapter->TxLock);
@@ -2033,4 +2033,5 @@ RndisTxDrainChain(
         NDIS_SEND_FLAGS_DISPATCH_LEVEL,
         TRUE,   /* IgnoreQueue */
         TRUE);  /* TxAlreadyOwned */
+    return TRUE;
 }

@@ -926,7 +926,7 @@ VOID
 RndisTxDequeueAndSend(
     IN PRNDIS_ADAPTER Adapter);
 
-VOID
+BOOLEAN
 RndisTxDrainChain(
     IN PRNDIS_ADAPTER Adapter,
     IN PNET_BUFFER_LIST NblChain);
