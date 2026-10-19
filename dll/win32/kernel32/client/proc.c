@@ -3192,6 +3192,21 @@ Failure:
     return FALSE;
 }
 
+static
+BOOLEAN
+BasepIsBlankImage(
+    _In_ HANDLE FileHandle)
+{
+    IO_STATUS_BLOCK IoStatusBlock;
+    LARGE_INTEGER Offset;
+    ULONG Header = 0;
+
+    Offset.QuadPart = 0;
+    if (!NT_SUCCESS(NtReadFile(FileHandle, NULL, NULL, NULL, &IoStatusBlock, &Header, sizeof(Header), &Offset, NULL)))
+        return FALSE;
+    return (Header == 0) || (Header == MAXULONG);
+}
+
 /*
  * @implemented
  */
@@ -3219,7 +3234,7 @@ CreateProcessInternalW(IN HANDLE hUserToken,
     SECTION_IMAGE_INFORMATION ImageInformation;
     IO_STATUS_BLOCK IoStatusBlock;
     CLIENT_ID ClientId;
-    ULONG NoWindow, StackSize, ErrorCode, Flags;
+    ULONG NoWindow, StackSize, ErrorCode, Flags, ImageError;
     SIZE_T RegionSize;
     USHORT ImageMachine;
     ULONG ParameterFlags, PrivilegeValue, HardErrorMode, ErrorResponse;
@@ -4131,6 +4146,16 @@ StartScan:
         }
     }
 
+    ImageError = ERROR_BAD_EXE_FORMAT;
+    if ((sizeof(PVOID) > sizeof(ULONG)) &&
+        ((Status == STATUS_INVALID_IMAGE_PROTECT) ||
+         (Status == STATUS_INVALID_IMAGE_NE_FORMAT) ||
+         ((Status == STATUS_INVALID_IMAGE_NOT_MZ) && BaseIsDosApplication(&PathName, Status))))
+    {
+        ImageError = BasepIsBlankImage(FileHandle) ? ERROR_FILE_CORRUPT : ERROR_EXE_MACHINE_TYPE_MISMATCH;
+        Status = STATUS_INVALID_IMAGE_FORMAT;
+    }
+
     /* The last step is to figure out why the section object was not created */
     switch (Status)
     {
@@ -4483,7 +4508,7 @@ StartScan:
             if (!NT_SUCCESS(Status))
             {
                 DPRINT1("Failed to create section: %lx\n", Status);
-                SetLastError(ERROR_BAD_EXE_FORMAT);
+                SetLastError(ImageError);
                 Result = FALSE;
                 goto Quickie;
             }
@@ -5551,10 +5576,7 @@ Quickie:
     if ((lpEnvironment) && !(dwCreationFlags & CREATE_UNICODE_ENVIRONMENT))
     {
         /* Destroy it */
-        RtlDestroyEnvironment(lpEnvironment);
-
-        /* If this was the VDM environment too, clear that as well */
-        if (VdmUnicodeEnv.Buffer == lpEnvironment) VdmUnicodeEnv.Buffer = NULL;
+        if (VdmUnicodeEnv.Buffer != lpEnvironment) RtlDestroyEnvironment(lpEnvironment);
         lpEnvironment = NULL;
     }
 
