@@ -143,6 +143,8 @@ if(WOW64_I386_DXILCONV_FILE)
 endif()
 if(WOW64_I386_MESA_FILE)
     list(APPEND WOW64_I386_OPTIONAL_FILES "${WOW64_I386_MESA_FILE}")
+    add_optional_registry_inf(INF "${REACTOS_SOURCE_DIR}/dll/opengl/mesa_gallium/mesa-gallium-wow64.inf"
+                              REQUIRES "${WOW64_I386_MESA_FILE}")
     if(WOW64_I386_MESA_D3D_FILE)
         list(APPEND WOW64_I386_OPTIONAL_FILES "${WOW64_I386_MESA_D3D_FILE}")
     endif()
