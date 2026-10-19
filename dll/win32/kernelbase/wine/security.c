@@ -555,6 +555,15 @@ BOOL WINAPI IsWellKnownSid( PSID sid, WELL_KNOWN_SID_TYPE type )
                 return TRUE;
 
 #ifdef __REACTOS__
+    if (type == WinLogonIdsSid && IsValidSid(sid) &&
+        *GetSidSubAuthorityCount(sid) == SECURITY_LOGON_IDS_RID_COUNT)
+    {
+        static const SID_IDENTIFIER_AUTHORITY nt_authority = { SECURITY_NT_AUTHORITY };
+
+        return !memcmp(GetSidIdentifierAuthority(sid), &nt_authority, sizeof(nt_authority)) &&
+               *GetSidSubAuthority(sid, 0) == SECURITY_LOGON_IDS_RID;
+    }
+
     if (IsValidSid(sid) && *GetSidSubAuthorityCount(sid) == 5)
     {
         static const SID_IDENTIFIER_AUTHORITY authority = { SECURITY_NT_AUTHORITY };
