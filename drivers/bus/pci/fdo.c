@@ -469,6 +469,29 @@ FdoQueryBusRelations(
 }
 
 
+static BOOLEAN
+PciFdoReserveWindows(
+    _Inout_ PPCI_ADDRESS_WINDOW *Windows,
+    _Inout_ PULONG Capacity,
+    _In_ ULONG Needed)
+{
+    PPCI_ADDRESS_WINDOW NewWindows;
+
+    if (Needed <= *Capacity)
+        return TRUE;
+
+    NewWindows = ExAllocatePoolWithTag(NonPagedPool, Needed * sizeof(PCI_ADDRESS_WINDOW), TAG_PCI);
+    if (NewWindows == NULL)
+        return FALSE;
+
+    RtlZeroMemory(NewWindows, Needed * sizeof(PCI_ADDRESS_WINDOW));
+    if (*Windows != NULL)
+        ExFreePoolWithTag(*Windows, TAG_PCI);
+    *Windows = NewWindows;
+    *Capacity = Needed;
+    return TRUE;
+}
+
 static NTSTATUS
 FdoStartDevice(
     IN PDEVICE_OBJECT DeviceObject,
@@ -478,6 +501,8 @@ FdoStartDevice(
     PCM_RESOURCE_LIST AllocatedResources;
     PCM_PARTIAL_RESOURCE_DESCRIPTOR ResourceDescriptor;
     ULONG FoundBusNumber = FALSE;
+    ULONG IoWindowsNeeded = 0;
+    ULONG MemoryWindowsNeeded = 0;
     ULONG i;
 #ifdef HAL_PCI_HAS_MSI_SUPPORT_QUERY
     BOOLEAN HalMsiSupported;
@@ -516,6 +541,28 @@ FdoStartDevice(
     for (i = 0; i < AllocatedResources->List[0].PartialResourceList.Count; i++)
     {
         ResourceDescriptor = &AllocatedResources->List[0].PartialResourceList.PartialDescriptors[i];
+        if (ResourceDescriptor->Type == CmResourceTypePort &&
+            (ResourceDescriptor->Flags & CM_RESOURCE_PORT_WINDOW_DECODE))
+        {
+            IoWindowsNeeded++;
+        }
+        else if ((ResourceDescriptor->Type == CmResourceTypeMemory ||
+                  ResourceDescriptor->Type == CmResourceTypeMemoryLarge) &&
+                 (ResourceDescriptor->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE))
+        {
+            MemoryWindowsNeeded++;
+        }
+    }
+
+    if (!PciFdoReserveWindows(&DeviceExtension->IoWindows, &DeviceExtension->IoWindowCapacity, IoWindowsNeeded) ||
+        !PciFdoReserveWindows(&DeviceExtension->MemoryWindows, &DeviceExtension->MemoryWindowCapacity, MemoryWindowsNeeded))
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    for (i = 0; i < AllocatedResources->List[0].PartialResourceList.Count; i++)
+    {
+        ResourceDescriptor = &AllocatedResources->List[0].PartialResourceList.PartialDescriptors[i];
         switch (ResourceDescriptor->Type)
         {
             case CmResourceTypeBusNumber:
@@ -550,7 +597,7 @@ FdoStartDevice(
             case CmResourceTypePort:
                 if ((ResourceDescriptor->Flags & CM_RESOURCE_PORT_WINDOW_DECODE) &&
                     ResourceDescriptor->u.Port.Length != 0 &&
-                    DeviceExtension->IoWindowCount < PCI_MAX_ADDRESS_WINDOWS)
+                    DeviceExtension->IoWindowCount < DeviceExtension->IoWindowCapacity)
                 {
                     PPCI_ADDRESS_WINDOW Window = &DeviceExtension->IoWindows[DeviceExtension->IoWindowCount];
                     ULONGLONG Length = ResourceDescriptor->u.Port.Length;
@@ -572,7 +619,7 @@ FdoStartDevice(
             case CmResourceTypeMemory:
                 if ((ResourceDescriptor->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) &&
                     PciMemoryDescriptorLength(ResourceDescriptor) != 0 &&
-                    DeviceExtension->MemoryWindowCount < PCI_MAX_ADDRESS_WINDOWS)
+                    DeviceExtension->MemoryWindowCount < DeviceExtension->MemoryWindowCapacity)
                 {
                     PPCI_ADDRESS_WINDOW Window = &DeviceExtension->MemoryWindows[DeviceExtension->MemoryWindowCount];
                     ULONGLONG Length = PciMemoryDescriptorLength(ResourceDescriptor);
@@ -787,6 +834,10 @@ FdoPnpControl(
             IoSkipCurrentIrpStackLocation(Irp);
             Status = IoCallDriver(DeviceExtension->Ldo, Irp);
             IoDetachDevice(DeviceExtension->Ldo);
+            if (DeviceExtension->IoWindows != NULL)
+                ExFreePoolWithTag(DeviceExtension->IoWindows, TAG_PCI);
+            if (DeviceExtension->MemoryWindows != NULL)
+                ExFreePoolWithTag(DeviceExtension->MemoryWindows, TAG_PCI);
             IoDeleteDevice(DeviceObject);
             return Status;
 
