@@ -151,7 +151,7 @@ RawInputThreadMain(VOID)
     PFILE_OBJECT pKbdDevice = NULL, pMouDevice = NULL;
     LARGE_INTEGER ByteOffset;
     //LARGE_INTEGER WaitTimeout;
-    PVOID WaitObjects[6 + HIDINPUT_MAX_DEVICES], pSignaledObject = NULL;
+    PVOID WaitObjects[6 + HIDINPUT_MAX_DEVICES + HIDINPUT_MAX_RAW_DEVICES], pSignaledObject = NULL;
     KWAIT_BLOCK WaitBlockArray[RTL_NUMBER_OF(WaitObjects)];
     ULONG cWaitObjects = 0, cMaxWaitObjects = 2, cExpectedWaitObjects, MouseInputCount, i;
     MOUSE_INPUT_DATA MouseInput[MOUSE_INPUT_BUFFER_SIZE];

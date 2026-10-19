@@ -6,6 +6,9 @@
  */
 
 #include <win32k.h>
+#define _HIDPI_NO_FUNCTION_MACROS_
+#include <hidclass.h>
+#include <hidpi.h>
 #include <hidusage.h>
 
 #define RAWINPUT_MAX_PENDING 10000
@@ -16,13 +19,31 @@ typedef struct _RAWINPUT_DEVICE_OBJECT
     LIST_ENTRY ListEntry;
     UNICODE_STRING Path;
     RID_DEVICE_INFO Info;
+    PVOID PreparsedData;
+    ULONG PreparsedLength;
+    ULONG InputLength;
     BOOLEAN Present;
+    BOOLEAN Hidden;
 } RAWINPUT_DEVICE_OBJECT, *PRAWINPUT_DEVICE_OBJECT;
+
+typedef struct _RAWINPUT_HID_ARRIVAL
+{
+    LIST_ENTRY ListEntry;
+    PWSTR Link;
+    SIZE_T cchLink;
+    RID_DEVICE_INFO Info;
+    PVOID PreparsedData;
+    ULONG PreparsedLength;
+    ULONG InputLength;
+    BOOLEAN Hidden;
+} RAWINPUT_HID_ARRIVAL, *PRAWINPUT_HID_ARRIVAL;
 
 static const GUID RawInputMouseInterface =
     { 0x378de44c, 0x56ef, 0x11d1, { 0xbc, 0x8c, 0x00, 0xa0, 0xc9, 0x14, 0x05, 0xdd } };
 static const GUID RawInputKeyboardInterface =
     { 0x884b96c3, 0x56ef, 0x11d1, { 0xbc, 0x8c, 0x00, 0xa0, 0xc9, 0x14, 0x05, 0xdd } };
+static const GUID RawInputHidInterface =
+    { 0x4d1e55b2, 0xf16f, 0x11cf, { 0x88, 0xcb, 0x00, 0x11, 0x11, 0x00, 0x00, 0x30 } };
 
 static LIST_ENTRY gRawInputDevices = { &gRawInputDevices, &gRawInputDevices };
 static MOUSE_ATTRIBUTES gRawInputMouseAttributes;
@@ -75,10 +96,52 @@ RawInputFillDeviceInfo(PRID_DEVICE_INFO Info, DWORD dwType)
 }
 
 static VOID
+RawInputDeviceUsage(PRAWINPUT_DEVICE_OBJECT Device, PUSHORT pUsagePage, PUSHORT pUsage)
+{
+    if (Device->Info.dwType == RIM_TYPEHID)
+    {
+        *pUsagePage = Device->Info.hid.usUsagePage;
+        *pUsage = Device->Info.hid.usUsage;
+    }
+    else
+    {
+        *pUsagePage = HID_USAGE_PAGE_GENERIC;
+        *pUsage = (Device->Info.dwType == RIM_TYPEMOUSE) ? HID_USAGE_GENERIC_MOUSE : HID_USAGE_GENERIC_KEYBOARD;
+    }
+}
+
+static PRAWINPUTDEVICE
+RawInputFindRegistration(PPROCESSINFO ppi, USHORT UsagePage, USHORT Usage);
+
+static VOID
+RawInputPostDeviceChange(PRAWINPUT_DEVICE_OBJECT Device, WPARAM Change)
+{
+    PPROCESSINFO ppi;
+    PRAWINPUTDEVICE Registration;
+    USHORT UsagePage, Usage;
+
+    if (Device->Hidden)
+        return;
+
+    RawInputDeviceUsage(Device, &UsagePage, &Usage);
+    for (ppi = gppiList; ppi; ppi = ppi->ppiNext)
+    {
+        if (!ppi->cRawInputDevices)
+            continue;
+        Registration = RawInputFindRegistration(ppi, UsagePage, Usage);
+        if (Registration && (Registration->dwFlags & RIDEV_DEVNOTIFY) && Registration->hwndTarget)
+            UserPostMessage(Registration->hwndTarget, WM_INPUT_DEVICE_CHANGE, Change, (LPARAM)UserHMGetHandle(Device));
+    }
+}
+
+static VOID
 RawInputDeleteDevice(PRAWINPUT_DEVICE_OBJECT Device)
 {
+    RawInputPostDeviceChange(Device, GIDC_REMOVAL);
     RemoveEntryList(&Device->ListEntry);
     ExFreePoolWithTag(Device->Path.Buffer, USERTAG_DEVICEINFO);
+    if (Device->PreparsedData)
+        ExFreePoolWithTag(Device->PreparsedData, USERTAG_HIDDESC);
     UserDereferenceObject(Device);
     UserDeleteObject(UserHMGetHandle(Device), TYPE_DEVICEINFO);
 }
@@ -155,6 +218,7 @@ RawInputMergeInterfaces(DWORD dwType, PWSTR pszList)
         RawInputFillDeviceInfo(&Device->Info, dwType);
         Device->Present = TRUE;
         InsertTailList(&gRawInputDevices, &Device->ListEntry);
+        RawInputPostDeviceChange(Device, GIDC_ARRIVAL);
     }
 
     for (Entry = gRawInputDevices.Flink; Entry != &gRawInputDevices; Entry = Next)
@@ -166,27 +230,172 @@ RawInputMergeInterfaces(DWORD dwType, PWSTR pszList)
     }
 }
 
+static VOID
+RawInputFreeHidArrival(PRAWINPUT_HID_ARRIVAL Arrival)
+{
+    if (Arrival->PreparsedData)
+        ExFreePoolWithTag(Arrival->PreparsedData, USERTAG_HIDDESC);
+    ExFreePoolWithTag(Arrival, USERTAG_DEVICEINFO);
+}
+
+static VOID
+RawInputQueryHidArrivals(PWSTR pszList, PLIST_ENTRY Arrivals)
+{
+    HID_COLLECTION_INFORMATION Information;
+    PHIDP_PREPARSED_DATA PreparsedData;
+    PRAWINPUT_HID_ARRIVAL Arrival;
+    UNICODE_STRING Path;
+    HIDP_CAPS Caps;
+    PWSTR pszLink;
+    SIZE_T cchLink;
+    BOOLEAN Known;
+
+    for (pszLink = pszList; *pszLink; pszLink += cchLink + 1)
+    {
+        cchLink = wcslen(pszLink);
+        if (cchLink < 4 || cchLink >= UNICODE_STRING_MAX_CHARS)
+            continue;
+
+        UserEnterShared();
+        Known = RawInputFindDevicePath(RIM_TYPEHID, pszLink, cchLink) != NULL;
+        UserLeave();
+        if (Known)
+            continue;
+
+        Path.Buffer = pszLink;
+        Path.Length = Path.MaximumLength = (USHORT)(cchLink * sizeof(WCHAR));
+        if (!NT_SUCCESS(HidInputQueryCollection(&Path, &Information, &PreparsedData, &Caps)))
+            continue;
+
+        Arrival = ExAllocatePoolZero(PagedPool, sizeof(*Arrival), USERTAG_DEVICEINFO);
+        if (!Arrival)
+        {
+            ExFreePoolWithTag(PreparsedData, USERTAG_HIDDESC);
+            continue;
+        }
+        Arrival->Link = pszLink;
+        Arrival->cchLink = cchLink;
+        Arrival->Info.cbSize = sizeof(Arrival->Info);
+        Arrival->Info.dwType = RIM_TYPEHID;
+        Arrival->Info.hid.dwVendorId = Information.VendorID;
+        Arrival->Info.hid.dwProductId = Information.ProductID;
+        Arrival->Info.hid.dwVersionNumber = Information.VersionNumber;
+        Arrival->Info.hid.usUsagePage = Caps.UsagePage;
+        Arrival->Info.hid.usUsage = Caps.Usage;
+        Arrival->PreparsedData = PreparsedData;
+        Arrival->PreparsedLength = Information.DescriptorSize;
+        Arrival->InputLength = Caps.InputReportByteLength;
+        Arrival->Hidden = Caps.UsagePage == HID_USAGE_PAGE_GENERIC &&
+                          (Caps.Usage == HID_USAGE_GENERIC_MOUSE || Caps.Usage == HID_USAGE_GENERIC_KEYBOARD);
+        InsertTailList(Arrivals, &Arrival->ListEntry);
+    }
+}
+
+static VOID
+RawInputMergeHid(PWSTR pszList, PLIST_ENTRY Arrivals)
+{
+    PLIST_ENTRY Entry, Next;
+    PRAWINPUT_DEVICE_OBJECT Device;
+    PRAWINPUT_HID_ARRIVAL Arrival;
+    PWSTR pszLink;
+    SIZE_T cchLink;
+    HANDLE hDevice;
+
+    for (Entry = gRawInputDevices.Flink; Entry != &gRawInputDevices; Entry = Entry->Flink)
+    {
+        Device = CONTAINING_RECORD(Entry, RAWINPUT_DEVICE_OBJECT, ListEntry);
+        if (Device->Info.dwType == RIM_TYPEHID)
+            Device->Present = FALSE;
+    }
+
+    for (pszLink = pszList; *pszLink; pszLink += cchLink + 1)
+    {
+        cchLink = wcslen(pszLink);
+        Device = RawInputFindDevicePath(RIM_TYPEHID, pszLink, cchLink);
+        if (Device)
+            Device->Present = TRUE;
+    }
+
+    while (!IsListEmpty(Arrivals))
+    {
+        Arrival = CONTAINING_RECORD(RemoveHeadList(Arrivals), RAWINPUT_HID_ARRIVAL, ListEntry);
+        if (RawInputFindDevicePath(RIM_TYPEHID, Arrival->Link, Arrival->cchLink))
+        {
+            RawInputFreeHidArrival(Arrival);
+            continue;
+        }
+
+        Device = UserCreateObject(gHandleTable, NULL, NULL, &hDevice, TYPE_DEVICEINFO, sizeof(*Device));
+        if (!Device)
+        {
+            RawInputFreeHidArrival(Arrival);
+            continue;
+        }
+        Device->Path.Buffer = ExAllocatePoolWithTag(PagedPool, (Arrival->cchLink + 1) * sizeof(WCHAR), USERTAG_DEVICEINFO);
+        if (!Device->Path.Buffer)
+        {
+            UserDereferenceObject(Device);
+            UserDeleteObject(hDevice, TYPE_DEVICEINFO);
+            RawInputFreeHidArrival(Arrival);
+            continue;
+        }
+        RtlCopyMemory(Device->Path.Buffer, Arrival->Link, (Arrival->cchLink + 1) * sizeof(WCHAR));
+        Device->Path.Buffer[1] = L'\\';
+        Device->Path.Length = (USHORT)(Arrival->cchLink * sizeof(WCHAR));
+        Device->Path.MaximumLength = Device->Path.Length + sizeof(WCHAR);
+        Device->Info = Arrival->Info;
+        Device->PreparsedData = Arrival->PreparsedData;
+        Device->PreparsedLength = Arrival->PreparsedLength;
+        Device->InputLength = Arrival->InputLength;
+        Device->Hidden = Arrival->Hidden;
+        Device->Present = TRUE;
+        Arrival->PreparsedData = NULL;
+        RawInputFreeHidArrival(Arrival);
+        InsertTailList(&gRawInputDevices, &Device->ListEntry);
+        RawInputPostDeviceChange(Device, GIDC_ARRIVAL);
+    }
+
+    for (Entry = gRawInputDevices.Flink; Entry != &gRawInputDevices; Entry = Next)
+    {
+        Next = Entry->Flink;
+        Device = CONTAINING_RECORD(Entry, RAWINPUT_DEVICE_OBJECT, ListEntry);
+        if (Device->Info.dwType == RIM_TYPEHID && !Device->Present)
+            RawInputDeleteDevice(Device);
+    }
+}
+
 VOID NTAPI
 RawInputUpdateDevices(VOID)
 {
-    PWSTR pszMice = NULL, pszKeyboards = NULL;
+    PWSTR pszMice = NULL, pszKeyboards = NULL, pszHid = NULL;
+    LIST_ENTRY HidArrivals;
 
+    InitializeListHead(&HidArrivals);
     if (!NT_SUCCESS(IoGetDeviceInterfaces(&RawInputMouseInterface, NULL, 0, &pszMice)))
         pszMice = NULL;
     if (!NT_SUCCESS(IoGetDeviceInterfaces(&RawInputKeyboardInterface, NULL, 0, &pszKeyboards)))
         pszKeyboards = NULL;
+    if (!NT_SUCCESS(IoGetDeviceInterfaces(&RawInputHidInterface, NULL, 0, &pszHid)))
+        pszHid = NULL;
+    if (pszHid)
+        RawInputQueryHidArrivals(pszHid, &HidArrivals);
 
     UserEnterExclusive();
     if (pszMice)
         RawInputMergeInterfaces(RIM_TYPEMOUSE, pszMice);
     if (pszKeyboards)
         RawInputMergeInterfaces(RIM_TYPEKEYBOARD, pszKeyboards);
+    if (pszHid)
+        RawInputMergeHid(pszHid, &HidArrivals);
     UserLeave();
 
     if (pszMice)
         ExFreePool(pszMice);
     if (pszKeyboards)
         ExFreePool(pszKeyboards);
+    if (pszHid)
+        ExFreePool(pszHid);
+    HidInputRawInputChanged();
 }
 
 static HANDLE
@@ -251,7 +460,7 @@ RawInputNextHandle(VOID)
 }
 
 static VOID
-RawInputDispatch(const RAWINPUT *Template, USHORT Usage, ULONG_PTR ExtraInfo, BOOL bInjected, DWORD dwTime)
+RawInputDispatch(const RAWINPUT *Template, USHORT UsagePage, USHORT Usage, ULONG_PTR ExtraInfo, BOOL bInjected, DWORD dwTime)
 {
     PUSER_MESSAGE_QUEUE pqFocus;
     PWND pwndForeground, pwnd;
@@ -270,16 +479,21 @@ RawInputDispatch(const RAWINPUT *Template, USHORT Usage, ULONG_PTR ExtraInfo, BO
     if (!pwndForeground)
         return;
     ppiForeground = pwndForeground->head.pti->ppi;
-    bForegroundRegistered = RawInputFindRegistration(ppiForeground, HID_USAGE_PAGE_GENERIC, Usage) != NULL;
+    bForegroundRegistered = RawInputFindRegistration(ppiForeground, UsagePage, Usage) != NULL;
 
-    Source.deviceType = (Template->header.dwType == RIM_TYPEMOUSE) ? IMDT_MOUSE : IMDT_KEYBOARD;
+    if (Template->header.dwType == RIM_TYPEMOUSE)
+        Source.deviceType = IMDT_MOUSE;
+    else if (Template->header.dwType == RIM_TYPEKEYBOARD)
+        Source.deviceType = IMDT_KEYBOARD;
+    else
+        Source.deviceType = IMDT_UNAVAILABLE;
     Source.originId = bInjected ? IMO_INJECTED : IMO_HARDWARE;
 
     for (ppi = gppiList; ppi; ppi = ppi->ppiNext)
     {
         if (!ppi->cRawInputDevices)
             continue;
-        Device = RawInputFindRegistration(ppi, HID_USAGE_PAGE_GENERIC, Usage);
+        Device = RawInputFindRegistration(ppi, UsagePage, Usage);
         if (!Device)
             continue;
 
@@ -341,7 +555,7 @@ RawInputProcessKeyboard(WORD wScanCode, WORD wVk, DWORD dwFlags, UINT uMsg, ULON
     Raw.data.keyboard.Message = uMsg;
     Raw.data.keyboard.ExtraInformation = (ULONG)dwExtraInfo;
 
-    RawInputDispatch(&Raw, HID_USAGE_GENERIC_KEYBOARD, dwExtraInfo, bInjected, dwTime);
+    RawInputDispatch(&Raw, HID_USAGE_PAGE_GENERIC, HID_USAGE_GENERIC_KEYBOARD, dwExtraInfo, bInjected, dwTime);
 }
 
 VOID NTAPI
@@ -361,7 +575,7 @@ RawInputProcessMouseData(PMOUSE_INPUT_DATA pMouseInputData)
     Raw.data.mouse.lLastY = pMouseInputData->LastY;
     Raw.data.mouse.ulExtraInformation = pMouseInputData->ExtraInformation;
 
-    RawInputDispatch(&Raw, HID_USAGE_GENERIC_MOUSE, pMouseInputData->ExtraInformation, FALSE, EngGetTickCount32());
+    RawInputDispatch(&Raw, HID_USAGE_PAGE_GENERIC, HID_USAGE_GENERIC_MOUSE, pMouseInputData->ExtraInformation, FALSE, EngGetTickCount32());
 }
 
 VOID NTAPI
@@ -418,10 +632,76 @@ RawInputProcessMouseInput(const MOUSEINPUT *pMouseInput)
         return;
 
     RawInputDispatch(&Raw,
+                     HID_USAGE_PAGE_GENERIC,
                      HID_USAGE_GENERIC_MOUSE,
                      pMouseInput->dwExtraInfo,
                      TRUE,
                      pMouseInput->time ? pMouseInput->time : EngGetTickCount32());
+}
+
+VOID NTAPI
+RawInputProcessHidReport(HANDLE hDevice, const UCHAR *Report, ULONG Length)
+{
+    PRAWINPUT_DEVICE_OBJECT Device;
+    PRAWINPUT Raw;
+    ULONG Size;
+
+    Device = UserGetObject(gHandleTable, hDevice, TYPE_DEVICEINFO);
+    if (!Device || Device->Info.dwType != RIM_TYPEHID || Device->Hidden || !Length)
+        return;
+
+    Size = FIELD_OFFSET(RAWINPUT, data.hid.bRawData) + Length;
+    Raw = ExAllocatePoolZero(PagedPool, Size, USERTAG_HIDDATA);
+    if (!Raw)
+        return;
+    Raw->header.dwType = RIM_TYPEHID;
+    Raw->header.dwSize = Size;
+    Raw->header.hDevice = hDevice;
+    Raw->data.hid.dwSizeHid = Length;
+    Raw->data.hid.dwCount = 1;
+    RtlCopyMemory(Raw->data.hid.bRawData, Report, Length);
+
+    RawInputDispatch(Raw, Device->Info.hid.usUsagePage, Device->Info.hid.usUsage, 0, FALSE, EngGetTickCount32());
+    ExFreePoolWithTag(Raw, USERTAG_HIDDATA);
+}
+
+ULONG NTAPI
+RawInputGetHidTargets(PRAWINPUT_HID_TARGET Targets, ULONG MaxTargets)
+{
+    PLIST_ENTRY Entry;
+    PRAWINPUT_DEVICE_OBJECT Device;
+    PPROCESSINFO ppi;
+    ULONG Count = 0;
+
+    for (Entry = gRawInputDevices.Flink; Entry != &gRawInputDevices && Count < MaxTargets; Entry = Entry->Flink)
+    {
+        Device = CONTAINING_RECORD(Entry, RAWINPUT_DEVICE_OBJECT, ListEntry);
+        if (Device->Info.dwType != RIM_TYPEHID || Device->Hidden || !Device->InputLength)
+            continue;
+
+        for (ppi = gppiList; ppi; ppi = ppi->ppiNext)
+        {
+            if (ppi->cRawInputDevices &&
+                RawInputFindRegistration(ppi, Device->Info.hid.usUsagePage, Device->Info.hid.usUsage))
+            {
+                break;
+            }
+        }
+        if (!ppi)
+            continue;
+
+        Targets[Count].Path.Buffer = ExAllocatePoolWithTag(PagedPool, Device->Path.MaximumLength, USERTAG_HIDDESC);
+        if (!Targets[Count].Path.Buffer)
+            continue;
+        RtlCopyMemory(Targets[Count].Path.Buffer, Device->Path.Buffer, Device->Path.MaximumLength);
+        Targets[Count].Path.Buffer[1] = L'?';
+        Targets[Count].Path.Length = Device->Path.Length;
+        Targets[Count].Path.MaximumLength = Device->Path.MaximumLength;
+        Targets[Count].hDevice = UserHMGetHandle(Device);
+        Targets[Count].ReportLength = Device->InputLength;
+        Count++;
+    }
+    return Count;
 }
 
 VOID FASTCALL
@@ -467,6 +747,7 @@ RawInputCleanupProcess(PPROCESSINFO ppi)
     {
         ExFreePoolWithTag(ppi->pRawInputDevices, USERTAG_HIDDESC);
         ppi->pRawInputDevices = NULL;
+        HidInputRawInputChanged();
     }
     ppi->cRawInputDevices = 0;
 }
@@ -476,17 +757,19 @@ RawInputPostDeviceArrivals(const RAWINPUTDEVICE *Filter)
 {
     PLIST_ENTRY Entry;
     PRAWINPUT_DEVICE_OBJECT Device;
-    USHORT Usage;
-
-    if (Filter->usUsagePage != HID_USAGE_PAGE_GENERIC)
-        return;
+    USHORT UsagePage, Usage;
 
     for (Entry = gRawInputDevices.Flink; Entry != &gRawInputDevices; Entry = Entry->Flink)
     {
         Device = CONTAINING_RECORD(Entry, RAWINPUT_DEVICE_OBJECT, ListEntry);
-        Usage = (Device->Info.dwType == RIM_TYPEMOUSE) ? HID_USAGE_GENERIC_MOUSE : HID_USAGE_GENERIC_KEYBOARD;
-        if (Filter->usUsage != Usage)
+        if (Device->Hidden)
             continue;
+        RawInputDeviceUsage(Device, &UsagePage, &Usage);
+        if (Filter->usUsagePage != UsagePage ||
+            (Filter->usUsage != Usage && (Filter->dwFlags & RIDEV_EXMODEMASK) != RIDEV_PAGEONLY))
+        {
+            continue;
+        }
         UserPostMessage(Filter->hwndTarget, WM_INPUT_DEVICE_CHANGE, GIDC_ARRIVAL, (LPARAM)UserHMGetHandle(Device));
     }
 }
@@ -614,6 +897,7 @@ NtUserRegisterRawInputDevices(
     }
     ppi->cRawInputDevices = cDevices;
     Ret = TRUE;
+    HidInputRawInputChanged();
 
 Leave:
     UserLeave();
@@ -704,7 +988,10 @@ NtUserGetRawInputDeviceList(
     UserEnterShared();
 
     for (Entry = gRawInputDevices.Flink; Entry != &gRawInputDevices; Entry = Entry->Flink)
-        Count++;
+    {
+        if (!CONTAINING_RECORD(Entry, RAWINPUT_DEVICE_OBJECT, ListEntry)->Hidden)
+            Count++;
+    }
 
     _SEH2_TRY
     {
@@ -722,11 +1009,14 @@ NtUserGetRawInputDeviceList(
         else
         {
             ProbeForWrite(pRawInputDeviceList, Count * sizeof(RAWINPUTDEVICELIST), 1);
-            for (Entry = gRawInputDevices.Flink, i = 0; Entry != &gRawInputDevices; Entry = Entry->Flink, i++)
+            for (Entry = gRawInputDevices.Flink, i = 0; Entry != &gRawInputDevices; Entry = Entry->Flink)
             {
                 Device = CONTAINING_RECORD(Entry, RAWINPUT_DEVICE_OBJECT, ListEntry);
+                if (Device->Hidden)
+                    continue;
                 pRawInputDeviceList[i].hDevice = UserHMGetHandle(Device);
                 pRawInputDeviceList[i].dwType = Device->Info.dwType;
+                i++;
             }
             Ret = Count;
         }
@@ -776,7 +1066,7 @@ NtUserGetRawInputDeviceInfo(
     UserEnterShared();
 
     Device = UserGetObject(gHandleTable, hDevice, TYPE_DEVICEINFO);
-    if (!Device)
+    if (!Device || Device->Hidden)
     {
         EngSetLastError(ERROR_INVALID_HANDLE);
         goto Leave;
@@ -797,7 +1087,9 @@ NtUserGetRawInputDeviceInfo(
             break;
 
         case RIDI_PREPARSEDDATA:
-            Len = 0;
+            Len = Device->PreparsedLength;
+            cbCopy = Len;
+            pSource = Device->PreparsedData;
             break;
     }
 

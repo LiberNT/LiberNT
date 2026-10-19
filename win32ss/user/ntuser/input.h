@@ -98,8 +98,25 @@ VOID FASTCALL RawInputSetThreadData(PTHREADINFO pti, PUSER_MESSAGE Message, BOOL
 VOID FASTCALL RawInputCleanupThread(PTHREADINFO pti);
 VOID FASTCALL RawInputCleanupProcess(PPROCESSINFO ppi);
 
+typedef struct _RAWINPUT_HID_TARGET
+{
+    HANDLE hDevice;
+    UNICODE_STRING Path;
+    ULONG ReportLength;
+} RAWINPUT_HID_TARGET, *PRAWINPUT_HID_TARGET;
+
+VOID NTAPI RawInputProcessHidReport(HANDLE hDevice, const UCHAR *Report, ULONG Length);
+ULONG NTAPI RawInputGetHidTargets(PRAWINPUT_HID_TARGET Targets, ULONG MaxTargets);
+
 /* HID consumer controls */
 #define HIDINPUT_MAX_DEVICES 8
+#define HIDINPUT_MAX_RAW_DEVICES 16
+struct _HID_COLLECTION_INFORMATION;
+struct _HIDP_PREPARSED_DATA;
+struct _HIDP_CAPS;
+NTSTATUS NTAPI HidInputQueryCollection(PUNICODE_STRING Path, struct _HID_COLLECTION_INFORMATION *Information,
+                                       struct _HIDP_PREPARSED_DATA **PreparsedData, struct _HIDP_CAPS *Caps);
+VOID NTAPI HidInputRawInputChanged(VOID);
 NTSTATUS NTAPI InitHidInputImpl(PDRIVER_OBJECT DriverObject);
 VOID NTAPI HidInputStart(VOID);
 VOID NTAPI HidInputStop(VOID);

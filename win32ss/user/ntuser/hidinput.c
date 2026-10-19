@@ -40,9 +40,22 @@ typedef struct _HIDINPUT_DEVICE
     UNICODE_STRING Path;
 } HIDINPUT_DEVICE, *PHIDINPUT_DEVICE;
 
+typedef struct _HIDINPUT_RAW_READER
+{
+    HANDLE hDevice;
+    HANDLE Handle;
+    PFILE_OBJECT FileObject;
+    PUCHAR Report;
+    ULONG ReportLength;
+    IO_STATUS_BLOCK Iosb;
+    NTSTATUS Status;
+} HIDINPUT_RAW_READER, *PHIDINPUT_RAW_READER;
+
 typedef struct _HIDINPUT_STATE
 {
     KEVENT ArrivalEvent;
+    LONG DevicesChanged;
+    LONG RawDirty;
     FAST_MUTEX ArrivalLock;
     LIST_ENTRY Arrivals;
     PVOID NotificationEntry;
@@ -52,12 +65,15 @@ typedef struct _HIDINPUT_STATE
     PHIDINPUT_DEVICE RepeatDevice;
     USAGE_AND_PAGE RepeatUsage;
     HIDINPUT_DEVICE Devices[HIDINPUT_MAX_DEVICES];
+    HIDINPUT_RAW_READER RawReaders[HIDINPUT_MAX_RAW_DEVICES];
 } HIDINPUT_STATE, *PHIDINPUT_STATE;
 
 static const GUID HidInputInterface =
     { 0x4D1E55B2, 0xF16F, 0x11CF, { 0x88, 0xCB, 0x00, 0x11, 0x11, 0x00, 0x00, 0x30 } };
 static const GUID HidInputInterfaceArrival =
     { 0xCB3A4004, 0x46F0, 0x11D0, { 0xB0, 0x8F, 0x00, 0x60, 0x97, 0x13, 0x05, 0x3F } };
+static const GUID HidInputInterfaceRemoval =
+    { 0xCB3A4005, 0x46F0, 0x11D0, { 0xB0, 0x8F, 0x00, 0x60, 0x97, 0x13, 0x05, 0x3F } };
 
 static PDRIVER_OBJECT gHidInputDriverObject;
 static PHIDINPUT_STATE gHidInput;
@@ -113,8 +129,15 @@ HidInputInterfaceNotification(
     PHIDINPUT_ARRIVAL Arrival;
     USHORT Length;
 
+    if (IsEqualGUID(&Notification->Event, &HidInputInterfaceRemoval))
+    {
+        InterlockedExchange(&State->DevicesChanged, 1);
+        KeSetEvent(&State->ArrivalEvent, IO_NO_INCREMENT, FALSE);
+        return STATUS_SUCCESS;
+    }
     if (!IsEqualGUID(&Notification->Event, &HidInputInterfaceArrival))
         return STATUS_SUCCESS;
+    InterlockedExchange(&State->DevicesChanged, 1);
 
     Length = Notification->SymbolicLinkName->Length;
     Arrival = ExAllocatePoolWithTag(PagedPool, sizeof(*Arrival) + Length, USERTAG_HIDDESC);
@@ -216,6 +239,52 @@ HidInputClose(
     RtlZeroMemory(Device, sizeof(*Device));
 }
 
+NTSTATUS
+NTAPI
+HidInputQueryCollection(
+    _In_ PUNICODE_STRING Path,
+    _Out_ PHID_COLLECTION_INFORMATION Information,
+    _Out_ PHIDP_PREPARSED_DATA *PreparsedData,
+    _Out_ PHIDP_CAPS Caps)
+{
+    PHIDP_PREPARSED_DATA Data;
+    PFILE_OBJECT FileObject;
+    HANDLE Handle;
+    NTSTATUS Status;
+
+    *PreparsedData = NULL;
+    Status = HidInputOpen(Path, 0, &Handle, &FileObject);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = HidInputIoctl(Handle, FileObject, IOCTL_HID_GET_COLLECTION_INFORMATION, Information, sizeof(*Information));
+    if (NT_SUCCESS(Status) && Information->DescriptorSize == 0)
+        Status = STATUS_DEVICE_DATA_ERROR;
+    if (NT_SUCCESS(Status))
+    {
+        Data = ExAllocatePoolWithTag(NonPagedPool, Information->DescriptorSize, USERTAG_HIDDESC);
+        if (!Data)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+        else
+        {
+            Status = HidInputIoctl(Handle, FileObject, IOCTL_HID_GET_COLLECTION_DESCRIPTOR, Data,
+                                   Information->DescriptorSize);
+            if (NT_SUCCESS(Status) && HidP_GetCaps(Data, Caps) != HIDP_STATUS_SUCCESS)
+                Status = STATUS_DEVICE_DATA_ERROR;
+            if (NT_SUCCESS(Status))
+                *PreparsedData = Data;
+            else
+                ExFreePoolWithTag(Data, USERTAG_HIDDESC);
+        }
+    }
+
+    ObCloseHandle(Handle, KernelMode);
+    ObDereferenceObject(FileObject);
+    return Status;
+}
+
 static
 PHIDP_PREPARSED_DATA
 HidInputQueryConsumerCollection(
@@ -223,38 +292,114 @@ HidInputQueryConsumerCollection(
     _Out_ PHIDP_CAPS Caps)
 {
     HID_COLLECTION_INFORMATION Information;
-    PHIDP_PREPARSED_DATA PreparsedData = NULL;
-    PFILE_OBJECT FileObject;
-    HANDLE Handle;
-    NTSTATUS Status;
+    PHIDP_PREPARSED_DATA PreparsedData;
 
-    Status = HidInputOpen(Path, 0, &Handle, &FileObject);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(HidInputQueryCollection(Path, &Information, &PreparsedData, Caps)))
         return NULL;
 
-    Status = HidInputIoctl(Handle, FileObject, IOCTL_HID_GET_COLLECTION_INFORMATION, &Information, sizeof(Information));
-    if (NT_SUCCESS(Status) && Information.DescriptorSize != 0)
+    if (Caps->UsagePage != HID_USAGE_PAGE_CONSUMER ||
+        Caps->Usage != HID_USAGE_CONSUMERCTRL ||
+        Caps->InputReportByteLength == 0)
     {
-        PreparsedData = ExAllocatePoolWithTag(NonPagedPool, Information.DescriptorSize, USERTAG_HIDDESC);
-        if (PreparsedData)
-        {
-            Status = HidInputIoctl(Handle, FileObject, IOCTL_HID_GET_COLLECTION_DESCRIPTOR, PreparsedData,
-                                   Information.DescriptorSize);
-            if (!NT_SUCCESS(Status) ||
-                HidP_GetCaps(PreparsedData, Caps) != HIDP_STATUS_SUCCESS ||
-                Caps->UsagePage != HID_USAGE_PAGE_CONSUMER ||
-                Caps->Usage != HID_USAGE_CONSUMERCTRL ||
-                Caps->InputReportByteLength == 0)
-            {
-                ExFreePoolWithTag(PreparsedData, USERTAG_HIDDESC);
-                PreparsedData = NULL;
-            }
-        }
+        ExFreePoolWithTag(PreparsedData, USERTAG_HIDDESC);
+        return NULL;
+    }
+    return PreparsedData;
+}
+
+static
+VOID
+HidInputCloseRawReader(
+    _Inout_ PHIDINPUT_RAW_READER Reader)
+{
+    if (Reader->Handle && Reader->Status == STATUS_PENDING)
+    {
+        (void)ZwCancelIoFile(Reader->Handle, &Reader->Iosb);
+        KeWaitForSingleObject(&Reader->FileObject->Event, Executive, KernelMode, FALSE, NULL);
+    }
+    if (Reader->Handle)
+        ObCloseHandle(Reader->Handle, KernelMode);
+    if (Reader->FileObject)
+        ObDereferenceObject(Reader->FileObject);
+    if (Reader->Report)
+        ExFreePoolWithTag(Reader->Report, USERTAG_HIDDATA);
+    RtlZeroMemory(Reader, sizeof(*Reader));
+}
+
+static
+VOID
+HidInputOpenRawReader(
+    _Inout_ PHIDINPUT_RAW_READER Reader,
+    _In_ PRAWINPUT_HID_TARGET Target)
+{
+    Reader->Report = ExAllocatePoolWithTag(NonPagedPool, Target->ReportLength, USERTAG_HIDDATA);
+    if (!Reader->Report)
+        return;
+
+    if (!NT_SUCCESS(HidInputOpen(&Target->Path, FILE_READ_DATA, &Reader->Handle, &Reader->FileObject)))
+    {
+        ExFreePoolWithTag(Reader->Report, USERTAG_HIDDATA);
+        RtlZeroMemory(Reader, sizeof(*Reader));
+        return;
     }
 
-    ObCloseHandle(Handle, KernelMode);
-    ObDereferenceObject(FileObject);
-    return PreparsedData;
+    Reader->hDevice = Target->hDevice;
+    Reader->ReportLength = Target->ReportLength;
+    Reader->Status = STATUS_SUCCESS;
+    Reader->Iosb.Information = 0;
+}
+
+static
+VOID
+HidInputSyncRawReaders(
+    _Inout_ PHIDINPUT_STATE State)
+{
+    RAWINPUT_HID_TARGET Targets[HIDINPUT_MAX_RAW_DEVICES];
+    PHIDINPUT_RAW_READER Reader, FreeReader;
+    ULONG Count, Index, Target;
+
+    UserEnterShared();
+    Count = RawInputGetHidTargets(Targets, HIDINPUT_MAX_RAW_DEVICES);
+    UserLeave();
+
+    for (Index = 0; Index < HIDINPUT_MAX_RAW_DEVICES; Index++)
+    {
+        Reader = &State->RawReaders[Index];
+        if (!Reader->Handle)
+            continue;
+        for (Target = 0; Target < Count && Targets[Target].hDevice != Reader->hDevice; Target++)
+            ;
+        if (Target == Count)
+            HidInputCloseRawReader(Reader);
+    }
+
+    for (Target = 0; Target < Count; Target++)
+    {
+        FreeReader = NULL;
+        for (Index = 0; Index < HIDINPUT_MAX_RAW_DEVICES; Index++)
+        {
+            Reader = &State->RawReaders[Index];
+            if (Reader->Handle && Reader->hDevice == Targets[Target].hDevice)
+                break;
+            if (!Reader->Handle && !FreeReader)
+                FreeReader = Reader;
+        }
+        if (Index == HIDINPUT_MAX_RAW_DEVICES && FreeReader)
+            HidInputOpenRawReader(FreeReader, &Targets[Target]);
+        ExFreePoolWithTag(Targets[Target].Path.Buffer, USERTAG_HIDDESC);
+    }
+}
+
+VOID
+NTAPI
+HidInputRawInputChanged(VOID)
+{
+    PHIDINPUT_STATE State = gHidInput;
+
+    if (!State)
+        return;
+    InterlockedExchange(&State->RawDirty, 1);
+    KeSetEvent(&State->ArrivalEvent, IO_NO_INCREMENT, FALSE);
 }
 
 static
@@ -627,6 +772,11 @@ HidInputStop(VOID)
         if (State->Devices[Index].Handle)
             HidInputClose(&State->Devices[Index]);
     }
+    for (Index = 0; Index < HIDINPUT_MAX_RAW_DEVICES; Index++)
+    {
+        if (State->RawReaders[Index].Handle)
+            HidInputCloseRawReader(&State->RawReaders[Index]);
+    }
 
     while (!IsListEmpty(&State->Arrivals))
     {
@@ -678,6 +828,25 @@ HidInputPrepareWait(
         if (Device->Status == STATUS_PENDING)
             WaitObjects[(*WaitCount)++] = &Device->FileObject->Event;
     }
+
+    for (Index = 0; Index < HIDINPUT_MAX_RAW_DEVICES; Index++)
+    {
+        PHIDINPUT_RAW_READER Reader = &State->RawReaders[Index];
+
+        if (!Reader->Handle)
+            continue;
+
+        Expected++;
+        if (Reader->Status != STATUS_PENDING)
+        {
+            Reader->Status = ZwReadFile(Reader->Handle, NULL, NULL, NULL, &Reader->Iosb, Reader->Report,
+                                        Reader->ReportLength, &ByteOffset, NULL);
+            if (Reader->Status != STATUS_PENDING && NT_SUCCESS(Reader->Status))
+                Reader->Status = Reader->Iosb.Status;
+        }
+        if (Reader->Status == STATUS_PENDING)
+            WaitObjects[(*WaitCount)++] = &Reader->FileObject->Event;
+    }
     return Expected;
 }
 
@@ -710,6 +879,17 @@ HidInputSignaled(
             return TRUE;
         }
     }
+
+    for (Index = 0; Index < HIDINPUT_MAX_RAW_DEVICES; Index++)
+    {
+        PHIDINPUT_RAW_READER Reader = &State->RawReaders[Index];
+
+        if (Reader->Handle && Reader->Status == STATUS_PENDING && Object == &Reader->FileObject->Event)
+        {
+            Reader->Status = Reader->Iosb.Status;
+            return TRUE;
+        }
+    }
     return FALSE;
 }
 
@@ -738,6 +918,31 @@ HidInputProcess(VOID)
         Arrival = CONTAINING_RECORD(Entry, HIDINPUT_ARRIVAL, ListEntry);
         HidInputAttach(State, &Arrival->Path);
         ExFreePoolWithTag(Arrival, USERTAG_HIDDESC);
+    }
+
+    if (InterlockedExchange(&State->DevicesChanged, 0))
+        RawInputUpdateDevices();
+    if (InterlockedExchange(&State->RawDirty, 0))
+        HidInputSyncRawReaders(State);
+
+    for (Index = 0; Index < HIDINPUT_MAX_RAW_DEVICES; Index++)
+    {
+        PHIDINPUT_RAW_READER Reader = &State->RawReaders[Index];
+
+        if (!Reader->Handle || Reader->Status == STATUS_PENDING)
+            continue;
+        if (!NT_SUCCESS(Reader->Status))
+        {
+            HidInputCloseRawReader(Reader);
+            continue;
+        }
+        if (Reader->Iosb.Information)
+        {
+            UserEnterExclusive();
+            RawInputProcessHidReport(Reader->hDevice, Reader->Report, (ULONG)min(Reader->Iosb.Information, Reader->ReportLength));
+            UserLeave();
+            Reader->Iosb.Information = 0;
+        }
     }
 
     for (Index = 0; Index < HIDINPUT_MAX_DEVICES; Index++)
