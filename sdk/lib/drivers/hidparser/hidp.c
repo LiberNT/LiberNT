@@ -550,11 +550,6 @@ HidP_MaxUsageListLength(
         return 0;
 
     //
-    // sanity check
-    //
-    ASSERT(ReportType == HidP_Input || ReportType == HidP_Output || ReportType == HidP_Feature);
-
-    //
     // get usage length
     //
     return HidParser_MaxUsageListLength(PreparsedData, ReportType, UsagePage);
@@ -575,11 +570,6 @@ HidP_GetSpecificValueCaps(
     PreparsedData = HidP_GetParserContext(PreparsedData);
     if (!PreparsedData || !ValueCapsLength)
         return HIDP_STATUS_INVALID_PREPARSED_DATA;
-
-    //
-    // sanity check
-    //
-    ASSERT(ReportType == HidP_Input || ReportType == HidP_Output || ReportType == HidP_Feature);
 
     //
     // get value caps
@@ -603,11 +593,6 @@ HidP_GetUsages(
     PreparsedData = HidP_GetParserContext(PreparsedData);
     if (!PreparsedData)
         return HIDP_STATUS_INVALID_PREPARSED_DATA;
-
-    //
-    // sanity check
-    //
-    ASSERT(ReportType == HidP_Input || ReportType == HidP_Output || ReportType == HidP_Feature);
 
     //
     // get usages
@@ -675,11 +660,6 @@ HidP_GetScaledUsageValue(
     PreparsedData = HidP_GetParserContext(PreparsedData);
     if (!PreparsedData)
         return HIDP_STATUS_INVALID_PREPARSED_DATA;
-
-    //
-    // sanity check
-    //
-    ASSERT(ReportType == HidP_Input || ReportType == HidP_Output || ReportType == HidP_Feature);
 
     //
     // get scaled usage value
