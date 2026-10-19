@@ -298,8 +298,6 @@ IopConnectInterruptExMessageBased(
             (d->Flags & CM_RESOURCE_INTERRUPT_MESSAGE))
         {
             MessageCount++;
-            if (p->SynchronizeIrql && p->SynchronizeIrql < d->u.Interrupt.Level)
-                return STATUS_INVALID_PARAMETER;
             if (SynchronizeIrql < d->u.Interrupt.Level)
                 SynchronizeIrql = (KIRQL)d->u.Interrupt.Level;
         }
@@ -527,12 +525,8 @@ IopConnectInterruptExLineBased(
         return STATUS_NOT_FOUND;
     }
 
-    /* SynchronizeIrql is optional; when omitted the interrupt's own IRQL
-     * is used, and when given it must not be below that IRQL. */
     Irql = (KIRQL)LineDesc->u.Interrupt.Level;
-    SynchronizeIrql = p->SynchronizeIrql ? p->SynchronizeIrql : Irql;
-    if (SynchronizeIrql < Irql)
-        return STATUS_INVALID_PARAMETER;
+    SynchronizeIrql = p->SynchronizeIrql > Irql ? p->SynchronizeIrql : Irql;
 
     /* Everything else about the connection comes from the resource
      * descriptor; on success the caller's *InterruptObject receives the
