@@ -15074,6 +15074,16 @@ XHCI_ResumeController(
      * clearing the INTx Disable bit. Re-establish bus mastering and INTx
      * disable before reprogramming controller registers.
      */
+    if (!Extension->OperationalRegisters ||
+        XHCI_READ_REGISTER_ULONG(&Extension->OperationalRegisters->DcbaapLow) !=
+            (ULONG)(Extension->DcbaaPhysical.QuadPart & 0xFFFFFFFF) ||
+        XHCI_READ_REGISTER_ULONG(&Extension->OperationalRegisters->DcbaapHigh) !=
+            (ULONG)(Extension->DcbaaPhysical.QuadPart >> 32))
+    {
+        DPRINT1("usbxhci: controller context was lost, restarting the controller\n");
+        return MP_STATUS_HW_ERROR;
+    }
+
     XHCI_EnablePciBusMaster(Extension);
     if (Extension->MsixEnabled || Extension->MsiEnabled)
         XHCI_DisablePciIntx(Extension);
