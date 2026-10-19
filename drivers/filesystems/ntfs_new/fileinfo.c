@@ -202,6 +202,78 @@
 
 static
 NTSTATUS
+GetFileNormalizedNameInformation(_In_ PVolumeContextBlock VolCB,
+                                 _In_ PFileContextBlock FileCB,
+                                 _Out_ PFILE_NAME_INFORMATION Buffer,
+                                 _Inout_ PULONG Length)
+{
+    PNtfsMasterFileTable Mft = NtfsVolumeGetMft(VolCB->DiskVolume);
+    PStreamContextBlock ParentStream;
+    UNICODE_STRING LeafName;
+    UNICODE_STRING LinkName;
+    ULONG Capacity = MAXUSHORT / sizeof(WCHAR);
+    ULONG HeaderSize;
+    ULONG PathLength;
+    ULONG BytesToCopy;
+    PWCHAR Path;
+    NTSTATUS Status;
+
+    if (FileCB->IsVolumeOpen || FileCB->RequestedStream ||
+        (FileCB->CreateOptions & FILE_OPEN_BY_FILE_ID) ||
+        FileCB->FileName.Length <= sizeof(WCHAR))
+    {
+        return GetFileNameInformation(VolCB, FileCB, Buffer, Length);
+    }
+
+    HeaderSize = FIELD_OFFSET(FILE_NAME_INFORMATION, FileName);
+    if (*Length < HeaderSize)
+        return STATUS_INFO_LENGTH_MISMATCH;
+
+    Path = ExAllocatePoolWithTag(PagedPool, Capacity * sizeof(WCHAR), TAG_NTFS);
+    if (!Path)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = NtfsReferenceNameParent(VolCB, &FileCB->FileName, &ParentStream, &LeafName);
+    if (NT_SUCCESS(Status))
+    {
+        Status = NtfsMasterFileTableGetPathFromFileReference(Mft, ParentStream->FileReference,
+                                                            Path, Capacity, &PathLength);
+        if (NT_SUCCESS(Status))
+            Status = NtfsMasterFileTableGetLinkName(Mft, FileCB->FileRec, ParentStream->FileReference,
+                                                   &LeafName, &LinkName);
+        if (NT_SUCCESS(Status))
+        {
+            if (PathLength != 1)
+                Path[PathLength++] = L'\\';
+            if (PathLength + LinkName.Length / sizeof(WCHAR) > Capacity)
+                Status = STATUS_NAME_TOO_LONG;
+            else
+            {
+                RtlCopyMemory(&Path[PathLength], LinkName.Buffer, LinkName.Length);
+                PathLength += LinkName.Length / sizeof(WCHAR);
+            }
+        }
+        NtfsDereferenceStreamContext(VolCB, ParentStream);
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        Buffer->FileNameLength = PathLength * sizeof(WCHAR);
+        BytesToCopy = min(*Length - HeaderSize, Buffer->FileNameLength);
+        BytesToCopy &= ~(sizeof(WCHAR) - 1);
+        if (BytesToCopy)
+            RtlCopyMemory(Buffer->FileName, Path, BytesToCopy);
+        *Length -= HeaderSize + BytesToCopy;
+        if (BytesToCopy < Buffer->FileNameLength)
+            Status = STATUS_BUFFER_OVERFLOW;
+    }
+
+    ExFreePoolWithTag(Path, TAG_NTFS);
+    return Status;
+}
+
+static
+NTSTATUS
 GetFileInternalInformation(_In_ PFileContextBlock FileCB,
                             _Out_ PFILE_INTERNAL_INFORMATION Buffer,
                             _Inout_ PULONG Length)
@@ -215,12 +287,43 @@ GetFileInternalInformation(_In_ PFileContextBlock FileCB,
      if (*Length < sizeof(FILE_INTERNAL_INFORMATION))
          return STATUS_BUFFER_TOO_SMALL;
 
-     Buffer->IndexNumber.QuadPart = NtfsFileRecordGetHeader(FileCB->FileRec)->MFTRecordNumber;
+     Buffer->IndexNumber.QuadPart =
+         ((ULONGLONG)NtfsFileRecordGetHeader(FileCB->FileRec)->SequenceNumber << 48) |
+         NtfsFileRecordGetHeader(FileCB->FileRec)->MFTRecordNumber;
 
      *Length -= sizeof(FILE_INTERNAL_INFORMATION);
 
      return STATUS_SUCCESS;
  }
+
+static
+NTSTATUS
+GetFileIdInformation(_In_ PVolumeContextBlock VolCB,
+                     _In_ PFileContextBlock FileCB,
+                     _Out_ PFILE_ID_INFORMATION Buffer,
+                     _Inout_ PULONG Length)
+{
+    NtfsVolumeInformation Information;
+    ULONGLONG Reference;
+    NTSTATUS Status;
+
+    if (*Length < sizeof(FILE_ID_INFORMATION))
+        return STATUS_BUFFER_TOO_SMALL;
+
+    Status = NtfsVolumeQueryInformation(VolCB->DiskVolume, &Information);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Reference = ((ULONGLONG)NtfsFileRecordGetHeader(FileCB->FileRec)->SequenceNumber << 48) |
+                NtfsFileRecordGetHeader(FileCB->FileRec)->MFTRecordNumber;
+    RtlZeroMemory(Buffer, sizeof(*Buffer));
+    Buffer->VolumeSerialNumber = Information.VolumeSerialNumber;
+    RtlCopyMemory(Buffer->FileId.Identifier, &Reference, sizeof(Reference));
+
+    *Length -= sizeof(FILE_ID_INFORMATION);
+
+    return STATUS_SUCCESS;
+}
 
 static
 NTSTATUS
@@ -592,7 +695,9 @@ NtfsAppendDotDirectoryEntry(_In_ PFileContextBlock FileCB,
     Info.EndOfFile = Header->FileSize;
     Info.AllocationSize = Header->AllocationSize;
     Info.FileAttributes = Information.FileAttributes | FILE_ATTRIBUTE_DIRECTORY;
-    Info.FileId.QuadPart = NtfsFileRecordGetHeader(FileCB->FileRec)->MFTRecordNumber;
+    if (NameLength == 1)
+        Info.FileId.QuadPart = ((ULONGLONG)NtfsFileRecordGetHeader(FileCB->FileRec)->SequenceNumber << 48) |
+                               NtfsFileRecordGetHeader(FileCB->FileRec)->MFTRecordNumber;
     return NtfsDirectoryStoreInfo(InformationClass, &Info, Name, NameLength * sizeof(WCHAR), Buffer, Length, EntrySize);
 }
 
@@ -1942,6 +2047,8 @@ NtfsFsdQueryInformation(_In_    PDEVICE_OBJECT VolumeDeviceObject,
         case FileAttributeTagInformation:
         case FileCompressionInformation:
         case FileAllInformation:
+        case FileNormalizedNameInformation:
+        case FileIdInformation:
             if (!FileCB->FileRec || !VolCB || !VolCB->DiskVolume)
             {
                 Status = STATUS_INVALID_PARAMETER;
@@ -1985,6 +2092,16 @@ NtfsFsdQueryInformation(_In_    PDEVICE_OBJECT VolumeDeviceObject,
             Status = GetFileNameInformation(VolumeDeviceObject->DeviceExtension, FileCB,
                                             (PFILE_NAME_INFORMATION)SystemBuffer,
                                             &BufferLength);
+            break;
+        case FileNormalizedNameInformation:
+            Status = GetFileNormalizedNameInformation(VolumeDeviceObject->DeviceExtension, FileCB,
+                                                      (PFILE_NAME_INFORMATION)SystemBuffer,
+                                                      &BufferLength);
+            break;
+        case FileIdInformation:
+            Status = GetFileIdInformation(VolumeDeviceObject->DeviceExtension, FileCB,
+                                          (PFILE_ID_INFORMATION)SystemBuffer,
+                                          &BufferLength);
             break;
         case FileNetworkOpenInformation:
             Status = GetFileNetworkOpenInformation(FileCB,

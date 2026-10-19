@@ -63,7 +63,25 @@ UCHAR IopQueryOperationLength[FileMaximumInformation] =
     0,
     sizeof(FILE_NETWORK_PHYSICAL_NAME_INFORMATION),
 #endif
-    sizeof(FILE_IO_COMPLETION_NOTIFICATION_INFORMATION)
+    sizeof(FILE_IO_COMPLETION_NOTIFICATION_INFORMATION),
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    sizeof(FILE_NAME_INFORMATION),
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    sizeof(FILE_ID_INFORMATION)
 };
 
 UCHAR IopSetOperationLength[FileMaximumInformation] =

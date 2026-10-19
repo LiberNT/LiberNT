@@ -204,11 +204,23 @@ NtfsResolveFileIdName(
     ULONG PathLength = 0;
     NTSTATUS Status;
 
-    if (FileObject->FileName.Length != sizeof(ULONGLONG) || !FileObject->FileName.Buffer)
+    if ((FileObject->FileName.Length != sizeof(ULONGLONG) &&
+         FileObject->FileName.Length != 2 * sizeof(ULONGLONG)) ||
+        !FileObject->FileName.Buffer)
+    {
         return STATUS_INVALID_PARAMETER;
+    }
     if (!VolCB->DiskVolume)
         return STATUS_VOLUME_DISMOUNTED;
+    if (FileObject->FileName.Length == 2 * sizeof(ULONGLONG))
+    {
+        RtlCopyMemory(&Reference, (PUCHAR)FileObject->FileName.Buffer + sizeof(ULONGLONG), sizeof(Reference));
+        if (Reference != 0)
+            return STATUS_INVALID_PARAMETER;
+    }
     RtlCopyMemory(&Reference, FileObject->FileName.Buffer, sizeof(Reference));
+    if ((Reference >> 48) == 0)
+        return STATUS_INVALID_PARAMETER;
 
     Scratch = ExAllocatePoolWithTag(PagedPool, ScratchLength * sizeof(WCHAR), TAG_NTFS);
     if (!Scratch)

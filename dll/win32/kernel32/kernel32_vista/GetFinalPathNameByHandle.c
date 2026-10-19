@@ -133,6 +133,8 @@ GetFinalPathNameByHandleW(
     } NameInfoBuffer;
     PFILE_NAME_INFORMATION FileNameInfo = &NameInfoBuffer.File;
     PUNICODE_STRING ObjectName = &NameInfoBuffer.Object.Name;
+    WCHAR FilePathBuffer[MAX_PATH + 1];
+    UNICODE_STRING FilePath;
     WCHAR VolumeBuffer[sizeof("\\Device\\Volume{01234567-89ab-cdef-0123-456789abcdef}")];
     IO_STATUS_BLOCK IoStatusBlock;
     PWSTR PathSplit;
@@ -156,11 +158,27 @@ GetFinalPathNameByHandleW(
 
     /* Query the file name. This returns the relative path without volume.
        This also validates that the handle refers to a file. */
-    Status = NtQueryInformationFile(hFile,
-                                    &IoStatusBlock,
-                                    &NameInfoBuffer,
-                                    sizeof(NameInfoBuffer),
-                                    FileNameInformation);
+    Status = STATUS_INVALID_INFO_CLASS;
+    if (!(dwFlags & FILE_NAME_OPENED))
+    {
+        Status = NtQueryInformationFile(hFile,
+                                        &IoStatusBlock,
+                                        &NameInfoBuffer,
+                                        sizeof(NameInfoBuffer),
+                                        FileNormalizedNameInformation);
+    }
+    if (Status == STATUS_INVALID_INFO_CLASS ||
+        Status == STATUS_INVALID_PARAMETER ||
+        Status == STATUS_NOT_IMPLEMENTED ||
+        Status == STATUS_NOT_SUPPORTED ||
+        Status == STATUS_INVALID_DEVICE_REQUEST)
+    {
+        Status = NtQueryInformationFile(hFile,
+                                        &IoStatusBlock,
+                                        &NameInfoBuffer,
+                                        sizeof(NameInfoBuffer),
+                                        FileNameInformation);
+    }
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtQueryInformationFile failed: %lx\n", Status);
@@ -186,6 +204,11 @@ GetFinalPathNameByHandleW(
         return FinalLength;
     }
 
+    FilePath.Buffer = FilePathBuffer;
+    FilePath.Length = (USHORT)min(FileNameInfo->FileNameLength, sizeof(FilePathBuffer) - sizeof(WCHAR));
+    FilePath.MaximumLength = sizeof(FilePathBuffer);
+    RtlCopyMemory(FilePathBuffer, FileNameInfo->FileName, FilePath.Length);
+
     /* Query the NT object name */
     Status = NtQueryObject(hFile,
                            ObjectNameInformation,
@@ -202,8 +225,17 @@ GetFinalPathNameByHandleW(
     /* If the NT path was requested, we return the name as it is */
     if (VolumeType == VOLUME_NAME_NT)
     {
+        PathSplit = wcschr(&ObjectName->Buffer[sizeof("\\Device\\") - 1], L'\\');
+        if (PathSplit == NULL)
+        {
+            DPRINT1("Invalid object name: %wZ\n", ObjectName);
+            SetLastError(ERROR_INVALID_HANDLE);
+            return 0;
+        }
+        DeviceName.Length = (USHORT)(PathSplit - ObjectName->Buffer) * sizeof(WCHAR);
+
         /* Calculate the final length and validate the buffer size */
-        FinalLength = ObjectName->Length / sizeof(WCHAR);
+        FinalLength = (DeviceName.Length + FilePath.Length) / sizeof(WCHAR);
         if (cchFilePath < FinalLength + 1)
         {
             SetLastError(ERROR_NOT_ENOUGH_MEMORY);
@@ -211,8 +243,9 @@ GetFinalPathNameByHandleW(
         }
 
         /* Copy the name to the caller's buffer */
-        RtlCopyMemory(lpszFilePath, ObjectName->Buffer, ObjectName->Length);
-        lpszFilePath[ObjectName->Length / sizeof(WCHAR)] = UNICODE_NULL;
+        RtlCopyMemory(lpszFilePath, ObjectName->Buffer, DeviceName.Length);
+        RtlCopyMemory(lpszFilePath + DeviceName.Length / sizeof(WCHAR), FilePath.Buffer, FilePath.Length);
+        lpszFilePath[FinalLength] = UNICODE_NULL;
 
         /* Return the length of the name */
         return FinalLength;
@@ -231,8 +264,12 @@ GetFinalPathNameByHandleW(
     DeviceName.Length = (USHORT)(PathSplit - ObjectName->Buffer) * sizeof(WCHAR);
     DeviceName.MaximumLength = DeviceName.Length;
 
-    RelativePath.Buffer = PathSplit + 1;
-    RelativePath.Length = ObjectName->Length - DeviceName.Length - sizeof(WCHAR);
+    RelativePath = FilePath;
+    if (RelativePath.Length >= sizeof(WCHAR) && RelativePath.Buffer[0] == L'\\')
+    {
+        RelativePath.Buffer++;
+        RelativePath.Length -= sizeof(WCHAR);
+    }
     RelativePath.MaximumLength = RelativePath.Length;
 
     /* Query the DOS volume name */

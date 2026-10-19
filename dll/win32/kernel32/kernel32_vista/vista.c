@@ -571,7 +571,7 @@ OpenFileById(IN HANDLE hFile,
     {
         FileId.Length = sizeof(lpFileID->FileId);
     }
-    else if (lpFileID->Type == ObjectIdType)
+    else if (lpFileID->Type == ObjectIdType || lpFileID->Type == ExtendedFileIdType)
     {
         FileId.Length = sizeof(lpFileID->ObjectId);
     }
