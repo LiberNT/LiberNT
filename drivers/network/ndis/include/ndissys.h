@@ -37,18 +37,7 @@ NdisCurrentProcessorIndex(VOID)
 #define EXPORT NTAPI
 #endif
 
-/* the version of NDIS we claim to be.
- *
- * dev-nt6-1: bumped from 0x00050001 (NDIS 5.1) to 0x00060014 (NDIS 6.20)
- * for the NT 6.1 (Windows 7) target. The encoding is
- *   ((Major << 16) | (Minor & 0xFFFF))
- * so 0x0006_0014 = NDIS 6.20.
- *
- * NdisGetVersion() returns this value, and NdisReadConfiguration with the
- * "NdisVersion" key reports it back to legacy NDIS 5 protocols. Legacy
- * protocols that check NdisGetVersion() expect a value >= some minimum;
- * 6.20 satisfies all known checks. */
-#define NDIS_VERSION 0x00060014
+#define NDIS_VERSION ((6 << 16) | 89)
 
 #define NDIS_TAG 'SIDN' // "NDIS"
 
