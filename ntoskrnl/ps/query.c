@@ -181,16 +181,16 @@ PspCopyThreadWow64Context(IN PETHREAD Thread,
                 StoredContext->Eip = Context->Eip;
                 StoredContext->Esp = Context->Esp;
                 StoredContext->EFlags = Context->EFlags;
-                StoredContext->SegCs = Context->SegCs;
-                StoredContext->SegSs = Context->SegSs;
+                StoredContext->SegCs = Context->SegCs & 0xFFFF;
+                StoredContext->SegSs = Context->SegSs & 0xFFFF;
                 Cpu->Flags |= WOW64_CPURESERVED_FLAG_RESET_STATE;
             }
             if (Flags & WOW64_CONTEXT_SEGMENTS)
             {
-                StoredContext->SegDs = Context->SegDs;
-                StoredContext->SegEs = Context->SegEs;
-                StoredContext->SegFs = Context->SegFs;
-                StoredContext->SegGs = Context->SegGs;
+                StoredContext->SegDs = Context->SegDs & 0xFFFF;
+                StoredContext->SegEs = Context->SegEs & 0xFFFF;
+                StoredContext->SegFs = Context->SegFs & 0xFFFF;
+                StoredContext->SegGs = Context->SegGs & 0xFFFF;
             }
             if (Flags & WOW64_CONTEXT_DEBUG_REGISTERS)
             {
