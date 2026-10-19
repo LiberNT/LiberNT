@@ -118,6 +118,18 @@ static CRITICAL_SECTION_DEBUG HandleNotifyLockDebug =
 };
 static CRITICAL_SECTION HandleNotifyLock = { &HandleNotifyLockDebug, -1, 0, 0, 0, 0 };
 static LIST_ENTRY HandleNotifyList = { &HandleNotifyList, &HandleNotifyList };
+static LIST_ENTRY HandleNotifyEvents = { &HandleNotifyEvents, &HandleNotifyEvents };
+static HANDLE HandleNotifySignal;
+static HANDLE HandleNotifyThread;
+
+typedef struct _HANDLE_NOTIFY_EVENT
+{
+    LIST_ENTRY ListEntry;
+    PNOTIFY_DATA pNotifyData;
+    HDEVNOTIFY hHandleNotify;
+    DWORD dwEventType;
+    DEV_BROADCAST_HDR Header;
+} HANDLE_NOTIFY_EVENT, *PHANDLE_NOTIFY_EVENT;
 
 
 /* FUNCTIONS ****************************************************************/
@@ -796,6 +808,67 @@ CMP_Init_Detection(
 }
 
 static
+HWND
+CmpFindHandleNotifyWindow(
+    _In_ PNOTIFY_DATA pTarget,
+    _In_ HDEVNOTIFY hHandleNotify)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = HandleNotifyList.Flink; Entry != &HandleNotifyList; Entry = Entry->Flink)
+    {
+        PNOTIFY_DATA pNotifyData = CONTAINING_RECORD(Entry, NOTIFY_DATA, ListEntry);
+
+        if (pNotifyData == pTarget && pNotifyData->hHandleNotify == hHandleNotify)
+            return pNotifyData->hWindow;
+    }
+    return NULL;
+}
+
+
+static
+DWORD
+WINAPI
+CmpHandleNotifyWorker(
+    _In_ LPVOID Parameter)
+{
+    UNREFERENCED_PARAMETER(Parameter);
+
+    for (;;)
+    {
+        PHANDLE_NOTIFY_EVENT pEvent = NULL;
+        HWND hWindow = NULL;
+
+        EnterCriticalSection(&HandleNotifyLock);
+        if (!IsListEmpty(&HandleNotifyEvents))
+        {
+            pEvent = CONTAINING_RECORD(RemoveHeadList(&HandleNotifyEvents), HANDLE_NOTIFY_EVENT, ListEntry);
+            hWindow = CmpFindHandleNotifyWindow(pEvent->pNotifyData, pEvent->hHandleNotify);
+        }
+        LeaveCriticalSection(&HandleNotifyLock);
+
+        if (pEvent == NULL)
+        {
+            WaitForSingleObject(HandleNotifySignal, INFINITE);
+            continue;
+        }
+
+        if (hWindow != NULL)
+        {
+            SendMessageTimeoutW(hWindow,
+                                WM_DEVICECHANGE,
+                                (WPARAM)pEvent->dwEventType,
+                                (LPARAM)&pEvent->Header,
+                                SMTO_ABORTIFHUNG,
+                                2000,
+                                NULL);
+        }
+        HeapFree(GetProcessHeap(), 0, pEvent);
+    }
+}
+
+
+static
 DWORD
 CALLBACK
 CmpHandleNotifyCallback(
@@ -804,34 +877,28 @@ CmpHandleNotifyCallback(
     _In_ DEV_BROADCAST_HDR *pHeader)
 {
     PDEV_BROADCAST_HANDLE pHandle = (PDEV_BROADCAST_HANDLE)pHeader;
-    PLIST_ENTRY Entry;
-    HWND hWindow = NULL;
+    PHANDLE_NOTIFY_EVENT pEvent;
+    HDEVNOTIFY hHandleNotify = pHandle->dbch_hdevnotify;
+
+    pEvent = HeapAlloc(GetProcessHeap(), 0, FIELD_OFFSET(HANDLE_NOTIFY_EVENT, Header) + pHeader->dbch_size);
+    if (pEvent == NULL)
+        return 0;
+    pEvent->pNotifyData = (PNOTIFY_DATA)hContext;
+    pEvent->hHandleNotify = hHandleNotify;
+    pEvent->dwEventType = dwEventType;
+    CopyMemory(&pEvent->Header, pHeader, pHeader->dbch_size);
+    ((PDEV_BROADCAST_HANDLE)&pEvent->Header)->dbch_hdevnotify = (HDEVNOTIFY)hContext;
 
     EnterCriticalSection(&HandleNotifyLock);
-    for (Entry = HandleNotifyList.Flink; Entry != &HandleNotifyList; Entry = Entry->Flink)
+    if (CmpFindHandleNotifyWindow(pEvent->pNotifyData, hHandleNotify) == NULL)
     {
-        PNOTIFY_DATA pNotifyData = CONTAINING_RECORD(Entry, NOTIFY_DATA, ListEntry);
-
-        if (pNotifyData == (PNOTIFY_DATA)hContext &&
-            pNotifyData->hHandleNotify == pHandle->dbch_hdevnotify)
-        {
-            hWindow = pNotifyData->hWindow;
-            break;
-        }
-    }
-    LeaveCriticalSection(&HandleNotifyLock);
-
-    if (hWindow == NULL)
+        LeaveCriticalSection(&HandleNotifyLock);
+        HeapFree(GetProcessHeap(), 0, pEvent);
         return 0;
-
-    pHandle->dbch_hdevnotify = (HDEVNOTIFY)hContext;
-    SendMessageTimeoutW(hWindow,
-                        WM_DEVICECHANGE,
-                        (WPARAM)dwEventType,
-                        (LPARAM)pHeader,
-                        SMTO_ABORTIFHUNG,
-                        2000,
-                        NULL);
+    }
+    InsertTailList(&HandleNotifyEvents, &pEvent->ListEntry);
+    LeaveCriticalSection(&HandleNotifyLock);
+    SetEvent(HandleNotifySignal);
     return 0;
 }
 
@@ -851,6 +918,18 @@ CmpRegisterHandleNotification(
 
     if (ulFlags & DEVICE_NOTIFY_ALL_INTERFACE_CLASSES)
         return CR_INVALID_FLAG;
+
+    EnterCriticalSection(&HandleNotifyLock);
+    if (HandleNotifyThread == NULL)
+    {
+        if (HandleNotifySignal == NULL)
+            HandleNotifySignal = CreateEventW(NULL, FALSE, FALSE, NULL);
+        if (HandleNotifySignal != NULL)
+            HandleNotifyThread = CreateThread(NULL, 0, CmpHandleNotifyWorker, NULL, 0, NULL);
+    }
+    LeaveCriticalSection(&HandleNotifyLock);
+    if (HandleNotifyThread == NULL)
+        return CR_OUT_OF_MEMORY;
 
     hHandleNotify = I_ScRegisterDeviceNotification(pNotifyData,
                                                    (DEV_BROADCAST_HDR *)pFilter,
