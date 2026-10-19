@@ -867,6 +867,45 @@ DWORD WINAPI GetFileVersionInfoSizeExA( DWORD flags, LPCSTR filename, LPDWORD ha
     return retval;
 }
 
+#ifdef __REACTOS__
+static void apply_file_version_lie( LPCWSTR filename, VS_VERSION_INFO_STRUCT32 *vvis, DWORD datasize )
+{
+    RTL_OSVERSIONINFOEXW real;
+    OSVERSIONINFOW reported;
+    VS_FIXEDFILEINFO *ffi;
+    WCHAR path[MAX_PATH + 4], dir[MAX_PATH];
+    const WCHAR *name = path;
+    HANDLE file;
+    BOOL wow64 = FALSE;
+    DWORD len, dir_len;
+
+    if (datasize < sizeof(*vvis) || vvis->wValueLength < sizeof(*ffi)) return;
+    ffi = (VS_FIXEDFILEINFO *)VersionInfo32_Value( vvis );
+    if ((LPBYTE)(ffi + 1) > (LPBYTE)vvis + datasize || ffi->dwSignature != VS_FFI_SIGNATURE) return;
+
+    real.dwOSVersionInfoSize = sizeof(real);
+    reported.dwOSVersionInfoSize = sizeof(reported);
+    if (RtlGetVersion( &real ) || !GetVersionExW( &reported )) return;
+    if (reported.dwMajorVersion == real.dwMajorVersion && reported.dwMinorVersion == real.dwMinorVersion) return;
+    if (ffi->dwFileVersionMS != MAKELONG( real.dwMinorVersion, real.dwMajorVersion )) return;
+
+    file = CreateFileW( filename, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        NULL, OPEN_EXISTING, 0, 0 );
+    if (file == INVALID_HANDLE_VALUE) return;
+    len = GetFinalPathNameByHandleW( file, path, ARRAY_SIZE(path), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS );
+    CloseHandle( file );
+    if (!len || len >= ARRAY_SIZE(path)) return;
+    if (!wcsncmp( name, L"\\\\?\\", 4 )) name += 4;
+
+    IsWow64Process( GetCurrentProcess(), &wow64 );
+    dir_len = wow64 ? GetSystemWow64DirectoryW( dir, ARRAY_SIZE(dir) ) : GetSystemDirectoryW( dir, ARRAY_SIZE(dir) );
+    if (!dir_len || dir_len >= ARRAY_SIZE(dir)) return;
+    if (wcsnicmp( name, dir, dir_len ) || name[dir_len] != '\\') return;
+
+    ffi->dwFileVersionMS = MAKELONG( reported.dwMinorVersion, reported.dwMajorVersion );
+}
+#endif
+
 /***********************************************************************
  *           GetFileVersionInfoExW           (kernelbase.@)
  */
@@ -930,6 +969,9 @@ BOOL WINAPI GetFileVersionInfoExW( DWORD flags, LPCWSTR filename, DWORD ignored,
         return TRUE;
 
     case IMAGE_NT_SIGNATURE:
+#ifdef __REACTOS__
+        apply_file_version_lie( filename, vvis, min( len, datasize ) );
+#endif
         /* We have a 32bit resource.
          *
          * XP/W2K/W2K3 uses a buffer which is 2 times the actual needed space + 4 bytes "FE2X"
