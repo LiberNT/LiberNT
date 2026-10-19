@@ -3305,6 +3305,7 @@ BOOL APIENTRY
 NtUserSwitchDesktop(HDESK hdesk)
 {
     PDESKTOP pdesk;
+    PDESKTOP pdeskPrevious;
     NTSTATUS Status;
     BOOL bRedrawDesktop;
     BOOL Ret = FALSE;
@@ -3367,6 +3368,7 @@ NtUserSwitchDesktop(HDESK hdesk)
     TRACE("Switching from desktop 0x%p to 0x%p\n", gpdeskInputDesktop, pdesk);
 
     bRedrawDesktop = FALSE;
+    pdeskPrevious = gpdeskInputDesktop;
 
     /* The first time SwitchDesktop is called, gpdeskInputDesktop is NULL */
     if (gpdeskInputDesktop != NULL)
@@ -3399,7 +3401,8 @@ NtUserSwitchDesktop(HDESK hdesk)
 #endif
 
     TRACE("SwitchDesktop gpdeskInputDesktop 0x%p\n", gpdeskInputDesktop);
-    ObDereferenceObject(pdesk);
+    if (pdeskPrevious != NULL)
+        ObDereferenceObject(pdeskPrevious);
 
     Ret = TRUE;
 
