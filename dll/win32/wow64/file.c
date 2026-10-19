@@ -38,6 +38,43 @@
 WINE_DEFAULT_DEBUG_CHANNEL(wow);
 
 
+#ifdef __REACTOS__
+typedef struct
+{
+    LARGE_INTEGER index;
+    ULONG serial;
+    BOOLEAN valid;
+} FILE_REDIRECT_ID;
+
+static FILE_REDIRECT_ID windir_id, sysdir_id;
+
+static NTSTATUS get_file_id( HANDLE handle, FILE_REDIRECT_ID *id )
+{
+    FILE_INTERNAL_INFORMATION internal;
+    struct
+    {
+        FILE_FS_VOLUME_INFORMATION info;
+        WCHAR label[MAX_PATH];
+    } volume;
+    IO_STATUS_BLOCK io;
+    NTSTATUS status;
+
+    memset( id, 0, sizeof(*id) );
+    status = NtQueryInformationFile( handle, &io, &internal, sizeof(internal), FileInternalInformation );
+    if (status) return status;
+    status = NtQueryVolumeInformationFile( handle, &io, &volume, sizeof(volume), FileFsVolumeInformation );
+    if (status) return status;
+    id->index = internal.IndexNumber;
+    id->serial = volume.info.VolumeSerialNumber;
+    id->valid = TRUE;
+    return STATUS_SUCCESS;
+}
+
+static BOOL same_file_id( const FILE_REDIRECT_ID *id, const FILE_REDIRECT_ID *ref )
+{
+    return ref->valid && id->index.QuadPart == ref->index.QuadPart && id->serial == ref->serial;
+}
+#else
 static FILE_OBJECTID_BUFFER windir_id, sysdir_id;
 
 static inline NTSTATUS get_file_id( HANDLE handle, FILE_OBJECTID_BUFFER *id )
@@ -47,6 +84,7 @@ static inline NTSTATUS get_file_id( HANDLE handle, FILE_OBJECTID_BUFFER *id )
 
     return NtFsControlFile( handle, 0, NULL, NULL, &io, FSCTL_GET_OBJECT_ID, NULL, 0, id, sizeof(*id) );
 }
+#endif
 
 static inline ULONG starts_with_path( const WCHAR *name, ULONG name_len, const WCHAR *prefix )
 {
@@ -162,12 +200,21 @@ BOOL get_file_redirect( OBJECT_ATTRIBUTES *attr )
     }
     else
     {
+#ifdef __REACTOS__
+        FILE_REDIRECT_ID id;
+
+        if (get_file_id( attr->RootDirectory, &id )) return FALSE;
+        if (!same_file_id( &id, &windir_id ))
+        {
+            if (!same_file_id( &id, &sysdir_id )) return FALSE;
+#else
         FILE_OBJECTID_BUFFER id;
 
         if (get_file_id( attr->RootDirectory, &id )) return FALSE;
         if (memcmp( &id, &windir_id, sizeof(id) ))
         {
             if (memcmp( &id, &sysdir_id, sizeof(id) )) return FALSE;
+#endif
             if (NtCurrentTeb()->TlsSlots[WOW64_TLS_FILESYSREDIR]) return FALSE;
             if (name[0] == '\\') return FALSE;
 
