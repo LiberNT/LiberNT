@@ -1239,7 +1239,7 @@ DxgkpCreateAdapterHandle(
 }
 
 /* Maximum adapters for on-stack snapshot arrays */
-#define DXGKP_MAX_ADAPTERS  16
+#define DXGKP_MAX_ADAPTERS  34
 
 /*
  * DxgkpSnapshotAdapters
@@ -2219,7 +2219,7 @@ DxgkpEnumAdapters2(
      */
     if (UserAdapters == NULL)
     {
-        pEnumAdapters2->NumAdapters = Started;
+        pEnumAdapters2->NumAdapters = DXGKP_MAX_ADAPTERS;
         DxgkpDereferenceAdapterSnapshot(Snapshot, Count);
         return STATUS_SUCCESS;
     }

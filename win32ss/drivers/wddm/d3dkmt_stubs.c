@@ -3181,7 +3181,7 @@ D3DKMTEnumAdapters2(
     Capacity = Captured.NumAdapters;
 
     /* Pass 1: count query (no output array). */
-    if (Captured.pAdapters == NULL || Captured.NumAdapters == 0)
+    if (Captured.pAdapters == NULL)
     {
         Captured.pAdapters = NULL;
         Status = WddmBridgeSafeProbeForWrite((PUCHAR)pData + FIELD_OFFSET(D3DKMT_ENUMADAPTERS2, NumAdapters), sizeof(Captured.NumAdapters));
@@ -3200,6 +3200,9 @@ D3DKMTEnumAdapters2(
         }
         return Status;
     }
+
+    if (Captured.NumAdapters == 0)
+        return STATUS_BUFFER_TOO_SMALL;
 
     if (Captured.NumAdapters > 256)
         return STATUS_INVALID_PARAMETER;
