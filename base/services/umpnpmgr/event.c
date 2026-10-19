@@ -273,6 +273,18 @@ ProcessTargetDeviceEvent(
 
 static
 VOID
+CopyInterfaceName(
+    _Out_ PWSTR Destination,
+    _In_ PCWSTR SymbolicLinkName)
+{
+    wcscpy(Destination, SymbolicLinkName);
+    if (!wcsncmp(Destination, L"\\??\\", 4))
+        Destination[1] = L'\\';
+}
+
+
+static
+VOID
 ProcessDeviceClassChangeEvent(
     _In_ PPLUGPLAY_EVENT_BLOCK PnpEvent)
 {
@@ -323,7 +335,7 @@ ProcessDeviceClassChangeEvent(
                 pEventData->dbcc_size = dwSize;
                 pEventData->dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
                 CopyMemory(&pEventData->dbcc_classguid, &PnpEvent->DeviceClass.ClassGuid, sizeof(GUID));
-                wcscpy(pEventData->dbcc_name, PnpEvent->DeviceClass.SymbolicLinkName);
+                CopyInterfaceName(pEventData->dbcc_name, PnpEvent->DeviceClass.SymbolicLinkName);
             }
 
             if (pEventData == NULL)
@@ -378,7 +390,7 @@ ProcessDeviceClassChangeEvent(
     pEventData->dbcc_size = dwSize;
     pEventData->dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
     CopyMemory(&pEventData->dbcc_classguid, &PnpEvent->DeviceClass.ClassGuid, sizeof(GUID));
-    wcscpy(pEventData->dbcc_name, PnpEvent->DeviceClass.SymbolicLinkName);
+    CopyInterfaceName(pEventData->dbcc_name, PnpEvent->DeviceClass.SymbolicLinkName);
     BroadcastListenerEvent(dwEventType, PnpEvent->DeviceClass.SymbolicLinkName, (PBYTE)pEventData, dwSize);
     HeapFree(GetProcessHeap(), 0, pEventData);
 }
