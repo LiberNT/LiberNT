@@ -1161,6 +1161,12 @@ EnableMouseInPointer(BOOL fEnable)
     return NtUserEnableMouseInPointer(fEnable);
 }
 
+BOOL WINAPI
+IsMouseInPointerEnabled(VOID)
+{
+    return NtUserIsMouseInPointerEnabled();
+}
+
 /*
  * @implemented
  */

@@ -5456,6 +5456,9 @@ BOOL WINAPI IsHungAppWindow(_In_ HWND);
 #endif
 BOOL WINAPI IsIconic(_In_ HWND);
 BOOL WINAPI IsMenu(_In_ HMENU);
+#if (_WIN32_WINNT >= 0x0602)
+BOOL WINAPI IsMouseInPointerEnabled(void);
+#endif
 BOOL WINAPI IsRectEmpty(_In_ LPCRECT);
 BOOL WINAPI IsWindow(_In_opt_ HWND);
 #if (WINVER >= 0x0604)

@@ -485,6 +485,7 @@
 @ stdcall IsHungAppWindow(long)
 @ stdcall IsIconic(long)
 @ stdcall IsMenu(long)
+@ stdcall -version=0x602+ IsMouseInPointerEnabled()
 @ stdcall -stub IsProcess16Bit()
 @ stdcall -version=0x600+ IsProcessDPIAware()
 @ stdcall IsRectEmpty(ptr)
