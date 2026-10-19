@@ -3624,6 +3624,7 @@ BOOL WINAPI SetupDiGetDeviceInterfaceDetailW(
         else
         {
             strcpyW(DeviceInterfaceDetailData->DevicePath, devName);
+            CharLowerW(DeviceInterfaceDetailData->DevicePath);
             TRACE("DevicePath is %s\n", debugstr_w(DeviceInterfaceDetailData->DevicePath));
             ret = TRUE;
         }
