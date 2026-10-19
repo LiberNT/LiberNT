@@ -179,6 +179,7 @@ PopInitializeEventSupport(VOID)
     ULONG AcEnergyPreference = 33;
     ULONG DcEnergyPreference = 50;
     ULONG DisplayState = PowerMonitorOn;
+    ULONG MonitorOn = 1;
     ULONG DiskIdleTimeout = MAXULONG;
     ULONG AcPowerSource = PoAc;
     ULONG DcPowerSource = PoDc;
@@ -203,6 +204,8 @@ PopInitializeEventSupport(VOID)
     PopSeedPowerSetting(&GUID_PROCESSOR_PERF_ENERGY_PERFORMANCE_PREFERENCE, PoDc, &DcEnergyPreference, sizeof(DcEnergyPreference));
     PopSeedPowerSetting(&GUID_CONSOLE_DISPLAY_STATE, PoAc, &DisplayState, sizeof(DisplayState));
     PopSeedPowerSetting(&GUID_CONSOLE_DISPLAY_STATE, PoDc, &DisplayState, sizeof(DisplayState));
+    PopSeedPowerSetting(&GUID_MONITOR_POWER_ON, PoAc, &MonitorOn, sizeof(MonitorOn));
+    PopSeedPowerSetting(&GUID_MONITOR_POWER_ON, PoDc, &MonitorOn, sizeof(MonitorOn));
     PopSeedPowerSetting(&GUID_DISK_IDLE_TIMEOUT, PoAc, &DiskIdleTimeout, sizeof(DiskIdleTimeout));
     PopSeedPowerSetting(&GUID_DISK_IDLE_TIMEOUT, PoDc, &DiskIdleTimeout, sizeof(DiskIdleTimeout));
     PopSeedPowerSetting(&GUID_ACDC_POWER_SOURCE, PoAc, &AcPowerSource, sizeof(AcPowerSource));
@@ -724,7 +727,15 @@ PopGetSysButton(
             case PowerActionNone:
                 break;
             case PowerActionSleep:
-                ActionStatus = ZwInitiatePowerAction(PowerActionSleep, PowerSystemSleeping1, 0, TRUE);
+                if (!PopAoAc)
+                {
+                    ActionStatus = ZwInitiatePowerAction(PowerActionSleep, PowerSystemSleeping1, 0, TRUE);
+                    break;
+                }
+                PopRequestDisplayState(PopGetDisplayState() == PowerMonitorOff ? PowerMonitorOn : PowerMonitorOff);
+                break;
+            case PowerActionDisplayOff:
+                PopRequestDisplayState(PopGetDisplayState() == PowerMonitorOff ? PowerMonitorOn : PowerMonitorOff);
                 break;
             case PowerActionHibernate:
                 ActionStatus = ZwInitiatePowerAction(PowerActionHibernate, PowerSystemHibernate, 0, TRUE);

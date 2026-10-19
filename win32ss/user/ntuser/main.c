@@ -218,6 +218,7 @@ UserProcessDestroy(PEPROCESS Process)
     UserDestroyObjectsForOwner(gHandleTable, ppiCurrent);
     IntUipiFreeProcessFilters(ppiCurrent);
     RawInputCleanupProcess(ppiCurrent);
+    UserCleanupPowerSettingNotifications(ppiCurrent);
 
     TRACE_CH(UserProcess, "Freeing ppi 0x%p\n", ppiCurrent);
 #if DBG

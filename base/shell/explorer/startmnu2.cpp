@@ -566,10 +566,24 @@ SM2SuspendThread(LPVOID lpParameter)
     return 0;
 }
 
+static BOOL
+SM2IsModernStandby()
+{
+    SYSTEM_POWER_CAPABILITIES Capabilities;
+
+    return GetPwrCapabilities(&Capabilities) && Capabilities.AoAc;
+}
+
 static DWORD
 SM2Suspend(BOOL bHibernate)
 {
     HANDLE hThread;
+
+    if (!bHibernate && SM2IsModernStandby())
+    {
+        DefWindowProcW(GetDesktopWindow(), WM_SYSCOMMAND, SC_MONITORPOWER, 2);
+        return ERROR_SUCCESS;
+    }
 
     hThread = CreateThread(NULL, 0, SM2SuspendThread, bHibernate ? (LPVOID)1 : NULL, 0, NULL);
     if (hThread == NULL)
@@ -876,7 +890,7 @@ public:
         m_cItems = 0;
         for (UINT i = 0; i < _countof(c_Items); i++)
         {
-            if ((c_Items[i].nCmd == SM2F_SLEEP && !IsPwrSuspendAllowed()) ||
+            if ((c_Items[i].nCmd == SM2F_SLEEP && !IsPwrSuspendAllowed() && !SM2IsModernStandby()) ||
                 (c_Items[i].nCmd == SM2F_HIBERNATE && !IsPwrHibernateAllowed()))
             {
                 continue;

@@ -1633,17 +1633,23 @@ I_ScSendPnPMessage(
     _In_opt_ PVOID pEventData)
 {
     BYTE NoEventData = 0;
+    DWORD dwEventSize = 0;
     DWORD dwError;
 
     TRACE("I_ScSendPnPMessage(%p %lu %lu %p)\n",
           hServiceStatus, dwControlCode, dwEventType, pEventData);
+
+    if (pEventData != NULL && dwControlCode == SERVICE_CONTROL_POWEREVENT && dwEventType == PBT_POWERSETTINGCHANGE)
+        dwEventSize = FIELD_OFFSET(POWERBROADCAST_SETTING, Data) + ((PPOWERBROADCAST_SETTING)pEventData)->DataLength;
+    else if (pEventData != NULL)
+        dwEventSize = ((PDEV_BROADCAST_HDR)pEventData)->dbch_size;
 
     RpcTryExcept
     {
         dwError = RI_ScSendPnPMessage((RPC_SERVICE_STATUS_HANDLE)(ULONG_PTR)hServiceStatus,
                                       dwControlCode,
                                       dwEventType,
-                                      pEventData ? ((PDEV_BROADCAST_HDR)pEventData)->dbch_size : 0,
+                                      dwEventSize,
                                       pEventData ? pEventData : &NoEventData);
     }
     RpcExcept(EXCEPTION_EXECUTE_HANDLER)

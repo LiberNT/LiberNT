@@ -1085,6 +1085,7 @@ struct _DXGKRNL_ADAPTER
     KSPIN_LOCK                  ChildListLock;
     LIST_ENTRY                  ChildListHead;
     ULONG                       ChildPdoCount;
+    PVOID                       DisplayPowerSettingHandle;
 
     /*
      * List of DXGKRNL_DEVICE instances created against this adapter.

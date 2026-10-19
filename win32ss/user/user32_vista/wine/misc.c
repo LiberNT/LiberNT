@@ -501,6 +501,7 @@ BOOL WINAPI UserHandleGrantAccess(HANDLE handle, HANDLE job, BOOL grant)
 }
 #endif
 
+#ifndef __REACTOS__
 /**********************************************************************
  * RegisterPowerSettingNotification [USER32.@]
  */
@@ -518,6 +519,7 @@ BOOL WINAPI UnregisterPowerSettingNotification(HPOWERNOTIFY handle)
     FIXME("(%p): stub\n", handle);
     return TRUE;
 }
+#endif
 
 /**********************************************************************
  * RegisterSuspendResumeNotification (USER32.@)

@@ -901,7 +901,17 @@ NTSTATUS
 IopQueuePowerEvent(
     _In_ ULONG NotificationCode,
     _In_ ULONG NotificationData,
+    _In_reads_bytes_opt_(PayloadSize) const VOID *Payload,
+    _In_ ULONG PayloadSize,
     _In_opt_ PLARGE_INTEGER Timeout);
+
+BOOLEAN
+NTAPI
+IoPnPDeliverServicePowerSetting(
+    _In_ ULONG PowerNotificationCode,
+    _In_ ULONG ServiceStatusHandle,
+    _In_reads_bytes_(SettingSize) PVOID Setting,
+    _In_ ULONG SettingSize);
 
 NTSTATUS
 NTAPI

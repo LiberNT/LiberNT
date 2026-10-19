@@ -47,6 +47,8 @@ static CONST GUID DxgkpGuidAcDcPowerSource =
     { 0x5D3E9A59, 0xE9D5, 0x4B00, { 0xA6, 0xBD, 0xFF, 0x34, 0xFF, 0x51, 0x65, 0x48 } };
 static CONST GUID DxgkpGuidLidSwitchStateChange =
     { 0xBA3E0F4D, 0xB817, 0x4094, { 0xA2, 0xD1, 0xD5, 0x63, 0x79, 0xE6, 0xA0, 0xF3 } };
+static CONST GUID DxgkpGuidConsoleDisplayState =
+    { 0x6FE69556, 0x704A, 0x47A0, { 0x8F, 0x24, 0xC2, 0x8D, 0x93, 0x6F, 0xDA, 0x47 } };
 static CONST GUID DxgkpGuidHwProfileChangeComplete =
     { 0xCB3A4003, 0x46F0, 0x11D0, { 0xB0, 0x8F, 0x00, 0x60, 0x97, 0x13, 0x05, 0x3F } };
 
@@ -298,6 +300,54 @@ DxgkpAcDcPowerSourceCallback(
 
 static NTSTATUS
 NTAPI
+DxgkpConsoleDisplayCallback(
+    _In_ LPCGUID SettingGuid,
+    _In_reads_bytes_(ValueLength) PVOID Value,
+    _In_ ULONG ValueLength,
+    _Inout_opt_ PVOID Context)
+{
+    PDXGKRNL_ADAPTER Adapter = (PDXGKRNL_ADAPTER)Context;
+    PDEVICE_OBJECT Monitors[16];
+    POWER_STATE State;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+    ULONG Count = 0;
+    ULONG i;
+
+    UNREFERENCED_PARAMETER(SettingGuid);
+
+    if (Adapter == NULL || Value == NULL || ValueLength != sizeof(ULONG))
+        return STATUS_SUCCESS;
+
+    State.DeviceState = (*(PULONG)Value == PowerMonitorOff) ? PowerDeviceD3 : PowerDeviceD0;
+
+    KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
+    for (Entry = Adapter->ChildListHead.Flink;
+         Entry != &Adapter->ChildListHead && Count < RTL_NUMBER_OF(Monitors);
+         Entry = Entry->Flink)
+    {
+        PDXGK_CHILD_PDO_EXTENSION Child = CONTAINING_RECORD(Entry, DXGK_CHILD_PDO_EXTENSION, ListEntry);
+
+        if (Child->Present && Child->DeviceObject != NULL &&
+            Child->Descriptor.ChildDeviceType == TypeVideoOutput)
+        {
+            ObReferenceObject(Child->DeviceObject);
+            Monitors[Count++] = Child->DeviceObject;
+        }
+    }
+    KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+
+    for (i = 0; i < Count; i++)
+    {
+        PoRequestPowerIrp(Monitors[i], IRP_MN_SET_POWER, State, NULL, NULL, NULL);
+        ObDereferenceObject(Monitors[i]);
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+NTAPI
 DxgkpLidSwitchCallback(
     _In_ LPCGUID SettingGuid,
     _In_reads_bytes_(ValueLength) PVOID Value,
@@ -366,6 +416,21 @@ DxgkAcpiEventsStart(
     NTSTATUS Status;
 
     PAGED_CODE();
+
+    if (Adapter->DisplayPowerSettingHandle == NULL)
+    {
+        Status = PoRegisterPowerSettingCallback(Adapter->FunctionalDeviceObject,
+                                                &DxgkpGuidConsoleDisplayState,
+                                                DxgkpConsoleDisplayCallback,
+                                                Adapter,
+                                                &Adapter->DisplayPowerSettingHandle);
+        if (!NT_SUCCESS(Status))
+        {
+            Adapter->DisplayPowerSettingHandle = NULL;
+            DXGKRNL_WARN("DxgkAcpiEventsStart: console display state not "
+                         "subscribed 0x%08lx\n", Status);
+        }
+    }
 
     if (Events->Subscribed)
         return;
@@ -496,6 +561,12 @@ DxgkAcpiEventsStop(
 
     PAGED_CODE();
 
+    if (Adapter->DisplayPowerSettingHandle != NULL)
+    {
+        PoUnregisterPowerSettingCallback(Adapter->DisplayPowerSettingHandle);
+        Adapter->DisplayPowerSettingHandle = NULL;
+    }
+
     if (!Events->Subscribed)
         return;
 
@@ -520,6 +591,7 @@ DxgkAcpiEventsStop(
         PoUnregisterPowerSettingCallback(Events->LidPowerSettingHandle);
         Events->LidPowerSettingHandle = NULL;
     }
+
     if (Events->HwProfileNotificationEntry != NULL)
     {
 #ifdef _WIN64

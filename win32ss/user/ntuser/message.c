@@ -96,7 +96,7 @@ static const unsigned int message_pointer_flags[] =
     /* 0x1e0 - 0x1ff */
     0,
     /* 0x200 - 0x21f */
-    SET(WM_NEXTMENU) | SET(WM_SIZING) | SET(WM_MOVING) | SET(WM_DEVICECHANGE),
+    SET(WM_NEXTMENU) | SET(WM_SIZING) | SET(WM_MOVING) | SET(WM_POWERBROADCAST) | SET(WM_DEVICECHANGE),
     /* 0x220 - 0x23f */
     SET(WM_MDICREATE) | SET(WM_MDIGETACTIVE) | SET(WM_DROPOBJECT) |
     SET(WM_QUERYDROPOBJECT) | SET(WM_DRAGLOOP) | SET(WM_DRAGSELECT) | SET(WM_DRAGMOVE),
@@ -123,6 +123,7 @@ static inline int is_pointer_message( UINT message, WPARAM wparam )
 {
     if (message >= 8*sizeof(message_pointer_flags)) return FALSE;
     if (message == WM_DEVICECHANGE && !(wparam & 0x8000)) return FALSE;
+    if (message == WM_POWERBROADCAST && wparam != PBT_POWERSETTINGCHANGE) return FALSE;
     return (message_pointer_flags[message / 32] & SET(message)) != 0;
 }
 #undef SET
@@ -172,6 +173,7 @@ static MSGMEMORY g_MsgMemory[] =
     { WM_NEXTMENU, sizeof(MDINEXTMENU), MMS_FLAG_READWRITE },
     { WM_MDIGETACTIVE, sizeof(BOOL), MMS_FLAG_WRITE },
     { WM_DEVICECHANGE, MMS_SIZE_SPECIAL, MMS_FLAG_READ },
+    { WM_POWERBROADCAST, MMS_SIZE_SPECIAL, MMS_FLAG_READ },
     { WM_GETDLGCODE, sizeof(MSG), MMS_FLAG_READ },
     { WM_ASKCBFORMATNAME, MMS_SIZE_WPARAMWCHAR, MMS_FLAG_WRITE },
     { EM_GETSEL, sizeof(DWORD), MMS_FLAG_READWRITE },
@@ -300,6 +302,14 @@ MsgMemorySize(PMSGMEMORY MsgMemoryEntry, WPARAM wParam, LPARAM lParam)
                         DEV_BROADCAST_HDR *header = (DEV_BROADCAST_HDR *)lParam;
                         Size = header->dbch_size;
                     }
+                }
+                break;
+
+            case WM_POWERBROADCAST:
+                if (wParam == PBT_POWERSETTINGCHANGE)
+                {
+                    POWERBROADCAST_SETTING *Setting = (POWERBROADCAST_SETTING *)lParam;
+                    Size = FIELD_OFFSET(POWERBROADCAST_SETTING, Data) + Setting->DataLength;
                 }
                 break;
 

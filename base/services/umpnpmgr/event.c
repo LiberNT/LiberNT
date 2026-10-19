@@ -481,6 +481,28 @@ ProcessPowerEvent(
 
     DPRINT("ProcessPowerEvent(0x%lx)\n", PnpEvent->PowerNotification.NotificationCode);
 
+    if (PnpEvent->PowerNotification.NotificationCode == PBT_POWERSETTINGCHANGE)
+    {
+        PPOWERBROADCAST_SETTING Setting = (PPOWERBROADCAST_SETTING)(&PnpEvent->PowerNotification + 1);
+        ULONG Offset = FIELD_OFFSET(PLUGPLAY_EVENT_BLOCK, PowerNotification) + sizeof(PnpEvent->PowerNotification);
+
+        if (PnpEvent->TotalSize < Offset + FIELD_OFFSET(POWERBROADCAST_SETTING, Data) ||
+            PnpEvent->TotalSize - Offset - FIELD_OFFSET(POWERBROADCAST_SETTING, Data) < Setting->DataLength)
+        {
+            return;
+        }
+
+        if (!I_ScSendPnPMessage((SERVICE_STATUS_HANDLE)(ULONG_PTR)PnpEvent->PowerNotification.NotificationData,
+                                SERVICE_CONTROL_POWEREVENT,
+                                PBT_POWERSETTINGCHANGE,
+                                Setting))
+        {
+            DPRINT1("Power setting notification to service %lu failed (Error %lu)\n",
+                    PnpEvent->PowerNotification.NotificationData, GetLastError());
+        }
+        return;
+    }
+
     Manager = OpenSCManagerW(NULL, SERVICES_ACTIVE_DATABASEW, SC_MANAGER_ENUMERATE_SERVICE);
     if (Manager == NULL)
         return;

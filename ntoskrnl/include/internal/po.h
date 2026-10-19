@@ -352,6 +352,40 @@ PopInitializeSleepSupport(
     VOID
 );
 
+extern BOOLEAN PopAoAc;
+
+VOID
+PopSleepCallWin32(
+    _In_ POWERSTATETASK Task,
+    _In_ POWER_ACTION SystemAction,
+    _In_ SYSTEM_POWER_STATE SystemState,
+    _In_ ULONG Flags
+);
+
+BOOLEAN
+NTAPI
+PopDetectAoAc(
+    VOID
+);
+
+VOID
+NTAPI
+PopInitializeStandby(
+    VOID
+);
+
+VOID
+NTAPI
+PopRequestDisplayState(
+    _In_ MONITOR_DISPLAY_STATE State
+);
+
+MONITOR_DISPLAY_STATE
+NTAPI
+PopGetDisplayState(
+    VOID
+);
+
 NTSTATUS
 NTAPI
 PopRegisterPowerStateHandler(

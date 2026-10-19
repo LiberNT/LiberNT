@@ -759,6 +759,7 @@ PoInitSystem(IN ULONG BootPhase)
     /* Initialize the power capabilities */
     RtlZeroMemory(&PopCapabilities, sizeof(SYSTEM_POWER_CAPABILITIES));
     PopInitializeSleepSupport();
+    PopInitializeStandby();
     PopHiberInitialize();
     PopInitializeEventSupport();
     PopInitializeThermalRequests();
@@ -2010,19 +2011,32 @@ NtPowerInformation(IN POWER_INFORMATION_LEVEL PowerInformationLevel,
             break;
         }
 
+        case SessionDisplayState:
+        {
+            if (PreviousMode != KernelMode)
+            {
+                Status = STATUS_NOT_IMPLEMENTED;
+                break;
+            }
+
+            if (InputBuffer == NULL || InputBufferLength != sizeof(ULONG) || *(PULONG)InputBuffer > PowerMonitorDim)
+                return STATUS_INVALID_PARAMETER;
+
+            PopRequestDisplayState((MONITOR_DISPLAY_STATE)*(PULONG)InputBuffer);
+            Status = STATUS_SUCCESS;
+            break;
+        }
+
         case PlatformInformation:
         {
             PPOWER_PLATFORM_INFORMATION PlatformInfo = (PPOWER_PLATFORM_INFORMATION)OutputBuffer;
 
-            if (InputBuffer != NULL)
+            if (InputBuffer != NULL || OutputBufferLength < sizeof(POWER_PLATFORM_INFORMATION))
                 return STATUS_INVALID_PARAMETER;
-            if (OutputBufferLength < sizeof(POWER_PLATFORM_INFORMATION))
-                return STATUS_BUFFER_TOO_SMALL;
 
             _SEH2_TRY
             {
-                /* No Modern Standby (AoAc) support */
-                PlatformInfo->AoAc = FALSE;
+                PlatformInfo->AoAc = PopAoAc;
                 Status = STATUS_SUCCESS;
             }
             _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)

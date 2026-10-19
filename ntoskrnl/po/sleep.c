@@ -119,6 +119,14 @@ PopInitializeSleepSupport(VOID)
     KeInitializeGuardedMutex(&PopStateHandlerLock);
     InitializeListHead(&PopSleepDisableList);
 
+    PopAoAc = PopDetectAoAc();
+    PopCapabilities.AoAc = PopAoAc;
+    if (PopAoAc)
+    {
+        DPRINT1("The platform supports modern standby\n");
+        return;
+    }
+
     PopAoAcDisable.Reason.PowerReasonCode = SPSD_REASON_AOAC_NOBIOSSUPPORT;
     PopSetAffectedStates(&PopAoAcDisable.Reason, PO_REASON_STATE_S0IDLE);
     InsertTailList(&PopSleepDisableList, &PopAoAcDisable.Link);
@@ -575,7 +583,6 @@ PopSleepSendDevices(
     return PopSleepSendToPowerDevice(&Traverse);
 }
 
-static
 VOID
 PopSleepCallWin32(
     _In_ POWERSTATETASK Task,
@@ -667,7 +674,7 @@ PopSleepSystem(
 
     if (SystemState == PowerSystemUnspecified)
     {
-        if (!PopGetHibernateHandler(&Call.Handler))
+        if ((SystemAction == PowerActionSleep && PopAoAc) || !PopGetHibernateHandler(&Call.Handler))
         {
             DPRINT1("No sleep state at or below S%u is available\n",
                     LightestSystemState - PowerSystemWorking);

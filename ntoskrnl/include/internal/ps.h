@@ -225,6 +225,18 @@ PsGetNextProcess(
 
 NTSTATUS
 NTAPI
+PsSuspendProcess(
+    _In_ PEPROCESS Process
+);
+
+NTSTATUS
+NTAPI
+PsResumeProcess(
+    _In_ PEPROCESS Process
+);
+
+NTSTATUS
+NTAPI
 PspMapSystemDll(
     IN PEPROCESS Process,
     OUT PVOID *DllBase,

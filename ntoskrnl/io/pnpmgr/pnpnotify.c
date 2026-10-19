@@ -368,11 +368,26 @@ IoPnPDeliverServicePowerNotification(
     Timeout.QuadPart = -2000LL * 10000LL;
     Status = IopQueuePowerEvent(PowerNotificationCode,
                                 PowerNotificationData,
+                                NULL,
+                                0,
                                 Synchronous ? &Timeout : NULL);
     if (Status == STATUS_TIMEOUT)
         DPRINT1("Services did not handle power event 0x%lx within two seconds\n", PowerNotificationCode);
 
     return NT_SUCCESS(Status);
+}
+
+BOOLEAN
+NTAPI
+IoPnPDeliverServicePowerSetting(
+    _In_ ULONG PowerNotificationCode,
+    _In_ ULONG ServiceStatusHandle,
+    _In_reads_bytes_(SettingSize) PVOID Setting,
+    _In_ ULONG SettingSize)
+{
+    PAGED_CODE();
+
+    return NT_SUCCESS(IopQueuePowerEvent(PowerNotificationCode, ServiceStatusHandle, Setting, SettingSize, NULL));
 }
 
 /*

@@ -513,3 +513,33 @@ DWORD WINAPI MBToWCSEx(WORD CodePage,LPSTR MBString,LONG MBSize,LPWSTR *UnicodeS
 	}
 	return Size;
 }
+
+HPOWERNOTIFY
+WINAPI
+RegisterPowerSettingNotification(
+    _In_ HANDLE hRecipient,
+    _In_ LPCGUID PowerSettingGuid,
+    _In_ DWORD Flags)
+{
+    DWORD Routine;
+
+    if (Flags == DEVICE_NOTIFY_WINDOW_HANDLE)
+        Routine = TWOPARAM_ROUTINE_ROS_REGISTERPOWERSETTING;
+    else if (Flags == DEVICE_NOTIFY_SERVICE_HANDLE)
+        Routine = TWOPARAM_ROUTINE_ROS_REGISTERSERVICEPOWERSETTING;
+    else
+    {
+        UserSetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+
+    return (HPOWERNOTIFY)NtUserCallTwoParam((DWORD_PTR)hRecipient, (DWORD_PTR)PowerSettingGuid, Routine);
+}
+
+BOOL
+WINAPI
+UnregisterPowerSettingNotification(
+    _In_ HPOWERNOTIFY Handle)
+{
+    return (BOOL)NtUserCallOneParam((DWORD_PTR)Handle, ONEPARAM_ROUTINE_ROS_UNREGISTERPOWERSETTING);
+}

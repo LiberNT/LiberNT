@@ -18,7 +18,298 @@ PFAST_MUTEX gpPowerCalloutMutexLock;
 PKEVENT gpPowerRequestCalloutEvent;
 PKTHREAD gpPowerCalloutMutexOwnerThread;
 
+typedef struct _USER_POWER_SETTING
+{
+    LIST_ENTRY Link;
+    GUID Guid;
+    PVOID Registration;
+    ULONG References;
+    BOOLEAN HasValue;
+    ULONG ValueLength;
+    ULONG64 Value[USER_POWER_SETTING_VALUE_MAX / sizeof(ULONG64)];
+} USER_POWER_SETTING, *PUSER_POWER_SETTING;
+
+typedef struct _USER_POWER_NOTIFY
+{
+    LIST_ENTRY Link;
+    PPROCESSINFO ppi;
+    HANDLE Recipient;
+    BOOLEAN Service;
+    GUID Guid;
+    ULONG Cookie;
+    PUSER_POWER_SETTING Setting;
+} USER_POWER_NOTIFY, *PUSER_POWER_NOTIFY;
+
+typedef struct _USER_POWER_DELIVERY
+{
+    HANDLE Recipient;
+    BOOLEAN Service;
+    GUID Guid;
+    ULONG Length;
+    ULONG64 Value[USER_POWER_SETTING_VALUE_MAX / sizeof(ULONG64)];
+} USER_POWER_DELIVERY, *PUSER_POWER_DELIVERY;
+
+NTKERNELAPI
+BOOLEAN
+NTAPI
+IoPnPDeliverServicePowerSetting(
+    _In_ ULONG PowerNotificationCode,
+    _In_ ULONG ServiceStatusHandle,
+    _In_reads_bytes_(SettingSize) PVOID Setting,
+    _In_ ULONG SettingSize);
+
+static const GUID UserGuidConsoleDisplayState = { 0x6fe69556, 0x704a, 0x47a0, { 0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47 } };
+static const GUID UserGuidMonitorPowerOn = { 0x02731015, 0x4510, 0x4526, { 0x99, 0xe6, 0xe5, 0xa1, 0x7e, 0xbd, 0x1a, 0xea } };
+static const GUID UserGuidSessionDisplayStatus = { 0x2b84c20e, 0xad23, 0x4ddf, { 0x93, 0xdb, 0x05, 0xff, 0xbd, 0x7e, 0xfc, 0xa5 } };
+
+static LIST_ENTRY gPowerNotifyList = { &gPowerNotifyList, &gPowerNotifyList };
+static LIST_ENTRY gPowerSettingList = { &gPowerSettingList, &gPowerSettingList };
+static ULONG gPowerNotifyCookie;
+static MONITOR_DISPLAY_STATE gConsoleDisplayState = PowerMonitorOn;
+static volatile LONG gConsoleDisplayWakePending;
+
 /* PRIVATE FUNCTIONS *********************************************************/
+
+static
+BOOLEAN
+IntGetDisplaySettingValue(
+    _In_ LPCGUID Guid,
+    _Out_ PULONG Value)
+{
+    if (IsEqualGUID(Guid, &UserGuidConsoleDisplayState) || IsEqualGUID(Guid, &UserGuidSessionDisplayStatus))
+    {
+        *Value = gConsoleDisplayState;
+        return TRUE;
+    }
+
+    if (IsEqualGUID(Guid, &UserGuidMonitorPowerOn))
+    {
+        *Value = (gConsoleDisplayState != PowerMonitorOff);
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+static
+VOID
+IntQueuePowerSettingCallout(
+    _In_ LPCGUID Guid,
+    _In_ ULONG Cookie,
+    _In_reads_bytes_opt_(Length) const VOID *Value,
+    _In_ ULONG Length)
+{
+    PWIN32POWERCALLOUT pWin32PwrCallout;
+
+    if (gpPowerCalloutMutexLock == NULL || gpPowerRequestCalloutEvent == NULL || Length > USER_POWER_SETTING_VALUE_MAX)
+        return;
+
+    pWin32PwrCallout = ExAllocatePoolZero(NonPagedPool, sizeof(WIN32POWERCALLOUT), USERTAG_POWER);
+    if (pWin32PwrCallout == NULL)
+        return;
+
+    pWin32PwrCallout->Type = POWER_CALLOUT_SETTING;
+    pWin32PwrCallout->SettingGuid = *Guid;
+    pWin32PwrCallout->SettingCookie = Cookie;
+    if (Value != NULL)
+    {
+        pWin32PwrCallout->SettingHasValue = TRUE;
+        pWin32PwrCallout->SettingLength = Length;
+        RtlCopyMemory(pWin32PwrCallout->SettingValue, Value, Length);
+    }
+
+    IntAcquirePowerCalloutLock();
+    InsertTailList(&gPowerCalloutsQueueList, &pWin32PwrCallout->Link);
+    IntReleasePowerCalloutLock();
+    KeSetEvent(gpPowerRequestCalloutEvent, EVENT_INCREMENT, FALSE);
+}
+
+static
+NTSTATUS
+NTAPI
+IntPowerSettingCallback(
+    _In_ LPCGUID SettingGuid,
+    _In_reads_bytes_(ValueLength) PVOID Value,
+    _In_ ULONG ValueLength,
+    _Inout_opt_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    IntQueuePowerSettingCallout(SettingGuid, 0, Value, ValueLength);
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+IntDeliverPowerSettings(
+    _In_reads_(Count) PUSER_POWER_DELIVERY Deliveries,
+    _In_ ULONG Count,
+    _In_ BOOLEAN Synchronous)
+{
+    ULONGLONG Deadline = KeQueryInterruptTime() + 2000ULL * 10000ULL;
+    ULONGLONG Now;
+    ULONG_PTR Result;
+    union
+    {
+        POWERBROADCAST_SETTING Setting;
+        ULONG64 Align[(sizeof(POWERBROADCAST_SETTING) + USER_POWER_SETTING_VALUE_MAX + sizeof(ULONG64) - 1) / sizeof(ULONG64)];
+    } Buffer;
+    ULONG i;
+
+    for (i = 0; i < Count; i++)
+    {
+        Buffer.Setting.PowerSetting = Deliveries[i].Guid;
+        Buffer.Setting.DataLength = Deliveries[i].Length;
+        RtlCopyMemory(Buffer.Setting.Data, Deliveries[i].Value, Deliveries[i].Length);
+
+        if (Deliveries[i].Service)
+        {
+            IoPnPDeliverServicePowerSetting(PBT_POWERSETTINGCHANGE,
+                                            (ULONG)(ULONG_PTR)Deliveries[i].Recipient,
+                                            &Buffer.Setting,
+                                            FIELD_OFFSET(POWERBROADCAST_SETTING, Data) + Deliveries[i].Length);
+            continue;
+        }
+
+        if (ValidateHwndNoErr((HWND)Deliveries[i].Recipient) == NULL)
+            continue;
+
+        Now = KeQueryInterruptTime();
+        if (Synchronous && Now < Deadline)
+        {
+            co_IntSendMessageTimeout((HWND)Deliveries[i].Recipient,
+                                     WM_POWERBROADCAST,
+                                     PBT_POWERSETTINGCHANGE,
+                                     (LPARAM)&Buffer.Setting,
+                                     SMTO_ABORTIFHUNG,
+                                     (UINT)max((Deadline - Now) / 10000ULL, 1ULL),
+                                     &Result);
+            continue;
+        }
+
+        co_IntSendMessageWithCallBack((HWND)Deliveries[i].Recipient,
+                                      WM_POWERBROADCAST,
+                                      PBT_POWERSETTINGCHANGE,
+                                      (LPARAM)&Buffer.Setting,
+                                      NULL,
+                                      0,
+                                      NULL);
+    }
+}
+
+static
+VOID
+IntBroadcastPowerSetting(
+    _In_opt_ PUSER_POWER_SETTING Setting,
+    _In_opt_ PUSER_POWER_NOTIFY Target,
+    _In_ BOOLEAN Synchronous)
+{
+    PUSER_POWER_DELIVERY Deliveries;
+    PUSER_POWER_NOTIFY Notify;
+    PLIST_ENTRY Entry;
+    ULONG Count = 0;
+    ULONG Value;
+
+    for (Entry = gPowerNotifyList.Flink; Entry != &gPowerNotifyList; Entry = Entry->Flink)
+        Count++;
+    if (Count == 0)
+        return;
+
+    Deliveries = ExAllocatePoolWithTag(PagedPool, Count * sizeof(USER_POWER_DELIVERY), USERTAG_POWER);
+    if (Deliveries == NULL)
+        return;
+
+    Count = 0;
+    for (Entry = gPowerNotifyList.Flink; Entry != &gPowerNotifyList; Entry = Entry->Flink)
+    {
+        Notify = CONTAINING_RECORD(Entry, USER_POWER_NOTIFY, Link);
+        if (Target != NULL && Notify != Target)
+            continue;
+
+        if (Notify->Setting == NULL)
+        {
+            if (Setting != NULL || !IntGetDisplaySettingValue(&Notify->Guid, &Value))
+                continue;
+            Deliveries[Count].Length = sizeof(Value);
+            RtlCopyMemory(Deliveries[Count].Value, &Value, sizeof(Value));
+        }
+        else
+        {
+            if ((Setting != NULL && Notify->Setting != Setting) ||
+                (Setting == NULL && Target == NULL) ||
+                !Notify->Setting->HasValue)
+            {
+                continue;
+            }
+            Deliveries[Count].Length = Notify->Setting->ValueLength;
+            RtlCopyMemory(Deliveries[Count].Value, Notify->Setting->Value, Notify->Setting->ValueLength);
+        }
+
+        Deliveries[Count].Recipient = Notify->Recipient;
+        Deliveries[Count].Service = Notify->Service;
+        Deliveries[Count].Guid = Notify->Guid;
+        Count++;
+    }
+
+    IntDeliverPowerSettings(Deliveries, Count, Synchronous);
+    ExFreePoolWithTag(Deliveries, USERTAG_POWER);
+}
+
+static
+VOID
+IntHandlePowerSettingWorker(
+    _In_ PWIN32POWERCALLOUT pWin32PwrCallout)
+{
+    PUSER_POWER_SETTING Setting;
+    PUSER_POWER_NOTIFY Notify;
+    PLIST_ENTRY Entry;
+
+    if (pWin32PwrCallout->SettingCookie != 0)
+    {
+        for (Entry = gPowerNotifyList.Flink; Entry != &gPowerNotifyList; Entry = Entry->Flink)
+        {
+            Notify = CONTAINING_RECORD(Entry, USER_POWER_NOTIFY, Link);
+            if (Notify->Cookie == pWin32PwrCallout->SettingCookie)
+            {
+                IntBroadcastPowerSetting(NULL, Notify, FALSE);
+                break;
+            }
+        }
+        return;
+    }
+
+    for (Entry = gPowerSettingList.Flink; Entry != &gPowerSettingList; Entry = Entry->Flink)
+    {
+        Setting = CONTAINING_RECORD(Entry, USER_POWER_SETTING, Link);
+        if (!IsEqualGUID(&Setting->Guid, &pWin32PwrCallout->SettingGuid))
+            continue;
+
+        Setting->HasValue = TRUE;
+        Setting->ValueLength = pWin32PwrCallout->SettingLength;
+        RtlCopyMemory(Setting->Value, pWin32PwrCallout->SettingValue, pWin32PwrCallout->SettingLength);
+        IntBroadcastPowerSetting(Setting, NULL, FALSE);
+        break;
+    }
+}
+
+static
+VOID
+IntFreePowerNotify(
+    _In_ PUSER_POWER_NOTIFY Notify)
+{
+    PUSER_POWER_SETTING Setting = Notify->Setting;
+
+    RemoveEntryList(&Notify->Link);
+    ExFreePoolWithTag(Notify, USERTAG_POWER);
+
+    if (Setting != NULL && --Setting->References == 0)
+    {
+        RemoveEntryList(&Setting->Link);
+        if (Setting->Registration != NULL)
+            PoUnregisterPowerSettingCallback(Setting->Registration);
+        ExFreePoolWithTag(Setting, USERTAG_POWER);
+    }
+}
 
 /**
  * @brief
@@ -43,6 +334,14 @@ IntHandlePowerEventWorker(
     Code = pParameters->Code;
     switch (PwrEventType)
     {
+        case PsW32DisplayState:
+        {
+            gConsoleDisplayState = (MONITOR_DISPLAY_STATE)Code;
+            InterlockedExchange(&gConsoleDisplayWakePending, 0);
+            IntBroadcastPowerSetting(NULL, NULL, FALSE);
+            break;
+        }
+
         case PsW32SystemTime:
         {
             /*
@@ -171,6 +470,14 @@ IntHandlePowerStateWorker(
         case PowerState_SuspendApps:
         {
             IntBroadcastPowerMessage(PBT_APMSUSPEND);
+            break;
+        }
+
+        case PowerState_MonitorOff:
+        {
+            gConsoleDisplayState = PowerMonitorOff;
+            InterlockedExchange(&gConsoleDisplayWakePending, 0);
+            IntBroadcastPowerSetting(NULL, NULL, TRUE);
             break;
         }
 
@@ -332,6 +639,11 @@ IntDeployPowerCallout(VOID)
             /* We are done with this power callout */
             ExFreePoolWithTag(pWin32PwrCallout, USERTAG_POWER);
         }
+        else if (pWin32PwrCallout->Type == POWER_CALLOUT_SETTING)
+        {
+            IntHandlePowerSettingWorker(pWin32PwrCallout);
+            ExFreePoolWithTag(pWin32PwrCallout, USERTAG_POWER);
+        }
         else // POWER_CALLOUT_STATE
         {
             pWin32PwrCallout->Status = IntHandlePowerStateWorker(&pWin32PwrCallout->StateParams);
@@ -379,7 +691,8 @@ IntEnlistPowerCallout(
     CurrentThread = PsGetCurrentThread();
     if (PsIsSystemThread(CurrentThread) ||
         KeIsAttachedProcess() ||
-        !IntIsThreadWin32Thread(CurrentThread))
+        !IntIsThreadWin32Thread(CurrentThread) ||
+        ExGetPreviousMode() != UserMode)
     {
         /* Alert CSRSS of the presence of an enqueued power callout */
         KeSetEvent(gpPowerRequestCalloutEvent, EVENT_INCREMENT, FALSE);
@@ -607,6 +920,160 @@ IntUserPowerCalloutWorker(VOID)
         return;
 
     IntDeployPowerCallout();
+}
+
+ULONG_PTR
+FASTCALL
+UserRegisterPowerSettingNotification(
+    _In_ HANDLE Recipient,
+    _In_ LPCGUID UserGuid,
+    _In_ BOOLEAN Service)
+{
+    PUSER_POWER_SETTING Setting = NULL;
+    PUSER_POWER_NOTIFY Notify;
+    PLIST_ENTRY Entry;
+    GUID Guid;
+    ULONG Value;
+    NTSTATUS Status;
+
+    _SEH2_TRY
+    {
+        ProbeForRead(UserGuid, sizeof(GUID), sizeof(UCHAR));
+        Guid = *UserGuid;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        SetLastNtError(_SEH2_GetExceptionCode());
+        _SEH2_YIELD(return 0);
+    }
+    _SEH2_END;
+
+    if (Service && IsEqualGUID(&Guid, &UserGuidSessionDisplayStatus))
+    {
+        EngSetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    Notify = ExAllocatePoolZero(PagedPool, sizeof(USER_POWER_NOTIFY), USERTAG_POWER);
+    if (Notify == NULL)
+    {
+        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return 0;
+    }
+
+    if (!IntGetDisplaySettingValue(&Guid, &Value))
+    {
+        for (Entry = gPowerSettingList.Flink; Entry != &gPowerSettingList; Entry = Entry->Flink)
+        {
+            Setting = CONTAINING_RECORD(Entry, USER_POWER_SETTING, Link);
+            if (IsEqualGUID(&Setting->Guid, &Guid))
+                break;
+            Setting = NULL;
+        }
+
+        if (Setting != NULL)
+        {
+            Setting->References++;
+        }
+        else
+        {
+            Setting = ExAllocatePoolZero(PagedPool, sizeof(USER_POWER_SETTING), USERTAG_POWER);
+            if (Setting == NULL)
+            {
+                ExFreePoolWithTag(Notify, USERTAG_POWER);
+                EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                return 0;
+            }
+
+            Setting->Guid = Guid;
+            Setting->References = 1;
+            InsertTailList(&gPowerSettingList, &Setting->Link);
+            Status = PoRegisterPowerSettingCallback(NULL, &Setting->Guid, IntPowerSettingCallback, NULL, &Setting->Registration);
+            if (!NT_SUCCESS(Status))
+                Setting->Registration = NULL;
+        }
+    }
+
+    if (++gPowerNotifyCookie == 0)
+        gPowerNotifyCookie = 1;
+
+    Notify->ppi = PsGetCurrentProcessWin32Process();
+    Notify->Recipient = Recipient;
+    Notify->Service = Service;
+    Notify->Guid = Guid;
+    Notify->Cookie = gPowerNotifyCookie;
+    Notify->Setting = Setting;
+    InsertTailList(&gPowerNotifyList, &Notify->Link);
+
+    if (Setting == NULL || Setting->HasValue)
+        IntQueuePowerSettingCallout(&Guid, Notify->Cookie, NULL, 0);
+
+    return Notify->Cookie;
+}
+
+BOOL
+FASTCALL
+UserUnregisterPowerSettingNotification(
+    _In_ ULONG Cookie)
+{
+    PPROCESSINFO ppi = PsGetCurrentProcessWin32Process();
+    PUSER_POWER_NOTIFY Notify;
+    PLIST_ENTRY Entry;
+
+    for (Entry = gPowerNotifyList.Flink; Entry != &gPowerNotifyList; Entry = Entry->Flink)
+    {
+        Notify = CONTAINING_RECORD(Entry, USER_POWER_NOTIFY, Link);
+        if (Notify->Cookie == Cookie && Notify->ppi == ppi)
+        {
+            IntFreePowerNotify(Notify);
+            return TRUE;
+        }
+    }
+
+    EngSetLastError(ERROR_INVALID_PARAMETER);
+    return FALSE;
+}
+
+VOID
+FASTCALL
+UserCleanupPowerSettingNotifications(
+    _In_ PPROCESSINFO ppi)
+{
+    PUSER_POWER_NOTIFY Notify;
+    PLIST_ENTRY Entry;
+
+    Entry = gPowerNotifyList.Flink;
+    while (Entry != &gPowerNotifyList)
+    {
+        Notify = CONTAINING_RECORD(Entry, USER_POWER_NOTIFY, Link);
+        Entry = Entry->Flink;
+        if (Notify->ppi == ppi)
+            IntFreePowerNotify(Notify);
+    }
+}
+
+VOID
+FASTCALL
+UserRequestConsoleDisplayState(
+    _In_ MONITOR_DISPLAY_STATE State)
+{
+    ULONG Value = State;
+    NTSTATUS Status;
+
+    Status = ZwPowerInformation(SessionDisplayState, &Value, sizeof(Value), NULL, 0);
+    if (!NT_SUCCESS(Status))
+        ERR("Console display state %lu not requested: 0x%08lx\n", Value, Status);
+}
+
+VOID
+FASTCALL
+UserConsoleDisplayInput(VOID)
+{
+    if (gConsoleDisplayState == PowerMonitorOff &&
+        InterlockedExchange(&gConsoleDisplayWakePending, 1) == 0)
+    {
+        UserRequestConsoleDisplayState(PowerMonitorOn);
+    }
 }
 
 /* EOF */

@@ -45,6 +45,7 @@ IntLastInputTick(BOOL bUpdate)
     if (bUpdate)
     {
         LastInputTick = EngGetTickCount32();
+        UserConsoleDisplayInput();
         if (gpsi)
         {
             gpsi->dwLastRITEventTickCount = LastInputTick;
@@ -847,6 +848,9 @@ NtUserSendInput(
                 break;
         }
     }
+
+    if (uRet)
+        IntLastInputTick(TRUE);
 
 cleanup:
     TRACE("Leave NtUserSendInput, ret=%u\n", uRet);

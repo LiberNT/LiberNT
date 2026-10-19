@@ -164,6 +164,13 @@ DefWndHandleSysCommand(PWND pWnd, WPARAM wParam, LPARAM lParam)
       case SC_CLOSE:
         return co_IntSendMessage(UserHMGetHandle(pWnd), WM_CLOSE, 0, 0);
 
+      case SC_MONITORPOWER:
+        if (lParam == 2)
+            UserRequestConsoleDisplayState(PowerMonitorOff);
+        else if (lParam == -1)
+            UserRequestConsoleDisplayState(PowerMonitorOn);
+        break;
+
       case SC_SCREENSAVE:
         ERR("Screensaver Called!\n");
         UserPostMessage(hwndSAS, WM_LOGONNOTIFY, LN_START_SCREENSAVE, 0); // always lParam 0 == not Secure

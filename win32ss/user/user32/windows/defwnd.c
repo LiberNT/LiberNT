@@ -235,6 +235,7 @@ DefWndHandleSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam)
       case SC_MOUSEMENU:
       case SC_KEYMENU:
       case SC_SCREENSAVE:
+      case SC_MONITORPOWER:
       case SC_MINIMIZE:
       case SC_MAXIMIZE:
       case SC_RESTORE:

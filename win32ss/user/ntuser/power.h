@@ -13,8 +13,11 @@
 typedef enum tagPOWER_CALLOUT_TYPE
 {
     POWER_CALLOUT_EVENT = 0,
-    POWER_CALLOUT_STATE
+    POWER_CALLOUT_STATE,
+    POWER_CALLOUT_SETTING
 } POWER_CALLOUT_TYPE;
+
+#define USER_POWER_SETTING_VALUE_MAX 64
 
 //
 // Power Callout structure
@@ -36,6 +39,12 @@ typedef struct tagWIN32POWERCALLOUT
     WIN32_POWERSTATE_PARAMETERS StateParams;
     KEVENT CompletionEvent;
     NTSTATUS Status;
+
+    GUID SettingGuid;
+    ULONG SettingCookie;
+    BOOLEAN SettingHasValue;
+    ULONG SettingLength;
+    ULONG64 SettingValue[USER_POWER_SETTING_VALUE_MAX / sizeof(ULONG64)];
 } WIN32POWERCALLOUT, *PWIN32POWERCALLOUT;
 
 //
@@ -77,6 +86,32 @@ IntHandlePowerState(
 VOID
 NTAPI
 IntUserPowerCalloutWorker(VOID);
+
+ULONG_PTR
+FASTCALL
+UserRegisterPowerSettingNotification(
+    _In_ HANDLE Recipient,
+    _In_ LPCGUID UserGuid,
+    _In_ BOOLEAN Service);
+
+BOOL
+FASTCALL
+UserUnregisterPowerSettingNotification(
+    _In_ ULONG Cookie);
+
+VOID
+FASTCALL
+UserCleanupPowerSettingNotifications(
+    _In_ PPROCESSINFO ppi);
+
+VOID
+FASTCALL
+UserRequestConsoleDisplayState(
+    _In_ MONITOR_DISPLAY_STATE State);
+
+VOID
+FASTCALL
+UserConsoleDisplayInput(VOID);
 
 //
 // Power Callout locking mechanism

@@ -478,6 +478,7 @@
 @ stdcall IoOpenDeviceRegistryKey(ptr long long ptr)
 @ stdcall IoPageRead(ptr ptr ptr ptr ptr)
 @ stdcall IoPnPDeliverServicePowerNotification(long long long long)
+@ stdcall IoPnPDeliverServicePowerSetting(long long ptr long)
 @ stdcall IoQueryDeviceDescription(ptr ptr ptr ptr ptr ptr ptr ptr)
 @ stdcall IoQueryFileDosDeviceName(ptr ptr)
 @ stdcall IoQueryFileInformation(ptr long long ptr ptr)

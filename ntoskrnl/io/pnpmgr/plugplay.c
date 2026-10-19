@@ -195,6 +195,8 @@ NTSTATUS
 IopQueuePowerEvent(
     _In_ ULONG NotificationCode,
     _In_ ULONG NotificationData,
+    _In_reads_bytes_opt_(PayloadSize) const VOID *Payload,
+    _In_ ULONG PayloadSize,
     _In_opt_ PLARGE_INTEGER Timeout)
 {
     PPNP_EVENT_ENTRY EventEntry;
@@ -208,7 +210,7 @@ IopQueuePowerEvent(
     PAGED_CODE();
 
     TotalSize = FIELD_OFFSET(PLUGPLAY_EVENT_BLOCK, PowerNotification) +
-                sizeof(EventEntry->Event.PowerNotification);
+                sizeof(EventEntry->Event.PowerNotification) + PayloadSize;
 
     EventEntry = ExAllocatePool(NonPagedPool, TotalSize + FIELD_OFFSET(PNP_EVENT_ENTRY, Event));
     if (!EventEntry)
@@ -219,6 +221,8 @@ IopQueuePowerEvent(
     EventEntry->Event.TotalSize = TotalSize;
     EventEntry->Event.PowerNotification.NotificationCode = NotificationCode;
     EventEntry->Event.PowerNotification.NotificationData = NotificationData;
+    if (PayloadSize != 0)
+        RtlCopyMemory(&EventEntry->Event.PowerNotification + 1, Payload, PayloadSize);
 
     if (!Timeout)
     {

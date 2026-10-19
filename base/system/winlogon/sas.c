@@ -1499,8 +1499,17 @@ HandleSuspend(
     IN DWORD wlxAction)
 {
     BOOLEAN Hibernate = (wlxAction == WLX_SAS_ACTION_SHUTDOWN_HIBERNATE);
+    SYSTEM_POWER_CAPABILITIES Capabilities;
     NTSTATUS Status;
     BOOLEAN Old;
+
+    if (!Hibernate &&
+        NT_SUCCESS(NtPowerInformation(SystemPowerCapabilities, NULL, 0, &Capabilities, sizeof(Capabilities))) &&
+        Capabilities.AoAc)
+    {
+        DefWindowProcW(GetDesktopWindow(), WM_SYSCOMMAND, SC_MONITORPOWER, 2);
+        return;
+    }
 
     RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &Old);
     Status = NtInitiatePowerAction(Hibernate ? PowerActionHibernate : PowerActionSleep,

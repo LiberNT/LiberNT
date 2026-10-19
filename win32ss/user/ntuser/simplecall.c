@@ -281,6 +281,10 @@ NtUserCallOneParam(
 
     switch (Routine)
     {
+        case ONEPARAM_ROUTINE_ROS_UNREGISTERPOWERSETTING:
+            Result = UserUnregisterPowerSettingNotification((ULONG)Param);
+            break;
+
         case ONEPARAM_ROUTINE_POSTQUITMESSAGE:
         {
             PTHREADINFO pti;
@@ -811,6 +815,14 @@ NtUserCallTwoParam(
             IntReleaseMenuObject(MenuObject);
             break;
         }
+
+        case TWOPARAM_ROUTINE_ROS_REGISTERPOWERSETTING:
+            Ret = UserRegisterPowerSettingNotification((HANDLE)Param1, (LPCGUID)Param2, FALSE);
+            break;
+
+        case TWOPARAM_ROUTINE_ROS_REGISTERSERVICEPOWERSETTING:
+            Ret = UserRegisterPowerSettingNotification((HANDLE)Param1, (LPCGUID)Param2, TRUE);
+            break;
 
         case TWOPARAM_ROUTINE_SETGUITHRDHANDLE:
         {
