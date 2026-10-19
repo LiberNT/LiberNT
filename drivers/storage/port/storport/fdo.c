@@ -1514,6 +1514,8 @@ PortFdoPowerUpWorker(
     PIO_WORKITEM WorkItem = Irp->Tail.Overlay.DriverContext[0];
     POWER_STATE PowerState;
 
+    DeviceExtension->DumpMode = FALSE;
+    KeMemoryBarrier();
     PortFdoRestartAdapter(DeviceExtension);
 
     PowerState.DeviceState = PowerDeviceD0;
