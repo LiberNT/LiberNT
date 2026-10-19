@@ -1011,6 +1011,32 @@ NDIS_STATUS NTAPI ProtocolBindAdapter(
 }
 
 
+static VOID LanTransmitToSelf(
+    PLAN_ADAPTER Adapter,
+    PNDIS_PACKET NdisPacket,
+    USHORT Type)
+{
+    PNDIS_PACKET SelfPacket;
+    NDIS_STATUS NdisStatus;
+    PCHAR Data;
+    UINT Size;
+
+    GetDataPtr(NdisPacket, 0, &Data, &Size);
+    NdisStatus = AllocatePacketWithBuffer(&SelfPacket, Data, Size);
+    if (NdisStatus == NDIS_STATUS_SUCCESS)
+    {
+        PC(SelfPacket)->PacketType = (Type == LAN_PROTO_IPv4) ? ETYPE_IPv4 : ETYPE_IPv6;
+        if (!LanSubmitReceiveWork(Adapter, SelfPacket, Size))
+        {
+            FreeNdisPacket(SelfPacket);
+            NdisStatus = NDIS_STATUS_RESOURCES;
+        }
+    }
+
+    LanSendDone(Adapter);
+    (*PC(NdisPacket)->DLComplete)(PC(NdisPacket)->Context, NdisPacket, NdisStatus);
+}
+
 VOID LANTransmit(
     PVOID Context,
     PNDIS_PACKET NdisPacket,
@@ -1045,6 +1071,14 @@ VOID LANTransmit(
         InterlockedCompareExchange(&Adapter->Paused, 0, 0)) {
         LanSendDone(Adapter);
         (*PC(NdisPacket)->DLComplete)(PC(NdisPacket)->Context, NdisPacket, NDIS_STATUS_NOT_ACCEPTED);
+        return;
+    }
+
+    if (LinkAddress && Adapter->Media == NdisMedium802_3 &&
+        (Type == LAN_PROTO_IPv4 || Type == LAN_PROTO_IPv6) &&
+        RtlEqualMemory(LinkAddress, Adapter->HWAddress, IEEE_802_ADDR_LENGTH))
+    {
+        LanTransmitToSelf(Adapter, NdisPacket, Type);
         return;
     }
 
