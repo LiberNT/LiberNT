@@ -238,10 +238,11 @@ static const struct column col_msft_phys_disk[] =
     { L"Description",                       CIM_STRING },
     { L"DeviceId",                          CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { L"EnclosureNumber",                   CIM_UINT16 },
-    { L"FirmwareVersion",                   CIM_STRING },
 #ifdef __REACTOS__
+    { L"FirmwareVersion",                   CIM_STRING|COL_FLAG_DYNAMIC },
     { L"FriendlyName",                      CIM_STRING|COL_FLAG_DYNAMIC },
 #else
+    { L"FirmwareVersion",                   CIM_STRING },
     { L"FriendlyName",                      CIM_STRING },
 #endif
     { L"FruId",                             CIM_STRING },
@@ -5975,6 +5976,8 @@ static enum fill_status fill_msft_phys_disk( struct table *table, const struct e
         rec->bus_type               = device.desc.BusType;
         swprintf( device_id, ARRAY_SIZE( device_id ), L"%u", index );
         rec->device_id              = wcsdup( device_id );
+        rec->firmware_version       = get_storage_descriptor_string( &device.desc, sizeof(device), device.desc.ProductRevisionOffset );
+        if (!rec->firmware_version) rec->firmware_version = wcsdup( L"" );
         rec->model                  = get_storage_descriptor_string( &device.desc, sizeof(device), device.desc.ProductIdOffset );
         rec->friendly_name          = rec->model ? wcsdup( rec->model ) : NULL;
         rec->serial_number          = get_storage_descriptor_string( &device.desc, sizeof(device), device.desc.SerialNumberOffset );
