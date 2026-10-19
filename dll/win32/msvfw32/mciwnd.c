@@ -695,7 +695,11 @@ static LRESULT WINAPI MCIWndProc(HWND hWnd, UINT wMsg, WPARAM wParam, LPARAM lPa
 
 end_of_mci_open:
             if (wMsg == MCIWNDM_OPENA)
+#ifdef __REACTOS__
+                HeapFree(GetProcessHeap(), 0, (void *)lParam);
+#else
                 free((void *)lParam);
+#endif
             return mwi->lasterror;
         }
 
@@ -1276,7 +1280,11 @@ sendstring_done:
             }
 
             if (wMsg == MCIWNDM_SETTIMEFORMATA)
+#ifdef __REACTOS__
+                HeapFree(GetProcessHeap(), 0, (void *)lParam);
+#else
                 free((void *)lParam);
+#endif
 
             return 0;
         }
