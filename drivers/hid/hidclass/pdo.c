@@ -111,7 +111,7 @@ HidClassPDO_HandleQueryDeviceId(
     //
     // allocate new buffer
     //
-    NewBuffer = ExAllocatePoolWithTag(NonPagedPool, (Length + 1) * sizeof(WCHAR), HIDCLASS_TAG);
+    NewBuffer = ExAllocatePoolWithTag(NonPagedPool, (Length + 7) * sizeof(WCHAR), HIDCLASS_TAG);
     if (!NewBuffer)
     {
         //
@@ -144,6 +144,9 @@ HidClassPDO_HandleQueryDeviceId(
         Ptr[2] = L'I';
         PDODeviceExtension->IsXInput = TRUE;
     }
+
+    if (PDODeviceExtension->Common.DeviceDescription.CollectionDescLength > 1)
+        _swprintf(NewBuffer + wcslen(NewBuffer), L"&Col%02X", PDODeviceExtension->CollectionNumber);
 
     //
     // free old buffer
