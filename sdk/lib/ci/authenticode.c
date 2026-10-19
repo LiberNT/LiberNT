@@ -339,7 +339,7 @@ CiVerifySigner(CI_SIGNED_DATA *Signed, uint64_t Time, int Timestamp)
     }
     if (mbedtls_x509_crt_parse_der(&Roots, CiMicrosoftRoot2010, sizeof(CiMicrosoftRoot2010)) || mbedtls_x509_crt_parse_der(&Roots, CiMicrosoftRoot2011, sizeof(CiMicrosoftRoot2011)))
         goto Exit;
-    if (mbedtls_x509_crt_check_key_usage(&Chain, MBEDTLS_X509_KU_DIGITAL_SIGNATURE) || !(Chain.ext_types & MBEDTLS_X509_EXT_EXTENDED_KEY_USAGE) || mbedtls_x509_crt_check_extended_key_usage(&Chain, Eku, strlen(Eku)))
+    if (mbedtls_x509_crt_check_key_usage(&Chain, MBEDTLS_X509_KU_DIGITAL_SIGNATURE) || !mbedtls_x509_crt_has_ext_type(&Chain, MBEDTLS_X509_EXT_EXTENDED_KEY_USAGE) || mbedtls_x509_crt_check_extended_key_usage(&Chain, Eku, strlen(Eku)))
         goto Exit;
     if (!Timestamp && !CiMicrosoftPublisher(&Chain))
         goto Exit;

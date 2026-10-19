@@ -27,14 +27,13 @@ WINE_DEFAULT_DEBUG_CHANNEL(schannel);
 
 #if defined(SONAME_LIBMBEDTLS) && !defined(HAVE_SECURITY_SECURITY_H) && !defined(SONAME_LIBGNUTLS)
 
+#define MBEDTLS_ALLOW_PRIVATE_ACCESS
+
 #include <mbedtls/ssl.h>
 #include <mbedtls/net_sockets.h>
 
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
-#include <mbedtls/cipher_internal.h>
-#include <mbedtls/md_internal.h>
-#include <mbedtls/ssl_internal.h>
 
 typedef struct
 {
@@ -211,15 +210,6 @@ DWORD schan_imp_enabled_protocols(void)
     TRACE("MBEDTLS schan_imp_enabled_protocols()\n");
 
     return 0
-#ifdef MBEDTLS_SSL_PROTO_SSL3
-        | SP_PROT_SSL3_CLIENT | SP_PROT_SSL3_SERVER
-#endif
-#ifdef MBEDTLS_SSL_PROTO_TLS1
-        | SP_PROT_TLS1_0_CLIENT | SP_PROT_TLS1_0_SERVER
-#endif
-#ifdef MBEDTLS_SSL_PROTO_TLS1_1
-        | SP_PROT_TLS1_1_CLIENT | SP_PROT_TLS1_1_SERVER
-#endif
 #ifdef MBEDTLS_SSL_PROTO_TLS1_2
         | SP_PROT_TLS1_2_CLIENT | SP_PROT_TLS1_2_SERVER
 #endif
@@ -364,7 +354,7 @@ static unsigned int schannel_get_cipher_key_size(int ciphersuite_id)
     const mbedtls_ssl_ciphersuite_t *ssl_cipher_suite = mbedtls_ssl_ciphersuite_from_id(ciphersuite_id);
     const mbedtls_cipher_info_t          *cipher_info = mbedtls_cipher_info_from_type(ssl_cipher_suite->cipher);
 
-    unsigned int key_bitlen = cipher_info->key_bitlen;
+    unsigned int key_bitlen = mbedtls_cipher_info_get_key_bitlen(cipher_info);
 
     TRACE("MBEDTLS schannel_get_cipher_key_size: Unknown cipher %#x, returning %u\n", ciphersuite_id, key_bitlen);
 
@@ -376,9 +366,9 @@ static BOOL schannel_is_aead(int ciphersuite_id)
     const mbedtls_ssl_ciphersuite_t *ssl_cipher_suite = mbedtls_ssl_ciphersuite_from_id(ciphersuite_id);
     const mbedtls_cipher_info_t          *cipher_info = mbedtls_cipher_info_from_type(ssl_cipher_suite->cipher);
 
-    return cipher_info && (cipher_info->mode == MBEDTLS_MODE_GCM ||
-                           cipher_info->mode == MBEDTLS_MODE_CCM ||
-                           cipher_info->mode == MBEDTLS_MODE_CHACHAPOLY);
+    return cipher_info && (mbedtls_cipher_info_get_mode(cipher_info) == MBEDTLS_MODE_GCM ||
+                           mbedtls_cipher_info_get_mode(cipher_info) == MBEDTLS_MODE_CCM ||
+                           mbedtls_cipher_info_get_mode(cipher_info) == MBEDTLS_MODE_CHACHAPOLY);
 }
 
 static unsigned int schannel_get_mac_key_size(int ciphersuite_id)
@@ -390,7 +380,7 @@ static unsigned int schannel_get_mac_key_size(int ciphersuite_id)
     if (schannel_is_aead(ciphersuite_id))
         return 0;
 
-    md_size = md_info->size * CHAR_BIT; /* return the size in bits, as the secur32:schannel winetest shows */
+    md_size = mbedtls_md_get_size(md_info) * CHAR_BIT; /* return the size in bits, as the secur32:schannel winetest shows */
 
     TRACE("MBEDTLS schannel_get_mac_key_size: returning %i\n", md_size);
 
@@ -418,27 +408,15 @@ static DWORD schannel_get_protocol(const mbedtls_ssl_context *ssl, const mbedtls
      * there's no reason it couldn't be used for servers as well. The
      * context doesn't tell us which it is, so decide based on ssl endpoint value. */
 
-    switch (ssl->minor_ver)
+    switch (mbedtls_ssl_get_version_number(ssl))
     {
-        case MBEDTLS_SSL_MINOR_VERSION_0:
-            return (conf->endpoint == MBEDTLS_SSL_IS_CLIENT) ? SP_PROT_SSL3_CLIENT :
-                                                               SP_PROT_SSL3_SERVER;
-
-        case MBEDTLS_SSL_MINOR_VERSION_1:
-            return (conf->endpoint == MBEDTLS_SSL_IS_CLIENT) ? SP_PROT_TLS1_0_CLIENT :
-                                                               SP_PROT_TLS1_0_SERVER;
-
-        case MBEDTLS_SSL_MINOR_VERSION_2:
-            return (conf->endpoint == MBEDTLS_SSL_IS_CLIENT) ? SP_PROT_TLS1_1_CLIENT :
-                                                               SP_PROT_TLS1_1_SERVER;
-
-        case MBEDTLS_SSL_MINOR_VERSION_3:
-            return (conf->endpoint == MBEDTLS_SSL_IS_CLIENT) ? SP_PROT_TLS1_2_CLIENT :
-                                                               SP_PROT_TLS1_2_SERVER;
+        case MBEDTLS_SSL_VERSION_TLS1_2:
+            return (mbedtls_ssl_conf_get_endpoint(conf) == MBEDTLS_SSL_IS_CLIENT) ? SP_PROT_TLS1_2_CLIENT :
+                                                                                    SP_PROT_TLS1_2_SERVER;
 
         default:
         {
-            FIXME("MBEDTLS schannel_get_protocol: unknown protocol %d\n", ssl->minor_ver);
+            FIXME("MBEDTLS schannel_get_protocol: unknown protocol %#x\n", mbedtls_ssl_get_version_number(ssl));
             return 0;
         }
     }
@@ -454,12 +432,6 @@ static ALG_ID schannel_get_cipher_algid(int ciphersuite_id)
         case MBEDTLS_CIPHER_NULL:
             return 0;
 
-#ifdef MBEDTLS_ARC4_C
-        /* ARC4 */
-        case MBEDTLS_CIPHER_ARC4_128:
-            return CALG_RC4;
-#endif
-
 #ifdef MBEDTLS_DES_C
         /* DES */
         case MBEDTLS_CIPHER_DES_ECB:
@@ -471,16 +443,6 @@ static ALG_ID schannel_get_cipher_algid(int ciphersuite_id)
         case MBEDTLS_CIPHER_DES_EDE3_ECB:
         case MBEDTLS_CIPHER_DES_EDE3_CBC:
             return CALG_3DES;
-#endif
-
-#ifdef MBEDTLS_BLOWFISH_C
-        /* BLOWFISH */
-        case MBEDTLS_CIPHER_BLOWFISH_ECB:
-        case MBEDTLS_CIPHER_BLOWFISH_CBC:
-        case MBEDTLS_CIPHER_BLOWFISH_CFB64:
-        case MBEDTLS_CIPHER_BLOWFISH_CTR:
-            return CALG_RC4;  // (as schannel does not support it fake it as RC4, which has a
-                              //  similar profile of low footprint and medium-high security) CALG_BLOWFISH;
 #endif
 
 #ifdef MBEDTLS_CAMELLIA_C
@@ -553,8 +515,6 @@ static ALG_ID schannel_get_mac_algid(int ciphersuite_id)
     switch (cipher_suite->mac)
     {
         case MBEDTLS_MD_NONE:      return 0;
-        case MBEDTLS_MD_MD2:       return CALG_MD2;
-        case MBEDTLS_MD_MD4:       return CALG_MD4;
         case MBEDTLS_MD_MD5:       return CALG_MD5;
         case MBEDTLS_MD_SHA1:      return CALG_SHA1;
         case MBEDTLS_MD_SHA224:    return CALG_SHA;
@@ -610,7 +570,9 @@ unsigned int schan_imp_get_session_cipher_block_size(schan_imp_session session)
 {
     MBEDTLS_SESSION *s = (MBEDTLS_SESSION *)session;
 
-    unsigned int cipher_block_size = mbedtls_cipher_get_block_size(&s->ssl.transform->cipher_ctx_enc);
+    const mbedtls_ssl_ciphersuite_t *ssl_cipher_suite = mbedtls_ssl_ciphersuite_from_id(mbedtls_ssl_get_ciphersuite_id_from_ssl(&s->ssl));
+    const mbedtls_cipher_info_t *cipher_info = ssl_cipher_suite ? mbedtls_cipher_info_from_type(ssl_cipher_suite->cipher) : NULL;
+    unsigned int cipher_block_size = cipher_info ? mbedtls_cipher_info_get_block_size(cipher_info) : 0;
 
     TRACE("MBEDTLS schan_imp_get_session_cipher_block_size %p returning %u.\n", session, cipher_block_size);
 
@@ -621,7 +583,8 @@ unsigned int schan_imp_get_max_message_size(schan_imp_session session)
 {
     MBEDTLS_SESSION *s = (MBEDTLS_SESSION *)session;
 
-    unsigned int max_frag_len = mbedtls_ssl_get_max_frag_len(&s->ssl);
+    int max_payload = mbedtls_ssl_get_max_out_record_payload(&s->ssl);
+    unsigned int max_frag_len = max_payload > 0 ? max_payload : 0;
 
     TRACE("MBEDTLS schan_imp_get_max_message_size %p returning %u.\n", session, max_frag_len);
 
@@ -853,7 +816,7 @@ static NTSTATUS backend_get_cipher_info(void *args)
 
     memset(info, 0, sizeof(*info));
     info->dwVersion = SECPKGCONTEXT_CIPHERINFO_V1;
-    info->dwProtocol = (session->ssl.major_ver << 8) | session->ssl.minor_ver;
+    info->dwProtocol = mbedtls_ssl_get_version_number(&session->ssl);
     info->dwCipherSuite = id;
     info->dwBaseCipherSuite = id;
     info->dwCipherLen = schannel_get_cipher_key_size(id);
@@ -865,7 +828,7 @@ static NTSTATUS backend_get_cipher_info(void *args)
     for (p = info->szCipherSuite; *p; p++)
         if (*p == '-') *p = '_';
 
-    if (cipher && cipher->base && cipher->base->cipher == MBEDTLS_CIPHER_ID_AES)
+    if (cipher && !strncmp(mbedtls_cipher_info_get_name(cipher), "AES-", 4))
         lstrcpyW(info->szCipher, BCRYPT_AES_ALGORITHM);
 
     if (suite)
@@ -928,7 +891,7 @@ static NTSTATUS backend_get_unique_channel_binding(void *args)
 {
     const struct get_unique_channel_binding_params *params = args;
     MBEDTLS_SESSION *session = session_from_handle(params->session);
-    const char *verify_data = (session->conf.endpoint == MBEDTLS_SSL_IS_CLIENT) ?
+    const char *verify_data = (mbedtls_ssl_conf_get_endpoint(&session->conf) == MBEDTLS_SSL_IS_CLIENT) ?
                               session->ssl.own_verify_data : session->ssl.peer_verify_data;
     ULONG size = session->ssl.verify_data_len;
 

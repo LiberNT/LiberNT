@@ -2,4 +2,5 @@
 /* Copyright 2026 Ahmed ARIF */
 #pragma once
 
+#define MBEDTLS_PLATFORM_C
 #define MBEDTLS_CHACHA20_C

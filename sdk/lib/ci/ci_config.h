@@ -23,6 +23,7 @@
 #define MBEDTLS_RSA_C
 #define MBEDTLS_SHA1_C
 #define MBEDTLS_SHA256_C
+#define MBEDTLS_SHA384_C
 #define MBEDTLS_SHA512_C
 #define MBEDTLS_X509_USE_C
 #define MBEDTLS_X509_CRT_PARSE_C
@@ -30,5 +31,4 @@
 #define MBEDTLS_X509_CHECK_EXTENDED_KEY_USAGE
 
 /* Verification uses an explicitly supplied time, including trusted timestamps. */
-#include <mbedtls/check_config.h>
 #endif

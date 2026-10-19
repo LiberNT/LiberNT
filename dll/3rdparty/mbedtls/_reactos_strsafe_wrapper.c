@@ -48,3 +48,8 @@ int _vsnprintf_s(char *buffer, size_t sizeOfBuffer, size_t count, const char *fo
             return -1;
     }
 }
+
+int vsnprintf_s(char *buffer, size_t sizeOfBuffer, size_t count, const char *format, va_list argptr)
+{
+    return _vsnprintf_s(buffer, sizeOfBuffer, count, format, argptr);
+}

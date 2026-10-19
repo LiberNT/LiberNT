@@ -7,8 +7,7 @@ include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers/ksecdd)
 
 list(APPEND SOURCE
     csprng.c
-    ${REACTOS_SOURCE_DIR}/dll/3rdparty/mbedtls/chacha20.c
-    ${REACTOS_SOURCE_DIR}/dll/3rdparty/mbedtls/platform_util.c)
+    ${REACTOS_SOURCE_DIR}/dll/3rdparty/mbedtls/chacha20.c)
 
 add_library(csprng ${SOURCE})
 target_include_directories(csprng PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs)

@@ -76,9 +76,9 @@ URL: http://xmlsoft.org
 
 Title: mbed TLS
 Path: dll/3rdparty/mbedtls
-Used Version: 2.16.11
-License: Apache-2.0 (https://spdx.org/licenses/Apache-2.0.html)
-URL: https://tls.mbed.org/
+Used Version: 3.6.7
+License: Apache-2.0 OR GPL-2.0-or-later (https://spdx.org/licenses/Apache-2.0.html)
+URL: https://github.com/Mbed-TLS/mbedtls
 
 Title: Mesa3D
 Path: dll/opengl/mesa

@@ -16,6 +16,7 @@
 #include <ksecioctl.h>
 #include <csprng.h>
 #include <mbedtls/chacha20.h>
+#include <mbedtls/platform_util.h>
 
 #define CSPRNG_SEED_SIZE (32 + 12)
 #define CSPRNG_BLOCK_SIZE 1024
@@ -23,6 +24,12 @@
 static RTL_SRWLOCK CsprngLock;
 static BOOLEAN CsprngInitialized;
 static UCHAR CsprngSeed[CSPRNG_SEED_SIZE];
+
+void
+mbedtls_platform_zeroize(void *buf, size_t len)
+{
+    RtlSecureZeroMemory(buf, len);
+}
 
 static
 BOOLEAN
