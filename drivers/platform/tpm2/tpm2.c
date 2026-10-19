@@ -658,10 +658,9 @@ Tpm2TisCommandReady(
     _In_ PTPM2_DEVICE_EXTENSION DeviceExtension)
 {
     PUCHAR StatusRegister = (PUCHAR)DeviceExtension->TisRegisters + TIS_STATUS;
-    UCHAR Expected = TIS_STATUS_VALID | TIS_STATUS_COMMAND_READY;
 
     WRITE_REGISTER_UCHAR(StatusRegister, TIS_STATUS_COMMAND_READY);
-    return Tpm2WaitRegister8(StatusRegister, Expected, Expected, TPM2_READY_TIMEOUT_MS) ? STATUS_SUCCESS : STATUS_IO_TIMEOUT;
+    return Tpm2WaitRegister8(StatusRegister, TIS_STATUS_COMMAND_READY, TIS_STATUS_COMMAND_READY, TPM2_READY_TIMEOUT_MS) ? STATUS_SUCCESS : STATUS_IO_TIMEOUT;
 }
 
 static
