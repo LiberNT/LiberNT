@@ -627,15 +627,6 @@ HidClassPDO_PnP(
             PDODeviceExtension->Removed = FALSE;
 
             //
-            // Polled HID miniports are not implemented by HIDCLASS yet.
-            // Keep the PDO alive and let read dispatch fail explicitly.
-            //
-            if (PDODeviceExtension->Common.DriverExtension->DevicesArePolled)
-            {
-                DPRINT1("[HIDCLASS] PDO start: polled device detected\n");
-            }
-
-            //
             // now register the device interface
             //
             Status = IoRegisterDeviceInterface(DeviceObject,

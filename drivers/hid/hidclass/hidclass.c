@@ -283,7 +283,9 @@ HidClass_CopyReport(
 
     CopyLength = min(ReportLength, TotalLength - Offset);
     RtlCopyMemory(&Address[Offset], Report, CopyLength);
-    if (Offset + CopyLength < TotalLength)
+    if (FDODeviceExtension->Common.DriverExtension->DevicesArePolled)
+        TotalLength = Offset + CopyLength;
+    else if (Offset + CopyLength < TotalLength)
         RtlZeroMemory(&Address[Offset + CopyLength], TotalLength - Offset - CopyLength);
     Irp->IoStatus.Information = TotalLength;
     Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -407,7 +409,31 @@ HidClassFDO_RouteReport(
         }
     }
 
-    if (!CollectionNumber || ReportLength < ExpectedLength)
+    if (!CollectionNumber)
+        return;
+
+    if (FDODeviceExtension->Common.DriverExtension->DevicesArePolled)
+    {
+        for (Entry = FDODeviceExtension->OpenFileList.Flink;
+             Entry != &FDODeviceExtension->OpenFileList;
+             Entry = Entry->Flink)
+        {
+            PHIDCLASS_FILEOP_CONTEXT Context = CONTAINING_RECORD(Entry, HIDCLASS_FILEOP_CONTEXT, FdoListEntry);
+            PIRP Irp;
+
+            if (Context->StopInProgress || Context->DeviceExtension->CollectionNumber != CollectionNumber)
+                continue;
+
+            while ((Irp = HidClass_RemovePendingRead(FDODeviceExtension, Context)) != NULL)
+            {
+                HidClass_CopyReport(FDODeviceExtension, Irp, Report, ReportLength);
+                InsertTailList(CompleteList, &Irp->Tail.Overlay.ListEntry);
+            }
+        }
+        return;
+    }
+
+    if (ReportLength < ExpectedLength)
         return;
 
     for (Entry = FDODeviceExtension->OpenFileList.Flink;
@@ -559,8 +585,17 @@ HidClassFDO_ReadCompletion(
     }
     KeReleaseSpinLock(&FDODeviceExtension->ReadLock, OldLevel);
 
-    if (Continue)
+    if (Continue && FDODeviceExtension->Common.DriverExtension->DevicesArePolled)
+    {
+        LARGE_INTEGER DueTime;
+
+        DueTime.QuadPart = -(LONGLONG)FDODeviceExtension->PollInterval * 10000;
+        KeSetTimer(&FDODeviceExtension->PollTimer, DueTime, &FDODeviceExtension->ReadDpc);
+    }
+    else if (Continue)
+    {
         KeInsertQueueDpc(&FDODeviceExtension->ReadDpc, NULL, NULL);
+    }
 
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
@@ -577,6 +612,8 @@ HidClassFDO_InitializeRead(
     InitializeListHead(&FDODeviceExtension->OpenFileList);
     KeInitializeEvent(&FDODeviceExtension->ReadIdleEvent, NotificationEvent, TRUE);
     KeInitializeDpc(&FDODeviceExtension->ReadDpc, HidClassFDO_ReadDpc, FDODeviceObject);
+    KeInitializeTimer(&FDODeviceExtension->PollTimer);
+    FDODeviceExtension->PollInterval = HIDCLASS_DEFAULT_POLL_INTERVAL;
 }
 
 VOID
@@ -613,8 +650,17 @@ HidClassFDO_StopRead(
 
     HidClass_CompleteReadList(&CompleteList);
 
-    if (Active && FDODeviceExtension->ReadIrp)
+    if (KeCancelTimer(&FDODeviceExtension->PollTimer))
+    {
+        KeAcquireSpinLock(&FDODeviceExtension->ReadLock, &OldLevel);
+        FDODeviceExtension->ReadActive = FALSE;
+        KeSetEvent(&FDODeviceExtension->ReadIdleEvent, IO_NO_INCREMENT, FALSE);
+        KeReleaseSpinLock(&FDODeviceExtension->ReadLock, OldLevel);
+    }
+    else if (Active && FDODeviceExtension->ReadIrp)
+    {
         IoCancelIrp(FDODeviceExtension->ReadIrp);
+    }
     if (!Wait)
         return;
 
@@ -819,18 +865,6 @@ HidClass_Read(
         return STATUS_INVALID_USER_BUFFER;
     }
 
-    //
-    // Polled HID miniports are not implemented here. Do not assert in
-    // checked builds; fail reads explicitly until a real poll path exists.
-    //
-    if (Context->DeviceExtension->Common.DriverExtension->DevicesArePolled)
-    {
-        DPRINT1("[HIDCLASS] ReadDispatch: polled device not supported via IRP path\n");
-        Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
-        IoCompleteRequest(Irp, IO_NO_INCREMENT);
-        return STATUS_NOT_SUPPORTED;
-    }
-
     FDODeviceObject = Context->DeviceExtension->FDODeviceObject;
     FDODeviceExtension = Context->DeviceExtension->FDODeviceExtension;
 
@@ -893,8 +927,17 @@ HidClass_Read(
 
     KeReleaseSpinLock(&FDODeviceExtension->ReadLock, OldLevel);
 
-    if (Start)
+    if (Start && FDODeviceExtension->Common.DriverExtension->DevicesArePolled)
+    {
+        LARGE_INTEGER DueTime;
+
+        DueTime.QuadPart = -(LONGLONG)FDODeviceExtension->PollInterval * 10000;
+        KeSetTimer(&FDODeviceExtension->PollTimer, DueTime, &FDODeviceExtension->ReadDpc);
+    }
+    else if (Start)
+    {
         HidClassFDO_SubmitRead(FDODeviceObject);
+    }
 
     return STATUS_PENDING;
 }
@@ -1323,6 +1366,41 @@ HidClass_DeviceControl(
 
     switch (IoStack->Parameters.DeviceIoControl.IoControlCode)
     {
+        case IOCTL_HID_GET_POLL_FREQUENCY_MSEC:
+        {
+            if (IoStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(ULONG))
+            {
+                Irp->IoStatus.Status = STATUS_BUFFER_TOO_SMALL;
+                IoCompleteRequest(Irp, IO_NO_INCREMENT);
+                return STATUS_BUFFER_TOO_SMALL;
+            }
+
+            *(PULONG)Irp->AssociatedIrp.SystemBuffer =
+                CommonDeviceExtension->DriverExtension->DevicesArePolled ? PDODeviceExtension->FDODeviceExtension->PollInterval : 0;
+            Irp->IoStatus.Information = sizeof(ULONG);
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return STATUS_SUCCESS;
+        }
+        case IOCTL_HID_SET_POLL_FREQUENCY_MSEC:
+        {
+            ULONG Interval;
+
+            if (IoStack->Parameters.DeviceIoControl.InputBufferLength < sizeof(ULONG))
+            {
+                Irp->IoStatus.Status = STATUS_BUFFER_TOO_SMALL;
+                IoCompleteRequest(Irp, IO_NO_INCREMENT);
+                return STATUS_BUFFER_TOO_SMALL;
+            }
+
+            Interval = *(PULONG)Irp->AssociatedIrp.SystemBuffer;
+            if (Interval && CommonDeviceExtension->DriverExtension->DevicesArePolled)
+                PDODeviceExtension->FDODeviceExtension->PollInterval = min(Interval, HIDCLASS_MAX_POLL_INTERVAL);
+            Irp->IoStatus.Information = 0;
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return STATUS_SUCCESS;
+        }
         case IOCTL_HID_GET_COLLECTION_INFORMATION:
         {
             //

@@ -90,6 +90,8 @@ typedef struct
     BOOLEAN ReadStopped;
     KEVENT ReadIdleEvent;
     KDPC ReadDpc;
+    KTIMER PollTimer;
+    ULONG PollInterval;
 
     KSPIN_LOCK WakeLock;
     volatile LONG WakeState;
@@ -150,6 +152,9 @@ VOID
 HidClassPDO_CompleteWake(
     IN PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension,
     IN NTSTATUS Status);
+
+#define HIDCLASS_DEFAULT_POLL_INTERVAL 5
+#define HIDCLASS_MAX_POLL_INTERVAL 10000
 
 #define HIDCLASS_QUEUED_REPORTS 32
 #define HIDCLASS_MIN_QUEUED_REPORTS 2
