@@ -240,6 +240,35 @@ MiSelectBottomUpBase(
     }
 }
 
+static
+VOID
+MiInitializeExecuteOptions(
+    _In_ PEPROCESS Process,
+    _In_ PMI_SECTION_OBJECT Section)
+{
+    PMI_CONTROL_AREA Control = Section->Control;
+    ULONG Policy = SharedUserData->NXSupportPolicy;
+    UCHAR Options = MEM_EXECUTE_OPTION_EXECUTE_DISPATCH_ENABLE | MEM_EXECUTE_OPTION_IMAGE_DISPATCH_ENABLE;
+
+    if (Control->Image64 || Policy == NX_SUPPORT_POLICY_ALWAYSON ||
+        (Policy != NX_SUPPORT_POLICY_ALWAYSOFF && Control->Image &&
+         (Control->ImageInformation.DllCharacteristics & IMAGE_DLLCHARACTERISTICS_NX_COMPAT)))
+    {
+        Options = MEM_EXECUTE_OPTION_DISABLE | MEM_EXECUTE_OPTION_DISABLE_THUNK_EMULATION |
+                  MEM_EXECUTE_OPTION_PERMANENT;
+    }
+    else if (Policy == NX_SUPPORT_POLICY_OPTOUT)
+    {
+        Options |= MEM_EXECUTE_OPTION_DISABLE;
+    }
+    else
+    {
+        Options |= MEM_EXECUTE_OPTION_ENABLE;
+    }
+
+    Process->Pcb.ExecuteOptions = Options;
+}
+
 NTSTATUS
 NTAPI
 MmInitializeProcessAddressSpace(
@@ -365,6 +394,7 @@ CloneDone:
 
     if (NT_SUCCESS(Status))
     {
+        MiInitializeExecuteOptions(Process, Section);
         MiSelectBottomUpBase(Process, Section);
         Status = MmMapViewOfSection(Section, Process, &ImageBase, 0, 0, NULL, &ViewSize, ViewShare, MEM_COMMIT,
                                     PAGE_READWRITE);

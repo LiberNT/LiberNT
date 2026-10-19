@@ -187,7 +187,6 @@ KiInitializeCpu(PKIPCR Pcr)
     }
 
     /* Set DEP to always on */
-    SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_ALWAYSON;
     FeatureBits |= KF_NX_ENABLED;
 
     /* Save feature bits */
