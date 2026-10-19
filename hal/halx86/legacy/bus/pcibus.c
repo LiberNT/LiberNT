@@ -1639,6 +1639,22 @@ HalpConfigurePciRootBridge(
         return;
     }
 
+    if (Info->BusRangePresent)
+    {
+        BusStart = Info->BusStart;
+        BusEnd = Info->BusEnd;
+    }
+    else
+    {
+        BusStart = Info->Bus;
+        BusEnd = Info->Bus;
+    }
+
+    if (BusStart < HalpMinPciBus)
+        HalpMinPciBus = BusStart;
+    if (BusEnd > HalpMaxPciBus)
+        HalpMaxPciBus = BusEnd;
+
     Bus = HalHandlerForBus(PCIBus, Info->Bus);
     if (!Bus || !Bus->BusData)
     {
@@ -1650,17 +1666,6 @@ HalpConfigurePciRootBridge(
 
     BusData = (PPCIPBUSDATA)Bus->BusData;
     BusData->PciSegment = (USHORT)Info->Segment;
-
-    if (Info->BusRangePresent)
-    {
-        BusStart = Info->BusStart;
-        BusEnd = Info->BusEnd;
-    }
-    else
-    {
-        BusStart = Info->Bus;
-        BusEnd = Info->Bus;
-    }
 
     BusData->BusNumberStart = (UCHAR)BusStart;
     BusData->BusNumberEnd = (UCHAR)BusEnd;
@@ -1691,11 +1696,6 @@ HalpConfigurePciRootBridge(
     }
 
     BusData->ResourcesInitialized = TRUE;
-
-    if (BusStart < HalpMinPciBus)
-        HalpMinPciBus = BusStart;
-    if (BusEnd > HalpMaxPciBus)
-        HalpMaxPciBus = BusEnd;
 
     Ranges = Bus->BusAddresses;
     if (!Ranges)
