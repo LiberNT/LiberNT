@@ -115,6 +115,12 @@ HalpInitializeClock(VOID)
     HalpCurrentTimeIncrement = Increment;
 }
 
+VOID
+HalpRestoreClock(VOID)
+{
+    HalpSetTimerRollOver((USHORT)HalpCurrentRollOver);
+}
+
 #ifdef _M_IX86
 #ifndef _MINIHAL_
 VOID

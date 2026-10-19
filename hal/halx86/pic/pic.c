@@ -3,6 +3,7 @@
  * LICENSE:         BSD - See COPYING.ARM in the top level directory
  * PURPOSE:         HAL PIC Management and Control Code
  * PROGRAMMERS:     ReactOS Portable Systems Group
+ *                  Ahmed ARIF (arif.ing@outlook.com)
  */
 
 /* INCLUDES *******************************************************************/
@@ -278,6 +279,45 @@ HalpInitializePICs(IN BOOLEAN EnableInterrupts)
     /* Restore interrupt state */
     if (EnableInterrupts) EFlags |= EFLAGS_INTERRUPT_MASK;
     __writeeflags(EFlags);
+}
+
+VOID
+HalpSaveInterruptControllers(VOID)
+{
+}
+
+VOID
+HalpRestoreInterruptControllers(VOID)
+{
+    PKPCR Pcr = KeGetPcr();
+    PIC_MASK Mask;
+
+    HalpInitializeLegacyPICs();
+
+    if (HalpEisaELCR)
+    {
+        __outbyte(EISA_ELCR_MASTER, (UCHAR)HalpEisaELCR);
+        __outbyte(EISA_ELCR_SLAVE, (UCHAR)(HalpEisaELCR >> 8));
+    }
+
+    Mask.Both = (KiI8259MaskTable[Pcr->Irql] | Pcr->IDR) & 0xFFFF;
+    __outbyte(PIC1_DATA_PORT, Mask.Master);
+    __outbyte(PIC2_DATA_PORT, Mask.Slave);
+}
+
+ULONG
+HalpSaveLocalInterrupts(VOID)
+{
+    return 0;
+}
+
+VOID
+HalpRestoreLocalInterrupts(
+    _In_ ULONG Processor,
+    _In_ ULONG Priority)
+{
+    UNREFERENCED_PARAMETER(Processor);
+    UNREFERENCED_PARAMETER(Priority);
 }
 
 UCHAR

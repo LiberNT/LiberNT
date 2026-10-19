@@ -10,6 +10,7 @@
 
 #include <hal.h>
 #include <smp.h>
+#include <hiberfil.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -99,4 +100,17 @@ HalpPrepareLowStub(
     *(PULONG)(StubVa(HalpAPEntryGdtr) + 2) = StubPa(HalpAPEntryGdt);
 
     return HalpLowStubPhysicalAddress.LowPart;
+}
+
+VOID
+HalpQueryLowStubResumeTarget(
+    _Out_ PVOID ResumeTarget)
+{
+    PLNT_HIBER_RESUME_TARGET Target = ResumeTarget;
+
+    Target->StubPhysical = HalpLowStubPhysicalAddress.QuadPart;
+    Target->StubPages = HALP_LOW_STUB_SIZE_IN_PAGES;
+    Target->Prot32Offset = (ULONG)StubOffset(HalpAPEntryProt32);
+    Target->GdtOffset = (ULONG)StubOffset(HalpAPEntryGdt);
+    Target->GdtLimit = (4 * sizeof(ULONG64)) - 1;
 }

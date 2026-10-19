@@ -34,7 +34,7 @@ PUBLIC HalpAPEntry16End
 PUBLIC HalpAPEntry64
 PUBLIC HalpSleepSaveContext
 PUBLIC HalpSleepReadXcr0
-PUBLIC HalpSleepResume64
+PUBLIC HalpSleepResume
 
 .equ OFF_PROCSTATE, HalpAPEntryProcState - HalpAPEntry16
 .equ OFF_HIGH, HalpAPEntryHigh - HalpAPEntry16
@@ -289,7 +289,7 @@ HalpSleepReadXcr0:
     ret
 
 /* Entered from the low stub in long mode: rcx = PHALP_SLEEP_PROCESSOR */
-HalpSleepResume64:
+HalpSleepResume:
     mov rax, [rcx + PsSpecialRegisters + SrCr3]
     mov cr3, rax
     mov rax, [rcx + PsSpecialRegisters + SrCr4]

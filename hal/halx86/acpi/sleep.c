@@ -1,13 +1,14 @@
 /*
  * PROJECT:     LiberNT HAL
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     ACPI sleep states S1-S3 for the AMD64 APIC HAL
+ * PURPOSE:     ACPI sleep states S1-S3 for the x86 ACPI HALs
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <hal.h>
 #include <smp.h>
 #include <drivers/acpi/acpipm.h>
+#include <hiberfil.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -34,9 +35,17 @@
 #define MSR_TIME_STAMP_COUNTER          0x0010
 #define MSR_TSC_ADJUST                  0x003B
 #define MSR_MTRR_CAP                    0x00FE
+#define MSR_SYSENTER_CS                 0x0174
+#define MSR_SYSENTER_ESP                0x0175
+#define MSR_SYSENTER_EIP                0x0176
 #define MSR_MTRR_PHYS_BASE0             0x0200
+#define MSR_PAGE_ATTRIBUTE_TABLE        0x0277
 #define MSR_MTRR_DEF_TYPE               0x02FF
 #define MSR_XSS                         0x0DA0
+
+#define HALP_CR0_NW                     0x20000000
+#define HALP_CR0_CD                     0x40000000
+#define HALP_CR4_OSXSAVE                0x00040000
 
 #define MTRR_CAP_VCNT_MASK              0xFF
 #define MTRR_CAP_FIX                    (1UL << 8)
@@ -70,9 +79,11 @@ typedef struct _HALP_SLEEP_PROCESSOR
     ULONG64 Xss;
     ULONG64 Efer;
     ULONG64 Pat;
+    ULONG64 Sysenter[3];
     ULONG64 MtrrDefType;
     ULONG64 MtrrFixed[MTRR_FIXED_COUNT];
     ULONG64 MtrrVariable[2 * MTRR_MAX_VARIABLE];
+    ULONG LocalPriority;
     volatile LONG Resumed;
 } HALP_SLEEP_PROCESSOR, *PHALP_SLEEP_PROCESSOR;
 
@@ -81,7 +92,7 @@ C_ASSERT(FIELD_OFFSET(HALP_SLEEP_PROCESSOR, FpuArea) == sizeof(KPROCESSOR_STATE)
 C_ASSERT(FIELD_OFFSET(HALP_SLEEP_PROCESSOR, Xss) == sizeof(KPROCESSOR_STATE) + 2 * sizeof(ULONG64));
 
 ULONG HalpSleepSaveContext(_Inout_ PHALP_SLEEP_PROCESSOR Save);
-VOID HalpSleepResume64(VOID);
+VOID HalpSleepResume(VOID);
 ULONG64 HalpSleepReadXcr0(VOID);
 
 extern PHYSICAL_ADDRESS HalpLowStubPhysicalAddress;
@@ -94,13 +105,15 @@ KeSaveStateForHibernate(
     _In_ PKPROCESSOR_STATE State);
 
 static PM_DISPATCH_TABLE HalpPmDispatchTable = { ACPI_PM_DISPATCH_SIGNATURE, ACPI_PM_DISPATCH_VERSION, { NULL } };
-static HALP_SLEEP_STATE HalpSleepStates[3];
+static HALP_SLEEP_STATE HalpSleepStates[4];
 static PHALP_SLEEP_PROCESSOR HalpSleepProcessors;
 static ULONG HalpSleepProcessorCount;
 static BOOLEAN HalpSleepInitialized;
 static BOOLEAN HalpSleepHwReduced;
 static BOOLEAN HalpSleepXSave;
 static BOOLEAN HalpSleepXss;
+static BOOLEAN HalpSleepPat;
+static BOOLEAN HalpSleepSysenter;
 static BOOLEAN HalpSleepMtrr;
 static BOOLEAN HalpSleepTscAdjust;
 static ULONG HalpSleepVariableMtrrs;
@@ -291,7 +304,7 @@ HalpSleepDetectProcessorFeatures(VOID)
         HalpSleepTscAdjust = (CpuInfo[1] & (1 << 1)) != 0;
     }
 
-    HalpSleepXSave = (__readcr4() & CR4_XSAVE) != 0;
+    HalpSleepXSave = (__readcr4() & HALP_CR4_OSXSAVE) != 0;
     if (HalpSleepXSave)
     {
         __cpuidex(CpuInfo, 0xD, 1);
@@ -299,7 +312,9 @@ HalpSleepDetectProcessorFeatures(VOID)
     }
 
     __cpuid(CpuInfo, 1);
+    HalpSleepSysenter = (CpuInfo[3] & (1 << 11)) != 0;
     HalpSleepMtrr = (CpuInfo[3] & (1 << 12)) != 0;
+    HalpSleepPat = (CpuInfo[3] & (1 << 16)) != 0;
     if (HalpSleepMtrr)
     {
         MtrrCap = __readmsr(MSR_MTRR_CAP);
@@ -418,7 +433,7 @@ HalpSleepRestoreMtrrs(
     if (Cr4 & CR4_PGE)
         __writecr4(Cr4 & ~CR4_PGE);
     Cr0 = __readcr0();
-    __writecr0((Cr0 | CR0_CD) & ~CR0_NW);
+    __writecr0((Cr0 | HALP_CR0_CD) & ~HALP_CR0_NW);
     __wbinvd();
     __writecr3(__readcr3());
 
@@ -444,12 +459,22 @@ HalpSleepSaveProcessor(
     _Out_ PHALP_SLEEP_PROCESSOR Save)
 {
     KeSaveStateForHibernate(&Save->ProcessorState);
+#ifdef _M_AMD64
     Save->Efer = __readmsr(MSR_EFER);
-    Save->Pat = __readmsr(MSR_PAT);
+#endif
+    if (HalpSleepPat)
+        Save->Pat = __readmsr(MSR_PAGE_ATTRIBUTE_TABLE);
+    if (HalpSleepSysenter)
+    {
+        Save->Sysenter[0] = __readmsr(MSR_SYSENTER_CS);
+        Save->Sysenter[1] = __readmsr(MSR_SYSENTER_ESP);
+        Save->Sysenter[2] = __readmsr(MSR_SYSENTER_EIP);
+    }
     HalpSleepSaveMtrrs(Save);
 
     Save->XSaveMask = HalpSleepXSave ? HalpSleepReadXcr0() : 0;
     Save->Xss = HalpSleepXss ? __readmsr(MSR_XSS) : 0;
+    Save->LocalPriority = HalpSaveLocalInterrupts();
 }
 
 static
@@ -475,13 +500,24 @@ HalpSleepRestoreProcessor(
 {
     PKSPECIAL_REGISTERS Special = &Save->ProcessorState.SpecialRegisters;
 
+#ifdef _M_AMD64
     __writemsr(MSR_EFER, Save->Efer);
+#endif
     HalpSleepRestoreMtrrs(Save);
-    __writemsr(MSR_PAT, Save->Pat);
+    if (HalpSleepPat)
+        __writemsr(MSR_PAGE_ATTRIBUTE_TABLE, Save->Pat);
+#ifdef _M_AMD64
     __writemsr(MSR_STAR, Special->MsrStar);
     __writemsr(MSR_LSTAR, Special->MsrLStar);
     __writemsr(MSR_CSTAR, Special->MsrCStar);
     __writemsr(MSR_SYSCALL_MASK, Special->MsrSyscallMask);
+#endif
+    if (HalpSleepSysenter)
+    {
+        __writemsr(MSR_SYSENTER_CS, Save->Sysenter[0]);
+        __writemsr(MSR_SYSENTER_ESP, Save->Sysenter[1]);
+        __writemsr(MSR_SYSENTER_EIP, Save->Sysenter[2]);
+    }
 
     __writedr(0, Special->KernelDr0);
     __writedr(1, Special->KernelDr1);
@@ -491,8 +527,7 @@ HalpSleepRestoreProcessor(
     __writedr(7, Special->KernelDr7);
 
     HalpSleepAdjustTsc();
-    ApicInitializeLocalApic(Processor);
-    __writecr8(Special->Cr8);
+    HalpRestoreLocalInterrupts(Processor, Save->LocalPriority);
 }
 
 static
@@ -595,7 +630,7 @@ HalpSleepRestartProcessors(VOID)
     {
         Save = &HalpSleepProcessors[Processor];
         Save->Resumed = 0;
-        if (!HalpRestartProcessor(Processor, &Save->ProcessorState, HalpSleepResume64))
+        if (!HalpRestartProcessor(Processor, &Save->ProcessorState, HalpSleepResume))
         {
             DPRINT1("Processor %lu could not be restarted after sleep\n", Processor);
             continue;
@@ -626,9 +661,6 @@ HalpAcpiSleepHandler(
     LONG Generation;
     NTSTATUS Status = STATUS_SUCCESS;
     BOOLEAN Woke;
-
-    UNREFERENCED_PARAMETER(SystemHandler);
-    UNREFERENCED_PARAMETER(SystemContext);
 
     if (Processor >= HalpSleepProcessorCount || Number == NULL)
         return STATUS_INVALID_PARAMETER;
@@ -676,15 +708,36 @@ HalpAcpiSleepHandler(
             YieldProcessor();
 
         HalpSaveInterruptControllers();
-        if (!HalpPrepareLowStub(&Save->ProcessorState, HalpSleepResume64))
+        if (!HalpPrepareLowStub(&Save->ProcessorState, HalpSleepResume))
         {
             Status = STATUS_UNSUCCESSFUL;
             goto ResumeProcessors;
         }
 
-        HalpSleepSetWakingVector(HalpLowStubPhysicalAddress.LowPart);
         HalpSleepTscOffset = 0;
         HalpSleepTsc = __rdtsc();
+
+        if (State->SystemState == PowerSystemHibernate)
+        {
+            if (SystemHandler == NULL || SystemContext == NULL)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                goto ResumeProcessors;
+            }
+
+            HalpSleepSetWakingVector(0);
+            HalpQueryLowStubResumeTarget(SystemContext);
+            Status = SystemHandler(SystemContext);
+            if (!NT_SUCCESS(Status))
+            {
+                DPRINT1("Writing the hibernation image failed: 0x%08lx\n", Status);
+                goto ResumeProcessors;
+            }
+        }
+        else
+        {
+            HalpSleepSetWakingVector(HalpLowStubPhysicalAddress.LowPart);
+        }
 
         HalpSleepEnterState(State);
 
@@ -780,10 +833,7 @@ HalpInitPowerManagement(
         return STATUS_INVALID_PARAMETER;
 
     if (HalpFixedAcpiDescTable.flags & ACPI_FADT_LOW_POWER_S0_IDLE)
-    {
         DPRINT1("ACPI sleep: the platform is low-power S0 idle capable, S1-S3 are not offered\n");
-        return STATUS_SUCCESS;
-    }
 
     HalpSleepHwReduced = (HalpFixedAcpiDescTable.flags & ACPI_FADT_HW_REDUCED) != 0;
     if (!HalpSleepMapPlatform())
@@ -794,7 +844,15 @@ HalpInitPowerManagement(
         return STATUS_INSUFFICIENT_RESOURCES;
 
     for (Index = 0; Index < RTL_NUMBER_OF(HalpSleepStates); Index++)
+    {
+        if ((HalpFixedAcpiDescTable.flags & ACPI_FADT_LOW_POWER_S0_IDLE) &&
+            PowerSystemSleeping1 + Index != PowerSystemHibernate)
+        {
+            continue;
+        }
+
         HalpSleepRegisterState(GetSleepType, Index);
+    }
 
     return STATUS_SUCCESS;
 }

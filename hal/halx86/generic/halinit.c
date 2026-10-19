@@ -150,9 +150,6 @@ HalInitSystem(
         HalSetSystemInformation = HaliSetSystemInformation;
         HalInitPnpDriver = HaliInitPnpDriver;
         HalGetDmaAdapter = HalpGetDmaAdapter;
-#ifdef _M_AMD64
-        HalInitPowerManagement = HalpInitPowerManagement;
-#endif
 
         HalGetInterruptTranslator = NULL;  // FIXME: TODO
         HalResetDisplay = HalpBiosDisplayReset;

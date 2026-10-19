@@ -126,3 +126,16 @@ HalStartNextProcessor(
 
     return TRUE;
 }
+
+BOOLEAN
+HalpRestartProcessor(
+    _In_ ULONG NTProcessorNumber,
+    _In_ PKPROCESSOR_STATE ProcessorState,
+    _In_ PVOID Entry)
+{
+    if (!HalpPrepareLowStub(ProcessorState, Entry))
+        return FALSE;
+
+    ApicStartApplicationProcessor(NTProcessorNumber, HalpLowStubPhysicalAddress);
+    return TRUE;
+}

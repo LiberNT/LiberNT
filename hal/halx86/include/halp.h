@@ -267,12 +267,13 @@ FASTCALL
 HalpMsiVectorToIrql(
     _In_ UCHAR Vector);
 
+#endif /* _M_AMD64 */
+
 NTSTATUS
 NTAPI
 HalpInitPowerManagement(
     _In_ PPM_DISPATCH_TABLE PmDriverDispatchTable,
     _Out_ PPM_DISPATCH_TABLE *PmHalDispatchTable);
-#endif /* _M_AMD64 */
 
 VOID
 NTAPI
@@ -287,6 +288,14 @@ HalpRestoreInterruptControllers(VOID);
 
 VOID
 HalpRestoreClock(VOID);
+
+ULONG
+HalpSaveLocalInterrupts(VOID);
+
+VOID
+HalpRestoreLocalInterrupts(
+    _In_ ULONG Processor,
+    _In_ ULONG Priority);
 
 /* profil.c */
 extern BOOLEAN HalpProfilingStopped;

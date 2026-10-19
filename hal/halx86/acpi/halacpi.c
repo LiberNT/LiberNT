@@ -189,6 +189,7 @@ HalpSetupAcpiPhase0(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     /* Let drivers look up cached tables through the HAL dispatch table */
     HalGetCachedAcpiTable = HaliGetCachedAcpiTable;
+    HalInitPowerManagement = HalpInitPowerManagement;
 
     /* Grab the FADT */
     Fadt = HalAcpiGetTable(LoaderBlock, FADT_SIGNATURE);

@@ -67,6 +67,8 @@ HalSendSoftwareInterrupt(
     NOTHING;
 }
 
+#endif // _M_AMD64
+
 BOOLEAN
 HalpRestartProcessor(
     _In_ ULONG NTProcessorNumber,
@@ -75,5 +77,3 @@ HalpRestartProcessor(
 {
     return FALSE;
 }
-
-#endif // _M_AMD64

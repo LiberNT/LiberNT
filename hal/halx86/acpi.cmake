@@ -20,6 +20,12 @@ if(ARCH STREQUAL "amd64")
         smp/amd64/lowstub.c)
     list(APPEND HAL_ACPI_ASM_SOURCE
         smp/amd64/apentry.S)
+elseif(ARCH STREQUAL "i386")
+    list(APPEND HAL_ACPI_SOURCE
+        acpi/sleep.c
+        smp/i386/lowstub.c)
+    list(APPEND HAL_ACPI_ASM_SOURCE
+        smp/i386/wakestub.S)
 endif()
 
 # Needed to compile while using ACPICA

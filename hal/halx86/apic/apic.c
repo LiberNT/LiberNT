@@ -646,6 +646,21 @@ HalpSaveInterruptControllers(VOID)
         HalpSavedIoApicEntries[Index] = ApicReadIORedirectionEntry(Index);
 }
 
+ULONG
+HalpSaveLocalInterrupts(VOID)
+{
+    return ApicRead(APIC_TPR);
+}
+
+VOID
+HalpRestoreLocalInterrupts(
+    _In_ ULONG Processor,
+    _In_ ULONG Priority)
+{
+    ApicInitializeLocalApic(Processor);
+    ApicWrite(APIC_TPR, Priority);
+}
+
 VOID
 HalpRestoreInterruptControllers(VOID)
 {
