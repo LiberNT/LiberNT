@@ -846,6 +846,8 @@ wWinMain(
     SetupData.hInstance = hInst;
 
     FirstBootRun = EndFirstBootSetup();
+    if (!ComponentsOnly)
+        DPRINT1("Disk signature check finished with exit code %lu\n", RunExpandStorage(L"/u"));
     if (IsUnattendedFirstBoot() || HasAutomationPayload())
         return OOBE_SKIPPED;
 

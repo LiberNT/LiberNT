@@ -1,4 +1,7 @@
+libernt_standard_disk_signature(_standard_signature)
+
 add_executable(lntexpandstorage lntexpandstorage.c expandcore.c)
+target_compile_definitions(lntexpandstorage PRIVATE LIBERNT_STANDARD_SIGNATURE=0x${_standard_signature})
 set_module_type(lntexpandstorage win32cui)
 add_importlibs(lntexpandstorage msvcrt kernel32 advapi32 user32)
 add_cd_file(TARGET lntexpandstorage DESTINATION reactos/system32 FOR all)
