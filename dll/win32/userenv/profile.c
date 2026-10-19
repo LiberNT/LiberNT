@@ -2244,7 +2244,8 @@ LoadUserProfileW(
 
             bNewProfile = TRUE;
         }
-        else if (GetFileAttributesW(szUserHivePath) == INVALID_FILE_ATTRIBUTES)
+        else if ((!bProfileListPath && !lpProfileInfo->lpProfilePath) ||
+                 GetFileAttributesW(szUserHivePath) == INVALID_FILE_ATTRIBUTES)
         {
             /* Get user sid */
             if (GetTokenInformation(hToken, TokenUser, NULL, 0, &dwLength) ||
@@ -2276,6 +2277,13 @@ LoadUserProfileW(
                 goto cleanup;
             }
             ret = FALSE;
+
+            if (!lpProfileInfo->lpProfilePath &&
+                GetProfileListImagePath(SidString.Buffer, szProfileListPath, ARRAYSIZE(szProfileListPath)))
+            {
+                StringCbCopyW(szUserHivePath, sizeof(szUserHivePath), szProfileListPath);
+                StringCbCatW(szUserHivePath, sizeof(szUserHivePath), L"\\ntuser.dat");
+            }
         }
 
         /* Acquire restore privilege */
