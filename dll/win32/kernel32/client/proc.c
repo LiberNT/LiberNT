@@ -2858,6 +2858,7 @@ BasepCreateUserProcess(IN HANDLE UserToken,
     UNICODE_STRING DllPath, ImageName, CommandLineString, CurrentDirectory;
     UNICODE_STRING Desktop, Shell, Runtime, Title;
     WCHAR FullPath[MAX_PATH + 5];
+    WCHAR CurrentDirectoryPath[MAX_PATH + 1];
     PWCHAR DllPathString = NULL;
     LPCWSTR ImagePathName;
     HANDLE ProcessHandle = NULL, ThreadHandle = NULL, DebugHandle = NULL;
@@ -2870,6 +2871,25 @@ BasepCreateUserProcess(IN HANDLE UserToken,
     NTSTATUS Status;
     PS_BNO_ISOLATION_PARAMETERS BnoIsolation;
     ULONG BnoPrefixLength;
+
+    if (CurrentDirectoryName)
+    {
+        DWORD DirectoryAttributes;
+
+        Length = GetFullPathNameW(CurrentDirectoryName, MAX_PATH, CurrentDirectoryPath, NULL);
+        if (!Length || Length > MAX_PATH)
+        {
+            SetLastError(ERROR_DIRECTORY);
+            return FALSE;
+        }
+        DirectoryAttributes = GetFileAttributesW(CurrentDirectoryPath);
+        if (DirectoryAttributes == INVALID_FILE_ATTRIBUTES || !(DirectoryAttributes & FILE_ATTRIBUTE_DIRECTORY))
+        {
+            SetLastError(ERROR_DIRECTORY);
+            return FALSE;
+        }
+        CurrentDirectoryName = CurrentDirectoryPath;
+    }
 
     Length = GetFullPathNameW(ApplicationPathName, ARRAYSIZE(FullPath), FullPath, NULL);
     ImagePathName = (Length && Length < ARRAYSIZE(FullPath)) ? FullPath : ApplicationPathName;
