@@ -1781,4 +1781,32 @@ Ndis6InitializeImDeviceInstance(
     return NDIS_STATUS_SUCCESS;
 }
 
+NDIS_STATUS
+NTAPI
+NdisIMDeInitializeDeviceInstance(
+    _In_ NDIS_HANDLE NdisMiniportHandle)
+{
+    PLOGICAL_ADAPTER Adapter = (PLOGICAL_ADAPTER)NdisMiniportHandle;
+    PNDIS6_ADAPTER_EXT Ext;
+
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL || Adapter == NULL || !Adapter->IsNdis6)
+        return NDIS_STATUS_FAILURE;
+
+    Ext = NDIS6_EXT(Adapter);
+    if (Ext == NULL || Ext->DriverBlock == NULL ||
+        Ext->PhysicalDeviceObject != Ext->FunctionalDeviceObject)
+    {
+        return NDIS_STATUS_FAILURE;
+    }
+
+    if (Ext->Initialized)
+    {
+        Ndis6CallMiniportHaltEx(Adapter, NdisHaltDeviceDisabled);
+        Ext->Initialized = FALSE;
+    }
+
+    Ndis6DestroyLogicalAdapter(Adapter);
+    return NDIS_STATUS_SUCCESS;
+}
+
 /* EOF */

@@ -225,20 +225,6 @@ NdisCompleteQueryStatistics(
 /*
  * @unimplemented
  */
-NDIS_STATUS
-EXPORT
-NdisIMDeInitializeDeviceInstance(
-    IN  NDIS_HANDLE NdisMiniportHandle)
-{
-    UNIMPLEMENTED;
-
-	return NDIS_STATUS_FAILURE;
-}
-
-
-/*
- * @unimplemented
- */
 #undef NdisIMInitializeDeviceInstance
 NDIS_STATUS
 EXPORT
