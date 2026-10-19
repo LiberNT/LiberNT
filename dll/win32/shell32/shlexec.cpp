@@ -147,123 +147,90 @@ static HRESULT TryShellExecuteHooks(LPSHELLEXECUTEINFOW pSEI)
     return hr;
 }
 
-static void ParseNoTildeEffect(PWSTR &res, LPCWSTR &args, DWORD &len, DWORD &used, int argNum)
+static void ArgifyEmit(PWSTR &res, DWORD &len, DWORD &used, WCHAR ch)
 {
-    bool firstCharQuote = false;
-    bool quotes_opened = false;
-    bool backslash_encountered = false;
-
-    for (int curArg = 0; curArg <= argNum && *args; ++curArg)
-    {
-        firstCharQuote = false;
-        if (*args == '"')
-        {
-            quotes_opened = true;
-            firstCharQuote = true;
-            args++;
-        }
-
-        while(*args)
-        {
-            if (*args == '\\')
-            {
-                // if we found a backslash then flip the variable
-                backslash_encountered = !backslash_encountered;
-            }
-            else if (*args == '"')
-            {
-                if (quotes_opened)
-                {
-                    if (*(args + 1) != '"')
-                    {
-                        quotes_opened = false;
-                        args++;
-                        break;
-                    }
-                    else
-                    {
-                        args++;
-                    }
-                }
-                else
-                {
-                    quotes_opened = true;
-                }
-
-                backslash_encountered = false;
-            }
-            else
-            {
-                backslash_encountered = false;
-                if (*args == ' ' && !firstCharQuote)
-                    break;
-            }
-
-            if (curArg == argNum)
-            {
-                used++;
-                if (used < len)
-                    *res++ = *args;
-            }
-
-            args++;
-        }
-
-        while(*args == ' ')
-            ++args;
-    }
+    used++;
+    if (used < len)
+        *res++ = ch;
 }
 
-static void ParseTildeEffect(PWSTR &res, LPCWSTR &args, DWORD &len, DWORD &used, int argNum)
+static BOOL ArgifyQuotedIsClosed(LPCWSTR cursor)
 {
-    bool quotes_opened = false;
-    bool backslash_encountered = false;
+    SIZE_T quotes;
 
-    for (int curArg = 0; curArg <= argNum && *args; ++curArg)
+    while (*cursor)
     {
-        while(*args)
+        if (*cursor != '"')
         {
-            if (*args == '\\')
-            {
-                // if we found a backslash then flip the variable
-                backslash_encountered = !backslash_encountered;
-            }
-            else if (*args == '"')
-            {
-                if (quotes_opened)
-                {
-                    if (*(args + 1) != '"')
-                    {
-                        quotes_opened = false;
-                    }
-                    else
-                    {
-                        args++;
-                    }
-                }
-                else
-                {
-                    quotes_opened = true;
-                }
-
-                backslash_encountered = false;
-            }
-            else
-            {
-                backslash_encountered = false;
-                if (*args == ' ' && !quotes_opened && curArg != argNum)
-                    break;
-            }
-
-            if (curArg == argNum)
-            {
-                used++;
-                if (used < len)
-                    *res++ = *args;
-            }
-
-            args++;
+            cursor++;
+            continue;
         }
+        for (quotes = 0; cursor[quotes] == '"'; quotes++)
+            ;
+        if (quotes & 1)
+            return TRUE;
+        cursor += quotes;
+    }
+    return FALSE;
+}
+
+static LPCWSTR ArgifyParameter(LPCWSTR args, PWSTR &res, DWORD &len, DWORD &used, BOOL emit)
+{
+    BOOL quoted = (*args == '"');
+    LPCWSTR cursor = quoted ? args + 1 : args;
+    SIZE_T quotes, i;
+
+    if (quoted && emit && !ArgifyQuotedIsClosed(cursor))
+        emit = FALSE;
+
+    while (*cursor && (quoted || *cursor != ' '))
+    {
+        if (*cursor != '"')
+        {
+            if (emit)
+                ArgifyEmit(res, len, used, *cursor);
+            cursor++;
+            continue;
+        }
+        for (quotes = 0; cursor[quotes] == '"'; quotes++)
+            ;
+        cursor += quotes;
+        if (emit)
+        {
+            for (i = 0; i < quotes / 2; i++)
+                ArgifyEmit(res, len, used, '"');
+        }
+        if (quotes & 1)
+            break;
+    }
+    return cursor;
+}
+
+static void ArgifyArgument(LPCWSTR args, int index, BOOL tilde, PWSTR &res, DWORD &len, DWORD &used)
+{
+    LPCWSTR end = args, start;
+    int current;
+
+    for (current = 0; ; current++)
+    {
+        if (tilde && current == index)
+        {
+            while (*end)
+                ArgifyEmit(res, len, used, *end++);
+            return;
+        }
+
+        for (start = end; *start == ' '; start++)
+            ;
+        if (!*start)
+            return;
+
+        if (current == index)
+        {
+            ArgifyParameter(start, res, len, used, TRUE);
+            return;
+        }
+        end = ArgifyParameter(start, res, len, used, FALSE);
     }
 }
 
@@ -347,7 +314,14 @@ static BOOL SHELL_ArgifyW(WCHAR* out, DWORD len, const WCHAR* fmt, const WCHAR* 
                 break;
 
                 case '~':
-
+                    if (fmt[1] < '2' || fmt[1] > '9')
+                    {
+                        ArgifyEmit(res, len, used, '%');
+                        ArgifyEmit(res, len, used, '~');
+                        break;
+                    }
+                    fmt++;
+                    tildeEffect = true;
                 case '2':
                 case '3':
                 case '4':
@@ -358,26 +332,9 @@ static BOOL SHELL_ArgifyW(WCHAR* out, DWORD len, const WCHAR* fmt, const WCHAR* 
                 case '9':
                     //case '0':
                 {
-                    if (*fmt == '~')
-                    {
-                        fmt++;
-                        tildeEffect = true;
-                    }
-
                     if (args)
-                    {
-                        LPCWSTR ArgCursor = args;
-
-                        if (tildeEffect)
-                        {
-                            ParseTildeEffect(res, ArgCursor, len, used, *fmt - '2');
-                            tildeEffect = false;
-                        }
-                        else
-                        {
-                            ParseNoTildeEffect(res, ArgCursor, len, used, *fmt - '2');
-                        }
-                    }
+                        ArgifyArgument(args, *fmt - '2', tildeEffect, res, len, used);
+                    tildeEffect = false;
                 };
                 break;
 
@@ -479,44 +436,7 @@ static BOOL SHELL_ArgifyW(WCHAR* out, DWORD len, const WCHAR* fmt, const WCHAR* 
                     break;
 
                 default:
-                    /*
-                     * Check if this is an env-variable here...
-                     */
-
-                    /* Make sure that we have at least one more %.*/
-                    if (strchrW(fmt, '%'))
-                    {
-                        WCHAR   tmpBuffer[1024];
-                        PWSTR   tmpB = tmpBuffer;
-                        WCHAR   tmpEnvBuff[MAX_PATH];
-                        DWORD   envRet;
-
-                        while (*fmt != '%')
-                            *tmpB++ = *fmt++;
-                        *tmpB++ = 0;
-
-                        TRACE("Checking %s to be an env-var\n", debugstr_w(tmpBuffer));
-
-                        envRet = GetEnvironmentVariableW(tmpBuffer, tmpEnvBuff, MAX_PATH);
-                        if (envRet == 0 || envRet > MAX_PATH)
-                        {
-                            used += wcslen(tmpBuffer);
-                            if (used < len)
-                            {
-                                wcscpy( res, tmpBuffer );
-                                res += wcslen(tmpBuffer);
-                            }
-                        }
-                        else
-                        {
-                            used += wcslen(tmpEnvBuff);
-                            if (used < len)
-                            {
-                                wcscpy( res, tmpEnvBuff );
-                                res += wcslen(tmpEnvBuff);
-                            }
-                        }
-                    }
+                    ArgifyEmit(res, len, used, *fmt);
                     done = TRUE;
                     break;
             }
@@ -1009,8 +929,8 @@ static UINT SHELL_FindExecutableByVerb(LPCWSTR lpVerb, LPWSTR key, LPWSTR classn
     wcscat(classname, verb);
     wcscat(classname, L"\\command");
 
-    if (RegQueryValueW(HKEY_CLASSES_ROOT, classname, command,
-                       &commandlen) == ERROR_SUCCESS)
+    if (SHGetValueW(HKEY_CLASSES_ROOT, classname, NULL, NULL, command,
+                    (DWORD *)&commandlen) == ERROR_SUCCESS)
     {
         commandlen /= sizeof(WCHAR);
         if (key) wcscpy(key, classname);
@@ -1524,7 +1444,7 @@ static UINT_PTR execute_from_key(LPCWSTR key, LPCWSTR lpFile, WCHAR *env,
     param[0] = '\0';
 
     /* Get the application from the registry */
-    if (RegQueryValueW(HKEY_CLASSES_ROOT, key, cmd, (LONG *)&cmdlen) == ERROR_SUCCESS)
+    if (SHGetValueW(HKEY_CLASSES_ROOT, key, NULL, NULL, cmd, &cmdlen) == ERROR_SUCCESS)
     {
         TRACE("got cmd: %s\n", debugstr_w(cmd));
 
