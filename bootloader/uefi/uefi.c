@@ -176,6 +176,63 @@ FwGetDisk(
 }
 
 static
+SIZE_T
+FwDevicePathSize(
+    _In_ EFI_DEVICE_PATH_PROTOCOL* Path)
+{
+    EFI_DEVICE_PATH_PROTOCOL* Node;
+
+    for (Node = Path; !IsDevicePathEnd(Node); Node = NextDevicePathNode(Node))
+        ;
+
+    return (PUCHAR)Node - (PUCHAR)Path;
+}
+
+BOOLEAN
+FwGetBootDiskIndex(
+    _Out_ PULONG Index)
+{
+    EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
+    EFI_DEVICE_PATH_PROTOCOL *BootPath, *DiskPath, *Node;
+    EFI_HANDLE Handle = FwGetBootDeviceHandle();
+    DK_DEVICE Disk;
+    SIZE_T Size;
+    ULONG Count;
+    UINTN i;
+
+    if (!Handle ||
+        EFI_ERROR(BootServices->HandleProtocol(Handle, &FwDevicePathGuid, (VOID**)&BootPath)) ||
+        !FwGetDisk(0, &Disk))
+    {
+        return FALSE;
+    }
+
+    for (i = 0, Count = 0; i < FwDiskHandleCount; i++)
+    {
+        if (!FwOpenBlockDevice(FwDiskHandles[i], TRUE, &Disk))
+            continue;
+
+        if (!EFI_ERROR(BootServices->HandleProtocol(FwDiskHandles[i], &FwDevicePathGuid, (VOID**)&DiskPath)))
+        {
+            Size = FwDevicePathSize(DiskPath);
+            Node = (EFI_DEVICE_PATH_PROTOCOL*)((PUCHAR)BootPath + Size);
+            if (Size < FwDevicePathSize(BootPath) &&
+                RtlEqualMemory(BootPath, DiskPath, Size) &&
+                DevicePathType(Node) == MEDIA_DEVICE_PATH &&
+                DevicePathSubType(Node) == MEDIA_HARDDRIVE_DP)
+            {
+                *Index = Count;
+                return TRUE;
+            }
+        }
+
+        Count++;
+    }
+
+    return FALSE;
+}
+
+static
 VOID
 FwFreeDiskHandles(VOID)
 {

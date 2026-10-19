@@ -170,6 +170,10 @@ FwGetLoadOptions(
     _Out_ PULONG Chars);
 
 BOOLEAN
+FwGetBootDiskIndex(
+    _Out_ PULONG Index);
+
+BOOLEAN
 FwGetBootPartition(
     _Out_ PULONG PartitionNumber,
     _Out_writes_bytes_(16) PUCHAR Signature,

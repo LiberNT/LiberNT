@@ -732,6 +732,17 @@ FwGetBootDevice(
 }
 
 BOOLEAN
+FwGetBootDiskIndex(
+    _Out_ PULONG Index)
+{
+    if (OfwParameters->BootDisk == MAXULONG)
+        return FALSE;
+
+    *Index = OfwParameters->BootDisk;
+    return TRUE;
+}
+
+BOOLEAN
 FwGetBootPartition(
     _Out_ PULONG PartitionNumber,
     _Out_writes_bytes_(16) PUCHAR Signature,

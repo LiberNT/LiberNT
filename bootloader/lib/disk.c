@@ -199,6 +199,20 @@ DkFindMbrPartition(
     return FALSE;
 }
 
+static
+BOOLEAN
+DkMatchBcdPartition(
+    _In_ PBCD_DEVICE BcdDevice,
+    _In_ ULONG Index,
+    _Inout_ PDK_DEVICE Disk,
+    _Out_ PDK_DEVICE Device)
+{
+    Disk->DiskIndex = Index;
+    return BcdDevice->Type == BcdDeviceGptPartition ?
+           GptFindPartition(Disk, BcdDevice->Disk, BcdDevice->Partition, Device) :
+           DkFindMbrPartition(Disk, BcdDevice->Signature, BcdDevice->PartitionOffset, Device);
+}
+
 BOOLEAN
 DkOpenBcdDevice(
     _In_ PBCD_DEVICE BcdDevice,
@@ -214,17 +228,19 @@ DkOpenBcdDevice(
 
         case BcdDeviceGptPartition:
         case BcdDeviceMbrPartition:
+            if (FwGetBootDiskIndex(&Index) &&
+                FwGetDisk(Index, &Disk) &&
+                DkMatchBcdPartition(BcdDevice, Index, &Disk, Device))
+            {
+                return TRUE;
+            }
+
             do
             {
                 for (Index = 0; FwGetDisk(Index, &Disk); Index++)
                 {
-                    Disk.DiskIndex = Index;
-                    if (BcdDevice->Type == BcdDeviceGptPartition ?
-                        GptFindPartition(&Disk, BcdDevice->Disk, BcdDevice->Partition, Device) :
-                        DkFindMbrPartition(&Disk, BcdDevice->Signature, BcdDevice->PartitionOffset, Device))
-                    {
+                    if (DkMatchBcdPartition(BcdDevice, Index, &Disk, Device))
                         return TRUE;
-                    }
                 }
             } while (FwRescanDisks());
             break;
@@ -240,14 +256,18 @@ DkLocateBootPartition(
     UCHAR Signature[16];
     UCHAR Sector[512];
     DK_DEVICE Disk;
-    ULONG Number, Index;
-    BOOLEAN IsGpt;
+    ULONG Number, Index, BootIndex;
+    BOOLEAN IsGpt, HaveBootIndex;
 
     if (!FwGetBootPartition(&Number, Signature, &IsGpt))
         return FALSE;
 
+    HaveBootIndex = FwGetBootDiskIndex(&BootIndex);
     for (Index = 0; FwGetDisk(Index, &Disk); Index++)
     {
+        if (HaveBootIndex && Index != BootIndex)
+            continue;
+
         Disk.DiskIndex = Index;
 
         if (IsGpt)
