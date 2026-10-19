@@ -129,6 +129,15 @@ static void copy_bits(unsigned char *dst, const unsigned char *src, int count, i
     }
 }
 
+static ULONG array_index_min(const struct hid_value_caps *caps)
+{
+    const struct hid_value_caps *end = caps;
+
+    while (end->flags & HID_VALUE_CAPS_ARRAY_HAS_MORE) end++;
+    if (!caps->usage_min) return (ULONG)(end - caps);
+    return (ULONG)(end - caps + 1);
+}
+
 static LONG mul_div(LONG a, LONG b, LONG c)
 {
     LONGLONG ret;
@@ -401,7 +410,6 @@ struct get_usage_params
 
 static NTSTATUS get_usage(const struct hid_value_caps *caps, void *user)
 {
-    const struct hid_value_caps *end = caps;
     ULONG index_min, index_max, bit, last;
     struct get_usage_params *params = user;
     unsigned char *report_buf;
@@ -411,8 +419,7 @@ static NTSTATUS get_usage(const struct hid_value_caps *caps, void *user)
 
     if (HID_VALUE_CAPS_IS_ARRAY(caps))
     {
-        while (end->flags & HID_VALUE_CAPS_ARRAY_HAS_MORE) end++;
-        index_min = (ULONG)(end - caps + 1);
+        index_min = array_index_min(caps);
         index_max = index_min + caps->usage_max - caps->usage_min;
 
         for (bit = caps->start_bit, last = bit + caps->report_count * caps->bit_size - 1; bit <= last; bit += 8)
@@ -462,6 +469,7 @@ HidP_GetUsages(
 
     if (!ReportLength) return HIDP_STATUS_INVALID_REPORT_LENGTH;
 
+    RtlZeroMemory(UsageList, *UsageLength * sizeof(*UsageList));
     filter.report_id = Report[0];
     status = enum_value_caps((struct hid_preparsed_data *)PreparsedData, ReportType, ReportLength, &filter,
                              get_usage, &params, &limit);
@@ -690,7 +698,6 @@ struct set_usage_params
 
 static NTSTATUS set_usage(const struct hid_value_caps *caps, void *user)
 {
-    const struct hid_value_caps *end = caps;
     struct set_usage_params *params = user;
     ULONG index_min, bit, last;
     unsigned char *report_buf;
@@ -699,8 +706,7 @@ static NTSTATUS set_usage(const struct hid_value_caps *caps, void *user)
 
     if (HID_VALUE_CAPS_IS_ARRAY(caps))
     {
-        while (end->flags & HID_VALUE_CAPS_ARRAY_HAS_MORE) end++;
-        index_min = (ULONG)(end - caps + 1);
+        index_min = array_index_min(caps);
 
         for (bit = caps->start_bit, last = bit + caps->report_count * caps->bit_size - 1; bit <= last; bit += 8)
         {
@@ -767,7 +773,6 @@ struct unset_usage_params
 static NTSTATUS unset_usage(const struct hid_value_caps *caps, void *user)
 {
     ULONG index, index_min, index_max, bit, last;
-    const struct hid_value_caps *end = caps;
     struct unset_usage_params *params = user;
     unsigned char *report_buf;
 
@@ -775,8 +780,7 @@ static NTSTATUS unset_usage(const struct hid_value_caps *caps, void *user)
 
     if (HID_VALUE_CAPS_IS_ARRAY(caps))
     {
-        while (end->flags & HID_VALUE_CAPS_ARRAY_HAS_MORE) end++;
-        index_min = (ULONG)(end - caps + 1);
+        index_min = array_index_min(caps);
         index_max = index_min + caps->usage_max - caps->usage_min;
 
         for (bit = caps->start_bit, last = bit + caps->report_count * caps->bit_size - 1; bit <= last; bit += 8)
@@ -1059,7 +1063,6 @@ struct get_usage_and_page_params
 static NTSTATUS get_usage_and_page(const struct hid_value_caps *caps, void *user)
 {
     struct get_usage_and_page_params *params = user;
-    const struct hid_value_caps *end = caps;
     ULONG index_min, index_max, bit, last;
     unsigned char *report_buf;
     UCHAR index;
@@ -1068,8 +1071,7 @@ static NTSTATUS get_usage_and_page(const struct hid_value_caps *caps, void *user
 
     if (HID_VALUE_CAPS_IS_ARRAY(caps))
     {
-        while (end->flags & HID_VALUE_CAPS_ARRAY_HAS_MORE) end++;
-        index_min = (ULONG)(end - caps + 1);
+        index_min = array_index_min(caps);
         index_max = index_min + caps->usage_max - caps->usage_min;
 
         for (bit = caps->start_bit, last = bit + caps->report_count * caps->bit_size - 1; bit <= last; bit += 8)
@@ -1126,6 +1128,7 @@ HidP_GetUsagesEx(
 
     if (!ReportLength) return HIDP_STATUS_INVALID_REPORT_LENGTH;
 
+    RtlZeroMemory(ButtonList, *UsageLength * sizeof(*ButtonList));
     filter.report_id = Report[0];
     status = enum_value_caps((struct hid_preparsed_data *)PreparsedData, ReportType, ReportLength, &filter,
                              get_usage_and_page, &params, &limit);
@@ -1175,7 +1178,6 @@ static NTSTATUS find_all_data(const struct hid_value_caps *caps, void *user)
     struct find_all_data_params *params = user;
     HIDP_DATA *data = params->data, *data_end = params->data_end;
     ULONG index_min, index_max, bit, last, bit_count;
-    const struct hid_value_caps *end = caps;
     unsigned char *report_buf;
     UCHAR index;
 
@@ -1185,8 +1187,7 @@ static NTSTATUS find_all_data(const struct hid_value_caps *caps, void *user)
 
     if (HID_VALUE_CAPS_IS_ARRAY(caps))
     {
-        while (end->flags & HID_VALUE_CAPS_ARRAY_HAS_MORE) end++;
-        index_min = (ULONG)(end - caps + 1);
+        index_min = array_index_min(caps);
         index_max = index_min + caps->usage_max - caps->usage_min;
 
         for (bit = caps->start_bit, last = bit + caps->report_count * caps->bit_size - 1; bit <= last; bit += 8)
@@ -1308,7 +1309,6 @@ struct set_data_params
 static NTSTATUS set_data(const struct hid_value_caps *caps, void *user)
 {
     ULONG index_min, index_max, index, lookup, bit, last, mask, bit_count;
-    const struct hid_value_caps *end = caps;
     struct set_data_params *params = user;
     HIDP_DATA *data = params->data;
     unsigned char *report_buf;
@@ -1324,8 +1324,7 @@ static NTSTATUS set_data(const struct hid_value_caps *caps, void *user)
     {
         if (!(caps->flags & HID_VALUE_CAPS_IS_RANGE)) return HIDP_STATUS_IS_VALUE_ARRAY;
 
-        while (end->flags & HID_VALUE_CAPS_ARRAY_HAS_MORE) end++;
-        index_min = (ULONG)(end - caps + 1);
+        index_min = array_index_min(caps);
         index_max = index_min + caps->usage_max - caps->usage_min;
         lookup = index_min + data->DataIndex - caps->data_index_min;
 
