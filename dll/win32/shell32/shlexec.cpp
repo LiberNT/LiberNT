@@ -328,14 +328,16 @@ static BOOL SHELL_ArgifyW(WCHAR* out, DWORD len, const WCHAR* fmt, const WCHAR* 
                     {
                         if (*fmt == '*')
                         {
+                            LPCWSTR AllArgs = args;
+
                             used++;
-                            while(*args)
+                            while(*AllArgs)
                             {
                                 used++;
                                 if (used < len)
-                                    *res++ = *args++;
+                                    *res++ = *AllArgs++;
                                 else
-                                    args++;
+                                    AllArgs++;
                             }
                             used++;
                             break;
@@ -364,14 +366,16 @@ static BOOL SHELL_ArgifyW(WCHAR* out, DWORD len, const WCHAR* fmt, const WCHAR* 
 
                     if (args)
                     {
+                        LPCWSTR ArgCursor = args;
+
                         if (tildeEffect)
                         {
-                            ParseTildeEffect(res, args, len, used, *fmt - '2');
+                            ParseTildeEffect(res, ArgCursor, len, used, *fmt - '2');
                             tildeEffect = false;
                         }
                         else
                         {
-                            ParseNoTildeEffect(res, args, len, used, *fmt - '2');
+                            ParseNoTildeEffect(res, ArgCursor, len, used, *fmt - '2');
                         }
                     }
                 };
@@ -984,6 +988,15 @@ static UINT SHELL_FindExecutableByVerb(LPCWSTR lpVerb, LPWSTR key, LPWSTR classn
 {
     HKEY hkeyClass;
     WCHAR verb[MAX_PATH];
+
+    if (*classname == L'.')
+    {
+        WCHAR ProgId[MAX_PATH];
+        LONG Length = sizeof(ProgId);
+
+        if (!RegQueryValueW(HKEY_CLASSES_ROOT, classname, ProgId, &Length) && *ProgId)
+            wcscpy(classname, ProgId);
+    }
 
     if (RegOpenKeyExW(HKEY_CLASSES_ROOT, classname, 0, KEY_READ, &hkeyClass))
         return SE_ERR_NOASSOC;
@@ -2490,6 +2503,18 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
         }
     }
 
+    if (PathIsRelativeW(wszDir))
+    {
+        WCHAR FullDir[MAX_PATH];
+        DWORD FullDirLength = GetFullPathNameW(wszDir, _countof(FullDir), FullDir, NULL);
+
+        if (FullDirLength && FullDirLength < _countof(FullDir))
+        {
+            StringCchCopyW(dirBuffer, _countof(dirBuffer), FullDir);
+            wszDir = dirBuffer;
+        }
+    }
+
     /* adjust string pointers to point to the new buffers */
     sei_tmp.lpFile = wszApplicationName;
     sei_tmp.lpParameters = wszParameters;
@@ -2691,6 +2716,16 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
     /* Only execute if it has an executable extension */
     if (PathIsExeW(lpFile))
     {
+        WCHAR wszExePath[MAX_PATH];
+        LPCWSTR SearchPaths[] = { sei_tmp.lpDirectory, NULL };
+
+        if ((UINT)lstrlenW(wszApplicationName) < _countof(wszExePath) && PathIsFileSpecW(wszApplicationName))
+        {
+            StringCchCopyW(wszExePath, _countof(wszExePath), wszApplicationName);
+            if (PathFindOnPathW(wszExePath, SearchPaths))
+                StringCchCopyW(wszApplicationName, dwApplicationNameLen, wszExePath);
+        }
+
         len = lstrlenW(wszApplicationName) + 3;
         if (sei_tmp.lpParameters[0])
             len += 1 + lstrlenW(wszParameters);
