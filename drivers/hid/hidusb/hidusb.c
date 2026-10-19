@@ -1282,11 +1282,10 @@ HidInternalDeviceControl(
         }
         case IOCTL_GET_PHYSICAL_DESCRIPTOR:
         {
-            DPRINT1("[HIDUSB] IOCTL_GET_PHYSICAL_DESCRIPTOR not implemented \n");
-            ASSERT(FALSE);
-            Irp->IoStatus.Status = STATUS_NOT_IMPLEMENTED;
+            Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+            Irp->IoStatus.Information = 0;
             IoCompleteRequest(Irp, IO_NO_INCREMENT);
-            return STATUS_NOT_IMPLEMENTED;
+            return STATUS_NOT_SUPPORTED;
         }
         case IOCTL_HID_SEND_IDLE_NOTIFICATION_REQUEST:
         {
