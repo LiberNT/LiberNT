@@ -1099,8 +1099,6 @@ static LSTATUS profile_open_key( HKEY root, const WCHAR *name, ACCESS_MASK acces
     const WCHAR *start, *end;
     NTSTATUS status;
 
-    access &= ~(KEY_WOW64_64KEY | KEY_WOW64_32KEY);
-
     if (root == HKEY_LOCAL_MACHINE)
     {
         RtlInitUnicodeString( &str, L"\\Registry\\Machine" );
@@ -1136,7 +1134,7 @@ static LSTATUS profile_open_key( HKEY root, const WCHAR *name, ACCESS_MASK acces
             str.Length = str.MaximumLength = (USHORT)((end - start) * sizeof(WCHAR));
             InitializeObjectAttributes( &attr, &str, OBJ_CASE_INSENSITIVE, current, NULL );
             while (*end == '\\') end++;
-            status = NtCreateKey( &handle, *end ? KEY_CREATE_SUB_KEY : access, &attr, 0, NULL, 0, NULL );
+            status = NtCreateKey( &handle, *end ? KEY_CREATE_SUB_KEY | (access & KEY_WOW64_RES) : access, &attr, 0, NULL, 0, NULL );
             if (current != parent) NtClose( current );
             if (!NT_SUCCESS(status) || !*end) break;
             current = handle;
