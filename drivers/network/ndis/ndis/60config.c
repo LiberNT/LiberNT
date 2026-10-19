@@ -62,6 +62,7 @@ NdisOpenConfigurationEx(
     ULONG Signature;
     HANDLE KeyHandle;
     NTSTATUS Status;
+    BOOLEAN AdapterKey = FALSE;
 
     if (Obj == NULL || ConfigurationHandle == NULL || Obj->NdisHandle == NULL)
         return NDIS_STATUS_INVALID_PARAMETER;
@@ -120,6 +121,7 @@ NdisOpenConfigurationEx(
             PLUGPLAY_REGKEY_DRIVER,
             KEY_ALL_ACCESS,
             &KeyHandle);
+        AdapterKey = TRUE;
     }
 
     if (!NT_SUCCESS(Status))
@@ -138,6 +140,7 @@ NdisOpenConfigurationEx(
     KeInitializeSpinLock(&Ctx->ResourceLock);
     InitializeListHead(&Ctx->ResourceListHead);
     Ctx->Handle = KeyHandle;
+    Ctx->AdapterDefaults = AdapterKey;
 
     *ConfigurationHandle = (NDIS_HANDLE)Ctx;
     return NDIS_STATUS_SUCCESS;

@@ -248,6 +248,7 @@ NdisOpenConfiguration(
     InitializeListHead(&ConfigurationContext->ResourceListHead);
 
     ConfigurationContext->Handle = KeyHandle;
+    ConfigurationContext->AdapterDefaults = TRUE;
 
     *ConfigurationHandle = (NDIS_HANDLE)ConfigurationContext;
     *Status = NDIS_STATUS_SUCCESS;
@@ -324,6 +325,7 @@ NdisOpenProtocolConfiguration(
     InitializeListHead(&ConfigurationContext->ResourceListHead);
 
     ConfigurationContext->Handle = KeyHandle;
+    ConfigurationContext->AdapterDefaults = FALSE;
 
     *ConfigurationHandle = (NDIS_HANDLE)ConfigurationContext;
     *Status = NDIS_STATUS_SUCCESS;
@@ -406,6 +408,18 @@ IsValidNumericString(PNDIS_STRING String, ULONG Base)
     return TRUE;
 }
 
+static
+NTSTATUS
+MiniportOpenAdapterDefaults(
+    OUT PHANDLE KeyHandle)
+{
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Services\\Ndis\\Parameters\\AdapterDefaults");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    return ZwOpenKey(KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes);
+}
+
 /*
  * @implemented
  */
@@ -438,6 +452,8 @@ NdisReadConfiguration(
     PMINIPORT_RESOURCE MiniportResource;
     PMINIPORT_CONFIGURATION_CONTEXT ConfigurationContext = (PMINIPORT_CONFIGURATION_CONTEXT)ConfigurationHandle;
     PVOID Buffer;
+    HANDLE ValueKey;
+    HANDLE DefaultsKey = NULL;
 
     //*ParameterValue = NULL;
     *Status = NDIS_STATUS_FAILURE;
@@ -559,10 +575,20 @@ NdisReadConfiguration(
     }
 
     /* figure out how much buffer i should allocate */
-    *Status = ZwQueryValueKey(ConfigurationContext->Handle, Keyword, KeyValuePartialInformation, NULL, 0, &KeyDataLength);
+    ValueKey = ConfigurationContext->Handle;
+    *Status = ZwQueryValueKey(ValueKey, Keyword, KeyValuePartialInformation, NULL, 0, &KeyDataLength);
+    if (*Status == STATUS_OBJECT_NAME_NOT_FOUND &&
+        ConfigurationContext->AdapterDefaults &&
+        NT_SUCCESS(MiniportOpenAdapterDefaults(&DefaultsKey)))
+    {
+        ValueKey = DefaultsKey;
+        *Status = ZwQueryValueKey(ValueKey, Keyword, KeyValuePartialInformation, NULL, 0, &KeyDataLength);
+    }
     if(*Status != STATUS_BUFFER_OVERFLOW && *Status != STATUS_BUFFER_TOO_SMALL && *Status != STATUS_SUCCESS)
     {
         NDIS_DbgPrint(MID_TRACE,("ZwQueryValueKey #1 failed for %wZ, status 0x%x\n", Keyword, *Status));
+        if (DefaultsKey != NULL)
+            ZwClose(DefaultsKey);
         *Status = NDIS_STATUS_FAILURE;
         return;
     }
@@ -572,13 +598,17 @@ NdisReadConfiguration(
     if(!KeyInformation)
     {
         NDIS_DbgPrint(MIN_TRACE,("Insufficient resources.\n"));
+        if (DefaultsKey != NULL)
+            ZwClose(DefaultsKey);
         *Status = NDIS_STATUS_RESOURCES;
         return;
     }
 
     /* grab the value */
-    *Status = ZwQueryValueKey(ConfigurationContext->Handle, Keyword, KeyValuePartialInformation,
+    *Status = ZwQueryValueKey(ValueKey, Keyword, KeyValuePartialInformation,
         KeyInformation, KeyDataLength + sizeof(KEY_VALUE_PARTIAL_INFORMATION), &KeyDataLength);
+    if (DefaultsKey != NULL)
+        ZwClose(DefaultsKey);
     if(*Status != STATUS_SUCCESS)
     {
         ExFreePool(KeyInformation);
@@ -947,6 +977,7 @@ NdisOpenConfigurationKeyByIndex(
     InitializeListHead(&ConfigurationContext->ResourceListHead);
 
     ConfigurationContext->Handle = RegKeyHandle;
+    ConfigurationContext->AdapterDefaults = FALSE;
 
     *KeyHandle = (NDIS_HANDLE)ConfigurationContext;
 
@@ -1007,6 +1038,7 @@ NdisOpenConfigurationKeyByName(
     InitializeListHead(&ConfigurationContext->ResourceListHead);
 
     ConfigurationContext->Handle = RegKeyHandle;
+    ConfigurationContext->AdapterDefaults = FALSE;
 
     *KeyHandle = (NDIS_HANDLE)ConfigurationContext;
 

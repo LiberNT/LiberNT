@@ -51,6 +51,7 @@ typedef struct _MINIPORT_CONFIGURATION_CONTEXT {
     NDIS_HANDLE    Handle;
     LIST_ENTRY     ResourceListHead;
     KSPIN_LOCK     ResourceLock;
+    BOOLEAN        AdapterDefaults;
 } MINIPORT_CONFIGURATION_CONTEXT, *PMINIPORT_CONFIGURATION_CONTEXT;
 
 /* Bugcheck callback context */
