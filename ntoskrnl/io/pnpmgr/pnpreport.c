@@ -27,6 +27,10 @@ typedef struct _INTERNAL_WORK_QUEUE_ITEM
 #define DRVO_ROOT_DEVICE_REPORTED 0x00000800
 
 static EX_PUSH_LOCK IopRootDeviceReportLock;
+static LIST_ENTRY IopTargetChangeAsyncList = { &IopTargetChangeAsyncList, &IopTargetChangeAsyncList };
+static KSPIN_LOCK IopTargetChangeAsyncLock;
+static BOOLEAN IopTargetChangeAsyncActive;
+static WORK_QUEUE_ITEM IopTargetChangeAsyncWorkItem;
 
 NTSTATUS
 IopSetDeviceInstanceData(HANDLE InstanceKey,
@@ -303,11 +307,26 @@ NTAPI
 IopReportTargetDeviceChangeAsyncWorker(PVOID Context)
 {
     PINTERNAL_WORK_QUEUE_ITEM Item;
+    KIRQL OldIrql;
 
-    Item = (PINTERNAL_WORK_QUEUE_ITEM)Context;
-    PpSetCustomTargetEvent(Item->PhysicalDeviceObject, NULL, NULL, Item->Callback, Item->Context, &Item->NotificationStructure);
-    ObDereferenceObject(Item->PhysicalDeviceObject);
-    ExFreePoolWithTag(Context, '  pP');
+    UNREFERENCED_PARAMETER(Context);
+
+    for (;;)
+    {
+        KeAcquireSpinLock(&IopTargetChangeAsyncLock, &OldIrql);
+        if (IsListEmpty(&IopTargetChangeAsyncList))
+        {
+            IopTargetChangeAsyncActive = FALSE;
+            KeReleaseSpinLock(&IopTargetChangeAsyncLock, OldIrql);
+            return;
+        }
+        Item = CONTAINING_RECORD(RemoveHeadList(&IopTargetChangeAsyncList), INTERNAL_WORK_QUEUE_ITEM, WorkItem.List);
+        KeReleaseSpinLock(&IopTargetChangeAsyncLock, OldIrql);
+
+        PpSetCustomTargetEvent(Item->PhysicalDeviceObject, NULL, NULL, Item->Callback, Item->Context, &Item->NotificationStructure);
+        ObDereferenceObject(Item->PhysicalDeviceObject);
+        ExFreePoolWithTag(Item, '  pP');
+    }
 }
 
 NTSTATUS
@@ -717,6 +736,8 @@ IoReportTargetDeviceChangeAsynchronous(IN PDEVICE_OBJECT PhysicalDeviceObject,
     PINTERNAL_WORK_QUEUE_ITEM Item = NULL;
     PTARGET_DEVICE_CUSTOM_NOTIFICATION notifyStruct = (PTARGET_DEVICE_CUSTOM_NOTIFICATION)NotificationStructure;
     SIZE_T WorkItemSize;
+    BOOLEAN StartWorker;
+    KIRQL OldIrql;
 
     ASSERT(notifyStruct);
 
@@ -756,10 +777,18 @@ IoReportTargetDeviceChangeAsynchronous(IN PDEVICE_OBJECT PhysicalDeviceObject,
     Item->Callback = Callback;
     Item->Context = Context;
     RtlCopyMemory(&Item->NotificationStructure, notifyStruct, notifyStruct->Size);
-    ExInitializeWorkItem(&(Item->WorkItem), IopReportTargetDeviceChangeAsyncWorker, Item);
 
-    /* Finally, queue the item, our work here is done */
-    ExQueueWorkItem(&(Item->WorkItem), DelayedWorkQueue);
+    KeAcquireSpinLock(&IopTargetChangeAsyncLock, &OldIrql);
+    InsertTailList(&IopTargetChangeAsyncList, &Item->WorkItem.List);
+    StartWorker = !IopTargetChangeAsyncActive;
+    IopTargetChangeAsyncActive = TRUE;
+    KeReleaseSpinLock(&IopTargetChangeAsyncLock, OldIrql);
+
+    if (StartWorker)
+    {
+        ExInitializeWorkItem(&IopTargetChangeAsyncWorkItem, IopReportTargetDeviceChangeAsyncWorker, NULL);
+        ExQueueWorkItem(&IopTargetChangeAsyncWorkItem, DelayedWorkQueue);
+    }
 
     return STATUS_SUCCESS;
 }
