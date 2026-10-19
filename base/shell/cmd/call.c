@@ -207,7 +207,7 @@ INT cmd_call(LPTSTR param)
     }
     else
     {
-        nErrorLevel = DoCommand(first, param, NULL);
+        nErrorLevel = DoCallCommand(first, param);
     }
 
     FreeCommand(Cmd);

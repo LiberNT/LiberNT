@@ -636,6 +636,37 @@ DoCommand(LPTSTR first, LPTSTR rest, PARSED_COMMAND *Cmd)
 }
 
 
+INT
+DoCallCommand(LPTSTR first, LPTSTR rest)
+{
+    TCHAR szName[MAX_PATH];
+    TCHAR szFullName[MAX_PATH];
+    SIZE_T Length;
+    TCHAR *com;
+    INT ret;
+
+    Length = _tcscspn(first, _T("\t +,/;=[]"));
+    if (Length == 0 || Length >= ARRAYSIZE(szName))
+        return DoCommand(first, rest, NULL);
+
+    _tcsncpy(szName, first, Length);
+    szName[Length] = _T('\0');
+    StripQuotes(szName);
+    if (!SearchForExecutable(szName, szFullName))
+        return DoCommand(first, rest, NULL);
+
+    com = cmd_alloc((_tcslen(first) + _tcslen(rest) + 2) * sizeof(TCHAR));
+    if (com == NULL)
+    {
+        error_out_of_memory();
+        return 1;
+    }
+
+    ret = Execute(com, first, rest, NULL);
+    cmd_free(com);
+    return ret;
+}
+
 /*
  * process the command line and execute the appropriate functions
  * full input/output redirection and piping are supported

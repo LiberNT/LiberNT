@@ -121,6 +121,7 @@ DoDelayedExpansion(
     IN PCTSTR Line);
 
 INT DoCommand(LPTSTR first, LPTSTR rest, struct _PARSED_COMMAND *Cmd);
+INT DoCallCommand(LPTSTR first, LPTSTR rest);
 BOOL ReadLine(TCHAR *commandline, BOOL bMore);
 
 extern HANDLE CMD_ModuleHandle;
