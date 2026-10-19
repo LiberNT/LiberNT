@@ -408,7 +408,9 @@ static const struct strmbase_filter_ops filter_ops =
 static DWORD CALLBACK io_thread(void *arg)
 {
     struct async_reader *filter = arg;
+#ifndef __REACTOS__
     struct request *req;
+#endif
     OVERLAPPED *ovl;
     ULONG_PTR key;
     DWORD size;
@@ -425,6 +427,9 @@ static DWORD CALLBACK io_thread(void *arg)
 
         EnterCriticalSection(&filter->sample_cs);
 
+#ifdef __REACTOS__
+        WakeAllConditionVariable(&filter->sample_cv);
+#else
         req = CONTAINING_RECORD(ovl, struct request, ovl);
         TRACE("Got sample %Iu.\n", req - filter->requests);
         assert(req >= filter->requests && req < filter->requests + filter->max_requests);
@@ -436,6 +441,7 @@ static DWORD CALLBACK io_thread(void *arg)
             ERR("GetQueuedCompletionStatus() returned failure, error %lu.\n", GetLastError());
             req->sample = NULL;
         }
+#endif
 
         LeaveCriticalSection(&filter->sample_cs);
     }
@@ -503,6 +509,9 @@ static HRESULT WINAPI FileSource_Load(IFileSourceFilter * iface, LPCOLESTR pszFi
     {
         return HRESULT_FROM_WIN32(GetLastError());
     }
+#ifdef __REACTOS__
+    CreateIoCompletionPort(hFile, This->port, 0, 0);
+#endif
 
     if (!GetFileSizeEx(hFile, &This->file_size))
     {
@@ -808,6 +817,22 @@ static HRESULT WINAPI FileAsyncReader_WaitForNext(IAsyncReader *iface,
     {
         if (filter->flushing)
         {
+#ifdef __REACTOS__
+            for (i = 0; i < filter->max_requests; ++i)
+            {
+                struct request *req = &filter->requests[i];
+
+                if (req->sample)
+                {
+                    IMediaSample_SetActualDataLength(req->sample, 0);
+                    *sample = req->sample;
+                    *cookie = req->cookie;
+                    req->sample = NULL;
+                    LeaveCriticalSection(&filter->sample_cs);
+                    return VFW_E_TIMEOUT;
+                }
+            }
+#endif
             LeaveCriticalSection(&filter->sample_cs);
             return VFW_E_WRONG_STATE;
         }
@@ -834,6 +859,20 @@ static HRESULT WINAPI FileAsyncReader_WaitForNext(IAsyncReader *iface,
                 TRACE("Returning sample %u.\n", i);
                 return S_OK;
             }
+#ifdef __REACTOS__
+            else if (req->sample && GetLastError() != ERROR_IO_INCOMPLETE)
+            {
+                HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
+
+                IMediaSample_SetActualDataLength(req->sample, 0);
+                *sample = req->sample;
+                *cookie = req->cookie;
+                req->sample = NULL;
+
+                LeaveCriticalSection(&filter->sample_cs);
+                return hr;
+            }
+#endif
         }
     } while (SleepConditionVariableCS(&filter->sample_cv, &filter->sample_cs, timeout));
 
@@ -939,9 +978,20 @@ static HRESULT WINAPI FileAsyncReader_BeginFlush(IAsyncReader * iface)
     EnterCriticalSection(&filter->sample_cs);
 
     filter->flushing = TRUE;
+#ifdef __REACTOS__
+    CancelIoEx(filter->file, NULL);
+    for (i = 0; i < filter->max_requests; ++i)
+    {
+        DWORD size;
+
+        if (filter->requests[i].sample)
+            GetOverlappedResult(filter->file, &filter->requests[i].ovl, &size, TRUE);
+    }
+#else
     for (i = 0; i < filter->max_requests; ++i)
         filter->requests[i].sample = NULL;
     CancelIoEx(filter->file, NULL);
+#endif
     WakeAllConditionVariable(&filter->sample_cv);
 
     LeaveCriticalSection(&filter->sample_cs);
@@ -958,6 +1008,14 @@ static HRESULT WINAPI FileAsyncReader_EndFlush(IAsyncReader * iface)
     EnterCriticalSection(&filter->sample_cs);
 
     filter->flushing = FALSE;
+#ifdef __REACTOS__
+    {
+        unsigned int i;
+
+        for (i = 0; i < filter->max_requests; ++i)
+            filter->requests[i].sample = NULL;
+    }
+#endif
 
     LeaveCriticalSection(&filter->sample_cs);
 
