@@ -701,6 +701,12 @@ UserAttachThreadInput(PTHREADINFO ptiFrom, PTHREADINFO ptiTo, BOOL fAttach)
               {
                  ptiFrom->MessageQueue->spwndActive = spwndActive;
                  ptiTo->MessageQueue->spwndActive = 0;
+                 if (ptiTo->MessageQueue == gpqForeground)
+                 {
+                    IntSetFocusMessageQueue(NULL);
+                    IntSetFocusMessageQueue(ptiFrom->MessageQueue);
+                    IntSetForegroundThread(ptiFrom);
+                 }
               }
            }
            if (spwndFocus)
