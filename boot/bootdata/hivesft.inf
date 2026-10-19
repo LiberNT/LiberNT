@@ -969,6 +969,9 @@ HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers",,0x000
 ; Version Information
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","InstallDate",0x00010003,0
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","ProductName",2,"LiberNT"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","InstallationType",2,"Client"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","DisplayVersion",2,"24H2"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","ReleaseId",2,"2009"
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","RegDone",0x00000002,""
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","RegisteredOrganization",2,""
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","RegisteredOwner",2,""
