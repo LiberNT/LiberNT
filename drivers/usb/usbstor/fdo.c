@@ -104,8 +104,19 @@ USBSTOR_FdoHandleRemoveDevice(
 {
     NTSTATUS Status;
     ULONG Index;
+    PPDO_DEVICE_EXTENSION PDODeviceExtension;
 
     DPRINT("Handling FDO removal %p\n", DeviceObject);
+
+    for (Index = 0; Index < USB_MAXCHILDREN; Index++)
+    {
+        if (DeviceExtension->ChildPDO[Index] != NULL)
+        {
+            PDODeviceExtension = DeviceExtension->ChildPDO[Index]->DeviceExtension;
+            USBSTOR_PdoStopRequests(PDODeviceExtension, Irp);
+            PDODeviceExtension->PDODeviceObject = NULL;
+        }
+    }
 
     if (DeviceExtension->IrpPendingCount != 0 || DeviceExtension->ActiveSrb != NULL)
         USBSTOR_QueueWaitForPendingRequests(DeviceObject);

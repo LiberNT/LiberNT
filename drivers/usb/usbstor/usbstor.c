@@ -138,9 +138,30 @@ USBSTOR_DispatchDeviceControl(
     PDEVICE_OBJECT DeviceObject,
     PIRP Irp)
 {
+    PPDO_DEVICE_EXTENSION PDODeviceExtension = DeviceObject->DeviceExtension;
     NTSTATUS Status;
 
-    Status = USBSTOR_HandleDeviceControl(DeviceObject, Irp);
+    if (PDODeviceExtension->Common.IsFDO)
+    {
+        Status = USBSTOR_HandleDeviceControl(DeviceObject, Irp);
+    }
+    else
+    {
+        Status = IoAcquireRemoveLock(&PDODeviceExtension->RemoveLock, Irp);
+        if (NT_SUCCESS(Status))
+        {
+            if (PDODeviceExtension->Removed)
+                Status = STATUS_DEVICE_DOES_NOT_EXIST;
+            else
+                Status = USBSTOR_HandleDeviceControl(DeviceObject, Irp);
+            IoReleaseRemoveLock(&PDODeviceExtension->RemoveLock, Irp);
+        }
+        else
+        {
+            Status = STATUS_DEVICE_DOES_NOT_EXIST;
+        }
+    }
+
     Irp->IoStatus.Status = Status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return Status;

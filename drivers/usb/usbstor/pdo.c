@@ -547,6 +547,16 @@ USBSTOR_PdoHandleDeviceRelations(
     return STATUS_SUCCESS;
 }
 
+VOID
+USBSTOR_PdoStopRequests(
+    IN PPDO_DEVICE_EXTENSION PDODeviceExtension,
+    IN PIRP Irp)
+{
+    PDODeviceExtension->Removed = TRUE;
+    if (NT_SUCCESS(IoAcquireRemoveLock(&PDODeviceExtension->RemoveLock, Irp)))
+        IoReleaseRemoveLockAndWait(&PDODeviceExtension->RemoveLock, Irp);
+}
+
 NTSTATUS
 USBSTOR_PdoHandlePnp(
     IN PDEVICE_OBJECT DeviceObject,
@@ -606,6 +616,7 @@ USBSTOR_PdoHandlePnp(
        case IRP_MN_REMOVE_DEVICE:
        {
            DPRINT("IRP_MN_REMOVE_DEVICE\n");
+           USBSTOR_PdoStopRequests(DeviceExtension, Irp);
 
            if (DeviceExtension->DumpContext != NULL)
            {
@@ -613,9 +624,10 @@ USBSTOR_PdoHandlePnp(
                DeviceExtension->DumpContext = NULL;
            }
 
-           if(*DeviceExtension->PDODeviceObject != NULL)
+           if (DeviceExtension->PDODeviceObject != NULL)
            {
                *DeviceExtension->PDODeviceObject = NULL;
+               DeviceExtension->PDODeviceObject = NULL;
                bDelete = TRUE;
            }
            else
@@ -675,6 +687,7 @@ USBSTOR_PdoHandlePnp(
        }
        case IRP_MN_SURPRISE_REMOVAL:
        {
+           DeviceExtension->Removed = TRUE;
            Status = STATUS_SUCCESS;
            break;
        }
@@ -920,6 +933,7 @@ USBSTOR_CreatePDO(
     PDODeviceExtension->PDODeviceObject = &FDODeviceExtension->ChildPDO[LUN];
     PDODeviceExtension->Self = PDO;
     PDODeviceExtension->LUN = LUN;
+    IoInitializeRemoveLock(&PDODeviceExtension->RemoveLock, USB_STOR_TAG, 0, 0);
 
     PDO->Flags |= DO_DIRECT_IO;
 

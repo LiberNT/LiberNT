@@ -172,6 +172,8 @@ typedef struct
     PDEVICE_OBJECT *PDODeviceObject;                                                     // entry in pdo list
     PDEVICE_OBJECT Self;                                                                 // self
     struct _USBSTOR_DUMP_CONTEXT *DumpContext;
+    IO_REMOVE_LOCK RemoveLock;
+    BOOLEAN Removed;
     // the whole structure is not stored
     UCHAR InquiryData[INQUIRYDATABUFFERSIZE];                                            // USB SCSI inquiry data
 }PDO_DEVICE_EXTENSION, *PPDO_DEVICE_EXTENSION;
@@ -230,6 +232,11 @@ NTSTATUS
 USBSTOR_CreatePDO(
     IN PDEVICE_OBJECT DeviceObject,
     IN UCHAR LUN);
+
+VOID
+USBSTOR_PdoStopRequests(
+    IN PPDO_DEVICE_EXTENSION PDODeviceExtension,
+    IN PIRP Irp);
 
 //---------------------------------------------------------------------
 //

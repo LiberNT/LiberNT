@@ -258,6 +258,22 @@ USBSTOR_HandleInternalDeviceControl(
     PDODeviceExtension = (PPDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
     ASSERT(PDODeviceExtension->Common.IsFDO == FALSE);
 
+    Status = IoAcquireRemoveLock(&PDODeviceExtension->RemoveLock, Irp);
+    if (NT_SUCCESS(Status) && PDODeviceExtension->Removed)
+    {
+        IoReleaseRemoveLock(&PDODeviceExtension->RemoveLock, Irp);
+        Status = STATUS_DEVICE_DOES_NOT_EXIST;
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        Request->SrbStatus = SRB_STATUS_NO_DEVICE;
+        Request->DataTransferLength = 0;
+        Irp->IoStatus.Information = 0;
+        Irp->IoStatus.Status = STATUS_DEVICE_DOES_NOT_EXIST;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_DEVICE_DOES_NOT_EXIST;
+    }
+
     switch(Request->Function)
     {
         case SRB_FUNCTION_EXECUTE_SCSI:
@@ -287,6 +303,7 @@ USBSTOR_HandleInternalDeviceControl(
                 IoStartPacket(PDODeviceExtension->LowerDeviceObject, Irp, &Request->QueueSortKey, NULL);
             }
 
+            IoReleaseRemoveLock(&PDODeviceExtension->RemoveLock, Irp);
             return STATUS_PENDING;
         }
         case SRB_FUNCTION_RELEASE_DEVICE:
@@ -355,6 +372,7 @@ USBSTOR_HandleInternalDeviceControl(
 
     Irp->IoStatus.Status = Status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    IoReleaseRemoveLock(&PDODeviceExtension->RemoveLock, Irp);
     return Status;
 }
 
