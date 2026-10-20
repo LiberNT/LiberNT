@@ -3651,6 +3651,11 @@ LsarRetrievePrivateData(
                               0,
                               PolicyObject->Trusted,
                               &SecretObject);
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+    {
+        TRACE("No private data stored for %wZ\n", KeyName);
+        goto done;
+    }
     if (!NT_SUCCESS(Status))
     {
         ERR("LsapOpenDbObject failed (Status 0x%08lx)\n", Status);
