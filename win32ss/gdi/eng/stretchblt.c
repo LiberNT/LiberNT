@@ -998,6 +998,23 @@ IntEngStretchBlt(SURFOBJ *psoDest,
                                                  pbo,
                                                  Rop4);
     }
+    else if (UsesSource && psoSource &&
+             (CONTAINING_RECORD(psoSource, SURFACE, SurfObj)->flags & HOOK_STRETCHBLTROP))
+    {
+        ret = GDIDEVFUNCS(psoSource).StretchBltROP(psoDest,
+                                                   psoSource,
+                                                   MaskSurf,
+                                                   ClipRegion,
+                                                   ColorTranslation,
+                                                   pca,
+                                                   BrushOrigin,
+                                                   &OutputRect,
+                                                   &InputRect,
+                                                   &MaskOrigin,
+                                                   Mode,
+                                                   pbo,
+                                                   Rop4);
+    }
 
     if (! ret)
     {

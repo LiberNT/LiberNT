@@ -238,6 +238,13 @@ IntEngAlphaBlend(
                   psoDest, psoSource, pco, pxlo,
                   prclDest, prclSrc, pBlendObj);
     }
+    else if (psoSource &&
+             (CONTAINING_RECORD(psoSource, SURFACE, SurfObj)->flags & HOOK_ALPHABLEND))
+    {
+        ret = GDIDEVFUNCS(psoSource).AlphaBlend(
+                  psoDest, psoSource, pco, pxlo,
+                  prclDest, prclSrc, pBlendObj);
+    }
 
     if (!ret)
     {

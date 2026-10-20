@@ -426,29 +426,21 @@ RcddPresentTarget(
    RcddPresent(ppdev, &rcl);
 }
 
-/* A screen read under GPU composition must sample the composed primary,
- * not ScreenPtr (the independent GDI drawing buffer). Keep a real engine
- * bitmap so Eng* can safely recover its private SURFACE, and keep its lock
- * until the caller has consumed the captured pixels. Only the source
- * rectangle of the read is captured. Ordinary screen writes and
- * offscreen-to-offscreen blits do not perform any readback. */
 static BOOL
-RcddAcquireScreenRead(
+RcddAcquireScreenReadRegion(
    SURFOBJ *Destination,
    SURFOBJ **Source,
-   CONST RECTL *DestinationRect,
-   CONST POINTL *SourcePoint,
+   CONST RECTL *SourceRect,
    PRCDD_PDEV *LockedPdev)
 {
    PRCDD_PDEV ppdev;
    DXGK_DESKTOP_CAPTURE Capture;
    RECTL Region;
    SIZEL Size;
-   LONG Width, Height;
    ULONG Returned, Error;
 
    *LockedPdev = NULL;
-   if (*Source == NULL || (*Source)->dhpdev == NULL || SourcePoint == NULL)
+   if (*Source == NULL || (*Source)->dhpdev == NULL || SourceRect == NULL)
       return TRUE;
    ppdev = (PRCDD_PDEV)(*Source)->dhpdev;
    if ((*Source)->pvScan0 != ppdev->ScreenPtr ||
@@ -456,17 +448,10 @@ RcddAcquireScreenRead(
        ppdev->BitsPerPixel != 32)
       return TRUE;
 
-   /* The engine may pass a mirrored destination rectangle. */
-   Width = DestinationRect->right - DestinationRect->left;
-   Height = DestinationRect->bottom - DestinationRect->top;
-   if (Width < 0)
-      Width = -Width;
-   if (Height < 0)
-      Height = -Height;
-   Region.left = max(SourcePoint->x, 0);
-   Region.top = max(SourcePoint->y, 0);
-   Region.right = min(SourcePoint->x + Width, (LONG)ppdev->ScreenWidth);
-   Region.bottom = min(SourcePoint->y + Height, (LONG)ppdev->ScreenHeight);
+   Region.left = max(min(SourceRect->left, SourceRect->right), 0);
+   Region.top = max(min(SourceRect->top, SourceRect->bottom), 0);
+   Region.right = min(max(SourceRect->left, SourceRect->right), (LONG)ppdev->ScreenWidth);
+   Region.bottom = min(max(SourceRect->top, SourceRect->bottom), (LONG)ppdev->ScreenHeight);
    if (Region.left >= Region.right || Region.top >= Region.bottom)
       return TRUE;
 
@@ -512,6 +497,41 @@ RcddAcquireScreenRead(
 Failure:
    KeReleaseMutex(&ppdev->CaptureMutex, FALSE);
    return FALSE;
+}
+
+/* A screen read under GPU composition must sample the composed primary,
+ * not ScreenPtr (the independent GDI drawing buffer). Keep a real engine
+ * bitmap so Eng* can safely recover its private SURFACE, and keep its lock
+ * until the caller has consumed the captured pixels. Only the source
+ * rectangle of the read is captured. Ordinary screen writes and
+ * offscreen-to-offscreen blits do not perform any readback. */
+static BOOL
+RcddAcquireScreenRead(
+   SURFOBJ *Destination,
+   SURFOBJ **Source,
+   CONST RECTL *DestinationRect,
+   CONST POINTL *SourcePoint,
+   PRCDD_PDEV *LockedPdev)
+{
+   RECTL SourceRect;
+   LONG Width, Height;
+
+   *LockedPdev = NULL;
+   if (SourcePoint == NULL)
+      return TRUE;
+
+   /* The engine may pass a mirrored destination rectangle. */
+   Width = DestinationRect->right - DestinationRect->left;
+   Height = DestinationRect->bottom - DestinationRect->top;
+   if (Width < 0)
+      Width = -Width;
+   if (Height < 0)
+      Height = -Height;
+   SourceRect.left = SourcePoint->x;
+   SourceRect.top = SourcePoint->y;
+   SourceRect.right = SourcePoint->x + Width;
+   SourceRect.bottom = SourcePoint->y + Height;
+   return RcddAcquireScreenReadRegion(Destination, Source, &SourceRect, LockedPdev);
 }
 
 static VOID
@@ -1080,10 +1100,14 @@ RcddPlgBlt(
    IN ULONG iMode)
 {
    BOOL Result;
+   PRCDD_PDEV CapturePdev;
 
    ULONG seq = RcddBeginDraw(psoDest);
 
+   if (!RcddAcquireScreenReadRegion(psoDest, &psoSrc, prclSrc, &CapturePdev))
+      return FALSE;
    Result = EngPlgBlt(psoDest, psoSrc, psoMask, pco, pxlo, pca, pptlBrushOrg, pptfx, prclSrc, pptlMask, iMode);
+   RcddReleaseScreenRead(CapturePdev);
    if (Result)
       RcddPresentTarget(psoDest, seq, NULL, pco);
    return Result;
@@ -1184,11 +1208,15 @@ RcddStretchBlt(
    IN ULONG iMode)
 {
    BOOL Result;
+   PRCDD_PDEV CapturePdev;
 
    ULONG seq = RcddBeginDraw(psoDest);
 
+   if (!RcddAcquireScreenReadRegion(psoDest, &psoSrc, prclSrc, &CapturePdev))
+      return FALSE;
    Result = EngStretchBlt(psoDest, psoSrc, psoMask, pco, pxlo, pca, pptlHTOrg,
                           prclDest, prclSrc, pptlMask, iMode);
+   RcddReleaseScreenRead(CapturePdev);
    if (Result)
       RcddPresentTarget(psoDest, seq, prclDest, pco);
 
@@ -1212,10 +1240,14 @@ RcddStretchBltROP(
    IN DWORD rop4)
 {
    BOOL Result;
+   PRCDD_PDEV CapturePdev;
 
    ULONG seq = RcddBeginDraw(psoDest);
 
+   if (!RcddAcquireScreenReadRegion(psoDest, &psoSrc, prclSrc, &CapturePdev))
+      return FALSE;
    Result = EngStretchBltROP(psoDest, psoSrc, psoMask, pco, pxlo, pca, pptlHTOrg, prclDest, prclSrc, pptlMask, iMode, pbo, rop4);
+   RcddReleaseScreenRead(CapturePdev);
    if (Result)
       RcddPresentTarget(psoDest, seq, prclDest, pco);
    return Result;
@@ -1232,10 +1264,14 @@ RcddAlphaBlend(
    IN BLENDOBJ *pBlendObj)
 {
    BOOL Result;
+   PRCDD_PDEV CapturePdev;
 
    ULONG seq = RcddBeginDraw(psoDest);
 
+   if (!RcddAcquireScreenReadRegion(psoDest, &psoSrc, prclSrc, &CapturePdev))
+      return FALSE;
    Result = EngAlphaBlend(psoDest, psoSrc, pco, pxlo, prclDest, prclSrc, pBlendObj);
+   RcddReleaseScreenRead(CapturePdev);
    if (Result)
       RcddPresentTarget(psoDest, seq, prclDest, pco);
 
@@ -1254,11 +1290,15 @@ RcddTransparentBlt(
    IN ULONG ulReserved)
 {
    BOOL Result;
+   PRCDD_PDEV CapturePdev;
 
    ULONG seq = RcddBeginDraw(psoDst);
 
+   if (!RcddAcquireScreenReadRegion(psoDst, &psoSrc, prclSrc, &CapturePdev))
+      return FALSE;
    Result = EngTransparentBlt(psoDst, psoSrc, pco, pxlo, prclDst, prclSrc,
                               iTransColor, ulReserved);
+   RcddReleaseScreenRead(CapturePdev);
    if (Result)
       RcddPresentTarget(psoDst, seq, prclDst, pco);
 

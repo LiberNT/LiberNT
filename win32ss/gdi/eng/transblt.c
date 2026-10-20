@@ -282,6 +282,18 @@ IntEngTransparentBlt(
                                                   iTransColor,
                                                   Reserved);
     }
+    else if (psoSource &&
+             (CONTAINING_RECORD(psoSource, SURFACE, SurfObj)->flags & HOOK_TRANSPARENTBLT))
+    {
+        Ret = GDIDEVFUNCS(psoSource).TransparentBlt(psoDest,
+                                                    psoSource,
+                                                    Clip,
+                                                    ColorTranslation,
+                                                    &OutputRect,
+                                                    &InputRect,
+                                                    iTransColor,
+                                                    Reserved);
+    }
     else
         Ret = FALSE;
 
