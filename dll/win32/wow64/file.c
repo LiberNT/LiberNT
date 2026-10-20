@@ -909,11 +909,12 @@ NTSTATUS WINAPI wow64_NtSetInformationFile( UINT *args )
     default:
 #ifdef __REACTOS__
         FIXME( "wow64_NtSetInformationFile: unsupported class %u\n", class );
+        return STATUS_INVALID_INFO_CLASS;
 #else
         FIXME( "unsupported class %u\n", class );
-#endif
         status = io.Status = STATUS_INVALID_INFO_CLASS;
         break;
+#endif
     }
     put_iosb( io32, &io );
     return status;
