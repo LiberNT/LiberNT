@@ -177,7 +177,7 @@ KeUpdateSystemTime(IN PKTRAP_FRAME TrapFrame,
 {
     PKPRCB Prcb = KeGetCurrentPrcb();
     LARGE_INTEGER CurrentTime, InterruptTime;
-    ULONGLONG Elapsed;
+    ULONGLONG Elapsed, Overrun;
     LONG OldTickOffset;
     ULONG Ticks;
 
@@ -201,11 +201,11 @@ KeUpdateSystemTime(IN PKTRAP_FRAME TrapFrame,
     /* Add the increment time to the shared data */
     InterruptTime.QuadPart = KiUpdateSharedTime(Increment, TRUE);
 
+    Elapsed = Increment;
     if (KiLastClockInterruptTime)
     {
         Elapsed = ((ULONGLONG)InterruptTime.QuadPart > KiLastClockInterruptTime) ?
                   (ULONGLONG)InterruptTime.QuadPart - KiLastClockInterruptTime : 0;
-        Increment = (Elapsed > MAXULONG) ? MAXULONG : (ULONG)Elapsed;
     }
     KiLastClockInterruptTime = InterruptTime.QuadPart;
 #if DBG && defined(KDBG)
@@ -216,7 +216,7 @@ KeUpdateSystemTime(IN PKTRAP_FRAME TrapFrame,
     KiCheckForTimerExpiration(Prcb, TrapFrame, InterruptTime);
 
     /* Update the tick offset */
-    OldTickOffset = InterlockedExchangeAdd(&KiTickOffset, -(LONG)Increment);
+    OldTickOffset = InterlockedExchangeAdd(&KiTickOffset, -(LONG)min(Elapsed, (ULONGLONG)KeMaximumIncrement));
 
     /* If the debugger is enabled, check for break-in request */
     if (KdDebuggerEnabled && KdPollBreakIn())
@@ -226,9 +226,10 @@ KeUpdateSystemTime(IN PKTRAP_FRAME TrapFrame,
     }
 
     /* Check for full tick */
-    if (OldTickOffset <= (LONG)Increment)
+    if ((LONGLONG)OldTickOffset <= (LONGLONG)Elapsed)
     {
-        Ticks = 1 + (Increment - (ULONG)OldTickOffset) / KeMaximumIncrement;
+        Overrun = (ULONGLONG)((LONGLONG)Elapsed - OldTickOffset);
+        Ticks = 1 + (ULONG)(Overrun / KeMaximumIncrement);
 
         /* A delayed clock can cross timer buckets that neither endpoint visits. */
         if (Ticks > 1 && !Prcb->TimerRequest)
@@ -249,7 +250,7 @@ KeUpdateSystemTime(IN PKTRAP_FRAME TrapFrame,
         KiCheckForTimerExpiration(Prcb, TrapFrame, InterruptTime);
 
         /* Reset the tick offset */
-        KiTickOffset = KeMaximumIncrement - (Increment - (ULONG)OldTickOffset) % KeMaximumIncrement;
+        KiTickOffset = KeMaximumIncrement - (ULONG)(Overrun % KeMaximumIncrement);
         KiTickPhase = (ULONG)((ULONGLONG)InterruptTime.QuadPart % KeMaximumIncrement);
 
         if (KiClockOwnerPrcb != Prcb)
