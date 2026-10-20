@@ -170,12 +170,7 @@ add_livecd_shortcut("Install LiberNT"
     CMDLINE_ARGS "/D /E:ON /C \"start ${envvar_systemdrive}\\${envvar_archdir}\\libernt.exe\""
     ICON "${envvar_systemdrive}\\${envvar_archdir}\\libernt.exe"
     MINIMIZE
-    FOR livecd
     DESTINATION "${dir_allusers_desktop}")
-add_cd_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/Install LiberNT.lnk"
-            TARGET livecd_links
-            DESTINATION "${dir_startmenu_programs}"
-            FOR preinstall)
 
 add_livecd_shortcut("Read Me"
     "shell:windows\\readme.txt"
