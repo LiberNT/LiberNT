@@ -592,6 +592,32 @@ CopyMsgToKernelMem(MSG *KernelModeMsg, MSG *UserModeMsg, PMSGMEMORY MsgMemoryEnt
         if (0 != (MsgMemoryEntry->Flags & MMS_FLAG_READ))
         {
             TRACE("Copy Message %u from usermode buffer\n", KernelModeMsg->message);
+            if (KernelModeMsg->message == WM_COPYDATA)
+            {
+                COPYDATASTRUCT *CapturedData = KernelMem;
+
+                Status = MmCopyFromCaller(CapturedData,
+                                          (PVOID)UserModeMsg->lParam,
+                                          sizeof(*CapturedData));
+                if (NT_SUCCESS(Status) &&
+                    sizeof(*CapturedData) + (CapturedData->lpData ? CapturedData->cbData : 0) != Size)
+                {
+                    Status = STATUS_INVALID_PARAMETER;
+                }
+                if (NT_SUCCESS(Status) && CapturedData->lpData)
+                {
+                    Status = MmCopyFromCaller(CapturedData + 1,
+                                              CapturedData->lpData,
+                                              CapturedData->cbData);
+                    CapturedData->lpData = CapturedData + 1;
+                }
+                if (!NT_SUCCESS(Status))
+                {
+                    ERR("Failed to copy message to kernel: invalid usermode lParam buffer\n");
+                    ExFreePoolWithTag(KernelMem, TAG_MSG);
+                }
+                return Status;
+            }
             if (KernelModeMsg->message == WM_MDICREATE)
             {
                 MDICREATESTRUCTW Mdi;
@@ -683,13 +709,6 @@ CopyFailed:
                 ERR("Failed to copy message to kernel: invalid usermode lParam buffer\n");
                 ExFreePoolWithTag(KernelMem, TAG_MSG);
                 return Status;
-            }
-
-            if (KernelModeMsg->message == WM_COPYDATA &&
-                ((COPYDATASTRUCT *)KernelMem)->lpData)
-            {
-                ((COPYDATASTRUCT *)KernelMem)->lpData =
-                    (COPYDATASTRUCT *)KernelMem + 1;
             }
         }
         else

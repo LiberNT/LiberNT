@@ -766,6 +766,11 @@ static size_t packed_message_64to32( UINT message, WPARAM wparam,
 
             cds32.dwData = cds64->dwData;
             cds32.cbData = cds64->cbData;
+#ifdef __REACTOS__
+            if ((ULONG_PTR)cds64->lpData == sizeof(*cds64))
+                cds32.lpData = sizeof(cds32);
+            else
+#endif
             cds32.lpData = PtrToUlong( cds64->lpData );
             memcpy( params32, &cds32, sizeof(cds32) );
             size -= sizeof(cds32);
