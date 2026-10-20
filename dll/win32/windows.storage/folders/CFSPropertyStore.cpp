@@ -380,6 +380,21 @@ CFSPropertyStoreFactory::AddFileSystemProperties(IPropertyStore *pStore)
         if (SUCCEEDED(GetVolumeId(m_szPath, &VolumeId)))
             StoreValue(pStore, PKEY_VolumeId, pv, InitPropVariantFromCLSID(VolumeId, &pv));
     }
+    if (PathIsRootW(m_szPath))
+    {
+        ULARGE_INTEGER FreeBytes, TotalBytes;
+
+        if (GetDiskFreeSpaceExW(m_szPath, &FreeBytes, &TotalBytes, NULL))
+        {
+            StoreValue(pStore, PKEY_Capacity, pv, InitPropVariantFromUInt64(TotalBytes.QuadPart, &pv));
+            StoreValue(pStore, PKEY_FreeSpace, pv, InitPropVariantFromUInt64(FreeBytes.QuadPart, &pv));
+            if (TotalBytes.QuadPart != 0 && FreeBytes.QuadPart <= TotalBytes.QuadPart)
+                StoreUInt32(pStore, PKEY_PercentFull,
+                            (ULONG)((TotalBytes.QuadPart - FreeBytes.QuadPart) * 100 / TotalBytes.QuadPart));
+        }
+        if (GetVolumeInformationW(m_szPath, NULL, 0, NULL, NULL, NULL, szText, _countof(szText)))
+            StoreString(pStore, PKEY_Volume_FileSystem, szText);
+    }
     StoreString(pStore, PKEY_ItemFolderPathDisplay, szFolder);
     StoreString(pStore, PKEY_ItemPathDisplay, m_szPath);
     StoreNamedBoolean(pStore, L"System.IsFolder", bFolder);

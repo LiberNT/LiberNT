@@ -24,6 +24,9 @@
 #include <precomp.h>
 #include <process.h>
 
+EXTERN_C HRESULT CFSPropertyStoreFactory_CreateInstance(PCIDLIST_ABSOLUTE pidlFolder, IShellFolder2 *psf,
+                                                        PCUITEMID_CHILD pidl, PCWSTR pszPath, REFIID riid, void **ppv);
+
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
 
 /*
@@ -889,6 +892,9 @@ HRESULT WINAPI CDrivesFolder::BindToObject(PCUIDLIST_RELATIVE pidl, LPBC pbcRese
     pfti.szTargetParsingName[0] = *pchDrive;
     pfti.szTargetParsingName[1] = L':';
     pfti.szTargetParsingName[2] = L'\\';
+
+    if (_ILIsPidlSimple(pidl) && (IsEqualIID(riid, IID_IPropertyStoreFactory) || IsEqualIID(riid, IID_IPropertyStore)))
+        return CFSPropertyStoreFactory_CreateInstance(pidlRoot, this, pidl, pfti.szTargetParsingName, riid, ppvOut);
 
     HRESULT hr = SHELL32_BindToSF(pidlRoot,
                                   &pfti,
