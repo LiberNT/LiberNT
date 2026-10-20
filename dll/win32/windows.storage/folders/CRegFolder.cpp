@@ -967,7 +967,10 @@ static HRESULT CALLBACK RegFolderContextMenuCallback(IShellFolder *psf, HWND hwn
     {
         WCHAR buf[MAX_PATH];
         wsprintfW(buf, L"%hs", const_cast<LPCSTR>(pRequired->pszCpl));
-        hr = SHELL_ExecuteControlPanelCPL(hwnd, buf) ? S_OK : E_FAIL;
+        if (StrChrW(buf, L':'))
+            hr = (INT_PTR)ShellExecuteW(hwnd, NULL, buf, NULL, NULL, SW_SHOWNORMAL) > 32 ? S_OK : E_FAIL;
+        else
+            hr = SHELL_ExecuteControlPanelCPL(hwnd, buf) ? S_OK : E_FAIL;
     }
 #if 0 // Should never happen, CDesktopFolder.cpp handles this
     else if (_ILIsDesktop(pidlFolder) && _ILIsDesktop(apidl[0]))
