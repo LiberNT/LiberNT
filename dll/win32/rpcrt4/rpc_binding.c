@@ -1066,7 +1066,11 @@ RPC_STATUS WINAPI RpcImpersonateClient(RPC_BINDING_HANDLE BindingHandle)
     TRACE("(%p)\n", BindingHandle);
 
     if (!BindingHandle) BindingHandle = I_RpcGetCurrentCallHandle();
+#ifdef __REACTOS__
+    if (!BindingHandle) return RPC_S_NO_CALL_ACTIVE;
+#else
     if (!BindingHandle) return RPC_S_INVALID_BINDING;
+#endif
 
     bind = BindingHandle;
     if (bind->FromConn)
