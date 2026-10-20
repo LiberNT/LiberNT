@@ -801,6 +801,12 @@ NtUserSetInformationThread(IN HANDLE ThreadHandle,
                 break;
             }
 
+            if (gpdeskInputDesktop == NULL)
+            {
+                Status = STATUS_UNSUCCESSFUL;
+                break;
+            }
+
             hdesk = IntGetDesktopObjectHandle(gpdeskInputDesktop);
             IntSetThreadDesktop(hdesk, FALSE);
 
