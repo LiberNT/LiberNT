@@ -1458,6 +1458,7 @@ GdiSelectBrush(
     _In_ HBRUSH hbr)
 {
 #ifdef WOW64_I386_RUNTIME
+    HANDLE_METADC(HBRUSH, SelectObject, NULL, hdc, hbr);
     return NtGdiSelectBrush(hdc, hbr);
 #else
     PDC_ATTR pdcattr;
