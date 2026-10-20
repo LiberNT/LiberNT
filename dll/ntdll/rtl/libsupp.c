@@ -619,7 +619,7 @@ NTSTATUS LdrpFindModuleResourceEntry( PVOID BaseAddress, LDR_RESOURCE_INFO *info
     ULONG size;
     void *root;
     IMAGE_RESOURCE_DIRECTORY *resdirptr;
-    USHORT list[9];  /* list of languages to try */
+    USHORT list[10];  /* list of languages to try */
     int i, pos = 0;
     LCID user_lcid, system_lcid;
 
@@ -656,6 +656,7 @@ NTSTATUS LdrpFindModuleResourceEntry( PVOID BaseAddress, LDR_RESOURCE_INFO *info
         {
             /* 4. current thread locale language */
             pos = push_language( list, pos, LANGIDFROMLCID(NtCurrentTeb()->CurrentLocale) );
+            pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(LANGIDFROMLCID(NtCurrentTeb()->CurrentLocale)), SUBLANG_NEUTRAL ) );
 
             if (NT_SUCCESS(NtQueryDefaultLocale(TRUE, &user_lcid)))
             {
