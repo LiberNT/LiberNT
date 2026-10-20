@@ -3995,12 +3995,16 @@ bool d3d12_device_is_uma(struct d3d12_device *device, bool *coherent)
     if (coherent)
         *coherent = true;
 
+    for (i = 0; i < device->memory_properties.memoryHeapCount; ++i)
+    {
+        if (!(device->memory_properties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT))
+            return false;
+    }
+
     for (i = 0; i < device->memory_properties.memoryTypeCount; ++i)
     {
-        if (!(device->memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
-            return false;
-        if (coherent && !(device->memory_properties.memoryTypes[i].propertyFlags
-                & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+        if (coherent && (device->memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+                && !(device->memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
             *coherent = false;
     }
 
