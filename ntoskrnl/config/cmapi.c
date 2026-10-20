@@ -2973,7 +2973,7 @@ CmpDeepCopyKeyInternal(IN PHHIVE SourceHive,
     DestNode->SubKeyLists[Stable] = DestNode->SubKeyLists[Volatile] = HCELL_NIL;
 
     /* Calculate the total number of subkeys */
-    SubKeyCount = SrcNode->SubKeyCounts[Stable] + SrcNode->SubKeyCounts[Volatile];
+    SubKeyCount = SrcNode->SubKeyCounts[Stable];
 
     /* Loop through all the subkeys */
     for (Index = 0; Index < SubKeyCount; Index++)
