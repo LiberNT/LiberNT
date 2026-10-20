@@ -2393,6 +2393,52 @@ done:
 }
 
 
+static
+NET_API_STATUS
+NetpGetCallerAccountName(LPWSTR UserName,
+                         DWORD UserNameLength,
+                         LPWSTR DomainName,
+                         DWORD DomainNameLength)
+{
+    PTOKEN_USER UserInfo = NULL;
+    HANDLE TokenHandle = NULL;
+    SID_NAME_USE Use;
+    DWORD Size = 0;
+    NET_API_STATUS ApiStatus = NERR_Success;
+
+    if (!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &TokenHandle) &&
+        !OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &TokenHandle))
+        return GetLastError();
+
+    GetTokenInformation(TokenHandle, TokenUser, NULL, 0, &Size);
+
+    UserInfo = HeapAlloc(GetProcessHeap(), 0, Size);
+    if (UserInfo == NULL)
+    {
+        ApiStatus = ERROR_NOT_ENOUGH_MEMORY;
+        goto done;
+    }
+
+    if (!GetTokenInformation(TokenHandle, TokenUser, UserInfo, Size, &Size) ||
+        !LookupAccountSidW(NULL,
+                           UserInfo->User.Sid,
+                           UserName,
+                           &UserNameLength,
+                           DomainName,
+                           &DomainNameLength,
+                           &Use))
+        ApiStatus = GetLastError();
+
+done:
+    if (UserInfo != NULL)
+        HeapFree(GetProcessHeap(), 0, UserInfo);
+
+    CloseHandle(TokenHandle);
+
+    return ApiStatus;
+}
+
+
 /******************************************************************************
  *                NetUserChangePassword  (NETAPI32.@)
  * PARAMS
@@ -2417,7 +2463,7 @@ NetUserChangePassword(LPCWSTR domainname,
 {
     PMSV1_0_CHANGEPASSWORD_REQUEST RequestBuffer = NULL;
     PMSV1_0_CHANGEPASSWORD_RESPONSE ResponseBuffer = NULL;
-    ULONG RequestBufferSize;
+    ULONG RequestBufferSize = 0;
     ULONG ResponseBufferSize = 0;
     LPWSTR Ptr;
     ANSI_STRING PackageName;
@@ -2426,15 +2472,31 @@ NetUserChangePassword(LPCWSTR domainname,
     NET_API_STATUS ApiStatus = NERR_Success;
     NTSTATUS Status = STATUS_SUCCESS;
     NTSTATUS ProtocolStatus;
+    WCHAR CallerName[UNLEN + 1];
+    WCHAR CallerDomain[DNLEN + 1];
 
     TRACE("(%s, %s, ..., ...)\n", debugstr_w(domainname), debugstr_w(username));
-
-    /* FIXME: handle null domain or user name */
 
     /* Check the parameters */
     if ((oldpassword == NULL) ||
         (newpassword == NULL))
         return ERROR_INVALID_PARAMETER;
+
+    if ((domainname == NULL) || (username == NULL))
+    {
+        ApiStatus = NetpGetCallerAccountName(CallerName,
+                                             ARRAYSIZE(CallerName),
+                                             CallerDomain,
+                                             ARRAYSIZE(CallerDomain));
+        if (ApiStatus != NERR_Success)
+            return ApiStatus;
+
+        if (domainname == NULL)
+            domainname = CallerDomain;
+
+        if (username == NULL)
+            username = CallerName;
+    }
 
     /* Connect to the LSA server */
     Status = LsaConnectUntrusted(&LsaHandle);
@@ -2537,7 +2599,10 @@ NetUserChangePassword(LPCWSTR domainname,
 
 done:
     if (RequestBuffer != NULL)
+    {
+        SecureZeroMemory(RequestBuffer, RequestBufferSize);
         NetApiBufferFree(RequestBuffer);
+    }
 
     if (ResponseBuffer != NULL)
         LsaFreeReturnBuffer(ResponseBuffer);
