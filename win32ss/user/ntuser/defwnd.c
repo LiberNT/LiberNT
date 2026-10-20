@@ -1151,7 +1151,7 @@ IntDefWindowProc(
          pti->MessageQueue->QF_flags &= ~(QF_FMENUSTATUS|QF_FMENUSTATUSBREAK);
 
          MENU_EndMenu( Wnd );
-         if (IntGetCaptureWindow() == UserHMGetHandle(Wnd))
+         if (pti->MessageQueue->spwndCapture == Wnd)
          {
             IntReleaseCapture();
          }

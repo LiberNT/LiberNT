@@ -962,14 +962,8 @@ static HWND DIALOG_CreateIndirect( HINSTANCE hInst, LPCVOID dlgTemplate,
 
            if (IsWindowEnabled( owner ))
            {
-               HWND captured = NULL;
                disabled_owner = owner;
                EnableWindow( disabled_owner, FALSE );
-
-               captured = GetCapture();
-
-               if (captured)
-                   SendMessageW(captured, WM_CANCELMODE, 0, 0);
            }
         }
         *modal_owner = owner;
@@ -1049,6 +1043,8 @@ static HWND DIALOG_CreateIndirect( HINSTANCE hInst, LPCVOID dlgTemplate,
 
     if (DIALOG_CreateControls32( hwnd, dlgTemplate, &template, hInst, unicode ))
     {
+        HWND capture;
+
         /* Send initialisation messages and set focus */
 
         if (dlgProc)
@@ -1084,6 +1080,9 @@ static HWND DIALOG_CreateIndirect( HINSTANCE hInst, LPCVOID dlgTemplate,
         }
         if (!IsWindow(hwnd))
             return NULL;
+
+        if (modal_owner && (capture = GetCapture()))
+            SendMessageW( capture, WM_CANCELMODE, 0, 0 );
 
 //// ReactOS Rev 30613 & 30644
         if (!(GetWindowLongPtrW( hwnd, GWL_STYLE ) & WS_CHILD))
