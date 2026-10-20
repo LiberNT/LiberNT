@@ -68,7 +68,7 @@ typedef struct
     short      y;
     short      cx;
     short      cy;
-    UINT       id;
+    UINT_PTR   id;
     LPCWSTR    className;
     LPCWSTR    windowName;
     BOOL       windowNameFree; // ReactOS
@@ -274,7 +274,7 @@ static const WORD *DIALOG_GetControl32( const WORD *p, DLG_CONTROL_INFO *info,
         p += strlenW( info->windowName ) + 1;
     }
 
-    TRACE("    %s %s %ld, %d, %d, %d, %d, %08x, %08x, %08x\n",
+    TRACE("    %s %s %Id, %d, %d, %d, %d, %08x, %08x, %08x\n",
           debugstr_w( info->className ), debugstr_w( info->windowName ),
           info->id, info->x, info->y, info->cx, info->cy,
           info->style, info->exStyle, info->helpId );
