@@ -71,7 +71,6 @@ typedef struct
     UINT_PTR   id;
     LPCWSTR    className;
     LPCWSTR    windowName;
-    BOOL       windowNameFree; // ReactOS
     LPCVOID    data;
 } DLG_CONTROL_INFO;
 
@@ -254,23 +253,12 @@ static const WORD *DIALOG_GetControl32( const WORD *p, DLG_CONTROL_INFO *info,
 
     if (GET_WORD(p) == 0xffff)  /* Is it an integer id? */
     {
-//// ReactOS Rev 6478
-        info->windowName = HeapAlloc( GetProcessHeap(), 0, sizeof(L"#65535") );
-        if (info->windowName != NULL)
-        {
-            wsprintf((LPWSTR)info->windowName, L"#%u", GET_WORD(p + 1));
-            info->windowNameFree = TRUE;
-        }
-        else
-        {
-            info->windowNameFree = FALSE;
-        }
+        info->windowName = MAKEINTRESOURCEW(GET_WORD(p + 1));
         p += 2;
     }
     else
     {
         info->windowName = (LPCWSTR)p;
-        info->windowNameFree = FALSE;
         p += strlenW( info->windowName ) + 1;
     }
 
@@ -323,8 +311,18 @@ static BOOL DIALOG_CreateControls32( HWND hwnd, LPCSTR template, const DLG_TEMPL
 
         if (unicode)
         {
+            LPCWSTR caption = info.windowName;
+            WCHAR caption_buf[3];
+
+            if (IS_INTRESOURCE(caption) && caption)
+            {
+                caption_buf[0] = 0xffff;
+                caption_buf[1] = PtrToUlong( caption );
+                caption_buf[2] = 0;
+                caption = caption_buf;
+            }
             hwndCtrl = CreateWindowExW( info.exStyle | WS_EX_NOPARENTNOTIFY,
-                                        info.className, info.windowName,
+                                        info.className, caption,
                                         info.style | WS_CHILD,
                                         MulDiv(info.x, dlgInfo->xBaseUnit, 4),
                                         MulDiv(info.y, dlgInfo->yBaseUnit, 8),
@@ -336,7 +334,9 @@ static BOOL DIALOG_CreateControls32( HWND hwnd, LPCSTR template, const DLG_TEMPL
         else
         {
             LPSTR class = (LPSTR)info.className;
-            LPSTR caption = (LPSTR)info.windowName;
+            LPCSTR caption = (LPCSTR)info.windowName;
+            LPSTR caption_tmp = NULL;
+            char caption_buf[4];
 
             if (!IS_INTRESOURCE(class))
             {
@@ -348,12 +348,21 @@ static BOOL DIALOG_CreateControls32( HWND hwnd, LPCSTR template, const DLG_TEMPL
             if (!IS_INTRESOURCE(caption))
             {
                 DWORD len = WideCharToMultiByte( CP_ACP, 0, info.windowName, -1, NULL, 0, NULL, NULL );
-                caption = HeapAlloc( GetProcessHeap(), 0, len );
-                if (caption != NULL)
-                    WideCharToMultiByte( CP_ACP, 0, info.windowName, -1, caption, len, NULL, NULL );
+                caption_tmp = HeapAlloc( GetProcessHeap(), 0, len );
+                if (caption_tmp != NULL)
+                    WideCharToMultiByte( CP_ACP, 0, info.windowName, -1, caption_tmp, len, NULL, NULL );
+                caption = caption_tmp;
+            }
+            else if (caption)
+            {
+                caption_buf[0] = 0xff;
+                caption_buf[1] = PtrToUlong( caption );
+                caption_buf[2] = PtrToUlong( caption ) >> 8;
+                caption_buf[3] = 0;
+                caption = caption_buf;
             }
 
-            if (class != NULL && caption != NULL)
+            if (class != NULL && (caption != NULL || !info.windowName))
             {
                 hwndCtrl = CreateWindowExA( info.exStyle | WS_EX_NOPARENTNOTIFY,
                                             class, caption, info.style | WS_CHILD,
@@ -367,12 +376,7 @@ static BOOL DIALOG_CreateControls32( HWND hwnd, LPCSTR template, const DLG_TEMPL
             else
                 hwndCtrl = NULL;
             if (!IS_INTRESOURCE(class)) HeapFree( GetProcessHeap(), 0, class );
-            if (!IS_INTRESOURCE(caption)) HeapFree( GetProcessHeap(), 0, caption );
-        }
-
-        if (info.windowNameFree)
-        {
-            HeapFree( GetProcessHeap(), 0, (LPVOID)info.windowName );
+            if (caption_tmp) HeapFree( GetProcessHeap(), 0, caption_tmp );
         }
 
         if (!hwndCtrl)
