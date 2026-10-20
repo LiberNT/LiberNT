@@ -7,6 +7,7 @@
 
 #include "settings.h"
 #include <stdarg.h>
+#include <lmerr.h>
 
 static const PageInfo Pages[] =
 {
@@ -254,14 +255,21 @@ Win32Message(DWORD error)
     LPWSTR text = NULL;
     std::wstring result;
 
-    if (FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                       NULL, error, 0, (LPWSTR)&text, 0, NULL) && text)
+    HMODULE module = NULL;
+
+    if (error >= NERR_BASE && error <= MAX_NERR)
+        module = LoadLibraryExW(L"netmsg.dll", NULL, LOAD_LIBRARY_AS_DATAFILE);
+    if (FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS |
+                           (module ? FORMAT_MESSAGE_FROM_HMODULE : 0),
+                       module, error, 0, (LPWSTR)&text, 0, NULL) && text)
     {
         result = text;
         while (!result.empty() && (result.back() == L'\n' || result.back() == L'\r' || result.back() == L' '))
             result.pop_back();
         LocalFree(text);
     }
+    if (module)
+        FreeLibrary(module);
     if (result.empty())
         result = Printf(L"0x%08lX", error);
     return result;

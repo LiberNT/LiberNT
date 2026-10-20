@@ -7,6 +7,8 @@
 
 #include "settings.h"
 #include <lm.h>
+#include <winternl.h>
+#include <ntsam.h>
 #include <algorithm>
 
 #define WINLOGON_KEY L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon"
@@ -21,6 +23,155 @@ CurrentUser()
     if (!GetUserNameW(name, &size))
         name[0] = UNICODE_NULL;
     return name;
+}
+
+static bool
+WithLocalUser(const std::wstring &user, ACCESS_MASK access, const std::function<bool(SAM_HANDLE)> &action)
+{
+    WCHAR computer[MAX_COMPUTERNAME_LENGTH + 1];
+    DWORD length = _countof(computer);
+    UNICODE_STRING domainName, name;
+    SAM_HANDLE server = NULL, domain = NULL, handle = NULL;
+    PSID domainSid = NULL;
+    PULONG rids = NULL;
+    PSID_NAME_USE use = NULL;
+    bool result = false;
+
+    if (!GetComputerNameW(computer, &length))
+        return false;
+    domainName.Buffer = computer;
+    domainName.Length = (USHORT)(length * sizeof(WCHAR));
+    domainName.MaximumLength = domainName.Length;
+    name.Buffer = (PWSTR)user.c_str();
+    name.Length = (USHORT)(user.length() * sizeof(WCHAR));
+    name.MaximumLength = name.Length;
+    if (SamConnect(NULL, &server, SAM_SERVER_CONNECT | SAM_SERVER_LOOKUP_DOMAIN, NULL) >= 0 &&
+        SamLookupDomainInSamServer(server, &domainName, &domainSid) >= 0 &&
+        SamOpenDomain(server, DOMAIN_LOOKUP, domainSid, &domain) >= 0 &&
+        SamLookupNamesInDomain(domain, 1, &name, &rids, &use) >= 0 && use[0] == SidTypeUser &&
+        SamOpenUser(domain, access, rids[0], &handle) >= 0)
+        result = action(handle);
+    if (handle)
+        SamCloseHandle(handle);
+    if (domain)
+        SamCloseHandle(domain);
+    if (server)
+        SamCloseHandle(server);
+    if (domainSid)
+        SamFreeMemory(domainSid);
+    if (rids)
+        SamFreeMemory(rids);
+    if (use)
+        SamFreeMemory(use);
+    return result;
+}
+
+static bool
+IsPasswordBlank(const std::wstring &user)
+{
+    bool blank = false;
+
+    WithLocalUser(user, USER_READ_ACCOUNT,
+                  [&blank](SAM_HANDLE handle)
+                  {
+                      PUSER_LOGON_UI_INFORMATION info = NULL;
+
+                      if (SamQueryInformationUser(handle, UserLogonUIInformation, (PVOID *)&info) < 0 || !info)
+                          return false;
+                      blank = info->PasswordIsBlank != FALSE;
+                      SamFreeMemory(info);
+                      return true;
+                  });
+    return blank;
+}
+
+static bool
+SetPasswordHint(const std::wstring &user, const std::wstring &hint)
+{
+    return WithLocalUser(user, USER_WRITE_PREFERENCES,
+                         [&hint](SAM_HANDLE handle)
+                         {
+                             USER_EXTENDED_INFORMATION info = { };
+
+                             info.ExtendedWhichFields = USER_EXTENDED_FIELD_PASSWORD_HINT;
+                             info.PasswordHint.Buffer = (PWSTR)hint.c_str();
+                             info.PasswordHint.Length = (USHORT)(hint.length() * sizeof(WCHAR));
+                             info.PasswordHint.MaximumLength = info.PasswordHint.Length;
+                             return SamSetInformationUser(handle, UserExtendedInformation, &info) >= 0;
+                         });
+}
+
+static void
+ShowPasswordProblem(HWND owner, UINT id)
+{
+    TASKDIALOGCONFIG config = { sizeof(config) };
+    std::wstring title = Str(IDS_APP_TITLE), heading = Str(IDS_ERROR_HEADING), text = Str(id);
+
+    config.hwndParent = owner;
+    config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW;
+    config.dwCommonButtons = TDCBF_OK_BUTTON;
+    config.pszWindowTitle = title.c_str();
+    config.pszMainIcon = TD_ERROR_ICON;
+    config.pszMainInstruction = heading.c_str();
+    config.pszContent = text.c_str();
+    TaskDialogIndirect(&config, NULL, NULL, NULL);
+}
+
+static bool
+CheckNewPassword(HWND owner, const std::wstring &password, const std::wstring &confirm, const std::wstring &hint)
+{
+    std::wstring lowerPassword = password, lowerHint = hint;
+
+    if (password != confirm)
+    {
+        ShowPasswordProblem(owner, IDS_PASSWORD_MISMATCH);
+        return false;
+    }
+    if (password.empty())
+        return true;
+    if (hint.empty())
+    {
+        ShowPasswordProblem(owner, IDS_PASSWORD_HINT_NEEDED);
+        return false;
+    }
+    CharLowerBuffW(&lowerPassword[0], (DWORD)lowerPassword.length());
+    CharLowerBuffW(&lowerHint[0], (DWORD)lowerHint.length());
+    if (lowerHint.find(lowerPassword) != std::wstring::npos)
+    {
+        SecureZeroMemory(&lowerPassword[0], lowerPassword.length() * sizeof(WCHAR));
+        ShowPasswordProblem(owner, IDS_PASSWORD_HINT_CONTAINS);
+        return false;
+    }
+    SecureZeroMemory(&lowerPassword[0], lowerPassword.length() * sizeof(WCHAR));
+    return true;
+}
+
+static void
+DisableBlankAutoLogon(const std::wstring &user)
+{
+    HKEY key;
+    WCHAR password[2] = L"";
+    DWORD type, size = sizeof(password);
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, WINLOGON_KEY, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &key) != ERROR_SUCCESS)
+        return;
+    if (ReadString(HKEY_LOCAL_MACHINE, WINLOGON_KEY, L"AutoAdminLogon") == L"1" &&
+        !lstrcmpiW(ReadString(HKEY_LOCAL_MACHINE, WINLOGON_KEY, L"DefaultUserName").c_str(), user.c_str()) &&
+        RegQueryValueExW(key, L"DefaultPassword", NULL, &type, (PBYTE)password, &size) == ERROR_SUCCESS &&
+        type == REG_SZ && !password[0])
+    {
+        RegSetValueExW(key, L"AutoAdminLogon", 0, REG_SZ, (const BYTE *)L"0", 2 * sizeof(WCHAR));
+        RegDeleteValueW(key, L"DefaultPassword");
+    }
+    RegCloseKey(key);
+}
+
+static void
+ClearSecrets(std::vector<std::wstring> &values, size_t count)
+{
+    for (size_t i = 0; i < count && i < values.size(); i++)
+        if (!values[i].empty())
+            SecureZeroMemory(&values[i][0], values[i].length() * sizeof(WCHAR));
 }
 
 static void
@@ -129,24 +280,46 @@ BuildSignIn(PageBuilder &page)
                 [host](int)
                 {
                     std::vector<std::wstring> labels, values;
-                    std::vector<bool> secret(3, true);
+                    std::vector<bool> secret;
                     NET_API_STATUS status;
-                    std::wstring user = CurrentUser();
+                    std::wstring user = CurrentUser(), current;
+                    bool blank = IsPasswordBlank(user);
+                    size_t first = blank ? 0 : 1;
 
-                    labels.push_back(Str(IDS_CURRENT_PASSWORD));
+                    if (!blank)
+                    {
+                        labels.push_back(Str(IDS_CURRENT_PASSWORD));
+                        secret.push_back(true);
+                    }
                     labels.push_back(Str(IDS_NEW_PASSWORD));
                     labels.push_back(Str(IDS_CONFIRM_PASSWORD));
-                    if (!InputFields(host->Window(), Str(IDS_CHANGE_PASSWORD), labels, values, secret))
+                    labels.push_back(Str(IDS_PASSWORD_HINT));
+                    secret.push_back(true);
+                    secret.push_back(true);
+                    secret.push_back(false);
+                    if (!InputFields(host->Window(), Str(blank ? IDS_CREATE_PASSWORD : IDS_CHANGE_PASSWORD), labels,
+                                     values, secret))
                         return;
-                    if (values[1] != values[2])
+                    if (!CheckNewPassword(host->Window(), values[first], values[first + 1], values[first + 2]))
                     {
-                        ShowError(host->Window(), ERROR_INVALID_PASSWORD);
+                        ClearSecrets(values, first + 2);
                         return;
                     }
-                    status = NetUserChangePassword(NULL, user.c_str(), values[0].c_str(), values[1].c_str());
-                    for (size_t i = 0; i < values.size(); i++)
-                        SecureZeroMemory(&values[i][0], values[i].length() * sizeof(WCHAR));
-                    if (status != NERR_Success)
+                    if (!blank)
+                        current = values[0];
+                    status = NetUserChangePassword(NULL, user.c_str(), current.c_str(), values[first].c_str());
+                    if (status == NERR_Success)
+                    {
+                        SetPasswordHint(user, values[first].empty() ? std::wstring() : values[first + 2]);
+                        if (!values[first].empty())
+                            DisableBlankAutoLogon(user);
+                    }
+                    if (!current.empty())
+                        SecureZeroMemory(&current[0], current.length() * sizeof(WCHAR));
+                    ClearSecrets(values, first + 2);
+                    if (status == ERROR_INVALID_PASSWORD)
+                        ShowPasswordProblem(host->Window(), IDS_PASSWORD_INCORRECT);
+                    else if (status != NERR_Success)
                         ShowError(host->Window(), status);
                 });
     page.Group(Str(IDS_SIGNIN_EXTRA));
@@ -185,23 +358,26 @@ AddAccount(HWND owner)
     labels.push_back(Str(IDS_USER_NAME));
     labels.push_back(Str(IDS_NEW_PASSWORD));
     labels.push_back(Str(IDS_CONFIRM_PASSWORD));
+    labels.push_back(Str(IDS_PASSWORD_HINT));
     secret.push_back(false);
     secret.push_back(true);
     secret.push_back(true);
+    secret.push_back(false);
     if (!InputFields(owner, Str(IDS_ADD_ACCOUNT), labels, values, secret) || values[0].empty())
         return;
-    if (values[1] != values[2])
+    if (!CheckNewPassword(owner, values[1], values[2], values[3]))
     {
-        ShowError(owner, ERROR_INVALID_PASSWORD);
+        ClearSecrets(values, 3);
         return;
     }
     info.usri1_name = (LPWSTR)values[0].c_str();
     info.usri1_password = (LPWSTR)values[1].c_str();
     info.usri1_priv = USER_PRIV_USER;
-    info.usri1_flags = UF_SCRIPT | UF_NORMAL_ACCOUNT | UF_DONT_EXPIRE_PASSWD;
+    info.usri1_flags = UF_SCRIPT | UF_NORMAL_ACCOUNT | UF_DONT_EXPIRE_PASSWD | (values[1].empty() ? UF_PASSWD_NOTREQD : 0);
     status = NetUserAdd(NULL, 1, (LPBYTE)&info, &error);
-    SecureZeroMemory(&values[1][0], values[1].length() * sizeof(WCHAR));
-    SecureZeroMemory(&values[2][0], values[2].length() * sizeof(WCHAR));
+    if (status == NERR_Success && !values[1].empty())
+        SetPasswordHint(values[0], values[3]);
+    ClearSecrets(values, 3);
     if (status != NERR_Success)
     {
         ShowError(owner, status);
@@ -284,24 +460,33 @@ BuildUser(PageBuilder &page)
                 [host, user](int)
                 {
                     std::vector<std::wstring> labels, values;
-                    std::vector<bool> secret(2, true);
+                    std::vector<bool> secret;
                     USER_INFO_1003 info;
                     DWORD error = 0;
                     NET_API_STATUS status;
 
                     labels.push_back(Str(IDS_NEW_PASSWORD));
                     labels.push_back(Str(IDS_CONFIRM_PASSWORD));
+                    labels.push_back(Str(IDS_PASSWORD_HINT));
+                    secret.push_back(true);
+                    secret.push_back(true);
+                    secret.push_back(false);
                     if (!InputFields(host->Window(), Str(IDS_RESET_PASSWORD), labels, values, secret))
                         return;
-                    if (values[0] != values[1])
+                    if (!CheckNewPassword(host->Window(), values[0], values[1], values[2]))
                     {
-                        ShowError(host->Window(), ERROR_INVALID_PASSWORD);
+                        ClearSecrets(values, 2);
                         return;
                     }
                     info.usri1003_password = (LPWSTR)values[0].c_str();
                     status = NetUserSetInfo(NULL, user.c_str(), 1003, (LPBYTE)&info, &error);
-                    SecureZeroMemory(&values[0][0], values[0].length() * sizeof(WCHAR));
-                    SecureZeroMemory(&values[1][0], values[1].length() * sizeof(WCHAR));
+                    if (status == NERR_Success)
+                    {
+                        SetPasswordHint(user, values[0].empty() ? std::wstring() : values[2]);
+                        if (!values[0].empty())
+                            DisableBlankAutoLogon(user);
+                    }
+                    ClearSecrets(values, 2);
                     if (status != NERR_Success)
                         ShowError(host->Window(), status);
                 }).Enabled = admin;

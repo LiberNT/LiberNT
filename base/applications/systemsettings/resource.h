@@ -418,6 +418,12 @@
 #define IDS_CURRENT_PASSWORD           508
 #define IDS_NEW_PASSWORD               509
 #define IDS_CONFIRM_PASSWORD           510
+#define IDS_PASSWORD_HINT              900
+#define IDS_PASSWORD_HINT_NEEDED       901
+#define IDS_PASSWORD_MISMATCH          902
+#define IDS_PASSWORD_INCORRECT         903
+#define IDS_CREATE_PASSWORD            904
+#define IDS_PASSWORD_HINT_CONTAINS     905
 #define IDS_SIGNIN_EXTRA               511
 #define IDS_REQUIRE_SIGNIN             512
 #define IDS_REQUIRE_SIGNIN_DESC        513
