@@ -1608,6 +1608,23 @@ IntSetWindowDpiContext(PWND pWnd, HWND hWnd, PBOOL Changed)
   return Current;
 }
 
+static BOOL
+IntIsWow64DialogWindow(HWND hWnd)
+{
+#ifdef WOW64_I386_RUNTIME
+  ROS_WINDOWINFO Info;
+  DWORD Error = GetLastError();
+  BOOL Ret = NtUserCallHwndParam(hWnd, (DWORD_PTR)&Info, HWNDPARAM_ROUTINE_ROS_GETWINDOWINFO) &&
+             Info.fnid == FNID_DIALOG;
+
+  SetLastError(Error);
+  return Ret;
+#else
+  UNREFERENCED_PARAMETER(hWnd);
+  return FALSE;
+#endif
+}
+
 LRESULT FASTCALL
 IntCallWindowProcW(BOOL IsAnsiProc,
                    WNDPROC WndProc,
@@ -1642,7 +1659,7 @@ IntCallWindowProcW(BOOL IsAnsiProc,
   Hook = BeginIfHookedUserApiHook();
   if (Hook)
   {
-     if (Dialog && (WndProc == DefDlgProcW || WndProc == DefDlgProcA))
+     if ((WndProc == DefDlgProcW || WndProc == DefDlgProcA) && (Dialog || IntIsWow64DialogWindow(hWnd)))
         DlgOverride = IsMsgOverride( Msg, &guah.DlgProcArray);
      MsgOverride = IsMsgOverride( Msg, &guah.WndProcArray);
   }
@@ -1811,7 +1828,7 @@ IntCallWindowProcA(BOOL IsAnsiProc,
   Hook = BeginIfHookedUserApiHook();
   if (Hook)
   {
-     if (Dialog && (WndProc == DefDlgProcW || WndProc == DefDlgProcA))
+     if ((WndProc == DefDlgProcW || WndProc == DefDlgProcA) && (Dialog || IntIsWow64DialogWindow(hWnd)))
         DlgOverride = IsMsgOverride( Msg, &guah.DlgProcArray);
      MsgOverride = IsMsgOverride( Msg, &guah.WndProcArray);
   }
