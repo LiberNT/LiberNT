@@ -22,6 +22,8 @@ NtGdiDdDDICreateDCFromMemory(
     PSURFACE psurf;
     HBITMAP hBitmap, hOldBitmap;
     HDC hDC;
+    PDC pdc;
+    HDEV hdev;
     NTSTATUS Status;
 
     const struct d3dddi_format_info
@@ -128,6 +130,15 @@ NtGdiDdDDICreateDCFromMemory(
         return STATUS_INVALID_PARAMETER;
     }
 
+    pdc = DC_LockDc(hDC);
+    if (pdc == NULL)
+    {
+        NtGdiDeleteObjectApp(hDC);
+        return STATUS_INVALID_PARAMETER;
+    }
+    hdev = (HDEV)pdc->ppdev;
+    DC_UnlockDc(pdc);
+
     /* Allocate a surface */
     psurf = SURFACE_AllocSurface(STYPE_BITMAP,
                                  Captured.Width,
@@ -150,6 +161,7 @@ NtGdiDdDDICreateDCFromMemory(
      */
     psurf->SurfObj.lDelta = Captured.Pitch;
     psurf->SurfObj.cjBits = BufferSize;
+    psurf->SurfObj.hdev = hdev;
 
     /* Mark as API bitmap */
     psurf->flags |= (DDB_SURFACE | API_BITMAP);
