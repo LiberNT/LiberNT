@@ -3,6 +3,7 @@
 #include <windowsx.h>
 #include <powrprof.h>
 
+#define SM2_KEY             L"Software\\ReactOS\\StartMenu2"
 #define SM2_RECENT_LINK_KEY L"Software\\ReactOS\\StartMenu2\\RecentApps\\Links"
 #define SM2_RECENT_EXE_KEY  L"Software\\ReactOS\\StartMenu2\\RecentApps\\Executables"
 
@@ -231,6 +232,7 @@ struct SM2ITEM
     CStringW szName;
     CStringW szPath;
     CStringW szTargetPath;
+    ULONGLONG Created;
     BOOL bFolder;
     BOOL bExpanded;
     HICON hSmallIcon;
@@ -239,7 +241,7 @@ struct SM2ITEM
     BOOL bTargetTried;
     CAtlArray<SM2ITEM*> Children;
 
-    SM2ITEM() : bFolder(FALSE), bExpanded(FALSE), hSmallIcon(NULL), hLargeIcon(NULL),
+    SM2ITEM() : Created(0), bFolder(FALSE), bExpanded(FALSE), hSmallIcon(NULL), hLargeIcon(NULL),
                 bSmallTried(FALSE), bTargetTried(FALSE) {}
 
     ~SM2ITEM()
@@ -351,6 +353,8 @@ SM2EnumFolder(LPCWSTR pszDir, SM2ITEM *pParent, BOOL bFilesOnly)
             pItem->bFolder = FALSE;
             pItem->szName = szName;
             pItem->szPath = szFull;
+            pItem->Created = ((ULONGLONG)wfd.ftCreationTime.dwHighDateTime << 32) |
+                             wfd.ftCreationTime.dwLowDateTime;
             pParent->Children.Add(pItem);
         }
     } while (FindNextFileW(hFind, &wfd));
@@ -1222,6 +1226,9 @@ public:
         if (m_iDpi <= 0)
             m_iDpi = 96;
 
+        if (!SM2GetLastUsed(SM2_KEY, L"RecentlyAddedSince"))
+            SM2SetLastUsed(SM2_KEY, L"RecentlyAddedSince");
+
         return Create(hwndTray, CWindow::rcDefault, NULL) != NULL;
     }
 
@@ -1313,6 +1320,38 @@ public:
         {
             if (!m_Recent[i]->hLargeIcon)
                 m_Recent[i]->hLargeIcon = SM2LoadShellIcon(m_Recent[i]->szPath, TRUE);
+        }
+    }
+
+    VOID AddRecentlyAdded()
+    {
+        ULONGLONG Since = SM2GetLastUsed(SM2_KEY, L"RecentlyAddedSince");
+        ULONGLONG Newest = Since;
+
+        if (!Since)
+        {
+            SM2SetLastUsed(SM2_KEY, L"RecentlyAddedSince");
+            return;
+        }
+
+        for (SIZE_T i = 0; i < m_Flat.GetCount(); i++)
+        {
+            ULONGLONG Created = m_Flat[i]->Created;
+            if (Created <= Since)
+                continue;
+            if (SM2GetLastUsed(SM2_RECENT_LINK_KEY, m_Flat[i]->szPath) < Created)
+            {
+                SHSetValueW(HKEY_CURRENT_USER, SM2_RECENT_LINK_KEY, m_Flat[i]->szPath,
+                            REG_QWORD, &Created, sizeof(Created));
+            }
+            if (Created > Newest)
+                Newest = Created;
+        }
+
+        if (Newest != Since)
+        {
+            SHSetValueW(HKEY_CURRENT_USER, SM2_KEY, L"RecentlyAddedSince",
+                        REG_QWORD, &Newest, sizeof(Newest));
         }
     }
 
@@ -1411,6 +1450,7 @@ public:
         m_Rows.SetCount(0);
         SM2BuildTree(&m_Root);
         SM2FlattenTree(&m_Root, m_Flat);
+        AddRecentlyAdded();
         AddRecentExecutables();
         BuildRecent();
         BuildTreeVis();
