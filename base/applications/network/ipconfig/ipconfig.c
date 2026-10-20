@@ -241,6 +241,10 @@ GetAdapterFriendlyName(
     DWORD dwType;
     DWORD dwDataSize;
 
+    if (cchFriendlyNameLength == 0)
+        return;
+    pszFriendlyName[0] = UNICODE_NULL;
+
     /* don't overflow the buffer */
     PathSize = strlen(PrePath) + strlen(lpClass) + strlen(PostPath) + 1;
     if (PathSize > _countof(Path))
@@ -255,12 +259,17 @@ GetAdapterFriendlyName(
                       &hKey) == ERROR_SUCCESS)
     {
         dwDataSize = cchFriendlyNameLength * sizeof(WCHAR);
-        RegQueryValueExW(hKey,
-                         L"Name",
-                         NULL,
-                         &dwType,
-                         (PBYTE)pszFriendlyName,
-                         &dwDataSize);
+        if (RegQueryValueExW(hKey,
+                             L"Name",
+                             NULL,
+                             &dwType,
+                             (PBYTE)pszFriendlyName,
+                             &dwDataSize) != ERROR_SUCCESS ||
+            dwType != REG_SZ)
+        {
+            pszFriendlyName[0] = UNICODE_NULL;
+        }
+        pszFriendlyName[cchFriendlyNameLength - 1] = UNICODE_NULL;
     }
 
     if (hKey != NULL)
@@ -284,6 +293,10 @@ GetInterfaceFriendlyName(
 
     size_t dwPrefixLength = wcslen(DevicePrefix);
 
+    if (cchFriendlyNameLength == 0)
+        return;
+    pszFriendlyName[0] = UNICODE_NULL;
+
     /* don't overflow the buffer */
     PathSize = wcslen(PrePath) + wcslen(lpDeviceName) - dwPrefixLength + wcslen(PostPath) + 1;
     if (PathSize > _countof(Path))
@@ -298,12 +311,17 @@ GetInterfaceFriendlyName(
                       &hKey) == ERROR_SUCCESS)
     {
         dwDataSize = cchFriendlyNameLength * sizeof(WCHAR);
-        RegQueryValueExW(hKey,
-                         L"Name",
-                         NULL,
-                         &dwType,
-                         (PBYTE)pszFriendlyName,
-                         &dwDataSize);
+        if (RegQueryValueExW(hKey,
+                             L"Name",
+                             NULL,
+                             &dwType,
+                             (PBYTE)pszFriendlyName,
+                             &dwDataSize) != ERROR_SUCCESS ||
+            dwType != REG_SZ)
+        {
+            pszFriendlyName[0] = UNICODE_NULL;
+        }
+        pszFriendlyName[cchFriendlyNameLength - 1] = UNICODE_NULL;
     }
 
     if (hKey != NULL)
