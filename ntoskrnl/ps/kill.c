@@ -705,6 +705,7 @@ PspExitThread(IN NTSTATUS ExitStatus)
 
     /* Process the Termination Ports */
     TerminationPort = Thread->TerminationPort;
+    Thread->TerminationPort = NULL;
     if (TerminationPort)
     {
         /* Setup the message header */
