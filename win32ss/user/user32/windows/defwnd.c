@@ -248,11 +248,16 @@ DefWndHandleSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam)
         break;
     }
 
+#ifdef WOW64_I386_RUNTIME
+  NtUserMessageCall(hWnd, WM_SYSCOMMAND, wParam, lParam, (ULONG_PTR)&lResult, FNID_DEFWINDOWPROC, FALSE);
+  if (lResult) return 0;
+#else
   if (ISITHOOKED(WH_CBT))
   {
      NtUserMessageCall(hWnd, WM_SYSCOMMAND, wParam, lParam, (ULONG_PTR)&lResult, FNID_DEFWINDOWPROC, FALSE);
      if (lResult) return 0;
   }
+#endif
 
   switch (wParam & 0xfff0)
     {
@@ -1070,6 +1075,9 @@ RealDefWindowProcA(HWND hWnd,
     if (!Wnd && Msg == WM_WINDOWPOSCHANGED)
         return DefWndHandleWindowPosChanged(hWnd, (const WINDOWPOS *)lParam);
 
+    if (!Wnd && Msg == WM_SYSCOMMAND)
+        return DefWndHandleSysCommand(hWnd, wParam, lParam);
+
     if (!Wnd && Msg != WM_NCCREATE && !IntIsClientDefWndMessage(Msg))
     {
         NtUserMessageCall(hWnd, Msg, wParam, lParam, (ULONG_PTR)&Result, FNID_DEFWINDOWPROC, TRUE);
@@ -1317,6 +1325,9 @@ RealDefWindowProcW(HWND hWnd,
 
     if (!Wnd && Msg == WM_WINDOWPOSCHANGED)
         return DefWndHandleWindowPosChanged(hWnd, (const WINDOWPOS *)lParam);
+
+    if (!Wnd && Msg == WM_SYSCOMMAND)
+        return DefWndHandleSysCommand(hWnd, wParam, lParam);
 
     if (!Wnd && Msg != WM_NCCREATE && !IntIsClientDefWndMessage(Msg))
     {
