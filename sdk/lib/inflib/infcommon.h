@@ -8,7 +8,7 @@
 
 #pragma once
 
-#define MAX_INF_STRING_LENGTH  512
+#define MAX_INF_STRING_LENGTH  4096
 
 typedef void *HINF, **PHINF;
 typedef struct _INFCONTEXT *PINFCONTEXT;

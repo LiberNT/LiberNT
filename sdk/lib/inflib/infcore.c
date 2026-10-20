@@ -15,7 +15,7 @@
 
 #define CONTROL_Z  '\x1a'
 #define MAX_SECTION_NAME_LEN  255
-#define MAX_FIELD_LEN         511  /* larger fields get silently truncated */
+#define MAX_FIELD_LEN         4095  /* larger fields get silently truncated */
 /* actual string limit is MAX_INF_STRING_LENGTH+1 (plus terminating null) under Windows */
 #define MAX_STRING_LEN        (MAX_INF_STRING_LENGTH+1)
 
