@@ -85,7 +85,7 @@ SHAppBarMessage(
     cmd.abd.rc = pData->rc;
     cmd.abd.lParam64 = pData->lParam;
     cmd.dwMessage = dwMessage;
-    cmd.hOutput = (APPBAR_OUTPUT)NULL;
+    cmd.hOutput = (APPBAR_OUTPUT)(LONG_PTR)NULL;
     cmd.dwProcessId = GetCurrentProcessId();
 
     /* Make output data if necessary */
@@ -94,7 +94,7 @@ SHAppBarMessage(
         case ABM_QUERYPOS:
         case ABM_SETPOS:
         case ABM_GETTASKBARPOS:
-            cmd.hOutput = (APPBAR_OUTPUT)AppBar_CopyIn(&cmd.abd, sizeof(cmd.abd), cmd.dwProcessId);
+            cmd.hOutput = (APPBAR_OUTPUT)(LONG_PTR)AppBar_CopyIn(&cmd.abd, sizeof(cmd.abd), cmd.dwProcessId);
             if (!cmd.hOutput)
             {
                 ERR("AppBar_CopyIn: %d\n", dwMessage);
@@ -112,7 +112,7 @@ SHAppBarMessage(
     /* Copy back output data */
     if (cmd.hOutput)
     {
-        if (!AppBar_CopyOut((HANDLE)cmd.hOutput, &cmd.abd, sizeof(cmd.abd), cmd.dwProcessId))
+        if (!AppBar_CopyOut((HANDLE)(LONG_PTR)cmd.hOutput, &cmd.abd, sizeof(cmd.abd), cmd.dwProcessId))
         {
             ERR("AppBar_CopyOut: %d\n", dwMessage);
             return FALSE;
