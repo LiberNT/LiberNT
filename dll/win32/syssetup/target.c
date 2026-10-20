@@ -12,6 +12,7 @@
 #include <lmcons.h>
 #include <ntsecapi.h>
 #include <ntsam.h>
+#include <sddl.h>
 #include <userenv.h>
 #include <strsafe.h>
 #include <ndk/obfuncs.h>
@@ -974,15 +975,76 @@ SaveTargetHive(
 }
 
 static DWORD
+CopyTargetSamKey(
+    _In_ PTARGET_SETTINGS Settings)
+{
+    UNICODE_STRING LiveName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\Lsa\\SamKey");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"");
+    UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + 64];
+    PKEY_VALUE_PARTIAL_INFORMATION Value = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    WCHAR TargetPath[MAX_PATH];
+    UNICODE_STRING TargetName;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    PSECURITY_DESCRIPTOR Sd = NULL;
+    HANDLE LiveKey = NULL, TargetKey = NULL;
+    ULONG Length, Disposition;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, &LiveName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenKeyEx(&LiveKey, KEY_QUERY_VALUE, &ObjectAttributes, REG_OPTION_BACKUP_RESTORE);
+    if (NT_SUCCESS(Status))
+        Status = NtQueryValueKey(LiveKey, &ValueName, KeyValuePartialInformation, Value, sizeof(Buffer), &Length);
+    if (LiveKey)
+        NtClose(LiveKey);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    StringCchPrintfW(TargetPath, ARRAYSIZE(TargetPath), L"%s\\SYSTEM\\CurrentControlSet\\Control\\Lsa\\SamKey",
+                     Settings->MachineKey);
+    RtlInitUnicodeString(&TargetName, TargetPath);
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:P(A;;KA;;;SY)", SDDL_REVISION_1, &Sd, NULL))
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto done;
+    }
+
+    InitializeObjectAttributes(&ObjectAttributes, &TargetName, OBJ_CASE_INSENSITIVE, NULL, Sd);
+    Status = NtCreateKey(&TargetKey,
+                         KEY_SET_VALUE,
+                         &ObjectAttributes,
+                         0,
+                         NULL,
+                         REG_OPTION_NON_VOLATILE | REG_OPTION_BACKUP_RESTORE,
+                         &Disposition);
+    if (NT_SUCCESS(Status))
+    {
+        Status = NtSetValueKey(TargetKey, &ValueName, 0, Value->Type, Value->Data, Value->DataLength);
+        NtClose(TargetKey);
+    }
+    LocalFree(Sd);
+
+done:
+    RtlSecureZeroMemory(Buffer, sizeof(Buffer));
+    if (!NT_SUCCESS(Status))
+        DPRINT1("Copying the SAM password key to the target failed (Status 0x%08lx)\n", Status);
+
+    return RtlNtStatusToDosError(Status);
+}
+
+static DWORD
 SaveTargetSecurityHives(
     _In_ PTARGET_SETTINGS Settings)
 {
     DWORD Error;
 
     pSetupEnablePrivilege(L"SeBackupPrivilege", TRUE);
-    Error = SaveTargetHive(Settings, L"\\Registry\\Machine\\SAM", L"SAM");
+    pSetupEnablePrivilege(L"SeRestorePrivilege", TRUE);
+    Error = CopyTargetSamKey(Settings);
+    if (Error == ERROR_SUCCESS)
+        Error = SaveTargetHive(Settings, L"\\Registry\\Machine\\SAM", L"SAM");
     if (Error == ERROR_SUCCESS)
         Error = SaveTargetHive(Settings, L"\\Registry\\Machine\\SECURITY", L"SECURITY");
+    pSetupEnablePrivilege(L"SeRestorePrivilege", FALSE);
     pSetupEnablePrivilege(L"SeBackupPrivilege", FALSE);
 
     return Error;
