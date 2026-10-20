@@ -275,6 +275,16 @@ CmBattNotifyHandler(
     IN ULONG NotifyValue
 );
 
+VOID
+NTAPI
+CmBattWaitWakeLoop(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN UCHAR MinorFunction,
+    IN POWER_STATE PowerState,
+    IN PVOID Context,
+    IN PIO_STATUS_BLOCK IoStatusBlock
+);
+
 NTSTATUS
 NTAPI
 CmBattWmiDeRegistration(
@@ -337,5 +347,6 @@ CmBattQueryTag(
 
 extern PDEVICE_OBJECT AcAdapterPdo;
 extern ULONG CmBattDebug;
+extern UNICODE_STRING GlobalRegistryPath;
 
 #endif /* _CMBATT_PCH_ */

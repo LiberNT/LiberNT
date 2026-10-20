@@ -4,11 +4,14 @@
  * FILE:            boot/drivers/bus/acpi/cmbatt/cmbwmi.c
  * PURPOSE:         WMI Interface
  * PROGRAMMERS:     ReactOS Portable Systems Group
+ *                  Ahmed ARIF (arif.ing@outlook.com)
  */
 
 /* INCLUDES *******************************************************************/
 
 #include "cmbatt.h"
+
+#include <wmistr.h>
 
 #include <debug.h>
 
@@ -61,8 +64,58 @@ CmBattQueryWmiRegInfo(PDEVICE_OBJECT DeviceObject,
                       PUNICODE_STRING MofResourceName,
                       PDEVICE_OBJECT *Pdo)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    PCMBATT_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    PAGED_CODE();
+
+    *RegFlags = WMIREG_FLAG_INSTANCE_PDO;
+    *RegistryPath = &GlobalRegistryPath;
+    *Pdo = DeviceExtension->PdoDeviceObject;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+CmBattSetWaitWake(IN PCMBATT_DEVICE_EXTENSION DeviceExtension,
+                  IN BOOLEAN Enable)
+{
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"WaitWakeEnabled");
+    HANDLE KeyHandle;
+    ULONG Value = Enable;
+    NTSTATUS Status;
+    PAGED_CODE();
+
+    Status = IoOpenDeviceRegistryKey(DeviceExtension->PdoDeviceObject,
+                                     PLUGPLAY_REGKEY_DEVICE,
+                                     KEY_SET_VALUE,
+                                     &KeyHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ZwSetValueKey(KeyHandle, &ValueName, 0, REG_DWORD, &Value, sizeof(Value));
+    ZwClose(KeyHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    DeviceExtension->WaitWakeEnable = Enable;
+    if (Enable)
+    {
+        if (!DeviceExtension->PowerIrp &&
+            DeviceExtension->PowerState.SystemState != PowerSystemUnspecified)
+        {
+            PoRequestPowerIrp(DeviceExtension->DeviceObject,
+                              IRP_MN_WAIT_WAKE,
+                              DeviceExtension->PowerState,
+                              CmBattWaitWakeLoop,
+                              NULL,
+                              &DeviceExtension->PowerIrp);
+        }
+    }
+    else if (DeviceExtension->PowerIrp)
+    {
+        IoCancelIrp(DeviceExtension->PowerIrp);
+    }
+
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS
@@ -76,8 +129,44 @@ CmBattQueryWmiDataBlock(PDEVICE_OBJECT DeviceObject,
                         ULONG BufferAvail,
                         PUCHAR Buffer)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    PCMBATT_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    ULONG Size = 0;
+    NTSTATUS Status;
+    PAGED_CODE();
+
+    if (DeviceExtension->FdoType == CmBattBattery)
+    {
+        Status = BatteryClassQueryWmiDataBlock(DeviceExtension->ClassData,
+                                               DeviceObject,
+                                               Irp,
+                                               GuidIndex,
+                                               InstanceLengthArray,
+                                               BufferAvail,
+                                               Buffer);
+        if (Status != STATUS_WMI_GUID_NOT_FOUND)
+            return Status;
+    }
+
+    if (GuidIndex != 0)
+    {
+        Status = STATUS_WMI_GUID_NOT_FOUND;
+    }
+    else
+    {
+        Size = sizeof(BOOLEAN);
+        if (!InstanceLengthArray || BufferAvail < Size)
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            *(PBOOLEAN)Buffer = DeviceExtension->WaitWakeEnable;
+            InstanceLengthArray[0] = Size;
+            Status = STATUS_SUCCESS;
+        }
+    }
+
+    return WmiCompleteRequest(DeviceObject, Irp, Status, Size, IO_NO_INCREMENT);
 }
 
 NTSTATUS
@@ -89,8 +178,17 @@ CmBattSetWmiDataBlock(PDEVICE_OBJECT DeviceObject,
                       ULONG BufferSize,
                       PUCHAR Buffer)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    NTSTATUS Status;
+    PAGED_CODE();
+
+    if (GuidIndex != 0)
+        Status = STATUS_WMI_GUID_NOT_FOUND;
+    else if (BufferSize < sizeof(BOOLEAN))
+        Status = STATUS_INFO_LENGTH_MISMATCH;
+    else
+        Status = CmBattSetWaitWake(DeviceObject->DeviceExtension, *(PBOOLEAN)Buffer != FALSE);
+
+    return WmiCompleteRequest(DeviceObject, Irp, Status, 0, IO_NO_INCREMENT);
 }
 
 NTSTATUS
@@ -103,8 +201,19 @@ CmBattSetWmiDataItem(PDEVICE_OBJECT DeviceObject,
                      ULONG BufferSize,
                      PUCHAR Buffer)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    NTSTATUS Status;
+    PAGED_CODE();
+
+    if (GuidIndex != 0)
+        Status = STATUS_WMI_GUID_NOT_FOUND;
+    else if (DataItemId != 1)
+        Status = STATUS_WMI_ITEMID_NOT_FOUND;
+    else if (BufferSize < sizeof(BOOLEAN))
+        Status = STATUS_INFO_LENGTH_MISMATCH;
+    else
+        Status = CmBattSetWaitWake(DeviceObject->DeviceExtension, *(PBOOLEAN)Buffer != FALSE);
+
+    return WmiCompleteRequest(DeviceObject, Irp, Status, 0, IO_NO_INCREMENT);
 }
 
 NTSTATUS
