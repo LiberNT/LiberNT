@@ -35,6 +35,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(user32);
 /* MACROS/DEFINITIONS ********************************************************/
 
 #define DF_END  0x0001
+#define DF_ANSIDLGPROC 0x0002
 #define DF_DIALOGACTIVE 0x4000 // ReactOS
 #define GETDLGINFO(hwnd) DIALOG_get_info(hwnd, FALSE)
 #define GET_WORD(ptr)  (*(WORD *)(ptr))
@@ -179,6 +180,59 @@ DIALOGINFO *DIALOG_get_info( HWND hWnd, BOOL create )
 
 #endif
     return dlgInfo;
+}
+
+static LONG_PTR DIALOG_MapDlgProc( HWND hwnd, LONG_PTR proc, BOOL ansiproc, BOOL unicode )
+{
+    if (!proc || ansiproc == !unicode) return proc;
+    return NtUserGetCPD( hwnd, UserGetCPDDialog | (ansiproc ? UserGetCPDU2A : UserGetCPDA2U), proc );
+}
+
+static void DIALOG_ResolveCallProc( LONG_PTR *proc, BOOL *ansiproc )
+{
+#ifdef WOW64_I386_RUNTIME
+    ROS_CALLPROCINFO Info;
+
+    if (!NtUserCallTwoParam( (DWORD_PTR)*proc, (DWORD_PTR)&Info, TWOPARAM_ROUTINE_ROS_GETCALLPROCINFO ) ||
+        Info.WindowProc > MAXULONG)
+        return;
+    *proc = (LONG_PTR)Info.WindowProc;
+    *ansiproc = !Info.IsUnicode;
+#else
+    PCALLPROCDATA CallProc = ValidateCallProc( (HANDLE)*proc );
+
+    if (!CallProc) return;
+    *proc = (LONG_PTR)CallProc->pfnClientPrevious;
+    *ansiproc = !(CallProc->wType & UserGetCPDA2U);
+#endif
+}
+
+LONG_PTR DIALOG_GetDlgProc( HWND hwnd, LONG_PTR proc, BOOL unicode )
+{
+    DIALOGINFO *dlgInfo = GETDLGINFO(hwnd);
+
+    if (!dlgInfo) return proc;
+    return DIALOG_MapDlgProc( hwnd, proc, !!(dlgInfo->flags & DF_ANSIDLGPROC), unicode );
+}
+
+BOOL DIALOG_SetDlgProc( HWND hwnd, LONG_PTR proc, BOOL unicode, LONG_PTR *oldproc )
+{
+    DIALOGINFO *dlgInfo = GETDLGINFO(hwnd);
+    BOOL ansiproc = !unicode;
+    BOOL oldansiproc;
+    LONG_PTR ret;
+
+    if (!dlgInfo) return FALSE;
+
+    if (IsCallProcHandle( (WNDPROC)proc ))
+        DIALOG_ResolveCallProc( &proc, &ansiproc );
+
+    oldansiproc = !!(dlgInfo->flags & DF_ANSIDLGPROC);
+    ret = NtUserSetWindowLongPtr( hwnd, DWLP_DLGPROC, proc, !unicode );
+    if (ansiproc) dlgInfo->flags |= DF_ANSIDLGPROC;
+    else dlgInfo->flags &= ~DF_ANSIDLGPROC;
+    *oldproc = DIALOG_MapDlgProc( hwnd, ret, oldansiproc, unicode );
+    return TRUE;
 }
 
 /***********************************************************************
@@ -1770,7 +1824,7 @@ DefDlgProcA(
 
     SetWindowLongPtrW( hDlg, DWLP_MSGRESULT, 0 );
 
-    if ((dlgproc = (WNDPROC)GetWindowLongPtrW( hDlg, DWLP_DLGPROC )))
+    if ((dlgproc = (WNDPROC)IntGetWindowLong( hDlg, DWLP_DLGPROC, sizeof(LONG_PTR), !(dlgInfo->flags & DF_ANSIDLGPROC) )))
     {
         /* Call dialog procedure */
         result = CallWindowProcA( dlgproc, hDlg, Msg, wParam, lParam );
@@ -1833,7 +1887,7 @@ DefDlgProcW(
 
     SetWindowLongPtrW( hDlg, DWLP_MSGRESULT, 0 );
 
-    if ((dlgproc = (WNDPROC)GetWindowLongPtrW( hDlg, DWLP_DLGPROC )))
+    if ((dlgproc = (WNDPROC)IntGetWindowLong( hDlg, DWLP_DLGPROC, sizeof(LONG_PTR), !(dlgInfo->flags & DF_ANSIDLGPROC) )))
     {
         /* Call dialog procedure */
         result = CallWindowProcW( dlgproc, hDlg, Msg, wParam, lParam );

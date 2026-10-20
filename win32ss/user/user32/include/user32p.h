@@ -138,6 +138,9 @@ extern BOOL FASTCALL EnumNamesA(HWINSTA WindowStation, NAMEENUMPROCA EnumFunc, L
 extern BOOL FASTCALL EnumNamesW(HWINSTA WindowStation, NAMEENUMPROCW EnumFunc, LPARAM Context, BOOL Desktops);
 BOOL UserDrawSysMenuButton( HWND hWnd, HDC hDC, LPRECT, BOOL down );
 HWND* WIN_ListChildren (HWND hWndparent);
+LONG_PTR IntGetWindowLong(HWND hwnd, INT offset, UINT size, BOOL unicode);
+LONG_PTR DIALOG_GetDlgProc(HWND hwnd, LONG_PTR proc, BOOL unicode);
+BOOL DIALOG_SetDlgProc(HWND hwnd, LONG_PTR proc, BOOL unicode, LONG_PTR *oldproc);
 VOID DeleteFrameBrushes(VOID);
 BOOL WINAPI GdiValidateHandle(HGDIOBJ);
 HANDLE FASTCALL UserGetProp(HWND hWnd, ATOM Atom, BOOLEAN SystemProp);

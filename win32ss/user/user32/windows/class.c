@@ -1157,6 +1157,8 @@ LONG_PTR IntGetWindowLong( HWND hwnd, INT offset, UINT size, BOOL unicode )
 #ifdef WOW64_I386_RUNTIME
     if (size == sizeof(WORD))
         return (LONG_PTR)NtUserCallHwndParam(hwnd, (DWORD_PTR)offset, HWNDPARAM_ROUTINE_ROS_GETWINDOWWORD);
+    if (offset == DWLP_DLGPROC && size == sizeof(LONG_PTR))
+        return DIALOG_GetDlgProc(hwnd, (LONG_PTR)NtUserCallHwndParam(hwnd, (DWORD_PTR)offset, unicode ? HWNDPARAM_ROUTINE_ROS_GETWINDOWLONGW : HWNDPARAM_ROUTINE_ROS_GETWINDOWLONGA), unicode);
     return (LONG_PTR)NtUserCallHwndParam(hwnd, (DWORD_PTR)offset, unicode ? HWNDPARAM_ROUTINE_ROS_GETWINDOWLONGW : HWNDPARAM_ROUTINE_ROS_GETWINDOWLONGA);
 #else
     LONG_PTR retvalue = 0;
@@ -1185,9 +1187,8 @@ LONG_PTR IntGetWindowLong( HWND hwnd, INT offset, UINT size, BOOL unicode )
         }
         retvalue = *((LONG_PTR *)((PCHAR)(wndPtr + 1) + offset));
 
-        /* WINE: special case for dialog window procedure */
-        //if ((offset == DWLP_DLGPROC) && (size == sizeof(LONG_PTR)) && (wndPtr->flags & WIN_ISDIALOG))
-        //    retvalue = (LONG_PTR)IntGetWndProc( (WNDPROC)retvalue, unicode );
+        if (offset == DWLP_DLGPROC && size == sizeof(LONG_PTR))
+            retvalue = DIALOG_GetDlgProc(hwnd, retvalue, unicode);
         return retvalue;
     }
 
@@ -1756,6 +1757,11 @@ SetWindowLongA(
   int nIndex,
   LONG dwNewLong)
 {
+    LONG_PTR OldProc;
+
+    if (nIndex == DWLP_DLGPROC && sizeof(LONG) == sizeof(LONG_PTR) &&
+        DIALOG_SetDlgProc(hWnd, dwNewLong, FALSE, &OldProc))
+        return (LONG)OldProc;
     /* DO NOT USE NtUserSetWindowLongPtr! */
     return NtUserSetWindowLong(hWnd, nIndex, dwNewLong, TRUE);
 }
@@ -1770,6 +1776,11 @@ SetWindowLongW(
   int nIndex,
   LONG dwNewLong)
 {
+    LONG_PTR OldProc;
+
+    if (nIndex == DWLP_DLGPROC && sizeof(LONG) == sizeof(LONG_PTR) &&
+        DIALOG_SetDlgProc(hWnd, dwNewLong, TRUE, &OldProc))
+        return (LONG)OldProc;
     /* DO NOT USE NtUserSetWindowLongPtr! */
     return NtUserSetWindowLong(hWnd, nIndex, dwNewLong, FALSE);
 }
@@ -1784,6 +1795,10 @@ SetWindowLongPtrA(HWND hWnd,
                   INT nIndex,
                   LONG_PTR dwNewLong)
 {
+    LONG_PTR OldProc;
+
+    if (nIndex == DWLP_DLGPROC && DIALOG_SetDlgProc(hWnd, dwNewLong, FALSE, &OldProc))
+        return OldProc;
     return NtUserSetWindowLongPtr(hWnd, nIndex, dwNewLong, TRUE);
 }
 
@@ -1796,6 +1811,10 @@ SetWindowLongPtrW(HWND hWnd,
                   INT nIndex,
                   LONG_PTR dwNewLong)
 {
+    LONG_PTR OldProc;
+
+    if (nIndex == DWLP_DLGPROC && DIALOG_SetDlgProc(hWnd, dwNewLong, TRUE, &OldProc))
+        return OldProc;
     return NtUserSetWindowLongPtr(hWnd, nIndex, dwNewLong, FALSE);
 }
 #endif
