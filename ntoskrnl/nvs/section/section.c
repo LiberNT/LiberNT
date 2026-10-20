@@ -660,6 +660,7 @@ MiSegmentRelease(
     PMI_SYSTEM System = Segment->System;
     PMI_SEGMENT Victim = NULL;
     BOOLEAN Closed = FALSE;
+    BOOLEAN Exceeded = FALSE;
     KIRQL OldIrql;
 
     if (DeferredDelete != NULL)
@@ -690,14 +691,7 @@ MiSegmentRelease(
         Segment->State = MI_SEGMENT_UNUSED;
         InsertTailList(&System->UnusedSegmentList, &Segment->UnusedLink);
         System->UnusedSegmentCount++;
-
-        if (System->UnusedSegmentCount > System->UnusedSegmentLimit)
-        {
-            Victim = CONTAINING_RECORD(System->UnusedSegmentList.Flink, MI_SEGMENT, UnusedLink);
-            RemoveEntryList(&Victim->UnusedLink);
-            System->UnusedSegmentCount--;
-            Victim->State = MI_SEGMENT_DELETING;
-        }
+        Exceeded = System->UnusedSegmentCount > System->UnusedSegmentLimit;
     }
     else
     {
@@ -707,6 +701,9 @@ MiSegmentRelease(
     }
 
     MI_SPIN_RELEASE(&System->SegmentListLock, OldIrql);
+
+    if (Exceeded && System->UnusedSegmentsExceeded != NULL)
+        System->UnusedSegmentsExceeded(System);
 
     if (DeferredDelete != NULL)
         *DeferredDelete = Victim;
@@ -762,6 +759,39 @@ MiSegmentPurgeUnused(
     }
 
     return Purged;
+}
+
+ULONG
+MiSegmentTrimUnused(
+    _Inout_ PMI_SYSTEM System)
+{
+    ULONG Trimmed = 0;
+
+    for (;;)
+    {
+        PMI_SEGMENT Victim = NULL;
+        KIRQL OldIrql;
+
+        MI_SPIN_ACQUIRE(&System->SegmentListLock, &OldIrql);
+
+        if (System->UnusedSegmentCount > System->UnusedSegmentLimit && !IsListEmpty(&System->UnusedSegmentList))
+        {
+            Victim = CONTAINING_RECORD(System->UnusedSegmentList.Flink, MI_SEGMENT, UnusedLink);
+            RemoveEntryList(&Victim->UnusedLink);
+            System->UnusedSegmentCount--;
+            Victim->State = MI_SEGMENT_DELETING;
+        }
+
+        MI_SPIN_RELEASE(&System->SegmentListLock, OldIrql);
+
+        if (Victim == NULL)
+            break;
+
+        MiSegmentDelete(Victim, TRUE);
+        Trimmed++;
+    }
+
+    return Trimmed;
 }
 
 static

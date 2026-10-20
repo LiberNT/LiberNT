@@ -954,6 +954,16 @@ SectionViewOutlivesOwner(void)
     WorldDestroy(&World);
 }
 
+static volatile LONG SectionUnusedExceededCalls;
+
+static
+VOID
+SectionUnusedExceeded(PMI_SYSTEM System)
+{
+    UNREFERENCED_PARAMETER(System);
+    __sync_fetch_and_add(&SectionUnusedExceededCalls, 1);
+}
+
 static
 void
 SectionUnusedCache(void)
@@ -970,6 +980,8 @@ SectionUnusedCache(void)
     memset(Owned, 0, sizeof(Owned));
     WorldCreate(&World, 512, 1, 1000);
     World.System.UnusedSegmentLimit = 2;
+    World.System.UnusedSegmentsExceeded = SectionUnusedExceeded;
+    SectionUnusedExceededCalls = 0;
     SpaceCreate(&World, 0, &A);
 
     for (i = 0; i < 3; i++)
@@ -1005,10 +1017,16 @@ SectionUnusedCache(void)
 
     MiSegmentDereference(Segment[1]);
     CHECK(World.System.UnusedSegmentCount == 2 && Owned[0].Released == 0 && Owned[1].Released == 0);
+    CHECK(SectionUnusedExceededCalls == 0);
 
     MiSegmentDereference(Segment[2]);
+    CHECK(World.System.UnusedSegmentCount == 3 && SectionUnusedExceededCalls == 1);
+    CHECK(Owned[0].Released == 0 && Owned[1].Released == 0 && Owned[2].Released == 0);
+
+    CHECK(MiSegmentTrimUnused(&World.System) == 1);
     CHECK(World.System.UnusedSegmentCount == 2);
     CHECK(Owned[0].Released == 1 && Owned[1].Released == 0 && Owned[2].Released == 0);
+    CHECK(MiSegmentTrimUnused(&World.System) == 0);
     CHECK(*(ULONG64 *)(Owned[0].File.Data + 0x3000) == 0xCAC4ED);
 
     CHECK(MiSegmentTryReference(Segment[1]));

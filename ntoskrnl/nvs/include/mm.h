@@ -107,6 +107,7 @@ typedef struct _MI_SYSTEM
     VOID (*ReturnOwnerCommit)(_In_ PVOID Owner, _In_ LONG64 Pages);
     BOOLEAN (*ExpandCommit)(_Inout_ struct _MI_SYSTEM *System, _In_ LONG64 Pages, _In_ LONG64 Limit,
                             _In_ BOOLEAN Wait);
+    VOID (*UnusedSegmentsExceeded)(_Inout_ struct _MI_SYSTEM *System);
 } MI_SYSTEM, *PMI_SYSTEM;
 
 NTSTATUS MiSystemInitialize(_Out_ PMI_SYSTEM System, _In_ PMI_PFN PfnArray, _In_ ULONG FrameCount,
@@ -518,6 +519,7 @@ VOID MiTlbBatchAdd(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress,
                    _In_opt_ PMI_SEGMENT Segment, _In_opt_ PMI_PTE Proto, _In_ BOOLEAN Private);
 BOOLEAN MiSegmentDereferenceAndClose(_Inout_ PMI_SEGMENT Segment);
 ULONG MiSegmentPurgeUnused(_Inout_ PMI_SYSTEM System, _In_ ULONG MaximumCount);
+ULONG MiSegmentTrimUnused(_Inout_ PMI_SYSTEM System);
 VOID MiSegmentDereference(_Inout_ PMI_SEGMENT Segment);
 NTSTATUS MiSegmentExtend(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 NewSizeInBytes);
 NTSTATUS MiSegmentFlush(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 Offset, _In_ ULONG64 Length);

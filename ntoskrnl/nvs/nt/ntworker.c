@@ -13,6 +13,7 @@
 
 static KEVENT MiBalanceEvent;
 static KEVENT MiModifiedWriterEvent;
+static KEVENT MiDereferenceSegmentEvent;
 static KEVENT MiZeroPageEvent;
 static volatile LONG MiZeroPageWaiting;
 
@@ -66,6 +67,33 @@ MiModifiedPageWriter(
     }
 }
 
+static
+VOID
+NTAPI
+MiDereferenceSegmentThread(
+    _In_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    KeSetPriorityThread(KeGetCurrentThread(), LOW_REALTIME_PRIORITY + 2);
+
+    for (;;)
+    {
+        KeWaitForSingleObject(&MiDereferenceSegmentEvent, Executive, KernelMode, FALSE, NULL);
+        MiSegmentTrimUnused(&MiSystem);
+    }
+}
+
+static
+VOID
+MiUnusedSegmentsExceeded(
+    _Inout_ PMI_SYSTEM System)
+{
+    UNREFERENCED_PARAMETER(System);
+
+    KeSetEvent(&MiDereferenceSegmentEvent, 0, FALSE);
+}
+
 VOID
 MiWakeBalanceSetManager(VOID)
 {
@@ -102,6 +130,16 @@ MiWorkerThreadsInitialize(VOID)
         return Status;
 
     ZwClose(Handle);
+
+    KeInitializeEvent(&MiDereferenceSegmentEvent, SynchronizationEvent, FALSE);
+    Status = PsCreateSystemThread(&Handle, THREAD_ALL_ACCESS, &ObjectAttributes, NULL, NULL,
+                                  MiDereferenceSegmentThread, NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    ZwClose(Handle);
+    MiSystem.UnusedSegmentsExceeded = MiUnusedSegmentsExceeded;
+    KeSetEvent(&MiDereferenceSegmentEvent, 0, FALSE);
 
     /* NVS's memory balancer does not scan scheduler ready queues. Start
      * the shared scheduler balance-set manager too, so threads readied at
