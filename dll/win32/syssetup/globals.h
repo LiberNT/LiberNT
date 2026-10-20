@@ -70,7 +70,8 @@ BOOL
 InstallSysSetupInfDevices(VOID);
 
 BOOL
-InstallSysSetupInfComponents(VOID);
+InstallSysSetupInfComponents(
+    _In_ UINT Flags);
 
 BOOL
 InitializeProgramFilesDir(VOID);

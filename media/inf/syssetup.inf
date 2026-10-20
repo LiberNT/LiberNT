@@ -45,11 +45,46 @@ RegisterDlls = OleControlDlls
 AddReg=Classes
 
 [RegistrationLiveCD]
-RegisterDlls = OleControlDllsCode
+RegisterDlls = FileRegisterDlls
 AddReg=Classes
 
+[FileRegisterDlls]
+11,,fontext.dll,1
+11,,mydocs.dll,1
+11,,sendmail.dll,1
+11,,shell32.dll,1
+11,,zipfldr.dll,1
+
 [Wow64Registration]
-RegisterDlls = EarlyRegisterDlls, OleControlDllsCode
+RegisterDlls = Wow64RegisterDlls
+
+[Wow64RegisterDlls]
+11,,comctl32.dll,2
+11,,ole32.dll,1
+11,,cryptdlg.dll,1
+11,,cryptnet.dll,1
+11,,winegstreamer.dll,1
+11,,devenum.dll,1
+11,,quartz.dll,1
+11,,dsound.dll,1
+11,,fontext.dll,1
+11,,mfh264enc.dll,1
+11,,mmdevapi.dll,1
+11,,mscat32.dll,1
+11,,mshtml.dll,3
+11,,msisip.dll,1
+11,,mydocs.dll,1
+11,,qcap.dll,1
+11,,qedit.dll,1
+11,,sendmail.dll,1
+11,,shdocvw.dll,1
+11,,shell32.dll,3
+11,,softpub.dll,1
+11,,urlmon.dll,3
+11,,windowscodecs.dll,1
+11,,wininet.dll,2
+11,,wintrust.dll,1
+11,,zipfldr.dll,1
 
 [OleControlDlls]
 11,,activeds.dll,1

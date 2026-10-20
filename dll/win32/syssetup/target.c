@@ -1076,8 +1076,9 @@ InstallTargetSystem(VOID)
     ReportTargetPhase(2);
     if (!InstallSysSetupInfDevices())
         return GetLastError();
-    if (!InstallSysSetupInfComponents())
+    if (!InstallSysSetupInfComponents(SPINST_ALL))
         return GetLastError();
+    StartWow64Registration();
     Error = EnableTargetPlugPlay();
     if (Error != ERROR_SUCCESS)
         return Error;

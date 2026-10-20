@@ -6,6 +6,7 @@ PURPOSE:     Build the script registrations of the system DLLs into a hive INF f
 COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 """
 
+import re
 import struct
 import sys
 
@@ -13,11 +14,17 @@ SYSTEM32 = "%SystemRoot%\\system32"
 SYSWOW64 = "%SystemRoot%\\SysWOW64"
 MODULE_MARK = "\x01M\x01"
 SYSROOT_MARK = "\x01R\x01"
+SYSDIR_MARK = "\x01S\x01"
+PROGFILES_MARK = "\x01P\x01"
+PROGFILES86_MARK = "\x01X\x01"
+MARKS = (MODULE_MARK, SYSROOT_MARK, SYSDIR_MARK, PROGFILES_MARK, PROGFILES86_MARK)
 
 REG_SZ = 1
 REG_EXPAND_SZ = 2
+REG_NONE = 0
 REG_BINARY = 3
 REG_DWORD = 4
+REG_MULTI_SZ = 7
 
 ROOTS = {
     "HKEY_CLASSES_ROOT": ("HKLM", "SOFTWARE\\Classes"),
@@ -397,23 +404,32 @@ def script_ops(image, rtype, atl, warnings, label):
     return ops
 
 
-def resolve(text, path):
-    return text.replace(MODULE_MARK, path).replace(SYSROOT_MARK, "%SystemRoot%")
+def resolve(text, path, sysdir):
+    progfiles = "%ProgramFiles(x86)%" if sysdir == SYSWOW64 else "%ProgramFiles%"
+    return text.replace(MODULE_MARK, path).replace(SYSDIR_MARK, sysdir).replace(SYSROOT_MARK, "%SystemRoot%") \
+               .replace(PROGFILES_MARK, progfiles).replace(PROGFILES86_MARK, "%ProgramFiles(x86)%")
 
 
-def apply(registry, ops, path):
+TYPELIB_PLATFORM = re.compile(r"^(SOFTWARE\\Classes\\TypeLib\\[^\\]+\\[^\\]+\\[^\\]+\\)win64(\\|$)", re.I)
+
+
+def apply(registry, ops, path, sysdir=SYSTEM32, platform="win64"):
     for op in ops:
+        if platform != "win64" and op[0] != "delete":
+            op = (op[0], op[1], TYPELIB_PLATFORM.sub(r"\1%s\2" % platform, op[2])) + tuple(op[3:])
         if op[0] == "delete":
-            registry.delete_tree(op[1], resolve(op[2], path))
+            registry.delete_tree(op[1], resolve(op[2], path, sysdir))
         elif op[0] == "create":
-            registry.create(op[1], resolve(op[2], path))
+            registry.create(op[1], resolve(op[2], path, sysdir))
         else:
             kind, root, key, name, vtype, data = op
-            if vtype in (REG_SZ, REG_EXPAND_SZ) and (MODULE_MARK in data or SYSROOT_MARK in data):
+            if vtype in (REG_SZ, REG_EXPAND_SZ) and any(m in data for m in MARKS):
                 if name.lower() != "image path":
                     vtype = REG_EXPAND_SZ
-                data = resolve(data, path)
-            registry.set_value(root, resolve(key, path), resolve(name, path), vtype, data)
+                data = resolve(data, path, sysdir)
+            elif vtype == REG_MULTI_SZ:
+                data = [resolve(item, path, sysdir) for item in data]
+            registry.set_value(root, resolve(key, path, sysdir), resolve(name, path, sysdir), vtype, data)
 
 
 def inf_string(text):
@@ -442,27 +458,131 @@ def write_inf(registry, out):
                 out.write("%s,%s,0x00020000,%s\n" % (head, inf_string(vname), inf_string(data)))
             elif vtype == REG_DWORD:
                 out.write("%s,%s,0x00010001,0x%08x\n" % (head, inf_string(vname), data))
-            elif vtype == REG_BINARY:
-                out.write("%s,%s,0x00000001%s\n" % (head, inf_string(vname),
-                                                    "".join(",%02x" % b for b in data)))
+            elif vtype == REG_MULTI_SZ:
+                out.write("%s,%s,0x00010000%s\n" % (head, inf_string(vname),
+                                                    "".join("," + inf_string(item) for item in data)))
             else:
-                raise ValueError("unsupported value type %d" % vtype)
+                flags = 0x00000001 if vtype == REG_BINARY else 0x00020001 if vtype == REG_NONE else (vtype << 16) | 1
+                out.write("%s,%s,0x%08x%s\n" % (head, inf_string(vname), flags,
+                                               "".join(",%02x" % b for b in data)))
 
 
-def register(registry, modules, subdir, name, warnings, root=SYSTEM32):
+def register(registry, modules, subdir, name, warnings, root=SYSTEM32, code_ops=None, scripts=True):
     image_path = modules.get(name.lower())
     if not image_path:
         warnings.append("%s: no module in this build" % name)
         return
     image = PeImage(image_path)
     path = module_path(subdir, name, root)
-    apply(registry, script_ops(image, "WINE_REGISTRY", False, warnings, name), path)
-    apply(registry, script_ops(image, "REGISTRY", True, warnings, name), path)
+    if scripts:
+        apply(registry, script_ops(image, "WINE_REGISTRY", False, warnings, name), path, root)
+        apply(registry, script_ops(image, "REGISTRY", True, warnings, name), path, root)
+    if code_ops:
+        apply(registry, code_ops, path, root, image.platform)
 
 
-def build(inf, modules, wow64_modules, warnings):
+def split_fields(text):
+    fields = []
+    i = 0
+    n = len(text)
+    while True:
+        while i < n and text[i] in " \t":
+            i += 1
+        if i < n and text[i] == '"':
+            parts = []
+            i += 1
+            while True:
+                j = text.find('"', i)
+                if j < 0:
+                    raise ValueError("unterminated string in %r" % text)
+                parts.append(text[i:j])
+                if j + 1 < n and text[j + 1] == '"':
+                    parts.append('"')
+                    i = j + 2
+                    continue
+                i = j + 1
+                break
+            fields.append("".join(parts))
+            while i < n and text[i] in " \t":
+                i += 1
+        else:
+            j = text.find(",", i)
+            if j < 0:
+                j = n
+            fields.append(text[i:j].strip())
+            i = j
+        if i >= n:
+            return fields
+        if text[i] != ",":
+            raise ValueError("expected ',' in %r" % text)
+        i += 1
+
+
+CODE_PLACEHOLDERS = {"": "%", "module": MODULE_MARK, "systemdir": SYSDIR_MARK, "systemroot": SYSROOT_MARK,
+                     "programfiles": PROGFILES_MARK, "programfiles(x86)": PROGFILES86_MARK}
+
+CODE_ROOTS = {"HKCR": ("HKLM", "SOFTWARE\\Classes\\"), "HKLM": ("HKLM", ""), "HKCU": ("HKCU", "")}
+
+
+def unplace(text):
+    out = []
+    i = 0
+    while True:
+        j = text.find("%", i)
+        if j < 0:
+            out.append(text[i:])
+            return "".join(out)
+        k = text.find("%", j + 1)
+        if k < 0 or text[j + 1:k].lower() not in CODE_PLACEHOLDERS:
+            raise ValueError("bad placeholder in %r" % text)
+        out.append(text[i:j])
+        out.append(CODE_PLACEHOLDERS[text[j + 1:k].lower()])
+        i = k + 1
+
+
+def code_line_op(text):
+    f = split_fields(text)
+    if len(f) < 2 or f[0].upper() not in CODE_ROOTS:
+        raise ValueError("bad registry line %r" % text)
+    root, prefix = CODE_ROOTS[f[0].upper()]
+    key = prefix + unplace(f[1])
+    flags = int(f[3], 16) if len(f) > 3 and f[3] else 0
+    if flags == 0x00000010:
+        return ("create", root, key)
+    name = unplace(f[2]) if len(f) > 2 else ""
+    data = f[4:]
+    if flags == 0x00010001:
+        return ("set", root, key, name, REG_DWORD, int(data[0], 16) & 0xFFFFFFFF)
+    if flags & 1:
+        vtype = {0: REG_BINARY, 2: REG_NONE}.get(flags >> 16, flags >> 16)
+        return ("set", root, key, name, vtype, bytes(int(b, 16) for b in data))
+    if flags == 0x00010000:
+        return ("set", root, key, name, REG_MULTI_SZ, [unplace(x) for x in data])
+    if flags in (0x00000000, 0x00020000):
+        return ("set", root, key, name, REG_EXPAND_SZ if flags else REG_SZ, unplace(data[0]) if data else "")
+    raise ValueError("unsupported flags 0x%08x in %r" % (flags, text))
+
+
+def read_code_data(lines):
+    sections = {}
+    current = None
+    for line in lines:
+        text = line.strip()
+        if not text or text.startswith(";"):
+            continue
+        if text.startswith("["):
+            current = sections.setdefault(text[1:text.index("]")].strip().lower(), [])
+            continue
+        if current is None:
+            raise ValueError("registry line outside a section: %r" % text)
+        current.append(code_line_op(text))
+    return sections
+
+
+def build(inf, modules, wow64_modules, code_data, warnings):
     entries = [tuple(f[:4]) for f in read_inf_section(inf, "OleControlDlls") if len(f) >= 4]
     code = [tuple(f[:4]) for f in read_inf_section(inf, "OleControlDllsCode") if len(f) >= 4]
+    early = [tuple(f[:4]) for f in read_inf_section(inf, "EarlyRegisterDlls") if len(f) >= 4]
     keys = [tuple(x.lower() for x in entry) for entry in entries]
     last = -1
     for entry in code:
@@ -477,8 +597,6 @@ def build(inf, modules, wow64_modules, warnings):
     wow64 = Registry()
     for dirid, subdir, name, flags in entries:
         if name.lower() in code_names:
-            if name.lower() in wow64_modules:
-                register(wow64, wow64_modules, subdir, name, warnings, SYSWOW64)
             continue
         if dirid != "11" or int(flags or "1") & ~1:
             raise ValueError("%s must be registered at run time; add it to [OleControlDllsCode]" % name)
@@ -491,6 +609,33 @@ def build(inf, modules, wow64_modules, warnings):
         if fields[0].lower() in wow64_modules:
             register(wow64, wow64_modules, "", fields[0], warnings, SYSWOW64)
         register(registry, modules, "", fields[0], warnings)
+
+    runtime = []
+    seen = set()
+    for dirid, subdir, name, flags in early + code:
+        if name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        if dirid != "11":
+            raise ValueError("%s is not in the system directory" % name)
+        if name.lower() not in code_data:
+            raise ValueError("%s has no captured registration in comreg_code.inf" % name)
+        runtime.append((dirid, subdir, name, flags))
+    for dirid, subdir, name, flags in runtime:
+        ops = code_data[name.lower()]
+        register(registry, modules, subdir, name, warnings, SYSTEM32, ops, False)
+        if name.lower() in wow64_modules:
+            register(wow64, wow64_modules, subdir, name, warnings, SYSWOW64, ops, False)
+    for name in code_data:
+        if name not in seen:
+            raise ValueError("comreg_code.inf has a section for %s, which is not registered at run time" % name)
+
+    wow64_list = [f[2].lower() for f in read_inf_section(inf, "Wow64RegisterDlls") if len(f) >= 3]
+    wanted = [entry[2].lower() for entry in runtime if entry[2].lower() in wow64_modules]
+    if wow64_modules and wow64_list != wanted:
+        raise ValueError("[Wow64RegisterDlls] must list, in order, the [EarlyRegisterDlls] and "
+                         "[OleControlDllsCode] entries that have a 32-bit module: %s" % ", ".join(wanted))
+
     merge_wow64(registry, wow64)
     return registry
 
@@ -506,22 +651,24 @@ def read_modules(path):
 
 
 def main(argv):
-    if len(argv) != 5:
-        sys.stderr.write("usage: mkcomreg.py <syssetup.inf> <modules.txt> <wow64_modules.txt> <output.inf>\n")
+    if len(argv) != 6:
+        sys.stderr.write("usage: mkcomreg.py <syssetup.inf> <comreg_code.inf> <modules.txt> <wow64_modules.txt> <output.inf>\n")
         return 2
     with open(argv[1], encoding="utf-8-sig", errors="replace") as f:
         inf = f.read().splitlines()
-    modules = read_modules(argv[2])
-    wow64_modules = read_modules(argv[3])
+    modules = read_modules(argv[3])
+    wow64_modules = read_modules(argv[4])
     warnings = []
     try:
-        registry = build(inf, modules, wow64_modules, warnings)
+        with open(argv[2], encoding="utf-8-sig") as f:
+            code_data = read_code_data(f.read().splitlines())
+        registry = build(inf, modules, wow64_modules, code_data, warnings)
     except ValueError as e:
         sys.stderr.write("mkcomreg: error: %s\n" % e)
         return 1
     for w in warnings:
         sys.stderr.write("mkcomreg: warning: %s\n" % w)
-    with open(argv[4], "w", encoding="utf-16", newline="\r\n") as out:
+    with open(argv[5], "w", encoding="utf-16", newline="\r\n") as out:
         write_inf(registry, out)
     return 0
 

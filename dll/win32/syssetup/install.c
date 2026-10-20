@@ -457,7 +457,8 @@ InstallSysSetupInfDevices(VOID)
 }
 
 BOOL
-InstallSysSetupInfComponents(VOID)
+InstallSysSetupInfComponents(
+    _In_ UINT Flags)
 {
     INFCONTEXT InfContext;
     WCHAR szNameBuffer[256];
@@ -511,7 +512,7 @@ InstallSysSetupInfComponents(VOID)
             if (!SetupInstallFromInfSectionW(NULL,
                                              hComponentInf,
                                              szSectionBuffer,
-                                             SPINST_ALL,
+                                             Flags,
                                              NULL,
                                              NULL,
                                              SP_COPY_NEWER,
@@ -530,7 +531,6 @@ InstallSysSetupInfComponents(VOID)
         while (SetupFindNextLine(&InfContext, &InfContext));
     }
 
-    StartWow64Registration();
     return TRUE;
 }
 
@@ -545,7 +545,7 @@ StartWow64Registration(VOID)
     WCHAR Wow64Dir[MAX_PATH], WindowsDir[MAX_PATH], Rundll32[MAX_PATH], CommandLine[3 * MAX_PATH];
     PROCESS_INFORMATION ProcessInformation;
     STARTUPINFOW StartupInfo;
-    LONG Early, Code;
+    LONG Count;
 
     if (hWow64Registration)
         return;
@@ -574,9 +574,8 @@ StartWow64Registration(VOID)
     CloseHandle(ProcessInformation.hThread);
     hWow64Registration = ProcessInformation.hProcess;
 
-    Early = SetupGetLineCountW(hSysSetupInf, L"EarlyRegisterDlls");
-    Code = SetupGetLineCountW(hSysSetupInf, L"OleControlDllsCode");
-    Wow64RegistrationTimeout = 60000 * (max(Early, 0) + max(Code, 0));
+    Count = SetupGetLineCountW(hSysSetupInf, L"Wow64RegisterDlls");
+    Wow64RegistrationTimeout = 60000 * max(Count, 0);
 }
 
 VOID
@@ -1110,7 +1109,7 @@ CommonInstall(VOID)
                            0,
                            0);
 
-    if (!InstallSysSetupInfComponents())
+    if (!InstallSysSetupInfComponents(SPINST_ALL & ~SPINST_REGSVR))
     {
         HideDeviceBootStatus(StatusWindow);
         FatalError("InstallSysSetupInfComponents() failed!\n");
@@ -1389,7 +1388,6 @@ InstallLiveCD(VOID)
     SetupCloseInfFile(hSysSetupInf);
 
     StartServiceAccountServices();
-    WaitWow64Registration();
 
     if (bPreinstall)
     {

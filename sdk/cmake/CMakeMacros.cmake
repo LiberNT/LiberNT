@@ -925,6 +925,7 @@ function(create_registry_hives)
 
     find_program(MKCOMREG_PYTHON_EXECUTABLE NAMES python3 python REQUIRED NO_CMAKE_FIND_ROOT_PATH)
     set(_syssetup_inf ${CMAKE_SOURCE_DIR}/media/inf/syssetup.inf)
+    set(_comreg_code_inf ${CMAKE_SOURCE_DIR}/boot/bootdata/comreg_code.inf)
     set(_comreg_inf ${CMAKE_BINARY_DIR}/boot/bootdata/comreg.inf)
     set(_comreg_list ${CMAKE_BINARY_DIR}/boot/bootdata/comreg_modules-$<CONFIG>.txt)
     get_property(_comreg_targets GLOBAL PROPERTY CI_SYSTEM_TARGETS)
@@ -943,8 +944,8 @@ function(create_registry_hives)
     file(GENERATE OUTPUT ${_comreg_wow64_list} CONTENT "${_comreg_wow64_modules}")
     add_custom_command(
         OUTPUT ${_comreg_inf}
-        COMMAND ${MKCOMREG_PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_syssetup_inf} ${_comreg_list} ${_comreg_wow64_list} ${_comreg_inf}
-        DEPENDS ${_comreg_targets} ${WOW64_I386_FILES} ${_syssetup_inf} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_comreg_list} ${_comreg_wow64_list}
+        COMMAND ${MKCOMREG_PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_syssetup_inf} ${_comreg_code_inf} ${_comreg_list} ${_comreg_wow64_list} ${_comreg_inf}
+        DEPENDS ${_comreg_targets} ${WOW64_I386_FILES} ${_syssetup_inf} ${_comreg_code_inf} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_comreg_list} ${_comreg_wow64_list}
         VERBATIM)
 
     # LiveCD hives
