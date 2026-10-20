@@ -146,6 +146,8 @@ typedef struct _I8042_KEYBOARD_EXTENSION
 
 	KEYBOARD_INDICATOR_PARAMETERS KeyboardIndicators;
 
+	KEYBOARD_TYPEMATIC_PARAMETERS KeyboardTypematic;
+
 	KEYBOARD_SCAN_STATE KeyboardScanState;
 	BOOLEAN KeyComplete;
 	PKEYBOARD_INPUT_DATA KeyboardBuffer;
@@ -234,6 +236,7 @@ typedef struct _I8042_HOOK_WORKITEM
 
 #define KBD_CMD_SET_LEDS   0xED
 #define KBD_CMD_GET_ID     0xF2
+#define KBD_CMD_SET_TYPEMATIC 0xF3
 
 /*-----------------------------------------------------
  * Keyboard responses

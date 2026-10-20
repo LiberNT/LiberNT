@@ -96,6 +96,27 @@ i8042SynchWritePortKbd(
 		WaitForAck);
 }
 
+static UCHAR
+i8042KbdTypematicByte(
+	IN PKEYBOARD_TYPEMATIC_PARAMETERS Typematic)
+{
+	ULONG Index, Rate10, Diff, BestDiff = MAXULONG;
+	UCHAR Best = 0;
+
+	for (Index = 0; Index < 0x20; Index++)
+	{
+		Rate10 = 2400 / ((8 + (Index & 7)) << (Index >> 3));
+		Diff = Rate10 > Typematic->Rate * 10UL ? Rate10 - Typematic->Rate * 10UL : Typematic->Rate * 10UL - Rate10;
+		if (Diff < BestDiff)
+		{
+			BestDiff = Diff;
+			Best = (UCHAR)Index;
+		}
+	}
+
+	return (UCHAR)((((Typematic->Delay + 125) / 250 - 1) << 5) | Best);
+}
+
 /*
  * Process the keyboard internal device requests
  */
@@ -132,6 +153,30 @@ i8042KbdStartIo(
 
 			if (DeviceExtension->KeyboardIndicators.LedFlags & KEYBOARD_SCROLL_LOCK_ON)
 				PortDeviceExtension->PacketBuffer[1] |= KBD_LED_SCROLL;
+
+			i8042StartPacket(
+				PortDeviceExtension,
+				&DeviceExtension->Common,
+				PortDeviceExtension->PacketBuffer,
+				2,
+				Irp);
+			break;
+		}
+		case IOCTL_KEYBOARD_SET_TYPEMATIC:
+		{
+			KEYBOARD_TYPEMATIC_PARAMETERS Typematic;
+
+			RtlCopyMemory(&Typematic, Irp->AssociatedIrp.SystemBuffer, sizeof(KEYBOARD_TYPEMATIC_PARAMETERS));
+			Typematic.Rate = min(max(Typematic.Rate, DeviceExtension->KeyboardAttributes.KeyRepeatMinimum.Rate),
+			                     DeviceExtension->KeyboardAttributes.KeyRepeatMaximum.Rate);
+			Typematic.Delay = min(max(Typematic.Delay, DeviceExtension->KeyboardAttributes.KeyRepeatMinimum.Delay),
+			                      DeviceExtension->KeyboardAttributes.KeyRepeatMaximum.Delay);
+			DeviceExtension->KeyboardTypematic = Typematic;
+
+			TRACE_(I8042PRT, "IOCTL_KEYBOARD_SET_TYPEMATIC rate %u delay %u\n", Typematic.Rate, Typematic.Delay);
+
+			PortDeviceExtension->PacketBuffer[0] = KBD_CMD_SET_TYPEMATIC;
+			PortDeviceExtension->PacketBuffer[1] = i8042KbdTypematicByte(&Typematic);
 
 			i8042StartPacket(
 				PortDeviceExtension,
@@ -499,11 +544,15 @@ i8042InitializeKeyboardAttributes(
     KeyboardAttributes->NumberOfKeysTotal = 101;
     KeyboardAttributes->InputDataQueueLength = Settings->KeyboardDataQueueSize;
     KeyboardAttributes->KeyRepeatMinimum.UnitId = 0;
-    KeyboardAttributes->KeyRepeatMinimum.Rate = (USHORT)Settings->SampleRate;
-    KeyboardAttributes->KeyRepeatMinimum.Delay = 0;
-    KeyboardAttributes->KeyRepeatMinimum.UnitId = 0;
-    KeyboardAttributes->KeyRepeatMinimum.Rate = (USHORT)Settings->SampleRate;
-    KeyboardAttributes->KeyRepeatMinimum.Delay = 0;
+    KeyboardAttributes->KeyRepeatMinimum.Rate = 2;
+    KeyboardAttributes->KeyRepeatMinimum.Delay = 250;
+    KeyboardAttributes->KeyRepeatMaximum.UnitId = 0;
+    KeyboardAttributes->KeyRepeatMaximum.Rate = 30;
+    KeyboardAttributes->KeyRepeatMaximum.Delay = 1000;
+
+    DeviceExtension->KeyboardTypematic.UnitId = 0;
+    DeviceExtension->KeyboardTypematic.Rate = 11;
+    DeviceExtension->KeyboardTypematic.Delay = 500;
 }
 
 /*
@@ -662,14 +711,37 @@ cleanup:
 		}
 		case IOCTL_KEYBOARD_QUERY_TYPEMATIC:
 		{
-			DPRINT1("IOCTL_KEYBOARD_QUERY_TYPEMATIC not implemented\n");
-			Status = STATUS_NOT_IMPLEMENTED;
+			TRACE_(I8042PRT, "IRP_MJ_INTERNAL_DEVICE_CONTROL / IOCTL_KEYBOARD_QUERY_TYPEMATIC\n");
+
+			if (Stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(KEYBOARD_TYPEMATIC_PARAMETERS))
+			{
+				Status = STATUS_BUFFER_TOO_SMALL;
+			}
+			else
+			{
+				RtlCopyMemory(
+					Irp->AssociatedIrp.SystemBuffer,
+					&DeviceExtension->KeyboardTypematic,
+					sizeof(KEYBOARD_TYPEMATIC_PARAMETERS));
+				Irp->IoStatus.Information = sizeof(KEYBOARD_TYPEMATIC_PARAMETERS);
+				Status = STATUS_SUCCESS;
+			}
 			break;
 		}
 		case IOCTL_KEYBOARD_SET_TYPEMATIC:
 		{
-			DPRINT1("IOCTL_KEYBOARD_SET_TYPEMATIC not implemented\n");
-			Status = STATUS_NOT_IMPLEMENTED;
+			TRACE_(I8042PRT, "IRP_MJ_INTERNAL_DEVICE_CONTROL / IOCTL_KEYBOARD_SET_TYPEMATIC\n");
+
+			if (Stack->Parameters.DeviceIoControl.InputBufferLength < sizeof(KEYBOARD_TYPEMATIC_PARAMETERS))
+			{
+				Status = STATUS_BUFFER_TOO_SMALL;
+			}
+			else
+			{
+				Status = STATUS_PENDING;
+				IoMarkIrpPending(Irp);
+				IoStartPacket(DeviceObject, Irp, NULL, NULL);
+			}
 			break;
 		}
 		case IOCTL_KEYBOARD_QUERY_INDICATOR_TRANSLATION:
