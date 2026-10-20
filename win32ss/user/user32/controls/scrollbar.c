@@ -85,6 +85,7 @@ const struct builtin_class_descr SCROLL_builtin_class =
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+#ifndef WOW64_I386_RUNTIME
 static PSBDATA
 IntGetSBData(PWND pwnd, INT Bar)
 {
@@ -111,6 +112,7 @@ IntGetSBData(PWND pwnd, INT Bar)
    }
    return NULL;
 }
+#endif
 
 static void
 IntDrawScrollInterior(HWND hWnd, HDC hDC, INT nBar, BOOL Vertical,
@@ -607,26 +609,41 @@ static UINT FASTCALL
 IntScrollGetThumbVal(HWND Wnd, INT SBType, PSCROLLBARINFO ScrollBarInfo,
                      BOOL Vertical, INT Pos)
 {
+#ifdef WOW64_I386_RUNTIME
+  SCROLLINFO Info = { sizeof(Info), SIF_RANGE | SIF_PAGE };
+#else
   PWND pWnd;
   PSBDATA pSBData;
+#endif
+  INT PosMin, PosMax, Page;
   INT Pixels = Vertical ? ScrollBarInfo->rcScrollBar.bottom
                           - ScrollBarInfo->rcScrollBar.top
                         : ScrollBarInfo->rcScrollBar.right
                           - ScrollBarInfo->rcScrollBar.left;
 
+#ifdef WOW64_I386_RUNTIME
+  if (!NtUserSBGetParms(Wnd, SBType, NULL, &Info)) return FALSE;
+  PosMin = Info.nMin;
+  PosMax = Info.nMax;
+  Page = Info.nPage;
+#else
   pWnd = ValidateHwnd( Wnd );
   if (!pWnd) return FALSE; 
 
   pSBData = IntGetSBData(pWnd, SBType);
+  PosMin = pSBData->posMin;
+  PosMax = pSBData->posMax;
+  Page = pSBData->page;
+#endif
 
   if ((Pixels -= 2 * ScrollBarInfo->dxyLineButton) <= 0)
   {
-      return pSBData->posMin;
+      return PosMin;
   }
 
   if ((Pixels -= (ScrollBarInfo->xyThumbBottom - ScrollBarInfo->xyThumbTop)) <= 0)
   {
-      return pSBData->posMin;
+      return PosMin;
   }
 
   Pos = Pos - ScrollBarInfo->dxyLineButton;
@@ -636,12 +653,12 @@ IntScrollGetThumbVal(HWND Wnd, INT SBType, PSCROLLBARINFO ScrollBarInfo,
   }
   if (Pos > Pixels) Pos = Pixels;
 
-  if (!pSBData->page)
-      Pos *= pSBData->posMax - pSBData->posMin;
+  if (!Page)
+      Pos *= PosMax - PosMin;
   else
-      Pos *= pSBData->posMax - pSBData->posMin - pSBData->page + 1;
+      Pos *= PosMax - PosMin - Page + 1;
 
-  return pSBData->posMin + ((Pos + Pixels / 2) / Pixels);
+  return PosMin + ((Pos + Pixels / 2) / Pixels);
 }
 
 /***********************************************************************
@@ -1158,10 +1175,17 @@ ScrollTrackScrollBar(HWND Wnd, INT SBType, POINT Pt)
 
   if (SBType != SB_CTL)
   { // Used with CMD mouse tracking.
+#ifdef WOW64_I386_RUNTIME
+      ROS_WINDOWINFO Info;
+      if (!NtUserCallHwndParam(Wnd, (DWORD_PTR)&Info, HWNDPARAM_ROUTINE_ROS_GETWINDOWINFO)) return;
+      XOffset = Info.rcClient.left - Info.rcWindow.left;
+      YOffset = Info.rcClient.top - Info.rcWindow.top;
+#else
       PWND pwnd = ValidateHwnd(Wnd);
       if (!pwnd) return;
       XOffset = pwnd->rcClient.left - pwnd->rcWindow.left;
       YOffset = pwnd->rcClient.top - pwnd->rcWindow.top;
+#endif
 //      RECT rect;
 //      WIN_GetRectangles( Wnd, COORDS_CLIENT, &rect, NULL );
       ScreenToClient(Wnd, &Pt);
