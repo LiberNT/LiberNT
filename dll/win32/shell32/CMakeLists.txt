@@ -131,6 +131,10 @@ add_library(shell32 MODULE
 
 target_compile_definitions(shell32 PRIVATE CONST_VTABLE)
 
+if(WOW64_I386_RUNTIME AND ARCH STREQUAL "i386")
+    target_compile_definitions(shell32 PRIVATE BUILD_WOW6432)
+endif()
+
 if(ARCH STREQUAL "arm64" AND ENABLE_FEX_ARM64EC AND EXISTS "${REACTOS_SOURCE_DIR}/submodules/fex-arm64ec/CMakeLists.txt")
     target_compile_definitions(shell32 PRIVATE ENABLE_FEX_ARM64EC)
 endif()

@@ -48,12 +48,62 @@ extern "C" {
  * Taskbar interface WM_COPYDATA structures
  * See http://www.geoffchappell.com/studies/windows/shell/shell32/api/shlnot/copydata.htm
  */
+#if defined(BUILD_WOW6432)
+typedef struct _NOTIFYICONDATA64W
+{
+    DWORD cbSize;
+    UINT64 hWnd;
+    UINT uID;
+    UINT uFlags;
+    UINT uCallbackMessage;
+    UINT64 hIcon;
+    WCHAR szTip[128];
+    DWORD dwState;
+    DWORD dwStateMask;
+    WCHAR szInfo[256];
+    union
+    {
+        UINT uTimeout;
+        UINT uVersion;
+    } DUMMYUNIONNAME;
+    WCHAR szInfoTitle[64];
+    DWORD dwInfoFlags;
+    GUID guidItem;
+    UINT64 hBalloonIcon;
+} NOTIFYICONDATA64W;
+
+C_ASSERT(sizeof(NOTIFYICONDATA64W) == 0x3D0);
+C_ASSERT(FIELD_OFFSET(NOTIFYICONDATA64W, hIcon) == 0x20);
+C_ASSERT(FIELD_OFFSET(NOTIFYICONDATA64W, hBalloonIcon) == 0x3C8);
+
+typedef struct _NOTIFYICONIDENTIFIER64
+{
+    DWORD cbSize;
+    UINT64 hWnd;
+    UINT uID;
+    GUID guidItem;
+} NOTIFYICONIDENTIFIER64;
+
+C_ASSERT(sizeof(NOTIFYICONIDENTIFIER64) == 0x28);
+#endif
+
+#if defined(_WIN64)
+C_ASSERT(sizeof(NOTIFYICONDATAW) == 0x3D0);
+C_ASSERT(FIELD_OFFSET(NOTIFYICONDATAW, hIcon) == 0x20);
+C_ASSERT(FIELD_OFFSET(NOTIFYICONDATAW, hBalloonIcon) == 0x3C8);
+C_ASSERT(sizeof(NOTIFYICONIDENTIFIER) == 0x28);
+#endif
+
 /* Data structure for Shell_NotifyIcon messages */
 typedef struct _TRAYNOTIFYDATAW
 {
     DWORD dwSignature;
     DWORD dwMessage;
+#if defined(BUILD_WOW6432)
+    NOTIFYICONDATA64W nid;
+#else
     NOTIFYICONDATAW nid; // Always use the latest NOTIFYICONDATAW structure version.
+#endif
 } TRAYNOTIFYDATAW, *PTRAYNOTIFYDATAW;
 // Note: One could also introduce TRAYNOTIFYDATAA
 
@@ -65,7 +115,11 @@ typedef struct _TRAYNOTIFYDATAW
 typedef struct _TRAYNOTIFYICONGETRECTDATA
 {
     DWORD dwSignature;
+#if defined(BUILD_WOW6432)
+    NOTIFYICONIDENTIFIER64 Identifier;
+#else
     NOTIFYICONIDENTIFIER Identifier;
+#endif
     WCHAR MappingName[NI_GETRECT_MAPPING_LENGTH];
 } TRAYNOTIFYICONGETRECTDATA, *PTRAYNOTIFYICONGETRECTDATA;
 
