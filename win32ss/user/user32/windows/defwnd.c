@@ -396,6 +396,27 @@ DefWndGetIcon(PWND pWnd, WPARAM wParam, LPARAM lParam)
     return (LRESULT)hIconRet;
 }
 
+#ifdef WOW64_I386_RUNTIME
+static BOOL
+IntIsHwndDefWndMessage(UINT Msg)
+{
+    switch (Msg)
+    {
+        case WM_VKEYTOITEM:
+        case WM_CHARTOITEM:
+        case WM_QUERYDROPOBJECT:
+        case WM_QUERYDRAGICON:
+        case WM_NOTIFYFORMAT:
+        case WM_QUERYOPEN:
+        case WM_QUERYENDSESSION:
+        case WM_INPUTLANGCHANGEREQUEST:
+        case WM_INPUTLANGCHANGE:
+        case WM_COPYGLOBALDATA:
+            return TRUE;
+    }
+    return FALSE;
+}
+#endif
 
 LRESULT WINAPI
 User32DefWindowProc(HWND hWnd,
@@ -409,7 +430,9 @@ User32DefWindowProc(HWND hWnd,
     {
        pWnd = ValidateHwnd(hWnd);
 #ifdef WOW64_I386_RUNTIME
-       if (!pWnd && Msg != WM_GETTITLEBARINFOEX) return 0;
+       if (!pWnd && Msg != WM_GETTITLEBARINFOEX &&
+           !(IntIsHwndDefWndMessage(Msg) && IsWindow(hWnd)))
+           return 0;
 #else
        if (!pWnd) return 0;
 #endif
@@ -1100,7 +1123,7 @@ RealDefWindowProcA(HWND hWnd,
     if (!Wnd && Msg == WM_SYSCOMMAND)
         return DefWndHandleSysCommand(hWnd, wParam, lParam);
 
-    if (!Wnd && Msg != WM_NCCREATE && !IntIsClientDefWndMessage(Msg))
+    if (!Wnd && Msg != WM_NCCREATE && !IntIsClientDefWndMessage(Msg) && !IntIsHwndDefWndMessage(Msg))
     {
         NtUserMessageCall(hWnd, Msg, wParam, lParam, (ULONG_PTR)&Result, FNID_DEFWINDOWPROC, TRUE);
         return Result;
@@ -1355,7 +1378,7 @@ RealDefWindowProcW(HWND hWnd,
     if (!Wnd && Msg == WM_SYSCOMMAND)
         return DefWndHandleSysCommand(hWnd, wParam, lParam);
 
-    if (!Wnd && Msg != WM_NCCREATE && !IntIsClientDefWndMessage(Msg))
+    if (!Wnd && Msg != WM_NCCREATE && !IntIsClientDefWndMessage(Msg) && !IntIsHwndDefWndMessage(Msg))
     {
         NtUserMessageCall(hWnd, Msg, wParam, lParam, (ULONG_PTR)&Result, FNID_DEFWINDOWPROC, FALSE);
         return Result;
