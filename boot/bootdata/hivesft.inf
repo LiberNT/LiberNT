@@ -940,6 +940,8 @@ HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\DefragPath",
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\DefragPath","",0x00020000,"%SystemRoot%\system32\dfrg.msc %c:"
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\BackupPath",,0x00000012
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\BackupPath","",0x00020000,"%SystemRoot%\system32\ntbackup.exe"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu","{871C5380-42A0-1069-A2EA-08002B30309D}",0x00010001,1
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel","{871C5380-42A0-1069-A2EA-08002B30309D}",0x00010001,1
 
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Run",,0x00000012
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce",,0x00000012
