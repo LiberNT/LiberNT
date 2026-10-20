@@ -82,9 +82,10 @@ DWORD
 SaveDefaultUserHive(VOID);
 
 VOID
-RegisterWow64CodeDlls(
-    _In_ HINF hinf,
-    _In_ LPCWSTR szSection);
+StartWow64Registration(VOID);
+
+VOID
+WaitWow64Registration(VOID);
 
 BOOL
 RegisterTypeLibraries(

@@ -48,6 +48,9 @@ AddReg=Classes
 RegisterDlls = OleControlDllsCode
 AddReg=Classes
 
+[Wow64Registration]
+RegisterDlls = EarlyRegisterDlls, OleControlDllsCode
+
 [OleControlDlls]
 11,,activeds.dll,1
 11,,atl.dll,1

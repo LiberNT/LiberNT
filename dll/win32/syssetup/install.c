@@ -530,75 +530,64 @@ InstallSysSetupInfComponents(VOID)
         while (SetupFindNextLine(&InfContext, &InfContext));
     }
 
-    RegisterWow64CodeDlls(hSysSetupInf, L"EarlyRegisterDlls");
+    StartWow64Registration();
     return TRUE;
 }
 
 
 
+static HANDLE hWow64Registration = NULL;
+static DWORD Wow64RegistrationTimeout;
+
 VOID
-RegisterWow64CodeDlls(
-    _In_ HINF hinf,
-    _In_ LPCWSTR szSection)
+StartWow64Registration(VOID)
 {
-    WCHAR Wow64Dir[MAX_PATH], Regsvr32[MAX_PATH], DllPath[MAX_PATH], CommandLine[3 * MAX_PATH];
-    WCHAR SubDir[MAX_PATH], FileName[MAX_PATH];
+    WCHAR Wow64Dir[MAX_PATH], WindowsDir[MAX_PATH], Rundll32[MAX_PATH], CommandLine[3 * MAX_PATH];
     PROCESS_INFORMATION ProcessInformation;
     STARTUPINFOW StartupInfo;
-    INFCONTEXT Context;
-    PCWSTR Switches;
-    INT DirId, Flags;
-    HRESULT hr;
+    LONG Early, Code;
 
-    if (!GetSystemWow64DirectoryW(Wow64Dir, ARRAYSIZE(Wow64Dir)))
+    if (hWow64Registration)
         return;
-    if (FAILED(StringCchPrintfW(Regsvr32, ARRAYSIZE(Regsvr32), L"%s\\regsvr32.exe", Wow64Dir)) ||
-        GetFileAttributesW(Regsvr32) == INVALID_FILE_ATTRIBUTES)
+    if (!GetSystemWow64DirectoryW(Wow64Dir, ARRAYSIZE(Wow64Dir)) ||
+        !GetWindowsDirectoryW(WindowsDir, ARRAYSIZE(WindowsDir)))
+    {
+        return;
+    }
+    if (FAILED(StringCchPrintfW(Rundll32, ARRAYSIZE(Rundll32), L"%s\\rundll32.exe", Wow64Dir)) ||
+        GetFileAttributesW(Rundll32) == INVALID_FILE_ATTRIBUTES ||
+        FAILED(StringCchPrintfW(CommandLine, ARRAYSIZE(CommandLine),
+                                L"\"%s\" setupapi.dll,InstallHinfSection Wow64Registration 128 %s\\inf\\syssetup.inf",
+                                Rundll32, WindowsDir)))
     {
         return;
     }
 
-    if (!SetupFindFirstLineW(hinf, szSection, NULL, &Context))
-        return;
-
-    do
+    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+    StartupInfo.cb = sizeof(StartupInfo);
+    if (!CreateProcessW(Rundll32, CommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL,
+                        &StartupInfo, &ProcessInformation))
     {
-        if (!SetupGetIntField(&Context, 1, &DirId) || DirId != 11 ||
-            !SetupGetStringFieldW(&Context, 3, FileName, ARRAYSIZE(FileName), NULL))
-        {
-            continue;
-        }
-        if (!SetupGetStringFieldW(&Context, 2, SubDir, ARRAYSIZE(SubDir), NULL))
-            SubDir[0] = UNICODE_NULL;
-        if (!SetupGetIntField(&Context, 4, &Flags))
-            Flags = 1;
+        DPRINT1("Could not start the 32-bit registration (Error %lu)\n", GetLastError());
+        return;
+    }
+    CloseHandle(ProcessInformation.hThread);
+    hWow64Registration = ProcessInformation.hProcess;
 
-        if (SubDir[0])
-            hr = StringCchPrintfW(DllPath, ARRAYSIZE(DllPath), L"%s\\%s\\%s", Wow64Dir, SubDir, FileName);
-        else
-            hr = StringCchPrintfW(DllPath, ARRAYSIZE(DllPath), L"%s\\%s", Wow64Dir, FileName);
-        if (FAILED(hr) || GetFileAttributesW(DllPath) == INVALID_FILE_ATTRIBUTES)
-            continue;
+    Early = SetupGetLineCountW(hSysSetupInf, L"EarlyRegisterDlls");
+    Code = SetupGetLineCountW(hSysSetupInf, L"OleControlDllsCode");
+    Wow64RegistrationTimeout = 60000 * (max(Early, 0) + max(Code, 0));
+}
 
-        Switches = (Flags & 2) ? ((Flags & 1) ? L"/s /i" : L"/s /n /i") : L"/s";
-        if (FAILED(StringCchPrintfW(CommandLine, ARRAYSIZE(CommandLine), L"\"%s\" %s \"%s\"",
-                                    Regsvr32, Switches, DllPath)))
-        {
-            continue;
-        }
-
-        ZeroMemory(&StartupInfo, sizeof(StartupInfo));
-        StartupInfo.cb = sizeof(StartupInfo);
-        if (!CreateProcessW(Regsvr32, CommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL,
-                            &StartupInfo, &ProcessInformation))
-        {
-            DPRINT1("Could not start the 32-bit registration of %S (Error %lu)\n", DllPath, GetLastError());
-            continue;
-        }
-        WaitForSingleObject(ProcessInformation.hProcess, 60000);
-        CloseHandle(ProcessInformation.hThread);
-        CloseHandle(ProcessInformation.hProcess);
-    } while (SetupFindNextLine(&Context, &Context));
+VOID
+WaitWow64Registration(VOID)
+{
+    if (!hWow64Registration)
+        return;
+    if (WaitForSingleObject(hWow64Registration, Wow64RegistrationTimeout) != WAIT_OBJECT_0)
+        DPRINT1("The 32-bit registration did not finish\n");
+    CloseHandle(hWow64Registration);
+    hWow64Registration = NULL;
 }
 
 BOOL
@@ -672,6 +661,14 @@ RegisterTypeLibraries(
     return TRUE;
 }
 
+static SERVICE_NOTIFYW PnpServiceNotify;
+
+static VOID CALLBACK
+PnpServiceStatusChanged(PVOID pParameter)
+{
+    UNREFERENCED_PARAMETER(pParameter);
+}
+
 static BOOL
 EnableUserModePnpManager(VOID)
 {
@@ -717,6 +714,13 @@ EnableUserModePnpManager(VOID)
         goto cleanup;
     }
 
+    PnpServiceNotify.dwVersion = SERVICE_NOTIFY_STATUS_CHANGE;
+    PnpServiceNotify.pfnNotifyCallback = PnpServiceStatusChanged;
+    NotifyServiceStatusChangeW(hService,
+                               SERVICE_NOTIFY_STOPPED | SERVICE_NOTIFY_STOP_PENDING | SERVICE_NOTIFY_RUNNING |
+                               SERVICE_NOTIFY_CONTINUE_PENDING | SERVICE_NOTIFY_PAUSE_PENDING | SERVICE_NOTIFY_PAUSED,
+                               &PnpServiceNotify);
+
     while (TRUE)
     {
         bRet = QueryServiceStatusEx(hService,
@@ -736,7 +740,7 @@ EnableUserModePnpManager(VOID)
         WaitTime = ServiceStatus.dwWaitHint / 10;
         if (WaitTime < 1000) WaitTime = 1000;
         else if (WaitTime > 10000) WaitTime = 10000;
-        Sleep(WaitTime);
+        SleepEx(WaitTime, TRUE);
     };
 
     if (ServiceStatus.dwCurrentState != SERVICE_RUNNING)
@@ -1375,7 +1379,6 @@ InstallLiveCD(VOID)
         {
             DPRINT1("SetupInstallFromInfSectionW failed!\n");
         }
-        RegisterWow64CodeDlls(hSysSetupInf, L"OleControlDllsCode");
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -1386,6 +1389,7 @@ InstallLiveCD(VOID)
     SetupCloseInfFile(hSysSetupInf);
 
     StartServiceAccountServices();
+    WaitWow64Registration();
 
     if (bPreinstall)
     {
