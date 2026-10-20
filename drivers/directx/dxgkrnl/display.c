@@ -325,6 +325,37 @@ DxgkpGetTargetModeDimensions(
     }
 }
 
+static VOID
+DxgkpFindDefaultTargetMode(
+    _In_ PDXGKP_VIDPN_TARGET_MODESET TgtSet,
+    _Inout_ SIZE_T *Index)
+{
+    BOOLEAN Found = FALSE;
+    SIZE_T i;
+
+    for (i = 0; i < TgtSet->NumModes; i++)
+    {
+        CONST D3DDDI_RATIONAL *VSync = &TgtSet->Modes[i].VideoSignalInfo.VSyncFreq;
+        UINT Width;
+        UINT Height;
+
+        DxgkpGetTargetModeDimensions(&TgtSet->Modes[i], &Width, &Height);
+        if (Width != 1024 || Height != 768)
+            continue;
+        if (!Found)
+        {
+            *Index = i;
+            Found = TRUE;
+        }
+        if (VSync->Denominator != 0 &&
+            ((ULONGLONG)VSync->Numerator + VSync->Denominator / 2) / VSync->Denominator == 60)
+        {
+            *Index = i;
+            return;
+        }
+    }
+}
+
 static BOOLEAN
 DxgkpVidPnPathScalingIsPinned(
     _In_ CONST D3DKMDT_VIDPN_PRESENT_PATH *Path)
@@ -2139,6 +2170,10 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
                         break;
                     }
                 }
+            }
+            else if (!FoundPreferredTarget)
+            {
+                DxgkpFindDefaultTargetMode(TgtSet, &TargetIndex);
             }
 
             TgtSet->PinnedModeId = TgtSet->Modes[TargetIndex].Id;
