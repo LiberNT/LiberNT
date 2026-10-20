@@ -1216,6 +1216,29 @@ ScrollBarWndProc_common(WNDPROC DefWindowProc, HWND Wnd, UINT Msg, WPARAM wParam
   PWND pWnd;
   PSBWND pSBWnd;
   SCROLLINFO ScrollInfo;
+#ifdef WOW64_I386_RUNTIME
+  ROS_WINDOWINFO Info;
+
+  if (!NtUserCallHwndParam(Wnd, (DWORD_PTR)&Info, HWNDPARAM_ROUTINE_ROS_GETWINDOWINFO))
+     return 0;
+  if (!Info.fnid)
+  {
+     if (GetClassLongPtrW(Wnd, GCL_CBWNDEXTRA) < (sizeof(SBWND)-sizeof(WND)))
+     {
+        ERR("Wrong Extra bytes for Scrollbar!\n");
+        return 0;
+     }
+     if (Msg != WM_CREATE)
+     {
+        return DefWindowProc(Wnd, Msg, wParam, lParam);
+     }
+  }
+  else if (Info.fnid != FNID_SCROLLBAR)
+  {
+     ERR("Wrong window class for Scrollbar!\n");
+     return 0;
+  }
+#endif
 
   pWnd = ValidateHwnd(Wnd);
   if (pWnd)
@@ -1396,11 +1419,28 @@ ScrollBarWndProc_common(WNDPROC DefWindowProc, HWND Wnd, UINT Msg, WPARAM wParam
         break;
 
       case SBM_GETPOS:
+#ifdef WOW64_I386_RUNTIME
+        ScrollInfo.cbSize = sizeof(ScrollInfo);
+        ScrollInfo.fMask = SIF_POS;
+        if (!NtUserSBGetParms(Wnd, SB_CTL, NULL, &ScrollInfo))
+           return 0;
+        return ScrollInfo.nPos;
+#else
         return pSBWnd->SBCalc.pos;
+#endif
 
       case SBM_GETRANGE:
+#ifdef WOW64_I386_RUNTIME
+        ScrollInfo.cbSize = sizeof(ScrollInfo);
+        ScrollInfo.fMask = SIF_RANGE;
+        if (!NtUserSBGetParms(Wnd, SB_CTL, NULL, &ScrollInfo))
+           ScrollInfo.nMin = ScrollInfo.nMax = 0;
+        *(LPINT)wParam = ScrollInfo.nMin;
+        *(LPINT)lParam = ScrollInfo.nMax;
+#else
         *(LPINT)wParam = pSBWnd->SBCalc.posMin;
         *(LPINT)lParam = pSBWnd->SBCalc.posMax;
+#endif
         // This message does not return a value.
         return 0;
  

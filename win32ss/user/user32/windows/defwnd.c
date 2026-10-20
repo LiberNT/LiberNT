@@ -1024,6 +1024,28 @@ GoSS:
 
 
 #ifdef WOW64_I386_RUNTIME
+static VOID
+DefWndInitScrollBars(HWND hWnd)
+{
+    LONG Style = GetWindowLongW(hWnd, GWL_STYLE);
+    SCROLLINFO Probe = {sizeof(Probe), SIF_RANGE};
+    SCROLLINFO si = {sizeof si, SIF_ALL, 0, 100, 0, 0, 0};
+    DWORD Error;
+
+    if (!(Style & (WS_HSCROLL | WS_VSCROLL)))
+        return;
+
+    Error = GetLastError();
+    if (NtUserSBGetParms(hWnd, SB_HORZ, NULL, &Probe))
+        return;
+    SetLastError(Error);
+
+    if (Style & WS_HSCROLL)
+        SetScrollInfo(hWnd, SB_HORZ, &si, FALSE);
+    if (Style & WS_VSCROLL)
+        SetScrollInfo(hWnd, SB_VERT, &si, FALSE);
+}
+
 static BOOL
 IntIsClientDefWndMessage(UINT Msg)
 {
@@ -1097,6 +1119,10 @@ RealDefWindowProcA(HWND hWnd,
     {
         case WM_NCCREATE:
         {
+#ifdef WOW64_I386_RUNTIME
+            if (!Wnd)
+                DefWndInitScrollBars(hWnd);
+#endif
             if ( Wnd &&
                  Wnd->style & (WS_HSCROLL | WS_VSCROLL) )
             {
@@ -1348,6 +1374,10 @@ RealDefWindowProcW(HWND hWnd,
     {
         case WM_NCCREATE:
         {
+#ifdef WOW64_I386_RUNTIME
+            if (!Wnd)
+                DefWndInitScrollBars(hWnd);
+#endif
             if ( Wnd &&
                  Wnd->style & (WS_HSCROLL | WS_VSCROLL) )
             {
