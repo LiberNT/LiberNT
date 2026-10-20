@@ -887,7 +887,7 @@ private:
                          SWP_NOACTIVATE);
         }
         InitList(GetDlgItem(m_Pages[PageDevices], IDC_DEVICES), LVS_EX_CHECKBOXES,
-                 { { IDS_COL_DEVICE, 46 }, { IDS_COL_NEW, 36 }, { IDS_COL_VERSION, 18 } });
+                 { { IDS_COL_DEVICE, 46 }, { IDS_COL_DRIVER, 36 }, { IDS_COL_VERSION, 18 } });
         InitList(GetDlgItem(m_Pages[PageDone], IDC_RESULTS), 0,
                  { { IDS_COL_DEVICE, 34 }, { IDS_COL_DRIVER, 34 }, { IDS_COL_RESULT, 32 } });
         InitList(GetDlgItem(m_Pages[PageHistory], IDC_HISTORY_LIST), 0,

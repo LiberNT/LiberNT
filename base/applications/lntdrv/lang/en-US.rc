@@ -170,7 +170,6 @@ BEGIN
     IDS_ERROR_OTHER_ARCH "The catalog has no driver for this PC architecture."
     IDS_CLI_GROUP "%1 (%2, %3 devices)"
     IDS_DONE_NOTHING "No driver was installed."
-    IDS_COL_NEW "New driver"
     IDS_SCAN_PROGRESS "Searching the Microsoft Update Catalog... device %1 of %2"
     IDS_SCAN_FOUND "A newer driver was found for %1 device(s)."
     IDS_SCAN_NONE "The Microsoft Update Catalog has nothing new to install for this PC."

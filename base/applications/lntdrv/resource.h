@@ -136,7 +136,6 @@
 #define IDS_ERROR_OTHER_ARCH         2122
 #define IDS_CLI_GROUP                2123
 #define IDS_DONE_NOTHING             2124
-#define IDS_COL_NEW                  2125
 #define IDS_SCAN_PROGRESS            2126
 #define IDS_SCAN_FOUND               2127
 #define IDS_SCAN_NONE                2128

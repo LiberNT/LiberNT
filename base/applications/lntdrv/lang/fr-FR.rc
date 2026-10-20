@@ -170,7 +170,6 @@ BEGIN
     IDS_ERROR_OTHER_ARCH "Le catalogue n'a pas de pilote pour l'architecture de ce PC."
     IDS_CLI_GROUP "%1 (%2, %3 périphériques)"
     IDS_DONE_NOTHING "Aucun pilote n'a été installé."
-    IDS_COL_NEW "Nouveau pilote"
     IDS_SCAN_PROGRESS "Recherche dans le catalogue Microsoft Update... périphérique %1 sur %2"
     IDS_SCAN_FOUND "Un pilote plus récent a été trouvé pour %1 périphérique(s)."
     IDS_SCAN_NONE "Le catalogue Microsoft Update n'a rien de nouveau à installer pour ce PC."
