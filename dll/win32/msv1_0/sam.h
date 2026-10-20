@@ -19,6 +19,7 @@ typedef struct _LSA_SAM_PWD_DATA
     /* TRUE: PlainPwd is filled,
        FALSE: LmPwd and NtPwd is filled */
     BOOL IsNetwork;
+    BOOL TrustedClient;
     PUNICODE_STRING PlainPwd;
 
     /* Input (IsNetwork = TRUE) */

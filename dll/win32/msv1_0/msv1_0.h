@@ -51,6 +51,11 @@ typedef struct _ENCRYPTED_LM_OWF_PASSWORD
     char data[16];
 } ENCRYPTED_LM_OWF_PASSWORD, *PENCRYPTED_LM_OWF_PASSWORD, ENCRYPTED_NT_OWF_PASSWORD, *PENCRYPTED_NT_OWF_PASSWORD;
 
+typedef struct _SAMPR_ENCRYPTED_USER_PASSWORD
+{
+    unsigned char Buffer[(256 * 2) + 4];
+} SAMPR_ENCRYPTED_USER_PASSWORD, *PSAMPR_ENCRYPTED_USER_PASSWORD;
+
 typedef struct _SAMPR_ULONG_ARRAY
 {
     ULONG Count;
@@ -170,17 +175,14 @@ SamIFree_SAMPR_USER_INFO_BUFFER(PSAMPR_USER_INFO_BUFFER Ptr,
 
 NTSTATUS
 NTAPI
-SamrChangePasswordUser(IN SAMPR_HANDLE UserHandle,
-                       IN unsigned char LmPresent,
-                       IN PENCRYPTED_LM_OWF_PASSWORD OldLmEncryptedWithNewLm,
-                       IN PENCRYPTED_LM_OWF_PASSWORD NewLmEncryptedWithOldLm,
-                       IN unsigned char NtPresent,
-                       IN PENCRYPTED_NT_OWF_PASSWORD OldNtEncryptedWithNewNt,
-                       IN PENCRYPTED_NT_OWF_PASSWORD NewNtEncryptedWithOldNt,
-                       IN unsigned char NtCrossEncryptionPresent,
-                       IN PENCRYPTED_NT_OWF_PASSWORD NewNtEncryptedWithNewLm,
-                       IN unsigned char LmCrossEncryptionPresent,
-                       IN PENCRYPTED_LM_OWF_PASSWORD NewLmEncryptedWithNewNt);
+SamrUnicodeChangePasswordUser2(IN PVOID BindingHandle,
+                               IN PRPC_UNICODE_STRING ServerName,
+                               IN PRPC_UNICODE_STRING UserName,
+                               IN PSAMPR_ENCRYPTED_USER_PASSWORD NewPasswordEncryptedWithOldNt,
+                               IN PENCRYPTED_NT_OWF_PASSWORD OldNtOwfPasswordEncryptedWithNewNt,
+                               IN unsigned char LmPresent,
+                               IN PSAMPR_ENCRYPTED_USER_PASSWORD NewPasswordEncryptedWithOldLm,
+                               IN PENCRYPTED_LM_OWF_PASSWORD OldLmOwfPasswordEncryptedWithNewNt);
 
 NTSTATUS
 NTAPI
@@ -312,11 +314,6 @@ LsarQueryInformationPolicy(IN LSAPR_HANDLE PolicyHandle,
 
 NTSTATUS
 WINAPI
-SystemFunction006(LPCSTR password,
-                  LPSTR hash);
-
-NTSTATUS
-WINAPI
 SystemFunction007(PUNICODE_STRING string,
                   LPBYTE hash);
 
@@ -325,6 +322,18 @@ WINAPI
 SystemFunction012(const BYTE *in,
                   const BYTE *key,
                   LPBYTE out);
+
+struct ustring
+{
+    DWORD Length;
+    DWORD MaximumLength;
+    unsigned char *Buffer;
+};
+
+NTSTATUS
+WINAPI
+SystemFunction032(struct ustring *data,
+                  const struct ustring *key);
 
 typedef struct _MD5_CTX
 {

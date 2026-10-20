@@ -224,11 +224,6 @@ MsvpCheckPassword(
     _In_ PSAMPR_USER_INFO_BUFFER UserInfo)
 {
     ENCRYPTED_NT_OWF_PASSWORD UserNtPassword;
-    ENCRYPTED_LM_OWF_PASSWORD UserLmPassword;
-    BOOLEAN UserLmPasswordPresent = FALSE;
-    BOOLEAN UserNtPasswordPresent = FALSE;
-    OEM_STRING LmPwdString;
-    CHAR LmPwdBuffer[15];
     NTSTATUS Status;
 
     TRACE("(%p %p)\n", UserPwdData, UserInfo);
@@ -236,77 +231,32 @@ MsvpCheckPassword(
     if (UserPwdData->IsNetwork)
         return MsvpCheckChallengeResponse(UserPwdData, UserInfo);
 
-    /* Calculate the LM password and hash for the users password */
-    LmPwdString.Length = 15;
-    LmPwdString.MaximumLength = 15;
-    LmPwdString.Buffer = LmPwdBuffer;
-    ZeroMemory(LmPwdString.Buffer, LmPwdString.MaximumLength);
-
-    Status = RtlUpcaseUnicodeStringToOemString(&LmPwdString,
-                                               UserPwdData->PlainPwd,
-                                               FALSE);
-    if (NT_SUCCESS(Status))
+    if (!UserInfo->All.NtPasswordPresent)
     {
-        /* Calculate the LM hash value of the users password */
-        Status = SystemFunction006(LmPwdString.Buffer,
-                                   (LPSTR)&UserLmPassword);
-        if (NT_SUCCESS(Status))
-        {
-            UserLmPasswordPresent = TRUE;
-        }
+        if (UserPwdData->PlainPwd->Length == 0)
+            return STATUS_SUCCESS;
+
+        return STATUS_WRONG_PASSWORD;
     }
 
-    /* Calculate the NT hash of the users password */
+    if (UserInfo->All.NtOwfPassword.Buffer == NULL ||
+        UserInfo->All.NtOwfPassword.Length != sizeof(ENCRYPTED_NT_OWF_PASSWORD))
+        return STATUS_WRONG_PASSWORD;
+
     Status = SystemFunction007(UserPwdData->PlainPwd,
                                (LPBYTE)&UserNtPassword);
-    if (NT_SUCCESS(Status))
-    {
-        UserNtPasswordPresent = TRUE;
-    }
+    if (!NT_SUCCESS(Status))
+        return Status;
 
-    Status = STATUS_WRONG_PASSWORD;
-
-    /* Succeed, if no password has been set */
-    if (UserInfo->All.NtPasswordPresent == FALSE &&
-        UserInfo->All.LmPasswordPresent == FALSE)
-    {
-        TRACE("No password check!\n");
+    if (RtlEqualMemory(&UserNtPassword,
+                       UserInfo->All.NtOwfPassword.Buffer,
+                       sizeof(ENCRYPTED_NT_OWF_PASSWORD)))
         Status = STATUS_SUCCESS;
-        goto done;
-    }
+    else
+        Status = STATUS_WRONG_PASSWORD;
 
-    /* Succeed, if NT password matches */
-    if (UserNtPasswordPresent && UserInfo->All.NtPasswordPresent)
-    {
-        TRACE("Check NT password hashes:\n");
-        if (RtlEqualMemory(&UserNtPassword,
-                           UserInfo->All.NtOwfPassword.Buffer,
-                           sizeof(ENCRYPTED_NT_OWF_PASSWORD)))
-        {
-            TRACE("  success!\n");
-            Status = STATUS_SUCCESS;
-            goto done;
-        }
+    RtlSecureZeroMemory(&UserNtPassword, sizeof(UserNtPassword));
 
-        TRACE("  failed!\n");
-    }
-
-    /* Succeed, if LM password matches */
-    if (UserLmPasswordPresent && UserInfo->All.LmPasswordPresent)
-    {
-        TRACE("Check LM password hashes:\n");
-        if (RtlEqualMemory(&UserLmPassword,
-                           UserInfo->All.LmOwfPassword.Buffer,
-                           sizeof(ENCRYPTED_LM_OWF_PASSWORD)))
-        {
-            TRACE("  success!\n");
-            Status = STATUS_SUCCESS;
-            goto done;
-        }
-        TRACE("  failed!\n");
-    }
-
-done:
     return Status;
 }
 
@@ -489,79 +439,78 @@ SamValidateNormalUser(
 
     TRACE("UserName: %wZ\n", &UserInfo->All.UserName);
 
-    /* Check the password */
-    if (PwdData->IsNetwork ||
-        (UserInfo->All.UserAccountControl & USER_PASSWORD_NOT_REQUIRED) == 0)
+    if (UserInfo->All.UserAccountControl & USER_ACCOUNT_AUTO_LOCKED)
     {
-        Status = MsvpCheckPassword(PwdData, UserInfo);
-        if (!NT_SUCCESS(Status))
-        {
-            ERR("MsvpCheckPassword failed (Status %08lx)\n", Status);
-            goto done;
-        }
+        ERR("Account locked!\n");
+        Status = STATUS_ACCOUNT_LOCKED_OUT;
+        goto done;
     }
 
-    /* Check account restrictions for non-administrator accounts */
-    if (RelativeIds.Element[0] != DOMAIN_USER_RID_ADMIN)
+    Status = MsvpCheckPassword(PwdData, UserInfo);
+    if (!NT_SUCCESS(Status))
     {
-        /* Check if the account has been disabled */
-        if (UserInfo->All.UserAccountControl & USER_ACCOUNT_DISABLED)
+        ERR("MsvpCheckPassword failed (Status %08lx)\n", Status);
+        if (Status == STATUS_WRONG_PASSWORD)
         {
-            ERR("Account disabled!\n");
-            *SubStatus = STATUS_ACCOUNT_DISABLED;
-            Status = STATUS_ACCOUNT_RESTRICTION;
-            goto done;
+            *UserHandlePtr = UserHandle;
+            UserHandle = NULL;
         }
-
-        /* Check if the account has been locked */
-        if (UserInfo->All.UserAccountControl & USER_ACCOUNT_AUTO_LOCKED)
-        {
-            ERR("Account locked!\n");
-            *SubStatus = STATUS_ACCOUNT_LOCKED_OUT;
-            Status = STATUS_ACCOUNT_RESTRICTION;
-            goto done;
-        }
-
-        /* Check if the account expired */
-        if (LogonTime.QuadPart >= *(UINT64*)&UserInfo->All.AccountExpires)
-        {
-            ERR("Account expired!\n");
-            *SubStatus = STATUS_ACCOUNT_EXPIRED;
-            Status = STATUS_ACCOUNT_RESTRICTION;
-            goto done;
-        }
-
-        /* Check if the password expired */
-        if (LogonTime.QuadPart >= *(UINT64*)&UserInfo->All.PasswordMustChange)
-        {
-            ERR("Password expired!\n");
-            if (*(UINT64*)&UserInfo->All.PasswordLastSet == 0)
-                *SubStatus = STATUS_PASSWORD_MUST_CHANGE;
-            else
-                *SubStatus = STATUS_PASSWORD_EXPIRED;
-
-            Status = STATUS_ACCOUNT_RESTRICTION;
-            goto done;
-        }
-
-        /* Check logon hours */
-        if (!MsvpCheckLogonHours(&UserInfo->All.LogonHours, LogonTime))
-        {
-            ERR("Invalid logon hours!\n");
-            *SubStatus = STATUS_INVALID_LOGON_HOURS;
-            Status = STATUS_ACCOUNT_RESTRICTION;
-            goto done;
-        }
-
-        /* Check workstations */
-        if (!MsvpCheckWorkstations(&UserInfo->All.WorkStations, ComputerName->Buffer))
-        {
-            ERR("Invalid workstation!\n");
-            *SubStatus = STATUS_INVALID_WORKSTATION;
-            Status = STATUS_ACCOUNT_RESTRICTION;
-            goto done;
-        }
+        goto done;
     }
+
+    if (!PwdData->IsNetwork &&
+        !PwdData->TrustedClient &&
+        !UserInfo->All.NtPasswordPresent &&
+        MsvpLimitBlankPasswordUse())
+    {
+        ERR("Blank password not allowed for this caller!\n");
+        *SubStatus = STATUS_ACCOUNT_RESTRICTION;
+        Status = STATUS_ACCOUNT_RESTRICTION;
+        goto done;
+    }
+
+    if (UserInfo->All.UserAccountControl & USER_ACCOUNT_DISABLED)
+    {
+        ERR("Account disabled!\n");
+        *SubStatus = STATUS_ACCOUNT_DISABLED;
+        Status = STATUS_ACCOUNT_RESTRICTION;
+        goto done;
+    }
+
+    if (LogonTime.QuadPart >= *(UINT64*)&UserInfo->All.AccountExpires)
+    {
+        ERR("Account expired!\n");
+        *SubStatus = STATUS_ACCOUNT_EXPIRED;
+        Status = STATUS_ACCOUNT_RESTRICTION;
+        goto done;
+    }
+
+    if (LogonTime.QuadPart >= *(UINT64*)&UserInfo->All.PasswordMustChange)
+    {
+        ERR("Password expired!\n");
+        if (*(UINT64*)&UserInfo->All.PasswordLastSet == 0)
+            Status = STATUS_PASSWORD_MUST_CHANGE;
+        else
+            Status = STATUS_PASSWORD_EXPIRED;
+        goto done;
+    }
+
+    if (!MsvpCheckLogonHours(&UserInfo->All.LogonHours, LogonTime))
+    {
+        ERR("Invalid logon hours!\n");
+        *SubStatus = STATUS_INVALID_LOGON_HOURS;
+        Status = STATUS_ACCOUNT_RESTRICTION;
+        goto done;
+    }
+
+    if (!MsvpCheckWorkstations(&UserInfo->All.WorkStations, ComputerName->Buffer))
+    {
+        ERR("Invalid workstation!\n");
+        *SubStatus = STATUS_INVALID_WORKSTATION;
+        Status = STATUS_ACCOUNT_RESTRICTION;
+        goto done;
+    }
+
 done:
     if (NT_SUCCESS(Status))
     {
