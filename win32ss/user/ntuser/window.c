@@ -3828,6 +3828,7 @@ typedef struct
     INT         height;         /* Window height */
     VOID       *items;          /* Array of items */
     INT         nb_items;       /* Number of items */
+    UINT        items_size;
     INT         top_item;       /* Top visible item */
     INT         selected_item;  /* Selected item */
     INT         focus_item;     /* Item that has the focus */
@@ -3843,6 +3844,26 @@ typedef struct _WND2LB
   WND;
   LB_DESCR * pLBiv;
 } WND2LB, *PWND2LB;
+
+#ifdef _WIN64
+typedef struct
+{
+    ULONG       self;
+    ULONG       owner;
+    UINT        style;
+    INT         width;
+    INT         height;
+    ULONG       items;
+    INT         nb_items;
+    UINT        items_size;
+    INT         top_item;
+    INT         selected_item;
+    INT         focus_item;
+    INT         anchor_item;
+    INT         item_height;
+    INT         page_size;
+} LB_DESCR32;
+#endif
 ////
 ////
 ////
@@ -3880,9 +3901,19 @@ NtUserGetListBoxInfo(
 
    _SEH2_TRY
    {
-      LB_DESCR *descr = ((PWND2LB)Wnd)->pLBiv;
-      // See Controls ListBox.c:LB_GETLISTBOXINFO must match...
-      Ret = descr->page_size;
+#ifdef _WIN64
+      if (PsGetProcessWow64Process(Wnd->head.pti->ppi->peProcess))
+      {
+         LB_DESCR32 *descr32 = UlongToPtr(*(PULONG)&((PWND2LB)Wnd)->pLBiv);
+         Ret = descr32->page_size;
+      }
+      else
+#endif
+      {
+         LB_DESCR *descr = ((PWND2LB)Wnd)->pLBiv;
+         // See Controls ListBox.c:LB_GETLISTBOXINFO must match...
+         Ret = descr->page_size;
+      }
    }
    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
    {
