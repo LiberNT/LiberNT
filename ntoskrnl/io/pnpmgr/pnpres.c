@@ -1979,6 +1979,59 @@ cleanup:
    return Status;
 }
 
+static
+BOOLEAN
+IopIsConflictingBootInterrupt(
+    _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR CmDesc,
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    return CmDesc->Type == CmResourceTypeInterrupt &&
+           !(CmDesc->Flags & CM_RESOURCE_INTERRUPT_MESSAGE) &&
+           CmDesc->ShareDisposition == CmResourceShareDeviceExclusive &&
+           IopCheckDescriptorForConflict(CmDesc, NULL, NULL, DeviceNode);
+}
+
+static
+PCM_RESOURCE_LIST
+IopCopyWithoutConflictingInterrupts(
+    _In_ PCM_RESOURCE_LIST ResourceList,
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PCM_PARTIAL_RESOURCE_LIST PartialList;
+    PCM_PARTIAL_RESOURCE_LIST NewPartialList;
+    PCM_RESOURCE_LIST NewList;
+    ULONG i;
+    ULONG Kept = 0;
+
+    if (ResourceList->Count != 1)
+        return NULL;
+
+    PartialList = &ResourceList->List[0].PartialResourceList;
+    for (i = 0; i < PartialList->Count; i++)
+    {
+        if (!IopIsConflictingBootInterrupt(&PartialList->PartialDescriptors[i], DeviceNode))
+            Kept++;
+    }
+    if (Kept == PartialList->Count)
+        return NULL;
+
+    NewList = ExAllocatePool(PagedPool, PnpDetermineResourceListSize(ResourceList));
+    if (!NewList)
+        return NULL;
+
+    RtlCopyMemory(NewList, ResourceList, FIELD_OFFSET(CM_RESOURCE_LIST, List[0].PartialResourceList.PartialDescriptors));
+    NewPartialList = &NewList->List[0].PartialResourceList;
+    NewPartialList->Count = 0;
+    for (i = 0; i < PartialList->Count; i++)
+    {
+        if (IopIsConflictingBootInterrupt(&PartialList->PartialDescriptors[i], DeviceNode))
+            continue;
+        NewPartialList->PartialDescriptors[NewPartialList->Count++] = PartialList->PartialDescriptors[i];
+    }
+
+    return NewList;
+}
+
 NTSTATUS
 NTAPI
 IopAssignDeviceResources(
@@ -2048,6 +2101,18 @@ IopAssignDeviceResources(
 
    /* Call HAL to fixup our resource requirements list */
    HalAdjustResourceList(&DeviceNode->ResourceRequirements);
+
+   if (DeviceNode->ResourceList)
+   {
+       PCM_RESOURCE_LIST Reassigned = IopCopyWithoutConflictingInterrupts(DeviceNode->ResourceList, DeviceNode);
+
+       if (Reassigned &&
+           NT_SUCCESS(IopFixupResourceListWithRequirements(DeviceNode->ResourceRequirements, &Reassigned, DeviceNode)))
+       {
+           ExFreePool(DeviceNode->ResourceList);
+           DeviceNode->ResourceList = Reassigned;
+       }
+   }
 
    /* Add resource requirements that aren't in the list we already got */
    Status = IopFixupResourceListWithRequirements(DeviceNode->ResourceRequirements, &DeviceNode->ResourceList, DeviceNode);
