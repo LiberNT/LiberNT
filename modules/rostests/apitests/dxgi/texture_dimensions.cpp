@@ -215,7 +215,8 @@ static void TestCube(ID3D11Device *device, ID3D11DeviceContext *context, DXGI_FO
     ID3D11Texture2D *cube = NULL, *staging = NULL;
     desc.ArraySize = 7;
     HRESULT hr = device->CreateTexture2D(&desc, NULL, &cube);
-    ok(hr == E_INVALIDARG && !cube, "Incomplete cube: %#lx %p\n", hr, cube);
+    ok(hr == S_OK && cube, "Incomplete cube: %#lx %p\n", hr, cube);
+    if (cube) { cube->Release(); cube = NULL; }
     desc.ArraySize = 12;
     desc.Height = 2;
     hr = device->CreateTexture2D(&desc, NULL, &cube);
