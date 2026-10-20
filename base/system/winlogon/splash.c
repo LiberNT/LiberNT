@@ -294,7 +294,7 @@ EarlySplashCreate(VOID)
     HeapFree(GetProcessHeap(), 0, EarlySplash.Bits);
     EarlySplash.Bits = NULL;
     EarlySplash.Active = TRUE;
-    TRACE("EARLY_SPLASH: WALLPAPER_OK source=%lux%lu owner=win32k mode=stretch\n", EarlySplash.Width, EarlySplash.Height);
+    TRACE("EARLY_SPLASH: WALLPAPER_OK source=%lux%lu owner=win32k\n", EarlySplash.Width, EarlySplash.Height);
     return TRUE;
 
 failure:

@@ -1235,7 +1235,7 @@ SpiSetEarlyWallpaper(
     gspv.hbmWallpaper = Bitmap;
     gspv.cxWallpaper = Width;
     gspv.cyWallpaper = Height;
-    gspv.WallpaperMode = wmStretch;
+    gspv.WallpaperMode = SpiLoadWallpaperMode();
     gspv.bEarlySplashWallpaper = TRUE;
     RtlCopyMemory(gspv.awcWallpaper, WallpaperPath.Buffer, WallpaperPath.Length + sizeof(WCHAR));
     gspv.ustrWallpaper.Buffer = gspv.awcWallpaper;
@@ -1248,7 +1248,7 @@ SpiSetEarlyWallpaper(
         GreDeleteObject(OldBitmap);
     }
 
-    TRACE("EARLY_SPLASH: WIN32K_WALLPAPER_OK bitmap=%p source=%ldx%ld mode=stretch\n", Bitmap, Width, Height);
+    TRACE("EARLY_SPLASH: WIN32K_WALLPAPER_OK bitmap=%p source=%ldx%ld mode=%u\n", Bitmap, Width, Height, gspv.WallpaperMode);
     UserRedrawDesktop();
 
     DesktopWindow = UserGetDesktopWindow();
