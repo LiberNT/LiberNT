@@ -11,9 +11,9 @@
 
 ## Quick Links
 [Website](https://libernt.com/) &bull;
-[Source code](https://github.com/ahmedarif193/LiberNT) &bull;
-[Issues](https://github.com/ahmedarif193/LiberNT/issues) &bull;
-[Wiki](https://github.com/ahmedarif193/LiberNT/wiki) &bull;
+[Source code](https://github.com/LiberNT/LiberNT) &bull;
+[Issues](https://github.com/LiberNT/LiberNT/issues) &bull;
+[Wiki](https://github.com/LiberNT/LiberNT/wiki) &bull;
 [Build environment](https://github.com/LiberNT/libernt-build-toolchain)
 
 ## What is LiberNT?
@@ -59,7 +59,7 @@ On Windows, we suggest WSL2. Install it with `wsl --install`, open the Linux ter
 ### 2. Get the source
 
 ```sh
-git clone https://github.com/ahmedarif193/LiberNT.git
+git clone https://github.com/LiberNT/LiberNT.git
 cd LiberNT
 ```
 
@@ -131,7 +131,7 @@ See [INSTALL.md](INSTALL.md) for installation instructions.
 
 ## Contributing
 
-Report bugs and suggest features in [Issues](https://github.com/ahmedarif193/LiberNT/issues), and find guides and notes in the [Wiki](https://github.com/ahmedarif193/LiberNT/wiki).
+Report bugs and suggest features in [Issues](https://github.com/LiberNT/LiberNT/issues), and find guides and notes in the [Wiki](https://github.com/LiberNT/LiberNT/wiki).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [PULL_REQUEST_MANAGEMENT.md](PULL_REQUEST_MANAGEMENT.md).
 

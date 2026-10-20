@@ -24,4 +24,4 @@ The preinstalled disk also carries LiberNT Setup. Run `C:\<architecture>\libernt
 
 ## Help
 
-If something goes wrong, report it in [Issues](https://github.com/ahmedarif193/LiberNT/issues) with the architecture, the build type, the commit you built and the steps that lead to the problem. Guides and notes are in the [Wiki](https://github.com/ahmedarif193/LiberNT/wiki), and you can ask the team on [Discord](https://discord.gg/BpcKg7FZ2) or [Matrix](https://matrix.to/#/#libernt:matrix.org).
+If something goes wrong, report it in [Issues](https://github.com/LiberNT/LiberNT/issues) with the architecture, the build type, the commit you built and the steps that lead to the problem. Guides and notes are in the [Wiki](https://github.com/LiberNT/LiberNT/wiki), and you can ask the team on [Discord](https://discord.gg/BpcKg7FZ2) or [Matrix](https://matrix.to/#/#libernt:matrix.org).

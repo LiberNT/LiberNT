@@ -19,7 +19,7 @@ LiberNT is built clean-room: from the Windows SDK and WDK headers, Windows 11 pu
 
 ### Report bugs
 
-Report bugs in [Issues](https://github.com/ahmedarif193/LiberNT/issues). Give the architecture (amd64, i386, arm64 or riscv64), the build type, the commit you built and the steps that lead to the problem. A debug log from the serial port helps a lot.
+Report bugs in [Issues](https://github.com/LiberNT/LiberNT/issues). Give the architecture (amd64, i386, arm64 or riscv64), the build type, the commit you built and the steps that lead to the problem. A debug log from the serial port helps a lot.
 
 ### Fix bugs
 
@@ -35,11 +35,11 @@ Run LiberNT in a virtual machine or on real hardware and report what breaks. Rea
 
 ### Implement new things
 
-Windows 11 is the compatibility reference. Before starting a larger piece of work, ask in [Issues](https://github.com/ahmedarif193/LiberNT/issues) or on [Discord](https://discord.gg/BpcKg7FZ2) whether someone is already working on it.
+Windows 11 is the compatibility reference. Before starting a larger piece of work, ask in [Issues](https://github.com/LiberNT/LiberNT/issues) or on [Discord](https://discord.gg/BpcKg7FZ2) whether someone is already working on it.
 
 ### Write documentation
 
-Guides and design notes go in the [Wiki](https://github.com/ahmedarif193/LiberNT/wiki). Respect [clean room reverse engineering] practices, and write only what the source code, the documentation or a test run shows.
+Guides and design notes go in the [Wiki](https://github.com/LiberNT/LiberNT/wiki). Respect [clean room reverse engineering] practices, and write only what the source code, the documentation or a test run shows.
 
 ### Third-party code
 
@@ -95,9 +95,9 @@ See [CREDITS.md](CREDITS.md) for the people behind LiberNT and ReactOS.
 
 ## Where To Start?
 
-- Look at the open [Issues](https://github.com/ahmedarif193/LiberNT/issues).
+- Look at the open [Issues](https://github.com/LiberNT/LiberNT/issues).
 - Find a test that fails, compare it with Windows 11, and make it pass.
-- Read the [Wiki](https://github.com/ahmedarif193/LiberNT/wiki) for guides and design notes.
+- Read the [Wiki](https://github.com/LiberNT/LiberNT/wiki) for guides and design notes.
 - Ask for help on [Discord](https://discord.gg/BpcKg7FZ2) or [Matrix](https://matrix.to/#/#libernt:matrix.org).
 
   [clean room reverse engineering]:                              https://en.wikipedia.org/wiki/Clean_room_design
