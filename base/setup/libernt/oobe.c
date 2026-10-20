@@ -22,6 +22,7 @@
 #define OOBE_SKIPPED            1
 #define OOBE_DEFAULT_HIVE       L"LiberNT.FirstBoot.Default"
 #define OOBE_APPLY_TIMEOUT      5000
+#define OOBE_DRIVERS_TIMEOUT    (15 * 60 * 1000)
 #define PM_APPLY_DONE           (WM_APP + 3)
 
 NTSTATUS
@@ -533,6 +534,40 @@ DisableSetupAccount(VOID)
     return NetUserSetInfo(NULL, Name, 1008, (LPBYTE)&Flags, NULL);
 }
 
+static VOID
+InstallMissingDrivers(
+    _In_ POOBE_PROGRESS Progress)
+{
+    WCHAR Path[MAX_PATH];
+    WCHAR CommandLine[MAX_PATH + 16];
+    STARTUPINFOW StartupInfo;
+    PROCESS_INFORMATION ProcessInfo;
+    DWORD ExitCode = WAIT_TIMEOUT;
+
+    if (!GetSystemDirectoryW(Path, ARRAYSIZE(Path)) ||
+        FAILED(StringCchCatW(Path, ARRAYSIZE(Path), L"\\lntdrv.exe")) ||
+        GetFileAttributesW(Path) == INVALID_FILE_ATTRIBUTES ||
+        FAILED(StringCchPrintfW(CommandLine, ARRAYSIZE(CommandLine), L"\"%s\" /installall", Path)))
+    {
+        return;
+    }
+
+    SetResText(Progress->hwndActivity, IDS_OOBE_INSTALL_DRIVERS);
+    SetWindowTextW(Progress->hwndItem, L"");
+    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+    StartupInfo.cb = sizeof(StartupInfo);
+    if (!CreateProcessW(Path, CommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &StartupInfo, &ProcessInfo))
+    {
+        DPRINT1("Could not start %S, error %lu\n", Path, GetLastError());
+        return;
+    }
+    if (WaitForSingleObject(ProcessInfo.hProcess, OOBE_DRIVERS_TIMEOUT) == WAIT_OBJECT_0)
+        GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode);
+    DPRINT1("Driver installation finished with %lu\n", ExitCode);
+    CloseHandle(ProcessInfo.hThread);
+    CloseHandle(ProcessInfo.hProcess);
+}
+
 typedef struct _FINISH_CONTEXT
 {
     HWND hwndDlg;
@@ -593,6 +628,7 @@ Components:
     }
     if (SUCCEEDED(hrCom))
         CoUninitialize();
+    InstallMissingDrivers(&Context->Progress);
 
     PostMessageW(Context->hwndDlg, PM_INSTALL_DONE, ERROR_SUCCESS, 0);
     return ERROR_SUCCESS;

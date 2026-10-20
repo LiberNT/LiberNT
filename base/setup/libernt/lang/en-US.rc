@@ -282,6 +282,7 @@ BEGIN
     IDS_OOBE_APPS_SPACE "The selected components need about %lu MB. Drive C: has %I64u MB free."
     IDS_OOBE_APPS_NOSPACE "Not enough free space for the selected components"
     IDS_OOBE_APPS_NOSPACE_TEXT "They need about %lu MB, and drive C: has %I64u MB free. Clear some boxes to continue. To install them later, expand drive C: with lntexpandstorage in Command Prompt, then run %%SystemRoot%%\\system32\\oobe\\oobe.exe /components."
+    IDS_OOBE_INSTALL_DRIVERS "Installing drivers for your devices..."
 END
 
 /* Progress Strings */
