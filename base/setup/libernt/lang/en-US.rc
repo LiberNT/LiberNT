@@ -81,16 +81,18 @@ FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "Co&mputer name:", IDC_STATIC, 0, 4, 95, 9
     EDITTEXT IDC_COMPUTERNAME, 100, 2, 190, 13, ES_UPPERCASE | ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "&User name:", IDC_STATIC, 0, 24, 95, 9
-    EDITTEXT IDC_USERNAME, 100, 22, 190, 13, ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "&Password:", IDC_STATIC, 0, 44, 95, 9
-    EDITTEXT IDC_PASSWORD1, 100, 42, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "C&onfirm password:", IDC_STATIC, 0, 64, 95, 9
-    EDITTEXT IDC_PASSWORD2, 100, 62, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "&Time zone:", IDC_STATIC, 0, 88, 95, 9
-    COMBOBOX IDC_TIMEZONELIST, 100, 86, 190, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    AUTOCHECKBOX "Adjust for &daylight saving time automatically", IDC_AUTODAYLIGHT, 100, 105, 190, 10, WS_TABSTOP
-    LTEXT "This account is a member of the Administrators group. If you leave the password empty, LiberNT signs in to it automatically.", IDC_STATIC, 0, 128, 290, 26
+    LTEXT "&User name:", IDC_STATIC, 0, 22, 95, 9
+    EDITTEXT IDC_USERNAME, 100, 20, 190, 13, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "&Password:", IDC_STATIC, 0, 40, 95, 9
+    EDITTEXT IDC_PASSWORD1, 100, 38, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "C&onfirm password:", IDC_STATIC, 0, 58, 95, 9
+    EDITTEXT IDC_PASSWORD2, 100, 56, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "Password &hint:", IDC_STATIC, 0, 76, 95, 9
+    EDITTEXT IDC_PASSWORDHINT, 100, 74, 190, 13, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "&Time zone:", IDC_STATIC, 0, 96, 95, 9
+    COMBOBOX IDC_TIMEZONELIST, 100, 94, 190, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX "Adjust for &daylight saving time automatically", IDC_AUTODAYLIGHT, 100, 111, 190, 10, WS_TABSTOP
+    LTEXT "This account is a member of the Administrators group. If you leave the password empty, LiberNT signs in to it automatically.", IDC_STATIC, 0, 130, 290, 26
 END
 
 IDD_READYPAGE DIALOGEX 0, 0, 290, 160
@@ -338,6 +340,8 @@ BEGIN
     IDS_ERROR_USERNAME "The user name must have 1 to 20 characters and cannot contain any of these characters:\n"" / \\ [ ] : ; | = , + * ? < > @\nIt cannot contain only periods and spaces."
     IDS_ERROR_USEREXISTS "This name is already used by a built-in account or group, or by the computer. Choose another user name."
     IDS_ERROR_PASSWORDMATCH "The passwords do not match. Type the same password in both boxes."
+    IDS_ERROR_PASSWORDHINT "Type a password hint."
+    IDS_ERROR_HINTPASSWORD "The password hint can't contain the password."
 END
 
 /* Error Strings */

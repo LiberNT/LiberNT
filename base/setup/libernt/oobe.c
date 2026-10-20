@@ -10,6 +10,7 @@
 #include <tzlib.h>
 #include <objbase.h>
 #include <lm.h>
+#include <ntsam.h>
 #include <userenv.h>
 
 #include "oobe.h"
@@ -411,6 +412,50 @@ AddToLocalGroup(
     return (Status == ERROR_MEMBER_IN_ALIAS) ? NERR_Success : Status;
 }
 
+static VOID
+SetAccountPasswordHint(
+    _In_ PSETUPDATA pSetupData)
+{
+    UNICODE_STRING DomainName, UserName;
+    SAM_HANDLE ServerHandle = NULL, DomainHandle = NULL, UserHandle = NULL;
+    USER_EXTENDED_INFORMATION Info;
+    PSID DomainSid = NULL;
+    PULONG RelativeIds = NULL;
+    PSID_NAME_USE Use = NULL;
+
+    if (!pSetupData->PasswordHint[0])
+        return;
+
+    RtlInitUnicodeString(&DomainName, pSetupData->ComputerName);
+    RtlInitUnicodeString(&UserName, pSetupData->UserName);
+
+    if (NT_SUCCESS(SamConnect(NULL, &ServerHandle, SAM_SERVER_CONNECT | SAM_SERVER_LOOKUP_DOMAIN, NULL)) &&
+        NT_SUCCESS(SamLookupDomainInSamServer(ServerHandle, &DomainName, &DomainSid)) &&
+        NT_SUCCESS(SamOpenDomain(ServerHandle, DOMAIN_LOOKUP, DomainSid, &DomainHandle)) &&
+        NT_SUCCESS(SamLookupNamesInDomain(DomainHandle, 1, &UserName, &RelativeIds, &Use)) &&
+        Use[0] == SidTypeUser &&
+        NT_SUCCESS(SamOpenUser(DomainHandle, USER_WRITE_PREFERENCES, RelativeIds[0], &UserHandle)))
+    {
+        ZeroMemory(&Info, sizeof(Info));
+        Info.ExtendedWhichFields = USER_EXTENDED_FIELD_PASSWORD_HINT;
+        RtlInitUnicodeString(&Info.PasswordHint, pSetupData->PasswordHint);
+        SamSetInformationUser(UserHandle, UserExtendedInformation, &Info);
+    }
+
+    if (UserHandle != NULL)
+        SamCloseHandle(UserHandle);
+    if (DomainHandle != NULL)
+        SamCloseHandle(DomainHandle);
+    if (ServerHandle != NULL)
+        SamCloseHandle(ServerHandle);
+    if (DomainSid != NULL)
+        SamFreeMemory(DomainSid);
+    if (RelativeIds != NULL)
+        SamFreeMemory(RelativeIds);
+    if (Use != NULL)
+        SamFreeMemory(Use);
+}
+
 static DWORD
 CreateAccount(
     _In_ PSETUPDATA pSetupData)
@@ -435,6 +480,8 @@ CreateAccount(
     Status = NetUserAdd(NULL, 1, (LPBYTE)&Info, NULL);
     if (Status != NERR_Success)
         return Status;
+
+    SetAccountPasswordHint(pSetupData);
 
     if (!LookupAccountNameW(NULL, pSetupData->UserName, UserSid, &cbUserSid, Domain, &cchDomain, &Use))
         return GetLastError();

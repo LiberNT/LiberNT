@@ -206,6 +206,8 @@ ApplyAccountSettings(
     WCHAR UserName[UNLEN + 1];
     WCHAR Password1[128];
     WCHAR Password2[128];
+    WCHAR Hint[PWLEN + 1];
+    WCHAR LowerPassword[128];
     UINT ErrorId = 0, FocusId = 0;
     INT iItem;
 
@@ -213,6 +215,9 @@ ApplyAccountSettings(
     GetDlgItemTextW(hwndDlg, IDC_USERNAME, UserName, ARRAYSIZE(UserName));
     GetDlgItemTextW(hwndDlg, IDC_PASSWORD1, Password1, ARRAYSIZE(Password1));
     GetDlgItemTextW(hwndDlg, IDC_PASSWORD2, Password2, ARRAYSIZE(Password2));
+    GetDlgItemTextW(hwndDlg, IDC_PASSWORDHINT, Hint, ARRAYSIZE(Hint));
+    StringCchCopyW(LowerPassword, ARRAYSIZE(LowerPassword), Password1);
+    CharLowerW(LowerPassword);
 
     if (!IsValidSetupComputerName(ComputerName))
     {
@@ -234,6 +239,16 @@ ApplyAccountSettings(
         ErrorId = IDS_ERROR_PASSWORDMATCH;
         FocusId = IDC_PASSWORD1;
     }
+    else if (Password1[0] && !Hint[0])
+    {
+        ErrorId = IDS_ERROR_PASSWORDHINT;
+        FocusId = IDC_PASSWORDHINT;
+    }
+    else if (Password1[0] && wcsstr(CharLowerW(Hint), LowerPassword))
+    {
+        ErrorId = IDS_ERROR_HINTPASSWORD;
+        FocusId = IDC_PASSWORDHINT;
+    }
 
     if (ErrorId == 0)
     {
@@ -241,6 +256,9 @@ ApplyAccountSettings(
         StringCchCopyW(pSetupData->ComputerName, ARRAYSIZE(pSetupData->ComputerName), ComputerName);
         StringCchCopyW(pSetupData->UserName, ARRAYSIZE(pSetupData->UserName), UserName);
         StringCchCopyW(pSetupData->Password, ARRAYSIZE(pSetupData->Password), Password1);
+        GetDlgItemTextW(hwndDlg, IDC_PASSWORDHINT, pSetupData->PasswordHint, ARRAYSIZE(pSetupData->PasswordHint));
+        if (!Password1[0])
+            pSetupData->PasswordHint[0] = UNICODE_NULL;
 
         iItem = (INT)SendDlgItemMessageW(hwndDlg, IDC_TIMEZONELIST, CB_GETCURSEL, 0, 0);
         pSetupData->TimeZoneName[0] = UNICODE_NULL;
@@ -254,6 +272,7 @@ ApplyAccountSettings(
 
     SecureZeroMemory(Password1, sizeof(Password1));
     SecureZeroMemory(Password2, sizeof(Password2));
+    SecureZeroMemory(LowerPassword, sizeof(LowerPassword));
 
     if (ErrorId != 0)
     {
@@ -289,6 +308,8 @@ AccountPageProc(
             SendDlgItemMessageW(hwndDlg, IDC_USERNAME, EM_LIMITTEXT, 20, 0);
             SendDlgItemMessageW(hwndDlg, IDC_PASSWORD1, EM_LIMITTEXT, 127, 0);
             SendDlgItemMessageW(hwndDlg, IDC_PASSWORD2, EM_LIMITTEXT, 127, 0);
+            SendDlgItemMessageW(hwndDlg, IDC_PASSWORDHINT, EM_LIMITTEXT, PWLEN, 0);
+            SetDlgItemTextW(hwndDlg, IDC_PASSWORDHINT, pSetupData->PasswordHint);
             SetDlgItemTextW(hwndDlg, IDC_COMPUTERNAME, pSetupData->ComputerName);
             SetDlgItemTextW(hwndDlg, IDC_USERNAME, pSetupData->UserName);
 

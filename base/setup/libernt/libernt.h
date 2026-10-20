@@ -127,6 +127,7 @@ typedef struct _SETUPDATA
     WCHAR ComputerName[MAX_COMPUTERNAME_LENGTH + 1];
     WCHAR UserName[UNLEN + 1];
     WCHAR Password[PWLEN + 1];
+    WCHAR PasswordHint[PWLEN + 1];
     DWORD TimeZoneIndex;
     BOOL AutoDaylight;
     WCHAR TimeZoneName[128];
