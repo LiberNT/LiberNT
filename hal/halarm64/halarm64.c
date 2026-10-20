@@ -3279,9 +3279,8 @@ HalAllocateCommonBuffer(
      * MmNonCached maps as Normal Non-Cacheable (not Device memory), which
      * remains required for non-coherent systems.
      */
-    CacheType = (CacheEnabled && HalpArm64DmaCoherency.SystemCoherent) ?
-                MmCached :
-                MmNonCached;
+    UNREFERENCED_PARAMETER(CacheEnabled);
+    CacheType = HalpArm64DmaCoherency.SystemCoherent ? MmCached : MmNonCached;
 
     /* Allocate from a CPU range reachable through this device's DMA window. */
     VirtualAddress = HalpArm64AllocateDmaMemory(AdapterObject, Length, CacheType, &CpuAddress, LogicalAddress);
