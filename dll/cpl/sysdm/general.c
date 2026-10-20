@@ -619,16 +619,10 @@ static VOID AppendDlgItemText(HWND hwnd, INT nIDDlgItem, PCWSTR pszText)
 static VOID GetSystemRelease(HWND hwnd)
 {
     static const WCHAR szKey[] = L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
-    WCHAR szRelease[64], szVersion[32], szBuild[16], szLab[256], szText[256];
+    WCHAR szVersion[32], szBuild[16], szLab[256], szText[256];
     PWSTR Hash, Revision, Compiler, Scan;
     PCSTR Arch, ArchEnd;
     DWORD cbData, dwUbr;
-
-    if (LoadStringW(hApplet, IDS_DEVELOPMENT_PREVIEW, szRelease, _countof(szRelease)))
-    {
-        StringCchPrintfW(szText, _countof(szText), L" \x00B7 %s", szRelease);
-        AppendDlgItemText(hwnd, IDC_ROSPRODUCT, szText);
-    }
 
     cbData = sizeof(szVersion);
     if (RegGetValueW(HKEY_LOCAL_MACHINE, szKey, L"DisplayVersion", RRF_RT_REG_SZ, NULL, szVersion, &cbData) != ERROR_SUCCESS)
