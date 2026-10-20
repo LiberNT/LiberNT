@@ -165,6 +165,116 @@ IntGetMenuDefaultItem(PMENU Menu, BOOL fByPos, UINT gmdiFlags, DWORD *gismc)
 }
 
 #ifdef WOW64_I386_RUNTIME
+static BOOL MENU_QueryMenu(HMENU hMenu, PROS_MENUQUERY Query)
+{
+    return (BOOL)NtUserCallTwoParam((DWORD_PTR)hMenu, (DWORD_PTR)Query, TWOPARAM_ROUTINE_ROS_QUERYMENU);
+}
+
+static BOOL MENU_QueryItem(HMENU hMenu, UINT uPos, LPMENUITEMINFOW Item)
+{
+    ZeroMemory(Item, sizeof(*Item));
+    Item->cbSize = sizeof(*Item);
+    Item->fMask = MIIM_BITMAP | MIIM_CHECKMARKS | MIIM_DATA | MIIM_FTYPE | MIIM_ID | MIIM_STATE | MIIM_STRING | MIIM_SUBMENU;
+    return NtUserThunkedMenuItemInfo(hMenu, uPos, TRUE, THUNKED_MENUITEMINFO_ROS_GETW, Item, NULL);
+}
+
+static BOOL MENU_LookupItem(HMENU *hmenu, UINT *nPos, UINT wFlags, LPMENUITEMINFOW Item)
+{
+    MENUITEMINFOW Current, Fallback;
+    ROS_MENUQUERY Query;
+    UINT FallbackPos = 0;
+    BOOL HasFallback = FALSE;
+    UINT i;
+
+    if (*hmenu == (HMENU)0xffff) return FALSE;
+    if (wFlags & MF_BYPOSITION) return MENU_QueryItem(*hmenu, *nPos, Item);
+    if (!MENU_QueryMenu(*hmenu, &Query)) return FALSE;
+
+    for (i = 0; i < Query.cItems; i++)
+    {
+        if (!MENU_QueryItem(*hmenu, i, &Current)) return FALSE;
+        if (Current.hSubMenu)
+        {
+            HMENU hsubmenu = Current.hSubMenu;
+
+            if (MENU_LookupItem(&hsubmenu, nPos, wFlags, Item))
+            {
+                *hmenu = hsubmenu;
+                return TRUE;
+            }
+            if (Current.wID == *nPos)
+            {
+                Fallback = Current;
+                FallbackPos = i;
+                HasFallback = TRUE;
+            }
+        }
+        else if (Current.wID == *nPos)
+        {
+            *Item = Current;
+            *nPos = i;
+            return TRUE;
+        }
+    }
+
+    if (!HasFallback) return FALSE;
+    *Item = Fallback;
+    *nPos = FallbackPos;
+    return TRUE;
+}
+
+static BOOL MENU_FindItemInfo(HMENU *hmenu, UINT *nPos, UINT wFlags, LPMENUITEMINFOW Item)
+{
+    DWORD Error = GetLastError();
+
+    if (MENU_LookupItem(hmenu, nPos, wFlags, Item)) return TRUE;
+    SetLastError(Error);
+    return FALSE;
+}
+
+static LPWSTR MENU_GetItemText(HMENU hMenu, UINT uPos, UINT cch)
+{
+    MENUITEMINFOW Item;
+    LPWSTR Text;
+
+    Text = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, (cch + 1) * sizeof(WCHAR));
+    if (!Text) return NULL;
+    if (!cch) return Text;
+
+    ZeroMemory(&Item, sizeof(Item));
+    Item.cbSize = sizeof(Item);
+    Item.fMask = MIIM_STRING;
+    Item.dwTypeData = Text;
+    Item.cch = cch;
+    NtUserThunkedMenuItemInfo(hMenu, uPos, TRUE, THUNKED_MENUITEMINFO_ROS_GETW, &Item, NULL);
+    return Text;
+}
+
+static UINT MENU_GetDefaultItem(HMENU hMenu, UINT fByPos, UINT gmdiFlags)
+{
+    MENUITEMINFOW Item;
+    ROS_MENUQUERY Query;
+    UINT i;
+
+    if (!MENU_QueryMenu(hMenu, &Query)) return -1;
+
+    for (i = 0; i < Query.cItems; i++)
+    {
+        if (!MENU_QueryItem(hMenu, i, &Item)) return -1;
+        if (Item.fState & MFS_DEFAULT) break;
+    }
+    if (i >= Query.cItems) return -1;
+
+    if (!(GMDI_USEDISABLED & gmdiFlags) && (Item.fState & MFS_DISABLED)) return -1;
+
+    if ((gmdiFlags & GMDI_GOINTOPOPUPS) && Item.hSubMenu)
+    {
+        UINT ret = MENU_GetDefaultItem(Item.hSubMenu, fByPos, gmdiFlags);
+        if (ret != -1) return ret;
+    }
+    return fByPos ? i : Item.wID;
+}
+
 static BOOL GetMenuItemInfo_common ( HMENU hmenu,
                                      UINT item,
                                      BOOL bypos,
@@ -696,7 +806,11 @@ static void MENU_mnu2mnuii( UINT flags, UINT_PTR id, LPCWSTR str, LPMENUITEMINFO
         pmii->dwItemData = (ULONG_PTR) str;
     }
     if( flags & MF_POPUP) {
+#ifdef WOW64_I386_RUNTIME
+        if (IsMenu((HMENU)id)) {
+#else
         if (MENU_GetMenu((HMENU)id)) {
+#endif
             pmii->fMask |= MIIM_SUBMENU;
             pmii->hSubMenu = (HMENU)id;
         } else {
@@ -881,6 +995,9 @@ CheckMenuItem(HMENU hmenu,
 	      UINT uIDCheckItem,
 	      UINT uCheck)
 {
+#ifdef WOW64_I386_RUNTIME
+  return NtUserCheckMenuItem(hmenu, uIDCheckItem, uCheck);
+#else
   PITEM item;
   DWORD Ret;
   UINT uID = uIDCheckItem;
@@ -894,6 +1011,7 @@ CheckMenuItem(HMENU hmenu,
   if ( Ret == (uCheck & MFS_CHECKED)) return Ret; // Already Checked...
 
   return NtUserCheckMenuItem(hmenu, uIDCheckItem, uCheck);
+#endif
 }
 
 /*
@@ -906,6 +1024,52 @@ CheckMenuRadioItem(HMENU hMenu,
                    UINT check,
                    UINT bypos)
 {
+#ifdef WOW64_I386_RUNTIME
+    BOOL done = FALSE, found_first = FALSE;
+    UINT i;
+    MENUITEMINFOW mi_check;
+    HMENU m_first = NULL, m_check;
+    MENUITEMINFOW mii;
+    mii.cbSize = sizeof( mii);
+
+    for (i = first; i <= last; i++)
+    {
+        UINT pos = i;
+
+        m_check = hMenu;
+        if (!MENU_FindItemInfo(&m_check, &pos, bypos, &mi_check)) continue;
+        if (!found_first)
+        {
+            found_first = TRUE;
+            m_first = m_check;
+        }
+
+        if (m_first != m_check) continue;
+        if (mi_check.fType == MFT_SEPARATOR) continue;
+
+        if (i == check)
+        {
+            if (!(mi_check.fType & MFT_RADIOCHECK) || !(mi_check.fState & MFS_CHECKED))
+            {
+               mii.fMask = MIIM_FTYPE | MIIM_STATE;
+               mii.fType = (mi_check.fType & MENUITEMINFO_TYPE_MASK) | MFT_RADIOCHECK;
+               mii.fState = (mi_check.fState & MII_STATE_MASK) | MFS_CHECKED;
+               NtUserThunkedMenuItemInfo(m_check, i, bypos, FALSE, &mii, NULL);
+            }
+            done = TRUE;
+        }
+        else
+        {
+            if (mi_check.fState & MFS_CHECKED)
+            {
+               mii.fMask = MIIM_STATE;
+               mii.fState = (mi_check.fState & MII_STATE_MASK) & ~MFS_CHECKED;
+               NtUserThunkedMenuItemInfo(m_check, i, bypos, FALSE, &mii, NULL);
+            }
+        }
+    }
+    return done;
+#else
     BOOL done = FALSE;
     UINT i;
     PITEM mi_first = NULL, mi_check;
@@ -958,6 +1122,7 @@ CheckMenuRadioItem(HMENU hMenu,
         }
     }
     return done;
+#endif
 }
 
 /*
@@ -1033,10 +1198,17 @@ DWORD
 WINAPI
 GetMenuContextHelpId(HMENU hmenu)
 {
+#ifdef WOW64_I386_RUNTIME
+  ROS_MENUQUERY Query;
+  if (MENU_QueryMenu(hmenu, &Query))
+     return Query.dwContextHelpId;
+  return 0;
+#else
   PMENU pMenu;
   if ((pMenu = ValidateHandle(hmenu, TYPE_MENU)))
      return pMenu->dwContextHelpId;
   return 0;
+#endif
 }
 
 /*
@@ -1047,12 +1219,16 @@ GetMenuDefaultItem(HMENU hMenu,
 		   UINT fByPos,
 		   UINT gmdiFlags)
 {
+#ifdef WOW64_I386_RUNTIME
+  return MENU_GetDefaultItem(hMenu, fByPos, gmdiFlags);
+#else
   PMENU pMenu;
   DWORD gismc = 0;
   if (!(pMenu = ValidateHandle(hMenu, TYPE_MENU)))
        return (UINT)-1;
 
   return IntGetMenuDefaultItem( pMenu, (BOOL)fByPos, gmdiFlags, &gismc);
+#endif
 }
 
 /*
@@ -1062,6 +1238,35 @@ BOOL WINAPI
 GetMenuInfo(HMENU hmenu,
 	    LPMENUINFO lpcmi)
 {
+#ifdef WOW64_I386_RUNTIME
+  ROS_MENUQUERY Query;
+
+  if (!lpcmi || (lpcmi->cbSize != sizeof(MENUINFO)))
+  {
+     SetLastError(ERROR_INVALID_PARAMETER);
+     return FALSE;
+  }
+
+  if (!MENU_QueryMenu(hmenu, &Query))
+     return FALSE;
+
+  if (lpcmi->fMask & MIM_BACKGROUND)
+      lpcmi->hbrBack = (HBRUSH)(ULONG_PTR)Query.hbrBack;
+
+  if (lpcmi->fMask & MIM_HELPID)
+      lpcmi->dwContextHelpID = Query.dwContextHelpId;
+
+  if (lpcmi->fMask & MIM_MAXHEIGHT)
+      lpcmi->cyMax = Query.cyMax;
+
+  if (lpcmi->fMask & MIM_MENUDATA)
+      lpcmi->dwMenuData = (ULONG_PTR)Query.dwMenuData;
+
+  if (lpcmi->fMask & MIM_STYLE)
+      lpcmi->dwStyle = Query.fFlags & MNS_STYLE_MASK;
+
+  return TRUE;
+#else
   PMENU pMenu;
 
   if (!lpcmi || (lpcmi->cbSize != sizeof(MENUINFO)))
@@ -1089,6 +1294,7 @@ GetMenuInfo(HMENU hmenu,
       lpcmi->dwStyle = pMenu->fFlags & MNS_STYLE_MASK;
 
   return TRUE;
+#endif
 }
 
 /*
@@ -1097,10 +1303,17 @@ GetMenuInfo(HMENU hmenu,
 int WINAPI
 GetMenuItemCount(HMENU hmenu)
 {
+#ifdef WOW64_I386_RUNTIME
+  ROS_MENUQUERY Query;
+  if (MENU_QueryMenu(hmenu, &Query))
+     return Query.cItems;
+  return -1;
+#else
   PMENU pMenu;
   if ((pMenu = ValidateHandle(hmenu, TYPE_MENU)))
      return pMenu->cItems;
   return -1;
+#endif
 }
 
 /*
@@ -1110,10 +1323,17 @@ UINT WINAPI
 GetMenuItemID(HMENU hMenu,
 	      int nPos)
 {
+#ifdef WOW64_I386_RUNTIME
+  MENUITEMINFOW Item;
+  if (!MENU_FindItemInfo(&hMenu, (UINT*)&nPos, MF_BYPOSITION, &Item)) return -1;
+  if (Item.hSubMenu) return -1;
+  return Item.wID;
+#else
   ITEM * lpmi;
   if (!(lpmi = MENU_FindItem(&hMenu,(UINT*)&nPos,MF_BYPOSITION))) return -1;
   if (lpmi->spSubMenu) return -1;
   return lpmi->wID;
+#endif
 }
 
 /*
@@ -1182,6 +1402,24 @@ GetMenuState(
   UINT uId,
   UINT uFlags)
 {
+#ifdef WOW64_I386_RUNTIME
+  MENUITEMINFOW Item;
+  ROS_MENUQUERY Query;
+  UINT Type = 0;
+  TRACE("(menu=%p, id=%04x, flags=%04x);\n", hMenu, uId, uFlags);
+  if (!MENU_FindItemInfo(&hMenu, &uId, uFlags, &Item)) return -1;
+
+  if (!Item.cch && Item.hbmpItem) Type = MFT_BITMAP;
+
+  if (Item.hSubMenu)
+  {
+     Type |= MF_POPUP;
+     if (!MENU_QueryMenu(Item.hSubMenu, &Query)) return (UINT)-1;
+     else return (Query.cItems << 8) | ((Item.fState|Item.fType|Type) & 0xff);
+  }
+  else
+     return (Item.fType | Item.fState | Type);
+#else
   PITEM pItem;
   UINT Type = 0;
   TRACE("(menu=%p, id=%04x, flags=%04x);\n", hMenu, uId, uFlags);
@@ -1199,6 +1437,7 @@ GetMenuState(
   }
   else
      return (pItem->fType | pItem->fState | Type);  
+#endif
 }
 
 /*
@@ -1213,6 +1452,37 @@ GetMenuStringA(
   int nMaxCount,
   UINT uFlag)
 {
+#ifdef WOW64_I386_RUNTIME
+  MENUITEMINFOW Item;
+  LPWSTR text;
+  int ret;
+  TRACE("menu=%p item=%04x ptr=%p len=%d flags=%04x\n", hMenu, uIDItem, lpString, nMaxCount, uFlag );
+
+  if (lpString && nMaxCount) lpString[0] = '\0';
+
+  if (!MENU_FindItemInfo( &hMenu, &uIDItem, uFlag, &Item ))
+  {
+      SetLastError( ERROR_MENU_ITEM_NOT_FOUND);
+      return 0;
+  }
+
+  if (!Item.cch) return 0;
+  if (!(text = MENU_GetItemText( hMenu, uIDItem, Item.cch )))
+  {
+      SetLastError( ERROR_NOT_ENOUGH_MEMORY);
+      return 0;
+  }
+  if (!lpString || !nMaxCount)
+      ret = WideCharToMultiByte( CP_ACP, 0, text, -1, NULL, 0, NULL, NULL );
+  else
+  {
+      if (!WideCharToMultiByte( CP_ACP, 0, text, -1, lpString, nMaxCount, NULL, NULL ))
+          lpString[nMaxCount-1] = 0;
+      ret = strlen(lpString);
+  }
+  RtlFreeHeap(RtlGetProcessHeap(), 0, text);
+  return ret;
+#else
   ITEM *item;
   LPWSTR text;
   ////// wine Code, seems to be faster.
@@ -1234,6 +1504,7 @@ GetMenuStringA(
       lpString[nMaxCount-1] = 0;
   TRACE("A returning %s\n", lpString);
   return strlen(lpString);
+#endif
 }
 
 /*
@@ -1248,6 +1519,36 @@ GetMenuStringW(
   int nMaxCount,
   UINT uFlag)
 {
+#ifdef WOW64_I386_RUNTIME
+  MENUITEMINFOW Item;
+  LPWSTR text;
+
+  TRACE("menu=%p item=%04x ptr=%p len=%d flags=%04x\n", hMenu, uIDItem, lpString, nMaxCount, uFlag );
+
+  if (lpString && nMaxCount) lpString[0] = '\0';
+
+  if (!MENU_FindItemInfo( &hMenu, &uIDItem, uFlag, &Item ))
+  {
+      SetLastError( ERROR_MENU_ITEM_NOT_FOUND);
+      return 0;
+  }
+
+  if (!lpString || !nMaxCount) return Item.cch;
+  if (!Item.cch)
+  {
+      lpString[0] = 0;
+      return 0;
+  }
+  if (!(text = MENU_GetItemText( hMenu, uIDItem, Item.cch )))
+  {
+      SetLastError( ERROR_NOT_ENOUGH_MEMORY);
+      return 0;
+  }
+  lstrcpynW( lpString, text, nMaxCount );
+  RtlFreeHeap(RtlGetProcessHeap(), 0, text);
+  TRACE("W returning %S\n", lpString);
+  return strlenW(lpString);
+#else
   ITEM *item;
   LPWSTR text;
 
@@ -1272,6 +1573,7 @@ GetMenuStringW(
   lstrcpynW( lpString, text, nMaxCount );
   TRACE("W returning %S\n", lpString);
   return strlenW(lpString);
+#endif
 }
 
 /*
@@ -1283,6 +1585,13 @@ GetSubMenu(
   HMENU hMenu,
   int nPos)
 {
+#ifdef WOW64_I386_RUNTIME
+  MENUITEMINFOW Item;
+  if (!MENU_FindItemInfo( &hMenu, (UINT*)&nPos, MF_BYPOSITION, &Item )) return NULL;
+
+  if (Item.hSubMenu && IsMenu(Item.hSubMenu)) return Item.hSubMenu;
+  return NULL;
+#else
   PITEM pItem;
   if (!(pItem = MENU_FindItem( &hMenu, (UINT*)&nPos, MF_BYPOSITION ))) return NULL;
 
@@ -1293,6 +1602,7 @@ GetSubMenu(
      if (IsMenu(hsubmenu)) return hsubmenu;
   }
   return NULL;
+#endif
 }
 
 /*
@@ -1465,8 +1775,13 @@ WINAPI
 IsMenu(
   HMENU Menu)
 {
+#ifdef WOW64_I386_RUNTIME
+  ROS_MENUQUERY Query;
+  return MENU_QueryMenu(Menu, &Query);
+#else
   if (ValidateHandle(Menu, TYPE_MENU)) return TRUE;
   return FALSE;
+#endif
 }
 
 /*

@@ -800,6 +800,21 @@ UserObjectInDestroy(HANDLE h)
   return Ret;
 }
 
+BOOL
+FASTCALL
+UserObjectMarkedDestroy(HANDLE h)
+{
+  PUSER_HANDLE_ENTRY entry;
+  BOOL Ret = TRUE;
+
+  UserDomainLockShared(DLT_HANDLEMANAGER);
+  entry = handle_to_entry( gHandleTable, h );
+  if (entry)
+     Ret = (entry->flags & (HANDLEENTRY_DESTROY | HANDLEENTRY_INDESTROY)) != 0;
+  UserDomainUnlockShared(DLT_HANDLEMANAGER);
+  return Ret;
+}
+
 /*
  * Validates a USER handle that is about to be granted to a job, and marks it
  * so that freeing it withdraws the grant again. The mark is not cleared on
