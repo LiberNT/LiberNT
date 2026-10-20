@@ -437,6 +437,7 @@ protected:
                 m_Scroll -= MulDiv(GET_WHEEL_DELTA_WPARAM(wParam), m_Theme.Scale(64), WHEEL_DELTA);
                 ClampScroll();
                 Invalidate(NULL);
+                UpdateWindow(m_hwnd);
                 return 0;
             }
             case WM_VSCROLL:
@@ -1766,10 +1767,11 @@ private:
                 defer = DeferWindowPos(defer, control.Window, control.Action == BAR_ACTION ? HWND_TOP : NULL, rc.left,
                                        rc.top, rc.right - rc.left, height,
                                        (control.Action == BAR_ACTION ? 0 : SWP_NOZORDER) | SWP_NOACTIVATE |
-                                       (shown ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+                                       SWP_NOCOPYBITS | SWP_NOREDRAW | (shown ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
         }
         if (defer)
             EndDeferWindowPos(defer);
+        RedrawWindow(m_hwnd, &view, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
     }
 
     void OnScrollBar(UINT code)
@@ -1809,6 +1811,7 @@ private:
         }
         ClampScroll();
         Invalidate(NULL);
+        UpdateWindow(m_hwnd);
     }
 
     void OnSlider(int index, UINT code)
@@ -1951,6 +1954,7 @@ private:
         }
         ClampScroll();
         Invalidate(NULL);
+        UpdateWindow(m_hwnd);
         return TRUE;
     }
 
