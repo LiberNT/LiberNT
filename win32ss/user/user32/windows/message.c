@@ -1576,19 +1576,32 @@ ULONG WINAPI IntGetThreadDpiContext(VOID);
 ULONG WINAPI IntSetThreadDpiContext(ULONG Context);
 
 static ULONG
-IntSetWindowDpiContext(PWND pWnd, PBOOL Changed)
+IntSetWindowDpiContext(PWND pWnd, HWND hWnd, PBOOL Changed)
 {
-  ULONG Current;
+  ULONG Current, WindowContext = 0;
 
   *Changed = FALSE;
-  if (!pWnd || !pWnd->DpiContext)
+#ifdef WOW64_I386_RUNTIME
+  UNREFERENCED_PARAMETER(pWnd);
+  if (hWnd)
+  {
+      DWORD Error = GetLastError();
+      WindowContext = NtUserGetWindowDpiAwarenessContext(hWnd);
+      SetLastError(Error);
+  }
+#else
+  UNREFERENCED_PARAMETER(hWnd);
+  if (pWnd)
+      WindowContext = pWnd->DpiContext;
+#endif
+  if (!WindowContext)
       return 0;
 
   Current = IntGetThreadDpiContext();
-  if ((Current & ~DPI_CONTEXT_FLAG_PROCESS) == (pWnd->DpiContext & ~DPI_CONTEXT_FLAG_PROCESS))
+  if ((Current & ~DPI_CONTEXT_FLAG_PROCESS) == (WindowContext & ~DPI_CONTEXT_FLAG_PROCESS))
       return 0;
 
-  Current = IntSetThreadDpiContext(pWnd->DpiContext);
+  Current = IntSetThreadDpiContext(WindowContext);
   if (Current)
       *Changed = TRUE;
 
@@ -1619,7 +1632,7 @@ IntCallWindowProcW(BOOL IsAnsiProc,
   }
 
   WndProc = User32TranslateSharedPfn(WndProc);
-  PreviousDpiContext = IntSetWindowDpiContext(pWnd, &DpiContextChanged);
+  PreviousDpiContext = IntSetWindowDpiContext(pWnd, hWnd, &DpiContextChanged);
 
   if (pWnd)
      Dialog = (pWnd->fnid == FNID_DIALOG);
@@ -1788,7 +1801,7 @@ IntCallWindowProcA(BOOL IsAnsiProc,
   }
 
   WndProc = User32TranslateSharedPfn(WndProc);
-  PreviousDpiContext = IntSetWindowDpiContext(pWnd, &DpiContextChanged);
+  PreviousDpiContext = IntSetWindowDpiContext(pWnd, hWnd, &DpiContextChanged);
 
   if (pWnd)
      Dialog = (pWnd->fnid == FNID_DIALOG);
