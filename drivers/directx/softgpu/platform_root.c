@@ -469,6 +469,8 @@ SoftGpuPlatformQueryStart(
     {
         DXGK_DISPLAY_INFORMATION PostDisplayInfo;
         ULONGLONG PostVisibleLength;
+        INTERFACE_TYPE BusType;
+        ULONG ResultLength;
         /*
          * This root adapter is a Basic Display fallback. Use the firmware
          * framebuffer when dxgkrnl transfers one. A successful zero-width
@@ -490,6 +492,19 @@ SoftGpuPlatformQueryStart(
                 PostDisplayInfo.PhysicAddress;
             Config->ScanoutPitch = PostDisplayInfo.Pitch;
             Config->ScanoutSize = PostVisibleLength;
+        }
+        else if (Device != NULL &&
+                 Device->PhysicalDeviceObject != NULL &&
+                 NT_SUCCESS(IoGetDeviceProperty(Device->PhysicalDeviceObject,
+                                                DevicePropertyLegacyBusType,
+                                                sizeof(BusType),
+                                                &BusType,
+                                                &ResultLength)) &&
+                 BusType == PCIBus)
+        {
+            DPRINT1("SOFTGPU: PCI display device has no POST framebuffer; "
+                    "not starting\n");
+            return STATUS_UNSUCCESSFUL;
         }
         else
         {
