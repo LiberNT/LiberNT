@@ -1323,6 +1323,50 @@ public:
         }
     }
 
+    VOID AddRecentlyAddedList()
+    {
+        WCHAR szList[2048] = L"";
+        DWORD cbList = sizeof(szList) - 2 * sizeof(WCHAR), dwType = 0;
+        FILETIME ft;
+        ULARGE_INTEGER Now;
+
+        if (!m_Flat.GetCount() ||
+            SHGetValueW(HKEY_CURRENT_USER, SM2_KEY, L"RecentlyAdded",
+                        &dwType, szList, &cbList) != ERROR_SUCCESS)
+        {
+            return;
+        }
+
+        GetSystemTimeAsFileTime(&ft);
+        Now.LowPart = ft.dwLowDateTime;
+        Now.HighPart = ft.dwHighDateTime;
+
+        if (dwType == REG_MULTI_SZ)
+        {
+            for (LPCWSTR pszEntry = szList; *pszEntry; pszEntry += wcslen(pszEntry) + 1)
+            {
+                int cchEntry = (int)wcslen(pszEntry);
+                for (SIZE_T i = 0; i < m_Flat.GetCount(); i++)
+                {
+                    const CStringW &Path = m_Flat[i]->szPath;
+                    int cchPath = Path.GetLength();
+                    if (cchPath <= cchEntry || Path[cchPath - cchEntry - 1] != L'\\' ||
+                        lstrcmpiW((LPCWSTR)Path + cchPath - cchEntry, pszEntry) != 0)
+                    {
+                        continue;
+                    }
+                    if (!SM2GetLastUsed(SM2_RECENT_LINK_KEY, Path))
+                    {
+                        SHSetValueW(HKEY_CURRENT_USER, SM2_RECENT_LINK_KEY, Path,
+                                    REG_QWORD, &Now.QuadPart, sizeof(Now.QuadPart));
+                    }
+                }
+            }
+        }
+
+        SHDeleteValueW(HKEY_CURRENT_USER, SM2_KEY, L"RecentlyAdded");
+    }
+
     VOID AddRecentlyAdded()
     {
         ULONGLONG Since = SM2GetLastUsed(SM2_KEY, L"RecentlyAddedSince");
@@ -1450,6 +1494,7 @@ public:
         m_Rows.SetCount(0);
         SM2BuildTree(&m_Root);
         SM2FlattenTree(&m_Root, m_Flat);
+        AddRecentlyAddedList();
         AddRecentlyAdded();
         AddRecentExecutables();
         BuildRecent();

@@ -188,13 +188,13 @@ add_livecd_shortcut("LiberNT Explorer"
 add_livecd_shortcut("Command Prompt"
     "shell:system\\cmd.exe" ICON_INDEX 0
     WORKDIR "${envvar_homedrive}${envvar_homepath}"
-    DESTINATION "${dir_allusers_desktop}" "${dir_startmenu_accessories}" "${dir_quicklaunch}")
+    DESTINATION "${dir_startmenu_accessories}" "${dir_quicklaunch}")
 add_livecd_shortcut("Applications Manager"
     "shell:system\\rapps.exe" ICON_INDEX 0
-    DESTINATION "${dir_allusers_desktop}")
+    DESTINATION "${dir_startmenu_programs}")
 add_livecd_shortcut("Device Manager"
     "shell:system\\devmgmt.exe" ICON_INDEX 0
-    DESTINATION "${dir_allusers_desktop}" "${dir_startmenu_admintools}")
+    DESTINATION "${dir_startmenu_admintools}")
 add_livecd_shortcut("Disk Management"
     "shell:system\\diskmgmt.exe" ICON_INDEX 0
     DESTINATION "${dir_startmenu_admintools}")
@@ -242,13 +242,13 @@ add_livecd_shortcut("Registry Editor"
     DESTINATION "${dir_startmenu_systemtools}")
 add_livecd_shortcut("Task Manager"
     "shell:system\\taskmgr.exe" ICON_INDEX 0
-    DESTINATION "${dir_allusers_desktop}" "${dir_startmenu_systemtools}")
+    DESTINATION "${dir_startmenu_systemtools}")
 add_livecd_shortcut("Task Manager 11"
     "shell:system\\taskmgr11.exe" ICON_INDEX 0
-    DESTINATION "${dir_allusers_desktop}" "${dir_startmenu_systemtools}")
+    DESTINATION "${dir_startmenu_systemtools}")
 add_livecd_shortcut("LntGet"
     "shell:system\\lntget.exe" ICON_INDEX 0 CMDLINE_ARGS "gui"
-    DESTINATION "${dir_allusers_desktop}" "${dir_startmenu_systemtools}")
+    DESTINATION "${dir_startmenu_systemtools}")
 add_livecd_shortcut("Calculator"
     "shell:system\\calc.exe" ICON_INDEX 0
     WORKDIR "${envvar_homedrive}${envvar_homepath}"
