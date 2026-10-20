@@ -99,7 +99,8 @@ FrameWindow::ApplyFrameAttributes()
 #if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
     MARGINS margins = { 0, 0, 0, 0 };
 #else
-    MARGINS margins = { m_Theme.IsHighContrast() ? 0 : GlassWidth(), 0, m_Theme.IsHighContrast() ? 0 : GlassTop(), 0 };
+    BOOL glass = !m_Theme.IsHighContrast() && IsAppThemed();
+    MARGINS margins = { glass ? GlassWidth() : 0, 0, glass ? GlassTop() : 0, 0 };
 #endif
     DWORD corner = 2;
 

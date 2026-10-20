@@ -54,7 +54,7 @@ GlassColor(const Theme &theme, GlassTone tone)
     };
     const Palette &c = theme.Colors();
 
-    if (!theme.IsHighContrast())
+    if (!theme.IsHighContrast() && IsAppThemed())
         return Tones[(int)tone];
     switch (tone)
     {
@@ -1076,11 +1076,11 @@ private:
 
         canvas.Graphics().Flush(Gdiplus::FlushIntentionSync);
         if (m_HotAccount || TopLevel(m_Page) == PageId::Accounts)
-            FillRoundGlass(canvas.Dc(), tile, m_Theme.ScaleF(6.0f), RGB(255, 255, 255),
+            FillRoundGlass(canvas.Dc(), tile, m_Theme.ScaleF(6.0f), GlassColor(m_Theme, GlassTone::Text),
                            TopLevel(m_Page) == PageId::Accounts ? 26 : 13);
         SetRect(&avatar, tile.left + m_Theme.Scale(6), tile.top + m_Theme.Scale(6), tile.left + m_Theme.Scale(38),
                 tile.top + m_Theme.Scale(38));
-        FillRoundGlass(canvas.Dc(), avatar, m_Theme.ScaleF(16.0f), RGB(255, 255, 255), 26);
+        FillRoundGlass(canvas.Dc(), avatar, m_Theme.ScaleF(16.0f), GlassColor(m_Theme, GlassTone::Text), 26);
         CenterIcon(canvas, avatar, m_Theme.Scale(18), L"person_20_regular", GlassColor(m_Theme, GlassTone::Text));
         SetRect(&name, avatar.right + m_Theme.Scale(10), tile.top + m_Theme.Scale(4), tile.right - m_Theme.Scale(8),
                 tile.top + m_Theme.Scale(22));
@@ -1557,7 +1557,7 @@ private:
             pill.bottom -= m_Theme.Scale(2);
             pill.right -= m_Theme.Scale(4);
             if (selected || hot)
-                FillRoundGlass(hdc, pill, m_Theme.ScaleF(6.0f), RGB(255, 255, 255), selected ? 26 : 13);
+                FillRoundGlass(hdc, pill, m_Theme.ScaleF(6.0f), GlassColor(m_Theme, GlassTone::Text), selected ? 26 : 13);
             ImageList_Draw(m_NavImages, data.iImage, hdc, pill.left + m_Theme.Scale(14), (rc.top + rc.bottom - size) / 2,
                            ILD_TRANSPARENT);
             label = pill;

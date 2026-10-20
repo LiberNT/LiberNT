@@ -719,6 +719,11 @@ static void UXTHEME_ClearLiquidProperties(HWND hwnd, ULONG region)
     RemovePropW(hwnd, DWM_PROP_BACKDROP_REGION);
 }
 
+void UXTHEME_ClearNonClientLiquidProperties(HWND hwnd)
+{
+    UXTHEME_ClearLiquidProperties(hwnd, DWM_BACKDROP_REGION_NONCLIENT);
+}
+
 static void UXTHEME_ApplyLiquidProperties(HWND hwnd, LPCWSTR classList,
                                           DWORD flags, UINT dpi)
 {

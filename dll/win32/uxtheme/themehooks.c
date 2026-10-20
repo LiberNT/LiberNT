@@ -289,8 +289,13 @@ static BOOL CALLBACK ThemeCleanupWndContext(HWND hWnd, LPARAM msg)
     }
     else
     {
+        DWORD ProcessId;
+
         ThemeDestroyWndData(hWnd);
         EnumChildWindows (hWnd, ThemeCleanupChildWndContext, 0);
+        GetWindowThreadProcessId(hWnd, &ProcessId);
+        if (ProcessId == GetCurrentProcessId())
+            UXTHEME_ClearNonClientLiquidProperties(hWnd);
     }
 
     return TRUE;
