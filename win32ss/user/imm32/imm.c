@@ -978,10 +978,13 @@ ImmLockClientImc(_In_ HIMC hImc)
 
     if (!NtUserUpdateInputContext(hImc, UIC_CLIENTIMCDATA, (DWORD_PTR)pClientImc))
     {
-        ERR("\n");
         RtlDeleteCriticalSection(&pClientImc->cs);
         ImmLocalFree(pClientImc);
-        return NULL;
+
+        pClientImc = (PCLIENTIMC)NtUserQueryInputContext(hImc, QIC_ROS_CLIENTIMCDATA);
+        if (!pClientImc || (pClientImc->dwFlags & CLIENTIMC_DESTROY))
+            return NULL;
+        goto Finish;
     }
 
     pClientImc->dwFlags |= CLIENTIMC_LOCKED;
