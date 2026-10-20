@@ -501,7 +501,10 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICheckOcclusion( UINT *args )
         ULONG hWnd;
     } *desc32 = get_ptr( &args );
 #ifdef __REACTOS__
-    D3DKMT_CHECKOCCLUSION desc = {.hWnd = Handle32ToHandle( desc32->hWnd )};
+    D3DKMT_CHECKOCCLUSION desc;
+
+    if (!desc32) return NtGdiDdDDICheckOcclusion( NULL );
+    desc.hWnd = Handle32ToHandle( desc32->hWnd );
 #else
     D3DKMT_CHECKOCCLUSION desc = {.hWnd = UlongToHandle( desc32->hWnd )};
 #endif
