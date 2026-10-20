@@ -149,6 +149,13 @@ KiFreezeIfRequested(
         return;
     }
 
+    /* Same rule as the NMI path: never freeze while holding the KD port.
+     * The port release path calls us again once the lock is dropped. */
+    if (KdpPortOwnerPrcb == CurrentPrcb)
+    {
+        return;
+    }
+
     Enable = KeDisableInterrupts();
     if (InterlockedCompareExchange((PLONG)&CurrentPrcb->IpiFrozen, IPI_FROZEN_STATE_SAVING, IPI_FROZEN_STATE_TARGET_FREEZE) ==
         IPI_FROZEN_STATE_TARGET_FREEZE)
@@ -191,9 +198,11 @@ KxFreezeExecution(
     while (InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeOwner, CurrentPrcb, NULL))
     {
         /* Someone else was faster. We expect an NMI to freeze any time.
-           Spin here until the freeze owner is available. */
+           Spin here until the freeze owner is available, completing the
+           freeze ourselves if that NMI never arrives. */
         while (KiFreezeOwner != NULL)
         {
+            KiFreezeIfRequested();
             YieldProcessor();
             KeMemoryBarrier();
         }

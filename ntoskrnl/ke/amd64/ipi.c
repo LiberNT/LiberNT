@@ -84,6 +84,16 @@ KiIpiSend(
     {
         /* On x64 the freeze IPI is an NMI */
         HalSendNMI(TargetSet);
+
+        /* Also queue the request behind a normal IPI. Some hypervisors can
+         * lose an NMI (VirtualBox on Hyper-V strands it in TRPM forever);
+         * KiIpiProcessRequests then completes the freeze through
+         * KiFreezeIfRequested. Whichever path claims TARGET_FREEZE first
+         * wins, the other one finds nothing to do. */
+        TargetSet = KiIpiQueueRequest(TargetSet, IPI_FREEZE);
+
+        if (TargetSet != 0)
+            HalRequestIpi(TargetSet);
     }
     else
     {
@@ -169,12 +179,18 @@ KiIpiProcessRequests(VOID)
 
         ASSERT((Requests & ~(KI_IPI_MEMORY |
                              KI_IPI_GENERIC_CALL |
-                             IPI_DPC)) == 0);
+                             IPI_DPC |
+                             IPI_FREEZE)) == 0);
         Sources &= ~AFFINITY_MASK(Source);
     }
 
     if (DpcRequest)
         HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+
+    /* Complete a freeze whose NMI has not arrived. This also covers the
+     * spin loops that poll here with interrupts disabled (TLB shootdown,
+     * generic call), where a lost NMI would otherwise deadlock the owner. */
+    KiFreezeIfRequested();
 }
 
 ULONG_PTR
