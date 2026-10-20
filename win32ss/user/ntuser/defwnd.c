@@ -874,6 +874,83 @@ IntDefWindowProc(
          return DefWndGetIcon(Wnd, wParam, lParam);
       }
 
+      case WM_QUERYUISTATE:
+      {
+         if (Wnd->HideFocus)
+            lResult |= UISF_HIDEFOCUS;
+         if (Wnd->HideAccel)
+            lResult |= UISF_HIDEACCEL;
+         break;
+      }
+
+      case WM_CHANGEUISTATE:
+      case WM_UPDATEUISTATE:
+      {
+         WORD Action = LOWORD(wParam);
+         WORD Flags = HIWORD(wParam);
+         BOOL Change;
+
+         if (SPITESTPREF(UPM_KEYBOARDCUES) || lParam != 0)
+            break;
+         if (Flags & ~(UISF_HIDEFOCUS | UISF_HIDEACCEL | UISF_ACTIVE))
+            break;
+
+         if (Action == UIS_INITIALIZE)
+         {
+            if (!pti->pDeskInfo)
+               break;
+            Action = pti->pDeskInfo->LastInputWasKbd ? UIS_CLEAR : UIS_SET;
+            Flags = UISF_HIDEFOCUS | UISF_HIDEACCEL;
+            wParam = MAKEWPARAM(Action, Flags);
+         }
+
+         if (Action == UIS_SET)
+         {
+            Change = ((Flags & UISF_HIDEFOCUS) && !Wnd->HideFocus) ||
+                     ((Flags & UISF_HIDEACCEL) && !Wnd->HideAccel);
+         }
+         else if (Action == UIS_CLEAR)
+         {
+            Change = ((Flags & UISF_HIDEFOCUS) && Wnd->HideFocus) ||
+                     ((Flags & UISF_HIDEACCEL) && Wnd->HideAccel);
+         }
+         else if (Msg == WM_UPDATEUISTATE)
+         {
+            break;
+         }
+         else
+         {
+            Change = TRUE;
+         }
+
+         if (Msg == WM_CHANGEUISTATE)
+         {
+            if (!Change)
+               break;
+            if ((Wnd->style & WS_CHILD) && Wnd->spwndParent)
+               lResult = co_IntSendMessage(UserHMGetHandle(Wnd->spwndParent), WM_CHANGEUISTATE, wParam, lParam);
+            else
+               lResult = co_IntSendMessage(UserHMGetHandle(Wnd), WM_UPDATEUISTATE, wParam, lParam);
+            break;
+         }
+
+         if (Change && !UserUpdateUiState(Wnd, wParam))
+            break;
+
+         {
+            HWND *Children = IntWinListChildren(Wnd);
+            HWND *Handle;
+
+            if (Children)
+            {
+               for (Handle = Children; *Handle; ++Handle)
+                  co_IntSendMessage(*Handle, WM_UPDATEUISTATE, wParam, 0);
+               ExFreePoolWithTag(Children, USERTAG_WINDOWLIST);
+            }
+         }
+         break;
+      }
+
       case WM_HELP:
       {
          PWND Parent = IntGetParent(Wnd);
