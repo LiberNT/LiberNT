@@ -105,8 +105,8 @@ IntGdiCleanDC(HDC hDC)
            DPRINT1("Failed to remove Path\n");
         }
         dc->dclevel.hPath = 0;
-        dc->dclevel.flPath = 0;
     }
+    dc->dclevel.flPath = 0;
 
     /* DC_vCopyState frees the Clip rgn and the Meta rgn. Take care of the other ones
      * There is no need to clear prgnVis, as UserGetDC updates it immediately. */
