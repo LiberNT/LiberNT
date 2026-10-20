@@ -182,7 +182,8 @@ static NTSTATUS open_redirected_key( HANDLE *ret, ACCESS_MASK access, const OBJE
     BOOL final_is_wow6432node, wowshare;
     NTSTATUS status;
 
-    if (!attr || !attr->ObjectName || !is_valid_key_path( attr->ObjectName )) return STATUS_NOT_SUPPORTED;
+    if (!attr || attr->Length != sizeof(*attr) || !attr->ObjectName || !is_valid_key_path( attr->ObjectName ))
+        return STATUS_NOT_SUPPORTED;
     name = *attr->ObjectName;
     current = attr->RootDirectory;
 

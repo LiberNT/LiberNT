@@ -1794,9 +1794,6 @@ MiLockUnlockVirtualMemory(
             {
                 Status = MiFault(MiSpaceOfProcess(Target.Process), Va, MiFaultRead, TRUE);
             } while (NT_SUCCESS(MiWaitForMemory(Status, &Attempts)) && Status == STATUS_NO_MEMORY);
-
-            if (Status == STATUS_GUARD_PAGE_VIOLATION)
-                Status = STATUS_SUCCESS;
         }
     }
 

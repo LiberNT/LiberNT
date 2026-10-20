@@ -211,9 +211,9 @@ static inline OBJECT_ATTRIBUTES *objattr_32to64( struct object_attr64 *out, cons
 {
     memset( out, 0, sizeof(*out) );
     if (!in) return NULL;
-    if (in->Length != sizeof(*in)) return &out->attr;
+    if (in->Length < sizeof(*in)) return &out->attr;
 
-    out->attr.Length = sizeof(out->attr);
+    out->attr.Length = in->Length - sizeof(*in) + sizeof(out->attr);
     out->attr.RootDirectory = LongToHandle( in->RootDirectory );
     out->attr.Attributes = in->Attributes;
     out->attr.ObjectName = unicode_str_32to64( &out->str, ULongToPtr( in->ObjectName ));
