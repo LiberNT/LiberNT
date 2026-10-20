@@ -981,6 +981,12 @@ co_IntCallEventProc(HWINEVENTHOOK hook,
    ULONG ArgumentLength, ResultLength;
    PVOID Argument, ResultPointer;
 
+   if (((PTHREADINFO)PsGetCurrentThreadWin32Thread())->TIF_flags & TIF_INCLEANUP)
+   {
+      TRACE("Thread is in cleanup and trying to call event hook %lx\n", event);
+      return 0;
+   }
+
    ArgumentLength = sizeof(EVENTPROC_CALLBACK_ARGUMENTS);
 
    Argument = IntCbAllocateMemory(ArgumentLength);
