@@ -3,7 +3,6 @@ Signature = $Windows NT$
 ClassGUID = {00000000-0000-0000-0000-000000000000}
 
 [ShortcutFolders]
-DesktopShortcuts=0,
 ProgramShortcuts=2,
 AdminToolsShortcuts=47,
 AccessoriesShortcuts=2, %ACCESSORIES%
@@ -13,14 +12,6 @@ EntertainmentShortcuts=2, %ACCESSORIES%\%ENTERTAINMENT%
 CommunicationsShortcuts=2, %ACCESSORIES%\%COMMUNICATIONS%
 GamesShortcuts=2, %GAMES%
 QuickLaunchShortcuts=26, Microsoft\Internet Explorer\Quick Launch
-
-[DesktopShortcuts]
-%SystemRoot%\readme.txt, %README_TITLE%, %README_DESC%
-%SystemRoot%\system32\cmd.exe, %CMD_TITLE%, %CMD_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
-%SystemRoot%\system32\rapps.exe, %RAPPS_TITLE_SHORT%, %RAPPS_DESC%, 0
-%SystemRoot%\system32\devmgmt.exe, %DEVMGMT_TITLE%, %DEVMGMT_DESC%, 0
-%SystemRoot%\system32\taskmgr11.exe, %TASKMGR11_TITLE%, %TASKMGR11_DESC%, 0
-%SystemRoot%\system32\lntget.exe, %LNTGET_TITLE%, %LNTGET_DESC%, 0, %SystemRoot%\system32, gui
 
 [ProgramShortcuts]
 %SystemRoot%\explorer.exe, %EXPLORER_TITLE%, %EXPLORER_DESC%, 1, %HOMEDRIVE%%HOMEPATH%
@@ -50,6 +41,8 @@ QuickLaunchShortcuts=26, Microsoft\Internet Explorer\Quick Launch
 %SystemRoot%\system32\kbswitch.exe, %KBSWITCH_TITLE%, %KBSWITCH_DESC%, 0
 %SystemRoot%\regedit.exe, %REGEDIT_TITLE%, %REGEDIT_DESC%, 0
 %SystemRoot%\system32\taskmgr.exe, %TASKMGR_TITLE%, %TASKMGR_DESC%, 0
+%SystemRoot%\system32\taskmgr11.exe, %TASKMGR11_TITLE%, %TASKMGR11_DESC%, 0
+%SystemRoot%\system32\lntget.exe, %LNTGET_TITLE%, %LNTGET_DESC%, 0, %SystemRoot%\system32, gui
 %SystemRoot%\system32\dxdiag.exe, %DXDIAG_TITLE%, %DXDIAG_DESC%, 0
 %SystemRoot%\system32\netassist.exe, %NETASSIST_TITLE%, %NETASSIST_DESC%, 0
 %SystemRoot%\system32\control.exe, %GECKO_TITLE%, %GECKO_DESC%, 0, , "appwiz.cpl,,install_gecko"
