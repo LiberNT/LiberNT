@@ -29,6 +29,7 @@
 #include <winsvc.h>
 #include <userenv.h>
 #include <ndk/sefuncs.h>
+#include <ntsam.h>
 
 HINSTANCE hDllInstance;
 
@@ -694,42 +695,34 @@ WlxRemoveStatusMessage(
 }
 
 
+static
 BOOL
-DoAdminUnlock(
-    IN PGINA_CONTEXT pgContext,
-    IN PWSTR UserName,
-    IN PWSTR Domain,
-    IN PWSTR Password)
+IsSameTokenUser(
+    IN HANDLE Token1,
+    IN HANDLE Token2)
 {
-    HANDLE hToken = NULL;
+    UCHAR Buffer1[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    UCHAR Buffer2[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    ULONG Size;
+
+    if (!NT_SUCCESS(NtQueryInformationToken(Token1, TokenUser, Buffer1, sizeof(Buffer1), &Size)) ||
+        !NT_SUCCESS(NtQueryInformationToken(Token2, TokenUser, Buffer2, sizeof(Buffer2), &Size)))
+        return FALSE;
+
+    return RtlEqualSid(((PTOKEN_USER)Buffer1)->User.Sid, ((PTOKEN_USER)Buffer2)->User.Sid);
+}
+
+
+static
+BOOL
+IsAdminToken(
+    IN HANDLE hToken)
+{
     PTOKEN_GROUPS Groups = NULL;
     BOOL bIsAdmin = FALSE;
     ULONG Size;
     ULONG i;
     NTSTATUS Status;
-    NTSTATUS SubStatus = STATUS_SUCCESS;
-
-    TRACE("(%S %S %S)\n", UserName, Domain, Password);
-
-    Status = ConnectToLsa(pgContext);
-    if (!NT_SUCCESS(Status))
-    {
-        WARN("ConnectToLsa() failed\n");
-        return FALSE;
-    }
-
-    Status = MyLogonUser(pgContext->LsaHandle,
-                         pgContext->AuthenticationPackage,
-                         UserName,
-                         Domain,
-                         Password,
-                         &hToken,
-                         &SubStatus);
-    if (!NT_SUCCESS(Status))
-    {
-        WARN("MyLogonUser() failed\n");
-        return FALSE;
-    }
 
     Status = NtQueryInformationToken(hToken,
                                      TokenGroups,
@@ -774,10 +767,208 @@ done:
     if (Groups != NULL)
         HeapFree(GetProcessHeap(), 0, Groups);
 
-    if (hToken != NULL)
-        CloseHandle(hToken);
-
     return bIsAdmin;
+}
+
+
+NTSTATUS
+DoUnlock(
+    IN PGINA_CONTEXT pgContext,
+    IN PWSTR UserName,
+    IN PWSTR Domain,
+    IN PWSTR Password,
+    OUT PNTSTATUS SubStatus,
+    OUT PINT Action)
+{
+    HANDLE hToken = NULL;
+    NTSTATUS Status;
+
+    TRACE("(%S %S)\n", UserName, Domain);
+
+    *Action = WLX_SAS_ACTION_NONE;
+    *SubStatus = STATUS_SUCCESS;
+
+    Status = ConnectToLsa(pgContext);
+    if (!NT_SUCCESS(Status))
+    {
+        WARN("ConnectToLsa() failed\n");
+        return Status;
+    }
+
+    Status = MyLogonUser(pgContext->LsaHandle,
+                         pgContext->AuthenticationPackage,
+                         UserName,
+                         Domain,
+                         Password,
+                         Unlock,
+                         &hToken,
+                         SubStatus);
+    if (!NT_SUCCESS(Status))
+    {
+        WARN("MyLogonUser() failed (Status 0x%08lx)\n", Status);
+        return Status;
+    }
+
+    if ((pgContext->UserToken != NULL && IsSameTokenUser(hToken, pgContext->UserToken)) ||
+        IsAdminToken(hToken))
+        *Action = WLX_SAS_ACTION_UNLOCK_WKSTA;
+
+    CloseHandle(hToken);
+
+    return STATUS_SUCCESS;
+}
+
+
+static
+NTSTATUS
+QueryLocalUserInformation(
+    IN PCWSTR UserName,
+    IN USER_INFORMATION_CLASS InformationClass,
+    OUT PVOID *Buffer)
+{
+    WCHAR ComputerName[MAX_COMPUTERNAME_LENGTH + 1];
+    DWORD Length = _countof(ComputerName);
+    UNICODE_STRING DomainName;
+    UNICODE_STRING Name;
+    SAM_HANDLE ServerHandle = NULL;
+    SAM_HANDLE DomainHandle = NULL;
+    SAM_HANDLE UserHandle = NULL;
+    PSID DomainSid = NULL;
+    PULONG RelativeIds = NULL;
+    PSID_NAME_USE Use = NULL;
+    NTSTATUS Status;
+
+    *Buffer = NULL;
+
+    if (!GetComputerNameW(ComputerName, &Length))
+        return STATUS_UNSUCCESSFUL;
+
+    RtlInitUnicodeString(&DomainName, ComputerName);
+    RtlInitUnicodeString(&Name, UserName);
+
+    Status = SamConnect(NULL,
+                        &ServerHandle,
+                        SAM_SERVER_CONNECT | SAM_SERVER_LOOKUP_DOMAIN,
+                        NULL);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SamLookupDomainInSamServer(ServerHandle,
+                                        &DomainName,
+                                        &DomainSid);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SamOpenDomain(ServerHandle,
+                           DOMAIN_LOOKUP,
+                           DomainSid,
+                           &DomainHandle);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SamLookupNamesInDomain(DomainHandle,
+                                    1,
+                                    &Name,
+                                    &RelativeIds,
+                                    &Use);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    if (Use[0] != SidTypeUser)
+    {
+        Status = STATUS_NO_SUCH_USER;
+        goto done;
+    }
+
+    Status = SamOpenUser(DomainHandle,
+                         USER_READ_GENERAL | USER_READ_ACCOUNT,
+                         RelativeIds[0],
+                         &UserHandle);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SamQueryInformationUser(UserHandle,
+                                     InformationClass,
+                                     Buffer);
+
+done:
+    if (UserHandle != NULL)
+        SamCloseHandle(UserHandle);
+
+    if (DomainHandle != NULL)
+        SamCloseHandle(DomainHandle);
+
+    if (ServerHandle != NULL)
+        SamCloseHandle(ServerHandle);
+
+    if (DomainSid != NULL)
+        SamFreeMemory(DomainSid);
+
+    if (RelativeIds != NULL)
+        SamFreeMemory(RelativeIds);
+
+    if (Use != NULL)
+        SamFreeMemory(Use);
+
+    return Status;
+}
+
+
+BOOL
+GetUserPasswordHint(
+    IN PCWSTR UserName,
+    OUT PWSTR Hint,
+    IN SIZE_T HintLength)
+{
+    PUSER_EXTENDED_INFORMATION Info = NULL;
+    BOOL Result = FALSE;
+
+    Hint[0] = UNICODE_NULL;
+
+    if (!NT_SUCCESS(QueryLocalUserInformation(UserName,
+                                              UserExtendedInformation,
+                                              (PVOID *)&Info)))
+        return FALSE;
+
+    if ((Info->ExtendedWhichFields & USER_EXTENDED_FIELD_PASSWORD_HINT) &&
+        (Info->PasswordHint.Length != 0) &&
+        (Info->PasswordHint.Buffer != NULL))
+    {
+        Result = SUCCEEDED(StringCchCopyNW(Hint,
+                                           HintLength,
+                                           Info->PasswordHint.Buffer,
+                                           Info->PasswordHint.Length / sizeof(WCHAR)));
+    }
+
+    if (Info->PasswordHint.Buffer != NULL)
+        SamFreeMemory(Info->PasswordHint.Buffer);
+
+    if (Info->UserTile.Data != NULL)
+        SamFreeMemory(Info->UserTile.Data);
+
+    SamFreeMemory(Info);
+
+    return Result;
+}
+
+
+BOOL
+IsUserPasswordBlank(
+    IN PCWSTR UserName)
+{
+    PUSER_LOGON_UI_INFORMATION Info = NULL;
+    BOOL Result;
+
+    if (!NT_SUCCESS(QueryLocalUserInformation(UserName,
+                                              UserLogonUIInformation,
+                                              (PVOID *)&Info)))
+        return FALSE;
+
+    Result = Info->PasswordIsBlank;
+
+    SamFreeMemory(Info);
+
+    return Result;
 }
 
 
@@ -803,6 +994,7 @@ DoLoginTasks(
                          UserName,
                          Domain,
                          Password,
+                         Interactive,
                          &pgContext->UserToken,
                          SubStatus);
     if (!NT_SUCCESS(Status))

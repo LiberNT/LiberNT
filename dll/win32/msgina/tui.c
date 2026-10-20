@@ -228,11 +228,11 @@ static INT
 TUILockedSAS(
     IN OUT PGINA_CONTEXT pgContext)
 {
-    HANDLE hToken;
     WCHAR UserName[256];
     WCHAR Password[256];
     NTSTATUS SubStatus;
     NTSTATUS Status;
+    INT Action;
 
     TRACE("TUILockedSAS()\n");
 
@@ -247,28 +247,20 @@ TUILockedSAS(
     if (!ReadString(IDS_ASKFORPASSWORD, Password, _countof(Password), FALSE))
         return WLX_SAS_ACTION_NONE;
 
-    Status = ConnectToLsa(pgContext);
+    Status = DoUnlock(pgContext,
+                      UserName,
+                      NULL,
+                      Password,
+                      &SubStatus,
+                      &Action);
+    SecureZeroMemory(Password, sizeof(Password));
     if (!NT_SUCCESS(Status))
     {
-        WARN("ConnectToLsa() failed\n");
+        WARN("DoUnlock() failed (Status 0x%08lx)\n", Status);
         return WLX_SAS_ACTION_NONE;
     }
 
-    Status = MyLogonUser(pgContext->LsaHandle,
-                         pgContext->AuthenticationPackage,
-                         UserName,
-                         NULL,
-                         Password,
-                         &hToken,
-                         &SubStatus);
-    if (!NT_SUCCESS(Status))
-    {
-        WARN("MyLogonUser() failed\n");
-        return WLX_SAS_ACTION_NONE;
-    }
-
-    CloseHandle(hToken);
-    return WLX_SAS_ACTION_UNLOCK_WKSTA;
+    return Action;
 }
 
 static VOID

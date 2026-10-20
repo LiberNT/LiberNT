@@ -22,7 +22,7 @@ add_library(msgina MODULE
 
 set_module_type(msgina win32dll UNICODE)
 target_link_libraries(msgina wine uuid bootstatus shellframe ${PSEH_LIB} cpprt)
-add_delay_importlibs(msgina secur32 netapi32 gdiplus)
+add_delay_importlibs(msgina secur32 netapi32 samlib gdiplus)
 add_importlibs(msgina advapi32 user32 gdi32 userenv msvcrt kernel32 ntdll)
 add_pch(msgina msgina.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET msgina DESTINATION reactos/system32 FOR all)

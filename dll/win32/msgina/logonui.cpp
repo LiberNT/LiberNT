@@ -102,6 +102,7 @@ struct LogonJob
     WCHAR Domain[MAX_COMPUTERNAME_LENGTH + 1];
     WCHAR Password[LOGONUI_TEXT];
     WCHAR NewPassword[LOGONUI_TEXT];
+    WCHAR Hint[LOGONUI_TEXT];
     NTSTATUS Status;
     NTSTATUS SubStatus;
     INT Action;
@@ -724,7 +725,7 @@ public:
         if (Mode == LogonUiUnlock)
         {
             StringCchCopyW(Users[0], _countof(Users[0]), Context->UserName);
-            NoPassword[0] = !Context->Password[0];
+            NoPassword[0] = IsUserPasswordBlank(Context->UserName);
             UserCount = 1;
             Selected = 0;
             return;
@@ -744,7 +745,8 @@ public:
                 if (Info[i].usri1_flags & UF_ACCOUNTDISABLE)
                     continue;
                 StringCchCopyW(Users[UserCount], _countof(Users[UserCount]), Info[i].usri1_name);
-                NoPassword[UserCount] = Blank[0] && !_wcsicmp(Users[UserCount], Blank);
+                NoPassword[UserCount] = (Blank[0] && !_wcsicmp(Users[UserCount], Blank)) ||
+                                        IsUserPasswordBlank(Users[UserCount]);
                 if (!_wcsicmp(Users[UserCount], Context->UserName))
                     Default = UserCount;
                 UserCount++;
@@ -1342,20 +1344,27 @@ public:
                 Finish(WLX_SAS_ACTION_LOGON, Done);
                 return;
             }
-            if (Done->Status == STATUS_ACCOUNT_RESTRICTION &&
-                (Done->SubStatus == STATUS_PASSWORD_EXPIRED || Done->SubStatus == STATUS_PASSWORD_MUST_CHANGE))
+            if (Done->Status == STATUS_PASSWORD_EXPIRED || Done->Status == STATUS_PASSWORD_MUST_CHANGE ||
+                (Done->Status == STATUS_ACCOUNT_RESTRICTION &&
+                 (Done->SubStatus == STATUS_PASSWORD_EXPIRED || Done->SubStatus == STATUS_PASSWORD_MUST_CHANGE)))
             {
+                NTSTATUS Reason = Done->Status == STATUS_ACCOUNT_RESTRICTION ? Done->SubStatus : Done->Status;
+
                 ExpiredFlow = TRUE;
                 StringCchCopyW(ExpiredUser, _countof(ExpiredUser), Done->User);
                 StringCchCopyW(Context->DomainName, _countof(Context->DomainName), Done->Domain);
                 StringCchCopyW(Context->Password, _countof(Context->Password), Done->Password);
                 SwitchPage(Page::Password);
-                SetMessage(Done->SubStatus == STATUS_PASSWORD_EXPIRED ? IDS_LOGONUI_PASSWORD_EXPIRED
-                                                                      : IDS_LOGONUI_PASSWORD_MUST_CHANGE, NULL);
+                SetMessage(Reason == STATUS_PASSWORD_EXPIRED ? IDS_LOGONUI_PASSWORD_EXPIRED
+                                                             : IDS_LOGONUI_PASSWORD_MUST_CHANGE, NULL);
                 Release(Done);
                 return;
             }
-            if (Done->Status == STATUS_ACCOUNT_RESTRICTION)
+            if (Done->Status == STATUS_ACCOUNT_LOCKED_OUT)
+            {
+                Error = IDS_LOGONUI_LOCKED_OUT;
+            }
+            else if (Done->Status == STATUS_ACCOUNT_RESTRICTION)
             {
                 switch (Done->SubStatus)
                 {
@@ -1384,7 +1393,16 @@ public:
                 Finish(WLX_SAS_ACTION_UNLOCK_WKSTA, Done);
                 return;
             }
-            Error = NT_SUCCESS(Done->Status) ? IDS_LOGONUI_UNLOCK_OTHER : IDS_LOGONUI_WRONG_PASSWORD;
+            if (NT_SUCCESS(Done->Status))
+                Error = IDS_LOGONUI_UNLOCK_OTHER;
+            else if (Done->Status == STATUS_ACCOUNT_LOCKED_OUT)
+                Error = IDS_LOGONUI_LOCKED_OUT;
+            else if (Done->Status == STATUS_ACCOUNT_RESTRICTION && Done->SubStatus == STATUS_ACCOUNT_DISABLED)
+                Error = IDS_LOGONUI_DISABLED;
+            else if (Done->Status == STATUS_ACCOUNT_RESTRICTION)
+                Error = IDS_LOGONUI_RESTRICTION;
+            else
+                Error = IDS_LOGONUI_WRONG_PASSWORD;
         }
         else if (Done->Kind == Job::Change)
         {
@@ -1417,8 +1435,14 @@ public:
                 return;
             }
             Retry = ExpiredFlow ? NewEdit : OldEdit;
-            Error = Done->Status == STATUS_PASSWORD_RESTRICTION ? IDS_LOGONUI_PASSWORD_RULES
-                                                                 : IDS_LOGONUI_CHANGE_FAILED;
+            if (Done->Status == STATUS_PASSWORD_RESTRICTION)
+                Error = IDS_LOGONUI_PASSWORD_RULES;
+            else if (Done->Status == STATUS_WRONG_PASSWORD || Done->Status == STATUS_LOGON_FAILURE)
+                Error = IDS_LOGONUI_WRONG_PASSWORD;
+            else if (Done->Status == STATUS_ACCOUNT_LOCKED_OUT)
+                Error = IDS_LOGONUI_LOCKED_OUT;
+            else
+                Error = IDS_LOGONUI_CHANGE_FAILED;
         }
 
         if (Current == Page::SignIn && Passwordless())
@@ -1435,6 +1459,11 @@ public:
         }
         ShowFields(TRUE);
         Fail(Error, Done->Kind == Job::Unlock ? Context->UserName : NULL, Retry);
+        if (Error == IDS_LOGONUI_WRONG_PASSWORD && Done->Hint[0])
+        {
+            StringCchCatW(Message, _countof(Message), L"\n");
+            StringCchCatW(Message, _countof(Message), Done->Hint);
+        }
         Release(Done);
     }
 
@@ -2118,15 +2147,13 @@ RunLogon(PGINA_CONTEXT Context, LogonJob *Pending)
     Pending->Status = DoLoginTasks(Context, Pending->User, Pending->Domain, Pending->Password, &Pending->SubStatus);
     if (NT_SUCCESS(Pending->Status))
     {
-        if (CreateProfile(Context, Pending->User, Pending->Domain, Pending->Password))
-        {
-            SecureZeroMemory(Context->Password, sizeof(Context->Password));
-            StringCchCopyW(Context->Password, _countof(Context->Password), Pending->Password);
-        }
-        else
-        {
+        if (!CreateProfile(Context, Pending->User, Pending->Domain, Pending->Password))
             Pending->Status = STATUS_UNSUCCESSFUL;
-        }
+        SecureZeroMemory(Context->Password, sizeof(Context->Password));
+    }
+    else if (Pending->Status == STATUS_LOGON_FAILURE)
+    {
+        GetUserPasswordHint(Pending->User, Pending->Hint, _countof(Pending->Hint));
     }
 }
 
@@ -2143,20 +2170,10 @@ LogonJobThread(PVOID Parameter)
     }
     else if (Pending->Kind == Job::Unlock)
     {
-        if (!_wcsicmp(Pending->User, Context->UserName))
-        {
-            Pending->Status = STATUS_WRONG_PASSWORD;
-            if (!wcscmp(Pending->Password, Context->Password))
-                Pending->Action = WLX_SAS_ACTION_UNLOCK_WKSTA;
-        }
-        else if (DoAdminUnlock(Context, Pending->User, Pending->Domain, Pending->Password))
-        {
-            Pending->Action = WLX_SAS_ACTION_UNLOCK_WKSTA;
-        }
-        else
-        {
-            Pending->Status = STATUS_SUCCESS;
-        }
+        Pending->Status = DoUnlock(Context, Pending->User, Pending->Domain, Pending->Password,
+                                   &Pending->SubStatus, &Pending->Action);
+        if (Pending->Status == STATUS_LOGON_FAILURE)
+            GetUserPasswordHint(Pending->User, Pending->Hint, _countof(Pending->Hint));
     }
     else if (Pending->Kind == Job::Change)
     {
@@ -2167,10 +2184,7 @@ LogonJobThread(PVOID Parameter)
                                                Pending->User, Pending->Password, Pending->NewPassword);
         }
         if (NT_SUCCESS(Pending->Status) && !_wcsicmp(Pending->User, Context->UserName))
-        {
             SecureZeroMemory(Context->Password, sizeof(Context->Password));
-            StringCchCopyW(Context->Password, _countof(Context->Password), Pending->NewPassword);
-        }
     }
 
     PostMessageW(Window, WM_LOGONUI_DONE, 0, (LPARAM)Pending);

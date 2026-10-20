@@ -98,6 +98,7 @@ MyLogonUser(
     LPWSTR lpszUsername,
     LPWSTR lpszDomain,
     LPWSTR lpszPassword,
+    SECURITY_LOGON_TYPE LogonType,
     PHANDLE phToken,
     PNTSTATUS SubStatus);
 
@@ -112,12 +113,24 @@ MyChangePassword(
 
 /* msgina.c */
 
-BOOL
-DoAdminUnlock(
+NTSTATUS
+DoUnlock(
     IN PGINA_CONTEXT pgContext,
     IN PWSTR UserName,
     IN PWSTR Domain,
-    IN PWSTR Password);
+    IN PWSTR Password,
+    OUT PNTSTATUS SubStatus,
+    OUT PINT Action);
+
+BOOL
+GetUserPasswordHint(
+    IN PCWSTR UserName,
+    OUT PWSTR Hint,
+    IN SIZE_T HintLength);
+
+BOOL
+IsUserPasswordBlank(
+    IN PCWSTR UserName);
 
 NTSTATUS
 DoLoginTasks(

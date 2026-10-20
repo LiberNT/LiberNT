@@ -58,6 +58,7 @@ MyLogonUser(
     LPWSTR lpszUsername,
     LPWSTR lpszDomain,
     LPWSTR lpszPassword,
+    SECURITY_LOGON_TYPE LogonType,
     PHANDLE phToken,
     PNTSTATUS SubStatus)
 {
@@ -111,7 +112,7 @@ MyLogonUser(
         goto done;
     }
 
-    AuthInfo->MessageType = MsV1_0InteractiveLogon;
+    AuthInfo->MessageType = (LogonType == Unlock) ? MsV1_0WorkstationUnlockLogon : MsV1_0InteractiveLogon;
 
     Ptr = (ULONG_PTR)AuthInfo + sizeof(MSV1_0_INTERACTIVE_LOGON);
 
@@ -205,7 +206,7 @@ MyLogonUser(
 
     Status = LsaLogonUser(LsaHandle,
                           &OriginName,
-                          Interactive,
+                          LogonType,
                           AuthenticationPackage,
                           (PVOID)AuthInfo,
                           AuthInfoLength,
