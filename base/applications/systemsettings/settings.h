@@ -82,6 +82,7 @@ enum class PageId
     Accessibility,
     Privacy,
     Search,
+    Legacy,
     Count
 };
 

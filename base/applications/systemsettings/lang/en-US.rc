@@ -31,6 +31,7 @@ BEGIN
     IDS_PAGE_GAMING "Gaming"
     IDS_PAGE_ACCESSIBILITY "Accessibility"
     IDS_PAGE_PRIVACY "Privacy & security"
+    IDS_PAGE_LEGACY "Legacy settings"
     IDS_PAGE_DISPLAY "Display"
     IDS_PAGE_SOUND "Sound"
     IDS_PAGE_POWER "Power"

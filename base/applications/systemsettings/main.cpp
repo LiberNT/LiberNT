@@ -499,8 +499,19 @@ protected:
                 if (header->hwndFrom == m_NavTree && header->code == TVN_SELCHANGEDW)
                 {
                     NMTREEVIEWW *tree = (NMTREEVIEWW *)lParam;
-                    if (tree->action == TVC_BYMOUSE || tree->action == TVC_BYKEYBOARD)
+                    if (tree->action == TVC_BYMOUSE ||
+                        (tree->action == TVC_BYKEYBOARD && (PageId)tree->itemNew.lParam != PageId::Legacy))
                         PostMessageW(m_hwnd, WM_SETTINGS_NAVIGATE, (WPARAM)tree->itemNew.lParam, 0);
+                    return 0;
+                }
+                if (header->hwndFrom == m_NavTree && header->code == TVN_KEYDOWN &&
+                    ((NMTVKEYDOWN *)lParam)->wVKey == VK_RETURN)
+                {
+                    TVITEMW data = { TVIF_PARAM };
+
+                    data.hItem = (HTREEITEM)SendMessageW(m_NavTree, TVM_GETNEXTITEM, TVGN_CARET, 0);
+                    if (data.hItem && SendMessageW(m_NavTree, TVM_GETITEMW, 0, (LPARAM)&data))
+                        PostMessageW(m_hwnd, WM_SETTINGS_NAVIGATE, (WPARAM)data.lParam, 0);
                     return 0;
                 }
                 if (header->hwndFrom == m_Crumbs && (header->code == NM_CLICK || header->code == NM_RETURN))
@@ -803,6 +814,12 @@ private:
 
     void Navigate(PageId page, const std::wstring &param, BOOL remember)
     {
+        if (page == PageId::Legacy)
+        {
+            Launch(L"control.exe");
+            PostMessageW(m_hwnd, WM_CLOSE, 0, 0);
+            return;
+        }
         if (page == m_Page && param == m_Param)
             return;
         if (remember)

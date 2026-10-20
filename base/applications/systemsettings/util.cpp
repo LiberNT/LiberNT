@@ -23,6 +23,7 @@ static const PageInfo Pages[] =
     { PageId::Accessibility, IDS_PAGE_ACCESSIBILITY, L"accessibility_20_regular", PageId::None, BuildAccessibility,
       L"easeofaccess;accessibility;easeofaccess-keyboard;easeofaccess-mouse;easeofaccess-highcontrast" },
     { PageId::Privacy, IDS_PAGE_PRIVACY, L"shield_20_regular", PageId::None, BuildPrivacy, L"privacy;windowsdefender" },
+    { PageId::Legacy, IDS_PAGE_LEGACY, L"settings_20_regular", PageId::None, NULL, NULL },
     { PageId::Display, IDS_PAGE_DISPLAY, L"desktop_20_regular", PageId::System, BuildDisplay,
       L"display;screenrotation;display-advanced" },
     { PageId::Sound, IDS_PAGE_SOUND, L"speaker_2_20_regular", PageId::System, BuildSound,

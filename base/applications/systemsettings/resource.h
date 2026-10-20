@@ -748,3 +748,4 @@
 #define IDS_DEVELOPMENT_PREVIEW        838
 #define IDS_TARGET                     839
 #define IDS_TARGET_FORMAT              840
+#define IDS_PAGE_LEGACY                841
