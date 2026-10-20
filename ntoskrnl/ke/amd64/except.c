@@ -815,8 +815,7 @@ KiGeneralProtectionFaultHandler(
             Instructions[4], Instructions[5], Instructions[6], Instructions[7],
             (PVOID)TrapFrame->Rax, (PVOID)TrapFrame->Rcx, (PVOID)TrapFrame->Rdx,
             (PVOID)(ULONG_PTR)TrapFrame->ErrorCode);
-    ASSERT(FALSE);
-    return STATUS_UNSUCCESSFUL;
+    return STATUS_ACCESS_VIOLATION;
 }
 
 DECLSPEC_NORETURN
