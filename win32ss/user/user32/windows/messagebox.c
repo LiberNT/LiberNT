@@ -1059,9 +1059,12 @@ SoftModalMessageBox(IN LPMSGBOXDATA lpMsgBoxData)
         WARN("MessageBox: %s\n", wine_dbgstr_wn(lpMsgBoxParams->lpszText, textlen));
     else
         TRACE("MessageBox: %s\n", wine_dbgstr_wn(lpMsgBoxParams->lpszText, textlen));
+    NtUserModifyUserStartupInfoFlags(STARTF_USESHOWWINDOW, 0);
     ret = DialogBoxIndirectParamW(lpMsgBoxParams->hInstance, tpl,
                                   lpMsgBoxParams->hwndOwner,
                                   MessageBoxProc, (LPARAM)&mbd);
+    if (ret == -1)
+        ret = 0;
 
 Quit:
     if (buf)
