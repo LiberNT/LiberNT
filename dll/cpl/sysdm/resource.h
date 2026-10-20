@@ -65,6 +65,7 @@
 #define IDS_GIGAHERTZ 131
 
 #define IDS_UPTIME_FORMAT 140
+#define IDS_DEVELOPMENT_PREVIEW 141
 
 #define IDS_ENVIRONMENT_WARNING            150
 #define IDS_ENVIRONMENT_WARNING_TITLE      151
@@ -83,6 +84,9 @@
 #define IDC_ROSHOMEPAGE_LINK 109
 #define IDC_ROSVERSION       110
 #define IDC_UPTIME           111
+#define IDC_ROSPRODUCT       116
+#define IDC_ROSTARGET        117
+#define IDC_ROSBUILD         118
 
 /* Propsheet - hardware */
 #define IDD_PROPPAGEHARDWARE        300

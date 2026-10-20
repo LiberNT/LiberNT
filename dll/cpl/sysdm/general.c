@@ -606,6 +606,82 @@ static VOID GetSystemVersion(HWND hwnd)
     HeapFree(GetProcessHeap(), 0, pwszStr);
 }
 
+static VOID AppendDlgItemText(HWND hwnd, INT nIDDlgItem, PCWSTR pszText)
+{
+    WCHAR szText[256];
+
+    if (!GetDlgItemTextW(hwnd, nIDDlgItem, szText, _countof(szText)))
+        return;
+    StringCchCatW(szText, _countof(szText), pszText);
+    SetDlgItemTextW(hwnd, nIDDlgItem, szText);
+}
+
+static VOID GetSystemRelease(HWND hwnd)
+{
+    static const WCHAR szKey[] = L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
+    WCHAR szRelease[64], szVersion[32], szBuild[16], szLab[256], szText[256];
+    PWSTR Hash, Revision, Compiler, Scan;
+    PCSTR Arch, ArchEnd;
+    DWORD cbData, dwUbr;
+
+    if (LoadStringW(hApplet, IDS_DEVELOPMENT_PREVIEW, szRelease, _countof(szRelease)))
+    {
+        StringCchPrintfW(szText, _countof(szText), L" \x00B7 %s", szRelease);
+        AppendDlgItemText(hwnd, IDC_ROSPRODUCT, szText);
+    }
+
+    cbData = sizeof(szVersion);
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, szKey, L"DisplayVersion", RRF_RT_REG_SZ, NULL, szVersion, &cbData) != ERROR_SUCCESS)
+        szVersion[0] = UNICODE_NULL;
+    cbData = sizeof(szBuild);
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, szKey, L"CurrentBuild", RRF_RT_REG_SZ, NULL, szBuild, &cbData) != ERROR_SUCCESS)
+        szBuild[0] = UNICODE_NULL;
+    cbData = sizeof(dwUbr);
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, szKey, L"UBR", RRF_RT_REG_DWORD, NULL, &dwUbr, &cbData) == ERROR_SUCCESS)
+        StringCchPrintfW(szText, _countof(szText), L" %s %s.%lu", szVersion, szBuild, dwUbr);
+    else
+        StringCchPrintfW(szText, _countof(szText), L" %s %s", szVersion, szBuild);
+    AppendDlgItemText(hwnd, IDC_ROSTARGET, szText);
+
+    cbData = sizeof(szLab);
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, szKey, L"BuildLab", RRF_RT_REG_SZ, NULL, szLab, &cbData) != ERROR_SUCCESS)
+        return;
+
+    Hash = NULL;
+    Scan = szLab;
+    while ((Scan = wcsstr(Scan, L"-g")) != NULL)
+    {
+        Hash = Scan;
+        Scan += 2;
+    }
+    if (Hash)
+    {
+        Revision = Hash;
+        while (Revision > szLab && Revision[-1] >= L'0' && Revision[-1] <= L'9')
+            --Revision;
+        Compiler = Hash + 2 + wcsspn(Hash + 2, L"0123456789abcdefABCDEF");
+        if (Revision > szLab && Revision < Hash && Revision[-1] == L'-' &&
+            Compiler > Hash + 2 && (*Compiler == L'.' || *Compiler == UNICODE_NULL))
+        {
+            --Revision;
+            MoveMemory(Revision, Compiler, (wcslen(Compiler) + 1) * sizeof(WCHAR));
+        }
+    }
+    Scan = szLab + wcsspn(szLab, L"0123456789");
+    if (Scan > szLab && *Scan == L'-')
+        MoveMemory(szLab, Scan + 1, (wcslen(Scan + 1) + 1) * sizeof(WCHAR));
+    Scan = wcsrchr(szLab, L'_');
+    if (Scan)
+        *Scan = L'-';
+
+    Arch = strchr(KERNEL_VERSION_STR, '-');
+    Arch = Arch ? Arch + 1 : KERNEL_VERSION_STR;
+    ArchEnd = strchr(Arch, '-');
+    StringCchPrintfW(szText, _countof(szText), L" %s-%.*S", szLab,
+                     ArchEnd ? (INT)(ArchEnd - Arch) : (INT)strlen(Arch), Arch);
+    AppendDlgItemText(hwnd, IDC_ROSBUILD, szText);
+}
+
 /**
  * @brief
  * An equivalent of GetTickCount64, implemented using QueryPerformanceCounter.
@@ -708,6 +784,7 @@ INT_PTR CALLBACK GeneralPageProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM 
             SetWindowLongPtr(GetDlgItem(hwndDlg, IDC_ROSIMG), GWLP_WNDPROC, (LONG_PTR)RosImageProc);
             GetSystemInformation(hwndDlg);
             GetSystemVersion(hwndDlg);
+            GetSystemRelease(hwndDlg);
             InitSystemUptime(hwndDlg);
             break;
         }
