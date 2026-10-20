@@ -1436,7 +1436,14 @@ NTSTATUS WINAPI wow64_NtQueryObject( UINT *args )
         ULONG ret_size, size = 32 * (sizeof(OBJECT_TYPE_INFORMATION) + 16 * sizeof(WCHAR));
 
         info = Wow64AllocateTemp( size );
-        if (!(status = NtQueryObject( handle, class, info, size, &ret_size )))
+        status = NtQueryObject( handle, class, info, size, &ret_size );
+        if (status == STATUS_INFO_LENGTH_MISMATCH && ret_size > size)
+        {
+            size = ret_size;
+            info = Wow64AllocateTemp( size );
+            status = NtQueryObject( handle, class, info, size, &ret_size );
+        }
+        if (!status)
         {
             OBJECT_TYPE_INFORMATION *type;
             OBJECT_TYPE_INFORMATION32 *type32;
