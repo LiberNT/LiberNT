@@ -19,13 +19,13 @@
 @ stub BuildSecurityDescriptorForSharingAccessEx
 @ stub CapabilityCheck
 @ stub CapabilityCheckForSingleSessionSku
-@ stdcall ChangeServiceConfig2A(long long ptr)
-@ stdcall ChangeServiceConfig2W(long long ptr)
-@ stdcall ChangeServiceConfigA(long long long long str str ptr str str str str)
-@ stdcall ChangeServiceConfigW(long long long long wstr wstr ptr wstr wstr wstr wstr)
-@ stdcall CloseServiceHandle(long)
+@ stdcall ChangeServiceConfig2A(long long ptr) advapi32.ChangeServiceConfig2A
+@ stdcall ChangeServiceConfig2W(long long ptr) advapi32.ChangeServiceConfig2W
+@ stdcall ChangeServiceConfigA(long long long long str str ptr str str str str) advapi32.ChangeServiceConfigA
+@ stdcall ChangeServiceConfigW(long long long long wstr wstr ptr wstr wstr wstr wstr) advapi32.ChangeServiceConfigW
+@ stdcall CloseServiceHandle(long) advapi32.CloseServiceHandle
 @ stdcall CloseTrace(int64)
-@ stdcall ControlService(long long ptr)
+@ stdcall ControlService(long long ptr) advapi32.ControlService
 @ stub ControlServiceExA
 @ stub ControlServiceExW
 @ stdcall ControlTraceA(int64 str ptr long) advapi32.ControlTraceA
@@ -38,9 +38,9 @@
 @ stub ConvertStringSDToSDRootDomainW
 @ stdcall ConvertStringSecurityDescriptorToSecurityDescriptorW(wstr long ptr ptr)
 @ stdcall ConvertStringSidToSidW(wstr ptr)
-@ stdcall CreateServiceA(long str str long long long long str str ptr str str str)
+@ stdcall CreateServiceA(long str str long long long long str str ptr str str str) advapi32.CreateServiceA
 @ stub CreateServiceEx
-@ stdcall CreateServiceW(long wstr wstr long long long long wstr wstr ptr wstr wstr wstr)
+@ stdcall CreateServiceW(long wstr wstr long long long long wstr wstr ptr wstr wstr wstr) advapi32.CreateServiceW
 @ stub CredBackupCredentials
 @ stdcall CredDeleteA(str long long) advapi32.CredDeleteA
 @ stdcall CredDeleteW(wstr long long) advapi32.CredDeleteW
@@ -84,10 +84,10 @@
 @ stub CredpDecodeCredential
 @ stub CredpEncodeCredential
 @ stub CredpEncodeSecret
-@ stdcall DeleteService(long)
+@ stdcall DeleteService(long) advapi32.DeleteService
 @ stdcall EnableTraceEx2(int64 ptr long long int64 int64 long ptr)
-@ stdcall EnumDependentServicesW(long long ptr long ptr ptr)
-@ stdcall EnumServicesStatusExW(long long long long ptr long ptr ptr ptr wstr)
+@ stdcall EnumDependentServicesW(long long ptr long ptr ptr) advapi32.EnumDependentServicesW
+@ stdcall EnumServicesStatusExW(long long long long ptr long ptr ptr ptr wstr) advapi32.EnumServicesStatusExW
 @ stub EnumerateIdentityProviders
 @ stdcall EnumerateTraceGuidsEx(long ptr long ptr long ptr) advapi32.EnumerateTraceGuidsEx
 @ stub EtwQueryRealtimeConsumer
@@ -99,8 +99,8 @@
 @ stub GetIdentityProviderInfoByGUID
 @ stub GetIdentityProviderInfoByName
 @ stub GetServiceDirectory
-@ stdcall GetServiceDisplayNameW(ptr wstr ptr ptr)
-@ stdcall GetServiceKeyNameW(long wstr ptr ptr)
+@ stdcall GetServiceDisplayNameW(ptr wstr ptr ptr) advapi32.GetServiceDisplayNameW
+@ stdcall GetServiceKeyNameW(long wstr ptr ptr) advapi32.GetServiceKeyNameW
 @ stub GetServiceRegistryStateKey
 @ stub I_QueryTagInformation
 @ stub I_RegisterSvchostNotificationCallback
@@ -160,44 +160,44 @@
 @ stub NotifyServiceStatusChange
 @ stub NotifyServiceStatusChangeA
 @ stdcall NotifyServiceStatusChangeW(ptr long ptr)
-@ stdcall OpenSCManagerA(str str long)
-@ stdcall OpenSCManagerW(wstr wstr long)
-@ stdcall OpenServiceA(long str long)
-@ stdcall OpenServiceW(long wstr long)
+@ stdcall OpenSCManagerA(str str long) advapi32.OpenSCManagerA
+@ stdcall OpenSCManagerW(wstr wstr long) advapi32.OpenSCManagerW
+@ stdcall OpenServiceA(long str long) advapi32.OpenServiceA
+@ stdcall OpenServiceW(long wstr long) advapi32.OpenServiceW
 @ stdcall -ret64 OpenTraceW(ptr)
 @ stdcall ProcessTrace(ptr long ptr ptr)
 @ stdcall QueryAllTracesA(ptr long ptr) advapi32.QueryAllTracesA
 @ stdcall QueryAllTracesW(ptr long ptr) advapi32.QueryAllTracesW
 @ stub QueryLocalUserServiceName
-@ stdcall QueryServiceConfig2A(long long ptr long ptr)
-@ stdcall QueryServiceConfig2W(long long ptr long ptr)
-@ stdcall QueryServiceConfigA(long ptr long ptr)
-@ stdcall QueryServiceConfigW(long ptr long ptr)
+@ stdcall QueryServiceConfig2A(long long ptr long ptr) advapi32.QueryServiceConfig2A
+@ stdcall QueryServiceConfig2W(long long ptr long ptr) advapi32.QueryServiceConfig2W
+@ stdcall QueryServiceConfigA(long ptr long ptr) advapi32.QueryServiceConfigA
+@ stdcall QueryServiceConfigW(long ptr long ptr) advapi32.QueryServiceConfigW
 @ stub QueryServiceDynamicInformation
-@ stdcall QueryServiceObjectSecurity(long long ptr long ptr)
-@ stdcall QueryServiceStatus(long ptr)
-@ stdcall QueryServiceStatusEx(long long ptr long ptr)
+@ stdcall QueryServiceObjectSecurity(long long ptr long ptr) advapi32.QueryServiceObjectSecurity
+@ stdcall QueryServiceStatus(long ptr) advapi32.QueryServiceStatus
+@ stdcall QueryServiceStatusEx(long long ptr long ptr) advapi32.QueryServiceStatusEx
 @ stub QueryTraceProcessingHandle
 @ stub QueryTransientObjectSecurityDescriptor
 @ stub QueryUserServiceName
 @ stub QueryUserServiceNameForContext
-@ stdcall RegisterServiceCtrlHandlerA(str ptr)
-@ stdcall RegisterServiceCtrlHandlerExA(str ptr ptr)
-@ stdcall RegisterServiceCtrlHandlerExW(wstr ptr ptr)
-@ stdcall RegisterServiceCtrlHandlerW(wstr ptr)
+@ stdcall RegisterServiceCtrlHandlerA(str ptr) advapi32.RegisterServiceCtrlHandlerA
+@ stdcall RegisterServiceCtrlHandlerExA(str ptr ptr) advapi32.RegisterServiceCtrlHandlerExA
+@ stdcall RegisterServiceCtrlHandlerExW(wstr ptr ptr) advapi32.RegisterServiceCtrlHandlerExW
+@ stdcall RegisterServiceCtrlHandlerW(wstr ptr) advapi32.RegisterServiceCtrlHandlerW
 @ stdcall RegisterTraceGuidsA(ptr ptr ptr long ptr str str ptr) advapi32.RegisterTraceGuidsA
 @ stub ReleaseIdentityProviderEnumContext
 @ stub RemoveTraceCallback
 @ stub RpcClientCapabilityCheck
 @ stub SetLocalRpcServerInterfaceSecurity
 @ stub SetLocalRpcServerProtseqSecurity
-@ stdcall SetServiceObjectSecurity(long long ptr)
-@ stdcall SetServiceStatus(long ptr)
+@ stdcall SetServiceObjectSecurity(long long ptr) advapi32.SetServiceObjectSecurity
+@ stdcall SetServiceStatus(long ptr) advapi32.SetServiceStatus
 @ stub SetTraceCallback
-@ stdcall StartServiceA(long long ptr)
-@ stdcall StartServiceCtrlDispatcherA(ptr)
-@ stdcall StartServiceCtrlDispatcherW(ptr)
-@ stdcall StartServiceW(long long ptr)
+@ stdcall StartServiceA(long long ptr) advapi32.StartServiceA
+@ stdcall StartServiceCtrlDispatcherA(ptr) advapi32.StartServiceCtrlDispatcherA
+@ stdcall StartServiceCtrlDispatcherW(ptr) advapi32.StartServiceCtrlDispatcherW
+@ stdcall StartServiceW(long long ptr) advapi32.StartServiceW
 @ stdcall StartTraceA(ptr str ptr) advapi32.StartTraceA
 @ stdcall StartTraceW(ptr wstr ptr) advapi32.StartTraceW
 @ stdcall StopTraceW(int64 wstr ptr) advapi32.StopTraceW
