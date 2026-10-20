@@ -3365,8 +3365,6 @@ DxgkGpuVaPlanReserve(_In_ PDXGKRNL_PROCESS Process, _In_ D3DGPU_VIRTUAL_ADDRESS 
          * and has to be aligned; convert the inclusive bound to the exclusive
          * limit the search below already assumes.
          */
-        if (MinAddress != 0 && (MinAddress & GPUVA_RESERVATION_MASK) != 0)
-            return STATUS_INVALID_PARAMETER;
         if (MinAddress == 0)
             MinAddress = GPUVA_START_ADDRESS;
         if (MaxAddress != 0 && MaxAddress != MAXULONGLONG)
@@ -3572,8 +3570,6 @@ DxgkGpuVaReserve(
          * and has to be aligned; convert the inclusive bound to the exclusive
          * limit the search below already assumes.
          */
-        if (MinAddress != 0 && (MinAddress & GPUVA_RESERVATION_MASK) != 0)
-            return STATUS_INVALID_PARAMETER;
         if (MinAddress == 0)
             MinAddress = GPUVA_START_ADDRESS;
         if (MaxAddress != 0 && MaxAddress != MAXULONGLONG)
