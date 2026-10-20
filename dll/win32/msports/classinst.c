@@ -288,6 +288,7 @@ InstallSerialPort(IN HDEVINFO DeviceInfoSet,
     HCOMDB hComDB = HCOMDB_INVALID_HANDLE_VALUE;
     HKEY hKey;
     LONG lError;
+    BOOL bPortNameFound = FALSE;
 
     TRACE("InstallSerialPort(%p, %p)\n",
           DeviceInfoSet, DeviceInfoData);
@@ -317,6 +318,7 @@ InstallSerialPort(IN HDEVINFO DeviceInfoSet,
             if (_wcsnicmp(szPortName, pszCom, wcslen(pszCom)) == 0)
             {
                 dwPortNumber = _wtoi(szPortName + wcslen(pszCom));
+                bPortNameFound = (dwPortNumber != 0);
                 TRACE("COM port number found: %lu\n", dwPortNumber);
             }
         }
@@ -332,10 +334,15 @@ InstallSerialPort(IN HDEVINFO DeviceInfoSet,
     if (dwPortNumber != 0)
     {
         /* ... and claim the port number in the database */
-        ComDBClaimPort(hComDB,
-                       dwPortNumber,
-                       FALSE,
-                       NULL);
+        if (ComDBClaimPort(hComDB,
+                           dwPortNumber,
+                           FALSE,
+                           NULL) == ERROR_SHARING_VIOLATION &&
+            !bPortNameFound)
+        {
+            ComDBClaimNextFreePort(hComDB,
+                                   &dwPortNumber);
+        }
     }
     else
     {
@@ -692,12 +699,14 @@ GetPortType(IN HDEVINFO DeviceInfoSet,
 
     if (lError == ERROR_SUCCESS &&
         dwSize == sizeof(BYTE) &&
-        dwType == REG_BINARY)
+        dwType == REG_BINARY &&
+        bData == 0)
     {
-        if (bData == 0)
-            PortType = ParallelPort;
-        else
-            PortType = SerialPort;
+        PortType = ParallelPort;
+    }
+    else
+    {
+        PortType = SerialPort;
     }
 
 done:
