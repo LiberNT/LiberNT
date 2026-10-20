@@ -469,6 +469,23 @@ Fdo_EvtDevicePrepareHardware(
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
 
+    bytesRead = fdoCtx->BusInterface.GetBusData(
+        fdoCtx->BusInterface.Context,
+        PCI_WHICHSPACE_CONFIG,
+        &fdoCtx->subClass,
+        FIELD_OFFSET(PCI_COMMON_HEADER, SubClass),
+        sizeof(fdoCtx->subClass));
+    if (bytesRead != sizeof(fdoCtx->subClass))
+    {
+        SklHdAudBusPrint(DEBUG_LEVEL_ERROR, DBG_PNP,
+            "Failed to read PCI subclass for %04x:%04x: read %lu of %Iu bytes\n",
+            fdoCtx->venId,
+            fdoCtx->devId,
+            bytesRead,
+            sizeof(fdoCtx->subClass));
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+
     SklHdAudBusPrint(DEBUG_LEVEL_INFO, DBG_PNP,
         "PCI HDA controller: vendor=0x%04x device=0x%04x revision=0x%02x\n",
         fdoCtx->venId,
@@ -1240,7 +1257,7 @@ Fdo_EvtDeviceSelfManagedIoInit(
 #endif
 
     fdoCtx->dspInterruptCallback = NULL;
-    if (fdoCtx->m_BAR4.Base.Base) { //Populate ADSP if present
+    if (fdoCtx->m_BAR4.Base.Base && fdoCtx->subClass == PCI_SUBCLASS_MM_AUDIO_DEV) { //Populate ADSP if present
         PDO_IDENTIFICATION_DESCRIPTION description;
         //
         // Initialize the description with the information about the detected codec.
