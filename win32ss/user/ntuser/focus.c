@@ -466,7 +466,7 @@ IntActivateWindow(PWND Wnd, PTHREADINFO pti, HANDLE tid, DWORD Type)
 
               co_IntSendMessage( UserHMGetHandle(Wnd), WM_NCACTIVATE, wParam, 0);
 
-              if (wParam)
+              if (wParam && Wnd->head.pti->MessageQueue == gpqForeground)
               {
                   UpdateShellHook(Wnd);
 
@@ -940,9 +940,12 @@ co_IntSetForegroundMessageQueue(
               {
                  co_IntSendMessage( UserHMGetHandle(Wnd), WM_NCACTIVATE, TRUE, (LPARAM)UserHMGetHandle(Wnd));
 
-                 UpdateShellHook(Wnd);
+                 if (gpqForeground == pumq)
+                 {
+                    UpdateShellHook(Wnd);
 
-                 co_WinPosSetWindowPos(Wnd, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
+                    co_WinPosSetWindowPos(Wnd, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
+                 }
               }
               else
               {
