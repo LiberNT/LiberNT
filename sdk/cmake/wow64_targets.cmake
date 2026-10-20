@@ -223,6 +223,7 @@ set(WOW64_I386_EXECUTABLES
     nslookup
     ping
     reg
+    regedit
     regedt32
     regsvr32
     replace
