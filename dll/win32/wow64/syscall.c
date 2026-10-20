@@ -1842,8 +1842,10 @@ __ASM_GLOBAL_FUNC( Wow64PrepareForException,
                    "mov %r10,(%rcx)\n\t"         /* rec */
                    "mov %rdx,8(%rcx)\n\t"        /* context */
                    "mov " __ASM_NAME("pBTCpuResetToConsistentState") "(%rip),%rax\n\t"
-                   "call *%rax\n\t"
-                   "add $0x38,%rsp\n\t"
+                   "test %rax,%rax\n\t"
+                   "jz 2f\n\t"
+                   "call *%rax\n"
+                   "2:\tadd $0x38,%rsp\n\t"
                    "ret" )
 #else
 void WINAPI Wow64PrepareForException( EXCEPTION_RECORD *rec, CONTEXT *context )
