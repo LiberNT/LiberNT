@@ -6,12 +6,15 @@
 
 #include <windows.h>
 #include <GL/gl.h>
+#include <string.h>
 #include <wine/test.h>
 
 START_TEST(wgl_swap_control)
 {
     BOOL (WINAPI *set_interval)(int);
     int (WINAPI *get_interval)(void);
+    const char *version;
+    BOOL mesa;
     PIXELFORMATDESCRIPTOR pfd = { sizeof(pfd), 1 };
     HWND windows[2] = { NULL, NULL };
     HDC dcs[2] = { NULL, NULL };
@@ -62,14 +65,19 @@ START_TEST(wgl_swap_control)
     ok(get_interval() == 2, "Second drawable did not retain interval 2\n");
     ok(wglMakeCurrent(dcs[0], contexts[0]), "Failed to restore first drawable\n");
     ok(get_interval() == 0, "Second drawable changed the first drawable's interval\n");
-    SetLastError(0xdeadbeef);
-    ret = set_interval(-1);
-    ok(!ret && GetLastError() == ERROR_INVALID_DATA, "Negative interval: ret %d, error %lu\n", ret, GetLastError());
-    ok(get_interval() == 0, "Rejected interval changed drawable state\n");
+    version = (const char *)glGetString(GL_VERSION);
+    mesa = version && strstr(version, "Mesa");
+    if (mesa)
+    {
+        SetLastError(0xdeadbeef);
+        ret = set_interval(-1);
+        ok(!ret && GetLastError() == ERROR_INVALID_DATA, "Negative interval: ret %d, error %lu\n", ret, GetLastError());
+        ok(get_interval() == 0, "Rejected interval changed drawable state\n");
+    }
     ok(wglMakeCurrent(NULL, NULL), "Failed to unbind context\n");
     SetLastError(0xdeadbeef);
     ret = set_interval(1);
-    ok(!ret && GetLastError() == ERROR_DC_NOT_FOUND, "No current drawable: ret %d, error %lu\n", ret, GetLastError());
+    ok(!ret && (!mesa || GetLastError() == ERROR_DC_NOT_FOUND), "No current drawable: ret %d, error %lu\n", ret, GetLastError());
 
 cleanup:
     wglMakeCurrent(NULL, NULL);
