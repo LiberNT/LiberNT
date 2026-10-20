@@ -1,60 +1,159 @@
-<p align=center>
-  <img alt="LiberNT" src="media/graphics/branding/libernt-logo.png" width="480">
+<p align="center">
+  <img src="media/graphics/branding/libernt-banner.png" width="480" alt="LiberNT">
 </p>
 
-<p align=center>
-  <a href="COPYING">
-    <img alt="License" src="https://img.shields.io/badge/license-GNU_GPL_3.0-0161B6.svg"></a>
+> [!IMPORTANT]
+> LiberNT is in active development. The builds on the [Releases](https://github.com/LiberNT/LiberNT/releases) page are Debug pre-releases for testing: run them in a virtual machine or on spare hardware, not on a computer you depend on.
+
+<div align="center">
+
+# [LiberNT](https://libernt.com)
+### A free NT operating system
+
+**Built out of love for the NT architecture. Windows® 11 compatible, for amd64, arm64 and riscv64.**
+
+[![Build](https://img.shields.io/github/actions/workflow/status/LiberNT/LiberNT/build.yml?branch=main-nt10&label=Build&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/LiberNT/LiberNT/actions/workflows/build.yml)
+[![License: GPL 3.0](https://img.shields.io/badge/License-GPL_3.0-0161B6?style=for-the-badge&logo=gnu&logoColor=white)](#license)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/BpcKg7FZ2)
+[![Matrix](https://img.shields.io/badge/Matrix-%23libernt-000000?style=for-the-badge&logo=matrix&logoColor=white)](https://matrix.to/#/#libernt:matrix.org)
+
+<img src="https://img.shields.io/github/repo-size/LiberNT/LiberNT?style=flat-square&color=blue" alt="Repo Size">
+<img src="https://img.shields.io/github/stars/LiberNT/LiberNT?style=flat-square&color=yellow" alt="Stars">
+<img src="https://img.shields.io/github/forks/LiberNT/LiberNT?style=flat-square&color=lightgrey" alt="Forks">
+<img src="https://img.shields.io/github/last-commit/LiberNT/LiberNT/main-nt10?style=flat-square&color=green" alt="Last Commit">
+<img src="https://img.shields.io/github/issues/LiberNT/LiberNT?style=flat-square&color=orange" alt="Issues">
+
+<br>
+
+[![Download the latest build](https://img.shields.io/badge/Download-Latest_build-0161B6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/LiberNT/LiberNT/releases)
+
+</div>
+
+## Sponsors
+
+<p align="center">
   <a href="https://github.com/sponsors/ahmedarif193">
-    <img alt="Support LiberNT" src="https://img.shields.io/badge/support-LiberNT-E44E4A.svg"></a>
+    <img src="https://img.shields.io/badge/Sponsor-LiberNT-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor LiberNT">
+  </a>
 </p>
 
-## Quick Links
-[Website](https://libernt.com/) &bull;
-[Source code](https://github.com/LiberNT/LiberNT) &bull;
-[Issues](https://github.com/LiberNT/LiberNT/issues) &bull;
-[Wiki](https://github.com/LiberNT/LiberNT/wiki) &bull;
-[Build environment](https://github.com/LiberNT/libernt-build-toolchain)
+---
 
-## What is LiberNT?
+LiberNT is a free NT operating system. The name says it: *liber* is Latin for **free**. It targets **Windows® 11 compatibility**, with room for freestyle and experimental features.
 
-LiberNT is a free NT operating system, built out of love for the NT architecture. The name says it: *liber* is Latin for free. LiberNT targets Windows® 11 compatibility, with room for freestyle and experimental features.
+LiberNT brings extensive work on kernel-space components and drivers, aimed at stability and modern hardware, and it focuses on 64-bit platforms: **amd64, arm64 and riscv64**.
 
-LiberNT is based on ReactOS, the Open Source effort to develop an operating system that is compatible with applications and drivers written for the Microsoft Windows NT family of operating systems. It is a fork with extensive changes to kernel-space components and drivers, aimed at stability and modern hardware, and it focuses on 64-bit platforms: amd64, arm64 and riscv64.
+Our goal is a system that stays maintainable in the long run: **stable, reliable and efficient**, running on embedded devices too, and able to support every feature a modern operating system should have.
 
-Our goal is a system that stays maintainable in the long run: stable, reliable and efficient, running on embedded devices too, and able to support every feature a modern operating system should have.
+> [!NOTE]
+> New to NT? **NT** is the architecture behind every modern version of Windows: its kernel, driver model and system services. LiberNT is a free operating system built on that architecture, and Windows 11 is the reference it measures itself against.
 
-LiberNT is licensed under the [GNU GPL 3.0](COPYING). Code inherited from ReactOS keeps the licence stated in its file headers, most of it GPL 2.0 or later. The GPL 2.0, LGPL 2.1 and BSD texts those files refer to are in [COPYING2](COPYING2), [COPYING.LIB](COPYING.LIB) and [COPYING.ARM](COPYING.ARM).
+---
 
-The changes made in LiberNT are Copyright © 2026 the LiberNT contributors. Code inherited from ReactOS and from third parties keeps the copyright notices of its authors. See [CREDITS.md](CREDITS.md).
+## Table of Contents
 
-### Status
+- [What LiberNT Includes](#what-libernt-includes)
+- [Supported Platforms](#supported-platforms)
+- [Getting Started](#getting-started)
+  - [Step 1: Download a Build](#step-1-download-a-build)
+  - [Step 2: Boot It](#step-2-boot-it)
+  - [Step 3: Install LiberNT](#step-3-install-libernt)
+- [Building LiberNT Yourself](#building-libernt-yourself)
+- [Build Hosts](#build-hosts)
+- [Project Structure](#project-structure)
+- [Contributing](#contributing)
+- [Use of AI](#use-of-ai)
+- [License](#license)
+- [About](#about)
 
-So far, LiberNT has proven more stable and faster than ReactOS in CPU management, memory management and I/O resource handling. Windows 11 is the compatibility reference.
+---
 
-## Support LiberNT
+## What LiberNT Includes
 
-We want LiberNT to be a free NT operating system that everyone can rely on, every day. Support our goal by [donating](https://github.com/sponsors/ahmedarif193) or by joining our new community. See [Contributing](#contributing) to get started.
+LiberNT brings modern hardware and platforms to the NT architecture.
 
-## Upstream ReactOS
+| Feature | What it means for you |
+| --- | --- |
+| **64-bit first** | The kernel, HAL and FreeLoader run on amd64, arm64 and riscv64. |
+| **UEFI boot** | Boots on UEFI firmware, with a GOP framebuffer and early display support. The preinstalled disk boots with UEFI or BIOS. |
+| **Modern buses and storage** | PCIe, PCI, Plug and Play, USB with xHCI, SD/eMMC, and storage and bus drivers. |
+| **Board support** | Real boards, including the Raspberry Pi and its RP1 I/O controller. |
+| **The Windows 11 driver model** | Windows 11 (NT10) compatibility and driver-model work, checked against Windows 11 itself. |
+| **Graphics and x86 apps on Arm** | The graphics driver model with Mesa, and WoW64 with FEX, are build options you can switch on. |
+| **LiberNT Setup** | Lists drives the way Windows Setup does, creates, deletes, formats, shrinks and extends partitions, and installs LiberNT on NTFS with the EFI system partition it needs. |
+| **Your own build** | `menuconfig` lets you choose the target, compiler and build type, and switch features on or off. |
 
-LiberNT would not exist without ReactOS. With all our respect and gratitude to the ReactOS Team & Contributors, whose work LiberNT builds on, you can find the upstream source code at [github.com/reactos/reactos](https://github.com/reactos/reactos).
+> [!TIP]
+> Each build on the [Releases](https://github.com/LiberNT/LiberNT/releases) page lists what changed since the previous one.
 
-## Building
+---
+
+## Supported Platforms
+
+| Architecture | Prebuilt images | Build from source | Notes |
+| --- | :---: | :---: | --- |
+| **amd64** | ✓ | ✓ | Clang (default) or GCC |
+| **arm64** | ✓ | ✓ | Includes Raspberry Pi support |
+| **riscv64** | ✓ | ✓ | A separate image is built for JH7110 boards |
+| **i386** | | ✓ | 32-bit x86 |
+
+Release builds also include PowerPC images.
+
+---
+
+## Getting Started
+
+### Step 1: Download a Build
+
+Every build on the [Releases](https://github.com/LiberNT/LiberNT/releases) page comes as one ZIP file per image and architecture:
+
+| File | What it is |
+| --- | --- |
+| `bootcd-iso-…-<arch>-…zip` | `bootcd.iso`, a CD image that runs LiberNT or starts LiberNT Setup |
+| `LiberNT-img-…-<arch>-…zip` | `LiberNT.img`, a disk with LiberNT already installed |
+| `LiberNT-vhd-…-<arch>-…zip` | `LiberNT.vhd`, the same preinstalled disk for VHD-based virtual machines |
+
+> [!NOTE]
+> These are Clang Debug builds, made by GitHub Actions from the `main-nt10` branch.
+
+### Step 2: Boot It
+
+The quickest way to try LiberNT is the preinstalled disk:
+
+1. Unzip `LiberNT.img` (or `LiberNT.vhd`)
+2. Start it in a virtual machine such as **QEMU**, or use the VHD in **Hyper-V** or **VirtualBox**
+3. Or write `LiberNT.img` to a USB drive or an SD card and boot the machine from it. It boots with UEFI or BIOS
+
+> [!CAUTION]
+> Writing `LiberNT.img` to a USB drive or an SD card erases everything on it. Double-check the target device first.
+
+### Step 3: Install LiberNT
+
+Boot `bootcd.iso` in a virtual machine or on a PC, and follow the instructions of **LiberNT Setup**.
+
+The preinstalled disk also carries LiberNT Setup. Run `C:\<architecture>\libernt.exe`, for example `C:\arm64\libernt.exe`, to install LiberNT on another disk from the running system.
+
+> [!CAUTION]
+> Setup can delete and format partitions. Back up anything important on the target disk before you install.
+
+See [INSTALL.md](INSTALL.md) for the full installation guide.
+
+---
+
+## Building LiberNT Yourself
 
 LiberNT builds with RosBE, a cross-build toolchain. The steps below work on Linux and macOS, and on Windows through WSL2.
 
-### 1. Install the tools
+### 1. Install the toolchain
 
 You need Git, CMake, Ninja and a C/C++ compiler for your own machine. RosBE adds the compilers that build LiberNT.
-
-On Linux or macOS:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/LiberNT/libernt-build-toolchain/main/rosbe-unix-bootstrap.sh | sh
 ```
 
-On Windows, we suggest WSL2. Install it with `wsl --install`, open the Linux terminal it adds, and follow the Linux steps there. Keep the source inside the Linux file system rather than under `/mnt/c`, where builds run slower.
+> [!TIP]
+> On Windows, we suggest WSL2. Install it with `wsl --install`, open the Linux terminal it adds, and follow the Linux steps there. Keep the source inside the Linux file system rather than under `/mnt/c`, where builds run slower.
 
 ### 2. Get the source
 
@@ -63,7 +162,8 @@ git clone https://github.com/LiberNT/LiberNT.git
 cd LiberNT
 ```
 
-The first configure run also fetches the submodule and external sources the build needs.
+> [!NOTE]
+> The first configure run also fetches the submodule and external sources the build needs.
 
 ### 3. Configure
 
@@ -74,7 +174,7 @@ The first configure run also fetches the submodule and external sources the buil
 With no options, this sets up an AMD64 Debug build with Clang in the folder `output-Clang-amd64-debug`. The folder name always follows the pattern `output-<compiler>-<architecture>-<debug|release>`.
 
 | Option | What it does |
-|---|---|
+| --- | --- |
 | `-a`, `--arch <arch>` | Chooses the target architecture: `amd64` (default), `i386`, `arm64` or `riscv64`. |
 | `--clang` | Builds with Clang/LLVM from RosBE. This is the default. |
 | `--gcc` | Builds with GCC from RosBE instead of Clang. The macOS RosBE does not include GCC. |
@@ -110,32 +210,60 @@ ninja liberntimg
 ```
 
 | Command | Creates | Use it to |
-|---|---|---|
+| --- | --- | --- |
 | `ninja bootcd` | `bootcd.iso` | Install LiberNT from a CD image, in a virtual machine or on a PC. |
 | `ninja liberntimg` | `LiberNT.img` | Boot a disk with LiberNT already installed. Start it in a virtual machine such as QEMU, or write it to a USB drive or SD card. It boots with UEFI or BIOS. |
 | `ninja liberntvhd` | `LiberNT.vhd` | Use the same preinstalled disk in virtual machines that take VHD disks, such as Hyper-V and VirtualBox. |
 
 Each target builds everything it needs first, and the files are written to the output folder.
 
-## What LiberNT Enables
+---
 
-LiberNT brings modern hardware and platforms to the NT architecture. The current focus is:
+## Build Hosts
 
-- 64-bit platform support on amd64, arm64 and riscv64: kernel, HAL and FreeLoader
-- UEFI boot, GOP framebuffer, and early display support
-- PCIe, PCI, PnP, USB/xHCI, SD/eMMC, and storage/bus drivers
-- Board support, including the Raspberry Pi and its RP1 I/O controller
-- Windows 11 (NT10) compatibility and driver-model work
+| Host | Compilers | Notes |
+| --- | --- | --- |
+| **Linux** x86_64 / aarch64 | Clang and GCC | The full RosBE toolchain |
+| **macOS** Intel / Apple Silicon | Clang | RosBE has no GCC build for macOS |
+| **Windows** | Clang and GCC | Through WSL2, following the Linux steps |
 
-See [INSTALL.md](INSTALL.md) for installation instructions.
+On every host, install Git, CMake, Ninja, Flex and Bison from your package manager. RosBE provides only the cross compilers. Prebuilt toolchains live in [LiberNT/libernt-build-toolchain](https://github.com/LiberNT/libernt-build-toolchain).
+
+---
+
+## Project Structure
+
+```text
+LiberNT/
+├── base/            # Applications, services, setup and the shell
+├── boot/            # FreeLoader, boot data and boot images
+├── bootloader/      # Boot manager, Windows loader, UEFI and Open Firmware support
+├── dll/             # User-mode DLLs, including ntdll and the Win32 libraries
+├── drivers/         # Kernel-mode drivers: buses, storage, file systems, network, input and more
+├── hal/             # Hardware abstraction layers for x86, Arm, Arm64, PowerPC and RISC-V
+├── media/           # Fonts, themes, INF files, sounds and branding
+├── modules/         # Optional applications, tests and wallpapers
+├── ntoskrnl/        # The NT kernel and executive
+├── sdk/             # Headers, libraries and build tools
+├── submodules/      # Recipes and patches for external components
+├── subsystems/      # CSRSS and the Windows subsystem
+├── win32ss/         # win32k, USER, GDI and display drivers
+├── configure.sh     # Sets up a build on Linux, macOS and WSL2
+└── configure.cmd    # Sets up a build on Windows
+```
+
+---
 
 ## Contributing
 
 Report bugs and suggest features in [Issues](https://github.com/LiberNT/LiberNT/issues), and find guides and notes in the [Wiki](https://github.com/LiberNT/LiberNT/wiki).
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [PULL_REQUEST_MANAGEMENT.md](PULL_REQUEST_MANAGEMENT.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [PULL_REQUEST_MANAGEMENT.md](PULL_REQUEST_MANAGEMENT.md). If you're planning a larger change, ask in [Issues](https://github.com/LiberNT/LiberNT/issues) or on [Discord](https://discord.gg/BpcKg7FZ2) first.
 
-**Legal notice:** If you have seen proprietary Microsoft Windows source code (including but not limited to the leaked Windows NT 3.5, NT 4, 2000 source code and the Windows Research Kernel), your contribution won't be accepted because of potential copyright violation.
+> [!WARNING]
+> **Legal notice:** If you have seen proprietary Microsoft Windows source code (including but not limited to the leaked Windows NT 3.5, NT 4, 2000 source code and the Windows Research Kernel), your contribution won't be accepted because of potential copyright violation.
+
+---
 
 ## Use of AI
 
@@ -150,4 +278,27 @@ Like any other tool, AI is there to help us achieve our goals. It follows the sa
 - A fix is only a fix once we have seen it work in a real boot or test run. Once tests pass, a future CI will keep them passing and preserve our overall progress.
 - We compare our test results check by check with the same tests run on Windows 11.
 
-If you use AI in your own contributions, you are welcome here too. Just tell us in the pull request which parts it helped with and how you tested them. That honesty is all we ask.
+> [!TIP]
+> If you use AI in your own contributions, you are welcome here too. Just tell us in the pull request which parts it helped with and how you tested them. That honesty is all we ask.
+
+---
+
+## License
+
+LiberNT is licensed under the [GNU GPL 3.0](COPYING). Code inherited from other projects keeps the licence stated in its file headers, most of it GPL 2.0 or later. The GPL 2.0, LGPL 2.1 and BSD texts those files refer to are in [COPYING2](COPYING2), [COPYING.LIB](COPYING.LIB) and [COPYING.ARM](COPYING.ARM).
+
+The changes made in LiberNT are Copyright © 2026 the LiberNT contributors. Inherited and third-party code keeps the copyright notices of its authors. See [CREDITS.md](CREDITS.md).
+
+LiberNT is an independent project. It is not affiliated with, endorsed by or sponsored by Microsoft. Windows® is a registered trademark of Microsoft Corporation.
+
+---
+
+## About
+
+LiberNT is built by the **LiberNT contributors**, started and maintained by [Ahmed Arif](https://github.com/ahmedarif193).
+
+- [Visit the LiberNT organization](https://github.com/LiberNT)
+- [Website](https://libernt.com)
+- [Download the latest build](https://github.com/LiberNT/LiberNT/releases)
+- [Wiki](https://github.com/LiberNT/LiberNT/wiki)
+- Chat on [Discord](https://discord.gg/BpcKg7FZ2) or [Matrix](https://matrix.to/#/#libernt:matrix.org)
