@@ -1982,7 +1982,7 @@ IntCallMessageProc(IN PWND Wnd, IN HWND hWnd, IN UINT Msg, IN WPARAM wParam, IN 
    */
     TRACE("HWND %p, MSG %u, WPARAM %p, LPARAM %p, Ansi %d\n", hWnd, Msg, wParam, lParam, Ansi);
 //    if (Class->fnid <= FNID_GHOST && Class->fnid >= FNID_BUTTON )
-    if (Class->fnid <= FNID_GHOST && Class->fnid >= FNID_FIRST )
+    if (Class->fnid <= FNID_GHOST && Class->fnid >= FNID_FIRST && Class->fnid != FNID_DIALOG)
     {
        if (Ansi)
        {
