@@ -170,8 +170,9 @@ IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE a
 }
 
 /* Conflicts are logged but still recorded (non-enforcing). */
+static
 NTSTATUS
-IopResDbReserve(_In_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST ResourceList, _Out_opt_ PBOOLEAN Conflict)
+IopResDbReserveList(_In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST ResourceList, _In_ BOOLEAN SkipInternalInterrupts, _Out_opt_ PBOOLEAN Conflict)
 {
     PCM_FULL_RESOURCE_DESCRIPTOR full;
     ULONG i, j;
@@ -196,6 +197,8 @@ IopResDbReserve(_In_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST Resourc
             KIRQL irql;
 
             if (!IopResClassFromType(desc->Type, &cls))
+                continue;
+            if (SkipInternalInterrupts && full->InterfaceType == Internal && desc->Type == CmResourceTypeInterrupt)
                 continue;
 
             entry = ExAllocatePoolWithTag(NonPagedPool, sizeof(*entry), TAG_IO);
@@ -228,6 +231,12 @@ IopResDbReserve(_In_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST Resourc
 
     KeReleaseMutex(&IopResourceAssignmentLock, FALSE);
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+IopResDbReserve(_In_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST ResourceList, _Out_opt_ PBOOLEAN Conflict)
+{
+    return IopResDbReserveList(DeviceNode, ResourceList, FALSE, Conflict);
 }
 
 /* Check one candidate descriptor against the database; returns the conflicting entry. */
@@ -332,6 +341,8 @@ IopResDbSeedFromRegistry(VOID)
     NTSTATUS status;
 
     UNICODE_STRING systemResourcesName = RTL_CONSTANT_STRING(L"System Resources");
+    UNICODE_STRING halName = RTL_CONSTANT_STRING(L"Hardware Abstraction Layer");
+    BOOLEAN halKey;
 
     RtlInitUnicodeString(&keyName, L"\\Registry\\Machine\\HARDWARE\\RESOURCEMAP");
     InitializeObjectAttributes(&oa, &keyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
@@ -362,6 +373,7 @@ IopResDbSeedFromRegistry(VOID)
             ExFreePoolWithTag(basic, TAG_IO);
             continue;
         }
+        halKey = RtlEqualUnicodeString(&keyName, &halName, TRUE);
         InitializeObjectAttributes(&oa, &keyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, mapKey, NULL);
         status = ZwOpenKey(&classKey, KEY_ENUMERATE_SUB_KEYS, &oa);
         ExFreePoolWithTag(basic, TAG_IO);
@@ -436,7 +448,7 @@ IopResDbSeedFromRegistry(VOID)
                 /* Only raw lists; skip translated copies */
                 list = (PCM_RESOURCE_LIST)value->Data;
                 if (wcsstr(valueName->Name, L".Translated") == NULL && value->Type == REG_RESOURCE_LIST && IopIsResourceListValid(list, value->DataLength) && list->Count != 0)
-                    IopResDbReserve(NULL, list, NULL);
+                    IopResDbReserveList(NULL, list, halKey, NULL);
 
                 ExFreePoolWithTag(valueName, TAG_IO);
                 ExFreePoolWithTag(value, TAG_IO);
