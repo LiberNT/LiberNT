@@ -7733,7 +7733,8 @@ DxgkCbNotifyInterrupt(
         {
             InterlockedExchange64(&Adapter->VsyncScanoutAddress[SourceId],
                                   NotifyInterruptData->CrtcVsync.PhysicalAddress.QuadPart);
-            InterlockedExchange(&Adapter->VsyncReportsAddress[SourceId], 1);
+            InterlockedExchange(&Adapter->VsyncReportsAddress[SourceId],
+                                NotifyInterruptData->CrtcVsync.PhysicalAddress.QuadPart != 0);
             InterlockedExchange(&Adapter->VsyncReportsPresentId[SourceId], 0);
             InterlockedIncrement64(&Adapter->VsyncScanoutSequence[SourceId]);
             InterlockedOr(&Adapter->VsyncPending, (LONG)(1UL << SourceId));
@@ -7756,7 +7757,7 @@ DxgkCbNotifyInterrupt(
                 const DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO *Info =
                     &NotifyInterruptData->CrtcVsyncWithMultiPlaneOverlay.pMultiPlaneOverlayVsyncInfo[PlaneIndex];
 
-                if (Info->LayerIndex == 0 && Info->Enabled)
+                if (Info->LayerIndex == 0 && Info->Enabled && Info->PhysicalAddress.QuadPart != 0)
                 {
                     InterlockedExchange64(&Adapter->VsyncScanoutAddress[SourceId], Info->PhysicalAddress.QuadPart);
                     PrimaryReported = TRUE;
