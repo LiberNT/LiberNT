@@ -372,6 +372,32 @@ UserPaintCaption(PWND pwnd, INT Flags)
   //NtUserCallTwoParam((DWORD_PTR)UserHMGetHandle(pwnd),Flags,TWOPARAM_ROUTINE_REDRAWTITLE)
 }
 
+#ifdef WOW64_I386_RUNTIME
+static VOID
+IntPaintCaptionHwnd(HWND hWnd, INT Flags)
+{
+    ROS_WINDOWINFO Info;
+
+    if (!NtUserCallHwndParam(hWnd, (DWORD_PTR)&Info, HWNDPARAM_ROUTINE_ROS_GETWINDOWINFO))
+        return;
+    if (!(Info.style & WS_VISIBLE) || (Info.style & WS_CAPTION) != WS_CAPTION)
+        return;
+    if (Info.state & WNDS_HASCAPTION && NtUserQueryWindow(hWnd, QUERY_WINDOW_FOREGROUND))
+        Flags |= DC_ACTIVE;
+    if (UserGetServerInfo(dwSRVIFlags, ROS_SERVERINFO_SRVIFLAGS) & SRVINFO_APIHOOK)
+    {
+        DefWindowProcW(hWnd, WM_NCUAHDRAWCAPTION, Flags, 0);
+    }
+    else
+    {
+        RECT rc = {0,0,0,0};
+        HDC hDC = GetDCEx(hWnd, NULL, DCX_WINDOW|DCX_USESTYLE);
+        NtUserDrawCaption(hWnd, hDC, &rc, DC_DRAWCAPTIONMD|Flags);
+        ReleaseDC(hWnd, hDC);
+    }
+}
+#endif
+
 LRESULT FASTCALL
 DefWndGetIcon(PWND pWnd, WPARAM wParam, LPARAM lParam)
 {
@@ -1112,9 +1138,10 @@ RealDefWindowProcA(HWND hWnd,
 #ifdef WOW64_I386_RUNTIME
     if (!Wnd && Msg == WM_SETTEXT)
     {
-        Result = DefSetText(hWnd, (PCWSTR)lParam, TRUE);
-        if (Result) RedrawWindow(hWnd, NULL, 0, RDW_INVALIDATE | RDW_FRAME | RDW_ERASE);
-        return Result;
+        DefSetText(hWnd, (PCWSTR)lParam, TRUE);
+        IntPaintCaptionHwnd(hWnd, DC_TEXT);
+        IntNotifyWinEvent(EVENT_OBJECT_NAMECHANGE, hWnd, OBJID_WINDOW, CHILDID_SELF, 0);
+        return 1;
     }
 
     if (!Wnd && Msg == WM_WINDOWPOSCHANGED)
@@ -1367,9 +1394,10 @@ RealDefWindowProcW(HWND hWnd,
 #ifdef WOW64_I386_RUNTIME
     if (!Wnd && Msg == WM_SETTEXT)
     {
-        Result = DefSetText(hWnd, (PCWSTR)lParam, FALSE);
-        if (Result) RedrawWindow(hWnd, NULL, 0, RDW_INVALIDATE | RDW_FRAME | RDW_ERASE);
-        return Result;
+        DefSetText(hWnd, (PCWSTR)lParam, FALSE);
+        IntPaintCaptionHwnd(hWnd, DC_TEXT);
+        IntNotifyWinEvent(EVENT_OBJECT_NAMECHANGE, hWnd, OBJID_WINDOW, CHILDID_SELF, 0);
+        return 1;
     }
 
     if (!Wnd && Msg == WM_WINDOWPOSCHANGED)

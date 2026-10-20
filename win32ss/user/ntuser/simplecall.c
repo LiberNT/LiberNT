@@ -406,6 +406,9 @@ NtUserCallOneParam(
                 case ROS_SERVERINFO_ATOMICONSMPROP:
                     Result = gpsi->atomIconSmProp;
                     break;
+                case ROS_SERVERINFO_SRVIFLAGS:
+                    Result = gpsi->dwSRVIFlags;
+                    break;
                 default:
                     EngSetLastError(ERROR_INVALID_PARAMETER);
                     Result = 0;
