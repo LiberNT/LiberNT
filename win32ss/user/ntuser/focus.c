@@ -1109,6 +1109,7 @@ co_IntSetActiveWindow(
    HWND hWndPrev;
    HWND hWnd = 0;
    BOOL InAAPM;
+   LRESULT HookVeto;
    CBTACTIVATESTRUCT cbt;
 
    //ERR("co_IntSetActiveWindow 1\n");
@@ -1157,7 +1158,10 @@ co_IntSetActiveWindow(
    /* Call CBT hook chain */
    cbt.fMouse     = bMouse;
    cbt.hWndActive = hWndPrev;
-   if (co_HOOK_CallHooks( WH_CBT, HCBT_ACTIVATE, (WPARAM)hWnd, (LPARAM)&cbt))
+   Wnd->state |= WNDS_BEINGACTIVATED;
+   HookVeto = co_HOOK_CallHooks( WH_CBT, HCBT_ACTIVATE, (WPARAM)hWnd, (LPARAM)&cbt);
+   Wnd->state &= ~WNDS_BEINGACTIVATED;
+   if (HookVeto)
    {
       ERR("SetActiveWindow: WH_CBT Call Hook return!\n");
       return FALSE;
