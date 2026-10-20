@@ -153,7 +153,7 @@ if not defined ROS_ARCH if not defined VCINSTALLDIR (
     if not defined ROSBE_ROOT (
         echo. & echo Error: RosBE installation not found.
         echo Looked under %%LOCALAPPDATA%%\RosBE\pkgs\^<version^>
-        echo Install RosBE first ^(e.g. "winget install ReactOS.RosBE" then "rosbe install"^),
+        echo Install RosBE first ^(see https://github.com/LiberNT/libernt-build-toolchain^),
         echo or run from a Visual Studio Developer Command Prompt to build with MSVC.
         goto quit
     )

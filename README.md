@@ -14,7 +14,7 @@
 [Source code](https://github.com/ahmedarif193/LiberNT) &bull;
 [Issues](https://github.com/ahmedarif193/LiberNT/issues) &bull;
 [Wiki](https://github.com/ahmedarif193/LiberNT/wiki) &bull;
-[Build environment](https://github.com/ahmedarif193/winget-rosbe)
+[Build environment](https://github.com/LiberNT/libernt-build-toolchain)
 
 ## What is LiberNT?
 
@@ -51,7 +51,7 @@ You need Git, CMake, Ninja and a C/C++ compiler for your own machine. RosBE adds
 On Linux or macOS:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ahmedarif193/winget-rosbe/main/rosbe-unix-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LiberNT/libernt-build-toolchain/main/rosbe-unix-bootstrap.sh | sh
 ```
 
 On Windows, we suggest WSL2. Install it with `wsl --install`, open the Linux terminal it adds, and follow the Linux steps there. Keep the source inside the Linux file system rather than under `/mnt/c`, where builds run slower.
