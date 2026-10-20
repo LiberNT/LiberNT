@@ -422,7 +422,7 @@ GetUserPrivileges(
     NET_API_STATUS ApiStatus = NERR_Success;
     NTSTATUS Status;
 
-    FIXME("GetUserPrivileges(%p)\n", UserHandle);
+    TRACE("GetUserPrivileges(%p)\n", UserHandle);
 
     /* Get the users group memberships */
     Status = SamGetGroupsForUser(UserHandle,
