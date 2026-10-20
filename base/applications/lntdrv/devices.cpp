@@ -1,5 +1,5 @@
 /*
- * PROJECT:     LiberNT Drivers
+ * PROJECT:     LiberNT Driver Installer
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Device inventory, driver package install and install history
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
@@ -1028,7 +1028,7 @@ std::wstring DriverSource(const DeviceInfo &device, const std::vector<HistoryEnt
     if (device.Inf.empty())
         return std::wstring();
     if (!StartsWith(device.Inf, L"oem"))
-        return LoadText(IDS_SOURCE_INBOX);
+        return std::wstring();
     return LoadText(CatalogEntryInUse(device, history) ? IDS_SOURCE_CATALOG : IDS_SOURCE_THIRD_PARTY);
 }
 

@@ -1,5 +1,5 @@
 /*
- * PROJECT:     LiberNT Drivers
+ * PROJECT:     LiberNT Driver Installer
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Driver inventory and Microsoft Update Catalog installer
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
@@ -18,8 +18,10 @@
 
 #include <algorithm>
 #include <climits>
+#include <cwctype>
 #include <map>
 #include <memory>
+#include <set>
 
 namespace lntdrv
 {
@@ -30,18 +32,16 @@ namespace
 enum : UINT
 {
     WM_APP_PROGRESS = WM_APP + 1,
-    WM_APP_RESULTS,
-    WM_APP_SEARCHED,
+    WM_APP_FOUND,
     WM_APP_INSTALLED,
     WM_APP_ACTION,
     WM_APP_NAME,
+    WM_APP_SCAN_DONE,
 };
 
 enum Page
 {
     PageDevices,
-    PageSearch,
-    PageChoose,
     PageInstall,
     PageDone,
     PageHistory,
@@ -66,14 +66,16 @@ struct PageInfo
 const PageInfo Pages[PageCount] =
 {
     { IDD_DEVICES, IDS_DEVICES_TITLE, IDS_DEVICES_SUBTITLE },
-    { IDD_PROGRESS, IDS_SEARCH_TITLE, IDS_SEARCH_SUBTITLE },
-    { IDD_CHOOSE, IDS_CHOOSE_TITLE, IDS_CHOOSE_SUBTITLE },
     { IDD_PROGRESS, IDS_INSTALL_TITLE, IDS_INSTALL_SUBTITLE },
     { IDD_DONE, IDS_DONE_TITLE, IDS_DONE_SUBTITLE },
     { IDD_HISTORY, IDS_HISTORY_TITLE, IDS_HISTORY_SUBTITLE },
 };
 
 const DWORD DownloadsKeptDays = 14;
+const UINT_PTR SpinnerTimer = 1;
+const UINT SpinnerInterval = 90;
+const int SpinnerDots[8][2] = { { 1000, 0 }, { 707, 707 }, { 0, 1000 }, { -707, 707 },
+                                { -1000, 0 }, { -707, -707 }, { 0, -1000 }, { 707, -707 } };
 const size_t MaximumCandidates = 3;
 
 struct ProgressMessage
@@ -83,11 +85,9 @@ struct ProgressMessage
     int Percent;
 };
 
-struct ResultsMessage
+struct FoundMessage
 {
     std::wstring InstanceId;
-    std::wstring Note;
-    DWORD Error;
     std::vector<CatalogUpdate> Updates;
 };
 
@@ -106,6 +106,7 @@ struct Outcome
     DWORD Error;
     BOOL Reboot;
     bool Skipped;
+    std::wstring Note;
 };
 
 struct InstalledMessage
@@ -141,10 +142,15 @@ bool IsCancelled(const CancelFlag &cancel)
     return cancel && InterlockedCompareExchange(cancel.get(), 0, 0) != 0;
 }
 
-std::wstring CatalogNote(const DeviceInfo &device, const std::vector<CatalogUpdate> &updates, DWORD error)
+std::wstring CatalogNote(const DeviceInfo &device, const std::vector<CatalogUpdate> &updates, DWORD error,
+                         const std::wstring &others)
 {
     if (error == ERROR_NOT_SUPPORTED)
         return LoadText(IDS_NOTE_NOT_SEARCHABLE);
+    if (error == ERROR_LNTDRV_OTHER_ARCH)
+        return FormatText(IDS_NOTE_OTHER_ARCH, { NativeArchitecture(), others });
+    if (error == ERROR_LNTDRV_OTHER_WINDOWS)
+        return LoadText(IDS_NOTE_OTHER_WINDOWS);
     if (error == ERROR_NOT_FOUND || (!error && updates.empty()))
         return LoadText(IDS_NOTE_NOT_FOUND);
     if (error)
@@ -177,6 +183,11 @@ ChoiceState StateOf(const DeviceInfo &device, const CatalogUpdate &update, const
         default:
             return ChoiceState::Older;
     }
+}
+
+std::wstring OfferedVersion(const CatalogUpdate &update)
+{
+    return !update.Version.empty() && iswdigit(update.Version[0]) ? update.Version : update.LastUpdated;
 }
 
 bool Updatable(const DeviceInfo &device)
@@ -277,6 +288,12 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
     {
         report(LoadText(IDS_PROGRESS_VERIFY), -1);
         error = VerifyPackage(package, detail);
+        if (error && error != ERROR_LNTDRV_NOT_COVERED)
+        {
+            OutputDebugStringW((L"[LNTDRV] " + device.Name + L": " + ErrorText(error) + L"\n").c_str());
+            detail = LoadText(IDS_RESULT_UNSIGNED);
+            error = ERROR_SUCCESS;
+        }
     }
     if (!error)
     {
@@ -317,10 +334,15 @@ std::wstring OutcomeText(const Outcome &outcome)
 {
     std::wstring text;
 
+    if (!outcome.Note.empty())
+        return outcome.Note;
     if (outcome.Skipped)
         return LoadText(IDS_RESULT_SKIPPED);
     if (!outcome.Error)
-        return LoadText(outcome.Reboot ? IDS_RESULT_REBOOT : IDS_RESULT_INSTALLED);
+    {
+        text = LoadText(outcome.Reboot ? IDS_RESULT_REBOOT : IDS_RESULT_INSTALLED);
+        return outcome.Detail.empty() ? text : FormatText(IDS_RESULT_FILE, { text, outcome.Detail });
+    }
     text = ErrorText(outcome.Error);
     return outcome.Detail.empty() ? text : FormatText(IDS_RESULT_FILE, { text, outcome.Detail });
 }
@@ -533,32 +555,20 @@ private:
             case WM_APP_PROGRESS:
             {
                 std::unique_ptr<ProgressMessage> progress((ProgressMessage *)lParam);
-                if ((UINT)wParam == m_Job && (m_Current == PageSearch || m_Current == PageInstall))
+                if ((UINT)wParam == m_Job && m_Current == PageInstall)
                 {
                     SetProgress(m_Pages[m_Current], progress->Text,
-                                IsCancelled(m_Cancel) ? LoadText(IDS_INSTALL_CANCELLING) : progress->Detail,
-                                progress->Percent);
+                                IsCancelled(m_Cancel) ? LoadText(IDS_INSTALL_CANCELLING) : progress->Detail);
                 }
                 return TRUE;
             }
-            case WM_APP_RESULTS:
+            case WM_APP_FOUND:
             {
-                std::unique_ptr<ResultsMessage> results((ResultsMessage *)lParam);
-                if ((UINT)wParam == m_Job)
-                {
-                    m_Found[results->InstanceId] = results->Updates;
-                    if (results->Updates.empty() && results->Error != ERROR_NOT_FOUND)
-                        m_SearchErrors.push_back(results->Note);
-                }
+                std::unique_ptr<FoundMessage> found((FoundMessage *)lParam);
+                if ((UINT)wParam == m_Scan)
+                    OnFound(*found);
                 return TRUE;
             }
-            case WM_APP_SEARCHED:
-                if ((UINT)wParam == m_Job)
-                {
-                    FillChoices();
-                    Show(PageChoose);
-                }
-                return TRUE;
             case WM_APP_INSTALLED:
             {
                 std::unique_ptr<InstalledMessage> installed((InstalledMessage *)lParam);
@@ -579,13 +589,15 @@ private:
                 {
                     m_Busy = false;
                     LoadDevices();
+                    StartScan();
                     FillHistory();
                     UpdateButtons();
                     SetDlgItemTextW(m_Pages[PageHistory], IDC_HISTORY_NOTE, L"");
                     if (action->Error)
                         Message(TD_ERROR_ICON, FormatText(IDS_ACTION_FAILED, { ErrorText(action->Error) }));
                     else
-                        Message(TD_INFORMATION_ICON, LoadText(action->Reboot ? IDS_ACTION_DONE_REBOOT : IDS_ACTION_DONE));
+                        Message(TD_INFORMATION_ICON,
+                                LoadText(action->Reboot ? IDS_ACTION_DONE_REBOOT : IDS_ACTION_DONE));
                 }
                 return TRUE;
             }
@@ -606,8 +618,37 @@ private:
                 }
                 return TRUE;
             }
+            case WM_APP_SCAN_DONE:
+                if ((UINT)wParam == m_Scan)
+                {
+                    m_Scanning = false;
+                    m_ScanError = (DWORD)lParam;
+                    m_Resolving.clear();
+                    KillTimer(m_hwnd, SpinnerTimer);
+                    InvalidateRect(GetDlgItem(m_Pages[PageDevices], IDC_DEVICES), NULL, FALSE);
+                    UpdateScanStatus();
+                    UpdateButtons();
+                }
+                return TRUE;
+            case WM_TIMER:
+                if (wParam == SpinnerTimer)
+                {
+                    HWND list = GetDlgItem(m_Pages[PageDevices], IDC_DEVICES);
+
+                    m_Frame++;
+                    for (size_t i = 0; i < m_Devices.size(); i++)
+                    {
+                        if (m_Resolving.count(m_Devices[i].InstanceId))
+                            ListView_RedrawItems(list, (int)i, (int)i);
+                    }
+                    if (m_Resolving.empty())
+                        KillTimer(m_hwnd, SpinnerTimer);
+                    return TRUE;
+                }
+                break;
             case WM_DESTROY:
-                InterlockedExchange(m_NameCancel.get(), 1);
+                KillTimer(m_hwnd, SpinnerTimer);
+                InterlockedExchange(m_ScanCancel.get(), 1);
                 if (m_Cancel)
                     InterlockedExchange(m_Cancel.get(), 1);
                 if (m_TitleFont)
@@ -634,6 +675,10 @@ private:
                 case IDC_DETAILS:
                     ShowDetails();
                     return TRUE;
+                case IDC_SELECT_ALL:
+                case IDC_SELECT_NONE:
+                    SelectAll(page, LOWORD(wParam) == IDC_SELECT_ALL);
+                    return TRUE;
                 case IDC_ROLLBACK:
                     StartAction(true);
                     return TRUE;
@@ -650,8 +695,6 @@ private:
                 return OnDeviceNotify(page, header);
             else if (header->idFrom == IDC_HISTORY_LIST && header->code == LVN_ITEMCHANGED)
                 UpdateButtons();
-            else if (header->idFrom == IDC_CHOICES)
-                return OnChoiceNotify(page, header);
         }
         return FALSE;
     }
@@ -663,9 +706,26 @@ private:
                      change->iItem >= 0 && change->iItem < (int)m_Devices.size() && (change->uChanged & LVIF_STATE) &&
                      ((change->uNewState ^ change->uOldState) & LVIS_STATEIMAGEMASK);
 
+        if (header->code == NM_CUSTOMDRAW)
+        {
+            NMLVCUSTOMDRAW *draw = (NMLVCUSTOMDRAW *)header;
+            LRESULT result = CDRF_DODEFAULT;
+            size_t row = (size_t)draw->nmcd.dwItemSpec;
+
+            if (draw->nmcd.dwDrawStage == CDDS_PREPAINT)
+                result = CDRF_NOTIFYITEMDRAW;
+            else if (draw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT && row < m_Devices.size() &&
+                     m_Resolving.count(m_Devices[row].InstanceId))
+                result = CDRF_NOTIFYPOSTPAINT;
+            else if (draw->nmcd.dwDrawStage == CDDS_ITEMPOSTPAINT)
+                PaintSpinner(header->hwndFrom, draw->nmcd.hdc, (int)row);
+            SetWindowLongPtrW(page, DWLP_MSGRESULT, result);
+            return TRUE;
+        }
         if (header->code == NM_DBLCLK)
             ShowDetails();
-        else if (header->code == LVN_ITEMCHANGING && image && !m_Filling && !Updatable(m_Devices[change->iItem]))
+        else if (header->code == LVN_ITEMCHANGING && image && !m_Filling &&
+                 !m_Found.count(m_Devices[change->iItem].InstanceId))
         {
             SetWindowLongPtrW(page, DWLP_MSGRESULT, TRUE);
             return TRUE;
@@ -683,32 +743,42 @@ private:
         return FALSE;
     }
 
-    INT_PTR OnChoiceNotify(HWND page, NMHDR *header)
+    void PaintSpinner(HWND list, HDC hdc, int row)
     {
-        HWND list = header->hwndFrom;
-        NMLISTVIEW *change = (NMLISTVIEW *)header;
+        RECT cell;
+        COLORREF fore = ListView_GetTextColor(list), back = ListView_GetTextBkColor(list);
+        HGDIOBJ pen;
+        int size, radius, dot, x, y;
 
-        UNREFERENCED_PARAMETER(page);
-        if (header->code == LVN_ITEMCHANGED && !m_Filling)
+        if (!ListView_GetItemRect(list, row, &cell, LVIR_LABEL))
+            return;
+        size = cell.bottom - cell.top - 4;
+        if (size < 8)
+            return;
+        pen = SelectObject(hdc, GetStockObject(NULL_PEN));
+        if (fore == CLR_DEFAULT)
+            fore = GetSysColor(COLOR_WINDOWTEXT);
+        if (back == CLR_DEFAULT || back == CLR_NONE)
+            back = GetSysColor(COLOR_WINDOW);
+        radius = size / 2 - 1;
+        dot = std::max(1, size / 8);
+        x = cell.right - size / 2 - 4;
+        y = (cell.top + cell.bottom) / 2;
+        for (int i = 0; i < 8; i++)
         {
-            if (change->iItem >= 0 && change->iItem < (int)m_Choices.size() && (change->uChanged & LVIF_STATE) &&
-                ((change->uNewState ^ change->uOldState) & LVIS_STATEIMAGEMASK) &&
-                ListView_GetCheckState(list, change->iItem) == 1)
-            {
-                m_Filling = true;
-                for (int i = 0; i < (int)m_Choices.size(); i++)
-                {
-                    if (i != change->iItem &&
-                        m_Choices[i].Device.InstanceId == m_Choices[change->iItem].Device.InstanceId)
-                    {
-                        ListView_SetCheckState(list, i, FALSE);
-                    }
-                }
-                m_Filling = false;
-            }
-            UpdateButtons();
+            int age = (int)((m_Frame + 8 - i) % 8), weight = 255 - age * 28;
+            COLORREF color = RGB((GetRValue(fore) * weight + GetRValue(back) * (255 - weight)) / 255,
+                                 (GetGValue(fore) * weight + GetGValue(back) * (255 - weight)) / 255,
+                                 (GetBValue(fore) * weight + GetBValue(back) * (255 - weight)) / 255);
+            HBRUSH brush = CreateSolidBrush(color);
+            HGDIOBJ old = SelectObject(hdc, brush);
+            int cx = x + SpinnerDots[i][0] * radius / 1000, cy = y + SpinnerDots[i][1] * radius / 1000;
+
+            Ellipse(hdc, cx - dot, cy - dot, cx + dot + 1, cy + dot + 1);
+            SelectObject(hdc, old);
+            DeleteObject(brush);
         }
-        return FALSE;
+        SelectObject(hdc, pen);
     }
 
     void Message(PCWSTR icon, const std::wstring &text)
@@ -817,16 +887,12 @@ private:
                          SWP_NOACTIVATE);
         }
         InitList(GetDlgItem(m_Pages[PageDevices], IDC_DEVICES), LVS_EX_CHECKBOXES,
-                 { { IDS_COL_DEVICE, 42 }, { IDS_COL_STATUS, 20 }, { IDS_COL_VERSION, 17 }, { IDS_COL_SOURCE, 21 } });
-        InitList(GetDlgItem(m_Pages[PageChoose], IDC_CHOICES), LVS_EX_CHECKBOXES,
-                 { { IDS_COL_DEVICE, 30 }, { IDS_COL_DRIVER, 34 }, { IDS_COL_OFFERED, 14 }, { IDS_COL_STATUS, 22 } });
+                 { { IDS_COL_DEVICE, 46 }, { IDS_COL_NEW, 36 }, { IDS_COL_VERSION, 18 } });
         InitList(GetDlgItem(m_Pages[PageDone], IDC_RESULTS), 0,
                  { { IDS_COL_DEVICE, 34 }, { IDS_COL_DRIVER, 34 }, { IDS_COL_RESULT, 32 } });
         InitList(GetDlgItem(m_Pages[PageHistory], IDC_HISTORY_LIST), 0,
                  { { IDS_COL_DATE, 22 }, { IDS_COL_ACTION, 14 }, { IDS_COL_DEVICE, 24 }, { IDS_COL_DRIVER, 24 },
                    { IDS_COL_RESULT, 16 } });
-        SendDlgItemMessageW(m_Pages[PageSearch], IDC_PROGRESS_BAR, PBM_SETRANGE32, 0, 100);
-        SendDlgItemMessageW(m_Pages[PageInstall], IDC_PROGRESS_BAR, PBM_SETRANGE32, 0, 100);
 
         Center();
         if (IsUserAnAdmin())
@@ -834,7 +900,7 @@ private:
         LoadDevices();
         Show(PageDevices);
         SetFocus(GetDlgItem(m_Pages[PageDevices], IDC_DEVICES));
-        ResolveNames();
+        StartScan();
     }
 
     void Center()
@@ -887,7 +953,7 @@ private:
         SetDlgItemTextW(m_hwnd, IDC_FRAME_SUBTITLE, LoadText(Pages[page].Subtitle).c_str());
         SetDlgItemTextW(m_hwnd, IDC_FRAME_BACK, LoadText(IDS_BACK).c_str());
         SetDlgItemTextW(m_hwnd, IDC_FRAME_NEXT,
-                        LoadText(page == PageChoose ? IDS_INSTALL : page == PageDone ? IDS_FINISH : IDS_NEXT).c_str());
+                        LoadText(page == PageDevices ? IDS_INSTALL : page == PageDone ? IDS_FINISH : IDS_NEXT).c_str());
         SetDlgItemTextW(m_hwnd, IDCANCEL, LoadText(IDS_CANCEL).c_str());
         ShowWindow(m_Pages[page], SW_SHOW);
         UpdateButtons();
@@ -917,23 +983,17 @@ private:
 
     void UpdateButtons()
     {
-        HWND list = GetDlgItem(m_Pages[PageChoose], IDC_CHOICES);
         const DeviceInfo *device = SelectedDevice();
         const HistoryEntry *entry = SelectedEntry();
-        bool back = m_Current == PageChoose || m_Current == PageHistory;
-        bool next = m_Current != PageHistory && m_Current != PageSearch && m_Current != PageInstall;
+        bool back = m_Current == PageHistory;
+        bool next = m_Current != PageHistory && m_Current != PageInstall;
         bool cancel = m_Current != PageDone;
         bool cancelEnabled = m_Current != PageInstall || !IsCancelled(m_Cancel);
         bool nextEnabled = m_Current == PageDone;
         bool usable = entry && !m_Busy && entry->Action == L"install" && !entry->Result && EntryInUse(*entry);
 
         if (m_Current == PageDevices)
-            nextEnabled = !SearchList().empty();
-        else if (m_Current == PageChoose)
-        {
-            for (int i = 0; i < ListView_GetItemCount(list) && !nextEnabled; i++)
-                nextEnabled = ListView_GetCheckState(list, i) == 1;
-        }
+            nextEnabled = !InstallList().empty();
         ShowWindow(GetDlgItem(m_hwnd, IDC_FRAME_BACK), back ? SW_SHOW : SW_HIDE);
         ShowWindow(GetDlgItem(m_hwnd, IDC_FRAME_NEXT), next ? SW_SHOW : SW_HIDE);
         ShowWindow(GetDlgItem(m_hwnd, IDCANCEL), cancel ? SW_SHOW : SW_HIDE);
@@ -954,9 +1014,10 @@ private:
         if (!IsWindowVisible(next) || !IsWindowEnabled(next))
             return;
         if (m_Current == PageDevices)
-            StartSearch();
-        else if (m_Current == PageChoose)
-            StartInstall();
+        {
+            if (EnsureAdministrator())
+                PrepareInstall();
+        }
         else if (m_Current == PageDone)
             EndDialog(m_hwnd, IDOK);
     }
@@ -978,13 +1039,7 @@ private:
         }
         if (!IsWindowEnabled(GetDlgItem(m_hwnd, IDCANCEL)))
             return;
-        if (m_Current == PageSearch)
-        {
-            InterlockedExchange(m_Cancel.get(), 1);
-            m_Job++;
-            Show(PageDevices);
-        }
-        else if (m_Current == PageInstall)
+        if (m_Current == PageInstall)
         {
             InterlockedExchange(m_Cancel.get(), 1);
             SetDlgItemTextW(m_Pages[PageInstall], IDC_PROGRESS_DETAIL, LoadText(IDS_INSTALL_CANCELLING).c_str());
@@ -1000,21 +1055,28 @@ private:
     {
         auto selected = m_Selected.find(device.InstanceId);
 
-        if (!Updatable(device))
+        if (!m_Found.count(device.InstanceId))
             return false;
-        return selected != m_Selected.end() ? selected->second : NeedsDriver(device);
+        return selected == m_Selected.end() || selected->second;
     }
 
-    std::vector<DeviceInfo> SearchList() const
+    std::vector<Choice> InstallList() const
     {
-        std::vector<DeviceInfo> devices;
+        std::vector<Choice> choices;
 
         for (const DeviceInfo &device : m_Devices)
         {
-            if (Ticked(device))
-                devices.push_back(device);
+            auto found = m_Found.find(device.InstanceId);
+
+            if (found != m_Found.end() && Ticked(device))
+            {
+                Choice choice = found->second;
+
+                choice.Device = device;
+                choices.push_back(choice);
+            }
         }
-        return devices;
+        return choices;
     }
 
     void LoadDevices()
@@ -1022,7 +1084,11 @@ private:
         HWND list = GetDlgItem(m_Pages[PageDevices], IDC_DEVICES);
 
         m_History = LoadHistory();
+        m_Found.clear();
         EnumerateDevices(m_Devices);
+        m_Devices.erase(std::remove_if(m_Devices.begin(), m_Devices.end(),
+                                       [](const DeviceInfo &device) { return !Updatable(device); }),
+                        m_Devices.end());
         for (DeviceInfo &device : m_Devices)
         {
             auto name = m_Names.find(device.InstanceId);
@@ -1039,17 +1105,7 @@ private:
         {
             int row = AddRow(list, device.Name);
 
-            SetCell(list, row, 1, DeviceStatus(device));
-            SetCell(list, row, 2, device.DriverVersion);
-            SetCell(list, row, 3, DriverSource(device, m_History));
-            if (Updatable(device))
-            {
-                ListView_SetCheckState(list, row, Ticked(device));
-            }
-            else
-            {
-                ListView_SetItemState(list, row, INDEXTOSTATEIMAGEMASK(0), LVIS_STATEIMAGEMASK);
-            }
+            ListView_SetItemState(list, row, INDEXTOSTATEIMAGEMASK(0), LVIS_STATEIMAGEMASK);
         }
         SendMessageW(list, WM_SETREDRAW, TRUE, 0);
         m_Filling = false;
@@ -1067,51 +1123,152 @@ private:
         }
         SetDlgItemTextW(m_Pages[PageDevices], IDC_DEVICES_NOTE,
                         FormatText(IDS_DEVICES_NOTE, { std::to_wstring(m_Devices.size()), std::to_wstring(missing),
-                                                       std::to_wstring(SearchList().size()),
+                                                       std::to_wstring(InstallList().size()),
                                                        NativeArchitecture() }).c_str());
     }
 
-    void ResolveNames()
+    void UpdateScanStatus()
     {
-        std::vector<DeviceInfo> unknown;
-        HWND hwnd = m_hwnd;
-        CancelFlag cancel = m_NameCancel;
+        std::wstring text;
 
-        for (const DeviceInfo &device : m_Devices)
-        {
-            if (NeedsDriver(device) && !device.NameResolved && !CatalogQueries(device).empty())
-                unknown.push_back(device);
-        }
-        if (unknown.empty())
+        if (m_Scanning)
+            text = FormatText(IDS_SCAN_PROGRESS, { std::to_wstring(std::min(m_Scanned + 1, m_ScanTotal)),
+                                                   std::to_wstring(m_ScanTotal) });
+        else if (m_ScanError)
+            text = ErrorText(m_ScanError);
+        else if (!m_Found.empty())
+            text = FormatText(IDS_SCAN_FOUND, { std::to_wstring(m_Found.size()) });
+        else
+            text = LoadText(IDS_SCAN_NONE);
+        SetDlgItemTextW(m_Pages[PageDevices], IDC_DEVICES_STATUS, text.c_str());
+    }
+
+    void StartScan()
+    {
+        std::vector<DeviceInfo> devices = m_Devices;
+        HWND hwnd = m_hwnd;
+        UINT scan = ++m_Scan;
+        CancelFlag cancel;
+
+        InterlockedExchange(m_ScanCancel.get(), 1);
+        m_ScanCancel = std::make_shared<LONG>(0);
+        cancel = m_ScanCancel;
+        m_Found.clear();
+        m_Resolving.clear();
+        m_Scanned = 0;
+        m_ScanTotal = devices.size();
+        m_ScanError = ERROR_SUCCESS;
+        m_Scanning = !devices.empty();
+        for (const DeviceInfo &device : devices)
+            m_Resolving.insert(device.InstanceId);
+        UpdateScanStatus();
+        UpdateButtons();
+        if (devices.empty())
             return;
-        StartJob([hwnd, unknown, cancel]() {
+        SetTimer(m_hwnd, SpinnerTimer, SpinnerInterval, NULL);
+        if (!StartJob([hwnd, devices, scan, cancel]() {
             Catalog catalog;
+            DWORD failure = ERROR_SUCCESS;
 
             catalog.SetCancel(cancel.get());
-            for (const DeviceInfo &device : unknown)
+            for (const DeviceInfo &device : devices)
             {
+                FoundMessage *found;
                 std::wstring name;
+                bool unnamed = NeedsDriver(device) && !device.NameResolved;
+                DWORD error;
 
                 if (IsCancelled(cancel))
                     break;
-                name = LocalDeviceName(device);
-                if (name.empty())
-                {
-                    std::vector<CatalogUpdate> updates;
-                    DWORD error = SearchDevice(catalog, device, updates);
-
-                    if (!updates.empty())
-                        name = updates.front().Model;
-                    if (IsOfflineError(error))
-                        break;
-                }
+                found = new FoundMessage{ device.InstanceId, std::vector<CatalogUpdate>() };
+                if (unnamed)
+                    name = LocalDeviceName(device);
+                error = SearchDevice(catalog, device, found->Updates);
+                if (unnamed && name.empty())
+                    name = found->Updates.empty() ? catalog.OtherModel() : found->Updates.front().Model;
                 if (!name.empty())
                 {
                     StoreDeviceName(device, name);
-                    Post(hwnd, WM_APP_NAME, 0, new NameMessage{ device.InstanceId, name });
+                    Post(hwnd, WM_APP_NAME, scan, new NameMessage{ device.InstanceId, name });
+                }
+                OutputDebugStringW((L"[LNTDRV] " + (name.empty() ? device.Name : name) + L" (" + device.InstanceId +
+                                    L"): " + CatalogNote(device, found->Updates, error, catalog.OtherArchitectures()) +
+                                    L"\n").c_str());
+                Post(hwnd, WM_APP_FOUND, scan, found);
+                if (IsOfflineError(error) || error == ERROR_CANCELLED)
+                {
+                    failure = error == ERROR_CANCELLED ? ERROR_SUCCESS : error;
+                    break;
                 }
             }
-        });
+            PostMessageW(hwnd, WM_APP_SCAN_DONE, scan, failure);
+        }))
+        {
+            m_Scanning = false;
+            m_Resolving.clear();
+            KillTimer(m_hwnd, SpinnerTimer);
+            UpdateScanStatus();
+        }
+    }
+
+    void OnFound(const FoundMessage &found)
+    {
+        HWND list = GetDlgItem(m_Pages[PageDevices], IDC_DEVICES);
+
+        m_Resolving.erase(found.InstanceId);
+        m_Scanned++;
+        for (size_t i = 0; i < m_Devices.size(); i++)
+        {
+            const DeviceInfo &device = m_Devices[i];
+
+            if (device.InstanceId != found.InstanceId)
+                continue;
+            for (const CatalogUpdate &update : found.Updates)
+            {
+                ChoiceState state = StateOf(device, update, m_History);
+
+                if (Selectable(state))
+                {
+                    m_Found[device.InstanceId] = Choice{ device, update, state };
+                    break;
+                }
+            }
+            if (m_Found.count(device.InstanceId))
+            {
+                m_Filling = true;
+                SetCell(list, (int)i, 1, m_Found[device.InstanceId].Update.Title);
+                SetCell(list, (int)i, 2, OfferedVersion(m_Found[device.InstanceId].Update));
+                ListView_SetCheckState(list, (int)i, Ticked(device));
+                m_Filling = false;
+                ListView_RedrawItems(list, (int)i, (int)i);
+            }
+            else
+            {
+                ListView_DeleteItem(list, (int)i);
+                m_Devices.erase(m_Devices.begin() + i);
+            }
+            break;
+        }
+        UpdateScanStatus();
+        UpdateDevicesNote();
+        UpdateButtons();
+    }
+
+    void SelectAll(HWND page, bool check)
+    {
+        HWND list = GetDlgItem(page, IDC_DEVICES);
+
+        m_Filling = true;
+        for (size_t i = 0; i < m_Devices.size(); i++)
+        {
+            if (!m_Found.count(m_Devices[i].InstanceId))
+                continue;
+            m_Selected[m_Devices[i].InstanceId] = check;
+            ListView_SetCheckState(list, (int)i, check);
+        }
+        m_Filling = false;
+        UpdateDevicesNote();
+        UpdateButtons();
     }
 
     void ShowDetails()
@@ -1125,30 +1282,10 @@ private:
         DialogBoxParamW(m_Instance, MAKEINTRESOURCEW(IDD_DETAILS), m_hwnd, DetailsProc, (LPARAM)text.c_str());
     }
 
-    void SetProgress(HWND page, const std::wstring &text, const std::wstring &detail, int percent)
+    void SetProgress(HWND page, const std::wstring &text, const std::wstring &detail)
     {
-        HWND bar = GetDlgItem(page, IDC_PROGRESS_BAR);
-        LONG_PTR style = GetWindowLongPtrW(bar, GWL_STYLE);
-
         SetDlgItemTextW(page, IDC_PROGRESS_TEXT, text.c_str());
         SetDlgItemTextW(page, IDC_PROGRESS_DETAIL, detail.c_str());
-        if (percent < 0)
-        {
-            if (!(style & PBS_MARQUEE))
-            {
-                SetWindowLongPtrW(bar, GWL_STYLE, style | PBS_MARQUEE);
-                SendMessageW(bar, PBM_SETMARQUEE, TRUE, 30);
-            }
-        }
-        else
-        {
-            if (style & PBS_MARQUEE)
-            {
-                SendMessageW(bar, PBM_SETMARQUEE, FALSE, 0);
-                SetWindowLongPtrW(bar, GWL_STYLE, style & ~PBS_MARQUEE);
-            }
-            SendMessageW(bar, PBM_SETPOS, percent, 0);
-        }
     }
 
     bool StartJob(std::function<void()> work)
@@ -1179,127 +1316,30 @@ private:
         return ++m_Job;
     }
 
-    void StartSearch()
+    void PrepareInstall()
     {
-        std::vector<DeviceInfo> devices = SearchList();
+        std::vector<Choice> chosen = InstallList();
+
+        if (chosen.empty())
+            return;
+        InterlockedExchange(m_ScanCancel.get(), 1);
+        m_Scan++;
+        m_Scanning = false;
+        m_Resolving.clear();
+        KillTimer(m_hwnd, SpinnerTimer);
+        StartInstall(chosen);
+    }
+
+    void StartInstall(const std::vector<Choice> &chosen)
+    {
         HWND hwnd = m_hwnd;
         CancelFlag cancel;
         UINT job;
 
-        if (devices.empty())
-            return;
-        job = NewJob();
-        cancel = m_Cancel;
-        m_Single = devices.size() == 1;
-        m_Found.clear();
-        m_SearchErrors.clear();
-        SetProgress(m_Pages[PageSearch], FormatText(IDS_SEARCH_START, { std::to_wstring(devices.size()) }),
-                    std::wstring(), -1);
-        Show(PageSearch);
-        if (!StartJob([hwnd, devices, job, cancel]() {
-            Catalog catalog;
-
-            catalog.SetCancel(cancel.get());
-            for (size_t i = 0; i < devices.size() && !IsCancelled(cancel); i++)
-            {
-                ResultsMessage *results = new ResultsMessage;
-
-                Post(hwnd, WM_APP_PROGRESS, job,
-                     new ProgressMessage{ FormatText(IDS_SEARCH_STEP, { std::to_wstring(i + 1),
-                                                                         std::to_wstring(devices.size()) }),
-                                          devices[i].Name, (int)(i * 100 / devices.size()) });
-                results->Error = SearchDevice(catalog, devices[i], results->Updates);
-                results->InstanceId = devices[i].InstanceId;
-                results->Note = devices[i].Name + L": " + CatalogNote(devices[i], results->Updates, results->Error);
-                Post(hwnd, WM_APP_RESULTS, job, results);
-                if (IsOfflineError(results->Error))
-                    break;
-            }
-            PostMessageW(hwnd, WM_APP_SEARCHED, job, 0);
-        }))
-        {
-            Show(PageDevices);
-        }
-    }
-
-    void FillChoices()
-    {
-        HWND list = GetDlgItem(m_Pages[PageChoose], IDC_CHOICES);
-        size_t searched = m_Found.size(), absent = 0, current = 0;
-        std::wstring note;
-        std::map<std::wstring, bool> checked;
-
-        m_Choices.clear();
-        for (const DeviceInfo &device : m_Devices)
-        {
-            auto found = m_Found.find(device.InstanceId);
-            bool offered = false;
-
-            if (found == m_Found.end())
-                continue;
-            if (found->second.empty())
-            {
-                absent++;
-                continue;
-            }
-            for (size_t i = 0; i < found->second.size() && (m_Single || !offered); i++)
-            {
-                ChoiceState state = StateOf(device, found->second[i], m_History);
-
-                if (!Selectable(state))
-                    continue;
-                m_Choices.push_back(Choice{ device, found->second[i], state });
-                offered = true;
-            }
-            if (!offered)
-                current++;
-        }
-        m_Filling = true;
-        SendMessageW(list, WM_SETREDRAW, FALSE, 0);
-        ListView_DeleteAllItems(list);
-        for (const Choice &choice : m_Choices)
-        {
-            int row = AddRow(list, choice.Device.Name);
-
-            SetCell(list, row, 1, choice.Update.Title);
-            SetCell(list, row, 2, choice.Update.Version);
-            SetCell(list, row, 3, LoadText(choice.State == ChoiceState::Missing ? IDS_STATE_MISSING : IDS_STATE_NEWER));
-            ListView_SetCheckState(list, row, !checked[choice.Device.InstanceId]);
-            checked[choice.Device.InstanceId] = true;
-        }
-        SendMessageW(list, WM_SETREDRAW, TRUE, 0);
-        m_Filling = false;
-        if (m_Choices.empty())
-            note = FormatText(IDS_CHOOSE_NONE, { std::to_wstring(searched) });
-        else
-            note = FormatText(IDS_CHOOSE_FOUND, { std::to_wstring(checked.size()), std::to_wstring(searched) });
-        if (current)
-            note += L" " + FormatText(IDS_CHOOSE_CURRENT, { std::to_wstring(current) });
-        if (absent)
-            note += L" " + FormatText(IDS_CHOOSE_ABSENT, { std::to_wstring(absent) });
-        if (!m_SearchErrors.empty())
-            note += L" " + m_SearchErrors.front();
-        SetDlgItemTextW(m_Pages[PageChoose], IDC_CHOOSE_NOTE, note.c_str());
-    }
-
-    void StartInstall()
-    {
-        HWND list = GetDlgItem(m_Pages[PageChoose], IDC_CHOICES), hwnd = m_hwnd;
-        std::vector<Choice> chosen;
-        CancelFlag cancel;
-        UINT job;
-
-        for (int i = 0; i < ListView_GetItemCount(list) && i < (int)m_Choices.size(); i++)
-        {
-            if (ListView_GetCheckState(list, i) == 1)
-                chosen.push_back(m_Choices[i]);
-        }
-        if (chosen.empty() || !EnsureAdministrator())
-            return;
         job = NewJob();
         cancel = m_Cancel;
         SetProgress(m_Pages[PageInstall], FormatText(IDS_INSTALL_START, { std::to_wstring(chosen.size()) }),
-                    std::wstring(), -1);
+                    std::wstring());
         Show(PageInstall);
         if (!StartJob([hwnd, chosen, job, cancel]() {
             InstalledMessage *installed = new InstalledMessage;
@@ -1334,6 +1374,8 @@ private:
                     if (outcome.Error == ERROR_CANCELLED)
                         installed->Cancelled = true;
                 }
+                OutputDebugStringW((L"[LNTDRV] " + choice.Device.Name + L": " + choice.Update.Title + L": " +
+                                    OutcomeText(outcome) + L"\n").c_str());
                 installed->Outcomes.push_back(outcome);
                 Post(hwnd, WM_APP_PROGRESS, job,
                      new ProgressMessage{ step, std::wstring(), (int)((i + 1) * 100 / chosen.size()) });
@@ -1341,14 +1383,14 @@ private:
             Post(hwnd, WM_APP_INSTALLED, job, installed);
         }))
         {
-            Show(PageChoose);
+            Show(PageDevices);
         }
     }
 
     void FillDone(bool cancelled)
     {
         HWND list = GetDlgItem(m_Pages[PageDone], IDC_RESULTS);
-        size_t failed = 0;
+        size_t failed = 0, installed = 0;
         bool reboot = false;
         std::wstring note;
 
@@ -1361,6 +1403,8 @@ private:
             SetCell(list, row, 2, OutcomeText(outcome));
             if (outcome.Error && outcome.Error != ERROR_CANCELLED)
                 failed++;
+            else if (!outcome.Error && !outcome.Skipped && outcome.Note.empty())
+                installed++;
             if (outcome.Reboot)
                 reboot = true;
         }
@@ -1368,6 +1412,8 @@ private:
             note = LoadText(IDS_DONE_CANCELLED);
         else if (failed)
             note = FormatText(IDS_DONE_FAILED, { std::to_wstring(failed) });
+        else if (!installed)
+            note = LoadText(IDS_DONE_NOTHING);
         else
             note = LoadText(IDS_DONE_OK);
         if (reboot)
@@ -1447,17 +1493,21 @@ private:
     int m_Corner = 8;
     UINT m_Job = 0;
     CancelFlag m_Cancel = std::make_shared<LONG>(0);
-    CancelFlag m_NameCancel = std::make_shared<LONG>(0);
+    CancelFlag m_ScanCancel = std::make_shared<LONG>(0);
+    UINT m_Scan = 0;
+    bool m_Scanning = false;
+    size_t m_Scanned = 0;
+    size_t m_ScanTotal = 0;
+    DWORD m_ScanError = ERROR_SUCCESS;
     bool m_Busy = false;
-    bool m_Single = false;
+    UINT m_Frame = 0;
     bool m_Filling = false;
     std::vector<DeviceInfo> m_Devices;
     std::vector<HistoryEntry> m_History;
-    std::map<std::wstring, std::vector<CatalogUpdate>> m_Found;
+    std::map<std::wstring, Choice> m_Found;
     std::map<std::wstring, bool> m_Selected;
     std::map<std::wstring, std::wstring> m_Names;
-    std::vector<std::wstring> m_SearchErrors;
-    std::vector<Choice> m_Choices;
+    std::set<std::wstring> m_Resolving;
     std::vector<Outcome> m_Outcomes;
 };
 
@@ -1490,6 +1540,41 @@ void PrintProgress(const std::wstring &text, int percent)
 {
     if (percent < 0 || percent % 25 == 0)
         Print(L"  " + text + (percent >= 0 ? L" " + std::to_wstring(percent) + L"%" : std::wstring()));
+}
+
+std::wstring GroupKey(const DeviceInfo &device)
+{
+    return device.HardwareIds.empty() ? device.InstanceId : device.HardwareIds.front();
+}
+
+std::vector<std::vector<DeviceInfo>> MissingGroups(const std::vector<DeviceInfo> &devices, bool searchable)
+{
+    std::vector<std::vector<DeviceInfo>> groups;
+
+    for (const DeviceInfo &device : devices)
+    {
+        std::wstring key = GroupKey(device);
+        auto group = std::find_if(groups.begin(), groups.end(), [&key](const std::vector<DeviceInfo> &other) {
+            return _wcsicmp(GroupKey(other.front()).c_str(), key.c_str()) == 0;
+        });
+
+        if (!NeedsDriver(device) || (searchable && CatalogQueries(device).empty()))
+            continue;
+        if (group == groups.end())
+            groups.push_back(std::vector<DeviceInfo>(1, device));
+        else
+            group->push_back(device);
+    }
+    return groups;
+}
+
+std::wstring GroupName(const std::vector<DeviceInfo> &group)
+{
+    const DeviceInfo &first = group.front();
+
+    if (group.size() == 1)
+        return first.Name + L" (" + first.InstanceId + L")";
+    return FormatText(IDS_CLI_GROUP, { first.Name, GroupKey(first), std::to_wstring(group.size()) });
 }
 
 std::wstring ErrorWithDetail(DWORD error, const std::wstring &detail)
@@ -1535,6 +1620,9 @@ int RunCommand(int argc, LPWSTR *argv)
 
     if (_wcsicmp(command.c_str(), L"list") == 0)
     {
+        devices.erase(std::remove_if(devices.begin(), devices.end(),
+                                     [](const DeviceInfo &current) { return !Updatable(current); }),
+                      devices.end());
         for (const DeviceInfo &current : devices)
         {
             Print(current.Name + L" | " + DeviceStatus(current) + L" | " + current.Class + L" | " +
@@ -1547,17 +1635,16 @@ int RunCommand(int argc, LPWSTR *argv)
     if (_wcsicmp(command.c_str(), L"scan") == 0)
     {
         Catalog catalog;
+        std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, false);
         size_t missing = 0;
 
-        for (const DeviceInfo &current : devices)
+        for (const std::vector<DeviceInfo> &group : groups)
         {
             std::vector<CatalogUpdate> updates;
 
-            if (!NeedsDriver(current))
-                continue;
-            missing++;
-            error = SearchDevice(catalog, current, updates);
-            Print(current.Name + L" (" + current.InstanceId + L"): " + CatalogNote(current, updates, error));
+            missing += group.size();
+            error = SearchDevice(catalog, group.front(), updates);
+            Print(GroupName(group) + L": " + CatalogNote(group.front(), updates, error, catalog.OtherArchitectures()));
             if (!updates.empty())
                 PrintUpdate(updates.front());
             if (IsOfflineError(error))
@@ -1569,41 +1656,43 @@ int RunCommand(int argc, LPWSTR *argv)
     if (installAll)
     {
         Catalog catalog;
-        std::vector<std::wstring> pending;
-        size_t installed = 0, failed = 0, absent = 0;
+        std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, true);
+        size_t installed = 0, failed = 0, absent = 0, missing = 0;
         bool restart = false;
 
-        for (const DeviceInfo &current : devices)
-        {
-            if (NeedsDriver(current) && !CatalogQueries(current).empty())
-                pending.push_back(current.InstanceId);
-        }
-        Print(FormatText(IDS_CLI_MISSING_TOTAL, { std::to_wstring(pending.size()) }));
-        for (const std::wstring &instanceId : pending)
+        for (const std::vector<DeviceInfo> &group : groups)
+            missing += group.size();
+        Print(FormatText(IDS_CLI_MISSING_TOTAL, { std::to_wstring(missing) }));
+        for (const std::vector<DeviceInfo> &group : groups)
         {
             std::vector<CatalogUpdate> updates;
             DeviceInfo target;
             std::wstring detail;
             BOOL reboot = FALSE;
 
-            if (!FindDevice(instanceId, target) || !NeedsDriver(target))
+            if (!FindDevice(group.front().InstanceId, target) || !NeedsDriver(target))
             {
-                Print(FormatText(IDS_CLI_ALREADY, { instanceId }));
+                Print(FormatText(IDS_CLI_ALREADY, { GroupName(group) }));
                 continue;
             }
             error = SearchDevice(catalog, target, updates);
             if (updates.empty())
             {
-                Print(target.Name + L" (" + instanceId + L"): " + CatalogNote(target, updates, error));
-                if (error && error != ERROR_NOT_FOUND)
+                Print(GroupName(group) + L": " + CatalogNote(target, updates, error, catalog.OtherArchitectures()));
+                if (error && error != ERROR_NOT_FOUND && error != ERROR_LNTDRV_OTHER_ARCH &&
+                    error != ERROR_LNTDRV_OTHER_WINDOWS)
+                {
                     failed++;
+                }
                 else
+                {
                     absent++;
+                }
                 if (IsOfflineError(error))
                     break;
                 continue;
             }
-            Print(FormatText(IDS_CLI_INSTALLING, { target.Name, instanceId }));
+            Print(FormatText(IDS_CLI_INSTALLING, { GroupName(group), target.InstanceId }));
             for (size_t i = 0; i < updates.size() && i < MaximumCandidates; i++)
             {
                 PrintUpdate(updates[i]);
@@ -1644,7 +1733,7 @@ int RunCommand(int argc, LPWSTR *argv)
             return ERROR_NOT_FOUND;
         }
         error = SearchDevice(catalog, *device, updates);
-        Print(device->Name + L": " + CatalogNote(*device, updates, error));
+        Print(device->Name + L": " + CatalogNote(*device, updates, error, catalog.OtherArchitectures()));
         for (const CatalogUpdate &current : updates)
             PrintUpdate(current);
         if (!install || updates.empty())

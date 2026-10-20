@@ -2,7 +2,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 IDD_FRAME DIALOGEX 0, 0, 420, 240
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "LiberNT Drivers"
+CAPTION "LiberNT Driver Installer"
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_FRAME_TITLE, 120, 10, 290, 14, SS_NOPREFIX
@@ -18,9 +18,12 @@ IDD_DEVICES DIALOGEX 0, 0, 290, 160
 STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
-    CONTROL "", IDC_DEVICES, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 128
+    LTEXT "", IDC_DEVICES_STATUS, 0, 0, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    CONTROL "", IDC_DEVICES, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 12, 290, 116
     LTEXT "", IDC_DEVICES_NOTE, 0, 132, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
     PUSHBUTTON "&Details", IDC_DETAILS, 0, 146, 56, 14
+    PUSHBUTTON "Select &all", IDC_SELECT_ALL, 60, 146, 56, 14
+    PUSHBUTTON "&Clear all", IDC_SELECT_NONE, 120, 146, 56, 14
     PUSHBUTTON "&History", IDC_HISTORY, 234, 146, 56, 14
 END
 
@@ -29,16 +32,7 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_PROGRESS_TEXT, 0, 44, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
-    CONTROL "", IDC_PROGRESS_BAR, "msctls_progress32", PBS_SMOOTH | WS_BORDER, 0, 58, 290, 10
-    LTEXT "", IDC_PROGRESS_DETAIL, 0, 73, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
-END
-
-IDD_CHOOSE DIALOGEX 0, 0, 290, 160
-STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
-FONT 8, "MS Shell Dlg"
-BEGIN
-    CONTROL "", IDC_CHOICES, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 136
-    LTEXT "", IDC_CHOOSE_NOTE, 0, 140, 290, 18, SS_NOPREFIX
+    LTEXT "", IDC_PROGRESS_DETAIL, 0, 58, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
 END
 
 IDD_DONE DIALOGEX 0, 0, 290, 160
@@ -70,41 +64,27 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_CAPTION "LiberNT Drivers"
+    IDS_CAPTION "LiberNT Driver Installer"
     IDS_BACK "&Back"
     IDS_NEXT "&Next"
     IDS_CANCEL "Cancel"
     IDS_INSTALL "&Install"
     IDS_FINISH "&Finish"
     IDS_DEVICES_TITLE "Drivers for this PC"
-    IDS_DEVICES_SUBTITLE "Tick the devices to look up in the Microsoft Update Catalog. Devices without a driver are ticked; inbox drivers are not updated."
-    IDS_SEARCH_TITLE "Searching the Microsoft Update Catalog"
-    IDS_SEARCH_SUBTITLE "Looking for drivers that match your devices and this PC."
-    IDS_CHOOSE_TITLE "Choose the drivers to install"
-    IDS_CHOOSE_SUBTITLE "Each driver is downloaded from the Microsoft Update Catalog and its signature is checked before it is installed."
+    IDS_DEVICES_SUBTITLE "Devices without a driver or with a third-party driver that have a newer driver in the Microsoft Update Catalog. Tick the ones to install."
     IDS_INSTALL_TITLE "Installing drivers"
     IDS_INSTALL_SUBTITLE "Wait until the drivers are installed."
     IDS_DONE_TITLE "Finished"
-    IDS_DONE_SUBTITLE "These are the drivers that were installed."
+    IDS_DONE_SUBTITLE "The result for each device."
     IDS_HISTORY_TITLE "Drivers installed from the catalog"
-    IDS_HISTORY_SUBTITLE "Every change LiberNT Drivers made on this PC, newest first."
+    IDS_HISTORY_SUBTITLE "Every change LiberNT Driver Installer made on this PC, newest first."
     IDS_COL_DEVICE "Device"
-    IDS_COL_STATUS "Status"
-    IDS_COL_VERSION "Driver version"
-    IDS_COL_SOURCE "Source"
+    IDS_COL_VERSION "Version"
     IDS_COL_DRIVER "Driver"
-    IDS_COL_OFFERED "Version"
     IDS_COL_RESULT "Result"
     IDS_COL_DATE "Date"
     IDS_COL_ACTION "Action"
     IDS_DEVICES_NOTE "%1 devices, %2 without a driver, %3 ticked. Drivers are searched for %4."
-    IDS_SEARCH_START "Searching for drivers for %1 device(s)"
-    IDS_SEARCH_STEP "Device %1 of %2"
-    IDS_CHOOSE_NONE "The Microsoft Update Catalog has no driver for the %1 device(s) searched."
-    IDS_CHOOSE_FOUND "%1 driver(s) can be installed for the %2 device(s) searched."
-    IDS_CHOOSE_ABSENT "%1 device(s) have nothing in the catalog."
-    IDS_STATE_MISSING "Not installed"
-    IDS_STATE_NEWER "Newer than installed"
     IDS_INSTALL_START "Installing %1 driver(s)"
     IDS_INSTALL_STEP "Driver %1 of %2: %3"
     IDS_INSTALL_CANCELLING "Stopping after the current step..."
@@ -132,14 +112,14 @@ BEGIN
     IDS_ACTION_FAILED "The change failed: %1"
     IDS_HISTORY_WORKING "Working..."
     IDS_ADMIN_REQUIRED "Installing and removing drivers needs administrator rights."
-    IDS_ADMIN_RESTART "Restart LiberNT Drivers as an administrator?"
+    IDS_ADMIN_RESTART "Restart LiberNT Driver Installer as an administrator?"
     IDS_WORKER_FAILED "Cannot start the worker thread: %1"
     IDS_ERROR_CHECKSUM "The download does not match the checksum published by the catalog."
     IDS_ERROR_SERVER "The Microsoft Update Catalog returned an unexpected answer."
     IDS_ERROR_CANCELLED "Cancelled."
     IDS_ERROR_NOT_BETTER "The driver already installed is a better match for this device."
     IDS_ERROR_NO_COMPAT "The package has no driver for this device on this PC."
-    IDS_ERROR_FORMAT "The Microsoft Update Catalog page has changed and cannot be read. LiberNT Drivers needs an update."
+    IDS_ERROR_FORMAT "The Microsoft Update Catalog page has changed and cannot be read. LiberNT Driver Installer needs an update."
     IDS_ERROR_PROGRAM "The catalog package is a program, not a driver package. Run it yourself if you trust it."
     IDS_ERROR_ALREADY "This driver is already installed."
     IDS_ERROR_NOT_NEWER "The installed driver is newer than this one."
@@ -153,7 +133,6 @@ BEGIN
     IDS_STATUS_PROBLEM "Problem code %1"
     IDS_STATUS_WORKING "Working"
     IDS_STATUS_STOPPED "Not started"
-    IDS_SOURCE_INBOX "Inbox"
     IDS_SOURCE_CATALOG "Microsoft Update Catalog"
     IDS_SOURCE_THIRD_PARTY "Third party"
     IDS_DETAIL_NAME "Name: %1"
@@ -186,5 +165,14 @@ BEGIN
     IDS_CLI_RESTART "Restart required."
     IDS_CLI_NO_DEVICE "No present device has the instance ID %1."
     IDS_CLI_USAGE "Usage: lntdrv [/list | /scan | /installall | /search <instance id> | /install <instance id> [update id]]"
-    IDS_CHOOSE_CURRENT "%1 device(s) already have the newest driver."
+    IDS_NOTE_OTHER_ARCH "No %1 driver in the catalog; it only has drivers for %2"
+    IDS_NOTE_OTHER_WINDOWS "The catalog only has drivers for other Windows versions"
+    IDS_ERROR_OTHER_ARCH "The catalog has no driver for this PC architecture."
+    IDS_CLI_GROUP "%1 (%2, %3 devices)"
+    IDS_DONE_NOTHING "No driver was installed."
+    IDS_COL_NEW "New driver"
+    IDS_SCAN_PROGRESS "Searching the Microsoft Update Catalog... device %1 of %2"
+    IDS_SCAN_FOUND "A newer driver was found for %1 device(s)."
+    IDS_SCAN_NONE "The Microsoft Update Catalog has nothing new to install for this PC."
+    IDS_RESULT_UNSIGNED "signature not verified"
 END

@@ -1,5 +1,5 @@
 /*
- * PROJECT:     LiberNT Drivers
+ * PROJECT:     LiberNT Driver Installer
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Driver package signature and file hash verification
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>

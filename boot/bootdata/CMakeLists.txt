@@ -244,7 +244,7 @@ add_livecd_shortcut("Task Manager 11"
 add_livecd_shortcut("LntGet"
     "shell:system\\lntget.exe" ICON_INDEX 0 CMDLINE_ARGS "gui"
     DESTINATION "${dir_startmenu_systemtools}")
-add_livecd_shortcut("LiberNT Drivers"
+add_livecd_shortcut("LiberNT Driver Installer"
     "shell:system\\lntdrv.exe" ICON_INDEX 0
     DESTINATION "${dir_startmenu_systemtools}")
 add_livecd_shortcut("Calculator"

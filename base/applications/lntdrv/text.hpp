@@ -1,5 +1,5 @@
 /*
- * PROJECT:     LiberNT Drivers
+ * PROJECT:     LiberNT Driver Installer
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Localized text and error messages
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
@@ -25,6 +25,8 @@ const DWORD ERROR_LNTDRV_NOT_NEWER = 0x20000004;
 const DWORD ERROR_LNTDRV_NOT_COVERED = 0x20000005;
 const DWORD ERROR_LNTDRV_NOT_IN_USE = 0x20000006;
 const DWORD ERROR_LNTDRV_NO_SIGNATURE = 0x20000007;
+const DWORD ERROR_LNTDRV_OTHER_ARCH = 0x20000008;
+const DWORD ERROR_LNTDRV_OTHER_WINDOWS = 0x20000009;
 
 std::wstring LoadText(UINT id);
 std::wstring FormatText(UINT id, std::initializer_list<std::wstring> args);

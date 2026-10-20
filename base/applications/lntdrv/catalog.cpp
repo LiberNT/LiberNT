@@ -1,5 +1,5 @@
 /*
- * PROJECT:     LiberNT Drivers
+ * PROJECT:     LiberNT Driver Installer
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Microsoft Update Catalog client
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
@@ -24,8 +24,11 @@ namespace
 
 const WCHAR CatalogRoot[] = L"https://www.catalog.update.microsoft.com/";
 const size_t MaximumPage = 8 * 1024 * 1024;
-const size_t MaximumArchitectureChecks = 16;
-const unsigned MaximumPages = 4;
+const size_t MaximumDetails = 160;
+const size_t WantedMatches = 3;
+const unsigned MaximumPages = 10;
+const unsigned DetailWorkers = 6;
+const WCHAR DetailsKey[] = L"SOFTWARE\\LiberNT\\Drivers\\Catalog";
 const unsigned MaximumAttempts = 3;
 const size_t RowsPerPage = 25;
 
@@ -279,6 +282,118 @@ ULONG FindBuild(const std::wstring &entry, const NamedBuild (&table)[Count], ULO
     return fallback;
 }
 
+void CopyDetails(CatalogUpdate &update, const CatalogUpdate &details)
+{
+    update.Architecture = details.Architecture;
+    update.Model = details.Model;
+    update.HardwareIds = details.HardwareIds;
+    update.Detailed = true;
+}
+
+bool LoadDetails(CatalogUpdate &update)
+{
+    std::vector<WCHAR> value;
+    DWORD type = 0, size = 0;
+    HKEY key;
+    LONG error;
+    std::wstring text, ids;
+    size_t first, second;
+
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, DetailsKey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
+        return false;
+    error = RegQueryValueExW(key, update.Id.c_str(), NULL, &type, NULL, &size);
+    if (error == ERROR_SUCCESS && type == REG_SZ && size)
+    {
+        value.resize(size / sizeof(WCHAR) + 1, L'\0');
+        error = RegQueryValueExW(key, update.Id.c_str(), NULL, &type, (LPBYTE)value.data(), &size);
+    }
+    RegCloseKey(key);
+    if (error != ERROR_SUCCESS || type != REG_SZ || value.empty())
+        return false;
+    text = value.data();
+    first = text.find(L'|');
+    second = first == std::wstring::npos ? first : text.find(L'|', first + 1);
+    if (second == std::wstring::npos)
+        return false;
+    update.Architecture = text.substr(0, first);
+    update.Model = text.substr(first + 1, second - first - 1);
+    update.HardwareIds.clear();
+    ids = text.substr(second + 1);
+    for (size_t start = 0; start < ids.size();)
+    {
+        size_t end = ids.find(L';', start);
+
+        if (end == std::wstring::npos)
+            end = ids.size();
+        if (end > start)
+            update.HardwareIds.push_back(ids.substr(start, end - start));
+        start = end + 1;
+    }
+    update.Detailed = true;
+    return true;
+}
+
+void SaveDetails(const CatalogUpdate &update)
+{
+    std::wstring text = update.Architecture + L"|" + update.Model + L"|";
+    HKEY key;
+
+    for (size_t i = 0; i < update.HardwareIds.size(); i++)
+        text += (i ? L";" : L"") + update.HardwareIds[i];
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, DetailsKey, 0, NULL, 0, KEY_SET_VALUE, NULL, &key, NULL) != ERROR_SUCCESS)
+        return;
+    RegSetValueExW(key, update.Id.c_str(), 0, REG_SZ, (const BYTE *)text.c_str(),
+                   (DWORD)((text.size() + 1) * sizeof(WCHAR)));
+    RegCloseKey(key);
+}
+
+bool Supports(const CatalogUpdate &update, const std::vector<std::wstring> &queries)
+{
+    if (update.HardwareIds.empty())
+        return true;
+    for (const std::wstring &query : queries)
+    {
+        std::wstring id = Upper(query);
+
+        if (std::find(update.HardwareIds.begin(), update.HardwareIds.end(), id) != update.HardwareIds.end())
+            return true;
+    }
+    return false;
+}
+
+struct DetailsWork
+{
+    std::vector<CatalogUpdate *> *Items;
+    volatile LONG Next;
+    volatile LONG *Cancel;
+    volatile LONG Error;
+};
+
+DWORD WINAPI DetailsWorker(LPVOID parameter)
+{
+    DetailsWork *work = (DetailsWork *)parameter;
+    Catalog catalog;
+
+    catalog.SetCancel(work->Cancel);
+    for (;;)
+    {
+        LONG index = InterlockedIncrement(&work->Next);
+        DWORD error;
+
+        if (index >= (LONG)work->Items->size())
+            break;
+        error = catalog.QueryDetails(*(*work->Items)[index]);
+        if (error == ERROR_CANCELLED || IsOfflineError(error))
+            InterlockedExchange(&work->Error, (LONG)error);
+    }
+    return 0;
+}
+
+std::wstring Key(const CatalogUpdate &update)
+{
+    return update.Title + L"|" + update.Version + L"|" + std::to_wstring(update.Bytes);
+}
+
 class InternetHandle
 {
 public:
@@ -302,7 +417,7 @@ Catalog::Catalog() : m_Cancel(NULL)
 {
     DWORD timeout = 30000;
 
-    m_Session = InternetOpenW(L"LiberNT-Drivers/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    m_Session = InternetOpenW(L"LiberNT-Driver-Installer/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     if (m_Session)
     {
         InternetSetOptionW(m_Session, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
@@ -446,32 +561,31 @@ DWORD Catalog::Fetch(LPCWSTR verb, const std::wstring &url, const std::string &b
         });
 }
 
-DWORD Catalog::Search(const std::wstring &query, std::vector<CatalogUpdate> &updates)
+DWORD Catalog::SearchPage(const std::wstring &query, unsigned page, std::vector<CatalogUpdate> &updates, bool &last)
 {
-    auto cached = m_Searches.find(query);
-    std::wstring base = std::wstring(CatalogRoot) + L"Search.aspx?q=" + Wide(UrlEncode(Utf8(query))) +
-                        L"&scol=DateComputed&sdir=desc";
+    std::wstring key = query + L"#" + std::to_wstring(page);
+    auto cached = m_Pages.find(key);
+    std::wstring url = std::wstring(CatalogRoot) + L"Search.aspx?q=" + Wide(UrlEncode(Utf8(query))) +
+                       L"&scol=DateComputed&sdir=desc" + (page ? L"&p=" + std::to_wstring(page) : std::wstring());
+    std::string html;
+    size_t rows = 0;
+    DWORD error;
 
     updates.clear();
-    if (cached != m_Searches.end())
+    last = true;
+    if (cached != m_Pages.end())
     {
-        updates = cached->second;
+        updates = cached->second.first;
+        last = cached->second.second;
         return ERROR_SUCCESS;
     }
-    for (unsigned page = 0; page < MaximumPages; page++)
-    {
-        std::string html;
-        size_t rows = 0;
-        DWORD error = Fetch(L"GET", page ? base + L"&p=" + std::to_wstring(page) : base, std::string(), html);
-
-        if (!error)
-            error = ParseResults(html, query, updates, rows);
-        if (error)
-            return error;
-        if (rows < RowsPerPage || LastPage(html))
-            break;
-    }
-    m_Searches[query] = updates;
+    error = Fetch(L"GET", url, std::string(), html);
+    if (!error)
+        error = ParseResults(html, query, updates, rows);
+    if (error)
+        return error;
+    last = rows < RowsPerPage || LastPage(html);
+    m_Pages[key] = std::make_pair(updates, last);
     return ERROR_SUCCESS;
 }
 
@@ -485,8 +599,12 @@ DWORD Catalog::QueryDetails(CatalogUpdate &update)
 
     if (cached != m_Details.end())
     {
-        update.Architecture = cached->second.first;
-        update.Model = cached->second.second;
+        CopyDetails(update, cached->second);
+        return ERROR_SUCCESS;
+    }
+    if (LoadDetails(update))
+    {
+        m_Details[update.Id] = update;
         return ERROR_SUCCESS;
     }
     error = Fetch(L"GET", std::wstring(CatalogRoot) + L"ScopedViewInline.aspx?updateid=" + update.Id, std::string(),
@@ -505,55 +623,169 @@ DWORD Catalog::QueryDetails(CatalogUpdate &update)
     update.Model = models.substr(0, models.find(L','));
     while (!update.Model.empty() && update.Model.back() == L' ')
         update.Model.pop_back();
-    m_Details[update.Id] = std::make_pair(update.Architecture, update.Model);
+    update.HardwareIds.clear();
+    pos = html.find("id=\"driverhwIDs\"");
+    if (pos != std::string::npos)
+    {
+        static const std::string Item = "<div style=\"padding-bottom: 0.3em;\">";
+        size_t stop = html.find("ScopedViewHandler_labelSupportedUpdateIDs", pos);
+        std::string block = html.substr(pos, stop == std::string::npos ? std::string::npos : stop - pos);
+
+        for (size_t at = block.find(Item); at != std::string::npos; at = block.find(Item, at + Item.size()))
+        {
+            size_t close = block.find("</div>", at);
+            std::wstring id;
+
+            if (close == std::string::npos)
+                break;
+            id = Upper(HtmlText(block.substr(at + Item.size(), close - at - Item.size())));
+            if (!id.empty())
+                update.HardwareIds.push_back(id);
+        }
+    }
+    update.Detailed = true;
+    m_Details[update.Id] = update;
+    SaveDetails(update);
     return ERROR_SUCCESS;
+}
+
+DWORD Catalog::QueryAllDetails(std::vector<CatalogUpdate> &updates)
+{
+    std::vector<CatalogUpdate *> pending;
+    std::vector<HANDLE> threads;
+    DetailsWork work = { &pending, -1, m_Cancel, ERROR_SUCCESS };
+
+    for (CatalogUpdate &update : updates)
+    {
+        auto cached = m_Details.find(update.Id);
+
+        if (cached != m_Details.end())
+        {
+            CopyDetails(update, cached->second);
+        }
+        else if (LoadDetails(update))
+        {
+            m_Details[update.Id] = update;
+        }
+        else
+        {
+            pending.push_back(&update);
+        }
+    }
+    for (size_t i = 0; i < pending.size() && i < DetailWorkers; i++)
+    {
+        HANDLE thread = CreateThread(NULL, 0, DetailsWorker, &work, 0, NULL);
+        if (thread)
+            threads.push_back(thread);
+    }
+    if (threads.empty())
+        DetailsWorker(&work);
+    else
+        WaitForMultipleObjects((DWORD)threads.size(), threads.data(), TRUE, INFINITE);
+    for (HANDLE thread : threads)
+        CloseHandle(thread);
+    for (CatalogUpdate *update : pending)
+    {
+        if (update->Detailed)
+            m_Details[update->Id] = *update;
+    }
+    if (Cancelled())
+        return ERROR_CANCELLED;
+    return (DWORD)work.Error;
 }
 
 DWORD Catalog::FindUpdates(const std::vector<std::wstring> &queries, std::vector<CatalogUpdate> &updates)
 {
     SystemTarget system = CurrentSystem();
+    std::vector<std::wstring> others;
+    bool rows = false, fits = false, supported = false;
 
     updates.clear();
+    m_OtherArchitectures.clear();
+    m_OtherModel.clear();
     for (const std::wstring &query : queries)
     {
-        std::vector<CatalogUpdate> rows, unique;
-        DWORD status = Search(query, rows);
+        std::vector<std::wstring> seen;
+        size_t detailed = 0;
 
-        if (status)
-            return status;
-        for (CatalogUpdate &row : rows)
+        for (unsigned page = 0; page < MaximumPages && detailed < MaximumDetails; page++)
         {
-            bool seen = std::any_of(unique.begin(), unique.end(), [&row](const CatalogUpdate &other) {
-                return other.Title == row.Title && other.Version == row.Version && other.Bytes == row.Bytes;
-            });
-            row.Fit = ProductFit(row.Products, system);
-            if (!seen && row.Fit > 0)
-                unique.push_back(row);
-        }
-        std::stable_sort(unique.begin(), unique.end(), [](const CatalogUpdate &left, const CatalogUpdate &right) {
-            int order;
+            std::vector<CatalogUpdate> found, fresh;
+            bool last = true;
+            DWORD status = SearchPage(query, page, found, last);
 
-            if (left.Fit != right.Fit)
-                return left.Fit > right.Fit;
-            order = CompareVersions(left.Version, right.Version);
-            if (order)
-                return order > 0;
-            return DateKey(left.LastUpdated) > DateKey(right.LastUpdated);
-        });
-        if (unique.size() > MaximumArchitectureChecks)
-            unique.resize(MaximumArchitectureChecks);
-        for (CatalogUpdate &update : unique)
-        {
-            status = QueryDetails(update);
-            if (status == ERROR_CANCELLED || IsOfflineError(status))
+            if (status)
                 return status;
-            if (ArchitectureMatches(update.Architecture))
-                updates.push_back(update);
+            rows = rows || !found.empty();
+            for (CatalogUpdate &row : found)
+            {
+                std::wstring key = Key(row);
+
+                row.Fit = ProductFit(row.Products, system);
+                if (row.Fit <= 0 || std::find(seen.begin(), seen.end(), key) != seen.end())
+                    continue;
+                seen.push_back(key);
+                fresh.push_back(row);
+            }
+            fits = fits || !fresh.empty();
+            if (fresh.size() > MaximumDetails - detailed)
+                fresh.resize(MaximumDetails - detailed);
+            detailed += fresh.size();
+            status = QueryAllDetails(fresh);
+            if (status)
+                return status;
+            for (const CatalogUpdate &update : fresh)
+            {
+                if (!update.Detailed || !Supports(update, queries))
+                    continue;
+                supported = true;
+                if (ArchitectureMatches(update.Architecture))
+                {
+                    updates.push_back(update);
+                    continue;
+                }
+                if (m_OtherModel.empty())
+                    m_OtherModel = update.Model;
+                if (std::find(others.begin(), others.end(), update.Architecture) == others.end())
+                    others.push_back(update.Architecture);
+            }
+            if (updates.size() >= WantedMatches || last)
+                break;
         }
         if (!updates.empty())
+        {
+            std::stable_sort(updates.begin(), updates.end(), [](const CatalogUpdate &left, const CatalogUpdate &right) {
+                int order;
+
+                if (left.Fit != right.Fit)
+                    return left.Fit > right.Fit;
+                order = CompareVersions(left.Version, right.Version);
+                if (order)
+                    return order > 0;
+                return DateKey(left.LastUpdated) > DateKey(right.LastUpdated);
+            });
             return ERROR_SUCCESS;
+        }
     }
-    return ERROR_NOT_FOUND;
+    if (!rows)
+        return ERROR_NOT_FOUND;
+    if (!fits)
+        return ERROR_LNTDRV_OTHER_WINDOWS;
+    if (!supported)
+        return ERROR_NOT_FOUND;
+    for (const std::wstring &other : others)
+        m_OtherArchitectures += (m_OtherArchitectures.empty() ? L"" : L", ") + other;
+    return ERROR_LNTDRV_OTHER_ARCH;
+}
+
+const std::wstring &Catalog::OtherArchitectures() const
+{
+    return m_OtherArchitectures;
+}
+
+const std::wstring &Catalog::OtherModel() const
+{
+    return m_OtherModel;
 }
 
 DWORD Catalog::QueryFiles(const std::wstring &id, std::vector<CatalogFile> &files)

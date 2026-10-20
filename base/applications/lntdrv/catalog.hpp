@@ -1,5 +1,5 @@
 /*
- * PROJECT:     LiberNT Drivers
+ * PROJECT:     LiberNT Driver Installer
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Microsoft Update Catalog client
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
@@ -33,8 +33,10 @@ struct CatalogUpdate
     ULONGLONG Bytes = 0;
     std::wstring Architecture;
     std::wstring Model;
+    std::vector<std::wstring> HardwareIds;
     std::wstring Query;
     int Fit = 1;
+    bool Detailed = false;
 };
 
 struct CatalogFile
@@ -61,11 +63,14 @@ public:
     Catalog &operator=(const Catalog &) = delete;
 
     void SetCancel(volatile LONG *cancel);
-    DWORD Search(const std::wstring &query, std::vector<CatalogUpdate> &updates);
+    DWORD SearchPage(const std::wstring &query, unsigned page, std::vector<CatalogUpdate> &updates, bool &last);
     DWORD QueryDetails(CatalogUpdate &update);
+    DWORD QueryAllDetails(std::vector<CatalogUpdate> &updates);
     DWORD FindUpdates(const std::vector<std::wstring> &queries, std::vector<CatalogUpdate> &updates);
     DWORD QueryFiles(const std::wstring &id, std::vector<CatalogFile> &files);
     DWORD Download(const CatalogFile &file, const std::wstring &path, const ProgressCallback &progress);
+    const std::wstring &OtherArchitectures() const;
+    const std::wstring &OtherModel() const;
 
 private:
     using Sink = std::function<DWORD(const BYTE *data, DWORD size, ULONGLONG total)>;
@@ -78,8 +83,10 @@ private:
 
     HINTERNET m_Session;
     volatile LONG *m_Cancel;
-    std::map<std::wstring, std::pair<std::wstring, std::wstring>> m_Details;
-    std::map<std::wstring, std::vector<CatalogUpdate>> m_Searches;
+    std::map<std::wstring, CatalogUpdate> m_Details;
+    std::map<std::wstring, std::pair<std::vector<CatalogUpdate>, bool>> m_Pages;
+    std::wstring m_OtherArchitectures;
+    std::wstring m_OtherModel;
 };
 
 std::wstring NativeArchitecture();

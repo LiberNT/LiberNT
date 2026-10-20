@@ -1,5 +1,5 @@
 /*
- * PROJECT:     LiberNT Drivers
+ * PROJECT:     LiberNT Driver Installer
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Localized text and error messages
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
@@ -82,6 +82,10 @@ std::wstring ErrorText(DWORD error)
             return LoadText(IDS_ERROR_NOT_IN_USE);
         case ERROR_LNTDRV_NO_SIGNATURE:
             return LoadText(IDS_ERROR_NO_SIGNATURE);
+        case ERROR_LNTDRV_OTHER_ARCH:
+            return LoadText(IDS_ERROR_OTHER_ARCH);
+        case ERROR_LNTDRV_OTHER_WINDOWS:
+            return LoadText(IDS_NOTE_OTHER_WINDOWS);
     }
     if (IsOfflineError(error))
         return LoadText(IDS_ERROR_OFFLINE);

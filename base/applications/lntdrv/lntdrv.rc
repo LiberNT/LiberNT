@@ -1,11 +1,11 @@
 /*
- * PROJECT:     LiberNT Drivers
+ * PROJECT:     LiberNT Driver Installer
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Defines the LiberNT Drivers version, icon, dialog and manifest resources
+ * PURPOSE:     Defines the LiberNT Driver Installer version, icon, dialog and manifest resources
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#define REACTOS_STR_FILE_DESCRIPTION   "LiberNT Drivers"
+#define REACTOS_STR_FILE_DESCRIPTION   "LiberNT Driver Installer"
 #define REACTOS_STR_INTERNAL_NAME      "lntdrv"
 #define REACTOS_STR_ORIGINAL_FILENAME  "lntdrv.exe"
 #include <reactos/version.rc>

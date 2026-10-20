@@ -1,5 +1,5 @@
 /*
- * PROJECT:     LiberNT Drivers
+ * PROJECT:     LiberNT Driver Installer
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Driver package signature and file hash verification
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
@@ -345,7 +345,8 @@ DWORD CatalogContent(const std::wstring &path, std::vector<BYTE> &content)
 
 bool Contains(const std::vector<BYTE> &content, const std::vector<BYTE> &digest)
 {
-    return !digest.empty() && std::search(content.begin(), content.end(), digest.begin(), digest.end()) != content.end();
+    return !digest.empty() &&
+           std::search(content.begin(), content.end(), digest.begin(), digest.end()) != content.end();
 }
 
 }
