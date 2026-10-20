@@ -5136,4 +5136,9 @@ static inline bool wined3d_map_persistent(void)
 
 extern CRITICAL_SECTION wined3d_command_cs;
 
+#if defined(__REACTOS__) && defined(REACTOS_WINE_WDDM)
+void wined3d_get_wddm_adapter_identifier(D3DKMT_HANDLE kmt_adapter,
+        struct wined3d_adapter_identifier *identifier);
+#endif
+
 #endif

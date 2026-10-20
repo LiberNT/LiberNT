@@ -50,6 +50,9 @@ add_library(d3dwine MODULE
 
 if(REACTOS_USE_WDDM)
     target_compile_definitions(d3dwine PRIVATE REACTOS_WINE_WDDM)
+    target_sources(d3dwine PRIVATE reactos_wddm.c)
+    set_source_files_properties(reactos_wddm.c PROPERTIES
+        COMPILE_OPTIONS "-UDXGKDDI_INTERFACE_VERSION;-DDXGKDDI_INTERFACE_VERSION=0x11007")
 endif()
 
 set_module_type(d3dwine win32dll)
