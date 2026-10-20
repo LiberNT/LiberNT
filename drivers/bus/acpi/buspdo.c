@@ -1949,6 +1949,179 @@ BuspCreateRequirementsListFromAcpiResources(
     return STATUS_SUCCESS;
 }
 
+static
+NTSTATUS
+BuspCreateDependentSetList(
+    _In_ PPDO_DEVICE_DATA DeviceData,
+    _In_ ACPI_RESOURCE *FirstResource,
+    _Out_writes_bytes_(BufferLength) PUCHAR Stream,
+    _In_ ACPI_SIZE BufferLength,
+    _In_ ULONG Set,
+    _In_ ULONG RootBusNumber,
+    _Outptr_result_maybenull_ PIO_RESOURCE_REQUIREMENTS_LIST *ListOut)
+{
+    ACPI_RESOURCE *resource;
+    BOOLEAN InDependent = FALSE;
+    ULONG DependentIndex = 0;
+    PUCHAR Dst = Stream;
+
+    UNREFERENCED_PARAMETER(BufferLength);
+
+    for (resource = FirstResource; ; resource = ACPI_NEXT_RESOURCE(resource))
+    {
+        if (resource->Type == ACPI_RESOURCE_TYPE_START_DEPENDENT)
+        {
+            InDependent = TRUE;
+            DependentIndex++;
+            continue;
+        }
+        if (resource->Type == ACPI_RESOURCE_TYPE_END_DEPENDENT)
+        {
+            InDependent = FALSE;
+            continue;
+        }
+        if (!InDependent || DependentIndex == Set + 1)
+        {
+            RtlCopyMemory(Dst, resource, resource->Length);
+            Dst += resource->Length;
+        }
+        if (resource->Type == ACPI_RESOURCE_TYPE_END_TAG)
+            break;
+    }
+
+    return BuspCreateRequirementsListFromAcpiResources(DeviceData,
+                                                       (ACPI_RESOURCE *)Stream,
+                                                       FALSE,
+                                                       FALSE,
+                                                       RootBusNumber,
+                                                       ListOut);
+}
+
+static
+NTSTATUS
+BuspMergeRequirementsLists(
+    _In_reads_(SetCount) PIO_RESOURCE_REQUIREMENTS_LIST *SetLists,
+    _In_ ULONG SetCount,
+    _Outptr_result_maybenull_ PIO_RESOURCE_REQUIREMENTS_LIST *RequirementsListOut)
+{
+    PIO_RESOURCE_REQUIREMENTS_LIST RequirementsList;
+    PIO_RESOURCE_REQUIREMENTS_LIST FirstList = NULL;
+    ULONG ListSize = FIELD_OFFSET(IO_RESOURCE_REQUIREMENTS_LIST, List);
+    ULONG ListCount = 0;
+    ULONG Set;
+    PUCHAR Out;
+
+    for (Set = 0; Set < SetCount; Set++)
+    {
+        if (!SetLists[Set])
+            continue;
+        if (!FirstList)
+            FirstList = SetLists[Set];
+        ListCount++;
+        ListSize += FIELD_OFFSET(IO_RESOURCE_LIST, Descriptors) +
+                    SetLists[Set]->List[0].Count * sizeof(IO_RESOURCE_DESCRIPTOR);
+    }
+
+    if (ListCount == 0)
+        return STATUS_SUCCESS;
+
+    RequirementsList = ExAllocatePoolZero(PagedPool, ListSize, 'RpcA');
+    if (!RequirementsList)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RequirementsList->ListSize = ListSize;
+    RequirementsList->InterfaceType = FirstList->InterfaceType;
+    RequirementsList->BusNumber = FirstList->BusNumber;
+    RequirementsList->SlotNumber = FirstList->SlotNumber;
+    RequirementsList->AlternativeLists = ListCount;
+
+    Out = (PUCHAR)RequirementsList->List;
+    for (Set = 0; Set < SetCount; Set++)
+    {
+        ULONG Size;
+
+        if (!SetLists[Set])
+            continue;
+
+        Size = FIELD_OFFSET(IO_RESOURCE_LIST, Descriptors) +
+               SetLists[Set]->List[0].Count * sizeof(IO_RESOURCE_DESCRIPTOR);
+        RtlCopyMemory(Out, &SetLists[Set]->List[0], Size);
+        Out += Size;
+    }
+
+    *RequirementsListOut = RequirementsList;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+BuspCreateDependentRequirementsList(
+    _In_ PPDO_DEVICE_DATA DeviceData,
+    _In_ ACPI_RESOURCE *FirstResource,
+    _In_ ACPI_SIZE BufferLength,
+    _In_ ULONG RootBusNumber,
+    _Outptr_result_maybenull_ PIO_RESOURCE_REQUIREMENTS_LIST *RequirementsListOut)
+{
+    PIO_RESOURCE_REQUIREMENTS_LIST *SetLists;
+    ACPI_RESOURCE *resource;
+    PUCHAR Stream;
+    ULONG SetCount = 0;
+    ULONG Set;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+
+    *RequirementsListOut = NULL;
+
+    for (resource = FirstResource;
+         resource->Type != ACPI_RESOURCE_TYPE_END_TAG;
+         resource = ACPI_NEXT_RESOURCE(resource))
+    {
+        if (resource->Length == 0 ||
+            (ACPI_SIZE)((PUCHAR)resource - (PUCHAR)FirstResource) + resource->Length > BufferLength)
+        {
+            return STATUS_NOT_SUPPORTED;
+        }
+        if (resource->Type == ACPI_RESOURCE_TYPE_START_DEPENDENT)
+            SetCount++;
+    }
+
+    if (SetCount < 2)
+        return STATUS_NOT_SUPPORTED;
+
+    SetLists = ExAllocatePoolZero(PagedPool, SetCount * sizeof(*SetLists), 'RpcA');
+    Stream = ExAllocatePoolWithTag(PagedPool, BufferLength, 'BpcA');
+    if (!SetLists || !Stream)
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+
+    for (Set = 0; NT_SUCCESS(Status) && Set < SetCount; Set++)
+    {
+        Status = BuspCreateDependentSetList(DeviceData,
+                                            FirstResource,
+                                            Stream,
+                                            BufferLength,
+                                            Set,
+                                            RootBusNumber,
+                                            &SetLists[Set]);
+    }
+
+    if (NT_SUCCESS(Status))
+        Status = BuspMergeRequirementsLists(SetLists, SetCount, RequirementsListOut);
+
+    if (SetLists)
+    {
+        for (Set = 0; Set < SetCount; Set++)
+        {
+            if (SetLists[Set])
+                ExFreePoolWithTag(SetLists[Set], 'RpcA');
+        }
+        ExFreePoolWithTag(SetLists, 'RpcA');
+    }
+    if (Stream)
+        ExFreePoolWithTag(Stream, 'BpcA');
+    return Status;
+}
+
 #ifndef UNIT_TEST
 static
 NTSTATUS
@@ -4043,12 +4216,24 @@ Bus_PDO_QueryResourceRequirements(
         return STATUS_UNSUCCESSFUL;
     }
 
-    Status = BuspCreateRequirementsListFromAcpiResources(DeviceData,
-                                                         Buffer.Pointer,
-                                                         CurrentRes,
-                                                         IsPciRoot,
-                                                         RootBusNumber,
-                                                         &RequirementsList);
+    Status = STATUS_NOT_SUPPORTED;
+    if (!CurrentRes && !IsPciRoot)
+    {
+        Status = BuspCreateDependentRequirementsList(DeviceData,
+                                                     Buffer.Pointer,
+                                                     Buffer.Length,
+                                                     RootBusNumber,
+                                                     &RequirementsList);
+    }
+    if (Status == STATUS_NOT_SUPPORTED)
+    {
+        Status = BuspCreateRequirementsListFromAcpiResources(DeviceData,
+                                                             Buffer.Pointer,
+                                                             CurrentRes,
+                                                             IsPciRoot,
+                                                             RootBusNumber,
+                                                             &RequirementsList);
+    }
 
     ExFreePoolWithTag(Buffer.Pointer, 'BpcA');
 
