@@ -1,11 +1,8 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 set DBGPRINT=%SystemRoot%\system32\dbgprint.exe
-set SLEEP=%SystemRoot%\system32\ping.exe
 set APPDRIVE=
-set /a TRIES=0
 
-:scan
 for %%D in (D E F G H I J K L M N O P Q R S T U V W X Y Z C) do (
     if /i not "%%D:" == "%SystemDrive%" (
         if exist "%%D:\launcher.cmd" (
@@ -14,11 +11,7 @@ for %%D in (D E F G H I J K L M N O P Q R S T U V W X Y Z C) do (
         )
     )
 )
-set /a TRIES+=1
-if !TRIES! GEQ 4 goto none
-if not exist "%SLEEP%" goto none
-"%SLEEP%" -n 3 127.0.0.1 >nul 2>nul
-goto scan
+goto none
 
 :found
 call :say APPLAUNCH_BEGIN !APPDRIVE!
