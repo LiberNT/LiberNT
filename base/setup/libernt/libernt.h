@@ -348,6 +348,14 @@ SetupFrameGoTo(
     _In_ HWND hPage,
     _In_ INT Page);
 
+VOID
+SetupFrameReload(
+    _In_ HWND hPage);
+
+VOID
+SetSetupLanguage(
+    _In_ PCWSTR LocaleId);
+
 
 
 /* libernt.c */

@@ -21,6 +21,7 @@ typedef struct _SETUP_FRAME
     INT PageCount;
     HWND Pages[SETUP_MAX_PAGES];
     INT Current;
+    INT Restart;
     HBITMAP hWatermark;
     SIZE Watermark;
     INT Corner;
@@ -481,7 +482,9 @@ SetupFrameProc(
             }
 
             FrameCenter(hwnd);
-            FrameShowPage(FrameNextPage(0));
+            Page = (Frame.Restart >= 0) ? Frame.Restart : FrameNextPage(0);
+            Frame.Restart = -1;
+            FrameShowPage(Page);
             return FALSE;
         }
 
@@ -526,14 +529,40 @@ SetupFrameProc(
     return FALSE;
 }
 
+VOID
+SetupFrameReload(
+    _In_ HWND hPage)
+{
+    UNREFERENCED_PARAMETER(hPage);
+    Frame.Restart = Frame.Current;
+    EndDialog(Frame.hwnd, IDRETRY);
+}
+
+VOID
+SetSetupLanguage(
+    _In_ PCWSTR LocaleId)
+{
+    LANGID LangId = LANGIDFROMLCID(wcstoul(LocaleId, NULL, 16));
+
+    if (LangId && SetThreadUILanguage(LangId) != LangId)
+        DPRINT1("SetThreadUILanguage(%04x) failed, error %lu\n", LangId, GetLastError());
+}
+
 INT_PTR
 RunSetupFrame(
     _In_ PSETUPDATA pSetupData,
     _In_reads_(PageCount) const SETUP_PAGE_INFO* PageInfo,
     _In_ INT PageCount)
 {
+    INT_PTR Result;
+
     Frame.PageInfo = PageInfo;
     Frame.PageCount = min(PageCount, SETUP_MAX_PAGES);
-    return DialogBoxParamW(pSetupData->hInstance, MAKEINTRESOURCEW(IDD_SETUPFRAME),
-                           NULL, SetupFrameProc, (LPARAM)pSetupData);
+    Frame.Restart = -1;
+    do
+    {
+        Result = DialogBoxParamW(pSetupData->hInstance, MAKEINTRESOURCEW(IDD_SETUPFRAME),
+                                 NULL, SetupFrameProc, (LPARAM)pSetupData);
+    } while (Result == IDRETRY);
+    return Result;
 }

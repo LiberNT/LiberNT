@@ -2,9 +2,129 @@ LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
 
 /* Dialogs */
 
+IDD_SETUPFRAME DIALOGEX 0, 0, 420, 240
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "LiberNT-Setup"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_FRAME_TITLE, 120, 10, 290, 14, SS_NOPREFIX
+    LTEXT "", IDC_FRAME_SUBTITLE, 120, 26, 290, 18, SS_NOPREFIX
+    LTEXT "", IDC_FRAME_PAGE, 120, 48, 290, 160, NOT WS_VISIBLE
+    CONTROL "", IDC_STATIC, "Static", SS_ETCHEDHORZ, 120, 212, 300, 1
+    PUSHBUTTON "&Zurück", IDC_FRAME_BACK, 250, 219, 50, 14
+    DEFPUSHBUTTON "&Weiter", IDC_FRAME_NEXT, 305, 219, 50, 14
+    PUSHBUTTON "Abbrechen", IDCANCEL, 360, 219, 50, 14
+END
+
+IDD_DISKPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_DISKLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 106
+    LTEXT "", IDC_DISKINFO, 0, 110, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    PUSHBUTTON "&Neu", IDC_DISKNEW, 0, 123, 36, 14
+    PUSHBUTTON "&Löschen", IDC_DISKDELETE, 39, 123, 36, 14
+    PUSHBUTTON "&Format.", IDC_DISKFORMAT, 78, 123, 36, 14
+    PUSHBUTTON "&Erweitern", IDC_DISKEXTEND, 117, 123, 36, 14
+    PUSHBUTTON "Ver&kleinern", IDC_DISKSHRINK, 156, 123, 36, 14
+    PUSHBUTTON "Alles l&öschen", IDC_DISKERASE, 195, 123, 50, 14
+    PUSHBUTTON "&Aktualis.", IDC_DISKREFRESH, 250, 123, 40, 14
+    LTEXT "", IDC_DISKNOTE, 0, 142, 290, 18, SS_NOPREFIX
+END
+
+IDD_NEWPARTITION DIALOGEX 0, 0, 210, 62
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Neue Partition"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_NEWSIZE_RANGE, 7, 10, 130, 9
+    EDITTEXT IDC_NEWSIZE, 140, 8, 52, 13, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
+    CONTROL "", IDC_NEWSIZE_SPIN, UPDOWN_CLASS, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 192, 8, 10, 13
+    DEFPUSHBUTTON "OK", IDOK, 97, 41, 50, 14
+    PUSHBUTTON "Abbrechen", IDCANCEL, 153, 41, 50, 14
+END
+
+IDD_LANGUAGEPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "&Sprache und Region:", IDC_STATIC, 0, 4, 95, 9
+    COMBOBOX IDC_LANGUAGELIST, 100, 2, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT "&Tastatur oder Eingabe:", IDC_STATIC, 0, 24, 95, 9
+    COMBOBOX IDC_LAYOUTLIST, 100, 22, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT "Die Tastatur gilt im Setup, sobald Sie sie auswählen. So können Sie damit Ihren Kontonamen und Ihr Kennwort eingeben.", IDC_STATIC, 0, 128, 290, 26
+END
+
+IDD_APPSPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 104
+    LTEXT "", IDC_APPSPACE, 0, 108, 290, 10, SS_NOPREFIX
+    LTEXT "Deaktivieren Sie ein Kontrollkästchen, um eine Komponente auszulassen. Die Downloads nutzen Ihre Internetverbindung, und jedes Paket wird vor der Installation anhand der Signatur oder Prüfsumme seines Herausgebers geprüft.", IDC_STATIC, 0, 124, 290, 34
+END
+
+IDD_STORAGEPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
+    AUTORADIOBUTTON "Laufwerk C: jetzt &erweitern und neu starten", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&Nicht jetzt", IDC_EXPANDLATER, 0, 42, 290, 10
+    LTEXT "LiberNT startet zum Abschluss einmal neu, danach wird dieses Setup erneut geöffnet.", IDC_STATIC, 0, 60, 290, 18
+    LTEXT "Sie können das auch später tun: Führen Sie lntexpandstorage in der Eingabeaufforderung als Administrator aus. Die als Nächstes angebotenen Komponenten benötigen mehr als 1 GB freien Speicher.", IDC_STATIC, 0, 124, 290, 34
+END
+
+IDD_ACCOUNTPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "Co&mputername:", IDC_STATIC, 0, 4, 95, 9
+    EDITTEXT IDC_COMPUTERNAME, 100, 2, 190, 13, ES_UPPERCASE | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "&Benutzername:", IDC_STATIC, 0, 22, 95, 9
+    EDITTEXT IDC_USERNAME, 100, 20, 190, 13, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "&Kennwort:", IDC_STATIC, 0, 40, 95, 9
+    EDITTEXT IDC_PASSWORD1, 100, 38, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "Kennwort &bestätigen:", IDC_STATIC, 0, 58, 95, 9
+    EDITTEXT IDC_PASSWORD2, 100, 56, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "Kennwort&hinweis:", IDC_STATIC, 0, 76, 95, 9
+    EDITTEXT IDC_PASSWORDHINT, 100, 74, 190, 13, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "&Zeitzone:", IDC_STATIC, 0, 96, 95, 9
+    COMBOBOX IDC_TIMEZONELIST, 100, 94, 190, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX "Automatisch auf &Sommerzeit umstellen", IDC_AUTODAYLIGHT, 100, 111, 190, 10, WS_TABSTOP
+    LTEXT "Dieses Konto gehört zur Gruppe Administratoren. Wenn Sie das Kennwort leer lassen, meldet LiberNT Sie automatisch an diesem Konto an.", IDC_STATIC, 0, 130, 290, 26
+END
+
+IDD_READYPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    EDITTEXT IDC_READY_SUMMARY, 0, 0, 290, 90, ES_MULTILINE | ES_READONLY | WS_VSCROLL | NOT WS_TABSTOP
+    LTEXT "LiberNT befindet sich in aktiver Entwicklung. Verwenden Sie es zum Ausprobieren und Testen, nicht als Hauptbetriebssystem. Es kann Ihre Daten beschädigen oder Ihre Hardware schädigen.", IDC_READY_WARNING, 0, 97, 290, 28
+    AUTOCHECKBOX "Ich habe das &verstanden und die Daten gesichert, die ich behalten möchte.", IDC_CONFIRM_INSTALL, 0, 132, 290, 20, BS_MULTILINE | BS_TOP | WS_TABSTOP
+END
+
+IDD_PROCESSPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_ACTIVITY, 0, 40, 290, 10, SS_NOPREFIX
+    CONTROL "", IDC_PROCESSPROGRESS, "msctls_progress32", PBS_SMOOTH | WS_CHILD | WS_VISIBLE | WS_BORDER, 0, 56, 290, 10
+    LTEXT "", IDC_ITEM, 0, 72, 290, 20, SS_NOPREFIX
+END
+
+IDD_FINISHPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_FINISHLOGO, "Static", SS_OWNERDRAW, 0, 0, 290, 96
+    LTEXT "", IDC_FINISHTEXT, 0, 102, 290, 40, SS_NOPREFIX
+    CONTROL "", IDC_RESTART_PROGRESS, "msctls_progress32", PBS_SMOOTH | WS_CHILD | WS_BORDER, 0, 148, 290, 8
+END
+
 IDD_RESIZE DIALOGEX 0, 0, 300, 170
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Shrink"
+CAPTION "Verkleinern"
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_RESIZE_LABEL_TOTAL, 7, 13, 190, 8
@@ -17,99 +137,212 @@ BEGIN
     LTEXT "", IDC_RESIZE_LABEL_AFTER, 7, 70, 190, 8
     EDITTEXT IDC_RESIZE_AFTER, 203, 67, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
     ICON "", IDC_RESIZE_ICON, 8, 85, 10, 10, SS_ICON | SS_REALSIZEIMAGE
-    LTEXT "You cannot shrink a volume beyond the point where any unmovable files are located.", IDC_RESIZE_NOTE, 25, 86, 268, 26
+    LTEXT "Ein Volume kann nicht über die Stelle hinaus verkleinert werden, an der sich nicht verschiebbare Dateien befinden.", IDC_RESIZE_NOTE, 25, 86, 268, 26
     DEFPUSHBUTTON "", IDOK, 180, 149, 54, 14
-    PUSHBUTTON "Cancel", IDCANCEL, 239, 149, 54, 14
+    PUSHBUTTON "Abbrechen", IDCANCEL, 239, 149, 54, 14
 END
 
 /* Strings */
 
 STRINGTABLE
 BEGIN
-    IDS_SHRINK_CAPTION "Shrink %s"
-    IDS_EXTEND_CAPTION "Extend %s"
-    IDS_SHRINK_TOTAL "Total size before shrink in MB:"
-    IDS_SHRINK_AVAILABLE "Size of available shrink space in MB:"
-    IDS_SHRINK_AMOUNT "&Enter the amount of space to shrink in MB:"
-    IDS_SHRINK_AFTER "Total size after shrink in MB:"
-    IDS_SHRINK_BUTTON "&Shrink"
-    IDS_EXTEND_TOTAL "Total size before extend in MB:"
-    IDS_EXTEND_AVAILABLE "Size of available space in MB:"
-    IDS_EXTEND_AMOUNT "&Enter the amount of space to add in MB:"
-    IDS_EXTEND_AFTER "Total size after extend in MB:"
-    IDS_EXTEND_BUTTON "E&xtend"
-    IDS_RESIZE_PENDING "Partition changes are waiting to be applied. Shrink and extend take effect immediately, so do them before creating, deleting or formatting partitions."
-    IDS_RESIZE_FAILED "The partition could not be resized."
-    IDS_CAPTION "LiberNT Setup"
-    IDS_DRIVETITLE "Richte Installationspartition und Systemverzeichnis ein"
-    IDS_PROCESSTITLE "Richte Partition ein, kopiere Dateien und richte System ein."
-    IDS_PROCESSSUBTITLE "Erstelle und formatiere Partition, kopiere Dateien, installiere und konfiguriere Bootloader."
-    IDS_ABORTSETUP "LiberNT ist nicht vollständig auf Ihrem Computer installiert. Wenn Sie das Setup verlassen, müssen Sie das Setup nochmals ausführen, um LiberNT zu installieren. Wirklich beenden?"
+    IDS_SHRINK_CAPTION "%s verkleinern"
+    IDS_EXTEND_CAPTION "%s erweitern"
+    IDS_SHRINK_TOTAL "Gesamtgröße vor dem Verkleinern in MB:"
+    IDS_SHRINK_AVAILABLE "Zum Verkleinern verfügbarer Speicher in MB:"
+    IDS_SHRINK_AMOUNT "Zu verkleinernder Speicher in &MB:"
+    IDS_SHRINK_AFTER "Gesamtgröße nach dem Verkleinern in MB:"
+    IDS_SHRINK_BUTTON "&Verkleinern"
+    IDS_EXTEND_TOTAL "Gesamtgröße vor dem Erweitern in MB:"
+    IDS_EXTEND_AVAILABLE "Verfügbarer Speicher in MB:"
+    IDS_EXTEND_AMOUNT "Hinzuzufügender Speicher in &MB:"
+    IDS_EXTEND_AFTER "Gesamtgröße nach dem Erweitern in MB:"
+    IDS_EXTEND_BUTTON "&Erweitern"
+    IDS_RESIZE_PENDING "Partitionsänderungen stehen noch aus. Verkleinern und Erweitern werden sofort ausgeführt; führen Sie sie daher vor dem Erstellen, Löschen oder Formatieren von Partitionen aus."
+    IDS_RESIZE_FAILED "Die Größe der Partition konnte nicht geändert werden."
+    IDS_CAPTION "LiberNT-Setup"
+    IDS_DRIVETITLE "Wo möchten Sie LiberNT installieren?"
+    IDS_PROCESSTITLE "LiberNT wird installiert"
+    IDS_PROCESSSUBTITLE "Setup bereitet den Datenträger vor, kopiert die Dateien, konfiguriert LiberNT und installiert den Bootloader. Das kann einige Minuten dauern."
+    IDS_ABORTSETUP "LiberNT ist nicht vollständig auf Ihrem Computer installiert. Wenn Sie Setup jetzt beenden, müssen Sie Setup erneut ausführen, um LiberNT zu installieren. Wirklich beenden?"
     IDS_ABORTSETUP2 "Installation abbrechen?"
-    IDS_NO_TXTSETUP_SIF "Die Datei 'txtsetup.sif' konnte nicht gefunden werden.\nSetup kann nicht fortfahren."
-    IDS_FINISH_NO_REBOOT "Setup needs to restart your computer to continue with the second installation step.\n\nClick on Restart to immediately restart your computer.\nClick on Postpone to quit the installer and restart your computer at a later time."
-    IDS_ABORT_NO_REBOOT "Click on Restart to immediately restart your computer.\nClick on Close to quit the installer."
-    IDS_INSTALLBTN "&Install"
-    IDS_RESTARTBTN "&Restart"
-    IDS_POSTPONEBTN "&Postpone"
+    IDS_NO_TXTSETUP_SIF "'txtsetup.sif' wurde nicht gefunden.\nSetup kann nicht fortfahren."
+    IDS_FINISH_NO_REBOOT "Starten Sie den Computer neu, um LiberNT zu starten. Starten Sie nicht erneut vom Installationsmedium.\n\nKlicken Sie auf Neu starten, um den Computer sofort neu zu starten.\nKlicken Sie auf Später, um Setup zu beenden und den Computer später neu zu starten."
+    IDS_ABORT_NO_REBOOT "Klicken Sie auf Neu starten, um den Computer sofort neu zu starten.\nKlicken Sie auf Schließen, um Setup zu beenden."
+    IDS_INSTALLBTN "&Installieren"
+    IDS_RESTARTBTN "&Neu starten"
+    IDS_POSTPONEBTN "&Später"
+END
+
+/* Setup window */
+
+STRINGTABLE
+BEGIN
+    IDS_DISKSUBTITLE "Wählen Sie eine Partition oder nicht zugeordneten Speicher. Außer Verkleinern und Erweitern ändert Setup Ihre Datenträger erst nach Klick auf Installieren."
+    IDS_ACCOUNTZONESUBTITLE "Mit diesem Konto melden Sie sich bei LiberNT an. LiberNT zeigt die Uhrzeit der ausgewählten Zeitzone an."
+    IDS_READYTITLE "Bereit zur Installation"
+    IDS_READYSUBTITLE "Überprüfen Sie Ihre Auswahl. Setup beginnt mit dem Ändern Ihrer Datenträger, wenn Sie auf Installieren klicken."
+    IDS_DONETITLE "LiberNT ist installiert"
+    IDS_ABORTTITLE "LiberNT wurde nicht installiert"
+    IDS_DONE_REBOOT "Ihr Computer startet in wenigen Sekunden neu, um LiberNT zu starten. Starten Sie nicht erneut vom Installationsmedium.\n\nKlicken Sie auf Neu starten, um jetzt neu zu starten."
+    IDS_ABORT_REBOOT "Setup wurde nicht abgeschlossen. Ihr Computer startet in wenigen Sekunden neu.\n\nKlicken Sie auf Neu starten, um jetzt neu zu starten."
+    IDS_BACKBTN "&Zurück"
+    IDS_NEXTBTN "&Weiter"
+    IDS_CANCELBTN "Abbrechen"
+    IDS_CLOSEBTN "S&chließen"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_DISK_COL_NAME "Name"
+    IDS_DISK_COL_TOTAL "Gesamtgröße"
+    IDS_DISK_COL_FREE "Freier Speicher"
+    IDS_DISK_COL_TYPE "Typ"
+    IDS_DISK_UNALLOCATED "Nicht zugeordneter Speicher auf Laufwerk %lu"
+    IDS_DISK_PARTITION "Laufwerk %lu Partition %lu"
+    IDS_DISK_PARTITION_LABEL "Laufwerk %lu Partition %lu: %s"
+    IDS_DISK_SUFFIX_NEW " (neu)"
+    IDS_DISK_SUFFIX_FORMAT " (wird formatiert)"
+    IDS_DISKINFO "Laufwerk %lu:"
+    IDS_TYPE_SYSTEM "System"
+    IDS_TYPE_MSR "MSR (reserviert)"
+    IDS_TYPE_PRIMARY "Primär"
+    IDS_TYPE_RECOVERY "Wiederherstellung"
+    IDS_TYPE_OEM "OEM (reserviert)"
+    IDS_TYPE_LOGICAL "Logisch"
+    IDS_TYPE_EXTENDED "Erweitert"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_DISK_SELECT "Wählen Sie aus, wo LiberNT installiert werden soll."
+    IDS_DISK_NO_REGION "Dieser Bereich ist zu klein für eine neue Partition."
+    IDS_DISK_NOT_BASIC "LiberNT kann nicht auf dieser Partition installiert werden. Wählen Sie eine primäre Partition oder nicht zugeordneten Speicher."
+    IDS_DISK_NOT_FIRMWARE "Die Firmware dieses Computers erkennt das ausgewählte Laufwerk nicht, daher startet LiberNT möglicherweise nicht davon.\n\nKlicken Sie auf OK, um es trotzdem zu verwenden."
+    IDS_DISK_NEW_SYSTEM "Damit alle Funktionen von LiberNT richtig funktionieren, erstellt Setup auch Partitionen für Systemdateien."
+    IDS_DISK_FORMAT_WARN "Wenn Sie diese Partition formatieren, gehen alle darauf gespeicherten Daten verloren. Sichern Sie zuerst alle Dateien, die Sie behalten möchten."
+    IDS_DISK_FORMAT_NTFS "LiberNT wird auf NTFS installiert. Setup formatiert diese Partition, und alle darauf gespeicherten Daten gehen verloren."
+    IDS_DISK_FORMAT_EXISTING "Diese Partition enthält bereits eine Windows- oder LiberNT-Installation. Setup formatiert sie, und alle darauf gespeicherten Daten gehen verloren. Wählen Sie eine andere Partition, um sie zu behalten."
+    IDS_DISK_ERASE_WARN "Alle Partitionen auf Laufwerk %lu und alle darauf gespeicherten Daten werden zu Beginn der Installation gelöscht."
+    IDS_NEWPART_RANGE "&Größe in MB (bis %I64u):"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_READY_TARGET "LiberNT wird auf %s (%s) installiert."
+    IDS_READY_ERASE "Laufwerk %lu wird gelöscht."
+    IDS_READY_DELETE "%s wird gelöscht."
+    IDS_READY_CREATE "%s (%s) wird erstellt und als %s formatiert."
+    IDS_READY_FORMAT "%s (%s) wird als %s formatiert."
+    IDS_READY_NOCHANGES "Keine Partition wird erstellt, gelöscht oder formatiert."
+    IDS_READY_COMPUTER "Computername: %s"
+    IDS_READY_ACCOUNT "Konto: %s"
+    IDS_READY_TIMEZONE "Zeitzone: %s"
+    IDS_READY_LANGUAGE "Sprache und Region: %s"
+    IDS_READY_KEYBOARD "Tastatur: %s"
+    IDS_LANGUAGETITLE "Sprache und Tastatur auswählen"
+    IDS_LANGUAGESUBTITLE "Setup und LiberNT verwenden diese Sprache und ihr Format für Datum, Uhrzeit, Zahlen und Währung."
+END
+
+STRINGTABLE
+BEGIN
+    IDS_INSTALL_FAILED "LiberNT konnte nicht installiert werden"
+    IDS_INSTALL_STEP_FAILED "%s\nDer Schritt ist mit dem Status 0x%08lx fehlgeschlagen."
+    IDS_FORMAT_FAILED "Setup konnte %s nicht als %s formatieren.\n%s"
+    IDS_CHECK_FAILED "Setup hat auf %s Fehler gefunden, die nicht behoben werden konnten (Status 0x%08lx). Setup wird fortgesetzt."
+    IDS_SETUPLIB_MISSING "Setup kann %s nicht laden. Führen Sie libernt.exe aus dem Ordner aus, der den Ordner system32 und txtsetup.sif enthält."
+END
+
+STRINGTABLE
+BEGIN
+    IDS_OOBE_REGIONTITLE "Sprache und Tastatur auswählen"
+    IDS_OOBE_REGIONSUBTITLE "LiberNT verwendet diese Sprache, ihr Format für Datum, Uhrzeit, Zahlen und Währung sowie diese Tastatur zur Eingabe."
+    IDS_APPSTITLE "Komponenten für die meisten Programme"
+    IDS_APPSSUBTITLE "LiberNT lädt sie von ihren Herausgebern herunter und installiert sie für alle Konten."
+    IDS_APPS_COL_NAME "Komponente"
+    IDS_APPS_COL_SOURCE "Heruntergeladen von"
+    IDS_OOBE_FINISHTITLE "LiberNT wird vorbereitet"
+    IDS_OOBE_FINISHSUBTITLE "Das kann einige Minuten dauern. Lassen Sie den Computer eingeschaltet."
+    IDS_OOBE_APPLY_REGION "Sprache und Tastatur werden übernommen..."
+    IDS_OOBE_APPLY_TIMEZONE "Zeitzone wird eingestellt..."
+    IDS_OOBE_APPLY_NAME "Computer wird benannt..."
+    IDS_OOBE_APPLY_ACCOUNT "Konto wird erstellt..."
+    IDS_OOBE_DOWNLOADING "%s wird heruntergeladen..."
+    IDS_OOBE_INSTALLING "%s wird installiert..."
+    IDS_OOBE_APP_FAILED "%s: %s (%s)"
+    IDS_OOBE_APPS_FAILED "Einige Komponenten wurden nicht installiert"
+    IDS_OOBE_ACCOUNT_FAILED "LiberNT konnte Ihr Konto nicht erstellen (Fehler %lu). LiberNT meldet stattdessen das integrierte Konto Benutzer an."
+    IDS_OOBE_UNKNOWN_ERROR "Unbekannter Fehler"
+    IDS_OOBE_STORAGETITLE "Den gesamten Speicher nutzen"
+    IDS_OOBE_STORAGESUBTITLE "LiberNT kann Laufwerk C: auf das gesamte Speichergerät vergrößern, von dem es ausgeführt wird."
+    IDS_OOBE_STORAGE_INFO "Laufwerk C: hat %I64u MB, davon %I64u MB frei. Der Rest des Speichergeräts wird noch nicht genutzt."
+    IDS_OOBE_EXPAND_RESTART "LiberNT startet neu, um Laufwerk C: zu erweitern"
+    IDS_OOBE_EXPAND_RESTART_TEXT "Laufwerk C: wird auf das gesamte Speichergerät vergrößert, danach startet LiberNT neu. Dieses Setup wird nach dem Neustart erneut geöffnet."
+    IDS_OOBE_EXPAND_FAILED "LiberNT konnte Laufwerk C: nicht erweitern (Exitcode von lntexpandstorage: %lu). Setup wird fortgesetzt; Sie können es später mit lntexpandstorage in der Eingabeaufforderung erneut versuchen."
+    IDS_OOBE_APPS_SPACE "Die ausgewählten Komponenten benötigen etwa %lu MB. Laufwerk C: hat %I64u MB frei."
+    IDS_OOBE_APPS_NOSPACE "Nicht genügend freier Speicher für die ausgewählten Komponenten"
+    IDS_OOBE_APPS_NOSPACE_TEXT "Sie benötigen etwa %lu MB, und Laufwerk C: hat %I64u MB frei. Deaktivieren Sie einige Kontrollkästchen, um fortzufahren. Um sie später zu installieren, erweitern Sie Laufwerk C: mit lntexpandstorage in der Eingabeaufforderung und führen dann %%SystemRoot%%\\system32\\oobe\\oobe.exe /components aus."
+    IDS_OOBE_INSTALL_DRIVERS "Treiber für Ihre Geräte werden installiert..."
 END
 
 /* Progress Strings */
 
 STRINGTABLE
 BEGIN
-    IDS_FORMATTING_PROGRESS1 "Formatting volume %c: (%s) in %s..."
-    IDS_FORMATTING_PROGRESS2 "Formatting volume %s in %s..."
+    IDS_FORMATTING_PROGRESS1 "Volume %c: (%s) wird als %s formatiert..."
+    IDS_FORMATTING_PROGRESS2 "Volume %s wird als %s formatiert..."
 
-    IDS_CHECKING_PROGRESS1 "Checking volume %c: (%s)..."
-    IDS_CHECKING_PROGRESS2 "Checking volume %s..."
+    IDS_CHECKING_PROGRESS1 "Volume %c: (%s) wird überprüft..."
+    IDS_CHECKING_PROGRESS2 "Volume %s wird überprüft..."
 
-    IDS_COPYING  "Copying %s"
-    IDS_MOVING   "Moving %s to %s"
-    IDS_RENAMING "Renaming %s to %s"
-    IDS_DELETING "Deleting %s"
+    IDS_COPYING  "%s wird kopiert"
+    IDS_MOVING   "%s wird nach %s verschoben"
+    IDS_RENAMING "%s wird in %s umbenannt"
+    IDS_DELETING "%s wird gelöscht"
 
-    IDS_CONFIG_SYSTEM_PARTITION "Configuring the system partition..."
-    IDS_PREPARE_PARTITIONS "Preparing partitions..."
-    IDS_PREPARE_FILES "Preparing the list of files to be copied, please wait..."
-    IDS_COPYING_FILES "Copying the files..."
+    IDS_CONFIG_SYSTEM_PARTITION "Systempartition wird konfiguriert..."
+    IDS_PREPARE_PARTITIONS "Partitionen werden vorbereitet..."
+    IDS_PREPARE_FILES "Liste der zu kopierenden Dateien wird vorbereitet, bitte warten..."
+    IDS_COPYING_FILES "Dateien werden kopiert..."
 
-    IDS_CREATE_REGISTRY "Creating the registry..."
+    IDS_CREATE_REGISTRY "Registrierung wird erstellt..."
 
     // IDS_INSTALL_FINALIZE "Finalizing the installation..."
-    IDS_INSTALL_BOOTLOADER "Installing the bootloader..."
+    IDS_INSTALL_BOOTLOADER "Bootloader wird installiert..."
 END
 
 // Note to translators: please refer to the corresponding usetup/lang/*.h translations.
 STRINGTABLE
 BEGIN
-    IDS_REG_DONE "Done"
-    IDS_REG_REGHIVEUPDATE "Updating registry hives"
-    IDS_REG_IMPORTFILE "Importing %s"
-    IDS_REG_DISPLAYSETTINGSUPDATE "Updating display registry settings"
-    IDS_REG_LOCALESETTINGSUPDATE "Updating locale settings"
-    IDS_REG_ADDKBLAYOUTS "Adding keyboard layouts"
-    IDS_REG_KEYBOARDSETTINGSUPDATE "Updating keyboard layout settings"
-    IDS_REG_CODEPAGEINFOUPDATE "Adding codepage information"
+    IDS_REG_DONE "Fertig"
+    IDS_REG_REGHIVEUPDATE "Registrierungsstrukturen werden aktualisiert"
+    IDS_REG_IMPORTFILE "%s wird importiert"
+    IDS_REG_DISPLAYSETTINGSUPDATE "Anzeigeeinstellungen in der Registrierung werden aktualisiert"
+    IDS_REG_LOCALESETTINGSUPDATE "Regionale Einstellungen werden aktualisiert"
+    IDS_REG_ADDKBLAYOUTS "Tastaturlayouts werden hinzugefügt"
+    IDS_REG_KEYBOARDSETTINGSUPDATE "Tastaturlayout-Einstellungen werden aktualisiert"
+    IDS_REG_CODEPAGEINFOUPDATE "Codepage-Informationen werden hinzugefügt"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_ACCOUNTTITLE "Name your computer and create your account"
-    IDS_CONFIGURE_SYSTEM "Configuring LiberNT..."
-    IDS_CONFIG_FOLDERS "Creating the system and profile folders"
-    IDS_CONFIG_DEVICES "Installing the device classes"
-    IDS_CONFIG_NETWORK "Installing the network protocols"
-    IDS_CONFIG_SETTINGS "Applying the computer settings"
-    IDS_CONFIG_COMPONENTS "Registering the components"
-    IDS_CONFIG_SHORTCUTS "Creating the Start menu shortcuts"
-    IDS_CONFIG_SECURITY "Applying the security settings"
-    IDS_CONFIG_ACCOUNT "Creating your account"
-    IDS_CONFIG_FINISH "Saving the configuration"
-    IDS_ERROR_COMPUTERNAME "The computer name must have 1 to 15 letters, digits or hyphens, and cannot contain only digits."
-    IDS_ERROR_USERNAME "The user name must have 1 to 20 characters and cannot contain any of these characters:\n"" / \\ [ ] : ; | = , + * ? < > @\nIt cannot contain only periods and spaces."
-    IDS_ERROR_USEREXISTS "This name is already used by a built-in account or group, or by the computer. Choose another user name."
-    IDS_ERROR_PASSWORDMATCH "The passwords do not match. Type the same password in both boxes."
+    IDS_ACCOUNTTITLE "Computer benennen und Konto erstellen"
+    IDS_CONFIGURE_SYSTEM "LiberNT wird konfiguriert..."
+    IDS_CONFIG_FOLDERS "System- und Profilordner werden erstellt"
+    IDS_CONFIG_DEVICES "Geräteklassen werden installiert"
+    IDS_CONFIG_NETWORK "Netzwerkprotokolle werden installiert"
+    IDS_CONFIG_SETTINGS "Computereinstellungen werden übernommen"
+    IDS_CONFIG_COMPONENTS "Komponenten werden registriert"
+    IDS_CONFIG_SHORTCUTS "Verknüpfungen im Startmenü werden erstellt"
+    IDS_CONFIG_SECURITY "Sicherheitseinstellungen werden übernommen"
+    IDS_CONFIG_ACCOUNT "Ihr Konto wird erstellt"
+    IDS_CONFIG_FINISH "Konfiguration wird gespeichert"
+    IDS_ERROR_COMPUTERNAME "Der Computername muss aus 1 bis 15 Buchstaben, Ziffern oder Bindestrichen bestehen und darf nicht nur Ziffern enthalten."
+    IDS_ERROR_USERNAME "Der Benutzername muss 1 bis 20 Zeichen lang sein und darf keines dieser Zeichen enthalten:\n"" / \\ [ ] : ; | = , + * ? < > @\nEr darf nicht nur aus Punkten und Leerzeichen bestehen."
+    IDS_ERROR_USEREXISTS "Dieser Name wird bereits von einem integrierten Konto, einer Gruppe oder dem Computer verwendet. Wählen Sie einen anderen Benutzernamen."
+    IDS_ERROR_PASSWORDMATCH "Die Kennwörter stimmen nicht überein. Geben Sie in beiden Feldern dasselbe Kennwort ein."
+    IDS_ERROR_PASSWORDHINT "Geben Sie einen Kennworthinweis ein."
+    IDS_ERROR_HINTPASSWORD "Der Kennworthinweis darf das Kennwort nicht enthalten."
 END
 
 /* Error Strings */
@@ -117,11 +350,11 @@ END
 STRINGTABLE
 BEGIN
 
-    IDS_ERROR_CREATE_PARTITION "Failed to create a new partition."
+    IDS_ERROR_CREATE_PARTITION "Die neue Partition konnte nicht erstellt werden."
 
-    IDS_WARN_DELETE_PARTITION_TITLE "Delete partition?"
-    IDS_WARN_DELETE_PARTITION "Are you sure you want to delete the selected partition?"
-    IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "Are you sure you want to delete the selected extended partition and ALL the logical partitions it contains?"
+    IDS_WARN_DELETE_PARTITION_TITLE "Partition löschen?"
+    IDS_WARN_DELETE_PARTITION "Möchten Sie die ausgewählte Partition wirklich löschen?"
+    IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "Möchten Sie die ausgewählte erweiterte Partition und ALLE darin enthaltenen logischen Partitionen wirklich löschen?"
 END
 
 IDD_INSTALLTYPEPAGE DIALOGEX 0, 0, 290, 160
@@ -130,11 +363,11 @@ FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_TYPE_FOUND, 0, 0, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
     AUTORADIOBUTTON "", IDC_TYPE_ALONGSIDE, 0, 13, 290, 10, WS_GROUP | WS_TABSTOP
-    AUTORADIOBUTTON "&Something else: create, resize or choose partitions yourself", IDC_TYPE_MANUAL, 0, 25, 290, 10
+    AUTORADIOBUTTON "&Etwas anderes: Partitionen selbst erstellen, ändern oder auswählen", IDC_TYPE_MANUAL, 0, 25, 290, 10
     CONTROL "", IDC_TYPE_SPLIT, TRACKBAR_CLASS, TBS_HORZ | TBS_NOTICKS | TBS_BOTH | WS_GROUP | WS_TABSTOP, 6, 40, 284, 16
     LTEXT "", IDC_TYPE_WINSIZE, 12, 57, 136, 9, SS_NOPREFIX
     RTEXT "", IDC_TYPE_LNTSIZE, 148, 57, 136, 9, SS_NOPREFIX
-    LTEXT "Start by default:", IDC_TYPE_DEFAULT_LABEL, 12, 73, 62, 9
+    LTEXT "Standardmäßig starten:", IDC_TYPE_DEFAULT_LABEL, 12, 73, 62, 9
     AUTORADIOBUTTON "&LiberNT", IDC_TYPE_DEFAULT_LIBERNT, 76, 72, 70, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "", IDC_TYPE_DEFAULT_WINDOWS, 150, 72, 120, 10
     ICON "", IDC_TYPE_WARNICON, 12, 87, 10, 10, SS_ICON | SS_REALSIZEIMAGE
@@ -144,22 +377,22 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_TYPETITLE "Installation type"
-    IDS_TYPESUBTITLE "Choose how LiberNT shares this computer."
-    IDS_TYPE_FOUND "This computer has %s on %s."
-    IDS_TYPE_ALONGSIDE "Install LiberNT &alongside %s"
+    IDS_TYPETITLE "Installationsart"
+    IDS_TYPESUBTITLE "Wählen Sie, wie LiberNT diesen Computer teilt."
+    IDS_TYPE_FOUND "Auf diesem Computer befindet sich %s auf %s."
+    IDS_TYPE_ALONGSIDE "LiberNT &neben %s installieren"
     IDS_TYPE_SPLITSIZE "%s: %s"
-    IDS_TYPE_SHRINKNOTE "Drag the slider to share the space. %s keeps its programs and files. Its partition shrinks as soon as you select Next."
-    IDS_TYPE_HIBERNATED "%s is hibernated or was shut down with Fast startup, so its partition cannot be resized safely. Start %s, choose Restart from the Start menu, then start Setup again. You can also turn off Fast startup in Control Panel > Power Options."
-    IDS_TYPE_NOSPACE "%s does not have enough free space to make room for LiberNT, which needs at least %I64u GB. Free some space in it, or choose Something else."
-    IDS_TYPE_NORESIZE "The %s partition cannot be resized. Choose Something else to pick another place for LiberNT."
-    IDS_TYPE_PLANNED "%s was resized to %s. LiberNT will be installed in the new %s partition."
-    IDS_TYPE_WARNING "%s starts by default. To start LiberNT, you must open the computer's boot menu while it starts, usually with F12, F11, F9 or Esc, and choose LiberNT Boot Manager. In Windows you can also use Settings > System > Recovery > Advanced startup > Use a device."
-    IDS_TYPE_CONFIRM_TITLE "Resize %s now?"
-    IDS_TYPE_CONFIRM "%s shrinks from %s to %s right away, before the rest of the installation, and LiberNT gets %s. Make sure the files you want to keep are backed up."
+    IDS_TYPE_SHRINKNOTE "Ziehen Sie den Schieberegler, um den Speicher aufzuteilen. %s behält seine Programme und Dateien. Seine Partition wird verkleinert, sobald Sie auf Weiter klicken."
+    IDS_TYPE_HIBERNATED "%s befindet sich im Ruhezustand oder wurde mit dem Schnellstart heruntergefahren, daher kann seine Partition nicht sicher verkleinert werden. Starten Sie %s, wählen Sie im Startmenü Neu starten und starten Sie dann Setup erneut. Sie können den Schnellstart auch unter Systemsteuerung > Energieoptionen deaktivieren."
+    IDS_TYPE_NOSPACE "%s hat nicht genug freien Speicher, um Platz für LiberNT zu schaffen, das mindestens %I64u GB benötigt. Geben Sie dort Speicher frei, oder wählen Sie Etwas anderes."
+    IDS_TYPE_NORESIZE "Die Größe der Partition von %s kann nicht geändert werden. Wählen Sie Etwas anderes, um einen anderen Ort für LiberNT auszuwählen."
+    IDS_TYPE_PLANNED "%s wurde auf %s verkleinert. LiberNT wird in der neuen Partition mit %s installiert."
+    IDS_TYPE_WARNING "%s startet standardmäßig. Um LiberNT zu starten, öffnen Sie beim Starten des Computers das Startmenü der Firmware, meist mit F12, F11, F9 oder Esc, und wählen Sie LiberNT Boot Manager. In Windows können Sie auch Einstellungen > System > Wiederherstellung > Erweiterter Start > Gerät verwenden nutzen."
+    IDS_TYPE_CONFIRM_TITLE "%s jetzt verkleinern?"
+    IDS_TYPE_CONFIRM "%s wird sofort, vor dem Rest der Installation, von %s auf %s verkleinert, und LiberNT erhält %s. Stellen Sie sicher, dass die Dateien, die Sie behalten möchten, gesichert sind."
     IDS_TYPE_WINDOWS11 "Windows 11"
     IDS_TYPE_WINDOWS10 "Windows 10"
     IDS_TYPE_WINDOWS "Windows"
-    IDS_READY_DEFAULTOS "Starts by default: %s"
+    IDS_READY_DEFAULTOS "Standardmäßig gestartet: %s"
     IDS_TYPE_LIBERNT "LiberNT"
 END

@@ -1,0 +1,398 @@
+LANGUAGE LANG_ARABIC, SUBLANG_NEUTRAL
+
+/* Dialogs */
+
+IDD_SETUPFRAME DIALOGEX 0, 0, 420, 240
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "إعداد LiberNT"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_FRAME_TITLE, 120, 10, 290, 14, SS_NOPREFIX
+    LTEXT "", IDC_FRAME_SUBTITLE, 120, 26, 290, 18, SS_NOPREFIX
+    LTEXT "", IDC_FRAME_PAGE, 120, 48, 290, 160, NOT WS_VISIBLE
+    CONTROL "", IDC_STATIC, "Static", SS_ETCHEDHORZ, 120, 212, 300, 1
+    PUSHBUTTON "&السابق", IDC_FRAME_BACK, 250, 219, 50, 14
+    DEFPUSHBUTTON "ال&تالي", IDC_FRAME_NEXT, 305, 219, 50, 14
+    PUSHBUTTON "إلغاء الأمر", IDCANCEL, 360, 219, 50, 14
+END
+
+IDD_DISKPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_DISKLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 106
+    LTEXT "", IDC_DISKINFO, 0, 110, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    PUSHBUTTON "&جديد", IDC_DISKNEW, 0, 123, 36, 14
+    PUSHBUTTON "&حذف", IDC_DISKDELETE, 39, 123, 36, 14
+    PUSHBUTTON "&تهيئة", IDC_DISKFORMAT, 78, 123, 36, 14
+    PUSHBUTTON "&توسيع", IDC_DISKEXTEND, 117, 123, 36, 14
+    PUSHBUTTON "ت&قليص", IDC_DISKSHRINK, 156, 123, 36, 14
+    PUSHBUTTON "&مسح محرك الأقراص", IDC_DISKERASE, 195, 123, 50, 14
+    PUSHBUTTON "ت&حديث", IDC_DISKREFRESH, 250, 123, 40, 14
+    LTEXT "", IDC_DISKNOTE, 0, 142, 290, 18, SS_NOPREFIX
+END
+
+IDD_NEWPARTITION DIALOGEX 0, 0, 210, 62
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "قسم جديد"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_NEWSIZE_RANGE, 7, 10, 130, 9
+    EDITTEXT IDC_NEWSIZE, 140, 8, 52, 13, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
+    CONTROL "", IDC_NEWSIZE_SPIN, UPDOWN_CLASS, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 192, 8, 10, 13
+    DEFPUSHBUTTON "موافق", IDOK, 97, 41, 50, 14
+    PUSHBUTTON "إلغاء الأمر", IDCANCEL, 153, 41, 50, 14
+END
+
+IDD_LANGUAGEPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "ال&لغة والمنطقة:", IDC_STATIC, 0, 4, 95, 9
+    COMBOBOX IDC_LANGUAGELIST, 100, 2, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT "لوحة ال&مفاتيح أو أسلوب الإدخال:", IDC_STATIC, 0, 24, 95, 9
+    COMBOBOX IDC_LAYOUTLIST, 100, 22, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT "تعمل لوحة المفاتيح في برنامج الإعداد بمجرد اختيارها، لذا يمكنك استخدامها لكتابة اسم حسابك وكلمة المرور.", IDC_STATIC, 0, 128, 290, 26
+END
+
+IDD_APPSPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 104
+    LTEXT "", IDC_APPSPACE, 0, 108, 290, 10, SS_NOPREFIX
+    LTEXT "ألغِ تحديد مربع لتخطي مكون. تستخدم التنزيلات اتصالك بالإنترنت، ويتم التحقق من كل حزمة بتوقيع ناشرها أو المجموع الاختباري قبل تثبيتها.", IDC_STATIC, 0, 124, 290, 34
+END
+
+IDD_STORAGEPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
+    AUTORADIOBUTTON "&توسيع محرك الأقراص C: الآن وإعادة التشغيل", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&ليس الآن", IDC_EXPANDLATER, 0, 42, 290, 10
+    LTEXT "يُعاد تشغيل LiberNT مرة واحدة للانتهاء، ثم يُفتح هذا الإعداد مرة أخرى.", IDC_STATIC, 0, 60, 290, 18
+    LTEXT "يمكنك أيضًا القيام بذلك لاحقًا: شغّل lntexpandstorage في موجه الأوامر كمسؤول. تحتاج المكونات التي يعرضها هذا الإعداد بعد ذلك إلى أكثر من 1 غيغابايت من المساحة الحرة.", IDC_STATIC, 0, 124, 290, 34
+END
+
+IDD_ACCOUNTPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "اسم ال&كمبيوتر:", IDC_STATIC, 0, 4, 95, 9
+    EDITTEXT IDC_COMPUTERNAME, 100, 2, 190, 13, ES_UPPERCASE | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "اسم الم&ستخدم:", IDC_STATIC, 0, 22, 95, 9
+    EDITTEXT IDC_USERNAME, 100, 20, 190, 13, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "&كلمة المرور:", IDC_STATIC, 0, 40, 95, 9
+    EDITTEXT IDC_PASSWORD1, 100, 38, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "تأكيد كلمة الم&رور:", IDC_STATIC, 0, 58, 95, 9
+    EDITTEXT IDC_PASSWORD2, 100, 56, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "&تلميح كلمة المرور:", IDC_STATIC, 0, 76, 95, 9
+    EDITTEXT IDC_PASSWORDHINT, 100, 74, 190, 13, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "المنطقة ال&زمنية:", IDC_STATIC, 0, 96, 95, 9
+    COMBOBOX IDC_TIMEZONELIST, 100, 94, 190, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX "الضبط التلقائي لل&توقيت الصيفي", IDC_AUTODAYLIGHT, 100, 111, 190, 10, WS_TABSTOP
+    LTEXT "هذا الحساب عضو في مجموعة Administrators. إذا تركت كلمة المرور فارغة، يسجّل LiberNT الدخول إليه تلقائيًا.", IDC_STATIC, 0, 130, 290, 26
+END
+
+IDD_READYPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    EDITTEXT IDC_READY_SUMMARY, 0, 0, 290, 90, ES_MULTILINE | ES_READONLY | WS_VSCROLL | NOT WS_TABSTOP
+    LTEXT "LiberNT قيد التطوير النشط. استخدمه للتقييم والاختبار، وليس كنظام التشغيل الرئيسي لديك. قد يؤدي إلى تلف بياناتك أو إتلاف أجهزتك.", IDC_READY_WARNING, 0, 97, 290, 28
+    AUTOCHECKBOX "أ&فهم ذلك، وقد نسخت احتياطيًا البيانات التي أريد الاحتفاظ بها.", IDC_CONFIRM_INSTALL, 0, 132, 290, 20, BS_MULTILINE | BS_TOP | WS_TABSTOP
+END
+
+IDD_PROCESSPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_ACTIVITY, 0, 40, 290, 10, SS_NOPREFIX
+    CONTROL "", IDC_PROCESSPROGRESS, "msctls_progress32", PBS_SMOOTH | WS_CHILD | WS_VISIBLE | WS_BORDER, 0, 56, 290, 10
+    LTEXT "", IDC_ITEM, 0, 72, 290, 20, SS_NOPREFIX
+END
+
+IDD_FINISHPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_FINISHLOGO, "Static", SS_OWNERDRAW, 0, 0, 290, 96
+    LTEXT "", IDC_FINISHTEXT, 0, 102, 290, 40, SS_NOPREFIX
+    CONTROL "", IDC_RESTART_PROGRESS, "msctls_progress32", PBS_SMOOTH | WS_CHILD | WS_BORDER, 0, 148, 290, 8
+END
+
+IDD_RESIZE DIALOGEX 0, 0, 300, 170
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "تقليص"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_RESIZE_LABEL_TOTAL, 7, 13, 190, 8
+    EDITTEXT IDC_RESIZE_TOTAL, 203, 10, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
+    LTEXT "", IDC_RESIZE_LABEL_AVAILABLE, 7, 32, 190, 8
+    EDITTEXT IDC_RESIZE_AVAILABLE, 203, 29, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
+    LTEXT "", IDC_RESIZE_LABEL_AMOUNT, 7, 51, 190, 8
+    EDITTEXT IDC_RESIZE_AMOUNT, 203, 48, 80, 13, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
+    CONTROL "", IDC_RESIZE_SPIN, UPDOWN_CLASS, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 283, 48, 10, 13
+    LTEXT "", IDC_RESIZE_LABEL_AFTER, 7, 70, 190, 8
+    EDITTEXT IDC_RESIZE_AFTER, 203, 67, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
+    ICON "", IDC_RESIZE_ICON, 8, 85, 10, 10, SS_ICON | SS_REALSIZEIMAGE
+    LTEXT "لا يمكنك تقليص وحدة تخزين إلى ما بعد النقطة التي توجد فيها ملفات غير قابلة للنقل.", IDC_RESIZE_NOTE, 25, 86, 268, 26
+    DEFPUSHBUTTON "", IDOK, 180, 149, 54, 14
+    PUSHBUTTON "إلغاء الأمر", IDCANCEL, 239, 149, 54, 14
+END
+
+/* Strings */
+
+STRINGTABLE
+BEGIN
+    IDS_SHRINK_CAPTION "تقليص %s"
+    IDS_EXTEND_CAPTION "توسيع %s"
+    IDS_SHRINK_TOTAL "الحجم الكلي قبل التقليص بالميغابايت:"
+    IDS_SHRINK_AVAILABLE "حجم المساحة المتاحة للتقليص بالميغابايت:"
+    IDS_SHRINK_AMOUNT "أ&دخل مقدار المساحة المراد تقليصها بالميغابايت:"
+    IDS_SHRINK_AFTER "الحجم الكلي بعد التقليص بالميغابايت:"
+    IDS_SHRINK_BUTTON "ت&قليص"
+    IDS_EXTEND_TOTAL "الحجم الكلي قبل التوسيع بالميغابايت:"
+    IDS_EXTEND_AVAILABLE "حجم المساحة المتاحة بالميغابايت:"
+    IDS_EXTEND_AMOUNT "أ&دخل مقدار المساحة المراد إضافتها بالميغابايت:"
+    IDS_EXTEND_AFTER "الحجم الكلي بعد التوسيع بالميغابايت:"
+    IDS_EXTEND_BUTTON "&توسيع"
+    IDS_RESIZE_PENDING "هناك تغييرات على الأقسام بانتظار التطبيق. يسري التقليص والتوسيع فورًا، لذا قم بهما قبل إنشاء الأقسام أو حذفها أو تهيئتها."
+    IDS_RESIZE_FAILED "تعذّر تغيير حجم القسم."
+    IDS_CAPTION "إعداد LiberNT"
+    IDS_DRIVETITLE "أين تريد تثبيت LiberNT؟"
+    IDS_PROCESSTITLE "جارٍ تثبيت LiberNT"
+    IDS_PROCESSSUBTITLE "يجهّز برنامج الإعداد القرص وينسخ الملفات ويكوّن LiberNT ويثبّت محمّل الإقلاع. قد يستغرق ذلك بضع دقائق."
+    IDS_ABORTSETUP "لم يتم تثبيت LiberNT بالكامل على الكمبيوتر. إذا أنهيت الإعداد الآن، فستحتاج إلى تشغيله مرة أخرى لتثبيت LiberNT. هل تريد الإنهاء فعلاً؟"
+    IDS_ABORTSETUP2 "إلغاء التثبيت؟"
+    IDS_NO_TXTSETUP_SIF "تعذّر العثور على 'txtsetup.sif'.\nلا يمكن لبرنامج الإعداد المتابعة."
+    IDS_FINISH_NO_REBOOT "أعد تشغيل الكمبيوتر لبدء LiberNT. لا تقم بالإقلاع من وسائط التثبيت مرة أخرى.\n\nانقر فوق إعادة التشغيل لإعادة تشغيل الكمبيوتر الآن.\nانقر فوق تأجيل لإنهاء برنامج التثبيت وإعادة تشغيل الكمبيوتر لاحقًا."
+    IDS_ABORT_NO_REBOOT "انقر فوق إعادة التشغيل لإعادة تشغيل الكمبيوتر الآن.\nانقر فوق إغلاق لإنهاء برنامج التثبيت."
+    IDS_INSTALLBTN "ت&ثبيت"
+    IDS_RESTARTBTN "إعادة ال&تشغيل"
+    IDS_POSTPONEBTN "تأ&جيل"
+END
+
+/* Setup window */
+
+STRINGTABLE
+BEGIN
+    IDS_DISKSUBTITLE "حدد قسمًا أو مساحة غير مخصصة. باستثناء التقليص والتوسيع، لا يغيّر الإعداد أقراصك إلا بعد النقر فوق تثبيت."
+    IDS_ACCOUNTZONESUBTITLE "تسجّل الدخول إلى LiberNT بهذا الحساب. يعرض LiberNT وقت المنطقة الزمنية التي تحددها."
+    IDS_READYTITLE "جاهز للتثبيت"
+    IDS_READYSUBTITLE "راجع اختياراتك. يبدأ الإعداد في تغيير أقراصك عند النقر فوق تثبيت."
+    IDS_DONETITLE "تم تثبيت LiberNT"
+    IDS_ABORTTITLE "لم يتم تثبيت LiberNT"
+    IDS_DONE_REBOOT "ستتم إعادة تشغيل الكمبيوتر خلال ثوانٍ لبدء LiberNT. لا تقم بالإقلاع من وسائط التثبيت مرة أخرى.\n\nانقر فوق إعادة التشغيل لإعادة التشغيل الآن."
+    IDS_ABORT_REBOOT "لم يكتمل الإعداد. ستتم إعادة تشغيل الكمبيوتر خلال ثوانٍ.\n\nانقر فوق إعادة التشغيل لإعادة التشغيل الآن."
+    IDS_BACKBTN "&السابق"
+    IDS_NEXTBTN "ال&تالي"
+    IDS_CANCELBTN "إلغاء الأمر"
+    IDS_CLOSEBTN "إ&غلاق"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_DISK_COL_NAME "الاسم"
+    IDS_DISK_COL_TOTAL "الحجم الكلي"
+    IDS_DISK_COL_FREE "المساحة الحرة"
+    IDS_DISK_COL_TYPE "النوع"
+    IDS_DISK_UNALLOCATED "مساحة غير مخصصة على محرك الأقراص %lu"
+    IDS_DISK_PARTITION "محرك الأقراص %lu القسم %lu"
+    IDS_DISK_PARTITION_LABEL "محرك الأقراص %lu القسم %lu: %s"
+    IDS_DISK_SUFFIX_NEW " (جديد)"
+    IDS_DISK_SUFFIX_FORMAT " (ستتم تهيئته)"
+    IDS_DISKINFO "محرك الأقراص %lu:"
+    IDS_TYPE_SYSTEM "النظام"
+    IDS_TYPE_MSR "MSR (محجوز)"
+    IDS_TYPE_PRIMARY "أساسي"
+    IDS_TYPE_RECOVERY "الاسترداد"
+    IDS_TYPE_OEM "OEM (محجوز)"
+    IDS_TYPE_LOGICAL "منطقي"
+    IDS_TYPE_EXTENDED "موسّع"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_DISK_SELECT "حدد مكان تثبيت LiberNT."
+    IDS_DISK_NO_REGION "هذه المساحة صغيرة جدًا لاستيعاب قسم جديد."
+    IDS_DISK_NOT_BASIC "لا يمكن تثبيت LiberNT على هذا القسم. حدد قسمًا أساسيًا أو مساحة غير مخصصة."
+    IDS_DISK_NOT_FIRMWARE "لا يرى البرنامج الثابت لهذا الكمبيوتر محرك الأقراص المحدد، لذا قد لا يبدأ LiberNT منه.\n\nانقر فوق موافق لاستخدامه على أي حال."
+    IDS_DISK_NEW_SYSTEM "للتأكد من عمل جميع ميزات LiberNT بشكل صحيح، ينشئ برنامج الإعداد أيضًا أقسامًا لملفات النظام."
+    IDS_DISK_FORMAT_WARN "إذا قمت بتهيئة هذا القسم، فستُفقد كل البيانات المخزنة عليه. انسخ احتياطيًا أولاً أي ملفات تريد الاحتفاظ بها."
+    IDS_DISK_FORMAT_NTFS "يُثبَّت LiberNT على NTFS. يهيّئ برنامج الإعداد هذا القسم، وستُفقد كل البيانات المخزنة عليه."
+    IDS_DISK_FORMAT_EXISTING "يحتوي هذا القسم بالفعل على تثبيت Windows أو LiberNT. يهيّئه برنامج الإعداد، وستُفقد كل البيانات المخزنة عليه. حدد قسمًا آخر للاحتفاظ به."
+    IDS_DISK_ERASE_WARN "تُحذف كل الأقسام على محرك الأقراص %lu، وكل البيانات المخزنة عليها، عند بدء التثبيت."
+    IDS_NEWPART_RANGE "ال&حجم بالميغابايت (حتى %I64u):"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_READY_TARGET "يُثبَّت LiberNT على %s (%s)."
+    IDS_READY_ERASE "يُمسح محرك الأقراص %lu."
+    IDS_READY_DELETE "يُحذف %s."
+    IDS_READY_CREATE "يُنشأ %s (%s) ويُهيّأ بنظام %s."
+    IDS_READY_FORMAT "يُهيّأ %s (%s) بنظام %s."
+    IDS_READY_NOCHANGES "لا يتم إنشاء أي قسم أو حذفه أو تهيئته."
+    IDS_READY_COMPUTER "اسم الكمبيوتر: %s"
+    IDS_READY_ACCOUNT "الحساب: %s"
+    IDS_READY_TIMEZONE "المنطقة الزمنية: %s"
+    IDS_READY_LANGUAGE "اللغة والمنطقة: %s"
+    IDS_READY_KEYBOARD "لوحة المفاتيح: %s"
+    IDS_LANGUAGETITLE "اختر اللغة ولوحة المفاتيح"
+    IDS_LANGUAGESUBTITLE "يستخدم برنامج الإعداد وLiberNT هذه اللغة وتنسيقها للتواريخ والأوقات والأرقام والعملة."
+END
+
+STRINGTABLE
+BEGIN
+    IDS_INSTALL_FAILED "تعذّر تثبيت LiberNT"
+    IDS_INSTALL_STEP_FAILED "%s\nفشلت الخطوة بالحالة 0x%08lx."
+    IDS_FORMAT_FAILED "تعذّر على برنامج الإعداد تهيئة %s بنظام %s.\n%s"
+    IDS_CHECK_FAILED "عثر برنامج الإعداد على أخطاء في %s تعذّر إصلاحها (الحالة 0x%08lx). يستمر الإعداد."
+    IDS_SETUPLIB_MISSING "لا يستطيع برنامج الإعداد تحميل %s. شغّل libernt.exe من المجلد الذي يحتوي على مجلد system32 الخاص به وعلى txtsetup.sif."
+END
+
+STRINGTABLE
+BEGIN
+    IDS_OOBE_REGIONTITLE "اختر اللغة ولوحة المفاتيح"
+    IDS_OOBE_REGIONSUBTITLE "يستخدم LiberNT هذه اللغة وتنسيقها للتواريخ والأوقات والأرقام والعملة، ولوحة المفاتيح هذه للكتابة."
+    IDS_APPSTITLE "احصل على المكونات التي تحتاجها معظم البرامج"
+    IDS_APPSSUBTITLE "ينزّلها LiberNT من ناشريها ويثبّتها لكل الحسابات."
+    IDS_APPS_COL_NAME "المكوّن"
+    IDS_APPS_COL_SOURCE "مصدر التنزيل"
+    IDS_OOBE_FINISHTITLE "جارٍ تجهيز LiberNT"
+    IDS_OOBE_FINISHSUBTITLE "قد يستغرق ذلك بضع دقائق. أبقِ الكمبيوتر قيد التشغيل."
+    IDS_OOBE_APPLY_REGION "جارٍ تطبيق اللغة ولوحة المفاتيح..."
+    IDS_OOBE_APPLY_TIMEZONE "جارٍ تعيين المنطقة الزمنية..."
+    IDS_OOBE_APPLY_NAME "جارٍ تسمية الكمبيوتر..."
+    IDS_OOBE_APPLY_ACCOUNT "جارٍ إنشاء حسابك..."
+    IDS_OOBE_DOWNLOADING "جارٍ تنزيل %s..."
+    IDS_OOBE_INSTALLING "جارٍ تثبيت %s..."
+    IDS_OOBE_APP_FAILED "%s: %s (%s)"
+    IDS_OOBE_APPS_FAILED "لم يتم تثبيت بعض المكونات"
+    IDS_OOBE_ACCOUNT_FAILED "تعذّر على LiberNT إنشاء حسابك (الخطأ %lu). يسجّل LiberNT الدخول إلى حساب User المضمّن بدلاً من ذلك."
+    IDS_OOBE_UNKNOWN_ERROR "خطأ غير معروف"
+    IDS_OOBE_STORAGETITLE "استخدم كل مساحة التخزين"
+    IDS_OOBE_STORAGESUBTITLE "يمكن لـ LiberNT توسيع محرك الأقراص C: ليملأ جهاز التخزين الذي يعمل منه."
+    IDS_OOBE_STORAGE_INFO "حجم محرك الأقراص C: هو %I64u ميغابايت منها %I64u ميغابايت حرة. بقية جهاز التخزين غير مستخدمة بعد."
+    IDS_OOBE_EXPAND_RESTART "يُعاد تشغيل LiberNT لتوسيع محرك الأقراص C:"
+    IDS_OOBE_EXPAND_RESTART_TEXT "يتوسع محرك الأقراص C: ليملأ جهاز التخزين، ثم يُعاد تشغيل LiberNT. يُفتح هذا الإعداد مرة أخرى بعد إعادة التشغيل."
+    IDS_OOBE_EXPAND_FAILED "تعذّر على LiberNT توسيع محرك الأقراص C: (رمز خروج lntexpandstorage هو %lu). يستمر الإعداد؛ يمكنك المحاولة لاحقًا باستخدام lntexpandstorage في موجه الأوامر."
+    IDS_OOBE_APPS_SPACE "تحتاج المكونات المحددة إلى نحو %lu ميغابايت. يحتوي محرك الأقراص C: على %I64u ميغابايت حرة."
+    IDS_OOBE_APPS_NOSPACE "لا توجد مساحة حرة كافية للمكونات المحددة"
+    IDS_OOBE_APPS_NOSPACE_TEXT "تحتاج إلى نحو %lu ميغابايت، ويحتوي محرك الأقراص C: على %I64u ميغابايت حرة. ألغِ تحديد بعض المربعات للمتابعة. لتثبيتها لاحقًا، وسّع محرك الأقراص C: باستخدام lntexpandstorage في موجه الأوامر، ثم شغّل %%SystemRoot%%\\system32\\oobe\\oobe.exe /components."
+    IDS_OOBE_INSTALL_DRIVERS "جارٍ تثبيت برامج التشغيل لأجهزتك..."
+END
+
+/* Progress Strings */
+
+STRINGTABLE
+BEGIN
+    IDS_FORMATTING_PROGRESS1 "جارٍ تهيئة وحدة التخزين %c: (%s) بنظام %s..."
+    IDS_FORMATTING_PROGRESS2 "جارٍ تهيئة وحدة التخزين %s بنظام %s..."
+
+    IDS_CHECKING_PROGRESS1 "جارٍ فحص وحدة التخزين %c: (%s)..."
+    IDS_CHECKING_PROGRESS2 "جارٍ فحص وحدة التخزين %s..."
+
+    IDS_COPYING  "جارٍ نسخ %s"
+    IDS_MOVING   "جارٍ نقل %s إلى %s"
+    IDS_RENAMING "جارٍ إعادة تسمية %s إلى %s"
+    IDS_DELETING "جارٍ حذف %s"
+
+    IDS_CONFIG_SYSTEM_PARTITION "جارٍ تكوين قسم النظام..."
+    IDS_PREPARE_PARTITIONS "جارٍ تجهيز الأقسام..."
+    IDS_PREPARE_FILES "جارٍ تجهيز قائمة الملفات المراد نسخها، يُرجى الانتظار..."
+    IDS_COPYING_FILES "جارٍ نسخ الملفات..."
+
+    IDS_CREATE_REGISTRY "جارٍ إنشاء السجل..."
+
+    // IDS_INSTALL_FINALIZE "Finalizing the installation..."
+    IDS_INSTALL_BOOTLOADER "جارٍ تثبيت محمّل الإقلاع..."
+END
+
+// Note to translators: please refer to the corresponding usetup/lang/*.h translations.
+STRINGTABLE
+BEGIN
+    IDS_REG_DONE "تم"
+    IDS_REG_REGHIVEUPDATE "جارٍ تحديث خلايا السجل"
+    IDS_REG_IMPORTFILE "جارٍ استيراد %s"
+    IDS_REG_DISPLAYSETTINGSUPDATE "جارٍ تحديث إعدادات العرض في السجل"
+    IDS_REG_LOCALESETTINGSUPDATE "جارٍ تحديث الإعدادات الإقليمية"
+    IDS_REG_ADDKBLAYOUTS "جارٍ إضافة تخطيطات لوحة المفاتيح"
+    IDS_REG_KEYBOARDSETTINGSUPDATE "جارٍ تحديث إعدادات تخطيط لوحة المفاتيح"
+    IDS_REG_CODEPAGEINFOUPDATE "جارٍ إضافة معلومات صفحات الرموز"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_ACCOUNTTITLE "سمِّ الكمبيوتر وأنشئ حسابك"
+    IDS_CONFIGURE_SYSTEM "جارٍ تكوين LiberNT..."
+    IDS_CONFIG_FOLDERS "جارٍ إنشاء مجلدات النظام وملفات التعريف"
+    IDS_CONFIG_DEVICES "جارٍ تثبيت فئات الأجهزة"
+    IDS_CONFIG_NETWORK "جارٍ تثبيت بروتوكولات الشبكة"
+    IDS_CONFIG_SETTINGS "جارٍ تطبيق إعدادات الكمبيوتر"
+    IDS_CONFIG_COMPONENTS "جارٍ تسجيل المكونات"
+    IDS_CONFIG_SHORTCUTS "جارٍ إنشاء اختصارات قائمة البدء"
+    IDS_CONFIG_SECURITY "جارٍ تطبيق إعدادات الأمان"
+    IDS_CONFIG_ACCOUNT "جارٍ إنشاء حسابك"
+    IDS_CONFIG_FINISH "جارٍ حفظ التكوين"
+    IDS_ERROR_COMPUTERNAME "يجب أن يتكون اسم الكمبيوتر من 1 إلى 15 حرفًا أو رقمًا أو شرطة، ولا يمكن أن يحتوي على أرقام فقط."
+    IDS_ERROR_USERNAME "يجب أن يتكون اسم المستخدم من 1 إلى 20 حرفًا، ولا يمكن أن يحتوي على أي من هذه الأحرف:\n"" / \\ [ ] : ; | = , + * ? < > @\nولا يمكن أن يحتوي على نقاط ومسافات فقط."
+    IDS_ERROR_USEREXISTS "هذا الاسم مستخدم بالفعل من قبل حساب أو مجموعة مضمّنة، أو من قبل الكمبيوتر. اختر اسم مستخدم آخر."
+    IDS_ERROR_PASSWORDMATCH "كلمتا المرور غير متطابقتين. اكتب كلمة المرور نفسها في المربعين."
+    IDS_ERROR_PASSWORDHINT "اكتب تلميحًا لكلمة المرور."
+    IDS_ERROR_HINTPASSWORD "لا يمكن أن يحتوي تلميح كلمة المرور على كلمة المرور."
+END
+
+/* Error Strings */
+
+STRINGTABLE
+BEGIN
+
+    IDS_ERROR_CREATE_PARTITION "فشل إنشاء قسم جديد."
+
+    IDS_WARN_DELETE_PARTITION_TITLE "حذف القسم؟"
+    IDS_WARN_DELETE_PARTITION "هل تريد بالتأكيد حذف القسم المحدد؟"
+    IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "هل تريد بالتأكيد حذف القسم الموسّع المحدد وكل الأقسام المنطقية التي يحتويها؟"
+END
+
+IDD_INSTALLTYPEPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_TYPE_FOUND, 0, 0, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    AUTORADIOBUTTON "", IDC_TYPE_ALONGSIDE, 0, 13, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&خيار آخر: أنشئ الأقسام أو غيّر حجمها أو اخترها بنفسك", IDC_TYPE_MANUAL, 0, 25, 290, 10
+    CONTROL "", IDC_TYPE_SPLIT, TRACKBAR_CLASS, TBS_HORZ | TBS_NOTICKS | TBS_BOTH | WS_GROUP | WS_TABSTOP, 6, 40, 284, 16
+    LTEXT "", IDC_TYPE_WINSIZE, 12, 57, 136, 9, SS_NOPREFIX
+    RTEXT "", IDC_TYPE_LNTSIZE, 148, 57, 136, 9, SS_NOPREFIX
+    LTEXT "البدء افتراضيًا:", IDC_TYPE_DEFAULT_LABEL, 12, 73, 62, 9
+    AUTORADIOBUTTON "&LiberNT", IDC_TYPE_DEFAULT_LIBERNT, 76, 72, 70, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "", IDC_TYPE_DEFAULT_WINDOWS, 150, 72, 120, 10
+    ICON "", IDC_TYPE_WARNICON, 12, 87, 10, 10, SS_ICON | SS_REALSIZEIMAGE
+    LTEXT "", IDC_TYPE_WARNING, 28, 87, 262, 36, SS_NOPREFIX
+    LTEXT "", IDC_TYPE_NOTE, 0, 126, 290, 32, SS_NOPREFIX
+END
+
+STRINGTABLE
+BEGIN
+    IDS_TYPETITLE "نوع التثبيت"
+    IDS_TYPESUBTITLE "اختر كيف يتشارك LiberNT هذا الكمبيوتر."
+    IDS_TYPE_FOUND "يحتوي هذا الكمبيوتر على %s في %s."
+    IDS_TYPE_ALONGSIDE "تثبيت LiberNT &بجانب %s"
+    IDS_TYPE_SPLITSIZE "%s: %s"
+    IDS_TYPE_SHRINKNOTE "اسحب شريط التمرير لتقسيم المساحة. يحتفظ %s ببرامجه وملفاته. يتقلص قسمه بمجرد تحديد التالي."
+    IDS_TYPE_HIBERNATED "%s في وضع الإسبات أو تم إيقاف تشغيله باستخدام بدء التشغيل السريع، لذا لا يمكن تغيير حجم قسمه بأمان. ابدأ %s، واختر إعادة التشغيل من قائمة البدء، ثم ابدأ الإعداد مرة أخرى. يمكنك أيضًا إيقاف بدء التشغيل السريع في لوحة التحكم > خيارات الطاقة."
+    IDS_TYPE_NOSPACE "لا يحتوي %s على مساحة حرة كافية لإفساح المجال لـ LiberNT، الذي يحتاج إلى %I64u غيغابايت على الأقل. حرّر بعض المساحة فيه، أو اختر خيار آخر."
+    IDS_TYPE_NORESIZE "لا يمكن تغيير حجم قسم %s. اختر خيار آخر لاختيار مكان آخر لـ LiberNT."
+    IDS_TYPE_PLANNED "تم تغيير حجم %s إلى %s. سيتم تثبيت LiberNT في القسم الجديد بحجم %s."
+    IDS_TYPE_WARNING "يبدأ %s افتراضيًا. لبدء LiberNT، افتح قائمة الإقلاع في الكمبيوتر أثناء بدء تشغيله، عادةً باستخدام F12 أو F11 أو F9 أو Esc، واختر LiberNT Boot Manager. في Windows يمكنك أيضًا استخدام الإعدادات > النظام > الاسترداد > بدء التشغيل المتقدم > استخدام جهاز."
+    IDS_TYPE_CONFIRM_TITLE "تغيير حجم %s الآن؟"
+    IDS_TYPE_CONFIRM "يتقلص %s من %s إلى %s على الفور، قبل بقية التثبيت، ويحصل LiberNT على %s. تأكد من نسخ الملفات التي تريد الاحتفاظ بها احتياطيًا."
+    IDS_TYPE_WINDOWS11 "Windows 11"
+    IDS_TYPE_WINDOWS10 "Windows 10"
+    IDS_TYPE_WINDOWS "Windows"
+    IDS_READY_DEFAULTOS "يبدأ افتراضيًا: %s"
+    IDS_TYPE_LIBERNT "LiberNT"
+END

@@ -12,6 +12,9 @@
 #define NDEBUG
 #include <debug.h>
 
+#define LANGUAGE_TIMER  1
+#define LANGUAGE_DELAY  500
+
 static VOID
 FillChoiceList(
     _In_ HWND hCombo,
@@ -126,6 +129,29 @@ SelectLayoutForLocale(
     SelectChoiceById(hLayouts, pSetupData->Layouts, pSetupData->LayoutCount, LayoutId);
 }
 
+static VOID
+SwitchSetupLanguage(
+    _In_ HWND hwndDlg,
+    _In_ PSETUPDATA pSetupData)
+{
+    HWND hLanguages = GetDlgItem(hwndDlg, IDC_LANGUAGELIST);
+    const SETUP_CHOICE* Locale;
+    const SETUP_CHOICE* Layout;
+
+    KillTimer(hwndDlg, LANGUAGE_TIMER);
+    if (SendMessageW(hLanguages, CB_GETDROPPEDSTATE, 0, 0))
+        return;
+
+    Locale = GetSelectedChoice(hLanguages, pSetupData->Locales, pSetupData->LocaleCount);
+    if (!Locale || _wcsicmp(Locale->Id, pSetupData->DefaultLanguage) == 0)
+        return;
+
+    Layout = GetSelectedChoice(GetDlgItem(hwndDlg, IDC_LAYOUTLIST), pSetupData->Layouts, pSetupData->LayoutCount);
+    ApplyLanguageChoice(pSetupData, Locale->Id, Layout ? Layout->Id : pSetupData->DefaultKBLayout);
+    SetSetupLanguage(pSetupData->DefaultLanguage);
+    SetupFrameReload(hwndDlg);
+}
+
 INT_PTR
 CALLBACK
 LanguagePageProc(
@@ -151,12 +177,18 @@ LanguagePageProc(
             return FALSE;
 
         case WM_COMMAND:
+            if (LOWORD(wParam) == IDC_LANGUAGELIST && HIWORD(wParam) == CBN_CLOSEUP)
+            {
+                SetTimer(hwndDlg, LANGUAGE_TIMER, USER_TIMER_MINIMUM, NULL);
+                break;
+            }
             if (HIWORD(wParam) != CBN_SELCHANGE)
                 break;
             if (LOWORD(wParam) == IDC_LANGUAGELIST)
             {
                 SelectLayoutForLocale(hwndDlg, pSetupData);
                 ActivateLayout(hwndDlg, pSetupData);
+                SetTimer(hwndDlg, LANGUAGE_TIMER, LANGUAGE_DELAY, NULL);
             }
             else if (LOWORD(wParam) == IDC_LAYOUTLIST)
             {
@@ -164,8 +196,18 @@ LanguagePageProc(
             }
             break;
 
+        case WM_TIMER:
+            if (wParam != LANGUAGE_TIMER)
+                break;
+            SwitchSetupLanguage(hwndDlg, pSetupData);
+            return TRUE;
+
         case SPN_SETACTIVE:
             SetFocus(GetDlgItem(hwndDlg, IDC_LANGUAGELIST));
+            return TRUE;
+
+        case SPN_KILLACTIVE:
+            KillTimer(hwndDlg, LANGUAGE_TIMER);
             return TRUE;
 
         case SPN_WIZNEXT:
@@ -176,6 +218,13 @@ LanguagePageProc(
             const SETUP_CHOICE* Layout = GetSelectedChoice(GetDlgItem(hwndDlg, IDC_LAYOUTLIST),
                                                            pSetupData->Layouts,
                                                            pSetupData->LayoutCount);
+
+            if (Locale && _wcsicmp(Locale->Id, pSetupData->DefaultLanguage) != 0)
+            {
+                SwitchSetupLanguage(hwndDlg, pSetupData);
+                SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, -1);
+                return TRUE;
+            }
 
             ApplyLanguageChoice(pSetupData,
                                 Locale ? Locale->Id : pSetupData->DefaultLanguage,

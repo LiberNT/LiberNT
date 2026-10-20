@@ -1333,7 +1333,6 @@ DiskPageProc(
         }
 
         case WM_DESTROY:
-            ForgetVolumePlans(NULL, NULL, FALSE);
             DiskInfoFree();
             break;
 

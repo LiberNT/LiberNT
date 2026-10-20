@@ -2,9 +2,129 @@ LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
 
 /* Dialogs */
 
+IDD_SETUPFRAME DIALOGEX 0, 0, 420, 240
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "LiberNT 安装程序"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_FRAME_TITLE, 120, 10, 290, 14, SS_NOPREFIX
+    LTEXT "", IDC_FRAME_SUBTITLE, 120, 26, 290, 18, SS_NOPREFIX
+    LTEXT "", IDC_FRAME_PAGE, 120, 48, 290, 160, NOT WS_VISIBLE
+    CONTROL "", IDC_STATIC, "Static", SS_ETCHEDHORZ, 120, 212, 300, 1
+    PUSHBUTTON "上一步(&B)", IDC_FRAME_BACK, 250, 219, 50, 14
+    DEFPUSHBUTTON "下一步(&N)", IDC_FRAME_NEXT, 305, 219, 50, 14
+    PUSHBUTTON "取消", IDCANCEL, 360, 219, 50, 14
+END
+
+IDD_DISKPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_DISKLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 106
+    LTEXT "", IDC_DISKINFO, 0, 110, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    PUSHBUTTON "新建(&W)", IDC_DISKNEW, 0, 123, 36, 14
+    PUSHBUTTON "删除(&D)", IDC_DISKDELETE, 39, 123, 36, 14
+    PUSHBUTTON "格式化(&F)", IDC_DISKFORMAT, 78, 123, 36, 14
+    PUSHBUTTON "扩展(&X)", IDC_DISKEXTEND, 117, 123, 36, 14
+    PUSHBUTTON "压缩(&H)", IDC_DISKSHRINK, 156, 123, 36, 14
+    PUSHBUTTON "清除驱动器(&E)", IDC_DISKERASE, 195, 123, 50, 14
+    PUSHBUTTON "刷新(&R)", IDC_DISKREFRESH, 250, 123, 40, 14
+    LTEXT "", IDC_DISKNOTE, 0, 142, 290, 18, SS_NOPREFIX
+END
+
+IDD_NEWPARTITION DIALOGEX 0, 0, 210, 62
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "新建分区"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_NEWSIZE_RANGE, 7, 10, 130, 9
+    EDITTEXT IDC_NEWSIZE, 140, 8, 52, 13, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
+    CONTROL "", IDC_NEWSIZE_SPIN, UPDOWN_CLASS, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 192, 8, 10, 13
+    DEFPUSHBUTTON "确定", IDOK, 97, 41, 50, 14
+    PUSHBUTTON "取消", IDCANCEL, 153, 41, 50, 14
+END
+
+IDD_LANGUAGEPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "语言和区域(&L):", IDC_STATIC, 0, 4, 95, 9
+    COMBOBOX IDC_LANGUAGELIST, 100, 2, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT "键盘或输入法(&K):", IDC_STATIC, 0, 24, 95, 9
+    COMBOBOX IDC_LAYOUTLIST, 100, 22, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT "选择键盘后，它会立即在安装程序中生效，因此你可以用它输入帐户名和密码。", IDC_STATIC, 0, 128, 290, 26
+END
+
+IDD_APPSPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 104
+    LTEXT "", IDC_APPSPACE, 0, 108, 290, 10, SS_NOPREFIX
+    LTEXT "取消勾选某个组件即可跳过它。下载会使用你的 Internet 连接，每个包在安装前都会根据其发布者的签名或校验和进行检查。", IDC_STATIC, 0, 124, 290, 34
+END
+
+IDD_STORAGEPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
+    AUTORADIOBUTTON "立即扩展驱动器 C: 并重新启动(&E)", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "暂不(&N)", IDC_EXPANDLATER, 0, 42, 290, 10
+    LTEXT "LiberNT 会重新启动一次以完成操作，然后此设置程序会再次打开。", IDC_STATIC, 0, 60, 290, 18
+    LTEXT "你也可以稍后执行此操作：以管理员身份在命令提示符中运行 lntexpandstorage。接下来提供的组件需要超过 1 GB 的可用空间。", IDC_STATIC, 0, 124, 290, 34
+END
+
+IDD_ACCOUNTPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "计算机名(&M):", IDC_STATIC, 0, 4, 95, 9
+    EDITTEXT IDC_COMPUTERNAME, 100, 2, 190, 13, ES_UPPERCASE | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "用户名(&U):", IDC_STATIC, 0, 22, 95, 9
+    EDITTEXT IDC_USERNAME, 100, 20, 190, 13, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "密码(&P):", IDC_STATIC, 0, 40, 95, 9
+    EDITTEXT IDC_PASSWORD1, 100, 38, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "确认密码(&O):", IDC_STATIC, 0, 58, 95, 9
+    EDITTEXT IDC_PASSWORD2, 100, 56, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "密码提示(&H):", IDC_STATIC, 0, 76, 95, 9
+    EDITTEXT IDC_PASSWORDHINT, 100, 74, 190, 13, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT "时区(&T):", IDC_STATIC, 0, 96, 95, 9
+    COMBOBOX IDC_TIMEZONELIST, 100, 94, 190, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX "自动调整夏令时(&D)", IDC_AUTODAYLIGHT, 100, 111, 190, 10, WS_TABSTOP
+    LTEXT "此帐户是 Administrators 组的成员。如果密码留空，LiberNT 会自动登录此帐户。", IDC_STATIC, 0, 130, 290, 26
+END
+
+IDD_READYPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    EDITTEXT IDC_READY_SUMMARY, 0, 0, 290, 90, ES_MULTILINE | ES_READONLY | WS_VSCROLL | NOT WS_TABSTOP
+    LTEXT "LiberNT 仍在积极开发中。请将其用于评估和测试，不要作为主要操作系统使用。它可能会损坏你的数据或硬件。", IDC_READY_WARNING, 0, 97, 290, 28
+    AUTOCHECKBOX "我已了解，并已备份需要保留的数据(&U)。", IDC_CONFIRM_INSTALL, 0, 132, 290, 20, BS_MULTILINE | BS_TOP | WS_TABSTOP
+END
+
+IDD_PROCESSPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_ACTIVITY, 0, 40, 290, 10, SS_NOPREFIX
+    CONTROL "", IDC_PROCESSPROGRESS, "msctls_progress32", PBS_SMOOTH | WS_CHILD | WS_VISIBLE | WS_BORDER, 0, 56, 290, 10
+    LTEXT "", IDC_ITEM, 0, 72, 290, 20, SS_NOPREFIX
+END
+
+IDD_FINISHPAGE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_FINISHLOGO, "Static", SS_OWNERDRAW, 0, 0, 290, 96
+    LTEXT "", IDC_FINISHTEXT, 0, 102, 290, 40, SS_NOPREFIX
+    CONTROL "", IDC_RESTART_PROGRESS, "msctls_progress32", PBS_SMOOTH | WS_CHILD | WS_BORDER, 0, 148, 290, 8
+END
+
 IDD_RESIZE DIALOGEX 0, 0, 300, 170
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Shrink"
+CAPTION "压缩"
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_RESIZE_LABEL_TOTAL, 7, 13, 190, 8
@@ -17,99 +137,212 @@ BEGIN
     LTEXT "", IDC_RESIZE_LABEL_AFTER, 7, 70, 190, 8
     EDITTEXT IDC_RESIZE_AFTER, 203, 67, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
     ICON "", IDC_RESIZE_ICON, 8, 85, 10, 10, SS_ICON | SS_REALSIZEIMAGE
-    LTEXT "You cannot shrink a volume beyond the point where any unmovable files are located.", IDC_RESIZE_NOTE, 25, 86, 268, 26
+    LTEXT "卷无法压缩到不可移动文件所在位置之外。", IDC_RESIZE_NOTE, 25, 86, 268, 26
     DEFPUSHBUTTON "", IDOK, 180, 149, 54, 14
-    PUSHBUTTON "Cancel", IDCANCEL, 239, 149, 54, 14
+    PUSHBUTTON "取消", IDCANCEL, 239, 149, 54, 14
 END
 
 /* Strings */
 
 STRINGTABLE
 BEGIN
-    IDS_SHRINK_CAPTION "Shrink %s"
-    IDS_EXTEND_CAPTION "Extend %s"
-    IDS_SHRINK_TOTAL "Total size before shrink in MB:"
-    IDS_SHRINK_AVAILABLE "Size of available shrink space in MB:"
-    IDS_SHRINK_AMOUNT "&Enter the amount of space to shrink in MB:"
-    IDS_SHRINK_AFTER "Total size after shrink in MB:"
-    IDS_SHRINK_BUTTON "&Shrink"
-    IDS_EXTEND_TOTAL "Total size before extend in MB:"
-    IDS_EXTEND_AVAILABLE "Size of available space in MB:"
-    IDS_EXTEND_AMOUNT "&Enter the amount of space to add in MB:"
-    IDS_EXTEND_AFTER "Total size after extend in MB:"
-    IDS_EXTEND_BUTTON "E&xtend"
-    IDS_RESIZE_PENDING "Partition changes are waiting to be applied. Shrink and extend take effect immediately, so do them before creating, deleting or formatting partitions."
-    IDS_RESIZE_FAILED "The partition could not be resized."
+    IDS_SHRINK_CAPTION "压缩 %s"
+    IDS_EXTEND_CAPTION "扩展 %s"
+    IDS_SHRINK_TOTAL "压缩前的总大小(MB):"
+    IDS_SHRINK_AVAILABLE "可用压缩空间大小(MB):"
+    IDS_SHRINK_AMOUNT "输入压缩空间量(MB)(&E):"
+    IDS_SHRINK_AFTER "压缩后的总大小(MB):"
+    IDS_SHRINK_BUTTON "压缩(&S)"
+    IDS_EXTEND_TOTAL "扩展前的总大小(MB):"
+    IDS_EXTEND_AVAILABLE "可用空间大小(MB):"
+    IDS_EXTEND_AMOUNT "输入要添加的空间量(MB)(&E):"
+    IDS_EXTEND_AFTER "扩展后的总大小(MB):"
+    IDS_EXTEND_BUTTON "扩展(&X)"
+    IDS_RESIZE_PENDING "有尚未应用的分区更改。压缩和扩展会立即生效，因此请在创建、删除或格式化分区之前执行。"
+    IDS_RESIZE_FAILED "无法调整分区大小。"
     IDS_CAPTION "LiberNT 安装程序"
-    IDS_DRIVETITLE "设置安装分区和系统文件夹"
-    IDS_PROCESSTITLE "设置分区、复制文件并安装系统"
-    IDS_PROCESSSUBTITLE "建立并格式化分区，复制文件，安装并设置引导程序。"
-    IDS_ABORTSETUP "LiberNT 未在您的电脑上安装完成。如果您现在退出安装程序，您需要再次运行安装程序来安装 LiberNT。 确定退出？"
-    IDS_ABORTSETUP2 "终止安装？"
-    IDS_NO_TXTSETUP_SIF "无法找到 'txtsetup.sif'。\n安装程序无法继续。"
-    IDS_FINISH_NO_REBOOT "Setup needs to restart your computer to continue with the second installation step.\n\nClick on Restart to immediately restart your computer.\nClick on Postpone to quit the installer and restart your computer at a later time."
-    IDS_ABORT_NO_REBOOT "Click on Restart to immediately restart your computer.\nClick on Close to quit the installer."
-    IDS_INSTALLBTN "&Install"
-    IDS_RESTARTBTN "&Restart"
-    IDS_POSTPONEBTN "&Postpone"
+    IDS_DRIVETITLE "你想将 LiberNT 安装在哪里？"
+    IDS_PROCESSTITLE "正在安装 LiberNT"
+    IDS_PROCESSSUBTITLE "安装程序正在准备磁盘、复制文件、配置 LiberNT 并安装启动加载程序。这可能需要几分钟。"
+    IDS_ABORTSETUP "LiberNT 尚未完全安装到你的计算机上。如果现在退出安装程序，你需要重新运行安装程序才能安装 LiberNT。确实要退出吗？"
+    IDS_ABORTSETUP2 "中止安装？"
+    IDS_NO_TXTSETUP_SIF "找不到 'txtsetup.sif'。\n安装程序无法继续。"
+    IDS_FINISH_NO_REBOOT "重新启动计算机以启动 LiberNT。不要再从安装介质启动。\n\n单击“重新启动”立即重新启动计算机。\n单击“推迟”退出安装程序，稍后再重新启动计算机。"
+    IDS_ABORT_NO_REBOOT "单击“重新启动”立即重新启动计算机。\n单击“关闭”退出安装程序。"
+    IDS_INSTALLBTN "安装(&I)"
+    IDS_RESTARTBTN "重新启动(&R)"
+    IDS_POSTPONEBTN "推迟(&P)"
+END
+
+/* Setup window */
+
+STRINGTABLE
+BEGIN
+    IDS_DISKSUBTITLE "选择一个分区或未分配的空间。除压缩和扩展外，安装程序只会在你单击“安装”后更改磁盘。"
+    IDS_ACCOUNTZONESUBTITLE "你将使用此帐户登录 LiberNT。LiberNT 显示所选时区的时间。"
+    IDS_READYTITLE "准备安装"
+    IDS_READYSUBTITLE "请检查你的选择。单击“安装”后，安装程序开始更改你的磁盘。"
+    IDS_DONETITLE "LiberNT 已安装"
+    IDS_ABORTTITLE "LiberNT 未安装"
+    IDS_DONE_REBOOT "计算机将在几秒钟后重新启动以启动 LiberNT。不要再从安装介质启动。\n\n单击“重新启动”立即重新启动。"
+    IDS_ABORT_REBOOT "安装未完成。计算机将在几秒钟后重新启动。\n\n单击“重新启动”立即重新启动。"
+    IDS_BACKBTN "上一步(&B)"
+    IDS_NEXTBTN "下一步(&N)"
+    IDS_CANCELBTN "取消"
+    IDS_CLOSEBTN "关闭(&C)"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_DISK_COL_NAME "名称"
+    IDS_DISK_COL_TOTAL "总大小"
+    IDS_DISK_COL_FREE "可用空间"
+    IDS_DISK_COL_TYPE "类型"
+    IDS_DISK_UNALLOCATED "驱动器 %lu 未分配的空间"
+    IDS_DISK_PARTITION "驱动器 %lu 分区 %lu"
+    IDS_DISK_PARTITION_LABEL "驱动器 %lu 分区 %lu: %s"
+    IDS_DISK_SUFFIX_NEW " (新)"
+    IDS_DISK_SUFFIX_FORMAT " (将格式化)"
+    IDS_DISKINFO "驱动器 %lu:"
+    IDS_TYPE_SYSTEM "系统"
+    IDS_TYPE_MSR "MSR (保留)"
+    IDS_TYPE_PRIMARY "主分区"
+    IDS_TYPE_RECOVERY "恢复"
+    IDS_TYPE_OEM "OEM (保留)"
+    IDS_TYPE_LOGICAL "逻辑分区"
+    IDS_TYPE_EXTENDED "扩展分区"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_DISK_SELECT "选择安装 LiberNT 的位置。"
+    IDS_DISK_NO_REGION "此空间太小，无法容纳新分区。"
+    IDS_DISK_NOT_BASIC "无法将 LiberNT 安装到此分区。请选择主分区或未分配的空间。"
+    IDS_DISK_NOT_FIRMWARE "此计算机的固件无法识别所选驱动器，因此 LiberNT 可能无法从中启动。\n\n单击“确定”仍然使用它。"
+    IDS_DISK_NEW_SYSTEM "为确保 LiberNT 的所有功能正常工作，安装程序还会为系统文件创建分区。"
+    IDS_DISK_FORMAT_WARN "如果格式化此分区，其中存储的所有数据都将丢失。请先备份要保留的文件。"
+    IDS_DISK_FORMAT_NTFS "LiberNT 将安装在 NTFS 上。安装程序将格式化此分区，其中存储的所有数据都将丢失。"
+    IDS_DISK_FORMAT_EXISTING "此分区已包含 Windows 或 LiberNT 安装。安装程序将格式化它，其中存储的所有数据都将丢失。若要保留它，请选择其他分区。"
+    IDS_DISK_ERASE_WARN "安装开始时，将删除驱动器 %lu 上的所有分区及其中存储的所有数据。"
+    IDS_NEWPART_RANGE "大小(MB，最大 %I64u)(&S):"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_READY_TARGET "LiberNT 将安装在 %s (%s) 上。"
+    IDS_READY_ERASE "驱动器 %lu 将被清除。"
+    IDS_READY_DELETE "%s 将被删除。"
+    IDS_READY_CREATE "将创建 %s (%s) 并格式化为 %s。"
+    IDS_READY_FORMAT "%s (%s) 将被格式化为 %s。"
+    IDS_READY_NOCHANGES "不会创建、删除或格式化任何分区。"
+    IDS_READY_COMPUTER "计算机名: %s"
+    IDS_READY_ACCOUNT "帐户: %s"
+    IDS_READY_TIMEZONE "时区: %s"
+    IDS_READY_LANGUAGE "语言和区域: %s"
+    IDS_READY_KEYBOARD "键盘: %s"
+    IDS_LANGUAGETITLE "选择你的语言和键盘"
+    IDS_LANGUAGESUBTITLE "安装程序和 LiberNT 使用此语言，以及它的日期、时间、数字和货币格式。"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_INSTALL_FAILED "无法安装 LiberNT"
+    IDS_INSTALL_STEP_FAILED "%s\n该步骤失败，状态为 0x%08lx。"
+    IDS_FORMAT_FAILED "安装程序无法将 %s 格式化为 %s。\n%s"
+    IDS_CHECK_FAILED "安装程序在 %s 上发现无法修复的错误(状态 0x%08lx)。安装将继续。"
+    IDS_SETUPLIB_MISSING "安装程序无法加载 %s。请从包含其 system32 文件夹和 txtsetup.sif 的文件夹运行 libernt.exe。"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_OOBE_REGIONTITLE "选择你的语言和键盘"
+    IDS_OOBE_REGIONSUBTITLE "LiberNT 使用此语言及其日期、时间、数字和货币格式，并使用此键盘进行输入。"
+    IDS_APPSTITLE "获取大多数程序需要的组件"
+    IDS_APPSSUBTITLE "LiberNT 从发布者处下载这些组件，并为所有帐户安装。"
+    IDS_APPS_COL_NAME "组件"
+    IDS_APPS_COL_SOURCE "下载来源"
+    IDS_OOBE_FINISHTITLE "正在准备 LiberNT"
+    IDS_OOBE_FINISHSUBTITLE "这可能需要几分钟。请保持计算机开机。"
+    IDS_OOBE_APPLY_REGION "正在应用你的语言和键盘..."
+    IDS_OOBE_APPLY_TIMEZONE "正在设置时区..."
+    IDS_OOBE_APPLY_NAME "正在命名你的计算机..."
+    IDS_OOBE_APPLY_ACCOUNT "正在创建你的帐户..."
+    IDS_OOBE_DOWNLOADING "正在下载 %s..."
+    IDS_OOBE_INSTALLING "正在安装 %s..."
+    IDS_OOBE_APP_FAILED "%s: %s (%s)"
+    IDS_OOBE_APPS_FAILED "部分组件未安装"
+    IDS_OOBE_ACCOUNT_FAILED "LiberNT 无法创建你的帐户(错误 %lu)。LiberNT 将改为登录内置的 User 帐户。"
+    IDS_OOBE_UNKNOWN_ERROR "未知错误"
+    IDS_OOBE_STORAGETITLE "使用全部存储空间"
+    IDS_OOBE_STORAGESUBTITLE "LiberNT 可以扩大驱动器 C:，使其占满运行 LiberNT 的存储设备。"
+    IDS_OOBE_STORAGE_INFO "驱动器 C: 大小为 %I64u MB，可用 %I64u MB。存储设备的其余部分尚未使用。"
+    IDS_OOBE_EXPAND_RESTART "LiberNT 将重新启动以扩展驱动器 C:"
+    IDS_OOBE_EXPAND_RESTART_TEXT "驱动器 C: 将扩大到占满存储设备，然后 LiberNT 重新启动。重新启动后，此设置程序会再次打开。"
+    IDS_OOBE_EXPAND_FAILED "LiberNT 无法扩展驱动器 C: (lntexpandstorage 退出代码 %lu)。设置将继续；你可以稍后在命令提示符中使用 lntexpandstorage 重试。"
+    IDS_OOBE_APPS_SPACE "所选组件大约需要 %lu MB。驱动器 C: 有 %I64u MB 可用空间。"
+    IDS_OOBE_APPS_NOSPACE "可用空间不足，无法安装所选组件"
+    IDS_OOBE_APPS_NOSPACE_TEXT "它们大约需要 %lu MB，而驱动器 C: 有 %I64u MB 可用空间。请取消勾选部分组件以继续。若要稍后安装，请在命令提示符中使用 lntexpandstorage 扩展驱动器 C:，然后运行 %%SystemRoot%%\\system32\\oobe\\oobe.exe /components。"
+    IDS_OOBE_INSTALL_DRIVERS "正在为你的设备安装驱动程序..."
 END
 
 /* Progress Strings */
 
 STRINGTABLE
 BEGIN
-    IDS_FORMATTING_PROGRESS1 "Formatting volume %c: (%s) in %s..."
-    IDS_FORMATTING_PROGRESS2 "Formatting volume %s in %s..."
+    IDS_FORMATTING_PROGRESS1 "正在将卷 %c: (%s) 格式化为 %s..."
+    IDS_FORMATTING_PROGRESS2 "正在将卷 %s 格式化为 %s..."
 
-    IDS_CHECKING_PROGRESS1 "Checking volume %c: (%s)..."
-    IDS_CHECKING_PROGRESS2 "Checking volume %s..."
+    IDS_CHECKING_PROGRESS1 "正在检查卷 %c: (%s)..."
+    IDS_CHECKING_PROGRESS2 "正在检查卷 %s..."
 
-    IDS_COPYING  "Copying %s"
-    IDS_MOVING   "Moving %s to %s"
-    IDS_RENAMING "Renaming %s to %s"
-    IDS_DELETING "Deleting %s"
+    IDS_COPYING  "正在复制 %s"
+    IDS_MOVING   "正在将 %s 移动到 %s"
+    IDS_RENAMING "正在将 %s 重命名为 %s"
+    IDS_DELETING "正在删除 %s"
 
-    IDS_CONFIG_SYSTEM_PARTITION "Configuring the system partition..."
-    IDS_PREPARE_PARTITIONS "Preparing partitions..."
-    IDS_PREPARE_FILES "Preparing the list of files to be copied, please wait..."
-    IDS_COPYING_FILES "Copying the files..."
+    IDS_CONFIG_SYSTEM_PARTITION "正在配置系统分区..."
+    IDS_PREPARE_PARTITIONS "正在准备分区..."
+    IDS_PREPARE_FILES "正在准备要复制的文件列表，请稍候..."
+    IDS_COPYING_FILES "正在复制文件..."
 
-    IDS_CREATE_REGISTRY "Creating the registry..."
+    IDS_CREATE_REGISTRY "正在创建注册表..."
 
     // IDS_INSTALL_FINALIZE "Finalizing the installation..."
-    IDS_INSTALL_BOOTLOADER "Installing the bootloader..."
+    IDS_INSTALL_BOOTLOADER "正在安装启动加载程序..."
 END
 
 // Note to translators: please refer to the corresponding usetup/lang/*.h translations.
 STRINGTABLE
 BEGIN
-    IDS_REG_DONE "Done"
-    IDS_REG_REGHIVEUPDATE "Updating registry hives"
-    IDS_REG_IMPORTFILE "Importing %s"
-    IDS_REG_DISPLAYSETTINGSUPDATE "Updating display registry settings"
-    IDS_REG_LOCALESETTINGSUPDATE "Updating locale settings"
-    IDS_REG_ADDKBLAYOUTS "Adding keyboard layouts"
-    IDS_REG_KEYBOARDSETTINGSUPDATE "Updating keyboard layout settings"
-    IDS_REG_CODEPAGEINFOUPDATE "Adding codepage information"
+    IDS_REG_DONE "完成"
+    IDS_REG_REGHIVEUPDATE "正在更新注册表配置单元"
+    IDS_REG_IMPORTFILE "正在导入 %s"
+    IDS_REG_DISPLAYSETTINGSUPDATE "正在更新注册表中的显示设置"
+    IDS_REG_LOCALESETTINGSUPDATE "正在更新区域设置"
+    IDS_REG_ADDKBLAYOUTS "正在添加键盘布局"
+    IDS_REG_KEYBOARDSETTINGSUPDATE "正在更新键盘布局设置"
+    IDS_REG_CODEPAGEINFOUPDATE "正在添加代码页信息"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_ACCOUNTTITLE "Name your computer and create your account"
-    IDS_CONFIGURE_SYSTEM "Configuring LiberNT..."
-    IDS_CONFIG_FOLDERS "Creating the system and profile folders"
-    IDS_CONFIG_DEVICES "Installing the device classes"
-    IDS_CONFIG_NETWORK "Installing the network protocols"
-    IDS_CONFIG_SETTINGS "Applying the computer settings"
-    IDS_CONFIG_COMPONENTS "Registering the components"
-    IDS_CONFIG_SHORTCUTS "Creating the Start menu shortcuts"
-    IDS_CONFIG_SECURITY "Applying the security settings"
-    IDS_CONFIG_ACCOUNT "Creating your account"
-    IDS_CONFIG_FINISH "Saving the configuration"
-    IDS_ERROR_COMPUTERNAME "The computer name must have 1 to 15 letters, digits or hyphens, and cannot contain only digits."
-    IDS_ERROR_USERNAME "The user name must have 1 to 20 characters and cannot contain any of these characters:\n"" / \\ [ ] : ; | = , + * ? < > @\nIt cannot contain only periods and spaces."
-    IDS_ERROR_USEREXISTS "This name is already used by a built-in account or group, or by the computer. Choose another user name."
-    IDS_ERROR_PASSWORDMATCH "The passwords do not match. Type the same password in both boxes."
+    IDS_ACCOUNTTITLE "为计算机命名并创建你的帐户"
+    IDS_CONFIGURE_SYSTEM "正在配置 LiberNT..."
+    IDS_CONFIG_FOLDERS "正在创建系统和配置文件文件夹"
+    IDS_CONFIG_DEVICES "正在安装设备类"
+    IDS_CONFIG_NETWORK "正在安装网络协议"
+    IDS_CONFIG_SETTINGS "正在应用计算机设置"
+    IDS_CONFIG_COMPONENTS "正在注册组件"
+    IDS_CONFIG_SHORTCUTS "正在创建“开始”菜单快捷方式"
+    IDS_CONFIG_SECURITY "正在应用安全设置"
+    IDS_CONFIG_ACCOUNT "正在创建你的帐户"
+    IDS_CONFIG_FINISH "正在保存配置"
+    IDS_ERROR_COMPUTERNAME "计算机名必须包含 1 到 15 个字母、数字或连字符，且不能只包含数字。"
+    IDS_ERROR_USERNAME "用户名必须包含 1 到 20 个字符，且不能包含以下任何字符:\n"" / \\ [ ] : ; | = , + * ? < > @\n用户名不能只包含句点和空格。"
+    IDS_ERROR_USEREXISTS "此名称已被内置帐户、组或计算机使用。请选择其他用户名。"
+    IDS_ERROR_PASSWORDMATCH "密码不匹配。请在两个框中键入相同的密码。"
+    IDS_ERROR_PASSWORDHINT "请键入密码提示。"
+    IDS_ERROR_HINTPASSWORD "密码提示不能包含密码。"
 END
 
 /* Error Strings */
@@ -117,11 +350,11 @@ END
 STRINGTABLE
 BEGIN
 
-    IDS_ERROR_CREATE_PARTITION "Failed to create a new partition."
+    IDS_ERROR_CREATE_PARTITION "无法创建新分区。"
 
-    IDS_WARN_DELETE_PARTITION_TITLE "Delete partition?"
-    IDS_WARN_DELETE_PARTITION "Are you sure you want to delete the selected partition?"
-    IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "Are you sure you want to delete the selected extended partition and ALL the logical partitions it contains?"
+    IDS_WARN_DELETE_PARTITION_TITLE "删除分区？"
+    IDS_WARN_DELETE_PARTITION "确实要删除所选分区吗？"
+    IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "确实要删除所选扩展分区及其包含的所有逻辑分区吗？"
 END
 
 IDD_INSTALLTYPEPAGE DIALOGEX 0, 0, 290, 160
@@ -130,12 +363,12 @@ FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_TYPE_FOUND, 0, 0, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
     AUTORADIOBUTTON "", IDC_TYPE_ALONGSIDE, 0, 13, 290, 10, WS_GROUP | WS_TABSTOP
-    AUTORADIOBUTTON "&Something else: create, resize or choose partitions yourself", IDC_TYPE_MANUAL, 0, 25, 290, 10
+    AUTORADIOBUTTON "其他方式：自行创建、调整或选择分区(&S)", IDC_TYPE_MANUAL, 0, 25, 290, 10
     CONTROL "", IDC_TYPE_SPLIT, TRACKBAR_CLASS, TBS_HORZ | TBS_NOTICKS | TBS_BOTH | WS_GROUP | WS_TABSTOP, 6, 40, 284, 16
     LTEXT "", IDC_TYPE_WINSIZE, 12, 57, 136, 9, SS_NOPREFIX
     RTEXT "", IDC_TYPE_LNTSIZE, 148, 57, 136, 9, SS_NOPREFIX
-    LTEXT "Start by default:", IDC_TYPE_DEFAULT_LABEL, 12, 73, 62, 9
-    AUTORADIOBUTTON "&LiberNT", IDC_TYPE_DEFAULT_LIBERNT, 76, 72, 70, 10, WS_GROUP | WS_TABSTOP
+    LTEXT "默认启动:", IDC_TYPE_DEFAULT_LABEL, 12, 73, 62, 9
+    AUTORADIOBUTTON "LiberNT(&L)", IDC_TYPE_DEFAULT_LIBERNT, 76, 72, 70, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "", IDC_TYPE_DEFAULT_WINDOWS, 150, 72, 120, 10
     ICON "", IDC_TYPE_WARNICON, 12, 87, 10, 10, SS_ICON | SS_REALSIZEIMAGE
     LTEXT "", IDC_TYPE_WARNING, 28, 87, 262, 36, SS_NOPREFIX
@@ -144,22 +377,22 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_TYPETITLE "Installation type"
-    IDS_TYPESUBTITLE "Choose how LiberNT shares this computer."
-    IDS_TYPE_FOUND "This computer has %s on %s."
-    IDS_TYPE_ALONGSIDE "Install LiberNT &alongside %s"
+    IDS_TYPETITLE "安装类型"
+    IDS_TYPESUBTITLE "选择 LiberNT 与这台计算机的共享方式。"
+    IDS_TYPE_FOUND "这台计算机的 %s 上有 %s。"
+    IDS_TYPE_ALONGSIDE "与 %s 并存安装 LiberNT(&A)"
     IDS_TYPE_SPLITSIZE "%s: %s"
-    IDS_TYPE_SHRINKNOTE "Drag the slider to share the space. %s keeps its programs and files. Its partition shrinks as soon as you select Next."
-    IDS_TYPE_HIBERNATED "%s is hibernated or was shut down with Fast startup, so its partition cannot be resized safely. Start %s, choose Restart from the Start menu, then start Setup again. You can also turn off Fast startup in Control Panel > Power Options."
-    IDS_TYPE_NOSPACE "%s does not have enough free space to make room for LiberNT, which needs at least %I64u GB. Free some space in it, or choose Something else."
-    IDS_TYPE_NORESIZE "The %s partition cannot be resized. Choose Something else to pick another place for LiberNT."
-    IDS_TYPE_PLANNED "%s was resized to %s. LiberNT will be installed in the new %s partition."
-    IDS_TYPE_WARNING "%s starts by default. To start LiberNT, you must open the computer's boot menu while it starts, usually with F12, F11, F9 or Esc, and choose LiberNT Boot Manager. In Windows you can also use Settings > System > Recovery > Advanced startup > Use a device."
-    IDS_TYPE_CONFIRM_TITLE "Resize %s now?"
-    IDS_TYPE_CONFIRM "%s shrinks from %s to %s right away, before the rest of the installation, and LiberNT gets %s. Make sure the files you want to keep are backed up."
+    IDS_TYPE_SHRINKNOTE "拖动滑块分配空间。%s 会保留其程序和文件。你选择“下一步”后，其分区会立即压缩。"
+    IDS_TYPE_HIBERNATED "%s 处于休眠状态或使用快速启动关机，因此无法安全地调整其分区。请启动 %s，从“开始”菜单选择“重启”，然后再次启动安装程序。你也可以在“控制面板 > 电源选项”中关闭快速启动。"
+    IDS_TYPE_NOSPACE "%s 没有足够的可用空间来容纳 LiberNT，LiberNT 至少需要 %I64u GB。请释放一些空间，或选择“其他方式”。"
+    IDS_TYPE_NORESIZE "无法调整 %s 分区的大小。请选择“其他方式”为 LiberNT 选择其他位置。"
+    IDS_TYPE_PLANNED "%s 已调整为 %s。LiberNT 将安装在新的 %s 分区中。"
+    IDS_TYPE_WARNING "默认启动 %s。若要启动 LiberNT，请在计算机启动时打开启动菜单(通常按 F12、F11、F9 或 Esc)，然后选择 LiberNT Boot Manager。在 Windows 中，也可以使用“设置 > 系统 > 恢复 > 高级启动 > 使用设备”。"
+    IDS_TYPE_CONFIRM_TITLE "立即调整 %s 的大小？"
+    IDS_TYPE_CONFIRM "%s 将在安装其余部分之前立即从 %s 压缩到 %s，LiberNT 将获得 %s。请确保已备份要保留的文件。"
     IDS_TYPE_WINDOWS11 "Windows 11"
     IDS_TYPE_WINDOWS10 "Windows 10"
     IDS_TYPE_WINDOWS "Windows"
-    IDS_READY_DEFAULTOS "Starts by default: %s"
+    IDS_READY_DEFAULTOS "默认启动: %s"
     IDS_TYPE_LIBERNT "LiberNT"
 END

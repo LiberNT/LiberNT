@@ -268,6 +268,51 @@ WriteUserRegion(
 }
 
 static VOID
+WriteSystemLanguage(
+    _In_ LCID Lcid)
+{
+    static const struct
+    {
+        LCTYPE Type;
+        PCWSTR Name;
+    } CodePages[] =
+    {
+        { LOCALE_IDEFAULTANSICODEPAGE, L"ACP" },
+        { LOCALE_IDEFAULTCODEPAGE, L"OEMCP" },
+        { LOCALE_IDEFAULTMACCODEPAGE, L"MACCP" },
+    };
+    WCHAR Text[16];
+    BOOL Legacy;
+    HKEY hKey;
+    ULONG Index;
+
+    Legacy = GetLocaleInfoW(Lcid, LOCALE_IDEFAULTANSICODEPAGE | LOCALE_NOUSEROVERRIDE, Text, ARRAYSIZE(Text)) &&
+             wcstoul(Text, NULL, 10) != CP_ACP;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Nls\\Language",
+                      0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        StringCchPrintfW(Text, ARRAYSIZE(Text), L"%04X", LANGIDFROMLCID(Lcid));
+        SetStringValue(hKey, L"InstallLanguage", Text);
+        if (Legacy)
+            SetStringValue(hKey, L"Default", Text);
+        RegCloseKey(hKey);
+    }
+
+    if (Legacy &&
+        RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Nls\\CodePage",
+                      0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        for (Index = 0; Index < ARRAYSIZE(CodePages); Index++)
+        {
+            if (GetLocaleInfoW(Lcid, CodePages[Index].Type | LOCALE_NOUSEROVERRIDE, Text, ARRAYSIZE(Text)))
+                SetStringValue(hKey, CodePages[Index].Name, Text);
+        }
+        RegCloseKey(hKey);
+    }
+}
+
+static VOID
 ApplyRegion(
     _In_ PSETUPDATA pSetupData)
 {
@@ -277,6 +322,7 @@ ApplyRegion(
     HKEY hUser;
     LONG Error;
 
+    WriteSystemLanguage(Lcid);
     WriteUserRegion(HKEY_CURRENT_USER, Lcid, pSetupData->DefaultKBLayout);
 
     if (RegOpenKeyExW(HKEY_USERS, L".DEFAULT", 0, KEY_CREATE_SUB_KEY | KEY_SET_VALUE, &hUser) == ERROR_SUCCESS)
@@ -585,6 +631,7 @@ FinishThread(
     DWORD Error;
     ULONG Index;
 
+    SetSetupLanguage(pSetupData->DefaultLanguage);
     if (ComponentsOnly)
     {
         pSetupData->bInstalled = TRUE;
@@ -940,6 +987,7 @@ wWinMain(
     hrCom = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
     StringCchPrintfW(SetupData.DefaultLanguage, ARRAYSIZE(SetupData.DefaultLanguage), L"%08lX", GetUserDefaultLCID());
+    SetSetupLanguage(SetupData.DefaultLanguage);
     if (!GetKeyboardLayoutNameW(SetupData.DefaultKBLayout))
         StringCchCopyW(SetupData.DefaultKBLayout, ARRAYSIZE(SetupData.DefaultKBLayout), L"00000409");
     GenerateComputerName(SetupData.ComputerName);

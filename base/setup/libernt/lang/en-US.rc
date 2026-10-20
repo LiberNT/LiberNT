@@ -48,7 +48,7 @@ IDD_LANGUAGEPAGE DIALOGEX 0, 0, 290, 160
 STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
-    LTEXT "&Time and currency format:", IDC_STATIC, 0, 4, 95, 9
+    LTEXT "&Language and region:", IDC_STATIC, 0, 4, 95, 9
     COMBOBOX IDC_LANGUAGELIST, 100, 2, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
     LTEXT "&Keyboard or input method:", IDC_STATIC, 0, 24, 95, 9
     COMBOBOX IDC_LAYOUTLIST, 100, 22, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
@@ -238,10 +238,10 @@ BEGIN
     IDS_READY_COMPUTER "Computer name: %s"
     IDS_READY_ACCOUNT "Account: %s"
     IDS_READY_TIMEZONE "Time zone: %s"
-    IDS_READY_LANGUAGE "Time and currency format: %s"
+    IDS_READY_LANGUAGE "Language and region: %s"
     IDS_READY_KEYBOARD "Keyboard: %s"
     IDS_LANGUAGETITLE "Choose your language and keyboard"
-    IDS_LANGUAGESUBTITLE "LiberNT uses this format for dates, times, numbers and currency."
+    IDS_LANGUAGESUBTITLE "Setup and LiberNT use this language, and its format for dates, times, numbers and currency."
 END
 
 STRINGTABLE
@@ -255,15 +255,15 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_OOBE_REGIONTITLE "Choose your region format and keyboard"
-    IDS_OOBE_REGIONSUBTITLE "LiberNT uses this format for dates, times, numbers and currency, and this keyboard for typing."
+    IDS_OOBE_REGIONTITLE "Choose your language and keyboard"
+    IDS_OOBE_REGIONSUBTITLE "LiberNT uses this language, its format for dates, times, numbers and currency, and this keyboard for typing."
     IDS_APPSTITLE "Get the components most programs need"
     IDS_APPSSUBTITLE "LiberNT downloads them from their publishers and installs them for every account."
     IDS_APPS_COL_NAME "Component"
     IDS_APPS_COL_SOURCE "Downloaded from"
     IDS_OOBE_FINISHTITLE "Getting LiberNT ready"
     IDS_OOBE_FINISHSUBTITLE "This can take a few minutes. Keep your computer on."
-    IDS_OOBE_APPLY_REGION "Applying your region and keyboard..."
+    IDS_OOBE_APPLY_REGION "Applying your language and keyboard..."
     IDS_OOBE_APPLY_TIMEZONE "Setting the time zone..."
     IDS_OOBE_APPLY_NAME "Naming your computer..."
     IDS_OOBE_APPLY_ACCOUNT "Creating your account..."

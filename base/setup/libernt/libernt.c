@@ -557,6 +557,7 @@ PrepareAndDoCopyThread(
     NTSTATUS Status;
     DWORD Error;
 
+    SetSetupLanguage(pSetupData->DefaultLanguage);
     UiContext.hwndDlg = hwndDlg;
     UiContext.hWndItem = GetDlgItem(hwndDlg, IDC_ITEM);
     UiContext.hWndProgress = GetDlgItem(hwndDlg, IDC_PROCESSPROGRESS);
@@ -1320,6 +1321,7 @@ wWinMain(
     SetupData.bUnattend = CheckUnattendedSetup(&SetupData.USetupData);
     if (!LoadSetupData(&SetupData))
         goto Quit;
+    SetSetupLanguage(SetupData.DefaultLanguage);
 
     if (wcsstr(lpszCmdLine, L"--selftest") || SetupData.USetupData.SelfTest)
     {
