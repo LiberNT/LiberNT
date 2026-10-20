@@ -1416,7 +1416,7 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
 
         /* Post a keyboard message */
         TRACE("Posting keyboard msg %u wParam 0x%x lParam 0x%x\n", Msg.message, Msg.wParam, Msg.lParam);
-        if (!Wnd) {ERR("Window is NULL\n");}
+        if (!Wnd) TRACE("Posting keyboard msg to the focus thread without a window\n");
         if (!RawInputIsNoLegacy(pti->ppi, RIM_TYPEKEYBOARD))
         {
             INPUT_MESSAGE_SOURCE KbdSource = { IMDT_KEYBOARD, bInjected ? IMO_INJECTED : IMO_HARDWARE };
