@@ -181,6 +181,11 @@ SETUP_CreateDevicesList(
                                   (DEVINSTID_W)InstancePath,
                                   OnlyPresent ? CM_LOCATE_DEVNODE_NORMAL : CM_LOCATE_DEVNODE_PHANTOM,
                                   list->hMachine);
+        if (cr == CR_NO_SUCH_DEVNODE && OnlyPresent)
+        {
+            TRACE("Skipping non-present device %S\n", InstancePath);
+            continue;
+        }
         if (cr != CR_SUCCESS)
         {
             ERR("CM_Locate_DevNode_ExW('%S') failed with status 0x%x\n", InstancePath, cr);
