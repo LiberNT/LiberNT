@@ -2925,6 +2925,173 @@ BuspBuildStableInstanceId(
     return 0;
 }
 
+static
+PCM_PARTIAL_RESOURCE_DESCRIPTOR
+BuspFindAssignedResource(
+    _In_ PCM_RESOURCE_LIST ResourceList,
+    _In_ UCHAR Type,
+    _In_ ULONG Index)
+{
+    PCM_PARTIAL_RESOURCE_LIST Partial = &ResourceList->List[0].PartialResourceList;
+    ULONG i;
+
+    for (i = 0; i < Partial->Count; i++)
+    {
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor = &Partial->PartialDescriptors[i];
+
+        if (Descriptor->Type != Type)
+            continue;
+        if (Type == CmResourceTypeInterrupt &&
+            (Descriptor->Flags & CM_RESOURCE_INTERRUPT_MESSAGE))
+        {
+            continue;
+        }
+        if (Index-- == 0)
+            return Descriptor;
+    }
+
+    return NULL;
+}
+
+static
+NTSTATUS
+BuspProgramAssignedResources(
+    _In_ PPDO_DEVICE_DATA DeviceData,
+    _In_opt_ PCM_RESOURCE_LIST AllocatedResources)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Assigned;
+    ACPI_RESOURCE *resource;
+    ACPI_HANDLE SrsHandle;
+    ACPI_BUFFER Buffer;
+    ACPI_STATUS AcpiStatus;
+    ULONG Interrupts = 0;
+    ULONG Ports = 0;
+    ULONG Channels = 0;
+    BOOLEAN Changed = FALSE;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+
+    if (!AllocatedResources || AllocatedResources->Count == 0 ||
+        ACPI_FAILURE(AcpiGetHandle(DeviceData->AcpiHandle, "_SRS", &SrsHandle)))
+    {
+        return STATUS_SUCCESS;
+    }
+
+    Buffer.Length = 0;
+    Buffer.Pointer = NULL;
+    AcpiStatus = BuspGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
+    if ((!ACPI_SUCCESS(AcpiStatus) && AcpiStatus != AE_BUFFER_OVERFLOW) ||
+        Buffer.Length == 0)
+    {
+        return STATUS_SUCCESS;
+    }
+
+    Buffer.Pointer = ExAllocatePoolWithTag(PagedPool, Buffer.Length, 'BpcA');
+    if (!Buffer.Pointer)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    AcpiStatus = BuspGetCurrentResources(DeviceData->AcpiHandle, &Buffer);
+    if (!ACPI_SUCCESS(AcpiStatus))
+    {
+        ExFreePoolWithTag(Buffer.Pointer, 'BpcA');
+        return STATUS_SUCCESS;
+    }
+
+    for (resource = Buffer.Pointer;
+         resource->Type != ACPI_RESOURCE_TYPE_END_TAG;
+         resource = ACPI_NEXT_RESOURCE(resource))
+    {
+        switch (resource->Type)
+        {
+            case ACPI_RESOURCE_TYPE_IRQ:
+            {
+                ACPI_RESOURCE_IRQ *irq = &resource->Data.Irq;
+
+                Assigned = BuspFindAssignedResource(AllocatedResources, CmResourceTypeInterrupt, Interrupts++);
+                if (Assigned && Assigned->u.Interrupt.Vector < 16 &&
+                    (irq->InterruptCount != 1 || irq->Interrupts[0] != Assigned->u.Interrupt.Vector))
+                {
+                    irq->InterruptCount = 1;
+                    irq->Interrupts[0] = (UINT8)Assigned->u.Interrupt.Vector;
+                    Changed = TRUE;
+                }
+                break;
+            }
+
+            case ACPI_RESOURCE_TYPE_EXTENDED_IRQ:
+            {
+                ACPI_RESOURCE_EXTENDED_IRQ *irq = &resource->Data.ExtendedIrq;
+
+                if (irq->ProducerConsumer == ACPI_PRODUCER)
+                    break;
+
+                Assigned = BuspFindAssignedResource(AllocatedResources, CmResourceTypeInterrupt, Interrupts++);
+                if (Assigned &&
+                    (irq->InterruptCount != 1 || irq->Interrupts[0] != Assigned->u.Interrupt.Vector))
+                {
+                    irq->InterruptCount = 1;
+                    irq->Interrupts[0] = Assigned->u.Interrupt.Vector;
+                    Changed = TRUE;
+                }
+                break;
+            }
+
+            case ACPI_RESOURCE_TYPE_IO:
+            {
+                ACPI_RESOURCE_IO *io = &resource->Data.Io;
+
+                Assigned = BuspFindAssignedResource(AllocatedResources, CmResourceTypePort, Ports++);
+                if (Assigned && Assigned->u.Port.Start.QuadPart <= 0xFFFF &&
+                    (io->Minimum != Assigned->u.Port.Start.LowPart ||
+                     io->Maximum != Assigned->u.Port.Start.LowPart))
+                {
+                    io->Minimum = (UINT16)Assigned->u.Port.Start.LowPart;
+                    io->Maximum = (UINT16)Assigned->u.Port.Start.LowPart;
+                    Changed = TRUE;
+                }
+                break;
+            }
+
+            case ACPI_RESOURCE_TYPE_FIXED_IO:
+                Ports++;
+                break;
+
+            case ACPI_RESOURCE_TYPE_DMA:
+            {
+                ACPI_RESOURCE_DMA *dma = &resource->Data.Dma;
+
+                Assigned = BuspFindAssignedResource(AllocatedResources, CmResourceTypeDma, Channels++);
+                if (Assigned && !(Assigned->Flags & CM_RESOURCE_DMA_V3) &&
+                    Assigned->u.Dma.Channel < 8 &&
+                    (dma->ChannelCount != 1 || dma->Channels[0] != Assigned->u.Dma.Channel))
+                {
+                    dma->ChannelCount = 1;
+                    dma->Channels[0] = (UINT8)Assigned->u.Dma.Channel;
+                    Changed = TRUE;
+                }
+                break;
+            }
+
+            default:
+                break;
+        }
+    }
+
+    if (Changed)
+    {
+        AcpiStatus = BuspSetCurrentResources(DeviceData->AcpiHandle, &Buffer);
+        if (ACPI_FAILURE(AcpiStatus))
+        {
+            DPRINT1("ACPI: _SRS failed (0x%x) for %S\n", AcpiStatus, DeviceData->HardwareIDs);
+            Status = STATUS_UNSUCCESSFUL;
+        }
+    }
+
+    ExFreePoolWithTag(Buffer.Pointer, 'BpcA');
+    return Status;
+}
+
 /* ============================== PDO PnP ================================ */
 
 NTSTATUS
@@ -2968,6 +3135,16 @@ Bus_PDO_PnP (
         {
             BuspPublishLegacyScsiportConfig(DeviceData,
                 IrpStack->Parameters.StartDevice.AllocatedResourcesTranslated);
+        }
+
+        if (DeviceData->AcpiHandle &&
+            !BuspIsPciRootDevice(DeviceData) &&
+            !BuspIsPciLinkDevice(DeviceData))
+        {
+            status = BuspProgramAssignedResources(DeviceData,
+                IrpStack->Parameters.StartDevice.AllocatedResources);
+            if (!NT_SUCCESS(status))
+                break;
         }
 
         if (DeviceData->AcpiHandle &&

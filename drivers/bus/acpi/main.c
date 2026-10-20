@@ -43,6 +43,19 @@ BuspGetPossibleResources(
 }
 
 ACPI_STATUS
+BuspSetCurrentResources(
+    _In_ ACPI_HANDLE Handle,
+    _In_ ACPI_BUFFER *Buffer)
+{
+    ACPI_STATUS Status;
+
+    KeAcquireGuardedMutex(&BuspResourceLock);
+    Status = AcpiSetCurrentResources(Handle, Buffer);
+    KeReleaseGuardedMutex(&BuspResourceLock);
+    return Status;
+}
+
+ACPI_STATUS
 BuspGetIrqRoutingTable(
     _In_ ACPI_HANDLE Handle,
     _Inout_ ACPI_BUFFER *Buffer)
