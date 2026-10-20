@@ -37,7 +37,6 @@ LsapDeregisterLogonProcess(PLSA_API_MSG RequestMsg,
 }
 
 
-static
 BOOL
 LsapIsTrustedClient(
     _In_ HANDLE ProcessHandle)

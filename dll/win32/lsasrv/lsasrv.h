@@ -135,6 +135,10 @@ LsapTerminateLogon(
 NTSTATUS
 StartAuthenticationPort(VOID);
 
+BOOL
+LsapIsTrustedClient(
+    _In_ HANDLE ProcessHandle);
+
 /* database.c */
 NTSTATUS
 LsapInitDatabase(VOID);

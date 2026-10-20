@@ -50,6 +50,18 @@ typedef NTSTATUS (NTAPI *PLSA_COPY_TO_CLIENT_BUFFER)(PLSA_CLIENT_REQUEST, ULONG,
 typedef NTSTATUS (NTAPI *PLSA_COPY_FROM_CLIENT_BUFFER)(PLSA_CLIENT_REQUEST,
  ULONG, PVOID, PVOID);
 
+typedef struct _SECPKG_CLIENT_INFO
+{
+    LUID LogonId;
+    ULONG ProcessID;
+    ULONG ThreadID;
+    BOOLEAN HasTcbPrivilege;
+    BOOLEAN Impersonating;
+    BOOLEAN Restricted;
+} SECPKG_CLIENT_INFO, *PSECPKG_CLIENT_INFO;
+
+typedef NTSTATUS (NTAPI *PLSA_GET_CLIENT_INFO)(PSECPKG_CLIENT_INFO);
+
 typedef struct LSA_DISPATCH_TABLE
 {
     PLSA_CREATE_LOGON_SESSION CreateLogonSession;
@@ -64,6 +76,27 @@ typedef struct LSA_DISPATCH_TABLE
     PLSA_COPY_TO_CLIENT_BUFFER CopyToClientBuffer;
     PLSA_COPY_FROM_CLIENT_BUFFER CopyFromClientBuffer;
 } LSA_DISPATCH_TABLE, *PLSA_DISPATCH_TABLE;
+
+typedef struct _LSA_SECPKG_FUNCTION_TABLE
+{
+    PLSA_CREATE_LOGON_SESSION CreateLogonSession;
+    PLSA_DELETE_LOGON_SESSION DeleteLogonSession;
+    PLSA_ADD_CREDENTIAL AddCredential;
+    PLSA_GET_CREDENTIALS GetCredentials;
+    PLSA_DELETE_CREDENTIAL DeleteCredential;
+    PLSA_ALLOCATE_LSA_HEAP AllocateLsaHeap;
+    PLSA_FREE_LSA_HEAP FreeLsaHeap;
+    PLSA_ALLOCATE_CLIENT_BUFFER AllocateClientBuffer;
+    PLSA_FREE_CLIENT_BUFFER FreeClientBuffer;
+    PLSA_COPY_TO_CLIENT_BUFFER CopyToClientBuffer;
+    PLSA_COPY_FROM_CLIENT_BUFFER CopyFromClientBuffer;
+    PVOID ImpersonateClient;
+    PVOID UnloadPackage;
+    PVOID DuplicateHandle;
+    PVOID SaveSupplementalCredentials;
+    PVOID CreateThread;
+    PLSA_GET_CLIENT_INFO GetClientInfo;
+} LSA_SECPKG_FUNCTION_TABLE, *PLSA_SECPKG_FUNCTION_TABLE;
 
 
 typedef NTSTATUS (NTAPI *PLSA_AP_INITIALIZE_PACKAGE)(ULONG, PLSA_DISPATCH_TABLE,
@@ -161,7 +194,8 @@ SamrGetAliasMembership(
 
 static LIST_ENTRY PackageListHead;
 static ULONG PackageId;
-static LSA_DISPATCH_TABLE DispatchTable;
+static LSA_SECPKG_FUNCTION_TABLE DispatchTable;
+static DWORD LsapClientTlsIndex = TLS_OUT_OF_INDEXES;
 
 #define CONST_LUID(x1, x2) {x1, x2}
 static const LUID SeChangeNotifyPrivilege = CONST_LUID(SE_CHANGE_NOTIFY_PRIVILEGE, 0);
@@ -295,7 +329,7 @@ LsapAddAuthPackage(IN PWSTR ValueName,
 
     /* Initialize the current package */
     Status = Package->LsaApInitializePackage(*Id,
-                                             &DispatchTable,
+                                             (PLSA_DISPATCH_TABLE)&DispatchTable,
                                              NULL,
                                              NULL,
                                              &Package->Name);
@@ -470,6 +504,67 @@ LsapCopyFromClientBuffer(IN PLSA_CLIENT_REQUEST ClientRequest,
 }
 
 
+static
+VOID
+LsapSetClientContext(
+    _In_opt_ PLSAP_LOGON_CONTEXT LogonContext)
+{
+    if (LsapClientTlsIndex != TLS_OUT_OF_INDEXES)
+        TlsSetValue(LsapClientTlsIndex, LogonContext);
+}
+
+
+static
+NTSTATUS
+NTAPI
+LsapGetClientInfo(
+    _Out_ PSECPKG_CLIENT_INFO ClientInfo)
+{
+    PLSAP_LOGON_CONTEXT LogonContext = NULL;
+    PROCESS_BASIC_INFORMATION ProcessInfo;
+    TOKEN_STATISTICS Statistics;
+    HANDLE TokenHandle;
+    ULONG Length;
+    NTSTATUS Status;
+
+    if (LsapClientTlsIndex != TLS_OUT_OF_INDEXES)
+        LogonContext = TlsGetValue(LsapClientTlsIndex);
+
+    if (LogonContext == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    RtlZeroMemory(ClientInfo, sizeof(*ClientInfo));
+
+    Status = NtQueryInformationProcess(LogonContext->ClientProcessHandle,
+                                       ProcessBasicInformation,
+                                       &ProcessInfo,
+                                       sizeof(ProcessInfo),
+                                       NULL);
+    if (NT_SUCCESS(Status))
+        ClientInfo->ProcessID = (ULONG)ProcessInfo.UniqueProcessId;
+
+    Status = NtOpenProcessToken(LogonContext->ClientProcessHandle,
+                                TOKEN_QUERY,
+                                &TokenHandle);
+    if (NT_SUCCESS(Status))
+    {
+        Status = NtQueryInformationToken(TokenHandle,
+                                         TokenStatistics,
+                                         &Statistics,
+                                         sizeof(Statistics),
+                                         &Length);
+        if (NT_SUCCESS(Status))
+            ClientInfo->LogonId = Statistics.AuthenticationId;
+
+        NtClose(TokenHandle);
+    }
+
+    ClientInfo->HasTcbPrivilege = (BOOLEAN)LsapIsTrustedClient(LogonContext->ClientProcessHandle);
+
+    return STATUS_SUCCESS;
+}
+
+
 NTSTATUS
 LsapInitAuthPackages(VOID)
 {
@@ -494,6 +589,9 @@ LsapInitAuthPackages(VOID)
     DispatchTable.FreeClientBuffer = &LsapFreeClientBuffer;
     DispatchTable.CopyToClientBuffer = &LsapCopyToClientBuffer;
     DispatchTable.CopyFromClientBuffer = &LsapCopyFromClientBuffer;
+    DispatchTable.GetClientInfo = &LsapGetClientInfo;
+
+    LsapClientTlsIndex = TlsAlloc();
 
     /* Add registered authentication packages */
     Status = RtlQueryRegistryValues(RTL_REGISTRY_CONTROL,
@@ -604,6 +702,8 @@ LsapCallAuthenticationPackage(PLSA_API_MSG RequestMsg,
         }
     }
 
+    LsapSetClientContext(LogonContext);
+
     if (LogonContext->TrustedCaller)
         Status = Package->LsaApCallPackage((PLSA_CLIENT_REQUEST)LogonContext,
                                            LocalBuffer,
@@ -620,6 +720,9 @@ LsapCallAuthenticationPackage(PLSA_API_MSG RequestMsg,
                                                     &RequestMsg->CallAuthenticationPackage.Reply.ProtocolReturnBuffer,
                                                     &RequestMsg->CallAuthenticationPackage.Reply.ReturnBufferLength,
                                                     &RequestMsg->CallAuthenticationPackage.Reply.ProtocolStatus);
+
+    LsapSetClientContext(NULL);
+
     if (!NT_SUCCESS(Status))
     {
         TRACE("Package->LsaApCallPackage() failed (Status 0x%08lx)\n", Status);
@@ -900,6 +1003,7 @@ LsapAddDefaultGroups(
         switch (LogonType)
         {
             case Interactive:
+            case Unlock:
                 SrcSid = LsapInteractiveSid;
                 break;
 
@@ -1474,6 +1578,8 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
         TRACE("GroupCount: %lu\n", LocalGroups->GroupCount);
     }
 
+    LsapSetClientContext(LogonContext);
+
     if (Package->LsaApLogonUserEx2 != NULL)
     {
         Status = Package->LsaApLogonUserEx2((PLSA_CLIENT_REQUEST)LogonContext,
@@ -1526,6 +1632,8 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
                                          &AccountName,
                                          &AuthenticatingAuthority);
     }
+
+    LsapSetClientContext(NULL);
 
     if (!NT_SUCCESS(Status))
     {
@@ -1687,7 +1795,8 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
 
     if (LogonType == Interactive ||
         LogonType == Batch ||
-        LogonType == Service)
+        LogonType == Service ||
+        LogonType == Unlock)
     {
         UserName = &((PMSV1_0_INTERACTIVE_LOGON)LocalAuthInfo)->UserName;
         LogonDomainName = &((PMSV1_0_INTERACTIVE_LOGON)LocalAuthInfo)->LogonDomainName;
