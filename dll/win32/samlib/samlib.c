@@ -37,11 +37,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(samlib);
 
 NTSTATUS
 WINAPI
-SystemFunction006(LPCSTR password,
-                  LPSTR hash);
-
-NTSTATUS
-WINAPI
 SystemFunction007(PUNICODE_STRING string,
                   LPBYTE hash);
 
@@ -50,6 +45,23 @@ WINAPI
 SystemFunction012(const BYTE *in,
                   const BYTE *key,
                   LPBYTE out);
+
+struct ustring
+{
+    DWORD Length;
+    DWORD MaximumLength;
+    unsigned char *Buffer;
+};
+
+NTSTATUS
+WINAPI
+SystemFunction032(struct ustring *data,
+                  const struct ustring *key);
+
+BOOLEAN
+WINAPI
+SystemFunction036(PVOID pbBuffer,
+                  ULONG dwLen);
 
 /* GLOBALS *******************************************************************/
 
@@ -144,13 +156,58 @@ PSAMPR_SERVER_NAME_unbind(PSAMPR_SERVER_NAME pszSystemName,
 }
 
 
+static
+BOOLEAN
+SampPasswordContainsName(IN PUNICODE_STRING Password,
+                         IN PRPC_UNICODE_STRING Name,
+                         IN BOOLEAN Tokenize)
+{
+    ULONG PasswordLength = Password->Length / sizeof(WCHAR);
+    ULONG NameLength = Name->Length / sizeof(WCHAR);
+    ULONG Start = 0;
+    ULONG End;
+    ULONG i;
+
+    while (Start < NameLength)
+    {
+        End = Start;
+        if (Tokenize)
+        {
+            while (End < NameLength && wcschr(L",.-_# \t", Name->Buffer[End]) == NULL)
+                End++;
+        }
+        else
+        {
+            End = NameLength;
+        }
+
+        if (End - Start >= 3)
+        {
+            for (i = 0; i + (End - Start) <= PasswordLength; i++)
+            {
+                if (_wcsnicmp(&Password->Buffer[i], &Name->Buffer[Start], End - Start) == 0)
+                    return TRUE;
+            }
+        }
+
+        Start = End + 1;
+    }
+
+    return FALSE;
+}
+
+
+static
 NTSTATUS
 SampCheckPassword(IN SAMPR_HANDLE UserHandle,
-                  IN PUNICODE_STRING Password)
+                  IN PUNICODE_STRING Password,
+                  IN PULONG UserAccountControl OPTIONAL)
 {
     USER_DOMAIN_PASSWORD_INFORMATION DomainPasswordInformation;
+    PSAMPR_USER_INFO_BUFFER UserInfo = NULL;
     LPWORD CharTypeBuffer = NULL;
     ULONG PasswordLength;
+    ULONG AccountControl = 0;
     ULONG i;
     ULONG Upper = 0, Lower = 0, Digit = 0, Punct = 0, Alpha = 0;
     NTSTATUS Status = STATUS_SUCCESS;
@@ -168,14 +225,56 @@ SampCheckPassword(IN SAMPR_HANDLE UserHandle,
 
     PasswordLength = (ULONG)(Password->Length / sizeof(WCHAR));
 
-    /* Fail if the password is too short or too long */
-    if ((PasswordLength < DomainPasswordInformation.MinPasswordLength) ||
-        (PasswordLength > 256))
+    if (PasswordLength > 256)
+        return STATUS_PASSWORD_RESTRICTION;
+
+    if (PasswordLength == 0)
+    {
+        if (UserAccountControl != NULL)
+        {
+            AccountControl = *UserAccountControl;
+        }
+        else if (NT_SUCCESS(SamrQueryInformationUser(UserHandle,
+                                                     UserControlInformation,
+                                                     &UserInfo)))
+        {
+            AccountControl = UserInfo->Control.UserAccountControl;
+            midl_user_free(UserInfo);
+            UserInfo = NULL;
+        }
+
+        if (AccountControl & USER_PASSWORD_NOT_REQUIRED)
+            return STATUS_SUCCESS;
+    }
+
+    /* Fail if the password is too short */
+    if (PasswordLength < DomainPasswordInformation.MinPasswordLength)
         return STATUS_PASSWORD_RESTRICTION;
 
     /* Check the password complexity */
     if (DomainPasswordInformation.PasswordProperties & DOMAIN_PASSWORD_COMPLEX)
     {
+        if (PasswordLength == 0)
+            return STATUS_PASSWORD_RESTRICTION;
+
+        if (NT_SUCCESS(SamrQueryInformationUser(UserHandle,
+                                                UserNameInformation,
+                                                &UserInfo)))
+        {
+            if (SampPasswordContainsName(Password, &UserInfo->Name.UserName, FALSE) ||
+                SampPasswordContainsName(Password, &UserInfo->Name.FullName, TRUE))
+                Status = STATUS_PASSWORD_RESTRICTION;
+
+            if (UserInfo->Name.UserName.Buffer != NULL)
+                midl_user_free(UserInfo->Name.UserName.Buffer);
+            if (UserInfo->Name.FullName.Buffer != NULL)
+                midl_user_free(UserInfo->Name.FullName.Buffer);
+            midl_user_free(UserInfo);
+
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+
         CharTypeBuffer = midl_user_allocate(PasswordLength * sizeof(WORD));
         if (CharTypeBuffer == NULL)
             return STATUS_INSUFFICIENT_RESOURCES;
@@ -196,20 +295,14 @@ SampCheckPassword(IN SAMPR_HANDLE UserHandle,
 
             if (CharTypeBuffer[i] & C1_UPPER)
                 Upper = 1;
-
-            if (CharTypeBuffer[i] & C1_LOWER)
+            else if (CharTypeBuffer[i] & C1_LOWER)
                 Lower = 1;
-
-            if (CharTypeBuffer[i] & C1_DIGIT)
+            else if (CharTypeBuffer[i] & C1_DIGIT)
                 Digit = 1;
-
-            if (CharTypeBuffer[i] & C1_PUNCT)
-                Punct = 1;
-
-            if ((CharTypeBuffer[i] & C1_ALPHA) &&
-                !(CharTypeBuffer[i] & C1_UPPER) &&
-                !(CharTypeBuffer[i] & C1_LOWER))
+            else if (CharTypeBuffer[i] & C1_ALPHA)
                 Alpha = 1;
+            else
+                Punct = 1;
         }
 
         TRACE("Upper: %lu\n", Upper);
@@ -323,131 +416,44 @@ SamChangePasswordUser(IN SAM_HANDLE UserHandle,
 {
     NT_OWF_PASSWORD OldNtPassword;
     NT_OWF_PASSWORD NewNtPassword;
-    LM_OWF_PASSWORD OldLmPassword;
-    LM_OWF_PASSWORD NewLmPassword;
-    OEM_STRING LmPwdString;
-    CHAR LmPwdBuffer[15];
-    BOOLEAN OldLmPasswordPresent = FALSE;
-    BOOLEAN NewLmPasswordPresent = FALSE;
-    NTSTATUS Status;
-
-    ENCRYPTED_LM_OWF_PASSWORD OldLmEncryptedWithNewLm;
-    ENCRYPTED_LM_OWF_PASSWORD NewLmEncryptedWithOldLm;
     ENCRYPTED_NT_OWF_PASSWORD OldNtEncryptedWithNewNt;
     ENCRYPTED_NT_OWF_PASSWORD NewNtEncryptedWithOldNt;
-    PENCRYPTED_LM_OWF_PASSWORD pOldLmEncryptedWithNewLm = NULL;
-    PENCRYPTED_LM_OWF_PASSWORD pNewLmEncryptedWithOldLm = NULL;
+    NTSTATUS Status;
 
-    /* Calculate the NT hash for the old password */
+    Status = SampCheckPassword((SAMPR_HANDLE)UserHandle,
+                               NewPassword,
+                               NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
     Status = SystemFunction007(OldPassword,
                                (LPBYTE)&OldNtPassword);
     if (!NT_SUCCESS(Status))
-    {
-        TRACE("SystemFunction007 failed (Status 0x%08lx)\n", Status);
-        return Status;
-    }
+        goto done;
 
-    /* Calculate the NT hash for the new password */
     Status = SystemFunction007(NewPassword,
                                (LPBYTE)&NewNtPassword);
     if (!NT_SUCCESS(Status))
-    {
-        TRACE("SystemFunction007 failed (Status 0x%08lx)\n", Status);
-        return Status;
-    }
+        goto done;
 
-    /* Calculate the LM password and hash for the old password */
-    LmPwdString.Length = 15;
-    LmPwdString.MaximumLength = 15;
-    LmPwdString.Buffer = LmPwdBuffer;
-    ZeroMemory(LmPwdString.Buffer, LmPwdString.MaximumLength);
-
-    Status = RtlUpcaseUnicodeStringToOemString(&LmPwdString,
-                                               OldPassword,
-                                               FALSE);
-    if (NT_SUCCESS(Status))
-    {
-        /* Calculate the LM hash value of the password */
-        Status = SystemFunction006(LmPwdString.Buffer,
-                                   (LPSTR)&OldLmPassword);
-        if (NT_SUCCESS(Status))
-        {
-            OldLmPasswordPresent = TRUE;
-        }
-    }
-
-    /* Calculate the LM password and hash for the new password */
-    LmPwdString.Length = 15;
-    LmPwdString.MaximumLength = 15;
-    LmPwdString.Buffer = LmPwdBuffer;
-    ZeroMemory(LmPwdString.Buffer, LmPwdString.MaximumLength);
-
-    Status = RtlUpcaseUnicodeStringToOemString(&LmPwdString,
-                                               NewPassword,
-                                               FALSE);
-    if (NT_SUCCESS(Status))
-    {
-        /* Calculate the LM hash value of the password */
-        Status = SystemFunction006(LmPwdString.Buffer,
-                                   (LPSTR)&NewLmPassword);
-        if (NT_SUCCESS(Status))
-        {
-            NewLmPasswordPresent = TRUE;
-        }
-    }
-
-    if (OldLmPasswordPresent && NewLmPasswordPresent)
-    {
-        /* Encrypt the old LM hash with the new LM hash */
-        Status = SystemFunction012((const BYTE *)&OldLmPassword,
-                                   (const BYTE *)&NewLmPassword,
-                                   (LPBYTE)&OldLmEncryptedWithNewLm);
-        if (!NT_SUCCESS(Status))
-        {
-            TRACE("SystemFunction012 failed (Status 0x%08lx)\n", Status);
-            return Status;
-        }
-
-        /* Encrypt the new LM hash with the old LM hash */
-        Status = SystemFunction012((const BYTE *)&NewLmPassword,
-                                   (const BYTE *)&OldLmPassword,
-                                   (LPBYTE)&NewLmEncryptedWithOldLm);
-        if (!NT_SUCCESS(Status))
-        {
-            TRACE("SystemFunction012 failed (Status 0x%08lx)\n", Status);
-            return Status;
-        }
-
-        pOldLmEncryptedWithNewLm = &OldLmEncryptedWithNewLm;
-        pNewLmEncryptedWithOldLm = &NewLmEncryptedWithOldLm;
-    }
-
-    /* Encrypt the old NT hash with the new NT hash */
     Status = SystemFunction012((const BYTE *)&OldNtPassword,
                                (const BYTE *)&NewNtPassword,
                                (LPBYTE)&OldNtEncryptedWithNewNt);
     if (!NT_SUCCESS(Status))
-    {
-        TRACE("SystemFunction012 failed (Status 0x%08lx)\n", Status);
-        return Status;
-    }
+        goto done;
 
-    /* Encrypt the new NT hash with the old NT hash */
     Status = SystemFunction012((const BYTE *)&NewNtPassword,
                                (const BYTE *)&OldNtPassword,
                                (LPBYTE)&NewNtEncryptedWithOldNt);
     if (!NT_SUCCESS(Status))
-    {
-        TRACE("SystemFunction012 failed (Status 0x%08lx)\n", Status);
-        return Status;
-    }
+        goto done;
 
     RpcTryExcept
     {
         Status = SamrChangePasswordUser((SAMPR_HANDLE)UserHandle,
-                                        OldLmPasswordPresent && NewLmPasswordPresent,
-                                        pOldLmEncryptedWithNewLm,
-                                        pNewLmEncryptedWithOldLm,
+                                        FALSE,
+                                        NULL,
+                                        NULL,
                                         TRUE,
                                         &OldNtEncryptedWithNewNt,
                                         &NewNtEncryptedWithOldNt,
@@ -462,6 +468,10 @@ SamChangePasswordUser(IN SAM_HANDLE UserHandle,
     }
     RpcEndExcept;
 
+done:
+    SecureZeroMemory(&OldNtPassword, sizeof(OldNtPassword));
+    SecureZeroMemory(&NewNtPassword, sizeof(NewNtPassword));
+
     return Status;
 }
 
@@ -473,8 +483,112 @@ SamChangePasswordUser2(IN PUNICODE_STRING ServerName,
                        IN PUNICODE_STRING OldPassword,
                        IN PUNICODE_STRING NewPassword)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    SAMPR_ENCRYPTED_USER_PASSWORD PasswordBuffer;
+    NT_OWF_PASSWORD OldNtPassword;
+    NT_OWF_PASSWORD NewNtPassword;
+    ENCRYPTED_NT_OWF_PASSWORD OldNtEncryptedWithNewNt;
+    struct ustring Data;
+    struct ustring Key;
+    PSAMPR_SERVER_NAME pServerName = NULL;
+    handle_t BindingHandle = NULL;
+    ULONG PasswordLength;
+    NTSTATUS Status;
+
+    TRACE("SamChangePasswordUser2(%p %p %p %p)\n",
+          ServerName, UserName, OldPassword, NewPassword);
+
+    if ((UserName == NULL) || (OldPassword == NULL) || (NewPassword == NULL))
+        return STATUS_INVALID_PARAMETER;
+
+    if (NewPassword->Length > 256 * sizeof(WCHAR))
+        return STATUS_PASSWORD_RESTRICTION;
+
+    if ((ServerName != NULL) && (ServerName->Length != 0))
+    {
+        pServerName = midl_user_allocate(ServerName->Length + sizeof(WCHAR));
+        if (pServerName == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+
+        RtlCopyMemory(pServerName, ServerName->Buffer, ServerName->Length);
+        pServerName[ServerName->Length / sizeof(WCHAR)] = UNICODE_NULL;
+    }
+
+    Status = SystemFunction007(OldPassword,
+                               (LPBYTE)&OldNtPassword);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SystemFunction007(NewPassword,
+                               (LPBYTE)&NewNtPassword);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    if (!SystemFunction036(PasswordBuffer.Buffer, sizeof(PasswordBuffer.Buffer)))
+    {
+        Status = STATUS_INTERNAL_ERROR;
+        goto done;
+    }
+
+    PasswordLength = NewPassword->Length;
+    RtlCopyMemory(&PasswordBuffer.Buffer[256 * sizeof(WCHAR) - PasswordLength],
+                  NewPassword->Buffer,
+                  PasswordLength);
+    RtlCopyMemory(&PasswordBuffer.Buffer[256 * sizeof(WCHAR)],
+                  &PasswordLength,
+                  sizeof(ULONG));
+
+    Data.Length = sizeof(PasswordBuffer.Buffer);
+    Data.MaximumLength = sizeof(PasswordBuffer.Buffer);
+    Data.Buffer = PasswordBuffer.Buffer;
+    Key.Length = sizeof(OldNtPassword);
+    Key.MaximumLength = sizeof(OldNtPassword);
+    Key.Buffer = (unsigned char *)&OldNtPassword;
+
+    Status = SystemFunction032(&Data, &Key);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SystemFunction012((const BYTE *)&OldNtPassword,
+                               (const BYTE *)&NewNtPassword,
+                               (LPBYTE)&OldNtEncryptedWithNewNt);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    BindingHandle = PSAMPR_SERVER_NAME_bind(pServerName);
+    if (BindingHandle == NULL)
+    {
+        Status = RPC_NT_INVALID_BINDING;
+        goto done;
+    }
+
+    RpcTryExcept
+    {
+        Status = SamrUnicodeChangePasswordUser2(BindingHandle,
+                                                (PRPC_UNICODE_STRING)ServerName,
+                                                (PRPC_UNICODE_STRING)UserName,
+                                                &PasswordBuffer,
+                                                &OldNtEncryptedWithNewNt,
+                                                FALSE,
+                                                NULL,
+                                                NULL);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = I_RpcMapWin32Status(RpcExceptionCode());
+    }
+    RpcEndExcept;
+
+    PSAMPR_SERVER_NAME_unbind(pServerName, BindingHandle);
+
+done:
+    SecureZeroMemory(&PasswordBuffer, sizeof(PasswordBuffer));
+    SecureZeroMemory(&OldNtPassword, sizeof(OldNtPassword));
+    SecureZeroMemory(&NewNtPassword, sizeof(NewNtPassword));
+
+    if (pServerName != NULL)
+        midl_user_free(pServerName);
+
+    return Status;
 }
 
 
@@ -2006,8 +2120,6 @@ SamSetInformationUser(IN SAM_HANDLE UserHandle,
     PSAMPR_USER_SET_PASSWORD_INFORMATION PasswordBuffer;
     SAMPR_USER_INTERNAL1_INFORMATION Internal1Buffer;
     USER_ALL_INFORMATION InternalAllBuffer;
-    OEM_STRING LmPwdString;
-    CHAR LmPwdBuffer[15];
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
 
     TRACE("SamSetInformationUser(%p %lu %p)\n",
@@ -2018,7 +2130,8 @@ SamSetInformationUser(IN SAM_HANDLE UserHandle,
         PasswordBuffer = (PSAMPR_USER_SET_PASSWORD_INFORMATION)Buffer;
 
         Status = SampCheckPassword(UserHandle,
-                                   (PUNICODE_STRING)&PasswordBuffer->Password);
+                                   (PUNICODE_STRING)&PasswordBuffer->Password,
+                                   NULL);
         if (!NT_SUCCESS(Status))
         {
             TRACE("SampCheckPassword failed (Status 0x%08lx)\n", Status);
@@ -2036,24 +2149,8 @@ SamSetInformationUser(IN SAM_HANDLE UserHandle,
 
         Internal1Buffer.NtPasswordPresent = TRUE;
         Internal1Buffer.LmPasswordPresent = FALSE;
-
-        /* Build the LM password */
-        LmPwdString.Length = 15;
-        LmPwdString.MaximumLength = 15;
-        LmPwdString.Buffer = LmPwdBuffer;
-        ZeroMemory(LmPwdString.Buffer, LmPwdString.MaximumLength);
-
-        Status = RtlUpcaseUnicodeStringToOemString(&LmPwdString,
-                                                   (PUNICODE_STRING)&PasswordBuffer->Password,
-                                                   FALSE);
-        if (NT_SUCCESS(Status))
-        {
-            /* Calculate the LM hash value of the password */
-            Status = SystemFunction006(LmPwdString.Buffer,
-                                       (LPSTR)&Internal1Buffer.EncryptedLmOwfPassword);
-            if (NT_SUCCESS(Status))
-                Internal1Buffer.LmPasswordPresent = TRUE;
-        }
+        ZeroMemory(&Internal1Buffer.EncryptedLmOwfPassword,
+                   sizeof(Internal1Buffer.EncryptedLmOwfPassword));
 
         Internal1Buffer.PasswordExpired = PasswordBuffer->PasswordExpired;
 
@@ -2115,7 +2212,9 @@ SamSetInformationUser(IN SAM_HANDLE UserHandle,
                 if (InternalAllBuffer.WhichFields & USER_ALL_NTPASSWORDPRESENT)
                 {
                     Status = SampCheckPassword(UserHandle,
-                                               &InternalAllBuffer.NtPassword);
+                                               &InternalAllBuffer.NtPassword,
+                                               (InternalAllBuffer.WhichFields & USER_ALL_USERACCOUNTCONTROL) ?
+                                               &InternalAllBuffer.UserAccountControl : NULL);
                     if (!NT_SUCCESS(Status))
                     {
                         TRACE("SampCheckPassword failed (Status 0x%08lx)\n", Status);
@@ -2137,31 +2236,6 @@ SamSetInformationUser(IN SAM_HANDLE UserHandle,
                     InternalAllBuffer.NtPassword.Length = sizeof(ENCRYPTED_NT_OWF_PASSWORD);
                     InternalAllBuffer.NtPassword.MaximumLength = sizeof(ENCRYPTED_NT_OWF_PASSWORD);
                     InternalAllBuffer.NtPassword.Buffer = (LPWSTR)&Internal1Buffer.EncryptedNtOwfPassword;
-
-                    /* Build the LM password */
-                    LmPwdString.Length = 15;
-                    LmPwdString.MaximumLength = 15;
-                    LmPwdString.Buffer = LmPwdBuffer;
-                    ZeroMemory(LmPwdString.Buffer, LmPwdString.MaximumLength);
-
-                    Status = RtlUpcaseUnicodeStringToOemString(&LmPwdString,
-                                                               (PUNICODE_STRING)&InternalAllBuffer.NtPassword,
-                                                               FALSE);
-                    if (NT_SUCCESS(Status))
-                    {
-                        /* Calculate the LM password hash */
-                        Status = SystemFunction006(LmPwdString.Buffer,
-                                                   (LPSTR)&Internal1Buffer.EncryptedLmOwfPassword);
-                        if (NT_SUCCESS(Status))
-                        {
-                            InternalAllBuffer.WhichFields |= USER_ALL_LMPASSWORDPRESENT;
-                            InternalAllBuffer.LmPasswordPresent = TRUE;
-
-                            InternalAllBuffer.LmPassword.Length = sizeof(ENCRYPTED_LM_OWF_PASSWORD);
-                            InternalAllBuffer.LmPassword.MaximumLength = sizeof(ENCRYPTED_LM_OWF_PASSWORD);
-                            InternalAllBuffer.LmPassword.Buffer = (LPWSTR)&Internal1Buffer.EncryptedLmOwfPassword;
-                        }
-                    }
                 }
             }
         }

@@ -524,42 +524,6 @@ SampSetupCreateUserAccount(HANDLE hDomainKey,
     if (!NT_SUCCESS(Status))
         goto done;
 
-    /* Set LMPwd attribute*/
-    Status = SampRegSetValue(hAccountKey,
-                             L"LMPwd",
-                             REG_BINARY,
-                             (LPVOID)&EmptyLmHash,
-                             sizeof(ENCRYPTED_LM_OWF_PASSWORD));
-    if (!NT_SUCCESS(Status))
-        goto done;
-
-    /* Set NTPwd attribute*/
-    Status = SampRegSetValue(hAccountKey,
-                             L"NTPwd",
-                             REG_BINARY,
-                             (LPVOID)&EmptyNtHash,
-                             sizeof(ENCRYPTED_NT_OWF_PASSWORD));
-    if (!NT_SUCCESS(Status))
-        goto done;
-
-    /* Set LMPwdHistory attribute*/
-    Status = SampRegSetValue(hAccountKey,
-                             L"LMPwdHistory",
-                             REG_BINARY,
-                             NULL,
-                             0);
-    if (!NT_SUCCESS(Status))
-        goto done;
-
-    /* Set NTPwdHistory attribute*/
-    Status = SampRegSetValue(hAccountKey,
-                             L"NTPwdHistory",
-                             REG_BINARY,
-                             NULL,
-                             0);
-    if (!NT_SUCCESS(Status))
-        goto done;
-
     /* Set PrivateData attribute*/
     Status = SampRegSetValue(hAccountKey,
                              L"PrivateData",
@@ -645,14 +609,14 @@ SampSetupCreateDomain(IN HANDLE hServerKey,
     FixedData.MaxPasswordAge.QuadPart = -(6LL * 7LL * 24LL * 60LL * 60LL * TICKS_PER_SECOND); /* 6 weeks */
     FixedData.MinPasswordAge.QuadPart = 0;                                                    /* right now */
     FixedData.ForceLogoff.QuadPart = LLONG_MAX;                                               /* very far in the future aka never */
-    FixedData.LockoutDuration.QuadPart = -(30LL * 60LL * TICKS_PER_SECOND);                   /* 30 minutes */
-    FixedData.LockoutObservationWindow.QuadPart = -(30LL * 60LL * TICKS_PER_SECOND);          /* 30 minutes */
+    FixedData.LockoutDuration.QuadPart = -(10LL * 60LL * TICKS_PER_SECOND);
+    FixedData.LockoutObservationWindow.QuadPart = -(10LL * 60LL * TICKS_PER_SECOND);
     FixedData.ModifiedCountAtLastPromotion.QuadPart = 0;
     FixedData.NextRid = 1000;
-    FixedData.PasswordProperties = 0;
+    FixedData.PasswordProperties = DOMAIN_LOCKOUT_ADMINS;
     FixedData.MinPasswordLength = 0;
     FixedData.PasswordHistoryLength = 0;
-    FixedData.LockoutThreshold = 0;
+    FixedData.LockoutThreshold = 10;
     FixedData.DomainServerState = DomainServerEnabled;
     FixedData.DomainServerRole = DomainServerRolePrimary;
     FixedData.UasCompatibilityRequired = TRUE;

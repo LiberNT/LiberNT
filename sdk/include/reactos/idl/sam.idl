@@ -681,6 +681,25 @@ typedef struct _SAMPR_USER_INTERNAL5_INFORMATION_NEW
     BOOLEAN PasswordExpired;
 } SAMPR_USER_INTERNAL5_INFORMATION_NEW, *PSAMPR_USER_INTERNAL5_INFORMATION_NEW;
 
+typedef struct _SAMPR_USER_TILE
+{
+    [range(0, 1024 * 1024)] unsigned long Length;
+    [size_is(Length)] unsigned char* Data;
+} SAMPR_USER_TILE, *PSAMPR_USER_TILE;
+
+typedef struct _SAMPR_USER_EXTENDED_INFORMATION
+{
+    unsigned long ExtendedWhichFields;
+    SAMPR_USER_TILE UserTile;
+    RPC_UNICODE_STRING PasswordHint;
+} SAMPR_USER_EXTENDED_INFORMATION, *PSAMPR_USER_EXTENDED_INFORMATION;
+
+typedef struct _SAMPR_USER_LOGON_UI_INFORMATION
+{
+    BOOLEAN PasswordIsBlank;
+    BOOLEAN AccountIsDisabled;
+} SAMPR_USER_LOGON_UI_INFORMATION, *PSAMPR_USER_LOGON_UI_INFORMATION;
+
 cpp_quote("#ifndef _NTSAM_")
 typedef enum _USER_INFORMATION_CLASS
 {
@@ -743,6 +762,8 @@ typedef [switch_type(USER_INFORMATION_CLASS)] union _SAMPR_USER_INFO_BUFFER
     [case(UserInternal5Information)] SAMPR_USER_INTERNAL5_INFORMATION Internal5;
     [case(UserInternal4InformationNew)] SAMPR_USER_INTERNAL4_INFORMATION_NEW Internal4New;
     [case(UserInternal5InformationNew)] SAMPR_USER_INTERNAL5_INFORMATION_NEW Internal5New;
+    [case(UserExtendedInformation)] SAMPR_USER_EXTENDED_INFORMATION Extended;
+    [case(UserLogonUIInformation)] SAMPR_USER_LOGON_UI_INFORMATION LogonUI;
 } SAMPR_USER_INFO_BUFFER, *PSAMPR_USER_INFO_BUFFER;
 
 typedef enum _PASSWORD_POLICY_VALIDATION_TYPE

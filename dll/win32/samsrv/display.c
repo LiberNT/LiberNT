@@ -119,7 +119,7 @@ SampReadDisplayEntry(
                                         &Size);
         if (NT_SUCCESS(Status))
         {
-            Entry->Control = FixedUserData.UserAccountControl;
+            Entry->Control = SampGetUserAccountControl(Object, &FixedUserData);
 
             if (DisplayInformationClass == DomainDisplayUser)
                 *Include = (FixedUserData.UserAccountControl & USER_NORMAL_ACCOUNT) != 0;

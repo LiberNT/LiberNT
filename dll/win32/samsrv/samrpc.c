@@ -58,6 +58,110 @@ PGENERIC_MAPPING pServerMapping = &ServerMapping;
 
 /* FUNCTIONS *****************************************************************/
 
+NTSTATUS
+SampCheckObjectAccess(IN PSAM_DB_OBJECT DbObject,
+                      IN ACCESS_MASK DesiredAccess)
+{
+    UCHAR PrivilegeBuffer[sizeof(PRIVILEGE_SET) + 4 * sizeof(LUID_AND_ATTRIBUTES)];
+    ULONG PrivilegeLength = sizeof(PrivilegeBuffer);
+    PSECURITY_DESCRIPTOR Sd = NULL;
+    ULONG SdSize = 0;
+    HANDLE TokenHandle = NULL;
+    PGENERIC_MAPPING Mapping;
+    ACCESS_MASK GrantedAccess = 0;
+    NTSTATUS AccessStatus;
+    NTSTATUS Status;
+    RPC_STATUS RpcStatus;
+
+    switch (DbObject->ObjectType)
+    {
+        case SamDbServerObject:
+            Mapping = &ServerMapping;
+            break;
+
+        case SamDbDomainObject:
+            Mapping = &DomainMapping;
+            break;
+
+        case SamDbAliasObject:
+            Mapping = &AliasMapping;
+            break;
+
+        case SamDbGroupObject:
+            Mapping = &GroupMapping;
+            break;
+
+        case SamDbUserObject:
+            Mapping = &UserMapping;
+            break;
+
+        default:
+            return STATUS_INVALID_HANDLE;
+    }
+
+    RtlMapGenericMask(&DesiredAccess, Mapping);
+
+    if (!DbObject->Trusted)
+    {
+        RpcStatus = RpcImpersonateClient(NULL);
+        if (RpcStatus == RPC_S_OK)
+        {
+            Status = NtOpenThreadToken(NtCurrentThread(), TOKEN_QUERY, TRUE, &TokenHandle);
+            RpcRevertToSelf();
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+        else if (RpcStatus != RPC_S_NO_CALL_ACTIVE)
+        {
+            return STATUS_ACCESS_DENIED;
+        }
+    }
+
+    if (TokenHandle == NULL)
+    {
+        if (DesiredAccess & MAXIMUM_ALLOWED)
+            DesiredAccess = (DesiredAccess & ~MAXIMUM_ALLOWED) | Mapping->GenericAll;
+        DbObject->Access = DesiredAccess;
+        return STATUS_SUCCESS;
+    }
+
+    Status = SampGetObjectAttribute(DbObject, L"SecDesc", NULL, NULL, &SdSize);
+    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_OVERFLOW)
+        goto done;
+
+    Sd = RtlAllocateHeap(RtlGetProcessHeap(), 0, SdSize);
+    if (Sd == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto done;
+    }
+
+    Status = SampGetObjectAttribute(DbObject, L"SecDesc", NULL, Sd, &SdSize);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = NtAccessCheck(Sd,
+                           TokenHandle,
+                           DesiredAccess,
+                           Mapping,
+                           (PPRIVILEGE_SET)PrivilegeBuffer,
+                           &PrivilegeLength,
+                           &GrantedAccess,
+                           &AccessStatus);
+    if (NT_SUCCESS(Status))
+        Status = AccessStatus;
+    if (NT_SUCCESS(Status))
+        DbObject->Access = GrantedAccess;
+
+done:
+    if (Sd != NULL)
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Sd);
+
+    NtClose(TokenHandle);
+
+    return Status;
+}
+
 static
 LARGE_INTEGER
 SampAddRelativeTimeToTime(IN LARGE_INTEGER AbsoluteTime,
@@ -878,13 +982,19 @@ SamrOpenDomain(IN SAMPR_HANDLE ServerHandle,
                                   SAM_SERVER_LOOKUP_DOMAIN,
                                   &ServerObject);
     if (!NT_SUCCESS(Status))
+    {
+        RtlReleaseResource(&SampResource);
         return Status;
+    }
 
     /* Validate the Domain SID */
     if ((DomainId->Revision != SID_REVISION) ||
         (DomainId->SubAuthorityCount > SID_MAX_SUB_AUTHORITIES) ||
         (memcmp(&DomainId->IdentifierAuthority, &NtSidAuthority, sizeof(SID_IDENTIFIER_AUTHORITY)) != 0))
+    {
+        RtlReleaseResource(&SampResource);
         return STATUS_INVALID_PARAMETER;
+    }
 
     /* Open the domain object */
     if ((DomainId->SubAuthorityCount == 1) &&
@@ -921,6 +1031,13 @@ SamrOpenDomain(IN SAMPR_HANDLE ServerHandle,
     {
         /* No valid domain SID */
         Status = STATUS_INVALID_PARAMETER;
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        Status = SampCheckObjectAccess(DomainObject, DesiredAccess);
+        if (!NT_SUCCESS(Status))
+            SampCloseDbObject(DomainObject);
     }
 
     if (NT_SUCCESS(Status))
@@ -2628,48 +2745,9 @@ SamrCreateUserInDomain(IN SAMPR_HANDLE DomainHandle,
         goto done;
     }
 
-    /* Set LMPwd attribute*/
-    Status = SampSetObjectAttribute(UserObject,
-                                    L"LMPwd",
-                                    REG_BINARY,
-                                    &EmptyLmHash,
-                                    sizeof(ENCRYPTED_LM_OWF_PASSWORD));
-    if (!NT_SUCCESS(Status))
-    {
-        TRACE("failed with status 0x%08lx\n", Status);
-        goto done;
-    }
-
-    /* Set NTPwd attribute*/
-    Status = SampSetObjectAttribute(UserObject,
-                                    L"NTPwd",
-                                    REG_BINARY,
-                                    &EmptyNtHash,
-                                    sizeof(ENCRYPTED_NT_OWF_PASSWORD));
-    if (!NT_SUCCESS(Status))
-    {
-        TRACE("failed with status 0x%08lx\n", Status);
-        goto done;
-    }
-
-    /* Set LMPwdHistory attribute*/
-    Status = SampSetObjectAttribute(UserObject,
-                                    L"LMPwdHistory",
-                                    REG_BINARY,
-                                    NULL,
-                                    0);
-    if (!NT_SUCCESS(Status))
-    {
-        TRACE("failed with status 0x%08lx\n", Status);
-        goto done;
-    }
-
-    /* Set NTPwdHistory attribute*/
-    Status = SampSetObjectAttribute(UserObject,
-                                    L"NTPwdHistory",
-                                    REG_BINARY,
-                                    NULL,
-                                    0);
+    Status = SampSetUserPassword(UserObject,
+                                 NULL,
+                                 FALSE);
     if (!NT_SUCCESS(Status))
     {
         TRACE("failed with status 0x%08lx\n", Status);
@@ -4065,6 +4143,13 @@ SamrOpenGroup(IN SAMPR_HANDLE DomainHandle,
         goto done;
     }
 
+    Status = SampCheckObjectAccess(GroupObject, DesiredAccess);
+    if (!NT_SUCCESS(Status))
+    {
+        SampCloseDbObject(GroupObject);
+        goto done;
+    }
+
     *GroupHandle = (SAMPR_HANDLE)GroupObject;
 
 done:
@@ -4908,6 +4993,13 @@ SamrOpenAlias(IN SAMPR_HANDLE DomainHandle,
         goto done;
     }
 
+    Status = SampCheckObjectAccess(AliasObject, DesiredAccess);
+    if (!NT_SUCCESS(Status))
+    {
+        SampCloseDbObject(AliasObject);
+        goto done;
+    }
+
     *AliasHandle = (SAMPR_HANDLE)AliasObject;
 
 done:
@@ -5509,6 +5601,13 @@ SamrOpenUser(IN SAMPR_HANDLE DomainHandle,
         goto done;
     }
 
+    Status = SampCheckObjectAccess(UserObject, DesiredAccess);
+    if (!NT_SUCCESS(Status))
+    {
+        SampCloseDbObject(UserObject);
+        goto done;
+    }
+
     *UserHandle = (SAMPR_HANDLE)UserObject;
 
 done:
@@ -5783,7 +5882,7 @@ SampQueryUserLogon(PSAM_DB_OBJECT UserObject,
     InfoBuffer->Logon.PasswordLastSet.HighPart = FixedData.PasswordLastSet.HighPart;
     InfoBuffer->Logon.BadPasswordCount = FixedData.BadPasswordCount;
     InfoBuffer->Logon.LogonCount = FixedData.LogonCount;
-    InfoBuffer->Logon.UserAccountControl = FixedData.UserAccountControl;
+    InfoBuffer->Logon.UserAccountControl = SampGetUserAccountControl(UserObject, &FixedData);
 
     PasswordCanChange = SampAddRelativeTimeToTime(FixedData.PasswordLastSet,
                                                   DomainFixedData.MinPasswordAge);
@@ -5949,7 +6048,7 @@ SampQueryUserAccount(PSAM_DB_OBJECT UserObject,
     InfoBuffer->Account.AccountExpires.HighPart = FixedData.AccountExpires.HighPart;
     InfoBuffer->Account.BadPasswordCount = FixedData.BadPasswordCount;
     InfoBuffer->Account.LogonCount = FixedData.LogonCount;
-    InfoBuffer->Account.UserAccountControl = FixedData.UserAccountControl;
+    InfoBuffer->Account.UserAccountControl = SampGetUserAccountControl(UserObject, &FixedData);
 
     /* Get the Name string */
     Status = SampGetObjectAttributeString(UserObject,
@@ -6549,7 +6648,7 @@ SampQueryUserControl(PSAM_DB_OBJECT UserObject,
     if (!NT_SUCCESS(Status))
         goto done;
 
-    InfoBuffer->Control.UserAccountControl = FixedData.UserAccountControl;
+    InfoBuffer->Control.UserAccountControl = SampGetUserAccountControl(UserObject, &FixedData);
 
     *Buffer = InfoBuffer;
 
@@ -6615,7 +6714,6 @@ SampQueryUserInternal1(PSAM_DB_OBJECT UserObject,
                        PSAMPR_USER_INFO_BUFFER *Buffer)
 {
     PSAMPR_USER_INFO_BUFFER InfoBuffer = NULL;
-    ULONG Length = 0;
     NTSTATUS Status = STATUS_SUCCESS;
 
     /* Fail, if the caller is not a trusted caller */
@@ -6629,56 +6727,14 @@ SampQueryUserInternal1(PSAM_DB_OBJECT UserObject,
         return STATUS_INSUFFICIENT_RESOURCES;
 
     InfoBuffer->Internal1.LmPasswordPresent = FALSE;
-    InfoBuffer->Internal1.NtPasswordPresent = FALSE;
+    ZeroMemory(&InfoBuffer->Internal1.EncryptedLmOwfPassword,
+               sizeof(ENCRYPTED_LM_OWF_PASSWORD));
 
-    /* Get the NT password */
-    Length = 0;
-    SampGetObjectAttribute(UserObject,
-                           L"NTPwd",
-                           NULL,
-                           NULL,
-                           &Length);
-
-    if (Length == sizeof(ENCRYPTED_NT_OWF_PASSWORD))
-    {
-        Status = SampGetObjectAttribute(UserObject,
-                                        L"NTPwd",
-                                        NULL,
-                                        (PVOID)&InfoBuffer->Internal1.EncryptedNtOwfPassword,
-                                        &Length);
-        if (!NT_SUCCESS(Status))
-            goto done;
-
-        if (memcmp(&InfoBuffer->Internal1.EncryptedNtOwfPassword,
-                   &EmptyNtHash,
-                   sizeof(ENCRYPTED_NT_OWF_PASSWORD)))
-            InfoBuffer->Internal1.NtPasswordPresent = TRUE;
-    }
-
-
-    /* Get the LM password */
-    Length = 0;
-    SampGetObjectAttribute(UserObject,
-                           L"LMPwd",
-                           NULL,
-                           NULL,
-                           &Length);
-
-    if (Length == sizeof(ENCRYPTED_LM_OWF_PASSWORD))
-    {
-        Status = SampGetObjectAttribute(UserObject,
-                                        L"LMPwd",
-                                        NULL,
-                                        (PVOID)&InfoBuffer->Internal1.EncryptedLmOwfPassword,
-                                        &Length);
-        if (!NT_SUCCESS(Status))
-            goto done;
-
-        if (memcmp(&InfoBuffer->Internal1.EncryptedLmOwfPassword,
-                   &EmptyLmHash,
-                   sizeof(ENCRYPTED_LM_OWF_PASSWORD)))
-            InfoBuffer->Internal1.LmPasswordPresent = TRUE;
-    }
+    Status = SampGetUserNtPassword(UserObject,
+                                   &InfoBuffer->Internal1.EncryptedNtOwfPassword,
+                                   &InfoBuffer->Internal1.NtPasswordPresent);
+    if (!NT_SUCCESS(Status))
+        goto done;
 
     InfoBuffer->Internal1.PasswordExpired = FALSE;
 
@@ -7058,7 +7114,7 @@ SampQueryUserAll(PSAM_DB_OBJECT UserObject,
     /* Get the UserAccountControl attribute */
     if (InfoBuffer->All.WhichFields & USER_ALL_USERACCOUNTCONTROL)
     {
-        InfoBuffer->All.UserAccountControl = FixedData.UserAccountControl;
+        InfoBuffer->All.UserAccountControl = SampGetUserAccountControl(UserObject, &FixedData);
     }
 
     /* Get the Parameters attribute */
@@ -7092,73 +7148,21 @@ SampQueryUserAll(PSAM_DB_OBJECT UserObject,
         InfoBuffer->All.LmPasswordPresent = FALSE;
         InfoBuffer->All.NtPasswordPresent = FALSE;
 
-        /* Get the NT password */
-        Length = 0;
-        SampGetObjectAttribute(UserObject,
-                               L"NTPwd",
-                               NULL,
-                               NULL,
-                               &Length);
-
-        if (Length == sizeof(ENCRYPTED_NT_OWF_PASSWORD))
+        InfoBuffer->All.NtOwfPassword.Buffer = midl_user_allocate(sizeof(ENCRYPTED_NT_OWF_PASSWORD));
+        if (InfoBuffer->All.NtOwfPassword.Buffer == NULL)
         {
-            InfoBuffer->All.NtOwfPassword.Buffer = midl_user_allocate(sizeof(ENCRYPTED_NT_OWF_PASSWORD));
-            if (InfoBuffer->All.NtOwfPassword.Buffer == NULL)
-            {
-                Status = STATUS_INSUFFICIENT_RESOURCES;
-                goto done;
-            }
-
-            InfoBuffer->All.NtOwfPassword.Length = sizeof(ENCRYPTED_NT_OWF_PASSWORD);
-            InfoBuffer->All.NtOwfPassword.MaximumLength = sizeof(ENCRYPTED_NT_OWF_PASSWORD);
-
-            Status = SampGetObjectAttribute(UserObject,
-                                            L"NTPwd",
-                                            NULL,
-                                            (PVOID)InfoBuffer->All.NtOwfPassword.Buffer,
-                                            &Length);
-            if (!NT_SUCCESS(Status))
-                goto done;
-
-            if (memcmp(InfoBuffer->All.NtOwfPassword.Buffer,
-                       &EmptyNtHash,
-                       sizeof(ENCRYPTED_NT_OWF_PASSWORD)))
-                InfoBuffer->All.NtPasswordPresent = TRUE;
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto done;
         }
 
-        /* Get the LM password */
-        Length = 0;
-        SampGetObjectAttribute(UserObject,
-                               L"LMPwd",
-                               NULL,
-                               NULL,
-                               &Length);
+        InfoBuffer->All.NtOwfPassword.Length = sizeof(ENCRYPTED_NT_OWF_PASSWORD);
+        InfoBuffer->All.NtOwfPassword.MaximumLength = sizeof(ENCRYPTED_NT_OWF_PASSWORD);
 
-        if (Length == sizeof(ENCRYPTED_LM_OWF_PASSWORD))
-        {
-            InfoBuffer->All.LmOwfPassword.Buffer = midl_user_allocate(sizeof(ENCRYPTED_LM_OWF_PASSWORD));
-            if (InfoBuffer->All.LmOwfPassword.Buffer == NULL)
-            {
-                Status = STATUS_INSUFFICIENT_RESOURCES;
-                goto done;
-            }
-
-            InfoBuffer->All.LmOwfPassword.Length = sizeof(ENCRYPTED_LM_OWF_PASSWORD);
-            InfoBuffer->All.LmOwfPassword.MaximumLength = sizeof(ENCRYPTED_LM_OWF_PASSWORD);
-
-            Status = SampGetObjectAttribute(UserObject,
-                                            L"LMPwd",
-                                            NULL,
-                                            (PVOID)InfoBuffer->All.LmOwfPassword.Buffer,
-                                            &Length);
-            if (!NT_SUCCESS(Status))
-                goto done;
-
-            if (memcmp(InfoBuffer->All.LmOwfPassword.Buffer,
-                       &EmptyLmHash,
-                       sizeof(ENCRYPTED_LM_OWF_PASSWORD)))
-                InfoBuffer->All.LmPasswordPresent = TRUE;
-        }
+        Status = SampGetUserNtPassword(UserObject,
+                                       (PENCRYPTED_NT_OWF_PASSWORD)InfoBuffer->All.NtOwfPassword.Buffer,
+                                       &InfoBuffer->All.NtPasswordPresent);
+        if (!NT_SUCCESS(Status))
+            goto done;
     }
 
     if (InfoBuffer->All.WhichFields & USER_ALL_PRIVATEDATA)
@@ -7265,6 +7269,119 @@ done:
     }
 
     return Status;
+}
+
+
+static NTSTATUS
+SampQueryUserExtended(PSAM_DB_OBJECT UserObject,
+                      PSAMPR_USER_INFO_BUFFER *Buffer)
+{
+    PSAMPR_USER_INFO_BUFFER InfoBuffer;
+    ULONG Length = 0;
+    NTSTATUS Status;
+
+    *Buffer = NULL;
+
+    InfoBuffer = midl_user_allocate(sizeof(SAMPR_USER_INFO_BUFFER));
+    if (InfoBuffer == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    ZeroMemory(InfoBuffer, sizeof(SAMPR_USER_INFO_BUFFER));
+    InfoBuffer->Extended.ExtendedWhichFields = USER_EXTENDED_FIELD_PASSWORD_HINT;
+
+    Status = SampGetObjectAttribute(UserObject,
+                                    L"UserPasswordHint",
+                                    NULL,
+                                    NULL,
+                                    &Length);
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+    {
+        Length = 0;
+        Status = STATUS_SUCCESS;
+    }
+
+    if (NT_SUCCESS(Status) && Length >= sizeof(WCHAR))
+    {
+        Length &= ~(sizeof(WCHAR) - 1);
+        if (Length > MAXUSHORT - sizeof(WCHAR))
+            Length = (MAXUSHORT - sizeof(WCHAR)) & ~(sizeof(WCHAR) - 1);
+
+        InfoBuffer->Extended.PasswordHint.Buffer = midl_user_allocate(Length + sizeof(WCHAR));
+        if (InfoBuffer->Extended.PasswordHint.Buffer == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto done;
+        }
+
+        Status = SampGetObjectAttribute(UserObject,
+                                        L"UserPasswordHint",
+                                        NULL,
+                                        InfoBuffer->Extended.PasswordHint.Buffer,
+                                        &Length);
+        if (!NT_SUCCESS(Status))
+            goto done;
+
+        InfoBuffer->Extended.PasswordHint.Length = (USHORT)(Length & ~(sizeof(WCHAR) - 1));
+        InfoBuffer->Extended.PasswordHint.MaximumLength = InfoBuffer->Extended.PasswordHint.Length + sizeof(WCHAR);
+        InfoBuffer->Extended.PasswordHint.Buffer[InfoBuffer->Extended.PasswordHint.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    }
+
+    if (NT_SUCCESS(Status))
+        *Buffer = InfoBuffer;
+
+done:
+    if (!NT_SUCCESS(Status))
+    {
+        if (InfoBuffer->Extended.PasswordHint.Buffer != NULL)
+            midl_user_free(InfoBuffer->Extended.PasswordHint.Buffer);
+
+        midl_user_free(InfoBuffer);
+    }
+
+    return Status;
+}
+
+
+static NTSTATUS
+SampQueryUserLogonUI(PSAM_DB_OBJECT UserObject,
+                     PSAMPR_USER_INFO_BUFFER *Buffer)
+{
+    PSAMPR_USER_INFO_BUFFER InfoBuffer;
+    SAM_USER_FIXED_DATA FixedData;
+    ENCRYPTED_NT_OWF_PASSWORD NtPassword;
+    BOOLEAN NtPasswordPresent;
+    ULONG Length;
+    NTSTATUS Status;
+
+    *Buffer = NULL;
+
+    Length = sizeof(SAM_USER_FIXED_DATA);
+    Status = SampGetObjectAttribute(UserObject,
+                                    L"F",
+                                    NULL,
+                                    &FixedData,
+                                    &Length);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = SampGetUserNtPassword(UserObject,
+                                   &NtPassword,
+                                   &NtPasswordPresent);
+    RtlSecureZeroMemory(&NtPassword, sizeof(NtPassword));
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    InfoBuffer = midl_user_allocate(sizeof(SAMPR_USER_INFO_BUFFER));
+    if (InfoBuffer == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    ZeroMemory(InfoBuffer, sizeof(SAMPR_USER_INFO_BUFFER));
+    InfoBuffer->LogonUI.PasswordIsBlank = !NtPasswordPresent;
+    InfoBuffer->LogonUI.AccountIsDisabled = (FixedData.UserAccountControl & USER_ACCOUNT_DISABLED) != 0;
+
+    *Buffer = InfoBuffer;
+
+    return STATUS_SUCCESS;
 }
 
 
@@ -7492,7 +7609,9 @@ SampSetUserControl(PSAM_DB_OBJECT UserObject,
     if (!NT_SUCCESS(Status))
         goto done;
 
-    FixedData.UserAccountControl = Buffer->Control.UserAccountControl;
+    SampMergeUserAccountControl(UserObject,
+                                &FixedData,
+                                Buffer->Control.UserAccountControl);
 
     Status = SampSetObjectAttribute(UserObject,
                                     L"F",
@@ -7549,9 +7668,7 @@ SampSetUserInternal1(PSAM_DB_OBJECT UserObject,
 
     Status = SampSetUserPassword(UserObject,
                                  &Buffer->Internal1.EncryptedNtOwfPassword,
-                                 Buffer->Internal1.NtPasswordPresent,
-                                 &Buffer->Internal1.EncryptedLmOwfPassword,
-                                 Buffer->Internal1.LmPasswordPresent);
+                                 Buffer->Internal1.NtPasswordPresent);
     if (!NT_SUCCESS(Status))
         goto done;
 
@@ -7619,17 +7736,15 @@ SampSetUserInternal2(PSAM_DB_OBJECT UserObject,
 
         FixedData.LogonCount++;
         FixedData.BadPasswordCount = 0;
+        FixedData.UserAccountControl &= ~USER_ACCOUNT_AUTO_LOCKED;
     }
 
     if ((Buffer->Internal2.Flags & USER_LOGON_BAD_PASSWORD) &&
         ((Buffer->Internal2.Flags & ~USER_LOGON_BAD_PASSWORD) == 0))
     {
-        /* Update the LastBadPasswordTime */
-        Status = NtQuerySystemTime(&FixedData.LastBadPasswordTime);
-        if (!NT_SUCCESS(Status))
-            goto done;
-
-        FixedData.BadPasswordCount++;
+        Status = SampRecordBadPassword(UserObject,
+                                       &FixedData);
+        goto done;
     }
 
     /* Set the fixed user attributes */
@@ -7645,6 +7760,65 @@ done:
 
 
 static NTSTATUS
+SampSetUserSetPassword(PSAM_DB_OBJECT UserObject,
+                       PSAMPR_USER_INFO_BUFFER Buffer)
+{
+    SAMPR_USER_INFO_BUFFER Internal1;
+    NTSTATUS Status;
+
+    ZeroMemory(&Internal1, sizeof(Internal1));
+
+    Status = SystemFunction007((PUNICODE_STRING)&Buffer->SetPassword.Password,
+                               (LPBYTE)&Internal1.Internal1.EncryptedNtOwfPassword);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = SampCheckPasswordPolicy(UserObject,
+                                     (PCUNICODE_STRING)&Buffer->SetPassword.Password,
+                                     &Internal1.Internal1.EncryptedNtOwfPassword,
+                                     FALSE);
+    if (NT_SUCCESS(Status))
+    {
+        Internal1.Internal1.NtPasswordPresent = (Buffer->SetPassword.Password.Length != 0);
+        Internal1.Internal1.PasswordExpired = Buffer->SetPassword.PasswordExpired;
+        Status = SampSetUserInternal1(UserObject,
+                                      &Internal1);
+    }
+
+    RtlSecureZeroMemory(&Internal1, sizeof(Internal1));
+
+    return Status;
+}
+
+
+static NTSTATUS
+SampSetUserExtended(PSAM_DB_OBJECT UserObject,
+                    PSAMPR_USER_INFO_BUFFER Buffer)
+{
+    PRPC_UNICODE_STRING Hint;
+
+    if (!(Buffer->Extended.ExtendedWhichFields & USER_EXTENDED_FIELD_PASSWORD_HINT))
+        return STATUS_SUCCESS;
+
+    Hint = &Buffer->Extended.PasswordHint;
+    if ((Hint->Length & 1) || (Hint->Length > 0 && Hint->Buffer == NULL))
+        return STATUS_INVALID_PARAMETER;
+
+    if (Hint->Length == 0)
+    {
+        SampRegDeleteValue(UserObject->KeyHandle, L"UserPasswordHint");
+        return STATUS_SUCCESS;
+    }
+
+    return SampSetObjectAttribute(UserObject,
+                                  L"UserPasswordHint",
+                                  REG_BINARY,
+                                  Hint->Buffer,
+                                  Hint->Length);
+}
+
+
+static NTSTATUS
 SampSetUserAll(PSAM_DB_OBJECT UserObject,
                PSAMPR_USER_INFO_BUFFER Buffer)
 {
@@ -7652,9 +7826,7 @@ SampSetUserAll(PSAM_DB_OBJECT UserObject,
     ULONG Length = 0;
     ULONG WhichFields;
     PENCRYPTED_NT_OWF_PASSWORD NtPassword = NULL;
-    PENCRYPTED_LM_OWF_PASSWORD LmPassword = NULL;
     BOOLEAN NtPasswordPresent = FALSE;
-    BOOLEAN LmPasswordPresent = FALSE;
     BOOLEAN WriteFixedData = FALSE;
     NTSTATUS Status = STATUS_SUCCESS;
 
@@ -7782,7 +7954,9 @@ SampSetUserAll(PSAM_DB_OBJECT UserObject,
 
     if (WhichFields & USER_ALL_USERACCOUNTCONTROL)
     {
-        FixedData.UserAccountControl = Buffer->All.UserAccountControl;
+        SampMergeUserAccountControl(UserObject,
+                                    &FixedData,
+                                    Buffer->All.UserAccountControl);
         WriteFixedData = TRUE;
     }
 
@@ -7798,26 +7972,24 @@ SampSetUserAll(PSAM_DB_OBJECT UserObject,
         WriteFixedData = TRUE;
     }
 
-    if (WhichFields & (USER_ALL_NTPASSWORDPRESENT |
-                       USER_ALL_LMPASSWORDPRESENT))
+    if (WhichFields & USER_ALL_NTPASSWORDPRESENT)
     {
-        if (WhichFields & USER_ALL_NTPASSWORDPRESENT)
+        NtPasswordPresent = Buffer->All.NtPasswordPresent;
+        if (NtPasswordPresent)
         {
-            NtPassword = (PENCRYPTED_NT_OWF_PASSWORD)Buffer->All.NtOwfPassword.Buffer;
-            NtPasswordPresent = Buffer->All.NtPasswordPresent;
-        }
+            if ((Buffer->All.NtOwfPassword.Buffer == NULL) ||
+                (Buffer->All.NtOwfPassword.Length != sizeof(ENCRYPTED_NT_OWF_PASSWORD)))
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                goto done;
+            }
 
-        if (WhichFields & USER_ALL_LMPASSWORDPRESENT)
-        {
-            LmPassword = (PENCRYPTED_LM_OWF_PASSWORD)Buffer->All.LmOwfPassword.Buffer;
-            LmPasswordPresent = Buffer->All.LmPasswordPresent;
+            NtPassword = (PENCRYPTED_NT_OWF_PASSWORD)Buffer->All.NtOwfPassword.Buffer;
         }
 
         Status = SampSetUserPassword(UserObject,
                                      NtPassword,
-                                     NtPasswordPresent,
-                                     LmPassword,
-                                     LmPasswordPresent);
+                                     NtPasswordPresent);
         if (!NT_SUCCESS(Status))
             goto done;
 
@@ -7913,16 +8085,10 @@ SamrChangePasswordUser(IN SAMPR_HANDLE UserHandle,
                        IN unsigned char LmCrossEncryptionPresent,
                        IN PENCRYPTED_LM_OWF_PASSWORD NewLmEncryptedWithNewNt)
 {
-    ENCRYPTED_LM_OWF_PASSWORD StoredLmPassword;
     ENCRYPTED_NT_OWF_PASSWORD StoredNtPassword;
-    LM_OWF_PASSWORD OldLmPassword;
-    LM_OWF_PASSWORD NewLmPassword;
     NT_OWF_PASSWORD OldNtPassword;
     NT_OWF_PASSWORD NewNtPassword;
-    BOOLEAN StoredLmPresent = FALSE;
     BOOLEAN StoredNtPresent = FALSE;
-    BOOLEAN StoredLmEmpty = TRUE;
-    BOOLEAN StoredNtEmpty = TRUE;
     PSAM_DB_OBJECT UserObject;
     ULONG Length;
     SAM_USER_FIXED_DATA UserFixedData;
@@ -7930,14 +8096,13 @@ SamrChangePasswordUser(IN SAMPR_HANDLE UserHandle,
     LARGE_INTEGER SystemTime;
     NTSTATUS Status;
 
-    DBG_UNREFERENCED_LOCAL_VARIABLE(StoredLmPresent);
-    DBG_UNREFERENCED_LOCAL_VARIABLE(StoredNtPresent);
-    DBG_UNREFERENCED_LOCAL_VARIABLE(StoredLmEmpty);
-
     TRACE("SamrChangePasswordUser(%p %u %p %p %u %p %p %u %p %u %p)\n",
           UserHandle, LmPresent, OldLmEncryptedWithNewLm, NewLmEncryptedWithOldLm,
           NtPresent, OldNtEncryptedWithNewNt, NewNtEncryptedWithOldNt, NtCrossEncryptionPresent,
           NewNtEncryptedWithNewLm, LmCrossEncryptionPresent, NewLmEncryptedWithNewNt);
+
+    if (!NtPresent || OldNtEncryptedWithNewNt == NULL || NewNtEncryptedWithOldNt == NULL)
+        return STATUS_INVALID_PARAMETER;
 
     RtlAcquireResourceExclusive(&SampResource,
                                 TRUE);
@@ -7953,53 +8118,16 @@ SamrChangePasswordUser(IN SAMPR_HANDLE UserHandle,
         goto done;
     }
 
-    /* Get the current time */
     Status = NtQuerySystemTime(&SystemTime);
     if (!NT_SUCCESS(Status))
-    {
-        TRACE("NtQuerySystemTime failed (Status 0x%08lx)\n", Status);
         goto done;
-    }
 
-    /* Retrieve the LM password */
-    Length = sizeof(ENCRYPTED_LM_OWF_PASSWORD);
-    Status = SampGetObjectAttribute(UserObject,
-                                    L"LMPwd",
-                                    NULL,
-                                    &StoredLmPassword,
-                                    &Length);
-    if (NT_SUCCESS(Status))
-    {
-        if (Length == sizeof(ENCRYPTED_LM_OWF_PASSWORD))
-        {
-            StoredLmPresent = TRUE;
-            if (!RtlEqualMemory(&StoredLmPassword,
-                                &EmptyLmHash,
-                                sizeof(ENCRYPTED_LM_OWF_PASSWORD)))
-                StoredLmEmpty = FALSE;
-        }
-    }
+    Status = SampGetUserNtPassword(UserObject,
+                                   &StoredNtPassword,
+                                   &StoredNtPresent);
+    if (!NT_SUCCESS(Status))
+        goto done;
 
-    /* Retrieve the NT password */
-    Length = sizeof(ENCRYPTED_NT_OWF_PASSWORD);
-    Status = SampGetObjectAttribute(UserObject,
-                                    L"NTPwd",
-                                    NULL,
-                                    &StoredNtPassword,
-                                    &Length);
-    if (NT_SUCCESS(Status))
-    {
-        if (Length == sizeof(ENCRYPTED_NT_OWF_PASSWORD))
-        {
-            StoredNtPresent = TRUE;
-            if (!RtlEqualMemory(&StoredNtPassword,
-                                &EmptyNtHash,
-                                sizeof(ENCRYPTED_NT_OWF_PASSWORD)))
-                StoredNtEmpty = FALSE;
-        }
-    }
-
-    /* Retrieve the fixed size user data */
     Length = sizeof(SAM_USER_FIXED_DATA);
     Status = SampGetObjectAttribute(UserObject,
                                     L"F",
@@ -8007,173 +8135,75 @@ SamrChangePasswordUser(IN SAMPR_HANDLE UserHandle,
                                     &UserFixedData,
                                     &Length);
     if (!NT_SUCCESS(Status))
+        goto done;
+
+    Length = sizeof(SAM_DOMAIN_FIXED_DATA);
+    Status = SampGetObjectAttribute(UserObject->ParentObject,
+                                    L"F",
+                                    NULL,
+                                    &DomainFixedData,
+                                    &Length);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    if (SampIsUserLockedOut(&DomainFixedData, &UserFixedData, &SystemTime))
     {
-        TRACE("SampGetObjectAttribute failed to retrieve the fixed user data (Status 0x%08lx)\n", Status);
+        Status = STATUS_ACCOUNT_LOCKED_OUT;
         goto done;
     }
 
-    /* Check if we can change the password at this time */
-    if ((StoredLmEmpty == FALSE) || (StoredNtEmpty == FALSE))
+    Status = SystemFunction013((const BYTE *)NewNtEncryptedWithOldNt,
+                               (const BYTE *)&StoredNtPassword,
+                               (LPBYTE)&NewNtPassword);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SystemFunction013((const BYTE *)OldNtEncryptedWithNewNt,
+                               (const BYTE *)&NewNtPassword,
+                               (LPBYTE)&OldNtPassword);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    if (!RtlEqualMemory(&StoredNtPassword,
+                        &OldNtPassword,
+                        sizeof(ENCRYPTED_NT_OWF_PASSWORD)))
     {
-        /* Get fixed domain data */
-        Length = sizeof(SAM_DOMAIN_FIXED_DATA);
-        Status = SampGetObjectAttribute(UserObject->ParentObject,
-                                        L"F",
-                                        NULL,
-                                        &DomainFixedData,
-                                        &Length);
+        TRACE("Old NT Password does not match!\n");
+        SampRecordBadPassword(UserObject, &UserFixedData);
+        Status = STATUS_WRONG_PASSWORD;
+        goto done;
+    }
+
+    if (StoredNtPresent)
+    {
+        Status = SampCheckPasswordPolicy(UserObject,
+                                         NULL,
+                                         (PENCRYPTED_NT_OWF_PASSWORD)&NewNtPassword,
+                                         TRUE);
         if (!NT_SUCCESS(Status))
-        {
-            TRACE("SampGetObjectAttribute failed to retrieve the fixed domain data (Status 0x%08lx)\n", Status);
             goto done;
-        }
-
-        if (DomainFixedData.MinPasswordAge.QuadPart > 0)
-        {
-            if (SystemTime.QuadPart < (UserFixedData.PasswordLastSet.QuadPart + DomainFixedData.MinPasswordAge.QuadPart))
-            {
-                Status = STATUS_ACCOUNT_RESTRICTION;
-                goto done;
-            }
-        }
     }
 
-    /* Decrypt the LM passwords, if present */
-    if (LmPresent)
-    {
-        Status = SystemFunction013((const BYTE *)NewLmEncryptedWithOldLm,
-                                   (const BYTE *)&StoredLmPassword,
-                                   (LPBYTE)&NewLmPassword);
-        if (!NT_SUCCESS(Status))
-        {
-            TRACE("SystemFunction013 failed (Status 0x%08lx)\n", Status);
-            goto done;
-        }
+    Status = SampSetUserPassword(UserObject,
+                                 (PENCRYPTED_NT_OWF_PASSWORD)&NewNtPassword,
+                                 TRUE);
+    if (!NT_SUCCESS(Status))
+        goto done;
 
-        Status = SystemFunction013((const BYTE *)OldLmEncryptedWithNewLm,
-                                   (const BYTE *)&NewLmPassword,
-                                   (LPBYTE)&OldLmPassword);
-        if (!NT_SUCCESS(Status))
-        {
-            TRACE("SystemFunction013 failed (Status 0x%08lx)\n", Status);
-            goto done;
-        }
-    }
+    UserFixedData.PasswordLastSet.QuadPart = SystemTime.QuadPart;
 
-    /* Decrypt the NT passwords, if present */
-    if (NtPresent)
-    {
-        Status = SystemFunction013((const BYTE *)NewNtEncryptedWithOldNt,
-                                   (const BYTE *)&StoredNtPassword,
-                                   (LPBYTE)&NewNtPassword);
-        if (!NT_SUCCESS(Status))
-        {
-            TRACE("SystemFunction013 failed (Status 0x%08lx)\n", Status);
-            goto done;
-        }
-
-        Status = SystemFunction013((const BYTE *)OldNtEncryptedWithNewNt,
-                                   (const BYTE *)&NewNtPassword,
-                                   (LPBYTE)&OldNtPassword);
-        if (!NT_SUCCESS(Status))
-        {
-            TRACE("SystemFunction013 failed (Status 0x%08lx)\n", Status);
-            goto done;
-        }
-    }
-
-    /* Check if the old passwords match the stored ones */
-    if (NtPresent)
-    {
-        if (LmPresent)
-        {
-            if (!RtlEqualMemory(&StoredLmPassword,
-                                &OldLmPassword,
-                                sizeof(ENCRYPTED_LM_OWF_PASSWORD)))
-            {
-                TRACE("Old LM Password does not match!\n");
-                Status = STATUS_WRONG_PASSWORD;
-            }
-            else
-            {
-                if (!RtlEqualMemory(&StoredNtPassword,
-                                    &OldNtPassword,
-                                    sizeof(ENCRYPTED_LM_OWF_PASSWORD)))
-                {
-                    TRACE("Old NT Password does not match!\n");
-                    Status = STATUS_WRONG_PASSWORD;
-                }
-            }
-        }
-        else
-        {
-            if (!RtlEqualMemory(&StoredNtPassword,
-                                &OldNtPassword,
-                                sizeof(ENCRYPTED_LM_OWF_PASSWORD)))
-            {
-                TRACE("Old NT Password does not match!\n");
-                Status = STATUS_WRONG_PASSWORD;
-            }
-        }
-    }
-    else
-    {
-        if (LmPresent)
-        {
-            if (!RtlEqualMemory(&StoredLmPassword,
-                                &OldLmPassword,
-                                sizeof(ENCRYPTED_LM_OWF_PASSWORD)))
-            {
-                TRACE("Old LM Password does not match!\n");
-                Status = STATUS_WRONG_PASSWORD;
-            }
-        }
-        else
-        {
-            Status = STATUS_INVALID_PARAMETER;
-        }
-    }
-
-    /* Store the new password hashes */
-    if (NT_SUCCESS(Status))
-    {
-        Status = SampSetUserPassword(UserObject,
-                                     &NewNtPassword,
-                                     NtPresent,
-                                     &NewLmPassword,
-                                     LmPresent);
-        if (NT_SUCCESS(Status))
-        {
-            /* Update PasswordLastSet */
-            UserFixedData.PasswordLastSet.QuadPart = SystemTime.QuadPart;
-
-            /* Set the fixed size user data */
-            Length = sizeof(SAM_USER_FIXED_DATA);
-            Status = SampSetObjectAttribute(UserObject,
-                                            L"F",
-                                            REG_BINARY,
-                                            &UserFixedData,
-                                            Length);
-        }
-    }
-
-    if (Status == STATUS_WRONG_PASSWORD)
-    {
-        /* Update BadPasswordCount and LastBadPasswordTime */
-        UserFixedData.BadPasswordCount++;
-        UserFixedData.LastBadPasswordTime.QuadPart = SystemTime.QuadPart;
-
-        /* Set the fixed size user data */
-        Length = sizeof(SAM_USER_FIXED_DATA);
-        Status = SampSetObjectAttribute(UserObject,
-                                        L"F",
-                                        REG_BINARY,
-                                        &UserFixedData,
-                                        Length);
-    }
+    Status = SampSetObjectAttribute(UserObject,
+                                    L"F",
+                                    REG_BINARY,
+                                    &UserFixedData,
+                                    sizeof(SAM_USER_FIXED_DATA));
 
 done:
     RtlReleaseResource(&SampResource);
+
+    RtlSecureZeroMemory(&StoredNtPassword, sizeof(StoredNtPassword));
+    RtlSecureZeroMemory(&OldNtPassword, sizeof(OldNtPassword));
+    RtlSecureZeroMemory(&NewNtPassword, sizeof(NewNtPassword));
 
     return Status;
 }
@@ -8676,7 +8706,12 @@ SamrQueryInformationUser2(IN SAMPR_HANDLE UserHandle,
         case UserInternal1Information:
         case UserInternal2Information:
         case UserAllInformation:
+        case UserExtendedInformation:
             DesiredAccess = 0;
+            break;
+
+        case UserLogonUIInformation:
+            DesiredAccess = USER_READ_ACCOUNT;
             break;
 
         default:
@@ -8797,6 +8832,16 @@ SamrQueryInformationUser2(IN SAMPR_HANDLE UserHandle,
         case UserAllInformation:
             Status = SampQueryUserAll(UserObject,
                                       Buffer);
+            break;
+
+        case UserExtendedInformation:
+            Status = SampQueryUserExtended(UserObject,
+                                           Buffer);
+            break;
+
+        case UserLogonUIInformation:
+            Status = SampQueryUserLogonUI(UserObject,
+                                          Buffer);
             break;
 
 //        case UserInternal4Information:
@@ -9182,48 +9227,9 @@ SamrCreateUser2InDomain(IN SAMPR_HANDLE DomainHandle,
         goto done;
     }
 
-    /* Set LMPwd attribute*/
-    Status = SampSetObjectAttribute(UserObject,
-                                    L"LMPwd",
-                                    REG_BINARY,
-                                    NULL,
-                                    0);
-    if (!NT_SUCCESS(Status))
-    {
-        TRACE("failed with status 0x%08lx\n", Status);
-        goto done;
-    }
-
-    /* Set NTPwd attribute*/
-    Status = SampSetObjectAttribute(UserObject,
-                                    L"NTPwd",
-                                    REG_BINARY,
-                                    NULL,
-                                    0);
-    if (!NT_SUCCESS(Status))
-    {
-        TRACE("failed with status 0x%08lx\n", Status);
-        goto done;
-    }
-
-    /* Set LMPwdHistory attribute*/
-    Status = SampSetObjectAttribute(UserObject,
-                                    L"LMPwdHistory",
-                                    REG_BINARY,
-                                    NULL,
-                                    0);
-    if (!NT_SUCCESS(Status))
-    {
-        TRACE("failed with status 0x%08lx\n", Status);
-        goto done;
-    }
-
-    /* Set NTPwdHistory attribute*/
-    Status = SampSetObjectAttribute(UserObject,
-                                    L"NTPwdHistory",
-                                    REG_BINARY,
-                                    NULL,
-                                    0);
+    Status = SampSetUserPassword(UserObject,
+                                 NULL,
+                                 FALSE);
     if (!NT_SUCCESS(Status))
     {
         TRACE("failed with status 0x%08lx\n", Status);
@@ -9407,8 +9413,240 @@ SamrUnicodeChangePasswordUser2(IN handle_t BindingHandle,
                                IN PSAMPR_ENCRYPTED_USER_PASSWORD NewPasswordEncryptedWithOldLm,
                                IN PENCRYPTED_LM_OWF_PASSWORD OldLmOwfPasswordEncryptedWithNewNt)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    SAMPR_ENCRYPTED_USER_PASSWORD PasswordBuffer;
+    ENCRYPTED_NT_OWF_PASSWORD StoredNtPassword;
+    NT_OWF_PASSWORD NewNtPassword;
+    NT_OWF_PASSWORD OldNtPassword;
+    BOOLEAN StoredNtPresent = FALSE;
+    WCHAR PasswordText[256];
+    UNICODE_STRING NewPassword;
+    SAM_USER_FIXED_DATA UserFixedData;
+    SAM_DOMAIN_FIXED_DATA DomainFixedData;
+    LARGE_INTEGER SystemTime;
+    PSAM_DB_OBJECT ServerObject = NULL;
+    PSAM_DB_OBJECT DomainObject = NULL;
+    PSAM_DB_OBJECT UserObject = NULL;
+    HANDLE UsersKeyHandle = NULL;
+    HANDLE NamesKeyHandle = NULL;
+    struct ustring Data;
+    struct ustring Key;
+    PWSTR Name = NULL;
+    ULONG PasswordLength;
+    ULONG RelativeId = 0;
+    ULONG Length;
+    NTSTATUS Status;
+
+    TRACE("SamrUnicodeChangePasswordUser2(%p %p %p %p %p %u %p %p)\n",
+          BindingHandle, ServerName, UserName, NewPasswordEncryptedWithOldNt,
+          OldNtOwfPasswordEncryptedWithNewNt, LmPresent, NewPasswordEncryptedWithOldLm,
+          OldLmOwfPasswordEncryptedWithNewNt);
+
+    if ((UserName == NULL) ||
+        (UserName->Buffer == NULL) ||
+        (UserName->Length == 0) ||
+        (NewPasswordEncryptedWithOldNt == NULL) ||
+        (OldNtOwfPasswordEncryptedWithNewNt == NULL))
+        return STATUS_INVALID_PARAMETER;
+
+    Name = midl_user_allocate(UserName->Length + sizeof(WCHAR));
+    if (Name == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(Name, UserName->Buffer, UserName->Length);
+    Name[UserName->Length / sizeof(WCHAR)] = UNICODE_NULL;
+
+    RtlAcquireResourceExclusive(&SampResource,
+                                TRUE);
+
+    Status = SampOpenDbObject(NULL,
+                              NULL,
+                              L"SAM",
+                              0,
+                              SamDbServerObject,
+                              SAM_SERVER_LOOKUP_DOMAIN,
+                              &ServerObject);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SampOpenDbObject(ServerObject,
+                              L"Domains",
+                              L"Account",
+                              0,
+                              SamDbDomainObject,
+                              DOMAIN_LOOKUP,
+                              &DomainObject);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SampRegOpenKey(DomainObject->KeyHandle,
+                            L"Users",
+                            KEY_READ,
+                            &UsersKeyHandle);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SampRegOpenKey(UsersKeyHandle,
+                            L"Names",
+                            KEY_READ,
+                            &NamesKeyHandle);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Length = sizeof(ULONG);
+    Status = SampRegQueryValue(NamesKeyHandle,
+                               Name,
+                               NULL,
+                               &RelativeId,
+                               &Length);
+    if (!NT_SUCCESS(Status) || RelativeId == 0)
+    {
+        Status = STATUS_NO_SUCH_USER;
+        goto done;
+    }
+
+    Status = SampOpenUserObject(DomainObject,
+                                RelativeId,
+                                USER_CHANGE_PASSWORD,
+                                &UserObject);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SampCheckObjectAccess(UserObject,
+                                   USER_CHANGE_PASSWORD);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = NtQuerySystemTime(&SystemTime);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SampGetUserNtPassword(UserObject,
+                                   &StoredNtPassword,
+                                   &StoredNtPresent);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Length = sizeof(SAM_USER_FIXED_DATA);
+    Status = SampGetObjectAttribute(UserObject,
+                                    L"F",
+                                    NULL,
+                                    &UserFixedData,
+                                    &Length);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Length = sizeof(SAM_DOMAIN_FIXED_DATA);
+    Status = SampGetObjectAttribute(DomainObject,
+                                    L"F",
+                                    NULL,
+                                    &DomainFixedData,
+                                    &Length);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    if (SampIsUserLockedOut(&DomainFixedData, &UserFixedData, &SystemTime))
+    {
+        Status = STATUS_ACCOUNT_LOCKED_OUT;
+        goto done;
+    }
+
+    PasswordBuffer = *NewPasswordEncryptedWithOldNt;
+
+    Data.Length = sizeof(PasswordBuffer.Buffer);
+    Data.MaximumLength = sizeof(PasswordBuffer.Buffer);
+    Data.Buffer = PasswordBuffer.Buffer;
+    Key.Length = sizeof(StoredNtPassword);
+    Key.MaximumLength = sizeof(StoredNtPassword);
+    Key.Buffer = (unsigned char *)&StoredNtPassword;
+
+    Status = SystemFunction032(&Data, &Key);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    RtlCopyMemory(&PasswordLength,
+                  &PasswordBuffer.Buffer[sizeof(PasswordText)],
+                  sizeof(ULONG));
+
+    if ((PasswordLength > sizeof(PasswordText)) || (PasswordLength & 1))
+    {
+        SampRecordBadPassword(UserObject, &UserFixedData);
+        Status = STATUS_WRONG_PASSWORD;
+        goto done;
+    }
+
+    RtlCopyMemory(PasswordText,
+                  &PasswordBuffer.Buffer[sizeof(PasswordText) - PasswordLength],
+                  PasswordLength);
+
+    NewPassword.Buffer = PasswordText;
+    NewPassword.Length = (USHORT)PasswordLength;
+    NewPassword.MaximumLength = (USHORT)PasswordLength;
+
+    Status = SystemFunction007(&NewPassword,
+                               (LPBYTE)&NewNtPassword);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SystemFunction013((const BYTE *)OldNtOwfPasswordEncryptedWithNewNt,
+                               (const BYTE *)&NewNtPassword,
+                               (LPBYTE)&OldNtPassword);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    if (!RtlEqualMemory(&StoredNtPassword,
+                        &OldNtPassword,
+                        sizeof(ENCRYPTED_NT_OWF_PASSWORD)))
+    {
+        SampRecordBadPassword(UserObject, &UserFixedData);
+        Status = STATUS_WRONG_PASSWORD;
+        goto done;
+    }
+
+    Status = SampCheckPasswordPolicy(UserObject,
+                                     &NewPassword,
+                                     (PENCRYPTED_NT_OWF_PASSWORD)&NewNtPassword,
+                                     TRUE);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = SampSetUserPassword(UserObject,
+                                 (PENCRYPTED_NT_OWF_PASSWORD)&NewNtPassword,
+                                 NewPassword.Length != 0);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    UserFixedData.PasswordLastSet.QuadPart = SystemTime.QuadPart;
+
+    Status = SampSetObjectAttribute(UserObject,
+                                    L"F",
+                                    REG_BINARY,
+                                    &UserFixedData,
+                                    sizeof(SAM_USER_FIXED_DATA));
+
+done:
+    SampRegCloseKey(&NamesKeyHandle);
+    SampRegCloseKey(&UsersKeyHandle);
+
+    if (UserObject != NULL)
+        SampCloseDbObject(UserObject);
+
+    if (DomainObject != NULL)
+        SampCloseDbObject(DomainObject);
+
+    if (ServerObject != NULL)
+        SampCloseDbObject(ServerObject);
+
+    RtlReleaseResource(&SampResource);
+
+    RtlSecureZeroMemory(&PasswordBuffer, sizeof(PasswordBuffer));
+    RtlSecureZeroMemory(PasswordText, sizeof(PasswordText));
+    RtlSecureZeroMemory(&StoredNtPassword, sizeof(StoredNtPassword));
+    RtlSecureZeroMemory(&OldNtPassword, sizeof(OldNtPassword));
+    RtlSecureZeroMemory(&NewNtPassword, sizeof(NewNtPassword));
+
+    midl_user_free(Name);
+
+    return Status;
 }
 
 
@@ -9549,8 +9787,27 @@ SamrSetInformationUser2(IN SAMPR_HANDLE UserHandle,
             break;
 
         case UserAllInformation:
+            if (Buffer->All.WhichFields & USER_ALL_WRITE_CANT_MASK)
+                return STATUS_INVALID_PARAMETER;
+
+            DesiredAccess = 0;
+            if (Buffer->All.WhichFields & USER_ALL_WRITE_ACCOUNT_MASK)
+                DesiredAccess |= USER_WRITE_ACCOUNT;
+            if (Buffer->All.WhichFields & USER_ALL_WRITE_PREFERENCES_MASK)
+                DesiredAccess |= USER_WRITE_PREFERENCES;
+            if (Buffer->All.WhichFields & USER_ALL_WRITE_FORCE_PASSWORD_CHANGE_MASK)
+                DesiredAccess |= USER_FORCE_PASSWORD_CHANGE;
+            break;
+
         case UserInternal2Information:
-            DesiredAccess = 0; /* FIXME */
+            DesiredAccess = 0;
+            break;
+
+        case UserExtendedInformation:
+            if (Buffer->Extended.ExtendedWhichFields & SAMP_USER_EXTENDED_INVALID_FIELDS)
+                return STATUS_INVALID_PARAMETER;
+
+            DesiredAccess = USER_WRITE_PREFERENCES;
             break;
 
         default:
@@ -9569,6 +9826,30 @@ SamrSetInformationUser2(IN SAMPR_HANDLE UserHandle,
     {
         TRACE("failed with status 0x%08lx\n", Status);
         goto done;
+    }
+
+    if (!UserObject->Trusted)
+    {
+        if ((UserInformationClass == UserInternal2Information) ||
+            (UserInformationClass == UserSetPasswordInformation))
+        {
+            Status = STATUS_INVALID_INFO_CLASS;
+            goto done;
+        }
+
+        if ((UserInformationClass == UserAllInformation) &&
+            (Buffer->All.WhichFields & USER_ALL_WRITE_TRUSTED_MASK))
+        {
+            Status = STATUS_ACCESS_DENIED;
+            goto done;
+        }
+
+        if ((UserInformationClass == UserExtendedInformation) &&
+            (Buffer->Extended.ExtendedWhichFields & SAMP_USER_EXTENDED_TRUSTED_FIELDS))
+        {
+            Status = STATUS_ACCESS_DENIED;
+            goto done;
+        }
     }
 
     switch (UserInformationClass)
@@ -9652,12 +9933,8 @@ SamrSetInformationUser2(IN SAMPR_HANDLE UserHandle,
             break;
 
         case UserSetPasswordInformation:
-            TRACE("Password: %S\n", Buffer->SetPassword.Password.Buffer);
-            TRACE("PasswordExpired: %d\n", Buffer->SetPassword.PasswordExpired);
-
-            Status = SampSetObjectAttributeString(UserObject,
-                                                  L"Password",
-                                                  &Buffer->SetPassword.Password);
+            Status = SampSetUserSetPassword(UserObject,
+                                            Buffer);
             break;
 
         case UserControlInformation:
@@ -9689,6 +9966,11 @@ SamrSetInformationUser2(IN SAMPR_HANDLE UserHandle,
         case UserAllInformation:
             Status = SampSetUserAll(UserObject,
                                     Buffer);
+            break;
+
+        case UserExtendedInformation:
+            Status = SampSetUserExtended(UserObject,
+                                         Buffer);
             break;
 
 //        case UserInternal4Information:
@@ -9808,6 +10090,13 @@ SamrConnect5(IN PSAMPR_SERVER_NAME ServerName,
                               SamDbServerObject,
                               DesiredAccess,
                               &ServerObject);
+    if (NT_SUCCESS(Status))
+    {
+        Status = SampCheckObjectAccess(ServerObject, DesiredAccess);
+        if (!NT_SUCCESS(Status))
+            SampCloseDbObject(ServerObject);
+    }
+
     if (NT_SUCCESS(Status))
     {
         *OutVersion = 1;

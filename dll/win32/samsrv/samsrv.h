@@ -20,17 +20,25 @@
 #include <windef.h>
 #include <winbase.h>
 #include <winreg.h>
+#include <winnls.h>
 #define NTOS_MODE_USER
+#include <ndk/cmfuncs.h>
 #include <ndk/ketypes.h>
 #include <ndk/kefuncs.h>
 #include <ndk/obfuncs.h>
+#include <ndk/psfuncs.h>
 #include <ndk/rtlfuncs.h>
+#include <ndk/sefuncs.h>
 #include <ddk/ntsam.h>
+#include <bcrypt.h>
 #include <sddl.h>
 #include <sam_s.h>
 
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(samsrv);
+
+#define SAMP_USER_EXTENDED_INVALID_FIELDS 0xFF200FFF
+#define SAMP_USER_EXTENDED_TRUSTED_FIELDS 0x00980000
 
 typedef enum _SAM_DB_OBJECT_TYPE
 {
@@ -118,7 +126,6 @@ typedef struct _SAM_USER_FIXED_DATA
 
 extern PGENERIC_MAPPING pServerMapping;
 extern ENCRYPTED_NT_OWF_PASSWORD EmptyNtHash;
-extern ENCRYPTED_LM_OWF_PASSWORD EmptyLmHash;
 extern RTL_RESOURCE SampResource;
 extern NT_PRODUCT_TYPE SampProductType;
 
@@ -338,6 +345,10 @@ SampRegSetValue(IN HANDLE KeyHandle,
 VOID
 SampStartRpcServer(VOID);
 
+NTSTATUS
+SampCheckObjectAccess(IN PSAM_DB_OBJECT DbObject,
+                      IN ACCESS_MASK DesiredAccess);
+
 
 /* security.c */
 
@@ -409,11 +420,44 @@ NTSTATUS
 SampRemoveUserFromAllAliases(IN PSAM_DB_OBJECT UserObject);
 
 NTSTATUS
+SampInitPasswordEncryption(VOID);
+
+NTSTATUS
+SampMigrateUserPasswords(VOID);
+
+NTSTATUS
+SampGetUserNtPassword(IN PSAM_DB_OBJECT UserObject,
+                      OUT PENCRYPTED_NT_OWF_PASSWORD NtPassword,
+                      OUT PBOOLEAN NtPasswordPresent);
+
+NTSTATUS
 SampSetUserPassword(IN PSAM_DB_OBJECT UserObject,
                     IN PENCRYPTED_NT_OWF_PASSWORD NtPassword,
-                    IN BOOLEAN NtPasswordPresent,
-                    IN PENCRYPTED_LM_OWF_PASSWORD LmPassword,
-                    IN BOOLEAN LmPasswordPresent);
+                    IN BOOLEAN NtPasswordPresent);
+
+BOOLEAN
+SampIsUserLockedOut(IN PSAM_DOMAIN_FIXED_DATA DomainFixedData,
+                    IN PSAM_USER_FIXED_DATA UserFixedData,
+                    IN PLARGE_INTEGER CurrentTime);
+
+ULONG
+SampGetUserAccountControl(IN PSAM_DB_OBJECT UserObject,
+                          IN PSAM_USER_FIXED_DATA UserFixedData);
+
+NTSTATUS
+SampRecordBadPassword(IN PSAM_DB_OBJECT UserObject,
+                      IN OUT PSAM_USER_FIXED_DATA UserFixedData);
+
+VOID
+SampMergeUserAccountControl(IN PSAM_DB_OBJECT UserObject,
+                            IN OUT PSAM_USER_FIXED_DATA UserFixedData,
+                            IN ULONG UserAccountControl);
+
+NTSTATUS
+SampCheckPasswordPolicy(IN PSAM_DB_OBJECT UserObject,
+                        IN PCUNICODE_STRING Password,
+                        IN PENCRYPTED_NT_OWF_PASSWORD NtPassword,
+                        IN BOOLEAN Change);
 
 NTSTATUS
 SampGetLogonHoursAttribute(IN PSAM_DB_OBJECT UserObject,
@@ -452,11 +496,6 @@ SampCheckAccountName(IN PRPC_UNICODE_STRING AccountName,
 
 NTSTATUS
 WINAPI
-SystemFunction006(LPCSTR password,
-                  LPSTR hash);
-
-NTSTATUS
-WINAPI
 SystemFunction007(PUNICODE_STRING string,
                   LPBYTE hash);
 
@@ -465,5 +504,23 @@ WINAPI
 SystemFunction013(const BYTE *in,
                   const BYTE *key,
                   LPBYTE out);
+
+struct ustring
+{
+    DWORD Length;
+    DWORD MaximumLength;
+    unsigned char *Buffer;
+};
+
+NTSTATUS
+WINAPI
+SystemFunction012(const BYTE *in,
+                  const BYTE *key,
+                  LPBYTE out);
+
+NTSTATUS
+WINAPI
+SystemFunction032(struct ustring *data,
+                  const struct ustring *key);
 
 #endif /* _SAMSRV_PCH_ */

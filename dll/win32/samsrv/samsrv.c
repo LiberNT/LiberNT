@@ -24,7 +24,6 @@
 /* GLOBALS *******************************************************************/
 
 ENCRYPTED_NT_OWF_PASSWORD EmptyNtHash;
-ENCRYPTED_LM_OWF_PASSWORD EmptyLmHash;
 RTL_RESOURCE SampResource;
 NT_PRODUCT_TYPE SampProductType;
 
@@ -36,7 +35,6 @@ NTSTATUS
 SampInitHashes(VOID)
 {
     UNICODE_STRING EmptyNtPassword = {0, 0, NULL};
-    CHAR EmptyLmPassword[15] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,};
     NTSTATUS Status;
 
     /* Calculate the NT hash value of the empty password */
@@ -46,14 +44,6 @@ SampInitHashes(VOID)
     {
         ERR("Calculation of the empty NT hash failed (Status 0x%08lx)\n", Status);
         return Status;
-    }
-
-    /* Calculate the LM hash value of the empty password */
-    Status = SystemFunction006(EmptyLmPassword,
-                               (LPSTR)&EmptyLmHash);
-    if (!NT_SUCCESS(Status))
-    {
-        ERR("Calculation of the empty LM hash failed (Status 0x%08lx)\n", Status);
     }
 
     return Status;
@@ -88,7 +78,11 @@ SamIConnect(IN PSAMPR_SERVER_NAME ServerName,
     if (NT_SUCCESS(Status))
     {
         ServerObject->Trusted = Trusted;
-        *ServerHandle = (SAMPR_HANDLE)ServerObject;
+        Status = SampCheckObjectAccess(ServerObject, DesiredAccess);
+        if (NT_SUCCESS(Status))
+            *ServerHandle = (SAMPR_HANDLE)ServerObject;
+        else
+            SampCloseDbObject(ServerObject);
     }
 
     TRACE("SamIConnect done (Status 0x%08lx)\n", Status);
@@ -101,6 +95,7 @@ NTSTATUS
 NTAPI
 SamIInitialize(VOID)
 {
+    NTSTATUS PasswordStatus;
     NTSTATUS Status = STATUS_SUCCESS;
 
     TRACE("SamIInitialize() called\n");
@@ -112,6 +107,8 @@ SamIInitialize(VOID)
     Status = SampInitHashes();
     if (!NT_SUCCESS(Status))
         return Status;
+
+    PasswordStatus = SampInitPasswordEncryption();
 
     if (SampIsSetupRunning())
     {
@@ -130,6 +127,9 @@ SamIInitialize(VOID)
     Status = SampInitDatabase();
     if (!NT_SUCCESS(Status))
         return Status;
+
+    if (NT_SUCCESS(PasswordStatus))
+        SampMigrateUserPasswords();
 
     /* Start the RPC server */
     SampStartRpcServer();
