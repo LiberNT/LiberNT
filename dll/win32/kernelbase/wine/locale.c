@@ -7169,8 +7169,7 @@ LCID WINAPI DECLSPEC_HOTPATCH LocaleNameToLCID( const WCHAR *name, DWORD flags )
 #ifdef __REACTOS__
     const NLS_LOCALE_DATA *locale;
 
-    if ((flags & ~LOCALE_ALLOW_NEUTRAL_NAMES) ||
-        (name && !compare_locale_names( name, LOCALE_NAME_SYSTEM_DEFAULT )))
+    if (flags & ~LOCALE_ALLOW_NEUTRAL_NAMES)
     {
         SetLastError( ERROR_INVALID_PARAMETER );
         return 0;
