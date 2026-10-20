@@ -808,10 +808,15 @@ BuildAbout(PageBuilder &page)
         if (!manufacturer.empty() || !model.empty())
             device.push_back(std::make_pair(Str(IDS_MODEL), manufacturer + (manufacturer.empty() ? L"" : L" ") + model));
         device.push_back(std::make_pair(Str(IDS_PRODUCT_ID), ReadString(HKEY_LOCAL_MACHINE, WINDOWS_NT_KEY, L"ProductId")));
+        std::wstring version = ReadString(HKEY_LOCAL_MACHINE, WINDOWS_NT_KEY, L"DisplayVersion");
+        std::wstring build = BuildNumber();
         system.push_back(std::make_pair(Str(IDS_EDITION), ProductName()));
-        system.push_back(std::make_pair(Str(IDS_VERSION), ReadString(HKEY_LOCAL_MACHINE, WINDOWS_NT_KEY, L"DisplayVersion")));
+        system.push_back(std::make_pair(Str(IDS_RELEASE), Str(IDS_DEVELOPMENT_PREVIEW)));
+        system.push_back(std::make_pair(Str(IDS_TARGET), Format(IDS_TARGET_FORMAT, version.c_str(), build.c_str())));
+        system.push_back(std::make_pair(Str(IDS_VERSION), version));
         system.push_back(std::make_pair(Str(IDS_INSTALLED_ON), InstallDate()));
-        system.push_back(std::make_pair(Str(IDS_OS_BUILD), BuildNumber()));
+        system.push_back(std::make_pair(Str(IDS_OS_BUILD), build));
+        system.push_back(std::make_pair(Str(IDS_BUILD_LAB), ReadString(HKEY_LOCAL_MACHINE, WINDOWS_NT_KEY, L"BuildLab")));
     }
     page.Hero(ComputerName(), model.empty() ? ProductName() : model, L"laptop_20_regular").Action = Str(IDS_RENAME_PC);
     page.Groups.back().Rows.back().Invoke = [host](int) { RenameComputer(host->Window()); };

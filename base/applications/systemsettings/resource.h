@@ -744,3 +744,7 @@
 #define IDS_SHOW_LAST_USER_DESC        834
 #define IDS_SIGNIN_POWER               835
 #define IDS_SIGNIN_POWER_DESC          836
+#define IDS_RELEASE                    837
+#define IDS_DEVELOPMENT_PREVIEW        838
+#define IDS_TARGET                     839
+#define IDS_TARGET_FORMAT              840

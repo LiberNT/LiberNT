@@ -746,4 +746,8 @@ BEGIN
     IDS_SHOW_LAST_USER_DESC "Select it on the sign-in screen instead of asking for an account name"
     IDS_SIGNIN_POWER "Power button"
     IDS_SIGNIN_POWER_DESC "Shut down or restart from the lock and sign-in screens"
+    IDS_RELEASE "Release"
+    IDS_DEVELOPMENT_PREVIEW "Development Preview"
+    IDS_TARGET "Target"
+    IDS_TARGET_FORMAT "Windows 11 %s %s"
 END
