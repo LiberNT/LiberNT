@@ -25,7 +25,6 @@ typedef struct _DEVICE_EXTENSION
     LIST_ENTRY SavedLinksListHead;
     BOOLEAN ProcessedSuggestions;
     BOOLEAN NoAutoMount;
-    BOOLEAN IsMiniNt;
     LIST_ENTRY WorkerQueueListHead;
     KSEMAPHORE WorkerSemaphore;
     LONG WorkerReferences;
@@ -62,9 +61,6 @@ BOOLEAN
 MountMgrAutoMountAllowed(_In_ PDEVICE_EXTENSION DeviceExtension,
                          _In_ BOOLEAN Removable)
 {
-    if (DeviceExtension->IsMiniNt && Removable)
-        return FALSE;
-
     return !DeviceExtension->NoAutoMount || Removable;
 }
 

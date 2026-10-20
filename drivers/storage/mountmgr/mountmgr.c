@@ -1994,27 +1994,6 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
 
     DeviceExtension->NoAutoMount = MountmgrReadNoAutoMount(&(DeviceExtension->RegistryPath));
 
-    /* In WinPE / LiveCD mode the kernel creates a volatile MiniNT key before
-     * boot drivers are loaded. Suppress removable boot media without disabling
-     * automatic drive letters for unrelated fixed volumes. */
-    {
-        UNICODE_STRING MiniNTKeyName = RTL_CONSTANT_STRING(
-            L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\MiniNT");
-        OBJECT_ATTRIBUTES MiniNTAttributes;
-        HANDLE MiniNTKeyHandle;
-
-        InitializeObjectAttributes(&MiniNTAttributes,
-                                   &MiniNTKeyName,
-                                   OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
-                                   NULL,
-                                   NULL);
-        if (NT_SUCCESS(ZwOpenKey(&MiniNTKeyHandle, KEY_READ, &MiniNTAttributes)))
-        {
-            ZwClose(MiniNTKeyHandle);
-            DeviceExtension->IsMiniNt = TRUE;
-        }
-    }
-
     MountMgrLoadBootRamdiskInformation(DeviceExtension);
 
     GlobalCreateSymbolicLink(&DosDevicesMount, &DeviceMount);

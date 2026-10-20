@@ -513,8 +513,6 @@ MountMgrNextDriveLetterWorker(IN PDEVICE_EXTENSION DeviceExtension,
         }
     }
 
-    /* MiniNT hides removable boot media. Normal no-automount mode instead
-     * permits removable media while keeping fixed volumes unassigned. */
     if (!MountMgrAutoMountAllowed(DeviceExtension, Removable))
     {
         if (DriveLetterInfo->DriveLetterWasAssigned)
