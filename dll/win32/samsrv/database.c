@@ -4,6 +4,7 @@
  * FILE:        dll/win32/samsrv/database.c
  * PURPOSE:     SAM object database
  * COPYRIGHT:   Copyright 2012 Eric Kohl
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include "samsrv.h"
@@ -16,6 +17,71 @@ static HANDLE SamKeyHandle = NULL;
 
 
 /* FUNCTIONS ***************************************************************/
+
+static
+VOID
+SampRepairDomainSecurity(VOID)
+{
+    static const PCWSTR DomainKeyNames[] = {L"Domains\\Builtin", L"Domains\\Account"};
+    PSECURITY_DESCRIPTOR Sd;
+    HANDLE ServerKeyHandle = NULL;
+    HANDLE DomainKeyHandle;
+    BOOLEAN Repaired = FALSE;
+    ULONG SdSize;
+    ULONG Index;
+    NTSTATUS Status;
+
+    Status = SampRegOpenKey(SamKeyHandle,
+                            L"SAM",
+                            KEY_ALL_ACCESS,
+                            &ServerKeyHandle);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    for (Index = 0; Index < ARRAYSIZE(DomainKeyNames); Index++)
+    {
+        Status = SampRegOpenKey(ServerKeyHandle,
+                                DomainKeyNames[Index],
+                                KEY_ALL_ACCESS,
+                                &DomainKeyHandle);
+        if (!NT_SUCCESS(Status))
+            continue;
+
+        if (SampRegQueryValue(DomainKeyHandle, L"SecDesc", NULL, NULL, NULL) == STATUS_OBJECT_NAME_NOT_FOUND)
+        {
+            if (Index == 0)
+                Status = SampCreateBuiltinDomainSD(&Sd, &SdSize);
+            else
+                Status = SampCreateAccountDomainSD(&Sd, &SdSize);
+
+            if (NT_SUCCESS(Status))
+            {
+                Status = SampRegSetValue(DomainKeyHandle,
+                                         L"SecDesc",
+                                         REG_BINARY,
+                                         Sd,
+                                         SdSize);
+                RtlFreeHeap(RtlGetProcessHeap(), 0, Sd);
+                if (NT_SUCCESS(Status))
+                    Repaired = TRUE;
+            }
+        }
+
+        SampRegCloseKey(&DomainKeyHandle);
+    }
+
+    if (Repaired && NT_SUCCESS(SampCreateServerSD(&Sd, &SdSize)))
+    {
+        SampRegSetValue(ServerKeyHandle,
+                        L"SecDesc",
+                        REG_BINARY,
+                        Sd,
+                        SdSize);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Sd);
+    }
+
+    SampRegCloseKey(&ServerKeyHandle);
+}
 
 NTSTATUS
 SampInitDatabase(VOID)
@@ -33,6 +99,8 @@ SampInitDatabase(VOID)
         ERR("Failed to open the SAM key (Status: 0x%08lx)\n", Status);
         return Status;
     }
+
+    SampRepairDomainSecurity();
 
     TRACE("SampInitDatabase() done\n");
 
