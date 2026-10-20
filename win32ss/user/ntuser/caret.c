@@ -287,7 +287,7 @@ BOOL FASTCALL co_UserHideCaret(PWND Window OPTIONAL)
    if(ThreadQueue->CaretInfo.Visible)
    {
       THRDCARETINFO OldCaret = ThreadQueue->CaretInfo;
-      PWND pwnd = UserGetWindowObject(ThreadQueue->CaretInfo.hWnd);
+      PWND pwnd = ValidateHwndNoErr(ThreadQueue->CaretInfo.hWnd);
       if (pwnd)
          IntKillTimer(pwnd, IDCARETTIMER, TRUE);
 
