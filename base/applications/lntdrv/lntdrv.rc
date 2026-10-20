@@ -1,0 +1,31 @@
+/*
+ * PROJECT:     LiberNT Drivers
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Defines the LiberNT Drivers version, icon, dialog and manifest resources
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#define REACTOS_STR_FILE_DESCRIPTION   "LiberNT Drivers"
+#define REACTOS_STR_INTERNAL_NAME      "lntdrv"
+#define REACTOS_STR_ORIGINAL_FILENAME  "lntdrv.exe"
+#include <reactos/version.rc>
+
+#include <windef.h>
+#include <winuser.h>
+#include <commctrl.h>
+#include "resource.h"
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+IDI_LNTDRV ICON "../mscutils/devmgmt/devmgmt.ico"
+IDB_WATERMARK BITMAP "../../setup/libernt/res/watermark.bmp"
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "lntdrv.exe.manifest"
+
+#pragma code_page(65001)
+
+#ifdef LANGUAGE_EN_US
+    #include "lang/en-US.rc"
+#endif
+#ifdef LANGUAGE_FR_FR
+    #include "lang/fr-FR.rc"
+#endif

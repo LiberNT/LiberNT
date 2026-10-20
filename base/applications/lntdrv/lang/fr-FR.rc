@@ -1,0 +1,190 @@
+LANGUAGE LANG_FRENCH, SUBLANG_NEUTRAL
+
+IDD_FRAME DIALOGEX 0, 0, 420, 240
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Pilotes LiberNT"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_FRAME_TITLE, 120, 10, 290, 14, SS_NOPREFIX
+    LTEXT "", IDC_FRAME_SUBTITLE, 120, 26, 290, 18, SS_NOPREFIX
+    LTEXT "", IDC_FRAME_PAGE, 120, 48, 290, 160, NOT WS_VISIBLE
+    CONTROL "", -1, "Static", SS_ETCHEDHORZ, 120, 212, 300, 1
+    PUSHBUTTON "&Précédent", IDC_FRAME_BACK, 250, 219, 50, 14
+    DEFPUSHBUTTON "&Suivant", IDC_FRAME_NEXT, 305, 219, 50, 14
+    PUSHBUTTON "Annuler", IDCANCEL, 360, 219, 50, 14
+END
+
+IDD_DEVICES DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_DEVICES, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 128
+    LTEXT "", IDC_DEVICES_NOTE, 0, 132, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    PUSHBUTTON "&Détails", IDC_DETAILS, 0, 146, 56, 14
+    PUSHBUTTON "&Historique", IDC_HISTORY, 234, 146, 56, 14
+END
+
+IDD_PROGRESS DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "", IDC_PROGRESS_TEXT, 0, 44, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    CONTROL "", IDC_PROGRESS_BAR, "msctls_progress32", PBS_SMOOTH | WS_BORDER, 0, 58, 290, 10
+    LTEXT "", IDC_PROGRESS_DETAIL, 0, 73, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+END
+
+IDD_CHOOSE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_CHOICES, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 136
+    LTEXT "", IDC_CHOOSE_NOTE, 0, 140, 290, 18, SS_NOPREFIX
+END
+
+IDD_DONE DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_RESULTS, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 136
+    LTEXT "", IDC_DONE_NOTE, 0, 140, 290, 18, SS_NOPREFIX
+END
+
+IDD_HISTORY DIALOGEX 0, 0, 290, 160
+STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_HISTORY_LIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 140
+    PUSHBUTTON "&Restaurer", IDC_ROLLBACK, 0, 146, 56, 14
+    PUSHBUTTON "&Supprimer", IDC_REMOVE, 60, 146, 64, 14
+    LTEXT "", IDC_HISTORY_NOTE, 130, 149, 160, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+END
+
+IDD_DETAILS DIALOGEX 0, 0, 300, 200
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Détails du périphérique"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    EDITTEXT IDC_DETAILS_TEXT, 7, 7, 286, 166, ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | ES_AUTOHSCROLL | WS_VSCROLL | WS_HSCROLL
+    DEFPUSHBUTTON "OK", IDOK, 243, 179, 50, 14
+END
+
+STRINGTABLE
+BEGIN
+    IDS_CAPTION "Pilotes LiberNT"
+    IDS_BACK "&Précédent"
+    IDS_NEXT "&Suivant"
+    IDS_CANCEL "Annuler"
+    IDS_INSTALL "&Installer"
+    IDS_FINISH "&Terminer"
+    IDS_DEVICES_TITLE "Pilotes de ce PC"
+    IDS_DEVICES_SUBTITLE "Cochez les périphériques à chercher dans le catalogue Microsoft Update. Ceux sans pilote sont cochés ; les pilotes intégrés ne sont pas mis à jour."
+    IDS_SEARCH_TITLE "Recherche dans le catalogue Microsoft Update"
+    IDS_SEARCH_SUBTITLE "Recherche des pilotes adaptés à vos périphériques et à ce PC."
+    IDS_CHOOSE_TITLE "Choisissez les pilotes à installer"
+    IDS_CHOOSE_SUBTITLE "Chaque pilote est téléchargé depuis le catalogue Microsoft Update et sa signature est vérifiée avant l'installation."
+    IDS_INSTALL_TITLE "Installation des pilotes"
+    IDS_INSTALL_SUBTITLE "Patientez pendant l'installation des pilotes."
+    IDS_DONE_TITLE "Terminé"
+    IDS_DONE_SUBTITLE "Voici les pilotes qui ont été installés."
+    IDS_HISTORY_TITLE "Pilotes installés depuis le catalogue"
+    IDS_HISTORY_SUBTITLE "Toutes les modifications faites par Pilotes LiberNT sur ce PC, des plus récentes aux plus anciennes."
+    IDS_COL_DEVICE "Périphérique"
+    IDS_COL_STATUS "État"
+    IDS_COL_VERSION "Version du pilote"
+    IDS_COL_SOURCE "Origine"
+    IDS_COL_DRIVER "Pilote"
+    IDS_COL_OFFERED "Version"
+    IDS_COL_RESULT "Résultat"
+    IDS_COL_DATE "Date"
+    IDS_COL_ACTION "Action"
+    IDS_DEVICES_NOTE "%1 périphériques, %2 sans pilote, %3 cochés. Pilotes cherchés pour %4."
+    IDS_SEARCH_START "Recherche de pilotes pour %1 périphérique(s)"
+    IDS_SEARCH_STEP "Périphérique %1 sur %2"
+    IDS_CHOOSE_NONE "Le catalogue Microsoft Update n'a aucun pilote pour les %1 périphérique(s) cherchés."
+    IDS_CHOOSE_FOUND "%1 pilote(s) peuvent être installés pour les %2 périphérique(s) cherchés."
+    IDS_CHOOSE_ABSENT "%1 périphérique(s) n'ont rien dans le catalogue."
+    IDS_STATE_MISSING "Non installé"
+    IDS_STATE_NEWER "Plus récent que l'installé"
+    IDS_INSTALL_START "Installation de %1 pilote(s)"
+    IDS_INSTALL_STEP "Pilote %1 sur %2 : %3"
+    IDS_INSTALL_CANCELLING "Arrêt après l'étape en cours..."
+    IDS_PROGRESS_QUERY "Demande du paquet au catalogue Microsoft Update"
+    IDS_PROGRESS_DOWNLOAD "Téléchargement de %1 (%2 Ko)"
+    IDS_PROGRESS_UNPACK "Décompression de %1"
+    IDS_PROGRESS_VERIFY "Vérification de la signature du paquet"
+    IDS_PROGRESS_CHECK "Vérification que le pilote convient à ce périphérique"
+    IDS_PROGRESS_INSTALL "Installation du pilote pour %1"
+    IDS_RESULT_INSTALLED "Installé"
+    IDS_RESULT_REBOOT "Installé, redémarrage nécessaire"
+    IDS_RESULT_SKIPPED "A déjà un pilote"
+    IDS_RESULT_FILE "%1 (%2)"
+    IDS_DONE_FAILED "%1 pilote(s) n'ont pas pu être installés."
+    IDS_DONE_OK "Les pilotes sont installés."
+    IDS_DONE_REBOOT "Redémarrez le PC pour terminer leur installation."
+    IDS_DONE_CANCELLED "L'installation a été arrêtée."
+    IDS_ACTION_INSTALL "Installation"
+    IDS_ACTION_ROLLBACK "Restauration"
+    IDS_ACTION_REMOVE "Suppression"
+    IDS_ROLLBACK_CONFIRM "Remettre le pilote que %1 utilisait avant (version %2) ?"
+    IDS_REMOVE_CONFIRM "Supprimer le pilote du catalogue de %1 ? LiberNT installe ensuite le meilleur pilote qu'il possède encore pour ce périphérique."
+    IDS_ACTION_DONE "Terminé."
+    IDS_ACTION_DONE_REBOOT "Terminé. Redémarrez le PC pour finir."
+    IDS_ACTION_FAILED "La modification a échoué : %1"
+    IDS_HISTORY_WORKING "En cours..."
+    IDS_ADMIN_REQUIRED "Installer et supprimer des pilotes demande les droits d'administrateur."
+    IDS_ADMIN_RESTART "Relancer Pilotes LiberNT en tant qu'administrateur ?"
+    IDS_WORKER_FAILED "Impossible de démarrer le thread de travail : %1"
+    IDS_ERROR_CHECKSUM "Le téléchargement ne correspond pas à la somme de contrôle publiée par le catalogue."
+    IDS_ERROR_SERVER "Le catalogue Microsoft Update a renvoyé une réponse inattendue."
+    IDS_ERROR_CANCELLED "Annulé."
+    IDS_ERROR_NOT_BETTER "Le pilote déjà installé convient mieux à ce périphérique."
+    IDS_ERROR_NO_COMPAT "Le paquet n'a pas de pilote pour ce périphérique sur ce PC."
+    IDS_ERROR_FORMAT "La page du catalogue Microsoft Update a changé et ne peut pas être lue. Pilotes LiberNT doit être mis à jour."
+    IDS_ERROR_PROGRAM "Le paquet du catalogue est un programme, pas un paquet de pilote. Lancez-le vous-même si vous lui faites confiance."
+    IDS_ERROR_ALREADY "Ce pilote est déjà installé."
+    IDS_ERROR_NOT_NEWER "Le pilote installé est plus récent que celui-ci."
+    IDS_ERROR_NOT_COVERED "Un fichier du paquet n'est pas couvert par sa signature."
+    IDS_ERROR_NOT_IN_USE "Le périphérique n'utilise plus ce pilote du catalogue."
+    IDS_ERROR_NO_SIGNATURE "Le paquet n'a pas de signature."
+    IDS_ERROR_OFFLINE "Impossible de joindre le catalogue Microsoft Update. Vérifiez que ce PC est connecté à Internet."
+    IDS_ERROR_SIGNATURE "La signature du paquet n'est pas approuvée : %1"
+    IDS_ERROR_CODE "Erreur %1"
+    IDS_STATUS_MISSING "Pilote manquant"
+    IDS_STATUS_PROBLEM "Code de problème %1"
+    IDS_STATUS_WORKING "Fonctionne"
+    IDS_STATUS_STOPPED "Non démarré"
+    IDS_SOURCE_INBOX "Intégré"
+    IDS_SOURCE_CATALOG "Catalogue Microsoft Update"
+    IDS_SOURCE_THIRD_PARTY "Tiers"
+    IDS_DETAIL_NAME "Nom : %1"
+    IDS_DETAIL_STATUS "État : %1"
+    IDS_DETAIL_CLASS "Classe : %1"
+    IDS_DETAIL_INSTANCE "ID d'instance : %1"
+    IDS_DETAIL_DRIVER "Pilote : %1 %2 %3"
+    IDS_DETAIL_INF "INF : %1"
+    IDS_DETAIL_SOURCE "Origine : %1"
+    IDS_DETAIL_SERVICE "Service : %1"
+    IDS_DETAIL_HARDWARE "ID matériels :"
+    IDS_DETAIL_COMPATIBLE "ID compatibles :"
+    IDS_DETAIL_QUERIES "ID cherchés dans le catalogue :"
+    IDS_DETAIL_NONE "aucun"
+    IDS_NOTE_NOT_SEARCHABLE "Recherche impossible"
+    IDS_NOTE_NOT_FOUND "Absent du catalogue"
+    IDS_NOTE_FAILED "Échec de la recherche : %1"
+    IDS_NOTE_AVAILABLE "Pilote disponible : %1"
+    IDS_NOTE_NEWER "Pilote plus récent : %1"
+    IDS_NOTE_CURRENT "À jour"
+    IDS_CLI_LIST_ERROR "Impossible de lister les périphériques : %1"
+    IDS_CLI_LIST_TOTAL "%1 périphériques, architecture %2"
+    IDS_CLI_MISSING_TOTAL "%1 périphérique(s) sans pilote"
+    IDS_CLI_ALREADY "%1 : a déjà un pilote"
+    IDS_CLI_INSTALLING "%1 (%2) : installation"
+    IDS_CLI_INSTALLED "%1 : %2 installé"
+    IDS_CLI_INSTALLED_REBOOT "%1 : %2 installé, redémarrage nécessaire"
+    IDS_CLI_FAILED "%1 : %2"
+    IDS_CLI_SUMMARY "Installés %1, absents du catalogue %2, échecs %3."
+    IDS_CLI_RESTART "Redémarrage nécessaire."
+    IDS_CLI_NO_DEVICE "Aucun périphérique présent n'a l'ID d'instance %1."
+    IDS_CLI_USAGE "Usage : lntdrv [/list | /scan | /installall | /search <ID d'instance> | /install <ID d'instance> [ID de mise à jour]]"
+    IDS_CHOOSE_CURRENT "%1 périphérique(s) ont déjà le pilote le plus récent."
+END
