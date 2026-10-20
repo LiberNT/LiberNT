@@ -11,6 +11,7 @@ endif()
 list(APPEND SOURCE
     adapter.c
     device.c
+    duplication.c
     dxgi_main.c
     factory.c
     output.c

@@ -170,6 +170,10 @@ struct dxgi_output
 
 HRESULT dxgi_output_create(struct dxgi_adapter *adapter, unsigned int output_idx,
         struct dxgi_output **output);
+#ifdef __REACTOS__
+HRESULT dxgi_output_duplication_create(IDXGIOutput *output, IUnknown *device,
+        IDXGIOutputDuplication **duplication);
+#endif
 struct dxgi_output *unsafe_impl_from_IDXGIOutput(IDXGIOutput *iface);
 
 /* IDXGIAdapter */

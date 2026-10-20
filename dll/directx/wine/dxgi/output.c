@@ -602,9 +602,15 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_GetDisplaySurfaceData1(IDXGIOutput6
 static HRESULT STDMETHODCALLTYPE dxgi_output_DuplicateOutput(IDXGIOutput6 *iface,
         IUnknown *device, IDXGIOutputDuplication **output_duplication)
 {
+#ifdef __REACTOS__
+    TRACE("iface %p, device %p, output_duplication %p.\n", iface, device, output_duplication);
+
+    return dxgi_output_duplication_create((IDXGIOutput *)iface, device, output_duplication);
+#else
     FIXME("iface %p, device %p, output_duplication %p stub!\n", iface, device, output_duplication);
 
     return E_NOTIMPL;
+#endif
 }
 
 /* IDXGIOutput2 methods */
@@ -643,11 +649,27 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_DuplicateOutput1(IDXGIOutput6 *ifac
         IUnknown *device, UINT flags, UINT format_count, const DXGI_FORMAT *formats,
         IDXGIOutputDuplication **output_duplication)
 {
+#ifdef __REACTOS__
+    UINT i;
+
+    TRACE("iface %p, device %p, flags %#x, format_count %u, formats %p, output_duplication %p.\n",
+            iface, device, flags, format_count, formats, output_duplication);
+
+    if (flags || !format_count || !formats)
+        return E_INVALIDARG;
+    for (i = 0; i < format_count; ++i)
+    {
+        if (formats[i] == DXGI_FORMAT_B8G8R8A8_UNORM)
+            return dxgi_output_duplication_create((IDXGIOutput *)iface, device, output_duplication);
+    }
+    return DXGI_ERROR_UNSUPPORTED;
+#else
     FIXME("iface %p, device %p, flags %#x, format_count %u, formats %p, "
             "output_duplication %p stub!\n", iface, device, flags, format_count,
             formats, output_duplication);
 
     return E_NOTIMPL;
+#endif
 }
 
 /* IDXGIOutput6 methods */
