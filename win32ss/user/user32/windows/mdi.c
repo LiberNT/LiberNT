@@ -1177,12 +1177,17 @@ LRESULT WINAPI MDIClientWndProc_common( HWND hwnd, UINT message, WPARAM wParam, 
     TRACE("%p %04x (%s) %08lx %08lx\n", hwnd, message, SPY_GetMsgName(message, hwnd), wParam, lParam);
 
 #ifdef __REACTOS__
+#ifdef WOW64_I386_RUNTIME
+    if (message == WM_NCCREATE)
+        NtUserSetWindowFNID(hwnd, FNID_MDICLIENT);
+#else
     {
         PWND pWnd = ValidateHwnd(hwnd);
 
         if (pWnd && !pWnd->fnid)
             NtUserSetWindowFNID(hwnd, FNID_MDICLIENT);
     }
+#endif
 #endif
 
     if (!(ci = get_client_info( hwnd )))

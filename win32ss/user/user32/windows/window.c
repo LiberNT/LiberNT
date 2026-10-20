@@ -382,9 +382,10 @@ cleanup:
 static BOOL
 IntIsMdiClientWindow(HWND hWnd)
 {
-    WCHAR szClass[16];
+    ROS_WINDOWINFO Info;
 
-    return GetClassNameW(hWnd, szClass, ARRAYSIZE(szClass)) && !_wcsicmp(szClass, L"MDIClient");
+    return NtUserCallHwndParam(hWnd, (DWORD_PTR)&Info, HWNDPARAM_ROUTINE_ROS_GETWINDOWINFO) &&
+           Info.fnid == FNID_MDICLIENT;
 }
 #endif
 
