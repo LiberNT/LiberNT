@@ -1095,6 +1095,7 @@ SpiSetWallpaper(PVOID pvParam, FLONG fl, HBITMAP hbmSupplied)
         gspv.WallpaperMode = SpiLoadWallpaperMode();
         TRACE("EARLY_SPLASH: WIN32K_WALLPAPER_REUSED path=%S mode=%u\n", gspv.awcWallpaper, gspv.WallpaperMode);
         NtUserRedrawWindow(UserGetShellWindow(), NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+        IntCompositionDamageWindow(UserGetDesktopWindow());
         return (UINT_PTR)KEY_DESKTOP;
     }
 #endif
@@ -1165,6 +1166,7 @@ ReplaceWallpaper:
 #endif
 
     NtUserRedrawWindow(UserGetShellWindow(), NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+    IntCompositionDamageWindow(UserGetDesktopWindow());
 
 
     return (UINT_PTR)KEY_DESKTOP;
