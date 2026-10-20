@@ -426,15 +426,6 @@ IntDeactivateWindow(PTHREADINFO pti, HANDLE tid)
    MsqReleaseModifierKeys(pti->MessageQueue);
 
    if (InAAPM) pti->TIF_flags &= ~TIF_INACTIVATEAPPMSG;
-   if (pti->MessageQueue == DeactivatedQueue &&
-       DeactivatedQueue != gpqForeground &&
-       !(DeactivatedQueue->QF_flags & QF_INDESTROY) &&
-       !DeactivatedQueue->spwndActive &&
-       !DeactivatedQueue->spwndFocus &&
-       !DeactivatedQueue->CaretInfo.hWnd)
-   {
-      IntNotifyWinEvent(EVENT_OBJECT_HIDE, NULL, OBJID_CARET, CHILDID_SELF, 0);
-   }
    IntDereferenceMessageQueue(DeactivatedQueue);
    if (ptiCurrent != pti)
    {
