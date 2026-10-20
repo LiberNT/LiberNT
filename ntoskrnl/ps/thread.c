@@ -56,7 +56,7 @@ PspUserThreadStartup(IN PKSTART_ROUTINE StartRoutine,
     if (!(Thread->DeadThread) && !(Thread->HideFromDebugger))
     {
         /* We're not, so notify the debugger */
-        DbgkCreateThread(Thread, StartContext);
+        DbgkCreateThread(Thread, Thread->Win32StartAddress ? Thread->Win32StartAddress : StartContext);
     }
 
     /* Make sure we're not already dead */

@@ -776,7 +776,8 @@ DbgkpPostFakeThreadMessages(IN PEPROCESS Process,
         {
             /* Otherwise it's a thread message */
             ApiMessage.ApiNumber = DbgKmCreateThreadApi;
-            CreateThread->StartAddress = ThisThread->StartAddress;
+            CreateThread->StartAddress = ThisThread->Win32StartAddress ? ThisThread->Win32StartAddress :
+                                                                       ThisThread->StartAddress;
         }
 
         /* Trace */
