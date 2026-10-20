@@ -877,7 +877,8 @@ IntDefWindowProc(
       case WM_HELP:
       {
          PWND Parent = IntGetParent(Wnd);
-         co_IntSendMessage(UserHMGetHandle(Parent), Msg, wParam, lParam);
+         if (Parent)
+            co_IntSendMessage(UserHMGetHandle(Parent), Msg, wParam, lParam);
          break;
       }
 
@@ -935,7 +936,9 @@ IntDefWindowProc(
       {
             if (Wnd->style & WS_CHILD)
             {
-                co_IntSendMessage(UserHMGetHandle(IntGetParent(Wnd)), Msg, (WPARAM)UserHMGetHandle(Wnd), lParam);
+                PWND Parent = IntGetParent(Wnd);
+                if (Parent)
+                    co_IntSendMessage(UserHMGetHandle(Parent), Msg, (WPARAM)UserHMGetHandle(Wnd), lParam);
             }
             else
             {
@@ -1137,7 +1140,11 @@ IntDefWindowProc(
             {
                 if (wParam == VK_TAB || wParam == VK_ESCAPE) break;
                 if (wParam == VK_SPACE && Wnd->style & WS_CHILD)
-                    co_IntSendMessage( UserHMGetHandle(IntGetParent(Wnd)), Msg, wParam, lParam );
+                {
+                    PWND Parent = IntGetParent(Wnd);
+                    if (Parent)
+                        co_IntSendMessage( UserHMGetHandle(Parent), Msg, wParam, lParam );
+                }
                 else
                     co_IntSendMessage( UserHMGetHandle(Wnd), WM_SYSCOMMAND, SC_KEYMENU, wParam );
             }
