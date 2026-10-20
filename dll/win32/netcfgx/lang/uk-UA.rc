@@ -213,7 +213,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "Мережне підключення"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "Адаптеру потрібна хоча б одна IP-адреса. Будь-ласка, введіть її."
     IDS_NO_SUBMASK_SET "Введено адресу без вказання маски підмережі. Додайте маску підмережі."
     IDS_TCPFILTERDESC "Фільтрування TCP/IP дозволяє контролювати мережний трафік TCP/IP, що надходить на ваш комп'ютер."

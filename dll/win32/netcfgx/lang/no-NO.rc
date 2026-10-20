@@ -213,7 +213,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "Nettverk tilkobling"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "Kortet trenger minst en IP adresse. Vennligst skriv inn en IP adresse."
     IDS_NO_SUBMASK_SET "Du har skrevet en adresse som mangler subnet maske. Vennligst skriv inn et subnet maske."
     IDS_TCPFILTERDESC "TCP/IP filtering lar deg kontrollere typen av TCP/IP nettverk trafikk som strekker seg til din datamaskin."

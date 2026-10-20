@@ -221,7 +221,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "Conexión de red"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "El adaptador requiere al menos una dirección IP. Escriba una."
     IDS_NO_SUBMASK_SET "Ha escrito una dirección sin su máscara de subred. Por favor, añádala."
     IDS_TCPFILTERDESC "El filtrado TCP/IP le permite controlar qué tipo de tráfico de red TCP/IP que llega a su equipo."

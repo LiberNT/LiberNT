@@ -9,6 +9,8 @@
 
 #include "precomp.h"
 #include <strsafe.h>
+#include <ipifcons.h>
+#include <ntddndis.h>
 #include <devpropdef.h>
 
 typedef struct _NET_INF_KEYWORDS
@@ -111,50 +113,102 @@ cleanup:
 
 static
 DWORD
+ReadDriverDword(
+    _In_ HKEY hDriverKey,
+    _In_ PCWSTR ValueName)
+{
+    WCHAR Text[16];
+    DWORD dwType, dwSize, dwValue = 0;
+
+    dwSize = sizeof(Text) - sizeof(WCHAR);
+    ZeroMemory(Text, sizeof(Text));
+    if (RegQueryValueExW(hDriverKey, ValueName, NULL, &dwType, (LPBYTE)Text, &dwSize) != ERROR_SUCCESS)
+        return 0;
+    if (dwType == REG_DWORD && dwSize == sizeof(DWORD))
+        CopyMemory(&dwValue, Text, sizeof(DWORD));
+    else if (dwType == REG_SZ)
+        dwValue = wcstoul(Text, NULL, 10);
+    return dwValue;
+}
+
+static
+UINT
+GetConnectionNameId(
+    _In_ HKEY hDriverKey)
+{
+    DWORD IfType = ReadDriverDword(hDriverKey, L"*IfType");
+    DWORD PhysicalMedium = ReadDriverDword(hDriverKey, L"*PhysicalMediaType");
+
+    if (IfType == IF_TYPE_IEEE80211 || PhysicalMedium == NdisPhysicalMediumNative802_11)
+        return IDS_NET_CONNECT_WIFI;
+    if (PhysicalMedium == NdisPhysicalMediumBluetooth)
+        return IDS_NET_CONNECT_BLUETOOTH;
+    if (IfType == IF_TYPE_WWANPP || IfType == IF_TYPE_WWANPP2 ||
+        PhysicalMedium == NdisPhysicalMediumWirelessWan)
+    {
+        return IDS_NET_CONNECT_CELLULAR;
+    }
+    return IDS_NET_CONNECT_ETHERNET;
+}
+
+static
+BOOL
+IsConnectionNameUsed(
+    _In_ HKEY hNetworkKey,
+    _In_ PCWSTR pszName)
+{
+    WCHAR SubKey[64];
+    WCHAR Name[256];
+    DWORD Index, cchSubKey, dwType, dwSize;
+    HKEY hConnectionKey;
+    BOOL Used = FALSE;
+
+    for (Index = 0; !Used; Index++)
+    {
+        cchSubKey = _countof(SubKey) - _countof(L"\\Connection");
+        if (RegEnumKeyExW(hNetworkKey, Index, SubKey, &cchSubKey, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        StringCchCatW(SubKey, _countof(SubKey), L"\\Connection");
+        if (RegOpenKeyExW(hNetworkKey, SubKey, 0, KEY_QUERY_VALUE, &hConnectionKey) != ERROR_SUCCESS)
+            continue;
+        dwSize = sizeof(Name) - sizeof(WCHAR);
+        ZeroMemory(Name, sizeof(Name));
+        if (RegQueryValueExW(hConnectionKey, L"Name", NULL, &dwType, (LPBYTE)Name, &dwSize) == ERROR_SUCCESS &&
+            dwType == REG_SZ && _wcsicmp(Name, pszName) == 0)
+        {
+            Used = TRUE;
+        }
+        RegCloseKey(hConnectionKey);
+    }
+
+    return Used;
+}
+
+static
+DWORD
 GetUniqueConnectionName(
     _In_ HKEY hNetworkKey,
+    _In_ UINT NameId,
     _Out_ PWSTR *ppszNameBuffer)
 {
-    int Length = 0;
-    PWSTR pszDefaultName = NULL;
-    PWSTR pszNameBuffer = NULL;
-    DWORD dwSubKeys = 0;
-    DWORD dwError;
+    WCHAR BaseName[128];
+    PWSTR pszNameBuffer;
+    SIZE_T cchName;
+    ULONG Number;
 
-    TRACE("GetNewConnectionName()\n");
+    TRACE("GetUniqueConnectionName()\n");
 
-    Length = LoadStringW(netcfgx_hInstance, IDS_NET_CONNECT, (LPWSTR)&pszDefaultName, 0);
-    if (Length == 0)
-    {
-        pszDefaultName = L"Network Connection";
-        Length = wcslen(pszDefaultName);
-    }
+    if (LoadStringW(netcfgx_hInstance, NameId, BaseName, _countof(BaseName)) == 0)
+        StringCchCopyW(BaseName, _countof(BaseName), L"Ethernet");
 
-    TRACE("Length %d\n", Length);
-
-    dwError = RegQueryInfoKeyW(hNetworkKey,
-                               NULL, NULL, NULL, &dwSubKeys,
-                               NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-    if (dwError != ERROR_SUCCESS)
-    {
-        ERR("RegQueryInfoKeyW: Error %lu\n", dwError);
-        return dwError;
-    }
-
-    TRACE("Adapter Count: %lu\n", dwSubKeys);
-
-    pszNameBuffer = HeapAlloc(GetProcessHeap(),
-                              HEAP_ZERO_MEMORY,
-                              (Length + ((dwSubKeys != 0) ? 6 : 1)) * sizeof(WCHAR));
+    cchName = wcslen(BaseName) + 12;
+    pszNameBuffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, cchName * sizeof(WCHAR));
     if (pszNameBuffer == NULL)
-    {
         return ERROR_OUTOFMEMORY;
-    }
 
-    if (dwSubKeys != 0)
-        StringCchPrintfW(pszNameBuffer, Length + 6, L"%.*s %lu", Length, pszDefaultName, dwSubKeys + 1);
-    else
-        StringCchPrintfW(pszNameBuffer, Length + 1, L"%.*s", Length, pszDefaultName);
+    StringCchCopyW(pszNameBuffer, cchName, BaseName);
+    for (Number = 2; IsConnectionNameUsed(hNetworkKey, pszNameBuffer) && Number < 100000; Number++)
+        StringCchPrintfW(pszNameBuffer, cchName, L"%s %lu", BaseName, Number);
 
     TRACE("Adapter Name: %S\n", pszNameBuffer);
 
@@ -501,6 +555,7 @@ InstallNetDevice(
     DWORD dwShowIcon, dwLength, dwValue;
     PWSTR pszNameBuffer = NULL;
     DWORD dwRegType;
+    UINT NameId = IDS_NET_CONNECT_ETHERNET;
 
     DeviceInstallParams.cbSize = sizeof(DeviceInstallParams);
     if (!SetupDiGetDeviceInstallParamsW(DeviceInfoSet,
@@ -722,6 +777,7 @@ InstallNetDevice(
         ERR("RegSetValueExW() failed with error 0x%lx\n", rc);
         goto cleanup;
     }
+    NameId = GetConnectionNameId(hKey);
     RegCloseKey(hKey);
     hKey = NULL;
 
@@ -741,7 +797,7 @@ InstallNetDevice(
         goto cleanup;
     }
 
-    rc = GetUniqueConnectionName(hNetworkKey, &pszNameBuffer);
+    rc = GetUniqueConnectionName(hNetworkKey, NameId, &pszNameBuffer);
     if (rc != ERROR_SUCCESS)
     {
         ERR("GetUniqueConnectionName() failed with error 0x%lx\n", rc);

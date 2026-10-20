@@ -213,7 +213,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "Connexion réseau"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "La carte réseau nécessite au moins une adresse IP. Veuillez en entre une."
     IDS_NO_SUBMASK_SET "Vous avez entré une adresse sans entrer son masque de sous-réseau. Veuillez ajouter un masque de sous-réseau."
     IDS_TCPFILTERDESC "Le filtrage TCP/IP vous permet de contrôler le type de trafic TCP/IP qui atteint l'ordinateur."

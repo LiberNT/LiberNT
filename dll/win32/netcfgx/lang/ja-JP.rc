@@ -213,7 +213,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "ネットワーク接続"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "アダプタには少なくとも 1 つの IP アドレスが必要です。1 つ入力してください。"
     IDS_NO_SUBMASK_SET "サブネットマスクが指定されていないアドレスを入力しました。サブネットマスクを追加してください。"
     IDS_TCPFILTERDESC "TCP/IP フィルタリングを使用すると、コンピュータに到達する TCP/IP ネットワーク トラフィックの種類を制御できます。"

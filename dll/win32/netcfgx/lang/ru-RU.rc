@@ -213,7 +213,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "Сетевое подключение"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "Этот адаптер требует ввода хотя бы одного IP-адреса. Введите адрес."
     IDS_NO_SUBMASK_SET "Введен адрес без указания маски подсети. Введите маску подсети."
     IDS_TCPFILTERDESC "Фильтрация TCP/IP позволяет контролировать сетевой трафик TCP/IP, поступающий на данный компьютер."

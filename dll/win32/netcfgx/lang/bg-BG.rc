@@ -213,7 +213,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "Мрежoвo свързване"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "Картата иска поне един IP адрес. Въведете такъв."
     IDS_NO_SUBMASK_SET "Въвели сте адрес без подмрежова маска. Въведете такава."
     IDS_TCPFILTERDESC "Пресяването по TCP/IP позволява управление на вида на обмена по TCP/IP, който достига до компютъра ви."

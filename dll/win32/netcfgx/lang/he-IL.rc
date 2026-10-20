@@ -213,7 +213,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "חיבור רשת"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "The adapter requires at least one IP address. Please enter one."
     IDS_NO_SUBMASK_SET "You have entered an address that is missing its subnet mask. Please add a subnet mask."
     IDS_TCPFILTERDESC "TCP/IP filtering allows you to control the type of TCP/IP network traffic that reaches your computer."

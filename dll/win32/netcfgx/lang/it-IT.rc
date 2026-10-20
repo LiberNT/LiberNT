@@ -213,7 +213,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "Connessioni di rete"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "L'adattatore richiede almeno un indirizzo IP. Indicarne uno."
     IDS_NO_SUBMASK_SET "Avete indicato un indirizzo IP senza subnet mask. Indicare la subnet mask."
     IDS_TCPFILTERDESC "I filtri TCP/IP permettono di controllare il tipo di traffico di rete che raggiunge il vostro computer."

@@ -221,7 +221,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "網絡連線"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "介面卡需要至少一個 IP 位址。請輸入一個。"
     IDS_NO_SUBMASK_SET "您輸入的位址缺少了子網絡遮罩。請新增一個子網絡遮罩。"
     IDS_TCPFILTERDESC "TCP/IP 篩選允許您控制到達您的電腦的 TCP/IP 網絡通訊的類型。"

@@ -221,7 +221,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "Ağ Bağlantısı"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "Bağdaştırıcı, en az bir IP adresi gerektiriyor. Lütfen bir tane giriniz."
     IDS_NO_SUBMASK_SET "Alt ağ maskesi eksik olan bir adres girdiniz. Lütfen bir alt ağ maskesi giriniz."
     IDS_TCPFILTERDESC "TCP/IP filtrelemesi, bilgisayarınıza uzanan TCP/IP ağ trafiğinin türünü denetlemenize izin verir."

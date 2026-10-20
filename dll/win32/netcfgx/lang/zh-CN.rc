@@ -222,7 +222,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "网络连接"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "适配器需要至少一个 IP 地址。请添加 IP 地址。"
     IDS_NO_SUBMASK_SET "您输入的地址缺少子网掩码。请添加子网掩码。"
     IDS_TCPFILTERDESC "TCP/IP 筛选器可控制到达计算机的 TCP/IP 网络通信的类型。"

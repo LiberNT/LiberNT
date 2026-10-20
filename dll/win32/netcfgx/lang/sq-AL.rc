@@ -215,7 +215,10 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT "Lidhje rrjeti"
+    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_WIFI "Wi-Fi"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
+    IDS_NET_CONNECT_CELLULAR "Cellular"
     IDS_NO_IPADDR_SET "Përshtatësi kërkon të paktën një adresë IP. Ju lutemi shkruani një."
     IDS_NO_SUBMASK_SET "Ju keni futur në një adresë që mungon maskën e subnet-it të vet. Ju lutem shtoni një maskë subnet."
     IDS_TCPFILTERDESC "TCP/IP filtrim ju lejon kontrollin e llojit të TCP/IP të rrjetit të trafikut që arrin kompjuteri juaj."
