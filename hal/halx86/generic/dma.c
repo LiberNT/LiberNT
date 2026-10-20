@@ -1243,10 +1243,6 @@ HalPutDmaAdapter(IN PADAPTER_OBJECT AdapterObject)
  *
  * @return The base virtual address of the memory allocated or NULL on failure.
  *
- * @remarks
- *    On real NT x86 systems the CacheEnabled parameter is ignored, we honour
- *    it. If it proves to cause problems change it.
- *
  * @see HalFreeCommonBuffer
  *
  * @implemented
@@ -1281,12 +1277,12 @@ HalAllocateCommonBuffer(IN PADAPTER_OBJECT AdapterObject,
         BoundryAddressMultiple.LowPart = 0x10000;
     }
 
+    UNREFERENCED_PARAMETER(CacheEnabled);
     VirtualAddress = MmAllocateContiguousMemorySpecifyCache(Length,
                                                             LowestAcceptableAddress,
                                                             HighestAcceptableAddress,
                                                             BoundryAddressMultiple,
-                                                            CacheEnabled ? MmCached :
-                                                            MmNonCached);
+                                                            MmCached);
     if (VirtualAddress == NULL) return NULL;
 
     *LogicalAddress = MmGetPhysicalAddress(VirtualAddress);
@@ -1311,9 +1307,10 @@ HalFreeCommonBuffer(IN PADAPTER_OBJECT AdapterObject,
                     IN PVOID VirtualAddress,
                     IN BOOLEAN CacheEnabled)
 {
+    UNREFERENCED_PARAMETER(CacheEnabled);
     MmFreeContiguousMemorySpecifyCache(VirtualAddress,
                                        Length,
-                                       CacheEnabled ? MmCached : MmNonCached);
+                                       MmCached);
 }
 
 typedef struct _SCATTER_GATHER_CONTEXT {
