@@ -8882,7 +8882,7 @@ NtGdiExtTextOutW(
 
     /* Invalid DC handles fail without changing the caller's last error. */
     if (!GreIsHandleValid(hDC) ||
-        (GDI_HANDLE_GET_TYPE(hDC) != GDI_OBJECT_TYPE_DC))
+        ((GDI_HANDLE_GET_TYPE(hDC) & GDI_HANDLE_BASETYPE_MASK) != GDI_OBJECT_TYPE_DC))
     {
         return FALSE;
     }
