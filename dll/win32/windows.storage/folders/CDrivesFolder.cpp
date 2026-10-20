@@ -1798,7 +1798,7 @@ HRESULT WINAPI CDrivesFolder::CallBack(IShellFolder *psf, HWND hwndOwner, IDataO
         if (uMsg == DFM_INVOKECOMMAND && wParam == IDC_PROPERTIES)
         {
             // "System" properties
-            return (INT_PTR)ShellExecuteW(hwndOwner, NULL, L"ms-settings:about", NULL, NULL, SW_SHOWNORMAL) > 32 ? S_OK : E_FAIL;
+            return SHELL_ExecuteControlPanelCPL(hwndOwner, L"sysdm.cpl") ? S_OK : E_FAIL;
         }
         else if (uMsg == DFM_MERGECONTEXTMENU) // TODO: DFM_MERGECONTEXTMENU_BOTTOM
         {
