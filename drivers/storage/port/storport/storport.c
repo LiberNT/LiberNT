@@ -1417,6 +1417,28 @@ StorPortExtendedFunction(
     va_start(Args, HwDeviceExtension);
     switch (FunctionCode)
     {
+        case ExtFunctionGetDeviceObjects:
+        {
+            PVOID *AdapterDeviceObject = va_arg(Args, PVOID *);
+            PVOID *PhysicalDeviceObject = va_arg(Args, PVOID *);
+            PVOID *LowerDeviceObject = va_arg(Args, PVOID *);
+            PMINIPORT_DEVICE_EXTENSION MiniportExtension;
+            PFDO_DEVICE_EXTENSION DeviceExtension;
+
+            if (!HwDeviceExtension || !AdapterDeviceObject || !PhysicalDeviceObject || !LowerDeviceObject)
+            {
+                Status = STOR_STATUS_INVALID_PARAMETER;
+                break;
+            }
+            MiniportExtension = CONTAINING_RECORD(HwDeviceExtension, MINIPORT_DEVICE_EXTENSION, HwDeviceExtension);
+            DeviceExtension = MiniportExtension->Miniport->DeviceExtension;
+            *AdapterDeviceObject = DeviceExtension->Device;
+            *PhysicalDeviceObject = DeviceExtension->PhysicalDevice;
+            *LowerDeviceObject = DeviceExtension->LowerDevice;
+            Status = STOR_STATUS_SUCCESS;
+            break;
+        }
+
         case ExtFunctionAllocatePool:
         {
             ULONG NumberOfBytes = va_arg(Args, ULONG);

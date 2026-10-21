@@ -50,6 +50,8 @@ GetBusInterface(
         return PCIBus;
     else if (RtlCompareMemory(&Guid, &GUID_BUS_TYPE_ISAPNP, sizeof(GUID)) == sizeof(GUID))
         return PNPISABus;
+    else if (RtlCompareMemory(&Guid, &GUID_BUS_TYPE_INTERNAL, sizeof(GUID)) == sizeof(GUID))
+        return Internal;
 
     return InterfaceTypeUndefined;
 }
