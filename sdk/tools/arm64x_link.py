@@ -97,6 +97,68 @@ def drop_option(argv, option):
         del argv[index:index + 2]
 
 
+def hybrid_image_error(path):
+    with open(path, "rb") as handle:
+        data = handle.read()
+    nt = struct.unpack_from("<I", data, 0x3C)[0]
+    machine, sections = struct.unpack_from("<HH", data, nt + 4)
+    optional_size = struct.unpack_from("<H", data, nt + 20)[0]
+    optional = nt + 24
+    if machine != 0xAA64 or struct.unpack_from("<H", data, optional)[0] != 0x20B:
+        return "not an ARM64 PE32+ image"
+    headers = [struct.unpack_from("<IIII", data, optional + optional_size + i * 40 + 8) for i in range(sections)]
+
+    def file_offset(rva):
+        for virtual_size, virtual_address, raw_size, raw_pointer in headers:
+            if virtual_address <= rva < virtual_address + max(virtual_size, raw_size):
+                return raw_pointer + rva - virtual_address
+        return None
+
+    config_rva, config_size = struct.unpack_from("<II", data, optional + 112 + 10 * 8)
+    config = file_offset(config_rva) if config_rva else None
+    if config is None or config_size < 0xE6 or struct.unpack_from("<I", data, config)[0] < 0xE6:
+        return "no native load configuration"
+    if not struct.unpack_from("<Q", data, config + 0xC8)[0]:
+        return "no CHPE metadata"
+    table_offset, table_section = struct.unpack_from("<IH", data, config + 0xE0)
+    if not table_section or table_section > sections:
+        return "no dynamic value relocation table"
+    table = headers[table_section - 1][3] + table_offset
+    version, size = struct.unpack_from("<II", data, table)
+    entry, end = table + 8, table + 8 + size
+    while entry < end:
+        if version == 1:
+            symbol, fixup_size = struct.unpack_from("<QI", data, entry)
+            fixups = entry + 12
+        else:
+            header_size, fixup_size, symbol = struct.unpack_from("<IIQ", data, entry)
+            fixups = entry + header_size
+        if symbol == 6 and fixup_size:
+            block_end = fixups + fixup_size
+            while fixups + 8 <= block_end:
+                page, block_size = struct.unpack_from("<II", data, fixups)
+                if not block_size:
+                    break
+                record = fixups + 8
+                while record < fixups + block_size:
+                    value = struct.unpack_from("<H", data, record)[0]
+                    record += 2
+                    if not value:
+                        break
+                    kind, argument = (value >> 12) & 3, value >> 14
+                    if kind == 1:
+                        if page + (value & 0xFFF) == nt + 4 and argument == 1 and \
+                                struct.unpack_from("<H", data, record)[0] == 0x8664:
+                            return None
+                        record += 1 << argument
+                    elif kind == 2:
+                        record += 2
+                fixups += block_size
+            return "ARM64X relocations do not switch the machine to AMD64"
+        entry = fixups + fixup_size
+    return "no ARM64X dynamic relocations"
+
+
 def image_base_object(clang, output):
     source = output + ".imagebase.s"
     obj = output + ".imagebase.obj"
@@ -140,6 +202,11 @@ def main():
             for segment in native_post]
     if post:
         subprocess.run(" && ".join(post), shell=True, cwd=native_dir, check=True)
+
+    error = hybrid_image_error(output)
+    if error:
+        os.remove(output)
+        sys.exit("arm64x_link: %s: %s" % (output, error))
 
 
 if __name__ == "__main__":
