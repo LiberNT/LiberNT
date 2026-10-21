@@ -734,6 +734,7 @@ function(export_sdk_libraries _target _directory)
         COMMAND ${CMAKE_COMMAND} -E make_directory "${_directory}"
         ${_commands}
         DEPENDS ${_export_DEPENDS}
+        COMMENT "Exporting SDK libraries to ${_directory}"
         VERBATIM)
 endfunction()
 
