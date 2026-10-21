@@ -510,6 +510,7 @@ BatteryClassIoctl(PVOID ClassData,
     LARGE_INTEGER Timeout;
     PBATTERY_STATUS BattStatus;
     BATTERY_NOTIFY BattNotify;
+    BOOLEAN NotifySet;
     ULONG ReturnedLength = 0;
 
     DPRINT("BatteryClassIoctl(%p %p)\n", ClassData, Irp);
@@ -592,7 +593,8 @@ BatteryClassIoctl(PVOID ClassData,
                 Status = BattClass->MiniportInfo.SetStatusNotify(BattClass->MiniportInfo.Context,
                                                                  BattWait.BatteryTag,
                                                                  &BattNotify);
-                if (!NT_SUCCESS(Status))
+                NotifySet = NT_SUCCESS(Status);
+                if (!NotifySet)
                 {
                     DPRINT("SetStatusNotify failed (0x%x)\n", Status);
                     // HACK: Continue anyway; the non-zero timeout will limit polling rate.
@@ -622,7 +624,8 @@ BatteryClassIoctl(PVOID ClassData,
                 BattClass->Waiting = FALSE;
                 ExReleaseFastMutex(&BattClass->Mutex);
 
-                if (!NT_SUCCESS(BattClass->MiniportInfo.DisableStatusNotify(BattClass->MiniportInfo.Context)))
+                if (NotifySet &&
+                    !NT_SUCCESS(BattClass->MiniportInfo.DisableStatusNotify(BattClass->MiniportInfo.Context)))
                     DPRINT1("DisableStatusNotify failed\n");
             }
 
