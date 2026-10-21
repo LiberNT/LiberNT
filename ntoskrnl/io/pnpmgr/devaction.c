@@ -2257,6 +2257,85 @@ PiSetDeviceStackRemovePending(
     KeReleaseQueuedSpinLock(LockQueueIoDatabaseLock, OldIrql);
 }
 
+typedef struct _PIP_LEAK_CHECK
+{
+    PDEVICE_OBJECT DeviceObject;
+    UNICODE_STRING InstancePath;
+    KTIMER Timer;
+    KDPC Dpc;
+    WORK_QUEUE_ITEM WorkItem;
+} PIP_LEAK_CHECK, *PPIP_LEAK_CHECK;
+
+#define PIP_LEAK_CHECK_DELAY_SECONDS 30
+
+static
+VOID
+NTAPI
+PipLeakCheckWorker(
+    _In_ PVOID Context)
+{
+    PPIP_LEAK_CHECK Check = Context;
+    LONG_PTR References = OBJECT_TO_OBJECT_HEADER(Check->DeviceObject)->PointerCount - 1;
+
+    if (References != 0)
+        DPRINT1("Leaking device %wZ, refCount = %d\n", &Check->InstancePath, (INT32)References);
+
+    ObDereferenceObject(Check->DeviceObject);
+    ExFreePoolWithTag(Check->InstancePath.Buffer, TAG_IO);
+    ExFreePoolWithTag(Check, TAG_IO);
+}
+
+static
+VOID
+NTAPI
+PipLeakCheckDpc(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    PPIP_LEAK_CHECK Check = DeferredContext;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ExQueueWorkItem(&Check->WorkItem, DelayedWorkQueue);
+}
+
+static
+VOID
+PipQueueLeakCheck(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PCUNICODE_STRING InstancePath)
+{
+    PPIP_LEAK_CHECK Check;
+    LARGE_INTEGER DueTime;
+
+    Check = ExAllocatePoolZero(NonPagedPool, sizeof(*Check), TAG_IO);
+    if (Check == NULL)
+        return;
+
+    Check->InstancePath.Buffer = ExAllocatePoolWithTag(NonPagedPool, InstancePath->Length, TAG_IO);
+    if (Check->InstancePath.Buffer == NULL)
+    {
+        ExFreePoolWithTag(Check, TAG_IO);
+        return;
+    }
+
+    RtlCopyMemory(Check->InstancePath.Buffer, InstancePath->Buffer, InstancePath->Length);
+    Check->InstancePath.Length = InstancePath->Length;
+    Check->InstancePath.MaximumLength = InstancePath->Length;
+    Check->DeviceObject = DeviceObject;
+    ObReferenceObject(DeviceObject);
+
+    ExInitializeWorkItem(&Check->WorkItem, PipLeakCheckWorker, Check);
+    KeInitializeDpc(&Check->Dpc, PipLeakCheckDpc, Check);
+    KeInitializeTimer(&Check->Timer);
+    DueTime.QuadPart = -(LONGLONG)PIP_LEAK_CHECK_DELAY_SECONDS * 10000000;
+    KeSetTimer(&Check->Timer, DueTime, &Check->Dpc);
+}
+
 static
 VOID
 NTAPI
@@ -2297,11 +2376,9 @@ IopSendRemoveDevice(IN PDEVICE_OBJECT DeviceObject)
         DPRINT("Dock device %wZ removed; hardware profile changed\n", &DeviceNode->InstancePath);
         PiNotifyHardwareProfileChange(&GUID_HWPROFILE_CHANGE_COMPLETE);
     }
-    LONG_PTR refCount = ObDereferenceObject(DeviceObject);
-    if (refCount != 0 && (DeviceNode->Flags & DNF_DEVICE_GONE))
-    {
-        DPRINT1("Leaking device %wZ, refCount = %d\n", &DeviceNode->InstancePath, (INT32)refCount);
-    }
+    if (DeviceNode->Flags & DNF_DEVICE_GONE)
+        PipQueueLeakCheck(DeviceObject, &DeviceNode->InstancePath);
+    ObDereferenceObject(DeviceObject);
 }
 
 static
