@@ -129,17 +129,22 @@ HyperKbdChannelCallback(
             continue;
 
         RtlCopyMemory(&Flags, Payload + 8, sizeof(Flags));
-        if (Flags & SYNTHKBD_IS_UNICODE)
-            continue;
 
         RtlZeroMemory(&Input, sizeof(Input));
         RtlCopyMemory(&Input.MakeCode, Payload + 4, sizeof(Input.MakeCode));
         if (Flags & SYNTHKBD_IS_BREAK)
             Input.Flags |= KEY_BREAK;
-        if (Flags & SYNTHKBD_IS_E0)
-            Input.Flags |= KEY_E0;
-        if (Flags & SYNTHKBD_IS_E1)
-            Input.Flags |= KEY_E1;
+        if (Flags & SYNTHKBD_IS_UNICODE)
+        {
+            Input.Flags |= KEY_TERMSRV_VKPACKET;
+        }
+        else
+        {
+            if (Flags & SYNTHKBD_IS_E0)
+                Input.Flags |= KEY_E0;
+            if (Flags & SYNTHKBD_IS_E1)
+                Input.Flags |= KEY_E1;
+        }
 
         ClassService = (PSERVICE_CALLBACK_ROUTINE)Extension->ConnectData.ClassService;
         if (ClassService != NULL)
