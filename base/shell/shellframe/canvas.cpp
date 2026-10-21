@@ -33,6 +33,38 @@ AddRoundRect(Gdiplus::GraphicsPath &path, const Gdiplus::RectF &rc, float radius
     path.CloseFigure();
 }
 
+static void
+SettleAlpha(HDC hdc, const RECT &rc)
+{
+    DIBSECTION section;
+    RECT area = rc;
+
+    if (GetObjectW(GetCurrentObject(hdc, OBJ_BITMAP), sizeof(section), &section) != sizeof(section) ||
+        section.dsBm.bmBitsPixel != 32 || !section.dsBm.bmBits)
+        return;
+    GdiFlush();
+    LPtoDP(hdc, (POINT *)&area, 2);
+    if (area.left < 0)
+        area.left = 0;
+    if (area.top < 0)
+        area.top = 0;
+    if (area.right > section.dsBm.bmWidth)
+        area.right = section.dsBm.bmWidth;
+    if (area.bottom > section.dsBm.bmHeight)
+        area.bottom = section.dsBm.bmHeight;
+    for (LONG y = area.top; y < area.bottom; y++)
+    {
+        LONG line = section.dsBmih.biHeight < 0 ? y : section.dsBm.bmHeight - 1 - y;
+        PBYTE row = (PBYTE)section.dsBm.bmBits + (SIZE_T)line * section.dsBm.bmWidthBytes;
+
+        for (LONG x = area.left; x < area.right; x++)
+        {
+            if (row[x * 4 + 3] != 255)
+                row[x * 4 + 3] = 0;
+        }
+    }
+}
+
 Canvas::Canvas(HDC target, const RECT &bounds) :
     m_Target(target),
     m_Bounds(bounds),
@@ -63,7 +95,10 @@ Canvas::Canvas(HDC target, const RECT &bounds) :
 
 Canvas::~Canvas()
 {
+    RECT area = { 0, 0, m_Bounds.right - m_Bounds.left, m_Bounds.bottom - m_Bounds.top };
+
     delete m_Graphics;
+    SettleAlpha(m_Dc, area);
     BitBlt(m_Target, m_Bounds.left, m_Bounds.top, m_Bounds.right - m_Bounds.left, m_Bounds.bottom - m_Bounds.top,
            m_Dc, 0, 0, SRCCOPY);
     SelectObject(m_Dc, m_OldBitmap);
@@ -94,15 +129,18 @@ Canvas::FillRound(const RECT &rc, float radius, COLORREF color)
 void
 FillRoundSmooth(HDC hdc, const RECT &rc, float radius, COLORREF color)
 {
-    Gdiplus::Graphics graphics(hdc);
-    Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
-    Gdiplus::SolidBrush brush(ToColor(color));
+    {
+        Gdiplus::Graphics graphics(hdc);
+        Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
+        Gdiplus::SolidBrush brush(ToColor(color));
 
-    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-    AddRoundRect(path, Gdiplus::RectF((float)rc.left, (float)rc.top, (float)(rc.right - rc.left),
-                                      (float)(rc.bottom - rc.top)), radius);
-    graphics.FillPath(&brush, &path);
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        AddRoundRect(path, Gdiplus::RectF((float)rc.left, (float)rc.top, (float)(rc.right - rc.left),
+                                          (float)(rc.bottom - rc.top)), radius);
+        graphics.FillPath(&brush, &path);
+    }
+    SettleAlpha(hdc, rc);
 }
 
 void

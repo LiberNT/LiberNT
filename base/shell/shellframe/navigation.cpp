@@ -86,6 +86,26 @@ NavigationButtons::Create(HWND parent, const Theme &theme, UINT backId, UINT for
 }
 
 void
+NavigationButtons::SetColors(COLORREF glyph, COLORREF disabled)
+{
+    HIMAGELIST images, disabledImages;
+
+    if (!m_hwnd)
+        return;
+    images = CreateArrowList(m_Glyph, glyph);
+    disabledImages = CreateArrowList(m_Glyph, disabled);
+    SendMessageW(m_hwnd, TB_SETIMAGELIST, 0, (LPARAM)images);
+    SendMessageW(m_hwnd, TB_SETDISABLEDIMAGELIST, 0, (LPARAM)disabledImages);
+    if (m_Images)
+        ImageList_Destroy(m_Images);
+    if (m_Disabled)
+        ImageList_Destroy(m_Disabled);
+    m_Images = images;
+    m_Disabled = disabledImages;
+    InvalidateRect(m_hwnd, NULL, TRUE);
+}
+
+void
 NavigationButtons::Destroy()
 {
     if (m_hwnd)
@@ -131,21 +151,27 @@ NavigationButtons::OnNotify(const NMHDR *header, LRESULT *result, COLORREF backg
     }
     else if (draw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT)
     {
-        HDC hdc = draw->nmcd.hdc;
-        RECT rc = draw->nmcd.rc;
+        RECT rc = { 0, 0, draw->nmcd.rc.right - draw->nmcd.rc.left, draw->nmcd.rc.bottom - draw->nmcd.rc.top };
         UINT state = draw->nmcd.uItemState;
         int index = (int)SendMessageW(m_hwnd, TB_COMMANDTOINDEX, draw->nmcd.dwItemSpec, 0);
         int x = (rc.left + rc.right) / 2, y = (rc.top + rc.bottom) / 2;
-        HBRUSH brush = CreateSolidBrush(background);
+        Canvas canvas(draw->nmcd.hdc, draw->nmcd.rc);
+        HDC hdc = canvas.Dc();
 
-        FillRect(hdc, &rc, brush);
-        DeleteObject(brush);
+        canvas.Fill(rc, background);
         if (!(state & CDIS_DISABLED) && (state & (CDIS_HOT | CDIS_SELECTED)))
         {
             RECT pill = { x - m_Glyph / 2 - m_PadX, y - m_Glyph / 2 - m_PadY, x + m_Glyph / 2 + m_PadX,
                           y + m_Glyph / 2 + m_PadY };
 
-            FillRoundGlass(hdc, pill, m_Radius, RGB(255, 255, 255), (state & CDIS_SELECTED) ? 26 : 13);
+            COLORREF ink = GetRValue(background) * 299 + GetGValue(background) * 587 +
+                           GetBValue(background) * 114 < 128000 ? RGB(255, 255, 255) : RGB(0, 0, 0);
+            int opacity = (state & CDIS_SELECTED) ? 26 : 13;
+
+            FillRoundSmooth(hdc, pill, m_Radius,
+                            RGB((GetRValue(ink) * opacity + GetRValue(background) * (255 - opacity)) / 255,
+                                (GetGValue(ink) * opacity + GetGValue(background) * (255 - opacity)) / 255,
+                                (GetBValue(ink) * opacity + GetBValue(background) * (255 - opacity)) / 255));
         }
         if (index >= 0)
             ImageList_Draw((state & CDIS_DISABLED) ? m_Disabled : m_Images, index, hdc, x - m_Glyph / 2,

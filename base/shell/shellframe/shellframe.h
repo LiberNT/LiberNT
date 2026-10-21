@@ -140,6 +140,7 @@ public:
     BOOL Create(HWND parent, const Theme &theme, UINT backId, UINT forwardId, LPCWSTR backTip, LPCWSTR forwardTip,
                 COLORREF glyph, COLORREF disabled);
     void Destroy();
+    void SetColors(COLORREF glyph, COLORREF disabled);
     void Place(int left, int centerY);
     void Enable(BOOL back, BOOL forward);
     BOOL OnNotify(const NMHDR *header, LRESULT *result, COLORREF background);
