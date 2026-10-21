@@ -918,6 +918,119 @@ PartitionNotifyUniqueIdChange(
     IoCompleteRequest(irp, IO_NO_INCREMENT);
 }
 
+static
+NTSTATUS
+PartitionHandleDataSetAttributes(
+    _In_ PPARTITION_EXTENSION PartExt,
+    _In_ PFDO_EXTENSION FdoExtension,
+    _Inout_ PIRP Irp)
+{
+    PIO_STACK_LOCATION ioStack = IoGetCurrentIrpStackLocation(Irp);
+    PDEVICE_MANAGE_DATA_SET_ATTRIBUTES attributes = Irp->AssociatedIrp.SystemBuffer;
+    ULONG inLength = ioStack->Parameters.DeviceIoControl.InputBufferLength;
+    PDEVICE_MANAGE_DATA_SET_ATTRIBUTES translated;
+    PDEVICE_DATA_SET_RANGE ranges;
+    IO_STATUS_BLOCK ioStatus;
+    UINT64 partOffset, partLength;
+    ULONG translatedLength, rangesOffset = 0, rangeCount, i;
+    KEVENT event;
+    NTSTATUS status;
+    PIRP irp;
+
+    PAGED_CODE();
+
+    Irp->IoStatus.Information = 0;
+    if (inLength < sizeof(*attributes) ||
+        attributes->Size < sizeof(*attributes) ||
+        attributes->ParameterBlockOffset > inLength ||
+        attributes->ParameterBlockLength > inLength - attributes->ParameterBlockOffset ||
+        attributes->DataSetRangesOffset > inLength ||
+        attributes->DataSetRangesLength > inLength - attributes->DataSetRangesOffset ||
+        (attributes->DataSetRangesLength % sizeof(DEVICE_DATA_SET_RANGE)) != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    PartMgrAcquireLayoutLock(FdoExtension);
+    partOffset = PartExt->StartingOffset;
+    partLength = PartExt->PartitionLength;
+    PartMgrReleaseLayoutLock(FdoExtension);
+
+    if (attributes->Flags & DEVICE_DSM_FLAG_ENTIRE_DATA_SET_RANGE)
+    {
+        if (attributes->DataSetRangesLength != 0)
+            return STATUS_INVALID_PARAMETER;
+
+        rangesOffset = max((ULONG)sizeof(*attributes),
+                           attributes->ParameterBlockOffset + attributes->ParameterBlockLength);
+        rangesOffset = ALIGN_UP_BY(rangesOffset, sizeof(ULONGLONG));
+        translatedLength = rangesOffset + sizeof(DEVICE_DATA_SET_RANGE);
+    }
+    else
+    {
+        translatedLength = inLength;
+    }
+
+    translated = ExAllocatePoolZero(NonPagedPool, translatedLength, TAG_PARTMGR);
+    if (!translated)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(translated, attributes, min(inLength, translatedLength));
+    if (attributes->Flags & DEVICE_DSM_FLAG_ENTIRE_DATA_SET_RANGE)
+    {
+        translated->Flags &= ~DEVICE_DSM_FLAG_ENTIRE_DATA_SET_RANGE;
+        translated->DataSetRangesOffset = rangesOffset;
+        translated->DataSetRangesLength = sizeof(DEVICE_DATA_SET_RANGE);
+        ranges = (PDEVICE_DATA_SET_RANGE)((PUCHAR)translated + rangesOffset);
+        ranges->StartingOffset = (LONGLONG)partOffset;
+        ranges->LengthInBytes = partLength;
+    }
+    else
+    {
+        ranges = (PDEVICE_DATA_SET_RANGE)((PUCHAR)translated + translated->DataSetRangesOffset);
+        rangeCount = translated->DataSetRangesLength / sizeof(DEVICE_DATA_SET_RANGE);
+        for (i = 0; i < rangeCount; i++)
+        {
+            if (ranges[i].StartingOffset < 0 ||
+                (UINT64)ranges[i].StartingOffset > partLength ||
+                ranges[i].LengthInBytes > partLength - (UINT64)ranges[i].StartingOffset)
+            {
+                ExFreePoolWithTag(translated, TAG_PARTMGR);
+                return STATUS_INVALID_PARAMETER;
+            }
+            ranges[i].StartingOffset += (LONGLONG)partOffset;
+        }
+    }
+
+    KeInitializeEvent(&event, NotificationEvent, FALSE);
+    irp = IoBuildDeviceIoControlRequest(IOCTL_STORAGE_MANAGE_DATA_SET_ATTRIBUTES,
+                                        PartExt->LowerDevice,
+                                        translated,
+                                        translatedLength,
+                                        Irp->AssociatedIrp.SystemBuffer,
+                                        ioStack->Parameters.DeviceIoControl.OutputBufferLength,
+                                        FALSE,
+                                        &event,
+                                        &ioStatus);
+    if (!irp)
+    {
+        ExFreePoolWithTag(translated, TAG_PARTMGR);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    status = IoCallDriver(PartExt->LowerDevice, irp);
+    if (status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, NULL);
+        status = ioStatus.Status;
+    }
+
+    ExFreePoolWithTag(translated, TAG_PARTMGR);
+    if (NT_SUCCESS(status))
+        Irp->IoStatus.Information = ioStatus.Information;
+    return status;
+}
+
 NTSTATUS
 PartitionHandleDeviceControl(
     _In_ PDEVICE_OBJECT DeviceObject,
@@ -1475,6 +1588,9 @@ PartitionHandleDeviceControl(
             PartMgrReleaseLayoutLock(fdoExtension);
             return STATUS_PENDING;
         }
+        case IOCTL_STORAGE_MANAGE_DATA_SET_ATTRIBUTES:
+            status = PartitionHandleDataSetAttributes(partExt, fdoExtension, Irp);
+            break;
         case IOCTL_VOLSNAP_FLUSH_AND_HOLD_WRITES:
             status = PartitionHoldWrites(partExt, Irp);
             if (status == STATUS_PENDING)
