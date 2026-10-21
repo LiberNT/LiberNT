@@ -114,6 +114,8 @@ MiSystemInitialize(
     _In_ ULONG CpuCount,
     _In_ LONG64 CommitLimit)
 {
+    ULONG Bucket;
+
     RtlZeroMemory(System, sizeof(*System));
     System->Arch = MiArchDescribe();
     System->CommitLimit = CommitLimit;
@@ -124,6 +126,8 @@ MiSystemInitialize(
     MI_SPIN_INIT(&System->SegmentListLock);
     InitializeListHead(&System->SegmentList);
     InitializeListHead(&System->UnusedSegmentList);
+    for (Bucket = 0; Bucket < RTL_NUMBER_OF(System->SegmentChunkHash); Bucket++)
+        InitializeListHead(&System->SegmentChunkHash[Bucket]);
     System->Pfn.Repurpose = MiRepurposeStandbyPage;
     return STATUS_SUCCESS;
 }

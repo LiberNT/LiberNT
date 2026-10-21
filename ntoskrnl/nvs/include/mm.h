@@ -99,6 +99,7 @@ typedef struct _MI_SYSTEM
     MI_SPINLOCK SegmentListLock;
     LIST_ENTRY SegmentList;
     LIST_ENTRY UnusedSegmentList;
+    LIST_ENTRY SegmentChunkHash[1024];
     ULONG UnusedSegmentCount;
     ULONG UnusedSegmentLimit;
     volatile LONG64 UnusedSegmentHits;
@@ -439,6 +440,23 @@ typedef struct _MI_SEGMENT_LAYOUT
     ULONG Protection;
 } MI_SEGMENT_LAYOUT, *PMI_SEGMENT_LAYOUT;
 
+typedef struct _MI_CHUNK_LINK
+{
+    LIST_ENTRY Link;
+    struct _MI_CHUNK_INDEX *Index;
+} MI_CHUNK_LINK, *PMI_CHUNK_LINK;
+
+typedef struct _MI_CHUNK_INDEX
+{
+    MI_CHUNK_LINK Page[2];
+    struct _MI_CHUNK_INDEX *Next;
+    struct _MI_SEGMENT *Segment;
+    ULONG64 Base;
+    ULONG64 Number;
+    ULONG PageCount;
+    BOOLEAN Linked;
+} MI_CHUNK_INDEX, *PMI_CHUNK_INDEX;
+
 #define MI_SECTOR_SHIFT 9
 
 #define MI_SEGMENT_ACTIVE    0
@@ -480,6 +498,7 @@ typedef struct _MI_SEGMENT
     LIST_ENTRY ReadDrains;
     ULONG PendingReadCount;
     ULONG64 ReadGeneration;
+    PMI_CHUNK_INDEX ChunkIndex;
 } MI_SEGMENT, *PMI_SEGMENT;
 
 #define MI_IMAGE_WINDOW_MAXIMUM_SLOTS 0x100000ULL
