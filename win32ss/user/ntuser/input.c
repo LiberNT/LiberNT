@@ -70,7 +70,7 @@ DoTheScreenSaver(VOID)
 {
     DWORD Test, TO;
 
-    if (gspv.iScrSaverTimeout > 0) // Zero means Off.
+    if (gspv.iScrSaverTimeout > 0 && gspv.bScrSaverActive) // Zero means Off.
     {
         Test = EngGetTickCount32();
         Test = Test - LastInputTick;

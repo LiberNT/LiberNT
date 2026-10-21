@@ -354,7 +354,7 @@ WlxScreenSaverNotify(
 
     TRACE("(%p %p)\n", pWlxContext, pSecure);
 
-    *pSecure = TRUE;
+    *pSecure = FALSE;
 
     if (pgContext->UserToken == NULL)
     {

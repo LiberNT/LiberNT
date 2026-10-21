@@ -94,7 +94,7 @@ HKCU,"Control Panel\Desktop","DragWidth",0x00000000,"4"
 HKCU,"Control Panel\Desktop","PaintDesktopVersion",0x00010001,0x0
 HKCU,"Control Panel\Desktop","HungAppTimeout",2,"5000"
 HKCU,"Control Panel\Desktop","ScreenSaveActive",2,"0"
-HKCU,"Control Panel\Desktop","ScreenSaverIsSecure",2,"1"
+HKCU,"Control Panel\Desktop","ScreenSaverIsSecure",2,"0"
 HKCU,"Control Panel\Desktop","ScreenSaveTimeOut",2,"600"
 HKCU,"Control Panel\Desktop","WaitToKillAppTimeout",2,"20000"
 HKCU,"Control Panel\Desktop","Pattern",2,"(None)"
