@@ -65,6 +65,20 @@ static CRITICAL_SECTION_DEBUG handles_cs_debug =
 static CRITICAL_SECTION handles_cs = { &handles_cs_debug, -1, 0, 0, 0, 0 };
 static PTHEME_CLASS open_handles;
 
+#ifdef __REACTOS__
+static PTHEME_FILE MSSTYLES_ReferenceActiveTheme(void)
+{
+    PTHEME_FILE tf;
+
+    EnterCriticalSection(&handles_cs);
+    tf = tfActiveTheme;
+    if (tf)
+        InterlockedIncrement(&tf->refcount);
+    LeaveCriticalSection(&handles_cs);
+    return tf;
+}
+#endif
+
 /***********************************************************************/
 
 /**********************************************************************
@@ -246,6 +260,24 @@ static void MSSTYLES_ApplyStoredMetrics(PTHEME_FILE tf);
  */
 HRESULT MSSTYLES_SetActiveTheme(PTHEME_FILE tf, BOOL setMetrics)
 {
+#ifdef __REACTOS__
+    PTHEME_FILE old;
+
+    if (tf)
+    {
+        InterlockedIncrement(&tf->refcount);
+        if (!tf->classes)
+            MSSTYLES_ParseThemeIni(tf, setMetrics);
+        else if (setMetrics)
+            MSSTYLES_ApplyStoredMetrics(tf);
+    }
+    EnterCriticalSection(&handles_cs);
+    old = tfActiveTheme;
+    tfActiveTheme = tf;
+    LeaveCriticalSection(&handles_cs);
+    if (old)
+        MSSTYLES_CloseThemeFile(old);
+#else
     if(tfActiveTheme)
         MSSTYLES_CloseThemeFile(tfActiveTheme);
     tfActiveTheme = tf;
@@ -257,6 +289,7 @@ HRESULT MSSTYLES_SetActiveTheme(PTHEME_FILE tf, BOOL setMetrics)
 	else if (setMetrics)
 	    MSSTYLES_ApplyStoredMetrics(tfActiveTheme);
     }
+#endif
     return S_OK;
 }
 
@@ -675,9 +708,12 @@ static void MSSTYLES_ApplyStoredMetrics(PTHEME_FILE tf)
  */
 BOOL MSSTYLES_ReapplyActiveThemeMetrics(void)
 {
-    if (!tfActiveTheme)
+    PTHEME_FILE tf = MSSTYLES_ReferenceActiveTheme();
+
+    if (!tf)
         return FALSE;
-    MSSTYLES_ApplyStoredMetrics(tfActiveTheme);
+    MSSTYLES_ApplyStoredMetrics(tf);
+    MSSTYLES_CloseThemeFile(tf);
     return TRUE;
 }
 
@@ -1245,7 +1281,11 @@ static PTHEME_CLASS open_theme_class(PTHEME_FILE theme, LPCWSTR pszAppName,
 PTHEME_CLASS MSSTYLES_OpenThemeClass(LPCWSTR pszAppName, LPCWSTR pszClassList, UINT dpi)
 {
 #ifdef __REACTOS__
-    return open_theme_class(tfActiveTheme, pszAppName, NULL, pszClassList, dpi);
+    PTHEME_FILE tf = MSSTYLES_ReferenceActiveTheme();
+    PTHEME_CLASS cls = open_theme_class(tf, pszAppName, NULL, pszClassList, dpi);
+
+    MSSTYLES_CloseThemeFile(tf);
+    return cls;
 #else
     return open_theme_class(tfActiveTheme, pszAppName, pszClassList, dpi);
 #endif
@@ -1255,7 +1295,11 @@ PTHEME_CLASS MSSTYLES_OpenThemeClass(LPCWSTR pszAppName, LPCWSTR pszClassList, U
 PTHEME_CLASS MSSTYLES_OpenThemeClassForApp(LPCWSTR pszAppName, LPCWSTR pszDefaultAppName,
                                            LPCWSTR pszClassList, UINT dpi)
 {
-    return open_theme_class(tfActiveTheme, pszAppName, pszDefaultAppName, pszClassList, dpi);
+    PTHEME_FILE tf = MSSTYLES_ReferenceActiveTheme();
+    PTHEME_CLASS cls = open_theme_class(tf, pszAppName, pszDefaultAppName, pszClassList, dpi);
+
+    MSSTYLES_CloseThemeFile(tf);
+    return cls;
 }
 
 PTHEME_CLASS MSSTYLES_OpenThemeClassFromFile(PTHEME_FILE tf, LPCWSTR pszAppName,
