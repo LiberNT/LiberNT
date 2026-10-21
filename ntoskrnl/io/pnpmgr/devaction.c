@@ -1273,12 +1273,9 @@ IopQueryDeviceCapabilities(PDEVICE_NODE DeviceNode,
                                &StatusBlock,
                                IRP_MN_QUERY_CAPABILITIES,
                                &Stack);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status) && Status != STATUS_NOT_SUPPORTED)
     {
-        if (Status != STATUS_NOT_SUPPORTED)
-        {
-            DPRINT1("IRP_MN_QUERY_CAPABILITIES failed with status 0x%lx\n", Status);
-        }
+        DPRINT1("IRP_MN_QUERY_CAPABILITIES failed with status 0x%lx\n", Status);
         return Status;
     }
 
