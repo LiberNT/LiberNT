@@ -1452,6 +1452,49 @@ DwmCornerAlpha(LONG x, LONG y, LONG cx, LONG cy, ULONG Radius)
     return (ULONG)(Cover * 255.0);
 }
 
+static LONG
+DwmEdgeLines(const ULONG *Line, const DWM_WIN *Window, BOOL Left, LONG Width)
+{
+    ULONG Fill = Line[Left ? Width - 1 : Window->cx - Width] & 0x00FFFFFFu;
+    LONG Lines;
+
+    for (Lines = Width; Lines > 0; --Lines)
+    {
+        if ((Line[Left ? Lines - 1 : Window->cx - Lines] & 0x00FFFFFFu) != Fill)
+            break;
+    }
+    return Lines;
+}
+
+static LONG
+DwmClientTopEdge(const BYTE *Pixels, const DWM_WIN *Window, const ULONG **Line)
+{
+    LONG r = (LONG)Window->CornerRadius, Width = Window->ClientX;
+
+    if (r * 2 > Window->cx)
+        r = Window->cx / 2;
+    if (r * 2 > Window->cy)
+        r = Window->cy / 2;
+    if (r > 0 && Width > r)
+        Width = r;
+    if (Width <= 0 || Window->ClientY >= Width)
+        return 0;
+    *Line = (const ULONG *)(Pixels + (SIZE_T)r * Window->Stride);
+    return DwmEdgeLines(*Line, Window, TRUE, Width);
+}
+
+static ULONG
+DwmClientTopEdgePixel(const ULONG *Line, const DWM_WIN *Window, LONG x, LONG y)
+{
+    LONG Depth = y;
+
+    if (x < Depth)
+        Depth = x;
+    if (Window->cx - 1 - x < Depth)
+        Depth = Window->cx - 1 - x;
+    return Line[Depth];
+}
+
 static ULONG
 DwmCornerEdgePixel(const BYTE *Pixels, const DWM_WIN *Window, LONG x, LONG y, ULONG Source)
 {
@@ -1459,7 +1502,7 @@ DwmCornerEdgePixel(const BYTE *Pixels, const DWM_WIN *Window, LONG x, LONG y, UL
     BOOL Left, Top;
     double dx, dy, Depth, Fraction;
     const ULONG *Line;
-    ULONG Outer, Inner, Fill, Result = 0, Shift;
+    ULONG Outer, Inner, Result = 0, Shift;
 
     if (r * 2 > Window->cx)
         r = Window->cx / 2;
@@ -1480,12 +1523,7 @@ DwmCornerEdgePixel(const BYTE *Pixels, const DWM_WIN *Window, LONG x, LONG y, UL
     if (Depth >= (double)Width + 0.5)
         return Source;
     Line = (const ULONG *)(Pixels + (SIZE_T)(Top ? r : Window->cy - 1 - r) * Window->Stride);
-    Fill = Line[Left ? Width - 1 : Window->cx - Width] & 0x00FFFFFFu;
-    for (Lines = Width; Lines > 0; --Lines)
-    {
-        if ((Line[Left ? Lines - 1 : Window->cx - Lines] & 0x00FFFFFFu) != Fill)
-            break;
-    }
+    Lines = DwmEdgeLines(Line, Window, Left, Width);
     if (Lines == 0 || Depth >= (double)Lines + 0.5)
         return Source;
     Depth -= 0.5;
@@ -2516,7 +2554,8 @@ DwmBlendFrameBand(ULONG *Dest, const ULONG *Under, const ULONG *Source,
                   const ULONG *Wallpaper, LONG Count, LONG SourceX, LONG Row,
                   LONG ScreenX, LONG ScreenY, const DWM_WIN *Window,
                   BOOL UseBackdrop, ULONG BackdropKey, ULONG ColorizationKey,
-                  ULONG Frame, const ULONG *const *Buttons, ULONG WindowAlpha)
+                  ULONG Frame, const ULONG *const *Buttons, ULONG WindowAlpha,
+                  const ULONG *Edge, LONG EdgeInset)
 {
     LONG Index;
     ULONG Button;
@@ -2541,6 +2580,12 @@ DwmBlendFrameBand(ULONG *Dest, const ULONG *Under, const ULONG *Source,
                 Content = FALSE;
                 break;
             }
+        }
+        if (Button == DWM_CAPTION_BUTTONS && Edge != NULL &&
+            X >= EdgeInset && X < Window->cx - EdgeInset)
+        {
+            s = DwmClientTopEdgePixel(Edge, Window, X, Row);
+            Content = TRUE;
         }
         if (Content)
         {
@@ -2612,6 +2657,8 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
     const ULONG *frameButtons[DWM_CAPTION_BUTTONS] = { NULL };
     BOOL useEdge = useBackdrop && w->BackdropRegion == DWM_BACKDROP_REGION_WINDOW;
     BOOL edgeLeft, edgeTop, edgeRight, edgeBottom;
+    const ULONG *edgeLine = NULL;
+    LONG edgeLines;
 
     if (w->cx <= 0 || w->cy <= 0 ||
         (ULONG)w->cx > ((ULONG)-1) / sizeof(ULONG) ||
@@ -2631,6 +2678,7 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
     r0 = (wy < clipT) ? (LONG)(clipT - wy) : 0;
     r1 = (bottom > clipB) ? (LONG)(clipB - wy) : w->cy;
     if (r1 <= r0) return;
+    edgeLines = useFrame ? DwmClientTopEdge(pix, w, &edgeLine) : 0;
 
     if (useKey)
     {
@@ -2671,6 +2719,7 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
         LONG directStart = 0, directEnd = 0;
         const BYTE *reflection = NULL;
         LONG bandStart[2], bandEnd[2], bandCount = 0, band = 0, segEnd;
+        const ULONG *topEdge = r >= w->ClientY && r < edgeLines ? edgeLine : NULL;
 
         if (g_frameStats) InterlockedExchangeAdd64((volatile LONG64 *)&g_statBlitPixels, width);
         dy = (LONG)(wy + r);
@@ -2731,7 +2780,7 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
 
         if (!useKey && !useAlpha && !usePixelAlpha && !useBackdrop &&
             (!useCorner || (r >= cornerRows && r < w->cy - cornerRows)) &&
-            bandCount == 0)
+            bandCount == 0 && topEdge == NULL)
         {
             RtlCopyMemory(dstrow, srcrow, (SIZE_T)width * 4);
             continue;
@@ -2740,7 +2789,7 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
         /* Glass and rounded corners do not make the interior of a normal
          * client translucent. Copy its span without evaluating material,
          * corner coverage and alpha for every pixel during a drag. */
-        if (!useKey && !useAlpha && !usePixelAlpha && !useEdge &&
+        if (!useKey && !useAlpha && !usePixelAlpha && !useEdge && topEdge == NULL &&
             (!useBackdrop ||
              (w->BackdropRegion == DWM_BACKDROP_REGION_NONCLIENT &&
               r >= ncBottom && r < ncTop)))
@@ -2787,7 +2836,7 @@ DwmBlitWindow(ULONG *comp, LONG scrW,
                 if (glassStart < directStart) glassStart = directStart;
                 if (glassEnd > directEnd) glassEnd = directEnd;
             }
-            if (!useEdge || (r > 0 && r < w->cy - 1))
+            if (topEdge == NULL && (!useEdge || (r > 0 && r < w->cy - 1)))
                 reflection = g_reflectLut + reflectStart;
         }
 
@@ -2870,6 +2919,8 @@ next_segment:
                                              w->CornerRadius);
                 s = DwmCornerEdgePixel(pix, w, sourceX, r, s);
             }
+            if (topEdge != NULL && sourceX >= cornerRows && sourceX < w->cx - cornerRows)
+                s = DwmClientTopEdgePixel(topEdge, w, sourceX, r);
             if (useEdge)
             {
                 ULONG inner;
@@ -3016,7 +3067,7 @@ next_segment:
                               bandEnd[band] - bandStart[band], srcx0 + bandStart[band], r,
                               x0 + bandStart[band], dy, w, useBackdrop,
                               backdropKey, colorizationKey, frameKey,
-                              frameButtons, frameAlpha);
+                              frameButtons, frameAlpha, topEdge, cornerRows);
             x = bandEnd[band];
             band++;
             goto next_segment;
