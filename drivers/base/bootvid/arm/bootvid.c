@@ -279,12 +279,23 @@ ResetDisplay(
     VidSolidColorFill(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1, BV_COLOR_BLACK);
 }
 
-VOID
+BOOLEAN
 NTAPI
-VidFadeToBlack(
-    _In_ ULONG Steps)
+VidRenderStatusText(
+    _In_ PCSTR String,
+    _Out_writes_bytes_(Width * Height) PUCHAR Coverage,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ BOOLEAN Center,
+    _Inout_ PLONG Left)
 {
-    UNREFERENCED_PARAMETER(Steps);
+    UNREFERENCED_PARAMETER(String);
+    UNREFERENCED_PARAMETER(Coverage);
+    UNREFERENCED_PARAMETER(Width);
+    UNREFERENCED_PARAMETER(Height);
+    UNREFERENCED_PARAMETER(Center);
+    UNREFERENCED_PARAMETER(Left);
+    return FALSE;
 }
 
 BOOLEAN

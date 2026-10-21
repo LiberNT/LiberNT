@@ -50,9 +50,6 @@ InbvGetResourceAddress(
     _In_ ULONG ResourceNumber
 );
 
-extern BOOLEAN InbvBootFadeEnabled;
-extern ULONG InbvBootFadeSteps;
-
 BOOLEAN
 NTAPI
 InbvGetGopFrameBufferInfo(

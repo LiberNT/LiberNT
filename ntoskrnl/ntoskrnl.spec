@@ -2415,6 +2415,8 @@
 @ stub -arch=win64 HvlUpdatePerformanceStateCountersForLp
 @ stdcall InbvNotifyDisplayOwnershipChange(long)
 @ stdcall InbvSetVirtualFrameBuffer(ptr)
+@ stdcall InbvQueryBootScreen(ptr long ptr ptr)
+@ stdcall InbvDiscardBootScreen()
 @ stub -arch=win64 InterlockedPushListSList
 @ stub -arch=win64 IoAcquireKsrPersistentMemory
 @ stub -arch=win64 IoAcquireKsrPersistentMemoryEx

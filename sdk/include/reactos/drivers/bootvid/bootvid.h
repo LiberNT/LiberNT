@@ -59,11 +59,6 @@ VidCleanUp(VOID);
 
 VOID
 NTAPI
-VidFadeToBlack(
-    _In_ ULONG Steps);
-
-VOID
-NTAPI
 VidDisplayString(
     _In_ PCSTR String);
 
@@ -91,6 +86,16 @@ VidSetTextColor(
 BOOLEAN
 NTAPI
 VidUseCompactFont(VOID);
+
+BOOLEAN
+NTAPI
+VidRenderStatusText(
+    _In_ PCSTR String,
+    _Out_writes_bytes_(Width * Height) PUCHAR Coverage,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ BOOLEAN Center,
+    _Inout_ PLONG Left);
 
 VOID
 NTAPI

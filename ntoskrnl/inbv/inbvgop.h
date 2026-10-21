@@ -33,6 +33,19 @@ VOID
 NTAPI
 InbvGopLogoStop(VOID);
 
+BOOLEAN
+NTAPI
+InbvGopCaptureScreen(VOID);
+
+BOOLEAN
+NTAPI
+InbvGopDisplayStatus(
+    _In_ PCSTR String);
+
+VOID
+NTAPI
+InbvGopClearStatus(VOID);
+
 #ifdef __cplusplus
 }
 #endif

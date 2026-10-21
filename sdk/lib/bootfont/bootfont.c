@@ -16,6 +16,10 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
+#define BOOT_FONT_STYLE_GRAY    0
+#define BOOT_FONT_STYLE_MONO    1
+#define BOOT_FONT_STYLE_LIGHT   2
+
 static const WCHAR BootFontCp437ControlMap[32] =
 {
     0x0000, 0x263A, 0x263B, 0x2665, 0x2666, 0x2663, 0x2660, 0x2022,
@@ -63,19 +67,23 @@ BOOLEAN
 BootFontLoadGlyph(
     _In_ FT_Face Face,
     _In_ UCHAR Character,
-    _In_ BOOLEAN Monochrome)
+    _In_ ULONG Style)
 {
     WCHAR Unicode = BootFontCp437ToUnicode(Character);
     FT_UInt GlyphIndex = FT_Get_Char_Index(Face, Unicode);
+    FT_Int32 Flags;
 
     if ((GlyphIndex == 0) && (Unicode != 0))
         return FALSE;
 
-    return FT_Load_Glyph(Face,
-                         GlyphIndex,
-                         (Monochrome ? FT_LOAD_TARGET_MONO | FT_LOAD_FORCE_AUTOHINT :
-                                       FT_LOAD_DEFAULT | FT_LOAD_NO_AUTOHINT) |
-                         FT_LOAD_NO_BITMAP) == FT_Err_Ok;
+    if (Style == BOOT_FONT_STYLE_MONO)
+        Flags = FT_LOAD_TARGET_MONO | FT_LOAD_FORCE_AUTOHINT;
+    else if (Style == BOOT_FONT_STYLE_LIGHT)
+        Flags = FT_LOAD_TARGET_LIGHT | FT_LOAD_FORCE_AUTOHINT;
+    else
+        Flags = FT_LOAD_DEFAULT | FT_LOAD_NO_AUTOHINT;
+
+    return FT_Load_Glyph(Face, GlyphIndex, Flags | FT_LOAD_NO_BITMAP) == FT_Err_Ok;
 }
 
 static
@@ -83,21 +91,22 @@ BOOLEAN
 BootFontRenderGlyph(
     _In_ FT_Face Face,
     _In_ UCHAR Character,
-    _In_ BOOLEAN Monochrome)
+    _In_ ULONG Style)
 {
     const FT_Bitmap* Bitmap;
 
-    if (!BootFontLoadGlyph(Face, Character, Monochrome))
+    if (!BootFontLoadGlyph(Face, Character, Style))
         return FALSE;
 
     if (FT_Render_Glyph(Face->glyph,
-                        Monochrome ? FT_RENDER_MODE_MONO : FT_RENDER_MODE_NORMAL) != FT_Err_Ok)
+                        (Style == BOOT_FONT_STYLE_MONO) ? FT_RENDER_MODE_MONO :
+                                                          FT_RENDER_MODE_NORMAL) != FT_Err_Ok)
     {
         return FALSE;
     }
 
     Bitmap = &Face->glyph->bitmap;
-    if (Monochrome)
+    if (Style == BOOT_FONT_STYLE_MONO)
         return Bitmap->pixel_mode == FT_PIXEL_MODE_MONO;
 
     return (Bitmap->pixel_mode == FT_PIXEL_MODE_GRAY) && (Bitmap->num_grays == 256);
@@ -108,7 +117,7 @@ BOOLEAN
 BootFontMeasure(
     _In_ FT_Face Face,
     _In_ ULONG PixelHeight,
-    _In_ BOOLEAN Monochrome,
+    _In_ ULONG Style,
     _Out_ PULONG CellWidth,
     _Out_ PULONG CellHeight,
     _Out_ PULONG Baseline)
@@ -130,7 +139,7 @@ BootFontMeasure(
     {
         LONG Advance;
 
-        if (!BootFontRenderGlyph(Face, (UCHAR)Character, Monochrome))
+        if (!BootFontRenderGlyph(Face, (UCHAR)Character, Style))
             continue;
 
         Slot = Face->glyph;
@@ -185,7 +194,7 @@ BootFontChooseMetrics(
 
     for (;;)
     {
-        if (!BootFontMeasure(Face, Height, FALSE, CellWidth, CellHeight, Baseline))
+        if (!BootFontMeasure(Face, Height, BOOT_FONT_STYLE_GRAY, CellWidth, CellHeight, Baseline))
             return FALSE;
 
         if ((((ScreenWidth / *CellWidth) >= BOOT_FONT_MIN_COLUMNS) &&
@@ -204,7 +213,7 @@ static
 BOOLEAN
 BootFontMeasureGlyphCache(
     _In_ FT_Face Face,
-    _In_ BOOLEAN Monochrome,
+    _In_ ULONG Style,
     _Out_ PULONG BitmapSize)
 {
     FT_GlyphSlot Slot;
@@ -215,7 +224,7 @@ BootFontMeasureGlyphCache(
     {
         ULONG GlyphSize;
 
-        if (!BootFontRenderGlyph(Face, (UCHAR)Character, Monochrome))
+        if (!BootFontRenderGlyph(Face, (UCHAR)Character, Style))
             continue;
 
         Slot = Face->glyph;
@@ -243,7 +252,7 @@ static
 BOOLEAN
 BootFontCacheGlyphs(
     _In_ FT_Face Face,
-    _In_ BOOLEAN Monochrome,
+    _In_ ULONG Style,
     _Inout_ PBOOT_FONT_RENDERER Renderer)
 {
     FT_GlyphSlot Slot;
@@ -258,7 +267,7 @@ BootFontCacheGlyphs(
         ULONG Row;
         LONG SourcePitch;
 
-        if (!BootFontRenderGlyph(Face, (UCHAR)Character, Monochrome))
+        if (!BootFontRenderGlyph(Face, (UCHAR)Character, Style))
             continue;
 
         Slot = Face->glyph;
@@ -280,9 +289,10 @@ BootFontCacheGlyphs(
         Glyph->Width = (USHORT)Slot->bitmap.width;
         Glyph->Height = (USHORT)Slot->bitmap.rows;
         Glyph->Pitch = Glyph->Width;
+        Glyph->Advance = (SHORT)((Slot->advance.x + 32) >> 6);
         Glyph->BitmapOffset = BitmapOffset;
 
-        RowBytes = Monochrome ? (Glyph->Width + 7) / 8 : Glyph->Width;
+        RowBytes = (Style == BOOT_FONT_STYLE_MONO) ? (Glyph->Width + 7) / 8 : Glyph->Width;
         SourcePitch = Slot->bitmap.pitch;
         if (Glyph->Width &&
             (((SourcePitch >= 0) && ((ULONG)SourcePitch < RowBytes)) ||
@@ -309,7 +319,7 @@ BootFontCacheGlyphs(
                          (Glyph->Height - 1 - Row) * -SourcePitch;
             }
 
-            if (!Monochrome)
+            if (Style != BOOT_FONT_STYLE_MONO)
             {
                 memcpy(Target, Source, Glyph->Width);
                 continue;
@@ -346,7 +356,9 @@ BootFontCreate(
     _In_ ULONG ScreenWidth,
     _In_ ULONG ScreenHeight,
     _In_ ULONG PixelHeight,
-    _In_ BOOLEAN Monochrome)
+    _In_ ULONG Style,
+    _In_reads_bytes_(Size) const UCHAR* Data,
+    _In_ ULONG Size)
 {
     FT_Library Library = NULL;
     FT_Face Face = NULL;
@@ -360,11 +372,7 @@ BootFontCreate(
     if (Error != FT_Err_Ok)
         goto Cleanup;
 
-    Error = FT_New_Memory_Face(Library,
-                               bootfont_data,
-                               bootfont_data_SIZE,
-                               0,
-                               &Face);
+    Error = FT_New_Memory_Face(Library, Data, (FT_Long)Size, 0, &Face);
     if (Error != FT_Err_Ok)
         goto Cleanup;
 
@@ -376,7 +384,7 @@ BootFontCreate(
     {
         if (!BootFontMeasure(Face,
                              PixelHeight,
-                             Monochrome,
+                             Style,
                              &Renderer->CellWidth,
                              &Renderer->CellHeight,
                              &Renderer->Baseline))
@@ -400,7 +408,7 @@ BootFontCreate(
     if (Error != FT_Err_Ok)
         goto Cleanup;
 
-    if (!BootFontMeasureGlyphCache(Face, Monochrome, &BitmapSize))
+    if (!BootFontMeasureGlyphCache(Face, Style, &BitmapSize))
         goto Cleanup;
 
     Renderer->BitmapBuffer = malloc(BitmapSize);
@@ -410,7 +418,7 @@ BootFontCreate(
     Renderer->BitmapSize = BitmapSize;
     memset(Renderer->Glyphs, 0, sizeof(Renderer->Glyphs));
 
-    if (!BootFontCacheGlyphs(Face, Monochrome, Renderer))
+    if (!BootFontCacheGlyphs(Face, Style, Renderer))
         goto Cleanup;
 
     Renderer->Enabled = TRUE;
@@ -437,7 +445,8 @@ BootFontInitialize(
     if (!Renderer || !ScreenWidth || !ScreenHeight)
         return FALSE;
 
-    return BootFontCreate(Renderer, ScreenWidth, ScreenHeight, 0, FALSE);
+    return BootFontCreate(Renderer, ScreenWidth, ScreenHeight, 0, BOOT_FONT_STYLE_GRAY,
+                          bootfont_data, bootfont_data_SIZE);
 }
 
 int
@@ -448,7 +457,21 @@ BootFontInitializeMonochrome(
     if (!Renderer || !PixelHeight)
         return FALSE;
 
-    return BootFontCreate(Renderer, 0, 0, PixelHeight, TRUE);
+    return BootFontCreate(Renderer, 0, 0, PixelHeight, BOOT_FONT_STYLE_MONO,
+                          bootfont_data, bootfont_data_SIZE);
+}
+
+int
+BootFontInitializeFace(
+    _Inout_ PBOOT_FONT_RENDERER Renderer,
+    _In_reads_bytes_(Size) const unsigned char* Data,
+    _In_ unsigned long Size,
+    _In_ unsigned long PixelHeight)
+{
+    if (!Renderer || !Data || !Size || !PixelHeight)
+        return FALSE;
+
+    return BootFontCreate(Renderer, 0, 0, PixelHeight, BOOT_FONT_STYLE_LIGHT, Data, Size);
 }
 
 const BOOT_FONT_GLYPH*

@@ -50,8 +50,6 @@ static PUCHAR ResourceList[1 + IDB_MAX_RESOURCES]; // First entry == NULL, follo
 static LOADER_PARAMETER_FRAMEBUFFER InbvGopFramebuffer;
 static BOOLEAN InbvGopInfoValid = FALSE;
 
-BOOLEAN InbvBootFadeEnabled = TRUE;
-ULONG InbvBootFadeSteps = 14;
 static LOADER_PARAMETER_BGRT InbvBgrtInfo;
 static BOOLEAN InbvBgrtInfoValid = FALSE;
 
@@ -493,29 +491,14 @@ NTAPI
 InbvNotifyDisplayOwnershipLost(
     _In_ INBV_RESET_DISPLAY_PARAMETERS Callback)
 {
+    BOOLEAN Kept = FALSE;
+
     InbvGopLogoStop();
-
-    /*
-     * Dim the boot screen out before handing the framebuffer over, so the
-     * boot logo stays up until the display driver replaces it. Only safe
-     * where we can stall, and never while the system is crashing.
-     */
-    if (InbvBootFadeEnabled &&
-        InbvBootDriverInstalled &&
-        (InbvDisplayState == INBV_DISPLAY_STATE_OWNED) &&
-        (KeGetCurrentIrql() <= DISPATCH_LEVEL) &&
-        (KeBugCheckActive == 0))
+    if (KeBugCheckActive == 0)
     {
-        BOOLEAN Fade;
-
-        InbvAcquireLock();
-        Fade = (InbvDisplayState == INBV_DISPLAY_STATE_OWNED);
-        if (Fade)
-            InbvDisplayDebugStrings = FALSE;
-        InbvReleaseLock();
-
-        if (Fade)
-            VidFadeToBlack(InbvBootFadeSteps);
+        if (KeGetCurrentIrql() == PASSIVE_LEVEL)
+            InbvGopClearStatus();
+        Kept = InbvGopCaptureScreen();
     }
 
     /* Check if we're installed */
@@ -523,7 +506,10 @@ InbvNotifyDisplayOwnershipLost(
     {
         /* Acquire the lock and cleanup if we own the screen */
         InbvAcquireLock();
-        if (InbvDisplayState != INBV_DISPLAY_STATE_LOST) VidCleanUp();
+        if (Kept)
+            InbvDisplayDebugStrings = FALSE;
+        else if (InbvDisplayState != INBV_DISPLAY_STATE_LOST)
+            VidCleanUp();
 
         /* Set the reset callback and display state */
         InbvResetDisplayParameters = Callback;

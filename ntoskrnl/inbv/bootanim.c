@@ -255,24 +255,7 @@ VOID
 NTAPI
 FinalizeBootLogo(VOID)
 {
-    VID_DISPLAY_INFO DisplayInfo;
-
-    InbvQueryDisplayInfo(&DisplayInfo);
-
-    /*
-     * Leave whatever is on screen alone: the boot logo stays up until the
-     * display driver takes the framebuffer over and InbvNotifyDisplayOwnershipLost
-     * fades it out.
-     */
     InbvGopLogoComplete();
-
-    InbvAcquireLock();
-    if (!InbvBootFadeEnabled && InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
-    {
-        VidSolidColorFill(0, 0, DisplayInfo.Width - 1, DisplayInfo.Height - 1, BV_COLOR_BLACK);
-    }
-
-    InbvReleaseLock();
 }
 
 VOID

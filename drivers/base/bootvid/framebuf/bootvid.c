@@ -27,6 +27,7 @@
 #define BOOTVID_COMPACT_FONT_DECIPOINTS 75
 #define BOOTVID_DECIPOINTS_PER_INCH 720
 #define BOOTVID_TENTH_MILLIMETERS_PER_INCH 254
+#define BOOTVID_STATUS_FONT_PIXEL_HEIGHT 18
 
 #define BB_PIXEL(x, y) \
     (BackBuffer + (ULONG_PTR)(y) * VidpDisplayWidth + (x))
@@ -36,9 +37,6 @@ static ULONG_PTR PhysicalFrameBufferStart = 0;
 static ULONG FrameBufferSize;
 static ULONG ScreenWidth, ScreenHeight, BytesPerScanLine;
 
-#define BV_FADE_MAX_STEPS     32
-#define BV_FADE_STEP_DELAY_US 8000
-#define TAG_BOOTVID_FADE      'fdiV'
 static ULONG FrameBufferWidth, FrameBufferHeight;
 static ULONG FrameBufferRotation;
 static UCHAR BytesPerPixel;
@@ -49,6 +47,7 @@ static RGBQUAD CachedPalette[BV_MAX_COLORS];
 static UCHAR CachedBlendPalette[BV_MAX_COLORS][BV_MAX_COLORS][MAXUCHAR + 1];
 static BOOT_FONT_RENDERER BootVidFont;
 static BOOT_FONT_RENDERER BootVidCompactFont;
+static BOOT_FONT_RENDERER BootVidStatusFont;
 static BOOLEAN VidpCompactFont = FALSE;
 
 NTSTATUS
@@ -296,6 +295,24 @@ FindClosestBlendedPaletteColor(
     return BestIndex;
 }
 
+static BOOLEAN
+CachePalette(
+    _In_reads_(Count) const ULONG* Table,
+    _In_ ULONG Count)
+{
+    const ULONG* Entry = Table;
+    ULONG i;
+    BOOLEAN HasChanged = FALSE;
+
+    for (i = 0; i < Count; i++, Entry++)
+    {
+        HasChanged |= !!((CachedPalette[i] ^ *Entry) & 0x00FFFFFF);
+        CachedPalette[i] = *Entry | 0xFF000000;
+    }
+
+    return HasChanged;
+}
+
 static VOID
 CachePaletteBlends(VOID)
 {
@@ -509,6 +526,14 @@ VidInitialize(
 
     CompactPixelHeight = CompactFontPixelHeight(Dpi, &MonitorConfigData);
 
+    if (!BootFontInitializeUi(&BootVidStatusFont,
+                              (BOOTVID_STATUS_FONT_PIXEL_HEIGHT * Dpi +
+                               LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT / 2) /
+                              LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT))
+    {
+        DPRINT1("Could not initialize the boot status font\n");
+    }
+
     /*
      * The UEFI console chooses its font to retain about 38 visible rows.
      * Preserve that minimum physical text size after the kernel takes over;
@@ -677,6 +702,8 @@ VidInitialize(
     /* Reset the video mode if requested */
     if (SetMode)
         VidResetDisplay(TRUE);
+    else if (CachePalette((PULONG)VidpDefaultPalette, BV_MAX_COLORS))
+        CachePaletteBlends();
 
     return TRUE;
 
@@ -684,12 +711,82 @@ Failure:
     RtlZeroMemory(&VidpFrameBufferInfo, sizeof(VidpFrameBufferInfo));
     BootFontCleanup(&BootVidFont);
     BootFontCleanup(&BootVidCompactFont);
+    BootFontCleanup(&BootVidStatusFont);
 
     /* We failed somewhere; unmap the framebuffer if we mapped it */
     if (FrameBufferBase && (AddressSpace == 0))
         MmUnmapIoSpace(FrameBufferBase, MappedSize);
 
     return FALSE;
+}
+
+BOOLEAN
+NTAPI
+VidRenderStatusText(
+    _In_ PCSTR String,
+    _Out_writes_bytes_(Width * Height) PUCHAR Coverage,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ BOOLEAN Center,
+    _Inout_ PLONG Left)
+{
+    const BOOT_FONT_RENDERER* Font = &BootVidStatusFont;
+    const BOOT_FONT_GLYPH* Glyph;
+    const UCHAR* Bitmap;
+    LONG Pen, Baseline;
+    ULONG Index, Row, Column;
+
+    if (!Font->Enabled || !String || !Coverage || !Width || !Height || !Left)
+        return FALSE;
+
+    if (Center)
+    {
+        Pen = 0;
+        for (Index = 0; String[Index]; ++Index)
+        {
+            Glyph = BootFontGetGlyph(Font, (UCHAR)String[Index]);
+            if (Glyph)
+                Pen += Glyph->Advance;
+        }
+        *Left = ((LONG)Width - Pen) / 2;
+    }
+
+    RtlZeroMemory(Coverage, (SIZE_T)Width * Height);
+    Pen = *Left;
+    Baseline = ((LONG)Height - (LONG)Font->CellHeight) / 2 + (LONG)Font->Baseline;
+
+    for (Index = 0; String[Index]; ++Index)
+    {
+        Glyph = BootFontGetGlyph(Font, (UCHAR)String[Index]);
+        if (!Glyph)
+            continue;
+
+        Bitmap = BootFontGetGlyphBitmap(Font, Glyph);
+        for (Row = 0; Bitmap && Row < Glyph->Height; ++Row)
+        {
+            LONG Y = Baseline - Glyph->Top + (LONG)Row;
+
+            if ((Y < 0) || (Y >= (LONG)Height))
+                continue;
+
+            for (Column = 0; Column < Glyph->Width; ++Column)
+            {
+                LONG X = Pen + Glyph->Left + (LONG)Column;
+                UCHAR Alpha = Bitmap[Row * Glyph->Pitch + Column];
+                PUCHAR Target;
+
+                if ((X < 0) || (X >= (LONG)Width))
+                    continue;
+
+                Target = &Coverage[(SIZE_T)Y * Width + X];
+                if (Alpha > *Target)
+                    *Target = Alpha;
+            }
+        }
+        Pen += Glyph->Advance;
+    }
+
+    return TRUE;
 }
 
 BOOLEAN
@@ -733,103 +830,6 @@ VidUseCompactFont(VOID)
 
 VOID
 NTAPI
-VidFadeToBlack(
-    _In_ ULONG Steps)
-{
-    PULONG Snapshot;
-    SIZE_T Pixels;
-    ULONG Step, x, y;
-    UCHAR Lut[256];
-
-    if (!FrameBufferStart || BytesPerPixel != sizeof(ULONG))
-        return;
-    if (ScreenWidth == 0 || ScreenHeight == 0)
-        return;
-
-    if (Steps < 2)
-        Steps = 2;
-    else if (Steps > BV_FADE_MAX_STEPS)
-        Steps = BV_FADE_MAX_STEPS;
-
-    Pixels = (SIZE_T)ScreenWidth * ScreenHeight;
-    if (Pixels > MAXULONG_PTR / sizeof(ULONG))
-        return;
-
-    /*
-     * Reading the framebuffer back is far too slow to do once per step, so
-     * take one copy into cached memory and scale every step out of that.
-     * Without the copy there is nothing to fade from, so just leave the
-     * screen to the caller.
-     */
-    Snapshot = ExAllocatePoolWithTag(NonPagedPool, Pixels * sizeof(ULONG), TAG_BOOTVID_FADE);
-    if (!Snapshot)
-        return;
-
-    if (FrameBufferRotation == LoaderFramebufferRotationIdentity)
-    {
-        for (y = 0; y < ScreenHeight; ++y)
-        {
-            RtlCopyMemory(Snapshot + (SIZE_T)y * ScreenWidth,
-                          FramePixel(0, y),
-                          (SIZE_T)ScreenWidth * sizeof(ULONG));
-        }
-    }
-    else
-    {
-        for (y = 0; y < ScreenHeight; ++y)
-            for (x = 0; x < ScreenWidth; ++x)
-                Snapshot[(SIZE_T)y * ScreenWidth + x] = *FramePixel(x, y);
-    }
-
-    for (Step = 1; Step < Steps; ++Step)
-    {
-        ULONG Level = Steps - Step;
-        ULONG i;
-
-        for (i = 0; i < 256; ++i)
-            Lut[i] = (UCHAR)(i * Level / Steps);
-
-        for (y = 0; y < ScreenHeight; ++y)
-        {
-            const ULONG *Src = Snapshot + (SIZE_T)y * ScreenWidth;
-
-            if (FrameBufferRotation == LoaderFramebufferRotationIdentity)
-            {
-                PULONG Dst = FramePixel(0, y);
-
-                for (x = 0; x < ScreenWidth; ++x)
-                {
-                    ULONG Pixel = Src[x];
-
-                    Dst[x] = ((ULONG)Lut[(Pixel >> 16) & 0xFF] << 16) |
-                             ((ULONG)Lut[(Pixel >>  8) & 0xFF] <<  8) |
-                              (ULONG)Lut[ Pixel        & 0xFF];
-                }
-            }
-            else
-            {
-                for (x = 0; x < ScreenWidth; ++x)
-                {
-                    ULONG Pixel = Src[x];
-
-                    *FramePixel(x, y) = ((ULONG)Lut[(Pixel >> 16) & 0xFF] << 16) |
-                                        ((ULONG)Lut[(Pixel >>  8) & 0xFF] <<  8) |
-                                         (ULONG)Lut[ Pixel        & 0xFF];
-                }
-            }
-        }
-        FlushFrameRect(0, 0, ScreenWidth, ScreenHeight);
-
-        KeStallExecutionProcessor(BV_FADE_STEP_DELAY_US);
-    }
-
-    ExFreePoolWithTag(Snapshot, TAG_BOOTVID_FADE);
-
-    VidSolidColorFill(0, 0, ScreenWidth - 1, ScreenHeight - 1, BV_COLOR_BLACK);
-}
-
-VOID
-NTAPI
 VidCleanUp(VOID)
 {
     /* Just fill the screen black */
@@ -854,18 +854,8 @@ InitPaletteWithTable(
     _In_reads_(Count) const ULONG* Table,
     _In_ ULONG Count)
 {
-    const ULONG* Entry = Table;
-    ULONG i;
-    BOOLEAN HasChanged = FALSE;
-
-    for (i = 0; i < Count; i++, Entry++)
-    {
-        HasChanged |= !!((CachedPalette[i] ^ *Entry) & 0x00FFFFFF);
-        CachedPalette[i] = *Entry | 0xFF000000;
-    }
-
     /* Re-apply the palette if it has changed */
-    if (HasChanged)
+    if (CachePalette(Table, Count))
     {
         CachePaletteBlends();
         ApplyPalette();
@@ -1150,6 +1140,29 @@ VidScreenToBufferBlt(
     _In_ ULONG Stride)
 {
     ULONG x, y, CopyWidth, CopyHeight;
+
+    if (FrameBufferStart && BytesPerPixel == sizeof(ULONG) && Stride >= Width * sizeof(ULONG))
+    {
+        RtlZeroMemory(Buffer, Height * Stride);
+        if ((Left >= ScreenWidth) || (Top >= ScreenHeight))
+            return;
+
+        CopyWidth = min(Width, ScreenWidth - Left);
+        CopyHeight = min(Height, ScreenHeight - Top);
+        for (y = 0; y < CopyHeight; ++y)
+        {
+            PULONG Dst = (PULONG)(Buffer + (SIZE_T)y * Stride);
+
+            if (FrameBufferRotation == LoaderFramebufferRotationIdentity)
+            {
+                RtlCopyMemory(Dst, FramePixel(Left, Top + y), (SIZE_T)CopyWidth * sizeof(ULONG));
+                continue;
+            }
+            for (x = 0; x < CopyWidth; ++x)
+                Dst[x] = *FramePixel(Left + x, Top + y);
+        }
+        return;
+    }
 
     /* Clear the destination buffer */
     RtlZeroMemory(Buffer, Height * Stride);

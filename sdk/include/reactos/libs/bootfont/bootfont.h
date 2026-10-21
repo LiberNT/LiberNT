@@ -26,6 +26,7 @@ typedef struct _BOOT_FONT_GLYPH
     unsigned short Width;
     unsigned short Height;
     unsigned short Pitch;
+    short Advance;
     unsigned long BitmapOffset;
 } BOOT_FONT_GLYPH, *PBOOT_FONT_GLYPH;
 
@@ -50,6 +51,18 @@ BootFontInitialize(
 
 int
 BootFontInitializeMonochrome(
+    PBOOT_FONT_RENDERER Renderer,
+    unsigned long PixelHeight);
+
+int
+BootFontInitializeFace(
+    PBOOT_FONT_RENDERER Renderer,
+    const unsigned char* Data,
+    unsigned long Size,
+    unsigned long PixelHeight);
+
+int
+BootFontInitializeUi(
     PBOOT_FONT_RENDERER Renderer,
     unsigned long PixelHeight);
 

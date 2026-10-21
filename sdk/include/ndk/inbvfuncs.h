@@ -86,6 +86,21 @@ InbvQueryDisplayInfo(
     _Out_ struct _VID_DISPLAY_INFO *DisplayInfo
 );
 
+NTSTATUS
+NTAPI
+InbvQueryBootScreen(
+    _Out_writes_bytes_opt_(*Height * Stride) PVOID Bits,
+    _In_ LONG Stride,
+    _Inout_ PULONG Width,
+    _Inout_ PULONG Height
+);
+
+VOID
+NTAPI
+InbvDiscardBootScreen(
+    VOID
+);
+
 BOOLEAN
 NTAPI
 InbvEnableDisplayString(
