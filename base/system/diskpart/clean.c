@@ -12,6 +12,34 @@
 #include <debug.h>
 
 
+static
+BOOL
+IsSystemOrBootDisk(
+    _In_ PDISKENTRY DiskEntry)
+{
+    PLIST_ENTRY ListHeads[2];
+    PLIST_ENTRY Entry;
+    PPARTENTRY PartEntry;
+    INT i;
+
+    if (DiskEntry->IsBoot)
+        return TRUE;
+
+    ListHeads[0] = &DiskEntry->PrimaryPartListHead;
+    ListHeads[1] = &DiskEntry->LogicalPartListHead;
+    for (i = 0; i < ARRAYSIZE(ListHeads); i++)
+    {
+        for (Entry = ListHeads[i]->Flink; Entry != ListHeads[i]; Entry = Entry->Flink)
+        {
+            PartEntry = CONTAINING_RECORD(Entry, PARTENTRY, ListEntry);
+            if (PartEntry->IsSystem || PartEntry->IsBoot)
+                return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 EXIT_CODE
 clean_main(
     _In_ INT argc,
@@ -40,9 +68,8 @@ clean_main(
         return EXIT_SUCCESS;
     }
 
-    /* Do not allow to clean the boot disk */
-    if ((CurrentDisk->BiosFound == TRUE) &&
-        (CurrentDisk->BiosDiskNumber == 0))
+    /* Do not allow to clean the disk holding the system or boot volume */
+    if (IsSystemOrBootDisk(CurrentDisk))
     {
         ConResPuts(StdOut, IDS_CLEAN_SYSTEM);
         return EXIT_SUCCESS;
