@@ -1114,6 +1114,7 @@ function(add_neutral_resource_file _target _module_rc _neutral_rc)
     endif()
     add_library(${_target}_mun MODULE ${_neutral_rc})
     set_module_type(${_target}_mun module UNICODE ENTRYPOINT 0)
+    add_dependencies(${_target}_mun xdk)
     add_cd_file(TARGET ${_target}_mun DESTINATION reactos/SystemResources
                 NAME_ON_CD $<TARGET_FILE_NAME:${_target}>.mun FOR all)
 endfunction()
