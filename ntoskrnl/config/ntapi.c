@@ -1144,6 +1144,7 @@ NtSetValueKey(IN HANDLE KeyHandle,
         _SEH2_TRY
         {
             ProbeForRead(Data, DataSize, 1);
+            (void)*(volatile UCHAR *)Data;
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
