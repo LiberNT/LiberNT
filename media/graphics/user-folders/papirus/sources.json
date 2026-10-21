@@ -186,6 +186,36 @@
   "sha256": "ed9ce4791927eeebe804e834def67ee263497f71ac3aff83f8cdbeea29f0dcd5"
  },
  {
+  "name": "folder-yellow-favorites",
+  "size": "22x22",
+  "file": "22x22/places/folder-yellow-favorites.svg",
+  "sha256": "6fab8a75360dfa908b5a914bf830ca0085e231a4d0feb5e975f0caa7de33f7c1"
+ },
+ {
+  "name": "folder-yellow-favorites",
+  "size": "24x24",
+  "file": "24x24/places/folder-yellow-favorites.svg",
+  "sha256": "5f36a929efbb4140e276c10a0cf801b1d3683ff59ba601ba270c5dcc32e74226"
+ },
+ {
+  "name": "folder-yellow-favorites",
+  "size": "32x32",
+  "file": "32x32/places/folder-yellow-favorites.svg",
+  "sha256": "4613e597e5b8402fca4da0626138f0ba1b4854e26916147a3fe51417baf8232c"
+ },
+ {
+  "name": "folder-yellow-favorites",
+  "size": "48x48",
+  "file": "48x48/places/folder-yellow-favorites.svg",
+  "sha256": "ff2732c0739e6c1c2b88d9f239c26d1f4be0723f28b81afe8b93b492bbb38427"
+ },
+ {
+  "name": "folder-yellow-favorites",
+  "size": "64x64",
+  "file": "64x64/places/folder-yellow-favorites.svg",
+  "sha256": "bcb461507cb9edeb069893f9044e03052b97c5ec091b11f48ad7653126bc357c"
+ },
+ {
   "name": "folder-cyan-pictures",
   "size": "22x22",
   "file": "22x22/places/folder-cyan-pictures.svg",

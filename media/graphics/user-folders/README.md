@@ -22,6 +22,7 @@ records the icon name, design size, file and SHA-256 of each one.
 | Documents | `places/folder-blue-documents` | shell32.dll, -235; mydocs.dll, 100 |
 | Pictures | `places/folder-cyan-pictures` | shell32.dll, -236; mydocs.dll, 101 |
 | Music | `places/folder-deeporange-music` | shell32.dll, -237 |
+| Favorites | `places/folder-yellow-favorites` | shell32.dll, -44 and -173 |
 | Videos | `places/folder-violet-videos` (`folder-violet-video`) | shell32.dll, -238 |
 | Internet browser | `apps/web-browser` (`internet-web-browser`) | shell32.dll, -512; iexplore.exe |
 | Downloads | `places/folder-green-download` | shell32.dll, 16722 (`downloads.ico`) |

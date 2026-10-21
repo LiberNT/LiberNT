@@ -39,6 +39,7 @@ ICONS = (
     ("folder-blue-documents", ("dll/win32/shell32/res/icons/235.ico",)),
     ("folder-cyan-pictures", ("dll/win32/shell32/res/icons/236.ico",)),
     ("folder-deeporange-music", ("dll/win32/shell32/res/icons/237.ico",)),
+    ("folder-yellow-favorites", ("dll/win32/shell32/res/icons/44.ico", "dll/win32/shell32/res/icons/173.ico")),
     ("folder-violet-videos", ("dll/win32/shell32/res/icons/238.ico",)),
     ("web-browser", ("dll/win32/shell32/res/icons/512.ico", "base/applications/iexplore/iexplore.ico")),
     ("folder-green-download", ("dll/win32/shell32/res/icons/downloads.ico",)),
