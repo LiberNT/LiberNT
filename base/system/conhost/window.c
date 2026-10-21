@@ -653,7 +653,7 @@ static void update_content_backdrop( struct console *console )
     if (!console->win || !console->active) return;
     fill = console->active->color_map[(console->active->attr >> 4) & 0x0f];
     if (console->window->backdrop_set && console->window->backdrop == fill) return;
-    if (DwmSettingsSetContentBackdrop( console->win, fill, 128 ))
+    if (DwmSettingsSetContentBackdrop( console->win, fill, 192 ))
     {
         console->window->backdrop = fill;
         console->window->backdrop_set = TRUE;
