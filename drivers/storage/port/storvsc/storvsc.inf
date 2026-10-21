@@ -26,7 +26,7 @@ AddService = storvsc, 0x00000002, StorVsc_Service_Inst
 
 [StorVsc_Service_Inst]
 ServiceType    = 1
-StartType      = 3
+StartType      = 0
 ErrorControl   = 1
 ServiceBinary  = %12%\storvsc.sys
 LoadOrderGroup = SCSI Miniport

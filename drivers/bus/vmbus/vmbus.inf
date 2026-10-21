@@ -27,10 +27,11 @@ vmbus.sys
 AddService = vmbus, 0x00000002, VMBus_Service_Inst
 
 [VMBus_Service_Inst]
-ServiceType   = 1
-StartType     = 3
-ErrorControl  = 1
-ServiceBinary = %12%\vmbus.sys
+ServiceType    = 1
+StartType      = 0
+ErrorControl   = 1
+ServiceBinary  = %12%\vmbus.sys
+LoadOrderGroup = System Bus Extender
 
 [Strings]
 LiberNT = "LiberNT Project"
