@@ -242,6 +242,7 @@ NtfsPrepareFileDeletion(_In_ PVolumeContextBlock VolCB,
                          _Out_ PSIZE_T DeleteStreamCount)
 {
     PLIST_ENTRY Entry;
+    PLIST_ENTRY Bucket = NtfsStreamHashBucket(VolCB, FileStream->FileReference);
     PStreamContextBlock* Streams;
     SIZE_T Count = 0;
     SIZE_T Index = 0;
@@ -250,9 +251,9 @@ NtfsPrepareFileDeletion(_In_ PVolumeContextBlock VolCB,
     *DeleteStreams = NULL;
     *DeleteStreamCount = 0;
     ExAcquireFastMutex(&VolCB->StreamListMutex);
-    for (Entry = VolCB->StreamList.Flink; Entry != &VolCB->StreamList; Entry = Entry->Flink)
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
     {
-        PStreamContextBlock Stream = CONTAINING_RECORD(Entry, StreamContextBlock, ListEntry);
+        PStreamContextBlock Stream = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
 
         if (Stream == FileStream ||
             (WholeFile && Stream->FileReference == FileStream->FileReference))
@@ -263,9 +264,9 @@ NtfsPrepareFileDeletion(_In_ PVolumeContextBlock VolCB,
     }
     if (OpenHandles)
     {
-        for (Entry = VolCB->StreamList.Flink; Entry != &VolCB->StreamList; Entry = Entry->Flink)
+        for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
         {
-            PStreamContextBlock Stream = CONTAINING_RECORD(Entry, StreamContextBlock, ListEntry);
+            PStreamContextBlock Stream = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
 
             if (Stream == FileStream ||
                 (WholeFile && Stream->FileReference == FileStream->FileReference))
@@ -285,9 +286,9 @@ NtfsPrepareFileDeletion(_In_ PVolumeContextBlock VolCB,
         ExReleaseFastMutex(&VolCB->StreamListMutex);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
-    for (Entry = VolCB->StreamList.Flink; Entry != &VolCB->StreamList; Entry = Entry->Flink)
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
     {
-        PStreamContextBlock Stream = CONTAINING_RECORD(Entry, StreamContextBlock, ListEntry);
+        PStreamContextBlock Stream = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
 
         if (Stream == FileStream ||
             (WholeFile && Stream->FileReference == FileStream->FileReference))

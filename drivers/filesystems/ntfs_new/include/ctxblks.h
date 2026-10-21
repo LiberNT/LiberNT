@@ -42,6 +42,7 @@ typedef struct _VolumeContextBlock
     BOOLEAN Dismounted;
     FAST_MUTEX StreamListMutex;
     LIST_ENTRY StreamList;
+    LIST_ENTRY StreamHash[256];
     PNOTIFY_SYNC NotifySync;
     LIST_ENTRY NotifyList;
     TUNNEL Tunnel;
@@ -90,6 +91,7 @@ typedef struct _VolumeContextBlock
 #define NTFS_MISSING_NAME_BUCKETS RTL_NUMBER_OF_FIELD(VolumeContextBlock, MissingNameHash)
 #define NTFS_MAX_CACHED_RECORDS 512
 #define NTFS_RECORD_CACHE_BUCKETS RTL_NUMBER_OF_FIELD(VolumeContextBlock, RecordCacheHash)
+#define NTFS_STREAM_HASH_BUCKETS RTL_NUMBER_OF_FIELD(VolumeContextBlock, StreamHash)
 #define NTFS_MAX_IDLE_FCBS 64
 #define NTFS_INLINE_FILE_NAME_CHARS 128
 
@@ -267,6 +269,7 @@ typedef struct _SCB
     ERESOURCE PagingIoResource;
     FAST_MUTEX HeaderMutex;
     LIST_ENTRY ListEntry;
+    LIST_ENTRY HashEntry;
     ULONGLONG FileReference;
     AttributeType RequestedType;
     UNICODE_STRING RequestedStream;
@@ -280,6 +283,14 @@ typedef struct _SCB
     LONG UncleanCount;
     NTFS_NATIVE_SCB NativeScb;
 } StreamContextBlock, *PStreamContextBlock;
+
+FORCEINLINE
+PLIST_ENTRY
+NtfsStreamHashBucket(_In_ PVolumeContextBlock VolCB,
+                     _In_ ULONGLONG FileReference)
+{
+    return &VolCB->StreamHash[(ULONG)FileReference & (NTFS_STREAM_HASH_BUCKETS - 1)];
+}
 
 typedef struct _FCB
 {

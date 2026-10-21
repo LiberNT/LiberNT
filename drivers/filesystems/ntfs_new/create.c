@@ -1124,6 +1124,7 @@ NtfsReferenceStreamContext(
     PFileRecordHeader Header;
     PStreamContextBlock StreamCB;
     PLIST_ENTRY Entry;
+    PLIST_ENTRY Bucket;
     ULONGLONG FileReference;
     UNICODE_STRING StreamName;
     UNICODE_STRING BaseStreamName;
@@ -1147,11 +1148,12 @@ NtfsReferenceStreamContext(
     RtlInitUnicodeString(&BaseStreamName, Header->Flags & FR_IS_DIRECTORY ? L"$I30" : NULL);
 
     ExAcquireFastMutex(&VolCB->StreamListMutex);
-    for (Entry = VolCB->StreamList.Flink;
-         Entry != &VolCB->StreamList;
+    Bucket = NtfsStreamHashBucket(VolCB, FileReference);
+    for (Entry = Bucket->Flink;
+         Entry != Bucket;
          Entry = Entry->Flink)
     {
-        StreamCB = CONTAINING_RECORD(Entry, StreamContextBlock, ListEntry);
+        StreamCB = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
         if (StreamCB->FileReference == FileReference)
         {
             if (StreamCB->RequestedType == BaseType &&
@@ -1251,6 +1253,7 @@ NtfsReferenceStreamContext(
         }
     }
     InsertTailList(&VolCB->StreamList, &StreamCB->ListEntry);
+    InsertTailList(Bucket, &StreamCB->HashEntry);
     ExReleaseFastMutex(&VolCB->StreamListMutex);
     return StreamCB;
 }
@@ -1268,6 +1271,7 @@ NtfsDereferenceStreamContext(
     if (StreamCB->ReferenceCount == 0)
     {
         RemoveEntryList(&StreamCB->ListEntry);
+        RemoveEntryList(&StreamCB->HashEntry);
         FreeContext = TRUE;
     }
     ExReleaseFastMutex(&VolCB->StreamListMutex);
