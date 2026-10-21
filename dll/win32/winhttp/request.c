@@ -1147,7 +1147,11 @@ static DWORD query_headers( struct request *request, DWORD level, const WCHAR *n
         }
         else
         {
+#ifdef __REACTOS__
+            lstrcpyW( buffer, request->status_text ? request->status_text : L"" );
+#else
             lstrcpyW( buffer, request->status_text );
+#endif
             TRACE("returning string: %s\n", debugstr_w(buffer));
             ret = ERROR_SUCCESS;
         }
@@ -1569,8 +1573,13 @@ static BOOL do_authorization( struct request *request, DWORD target, DWORD schem
         else
         {
             if (!has_auth_value) return FALSE;
+#ifdef __REACTOS__
+            username = request->username;
+            password = request->password;
+#else
             username = request->connect->username;
             password = request->connect->password;
+#endif
         }
         break;
 
@@ -3746,7 +3755,14 @@ struct winhttp_request
     BOOL async;
     UINT url_codepage;
     DWORD security_flags;
+#ifdef __REACTOS__
+    WCHAR *user_agent;
+#endif
 };
+
+#ifdef __REACTOS__
+static const WCHAR default_user_agentW[] = L"Mozilla/4.0 (compatible; Win32; WinHttp.WinHttpRequest.5)";
+#endif
 
 static inline struct winhttp_request *impl_from_IWinHttpRequest( IWinHttpRequest *iface )
 {
@@ -3791,6 +3807,10 @@ static void free_request( struct winhttp_request *request )
     free( request->proxy.lpszProxyBypass );
     free( request->buffer );
     free( request->verb );
+#ifdef __REACTOS__
+    free( request->user_agent );
+    request->user_agent = NULL;
+#endif
     VariantClear( &request->data );
 }
 
@@ -4196,8 +4216,13 @@ static HRESULT WINAPI winhttp_request_Open(
 
     if (!request->hsession)
     {
+#ifdef __REACTOS__
+        if (!(request->hsession = WinHttpOpen( request->user_agent ? request->user_agent : user_agentW,
+                                               WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, WINHTTP_FLAG_ASYNC )))
+#else
         if (!(request->hsession = WinHttpOpen( user_agentW, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL,
                                                WINHTTP_FLAG_ASYNC )))
+#endif
         {
             err = GetLastError();
             goto error;
@@ -5062,6 +5087,13 @@ static HRESULT WINAPI winhttp_request_get_Option(
         V_I4( value ) = request->security_flags;
         break;
     }
+#ifdef __REACTOS__
+    case WinHttpRequestOption_UserAgentString:
+        V_VT( value ) = VT_BSTR;
+        V_BSTR( value ) = SysAllocString( request->user_agent ? request->user_agent : default_user_agentW );
+        if (!V_BSTR( value )) hr = E_OUTOFMEMORY;
+        break;
+#endif
     default:
         FIXME("unimplemented option %u\n", option);
         hr = E_NOTIMPL;
@@ -5092,6 +5124,26 @@ static HRESULT WINAPI winhttp_request_put_Option(
             request->disable_feature |= WINHTTP_DISABLE_REDIRECTS;
         break;
     }
+#ifdef __REACTOS__
+    case WinHttpRequestOption_UserAgentString:
+    {
+        VARIANT str;
+        VariantInit( &str );
+        hr = VariantChangeType( &str, &value, 0, VT_BSTR );
+        if (SUCCEEDED( hr ))
+        {
+            WCHAR *agent = wcsdup( V_BSTR( &str ) ? V_BSTR( &str ) : L"" );
+            VariantClear( &str );
+            if (!agent) hr = E_OUTOFMEMORY;
+            else
+            {
+                free( request->user_agent );
+                request->user_agent = agent;
+            }
+        }
+        break;
+    }
+#endif
     case WinHttpRequestOption_URLCodePage:
     {
         VARIANT cp;

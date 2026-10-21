@@ -260,6 +260,45 @@ static struct attr *parse_attr( const WCHAR *str, int *used )
     return attr;
 }
 
+#ifdef __REACTOS__
+static BOOL cookie_attr_expired( const struct attr *attr )
+{
+    SYSTEMTIME st;
+    FILETIME expires, now;
+
+    if (!attr->value) return FALSE;
+
+    if (!wcsicmp( attr->name, L"max-age" ))
+    {
+        const WCHAR *p = attr->value;
+        if (*p == '-') return TRUE;
+        while (*p >= '0' && *p <= '9') p++;
+        return p != attr->value && !*p && !wcstol( attr->value, NULL, 10 );
+    }
+
+    if (!WinHttpTimeToSystemTime( attr->value, &st ) || !SystemTimeToFileTime( &st, &expires )) return FALSE;
+    GetSystemTimeAsFileTime( &now );
+    return CompareFileTime( &expires, &now ) <= 0;
+}
+
+static void remove_cookie( struct session *session, const WCHAR *domain_name, const WCHAR *path, const WCHAR *name )
+{
+    struct list *item;
+    struct domain *domain;
+    struct cookie *cookie;
+
+    EnterCriticalSection( &session->cs );
+    LIST_FOR_EACH( item, &session->cookie_cache )
+    {
+        domain = LIST_ENTRY( item, struct domain, entry );
+        if (!domain_match( domain_name, domain, FALSE )) continue;
+        if ((cookie = find_cookie( domain, path, name ))) delete_cookie( cookie );
+        break;
+    }
+    LeaveCriticalSection( &session->cs );
+}
+
+#endif
 BOOL set_cookies( struct request *request, const WCHAR *cookies )
 {
     BOOL ret = FALSE;
@@ -269,6 +308,9 @@ BOOL set_cookies( struct request *request, const WCHAR *cookies )
     struct session *session = request->connect->session;
     struct cookie *cookie;
     int len, used;
+#ifdef __REACTOS__
+    BOOL expired = FALSE;
+#endif
 
     if (!(buffer = wcsdup( cookies ))) return FALSE;
 
@@ -293,6 +335,17 @@ BOOL set_cookies( struct request *request, const WCHAR *cookies )
             path = attr;
             cookie_path = attr->value;
         }
+#ifdef __REACTOS__
+        else if (!wcsicmp( attr->name, L"expires" ) || !wcsicmp( attr->name, L"max-age" ))
+        {
+            if (cookie_attr_expired( attr )) expired = TRUE;
+            free_attr( attr );
+        }
+        else if (!wcsicmp( attr->name, L"httponly" ) || !wcsicmp( attr->name, L"secure" ))
+        {
+            free_attr( attr );
+        }
+#endif
         else
         {
             FIXME( "unhandled attribute %s\n", debugstr_w(attr->name) );
@@ -305,6 +358,14 @@ BOOL set_cookies( struct request *request, const WCHAR *cookies )
     if (!cookie_path && !(cookie_path = wcsdup( request->path ))) goto end;
 
     if ((p = wcsrchr( cookie_path, '/' )) && p != cookie_path) *p = 0;
+#ifdef __REACTOS__
+    if (expired)
+    {
+        remove_cookie( session, cookie_domain, cookie_path, cookie->name );
+        ret = TRUE;
+        goto end;
+    }
+#endif
     ret = add_cookie( session, cookie, cookie_domain, cookie_path );
 
 end:

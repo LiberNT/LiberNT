@@ -259,6 +259,10 @@ struct request
     unsigned int websocket_send_buffer_size, websocket_set_send_buffer_size;
     int reply_len;
     enum request_state state;
+#ifdef __REACTOS__
+    WCHAR *username;
+    WCHAR *password;
+#endif
 };
 
 enum socket_state
