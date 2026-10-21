@@ -252,13 +252,135 @@ SpoolerInit(VOID)
     return TRUE;
 }
 
+static BOOL
+_AddOtherName(PWSTR** ppNames, PDWORD pcNames, PCWSTR pwszName)
+{
+    DWORD cbName = (wcslen(pwszName) + 1) * sizeof(WCHAR);
+    PWSTR* pNewNames = ReallocSplMem(*ppNames, *pcNames * sizeof(PWSTR), (*pcNames + 1) * sizeof(PWSTR));
+
+    if (!pNewNames)
+        return FALSE;
+
+    *ppNames = pNewNames;
+    pNewNames[*pcNames] = DllAllocSplMem(cbName);
+    if (!pNewNames[*pcNames])
+        return FALSE;
+
+    CopyMemory(pNewNames[*pcNames], pwszName, cbName);
+    (*pcNames)++;
+    return TRUE;
+}
+
+static VOID
+_FreeOtherNames(PWSTR* pNames, DWORD cNames)
+{
+    DWORD i;
+
+    if (!pNames)
+        return;
+
+    for (i = 0; i < cNames; i++)
+        DllFreeSplMem(pNames[i]);
+
+    DllFreeSplMem(pNames);
+}
+
+static BOOL
+_AddAdapterAddresses(PWSTR** ppNames, PDWORD pcNames, PIP_ADAPTER_ADDRESSES pAdapters, ADDRESS_FAMILY Family)
+{
+    PIP_ADAPTER_ADDRESSES pAdapter;
+    PIP_ADAPTER_UNICAST_ADDRESS pAddress;
+    WCHAR wszAddress[INET6_ADDRSTRLEN];
+
+    for (pAdapter = pAdapters; pAdapter; pAdapter = pAdapter->Next)
+    {
+        if (pAdapter->OperStatus != IfOperStatusUp || pAdapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
+            continue;
+
+        for (pAddress = pAdapter->FirstUnicastAddress; pAddress; pAddress = pAddress->Next)
+        {
+            if (pAddress->Address.lpSockaddr->sa_family != Family)
+                continue;
+
+            if (Family == AF_INET6)
+                RtlIpv6AddressToStringW(&((PSOCKADDR_IN6)pAddress->Address.lpSockaddr)->sin6_addr, wszAddress);
+            else
+                RtlIpv4AddressToStringW(&((PSOCKADDR_IN)pAddress->Address.lpSockaddr)->sin_addr, wszAddress);
+
+            if (!_AddOtherName(ppNames, pcNames, wszAddress))
+                return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
 BOOL WINAPI
 BuildOtherNamesFromMachineName(LPVOID * ptr1, ULONG * ptr2)
 {
-    FIXME("(%p, %p) stub\n", ptr1, ptr2);
+    PWSTR* pNames = NULL;
+    DWORD cNames = 0;
+    WCHAR wszComputerName[MAX_COMPUTERNAME_LENGTH + 1];
+    DWORD cchComputerName = _countof(wszComputerName);
+    PIP_ADAPTER_ADDRESSES pAdapters = NULL;
+    ULONG cbAdapters = 0;
+    ULONG ulFlags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_SKIP_FRIENDLY_NAME;
+    DWORD dwErrorCode;
+
+    TRACE("BuildOtherNamesFromMachineName(%p, %p)\n", ptr1, ptr2);
+
+    if (!ptr1 || !ptr2)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
 
     *ptr1 = NULL;
     *ptr2 = 0;
+
+    if (!GetComputerNameW(wszComputerName, &cchComputerName))
+        return FALSE;
+
+    if (!_AddOtherName(&pNames, &cNames, L"") || !_AddOtherName(&pNames, &cNames, wszComputerName))
+        goto Failure;
+
+    dwErrorCode = GetAdaptersAddresses(AF_UNSPEC, ulFlags, NULL, NULL, &cbAdapters);
+    while (dwErrorCode == ERROR_BUFFER_OVERFLOW)
+    {
+        DllFreeSplMem(pAdapters);
+        pAdapters = DllAllocSplMem(cbAdapters);
+        if (!pAdapters)
+            goto Failure;
+
+        dwErrorCode = GetAdaptersAddresses(AF_UNSPEC, ulFlags, NULL, pAdapters, &cbAdapters);
+    }
+
+    if (dwErrorCode == ERROR_SUCCESS)
+    {
+        if (!_AddAdapterAddresses(&pNames, &cNames, pAdapters, AF_INET6) ||
+            !_AddAdapterAddresses(&pNames, &cNames, pAdapters, AF_INET))
+        {
+            goto Failure;
+        }
+    }
+
+    DllFreeSplMem(pAdapters);
+    *ptr1 = pNames;
+    *ptr2 = cNames;
+    return TRUE;
+
+Failure:
+    DllFreeSplMem(pAdapters);
+    _FreeOtherNames(pNames, cNames);
+    SetLastError(ERROR_NOT_ENOUGH_MEMORY);
     return FALSE;
+}
+
+VOID WINAPI
+FreeOtherNames(LPVOID * ptr1, ULONG ptr2)
+{
+    TRACE("FreeOtherNames(%p, %lu)\n", ptr1, ptr2);
+
+    _FreeOtherNames((PWSTR*)ptr1, ptr2);
 }
 

@@ -375,6 +375,9 @@ _LocalSetPrinterHandleData(PLOCAL_PRINTER_HANDLE pPrinterHandle, PCWSTR pKeyName
     HKEY hKey = NULL;
     PWSTR pwszSubKey = NULL;
 
+    if (pKeyName && wcscmp(pKeyName, L"\\") == 0 && pValueName && _wcsicmp(pValueName, L"Name") == 0)
+        return ERROR_ACCESS_DENIED;
+
     dwErrorCode = _MakePrinterSubKey(pPrinterHandle, pKeyName, &pwszSubKey);
     if (dwErrorCode != ERROR_SUCCESS)
         goto Cleanup;

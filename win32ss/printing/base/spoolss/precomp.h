@@ -15,6 +15,9 @@
 #include <winreg.h>
 #include <winspool.h>
 #include <winsplp.h>
+#include <winsock2.h>
+#include <ws2ipdef.h>
+#include <iphlpapi.h>
 #include <ndk/rtlfuncs.h>
 
 #include <spoolss.h>

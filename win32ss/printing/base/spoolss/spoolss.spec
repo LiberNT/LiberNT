@@ -74,7 +74,7 @@
 @ stub FlushPrinter
 @ stub FormatPrinterForRegistryKey
 @ stub FormatRegistryKeyForPrinter
-@ stub FreeOtherNames
+@ stdcall FreeOtherNames(ptr long)
 @ stub GetClientUserHandle
 @ stdcall GetFormW(ptr wstr long ptr long ptr)
 @ stub GetJobAttributes
