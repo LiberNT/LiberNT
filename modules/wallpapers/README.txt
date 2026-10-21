@@ -45,12 +45,4 @@ other wallpapers. Its provenance record is in LICENSE.txt.
 "Sea Bridge" is the default wallpaper. Changing it means updating
 HKCU Control Panel\Desktop\Wallpaper in boot/bootdata/hivedef.inf.
 
-To include the module in your build folder, run the configure script with the flags -DENABLE_WALLPAPERS=1
-
-# For Windows users
-
-    configure.cmd -DENABLE_WALLPAPERS=1
-
-# For UNIX users
-
-    ./configure.sh -DENABLE_WALLPAPERS=1
+The wallpapers are included in every built image.

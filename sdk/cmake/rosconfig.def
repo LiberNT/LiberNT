@@ -422,13 +422,6 @@ endmenu
 
 menu "Desktop and applications"
 
-config ENABLE_WALLPAPERS
-    prompt "Extra wallpapers"
-    type bool
-    default n
-    help
-      Add the optional wallpapers module to built images.
-
 config ENABLE_ROSAPPS
     prompt "Extra applications (rosapps)"
     type bool

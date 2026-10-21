@@ -1,6 +1,5 @@
 
 option(ENABLE_ROSAPPS "Enable building the ReactOS extra applications" OFF)
-option(ENABLE_WALLPAPERS "Integrate wallpapers into the built ISOs" OFF)
 option(ENABLE_KMTESTS "Build kernel-mode tests without the full test suite" OFF)
 option(ENABLE_APPSMOKE_TESTS "Build the fast application smoke tests without the full test suite" OFF)
 option(ENABLE_RISCV64_TESTS "Build and package the RISC-V port regression tests" OFF)
@@ -28,9 +27,7 @@ if(ENABLE_APPSMOKE_TESTS AND NOT ENABLE_ROSTESTS AND NOT ENABLE_ROSAUTOTEST_BOOT
     add_subdirectory(rostests/apitests/appsmoke)
 endif()
 
-if(ENABLE_WALLPAPERS)
-    add_subdirectory(wallpapers)
-endif()
+add_subdirectory(wallpapers)
 
 if(ENABLE_ROSV)
     add_subdirectory(rosv)
