@@ -1080,6 +1080,7 @@ static HINTERNET FTP_FtpFindFirstFileW(ftp_session_t *lpwfs,
     LPWSTR lpszSearchPath = NULL;
 #ifdef __REACTOS__
     WIN32_FIND_DATAW find_data;
+    LPCWSTR lpszListArg = lpszSearchFile && *lpszSearchFile ? lpszSearchFile : NULL;
 #endif
 
     TRACE("\n");
@@ -1116,9 +1117,15 @@ static HINTERNET FTP_FtpFindFirstFileW(ftp_session_t *lpwfs,
         }
     }
 
+#ifdef __REACTOS__
+    if (!FTP_SendCommand(lpwfs->sndSocket, FTP_CMD_LIST, lpszListArg,
+        lpwfs->hdr.lpfnStatusCB, &lpwfs->hdr, lpwfs->hdr.dwContext))
+        goto lend;
+#else
     if (!FTP_SendCommand(lpwfs->sndSocket, FTP_CMD_LIST, lpszSearchPath,
         lpwfs->hdr.lpfnStatusCB, &lpwfs->hdr, lpwfs->hdr.dwContext))
         goto lend;
+#endif
 
     nResCode = FTP_ReceiveResponse(lpwfs, lpwfs->hdr.dwContext);
     if (nResCode)
@@ -1133,7 +1140,7 @@ static HINTERNET FTP_FtpFindFirstFileW(ftp_session_t *lpwfs,
 #ifdef __REACTOS__
                 DWORD list_error;
 
-                hFindNext = FTP_ReceiveFileList(lpwfs, nDataSocket, lpszSearchFile,
+                hFindNext = FTP_ReceiveFileList(lpwfs, nDataSocket, lpszListArg ? NULL : lpszSearchFile,
                                               unicode || !lpFindFileData ? lpFindFileData : &find_data,
                                               dwContext);
                 list_error = hFindNext ? ERROR_SUCCESS : INTERNET_GetLastError();
@@ -1145,7 +1152,9 @@ static HINTERNET FTP_FtpFindFirstFileW(ftp_session_t *lpwfs,
                 closesocket(nDataSocket);
                 nResCode = FTP_ReceiveResponse(lpwfs, lpwfs->hdr.dwContext);
 #ifdef __REACTOS__
-                if (!hFindNext)
+                if (!hFindNext && nResCode != 226 && nResCode != 250)
+                    FTP_SetResponseError(nResCode);
+                else if (!hFindNext)
                     INTERNET_SetLastError(list_error);
                 else if (nResCode != 226 && nResCode != 250)
 #else
