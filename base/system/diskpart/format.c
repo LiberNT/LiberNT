@@ -274,7 +274,10 @@ format_main(
 done:
     ConPuts(StdOut, L"\n");
     if (Success)
+    {
+        RefreshVolumeList();
         ConResPrintf(StdOut, IDS_FORMAT_SUCCESS);
+    }
     else
         ConResPrintf(StdOut, IDS_FORMAT_FAIL);
 

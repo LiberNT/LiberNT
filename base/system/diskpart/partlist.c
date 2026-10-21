@@ -1830,7 +1830,6 @@ GetVolumeSize(
 }
 
 
-static
 PDISKENTRY
 GetDiskForVolume(
     _In_ PVOLENTRY VolumeEntry)
@@ -1866,7 +1865,6 @@ GetDiskForVolume(
 }
 
 
-static
 PPARTENTRY
 GetPartitionForVolume(
     _In_ PVOLENTRY VolumeEntry)
@@ -3012,9 +3010,10 @@ GetVolumeFromPartition(
     while (Entry != &VolumeListHead)
     {
         VolumeEntry = CONTAINING_RECORD(Entry, VOLENTRY, ListEntry);
+        Entry = Entry->Flink;
 
         if (VolumeEntry->pExtents == NULL)
-            return NULL;
+            continue;
 
         for (i = 0; i < VolumeEntry->pExtents->NumberOfDiskExtents; i++)
         {
@@ -3025,8 +3024,56 @@ GetVolumeFromPartition(
                     return VolumeEntry;
             }
         }
+    }
 
-        Entry = Entry->Flink;
+    return NULL;
+}
+
+
+VOID
+RefreshVolumeList(VOID)
+{
+    PLIST_ENTRY Entry;
+    PVOLENTRY VolumeEntry;
+    ULONG ulVolumeNumber;
+
+    ulVolumeNumber = (CurrentVolume != NULL) ? CurrentVolume->VolumeNumber : MAXULONG;
+
+    DestroyVolumeList();
+    CreateVolumeList();
+
+    for (Entry = VolumeListHead.Flink; Entry != &VolumeListHead; Entry = Entry->Flink)
+    {
+        VolumeEntry = CONTAINING_RECORD(Entry, VOLENTRY, ListEntry);
+        if (VolumeEntry->VolumeNumber == ulVolumeNumber)
+        {
+            CurrentVolume = VolumeEntry;
+            break;
+        }
+    }
+}
+
+
+PVOLENTRY
+RefreshPartitionVolume(
+    _In_ PPARTENTRY PartEntry)
+{
+    PVOLENTRY VolumeEntry;
+    ULONG Attempt;
+
+    if (PartEntry == NULL)
+        return NULL;
+
+    for (Attempt = 0; Attempt < 40; Attempt++)
+    {
+        DestroyVolumeList();
+        CreateVolumeList();
+
+        VolumeEntry = GetVolumeFromPartition(PartEntry);
+        if (VolumeEntry != NULL)
+            return VolumeEntry;
+
+        Sleep(250);
     }
 
     return NULL;

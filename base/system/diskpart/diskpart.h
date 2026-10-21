@@ -707,6 +707,21 @@ PVOLENTRY
 GetVolumeFromPartition(
     _In_ PPARTENTRY PartEntry);
 
+PVOLENTRY
+RefreshPartitionVolume(
+    _In_ PPARTENTRY PartEntry);
+
+VOID
+RefreshVolumeList(VOID);
+
+PDISKENTRY
+GetDiskForVolume(
+    _In_ PVOLENTRY VolumeEntry);
+
+PPARTENTRY
+GetPartitionForVolume(
+    _In_ PVOLENTRY VolumeEntry);
+
 VOID
 RemoveVolume(
     _In_ PVOLENTRY VolumeEntry);

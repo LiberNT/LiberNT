@@ -223,6 +223,7 @@ CreateEfiPartition(
     }
 
     ConResPuts(StdOut, IDS_CREATE_PARTITION_SUCCESS);
+    CurrentVolume = RefreshPartitionVolume(CurrentPartition);
 
     return EXIT_SUCCESS;
 }
@@ -567,6 +568,8 @@ CreateLogicalPartition(
 
     DPRINT1("SectorCount: %I64u\n", ullSectorCount);
 
+    CurrentPartition = NULL;
+
     for (ListEntry = CurrentDisk->LogicalPartListHead.Flink;
          ListEntry != &CurrentDisk->LogicalPartListHead;
          ListEntry = ListEntry->Flink)
@@ -634,6 +637,12 @@ CreateLogicalPartition(
         }
     }
 
+    if (CurrentPartition == NULL)
+    {
+        ConResPuts(StdOut, IDS_CREATE_PARTITION_FAIL);
+        return EXIT_SUCCESS;
+    }
+
     UpdateMbrDiskLayout(CurrentDisk);
     Status = WriteMbrPartitions(CurrentDisk);
     if (!NT_SUCCESS(Status))
@@ -644,6 +653,7 @@ CreateLogicalPartition(
     }
 
     ConResPuts(StdOut, IDS_CREATE_PARTITION_SUCCESS);
+    CurrentVolume = RefreshPartitionVolume(CurrentPartition);
 
     return EXIT_SUCCESS;
 }
@@ -826,6 +836,8 @@ CreatePrimaryMbrPartition(
 
     DPRINT1("SectorCount: %I64u\n", ullSectorCount);
 
+    CurrentPartition = NULL;
+
     for (ListEntry = CurrentDisk->PrimaryPartListHead.Flink;
          ListEntry != &CurrentDisk->PrimaryPartListHead;
          ListEntry = ListEntry->Flink)
@@ -893,6 +905,12 @@ CreatePrimaryMbrPartition(
         }
     }
 
+    if (CurrentPartition == NULL)
+    {
+        ConResPuts(StdOut, IDS_CREATE_PARTITION_FAIL);
+        return;
+    }
+
     UpdateMbrDiskLayout(CurrentDisk);
     Status = WriteMbrPartitions(CurrentDisk);
     if (!NT_SUCCESS(Status))
@@ -903,6 +921,7 @@ CreatePrimaryMbrPartition(
     }
 
     ConResPuts(StdOut, IDS_CREATE_PARTITION_SUCCESS);
+    CurrentVolume = RefreshPartitionVolume(CurrentPartition);
 }
 
 
@@ -970,6 +989,7 @@ CreatePrimaryGptPartition(
     }
 
     ConResPuts(StdOut, IDS_CREATE_PARTITION_SUCCESS);
+    CurrentVolume = RefreshPartitionVolume(CurrentPartition);
 }
 
 
