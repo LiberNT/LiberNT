@@ -49,7 +49,15 @@ struct async_action
     IAsyncAction IAsyncAction_iface;
     IAsyncInfo IAsyncInfo_iface;
     LONG refcount;
+    CRITICAL_SECTION cs;
+    AsyncStatus status;
+    HRESULT hr;
+    BOOL running;
+    UINT32 id;
+    IAsyncActionCompletedHandler *handler;
 };
+
+static LONG async_action_next_id = 0;
 
 static inline struct threadpool_factory *impl_from_IActivationFactory(IActivationFactory *iface)
 {
@@ -116,7 +124,12 @@ static ULONG STDMETHODCALLTYPE async_action_Release(IAsyncAction *iface)
     TRACE("iface %p, refcount %lu.\n", iface, refcount);
 
     if (!refcount)
+    {
+        if (action->handler)
+            IAsyncActionCompletedHandler_Release(action->handler);
+        DeleteCriticalSection(&action->cs);
         free(action);
+    }
 
     return refcount;
 }
@@ -147,23 +160,105 @@ static HRESULT STDMETHODCALLTYPE async_action_GetTrustLevel(
 
 static HRESULT STDMETHODCALLTYPE async_action_put_Completed(IAsyncAction *iface, IAsyncActionCompletedHandler *handler)
 {
-    FIXME("iface %p, handler %p stub!\n", iface, handler);
+    struct async_action *action = impl_from_IAsyncAction(iface);
+    AsyncStatus status;
 
-    return E_NOTIMPL;
+    TRACE("iface %p, handler %p.\n", iface, handler);
+
+    if (!handler)
+        return E_POINTER;
+
+    EnterCriticalSection(&action->cs);
+    if (action->handler)
+    {
+        LeaveCriticalSection(&action->cs);
+        return E_ILLEGAL_DELEGATE_ASSIGNMENT;
+    }
+    IAsyncActionCompletedHandler_AddRef((action->handler = handler));
+    status = action->status;
+    LeaveCriticalSection(&action->cs);
+
+    if (status != Started)
+        IAsyncActionCompletedHandler_Invoke(handler, iface, status);
+
+    return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE async_action_get_Completed(IAsyncAction *iface, IAsyncActionCompletedHandler **handler)
 {
-    FIXME("iface %p, handler %p stub!\n", iface, handler);
+    struct async_action *action = impl_from_IAsyncAction(iface);
 
-    return E_NOTIMPL;
+    TRACE("iface %p, handler %p.\n", iface, handler);
+
+    if (!handler)
+        return E_POINTER;
+
+    EnterCriticalSection(&action->cs);
+    if ((*handler = action->handler))
+        IAsyncActionCompletedHandler_AddRef(*handler);
+    LeaveCriticalSection(&action->cs);
+
+    return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE async_action_GetResults(IAsyncAction *iface)
 {
-    FIXME("iface %p stub!\n", iface);
+    struct async_action *action = impl_from_IAsyncAction(iface);
+    HRESULT hr;
 
-    return E_NOTIMPL;
+    TRACE("iface %p.\n", iface);
+
+    EnterCriticalSection(&action->cs);
+    switch (action->status)
+    {
+    case Completed:
+        hr = S_OK;
+        break;
+    case Error:
+        hr = action->hr;
+        break;
+    case Canceled:
+        hr = HRESULT_FROM_WIN32(ERROR_CANCELLED);
+        break;
+    default:
+        hr = E_ILLEGAL_METHOD_CALL;
+        break;
+    }
+    LeaveCriticalSection(&action->cs);
+
+    return hr;
+}
+
+static void async_action_complete(struct async_action *action, AsyncStatus status)
+{
+    IAsyncActionCompletedHandler *handler;
+
+    EnterCriticalSection(&action->cs);
+    action->running = FALSE;
+    if (action->status == Started)
+        action->status = status;
+    status = action->status;
+    if ((handler = action->handler))
+        IAsyncActionCompletedHandler_AddRef(handler);
+    LeaveCriticalSection(&action->cs);
+
+    if (handler)
+    {
+        IAsyncActionCompletedHandler_Invoke(handler, &action->IAsyncAction_iface, status);
+        IAsyncActionCompletedHandler_Release(handler);
+    }
+}
+
+static BOOL async_action_start(struct async_action *action)
+{
+    BOOL start;
+
+    EnterCriticalSection(&action->cs);
+    start = action->status == Started;
+    action->running = start;
+    LeaveCriticalSection(&action->cs);
+
+    return start;
 }
 
 static const IAsyncActionVtbl async_action_vtbl =
@@ -217,37 +312,81 @@ static HRESULT STDMETHODCALLTYPE async_info_GetTrustLevel(IAsyncInfo *iface, Tru
 
 static HRESULT STDMETHODCALLTYPE async_info_get_Id(IAsyncInfo *iface, UINT32 *id)
 {
-    FIXME("iface %p, id %p stub!\n", iface, id);
+    TRACE("iface %p, id %p.\n", iface, id);
 
-    return E_NOTIMPL;
+    if (!id)
+        return E_POINTER;
+
+    *id = impl_from_IAsyncInfo(iface)->id;
+    return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE async_info_get_Status(IAsyncInfo *iface, AsyncStatus *status)
 {
-    FIXME("iface %p, status %p stub!\n", iface, status);
+    struct async_action *action = impl_from_IAsyncInfo(iface);
 
-    return E_NOTIMPL;
+    TRACE("iface %p, status %p.\n", iface, status);
+
+    if (!status)
+        return E_POINTER;
+
+    EnterCriticalSection(&action->cs);
+    *status = action->status;
+    LeaveCriticalSection(&action->cs);
+
+    return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE async_info_get_ErrorCode(IAsyncInfo *iface, HRESULT *error_code)
 {
-    FIXME("iface %p, error_code %p stub!\n", iface, error_code);
+    struct async_action *action = impl_from_IAsyncInfo(iface);
 
-    return E_NOTIMPL;
+    TRACE("iface %p, error_code %p.\n", iface, error_code);
+
+    if (!error_code)
+        return E_POINTER;
+
+    EnterCriticalSection(&action->cs);
+    *error_code = action->hr;
+    LeaveCriticalSection(&action->cs);
+
+    return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE async_info_Cancel(IAsyncInfo *iface)
 {
-    FIXME("iface %p stub!\n", iface);
+    struct async_action *action = impl_from_IAsyncInfo(iface);
+    BOOL cancelled = FALSE;
 
-    return E_NOTIMPL;
+    TRACE("iface %p.\n", iface);
+
+    EnterCriticalSection(&action->cs);
+    if (action->status == Started && !action->running)
+    {
+        action->status = Canceled;
+        cancelled = TRUE;
+    }
+    LeaveCriticalSection(&action->cs);
+
+    if (cancelled)
+        async_action_complete(action, Canceled);
+
+    return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE async_info_Close(IAsyncInfo *iface)
 {
-    FIXME("iface %p stub!\n", iface);
+    struct async_action *action = impl_from_IAsyncInfo(iface);
+    HRESULT hr = S_OK;
 
-    return E_NOTIMPL;
+    TRACE("iface %p.\n", iface);
+
+    EnterCriticalSection(&action->cs);
+    if (action->status == Started)
+        hr = E_ILLEGAL_STATE_CHANGE;
+    LeaveCriticalSection(&action->cs);
+
+    return hr;
 }
 
 static const IAsyncInfoVtbl async_info_vtbl =
@@ -277,6 +416,10 @@ static HRESULT async_action_create(IAsyncAction **ret)
     object->IAsyncAction_iface.lpVtbl = &async_action_vtbl;
     object->IAsyncInfo_iface.lpVtbl = &async_info_vtbl;
     object->refcount = 1;
+    object->status = Started;
+    object->hr = S_OK;
+    InitializeCriticalSectionEx(&object->cs, 0, RTL_CRITICAL_SECTION_FLAG_FORCE_DEBUG_INFO);
+    object->id = InterlockedIncrement(&async_action_next_id);
 
     *ret = &object->IAsyncAction_iface;
 
@@ -321,7 +464,20 @@ static HRESULT alloc_work_item(IWorkItemHandler *handler, struct work_item **ret
 
 static void work_item_invoke_release(struct work_item *item)
 {
-    IWorkItemHandler_Invoke(item->handler, item->action);
+    struct async_action *action = impl_from_IAsyncAction(item->action);
+    HRESULT hr;
+
+    if (async_action_start(action))
+    {
+        hr = IWorkItemHandler_Invoke(item->handler, item->action);
+        if (FAILED(hr))
+        {
+            EnterCriticalSection(&action->cs);
+            action->hr = hr;
+            LeaveCriticalSection(&action->cs);
+        }
+        async_action_complete(action, FAILED(hr) ? Error : Completed);
+    }
     release_work_item(item);
 }
 
