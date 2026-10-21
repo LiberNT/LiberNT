@@ -2064,12 +2064,54 @@ static BOOL HTTP_DealWithProxy(appinfo_t *hIC, http_session_t *session, http_req
     return TRUE;
 }
 
+#ifdef __REACTOS__
+static server_addr_t *copy_resolved_address(server_t *server)
+{
+    server_addr_t *src = NULL, *copy = NULL, *iter;
+    server_t *other;
+    unsigned count = 0, i;
+
+    EnterCriticalSection(&connection_pool_cs);
+
+    LIST_FOR_EACH_ENTRY(other, &connection_pool, server_t, entry) {
+        if(other != server && other->addr && !wcsicmp(other->name, server->name)) {
+            src = other->addr;
+            break;
+        }
+    }
+
+    for(iter = src; iter; iter = iter->next)
+        count++;
+
+    if(count)
+        copy = calloc(count, sizeof(*copy));
+    if(copy) {
+        for(iter = src, i = 0; iter; iter = iter->next, i++) {
+            copy[i] = *iter;
+            copy[i].next = iter->next ? &copy[i + 1] : NULL;
+            if(copy[i].addr.ss_family == AF_INET)
+                ((struct sockaddr_in *)&copy[i].addr)->sin_port = htons(server->port);
+            else if(copy[i].addr.ss_family == AF_INET6)
+                ((struct sockaddr_in6 *)&copy[i].addr)->sin6_port = htons(server->port);
+        }
+    }
+
+    LeaveCriticalSection(&connection_pool_cs);
+    return copy;
+}
+
+#endif
 static DWORD HTTP_ResolveName(http_request_t *request)
 {
     server_t *server = request->proxy ? request->proxy : request->server;
 
     if(server->addr)
         return ERROR_SUCCESS;
+
+#ifdef __REACTOS__
+    if((server->addr = copy_resolved_address(server)))
+        return ERROR_SUCCESS;
+#endif
 
     INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
                           INTERNET_STATUS_RESOLVING_NAME,
