@@ -48,6 +48,17 @@ NTAPI
 VmbChannelFromDevice(
     _In_ PDEVICE_OBJECT PhysicalDeviceObject);
 
+ULONG
+NTAPI
+VmbChannelGetMmioMegabytes(
+    _In_ PVMBUS_CHANNEL Channel);
+
+VOID
+NTAPI
+VmbChannelGetInterfaceType(
+    _In_ PVMBUS_CHANNEL Channel,
+    _Out_ GUID *InterfaceType);
+
 NTSTATUS
 NTAPI
 VmbChannelOpen(
@@ -84,6 +95,20 @@ VmbChannelSendPacket(
     _In_ ULONG64 TransactionId,
     _In_reads_bytes_(Length) const VOID *Data,
     _In_ ULONG Length);
+
+#define VMBUS_MAX_GPA_PFNS 512
+
+NTSTATUS
+NTAPI
+VmbChannelSendGpaDirect(
+    _In_ PVMBUS_CHANNEL Channel,
+    _In_ ULONG64 TransactionId,
+    _In_reads_bytes_(Length) const VOID *Data,
+    _In_ ULONG Length,
+    _In_ ULONG ByteOffset,
+    _In_ ULONG ByteCount,
+    _In_reads_(PfnCount) const ULONG64 *Pfns,
+    _In_ ULONG PfnCount);
 
 NTSTATUS
 NTAPI

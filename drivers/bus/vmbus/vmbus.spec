@@ -5,3 +5,6 @@
 @ stdcall VmbChannelDestroyGpadl(ptr long)
 @ stdcall VmbChannelSendPacket(ptr long long int64 ptr long)
 @ stdcall VmbChannelReceivePacket(ptr ptr long ptr)
+@ stdcall VmbChannelSendGpaDirect(ptr int64 ptr long long long ptr long)
+@ stdcall VmbChannelGetInterfaceType(ptr ptr)
+@ stdcall VmbChannelGetMmioMegabytes(ptr)

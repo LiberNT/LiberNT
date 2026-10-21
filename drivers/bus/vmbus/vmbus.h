@@ -228,6 +228,7 @@ typedef struct _VMBUS_CHANNEL
     GUID InterfaceInstance;
     ULONG ChildRelId;
     ULONG ConnectionId;
+    ULONG MmioMegabytes;
     BOOLEAN Rescinded;
     BOOLEAN Open;
     PVOID RingBuffer;
@@ -237,6 +238,7 @@ typedef struct _VMBUS_CHANNEL
     VMBUS_RING Inbound;
     PVMBUS_CHANNEL_CALLBACK Callback;
     PVOID CallbackContext;
+    volatile LONG KickPending;
 } VMBUS_CHANNEL;
 
 typedef struct _VMBUS_COMMON_EXTENSION

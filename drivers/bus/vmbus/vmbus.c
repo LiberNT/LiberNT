@@ -12,8 +12,33 @@
 
 PDRIVER_OBJECT VmbusDriverObject;
 
-static const GUID VmbusNetworkInterface =
-    { 0xf8615163, 0xdf3e, 0x46c5, { 0x91, 0x3f, 0xf2, 0xd2, 0xf9, 0x65, 0xed, 0x0e } };
+typedef struct _VMBUS_DEVICE_TYPE
+{
+    GUID InterfaceType;
+    PCWSTR Description;
+} VMBUS_DEVICE_TYPE;
+
+static const VMBUS_DEVICE_TYPE VmbusDeviceTypes[] =
+{
+    { { 0xf8615163, 0xdf3e, 0x46c5, { 0x91, 0x3f, 0xf2, 0xd2, 0xf9, 0x65, 0xed, 0x0e } },
+      L"Microsoft Hyper-V Network Adapter" },
+    { { 0xf912ad6d, 0x2b17, 0x48ea, { 0xbd, 0x65, 0xf9, 0x27, 0xa6, 0x1c, 0x76, 0x84 } },
+      L"Microsoft Hyper-V Virtual Keyboard" },
+    { { 0xcfa8b69e, 0x5b4a, 0x4cc0, { 0xb9, 0x8b, 0x8b, 0xa1, 0xa1, 0xf3, 0xf9, 0x5a } },
+      L"Microsoft Hyper-V Mouse" },
+    { { 0xda0a7802, 0xe377, 0x4aac, { 0x8e, 0x77, 0x05, 0x58, 0xeb, 0x10, 0x73, 0xf8 } },
+      L"Microsoft Hyper-V Video" },
+    { { 0xba6163d9, 0x04a1, 0x4d29, { 0xb6, 0x05, 0x72, 0xe2, 0xff, 0xb1, 0xdc, 0x7f } },
+      L"Microsoft Hyper-V SCSI Controller" },
+    { { 0x0e0b6031, 0x5213, 0x4934, { 0x81, 0x8b, 0x38, 0xd9, 0x0c, 0xed, 0x39, 0xdb } },
+      L"Microsoft Hyper-V Guest Shutdown" },
+    { { 0x9527e630, 0xd0ae, 0x497b, { 0xad, 0xce, 0xe8, 0x0a, 0xb0, 0x17, 0x5c, 0xaf } },
+      L"Microsoft Hyper-V Time Synchronization" },
+    { { 0x57164f39, 0x9115, 0x4e78, { 0xab, 0x55, 0x38, 0x2f, 0x3b, 0xd5, 0x42, 0x2d } },
+      L"Microsoft Hyper-V Heartbeat" },
+    { { 0xa9a0f4e7, 0x5a45, 0x4d96, { 0xb8, 0x27, 0x8a, 0x84, 0x1e, 0x8c, 0x03, 0xe6 } },
+      L"Microsoft Hyper-V Data Exchange" },
+};
 
 static const ULONG VmbusVersions[] =
 {
@@ -27,11 +52,27 @@ static const ULONG VmbusVersions[] =
 };
 
 static
+const VMBUS_DEVICE_TYPE *
+VmbusFindDeviceType(
+    _In_ PVMBUS_CHANNEL Channel)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(VmbusDeviceTypes); Index++)
+    {
+        if (IsEqualGUID(&Channel->InterfaceType, &VmbusDeviceTypes[Index].InterfaceType))
+            return &VmbusDeviceTypes[Index];
+    }
+
+    return NULL;
+}
+
+static
 BOOLEAN
 VmbusChannelIsSupported(
     _In_ PVMBUS_CHANNEL Channel)
 {
-    return IsEqualGUID(&Channel->InterfaceType, &VmbusNetworkInterface);
+    return VmbusFindDeviceType(Channel) != NULL;
 }
 
 VOID
@@ -145,6 +186,7 @@ VmbusAddOffer(
     Channel->InterfaceInstance = Offer->InterfaceInstance;
     Channel->ChildRelId = Offer->ChildRelId;
     Channel->ConnectionId = Offer->ConnectionId;
+    Channel->MmioMegabytes = Offer->MmioMegabytes;
 
     KeAcquireSpinLockAtDpcLevel(&Bus->ChannelLock);
     InsertTailList(&Bus->Channels, &Channel->ListEntry);
@@ -301,6 +343,37 @@ VmbusProcessEvents(
 
 static
 VOID
+VmbusProcessKicks(
+    _Inout_ PVMBUS_FDO_EXTENSION Bus)
+{
+    PLIST_ENTRY Entry;
+    PVMBUS_CHANNEL Channel;
+
+    for (;;)
+    {
+        Channel = NULL;
+        KeAcquireSpinLockAtDpcLevel(&Bus->ChannelLock);
+        for (Entry = Bus->Channels.Flink; Entry != &Bus->Channels; Entry = Entry->Flink)
+        {
+            PVMBUS_CHANNEL Candidate = CONTAINING_RECORD(Entry, VMBUS_CHANNEL, ListEntry);
+
+            if (InterlockedExchange(&Candidate->KickPending, 0) != 0)
+            {
+                Channel = Candidate;
+                break;
+            }
+        }
+        KeReleaseSpinLockFromDpcLevel(&Bus->ChannelLock);
+
+        if (Channel == NULL)
+            return;
+
+        VmbusChannelInterrupt(Channel);
+    }
+}
+
+static
+VOID
 NTAPI
 VmbusDpcRoutine(
     _In_ PKDPC Dpc,
@@ -319,6 +392,7 @@ VmbusDpcRoutine(
 
     VmbusProcessMessages(Bus);
     VmbusProcessEvents(Bus);
+    VmbusProcessKicks(Bus);
 }
 
 static
@@ -739,6 +813,7 @@ VmbusPdoQueryText(
     _In_ DEVICE_TEXT_TYPE TextType,
     _Out_ PULONG_PTR Information)
 {
+    const VMBUS_DEVICE_TYPE *DeviceType;
     PCWSTR Text;
     PWCHAR Result;
     SIZE_T Size;
@@ -746,10 +821,8 @@ VmbusPdoQueryText(
     if (TextType != DeviceTextDescription)
         return STATUS_NOT_SUPPORTED;
 
-    if (VmbusChannelIsSupported(Channel))
-        Text = L"Microsoft Hyper-V Network Adapter";
-    else
-        Text = L"Microsoft Hyper-V VMBus Device";
+    DeviceType = VmbusFindDeviceType(Channel);
+    Text = (DeviceType != NULL) ? DeviceType->Description : L"Microsoft Hyper-V VMBus Device";
 
     Size = (wcslen(Text) + 1) * sizeof(WCHAR);
     Result = ExAllocatePoolWithTag(PagedPool, Size, VMBUS_TAG);
@@ -758,6 +831,109 @@ VmbusPdoQueryText(
 
     RtlCopyMemory(Result, Text, Size);
     *Information = (ULONG_PTR)Result;
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+NTAPI
+VmbusInterfaceReference(
+    _In_ PVOID Context)
+{
+    ObReferenceObject(Context);
+}
+
+static
+VOID
+NTAPI
+VmbusInterfaceDereference(
+    _In_ PVOID Context)
+{
+    ObDereferenceObject(Context);
+}
+
+static
+BOOLEAN
+NTAPI
+VmbusTranslateBusAddress(
+    _In_ PVOID Context,
+    _In_ PHYSICAL_ADDRESS BusAddress,
+    _In_ ULONG Length,
+    _Inout_ PULONG AddressSpace,
+    _Out_ PPHYSICAL_ADDRESS TranslatedAddress)
+{
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(Length);
+    UNREFERENCED_PARAMETER(AddressSpace);
+
+    *TranslatedAddress = BusAddress;
+    return TRUE;
+}
+
+static
+PDMA_ADAPTER
+NTAPI
+VmbusGetDmaAdapter(
+    _In_ PVOID Context,
+    _In_ PDEVICE_DESCRIPTION DeviceDescriptor,
+    _Out_ PULONG NumberOfMapRegisters)
+{
+    DEVICE_DESCRIPTION Description = *DeviceDescriptor;
+
+    Description.Master = TRUE;
+    Description.ScatterGather = TRUE;
+    Description.Dma32BitAddresses = TRUE;
+    Description.Dma64BitAddresses = TRUE;
+    Description.InterfaceType = PCIBus;
+    return HalGetDmaAdapter(Context, &Description, NumberOfMapRegisters);
+}
+
+static
+ULONG
+NTAPI
+VmbusBusData(
+    _In_ PVOID Context,
+    _In_ ULONG DataType,
+    _In_ PVOID Buffer,
+    _In_ ULONG Offset,
+    _In_ ULONG Length)
+{
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(DataType);
+    UNREFERENCED_PARAMETER(Buffer);
+    UNREFERENCED_PARAMETER(Offset);
+    UNREFERENCED_PARAMETER(Length);
+    return 0;
+}
+
+static
+NTSTATUS
+VmbusPdoQueryInterface(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIO_STACK_LOCATION Stack)
+{
+    PBUS_INTERFACE_STANDARD BusInterface;
+
+    if (!IsEqualGUID(Stack->Parameters.QueryInterface.InterfaceType, &GUID_BUS_INTERFACE_STANDARD))
+        return STATUS_NOT_SUPPORTED;
+
+    if (Stack->Parameters.QueryInterface.Size < sizeof(BUS_INTERFACE_STANDARD) ||
+        Stack->Parameters.QueryInterface.Interface == NULL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    BusInterface = (PBUS_INTERFACE_STANDARD)Stack->Parameters.QueryInterface.Interface;
+    BusInterface->Size = sizeof(BUS_INTERFACE_STANDARD);
+    BusInterface->Version = 1;
+    BusInterface->Context = DeviceObject;
+    BusInterface->InterfaceReference = VmbusInterfaceReference;
+    BusInterface->InterfaceDereference = VmbusInterfaceDereference;
+    BusInterface->TranslateBusAddress = VmbusTranslateBusAddress;
+    BusInterface->GetDmaAdapter = VmbusGetDmaAdapter;
+    BusInterface->SetBusData = VmbusBusData;
+    BusInterface->GetBusData = VmbusBusData;
+    VmbusInterfaceReference(DeviceObject);
     return STATUS_SUCCESS;
 }
 
@@ -848,6 +1024,12 @@ VmbusPdoPnp(
         case IRP_MN_QUERY_RESOURCES:
         case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:
             Status = STATUS_SUCCESS;
+            break;
+
+        case IRP_MN_QUERY_INTERFACE:
+            Status = VmbusPdoQueryInterface(DeviceObject, Stack);
+            if (Status == STATUS_NOT_SUPPORTED)
+                Status = Irp->IoStatus.Status;
             break;
 
         case IRP_MN_QUERY_BUS_INFORMATION:

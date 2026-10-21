@@ -92,6 +92,23 @@ VmbChannelFromDevice(
     return PdoExtension->Channel;
 }
 
+ULONG
+NTAPI
+VmbChannelGetMmioMegabytes(
+    _In_ PVMBUS_CHANNEL Channel)
+{
+    return Channel->MmioMegabytes;
+}
+
+VOID
+NTAPI
+VmbChannelGetInterfaceType(
+    _In_ PVMBUS_CHANNEL Channel,
+    _Out_ GUID *InterfaceType)
+{
+    *InterfaceType = Channel->InterfaceType;
+}
+
 NTSTATUS
 NTAPI
 VmbChannelCreateGpadl(
@@ -267,6 +284,8 @@ VmbChannelOpen(
 
     KeMemoryBarrier();
     Channel->Open = TRUE;
+    InterlockedExchange(&Channel->KickPending, 1);
+    KeInsertQueueDpc(&Channel->Bus->Dpc, NULL, NULL);
     return STATUS_SUCCESS;
 
 Failure:
@@ -309,22 +328,31 @@ VmbChannelClose(
     Channel->RingBuffer = NULL;
 }
 
+typedef struct _VMBUS_WRITE_PART
+{
+    const VOID *Buffer;
+    ULONG Length;
+} VMBUS_WRITE_PART;
+
+static
 NTSTATUS
-NTAPI
-VmbChannelSendPacket(
+VmbusChannelWrite(
     _In_ PVMBUS_CHANNEL Channel,
     _In_ USHORT Type,
     _In_ USHORT Flags,
     _In_ ULONG64 TransactionId,
-    _In_reads_bytes_(Length) const VOID *Data,
-    _In_ ULONG Length)
+    _In_ ULONG HeaderLength,
+    _In_reads_(PartCount) const VMBUS_WRITE_PART *Parts,
+    _In_ ULONG PartCount)
 {
     PVMBUS_RING Ring = &Channel->Outbound;
     VMBUS_PACKET_DESCRIPTOR Descriptor;
     ULONG PacketLength;
+    ULONG PayloadLength = 0;
     ULONG WriteIndex;
     ULONG ReadIndex;
     ULONG Offset;
+    ULONG Index;
     ULONG64 Footer;
     BOOLEAN Signal;
     KIRQL Irql;
@@ -332,12 +360,15 @@ VmbChannelSendPacket(
     if (!Channel->Open)
         return STATUS_INVALID_DEVICE_STATE;
 
-    PacketLength = ALIGN_UP_BY(sizeof(Descriptor) + Length, 8);
-    if (PacketLength / 8 > MAXUSHORT)
+    for (Index = 0; Index < PartCount; Index++)
+        PayloadLength += Parts[Index].Length;
+
+    PacketLength = ALIGN_UP_BY(sizeof(Descriptor) + PayloadLength, 8);
+    if (PacketLength / 8 > MAXUSHORT || (HeaderLength & 7) != 0 || HeaderLength > PayloadLength)
         return STATUS_INVALID_PARAMETER;
 
     Descriptor.Type = Type;
-    Descriptor.DataOffset8 = sizeof(Descriptor) / 8;
+    Descriptor.DataOffset8 = (USHORT)((sizeof(Descriptor) + HeaderLength) / 8);
     Descriptor.Length8 = (USHORT)(PacketLength / 8);
     Descriptor.Flags = Flags;
     Descriptor.TransactionId = TransactionId;
@@ -354,8 +385,9 @@ VmbChannelSendPacket(
     }
 
     Offset = VmbusRingWrite(Ring, WriteIndex, &Descriptor, sizeof(Descriptor));
-    Offset = VmbusRingWrite(Ring, Offset, Data, Length);
-    Offset = VmbusRingWrite(Ring, Offset, NULL, PacketLength - sizeof(Descriptor) - Length);
+    for (Index = 0; Index < PartCount; Index++)
+        Offset = VmbusRingWrite(Ring, Offset, Parts[Index].Buffer, Parts[Index].Length);
+    Offset = VmbusRingWrite(Ring, Offset, NULL, PacketLength - sizeof(Descriptor) - PayloadLength);
     Footer = (ULONG64)WriteIndex << 32;
     Offset = VmbusRingWrite(Ring, Offset, &Footer, sizeof(Footer));
 
@@ -371,6 +403,69 @@ VmbChannelSendPacket(
         HvSignalEvent(Channel->ConnectionId);
 
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+VmbChannelSendPacket(
+    _In_ PVMBUS_CHANNEL Channel,
+    _In_ USHORT Type,
+    _In_ USHORT Flags,
+    _In_ ULONG64 TransactionId,
+    _In_reads_bytes_(Length) const VOID *Data,
+    _In_ ULONG Length)
+{
+    VMBUS_WRITE_PART Part;
+
+    Part.Buffer = Data;
+    Part.Length = Length;
+    return VmbusChannelWrite(Channel, Type, Flags, TransactionId, 0, &Part, 1);
+}
+
+NTSTATUS
+NTAPI
+VmbChannelSendGpaDirect(
+    _In_ PVMBUS_CHANNEL Channel,
+    _In_ ULONG64 TransactionId,
+    _In_reads_bytes_(Length) const VOID *Data,
+    _In_ ULONG Length,
+    _In_ ULONG ByteOffset,
+    _In_ ULONG ByteCount,
+    _In_reads_(PfnCount) const ULONG64 *Pfns,
+    _In_ ULONG PfnCount)
+{
+    VMBUS_WRITE_PART Parts[4];
+    ULONG Header[2];
+    ULONG Range[2];
+
+    if (PfnCount == 0 || PfnCount > VMBUS_MAX_GPA_PFNS ||
+        ByteOffset >= PAGE_SIZE || ByteCount == 0 ||
+        (ULONG64)ByteOffset + ByteCount > (ULONG64)PfnCount * PAGE_SIZE)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Header[0] = 0;
+    Header[1] = 1;
+    Range[0] = ByteCount;
+    Range[1] = ByteOffset;
+
+    Parts[0].Buffer = Header;
+    Parts[0].Length = sizeof(Header);
+    Parts[1].Buffer = Range;
+    Parts[1].Length = sizeof(Range);
+    Parts[2].Buffer = Pfns;
+    Parts[2].Length = PfnCount * sizeof(ULONG64);
+    Parts[3].Buffer = Data;
+    Parts[3].Length = Length;
+
+    return VmbusChannelWrite(Channel,
+                             VMBUS_PACKET_TYPE_GPA_DIRECT,
+                             VMBUS_PACKET_FLAG_COMPLETION_REQUESTED,
+                             TransactionId,
+                             sizeof(Header) + sizeof(Range) + PfnCount * sizeof(ULONG64),
+                             Parts,
+                             RTL_NUMBER_OF(Parts));
 }
 
 NTSTATUS
