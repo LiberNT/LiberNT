@@ -1,0 +1,36 @@
+[Version]
+Signature  = "$Windows NT$"
+LayoutFile = layout.inf
+Class      = System
+ClassGUID  = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider   = %LiberNT%
+DriverVer  = 10/21/2026,1.00
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%MicrosoftMfg% = MicrosoftMfg
+
+[MicrosoftMfg]
+%DynamicMemory.DeviceDesc% = Dmvsc_Inst,VMBUS\{525074dc-8985-46e2-8057-a307dc18a502}
+
+[Dmvsc_Inst.NT]
+CopyFiles = Dmvsc_CopyFiles.NT
+
+[Dmvsc_CopyFiles.NT]
+dmvsc.sys
+
+[Dmvsc_Inst.NT.Services]
+AddService = dmvsc, 0x00000002, Dmvsc_Service_Inst
+
+[Dmvsc_Service_Inst]
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\dmvsc.sys
+
+[Strings]
+LiberNT = "LiberNT Project"
+MicrosoftMfg = "Microsoft"
+DynamicMemory.DeviceDesc = "Microsoft Hyper-V Dynamic Memory"
