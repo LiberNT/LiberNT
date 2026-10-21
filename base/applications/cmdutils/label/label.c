@@ -180,7 +180,10 @@ int wmain(int argc, WCHAR *argv[])
         if (szBuffer[1] == L':')
         {
             szRootPath[0] = towupper(szBuffer[0]);
-            wcscpy(szLabel, &szBuffer[2]);
+            i = 2;
+            while (szBuffer[i] == L' ')
+                i++;
+            wcscpy(szLabel, &szBuffer[i]);
         }
         else
         {
