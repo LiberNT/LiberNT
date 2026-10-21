@@ -25,6 +25,8 @@
 #define SYNTHVID_VRAM_LOCATION_ACK              4
 #define SYNTHVID_SITUATION_UPDATE               5
 #define SYNTHVID_SITUATION_UPDATE_ACK           6
+#define SYNTHVID_POINTER_POSITION               7
+#define SYNTHVID_POINTER_SHAPE                  8
 #define SYNTHVID_FEATURE_CHANGE                 9
 #define SYNTHVID_DIRT                           10
 #define SYNTHVID_SUPPORTED_RESOLUTIONS_REQUEST  13
@@ -32,6 +34,11 @@
 
 #define SYNTHVID_VERSION(Major, Minor) ((ULONG)(Major) | ((ULONG)(Minor) << 16))
 #define SYNTHVID_VERSION_WIN10 SYNTHVID_VERSION(3, 5)
+
+#define SYNTHVID_POINTER_COMPLETE   0xFF
+#define SYNTHVID_POINTER_SHAPE_SIZE 18
+#define HVVID_POINTER_MESSAGE_MAX   (4 * sizeof(ULONG) + SYNTHVID_POINTER_SHAPE_SIZE + \
+                                     SOFTGPU_POINTER_PIXEL_COUNT * sizeof(ULONG))
 
 typedef struct _HVVID_CONTEXT
 {
@@ -48,6 +55,15 @@ typedef struct _HVVID_CONTEXT
     ULONG ResponseLength;
     UCHAR Response[HVVID_RESPONSE_MAX];
     UCHAR Packet[HVVID_PACKET_MAX];
+    PSOFTGPU_DEVICE Device;
+    WORK_QUEUE_ITEM PointerWorkItem;
+    KEVENT PointerWorkIdle;
+    volatile LONG PointerWorkQueued;
+    volatile LONG PointerWanted;
+    volatile LONG PointerResend;
+    BOOLEAN Stopping;
+    ULONG PointerGeneration;
+    UCHAR PointerMessage[HVVID_POINTER_MESSAGE_MAX];
 } HVVID_CONTEXT, *PHVVID_CONTEXT;
 
 static const ULONG HvVidVersions[] =
@@ -87,6 +103,28 @@ HvVidSend(
     RtlCopyMemory(Message, Header, sizeof(Header));
     RtlCopyMemory(Message + sizeof(Header), Payload, Length);
     return VmbChannelSendPacket(Context->Channel, VMBUS_PACKET_TYPE_INBAND, 0, 0, Message, sizeof(Header) + Length);
+}
+
+static
+VOID
+HvVidSendDirt(
+    _In_ PHVVID_CONTEXT Context,
+    _In_ LONG Left,
+    _In_ LONG Top,
+    _In_ LONG Right,
+    _In_ LONG Bottom);
+
+static
+VOID
+HvVidQueuePointerWork(
+    _Inout_ PHVVID_CONTEXT Context)
+{
+    if (!Context->Stopping && Context->Device != NULL &&
+        InterlockedExchange(&Context->PointerWorkQueued, 1) == 0)
+    {
+        KeClearEvent(&Context->PointerWorkIdle);
+        ExQueueWorkItem(&Context->PointerWorkItem, DelayedWorkQueue);
+    }
 }
 
 static
@@ -168,6 +206,13 @@ HvVidChannelCallback(
             InterlockedExchange(&Context->ExpectedType, 0);
             KeSetEvent(&Context->ResponseEvent, IO_NO_INCREMENT, FALSE);
         }
+        else if (Header[2] == SYNTHVID_FEATURE_CHANGE && Available >= 4)
+        {
+            InterlockedExchange(&Context->PointerWanted, Payload[1] != 0 || Payload[2] != 0);
+            HvVidQueuePointerWork(Context);
+            if (Payload[0] != 0 && Context->Width != 0 && Context->Height != 0)
+                HvVidSendDirt(Context, 0, 0, (LONG)Context->Width, (LONG)Context->Height);
+        }
     }
 }
 
@@ -189,6 +234,86 @@ HvVidSendDirt(
     RtlCopyMemory(Dirt + 10, &Right, sizeof(LONG));
     RtlCopyMemory(Dirt + 14, &Bottom, sizeof(LONG));
     HvVidSend(Context, SYNTHVID_DIRT, Dirt, sizeof(Dirt));
+}
+
+static
+VOID
+NTAPI
+HvVidPointerWorker(
+    _In_ PVOID Parameter)
+{
+    PHVVID_CONTEXT Context = Parameter;
+    BOOLEAN Wanted;
+
+    do
+    {
+        InterlockedExchange(&Context->PointerWorkQueued, 2);
+        Wanted = ReadNoFence(&Context->PointerWanted) != 0;
+        InterlockedExchange(&Context->PointerResend, 1);
+        if (!Context->Stopping)
+            (VOID)SoftGpuPointerSetPlatformHardware(Context->Device, Wanted);
+    } while (InterlockedCompareExchange(&Context->PointerWorkQueued, 0, 2) != 2);
+
+    KeSetEvent(&Context->PointerWorkIdle, IO_NO_INCREMENT, FALSE);
+}
+
+static
+NTSTATUS
+HvVidSendPointerPosition(
+    _In_ PHVVID_CONTEXT Context,
+    _In_ BOOLEAN Visible,
+    _In_ LONG X,
+    _In_ LONG Y)
+{
+    UCHAR Position[2 + 2 * sizeof(LONG)];
+
+    Position[0] = Visible ? 1 : 0;
+    Position[1] = 0;
+    RtlCopyMemory(Position + 2, &X, sizeof(LONG));
+    RtlCopyMemory(Position + 6, &Y, sizeof(LONG));
+    return HvVidSend(Context, SYNTHVID_POINTER_POSITION, Position, sizeof(Position));
+}
+
+static
+NTSTATUS
+HvVidSendPointerShape(
+    _Inout_ PHVVID_CONTEXT Context,
+    _In_ PSOFTGPU_DEVICE Device)
+{
+    ULONG RowBytes = Device->PointerWidth * sizeof(ULONG);
+    ULONG Length = SYNTHVID_POINTER_SHAPE_SIZE + RowBytes * Device->PointerHeight;
+    PUCHAR Shape;
+    ULONG Header[4];
+    ULONG Y;
+
+    if (!Context->Open || Device->PointerWidth > SOFTGPU_POINTER_MAX_WIDTH ||
+        Device->PointerHeight > SOFTGPU_POINTER_MAX_HEIGHT)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Header[0] = PIPE_MESSAGE_DATA;
+    Header[1] = 2 * sizeof(ULONG) + Length;
+    Header[2] = SYNTHVID_POINTER_SHAPE;
+    Header[3] = 2 * sizeof(ULONG) + Length;
+    RtlCopyMemory(Context->PointerMessage, Header, sizeof(Header));
+
+    Shape = Context->PointerMessage + sizeof(Header);
+    Shape[0] = SYNTHVID_POINTER_COMPLETE;
+    Shape[1] = 1;
+    RtlCopyMemory(Shape + 2, &Device->PointerWidth, sizeof(ULONG));
+    RtlCopyMemory(Shape + 6, &Device->PointerHeight, sizeof(ULONG));
+    RtlCopyMemory(Shape + 10, &Device->PointerHotX, sizeof(ULONG));
+    RtlCopyMemory(Shape + 14, &Device->PointerHotY, sizeof(ULONG));
+    for (Y = 0; Y < Device->PointerHeight; Y++)
+    {
+        RtlCopyMemory(Shape + SYNTHVID_POINTER_SHAPE_SIZE + Y * RowBytes,
+                      &Device->PointerPixels[Y * SOFTGPU_POINTER_MAX_WIDTH],
+                      RowBytes);
+    }
+
+    return VmbChannelSendPacket(Context->Channel, VMBUS_PACKET_TYPE_INBAND, 0, 0,
+                                Context->PointerMessage, sizeof(Header) + Length);
 }
 
 static
@@ -247,6 +372,8 @@ VOID
 HvVidRelease(
     _In_ PHVVID_CONTEXT Context)
 {
+    Context->Stopping = TRUE;
+    KeWaitForSingleObject(&Context->PointerWorkIdle, Executive, KernelMode, FALSE, NULL);
     if (Context->Open)
     {
         Context->Open = FALSE;
@@ -432,6 +559,8 @@ SoftGpuPlatformQueryStart(
             return STATUS_INSUFFICIENT_RESOURCES;
 
         KeInitializeEvent(&Context->ResponseEvent, NotificationEvent, FALSE);
+        KeInitializeEvent(&Context->PointerWorkIdle, NotificationEvent, TRUE);
+        ExInitializeWorkItem(&Context->PointerWorkItem, HvVidPointerWorker, Context);
         Context->Channel = VmbChannelFromDevice(Device->PhysicalDeviceObject);
         Context->Vram = PostDisplay.PhysicAddress;
         Context->VramSize = max(VisibleLength, (ULONGLONG)VmbChannelGetMmioMegabytes(Context->Channel) << 20);
@@ -443,8 +572,13 @@ SoftGpuPlatformQueryStart(
             return Status;
         }
 
+        Context->Device = Device;
         Device->PlatformContext = Context;
     }
+
+    Device->PlatformSwitchablePointer = TRUE;
+    if (ReadNoFence(&Context->PointerWanted) != 0)
+        HvVidQueuePointerWork(Context);
 
     Config->Width = PostDisplay.Width;
     Config->Height = PostDisplay.Height;
@@ -505,6 +639,7 @@ SoftGpuPlatformStopScanout(
     Context = Device->PlatformContext;
     Device->PlatformContext = NULL;
     HvVidRelease(Context);
+    Device->PlatformHardwarePointer = FALSE;
     return STATUS_SUCCESS;
 }
 
@@ -540,8 +675,27 @@ NTSTATUS
 SoftGpuPlatformUpdatePointer(
     _Inout_ PSOFTGPU_DEVICE Device)
 {
-    UNREFERENCED_PARAMETER(Device);
-    return STATUS_NOT_SUPPORTED;
+    PHVVID_CONTEXT Context;
+    NTSTATUS Status;
+
+    if (Device == NULL || Device->PlatformContext == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    Context = Device->PlatformContext;
+    if (InterlockedExchange(&Context->PointerResend, 0) != 0)
+        Context->PointerGeneration = 0;
+
+    if (Device->PointerShapeValid && Context->PointerGeneration != Device->PointerShapeGeneration)
+    {
+        Status = HvVidSendPointerShape(Context, Device);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Context->PointerGeneration = Device->PointerShapeGeneration;
+    }
+
+    return HvVidSendPointerPosition(Context, Device->PointerVisible && Device->PointerShapeValid,
+                                    Device->PointerX - (LONG)Device->PointerHotX,
+                                    Device->PointerY - (LONG)Device->PointerHotY);
 }
 
 VOID

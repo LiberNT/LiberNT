@@ -322,6 +322,9 @@ typedef struct _SOFTGPU_DEVICE
     PVOID               PlatformContext;
     BOOLEAN             PlatformDirectScanout;
     BOOLEAN             PlatformHardwarePointer;
+    /* The platform turns its pointer plane on and off at run time with
+     * SoftGpuPointerSetPlatformHardware; the pointer is emulated while off. */
+    BOOLEAN             PlatformSwitchablePointer;
 
     /* Software-emulated WDDM color-pointer plane. ScanoutMutex serializes
      * software composition with scanout writes. Hardware cursor platforms
@@ -596,6 +599,11 @@ SoftGpuPointerCompositeStage(
     _Inout_ PULONG Stage,
     _In_ ULONG StageWidth,
     _In_ const RECT *Chunk);
+
+NTSTATUS
+SoftGpuPointerSetPlatformHardware(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ BOOLEAN Hardware);
 
 NTSTATUS
 APIENTRY

@@ -1588,7 +1588,7 @@ SoftGpuDdiQueryAdapterInfo(
             ((PDXGK_DRIVERCAPS)pQueryAdapterInfo->pOutputData)
                 ->HighestAcceptableAddress = Device->HighestDmaAddress;
         }
-        if (!Device->PlatformHardwarePointer)
+        if (!Device->PlatformHardwarePointer && !Device->PlatformSwitchablePointer)
         {
             PDXGK_DRIVERCAPS Caps =
                 (PDXGK_DRIVERCAPS)pQueryAdapterInfo->pOutputData;

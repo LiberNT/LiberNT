@@ -191,6 +191,31 @@ SoftGpuPointerCompositeStage(
     }
 }
 
+static
+VOID
+SoftGpuPointerStoreShape(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ const DXGKARG_SETPOINTERSHAPE *SetPointerShape)
+{
+    const UCHAR *Pixels = (const UCHAR *)SetPointerShape->pPixels;
+    ULONG Y;
+
+    RtlZeroMemory(Device->PointerPixels, sizeof(Device->PointerPixels));
+    for (Y = 0; Y < SetPointerShape->Height; ++Y)
+    {
+        RtlCopyMemory(&Device->PointerPixels[Y * SOFTGPU_POINTER_MAX_WIDTH],
+                      Pixels + ((SIZE_T)Y * SetPointerShape->Pitch),
+                      SetPointerShape->Width * sizeof(ULONG));
+    }
+    Device->PointerWidth = SetPointerShape->Width;
+    Device->PointerHeight = SetPointerShape->Height;
+    Device->PointerHotX = SetPointerShape->XHot;
+    Device->PointerHotY = SetPointerShape->YHot;
+    Device->PointerShapeValid = TRUE;
+    if (++Device->PointerShapeGeneration == 0)
+        ++Device->PointerShapeGeneration;
+}
+
 NTSTATUS
 APIENTRY
 SoftGpuDdiSetPointerPosition(
@@ -208,37 +233,34 @@ SoftGpuDdiSetPointerPosition(
     }
     if (SetPointerPosition->Flags.Procedural || SetPointerPosition->Flags.Reserved)
         return STATUS_INVALID_PARAMETER;
+
     if (!ExAcquireRundownProtection(&Device->ScanoutRundown))
         return STATUS_DELETE_PENDING;
-    if (!Device->PlatformHardwarePointer)
-    {
-        KeAcquireSpinLock(&Device->PointerLock, &OldIrql);
-        if (InterlockedCompareExchange(&Device->Stopped, 0, 0) != 0)
-        {
-            Status = STATUS_DELETE_PENDING;
-        }
-        else
-        {
-            SoftGpuPointerRestoreLocked(Device);
-            Device->PointerX = SetPointerPosition->X;
-            Device->PointerY = SetPointerPosition->Y;
-            Device->PointerVisible = SetPointerPosition->Flags.Visible ? TRUE : FALSE;
-            SoftGpuPointerDrawLocked(Device);
-            KeMemoryBarrier();
-            Status = STATUS_SUCCESS;
-        }
-        KeReleaseSpinLock(&Device->PointerLock, OldIrql);
-        ExReleaseRundownProtection(&Device->ScanoutRundown);
-        return Status;
-    }
+
     Status = KeWaitForSingleObject(&Device->PointerMutex, Executive, KernelMode, FALSE, NULL);
     if (!NT_SUCCESS(Status))
         goto CleanupRundown;
+
     if (InterlockedCompareExchange(&Device->Stopped, 0, 0) != 0)
     {
         Status = STATUS_DELETE_PENDING;
         goto CleanupMutex;
     }
+
+    if (!Device->PlatformHardwarePointer)
+    {
+        KeAcquireSpinLock(&Device->PointerLock, &OldIrql);
+        SoftGpuPointerRestoreLocked(Device);
+        Device->PointerX = SetPointerPosition->X;
+        Device->PointerY = SetPointerPosition->Y;
+        Device->PointerVisible = SetPointerPosition->Flags.Visible ? TRUE : FALSE;
+        SoftGpuPointerDrawLocked(Device);
+        KeMemoryBarrier();
+        KeReleaseSpinLock(&Device->PointerLock, OldIrql);
+        Status = STATUS_SUCCESS;
+        goto CleanupMutex;
+    }
+
     Device->PointerX = SetPointerPosition->X;
     Device->PointerY = SetPointerPosition->Y;
     Device->PointerVisible = SetPointerPosition->Flags.Visible ? TRUE : FALSE;
@@ -262,9 +284,7 @@ SoftGpuDdiSetPointerShape(
     _In_ const DXGKARG_SETPOINTERSHAPE *SetPointerShape)
 {
     PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
-    const UCHAR *Pixels;
     KIRQL OldIrql;
-    ULONG Y;
     NTSTATUS Status;
 
     if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC ||
@@ -279,68 +299,86 @@ SoftGpuDdiSetPointerShape(
     {
         return STATUS_INVALID_PARAMETER;
     }
-    Pixels = (const UCHAR *)SetPointerShape->pPixels;
+
     if (!ExAcquireRundownProtection(&Device->ScanoutRundown))
         return STATUS_DELETE_PENDING;
-    if (!Device->PlatformHardwarePointer)
-    {
-        KeAcquireSpinLock(&Device->PointerLock, &OldIrql);
-        if (InterlockedCompareExchange(&Device->Stopped, 0, 0) != 0)
-        {
-            Status = STATUS_DELETE_PENDING;
-        }
-        else
-        {
-            SoftGpuPointerRestoreLocked(Device);
-            RtlZeroMemory(Device->PointerPixels, sizeof(Device->PointerPixels));
-            for (Y = 0; Y < SetPointerShape->Height; ++Y)
-            {
-                RtlCopyMemory(&Device->PointerPixels[Y * SOFTGPU_POINTER_MAX_WIDTH],
-                              Pixels + ((SIZE_T)Y * SetPointerShape->Pitch),
-                              SetPointerShape->Width * sizeof(ULONG));
-            }
-            Device->PointerWidth = SetPointerShape->Width;
-            Device->PointerHeight = SetPointerShape->Height;
-            Device->PointerHotX = SetPointerShape->XHot;
-            Device->PointerHotY = SetPointerShape->YHot;
-            Device->PointerShapeValid = TRUE;
-            if (++Device->PointerShapeGeneration == 0)
-                ++Device->PointerShapeGeneration;
-            SoftGpuPointerDrawLocked(Device);
-            KeMemoryBarrier();
-            Status = STATUS_SUCCESS;
-        }
-        KeReleaseSpinLock(&Device->PointerLock, OldIrql);
-        ExReleaseRundownProtection(&Device->ScanoutRundown);
-        return Status;
-    }
+
     Status = KeWaitForSingleObject(&Device->PointerMutex, Executive, KernelMode, FALSE, NULL);
     if (!NT_SUCCESS(Status))
         goto CleanupRundown;
+
     if (InterlockedCompareExchange(&Device->Stopped, 0, 0) != 0)
     {
         Status = STATUS_DELETE_PENDING;
         goto CleanupMutex;
     }
-    RtlZeroMemory(Device->PointerPixels, sizeof(Device->PointerPixels));
-    for (Y = 0; Y < SetPointerShape->Height; ++Y)
+
+    if (!Device->PlatformHardwarePointer)
     {
-        RtlCopyMemory(&Device->PointerPixels[Y * SOFTGPU_POINTER_MAX_WIDTH],
-                      Pixels + ((SIZE_T)Y * SetPointerShape->Pitch),
-                      SetPointerShape->Width * sizeof(ULONG));
+        KeAcquireSpinLock(&Device->PointerLock, &OldIrql);
+        SoftGpuPointerRestoreLocked(Device);
+        SoftGpuPointerStoreShape(Device, SetPointerShape);
+        SoftGpuPointerDrawLocked(Device);
+        KeMemoryBarrier();
+        KeReleaseSpinLock(&Device->PointerLock, OldIrql);
+        Status = STATUS_SUCCESS;
+        goto CleanupMutex;
     }
-    Device->PointerWidth = SetPointerShape->Width;
-    Device->PointerHeight = SetPointerShape->Height;
-    Device->PointerHotX = SetPointerShape->XHot;
-    Device->PointerHotY = SetPointerShape->YHot;
-    Device->PointerShapeValid = TRUE;
-    if (++Device->PointerShapeGeneration == 0)
-        ++Device->PointerShapeGeneration;
+
+    SoftGpuPointerStoreShape(Device, SetPointerShape);
     Status = SoftGpuPlatformUpdatePointer(Device);
     if (!NT_SUCCESS(Status))
         goto CleanupMutex;
     KeMemoryBarrier();
     Status = STATUS_SUCCESS;
+
+CleanupMutex:
+    KeReleaseMutex(&Device->PointerMutex, FALSE);
+CleanupRundown:
+    ExReleaseRundownProtection(&Device->ScanoutRundown);
+    return Status;
+}
+
+NTSTATUS
+SoftGpuPointerSetPlatformHardware(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ BOOLEAN Hardware)
+{
+    KIRQL OldIrql;
+    NTSTATUS Status;
+
+    if (Device == NULL || !Device->PlatformSwitchablePointer)
+        return STATUS_INVALID_PARAMETER;
+
+    if (!ExAcquireRundownProtection(&Device->ScanoutRundown))
+        return STATUS_DELETE_PENDING;
+
+    Status = KeWaitForSingleObject(&Device->PointerMutex, Executive, KernelMode, FALSE, NULL);
+    if (!NT_SUCCESS(Status))
+        goto CleanupRundown;
+
+    if (InterlockedCompareExchange(&Device->Stopped, 0, 0) != 0)
+    {
+        Device->PlatformHardwarePointer = Hardware;
+        Status = STATUS_SUCCESS;
+        goto CleanupMutex;
+    }
+
+    KeAcquireSpinLock(&Device->PointerLock, &OldIrql);
+    if (Hardware)
+    {
+        SoftGpuPointerRestoreLocked(Device);
+        Device->PlatformHardwarePointer = TRUE;
+    }
+    else if (Device->PlatformHardwarePointer)
+    {
+        Device->PlatformHardwarePointer = FALSE;
+        SoftGpuPointerDrawLocked(Device);
+    }
+    KeMemoryBarrier();
+    KeReleaseSpinLock(&Device->PointerLock, OldIrql);
+
+    Status = Hardware ? SoftGpuPlatformUpdatePointer(Device) : STATUS_SUCCESS;
 
 CleanupMutex:
     KeReleaseMutex(&Device->PointerMutex, FALSE);
