@@ -280,7 +280,7 @@ WSAPoll(IN OUT LPWSAPOLLFD fdArray,
         }
         WsSockDereference(Socket);
 
-        Events = AFD_EVENT_DISCONNECT | AFD_EVENT_ABORT | AFD_EVENT_CONNECT_FAIL;
+        Events = AFD_EVENT_DISCONNECT | AFD_EVENT_ABORT;
         if (fdArray[Index].events & POLLRDNORM)
             Events |= AFD_EVENT_ACCEPT | AFD_EVENT_RECEIVE;
         if (fdArray[Index].events & POLLRDBAND)
@@ -347,7 +347,7 @@ WSAPoll(IN OUT LPWSAPOLLFD fdArray,
                     Revents |= POLLWRNORM;
                 if (Events & (AFD_EVENT_ABORT | AFD_EVENT_DISCONNECT))
                     Revents |= POLLHUP;
-                if (Events & (AFD_EVENT_ABORT | AFD_EVENT_CONNECT_FAIL))
+                if (Events & AFD_EVENT_ABORT)
                     Revents |= POLLERR;
                 if (Events & AFD_EVENT_CLOSE)
                     Revents |= POLLNVAL;

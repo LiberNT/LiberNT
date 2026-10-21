@@ -2074,9 +2074,9 @@ MsafdCompleteConnect(
 
     if (Socket && Socket->SharedData->State != SocketClosed)
     {
-        Socket->SharedData->SocketLastError = TranslateNtStatusError(IoStatusBlock->Status);
         if (IoStatusBlock->Status == STATUS_SUCCESS)
         {
+            Socket->SharedData->SocketLastError = NO_ERROR;
             Socket->SharedData->State = SocketConnected;
             Socket->TdiConnectionHandle = (HANDLE)IoStatusBlock->Information;
             Socket->SharedData->ConnectTime = GetCurrentTimeInSeconds();
@@ -2880,6 +2880,45 @@ WSPIoctl(IN  SOCKET Handle,
                 }
             }
             Socket->SharedData->NonBlocking = NonBlocking ? 1 : 0;
+            if (lpOverlapped && !lpCompletionRoutine &&
+                !(Socket->SharedData->CreateFlags & SO_SYNCHRONOUS_NONALERT))
+            {
+                AFD_INFO InfoData;
+                HANDLE SockEvent;
+                NTSTATUS Status;
+
+                Status = NtCreateEvent(&SockEvent, EVENT_ALL_ACCESS, NULL, SynchronizationEvent, FALSE);
+                if (!NT_SUCCESS(Status))
+                {
+                    Errno = WSAENOBUFS;
+                    break;
+                }
+                RtlZeroMemory(&InfoData, sizeof(InfoData));
+                InfoData.InformationClass = AFD_INFO_BLOCKING_MODE;
+                InfoData.Information.Boolean = NonBlocking;
+                lpOverlapped->Internal = STATUS_PENDING;
+                Status = NtDeviceIoControlFile((HANDLE)Socket->Handle,
+                                               SockEvent,
+                                               NULL,
+                                               lpOverlapped,
+                                               (PIO_STATUS_BLOCK)&lpOverlapped->Internal,
+                                               IOCTL_AFD_SET_INFO,
+                                               &InfoData,
+                                               sizeof(InfoData),
+                                               NULL,
+                                               0);
+                if (Status == STATUS_PENDING)
+                {
+                    MsafdWaitForAlert(SockEvent);
+                    Status = (NTSTATUS)lpOverlapped->Internal;
+                }
+                NtClose(SockEvent);
+                NeedsCompletion = FALSE;
+                Errno = MsafdReturnWithErrno(Status, NULL, 0, NULL);
+                if (Errno == NO_ERROR)
+                    Ret = NO_ERROR;
+                break;
+            }
             Errno = SetSocketInformation(Socket, AFD_INFO_BLOCKING_MODE, &NonBlocking, NULL, NULL, NULL, NULL);
             if (Errno == NO_ERROR)
                 Ret = NO_ERROR;
