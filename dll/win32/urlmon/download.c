@@ -21,6 +21,10 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(urlmon);
 
+#ifdef __REACTOS__
+const GUID SID_LiberNTStartNotImplemented = {0x6e1b3ab5, 0x1b7c, 0x4f1e, {0x9a, 0x3d, 0x2c, 0x5e, 0x7f, 0x41, 0xd0, 0x9b}};
+#endif
+
 typedef struct {
     IBindStatusCallback IBindStatusCallback_iface;
     IServiceProvider    IServiceProvider_iface;
@@ -218,11 +222,7 @@ static HRESULT WINAPI DownloadBSC_OnStopBinding(IBindStatusCallback *iface,
     if(This->onstop_proc)
         hres = This->onstop_proc(This->ctx, This->cache_file, hresult, szError);
     else if(This->callback)
-#ifdef __REACTOS__
-        IBindStatusCallback_OnStopBinding(This->callback, hresult == S_OK && This->start_not_impl ? S_FALSE : hresult, szError);
-#else
         IBindStatusCallback_OnStopBinding(This->callback, hresult, szError);
-#endif
 
     if(This->binding) {
         IBinding_Release(This->binding);
@@ -315,6 +315,16 @@ static HRESULT WINAPI DwlServiceProvider_QueryService(IServiceProvider *iface,
     HRESULT hres;
 
     TRACE("(%p)->(%s %s %p)\n", This, debugstr_guid(guidService), debugstr_guid(riid), ppv);
+
+#ifdef __REACTOS__
+    if(IsEqualGUID(guidService, &SID_LiberNTStartNotImplemented)) {
+        if(!This->start_not_impl)
+            return E_NOINTERFACE;
+        IServiceProvider_AddRef(iface);
+        *ppv = iface;
+        return S_OK;
+    }
+#endif
 
     if(!This->callback)
         return E_NOINTERFACE;

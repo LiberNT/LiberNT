@@ -90,6 +90,9 @@ IInternetProtocol *get_mime_filter(LPCWSTR);
 BOOL is_registered_protocol(LPCWSTR);
 #ifdef __REACTOS__
 BOOL is_direct_builtin_protocol(IUri*);
+#ifdef __REACTOS__
+extern const GUID SID_LiberNTStartNotImplemented;
+#endif
 #endif
 HRESULT register_namespace(IClassFactory*,REFIID,LPCWSTR,BOOL);
 HINTERNET get_internet_session(IInternetBindInfo*);
@@ -225,6 +228,7 @@ typedef struct {
     BOOL url_binding;
     BOOL terminated;
     LONG lock_count;
+    CLSID clsid;
 #endif
 
     DWORD bscf;

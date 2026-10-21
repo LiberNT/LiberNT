@@ -532,6 +532,7 @@ static HRESULT WINAPI BindProtocol_StartEx(IInternetProtocolEx *iface, IUri *pUr
     }
 
 #ifdef __REACTOS__
+    This->clsid = clsid;
     if(!direct) {
 #endif
     StringFromCLSID(&clsid, &clsid_str);

@@ -77,6 +77,7 @@ typedef struct {
 #ifdef __REACTOS__
     IInternetProtocol *service_protocol;
     BOOL service_protocol_queried;
+    BOOL start_not_impl;
 #endif
 
     BindProtocol *protocol;
@@ -179,6 +180,14 @@ static void stop_binding(Binding *binding, HRESULT hres, LPCWSTR str)
         IInternetProtocolEx_UnlockRequest(&binding->protocol->IInternetProtocolEx_iface);
         binding->state &= ~BINDING_LOCKED;
     }
+
+#ifdef __REACTOS__
+    if(hres == S_OK && binding->start_not_impl) {
+        hres = S_FALSE;
+        if(IsEqualGUID(&binding->clsid, &CLSID_NULL))
+            binding->clsid = binding->protocol->clsid;
+    }
+#endif
 
     if(!(binding->state & BINDING_STOPPED)) {
         binding->state |= BINDING_STOPPED;
@@ -1208,7 +1217,7 @@ static HRESULT WINAPI InternetProtocolSink_ReportResult(IInternetProtocolSink *i
 
 #ifdef __REACTOS__
     if(hrResult != S_OK && IsEqualGUID(&This->clsid, &CLSID_NULL))
-        This->clsid = CLSID_FtpProtocol;
+        This->clsid = IsEqualGUID(&This->protocol->clsid, &CLSID_NULL) ? CLSID_FtpProtocol : This->protocol->clsid;
 #endif
     stop_binding(This, hrResult, szResult);
 
@@ -1629,6 +1638,18 @@ static HRESULT start_binding(IMoniker *mon, Binding *binding_ctx, IUri *uri, IBi
         IBinding_Release(&binding->IBinding_iface);
         return hres;
     }
+
+#ifdef __REACTOS__
+    if(binding->service_provider) {
+        IUnknown *unk;
+
+        if(SUCCEEDED(IServiceProvider_QueryService(binding->service_provider, &SID_LiberNTStartNotImplemented,
+                                                   &SID_LiberNTStartNotImplemented, (void**)&unk))) {
+            IUnknown_Release(unk);
+            binding->start_not_impl = TRUE;
+        }
+    }
+#endif
 
     if(binding_ctx) {
         set_binding_sink(binding->protocol, &binding->IInternetProtocolSink_iface,
