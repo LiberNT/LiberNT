@@ -50,6 +50,7 @@ private:
         ULONG cbData;
         LPWSTR pwszDesc;
         HICON hIcon;
+        HBITMAP hBitmap;
         SHELLNEW_ITEM *pNext;
     };
 
@@ -61,6 +62,7 @@ private:
     UINT m_idCmdFirst, m_idCmdFolder, m_idCmdLink;
     BOOL m_bCustomIconFolder, m_bCustomIconLink;
     HICON m_hIconFolder, m_hIconLink;
+    HBITMAP m_hbmFolder, m_hbmLink;
 
     SHELLNEW_ITEM *LoadItem(LPCWSTR pwszExt);
     void UnloadItem(SHELLNEW_ITEM *pItem);
