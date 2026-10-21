@@ -502,11 +502,6 @@ ChpeShouldRedirectImport(
     PVOID ImportBase,
     PUNICODE_STRING ImportName);
 
-BOOLEAN
-NTAPI
-ChpeShouldRedirectDynamicLoad(
-    PUNICODE_STRING DllName);
-
 NTSTATUS
 NTAPI
 ChpeValidateImportThunk(
@@ -618,6 +613,10 @@ LdrpArchEnterEmulationHost(
     _In_ PVOID Stack,
     _In_ PVOID Entry,
     _In_ PVOID Argument);
+
+NTSTATUS
+LdrpArchApplyImageView(
+    _In_ PVOID ImageBase);
 
 BOOLEAN
 RtlpArchQueryPerformanceCounter(

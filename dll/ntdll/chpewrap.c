@@ -364,6 +364,13 @@ ChpepNtMapViewOfSection(HANDLE SectionHandle,
     if (!IsCurrent || !NT_SUCCESS(Status))
         return Status;
 
+    NotifyStatus = LdrpArchApplyImageView(*BaseAddress);
+    if (!NT_SUCCESS(NotifyStatus))
+    {
+        ZwUnmapViewOfSection(ProcessHandle, *BaseAddress);
+        return NotifyStatus;
+    }
+
     CallbackToken = ChpeEnterEmulatorCallback();
     if (!CallbackToken)
         return Status;

@@ -10,7 +10,7 @@ list(SORT _ci_targets)
 set(_ci_files "")
 set(_ci_inputs "")
 foreach(_ci_target IN LISTS _ci_targets)
-    list(APPEND _ci_files "$<TARGET_FILE:${_ci_target}>")
+    list(APPEND _ci_files "$<IF:$<BOOL:$<TARGET_PROPERTY:${_ci_target},ARM64X_FILE>>,$<TARGET_PROPERTY:${_ci_target},ARM64X_FILE>,$<TARGET_FILE:${_ci_target}>>")
 endforeach()
 # Some OS DLLs are produced by nested builds and staged/stripped before
 # installation. Their declared file outputs carry the producer dependencies.

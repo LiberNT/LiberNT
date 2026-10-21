@@ -1060,7 +1060,7 @@ static
 BOOLEAN
 LdrpUsePreMappedChpeBridge(PVOID *BaseAddress, SIZE_T *ImageSize)
 {
-    const UNICODE_STRING Suffix = RTL_CONSTANT_STRING(L"\\System32\\arm64ec\\ntdll_chpe.dll");
+    const UNICODE_STRING Suffix = RTL_CONSTANT_STRING(L"\\System32\\ntdll_chpe.dll");
     struct
     {
         MEMORY_SECTION_NAME Name;
@@ -1225,7 +1225,7 @@ LdrpMapDll(IN PWSTR SearchPath OPTIONAL,
     PVOID ViewBase = NULL;
     PVOID ArbitraryUserPointer;
     PIMAGE_NT_HEADERS NtHeaders;
-    NTSTATUS HardErrorStatus, Status;
+    NTSTATUS HardErrorStatus, Status, ViewStatus;
     BOOLEAN OverlapDllFound = FALSE;
     ULONG_PTR ImageBase, ImageEnd;
     PLIST_ENTRY ListHead, NextEntry;
@@ -1408,6 +1408,14 @@ SkipCheck:
         /* Close and return */
         NtClose(SectionHandle);
         return Status;
+    }
+
+    ViewStatus = LdrpArchApplyImageView(ViewBase);
+    if (!NT_SUCCESS(ViewStatus))
+    {
+        NtUnmapViewOfSection(NtCurrentProcess(), ViewBase);
+        NtClose(SectionHandle);
+        return ViewStatus;
     }
 
     /* Get the NT Header */

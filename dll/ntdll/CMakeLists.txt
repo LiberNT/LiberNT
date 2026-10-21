@@ -120,6 +120,8 @@ if(ARCH STREQUAL "arm64")
         arm64/stubs.c
         chpe.c
         chpewrap.c)
+else()
+    list(APPEND SOURCE ldr/nohybrid.c)
 endif()
 
 add_library(ntdll MODULE

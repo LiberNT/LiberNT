@@ -271,7 +271,7 @@ NTSTATUS
 NTAPI
 PspMapChpeBridge(IN PEPROCESS Process)
 {
-    const UNICODE_STRING Path = RTL_CONSTANT_STRING(L"\\SystemRoot\\System32\\arm64ec\\ntdll_chpe.dll");
+    const UNICODE_STRING Path = RTL_CONSTANT_STRING(L"\\SystemRoot\\System32\\ntdll_chpe.dll");
     OBJECT_ATTRIBUTES Attributes;
     IO_STATUS_BLOCK IoStatus;
     HANDLE FileHandle;

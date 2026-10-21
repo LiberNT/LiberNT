@@ -462,7 +462,7 @@ LdrpIsSystemModuleDirectory(
     _In_ PCWSTR Directory,
     _In_ SIZE_T Length)
 {
-    static const PCWSTR SystemDirectories[] = { L"System32", L"SysWOW64", L"arm64ec" };
+    static const PCWSTR SystemDirectories[] = { L"System32", L"SysWOW64" };
     ULONG Index;
 
     for (Index = 0; Index < RTL_NUMBER_OF(SystemDirectories); Index++)

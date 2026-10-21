@@ -69,6 +69,36 @@ typedef struct _IMAGE_ARM64EC_REDIRECTION_ENTRY
     ULONG Destination;
 } IMAGE_ARM64EC_REDIRECTION_ENTRY, *PIMAGE_ARM64EC_REDIRECTION_ENTRY;
 
+typedef struct _IMAGE_DYNAMIC_RELOCATION_TABLE
+{
+    ULONG Version;
+    ULONG Size;
+} IMAGE_DYNAMIC_RELOCATION_TABLE, *PIMAGE_DYNAMIC_RELOCATION_TABLE;
+
+#pragma pack(push, 1)
+
+typedef struct _IMAGE_DYNAMIC_RELOCATION64
+{
+    ULONGLONG Symbol;
+    ULONG BaseRelocSize;
+} IMAGE_DYNAMIC_RELOCATION64, *PIMAGE_DYNAMIC_RELOCATION64;
+
+typedef struct _IMAGE_DYNAMIC_RELOCATION64_V2
+{
+    ULONG HeaderSize;
+    ULONG FixupInfoSize;
+    ULONGLONG Symbol;
+    ULONG SymbolGroup;
+    ULONG Flags;
+} IMAGE_DYNAMIC_RELOCATION64_V2, *PIMAGE_DYNAMIC_RELOCATION64_V2;
+
+#pragma pack(pop)
+
+#define IMAGE_DYNAMIC_RELOCATION_ARM64X         0x00000006
+#define IMAGE_DVRT_ARM64X_FIXUP_TYPE_ZEROFILL   0
+#define IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE      1
+#define IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA      2
+
 typedef struct _IMAGE_CHPE_RANGE_ENTRY
 {
     union
@@ -1825,6 +1855,227 @@ ChpeIsChpeProcess(VOID)
     return IsChpe;
 }
 
+static
+NTSTATUS
+ChpepApplyArm64XBlock(PVOID ImageBase,
+                      ULONG SizeOfImage,
+                      PIMAGE_BASE_RELOCATION Block)
+{
+    PUSHORT Record, RecordEnd;
+    PUCHAR Target, Page;
+    PVOID ProtectBase;
+    SIZE_T ProtectSize;
+    ULONG OldProtect[2], Protect, PageCount = 1, Index, Size, Offset, Type, Argument;
+    LONG Delta;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    Page = (PUCHAR)ImageBase + Block->VirtualAddress;
+    RecordEnd = (PUSHORT)((PUCHAR)Block + Block->SizeOfBlock);
+    for (Record = (PUSHORT)(Block + 1); Record < RecordEnd && *Record; Record++)
+    {
+        Offset = *Record & 0xFFF;
+        Type = (*Record >> 12) & 3;
+        Argument = *Record >> 14;
+        Size = (Type == IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA) ? sizeof(LONG) : (1UL << Argument);
+        if (Type == IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE && !Argument)
+            return STATUS_INVALID_IMAGE_FORMAT;
+        else if (Type == IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE)
+            Record += Size / sizeof(USHORT);
+        else if (Type == IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA)
+            Record++;
+        else if (Type != IMAGE_DVRT_ARM64X_FIXUP_TYPE_ZEROFILL)
+            return STATUS_INVALID_IMAGE_FORMAT;
+
+        if (Record >= RecordEnd || Offset + Size > SizeOfImage - Block->VirtualAddress)
+            return STATUS_INVALID_IMAGE_FORMAT;
+        if (Offset + Size > PAGE_SIZE)
+            PageCount = 2;
+    }
+
+    for (Index = 0; Index < PageCount; Index++)
+    {
+        ProtectBase = Page + Index * PAGE_SIZE;
+        ProtectSize = PAGE_SIZE;
+        Status = ZwProtectVirtualMemory(NtCurrentProcess(), &ProtectBase, &ProtectSize, PAGE_READWRITE, &OldProtect[Index]);
+        if (!NT_SUCCESS(Status))
+        {
+            PageCount = Index;
+            goto Restore;
+        }
+    }
+
+    for (Record = (PUSHORT)(Block + 1); Record < RecordEnd && *Record; Record++)
+    {
+        Target = Page + (*Record & 0xFFF);
+        Type = (*Record >> 12) & 3;
+        Argument = *Record >> 14;
+        switch (Type)
+        {
+            case IMAGE_DVRT_ARM64X_FIXUP_TYPE_ZEROFILL:
+                RtlZeroMemory(Target, 1UL << Argument);
+                break;
+
+            case IMAGE_DVRT_ARM64X_FIXUP_TYPE_VALUE:
+                RtlCopyMemory(Target, Record + 1, 1UL << Argument);
+                Record += (1UL << Argument) / sizeof(USHORT);
+                break;
+
+            case IMAGE_DVRT_ARM64X_FIXUP_TYPE_DELTA:
+                Delta = (LONG)(Record[1] * ((Argument & 2) ? 8 : 4));
+                if (Argument & 1)
+                    Delta = -Delta;
+                *(LONG UNALIGNED *)Target += Delta;
+                Record++;
+                break;
+        }
+    }
+
+Restore:
+    for (Index = 0; Index < PageCount; Index++)
+    {
+        ProtectBase = Page + Index * PAGE_SIZE;
+        ProtectSize = PAGE_SIZE;
+        ZwProtectVirtualMemory(NtCurrentProcess(), &ProtectBase, &ProtectSize, OldProtect[Index], &Protect);
+        if (OldProtect[Index] & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))
+            ZwFlushInstructionCache(NtCurrentProcess(), Page + Index * PAGE_SIZE, PAGE_SIZE);
+    }
+
+    return Status;
+}
+
+static
+NTSTATUS
+ChpepApplyArm64XRelocations(PVOID ImageBase)
+{
+    PIMAGE_NT_HEADERS NtHeader;
+    PIMAGE_LOAD_CONFIG_DIRECTORY64 Config;
+    PIMAGE_SECTION_HEADER Section;
+    PIMAGE_DYNAMIC_RELOCATION_TABLE Table;
+    PIMAGE_DYNAMIC_RELOCATION64 Relocation;
+    PIMAGE_DYNAMIC_RELOCATION64_V2 RelocationV2;
+    PIMAGE_BASE_RELOCATION Block;
+    PUCHAR Entry, End, Fixups = NULL;
+    ULONG ConfigSize, FixupsSize = 0, SizeOfImage;
+    const ULONG ConfigLength = RTL_SIZEOF_THROUGH_FIELD(IMAGE_LOAD_CONFIG_DIRECTORY64, DynamicValueRelocTableSection);
+    NTSTATUS Status;
+
+    NtHeader = ChpepGetImageNtHeader(ImageBase);
+    if (!NtHeader || NtHeader->FileHeader.Machine != IMAGE_FILE_MACHINE_ARM64 ||
+        NtHeader->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC)
+    {
+        return STATUS_SUCCESS;
+    }
+
+    Config = RtlImageDirectoryEntryToData(ImageBase, TRUE, IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG, &ConfigSize);
+    if (!Config || ConfigSize < RTL_SIZEOF_THROUGH_FIELD(IMAGE_LOAD_CONFIG_DIRECTORY64, CHPEMetadataPointer) ||
+        Config->Size < RTL_SIZEOF_THROUGH_FIELD(IMAGE_LOAD_CONFIG_DIRECTORY64, CHPEMetadataPointer) ||
+        !Config->CHPEMetadataPointer)
+    {
+        return STATUS_SUCCESS;
+    }
+
+    if (ConfigSize < ConfigLength || Config->Size < ConfigLength ||
+        !Config->DynamicValueRelocTableSection ||
+        Config->DynamicValueRelocTableSection > NtHeader->FileHeader.NumberOfSections)
+    {
+        return STATUS_INVALID_IMAGE_FORMAT;
+    }
+
+    SizeOfImage = NtHeader->OptionalHeader.SizeOfImage;
+    Section = IMAGE_FIRST_SECTION(NtHeader) + Config->DynamicValueRelocTableSection - 1;
+    if (Config->DynamicValueRelocTableOffset > Section->Misc.VirtualSize ||
+        Section->Misc.VirtualSize - Config->DynamicValueRelocTableOffset < sizeof(*Table) ||
+        Section->VirtualAddress > SizeOfImage ||
+        Section->Misc.VirtualSize > SizeOfImage - Section->VirtualAddress)
+    {
+        return STATUS_INVALID_IMAGE_FORMAT;
+    }
+
+    Table = (PIMAGE_DYNAMIC_RELOCATION_TABLE)((PUCHAR)ImageBase + Section->VirtualAddress +
+                                              Config->DynamicValueRelocTableOffset);
+    if (Table->Size > Section->Misc.VirtualSize - Config->DynamicValueRelocTableOffset - sizeof(*Table))
+        return STATUS_INVALID_IMAGE_FORMAT;
+
+    Entry = (PUCHAR)(Table + 1);
+    End = Entry + Table->Size;
+    while (Entry < End && !Fixups)
+    {
+        if (Table->Version == 1)
+        {
+            Relocation = (PIMAGE_DYNAMIC_RELOCATION64)Entry;
+            if ((ULONG_PTR)(End - Entry) < sizeof(*Relocation) ||
+                Relocation->BaseRelocSize > (ULONG_PTR)(End - Entry) - sizeof(*Relocation))
+            {
+                return STATUS_INVALID_IMAGE_FORMAT;
+            }
+
+            if (Relocation->Symbol == IMAGE_DYNAMIC_RELOCATION_ARM64X)
+            {
+                Fixups = (PUCHAR)(Relocation + 1);
+                FixupsSize = Relocation->BaseRelocSize;
+            }
+            Entry += sizeof(*Relocation) + Relocation->BaseRelocSize;
+        }
+        else if (Table->Version == 2)
+        {
+            RelocationV2 = (PIMAGE_DYNAMIC_RELOCATION64_V2)Entry;
+            if ((ULONG_PTR)(End - Entry) < sizeof(*RelocationV2) ||
+                RelocationV2->HeaderSize < sizeof(*RelocationV2) ||
+                RelocationV2->HeaderSize > (ULONG_PTR)(End - Entry) ||
+                RelocationV2->FixupInfoSize > (ULONG_PTR)(End - Entry) - RelocationV2->HeaderSize)
+            {
+                return STATUS_INVALID_IMAGE_FORMAT;
+            }
+
+            if (RelocationV2->Symbol == IMAGE_DYNAMIC_RELOCATION_ARM64X)
+            {
+                Fixups = Entry + RelocationV2->HeaderSize;
+                FixupsSize = RelocationV2->FixupInfoSize;
+            }
+            Entry += RelocationV2->HeaderSize + RelocationV2->FixupInfoSize;
+        }
+        else
+        {
+            return STATUS_INVALID_IMAGE_FORMAT;
+        }
+    }
+
+    if (!Fixups)
+        return STATUS_INVALID_IMAGE_FORMAT;
+
+    End = Fixups + FixupsSize;
+    while ((ULONG_PTR)(End - Fixups) >= sizeof(*Block))
+    {
+        Block = (PIMAGE_BASE_RELOCATION)Fixups;
+        if (!Block->SizeOfBlock)
+            break;
+
+        if (Block->SizeOfBlock < sizeof(*Block) || Block->SizeOfBlock > (ULONG_PTR)(End - Fixups) ||
+            (Block->VirtualAddress & (PAGE_SIZE - 1)) || Block->VirtualAddress >= SizeOfImage)
+        {
+            return STATUS_INVALID_IMAGE_FORMAT;
+        }
+
+        Status = ChpepApplyArm64XBlock(ImageBase, SizeOfImage, Block);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        Fixups += Block->SizeOfBlock;
+    }
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+LdrpArchApplyImageView(
+    _In_ PVOID ImageBase)
+{
+    if (!ChpeIsChpeProcess())
+        return STATUS_SUCCESS;
+
+    return ChpepApplyArm64XRelocations(ImageBase);
+}
+
 /*
  * Check whether the CHPE emulator has been loaded and ProcessInit called.
  */
@@ -1934,21 +2185,6 @@ ChpepIsPureAmd64Image(PVOID ImageBase)
 }
 
 static
-BOOLEAN
-ChpepNeedsChpeImportRedirects(PVOID ImageBase)
-{
-    USHORT Machine;
-
-    if (!ChpeIsChpeProcess())
-        return FALSE;
-
-    Machine = ChpepGetImageMachine(ImageBase);
-    return Machine == IMAGE_FILE_MACHINE_AMD64 ||
-           Machine == IMAGE_FILE_MACHINE_ARM64EC ||
-           Machine == IMAGE_FILE_MACHINE_ARM64;
-}
-
-static
 VOID
 ChpepGetImportBaseName(PUNICODE_STRING ImportName,
                        PUNICODE_STRING BaseName)
@@ -1970,68 +2206,6 @@ ChpepGetImportBaseName(PUNICODE_STRING ImportName,
     }
 }
 
-static
-BOOLEAN
-ChpepAppDirectoryOverridesImport(PCUNICODE_STRING BaseName,
-                                 PCUNICODE_STRING ImportName)
-{
-    PRTL_USER_PROCESS_PARAMETERS Params;
-    UNICODE_STRING AppDir, SystemDir, ImportDir, Candidate, NtSystemRoot;
-    WCHAR SystemBuffer[MAX_PATH];
-    WCHAR CandidateBuffer[MAX_PATH];
-    USHORT Index;
-
-    if (RtlEqualUnicodeString(BaseName, &ChpeNtdllImportName, TRUE))
-        return FALSE;
-
-    Params = NtCurrentPeb()->ProcessParameters;
-    if (!Params)
-        return FALSE;
-
-    AppDir = Params->ImagePathName;
-    if (!AppDir.Buffer || !AppDir.Length)
-        return FALSE;
-
-    for (Index = AppDir.Length / sizeof(WCHAR); Index > 0; --Index)
-    {
-        if (AppDir.Buffer[Index - 1] == L'\\' || AppDir.Buffer[Index - 1] == L'/')
-            break;
-    }
-    if (Index == 0)
-        return FALSE;
-
-    AppDir.Length = Index * sizeof(WCHAR);
-    AppDir.MaximumLength = AppDir.Length;
-
-    RtlInitUnicodeString(&NtSystemRoot, SharedUserData->NtSystemRoot);
-    RtlInitEmptyUnicodeString(&SystemDir, SystemBuffer, sizeof(SystemBuffer));
-    if (!NT_SUCCESS(RtlAppendUnicodeStringToString(&SystemDir, &NtSystemRoot)) ||
-        !NT_SUCCESS(RtlAppendUnicodeToString(&SystemDir, L"\\System32\\")))
-    {
-        return FALSE;
-    }
-
-    if (RtlEqualUnicodeString(&AppDir, &SystemDir, TRUE))
-        return FALSE;
-
-    /* A bundled DLL only overrides a searched import. An explicit System32
-     * load still needs the corresponding ARM64EC system image. */
-    ImportDir = *ImportName;
-    ImportDir.Length -= BaseName->Length;
-    ImportDir.MaximumLength = ImportDir.Length;
-    if (RtlEqualUnicodeString(&ImportDir, &SystemDir, TRUE))
-        return FALSE;
-
-    RtlInitEmptyUnicodeString(&Candidate, CandidateBuffer, sizeof(CandidateBuffer));
-    if (!NT_SUCCESS(RtlAppendUnicodeStringToString(&Candidate, &AppDir)) ||
-        !NT_SUCCESS(RtlAppendUnicodeStringToString(&Candidate, (PUNICODE_STRING)BaseName)))
-    {
-        return FALSE;
-    }
-
-    return RtlDoesFileExists_UStr(&Candidate);
-}
-
 BOOLEAN
 NTAPI
 ChpeShouldRedirectImport(PVOID ImportBase,
@@ -2039,39 +2213,11 @@ ChpeShouldRedirectImport(PVOID ImportBase,
 {
     UNICODE_STRING BaseName;
 
-    if (!ImportName || !ImportName->Buffer || !ChpepNeedsChpeImportRedirects(ImportBase))
+    if (!ImportName || !ImportName->Buffer || !ChpeIsChpeProcess() || !ChpepIsPureAmd64Image(ImportBase))
         return FALSE;
 
     ChpepGetImportBaseName(ImportName, &BaseName);
-    if (RtlEqualUnicodeString(&BaseName, &ChpeNtdllImportName, TRUE) && !ChpepIsPureAmd64Image(ImportBase))
-        return FALSE;
-
-    if (ChpepAppDirectoryOverridesImport(&BaseName, ImportName))
-        return FALSE;
-
-    return TRUE;
-}
-
-BOOLEAN
-NTAPI
-ChpeShouldRedirectDynamicLoad(PUNICODE_STRING DllName)
-{
-    UNICODE_STRING BaseName;
-
-    if (!DllName || !DllName->Buffer || !ChpeIsChpeProcess())
-        return FALSE;
-
-    ChpepGetImportBaseName(DllName, &BaseName);
-
-    /* The host ntdll owns the loader. Pure AMD64 imports are redirected to
-     * ntdll_chpe.dll while explicit ntdll.dll loads keep the host module. */
-    if (RtlEqualUnicodeString(&BaseName, &ChpeNtdllImportName, TRUE))
-        return FALSE;
-
-    if (ChpepAppDirectoryOverridesImport(&BaseName, DllName))
-        return FALSE;
-
-    return TRUE;
+    return RtlEqualUnicodeString(&BaseName, &ChpeNtdllImportName, TRUE);
 }
 
 NTSTATUS

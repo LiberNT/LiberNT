@@ -148,7 +148,8 @@ function(add_cd_file)
 
     # get file if we need to
     if(NOT _CD_FILE)
-        set(_CD_FILE "$<TARGET_FILE:${_CD_TARGET}>")
+        set_property(GLOBAL APPEND PROPERTY CD_TARGET_FILES ${_CD_TARGET})
+        set(_CD_FILE "$<IF:$<BOOL:$<TARGET_PROPERTY:${_CD_TARGET},ARM64X_FILE>>,$<TARGET_PROPERTY:${_CD_TARGET},ARM64X_FILE>,$<TARGET_FILE:${_CD_TARGET}>>")
         if(NOT _CD_NAME_ON_CD)
             set(_CD_NAME_ON_CD "$<TARGET_FILE_NAME:${_CD_TARGET}>")
         endif()

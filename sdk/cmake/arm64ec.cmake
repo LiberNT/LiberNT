@@ -76,24 +76,6 @@ if(TARGET mesa_gallium)
     list(APPEND ARM64EC_RUNTIME_VALIDATION_FILES "${_arm64ec_mesa_file}")
 endif()
 
-set(ARM64EC_ALIAS_FILES)
-set(ARM64EC_ALIAS_SOURCES)
-foreach(_alias IN LISTS ARM64EC_RUNTIME_ALIASES)
-    if(NOT _alias MATCHES "^([^=]+)=(.+)$")
-        message(FATAL_ERROR "Invalid ARM64EC runtime alias '${_alias}'; expected target=filename")
-    endif()
-
-    set(_alias_target "${CMAKE_MATCH_1}")
-    set(_alias_name "${CMAKE_MATCH_2}")
-    if(NOT _alias_target IN_LIST ARM64EC_RUNTIME_BUILD_MODULES)
-        message(FATAL_ERROR "ARM64EC runtime alias target '${_alias_target}' is not in the target list")
-    endif()
-
-    _arm64ec_get_target_file("${_alias_target}" _alias_source)
-    list(APPEND ARM64EC_ALIAS_SOURCES "${_alias_source}")
-    list(APPEND ARM64EC_ALIAS_FILES "${REACTOS_BINARY_DIR}/CMakeFiles/fex-arm64ec-aliases/${_alias_name}")
-endforeach()
-
 get_filename_component(_fex_toolchain "${CMAKE_TOOLCHAIN_FILE}" ABSOLUTE BASE_DIR "${REACTOS_SOURCE_DIR}")
 if(HOST_TOOLS_DIR)
     set(_arm64ec_host_tools_dir "${HOST_TOOLS_DIR}")
@@ -212,32 +194,50 @@ export_sdk_libraries(fex_arm64ec_sdk_libs "${FEX_ARM64EC_SDK_LIBDIR}"
     FILES "${ARM64EC_BINARY_DIR}/sdk/lib/vcruntime/libchpe.a"
     DEPENDS fex_arm64ec_runtime)
 
-add_cd_file(TARGET fex_arm64ec_runtime FILE ${ARM64EC_RUNTIME_FILES}
-    DESTINATION reactos/system32/arm64ec FOR all)
+find_program(ARM64X_PYTHON_EXECUTABLE NAMES python3 python REQUIRED NO_CMAKE_FIND_ROOT_PATH)
+get_property(_arm64x_system_targets GLOBAL PROPERTY CD_TARGET_FILES)
+set(_arm64x_files)
+set(_arm64ec_system_files)
+foreach(_target IN LISTS ARM64EC_RUNTIME_MODULES ARM64EC_RUNTIME_AUXILIARY_MODULES)
+    _arm64ec_get_target_file("${_target}" _ec_file)
+    if(_target IN_LIST _arm64x_system_targets)
+        file(RELATIVE_PATH _relative_file "${ARM64EC_BINARY_DIR}" "${_ec_file}")
+        get_filename_component(_name "${_ec_file}" NAME)
+        get_target_property(_binary_dir "${_target}" BINARY_DIR)
+        set(_arm64x_file "${_binary_dir}/arm64x/${_name}")
+        add_custom_command(
+            OUTPUT "${_arm64x_file}"
+            COMMAND "${ARM64X_PYTHON_EXECUTABLE}" "${REACTOS_SOURCE_DIR}/sdk/tools/arm64x_link.py"
+                --ninja "${CMAKE_MAKE_PROGRAM}"
+                --native-dir "${REACTOS_BINARY_DIR}" --native-target "${_relative_file}"
+                --ec-dir "${ARM64EC_BINARY_DIR}" --ec-target "${_relative_file}"
+                --output "${_arm64x_file}"
+            DEPENDS ${_target} "${_ec_file}" "${REACTOS_SOURCE_DIR}/sdk/tools/arm64x_link.py"
+            COMMENT "Linking ARM64X ${_name}"
+            VERBATIM)
+        set_target_properties(${_target} PROPERTIES ARM64X_FILE "${_arm64x_file}")
+        list(APPEND _arm64x_files "${_arm64x_file}")
+    elseif(_target IN_LIST ARM64EC_RUNTIME_MODULES)
+        list(APPEND _arm64ec_system_files "${_ec_file}")
+    endif()
+endforeach()
+
+add_custom_target(arm64x_runtime ALL DEPENDS ${_arm64x_files})
+add_dependencies(arm64x_runtime fex_arm64ec_runtime)
+add_dependencies(bootcd arm64x_runtime)
+add_dependencies(preinstall_partition arm64x_runtime)
+
+if(_arm64ec_system_files)
+    add_cd_file(TARGET fex_arm64ec_runtime FILE ${_arm64ec_system_files}
+        DESTINATION reactos/system32 FOR all)
+    set_property(GLOBAL APPEND PROPERTY CI_SYSTEM_FILES ${_arm64ec_system_files})
+endif()
 
 if(ARM64EC_RUNTIME_OPTIONAL_FILES)
     add_cd_file(TARGET fex_arm64ec_runtime FILE ${ARM64EC_RUNTIME_OPTIONAL_FILES}
-        DESTINATION reactos/system32/arm64ec OPTIONAL FOR all)
+        DESTINATION reactos/system32 OPTIONAL FOR all)
+    set_property(GLOBAL APPEND PROPERTY CI_SYSTEM_OPTIONAL_FILES ${ARM64EC_RUNTIME_OPTIONAL_FILES})
 endif()
 
-if(ARM64EC_ALIAS_FILES)
-    list(LENGTH ARM64EC_ALIAS_FILES _arm64ec_alias_count)
-    math(EXPR _arm64ec_alias_last "${_arm64ec_alias_count} - 1")
-    foreach(_alias_index RANGE 0 ${_arm64ec_alias_last})
-        list(GET ARM64EC_ALIAS_SOURCES ${_alias_index} _alias_source)
-        list(GET ARM64EC_ALIAS_FILES ${_alias_index} _alias_file)
-        add_custom_command(
-            OUTPUT "${_alias_file}"
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${REACTOS_BINARY_DIR}/CMakeFiles/fex-arm64ec-aliases"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_alias_source}" "${_alias_file}"
-            DEPENDS fex_arm64ec_runtime "${_alias_source}"
-            COMMENT "Creating ARM64EC runtime alias ${_alias_file}"
-            VERBATIM)
-    endforeach()
-
-    add_custom_target(fex_arm64ec_aliases DEPENDS ${ARM64EC_ALIAS_FILES})
-    add_cd_file(TARGET fex_arm64ec_aliases FILE ${ARM64EC_ALIAS_FILES}
-        DESTINATION reactos/system32/arm64ec FOR all)
-endif()
-
-message(STATUS "FEX: double-building ${_arm64ec_target_count} ARM64EC runtime DLLs into system32/arm64ec")
+list(LENGTH _arm64x_files _arm64x_count)
+message(STATUS "FEX: linking ${_arm64x_count} ARM64X system DLLs from the ARM64 and ARM64EC builds")

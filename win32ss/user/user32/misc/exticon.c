@@ -269,7 +269,7 @@ static BYTE * ICO_GetIconDirectory( LPBYTE peimage, LPicoICONDIR* lplpiID, ULONG
 #ifdef __REACTOS__
 static VOID USER32_RedirectToMunFile(LPWSTR lpszPath, DWORD cchPath)
 {
-    static const LPCWSTR SystemDirectories[] = { L"System32", L"SysWOW64", L"arm64ec" };
+    static const LPCWSTR SystemDirectories[] = { L"System32", L"SysWOW64" };
     WCHAR szMunPath[MAX_PATH];
     LPCWSTR pszName, pszParent;
     UINT i, cch;
