@@ -1,0 +1,37 @@
+[Version]
+Signature  = "$Windows NT$"
+LayoutFile = layout.inf
+Class      = SCSIAdapter
+ClassGUID  = {4D36E97B-E325-11CE-BFC1-08002BE10318}
+Provider   = %LiberNT%
+DriverVer  = 10/21/2026,1.00
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%MicrosoftMfg% = MicrosoftMfg
+
+[MicrosoftMfg]
+%StorVsc.DeviceDesc% = StorVsc_Inst,VMBUS\{ba6163d9-04a1-4d29-b605-72e2ffb1dc7f}
+
+[StorVsc_Inst.NT]
+CopyFiles = StorVsc_CopyFiles.NT
+
+[StorVsc_CopyFiles.NT]
+storvsc.sys
+
+[StorVsc_Inst.NT.Services]
+AddService = storvsc, 0x00000002, StorVsc_Service_Inst
+
+[StorVsc_Service_Inst]
+ServiceType    = 1
+StartType      = 3
+ErrorControl   = 1
+ServiceBinary  = %12%\storvsc.sys
+LoadOrderGroup = SCSI Miniport
+
+[Strings]
+LiberNT = "LiberNT Project"
+MicrosoftMfg = "Microsoft"
+StorVsc.DeviceDesc = "Microsoft Hyper-V SCSI Controller"
