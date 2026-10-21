@@ -1500,11 +1500,17 @@ public:
 
     VOID BuildResults(LPCWSTR pszQuery)
     {
+        int cchQuery = lstrlenW(pszQuery);
+
         m_Results.SetCount(0);
         for (SIZE_T i = 0; i < m_Flat.GetCount() && m_Results.GetCount() < 100; i++)
         {
-            if (StrStrIW(m_Flat[i]->szName, pszQuery))
+            if (StrStrIW(m_Flat[i]->szName, pszQuery) ||
+                (SM2GetTargetPath(m_Flat[i]) &&
+                 StrCmpNIW(PathFindFileNameW(m_Flat[i]->szTargetPath), pszQuery, cchQuery) == 0))
+            {
                 m_Results.Add(m_Flat[i]);
+            }
         }
     }
 
