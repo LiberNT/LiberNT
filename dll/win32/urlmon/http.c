@@ -96,6 +96,13 @@ static inline BOOL set_security_flag(HttpProtocol *This, DWORD flags)
     return res;
 }
 
+#ifdef __REACTOS__
+#define _SECURITY_FLAG_CERT_REV_FAILED    0x00800000
+#define _SECURITY_FLAG_CERT_INVALID_CA    0x01000000
+#define _SECURITY_FLAG_CERT_INVALID_CN    0x02000000
+#define _SECURITY_FLAG_CERT_INVALID_DATE  0x04000000
+#endif
+
 static inline HRESULT internet_error_to_hres(DWORD error)
 {
     switch(error)
@@ -131,6 +138,23 @@ static HRESULT handle_http_error(HttpProtocol *This, DWORD error)
     HRESULT hres;
 
     TRACE("(%p %lu)\n", This, error);
+
+#ifdef __REACTOS__
+    if(error == ERROR_INTERNET_SEC_CERT_ERRORS) {
+        DWORD flags, size = sizeof(flags);
+
+        if(InternetQueryOptionW(This->base.request, INTERNET_OPTION_SECURITY_FLAGS, &flags, &size)) {
+            if(flags & _SECURITY_FLAG_CERT_INVALID_CN)
+                error = ERROR_INTERNET_SEC_CERT_CN_INVALID;
+            else if(flags & _SECURITY_FLAG_CERT_INVALID_DATE)
+                error = ERROR_INTERNET_SEC_CERT_DATE_INVALID;
+            else if(flags & _SECURITY_FLAG_CERT_INVALID_CA)
+                error = ERROR_INTERNET_INVALID_CA;
+            else if(flags & _SECURITY_FLAG_CERT_REV_FAILED)
+                error = ERROR_INTERNET_SEC_CERT_REV_FAILED;
+        }
+    }
+#endif
 
     switch(error) {
     case ERROR_INTERNET_SEC_CERT_DATE_INVALID:
