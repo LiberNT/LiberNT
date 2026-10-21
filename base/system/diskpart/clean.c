@@ -95,6 +95,8 @@ clean_main(
         RtlFreeHeap(RtlGetProcessHeap(), 0, PartEntry);
     }
 
+    CurrentPartition = NULL;
+
     /* Initialize the disk entry */
     CurrentDisk->ExtendedPartition = NULL;
     CurrentDisk->Dirty = FALSE;
@@ -235,6 +237,23 @@ clean_main(
             ConResPuts(StdOut, IDS_CLEAN_FAIL);
             goto done;
         }
+    }
+
+    Status = NtDeviceIoControlFile(FileHandle,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   &IoStatusBlock,
+                                   IOCTL_DISK_DELETE_DRIVE_LAYOUT,
+                                   NULL,
+                                   0,
+                                   NULL,
+                                   0);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Failed to delete the drive layout! (Status 0x%08lx)\n", Status);
+        ConResPuts(StdOut, IDS_CLEAN_FAIL);
+        goto done;
     }
 
     ConResPuts(StdOut, IDS_CLEAN_SUCCESS);
