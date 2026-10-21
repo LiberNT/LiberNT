@@ -1,0 +1,38 @@
+[Version]
+Signature  = "$Windows NT$"
+LayoutFile = layout.inf
+Class      = System
+ClassGUID  = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider   = %LiberNT%
+DriverVer  = 10/21/2026,1.00
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%MicrosoftMfg% = MicrosoftMfg
+
+[MicrosoftMfg]
+%VMBus.DeviceDesc% = VMBus_Inst,ACPI\VMBus
+%VMBus.DeviceDesc% = VMBus_Inst,ACPI\VMBUS
+%VMBus.DeviceDesc% = VMBus_Inst,*VMBus
+
+[VMBus_Inst.NT]
+CopyFiles = VMBus_CopyFiles.NT
+
+[VMBus_CopyFiles.NT]
+vmbus.sys
+
+[VMBus_Inst.NT.Services]
+AddService = vmbus, 0x00000002, VMBus_Service_Inst
+
+[VMBus_Service_Inst]
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\vmbus.sys
+
+[Strings]
+LiberNT = "LiberNT Project"
+MicrosoftMfg = "Microsoft"
+VMBus.DeviceDesc = "Microsoft Hyper-V Virtual Machine Bus"

@@ -1,0 +1,7 @@
+@ stdcall VmbChannelFromDevice(ptr)
+@ stdcall VmbChannelOpen(ptr long ptr ptr)
+@ stdcall VmbChannelClose(ptr)
+@ stdcall VmbChannelCreateGpadl(ptr ptr long ptr)
+@ stdcall VmbChannelDestroyGpadl(ptr long)
+@ stdcall VmbChannelSendPacket(ptr long long int64 ptr long)
+@ stdcall VmbChannelReceivePacket(ptr ptr long ptr)
