@@ -2094,6 +2094,45 @@ DwmApplyBackdropBlur(ULONG *Composition, LONG Width, LONG Height,
     return NULL;
 }
 
+#define DWM_CORNER_KEEP_RADIUS 64
+
+static ULONG g_cornerKeep[4 * DWM_CORNER_KEEP_RADIUS * DWM_CORNER_KEEP_RADIUS];
+
+static void
+DwmKeepCorners(ULONG *Composition, LONG Width, LONG Height, const DWM_WIN *Window, BOOL Restore)
+{
+    LONG r = (LONG)min(Window->CornerRadius, (ULONG)min(Window->cx / 2, Window->cy / 2));
+    LONGLONG WindowX = (LONGLONG)Window->x - g_originX;
+    LONGLONG WindowY = (LONGLONG)Window->y - g_originY;
+    ULONG *Kept = g_cornerKeep;
+    LONG Corner, Left, Top, x, y;
+
+    if (r <= 0 || r > DWM_CORNER_KEEP_RADIUS)
+        return;
+    for (Corner = 0; Corner < 4; ++Corner)
+    {
+        Left = (Corner & 1) ? Window->cx - r : 0;
+        Top = (Corner & 2) ? Window->cy - r : 0;
+        for (y = Top; y < Top + r; ++y)
+        {
+            for (x = Left; x < Left + r; ++x, ++Kept)
+            {
+                LONGLONG ScreenX = WindowX + x, ScreenY = WindowY + y;
+                ULONG *Pixel;
+
+                if (ScreenX < 0 || ScreenY < 0 || ScreenX >= Width || ScreenY >= Height ||
+                    DwmCornerAlpha(x, y, Window->cx, Window->cy, Window->CornerRadius) != 0)
+                    continue;
+                Pixel = Composition + (SIZE_T)ScreenY * Width + (SIZE_T)ScreenX;
+                if (Restore)
+                    *Pixel = *Kept;
+                else
+                    *Kept = *Pixel;
+            }
+        }
+    }
+}
+
 static LONG
 DwmShadowCornerInset(const DWM_WIN *Window, LONG y)
 {
@@ -2488,6 +2527,7 @@ DwmBlendFrameBand(ULONG *Dest, const ULONG *Under, const ULONG *Source,
         ULONG s = Source[Index], f = Frame, Alpha = (s >> 24) & 0xFFu;
         ULONG Inverse = 255u - Alpha, Coverage = WindowAlpha, d;
         ULONG Red, Green, Blue, Out;
+        BOOL Content = Alpha == 0 && (s & 0x00FFFFFFu) != 0;
 
         for (Button = 0; Button < DWM_CAPTION_BUTTONS; ++Button)
         {
@@ -2498,21 +2538,33 @@ DwmBlendFrameBand(ULONG *Dest, const ULONG *Under, const ULONG *Source,
             {
                 f = Buttons[Button][(SIZE_T)(Row - Rect->top) * (ULONG)(Rect->right - Rect->left) +
                                     (ULONG)(X - Rect->left)];
+                Content = FALSE;
                 break;
             }
         }
-        if (UseBackdrop)
-            f = DwmFrameMaterial(f, Under[Index], Window, BackdropKey, ColorizationKey,
-                                 Wallpaper != NULL ? &Wallpaper[Index] : NULL,
-                                 ScreenX + Index, ScreenY);
+        if (Content)
+        {
+            Out = s & 0x00FFFFFFu;
+            if (UseBackdrop)
+                Out = DwmFrameMaterial(Out, Under[Index], Window, BackdropKey, ColorizationKey,
+                                       Wallpaper != NULL ? &Wallpaper[Index] : NULL,
+                                       ScreenX + Index, ScreenY);
+        }
+        else
+        {
+            if (UseBackdrop)
+                f = DwmFrameMaterial(f, Under[Index], Window, BackdropKey, ColorizationKey,
+                                     Wallpaper != NULL ? &Wallpaper[Index] : NULL,
+                                     ScreenX + Index, ScreenY);
 
-        Red = ((s >> 16) & 0xFFu) + ((f >> 16) & 0xFFu) * Inverse / 255u;
-        Green = ((s >> 8) & 0xFFu) + ((f >> 8) & 0xFFu) * Inverse / 255u;
-        Blue = (s & 0xFFu) + (f & 0xFFu) * Inverse / 255u;
-        if (Red > 255) Red = 255;
-        if (Green > 255) Green = 255;
-        if (Blue > 255) Blue = 255;
-        Out = (Red << 16) | (Green << 8) | Blue;
+            Red = ((s >> 16) & 0xFFu) + ((f >> 16) & 0xFFu) * Inverse / 255u;
+            Green = ((s >> 8) & 0xFFu) + ((f >> 8) & 0xFFu) * Inverse / 255u;
+            Blue = (s & 0xFFu) + (f & 0xFFu) * Inverse / 255u;
+            if (Red > 255) Red = 255;
+            if (Green > 255) Green = 255;
+            if (Blue > 255) Blue = 255;
+            Out = (Red << 16) | (Green << 8) | Blue;
+        }
 
         if (Window->CornerRadius != 0)
             Coverage = Coverage * DwmCornerAlpha(X, Row, Window->cx, Window->cy,
@@ -3450,6 +3502,7 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
             {
                 ULONG frameInverse = 255u - min(255u, sourceAlpha * recip >> 16);
                 ULONG f = frameKey, red, green, blue;
+                BOOL content = sourceAlpha == 0 && (s & 0x00FFFFFFu) != 0;
 
                 for (button = 0; button < DWM_CAPTION_BUTTONS; ++button)
                 {
@@ -3460,14 +3513,18 @@ DwmBlitScaled(ULONG *comp, LONG scrW,
                     {
                         f = frameButtons[button][(SIZE_T)(sy0 - Rect->top) * (ULONG)(Rect->right - Rect->left) +
                                                  (ULONG)(sx0 - Rect->left)];
+                        content = FALSE;
                         break;
                     }
                 }
-                red = ((s >> 16) & 0xFFu) + ((f >> 16) & 0xFFu) * frameInverse / 255u;
-                green = ((s >> 8) & 0xFFu) + ((f >> 8) & 0xFFu) * frameInverse / 255u;
-                blue = (s & 0xFFu) + (f & 0xFFu) * frameInverse / 255u;
+                if (!content)
+                {
+                    red = ((s >> 16) & 0xFFu) + ((f >> 16) & 0xFFu) * frameInverse / 255u;
+                    green = ((s >> 8) & 0xFFu) + ((f >> 8) & 0xFFu) * frameInverse / 255u;
+                    blue = (s & 0xFFu) + (f & 0xFFu) * frameInverse / 255u;
 
-                s = (min(red, 255u) << 16) | (min(green, 255u) << 8) | min(blue, 255u);
+                    s = (min(red, 255u) << 16) | (min(green, 255u) << 8) | min(blue, 255u);
+                }
             }
             if (premultiplied)
             {
@@ -4571,9 +4628,11 @@ DwmComposeLoop(HANDLE hStopEvent)
                         Animated.cx = wins[i].AnimCx;
                         Animated.cy = wins[i].AnimCy;
                         Animated.AnimFlags = 0;
+                        DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &Animated, FALSE);
                         animatedBackdrop = DwmApplyBackdropBlur(
                             (ULONG *)g_compBits, g_W, g_H,
                             pl, pt, pr, pb, &Animated, wins, i);
+                        DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &Animated, TRUE);
                         DwmBlendShadow((ULONG *)g_compBits, g_W, g_H,
                                        cl, ct, cr, cb, &wins[i]);
                         DwmStatCounter(&stgA);
@@ -4587,6 +4646,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                         continue;
                     }
                     DwmStatCounter(&stgA);
+                    DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &wins[i], FALSE);
                     DwmApplyBlur((const ULONG *)g_compBits,
                                  (ULONG *)g_compBits, g_W, g_H,
                                  pl, pt, pr, pb, &wins[i],
@@ -4597,6 +4657,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     backdropBase = DwmApplyBackdropBlur(
                         (ULONG *)g_compBits, g_W, g_H,
                         pl, pt, pr, pb, &wins[i], wins, i);
+                    DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &wins[i], TRUE);
                     DwmStatCounter(&stgA);
                     if (g_frameStats)
                         g_statBackdropBlurTicks += (ULONGLONG)(stgA.QuadPart - stgB.QuadPart);
