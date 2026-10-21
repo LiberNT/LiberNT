@@ -1889,6 +1889,27 @@ OpenRemoteDatabase(IN PDEVICE_INFORMATION DeviceInformation,
                           CreateFileTypeNone,
                           NULL,
                           IO_STOP_ON_SYMLINK | IO_NO_PARAMETER_CHECKING);
+    if (Status == STATUS_OBJECT_PATH_NOT_FOUND &&
+        (!MigrateDatabase || DeviceInformation->Migrated == 0) &&
+        NT_SUCCESS(RtlCreateSystemVolumeInformationFolder(&DeviceInformation->DeviceName)))
+    {
+        Status = IoCreateFile(&Database,
+                              SYNCHRONIZE | READ_CONTROL | FILE_WRITE_ATTRIBUTES |
+                              FILE_READ_ATTRIBUTES | FILE_WRITE_EA | FILE_READ_EA |
+                              FILE_APPEND_DATA | FILE_WRITE_DATA | FILE_READ_DATA,
+                              &ObjectAttributes,
+                              &IoStatusBlock,
+                              NULL,
+                              FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN,
+                              0,
+                              FILE_OPEN_IF,
+                              FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_ALERT,
+                              NULL,
+                              0,
+                              CreateFileTypeNone,
+                              NULL,
+                              IO_STOP_ON_SYMLINK | IO_NO_PARAMETER_CHECKING);
+    }
     if (Status == STATUS_STOPPED_ON_SYMLINK)
     {
         DPRINT1("Attempt to exploit CVE-2015-1769. See CORE-10216\n");
@@ -1896,6 +1917,11 @@ OpenRemoteDatabase(IN PDEVICE_INFORMATION DeviceInformation,
 
     /* If base it to be migrated and was opened successfully, go ahead */
     if (MigrateDatabase && NT_SUCCESS(Status))
+    {
+        DeviceInformation->Migrated = 1;
+    }
+    else if (MigrateDatabase &&
+             (Status == STATUS_OBJECT_NAME_NOT_FOUND || Status == STATUS_OBJECT_PATH_NOT_FOUND))
     {
         CreateRemoteDatabase(DeviceInformation, &Database);
     }
