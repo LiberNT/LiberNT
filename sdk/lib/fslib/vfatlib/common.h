@@ -14,6 +14,11 @@
 ULONG GetShiftCount(IN ULONG Value);
 ULONG CalcVolumeSerialNumber(VOID);
 
+VOID
+FatSetVolumeLabelEntry(
+    OUT PUCHAR Entry,
+    IN const UCHAR *VolumeLabel);
+
 NTSTATUS
 FatWipeSectors(
     IN HANDLE FileHandle,

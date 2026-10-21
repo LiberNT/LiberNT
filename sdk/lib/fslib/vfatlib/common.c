@@ -51,6 +51,33 @@ CalcVolumeSerialNumber(VOID)
     return Serial;
 }
 
+VOID
+FatSetVolumeLabelEntry(
+    OUT PUCHAR Entry,
+    IN const UCHAR *VolumeLabel)
+{
+    LARGE_INTEGER SystemTime;
+    LARGE_INTEGER LocalTime;
+    TIME_FIELDS TimeFields;
+    USHORT Time;
+    USHORT Date;
+
+    if (RtlCompareMemory(VolumeLabel, "NO NAME    ", 11) == 11)
+        return;
+
+    NtQuerySystemTime(&SystemTime);
+    RtlSystemTimeToLocalTime(&SystemTime, &LocalTime);
+    RtlTimeToTimeFields(&LocalTime, &TimeFields);
+    Time = (USHORT)((TimeFields.Hour << 11) | (TimeFields.Minute << 5) | (TimeFields.Second / 2));
+    Date = (USHORT)(((TimeFields.Year - 1980) << 9) | (TimeFields.Month << 5) | TimeFields.Day);
+
+    RtlZeroMemory(Entry, 32);
+    RtlCopyMemory(Entry, VolumeLabel, 11);
+    Entry[11] = 0x08;
+    RtlCopyMemory(Entry + 22, &Time, sizeof(Time));
+    RtlCopyMemory(Entry + 24, &Date, sizeof(Date));
+}
+
 /***** Wipe function for FAT12, FAT16 and FAT32 formats *****/
 NTSTATUS
 FatWipeSectors(

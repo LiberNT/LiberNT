@@ -340,6 +340,7 @@ Fat32WriteRootDirectory(IN HANDLE FileHandle,
 
     /* Zero the buffer */
     RtlZeroMemory(Buffer, BootSector->SectorsPerCluster * BootSector->BytesPerSector);
+    FatSetVolumeLabelEntry(Buffer, BootSector->VolumeLabel);
 
     DPRINT("BootSector->ReservedSectors = %lu\n", BootSector->ReservedSectors);
     DPRINT("BootSector->FATSectors32 = %lu\n", BootSector->FATSectors32);
@@ -473,7 +474,7 @@ Fat32Format(IN HANDLE FileHandle,
     }
     else
     {
-        RtlUnicodeStringToOemString(&VolumeLabel, Label, TRUE);
+        RtlUpcaseUnicodeStringToOemString(&VolumeLabel, Label, TRUE);
         RtlFillMemory(&BootSector.VolumeLabel[0], 11, ' ');
         memcpy(&BootSector.VolumeLabel[0], VolumeLabel.Buffer,
                VolumeLabel.Length < 11 ? VolumeLabel.Length : 11);

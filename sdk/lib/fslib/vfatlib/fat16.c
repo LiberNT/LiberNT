@@ -197,6 +197,7 @@ Fat16WriteRootDirectory(IN HANDLE FileHandle,
 
     /* Zero the buffer */
     RtlZeroMemory(Buffer, 32 * 1024);
+    FatSetVolumeLabelEntry(Buffer, BootSector->VolumeLabel);
 
     Sectors = 32 * 1024 / BootSector->BytesPerSector;
     for (i = 0; i < RootDirSectors; i += Sectors)
@@ -223,6 +224,8 @@ Fat16WriteRootDirectory(IN HANDLE FileHandle,
             DPRINT("NtWriteFile() failed (Status %lx)\n", Status);
             goto done;
         }
+
+        RtlZeroMemory(Buffer, 32);
 
         UpdateProgress(Context, Sectors);
     }
@@ -307,7 +310,7 @@ Fat16Format(IN HANDLE FileHandle,
     }
     else
     {
-        RtlUnicodeStringToOemString(&VolumeLabel, Label, TRUE);
+        RtlUpcaseUnicodeStringToOemString(&VolumeLabel, Label, TRUE);
         RtlFillMemory(&BootSector.VolumeLabel[0], 11, ' ');
         memcpy(&BootSector.VolumeLabel[0], VolumeLabel.Buffer,
                VolumeLabel.Length < 11 ? VolumeLabel.Length : 11);
