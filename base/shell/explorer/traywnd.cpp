@@ -998,8 +998,16 @@ public:
             ShellExecuteW(m_hWnd, NULL, L"ms-settings:about", NULL, NULL, SW_NORMAL);
             break;
         case IDHK_SETTINGS:
-            ShellExecuteW(m_hWnd, NULL, L"ms-settings:", NULL, NULL, SW_NORMAL);
+        {
+            HWND hwndButton = m_TrayNotify ? FindWindowExW(m_TrayNotify, NULL, L"TrayQuickSettingsButton", NULL) : NULL;
+            RECT rc;
+
+            if (!IsThemeActive() && hwndButton && ::GetWindowRect(hwndButton, &rc))
+                TrayQuickSettings_Toggle(hwndButton, &rc);
+            else
+                ShellExecuteW(m_hWnd, NULL, L"ms-settings:", NULL, NULL, SW_NORMAL);
             break;
+        }
         case IDHK_ACCESSIBILITY:
             ShellExecuteW(m_hWnd, NULL, L"ms-settings:easeofaccess", NULL, NULL, SW_NORMAL);
             break;

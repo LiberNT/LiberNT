@@ -45,6 +45,20 @@ TfyFlyoutRadius(VOID)
 {
     return IsThemeActive() ? ShellScaleForDpi(TFY_FLYOUT_RADIUS) : 0;
 }
+
+#define TFY_PANE_WIDTH 346
+
+static VOID
+TfyPanePosition(const RECT *prcAnchor, SIZE *pSize, POINT *ppt)
+{
+    MONITORINFO mi;
+
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfoW(MonitorFromRect(prcAnchor, MONITOR_DEFAULTTONEAREST), &mi);
+    pSize->cy = mi.rcWork.bottom - mi.rcWork.top;
+    ppt->x = mi.rcWork.right - pSize->cx;
+    ppt->y = mi.rcWork.top;
+}
 static ULONG g_TfyTransitionSeq;
 
 static VOID
@@ -78,11 +92,12 @@ public:
     POINT m_ptFinal;
     BYTE m_AnimAlpha;
     BYTE m_AnimStartAlpha;
+    BOOL m_bSlideFromRight;
     HTHEME m_hFlyoutTheme;
     HTHEME m_hFlyoutButtonTheme;
 
     CTrayFlyoutAnimation() : m_AnimPhase(TFY_NONE), m_AnimT0(0),
-                             m_AnimAlpha(255), m_AnimStartAlpha(255),
+                             m_AnimAlpha(255), m_AnimStartAlpha(255), m_bSlideFromRight(FALSE),
                              m_hFlyoutTheme(NULL), m_hFlyoutButtonTheme(NULL)
     {
         ZeroMemory(&m_ptFinal, sizeof(m_ptFinal));
@@ -141,7 +156,10 @@ public:
         }
         else
         {
-            SetRect(&rcFrom, x, y + nOffset, x + cx, y + nOffset + cy);
+            if (m_bSlideFromRight)
+                SetRect(&rcFrom, x + nOffset * 4, y, x + nOffset * 4 + cx, y + cy);
+            else
+                SetRect(&rcFrom, x, y + nOffset, x + cx, y + nOffset + cy);
             TfyRequestTransition(hWnd, &rcFrom, TFY_ANIM_INITIAL_ALPHA, 255, TFY_ANIM_OPEN_MS);
         }
         g_TfyMorphTick = 0;
@@ -3399,6 +3417,13 @@ VOID TrayNotifications_SetSink(IN HWND hwndSink)
     g_hwndTfyNotifSink = hwndSink;
 }
 
+static ULONGLONG g_TfyNotifHideUntil = 0;
+
+BOOL TrayNotifications_IsHidden(VOID)
+{
+    return g_TfyNotifHideUntil && GetTickCount64() < g_TfyNotifHideUntil;
+}
+
 VOID TrayFlyouts_Destroy(VOID)
 {
     TaskPreview_Hide();
@@ -6243,6 +6268,7 @@ typedef VOID (WINAPI *PFN_WLANFREEMEMORY)(PVOID);
 #define TFY_NETHIT_REFRESH  -3
 #define TFY_NETHIT_AIRPLANE -4
 #define TFY_NETHIT_WIFI     -5
+#define TFY_NETHIT_BACK     -6
 #define TFY_NETHIT_BUTTON   0x100
 #define TFY_NETHIT_BUTTON2  0x200
 #define TFY_NETHIT_CHECK    0x300
@@ -6603,6 +6629,8 @@ TfyXmlEscape(LPCWSTR pszIn, LPWSTR pszOut, SIZE_T cchOut)
     pszOut[o] = 0;
 }
 
+static BOOL g_bTfyNetFromSettings = FALSE;
+
 class CTrayNetworkWnd :
     public CWindowImpl<CTrayNetworkWnd, CWindow, CTrayFlyoutTraits>,
     public CTrayFlyoutAnimation
@@ -6657,6 +6685,11 @@ public:
     RECT m_rcWifi;
     BOOL m_bWifiOn;
     BOOL m_bAirplane;
+    BOOL m_bPane;
+    BOOL m_bBack;
+    int m_nVisRows;
+    HFONT m_hFontPaneTitle;
+    RECT m_rcBack;
 
     CTrayNetworkWnd() : m_hFont(NULL), m_hFontSmall(NULL), m_hFontHeader(NULL),
                         m_hWlanApi(NULL), m_hWlan(NULL),
@@ -6670,8 +6703,10 @@ public:
                         m_bScanPending(FALSE), m_bLaunching(FALSE), m_nWlanScroll(0), m_iWlanFirst(0),
                         m_bWlanLoading(FALSE), m_SpinT0(0),
                         m_bConnecting(FALSE), m_bTracking(FALSE), m_nIfaces(0),
-                        m_bWifiOn(TRUE), m_bAirplane(FALSE)
+                        m_bWifiOn(TRUE), m_bAirplane(FALSE), m_bPane(FALSE), m_bBack(FALSE),
+                        m_nVisRows(TFY_NET_VISROWS), m_hFontPaneTitle(NULL)
     {
+        SetRectEmpty(&m_rcBack);
         ZeroMemory(&m_Pal, sizeof(m_Pal));
         ZeroMemory(&m_rcAnchor, sizeof(m_rcAnchor));
         ZeroMemory(&m_size, sizeof(m_size));
@@ -6961,9 +6996,21 @@ public:
 
     VOID Layout()
     {
-        int y = Sc(10) + Sc(28);
-        m_size.cx = Sc(256);
-        SetRect(&m_rcRefresh, m_size.cx - Sc(12) - Sc(22), Sc(10), m_size.cx - Sc(12), Sc(10) + Sc(22));
+        int y = m_bPane ? Sc(84) : Sc(10) + Sc(28);
+        int yRefresh = m_bPane ? Sc(34) : Sc(10);
+        int cyPane = 0;
+
+        m_size.cx = m_bPane ? Sc(TFY_PANE_WIDTH) : Sc(256);
+        if (m_bPane)
+        {
+            POINT ptPane;
+
+            TfyPanePosition(&m_rcAnchor, &m_size, &ptPane);
+            cyPane = m_size.cy;
+            m_nVisRows = max(TFY_NET_VISROWS, (cyPane - Sc(320)) / Sc(40));
+            SetRect(&m_rcBack, Sc(8), Sc(27), Sc(8) + Sc(36), Sc(27) + Sc(36));
+        }
+        SetRect(&m_rcRefresh, m_size.cx - Sc(12) - Sc(22), yRefresh, m_size.cx - Sc(12), yRefresh + Sc(22));
         if (m_szBanner[0] || (m_nIfaces == 0 && !m_Rows.GetCount()))
             y += Sc(20);
         if (m_nIfaces > 0)
@@ -6984,8 +7031,8 @@ public:
             if (m_Rows[k].nType == 2)
                 nWlanTotal++;
         }
-        if (m_nWlanScroll > nWlanTotal - TFY_NET_VISROWS)
-            m_nWlanScroll = nWlanTotal - TFY_NET_VISROWS;
+        if (m_nWlanScroll > nWlanTotal - m_nVisRows)
+            m_nWlanScroll = nWlanTotal - m_nVisRows;
         if (m_nWlanScroll < 0)
             m_nWlanScroll = 0;
 
@@ -6999,7 +7046,7 @@ public:
             if (row.nType == 2 && (int)i >= m_iWlanFirst)
             {
                 int nThis = nWlanIdx++;
-                if (nThis < m_nWlanScroll || nThis >= m_nWlanScroll + TFY_NET_VISROWS)
+                if (nThis < m_nWlanScroll || nThis >= m_nWlanScroll + m_nVisRows)
                 {
                     SetRectEmpty(&row.rc);
                     SetRect(&row.rcButton, 0, 0, 0, 0);
@@ -7044,13 +7091,18 @@ public:
         }
         if (nWlanStart < 0)
             nWlanStart = y;
-        if ((nWlanTotal || m_bWlanLoading) && nWlanTotal < TFY_NET_VISROWS)
-            y += (TFY_NET_VISROWS - nWlanTotal) * Sc(40);
+        if ((nWlanTotal || m_bWlanLoading) && nWlanTotal < m_nVisRows)
+            y += (m_nVisRows - nWlanTotal) * Sc(40);
         SetRect(&m_rcWlanArea, Sc(8), nWlanStart, m_size.cx - Sc(8), y);
         y += Sc(8);
         SetRect(&m_rcLink, Sc(8), y, m_size.cx - Sc(8), y + Sc(26));
         y += Sc(26) + Sc(10);
         m_size.cy = y;
+        if (m_bPane)
+        {
+            SetRect(&m_rcLink, Sc(20), max(y - Sc(36), cyPane - Sc(58)), m_size.cx - Sc(20), max(y - Sc(10), cyPane - Sc(32)));
+            m_size.cy = max(y, cyPane);
+        }
         if (m_hwndEdit && m_iSel >= 0 && m_bPassMode)
         {
             TFYNETROW &row = m_Rows[m_iSel];
@@ -7065,7 +7117,16 @@ public:
         MONITORINFO mi;
         POINT ptRef;
         int xPos, yPos;
-        TfyW11Position(::GetWindow(m_hWnd, GW_OWNER), &m_rcAnchor, m_size, FALSE, &ptRef);
+        if (m_bPane)
+        {
+            SIZE size = m_size;
+
+            TfyPanePosition(&m_rcAnchor, &size, &ptRef);
+        }
+        else
+        {
+            TfyW11Position(::GetWindow(m_hWnd, GW_OWNER), &m_rcAnchor, m_size, FALSE, &ptRef);
+        }
         xPos = ptRef.x;
         yPos = ptRef.y;
         mi.cbSize = sizeof(mi);
@@ -7096,6 +7157,12 @@ public:
         if (!m_hFont) m_hFont = TfyCreateFont(12, FW_SEMIBOLD);
         if (!m_hFontSmall) m_hFontSmall = TfyCreateFont(11, FW_NORMAL);
         if (!m_hFontHeader) m_hFontHeader = TfyCreateFont(14, FW_SEMIBOLD);
+        m_bPane = !IsThemeActive();
+        m_bSlideFromRight = m_bPane;
+        m_bBack = m_bPane && g_bTfyNetFromSettings;
+        g_bTfyNetFromSettings = FALSE;
+        if (m_bPane && !m_hFontPaneTitle)
+            m_hFontPaneTitle = TfyCreateFont(27, FW_LIGHT);
         m_rcAnchor = *prcAnchor;
         Rebuild();
         AcquireSRWLockShared(&g_NetCacheLock);
@@ -7360,8 +7427,8 @@ public:
                 int nWlanIndex = i - m_iWlanFirst;
                 if (nWlanIndex >= 0 && nWlanIndex < m_nWlanScroll)
                     m_nWlanScroll = nWlanIndex;
-                else if (nWlanIndex >= m_nWlanScroll + TFY_NET_VISROWS)
-                    m_nWlanScroll = nWlanIndex - TFY_NET_VISROWS + 1;
+                else if (nWlanIndex >= m_nWlanScroll + m_nVisRows)
+                    m_nWlanScroll = nWlanIndex - m_nVisRows + 1;
                 StringCchCopyW(m_szSelName, _countof(m_szSelName), m_Rows[i].szName);
             }
             else
@@ -7468,8 +7535,24 @@ public:
         FillRect(hdcMem, &rc, hbr);
         DeleteObject(hbr);
         SetBkMode(hdcMem, TRANSPARENT);
-        HGDIOBJ hFontOld = SelectObject(hdcMem, m_hFontHeader);
+        HGDIOBJ hFontOld = SelectObject(hdcMem, m_bPane ? m_hFontPaneTitle : m_hFontHeader);
         RECT rcTitle = { Sc(12), Sc(8), m_rcRefresh.left - Sc(6), Sc(8) + Sc(26) };
+        if (m_bPane)
+        {
+            SetRect(&rcTitle, m_bBack ? m_rcBack.right + Sc(8) : Sc(26), Sc(22), m_rcRefresh.left - Sc(6), Sc(68));
+            if (m_bBack)
+            {
+                RECT rcArrow = { m_rcBack.left + Sc(8), m_rcBack.top + Sc(8), m_rcBack.right - Sc(8), m_rcBack.bottom - Sc(8) };
+
+                if (m_iHot == TFY_NETHIT_BACK)
+                {
+                    HBRUSH hbrBack = CreateSolidBrush(TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 24));
+                    FillRect(hdcMem, &m_rcBack, hbrBack);
+                    DeleteObject(hbrBack);
+                }
+                TfyDrawFluent(hdcMem, &rcArrow, IDI_FLU_ARROWLEFT);
+            }
+        }
         SetTextColor(hdcMem, m_Pal.PanelText);
         DrawTextW(hdcMem, L"Networks", -1, &rcTitle,
                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
@@ -7488,6 +7571,8 @@ public:
         if (m_szBanner[0])
         {
             RECT rcBanner = { Sc(12), Sc(10) + Sc(26), rc.right - Sc(12), Sc(10) + Sc(26) + Sc(20) };
+            if (m_bPane)
+                SetRect(&rcBanner, Sc(26), Sc(80), rc.right - Sc(26), Sc(100));
             SelectObject(hdcMem, m_hFontSmall);
             SetTextColor(hdcMem, m_Pal.DimText);
             DrawTextW(hdcMem, m_szBanner, -1, &rcBanner,
@@ -7642,6 +7727,8 @@ public:
         else if (m_Rows.GetCount() == 0 && !m_szBanner[0])
         {
             RECT rcNone = { Sc(12), Sc(40), rc.right - Sc(12), Sc(70) };
+            if (m_bPane)
+                SetRect(&rcNone, Sc(26), Sc(84), rc.right - Sc(26), Sc(114));
             SelectObject(hdcMem, m_hFontSmall);
             SetTextColor(hdcMem, m_Pal.DimText);
             DrawTextW(hdcMem, L"No networks found", -1, &rcNone,
@@ -7659,6 +7746,13 @@ public:
         SetTextColor(hdcMem, m_iHot == TFY_NETHIT_LINK ? m_Pal.HotBorder : m_Pal.DimText);
         DrawTextW(hdcMem, L"Network & internet settings", -1, &rcLinkText,
                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+        if (m_bPane)
+        {
+            RECT rcEdge = { 0, 0, 1, rc.bottom };
+            HBRUSH hbrEdge = CreateSolidBrush(m_Pal.Border);
+            FillRect(hdcMem, &rcEdge, hbrEdge);
+            DeleteObject(hbrEdge);
+        }
         SelectObject(hdcMem, hFontOld);
         BitBlt(hdc, 0, 0, rc.right, rc.bottom, hdcMem, 0, 0, SRCCOPY);
         SelectObject(hdcMem, hbmOld);
@@ -7803,6 +7897,8 @@ public:
     int HitTest(POINT pt, int *pnBtn)
     {
         *pnBtn = 0;
+        if (m_bBack && PtInRect(&m_rcBack, pt))
+            return TFY_NETHIT_BACK;
         if (m_nIfaces > 0 && PtInRect(&m_rcRefresh, pt))
             return TFY_NETHIT_REFRESH;
         if (m_nIfaces > 0 && PtInRect(&m_rcAirplane, pt))
@@ -7880,6 +7976,16 @@ public:
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         int nBtn = 0;
         int i = HitTest(pt, &nBtn);
+        if (i == TFY_NETHIT_BACK)
+        {
+            HWND hwndOwner = ::GetWindow(m_hWnd, GW_OWNER);
+            RECT rcAnchor = m_rcAnchor;
+
+            HandOffFlyout(m_hWnd);
+            FadeOut();
+            TrayQuickSettings_Toggle(hwndOwner, &rcAnchor);
+            return 0;
+        }
         if (i == TFY_NETHIT_LINK)
         {
             m_bLaunching = TRUE;
@@ -8029,6 +8135,7 @@ public:
         if (m_hFont) { DeleteObject(m_hFont); m_hFont = NULL; }
         if (m_hFontSmall) { DeleteObject(m_hFontSmall); m_hFontSmall = NULL; }
         if (m_hFontHeader) { DeleteObject(m_hFontHeader); m_hFontHeader = NULL; }
+        if (m_hFontPaneTitle) { DeleteObject(m_hFontPaneTitle); m_hFontPaneTitle = NULL; }
         return 0;
     }
 
@@ -9155,6 +9262,23 @@ enum
 #define TFY_QSHIT_BATTERY   0x203
 #define TFY_QSHIT_SETTINGS  0x204
 #define TFY_QSHIT_BRIGHTNESS 0x205
+#define TFY_QSHIT_PANELINK  0x300
+#define TFY_QSHIT_PANETILE  0x310
+#define TFY_QSHIT_PANECHANGE 0x320
+#define TFY_QSHIT_PANEMUTE  0x321
+
+enum
+{
+    TFY_PANE_NETWORK,
+    TFY_PANE_VOLUME,
+    TFY_PANE_BRIGHTNESS,
+    TFY_PANE_NOTIFICATIONS,
+    TFY_PANE_POWER,
+    TFY_PANE_KEYBOARD,
+    TFY_PANE_TILES
+};
+
+#define TFY_PANE_LINKS 4
 
 #define TFY_TIMER_QSTHEME   0x51
 
@@ -9305,15 +9429,36 @@ public:
     BOOL m_bTracking;
     SIZE m_size;
     RECT m_rcSound, m_rcSoundTitle, m_rcMute, m_rcSlider, m_rcSoundMore, m_rcFooter, m_rcBattery, m_rcSettings;
+    BOOL m_bPane;
+    int m_iPaneSlider;
+    HFONT m_hFontPaneTitle;
+    HFONT m_hFontPane;
+    HFONT m_hFontPaneSmall;
+    WCHAR m_szLang[16];
+    RECT m_rcPaneTitle, m_rcPaneSection, m_rcPaneChange, m_rcPaneBox, m_rcPaneValue, m_rcPaneMute, m_rcPaneSlider;
+    RECT m_rcPaneLinks[TFY_PANE_LINKS];
+    RECT m_rcPaneTiles[TFY_PANE_TILES];
 
     CTrayQuickSettingsWnd() : m_hwndOwner(NULL), m_hFont(NULL), m_hFontTitle(NULL), m_hFontSmall(NULL),
                               m_cTiles(0), m_bHasWlan(FALSE), m_bWifiOn(FALSE), m_bHasBluetooth(FALSE),
                               m_bNetConnected(FALSE), m_bDark(FALSE), m_bComVolume(FALSE), m_bLoaded(FALSE), m_bFrameStarted(FALSE),
                               m_nMaster(0), m_bMute(FALSE), m_bDragSlider(FALSE),
                               m_nBrightness(-1), m_bDragBrightness(FALSE), m_bBattery(FALSE),
-                              m_iHot(TFY_QSHIT_NONE), m_iPressed(TFY_QSHIT_NONE), m_bTracking(FALSE)
+                              m_iHot(TFY_QSHIT_NONE), m_iPressed(TFY_QSHIT_NONE), m_bTracking(FALSE),
+                              m_bPane(FALSE), m_iPaneSlider(-1), m_hFontPaneTitle(NULL), m_hFontPane(NULL),
+                              m_hFontPaneSmall(NULL)
     {
         ZeroMemory(&m_Pal, sizeof(m_Pal));
+        m_szLang[0] = UNICODE_NULL;
+        SetRectEmpty(&m_rcPaneTitle);
+        SetRectEmpty(&m_rcPaneSection);
+        SetRectEmpty(&m_rcPaneChange);
+        SetRectEmpty(&m_rcPaneBox);
+        SetRectEmpty(&m_rcPaneValue);
+        SetRectEmpty(&m_rcPaneMute);
+        SetRectEmpty(&m_rcPaneSlider);
+        ZeroMemory(m_rcPaneLinks, sizeof(m_rcPaneLinks));
+        ZeroMemory(m_rcPaneTiles, sizeof(m_rcPaneTiles));
         ZeroMemory(&m_rcAnchor, sizeof(m_rcAnchor));
         ZeroMemory(m_Tiles, sizeof(m_Tiles));
         ZeroMemory(&m_sps, sizeof(m_sps));
@@ -9408,6 +9553,11 @@ public:
         int pad = Sc(16), gap = Sc(10), tileH = Sc(60), badge = Sc(36);
         int colW, y, rows;
 
+        if (m_bPane)
+        {
+            LayoutPane();
+            return;
+        }
         m_size.cx = Sc(360);
         colW = (m_size.cx - pad * 2 - gap) / 2;
         y = pad;
@@ -9508,7 +9658,10 @@ public:
     VOID Reposition()
     {
         POINT pt;
-        TfyW11Position(m_hwndOwner, &m_rcAnchor, m_size, FALSE, &pt);
+        if (m_bPane)
+            TfyPanePosition(&m_rcAnchor, &m_size, &pt);
+        else
+            TfyW11Position(m_hwndOwner, &m_rcAnchor, m_size, FALSE, &pt);
         m_ptFinal = pt;
         if (m_AnimPhase == TFY_NONE)
             SetWindowPos(NULL, pt.x, pt.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -9531,13 +9684,29 @@ public:
             m_bFrameStarted = ShellFrame::Startup();
         m_bDark = !TfyQsReadLightTheme();
         m_bBattery = GetSystemPowerStatus(&m_sps) && m_sps.BatteryFlag != 128 && m_sps.BatteryFlag != 255;
+        m_bPane = !IsThemeActive();
+        m_bSlideFromRight = m_bPane;
+        if (m_bPane)
+        {
+            if (!m_hFontPaneTitle)
+                m_hFontPaneTitle = TfyCreateFont(27, FW_LIGHT);
+            if (!m_hFontPane)
+                m_hFontPane = TfyCreateFont(15, FW_NORMAL);
+            if (!m_hFontPaneSmall)
+                m_hFontPaneSmall = TfyCreateFont(13, FW_NORMAL);
+            PaneLanguage(GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), NULL)));
+        }
         BuildTiles();
         Layout();
-        TfyW11Position(hwndOwner, prcAnchor, m_size, FALSE, &pt);
+        if (m_bPane)
+            TfyPanePosition(prcAnchor, &m_size, &pt);
+        else
+            TfyW11Position(hwndOwner, prcAnchor, m_size, FALSE, &pt);
         BeginFlyoutOpen(m_hWnd, pt.x, pt.y, m_size.cx, m_size.cy, m_Pal.PanelBg);
         SetPropW(m_hWnd, DWM_PROP_CORNER_RADIUS, (HANDLE)(ULONG_PTR)TfyFlyoutRadius());
         SetTimer(TFY_TIMER_AUDIOLOAD, TFY_ANIM_OPEN_MS + TFY_ANIM_INTERVAL, NULL);
         ::InvalidateRect(m_hwndOwner, NULL, FALSE);
+        if (!m_bPane)
         {
             RECT rcQuickSettings = { pt.x, pt.y, pt.x + m_size.cx, pt.y + m_size.cy };
             TrayMediaCard_Open(m_hWnd, &rcQuickSettings);
@@ -9618,10 +9787,421 @@ public:
         UpdateWindow();
     }
 
+    VOID LayoutPane()
+    {
+        POINT pt;
+        int pad = Sc(26), gap = Sc(4), tileH = Sc(78), tileW, y, i;
+
+        m_size.cx = Sc(TFY_PANE_WIDTH);
+        TfyPanePosition(&m_rcAnchor, &m_size, &pt);
+        SetRect(&m_rcPaneTitle, pad, Sc(22), m_size.cx - pad, Sc(22) + Sc(46));
+        SetRect(&m_rcPaneSection, pad, m_rcPaneTitle.bottom + Sc(16), m_size.cx - pad, m_rcPaneTitle.bottom + Sc(40));
+        y = m_rcPaneSection.bottom + Sc(6);
+        for (i = 0; i < TFY_PANE_LINKS; i++)
+        {
+            SetRect(&m_rcPaneLinks[i], 0, y, m_size.cx, y + Sc(38));
+            y += Sc(38);
+        }
+        SetRect(&m_rcPaneChange, 0, m_size.cy - Sc(14) - Sc(44), m_size.cx, m_size.cy - Sc(14));
+        tileW = (m_size.cx - 2 * pad - 2 * gap) / 3;
+        y = m_rcPaneChange.top - Sc(18) - 2 * tileH - gap;
+        for (i = 0; i < TFY_PANE_TILES; i++)
+        {
+            int x = pad + (i % 3) * (tileW + gap);
+            int top = y + (i / 3) * (tileH + gap);
+
+            SetRect(&m_rcPaneTiles[i], x, top, x + tileW, top + tileH);
+        }
+        SetRectEmpty(&m_rcPaneBox);
+        SetRectEmpty(&m_rcPaneValue);
+        SetRectEmpty(&m_rcPaneMute);
+        SetRectEmpty(&m_rcPaneSlider);
+        if (m_iPaneSlider >= 0)
+        {
+            const RECT *prcTile = &m_rcPaneTiles[m_iPaneSlider];
+            int xMid = (prcTile->left + prcTile->right) / 2;
+
+            SetRect(&m_rcPaneBox, prcTile->left, y - gap - Sc(236), prcTile->right, y - gap);
+            SetRect(&m_rcPaneValue, m_rcPaneBox.left, m_rcPaneBox.top + Sc(8), m_rcPaneBox.right, m_rcPaneBox.top + Sc(40));
+            if (m_iPaneSlider == TFY_PANE_VOLUME)
+                SetRect(&m_rcPaneMute, m_rcPaneBox.left, m_rcPaneBox.bottom - Sc(40), m_rcPaneBox.right, m_rcPaneBox.bottom);
+            SetRect(&m_rcPaneSlider, xMid - Sc(2), m_rcPaneValue.bottom + Sc(12), xMid + Sc(2),
+                    (m_iPaneSlider == TFY_PANE_VOLUME ? m_rcPaneMute.top : m_rcPaneBox.bottom - Sc(14)) - Sc(12));
+        }
+    }
+
+    int HitTestPane(POINT pt)
+    {
+        RECT rcHit;
+        int i;
+
+        if (m_iPaneSlider >= 0)
+        {
+            rcHit = m_rcPaneSlider;
+            InflateRect(&rcHit, Sc(18), Sc(8));
+            if (PtInRect(&rcHit, pt))
+                return m_iPaneSlider == TFY_PANE_VOLUME ? TFY_QSHIT_SLIDER : TFY_QSHIT_BRIGHTNESS;
+            if (PtInRect(&m_rcPaneMute, pt))
+                return TFY_QSHIT_PANEMUTE;
+            if (PtInRect(&m_rcPaneBox, pt))
+                return TFY_QSHIT_NONE;
+        }
+        for (i = 0; i < TFY_PANE_TILES; i++)
+        {
+            if (PtInRect(&m_rcPaneTiles[i], pt))
+                return TFY_QSHIT_PANETILE + i;
+        }
+        for (i = 0; i < TFY_PANE_LINKS; i++)
+        {
+            if (PtInRect(&m_rcPaneLinks[i], pt))
+                return TFY_QSHIT_PANELINK + i;
+        }
+        if (PtInRect(&m_rcPaneChange, pt))
+            return TFY_QSHIT_PANECHANGE;
+        return TFY_QSHIT_NONE;
+    }
+
+    int DragPercent(POINT pt, BOOL bBrightness)
+    {
+        int h = m_rcPaneSlider.bottom - m_rcPaneSlider.top;
+
+        if (!m_bPane)
+            return bBrightness ? BrightnessFromX(pt.x) : PercentFromX(pt.x);
+        return h > 0 ? max(0, min(MulDiv(m_rcPaneSlider.bottom - pt.y, 100, h), 100)) : 0;
+    }
+
+    VOID PaneLanguage(HKL hkl)
+    {
+        LCID lcid = MAKELCID(LOWORD((ULONG_PTR)hkl), SORT_DEFAULT);
+
+        if (!GetLocaleInfoW(lcid, LOCALE_SISO639LANGNAME2, m_szLang, _countof(m_szLang)) &&
+            !GetLocaleInfoW(lcid, LOCALE_SABBREVLANGNAME, m_szLang, _countof(m_szLang)))
+        {
+            m_szLang[0] = UNICODE_NULL;
+        }
+        CharUpperW(m_szLang);
+    }
+
+    LPCWSTR PaneTileLabel(int i, LPWSTR pszBuf, SIZE_T cchBuf, LPCWSTR *ppszGlyph, BOOL *pbEnabled)
+    {
+        *pbEnabled = TRUE;
+        switch (i)
+        {
+            case TFY_PANE_NETWORK:
+            {
+                BOOL bAirplane = FALSE;
+
+                for (UINT k = 0; k < m_cTiles; k++)
+                {
+                    if (m_Tiles[k].Kind == TFY_QSTILE_AIRPLANE)
+                        bAirplane = m_Tiles[k].bOn;
+                }
+                if (bAirplane)
+                {
+                    *ppszGlyph = L"airplane_20_regular";
+                    return L"Airplane mode";
+                }
+                if (!m_bLoaded)
+                {
+                    *ppszGlyph = L"wifi_1_20_regular";
+                    return L"";
+                }
+                if (m_bHasWlan)
+                {
+                    *ppszGlyph = m_bWifiOn ? L"wifi_1_20_regular" : L"wifi_off_20_regular";
+                    if (!m_bWifiOn)
+                        return L"Unavailable";
+                    WifiStatus(pszBuf, cchBuf);
+                    return wcscmp(pszBuf, L"On") ? pszBuf : L"Available";
+                }
+                *ppszGlyph = L"plug_connected_20_regular";
+                return NetworkConnected() ? L"Connected" : L"Unavailable";
+            }
+            case TFY_PANE_VOLUME:
+                if (m_bMute)
+                    *ppszGlyph = L"speaker_mute_20_regular";
+                else if (m_nMaster == 0)
+                    *ppszGlyph = L"speaker_0_20_regular";
+                else if (m_nMaster < 50)
+                    *ppszGlyph = L"speaker_1_20_regular";
+                else
+                    *ppszGlyph = L"speaker_2_20_regular";
+                if (m_bMute)
+                    return L"Mute";
+                StringCchPrintfW(pszBuf, cchBuf, L"%d", m_nMaster);
+                return pszBuf;
+            case TFY_PANE_BRIGHTNESS:
+                *ppszGlyph = L"brightness_high_20_regular";
+                *pbEnabled = m_nBrightness >= 0;
+                return L"Brightness";
+            case TFY_PANE_NOTIFICATIONS:
+                *ppszGlyph = L"alert_20_regular";
+                return TrayNotifications_IsHidden() ? L"Hidden" : L"Notifications";
+            case TFY_PANE_POWER:
+                *ppszGlyph = L"power_20_regular";
+                return L"Power";
+            default:
+                *ppszGlyph = L"keyboard_20_regular";
+                return m_szLang[0] ? m_szLang : L"Keyboard";
+        }
+    }
+
+    VOID PaneHover(ShellFrame::Canvas &canvas, const RECT *prc, int iHit)
+    {
+        if (m_iHot == iHit)
+            canvas.Fill(*prc, TfyMix(m_Pal.PanelBg, m_Pal.PanelText, m_iPressed == iHit ? 44 : 24));
+    }
+
+    VOID PaintPane(ShellFrame::Canvas &canvas, const RECT &rc)
+    {
+        static const LPCWSTR s_Links[TFY_PANE_LINKS] = { L"Control Panel", L"Personalization", L"PC info", L"Help" };
+        COLORREF crActive = TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 36);
+        RECT rcText;
+        int i;
+
+        canvas.Fill(rc, m_Pal.PanelBg);
+        canvas.Text(L"Settings", m_rcPaneTitle, m_hFontPaneTitle, m_Pal.PanelText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        canvas.Text(L"Desktop", m_rcPaneSection, m_hFontTitle, m_Pal.DimText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        for (i = 0; i < TFY_PANE_LINKS; i++)
+        {
+            PaneHover(canvas, &m_rcPaneLinks[i], TFY_QSHIT_PANELINK + i);
+            rcText = m_rcPaneLinks[i];
+            rcText.left = m_rcPaneTitle.left;
+            rcText.right = m_rcPaneTitle.right;
+            canvas.Text(s_Links[i], rcText, m_hFontPane, m_Pal.PanelText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        }
+
+        if (m_iPaneSlider >= 0)
+        {
+            BOOL bVolume = (m_iPaneSlider == TFY_PANE_VOLUME);
+            int nPercent = bVolume ? m_nMaster : m_nBrightness;
+            int yFill = m_rcPaneSlider.bottom - MulDiv(nPercent, m_rcPaneSlider.bottom - m_rcPaneSlider.top, 100);
+            int xMid = (m_rcPaneSlider.left + m_rcPaneSlider.right) / 2;
+            RECT rcFill = m_rcPaneSlider, rcThumb, rcIcon;
+            WCHAR szValue[8];
+
+            canvas.Fill(m_rcPaneBox, crActive);
+            StringCchPrintfW(szValue, _countof(szValue), L"%d", nPercent);
+            canvas.Text(szValue, m_rcPaneValue, m_hFontPane, m_Pal.PanelText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            canvas.Fill(m_rcPaneSlider, TfyMix(crActive, m_Pal.PanelText, 90));
+            rcFill.top = yFill;
+            canvas.Fill(rcFill, m_Pal.AccentBg);
+            SetRect(&rcThumb, xMid - Sc(12), yFill - Sc(4), xMid + Sc(12), yFill + Sc(4));
+            canvas.Fill(rcThumb, m_Pal.PanelText);
+            if (bVolume)
+            {
+                PaneHover(canvas, &m_rcPaneMute, TFY_QSHIT_PANEMUTE);
+                SetRect(&rcIcon, xMid - Sc(10), (m_rcPaneMute.top + m_rcPaneMute.bottom) / 2 - Sc(10),
+                        xMid + Sc(10), (m_rcPaneMute.top + m_rcPaneMute.bottom) / 2 + Sc(10));
+                canvas.Icon(m_bMute ? L"speaker_mute_20_regular" : L"speaker_2_20_regular", rcIcon, m_Pal.PanelText);
+            }
+        }
+
+        for (i = 0; i < TFY_PANE_TILES; i++)
+        {
+            const RECT *prc = &m_rcPaneTiles[i];
+            WCHAR szBuf[64];
+            LPCWSTR pszGlyph, pszLabel;
+            BOOL bEnabled;
+            RECT rcIcon, rcLabel;
+            COLORREF crText;
+
+            pszLabel = PaneTileLabel(i, szBuf, _countof(szBuf), &pszGlyph, &bEnabled);
+            if (m_iPaneSlider == i)
+                canvas.Fill(*prc, crActive);
+            else if (bEnabled)
+                PaneHover(canvas, prc, TFY_QSHIT_PANETILE + i);
+            crText = bEnabled ? m_Pal.PanelText : m_Pal.DimText;
+            SetRect(&rcIcon, (prc->left + prc->right) / 2 - Sc(14), prc->top + Sc(12),
+                    (prc->left + prc->right) / 2 + Sc(14), prc->top + Sc(40));
+            canvas.Icon(pszGlyph, rcIcon, crText);
+            SetRect(&rcLabel, prc->left + Sc(4), prc->bottom - Sc(32), prc->right - Sc(4), prc->bottom - Sc(8));
+            canvas.Text(pszLabel, rcLabel, m_hFontPaneSmall, crText,
+                        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        }
+
+        PaneHover(canvas, &m_rcPaneChange, TFY_QSHIT_PANECHANGE);
+        rcText = m_rcPaneChange;
+        rcText.left = m_rcPaneTitle.left;
+        rcText.right = m_rcPaneTitle.right;
+        canvas.Text(L"Change PC settings", rcText, m_hFontPane, m_Pal.PanelText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        canvas.Line(0, 0, 0, rc.bottom, m_Pal.Border);
+    }
+
+    UINT PaneTrackMenu(HMENU hMenu, int iTile)
+    {
+        POINT pt = { m_rcPaneTiles[iTile].right, m_rcPaneTiles[iTile].top };
+
+        ClientToScreen(&pt);
+        return (UINT)TrackPopupMenuEx(hMenu, TPM_RIGHTALIGN | TPM_BOTTOMALIGN | TPM_RETURNCMD | TPM_NONOTIFY,
+                                      pt.x, pt.y, m_hWnd, NULL);
+    }
+
+    VOID PaneNotificationsMenu()
+    {
+        HMENU hMenu = CreatePopupMenu();
+        UINT uCmd;
+
+        if (!hMenu)
+            return;
+        if (TrayNotifications_IsHidden())
+        {
+            AppendMenuW(hMenu, MF_STRING, 1, L"Show notifications");
+        }
+        else
+        {
+            AppendMenuW(hMenu, MF_STRING, 60, L"Hide for 1 hour");
+            AppendMenuW(hMenu, MF_STRING, 180, L"Hide for 3 hours");
+            AppendMenuW(hMenu, MF_STRING, 480, L"Hide for 8 hours");
+        }
+        uCmd = PaneTrackMenu(hMenu, TFY_PANE_NOTIFICATIONS);
+        DestroyMenu(hMenu);
+        if (uCmd == 1)
+            g_TfyNotifHideUntil = 0;
+        else if (uCmd)
+            g_TfyNotifHideUntil = GetTickCount64() + (ULONGLONG)uCmd * 60000;
+    }
+
+    VOID PanePowerMenu()
+    {
+        HWND hwndOwner = m_hwndOwner;
+        HMENU hMenu = CreatePopupMenu();
+        UINT uCmd;
+
+        if (!hMenu)
+            return;
+        if (StartMenu2_IsPowerCommandAllowed(SM2F_SLEEP))
+            AppendMenuW(hMenu, MF_STRING, SM2F_SLEEP, L"Sleep");
+        if (StartMenu2_IsPowerCommandAllowed(SM2F_HIBERNATE))
+            AppendMenuW(hMenu, MF_STRING, SM2F_HIBERNATE, L"Hibernate");
+        AppendMenuW(hMenu, MF_STRING, SM2F_SHUTDOWN, L"Shut down");
+        AppendMenuW(hMenu, MF_STRING, SM2F_RESTART, L"Restart");
+        uCmd = PaneTrackMenu(hMenu, TFY_PANE_POWER);
+        DestroyMenu(hMenu);
+        if (!uCmd)
+            return;
+        FadeOut();
+        StartMenu2_DoPowerCommand(hwndOwner, (INT)uCmd);
+    }
+
+    VOID PaneKeyboardMenu()
+    {
+        HKL ahkl[32];
+        HKL hklCur = GetKeyboardLayout(0);
+        int n = GetKeyboardLayoutList(_countof(ahkl), ahkl);
+        HMENU hMenu;
+        UINT uCmd;
+
+        if (n <= 0 || !(hMenu = CreatePopupMenu()))
+            return;
+        for (int i = 0; i < n; i++)
+        {
+            LCID lcid = MAKELCID(LOWORD((ULONG_PTR)ahkl[i]), SORT_DEFAULT);
+            WCHAR szName[128], szItem[160], szAbbrev[16];
+
+            if (!GetLocaleInfoW(lcid, LOCALE_SLANGUAGE, szName, _countof(szName)))
+                szName[0] = UNICODE_NULL;
+            if (!GetLocaleInfoW(lcid, LOCALE_SISO639LANGNAME2, szAbbrev, _countof(szAbbrev)) &&
+                !GetLocaleInfoW(lcid, LOCALE_SABBREVLANGNAME, szAbbrev, _countof(szAbbrev)))
+            {
+                szAbbrev[0] = UNICODE_NULL;
+            }
+            CharUpperW(szAbbrev);
+            StringCchPrintfW(szItem, _countof(szItem), L"%s\t%s", szName, szAbbrev);
+            AppendMenuW(hMenu, MF_STRING | (ahkl[i] == hklCur ? MF_CHECKED : 0), (UINT_PTR)(i + 1), szItem);
+        }
+        uCmd = PaneTrackMenu(hMenu, TFY_PANE_KEYBOARD);
+        DestroyMenu(hMenu);
+        if (!uCmd || uCmd > (UINT)n)
+            return;
+        SystemParametersInfoW(SPI_SETDEFAULTINPUTLANG, 0, &ahkl[uCmd - 1], SPIF_SENDCHANGE);
+        ActivateKeyboardLayout(ahkl[uCmd - 1], 0);
+        ::PostMessageW(HWND_BROADCAST, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)ahkl[uCmd - 1]);
+        PaneLanguage(ahkl[uCmd - 1]);
+    }
+
+    VOID OpenPaneLink(int i)
+    {
+        WCHAR szPath[MAX_PATH];
+
+        switch (i)
+        {
+            case 0:
+                ShellExecuteW(NULL, NULL, L"control.exe", NULL, NULL, SW_SHOWNORMAL);
+                break;
+            case 1:
+                ShellExecuteW(NULL, NULL, L"control.exe", L"desk.cpl", NULL, SW_SHOWNORMAL);
+                break;
+            case 2:
+                ShellExecuteW(NULL, NULL, L"control.exe", L"sysdm.cpl", NULL, SW_SHOWNORMAL);
+                break;
+            default:
+                if (ExpandEnvironmentStringsW(L"%SystemRoot%\\readme.txt", szPath, _countof(szPath)))
+                    ShellExecuteW(NULL, NULL, szPath, NULL, NULL, SW_SHOWNORMAL);
+                break;
+        }
+    }
+
+    VOID ActivatePane(int iHit)
+    {
+        RECT rcAnchor = m_rcAnchor;
+        HWND hwndOwner = m_hwndOwner;
+
+        if (iHit == TFY_QSHIT_PANEMUTE)
+        {
+            ToggleMute();
+            return;
+        }
+        if (iHit == TFY_QSHIT_PANECHANGE)
+        {
+            TfyQsOpenSettings(L"ms-settings:");
+            FadeOut();
+            return;
+        }
+        if (iHit >= TFY_QSHIT_PANELINK && iHit < TFY_QSHIT_PANELINK + TFY_PANE_LINKS)
+        {
+            OpenPaneLink(iHit - TFY_QSHIT_PANELINK);
+            FadeOut();
+            return;
+        }
+        if (iHit < TFY_QSHIT_PANETILE || iHit >= TFY_QSHIT_PANETILE + TFY_PANE_TILES)
+            return;
+        switch (iHit - TFY_QSHIT_PANETILE)
+        {
+            case TFY_PANE_NETWORK:
+                HandOffFlyout(m_hWnd);
+                FadeOut();
+                g_bTfyNetFromSettings = TRUE;
+                TrayNetwork_Toggle(hwndOwner, &rcAnchor);
+                return;
+            case TFY_PANE_VOLUME:
+                m_iPaneSlider = (m_iPaneSlider == TFY_PANE_VOLUME) ? -1 : TFY_PANE_VOLUME;
+                break;
+            case TFY_PANE_BRIGHTNESS:
+                if (m_nBrightness < 0)
+                    return;
+                m_iPaneSlider = (m_iPaneSlider == TFY_PANE_BRIGHTNESS) ? -1 : TFY_PANE_BRIGHTNESS;
+                break;
+            case TFY_PANE_NOTIFICATIONS:
+                PaneNotificationsMenu();
+                break;
+            case TFY_PANE_POWER:
+                PanePowerMenu();
+                return;
+            default:
+                PaneKeyboardMenu();
+                break;
+        }
+        Layout();
+        InvalidateRect(NULL, FALSE);
+    }
+
     int HitTest(POINT pt)
     {
         RECT rcSliderHit = m_rcSlider;
 
+        if (m_bPane)
+            return HitTestPane(pt);
         for (UINT i = 0; i < m_cTiles; i++)
         {
             if (!PtInRect(&m_Tiles[i].rc, pt))
@@ -9803,6 +10383,13 @@ public:
         RECT rc;
 
         GetClientRect(&rc);
+        if (m_bPane)
+        {
+            ShellFrame::Canvas canvas(hdcWnd, rc);
+
+            PaintPane(canvas, rc);
+        }
+        else
         {
             ShellFrame::Canvas canvas(hdcWnd, rc);
 
@@ -9866,12 +10453,12 @@ public:
         }
         if (m_bDragSlider)
         {
-            ApplyVolume(PercentFromX(pt.x));
+            ApplyVolume(DragPercent(pt, FALSE));
             return 0;
         }
         if (m_bDragBrightness)
         {
-            ApplyBrightness(BrightnessFromX(pt.x));
+            ApplyBrightness(DragPercent(pt, TRUE));
             return 0;
         }
         if (iHit != m_iHot)
@@ -9902,13 +10489,13 @@ public:
         {
             m_bDragSlider = TRUE;
             SetCapture();
-            ApplyVolume(PercentFromX(pt.x));
+            ApplyVolume(DragPercent(pt, FALSE));
         }
         else if (m_iPressed == TFY_QSHIT_BRIGHTNESS)
         {
             m_bDragBrightness = TRUE;
             SetCapture();
-            ApplyBrightness(BrightnessFromX(pt.x));
+            ApplyBrightness(DragPercent(pt, TRUE));
         }
         InvalidateRect(NULL, FALSE);
         return 0;
@@ -10004,6 +10591,11 @@ public:
         if (iPressed != iHit || iHit == TFY_QSHIT_NONE)
             return 0;
 
+        if (m_bPane)
+        {
+            ActivatePane(iHit);
+            return 0;
+        }
         if (iHit >= 0 && iHit < (int)m_cTiles)
             ActivateTile((UINT)iHit, FALSE);
         else if (iHit >= TFY_QSHIT_ARROW && iHit < TFY_QSHIT_ARROW + (int)m_cTiles)
@@ -10103,6 +10695,21 @@ public:
         {
             DeleteObject(m_hFontSmall);
             m_hFontSmall = NULL;
+        }
+        if (m_hFontPaneTitle)
+        {
+            DeleteObject(m_hFontPaneTitle);
+            m_hFontPaneTitle = NULL;
+        }
+        if (m_hFontPane)
+        {
+            DeleteObject(m_hFontPane);
+            m_hFontPane = NULL;
+        }
+        if (m_hFontPaneSmall)
+        {
+            DeleteObject(m_hFontPaneSmall);
+            m_hFontPaneSmall = NULL;
         }
         if (m_bFrameStarted)
         {

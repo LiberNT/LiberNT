@@ -24,6 +24,7 @@ VOID TrayNotifications_Add(IN HWND hWndOwner, IN UINT uID, IN LPCWSTR pszApp,
                            IN LPCWSTR pszTitle, IN LPCWSTR pszText, IN HICON hIcon);
 UINT TrayNotifications_GetUnread(VOID);
 VOID TrayNotifications_SetSink(IN HWND hwndSink);
+BOOL TrayNotifications_IsHidden(VOID);
 
 VOID TrayOverflow_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor, IN HWND hwndPager);
 BOOL TrayOverflow_IsOpen(VOID);

@@ -35,16 +35,6 @@ enum SM2RCMD
     SM2C_GAP
 };
 
-enum SM2SHUTCMD
-{
-    SM2F_SHUTDOWN = 1,
-    SM2F_RESTART,
-    SM2F_LOGOFF,
-    SM2F_LOCK,
-    SM2F_SLEEP,
-    SM2F_HIBERNATE
-};
-
 enum
 {
     SM2_TIMER_ANIM = 1,
@@ -579,6 +569,15 @@ SM2IsModernStandby()
     return GetPwrCapabilities(&Capabilities) && Capabilities.AoAc;
 }
 
+BOOL StartMenu2_IsPowerCommandAllowed(IN INT nCmd)
+{
+    if (nCmd == SM2F_SLEEP)
+        return IsPwrSuspendAllowed() || SM2IsModernStandby();
+    if (nCmd == SM2F_HIBERNATE)
+        return IsPwrHibernateAllowed();
+    return TRUE;
+}
+
 static DWORD
 SM2Suspend(BOOL bHibernate)
 {
@@ -895,11 +894,8 @@ public:
         m_cItems = 0;
         for (UINT i = 0; i < _countof(c_Items); i++)
         {
-            if ((c_Items[i].nCmd == SM2F_SLEEP && !IsPwrSuspendAllowed() && !SM2IsModernStandby()) ||
-                (c_Items[i].nCmd == SM2F_HIBERNATE && !IsPwrHibernateAllowed()))
-            {
+            if (!StartMenu2_IsPowerCommandAllowed(c_Items[i].nCmd))
                 continue;
-            }
             m_Visible[m_cItems++] = i;
         }
 
@@ -3191,6 +3187,11 @@ public:
 };
 
 static CStartMenu2Wnd *g_pStartMenu2 = NULL;
+
+VOID StartMenu2_DoPowerCommand(IN HWND hwndOwner, IN INT nCmd)
+{
+    SM2DoShutdownCmd(hwndOwner, nCmd);
+}
 
 HRESULT StartMenu2_Create(IN ITrayWindow *Tray, IN HWND hwndTray)
 {

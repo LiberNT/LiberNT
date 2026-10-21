@@ -963,6 +963,12 @@ void CBalloonQueue::Show(Info& info)
                               info.szInfoTitle, info.szInfo, hIcon);
     }
 
+    if (TrayNotifications_IsHidden())
+    {
+        Close(m_current, NIN_BALLOONTIMEOUT);
+        return;
+    }
+
     m_tooltips->SetTitle(info.szInfoTitle, info.uIcon);
     m_tooltips->TrackPosition(x, y);
     m_tooltips->SetMaxTipWidth(BALLOON_MAXWIDTH);
