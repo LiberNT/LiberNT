@@ -5905,6 +5905,33 @@ static WCHAR *get_storage_descriptor_string( const STORAGE_DEVICE_DESCRIPTOR *de
     return ret;
 }
 
+static WCHAR *get_disk_layout_id( HANDLE handle )
+{
+    union
+    {
+        DRIVE_LAYOUT_INFORMATION layout;
+        BYTE buffer[4096];
+    } info;
+    STORAGE_DEVICE_NUMBER number;
+    GUID id = {0};
+    WCHAR *ret;
+    DWORD returned;
+
+    if (DeviceIoControl( handle, IOCTL_DISK_GET_DRIVE_LAYOUT, NULL, 0, &info, sizeof(info), &returned, NULL ) &&
+        info.layout.Signature)
+        id.Data1 = info.layout.Signature;
+    else if (DeviceIoControl( handle, IOCTL_STORAGE_GET_DEVICE_NUMBER, NULL, 0, &number, sizeof(number), &returned, NULL ))
+    {
+        id.Data1 = number.DeviceNumber;
+        id.Data2 = (USHORT)number.DeviceType;
+    }
+    else return NULL;
+    if (!(ret = malloc( 39 * sizeof(WCHAR) ))) return NULL;
+    swprintf( ret, 39, L"{%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}", id.Data1, id.Data2, id.Data3,
+              id.Data4[0], id.Data4[1], id.Data4[2], id.Data4[3], id.Data4[4], id.Data4[5], id.Data4[6], id.Data4[7] );
+    return ret;
+}
+
 static BOOL query_storage_property( HANDLE handle, STORAGE_PROPERTY_ID id, void *buffer, DWORD size )
 {
     STORAGE_PROPERTY_QUERY query;
@@ -5981,7 +6008,7 @@ static enum fill_status fill_msft_phys_disk( struct table *table, const struct e
         rec->model                  = get_storage_descriptor_string( &device.desc, sizeof(device), device.desc.ProductIdOffset );
         rec->friendly_name          = rec->model ? wcsdup( rec->model ) : NULL;
         rec->serial_number          = get_storage_descriptor_string( &device.desc, sizeof(device), device.desc.SerialNumberOffset );
-        rec->unique_id              = rec->serial_number ? wcsdup( rec->serial_number ) : NULL;
+        rec->unique_id              = rec->serial_number ? wcsdup( rec->serial_number ) : get_disk_layout_id( handle );
         rec->health_status          = 0;
         rec->media_type             = 0;
         if (query_storage_property( handle, StorageDeviceSeekPenaltyProperty, &seek_penalty, sizeof(seek_penalty) ))
