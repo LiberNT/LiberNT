@@ -100,8 +100,7 @@ RunBlurCacheProbe(const RECT *WorkArea)
                 Pixels = FALSE;
             if (Phase == 2) Value[Index] = 255 - Value[Index];
         }
-        Pixels = Pixels && Value[0] <= 32 + DWM_MATERIAL_REFLECT_STRENGTH &&
-                 Value[3] >= 223 - DWM_MATERIAL_REFLECT_STRENGTH &&
+        Pixels = Pixels && Value[0] <= 32 && Value[3] >= 223 &&
                  Value[1] > Value[0] + 8 && Value[2] + 8 < Value[3] && Value[1] < Value[2];
         Gpu = Capture->Domain[0].Counter[DPT_PREPARE].Completed != 0;
         Valid = Pixels && Capture->Domain[0].Counter[DPT_FRAME].Completed >= 20 &&

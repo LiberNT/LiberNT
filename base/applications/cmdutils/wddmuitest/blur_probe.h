@@ -153,13 +153,9 @@ RunBlurProbe(const RECT *WorkArea)
                     Value[2] >= 28 && Value[2] <= 36 &&
                     Value[3] >= 28 && Value[3] <= 36;
         else
-        {
-            ULONG Lift = Phase < 5 ? DWM_MATERIAL_REFLECT_STRENGTH : 0;
-
-            Valid = Valid && Value[0] <= 32 + Lift && Value[3] >= 223 - Lift &&
+            Valid = Valid && Value[0] <= 32 && Value[3] >= 223 &&
                     Value[1] > Value[0] + 8 && Value[2] + 8 < Value[3] &&
                     Value[1] < Value[2];
-        }
         TestPrint("DWM_GPU_BLUR_PROBE phase=%lu values=%lu,%lu,%lu,%lu pass=%u\n",
                   Phase, Value[0], Value[1], Value[2], Value[3], Valid);
         if (!Valid) ++Failures;

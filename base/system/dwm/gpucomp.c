@@ -993,8 +993,8 @@ typedef struct _DWM_GPU_MATERIAL_PROGRAM
 {
     GLuint Program;
     GLint Window, Backdrop, Glass, Whole, PixelAlpha, Premultiplied, UseKey;
-    GLint Opacity, Alpha, Radius, Saturation, Reflection;
-    GLint Size, ScreenSize, ClientMin, ClientMax;
+    GLint Opacity, Alpha, Radius, Saturation;
+    GLint Size, ClientMin, ClientMax;
     GLint CaptureOrigin, CaptureSize, Brush, Colorization, Key;
     GLint Buttons, FrameKey, FrameClient, FrameButtons;
 } DWM_GPU_MATERIAL_PROGRAM;
@@ -2535,9 +2535,7 @@ DwmGpuComposeBuildMaterial(DWM_GPU_MATERIAL_PROGRAM *Shader, BOOL Interior)
         MAT_CACHE(Alpha);
         MAT_CACHE(Radius);
         MAT_CACHE(Saturation);
-        MAT_CACHE(Reflection);
         MAT_CACHE(Size);
-        MAT_CACHE(ScreenSize);
         MAT_CACHE(ClientMin);
         MAT_CACHE(ClientMax);
         MAT_CACHE(CaptureOrigin);
@@ -2718,9 +2716,7 @@ DwmGpuComposeMaterial(const DWM_WIN *Window, GLuint Texture, BOOL Frame,
             pglUniform1f(Shader->Radius, min(Window->CornerRadius,
                           (ULONG)min(Window->cx / 2, Window->cy / 2)));
             pglUniform1f(Shader->Saturation, (100.0f + DWM_MATERIAL_SATURATION) / 100.0f);
-            pglUniform1f(Shader->Reflection, DWM_MATERIAL_REFLECT_STRENGTH / 255.0f);
             pglUniform2f(Shader->Size, Window->cx, Window->cy);
-            pglUniform2f(Shader->ScreenSize, g_composeWidth, g_composeHeight);
             pglUniform2f(Shader->ClientMin, FrameInterior.left, FrameInterior.top);
             pglUniform2f(Shader->ClientMax, FrameInterior.right, FrameInterior.bottom);
             pglUniform1i(Shader->Buttons, 2);

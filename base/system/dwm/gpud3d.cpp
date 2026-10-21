@@ -1486,7 +1486,6 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
     Data.Flags[3] = !!(Window->LayerFlags & DWM_LWA_COLORKEY);
     Data.Extra[0] = min(Window->BackdropOpacity, 255u) / 255.0f;
     Data.Extra[1] = (100.0f + DWM_MATERIAL_SATURATION) / 100.0f;
-    Data.Extra[2] = DWM_MATERIAL_REFLECT_STRENGTH / 255.0f;
     Data.Extra[3] = (FLOAT)Premultiplied;
     BOOL Blend = Alpha < 1.0f || Data.SourceSize[3] != 0 || Data.Flags[2] != 0 || Premultiplied;
     /* An opaque layer without glass or colour key is its source unchanged. */
