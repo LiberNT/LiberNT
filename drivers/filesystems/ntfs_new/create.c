@@ -1443,6 +1443,36 @@ NtfsApplyTunnelTime(
     (void)NtfsFileRecordSetBasicInformation(File, &Basic);
 }
 
+static
+PNTFS_NATIVE_LCB
+NtfsLookupChildLink(_In_ PVolumeContextBlock VolCB,
+                    _In_ PStreamContextBlock ParentStream,
+                    _In_ ULONGLONG FileReference,
+                    _In_ PCUNICODE_STRING LinkName)
+{
+    PLIST_ENTRY Bucket = NtfsLinkHashBucket(VolCB, &ParentStream->NativeScb, LinkName);
+    PLIST_ENTRY Entry;
+
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
+    {
+        PNTFS_LCB_ENTRY Candidate = CONTAINING_RECORD(Entry, NTFS_LCB_ENTRY, HashEntry);
+        PNTFS_NATIVE_CCB Ccb;
+        PFileContextBlock Other;
+
+        if (Candidate->Lcb.ParentScb != &ParentStream->NativeScb)
+            continue;
+        ASSERT(!IsListEmpty(&Candidate->Lcb.CcbList));
+        Ccb = CONTAINING_RECORD(Candidate->Lcb.CcbList.Flink, NTFS_NATIVE_CCB, LcbEntry);
+        Other = CONTAINING_RECORD(Ccb, FileContextBlock, NativeCcb);
+        if (Other->StreamCB->FileReference == FileReference &&
+            RtlEqualUnicodeString(&Candidate->Lcb.FileName, LinkName, FALSE))
+        {
+            return &Candidate->Lcb;
+        }
+    }
+    return NULL;
+}
+
 NTSTATUS
 NtfsFindOpenLink(_In_ PVolumeContextBlock VolCB,
                  _In_ PFileContextBlock FileCB,
@@ -1451,7 +1481,6 @@ NtfsFindOpenLink(_In_ PVolumeContextBlock VolCB,
     PStreamContextBlock ParentStream;
     UNICODE_STRING LeafName;
     UNICODE_STRING LinkName;
-    PLIST_ENTRY Entry;
     NTSTATUS Status;
 
     *Link = FileCB->NativeCcb.Lcb;
@@ -1464,26 +1493,7 @@ NtfsFindOpenLink(_In_ PVolumeContextBlock VolCB,
                                            FileCB->FileRec, ParentStream->FileReference,
                                            &LeafName, &LinkName);
     if (NT_SUCCESS(Status))
-    {
-        for (Entry = ParentStream->NativeScb.ChildLcbList.Flink;
-             Entry != &ParentStream->NativeScb.ChildLcbList;
-             Entry = Entry->Flink)
-        {
-            PNTFS_NATIVE_LCB Lcb = CONTAINING_RECORD(Entry, NTFS_NATIVE_LCB, ParentEntry);
-            PNTFS_NATIVE_CCB Ccb;
-            PFileContextBlock Other;
-
-            ASSERT(!IsListEmpty(&Lcb->CcbList));
-            Ccb = CONTAINING_RECORD(Lcb->CcbList.Flink, NTFS_NATIVE_CCB, LcbEntry);
-            Other = CONTAINING_RECORD(Ccb, FileContextBlock, NativeCcb);
-            if (Other->StreamCB->FileReference == FileCB->StreamCB->FileReference &&
-                RtlEqualUnicodeString(&Lcb->FileName, &LinkName, FALSE))
-            {
-                *Link = Lcb;
-                break;
-            }
-        }
-    }
+        *Link = NtfsLookupChildLink(VolCB, ParentStream, FileCB->StreamCB->FileReference, &LinkName);
     NtfsDereferenceStreamContext(VolCB, ParentStream);
     return Status;
 }
@@ -1497,8 +1507,8 @@ NtfsRegisterOpenLink(
 {
     PStreamContextBlock ParentStream = NULL;
     PNTFS_NATIVE_LCB Lcb = NULL;
+    PNTFS_LCB_ENTRY LinkEntry;
     PNTFS_NATIVE_CCB Ccb = &FileCB->NativeCcb;
-    PLIST_ENTRY Entry;
     UNICODE_STRING LeafName;
     UNICODE_STRING LinkName;
     NTSTATUS Status;
@@ -1514,28 +1524,13 @@ NtfsRegisterOpenLink(
                                                &LeafName, &LinkName);
         if (!NT_SUCCESS(Status))
             goto Failure;
-        for (Entry = ParentStream->NativeScb.ChildLcbList.Flink;
-             Entry != &ParentStream->NativeScb.ChildLcbList;
-             Entry = Entry->Flink)
+        Lcb = NtfsLookupChildLink(VolCB, ParentStream, FileCB->StreamCB->FileReference, &LinkName);
+        if (Lcb &&
+            CONTAINING_RECORD(CONTAINING_RECORD(Lcb->CcbList.Flink, NTFS_NATIVE_CCB, LcbEntry),
+                              FileContextBlock, NativeCcb)->DeletePending)
         {
-            PNTFS_NATIVE_LCB Candidate = CONTAINING_RECORD(Entry, NTFS_NATIVE_LCB, ParentEntry);
-            PNTFS_NATIVE_CCB ExistingCcb;
-            PFileContextBlock ExistingFile;
-
-            ASSERT(!IsListEmpty(&Candidate->CcbList));
-            ExistingCcb = CONTAINING_RECORD(Candidate->CcbList.Flink, NTFS_NATIVE_CCB, LcbEntry);
-            ExistingFile = CONTAINING_RECORD(ExistingCcb, FileContextBlock, NativeCcb);
-            if (ExistingFile->StreamCB->FileReference == FileCB->StreamCB->FileReference &&
-                RtlEqualUnicodeString(&Candidate->FileName, &LinkName, FALSE))
-            {
-                if (ExistingFile->DeletePending)
-                {
-                    Status = STATUS_DELETE_PENDING;
-                    goto Failure;
-                }
-                Lcb = Candidate;
-                break;
-            }
+            Status = STATUS_DELETE_PENDING;
+            goto Failure;
         }
         if (Lcb)
         {
@@ -1546,16 +1541,17 @@ NtfsRegisterOpenLink(
         }
         else
         {
-            Lcb = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Lcb), TAG_NTFS);
-            if (!Lcb)
+            LinkEntry = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*LinkEntry), TAG_NTFS);
+            if (!LinkEntry)
             {
                 Status = STATUS_INSUFFICIENT_RESOURCES;
                 goto Failure;
             }
+            Lcb = &LinkEntry->Lcb;
             Lcb->FileName.Buffer = ExAllocatePoolWithTag(PagedPool, LinkName.Length, TAG_NTFS);
             if (!Lcb->FileName.Buffer)
             {
-                ExFreePoolWithTag(Lcb, TAG_NTFS);
+                ExFreePoolWithTag(LinkEntry, TAG_NTFS);
                 Status = STATUS_INSUFFICIENT_RESOURCES;
                 goto Failure;
             }
@@ -1564,6 +1560,7 @@ NtfsRegisterOpenLink(
             Lcb->ParentScb = &ParentStream->NativeScb;
             InitializeListHead(&Lcb->CcbList);
             InsertTailList(&ParentStream->NativeScb.ChildLcbList, &Lcb->ParentEntry);
+            InsertTailList(NtfsLinkHashBucket(VolCB, Lcb->ParentScb, &Lcb->FileName), &LinkEntry->HashEntry);
         }
         InsertTailList(&Lcb->CcbList, &Ccb->LcbEntry);
         Lcb->CleanupCount++;
@@ -1631,8 +1628,9 @@ NtfsRemoveOpenLink(_In_ PVolumeContextBlock VolCB,
 
                 ASSERT(Lcb->CleanupCount == 0);
                 RemoveEntryList(&Lcb->ParentEntry);
+                RemoveEntryList(&CONTAINING_RECORD(Lcb, NTFS_LCB_ENTRY, Lcb)->HashEntry);
                 ExFreePoolWithTag(Lcb->FileName.Buffer, TAG_NTFS);
-                ExFreePoolWithTag(Lcb, TAG_NTFS);
+                ExFreePoolWithTag(CONTAINING_RECORD(Lcb, NTFS_LCB_ENTRY, Lcb), TAG_NTFS);
                 NtfsDereferenceStreamContext(VolCB, ParentStream);
             }
         }

@@ -1920,11 +1920,14 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
             CONTAINING_RECORD(Lcb->ParentScb, StreamContextBlock, NativeScb);
 
         RemoveEntryList(&Lcb->ParentEntry);
+        RemoveEntryList(&CONTAINING_RECORD(Lcb, NTFS_LCB_ENTRY, Lcb)->HashEntry);
         Lcb->ParentScb = &NewParent->NativeScb;
         InsertTailList(&NewParent->NativeScb.ChildLcbList, &Lcb->ParentEntry);
         ExFreePoolWithTag(Lcb->FileName.Buffer, TAG_NTFS);
         Lcb->FileName.Buffer = NewLeafBuffer;
         Lcb->FileName.Length = Lcb->FileName.MaximumLength = NewLeaf.Length;
+        InsertTailList(NtfsLinkHashBucket(VolCB, Lcb->ParentScb, &Lcb->FileName),
+                       &CONTAINING_RECORD(Lcb, NTFS_LCB_ENTRY, Lcb)->HashEntry);
         NewLeafBuffer = NULL;
         NewParent = NULL;
         NtfsDereferenceStreamContext(VolCB, OldParent);

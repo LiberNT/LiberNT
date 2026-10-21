@@ -497,6 +497,8 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
     InitializeListHead(&VolCB->StreamList);
     for (Index = 0; Index < NTFS_STREAM_HASH_BUCKETS; Index++)
         InitializeListHead(&VolCB->StreamHash[Index]);
+    for (Index = 0; Index < NTFS_LINK_HASH_BUCKETS; Index++)
+        InitializeListHead(&VolCB->LinkHash[Index]);
     InitializeListHead(&VolCB->NotifyList);
     FsRtlNotifyInitializeSync(&VolCB->NotifySync);
     FsRtlInitializeTunnelCache(&VolCB->Tunnel);
