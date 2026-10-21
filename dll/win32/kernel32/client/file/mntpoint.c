@@ -510,50 +510,352 @@ GetVolumeNameForVolumeMountPointW(IN LPCWSTR VolumeMountPoint,
     return Ret;
 }
 
+static
+BOOL
+BasepIsDriveRootPath(IN LPCWSTR lpszPath)
+{
+    return lpszPath[0] != UNICODE_NULL && lpszPath[1] == L':' &&
+           lpszPath[2] == L'\\' && lpszPath[3] == UNICODE_NULL;
+}
+
+static
+BOOL
+BasepMountMgrControl(IN DWORD IoControlCode,
+                     IN PVOID InputBuffer,
+                     IN DWORD InputLength,
+                     OUT PVOID OutputBuffer,
+                     IN DWORD OutputLength)
+{
+    BOOL Ret;
+    DWORD BytesReturned;
+    HANDLE MountMgrHandle;
+
+    MountMgrHandle = CreateFileW(MOUNTMGR_DOS_DEVICE_NAME, GENERIC_READ | GENERIC_WRITE,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                                 INVALID_HANDLE_VALUE);
+    if (MountMgrHandle == INVALID_HANDLE_VALUE)
+    {
+        return FALSE;
+    }
+
+    Ret = DeviceIoControl(MountMgrHandle, IoControlCode, InputBuffer, InputLength,
+                          OutputBuffer, OutputLength, &BytesReturned, NULL);
+    CloseHandle(MountMgrHandle);
+    return Ret;
+}
+
+static
+BOOL
+BasepNotifyVolumeMountPoint(IN DWORD IoControlCode,
+                            IN LPCWSTR lpszVolumeMountPoint,
+                            IN PCUNICODE_STRING TargetVolumeName)
+{
+    BOOL Ret;
+    ULONG Size;
+    UNICODE_STRING SourceName;
+    PMOUNTMGR_VOLUME_MOUNT_POINT MountPoint;
+
+    if (!RtlDosPathNameToNtPathName_U(lpszVolumeMountPoint, &SourceName, NULL, NULL))
+    {
+        SetLastError(ERROR_PATH_NOT_FOUND);
+        return FALSE;
+    }
+
+    Size = sizeof(MOUNTMGR_VOLUME_MOUNT_POINT) + SourceName.Length + TargetVolumeName->Length;
+    MountPoint = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, Size);
+    if (MountPoint == NULL)
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, SourceName.Buffer);
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+
+    MountPoint->SourceVolumeNameOffset = sizeof(MOUNTMGR_VOLUME_MOUNT_POINT);
+    MountPoint->SourceVolumeNameLength = SourceName.Length;
+    MountPoint->TargetVolumeNameOffset = MountPoint->SourceVolumeNameOffset + SourceName.Length;
+    MountPoint->TargetVolumeNameLength = TargetVolumeName->Length;
+    RtlCopyMemory((PUCHAR)MountPoint + MountPoint->SourceVolumeNameOffset,
+                  SourceName.Buffer, SourceName.Length);
+    RtlCopyMemory((PUCHAR)MountPoint + MountPoint->TargetVolumeNameOffset,
+                  TargetVolumeName->Buffer, TargetVolumeName->Length);
+
+    Ret = BasepMountMgrControl(IoControlCode, MountPoint, Size, NULL, 0);
+
+    RtlFreeHeap(RtlGetProcessHeap(), 0, MountPoint);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, SourceName.Buffer);
+    return Ret;
+}
+
+static
+BOOL
+BasepDeleteMountPointReparse(IN LPCWSTR lpszVolumeMountPoint)
+{
+    BOOL Ret;
+    HANDLE Handle;
+    DWORD BytesReturned;
+    REPARSE_DATA_BUFFER ReparseBuffer;
+
+    Handle = CreateFileW(lpszVolumeMountPoint, GENERIC_WRITE,
+                         FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+                         FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
+                         NULL);
+    if (Handle == INVALID_HANDLE_VALUE)
+    {
+        return FALSE;
+    }
+
+    RtlZeroMemory(&ReparseBuffer, FIELD_OFFSET(REPARSE_DATA_BUFFER, GenericReparseBuffer));
+    ReparseBuffer.ReparseTag = IO_REPARSE_TAG_MOUNT_POINT;
+    Ret = DeviceIoControl(Handle, FSCTL_DELETE_REPARSE_POINT, &ReparseBuffer,
+                          FIELD_OFFSET(REPARSE_DATA_BUFFER, GenericReparseBuffer), NULL, 0, &BytesReturned, NULL);
+    CloseHandle(Handle);
+    return Ret;
+}
+
 /*
- * @unimplemented
+ * @implemented
  */
 BOOL
 WINAPI
 SetVolumeMountPointW(IN LPCWSTR lpszVolumeMountPoint,
                      IN LPCWSTR lpszVolumeName)
 {
-    STUB;
-    return 0;
+    BOOL Ret;
+    ULONG Size;
+    HANDLE Handle;
+    DWORD BytesReturned;
+    UNICODE_STRING VolumeName;
+    UNICODE_STRING TargetName;
+    WCHAR TargetBuffer[MAX_PATH];
+    PREPARSE_DATA_BUFFER ReparseBuffer;
+    PMOUNTMGR_CREATE_POINT_INPUT CreatePoint;
+    WCHAR SymbolicLink[] = L"\\DosDevices\\?:";
+
+    if (lpszVolumeMountPoint == NULL || lpszVolumeName == NULL)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    RtlInitUnicodeString(&VolumeName, lpszVolumeName);
+    if (!MOUNTMGR_IS_DOS_VOLUME_NAME_WB(&VolumeName))
+    {
+        SetLastError(ERROR_INVALID_NAME);
+        return FALSE;
+    }
+
+    RtlCopyMemory(TargetBuffer, VolumeName.Buffer, VolumeName.Length);
+    TargetBuffer[1] = L'?';
+    TargetName.Buffer = TargetBuffer;
+    TargetName.Length = VolumeName.Length - sizeof(WCHAR);
+    TargetName.MaximumLength = TargetName.Length;
+
+    if (BasepIsDriveRootPath(lpszVolumeMountPoint))
+    {
+        SymbolicLink[12] = towupper(lpszVolumeMountPoint[0]);
+
+        Size = sizeof(MOUNTMGR_CREATE_POINT_INPUT) + sizeof(SymbolicLink) - sizeof(UNICODE_NULL) + TargetName.Length;
+        CreatePoint = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, Size);
+        if (CreatePoint == NULL)
+        {
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return FALSE;
+        }
+
+        CreatePoint->SymbolicLinkNameOffset = sizeof(MOUNTMGR_CREATE_POINT_INPUT);
+        CreatePoint->SymbolicLinkNameLength = sizeof(SymbolicLink) - sizeof(UNICODE_NULL);
+        CreatePoint->DeviceNameOffset = CreatePoint->SymbolicLinkNameOffset + CreatePoint->SymbolicLinkNameLength;
+        CreatePoint->DeviceNameLength = TargetName.Length;
+        RtlCopyMemory((PUCHAR)CreatePoint + CreatePoint->SymbolicLinkNameOffset,
+                      SymbolicLink, CreatePoint->SymbolicLinkNameLength);
+        RtlCopyMemory((PUCHAR)CreatePoint + CreatePoint->DeviceNameOffset,
+                      TargetName.Buffer, TargetName.Length);
+
+        Ret = BasepMountMgrControl(IOCTL_MOUNTMGR_CREATE_POINT, CreatePoint, Size, NULL, 0);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, CreatePoint);
+        return Ret;
+    }
+
+    Size = FIELD_OFFSET(REPARSE_DATA_BUFFER, MountPointReparseBuffer.PathBuffer) +
+           VolumeName.Length + 2 * sizeof(UNICODE_NULL);
+    ReparseBuffer = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, Size);
+    if (ReparseBuffer == NULL)
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+
+    ReparseBuffer->ReparseTag = IO_REPARSE_TAG_MOUNT_POINT;
+    ReparseBuffer->ReparseDataLength = (USHORT)(Size - FIELD_OFFSET(REPARSE_DATA_BUFFER, GenericReparseBuffer));
+    ReparseBuffer->MountPointReparseBuffer.SubstituteNameOffset = 0;
+    ReparseBuffer->MountPointReparseBuffer.SubstituteNameLength = VolumeName.Length;
+    ReparseBuffer->MountPointReparseBuffer.PrintNameOffset = VolumeName.Length + sizeof(UNICODE_NULL);
+    ReparseBuffer->MountPointReparseBuffer.PrintNameLength = 0;
+    RtlCopyMemory(ReparseBuffer->MountPointReparseBuffer.PathBuffer, VolumeName.Buffer, VolumeName.Length);
+    ReparseBuffer->MountPointReparseBuffer.PathBuffer[1] = L'?';
+
+    Handle = CreateFileW(lpszVolumeMountPoint, GENERIC_WRITE,
+                         FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+                         FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
+                         NULL);
+    if (Handle == INVALID_HANDLE_VALUE)
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, ReparseBuffer);
+        return FALSE;
+    }
+
+    Ret = DeviceIoControl(Handle, FSCTL_SET_REPARSE_POINT, ReparseBuffer, Size,
+                          NULL, 0, &BytesReturned, NULL);
+    CloseHandle(Handle);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, ReparseBuffer);
+    if (!Ret)
+    {
+        return FALSE;
+    }
+
+    if (!BasepNotifyVolumeMountPoint(IOCTL_MOUNTMGR_VOLUME_MOUNT_POINT_CREATED,
+                                     lpszVolumeMountPoint, &TargetName))
+    {
+        DWORD Error = GetLastError();
+
+        BasepDeleteMountPointReparse(lpszVolumeMountPoint);
+        SetLastError(Error);
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 BOOL
 WINAPI
 SetVolumeMountPointA(IN LPCSTR lpszVolumeMountPoint,
                      IN LPCSTR lpszVolumeName)
 {
-    STUB;
-    return 0;
+    BOOL Ret;
+    UNICODE_STRING VolumeMountPointU;
+    UNICODE_STRING VolumeNameU;
+
+    if (!Basep8BitStringToDynamicUnicodeString(&VolumeMountPointU, lpszVolumeMountPoint))
+    {
+        return FALSE;
+    }
+
+    if (!Basep8BitStringToDynamicUnicodeString(&VolumeNameU, lpszVolumeName))
+    {
+        RtlFreeUnicodeString(&VolumeMountPointU);
+        return FALSE;
+    }
+
+    Ret = SetVolumeMountPointW(VolumeMountPointU.Buffer, VolumeNameU.Buffer);
+
+    RtlFreeUnicodeString(&VolumeNameU);
+    RtlFreeUnicodeString(&VolumeMountPointU);
+    return Ret;
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 BOOL
 WINAPI
 DeleteVolumeMountPointA(IN LPCSTR lpszVolumeMountPoint)
 {
-    STUB;
-    return 0;
+    PUNICODE_STRING VolumeMountPointU;
+
+    VolumeMountPointU = Basep8BitStringToStaticUnicodeString(lpszVolumeMountPoint);
+    if (VolumeMountPointU == NULL)
+    {
+        return FALSE;
+    }
+
+    return DeleteVolumeMountPointW(VolumeMountPointU->Buffer);
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 BOOL
 WINAPI
 DeleteVolumeMountPointW(IN LPCWSTR lpszVolumeMountPoint)
 {
-    STUB;
-    return 0;
+    BOOL Ret;
+    ULONG Size;
+    UNICODE_STRING TargetName;
+    WCHAR TargetBuffer[MAX_PATH];
+    PMOUNTMGR_MOUNT_POINT MountPoint;
+    PMOUNTMGR_MOUNT_POINTS MountPoints;
+    WCHAR SymbolicLink[] = L"\\DosDevices\\?:";
+
+    if (lpszVolumeMountPoint == NULL)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (BasepIsDriveRootPath(lpszVolumeMountPoint))
+    {
+        SymbolicLink[12] = towupper(lpszVolumeMountPoint[0]);
+
+        Size = sizeof(MOUNTMGR_MOUNT_POINT) + sizeof(SymbolicLink) - sizeof(UNICODE_NULL);
+        MountPoint = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, Size);
+        if (MountPoint == NULL)
+        {
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return FALSE;
+        }
+
+        MountPoints = RtlAllocateHeap(RtlGetProcessHeap(), 0, 4096);
+        if (MountPoints == NULL)
+        {
+            RtlFreeHeap(RtlGetProcessHeap(), 0, MountPoint);
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return FALSE;
+        }
+
+        MountPoint->SymbolicLinkNameOffset = sizeof(MOUNTMGR_MOUNT_POINT);
+        MountPoint->SymbolicLinkNameLength = sizeof(SymbolicLink) - sizeof(UNICODE_NULL);
+        RtlCopyMemory((PUCHAR)MountPoint + MountPoint->SymbolicLinkNameOffset,
+                      SymbolicLink, MountPoint->SymbolicLinkNameLength);
+
+        Ret = BasepMountMgrControl(IOCTL_MOUNTMGR_DELETE_POINTS, MountPoint, Size, MountPoints, 4096);
+        if (Ret && MountPoints->NumberOfMountPoints == 0)
+        {
+            SetLastError(ERROR_FILE_NOT_FOUND);
+            Ret = FALSE;
+        }
+
+        RtlFreeHeap(RtlGetProcessHeap(), 0, MountPoints);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, MountPoint);
+        return Ret;
+    }
+
+    if (!BasepGetVolumeNameFromReparsePoint(lpszVolumeMountPoint, TargetBuffer,
+                                            _countof(TargetBuffer), NULL))
+    {
+        if (GetLastError() == ERROR_SUCCESS)
+            SetLastError(ERROR_NOT_A_REPARSE_POINT);
+        return FALSE;
+    }
+
+    if (!BasepDeleteMountPointReparse(lpszVolumeMountPoint))
+    {
+        return FALSE;
+    }
+
+    TargetBuffer[1] = L'?';
+    RtlInitUnicodeString(&TargetName, TargetBuffer);
+    if (TargetName.Length > sizeof(WCHAR) && TargetName.Buffer[TargetName.Length / sizeof(WCHAR) - 1] == L'\\')
+    {
+        TargetName.Length -= sizeof(WCHAR);
+    }
+
+    BasepNotifyVolumeMountPoint(IOCTL_MOUNTMGR_VOLUME_MOUNT_POINT_DELETED,
+                                lpszVolumeMountPoint, &TargetName);
+    return TRUE;
 }
 
 /*
