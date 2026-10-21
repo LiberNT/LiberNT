@@ -394,6 +394,7 @@ endfunction()
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 # Create TEMP directory
 file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "reactos/TEMP=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
+file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "reactos/SystemTemp=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 add_system_dirs(${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst)
 add_program_files_dirs(${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst)
 file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/livecd.cmake.lst "reactos/system32/Tasks=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
@@ -497,6 +498,7 @@ endif()
 
 # Create TEMP dir
 file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/preinstall.cmake.lst "reactos/TEMP=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
+file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/preinstall.cmake.lst "reactos/SystemTemp=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 add_system_dirs(${CMAKE_CURRENT_BINARY_DIR}/preinstall.cmake.lst)
 file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/preinstall.cmake.lst "reactos/system32/Tasks=${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 

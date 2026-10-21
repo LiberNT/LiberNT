@@ -11,6 +11,7 @@ Windows = "\"
 "Windows\system32\config" = 1
 "Windows\SysWOW64\config" = 1
 "Windows\TEMP" = 1
+"Windows\SystemTemp" = 1
 "Windows\system32\app_launcher.cmd" = 1
 "Windows\unattend.inf" = 1
 "Windows\welcome.ini" = 1

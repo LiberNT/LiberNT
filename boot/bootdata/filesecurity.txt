@@ -15,6 +15,7 @@ dir Windows={COMPONENTDIR}
 dirs Windows={COMPONENTDIR}
 files Windows={COMPONENTFILE}
 dir Windows/TEMP=O:SYG:SYD:PAI(A;CI;0x100026;;;BU)(A;;FA;;;BA)(A;OICIIO;GA;;;BA)(A;;FA;;;SY)(A;OICIIO;GA;;;SY)(A;OICIIO;GA;;;CO)
+dir Windows/SystemTemp=O:SYG:SYD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)
 dir Windows/bin={CREATEDDIR}
 dirs Windows/bin={CREATEDDIR}
 files Windows/bin={CREATEDFILE}
