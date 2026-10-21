@@ -561,7 +561,6 @@ typedef struct _TDR_CONFIG
 } TDR_CONFIG, *PTDR_CONFIG;
 
 extern TDR_CONFIG g_TdrConfig;
-extern LONG g_BootLogDisplay;
 BOOLEAN DxgkpBootLogHoldsDisplay(VOID);
 
 /* Direct counters include every committed tracked submission.  The public

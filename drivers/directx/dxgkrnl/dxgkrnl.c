@@ -447,115 +447,10 @@ DxgkpLoadTdrConfig(VOID)
     DXGKRNL_TRACE("DxgkpLoadTdrConfig: delay=%lu ddi=%lu level=%lu limit=%lu/%lus debug=%lu\n", g_TdrConfig.TdrDelay, g_TdrConfig.TdrDdiDelay, g_TdrConfig.TdrLevel, g_TdrConfig.TdrLimitCount, g_TdrConfig.TdrLimitTime, g_TdrConfig.TdrDebugMode);
 }
 
-LONG g_BootLogDisplay = 0;
-static LONG g_ScreenLogDisplay = 0;
-
 BOOLEAN
 DxgkpBootLogHoldsDisplay(VOID)
 {
-    if (InterlockedCompareExchange(&g_BootLogDisplay, 0, 0) == 0)
-    {
-        return InterlockedCompareExchange(&g_ScreenLogDisplay, 0, 0) != 0 &&
-               InbvCheckDisplayOwnership();
-    }
-    if (InbvCheckDisplayOwnership())
-        return TRUE;
-
-    InterlockedExchange(&g_BootLogDisplay, 0);
-    return FALSE;
-}
-
-static VOID
-DxgkpLoadBootLogDisplay(VOID)
-{
-    static CONST WCHAR ControlPath[] = L"\\Registry\\Machine\\System\\CurrentControlSet\\Control";
-    static CONST WCHAR SetupPath[] = L"\\Registry\\Machine\\System\\Setup";
-    struct
-    {
-        KEY_VALUE_PARTIAL_INFORMATION Header;
-        WCHAR Text[64];
-    } SetupCommand;
-    UNICODE_STRING KeyName, ValueName, Option, ScreenOption;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    PKEY_VALUE_PARTIAL_INFORMATION ValueInfo;
-    HANDLE KeyHandle = NULL;
-    ULONG Length = 0, SetupInProgress = 0;
-    PCWSTR Current, End;
-    NTSTATUS Status;
-
-    RtlInitUnicodeString(&KeyName, SetupPath);
-    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
-    if (NT_SUCCESS(ZwOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes)))
-    {
-        (VOID)DxgkpReadTdrDword(KeyHandle, L"SystemSetupInProgress", &SetupInProgress);
-        if (SetupInProgress != 0)
-        {
-            RtlInitUnicodeString(&ValueName, L"CmdLine");
-            RtlZeroMemory(&SetupCommand, sizeof(SetupCommand));
-            Status = ZwQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation, &SetupCommand, sizeof(SetupCommand) - sizeof(WCHAR), &Length);
-            if (NT_SUCCESS(Status) &&
-                (SetupCommand.Header.Type == REG_SZ || SetupCommand.Header.Type == REG_EXPAND_SZ) &&
-                wcsstr((PCWSTR)SetupCommand.Header.Data, L"-mini") != NULL)
-            {
-                SetupInProgress = 0;
-            }
-        }
-        ZwClose(KeyHandle);
-        KeyHandle = NULL;
-    }
-    if (SetupInProgress != 0)
-        return;
-
-    RtlInitUnicodeString(&KeyName, ControlPath);
-    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
-    Status = ZwOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes);
-    if (!NT_SUCCESS(Status))
-        return;
-
-    RtlInitUnicodeString(&ValueName, L"SystemStartOptions");
-    Status = ZwQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation, NULL, 0, &Length);
-    if ((Status != STATUS_BUFFER_TOO_SMALL && Status != STATUS_BUFFER_OVERFLOW) || Length == 0)
-    {
-        ZwClose(KeyHandle);
-        return;
-    }
-
-    ValueInfo = ExAllocatePoolWithTag(PagedPool, Length, TAG_DXGK_DISPLAY);
-    if (ValueInfo == NULL)
-    {
-        ZwClose(KeyHandle);
-        return;
-    }
-
-    Status = ZwQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation, ValueInfo, Length, &Length);
-    ZwClose(KeyHandle);
-    if (NT_SUCCESS(Status) && ValueInfo->Type == REG_SZ)
-    {
-        RtlInitUnicodeString(&ScreenOption, L"DEBUGPORT=SCREEN");
-        Current = (PCWSTR)ValueInfo->Data;
-        End = Current + ValueInfo->DataLength / sizeof(WCHAR);
-        while (Current < End && *Current != UNICODE_NULL)
-        {
-            while (Current < End && (*Current == L' ' || *Current == L'\t' || *Current == L'/'))
-                ++Current;
-
-            Option.Buffer = (PWSTR)Current;
-            while (Current < End && *Current != UNICODE_NULL && *Current != L' ' && *Current != L'\t' && *Current != L'/')
-                ++Current;
-
-            Option.Length = (USHORT)((Current - Option.Buffer) * sizeof(WCHAR));
-            Option.MaximumLength = Option.Length;
-            if (RtlEqualUnicodeString(&Option, &ScreenOption, TRUE))
-            {
-                InterlockedExchange(&g_BootLogDisplay, 1);
-                InterlockedExchange(&g_ScreenLogDisplay, 1);
-                DXGKRNL_INFO("The kernel debug log keeps the boot display until the shell starts\n");
-                break;
-            }
-        }
-    }
-
-    ExFreePoolWithTag(ValueInfo, TAG_DXGK_DISPLAY);
+    return InbvCheckDisplayOwnership();
 }
 
 /*
@@ -1545,7 +1440,6 @@ DriverEntry(
     }
     GDxgControlDeviceStatus = STATUS_PENDING;
     DxgkpLoadTdrConfig();
-    DxgkpLoadBootLogDisplay();
     DxgkRedirectionInitialize();
 
     /* --- Create the control device object ------------------------------- */

@@ -11817,10 +11817,8 @@ DxgkpAcquirePostDisplayOwnership(
     ULONG                        BytesPerPixel;
     ULONGLONG                    TotalStart100ns;
     ULONGLONG                    GopQueryUs = 0;
-    ULONGLONG                    OwnershipUs = 0;
     ULONGLONG                    StepStart100ns;
     BOOLEAN                      ReleasedByDriver = FALSE;
-    BOOLEAN                      TransferFromInbv = TRUE;
     NTSTATUS                     Status = STATUS_SUCCESS;
 
     PAGED_CODE();
@@ -11905,7 +11903,6 @@ DxgkpAcquirePostDisplayOwnership(
 
     if (ReleasedByDriver)
     {
-        TransferFromInbv = FALSE;
         if (!DxgkpValidatePostDisplayInformation(
                  &ReleasedDisplayInformation))
         {
@@ -12108,24 +12105,10 @@ TransferOwnership:
                   (int)DisplayInformation->ColorFormat,
                   DisplayInformation->PhysicAddress.QuadPart);
 
-    /*
-     * Transfer display ownership from InbV to the miniport.
-     * This synchronously stops the boot animation before InbV marks the
-     * display lost, so no boot-video thread can write after the handoff.
-     */
-    if (TransferFromInbv)
-    {
-        StepStart100ns = DxgkpTraceNow100ns();
-        if (InterlockedCompareExchange(&g_BootLogDisplay, 0, 0) == 0)
-            InbvNotifyDisplayOwnershipLost(NULL);
-        OwnershipUs = DxgkpTraceElapsedUs(StepStart100ns);
-    }
-
     DxgkpSetPostDisplayOwner(Claimant);
 
-    DXGKRNL_TRACE("DxgkCbAcquirePostDisplayOwnership: gop=%I64u us ownership=%I64u us total=%I64u us\n",
+    DXGKRNL_TRACE("DxgkCbAcquirePostDisplayOwnership: gop=%I64u us total=%I64u us\n",
                   GopQueryUs,
-                  OwnershipUs,
                   DxgkpTraceElapsedUs(TotalStart100ns));
 
 Complete:
