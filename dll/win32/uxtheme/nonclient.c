@@ -1223,7 +1223,19 @@ ThemeDwmDrawCaptionButton(HDC hDC, const RECT *prc, UINT Button, ULONG State, BO
     hTheme = UXTHEME_OpenNcThemeData(NULL, L"WINDOW", OTD_NONCLIENT);
     if (!hTheme)
         return FALSE;
-    DrawThemeBackground(hTheme, hDC, iPart, iState, prc, NULL);
+    if (iPart == WP_CLOSEBUTTON &&
+        (State & DWM_CAPTION_STATE_DISABLED(DWM_CAPTION_BUTTON_MAXIMIZE)) &&
+        (State & DWM_CAPTION_STATE_DISABLED(DWM_CAPTION_BUTTON_MINIMIZE)))
+    {
+        ZeroMemory(&context, sizeof(context));
+        context.hDC = hDC;
+        context.theme = hTheme;
+        ThemeDrawCaptionGroupStart(&context, iPart, iState, prc);
+    }
+    else
+    {
+        DrawThemeBackground(hTheme, hDC, iPart, iState, prc, NULL);
+    }
     CloseThemeData(hTheme);
     return TRUE;
 }
