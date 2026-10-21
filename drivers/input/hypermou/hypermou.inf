@@ -1,0 +1,37 @@
+[Version]
+Signature  = "$Windows NT$"
+LayoutFile = layout.inf
+Class      = Mouse
+ClassGUID  = {4D36E96F-E325-11CE-BFC1-08002BE10318}
+Provider   = %LiberNT%
+DriverVer  = 10/21/2026,1.00
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%MicrosoftMfg% = MicrosoftMfg
+
+[MicrosoftMfg]
+%HyperMou.DeviceDesc% = HyperMou_Inst,VMBUS\{cfa8b69e-5b4a-4cc0-b98b-8ba1a1f3f95a}
+
+[HyperMou_Inst.NT]
+CopyFiles = HyperMou_CopyFiles.NT
+
+[HyperMou_CopyFiles.NT]
+hypermou.sys
+
+[HyperMou_Inst.NT.Services]
+AddService = hypermou, 0x00000002, HyperMou_Service_Inst
+
+[HyperMou_Service_Inst]
+ServiceType    = 1
+StartType      = 3
+ErrorControl   = 1
+ServiceBinary  = %12%\hypermou.sys
+LoadOrderGroup = Pointer Port
+
+[Strings]
+LiberNT = "LiberNT Project"
+MicrosoftMfg = "Microsoft"
+HyperMou.DeviceDesc = "Microsoft Hyper-V Mouse"
