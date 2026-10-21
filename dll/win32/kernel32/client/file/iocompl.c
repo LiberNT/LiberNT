@@ -302,16 +302,8 @@ GetOverlappedResult(IN HANDLE hFile,
     /* Return bytes transferred */
     *lpNumberOfBytesTransferred = lpOverlapped->InternalHigh;
 
-    /* Check for failure during I/O */
-    if (!NT_SUCCESS(lpOverlapped->Internal))
-    {
-        /* Set the error and fail */
-        BaseSetLastNTError(lpOverlapped->Internal);
-        return FALSE;
-    }
-
-    /* All done */
-    return TRUE;
+    BaseSetLastNTError(lpOverlapped->Internal);
+    return NT_SUCCESS(lpOverlapped->Internal);
 }
 
 /*
