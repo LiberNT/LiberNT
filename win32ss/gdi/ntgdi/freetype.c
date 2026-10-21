@@ -3095,6 +3095,22 @@ IntEnableFontRendering(BOOL Enable)
     g_RenderingEnabled = Enable;
 }
 
+static FT_Int32
+IntGetGlyphLoadFlags(FT_Face face)
+{
+    FT_ULong Length = 0;
+
+    if (FT_Load_Sfnt_Table(face, TTAG_glyf, 0, NULL, &Length) != 0)
+        return FT_LOAD_NO_AUTOHINT;
+    Length = 0;
+    if (FT_Load_Sfnt_Table(face, TTAG_fpgm, 0, NULL, &Length) == 0)
+        return FT_LOAD_NO_AUTOHINT;
+    Length = 0;
+    if (FT_Load_Sfnt_Table(face, TTAG_prep, 0, NULL, &Length) == 0)
+        return FT_LOAD_NO_AUTOHINT;
+    return FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_LIGHT;
+}
+
 FT_Render_Mode FASTCALL
 IntGetFontRenderMode(LOGFONTW *logfont)
 {
@@ -5589,7 +5605,7 @@ ftGdiGetGlyphOutline(
     FT_Bitmap ft_bitmap;
     FT_Error error;
     INT left, right, top = 0, bottom = 0;
-    FT_Int load_flags = FT_LOAD_NO_AUTOHINT | FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH;
+    FT_Int load_flags = FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH;
     FLOATOBJ eM11, widthRatio, eTemp;
     FT_Matrix mat, transMat = identityMat;
     BOOL needsTransform = FALSE;
@@ -5671,6 +5687,7 @@ ftGdiGetGlyphOutline(
         iFormat &= ~GGO_UNHINTED;
     }
 
+    load_flags |= IntGetGlyphLoadFlags(ft_face);
     error = FT_Load_Glyph(ft_face, glyph_index, load_flags);
     if (error && !(load_flags & FT_LOAD_NO_HINTING))
         error = FT_Load_Glyph(ft_face, glyph_index, load_flags | FT_LOAD_NO_HINTING);
@@ -6152,9 +6169,10 @@ IntGetRealGlyph(
     if (realglyph)
         return realglyph;
 
-    error = FT_Load_Glyph(Cache->Hashed.Face, Cache->Hashed.GlyphIndex, FT_LOAD_NO_AUTOHINT);
+    error = FT_Load_Glyph(Cache->Hashed.Face, Cache->Hashed.GlyphIndex, IntGetGlyphLoadFlags(Cache->Hashed.Face));
     if (error)
-        error = FT_Load_Glyph(Cache->Hashed.Face, Cache->Hashed.GlyphIndex, FT_LOAD_NO_AUTOHINT | FT_LOAD_NO_HINTING);
+        error = FT_Load_Glyph(Cache->Hashed.Face, Cache->Hashed.GlyphIndex,
+                              IntGetGlyphLoadFlags(Cache->Hashed.Face) | FT_LOAD_NO_HINTING);
     if (error)
     {
         DPRINT1("WARNING: Failed to load and render glyph! [index: %d]\n", Cache->Hashed.GlyphIndex);
@@ -9135,8 +9153,8 @@ GreGetCharABCWidthsW(
         else
             glyph_index = get_glyph_index_flagged(face, i, (fl & GCABCW_INDICES));
 
-        if (FT_Load_Glyph(face, glyph_index, FT_LOAD_NO_AUTOHINT))
-            FT_Load_Glyph(face, glyph_index, FT_LOAD_NO_AUTOHINT | FT_LOAD_NO_HINTING);
+        if (FT_Load_Glyph(face, glyph_index, IntGetGlyphLoadFlags(face)))
+            FT_Load_Glyph(face, glyph_index, IntGetGlyphLoadFlags(face) | FT_LOAD_NO_HINTING);
 
         left = (INT)face->glyph->metrics.horiBearingX  & -64;
         right = (INT)((face->glyph->metrics.horiBearingX + face->glyph->metrics.width) + 63) & -64;
@@ -9253,8 +9271,8 @@ GreGetCharWidthW(
         else
             glyph_index = get_glyph_index_flagged(face, i, (fl & GCW_INDICES));
 
-        if (FT_Load_Glyph(face, glyph_index, FT_LOAD_NO_AUTOHINT))
-            FT_Load_Glyph(face, glyph_index, FT_LOAD_NO_AUTOHINT | FT_LOAD_NO_HINTING);
+        if (FT_Load_Glyph(face, glyph_index, IntGetGlyphLoadFlags(face)))
+            FT_Load_Glyph(face, glyph_index, IntGetGlyphLoadFlags(face) | FT_LOAD_NO_HINTING);
 
         Width = (IntGetGlyphAdvance64(face->glyph) + 32) >> 6;
         if (EMUBOLD_NEEDED(FontGDI->OriginalWeight, plf->lfWeight))
