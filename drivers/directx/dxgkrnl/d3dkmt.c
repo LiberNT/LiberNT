@@ -1158,15 +1158,21 @@ DxgkpGetUmdFileVersion(
 {
     WCHAR Name[MAX_PATH];
     ULONG Index;
+    BOOLEAN Wow64 = DxgkpIsWow64Caller();
 
     for (Index = 0; Index < NUM_KMTUMDVERSIONS; ++Index)
     {
         if (NT_SUCCESS(DxgkpQueryDriverStringValue(Adapter,
-                                                   DxgkpIsWow64Caller() ? L"UserModeDriverNameWow" : L"UserModeDriverName",
+                                                   Wow64 ? L"UserModeDriverNameWow" : L"UserModeDriverName",
                                                    Index, Name, ARRAYSIZE(Name))) &&
             Name[0] != UNICODE_NULL && wcscmp(Name, L"<>") != 0)
         {
-            return DxgkpReadPrefixedFileVersion(L"\\??\\", Name, Version);
+            if (Name[0] == L'\\')
+                return DxgkpReadPrefixedFileVersion(L"", Name, Version);
+            if (wcschr(Name, L'\\') != NULL)
+                return DxgkpReadPrefixedFileVersion(L"\\??\\", Name, Version);
+            return DxgkpReadPrefixedFileVersion(Wow64 ? L"\\SystemRoot\\SysWOW64\\" : L"\\SystemRoot\\System32\\",
+                                                Name, Version);
         }
     }
     return STATUS_OBJECT_NAME_NOT_FOUND;
