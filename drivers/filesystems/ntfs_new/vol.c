@@ -532,6 +532,8 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
     Status = STATUS_SUCCESS;
 
 Cleanup:
+    if (!NT_SUCCESS(Status))
+        NtfsDiskReleaseKm(TargetDeviceObject);
     return Status;
 }
 

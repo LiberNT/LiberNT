@@ -627,17 +627,11 @@ NtfsDiskInitializeKm(
     return STATUS_SUCCESS;
 }
 
-NTSTATUS
-NtfsDiskPrepareMountKm(
-    _In_ PDEVICE_OBJECT DeviceObject,
-    _In_ ULONG SectorBytes)
+static
+VOID
+NtfsCacheDiscardOwner(_In_ PDEVICE_OBJECT DeviceObject)
 {
-    NTSTATUS Status;
     ULONG Index;
-
-    Status = NtfsDiskInitializeKm(DeviceObject, SectorBytes);
-    if (!NT_SUCCESS(Status))
-        return Status;
 
     /*
      * Failed mount probes cache clean data from raw volumes. A formatter writes
@@ -657,8 +651,27 @@ NtfsDiskPrepareMountKm(
         }
     }
     ExReleaseFastMutex(&NtfsCacheMutex);
+}
 
+NTSTATUS
+NtfsDiskPrepareMountKm(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ ULONG SectorBytes)
+{
+    NTSTATUS Status;
+
+    Status = NtfsDiskInitializeKm(DeviceObject, SectorBytes);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    NtfsCacheDiscardOwner(DeviceObject);
     return STATUS_SUCCESS;
+}
+
+VOID
+NtfsDiskReleaseKm(_In_ PDEVICE_OBJECT DeviceObject)
+{
+    NtfsCacheDiscardOwner(DeviceObject);
 }
 
 typedef struct _NTFS_DISK_IO_CONTEXT

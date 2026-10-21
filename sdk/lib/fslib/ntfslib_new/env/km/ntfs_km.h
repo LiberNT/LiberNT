@@ -19,6 +19,10 @@ NtfsDiskPrepareMountKm(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ ULONG SectorBytes);
 
+/* Drops clean blocks cached for a device that failed to mount. */
+VOID
+NtfsDiskReleaseKm(_In_ PDEVICE_OBJECT DeviceObject);
+
 /* Writes out metadata held back by the block cache. */
 NTSTATUS
 NtfsDiskFlushKm(VOID);
