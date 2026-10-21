@@ -38,7 +38,7 @@ ReadRegistryEntries(
 	ULONG DefaultPollingIterations = 12000;
 	ULONG DefaultPollingIterationsMaximum = 12000;
 	ULONG DefaultResendIterations = 0x3;
-	ULONG DefaultSampleRate = 60;
+	ULONG DefaultSampleRate = 100;
 	ULONG DefaultCrashOnCtrlScroll;
 
 	/* Default value for CrashOnCtrlScroll depends if we're
