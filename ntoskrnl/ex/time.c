@@ -207,9 +207,9 @@ ExpUpdateTimerResolution(VOID)
     PEPROCESS Process;
     ULONG DesiredTime = KeMaximumIncrement;
     ULONG ProcessTime = KeMaximumIncrement;
+    ULONG ClockTime;
 
     if (ExpKernelResolutionCount) DesiredTime = min(DesiredTime, ExpKernelRequestedResolution);
-    if (ExpHighResolutionActive) DesiredTime = KeMinimumIncrement;
 
     for (ListEntry = ExpTimerResolutionListHead.Flink;
          ListEntry != &ExpTimerResolutionListHead;
@@ -220,13 +220,14 @@ ExpUpdateTimerResolution(VOID)
     }
     ExpProcessTimerResolution = ProcessTime;
     DesiredTime = min(DesiredTime, ProcessTime);
+    ClockTime = ExpHighResolutionActive ? KeMinimumIncrement : DesiredTime;
 
-    if (DesiredTime != KeTimeIncrement)
+    if (ClockTime != KeTimeIncrement)
     {
-        KeTimeIncrement = HalSetTimeIncrement(DesiredTime);
+        KeTimeIncrement = HalSetTimeIncrement(ClockTime);
     }
 
-    return KeTimeIncrement;
+    return ExpHighResolutionActive ? DesiredTime : KeTimeIncrement;
 }
 
 static
@@ -314,11 +315,13 @@ ExSetTimerResolution(IN ULONG DesiredTime,
         DesiredTime = ExpClampTimerResolution(DesiredTime);
         if (!ExpKernelResolutionCount++ || DesiredTime < ExpKernelRequestedResolution)
             ExpKernelRequestedResolution = DesiredTime;
-        CurrentIncrement = ExpUpdateTimerResolution();
+        ExpUpdateTimerResolution();
+        CurrentIncrement = KeTimeIncrement;
     }
     else if (ExpKernelResolutionCount && !--ExpKernelResolutionCount)
     {
-        CurrentIncrement = ExpUpdateTimerResolution();
+        ExpUpdateTimerResolution();
+        CurrentIncrement = KeTimeIncrement;
     }
     else
     {
