@@ -6260,6 +6260,7 @@ typedef VOID (WINAPI *PFN_WLANFREEMEMORY)(PVOID);
 #define TFY_TIMER_POLL 10
 #define TFY_TIMER_RESCAN 12
 #define TFY_NET_VISROWS 3
+#define TFY_NET_WIFIROWS 6
 #define TFY_TIMER_SPIN 13
 #define TFY_NET_EDIT_ID 101
 
@@ -6292,6 +6293,7 @@ struct TFYNETROW
     RECT rcButton2;
     RECT rcCheck;
     RECT rcEdit;
+    RECT rcInfo;
 };
 
 struct TFYNETCACHE
@@ -6631,6 +6633,9 @@ TfyXmlEscape(LPCWSTR pszIn, LPWSTR pszOut, SIZE_T cchOut)
 
 static BOOL g_bTfyNetFromSettings = FALSE;
 
+static VOID
+TfyFillRound(HDC hdc, const RECT *prc, int radius, COLORREF crFill, COLORREF crBack);
+
 class CTrayNetworkWnd :
     public CWindowImpl<CTrayNetworkWnd, CWindow, CTrayFlyoutTraits>,
     public CTrayFlyoutAnimation
@@ -6690,6 +6695,9 @@ public:
     int m_nVisRows;
     HFONT m_hFontPaneTitle;
     RECT m_rcBack;
+    BOOL m_bWifiPage;
+    int m_yFooter;
+    HFONT m_hFontRow;
 
     CTrayNetworkWnd() : m_hFont(NULL), m_hFontSmall(NULL), m_hFontHeader(NULL),
                         m_hWlanApi(NULL), m_hWlan(NULL),
@@ -6704,7 +6712,8 @@ public:
                         m_bWlanLoading(FALSE), m_SpinT0(0),
                         m_bConnecting(FALSE), m_bTracking(FALSE), m_nIfaces(0),
                         m_bWifiOn(TRUE), m_bAirplane(FALSE), m_bPane(FALSE), m_bBack(FALSE),
-                        m_nVisRows(TFY_NET_VISROWS), m_hFontPaneTitle(NULL)
+                        m_nVisRows(TFY_NET_VISROWS), m_hFontPaneTitle(NULL),
+                        m_bWifiPage(FALSE), m_yFooter(0), m_hFontRow(NULL)
     {
         SetRectEmpty(&m_rcBack);
         ZeroMemory(&m_Pal, sizeof(m_Pal));
@@ -6994,8 +7003,115 @@ public:
             m_szBanner[0] = 0;
     }
 
+    VOID LayoutWifiPage()
+    {
+        const int cx = Sc(360);
+        int y = Sc(56);
+        int nListTop;
+        int nWlanTotal = 0;
+        int nWlanIdx = 0;
+
+        m_size.cx = cx;
+        m_nVisRows = TFY_NET_WIFIROWS;
+        SetRect(&m_rcBack, Sc(12), Sc(12), Sc(12) + Sc(32), Sc(12) + Sc(32));
+        SetRect(&m_rcWifi, cx - Sc(20) - Sc(40), Sc(18), cx - Sc(20), Sc(18) + Sc(20));
+        SetRectEmpty(&m_rcAirplane);
+        if (m_szBanner[0])
+            y += Sc(24);
+
+        for (SIZE_T k = (SIZE_T)m_iWlanFirst; k < m_Rows.GetCount(); k++)
+        {
+            if (m_Rows[k].nType == 2)
+                nWlanTotal++;
+        }
+        if (m_nWlanScroll > nWlanTotal - m_nVisRows)
+            m_nWlanScroll = nWlanTotal - m_nVisRows;
+        if (m_nWlanScroll < 0)
+            m_nWlanScroll = 0;
+
+        nListTop = y;
+        for (SIZE_T i = 0; i < m_Rows.GetCount(); i++)
+        {
+            TFYNETROW &row = m_Rows[i];
+            BOOL bExpanded = ((int)i == m_iSel);
+            int nHeadH;
+            int yb;
+
+            SetRectEmpty(&row.rc);
+            SetRectEmpty(&row.rcButton);
+            SetRectEmpty(&row.rcButton2);
+            SetRectEmpty(&row.rcCheck);
+            SetRectEmpty(&row.rcEdit);
+            SetRectEmpty(&row.rcInfo);
+            if (row.nType != 2)
+                continue;
+            if ((int)i >= m_iWlanFirst)
+            {
+                int nThis = nWlanIdx++;
+                if (nThis < m_nWlanScroll || nThis >= m_nWlanScroll + m_nVisRows)
+                    continue;
+            }
+
+            nHeadH = (row.bConnected || bExpanded) ? Sc(60) : Sc(48);
+            yb = y + nHeadH;
+            if (row.bConnected)
+            {
+                SetRect(&row.rcInfo, cx - Sc(16) - Sc(32), y + (nHeadH - Sc(32)) / 2,
+                        cx - Sc(16), y + (nHeadH + Sc(32)) / 2);
+            }
+            if (bExpanded)
+            {
+                if (m_bPassMode)
+                {
+                    yb += Sc(22);
+                    SetRect(&row.rcEdit, Sc(52), yb, cx - Sc(24), yb + Sc(28));
+                    yb += Sc(28) + Sc(10);
+                    SetRect(&row.rcButton, cx - Sc(24) - Sc(216), yb, cx - Sc(24) - Sc(112), yb + Sc(32));
+                    SetRect(&row.rcButton2, cx - Sc(24) - Sc(104), yb, cx - Sc(24), yb + Sc(32));
+                    yb += Sc(32) + Sc(12);
+                }
+                else
+                {
+                    if (!row.bConnected)
+                    {
+                        SetRect(&row.rcCheck, Sc(52), yb, cx - Sc(24), yb + Sc(24));
+                        yb += Sc(30);
+                    }
+                    SetRect(&row.rcButton, cx - Sc(24) - Sc(136), yb, cx - Sc(24), yb + Sc(32));
+                    yb += Sc(32) + Sc(12);
+                }
+            }
+            SetRect(&row.rc, Sc(8), y, cx - Sc(8), yb);
+            y = yb + Sc(2);
+        }
+        if (y < nListTop + Sc(48) * 3)
+            y = nListTop + Sc(48) * 3;
+        SetRect(&m_rcWlanArea, Sc(8), nListTop, cx - Sc(8), y);
+
+        y += Sc(6);
+        m_yFooter = y;
+        SetRect(&m_rcLink, Sc(16), y + Sc(8), cx - Sc(64), y + Sc(8) + Sc(32));
+        SetRect(&m_rcRefresh, cx - Sc(16) - Sc(32), y + Sc(8), cx - Sc(16), y + Sc(8) + Sc(32));
+        m_size.cy = y + Sc(48);
+
+        if (m_hwndEdit && m_iSel >= 0 && m_bPassMode)
+        {
+            TFYNETROW &row = m_Rows[m_iSel];
+            ::SetWindowPos(m_hwndEdit, NULL, row.rcEdit.left + Sc(6), row.rcEdit.top + Sc(5),
+                           row.rcEdit.right - row.rcEdit.left - Sc(12), row.rcEdit.bottom - row.rcEdit.top - Sc(10),
+                           SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+    }
+
     VOID Layout()
     {
+        m_bWifiPage = !m_bPane && m_nIfaces > 0;
+        if (m_bWifiPage)
+        {
+            LayoutWifiPage();
+            return;
+        }
+
         int y = m_bPane ? Sc(84) : Sc(10) + Sc(28);
         int yRefresh = m_bPane ? Sc(34) : Sc(10);
         int cyPane = 0;
@@ -7157,6 +7273,7 @@ public:
         if (!m_hFont) m_hFont = TfyCreateFont(12, FW_SEMIBOLD);
         if (!m_hFontSmall) m_hFontSmall = TfyCreateFont(11, FW_NORMAL);
         if (!m_hFontHeader) m_hFontHeader = TfyCreateFont(14, FW_SEMIBOLD);
+        if (!m_hFontRow) m_hFontRow = TfyCreateFont(12, FW_NORMAL);
         m_bPane = !IsThemeActive();
         m_bSlideFromRight = m_bPane;
         m_bBack = m_bPane && g_bTfyNetFromSettings;
@@ -7470,6 +7587,234 @@ public:
         DrawTextW(hdc, pszLabel, -1, &rcLabel, DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
     }
 
+    VOID DrawSwitch(HDC hdc, const RECT *prc, BOOL bOn, BOOL bHot, BOOL bEnabled)
+    {
+        int h = prc->bottom - prc->top;
+        RECT rcKnob;
+        COLORREF crTrack;
+
+        if (bOn && bEnabled)
+        {
+            crTrack = bHot ? TfyMix(m_Pal.AccentBg, m_Pal.PanelBg, 40) : m_Pal.AccentBg;
+            TfyFillRound(hdc, prc, h / 2, crTrack, m_Pal.PanelBg);
+            SetRect(&rcKnob, prc->right - h + Sc(4), prc->top + Sc(4), prc->right - Sc(4), prc->bottom - Sc(4));
+            TfyFillRound(hdc, &rcKnob, (rcKnob.bottom - rcKnob.top) / 2, m_Pal.AccentText, crTrack);
+            return;
+        }
+
+        RECT rcInner = *prc;
+        COLORREF crEdge = bEnabled ? TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 170) : TfyMix(m_Pal.PanelBg, m_Pal.DimText, 120);
+
+        crTrack = bHot && bEnabled ? TfyMix(m_Pal.PanelBg, m_Pal.HotFill, 130) : m_Pal.PanelBg;
+        InflateRect(&rcInner, -1, -1);
+        TfyFillRound(hdc, prc, h / 2, crEdge, m_Pal.PanelBg);
+        TfyFillRound(hdc, &rcInner, (rcInner.bottom - rcInner.top) / 2, crTrack, crEdge);
+        SetRect(&rcKnob, prc->left + Sc(5), prc->top + Sc(5), prc->left + h - Sc(5), prc->bottom - Sc(5));
+        TfyFillRound(hdc, &rcKnob, (rcKnob.bottom - rcKnob.top) / 2, crEdge, crTrack);
+    }
+
+    VOID DrawInfoButton(HDC hdc, const RECT *prc, BOOL bHot, COLORREF crBack)
+    {
+        int cx = (prc->left + prc->right) / 2;
+        int cy = (prc->top + prc->bottom) / 2;
+        RECT rcRing = { cx - Sc(8), cy - Sc(8), cx + Sc(8), cy + Sc(8) };
+        RECT rcHole = rcRing;
+        COLORREF crFill = crBack;
+
+        if (bHot)
+        {
+            crFill = TfyMix(crBack, m_Pal.PanelText, 24);
+            TfyFillRound(hdc, prc, Sc(4), crFill, crBack);
+        }
+        InflateRect(&rcHole, -Sc(1), -Sc(1));
+        TfyFillRound(hdc, &rcRing, Sc(8), m_Pal.HotBorder, crFill);
+        TfyFillRound(hdc, &rcHole, Sc(7), crFill, m_Pal.HotBorder);
+        HGDIOBJ hOld = SelectObject(hdc, m_hFont);
+        SetTextColor(hdc, m_Pal.HotBorder);
+        DrawTextW(hdc, L"i", -1, &rcRing, DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
+        SelectObject(hdc, hOld);
+    }
+
+    VOID DrawLoadingSpinner(HDC hdc)
+    {
+        const double kPi = 3.14159265358979;
+        double t = (double)(GetTickCount64() - m_SpinT0) / 1000.0;
+        double a = (t * kPi * 0.5) + sin(t * kPi) * 0.5;
+        int cxMid = (m_rcWlanArea.left + m_rcWlanArea.right) / 2;
+        int cyMid2 = (m_rcWlanArea.top + m_rcWlanArea.bottom) / 2;
+        int r = Sc(12);
+        HPEN hPen = CreatePen(PS_SOLID, Sc(2), TfyMix(m_Pal.PanelBg, m_Pal.AccentBg, 220));
+        HGDIOBJ hPenOld = SelectObject(hdc, hPen);
+        HGDIOBJ hBrOld = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+
+        Arc(hdc, cxMid - r, cyMid2 - r, cxMid + r, cyMid2 + r,
+            cxMid + (int)(r * cos(a)), cyMid2 + (int)(r * sin(a)),
+            cxMid + (int)(r * cos(a + kPi * 1.35)),
+            cyMid2 + (int)(r * sin(a + kPi * 1.35)));
+
+        SelectObject(hdc, hBrOld);
+        SelectObject(hdc, hPenOld);
+        DeleteObject(hPen);
+    }
+
+    VOID PaintWifiPage(HDC hdc, const RECT *prc)
+    {
+        RECT rcTitle = { m_rcBack.right + Sc(8), m_rcBack.top, m_rcWifi.left - Sc(8), m_rcBack.bottom };
+        RECT rcArrow = { m_rcBack.left + Sc(8), m_rcBack.top + Sc(8), m_rcBack.right - Sc(8), m_rcBack.bottom - Sc(8) };
+        HGDIOBJ hFontOld;
+
+        if (m_iHot == TFY_NETHIT_BACK)
+            TfyFillRound(hdc, &m_rcBack, Sc(4), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 24), m_Pal.PanelBg);
+        TfyDrawFluent(hdc, &rcArrow, IDI_FLU_ARROWLEFT);
+        hFontOld = SelectObject(hdc, m_hFontHeader);
+        SetTextColor(hdc, m_Pal.PanelText);
+        DrawTextW(hdc, L"Wi-Fi", -1, &rcTitle, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+        DrawSwitch(hdc, &m_rcWifi, m_bWifiOn && !m_bAirplane, m_iHot == TFY_NETHIT_WIFI, !m_bAirplane);
+
+        if (m_szBanner[0])
+        {
+            RECT rcBanner = { Sc(20), Sc(52), prc->right - Sc(20), Sc(52) + Sc(24) };
+            SelectObject(hdc, m_hFontSmall);
+            SetTextColor(hdc, m_Pal.DimText);
+            DrawTextW(hdc, m_szBanner, -1, &rcBanner, DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+        }
+
+        for (SIZE_T i = 0; i < m_Rows.GetCount(); i++)
+        {
+            TFYNETROW &row = m_Rows[i];
+            BOOL bExpanded = ((int)i == m_iSel);
+            BOOL bHot = ((int)i == m_iHot);
+            BOOL bTwoLines = row.bConnected || bExpanded;
+            int nHeadH = bTwoLines ? Sc(60) : Sc(48);
+            int cyMid;
+            COLORREF crRow = m_Pal.PanelBg;
+            RECT rcIcon;
+            RECT rcName;
+            UINT nWifi;
+
+            if (row.nType != 2 || IsRectEmpty(&row.rc))
+                continue;
+
+            if (bExpanded || bHot)
+            {
+                crRow = TfyMix(m_Pal.PanelBg, m_Pal.HotFill, bExpanded ? 90 : 130);
+                TfyFillRound(hdc, &row.rc, Sc(4), crRow, m_Pal.PanelBg);
+            }
+            if (bExpanded)
+            {
+                RECT rcBar = { row.rc.left, row.rc.top + Sc(14), row.rc.left + Sc(3), row.rc.bottom - Sc(14) };
+                TfyFillRound(hdc, &rcBar, Sc(1), m_Pal.AccentBg, crRow);
+            }
+
+            cyMid = row.rc.top + nHeadH / 2;
+            SetRect(&rcIcon, row.rc.left + Sc(12), cyMid - Sc(10), row.rc.left + Sc(32), cyMid + Sc(10));
+            nWifi = row.nSignal >= 75 ? IDI_FLU_WIFI1 :
+                    row.nSignal >= 50 ? IDI_FLU_WIFI2 :
+                    row.nSignal >= 25 ? IDI_FLU_WIFI3 : IDI_FLU_WIFI4;
+            TfyDrawFluent(hdc, &rcIcon, nWifi);
+            if (row.bSecure)
+            {
+                RECT rcLock = { rcIcon.right - Sc(7), rcIcon.bottom - Sc(9), rcIcon.right + Sc(3), rcIcon.bottom + Sc(1) };
+                TfyDrawFluent(hdc, &rcLock, IDI_FLU_LOCK);
+            }
+
+            SetRect(&rcName, row.rc.left + Sc(44), row.rc.top, row.bConnected ? row.rcInfo.left - Sc(8) : row.rc.right - Sc(12),
+                    row.rc.top + nHeadH);
+            SelectObject(hdc, m_hFontRow);
+            SetTextColor(hdc, m_Pal.PanelText);
+            if (bTwoLines)
+            {
+                RECT rcStatus = rcName;
+                LPCWSTR pszStatus = row.szStatus;
+
+                rcName.top = row.rc.top + Sc(10);
+                rcName.bottom = cyMid + Sc(1);
+                rcStatus.top = cyMid + Sc(1);
+                rcStatus.bottom = cyMid + Sc(20);
+                DrawTextW(hdc, row.szName, -1, &rcName, DT_SINGLELINE | DT_BOTTOM | DT_END_ELLIPSIS | DT_NOPREFIX);
+                if (row.bConnected && (!pszStatus[0] || !wcsncmp(pszStatus, L"Connected", 9)))
+                    pszStatus = row.bSecure ? L"Connected, secured" : L"Connected";
+                else if (!pszStatus[0])
+                    pszStatus = row.bSecure ? (IsEnterprise(row) ? L"Secured (enterprise)" : L"Secured") : L"Open";
+                SelectObject(hdc, m_hFontSmall);
+                SetTextColor(hdc, m_Pal.DimText);
+                DrawTextW(hdc, pszStatus, -1, &rcStatus, DT_SINGLELINE | DT_TOP | DT_END_ELLIPSIS | DT_NOPREFIX);
+            }
+            else
+            {
+                DrawTextW(hdc, row.szName, -1, &rcName, DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+            }
+
+            if (row.bConnected)
+                DrawInfoButton(hdc, &row.rcInfo, bHot && m_iHotBtn == 5, crRow);
+
+            if (!bExpanded)
+                continue;
+            if (m_bPassMode)
+            {
+                RECT rcPrompt = { row.rcEdit.left, row.rc.top + nHeadH, row.rcEdit.right, row.rcEdit.top };
+                RECT rcEditFrame = row.rcEdit;
+
+                SelectObject(hdc, m_hFontSmall);
+                SetTextColor(hdc, m_Pal.PanelText);
+                DrawTextW(hdc, L"Enter the network security key", -1, &rcPrompt, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+                TfyFillRound(hdc, &rcEditFrame, Sc(4), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 70), crRow);
+                InflateRect(&rcEditFrame, -1, -1);
+                TfyFillRound(hdc, &rcEditFrame, Sc(3), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 20),
+                             TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 70));
+                DrawButton(hdc, &row.rcButton, L"Next", m_iHotBtn == 1, TRUE);
+                DrawButton(hdc, &row.rcButton2, L"Cancel", m_iHotBtn == 2, FALSE);
+            }
+            else
+            {
+                if (!row.bConnected)
+                    DrawCheck(hdc, &row.rcCheck, m_bAutoConnect, L"Connect automatically", m_iHotBtn == 3);
+                DrawButton(hdc, &row.rcButton, row.bConnected ? L"Disconnect" : L"Connect",
+                           m_iHotBtn == 1, !row.bConnected);
+            }
+        }
+
+        if (m_bWlanLoading)
+        {
+            DrawLoadingSpinner(hdc);
+        }
+        else if (m_bWifiOn && !m_bAirplane)
+        {
+            BOOL bAny = FALSE;
+
+            for (SIZE_T i = 0; i < m_Rows.GetCount() && !bAny; i++)
+                bAny = (m_Rows[i].nType == 2);
+            if (!bAny && !m_bScanning)
+            {
+                SelectObject(hdc, m_hFontSmall);
+                SetTextColor(hdc, m_Pal.DimText);
+                DrawTextW(hdc, L"No Wi-Fi networks found", -1, &m_rcWlanArea,
+                          DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
+            }
+        }
+
+        {
+            RECT rcSep = { 0, m_yFooter, prc->right, m_yFooter + 1 };
+            HBRUSH hbrSep = CreateSolidBrush(TfyMix(m_Pal.PanelBg, m_Pal.Border, 140));
+            RECT rcLinkText = m_rcLink;
+            RECT rcRefreshIcon = { m_rcRefresh.left + Sc(8), m_rcRefresh.top + Sc(8),
+                                   m_rcRefresh.right - Sc(8), m_rcRefresh.bottom - Sc(8) };
+
+            FillRect(hdc, &rcSep, hbrSep);
+            DeleteObject(hbrSep);
+            if (m_iHot == TFY_NETHIT_LINK)
+                TfyFillRound(hdc, &m_rcLink, Sc(4), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 24), m_Pal.PanelBg);
+            rcLinkText.left += Sc(4);
+            SelectObject(hdc, m_hFontRow);
+            SetTextColor(hdc, m_Pal.PanelText);
+            DrawTextW(hdc, L"More Wi-Fi settings", -1, &rcLinkText, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            if (m_iHot == TFY_NETHIT_REFRESH)
+                TfyFillRound(hdc, &m_rcRefresh, Sc(4), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 24), m_Pal.PanelBg);
+            TfyDrawFluent(hdc, &rcRefreshIcon, IDI_FLU_REFRESH);
+        }
+        SelectObject(hdc, hFontOld);
+    }
+
     VOID DrawLock(HDC hdc, int x, int y, COLORREF cr)
     {
         HPEN hPen = CreatePen(PS_SOLID, Sc(1), cr);
@@ -7535,6 +7880,16 @@ public:
         FillRect(hdcMem, &rc, hbr);
         DeleteObject(hbr);
         SetBkMode(hdcMem, TRANSPARENT);
+        if (m_bWifiPage)
+        {
+            PaintWifiPage(hdcMem, &rc);
+            BitBlt(hdc, 0, 0, rc.right, rc.bottom, hdcMem, 0, 0, SRCCOPY);
+            SelectObject(hdcMem, hbmOld);
+            DeleteObject(hbm);
+            DeleteDC(hdcMem);
+            EndPaint(&ps);
+            return 0;
+        }
         HGDIOBJ hFontOld = SelectObject(hdcMem, m_bPane ? m_hFontPaneTitle : m_hFontHeader);
         RECT rcTitle = { Sc(12), Sc(8), m_rcRefresh.left - Sc(6), Sc(8) + Sc(26) };
         if (m_bPane)
@@ -7705,24 +8060,7 @@ public:
         }
         if (m_bWlanLoading)
         {
-            const double kPi = 3.14159265358979;
-            double t = (double)(GetTickCount64() - m_SpinT0) / 1000.0;
-            double a = (t * kPi * 0.5) + sin(t * kPi) * 0.5;
-            int cxMid = (m_rcWlanArea.left + m_rcWlanArea.right) / 2;
-            int cyMid2 = (m_rcWlanArea.top + m_rcWlanArea.bottom) / 2;
-            int r = Sc(12);
-            HPEN hPen = CreatePen(PS_SOLID, Sc(2), TfyMix(m_Pal.PanelBg, m_Pal.AccentBg, 220));
-            HGDIOBJ hPenOld = SelectObject(hdcMem, hPen);
-            HGDIOBJ hBrOld = SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
-
-            Arc(hdcMem, cxMid - r, cyMid2 - r, cxMid + r, cyMid2 + r,
-                cxMid + (int)(r * cos(a)), cyMid2 + (int)(r * sin(a)),
-                cxMid + (int)(r * cos(a + kPi * 1.35)),
-                cyMid2 + (int)(r * sin(a + kPi * 1.35)));
-
-            SelectObject(hdcMem, hBrOld);
-            SelectObject(hdcMem, hPenOld);
-            DeleteObject(hPen);
+            DrawLoadingSpinner(hdcMem);
         }
         else if (m_Rows.GetCount() == 0 && !m_szBanner[0])
         {
@@ -7897,7 +8235,7 @@ public:
     int HitTest(POINT pt, int *pnBtn)
     {
         *pnBtn = 0;
-        if (m_bBack && PtInRect(&m_rcBack, pt))
+        if ((m_bBack || m_bWifiPage) && PtInRect(&m_rcBack, pt))
             return TFY_NETHIT_BACK;
         if (m_nIfaces > 0 && PtInRect(&m_rcRefresh, pt))
             return TFY_NETHIT_REFRESH;
@@ -7914,6 +8252,11 @@ public:
                 continue;
             if (row.nType == 3)
                 return TFY_NETHIT_NONE;
+            if (m_bWifiPage && PtInRect(&row.rcInfo, pt))
+            {
+                *pnBtn = 5;
+                return (int)i;
+            }
             if ((int)i == m_iSel && row.nType == 2)
             {
                 if (PtInRect(&row.rcButton, pt)) *pnBtn = 1;
@@ -7989,7 +8332,8 @@ public:
         if (i == TFY_NETHIT_LINK)
         {
             m_bLaunching = TRUE;
-            ShellExecuteW(NULL, NULL, L"ms-settings:network", NULL, NULL, SW_SHOWNORMAL);
+            ShellExecuteW(NULL, NULL, m_bWifiPage ? L"ms-settings:network-wifi" : L"ms-settings:network",
+                          NULL, NULL, SW_SHOWNORMAL);
             m_bLaunching = FALSE;
             FadeOut();
             return 0;
@@ -8017,6 +8361,14 @@ public:
         if (i < 0)
             return 0;
         TFYNETROW &row = m_Rows[i];
+        if (nBtn == 5)
+        {
+            m_bLaunching = TRUE;
+            ShellExecuteW(NULL, NULL, L"ms-settings:network-wifi", NULL, NULL, SW_SHOWNORMAL);
+            m_bLaunching = FALSE;
+            FadeOut();
+            return 0;
+        }
         if (row.nType != 2)
         {
             m_bLaunching = TRUE;
@@ -8136,6 +8488,7 @@ public:
         if (m_hFontSmall) { DeleteObject(m_hFontSmall); m_hFontSmall = NULL; }
         if (m_hFontHeader) { DeleteObject(m_hFontHeader); m_hFontHeader = NULL; }
         if (m_hFontPaneTitle) { DeleteObject(m_hFontPaneTitle); m_hFontPaneTitle = NULL; }
+        if (m_hFontRow) { DeleteObject(m_hFontRow); m_hFontRow = NULL; }
         return 0;
     }
 
