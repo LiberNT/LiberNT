@@ -28,6 +28,7 @@
 #define BOOTVID_DECIPOINTS_PER_INCH 720
 #define BOOTVID_TENTH_MILLIMETERS_PER_INCH 254
 #define BOOTVID_STATUS_FONT_PIXEL_HEIGHT 18
+#define BOOTVID_STATUS_NUMBER_DIGITS 3
 
 #define BB_PIXEL(x, y) \
     (BackBuffer + (ULONG_PTR)(y) * VidpDisplayWidth + (x))
@@ -726,33 +727,44 @@ VidRenderStatusText(
     _In_ PCSTR String,
     _Out_writes_bytes_(Width * Height) PUCHAR Coverage,
     _In_ ULONG Width,
-    _In_ ULONG Height,
-    _In_ BOOLEAN Center,
-    _Inout_ PLONG Left)
+    _In_ ULONG Height)
 {
     const BOOT_FONT_RENDERER* Font = &BootVidStatusFont;
     const BOOT_FONT_GLYPH* Glyph;
+    const BOOT_FONT_GLYPH* Digit;
     const UCHAR* Bitmap;
     LONG Pen, Baseline;
-    ULONG Index, Row, Column;
+    ULONG Index, Row, Column, Digits;
 
-    if (!Font->Enabled || !String || !Coverage || !Width || !Height || !Left)
+    if (!Font->Enabled || !String || !Coverage || !Width || !Height)
         return FALSE;
 
-    if (Center)
+    Digit = BootFontGetGlyph(Font, '0');
+    Pen = 0;
+    Digits = 0;
+    for (Index = 0; ; ++Index)
     {
-        Pen = 0;
-        for (Index = 0; String[Index]; ++Index)
+        if (String[Index] >= '0' && String[Index] <= '9')
         {
-            Glyph = BootFontGetGlyph(Font, (UCHAR)String[Index]);
-            if (Glyph)
-                Pen += Glyph->Advance;
+            ++Digits;
         }
-        *Left = ((LONG)Width - Pen) / 2;
+        else
+        {
+            if (Digit && Digits && Digits < BOOTVID_STATUS_NUMBER_DIGITS)
+                Pen += (LONG)(BOOTVID_STATUS_NUMBER_DIGITS - Digits) * Digit->Advance;
+            Digits = 0;
+        }
+
+        if (!String[Index])
+            break;
+
+        Glyph = BootFontGetGlyph(Font, (UCHAR)String[Index]);
+        if (Glyph)
+            Pen += Glyph->Advance;
     }
 
     RtlZeroMemory(Coverage, (SIZE_T)Width * Height);
-    Pen = *Left;
+    Pen = ((LONG)Width - Pen) / 2;
     Baseline = ((LONG)Height - (LONG)Font->CellHeight) / 2 + (LONG)Font->Baseline;
 
     for (Index = 0; String[Index]; ++Index)

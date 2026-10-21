@@ -6,7 +6,7 @@
 @ stdcall VidInitialize(long)
 @ stdcall VidQueryDisplayInfo(ptr)
 @ stdcall VidQueryFrameBufferInfo(ptr)
-@ stdcall VidRenderStatusText(str ptr long long long ptr)
+@ stdcall VidRenderStatusText(str ptr long long)
 @ stdcall VidResetDisplay(long)
 @ stdcall VidScreenToBufferBlt(ptr long long long long long)
 @ stdcall VidSetScrollRegion(long long long long)

@@ -95,8 +95,6 @@ typedef struct _INBV_STATUS_LINE
     PUCHAR Coverage;
     PULONG Row;
     ULONG Lut[256];
-    LONG Left;
-    CHAR Text[128];
     BOOLEAN Ready;
 } INBV_STATUS_LINE;
 
@@ -777,15 +775,6 @@ InbvGopLogoStop(VOID)
     g_LogoReady = FALSE;
 }
 
-static BOOLEAN
-InbvGopStatusKeepsStem(
-    _In_ PCSTR Line)
-{
-    PCSTR Space = strrchr(g_Status.Text, ' ');
-
-    return Space && !strncmp(Line, g_Status.Text, (SIZE_T)(Space - g_Status.Text) + 1);
-}
-
 BOOLEAN
 NTAPI
 InbvGopDisplayStatus(
@@ -825,14 +814,8 @@ InbvGopDisplayStatus(
         InbvGetDisplayState() == INBV_DISPLAY_STATE_OWNED)
     {
         if (g_Status.Coverage &&
-            VidRenderStatusText(Line,
-                                g_Status.Coverage,
-                                g_Status.PixelWidth,
-                                g_Status.PixelHeight,
-                                !InbvGopStatusKeepsStem(Line),
-                                &g_Status.Left))
+            VidRenderStatusText(Line, g_Status.Coverage, g_Status.PixelWidth, g_Status.PixelHeight))
         {
-            RtlCopyMemory(g_Status.Text, Line, Length + 1);
             for (y = 0; y < g_Status.PixelHeight; y++)
             {
                 const UCHAR *Source = g_Status.Coverage + (SIZE_T)y * g_Status.PixelWidth;

@@ -764,15 +764,8 @@ DisplayDeviceBootStatus(
 
     if (!LoadStringW(hDllInstance, IDS_STATUS_INSTALL_DEV, Phase, ARRAYSIZE(Phase)))
         Phase[0] = UNICODE_NULL;
-    if (Total != 0)
-    {
-        StringCchPrintfW(Text, ARRAYSIZE(Text), L"%s %lu%%\r\n", Phase,
-                         Completed >= Total ? 100 : Completed * 100 / Total);
-    }
-    else
-    {
-        StringCchPrintfW(Text, ARRAYSIZE(Text), L"%s\r\n", Phase);
-    }
+    StringCchPrintfW(Text, ARRAYSIZE(Text), L"%s %lu%%\r\n", Phase,
+                     Total == 0 ? 0 : Completed >= Total ? 100 : Completed * 100 / Total);
     RtlInitUnicodeString(&String, Text);
     NtDisplayString(&String);
 }
