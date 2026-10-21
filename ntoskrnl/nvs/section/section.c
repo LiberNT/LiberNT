@@ -11,6 +11,7 @@
 
 #define MI_SEGMENT_CHUNK_SHIFT  9
 #define MI_SEGMENT_CHUNK_PAGES  (1ULL << MI_SEGMENT_CHUNK_SHIFT)
+#define MI_SEGMENT_FIRST_CHUNK_PAGES 16ULL
 #define MI_PAGE_ALIGN_DOWN(a)   ((a) & ~((ULONG64)PAGE_SIZE - 1))
 #define MI_PAGE_ALIGN_UP(a)     (((a) + PAGE_SIZE - 1) & ~((ULONG64)PAGE_SIZE - 1))
 #define MI_VAD_START(v)         ((v)->Node.StartingVpn << PAGE_SHIFT)
@@ -32,6 +33,36 @@ MiSegmentSize(
     return (ULONG64)MI_ATOMIC_READ64(&Segment->SizeInBytes);
 }
 
+FORCEINLINE
+ULONG64
+MiSegmentChunkNumber(
+    _In_ ULONG64 Page)
+{
+    if (Page < MI_SEGMENT_FIRST_CHUNK_PAGES)
+        return 0;
+
+    return 1 + ((Page - MI_SEGMENT_FIRST_CHUNK_PAGES) >> MI_SEGMENT_CHUNK_SHIFT);
+}
+
+FORCEINLINE
+ULONG64
+MiSegmentChunkFirstPage(
+    _In_ ULONG64 Number)
+{
+    if (Number == 0)
+        return 0;
+
+    return MI_SEGMENT_FIRST_CHUNK_PAGES + ((Number - 1) << MI_SEGMENT_CHUNK_SHIFT);
+}
+
+FORCEINLINE
+ULONG64
+MiSegmentChunkPages(
+    _In_ ULONG64 Number)
+{
+    return (Number == 0) ? MI_SEGMENT_FIRST_CHUNK_PAGES : MI_SEGMENT_CHUNK_PAGES;
+}
+
 static VOID MiSegmentReleasePage(_Inout_ PMI_SEGMENT Segment, _Inout_ PMI_PTE Proto, _In_ ULONG Frame);
 
 static
@@ -41,8 +72,9 @@ MiSegmentProto(
     _In_ ULONG64 Page)
 {
     PMI_PTE *Directory = MI_ATOMIC_READ_POINTER(&Segment->Chunk);
+    ULONG64 Number = MiSegmentChunkNumber(Page);
 
-    return &Directory[Page >> MI_SEGMENT_CHUNK_SHIFT][Page & (MI_SEGMENT_CHUNK_PAGES - 1)];
+    return &Directory[Number][Page - MiSegmentChunkFirstPage(Number)];
 }
 
 static
@@ -109,7 +141,7 @@ MiSegmentGrow(
     _Inout_ PMI_SEGMENT Segment,
     _In_ ULONG64 NewPageCount)
 {
-    ULONG64 Needed = (NewPageCount + MI_SEGMENT_CHUNK_PAGES - 1) >> MI_SEGMENT_CHUNK_SHIFT;
+    ULONG64 Needed = (NewPageCount != 0) ? MiSegmentChunkNumber(NewPageCount - 1) + 1 : 0;
     ULONG64 Page;
 
     if (Needed > Segment->ChunkCapacity)
@@ -138,7 +170,8 @@ MiSegmentGrow(
 
     while (Segment->ChunkCount < Needed)
     {
-        PMI_PTE Chunk = MI_ALLOCATE(MI_SEGMENT_CHUNK_PAGES * sizeof(MI_PTE));
+        ULONG64 Entries = MiSegmentChunkPages(Segment->ChunkCount);
+        PMI_PTE Chunk = MI_ALLOCATE(Entries * sizeof(MI_PTE));
         PMI_CHUNK_INDEX Index;
 
         if (Chunk == NULL)
@@ -151,12 +184,12 @@ MiSegmentGrow(
             return STATUS_INSUFFICIENT_RESOURCES;
         }
 
-        RtlZeroMemory(Chunk, MI_SEGMENT_CHUNK_PAGES * sizeof(MI_PTE));
+        RtlZeroMemory(Chunk, Entries * sizeof(MI_PTE));
         RtlZeroMemory(Index, sizeof(*Index));
         Index->Segment = Segment;
         Index->Base = (ULONG64)(ULONG_PTR)Chunk;
         Index->Number = Segment->ChunkCount;
-        Index->PageCount = (ULONG)(((Index->Base + MI_SEGMENT_CHUNK_PAGES * sizeof(MI_PTE) - 1) >> PAGE_SHIFT) -
+        Index->PageCount = (ULONG)(((Index->Base + Entries * sizeof(MI_PTE) - 1) >> PAGE_SHIFT) -
                                    (Index->Base >> PAGE_SHIFT) + 1);
         MI_ASSERT(Index->PageCount <= RTL_NUMBER_OF(Index->Page));
         Index->Page[0].Index = Index;
@@ -886,9 +919,9 @@ MiSegmentFromPrototype(
     {
         PMI_CHUNK_INDEX Index = CONTAINING_RECORD(Link, MI_CHUNK_LINK, Link)->Index;
 
-        if (PteAddress >= Index->Base && PteAddress < Index->Base + MI_SEGMENT_CHUNK_PAGES * sizeof(MI_PTE))
+        if (PteAddress >= Index->Base && PteAddress < Index->Base + MiSegmentChunkPages(Index->Number) * sizeof(MI_PTE))
         {
-            *Page = (Index->Number << MI_SEGMENT_CHUNK_SHIFT) + (PteAddress - Index->Base) / sizeof(MI_PTE);
+            *Page = MiSegmentChunkFirstPage(Index->Number) + (PteAddress - Index->Base) / sizeof(MI_PTE);
             Index->Segment->ActiveWriters++;
             Found = Index->Segment;
             break;
