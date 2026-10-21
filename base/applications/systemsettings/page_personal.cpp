@@ -32,10 +32,6 @@ NotifyCompositor()
 static void
 SetDarkMode(bool dark)
 {
-    DWORD light = dark ? 0 : 1;
-
-    WriteDword(HKEY_CURRENT_USER, PERSONALIZE_KEY, L"AppsUseLightTheme", light);
-    WriteDword(HKEY_CURRENT_USER, PERSONALIZE_KEY, L"SystemUsesLightTheme", light);
     DwmSettingsWriteColorScheme(dark ? DWM_COLOR_SCHEME_DARK : DWM_COLOR_SCHEME_LIGHT);
     BroadcastSetting(L"ImmersiveColorSet");
     BroadcastSetting(REACTOS_DWM_SETTINGS_KEY);
@@ -59,8 +55,7 @@ BuildPersonalization(PageBuilder &page)
 {
     std::vector<std::wstring> modes;
     DWORD effects = DWM_EFFECT_ALL;
-    bool dark = ReadDword(HKEY_CURRENT_USER, PERSONALIZE_KEY, L"AppsUseLightTheme",
-                          DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT) == 0;
+    bool dark = DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_DARK;
 
     if (!page.Indexing)
         DwmSettingsRead(&effects);

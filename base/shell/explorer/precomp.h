@@ -49,6 +49,7 @@
 #include <ui/rosdlgs.h>
 #include <shellutils.h>
 #include <reactos/trayicons.h>
+#include <reactos/colorscheme.h>
 
 #include "tmschema.h"
 #include "resource.h"
@@ -80,7 +81,6 @@ ShellScaleForDpi(INT Value)
 
 #define SHELL_TMT_COMPOSITED 2204
 #define SHELL_TMT_FILLCOLOR  3802
-#define SHELL_TMT_OPACITY    2430
 
 static inline HTHEME
 ShellOpenTaskbarMaterial(VOID)
@@ -88,16 +88,16 @@ ShellOpenTaskbarMaterial(VOID)
     HTHEME hTheme;
     BOOL bComposited;
 
-    if (ShellSystemUsesLightTheme())
+    if (DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT)
     {
-        hTheme = OpenThemeData(NULL, L"TaskbarLight::Liquid");
+        hTheme = OpenThemeData(NULL, DWM_SHELL_MATERIAL(DWM_COLOR_SCHEME_LIGHT));
         bComposited = FALSE;
         if (hTheme && SUCCEEDED(GetThemeBool(hTheme, 0, 0, SHELL_TMT_COMPOSITED, &bComposited)) && bComposited)
             return hTheme;
         if (hTheme)
             CloseThemeData(hTheme);
     }
-    return OpenThemeData(NULL, L"TaskBar::Liquid");
+    return OpenThemeData(NULL, DWM_SHELL_MATERIAL(DWM_COLOR_SCHEME_DARK));
 }
 
 static inline BOOL

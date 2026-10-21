@@ -123,15 +123,7 @@ static HBRUSH g_SM2EditBrush = NULL;
 static BOOL
 SM2IsDarkTheme(VOID)
 {
-    DWORD dwValue = 1, cbData = sizeof(dwValue), dwType;
-    if (SHGetValueW(HKEY_CURRENT_USER,
-                    L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                    L"AppsUseLightTheme", &dwType, &dwValue, &cbData) == ERROR_SUCCESS)
-    {
-        return dwValue == 0;
-    }
-    COLORREF c = GetSysColor(COLOR_WINDOW);
-    return (GetRValue(c) * 299 + GetGValue(c) * 587 + GetBValue(c) * 114) / 1000 < 128;
+    return DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_DARK;
 }
 
 static VOID
@@ -166,8 +158,17 @@ SM2ClassicPalette(SM2PALETTE *pPal)
 static VOID
 SM2SelectPalette(VOID)
 {
+    COLORREF crTaskbar;
+
     if (IsAppThemed())
+    {
         g_SM2Pal = SM2IsDarkTheme() ? g_SM2PalDark : g_SM2PalLight;
+        if (ShellGetTaskbarMaterial(&crTaskbar))
+        {
+            g_SM2Pal = ShellColorIsLight(crTaskbar) ? g_SM2PalLight : g_SM2PalDark;
+            g_SM2Pal.LeftBg = crTaskbar;
+        }
+    }
     else
         SM2ClassicPalette(&g_SM2Pal);
     if (g_SM2EditBrush)
@@ -2091,6 +2092,7 @@ public:
 
         m_uPosition = uPos;
         SM2SelectPalette();
+        RefreshLiquidMaterial();
         RebuildData();
 
         int w = MenuW(), h = MenuH();

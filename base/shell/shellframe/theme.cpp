@@ -20,13 +20,6 @@ Blend(BYTE alpha, COLORREF fore, COLORREF back)
                (GetBValue(fore) * alpha + GetBValue(back) * (255 - alpha) + 127) / 255);
 }
 
-static BOOL
-ReadDword(HKEY root, LPCWSTR key, LPCWSTR value, DWORD *data)
-{
-    DWORD size = sizeof(*data);
-    return RegGetValueW(root, key, value, RRF_RT_REG_DWORD, NULL, data, &size) == ERROR_SUCCESS;
-}
-
 static COLORREF
 AccentFromPalette(BOOL dark)
 {
@@ -92,8 +85,6 @@ Theme::Update(HWND hwnd)
     HIGHCONTRASTW contrast = { sizeof(contrast) };
     COLORREF window;
 
-    ReadDword(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-              L"AppsUseLightTheme", &light);
     m_HighContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
                      (contrast.dwFlags & HCF_HIGHCONTRASTON);
     if (contrast.lpszDefaultScheme)

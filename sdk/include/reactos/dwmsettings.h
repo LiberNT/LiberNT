@@ -10,35 +10,10 @@
 #include <uxtheme.h>
 #include <vssym32.h>
 #include <reactos/dwmframe.h>
-
-#define REACTOS_DWM_SETTINGS_KEY L"Software\\ReactOS\\DWM"
-
-#define REACTOS_DWM_COLOR_SCHEME L"ColorScheme"
-
-#define DWM_COLOR_SCHEME_LIGHT 0u
-#define DWM_COLOR_SCHEME_DARK  1u
+#include <reactos/colorscheme.h>
 
 #define DWM_COLOR_SCHEME_MATERIAL(Scheme) \
     ((Scheme) == DWM_COLOR_SCHEME_LIGHT ? L"ContentLight::Liquid" : L"ContentDark::Liquid")
-
-static __inline DWORD
-DwmSettingsReadColorScheme(void)
-{
-    HKEY Key;
-    DWORD Scheme, Type, Size = sizeof(Scheme);
-    LONG Error;
-
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, REACTOS_DWM_SETTINGS_KEY, 0,
-                      KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
-        return DWM_COLOR_SCHEME_DARK;
-    Error = RegQueryValueExW(Key, REACTOS_DWM_COLOR_SCHEME, NULL, &Type,
-                             (BYTE *)&Scheme, &Size);
-    RegCloseKey(Key);
-    if (Error != ERROR_SUCCESS || Type != REG_DWORD ||
-        Size != sizeof(Scheme) || Scheme > DWM_COLOR_SCHEME_DARK)
-        return DWM_COLOR_SCHEME_DARK;
-    return Scheme;
-}
 
 static __inline BOOL
 DwmSettingsLoadMaterial(LPCWSTR ClassList, COLORREF *Fill, INT *Opacity)
@@ -62,6 +37,15 @@ static __inline BOOL
 DwmSettingsLoadSchemeMaterial(DWORD Scheme, COLORREF *Fill, INT *Opacity)
 {
     return DwmSettingsLoadMaterial(DWM_COLOR_SCHEME_MATERIAL(Scheme), Fill, Opacity);
+}
+
+static __inline BOOL
+DwmSettingsLoadShellMaterial(DWORD Scheme, COLORREF *Fill, INT *Opacity)
+{
+    if (DwmSettingsLoadMaterial(DWM_SHELL_MATERIAL(Scheme), Fill, Opacity))
+        return TRUE;
+    return Scheme == DWM_COLOR_SCHEME_LIGHT &&
+           DwmSettingsLoadMaterial(DWM_SHELL_MATERIAL(DWM_COLOR_SCHEME_DARK), Fill, Opacity);
 }
 
 static __inline BOOL

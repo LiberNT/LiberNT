@@ -34,16 +34,3 @@ ShellTrayIconRenderSize(VOID)
 {
     return MulDiv(ShellTrayIconSize(), 4, 5);
 }
-
-static inline BOOL
-ShellSystemUsesLightTheme(VOID)
-{
-    DWORD Value, Size = sizeof(Value);
-
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, NULL, &Value, &Size) == ERROR_SUCCESS)
-        return Value != 0;
-    Size = sizeof(Value);
-    return RegGetValueW(HKEY_CURRENT_USER, L"Software\\ReactOS\\DWM", L"ColorScheme", RRF_RT_REG_DWORD, NULL,
-                        &Value, &Size) == ERROR_SUCCESS && Value == 0;
-}

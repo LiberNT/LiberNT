@@ -110,27 +110,6 @@ public:
         SetWindowTheme(hWnd, pszClass, NULL);
         m_hFlyoutTheme = OpenThemeData(hWnd, pszClass);
         m_hFlyoutButtonTheme = OpenThemeData(hWnd, L"Button");
-        InheritTaskbarMaterial(hWnd);
-    }
-
-    static VOID InheritTaskbarMaterial(HWND hWnd)
-    {
-        HTHEME hTheme = ShellOpenTaskbarMaterial();
-        BOOL bComposited = FALSE;
-        COLORREF crFill;
-        INT nOpacity;
-
-        if (!hTheme)
-            return;
-        if (SUCCEEDED(GetThemeBool(hTheme, 0, 0, SHELL_TMT_COMPOSITED, &bComposited)) && bComposited &&
-            SUCCEEDED(GetThemeColor(hTheme, 0, 0, SHELL_TMT_FILLCOLOR, &crFill)) &&
-            SUCCEEDED(GetThemeInt(hTheme, 0, 0, SHELL_TMT_OPACITY, &nOpacity)) &&
-            nOpacity >= 0 && nOpacity <= 255)
-        {
-            SetPropW(hWnd, DWM_PROP_BACKDROP_COLOR, (HANDLE)(ULONG_PTR)((ULONG)crFill + 1));
-            SetPropW(hWnd, DWM_PROP_BACKDROP_OPACITY, (HANDLE)(ULONG_PTR)(nOpacity + 1));
-        }
-        CloseThemeData(hTheme);
     }
 
     VOID BeginFlyoutOpen(HWND hWnd, int x, int y, int cx, int cy,
@@ -9187,39 +9166,23 @@ struct TFYQSTILE
 static BOOL
 TfyQsReadLightTheme(VOID)
 {
-    DWORD dwValue = 1, cbValue = sizeof(dwValue);
-
-    if (SHGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                    L"AppsUseLightTheme", NULL, &dwValue, &cbValue) != ERROR_SUCCESS)
-    {
-        return TRUE;
-    }
-    return dwValue != 0;
+    return DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT;
 }
 
 static DWORD WINAPI
 TfyQsBroadcastThemeThread(LPVOID lpParameter)
 {
     UNREFERENCED_PARAMETER(lpParameter);
-    SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ImmersiveColorSet",
-                        SMTO_ABORTIFHUNG, 2000, NULL);
-    SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Software\\ReactOS\\DWM",
-                        SMTO_ABORTIFHUNG, 2000, NULL);
+    DwmSettingsBroadcastColorScheme();
     return 0;
 }
 
 static VOID
 TfyQsSetDarkMode(BOOL bDark)
 {
-    DWORD dwLight = bDark ? 0 : 1;
-    DWORD dwScheme = bDark ? 1 : 0;
     HANDLE hThread;
 
-    SHSetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                L"AppsUseLightTheme", REG_DWORD, &dwLight, sizeof(dwLight));
-    SHSetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                L"SystemUsesLightTheme", REG_DWORD, &dwLight, sizeof(dwLight));
-    SHSetValueW(HKEY_CURRENT_USER, L"Software\\ReactOS\\DWM", L"ColorScheme", REG_DWORD, &dwScheme, sizeof(dwScheme));
+    DwmSettingsWriteColorScheme(bDark ? DWM_COLOR_SCHEME_DARK : DWM_COLOR_SCHEME_LIGHT);
     hThread = CreateThread(NULL, 0, TfyQsBroadcastThemeThread, NULL, 0, NULL);
     if (hThread)
         CloseHandle(hThread);

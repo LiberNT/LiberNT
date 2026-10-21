@@ -104,14 +104,6 @@ DwmSettingsWrite(DWORD Effect, BOOL Enabled)
     return DwmSettingsWriteValue(DwmPreferences[Index].Name, !!Enabled);
 }
 
-LONG
-DwmSettingsWriteColorScheme(DWORD Scheme)
-{
-    if (Scheme > DWM_COLOR_SCHEME_DARK)
-        return ERROR_INVALID_PARAMETER;
-    return DwmSettingsWriteValue(REACTOS_DWM_COLOR_SCHEME, Scheme);
-}
-
 static LRESULT CALLBACK
 DwmSettingsWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 {

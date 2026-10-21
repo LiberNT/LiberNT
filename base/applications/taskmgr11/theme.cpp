@@ -87,8 +87,8 @@ void Theme_Apply(BOOL dark, int dpi)
     Theme_Free();
     ZeroMemory(&g_t, sizeof(g_t));
     g_t.dark = dark;
-    if (!DwmSettingsLoadMaterial(dark ? L"TaskBar::Liquid" : DWM_COLOR_SCHEME_MATERIAL(DWM_COLOR_SCHEME_LIGHT),
-                                 &g_t.material, &g_t.materialOpacity))
+    if (!DwmSettingsLoadShellMaterial(dark ? DWM_COLOR_SCHEME_DARK : DWM_COLOR_SCHEME_LIGHT,
+                                      &g_t.material, &g_t.materialOpacity))
         g_t.materialOpacity = -1;
 
     if (!dark)

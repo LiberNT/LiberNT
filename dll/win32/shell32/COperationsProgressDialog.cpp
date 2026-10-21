@@ -6,12 +6,11 @@
  */
 #include "precomp.h"
 #include "operationsprogress.h"
+#include <vssym32.h>
+#include <reactos/dwmsettings.h>
 
 #define WM_OP_REFRESH (WM_APP + 30)
 #define WM_OP_CLOSE (WM_APP + 31)
-
-#define OP_TMT_COMPOSITED 2204
-#define OP_TMT_FILLCOLOR  3802
 
 namespace
 {
@@ -20,11 +19,6 @@ BOOL HighContrast()
     HIGHCONTRASTW contrast = {sizeof(contrast)};
     SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0);
     return !!(contrast.dwFlags & HCF_HIGHCONTRASTON);
-}
-
-UINT Luminance(COLORREF color)
-{
-    return (GetRValue(color) * 299 + GetGValue(color) * 587 + GetBValue(color) * 114) / 1000;
 }
 
 COLORREF Translucent(COLORREF back, COLORREF color, int spread);
@@ -49,26 +43,14 @@ COLORREF Translucent(COLORREF back, COLORREF color, int spread)
 
 BOOL DarkTheme()
 {
-    DWORD value = 1, size = sizeof(value), type = 0;
-    if (SHGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                    L"AppsUseLightTheme", &type, &value, &size) == ERROR_SUCCESS && type == REG_DWORD)
-        return value == 0;
-    return Luminance(GetSysColor(COLOR_WINDOW)) < 128;
+    return DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_DARK;
 }
 
-BOOL MaterialColor(PCWSTR role, COLORREF *color)
+BOOL MaterialColor(BOOL dark, COLORREF *color)
 {
+    INT opacity;
     if (!IsThemeActive()) return FALSE;
-    WCHAR liquid[64];
-    StringCchPrintfW(liquid, _countof(liquid), L"%s::Liquid", role);
-    HTHEME theme = OpenThemeData(NULL, liquid);
-    if (!theme) return FALSE;
-    BOOL composited = FALSE;
-    HRESULT hr = GetThemeBool(theme, 0, 0, OP_TMT_COMPOSITED, &composited);
-    if (SUCCEEDED(hr) && composited) hr = GetThemeColor(theme, 0, 0, OP_TMT_FILLCOLOR, color);
-    else hr = E_FAIL;
-    CloseThemeData(theme);
-    return SUCCEEDED(hr);
+    return DwmSettingsLoadShellMaterial(dark ? DWM_COLOR_SCHEME_DARK : DWM_COLOR_SCHEME_LIGHT, color, &opacity);
 }
 
 // Microsoft Fluent UI System Icons (MIT), rasterised at their design sizes.
@@ -209,7 +191,7 @@ void COperationsProgressDialog::ApplyTheme()
     BOOL dark = !contrast && DarkTheme();
     PCWSTR role = dark ? L"FlyoutDark" : L"FlyoutLight";
     COLORREF material = 0;
-    BOOL blur = !contrast && MaterialColor(role, &material);
+    BOOL blur = !contrast && MaterialColor(dark, &material);
 
     m_Palette.Dark = dark;
     m_Palette.Material = blur;

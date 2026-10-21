@@ -151,9 +151,7 @@ DwmSettingsDialogProc(HWND Dialog, UINT Message, WPARAM WParam, LPARAM LParam)
                 {
                     State->ColorScheme = Scheme;
                     DwmSettingsApplyScheme(Dialog, State);
-                    SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
-                                        (LPARAM)REACTOS_DWM_SETTINGS_KEY,
-                                        SMTO_NORMAL, 2000, NULL);
+                    DwmSettingsBroadcastColorScheme();
                 }
             }
             else

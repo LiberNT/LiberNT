@@ -38,6 +38,5 @@ struct _DWM_WIN;
 
 LONG DwmSettingsRead(DWORD *Effects);
 LONG DwmSettingsWrite(DWORD Effect, BOOL Enabled);
-LONG DwmSettingsWriteColorScheme(DWORD Scheme);
 HWND DwmSettingsCreateWindow(HINSTANCE Instance, DWM_SETTINGS *Settings);
 void DwmSettingsApplyWindow(const DWM_SETTINGS *Settings, struct _DWM_WIN *Window);
