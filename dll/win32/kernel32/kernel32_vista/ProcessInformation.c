@@ -86,6 +86,10 @@ SetProcessInformation(
 
     switch (ProcessInformationClass)
     {
+        case ProcessPowerThrottling:
+            Status = NtSetInformationProcess(hProcess, ProcessPowerThrottlingState, ProcessInformation, ProcessInformationSize);
+            break;
+
         case ProcessMemoryPriority:
             Status = NtSetInformationProcess(hProcess, ProcessPagePriority, ProcessInformation, ProcessInformationSize);
             break;
