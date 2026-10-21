@@ -27,7 +27,13 @@ typedef DWORD (WINAPI *LPGETVERSION)();
 VOID _TestVesion(HANDLE dll, DWORD ExpectedVersion, int line)
 {
     LPGETVERSION proc = (LPGETVERSION)GetProcAddress(dll, "GetVersion");
-    DWORD version = proc();
+    DWORD version;
+
+    ok_(__FILE__, line)(proc != NULL, "GetVersion is not exported by %p\n", dll);
+    if (!proc)
+        return;
+
+    version = proc();
     ok_(__FILE__, line)(version == ExpectedVersion, "Got version %lu, expected %lu\n", version, ExpectedVersion);
 }
 
