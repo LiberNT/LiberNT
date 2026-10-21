@@ -9,7 +9,7 @@
 #include <exdisp.h>
 #include <shldisp.h>
 
-class CCabinetSite : public IServiceProvider, public ICommDlgBrowser, public IExplorerBrowserEvents
+class CCabinetSite : public IServiceProvider, public ICommDlgBrowser2, public IExplorerBrowserEvents
 {
 public:
     CCabinetSite(CCabinetWindow *window, IExplorerBrowser *browser) :
@@ -25,8 +25,8 @@ public:
             return E_POINTER;
         if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_IServiceProvider))
             *ppv = static_cast<IServiceProvider *>(this);
-        else if (IsEqualIID(riid, IID_ICommDlgBrowser))
-            *ppv = static_cast<ICommDlgBrowser *>(this);
+        else if (IsEqualIID(riid, IID_ICommDlgBrowser) || IsEqualIID(riid, IID_ICommDlgBrowser2))
+            *ppv = static_cast<ICommDlgBrowser2 *>(this);
         else if (IsEqualIID(riid, IID_IExplorerBrowserEvents))
             *ppv = static_cast<IExplorerBrowserEvents *>(this);
         else
@@ -78,6 +78,29 @@ public:
     {
         UNREFERENCED_PARAMETER(view);
         UNREFERENCED_PARAMETER(pidl);
+        return S_OK;
+    }
+
+    STDMETHODIMP Notify(IShellView *view, DWORD notifyType) override
+    {
+        UNREFERENCED_PARAMETER(view);
+        UNREFERENCED_PARAMETER(notifyType);
+        return S_OK;
+    }
+
+    STDMETHODIMP GetDefaultMenuText(IShellView *view, LPWSTR text, int cchMax) override
+    {
+        UNREFERENCED_PARAMETER(view);
+        UNREFERENCED_PARAMETER(text);
+        UNREFERENCED_PARAMETER(cchMax);
+        return S_FALSE;
+    }
+
+    STDMETHODIMP GetViewFlags(DWORD *flags) override
+    {
+        if (!flags)
+            return E_POINTER;
+        *flags = CDB2GVF_NOSELECTVERB;
         return S_OK;
     }
 
