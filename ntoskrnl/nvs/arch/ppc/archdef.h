@@ -20,9 +20,6 @@
 #define MI_ARCH_PAGE_SHIFT      12
 #define MI_ARCH_LARGE_LEVEL     1
 
-/* KSEG0 is a block translation with no page tables behind it. */
-#define MI_ARCH_HAS_TRANSLATION_WINDOW
-
 #define MI_ARCH_L0_SHIFT       12
 #define MI_ARCH_L0_BITS        9
 #define MI_ARCH_L1_SHIFT       21

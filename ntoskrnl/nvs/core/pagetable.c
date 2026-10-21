@@ -112,10 +112,8 @@ MiPtTranslateRoot(
 
     *PhysicalAddress = 0;
 
-#ifdef MI_ARCH_HAS_TRANSLATION_WINDOW
     if (MiArchTranslateWindow(VirtualAddress, PhysicalAddress, LeafPte))
         return TRUE;
-#endif
 
     for (Level = Arch->PagingLevels - 1; Level >= 0; Level--)
     {

@@ -148,6 +148,18 @@ MiArchIsSelfMapAddress(ULONG64 VirtualAddress)
 }
 
 BOOLEAN
+MiArchTranslateWindow(
+    ULONG64 VirtualAddress,
+    PULONG64 PhysicalAddress,
+    PMI_PTE LeafPte)
+{
+    UNREFERENCED_PARAMETER(VirtualAddress);
+    UNREFERENCED_PARAMETER(PhysicalAddress);
+    UNREFERENCED_PARAMETER(LeafPte);
+    return FALSE;
+}
+
+BOOLEAN
 MiArchPteIsUser(MI_PTE Pte)
 {
     return MiI386PteHas(Pte, MI_I386_PTE_USER);
