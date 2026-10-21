@@ -1516,6 +1516,21 @@ UserProcessKeyboardInput(
     PKBDTABLES pKbdTbl;
     PUSER_MESSAGE_QUEUE pFocusQueue;
 
+    if (pKbdInputData->Flags & KEY_TERMSRV_VKPACKET)
+    {
+        KEYBDINPUT KbdInput;
+
+        KbdInput.wVk = 0;
+        KbdInput.wScan = pKbdInputData->MakeCode;
+        KbdInput.dwFlags = KEYEVENTF_UNICODE;
+        if (pKbdInputData->Flags & KEY_BREAK)
+            KbdInput.dwFlags |= KEYEVENTF_KEYUP;
+        KbdInput.time = 0;
+        KbdInput.dwExtraInfo = pKbdInputData->ExtraInformation;
+        UserAccessKeyboardInput(&KbdInput);
+        return;
+    }
+
     /* Calculate scan code with prefix */
     wScanCode = pKbdInputData->MakeCode & 0x7F;
     if (pKbdInputData->Flags & KEY_E0)
