@@ -4,11 +4,13 @@
  * FILE:        wshtcpip.c
  * PURPOSE:     DLL entry
  * PROGRAMMERS: Casper S. Hornstrup (chorns@users.sourceforge.net)
+ *              Ahmed ARIF (arif.ing@outlook.com)
  * REVISIONS:
  *   CSH 01/09-2000 Created
  */
 #include "wshtcpip.h"
 #include <netioapi.h>
+#include <stdlib.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -628,6 +630,22 @@ typedef DWORD (WINAPI *PGET_BEST_ROUTE2)(NET_LUID *, NET_IFINDEX, const SOCKADDR
                                          const SOCKADDR_INET *, ULONG, PMIB_IPFORWARD_ROW2, SOCKADDR_INET *);
 
 static
+PGET_BEST_ROUTE2
+WshGetBestRoute2(VOID)
+{
+    static PGET_BEST_ROUTE2 pGetBestRoute2;
+    HMODULE Iphlpapi;
+
+    if (!pGetBestRoute2)
+    {
+        Iphlpapi = LoadLibraryW(L"iphlpapi.dll");
+        if (Iphlpapi)
+            pGetBestRoute2 = (PGET_BEST_ROUTE2)GetProcAddress(Iphlpapi, "GetBestRoute2");
+    }
+    return pGetBestRoute2;
+}
+
+static
 INT
 WSHIoctl_RoutingInterfaceQuery(
     IN  PSOCKET_CONTEXT Context,
@@ -637,11 +655,10 @@ WSHIoctl_RoutingInterfaceQuery(
     IN  DWORD OutputBufferLength,
     OUT LPDWORD NumberOfBytesReturned)
 {
-    static PGET_BEST_ROUTE2 pGetBestRoute2;
+    PGET_BEST_ROUTE2 pGetBestRoute2;
     SOCKADDR_INET Destination, Source;
     MIB_IPFORWARD_ROW2 Route;
     DWORD AddressLength;
-    HMODULE Iphlpapi;
 
     if (!InputBuffer || InputBufferLength < sizeof(USHORT))
         return WSAEFAULT;
@@ -678,14 +695,9 @@ WSHIoctl_RoutingInterfaceQuery(
     if (!OutputBuffer || OutputBufferLength < AddressLength)
         return WSAEFAULT;
 
+    pGetBestRoute2 = WshGetBestRoute2();
     if (!pGetBestRoute2)
-    {
-        Iphlpapi = LoadLibraryW(L"iphlpapi.dll");
-        if (Iphlpapi)
-            pGetBestRoute2 = (PGET_BEST_ROUTE2)GetProcAddress(Iphlpapi, "GetBestRoute2");
-        if (!pGetBestRoute2)
-            return WSAENETUNREACH;
-    }
+        return WSAENETUNREACH;
 
     RtlZeroMemory(&Source, sizeof(Source));
     if (pGetBestRoute2(NULL, 0, NULL, &Destination, 0, &Route, &Source) != NO_ERROR)
@@ -697,6 +709,265 @@ WSHIoctl_RoutingInterfaceQuery(
         Source.Ipv6.sin6_port = 0;
 
     RtlCopyMemory(OutputBuffer, &Source, AddressLength);
+    return NO_ERROR;
+}
+
+typedef struct _WSH_SORT_ENTRY
+{
+    SOCKADDR_IN6 Destination;
+    IN6_ADDR Source;
+    BOOLEAN Usable;
+    ULONG Index;
+} WSH_SORT_ENTRY, *PWSH_SORT_ENTRY;
+
+typedef struct _WSH_PREFIX_POLICY
+{
+    UCHAR Prefix[16];
+    UCHAR Length;
+    UCHAR Precedence;
+    UCHAR Label;
+} WSH_PREFIX_POLICY;
+
+static const WSH_PREFIX_POLICY WshPrefixPolicies[] =
+{
+    { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 }, 128, 50, 0 },
+    { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff }, 96, 35, 4 },
+    { { 0 }, 96, 1, 3 },
+    { { 0x20, 0x01, 0, 0 }, 32, 5, 5 },
+    { { 0x20, 0x02 }, 16, 30, 2 },
+    { { 0x3f, 0xfe }, 16, 1, 12 },
+    { { 0xfe, 0xc0 }, 10, 1, 11 },
+    { { 0xfc }, 7, 3, 13 },
+    { { 0 }, 0, 40, 1 },
+};
+
+static
+ULONG
+WshCommonPrefixLength(
+    IN const IN6_ADDR *First,
+    IN const IN6_ADDR *Second)
+{
+    ULONG Bit;
+
+    for (Bit = 0; Bit < 128; Bit++)
+    {
+        UCHAR Mask = (UCHAR)(0x80 >> (Bit & 7));
+
+        if ((First->u.Byte[Bit / 8] & Mask) != (Second->u.Byte[Bit / 8] & Mask))
+            break;
+    }
+    return Bit;
+}
+
+static
+const WSH_PREFIX_POLICY *
+WshLookupPrefixPolicy(
+    IN const IN6_ADDR *Address)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < ARRAYSIZE(WshPrefixPolicies) - 1; Index++)
+    {
+        if (WshCommonPrefixLength(Address, (const IN6_ADDR *)WshPrefixPolicies[Index].Prefix) >=
+            WshPrefixPolicies[Index].Length)
+        {
+            return &WshPrefixPolicies[Index];
+        }
+    }
+    return &WshPrefixPolicies[ARRAYSIZE(WshPrefixPolicies) - 1];
+}
+
+static
+ULONG
+WshAddressScope(
+    IN const IN6_ADDR *Address)
+{
+    if (IN6_IS_ADDR_MULTICAST(Address))
+        return Address->u.Byte[1] & 0x0f;
+    if (IN6_IS_ADDR_LOOPBACK(Address) || IN6_IS_ADDR_LINKLOCAL(Address))
+        return 2;
+    if (IN6_IS_ADDR_SITELOCAL(Address))
+        return 5;
+    if (IN6_IS_ADDR_V4MAPPED(Address) &&
+        (Address->u.Byte[12] == 127 || (Address->u.Byte[12] == 169 && Address->u.Byte[13] == 254)))
+    {
+        return 2;
+    }
+    return 14;
+}
+
+static
+int
+__cdecl
+WshCompareDestinations(
+    IN const void *First,
+    IN const void *Second)
+{
+    const WSH_SORT_ENTRY *A = First, *B = Second;
+    const IN6_ADDR *DestinationA = &A->Destination.sin6_addr, *DestinationB = &B->Destination.sin6_addr;
+    const WSH_PREFIX_POLICY *PolicyA = WshLookupPrefixPolicy(DestinationA);
+    const WSH_PREFIX_POLICY *PolicyB = WshLookupPrefixPolicy(DestinationB);
+    ULONG ScopeA = WshAddressScope(DestinationA), ScopeB = WshAddressScope(DestinationB);
+
+    if (A->Usable != B->Usable)
+        return A->Usable ? -1 : 1;
+
+    if (A->Usable)
+    {
+        BOOLEAN MatchA = ScopeA == WshAddressScope(&A->Source);
+        BOOLEAN MatchB = ScopeB == WshAddressScope(&B->Source);
+
+        if (MatchA != MatchB)
+            return MatchA ? -1 : 1;
+
+        MatchA = PolicyA->Label == WshLookupPrefixPolicy(&A->Source)->Label;
+        MatchB = PolicyB->Label == WshLookupPrefixPolicy(&B->Source)->Label;
+        if (MatchA != MatchB)
+            return MatchA ? -1 : 1;
+    }
+
+    if (PolicyA->Precedence != PolicyB->Precedence)
+        return PolicyA->Precedence > PolicyB->Precedence ? -1 : 1;
+
+    if (ScopeA != ScopeB)
+        return ScopeA < ScopeB ? -1 : 1;
+
+    if (A->Usable && !IN6_IS_ADDR_V4MAPPED(DestinationA) && !IN6_IS_ADDR_V4MAPPED(DestinationB))
+    {
+        ULONG PrefixA = WshCommonPrefixLength(DestinationA, &A->Source);
+        ULONG PrefixB = WshCommonPrefixLength(DestinationB, &B->Source);
+
+        if (PrefixA != PrefixB)
+            return PrefixA > PrefixB ? -1 : 1;
+    }
+
+    return A->Index < B->Index ? -1 : (A->Index > B->Index ? 1 : 0);
+}
+
+static
+BOOLEAN
+WshResolveDestination(
+    IN PGET_BEST_ROUTE2 pGetBestRoute2,
+    IN OUT PWSH_SORT_ENTRY Entry)
+{
+    SOCKADDR_INET Destination, Source;
+    MIB_IPFORWARD_ROW2 Route;
+
+    RtlZeroMemory(&Destination, sizeof(Destination));
+    if (IN6_IS_ADDR_V4MAPPED(&Entry->Destination.sin6_addr))
+    {
+        Destination.Ipv4.sin_family = AF_INET;
+        RtlCopyMemory(&Destination.Ipv4.sin_addr, &Entry->Destination.sin6_addr.u.Byte[12], sizeof(IN_ADDR));
+    }
+    else
+    {
+        Destination.Ipv6 = Entry->Destination;
+    }
+
+    RtlZeroMemory(&Source, sizeof(Source));
+    if (!pGetBestRoute2 || pGetBestRoute2(NULL, 0, NULL, &Destination, 0, &Route, &Source) != NO_ERROR)
+        return FALSE;
+
+    RtlZeroMemory(&Entry->Source, sizeof(Entry->Source));
+    if (Source.si_family == AF_INET)
+    {
+        Entry->Source.u.Byte[10] = 0xff;
+        Entry->Source.u.Byte[11] = 0xff;
+        RtlCopyMemory(&Entry->Source.u.Byte[12], &Source.Ipv4.sin_addr, sizeof(IN_ADDR));
+    }
+    else if (Source.si_family == AF_INET6)
+    {
+        Entry->Source = Source.Ipv6.sin6_addr;
+    }
+    else
+    {
+        return FALSE;
+    }
+
+    if (Entry->Destination.sin6_scope_id == 0 && WshAddressScope(&Entry->Destination.sin6_addr) < 14 &&
+        !IN6_IS_ADDR_V4MAPPED(&Entry->Destination.sin6_addr) && !IN6_IS_ADDR_LOOPBACK(&Entry->Destination.sin6_addr))
+    {
+        Entry->Destination.sin6_scope_id = Route.InterfaceIndex;
+    }
+    return TRUE;
+}
+
+static
+INT
+WSHIoctl_AddressListSort(
+    IN  LPVOID InputBuffer,
+    IN  DWORD InputBufferLength,
+    IN  LPVOID OutputBuffer,
+    IN  DWORD OutputBufferLength,
+    OUT LPDWORD NumberOfBytesReturned)
+{
+    PSOCKET_ADDRESS_LIST Input = InputBuffer, Output = OutputBuffer;
+    PGET_BEST_ROUTE2 pGetBestRoute2 = WshGetBestRoute2();
+    PWSH_SORT_ENTRY Entries;
+    PSOCKADDR_IN6 Addresses;
+    ULONG Count, Kept = 0, Index;
+    DWORD Required;
+
+    if (!Input || InputBufferLength < FIELD_OFFSET(SOCKET_ADDRESS_LIST, Address))
+        return WSAEFAULT;
+    if (Input->iAddressCount < 0)
+        return WSAEINVAL;
+
+    Count = (ULONG)Input->iAddressCount;
+    if (Count > (InputBufferLength - FIELD_OFFSET(SOCKET_ADDRESS_LIST, Address)) / sizeof(SOCKET_ADDRESS))
+        return WSAEFAULT;
+
+    Entries = HeapAlloc(GetProcessHeap(), 0, (Count ? Count : 1) * sizeof(*Entries));
+    if (!Entries)
+        return WSAENOBUFS;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        PSOCKADDR_IN6 Address = (PSOCKADDR_IN6)Input->Address[Index].lpSockaddr;
+        PWSH_SORT_ENTRY Entry = &Entries[Kept];
+
+        if (!Address || Input->Address[Index].iSockaddrLength < (INT)sizeof(SOCKADDR_IN6) ||
+            Address->sin6_family != AF_INET6)
+        {
+            HeapFree(GetProcessHeap(), 0, Entries);
+            return WSAEINVAL;
+        }
+
+        if (IN6_IS_ADDR_UNSPECIFIED(&Address->sin6_addr) || IN6_IS_ADDR_MULTICAST(&Address->sin6_addr))
+            continue;
+
+        Entry->Destination = *Address;
+        Entry->Index = Index;
+        Entry->Usable = WshResolveDestination(pGetBestRoute2, Entry);
+        if (!Entry->Usable && Entry->Destination.sin6_scope_id == 0 &&
+            (IN6_IS_ADDR_LINKLOCAL(&Entry->Destination.sin6_addr) ||
+             IN6_IS_ADDR_SITELOCAL(&Entry->Destination.sin6_addr)))
+        {
+            continue;
+        }
+        Kept++;
+    }
+
+    qsort(Entries, Kept, sizeof(*Entries), WshCompareDestinations);
+
+    Required = FIELD_OFFSET(SOCKET_ADDRESS_LIST, Address) + Kept * (sizeof(SOCKET_ADDRESS) + sizeof(SOCKADDR_IN6));
+    *NumberOfBytesReturned = Required;
+    if (!Output || OutputBufferLength < Required)
+    {
+        HeapFree(GetProcessHeap(), 0, Entries);
+        return WSAEFAULT;
+    }
+
+    Addresses = (PSOCKADDR_IN6)&Output->Address[Kept];
+    Output->iAddressCount = (INT)Kept;
+    for (Index = 0; Index < Kept; Index++)
+    {
+        Addresses[Index] = Entries[Index].Destination;
+        Output->Address[Index].lpSockaddr = (LPSOCKADDR)&Addresses[Index];
+        Output->Address[Index].iSockaddrLength = sizeof(SOCKADDR_IN6);
+    }
+
+    HeapFree(GetProcessHeap(), 0, Entries);
     return NO_ERROR;
 }
 
@@ -739,6 +1010,14 @@ WSHIoctl(
                                               OutputBuffer,
                                               OutputBufferLength,
                                               NumberOfBytesReturned);
+    }
+    else if (IoControlCode == SIO_ADDRESS_LIST_SORT)
+    {
+        return WSHIoctl_AddressListSort(InputBuffer,
+                                        InputBufferLength,
+                                        OutputBuffer,
+                                        OutputBufferLength,
+                                        NumberOfBytesReturned);
     }
     else if (IoControlCode == SIO_KEEPALIVE_VALS)
     {
