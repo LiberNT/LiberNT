@@ -770,7 +770,7 @@ void ThemeCalculateCaptionButtonsPos(HWND hWnd, HTHEME htheme)
 static COLORREF
 ThemeDarkCaptionColor(PDRAW_CONTEXT pcontext)
 {
-    return pcontext->Active ? RGB(32, 32, 32) : RGB(43, 43, 43);
+    return pcontext->Active ? RGB(28, 32, 40) : RGB(39, 43, 51);
 }
 
 static COLORREF

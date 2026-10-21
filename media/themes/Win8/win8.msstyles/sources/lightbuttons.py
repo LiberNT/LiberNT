@@ -155,7 +155,7 @@ def convert_flat(bmp, cells):
             r, g, b, a = bmp.get(x, y)
             if red(r, g, b):
                 continue
-            v = max(0, min(255, LIGHT_BASE[level] - (r - DARK_BASE[level])))
+            v = max(0, min(255, LIGHT_BASE[level] - ((r * 299 + g * 587 + b * 114 + 500) // 1000 - DARK_BASE[level])))
             bmp.set(x, y, v, v, v, a)
 
 
