@@ -403,7 +403,7 @@ PrintVolume(
     ConResPrintf(StdOut, IDS_LIST_VOLUME_FORMAT,
                  (CurrentVolume == VolumeEntry) ? L'*' : L' ',
                  VolumeEntry->VolumeNumber,
-                 VolumeEntry->DriveLetter,
+                 (VolumeEntry->DriveLetter != UNICODE_NULL) ? VolumeEntry->DriveLetter : L' ',
                  (VolumeEntry->pszLabel) ? VolumeEntry->pszLabel : L"",
                  (VolumeEntry->pszFilesystem) ? VolumeEntry->pszFilesystem : L"",
                  szVolumeTypeBuffer,
