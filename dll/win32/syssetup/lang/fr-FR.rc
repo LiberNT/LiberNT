@@ -31,7 +31,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_STATUS_INSTALL_DEV "Installation des périphériques en cours..."
+    IDS_STATUS_INSTALL_DEV "Installation des périphériques en cours"
 END
 
 /* ATTENTION: Synchronize these strings with dll/win32/shell32/lang */

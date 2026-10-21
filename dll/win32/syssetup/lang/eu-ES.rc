@@ -38,7 +38,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_STATUS_INSTALL_DEV "Gailuak instalatzen..."
+    IDS_STATUS_INSTALL_DEV "Gailuak instalatzen"
 END
 
 /* ATTENTION: Synchronize these strings with dll/win32/shell32/lang */

@@ -11,6 +11,7 @@
 
 #include <wingdi.h>
 #include <reactos/bootstatus.h>
+#include <ndk/exfuncs.h>
 #include "logonui.h"
 
 typedef struct _DISPLAYSTATUSMSG
@@ -110,6 +111,17 @@ GUIDisplayStatusMessage(
 
     if (LogonUiCoverShown())
         return TRUE;
+
+    if (!pgContext->hStatusWindow && !LogonUiEverShown())
+    {
+        UNICODE_STRING String;
+        WCHAR Text[256];
+
+        StringCchPrintfW(Text, ARRAYSIZE(Text), L"%s\r\n", pMessage ? pMessage : L"");
+        RtlInitUnicodeString(&String, Text);
+        NtDisplayString(&String);
+        return TRUE;
+    }
 
     if (!pgContext->hStatusWindow)
     {

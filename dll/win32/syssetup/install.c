@@ -24,7 +24,7 @@
 #include <shobjidl.h>
 #include <rpcproxy.h>
 #include <ndk/cmfuncs.h>
-#include <reactos/bootstatus.h>
+#include <ndk/exfuncs.h>
 #include <strsafe.h>
 
 #define NDEBUG
@@ -40,12 +40,6 @@ SetupStartService(LPCWSTR lpServiceName, BOOL bWait);
 /* GLOBALS ******************************************************************/
 
 HINF hSysSetupInf = INVALID_HANDLE_VALUE;
-
-typedef struct _STATUS_MESSAGE_THREAD_DATA
-{
-    HANDLE ReadyEvent;
-    HWND Window;
-} STATUS_MESSAGE_THREAD_DATA, *PSTATUS_MESSAGE_THREAD_DATA;
 
 /* FUNCTIONS ****************************************************************/
 
@@ -759,78 +753,28 @@ cleanup:
     return bRet;
 }
 
-static DWORD WINAPI
-ShowStatusMessageThread(
-    IN LPVOID lpParameter)
-{
-    PSTATUS_MESSAGE_THREAD_DATA ThreadData = lpParameter;
-    WCHAR StatusText[256];
-    HWND hWnd;
-    MSG Msg;
-
-    if (!LoadStringW(hDllInstance,
-                     IDS_STATUS_PREPARE_DEV,
-                     StatusText,
-                     ARRAYSIZE(StatusText)))
-    {
-        StatusText[0] = UNICODE_NULL;
-    }
-
-    hWnd = BootStatusCreate(StatusText);
-    ThreadData->Window = hWnd;
-    SetEvent(ThreadData->ReadyEvent);
-    if (!hWnd)
-        return 0;
-
-    while (GetMessageW(&Msg, NULL, 0, 0) > 0)
-    {
-        TranslateMessage(&Msg);
-        DispatchMessageW(&Msg);
-    }
-
-    BootStatusDestroy(hWnd);
-
-    return 0;
-}
-
 static VOID
-UpdateDeviceBootStatus(
-    _In_opt_ HWND Window,
-    _In_ UINT PhaseId,
-    _In_opt_ UINT DetailId,
+DisplayDeviceBootStatus(
     _In_ ULONG Completed,
     _In_ ULONG Total)
 {
-    WCHAR PhaseText[256];
-    WCHAR DetailText[256];
+    WCHAR Phase[256];
+    WCHAR Text[272];
+    UNICODE_STRING String;
 
-    PhaseText[0] = UNICODE_NULL;
-    DetailText[0] = UNICODE_NULL;
-    LoadStringW(hDllInstance, PhaseId, PhaseText, ARRAYSIZE(PhaseText));
-    if (DetailId)
-        LoadStringW(hDllInstance, DetailId, DetailText, ARRAYSIZE(DetailText));
-
-    BootStatusUpdate(Window,
-                     PhaseText,
-                     DetailText,
-                     Completed,
-                     Total);
-}
-
-static VOID
-HideDeviceBootStatus(
-    _In_opt_ HWND Window)
-{
-    if (Window)
-        ShowWindowAsync(Window, SW_HIDE);
-}
-
-static VOID
-CloseDeviceBootStatus(
-    _In_opt_ HWND Window)
-{
-    if (Window)
-        SendMessageW(Window, WM_CLOSE, 0, 0);
+    if (!LoadStringW(hDllInstance, IDS_STATUS_INSTALL_DEV, Phase, ARRAYSIZE(Phase)))
+        Phase[0] = UNICODE_NULL;
+    if (Total != 0)
+    {
+        StringCchPrintfW(Text, ARRAYSIZE(Text), L"%s %lu%%\r\n", Phase,
+                         Completed >= Total ? 100 : Completed * 100 / Total);
+    }
+    else
+    {
+        StringCchPrintfW(Text, ARRAYSIZE(Text), L"%s\r\n", Phase);
+    }
+    RtlInitUnicodeString(&String, Text);
+    NtDisplayString(&String);
 }
 
 static BOOL
@@ -890,7 +834,7 @@ QueryDeviceInstallProgress(
 
 static DWORD
 WaitForDeviceInstall(
-    _In_opt_ HWND StatusWindow,
+    _In_ BOOL ShowStatus,
     _Out_ PULONG InstalledDevices,
     _Out_ PULONG TotalDevices)
 {
@@ -905,11 +849,8 @@ WaitForDeviceInstall(
         if (QueryDeviceInstallProgress(InstalledDevices, TotalDevices) &&
             (*InstalledDevices != LastInstalled || *TotalDevices != LastTotal))
         {
-            UpdateDeviceBootStatus(StatusWindow,
-                                   IDS_STATUS_INSTALL_DEV,
-                                   0,
-                                   *InstalledDevices,
-                                   *TotalDevices);
+            if (ShowStatus)
+                DisplayDeviceBootStatus(*InstalledDevices, *TotalDevices);
             LastInstalled = *InstalledDevices;
             LastTotal = *TotalDevices;
         }
@@ -920,11 +861,8 @@ WaitForDeviceInstall(
     if (WaitResult == WAIT_OBJECT_0 &&
         QueryDeviceInstallProgress(InstalledDevices, TotalDevices))
     {
-        UpdateDeviceBootStatus(StatusWindow,
-                               IDS_STATUS_INSTALL_DEV,
-                               0,
-                               *InstalledDevices,
-                               *TotalDevices);
+        if (ShowStatus)
+            DisplayDeviceBootStatus(*InstalledDevices, *TotalDevices);
     }
 
     return WaitResult;
@@ -1047,43 +985,13 @@ PreprocessUnattend(VOID)
 static BOOL
 CommonInstall(VOID)
 {
-    HANDLE hThread = NULL;
-    HANDLE ReadyEvent = NULL;
-    STATUS_MESSAGE_THREAD_DATA ThreadData = {0};
-    HWND StatusWindow = NULL;
     ULONG InstalledDevices = 0;
     ULONG TotalDevices = 0;
+    BOOL ShowStatus = !IsConsoleBoot();
     BOOL bResult = FALSE;
 
-    if (!IsConsoleBoot())
-    {
-        StatusWindow = BootStatusFind();
-        if (!StatusWindow)
-        {
-            ReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-            if (ReadyEvent)
-            {
-                ThreadData.ReadyEvent = ReadyEvent;
-                hThread = CreateThread(NULL,
-                                       0,
-                                       ShowStatusMessageThread,
-                                       &ThreadData,
-                                       0,
-                                       NULL);
-                if (hThread)
-                {
-                    WaitForSingleObject(ReadyEvent, INFINITE);
-                    StatusWindow = ThreadData.Window;
-                }
-            }
-        }
-
-        UpdateDeviceBootStatus(StatusWindow,
-                               IDS_STATUS_PREPARE_DEV,
-                               0,
-                               0,
-                               0);
-    }
+    if (ShowStatus)
+        DisplayDeviceBootStatus(0, 0);
 
     hSysSetupInf = SetupOpenInfFileW(L"syssetup.inf",
                                      NULL,
@@ -1091,43 +999,32 @@ CommonInstall(VOID)
                                      NULL);
     if (hSysSetupInf == INVALID_HANDLE_VALUE)
     {
-        HideDeviceBootStatus(StatusWindow);
         FatalError("SetupOpenInfFileW() failed to open 'syssetup.inf' (Error: %lu)\n", GetLastError());
         goto Exit;
     }
 
     if (!InstallSysSetupInfDevices())
     {
-        HideDeviceBootStatus(StatusWindow);
         FatalError("InstallSysSetupInfDevices() failed!\n");
         goto Exit;
     }
 
-    UpdateDeviceBootStatus(StatusWindow,
-                           IDS_STATUS_START_DEV,
-                           0,
-                           0,
-                           0);
-
     if (!InstallSysSetupInfComponents(SPINST_ALL & ~SPINST_REGSVR))
     {
-        HideDeviceBootStatus(StatusWindow);
         FatalError("InstallSysSetupInfComponents() failed!\n");
         goto Exit;
     }
 
     if (!EnableUserModePnpManager())
     {
-        HideDeviceBootStatus(StatusWindow);
         FatalError("EnableUserModePnpManager() failed!\n");
         goto Exit;
     }
 
-    if (WaitForDeviceInstall(StatusWindow,
+    if (WaitForDeviceInstall(ShowStatus,
                              &InstalledDevices,
                              &TotalDevices) != WAIT_OBJECT_0)
     {
-        HideDeviceBootStatus(StatusWindow);
         FatalError("CMP_WaitNoPendingInstallEvents() failed!\n");
         goto Exit;
     }
@@ -1141,18 +1038,6 @@ Exit:
             SetupCloseInfFile(hSysSetupInf);
 
     }
-
-    /* Device setup is the last phase in this path; reveal the desktop now. */
-    CloseDeviceBootStatus(StatusWindow);
-
-    if (hThread != NULL)
-    {
-        WaitForSingleObject(hThread, INFINITE);
-        CloseHandle(hThread);
-    }
-
-    if (ReadyEvent != NULL)
-        CloseHandle(ReadyEvent);
 
     return bResult;
 }

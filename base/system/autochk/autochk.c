@@ -419,7 +419,6 @@ CheckVolume(
     }
 
     DPRINT1("AUTOCHK: Checking %wZ\n", &VolumePathU);
-    PrintString("Verifying the file system on %S\r\n", DisplayName);
 
     /* Get the file system */
     Status = GetFileSystem(&VolumePathU,
@@ -431,8 +430,6 @@ CheckVolume(
         PrintString("  Unable to detect the file system of volume %S\r\n", DisplayName);
         goto Quit;
     }
-
-    PrintString("  The file system type is %S.\r\n\r\n", FileSystem);
 
     /* Find a suitable file system provider */
     for (Count = 0; Count < RTL_NUMBER_OF(FileSystems); ++Count)

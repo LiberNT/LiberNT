@@ -40,7 +40,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_STATUS_INSTALL_DEV "正在安裝裝置驅動程式..."
+    IDS_STATUS_INSTALL_DEV "正在安裝裝置驅動程式"
 END
 
 /* ATTENTION: Synchronize these strings with dll/win32/shell32/lang.

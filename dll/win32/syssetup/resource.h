@@ -44,8 +44,6 @@
 #define IDC_PS2STATIC          2307
 
 #define IDS_STATUS_INSTALL_DEV 3500
-#define IDS_STATUS_PREPARE_DEV 3504
-#define IDS_STATUS_START_DEV   3505
 
 /* ATTENTION: Synchronize the translation of these strings with shell32 */
 #define IDS_PROGRAMFILES    3600

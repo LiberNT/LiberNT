@@ -32,6 +32,9 @@ LogonUiRemoveCover(VOID);
 BOOL
 LogonUiCoverShown(VOID);
 
+BOOL
+LogonUiEverShown(VOID);
+
 DWORD
 LogonUiPowerDialog(
     _In_opt_ HWND Parent,

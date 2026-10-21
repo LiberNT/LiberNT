@@ -39,7 +39,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_STATUS_INSTALL_DEV "Installerar enheter..."
+    IDS_STATUS_INSTALL_DEV "Installerar enheter"
 END
 
 /* ATTENTION: Synchronize these strings with dll/win32/shell32/lang */

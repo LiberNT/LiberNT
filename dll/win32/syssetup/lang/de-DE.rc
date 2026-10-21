@@ -31,7 +31,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_STATUS_INSTALL_DEV "Geräte werden installiert..."
+    IDS_STATUS_INSTALL_DEV "Geräte werden installiert"
 END
 
 /* ATTENTION: Synchronize these strings with dll/win32/shell32/lang */

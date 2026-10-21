@@ -128,6 +128,7 @@ static Backdrop g_Backdrops[2];
 static ULONG_PTR g_GdiplusToken;
 static WNDPROC g_EditProc;
 static HWND g_Cover;
+static BOOL g_LogonUiShown = FALSE;
 static HBITMAP g_CoverBitmap;
 static HWND g_LockWindow;
 
@@ -917,6 +918,7 @@ public:
         }
         SetWindowPos(Window, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         UpdateWindow(Window);
+        g_LogonUiShown = TRUE;
         LogonUiRemoveCover();
         if (Current == Page::Lock)
         {
@@ -2418,6 +2420,12 @@ extern "C" BOOL
 LogonUiCoverShown(VOID)
 {
     return g_Cover != NULL;
+}
+
+extern "C" BOOL
+LogonUiEverShown(VOID)
+{
+    return g_LogonUiShown;
 }
 
 extern "C" DWORD
