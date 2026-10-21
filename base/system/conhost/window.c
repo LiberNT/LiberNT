@@ -1433,6 +1433,14 @@ static void record_key_input( struct console *console, BOOL down, WPARAM wparam,
     ir.Event.KeyEvent.dwControlKeyState = get_ctrl_state( key_state );
     if (lparam & (1u << 24)) ir.Event.KeyEvent.dwControlKeyState |= ENHANCED_KEY;
 
+    if (wparam == VK_PACKET)
+    {
+        ir.Event.KeyEvent.wVirtualScanCode  = 0;
+        ir.Event.KeyEvent.uChar.UnicodeChar = HIWORD(lparam);
+        write_console_input( console, &ir, 1, TRUE );
+        return;
+    }
+
     if (down)
     {
         switch (ToUnicode(wparam, HIWORD(lparam), key_state, buf, 2, 0))
