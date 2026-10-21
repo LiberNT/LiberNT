@@ -1985,6 +1985,9 @@ BOOLEAN NTAPI AhciHwStartIo(__in PVOID DeviceExtension, __in PSCSI_REQUEST_BLOCK
                     case SCSIOP_SYNCHRONIZE_CACHE16:
                         Srb->SrbStatus = DeviceRequestFlush(AdapterExtension, Srb, cdb);
                         break;
+                    case SCSIOP_UNMAP:
+                        Srb->SrbStatus = DeviceRequestUnmap(AdapterExtension, Srb, cdb);
+                        break;
                     case SCSIOP_MODE_SENSE:
                         Srb->SrbStatus = DeviceRequestSense(AdapterExtension, Srb, cdb);
                         break;
@@ -3627,6 +3630,137 @@ UCHAR DeviceRequestFlush(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in PSC
 }// -- DeviceRequestFlush();
 
 /**
+ * @name DeviceRequestUnmap
+ * @implemented
+ *
+ * Handle SCSIOP_UNMAP by translating the block descriptors into an ATA
+ * DATA SET MANAGEMENT (TRIM) command with a single 512-byte range payload.
+ *
+ * @param AdapterExtension
+ * @param Srb
+ * @param Cdb
+ *
+ * @return
+ * return STOR status for DeviceRequestUnmap
+ */
+UCHAR DeviceRequestUnmap(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in PSCSI_REQUEST_BLOCK Srb, __in PCDB Cdb)
+{
+    PAHCI_SRB_EXTENSION SrbExtension;
+    PAHCI_PORT_EXTENSION PortExtension;
+    PUNMAP_LIST_HEADER Header;
+    PUNMAP_BLOCK_DESCRIPTOR Descriptor;
+    STOR_PHYSICAL_ADDRESS PhysicalAddress;
+    ULONG DescriptorCount, Index, Ranges, Offset, Length;
+    ULONG64 Lba, Entry;
+    ULONG Count, Chunk;
+
+    DPRINT("DeviceRequestUnmap()\n");
+
+    UNREFERENCED_PARAMETER(Cdb);
+
+    NT_ASSERT(IsPortValid(AdapterExtension, Srb->PathId));
+
+    SrbExtension = GetSrbExtension(Srb);
+    PortExtension = &AdapterExtension->PortExtension[Srb->PathId];
+
+    if ((PortExtension->DeviceParams.DeviceType == AHCI_DEVICE_TYPE_ATAPI) ||
+        !PortExtension->IdentifyDeviceData->DataSetManagementFeature.SupportsTrim ||
+        !PortExtension->DeviceParams.Lba48BitMode)
+    {
+        return SRB_STATUS_INVALID_REQUEST;
+    }
+
+    if ((Srb->DataBuffer == NULL) || (Srb->DataTransferLength < sizeof(UNMAP_LIST_HEADER)))
+    {
+        return SRB_STATUS_INVALID_REQUEST;
+    }
+
+    Header = (PUNMAP_LIST_HEADER)Srb->DataBuffer;
+    DescriptorCount = ((ULONG)Header->BlockDescrDataLength[0] << 8) | Header->BlockDescrDataLength[1];
+    DescriptorCount = min(DescriptorCount, Srb->DataTransferLength - (ULONG)sizeof(UNMAP_LIST_HEADER)) /
+                      sizeof(UNMAP_BLOCK_DESCRIPTOR);
+
+    AhciZeroMemory((PCHAR)SrbExtension->TrimPayload, sizeof(SrbExtension->TrimPayload));
+    Ranges = 0;
+    for (Index = 0; Index < DescriptorCount; Index++)
+    {
+        Descriptor = &Header->Descriptors[Index];
+        Lba = ((ULONG64)Descriptor->StartingLba[0] << 56) | ((ULONG64)Descriptor->StartingLba[1] << 48) |
+              ((ULONG64)Descriptor->StartingLba[2] << 40) | ((ULONG64)Descriptor->StartingLba[3] << 32) |
+              ((ULONG64)Descriptor->StartingLba[4] << 24) | ((ULONG64)Descriptor->StartingLba[5] << 16) |
+              ((ULONG64)Descriptor->StartingLba[6] << 8) | (ULONG64)Descriptor->StartingLba[7];
+        Count = ((ULONG)Descriptor->LbaCount[0] << 24) | ((ULONG)Descriptor->LbaCount[1] << 16) |
+                ((ULONG)Descriptor->LbaCount[2] << 8) | (ULONG)Descriptor->LbaCount[3];
+
+        if ((Lba + Count) > (ULONG64)PortExtension->DeviceParams.MaxLba.QuadPart)
+        {
+            return SRB_STATUS_INVALID_REQUEST;
+        }
+
+        while (Count != 0)
+        {
+            if (Ranges == AHCI_TRIM_MAX_RANGES)
+            {
+                return SRB_STATUS_INVALID_REQUEST;
+            }
+
+            Chunk = min(Count, AHCI_TRIM_RANGE_MAX_SECTORS);
+            Entry = (Lba & 0x0000FFFFFFFFFFFFULL) | ((ULONG64)Chunk << 48);
+            StorPortCopyMemory(&SrbExtension->TrimPayload[Ranges * sizeof(ULONG64)], &Entry, sizeof(Entry));
+            Ranges++;
+            Lba += Chunk;
+            Count -= Chunk;
+        }
+    }
+
+    if (Ranges == 0)
+    {
+        Srb->ScsiStatus = SCSISTAT_GOOD;
+        return SRB_STATUS_SUCCESS;
+    }
+
+    SrbExtension->Sgl.NumberOfElements = 0;
+    for (Offset = 0; Offset < sizeof(SrbExtension->TrimPayload); Offset += Length)
+    {
+        if (SrbExtension->Sgl.NumberOfElements == MAXIMUM_AHCI_PRDT_ENTRIES)
+        {
+            return SRB_STATUS_ERROR;
+        }
+
+        PhysicalAddress = StorPortGetPhysicalAddress(AdapterExtension, NULL,
+                                                     &SrbExtension->TrimPayload[Offset], &Length);
+        if (Length == 0)
+        {
+            return SRB_STATUS_ERROR;
+        }
+
+        Length = min(Length, (ULONG)sizeof(SrbExtension->TrimPayload) - Offset);
+        SrbExtension->Sgl.List[SrbExtension->Sgl.NumberOfElements].PhysicalAddress = PhysicalAddress;
+        SrbExtension->Sgl.List[SrbExtension->Sgl.NumberOfElements].Length = Length;
+        SrbExtension->Sgl.NumberOfElements++;
+    }
+
+    SrbExtension->AtaFunction = ATA_FUNCTION_ATA_COMMAND;
+    SrbExtension->Flags = ATA_FLAGS_DATA_OUT | ATA_FLAGS_USE_DMA | ATA_FLAGS_48BIT_COMMAND;
+    SrbExtension->CompletionRoutine = NULL;
+    SrbExtension->CommandReg = IDE_COMMAND_DATA_SET_MANAGEMENT;
+    SrbExtension->FeaturesLow = IDE_DSM_FEATURE_TRIM;
+    SrbExtension->FeaturesHigh = 0;
+    SrbExtension->LBA0 = 0;
+    SrbExtension->LBA1 = 0;
+    SrbExtension->LBA2 = 0;
+    SrbExtension->LBA3 = 0;
+    SrbExtension->LBA4 = 0;
+    SrbExtension->LBA5 = 0;
+    SrbExtension->Device = IDE_LBA_MODE;
+    SrbExtension->SectorCountLow = 1;
+    SrbExtension->SectorCountHigh = 0;
+    SrbExtension->pSgl = &SrbExtension->Sgl;
+
+    return SRB_STATUS_PENDING;
+}// -- DeviceRequestUnmap();
+
+/**
  * @name DeviceReportLuns
  * @implemented
  *
@@ -3694,7 +3828,11 @@ UCHAR DeviceInquiryRequest(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in P
     PAHCI_SRB_EXTENSION SrbExtension;
     PAHCI_PORT_EXTENSION PortExtension;
     PVPD_SUPPORTED_PAGES_PAGE VpdOutputBuffer;
-    ULONG DataBufferLength, RequiredDataBufferLength;
+    PVPD_BLOCK_LIMITS_PAGE BlockLimits;
+    PVPD_BLOCK_DEVICE_CHARACTERISTICS_PAGE Characteristics;
+    PVPD_LOGICAL_BLOCK_PROVISIONING_PAGE Provisioning;
+    PIDENTIFY_DEVICE_DATA Identify;
+    ULONG DataBufferLength, RequiredDataBufferLength, Value;
 
     DPRINT("DeviceInquiryRequest()\n");
 
@@ -3766,7 +3904,7 @@ UCHAR DeviceInquiryRequest(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in P
             case VPD_SUPPORTED_PAGES:
                 {
                     DPRINT("\tVPD_SUPPORTED_PAGES\n");
-                    RequiredDataBufferLength = sizeof(VPD_SUPPORTED_PAGES_PAGE) + 1;
+                    RequiredDataBufferLength = sizeof(VPD_SUPPORTED_PAGES_PAGE) + 4;
 
                     if (DataBufferLength < RequiredDataBufferLength)
                     {
@@ -3779,12 +3917,82 @@ UCHAR DeviceInquiryRequest(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in P
                     VpdOutputBuffer->DeviceType = PortExtension->DeviceParams.AccessType;
                     VpdOutputBuffer->DeviceTypeQualifier = 0;
                     VpdOutputBuffer->PageCode = VPD_SUPPORTED_PAGES;
-                    VpdOutputBuffer->PageLength = 1;
+                    VpdOutputBuffer->PageLength = 4;
                     VpdOutputBuffer->SupportedPageList[0] = VPD_SUPPORTED_PAGES;
-                    //VpdOutputBuffer->SupportedPageList[1] = VPD_SERIAL_NUMBER;
-                    //VpdOutputBuffer->SupportedPageList[2] = VPD_DEVICE_IDENTIFIERS;
+                    VpdOutputBuffer->SupportedPageList[1] = VPD_BLOCK_LIMITS;
+                    VpdOutputBuffer->SupportedPageList[2] = VPD_BLOCK_DEVICE_CHARACTERISTICS;
+                    VpdOutputBuffer->SupportedPageList[3] = VPD_LOGICAL_BLOCK_PROVISIONING;
 
                     NT_ASSERT(VpdOutputBuffer->DeviceType == DIRECT_ACCESS_DEVICE);
+                }
+                break;
+            case VPD_BLOCK_LIMITS:
+                {
+                    RequiredDataBufferLength = sizeof(VPD_BLOCK_LIMITS_PAGE);
+                    if (DataBufferLength < RequiredDataBufferLength)
+                    {
+                        return SRB_STATUS_INVALID_REQUEST;
+                    }
+
+                    Identify = PortExtension->IdentifyDeviceData;
+                    BlockLimits = (PVPD_BLOCK_LIMITS_PAGE)DataBuffer;
+                    BlockLimits->DeviceType = PortExtension->DeviceParams.AccessType;
+                    BlockLimits->PageCode = VPD_BLOCK_LIMITS;
+                    BlockLimits->PageLength[1] = (UCHAR)(RequiredDataBufferLength - 4);
+                    if (Identify->DataSetManagementFeature.SupportsTrim && PortExtension->DeviceParams.Lba48BitMode)
+                    {
+                        Value = AHCI_TRIM_MAX_DESCRIPTORS * AHCI_TRIM_RANGE_MAX_SECTORS;
+                        REVERSE_BYTES(BlockLimits->MaximumUnmapLBACount, &Value);
+                        Value = AHCI_TRIM_MAX_DESCRIPTORS;
+                        REVERSE_BYTES(BlockLimits->MaximumUnmapBlockDescriptorCount, &Value);
+                        Value = 1;
+                        if (PortExtension->DeviceParams.BytesPerLogicalSector != 0 &&
+                            PortExtension->DeviceParams.BytesPerPhysicalSector > PortExtension->DeviceParams.BytesPerLogicalSector)
+                        {
+                            Value = PortExtension->DeviceParams.BytesPerPhysicalSector /
+                                    PortExtension->DeviceParams.BytesPerLogicalSector;
+                        }
+                        REVERSE_BYTES(BlockLimits->OptimalUnmapGranularity, &Value);
+                    }
+                }
+                break;
+            case VPD_BLOCK_DEVICE_CHARACTERISTICS:
+                {
+                    RequiredDataBufferLength = sizeof(VPD_BLOCK_DEVICE_CHARACTERISTICS_PAGE);
+                    if (DataBufferLength < RequiredDataBufferLength)
+                    {
+                        return SRB_STATUS_INVALID_REQUEST;
+                    }
+
+                    Identify = PortExtension->IdentifyDeviceData;
+                    Characteristics = (PVPD_BLOCK_DEVICE_CHARACTERISTICS_PAGE)DataBuffer;
+                    Characteristics->DeviceType = PortExtension->DeviceParams.AccessType;
+                    Characteristics->PageCode = VPD_BLOCK_DEVICE_CHARACTERISTICS;
+                    Characteristics->PageLength = (UCHAR)(RequiredDataBufferLength - 4);
+                    Characteristics->MediumRotationRateMsb = (UCHAR)(Identify->NominalMediaRotationRate >> 8);
+                    Characteristics->MediumRotationRateLsb = (UCHAR)(Identify->NominalMediaRotationRate & 0xFF);
+                    Characteristics->NominalFormFactor = Identify->NominalFormFactor;
+                }
+                break;
+            case VPD_LOGICAL_BLOCK_PROVISIONING:
+                {
+                    RequiredDataBufferLength = sizeof(VPD_LOGICAL_BLOCK_PROVISIONING_PAGE);
+                    if (DataBufferLength < RequiredDataBufferLength)
+                    {
+                        return SRB_STATUS_INVALID_REQUEST;
+                    }
+
+                    Identify = PortExtension->IdentifyDeviceData;
+                    Provisioning = (PVPD_LOGICAL_BLOCK_PROVISIONING_PAGE)DataBuffer;
+                    Provisioning->DeviceType = PortExtension->DeviceParams.AccessType;
+                    Provisioning->PageCode = VPD_LOGICAL_BLOCK_PROVISIONING;
+                    Provisioning->PageLength[1] = (UCHAR)(RequiredDataBufferLength - 4);
+                    if (Identify->DataSetManagementFeature.SupportsTrim && PortExtension->DeviceParams.Lba48BitMode)
+                    {
+                        Provisioning->LBPU = 1;
+                        Provisioning->LBPRZ = (Identify->AdditionalSupported.DeterministicReadAfterTrimSupported &&
+                                               Identify->AdditionalSupported.ReadZeroAfterTrimSupported) ? 1 : 0;
+                    }
                 }
                 break;
             case VPD_SERIAL_NUMBER:

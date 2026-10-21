@@ -110,6 +110,11 @@ typedef enum _AHCI_PORT_RECOVERY_STATE
 #define ATA_FLAGS_USE_DMA                   (1 << 4)
 #define ATA_FLAGS_NCQ                       (1 << 5)
 
+#define AHCI_TRIM_PAYLOAD_SIZE              512
+#define AHCI_TRIM_MAX_RANGES                (AHCI_TRIM_PAYLOAD_SIZE / sizeof(ULONG64))
+#define AHCI_TRIM_RANGE_MAX_SECTORS         0xFFFF
+#define AHCI_TRIM_MAX_DESCRIPTORS           (AHCI_TRIM_MAX_RANGES / 2)
+
 #define IsAtaCommand(AtaFunction)           (AtaFunction & ATA_FUNCTION_ATA_COMMAND)
 #define IsAtapiCommand(AtaFunction)         (AtaFunction & ATA_FUNCTION_ATAPI_COMMAND)
 #define IsDataTransferNeeded(SrbExtension)  (SrbExtension->Flags & (ATA_FLAGS_DATA_IN | ATA_FLAGS_DATA_OUT))
@@ -596,6 +601,7 @@ typedef struct _LOCAL_SCATTER_GATHER_LIST
 typedef struct _AHCI_SRB_EXTENSION
 {
     AHCI_COMMAND_TABLE CommandTable;
+    UCHAR TrimPayload[AHCI_TRIM_PAYLOAD_SIZE];
     ULONG AtaFunction;
     ULONG Flags;
 
@@ -665,6 +671,8 @@ UCHAR DeviceInquiryRequest(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in P
 UCHAR DeviceRequestComplete(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in PSCSI_REQUEST_BLOCK Srb, __in PCDB Cdb);
 
 UCHAR DeviceRequestFlush(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in PSCSI_REQUEST_BLOCK Srb, __in PCDB Cdb);
+
+UCHAR DeviceRequestUnmap(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in PSCSI_REQUEST_BLOCK Srb, __in PCDB Cdb);
 
 UCHAR DeviceReportLuns(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in PSCSI_REQUEST_BLOCK Srb, __in PCDB Cdb);
 
