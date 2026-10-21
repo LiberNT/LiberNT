@@ -2171,6 +2171,36 @@ HANDLE WINAPI SHRemoveDefaultDialogFont(HWND hWnd)
  */
 HMODULE WINAPI SHPinDllOfCLSID(REFIID refiid)
 {
+#ifdef __REACTOS__
+    HKEY newkey;
+    DWORD type, count, length;
+    WCHAR value[MAX_PATH], expanded[MAX_PATH], string[MAX_PATH];
+
+    lstrcpyW(string, L"CLSID\\");
+    SHStringFromGUIDW(refiid, string + 6, ARRAY_SIZE(string) - 6);
+    lstrcatW(string, L"\\InProcServer32");
+
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, string, 0, KEY_QUERY_VALUE, &newkey) != ERROR_SUCCESS)
+        return NULL;
+    count = sizeof(value) - sizeof(WCHAR);
+    if (RegQueryValueExW(newkey, NULL, NULL, &type, (PBYTE)value, &count) != ERROR_SUCCESS ||
+        (type != REG_SZ && type != REG_EXPAND_SZ))
+    {
+        RegCloseKey(newkey);
+        return NULL;
+    }
+    RegCloseKey(newkey);
+    value[count / sizeof(WCHAR)] = UNICODE_NULL;
+
+    if (type == REG_EXPAND_SZ)
+    {
+        length = ExpandEnvironmentStringsW(value, expanded, ARRAY_SIZE(expanded));
+        if (!length || length > ARRAY_SIZE(expanded))
+            return NULL;
+        return LoadLibraryExW(expanded, 0, 0);
+    }
+    return LoadLibraryExW(value, 0, 0);
+#else
     HKEY newkey;
     DWORD type, count;
     CHAR value[MAX_PATH], string[MAX_PATH];
@@ -2184,6 +2214,7 @@ HMODULE WINAPI SHPinDllOfCLSID(REFIID refiid)
     RegQueryValueExA(newkey, 0, 0, &type, (PBYTE)value, &count);
     RegCloseKey(newkey);
     return LoadLibraryExA(value, 0, 0);
+#endif
 }
 
 /*************************************************************************
