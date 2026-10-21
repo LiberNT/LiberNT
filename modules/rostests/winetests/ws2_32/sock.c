@@ -7587,7 +7587,11 @@ todo_wine
     id = 0xdeadbeef;
     err = getsockopt(fdWrite, SOL_SOCKET, SO_ERROR, (char*)&id, &len);
     ok(!err, "getsockopt failed with %d\n", WSAGetLastError());
+#ifdef __REACTOS__
+    ok(id == 0, "expected 0, got %d\n", id);
+#else
     ok(id == WSAECONNREFUSED, "expected 10061, got %d\n", id);
+#endif
     closesocket(fdWrite);
 
     /* Try poll() on a closed socket after connection */
@@ -10844,8 +10848,12 @@ static void test_completion_port(void)
 
     io_info.Flags = 0;
     status = pNtQueryInformationFile((HANDLE)dest, &io, &io_info, sizeof(io_info), FileIoCompletionNotificationInformation);
+#ifdef __REACTOS__
+    ok(status == STATUS_OBJECT_TYPE_MISMATCH, "expected STATUS_OBJECT_TYPE_MISMATCH, got %08x\n", status);
+#else
     ok(status == STATUS_SUCCESS || broken(status == STATUS_INVALID_INFO_CLASS) /* XP */,
        "expected STATUS_SUCCESS, got %08x\n", status);
+#endif
     if (status == STATUS_SUCCESS)
         ok((io_info.Flags & FILE_SKIP_COMPLETION_PORT_ON_SUCCESS) != 0, "got %08x\n", io_info.Flags);
 
