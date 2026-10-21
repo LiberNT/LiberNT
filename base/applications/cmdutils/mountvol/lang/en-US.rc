@@ -1,0 +1,33 @@
+/*
+ * PROJECT:     LiberNT Mount Volume Command
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     English (United States) resource file
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+STRINGTABLE
+BEGIN
+    IDS_USAGE "Creates, deletes or lists a volume mount point.\n\n\
+MOUNTVOL [drive:]path VolumeName\n\
+MOUNTVOL [drive:]path /D\n\
+MOUNTVOL [drive:]path /L\n\
+MOUNTVOL /R\n\
+MOUNTVOL /N\n\
+MOUNTVOL /E\n\
+MOUNTVOL drive: /S\n\n\
+    path        An existing empty NTFS directory, or a drive letter, that\n\
+                will hold the mount point.\n\
+    VolumeName  The volume to mount, as \\\\?\\Volume{GUID}\\.\n\
+    /D          Removes the volume mount point from the path.\n\
+    /L          Shows the name of the volume mounted on the path.\n\
+    /R          Removes mount point settings of volumes that are no longer\n\
+                in the system.\n\
+    /N          Turns off automatic mounting of new volumes.\n\
+    /E          Turns automatic mounting of new volumes back on.\n\
+    /S          Mounts the EFI system partition on the drive.\n\n"
+    IDS_VOLUME_LIST "Possible values for VolumeName along with current mount points are:\n\n"
+    IDS_NO_MOUNT_POINTS "        *** NO MOUNT POINTS ***\n"
+    IDS_INVALID_PARAMETERS "The parameter is incorrect.\n"
+END
