@@ -453,7 +453,7 @@ CmpCommitKeyControlBlockRename(IN PVOID RenameContext,
     {
         Kcb = Context->Kcbs[i];
         Kcb->ConvKey = CmpHashNameControlBlock(Kcb->ParentKcb ? Kcb->ParentKcb->ConvKey : 0, Kcb->NameBlock);
-        ASSERT(CmpInsertKeyHash(&Kcb->KeyHash, FALSE) == NULL);
+        NT_VERIFY(CmpInsertKeyHash(&Kcb->KeyHash, FALSE) == NULL);
     }
 
     CmpDereferenceNameControlBlockWithLock(OldNameBlock);
