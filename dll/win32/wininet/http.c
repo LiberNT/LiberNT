@@ -5477,7 +5477,12 @@ static DWORD open_http_connection(http_request_t *request, BOOL *reusing)
 
     if (request->netconn)
     {
+#ifdef __REACTOS__
+        if (NETCON_is_alive(request->netconn) && drain_content(request, TRUE) == ERROR_SUCCESS &&
+            NETCON_is_alive(request->netconn))
+#else
         if (NETCON_is_alive(request->netconn) && drain_content(request, TRUE) == ERROR_SUCCESS)
+#endif
         {
             reset_data_stream(request);
             *reusing = TRUE;
