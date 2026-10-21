@@ -47,6 +47,17 @@ ExFreePoolWithTag(PVOID MemPtr, ULONG Tag)
 }
 
 static
+PVOID
+ExAllocatePoolZero(ULONG PoolType, SIZE_T NumberOfBytes, ULONG Tag)
+{
+    PVOID Mem = ExAllocatePoolWithTag(PoolType, NumberOfBytes, Tag);
+
+    if (Mem)
+        RtlZeroMemory(Mem, NumberOfBytes);
+    return Mem;
+}
+
+static
 SIZE_T
 GetPoolAllocSize(PVOID MemPtr)
 {

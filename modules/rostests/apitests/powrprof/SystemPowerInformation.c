@@ -7,6 +7,7 @@
 #include <apitest.h>
 #include <ntstatus.h>
 #define WIN32_NO_STATUS
+#include <winreg.h>
 #include <ndk/potypes.h>
 #include <powrprof.h>
 
