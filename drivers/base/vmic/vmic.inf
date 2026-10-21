@@ -1,0 +1,42 @@
+[Version]
+Signature  = "$Windows NT$"
+LayoutFile = layout.inf
+Class      = System
+ClassGUID  = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider   = %LiberNT%
+DriverVer  = 10/21/2026,1.00
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%MicrosoftMfg% = MicrosoftMfg
+
+[MicrosoftMfg]
+%Shutdown.DeviceDesc%  = Vmic_Inst,VMBUS\{0e0b6031-5213-4934-818b-38d90ced39db}
+%TimeSync.DeviceDesc%  = Vmic_Inst,VMBUS\{9527e630-d0ae-497b-adce-e80ab0175caf}
+%Heartbeat.DeviceDesc% = Vmic_Inst,VMBUS\{57164f39-9115-4e78-ab55-382f3bd5422d}
+%Kvp.DeviceDesc%       = Vmic_Inst,VMBUS\{a9a0f4e7-5a45-4d96-b827-8a841e8c03e6}
+
+[Vmic_Inst.NT]
+CopyFiles = Vmic_CopyFiles.NT
+
+[Vmic_CopyFiles.NT]
+vmic.sys
+
+[Vmic_Inst.NT.Services]
+AddService = vmic, 0x00000002, Vmic_Service_Inst
+
+[Vmic_Service_Inst]
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\vmic.sys
+
+[Strings]
+LiberNT = "LiberNT Project"
+MicrosoftMfg = "Microsoft"
+Shutdown.DeviceDesc = "Microsoft Hyper-V Guest Shutdown"
+TimeSync.DeviceDesc = "Microsoft Hyper-V Time Synchronization"
+Heartbeat.DeviceDesc = "Microsoft Hyper-V Heartbeat"
+Kvp.DeviceDesc = "Microsoft Hyper-V Data Exchange"
