@@ -38,12 +38,6 @@ typedef struct {
     HRESULT hres;
 
     LPWSTR cache_file;
-#ifdef __REACTOS__
-    BOOL locked;
-    BYTE *data;
-    DWORD data_size;
-    DWORD data_pos;
-#endif
 } stgmed_buf_t;
 
 typedef struct _stgmed_obj_t stgmed_obj_t;
@@ -179,47 +173,12 @@ static void mime_available(Binding *This, LPCWSTR mime)
     This->clipboard_format = RegisterClipboardFormatW(This->mime);
 }
 
-#ifdef __REACTOS__
-static void stgmed_buf_unlock(stgmed_buf_t *buf)
-{
-    BYTE chunk[8192];
-    DWORD read;
-    HRESULT hres;
-
-    if(!buf->locked)
-        return;
-
-    if(buf->file == INVALID_HANDLE_VALUE) {
-        do {
-            read = 0;
-            hres = IInternetProtocolEx_Read(buf->protocol, chunk, sizeof(chunk), &read);
-            if(read) {
-                BYTE *data = realloc(buf->data, buf->data_size + read);
-                if(!data)
-                    break;
-                memcpy(data + buf->data_size, chunk, read);
-                buf->data = data;
-                buf->data_size += read;
-            }
-        } while(hres == S_OK && read);
-    }
-
-    IInternetProtocolEx_UnlockRequest(buf->protocol);
-    buf->locked = FALSE;
-}
-
-#endif
 static void stop_binding(Binding *binding, HRESULT hres, LPCWSTR str)
 {
-#ifdef __REACTOS__
-    if(binding->stgmed_buf)
-        stgmed_buf_unlock(binding->stgmed_buf);
-#else
     if(binding->state & BINDING_LOCKED) {
         IInternetProtocolEx_UnlockRequest(&binding->protocol->IInternetProtocolEx_iface);
         binding->state &= ~BINDING_LOCKED;
     }
-#endif
 
     if(!(binding->state & BINDING_STOPPED)) {
         binding->state |= BINDING_STOPPED;
@@ -443,11 +402,6 @@ static ULONG WINAPI StgMedUnk_Release(IUnknown *iface)
     if(!ref) {
         if(This->file != INVALID_HANDLE_VALUE)
             CloseHandle(This->file);
-#ifdef __REACTOS__
-        if(This->locked)
-            IInternetProtocolEx_UnlockRequest(This->protocol);
-        free(This->data);
-#endif
         IInternetProtocolEx_Release(This->protocol);
         free(This->cache_file);
         free(This);
@@ -473,12 +427,6 @@ static stgmed_buf_t *create_stgmed_buf(IInternetProtocolEx *protocol)
     ret->file = INVALID_HANDLE_VALUE;
     ret->hres = S_OK;
     ret->cache_file = NULL;
-#ifdef __REACTOS__
-    ret->locked = FALSE;
-    ret->data = NULL;
-    ret->data_size = 0;
-    ret->data_pos = 0;
-#endif
 
     IInternetProtocolEx_AddRef(protocol);
     ret->protocol = protocol;
@@ -565,14 +513,6 @@ static HRESULT WINAPI ProtocolStream_Read(IStream *iface, void *pv,
 
     TRACE("(%p)->(%p %ld %p)\n", This, pv, cb, pcbRead);
 
-#ifdef __REACTOS__
-    if(This->buf->data_pos < This->buf->data_size) {
-        read = min(cb, This->buf->data_size - This->buf->data_pos);
-        memcpy(pv, This->buf->data + This->buf->data_pos, read);
-        This->buf->data_pos += read;
-        hres = This->buf->hres = read ? S_OK : S_FALSE;
-    }else
-#endif
     if(This->buf->file == INVALID_HANDLE_VALUE) {
         hres = This->buf->hres = IInternetProtocolEx_Read(This->buf->protocol, (PBYTE)pv, cb, &read);
     }else {
@@ -749,21 +689,9 @@ static void stgmed_stream_release(stgmed_obj_t *obj)
     IStream_Release(&stream->IStream_iface);
 }
 
-#ifdef __REACTOS__
-static void stgmed_buf_lock(stgmed_buf_t *buf)
-{
-    if(!buf->locked && SUCCEEDED(IInternetProtocolEx_LockRequest(buf->protocol, 0)))
-        buf->locked = TRUE;
-}
-
-#endif
 static HRESULT stgmed_stream_fill_stgmed(stgmed_obj_t *obj, STGMEDIUM *stgmed)
 {
     ProtocolStream *stream = (ProtocolStream*)obj;
-
-#ifdef __REACTOS__
-    stgmed_buf_lock(stream->buf);
-#endif
 
     stgmed->tymed = TYMED_ISTREAM;
     stgmed->pstm = &stream->IStream_iface;
@@ -779,10 +707,6 @@ static HRESULT stgmed_stream_get_result(stgmed_obj_t *obj, DWORD bindf, void **r
     if(!(bindf & BINDF_ASYNCHRONOUS) && stream->buf->file == INVALID_HANDLE_VALUE
        && stream->buf->hres != S_FALSE)
         return INET_E_DATA_NOT_AVAILABLE;
-
-#ifdef __REACTOS__
-    stgmed_buf_lock(stream->buf);
-#endif
 
     IStream_AddRef(&stream->IStream_iface);
     *result = &stream->IStream_iface;
@@ -834,9 +758,6 @@ static HRESULT stgmed_file_fill_stgmed(stgmed_obj_t *obj, STGMEDIUM *stgmed)
     }
 
     read_protocol_data(file_obj->buf);
-#ifdef __REACTOS__
-    stgmed_buf_lock(file_obj->buf);
-#endif
 
     stgmed->tymed = TYMED_FILE;
     stgmed->lpszFileName = file_obj->buf->cache_file;
@@ -1233,13 +1154,11 @@ static void report_data(Binding *This, DWORD bscf, ULONG progress, ULONG progres
         STGMEDIUM stgmed;
         HRESULT hres;
 
-#ifndef __REACTOS__
         if(!(This->state & BINDING_LOCKED)) {
             hres = IInternetProtocolEx_LockRequest(&This->protocol->IInternetProtocolEx_iface, 0);
             if(SUCCEEDED(hres))
                 This->state |= BINDING_LOCKED;
         }
-#endif
 
         hres = This->stgmed_obj->vtbl->fill_stgmed(This->stgmed_obj, &stgmed);
         if(FAILED(hres)) {
@@ -1770,10 +1689,8 @@ HRESULT bind_to_storage(IUri *uri, IBindCtx *pbc, REFIID riid, void **ppv)
         return hres;
 
     if(binding->hres == S_OK && binding->download_state != BEFORE_DOWNLOAD /* FIXME */) {
-#ifndef __REACTOS__
         if((binding->state & BINDING_STOPPED) && (binding->state & BINDING_LOCKED))
             IInternetProtocolEx_UnlockRequest(&binding->protocol->IInternetProtocolEx_iface);
-#endif
 
         hres = binding->stgmed_obj->vtbl->get_result(binding->stgmed_obj, binding->bindf, ppv);
     }else if(binding->bindf & BINDF_ASYNCHRONOUS) {

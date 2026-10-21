@@ -35,6 +35,9 @@ typedef struct ProxyBindStatusCallback
     IBindStatusCallback IBindStatusCallback_iface;
 
     IBindStatusCallback *pBSC;
+#ifdef __REACTOS__
+    IStream *data;
+#endif
 } ProxyBindStatusCallback;
 
 static inline ProxyBindStatusCallback *impl_from_IBindStatusCallback(IBindStatusCallback *iface)
@@ -170,6 +173,23 @@ static HRESULT WINAPI ProxyBindStatusCallback_OnObjectAvailable(IBindStatusCallb
 static HRESULT WINAPI BlockingBindStatusCallback_OnDataAvailable(IBindStatusCallback *iface, DWORD grfBSCF,
                                                                  DWORD dwSize, FORMATETC* pformatetc, STGMEDIUM* pstgmed)
 {
+#ifdef __REACTOS__
+    ProxyBindStatusCallback *This = impl_from_IBindStatusCallback(iface);
+
+    if(This->data && pstgmed && pstgmed->tymed == TYMED_ISTREAM && pstgmed->pstm)
+    {
+        BYTE buf[8192];
+        ULONG read;
+        HRESULT hres;
+
+        do {
+            read = 0;
+            hres = IStream_Read(pstgmed->pstm, buf, sizeof(buf), &read);
+            if(read)
+                IStream_Write(This->data, buf, read, NULL);
+        } while(hres == S_OK && read);
+    }
+#endif
     return S_OK;
 }
 
@@ -311,7 +331,29 @@ HRESULT WINAPI URLOpenBlockingStreamW(LPUNKNOWN pCaller, LPCWSTR szURL,
     blocking_bsc.IBindStatusCallback_iface.lpVtbl = &BlockingBindStatusCallbackVtbl;
     blocking_bsc.pBSC = lpfnCB;
 
+#ifdef __REACTOS__
+    {
+        LARGE_INTEGER zero = {{0}};
+        HRESULT hr;
+
+        hr = CreateStreamOnHGlobal(NULL, TRUE, &blocking_bsc.data);
+        if(FAILED(hr))
+            return hr;
+
+        hr = URLStartDownload(szURL, ppStream, &blocking_bsc.IBindStatusCallback_iface);
+        if(SUCCEEDED(hr) && *ppStream)
+        {
+            IStream_Release(*ppStream);
+            IStream_Seek(blocking_bsc.data, zero, STREAM_SEEK_SET, NULL);
+            *ppStream = blocking_bsc.data;
+        }
+        else
+            IStream_Release(blocking_bsc.data);
+        return hr;
+    }
+#else
     return URLStartDownload(szURL, ppStream, &blocking_bsc.IBindStatusCallback_iface);
+#endif
 }
 
 /***********************************************************************
@@ -360,6 +402,9 @@ HRESULT WINAPI URLOpenStreamW(LPUNKNOWN pCaller, LPCWSTR szURL, DWORD dwReserved
 
     async_bsc.IBindStatusCallback_iface.lpVtbl = &AsyncBindStatusCallbackVtbl;
     async_bsc.pBSC = lpfnCB;
+#ifdef __REACTOS__
+    async_bsc.data = NULL;
+#endif
 
     hr = URLStartDownload(szURL, &pStream, &async_bsc.IBindStatusCallback_iface);
     if (SUCCEEDED(hr) && pStream)
