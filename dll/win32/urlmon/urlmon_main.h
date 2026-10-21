@@ -174,6 +174,9 @@ struct ProtocolVtbl {
 #define FLAG_RESULT_REPORTED          0x0020
 #define FLAG_ERROR                    0x0040
 #define FLAG_SYNC_READ                0x0080
+#ifdef __REACTOS__
+#define FLAG_NO_CONNECT_STATUS        0x0100
+#endif
 
 HRESULT protocol_start(Protocol*,IInternetProtocol*,IUri*,IInternetProtocolSink*,IInternetBindInfo*);
 HRESULT protocol_continue(Protocol*,PROTOCOLDATA*);

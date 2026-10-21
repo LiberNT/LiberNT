@@ -163,6 +163,10 @@ static void WINAPI internet_status_callback(HINTERNET internet, DWORD_PTR contex
     switch(internet_status) {
     case INTERNET_STATUS_RESOLVING_NAME:
         TRACE("%p INTERNET_STATUS_RESOLVING_NAME\n", protocol);
+#ifdef __REACTOS__
+        if(protocol->flags & FLAG_NO_CONNECT_STATUS)
+            break;
+#endif
         report_progress(protocol, BINDSTATUS_FINDINGRESOURCE, (LPWSTR)status_info);
         break;
 
@@ -171,6 +175,10 @@ static void WINAPI internet_status_callback(HINTERNET internet, DWORD_PTR contex
 
         TRACE("%p INTERNET_STATUS_CONNECTING_TO_SERVER %s\n", protocol, (const char*)status_info);
 
+#ifdef __REACTOS__
+        if(protocol->flags & FLAG_NO_CONNECT_STATUS)
+            break;
+#endif
         info = strdupAtoW(status_info);
         if(!info)
             return;
@@ -182,6 +190,10 @@ static void WINAPI internet_status_callback(HINTERNET internet, DWORD_PTR contex
 
     case INTERNET_STATUS_SENDING_REQUEST:
         TRACE("%p INTERNET_STATUS_SENDING_REQUEST\n", protocol);
+#ifdef __REACTOS__
+        if(protocol->flags & FLAG_NO_CONNECT_STATUS)
+            break;
+#endif
         report_progress(protocol, BINDSTATUS_SENDINGREQUEST, (LPWSTR)status_info);
         break;
 

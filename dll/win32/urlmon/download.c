@@ -35,6 +35,9 @@ typedef struct {
 
     stop_cache_binding_proc_t onstop_proc;
     void *ctx;
+#ifdef __REACTOS__
+    BOOL start_not_impl;
+#endif
 } DownloadBSC;
 
 static inline DownloadBSC *impl_from_IBindStatusCallback(IBindStatusCallback *iface)
@@ -120,6 +123,9 @@ static HRESULT WINAPI DownloadBSC_OnStartBinding(IBindStatusCallback *iface,
     }
 
     /* Windows seems to ignore E_NOTIMPL if it's returned from the client. */
+#ifdef __REACTOS__
+    This->start_not_impl = hres == E_NOTIMPL;
+#endif
     return hres == E_NOTIMPL ? S_OK : hres;
 }
 
@@ -212,7 +218,11 @@ static HRESULT WINAPI DownloadBSC_OnStopBinding(IBindStatusCallback *iface,
     if(This->onstop_proc)
         hres = This->onstop_proc(This->ctx, This->cache_file, hresult, szError);
     else if(This->callback)
+#ifdef __REACTOS__
+        IBindStatusCallback_OnStopBinding(This->callback, hresult == S_OK && This->start_not_impl ? S_FALSE : hresult, szError);
+#else
         IBindStatusCallback_OnStopBinding(This->callback, hresult, szError);
+#endif
 
     if(This->binding) {
         IBinding_Release(This->binding);
