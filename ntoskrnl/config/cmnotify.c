@@ -42,6 +42,7 @@ typedef struct _CMP_NOTIFY_POST
     NTSTATUS Status;
     BOOLEAN Asynchronous;
     BOOLEAN IoStatus32;
+    BOOLEAN KernelWorkItem;
 } CMP_NOTIFY_POST, *PCMP_NOTIFY_POST;
 
 CODE_SEG("INIT")
@@ -158,7 +159,13 @@ CmpCompleteNotify(PCMP_NOTIFY_POST Post, NTSTATUS Status)
         Post->SlaveKeyBody = NULL;
     }
     Post->Status = Status;
-    if (Post->Asynchronous)
+    if (Post->KernelWorkItem)
+    {
+        if (Post->Event) KeSetEvent(Post->Event, IO_NO_INCREMENT, FALSE);
+        ExQueueWorkItem((PWORK_QUEUE_ITEM)Post->ApcRoutine, (WORK_QUEUE_TYPE)(ULONG_PTR)Post->ApcContext);
+        CmpFreeNotifyPost(Post);
+    }
+    else if (Post->Asynchronous)
     {
         KeInitializeApc(&Post->Apc,
                         &Post->Thread->Tcb,
@@ -275,6 +282,7 @@ CmpNotifyChangeKey(PCM_KEY_BODY KeyBody,
         Post->IoStatus32 = IoStatus32;
         Post->ApcRoutine = ApcRoutine;
         Post->ApcContext = ApcContext;
+        Post->KernelWorkItem = (PreviousMode == KernelMode && ApcRoutine != NULL);
     }
 
     CmpLockRegistry();
@@ -331,7 +339,7 @@ CmpNotifyChangeKey(PCM_KEY_BODY KeyBody,
         SlaveNotify = NULL;
     }
     InsertTailList(&Notify->PostList, &Post->KeyList);
-    if (!(Filter & REG_NOTIFY_THREAD_AGNOSTIC))
+    if (!(Filter & REG_NOTIFY_THREAD_AGNOSTIC) && !Post->KernelWorkItem)
         InsertTailList(&CmpNotifyThreadList, &Post->ThreadList);
     Status = STATUS_PENDING;
 

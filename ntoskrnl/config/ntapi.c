@@ -1848,7 +1848,7 @@ NtNotifyChangeMultipleKeys(IN HANDLE MasterKeyHandle,
 
     if (Count > 1 || (Count && !SlaveObjects))
         return STATUS_INVALID_PARAMETER;
-    if (ApcRoutine && (PreviousMode == KernelMode || !Asynchronous))
+    if (ApcRoutine && !Asynchronous)
         return STATUS_NOT_IMPLEMENTED;
     if (Asynchronous && !Event && !ApcRoutine) return STATUS_INVALID_PARAMETER;
 
