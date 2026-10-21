@@ -59,6 +59,16 @@
 #define KVP_IP_ADDRESS_CHARS    1024
 #define KVP_IP_GATEWAY_CHARS    512
 #define KVP_IP_INFO_SIZE        (2 + 2 * KVP_IP_ADAPTER_CHARS + 2 + 2 * (3 * KVP_IP_ADDRESS_CHARS + KVP_IP_GATEWAY_CHARS))
+#define KVP_IP_BINARY_MAX_V4    64
+#define KVP_IP_BINARY_MAX_GW    5
+#define KVP_IP_BINARY_V4        284
+#define KVP_IP_BINARY_V4_SUBNET 1564
+#define KVP_IP_BINARY_V4_GW     2076
+#define KVP_IP_BINARY_V4_DNS    2176
+#define KVP_IP_BINARY_ORIGINS   3456
+#define KVP_IP_BINARY_SIZE      3712
+#define KVP_IP_ORIGIN_OTHER     1
+#define KVP_IP_ORIGIN_STATIC    2
 
 #define HV_CPUID_FEATURES               0x40000003
 #define HV_FEATURE_TIME_REF_COUNT       0x00000002
@@ -650,8 +660,76 @@ VmicAutoPoolItem(
 }
 
 static
+ULONG
+VmicParseIpv4List(
+    _In_ PCWSTR Text,
+    _Out_writes_bytes_(MaxCount * 4) PUCHAR Addresses,
+    _In_ ULONG MaxCount)
+{
+    ULONG Count = 0;
+    ULONG Part = 0;
+    ULONG Value = 0;
+    BOOLEAN Digits = FALSE;
+    UCHAR Octets[4];
+
+    for (;; Text++)
+    {
+        if (*Text >= L'0' && *Text <= L'9')
+        {
+            Value = Value * 10 + (*Text - L'0');
+            Digits = Value <= 255;
+            if (!Digits)
+                Part = 4;
+            continue;
+        }
+
+        if (Part < 4 && Digits)
+            Octets[Part] = (UCHAR)Value;
+        if (*Text == L'.')
+        {
+            Part = (Part < 4 && Digits) ? Part + 1 : 4;
+        }
+        else
+        {
+            if (Part == 3 && Digits && Count < MaxCount)
+                RtlCopyMemory(Addresses + Count++ * 4, Octets, sizeof(Octets));
+            Part = 0;
+            if (*Text == UNICODE_NULL)
+                break;
+        }
+        Value = 0;
+        Digits = FALSE;
+    }
+
+    return Count;
+}
+
+static
+VOID
+VmicFillIpInfoBinary(
+    _Out_writes_bytes_(KVP_IP_BINARY_SIZE) PUCHAR Body,
+    _In_ const VMIC_IP_INFO *IpInfo)
+{
+    ULONG Count;
+    ULONG Index;
+
+    RtlZeroMemory(Body, 24);
+    RtlZeroMemory(Body + 280, KVP_IP_BINARY_SIZE - 280);
+    Count = VmicParseIpv4List(IpInfo->Addresses, Body + KVP_IP_BINARY_V4, KVP_IP_BINARY_MAX_V4);
+    VmicPut32(Body, 0, Count);
+    VmicParseIpv4List(IpInfo->Subnets, Body + KVP_IP_BINARY_V4_SUBNET, KVP_IP_BINARY_MAX_V4);
+    VmicPut32(Body, 8, VmicParseIpv4List(IpInfo->Gateways, Body + KVP_IP_BINARY_V4_GW, KVP_IP_BINARY_MAX_GW));
+    VmicPut32(Body, 16, VmicParseIpv4List(IpInfo->DnsServers, Body + KVP_IP_BINARY_V4_DNS, KVP_IP_BINARY_MAX_V4));
+    Body[280] = 1;
+    Body[281] = IpInfo->Dhcp ? 1 : 0;
+    for (Index = 0; Index < Count; Index++)
+        VmicPut16(Body, KVP_IP_BINARY_ORIGINS + Index * 2, IpInfo->Dhcp ? KVP_IP_ORIGIN_OTHER : KVP_IP_ORIGIN_STATIC);
+}
+
+static
 VOID
 VmicHandleKvp(
+    _In_ USHORT MessageMajor,
     _Inout_updates_bytes_(Length) PUCHAR Message,
     _In_ ULONG Length)
 {
@@ -695,6 +773,22 @@ VmicHandleKvp(
             break;
 
         case KVP_OP_GET_IP_INFO:
+            if (MessageMajor >= 5)
+            {
+                if (KvpLength < 4 + KVP_IP_BINARY_SIZE)
+                {
+                    Status = IC_STATUS_FAIL;
+                    break;
+                }
+                VmicQueryIpInfo(&IpInfo);
+                if (!IpInfo.Valid)
+                {
+                    Status = IC_STATUS_NOT_FOUND;
+                    break;
+                }
+                VmicFillIpInfoBinary(Kvp + 4, &IpInfo);
+                break;
+            }
             if (KvpLength < KVP_IP_INFO_SIZE)
             {
                 Status = IC_STATUS_FAIL;
@@ -800,7 +894,7 @@ VmicProcessPacket(
 
             case IC_MSG_KVP:
                 if (Extension->Kind == VmicKvp)
-                    VmicHandleKvp(Message, Length);
+                    VmicHandleKvp(Extension->MessageMajor, Message, Length);
                 break;
 
             default:
