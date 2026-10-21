@@ -1,0 +1,48 @@
+[Version]
+Signature  = "$Windows NT$"
+LayoutFile = layout.inf
+Class      = Net
+ClassGUID  = {4D36E972-E325-11CE-BFC1-08002BE10318}
+Provider   = %ReactOS%
+DriverVer  = 10/21/2026,1.00
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%MicrosoftMfg% = MicrosoftMfg
+
+[MicrosoftMfg]
+%NetVsc.DeviceDesc% = NetVsc_Inst.ndi,VMBUS\{f8615163-df3e-46c5-913f-f2d2f965ed0e}
+
+[NetVsc_Inst.ndi.NT]
+Characteristics = 0x84
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
+BusType = 15
+AddReg = NetVsc_AddReg.NT
+CopyFiles = NetVsc_CopyFiles.NT
+
+[NetVsc_CopyFiles.NT]
+netvsc.sys
+
+[NetVsc_AddReg.NT]
+HKR, Ndi,            Service,    0, "netvsc"
+HKR, Ndi\Interfaces, UpperRange, 0, "ndis5"
+HKR, Ndi\Interfaces, LowerRange, 0, "ethernet"
+
+[NetVsc_Inst.ndi.NT.Services]
+AddService = netvsc, 0x00000002, NetVsc_Service_Inst
+
+[NetVsc_Service_Inst]
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 0
+ServiceBinary = %12%\netvsc.sys
+LoadOrderGroup = NDIS
+
+[Strings]
+ReactOS = "LiberNT Project"
+MicrosoftMfg = "Microsoft"
+NetVsc.DeviceDesc = "Microsoft Hyper-V Network Adapter"
