@@ -39,8 +39,10 @@ typedef NTSTATUS (NTAPI *PSOFTGPU_X86_BIOS_READ_MEMORY)(USHORT, USHORT, PVOID, U
 typedef NTSTATUS (NTAPI *PSOFTGPU_X86_BIOS_WRITE_MEMORY)(USHORT, USHORT, PVOID, ULONG);
 typedef BOOLEAN (NTAPI *PSOFTGPU_X86_BIOS_CALL)(ULONG, PSOFTGPU_X86_BIOS_REGISTERS);
 typedef FIRMWARE_TYPE (NTAPI *PSOFTGPU_GET_FIRMWARE_TYPE)(VOID);
+typedef NTSTATUS (NTAPI *PSOFTGPU_SET_VIRTUAL_FRAMEBUFFER)(PVOID);
 
 static PSOFTGPU_X86_BIOS_CALL SoftGpuX86BiosCall;
+static ULONGLONG SoftGpuBootScreenSize;
 
 #if defined(_M_IX86) || defined(_M_AMD64)
 #define SOFTGPU_VGA_INPUT_STATUS_1       ((PUCHAR)(ULONG_PTR)0x3da)
@@ -82,6 +84,46 @@ SoftGpuGetHalRoutine(
     return MmGetSystemRoutineAddress(&RoutineName);
 }
 
+static PVOID
+SoftGpuDetachBootScreen(VOID)
+{
+    PSOFTGPU_SET_VIRTUAL_FRAMEBUFFER SetVirtualFrameBuffer;
+    PVOID Shadow;
+
+    if (SoftGpuBootScreenSize == 0 || SoftGpuBootScreenSize > MAXULONG_PTR)
+        return NULL;
+
+    SetVirtualFrameBuffer = (PSOFTGPU_SET_VIRTUAL_FRAMEBUFFER)SoftGpuGetHalRoutine(L"InbvSetVirtualFrameBuffer");
+    if (SetVirtualFrameBuffer == NULL)
+        return NULL;
+
+    Shadow = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)SoftGpuBootScreenSize, SOFTGPU_POOL_TAG);
+    if (Shadow == NULL)
+        return NULL;
+
+    if (!NT_SUCCESS(SetVirtualFrameBuffer(Shadow)))
+    {
+        ExFreePoolWithTag(Shadow, SOFTGPU_POOL_TAG);
+        return NULL;
+    }
+
+    return Shadow;
+}
+
+static VOID
+SoftGpuAttachBootScreen(
+    _In_opt_ PVOID Shadow)
+{
+    PSOFTGPU_SET_VIRTUAL_FRAMEBUFFER SetVirtualFrameBuffer;
+
+    if (Shadow == NULL)
+        return;
+
+    SetVirtualFrameBuffer = (PSOFTGPU_SET_VIRTUAL_FRAMEBUFFER)SoftGpuGetHalRoutine(L"InbvSetVirtualFrameBuffer");
+    SetVirtualFrameBuffer(NULL);
+    ExFreePoolWithTag(Shadow, SOFTGPU_POOL_TAG);
+}
+
 static USHORT
 SoftGpuReadUshort(
     _In_reads_bytes_(Offset + sizeof(USHORT)) const UCHAR *Buffer,
@@ -96,6 +138,8 @@ SoftGpuVbeSetMode(
     _In_ const SOFTGPU_DISPLAY_MODE *Mode)
 {
     SOFTGPU_X86_BIOS_REGISTERS Registers;
+    PVOID Shadow;
+    BOOLEAN Success;
 
     UNREFERENCED_PARAMETER(Device);
 
@@ -105,7 +149,10 @@ SoftGpuVbeSetMode(
     RtlZeroMemory(&Registers, sizeof(Registers));
     Registers.Eax = 0x4F02;
     Registers.Ebx = Mode->PlatformMode | SOFTGPU_VBE_LINEAR_FRAMEBUFFER | SOFTGPU_VBE_PRESERVE_MEMORY;
-    if (!SoftGpuX86BiosCall(0x10, &Registers) || (Registers.Eax & 0xFFFF) != SOFTGPU_VBE_SUCCESS)
+    Shadow = SoftGpuDetachBootScreen();
+    Success = SoftGpuX86BiosCall(0x10, &Registers) && (Registers.Eax & 0xFFFF) == SOFTGPU_VBE_SUCCESS;
+    SoftGpuAttachBootScreen(Shadow);
+    if (!Success)
         return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
 
     return STATUS_SUCCESS;
@@ -313,6 +360,7 @@ SoftGpuVbeQueryModes(
     USHORT ListSegment;
     USHORT ListOffset;
     ULONG Index;
+    PVOID Shadow;
 
     AllocateBuffer = (PSOFTGPU_X86_BIOS_ALLOCATE_BUFFER)SoftGpuGetHalRoutine(L"x86BiosAllocateBuffer");
     FreeBuffer = (PSOFTGPU_X86_BIOS_FREE_BUFFER)SoftGpuGetHalRoutine(L"x86BiosFreeBuffer");
@@ -328,6 +376,8 @@ SoftGpuVbeQueryModes(
 
     if (!NT_SUCCESS(AllocateBuffer(&Size, &Segment, &Offset)))
         return;
+
+    Shadow = SoftGpuDetachBootScreen();
 
     RtlZeroMemory(Info, sizeof(Info));
     RtlCopyMemory(Info, "VBE2", 4);
@@ -401,6 +451,7 @@ SoftGpuVbeQueryModes(
 
     }
 
+    SoftGpuAttachBootScreen(Shadow);
     FreeBuffer(Segment, Offset);
 }
 
@@ -463,6 +514,7 @@ SoftGpuPlatformQueryStart(
                 LoaderFrameBuffer.FrameBufferBase;
             Config->ScanoutPitch = LoaderPitch;
             Config->ScanoutSize = LoaderVisibleLength;
+            SoftGpuBootScreenSize = LoaderVisibleLength;
         }
     }
 #else
@@ -492,6 +544,7 @@ SoftGpuPlatformQueryStart(
                 PostDisplayInfo.PhysicAddress;
             Config->ScanoutPitch = PostDisplayInfo.Pitch;
             Config->ScanoutSize = PostVisibleLength;
+            SoftGpuBootScreenSize = PostVisibleLength;
         }
         else if (Device != NULL &&
                  Device->PhysicalDeviceObject != NULL &&
