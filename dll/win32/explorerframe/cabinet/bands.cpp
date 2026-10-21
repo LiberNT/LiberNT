@@ -8,6 +8,7 @@
 #include "cabinet.h"
 #include <shellframe.h>
 #include <commoncontrols.h>
+#include <reactos/dwmframe.h>
 
 #define IDC_CRUMB_OVERFLOW 0x100
 #define IDC_CRUMB(index) (0x200 + (index))
@@ -500,7 +501,15 @@ CCabinetTabBand::Paint(HDC dc)
         return;
     ZeroMemory(bits, width * height * 4);
     CabinetGetPalette(&palette);
-    strip = composed ? RGB(255, 255, 255) : palette.Text;
+    strip = palette.Text;
+    if (composed)
+    {
+        ULONG_PTR key = (ULONG_PTR)GetPropW(GetAncestor(m_hwnd, GA_ROOT), DWM_PROP_BACKDROP_COLOR);
+        COLORREF frame = key ? (COLORREF)(key - 1) : RGB(0, 0, 0);
+
+        strip = GetRValue(frame) * 299 + GetGValue(frame) * 587 + GetBValue(frame) * 114 < 128000 ?
+                RGB(255, 255, 255) : RGB(0, 0, 0);
+    }
     if (!composed)
     {
         COLORREF face = GetSysColor(COLOR_3DFACE);
