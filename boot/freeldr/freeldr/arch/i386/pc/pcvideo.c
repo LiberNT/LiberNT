@@ -120,6 +120,9 @@ static BOOLEAN VesaVideoMode = FALSE;                   /* Are we using a VESA m
 static SVGA_MODE_INFORMATION VesaVideoModeInformation;  /* Only valid when in VESA mode */
 static ULONG CurrentMemoryBank = 0;                     /* Currently selected VESA bank */
 static LOADER_PARAMETER_FRAMEBUFFER BootFrameBuffer = {0};
+static SVGA_MODE_INFORMATION BootFrameBufferModeInformation;
+static USHORT BootFrameBufferMode = 0;
+static BOOLEAN BootFrameBufferActive = FALSE;
 
 enum
 {
@@ -1188,6 +1191,10 @@ PcVideoCopyOffScreenBufferToVRAM(PVOID Buffer)
     else if (VideoGraphicsMode == DisplayMode && VesaVideoMode)
     {
         BankSize = VesaVideoModeInformation.WindowGranularity << 10;
+
+        if (BootFrameBufferActive || BankSize == 0)
+            return;
+
         BanksToCopy = (USHORT)((VesaVideoModeInformation.HeightInPixels * VesaVideoModeInformation.BytesPerScanLine) / BankSize);
         BytesInLastBank = (VesaVideoModeInformation.HeightInPixels * VesaVideoModeInformation.BytesPerScanLine) % BankSize;
 
@@ -1286,8 +1293,22 @@ VOID
 PcVideoPrepareForReactOS(VOID)
 {
     /* Preserve the VBE linear framebuffer selected during hardware detect. */
-    if (BootFrameBuffer.FrameBufferBase.QuadPart == 0)
+    if (BootFrameBufferMode != 0 && PcVideoSetBiosVesaMode(BootFrameBufferMode))
+    {
+        VesaVideoModeInformation = BootFrameBufferModeInformation;
+        ScreenWidth = BootFrameBuffer.HorizontalResolution;
+        ScreenHeight = BootFrameBuffer.VerticalResolution;
+        BytesPerScanLine = BootFrameBuffer.PixelsPerScanLine * sizeof(ULONG);
+        DisplayMode = VideoGraphicsMode;
+        VesaVideoMode = TRUE;
+        BootFrameBufferActive = TRUE;
+    }
+    else
+    {
+        if (BootFrameBufferMode != 0)
+            ERR("Failed to set VBE mode 0x%x for the boot framebuffer\n", BootFrameBufferMode);
         PcVideoSetMode80x25();
+    }
     PcVideoHideShowTextCursor(FALSE);
 }
 
@@ -1370,12 +1391,9 @@ PcVideoInitializeBootFramebuffer(
         return FALSE;
     }
 
-    VesaVideoModeInformation = Best;
-    ScreenWidth = Best.WidthInPixels;
-    ScreenHeight = Best.HeightInPixels;
-    BytesPerScanLine = Pitch;
-    DisplayMode = VideoGraphicsMode;
-    VesaVideoMode = TRUE;
+    PcVideoSetMode80x25();
+    BootFrameBufferMode = BestMode | 0x4000;
+    BootFrameBufferModeInformation = Best;
 
     BootFrameBuffer.FrameBufferBase.QuadPart = Best.LinearVideoBufferAddress;
     BootFrameBuffer.FrameBufferSize = (ULONG)Size;
