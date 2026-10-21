@@ -32,6 +32,55 @@ static UCHAR HalpNextClockRate;
 
 static LONG HalpClockIpiTickOffset;
 
+BOOLEAN HalpApicTimerClock = FALSE;
+static ULONG64 HalpApicTimerFrequency;
+
+extern LARGE_INTEGER HalpCpuClockFrequency;
+
+static
+BOOLEAN
+HalpCanUseApicTimerClock(VOID)
+{
+    INT CpuInfo[4];
+
+    __cpuid(CpuInfo, 1);
+
+    if (CpuInfo[2] & (1UL << 31))
+        return TRUE;
+
+    __cpuid(CpuInfo, 0);
+    if (CpuInfo[0] < 6)
+        return FALSE;
+    __cpuid(CpuInfo, 6);
+    return (CpuInfo[0] & (1UL << 2)) != 0;
+}
+
+static
+VOID
+HalpCalibrateApicTimer(VOID)
+{
+    LVT_REGISTER LvtEntry;
+    ULONG64 Start, Ticks;
+    ULONG Elapsed;
+
+    LvtEntry.Long = 0;
+    LvtEntry.Vector = APIC_CLOCK_VECTOR;
+    LvtEntry.Mask = 1;
+    ApicWrite(APIC_TMRLVTR, LvtEntry.Long);
+    ApicWrite(APIC_TDCR, TIMER_DV_DivideBy1);
+    ApicWrite(APIC_TICR, MAXULONG);
+
+    Ticks = HalpCpuClockFrequency.QuadPart / 100;
+    Start = __rdtsc();
+    while (__rdtsc() - Start < Ticks)
+        YieldProcessor();
+    Elapsed = MAXULONG - ApicRead(APIC_TCCR);
+
+    ApicWrite(APIC_TICR, 0);
+    HalpApicTimerFrequency = (ULONG64)Elapsed * 100;
+    DPRINT1("Local APIC timer clock: %I64u Hz\n", HalpApicTimerFrequency);
+}
+
 /*!
     \brief Converts the CMOS RTC rate into the time increment in 0.1ns intervals.
 
@@ -66,6 +115,24 @@ RtcClockRateToPreciseIncrement(UCHAR Rate)
     return 10000000000ULL / Frequency;
 }
 
+static
+VOID
+HalpProgramApicTimerClock(UCHAR ClockRate)
+{
+    LVT_REGISTER LvtEntry;
+    ULONG64 Count;
+
+    Count = HalpApicTimerFrequency * RtcClockRateToPreciseIncrement(ClockRate) / 10000000000ULL;
+
+    LvtEntry.Long = 0;
+    LvtEntry.Vector = APIC_CLOCK_VECTOR;
+    LvtEntry.TimerMode = 1;
+    LvtEntry.Mask = 0;
+    ApicWrite(APIC_TDCR, TIMER_DV_DivideBy1);
+    ApicWrite(APIC_TMRLVTR, LvtEntry.Long);
+    ApicWrite(APIC_TICR, (ULONG)max(Count, 1));
+}
+
 VOID
 RtcSetClockRate(UCHAR ClockRate)
 {
@@ -77,6 +144,12 @@ RtcSetClockRate(UCHAR ClockRate)
     PreciseIncrement = RtcClockRateToPreciseIncrement(ClockRate);
     HalpCurrentTimeIncrement = PreciseIncrement / 1000;
     HalpCurrentFractionalIncrement = PreciseIncrement % 1000;
+
+    if (HalpApicTimerClock)
+    {
+        HalpProgramApicTimerClock(ClockRate);
+        return;
+    }
 
     /* Acquire CMOS lock */
     HalpAcquireCmosSpinLock();
@@ -108,6 +181,22 @@ HalpInitializeClock(VOID)
     /* Save EFlags and disable interrupts */
     EFlags = __readeflags();
     _disable();
+
+    if (HalpCanUseApicTimerClock())
+    {
+        HalpApicTimerClock = TRUE;
+        HalpCalibrateApicTimer();
+
+        RtcSetClockRate(HalpCurrentClockRate);
+
+        HalpMinimumTimeIncrement = RtcClockRateToPreciseIncrement(RtcMinimumClockRate) / 1000;
+        HalpMaximumTimeIncrement = RtcClockRateToPreciseIncrement(RtcMaximumClockRate) / 1000;
+        KeSetTimeIncrement(HalpMaximumTimeIncrement, HalpMinimumTimeIncrement);
+
+        __writeeflags(EFlags);
+        DPRINT1("Clock initialized (local APIC timer)\n");
+        return;
+    }
 
     // TODO: disable NMI
 
@@ -155,6 +244,12 @@ HalpRestoreClock(VOID)
 {
     UCHAR RegisterB;
 
+    if (HalpApicTimerClock)
+    {
+        RtcSetClockRate(HalpCurrentClockRate);
+        return;
+    }
+
     HalpAcquireCmosSpinLock();
     RegisterB = HalpReadCmos(RTC_REGISTER_B);
     HalpWriteCmos(RTC_REGISTER_B, RegisterB | RTC_REG_B_PI);
@@ -192,9 +287,12 @@ HalpClockInterruptHandler(IN PKTRAP_FRAME TrapFrame)
     }
 
     /* Read register C, so that the next interrupt can happen */
-    HalpAcquireCmosSpinLock();
-    HalpReadCmos(RTC_REGISTER_C);
-    HalpReleaseCmosSpinLock();
+    if (!HalpApicTimerClock)
+    {
+        HalpAcquireCmosSpinLock();
+        HalpReadCmos(RTC_REGISTER_C);
+        HalpReleaseCmosSpinLock();
+    }
 
     /* Save increment */
     LastIncrement = HalpCurrentTimeIncrement;

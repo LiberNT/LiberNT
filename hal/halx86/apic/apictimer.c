@@ -14,6 +14,7 @@
 #include <debug.h>
 
 extern LARGE_INTEGER HalpCpuClockFrequency;
+extern BOOLEAN HalpApicTimerClock;
 
 /* HAL profiling variables */
 BOOLEAN HalIsProfiling = FALSE;
@@ -85,6 +86,9 @@ HalStartProfileInterrupt(IN KPROFILE_SOURCE ProfileSource)
 {
     LVT_REGISTER LvtEntry;
 
+    if (HalpApicTimerClock)
+        return;
+
     /* Only handle ProfileTime */
     if (ProfileSource == ProfileTime)
     {
@@ -108,6 +112,9 @@ NTAPI
 HalStopProfileInterrupt(IN KPROFILE_SOURCE ProfileSource)
 {
     LVT_REGISTER LvtEntry;
+
+    if (HalpApicTimerClock)
+        return;
 
     /* Only handle ProfileTime */
     if (ProfileSource == ProfileTime)
@@ -153,7 +160,8 @@ HalSetProfileInterval(IN ULONG_PTR Interval)
     KeGetPcr()->HalReserved[HAL_PROFILING_INTERVAL] = (ULONG)TimerInterval;
 
     /* And set it */
-    ApicWrite(APIC_TICR, (ULONG)TimerInterval);
+    if (!HalpApicTimerClock)
+        ApicWrite(APIC_TICR, (ULONG)TimerInterval);
 
     return Interval;
 }
