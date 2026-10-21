@@ -706,6 +706,31 @@ static BYTE *get_key_blob_ncrypt(const CERT_CONTEXT *ctx, DWORD *size)
     return buf;
 }
 
+#ifdef __REACTOS__
+static BYTE *get_key_blob_capi(const CERT_CONTEXT *ctx, DWORD *size)
+{
+    CERT_KEY_CONTEXT keyctx;
+    DWORD ctx_size = sizeof(keyctx), len = 0;
+    HCRYPTKEY key;
+    BYTE *buf, *ret = NULL;
+
+    if (!CertGetCertificateContextProperty(ctx, CERT_KEY_CONTEXT_PROP_ID, &keyctx, &ctx_size))
+        return NULL;
+    if (keyctx.dwKeySpec != AT_KEYEXCHANGE && keyctx.dwKeySpec != AT_SIGNATURE)
+        return NULL;
+    if (!CryptGetUserKey(keyctx.hCryptProv, keyctx.dwKeySpec, &key))
+        return NULL;
+    if (CryptExportKey(key, 0, PRIVATEKEYBLOB, 0, NULL, &len) && (buf = malloc(len)))
+    {
+        if (CryptExportKey(key, 0, PRIVATEKEYBLOB, 0, buf, &len))
+            ret = convert_capi_to_bcrypt(buf, len, size);
+        free(buf);
+    }
+    CryptDestroyKey(key);
+    return ret;
+}
+#endif
+
 static SECURITY_STATUS acquire_credentials_handle(ULONG fCredentialUse,
  const SCHANNEL_CRED *schanCred, PCredHandle phCredential, PTimeStamp ptsExpiry)
 {
@@ -760,8 +785,14 @@ static SECURITY_STATUS acquire_credentials_handle(ULONG fCredentialUse,
     creds->credential_use = fCredentialUse;
     creds->enabled_protocols = enabled_protocols;
 
+#ifdef __REACTOS__
+    if (cert && !(key_blob = get_key_blob(cert, &key_size))
+             && !(key_blob = get_key_blob_capi(cert, &key_size))
+             && !(key_blob = get_key_blob_ncrypt(cert, &key_size))) goto fail;
+#else
     if (cert && !(key_blob = get_key_blob(cert, &key_size))
              && !(key_blob = get_key_blob_ncrypt(cert, &key_size))) goto fail;
+#endif
     params.c = creds;
     if (cert)
     {
