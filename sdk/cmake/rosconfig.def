@@ -422,17 +422,6 @@ endmenu
 
 menu "Desktop and applications"
 
-config ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    prompt "Early Winlogon background image"
-    type bool
-    default y
-    help
-      Show the BlueHorizon PNG as soon as Winlogon creates the interactive
-      desktop, stretched across the virtual screen until Userinit has
-      prepared the user background and started the shell. Disable to keep
-      the classic solid-color startup background and omit the PNG decoder
-      path from Winlogon.
-
 config ENABLE_WALLPAPERS
     prompt "Extra wallpapers"
     type bool

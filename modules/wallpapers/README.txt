@@ -42,12 +42,8 @@ night" by Daniil Silantev, free to use under the Unsplash License. It was
 resampled from 4297 x 2792 to 1920 x 1248 using the same JPEG settings as the
 other wallpapers. Its provenance record is in LICENSE.txt.
 
-"Sea Bridge" is the default wallpaper. Changing it means updating all four of:
-
-  sdk/include/reactos/early_splash.h    REACTOS_EARLY_SPLASH_FILENAME
-  boot/bootdata/hiveearlysplash.inf     HKCU Control Panel\Desktop\Wallpaper
-  base/system/winlogon/CMakeLists.txt   add_cd_file under ENABLE_EXPERIMENTAL_EARLY_SPLASH
-  modules/wallpapers/CMakeLists.txt     list(REMOVE_ITEM ...) that avoids the duplicate
+"Sea Bridge" is the default wallpaper. Changing it means updating
+HKCU Control Panel\Desktop\Wallpaper in boot/bootdata/hivedef.inf.
 
 To include the module in your build folder, run the configure script with the flags -DENABLE_WALLPAPERS=1
 

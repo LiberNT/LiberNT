@@ -506,9 +506,7 @@ SetUserWallpaper(VOID)
     if (rc != ERROR_SUCCESS)
     {
         WARN("RegOpenKeyEx() failed with error %lu\n", rc);
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
         SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, NULL, SPIF_SENDCHANGE);
-#endif
         return;
     }
 
@@ -556,32 +554,25 @@ SetUserSettings(VOID)
     SetUserWallpaper();
 }
 
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
 static VOID
-SignalEarlySplashDesktopReady(
-    _In_ PCSTR Stage)
+SignalUserDesktopReady(VOID)
 {
     HANDLE ReadyEvent;
 
-    ReadyEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE, REACTOS_EARLY_SPLASH_READY_EVENT);
+    ReadyEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE, REACTOS_USER_DESKTOP_READY_EVENT);
     if (!ReadyEvent)
     {
         DWORD Error = GetLastError();
 
-        if (Error == ERROR_FILE_NOT_FOUND)
-            TRACE("EARLY_SPLASH: USER_DESKTOP_READY_SKIP stage=%s reason=no_waiter\n", Stage);
-        else
-            ERR("EARLY_SPLASH: USER_DESKTOP_READY_FAIL stage=%s operation=open error=%lu\n", Stage, Error);
+        if (Error != ERROR_FILE_NOT_FOUND)
+            ERR("Could not open the desktop ready event (error %lu)\n", Error);
         return;
     }
 
-    if (SetEvent(ReadyEvent))
-        TRACE("EARLY_SPLASH: USER_DESKTOP_READY stage=%s\n", Stage);
-    else
-        ERR("EARLY_SPLASH: USER_DESKTOP_READY_FAIL stage=%s operation=signal error=%lu\n", Stage, GetLastError());
+    if (!SetEvent(ReadyEvent))
+        ERR("Could not signal that the desktop is ready (error %lu)\n", GetLastError());
     CloseHandle(ReadyEvent);
 }
-#endif
 
 static VOID
 ApplyUserPowerScheme(VOID)
@@ -800,9 +791,7 @@ wWinMain(IN HINSTANCE hInst,
     Success = StartShell(pEnvironment);
     if (pEnvironment)
         DestroyEnvironmentBlock(pEnvironment);
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    SignalEarlySplashDesktopReady(Success ? "shell_started" : "shell_failed");
-#endif
+    SignalUserDesktopReady();
     if (Success)
         NotifyLogon();
 

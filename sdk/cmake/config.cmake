@@ -210,10 +210,6 @@ cmake_dependent_option(ENABLE_ROSTESTS "Whether to build the ReactOS test suite.
 
 option(ENABLE_MESA_LLVMPIPE "Add LLVMpipe to mesa_gallium.dll and package the Lavapipe Vulkan ICD and Khronos loader." OFF)
 
-option(ENABLE_EXPERIMENTAL_EARLY_SPLASH
-       "Whether Winlogon displays the experimental early PNG background until the user desktop is ready."
-       ON)
-
 cmake_dependent_option(ENABLE_FEX_ARM64EC
                        "Whether to build the optional FEX ARM64EC emulator for running AMD64 binaries on ARM64." ON
                        "ARCH STREQUAL arm64" OFF)

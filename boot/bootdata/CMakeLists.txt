@@ -17,10 +17,6 @@ add_registry_inf(
     hivesys.inf
     hivebcd.inf)
 
-if(ENABLE_EXPERIMENTAL_EARLY_SPLASH)
-    add_registry_inf(hiveearlysplash.inf)
-endif()
-
 if(REACTOS_USE_XPDM)
     add_registry_inf(hivesys_xpdm.inf)
 endif()

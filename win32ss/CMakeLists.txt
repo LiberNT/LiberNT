@@ -285,9 +285,6 @@ if(REACTOS_USE_WDDM)
         REACTOS_WDDM_TARGET_LEVEL=${REACTOS_WDDM_TARGET_LEVEL})
 endif()
 
-if(ENABLE_EXPERIMENTAL_EARLY_SPLASH)
-    target_compile_definitions(win32k PRIVATE ENABLE_EXPERIMENTAL_EARLY_SPLASH)
-endif()
 
 if(USE_DIBLIB)
     target_link_libraries(win32k diblib)

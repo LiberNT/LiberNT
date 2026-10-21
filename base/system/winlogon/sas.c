@@ -20,6 +20,7 @@
 #include <userenv.h>
 #include <ndk/setypes.h>
 #include <ndk/sefuncs.h>
+#include <reactos/desktopready.h>
 
 /* GLOBALS ******************************************************************/
 
@@ -151,14 +152,68 @@ StartSystemShell(VOID)
     return ret;
 }
 
+static HANDLE
+CreateUserDesktopReadyEvent(
+    _In_ PWLSESSION Session)
+{
+    HANDLE ReadyEvent;
+    BOOL Impersonated = FALSE;
+
+    if (Session->UserToken)
+    {
+        Impersonated = ImpersonateLoggedOnUser(Session->UserToken);
+        if (!Impersonated)
+            ERR("WL: Could not impersonate the user for the desktop ready event (error %lu)\n", GetLastError());
+    }
+
+    ReadyEvent = CreateEventW(NULL, TRUE, FALSE, REACTOS_USER_DESKTOP_READY_EVENT);
+    if (Impersonated && !RevertToSelf())
+        ERR("WL: RevertToSelf failed (error %lu)\n", GetLastError());
+    if (!ReadyEvent)
+    {
+        ERR("WL: Could not create the desktop ready event (error %lu)\n", GetLastError());
+        return NULL;
+    }
+
+    ResetEvent(ReadyEvent);
+    return ReadyEvent;
+}
+
+static VOID
+WaitForUserDesktopReady(
+    _In_ HANDLE ReadyEvent)
+{
+    DWORD Start = GetTickCount();
+    DWORD Elapsed;
+    DWORD Result;
+    MSG Msg;
+
+    for (;;)
+    {
+        PeekMessageW(&Msg, NULL, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
+        Elapsed = GetTickCount() - Start;
+        Result = MsgWaitForMultipleObjects(1,
+                                           &ReadyEvent,
+                                           FALSE,
+                                           Elapsed < REACTOS_USER_DESKTOP_READY_TIMEOUT_MS ?
+                                               REACTOS_USER_DESKTOP_READY_TIMEOUT_MS - Elapsed : 0,
+                                           QS_SENDMESSAGE);
+        if (Result != WAIT_OBJECT_0 + 1)
+            break;
+    }
+
+    if (Result == WAIT_TIMEOUT)
+        WARN("WL: The user desktop was not ready after %lu ms\n", (DWORD)REACTOS_USER_DESKTOP_READY_TIMEOUT_MS);
+    else if (Result != WAIT_OBJECT_0)
+        ERR("WL: Waiting for the user desktop failed (result %lu, error %lu)\n", Result, GetLastError());
+}
+
 static BOOL
 StartUserShell(
     IN OUT PWLSESSION Session)
 {
     LPVOID lpEnvironment = NULL;
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
     HANDLE ReadyEvent;
-#endif
     BOOLEAN Old;
     BOOL ret;
 
@@ -177,20 +232,16 @@ StartUserShell(
     /* FIXME: reverting to lower privileges after creating user shell? */
     RtlAdjustPrivilege(SE_ASSIGNPRIMARYTOKEN_PRIVILEGE, TRUE, FALSE, &Old);
 
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    ReadyEvent = EarlySplashCreateUserDesktopReadyEvent(Session);
-#endif
+    ReadyEvent = CreateUserDesktopReadyEvent(Session);
     ret = Session->Gina.Functions.WlxActivateUserShell(
                 Session->Gina.Context,
                 L"Default",
                 NULL, /* FIXME */
                 lpEnvironment);
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
     if (ret && ReadyEvent)
-        EarlySplashWaitForUserDesktopReady(ReadyEvent);
+        WaitForUserDesktopReady(ReadyEvent);
     if (ReadyEvent)
         CloseHandle(ReadyEvent);
-#endif
 
     DestroyEnvironmentBlock(lpEnvironment);
     return ret;
@@ -960,19 +1011,7 @@ cleanup:
     }
     else // if (ret)
     {
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-        if (SwitchDesktop(Session->ApplicationDesktop))
-        {
-            TRACE("EARLY_SPLASH: HANDOFF_COMPLETE desktop=Default\n");
-            EarlySplashDestroy();
-        }
-        else
-        {
-            ERR("EARLY_SPLASH: HANDOFF_SWITCH_FAIL error=%lu\n", GetLastError());
-        }
-#else
         SwitchDesktop(Session->ApplicationDesktop);
-#endif
         RemoveStatusMessage(Session);
         Session->LogonState = STATE_LOGGED_ON;
     }
