@@ -7,6 +7,7 @@
  */
 
 #include "fsutil.h"
+#include <ntddstor.h>
 
 /* Add handlers here for subcommands */
 static HandlerProc DrivesMain;
@@ -14,6 +15,7 @@ static HandlerProc DriveTypeMain;
 static HandlerProc VolumeInfoMain;
 static HandlerProc NtfsInfoMain;
 static HandlerProc StatisticsMain;
+static HandlerProc SectorInfoMain;
 static HandlerItem HandlersList[] =
 {
     /* Proc, name, help */
@@ -22,6 +24,7 @@ static HandlerItem HandlersList[] =
     { VolumeInfoMain, _T("volumeinfo"), _T("Provides informations about a volume") },
     { NtfsInfoMain, _T("ntfsinfo"), _T("Displays informations about a NTFS volume") },
     { StatisticsMain, _T("statistics"), _T("Displays volume statistics") },
+    { SectorInfoMain, _T("sectorinfo"), _T("Displays sector size, alignment, seek penalty and TRIM information") },
 };
 
 static int
@@ -629,6 +632,74 @@ StatisticsMain(int argc, const TCHAR *argv[])
         LocalFree(Statistics);
     }
 
+    return 0;
+}
+
+static BOOL
+QueryStorageProperty(HANDLE Volume, STORAGE_PROPERTY_ID PropertyId, PVOID Output, DWORD Length)
+{
+    STORAGE_PROPERTY_QUERY Query;
+    DWORD BytesRead;
+
+    ZeroMemory(&Query, sizeof(Query));
+    Query.PropertyId = PropertyId;
+    Query.QueryType = PropertyStandardQuery;
+    ZeroMemory(Output, Length);
+    return DeviceIoControl(Volume, IOCTL_STORAGE_QUERY_PROPERTY, &Query, sizeof(Query),
+                           Output, Length, &BytesRead, NULL) && BytesRead >= Length;
+}
+
+static int
+SectorInfoMain(int argc, const TCHAR *argv[])
+{
+    STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR Alignment;
+    DEVICE_SEEK_PENALTY_DESCRIPTOR SeekPenalty;
+    DEVICE_TRIM_DESCRIPTOR Trim;
+    HANDLE Volume;
+
+    /* We need a volume (letter or GUID) */
+    if (argc < 2)
+    {
+        _ftprintf(stderr, _T("Usage: fsutil fsinfo sectorinfo <volume>\n"));
+        _ftprintf(stderr, _T("\tFor example: fsutil fsinfo sectorinfo c:\n"));
+        return 1;
+    }
+
+    Volume = OpenVolume(argv[1], FALSE, FALSE);
+    if (Volume == INVALID_HANDLE_VALUE)
+    {
+        return 1;
+    }
+
+    if (QueryStorageProperty(Volume, StorageAccessAlignmentProperty, &Alignment, sizeof(Alignment)))
+    {
+        _ftprintf(stdout, _T("LogicalBytesPerSector :\t\t\t\t%lu\n"), Alignment.BytesPerLogicalSector);
+        _ftprintf(stdout, _T("PhysicalBytesPerSectorForAtomicity :\t\t%lu\n"), Alignment.BytesPerPhysicalSector);
+        _ftprintf(stdout, _T("PhysicalBytesPerSectorForPerformance :\t\t%lu\n"), Alignment.BytesPerPhysicalSector);
+        _ftprintf(stdout, _T("Device Alignment :\t\t\t\t%s (0x%03lx)\n"),
+                  Alignment.BytesOffsetForSectorAlignment == 0 ? _T("Aligned") : _T("Not Aligned"),
+                  Alignment.BytesOffsetForSectorAlignment);
+    }
+
+    if (QueryStorageProperty(Volume, StorageDeviceSeekPenaltyProperty, &SeekPenalty, sizeof(SeekPenalty)))
+    {
+        _ftprintf(stdout, SeekPenalty.IncursSeekPenalty ? _T("Incurs Seek Penalty\n") : _T("No Seek Penalty\n"));
+    }
+    else
+    {
+        _ftprintf(stdout, _T("Seek Penalty Unknown\n"));
+    }
+
+    if (QueryStorageProperty(Volume, StorageDeviceTrimProperty, &Trim, sizeof(Trim)))
+    {
+        _ftprintf(stdout, Trim.TrimEnabled ? _T("Trim Supported\n") : _T("Trim Not Supported\n"));
+    }
+    else
+    {
+        _ftprintf(stdout, _T("Trim Not Supported\n"));
+    }
+
+    CloseHandle(Volume);
     return 0;
 }
 
