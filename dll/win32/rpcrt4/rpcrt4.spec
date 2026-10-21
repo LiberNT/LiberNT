@@ -65,6 +65,7 @@
 @ stub I_RpcNsBindingSetEntryNameW
 @ stub I_RpcNsInterfaceExported
 @ stub I_RpcNsInterfaceUnexported
+@ stdcall I_RpcOpenClientProcess(ptr long ptr)
 @ stub I_RpcParseSecurity
 @ stub I_RpcPauseExecution
 @ stub I_RpcProxyNewConnection
