@@ -75,10 +75,16 @@ BOOL fInEndMenu = FALSE;
 #define MENU_BAR_ITEMS_SPACE (12)
 #define SEPARATOR_HEIGHT (5)
 #define MENU_TAB_SPACE (8)
-#define MENU_POPUP_INSET (4)
-#define MENU_POPUP_VPAD (4)
-#define MENU_POPUP_ITEM_PAD (12)
-#define MENU_POPUP_RADIUS (4)
+#define MENU_THEME_CHECK_SIZE (16)
+#define MENU_THEME_CHECK_MARGIN (3)
+#define MENU_THEME_CHECKBG_RIGHT (6)
+#define MENU_THEME_TEXT_LEFT (4)
+#define MENU_THEME_TEXT_RIGHT (20)
+#define MENU_THEME_ITEM_MARGIN (1)
+#define MENU_THEME_SEPARATOR_HEIGHT (5)
+#define MENU_THEME_SUBMENU_RIGHT (7)
+#define MENU_THEME_SUBMENU_SIZE (9)
+#define MENU_THEME_BARITEM_MARGIN (7)
 
 typedef struct
 {
@@ -1422,7 +1428,7 @@ void FASTCALL MENU_InitSysMenuPopup(PMENU menu, DWORD style, DWORD clsStyle, LON
  * Draws popup magic glyphs (can be found in system menu).
  */
 static void FASTCALL
-MENU_DrawPopupGlyph(HDC dc, LPRECT r, INT_PTR popupMagic, BOOL inactive, BOOL hilite)
+MENU_DrawPopupGlyph(HDC dc, LPRECT r, INT_PTR popupMagic, BOOL inactive, BOOL hilite, BOOL themed)
 {
   LOGFONTW lf;
   HFONT hFont, hOldFont;
@@ -1461,7 +1467,7 @@ MENU_DrawPopupGlyph(HDC dc, LPRECT r, INT_PTR popupMagic, BOOL inactive, BOOL hi
   bkmode = GreGetBkMode(dc);
   /* set color and drawing mode */
   IntGdiSetBkMode(dc, TRANSPARENT);
-  if (inactive)
+  if (inactive && !themed)
   {
     /* draw shadow */
     if (!hilite)
@@ -1470,7 +1476,7 @@ MENU_DrawPopupGlyph(HDC dc, LPRECT r, INT_PTR popupMagic, BOOL inactive, BOOL hi
       GreTextOutW(dc, r->left + 1, r->top + 1, &symbol, 1);
     }
   }
-  IntGdiSetTextColor(dc, IntGetSysColor(inactive ? COLOR_GRAYTEXT : (hilite ? COLOR_HIGHLIGHTTEXT : COLOR_MENUTEXT)));
+  IntGdiSetTextColor(dc, IntGetSysColor(inactive ? COLOR_GRAYTEXT : ((hilite && !themed) ? COLOR_HIGHLIGHTTEXT : COLOR_MENUTEXT)));
   /* draw selected symbol */
   GreTextOutW(dc, r->left, r->top, &symbol, 1);
   /* restore previous settings */
@@ -1672,6 +1678,43 @@ static void FASTCALL MENU_GetBitmapItemSize(PITEM lpitem, SIZE *size, PWND WndOw
     }
 }
 
+static INT FASTCALL MENU_Scale(INT Value)
+{
+    return EngMulDiv(Value, (gpsi && gpsi->dmLogPixels) ? gpsi->dmLogPixels : 96, 96);
+}
+
+static BOOL FASTCALL MENU_Themed(PMENU Menu)
+{
+    BOOL flat = FALSE;
+    UINT i;
+
+    UserSystemParametersInfo(SPI_GETFLATMENU, 0, &flat, 0);
+    if (!flat || !Menu)
+        return flat;
+
+    for (i = 0; i < Menu->cItems; i++)
+    {
+        if ((Menu->rgItems[i].fType & (MF_OWNERDRAW | MF_MENUBREAK | MF_MENUBARBREAK)) ||
+            Menu->rgItems[i].hbmp == HBMMENU_CALLBACK)
+        {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+static INT FASTCALL MENU_ThemeCheckWidth(PMENU Menu)
+{
+    return max(MENU_Scale(MENU_THEME_CHECK_SIZE), (INT)Menu->cxTextAlign) + 2 * MENU_Scale(MENU_THEME_CHECK_MARGIN);
+}
+
+static INT FASTCALL MENU_ThemeGutter(PMENU Menu)
+{
+    if (((Menu->fFlags & MNS_STYLE_MASK) & MNS_NOCHECK) && !Menu->cxTextAlign)
+        return 0;
+    return MENU_ThemeCheckWidth(Menu) + MENU_Scale(MENU_THEME_CHECKBG_RIGHT);
+}
+
 /***********************************************************************
  *           MenuDrawBitmapItem
  *
@@ -1689,10 +1732,12 @@ static void FASTCALL MENU_DrawBitmapItem(HDC hdc, PITEM lpitem, const RECT *rect
     int bmp_xoffset = 0;
     int left, top;
     BOOL flat_menu;
+    BOOL themed;
     HBITMAP hbmToDraw = lpitem->hbmp;
     bmp = hbmToDraw;
 
     UserSystemParametersInfo(SPI_GETFLATMENU, 0, &flat_menu, 0);
+    themed = MENU_Themed(Menu);
 
     /* Check if there is a magic menu item associated with this item */
     if (IS_MAGIC_BITMAP(hbmToDraw))
@@ -1792,7 +1837,8 @@ static void FASTCALL MENU_DrawBitmapItem(HDC hdc, PITEM lpitem, const RECT *rect
           case (INT_PTR) HBMMENU_POPUP_RESTORE:
           case (INT_PTR) HBMMENU_POPUP_MAXIMIZE:
           case (INT_PTR) HBMMENU_POPUP_MINIMIZE:
-            MENU_DrawPopupGlyph(hdc, &r, (INT_PTR)hbmToDraw, lpitem->fState & MF_GRAYED, lpitem->fState & MF_HILITE);
+            MENU_DrawPopupGlyph(hdc, &r, (INT_PTR)hbmToDraw, lpitem->fState & MF_GRAYED, lpitem->fState & MF_HILITE,
+                                themed);
             return;
       }
       RECTL_vInflateRect(&r, -1, -1);
@@ -1809,8 +1855,18 @@ static void FASTCALL MENU_DrawBitmapItem(HDC hdc, PITEM lpitem, const RECT *rect
     /* handle fontsize > bitmap_height */
     top = (h>bm.bmHeight) ? rect->top+(h-bm.bmHeight)/2 : rect->top;
     left=rect->left;
-    rop=((lpitem->fState & MF_HILITE) && !IS_MAGIC_BITMAP(hbmToDraw)) ? NOTSRCCOPY : SRCCOPY;
-    if ((lpitem->fState & MF_HILITE) && lpitem->hbmp)
+    if (bm.bmBitsPixel == 32 && bm.bmBits)
+    {
+        BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+        INT cx = min(w, bm.bmWidth - bmp_xoffset);
+        INT cy = min(h, bm.bmHeight);
+
+        NtGdiAlphaBlend(hdc, left, top, cx, cy, hdcMem, bmp_xoffset, 0, cx, cy, bf, NULL);
+        IntGdiDeleteDC( hdcMem, FALSE );
+        return;
+    }
+    rop=((lpitem->fState & MF_HILITE) && !IS_MAGIC_BITMAP(hbmToDraw) && !themed) ? NOTSRCCOPY : SRCCOPY;
+    if ((lpitem->fState & MF_HILITE) && lpitem->hbmp && !themed)
         IntGdiSetBkColor(hdc, IntGetSysColor(COLOR_HIGHLIGHT));
     if (MenuBar &&
         !flat_menu &&
@@ -1849,19 +1905,6 @@ IntGetDialogBaseUnits(VOID)
  *
  * Calculate the size of the menu item and store it in lpitem->rect.
  */
-static INT FASTCALL MENU_Scale(INT Value)
-{
-    return EngMulDiv(Value, (gpsi && gpsi->dmLogPixels) ? gpsi->dmLogPixels : 96, 96);
-}
-
-static BOOL FASTCALL MENU_Themed(VOID)
-{
-    BOOL flat = FALSE;
-
-    UserSystemParametersInfo(SPI_GETFLATMENU, 0, &flat, 0);
-    return flat;
-}
-
 static void FASTCALL MENU_CalcItemSize( HDC hdc, PITEM lpitem, PMENU Menu, PWND pwndOwner,
                  INT orgX, INT orgY, BOOL menuBar, BOOL textandbmp)
 {
@@ -1919,6 +1962,62 @@ static void FASTCALL MENU_CalcItemSize( HDC hdc, PITEM lpitem, PMENU Menu, PWND 
     lpitem->yItem  = orgY; 
     lpitem->cxItem = orgX;
     lpitem->cyItem = orgY;
+
+    if (!menuBar && MENU_Themed(Menu))
+    {
+        INT gutter = MENU_ThemeGutter(Menu);
+
+        if (lpitem->fType & MF_SEPARATOR)
+        {
+            lpitem->cxItem += gutter;
+            lpitem->cyItem += MENU_Scale(MENU_THEME_SEPARATOR_HEIGHT + 2 * MENU_THEME_ITEM_MARGIN);
+            return;
+        }
+
+        itemheight = MENU_Scale(MENU_THEME_CHECK_SIZE);
+        if (lpitem->hbmp)
+        {
+            SIZE size;
+
+            MENU_GetBitmapItemSize(lpitem, &size, pwndOwner);
+            lpitem->cxBmp = size.cx;
+            lpitem->cyBmp = size.cy;
+            itemheight = max(itemheight, size.cy);
+        }
+        itemheight += 2 * MENU_Scale(MENU_THEME_CHECK_MARGIN);
+        lpitem->cxItem += gutter + MENU_Scale(MENU_THEME_TEXT_LEFT);
+        lpitem->dxTab = 0;
+        if (!(lpitem->fType & MF_SYSMENU) && lpitem->Xlpstr)
+        {
+            HFONT hfontOld = NULL;
+            RECT rc = { 0, 0, 0, 0 };
+            LONG txtheight;
+
+            if (lpitem->fState & MFS_DEFAULT)
+                hfontOld = NtGdiSelectFont(hdc, ghMenuFontBold);
+            p = wcschr(lpitem->Xlpstr, L'\t');
+            txtheight = DrawTextW(hdc, lpitem->Xlpstr, p ? (INT)(p - lpitem->Xlpstr) : -1, &rc,
+                                  DT_SINGLELINE | DT_CALCRECT);
+            lpitem->cxItem += rc.right - rc.left + MENU_Scale(MENU_THEME_TEXT_RIGHT);
+            lpitem->dxTab = lpitem->cxItem;
+            if (p)
+            {
+                RECT tmprc = { 0, 0, 0, 0 };
+
+                txtheight = max(txtheight, DrawTextW(hdc, p + 1, -1, &tmprc, DT_SINGLELINE | DT_CALCRECT));
+                lpitem->cxItem += tmprc.right - tmprc.left + MENU_Scale(MENU_THEME_TEXT_RIGHT);
+            }
+            itemheight = max(itemheight, txtheight + 2 * MENU_Scale(MENU_THEME_ITEM_MARGIN));
+            if (hfontOld)
+                NtGdiSelectFont(hdc, hfontOld);
+        }
+        else
+        {
+            lpitem->cxItem += MENU_Scale(MENU_THEME_TEXT_RIGHT);
+        }
+        lpitem->cyItem += itemheight;
+        return;
+    }
 
     if (lpitem->fType & MF_SEPARATOR)
     {
@@ -1989,7 +2088,7 @@ static void FASTCALL MENU_CalcItemSize( HDC hdc, PITEM lpitem, PMENU Menu, PWND 
             lpitem->cxItem  += rc.right - rc.left;
             itemheight = max( max( itemheight, txtheight), UserGetSystemMetrics( SM_CYMENU) - 1);
 
-            lpitem->cxItem +=  2 * MenuCharSize.cx;
+            lpitem->cxItem += MENU_Themed(Menu) ? 2 * MENU_Scale(MENU_THEME_BARITEM_MARGIN) : 2 * MenuCharSize.cx;
         } else {
             if ((p = wcschr( lpitem->Xlpstr, '\t' )) != NULL) {
                 RECT tmprc = rc;
@@ -2016,7 +2115,7 @@ static void FASTCALL MENU_CalcItemSize( HDC hdc, PITEM lpitem, PMENU Menu, PWND 
             }
             lpitem->cxItem  += 2 + txtwidth;
             itemheight = max( itemheight,
-				    max( txtheight + 2, MenuCharSize.cy + (MENU_Themed() ? MENU_Scale(MENU_POPUP_ITEM_PAD) : 4)));
+				    max( txtheight + 2, MenuCharSize.cy + 4));
         }
         if (hfontOld)
         {
@@ -2056,6 +2155,7 @@ static void FASTCALL MENU_PopupMenuCalcSize(PMENU Menu, PWND WndOwner)
     int start, i;
     int orgX, orgY, maxX, maxTab, maxTabWidth, maxHeight;
     BOOL textandbmp = FALSE;
+    BOOL themed;
 
     Menu->cxMenu = Menu->cyMenu = 0;
     if (Menu->cItems == 0) return;
@@ -2068,6 +2168,19 @@ static void FASTCALL MENU_PopupMenuCalcSize(PMENU Menu, PWND WndOwner)
     maxX = 0;
 
     Menu->cxTextAlign = 0;
+    themed = MENU_Themed(Menu);
+    if (themed)
+    {
+        for (i = 0; i < Menu->cItems; i++)
+        {
+            SIZE size;
+
+            if (!Menu->rgItems[i].hbmp)
+                continue;
+            MENU_GetBitmapItemSize(&Menu->rgItems[i], &size, WndOwner);
+            Menu->cxTextAlign = max(Menu->cxTextAlign, size.cx);
+        }
+    }
 
     while (start < Menu->cItems)
     {
@@ -2075,7 +2188,7 @@ static void FASTCALL MENU_PopupMenuCalcSize(PMENU Menu, PWND WndOwner)
       orgX = maxX;
       if( lpitem->fType & (MF_MENUBREAK | MF_MENUBARBREAK))
           orgX += MENU_COL_SPACE;
-      orgY = MENU_Themed() ? MENU_Scale(MENU_POPUP_VPAD) : 0;
+      orgY = 0;
 
       maxTab = maxTabWidth = 0;
       /* Parse items until column break or end of menu */
@@ -2103,7 +2216,7 @@ static void FASTCALL MENU_PopupMenuCalcSize(PMENU Menu, PWND WndOwner)
            if (IS_STRING_ITEM(lpitem->fType) && lpitem->dxTab)
                lpitem->dxTab = maxTab;
       }
-      Menu->cyMenu = max(Menu->cyMenu, orgY + (MENU_Themed() ? MENU_Scale(MENU_POPUP_VPAD) : 0));
+      Menu->cyMenu = max(Menu->cyMenu, orgY);
     }
 
     Menu->cxMenu  = maxX;
@@ -2112,7 +2225,7 @@ static void FASTCALL MENU_PopupMenuCalcSize(PMENU Menu, PWND WndOwner)
      * least one item with both text and bitmap then bitmaps are
      * on the left and texts left aligned with the right hand side
      * of the bitmaps */
-    if( !textandbmp) Menu->cxTextAlign = 0;
+    if( !textandbmp && !themed) Menu->cxTextAlign = 0;
 
     /* Adjust popup height if it exceeds maximum */
     maxHeight = MENU_GetMaxPopupHeight(Menu);
@@ -2236,78 +2349,224 @@ static void MENU_DrawScrollArrows(PMENU lppop, HDC hdc)
     UITOOLS95_DrawFrameMenu(hdc, &rect, Flags | DFCS_MENUARROWDOWN);
 }
 
+#define MENU_BOX_HOT (0)
+#define MENU_BOX_DISABLEDHOT (1)
+#define MENU_BOX_PUSHED (2)
+
+static const struct
+{
+    COLORREF Border;
+    BYTE BorderAlpha;
+    COLORREF Fill;
+    BYTE FillAlpha;
+} MENU_ThemeBoxArt[] =
+{
+    { RGB(0x00, 0x36, 0x6D), 0x80, RGB(0x00, 0x11, 0x21), 0x21 },
+    { RGB(0x36, 0x36, 0x36), 0x80, RGB(0x10, 0x10, 0x10), 0x21 },
+    { RGB(0x00, 0x41, 0x82), 0x99, RGB(0x00, 0x20, 0x40), 0x40 },
+};
+
+static COLORREF FASTCALL MENU_MixColor(COLORREF From, COLORREF To, INT Weight)
+{
+    return RGB(GetRValue(From) + ((INT)GetRValue(To) - (INT)GetRValue(From)) * Weight / 255,
+               GetGValue(From) + ((INT)GetGValue(To) - (INT)GetGValue(From)) * Weight / 255,
+               GetBValue(From) + ((INT)GetBValue(To) - (INT)GetBValue(From)) * Weight / 255);
+}
+
+static COLORREF FASTCALL MENU_BlendColor(COLORREF Back, COLORREF Art, BYTE Alpha)
+{
+    return RGB(min(255, GetRValue(Art) + (GetRValue(Back) * (255 - Alpha) + 127) / 255),
+               min(255, GetGValue(Art) + (GetGValue(Back) * (255 - Alpha) + 127) / 255),
+               min(255, GetBValue(Art) + (GetBValue(Back) * (255 - Alpha) + 127) / 255));
+}
+
+static VOID FASTCALL MENU_FillColor(HDC hdc, const RECT *prc, COLORREF Color)
+{
+    IntSetDCBrushColor(hdc, Color);
+    FillRect(hdc, prc, NtGdiGetStockObject(DC_BRUSH));
+}
+
+static VOID FASTCALL MENU_DrawBox(HDC hdc, const RECT *prc, COLORREF Border, COLORREF Fill)
+{
+    RECT rc = *prc;
+
+    MENU_FillColor(hdc, &rc, Border);
+    RECTL_vInflateRect(&rc, -1, -1);
+    MENU_FillColor(hdc, &rc, Fill);
+}
+
+static VOID FASTCALL MENU_DrawThemeBox(HDC hdc, const RECT *prc, COLORREF Back, UINT Box)
+{
+    MENU_DrawBox(hdc, prc,
+                 MENU_BlendColor(Back, MENU_ThemeBoxArt[Box].Border, MENU_ThemeBoxArt[Box].BorderAlpha),
+                 MENU_BlendColor(Back, MENU_ThemeBoxArt[Box].Fill, MENU_ThemeBoxArt[Box].FillAlpha));
+}
+
+static VOID FASTCALL MENU_DrawThemedPopupItem(PMENU Menu, PWND WndOwner, HDC hdc, PITEM lpitem,
+                                              const RECT *prcItem, UINT odaction)
+{
+    COLORREF back = IntGetSysColor(COLOR_MENU);
+    COLORREF text = IntGetSysColor(COLOR_MENUTEXT);
+    BOOL grayed = (lpitem->fState & MF_GRAYED) != 0;
+    BOOL checked = (lpitem->fState & MF_CHECKED) != 0;
+    BOOL noCheck = ((Menu->fFlags & MNS_STYLE_MASK) & MNS_NOCHECK) != 0;
+    HBITMAP bm = checked ? lpitem->hbmpChecked : lpitem->hbmpUnchecked;
+    BOOL drawBmp;
+    INT gutter = MENU_ThemeGutter(Menu);
+    INT cyItem = prcItem->bottom - prcItem->top;
+    INT margin = MENU_Scale(MENU_THEME_CHECK_MARGIN);
+    INT checkH;
+    RECT rc, rcCheck;
+
+    FillRect(hdc, prcItem, Menu->hbrBack ? Menu->hbrBack : IntGetSysColorBrush(COLOR_MENU));
+    if (gutter)
+    {
+        RECTL_vSetRect(&rc, prcItem->left + gutter - 1, prcItem->top, prcItem->left + gutter, prcItem->bottom);
+        MENU_FillColor(hdc, &rc, MENU_MixColor(back, text, 27));
+    }
+
+    if (lpitem->fType & MF_SEPARATOR)
+    {
+        INT y = prcItem->top + MENU_Scale(MENU_THEME_ITEM_MARGIN) + MENU_Scale(2) +
+                (cyItem - MENU_Scale(MENU_THEME_SEPARATOR_HEIGHT + 2 * MENU_THEME_ITEM_MARGIN)) / 2;
+
+        RECTL_vSetRect(&rc, prcItem->left + gutter, y, prcItem->right, y + 1);
+        MENU_FillColor(hdc, &rc, MENU_MixColor(back, text, 27));
+        return;
+    }
+
+    if (lpitem->fState & MF_HILITE)
+    {
+        UINT box = grayed ? MENU_BOX_DISABLEDHOT : MENU_BOX_HOT;
+
+        MENU_DrawThemeBox(hdc, prcItem, back, box);
+        if (gutter)
+        {
+            RECTL_vSetRect(&rc, prcItem->left + gutter - 1, prcItem->top + 1, prcItem->left + gutter, prcItem->bottom - 1);
+            MENU_FillColor(hdc, &rc, MENU_BlendColor(MENU_MixColor(back, text, 27), MENU_ThemeBoxArt[box].Fill,
+                                                     MENU_ThemeBoxArt[box].FillAlpha));
+        }
+    }
+
+    IntGdiSetBkMode(hdc, TRANSPARENT);
+
+    checkH = MENU_Scale(MENU_THEME_CHECK_SIZE);
+    if (lpitem->hbmp)
+        checkH = max(checkH, (INT)lpitem->cyBmp);
+    checkH += 2 * margin;
+    RECTL_vSetRect(&rcCheck, prcItem->left, prcItem->top + (cyItem - checkH) / 2,
+                   prcItem->left + MENU_ThemeCheckWidth(Menu), prcItem->top + (cyItem - checkH) / 2 + checkH);
+    drawBmp = lpitem->hbmp && !(checked && !noCheck && ((Menu->fFlags & MNS_STYLE_MASK) & MNS_CHECKORBMP));
+
+    if (!noCheck && checked && !bm)
+    {
+        MENU_DrawBox(hdc, &rcCheck,
+                     grayed ? MENU_MixColor(back, text, 24) : RGB(0x26, 0xA0, 0xDA),
+                     MENU_BlendColor(back, grayed ? RGB(0x34, 0x34, 0x34) : RGB(0x09, 0x26, 0x34), 0x3D));
+    }
+    RECTL_vInflateRect(&rcCheck, -margin, -margin);
+
+    if (!noCheck && bm)
+    {
+        HDC hdcMem = NtGdiCreateCompatibleDC(hdc);
+        INT cx = UserGetSystemMetrics(SM_CXMENUCHECK);
+        INT cy = UserGetSystemMetrics(SM_CYMENUCHECK);
+
+        NtGdiSelectBitmap(hdcMem, bm);
+        NtGdiBitBlt(hdc, rcCheck.left + (rcCheck.right - rcCheck.left - cx) / 2,
+                    rcCheck.top + (rcCheck.bottom - rcCheck.top - cy) / 2,
+                    cx, cy, hdcMem, 0, 0, SRCCOPY, CLR_INVALID, 0);
+        IntGdiDeleteDC(hdcMem, FALSE);
+    }
+    else if (!noCheck && checked && !drawBmp)
+    {
+        INT size = MENU_Scale(MENU_THEME_CHECK_SIZE);
+
+        RECTL_vSetRect(&rc, rcCheck.left + (rcCheck.right - rcCheck.left - size) / 2,
+                       rcCheck.top + (rcCheck.bottom - rcCheck.top - size) / 2, 0, 0);
+        rc.right = rc.left + size;
+        rc.bottom = rc.top + size;
+        IntGdiSetTextColor(hdc, MENU_MixColor(text, back, grayed ? 119 : 36));
+        UITOOLS95_DrawFrameMenu(hdc, &rc, (lpitem->fType & MFT_RADIOCHECK) ? DFCS_MENUBULLET : DFCS_MENUCHECK);
+    }
+
+    if (drawBmp)
+    {
+        rc = rcCheck;
+        rc.left += (rcCheck.right - rcCheck.left - (INT)lpitem->cxBmp) / 2;
+        rc.right = rc.left + lpitem->cxBmp;
+        MENU_DrawBitmapItem(hdc, lpitem, &rc, Menu, WndOwner, odaction, FALSE);
+    }
+
+    if (lpitem->spSubMenu)
+    {
+        INT half = MENU_Scale(3);
+        INT x = prcItem->right - MENU_Scale(MENU_THEME_SUBMENU_RIGHT + MENU_THEME_SUBMENU_SIZE) + half;
+        INT y = prcItem->top + (cyItem - MENU_Scale(MENU_THEME_SUBMENU_SIZE)) / 2 + MENU_Scale(MENU_THEME_SUBMENU_SIZE) / 2;
+        INT i;
+
+        IntSetDCBrushColor(hdc, MENU_MixColor(text, back, grayed ? 119 : 43));
+        for (i = 0; i <= half; i++)
+        {
+            RECTL_vSetRect(&rc, x + i, y - (half - i), x + i + 1, y + (half - i) + 1);
+            FillRect(hdc, &rc, NtGdiGetStockObject(DC_BRUSH));
+        }
+    }
+
+    if (lpitem->Xlpstr)
+    {
+        PWCHAR Text = lpitem->Xlpstr;
+        HFONT hfontOld = NULL;
+        UINT uFormat = DT_LEFT | DT_VCENTER | DT_SINGLELINE;
+        INT i;
+
+        for (i = 0; Text[i]; i++)
+        {
+            if (Text[i] == L'\t' || Text[i] == L'\b')
+                break;
+        }
+
+        if (lpitem->fState & MFS_DEFAULT)
+            hfontOld = NtGdiSelectFont(hdc, ghMenuFontBold);
+
+        IntGdiSetTextColor(hdc, IntGetSysColor(grayed ? COLOR_GRAYTEXT : COLOR_MENUTEXT));
+        rc = *prcItem;
+        rc.left += gutter + MENU_Scale(MENU_THEME_TEXT_LEFT);
+        rc.top += MENU_Scale(MENU_THEME_ITEM_MARGIN);
+        rc.bottom -= MENU_Scale(MENU_THEME_ITEM_MARGIN);
+        DrawTextW(hdc, Text, i, &rc, uFormat);
+
+        if (Text[i])
+        {
+            if (Text[i] == L'\t')
+            {
+                rc.left = lpitem->dxTab;
+            }
+            else
+            {
+                rc.right = lpitem->dxTab;
+                uFormat = DT_RIGHT | DT_VCENTER | DT_SINGLELINE;
+            }
+            DrawTextW(hdc, Text + i + 1, -1, &rc, uFormat);
+        }
+
+        if (hfontOld)
+            NtGdiSelectFont(hdc, hfontOld);
+    }
+}
+
 /***********************************************************************
  *           MenuDrawMenuItem
  *
  * Draw a single menu item.
  */
-static COLORREF FASTCALL MENU_OffsetColor(COLORREF base, INT delta)
-{
-    INT r = GetRValue(base) + delta;
-    INT g = GetGValue(base) + delta;
-    INT b = GetBValue(base) + delta;
-    if (r < 0) r = 0;
-    if (r > 255) r = 255;
-    if (g < 0) g = 0;
-    if (g > 255) g = 255;
-    if (b < 0) b = 0;
-    if (b > 255) b = 255;
-    return RGB(r, g, b);
-}
-
-static void FASTCALL MENU_FillFlatPopupBack(HDC hdc, const RECT *prc, INT cyTotal)
-{
-    COLORREF base = IntGetSysColor(COLOR_MENU);
-    HPEN oldPen;
-    INT y;
-
-    if (cyTotal <= 0)
-        cyTotal = prc->bottom > 0 ? prc->bottom : 1;
-
-    oldPen = NtGdiSelectPen(hdc, NtGdiGetStockObject(DC_PEN));
-    if (!oldPen)
-    {
-        FillRect(hdc, prc, IntGetSysColorBrush(COLOR_MENU));
-        return;
-    }
-
-    for (y = prc->top; y < prc->bottom; y++)
-    {
-        INT delta = 18 - (24 * y) / cyTotal;
-        IntSetDCPenColor(hdc, MENU_OffsetColor(base, delta));
-        GreMoveTo(hdc, prc->left, y, NULL);
-        NtGdiLineTo(hdc, prc->right, y);
-    }
-    NtGdiSelectPen(hdc, oldPen);
-}
-
-static void FASTCALL MENU_FillHilite(HDC hdc, const RECT *prc, HBRUSH hilite, BOOL menuBar, INT bkgnd, INT cyTotal)
-{
-    RECT pill = *prc;
-    INT radius = MENU_Scale(MENU_POPUP_RADIUS) * 2;
-    HBRUSH oldBrush;
-    HPEN oldPen;
-
-    if (menuBar)
-        FillRect(hdc, prc, IntGetSysColorBrush(bkgnd));
-    else
-        MENU_FillFlatPopupBack(hdc, prc, cyTotal);
-    RECTL_vInflateRect(&pill, -MENU_Scale(menuBar ? 2 : MENU_POPUP_INSET), -MENU_Scale(menuBar ? 2 : 1));
-    oldBrush = NtGdiSelectBrush(hdc, hilite);
-    oldPen = NtGdiSelectPen(hdc, NtGdiGetStockObject(NULL_PEN));
-    NtGdiRoundRect(hdc, pill.left, pill.top, pill.right + 1, pill.bottom + 1, radius, radius);
-    if (oldPen)
-        NtGdiSelectPen(hdc, oldPen);
-    if (oldBrush)
-        NtGdiSelectBrush(hdc, oldBrush);
-}
-
 static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC hdc,
                  PITEM lpitem, UINT Height, BOOL menuBar, UINT odaction)
 {
     RECT rect;
     PWCHAR Text;
     BOOL flat_menu = FALSE;
+    BOOL themed;
     int bkgnd;
     UINT arrow_bitmap_width = 0;
     //RECT bmprc;
@@ -2327,6 +2586,7 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
     }
 
     UserSystemParametersInfo (SPI_GETFLATMENU, 0, &flat_menu, 0);
+    themed = MENU_Themed(Menu);
     bkgnd = (menuBar && flat_menu) ? COLOR_MENUBAR : COLOR_MENU;
   
     /* Setup colors */
@@ -2336,6 +2596,9 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
         if(menuBar && !flat_menu) {
             IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_MENUTEXT));
             IntGdiSetBkColor(hdc, IntGetSysColor(COLOR_MENU));
+        } else if (themed) {
+            IntGdiSetTextColor(hdc, IntGetSysColor((lpitem->fState & MF_GRAYED) ? COLOR_GRAYTEXT : COLOR_MENUTEXT));
+            IntGdiSetBkColor(hdc, IntGetSysColor(bkgnd));
         } else {
             if (lpitem->fState & MF_GRAYED)
                 IntGdiSetTextColor(hdc, IntGetSysColor(COLOR_GRAYTEXT));
@@ -2416,11 +2679,29 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
 
     if (menuBar && (lpitem->fType & MF_SEPARATOR)) return;
 
+    if (!menuBar && themed)
+    {
+        MENU_DrawThemedPopupItem(Menu, WndOwner, hdc, lpitem, &rect, odaction);
+        return;
+    }
+
     if (lpitem->fState & MF_HILITE)
     {
-        if (flat_menu)
+        if (menuBar && themed)
         {
-            MENU_FillHilite(hdc, &rect, IntGetSysColorBrush(COLOR_MENUHILIGHT), menuBar, bkgnd, Height);
+            FillRect(hdc, &rect, IntGetSysColorBrush(bkgnd));
+            if (!(lpitem->fState & MF_GRAYED))
+            {
+                MENU_DrawThemeBox(hdc, &rect, IntGetSysColor(bkgnd),
+                                  (lpitem->fState & MF_MOUSESELECT) ? MENU_BOX_PUSHED : MENU_BOX_HOT);
+            }
+        }
+        else if (flat_menu)
+        {
+            RECTL_vInflateRect (&rect, -1, -1);
+            FillRect(hdc, &rect, IntGetSysColorBrush(COLOR_MENUHILIGHT));
+            RECTL_vInflateRect (&rect, 1, 1);
+            FrameRect(hdc, &rect, IntGetSysColorBrush(COLOR_HIGHLIGHT));
         }
         else
         {
@@ -2436,12 +2717,7 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
         }
     }
     else
-    {
-        if (flat_menu && !menuBar)
-            MENU_FillFlatPopupBack(hdc, &rect, Height);
-        else
-            FillRect( hdc, &rect, IntGetSysColorBrush(bkgnd) );
-    }
+        FillRect( hdc, &rect, IntGetSysColorBrush(bkgnd) );
 
     IntGdiSetBkMode( hdc, TRANSPARENT );
 
@@ -2472,8 +2748,8 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
         HPEN oldPen;
         RECT rc = rect;
 
-        rc.left += menuBar || !flat_menu ? 1 : MENU_Scale(MENU_POPUP_INSET * 2);
-        rc.right -= menuBar || !flat_menu ? 1 : MENU_Scale(MENU_POPUP_INSET * 2);
+        rc.left++;
+        rc.right--;
         rc.top = (rc.top + rc.bottom) / 2 - 1;
         if (flat_menu)
         {
@@ -2703,13 +2979,10 @@ static void FASTCALL MENU_DrawPopupMenu(PWND wnd, HDC hdc, PMENU menu )
 {
     HBRUSH hPrevBrush = 0, brush = IntGetSysColorBrush(COLOR_MENU);
     RECT rect;
-    BOOL flat_menu = FALSE;
 
     TRACE("DPM wnd=%p dc=%p menu=%p\n", wnd, hdc, menu);
 
     IntGetClientRect( wnd, &rect );
-
-    UserSystemParametersInfo(SPI_GETFLATMENU, 0, &flat_menu, 0);
 
     if (menu && menu->hbrBack) brush = menu->hbrBack;
     if((hPrevBrush = NtGdiSelectBrush( hdc, brush ))
@@ -2718,10 +2991,7 @@ static void FASTCALL MENU_DrawPopupMenu(PWND wnd, HDC hdc, PMENU menu )
         HPEN hPrevPen;
 
         /* FIXME: Maybe we don't have to fill the background manually */
-        if (flat_menu && !(menu && menu->hbrBack))
-            MENU_FillFlatPopupBack(hdc, &rect, rect.bottom - rect.top);
-        else
-            FillRect(hdc, &rect, brush);
+        FillRect(hdc, &rect, brush);
 
         hPrevPen = NtGdiSelectPen( hdc, NtGdiGetStockObject( NULL_PEN ) );
         if ( hPrevPen )
@@ -2829,7 +3099,9 @@ IntDrawMenuBarTemp(PWND pWnd, HDC hDC, LPRECT Rect, PMENU pMenu, HFONT Font)
   FillRect(hDC, Rect, IntGetSysColorBrush(flat_menu ? COLOR_MENUBAR : COLOR_MENU));
 
   NtGdiSelectPen(hDC, NtGdiGetStockObject(DC_PEN));
-  IntSetDCPenColor(hDC, IntGetSysColor(COLOR_3DFACE));
+  IntSetDCPenColor(hDC, MENU_Themed(pMenu) ?
+                        MENU_MixColor(IntGetSysColor(COLOR_MENUBAR), IntGetSysColor(COLOR_MENUTEXT), 14) :
+                        IntGetSysColor(COLOR_3DFACE));
   GreMoveTo(hDC, Rect->left, Rect->bottom - 1, NULL);
   NtGdiLineTo(hDC, Rect->right, Rect->bottom - 1);
 
@@ -3415,6 +3687,18 @@ static void FASTCALL MENU_HideSubPopups(PWND pWndOwner, PMENU Menu,
          if (!(Item->spSubMenu) ||
              !(Item->fState & MF_MOUSESELECT)) return;
          Item->fState &= ~MF_MOUSESELECT;
+         if (!(Menu->fFlags & MNF_POPUP) && (Item->fState & MF_HILITE) && MENU_Themed(Menu))
+         {
+             PWND pWndBar = ValidateHwndNoErr(Menu->hWnd);
+             HDC hdcBar = pWndBar ? UserGetDCEx(pWndBar, 0, DCX_CACHE | DCX_WINDOW) : NULL;
+
+             if (hdcBar)
+             {
+                 NtGdiSelectFont(hdcBar, ghMenuFont);
+                 MENU_DrawMenuItem(pWndBar, Menu, pWndOwner, hdcBar, Item, Menu->cyMenu, TRUE, ODA_DRAWENTIRE);
+                 UserReleaseDC(pWndBar, hdcBar, FALSE);
+             }
+         }
       }
       else
          return;
@@ -3512,14 +3796,14 @@ static PMENU FASTCALL MENU_ShowSubPopup(PWND WndOwner, PMENU Menu, BOOL SelectFi
   }
 
   /* correct item if modified as a reaction to WM_INITMENUPOPUP message */
-  if (!(Item->fState & MF_HILITE))
+  if (!(Item->fState & MF_HILITE) || (!(Menu->fFlags & MNF_POPUP) && MENU_Themed(Menu)))
   {
       if (Menu->fFlags & MNF_POPUP) Dc = UserGetDCEx(pWnd, NULL, DCX_USESTYLE);
       else Dc = UserGetDCEx(pWnd, 0, DCX_CACHE | DCX_WINDOW);
 
       NtGdiSelectFont(Dc, ghMenuFont);
 
-      Item->fState |= MF_HILITE;
+      Item->fState |= MF_HILITE | MF_MOUSESELECT;
       MENU_DrawMenuItem(pWnd, Menu, WndOwner, Dc, Item, Menu->cyMenu,
                        !(Menu->fFlags & MNF_POPUP), ODA_DRAWENTIRE);
 

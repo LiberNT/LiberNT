@@ -204,7 +204,7 @@ IntCompositionCornerRadius(_In_ PWND Wnd)
     BYTE Alpha;
     COLORREF Key;
     DWORD Flags = 0;
-    BOOL ClassicFrame, FlatMenu = FALSE;
+    BOOL ClassicFrame;
 
     if (Radius != 0 && Radius <= 64)
         return (ULONG)Radius;
@@ -228,10 +228,7 @@ IntCompositionCornerRadius(_In_ PWND Wnd)
             return ClassicFrame ? 0 : DWM_CORNER_RADIUS_SMALL_96 * Dpi / 96;
         default:
             if (Wnd->fnid == FNID_MENU)
-            {
-                UserSystemParametersInfo(SPI_GETFLATMENU, 0, &FlatMenu, 0);
-                return FlatMenu ? DWM_CORNER_RADIUS_SMALL_96 * Dpi / 96 : 0;
-            }
+                return 0;
             return (Wnd->style & WS_CAPTION) == WS_CAPTION && !ClassicFrame ?
                    DWM_CORNER_RADIUS_96 * Dpi / 96 : 0;
     }

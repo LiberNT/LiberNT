@@ -1211,11 +1211,11 @@ NC_DoNCPaint(PWND pWnd, HDC hDC, INT Flags)
       if (flat_menu)
       {
          COLORREF crMenu = IntGetSysColor(COLOR_MENU);
-         COLORREF crGray = IntGetSysColor(COLOR_GRAYTEXT);
+         COLORREF crText = IntGetSysColor(COLOR_MENUTEXT);
          HBRUSH hbrFrame = IntGdiCreateSolidBrush(
-            RGB((GetRValue(crMenu) + GetRValue(crGray)) / 2,
-                (GetGValue(crMenu) + GetGValue(crGray)) / 2,
-                (GetBValue(crMenu) + GetBValue(crGray)) / 2));
+            RGB(GetRValue(crMenu) + ((INT)GetRValue(crText) - (INT)GetRValue(crMenu)) * 95 / 255,
+                GetGValue(crMenu) + ((INT)GetGValue(crText) - (INT)GetGValue(crMenu)) * 95 / 255,
+                GetBValue(crMenu) + ((INT)GetBValue(crText) - (INT)GetBValue(crMenu)) * 95 / 255));
 
          FillRect(hDC, &CurrentRect, IntGetSysColorBrush(COLOR_MENU));
          if (hbrFrame)
