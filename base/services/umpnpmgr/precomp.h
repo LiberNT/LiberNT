@@ -88,6 +88,7 @@ BroadcastListenerEvent(
 extern HANDLE hUserToken;
 extern HANDLE hInstallEvent;
 extern HANDLE hNoPendingInstalls;
+extern HANDLE hBootInstallComplete;
 
 /* Device-install event list */
 extern HANDLE hDeviceInstallListMutex;

@@ -276,6 +276,8 @@ ServiceMain(DWORD argc, LPTSTR *argv)
                            &dwThreadId);
     if (hThread != NULL)
         CloseHandle(hThread);
+    else
+        SetEvent(hBootInstallComplete);
 
     UpdateServiceStatus(SERVICE_RUNNING, 0);
 
@@ -309,6 +311,17 @@ InitializePnPManager(VOID)
     {
         dwError = GetLastError();
         DPRINT1("Could not create the Pending-Install Event! (Error %lu)\n", dwError);
+        return dwError;
+    }
+
+    hBootInstallComplete = CreateEventW(NULL,
+                                        TRUE,
+                                        FALSE,
+                                        L"Global\\PnP_Boot_Install_Complete");
+    if (hBootInstallComplete == NULL)
+    {
+        dwError = GetLastError();
+        DPRINT1("Could not create the Boot-Install Event! (Error %lu)\n", dwError);
         return dwError;
     }
 

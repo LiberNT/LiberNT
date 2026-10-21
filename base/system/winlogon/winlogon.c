@@ -13,6 +13,7 @@
 #include "winlogon.h"
 
 #include <ndk/cmfuncs.h>
+#include <winsvc.h>
 
 /* GLOBALS ******************************************************************/
 
@@ -360,6 +361,63 @@ GinaLoadFailedWindowProc(
 }
 
 
+static
+BOOL
+IsPlugPlayServiceRunning(VOID)
+{
+    SC_HANDLE hSCManager;
+    SC_HANDLE hService;
+    SERVICE_STATUS ServiceStatus;
+    BOOL bRunning = FALSE;
+
+    hSCManager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+    if (hSCManager == NULL)
+        return FALSE;
+
+    hService = OpenServiceW(hSCManager, L"PlugPlay", SERVICE_QUERY_STATUS);
+    if (hService != NULL)
+    {
+        if (QueryServiceStatus(hService, &ServiceStatus))
+        {
+            bRunning = (ServiceStatus.dwCurrentState == SERVICE_RUNNING ||
+                        ServiceStatus.dwCurrentState == SERVICE_START_PENDING);
+        }
+        CloseServiceHandle(hService);
+    }
+
+    CloseServiceHandle(hSCManager);
+    return bRunning;
+}
+
+
+static
+DWORD
+WINAPI
+WaitForBootDeviceInstallThread(
+    IN LPVOID lpParameter)
+{
+    PWLSESSION Session = (PWLSESSION)lpParameter;
+    HANDLE hEvents[2];
+
+    hEvents[0] = CreateEventW(NULL, TRUE, FALSE, L"Global\\PnP_Boot_Install_Complete");
+    hEvents[1] = OpenEventW(SYNCHRONIZE, FALSE, L"SC_AutoStartComplete");
+    if (hEvents[0] != NULL && hEvents[1] != NULL &&
+        WaitForMultipleObjects(2, hEvents, FALSE, INFINITE) == WAIT_OBJECT_0 + 1 &&
+        IsPlugPlayServiceRunning())
+    {
+        WaitForSingleObject(hEvents[0], INFINITE);
+    }
+
+    if (hEvents[1] != NULL)
+        CloseHandle(hEvents[1]);
+    if (hEvents[0] != NULL)
+        CloseHandle(hEvents[0]);
+
+    PostMessageW(Session->SASWindow, WLX_WM_SAS, WLX_SAS_TYPE_CTRL_ALT_DEL, 0);
+    return 0;
+}
+
+
 int
 WINAPI
 WinMain(
@@ -518,7 +576,12 @@ WinMain(
     }
     else
     {
-        PostMessageW(WLSession->SASWindow, WLX_WM_SAS, WLX_SAS_TYPE_CTRL_ALT_DEL, 0);
+        HANDLE hThread = CreateThread(NULL, 0, WaitForBootDeviceInstallThread, WLSession, 0, NULL);
+
+        if (hThread != NULL)
+            CloseHandle(hThread);
+        else
+            PostMessageW(WLSession->SASWindow, WLX_WM_SAS, WLX_SAS_TYPE_CTRL_ALT_DEL, 0);
     }
 
     /* Tell kernel that CurrentControlSet is good (needed

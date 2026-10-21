@@ -29,9 +29,12 @@
 /* INCLUDES *****************************************************************/
 
 #include "precomp.h"
+#include <exfuncs.h>
 
 #define NDEBUG
 #include <debug.h>
+
+#define IDS_STATUS_INSTALL_DEV 3500
 
 
 /* GLOBALS ******************************************************************/
@@ -39,6 +42,7 @@
 HANDLE hUserToken = NULL;
 HANDLE hInstallEvent = NULL;
 HANDLE hNoPendingInstalls = NULL;
+HANDLE hBootInstallComplete = NULL;
 
 /* Device-install event list */
 HANDLE hDeviceInstallListMutex;
@@ -1154,6 +1158,105 @@ IsUISuppressionAllowed(VOID)
 
 
 /* Loop to install all queued devices installations */
+typedef struct _BOOT_INSTALL_STATUS
+{
+    PCWSTR DeviceList;
+    ULONG DeviceCount;
+    HANDLE hStop;
+    WCHAR Phase[256];
+} BOOT_INSTALL_STATUS, *PBOOT_INSTALL_STATUS;
+
+static VOID
+DisplayBootInstallStatus(
+    _In_ PBOOT_INSTALL_STATUS Status,
+    _In_ ULONG Completed)
+{
+    WCHAR Text[272];
+    UNICODE_STRING String;
+
+    _snwprintf(Text, ARRAYSIZE(Text) - 1, L"%s %lu%%\r\n", Status->Phase,
+               Completed >= Status->DeviceCount ? 100 : Completed * 100 / Status->DeviceCount);
+    Text[ARRAYSIZE(Text) - 1] = UNICODE_NULL;
+    RtlInitUnicodeString(&String, Text);
+    NtDisplayString(&String);
+}
+
+static DWORD
+WINAPI
+BootInstallStatusThread(LPVOID lpParameter)
+{
+    PBOOT_INSTALL_STATUS Status = lpParameter;
+    ULONG LastCompleted = (ULONG)-1;
+
+    do
+    {
+        ULONG Completed = 0;
+
+        for (PCWSTR Device = Status->DeviceList; *Device; Device += lstrlenW(Device) + 1)
+        {
+            if (GetDeviceInstallState(Device) != DeviceInstallRequired)
+                Completed++;
+        }
+        if (Completed != LastCompleted)
+        {
+            DisplayBootInstallStatus(Status, Completed);
+            LastCompleted = Completed;
+        }
+    } while (WaitForSingleObject(Status->hStop, 150) == WAIT_TIMEOUT);
+
+    return 0;
+}
+
+static HANDLE
+StartBootInstallStatus(
+    _Out_ PBOOT_INSTALL_STATUS Status,
+    _In_ PCWSTR DeviceList,
+    _In_ ULONG DeviceCount)
+{
+    HMODULE hSysSetup;
+    HANDLE hThread;
+
+    ZeroMemory(Status, sizeof(*Status));
+    if (SetupIsActive() || IsConsoleBoot())
+        return NULL;
+
+    Status->DeviceList = DeviceList;
+    Status->DeviceCount = DeviceCount;
+    hSysSetup = LoadLibraryExW(L"syssetup.dll", NULL, LOAD_LIBRARY_AS_DATAFILE);
+    if (hSysSetup != NULL)
+    {
+        LoadStringW(hSysSetup, IDS_STATUS_INSTALL_DEV, Status->Phase, ARRAYSIZE(Status->Phase));
+        FreeLibrary(hSysSetup);
+    }
+
+    Status->hStop = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (Status->hStop == NULL)
+        return NULL;
+
+    hThread = CreateThread(NULL, 0, BootInstallStatusThread, Status, 0, NULL);
+    if (hThread == NULL)
+    {
+        CloseHandle(Status->hStop);
+        Status->hStop = NULL;
+    }
+    return hThread;
+}
+
+static VOID
+StopBootInstallStatus(
+    _Inout_ PBOOT_INSTALL_STATUS Status,
+    _In_opt_ HANDLE hThread)
+{
+    if (hThread == NULL)
+        return;
+
+    SetEvent(Status->hStop);
+    WaitForSingleObject(hThread, INFINITE);
+    CloseHandle(hThread);
+    CloseHandle(Status->hStop);
+    DisplayBootInstallStatus(Status, Status->DeviceCount);
+}
+
 DWORD
 WINAPI
 DeviceInstallThread(LPVOID lpParameter)
@@ -1264,6 +1367,9 @@ DeviceInstallThread(LPVOID lpParameter)
 
     if (filteredList != NULL && filteredCount != 0)
     {
+        BOOT_INSTALL_STATUS BootStatus;
+        HANDLE hBootStatusThread = StartBootInstallStatus(&BootStatus, filteredList, filteredCount);
+
         /* Try the batch path first — one rundll32 spawn for the whole
          * filtered boot device list. Falls back to the legacy per-device
          * loop if the batch child fails to signal completion (e.g. an
@@ -1281,6 +1387,8 @@ DeviceInstallThread(LPVOID lpParameter)
                 InstallDevice(currentDev, FALSE);
             }
         }
+
+        StopBootInstallStatus(&BootStatus, hBootStatusThread);
     }
     else if (filteredList == NULL)
     {
@@ -1306,6 +1414,8 @@ Cleanup:
 
     // Step 2: start the wait-loop for newly added devices
 Step2:
+
+    SetEvent(hBootInstallComplete);
 
     DPRINT("Step 2: Starting the wait-loop\n");
 
