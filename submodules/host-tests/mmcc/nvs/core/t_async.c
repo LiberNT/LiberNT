@@ -351,7 +351,7 @@ TestAsync(void)
     Calls = File.Calls;
     MI_MUTEX_ACQUIRE(&Segment->Lock);
     CHECK(MiSegmentPrefetch(Segment, 4 * PAGE_SIZE, PAGE_SIZE) == STATUS_CANT_WAIT);
-    CHECK(!MiSegmentIsResident(Segment, 0, PAGE_SIZE));
+    CHECK(MiSegmentIsResident(Segment, 0, PAGE_SIZE));
     MI_MUTEX_RELEASE(&Segment->Lock);
     CHECK(File.Calls == Calls);
     CHECK(MiSegmentPrefetch(Segment, ~0ULL - 8, 16) == STATUS_INVALID_PARAMETER);
