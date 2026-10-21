@@ -15,6 +15,7 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 
 100 ICON "../../win32/shell32/res/icons/235.ico" // IDI_SHELL_MY_DOCUMENTS
 101 ICON "../../win32/shell32/res/icons/236.ico" // IDI_SHELL_MY_PICTURES
+102 ICON "res/documents.ico"
 
 IDR_MYDOCS REGISTRY "res/mydocs.rgs"
 

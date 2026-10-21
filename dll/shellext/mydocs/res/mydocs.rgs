@@ -7,7 +7,7 @@ HKCR
             val 'NeverShowExt' = s ''
             val 'NoOpen' = s 'Drag Files onto this icon to store them in My Documents'
             val EditFlags = d '0x01'
-            DefaultIcon = e '%%SystemRoot%%\system32\shell32.dll,-235'
+            DefaultIcon = e '%%SystemRoot%%\system32\mydocs.dll,-102'
             {
             }
             InprocServer32 = s '%MODULE%'
