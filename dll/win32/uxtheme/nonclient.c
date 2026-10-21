@@ -1331,7 +1331,7 @@ ThemeDrawCaption(PDRAW_CONTEXT pcontext, RECT* prcCurrent, DWORD htHot, DWORD ht
         DrawThemeBackground(pcontext->theme, pcontext->hDC, iPart, iState, &rcPart, NULL);
 
     rcContent = rcPart;
-    rcContent.top += pcontext->wi.cyWindowBorders;
+    rcContent.top += ThemeGetMaximizedTopOverhang(&pcontext->wi);
 
     /* Add a padding around the objects of the caption */
     InflateRect(&rcPart, -(int)pcontext->wi.cyWindowBorders-BUTTON_GAP_SIZE,
