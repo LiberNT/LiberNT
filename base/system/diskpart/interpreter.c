@@ -248,7 +248,8 @@ InterpretMain(VOID)
         ConResPuts(StdOut, IDS_APP_PROMPT);
 
         /* Get input from the user. */
-        fgetws(input_line, MAX_STRING_SIZE, stdin);
+        if (fgetws(input_line, MAX_STRING_SIZE, stdin) == NULL)
+            break;
 
         bQuote = FALSE;
         ptr = input_line;
