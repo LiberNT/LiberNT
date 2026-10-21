@@ -849,6 +849,9 @@ i8042MouResetIsr(
 			DeviceExtension->MouseResetState++;
 			return TRUE;
 		case 1027:
+			DeviceExtension->MouseResetState++;
+			return TRUE;
+		case 1028:
 			if (0x04 == Value)
 			{
 				DeviceExtension->MouseAttributes.NumberOfButtons = 5;
@@ -860,6 +863,7 @@ i8042MouResetIsr(
 			DeviceExtension->MouseResetState = ExpectingSetSamplingRateACK;
 			return TRUE;
 		case ExpectingSetSamplingRateACK:
+			DeviceExtension->MouseAttributes.SampleRate = (USHORT)PortDeviceExtension->Settings.SampleRate;
 			DeviceExtension->MouseHook.IsrWritePort(
 				DeviceExtension->MouseHook.CallContext,
 				(UCHAR)DeviceExtension->MouseAttributes.SampleRate);
@@ -869,7 +873,7 @@ i8042MouResetIsr(
 			if (MOUSE_NACK == Value)
 			{
 				DeviceExtension->MouseHook.IsrWritePort(DeviceExtension->MouseHook.CallContext, 0x3C);
-				DeviceExtension->MouseAttributes.SampleRate = (USHORT)PortDeviceExtension->Settings.SampleRate;
+				DeviceExtension->MouseAttributes.SampleRate = 60;
 				DeviceExtension->MouseResetState = 1040;
 				return TRUE;
 			}
