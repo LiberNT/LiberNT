@@ -3620,6 +3620,7 @@ IoCreateStreamFileObjectEx(IN PFILE_OBJECT FileObject OPTIONAL,
     if (DeviceObject->Vpb)
     {
         /* Reference it */
+        CreatedFileObject->Vpb = DeviceObject->Vpb;
          InterlockedIncrement((PLONG)&DeviceObject->Vpb->ReferenceCount);
     }
 
@@ -3715,6 +3716,7 @@ IoCreateStreamFileObjectLite(IN PFILE_OBJECT FileObject OPTIONAL,
     if (DeviceObject->Vpb)
     {
         /* Reference it */
+        CreatedFileObject->Vpb = DeviceObject->Vpb;
          InterlockedIncrement((PLONG)&DeviceObject->Vpb->ReferenceCount);
     }
 
