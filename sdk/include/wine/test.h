@@ -363,6 +363,7 @@ static int winetest_vok( int condition, const char *msg, va_list args )
                 if (winetest_color) winetest_printf( winetest_color_dark_red );
                 winetest_print_context( "Test succeeded inside todo block: " );
                 winetest_vprintf( msg, args );
+                if ((data->nocount_level & 2) == 0)
                 InterlockedIncrement( &winetest_todo_failures );
             }
             if (winetest_color) winetest_printf( winetest_color_reset );
@@ -383,9 +384,11 @@ static int winetest_vok( int condition, const char *msg, va_list args )
                     if (winetest_color) winetest_printf( winetest_color_reset );
                     winetest_print_unlock();
                 }
+                if ((data->nocount_level & 1) == 0)
                 InterlockedIncrement( &winetest_todo_successes );
             }
-            else InterlockedIncrement( &winetest_muted_todo_successes );
+            else if ((data->nocount_level & 1) == 0)
+                InterlockedIncrement( &winetest_muted_todo_successes );
             return 1;
         }
     }
@@ -406,6 +409,7 @@ static int winetest_vok( int condition, const char *msg, va_list args )
                 if (winetest_color) winetest_printf( winetest_color_bright_red );
                 winetest_print_context( "Test failed: " );
                 winetest_vprintf( msg, args );
+                if ((data->nocount_level & 2) == 0)
                 InterlockedIncrement( &winetest_failures );
             }
             if (winetest_color) winetest_printf( winetest_color_reset );
@@ -423,6 +427,7 @@ static int winetest_vok( int condition, const char *msg, va_list args )
                 if (winetest_color) winetest_printf( winetest_color_reset );
                 winetest_print_unlock();
             }
+            if ((data->nocount_level & 1) == 0)
             InterlockedIncrement( &winetest_successes );
             return 1;
         }
