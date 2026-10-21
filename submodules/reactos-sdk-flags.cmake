@@ -31,6 +31,8 @@ function(reactos_sdk_flags _prefix)
     set(_libraries "${_builtins}")
     if(_sdk_ARCH STREQUAL "arm64ec")
         list(APPEND _libraries "${_sdk_LIBDIR}/libchpe.a")
+    elseif(_sdk_ARCH STREQUAL "aarch64" AND EXISTS "${_sdk_LIBDIR}/libsetjmp.a")
+        list(APPEND _libraries "${_sdk_LIBDIR}/libsetjmp.a")
     endif()
     if(_sdk_CRT STREQUAL "full")
         list(APPEND _libraries

@@ -67,12 +67,9 @@ foreach(_target IN LISTS ARM64EC_RUNTIME_AUXILIARY_MODULES)
 endforeach()
 
 # The source-built ICD is an external-project output, not a MODULE target.
-# Package its EC counterpart with the EC OpenGL loader, never the native ICD.
-set(ARM64EC_RUNTIME_OPTIONAL_FILES)
 if(TARGET mesa_gallium)
     set(_arm64ec_mesa_file "${ARM64EC_BINARY_DIR}/dll/opengl/mesa_gallium/mesa-icd/mesa_gallium.dll")
     list(APPEND ARM64EC_RUNTIME_BUILD_MODULES mesa_gallium)
-    list(APPEND ARM64EC_RUNTIME_OPTIONAL_FILES "${_arm64ec_mesa_file}")
     list(APPEND ARM64EC_RUNTIME_VALIDATION_FILES "${_arm64ec_mesa_file}")
 endif()
 
@@ -233,10 +230,26 @@ if(_arm64ec_system_files)
     set_property(GLOBAL APPEND PROPERTY CI_SYSTEM_FILES ${_arm64ec_system_files})
 endif()
 
-if(ARM64EC_RUNTIME_OPTIONAL_FILES)
-    add_cd_file(TARGET fex_arm64ec_runtime FILE ${ARM64EC_RUNTIME_OPTIONAL_FILES}
-        DESTINATION reactos/system32 OPTIONAL FOR all)
-    set_property(GLOBAL APPEND PROPERTY CI_SYSTEM_OPTIONAL_FILES ${ARM64EC_RUNTIME_OPTIONAL_FILES})
+if(TARGET mesa_gallium)
+    set(_mesa_native_dir "${REACTOS_BINARY_DIR}/dll/opengl/mesa_gallium/mesa-source/cmake-build")
+    set(_mesa_ec_dir "${ARM64EC_BINARY_DIR}/dll/opengl/mesa_gallium/mesa-source/cmake-build")
+    set(_mesa_target "src/gallium/targets/wgl/mesa_gallium.dll")
+    set(_mesa_arm64x_file "${_mesa_native_dir}/arm64x/mesa_gallium.dll")
+    add_custom_command(
+        OUTPUT "${_mesa_arm64x_file}"
+        COMMAND "${ARM64X_PYTHON_EXECUTABLE}" "${REACTOS_SOURCE_DIR}/sdk/tools/arm64x_link.py"
+            --ninja "${CMAKE_MAKE_PROGRAM}"
+            --native-dir "${_mesa_native_dir}" --native-target "${_mesa_target}"
+            --ec-dir "${_mesa_ec_dir}" --ec-target "${_mesa_target}"
+            --output "${_mesa_arm64x_file}"
+        DEPENDS mesa_gallium_build "${_mesa_native_dir}/${_mesa_target}" "${_arm64ec_mesa_file}"
+            "${REACTOS_SOURCE_DIR}/sdk/tools/arm64x_link.py"
+        COMMENT "Linking ARM64X mesa_gallium.dll"
+        VERBATIM)
+    add_custom_target(arm64x_mesa_gallium DEPENDS "${_mesa_arm64x_file}")
+    add_dependencies(arm64x_mesa_gallium fex_arm64ec_runtime)
+    add_dependencies(mesa_gallium arm64x_mesa_gallium)
+    set_target_properties(mesa_gallium PROPERTIES ARM64X_FILE "${_mesa_arm64x_file}")
 endif()
 
 list(LENGTH _arm64x_files _arm64x_count)

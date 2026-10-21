@@ -10,6 +10,11 @@ import subprocess
 import sys
 
 INPUT_SUFFIXES = (".obj", ".o", ".a", ".lib", ".res", ".def")
+VALUE_OPTIONS = {"-o", "-m", "-e", "-entry", "-L", "--out-implib", "--image-base", "--subsystem", "--stack", "--heap",
+                 "--major-image-version", "--minor-image-version", "--major-os-version", "--minor-os-version",
+                 "--major-subsystem-version", "--minor-subsystem-version", "--file-alignment", "--section-alignment",
+                 "--pdb", "--native-def", "--version-script", "--exclude-symbols", "--require-defined", "--defsym",
+                 "--wrap", "-u", "--undefined", "-Map"}
 
 
 def final_command(ninja, build_dir, target):
@@ -46,16 +51,50 @@ def resource_only(path):
     return bool(names) and all(name.startswith(b".rsrc") for name in names)
 
 
+def find_library(name, search_dirs):
+    for directory in search_dirs:
+        for candidate in ("lib%s.dll.a" % name, "%s.dll.a" % name, "lib%s.a" % name, "%s.lib" % name, "lib%s.lib" % name):
+            path = os.path.join(directory, candidate)
+            if os.path.isfile(path):
+                return path
+    sys.exit("arm64x_link: cannot find native library -l%s" % name)
+
+
 def native_inputs(build_dir, argv):
+    search_dirs = [os.path.join(build_dir, argument[2:]) for argument in argv if argument.startswith("-L") and len(argument) > 2]
+    search_dirs += [os.path.join(build_dir, argv[i + 1]) for i, argument in enumerate(argv[:-1]) if argument == "-L"]
     inputs = []
+    skip = False
+    whole_archive = False
     for argument in argv[1:]:
+        if skip:
+            skip = False
+            continue
+        if argument in VALUE_OPTIONS:
+            skip = True
+            continue
+        if argument in ("--whole-archive", "--no-whole-archive"):
+            whole_archive = argument == "--whole-archive"
+            inputs.append(argument)
+            continue
+        if argument.startswith("-l") and len(argument) > 2:
+            inputs.append(find_library(argument[2:], search_dirs))
+            continue
         if argument.startswith("-") or not argument.endswith(INPUT_SUFFIXES):
             continue
         path = os.path.normpath(os.path.join(build_dir, argument))
         if not os.path.isfile(path) or path.endswith(".res") or resource_only(path):
             continue
         inputs.append("--native-def=" + path if path.endswith(".def") else path)
+    if whole_archive:
+        inputs.append("--no-whole-archive")
     return inputs
+
+
+def drop_option(argv, option):
+    while option in argv:
+        index = argv.index(option)
+        del argv[index:index + 2]
 
 
 def image_base_object(clang, output):
@@ -88,6 +127,7 @@ def main():
     argv = linker_argv(ec_dir, ec_link)
     argv[argv.index("-m") + 1] = "arm64xpe"
     argv[argv.index("-o") + 1] = output
+    drop_option(argv, "--out-implib")
     extra = native_inputs(native_dir, linker_argv(native_dir, native_link))
     extra.append(image_base_object(shlex.split(native_link)[0], output))
     position = argv.index("--start-group") + 1 if "--start-group" in argv else argv.index("-o") + 2

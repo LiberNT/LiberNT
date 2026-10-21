@@ -103,6 +103,8 @@ set(_mesa_sdk_targets
     libadvapi32 libole32 liboleaut32 libshell32 uuid libpsapi libws2_32 libversion libsetupapi libkernelbase libsynchronization libwinspool libcomdlg32)
 if(ARM64EC_RUNTIME)
     list(APPEND _mesa_sdk_targets chpe)
+elseif(ARCH STREQUAL "arm64")
+    list(APPEND _mesa_sdk_targets setjmp)
 endif()
 export_sdk_libraries(mesa_reactos_sdk_libs "${MESA_SDK_LIBDIR}"
     LIBRARIES ${_mesa_sdk_targets}
@@ -186,13 +188,14 @@ endif()
 function(mesa_stage_dll _target _dll _stage_dir)
     get_filename_component(_name "${_dll}" NAME)
     set(_stage "${_stage_dir}/${_name}")
+    set(_source "$<IF:$<BOOL:$<TARGET_PROPERTY:${_target},ARM64X_FILE>>,$<TARGET_PROPERTY:${_target},ARM64X_FILE>,${_dll}>")
     add_custom_command(
         OUTPUT "${_stage}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${_stage_dir}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_dll}" "${_stage}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_source}" "${_stage}"
         COMMAND ${CMAKE_STRIP} --strip-debug "${_stage}"
         COMMAND native-symz "${_stage}"
-        DEPENDS mesa_gallium_build "${_dll}"
+        DEPENDS mesa_gallium_build "${_source}"
         VERBATIM)
     add_custom_target(${_target} DEPENDS "${_stage}")
     add_cd_file(FILE "${_stage}" TARGET ${_target} DESTINATION reactos/system32 OPTIONAL FOR all)
