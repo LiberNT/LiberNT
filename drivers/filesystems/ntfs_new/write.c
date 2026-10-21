@@ -417,7 +417,7 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
      */
     if (PagingIo && Length != 0)
     {
-        BounceBuffer = ExAllocatePoolUninitialized(NonPagedPool, Length, TAG_NTFS);
+        BounceBuffer = ExAllocatePoolUninitialized(NonPagedPoolNx, Length, TAG_NTFS);
         if (BounceBuffer)
         {
             RtlCopyMemory(BounceBuffer, Buffer, Length);

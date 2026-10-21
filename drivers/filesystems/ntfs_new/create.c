@@ -49,7 +49,7 @@ NtfsReturnCreateReparse(
 
     ReparseData =
         (PReparsePointEx)ExAllocatePoolWithTag(
-            NonPagedPool,
+            NonPagedPoolNx,
             BufferLength,
             TAG_NTFS);
     if (!ReparseData)
@@ -1173,7 +1173,7 @@ NtfsReferenceStreamContext(
         }
     }
 
-    StreamCB = (PStreamContextBlock)ExAllocatePoolZero(NonPagedPool,
+    StreamCB = (PStreamContextBlock)ExAllocatePoolZero(NonPagedPoolNx,
                                                         sizeof(*StreamCB),
                                                         TAG_NTFS);
     if (!StreamCB)
@@ -1542,7 +1542,7 @@ NtfsRegisterOpenLink(
         }
         else
         {
-            Lcb = ExAllocatePoolZero(NonPagedPool, sizeof(*Lcb), TAG_NTFS);
+            Lcb = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Lcb), TAG_NTFS);
             if (!Lcb)
             {
                 Status = STATUS_INSUFFICIENT_RESOURCES;
@@ -1821,7 +1821,7 @@ NtfsOpenVolume(
     if (!NT_SUCCESS(Status))
         goto Complete;
 
-    FileCB = (PFileContextBlock)ExAllocatePoolZero(NonPagedPool,
+    FileCB = (PFileContextBlock)ExAllocatePoolZero(NonPagedPoolNx,
                                                    sizeof(*FileCB),
                                                    TAG_NTFS);
     if (!FileCB)
@@ -2735,7 +2735,7 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
     else
     {
-        FileCB = (PFileContextBlock)ExAllocatePoolZero(NonPagedPool,
+        FileCB = (PFileContextBlock)ExAllocatePoolZero(NonPagedPoolNx,
                                                        sizeof(FileContextBlock),
                                                        TAG_NTFS);
         if (!FileCB)

@@ -630,7 +630,7 @@ NtfsRecordNameMissing(_In_ PVolumeContextBlock VolCB,
 
     Length = NtfsMissingNameLength(Name, Length);
     Missing = (PNtfsMissingName)ExAllocatePoolUninitialized(
-        NonPagedPool,
+        NonPagedPoolNx,
         FIELD_OFFSET(NtfsMissingName, Name) + Length * sizeof(WCHAR),
         TAG_NTFS);
     if (!Missing)
@@ -889,7 +889,7 @@ NtfsCacheRecord(_In_ PVolumeContextBlock VolCB,
     }
 
     New = (PNtfsCachedRecord)ExAllocatePoolUninitialized(
-        NonPagedPool,
+        NonPagedPoolNx,
         FIELD_OFFSET(NtfsCachedRecord, Name) + Length * sizeof(WCHAR),
         TAG_NTFS);
     if (!New)

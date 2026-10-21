@@ -1606,7 +1606,7 @@ NtfsExtendVolume(
         return STATUS_INVALID_PARAMETER;
     NewSectors--;
 
-    Workspace = ExAllocatePoolWithTag(NonPagedPool, EXPAND_WORKSPACE_BYTES, TAG_NTFS);
+    Workspace = ExAllocatePoolWithTag(NonPagedPoolNx, EXPAND_WORKSPACE_BYTES, TAG_NTFS);
     if (!Workspace)
         return STATUS_INSUFFICIENT_RESOURCES;
 
@@ -1820,7 +1820,7 @@ NtfsShrinkVolume(
             if (!NT_SUCCESS(Status))
                 break;
 
-            Workspace = ExAllocatePoolWithTag(NonPagedPool, EXPAND_WORKSPACE_BYTES, TAG_NTFS);
+            Workspace = ExAllocatePoolWithTag(NonPagedPoolNx, EXPAND_WORKSPACE_BYTES, TAG_NTFS);
             if (!Workspace)
             {
                 Status = STATUS_INSUFFICIENT_RESOURCES;

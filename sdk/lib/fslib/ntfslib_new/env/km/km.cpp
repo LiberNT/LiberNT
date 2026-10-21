@@ -21,6 +21,8 @@ extern "C" {
 void*
 NtfsAllocatePoolWithTag(POOL_TYPE PoolType, size_t Size, ULONG Tag)
 {
+    if (PoolType == NonPagedPool)
+        PoolType = NonPagedPoolNx;
     return ExAllocatePoolWithTag(PoolType, Size, Tag);
 }
 
@@ -317,7 +319,7 @@ NtfsCacheWriteBackOne(_In_ PDEVICE_OBJECT Owner,
     PDEVICE_OBJECT Target = NULL;
     ULONGLONG Generation = 0;
 
-    Staged = (PUCHAR)ExAllocatePoolUninitialized(NonPagedPool,
+    Staged = (PUCHAR)ExAllocatePoolUninitialized(NonPagedPoolNx,
                                                 NTFS_CACHE_BLOCK_SIZE, 'CftN');
     if (!Staged)
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -586,7 +588,7 @@ NtfsCacheInstall(_In_ PDEVICE_OBJECT Owner,
     }
     if (!Slot->Data)
     {
-        Slot->Data = (PUCHAR)ExAllocatePoolUninitialized(NonPagedPool,
+        Slot->Data = (PUCHAR)ExAllocatePoolUninitialized(NonPagedPoolNx,
                                                          NTFS_CACHE_BLOCK_SIZE,
                                                          'CftN');
         if (!Slot->Data)
@@ -932,7 +934,7 @@ NtfsReadVolumeContext(_In_opt_ void* Context,
             if (!NtfsCacheCopyOut(DeviceObject, Block, BlockOffset, Chunk, Out))
             {
                 PUCHAR BlockData = (PUCHAR)ExAllocatePoolUninitialized(
-                    NonPagedPool, NTFS_CACHE_BLOCK_SIZE, 'CftN');
+                    NonPagedPoolNx, NTFS_CACHE_BLOCK_SIZE, 'CftN');
 
                 if (!BlockData)
                     break;
@@ -1094,7 +1096,7 @@ NtfsWriteVolumeContext(_In_opt_ void* Context,
             if (!Absorbed)
             {
                 PUCHAR Staged = (PUCHAR)ExAllocatePoolUninitialized(
-                    NonPagedPool, NTFS_CACHE_BLOCK_SIZE, 'CftN');
+                    NonPagedPoolNx, NTFS_CACHE_BLOCK_SIZE, 'CftN');
 
                 if (Staged)
                 {

@@ -174,7 +174,7 @@ NtfsForwardVolumeIo(
     }
 
     IoContext = (PNTFS_VOLUME_IO_CONTEXT)
-        ExAllocatePoolZero(NonPagedPool,
+        ExAllocatePoolZero(NonPagedPoolNx,
                            sizeof(*IoContext),
                            TAG_NTFS);
     if (!IoContext)

@@ -590,7 +590,7 @@ NtfsFsdRead(_In_ PDEVICE_OBJECT VolumeDeviceObject,
          * memory and copy it across.
          */
         PVOID Bounce = PagingIo
-            ? ExAllocatePoolUninitialized(NonPagedPool, RequestedLength, TAG_NTFS)
+            ? ExAllocatePoolUninitialized(NonPagedPoolNx, RequestedLength, TAG_NTFS)
             : NULL;
 
         // Copy data from $DATA into file buffer.
