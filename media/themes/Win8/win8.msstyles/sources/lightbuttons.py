@@ -138,8 +138,8 @@ def convert_alpha(bmp, cells):
                 out = (0, 0, 0, 0)
             elif reds[cell]:
                 out = px[x, max(y, 1)]
-            elif (x, y) in body:
-                out = (255 - p[0], 255 - p[1], 255 - p[2], 255)
+            elif q in glyph and q[1] == y and p != faces[y]:
+                out = p
             elif q in glyph or q[1] != y:
                 out = lift(faces[q[1]], level)
             else:
