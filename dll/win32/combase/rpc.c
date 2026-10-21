@@ -389,6 +389,16 @@ static HRESULT rpcss_get_class_object(REFCLSID rclsid, PMInterfacePointer *objre
     RPCSS_CALL_END
 }
 
+#ifdef __REACTOS__
+static HRESULT create_local_service(REFCLSID rclsid)
+{
+    TRACE("Attempting to start Local service for %s\n", debugstr_guid(rclsid));
+
+    RPCSS_CALL_START
+    hr = irpcss_start_local_service(get_irpcss_handle(), rclsid);
+    RPCSS_CALL_END
+}
+#else
 static DWORD start_local_service(const WCHAR *name, DWORD num, LPCWSTR *params)
 {
     SC_HANDLE handle, hsvc;
@@ -431,11 +441,7 @@ static DWORD start_local_service(const WCHAR *name, DWORD num, LPCWSTR *params)
 static HRESULT create_local_service(REFCLSID rclsid)
 {
     HRESULT hr;
-#ifdef __REACTOS__
-    WCHAR buf[257];
-#else
     WCHAR buf[CHARS_IN_GUID];
-#endif
     HKEY hkey;
     LONG r;
     DWORD type, sz;
@@ -462,15 +468,6 @@ static HRESULT create_local_service(REFCLSID rclsid)
          *        REG_MULTI_SZ here, but it's a REG_SZ for the services
          *        that I'm interested in for the moment.
          */
-#ifdef __REACTOS__
-        r = RegQueryValueExW(hkey, L"ServiceParameters", NULL, &type, NULL, &sz);
-        if (r == ERROR_SUCCESS && type == REG_SZ && sz)
-        {
-            args[0] = calloc(1, sz);
-            num_args++;
-            RegQueryValueExW(hkey, L"ServiceParameters", NULL, &type, (LPBYTE)args[0], &sz);
-        }
-#else
         r = RegQueryValueExW(hkey, L"ServiceParams", NULL, &type, NULL, &sz);
         if (r == ERROR_SUCCESS && type == REG_SZ && sz)
         {
@@ -478,7 +475,6 @@ static HRESULT create_local_service(REFCLSID rclsid)
             num_args++;
             RegQueryValueExW(hkey, L"ServiceParams", NULL, &type, (LPBYTE)args[0], &sz);
         }
-#endif
         r = start_local_service(buf, num_args, (LPCWSTR *)args);
         if (r != ERROR_SUCCESS)
             hr = REGDB_E_CLASSNOTREG; /* FIXME: check retval */
@@ -493,6 +489,7 @@ static HRESULT create_local_service(REFCLSID rclsid)
 
     return hr;
 }
+#endif
 
 static HRESULT create_server(REFCLSID rclsid, HANDLE *process)
 {

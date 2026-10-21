@@ -148,6 +148,94 @@ HRESULT __cdecl irpcss_get_thread_seq_id(handle_t h, DWORD *id)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static HKEY open_appid_key(const GUID *clsid, REGSAM view)
+{
+    WCHAR appid[39], path[MAX_PATH];
+    DWORD type, size = sizeof(appid);
+    HKEY key, result = NULL;
+
+    swprintf(path, ARRAY_SIZE(path),
+             L"Software\\Classes\\CLSID\\{%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
+             clsid->Data1, clsid->Data2, clsid->Data3, clsid->Data4[0], clsid->Data4[1], clsid->Data4[2],
+             clsid->Data4[3], clsid->Data4[4], clsid->Data4[5], clsid->Data4[6], clsid->Data4[7]);
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, path, 0, KEY_READ | view, &key))
+        return NULL;
+    if (!RegQueryValueExW(key, L"AppID", NULL, &type, (BYTE *)appid, &size) && type == REG_SZ)
+    {
+        appid[ARRAY_SIZE(appid) - 1] = 0;
+        swprintf(path, ARRAY_SIZE(path), L"Software\\Classes\\AppID\\%s", appid);
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, path, 0, KEY_READ | view, &result))
+            result = NULL;
+    }
+    RegCloseKey(key);
+    return result;
+}
+
+HRESULT __cdecl irpcss_start_local_service(handle_t h, const GUID *clsid)
+{
+    static const REGSAM views[] = { 0, KEY_WOW64_32KEY };
+    WCHAR service[257], *params = NULL;
+    SC_HANDLE manager, handle;
+    DWORD type, size, error = ERROR_SUCCESS, i;
+    HKEY key = NULL;
+
+    for (i = 0; i < ARRAY_SIZE(views) && !key; i++)
+    {
+        if (!(key = open_appid_key(clsid, views[i])))
+            continue;
+        size = sizeof(service) - sizeof(WCHAR);
+        if (RegQueryValueExW(key, L"LocalService", NULL, &type, (BYTE *)service, &size) || type != REG_SZ)
+        {
+            RegCloseKey(key);
+            key = NULL;
+        }
+    }
+    if (!key)
+        return REGDB_E_CLASSNOTREG;
+    service[size / sizeof(WCHAR)] = 0;
+
+    if (!RegQueryValueExW(key, L"ServiceParameters", NULL, &type, NULL, &size) && type == REG_SZ && size &&
+        (params = calloc(1, size + sizeof(WCHAR))))
+    {
+        if (RegQueryValueExW(key, L"ServiceParameters", NULL, &type, (BYTE *)params, &size) || !params[0])
+        {
+            free(params);
+            params = NULL;
+        }
+    }
+    RegCloseKey(key);
+
+    TRACE("starting service %s for %s\n", debugstr_w(service), debugstr_guid(clsid));
+
+    if ((manager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT)))
+    {
+        if ((handle = OpenServiceW(manager, service, SERVICE_START)))
+        {
+            if (!StartServiceW(handle, params ? 1 : 0, params ? (const WCHAR **)&params : NULL))
+                error = GetLastError();
+            CloseServiceHandle(handle);
+        }
+        else
+        {
+            error = GetLastError();
+        }
+        CloseServiceHandle(manager);
+    }
+    else
+    {
+        error = GetLastError();
+    }
+    free(params);
+
+    if (error == ERROR_SERVICE_ALREADY_RUNNING)
+        error = ERROR_SUCCESS;
+    if (error)
+        WARN("service %s for %s failed to start, error %lu\n", debugstr_w(service), debugstr_guid(clsid), error);
+    return HRESULT_FROM_WIN32(error);
+}
+#endif
+
 static RPC_STATUS RPCSS_Initialize(void)
 {
     static unsigned short irot_protseq[] = IROT_PROTSEQ;
