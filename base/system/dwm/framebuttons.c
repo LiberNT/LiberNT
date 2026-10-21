@@ -49,7 +49,8 @@ DwmFrameKey(const DWM_WIN *Window)
     if (Window->BackdropType >= DWM_BACKDROP_MAIN &&
         Window->BackdropType <= DWM_BACKDROP_TABBED &&
         Window->BackdropRegion != 0)
-        return DwmFrameRgb(Active ? Window->BackdropColor : Window->BackdropColorization);
+        return DwmFrameRgb(Active && !Window->ContentBackdrop ? Window->BackdropColor :
+                                                                Window->BackdropColorization);
     return DwmFrameRgb(GetSysColor(Active ? COLOR_ACTIVECAPTION : COLOR_INACTIVECAPTION));
 }
 

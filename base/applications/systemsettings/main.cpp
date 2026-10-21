@@ -16,6 +16,7 @@ extern "C"
 }
 #include <wlanapi.h>
 #include <secext.h>
+#include <reactos/dwmsettings.h>
 #include <algorithm>
 
 using namespace ShellFrame;
@@ -260,8 +261,6 @@ public:
 
 protected:
     int CaptionHeight() const override { return m_Theme.Scale(48); }
-    int GlassWidth() const override { return PanelLeft() + PanelRadius(); }
-    int GlassTop() const override { return CaptionHeight() + PanelRadius(); }
 
     BOOL IsCaptionClient(POINT pt) override
     {
@@ -306,6 +305,7 @@ protected:
     {
         LOGFONTW lf;
 
+        ApplyMaterial();
         if (m_SearchFont)
             DeleteObject(m_SearchFont);
         m_SearchFont = NULL;
@@ -314,12 +314,85 @@ protected:
             GetObjectW(m_Theme.Font(TextStyle::Body), sizeof(lf), &lf);
             m_SearchFont = CreateFontIndirectW(&lf);
             SendMessageW(m_Search, WM_SETFONT, (WPARAM)m_SearchFont, TRUE);
+            SetWindowTheme(m_Search, LightColumn() ? L"ContentLight" : NULL, NULL);
         }
         ApplyControlTheme(m_ScrollBar);
         if (m_Crumbs)
             SendMessageW(m_Crumbs, WM_SETFONT, (WPARAM)m_Theme.Font(TextStyle::Title), TRUE);
         if (m_NavTree)
+        {
+            std::vector<PageId> pages = Categories();
+            std::vector<LPCWSTR> icons;
+            HIMAGELIST old;
+
+            for (PageId page : pages)
+                icons.push_back(FindPage(page)->Icon);
+            old = m_NavImages;
+            m_NavImages = GlyphList(icons.data(), icons.size(), m_Theme.Scale(18), ColumnColor(GlassTone::Text));
+            SendMessageW(m_NavTree, TVM_SETIMAGELIST, TVSIL_NORMAL, (LPARAM)m_NavImages);
+            if (old)
+                ImageList_Destroy(old);
+            SendMessageW(m_NavTree, TVM_SETBKCOLOR, 0, ColumnColor(GlassTone::Clear));
+            SendMessageW(m_NavTree, TVM_SETTEXTCOLOR, 0, ColumnColor(GlassTone::Text));
+            SetWindowTheme(m_NavTree, LightColumn() ? L"ContentLight" : NULL, NULL);
             SendMessageW(m_NavTree, WM_SETFONT, (WPARAM)m_Theme.Font(TextStyle::Body), TRUE);
+        }
+    }
+
+    void ApplyMaterial()
+    {
+        INT opacity;
+
+        m_ColumnMaterial = IsAppThemed() && !m_Theme.IsHighContrast() &&
+                           DwmSettingsLoadShellMaterial(DwmSettingsReadColorScheme(), &m_ColumnKey, &opacity) &&
+                           DwmSettingsSetContentBackdrop(m_hwnd, m_ColumnKey, opacity);
+        if (!m_ColumnMaterial)
+            DwmSettingsClearContentBackdrop(m_hwnd);
+        m_ColumnDark = !m_ColumnMaterial ||
+                       GetRValue(m_ColumnKey) * 299 + GetGValue(m_ColumnKey) * 587 + GetBValue(m_ColumnKey) * 114 <
+                       128000;
+        for (int i = 0; i < (int)TextStyle::Count; i++)
+        {
+            LOGFONTW lf;
+
+            if (m_GlassFonts[i])
+                DeleteObject(m_GlassFonts[i]);
+            m_GlassFonts[i] = NULL;
+            if (GetObjectW(m_Theme.Font((TextStyle)i), sizeof(lf), &lf))
+            {
+                lf.lfQuality = ANTIALIASED_QUALITY;
+                m_GlassFonts[i] = CreateFontIndirectW(&lf);
+            }
+        }
+    }
+
+    BOOL LightColumn() const
+    {
+        return m_ColumnMaterial && !m_ColumnDark;
+    }
+
+    COLORREF ColumnColor(GlassTone tone) const
+    {
+        if (!m_ColumnMaterial)
+            return GlassColor(m_Theme, tone);
+        if (tone == GlassTone::Clear)
+            return m_ColumnKey;
+        if (m_ColumnDark)
+            return GlassColor(m_Theme, tone);
+        switch (tone)
+        {
+            case GlassTone::TextSecondary:
+                return RGB(0x5D, 0x5D, 0x5D);
+            case GlassTone::TextDisabled:
+                return RGB(0xA0, 0xA0, 0xA0);
+            default:
+                return RGB(0x1B, 0x1B, 0x1B);
+        }
+    }
+
+    HFONT GlassFont(TextStyle style) const
+    {
+        return m_GlassFonts[(int)style] ? m_GlassFonts[(int)style] : m_Theme.Font(style);
     }
 
     bool LightControls() const
@@ -375,10 +448,11 @@ protected:
     void OnPaint(Canvas &canvas, const RECT &client) override
     {
         const Palette &c = m_Theme.Colors();
-        RECT glass = { 0, 0, GlassWidth(), client.bottom }, caption = { 0, 0, client.right, CaptionHeight() };
+        RECT column = { 0, CaptionHeight(), PanelLeft() + PanelRadius(), client.bottom };
+        RECT caption = { 0, 0, client.right, CaptionHeight() };
 
         canvas.Fill(client, c.Window);
-        canvas.Fill(glass, GlassColor(m_Theme, GlassTone::Clear));
+        canvas.Fill(column, ColumnColor(GlassTone::Clear));
         canvas.Fill(caption, GlassColor(m_Theme, GlassTone::Clear));
         {
             Gdiplus::GraphicsPath panel(Gdiplus::FillModeAlternate);
@@ -555,6 +629,12 @@ protected:
                 break;
             case WM_CTLCOLOREDIT:
             case WM_CTLCOLORLISTBOX:
+                if ((HWND)lParam == m_Search && LightColumn())
+                {
+                    SetTextColor((HDC)wParam, ColumnColor(GlassTone::Text));
+                    SetBkColor((HDC)wParam, RGB(255, 255, 255));
+                    return (LRESULT)GetStockObject(WHITE_BRUSH);
+                }
                 if (LightControls() && (HWND)lParam != m_Search)
                 {
                     SetTextColor((HDC)wParam, m_Theme.Colors().Text);
@@ -671,6 +751,12 @@ protected:
                 if (m_NavImages)
                     ImageList_Destroy(m_NavImages);
                 m_NavImages = NULL;
+                for (int i = 0; i < (int)TextStyle::Count; i++)
+                {
+                    if (m_GlassFonts[i])
+                        DeleteObject(m_GlassFonts[i]);
+                    m_GlassFonts[i] = NULL;
+                }
                 if (m_SmallIcon)
                     DestroyIcon(m_SmallIcon);
                 if (m_BigIcon)
@@ -1073,7 +1159,7 @@ private:
         title.top = 0;
         title.right = PanelLeft();
         title.bottom = CaptionHeight();
-        canvas.Text(Str(IDS_APP_TITLE).c_str(), title, m_Theme.Font(TextStyle::Caption),
+        canvas.Text(Str(IDS_APP_TITLE).c_str(), title, GlassFont(TextStyle::Caption),
                     IsActive() ? GlassColor(m_Theme, GlassTone::Text) : GlassColor(m_Theme, GlassTone::TextSecondary), DT_SINGLELINE | DT_VCENTER | DT_LEFT);
     }
 
@@ -1093,21 +1179,21 @@ private:
 
         canvas.Graphics().Flush(Gdiplus::FlushIntentionSync);
         if (m_HotAccount || TopLevel(m_Page) == PageId::Accounts)
-            FillRoundGlass(canvas.Dc(), tile, m_Theme.ScaleF(6.0f), GlassColor(m_Theme, GlassTone::Text),
+            FillRoundGlass(canvas.Dc(), tile, m_Theme.ScaleF(6.0f), ColumnColor(GlassTone::Text),
                            TopLevel(m_Page) == PageId::Accounts ? 26 : 13);
         SetRect(&avatar, tile.left + m_Theme.Scale(6), tile.top + m_Theme.Scale(6), tile.left + m_Theme.Scale(38),
                 tile.top + m_Theme.Scale(38));
-        FillRoundGlass(canvas.Dc(), avatar, m_Theme.ScaleF(16.0f), GlassColor(m_Theme, GlassTone::Text), 26);
-        CenterIcon(canvas, avatar, m_Theme.Scale(18), L"person_20_regular", GlassColor(m_Theme, GlassTone::Text));
+        FillRoundGlass(canvas.Dc(), avatar, m_Theme.ScaleF(16.0f), ColumnColor(GlassTone::Text), 26);
+        CenterIcon(canvas, avatar, m_Theme.Scale(18), L"person_20_regular", ColumnColor(GlassTone::Text));
         SetRect(&name, avatar.right + m_Theme.Scale(10), tile.top + m_Theme.Scale(4), tile.right - m_Theme.Scale(8),
                 tile.top + m_Theme.Scale(22));
-        canvas.Text(m_User, name, m_Theme.Font(TextStyle::BodyStrong), GlassColor(m_Theme, GlassTone::Text),
+        canvas.Text(m_User, name, GlassFont(TextStyle::BodyStrong), ColumnColor(GlassTone::Text),
                     DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
         kind = name;
         kind.top = name.bottom;
         kind.bottom = kind.top + m_Theme.Scale(18);
         canvas.Text(Str(m_Admin ? IDS_ACCOUNT_ADMIN_LOCAL : IDS_ACCOUNT_STANDARD_LOCAL).c_str(), kind,
-                    m_Theme.Font(TextStyle::Caption), GlassColor(m_Theme, GlassTone::TextSecondary), DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+                    GlassFont(TextStyle::Caption), ColumnColor(GlassTone::TextSecondary), DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     }
 
     void PaintHeader(Canvas &canvas)
@@ -1329,7 +1415,6 @@ private:
     void CreateChrome()
     {
         std::vector<PageId> pages = Categories();
-        std::vector<LPCWSTR> icons;
         std::wstring back = Str(IDS_BACK), forward = Str(IDS_FORWARD);
 
         m_NavButtons.Create(m_hwnd, m_Theme, IDC_BACK, IDC_FORWARD, back.c_str(), forward.c_str(),
@@ -1340,14 +1425,8 @@ private:
                                     (HMENU)IDC_NAVTREE, Instance, NULL);
         if (m_NavTree)
         {
-            for (PageId page : pages)
-                icons.push_back(FindPage(page)->Icon);
-            m_NavImages = GlyphList(icons.data(), icons.size(), m_Theme.Scale(18), GlassColor(m_Theme, GlassTone::Text));
             SendMessageW(m_NavTree, WM_SETFONT, (WPARAM)m_Theme.Font(TextStyle::Body), FALSE);
-            SendMessageW(m_NavTree, TVM_SETIMAGELIST, TVSIL_NORMAL, (LPARAM)m_NavImages);
             SendMessageW(m_NavTree, TVM_SETITEMHEIGHT, m_Theme.Scale(40), 0);
-            SendMessageW(m_NavTree, TVM_SETBKCOLOR, 0, GlassColor(m_Theme, GlassTone::Clear));
-            SendMessageW(m_NavTree, TVM_SETTEXTCOLOR, 0, GlassColor(m_Theme, GlassTone::Text));
             for (size_t i = 0; i < pages.size(); i++)
             {
                 TVINSERTSTRUCTW insert = { };
@@ -1428,7 +1507,13 @@ private:
         }
         if (box.left < PanelLeft() || box.top < CaptionHeight())
         {
-            glass = CreateSolidBrush(GlassColor(m_Theme, GlassTone::Clear));
+            RECT where = box;
+            HWND child = WindowFromDC(hdc);
+
+            if (child && child != m_hwnd)
+                MapWindowPoints(child, m_hwnd, (POINT *)&where, 2);
+            glass = CreateSolidBrush(where.top < CaptionHeight() ? GlassColor(m_Theme, GlassTone::Clear) :
+                                                                  ColumnColor(GlassTone::Clear));
             FillRect(hdc, &box, glass);
             DeleteObject(glass);
             return TRUE;
@@ -1561,7 +1646,7 @@ private:
             WCHAR title[128] = L"";
             TVITEMW data = { TVIF_TEXT | TVIF_IMAGE | TVIF_STATE, (HTREEITEM)draw->nmcd.dwItemSpec, 0, TVIS_SELECTED, title,
                              _countof(title) };
-            HBRUSH glass = CreateSolidBrush(GlassColor(m_Theme, GlassTone::Clear));
+            HBRUSH glass = CreateSolidBrush(ColumnColor(GlassTone::Clear));
             int size = m_Theme.Scale(18);
             BOOL selected, hot = (draw->nmcd.uItemState & CDIS_HOT) != 0;
 
@@ -1574,13 +1659,13 @@ private:
             pill.bottom -= m_Theme.Scale(2);
             pill.right -= m_Theme.Scale(4);
             if (selected || hot)
-                FillRoundGlass(hdc, pill, m_Theme.ScaleF(6.0f), GlassColor(m_Theme, GlassTone::Text), selected ? 26 : 13);
+                FillRoundGlass(hdc, pill, m_Theme.ScaleF(6.0f), ColumnColor(GlassTone::Text), selected ? 26 : 13);
             ImageList_Draw(m_NavImages, data.iImage, hdc, pill.left + m_Theme.Scale(14), (rc.top + rc.bottom - size) / 2,
                            ILD_TRANSPARENT);
             label = pill;
             label.left += m_Theme.Scale(46);
             SetBkMode(hdc, TRANSPARENT);
-            DrawLabel(hdc, title, label, m_Theme.Font(TextStyle::Body), GlassColor(m_Theme, GlassTone::Text),
+            DrawLabel(hdc, title, label, GlassFont(TextStyle::Body), ColumnColor(GlassTone::Text),
                      DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS);
             if ((draw->nmcd.uItemState & CDIS_FOCUS) && GetFocus() == m_NavTree &&
                 !(SendMessageW(m_hwnd, WM_QUERYUISTATE, 0, 0) & UISF_HIDEFOCUS))
@@ -2127,6 +2212,10 @@ private:
     HICON m_BigIcon;
     WCHAR m_User[UNLEN + 1];
     bool m_IndexReady;
+    COLORREF m_ColumnKey = RGB(0, 0, 0);
+    BOOL m_ColumnMaterial = FALSE;
+    BOOL m_ColumnDark = TRUE;
+    HFONT m_GlassFonts[(int)TextStyle::Count] = { };
 };
 
 static void
