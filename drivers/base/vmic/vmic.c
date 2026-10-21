@@ -47,9 +47,16 @@
 #define TIMESYNC_FLAG_SYNC    0x01
 #define TIMESYNC_FLAG_SAMPLE  0x02
 
+#define VSS_OP_CREATE           0
 #define VSS_OP_DELETE           1
+#define VSS_OP_CHECK_HOT_BACKUP 2
+#define VSS_OP_GET_DM_INFO      3
 #define VSS_OP_BACKUP_COMPLETE  4
+#define VSS_OP_FREEZE           5
 #define VSS_OP_THAW             6
+#define VSS_HOT_BACKUP_NO_AUTO_RECOVERY 0x00000005
+#define VMIC_MAX_FROZEN_VOLUMES 32
+#define VMIC_FREEZE_WAIT_SECONDS 15
 
 #define KVP_OP_GET              0
 #define KVP_OP_SET              1
@@ -99,6 +106,22 @@ typedef struct _VMIC_VERSION
     USHORT Minor;
 } VMIC_VERSION;
 
+typedef struct _VMIC_FROZEN_VOLUME
+{
+    HANDLE Handle;
+    PFILE_OBJECT FileObject;
+    PKTHREAD Thread;
+    KEVENT HeldEvent;
+    NTSTATUS HoldStatus;
+} VMIC_FROZEN_VOLUME, *PVMIC_FROZEN_VOLUME;
+
+typedef enum _VMIC_VOLUME_KIND
+{
+    VmicVolumeSkip,
+    VmicVolumeFreeze,
+    VmicVolumeUnsupported
+} VMIC_VOLUME_KIND;
+
 typedef struct _VMIC_EXTENSION
 {
     PDEVICE_OBJECT Self;
@@ -112,6 +135,8 @@ typedef struct _VMIC_EXTENSION
     LONG WorkQueued;
     KEVENT WorkIdle;
     BOOLEAN TimeSynced;
+    PVMIC_FROZEN_VOLUME FrozenVolumes;
+    ULONG FrozenCount;
     UCHAR Packet[VMIC_PACKET_MAX];
 } VMIC_EXTENSION, *PVMIC_EXTENSION;
 
@@ -133,6 +158,8 @@ static const GUID VmicHeartbeatGuid =
     { 0x57164f39, 0x9115, 0x4e78, { 0xab, 0x55, 0x38, 0x2f, 0x3b, 0xd5, 0x42, 0x2d } };
 static const GUID VmicKvpGuid =
     { 0xa9a0f4e7, 0x5a45, 0x4d96, { 0xb8, 0x27, 0x8a, 0x84, 0x1e, 0x8c, 0x03, 0xe6 } };
+static const GUID VmicVolumeInterfaceGuid =
+    { 0x53f5630d, 0xb6bf, 0x11d0, { 0x94, 0xf2, 0x00, 0xa0, 0xc9, 0x1e, 0xfb, 0x8b } };
 static const GUID VmicVssGuid =
     { 0x35fa2e29, 0xea23, 0x4236, { 0x96, 0xae, 0x3a, 0x6e, 0xba, 0xcb, 0xa4, 0x40 } };
 
@@ -305,10 +332,260 @@ VmicNegotiate(
 
 static
 VOID
+NTAPI
+VmicHoldThread(
+    _In_ PVOID Context)
+{
+    PVMIC_FROZEN_VOLUME Volume = Context;
+    PKEVENT HeldEvent = &Volume->HeldEvent;
+    IO_STATUS_BLOCK IoStatusBlock;
+
+    Volume->HoldStatus = ZwDeviceIoControlFile(Volume->Handle, NULL, NULL, NULL, &IoStatusBlock,
+                                               IOCTL_VOLSNAP_FLUSH_AND_HOLD_WRITES,
+                                               &HeldEvent, sizeof(HeldEvent), NULL, 0);
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+static
+VMIC_VOLUME_KIND
+VmicOpenVolume(
+    _In_ PUNICODE_STRING Name,
+    _Out_ PHANDLE Handle)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    FILE_FS_DEVICE_INFORMATION DeviceInfo;
+    UCHAR Buffer[sizeof(FILE_FS_ATTRIBUTE_INFORMATION) + 32 * sizeof(WCHAR)];
+    PFILE_FS_ATTRIBUTE_INFORMATION AttributeInfo = (PFILE_FS_ATTRIBUTE_INFORMATION)Buffer;
+    UNICODE_STRING FileSystem;
+    UNICODE_STRING Ntfs = RTL_CONSTANT_STRING(L"NTFS");
+    UNICODE_STRING Fat = RTL_CONSTANT_STRING(L"FAT");
+    UNICODE_STRING Fat32 = RTL_CONSTANT_STRING(L"FAT32");
+    UNICODE_STRING Raw = RTL_CONSTANT_STRING(L"RAW");
+    NTSTATUS Status;
+
+    *Handle = NULL;
+    InitializeObjectAttributes(&ObjectAttributes, Name, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = ZwOpenFile(Handle, SYNCHRONIZE | FILE_READ_DATA | FILE_READ_ATTRIBUTES, &ObjectAttributes, &IoStatusBlock,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status))
+    {
+        *Handle = NULL;
+        return VmicVolumeSkip;
+    }
+
+    Status = ZwQueryVolumeInformationFile(*Handle, &IoStatusBlock, &DeviceInfo, sizeof(DeviceInfo),
+                                          FileFsDeviceInformation);
+    if (!NT_SUCCESS(Status) ||
+        DeviceInfo.DeviceType != FILE_DEVICE_DISK ||
+        (DeviceInfo.Characteristics & (FILE_REMOVABLE_MEDIA | FILE_READ_ONLY_DEVICE | FILE_REMOTE_DEVICE)))
+    {
+        ZwClose(*Handle);
+        *Handle = NULL;
+        return VmicVolumeSkip;
+    }
+
+    Status = ZwQueryVolumeInformationFile(*Handle, &IoStatusBlock, AttributeInfo, sizeof(Buffer),
+                                          FileFsAttributeInformation);
+    if (NT_SUCCESS(Status))
+    {
+        FileSystem.Buffer = AttributeInfo->FileSystemName;
+        FileSystem.Length = (USHORT)min(AttributeInfo->FileSystemNameLength, 32 * sizeof(WCHAR));
+        FileSystem.MaximumLength = FileSystem.Length;
+
+        if (RtlEqualUnicodeString(&FileSystem, &Ntfs, TRUE) ||
+            RtlEqualUnicodeString(&FileSystem, &Fat, TRUE) ||
+            RtlEqualUnicodeString(&FileSystem, &Fat32, TRUE))
+        {
+            return VmicVolumeFreeze;
+        }
+
+        if (RtlEqualUnicodeString(&FileSystem, &Raw, TRUE))
+        {
+            ZwClose(*Handle);
+            *Handle = NULL;
+            return VmicVolumeSkip;
+        }
+    }
+
+    DPRINT1("VMIC: cannot freeze the file system of %wZ\n", Name);
+    ZwClose(*Handle);
+    *Handle = NULL;
+    return VmicVolumeUnsupported;
+}
+
+static
+VOID
+VmicReleaseVolume(
+    _In_ PFILE_OBJECT FileObject)
+{
+    PDEVICE_OBJECT Device;
+    IO_STATUS_BLOCK IoStatusBlock;
+    KEVENT Event;
+    PIRP Irp;
+
+    Device = IoGetAttachedDeviceReference(FileObject->DeviceObject);
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_VOLSNAP_RELEASE_WRITES, Device, NULL, 0, NULL, 0,
+                                        FALSE, &Event, &IoStatusBlock);
+    if (Irp != NULL && IoCallDriver(Device, Irp) == STATUS_PENDING)
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+    ObDereferenceObject(Device);
+}
+
+static
+VOID
+VmicCloseFrozenVolume(
+    _Inout_ PVMIC_FROZEN_VOLUME Volume)
+{
+    if (Volume->Thread != NULL)
+        ObDereferenceObject(Volume->Thread);
+    if (Volume->FileObject != NULL)
+        ObDereferenceObject(Volume->FileObject);
+    if (Volume->Handle != NULL)
+        ZwClose(Volume->Handle);
+    RtlZeroMemory(Volume, sizeof(*Volume));
+}
+
+static
+BOOLEAN
+VmicThawVolumes(
+    _Inout_ PVMIC_EXTENSION Extension)
+{
+    PVMIC_FROZEN_VOLUME Volume;
+    BOOLEAN Success = TRUE;
+    ULONG Index;
+
+    for (Index = 0; Index < Extension->FrozenCount; Index++)
+    {
+        Volume = &Extension->FrozenVolumes[Index];
+        VmicReleaseVolume(Volume->FileObject);
+        KeWaitForSingleObject(Volume->Thread, Executive, KernelMode, FALSE, NULL);
+        if (!NT_SUCCESS(Volume->HoldStatus))
+        {
+            DPRINT1("VMIC: writes on frozen volume %lu were released early (0x%lx)\n", Index, Volume->HoldStatus);
+            Success = FALSE;
+        }
+        VmicCloseFrozenVolume(Volume);
+    }
+
+    if (Extension->FrozenVolumes != NULL)
+        ExFreePoolWithTag(Extension->FrozenVolumes, VMIC_TAG);
+    Extension->FrozenVolumes = NULL;
+    Extension->FrozenCount = 0;
+    return Success;
+}
+
+static
+BOOLEAN
+VmicFreezeVolumes(
+    _Inout_ PVMIC_EXTENSION Extension)
+{
+    PVMIC_FROZEN_VOLUME Volume;
+    VMIC_VOLUME_KIND Kind;
+    UNICODE_STRING Name;
+    KWAIT_BLOCK WaitBlocks[2];
+    PVOID Objects[2];
+    LARGE_INTEGER Timeout;
+    HANDLE Handle;
+    HANDLE ThreadHandle;
+    PWSTR Links = NULL;
+    PWSTR Link;
+    BOOLEAN Success = TRUE;
+    NTSTATUS Status;
+
+    VmicThawVolumes(Extension);
+
+    Extension->FrozenVolumes = ExAllocatePoolZero(NonPagedPool,
+                                                  sizeof(VMIC_FROZEN_VOLUME) * VMIC_MAX_FROZEN_VOLUMES,
+                                                  VMIC_TAG);
+    if (Extension->FrozenVolumes == NULL)
+        return FALSE;
+
+    if (!NT_SUCCESS(IoGetDeviceInterfaces(&VmicVolumeInterfaceGuid, NULL, 0, &Links)))
+        return FALSE;
+
+    for (Link = Links; *Link != UNICODE_NULL; Link += wcslen(Link) + 1)
+    {
+        RtlInitUnicodeString(&Name, Link);
+        Kind = VmicOpenVolume(&Name, &Handle);
+        if (Kind == VmicVolumeSkip)
+            continue;
+        if (Kind == VmicVolumeUnsupported || Extension->FrozenCount == VMIC_MAX_FROZEN_VOLUMES)
+        {
+            if (Handle != NULL)
+                ZwClose(Handle);
+            Success = FALSE;
+            break;
+        }
+
+        Volume = &Extension->FrozenVolumes[Extension->FrozenCount];
+        Volume->Handle = Handle;
+        Volume->HoldStatus = STATUS_PENDING;
+        KeInitializeEvent(&Volume->HeldEvent, NotificationEvent, FALSE);
+        Status = ObReferenceObjectByHandle(Handle, 0, *IoFileObjectType, KernelMode,
+                                           (PVOID *)&Volume->FileObject, NULL);
+        if (NT_SUCCESS(Status))
+        {
+            Status = PsCreateSystemThread(&ThreadHandle, THREAD_ALL_ACCESS, NULL, NULL, NULL,
+                                          VmicHoldThread, Volume);
+        }
+        if (NT_SUCCESS(Status))
+        {
+            Status = ObReferenceObjectByHandle(ThreadHandle, SYNCHRONIZE, *PsThreadType, KernelMode,
+                                               (PVOID *)&Volume->Thread, NULL);
+            ZwClose(ThreadHandle);
+        }
+        if (!NT_SUCCESS(Status))
+        {
+            VmicCloseFrozenVolume(Volume);
+            Success = FALSE;
+            break;
+        }
+
+        Extension->FrozenCount++;
+
+        Objects[0] = &Volume->HeldEvent;
+        Objects[1] = Volume->Thread;
+        Timeout.QuadPart = -(LONGLONG)VMIC_FREEZE_WAIT_SECONDS * 10000000;
+        Status = KeWaitForMultipleObjects(2, Objects, WaitAny, Executive, KernelMode, FALSE,
+                                          &Timeout, WaitBlocks);
+        if (Status == STATUS_WAIT_0)
+            continue;
+
+        if (Status == STATUS_WAIT_1)
+        {
+            DPRINT1("VMIC: %wZ cannot hold writes (0x%lx), not frozen\n", &Name, Volume->HoldStatus);
+            Extension->FrozenCount--;
+            VmicCloseFrozenVolume(Volume);
+            continue;
+        }
+
+        DPRINT1("VMIC: %wZ did not freeze in time\n", &Name);
+        Success = FALSE;
+        break;
+    }
+
+    ExFreePool(Links);
+
+    if (!Success)
+    {
+        VmicThawVolumes(Extension);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static
+VOID
 VmicHandleVss(
+    _Inout_ PVMIC_EXTENSION Extension,
     _Inout_updates_bytes_(Length) PUCHAR Message,
     _In_ ULONG Length)
 {
+    ULONG Status = IC_STATUS_SUCCESS;
+
     if (Length < IC_HEADER_SIZE + 8)
     {
         VmicPut32(Message, 12, IC_STATUS_FAIL);
@@ -317,16 +594,37 @@ VmicHandleVss(
 
     switch (Message[IC_HEADER_SIZE])
     {
+        case VSS_OP_CHECK_HOT_BACKUP:
+            if (Length >= IC_HEADER_SIZE + 12)
+                VmicPut32(Message, IC_HEADER_SIZE + 8, VSS_HOT_BACKUP_NO_AUTO_RECOVERY);
+            break;
+
+        case VSS_OP_GET_DM_INFO:
+            if (Length >= IC_HEADER_SIZE + 12)
+                VmicPut32(Message, IC_HEADER_SIZE + 8, 0);
+            break;
+
+        case VSS_OP_CREATE:
+        case VSS_OP_FREEZE:
+            if (!VmicFreezeVolumes(Extension))
+                Status = IC_STATUS_FAIL;
+            break;
+
         case VSS_OP_DELETE:
-        case VSS_OP_BACKUP_COMPLETE:
         case VSS_OP_THAW:
-            VmicPut32(Message, 12, IC_STATUS_SUCCESS);
+            if (!VmicThawVolumes(Extension))
+                Status = IC_STATUS_FAIL;
+            break;
+
+        case VSS_OP_BACKUP_COMPLETE:
             break;
 
         default:
-            VmicPut32(Message, 12, IC_STATUS_FAIL);
+            Status = IC_STATUS_FAIL;
             break;
     }
+
+    VmicPut32(Message, 12, Status);
 }
 
 static
@@ -944,7 +1242,7 @@ VmicProcessPacket(
 
             case IC_MSG_VSS:
                 if (Extension->Kind == VmicVss)
-                    VmicHandleVss(Message, Length);
+                    VmicHandleVss(Extension, Message, Length);
                 break;
 
             default:
@@ -1092,6 +1390,7 @@ VmicStop(
     VmbChannelClose(Extension->Channel);
     if (InterlockedCompareExchange(&Extension->WorkQueued, 0, 0) != 0)
         KeWaitForSingleObject(&Extension->WorkIdle, Executive, KernelMode, FALSE, NULL);
+    VmicThawVolumes(Extension);
 }
 
 static

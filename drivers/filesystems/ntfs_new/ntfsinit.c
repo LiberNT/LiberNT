@@ -172,6 +172,28 @@ NtfsFsdDeviceControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
 
     DeviceExt = (PVolumeContextBlock)(VolumeDeviceObject->DeviceExtension);
+
+    if (VolumeDeviceObject != NtfsDiskFileSystemDeviceObject &&
+        IoGetCurrentIrpStackLocation(Irp)->Parameters.DeviceIoControl.IoControlCode ==
+            IOCTL_VOLSNAP_FLUSH_AND_HOLD_WRITES)
+    {
+        NTSTATUS Status;
+
+        KeEnterCriticalRegion();
+        NtfsAcquireMetadata(DeviceExt);
+        NtfsDiskFlushVolumeKm(DeviceExt->StorageDevice);
+        if (IoForwardIrpSynchronously(DeviceExt->StorageDevice, Irp))
+            Status = Irp->IoStatus.Status;
+        else
+            Status = STATUS_UNSUCCESSFUL;
+        NtfsReleaseMetadata(DeviceExt);
+        KeLeaveCriticalRegion();
+
+        Irp->IoStatus.Status = Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return Status;
+    }
+
     IoSkipCurrentIrpStackLocation(Irp);
 
     /* Lower driver will complete - we don't have to */

@@ -1764,7 +1764,6 @@ PartitionCheckVerify(
     return STATUS_VERIFY_REQUIRED;
 }
 
-static
 NTSTATUS
 NTAPI
 PartMgrReadWrite(
@@ -1782,6 +1781,9 @@ PartMgrReadWrite(
             IoCompleteRequest(Irp, IO_NO_INCREMENT);
             return STATUS_DEVICE_DOES_NOT_EXIST;
         }
+
+        if (ioStack->MajorFunction == IRP_MJ_WRITE && PartitionQueueHeldWrite(partExt, Irp))
+            return STATUS_PENDING;
 
         ULONG length = ioStack->Parameters.Read.Length;
         UINT64 offset = (UINT64)ioStack->Parameters.Read.ByteOffset.QuadPart;

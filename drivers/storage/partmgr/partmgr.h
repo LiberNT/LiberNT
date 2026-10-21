@@ -137,7 +137,15 @@ typedef struct _PARTITION_EXTENSION
     UNICODE_STRING VolumeInterfaceName;
     UNICODE_STRING DeviceName;
     PIRP UniqueIdChangeIrp;
+    KSPIN_LOCK HoldLock;
+    PIRP HoldIrp;
+    LIST_ENTRY HeldWrites;
+    KTIMER HoldTimer;
+    KDPC HoldDpc;
+    WORK_QUEUE_ITEM HoldWorkItem;
 } PARTITION_EXTENSION, *PPARTITION_EXTENSION;
+
+#define PARTMGR_HOLD_TIMEOUT_SECONDS 20
 
 C_ASSERT(FIELD_OFFSET(FDO_EXTENSION, RemoveLock) == FIELD_OFFSET(PARTITION_EXTENSION, RemoveLock));
 C_ASSERT(FIELD_OFFSET(FDO_EXTENSION, Removed) == FIELD_OFFSET(PARTITION_EXTENSION, Removed));
@@ -175,6 +183,21 @@ PartitionHandleRemove(
 CODE_SEG("PAGE")
 NTSTATUS
 PartitionHandlePnp(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp);
+
+VOID
+PartitionInitializeHold(
+    _In_ PPARTITION_EXTENSION PartExt);
+
+BOOLEAN
+PartitionQueueHeldWrite(
+    _In_ PPARTITION_EXTENSION PartExt,
+    _In_ PIRP Irp);
+
+NTSTATUS
+NTAPI
+PartMgrReadWrite(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PIRP Irp);
 
