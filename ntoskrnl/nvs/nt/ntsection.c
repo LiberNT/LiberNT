@@ -1507,7 +1507,7 @@ MiCreateSectionWithMode(
         if (Size > MI_NT_MAXIMUM_PAGEFILE_SECTION_SIZE)
             return STATUS_SECTION_TOO_BIG;
 
-        if (Size > SizeLimit)
+        if ((AllocationAttributes & SEC_RESERVE) && Size > SizeLimit)
             return STATUS_INSUFFICIENT_RESOURCES;
 
         Size = ROUND_TO_PAGES(Size);
