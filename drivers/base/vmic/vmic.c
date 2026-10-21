@@ -25,6 +25,7 @@
 #define IC_MSG_KVP        2
 #define IC_MSG_SHUTDOWN   3
 #define IC_MSG_TIMESYNC   4
+#define IC_MSG_VSS        5
 
 #define IC_FLAG_TRANSACTION 0x01
 #define IC_FLAG_REQUEST     0x02
@@ -43,6 +44,10 @@
 
 #define TIMESYNC_FLAG_SYNC    0x01
 #define TIMESYNC_FLAG_SAMPLE  0x02
+
+#define VSS_OP_DELETE           1
+#define VSS_OP_BACKUP_COMPLETE  4
+#define VSS_OP_THAW             6
 
 #define KVP_OP_GET              0
 #define KVP_OP_SET              1
@@ -82,7 +87,8 @@ typedef enum _VMIC_KIND
     VmicShutdown,
     VmicTimeSync,
     VmicHeartbeat,
-    VmicKvp
+    VmicKvp,
+    VmicVss
 } VMIC_KIND;
 
 typedef struct _VMIC_VERSION
@@ -125,12 +131,15 @@ static const GUID VmicHeartbeatGuid =
     { 0x57164f39, 0x9115, 0x4e78, { 0xab, 0x55, 0x38, 0x2f, 0x3b, 0xd5, 0x42, 0x2d } };
 static const GUID VmicKvpGuid =
     { 0xa9a0f4e7, 0x5a45, 0x4d96, { 0xb8, 0x27, 0x8a, 0x84, 0x1e, 0x8c, 0x03, 0xe6 } };
+static const GUID VmicVssGuid =
+    { 0x35fa2e29, 0xea23, 0x4236, { 0x96, 0xae, 0x3a, 0x6e, 0xba, 0xcb, 0xa4, 0x40 } };
 
 static const VMIC_VERSION VmicFrameworkVersions[] = { { 3, 0 }, { 1, 0 } };
 static const VMIC_VERSION VmicShutdownVersions[] = { { 3, 2 }, { 3, 1 }, { 3, 0 }, { 1, 0 } };
 static const VMIC_VERSION VmicTimeSyncVersions[] = { { 4, 0 }, { 3, 0 }, { 1, 0 } };
 static const VMIC_VERSION VmicHeartbeatVersions[] = { { 3, 0 }, { 1, 0 } };
 static const VMIC_VERSION VmicKvpVersions[] = { { 5, 0 }, { 4, 0 }, { 3, 0 } };
+static const VMIC_VERSION VmicVssVersions[] = { { 7, 0 }, { 6, 0 }, { 5, 0 }, { 4, 0 } };
 
 static
 USHORT
@@ -255,6 +264,10 @@ VmicNegotiate(
             Versions = VmicHeartbeatVersions;
             VersionCount = RTL_NUMBER_OF(VmicHeartbeatVersions);
             break;
+        case VmicVss:
+            Versions = VmicVssVersions;
+            VersionCount = RTL_NUMBER_OF(VmicVssVersions);
+            break;
         default:
             Versions = VmicKvpVersions;
             VersionCount = RTL_NUMBER_OF(VmicKvpVersions);
@@ -286,6 +299,32 @@ VmicNegotiate(
     VmicPut16(Body, 14, Selected.Minor);
     VmicPut16(Message, 10, 16);
     Extension->MessageMajor = Selected.Major;
+}
+
+static
+VOID
+VmicHandleVss(
+    _Inout_updates_bytes_(Length) PUCHAR Message,
+    _In_ ULONG Length)
+{
+    if (Length < IC_HEADER_SIZE + 8)
+    {
+        VmicPut32(Message, 12, IC_STATUS_FAIL);
+        return;
+    }
+
+    switch (Message[IC_HEADER_SIZE])
+    {
+        case VSS_OP_DELETE:
+        case VSS_OP_BACKUP_COMPLETE:
+        case VSS_OP_THAW:
+            VmicPut32(Message, 12, IC_STATUS_SUCCESS);
+            break;
+
+        default:
+            VmicPut32(Message, 12, IC_STATUS_FAIL);
+            break;
+    }
 }
 
 static
@@ -897,6 +936,11 @@ VmicProcessPacket(
                     VmicHandleKvp(Extension->MessageMajor, Message, Length);
                 break;
 
+            case IC_MSG_VSS:
+                if (Extension->Kind == VmicVss)
+                    VmicHandleVss(Message, Length);
+                break;
+
             default:
                 VmicPut32(Message, 12, IC_STATUS_NOT_SUPPORTED);
                 break;
@@ -992,6 +1036,8 @@ VmicKindFromGuid(
         return VmicHeartbeat;
     if (IsEqualGUID(InterfaceType, &VmicKvpGuid))
         return VmicKvp;
+    if (IsEqualGUID(InterfaceType, &VmicVssGuid))
+        return VmicVss;
     return VmicUnknown;
 }
 

@@ -17,6 +17,7 @@ DefaultDestDir = 12
 %TimeSync.DeviceDesc%  = Vmic_Inst,VMBUS\{9527e630-d0ae-497b-adce-e80ab0175caf}
 %Heartbeat.DeviceDesc% = Vmic_Inst,VMBUS\{57164f39-9115-4e78-ab55-382f3bd5422d}
 %Kvp.DeviceDesc%       = Vmic_Inst,VMBUS\{a9a0f4e7-5a45-4d96-b827-8a841e8c03e6}
+%Vss.DeviceDesc%       = Vmic_Inst,VMBUS\{35fa2e29-ea23-4236-96ae-3a6ebacba440}
 %LegacyVideo.DeviceDesc% = LegacyVideo_Inst,PCI\VEN_1414&DEV_5353
 
 [LegacyVideo_Inst]
@@ -46,4 +47,5 @@ Shutdown.DeviceDesc = "Microsoft Hyper-V Guest Shutdown"
 TimeSync.DeviceDesc = "Microsoft Hyper-V Time Synchronization"
 Heartbeat.DeviceDesc = "Microsoft Hyper-V Heartbeat"
 Kvp.DeviceDesc = "Microsoft Hyper-V Data Exchange"
+Vss.DeviceDesc = "Microsoft Hyper-V Volume Shadow Copy"
 LegacyVideo.DeviceDesc = "Microsoft Hyper-V Legacy Video"
