@@ -158,14 +158,24 @@ WritebackPastUnwritablePages(void)
     MI_FILE_OPS Ops = { .Read = TestFileOps.Read, .Write = WritebackAttempt };
     PMI_SEGMENT Anonymous;
     PMI_PFN_DATABASE Db = &World.System.Pfn;
-    ULONG Shard, Frame, i;
+    ULONG Held[4 << MI_PFN_LIST_SHARD_SHIFT];
+    ULONG Shard, Frame, i, HeldCount = 0, Kept = 0;
     BOOLEAN FileFirst = FALSE;
 
-    WorldCreate(&World, 1024, 1, 100000);
+    WorldCreate(&World, RTL_NUMBER_OF(Held), 1, 100000);
     CHECK(World.System.PageFile == NULL);
     CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentPageFileBacked, 64 * PAGE_SIZE, MI_PROT_READWRITE,
                                      NULL, NULL, NULL, 0, &Anonymous)));
     CHECK(NT_SUCCESS(MiSegmentMarkDirty(Anonymous, 0, 64 * PAGE_SIZE)));
+    while ((Frame = MiPfnAllocatePage(Db, MI_ALLOCATE_NO_RECLAIM)) != MI_FRAME_INVALID)
+        Held[HeldCount++] = Frame;
+    for (i = 0; i < HeldCount; i++)
+    {
+        if ((Held[i] >> MI_PFN_LIST_SHARD_SHIFT) == 0)
+            Held[Kept++] = Held[i];
+        else
+            MiPfnShareDecrement(Db, Held[i], TRUE);
+    }
     FileCreate(&File.File, PAGE_SIZE);
     CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentDataFile, PAGE_SIZE, MI_PROT_READWRITE,
                                      &Ops, &File, NULL, 0, &File.Segment)));
@@ -192,10 +202,12 @@ WritebackPastUnwritablePages(void)
     CHECK(MiPfnListCount(Db, MiPageModified) == 64);
     for (i = 0; i < PAGE_SIZE; i++)
         CHECK(File.File.Data[i] == (UCHAR)i);
+    while (Kept != 0)
+        MiPfnShareDecrement(Db, Held[--Kept], TRUE);
     CHECK(WorldCheck(&World) == 0);
     CHECK(MiSegmentDereferenceAndClose(File.Segment));
     CHECK(MiSegmentDereferenceAndClose(Anonymous));
-    WorldExpectClean(&World, 1024);
+    WorldExpectClean(&World, RTL_NUMBER_OF(Held));
     FileDestroy(&File.File);
     WorldDestroy(&World);
 }

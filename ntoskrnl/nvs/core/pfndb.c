@@ -1374,12 +1374,13 @@ MiPfnTakeModified(
     _Inout_ PMI_PFN_DATABASE Db)
 {
     ULONG Count = MiPfnShardCount(Db);
-    ULONG Start = (ULONG)MI_ATOMIC_ADD32(&Db->ModifiedCursor, 1) % Count;
+    ULONG Start = (ULONG)MI_ATOMIC_READ32(&Db->ModifiedCursor) % Count;
     ULONG Attempt;
 
     for (Attempt = 0; Attempt < Count; Attempt++)
     {
-        PMI_PFN_SHARD Shard = &Db->Shard[(Start + Attempt) % Count];
+        ULONG Index = (Start + Attempt) % Count;
+        PMI_PFN_SHARD Shard = &Db->Shard[Index];
         ULONG Frame;
         KIRQL OldIrql;
 
@@ -1397,6 +1398,7 @@ MiPfnTakeModified(
             MI_ATOMIC_OR8(&Db->Pfn[Frame].Flags, MI_PFN_FLAG_IN_FLIGHT);
             MI_ATOMIC_AND8(&Db->Pfn[Frame].Flags, (UCHAR)~MI_PFN_FLAG_MODIFIED);
             MiPfnUnlock(Db, Frame, OldIrql);
+            MI_ATOMIC_WRITE32(&Db->ModifiedCursor, (LONG)(Index + 1));
             return Frame;
         }
         MiPfnUnlock(Db, Frame, OldIrql);
