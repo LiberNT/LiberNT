@@ -8,6 +8,8 @@ EXTERN BootMain:PROC
 EXTERN cmdline:DWORD
 
 EXTERN DiskStopFloppyMotor:PROC
+EXTERN FrLdrAmd64InitializeIdt:PROC
+EXTERN FrLdrIdtPointer:FWORD
 
 #ifdef _USE_ML
 EXTERN __bss_start__:FWORD
@@ -27,6 +29,8 @@ RealEntryPoint:
 //    mov ss, ax
 
     //mov word ptr [HEX(b8000)], HEX(0e00) + '1'
+
+    lidt lXdtPrefix [FrLdrIdtPointer]
 
     /* Setup long mode stack */
     mov rsp, qword ptr [stack64]
@@ -69,6 +73,10 @@ FrldrStartup:
     sub rcx, rdi
     shr rcx, 3
     rep stosq
+
+    sub rsp, 40
+    call FrLdrAmd64InitializeIdt
+    add rsp, 40
 
     /* Pass the command line to BootMain */
     mov rcx, offset cmdline
@@ -192,12 +200,18 @@ SwitchToReal:
     /* Save 64-bit stack pointer */
     mov qword ptr [stack64], rsp
 
+    lidt lXdtPrefix [RealModeIdtPointer]
+
     /* Step 1 - jump to compatibility segment */
     jmp fword ptr [jumpvector]
 
 jumpvector:
     .long SwitchToRealCompSegment
     .word CMODE_CS
+
+RealModeIdtPointer:
+    .word HEX(3FF)
+    .quad 0
 
 SwitchToRealCompSegment:
     /* Note: In fact the CPU is in 32 bit mode here. But it will interpret

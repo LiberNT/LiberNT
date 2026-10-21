@@ -117,12 +117,14 @@ elseif(ARCH STREQUAL "amd64")
 
     list(APPEND PCATLDR_COMMON_ASM_SOURCE
         arch/amd64/entry.S
+        arch/amd64/amd64trap.S
         arch/amd64/int386.S
         arch/amd64/pnpbios.S
         arch/amd64/linux.S)
 
     list(APPEND PCATLDR_ARC_SOURCE
         lib/fs/pxe.c
+        arch/amd64/amd64trap.c
         arch/i386/drivemap.c
         arch/i386/hwacpi.c
         arch/i386/hwapm.c
