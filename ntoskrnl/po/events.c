@@ -757,6 +757,14 @@ PopGetSysButton(
             case PowerActionHibernate:
                 ActionStatus = ZwInitiatePowerAction(PowerActionHibernate, PowerSystemHibernate, 0, TRUE);
                 break;
+            case PowerActionShutdown:
+            case PowerActionShutdownReset:
+            case PowerActionShutdownOff:
+                ActionStatus = ZwInitiatePowerAction(Action, PowerSystemShutdown,
+                                                     POWER_ACTION_QUERY_ALLOWED | POWER_ACTION_UI_ALLOWED, TRUE);
+                if (!NT_SUCCESS(ActionStatus))
+                    ZwShutdownSystem(ShutdownNoReboot);
+                break;
             default:
                 ZwShutdownSystem(ShutdownNoReboot);
                 break;

@@ -788,6 +788,10 @@ typedef enum _PSPOWEREVENTTYPE
     PsW32MonitorOff = 12,
 } PSPOWEREVENTTYPE;
 
+#define PSW32_EVENT_CODE_SHUTDOWN           0x00000001
+#define PSW32_EVENT_CODE_SHUTDOWN_RESTART   0x00000002
+#define PSW32_EVENT_CODE_SHUTDOWN_FORCE     0x00000004
+
 //
 // Power State Tasks for Win32K Power State Callback
 //

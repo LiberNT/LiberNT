@@ -1437,6 +1437,27 @@ PopInitiatePowerActionWorker(
     ExFreePoolWithTag(Request, POP_PROCESSOR_POWER_TAG);
 }
 
+static
+BOOLEAN
+PopRequestUserShutdown(
+    _In_ POWER_ACTION SystemAction,
+    _In_ ULONG Flags)
+{
+    WIN32_POWEREVENT_PARAMETERS Parameters;
+
+    if (PopEventCallout == NULL || PopShutdownInProgress)
+        return FALSE;
+
+    Parameters.EventNumber = PsW32EventCode;
+    Parameters.Code = PSW32_EVENT_CODE_SHUTDOWN;
+    if (SystemAction == PowerActionShutdownReset)
+        Parameters.Code |= PSW32_EVENT_CODE_SHUTDOWN_RESTART;
+    if (Flags & POWER_ACTION_OVERRIDE_APPS)
+        Parameters.Code |= PSW32_EVENT_CODE_SHUTDOWN_FORCE;
+
+    return NT_SUCCESS(PopEventCallout(&Parameters));
+}
+
 NTSTATUS
 NTAPI
 NtInitiatePowerAction(IN POWER_ACTION SystemAction,
@@ -1472,6 +1493,15 @@ NtInitiatePowerAction(IN POWER_ACTION SystemAction,
 
     if (SystemAction == PowerActionNone)
         return STATUS_SUCCESS;
+
+    if ((SystemAction == PowerActionShutdown ||
+         SystemAction == PowerActionShutdownReset ||
+         SystemAction == PowerActionShutdownOff) &&
+        (Flags & POWER_ACTION_QUERY_ALLOWED) &&
+        PopRequestUserShutdown(SystemAction, Flags))
+    {
+        return STATUS_SUCCESS;
+    }
 
     if (!Asynchronous)
         return ZwSetSystemPowerState(SystemAction, MinSystemState, Flags);

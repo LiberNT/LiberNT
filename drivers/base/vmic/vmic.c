@@ -6,6 +6,7 @@
  */
 
 #include <ntifs.h>
+#include <ntpoapi.h>
 #include <ntstrsafe.h>
 #include <vmbusapi.h>
 
@@ -39,6 +40,7 @@
 #define IC_STATUS_NO_MORE_ITEMS  0x80070103
 #define IC_STATUS_NOT_FOUND      0x80041002
 
+#define SHUTDOWN_FLAG_FORCE      0x01
 #define SHUTDOWN_FLAG_RESTART    0x02
 #define SHUTDOWN_FLAG_HIBERNATE  0x04
 
@@ -334,7 +336,8 @@ VmicHandleShutdown(
     _Inout_updates_bytes_(Length) PUCHAR Message,
     _In_ ULONG Length,
     _Out_ PBOOLEAN Shutdown,
-    _Out_ PBOOLEAN Restart)
+    _Out_ PBOOLEAN Restart,
+    _Out_ PBOOLEAN Force)
 {
     ULONG Flags;
 
@@ -342,6 +345,7 @@ VmicHandleShutdown(
 
     *Shutdown = FALSE;
     *Restart = FALSE;
+    *Force = FALSE;
 
     if (Length < IC_HEADER_SIZE + 12)
     {
@@ -358,6 +362,7 @@ VmicHandleShutdown(
 
     *Shutdown = TRUE;
     *Restart = (Flags & SHUTDOWN_FLAG_RESTART) != 0;
+    *Force = (Flags & SHUTDOWN_FLAG_FORCE) != 0;
 }
 
 static
@@ -884,6 +889,7 @@ VmicProcessPacket(
     USHORT Type;
     BOOLEAN Shutdown = FALSE;
     BOOLEAN Restart = FALSE;
+    BOOLEAN Force = FALSE;
     NTSTATUS Status;
 
     if (Descriptor->Type != VMBUS_PACKET_TYPE_INBAND || Offset + PIPE_HEADER_SIZE + IC_HEADER_SIZE > PacketLength)
@@ -923,7 +929,7 @@ VmicProcessPacket(
 
             case IC_MSG_SHUTDOWN:
                 if (Extension->Kind == VmicShutdown)
-                    VmicHandleShutdown(Extension, Message, Length, &Shutdown, &Restart);
+                    VmicHandleShutdown(Extension, Message, Length, &Shutdown, &Restart, &Force);
                 break;
 
             case IC_MSG_TIMESYNC:
@@ -956,7 +962,10 @@ VmicProcessPacket(
     if (Shutdown)
     {
         Status = ZwInitiatePowerAction(Restart ? PowerActionShutdownReset : PowerActionShutdownOff,
-                                       PowerSystemShutdown, 0, TRUE);
+                                       PowerSystemShutdown,
+                                       POWER_ACTION_QUERY_ALLOWED | POWER_ACTION_UI_ALLOWED |
+                                       (Force ? POWER_ACTION_OVERRIDE_APPS : 0),
+                                       TRUE);
         if (!NT_SUCCESS(Status))
             DPRINT1("VMIC: shutdown request failed with 0x%lx\n", Status);
     }

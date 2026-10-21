@@ -342,6 +342,28 @@ IntHandlePowerEventWorker(
             break;
         }
 
+        case PsW32EventCode:
+        {
+            ULONG Flags;
+
+            if (!(Code & PSW32_EVENT_CODE_SHUTDOWN))
+                break;
+
+            Flags = EWX_SHUTDOWN;
+            Flags |= (Code & PSW32_EVENT_CODE_SHUTDOWN_RESTART) ? EWX_REBOOT : EWX_POWEROFF;
+            if (Code & PSW32_EVENT_CODE_SHUTDOWN_FORCE)
+                Flags |= EWX_FORCE;
+
+            if (hwndSAS == NULL ||
+                !UserPostMessage(hwndSAS, WM_LOGONNOTIFY, LN_LOGOFF, (LPARAM)Flags))
+            {
+                ZwInitiatePowerAction((Code & PSW32_EVENT_CODE_SHUTDOWN_RESTART) ?
+                                      PowerActionShutdownReset : PowerActionShutdownOff,
+                                      PowerSystemShutdown, 0, TRUE);
+            }
+            break;
+        }
+
         case PsW32SystemTime:
         {
             /*
