@@ -100,6 +100,20 @@ static void reset_data_stream( struct request *request )
     request->read.pos = request->read.size = 0;
 }
 
+#ifdef __REACTOS__
+static DWORD request_recv( struct request *request, void *buf, size_t len, int flags, int *ret_len )
+{
+    DWORD ret = netconn_recv( request->netconn, buf, len, flags, ret_len );
+    if (ret == ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED && request->cred_handle_initialized)
+    {
+        if ((ret = netconn_renegotiate( request->netconn, request->connect->hostname, &request->cred_handle ))) return ret;
+        ret = netconn_recv( request->netconn, buf, len, flags, ret_len );
+    }
+    return ret;
+}
+#define netconn_recv( conn, buf, len, flags, ret_len ) request_recv( request, buf, len, flags, ret_len )
+#endif
+
 static BOOL netconn_end_of_data( struct data_stream *stream, struct request *request )
 {
     return request->content_read == request->content_length || !netconn_is_valid( request->netconn );

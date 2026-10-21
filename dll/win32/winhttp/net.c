@@ -560,6 +560,16 @@ static DWORD read_ssl_chunk( struct netconn *conn, void *buf, SIZE_T buf_size, S
 
         case SEC_I_RENEGOTIATE:
             TRACE("renegotiate\n");
+#ifdef __REACTOS__
+            for(i = 0; i < ARRAY_SIZE(bufs); i++) {
+                if(bufs[i].BufferType == SECBUFFER_EXTRA && bufs[i].cbBuffer) {
+                    if(!(conn->extra_buf = malloc(bufs[i].cbBuffer)))
+                        return ERROR_OUTOFMEMORY;
+                    conn->extra_len = bufs[i].cbBuffer;
+                    memcpy(conn->extra_buf, (char*)conn->ssl_read_buf+buf_len-conn->extra_len, conn->extra_len);
+                }
+            }
+#endif
             return ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED;
 
         case SEC_I_CONTEXT_EXPIRED:
@@ -692,6 +702,108 @@ BOOL netconn_is_valid( struct netconn *netconn )
 {
     return netconn && netconn->socket != -1;
 }
+
+#ifdef __REACTOS__
+DWORD netconn_renegotiate( struct netconn *conn, const WCHAR *hostname, CredHandle *cred_handle )
+{
+    SecBuffer out_buf = {0, SECBUFFER_TOKEN, NULL}, in_bufs[2] = {{0, SECBUFFER_TOKEN}, {0, SECBUFFER_EMPTY}};
+    SecBufferDesc out_desc = {SECBUFFER_VERSION, 1, &out_buf}, in_desc = {SECBUFFER_VERSION, 2, in_bufs};
+    const DWORD isc_req_flags = ISC_REQ_ALLOCATE_MEMORY|ISC_REQ_USE_SESSION_KEY|ISC_REQ_CONFIDENTIALITY
+        |ISC_REQ_SEQUENCE_DETECT|ISC_REQ_REPLAY_DETECT|ISC_REQ_MANUAL_CRED_VALIDATION;
+    SIZE_T read_buf_size = 2048;
+    BYTE *read_buf;
+    ULONG attrs;
+    SECURITY_STATUS status;
+    int size;
+
+    if (!(read_buf = malloc( read_buf_size ))) return ERROR_OUTOFMEMORY;
+    if (conn->extra_len)
+    {
+        memcpy( read_buf, conn->extra_buf, conn->extra_len );
+        in_bufs[0].cbBuffer = conn->extra_len;
+        in_bufs[0].pvBuffer = read_buf;
+        conn->extra_len = 0;
+        free( conn->extra_buf );
+        conn->extra_buf = NULL;
+    }
+    status = InitializeSecurityContextW( cred_handle, &conn->ssl_ctx, (SEC_WCHAR *)hostname, isc_req_flags, 0, 0,
+                                         in_bufs[0].cbBuffer ? &in_desc : NULL, 0, NULL, &out_desc, &attrs, NULL );
+    TRACE( "renegotiation InitializeSecurityContext ret %#lx\n", status );
+    while (status == SEC_I_CONTINUE_NEEDED || status == SEC_E_INCOMPLETE_MESSAGE)
+    {
+        if (out_buf.cbBuffer)
+        {
+            size = sock_send( conn->socket, out_buf.pvBuffer, out_buf.cbBuffer, NULL );
+            FreeContextBuffer( out_buf.pvBuffer );
+            out_buf.pvBuffer = NULL;
+            out_buf.cbBuffer = 0;
+            if (size != (int)out_buf.cbBuffer && size < 0)
+            {
+                status = ERROR_WINHTTP_SECURE_CHANNEL_ERROR;
+                break;
+            }
+        }
+        if (status == SEC_I_CONTINUE_NEEDED)
+        {
+            if (in_bufs[1].BufferType == SECBUFFER_EXTRA && in_bufs[1].cbBuffer)
+            {
+                memmove( read_buf, (BYTE *)in_bufs[0].pvBuffer + in_bufs[0].cbBuffer - in_bufs[1].cbBuffer, in_bufs[1].cbBuffer );
+                in_bufs[0].cbBuffer = in_bufs[1].cbBuffer;
+            }
+            else in_bufs[0].cbBuffer = 0;
+        }
+        in_bufs[0].BufferType = SECBUFFER_TOKEN;
+        in_bufs[1].BufferType = SECBUFFER_EMPTY;
+        in_bufs[1].cbBuffer = 0;
+        in_bufs[1].pvBuffer = NULL;
+        if (in_bufs[0].cbBuffer + 1024 > read_buf_size)
+        {
+            BYTE *new_read_buf = realloc( read_buf, read_buf_size + 1024 );
+            if (!new_read_buf)
+            {
+                status = E_OUTOFMEMORY;
+                break;
+            }
+            read_buf = new_read_buf;
+            read_buf_size += 1024;
+        }
+        in_bufs[0].pvBuffer = read_buf;
+        size = sock_recv( conn->socket, read_buf + in_bufs[0].cbBuffer, read_buf_size - in_bufs[0].cbBuffer, 0 );
+        if (size < 1)
+        {
+            status = ERROR_WINHTTP_SECURE_CHANNEL_ERROR;
+            break;
+        }
+        in_bufs[0].cbBuffer += size;
+        status = InitializeSecurityContextW( cred_handle, &conn->ssl_ctx, (SEC_WCHAR *)hostname, isc_req_flags, 0, 0,
+                                             &in_desc, 0, NULL, &out_desc, &attrs, NULL );
+        TRACE( "renegotiation InitializeSecurityContext ret %#lx\n", status );
+    }
+    if (status == SEC_E_OK)
+    {
+        if (out_buf.cbBuffer)
+        {
+            size = sock_send( conn->socket, out_buf.pvBuffer, out_buf.cbBuffer, NULL );
+            FreeContextBuffer( out_buf.pvBuffer );
+            if (size < 0) status = ERROR_WINHTTP_SECURE_CHANNEL_ERROR;
+        }
+        if (status == SEC_E_OK && in_bufs[1].BufferType == SECBUFFER_EXTRA && in_bufs[1].cbBuffer)
+        {
+            if ((conn->extra_buf = malloc( in_bufs[1].cbBuffer )))
+            {
+                conn->extra_len = in_bufs[1].cbBuffer;
+                memcpy( conn->extra_buf, (BYTE *)in_bufs[0].pvBuffer + in_bufs[0].cbBuffer - in_bufs[1].cbBuffer, in_bufs[1].cbBuffer );
+            }
+            else status = ERROR_OUTOFMEMORY;
+        }
+    }
+    free( read_buf );
+    if (status == SEC_E_OK) return ERROR_SUCCESS;
+    if (status == ERROR_WINHTTP_SECURE_CHANNEL_ERROR || status == ERROR_OUTOFMEMORY) return status;
+    WARN( "renegotiation failed: %#lx\n", status );
+    return ERROR_WINHTTP_SECURE_FAILURE;
+}
+#endif
 
 BOOL netconn_is_alive( struct netconn *netconn )
 {

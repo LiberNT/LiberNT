@@ -449,6 +449,9 @@ BOOL netconn_wait_overlapped_result( struct netconn *conn, WSAOVERLAPPED *ovr, D
 void netconn_cancel_io( struct netconn *conn );
 DWORD netconn_set_timeout( struct netconn *, BOOL, int );
 BOOL netconn_is_alive( struct netconn * );
+#ifdef __REACTOS__
+DWORD netconn_renegotiate( struct netconn *conn, const WCHAR *hostname, CredHandle *cred_handle );
+#endif
 BOOL netconn_is_valid( struct netconn * );
 const void *netconn_get_certificate( struct netconn * );
 int netconn_get_cipher_strength( struct netconn * );
