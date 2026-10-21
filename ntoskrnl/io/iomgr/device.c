@@ -456,15 +456,24 @@ IopUnloadDevice(IN PDEVICE_OBJECT DeviceObject)
     /* Check if deletion is pending */
     if (ThisExtension->ExtensionFlags & DOE_DELETE_PENDING)
     {
-        if (DeviceObject->AttachedDevice)
-        {
-            DPRINT("Device object is in the middle of a device stack\n");
-            return;
-        }
-
         if (DeviceObject->ReferenceCount)
         {
             DPRINT("Device object still has %d references\n", DeviceObject->ReferenceCount);
+            return;
+        }
+
+        if (DeviceObject->AttachedDevice)
+        {
+            PDEVICE_OBJECT AttachedDevice = DeviceObject->AttachedDevice;
+            PFAST_IO_DISPATCH FastIoDispatch = AttachedDevice->DriverObject->FastIoDispatch;
+
+            DPRINT("Device object is in the middle of a device stack\n");
+            if (FastIoDispatch &&
+                FastIoDispatch->SizeOfFastIoDispatch > FIELD_OFFSET(FAST_IO_DISPATCH, FastIoDetachDevice) &&
+                FastIoDispatch->FastIoDetachDevice)
+            {
+                FastIoDispatch->FastIoDetachDevice(AttachedDevice, DeviceObject);
+            }
             return;
         }
 
