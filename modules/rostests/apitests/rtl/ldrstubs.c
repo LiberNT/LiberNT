@@ -28,6 +28,13 @@ LdrpGetAlternateResourceModule(PVOID BaseAddress, ULONG_PTR Type, USHORT Languag
     return STATUS_RESOURCE_DATA_NOT_FOUND;
 }
 
+NTSTATUS
+NTAPI
+LdrpGetNeutralResourceModule(PVOID BaseAddress, PVOID *ResourceBase)
+{
+    return STATUS_RESOURCE_DATA_NOT_FOUND;
+}
+
 PVOID
 NTAPI
 LdrpGetResourceModuleForEntry(PVOID BaseAddress, PVOID Entry)

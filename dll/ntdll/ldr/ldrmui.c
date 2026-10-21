@@ -305,17 +305,14 @@ LdrpGetLanguageKey(
 
 static
 NTSTATUS
-LdrpMapMuiFile(
+LdrpMapResourceFile(
     _In_ PCUNICODE_STRING Path,
-    _In_ PLDRP_MUI_CONFIG ModuleConfig,
-    _In_ PCWSTR Language,
     _Out_ PVOID *ViewBase,
     _Out_ PSIZE_T ViewSize)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;
     HANDLE FileHandle, SectionHandle;
-    LDRP_MUI_CONFIG Config;
     NTSTATUS Status;
 
     *ViewBase = NULL;
@@ -356,8 +353,34 @@ LdrpMapMuiFile(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    if (!RtlImageNtHeader(*ViewBase) ||
-        !LdrpGetMuiConfig((PVOID)((ULONG_PTR)*ViewBase | 1), &Config) ||
+    if (!RtlImageNtHeader(*ViewBase))
+    {
+        NtUnmapViewOfSection(NtCurrentProcess(), *ViewBase);
+        *ViewBase = NULL;
+        *ViewSize = 0;
+        return STATUS_INVALID_IMAGE_FORMAT;
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+LdrpMapMuiFile(
+    _In_ PCUNICODE_STRING Path,
+    _In_ PLDRP_MUI_CONFIG ModuleConfig,
+    _In_ PCWSTR Language,
+    _Out_ PVOID *ViewBase,
+    _Out_ PSIZE_T ViewSize)
+{
+    LDRP_MUI_CONFIG Config;
+    NTSTATUS Status;
+
+    Status = LdrpMapResourceFile(Path, ViewBase, ViewSize);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (!LdrpGetMuiConfig((PVOID)((ULONG_PTR)*ViewBase | 1), &Config) ||
         Config.FileType != LDRP_MUI_FILE_LANGUAGE_SPECIFIC ||
         RtlCompareMemory(Config.Checksum, ModuleConfig->Checksum, LDRP_MUI_RC_CHECKSUM_SIZE) != LDRP_MUI_RC_CHECKSUM_SIZE ||
         !LdrpMuiLanguageEquals(&Config, Language))
@@ -434,6 +457,89 @@ LdrpLoadMuiFile(
 }
 
 static
+BOOLEAN
+LdrpIsSystemModuleDirectory(
+    _In_ PCWSTR Directory,
+    _In_ SIZE_T Length)
+{
+    static const PCWSTR SystemDirectories[] = { L"System32", L"SysWOW64", L"arm64ec" };
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(SystemDirectories); Index++)
+    {
+        if (wcslen(SystemDirectories[Index]) == Length &&
+            !_wcsnicmp(Directory, SystemDirectories[Index], Length))
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static
+NTSTATUS
+LdrpLoadMunFile(
+    _In_ PVOID BaseAddress,
+    _Out_ PVOID *ViewBase,
+    _Out_ PSIZE_T ViewSize)
+{
+    static const WCHAR Directory[] = L"\\SystemRoot\\SystemResources\\";
+    static const WCHAR Extension[] = L".mun";
+    UCHAR NameBuffer[sizeof(MEMORY_SECTION_NAME) + (MAX_PATH * 2 * sizeof(WCHAR))];
+    PMEMORY_SECTION_NAME SectionName = (PMEMORY_SECTION_NAME)NameBuffer;
+    UNICODE_STRING Path, Name;
+    PWSTR FileName, Parent;
+    USHORT FileNameLength;
+    SIZE_T ReturnLength;
+    NTSTATUS Status;
+
+    *ViewBase = NULL;
+    *ViewSize = 0;
+
+    Status = NtQueryVirtualMemory(NtCurrentProcess(),
+                                  LdrpUntagResourceBase(BaseAddress),
+                                  MemorySectionName,
+                                  SectionName,
+                                  sizeof(NameBuffer),
+                                  &ReturnLength);
+    if (!NT_SUCCESS(Status))
+        return STATUS_MUI_FILE_NOT_FOUND;
+
+    FileName = SectionName->SectionFileName.Buffer + SectionName->SectionFileName.Length / sizeof(WCHAR);
+    while (FileName > SectionName->SectionFileName.Buffer && FileName[-1] != L'\\')
+        FileName--;
+    if (FileName <= SectionName->SectionFileName.Buffer + 1)
+        return STATUS_MUI_FILE_NOT_FOUND;
+    Parent = FileName - 1;
+    while (Parent > SectionName->SectionFileName.Buffer && Parent[-1] != L'\\')
+        Parent--;
+    if (!LdrpIsSystemModuleDirectory(Parent, FileName - 1 - Parent))
+        return STATUS_MUI_FILE_NOT_FOUND;
+
+    FileNameLength = (USHORT)(SectionName->SectionFileName.Length -
+                              (FileName - SectionName->SectionFileName.Buffer) * sizeof(WCHAR));
+    if (!FileNameLength)
+        return STATUS_MUI_FILE_NOT_FOUND;
+
+    Path.MaximumLength = sizeof(Directory) + FileNameLength + sizeof(Extension);
+    Path.Buffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, Path.MaximumLength);
+    if (!Path.Buffer)
+        return STATUS_NO_MEMORY;
+
+    Name.Buffer = FileName;
+    Name.Length = Name.MaximumLength = FileNameLength;
+    Path.Length = 0;
+    RtlAppendUnicodeToString(&Path, Directory);
+    RtlAppendUnicodeStringToString(&Path, &Name);
+    RtlAppendUnicodeToString(&Path, Extension);
+
+    Status = LdrpMapResourceFile(&Path, ViewBase, ViewSize);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Path.Buffer);
+    return NT_SUCCESS(Status) ? Status : STATUS_MUI_FILE_NOT_FOUND;
+}
+
+static
 PLDRP_MUI_MODULE
 LdrpLookupMuiModule(
     _In_ PVOID BaseAddress,
@@ -466,7 +572,7 @@ static
 NTSTATUS
 LdrpGetMuiModuleForLanguage(
     _In_ PVOID BaseAddress,
-    _In_ PLDRP_MUI_CONFIG Config,
+    _In_opt_ PLDRP_MUI_CONFIG Config,
     _In_ ULONG TimeDateStamp,
     _In_ ULONG SizeOfImage,
     _In_ PCWSTR Language,
@@ -494,7 +600,10 @@ LdrpGetMuiModuleForLanguage(
     RtlReleaseSRWLockShared(&LdrpMuiLock);
 
     *Attempted = TRUE;
-    Status = LdrpLoadMuiFile(BaseAddress, Config, Language, &ViewBase, &ViewSize);
+    if (Language[0])
+        Status = LdrpLoadMuiFile(BaseAddress, Config, Language, &ViewBase, &ViewSize);
+    else
+        Status = LdrpLoadMunFile(BaseAddress, &ViewBase, &ViewSize);
     if (Status == STATUS_NO_MEMORY)
         return Status;
     if (!NT_SUCCESS(Status))
@@ -619,6 +728,28 @@ LdrpGetAlternateResourceModule(
     if (NT_SUCCESS(Status) || Status == STATUS_NO_MEMORY)
         return Status;
     return AnyAttempted ? STATUS_MUI_FILE_NOT_FOUND : STATUS_MUI_FILE_NOT_LOADED;
+}
+
+NTSTATUS
+NTAPI
+LdrpGetNeutralResourceModule(
+    _In_ PVOID BaseAddress,
+    _Out_ PVOID *ResourceBase)
+{
+    PIMAGE_NT_HEADERS NtHeaders = RtlImageNtHeader(LdrpUntagResourceBase(BaseAddress));
+    BOOLEAN Attempted;
+
+    *ResourceBase = NULL;
+    if (!NtHeaders)
+        return STATUS_RESOURCE_DATA_NOT_FOUND;
+
+    return LdrpGetMuiModuleForLanguage(BaseAddress,
+                                       NULL,
+                                       NtHeaders->FileHeader.TimeDateStamp,
+                                       NtHeaders->OptionalHeader.SizeOfImage,
+                                       L"",
+                                       ResourceBase,
+                                       &Attempted);
 }
 
 PVOID

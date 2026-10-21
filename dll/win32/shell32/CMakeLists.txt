@@ -182,3 +182,4 @@ add_importlibs(shell32 windows.storage advapi32 gdi32 user32 comctl32 comdlg32 s
 add_dependencies(shell32 stdole2) # shell32_shldisp.tlb needs stdole2.tlb
 add_pch(shell32 precomp.h "${PCH_SKIP_SOURCE}")
 add_cd_file(TARGET shell32 DESTINATION reactos/system32 FOR all)
+add_neutral_resource_file(shell32 shell32.rc shell32_mun.rc)

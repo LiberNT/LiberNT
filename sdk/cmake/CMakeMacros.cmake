@@ -1105,6 +1105,18 @@ function(add_rc_deps _target_rc)
     set_source_files_properties(${_target_rc} PROPERTIES OBJECT_DEPENDS "${ARGN}")
 endfunction()
 
+function(add_neutral_resource_file _target _module_rc _neutral_rc)
+    set_property(SOURCE ${_module_rc} APPEND PROPERTY COMPILE_DEFINITIONS NEUTRAL_RESOURCES_IN_MUN)
+    get_source_file_property(_deps ${_module_rc} OBJECT_DEPENDS)
+    if(_deps)
+        set_source_files_properties(${_neutral_rc} PROPERTIES OBJECT_DEPENDS "${_deps}")
+    endif()
+    add_library(${_target}_mun MODULE ${_neutral_rc})
+    set_module_type(${_target}_mun module UNICODE ENTRYPOINT 0)
+    add_cd_file(TARGET ${_target}_mun DESTINATION reactos/SystemResources
+                NAME_ON_CD $<TARGET_FILE_NAME:${_target}>.mun FOR all)
+endfunction()
+
 add_custom_target(rostests_install COMMAND ${CMAKE_COMMAND} -DCOMPONENT=rostests -P ${CMAKE_BINARY_DIR}/cmake_install.cmake)
 function(add_rostests_file)
     cmake_parse_arguments(_ROSTESTS "" "RENAME;SUBDIR;TARGET" "FILE" ${ARGN})

@@ -643,6 +643,12 @@ LdrpGetAlternateResourceModule(
     _In_ USHORT LanguageId,
     _Out_ PVOID *ResourceBase);
 
+NTSTATUS
+NTAPI
+LdrpGetNeutralResourceModule(
+    _In_ PVOID BaseAddress,
+    _Out_ PVOID *ResourceBase);
+
 PVOID
 NTAPI
 LdrpGetResourceModuleForEntry(

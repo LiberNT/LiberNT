@@ -29,7 +29,9 @@
 #define REACTOS_STR_ORIGINAL_FILENAME "setupapi.dll"
 #include <reactos/version.rc>
 
+#ifndef NEUTRAL_RESOURCES_IN_MUN
 #include "res/icons_res.rc"
+#endif
 
 #include <reactos/manifest_dll.rc>
 

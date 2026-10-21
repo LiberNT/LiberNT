@@ -266,6 +266,41 @@ static BYTE * ICO_GetIconDirectory( LPBYTE peimage, LPicoICONDIR* lplpiID, ULONG
 	return 0;
 }
 
+#ifdef __REACTOS__
+static VOID USER32_RedirectToMunFile(LPWSTR lpszPath, DWORD cchPath)
+{
+    static const LPCWSTR SystemDirectories[] = { L"System32", L"SysWOW64", L"arm64ec" };
+    WCHAR szMunPath[MAX_PATH];
+    LPCWSTR pszName, pszParent;
+    UINT i, cch;
+
+    pszName = wcsrchr(lpszPath, L'\\');
+    if (!pszName || pszName == lpszPath)
+        return;
+    for (pszParent = pszName; pszParent > lpszPath && pszParent[-1] != L'\\'; pszParent--);
+    for (i = 0; i < ARRAY_SIZE(SystemDirectories); i++)
+    {
+        if (wcslen(SystemDirectories[i]) == (SIZE_T)(pszName - pszParent) &&
+            !_wcsnicmp(pszParent, SystemDirectories[i], pszName - pszParent))
+        {
+            break;
+        }
+    }
+    if (i == ARRAY_SIZE(SystemDirectories))
+        return;
+
+    cch = GetSystemWindowsDirectoryW(szMunPath, ARRAY_SIZE(szMunPath));
+    if (!cch || cch >= ARRAY_SIZE(szMunPath) ||
+        _snwprintf(szMunPath + cch, ARRAY_SIZE(szMunPath) - cch, L"\\SystemResources%s.mun", pszName) < 0 ||
+        GetFileAttributesW(szMunPath) == INVALID_FILE_ATTRIBUTES ||
+        wcslen(szMunPath) >= cchPath)
+    {
+        return;
+    }
+    wcscpy(lpszPath, szMunPath);
+}
+#endif
+
 /*************************************************************************
  *	ICO_ExtractIconExW		[internal]
  *
@@ -345,6 +380,9 @@ static UINT ICO_ExtractIconExW(
 #endif
         }
 
+#ifdef __REACTOS__
+    USER32_RedirectToMunFile(szExePath, ARRAY_SIZE(szExePath));
+#endif
 	hFile = CreateFileW(szExePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0);
 	if (hFile == INVALID_HANDLE_VALUE) return ret;
 	fsizel = GetFileSize(hFile,&fsizeh);
