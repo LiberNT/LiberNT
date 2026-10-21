@@ -3004,7 +3004,11 @@ static DWORD refill_read_buffer(http_request_t *req, BOOL allow_blocking, DWORD 
 static BOOL netconn_end_of_data(data_stream_t *stream, http_request_t *req)
 {
     netconn_stream_t *netconn_stream = (netconn_stream_t*)stream;
+#ifdef __REACTOS__
+    return netconn_stream->content_read >= netconn_stream->content_length || !is_valid_netconn(req->netconn);
+#else
     return netconn_stream->content_read == netconn_stream->content_length || !is_valid_netconn(req->netconn);
+#endif
 }
 
 static DWORD netconn_read(data_stream_t *stream, http_request_t *req, BYTE *buf, DWORD size,
@@ -3014,7 +3018,14 @@ static DWORD netconn_read(data_stream_t *stream, http_request_t *req, BYTE *buf,
     DWORD res = ERROR_SUCCESS;
     int ret = 0;
 
+#ifdef __REACTOS__
+    if(netconn_stream->content_read < netconn_stream->content_length)
+        size = min(size, netconn_stream->content_length-netconn_stream->content_read);
+    else
+        size = 0;
+#else
     size = min(size, netconn_stream->content_length-netconn_stream->content_read);
+#endif
 
     if(size && is_valid_netconn(req->netconn)) {
 #ifdef __REACTOS__
