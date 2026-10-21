@@ -554,6 +554,17 @@ MsafdWaitForAlert(
     _In_ HANDLE hObject);
 
 NTSTATUS
+MsafdAcquireEvent(
+    _Out_ PHANDLE Event,
+    _Out_ PBOOLEAN Shared);
+
+VOID
+MsafdReleaseEvent(
+    _In_ HANDLE Event,
+    _In_ BOOLEAN Shared,
+    _In_ BOOLEAN Reset);
+
+NTSTATUS
 MsafdWaitForCompletion(
     _In_ PSOCKET_INFORMATION Socket,
     _In_ HANDLE hObject,
