@@ -1018,8 +1018,15 @@ static HRESULT report_data(BindProtocol *This)
             return S_OK;
 
         bscf = BSCF_FIRSTDATANOTIFICATION;
+#ifdef __REACTOS__
         if(hres == S_FALSE)
             bscf |= BSCF_LASTDATANOTIFICATION|BSCF_DATAFULLYAVAILABLE;
+        else
+            bscf |= This->bscf & (BSCF_LASTDATANOTIFICATION|BSCF_DATAFULLYAVAILABLE);
+#else
+        if(hres == S_FALSE)
+            bscf |= BSCF_LASTDATANOTIFICATION|BSCF_DATAFULLYAVAILABLE;
+#endif
 
         if(!This->reported_mime) {
             BSTR raw_uri;
