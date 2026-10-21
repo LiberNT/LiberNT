@@ -601,6 +601,43 @@ static NTSTATUS NTAPI UDPWfpInjectReceive(
 }
 
 
+static
+VOID
+UDPDeliverToAddrFile(
+    _In_ PADDRESS_FILE AddrFile,
+    _In_ PIP_INTERFACE Interface,
+    _In_ PIP_PACKET IPPacket,
+    _In_ PIPv4_HEADER IPv4Header,
+    _In_ PUDP_HEADER UDPHeader,
+    _In_ UINT DataSize)
+{
+    if (!UDPClassify(AddrFile,
+                     FALSE,
+                     Interface,
+                     &IPPacket->DstAddr,
+                     UDPHeader->DestPort,
+                     &IPPacket->SrcAddr,
+                     UDPHeader->SourcePort,
+                     IPv4Header,
+                     IPPacket->HeaderSize,
+                     IPPacket->Data,
+                     DataSize,
+                     &IPPacket->WfpTag))
+    {
+        return;
+    }
+
+    IPPacket->WfpAccepted = TRUE;
+    DGDeliverData(AddrFile,
+                  &IPPacket->SrcAddr,
+                  &IPPacket->DstAddr,
+                  UDPHeader->SourcePort,
+                  UDPHeader->DestPort,
+                  IPPacket,
+                  DataSize,
+                  Interface);
+}
+
 VOID UDPReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
 /*
  * FUNCTION: Receives and queues a UDP datagram
@@ -614,11 +651,11 @@ VOID UDPReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
 {
   AF_SEARCH SearchContext;
   PIPv4_HEADER IPv4Header;
-  PADDRESS_FILE AddrFile;
+  PADDRESS_FILE AddrFile, Chosen = NULL;
   PUDP_HEADER UDPHeader;
   PIP_ADDRESS DstAddress, SrcAddress;
   UINT DataSize, i;
-  BOOLEAN IsMulticast;
+  BOOLEAN IsMulticast, DeliverToAll, ChosenSpecific = FALSE;
   ULONG MemberIndex;
   PIP_INTERFACE SourceInterface;
 
@@ -682,40 +719,31 @@ VOID UDPReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
      request on the address file object, call the associated receive
      handler. If no receive handler is registered, drop the packet */
 
+  DeliverToAll = IsMulticast || UDPIsBroadcastAddress(DstAddress);
+
   AddrFile = AddrSearchFirst(DstAddress,
                              UDPHeader->DestPort,
                              IPPROTO_UDP,
                              &SearchContext);
-  if (AddrFile) {
-    do {
-      if ((!IsMulticast || IGMPIsMember(AddrFile, MemberIndex, DstAddress->Address.IPv4Address)) &&
-          UDPClassify(AddrFile,
-                      FALSE,
-                      Interface,
-                      DstAddress,
-                      UDPHeader->DestPort,
-                      SrcAddress,
-                      UDPHeader->SourcePort,
-                      IPv4Header,
-                      IPPacket->HeaderSize,
-                      IPPacket->Data,
-                      DataSize,
-                      &IPPacket->WfpTag))
-      {
-          IPPacket->WfpAccepted = TRUE;
-          DGDeliverData(AddrFile,
-		    SrcAddress,
-                    DstAddress,
-		    UDPHeader->SourcePort,
-		    UDPHeader->DestPort,
-                    IPPacket,
-                    DataSize,
-                    Interface);
-      }
+  while (AddrFile != NULL) {
+    if (DeliverToAll) {
+      if (!IsMulticast || IGMPIsMember(AddrFile, MemberIndex, DstAddress->Address.IPv4Address))
+          UDPDeliverToAddrFile(AddrFile, Interface, IPPacket, IPv4Header, UDPHeader, DataSize);
       DereferenceObject(AddrFile);
-    } while ((AddrFile = AddrSearchNext(&SearchContext)) != NULL);
-  } else {
-    /* There are no open address files that will take this datagram */
+    } else if (Chosen == NULL || !ChosenSpecific || !AddrIsUnspecified(&AddrFile->Address)) {
+      if (Chosen != NULL)
+          DereferenceObject(Chosen);
+      Chosen = AddrFile;
+      ChosenSpecific = !AddrIsUnspecified(&AddrFile->Address);
+    } else {
+      DereferenceObject(AddrFile);
+    }
+    AddrFile = AddrSearchNext(&SearchContext);
+  }
+
+  if (Chosen != NULL) {
+    UDPDeliverToAddrFile(Chosen, Interface, IPPacket, IPv4Header, UDPHeader, DataSize);
+    DereferenceObject(Chosen);
   }
   TI_DbgPrint(MAX_TRACE, ("Leaving.\n"));
 }

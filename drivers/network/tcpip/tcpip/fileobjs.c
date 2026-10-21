@@ -270,6 +270,38 @@ LogActiveObjects(VOID)
 #endif
 }
 
+static BOOLEAN AddrAdoptSharer(
+    PADDRESS_FILE Sharer,
+    USHORT Protocol)
+{
+    if (Protocol == IPPROTO_UDP)
+        return AddrFileReferenceLive(Sharer);
+
+    ASSERT(Sharer->Sharers != 0);
+    InterlockedIncrement(&Sharer->Sharers);
+    return TRUE;
+}
+
+static BOOLEAN AddrPortInUseLocked(
+    PADDRESS_FILE AddrFile)
+{
+    PLIST_ENTRY Entry;
+    PADDRESS_FILE Current;
+
+    for (Entry = AddressFileListHead.Flink;
+         Entry != &AddressFileListHead;
+         Entry = Entry->Flink)
+    {
+        Current = CONTAINING_RECORD(Entry, ADDRESS_FILE, ListEntry);
+        if (Current->Port == AddrFile->Port &&
+            Current->Protocol == AddrFile->Protocol &&
+            Current->Address.Type == AddrFile->Address.Type)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 NTSTATUS AddrCheckSharing(
     PIP_ADDRESS BindAddress,
     USHORT Port,
@@ -313,10 +345,8 @@ NTSTATUS AddrCheckSharing(
         {
             if (Reuse && Current->Reuse)
             {
-                /* Increase the sharer count */
-                ASSERT(Current->Sharers != 0);
-                InterlockedIncrement(&Current->Sharers);
-                *SharedFile = Current;
+                if (AddrAdoptSharer(Current, Protocol))
+                    *SharedFile = Current;
             }
             else
             {
@@ -335,12 +365,8 @@ NTSTATUS AddrCheckSharing(
             Candidate = Current;
     }
 
-    if (NT_SUCCESS(Status) && !*SharedFile && Candidate)
-    {
-        ASSERT(Candidate->Sharers != 0);
-        InterlockedIncrement(&Candidate->Sharers);
+    if (NT_SUCCESS(Status) && !*SharedFile && Candidate && AddrAdoptSharer(Candidate, Protocol))
         *SharedFile = Candidate;
-    }
 
     TcpipReleaseSpinLock(&AddressFileListLock, OldIrql);
 
@@ -469,6 +495,12 @@ VOID AddrFileFree(
   /* Remove address file from the global list */
   TcpipAcquireSpinLock(&AddressFileListLock, &OldIrql);
   RemoveEntryList(&AddrFile->ListEntry);
+  if (AddrFile->Protocol == IPPROTO_UDP &&
+      AddrFile->Address.Type != IP_ADDRESS_V6 &&
+      !AddrPortInUseLocked(AddrFile))
+  {
+      UDPFreePort(AddrFile->Port);
+  }
   TcpipReleaseSpinLock(&AddressFileListLock, OldIrql);
 
   WfpShimEndpointClosed(AddrFile->WfpEndpointId);
@@ -516,8 +548,6 @@ VOID AddrFileFree(
   case IPPROTO_UDP:
     if (AddrFile->Address.Type == IP_ADDRESS_V6)
         LibUDPClose(AddrFile);
-    else
-        UDPFreePort( AddrFile->Port );
     break;
   }
 
@@ -560,7 +590,7 @@ NTSTATUS FileOpenAddress(
   BOOLEAN Exclusive,
   PVOID Options)
 {
-  PADDRESS_FILE AddrFile;
+  PADDRESS_FILE AddrFile, SharedFile = NULL;
   PIP_INTERFACE Interface;
   UINT AllocatedPort;
   IP_ADDRESS BindAddress;
@@ -579,12 +609,12 @@ NTSTATUS FileOpenAddress(
   /* If it's shared and has a port specified, look for a match */
   if (BindPort != 0)
   {
-    Status = AddrCheckSharing(&BindAddress, BindPort, Protocol, Shared, Exclusive, DualStack, &AddrFile);
+    Status = AddrCheckSharing(&BindAddress, BindPort, Protocol, Shared, Exclusive, DualStack, &SharedFile);
     if (!NT_SUCCESS(Status))
         return Status;
-    if (AddrFile != NULL)
+    if (SharedFile != NULL && Protocol != IPPROTO_UDP)
     {
-        Request->Handle.AddressHandle = AddrFile;
+        Request->Handle.AddressHandle = SharedFile;
         return STATUS_SUCCESS;
     }
   }
@@ -593,6 +623,8 @@ NTSTATUS FileOpenAddress(
                                    ADDR_FILE_TAG);
   if (!AddrFile) {
     TI_DbgPrint(MIN_TRACE, ("Insufficient resources.\n"));
+    if (SharedFile != NULL)
+        DereferenceObject(SharedFile);
     return STATUS_INSUFFICIENT_RESOURCES;
   }
 
@@ -634,6 +666,8 @@ NTSTATUS FileOpenAddress(
   if (AddrFile->Address.Type == IP_ADDRESS_V6) {
       if (!AddrIsUnspecified(&AddrFile->Address) &&
           !LibIPIsLocalAddress(&AddrFile->Address)) {
+          if (SharedFile != NULL)
+              DereferenceObject(SharedFile);
           ExFreePoolWithTag(AddrFile, ADDR_FILE_TAG);
           return STATUS_INVALID_ADDRESS;
       }
@@ -641,6 +675,8 @@ NTSTATUS FileOpenAddress(
       Interface = AddrLocateInterface(&AddrFile->Address);
       if (!Interface) {
 	  TI_DbgPrint(MIN_TRACE, ("Non-local address given (0x%X).\n", A2S(&AddrFile->Address)));
+	  if (SharedFile != NULL)
+	      DereferenceObject(SharedFile);
 	  ExFreePoolWithTag(AddrFile, ADDR_FILE_TAG);
 	  return STATUS_INVALID_ADDRESS;
       }
@@ -697,6 +733,8 @@ NTSTATUS FileOpenAddress(
           Status = LibUDPOpen(AddrFile, BindPort, &UdpPort);
           if (!NT_SUCCESS(Status))
           {
+              if (SharedFile != NULL)
+                  DereferenceObject(SharedFile);
               ExFreePoolWithTag(AddrFile, ADDR_FILE_TAG);
               return Status;
           }
@@ -706,12 +744,17 @@ NTSTATUS FileOpenAddress(
       }
 
       TI_DbgPrint(MID_TRACE,("Allocating udp port\n"));
-      AllocatedPort = UDPAllocatePort(BindPort);
+      if (SharedFile != NULL)
+          AllocatedPort = BindPort;
+      else
+          AllocatedPort = UDPAllocatePort(BindPort);
 
       if ((BindPort &&
            AllocatedPort != BindPort) ||
            AllocatedPort == (UINT)-1)
       {
+          if (SharedFile != NULL)
+              DereferenceObject(SharedFile);
           ExFreePoolWithTag(AddrFile, ADDR_FILE_TAG);
           return STATUS_ADDRESS_ALREADY_EXISTS;
       }
@@ -778,6 +821,9 @@ NTSTATUS FileOpenAddress(
     &AddressFileListHead,
     &AddrFile->ListEntry,
     &AddressFileListLock);
+
+  if (SharedFile != NULL)
+      DereferenceObject(SharedFile);
 
   TI_DbgPrint(MAX_TRACE, ("Leaving.\n"));
 

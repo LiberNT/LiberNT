@@ -176,6 +176,9 @@ LibUDPOpenCallback(void *arg)
         return;
     }
 
+    if (msg->AddrFile->Reuse)
+        pcb->so_options |= SOF_REUSEADDR;
+
     msg->Error = udp_bind(pcb, &msg->IpAddress, msg->Port);
     if (msg->Error != ERR_OK)
     {
