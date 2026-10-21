@@ -7,6 +7,7 @@
 
 #include <ntddk.h>
 #include <storport.h>
+#include <ntddstor.h>
 #include <vmbusapi.h>
 
 #define NDEBUG
@@ -367,6 +368,7 @@ StorvscFindAdapter(
         return SP_RETURN_ERROR;
     }
 
+    StorPortSetAdapterBusType(Extension, BusTypeScsi);
     ConfigInfo->MaximumTransferLength = Extension->MaxTransfer;
     ConfigInfo->NumberOfPhysicalBreaks = Extension->MaxTransfer / PAGE_SIZE + 1;
     ConfigInfo->AlignmentMask = 0;
