@@ -3450,9 +3450,10 @@ UCHAR DeviceRequestReadWrite(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in
 UCHAR DeviceRequestCapacity(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in PSCSI_REQUEST_BLOCK Srb, __in PCDB Cdb)
 {
     ULONG LastLba32, BytesPerLogicalSector;
+    ULONG LogicalPerPhysical, Exponent, LowestAlignedBlock, Length;
     ULONG64 LastLba;
     PREAD_CAPACITY_DATA ReadCapacity;
-    PREAD_CAPACITY_DATA_EX ReadCapacityEx;
+    READ_CAPACITY16_DATA Capacity16;
     PAHCI_PORT_EXTENSION PortExtension;
 
     DPRINT("DeviceRequestCapacity()\n");
@@ -3510,14 +3511,22 @@ UCHAR DeviceRequestCapacity(__in PAHCI_ADAPTER_EXTENSION AdapterExtension, __in 
             return SRB_STATUS_DATA_OVERRUN;
         }
 
-        ReadCapacityEx = (PREAD_CAPACITY_DATA_EX)Srb->DataBuffer;
+        AhciZeroMemory((PCHAR)&Capacity16, sizeof(Capacity16));
 
-        AhciZeroMemory((PCHAR)ReadCapacityEx, sizeof(READ_CAPACITY_DATA_EX));
+        REVERSE_BYTES(&Capacity16.BytesPerBlock, &BytesPerLogicalSector);
+        REVERSE_BYTES_QUAD(&Capacity16.LogicalBlockAddress, &LastLba);
 
-        REVERSE_BYTES(&ReadCapacityEx->BytesPerBlock, &BytesPerLogicalSector);
-        REVERSE_BYTES_QUAD(&ReadCapacityEx->LogicalBlockAddress, &LastLba);
+        LogicalPerPhysical = AtaDevLogicalSectorsPerPhysicalSector(PortExtension->IdentifyDeviceData, &Exponent);
+        LowestAlignedBlock = (LogicalPerPhysical -
+                              AtaDevLogicalSectorAlignment(PortExtension->IdentifyDeviceData) % LogicalPerPhysical) %
+                             LogicalPerPhysical;
+        Capacity16.LogicalPerPhysicalExponent = (UCHAR)Exponent;
+        Capacity16.LowestAlignedBlock_MSB = (UCHAR)(LowestAlignedBlock >> 8);
+        Capacity16.LowestAlignedBlock_LSB = (UCHAR)LowestAlignedBlock;
 
-        Srb->DataTransferLength = sizeof(READ_CAPACITY_DATA_EX);
+        Length = min(Srb->DataTransferLength, (ULONG)sizeof(Capacity16));
+        StorPortCopyMemory(Srb->DataBuffer, &Capacity16, Length);
+        Srb->DataTransferLength = Length;
     }
 
     DPRINT("\tCapacity: LastLba=%I64u BytesPerBlock=%u\n", LastLba, BytesPerLogicalSector);
