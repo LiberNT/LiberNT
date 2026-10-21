@@ -9,6 +9,7 @@
 /* INCLUDES ******************************************************************/
 
 #include <win32k.h>
+#include <ndk/inbvfuncs.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -902,6 +903,12 @@ GreSetPointerShape(
     /* We must have a valid surface in case of alpha bitmap */
     ASSERT(((fl & SPS_ALPHA) && psurfColor) || !(fl & SPS_ALPHA));
 
+    if (InbvCheckDisplayOwnership())
+    {
+        x = -1;
+        y = -1;
+    }
+
     /* Call the driver or eng function */
     ulResult = IntEngSetPointerShape(&psurf->SurfObj,
                                      psurfMask ? &psurfMask->SurfObj : NULL,
@@ -952,6 +959,12 @@ GreMovePointer(
         return;
     }
     ASSERT(pdc->dctype == DCTYPE_DIRECT);
+
+    if (InbvCheckDisplayOwnership())
+    {
+        x = -1;
+        y = -1;
+    }
 
     /* GCAPS_ASYNCMOVE permits the selected hardware pointer to move while a
      * different DC is drawing. Keep its shape, callback and surface stable

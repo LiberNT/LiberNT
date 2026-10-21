@@ -149,9 +149,8 @@ typedef struct _SPIVALUES
     WALLPAPER_MODE WallpaperMode;
     UNICODE_STRING ustrWallpaper;
     WCHAR awcWallpaper[MAX_PATH + 1];
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    BOOL bEarlySplashWallpaper;
-#endif
+    BOOL bBootScreenWallpaper;
+    BOOL bWallpaperApplied;
 
     BOOL bHandHeld;
     BOOL bFastTaskSwitch;
@@ -207,6 +206,7 @@ extern SPIVALUES gspv;
 extern BOOL g_PaintDesktopVersion;
 
 BOOL InitSysParams();
+VOID SpiSetBootScreenWallpaper(VOID);
 UINT UserGetSystemDpi(VOID);
 INT UserScaleForDpi(INT Value, UINT Dpi);
 INT UserScaleForSystemDpi(INT Value);

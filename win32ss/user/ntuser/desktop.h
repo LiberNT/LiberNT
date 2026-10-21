@@ -166,6 +166,7 @@ IntCreateDesktop(
     IN ACCESS_MASK dwDesiredAccess);
 
 VOID APIENTRY UserRedrawDesktop(VOID);
+VOID FASTCALL UserReleaseBootDisplay(VOID);
 BOOL IntRegisterShellHookWindow(HWND hWnd);
 BOOL IntDeRegisterShellHookWindow(HWND hWnd);
 VOID co_IntShellHookNotify(WPARAM Message, WPARAM wParam, LPARAM lParam);

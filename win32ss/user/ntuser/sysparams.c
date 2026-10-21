@@ -13,9 +13,7 @@
 // - Save appropriate text metrics.
 
 #include <win32k.h>
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-#include <reactos/early_splash.h>
-#endif
+#include <ndk/inbvfuncs.h>
 DBG_DEFAULT_CHANNEL(UserSysparams);
 
 SPIVALUES gspv;
@@ -392,6 +390,23 @@ SpiFixupValues(VOID)
     SpiUpdateFontMetrics();
 }
 
+static VOID
+SpiAdoptBootScreenWallpaper(
+    _In_ HBITMAP Bitmap,
+    _In_ ULONG Width,
+    _In_ ULONG Height)
+{
+    gspv.hbmWallpaper = Bitmap;
+    gspv.cxWallpaper = Width;
+    gspv.cyWallpaper = Height;
+    gspv.WallpaperMode = wmFill;
+    gspv.bBootScreenWallpaper = TRUE;
+    gspv.awcWallpaper[0] = UNICODE_NULL;
+    gspv.ustrWallpaper.Buffer = gspv.awcWallpaper;
+    gspv.ustrWallpaper.Length = 0;
+    gspv.ustrWallpaper.MaximumLength = sizeof(gspv.awcWallpaper);
+}
+
 static
 VOID
 SpiUpdatePerUserSystemParameters(VOID)
@@ -399,49 +414,24 @@ SpiUpdatePerUserSystemParameters(VOID)
     static LOGFONTW lf1 = {-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE,
                            FALSE, DEFAULT_CHARSET, 0, 0, DEFAULT_QUALITY,
                            0, L"Segoe UI"};
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    HBITMAP EarlyWallpaper = NULL;
-    LONG EarlyWallpaperWidth = 0;
-    LONG EarlyWallpaperHeight = 0;
-    WALLPAPER_MODE EarlyWallpaperMode = wmCenter;
-    WCHAR EarlyWallpaperPath[MAX_PATH + 1];
-    USHORT EarlyWallpaperPathLength = 0;
-#endif
+    HBITMAP BootScreen = NULL;
+    ULONG BootScreenWidth = 0;
+    ULONG BootScreenHeight = 0;
 
     TRACE("Enter SpiUpdatePerUserSystemParameters\n");
 
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    if (gspv.bEarlySplashWallpaper)
+    if (gspv.bBootScreenWallpaper)
     {
-        ASSERT(gspv.ustrWallpaper.Buffer == gspv.awcWallpaper);
-        ASSERT(gspv.ustrWallpaper.Length <= MAX_PATH * sizeof(WCHAR));
-        EarlyWallpaper = gspv.hbmWallpaper;
-        EarlyWallpaperWidth = gspv.cxWallpaper;
-        EarlyWallpaperHeight = gspv.cyWallpaper;
-        EarlyWallpaperMode = gspv.WallpaperMode;
-        EarlyWallpaperPathLength = gspv.ustrWallpaper.Length;
-        RtlCopyMemory(EarlyWallpaperPath, gspv.awcWallpaper, EarlyWallpaperPathLength + sizeof(WCHAR));
+        BootScreen = gspv.hbmWallpaper;
+        BootScreenWidth = gspv.cxWallpaper;
+        BootScreenHeight = gspv.cyWallpaper;
     }
-#endif
 
     /* Clear the structure */
     RtlZeroMemory(&gspv, sizeof(gspv));
 
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    if (EarlyWallpaper)
-    {
-        gspv.hbmWallpaper = EarlyWallpaper;
-        gspv.cxWallpaper = EarlyWallpaperWidth;
-        gspv.cyWallpaper = EarlyWallpaperHeight;
-        gspv.WallpaperMode = EarlyWallpaperMode;
-        gspv.bEarlySplashWallpaper = TRUE;
-        RtlCopyMemory(gspv.awcWallpaper, EarlyWallpaperPath, EarlyWallpaperPathLength + sizeof(WCHAR));
-        gspv.ustrWallpaper.Buffer = gspv.awcWallpaper;
-        gspv.ustrWallpaper.Length = EarlyWallpaperPathLength;
-        gspv.ustrWallpaper.MaximumLength = sizeof(gspv.awcWallpaper);
-        TRACE("EARLY_SPLASH: WIN32K_WALLPAPER_PRESERVED stage=user_parameters bitmap=%p\n", EarlyWallpaper);
-    }
-#endif
+    if (BootScreen)
+        SpiAdoptBootScreenWallpaper(BootScreen, BootScreenWidth, BootScreenHeight);
 
     /* DPI is machine-wide and must be known before loading pixel metrics. */
     gspv.uiSystemDpi = SpiLoadSystemDpi();
@@ -1003,15 +993,9 @@ UINT_PTR
 SpiSetWallpaper(PVOID pvParam, FLONG fl, HBITMAP hbmSupplied)
 {
     UNICODE_STRING ustr;
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    UNICODE_STRING CapturedWallpaper;
-#endif
     WCHAR awc[MAX_PATH];
     WCHAR awcCaptured[MAX_PATH + 1];
     BOOL bResult;
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    BOOL ReuseEarlyWallpaper;
-#endif
     HBITMAP hbmp, hOldBitmap;
     SURFACE *psurfBmp;
 
@@ -1065,13 +1049,6 @@ SpiSetWallpaper(PVOID pvParam, FLONG fl, HBITMAP hbmSupplied)
         }
     }
 
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    CapturedWallpaper.Buffer = awcCaptured;
-    CapturedWallpaper.Length = ustr.Length;
-    CapturedWallpaper.MaximumLength = sizeof(awcCaptured);
-    ReuseEarlyWallpaper = gspv.bEarlySplashWallpaper && RtlEqualUnicodeString(&CapturedWallpaper, &gspv.ustrWallpaper, TRUE);
-#endif
-
     RtlCopyMemory(gspv.awcWallpaper, awcCaptured, ustr.Length + sizeof(WCHAR));
 
     /* Update the UNICODE_STRING */
@@ -1086,19 +1063,6 @@ SpiSetWallpaper(PVOID pvParam, FLONG fl, HBITMAP hbmSupplied)
     {
         SpiStoreSz(KEY_DESKTOP, L"Wallpaper", gspv.awcWallpaper);
     }
-
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    if (ReuseEarlyWallpaper)
-    {
-        if (hbmSupplied)
-            GreDeleteObject(hbmSupplied);
-        gspv.WallpaperMode = SpiLoadWallpaperMode();
-        TRACE("EARLY_SPLASH: WIN32K_WALLPAPER_REUSED path=%S mode=%u\n", gspv.awcWallpaper, gspv.WallpaperMode);
-        NtUserRedrawWindow(UserGetShellWindow(), NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
-        IntCompositionDamageWindow(UserGetDesktopWindow());
-        return (UINT_PTR)KEY_DESKTOP;
-    }
-#endif
 
     /* Got a filename? */
     if (gspv.awcWallpaper[0] != 0)
@@ -1159,11 +1123,8 @@ ReplaceWallpaper:
 
     /* Set the new wallpaper */
     gspv.hbmWallpaper = hbmp;
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-    if (gspv.bEarlySplashWallpaper)
-        TRACE("EARLY_SPLASH: WIN32K_WALLPAPER_REPLACED path=%S\n", gspv.awcWallpaper);
-    gspv.bEarlySplashWallpaper = FALSE;
-#endif
+    gspv.bBootScreenWallpaper = FALSE;
+    gspv.bWallpaperApplied = TRUE;
 
     NtUserRedrawWindow(UserGetShellWindow(), NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
     IntCompositionDamageWindow(UserGetDesktopWindow());
@@ -1172,96 +1133,49 @@ ReplaceWallpaper:
     return (UINT_PTR)KEY_DESKTOP;
 }
 
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-static
-UINT_PTR
-SpiSetEarlyWallpaper(
-    _In_ HBITMAP Bitmap)
+VOID
+SpiSetBootScreenWallpaper(VOID)
 {
-    HBITMAP OldBitmap;
+    HBITMAP Bitmap, OldBitmap;
     SURFACE *Surface;
-    UNICODE_STRING WallpaperPath;
-    WCHAR WallpaperPathBuffer[MAX_PATH + 1];
+    ULONG Width = 0, Height = 0;
     NTSTATUS Status;
-    LONG Width, Height;
-    PWND DesktopWindow;
-    HDC Dc;
 
-    REQ_INTERACTIVE_WINSTA(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
-
-    if (!UserIsLogonProcess(PsGetCurrentProcessId()))
+    if (gspv.bWallpaperApplied)
     {
-        ERR("EARLY_SPLASH: WIN32K_WALLPAPER_FAIL stage=caller pid=%p\n", PsGetCurrentProcessId());
-        EngSetLastError(ERROR_ACCESS_DENIED);
-        return 0;
+        InbvDiscardBootScreen();
+        return;
     }
 
-    Surface = SURFACE_ShareLockSurface(Bitmap);
-    if (!Surface)
-    {
-        ERR("EARLY_SPLASH: WIN32K_WALLPAPER_FAIL stage=bitmap handle=%p\n", Bitmap);
-        EngSetLastError(ERROR_INVALID_HANDLE);
-        return 0;
-    }
+    if (InbvQueryBootScreen(NULL, 0, &Width, &Height) != STATUS_BUFFER_TOO_SMALL)
+        return;
 
-    Width = Surface->SurfObj.sizlBitmap.cx;
-    Height = Surface->SurfObj.sizlBitmap.cy;
-    SURFACE_ShareUnlockSurface(Surface);
-    if (Width <= 0 || Height <= 0)
+    Status = STATUS_NO_MEMORY;
+    Bitmap = GreCreateBitmap(Width, Height, 1, 32, NULL);
+    Surface = Bitmap ? SURFACE_ShareLockSurface(Bitmap) : NULL;
+    if (Surface)
     {
-        ERR("EARLY_SPLASH: WIN32K_WALLPAPER_FAIL stage=dimensions width=%ld height=%ld\n", Width, Height);
-        EngSetLastError(ERROR_INVALID_DATA);
-        return 0;
+        Status = InbvQueryBootScreen(Surface->SurfObj.pvScan0, Surface->SurfObj.lDelta, &Width, &Height);
+        SURFACE_ShareUnlockSurface(Surface);
     }
-
-    RtlInitEmptyUnicodeString(&WallpaperPath, WallpaperPathBuffer, sizeof(WallpaperPathBuffer));
-    Status = RtlAppendUnicodeToString(&WallpaperPath, SharedUserData->NtSystemRoot);
-    if (NT_SUCCESS(Status)) Status = RtlAppendUnicodeToString(&WallpaperPath, REACTOS_EARLY_SPLASH_RELATIVE_PATH);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status) || !GreSetObjectOwner(Bitmap, GDI_OBJ_HMGR_PUBLIC))
     {
-        ERR("EARLY_SPLASH: WIN32K_WALLPAPER_FAIL stage=path status=0x%08lx\n", Status);
-        EngSetLastError(RtlNtStatusToDosError(Status));
-        return 0;
-    }
-
-    if (!GreSetObjectOwner(Bitmap, GDI_OBJ_HMGR_PUBLIC))
-    {
-        ERR("EARLY_SPLASH: WIN32K_WALLPAPER_FAIL stage=ownership handle=%p\n", Bitmap);
-        EngSetLastError(ERROR_INVALID_HANDLE);
-        return 0;
+        ERR("Could not keep the boot screen on the desktop (status 0x%08lx)\n", Status);
+        InbvDiscardBootScreen();
+        if (Bitmap)
+            GreDeleteObject(Bitmap);
+        return;
     }
 
     OldBitmap = gspv.hbmWallpaper;
-    gspv.hbmWallpaper = Bitmap;
-    gspv.cxWallpaper = Width;
-    gspv.cyWallpaper = Height;
-    gspv.WallpaperMode = SpiLoadWallpaperMode();
-    gspv.bEarlySplashWallpaper = TRUE;
-    RtlCopyMemory(gspv.awcWallpaper, WallpaperPath.Buffer, WallpaperPath.Length + sizeof(WCHAR));
-    gspv.ustrWallpaper.Buffer = gspv.awcWallpaper;
-    gspv.ustrWallpaper.Length = WallpaperPath.Length;
-    gspv.ustrWallpaper.MaximumLength = sizeof(gspv.awcWallpaper);
+    SpiAdoptBootScreenWallpaper(Bitmap, Width, Height);
 
     if (OldBitmap && OldBitmap != Bitmap)
     {
         GreSetObjectOwner(OldBitmap, GDI_OBJ_HMGR_POWNED);
         GreDeleteObject(OldBitmap);
     }
-
-    TRACE("EARLY_SPLASH: WIN32K_WALLPAPER_OK bitmap=%p source=%ldx%ld mode=%u\n", Bitmap, Width, Height, gspv.WallpaperMode);
-    UserRedrawDesktop();
-
-    DesktopWindow = UserGetDesktopWindow();
-    Dc = UserGetWindowDC(DesktopWindow);
-    if (Dc)
-    {
-        IntPaintDesktop(Dc);
-        UserReleaseDC(DesktopWindow, Dc, FALSE);
-    }
-
-    return 1;
 }
-#endif
 
 static BOOL
 SpiNotifyNCMetricsChanged(VOID)
@@ -1377,11 +1291,6 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
 
         case SPI_ROS_SETDESKWALLPAPERBITMAP:
             return SpiSetWallpaper(pvParam, fl, LongToHandle((LONG)uiParam));
-
-#ifdef ENABLE_EXPERIMENTAL_EARLY_SPLASH
-        case REACTOS_SPI_SET_EARLY_WALLPAPER:
-            return SpiSetEarlyWallpaper((HBITMAP)pvParam);
-#endif
 
         case SPI_SETDESKPATTERN:
             ERR("SPI_SETDESKPATTERN is unimplemented\n");

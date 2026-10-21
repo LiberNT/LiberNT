@@ -10,6 +10,7 @@
 
 #include <win32k.h>
 #include <reactos/buildno.h>
+#include <ndk/inbvfuncs.h>
 DBG_DEFAULT_CHANNEL(UserDesktop);
 
 
@@ -1654,6 +1655,28 @@ UserRedrawDesktop(VOID)
     REGION_Delete(Rgn);
 
     IntCompositionDamageWindow(Window);
+}
+
+VOID FASTCALL
+UserReleaseBootDisplay(VOID)
+{
+    static BOOLEAN Released = FALSE;
+    MSG Msg;
+
+    if (Released)
+        return;
+    Released = TRUE;
+
+    if (InbvCheckDisplayOwnership())
+        InbvNotifyDisplayOwnershipLost(NULL);
+    SpiSetBootScreenWallpaper();
+    UserRedrawDesktop();
+
+    Msg.message = WM_MOUSEMOVE;
+    Msg.wParam = UserGetMouseButtonsState();
+    Msg.lParam = MAKELPARAM(gpsi->ptCursor.x, gpsi->ptCursor.y);
+    Msg.pt = gpsi->ptCursor;
+    co_MsqInsertMouseMessage(&Msg, 0, 0, FALSE);
 }
 
 

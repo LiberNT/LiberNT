@@ -4106,11 +4106,7 @@ NtUserSetShellWindowEx(HWND hwndShell, HWND hwndListView)
 
    UserRegisterHotKey(WndShell, SC_TASKLIST, MOD_CONTROL, VK_ESCAPE);
 
-   if (InbvCheckDisplayOwnership())
-   {
-      InbvNotifyDisplayOwnershipLost(NULL);
-      UserRedrawDesktop();
-   }
+   UserReleaseBootDisplay();
 
    UserDerefObjectCo(WndShell);
 

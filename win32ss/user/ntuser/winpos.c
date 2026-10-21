@@ -2116,6 +2116,12 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
       Window->style |= WS_VISIBLE; //IntSetStyle( Window, WS_VISIBLE, 0 );
       Window->head.pti->cVisWindows++;
       IntNotifyWinEvent(EVENT_OBJECT_SHOW, Window, OBJID_WINDOW, CHILDID_SELF, WEF_SETBYWNDPTI);
+      if (!(Window->style & WS_MINIMIZE) &&
+          Window->spwndParent && UserIsDesktopWindow(Window->spwndParent) &&
+          Window->head.rpdesk && Window->head.rpdesk->rpwinstaParent == UserGetDisplayInputWindowStation())
+      {
+         UserReleaseBootDisplay();
+      }
    }
    else
    {
