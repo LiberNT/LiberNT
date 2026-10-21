@@ -1692,9 +1692,6 @@ NtInitializeRegistry(IN USHORT Flag)
     if (KeGetPreviousMode() == UserMode)
         return ZwInitializeRegistry(Flag);
 
-    /* Enough of the system has booted by now */
-    Ki386PerfEnd();
-
     /* Validate flag */
     if (Flag > CM_BOOT_FLAG_MAX) return STATUS_INVALID_PARAMETER;
 
@@ -1731,6 +1728,7 @@ NtInitializeRegistry(IN USHORT Flag)
     /* Make sure we're only called once */
     if (!CmFirstTime) return STATUS_ACCESS_DENIED;
     CmFirstTime = FALSE;
+    Ki386PerfEnd();
 
     /* Lock the registry exclusively */
     CmpLockRegistryExclusive();
