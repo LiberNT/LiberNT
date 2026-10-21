@@ -11,6 +11,66 @@ Abstract:
 #include "driver.h"
 #include "device.tmh"
 
+#ifdef __REACTOS__
+#pragma code_seg("PAGE")
+static
+NTSTATUS
+CreateAudioChild(
+    WDFDEVICE Device
+)
+{
+    DECLARE_CONST_UNICODE_STRING(deviceId, L"BCM2836PWM\\RPIWAV");
+    DECLARE_CONST_UNICODE_STRING(instanceId, L"0");
+    DECLARE_CONST_UNICODE_STRING(description, L"Raspberry Pi Audio");
+    PWDFDEVICE_INIT childInit;
+    WDFDEVICE child;
+    NTSTATUS status;
+
+    PAGED_CODE();
+
+    childInit = WdfPdoInitAllocate(Device);
+    if (childInit == NULL)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    WdfDeviceInitSetDeviceType(childInit, FILE_DEVICE_SOUND);
+    status = WdfPdoInitAssignDeviceID(childInit, &deviceId);
+    if (NT_SUCCESS(status))
+    {
+        status = WdfPdoInitAddHardwareID(childInit, &deviceId);
+    }
+    if (NT_SUCCESS(status))
+    {
+        status = WdfPdoInitAssignInstanceID(childInit, &instanceId);
+    }
+    if (NT_SUCCESS(status))
+    {
+        status = WdfPdoInitAddDeviceText(childInit, &description, &description, 0x409);
+    }
+    if (!NT_SUCCESS(status))
+    {
+        WdfDeviceInitFree(childInit);
+        return status;
+    }
+    WdfPdoInitSetDefaultLocale(childInit, 0x409);
+
+    status = WdfDeviceCreate(&childInit, WDF_NO_OBJECT_ATTRIBUTES, &child);
+    if (!NT_SUCCESS(status))
+    {
+        WdfDeviceInitFree(childInit);
+        return status;
+    }
+
+    status = WdfFdoAddStaticChild(Device, child);
+    if (!NT_SUCCESS(status))
+    {
+        WdfObjectDelete(child);
+    }
+    return status;
+}
+#endif
+
 
 #pragma code_seg("PAGE")
 _Use_decl_annotations_
@@ -175,7 +235,17 @@ Return Value:
         TraceEvents(TRACE_LEVEL_ERROR, TRACE_INIT, "Can not create a symbolic name (0x%08x)", status);
         goto Exit;
     }
-    
+
+#ifdef __REACTOS__
+    status = CreateAudioChild(device);
+
+    if (!NT_SUCCESS(status))
+    {
+        TraceEvents(TRACE_LEVEL_ERROR, TRACE_INIT, "Can not create the audio child device (0x%08x)", status);
+        goto Exit;
+    }
+#endif
+
 Exit:
     return status;
 }

@@ -17,7 +17,7 @@ RPIWAV.CopyList=12
 %MfgName%=MicrosoftDS,NTarm64
 
 [MicrosoftDS.NTarm64]
-%RPIWAV.DeviceDesc%=RPIWAV,ROOT\RPIWAV
+%RPIWAV.DeviceDesc%=RPIWAV,BCM2836PWM\RPIWAV
 
 [RPIWAV.NT]
 Include=ks.inf,wdmaudio.inf
