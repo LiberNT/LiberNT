@@ -97,5 +97,7 @@ BEGIN
 
     IDS_MENUITEM "解压全部(&A)..."
     IDS_HELPTEXT "解压文件夹内容"
+    IDS_MENUITEM_HERE "解压到此处(&H)"
+    IDS_HELPTEXT_HERE "将内容解压到此文件夹"
     IDS_FRIENDLYNAME "压缩文件夹"
 END

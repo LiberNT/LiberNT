@@ -582,8 +582,11 @@ public:
         }
 
         CWindow Progress(hProgress);
-        Progress.SendMessage(PBM_SETRANGE32, 0, gi.number_entry);
-        Progress.SendMessage(PBM_SETPOS, 0, 0);
+        if (hProgress)
+        {
+            Progress.SendMessage(PBM_SETRANGE32, 0, gi.number_entry);
+            Progress.SendMessage(PBM_SETPOS, 0, 0);
+        }
 
         CStringW BaseDirectory = m_Directory;
         CStringW Name;
@@ -673,7 +676,8 @@ public:
             }
             if (Result == eNoError && is_dir)
                 continue;
-            Progress.SendMessage(PBM_SETPOS, CurrentFile, 0);
+            if (hProgress)
+                Progress.SendMessage(PBM_SETPOS, CurrentFile, 0);
         }
 
         Close();
@@ -733,5 +737,19 @@ void _CZipExtract_runWizardTo(PCWSTR Filename, PCWSTR Directory)
 {
     CZipExtract extractor(Filename, Directory);
     extractor.runWizard();
+}
+
+void _CZipExtract_extractHere(PCWSTR Filename, HWND hwndOwner)
+{
+    CStringW Directory = Filename;
+    PWSTR Dir = Directory.GetBuffer();
+    bool bCancel = false;
+
+    PathRemoveFileSpecW(Dir);
+    Directory.ReleaseBuffer();
+
+    CZipExtract extractor(Filename, Directory);
+    if (extractor.Extract(hwndOwner, NULL, &bCancel))
+        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATHW, Directory.GetString(), NULL);
 }
 

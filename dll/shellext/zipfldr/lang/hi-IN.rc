@@ -83,5 +83,7 @@ BEGIN
 
     IDS_MENUITEM "&सभी निकालो..."
     IDS_HELPTEXT "फ़ोल्डर सामग्री निकालता है"
+    IDS_MENUITEM_HERE "यहाँ निकालें(&H)"
+    IDS_HELPTEXT_HERE "सामग्री को इस फ़ोल्डर में निकालता है"
     IDS_FRIENDLYNAME "संपीड़ित (ज़िप्ड) फ़ोल्डर"
 END

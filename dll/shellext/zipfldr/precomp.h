@@ -26,6 +26,8 @@
 
 #define EXTRACT_VERBA "extract"
 #define EXTRACT_VERBW L"extract"
+#define EXTRACT_HERE_VERBA "extracthere"
+#define EXTRACT_HERE_VERBW L"extracthere"
 
 EXTERN_C const GUID CLSID_ZipFolderStorageHandler;
 EXTERN_C const GUID CLSID_ZipFolderSendTo;
@@ -63,6 +65,7 @@ HRESULT _CZipDataObject_CreateInstance(PCWSTR ZipFile, PCWSTR ZipDir, HWND hwnd,
                                        UINT cidl, PCUITEMID_CHILD_ARRAY apidl, REFIID riid, LPVOID *ppvOut);
 void _CZipExtract_runWizard(PCWSTR Filename);
 void _CZipExtract_runWizardTo(PCWSTR Filename, PCWSTR Directory);
+void _CZipExtract_extractHere(PCWSTR Filename, HWND hwndOwner);
 
 struct ZipDataItem
 {

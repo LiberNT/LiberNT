@@ -96,5 +96,7 @@ BEGIN
 
     IDS_MENUITEM "Extract &All..."
     IDS_HELPTEXT "Extracts folder contents"
+    IDS_MENUITEM_HERE "Extract &Here"
+    IDS_HELPTEXT_HERE "Extracts the contents into this folder"
     IDS_FRIENDLYNAME "Compressed (zipped) Folder"
 END

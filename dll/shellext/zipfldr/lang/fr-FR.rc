@@ -96,5 +96,7 @@ BEGIN
 
     IDS_MENUITEM "&Tout extraire..."
     IDS_HELPTEXT "Extrait le contenu du répertoire"
+    IDS_MENUITEM_HERE "Extraire &ici"
+    IDS_HELPTEXT_HERE "Extrait le contenu dans ce répertoire"
     IDS_FRIENDLYNAME "Répertoire compressé (zip)"
 END

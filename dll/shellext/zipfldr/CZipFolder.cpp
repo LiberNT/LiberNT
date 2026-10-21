@@ -89,6 +89,23 @@ DWORD WINAPI CZipFolder::s_ExtractProc(LPVOID arg)
     return 0;
 }
 
+struct ZIPEXTRACTHERE
+{
+    CStringW ZipFile;
+    HWND hwndOwner;
+};
+
+DWORD WINAPI CZipFolder::s_ExtractHereProc(LPVOID arg)
+{
+    ZIPEXTRACTHERE *pArgs = (ZIPEXTRACTHERE *)arg;
+
+    _CZipExtract_extractHere(pArgs->ZipFile, pArgs->hwndOwner);
+    delete pArgs;
+
+    InterlockedDecrement(&g_ModuleRefCnt);
+    return 0;
+}
+
 // Adapted from CFileDefExt::GetFileTimeString
 BOOL CZipFolder::_GetFileTimeString(LPFILETIME lpFileTime, PWSTR pwszResult, UINT cchResult)
 {
@@ -795,23 +812,23 @@ STDMETHODIMP CZipFolder::GetDisplayNameOf(PCUITEMID_CHILD pidl, DWORD dwFlags, L
 
 STDMETHODIMP CZipFolder::GetCommandString(UINT_PTR idCmd, UINT uFlags, UINT *pwReserved, LPSTR pszName, UINT cchMax)
 {
-    if (idCmd != 0)
+    if (idCmd > 1)
         return E_INVALIDARG;
 
     switch (uFlags)
     {
         case GCS_VERBA:
-            return StringCchCopyA(pszName, cchMax, EXTRACT_VERBA);
+            return StringCchCopyA(pszName, cchMax, idCmd ? EXTRACT_HERE_VERBA : EXTRACT_VERBA);
         case GCS_VERBW:
-            return StringCchCopyW((PWSTR)pszName, cchMax, EXTRACT_VERBW);
+            return StringCchCopyW((PWSTR)pszName, cchMax, idCmd ? EXTRACT_HERE_VERBW : EXTRACT_VERBW);
         case GCS_HELPTEXTA:
         {
-            CStringA helpText(MAKEINTRESOURCEA(IDS_HELPTEXT));
+            CStringA helpText(MAKEINTRESOURCEA(idCmd ? IDS_HELPTEXT_HERE : IDS_HELPTEXT));
             return StringCchCopyA(pszName, cchMax, helpText);
         }
         case GCS_HELPTEXTW:
         {
-            CStringW helpText(MAKEINTRESOURCEA(IDS_HELPTEXT));
+            CStringW helpText(MAKEINTRESOURCEA(idCmd ? IDS_HELPTEXT_HERE : IDS_HELPTEXT));
             return StringCchCopyW((PWSTR)pszName, cchMax, helpText);
         }
         case GCS_VALIDATEA:
@@ -842,6 +859,28 @@ STDMETHODIMP CZipFolder::InvokeCommand(LPCMINVOKECOMMANDINFO pici)
         }
     }
 
+    if (pici->lpVerb == MAKEINTRESOURCEA(1) ||
+        (!IS_INTRESOURCE(pici->lpVerb) && !strcmp(pici->lpVerb, EXTRACT_HERE_VERBA)))
+    {
+        ZIPEXTRACTHERE *pArgs = new ZIPEXTRACTHERE;
+
+        if (!pArgs)
+            return E_OUTOFMEMORY;
+        pArgs->ZipFile = m_ZipFile;
+        pArgs->hwndOwner = pici->hwnd;
+        InterlockedIncrement(&g_ModuleRefCnt);
+
+        HANDLE hThread = CreateThread(NULL, 0, s_ExtractHereProc, pArgs, 0, NULL);
+        if (hThread)
+        {
+            CloseHandle(hThread);
+            return S_OK;
+        }
+        delete pArgs;
+        InterlockedDecrement(&g_ModuleRefCnt);
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
     if (pici->lpVerb == MAKEINTRESOURCEA(DFM_CMD_DELETE) ||
         (!IS_INTRESOURCE(pici->lpVerb) && !strcmp(pici->lpVerb, "delete")))
     {
@@ -858,10 +897,12 @@ STDMETHODIMP CZipFolder::QueryContextMenu(HMENU hmenu, UINT indexMenu, UINT idCm
     if (!(uFlags & CMF_DEFAULTONLY))
     {
         CStringW menuText(MAKEINTRESOURCEW(IDS_MENUITEM));
+        CStringW menuHereText(MAKEINTRESOURCEW(IDS_MENUITEM_HERE));
 
         if (indexMenu)
             InsertMenuW(hmenu, indexMenu++, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
         InsertMenuW(hmenu, indexMenu++, MF_BYPOSITION | MF_STRING, idCmd++, menuText); // Command 0
+        InsertMenuW(hmenu, indexMenu++, MF_BYPOSITION | MF_STRING, idCmd++, menuHereText);
     }
 
     return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, idCmd - idCmdFirst);

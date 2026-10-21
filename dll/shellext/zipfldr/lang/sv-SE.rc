@@ -96,5 +96,7 @@ BEGIN
 
     IDS_MENUITEM "Extrahera &alla..."
     IDS_HELPTEXT "Extraherar mappinnehållet"
+    IDS_MENUITEM_HERE "Extrahera &här"
+    IDS_HELPTEXT_HERE "Extraherar innehållet till den här mappen"
     IDS_FRIENDLYNAME "Komprimerad (zippad) mapp"
 END

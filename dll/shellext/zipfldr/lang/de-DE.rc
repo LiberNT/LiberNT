@@ -96,5 +96,7 @@ BEGIN
 
     IDS_MENUITEM "&Alle Extrahieren..."
     IDS_HELPTEXT "Ordnerinhalt extrahieren"
+    IDS_MENUITEM_HERE "&Hier extrahieren"
+    IDS_HELPTEXT_HERE "Extrahiert den Inhalt in diesen Ordner"
     IDS_FRIENDLYNAME "ZIP-komprimierter Ordner"
 END

@@ -96,5 +96,7 @@ BEGIN
 
     IDS_MENUITEM "Ekstrakti &kõik..."
     IDS_HELPTEXT "Ekstraktib kausta sisu"
+    IDS_MENUITEM_HERE "Paki &siia lahti"
+    IDS_HELPTEXT_HERE "Pakib sisu sellesse kausta lahti"
     IDS_FRIENDLYNAME "Tihendatud (zippitud) kaust"
 END

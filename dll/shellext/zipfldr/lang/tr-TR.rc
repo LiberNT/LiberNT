@@ -96,5 +96,7 @@ BEGIN
 
     IDS_MENUITEM "&Hepsini Çıkart..."
     IDS_HELPTEXT "Dizin içeriğini çıkartır"
+    IDS_MENUITEM_HERE "&Buraya çıkart"
+    IDS_HELPTEXT_HERE "İçeriği bu dizine çıkartır"
     IDS_FRIENDLYNAME "Sıkıştırılmış Dizin"
 END

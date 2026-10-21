@@ -97,5 +97,7 @@ BEGIN
 
     IDS_MENUITEM "E&xtragere totală..."
     IDS_HELPTEXT "Se extrage conţinutul folderului"
+    IDS_MENUITEM_HERE "Extrage &aici"
+    IDS_HELPTEXT_HERE "Se extrage conţinutul în acest folder"
     IDS_FRIENDLYNAME "Folder comprimat (zip)"
 END

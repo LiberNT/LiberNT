@@ -96,5 +96,7 @@ BEGIN
 
     IDS_MENUITEM "Estrai &Tutto..."
     IDS_HELPTEXT "Estrae i contenuti della cartella"
+    IDS_MENUITEM_HERE "Estrai &qui"
+    IDS_HELPTEXT_HERE "Estrae i contenuti in questa cartella"
     IDS_FRIENDLYNAME "Cartella Compressa"
 END

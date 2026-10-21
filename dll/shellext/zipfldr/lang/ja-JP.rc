@@ -96,5 +96,7 @@ BEGIN
 
     IDS_MENUITEM "すべて展開(&A)..."
     IDS_HELPTEXT "フォルダ内容の展開"
+    IDS_MENUITEM_HERE "ここに展開(&H)"
+    IDS_HELPTEXT_HERE "このフォルダーに内容を展開します"
     IDS_FRIENDLYNAME "圧縮 (zip) フォルダ"
 END

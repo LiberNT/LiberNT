@@ -96,5 +96,7 @@ BEGIN
 
     IDS_MENUITEM "&Извлечь всё..."
     IDS_HELPTEXT "Извлекает содержимое архива"
+    IDS_MENUITEM_HERE "Извлечь &сюда"
+    IDS_HELPTEXT_HERE "Извлекает содержимое в эту папку"
     IDS_FRIENDLYNAME "Сжатая zip папка"
 END

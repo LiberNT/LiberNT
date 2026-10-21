@@ -74,6 +74,8 @@
 /* Context menu / ExplorerCommand strings */
 #define IDS_MENUITEM        10039
 #define IDS_HELPTEXT        10041
+#define IDS_MENUITEM_HERE   10042
+#define IDS_HELPTEXT_HERE   10043
 #define IDS_FRIENDLYNAME    10195
 
 #ifndef IDC_STATIC

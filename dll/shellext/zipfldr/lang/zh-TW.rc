@@ -98,5 +98,7 @@ BEGIN
 
     IDS_MENUITEM "解壓縮全部(&A)..."
     IDS_HELPTEXT "解壓縮資料夾内容"
+    IDS_MENUITEM_HERE "解壓縮至此處(&H)"
+    IDS_HELPTEXT_HERE "將內容解壓縮至此資料夾"
     IDS_FRIENDLYNAME "解壓縮資料夾"
 END

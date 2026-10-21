@@ -97,5 +97,7 @@ BEGIN
 
     IDS_MENUITEM "Wy&odrębnij wszystkie..."
     IDS_HELPTEXT "Wyodrębnia zawartość folderów"
+    IDS_MENUITEM_HERE "Wyodrębnij &tutaj"
+    IDS_HELPTEXT_HERE "Wyodrębnia zawartość do tego folderu"
     IDS_FRIENDLYNAME "Folder skompresowany (zip)"
 END

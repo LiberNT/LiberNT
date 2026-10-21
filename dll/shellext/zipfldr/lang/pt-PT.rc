@@ -96,5 +96,7 @@ BEGIN
 
     IDS_MENUITEM "Extrair &todos..."
     IDS_HELPTEXT "Extrair o conteúdo da pasta"
+    IDS_MENUITEM_HERE "Extrair &aqui"
+    IDS_HELPTEXT_HERE "Extrai o conteúdo para esta pasta"
     IDS_FRIENDLYNAME "Pasta compactada (zipada)"
 END
