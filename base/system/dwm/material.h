@@ -17,5 +17,5 @@
 #define DWM_MATERIAL_SATURATION           20
 #define DWM_MATERIAL_NOISE                1
 
-#define DWM_MATERIAL_REFLECT_STRENGTH     48u
+#define DWM_MATERIAL_REFLECT_STRENGTH     14u
 #define DWM_MATERIAL_EDGE_LIGHT           32u
