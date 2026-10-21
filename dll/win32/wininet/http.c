@@ -5635,6 +5635,9 @@ static DWORD create_request(http_request_t *request, void *optional, DWORD optle
                             BOOL end_request)
 {
     BOOL redirected = FALSE, secure_proxy_connect = FALSE, loop_next;
+#ifdef __REACTOS__
+    BOOL silent_retry = FALSE;
+#endif
     WCHAR *request_header = NULL;
     INT responseLen, cnt;
     DWORD res;
@@ -5747,6 +5750,9 @@ static DWORD create_request(http_request_t *request, void *optional, DWORD optle
 #endif
         TRACE("full request -> %s\n", debugstr_a(ascii_req) );
 
+#ifdef __REACTOS__
+        if (!silent_retry)
+#endif
         INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
                               INTERNET_STATUS_SENDING_REQUEST, NULL, 0);
 
@@ -5758,6 +5764,9 @@ static DWORD create_request(http_request_t *request, void *optional, DWORD optle
             if(!reusing_connection)
                 break;
             http_release_netconn(request, FALSE);
+#ifdef __REACTOS__
+            silent_retry = TRUE;
+#endif
             loop_next = TRUE;
             continue;
         }
@@ -5767,6 +5776,9 @@ static DWORD create_request(http_request_t *request, void *optional, DWORD optle
         request->awaiting_response = !end_request;
 #endif
 
+#ifdef __REACTOS__
+        if (!silent_retry)
+#endif
         INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
                               INTERNET_STATUS_REQUEST_SENT,
                               &len, sizeof(DWORD));
@@ -5775,6 +5787,9 @@ static DWORD create_request(http_request_t *request, void *optional, DWORD optle
         {
             DWORD dwBufferSize;
 
+#ifdef __REACTOS__
+            if (!silent_retry)
+#endif
             INTERNET_SendCallback(&request->hdr, request->hdr.dwContext,
                                 INTERNET_STATUS_RECEIVING_RESPONSE, NULL, 0);
 
@@ -5789,9 +5804,15 @@ static DWORD create_request(http_request_t *request, void *optional, DWORD optle
             if(!responseLen && reusing_connection) {
                 TRACE("Connection closed by server, reconnecting\n");
                 http_release_netconn(request, FALSE);
+#ifdef __REACTOS__
+                silent_retry = TRUE;
+#endif
                 loop_next = TRUE;
                 continue;
             }
+#ifdef __REACTOS__
+            silent_retry = FALSE;
+#endif
 #ifdef __REACTOS__
             if(!responseLen) {
                 http_release_netconn(request, FALSE);
