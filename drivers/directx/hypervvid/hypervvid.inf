@@ -1,0 +1,50 @@
+[Version]
+Signature="$Windows NT$"
+LayoutFile=layout.inf
+Class=Display
+ClassGUID={4D36E968-E325-11CE-BFC1-08002BE10318}
+Provider=%LiberNT%
+DriverVer=10/21/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%MicrosoftMfg%=MicrosoftMfg
+
+[MicrosoftMfg]
+%HyperVVid.DeviceDesc%=HyperVVid_Install,VMBUS\{da0a7802-e377-4aac-8e77-0558eb1073f8}
+
+[HyperVVid_Install]
+CopyFiles=HyperVVid_CopyFiles
+AddReg=HyperVVid_SoftwareSettings
+
+[HyperVVid_CopyFiles]
+hypervvid.sys
+
+[HyperVVid_SoftwareSettings]
+HKR,,InstalledDisplayDrivers,%REG_MULTI_SZ%,framebuf
+HKR,,VgaCompatible,%REG_DWORD%,0
+HKR,,UserModeDriverName,%REG_MULTI_SZ%,softgpuum.dll
+HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,softgpuum.dll
+HKR,,"Device Description",%REG_SZ%,"%HyperVVid.DeviceDesc%"
+
+[HyperVVid_Install.Services]
+AddService=hypervvid,0x00000002,HyperVVid_Service
+
+[HyperVVid_Service]
+DisplayName=%HyperVVid.ServiceDesc%
+ServiceType=1
+StartType=3
+ErrorControl=0
+ServiceBinary=%12%\hypervvid.sys
+LoadOrderGroup=Video
+
+[Strings]
+LiberNT="LiberNT Project"
+MicrosoftMfg="Microsoft"
+HyperVVid.DeviceDesc="Microsoft Hyper-V Video"
+HyperVVid.ServiceDesc="LiberNT Hyper-V Video Driver"
+REG_MULTI_SZ=0x00010000
+REG_DWORD=0x00010001
+REG_SZ=0x00000000
