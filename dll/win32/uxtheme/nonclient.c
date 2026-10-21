@@ -20,7 +20,7 @@ static const WCHAR immersive_dark_mode_propW[] = L"ReactOS.Dwm.ImmersiveDarkMode
 #define CAPTION_GLOW_RADIUS 5
 #define CAPTION_GLOW_PASSES 3
 #define CAPTION_GLOW_GAIN   3
-#define CAPTION_GLOW_LIGHT  35
+#define CAPTION_GLOW_LIGHT  21
 
 #define CAPTION_BUTTON_WIDTH_UNITS  46
 #define CAPTION_BUTTON_HEIGHT_UNITS 32
