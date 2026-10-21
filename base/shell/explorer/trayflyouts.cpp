@@ -39,6 +39,12 @@ enum
 
 static RECT g_rcTfyMorphFrom;
 static ULONGLONG g_TfyMorphTick;
+
+static int
+TfyFlyoutRadius(VOID)
+{
+    return IsThemeActive() ? ShellScaleForDpi(TFY_FLYOUT_RADIUS) : 0;
+}
 static ULONG g_TfyTransitionSeq;
 
 static VOID
@@ -127,7 +133,7 @@ public:
         m_AnimStartAlpha = 255;
         SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
         SetPropW(hWnd, DWM_PROP_CORNER_RADIUS,
-                 (HANDLE)(ULONG_PTR)ShellScaleForDpi(TFY_FLYOUT_RADIUS));
+                 (HANDLE)(ULONG_PTR)TfyFlyoutRadius());
         if (g_TfyMorphTick && m_AnimT0 - g_TfyMorphTick < TFY_MORPH_HANDOFF_MS)
         {
             rcFrom = g_rcTfyMorphFrom;
@@ -8737,7 +8743,7 @@ public:
         Reload();
         TfyW11Position(hwndOwner, prcAnchor, m_size, TRUE, &pt);
         BeginFlyoutOpen(m_hWnd, pt.x, pt.y, m_size.cx, m_size.cy, m_Pal.PanelBg);
-        SetPropW(m_hWnd, DWM_PROP_CORNER_RADIUS, (HANDLE)(ULONG_PTR)Sc(TFY_FLYOUT_RADIUS));
+        SetPropW(m_hWnd, DWM_PROP_CORNER_RADIUS, (HANDLE)(ULONG_PTR)TfyFlyoutRadius());
         ::InvalidateRect(m_hwndOwner, NULL, TRUE);
     }
 
@@ -9529,7 +9535,7 @@ public:
         Layout();
         TfyW11Position(hwndOwner, prcAnchor, m_size, FALSE, &pt);
         BeginFlyoutOpen(m_hWnd, pt.x, pt.y, m_size.cx, m_size.cy, m_Pal.PanelBg);
-        SetPropW(m_hWnd, DWM_PROP_CORNER_RADIUS, (HANDLE)(ULONG_PTR)Sc(TFY_FLYOUT_RADIUS));
+        SetPropW(m_hWnd, DWM_PROP_CORNER_RADIUS, (HANDLE)(ULONG_PTR)TfyFlyoutRadius());
         SetTimer(TFY_TIMER_AUDIOLOAD, TFY_ANIM_OPEN_MS + TFY_ANIM_INTERVAL, NULL);
         ::InvalidateRect(m_hwndOwner, NULL, FALSE);
         {
@@ -10625,7 +10631,7 @@ public:
         {
             BeginFlyoutOpen(m_hWnd, rcCal.left, yBottom - m_size.cy, m_size.cx, m_size.cy,
                             m_Pal.PanelBg, FALSE);
-            SetPropW(m_hWnd, DWM_PROP_CORNER_RADIUS, (HANDLE)(ULONG_PTR)Sc(TFY_FLYOUT_RADIUS));
+            SetPropW(m_hWnd, DWM_PROP_CORNER_RADIUS, (HANDLE)(ULONG_PTR)TfyFlyoutRadius());
         }
         else
         {
@@ -10709,7 +10715,7 @@ public:
             int x = rcCard.left + Sc(TFY_NC_PAD);
             int y = rcCard.top + Sc(TFY_NC_PAD);
 
-            TfyFillRound(hdc, &rcCard, Sc(TFY_FLYOUT_RADIUS),
+            TfyFillRound(hdc, &rcCard, TfyFlyoutRadius(),
                          (m_iHot == (int)i) ? TfyMix(crCard, m_Pal.PanelText, 10) : crCard, m_Pal.PanelBg);
             if (pNotif->hIcon)
                 DrawIconEx(hdc, x, y + Sc(2), pNotif->hIcon, Sc(16), Sc(16), 0, NULL, DI_NORMAL);

@@ -286,33 +286,20 @@ public:
         m_bModernTaskbar = bModernTaskbar;
         m_crMaterial = crMaterial;
 
-        if (!LoadStringW(hExplorerInstance, IDS_START, szStartCaption,
-                         _countof(szStartCaption)))
-        {
-            wcscpy(szStartCaption, L"Start");
-        }
-        if (m_bModernTaskbar)
-            szStartCaption[0] = UNICODE_NULL;
-        SetWindowTextW(szStartCaption);
-
         if (bRebuildImages)
         {
             ClearImageList();
-            if (m_bModernTaskbar)
+            m_ImageList = CreateStartOrbImageList(ShellScaleForDpi(m_bModernTaskbar ? 36 : 20));
+            if (m_ImageList)
             {
-                const INT cxIcon = ShellScaleForDpi(36);
-                m_ImageList = CreateStartOrbImageList(cxIcon);
-                if (m_ImageList)
-                {
-                    const INT Margin = ShellScaleForDpi(1);
-                    BUTTON_IMAGELIST bil = {m_ImageList,
-                                            {Margin, Margin, Margin, Margin},
-                                            BUTTON_IMAGELIST_ALIGN_CENTER};
-                    SendMessageW(BCM_SETIMAGELIST, 0, (LPARAM)&bil);
-                    m_bOrbIcon = TRUE;
-                }
+                const INT Margin = ShellScaleForDpi(1);
+                BUTTON_IMAGELIST bil = {m_ImageList,
+                                        {Margin, Margin, Margin, Margin},
+                                        BUTTON_IMAGELIST_ALIGN_CENTER};
+                SendMessageW(BCM_SETIMAGELIST, 0, (LPARAM)&bil);
+                m_bOrbIcon = TRUE;
             }
-            else
+            else if (!m_bModernTaskbar)
             {
                 m_ImageList = ImageList_LoadImageW(hExplorerInstance,
                                                    MAKEINTRESOURCEW(IDB_START),
@@ -329,6 +316,15 @@ public:
                 }
             }
         }
+
+        if (!LoadStringW(hExplorerInstance, IDS_START, szStartCaption,
+                         _countof(szStartCaption)))
+        {
+            wcscpy(szStartCaption, L"Start");
+        }
+        if (m_bModernTaskbar || m_bOrbIcon)
+            szStartCaption[0] = UNICODE_NULL;
+        SetWindowTextW(szStartCaption);
 
         m_bMaterial = m_bModernTaskbar && m_bOrbIcon;
         UpdateSize();
@@ -3459,7 +3455,7 @@ HandleTrayContextMenu:
     LRESULT OnShowVolumeFlyout(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
         RECT rcAnchor;
-        if (!IsThemeActive() || !m_TrayNotify)
+        if (!m_TrayNotify)
             return FALSE;
         ::GetWindowRect(m_TrayNotify, &rcAnchor);
         if (wParam == 1)
@@ -3477,7 +3473,7 @@ HandleTrayContextMenu:
     LRESULT OnShowNetworkFlyout(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
         RECT rcAnchor;
-        if (!IsThemeActive() || !m_TrayNotify)
+        if (!m_TrayNotify)
             return FALSE;
         ::GetWindowRect(m_TrayNotify, &rcAnchor);
         TrayNetwork_Toggle(m_hWnd, &rcAnchor);
@@ -3487,7 +3483,7 @@ HandleTrayContextMenu:
     LRESULT OnShowPowerFlyout(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
         RECT rcAnchor;
-        if (!IsThemeActive() || !m_TrayNotify)
+        if (!m_TrayNotify)
             return FALSE;
         ::GetWindowRect(m_TrayNotify, &rcAnchor);
         TrayPower_Toggle(m_hWnd, &rcAnchor);
@@ -3498,7 +3494,7 @@ HandleTrayContextMenu:
     {
         RECT rcAnchor;
         HWND hwndClock;
-        if (!IsThemeActive() || !m_TrayNotify)
+        if (!m_TrayNotify)
             return FALSE;
         hwndClock = FindWindowExW(m_TrayNotify, NULL, L"TrayClockWClass", NULL);
         if (!hwndClock)
