@@ -12,4 +12,4 @@ set_source_files_properties(resource.rc OBJECT_DEPENDS windows_applicationmodel_
 add_dependencies(windows_applicationmodel_winetest windows_applicationmodel_helper)
 set_module_type(windows_applicationmodel_winetest win32cui)
 add_importlibs(windows_applicationmodel_winetest combase advapi32 shlwapi msvcrt kernel32 ntdll)
-add_rostests_file(TARGET windows_applicationmodel_winetest RENAME wapp.exe)
+add_rostests_file(TARGET windows_applicationmodel_winetest)
