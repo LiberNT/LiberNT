@@ -88,7 +88,7 @@ IntGdiCreateDC(PUNICODE_STRING Driver,
 /* Stock objects */
 
 VOID FASTCALL
-IntSetSysColors(UINT nColors, CONST INT *Elements, CONST COLORREF *Colors);
+IntSetSysColors(UINT nColors, CONST INT *Elements, CONST COLORREF *Colors, BOOL UpdateDefaults);
 
 HGDIOBJ FASTCALL
 IntGetSysColorBrush(INT Object);

@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <winreg.h>
+
 #define REACTOS_DWM_SETTINGS_KEY L"Software\\ReactOS\\DWM"
 #define REACTOS_PERSONALIZE_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
 

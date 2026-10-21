@@ -3426,6 +3426,8 @@ NtUserSetShellWindowEx(
     HWND hwndShell,
     HWND hwndShellListView);
 
+#define SSCF_ROS_UPDATEDEFAULTS 0x80000000
+
 BOOL
 NTAPI
 NtUserSetSysColors(

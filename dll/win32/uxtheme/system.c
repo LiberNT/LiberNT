@@ -724,6 +724,13 @@ void UXTHEME_ClearNonClientLiquidProperties(HWND hwnd)
     UXTHEME_ClearLiquidProperties(hwnd, DWM_BACKDROP_REGION_NONCLIENT);
 }
 
+static BOOL UXTHEME_UseLightClasses(LPCWSTR classList, DWORD flags)
+{
+    if ((flags & OTD_NONCLIENT) && !lstrcmpiW(classList, L"WINDOW"))
+        return DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT;
+    return UXTHEME_UsesDefaultSysColors();
+}
+
 static PTHEME_CLASS UXTHEME_OpenShellMaterial(DWORD scheme, UINT dpi)
 {
     PTHEME_CLASS liquid = MSSTYLES_OpenThemeClass(DWM_SHELL_MATERIAL_APP(scheme), L"Liquid", dpi);
@@ -793,7 +800,9 @@ static void UXTHEME_ApplyLiquidProperties(HWND hwnd, LPCWSTR classList,
         return;
 
     liquid = NULL;
-    if (bThemeActive)
+    if (bThemeActive && !shell && DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT)
+        liquid = MSSTYLES_OpenThemeClass(L"NonClientLight", L"Liquid", dpi);
+    if (!liquid && bThemeActive)
         liquid = MSSTYLES_OpenThemeClass(role, L"Liquid", dpi);
     if (!liquid || FAILED(GetThemeBool(liquid, 0, 0, TMT_COMPOSITED,
                                        &composited)) || !composited ||
@@ -809,16 +818,14 @@ static void UXTHEME_ApplyLiquidProperties(HWND hwnd, LPCWSTR classList,
 
     colorizationResult = GetThemeColor(liquid, 0, 0, TMT_COLORIZATIONCOLOR, &colorization);
     MSSTYLES_CloseThemeClass(liquid);
-    liquid = shell ? UXTHEME_OpenShellMaterial(scheme, dpi) : NULL;
+    liquid = UXTHEME_OpenShellMaterial(shell ? scheme : DwmSettingsReadColorScheme(), dpi);
     if (liquid)
     {
         if (SUCCEEDED(GetThemeInt(liquid, 0, 0, TMT_OPACITY, &shellOpacity)) &&
-            shellOpacity >= 0 && shellOpacity <= 255 &&
-            SUCCEEDED(GetThemeColor(liquid, 0, 0, TMT_FILLCOLOR, &shellColor)))
-        {
+            shellOpacity >= 0 && shellOpacity <= 255)
             opacity = shellOpacity;
+        if (shell && SUCCEEDED(GetThemeColor(liquid, 0, 0, TMT_FILLCOLOR, &shellColor)))
             color = shellColor;
-        }
         MSSTYLES_CloseThemeClass(liquid);
     }
     if (FAILED(colorizationResult))
@@ -905,7 +912,8 @@ static HTHEME open_theme_data(HWND hwnd, LPCWSTR pszClassList, DWORD flags, UINT
 #ifdef __REACTOS__
         if (pszUseClassList)
             hTheme = MSSTYLES_OpenThemeClassForApp(pszAppName,
-                                                   UXTHEME_UsesDefaultSysColors() ? L"ContentLight" : NULL,
+                                                   UXTHEME_UseLightClasses(pszUseClassList, flags) ?
+                                                   L"ContentLight" : NULL,
                                                    pszUseClassList, dpi);
 #else
         if (pszUseClassList)

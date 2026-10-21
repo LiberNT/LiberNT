@@ -818,6 +818,7 @@
 @ stdcall UserLpkTabbedTextOut(long long long long long long long long long long long long)
 @ stdcall UserRealizePalette(long)
 @ stdcall UserRegisterWowHandlers(ptr ptr)
+@ stdcall UserSetLightColorScheme(long)
 # VRipOutput
 # VTagOutput
 @ stdcall ValidateRect(long ptr) NtUserValidateRect

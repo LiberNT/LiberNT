@@ -412,6 +412,7 @@ BOOL WINAPI RegisterUserApiHook(PUSERAPIHOOKINFO puah);
 #endif
 BOOL WINAPI UnregisterUserApiHook(VOID);
 #endif
+BOOL WINAPI UserSetLightColorScheme(BOOL Light);
 
 /* dwType for NtUserQueryInputContext */
 typedef enum _QUERY_INPUT_CONTEXT

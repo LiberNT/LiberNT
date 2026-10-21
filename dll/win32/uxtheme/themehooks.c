@@ -7,6 +7,7 @@
  */
 
 #include "uxthemep.h"
+#include <reactos/colorscheme.h>
 
 USERAPIHOOK g_user32ApiHook;
 BYTE gabDWPmessages[UAHOWP_MAX_SIZE];
@@ -513,6 +514,28 @@ ThemeDwmUpdateThemedFrame(HWND hWnd)
         RemovePropW(hWnd, DWM_PROP_THEMED_FRAME);
 }
 
+static BOOL CALLBACK
+ThemeNotifyColorScheme(HWND hWnd, LPARAM lParam)
+{
+    SendNotifyMessageW(hWnd, WM_SYSCOLORCHANGE, 0, 0);
+    SendNotifyMessageW(hWnd, WM_THEMECHANGED, TRUE, 0);
+    return TRUE;
+}
+
+static BOOL CALLBACK
+ThemeNotifyProcessColorScheme(HWND hWnd, LPARAM lParam)
+{
+    DWORD ProcessId = 0;
+
+    GetWindowThreadProcessId(hWnd, &ProcessId);
+    if (ProcessId == GetCurrentProcessId())
+    {
+        ThemeNotifyColorScheme(hWnd, lParam);
+        EnumChildWindows(hWnd, ThemeNotifyColorScheme, lParam);
+    }
+    return TRUE;
+}
+
 static LRESULT CALLBACK
 ThemePreWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, ULONG_PTR ret,PDWORD unknown)
 {
@@ -540,6 +563,13 @@ ThemePreWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, ULONG_PTR 
 
     switch(Msg)
     {
+        case WM_SETTINGCHANGE:
+            if (lParam && !lstrcmpiW((LPCWSTR)lParam, L"ImmersiveColorSet") &&
+                UserSetLightColorScheme(DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT))
+            {
+                EnumWindows(ThemeNotifyProcessColorScheme, 0);
+            }
+            break;
         case WM_CREATE:
         case WM_STYLECHANGED:
         case WM_SIZE:

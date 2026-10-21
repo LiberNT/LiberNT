@@ -1,6 +1,7 @@
 #include <user32.h>
 #include <ndk/cmfuncs.h>
 #include <strsafe.h>
+#include <reactos/colorscheme.h>
 
 #define MAX_USER_MODE_DRV_BUFFER 526
 
@@ -34,6 +35,7 @@ PUSER_HANDLE_ENTRY gHandleEntries = NULL;
 BOOLEAN gfLogonProcess  = FALSE;
 BOOLEAN gfServerProcess = FALSE;
 BOOLEAN gfDefaultSysColors = FALSE;
+BOOLEAN gfOutsideSystemDirectory = FALSE;
 BOOLEAN gfWin32kLockdown = FALSE;
 
 HDC
@@ -271,8 +273,8 @@ VOID
 WINAPI
 GdiProcessSetup(VOID);
 
-static VOID
-InitDefaultSysColors(VOID)
+static BOOLEAN
+IsOutsideSystemDirectory(VOID)
 {
     WCHAR Root[MAX_PATH + 1], Image[MAX_PATH];
     DWORD Size = ARRAYSIZE(Image);
@@ -280,7 +282,7 @@ InitDefaultSysColors(VOID)
 
     Length = GetSystemWindowsDirectoryW(Root, MAX_PATH);
     if (Length == 0 || Length >= MAX_PATH)
-        return;
+        return FALSE;
     if (Root[Length - 1] != L'\\')
     {
         Root[Length++] = L'\\';
@@ -288,12 +290,28 @@ InitDefaultSysColors(VOID)
     }
     if (!QueryFullProcessImageNameW(GetCurrentProcess(), 0, Image, &Size) &&
         GetModuleFileNameW(NULL, Image, ARRAYSIZE(Image)) == 0)
-        return;
-    if (!_wcsnicmp(Image, Root, Length))
-        return;
+        return FALSE;
+    return _wcsnicmp(Image, Root, Length) != 0;
+}
 
-    NtUserCallOneParam(TRUE, ONEPARAM_ROUTINE_ROS_USEDEFAULTSYSCOLORS);
-    gfDefaultSysColors = TRUE;
+BOOL
+WINAPI
+UserSetLightColorScheme(BOOL Light)
+{
+    BOOLEAN Default = gfOutsideSystemDirectory || Light;
+
+    if (gfServerProcess || Default == gfDefaultSysColors)
+        return FALSE;
+    NtUserCallOneParam(Default, ONEPARAM_ROUTINE_ROS_USEDEFAULTSYSCOLORS);
+    gfDefaultSysColors = Default;
+    return TRUE;
+}
+
+static VOID
+InitDefaultSysColors(VOID)
+{
+    gfOutsideSystemDirectory = IsOutsideSystemDirectory();
+    UserSetLightColorScheme(DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT);
 }
 
 BOOL

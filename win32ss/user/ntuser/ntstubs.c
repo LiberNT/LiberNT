@@ -358,7 +358,7 @@ NtUserSetSysColors(
       ProbeForRead(lpaElements, cElements * sizeof(INT), 1);
       ProbeForRead(lpaRgbValues, cElements * sizeof(COLORREF), 1);
 
-      IntSetSysColors(cElements, lpaElements, lpaRgbValues);
+      IntSetSysColors(cElements, lpaElements, lpaRgbValues, (Flags & SSCF_ROS_UPDATEDEFAULTS) != 0);
    }
    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
    {

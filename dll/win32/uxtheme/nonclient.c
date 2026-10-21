@@ -357,7 +357,8 @@ HRESULT WINAPI ThemeDrawCaptionText(PDRAW_CONTEXT pcontext, RECT* pRect, int iPa
 
     if (pcontext->DarkMode)
         textColor = pcontext->Active ? RGB(255, 255, 255) : RGB(160, 160, 160);
-    else
+    else if (FAILED(GetThemeColor(pcontext->theme, WP_CAPTION, pcontext->Active ? CS_ACTIVE : CS_INACTIVE,
+                                  TMT_TEXTCOLOR, &textColor)))
         textColor = GetThemeSysColor(pcontext->theme, pcontext->Active ? COLOR_CAPTIONTEXT : COLOR_INACTIVECAPTIONTEXT);
 
     GetThemeEnumValue(pcontext->theme, iPartId, iStateId, TMT_CONTENTALIGNMENT, &align);
@@ -1219,7 +1220,7 @@ ThemeDwmDrawCaptionButton(HDC hDC, const RECT *prc, UINT Button, ULONG State, BO
         break;
     }
 
-    hTheme = OpenThemeData(NULL, L"WINDOW");
+    hTheme = UXTHEME_OpenNcThemeData(NULL, L"WINDOW", OTD_NONCLIENT);
     if (!hTheme)
         return FALSE;
     DrawThemeBackground(hTheme, hDC, iPart, iState, prc, NULL);

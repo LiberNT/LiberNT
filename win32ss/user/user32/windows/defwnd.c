@@ -69,7 +69,8 @@ SetSysColors(
   CONST INT *lpaElements,
   CONST COLORREF *lpaRgbValues)
 {
-  return NtUserSetSysColors(cElements, lpaElements, lpaRgbValues, 0);
+  return NtUserSetSysColors(cElements, lpaElements, lpaRgbValues,
+                            gfOutsideSystemDirectory ? SSCF_ROS_UPDATEDEFAULTS : 0);
 }
 
 BOOL

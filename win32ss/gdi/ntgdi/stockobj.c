@@ -340,10 +340,10 @@ NtGdiGetStockObject(INT Object)
 }
 
 VOID FASTCALL
-IntSetSysColors(UINT nColors, CONST INT *Elements, CONST COLORREF *Colors)
+IntSetSysColors(UINT nColors, CONST INT *Elements, CONST COLORREF *Colors, BOOL UpdateDefaults)
 {
     PPROCESSINFO ppi = PsGetCurrentProcessWin32Process();
-    BOOL bDefaultColors = ppi && (ppi->W32PF_flags & W32PF_DEFAULTSYSCOLORS);
+    BOOL bDefaultColors = UpdateDefaults && ppi && (ppi->W32PF_flags & W32PF_DEFAULTSYSCOLORS);
     UINT i;
 
     for (i = 0; i < nColors; i++)
