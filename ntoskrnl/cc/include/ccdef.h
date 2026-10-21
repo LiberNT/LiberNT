@@ -14,7 +14,7 @@
 #define CC_VIEW_MASK                (CC_VIEW_SIZE - 1)
 #define CC_VIEW_PAGES               (CC_VIEW_SIZE >> PAGE_SHIFT)
 
-#define CC_LEAF_SHIFT               8
+#define CC_LEAF_SHIFT               4
 #define CC_LEAF_SLOTS               (1u << CC_LEAF_SHIFT)
 #define CC_LEAF_MASK                (CC_LEAF_SLOTS - 1)
 
