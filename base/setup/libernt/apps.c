@@ -11,6 +11,7 @@
 #include <initguid.h>
 #include <objbase.h>
 #include <bits.h>
+#include <netlistmgr.h>
 #include <wintrust.h>
 #include <softpub.h>
 #include <wincrypt.h>
@@ -25,6 +26,7 @@
 
 #define APP_NO_PROGRESS_TIMEOUT 120000
 #define APP_POLL_INTERVAL       250
+#define APP_RETRY_DELAY         60
 
 POOBE_APP OobeApps;
 ULONG OobeAppCount;
@@ -349,6 +351,46 @@ SetProgressText(
     SetWindowTextW(hWnd, Text);
 }
 
+static BOOL
+IsInternetConnected(VOID)
+{
+    INetworkListManager* Manager;
+    NLM_CONNECTIVITY Connectivity;
+    HRESULT hr;
+
+    hr = CoCreateInstance(&CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_INetworkListManager, (PVOID*)&Manager);
+    if (FAILED(hr))
+    {
+        DPRINT1("Network List Manager is not available, hr 0x%08lx\n", hr);
+        return TRUE;
+    }
+
+    hr = INetworkListManager_GetConnectivity(Manager, &Connectivity);
+    INetworkListManager_Release(Manager);
+    if (FAILED(hr))
+        return TRUE;
+
+    return (Connectivity & (NLM_CONNECTIVITY_IPV4_INTERNET | NLM_CONNECTIVITY_IPV6_INTERNET)) != 0;
+}
+
+static HRESULT
+GetJobError(
+    _In_ IBackgroundCopyJob* Job,
+    _In_ HRESULT hrDefault)
+{
+    IBackgroundCopyError* Error;
+    BG_ERROR_CONTEXT ErrorContext;
+    HRESULT hrJob = hrDefault;
+
+    if (SUCCEEDED(IBackgroundCopyJob_GetError(Job, &Error)))
+    {
+        IBackgroundCopyError_GetError(Error, &ErrorContext, &hrJob);
+        IBackgroundCopyError_Release(Error);
+    }
+    return hrJob;
+}
+
 static HRESULT
 DownloadFile(
     _In_ POOBE_APP App,
@@ -357,10 +399,9 @@ DownloadFile(
 {
     IBackgroundCopyManager* Manager = NULL;
     IBackgroundCopyJob* Job = NULL;
-    IBackgroundCopyError* Error;
-    BG_ERROR_CONTEXT ErrorContext;
     BG_JOB_PROGRESS JobProgress;
     BG_JOB_STATE State;
+    BG_JOB_STATE LastState = BG_JOB_STATE_QUEUED;
     UINT64 LastBytes = 0;
     DWORD LastChange = GetTickCount();
     HRESULT hr, hrJob = E_FAIL;
@@ -377,6 +418,10 @@ DownloadFile(
     hr = IBackgroundCopyManager_CreateJob(Manager, App->Name, BG_JOB_TYPE_DOWNLOAD, &JobId, &Job);
     if (SUCCEEDED(hr))
         hr = IBackgroundCopyJob_AddFile(Job, App->Url, LocalPath);
+    if (SUCCEEDED(hr))
+        hr = IBackgroundCopyJob_SetMinimumRetryDelay(Job, APP_RETRY_DELAY);
+    if (SUCCEEDED(hr))
+        hr = IBackgroundCopyJob_SetNoProgressTimeout(Job, APP_NO_PROGRESS_TIMEOUT / 1000);
     if (SUCCEEDED(hr))
         hr = IBackgroundCopyJob_Resume(Job);
     if (FAILED(hr))
@@ -405,6 +450,12 @@ DownloadFile(
             }
         }
 
+        if (State != LastState)
+        {
+            LastState = State;
+            LastChange = GetTickCount();
+        }
+
         if (State == BG_JOB_STATE_TRANSFERRED)
         {
             hr = IBackgroundCopyJob_Complete(Job);
@@ -414,18 +465,14 @@ DownloadFile(
 
         if (State == BG_JOB_STATE_ERROR)
         {
-            hrJob = E_FAIL;
-            if (SUCCEEDED(IBackgroundCopyJob_GetError(Job, &Error)))
-            {
-                IBackgroundCopyError_GetError(Error, &ErrorContext, &hrJob);
-                IBackgroundCopyError_Release(Error);
-            }
+            hrJob = GetJobError(Job, E_FAIL);
             IBackgroundCopyJob_Cancel(Job);
             break;
         }
 
         if (State == BG_JOB_STATE_CANCELLED ||
-            GetTickCount() - LastChange > APP_NO_PROGRESS_TIMEOUT)
+            (State != BG_JOB_STATE_TRANSIENT_ERROR &&
+             GetTickCount() - LastChange > APP_NO_PROGRESS_TIMEOUT))
         {
             hrJob = HRESULT_FROM_WIN32(ERROR_TIMEOUT);
             if (State != BG_JOB_STATE_CANCELLED)
@@ -640,6 +687,13 @@ InstallOobeApp(
     }
     CreateDirectoryW(Folder, NULL);
     DeleteFileW(Path);
+
+    if (!IsInternetConnected())
+    {
+        DPRINT1("No Internet connection, %S is not downloaded\n", App->Name);
+        App->Result = ERROR_NETWORK_UNREACHABLE;
+        return App->Result;
+    }
 
     SetProgressText(Progress->hwndActivity, IDS_OOBE_DOWNLOADING, App->Name);
     SetWindowTextW(Progress->hwndItem, App->Url);
