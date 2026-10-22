@@ -715,6 +715,99 @@ static ULONG WINAPI cost_manager_Release(
     return INetworkListManager_Release( &mgr->INetworkListManager_iface );
 }
 
+#ifdef __REACTOS__
+static DWORD default_route_interface( NET_IFINDEX *index )
+{
+    MIB_IPFORWARD_TABLE2 *table;
+    ULONG metric = ~0u, i;
+    DWORD ret;
+
+    if ((ret = GetIpForwardTable2( AF_UNSPEC, &table ))) return ret;
+
+    ret = ERROR_NETWORK_UNREACHABLE;
+    for (i = 0; i < table->NumEntries; i++)
+    {
+        const MIB_IPFORWARD_ROW2 *row = &table->Table[i];
+
+        if (row->DestinationPrefix.PrefixLength || row->Metric >= metric) continue;
+        metric = row->Metric;
+        *index = row->InterfaceIndex;
+        ret = ERROR_SUCCESS;
+    }
+    FreeMibTable( table );
+    return ret;
+}
+
+static DWORD destination_interface( const SOCKADDR *dst, NET_IFINDEX *index )
+{
+    const SOCKADDR_IN6 *dst6 = (const SOCKADDR_IN6 *)dst;
+    SOCKADDR_IN addr4;
+    MIB_IF_ROW2 row;
+    DWORD ret;
+
+    if (dst->sa_family == AF_INET6 && IN6_IS_ADDR_V4MAPPED( &dst6->sin6_addr ))
+    {
+        memset( &addr4, 0, sizeof(addr4) );
+        addr4.sin_family = AF_INET;
+        memcpy( &addr4.sin_addr, &dst6->sin6_addr.u.Byte[12], sizeof(addr4.sin_addr) );
+        dst = (const SOCKADDR *)&addr4;
+    }
+    if (GetBestInterfaceEx( (SOCKADDR *)dst, index )) return ERROR_NOT_FOUND;
+
+    memset( &row, 0, sizeof(row) );
+    row.InterfaceIndex = *index;
+    if ((ret = GetIfEntry2( &row ))) return ret;
+    return row.Type == IF_TYPE_SOFTWARE_LOOPBACK ? ERROR_NOT_FOUND : ERROR_SUCCESS;
+}
+
+static DWORD media_cost( NET_IFINDEX index )
+{
+    MIB_IF_ROW2 row;
+    const WCHAR *name = L"Default";
+    DWORD value, size = sizeof(value);
+
+    memset( &row, 0, sizeof(row) );
+    row.InterfaceIndex = index;
+    if (!GetIfEntry2( &row ))
+    {
+        if (row.Type == IF_TYPE_ETHERNET_CSMACD) name = L"Ethernet";
+        else if (row.Type == IF_TYPE_IEEE80211) name = L"WiFi";
+    }
+
+    if (RegGetValueW( HKEY_LOCAL_MACHINE,
+                      L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList\\DefaultMediaCost",
+                      name, RRF_RT_REG_DWORD, NULL, &value, &size ))
+        value = 1;
+
+    return value == 2 ? NLM_CONNECTION_COST_FIXED : NLM_CONNECTION_COST_UNRESTRICTED;
+}
+
+static HRESULT WINAPI cost_manager_GetCost(
+    INetworkCostManager *iface, DWORD *pCost, NLM_SOCKADDR *pDestIPAddr)
+{
+    const SOCKADDR *dst = (const SOCKADDR *)pDestIPAddr;
+    NET_IFINDEX index;
+    DWORD ret;
+
+    TRACE( "%p, %p, %p\n", iface, pCost, pDestIPAddr );
+
+    if (!pCost) return E_POINTER;
+
+    if (dst)
+    {
+        if (dst->sa_family != AF_INET && dst->sa_family != AF_INET6) return E_INVALIDARG;
+        if ((ret = destination_interface( dst, &index ))) return HRESULT_FROM_WIN32( ret );
+    }
+    else if (default_route_interface( &index ))
+    {
+        *pCost = NLM_CONNECTION_COST_UNKNOWN;
+        return S_OK;
+    }
+
+    *pCost = media_cost( index );
+    return S_OK;
+}
+#else
 static HRESULT WINAPI cost_manager_GetCost(
     INetworkCostManager *iface, DWORD *pCost, NLM_SOCKADDR *pDestIPAddr)
 {
@@ -725,6 +818,7 @@ static HRESULT WINAPI cost_manager_GetCost(
     *pCost = NLM_CONNECTION_COST_UNRESTRICTED;
     return S_OK;
 }
+#endif
 
 static BOOL map_address_6to4( const SOCKADDR_IN6 *addr6, SOCKADDR_IN *addr4 )
 {
