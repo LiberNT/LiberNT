@@ -1,0 +1,28 @@
+/*
+ * PROJECT:     LiberNT SDK
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Toast notification activation callback for desktop applications
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+import "oaidl.idl";
+
+typedef struct NOTIFICATION_USER_INPUT_DATA
+{
+    LPCWSTR Key;
+    LPCWSTR Value;
+} NOTIFICATION_USER_INPUT_DATA;
+
+[
+    object,
+    uuid(53e31837-6600-4a81-9395-75cffe746f94),
+    pointer_default(ref)
+]
+interface INotificationActivationCallback : IUnknown
+{
+    HRESULT Activate(
+        [in, string] LPCWSTR appUserModelId,
+        [in, string, unique] LPCWSTR invokedArgs,
+        [in, size_is(count), unique] const NOTIFICATION_USER_INPUT_DATA *data,
+        [in] ULONG count);
+}

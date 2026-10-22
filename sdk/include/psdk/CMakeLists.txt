@@ -124,6 +124,7 @@ list(APPEND SOURCE
     netcon.idl
     netlistmgr.idl
     netfw.idl
+    notificationactivationcallback.idl
     oaidl.idl
     objectarray.idl
     objidl.idl
@@ -199,6 +200,7 @@ list(APPEND SOURCE
     windows.applicationmodel.datatransfer.dragdrop.idl
     windows.applicationmodel.datatransfer.idl
     windows.applicationmodel.idl
+    windows.applicationmodel.store.preview.installcontrol.idl
     windows.data.json.idl
     windows.data.xml.dom.idl
     windows.devices.bluetooth.advertisement.idl

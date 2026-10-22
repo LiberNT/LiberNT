@@ -50,3 +50,9 @@ import "windows.ui.shell.idl";
 namespace Windows.UI.Shell {
     runtimeclass TaskbarManager;
 }
+
+#ifdef __REACTOS__
+namespace Windows.Devices.Input {
+    runtimeclass PenDevice;
+}
+#endif

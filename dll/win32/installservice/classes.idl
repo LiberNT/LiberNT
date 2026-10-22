@@ -1,0 +1,22 @@
+/*
+ * PROJECT:     LiberNT Windows Runtime
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Runtime classes of the Store install control
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep register
+#pragma winrt ns_prefix
+
+import "inspectable.idl";
+import "asyncinfo.idl";
+import "eventtoken.idl";
+import "windowscontracts.idl";
+import "windows.foundation.idl";
+import "windows.applicationmodel.store.preview.installcontrol.idl";
+
+namespace Windows.ApplicationModel.Store.Preview.InstallControl {
+    runtimeclass AppInstallManager;
+    runtimeclass AppInstallOptions;
+    runtimeclass AppUpdateOptions;
+}

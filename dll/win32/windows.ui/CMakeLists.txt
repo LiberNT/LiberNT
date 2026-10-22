@@ -5,6 +5,7 @@ list(APPEND SOURCE
     corewindow.c
     inputpane.c
     main.c
+    pendevice.c
     taskbarmanager.c
     uisettings.c
     uiviewsettings.c

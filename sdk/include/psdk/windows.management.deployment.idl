@@ -277,3 +277,55 @@ namespace Windows.Management.Deployment {
     }
 
 }
+
+#ifdef __REACTOS__
+namespace Windows.Management.Deployment {
+    interface IPackageVolume;
+
+    runtimeclass PackageVolume;
+
+    declare {
+        interface Windows.Foundation.Collections.IVectorView<Windows.ApplicationModel.Package *>;
+        interface Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package *>;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Management.Deployment.PackageVolume),
+        uuid(cf2672c3-1a40-4450-9739-2ace2e898853)
+    ]
+    interface IPackageVolume : IInspectable
+    {
+        [propget] HRESULT IsOffline([out, retval] boolean* value);
+        [propget] HRESULT IsSystemVolume([out, retval] boolean* value);
+        [propget] HRESULT MountPoint([out, retval] HSTRING* value);
+        [propget] HRESULT Name([out, retval] HSTRING* value);
+        [propget] HRESULT PackageStorePath([out, retval] HSTRING* value);
+        [propget] HRESULT SupportsHardLinks([out, retval] boolean* value);
+        [overload("FindPackages")] HRESULT FindPackages([out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackages")] HRESULT FindPackagesByNamePublisher([in] HSTRING packageName, [in] HSTRING packagePublisher, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackages")] HRESULT FindPackagesByPackageFamilyName([in] HSTRING packageFamilyName, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackagesWithPackageTypes")] HRESULT FindPackagesWithPackageTypes([in] Windows.Management.Deployment.PackageTypes packageTypes, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackagesWithPackageTypes")] HRESULT FindPackagesByNamePublisherWithPackagesTypes([in] Windows.Management.Deployment.PackageTypes packageTypes, [in] HSTRING packageName, [in] HSTRING packagePublisher, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackagesWithPackageTypes")] HRESULT FindPackagesByPackageFamilyNameWithPackageTypes([in] Windows.Management.Deployment.PackageTypes packageTypes, [in] HSTRING packageFamilyName, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackage")] HRESULT FindPackageByPackageFullName([in] HSTRING packageFullName, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackagesForUser")] HRESULT FindPackagesByUserSecurityId([in] HSTRING userSecurityId, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackagesForUser")] HRESULT FindPackagesByUserSecurityIdNamePublisher([in] HSTRING userSecurityId, [in] HSTRING packageName, [in] HSTRING packagePublisher, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackagesForUser")] HRESULT FindPackagesByUserSecurityIdPackageFamilyName([in] HSTRING userSecurityId, [in] HSTRING packageFamilyName, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackagesForUserWithPackageTypes")] HRESULT FindPackagesByUserSecurityIdWithPackageTypes([in] HSTRING userSecurityId, [in] Windows.Management.Deployment.PackageTypes packageTypes, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackagesForUserWithPackageTypes")] HRESULT FindPackagesByUserSecurityIdNamePublisherWithPackageTypes([in] HSTRING userSecurityId, [in] Windows.Management.Deployment.PackageTypes packageTypes, [in] HSTRING packageName, [in] HSTRING packagePublisher, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackagesForUserWithPackageTypes")] HRESULT FindPackagesByUserSecurityIdPackageFamilyNameWithPackagesTypes([in] HSTRING userSecurityId, [in] Windows.Management.Deployment.PackageTypes packageTypes, [in] HSTRING packageFamilyName, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+        [overload("FindPackageForUser")] HRESULT FindPackageByUserSecurityIdPackageFullName([in] HSTRING userSecurityId, [in] HSTRING packageFullName, [out, retval] Windows.Foundation.Collections.IVector<Windows.ApplicationModel.Package*>** packageCollection);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass PackageVolume
+    {
+        [default] interface Windows.Management.Deployment.IPackageVolume;
+    }
+}
+#endif

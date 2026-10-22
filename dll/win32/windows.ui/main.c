@@ -56,6 +56,11 @@ HRESULT WINAPI DllGetActivationFactory( HSTRING classid, IActivationFactory **fa
     if (!wcscmp( buffer, RuntimeClass_Windows_UI_Shell_TaskbarManager ))
         IActivationFactory_QueryInterface( taskbarmanager_factory, &IID_IActivationFactory, (void **)factory );
 
+#ifdef __REACTOS__
+    if (!wcscmp( buffer, RuntimeClass_Windows_Devices_Input_PenDevice ))
+        IActivationFactory_QueryInterface( pendevice_factory, &IID_IActivationFactory, (void **)factory );
+#endif
+
     if (*factory) return S_OK;
     return CLASS_E_CLASSNOTAVAILABLE;
 }

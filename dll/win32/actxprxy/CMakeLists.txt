@@ -11,6 +11,7 @@ add_rpcproxy_files(
     actxprxy_htiface.idl
     actxprxy_htiframe.idl
     actxprxy_imapi.idl
+    actxprxy_notificationactivationcallback.idl
     actxprxy_objsafe.idl
     actxprxy_ocmm.idl
     actxprxy_servprov.idl
@@ -29,6 +30,7 @@ list(APPEND SOURCE
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_htiface_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_htiframe_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_imapi_p.c
+    ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_notificationactivationcallback_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_objsafe_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_ocmm_p.c
     ${CMAKE_CURRENT_BINARY_DIR}/actxprxy_servprov_p.c
@@ -53,6 +55,7 @@ add_idl_reg_scripts(actxprxy registry
     actxprxy_htiface.idl
     actxprxy_htiframe.idl
     actxprxy_imapi.idl
+    actxprxy_notificationactivationcallback.idl
     actxprxy_objsafe.idl
     actxprxy_ocmm.idl
     actxprxy_servprov.idl

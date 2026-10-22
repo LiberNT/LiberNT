@@ -113,3 +113,43 @@ namespace Windows.Devices.Input {
         [contract(Windows.Foundation.UniversalApiContract, 1.0)] interface Windows.Devices.Input.IPointerDevice2;
     }
 }
+
+#ifdef __REACTOS__
+namespace Windows.Devices.Input {
+    interface IPenDevice;
+    interface IPenDeviceStatics;
+
+    runtimeclass PenDevice;
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        exclusiveto(Windows.Devices.Input.PenDevice),
+        uuid(31856eba-a738-5a8c-b8f6-f97ef68d18ef)
+    ]
+    interface IPenDevice : IInspectable
+    {
+        [propget] HRESULT PenId([out, retval] GUID *value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        exclusiveto(Windows.Devices.Input.PenDevice),
+        uuid(9dfbbe01-0966-5180-bcb4-b85060e39479)
+    ]
+    interface IPenDeviceStatics : IInspectable
+    {
+        HRESULT GetFromPointerId([in] UINT32 pointer_id, [out, retval] Windows.Devices.Input.PenDevice **result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        marshaling_behavior(agile),
+        static(Windows.Devices.Input.IPenDeviceStatics, Windows.Foundation.UniversalApiContract, 8.0),
+        threading(both)
+    ]
+    runtimeclass PenDevice
+    {
+        [default] interface Windows.Devices.Input.IPenDevice;
+    }
+}
+#endif

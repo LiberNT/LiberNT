@@ -1,0 +1,24 @@
+/*
+ * PROJECT:     LiberNT Windows Runtime
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Runtime classes of the toast notification platform
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma makedep register
+#pragma winrt ns_prefix
+
+import "inspectable.idl";
+import "asyncinfo.idl";
+import "eventtoken.idl";
+import "windowscontracts.idl";
+import "windows.foundation.idl";
+import "windows.data.xml.dom.idl";
+import "windows.ui.notifications.idl";
+
+namespace Windows.UI.Notifications {
+    runtimeclass NotificationData;
+    runtimeclass ScheduledToastNotification;
+    runtimeclass ToastNotification;
+    runtimeclass ToastNotificationManager;
+}

@@ -242,6 +242,7 @@ stdole2.tlb
 stdole32.tlb
 mshtml.tlb
 cryptowinrt.dll
+installservice.dll
 threadpoolwinrt.dll
 windows.applicationmodel.dll
 windows.devices.bluetooth.dll
@@ -272,6 +273,7 @@ windows.ui.core.textinput.dll
 windows.ui.xaml.dll
 windows.web.dll
 wintypes.dll
+wpnapps.dll
 
 [Strings]
 MciExtStr="Software\Microsoft\Windows NT\CurrentVersion\MCI Extensions"

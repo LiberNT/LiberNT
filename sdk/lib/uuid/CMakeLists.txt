@@ -87,6 +87,7 @@ list(APPEND IDL_SOURCES
 #    netfwv6.idl
 #    netfwv6clsid
 #    netmon.idl
+    notificationactivationcallback.idl
 #    netprov.idl
     oaidl.idl
     objidl.idl

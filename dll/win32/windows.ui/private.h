@@ -29,6 +29,9 @@
 
 #include "activation.h"
 
+#ifdef __REACTOS__
+#define WIDL_using_Windows_Devices_Input
+#endif
 #define WIDL_using_Windows_Foundation
 #include "windows.foundation.h"
 #define WIDL_using_Windows_UI
@@ -40,6 +43,9 @@
 
 #define WIDL_using_Windows_UI_Shell
 #include "windows.ui.shell.h"
+#ifdef __REACTOS__
+#include "windows.devices.input.h"
+#endif
 
 extern IActivationFactory *taskbarmanager_factory;
 extern IActivationFactory *accessibilitysettings_factory;
@@ -47,6 +53,9 @@ extern IActivationFactory *uisettings_factory;
 extern IActivationFactory *uiviewsettings_factory;
 extern IActivationFactory *inputpane_factory;
 extern IActivationFactory *corewindow_factory;
+#ifdef __REACTOS__
+extern IActivationFactory *pendevice_factory;
+#endif
 
 #define DEFINE_IINSPECTABLE_( pfx, iface_type, impl_type, impl_from, iface_mem, expr )             \
     static inline impl_type *impl_from( iface_type *iface )                                        \
