@@ -37,7 +37,7 @@ KiArm64TtbrToPa(
 #define SCTLR_EL1_BT0   (1ULL << 35)
 #define SCTLR_EL1_BT1   (1ULL << 36)
 #define KI_ARM64_ID_AA64ISAR0_ATOMIC_LSE 2
-#define KI_ARM64_CNTKCTL_EL0PCTEN (1ULL << 0)
+#define KI_ARM64_CNTKCTL_EL0VCTEN (1ULL << 1)
 #define KI_ARM64_PMUSERENR_CR (1ULL << 2)
 #define KI_ARM64_QPC_BYPASS_CONFIGURATION 0x0001
 #define KI_ARM64_IMPLEMENTER_ARM 0x41
@@ -211,7 +211,7 @@ KiArm64EnableUserPerformanceCounter(
     }
 
     __asm__ __volatile__("mrs %0, cntkctl_el1" : "=r"(CounterControl));
-    CounterControl |= KI_ARM64_CNTKCTL_EL0PCTEN;
+    CounterControl |= KI_ARM64_CNTKCTL_EL0VCTEN;
     __asm__ __volatile__("msr cntkctl_el1, %0" :: "r"(CounterControl) : "memory");
     __asm__ __volatile__("isb" ::: "memory");
     return TRUE;

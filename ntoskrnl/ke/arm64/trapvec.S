@@ -1015,7 +1015,7 @@ KiArm64PermVectorIrqSp0_Handler:
     stp x14, x15, [sp, #0x70]
     stp x16, x17, [sp, #0x80]
     stp x18, x19, [sp, #0x90]
-    mrs x9, cntpct_el0
+    mrs x9, cntvct_el0
     str x9, [sp, #0x330]
     ARM64_SAVE_NEON sp, ARM64_IRQ_NEON
     ARM64_SAVE_FP_CONTROL ARM64_IRQ_FPCR, ARM64_IRQ_FPSR
@@ -1037,7 +1037,7 @@ KiArm64PermVectorIrqSp0_Handler:
     /* Temporary audit: elapsed vector envelope, including dispatcher exit work. */
     ldr x9, [sp, #0xD8]
     cbz x9, 91f
-    mrs x10, cntpct_el0
+    mrs x10, cntvct_el0
     ldr x11, [sp, #0x330]
     sub x10, x10, x11
     ldr x11, [x9, #16]
@@ -1089,7 +1089,7 @@ KiArm64PermVectorFiqSp0_Handler:
     stp x14, x15, [sp, #0x70]
     stp x16, x17, [sp, #0x80]
     stp x18, x19, [sp, #0x90]
-    mrs x9, cntpct_el0
+    mrs x9, cntvct_el0
     str x9, [sp, #0x330]
     ARM64_SAVE_NEON sp, ARM64_IRQ_NEON
     ARM64_SAVE_FP_CONTROL ARM64_IRQ_FPCR, ARM64_IRQ_FPSR
@@ -1104,7 +1104,7 @@ KiArm64PermVectorFiqSp0_Handler:
     /* Temporary audit: elapsed vector envelope, including dispatcher exit work. */
     ldr x9, [sp, #0xD8]
     cbz x9, 91f
-    mrs x10, cntpct_el0
+    mrs x10, cntvct_el0
     ldr x11, [sp, #0x330]
     sub x10, x10, x11
     ldr x11, [x9, #16]
@@ -1156,7 +1156,7 @@ KiArm64PermVectorIrqSpx_Handler:
     stp x14, x15, [sp, #0x70]
     stp x16, x17, [sp, #0x80]
     stp x18, x19, [sp, #0x90]
-    mrs x9, cntpct_el0
+    mrs x9, cntvct_el0
     str x9, [sp, #0x330]
     ARM64_SAVE_NEON sp, ARM64_IRQ_NEON
     ARM64_SAVE_FP_CONTROL ARM64_IRQ_FPCR, ARM64_IRQ_FPSR
@@ -1171,7 +1171,7 @@ KiArm64PermVectorIrqSpx_Handler:
     /* Temporary audit: elapsed vector envelope, including dispatcher exit work. */
     ldr x9, [sp, #0xD8]
     cbz x9, 91f
-    mrs x10, cntpct_el0
+    mrs x10, cntvct_el0
     ldr x11, [sp, #0x330]
     sub x10, x10, x11
     ldr x11, [x9, #16]
@@ -1223,7 +1223,7 @@ KiArm64PermVectorFiqSpx_Handler:
     stp x14, x15, [sp, #0x70]
     stp x16, x17, [sp, #0x80]
     stp x18, x19, [sp, #0x90]
-    mrs x9, cntpct_el0
+    mrs x9, cntvct_el0
     str x9, [sp, #0x330]
     ARM64_SAVE_NEON sp, ARM64_IRQ_NEON
     ARM64_SAVE_FP_CONTROL ARM64_IRQ_FPCR, ARM64_IRQ_FPSR
@@ -1238,7 +1238,7 @@ KiArm64PermVectorFiqSpx_Handler:
     /* Temporary audit: elapsed vector envelope, including dispatcher exit work. */
     ldr x9, [sp, #0xD8]
     cbz x9, 91f
-    mrs x10, cntpct_el0
+    mrs x10, cntvct_el0
     ldr x11, [sp, #0x330]
     sub x10, x10, x11
     ldr x11, [x9, #16]
@@ -1308,7 +1308,7 @@ KiArm64PermVectorIrqLowerA64_Handler:
     mrs x9, sp_el0
     str x9, [sp, #0xD0]           /* Save user SP_EL0 after preserving x9 */
     mrs x18, tpidr_el1
-    mrs x9, cntpct_el0
+    mrs x9, cntvct_el0
     str x9, [sp, #0x330]
     ARM64_SAVE_NEON sp, ARM64_IRQ_NEON
     ARM64_SAVE_FP_CONTROL ARM64_IRQ_FPCR, ARM64_IRQ_FPSR
@@ -1324,7 +1324,7 @@ KiArm64PermVectorIrqLowerA64_Handler:
     /* Temporary audit: elapsed vector envelope, including dispatcher exit work. */
     ldr x9, [sp, #0xD8]
     cbz x9, 91f
-    mrs x10, cntpct_el0
+    mrs x10, cntvct_el0
     ldr x11, [sp, #0x330]
     sub x10, x10, x11
     ldr x11, [x9, #16]
@@ -1380,7 +1380,7 @@ KiArm64PermVectorFiqLowerA64_Handler:
     mrs x9, sp_el0
     str x9, [sp, #0xD0]           /* Save user SP_EL0 after preserving x9 */
     mrs x18, tpidr_el1
-    mrs x9, cntpct_el0
+    mrs x9, cntvct_el0
     str x9, [sp, #0x330]
     ARM64_SAVE_NEON sp, ARM64_IRQ_NEON
     ARM64_SAVE_FP_CONTROL ARM64_IRQ_FPCR, ARM64_IRQ_FPSR
@@ -1396,7 +1396,7 @@ KiArm64PermVectorFiqLowerA64_Handler:
     /* Temporary audit: elapsed vector envelope, including dispatcher exit work. */
     ldr x9, [sp, #0xD8]
     cbz x9, 91f
-    mrs x10, cntpct_el0
+    mrs x10, cntvct_el0
     ldr x11, [sp, #0x330]
     sub x10, x10, x11
     ldr x11, [x9, #16]
@@ -1452,7 +1452,7 @@ KiArm64PermVectorIrqLowerA32_Handler:
     mrs x9, sp_el0
     str x9, [sp, #0xD0]           /* Save user SP_EL0 after preserving x9 */
     mrs x18, tpidr_el1
-    mrs x9, cntpct_el0
+    mrs x9, cntvct_el0
     str x9, [sp, #0x330]
     ARM64_SAVE_NEON sp, ARM64_IRQ_NEON
     ARM64_SAVE_FP_CONTROL ARM64_IRQ_FPCR, ARM64_IRQ_FPSR
@@ -1467,7 +1467,7 @@ KiArm64PermVectorIrqLowerA32_Handler:
     /* Temporary audit: elapsed vector envelope, including dispatcher exit work. */
     ldr x9, [sp, #0xD8]
     cbz x9, 91f
-    mrs x10, cntpct_el0
+    mrs x10, cntvct_el0
     ldr x11, [sp, #0x330]
     sub x10, x10, x11
     ldr x11, [x9, #16]
@@ -1523,7 +1523,7 @@ KiArm64PermVectorFiqLowerA32_Handler:
     mrs x9, sp_el0
     str x9, [sp, #0xD0]           /* Save user SP_EL0 after preserving x9 */
     mrs x18, tpidr_el1
-    mrs x9, cntpct_el0
+    mrs x9, cntvct_el0
     str x9, [sp, #0x330]
     ARM64_SAVE_NEON sp, ARM64_IRQ_NEON
     ARM64_SAVE_FP_CONTROL ARM64_IRQ_FPCR, ARM64_IRQ_FPSR
@@ -1538,7 +1538,7 @@ KiArm64PermVectorFiqLowerA32_Handler:
     /* Temporary audit: elapsed vector envelope, including dispatcher exit work. */
     ldr x9, [sp, #0xD8]
     cbz x9, 91f
-    mrs x10, cntpct_el0
+    mrs x10, cntvct_el0
     ldr x11, [sp, #0x330]
     sub x10, x10, x11
     ldr x11, [x9, #16]

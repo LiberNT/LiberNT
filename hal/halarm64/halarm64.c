@@ -7092,7 +7092,7 @@ KeQueryPerformanceCounter(
     {
         PerformanceFrequency->QuadPart = (LONGLONG)HalpReadCntfrq();
     }
-    Counter.QuadPart = (LONGLONG)HalpReadCntpct();
+    Counter.QuadPart = (LONGLONG)HalpReadCntvct();
     return Counter;
 }
 
@@ -7102,14 +7102,14 @@ KeStallExecutionProcessor(
     _In_ ULONG MicroSeconds)
 {
     ULONGLONG Frequency = HalpReadCntfrq();
-    ULONGLONG Start = HalpReadCntpct();
+    ULONGLONG Start = HalpReadCntvct();
     ULONGLONG Ticks;
 
     if (Frequency == 0)
         return;
 
     Ticks = (Frequency / 1000000ULL) * (ULONGLONG)MicroSeconds;
-    while ((HalpReadCntpct() - Start) < Ticks)
+    while ((HalpReadCntvct() - Start) < Ticks)
     {
         __asm__ __volatile__("yield");
     }

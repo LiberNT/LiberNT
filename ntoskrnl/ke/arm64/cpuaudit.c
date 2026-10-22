@@ -26,7 +26,7 @@ static AUDIT_CPU AuditCpus[CPU_AUDIT_CPUS];
 ULONGLONG KiCpuAuditClock(VOID)
 {
     ULONGLONG Value;
-    __asm__ __volatile__("isb; mrs %0, cntpct_el0" : "=r"(Value) :: "memory");
+    __asm__ __volatile__("isb; mrs %0, cntvct_el0" : "=r"(Value) :: "memory");
     return Value;
 }
 static ULONG AuditThreadPid(PKTHREAD Thread)

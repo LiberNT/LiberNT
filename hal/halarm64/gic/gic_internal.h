@@ -907,10 +907,10 @@ HalpReadCntfrq(VOID)
 
 FORCEINLINE
 ULONGLONG
-HalpReadCntpct(VOID)
+HalpReadCntvct(VOID)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, cntpct_el0" : "=r"(v));
+    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(v));
     return v;
 }
 

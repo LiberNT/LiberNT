@@ -23,7 +23,7 @@ RtlpArchQueryPerformanceCounter(
 
     __asm__ __volatile__("dmb ishld" ::: "memory");
     Bias = SharedUserData->QpcBias;
-    __asm__ __volatile__("isb\n\tmrs %0, cntpct_el0" : "=r"(Value) :: "memory");
+    __asm__ __volatile__("isb\n\tmrs %0, cntvct_el0" : "=r"(Value) :: "memory");
     __asm__ __volatile__("dmb ishld" ::: "memory");
 
     if (Configuration != *(volatile USHORT *)&SharedUserData->QpcData)

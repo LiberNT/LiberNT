@@ -415,7 +415,7 @@ KdpReceiveByte(OUT PUCHAR OutByte)
      * acknowledgement deadline must remain finite in both environments.
      */
     __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(CounterFrequency));
-    __asm__ __volatile__("mrs %0, cntpct_el0" : "=r"(Start));
+    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(Start));
     TimeoutTicks = (CounterFrequency * GDB_RECEIVE_TIMEOUT_US) / 1000000;
 
     do
@@ -424,7 +424,7 @@ KdpReceiveByte(OUT PUCHAR OutByte)
             return KdPacketReceived;
 
         __asm__ __volatile__("yield");
-        __asm__ __volatile__("mrs %0, cntpct_el0" : "=r"(Now));
+        __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(Now));
     } while ((Now - Start) < TimeoutTicks);
 
     return KdPacketTimedOut;

@@ -41,7 +41,7 @@ KdpQueryDebugTimestamp(VOID)
      * The architectural counter is already live and gives useful monotonic
      * debug timestamps without enabling interrupts too early.
      */
-    __asm__ __volatile__("mrs %0, cntpct_el0" : "=r"(Counter));
+    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(Counter));
     Seconds = Counter / Frequency;
     Remainder = Counter % Frequency;
     CounterTime = (Seconds * KD_100NS_PER_SECOND) + ((Remainder * KD_100NS_PER_SECOND) / Frequency);
