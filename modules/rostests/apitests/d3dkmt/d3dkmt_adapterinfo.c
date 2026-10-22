@@ -519,8 +519,12 @@ static void Test_Wddm12Caps(PFND3DKMT_QUERYADAPTERINFO pfn, D3DKMT_HANDLE h)
 static void Test_UmdDriverVersion(PFND3DKMT_QUERYADAPTERINFO pfn, D3DKMT_HANDLE h)
 {
     D3DKMT_UMD_DRIVER_VERSION uv;
-    NTSTATUS st;
+    D3DKMT_UMDFILENAMEINFO name;
+    NTSTATUS st, name_st;
 
+    memset(&name, 0, sizeof(name));
+    name.Version = KMTUMDVERSION_DX9;
+    name_st = QueryAI(pfn, h, KMTQAITYPE_UMDRIVERNAME, &name, sizeof(name));
     memset(&uv, 0, sizeof(uv));
     st = QueryAI(pfn, h, KMTQAITYPE_UMD_DRIVER_VERSION, &uv, sizeof(uv));
     if (NT_SUCCESS(st))
@@ -528,6 +532,11 @@ static void Test_UmdDriverVersion(PFND3DKMT_QUERYADAPTERINFO pfn, D3DKMT_HANDLE 
               (unsigned long long)uv.DriverVersion.QuadPart);
     else
         trace("UMD_DRIVER_VERSION not available (0x%08lX)\n", (long)st);
+    if (NT_SUCCESS(name_st) && name.UmdFileName[0])
+    {
+        ok(NT_SUCCESS(st), "UMD_DRIVER_VERSION failed (0x%08lX) for a published UMD\n", (long)st);
+        ok(!NT_SUCCESS(st) || uv.DriverVersion.QuadPart != 0, "UMD_DRIVER_VERSION is zero\n");
+    }
     ExpectRefuseBadBuffers(pfn, h, KMTQAITYPE_UMD_DRIVER_VERSION,
                            "UMD_DRIVER_VERSION", sizeof(uv));
 }

@@ -13,6 +13,7 @@ spec2def(softgpuum.dll softgpuum.spec)
 add_library(softgpuum MODULE
     softgpuum.c
     softgpuum_backend_none.c
+    softgpuum.rc
     ${CMAKE_CURRENT_BINARY_DIR}/softgpuum.def)
 
 set_module_type(softgpuum win32dll ENTRYPOINT DllMain 12)
