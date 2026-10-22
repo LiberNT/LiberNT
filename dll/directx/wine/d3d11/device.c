@@ -3097,7 +3097,51 @@ static void STDMETHODCALLTYPE d3d11_device_context_EndEvent(ID3D11DeviceContext4
 static void STDMETHODCALLTYPE d3d11_device_context_Flush1(ID3D11DeviceContext4 *iface,
         D3D11_CONTEXT_TYPE type, HANDLE event)
 {
+#ifdef __REACTOS__
+    struct d3d11_device_context *context = impl_from_ID3D11DeviceContext4(iface);
+    struct wined3d_query *query;
+    HRESULT hr;
+
+    TRACE("iface %p, type %d, event %p.\n", iface, type, event);
+
+    if (!event || context->type != D3D11_DEVICE_CONTEXT_IMMEDIATE)
+    {
+        wined3d_device_context_flush(context->wined3d_context);
+        return;
+    }
+
+    wined3d_mutex_lock();
+    hr = wined3d_query_create(context->device->wined3d_device, WINED3D_QUERY_TYPE_EVENT, NULL,
+            &d3d_null_wined3d_parent_ops, &query);
+    wined3d_mutex_unlock();
+    if (FAILED(hr))
+    {
+        ERR("Failed to create event query, hr %#lx.\n", hr);
+        wined3d_device_context_flush(context->wined3d_context);
+        SetEvent(event);
+        return;
+    }
+
+    wined3d_device_context_issue_query(context->wined3d_context, query, WINED3DISSUE_END);
+    for (;;)
+    {
+        wined3d_mutex_lock();
+        hr = wined3d_query_get_data(query, NULL, 0, WINED3DGETDATA_FLUSH);
+        wined3d_mutex_unlock();
+        if (hr != S_FALSE)
+            break;
+        SwitchToThread();
+    }
+    if (FAILED(hr))
+        WARN("Event query failed, hr %#lx.\n", hr);
+
+    wined3d_mutex_lock();
+    wined3d_query_decref(query);
+    wined3d_mutex_unlock();
+    SetEvent(event);
+#else
     FIXME("iface %p, type %d, event %p stub!\n", iface, type, event);
+#endif
 }
 
 static void STDMETHODCALLTYPE d3d11_device_context_SetHardwareProtectionState(ID3D11DeviceContext4 *iface,
