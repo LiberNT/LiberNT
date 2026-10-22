@@ -190,13 +190,14 @@ NvmeProcessIoCompletionsLocked(_In_ PNVME_DEVICE_EXTENSION Device,
     return Collected;
 }
 
-VOID
+BOOLEAN
 NvmeDrainIoQueue(_In_ PNVME_DEVICE_EXTENSION Device, _In_ PNVME_QUEUE Queue)
 {
     NVME_COMPLETED_SRB Batch[NVME_COMPLETION_BATCH];
     NVME_LOCK Lock;
     ULONG Collected;
     ULONG Index;
+    ULONG Batches = 0;
 
     do
     {
@@ -221,7 +222,9 @@ NvmeDrainIoQueue(_In_ PNVME_DEVICE_EXTENSION Device, _In_ PNVME_QUEUE Queue)
                                         0x00);
             }
         }
-    } while (Collected == NVME_COMPLETION_BATCH);
+    } while (Collected == NVME_COMPLETION_BATCH && ++Batches < NVME_DPC_BATCH_LIMIT);
+
+    return Collected == NVME_COMPLETION_BATCH;
 }
 
 /* Takes the queue out of service and fails whatever it still holds. */
@@ -280,7 +283,12 @@ NvmeIoQueueDpc(_In_ PSTOR_DPC Dpc,
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    NvmeDrainIoQueue(Device, Queue);
+    if (NvmeDrainIoQueue(Device, Queue))
+    {
+        StorPortIssueDpc(Device, &Queue->Dpc, Queue, NULL);
+        return;
+    }
+
     if (!Device->MessageInterrupts)
         NvmeWriteRegister(Device, NVME_REG_INTMC, 0xFFFFFFFF);
 }

@@ -202,6 +202,7 @@ typedef struct _NVME_COMPLETED_SRB
 } NVME_COMPLETED_SRB, *PNVME_COMPLETED_SRB;
 
 #define NVME_COMPLETION_BATCH   32
+#define NVME_DPC_BATCH_LIMIT    8
 
 /* core.c */
 ULONG NvmeReadRegister(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG Offset);
@@ -226,7 +227,7 @@ ULONG NvmeQueueVector(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG QueueId);
 BOOLEAN NvmeCreateIoQueues(_In_ PNVME_DEVICE_EXTENSION Device);
 PNVME_QUEUE NvmeSelectQueue(_In_ PNVME_DEVICE_EXTENSION Device);
 BOOLEAN NvmeSubmitIoCommand(_In_ PNVME_DEVICE_EXTENSION Device, _In_ PNVME_QUEUE Queue, _In_ PSCSI_REQUEST_BLOCK Srb, _Inout_ PNVME_COMMAND Command);
-VOID NvmeDrainIoQueue(_In_ PNVME_DEVICE_EXTENSION Device, _In_ PNVME_QUEUE Queue);
+BOOLEAN NvmeDrainIoQueue(_In_ PNVME_DEVICE_EXTENSION Device, _In_ PNVME_QUEUE Queue);
 VOID NvmeRetireQueue(_In_ PNVME_DEVICE_EXTENSION Device, _In_ PNVME_QUEUE Queue, _In_ UCHAR SrbStatus);
 VOID NTAPI NvmeAdminDpc(_In_ PSTOR_DPC Dpc, _In_ PVOID HwDeviceExtension, _In_opt_ PVOID SystemArgument1, _In_opt_ PVOID SystemArgument2);
 VOID NTAPI NvmeIoQueueDpc(_In_ PSTOR_DPC Dpc, _In_ PVOID HwDeviceExtension, _In_opt_ PVOID SystemArgument1, _In_opt_ PVOID SystemArgument2);
