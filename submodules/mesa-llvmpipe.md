@@ -22,13 +22,37 @@ In menuconfig, choose **System components and compatibility -> Graphics
 stack -> Modern Mesa LLVMpipe OpenGL and Lavapipe Vulkan**.
 It defaults off.
 The common CMake option is `ENABLE_MESA_LLVMPIPE`; both configure frontends
-consume it. Current build support is llvm-mingw Clang, AMD64 or native ARM64,
-with `MESA_GALLIUM_FROM_SOURCE` enabled.
+consume it. Current build support is llvm-mingw Clang, AMD64 or native ARM64.
 
-For an already configured, compatible build directory:
+### Release payload (default)
+
+`ENABLE_MESA_LLVMPIPE=ON` alone builds nothing from LLVM or Mesa. Configure
+downloads `libernt-mesa-llvmpipe-<release>-<arch>.zip` from the
+`mesa-llvmpipe-<release>` LiberNT GitHub release, verifies the SHA-256 pinned in
+`submodules/mesa-llvmpipe-payload.cmake`, and packages:
+
+- `mesa_llvmpipe.dll`: an LLVMpipe-only WGL ICD registered as the `MSOGL`
+  fallback. On ARM64 it is an ARM64X image, so x64 applications under
+  emulation load the same file.
+- `vulkan_lvp.dll` and `lvp_icd.json`: the Lavapipe Vulkan ICD, registered in
+  the machine-wide Vulkan Drivers key for the in-tree `vulkan-1.dll`.
+- The Mesa, LLVM and DirectX-Headers licenses under
+  `reactos/3rdParty/mesa-llvmpipe`.
+
+`mesa_gallium.dll` is unchanged in this mode. `MESA_LLVMPIPE_PAYLOAD=<zip>`
+uses a local payload instead of the download. `sdk/tools/mesa_llvmpipe_payload.py`
+builds a payload from the vendored Mesa source and static Windows LLVM
+installations; publish a new release name and update the pinned hashes when
+Mesa or LLVM changes.
+
+### From source
+
+`MESA_LLVMPIPE_FROM_SOURCE=ON` keeps the previous integration described below:
+it requires `MESA_GALLIUM_FROM_SOURCE` and builds LLVM and LLVMpipe into
+`mesa_gallium.dll`. For an already configured, compatible build directory:
 
 ```sh
-cmake -S . -B output-Clang-arm64-debug -DENABLE_MESA_LLVMPIPE=ON
+cmake -S . -B output-Clang-arm64-debug -DENABLE_MESA_LLVMPIPE=ON -DMESA_LLVMPIPE_FROM_SOURCE=ON
 cmake --build output-Clang-arm64-debug --target mesa-llvmpipe
 ```
 

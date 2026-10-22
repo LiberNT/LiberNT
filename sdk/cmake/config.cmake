@@ -208,7 +208,10 @@ set(GENERATE_DEPENDENCY_GRAPH FALSE CACHE BOOL
 cmake_dependent_option(ENABLE_ROSTESTS "Whether to build the ReactOS test suite." OFF
                        "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
 
-option(ENABLE_MESA_LLVMPIPE "Add LLVMpipe to mesa_gallium.dll and package the Lavapipe Vulkan ICD and Khronos loader." OFF)
+option(ENABLE_MESA_LLVMPIPE "Package the LLVMpipe OpenGL and Lavapipe Vulkan software ICDs." OFF)
+cmake_dependent_option(MESA_LLVMPIPE_FROM_SOURCE
+                       "Build LLVM and LLVMpipe into mesa_gallium.dll instead of using the LiberNT release payload." OFF
+                       "ENABLE_MESA_LLVMPIPE" OFF)
 
 cmake_dependent_option(ENABLE_FEX_ARM64EC
                        "Whether to build the optional FEX ARM64EC emulator for running AMD64 binaries on ARM64." ON

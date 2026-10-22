@@ -361,17 +361,28 @@ config ENABLE_MESA_LLVMPIPE
     prompt "LLVMpipe OpenGL and Lavapipe Vulkan"
     type bool
     default n
-    depends MESA_GALLIUM_FROM_SOURCE=y
     depends TOOLCHAIN=clang
     depends ARCH=amd64 || ARCH=arm64
     help
-      Replace softpipe with LLVMpipe in mesa_gallium.dll and package the
-      Lavapipe Vulkan ICD with the Khronos Vulkan loader. On ARM64 the V3D
-      and VC4 hardware drivers are kept and LLVMpipe becomes their CPU
-      fallback. LLVM's Windows static libraries and native code-generation
-      tools are built automatically; the first enabled build downloads pinned
-      sources and needs several GB of free space. opengl32.dll is not
-      replaced.
+      Package the LLVMpipe OpenGL ICD (mesa_llvmpipe.dll, the software
+      OpenGL driver) and the Lavapipe Vulkan ICD. Configure downloads the
+      prebuilt, SHA-256-pinned mesa-llvmpipe release payload from the
+      LiberNT GitHub releases; on ARM64 its OpenGL ICD is an ARM64X image
+      that also serves x64 applications. mesa_gallium.dll keeps the V3D and
+      VC4 hardware drivers and softpipe. opengl32.dll is not replaced.
+
+config MESA_LLVMPIPE_FROM_SOURCE
+    prompt "Build LLVMpipe from source"
+    type bool
+    default n
+    depends ENABLE_MESA_LLVMPIPE=y
+    depends MESA_GALLIUM_FROM_SOURCE=y
+    help
+      Instead of the release payload, replace softpipe with LLVMpipe in
+      mesa_gallium.dll and package the Lavapipe Vulkan ICD with the Khronos
+      Vulkan loader. LLVM's Windows static libraries and native
+      code-generation tools are built automatically; the first build
+      downloads pinned sources and needs several GB of free space.
 
 endmenu
 

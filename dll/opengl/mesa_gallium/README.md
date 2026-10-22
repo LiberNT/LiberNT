@@ -12,13 +12,13 @@ the target architecture:
 | --- | --- | --- |
 | `vc4` | Raspberry Pi 3 GPU | ARM64 |
 | `v3d` | Raspberry Pi 4/5 GPU | ARM64 |
-| `llvmpipe` | LLVM-accelerated CPU rendering | AMD64 and ARM64 when `ENABLE_MESA_LLVMPIPE=ON` |
-| `softpipe` | CPU rendering without LLVM | i386; AMD64 and ARM64 when `ENABLE_MESA_LLVMPIPE=OFF` |
+| `llvmpipe` | LLVM-accelerated CPU rendering | AMD64 and ARM64 when `MESA_LLVMPIPE_FROM_SOURCE=ON` |
+| `softpipe` | CPU rendering without LLVM | i386; AMD64 and ARM64 when `MESA_LLVMPIPE_FROM_SOURCE=OFF` |
 
 Native i386, AMD64 and ARM64 builds using Clang enable
 `MESA_GALLIUM_FROM_SOURCE` by default. On ARM64, the normal profile contains
-V3D, VC4, and Softpipe. Enabling `ENABLE_MESA_LLVMPIPE` replaces Softpipe with
-LLVMpipe in that same DLL, producing exactly V3D, VC4, and LLVMpipe. The Pi
+V3D, VC4, and Softpipe. Enabling `MESA_LLVMPIPE_FROM_SOURCE` replaces Softpipe
+with LLVMpipe in that same DLL, producing exactly V3D, VC4, and LLVMpipe. The Pi
 display drivers and the software `MSOGL` fallback all register
 `mesa_gallium.dll`; the image packages one shared binary, not a second
 `mesadrv.dll`. Hardware is tried in V3D-then-VC4 order before the CPU fallback.
@@ -52,9 +52,12 @@ VC4 or V3D rendering on Raspberry Pi hardware.
 previous packaged Pi 3 ICD and custom Pi 5 ICD when those boards are enabled.
 The FEX runtime builds a separate ARM64EC copy of the shared ICD. The nested
 KMT support build disables the shared ICD to prevent recursive builds.
-There is no separate Softpipe build option. Explicitly enabling
-`ENABLE_MESA_LLVMPIPE` selects LLVMpipe inside the same ICD and also packages
-the separate Lavapipe Vulkan ICD and Khronos loader.
+There is no separate Softpipe build option. `ENABLE_MESA_LLVMPIPE` alone
+keeps this DLL unchanged and packages the prebuilt `mesa_llvmpipe.dll` and
+Lavapipe Vulkan ICD from the LiberNT release payload, with `mesa_llvmpipe.dll`
+as the `MSOGL` fallback. Adding `MESA_LLVMPIPE_FROM_SOURCE` selects LLVMpipe
+inside the same ICD and also packages the separate Lavapipe Vulkan ICD and
+Khronos loader.
 Existing `RPI3VC4_MESA_FROM_SOURCE` caches seed the renamed
 option on migration. Explicit `RPI3VC4_MESA_VC4_ICD` and
 `RPI5VC4_MESA_V3D_ICD` paths override the shared ICD for the respective board
