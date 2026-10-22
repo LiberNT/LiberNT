@@ -1124,6 +1124,7 @@ public:
     HFONT m_hFont;
     HFONT m_hFontCue;
     HFONT m_hFontUser;
+    HICON m_hSearchIcon;
     HTHEME m_hLiquidTheme;
     int m_iDpi;
 
@@ -1177,7 +1178,7 @@ public:
 
     CStartMenu2Wnd() :
         m_Tray(NULL), m_hwndTray(NULL), m_hwndEdit(NULL),
-        m_hFont(NULL), m_hFontCue(NULL), m_hFontUser(NULL),
+        m_hFont(NULL), m_hFontCue(NULL), m_hFontUser(NULL), m_hSearchIcon(NULL),
         m_hLiquidTheme(NULL), m_iDpi(96),
         m_nView(SM2V_MAIN), m_nScroll(0), m_nContentH(0),
         m_bScrollVis(FALSE), m_bDragScroll(FALSE), m_nDragOff(0),
@@ -1847,17 +1848,13 @@ public:
         FrameRect(hdc, &m_rcSearch, hbrEdge);
         DeleteObject(hbrEdge);
 
-        int cx = m_rcSearch.right - Sc(17);
-        int cy = (m_rcSearch.top + m_rcSearch.bottom) / 2 - Sc(2);
-        HPEN hpen = CreatePen(PS_SOLID, Sc(2), SM2_CLR_CUE);
-        HGDIOBJ hpenOld = SelectObject(hdc, hpen);
-        HGDIOBJ hbrOld = SelectObject(hdc, GetStockObject(NULL_BRUSH));
-        Ellipse(hdc, cx - Sc(4), cy - Sc(4), cx + Sc(4), cy + Sc(4));
-        MoveToEx(hdc, cx + Sc(3), cy + Sc(3), NULL);
-        LineTo(hdc, cx + Sc(7), cy + Sc(7));
-        SelectObject(hdc, hbrOld);
-        SelectObject(hdc, hpenOld);
-        DeleteObject(hpen);
+        if (m_hSearchIcon)
+        {
+            int n = Sc(16);
+            ShellDrawIconTinted(hdc, m_rcSearch.right - Sc(8) - n,
+                                (m_rcSearch.top + m_rcSearch.bottom - n) / 2,
+                                m_hSearchIcon, n, n, SM2_CLR_CUE);
+        }
     }
 
     VOID DrawRightPanel(HDC hdc, ULONGLONG now)
@@ -2818,6 +2815,9 @@ public:
         lf.lfHeight = -Sc(13);
         m_hFontUser = CreateFontIndirectW(&lf);
 
+        m_hSearchIcon = (HICON)LoadImageW(hExplorerInstance, MAKEINTRESOURCEW(IDI_FLU_SEARCHREG),
+                                          IMAGE_ICON, Sc(16), Sc(16), LR_DEFAULTCOLOR);
+
         if (!GetCurrentLoggedOnUserName(m_szUser, _countof(m_szUser)))
             StringCchCopyW(m_szUser, _countof(m_szUser), L"User");
 
@@ -2855,6 +2855,7 @@ public:
         if (m_hFont) { DeleteObject(m_hFont); m_hFont = NULL; }
         if (m_hFontCue) { DeleteObject(m_hFontCue); m_hFontCue = NULL; }
         if (m_hFontUser) { DeleteObject(m_hFontUser); m_hFontUser = NULL; }
+        if (m_hSearchIcon) { DestroyIcon(m_hSearchIcon); m_hSearchIcon = NULL; }
         if (m_hLiquidTheme)
         {
             CloseThemeData(m_hLiquidTheme);
