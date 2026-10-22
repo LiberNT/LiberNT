@@ -424,15 +424,17 @@ COpenWithList::SApp *COpenWithList::AddInternal(LPCWSTR pwszFilename)
         return pApp;
 
     /* Create new item */
+    SApp *pNewApps;
     if (!m_pApp)
-        m_pApp = static_cast<SApp *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(m_pApp[0])));
+        pNewApps = static_cast<SApp *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(m_pApp[0])));
     else
-        m_pApp = static_cast<SApp *>(HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, m_pApp, (m_cApp + 1)*sizeof(m_pApp[0])));
-    if (!m_pApp)
+        pNewApps = static_cast<SApp *>(HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, m_pApp, (m_cApp + 1)*sizeof(m_pApp[0])));
+    if (!pNewApps)
     {
         ERR("Allocation failed\n");
         return NULL;
     }
+    m_pApp = pNewApps;
 
     pApp = &m_pApp[m_cApp++];
     wcscpy(pApp->wszFilename, pwszFilename);
