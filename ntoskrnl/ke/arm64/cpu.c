@@ -223,6 +223,18 @@ KeFlushCurrentTb(VOID)
     KeFlushTb();
 }
 
+static
+BOOLEAN
+KiArm64PmuImplemented(VOID)
+{
+    ULONG64 Dfr0;
+    ULONG PmuVersion;
+
+    READ_SYSREG64(Dfr0, id_aa64dfr0_el1);
+    PmuVersion = (ULONG)((Dfr0 >> 8) & 0xF);
+    return (PmuVersion != 0) && (PmuVersion != 0xF);
+}
+
 VOID
 NTAPI
 KiSaveProcessorControlState(_Out_ PKPROCESSOR_STATE ProcessorState)
@@ -287,12 +299,24 @@ KiSaveProcessorControlState(_Out_ PKPROCESSOR_STATE ProcessorState)
     READ_SYSREG64(ProcessorState->ArchState.Ttbr1_El1, ttbr1_el1);
     READ_SYSREG64(ProcessorState->ArchState.Esr_El1, esr_el1);
     READ_SYSREG64(ProcessorState->ArchState.Far_El1, far_el1);
-    READ_SYSREG64(ProcessorState->ArchState.Pmcr_El0, pmcr_el0);
-    READ_SYSREG64(ProcessorState->ArchState.Pmcntenset_El0, pmcntenset_el0);
-    READ_SYSREG64(ProcessorState->ArchState.Pmccntr_El0, pmccntr_el0);
-    READ_SYSREG64(ProcessorState->ArchState.Pmovsclr_El0, pmovsclr_el0);
-    READ_SYSREG64(ProcessorState->ArchState.Pmselr_El0, pmselr_el0);
-    READ_SYSREG64(ProcessorState->ArchState.Pmuserenr_El0, pmuserenr_el0);
+    if (KiArm64PmuImplemented())
+    {
+        READ_SYSREG64(ProcessorState->ArchState.Pmcr_El0, pmcr_el0);
+        READ_SYSREG64(ProcessorState->ArchState.Pmcntenset_El0, pmcntenset_el0);
+        READ_SYSREG64(ProcessorState->ArchState.Pmccntr_El0, pmccntr_el0);
+        READ_SYSREG64(ProcessorState->ArchState.Pmovsclr_El0, pmovsclr_el0);
+        READ_SYSREG64(ProcessorState->ArchState.Pmselr_El0, pmselr_el0);
+        READ_SYSREG64(ProcessorState->ArchState.Pmuserenr_El0, pmuserenr_el0);
+    }
+    else
+    {
+        ProcessorState->ArchState.Pmcr_El0 = 0;
+        ProcessorState->ArchState.Pmcntenset_El0 = 0;
+        ProcessorState->ArchState.Pmccntr_El0 = 0;
+        ProcessorState->ArchState.Pmovsclr_El0 = 0;
+        ProcessorState->ArchState.Pmselr_El0 = 0;
+        ProcessorState->ArchState.Pmuserenr_El0 = 0;
+    }
     READ_SYSREG64(ProcessorState->ArchState.Mair_El1, mair_el1);
     READ_SYSREG64(ProcessorState->ArchState.Vbar_El1, vbar_el1);
 
@@ -399,9 +423,12 @@ KiRestoreProcessorControlState(_In_ PKPROCESSOR_STATE ProcessorState)
     WRITE_SYSREG64(sctlr_el1, ProcessorState->ArchState.Sctlr_El1);
     WRITE_SYSREG64(actlr_el1, ProcessorState->ArchState.Actlr_El1);
     WRITE_SYSREG64(cpacr_el1, ProcessorState->ArchState.Cpacr_El1);
-    WRITE_SYSREG64(pmcr_el0, ProcessorState->ArchState.Pmcr_El0);
-    WRITE_SYSREG64(pmcntenset_el0, ProcessorState->ArchState.Pmcntenset_El0);
-    WRITE_SYSREG64(pmuserenr_el0, ProcessorState->ArchState.Pmuserenr_El0);
+    if (KiArm64PmuImplemented())
+    {
+        WRITE_SYSREG64(pmcr_el0, ProcessorState->ArchState.Pmcr_El0);
+        WRITE_SYSREG64(pmcntenset_el0, ProcessorState->ArchState.Pmcntenset_El0);
+        WRITE_SYSREG64(pmuserenr_el0, ProcessorState->ArchState.Pmuserenr_El0);
+    }
 }
 
 BOOLEAN
