@@ -35,6 +35,8 @@ struct key
     BCRYPT_KEY_HANDLE bcrypt_key;
 #ifdef __REACTOS__
     BOOL finalized;
+    WCHAR *name;
+    DWORD flags;
 #endif
 };
 
