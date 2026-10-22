@@ -240,6 +240,8 @@ IntCompositionCornerRadius(_In_ PWND Wnd)
  * disables it and the desktop reverts to classic direct drawing. */
 volatile BOOL          g_DwmAttached = FALSE;
 volatile LONGLONG      g_DwmLastFrameTime = 0;
+static LONGLONG        g_DwmWatchdogLastCheck = 0;
+static LONGLONG        g_DwmWatchdogStart = 0;
 /* Damage wake event for dwm (referenced from dwm's handle), so dwm blocks
  * instead of polling when the desktop is idle. */
 static PKEVENT         g_DwmWakeEvent = NULL;
@@ -4954,12 +4956,19 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
 VOID
 IntCompositionWatchdog(VOID)
 {
+    LONGLONG Now;
+
     if (g_DwmGpuOutputWindow == NULL && g_DwmGpuOutputOwner.Generation != 0)
         (VOID)IntCompositionReleaseGpuOutput(TRUE);
 
     if (!g_DwmAttached || g_DwmProcess == NULL)
         return;
-    if ((LONGLONG)KeQueryInterruptTime() - g_DwmLastFrameTime <= (300LL * 1000000LL))
+
+    Now = (LONGLONG)KeQueryInterruptTime();
+    if (Now - g_DwmWatchdogLastCheck > (50LL * 1000000LL))
+        g_DwmWatchdogStart = Now;
+    g_DwmWatchdogLastCheck = Now;
+    if (Now - max(g_DwmLastFrameTime, g_DwmWatchdogStart) <= (300LL * 1000000LL))
         return; /* alive within 30 s */
 
     ERR("DWM went silent - tearing down composition, reverting to direct draw\n");
