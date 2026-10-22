@@ -149,6 +149,9 @@ DWORD WINAPI fileTransfer(void *param)
 {
     BackgroundCopyManagerImpl *qmgr = &globalMgr;
     HANDLE events[2];
+#ifdef __REACTOS__
+    DWORD timeout = INFINITE;
+#endif
 
     events[0] = stop_event;
     events[1] = qmgr->jobEvent;
@@ -159,7 +162,11 @@ DWORD WINAPI fileTransfer(void *param)
         BOOL haveJob = FALSE;
 
         /* Check if it's the stop_event */
+#ifdef __REACTOS__
+        if (WaitForMultipleObjects(2, events, FALSE, timeout) == WAIT_OBJECT_0)
+#else
         if (WaitForMultipleObjects(2, events, FALSE, INFINITE) == WAIT_OBJECT_0)
+#endif
         {
             LIST_FOR_EACH_ENTRY_SAFE(job, jobCur, &qmgr->jobs, BackgroundCopyJobImpl, entryFromQmgr)
             {
@@ -173,6 +180,9 @@ DWORD WINAPI fileTransfer(void *param)
            this thread ever deletes them so we don't need to worry about jobs
            magically disappearing from the list.  */
         EnterCriticalSection(&qmgr->cs);
+#ifdef __REACTOS__
+        timeout = INFINITE;
+#endif
 
         LIST_FOR_EACH_ENTRY_SAFE(job, jobCur, &qmgr->jobs, BackgroundCopyJobImpl, entryFromQmgr)
         {
@@ -186,6 +196,39 @@ DWORD WINAPI fileTransfer(void *param)
                 haveJob = TRUE;
                 break;
             }
+#ifdef __REACTOS__
+            else if (job->state == BG_JOB_STATE_TRANSIENT_ERROR)
+            {
+                ULONGLONG now = GetTickCount64();
+                ULONGLONG retry = job->retry_time + job->retry_delay * 1000ULL;
+                ULONGLONG give_up = job->transient_since + job->no_progress_timeout * 1000ULL;
+
+                if (now >= give_up)
+                {
+                    job->state = BG_JOB_STATE_ERROR;
+                }
+                else if (now >= retry)
+                {
+                    job->state = BG_JOB_STATE_QUEUED;
+                    job->error.context = 0;
+                    job->error.code = S_OK;
+                    if (job->error.file)
+                    {
+                        IBackgroundCopyFile2_Release(job->error.file);
+                        job->error.file = NULL;
+                    }
+                    haveJob = TRUE;
+                    break;
+                }
+                else
+                {
+                    ULONGLONG next = (retry < give_up) ? retry : give_up;
+
+                    if (next - now < timeout)
+                        timeout = (DWORD)(next - now);
+                }
+            }
+#endif
             else if (job->state == BG_JOB_STATE_CONNECTING
                      || job->state == BG_JOB_STATE_TRANSFERRING)
             {

@@ -438,6 +438,9 @@ static HRESULT WINAPI BackgroundCopyJob_Resume(IBackgroundCopyJob4 *iface)
             IBackgroundCopyFile2_Release(job->error.file);
             job->error.file = NULL;
         }
+#ifdef __REACTOS__
+        job->transient_since = 0;
+#endif
         SetEvent(globalMgr.jobEvent);
     }
     LeaveCriticalSection(&globalMgr.cs);
@@ -753,6 +756,65 @@ static HRESULT WINAPI BackgroundCopyJob_GetNotifyInterface(IBackgroundCopyJob4 *
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static HRESULT WINAPI BackgroundCopyJob_SetMinimumRetryDelay(IBackgroundCopyJob4 *iface, ULONG delay)
+{
+    BackgroundCopyJobImpl *job = impl_from_IBackgroundCopyJob4(iface);
+
+    TRACE("%p, %lu.\n", iface, delay);
+
+    EnterCriticalSection(&globalMgr.cs);
+    job->retry_delay = (delay < BG_MIN_RETRY_DELAY) ? BG_MIN_RETRY_DELAY : delay;
+    LeaveCriticalSection(&globalMgr.cs);
+    return S_OK;
+}
+
+static HRESULT WINAPI BackgroundCopyJob_GetMinimumRetryDelay(IBackgroundCopyJob4 *iface, ULONG *delay)
+{
+    BackgroundCopyJobImpl *job = impl_from_IBackgroundCopyJob4(iface);
+
+    TRACE("%p, %p.\n", iface, delay);
+
+    if (!delay) return E_INVALIDARG;
+    *delay = job->retry_delay;
+    return S_OK;
+}
+
+static HRESULT WINAPI BackgroundCopyJob_SetNoProgressTimeout(IBackgroundCopyJob4 *iface, ULONG timeout)
+{
+    BackgroundCopyJobImpl *job = impl_from_IBackgroundCopyJob4(iface);
+
+    TRACE("%p, %lu.\n", iface, timeout);
+
+    EnterCriticalSection(&globalMgr.cs);
+    job->no_progress_timeout = timeout;
+    LeaveCriticalSection(&globalMgr.cs);
+    SetEvent(globalMgr.jobEvent);
+    return S_OK;
+}
+
+static HRESULT WINAPI BackgroundCopyJob_GetNoProgressTimeout(IBackgroundCopyJob4 *iface, ULONG *timeout)
+{
+    BackgroundCopyJobImpl *job = impl_from_IBackgroundCopyJob4(iface);
+
+    TRACE("%p, %p.\n", iface, timeout);
+
+    if (!timeout) return E_INVALIDARG;
+    *timeout = job->no_progress_timeout;
+    return S_OK;
+}
+
+static HRESULT WINAPI BackgroundCopyJob_GetErrorCount(IBackgroundCopyJob4 *iface, ULONG *count)
+{
+    BackgroundCopyJobImpl *job = impl_from_IBackgroundCopyJob4(iface);
+
+    TRACE("%p, %p.\n", iface, count);
+
+    if (!count) return E_INVALIDARG;
+    *count = job->error_count;
+    return S_OK;
+}
+#else
 static HRESULT WINAPI BackgroundCopyJob_SetMinimumRetryDelay(IBackgroundCopyJob4 *iface, ULONG delay)
 {
     FIXME("%p, %lu.\n", iface, delay);
@@ -784,6 +846,7 @@ static HRESULT WINAPI BackgroundCopyJob_GetErrorCount(IBackgroundCopyJob4 *iface
     FIXME("%p, %p: stub\n", iface, count);
     return E_NOTIMPL;
 }
+#endif
 
 static HRESULT WINAPI BackgroundCopyJob_SetProxySettings(IBackgroundCopyJob4 *iface, BG_JOB_PROXY_USAGE proxy_usage,
         const WCHAR *proxy_list, const WCHAR *proxy_bypass_list)
@@ -1263,6 +1326,13 @@ HRESULT BackgroundCopyJobConstructor(LPCWSTR displayName, BG_JOB_TYPE type, GUID
     This->wait   = CreateEventW(NULL, FALSE, FALSE, NULL);
     This->cancel = CreateEventW(NULL, FALSE, FALSE, NULL);
     This->done   = CreateEventW(NULL, FALSE, FALSE, NULL);
+#ifdef __REACTOS__
+    This->retry_delay = BG_DEFAULT_RETRY_DELAY;
+    This->no_progress_timeout = BG_DEFAULT_NO_PROGRESS_TIMEOUT;
+    This->error_count = 0;
+    This->retry_time = 0;
+    This->transient_since = 0;
+#endif
 
     *job = This;
 

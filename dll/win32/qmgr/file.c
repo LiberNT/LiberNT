@@ -228,6 +228,53 @@ static void set_remote_file_error(BackgroundCopyJobImpl *job, BackgroundCopyFile
     LeaveCriticalSection(&job->cs);
 }
 
+static BOOL is_transient_error(HRESULT code)
+{
+    if (code == BG_E_HTTP_ERROR_503 || code == BG_E_HTTP_ERROR_504)
+        return TRUE;
+    if (HRESULT_FACILITY(code) != FACILITY_WIN32)
+        return FALSE;
+
+    switch (HRESULT_CODE(code))
+    {
+    case ERROR_WINHTTP_TIMEOUT:
+    case ERROR_WINHTTP_NAME_NOT_RESOLVED:
+    case ERROR_WINHTTP_CANNOT_CONNECT:
+    case ERROR_WINHTTP_CONNECTION_ERROR:
+    case ERROR_WINHTTP_INVALID_SERVER_RESPONSE:
+    case ERROR_WINHTTP_SECURE_CHANNEL_ERROR:
+    case WSAENETDOWN:
+    case WSAENETUNREACH:
+    case WSAECONNABORTED:
+    case WSAECONNRESET:
+    case WSAETIMEDOUT:
+    case WSAECONNREFUSED:
+    case WSAEHOSTUNREACH:
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
+static void fail_transfer(BackgroundCopyJobImpl *job)
+{
+    BG_JOB_STATE state = is_transient_error(job->error.code) ? BG_JOB_STATE_TRANSIENT_ERROR : BG_JOB_STATE_ERROR;
+
+    EnterCriticalSection(&globalMgr.cs);
+    if (job->state == BG_JOB_STATE_CONNECTING || job->state == BG_JOB_STATE_TRANSFERRING)
+    {
+        job->state = state;
+        job->error_count++;
+        if (state == BG_JOB_STATE_TRANSIENT_ERROR)
+        {
+            job->retry_time = GetTickCount64();
+            if (!job->transient_since)
+                job->transient_since = job->retry_time;
+        }
+    }
+    LeaveCriticalSection(&globalMgr.cs);
+}
+
 #endif
 static void CALLBACK progress_callback_http(HINTERNET handle, DWORD_PTR context, DWORD status,
                                             LPVOID buf, DWORD buflen)
@@ -293,8 +340,8 @@ static void CALLBACK progress_callback_http(HINTERNET handle, DWORD_PTR context,
         set_remote_file_error(job, file, HRESULT_FROM_WIN32(result->dwError));
 #else
         job->error.code = HRESULT_FROM_WIN32(result->dwError);
-#endif
         transitionJobState(job, BG_JOB_STATE_TRANSFERRING, BG_JOB_STATE_ERROR);
+#endif
         break;
     }
     default: break;
@@ -423,6 +470,9 @@ static BOOL transfer_file_http(BackgroundCopyFileImpl *file, URL_COMPONENTSW *uc
         EnterCriticalSection(&job->cs);
         file->fileProgress.BytesTransferred += file->read_size;
         job->jobProgress.BytesTransferred += file->read_size;
+#ifdef __REACTOS__
+        job->transient_since = 0;
+#endif
         LeaveCriticalSection(&job->cs);
     }
 
@@ -439,8 +489,13 @@ done:
     WinHttpCloseHandle(req);
     WinHttpCloseHandle(con);
     WinHttpCloseHandle(ses);
+#ifdef __REACTOS__
+    if (!ret)
+        fail_transfer(job);
+#else
     if (!ret && !transitionJobState(job, BG_JOB_STATE_CONNECTING, BG_JOB_STATE_ERROR))
         transitionJobState(job, BG_JOB_STATE_TRANSFERRING, BG_JOB_STATE_ERROR);
+#endif
 
     SetEvent(job->done);
     return ret;
@@ -516,6 +571,9 @@ BOOL processFile(BackgroundCopyFileImpl *file, BackgroundCopyJobImpl *job)
     }
 
     EnterCriticalSection(&job->cs);
+#ifdef __REACTOS__
+    job->jobProgress.BytesTransferred -= file->fileProgress.BytesTransferred;
+#endif
     file->fileProgress.BytesTotal = BG_SIZE_UNKNOWN;
     file->fileProgress.BytesTransferred = 0;
     file->fileProgress.Completed = FALSE;

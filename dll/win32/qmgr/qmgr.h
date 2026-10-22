@@ -32,6 +32,12 @@
 #include <string.h>
 #include "wine/list.h"
 
+#ifdef __REACTOS__
+#define BG_MIN_RETRY_DELAY             60
+#define BG_DEFAULT_RETRY_DELAY         600
+#define BG_DEFAULT_NO_PROGRESS_TIMEOUT 1209600
+#endif
+
 /* Background copy job vtbl and related data */
 typedef struct
 {
@@ -66,6 +72,13 @@ typedef struct
     HANDLE wait;
     HANDLE cancel;
     HANDLE done;
+#ifdef __REACTOS__
+    ULONG retry_delay;
+    ULONG no_progress_timeout;
+    ULONG error_count;
+    ULONGLONG retry_time;
+    ULONGLONG transient_since;
+#endif
 } BackgroundCopyJobImpl;
 
 /* Background copy file vtbl and related data */
