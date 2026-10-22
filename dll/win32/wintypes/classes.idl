@@ -30,6 +30,9 @@ namespace Windows.Foundation {
 }
 namespace Windows.Foundation.Collections {
     runtimeclass PropertySet;
+#ifdef __REACTOS__
+    runtimeclass ValueSet;
+#endif
 }
 namespace Windows.Foundation.Metadata {
     runtimeclass ApiInformation;

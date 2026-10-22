@@ -5,8 +5,8 @@ list(APPEND SOURCE
     buffer.c
     main.c
     map.c
-    propertyset.c
     storage.c
+    valueset.c
     private.h)
 
 add_library(wintypes MODULE

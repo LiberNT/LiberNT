@@ -53,6 +53,9 @@ extern HRESULT multi_threaded_map_create( const struct map_iids *iids, IInspecta
 extern IActivationFactory *data_writer_activation_factory;
 extern IActivationFactory *buffer_activation_factory;
 extern IActivationFactory *property_set_factory;
+#ifdef __REACTOS__
+extern IActivationFactory *value_set_factory;
+#endif
 
 #define DEFINE_IINSPECTABLE_( pfx, iface_type, impl_type, impl_from, iface_mem, expr )             \
     static inline impl_type *impl_from( iface_type *iface )                                        \
