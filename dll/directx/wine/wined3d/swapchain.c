@@ -294,7 +294,11 @@ HRESULT CDECL wined3d_swapchain_present(struct wined3d_swapchain *swapchain,
 
     if (!dst_rect)
     {
+#ifdef __REACTOS__
+        if (!desc->windowed || swapchain->composition)
+#else
         if (!desc->windowed)
+#endif
             SetRect(&d, 0, 0, desc->backbuffer_width, desc->backbuffer_height);
         else
             GetClientRect(swapchain->win_handle, &d);
@@ -471,6 +475,37 @@ HRESULT CDECL wined3d_swapchain_get_gamma_ramp(const struct wined3d_swapchain *s
     return wined3d_output_get_gamma_ramp(output, ramp);
 }
 
+#ifdef __REACTOS__
+static BOOL swapchain_composition_rects(const struct wined3d_swapchain *swapchain,
+        RECT *source_rect, RECT *draw_rect)
+{
+    OffsetRect(draw_rect, swapchain->composition_offset.x,
+            swapchain->composition_offset.y);
+    if (swapchain->composition_has_clip)
+    {
+        RECT unclipped_rect = *draw_rect;
+        LONG source_width = source_rect->right - source_rect->left;
+        LONG source_height = source_rect->bottom - source_rect->top;
+        LONG draw_width = draw_rect->right - draw_rect->left;
+        LONG draw_height = draw_rect->bottom - draw_rect->top;
+
+        if (!IntersectRect(draw_rect, draw_rect, &swapchain->composition_clip))
+            return FALSE;
+        if (draw_width)
+        {
+            source_rect->left += MulDiv(draw_rect->left - unclipped_rect.left, source_width, draw_width);
+            source_rect->right -= MulDiv(unclipped_rect.right - draw_rect->right, source_width, draw_width);
+        }
+        if (draw_height)
+        {
+            source_rect->top += MulDiv(draw_rect->top - unclipped_rect.top, source_height, draw_height);
+            source_rect->bottom -= MulDiv(unclipped_rect.bottom - draw_rect->bottom, source_height, draw_height);
+        }
+    }
+    return TRUE;
+}
+#endif
+
 /* The is a fallback for cases where we e.g. can't create a GL context or
  * Vulkan swapchain for the swapchain window. */
 static void swapchain_blit_gdi(struct wined3d_swapchain *swapchain,
@@ -496,32 +531,8 @@ static void swapchain_blit_gdi(struct wined3d_swapchain *swapchain,
         FIXME("Using GDI present.\n");
 
 #ifdef __REACTOS__
-    if (swapchain->composition)
-    {
-        OffsetRect(&draw_rect, swapchain->composition_offset.x,
-                swapchain->composition_offset.y);
-        if (swapchain->composition_has_clip)
-        {
-            RECT unclipped_rect = draw_rect;
-            LONG source_width = source_rect.right - source_rect.left;
-            LONG source_height = source_rect.bottom - source_rect.top;
-            LONG draw_width = draw_rect.right - draw_rect.left;
-            LONG draw_height = draw_rect.bottom - draw_rect.top;
-
-            if (!IntersectRect(&draw_rect, &draw_rect, &swapchain->composition_clip))
-                return;
-            if (draw_width)
-            {
-                source_rect.left += MulDiv(draw_rect.left - unclipped_rect.left, source_width, draw_width);
-                source_rect.right -= MulDiv(unclipped_rect.right - draw_rect.right, source_width, draw_width);
-            }
-            if (draw_height)
-            {
-                source_rect.top += MulDiv(draw_rect.top - unclipped_rect.top, source_height, draw_height);
-                source_rect.bottom -= MulDiv(unclipped_rect.bottom - draw_rect.bottom, source_height, draw_height);
-            }
-        }
-    }
+    if (swapchain->composition && !swapchain_composition_rects(swapchain, &source_rect, &draw_rect))
+        return;
 #endif
 
     format = back_buffer->resource.format;
@@ -734,7 +745,7 @@ static void swapchain_gl_present(struct wined3d_swapchain *swapchain,
     pixel_format = &wined3d_adapter_gl(swapchain->device->adapter)->pixel_formats[context_gl->pixel_format - 1];
     if (
 #ifdef __REACTOS__
-            swapchain->composition ||
+            (swapchain->composition && pixel_format->swap_method != WGL_SWAP_COPY_ARB) ||
 #endif
             context_gl->dc == wined3d_device_gl(swapchain->device)->backup_dc
             || (pixel_format->swap_method != WGL_SWAP_COPY_ARB
@@ -750,6 +761,17 @@ static void swapchain_gl_present(struct wined3d_swapchain *swapchain,
 
         wined3d_texture_load_location(back_buffer, 0, context, back_buffer->resource.draw_binding);
 
+#ifdef __REACTOS__
+        if (swapchain->composition)
+        {
+            RECT composition_source_rect = *src_rect;
+            RECT composition_draw_rect = *dst_rect;
+
+            if (swapchain_composition_rects(swapchain, &composition_source_rect, &composition_draw_rect))
+                swapchain_blit(swapchain, context, &composition_source_rect, &composition_draw_rect);
+        }
+        else
+#endif
         swapchain_blit(swapchain, context, src_rect, dst_rect);
 
         if (swapchain->device->context_count > 1)

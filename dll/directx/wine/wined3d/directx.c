@@ -2498,7 +2498,9 @@ HRESULT CDECL wined3d_get_device_caps(const struct wined3d_adapter *adapter,
                                         WINED3DPMISCCAPS_FOGVERTEXCLAMPED */
 
     caps->RasterCaps               = WINED3DPRASTERCAPS_DITHER    |
+#ifndef __REACTOS__
                                      WINED3DPRASTERCAPS_PAT       |
+#endif
                                      WINED3DPRASTERCAPS_WFOG      |
                                      WINED3DPRASTERCAPS_ZFOG      |
                                      WINED3DPRASTERCAPS_FOGVERTEX |

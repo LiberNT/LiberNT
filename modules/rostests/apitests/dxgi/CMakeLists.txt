@@ -2,6 +2,7 @@
 add_executable(dxgi_apitest
     adapter_removal.c
     dxgi.c
+    format_support.cpp
     texture_dimensions.cpp
     composition.cpp
     composition_damage.cpp

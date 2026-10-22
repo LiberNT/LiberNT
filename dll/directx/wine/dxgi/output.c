@@ -627,9 +627,29 @@ static BOOL STDMETHODCALLTYPE dxgi_output_SupportsOverlays(IDXGIOutput6 *iface)
 static HRESULT STDMETHODCALLTYPE dxgi_output_CheckOverlaySupport(IDXGIOutput6 *iface,
         DXGI_FORMAT format, IUnknown *device, UINT *flags)
 {
+#ifdef __REACTOS__
+    struct dxgi_output *output = impl_from_IDXGIOutput6(iface);
+    struct wined3d_adapter_identifier adapter_id = {0};
+    LUID luid;
+    HRESULT hr;
+
+    TRACE("iface %p, format %#x, device %p, flags %p.\n", iface, format, device, flags);
+
+    if (!device || !flags)
+        return E_INVALIDARG;
+
+    *flags = 0;
+    if (FAILED(hr = wined3d_adapter_get_identifier(output->adapter->wined3d_adapter, 0, &adapter_id)))
+        return hr;
+    luid = output->adapter->wddm_foreign ? output->adapter->wddm_luid : adapter_id.adapter_luid;
+    if (dxgi_wddm_adapter_supports_mpo(luid))
+        FIXME("Overlay planes are supported; per-format overlay support is not queried.\n");
+    return S_OK;
+#else
     FIXME("iface %p, format %#x, device %p, flags %p stub!\n", iface, format, device, flags);
 
     return E_NOTIMPL;
+#endif
 }
 
 /* IDXGIOutput4 methods */

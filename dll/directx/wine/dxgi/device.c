@@ -330,10 +330,23 @@ static HRESULT STDMETHODCALLTYPE dxgi_device_EnqueueSetEvent(IWineDXGIDevice *if
     return hr;
 }
 
+#ifdef __REACTOS__
+static void STDMETHODCALLTYPE dxgi_device_Trim(IWineDXGIDevice *iface)
+{
+    struct dxgi_device *device = impl_from_IWineDXGIDevice(iface);
+
+    TRACE("iface %p.\n", iface);
+
+    wined3d_mutex_lock();
+    wined3d_device_context_flush(wined3d_device_get_immediate_context(device->wined3d_device));
+    wined3d_mutex_unlock();
+}
+#else
 static void STDMETHODCALLTYPE dxgi_device_Trim(IWineDXGIDevice *iface)
 {
     FIXME("iface %p stub!\n", iface);
 }
+#endif
 
 /* IWineDXGIDevice methods */
 
@@ -459,6 +472,9 @@ static HRESULT STDMETHODCALLTYPE dxgi_swapchain_factory_create_swapchain(IWineDX
     struct IDXGIOutput *containing_output;
     struct dxgi_factory *dxgi_factory;
     struct d3d11_swapchain *object;
+#ifdef __REACTOS__
+    BOOL composition = !window;
+#endif
     HRESULT hr;
 
     TRACE("iface %p, factory %p, window %p, desc %p, fullscreen_desc %p, output %p, swapchain %p.\n",
@@ -536,6 +552,11 @@ static HRESULT STDMETHODCALLTYPE dxgi_swapchain_factory_create_swapchain(IWineDX
     object->background.g = 0.0f;
     object->background.b = 0.0f;
     object->background.a = 1.0f;
+    object->composition = composition;
+    object->source_width = desc->Width;
+    object->source_height = desc->Height;
+    object->transform._11 = 1.0f;
+    object->transform._22 = 1.0f;
 #endif
 
     TRACE("Created swapchain %p.\n", object);

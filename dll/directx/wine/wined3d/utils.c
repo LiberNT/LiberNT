@@ -32,7 +32,11 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d);
 
+#ifdef __REACTOS__
+#define WINED3D_FORMAT_FOURCC_BASE (WINED3DFMT_P010_PLANAR + 1)
+#else
 #define WINED3D_FORMAT_FOURCC_BASE (WINED3DFMT_BC7_UNORM_SRGB + 1)
+#endif
 
 static const struct
 {
@@ -90,6 +94,9 @@ static const struct wined3d_format_channels formats[] =
     {WINED3DFMT_YV12,                       0,  0,  0,  0,   0,  0,  0,  0,    1,   0,  0},
     {WINED3DFMT_NV12,                       0,  0,  0,  0,   0,  0,  0,  0,    1,   0,  0},
     {WINED3DFMT_NV12_PLANAR,                0,  0,  0,  0,   0,  0,  0,  0,    1,   0,  0},
+#ifdef __REACTOS__
+    {WINED3DFMT_P010_PLANAR,                0,  0,  0,  0,   0,  0,  0,  0,    2,   0,  0},
+#endif
     {WINED3DFMT_DXT1,                       0,  0,  0,  0,   0,  0,  0,  0,    1,   0,  0},
     {WINED3DFMT_DXT2,                       0,  0,  0,  0,   0,  0,  0,  0,    1,   0,  0},
     {WINED3DFMT_DXT3,                       0,  0,  0,  0,   0,  0,  0,  0,    1,   0,  0},
@@ -720,6 +727,9 @@ static const struct
 format_plane_info[] =
 {
     {WINED3DFMT_NV12_PLANAR, {WINED3DFMT_R8_UINT, WINED3DFMT_R8G8_UINT}, 2, 2},
+#ifdef __REACTOS__
+    {WINED3DFMT_P010_PLANAR, {WINED3DFMT_R16_UINT, WINED3DFMT_R16G16_UINT}, 2, 2},
+#endif
 };
 
 struct wined3d_format_vertex_info
@@ -4216,6 +4226,9 @@ static void init_vulkan_format_info(struct wined3d_adapter *adapter, struct wine
         {WINED3DFMT_X32_TYPELESS_G8X24_UINT,    VK_FORMAT_D32_SFLOAT_S8_UINT,      },
         {WINED3DFMT_D24_UNORM_S8_UINT,          VK_FORMAT_D24_UNORM_S8_UINT,       },
         {WINED3DFMT_NV12_PLANAR,                VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,},
+#ifdef __REACTOS__
+        {WINED3DFMT_P010_PLANAR,                VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16,},
+#endif
     };
     const struct wined3d_d3d_info *d3d_info = &adapter->d3d_info;
     VkFormat vk_format = VK_FORMAT_UNDEFINED;
@@ -4680,6 +4693,9 @@ const char *debug_d3dformat(enum wined3d_format_id format_id)
         FMT_TO_STR(WINED3DFMT_R8G8_B8G8_UNORM);
         FMT_TO_STR(WINED3DFMT_G8R8_G8B8_UNORM);
         FMT_TO_STR(WINED3DFMT_NV12_PLANAR);
+#ifdef __REACTOS__
+        FMT_TO_STR(WINED3DFMT_P010_PLANAR);
+#endif
         FMT_TO_STR(WINED3DFMT_BC1_TYPELESS);
         FMT_TO_STR(WINED3DFMT_BC1_UNORM);
         FMT_TO_STR(WINED3DFMT_BC1_UNORM_SRGB);

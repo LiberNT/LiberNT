@@ -264,6 +264,9 @@ DXGI_FORMAT dxgi_format_from_wined3dformat(enum wined3d_format_id format)
         case WINED3DFMT_BC7_UNORM: return DXGI_FORMAT_BC7_UNORM;
         case WINED3DFMT_BC7_UNORM_SRGB: return DXGI_FORMAT_BC7_UNORM_SRGB;
         case WINED3DFMT_NV12_PLANAR: return DXGI_FORMAT_NV12;
+#ifdef __REACTOS__
+        case WINED3DFMT_P010_PLANAR: return DXGI_FORMAT_P010;
+#endif
         case WINED3DFMT_YUY2: return DXGI_FORMAT_YUY2;
         case WINED3DFMT_B4G4R4A4_UNORM: return DXGI_FORMAT_B4G4R4A4_UNORM;
         default:
@@ -377,6 +380,9 @@ enum wined3d_format_id wined3dformat_from_dxgi_format(DXGI_FORMAT format)
         case DXGI_FORMAT_BC7_UNORM: return WINED3DFMT_BC7_UNORM;
         case DXGI_FORMAT_BC7_UNORM_SRGB: return WINED3DFMT_BC7_UNORM_SRGB;
         case DXGI_FORMAT_NV12: return WINED3DFMT_NV12_PLANAR;
+#ifdef __REACTOS__
+        case DXGI_FORMAT_P010: return WINED3DFMT_P010_PLANAR;
+#endif
         case DXGI_FORMAT_YUY2: return WINED3DFMT_YUY2;
         case DXGI_FORMAT_B4G4R4A4_UNORM: return WINED3DFMT_B4G4R4A4_UNORM;
         default:

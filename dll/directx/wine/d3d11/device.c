@@ -4675,7 +4675,11 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_CheckFormatSupport(ID3D11Device5 *
     };
     HRESULT hr;
 
+#ifdef __REACTOS__
+    TRACE("iface %p, format %u, format_support %p.\n", iface, format, format_support);
+#else
     FIXME("iface %p, format %u, format_support %p partial-stub!\n", iface, format, format_support);
+#endif
 
     wined3d_format = wined3dformat_from_dxgi_format(format);
     if (format && !wined3d_format)
@@ -4812,6 +4816,50 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_CheckFormatSupport(ID3D11Device5 *
                 break;
         }
     }
+
+    if (*format_support)
+        *format_support |= D3D11_FORMAT_SUPPORT_CPU_LOCKABLE;
+
+    if (feature_level >= D3D_FEATURE_LEVEL_10_0 && (*format_support & (D3D11_FORMAT_SUPPORT_TEXTURE1D
+            | D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_TEXTURE3D)) &&
+            ((format >= DXGI_FORMAT_R32G32B32A32_TYPELESS && format <= DXGI_FORMAT_R10G10B10A2_UINT) ||
+             (format >= DXGI_FORMAT_R8G8B8A8_TYPELESS && format <= DXGI_FORMAT_R8_SINT) ||
+             (format >= DXGI_FORMAT_BC1_TYPELESS && format <= DXGI_FORMAT_BC5_SNORM) ||
+             (format >= DXGI_FORMAT_B8G8R8A8_UNORM && format <= DXGI_FORMAT_BC7_UNORM_SRGB)))
+        *format_support |= D3D11_FORMAT_SUPPORT_CAST_WITHIN_BIT_LAYOUT;
+
+    if (*format_support & D3D11_FORMAT_SUPPORT_DISPLAY)
+    {
+        switch (format)
+        {
+            case DXGI_FORMAT_R8G8B8A8_UNORM: case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+            case DXGI_FORMAT_R10G10B10A2_UNORM: case DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM:
+            case DXGI_FORMAT_B8G8R8A8_UNORM: case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+                *format_support |= D3D11_FORMAT_SUPPORT_BACK_BUFFER_CAST;
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (feature_level >= D3D_FEATURE_LEVEL_10_0 && (*format_support & D3D11_FORMAT_SUPPORT_BUFFER))
+    {
+        switch (format)
+        {
+            case DXGI_FORMAT_R32G32B32A32_FLOAT: case DXGI_FORMAT_R32G32B32A32_UINT: case DXGI_FORMAT_R32G32B32A32_SINT:
+            case DXGI_FORMAT_R32G32B32_FLOAT: case DXGI_FORMAT_R32G32B32_UINT: case DXGI_FORMAT_R32G32B32_SINT:
+            case DXGI_FORMAT_R32G32_FLOAT: case DXGI_FORMAT_R32G32_UINT: case DXGI_FORMAT_R32G32_SINT:
+            case DXGI_FORMAT_R32_FLOAT: case DXGI_FORMAT_R32_UINT: case DXGI_FORMAT_R32_SINT:
+                *format_support |= D3D11_FORMAT_SUPPORT_SO_BUFFER;
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (format == DXGI_FORMAT_NV12 && *format_support &&
+            wined3d_device_get_video_decode_profile_count(device->wined3d_device))
+        *format_support |= D3D11_FORMAT_SUPPORT_DECODER_OUTPUT;
 #endif
 
     return *format_support ? S_OK : E_FAIL;

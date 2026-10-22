@@ -90,6 +90,27 @@ HRESULT dxgi_query_wddm_video_memory_info(LUID luid, UINT node_index, DXGI_MEMOR
     return S_OK;
 }
 
+BOOL dxgi_wddm_adapter_supports_mpo(LUID luid)
+{
+    D3DKMT_OPENADAPTERFROMLUID open_adapter = {0};
+    D3DKMT_MULTIPLANEOVERLAY_SUPPORT support = {0};
+    D3DKMT_QUERYADAPTERINFO query = {0};
+    D3DKMT_CLOSEADAPTER close_adapter;
+    NTSTATUS status;
+
+    open_adapter.AdapterLuid = luid;
+    if (!NT_SUCCESS(D3DKMTOpenAdapterFromLuid(&open_adapter)))
+        return FALSE;
+    query.hAdapter = open_adapter.hAdapter;
+    query.Type = KMTQAITYPE_MULTIPLANEOVERLAY_SUPPORT;
+    query.pPrivateDriverData = &support;
+    query.PrivateDriverDataSize = sizeof(support);
+    status = D3DKMTQueryAdapterInfo(&query);
+    close_adapter.hAdapter = open_adapter.hAdapter;
+    D3DKMTCloseAdapter(&close_adapter);
+    return NT_SUCCESS(status) && support.Supported;
+}
+
 HRESULT dxgi_get_wddm_adapter_desc(LUID luid, DXGI_ADAPTER_DESC3 *desc)
 {
     D3DKMT_OPENADAPTERFROMLUID open_adapter = {0};

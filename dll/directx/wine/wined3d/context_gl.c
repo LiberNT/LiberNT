@@ -1876,7 +1876,9 @@ HGLRC context_create_wgl_attribs(const struct wined3d_gl_info *gl_info, HDC hdc,
 static BOOL wined3d_context_gl_create_wgl_ctx(struct wined3d_context_gl *context_gl,
         struct wined3d_swapchain_gl *swapchain_gl, BOOL *new_drawable)
 {
+#ifndef __REACTOS__
     enum wined3d_swap_effect swap_effect = swapchain_gl->s.state.desc.swap_effect;
+#endif
     const struct wined3d_format *colour_format, *ds_format;
     struct wined3d_context *context = &context_gl->c;
     const struct wined3d_gl_info *gl_info;
@@ -1894,7 +1896,11 @@ static BOOL wined3d_context_gl_create_wgl_ctx(struct wined3d_context_gl *context
     target = &context->current_rt.texture->resource;
     target_bind_flags = target->bind_flags;
 
+#ifdef __REACTOS__
+    swap_effect_copy = true;
+#else
     swap_effect_copy = swap_effect == WINED3D_SWAP_EFFECT_COPY || swap_effect == WINED3D_SWAP_EFFECT_COPY_VSYNC;
+#endif
 
     *new_drawable = !GetPixelFormat(context_gl->dc);
 

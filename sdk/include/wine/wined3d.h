@@ -254,6 +254,9 @@ enum wined3d_format_id
     WINED3DFMT_BC7_TYPELESS,
     WINED3DFMT_BC7_UNORM,
     WINED3DFMT_BC7_UNORM_SRGB,
+#ifdef __REACTOS__
+    WINED3DFMT_P010_PLANAR,
+#endif
     /* FOURCC formats. */
     WINED3DFMT_UYVY                         = WINEMAKEFOURCC('U','Y','V','Y'),
     WINED3DFMT_YUY2                         = WINEMAKEFOURCC('Y','U','Y','2'),

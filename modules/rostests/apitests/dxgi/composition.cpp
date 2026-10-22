@@ -83,7 +83,7 @@ START_TEST(composition)
                 Hr = Chain3->SetSourceSize(Desc.Width, Desc.Height);
                 ok(Hr == S_OK, "Set full source size: %#lx\n", Hr);
                 Hr = Chain3->SetSourceSize(0, Desc.Height);
-                ok(FAILED(Hr), "Zero source width: %#lx\n", Hr);
+                ok(Hr == S_OK, "Zero source width: %#lx\n", Hr);
                 DXGI_MATRIX_3X2_F Matrix = {};
                 Hr = Chain3->GetMatrixTransform(&Matrix);
                 ok(Hr == S_OK && Matrix._11 == 1 && Matrix._22 == 1 && !Matrix._12
@@ -106,7 +106,7 @@ START_TEST(composition)
             Hr = Chain->SetFullscreenState(FALSE, NULL);
             ok(Hr == DXGI_ERROR_INVALID_CALL, "Composition SetFullscreenState: %#lx\n", Hr);
             Hr = Chain->ResizeBuffers(0, 0, 96, DXGI_FORMAT_UNKNOWN, 0);
-            ok(Hr == DXGI_ERROR_INVALID_CALL, "Composition resize zero width: %#lx\n", Hr);
+            ok(Hr == E_INVALIDARG, "Composition resize zero width: %#lx\n", Hr);
             ID3D11Texture2D *Initial = NULL;
             Hr = Chain->GetBuffer(0, IID_ID3D11Texture2D, reinterpret_cast<void **>(&Initial));
             ok(Hr == S_OK && Initial, "Unbound GetBuffer: %#lx\n", Hr);

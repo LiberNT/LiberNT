@@ -1666,6 +1666,12 @@ HRESULT WINAPI DCompositionCreateDevice2(IUnknown *rendering_device, REFIID iid,
 {
     TRACE("rendering_device %p, iid %s, device %p.\n",
             rendering_device, debugstr_guid(iid), device);
+    if (!IsEqualGUID(iid, &IID_IDCompositionDevice_local) && !IsEqualGUID(iid, &IID_IDCompositionDesktopDevice_local))
+    {
+        if (device)
+            *device = NULL;
+        return E_NOINTERFACE;
+    }
     return dcomp_create_device(rendering_device, iid, device);
 }
 

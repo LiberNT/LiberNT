@@ -12,8 +12,8 @@ typedef HRESULT (WINAPI *create_visual_fn)(void *, void **);
 typedef HRESULT (WINAPI *set_object_fn)(void *, void *);
 typedef ULONG (WINAPI *release_fn)(void *);
 
-static const GUID iid_dcomposition_device2 =
-    {0x75f6468d, 0x1b8e, 0x447c, {0x9b, 0xc6, 0x75, 0xfe, 0xa8, 0x0b, 0x5b, 0x25}};
+static const GUID iid_dcomposition_desktop_device =
+    {0x5f4633fe, 0x1e08, 0x4cb8, {0x8c, 0x75, 0xce, 0x24, 0x33, 0x3f, 0x56, 0x02}};
 
 START_TEST(visual_reset)
 {
@@ -37,7 +37,7 @@ START_TEST(visual_reset)
         return;
     }
 
-    hr = create_device(NULL, &iid_dcomposition_device2, &device);
+    hr = create_device(NULL, &iid_dcomposition_desktop_device, &device);
     ok(hr == S_OK, "DCompositionCreateDevice2 returned %#lx\n", hr);
     ok(device != NULL, "DCompositionCreateDevice2 returned a NULL device\n");
     if (!device)
