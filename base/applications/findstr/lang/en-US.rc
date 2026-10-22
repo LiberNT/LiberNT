@@ -2,12 +2,39 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 STRINGTABLE
 BEGIN
-    IDS_USAGE "FINDSTR: Prints all lines of a file that contain a string.\n\n\
-  FIND [ /C ] [ /I ] [ /N ] [ /V ] ""string"" [ file... ]\n\
-    /C  Count the number of lines that contain string\n\
-    /I  Ignore case\n\
-    /N  Number the displayed lines, starting at 1\n\
-    /V  Print lines that do not contain the string"
-    IDS_NO_SUCH_FILE "FINDSTR: %s: No such file\n"
-    IDS_CANNOT_OPEN "FINDSTR: %s: Cannot open file\n"
+    IDS_USAGE "Searches files for lines that contain strings.\n\n\
+FINDSTR [/B] [/E] [/L] [/R] [/S] [/I] [/X] [/V] [/N] [/M] [/O] [/P]\n\
+        [/F:file] [/C:string] [/G:file] [/D:directories] [/A:color]\n\
+        [/OFF[LINE]] strings [[drive:][path]filename [...]]\n\n\
+  /B           Match only at the beginning of a line.\n\
+  /E           Match only at the end of a line.\n\
+  /L           Treat the search strings as literal text.\n\
+  /R           Treat the search strings as regular expressions.\n\
+  /S           Also search the matching files in all subdirectories.\n\
+  /I           Ignore case.\n\
+  /X           Match only lines that are equal to a search string.\n\
+  /V           Print the lines that do not match.\n\
+  /N           Print the line number before each line.\n\
+  /M           Print only the names of the files that match.\n\
+  /O           Print the offset of each line in its file.\n\
+  /P           Skip files that contain non-printable characters.\n\
+  /OFF[LINE]   Also search files that are marked offline.\n\
+  /A:color     Print file names in this color (two hex digits, see COLOR /?).\n\
+  /F:file      Read the names of the files to search from file (/ is the console).\n\
+  /C:string    Search for string as one literal string, spaces included.\n\
+  /G:file      Read the search strings from file (/ is the console).\n\
+  /D:dirs      Search in a semicolon-separated list of directories.\n\
+  strings      Text to search for; spaces separate alternative strings.\n\
+  filename     Files to search; wildcards are allowed. Standard input is read\n\
+               when no file is given.\n\n\
+Search strings are literal unless /R is given or the first one contains a\n\
+regular expression character. /C strings are literal unless /R is given.\n\n\
+Regular expressions:\n\
+  .       any character            *       repeat the previous item\n\
+  ^       beginning of the line    $       end of the line\n\
+  [set]   one character in set     [^set]  one character not in set\n\
+  [a-z]   one character in range   \\x      the character x itself\n\
+  \\<      beginning of a word      \\>      end of a word"
+    IDS_NO_SUCH_FILE "FINDSTR: Cannot open %s\n"
+    IDS_CANNOT_OPEN "FINDSTR: Cannot open %s\n"
 END
