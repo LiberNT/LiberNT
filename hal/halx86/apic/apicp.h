@@ -78,6 +78,7 @@ extern ULONG HalpIoApicMaxIrq;
 #endif
 
 extern UCHAR HalpVectorToIndex[256];
+extern BOOLEAN HalpApicHvMsrs;
 
 VOID HalpRequestSelfInterrupt(_In_ UCHAR Vector);
 VOID HalpSecondaryInitialize(VOID);
@@ -139,6 +140,12 @@ typedef enum _APIC_REGISTER
 } APIC_REGISTER;
 
 #define MSR_APIC_BASE 0x0000001B
+#define HV_X64_MSR_EOI 0x40000070
+#define HV_X64_MSR_ICR 0x40000071
+#define HV_CPUID_INTERFACE_HV1 0x31237648
+#define HV_ACCESS_INTR_CTRL_REGS 0x00000010
+#define HV_APIC_ACCESS_RECOMMENDED 0x00000008
+#define HV_X2APIC_MSRS_RECOMMENDED 0x00000100
 #define IOAPIC_PHYS_BASE 0xFEC00000
 #define APIC_CLOCK_INDEX 8
 #define ApicLogicalId(Cpu) ((UCHAR)(((Cpu) < 8) ? (1u << (Cpu)) : 0))

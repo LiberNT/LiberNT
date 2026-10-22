@@ -69,16 +69,7 @@ ApicRequestGlobalInterrupt(
 {
     ULONG Flags;
     APIC_INTERRUPT_COMMAND_REGISTER Icr;
-
-    /* Disable interrupts so that we can change IRR without being interrupted */
-    Flags = __readeflags();
-    _disable();
-
-    /* Wait for the APIC to be idle */
-    do
-    {
-        Icr.Long0 = ApicRead(APIC_ICR0);
-    } while (Icr.DeliveryStatus);
+    APIC_INTERRUPT_COMMAND_REGISTER IcrStatus;
 
     /* Setup the command register */
     Icr.LongLong = 0;
@@ -92,14 +83,30 @@ ApicRequestGlobalInterrupt(
     Icr.DestinationShortHand = DestinationShortHand;
     Icr.Destination = DestinationProcessor;
 
+    if (HalpApicHvMsrs && MessageType == APIC_MT_Fixed)
+    {
+        __writemsr(HV_X64_MSR_ICR, Icr.LongLong);
+        return;
+    }
+
+    /* Disable interrupts so that we can change IRR without being interrupted */
+    Flags = __readeflags();
+    _disable();
+
+    /* Wait for the APIC to be idle */
+    do
+    {
+        IcrStatus.Long0 = ApicRead(APIC_ICR0);
+    } while (IcrStatus.DeliveryStatus);
+
     /* Write the low dword last to send the interrupt */
     ApicWrite(APIC_ICR1, Icr.Long1);
     ApicWrite(APIC_ICR0, Icr.Long0);
 
     do
     {
-        Icr.Long0 = ApicRead(APIC_ICR0);
-    } while (Icr.DeliveryStatus);
+        IcrStatus.Long0 = ApicRead(APIC_ICR0);
+    } while (IcrStatus.DeliveryStatus);
 
     /* Finally, restore the original interrupt state */
     if (Flags & EFLAGS_INTERRUPT_MASK)

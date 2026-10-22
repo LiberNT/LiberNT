@@ -88,9 +88,11 @@ extern "C" {
 #define AMD64_TSS 9
 
 #define APIC_EOI_REGISTER 0xFFFFFFFFFFFE00B0ULL
+#define HV_X64_MSR_EOI 0x40000070
 
 #ifndef __ASM__
 
+extern BOOLEAN KiHvApicMsrs;
 extern SIZE_T KeXStateLength;
 extern ULONG KiMxCsrMask;
 
@@ -411,6 +413,12 @@ FORCEINLINE
 VOID
 KiSendEOI(VOID)
 {
+    if (KiHvApicMsrs)
+    {
+        __writemsr(HV_X64_MSR_EOI, 0);
+        return;
+    }
+
     /* Write 0 to the apic EOI register */
     *((volatile ULONG*)APIC_EOI_REGISTER) = 0;
 }

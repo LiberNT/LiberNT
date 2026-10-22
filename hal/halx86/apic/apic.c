@@ -27,6 +27,7 @@
 ULONG ApicVersion;
 UCHAR HalpVectorToIndex[256];
 ULONG HalpIoApicMaxIrq = APIC_MAX_IRQ;
+BOOLEAN HalpApicHvMsrs;
 
 /* The shared IOREGSEL/IOWIN select/access pair must not interleave between
    CPUs, and level lines are masked from interrupt context: any-IRQL lock. */
@@ -201,6 +202,12 @@ ApicRequestSelfInterrupt(IN UCHAR Vector, UCHAR TriggerMode)
     Icr.TriggerMode = TriggerMode;
     Icr.DestinationShortHand = APIC_DSH_Self;
 
+    if (HalpApicHvMsrs && TriggerMode == APIC_TGM_Edge)
+    {
+        __writemsr(HV_X64_MSR_ICR, Icr.LongLong);
+        return;
+    }
+
     /* Disable interrupts so that we can change IRR without being interrupted */
     Flags = __readeflags();
     _disable();
@@ -241,7 +248,10 @@ FORCEINLINE
 VOID
 ApicSendEOI(void)
 {
-    ApicWrite(APIC_EOI, 0);
+    if (HalpApicHvMsrs)
+        __writemsr(HV_X64_MSR_EOI, 0);
+    else
+        ApicWrite(APIC_EOI, 0);
 }
 
 FORCEINLINE
@@ -337,6 +347,32 @@ HalpSendEOI(VOID)
     ApicSendEOI();
 }
 
+static
+BOOLEAN
+ApicHvMsrsRecommended(VOID)
+{
+    INT CpuInfo[4];
+
+    __cpuid(CpuInfo, 1);
+    if (!(CpuInfo[2] & 0x80000000))
+        return FALSE;
+
+    __cpuid(CpuInfo, 0x40000000);
+    if ((ULONG)CpuInfo[0] < 0x40000004)
+        return FALSE;
+
+    __cpuid(CpuInfo, 0x40000001);
+    if ((ULONG)CpuInfo[0] != HV_CPUID_INTERFACE_HV1)
+        return FALSE;
+
+    __cpuid(CpuInfo, 0x40000003);
+    if (!(CpuInfo[0] & HV_ACCESS_INTR_CTRL_REGS))
+        return FALSE;
+
+    __cpuid(CpuInfo, 0x40000004);
+    return (CpuInfo[0] & (HV_APIC_ACCESS_RECOMMENDED | HV_X2APIC_MSRS_RECOMMENDED)) != 0;
+}
+
 VOID
 NTAPI
 ApicInitializeLocalApic(ULONG Cpu)
@@ -344,6 +380,12 @@ ApicInitializeLocalApic(ULONG Cpu)
     APIC_BASE_ADDRESS_REGISTER BaseRegister;
     APIC_SPURIOUS_INERRUPT_REGISTER SpIntRegister;
     LVT_REGISTER LvtEntry;
+
+    if (Cpu == 0)
+    {
+        HalpApicHvMsrs = ApicHvMsrsRecommended();
+        DPRINT1("APIC: Hyper-V synthetic EOI/ICR MSRs %s\n", HalpApicHvMsrs ? "enabled" : "not used");
+    }
 
     /* Enable the APIC if it wasn't yet */
     BaseRegister.LongLong = __readmsr(MSR_APIC_BASE);

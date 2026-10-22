@@ -36,6 +36,8 @@ PVOID KiP0DoubleFaultStack = &KiP0DoubleFaultStackData[KERNEL_STACK_SIZE];
 
 ULONGLONG BootCycles, BootCyclesEnd;
 
+BOOLEAN KiHvApicMsrs;
+
 void KiInitializeSegments();
 void KiSystemCallEntry64();
 void KiSystemCallEntry32();
@@ -348,6 +350,33 @@ KiInitializeP0BootStructures(
 }
 
 CODE_SEG("INIT")
+static
+BOOLEAN
+KiHvApicMsrsRecommended(VOID)
+{
+    INT CpuInfo[4];
+
+    __cpuid(CpuInfo, 1);
+    if (!(CpuInfo[2] & 0x80000000))
+        return FALSE;
+
+    __cpuid(CpuInfo, 0x40000000);
+    if ((ULONG)CpuInfo[0] < 0x40000004)
+        return FALSE;
+
+    __cpuid(CpuInfo, 0x40000001);
+    if ((ULONG)CpuInfo[0] != 0x31237648)
+        return FALSE;
+
+    __cpuid(CpuInfo, 0x40000003);
+    if (!(CpuInfo[0] & 0x10))
+        return FALSE;
+
+    __cpuid(CpuInfo, 0x40000004);
+    return (CpuInfo[0] & 0x108) != 0;
+}
+
+CODE_SEG("INIT")
 VOID
 NTAPI
 KiInitializeKernelMachineDependent(
@@ -355,6 +384,8 @@ KiInitializeKernelMachineDependent(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     ULONG64 FeatureBits = KeFeatureBits;
+
+    KiHvApicMsrs = KiHvApicMsrsRecommended();
 
     /* Set boot-level flags */
     KeI386CpuType = Prcb->CpuType;

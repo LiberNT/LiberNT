@@ -32,6 +32,7 @@ EXTERN MmDeleteKernelStack:PROC
 EXTERN KdSetOwedBreakpoints:PROC
 EXTERN KeAcquireSpinLockAtDpcLevel:PROC
 EXTERN KeReleaseSpinLockFromDpcLevel:PROC
+EXTERN KiHvApicMsrs:BYTE
 
 
 /* Helper Macros *************************************************************/
@@ -848,7 +849,16 @@ PUBLIC KiApcInterrupt
     mov cr8, rax
 
     /* End the interrupt */
+    cmp byte ptr KiHvApicMsrs[rip], 0
+    jz KiApcInterruptMmioEoi
+    mov ecx, HEX(40000070)
+    xor eax, eax
+    xor edx, edx
+    wrmsr
+    jmp KiApcInterruptEoiDone
+KiApcInterruptMmioEoi:
     mov dword ptr [APIC_EOI], 0
+KiApcInterruptEoiDone:
 
     /* Enable interrupts  */
     sti
