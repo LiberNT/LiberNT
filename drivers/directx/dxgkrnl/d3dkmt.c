@@ -3572,6 +3572,9 @@ DxgkpQueryAdapterInfoCaptured(
             if ((UINT)DriverName.Version >= NUM_KMTUMDVERSIONS)
                 DXGKP_QUERY_RETURN(STATUS_INVALID_PARAMETER);
 
+            if (Adapter->MiniportContext != NULL && Adapter->MiniportContext->IsDisplayOnlyDriver)
+                DXGKP_QUERY_RETURN(STATUS_NOT_SUPPORTED);
+
             Status = DxgkpQueryDriverStringValue(Adapter,
                                                  DxgkpIsWow64Caller() ? L"UserModeDriverNameWow"
                                                                       : L"UserModeDriverName",
@@ -3627,6 +3630,9 @@ DxgkpQueryAdapterInfoCaptured(
             {
                 DXGKP_QUERY_RETURN(STATUS_BUFFER_TOO_SMALL);
             }
+
+            if (Adapter->MiniportContext != NULL && Adapter->MiniportContext->IsDisplayOnlyDriver)
+                DXGKP_QUERY_RETURN(STATUS_NOT_SUPPORTED);
 
             pOpenGlInfo = (D3DKMT_OPENGLINFO *)pQueryAdapterInfo->pPrivateDriverData;
             RtlZeroMemory(&OpenGlInfo, sizeof(OpenGlInfo));

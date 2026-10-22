@@ -2094,7 +2094,7 @@ HRESULT NativeDevice::Initialize(IDXGIAdapter *selected_adapter, UINT creation_f
             || (name.UmdFileName[0] && name.UmdFileName[1] == ':' && name.UmdFileName[2] == '\\'))
         load_flags = LOAD_WITH_ALTERED_SEARCH_PATH;
     umd = LoadLibraryExW(name.UmdFileName, NULL, load_flags);
-    if (!umd) return HRESULT_FROM_WIN32(GetLastError());
+    if (!umd) return DXGI_ERROR_UNSUPPORTED;
     PFND3D10DDI_OPENADAPTER open_adapter = reinterpret_cast<PFND3D10DDI_OPENADAPTER>(GetProcAddress(umd, "OpenAdapter10_2"));
     if (!open_adapter) return DXGI_ERROR_UNSUPPORTED;
     adapter_callbacks.pfnQueryAdapterInfoCb = NativeQueryAdapter;

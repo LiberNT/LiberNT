@@ -339,7 +339,7 @@ static HRESULT d3d11_create_device(IDXGIAdapter *adapter, D3D_DRIVER_TYPE driver
         levels = ARRAY_SIZE(default_feature_levels);
     }
 #if defined(__REACTOS__) && defined(REACTOS_D3D11_NATIVE_UMD)
-    hr = driver_type == D3D_DRIVER_TYPE_NULL ? DXGI_ERROR_UNSUPPORTED
+    hr = driver_type != D3D_DRIVER_TYPE_HARDWARE && driver_type != D3D_DRIVER_TYPE_UNKNOWN ? DXGI_ERROR_UNSUPPORTED
             : d3d11_native_create_device(adapter, flags, feature_levels, levels, &device);
     if (hr == DXGI_ERROR_UNSUPPORTED)
 #endif
