@@ -75,6 +75,10 @@ PADDRESS_FILE AddrSearchFirst(
 PADDRESS_FILE AddrSearchNext(
     PAF_SEARCH SearchContext);
 
+BOOLEAN AddrFileReceiveMatch(
+    PADDRESS_FILE AddrFile,
+    PIP_ADDRESS RemoteAddress);
+
 unsigned long NTAPI inet_addr(const char*);
 
 ULONG IPv4NToHl( ULONG Address );

@@ -117,10 +117,16 @@ BOOLEAN AddrIsBroadcastMatch(
     PLIST_ENTRY Entry;
     IF_LIST_ITER(IF);
 
+    if (BroadcastAddress->Type != IP_ADDRESS_V4 || UnicastAddress->Type != IP_ADDRESS_V4)
+        return FALSE;
+
     TcpipAcquireSpinLock(&NetTableListLock, &OldIrql);
 
     for (Entry = NetTableListHead.Flink; Entry != &NetTableListHead; Entry = Entry->Flink) {
         PIP_NTE Nte = CONTAINING_RECORD(Entry, IP_NTE, ListEntry);
+
+        if (Nte->Unicast.Type != IP_ADDRESS_V4 || Nte->Broadcast.Type != IP_ADDRESS_V4)
+            continue;
 
         if ((AddrIsUnspecified(UnicastAddress) ||
              AddrIsEqual(&Nte->Unicast, UnicastAddress)) &&
@@ -138,6 +144,9 @@ BOOLEAN AddrIsBroadcastMatch(
     TcpipAcquireSpinLock(&InterfaceListLock, &OldIrql);
 
     ForEachInterface(IF) {
+        if (IF->Unicast.Type != IP_ADDRESS_V4 || IF->Broadcast.Type != IP_ADDRESS_V4)
+            continue;
+
         if ((AddrIsUnspecified(UnicastAddress) ||
              AddrIsEqual(&IF->Unicast, UnicastAddress)) &&
             (AddrIsEqual(&IF->Broadcast, BroadcastAddress))) {
@@ -186,6 +195,29 @@ BOOLEAN AddrReceiveMatch(
    }
 
    return FALSE;
+}
+
+BOOLEAN AddrFileReceiveMatch(
+    PADDRESS_FILE AddrFile,
+    PIP_ADDRESS RemoteAddress)
+{
+    IP_ADDRESS Mapped;
+
+    if (AddrFile->Address.Type == RemoteAddress->Type)
+        return AddrReceiveMatch(&AddrFile->Address, RemoteAddress);
+
+    if (!AddrFile->DualStack || AddrFile->Address.Type != IP_ADDRESS_V6 ||
+        RemoteAddress->Type != IP_ADDRESS_V4)
+    {
+        return FALSE;
+    }
+
+    if (AddrIsUnspecified(&AddrFile->Address))
+        return TRUE;
+
+    Mapped = *RemoteAddress;
+    TCPMapToDualStack(&Mapped);
+    return AddrIsEqual(&AddrFile->Address, &Mapped);
 }
 
 VOID
@@ -282,6 +314,12 @@ static BOOLEAN AddrAdoptSharer(
     return TRUE;
 }
 
+static BOOLEAN AddrHoldsIPv4Port(
+    PADDRESS_FILE AddrFile)
+{
+    return AddrFile->Address.Type != IP_ADDRESS_V6 || AddrFile->DualStack;
+}
+
 static BOOLEAN AddrPortInUseLocked(
     PADDRESS_FILE AddrFile)
 {
@@ -295,7 +333,7 @@ static BOOLEAN AddrPortInUseLocked(
         Current = CONTAINING_RECORD(Entry, ADDRESS_FILE, ListEntry);
         if (Current->Port == AddrFile->Port &&
             Current->Protocol == AddrFile->Protocol &&
-            Current->Address.Type == AddrFile->Address.Type)
+            AddrHoldsIPv4Port(Current) == AddrHoldsIPv4Port(AddrFile))
             return TRUE;
     }
 
@@ -419,7 +457,7 @@ PADDRESS_FILE AddrSearchNext(
         /* See if this address matches the search criteria */
         if ((Current->Port    == SearchContext->Port) &&
             (Current->Protocol == SearchContext->Protocol) &&
-            (AddrReceiveMatch(IPAddress, SearchContext->Address)) &&
+            (AddrFileReceiveMatch(Current, SearchContext->Address)) &&
             /* This also takes the reference returned to the caller. An
              * address file being freed is not a match. */
             AddrFileReferenceLive(Current)) {
@@ -496,7 +534,7 @@ VOID AddrFileFree(
   TcpipAcquireSpinLock(&AddressFileListLock, &OldIrql);
   RemoveEntryList(&AddrFile->ListEntry);
   if (AddrFile->Protocol == IPPROTO_UDP &&
-      AddrFile->Address.Type != IP_ADDRESS_V6 &&
+      AddrHoldsIPv4Port(AddrFile) &&
       !AddrPortInUseLocked(AddrFile))
   {
       UDPFreePort(AddrFile->Port);
@@ -729,8 +767,27 @@ NTSTATUS FileOpenAddress(
       if (AddrFile->Address.Type == IP_ADDRESS_V6)
       {
           USHORT UdpPort;
+          BOOLEAN ReserveIPv4 = DualStack && (SharedFile == NULL || !SharedFile->DualStack);
+          UINT Attempts = UDP_DYNAMIC_PORTS;
 
-          Status = LibUDPOpen(AddrFile, BindPort, &UdpPort);
+          do
+          {
+              AllocatedPort = BindPort;
+              if (ReserveIPv4)
+              {
+                  AllocatedPort = UDPAllocatePort(BindPort);
+                  if (AllocatedPort == (UINT)-1)
+                  {
+                      Status = STATUS_ADDRESS_ALREADY_EXISTS;
+                      break;
+                  }
+              }
+
+              Status = LibUDPOpen(AddrFile, (USHORT)AllocatedPort, &UdpPort);
+              if (ReserveIPv4 && !NT_SUCCESS(Status))
+                  UDPFreePort(AllocatedPort);
+          } while (Status == STATUS_ADDRESS_ALREADY_EXISTS && ReserveIPv4 && BindPort == 0 && --Attempts != 0);
+
           if (!NT_SUCCESS(Status))
           {
               if (SharedFile != NULL)

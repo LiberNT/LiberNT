@@ -1,10 +1,12 @@
 
 list(APPEND SOURCE
     MulticastInterface.c
+    addresslistsort.c
     bind.c
     broadcast.c
     close.c
     connect_select.c
+    dualstack.c
     getaddrinfo.c
     gethostname.c
     getnameinfo.c

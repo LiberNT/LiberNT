@@ -3,10 +3,12 @@
 #include <apitest.h>
 
 extern void func_MulticastInterface(void);
+extern void func_addresslistsort(void);
 extern void func_bind(void);
 extern void func_broadcast(void);
 extern void func_close(void);
 extern void func_connect_select(void);
+extern void func_dualstack(void);
 extern void func_getaddrinfo(void);
 extern void func_gethostname(void);
 extern void func_getnameinfo(void);
@@ -29,10 +31,12 @@ extern void func_WSAStartup(void);
 const struct test winetest_testlist[] =
 {
     { "MulticastInterface", func_MulticastInterface },
+    { "addresslistsort", func_addresslistsort },
     { "bind", func_bind },
     { "broadcast", func_broadcast },
     { "close", func_close },
     { "connect_select", func_connect_select },
+    { "dualstack", func_dualstack },
     { "getaddrinfo", func_getaddrinfo },
     { "gethostname", func_gethostname },
     { "getnameinfo", func_getnameinfo },

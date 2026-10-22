@@ -183,12 +183,7 @@ DGDeliverData(
         {
             Current = CONTAINING_RECORD(CurrentEntry, DATAGRAM_RECEIVE_REQUEST, ListEntry);
             CurrentEntry = CurrentEntry->Flink;
-            if (DstPort == AddrFile->Port &&
-               (AddrIsEqual(DstAddress, &AddrFile->Address) ||
-                AddrIsUnspecified(&AddrFile->Address) ||
-                AddrIsUnspecified(DstAddress) ||
-                (DstAddress->Type == IP_ADDRESS_V4 &&
-                 (DN2H(DstAddress->Address.IPv4Address) & 0xf0000000) == 0xe0000000)))
+            if (DstPort == AddrFile->Port && AddrFileReceiveMatch(AddrFile, DstAddress))
             {
                 /* Remove the request from the queue */
                 RemoveEntryList(&Current->ListEntry);
@@ -208,6 +203,15 @@ DGDeliverData(
                 if (SrcAddress->Type == IP_ADDRESS_V6)
                 {
                     AddrBuildTransportAddress(SrcAddress, SrcPort,
+                                              (PTRANSPORT_ADDRESS)RTAIPAddress,
+                                              Current->ReturnInfo->RemoteAddressLength);
+                }
+                else if (AddrFile->Address.Type == IP_ADDRESS_V6)
+                {
+                    IP_ADDRESS MappedSource = *SrcAddress;
+
+                    TCPMapToDualStack(&MappedSource);
+                    AddrBuildTransportAddress(&MappedSource, SrcPort,
                                               (PTRANSPORT_ADDRESS)RTAIPAddress,
                                               Current->ReturnInfo->RemoteAddressLength);
                 }
