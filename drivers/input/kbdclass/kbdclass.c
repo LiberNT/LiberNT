@@ -196,6 +196,33 @@ ClassDeviceControl(
 	return Status;
 }
 
+static VOID
+ClassArmWaitWake(
+	IN PPORT_DEVICE_EXTENSION DeviceExtension);
+
+static VOID
+ClassCancelWaitWake(
+	IN PPORT_DEVICE_EXTENSION DeviceExtension);
+
+static IO_COMPLETION_ROUTINE ClassSystemPowerUpComplete;
+
+static NTSTATUS NTAPI
+ClassSystemPowerUpComplete(
+	IN PDEVICE_OBJECT DeviceObject,
+	IN PIRP Irp,
+	IN PVOID Context)
+{
+	UNREFERENCED_PARAMETER(DeviceObject);
+
+	if (Irp->PendingReturned)
+		IoMarkIrpPending(Irp);
+
+	if (NT_SUCCESS(Irp->IoStatus.Status))
+		ClassArmWaitWake(Context);
+
+	return STATUS_CONTINUE_COMPLETION;
+}
+
 static NTSTATUS NTAPI
 ClassPower(
 	IN PDEVICE_OBJECT DeviceObject,
@@ -203,10 +230,26 @@ ClassPower(
 {
 	NTSTATUS Status;
 	PPORT_DEVICE_EXTENSION DeviceExtension;
+	PIO_STACK_LOCATION Stack;
 
 	DeviceExtension = DeviceObject->DeviceExtension;
 	if (!DeviceExtension->Common.IsClassDO)
 	{
+		Stack = IoGetCurrentIrpStackLocation(Irp);
+		if (Stack->MinorFunction == IRP_MN_SET_POWER && Stack->Parameters.Power.Type == SystemPowerState)
+		{
+			if (Stack->Parameters.Power.State.SystemState == PowerSystemWorking)
+			{
+				PoStartNextPowerIrp(Irp);
+				IoCopyCurrentIrpStackLocationToNext(Irp);
+				IoSetCompletionRoutine(Irp, ClassSystemPowerUpComplete, DeviceExtension, TRUE, TRUE, TRUE);
+				return PoCallDriver(DeviceExtension->LowerDevice, Irp);
+			}
+
+			if (Stack->Parameters.Power.State.SystemState > DeviceExtension->SystemWake)
+				ClassCancelWaitWake(DeviceExtension);
+		}
+
 		/* Forward port DO IRPs to lower device */
 		PoStartNextPowerIrp(Irp);
 		IoSkipCurrentIrpStackLocation(Irp);
@@ -878,6 +921,14 @@ ClassWaitWakeComplete(
 
 	if (NT_SUCCESS(IoStatus->Status))
 		ClassArmWaitWake(DeviceExtension);
+}
+
+static VOID
+ClassCancelWaitWake(
+	IN PPORT_DEVICE_EXTENSION DeviceExtension)
+{
+	if (InterlockedCompareExchange(&DeviceExtension->WakeState, CLASS_WAKE_CANCELLING, CLASS_WAKE_ARMED) == CLASS_WAKE_ARMED)
+		IoCancelIrp(DeviceExtension->WakeIrp);
 }
 
 static VOID

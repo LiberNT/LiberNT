@@ -174,10 +174,14 @@ Bus_FDO_Power (
         oldPowerState = Data->Common.SystemPowerState;
         Data->Common.SystemPowerState = powerState.SystemState;
 
+        if (powerState.SystemState != PowerSystemWorking)
+            AcpiWakePrepareSleep(powerState.SystemState);
+
         switch (powerState.SystemState)
         {
             case PowerSystemWorking:
                 AcpiPmFinishWake();
+                AcpiWakeFinishSleep();
                 break;
 
             case PowerSystemSleeping1:
@@ -208,6 +212,7 @@ Bus_FDO_Power (
 
         if (!NT_SUCCESS(status))
         {
+            AcpiWakeFinishSleep();
             Data->Common.SystemPowerState = oldPowerState;
             /* A successful lower-driver completion must not hide a failed
              * platform transition. We still own this IRP at this point. */
@@ -258,11 +263,8 @@ Bus_PDO_Power (
     powerType = stack->Parameters.Power.Type;
     powerState = stack->Parameters.Power.State;
 
-    if (stack->MinorFunction == IRP_MN_WAIT_WAKE)
-        return AcpiWakeQueueIrp(PdoData, Irp);
-
-    if (stack->MinorFunction == IRP_MN_SET_POWER &&
-        powerType == DevicePowerState &&
+    if ((stack->MinorFunction == IRP_MN_WAIT_WAKE ||
+         (stack->MinorFunction == IRP_MN_SET_POWER && powerType == DevicePowerState)) &&
         PdoData->AcpiHandle &&
         KeGetCurrentIrql() > PASSIVE_LEVEL)
     {
@@ -275,6 +277,9 @@ Bus_PDO_Power (
             return STATUS_PENDING;
         }
     }
+
+    if (stack->MinorFunction == IRP_MN_WAIT_WAKE)
+        return AcpiWakeQueueIrp(PdoData, Irp);
 
     switch (stack->MinorFunction) {
     case IRP_MN_SET_POWER:

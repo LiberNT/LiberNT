@@ -17,7 +17,9 @@ typedef struct _ACPI_WAKE_CONTEXT
     LIST_ENTRY Link;
     struct acpi_device *Device;
     PIRP Irp;
+    SYSTEM_POWER_STATE WakeState;
     BOOLEAN Armed;
+    BOOLEAN SleepMasked;
     BOOLEAN WorkQueued;
     BOOLEAN Removed;
     WORK_QUEUE_ITEM WorkItem;
@@ -25,6 +27,7 @@ typedef struct _ACPI_WAKE_CONTEXT
 
 static KSPIN_LOCK AcpiWakeLock;
 static LIST_ENTRY AcpiWakeList;
+static SYSTEM_POWER_STATE AcpiWakeTargetState = PowerSystemWorking;
 
 static WORKER_THREAD_ROUTINE AcpiWakeWorker;
 static DRIVER_CANCEL AcpiWakeCancel;
@@ -197,6 +200,15 @@ AcpiWakeQueryCapabilities(
 }
 
 static
+BOOLEAN
+AcpiWakeAllowedLocked(
+    _In_ PACPI_WAKE_CONTEXT Context)
+{
+    return AcpiWakeTargetState == PowerSystemWorking ||
+           (Context->Irp != NULL && Context->WakeState >= AcpiWakeTargetState);
+}
+
+static
 VOID
 AcpiWakeQueueWorkLocked(
     _Inout_ PACPI_WAKE_CONTEXT Context)
@@ -238,16 +250,24 @@ AcpiWakeWorker(
         if (Wanted)
         {
             acpi_enable_wakeup_device_power(Device, (int)Device->wakeup.sleep_state);
-            AcpiSetGpeWakeMask(Device->wakeup.gpe_device, (UINT32)Device->wakeup.gpe_number, ACPI_GPE_ENABLE);
+            KeAcquireSpinLock(&AcpiWakeLock, &OldIrql);
+            Context->SleepMasked = !AcpiWakeAllowedLocked(Context);
+            if (!Context->SleepMasked)
+                AcpiSetGpeWakeMask(Device->wakeup.gpe_device, (UINT32)Device->wakeup.gpe_number, ACPI_GPE_ENABLE);
+            Context->Armed = TRUE;
+            KeReleaseSpinLock(&AcpiWakeLock, OldIrql);
             DPRINT1("%s is armed to wake the system\n", Device->pnp.bus_id);
         }
         else
         {
-            AcpiSetGpeWakeMask(Device->wakeup.gpe_device, (UINT32)Device->wakeup.gpe_number, ACPI_GPE_DISABLE);
+            KeAcquireSpinLock(&AcpiWakeLock, &OldIrql);
+            if (!Context->SleepMasked)
+                AcpiSetGpeWakeMask(Device->wakeup.gpe_device, (UINT32)Device->wakeup.gpe_number, ACPI_GPE_DISABLE);
+            Context->SleepMasked = FALSE;
+            Context->Armed = FALSE;
+            KeReleaseSpinLock(&AcpiWakeLock, OldIrql);
             acpi_disable_wakeup_device_power(Device);
         }
-
-        Context->Armed = Wanted;
     }
 }
 
@@ -318,6 +338,7 @@ AcpiWakeQueue(
     IoMarkIrpPending(Irp);
     Irp->Tail.Overlay.DriverContext[0] = Context;
     Context->Irp = Irp;
+    Context->WakeState = SystemState;
     IoSetCancelRoutine(Irp, AcpiWakeCancel);
     if (Irp->Cancel && IoSetCancelRoutine(Irp, NULL) != NULL)
     {
@@ -431,6 +452,54 @@ AcpiWakeRemoveDevice(
 
     if (Free)
         ExFreePoolWithTag(Context, ACPI_WAKE_TAG);
+}
+
+VOID
+AcpiWakePrepareSleep(
+    _In_ SYSTEM_POWER_STATE SystemState)
+{
+    struct acpi_device *Device;
+    PACPI_WAKE_CONTEXT Context;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&AcpiWakeLock, &OldIrql);
+    AcpiWakeTargetState = SystemState;
+    for (Entry = AcpiWakeList.Flink; Entry != &AcpiWakeList; Entry = Entry->Flink)
+    {
+        Context = CONTAINING_RECORD(Entry, ACPI_WAKE_CONTEXT, Link);
+        if (!Context->Armed || Context->SleepMasked || AcpiWakeAllowedLocked(Context))
+            continue;
+
+        Device = Context->Device;
+        AcpiSetGpeWakeMask(Device->wakeup.gpe_device, (UINT32)Device->wakeup.gpe_number, ACPI_GPE_DISABLE);
+        Context->SleepMasked = TRUE;
+        DPRINT("%s is not armed to wake the system from this state\n", Device->pnp.bus_id);
+    }
+    KeReleaseSpinLock(&AcpiWakeLock, OldIrql);
+}
+
+VOID
+AcpiWakeFinishSleep(VOID)
+{
+    struct acpi_device *Device;
+    PACPI_WAKE_CONTEXT Context;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&AcpiWakeLock, &OldIrql);
+    AcpiWakeTargetState = PowerSystemWorking;
+    for (Entry = AcpiWakeList.Flink; Entry != &AcpiWakeList; Entry = Entry->Flink)
+    {
+        Context = CONTAINING_RECORD(Entry, ACPI_WAKE_CONTEXT, Link);
+        if (!Context->SleepMasked)
+            continue;
+
+        Device = Context->Device;
+        Context->SleepMasked = FALSE;
+        AcpiSetGpeWakeMask(Device->wakeup.gpe_device, (UINT32)Device->wakeup.gpe_number, ACPI_GPE_ENABLE);
+    }
+    KeReleaseSpinLock(&AcpiWakeLock, OldIrql);
 }
 
 VOID

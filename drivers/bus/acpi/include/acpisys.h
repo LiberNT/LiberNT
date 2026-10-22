@@ -271,6 +271,8 @@ VOID AcpiWakeSignal(ACPI_HANDLE Handle);
 VOID AcpiPciSlotNotify(ACPI_HANDLE Handle, UINT32 Value);
 VOID AcpiWakeCancelDevice(ACPI_HANDLE Handle);
 VOID AcpiWakeCheckSources(VOID);
+VOID AcpiWakePrepareSleep(SYSTEM_POWER_STATE SystemState);
+VOID AcpiWakeFinishSleep(VOID);
 NTSTATUS AcpiQueryWakeForPciDeviceIoctl(PIRP Irp);
 NTSTATUS AcpiWaitWakeForPciDeviceIoctl(PIRP Irp);
 VOID AcpiThermalInitialize(PPDO_DEVICE_DATA DeviceData);
