@@ -1,0 +1,48 @@
+; PROJECT:     LiberNT AMD GPIO driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     AMD GPIO driver installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = System
+ClassGUID = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider = %LiberNT%
+DriverVer = 10/22/2026,1.0.0.0
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%LiberNT% = LiberNT
+
+[LiberNT]
+%AmdGpio.DeviceDesc% = AmdGpio_Inst,ACPI\AMD0030
+%AmdGpio.DeviceDesc% = AmdGpio_Inst,ACPI\AMDI0030
+%AmdGpio.DeviceDesc% = AmdGpio_Inst,ACPI\AMDI0031
+%AmdGpio.DeviceDesc% = AmdGpio_Inst,ACPI\AMDI0033
+
+[AmdGpio_Inst.NT]
+CopyFiles = AmdGpio_CopyFiles
+
+[AmdGpio_CopyFiles]
+amdgpio.sys
+
+[AmdGpio_Inst.NT.Services]
+AddService = amdgpio,0x00000002,AmdGpio_Service
+
+[AmdGpio_Service]
+DisplayName = %AmdGpio.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\amdgpio.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+AmdGpio.DeviceDesc = "AMD GPIO controller"
+AmdGpio.ServiceDesc = "LiberNT AMD GPIO Driver"
