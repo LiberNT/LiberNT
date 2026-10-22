@@ -33,6 +33,44 @@ def cmake_string(value):
     return '"' + str(value).replace('\\', '/').replace('"', '\\"') + '"'
 
 
+def digest(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def include_names(roots):
+    names = hashlib.sha256()
+    for root in roots:
+        for path in sorted(root.rglob('*')):
+            names.update(os.fsencode(path) + b'\0')
+    return names.hexdigest()
+
+
+def used_headers(build_dirs, roots):
+    headers = set()
+    for directory in build_dirs:
+        deps = subprocess.run(['ninja', '-C', str(directory), '-t', 'deps'],
+                              check=True, capture_output=True, text=True).stdout
+        for line in deps.splitlines():
+            if line.startswith(' '):
+                path = (directory / line.strip()).resolve()
+                if any(path.is_relative_to(root) for root in roots):
+                    headers.add(path)
+    return {str(path): digest(path) for path in sorted(headers)}
+
+
+def up_to_date(manifest_file, recipe, names, outputs):
+    try:
+        manifest = json.loads(manifest_file.read_text())
+        if manifest.get('recipe') != recipe or manifest.get('include_names') != names:
+            return False
+        if sorted(manifest['inputs']) != sorted(str(path) for path in outputs):
+            return False
+        recorded = {**manifest['inputs'], **manifest['headers']}
+        return all(digest(path) == value for path, value in recorded.items())
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--reactos-build', required=True, type=Path)
@@ -105,6 +143,21 @@ def main():
         'LIBCXX_HAS_PTHREAD_API': 'OFF', 'LIBCXX_HAS_ATOMIC_LIB': 'OFF',
         'LIBCXX_ENABLE_FILESYSTEM': 'ON', 'LIBCXX_ENABLE_EXPERIMENTAL_LIBRARY': 'OFF',
     }
+    compiler = subprocess.check_output([str(clang), '--version'], text=True)
+    outputs = [prefix / 'lib/libc++abi.a', prefix / 'lib/libunwind.a', prefix / 'lib/libc++.a',
+               prefix / f'lib/windows/libclang_rt.builtins-{builtins_name}.a',
+               prefix / 'include/c++/v1/__config_site']
+    roots = [source / 'sdk/include', build / 'sdk/include']
+    recipe = hashlib.sha256(json.dumps({
+        'script': digest(Path(__file__).resolve()), 'compiler': compiler, 'llvm_source': str(llvm),
+        'flags': flags, 'toolchain': config, 'builtins_options': builtins_options,
+        'options': {key: str(value) for key, value in options.items()}},
+        sort_keys=True).encode()).hexdigest()
+    names = include_names(roots)
+    manifest_file = prefix / 'reactos-runtime.json'
+    if up_to_date(manifest_file, recipe, names, outputs):
+        print(f'LLVM runtimes for {arch} are up to date in {prefix}', flush=True)
+        return
     run('cmake', '--fresh', '-S', llvm / 'runtimes', '-B', runtime, '-G', 'Ninja',
         *(f'-D{key}={value}' for key, value in options.items()))
     run('cmake', '--build', runtime, '--target', 'cxx', 'cxxabi', 'unwind', '--parallel', args.jobs)
@@ -118,12 +171,11 @@ def main():
         '-DCOMPILER_RT_EXCLUDE_EMUTLS=ON', *builtins_options)
     run('cmake', '--build', builtins, '--parallel', args.jobs)
     run('cmake', '--install', builtins)
-    manifest = {'compiler': subprocess.check_output([str(clang), '--version'], text=True),
-                'llvm_source': str(llvm), 'flags': flags, 'inputs': {}}
-    for path in [prefix / 'lib/libc++abi.a', prefix / 'lib/libunwind.a', prefix / 'lib/libc++.a',
-                 prefix / f'lib/windows/libclang_rt.builtins-{builtins_name}.a']:
-        manifest['inputs'][str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
-    (prefix / 'reactos-runtime.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    manifest = {'compiler': compiler, 'llvm_source': str(llvm), 'flags': flags,
+                'recipe': recipe, 'include_names': names,
+                'inputs': {str(path): digest(path) for path in outputs},
+                'headers': used_headers([runtime, builtins], roots)}
+    manifest_file.write_text(json.dumps(manifest, indent=2) + '\n')
 
 
 if __name__ == '__main__':
