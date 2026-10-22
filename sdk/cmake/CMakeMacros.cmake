@@ -949,6 +949,15 @@ function(create_registry_hives)
         COMMAND ${MKCOMREG_PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_syssetup_inf} ${_comreg_code_inf} ${_comreg_list} ${_comreg_wow64_list} ${_comreg_inf}
         DEPENDS ${_comreg_targets} ${WOW64_I386_FILES} ${_syssetup_inf} ${_comreg_code_inf} ${CMAKE_SOURCE_DIR}/sdk/tools/mkcomreg.py ${_comreg_list} ${_comreg_wow64_list}
         VERBATIM)
+    add_custom_target(comreg_inf DEPENDS ${_comreg_inf})
+    add_cd_file(TARGET comreg_inf
+                FILE ${_comreg_inf}
+                DESTINATION reactos
+                NO_CAB FOR bootcd)
+    add_cd_file(TARGET comreg_inf
+                FILE ${_comreg_inf}
+                DESTINATION ${ARCH}
+                FOR preinstall)
 
     # LiveCD hives
     list(APPEND _livecd_inf_files

@@ -573,10 +573,12 @@ Default = "XT-, AT- or extended keyboard (83-105 keys)"
 ; Called "HiveInfs.Fresh" on Windows
 AddReg = caroots.inf,AddReg
 AddReg = registry.inf,AddReg
+AddReg = comreg.inf,AddReg
 
 [HiveInfs.Upgrade]
 DelReg = registry.inf,DelReg
 AddReg = registry.inf,AddReg
+AddReg = comreg.inf,AddReg
 
 [Strings]
 cdname      = "LiberNT Installation Media"
