@@ -167,6 +167,7 @@ ExternalProject_Add(mesa_gallium_build
     BUILD_ALWAYS TRUE
     INSTALL_COMMAND ""
     BUILD_BYPRODUCTS ${_mesa_build_byproducts}
+    USES_TERMINAL_CONFIGURE TRUE
     USES_TERMINAL_BUILD TRUE)
 ExternalProject_Add_StepDependencies(mesa_gallium_build configure mesa_reactos_sdk_libs)
 if(ENABLE_MESA_LLVMPIPE)

@@ -87,6 +87,7 @@ add_custom_command(
     BYPRODUCTS "${EMU_AMD64_BINARY_DIR}/build.ninja"
     DEPENDS "${_emu_amd64_signature_file}"
     COMMENT "Configuring the AMD64 guest runtime"
+    USES_TERMINAL
     VERBATIM)
 
 add_custom_target(emu_amd64_configure DEPENDS "${_emu_amd64_configure_stamp}")
@@ -105,6 +106,7 @@ add_custom_target(emu_amd64 ALL
     COMMAND ${REACTOS_NESTED_BUILD} "${EMU_AMD64_BINARY_DIR}" --target ${EMU_AMD64_TARGETS}
     BYPRODUCTS ${EMU_AMD64_FILES}
     COMMENT "Building ${_emu_amd64_target_count} AMD64 guest runtime targets"
+    USES_TERMINAL
     VERBATIM)
 add_dependencies(emu_amd64 emu_amd64_configure)
 

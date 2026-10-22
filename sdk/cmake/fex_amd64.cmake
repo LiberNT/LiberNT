@@ -98,6 +98,7 @@ add_custom_command(
     BYPRODUCTS "${FEX_AMD64_BINARY_DIR}/build.ninja"
     DEPENDS "${_fex_amd64_signature_file}"
     COMMENT "Configuring AMD64 command payloads for FEX"
+    USES_TERMINAL
     VERBATIM)
 
 add_custom_target(fex_amd64_configure DEPENDS "${_fex_amd64_configure_stamp}")
@@ -123,6 +124,7 @@ add_custom_target(fex_amd64_commands ALL
     ${_fex_amd64_validate}
     BYPRODUCTS ${FEX_AMD64_COMMAND_FILES}
     COMMENT "Building AMD64 graphics commands for FEX"
+    USES_TERMINAL
     VERBATIM)
 add_dependencies(fex_amd64_commands fex_amd64_configure)
 

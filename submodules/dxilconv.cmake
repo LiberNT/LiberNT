@@ -95,6 +95,7 @@ ExternalProject_Add(dxilconv-tablegen
         ${REACTOS_NESTED_BUILD} <BINARY_DIR> --target llvm-tblgen clang-tblgen
     INSTALL_COMMAND ""
     BUILD_BYPRODUCTS "${DXILCONV_HOST_DIR}/bin/llvm-tblgen" "${DXILCONV_HOST_DIR}/bin/clang-tblgen"
+    USES_TERMINAL_CONFIGURE TRUE
     USES_TERMINAL_BUILD TRUE)
 
 set(_dxilconv_sdk_targets
@@ -135,6 +136,7 @@ ExternalProject_Add(dxilconv-build
         ${REACTOS_NESTED_BUILD} <BINARY_DIR> --target dxilconv
     INSTALL_COMMAND ""
     BUILD_BYPRODUCTS "${DXILCONV_BUILD_DLL}"
+    USES_TERMINAL_CONFIGURE TRUE
     USES_TERMINAL_BUILD TRUE)
 ExternalProject_Add_StepDependencies(dxilconv-build configure dxilconv_sdk_libs d3d_idl_headers)
 

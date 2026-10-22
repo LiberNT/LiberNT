@@ -164,6 +164,7 @@ ExternalProject_Add(fex-arm64ec-build
     COMMAND ${CMAKE_STRIP} --only-keep-debug "${FEX_DLL_SOURCE}" -o "${FEX_DLL_SYMBOLS}"
     COMMAND ${CMAKE_STRIP} --strip-debug "${FEX_DLL_SOURCE}" -o "${FEX_DLL_DEST}"
     BUILD_BYPRODUCTS "${FEX_DLL_DEST}" "${FEX_DLL_SYMBOLS}"
+    USES_TERMINAL_CONFIGURE TRUE
     USES_TERMINAL_BUILD OFF
 )
 
@@ -209,6 +210,7 @@ ExternalProject_Add(fex-wow64-build
     COMMAND ${CMAKE_STRIP} --only-keep-debug "${FEX_WOW64_DLL_SOURCE}" -o "${FEX_WOW64_DLL_SYMBOLS}"
     COMMAND ${CMAKE_STRIP} --strip-debug "${FEX_WOW64_DLL_SOURCE}" -o "${FEX_WOW64_DLL_DEST}"
     BUILD_BYPRODUCTS "${FEX_WOW64_DLL_DEST}" "${FEX_WOW64_DLL_SYMBOLS}"
+    USES_TERMINAL_CONFIGURE TRUE
     USES_TERMINAL_BUILD OFF
 )
 ExternalProject_Add_StepDependencies(fex-arm64ec-build configure fex_arm64ec_sdk_libs)

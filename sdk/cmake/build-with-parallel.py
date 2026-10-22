@@ -17,7 +17,6 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-import time
 
 
 NESTED_BUILD_MIRROR = 'REACTOS_NESTED_BUILD_MIRROR'
@@ -25,7 +24,6 @@ PROGRESS_LINE = re.compile(rb'^\[[0-9]+/[0-9]+\]')
 CONSOLE_ERASE = b'\r\x1b[K'
 if os.name == 'nt' or os.environ.get('TERM', 'dumb') == 'dumb':
     CONSOLE_ERASE = b'\r'
-MIRROR_INTERVAL = 0.5
 
 
 def job_count(argv):
@@ -174,12 +172,14 @@ def open_console():
         return None
 
 
-def show(console, prefix, line):
+def show(console, prefix, line, end=b'\n', width=0):
     """Write one tagged line over whatever status line Ninja last drew."""
+    text = prefix + line
     try:
-        console.write(CONSOLE_ERASE + prefix + line + b'\n')
+        console.write(CONSOLE_ERASE + text + b' ' * max(0, width - len(text)) + end)
     except OSError:
         pass
+    return len(text)
 
 
 def mirror_build(command, environment, console):
@@ -191,28 +191,24 @@ def mirror_build(command, environment, console):
     process = subprocess.Popen(command, env=environment,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     captured = []
-    pending = None
-    shown = 0.0
+    progress = None
+    width = 0
     for line in iter(process.stdout.readline, b''):
         captured.append(line)
         line = line.rstrip()
         if PROGRESS_LINE.match(line):
-            pending = line
-            if time.monotonic() - shown < MIRROR_INTERVAL:
-                continue
-            show(console, prefix, pending)
-            pending = None
-            shown = time.monotonic()
+            progress = line
+            width = show(console, prefix, line, b'', width)
             continue
         if not line:
             continue
-        if pending is not None:
-            show(console, prefix, pending)
-            pending = None
+        if progress is not None:
+            show(console, prefix, progress, width=width)
+            progress = None
+            width = 0
         show(console, prefix, line)
-        shown = time.monotonic()
-    if pending is not None:
-        show(console, prefix, pending)
+    if progress is not None:
+        show(console, prefix, progress, width=width)
     process.stdout.close()
     status = process.wait()
     if not status:

@@ -240,6 +240,7 @@ add_custom_command(
     BYPRODUCTS "${WOW64_I386_BINARY_DIR}/build.ninja"
     DEPENDS "${_wow64_i386_signature_file}"
     COMMENT "Configuring i386 rules for WoW64 targets"
+    USES_TERMINAL
     VERBATIM)
 
 add_custom_target(wow64_i386_configure DEPENDS "${_wow64_i386_configure_stamp}")
@@ -269,6 +270,7 @@ add_custom_target(wow64_i386 ALL
     ${_wow64_i386_validate}
     BYPRODUCTS ${WOW64_I386_VALIDATION_FILES}
     COMMENT "Building ${_wow64_i386_target_count} i386 WoW64 targets"
+    USES_TERMINAL
     VERBATIM)
 add_dependencies(wow64_i386 wow64_i386_configure)
 

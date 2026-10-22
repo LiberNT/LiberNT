@@ -179,6 +179,7 @@ else()
             -DBUILD_SHARED_LIBS=OFF
         BUILD_COMMAND ${CMAKE_COMMAND} -E env CCACHE_DISABLE=1 SCCACHE_DISABLE=1 ${REACTOS_NESTED_BUILD} <BINARY_DIR>
         INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR>
+        USES_TERMINAL_CONFIGURE TRUE
         USES_TERMINAL_BUILD TRUE)
     ExternalProject_Add_StepDependencies(mesa-llvm configure mesa_llvmpipe_sdk_libs)
     set(_mesa_llvm_dependency mesa-llvm)
@@ -201,7 +202,8 @@ ExternalProject_Add(vulkan-headers-build
         -DVULKAN_HEADERS_ENABLE_TESTS=OFF
     BUILD_COMMAND ""
     INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR>
-    BUILD_BYPRODUCTS "${VULKAN_HEADERS_PREFIX}/include/vulkan/vulkan.h")
+    BUILD_BYPRODUCTS "${VULKAN_HEADERS_PREFIX}/include/vulkan/vulkan.h"
+    USES_TERMINAL_CONFIGURE TRUE)
 
 ExternalProject_Add(directx-headers-build
     EXCLUDE_FROM_ALL TRUE
@@ -223,7 +225,9 @@ ExternalProject_Add(directx-headers-build
     INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR>
     BUILD_BYPRODUCTS
         "${DIRECTX_HEADERS_PREFIX}/include/directx/d3d12.h"
-        "${DIRECTX_HEADERS_PREFIX}/include/dxguids/dxguids.h")
+        "${DIRECTX_HEADERS_PREFIX}/include/dxguids/dxguids.h"
+    USES_TERMINAL_CONFIGURE TRUE
+    USES_TERMINAL_BUILD TRUE)
 ExternalProject_Add_StepDependencies(directx-headers-build configure mesa_llvmpipe_sdk_libs)
 
 ExternalProject_Add(vulkan-loader-build
@@ -251,6 +255,7 @@ ExternalProject_Add(vulkan-loader-build
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target vulkan
     INSTALL_COMMAND ""
     BUILD_BYPRODUCTS "${VULKAN_LOADER_BINARY_DIR}/loader/vulkan-1.dll"
+    USES_TERMINAL_CONFIGURE TRUE
     USES_TERMINAL_BUILD TRUE)
 ExternalProject_Add_StepDependencies(vulkan-loader-build configure mesa_llvmpipe_sdk_libs)
 

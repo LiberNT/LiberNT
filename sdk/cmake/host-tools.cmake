@@ -158,6 +158,8 @@ function(setup_host_tools)
             BUILD_ALWAYS TRUE
             INSTALL_COMMAND ${CMAKE_COMMAND} -E true
             BUILD_BYPRODUCTS ${HOST_TOOLS_OUTPUT}
+            USES_TERMINAL_CONFIGURE TRUE
+            USES_TERMINAL_BUILD TRUE
         )
 
         ExternalProject_Get_Property(host-tools INSTALL_DIR)
