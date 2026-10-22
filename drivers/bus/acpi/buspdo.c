@@ -565,7 +565,7 @@ BuspGetConnectionResourceInfo(
     {
         ACPI_RESOURCE_GPIO *Gpio = &Resource->Data.Gpio;
 
-        if (Gpio->ProducerConsumer == ACPI_PRODUCER || Gpio->ConnectionType != ACPI_RESOURCE_GPIO_TYPE_IO)
+        if (Gpio->ConnectionType != ACPI_RESOURCE_GPIO_TYPE_IO)
             return FALSE;
 
         *ConnectionClass = CM_RESOURCE_CONNECTION_CLASS_GPIO;
@@ -895,7 +895,6 @@ BuspGpioInterruptCount(
     _In_ ACPI_RESOURCE *Resource)
 {
     if (Resource->Data.Gpio.ConnectionType != ACPI_RESOURCE_GPIO_TYPE_INT ||
-        Resource->Data.Gpio.ProducerConsumer == ACPI_PRODUCER ||
         BuspGetConnectionController(DeviceData, Resource) == NULL)
     {
         return 0;
