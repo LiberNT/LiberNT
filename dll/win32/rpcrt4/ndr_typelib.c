@@ -1573,8 +1573,85 @@ static const IRpcProxyBufferVtbl typelib_proxy_vtbl =
     StdProxy_Disconnect,
 };
 
+#ifdef __REACTOS__
+HRESULT WINAPI CreateProxyFromTypeInfo(ITypeInfo *typeinfo, IUnknown *outer,
+        REFIID iid, IRpcProxyBuffer **proxy_buffer, void **out);
+HRESULT WINAPI CreateStubFromTypeInfo(ITypeInfo *typeinfo, REFIID iid,
+        IUnknown *server, IRpcStubBuffer **stub_buffer);
+
+static HRESULT get_parent_typeinfo(ITypeInfo *typeinfo, ITypeInfo **parent)
+{
+    ITypeInfo *real_typeinfo;
+    TYPEATTR *typeattr;
+    TYPEKIND typekind;
+    HREFTYPE reftype;
+    HRESULT hr;
+
+    hr = ITypeInfo_GetTypeAttr(typeinfo, &typeattr);
+    if (FAILED(hr))
+        return hr;
+    typekind = typeattr->typekind;
+    ITypeInfo_ReleaseTypeAttr(typeinfo, typeattr);
+
+    if (typekind == TKIND_DISPATCH)
+    {
+        hr = ITypeInfo_GetRefTypeOfImplType(typeinfo, -1, &reftype);
+        if (FAILED(hr))
+            return hr;
+        hr = ITypeInfo_GetRefTypeInfo(typeinfo, reftype, &real_typeinfo);
+        if (FAILED(hr))
+            return hr;
+    }
+    else
+        ITypeInfo_AddRef(real_typeinfo = typeinfo);
+
+    hr = ITypeInfo_GetRefTypeOfImplType(real_typeinfo, 0, &reftype);
+    if (SUCCEEDED(hr))
+        hr = ITypeInfo_GetRefTypeInfo(real_typeinfo, reftype, parent);
+    ITypeInfo_Release(real_typeinfo);
+    return hr;
+}
+
+static HRESULT create_parent_proxy(ITypeInfo *typeinfo, const GUID *parentiid,
+        IRpcProxyBuffer **proxy_buffer, void **out)
+{
+    ITypeInfo *parent;
+    HRESULT hr;
+
+    hr = create_proxy(parentiid, NULL, proxy_buffer, out);
+    if (hr != REGDB_E_IIDNOTREG)
+        return hr;
+
+    if (FAILED(get_parent_typeinfo(typeinfo, &parent)))
+        return hr;
+    hr = CreateProxyFromTypeInfo(parent, NULL, parentiid, proxy_buffer, out);
+    ITypeInfo_Release(parent);
+    return hr;
+}
+
+static HRESULT create_parent_stub(ITypeInfo *typeinfo, const GUID *parentiid,
+        IUnknown *server, IRpcStubBuffer **stub_buffer)
+{
+    ITypeInfo *parent;
+    HRESULT hr;
+
+    hr = create_stub(parentiid, server, stub_buffer);
+    if (hr != REGDB_E_IIDNOTREG)
+        return hr;
+
+    if (FAILED(get_parent_typeinfo(typeinfo, &parent)))
+        return hr;
+    hr = CreateStubFromTypeInfo(parent, parentiid, server, stub_buffer);
+    ITypeInfo_Release(parent);
+    return hr;
+}
+
+static HRESULT typelib_proxy_init(struct typelib_proxy *proxy, IUnknown *outer,
+        ITypeInfo *typeinfo, ULONG count, const GUID *parentiid, IRpcProxyBuffer **proxy_buffer, void **out)
+#else
 static HRESULT typelib_proxy_init(struct typelib_proxy *proxy, IUnknown *outer,
         ULONG count, const GUID *parentiid, IRpcProxyBuffer **proxy_buffer, void **out)
+#endif
 {
     if (!fill_stubless_table((IUnknownVtbl *)proxy->proxy_vtbl->Vtbl, count))
         return E_OUTOFMEMORY;
@@ -1589,8 +1666,13 @@ static HRESULT typelib_proxy_init(struct typelib_proxy *proxy, IUnknown *outer,
 
     if (!IsEqualGUID(parentiid, &IID_IUnknown))
     {
+#ifdef __REACTOS__
+        HRESULT hr = create_parent_proxy(typeinfo, parentiid, &proxy->proxy.base_proxy,
+                (void **)&proxy->proxy.base_object);
+#else
         HRESULT hr = create_proxy(parentiid, NULL, &proxy->proxy.base_proxy,
                 (void **)&proxy->proxy.base_object);
+#endif
         if (FAILED(hr)) return hr;
     }
 
@@ -1653,7 +1735,11 @@ HRESULT WINAPI CreateProxyFromTypeInfo(ITypeInfo *typeinfo, IUnknown *outer,
     }
     proxy->proxy_info.FormatStringOffset = &proxy->offset_table[-3];
 
+#ifdef __REACTOS__
+    hr = typelib_proxy_init(proxy, outer, typeinfo, funcs + parentfuncs, &parentiid, proxy_buffer, out);
+#else
     hr = typelib_proxy_init(proxy, outer, funcs + parentfuncs, &parentiid, proxy_buffer, out);
+#endif
     if (FAILED(hr))
     {
         free((void *)proxy->stub_desc.pFormatTypes);
@@ -1705,8 +1791,13 @@ static ULONG WINAPI typelib_stub_Release(IRpcStubBuffer *iface)
     return refcount;
 }
 
+#ifdef __REACTOS__
+static HRESULT typelib_stub_init(struct typelib_stub *stub, IUnknown *server,
+        ITypeInfo *typeinfo, const GUID *parentiid, IRpcStubBuffer **stub_buffer)
+#else
 static HRESULT typelib_stub_init(struct typelib_stub *stub, IUnknown *server,
         const GUID *parentiid, IRpcStubBuffer **stub_buffer)
+#endif
 {
     HRESULT hr;
 
@@ -1723,7 +1814,11 @@ static HRESULT typelib_stub_init(struct typelib_stub *stub, IUnknown *server,
     if (!IsEqualGUID(parentiid, &IID_IUnknown))
     {
         stub->stub.base_obj.lpVtbl = get_delegating_vtbl(stub->stub_vtbl.header.DispatchTableCount);
+#ifdef __REACTOS__
+        hr = create_parent_stub(typeinfo, parentiid, (IUnknown *)&stub->stub.base_obj, &stub->stub.base_stub);
+#else
         hr = create_stub(parentiid, &stub->stub.base_obj, &stub->stub.base_stub);
+#endif
         if (FAILED(hr))
         {
             IUnknown_Release(stub->stub.stub_buffer.pvServerObject);
@@ -1793,7 +1888,11 @@ HRESULT WINAPI CreateStubFromTypeInfo(ITypeInfo *typeinfo, REFIID iid,
         stub->stub_vtbl.Vtbl = CStdStubBuffer_Vtbl;
     stub->stub_vtbl.Vtbl.Release = typelib_stub_Release;
 
+#ifdef __REACTOS__
+    hr = typelib_stub_init(stub, server, typeinfo, &parentiid, stub_buffer);
+#else
     hr = typelib_stub_init(stub, server, &parentiid, stub_buffer);
+#endif
     if (FAILED(hr))
     {
         free((void *)stub->stub_desc.pFormatTypes);
