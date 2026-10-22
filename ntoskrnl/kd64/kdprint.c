@@ -555,6 +555,10 @@ KdpSymbol(IN PSTRING DllPath,
     BOOLEAN Enable;
     PKPRCB Prcb = KeGetCurrentPrcb();
 
+#ifndef _WINKD_
+    return;
+#endif
+
     /* Check if we need to do anything */
     if ((PreviousMode != KernelMode) || (KdDebuggerNotPresent)) return;
 
