@@ -1404,6 +1404,9 @@ KdbpSetEnterCondition(
         KdbEnterConditions[ExceptionNr][FirstChance ? 0 : 1] = Condition;
     }
 
+    if (FirstChance && Condition != KdbDoNotEnter)
+        NtGlobalFlag |= FLG_STOP_ON_EXCEPTION;
+
     return TRUE;
 }
 
