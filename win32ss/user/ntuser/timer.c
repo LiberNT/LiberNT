@@ -78,6 +78,11 @@ RemoveTimer(PTIMER pTmr)
   {
      /* Set the flag, it will be removed when ready */
      RemoveEntryList(&pTmr->ptmrList);
+     if ((pTmr->flags & TMRF_READY) && pTmr->pti && !(pTmr->pti->TIF_flags & TIF_INCLEANUP))
+     {
+        pTmr->flags &= ~TMRF_READY;
+        ClearMsgBitsMask(pTmr->pti, QS_TIMER);
+     }
      if ((pTmr->pWnd == NULL) && (!(pTmr->flags & TMRF_SYSTEM))) // System timers are reusable.
      {
         ULONG ulBitmapIndex;
