@@ -37,6 +37,7 @@ struct key
     BOOL finalized;
     WCHAR *name;
     DWORD flags;
+    UCHAR iv[16];
 #endif
 };
 
@@ -57,8 +58,15 @@ struct object_property
     void *value;
 };
 
+#ifdef __REACTOS__
+#define NCRYPT_OBJECT_MAGIC 0x4A424F4E
+#endif
+
 struct object
 {
+#ifdef __REACTOS__
+    DWORD magic;
+#endif
     enum object_type type;
     LONG refs;
     DWORD num_properties;

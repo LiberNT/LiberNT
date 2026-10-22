@@ -354,6 +354,133 @@ TestExportPolicy(
     }
 }
 
+static void
+TestSymmetricKey(
+    _In_ NCRYPT_PROV_HANDLE Provider)
+{
+    NCRYPT_CIPHER_PADDING_INFO Info;
+    NCRYPT_SUPPORTED_LENGTHS Lengths = { 0 };
+    NCryptAlgorithmName *List = NULL;
+    NCRYPT_KEY_HANDLE Key;
+    SECURITY_STATUS Status;
+    BYTE Iv[16], Plain[32], Cipher[64], Decrypted[64], Blob[256];
+    WCHAR Value[64], KeyName[96];
+    DWORD Size = 0, PlainSize = 0, Count = 0, i;
+    BOOL Aes = FALSE;
+
+    for (i = 0; i < sizeof(Plain); i++)
+        Plain[i] = (BYTE)(i * 3 + 5);
+    Status = NCryptEnumAlgorithms(Provider, NCRYPT_CIPHER_OPERATION, &Count, &List, 0);
+    ok(Status == ERROR_SUCCESS, "cipher algorithms: %#lx\n", Status);
+    if (Status == ERROR_SUCCESS)
+    {
+        for (i = 0; i < Count; i++)
+        {
+            ok(List[i].dwClass == NCRYPT_CIPHER_INTERFACE && List[i].dwAlgOperations == NCRYPT_CIPHER_OPERATION,
+               "cipher algorithm %ls class %lu ops %#lx\n", List[i].pszName, List[i].dwClass,
+               List[i].dwAlgOperations);
+            if (!wcscmp(List[i].pszName, NCRYPT_AES_ALGORITHM))
+                Aes = TRUE;
+        }
+        NCryptFreeBuffer(List);
+    }
+    ok(Aes, "AES is not listed as a cipher algorithm\n");
+
+    Status = NCryptCreatePersistedKey(Provider, &Key, NCRYPT_AES_ALGORITHM, NULL, 0, 0);
+    ok(Status == ERROR_SUCCESS, "AES create: %#lx\n", Status);
+    if (Status != ERROR_SUCCESS)
+        return;
+    ok(DwordProperty(Key, NCRYPT_LENGTH_PROPERTY) == 256, "AES default length %lu\n",
+       DwordProperty(Key, NCRYPT_LENGTH_PROPERTY));
+    ok(DwordProperty(Key, NCRYPT_BLOCK_LENGTH_PROPERTY) == 16, "AES block length %lu\n",
+       DwordProperty(Key, NCRYPT_BLOCK_LENGTH_PROPERTY));
+    ok(!StringProperty(Key, NCRYPT_CHAINING_MODE_PROPERTY, Value, ARRAYSIZE(Value)), "AES chaining mode %ls\n", Value);
+    Status = NCryptGetProperty(Key, NCRYPT_CHAINING_MODE_PROPERTY, (BYTE *)Value, sizeof(Value), &Size, 0);
+    ok(Status == NTE_NO_KEY, "AES chaining mode property: %#lx\n", Status);
+    ok(StringProperty(Key, NCRYPT_ALGORITHM_GROUP_PROPERTY, Value, ARRAYSIZE(Value)) && !wcscmp(Value, L"AES"),
+       "AES group %ls\n", Value);
+    ok(StringProperty(Key, NCRYPT_ALGORITHM_PROPERTY, Value, ARRAYSIZE(Value)) && !wcscmp(Value, L"AES"),
+       "AES algorithm %ls\n", Value);
+    Status = NCryptGetProperty(Key, NCRYPT_LENGTHS_PROPERTY, (BYTE *)&Lengths, sizeof(Lengths), &Size, 0);
+    ok(Status == ERROR_SUCCESS && Lengths.dwMinLength == 128 && Lengths.dwMaxLength == 256 &&
+       Lengths.dwIncrement == 64 && Lengths.dwDefaultLength == 256, "AES lengths %#lx: %lu %lu %lu %lu\n", Status,
+       Lengths.dwMinLength, Lengths.dwMaxLength, Lengths.dwIncrement, Lengths.dwDefaultLength);
+    Status = NCryptEncrypt(Key, Plain, sizeof(Plain), NULL, Cipher, sizeof(Cipher), &Size, 0);
+    ok(Status == NTE_BAD_KEY_STATE, "AES encrypt before finalize: %#lx\n", Status);
+    Status = NCryptFinalizeKey(Key, 0);
+    ok(Status == ERROR_SUCCESS, "AES finalize: %#lx\n", Status);
+
+    Size = 0;
+    Status = NCryptEncrypt(Key, Plain, sizeof(Plain), NULL, Cipher, sizeof(Cipher), &Size, 0);
+    ok(Status == ERROR_SUCCESS && Size == sizeof(Plain), "AES encrypt without padding info: %#lx size %lu\n", Status,
+       Size);
+    if (Status == ERROR_SUCCESS)
+    {
+        PlainSize = 0;
+        Status = NCryptDecrypt(Key, Cipher, Size, NULL, Decrypted, sizeof(Decrypted), &PlainSize, 0);
+        ok(Status == ERROR_SUCCESS && PlainSize == sizeof(Plain), "AES decrypt without padding info: %#lx size %lu\n",
+           Status, PlainSize);
+        ok(memcmp(Plain, Decrypted, 16) != 0, "AES decrypt without padding info restarted the chaining\n");
+        ok(!memcmp(Plain + 16, Decrypted + 16, 16), "AES decrypt without padding info does not chain the blocks\n");
+    }
+    Size = 0;
+    Status = NCryptEncrypt(Key, Plain, 20, NULL, Cipher, sizeof(Cipher), &Size, 0);
+    ok(Status == (SECURITY_STATUS)STATUS_INVALID_BUFFER_SIZE, "AES encrypt 20 bytes without padding: %#lx\n", Status);
+
+    memset(Iv, 0x42, sizeof(Iv));
+    Info.cbSize = sizeof(Info);
+    Info.dwFlags = NCRYPT_CIPHER_BLOCK_PADDING_FLAG;
+    Info.pbIV = Iv;
+    Info.cbIV = sizeof(Iv);
+    Info.pbOtherInfo = NULL;
+    Info.cbOtherInfo = 0;
+    Size = 0;
+    Status = NCryptEncrypt(Key, Plain, 20, &Info, Cipher, sizeof(Cipher), &Size, NCRYPT_PAD_CIPHER_FLAG);
+    ok(Status == ERROR_SUCCESS && Size == 32, "AES encrypt 20 bytes with block padding: %#lx size %lu\n", Status, Size);
+    ok(Iv[0] != 0x42 || Iv[15] != 0x42, "AES encrypt did not update the IV\n");
+    if (Status == ERROR_SUCCESS)
+    {
+        memset(Iv, 0x42, sizeof(Iv));
+        PlainSize = 0;
+        Status = NCryptDecrypt(Key, Cipher, Size, &Info, Decrypted, sizeof(Decrypted), &PlainSize,
+                               NCRYPT_PAD_CIPHER_FLAG);
+        ok(Status == ERROR_SUCCESS && PlainSize == 20 && !memcmp(Plain, Decrypted, 20),
+           "AES decrypt with block padding: %#lx size %lu\n", Status, PlainSize);
+    }
+    Size = 0;
+    Status = NCryptExportKey(Key, 0, NCRYPT_CIPHER_KEY_BLOB, NULL, Blob, sizeof(Blob), &Size, 0);
+    ok(Status == NTE_NOT_SUPPORTED, "AES cipher key blob export: %#lx\n", Status);
+    NCryptFreeObject(Key);
+
+    swprintf(KeyName, ARRAYSIZE(KeyName), L"LiberNT.ApiTest.AES.%lu", GetCurrentProcessId());
+    Status = NCryptCreatePersistedKey(Provider, &Key, NCRYPT_AES_ALGORITHM, KeyName, 0, 0);
+    ok(Status == ERROR_SUCCESS, "persisted AES create: %#lx\n", Status);
+    if (Status != ERROR_SUCCESS)
+        return;
+    Status = NCryptFinalizeKey(Key, 0);
+    ok(Status == ERROR_SUCCESS, "persisted AES finalize: %#lx\n", Status);
+    memset(Iv, 0x24, sizeof(Iv));
+    Size = 0;
+    Status = NCryptEncrypt(Key, Plain, sizeof(Plain), &Info, Cipher, sizeof(Cipher), &Size, NCRYPT_PAD_CIPHER_FLAG);
+    ok(Status == ERROR_SUCCESS && Size == 48, "persisted AES encrypt: %#lx size %lu\n", Status, Size);
+    NCryptFreeObject(Key);
+    Status = NCryptOpenKey(Provider, &Key, KeyName, 0, 0);
+    ok(Status == ERROR_SUCCESS, "persisted AES open: %#lx\n", Status);
+    if (Status != ERROR_SUCCESS)
+        return;
+    ok(StringProperty(Key, NCRYPT_ALGORITHM_PROPERTY, Value, ARRAYSIZE(Value)) && !wcscmp(Value, L"AES"),
+       "persisted AES reopened algorithm %ls\n", Value);
+    ok(DwordProperty(Key, NCRYPT_LENGTH_PROPERTY) == 256, "persisted AES reopened length %lu\n",
+       DwordProperty(Key, NCRYPT_LENGTH_PROPERTY));
+    memset(Iv, 0x24, sizeof(Iv));
+    PlainSize = 0;
+    Status = NCryptDecrypt(Key, Cipher, Size, &Info, Decrypted, sizeof(Decrypted), &PlainSize, NCRYPT_PAD_CIPHER_FLAG);
+    ok(Status == ERROR_SUCCESS && PlainSize == sizeof(Plain) && !memcmp(Plain, Decrypted, sizeof(Plain)),
+       "persisted AES decrypt after reopen: %#lx size %lu\n", Status, PlainSize);
+    Status = NCryptDeleteKey(Key, 0);
+    ok(Status == ERROR_SUCCESS, "persisted AES delete: %#lx\n", Status);
+}
+
 START_TEST(KeyStorage)
 {
     NCRYPT_PROV_HANDLE Provider;
@@ -368,6 +495,7 @@ START_TEST(KeyStorage)
     }
     TestAlgorithms(Provider);
     TestExportPolicy(Provider);
+    TestSymmetricKey(Provider);
     TestPersistedKey(Provider, NCRYPT_RSA_ALGORITHM, 2048, 0);
     TestPersistedKey(Provider, NCRYPT_ECDSA_P256_ALGORITHM, 256, 0);
     TestPersistedKey(Provider, NCRYPT_RSA_ALGORITHM, 2048, NCRYPT_MACHINE_KEY_FLAG);
