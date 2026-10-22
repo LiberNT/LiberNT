@@ -32,6 +32,9 @@
 #include "shcore.h"
 #define WINSHLWAPI
 #include "shlwapi.h"
+#ifdef __REACTOS__
+#include "ntsecapi.h"
+#endif
 
 #include "wine/debug.h"
 
@@ -2555,6 +2558,26 @@ LONG WINAPI SHQueryInfoKeyW(HKEY hkey, DWORD *subkeys, DWORD *subkey_max, DWORD 
 /*************************************************************************
  * IsOS        [SHCORE.@]
  */
+#ifdef __REACTOS__
+static BOOL is_domain_member(void)
+{
+    LSA_OBJECT_ATTRIBUTES attributes = { sizeof(attributes) };
+    POLICY_PRIMARY_DOMAIN_INFO *info;
+    LSA_HANDLE policy;
+    BOOL member = FALSE;
+
+    if (LsaOpenPolicy(NULL, &attributes, POLICY_VIEW_LOCAL_INFORMATION, &policy))
+        return FALSE;
+    if (!LsaQueryInformationPolicy(policy, PolicyPrimaryDomainInformation, (void **)&info))
+    {
+        member = info->Sid != NULL;
+        LsaFreeMemory(info);
+    }
+    LsaClose(policy);
+    return member;
+}
+
+#endif
 BOOL WINAPI IsOS(DWORD feature)
 {
     DWORD platform, majorv, minorv;
@@ -2656,8 +2679,12 @@ BOOL WINAPI IsOS(DWORD feature)
         FIXME("(OS_WELCOMELOGONUI) What should we return here?\n");
         return FALSE;
     case OS_DOMAINMEMBER:
+#ifdef __REACTOS__
+        ISOS_RETURN(is_domain_member());
+#else
         FIXME("(OS_DOMAINMEMBER) What should we return here?\n");
         return TRUE;
+#endif
     case OS_ANYSERVER:
 #ifdef __REACTOS__
         ISOS_RETURN(osvi.wProductType > VER_NT_WORKSTATION);
