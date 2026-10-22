@@ -44,4 +44,25 @@ START_TEST(ProcessPowerThrottling)
     Result = GetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &State, sizeof(State));
     ok(!Result, "Invalid version accepted\n");
     ok_long(GetLastError(), ERROR_INVALID_PARAMETER);
+
+    State.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+    State.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+    State.StateMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+    Result = SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &State, sizeof(State));
+    ok(Result, "SetProcessInformation failed: %lu\n", GetLastError());
+    State.ControlMask = State.StateMask = 0;
+    Result = GetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &State, sizeof(State));
+    ok(Result, "GetProcessInformation after set failed: %lu\n", GetLastError());
+    ok_long(State.ControlMask, PROCESS_POWER_THROTTLING_EXECUTION_SPEED);
+    ok_long(State.StateMask, PROCESS_POWER_THROTTLING_EXECUTION_SPEED);
+
+    State.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+    State.ControlMask = 0;
+    State.StateMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+    Result = SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &State, sizeof(State));
+    ok(!Result, "State outside the control mask accepted\n");
+
+    State.ControlMask = State.StateMask = 0;
+    Result = SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &State, sizeof(State));
+    ok(Result, "Resetting the throttling state failed: %lu\n", GetLastError());
 }
