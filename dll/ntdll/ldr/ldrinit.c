@@ -3085,9 +3085,6 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     InsertHeadList(&Peb->Ldr->InInitializationOrderModuleList,
                    &LdrpNtDllDataTableEntry->InInitializationOrderLinks);
 
-    /* Initialize Wine's active context implementation for the current process */
-    RtlpInitializeActCtx(&OldShimData);
-
     /* Set the current directory */
     Status = RtlSetCurrentDirectory_U(&CurrentDirectory);
     if (!NT_SUCCESS(Status))
@@ -3115,6 +3112,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     if (IsWow64)
     {
         LdrpLdrDatabaseIsSetup = TRUE;
+        RtlpInitializeActCtx(&OldShimData);
         RtlpInitializeThreadPooling();
         Status = LdrpInitializeWow64(Context);
         if (OptionsKey) NtClose(OptionsKey);
@@ -3182,6 +3180,8 @@ LdrpInitializeProcess(IN PCONTEXT Context,
             Kernel32ThreadInitThunkFunction = FunctionAddress;
         }
     }
+
+    RtlpInitializeActCtx(&OldShimData);
 
     /* Walk the IAT and load all the DLLs */
     ImportStatus = LdrpWalkImportDescriptor(LdrpDefaultPath.Buffer, LdrpImageEntry);
