@@ -335,16 +335,20 @@ static HRESULT WINAPI xml_node_get_NodeName( IXmlNode *iface, HSTRING *value )
 {
     struct xml_node *impl = impl_from_IXmlNode( iface );
     BSTR str = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return return_bstr( str, IXMLDOMNode_get_nodeName( impl->node, &str ), value );
+    hr = IXMLDOMNode_get_nodeName( impl->node, &str );
+    return return_bstr( str, hr, value );
 }
 
 static HRESULT WINAPI xml_node_get_ParentNode( IXmlNode *iface, IXmlNode **value )
 {
     struct xml_node *impl = impl_from_IXmlNode( iface );
     IXMLDOMNode *node = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return return_node( node, IXMLDOMNode_get_parentNode( impl->node, &node ), value );
+    hr = IXMLDOMNode_get_parentNode( impl->node, &node );
+    return return_node( node, hr, value );
 }
 
 static HRESULT WINAPI xml_node_get_ChildNodes( IXmlNode *iface, IXmlNodeList **value )
@@ -366,32 +370,40 @@ static HRESULT WINAPI xml_node_get_FirstChild( IXmlNode *iface, IXmlNode **value
 {
     struct xml_node *impl = impl_from_IXmlNode( iface );
     IXMLDOMNode *node = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return return_node( node, IXMLDOMNode_get_firstChild( impl->node, &node ), value );
+    hr = IXMLDOMNode_get_firstChild( impl->node, &node );
+    return return_node( node, hr, value );
 }
 
 static HRESULT WINAPI xml_node_get_LastChild( IXmlNode *iface, IXmlNode **value )
 {
     struct xml_node *impl = impl_from_IXmlNode( iface );
     IXMLDOMNode *node = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return return_node( node, IXMLDOMNode_get_lastChild( impl->node, &node ), value );
+    hr = IXMLDOMNode_get_lastChild( impl->node, &node );
+    return return_node( node, hr, value );
 }
 
 static HRESULT WINAPI xml_node_get_PreviousSibling( IXmlNode *iface, IXmlNode **value )
 {
     struct xml_node *impl = impl_from_IXmlNode( iface );
     IXMLDOMNode *node = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return return_node( node, IXMLDOMNode_get_previousSibling( impl->node, &node ), value );
+    hr = IXMLDOMNode_get_previousSibling( impl->node, &node );
+    return return_node( node, hr, value );
 }
 
 static HRESULT WINAPI xml_node_get_NextSibling( IXmlNode *iface, IXmlNode **value )
 {
     struct xml_node *impl = impl_from_IXmlNode( iface );
     IXMLDOMNode *node = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return return_node( node, IXMLDOMNode_get_nextSibling( impl->node, &node ), value );
+    hr = IXMLDOMNode_get_nextSibling( impl->node, &node );
+    return return_node( node, hr, value );
 }
 
 static HRESULT WINAPI xml_node_get_Attributes( IXmlNode *iface, IXmlNamedNodeMap **value )
@@ -524,10 +536,12 @@ static HRESULT WINAPI xml_node_CloneNode( IXmlNode *iface, boolean deep, IXmlNod
 {
     struct xml_node *impl = impl_from_IXmlNode( iface );
     IXMLDOMNode *node = NULL;
+    HRESULT hr;
 
     TRACE( "iface %p, deep %d, new_node %p.\n", iface, deep, new_node );
 
-    return return_node( node, IXMLDOMNode_cloneNode( impl->node, deep ? VARIANT_TRUE : VARIANT_FALSE, &node ), new_node );
+    hr = IXMLDOMNode_cloneNode( impl->node, deep ? VARIANT_TRUE : VARIANT_FALSE, &node );
+    return return_node( node, hr, new_node );
 }
 
 static HRESULT box_or_null( BSTR str, HRESULT hr, IInspectable **value )
@@ -542,24 +556,30 @@ static HRESULT WINAPI xml_node_get_NamespaceUri( IXmlNode *iface, IInspectable *
 {
     struct xml_node *impl = impl_from_IXmlNode( iface );
     BSTR str = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return box_or_null( str, IXMLDOMNode_get_namespaceURI( impl->node, &str ), value );
+    hr = IXMLDOMNode_get_namespaceURI( impl->node, &str );
+    return box_or_null( str, hr, value );
 }
 
 static HRESULT WINAPI xml_node_get_LocalName( IXmlNode *iface, IInspectable **value )
 {
     struct xml_node *impl = impl_from_IXmlNode( iface );
     BSTR str = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return box_or_null( str, IXMLDOMNode_get_baseName( impl->node, &str ), value );
+    hr = IXMLDOMNode_get_baseName( impl->node, &str );
+    return box_or_null( str, hr, value );
 }
 
 static HRESULT WINAPI xml_node_get_Prefix( IXmlNode *iface, IInspectable **value )
 {
     struct xml_node *impl = impl_from_IXmlNode( iface );
     BSTR str = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return box_or_null( str, IXMLDOMNode_get_prefix( impl->node, &str ), value );
+    hr = IXMLDOMNode_get_prefix( impl->node, &str );
+    return box_or_null( str, hr, value );
 }
 
 static HRESULT WINAPI xml_node_Normalize( IXmlNode *iface )
@@ -866,20 +886,64 @@ static const IXmlNodeSelectorVtbl xml_node_selector_vtbl =
 
 DEFINE_IINSPECTABLE( xml_node_serializer, IXmlNodeSerializer, struct xml_node, IXmlNode_iface )
 
+static HRESULT document_xml( IXMLDOMNode *document, HSTRING *value )
+{
+    IXMLDOMNodeList *children;
+    IXMLDOMNode *child;
+    WCHAR *buffer = NULL, *grown;
+    UINT32 length = 0, part_length;
+    LONG count = 0, i;
+    BSTR part;
+    HRESULT hr;
+
+    *value = NULL;
+    if (FAILED(hr = IXMLDOMNode_get_childNodes( document, &children ))) return hr;
+    hr = IXMLDOMNodeList_get_length( children, &count );
+    for (i = 0; SUCCEEDED(hr) && i < count; i++)
+    {
+        if (FAILED(hr = IXMLDOMNodeList_get_item( children, i, &child ))) break;
+        part = NULL;
+        hr = IXMLDOMNode_get_xml( child, &part );
+        IXMLDOMNode_Release( child );
+        if (FAILED(hr)) break;
+        part_length = SysStringLen( part );
+        if (part_length && !(grown = realloc( buffer, (length + part_length) * sizeof(WCHAR) )))
+            hr = E_OUTOFMEMORY;
+        else if (part_length)
+        {
+            buffer = grown;
+            memcpy( buffer + length, part, part_length * sizeof(WCHAR) );
+            length += part_length;
+        }
+        SysFreeString( part );
+    }
+    IXMLDOMNodeList_Release( children );
+    if (SUCCEEDED(hr)) hr = WindowsCreateString( buffer, length, value );
+    free( buffer );
+    return hr;
+}
+
 static HRESULT WINAPI xml_node_serializer_GetXml( IXmlNodeSerializer *iface, HSTRING *outer_xml )
 {
     struct xml_node *impl = impl_from_IXmlNodeSerializer( iface );
+    DOMNodeType type;
     BSTR str = NULL;
+    HRESULT hr;
     TRACE( "iface %p, outer_xml %p.\n", iface, outer_xml );
-    return return_bstr( str, IXMLDOMNode_get_xml( impl->node, &str ), outer_xml );
+    if (SUCCEEDED(IXMLDOMNode_get_nodeType( impl->node, &type )) && type == NODE_DOCUMENT)
+        return document_xml( impl->node, outer_xml );
+    hr = IXMLDOMNode_get_xml( impl->node, &str );
+    return return_bstr( str, hr, outer_xml );
 }
 
 static HRESULT WINAPI xml_node_serializer_get_InnerText( IXmlNodeSerializer *iface, HSTRING *value )
 {
     struct xml_node *impl = impl_from_IXmlNodeSerializer( iface );
     BSTR str = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return return_bstr( str, IXMLDOMNode_get_text( impl->node, &str ), value );
+    hr = IXMLDOMNode_get_text( impl->node, &str );
+    return return_bstr( str, hr, value );
 }
 
 static HRESULT WINAPI xml_node_serializer_put_InnerText( IXmlNodeSerializer *iface, HSTRING value )
@@ -1284,8 +1348,10 @@ static HRESULT WINAPI xml_attribute_get_Name( IXmlAttribute *iface, HSTRING *val
 {
     struct xml_node *impl = impl_from_IXmlAttribute( iface );
     BSTR str = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return return_bstr( str, IXMLDOMNode_get_nodeName( impl->node, &str ), value );
+    hr = IXMLDOMNode_get_nodeName( impl->node, &str );
+    return return_bstr( str, hr, value );
 }
 
 static HRESULT WINAPI xml_attribute_get_Specified( IXmlAttribute *iface, boolean *value )
@@ -1559,8 +1625,10 @@ static HRESULT WINAPI xml_processing_instruction_get_Target( IXmlProcessingInstr
 {
     struct xml_node *impl = impl_from_IXmlProcessingInstruction( iface );
     BSTR str = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return return_bstr( str, IXMLDOMNode_get_nodeName( impl->node, &str ), value );
+    hr = IXMLDOMNode_get_nodeName( impl->node, &str );
+    return return_bstr( str, hr, value );
 }
 
 static HRESULT WINAPI xml_processing_instruction_get_Data( IXmlProcessingInstruction *iface, HSTRING *value )
@@ -1637,8 +1705,10 @@ static HRESULT WINAPI xml_document_type_get_Name( IXmlDocumentType *iface, HSTRI
 {
     struct xml_node *impl = impl_from_IXmlDocumentType( iface );
     BSTR str = NULL;
+    HRESULT hr;
     TRACE( "iface %p, value %p.\n", iface, value );
-    return return_bstr( str, IXMLDOMNode_get_nodeName( impl->node, &str ), value );
+    hr = IXMLDOMNode_get_nodeName( impl->node, &str );
+    return return_bstr( str, hr, value );
 }
 
 static HRESULT document_type_map( struct xml_node *impl, BOOL entities, IXmlNamedNodeMap **value )

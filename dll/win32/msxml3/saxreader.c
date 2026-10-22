@@ -3172,6 +3172,25 @@ static void saxlocator_enddtd(struct saxlocator *locator)
     locator->status = saxlocator_callback_result(locator, hr);
 }
 
+#ifdef __REACTOS__
+static void saxlocator_extension_endtag(struct saxlocator *locator)
+{
+    struct saxextensionhandler_iface *handler = saxreader_get_extensionhandler(locator->saxreader);
+    HRESULT hr = S_OK;
+
+    if (locator->status != S_OK)
+        return;
+
+    if (saxreader_has_handler(locator, SAXExtensionHandler))
+    {
+        if (!locator->vbInterface)
+            hr = ISAXExtensionHandler_endtag(handler->handler);
+    }
+
+    locator->status = saxlocator_callback_result(locator, hr);
+}
+#endif
+
 static void saxlocator_extension_dtd(struct saxlocator *locator)
 {
     struct saxextensionhandler_iface *handler = saxreader_get_extensionhandler(locator->saxreader);
@@ -4363,8 +4382,16 @@ static void saxreader_parse_endtag(struct saxlocator *locator)
     {
         element = LIST_ENTRY(list_head(&locator->elements), struct element, entry);
 
+#ifdef __REACTOS__
+        if (!wcscmp(element->name.qname, name.qname))
+        {
+            saxlocator_extension_endtag(locator);
+            saxlocator_end_element(locator, &position, element);
+        }
+#else
         if (!wcscmp(element->name.qname, name.qname))
             saxlocator_end_element(locator, &position, element);
+#endif
         else
             hr = E_SAX_ENDTAGMISMATCH;
 

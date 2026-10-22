@@ -2049,7 +2049,11 @@ static void node_dump(struct domnode *node, struct node_dump_context *context)
             node_dump_append(context, L"<", 1);
             node_dump_qualified_name(context, node);
             node_dump_element_attributes(context, node);
+#ifdef __REACTOS__
+            if (list_empty(&node->children) && !(node->flags & DOMNODE_EXPLICIT_END_TAG))
+#else
             if (list_empty(&node->children))
+#endif
             {
                 node_dump_append(context, L"/>", 2);
             }
@@ -4220,6 +4224,18 @@ static HRESULT WINAPI parse_extension_handler_dtd(ISAXExtensionHandler *iface,
     return c->status;
 }
 
+#ifdef __REACTOS__
+static HRESULT WINAPI parse_extension_handler_endtag(ISAXExtensionHandler *iface)
+{
+    struct parse_context *c = impl_from_ISAXExtensionHandler(iface);
+
+    if (c->node && c->node->type == NODE_ELEMENT)
+        c->node->flags |= DOMNODE_EXPLICIT_END_TAG;
+
+    return c->status;
+}
+#endif
+
 static const ISAXExtensionHandlerVtbl parse_extension_handler_vtbl =
 {
     parse_extension_handler_QueryInterface,
@@ -4227,6 +4243,9 @@ static const ISAXExtensionHandlerVtbl parse_extension_handler_vtbl =
     parse_extension_handler_Release,
     parse_extension_handler_xmldecl,
     parse_extension_handler_dtd,
+#ifdef __REACTOS__
+    parse_extension_handler_endtag,
+#endif
 };
 
 static struct parse_context *impl_from_ISAXLexicalHandler(ISAXLexicalHandler *iface)

@@ -197,6 +197,9 @@ enum domnode_flags
     DOMNODE_PARSED_VALUE = 0x8,
     DOMNODE_NS_DECL = 0x10,
     DOMNODE_NO_PARENT = 0x20,
+#ifdef __REACTOS__
+    DOMNODE_EXPLICIT_END_TAG = 0x40,
+#endif
 };
 
 struct domdoc_properties
