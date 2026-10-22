@@ -2292,8 +2292,13 @@ static NTSTATUS encrypt_rsa( const struct key *key, const UCHAR *input, ULONG in
     }
     else if (flags == BCRYPT_PAD_PKCS1)
     {
+#ifdef __REACTOS__
+        if (SymCryptRsaPkcs1Encrypt( key->a.rsa.handle, input, input_len, 0, SYMCRYPT_NUMBER_FORMAT_MSB_FIRST, output,
+                                     output_len, &size )) return STATUS_INTERNAL_ERROR;
+#else
         if (SymCryptRsaPkcs1Encrypt( key->a.rsa.handle, input, input_len, SYMCRYPT_NUMBER_FORMAT_MSB_FIRST, 0, output,
                                      output_len, &size )) return STATUS_INTERNAL_ERROR;
+#endif
         *ret_len = size;
     }
     else if (flags == BCRYPT_PAD_OAEP)
