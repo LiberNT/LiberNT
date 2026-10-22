@@ -7,7 +7,7 @@
 #include "precomp.h"
 #include <wincodec.h>
 
-static HBITMAP CreateStartOrbBitmap(INT Size, UINT ResourceId)
+HBITMAP CreateStartOrbBitmap(INT Size, UINT ResourceId)
 {
     /* Bound the destination DIB allocation. */
     if (Size <= 0 || Size > 4096)
@@ -76,6 +76,111 @@ static HBITMAP CreateStartOrbBitmap(INT Size, UINT ResourceId)
         }
     }
     return Bitmap;
+}
+
+static BOOL GetStartOrbDib(HBITMAP Bitmap, DIBSECTION *Dib)
+{
+    return Bitmap &&
+           GetObjectW(Bitmap, sizeof(*Dib), Dib) == sizeof(*Dib) &&
+           Dib->dsBm.bmBits &&
+           Dib->dsBm.bmBitsPixel == 32 &&
+           Dib->dsBmih.biHeight < 0 &&
+           Dib->dsBm.bmWidth == Dib->dsBm.bmHeight;
+}
+
+INT GetStartOrbExtent(HBITMAP Bitmap)
+{
+    DIBSECTION Dib;
+    if (!GetStartOrbDib(Bitmap, &Dib))
+        return 0;
+
+    const BYTE *Bits = (const BYTE *)Dib.dsBm.bmBits;
+    INT Left = Dib.dsBm.bmWidth, Right = -1;
+    for (INT y = 0; y < Dib.dsBm.bmHeight; ++y)
+    {
+        const BYTE *Row = Bits + y * Dib.dsBm.bmWidthBytes;
+        for (INT x = 0; x < Dib.dsBm.bmWidth; ++x)
+        {
+            if (Row[x * 4 + 3])
+            {
+                Left = min(Left, x);
+                Right = max(Right, x);
+            }
+        }
+    }
+    return (Right >= Left) ? Right - Left + 1 : 0;
+}
+
+BOOL DrawStartOrbBitmap(HDC hdc, HBITMAP Source, INT x, INT y, INT Size, double Scale)
+{
+    DIBSECTION Dib;
+    if (Size <= 0 || Scale <= 0.0 || !GetStartOrbDib(Source, &Dib) ||
+        Dib.dsBm.bmWidth < Size || Dib.dsBm.bmWidth % Size)
+    {
+        return FALSE;
+    }
+
+    const INT SourceSize = Dib.dsBm.bmWidth;
+    const INT Sub = SourceSize / Size;
+    const UINT Samples = Sub * Sub;
+    const BYTE *Bits = (const BYTE *)Dib.dsBm.bmBits;
+    const double Center = SourceSize / 2.0;
+
+    BITMAPINFO Info = {};
+    Info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    Info.bmiHeader.biWidth = Size;
+    Info.bmiHeader.biHeight = -Size;
+    Info.bmiHeader.biPlanes = 1;
+    Info.bmiHeader.biBitCount = 32;
+    Info.bmiHeader.biCompression = BI_RGB;
+    DWORD *Frame;
+    HBITMAP Bitmap = CreateDIBSection(hdc, &Info, DIB_RGB_COLORS, (void **)&Frame, NULL, 0);
+    if (!Bitmap)
+        return FALSE;
+    HDC hdcMem = CreateCompatibleDC(hdc);
+    if (!hdcMem)
+    {
+        DeleteObject(Bitmap);
+        return FALSE;
+    }
+
+    for (INT dy = 0; dy < Size; ++dy)
+    {
+        for (INT dx = 0; dx < Size; ++dx)
+        {
+            UINT b = 0, g = 0, r = 0, a = 0;
+            for (INT j = 0; j < Sub; ++j)
+            {
+                double v = Center + (dy * Sub + j + 0.5 - Center) / Scale;
+                if (v < 0.0 || v >= SourceSize)
+                    continue;
+                const BYTE *Row = Bits + (INT)v * Dib.dsBm.bmWidthBytes;
+                for (INT i = 0; i < Sub; ++i)
+                {
+                    double u = Center + (dx * Sub + i + 0.5 - Center) / Scale;
+                    if (u < 0.0 || u >= SourceSize)
+                        continue;
+                    const BYTE *Pixel = Row + (INT)u * 4;
+                    b += Pixel[0] * Pixel[3];
+                    g += Pixel[1] * Pixel[3];
+                    r += Pixel[2] * Pixel[3];
+                    a += Pixel[3];
+                }
+            }
+            Frame[dy * Size + dx] = ((a / Samples) << 24) |
+                                    ((r / (255 * Samples)) << 16) |
+                                    ((g / (255 * Samples)) << 8) |
+                                    (b / (255 * Samples));
+        }
+    }
+
+    HGDIOBJ OldBitmap = SelectObject(hdcMem, Bitmap);
+    BLENDFUNCTION Blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    BOOL Ret = GdiAlphaBlend(hdc, x, y, Size, Size, hdcMem, 0, 0, Size, Size, Blend);
+    SelectObject(hdcMem, OldBitmap);
+    DeleteDC(hdcMem);
+    DeleteObject(Bitmap);
+    return Ret;
 }
 
 HIMAGELIST CreateStartOrbImageList(INT Size)

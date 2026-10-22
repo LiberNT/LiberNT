@@ -60,6 +60,9 @@
 WINE_DEFAULT_DEBUG_CHANNEL(explorernew);
 
 HIMAGELIST CreateStartOrbImageList(INT Size);
+HBITMAP CreateStartOrbBitmap(INT Size, UINT ResourceId);
+INT GetStartOrbExtent(HBITMAP Bitmap);
+BOOL DrawStartOrbBitmap(HDC hdc, HBITMAP Source, INT x, INT y, INT Size, double Scale);
 
 static inline INT
 ShellScaleForDpi(INT Value)

@@ -4,9 +4,11 @@
  * PURPOSE:     Tray window implementation
  * COPYRIGHT:   Copyright 2006-2007 Thomas Weidenmueller <w3seek@reactos.org>
  *              Copyright 2018-2025 Katayama Hirofumi MZ <katayama.hirofumi.mz@gmail.com>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include "precomp.h"
+#include <math.h>
 #include <commoncontrols.h>
 #include <cfgmgr32.h>
 #include <regstr.h>
@@ -26,6 +28,12 @@ HRESULT TrayWindowCtxMenuCreator(ITrayWindow * TrayWnd, IN HWND hWndOwner, ICont
 
 #define AUTOHIDE_SPEED_SHOW 10
 #define AUTOHIDE_SPEED_HIDE 1
+
+#define TIMER_ID_STARTLOGO 1
+#define STARTLOGO_INTERVAL 15
+#define STARTLOGO_PRESS_MS 50
+#define STARTLOGO_RELEASE_MS 250
+#define STARTLOGO_PRESSED_SCALE (5.0 / 6.0)
 
 #define AUTOHIDE_HIDDEN 0
 #define AUTOHIDE_SHOWING 1
@@ -195,6 +203,16 @@ class CStartButton
     BOOL m_bInitialized;
     COLORREF m_crMaterial;
 
+    HBITMAP m_OrbSource[3];
+    double m_OrbNormalize[3];
+    INT m_OrbSize;
+    BOOL m_bPressed;
+    double m_LogoScale;
+    double m_AnimFrom;
+    double m_AnimTo;
+    ULONGLONG m_AnimStart;
+    UINT m_AnimDuration;
+
 public:
     CStartButton()
         : m_ImageList(NULL),
@@ -203,19 +221,76 @@ public:
           m_bMaterial(FALSE),
           m_bModernTaskbar(FALSE),
           m_bInitialized(FALSE),
-          m_crMaterial(0)
+          m_crMaterial(0),
+          m_OrbSize(0),
+          m_bPressed(FALSE),
+          m_LogoScale(1.0),
+          m_AnimFrom(1.0),
+          m_AnimTo(1.0),
+          m_AnimStart(0),
+          m_AnimDuration(0)
     {
         m_Size.cx = 0;
         m_Size.cy = 0;
+        for (UINT i = 0; i < _countof(m_OrbSource); ++i)
+        {
+            m_OrbSource[i] = NULL;
+            m_OrbNormalize[i] = 1.0;
+        }
     }
 
     virtual ~CStartButton()
     {
+        ClearOrbSources();
+
         if (m_ImageList != NULL)
             ImageList_Destroy(m_ImageList);
 
         if (m_Font != NULL)
             DeleteObject(m_Font);
+    }
+
+    VOID ClearOrbSources()
+    {
+        for (UINT i = 0; i < _countof(m_OrbSource); ++i)
+        {
+            if (m_OrbSource[i])
+                DeleteObject(m_OrbSource[i]);
+            m_OrbSource[i] = NULL;
+            m_OrbNormalize[i] = 1.0;
+        }
+        m_OrbSize = 0;
+    }
+
+    VOID CreateOrbSources(INT Size)
+    {
+        static const UINT Resources[] = { IDI_STARTORB, IDI_STARTORB_HOVER, IDI_STARTORB_PRESSED };
+        INT Extent[_countof(Resources)];
+
+        ClearOrbSources();
+        for (UINT i = 0; i < _countof(Resources); ++i)
+        {
+            m_OrbSource[i] = CreateStartOrbBitmap(Size * 4, Resources[i]);
+            Extent[i] = GetStartOrbExtent(m_OrbSource[i]);
+        }
+        if (!Extent[0])
+        {
+            ClearOrbSources();
+            return;
+        }
+        for (UINT i = 1; i < _countof(Resources); ++i)
+        {
+            if (Extent[i])
+            {
+                m_OrbNormalize[i] = (double)Extent[0] / Extent[i];
+            }
+            else if (m_OrbSource[i])
+            {
+                DeleteObject(m_OrbSource[i]);
+                m_OrbSource[i] = NULL;
+            }
+        }
+        m_OrbSize = Size;
     }
 
     SIZE GetSize()
@@ -274,6 +349,7 @@ public:
             m_ImageList = NULL;
         }
         m_bOrbIcon = FALSE;
+        ClearOrbSources();
     }
 
     VOID UpdateThemeAppearance()
@@ -289,7 +365,7 @@ public:
         if (bRebuildImages)
         {
             ClearImageList();
-            m_ImageList = CreateStartOrbImageList(ShellScaleForDpi(m_bModernTaskbar ? 36 : 20));
+            m_ImageList = CreateStartOrbImageList(ShellScaleForDpi(m_bModernTaskbar ? 42 : 20));
             if (m_ImageList)
             {
                 const INT Margin = ShellScaleForDpi(1);
@@ -298,6 +374,8 @@ public:
                                         BUTTON_IMAGELIST_ALIGN_CENTER};
                 SendMessageW(BCM_SETIMAGELIST, 0, (LPARAM)&bil);
                 m_bOrbIcon = TRUE;
+                if (m_bModernTaskbar)
+                    CreateOrbSources(ShellScaleForDpi(42));
             }
             else if (!m_bModernTaskbar)
             {
@@ -379,8 +457,178 @@ public:
         if (uMsg == WM_KEYUP && wParam != VK_SPACE)
             return 0;
 
-        GetParent().PostMessage(TWM_OPENSTARTMENU);
+        if (!m_bMaterial)
+        {
+            GetParent().PostMessage(TWM_OPENSTARTMENU);
+            return 0;
+        }
+
+        SetCapture();
+        m_bPressed = TRUE;
+        AnimateLogo(STARTLOGO_PRESSED_SCALE, STARTLOGO_PRESS_MS);
         return 0;
+    }
+
+    LRESULT OnLButtonDblClk(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        if (!m_bMaterial)
+        {
+            bHandled = FALSE;
+            return 0;
+        }
+        return OnLButtonDown(uMsg, wParam, lParam, bHandled);
+    }
+
+    LRESULT OnLButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        RECT rc;
+
+        if (!m_bPressed)
+        {
+            bHandled = FALSE;
+            return 0;
+        }
+
+        GetClientRect(&rc);
+        EndPress();
+        ReleaseCapture();
+        if (PtInRect(&rc, pt))
+            GetParent().PostMessage(TWM_OPENSTARTMENU);
+        return 0;
+    }
+
+    LRESULT OnMouseMove(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        if (!m_bPressed)
+        {
+            bHandled = FALSE;
+            return 0;
+        }
+        return DefWindowProc(uMsg, wParam & ~MK_LBUTTON, lParam);
+    }
+
+    LRESULT OnCaptureChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        EndPress();
+        bHandled = FALSE;
+        return 0;
+    }
+
+    VOID EndPress()
+    {
+        if (!m_bPressed)
+            return;
+        m_bPressed = FALSE;
+        AnimateLogo(1.0, STARTLOGO_RELEASE_MS);
+    }
+
+    VOID AnimateLogo(double Target, UINT Duration)
+    {
+        m_AnimFrom = m_LogoScale;
+        m_AnimTo = Target;
+        m_AnimStart = GetTickCount64();
+        m_AnimDuration = Duration;
+        SetTimer(TIMER_ID_STARTLOGO, STARTLOGO_INTERVAL, NULL);
+        InvalidateRect(NULL, FALSE);
+    }
+
+    LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        if (wParam != TIMER_ID_STARTLOGO)
+        {
+            bHandled = FALSE;
+            return 0;
+        }
+
+        ULONGLONG Elapsed = GetTickCount64() - m_AnimStart;
+        if (Elapsed >= m_AnimDuration)
+        {
+            m_LogoScale = m_AnimTo;
+            KillTimer(TIMER_ID_STARTLOGO);
+        }
+        else
+        {
+            double s = pow((double)Elapsed / m_AnimDuration, 1.0 / 3.0);
+            m_LogoScale = m_AnimFrom + (m_AnimTo - m_AnimFrom) * s * s * (3.0 - 2.0 * s);
+        }
+        InvalidateRect(NULL, FALSE);
+        return 0;
+    }
+
+    static double PlateCoverage(INT x, INT y, INT w, INT h, INT r)
+    {
+        if (x < 0 || y < 0 || x >= w || y >= h)
+            return 0.0;
+
+        double px = x + 0.5, py = y + 0.5;
+        double dx = (px < r) ? r - px : (px > w - r) ? px - (w - r) : 0.0;
+        double dy = (py < r) ? r - py : (py > h - r) ? py - (h - r) : 0.0;
+        if (dx <= 0.0 || dy <= 0.0)
+            return 1.0;
+
+        double c = r + 0.5 - sqrt(dx * dx + dy * dy);
+        return (c < 0.0) ? 0.0 : (c > 1.0) ? 1.0 : c;
+    }
+
+    VOID DrawPlate(HDC hdc, const RECT *prc, INT Fill, INT EdgeTop, INT EdgeSide, INT EdgeBottom)
+    {
+        INT w = prc->right - prc->left, h = prc->bottom - prc->top;
+        INT r = ShellScaleForDpi(4);
+        BITMAPINFO bmi = {};
+        DWORD *pBits = NULL;
+
+        if (w <= 2 || h <= 2)
+            return;
+
+        bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+        bmi.bmiHeader.biWidth = w;
+        bmi.bmiHeader.biHeight = -h;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        HBITMAP hbm = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, (void **)&pBits, NULL, 0);
+        HDC hdcMem = CreateCompatibleDC(hdc);
+        if (hbm && hdcMem && pBits)
+        {
+            HGDIOBJ hbmOld = SelectObject(hdcMem, hbm);
+
+            if (BitBlt(hdcMem, 0, 0, w, h, hdc, prc->left, prc->top, SRCCOPY))
+            {
+                GdiFlush();
+                for (INT y = 0; y < h; ++y)
+                {
+                    double py = y + 0.5;
+                    double dy = (py < r) ? r - py : (py > h - r) ? py - (h - r) : 0.0;
+                    INT EdgeY = (y < h / 2) ? EdgeTop : EdgeBottom;
+
+                    for (INT x = 0; x < w; ++x)
+                    {
+                        double Outer = PlateCoverage(x, y, w, h, r);
+                        if (Outer <= 0.0)
+                            continue;
+
+                        double px = x + 0.5;
+                        double dx = (px < r) ? r - px : (px > w - r) ? px - (w - r) : 0.0;
+                        double Edge = (dx + dy > 0.0) ? (EdgeSide * dx + EdgeY * dy) / (dx + dy) : EdgeSide;
+                        double Inner = PlateCoverage(x - 1, y - 1, w - 2, h - 2, r - 1);
+                        INT Lift = (INT)floor(Fill * Inner + Edge * (Outer - Inner) + 0.5);
+                        DWORD Pixel = pBits[y * w + x];
+                        INT cr = max(0, min(255, (INT)((Pixel >> 16) & 0xFF) + Lift));
+                        INT cg = max(0, min(255, (INT)((Pixel >> 8) & 0xFF) + Lift));
+                        INT cb = max(0, min(255, (INT)(Pixel & 0xFF) + Lift));
+
+                        pBits[y * w + x] = (Pixel & 0xFF000000) | ((DWORD)cr << 16) | ((DWORD)cg << 8) | (DWORD)cb;
+                    }
+                }
+                BitBlt(hdc, prc->left, prc->top, w, h, hdcMem, 0, 0, SRCCOPY);
+            }
+            SelectObject(hdcMem, hbmOld);
+        }
+        if (hdcMem)
+            DeleteDC(hdcMem);
+        if (hbm)
+            DeleteObject(hbm);
     }
 
     VOID DrawFlagPane(HDC hdc, int x0, int x1, double t0, double t1, int yTop, int h, int skew, int w)
@@ -427,6 +675,75 @@ public:
         DeleteObject(hbr);
     }
 
+    VOID DrawLogo(HDC hdc, const RECT *prc, UINT iArt)
+    {
+        if (m_OrbSize > 0)
+        {
+            if (!m_OrbSource[iArt])
+                iArt = 0;
+            if (DrawStartOrbBitmap(hdc, m_OrbSource[iArt],
+                                   (prc->right - m_OrbSize) / 2, (prc->bottom - m_OrbSize) / 2,
+                                   m_OrbSize, m_LogoScale * m_OrbNormalize[iArt]))
+            {
+                return;
+            }
+        }
+
+        int cx = 0, cy = 0;
+        int iImage = (iArt == 2) ? PBS_PRESSED - 1 : (iArt == 1) ? PBS_HOT - 1 : PBS_NORMAL - 1;
+        ImageList_GetIconSize(m_ImageList, &cx, &cy);
+        if (ImageList_GetImageCount(m_ImageList) == 1)
+            iImage = 0;
+        ImageList_Draw(m_ImageList, iImage, hdc,
+                       (prc->right - cx) / 2, (prc->bottom - cy) / 2,
+                       ILD_TRANSPARENT);
+    }
+
+    VOID DrawMaterial(HDC hdc, const RECT *prc)
+    {
+        LRESULT state = SendMessageW(BM_GETSTATE, 0, 0);
+        BOOL bEnabled = IsWindowEnabled();
+        BOOL bOpen = bEnabled && (state & BST_PUSHED);
+        BOOL bHot = bEnabled && (state & BST_HOT);
+        BOOL bLight = ShellColorIsLight(m_crMaterial);
+        INT HoverFill = bLight ? 9 : 13;
+        INT PressedFill = bLight ? 5 : 7;
+        UINT iArt = 0;
+        RECT rcBack = *prc;
+
+        DrawThemeParentBackground(m_hWnd, hdc, &rcBack);
+        if (m_bPressed || bOpen || bHot)
+        {
+            INT Size = ShellScaleForDpi(40);
+            INT Fill = HoverFill;
+            RECT rcPlate;
+
+            rcPlate.left = (prc->right - Size) / 2;
+            rcPlate.top = (prc->bottom - Size) / 2;
+            rcPlate.right = rcPlate.left + Size;
+            rcPlate.bottom = rcPlate.top + Size;
+            if (m_bPressed)
+            {
+                Fill = PressedFill;
+            }
+            else if (m_LogoScale < 1.0)
+            {
+                double t = (m_LogoScale - STARTLOGO_PRESSED_SCALE) / (1.0 - STARTLOGO_PRESSED_SCALE);
+                Fill = PressedFill + (INT)floor((HoverFill - PressedFill) * max(0.0, t) + 0.5);
+            }
+            if (bLight)
+                DrawPlate(hdc, &rcPlate, Fill, -7, -7, -21);
+            else
+                DrawPlate(hdc, &rcPlate, Fill, 23, Fill, Fill);
+        }
+
+        if (m_bPressed || bOpen || m_LogoScale < 1.0)
+            iArt = 2;
+        else if (bHot)
+            iArt = 1;
+        DrawLogo(hdc, prc, iArt);
+    }
+
     LRESULT OnEraseBkgnd(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
         if (!m_bMaterial)
@@ -455,42 +772,23 @@ public:
             if (hdc)
             {
                 RECT rc;
-                LRESULT state = SendMessageW(BM_GETSTATE, 0, 0);
-                COLORREF cr = m_crMaterial;
-                int cx = 0, cy = 0;
-                int iImage = PBS_NORMAL - 1;
-
                 GetClientRect(&rc);
-                if (IsWindowEnabled())
+                HDC hdcMem = CreateCompatibleDC(hdc);
+                HBITMAP hbm = hdcMem ? CreateCompatibleBitmap(hdc, rc.right, rc.bottom) : NULL;
+                if (hbm)
                 {
-                    if (state & BST_PUSHED)
-                    {
-                        cr = ShellLiftColor(cr, ShellColorIsLight(cr) ? -14 : 14);
-                        iImage = PBS_PRESSED - 1;
-                    }
-                    else if (state & BST_HOT)
-                    {
-                        iImage = PBS_HOT - 1;
-                    }
+                    HGDIOBJ hbmOld = SelectObject(hdcMem, hbm);
+                    DrawMaterial(hdcMem, &rc);
+                    BitBlt(hdc, 0, 0, rc.right, rc.bottom, hdcMem, 0, 0, SRCCOPY);
+                    SelectObject(hdcMem, hbmOld);
+                    DeleteObject(hbm);
                 }
-                HBRUSH hbr = CreateSolidBrush(cr);
-                if (hbr)
+                else
                 {
-                    FillRect(hdc, &rc, hbr);
-                    DeleteObject(hbr);
+                    DrawMaterial(hdc, &rc);
                 }
-                ImageList_GetIconSize(m_ImageList, &cx, &cy);
-                if (ImageList_GetImageCount(m_ImageList) == 1)
-                    iImage = 0;
-                ImageList_Draw(m_ImageList, iImage, hdc,
-                               (rc.right - cx) / 2, (rc.bottom - cy) / 2,
-                               ILD_TRANSPARENT);
-                {
-                    RECT rcEdge = rc;
-
-                    rcEdge.bottom = rcEdge.top + ShellScaleForDpi(2);
-                    DrawThemeParentBackground(m_hWnd, hdc, &rcEdge);
-                }
+                if (hdcMem)
+                    DeleteDC(hdcMem);
                 EndPaint(&ps);
             }
             return 0;
