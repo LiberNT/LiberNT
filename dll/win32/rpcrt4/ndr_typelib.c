@@ -1440,11 +1440,15 @@ static HRESULT get_iface_info(ITypeInfo *typeinfo, WORD *funcs, WORD *parentfunc
 {
     ITypeInfo *parentinfo;
     TYPEATTR *typeattr;
+#ifndef __REACTOS__
     ITypeLib *typelib;
     TLIBATTR *libattr;
+#endif
     TYPEKIND typekind;
     HREFTYPE reftype;
+#ifndef __REACTOS__
     SYSKIND syskind;
+#endif
     HRESULT hr;
 
     /* Dual interfaces report their size to be sizeof(IDispatchVtbl) and their
@@ -1468,6 +1472,7 @@ static HRESULT get_iface_info(ITypeInfo *typeinfo, WORD *funcs, WORD *parentfunc
     else
         ITypeInfo_AddRef(*real_typeinfo = typeinfo);
 
+#ifndef __REACTOS__
     hr = ITypeInfo_GetContainingTypeLib(*real_typeinfo, &typelib, NULL);
     if (FAILED(hr))
         goto err;
@@ -1481,12 +1486,17 @@ static HRESULT get_iface_info(ITypeInfo *typeinfo, WORD *funcs, WORD *parentfunc
     syskind = libattr->syskind;
     ITypeLib_ReleaseTLibAttr(typelib, libattr);
     ITypeLib_Release(typelib);
+#endif
 
     hr = ITypeInfo_GetTypeAttr(*real_typeinfo, &typeattr);
     if (FAILED(hr))
         goto err;
     *funcs = typeattr->cFuncs;
+#ifdef __REACTOS__
+    *parentfuncs = typeattr->cbSizeVft / sizeof(void *) - *funcs;
+#else
     *parentfuncs = typeattr->cbSizeVft / (syskind == SYS_WIN64 ? 8 : 4) - *funcs;
+#endif
     ITypeInfo_ReleaseTypeAttr(*real_typeinfo, typeattr);
 
     hr = ITypeInfo_GetRefTypeOfImplType(*real_typeinfo, 0, &reftype);
