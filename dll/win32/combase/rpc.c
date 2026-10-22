@@ -674,7 +674,7 @@ HRESULT rpc_get_local_class_object(REFCLSID rclsid, REFIID riid, void **obj)
     while (tries++ < MAXTRIES)
     {
         DWORD index, start_ticks;
-        HANDLE process = 0;
+        HANDLE process = 0, wait_handle;
 
         if (SUCCEEDED(hr = rpcss_get_class_object(rclsid, &objref)))
             break;
@@ -687,10 +687,11 @@ HRESULT rpc_get_local_class_object(REFCLSID rclsid, REFIID riid, void **obj)
         }
 
         /* Wait for one second, even if messages arrive. */
+        wait_handle = process ? process : CreateEventW(NULL, TRUE, FALSE, NULL);
         start_ticks = GetTickCount();
         do
         {
-            if (SUCCEEDED(CoWaitForMultipleHandles(0, 1000, (process != 0), &process, &index)) && process && !index)
+            if (SUCCEEDED(CoWaitForMultipleHandles(0, 1000, (wait_handle != 0), &wait_handle, &index)) && process && !index)
             {
                 WARN("Server for %s failed to start.\n", debugstr_guid(rclsid));
                 CloseHandle(process);
@@ -698,7 +699,7 @@ HRESULT rpc_get_local_class_object(REFCLSID rclsid, REFIID riid, void **obj)
             }
         } while (GetTickCount() - start_ticks < 1000);
 
-        if (process) CloseHandle(process);
+        if (wait_handle) CloseHandle(wait_handle);
     }
 
     if (!objref || tries >= MAXTRIES)
