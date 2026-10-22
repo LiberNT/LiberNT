@@ -1957,6 +1957,20 @@ static HRESULT WINAPI dwritefontface5_GetFontAxisValues(IDWriteFontFace5 *iface,
     return E_NOTIMPL;
 }
 
+#ifdef __REACTOS__
+static BOOL WINAPI dwritefontface5_HasVariations(IDWriteFontFace5 *iface)
+{
+    struct dwrite_fontface *fontface = impl_from_IDWriteFontFace5(iface);
+    struct file_stream_desc stream_desc;
+
+    TRACE("%p.\n", iface);
+
+    stream_desc.stream = fontface->stream;
+    stream_desc.face_type = fontface->type;
+    stream_desc.face_index = fontface->index;
+    return opentype_has_font_variations(&stream_desc);
+}
+#else
 static BOOL WINAPI dwritefontface5_HasVariations(IDWriteFontFace5 *iface)
 {
     static int once;
@@ -1966,6 +1980,7 @@ static BOOL WINAPI dwritefontface5_HasVariations(IDWriteFontFace5 *iface)
 
     return FALSE;
 }
+#endif
 
 static HRESULT WINAPI dwritefontface5_GetFontResource(IDWriteFontFace5 *iface, IDWriteFontResource **resource)
 {

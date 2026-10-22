@@ -6721,6 +6721,27 @@ static void opentype_font_var_add_static_axis(struct dwrite_var_axis **axis, uns
     entry->attributes = 0;
 }
 
+#ifdef __REACTOS__
+BOOL opentype_has_font_variations(const struct file_stream_desc *stream_desc)
+{
+    const struct fvar_header *header;
+    struct dwrite_fonttable fvar;
+    BOOL ret = FALSE;
+
+    opentype_get_font_table(stream_desc, MS_FVAR_TAG, &fvar);
+
+    if ((header = table_read_ensure(&fvar, 0, sizeof(*header))) &&
+            GET_BE_WORD(header->major_version) == 1 && GET_BE_WORD(header->minor_version) == 0)
+    {
+        ret = GET_BE_WORD(header->axis_count) != 0;
+    }
+
+    if (fvar.context)
+        IDWriteFontFileStream_ReleaseFileFragment(stream_desc->stream, fvar.context);
+    return ret;
+}
+
+#endif
 HRESULT opentype_get_font_var_axis(const struct file_stream_desc *stream_desc, struct dwrite_var_axis **axis,
         unsigned int *axis_count)
 {

@@ -542,6 +542,9 @@ extern HRESULT opentype_get_kerning_pairs(struct dwrite_fontface *fontface, unsi
 extern BOOL opentype_has_kerning_pairs(struct dwrite_fontface *fontface);
 extern HRESULT opentype_get_font_var_axis(const struct file_stream_desc *stream_desc, struct dwrite_var_axis **axis,
         unsigned int *axis_count);
+#ifdef __REACTOS__
+extern BOOL opentype_has_font_variations(const struct file_stream_desc *stream_desc);
+#endif
 extern bool opentype_is_whitespace(unsigned int codepoint);
 
 struct dwrite_colorglyph {
