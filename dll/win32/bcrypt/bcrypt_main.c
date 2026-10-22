@@ -1946,6 +1946,9 @@ static NTSTATUS decrypt_rsa( const struct key *key, const UCHAR *input, ULONG in
             if (output) return STATUS_BUFFER_TOO_SMALL;
             return STATUS_SUCCESS;
         }
+#ifdef __REACTOS__
+        output_len = size;
+#endif
         if (SymCryptRsaRawDecrypt( key->a.rsa.handle, input, input_len, SYMCRYPT_NUMBER_FORMAT_MSB_FIRST, 0, output,
                                    output_len )) return STATUS_INTERNAL_ERROR;
     }
@@ -2282,6 +2285,9 @@ static NTSTATUS encrypt_rsa( const struct key *key, const UCHAR *input, ULONG in
         if (output) return STATUS_BUFFER_TOO_SMALL;
         return STATUS_SUCCESS;
     }
+#ifdef __REACTOS__
+    output_len = size;
+#endif
 
     if (!flags || flags == BCRYPT_PAD_NONE)
     {
