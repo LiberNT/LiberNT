@@ -723,7 +723,7 @@ public:                                                                         
         class ::GetObjectDescription,                                                                                  \
         class ::GetCategoryMap,                                                                                        \
         class ::ObjectMain};                                                                                           \
-    extern "C" _ATLALLOC("ATL$__m") ATL::_ATL_OBJMAP_ENTRY *_ATL_OBJMAP_ENTRY_CONST __pobjMap_##class = &__objMap_##class; \
+    extern "C" _ATLALLOC(_ATL_OBJMAP_ENTRY_SECTION) ATL::_ATL_OBJMAP_ENTRY *_ATL_OBJMAP_ENTRY_CONST __pobjMap_##class = &__objMap_##class; \
     OBJECT_ENTRY_PRAGMA(class)
 
 

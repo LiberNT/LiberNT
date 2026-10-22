@@ -185,10 +185,30 @@ typedef _ATL_WIN_MODULE70 _ATL_WIN_MODULE;
 
 // Auto object map
 
+#if defined(_M_ARM64EC)
+#define _ATL_OBJMAP_FIRST_SECTION "ATL$_ec_a"
+#define _ATL_OBJMAP_ENTRY_SECTION "ATL$_ec_m"
+#define _ATL_OBJMAP_LAST_SECTION "ATL$_ec_z"
+#define _ATL_OBJMAP_FIRST __pobjMapEntryFirstEC
+#define _ATL_OBJMAP_LAST __pobjMapEntryLastEC
+#else
+#define _ATL_OBJMAP_FIRST_SECTION "ATL$__a"
+#define _ATL_OBJMAP_ENTRY_SECTION "ATL$__m"
+#define _ATL_OBJMAP_LAST_SECTION "ATL$__z"
+#define _ATL_OBJMAP_FIRST __pobjMapEntryFirst
+#define _ATL_OBJMAP_LAST __pobjMapEntryLast
+#endif
+
 #if defined(_MSC_VER)
+#if defined(_M_ARM64EC)
+#pragma section("ATL$_ec_a", read, write)
+#pragma section("ATL$_ec_z", read, write)
+#pragma section("ATL$_ec_m", read, write)
+#else
 #pragma section("ATL$__a", read, write)
 #pragma section("ATL$__z", read, write)
 #pragma section("ATL$__m", read, write)
+#endif
 #define _ATLALLOC(x) __declspec(allocate(x))
 #define _ATL_OBJMAP_ENTRY_CONST const
 #define _ATL_OBJMAP_BOUND_CONST
@@ -232,8 +252,8 @@ static int ATL_OBJMAP_HACK_ATTRIBUTES hack_for_gcc(const _ATL_OBJMAP_ENTRY * con
 
 extern "C"
 {
-    _ATL_OBJMAP_BOUND_DECL __declspec(selectany) _ATLALLOC("ATL$__a") _ATL_OBJMAP_ENTRY * _ATL_OBJMAP_BOUND_CONST __pobjMapEntryFirst = NULL;
-    _ATL_OBJMAP_BOUND_DECL __declspec(selectany) _ATLALLOC("ATL$__z") _ATL_OBJMAP_ENTRY * _ATL_OBJMAP_BOUND_CONST __pobjMapEntryLast = NULL;
+    _ATL_OBJMAP_BOUND_DECL __declspec(selectany) _ATLALLOC(_ATL_OBJMAP_FIRST_SECTION) _ATL_OBJMAP_ENTRY * _ATL_OBJMAP_BOUND_CONST _ATL_OBJMAP_FIRST = NULL;
+    _ATL_OBJMAP_BOUND_DECL __declspec(selectany) _ATLALLOC(_ATL_OBJMAP_LAST_SECTION) _ATL_OBJMAP_ENTRY * _ATL_OBJMAP_BOUND_CONST _ATL_OBJMAP_LAST = NULL;
 }
 
 
@@ -616,8 +636,8 @@ public:
     {
         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)this, &m_hInstTypeLib);
 
-        m_ppAutoObjMapFirst = const_cast<_ATL_OBJMAP_ENTRY **>(&__pobjMapEntryFirst) + 1;
-        m_ppAutoObjMapLast = const_cast<_ATL_OBJMAP_ENTRY **>(&__pobjMapEntryLast);
+        m_ppAutoObjMapFirst = const_cast<_ATL_OBJMAP_ENTRY **>(&_ATL_OBJMAP_FIRST) + 1;
+        m_ppAutoObjMapLast = const_cast<_ATL_OBJMAP_ENTRY **>(&_ATL_OBJMAP_LAST);
         if (FAILED(m_csObjMap.Init()))
         {
             ATLASSERT(0);
