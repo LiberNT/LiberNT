@@ -635,7 +635,7 @@ GetDriveTypeW(IN LPCWSTR lpRootPathName)
          * Check we have a directory if we get farther in path
          */
         PathName.Length += sizeof(WCHAR);
-        if (IsThisARootDirectory(0, &PathName))
+        if (NT_SUCCESS(Status) && IsThisARootDirectory(0, &PathName))
         {
             /* Yes? Heh, then it's fine, keep our current handle */
             RetryOpen = FALSE;
