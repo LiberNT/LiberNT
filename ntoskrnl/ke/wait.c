@@ -437,7 +437,7 @@ KiExitDispatcher(IN KIRQL OldIrql)
         if ((Prcb->NextThread) && !(Prcb->DpcRoutineActive))
         {
             /* Request DPC interrupt */
-            HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+            KiRequestDispatchInterrupt(Prcb);
         }
 
         /* Lower IRQL and exit */

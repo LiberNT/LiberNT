@@ -176,7 +176,7 @@ KiCompleteTimer(IN PKTIMER Timer,
     KiReleaseDispatcherObject(&Timer->Header);
 
     /* Request a DPC if needed */
-    if (RequestInterrupt) HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+    if (RequestInterrupt) KiRequestDispatchInterrupt(KeGetCurrentPrcb());
 }
 
 /* PUBLIC FUNCTIONS **********************************************************/
@@ -315,7 +315,7 @@ KeSetTimerEx(IN OUT PKTIMER Timer,
         KiReleaseDispatcherObject(&Timer->Header);
 
         /* Check if we need to do an interrupt */
-        if (RequestInterrupt) HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+        if (RequestInterrupt) KiRequestDispatchInterrupt(KeGetCurrentPrcb());
     }
     else
     {

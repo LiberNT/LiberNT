@@ -29,6 +29,20 @@ KeGetPreviousMode(VOID)
 }
 #endif
 
+FORCEINLINE
+VOID
+KiRequestDispatchInterrupt(
+    _In_ PKPRCB Prcb)
+{
+#ifdef _M_AMD64
+    if (Prcb->CurrentThread == Prcb->IdleThread)
+        return;
+#else
+    UNREFERENCED_PARAMETER(Prcb);
+#endif
+    HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+}
+
 #ifdef KTHREAD_GROUP_AFFINITY
 #define KiThreadAffinityMask(Thread) ((Thread)->Affinity.Mask)
 #define KiThreadUserAffinityMask(Thread) ((Thread)->UserAffinity.Mask)

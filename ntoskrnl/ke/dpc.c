@@ -787,7 +787,7 @@ KiRetireDpcList(IN PKPRCB Prcb)
         KeReleaseSpinLockFromDpcLevel(&DpcData->DpcLock);
 
         if (RequestInterrupt)
-            HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+            KiRequestDispatchInterrupt(Prcb);
     }
 }
 
@@ -1003,7 +1003,7 @@ KeInsertQueueDpc(IN PKDPC Dpc,
         else
         {
             /* It wasn't, request an interrupt from HAL */
-            HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+            KiRequestDispatchInterrupt(CurrentPrcb);
         }
     }
 

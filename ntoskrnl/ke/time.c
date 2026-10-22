@@ -76,7 +76,7 @@ KiCheckForTimerExpiration(
             /* Request a DPC to handle this */
             Prcb->TimerRequest = (ULONG_PTR)TrapFrame;
             Prcb->TimerHand = Hand;
-            HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+            KiRequestDispatchInterrupt(Prcb);
         }
     }
 }
@@ -236,7 +236,7 @@ KeUpdateSystemTime(IN PKTRAP_FRAME TrapFrame,
         {
             Prcb->TimerRequest = (ULONG_PTR)TrapFrame;
             Prcb->TimerHand = KeTickCount.LowPart;
-            HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+            KiRequestDispatchInterrupt(Prcb);
         }
 
         /* Update the tick count */
@@ -368,7 +368,7 @@ KiUpdateRunTime(IN PKTRAP_FRAME TrapFrame,
     if ((Prcb->DpcData[0].DpcQueueDepth) && !(Prcb->DpcRoutineActive))
     {
         /* Request a DPC */
-        HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+        KiRequestDispatchInterrupt(Prcb);
     }
 
 #ifndef KI_CYCLE_QUANTUM
@@ -386,6 +386,6 @@ KiUpdateRunTime(IN PKTRAP_FRAME TrapFrame,
 
         /* Schedule a quantum end */
         Prcb->QuantumEnd = 1;
-        HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+        KiRequestDispatchInterrupt(Prcb);
     }
 }

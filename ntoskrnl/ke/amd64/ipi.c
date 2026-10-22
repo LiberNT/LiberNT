@@ -185,7 +185,7 @@ KiIpiProcessRequests(VOID)
     }
 
     if (DpcRequest)
-        HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
+        KiRequestDispatchInterrupt(Prcb);
 
     /* Complete a freeze whose NMI has not arrived. This also covers the
      * spin loops that poll here with interrupts disabled (TLB shootdown,
