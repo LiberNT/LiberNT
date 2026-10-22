@@ -1128,7 +1128,7 @@
 @ stdcall -arch=win64,ppc RtlLookupFunctionEntry(ptr ptr ptr) ntdll.RtlLookupFunctionEntry
 @ stdcall RtlMoveMemory(ptr ptr long) ntdll.RtlMoveMemory
 @ stdcall -arch=win64 RtlPcToFileHeader(ptr ptr) ntdll.RtlPcToFileHeader
-@ stdcall -arch=win64 RtlRaiseException(ptr) ntdll.RtlRaiseException
+@ stdcall -arch=x86_64,arm64ec RtlRaiseException(ptr) ntdll.RtlRaiseException
 @ stdcall -arch=win64 RtlRestoreContext(ptr ptr) ntdll.RtlRestoreContext
 @ stdcall RtlUnwind(ptr ptr ptr ptr) ntdll.RtlUnwind
 @ stdcall -arch=win64 RtlUnwindEx(ptr ptr ptr ptr ptr ptr) ntdll.RtlUnwindEx
