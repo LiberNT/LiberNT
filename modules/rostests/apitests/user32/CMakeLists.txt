@@ -37,6 +37,7 @@ list(APPEND SOURCE
     GetKeyState.c
     GetMessageTime.c
     GetPeekMessage.c
+    GetPointerDevices.c
     GetSetWindowInt.c
     GetSystemMetrics.c
     GetTitleBarInfoEx.c

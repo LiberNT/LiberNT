@@ -568,7 +568,12 @@ BOOL WINAPI GetPointerDevices(UINT32 *device_count, POINTER_DEVICE_INFO *devices
         return FALSE;
 
     if (devices)
+    {
+#ifdef __REACTOS__
+        SetLastError(ERROR_SYSTEM_DEVICE_NOT_FOUND);
+#endif
         return FALSE;
+    }
 
     *device_count = 0;
     return TRUE;

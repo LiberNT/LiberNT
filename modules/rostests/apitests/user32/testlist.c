@@ -37,6 +37,7 @@ extern void func_GetIconInfo(void);
 extern void func_GetKeyState(void);
 extern void func_GetMessageTime(void);
 extern void func_GetPeekMessage(void);
+extern void func_GetPointerDevices(void);
 extern void func_GetSetWindowInt(void);
 extern void func_GetSystemMetrics(void);
 extern void func_GetTitleBarInfoEx(void);
@@ -140,6 +141,7 @@ const struct test winetest_testlist[] =
     { "GetKeyState", func_GetKeyState },
     { "GetMessageTime", func_GetMessageTime },
     { "GetPeekMessage", func_GetPeekMessage },
+    { "GetPointerDevices", func_GetPointerDevices },
     { "GetSetWindowInt", func_GetSetWindowInt },
     { "GetSystemMetrics", func_GetSystemMetrics },
     { "GetTitleBarInfoEx", func_GetTitleBarInfoEx },
