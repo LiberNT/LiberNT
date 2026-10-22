@@ -50,7 +50,7 @@ Ndis6FindIfEntryLocked(
     {
         PNDIS6_IF_ENTRY Entry = CONTAINING_RECORD(Link, NDIS6_IF_ENTRY, Link);
 
-        if (Entry->IfIndex == IfIndex)
+        if (Entry->Provider != NULL && Entry->IfIndex == IfIndex)
             return Entry;
     }
 
@@ -93,7 +93,7 @@ Ndis6LookupProviderNetLuid(
     {
         PNDIS6_IF_ENTRY Entry = CONTAINING_RECORD(Link, NDIS6_IF_ENTRY, Link);
 
-        if (Entry->NetLuid.Value == NetLuid.Value)
+        if (Entry->Provider != NULL && Entry->NetLuid.Value == NetLuid.Value)
         {
             if (IfIndex != NULL)
                 *IfIndex = Entry->IfIndex;
@@ -102,6 +102,104 @@ Ndis6LookupProviderNetLuid(
         }
     }
     KeReleaseSpinLock(&Ndis6IfLock, OldIrql);
+
+    return Found;
+}
+
+static
+BOOLEAN
+Ndis6LuidIndexAllocatedLocked(
+    _In_ NET_IFTYPE IfType,
+    _In_ UINT32 NetLuidIndex)
+{
+    PLIST_ENTRY Link;
+
+    for (Link = Ndis6LuidIndices.Flink; Link != &Ndis6LuidIndices; Link = Link->Flink)
+    {
+        PNDIS6_LUID_INDEX Index = CONTAINING_RECORD(Link, NDIS6_LUID_INDEX, Link);
+
+        if (Index->IfType == IfType && Index->NetLuidIndex == NetLuidIndex)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+BOOLEAN
+Ndis6IsNetLuidIndexAllocated(
+    _In_ NET_IFTYPE IfType,
+    _In_ UINT32 NetLuidIndex)
+{
+    KIRQL OldIrql;
+    BOOLEAN Allocated;
+
+    KeAcquireSpinLock(&Ndis6IfLock, &OldIrql);
+    Allocated = Ndis6LuidIndexAllocatedLocked(IfType, NetLuidIndex);
+    KeReleaseSpinLock(&Ndis6IfLock, OldIrql);
+
+    return Allocated;
+}
+
+static
+BOOLEAN
+Ndis6AdapterUsesNetLuidIndexAtDpcLevel(
+    _In_ NET_IFTYPE IfType,
+    _In_ UINT32 NetLuidIndex)
+{
+    PLIST_ENTRY Link;
+    BOOLEAN Found = FALSE;
+
+    KeAcquireSpinLockAtDpcLevel(&AdapterListLock);
+    for (Link = AdapterListHead.Flink; Link != &AdapterListHead; Link = Link->Flink)
+    {
+        PLOGICAL_ADAPTER Adapter = CONTAINING_RECORD(Link, LOGICAL_ADAPTER, ListEntry);
+        PNDIS6_ADAPTER_EXT Ext;
+
+        if (!Adapter->IsNdis6)
+            continue;
+
+        Ext = NDIS6_EXT(Adapter);
+        if (Ext != NULL &&
+            Ext->NetLuid.Info.IfType == IfType &&
+            Ext->NetLuid.Info.NetLuidIndex == NetLuidIndex)
+        {
+            Found = TRUE;
+            break;
+        }
+    }
+    KeReleaseSpinLockFromDpcLevel(&AdapterListLock);
+
+    return Found;
+}
+
+BOOLEAN
+Ndis6LookupAdapterNetLuid(
+    _In_ NET_LUID NetLuid,
+    _Out_opt_ PNET_IFINDEX IfIndex)
+{
+    PLIST_ENTRY Link;
+    KIRQL OldIrql;
+    BOOLEAN Found = FALSE;
+
+    KeAcquireSpinLock(&AdapterListLock, &OldIrql);
+    for (Link = AdapterListHead.Flink; Link != &AdapterListHead; Link = Link->Flink)
+    {
+        PLOGICAL_ADAPTER Adapter = CONTAINING_RECORD(Link, LOGICAL_ADAPTER, ListEntry);
+        PNDIS6_ADAPTER_EXT Ext;
+
+        if (!Adapter->IsNdis6)
+            continue;
+
+        Ext = NDIS6_EXT(Adapter);
+        if (Ext != NULL && Ext->NetLuid.Value == NetLuid.Value)
+        {
+            if (IfIndex != NULL)
+                *IfIndex = Ext->IfIndex;
+            Found = TRUE;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&AdapterListLock, OldIrql);
 
     return Found;
 }
@@ -187,15 +285,12 @@ NdisIfDeregisterProvider(
 {
     PNDIS6_IF_PROVIDER Provider = (PNDIS6_IF_PROVIDER)NdisProviderHandle;
     PLIST_ENTRY Link, Next;
-    LIST_ENTRY Orphans;
     KIRQL OldIrql;
 
     PAGED_CODE();
 
     if (Provider == NULL || Provider->Signature != NDIS6_IF_PROVIDER_SIGNATURE)
         return;
-
-    InitializeListHead(&Orphans);
 
     KeAcquireSpinLock(&Ndis6IfLock, &OldIrql);
     for (Link = Ndis6IfEntries.Flink; Link != &Ndis6IfEntries; Link = Next)
@@ -205,20 +300,13 @@ NdisIfDeregisterProvider(
         Next = Link->Flink;
         if (Entry->Provider == Provider)
         {
-            RemoveEntryList(&Entry->Link);
-            InsertTailList(&Orphans, &Entry->Link);
+            Entry->Provider = NULL;
+            Entry->ProviderIfContext = NULL;
         }
     }
     RemoveEntryList(&Provider->Link);
     Provider->Signature = 0;
     KeReleaseSpinLock(&Ndis6IfLock, OldIrql);
-
-    while (!IsListEmpty(&Orphans))
-    {
-        PNDIS6_IF_ENTRY Entry = CONTAINING_RECORD(RemoveHeadList(&Orphans), NDIS6_IF_ENTRY, Link);
-
-        ExFreePoolWithTag(Entry, NDIS6_IF_PROVIDER_TAG);
-    }
 
     ExFreePoolWithTag(Provider, NDIS6_IF_PROVIDER_TAG);
 }
@@ -230,6 +318,7 @@ NdisIfAllocateNetLuidIndex(
     _Out_ PUINT32 pNetLuidIndex)
 {
     PNDIS6_LUID_INDEX Index;
+    UINT32 Value;
     KIRQL OldIrql;
 
     PAGED_CODE();
@@ -242,9 +331,23 @@ NdisIfAllocateNetLuidIndex(
         return NDIS_STATUS_RESOURCES;
 
     Index->IfType = ifType;
-    Index->NetLuidIndex = (UINT32)Ndis6AllocateInterfaceIndex();
 
     KeAcquireSpinLock(&Ndis6IfLock, &OldIrql);
+    for (Value = 0; Value <= 0x00ffffff; Value++)
+    {
+        if (!Ndis6LuidIndexAllocatedLocked(ifType, Value) &&
+            !Ndis6AdapterUsesNetLuidIndexAtDpcLevel(ifType, Value))
+        {
+            break;
+        }
+    }
+    if (Value > 0x00ffffff)
+    {
+        KeReleaseSpinLock(&Ndis6IfLock, OldIrql);
+        ExFreePoolWithTag(Index, NDIS6_IF_PROVIDER_TAG);
+        return NDIS_STATUS_RESOURCES;
+    }
+    Index->NetLuidIndex = Value;
     InsertTailList(&Ndis6LuidIndices, &Index->Link);
     KeReleaseSpinLock(&Ndis6IfLock, OldIrql);
 
@@ -295,7 +398,9 @@ NdisIfRegisterInterface(
     _Out_ PNET_IFINDEX pfIndex)
 {
     PNDIS6_IF_PROVIDER Provider = (PNDIS6_IF_PROVIDER)NdisProviderHandle;
-    PNDIS6_IF_ENTRY Entry;
+    PNDIS6_IF_ENTRY Entry, NewEntry;
+    PLIST_ENTRY Link;
+    NDIS_STATUS Status = NDIS_STATUS_SUCCESS;
     KIRQL OldIrql;
 
     PAGED_CODE();
@@ -307,30 +412,55 @@ NdisIfRegisterInterface(
 
     if (Provider == NULL ||
         Provider->Signature != NDIS6_IF_PROVIDER_SIGNATURE ||
-        pIfInfo == NULL ||
-        NetLuid.Info.NetLuidIndex == 0)
+        pIfInfo == NULL)
     {
         return NDIS_STATUS_INVALID_PARAMETER;
     }
 
-    if (Ndis6LookupProviderNetLuid(NetLuid, NULL))
-        return NDIS_STATUS_INVALID_PARAMETER;
+    if (Ndis6LookupAdapterNetLuid(NetLuid, NULL))
+        return (NDIS_STATUS)STATUS_DUPLICATE_OBJECTID;
 
-    Entry = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Entry), NDIS6_IF_PROVIDER_TAG);
-    if (Entry == NULL)
+    NewEntry = ExAllocatePoolWithTag(NonPagedPool, sizeof(*NewEntry), NDIS6_IF_PROVIDER_TAG);
+    if (NewEntry == NULL)
         return NDIS_STATUS_RESOURCES;
 
-    Entry->IfIndex = Ndis6AllocateInterfaceIndex();
-    Entry->NetLuid = NetLuid;
-    Entry->Provider = Provider;
-    Entry->ProviderIfContext = ProviderIfContext;
-
     KeAcquireSpinLock(&Ndis6IfLock, &OldIrql);
-    InsertTailList(&Ndis6IfEntries, &Entry->Link);
+    Entry = NULL;
+    for (Link = Ndis6IfEntries.Flink; Link != &Ndis6IfEntries; Link = Link->Flink)
+    {
+        PNDIS6_IF_ENTRY Candidate = CONTAINING_RECORD(Link, NDIS6_IF_ENTRY, Link);
+
+        if (Candidate->NetLuid.Value == NetLuid.Value)
+        {
+            Entry = Candidate;
+            break;
+        }
+    }
+
+    if (Entry != NULL && Entry->Provider != NULL)
+    {
+        Status = (NDIS_STATUS)STATUS_DUPLICATE_OBJECTID;
+    }
+    else
+    {
+        if (Entry == NULL)
+        {
+            Entry = NewEntry;
+            NewEntry = NULL;
+            Entry->IfIndex = Ndis6AllocateInterfaceIndex();
+            Entry->NetLuid = NetLuid;
+            InsertTailList(&Ndis6IfEntries, &Entry->Link);
+        }
+        Entry->Provider = Provider;
+        Entry->ProviderIfContext = ProviderIfContext;
+        *pfIndex = Entry->IfIndex;
+    }
     KeReleaseSpinLock(&Ndis6IfLock, OldIrql);
 
-    *pfIndex = Entry->IfIndex;
-    return NDIS_STATUS_SUCCESS;
+    if (NewEntry != NULL)
+        ExFreePoolWithTag(NewEntry, NDIS6_IF_PROVIDER_TAG);
+
+    return Status;
 }
 
 VOID
@@ -346,11 +476,11 @@ NdisIfDeregisterInterface(
     KeAcquireSpinLock(&Ndis6IfLock, &OldIrql);
     Entry = Ndis6FindIfEntryLocked(ifIndex);
     if (Entry != NULL)
-        RemoveEntryList(&Entry->Link);
+    {
+        Entry->Provider = NULL;
+        Entry->ProviderIfContext = NULL;
+    }
     KeReleaseSpinLock(&Ndis6IfLock, OldIrql);
-
-    if (Entry != NULL)
-        ExFreePoolWithTag(Entry, NDIS6_IF_PROVIDER_TAG);
 }
 
 NDIS_STATUS

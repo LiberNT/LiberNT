@@ -113,6 +113,7 @@ list(APPEND KMTEST_DRV_SOURCE
     example/Example.c
     example/KernelType.c
     hal/HalSystemInfo.c
+    ndis/NdisIfProvider.c
     ndis/NdisRwLock.c
     ndis/NdisProcessorGroup.c
     ndis/NdisLegacyHelpers.c

@@ -843,14 +843,16 @@ NdisIfGetInterfaceIndexFromNetLuid(
     _In_ NET_LUID NetLuid,
     _Out_ PNET_IFINDEX IfIndex)
 {
-    if (IfIndex == NULL || NetLuid.Info.NetLuidIndex == 0)
+    if (IfIndex == NULL)
         return NDIS_STATUS_INTERFACE_NOT_FOUND;
 
-    if (Ndis6LookupProviderNetLuid(NetLuid, IfIndex))
+    if (Ndis6LookupProviderNetLuid(NetLuid, IfIndex) ||
+        Ndis6LookupAdapterNetLuid(NetLuid, IfIndex))
+    {
         return NDIS_STATUS_SUCCESS;
+    }
 
-    *IfIndex = (NET_IFINDEX)NetLuid.Info.NetLuidIndex;
-    return NDIS_STATUS_SUCCESS;
+    return NDIS_STATUS_INTERFACE_NOT_FOUND;
 }
 
 /* ============================================================================

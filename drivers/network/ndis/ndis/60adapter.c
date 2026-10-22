@@ -161,15 +161,20 @@ Ndis6AllocateInterfaceIdentity(
     _Out_ PNDIS6_ADAPTER_EXT Ext)
 {
     LONG Next;
+    NET_IFTYPE IfType;
 
     /* NET_LUID reserves 24 bits for NetLuidIndex and zero is invalid. Keep
      * IfIndex and NetLuidIndex identical so NdisIfGetInterfaceIndexFromNetLuid
      * preserves the adapter identity. */
-    Next = (LONG)Ndis6AllocateInterfaceIndex();
+    IfType = Ndis6ReadInterfaceType(Pdo);
+    do
+    {
+        Next = (LONG)Ndis6AllocateInterfaceIndex();
+    } while (Ndis6IsNetLuidIndexAllocated(IfType, (UINT32)Next));
 
     Ext->IfIndex = (NET_IFINDEX)Next;
     Ext->NetLuid.Value = 0;
-    Ext->NetLuid.Info.IfType = Ndis6ReadInterfaceType(Pdo);
+    Ext->NetLuid.Info.IfType = IfType;
     Ext->NetLuid.Info.NetLuidIndex = (ULONG64)(ULONG)Next;
 }
 
