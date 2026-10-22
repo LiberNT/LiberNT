@@ -31,8 +31,33 @@ typedef ULONG_PTR (*PHALP_EFI_SET_VARIABLE)(PWSTR VariableName,
                                             ULONG_PTR DataSize,
                                             PVOID Data);
 
+#define HALP_EFI_UNSPECIFIED_TIMEZONE 0x07FF
+
+typedef struct _HALP_EFI_TIME
+{
+    USHORT Year;
+    UCHAR Month;
+    UCHAR Day;
+    UCHAR Hour;
+    UCHAR Minute;
+    UCHAR Second;
+    UCHAR Pad1;
+    ULONG Nanosecond;
+    SHORT TimeZone;
+    UCHAR Daylight;
+    UCHAR Pad2;
+} HALP_EFI_TIME, *PHALP_EFI_TIME;
+
+C_ASSERT(sizeof(HALP_EFI_TIME) == 16);
+
+typedef ULONG_PTR (*PHALP_EFI_GET_TIME)(PHALP_EFI_TIME Time,
+                                        PVOID Capabilities);
+
+typedef ULONG_PTR (*PHALP_EFI_SET_TIME)(PHALP_EFI_TIME Time);
+
 static VIRTUAL_EFI_RUNTIME_SERVICES HalpEfiRuntimeServices;
 static KGUARDED_MUTEX HalpEfiRuntimeLock;
+static KSPIN_LOCK HalpEfiTimeLock;
 static BOOLEAN HalpEfiFirmwareResources;
 
 VOID
@@ -44,6 +69,7 @@ HalpInitializeEfiRuntime(
     PLIST_ENTRY Resources;
 
     KeInitializeGuardedMutex(&HalpEfiRuntimeLock);
+    KeInitializeSpinLock(&HalpEfiTimeLock);
 
     if (!LoaderBlock->FirmwareInformation.FirmwareTypeEfi)
         return;
@@ -153,6 +179,78 @@ HalSetEnvironmentVariableEx(
     KeAcquireGuardedMutex(&HalpEfiRuntimeLock);
     Status = SetVariable(VariableName, VendorGuid, Attributes, ValueLength, Value);
     KeReleaseGuardedMutex(&HalpEfiRuntimeLock);
+
+    return HalpEfiStatusToNtStatus(Status);
+}
+
+NTSTATUS
+NTAPI
+HalpEfiQueryTime(
+    _Out_ PTIME_FIELDS TimeFields)
+{
+    PHALP_EFI_GET_TIME GetTime = (PHALP_EFI_GET_TIME)HalpEfiRuntimeServices.GetTime;
+    HALP_EFI_TIME Time;
+    ULONG_PTR Status;
+    KIRQL OldIrql;
+
+    if (!GetTime)
+        return STATUS_NOT_IMPLEMENTED;
+
+    RtlZeroMemory(&Time, sizeof(Time));
+    KeRaiseIrql(HIGH_LEVEL, &OldIrql);
+    KeAcquireSpinLockAtDpcLevel(&HalpEfiTimeLock);
+    Status = GetTime(&Time, NULL);
+    KeReleaseSpinLockFromDpcLevel(&HalpEfiTimeLock);
+    KeLowerIrql(OldIrql);
+
+    if (Status != HALP_EFI_SUCCESS)
+        return HalpEfiStatusToNtStatus(Status);
+
+    if (Time.Year < 1900 || Time.Month < 1 || Time.Month > 12 || Time.Day < 1 || Time.Day > 31 ||
+        Time.Hour > 23 || Time.Minute > 59 || Time.Second > 59)
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    TimeFields->Year = (CSHORT)Time.Year;
+    TimeFields->Month = Time.Month;
+    TimeFields->Day = Time.Day;
+    TimeFields->Hour = Time.Hour;
+    TimeFields->Minute = Time.Minute;
+    TimeFields->Second = Time.Second;
+    TimeFields->Milliseconds = (CSHORT)(Time.Nanosecond / 1000000);
+    TimeFields->Weekday = 0;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+HalpEfiSetTime(
+    _In_ PTIME_FIELDS TimeFields)
+{
+    PHALP_EFI_SET_TIME SetTime = (PHALP_EFI_SET_TIME)HalpEfiRuntimeServices.SetTime;
+    HALP_EFI_TIME Time;
+    ULONG_PTR Status;
+    KIRQL OldIrql;
+
+    if (!SetTime)
+        return STATUS_NOT_IMPLEMENTED;
+
+    RtlZeroMemory(&Time, sizeof(Time));
+    Time.Year = (USHORT)TimeFields->Year;
+    Time.Month = (UCHAR)TimeFields->Month;
+    Time.Day = (UCHAR)TimeFields->Day;
+    Time.Hour = (UCHAR)TimeFields->Hour;
+    Time.Minute = (UCHAR)TimeFields->Minute;
+    Time.Second = (UCHAR)TimeFields->Second;
+    Time.Nanosecond = (ULONG)TimeFields->Milliseconds * 1000000;
+    Time.TimeZone = HALP_EFI_UNSPECIFIED_TIMEZONE;
+
+    KeRaiseIrql(HIGH_LEVEL, &OldIrql);
+    KeAcquireSpinLockAtDpcLevel(&HalpEfiTimeLock);
+    Status = SetTime(&Time);
+    KeReleaseSpinLockFromDpcLevel(&HalpEfiTimeLock);
+    KeLowerIrql(OldIrql);
 
     return HalpEfiStatusToNtStatus(Status);
 }

@@ -15,3 +15,13 @@ HalpInitializeEfiRuntime(
 BOOLEAN
 NTAPI
 HalpEfiHasFirmwareResources(VOID);
+
+NTSTATUS
+NTAPI
+HalpEfiQueryTime(
+    _Out_ PTIME_FIELDS TimeFields);
+
+NTSTATUS
+NTAPI
+HalpEfiSetTime(
+    _In_ PTIME_FIELDS TimeFields);

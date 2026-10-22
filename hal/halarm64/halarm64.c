@@ -6009,6 +6009,9 @@ HalQueryRealTimeClock(
     ULONG Seconds;
     LARGE_INTEGER SystemTime;
 
+    if (NT_SUCCESS(HalpEfiQueryTime(TimeFields)))
+        return TRUE;
+
     if (HalpArm64HasQemuPl031())
     {
         Pl031Va = MmMapIoSpace(Pl031Phys, PAGE_SIZE, MmNonCached);
@@ -6193,7 +6196,9 @@ NTAPI
 HalSetRealTimeClock(
     _In_ PTIME_FIELDS TimeFields)
 {
-    UNREFERENCED_PARAMETER(TimeFields);
+    if (NT_SUCCESS(HalpEfiSetTime(TimeFields)))
+        return TRUE;
+
     UNIMPLEMENTED_STUB();
     return FALSE;
 }
