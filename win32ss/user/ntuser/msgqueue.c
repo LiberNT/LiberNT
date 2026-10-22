@@ -447,6 +447,8 @@ MsqWakeQueue(PTHREADINFO pti, DWORD MessageBits, BOOL KeyEvent)
    {
       ERR("This Message Queue is in Destroy!\n");
    }
+   if (MessageBits & QS_POSTMESSAGE)
+      MessageBits |= QS_ALLPOSTMESSAGE;
    UserDomainLockExclusive(DLT_QUEUE);
    pti->pcti->fsWakeBits |= MessageBits;
    pti->pcti->fsChangeBits |= MessageBits;
@@ -496,7 +498,7 @@ ClearMsgBitsMask(PTHREADINFO pti, UINT MessageBits)
    }
    if (MessageBits & QS_POSTMESSAGE)
    {
-      if (--pti->nCntsQBits[QSRosPostMessage] == 0) ClrMask |= QS_POSTMESSAGE;
+      if (--pti->nCntsQBits[QSRosPostMessage] == 0) ClrMask |= QS_POSTMESSAGE | QS_ALLPOSTMESSAGE;
    }
    if (MessageBits & QS_TIMER) // ReactOS hard coded.
    {  // Handle timer bits here.
