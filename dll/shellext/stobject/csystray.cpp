@@ -16,6 +16,7 @@
 
 SysTrayIconHandlers_t g_IconHandlers [] = {
     { VOLUME_SERVICE_FLAG, Volume_Init, Volume_Shutdown, Volume_Update, Volume_Message },
+    { BLUETOOTH_SERVICE_FLAG, Bluetooth_Init, Bluetooth_Shutdown, Bluetooth_Update, Bluetooth_Message },
     { HOTPLUG_SERVICE_FLAG, Hotplug_Init, Hotplug_Shutdown, Hotplug_Update, Hotplug_Message },
     { POWER_SERVICE_FLAG, Power_Init, Power_Shutdown, Power_Update, Power_Message }
 };
@@ -61,6 +62,7 @@ VOID CSysTray::GetServicesEnabled()
 
         RegCloseKey(hKey);
     }
+    this->dwServicesEnabled |= BLUETOOTH_SERVICE_FLAG;
 }
 
 VOID CSysTray::EnableService(DWORD dwServiceFlag, BOOL bEnable)

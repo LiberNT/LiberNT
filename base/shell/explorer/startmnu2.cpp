@@ -186,6 +186,8 @@ VOID StartMenu2_GetFlyoutPalette(OUT SM2_FLYOUT_PALETTE *pPal)
         pPal->PanelBg = crTaskbar;
     }
     pPal->PanelText = pBase->LeftText;
+    if (bDark)
+        pPal->PanelBg = SM2Mix(pPal->PanelBg, RGB(0, 0, 0), 60);
     pPal->DimText = SM2Mix(pBase->LeftText, pPal->PanelBg, 28);
     pPal->HotFill = pBase->HotFill;
     pPal->HotBorder = pBase->HotBorder;

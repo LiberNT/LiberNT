@@ -21,14 +21,14 @@
 
 #include "precomp.h"
 #include <commoncontrols.h>
+#include <shellframe.h>
 
 static const WCHAR szTrayNotifyWndClass[] = L"TrayNotifyWnd";
 
 #define TRAY_NOTIFY_WND_SPACING_X   ShellScaleForDpi(1)
 #define TRAY_NOTIFY_WND_SPACING_Y   ShellScaleForDpi(1)
 #define TRAY_CHEVRON_WIDTH          ShellScaleForDpi(32)
-#define TRAY_QS_PAD                 ShellScaleForDpi(4)
-#define TRAY_QS_SLOT                ShellScaleForDpi(24)
+#define TRAY_QS_WIDTH               ShellScaleForDpi(32)
 
 static const WCHAR szTrayChevronClass[] = L"TrayChevronButton";
 static const WCHAR szTrayQuickSettingsClass[] = L"TrayQuickSettingsButton";
@@ -211,18 +211,19 @@ public:
 class CTrayQuickSettingsButton :
     public CWindowImpl<CTrayQuickSettingsButton, CWindow, CControlWinTraits>
 {
-    HWND m_hwndPager;
-    TRAYICONLIST m_List;
     BOOL m_bHot;
     BOOL m_bPressed;
     BOOL m_bTracking;
+    BOOL m_bFrameStarted;
     CTooltips m_Tooltip;
+    WCHAR m_szTip[64];
 
     static VOID Paint(HWND hWnd, HDC hdc, const RECT *prc, PVOID pContext)
     {
         CTrayQuickSettingsButton *pThis = (CTrayQuickSettingsButton *)pContext;
-        INT iState = 0, cx = 0, cy = 0;
+        INT iState = 0, cx = GetSystemMetrics(SM_CXSMICON);
         RECT rcPill;
+        HICON hIcon;
 
         if (pThis->m_bPressed)
             iState = TRAY_PILL_PRESSED;
@@ -232,124 +233,43 @@ class CTrayQuickSettingsButton :
             iState = TRAY_PILL_HOT;
         ShellGetTrayPillRect(prc, &rcPill);
         ShellDrawTrayPill(hdc, &rcPill, iState);
-
-        if (!pThis->m_List.himl || !ImageList_GetIconSize(pThis->m_List.himl, &cx, &cy))
+        if (!pThis->m_bFrameStarted)
             return;
-        for (UINT i = 0; i < pThis->m_List.cItems; i++)
-        {
-            RECT rcSlot = pThis->SlotRect(i, &rcPill);
-            if (pThis->m_List.Items[i].iImage < 0)
-                continue;
-            ImageList_Draw(pThis->m_List.himl, pThis->m_List.Items[i].iImage, hdc,
-                           rcSlot.left + (rcSlot.right - rcSlot.left - cx) / 2,
-                           rcSlot.top + (rcSlot.bottom - rcSlot.top - cy) / 2,
-                           ILD_TRANSPARENT);
-        }
-    }
-
-    RECT SlotRect(UINT i, const RECT *prcPill) const
-    {
-        RECT rc = *prcPill;
-        rc.left = TRAY_QS_PAD + (INT)i * TRAY_QS_SLOT;
-        rc.right = rc.left + TRAY_QS_SLOT;
-        return rc;
-    }
-
-    INT SlotFromPoint(POINT pt) const
-    {
-        INT i = (pt.x - TRAY_QS_PAD) / TRAY_QS_SLOT;
-
-        if (!m_List.cItems)
-            return -1;
-        if (pt.x < TRAY_QS_PAD || i < 0)
-            return 0;
-        return min(i, (INT)m_List.cItems - 1);
-    }
-
-    VOID SendToSlot(INT i, UINT uMsg)
-    {
-        TRAYICONEVENT Event;
-
-        if (i < 0 || i >= (INT)m_List.cItems)
+        hIcon = ShellFrame::CreateGlyphIcon(L"toggle_multiple_20_regular", cx,
+                                            ShellTaskbarIsLight() ? RGB(25, 25, 25) : RGB(255, 255, 255));
+        if (!hIcon)
             return;
-        Event.hWnd = m_List.Items[i].hWnd;
-        Event.uID = m_List.Items[i].uID;
-        Event.uMsg = uMsg;
-        ::SendMessageW(m_hwndPager, TNWM_TRAYICONEVENT, 0, (LPARAM)&Event);
+        DrawIconEx(hdc, rcPill.left + (rcPill.right - rcPill.left - cx) / 2,
+                   rcPill.top + (rcPill.bottom - rcPill.top - cx) / 2, hIcon, cx, cx, 0, NULL, DI_NORMAL);
+        DestroyIcon(hIcon);
     }
 
 public:
-    CTrayQuickSettingsButton() : m_hwndPager(NULL), m_bHot(FALSE), m_bPressed(FALSE), m_bTracking(FALSE)
+    CTrayQuickSettingsButton() : m_bHot(FALSE), m_bPressed(FALSE), m_bTracking(FALSE), m_bFrameStarted(FALSE)
     {
-        ZeroMemory(&m_List, sizeof(m_List));
+        m_szTip[0] = UNICODE_NULL;
     }
 
     DECLARE_WND_CLASS_EX(szTrayQuickSettingsClass, CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS, COLOR_3DFACE)
 
-    HWND DoCreate(HWND hwndParent, HWND hwndPager)
+    HWND DoCreate(HWND hwndParent)
     {
-        m_hwndPager = hwndPager;
         Create(hwndParent, NULL, NULL, WS_CHILD | WS_CLIPSIBLINGS);
-        if (m_hWnd)
-            m_Tooltip.Create(m_hWnd, WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP);
-        return m_hWnd;
-    }
-
-    UINT GetCount() const
-    {
-        return m_List.cItems;
-    }
-
-    INT GetWidth() const
-    {
-        return m_List.cItems ? 2 * TRAY_QS_PAD + (INT)m_List.cItems * TRAY_QS_SLOT : 0;
-    }
-
-    VOID Refresh()
-    {
-        RECT rcClient, rcPill;
-
-        ZeroMemory(&m_List, sizeof(m_List));
-        if (m_hwndPager)
-            ::SendMessageW(m_hwndPager, TNWM_GETTRAYICONS, TRAYICONS_QUICKSETTINGS, (LPARAM)&m_List);
         if (!m_hWnd)
-            return;
+            return NULL;
 
-        while (m_Tooltip.m_hWnd && m_Tooltip.GetToolCount() > 0)
-        {
-            TTTOOLINFOW ti = { TTTOOLINFOW_V1_SIZE };
-            if (!m_Tooltip.EnumTools(&ti))
-                break;
-            m_Tooltip.DelTool(ti.hwnd, (UINT)ti.uId);
-        }
-        GetClientRect(&rcClient);
-        ShellGetTrayPillRect(&rcClient, &rcPill);
-        for (UINT i = 0; m_Tooltip.m_hWnd && i < m_List.cItems; i++)
-        {
-            TTTOOLINFOW ti = { TTTOOLINFOW_V1_SIZE };
-            ti.uFlags = TTF_SUBCLASS;
-            ti.hwnd = m_hWnd;
-            ti.uId = i + 1;
-            ti.rect = SlotRect(i, &rcPill);
-            if (i == 0)
-                ti.rect.left = 0;
-            if (i + 1 == m_List.cItems)
-                ti.rect.right = rcClient.right;
-            ti.lpszText = m_List.Items[i].szTip;
-            m_Tooltip.AddTool(&ti);
-        }
-        Invalidate(FALSE);
-    }
-
-    BOOL GetAnchor(POINT *ppt)
-    {
-        RECT rc;
-
-        if (!m_hWnd || !IsWindowVisible() || !GetWindowRect(&rc))
-            return FALSE;
-        ppt->x = (rc.left + rc.right) / 2;
-        ppt->y = (rc.top + rc.bottom) / 2;
-        return TRUE;
+        m_bFrameStarted = ShellFrame::Startup();
+        if (!LoadStringW(hExplorerInstance, IDS_TRAYQUICKSETTINGS_TOOLTIP, m_szTip, _countof(m_szTip)))
+            StringCchCopyW(m_szTip, _countof(m_szTip), L"Quick settings");
+        m_Tooltip.Create(m_hWnd, WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP);
+        TTTOOLINFOW ti = { 0 };
+        ti.cbSize = TTTOOLINFOW_V1_SIZE;
+        ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+        ti.hwnd = m_hWnd;
+        ti.uId = reinterpret_cast<UINT_PTR>(m_hWnd);
+        ti.lpszText = m_szTip;
+        m_Tooltip.AddTool(&ti);
+        return m_hWnd;
     }
 
     LRESULT OnEraseBackground(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
@@ -421,17 +341,6 @@ public:
         return 0;
     }
 
-    LRESULT OnRButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
-    {
-        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-        INT i = SlotFromPoint(pt);
-
-        SendToSlot(i, WM_RBUTTONDOWN);
-        SendToSlot(i, WM_RBUTTONUP);
-        SendToSlot(i, WM_CONTEXTMENU);
-        return 0;
-    }
-
     LRESULT OnCaptureChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
         if (m_bPressed && (HWND)lParam != m_hWnd)
@@ -450,7 +359,6 @@ public:
         MESSAGE_HANDLER(WM_MOUSELEAVE, OnMouseLeave)
         MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLButtonDown)
         MESSAGE_HANDLER(WM_LBUTTONUP, OnLButtonUp)
-        MESSAGE_HANDLER(WM_RBUTTONUP, OnRButtonUp)
         MESSAGE_HANDLER(WM_CAPTURECHANGED, OnCaptureChanged)
     END_MSG_MAP()
 };
@@ -570,7 +478,7 @@ public:
         m_hwndShowDesktop = m_ShowDesktopButton.m_hWnd;
 
         m_Chevron.DoCreate(m_hWnd, m_hwndPager);
-        m_QuickSettings.DoCreate(m_hWnd, m_hwndPager);
+        m_QuickSettings.DoCreate(m_hWnd);
 
         return TRUE;
     }
@@ -580,7 +488,7 @@ public:
         TRAYICONLIST List;
 
         ZeroMemory(&List, sizeof(List));
-        ::SendMessage(m_hwndPager, TNWM_GETTRAYICONS, TRAYICONS_OVERFLOW, (LPARAM)&List);
+        ::SendMessage(m_hwndPager, TNWM_GETTRAYICONS, 0, (LPARAM)&List);
         return List.cItems;
     }
 
@@ -599,7 +507,6 @@ public:
         ::SendMessage(m_hwndPager, TNWM_GETMINIMUMSIZE, TNWM_MINSIZE_MODERN, (LPARAM)&traySize);
         trayNotifySize = traySize;
 
-        m_QuickSettings.Refresh();
         m_bChevron = (GetOverflowCount() != 0);
 
         m_ShowDesktopButton.m_bModern = TRUE;
@@ -607,7 +514,7 @@ public:
         trayShowDesktopSize.cy = pSize->cy;
 
         pSize->cx = (m_bChevron ? TRAY_CHEVRON_WIDTH : 0) + trayNotifySize.cx +
-                    m_QuickSettings.GetWidth() + trayClockMinSize.cx + trayShowDesktopSize.cx;
+                    TRAY_QS_WIDTH + trayClockMinSize.cx + trayShowDesktopSize.cx;
         return TRUE;
     }
 
@@ -616,7 +523,6 @@ public:
         CONST UINT swpFlags = SWP_NOCOPYBITS | SWP_NOZORDER | SWP_NOACTIVATE;
         INT cy = prcClient->bottom - prcClient->top;
         INT x = prcClient->right;
-        INT cxQuickSettings = m_QuickSettings.GetWidth();
 
         if (g_TaskbarSettings.bShowDesktopButton)
         {
@@ -630,9 +536,8 @@ public:
             ::SetWindowPos(m_hwndClock, NULL, x, prcClient->top, trayClockMinSize.cx, cy, swpFlags);
         }
 
-        x -= cxQuickSettings;
-        ::SetWindowPos(m_QuickSettings, NULL, x, prcClient->top, cxQuickSettings, cy,
-                       swpFlags | (cxQuickSettings ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+        x -= TRAY_QS_WIDTH;
+        ::SetWindowPos(m_QuickSettings, NULL, x, prcClient->top, TRAY_QS_WIDTH, cy, swpFlags | SWP_SHOWWINDOW);
 
         x -= trayNotifySize.cx;
         ::SetWindowPos(m_hwndPager, NULL, x, prcClient->top, trayNotifySize.cx, cy, swpFlags);
@@ -916,8 +821,6 @@ public:
 
         if (!ppt)
             return FALSE;
-        if ((INT)wParam != TRAYICON_APP && m_QuickSettings.GetAnchor(ppt))
-            return TRUE;
         if (m_bChevron && m_Chevron.IsWindowVisible() && m_Chevron.GetWindowRect(&rc))
         {
             ppt->x = (rc.left + rc.right) / 2;
@@ -934,7 +837,6 @@ public:
     {
         if (!m_bModern)
             return 0;
-        m_QuickSettings.Refresh();
         m_Chevron.Invalidate(FALSE);
         TrayOverflow_Refresh();
         return 0;

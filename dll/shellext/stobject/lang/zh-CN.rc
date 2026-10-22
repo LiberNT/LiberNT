@@ -52,4 +52,7 @@ BEGIN
     IDS_KEYS_STICKY "粘滞键"
     IDS_KEYS_MOUSE "鼠标键"
     IDS_KEYS_FILTER "筛选键"
+    IDS_BT_DEVICES "Bluetooth Devices"
+    IDS_BT_SHOW "Show Bluetooth &Devices"
+    IDS_BT_SETTINGS "Open &Settings"
 END

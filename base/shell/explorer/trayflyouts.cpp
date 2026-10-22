@@ -3,7 +3,6 @@
 #include <commctrl.h>
 #include <windowsx.h>
 #include <reactos/dwmframe.h>
-#include <bluetoothapis.h>
 #include <shellframe.h>
 #include <winioctl.h>
 #include <ntddvdeo.h>
@@ -3441,6 +3440,7 @@ VOID TrayFlyouts_Destroy(VOID)
 
 #include <mmsystem.h>
 #include <initguid.h>
+#include <bluetoothapis.h>
 #include <mmdeviceapi.h>
 #include <audiopolicy.h>
 #include <endpointvolume.h>
@@ -6246,6 +6246,8 @@ VOID TrayMixer_Open(const RECT *prcAnchor)
 #include <iphlpapi.h>
 #include <wlanapi.h>
 #include <commctrl.h>
+#include <setupapi.h>
+#include <cfgmgr32.h>
 
 typedef DWORD (WINAPI *PFN_WLANOPENHANDLE)(DWORD, PVOID, PDWORD, PHANDLE);
 typedef DWORD (WINAPI *PFN_WLANCLOSEHANDLE)(HANDLE, PVOID);
@@ -6641,6 +6643,35 @@ static BOOL g_bTfyNetFromSettings = FALSE;
 
 static VOID
 TfyFillRound(HDC hdc, const RECT *prc, int radius, COLORREF crFill, COLORREF crBack);
+
+static VOID
+TfyDrawSwitch(HDC hdc, const RECT *prc, BOOL bOn, BOOL bHot, BOOL bEnabled, const SM2_FLYOUT_PALETTE *pPal)
+{
+    int h = prc->bottom - prc->top;
+    RECT rcKnob;
+    COLORREF crTrack;
+
+    if (bOn && bEnabled)
+    {
+        crTrack = bHot ? TfyMix(pPal->AccentBg, pPal->PanelBg, 40) : pPal->AccentBg;
+        TfyFillRound(hdc, prc, h / 2, crTrack, pPal->PanelBg);
+        SetRect(&rcKnob, prc->right - h + ShellScaleForDpi(4), prc->top + ShellScaleForDpi(4),
+                prc->right - ShellScaleForDpi(4), prc->bottom - ShellScaleForDpi(4));
+        TfyFillRound(hdc, &rcKnob, (rcKnob.bottom - rcKnob.top) / 2, pPal->AccentText, crTrack);
+        return;
+    }
+
+    RECT rcInner = *prc;
+    COLORREF crEdge = bEnabled ? TfyMix(pPal->PanelBg, pPal->PanelText, 170) : TfyMix(pPal->PanelBg, pPal->DimText, 120);
+
+    crTrack = bHot && bEnabled ? TfyMix(pPal->PanelBg, pPal->HotFill, 130) : pPal->PanelBg;
+    InflateRect(&rcInner, -1, -1);
+    TfyFillRound(hdc, prc, h / 2, crEdge, pPal->PanelBg);
+    TfyFillRound(hdc, &rcInner, (rcInner.bottom - rcInner.top) / 2, crTrack, crEdge);
+    SetRect(&rcKnob, prc->left + ShellScaleForDpi(5), prc->top + ShellScaleForDpi(5),
+            prc->left + h - ShellScaleForDpi(5), prc->bottom - ShellScaleForDpi(5));
+    TfyFillRound(hdc, &rcKnob, (rcKnob.bottom - rcKnob.top) / 2, crEdge, crTrack);
+}
 
 class CTrayNetworkWnd :
     public CWindowImpl<CTrayNetworkWnd, CWindow, CTrayFlyoutTraits>,
@@ -7111,27 +7142,23 @@ public:
 
     VOID Layout()
     {
-        m_bWifiPage = !m_bPane && m_nIfaces > 0;
+        m_bWifiPage = !m_bPane;
         if (m_bWifiPage)
         {
             LayoutWifiPage();
             return;
         }
 
-        int y = m_bPane ? Sc(84) : Sc(10) + Sc(28);
-        int yRefresh = m_bPane ? Sc(34) : Sc(10);
-        int cyPane = 0;
+        int y = Sc(84);
+        int yRefresh = Sc(34);
+        int cyPane;
+        POINT ptPane;
 
-        m_size.cx = m_bPane ? Sc(TFY_PANE_WIDTH) : Sc(256);
-        if (m_bPane)
-        {
-            POINT ptPane;
-
-            TfyPanePosition(&m_rcAnchor, &m_size, &ptPane);
-            cyPane = m_size.cy;
-            m_nVisRows = max(TFY_NET_VISROWS, (cyPane - Sc(320)) / Sc(40));
-            SetRect(&m_rcBack, Sc(8), Sc(27), Sc(8) + Sc(36), Sc(27) + Sc(36));
-        }
+        m_size.cx = Sc(TFY_PANE_WIDTH);
+        TfyPanePosition(&m_rcAnchor, &m_size, &ptPane);
+        cyPane = m_size.cy;
+        m_nVisRows = max(TFY_NET_VISROWS, (cyPane - Sc(320)) / Sc(40));
+        SetRect(&m_rcBack, Sc(8), Sc(27), Sc(8) + Sc(36), Sc(27) + Sc(36));
         SetRect(&m_rcRefresh, m_size.cx - Sc(12) - Sc(22), yRefresh, m_size.cx - Sc(12), yRefresh + Sc(22));
         if (m_szBanner[0] || (m_nIfaces == 0 && !m_Rows.GetCount()))
             y += Sc(20);
@@ -7216,15 +7243,9 @@ public:
         if ((nWlanTotal || m_bWlanLoading) && nWlanTotal < m_nVisRows)
             y += (m_nVisRows - nWlanTotal) * Sc(40);
         SetRect(&m_rcWlanArea, Sc(8), nWlanStart, m_size.cx - Sc(8), y);
-        y += Sc(8);
-        SetRect(&m_rcLink, Sc(8), y, m_size.cx - Sc(8), y + Sc(26));
-        y += Sc(26) + Sc(10);
-        m_size.cy = y;
-        if (m_bPane)
-        {
-            SetRect(&m_rcLink, Sc(20), max(y - Sc(36), cyPane - Sc(58)), m_size.cx - Sc(20), max(y - Sc(10), cyPane - Sc(32)));
-            m_size.cy = max(y, cyPane);
-        }
+        y += Sc(8) + Sc(26) + Sc(10);
+        SetRect(&m_rcLink, Sc(20), max(y - Sc(36), cyPane - Sc(58)), m_size.cx - Sc(20), max(y - Sc(10), cyPane - Sc(32)));
+        m_size.cy = max(y, cyPane);
         if (m_hwndEdit && m_iSel >= 0 && m_bPassMode)
         {
             TFYNETROW &row = m_Rows[m_iSel];
@@ -7593,32 +7614,6 @@ public:
         DrawTextW(hdc, pszLabel, -1, &rcLabel, DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
     }
 
-    VOID DrawSwitch(HDC hdc, const RECT *prc, BOOL bOn, BOOL bHot, BOOL bEnabled)
-    {
-        int h = prc->bottom - prc->top;
-        RECT rcKnob;
-        COLORREF crTrack;
-
-        if (bOn && bEnabled)
-        {
-            crTrack = bHot ? TfyMix(m_Pal.AccentBg, m_Pal.PanelBg, 40) : m_Pal.AccentBg;
-            TfyFillRound(hdc, prc, h / 2, crTrack, m_Pal.PanelBg);
-            SetRect(&rcKnob, prc->right - h + Sc(4), prc->top + Sc(4), prc->right - Sc(4), prc->bottom - Sc(4));
-            TfyFillRound(hdc, &rcKnob, (rcKnob.bottom - rcKnob.top) / 2, m_Pal.AccentText, crTrack);
-            return;
-        }
-
-        RECT rcInner = *prc;
-        COLORREF crEdge = bEnabled ? TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 170) : TfyMix(m_Pal.PanelBg, m_Pal.DimText, 120);
-
-        crTrack = bHot && bEnabled ? TfyMix(m_Pal.PanelBg, m_Pal.HotFill, 130) : m_Pal.PanelBg;
-        InflateRect(&rcInner, -1, -1);
-        TfyFillRound(hdc, prc, h / 2, crEdge, m_Pal.PanelBg);
-        TfyFillRound(hdc, &rcInner, (rcInner.bottom - rcInner.top) / 2, crTrack, crEdge);
-        SetRect(&rcKnob, prc->left + Sc(5), prc->top + Sc(5), prc->left + h - Sc(5), prc->bottom - Sc(5));
-        TfyFillRound(hdc, &rcKnob, (rcKnob.bottom - rcKnob.top) / 2, crEdge, crTrack);
-    }
-
     VOID DrawInfoButton(HDC hdc, const RECT *prc, BOOL bHot, COLORREF crBack)
     {
         int cx = (prc->left + prc->right) / 2;
@@ -7675,7 +7670,8 @@ public:
         hFontOld = SelectObject(hdc, m_hFontHeader);
         SetTextColor(hdc, m_Pal.PanelText);
         DrawTextW(hdc, L"Wi-Fi", -1, &rcTitle, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
-        DrawSwitch(hdc, &m_rcWifi, m_bWifiOn && !m_bAirplane, m_iHot == TFY_NETHIT_WIFI, !m_bAirplane);
+        TfyDrawSwitch(hdc, &m_rcWifi, m_bWifiOn && !m_bAirplane, m_iHot == TFY_NETHIT_WIFI,
+                      !m_bAirplane && m_nIfaces > 0, &m_Pal);
 
         if (m_szBanner[0])
         {
@@ -7784,6 +7780,13 @@ public:
         {
             DrawLoadingSpinner(hdc);
         }
+        else if (m_nIfaces == 0)
+        {
+            SelectObject(hdc, m_hFontSmall);
+            SetTextColor(hdc, m_Pal.DimText);
+            DrawTextW(hdc, L"No Wi-Fi adapter was found", -1, &m_rcWlanArea,
+                      DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
+        }
         else if (m_bWifiOn && !m_bAirplane)
         {
             BOOL bAny = FALSE;
@@ -7814,9 +7817,12 @@ public:
             SelectObject(hdc, m_hFontRow);
             SetTextColor(hdc, m_Pal.PanelText);
             DrawTextW(hdc, L"More Wi-Fi settings", -1, &rcLinkText, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
-            if (m_iHot == TFY_NETHIT_REFRESH)
-                TfyFillRound(hdc, &m_rcRefresh, Sc(4), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 24), m_Pal.PanelBg);
-            TfyDrawFluent(hdc, &rcRefreshIcon, IDI_FLU_REFRESH);
+            if (m_nIfaces > 0)
+            {
+                if (m_iHot == TFY_NETHIT_REFRESH)
+                    TfyFillRound(hdc, &m_rcRefresh, Sc(4), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 24), m_Pal.PanelBg);
+                TfyDrawFluent(hdc, &rcRefreshIcon, IDI_FLU_REFRESH);
+            }
         }
         SelectObject(hdc, hFontOld);
     }
@@ -7896,23 +7902,19 @@ public:
             EndPaint(&ps);
             return 0;
         }
-        HGDIOBJ hFontOld = SelectObject(hdcMem, m_bPane ? m_hFontPaneTitle : m_hFontHeader);
-        RECT rcTitle = { Sc(12), Sc(8), m_rcRefresh.left - Sc(6), Sc(8) + Sc(26) };
-        if (m_bPane)
+        HGDIOBJ hFontOld = SelectObject(hdcMem, m_hFontPaneTitle);
+        RECT rcTitle = { m_bBack ? m_rcBack.right + Sc(8) : Sc(26), Sc(22), m_rcRefresh.left - Sc(6), Sc(68) };
+        if (m_bBack)
         {
-            SetRect(&rcTitle, m_bBack ? m_rcBack.right + Sc(8) : Sc(26), Sc(22), m_rcRefresh.left - Sc(6), Sc(68));
-            if (m_bBack)
-            {
-                RECT rcArrow = { m_rcBack.left + Sc(8), m_rcBack.top + Sc(8), m_rcBack.right - Sc(8), m_rcBack.bottom - Sc(8) };
+            RECT rcArrow = { m_rcBack.left + Sc(8), m_rcBack.top + Sc(8), m_rcBack.right - Sc(8), m_rcBack.bottom - Sc(8) };
 
-                if (m_iHot == TFY_NETHIT_BACK)
-                {
-                    HBRUSH hbrBack = CreateSolidBrush(TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 24));
-                    FillRect(hdcMem, &m_rcBack, hbrBack);
-                    DeleteObject(hbrBack);
-                }
-                TfyDrawFluent(hdcMem, &rcArrow, IDI_FLU_ARROWLEFT);
+            if (m_iHot == TFY_NETHIT_BACK)
+            {
+                HBRUSH hbrBack = CreateSolidBrush(TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 24));
+                FillRect(hdcMem, &m_rcBack, hbrBack);
+                DeleteObject(hbrBack);
             }
+            TfyDrawFluent(hdcMem, &rcArrow, IDI_FLU_ARROWLEFT);
         }
         SetTextColor(hdcMem, m_Pal.PanelText);
         DrawTextW(hdcMem, L"Networks", -1, &rcTitle,
@@ -7931,9 +7933,7 @@ public:
         }
         if (m_szBanner[0])
         {
-            RECT rcBanner = { Sc(12), Sc(10) + Sc(26), rc.right - Sc(12), Sc(10) + Sc(26) + Sc(20) };
-            if (m_bPane)
-                SetRect(&rcBanner, Sc(26), Sc(80), rc.right - Sc(26), Sc(100));
+            RECT rcBanner = { Sc(26), Sc(80), rc.right - Sc(26), Sc(100) };
             SelectObject(hdcMem, m_hFontSmall);
             SetTextColor(hdcMem, m_Pal.DimText);
             DrawTextW(hdcMem, m_szBanner, -1, &rcBanner,
@@ -8070,9 +8070,7 @@ public:
         }
         else if (m_Rows.GetCount() == 0 && !m_szBanner[0])
         {
-            RECT rcNone = { Sc(12), Sc(40), rc.right - Sc(12), Sc(70) };
-            if (m_bPane)
-                SetRect(&rcNone, Sc(26), Sc(84), rc.right - Sc(26), Sc(114));
+            RECT rcNone = { Sc(26), Sc(84), rc.right - Sc(26), Sc(114) };
             SelectObject(hdcMem, m_hFontSmall);
             SetTextColor(hdcMem, m_Pal.DimText);
             DrawTextW(hdcMem, L"No networks found", -1, &rcNone,
@@ -8090,7 +8088,6 @@ public:
         SetTextColor(hdcMem, m_iHot == TFY_NETHIT_LINK ? m_Pal.HotBorder : m_Pal.DimText);
         DrawTextW(hdcMem, L"Network & internet settings", -1, &rcLinkText,
                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
-        if (m_bPane)
         {
             RECT rcEdge = { 0, 0, 1, rc.bottom };
             HBRUSH hbrEdge = CreateSolidBrush(m_Pal.Border);
@@ -8537,8 +8534,13 @@ VOID CTrayNetworkWnd::FadeOut()
     HideEdit();
 }
 
-VOID TrayNetwork_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor)
+static BOOL TfyQsWlanQuery(BOOL *pbHasWlan, BOOL *pbRadioOn);
+
+static VOID
+TfyNetworkToggle(HWND hwndOwner, const RECT *prcAnchor, BOOL bWiredSettings)
 {
+    BOOL bHasWlan, bRadioOn;
+
     if (GetTickCount64() - g_NetDismissTick < TFY_REOPEN_GUARD_MS)
         return;
     if (g_pTrayNetwork && g_pTrayNetwork->IsWindow())
@@ -8552,6 +8554,15 @@ VOID TrayNetwork_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor)
         ::DestroyWindow(g_pTrayNetwork->m_hWnd);
         g_pTrayNetwork = NULL;
     }
+    if (bWiredSettings && IsThemeActive())
+    {
+        TfyQsWlanQuery(&bHasWlan, &bRadioOn);
+        if (!bHasWlan)
+        {
+            ShellExecuteW(NULL, NULL, L"ms-settings:network-ethernet", NULL, NULL, SW_SHOWNORMAL);
+            return;
+        }
+    }
     CTrayNetworkWnd *pNetwork = new CTrayNetworkWnd();
     if (!pNetwork)
         return;
@@ -8564,36 +8575,57 @@ VOID TrayNetwork_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor)
     pNetwork->Toggle(hwndOwner, prcAnchor);
 }
 
-typedef BOOLEAN (CALLBACK *TFY_PWRSCHEMESENUMPROC)(UINT, DWORD, LPWSTR, DWORD, LPWSTR, PVOID, LPARAM);
-typedef BOOLEAN (WINAPI *PFN_ENUMPWRSCHEMES)(TFY_PWRSCHEMESENUMPROC, LPARAM);
-typedef BOOLEAN (WINAPI *PFN_GETACTIVEPWRSCHEME)(PUINT);
-typedef BOOLEAN (WINAPI *PFN_SETACTIVEPWRSCHEME)(UINT, PVOID, PVOID);
+VOID TrayNetwork_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor)
+{
+    TfyNetworkToggle(hwndOwner, prcAnchor, TRUE);
+}
+
+typedef DWORD (WINAPI *PFN_POWERGETACTIVESCHEME)(HKEY, GUID **);
+typedef DWORD (WINAPI *PFN_POWERSETACTIVESCHEME)(HKEY, const GUID *);
 
 static HMODULE g_hPowrProf = NULL;
-static PFN_ENUMPWRSCHEMES g_pfnEnumPwrSchemes = NULL;
-static PFN_GETACTIVEPWRSCHEME g_pfnGetActivePwrScheme = NULL;
-static PFN_SETACTIVEPWRSCHEME g_pfnSetActivePwrScheme = NULL;
+static PFN_POWERGETACTIVESCHEME g_pfnPowerGetActiveScheme = NULL;
+static PFN_POWERSETACTIVESCHEME g_pfnPowerSetActiveScheme = NULL;
+
+static const struct
+{
+    GUID Scheme;
+    LPCWSTR pszName;
+} g_TfyPowerModes[] =
+{
+    { { 0xA1841308, 0x3541, 0x4FAB, { 0xBC, 0x81, 0xF7, 0x15, 0x56, 0xF2, 0x0B, 0x4A } }, L"Best power efficiency" },
+    { { 0x381B4222, 0xF694, 0x41F0, { 0x96, 0x85, 0xFF, 0x5B, 0xB2, 0x60, 0xDF, 0x2E } }, L"Balanced" },
+    { { 0x8C5E7FDA, 0xE8BF, 0x4A96, { 0x9A, 0x85, 0xA6, 0xE2, 0x3A, 0x8C, 0x63, 0x5C } }, L"Best performance" }
+};
 
 static BOOL TfyLoadPowrProf()
 {
     if (g_hPowrProf)
-        return g_pfnEnumPwrSchemes && g_pfnGetActivePwrScheme && g_pfnSetActivePwrScheme;
+        return g_pfnPowerGetActiveScheme && g_pfnPowerSetActiveScheme;
     g_hPowrProf = LoadLibraryW(L"powrprof.dll");
     if (!g_hPowrProf)
         return FALSE;
-    g_pfnEnumPwrSchemes = (PFN_ENUMPWRSCHEMES)GetProcAddress(g_hPowrProf, "EnumPwrSchemes");
-    g_pfnGetActivePwrScheme = (PFN_GETACTIVEPWRSCHEME)GetProcAddress(g_hPowrProf, "GetActivePwrScheme");
-    g_pfnSetActivePwrScheme = (PFN_SETACTIVEPWRSCHEME)GetProcAddress(g_hPowrProf, "SetActivePwrScheme");
-    return g_pfnEnumPwrSchemes && g_pfnGetActivePwrScheme && g_pfnSetActivePwrScheme;
+    g_pfnPowerGetActiveScheme = (PFN_POWERGETACTIVESCHEME)GetProcAddress(g_hPowrProf, "PowerGetActiveScheme");
+    g_pfnPowerSetActiveScheme = (PFN_POWERSETACTIVESCHEME)GetProcAddress(g_hPowrProf, "PowerSetActiveScheme");
+    return g_pfnPowerGetActiveScheme && g_pfnPowerSetActiveScheme;
 }
 
-struct TFYPWRSCHEME
+static int
+TfyActivePowerMode(VOID)
 {
-    UINT uiIndex;
-    WCHAR szName[128];
-    WCHAR szDesc[256];
-    RECT rc;
-};
+    GUID *pScheme = NULL;
+    int iMode = -1;
+
+    if (!TfyLoadPowrProf() || g_pfnPowerGetActiveScheme(NULL, &pScheme) != ERROR_SUCCESS || !pScheme)
+        return -1;
+    for (int i = 0; i < (int)_countof(g_TfyPowerModes); i++)
+    {
+        if (IsEqualGUID(*pScheme, g_TfyPowerModes[i].Scheme))
+            iMode = i;
+    }
+    LocalFree(pScheme);
+    return iMode;
+}
 
 #define TFY_PWRHIT_NONE  -1
 #define TFY_PWRHIT_LINK  -2
@@ -8609,42 +8641,24 @@ public:
     HFONT m_hFontHeader;
     HFONT m_hFont;
     HFONT m_hFontSmall;
-    CAtlArray<TFYPWRSCHEME> m_Schemes;
-    UINT m_uiActive;
-    BOOL m_bHaveActive;
+    int m_iActive;
     SYSTEM_POWER_STATUS m_sps;
     int m_iHot;
     BOOL m_bTracking;
     SIZE m_size;
     RECT m_rcIcon, m_rcHeader, m_rcSub, m_rcPlanLabel, m_rcLink;
+    RECT m_rcModes[_countof(g_TfyPowerModes)];
 
     CTrayPowerWnd() : m_hFontHeader(NULL), m_hFont(NULL), m_hFontSmall(NULL),
-                      m_uiActive(0), m_bHaveActive(FALSE), m_iHot(TFY_PWRHIT_NONE),
-                      m_bTracking(FALSE)
+                      m_iActive(-1), m_iHot(TFY_PWRHIT_NONE), m_bTracking(FALSE)
     {
         ZeroMemory(&m_Pal, sizeof(m_Pal));
         ZeroMemory(&m_sps, sizeof(m_sps));
         ZeroMemory(&m_size, sizeof(m_size));
+        ZeroMemory(m_rcModes, sizeof(m_rcModes));
     }
 
     int Sc(int v) const { return ShellScaleForDpi(v); }
-
-    static BOOLEAN CALLBACK SchemeEnumProc(UINT uiIndex, DWORD dwName, LPWSTR sName,
-                                           DWORD dwDesc, LPWSTR sDesc, PVOID pp, LPARAM lParam)
-    {
-        CTrayPowerWnd *pThis = (CTrayPowerWnd *)lParam;
-        TFYPWRSCHEME scheme;
-        if (!pThis || pThis->m_Schemes.GetCount() >= 8)
-            return TRUE;
-        ZeroMemory(&scheme, sizeof(scheme));
-        scheme.uiIndex = uiIndex;
-        if (sName)
-            StringCchCopyW(scheme.szName, _countof(scheme.szName), sName);
-        if (sDesc)
-            StringCchCopyW(scheme.szDesc, _countof(scheme.szDesc), sDesc);
-        pThis->m_Schemes.Add(scheme);
-        return TRUE;
-    }
 
     VOID Build()
     {
@@ -8656,13 +8670,7 @@ public:
             m_sps.BatteryLifePercent = 255;
             m_sps.BatteryLifeTime = (DWORD)-1;
         }
-        m_Schemes.SetCount(0);
-        m_bHaveActive = FALSE;
-        if (TfyLoadPowrProf())
-        {
-            g_pfnEnumPwrSchemes(SchemeEnumProc, (LPARAM)this);
-            m_bHaveActive = g_pfnGetActivePwrScheme(&m_uiActive);
-        }
+        m_iActive = TfyActivePowerMode();
     }
 
     BOOL HasBattery() const
@@ -8726,23 +8734,15 @@ public:
         SetRect(&m_rcHeader, pad + Sc(56), y, m_size.cx - pad, y + Sc(24));
         SetRect(&m_rcSub, pad + Sc(56), y + Sc(24), m_size.cx - pad, y + Sc(44));
         y += Sc(44) + Sc(12);
-        if (m_Schemes.GetCount())
-        {
-            y += Sc(8);
-            SetRect(&m_rcPlanLabel, pad, y, m_size.cx - pad, y + Sc(20));
-            y += Sc(22);
-            for (SIZE_T i = 0; i < m_Schemes.GetCount(); i++)
-            {
-                SetRect(&m_Schemes[i].rc, Sc(8), y, m_size.cx - Sc(8), y + Sc(28));
-                y += Sc(28);
-            }
-            y += Sc(8);
-        }
-        else
-        {
-            SetRectEmpty(&m_rcPlanLabel);
-        }
         y += Sc(8);
+        SetRect(&m_rcPlanLabel, pad, y, m_size.cx - pad, y + Sc(20));
+        y += Sc(22);
+        for (UINT i = 0; i < _countof(m_rcModes); i++)
+        {
+            SetRect(&m_rcModes[i], Sc(8), y, m_size.cx - Sc(8), y + Sc(28));
+            y += Sc(28);
+        }
+        y += Sc(16);
         SetRect(&m_rcLink, Sc(8), y, m_size.cx - Sc(8), y + Sc(26));
         y += Sc(26) + Sc(10);
         m_size.cy = y;
@@ -8829,28 +8829,27 @@ public:
         RECT rcSep = { Sc(12), m_rcIcon.bottom + Sc(12), rc.right - Sc(12), m_rcIcon.bottom + Sc(13) };
         FillRect(hdcMem, &rcSep, hbrSep);
 
-        if (m_Schemes.GetCount())
+        SelectObject(hdcMem, m_hFontSmall);
+        SetTextColor(hdcMem, m_Pal.DimText);
+        DrawTextW(hdcMem, L"Power mode", -1, &m_rcPlanLabel, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+        for (UINT i = 0; i < _countof(m_rcModes); i++)
         {
-            SelectObject(hdcMem, m_hFontSmall);
-            SetTextColor(hdcMem, m_Pal.DimText);
-            DrawTextW(hdcMem, L"Select a power plan:", -1, &m_rcPlanLabel, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
-            for (SIZE_T i = 0; i < m_Schemes.GetCount(); i++)
+            BOOL bHot = (m_iHot == (int)i);
+            RECT rcText = { m_rcModes[i].left + Sc(34), m_rcModes[i].top, m_rcModes[i].right - Sc(8), m_rcModes[i].bottom };
+
+            if (bHot)
             {
-                TFYPWRSCHEME &scheme = m_Schemes[i];
-                BOOL bHot = (m_iHot == (int)i);
-                BOOL bChecked = m_bHaveActive && scheme.uiIndex == m_uiActive;
-                if (bHot)
-                {
-                    HBRUSH hbrHot = CreateSolidBrush(TfyMix(m_Pal.PanelBg, m_Pal.HotFill, 130));
-                    FillRect(hdcMem, &scheme.rc, hbrHot);
-                    DeleteObject(hbrHot);
-                }
-                DrawRadio(hdcMem, &scheme.rc, bChecked, bHot);
-                RECT rcText = { scheme.rc.left + Sc(34), scheme.rc.top, scheme.rc.right - Sc(8), scheme.rc.bottom };
-                SelectObject(hdcMem, m_hFont);
-                SetTextColor(hdcMem, m_Pal.PanelText);
-                DrawTextW(hdcMem, scheme.szName, -1, &rcText, DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+                HBRUSH hbrHot = CreateSolidBrush(TfyMix(m_Pal.PanelBg, m_Pal.HotFill, 130));
+                FillRect(hdcMem, &m_rcModes[i], hbrHot);
+                DeleteObject(hbrHot);
             }
+            DrawRadio(hdcMem, &m_rcModes[i], m_iActive == (int)i, bHot);
+            SelectObject(hdcMem, m_hFont);
+            SetTextColor(hdcMem, m_Pal.PanelText);
+            DrawTextW(hdcMem, g_TfyPowerModes[i].pszName, -1, &rcText,
+                      DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+        }
+        {
             RECT rcSep2 = { Sc(12), m_rcLink.top - Sc(9), rc.right - Sc(12), m_rcLink.top - Sc(8) };
             FillRect(hdcMem, &rcSep2, hbrSep);
         }
@@ -8865,7 +8864,7 @@ public:
         rcLinkText.left += Sc(26);
         SelectObject(hdcMem, m_hFontSmall);
         SetTextColor(hdcMem, m_iHot == TFY_PWRHIT_LINK ? m_Pal.HotBorder : m_Pal.DimText);
-        DrawTextW(hdcMem, L"More power options", -1, &rcLinkText, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+        DrawTextW(hdcMem, L"Power & battery settings", -1, &rcLinkText, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
 
         SelectObject(hdcMem, hFontOld);
         BitBlt(hdc, 0, 0, rc.right, rc.bottom, hdcMem, 0, 0, SRCCOPY);
@@ -8885,9 +8884,11 @@ public:
     {
         if (PtInRect(&m_rcLink, pt))
             return TFY_PWRHIT_LINK;
-        for (SIZE_T i = 0; i < m_Schemes.GetCount(); i++)
-            if (PtInRect(&m_Schemes[i].rc, pt))
+        for (UINT i = 0; i < _countof(m_rcModes); i++)
+        {
+            if (PtInRect(&m_rcModes[i], pt))
                 return (int)i;
+        }
         return TFY_PWRHIT_NONE;
     }
 
@@ -8930,13 +8931,10 @@ public:
             FadeOut();
             return 0;
         }
-        if (i >= 0 && i < (int)m_Schemes.GetCount())
+        if (i >= 0 && i < (int)_countof(g_TfyPowerModes))
         {
-            if (TfyLoadPowrProf() && g_pfnSetActivePwrScheme(m_Schemes[i].uiIndex, NULL, NULL))
-            {
-                m_uiActive = m_Schemes[i].uiIndex;
-                m_bHaveActive = TRUE;
-            }
+            if (TfyLoadPowrProf() && g_pfnPowerSetActiveScheme(NULL, &g_TfyPowerModes[i].Scheme) == ERROR_SUCCESS)
+                m_iActive = i;
             InvalidateRect(NULL, FALSE);
         }
         return 0;
@@ -9152,7 +9150,7 @@ public:
 
         ZeroMemory(&m_List, sizeof(m_List));
         if (m_hwndPager)
-            ::SendMessageW(m_hwndPager, TNWM_GETTRAYICONS, TRAYICONS_OVERFLOW, (LPARAM)&m_List);
+            ::SendMessageW(m_hwndPager, TNWM_GETTRAYICONS, 0, (LPARAM)&m_List);
         n = max(1u, m_List.cItems);
         m_cCols = (int)ceil(sqrt((double)n));
         m_cRows = (int)((n + m_cCols - 1) / m_cCols);
@@ -9582,6 +9580,179 @@ TfyQsWlanSetRadio(BOOL bOn)
     FreeLibrary(hWlanApi);
 }
 
+#define TFY_NETCONNECTIONS_KEY L"SYSTEM\\CurrentControlSet\\Control\\Network\\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+#define TFY_WM_DEVICESCHANGED (WM_APP + 45)
+
+struct TFYDEVICES
+{
+    WCHAR szInstance[8][MAX_DEVICE_ID_LEN];
+    BOOL bDisabled[8];
+    UINT cDevices;
+};
+
+struct TFYDEVICETOGGLE
+{
+    HWND hWnd;
+    BOOL bEnable;
+    TFYDEVICES Devices;
+};
+
+static volatile LONG g_TfyDeviceToggleActive = 0;
+
+static VOID
+TfyAddDevice(TFYDEVICES *pDevices, DEVINST hDevice, LPCWSTR pszInstance)
+{
+    ULONG ulStatus = 0, ulProblem = 0;
+
+    if (pDevices->cDevices >= _countof(pDevices->szInstance))
+        return;
+    StringCchCopyW(pDevices->szInstance[pDevices->cDevices], MAX_DEVICE_ID_LEN, pszInstance);
+    pDevices->bDisabled[pDevices->cDevices] = CM_Get_DevNode_Status(&ulStatus, &ulProblem, hDevice, 0) == CR_SUCCESS &&
+                                              (ulStatus & DN_HAS_PROBLEM) && ulProblem == CM_PROB_DISABLED;
+    pDevices->cDevices++;
+}
+
+static VOID
+TfyQueryWiredAdapters(TFYDEVICES *pDevices)
+{
+    WCHAR szGuid[64], szPath[96], szInstance[MAX_DEVICE_ID_LEN];
+    HKEY hKey;
+
+    ZeroMemory(pDevices, sizeof(*pDevices));
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, TFY_NETCONNECTIONS_KEY, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+        return;
+    for (DWORD i = 0;; i++)
+    {
+        DWORD cchGuid = _countof(szGuid), cb, dwType, dwIfType;
+        DEVINST hDevice;
+        HKEY hDriver;
+
+        if (RegEnumKeyExW(hKey, i, szGuid, &cchGuid, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        if (szGuid[0] != L'{')
+            continue;
+        StringCchPrintfW(szPath, _countof(szPath), L"%s\\Connection", szGuid);
+        cb = sizeof(szInstance);
+        if (RegGetValueW(hKey, szPath, L"PnpInstanceID", RRF_RT_REG_SZ, NULL, szInstance, &cb) != ERROR_SUCCESS ||
+            CM_Locate_DevNodeW(&hDevice, szInstance, CM_LOCATE_DEVNODE_NORMAL) != CR_SUCCESS ||
+            CM_Open_DevNode_Key(hDevice, KEY_QUERY_VALUE, 0, RegDisposition_OpenExisting, &hDriver,
+                                CM_REGISTRY_SOFTWARE) != CR_SUCCESS)
+        {
+            continue;
+        }
+        cb = sizeof(dwIfType);
+        if (RegQueryValueExW(hDriver, L"*IfType", NULL, &dwType, (LPBYTE)&dwIfType, &cb) != ERROR_SUCCESS ||
+            dwType != REG_DWORD)
+        {
+            dwIfType = 0;
+        }
+        RegCloseKey(hDriver);
+        if (dwIfType == IF_TYPE_ETHERNET_CSMACD)
+            TfyAddDevice(pDevices, hDevice, szInstance);
+    }
+    RegCloseKey(hKey);
+}
+
+static VOID
+TfyQueryBluetoothRadios(TFYDEVICES *pDevices)
+{
+    WCHAR szInstance[MAX_DEVICE_ID_LEN];
+    SP_DEVINFO_DATA Data;
+    DEVINST hDevice;
+    HDEVINFO hSet;
+
+    ZeroMemory(pDevices, sizeof(*pDevices));
+    hSet = SetupDiGetClassDevsW(&GUID_BTHPORT_DEVICE_INTERFACE, NULL, NULL, DIGCF_DEVICEINTERFACE);
+    if (hSet == INVALID_HANDLE_VALUE)
+        return;
+    Data.cbSize = sizeof(Data);
+    for (DWORD i = 0; SetupDiEnumDeviceInfo(hSet, i, &Data); i++)
+    {
+        if (SetupDiGetDeviceInstanceIdW(hSet, &Data, szInstance, _countof(szInstance), NULL) &&
+            CM_Locate_DevNodeW(&hDevice, szInstance, CM_LOCATE_DEVNODE_NORMAL) == CR_SUCCESS)
+        {
+            TfyAddDevice(pDevices, hDevice, szInstance);
+        }
+    }
+    SetupDiDestroyDeviceInfoList(hSet);
+}
+
+static BOOL
+TfyDevicesOn(const TFYDEVICES *pDevices)
+{
+    for (UINT i = 0; i < pDevices->cDevices; i++)
+    {
+        if (!pDevices->bDisabled[i])
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static VOID
+TfySetDeviceEnabled(LPCWSTR pszInstance, BOOL bEnable)
+{
+    HDEVINFO hSet = SetupDiCreateDeviceInfoList(NULL, NULL);
+    SP_DEVINFO_DATA Data = { sizeof(Data) };
+    SP_PROPCHANGE_PARAMS Params;
+
+    if (hSet == INVALID_HANDLE_VALUE)
+        return;
+    ZeroMemory(&Params, sizeof(Params));
+    Params.ClassInstallHeader.cbSize = sizeof(SP_CLASSINSTALL_HEADER);
+    Params.ClassInstallHeader.InstallFunction = DIF_PROPERTYCHANGE;
+    Params.StateChange = bEnable ? DICS_ENABLE : DICS_DISABLE;
+    Params.Scope = DICS_FLAG_GLOBAL;
+    if (SetupDiOpenDeviceInfoW(hSet, pszInstance, NULL, 0, &Data) &&
+        SetupDiSetClassInstallParamsW(hSet, &Data, &Params.ClassInstallHeader, sizeof(Params)))
+    {
+        SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, hSet, &Data);
+    }
+    SetupDiDestroyDeviceInfoList(hSet);
+}
+
+static DWORD WINAPI
+TfyDeviceToggleThread(LPVOID lpParameter)
+{
+    TFYDEVICETOGGLE *pToggle = (TFYDEVICETOGGLE *)lpParameter;
+
+    for (UINT i = 0; i < pToggle->Devices.cDevices; i++)
+    {
+        if (pToggle->Devices.bDisabled[i] == pToggle->bEnable)
+            TfySetDeviceEnabled(pToggle->Devices.szInstance[i], pToggle->bEnable);
+    }
+    InterlockedExchange(&g_TfyDeviceToggleActive, 0);
+    PostMessageW(pToggle->hWnd, TFY_WM_DEVICESCHANGED, 0, 0);
+    HeapFree(hProcessHeap, 0, pToggle);
+    return 0;
+}
+
+static BOOL
+TfyToggleDevices(HWND hWnd, TFYDEVICES *pDevices, BOOL bEnable)
+{
+    TFYDEVICETOGGLE *pToggle;
+    HANDLE hThread;
+
+    if (!pDevices->cDevices || InterlockedCompareExchange(&g_TfyDeviceToggleActive, 1, 0) != 0)
+        return FALSE;
+    pToggle = (TFYDEVICETOGGLE *)HeapAlloc(hProcessHeap, 0, sizeof(*pToggle));
+    if (!pToggle)
+    {
+        InterlockedExchange(&g_TfyDeviceToggleActive, 0);
+        return FALSE;
+    }
+    pToggle->hWnd = hWnd;
+    pToggle->bEnable = bEnable;
+    pToggle->Devices = *pDevices;
+    for (UINT i = 0; i < pDevices->cDevices; i++)
+        pDevices->bDisabled[i] = !bEnable;
+    hThread = CreateThread(NULL, 0, TfyDeviceToggleThread, pToggle, 0, NULL);
+    if (hThread)
+        CloseHandle(hThread);
+    else
+        TfyDeviceToggleThread(pToggle);
+    return TRUE;
+}
+
 static VOID
 TfyFillRound(HDC hdc, const RECT *prc, int radius, COLORREF crFill, COLORREF crBack)
 {
@@ -9605,11 +9776,8 @@ TfyFillRound(HDC hdc, const RECT *prc, int radius, COLORREF crFill, COLORREF crB
 enum
 {
     TFY_QSTILE_WIFI,
-    TFY_QSTILE_NETWORK,
+    TFY_QSTILE_ETHERNET,
     TFY_QSTILE_BLUETOOTH,
-    TFY_QSTILE_AIRPLANE,
-    TFY_QSTILE_DARKMODE,
-    TFY_QSTILE_ACCESSIBILITY,
     TFY_QSTILE_POWER
 };
 
@@ -9645,69 +9813,89 @@ struct TFYQSTILE
 {
     INT Kind;
     BOOL bToggle;
+    BOOL bMore;
     BOOL bOn;
     BOOL bEnabled;
     RECT rc;
     RECT rcBadge;
+    RECT rcMore;
     WCHAR szStatus[64];
 };
 
-static BOOL
-TfyQsReadLightTheme(VOID)
+struct TFYBTDEVICE
 {
-    return DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT;
-}
+    WCHAR szName[BLUETOOTH_MAX_NAME_SIZE];
+    ULONG ulClass;
+    BOOL bConnected;
+    BOOL bAuthenticated;
+};
 
-static DWORD WINAPI
-TfyQsBroadcastThemeThread(LPVOID lpParameter)
-{
-    UNREFERENCED_PARAMETER(lpParameter);
-    DwmSettingsBroadcastColorScheme();
-    return 0;
-}
-
-static VOID
-TfyQsSetDarkMode(BOOL bDark)
-{
-    HANDLE hThread;
-
-    DwmSettingsWriteColorScheme(bDark ? DWM_COLOR_SCHEME_DARK : DWM_COLOR_SCHEME_LIGHT);
-    hThread = CreateThread(NULL, 0, TfyQsBroadcastThemeThread, NULL, 0, NULL);
-    if (hThread)
-        CloseHandle(hThread);
-    else
-        TfyQsBroadcastThemeThread(NULL);
-}
-
-static BOOL
-TfyQsBluetoothRadioPresent(VOID)
+static UINT
+TfyBluetoothDevices(TFYBTDEVICE *pDevices, UINT cMax)
 {
     typedef HBLUETOOTH_RADIO_FIND (WINAPI *PFN_FINDFIRSTRADIO)(const BLUETOOTH_FIND_RADIO_PARAMS *, HANDLE *);
     typedef BOOL (WINAPI *PFN_FINDRADIOCLOSE)(HBLUETOOTH_RADIO_FIND);
+    typedef HBLUETOOTH_DEVICE_FIND (WINAPI *PFN_FINDFIRSTDEVICE)(const BLUETOOTH_DEVICE_SEARCH_PARAMS *,
+                                                                  BLUETOOTH_DEVICE_INFO *);
+    typedef BOOL (WINAPI *PFN_FINDNEXTDEVICE)(HBLUETOOTH_DEVICE_FIND, BLUETOOTH_DEVICE_INFO *);
+    typedef BOOL (WINAPI *PFN_FINDDEVICECLOSE)(HBLUETOOTH_DEVICE_FIND);
     HMODULE hBluetooth = LoadLibraryW(L"bluetoothapis.dll");
-    BLUETOOTH_FIND_RADIO_PARAMS Params = { sizeof(Params) };
-    HBLUETOOTH_RADIO_FIND hFind;
+    BLUETOOTH_FIND_RADIO_PARAMS RadioParams = { sizeof(RadioParams) };
+    BLUETOOTH_DEVICE_SEARCH_PARAMS SearchParams = { sizeof(SearchParams) };
+    BLUETOOTH_DEVICE_INFO Info = { sizeof(Info) };
+    HBLUETOOTH_RADIO_FIND hRadioFind;
+    HBLUETOOTH_DEVICE_FIND hFind;
     HANDLE hRadio = NULL;
-    PFN_FINDFIRSTRADIO pfnFirst;
-    PFN_FINDRADIOCLOSE pfnClose;
-    BOOL bPresent = FALSE;
+    PFN_FINDFIRSTRADIO pfnFirstRadio;
+    PFN_FINDRADIOCLOSE pfnRadioClose;
+    PFN_FINDFIRSTDEVICE pfnFirstDevice;
+    PFN_FINDNEXTDEVICE pfnNextDevice;
+    PFN_FINDDEVICECLOSE pfnDeviceClose;
+    UINT cDevices = 0;
 
     if (!hBluetooth)
-        return FALSE;
-    pfnFirst = (PFN_FINDFIRSTRADIO)GetProcAddress(hBluetooth, "BluetoothFindFirstRadio");
-    pfnClose = (PFN_FINDRADIOCLOSE)GetProcAddress(hBluetooth, "BluetoothFindRadioClose");
-    if (pfnFirst && pfnClose)
+        return 0;
+    pfnFirstRadio = (PFN_FINDFIRSTRADIO)GetProcAddress(hBluetooth, "BluetoothFindFirstRadio");
+    pfnRadioClose = (PFN_FINDRADIOCLOSE)GetProcAddress(hBluetooth, "BluetoothFindRadioClose");
+    pfnFirstDevice = (PFN_FINDFIRSTDEVICE)GetProcAddress(hBluetooth, "BluetoothFindFirstDevice");
+    pfnNextDevice = (PFN_FINDNEXTDEVICE)GetProcAddress(hBluetooth, "BluetoothFindNextDevice");
+    pfnDeviceClose = (PFN_FINDDEVICECLOSE)GetProcAddress(hBluetooth, "BluetoothFindDeviceClose");
+    if (pfnFirstRadio && pfnRadioClose && pfnFirstDevice && pfnNextDevice && pfnDeviceClose &&
+        (hRadioFind = pfnFirstRadio(&RadioParams, &hRadio)) != NULL)
     {
-        hFind = pfnFirst(&Params, &hRadio);
+        pfnRadioClose(hRadioFind);
+        SearchParams.fReturnAuthenticated = TRUE;
+        SearchParams.fReturnRemembered = TRUE;
+        SearchParams.fReturnConnected = TRUE;
+        SearchParams.hRadio = hRadio;
+        hFind = pfnFirstDevice(&SearchParams, &Info);
         if (hFind)
         {
-            bPresent = TRUE;
-            CloseHandle(hRadio);
-            pfnClose(hFind);
+            do
+            {
+                TFYBTDEVICE *pDevice = &pDevices[cDevices++];
+
+                if (Info.szName[0])
+                {
+                    StringCchCopyW(pDevice->szName, _countof(pDevice->szName), Info.szName);
+                }
+                else
+                {
+                    StringCchPrintfW(pDevice->szName, _countof(pDevice->szName), L"%02X:%02X:%02X:%02X:%02X:%02X",
+                                     Info.Address.rgBytes[5], Info.Address.rgBytes[4], Info.Address.rgBytes[3],
+                                     Info.Address.rgBytes[2], Info.Address.rgBytes[1], Info.Address.rgBytes[0]);
+                }
+                pDevice->ulClass = Info.ulClassofDevice;
+                pDevice->bConnected = Info.fConnected;
+                pDevice->bAuthenticated = Info.fAuthenticated;
+                Info.dwSize = sizeof(Info);
+            } while (cDevices < cMax && pfnNextDevice(hFind, &Info));
+            pfnDeviceClose(hFind);
         }
+        CloseHandle(hRadio);
     }
     FreeLibrary(hBluetooth);
-    return bPresent;
+    return cDevices;
 }
 
 static BOOL
@@ -9715,14 +9903,18 @@ TfyQsActivePowerPlan(LPWSTR pszName, DWORD cchName)
 {
     typedef DWORD (WINAPI *PFN_GETACTIVESCHEME)(HKEY, GUID **);
     typedef DWORD (WINAPI *PFN_READFRIENDLYNAME)(HKEY, const GUID *, const GUID *, const GUID *, PUCHAR, LPDWORD);
-    HMODULE hPowrProf = LoadLibraryW(L"powrprof.dll");
+    HMODULE hPowrProf;
     PFN_GETACTIVESCHEME pfnActive;
     PFN_READFRIENDLYNAME pfnName;
     GUID *pScheme = NULL;
     DWORD cbName = cchName * sizeof(WCHAR);
     BOOL bResult = FALSE;
+    int iMode = TfyActivePowerMode();
 
     pszName[0] = UNICODE_NULL;
+    if (iMode >= 0)
+        return SUCCEEDED(StringCchCopyW(pszName, cchName, g_TfyPowerModes[iMode].pszName));
+    hPowrProf = LoadLibraryW(L"powrprof.dll");
     if (!hPowrProf)
         return FALSE;
     pfnActive = (PFN_GETACTIVESCHEME)GetProcAddress(hPowrProf, "PowerGetActiveScheme");
@@ -9764,9 +9956,10 @@ public:
     UINT m_cTiles;
     BOOL m_bHasWlan;
     BOOL m_bWifiOn;
-    BOOL m_bHasBluetooth;
+    TFYDEVICES m_Wired;
+    TFYDEVICES m_Radios;
     BOOL m_bNetConnected;
-    BOOL m_bDark;
+    BOOL m_bAirplane;
     WCHAR m_szPowerPlan[64];
     TFYVOLUME m_Fallback;
     CComPtr<IMMDeviceEnumerator> m_pEnum;
@@ -9799,8 +9992,8 @@ public:
     RECT m_rcPaneTiles[TFY_PANE_TILES];
 
     CTrayQuickSettingsWnd() : m_hwndOwner(NULL), m_hFont(NULL), m_hFontTitle(NULL), m_hFontSmall(NULL),
-                              m_cTiles(0), m_bHasWlan(FALSE), m_bWifiOn(FALSE), m_bHasBluetooth(FALSE),
-                              m_bNetConnected(FALSE), m_bDark(FALSE), m_bComVolume(FALSE), m_bLoaded(FALSE), m_bFrameStarted(FALSE),
+                              m_cTiles(0), m_bHasWlan(FALSE), m_bWifiOn(FALSE), m_bNetConnected(FALSE),
+                              m_bAirplane(FALSE), m_bComVolume(FALSE), m_bLoaded(FALSE), m_bFrameStarted(FALSE),
                               m_nMaster(0), m_bMute(FALSE), m_bDragSlider(FALSE),
                               m_nBrightness(-1), m_bDragBrightness(FALSE), m_bBattery(FALSE),
                               m_iHot(TFY_QSHIT_NONE), m_iPressed(TFY_QSHIT_NONE), m_bTracking(FALSE),
@@ -9820,6 +10013,8 @@ public:
         ZeroMemory(m_rcPaneTiles, sizeof(m_rcPaneTiles));
         ZeroMemory(&m_rcAnchor, sizeof(m_rcAnchor));
         ZeroMemory(m_Tiles, sizeof(m_Tiles));
+        ZeroMemory(&m_Wired, sizeof(m_Wired));
+        ZeroMemory(&m_Radios, sizeof(m_Radios));
         ZeroMemory(&m_sps, sizeof(m_sps));
         ZeroMemory(&m_size, sizeof(m_size));
         m_szPowerPlan[0] = UNICODE_NULL;
@@ -9869,12 +10064,13 @@ public:
         return bConnected;
     }
 
-    TFYQSTILE *AddTile(INT Kind, BOOL bToggle, BOOL bOn, LPCWSTR pszStatus)
+    TFYQSTILE *AddTile(INT Kind, BOOL bToggle, BOOL bMore, BOOL bOn, LPCWSTR pszStatus)
     {
         TFYQSTILE *pTile = &m_Tiles[m_cTiles++];
 
         pTile->Kind = Kind;
         pTile->bToggle = bToggle;
+        pTile->bMore = bMore;
         pTile->bOn = bOn;
         pTile->bEnabled = TRUE;
         StringCchCopyW(pTile->szStatus, _countof(pTile->szStatus), pszStatus ? pszStatus : L"");
@@ -9883,28 +10079,29 @@ public:
 
     VOID BuildTiles()
     {
-        BOOL bRestore = TRUE, bAirplane, bConnected;
+        BOOL bRestore = TRUE, bOn;
         WCHAR szStatus[64];
 
         m_cTiles = 0;
         ZeroMemory(m_Tiles, sizeof(m_Tiles));
-        if (m_bHasWlan)
-        {
-            WifiStatus(szStatus, _countof(szStatus));
-            AddTile(TFY_QSTILE_WIFI, TRUE, m_bWifiOn, szStatus);
-        }
-        else
-        {
-            bConnected = NetworkConnected();
-            AddTile(TFY_QSTILE_NETWORK, FALSE, bConnected, bConnected ? L"Connected" : L"Network & internet");
-        }
-        AddTile(TFY_QSTILE_BLUETOOTH, FALSE, m_bHasBluetooth,
-                m_bLoaded ? (m_bHasBluetooth ? L"On" : L"Not available") : L"")->bEnabled = !m_bLoaded || m_bHasBluetooth;
-        bAirplane = CTrayNetworkWnd::LoadAirplane(&bRestore);
-        AddTile(TFY_QSTILE_AIRPLANE, TRUE, bAirplane, bAirplane ? L"On" : L"Off");
-        AddTile(TFY_QSTILE_DARKMODE, TRUE, m_bDark, m_bDark ? L"On" : L"Off");
-        AddTile(TFY_QSTILE_ACCESSIBILITY, FALSE, FALSE, L"");
-        AddTile(TFY_QSTILE_POWER, FALSE, FALSE, m_szPowerPlan);
+        WifiStatus(szStatus, _countof(szStatus));
+        AddTile(TFY_QSTILE_WIFI, TRUE, TRUE, m_bHasWlan && m_bWifiOn,
+                m_bHasWlan ? szStatus : L"Not available")->bEnabled = m_bHasWlan;
+        bOn = TfyDevicesOn(&m_Radios);
+        AddTile(TFY_QSTILE_BLUETOOTH, TRUE, TRUE, bOn,
+                !m_Radios.cDevices ? L"Not available" : bOn ? L"On" : L"Off")->bEnabled = m_Radios.cDevices != 0;
+        bOn = TfyDevicesOn(&m_Wired);
+        AddTile(TFY_QSTILE_ETHERNET, TRUE, TRUE, bOn,
+                !m_Wired.cDevices ? L"Not available" : !bOn ? L"Off" : NetworkConnected() ? L"Connected" :
+                L"Not connected")->bEnabled = m_Wired.cDevices != 0;
+        m_bAirplane = CTrayNetworkWnd::LoadAirplane(&bRestore);
+        AddTile(TFY_QSTILE_POWER, FALSE, TRUE, FALSE, m_szPowerPlan);
+    }
+
+    VOID QueryDevices()
+    {
+        TfyQueryWiredAdapters(&m_Wired);
+        TfyQueryBluetoothRadios(&m_Radios);
     }
 
     VOID Layout()
@@ -9929,6 +10126,10 @@ public:
             SetRect(&pTile->rc, x, top, x + colW, top + tileH);
             SetRect(&pTile->rcBadge, x + Sc(12), top + (tileH - badge) / 2, x + Sc(12) + badge,
                     top + (tileH - badge) / 2 + badge);
+            if (pTile->bMore)
+                SetRect(&pTile->rcMore, x + colW - Sc(36), top, x + colW, top + tileH);
+            else
+                SetRectEmpty(&pTile->rcMore);
         }
         rows = (int)(m_cTiles + 1) / 2;
         y += rows * (tileH + gap);
@@ -9993,7 +10194,7 @@ public:
         InterlockedExchange(&g_TfyAudioMute, m_bMute);
 
         TfyQsWlanQuery(&m_bHasWlan, &m_bWifiOn);
-        m_bHasBluetooth = TfyQsBluetoothRadioPresent();
+        QueryDevices();
         {
             TFYNETCACHE *pCache = (TFYNETCACHE *)HeapAlloc(hProcessHeap, HEAP_ZERO_MEMORY, sizeof(TFYNETCACHE));
             m_bNetConnected = FALSE;
@@ -10041,7 +10242,6 @@ public:
             m_hFontSmall = TfyCreateFont(11, FW_NORMAL);
         if (!m_bFrameStarted)
             m_bFrameStarted = ShellFrame::Startup();
-        m_bDark = !TfyQsReadLightTheme();
         m_bBattery = GetSystemPowerStatus(&m_sps) && m_sps.BatteryFlag != 128 && m_sps.BatteryFlag != 255;
         m_bPane = !IsThemeActive();
         m_bSlideFromRight = m_bPane;
@@ -10055,6 +10255,14 @@ public:
                 m_hFontPaneSmall = TfyCreateFont(13, FW_NORMAL);
             PaneLanguage(GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), NULL)));
         }
+        AcquireSRWLockShared(&g_NetCacheLock);
+        if (g_NetCache.bValid)
+        {
+            m_bHasWlan = g_NetCache.nWlanIfaces > 0;
+            m_bWifiOn = g_NetCache.bWifiOn;
+        }
+        ReleaseSRWLockShared(&g_NetCacheLock);
+        QueryDevices();
         BuildTiles();
         Layout();
         if (m_bPane)
@@ -10248,14 +10456,7 @@ public:
         {
             case TFY_PANE_NETWORK:
             {
-                BOOL bAirplane = FALSE;
-
-                for (UINT k = 0; k < m_cTiles; k++)
-                {
-                    if (m_Tiles[k].Kind == TFY_QSTILE_AIRPLANE)
-                        bAirplane = m_Tiles[k].bOn;
-                }
-                if (bAirplane)
+                if (m_bAirplane)
                 {
                     *ppszGlyph = L"airplane_20_regular";
                     return L"Airplane mode";
@@ -10565,9 +10766,9 @@ public:
         {
             if (!PtInRect(&m_Tiles[i].rc, pt))
                 continue;
-            if (PtInRect(&m_Tiles[i].rcBadge, pt))
-                return (int)i;
-            return TFY_QSHIT_ARROW + (int)i;
+            if (m_Tiles[i].bMore && (!m_Tiles[i].bToggle || PtInRect(&m_Tiles[i].rcMore, pt)))
+                return TFY_QSHIT_ARROW + (int)i;
+            return (int)i;
         }
         InflateRect(&rcSliderHit, Sc(4), Sc(14));
         if (PtInRect(&rcSliderHit, pt))
@@ -10595,12 +10796,9 @@ public:
         switch (pTile->Kind)
         {
             case TFY_QSTILE_WIFI: return pTile->bOn ? L"wifi_1_20_regular" : L"wifi_off_20_regular";
-            case TFY_QSTILE_NETWORK: return L"plug_connected_20_regular";
+            case TFY_QSTILE_ETHERNET: return L"plug_connected_20_regular";
             case TFY_QSTILE_BLUETOOTH: return L"bluetooth_20_regular";
-            case TFY_QSTILE_AIRPLANE: return L"airplane_20_regular";
-            case TFY_QSTILE_DARKMODE: return L"dark_theme_20_regular";
-            case TFY_QSTILE_POWER: return L"battery_saver_20_regular";
-            default: return L"accessibility_20_regular";
+            default: return L"battery_saver_20_regular";
         }
     }
 
@@ -10609,12 +10807,9 @@ public:
         switch (pTile->Kind)
         {
             case TFY_QSTILE_WIFI: return L"Wi-Fi";
-            case TFY_QSTILE_NETWORK: return L"Network";
+            case TFY_QSTILE_ETHERNET: return L"Ethernet";
             case TFY_QSTILE_BLUETOOTH: return L"Bluetooth";
-            case TFY_QSTILE_AIRPLANE: return L"Airplane mode";
-            case TFY_QSTILE_DARKMODE: return L"Dark mode";
-            case TFY_QSTILE_POWER: return L"Power mode";
-            default: return L"Accessibility";
+            default: return L"Power mode";
         }
     }
 
@@ -10643,30 +10838,49 @@ public:
     VOID DrawTile(ShellFrame::Canvas &canvas, UINT i)
     {
         TFYQSTILE *pTile = &m_Tiles[i];
-        BOOL bBodyHot = m_iHot == TFY_QSHIT_ARROW + (int)i;
-        BOOL bBadgeHot = m_iHot == (int)i;
+        BOOL bMoreHot = m_iHot == TFY_QSHIT_ARROW + (int)i;
+        BOOL bToggleHot = m_iHot == (int)i && pTile->bEnabled;
+        BOOL bSplit = pTile->bToggle && pTile->bMore;
         BOOL bActive = pTile->bOn && pTile->bEnabled;
         COLORREF crBadge, crGlyph, crTitle;
-        RECT rcTitle, rcStatus;
+        RECT rcTitle, rcStatus, rcHot;
 
-        canvas.FillRound(pTile->rc, (float)(pTile->rc.bottom - pTile->rc.top) / 2.0f,
-                         CardFill(bBodyHot || bBadgeHot, m_iPressed == m_iHot && (bBodyHot || bBadgeHot)));
+        canvas.FillRound(pTile->rc, (float)Sc(18), CardFill(FALSE, FALSE));
+        if (bMoreHot || bToggleHot)
+        {
+            rcHot = pTile->rc;
+            if (bSplit && bMoreHot)
+                rcHot.left = pTile->rcMore.left;
+            else if (bSplit)
+                rcHot.right = pTile->rcMore.left;
+            canvas.Graphics().SetClip(Gdiplus::Rect(rcHot.left, rcHot.top, rcHot.right - rcHot.left,
+                                                    rcHot.bottom - rcHot.top));
+            canvas.FillRound(pTile->rc, (float)Sc(18), CardFill(TRUE, m_iPressed == m_iHot));
+            canvas.Graphics().ResetClip();
+        }
+        if (bSplit)
+        {
+            canvas.Line(pTile->rcMore.left, pTile->rc.top + Sc(14), pTile->rcMore.left, pTile->rc.bottom - Sc(14),
+                        TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 60));
+        }
+        if (pTile->bMore)
+            CenterGlyph(canvas, &pTile->rcMore, Sc(12), L"chevron_right_12_regular", m_Pal.PanelText);
         if (bActive)
         {
-            crBadge = bBadgeHot ? TfyMix(m_Pal.AccentBg, RGB(255, 255, 255), 28) : m_Pal.AccentBg;
+            crBadge = bToggleHot ? TfyMix(m_Pal.AccentBg, RGB(255, 255, 255), 28) : m_Pal.AccentBg;
             crGlyph = m_Pal.AccentText;
         }
         else
         {
-            crBadge = TfyMix(m_Pal.PanelBg, m_Pal.PanelText, bBadgeHot ? 70 : 52);
+            crBadge = TfyMix(m_Pal.PanelBg, m_Pal.PanelText, bToggleHot ? 70 : 52);
             crGlyph = pTile->bEnabled ? m_Pal.PanelText : m_Pal.DimText;
         }
-        canvas.FillEllipse(pTile->rcBadge, crBadge);
+        canvas.FillRound(pTile->rcBadge, (float)Sc(6), crBadge);
         CenterGlyph(canvas, &pTile->rcBadge, Sc(20), TileGlyph(pTile), crGlyph);
 
         crTitle = pTile->bEnabled ? m_Pal.PanelText : m_Pal.DimText;
-        SetRect(&rcTitle, pTile->rcBadge.right + Sc(10), pTile->rc.top + Sc(11), pTile->rc.right - Sc(14),
-                pTile->rc.top + Sc(30));
+        SetRect(&rcTitle, pTile->rcBadge.right + Sc(10), pTile->rc.top + Sc(11),
+                pTile->bMore ? pTile->rcMore.left - Sc(8) : pTile->rc.right - Sc(14), pTile->rc.top + Sc(30));
         SetRect(&rcStatus, rcTitle.left, rcTitle.bottom, rcTitle.right, pTile->rc.bottom - Sc(10));
         if (!pTile->szStatus[0])
             OffsetRect(&rcTitle, 0, Sc(9));
@@ -10860,7 +11074,7 @@ public:
         return 0;
     }
 
-    VOID ActivateTile(UINT i, BOOL bBody)
+    VOID ActivateTile(UINT i, BOOL bMore)
     {
         TFYQSTILE *pTile = &m_Tiles[i];
         RECT rcAnchor = m_rcAnchor;
@@ -10868,60 +11082,44 @@ public:
 
         switch (pTile->Kind)
         {
-            case TFY_QSTILE_ACCESSIBILITY:
-                TfyQsOpenSettings(L"ms-settings:easeofaccess");
-                FadeOut();
-                return;
             case TFY_QSTILE_BLUETOOTH:
-                TfyQsOpenSettings(L"ms-settings:bluetooth");
-                FadeOut();
-                return;
+                if (bMore)
+                {
+                    HandOffFlyout(m_hWnd);
+                    FadeOut();
+                    TrayBluetooth_Toggle(hwndOwner, &rcAnchor);
+                    return;
+                }
+                if (!pTile->bEnabled || !TfyToggleDevices(m_hWnd, &m_Radios, !pTile->bOn))
+                    return;
+                break;
             case TFY_QSTILE_POWER:
                 HandOffFlyout(m_hWnd);
                 FadeOut();
                 TrayPower_Toggle(hwndOwner, &rcAnchor);
                 return;
-            case TFY_QSTILE_NETWORK:
-                HandOffFlyout(m_hWnd);
-                FadeOut();
-                TrayNetwork_Toggle(hwndOwner, &rcAnchor);
-                return;
+            case TFY_QSTILE_ETHERNET:
+                if (bMore)
+                {
+                    TfyQsOpenSettings(L"ms-settings:network-ethernet");
+                    FadeOut();
+                    return;
+                }
+                if (!pTile->bEnabled || !TfyToggleDevices(m_hWnd, &m_Wired, !pTile->bOn))
+                    return;
+                break;
             case TFY_QSTILE_WIFI:
-                if (bBody)
+                if (bMore)
                 {
                     HandOffFlyout(m_hWnd);
                     FadeOut();
-                    TrayNetwork_Toggle(hwndOwner, &rcAnchor);
+                    TfyNetworkToggle(hwndOwner, &rcAnchor, FALSE);
                     return;
                 }
+                if (!pTile->bEnabled)
+                    return;
                 m_bWifiOn = !m_bWifiOn;
                 TfyQsWlanSetRadio(m_bWifiOn);
-                break;
-            case TFY_QSTILE_AIRPLANE:
-            {
-                BOOL bRestore = TRUE;
-                BOOL bAirplane = CTrayNetworkWnd::LoadAirplane(&bRestore);
-
-                if (!bAirplane)
-                {
-                    CTrayNetworkWnd::SaveAirplane(TRUE, m_bWifiOn);
-                    if (m_bHasWlan)
-                        TfyQsWlanSetRadio(FALSE);
-                    m_bWifiOn = FALSE;
-                }
-                else
-                {
-                    CTrayNetworkWnd::SaveAirplane(FALSE, bRestore);
-                    if (m_bHasWlan)
-                        TfyQsWlanSetRadio(bRestore);
-                    m_bWifiOn = m_bHasWlan && bRestore;
-                }
-                break;
-            }
-            case TFY_QSTILE_DARKMODE:
-                m_bDark = !m_bDark;
-                TfyQsSetDarkMode(m_bDark);
-                StartMenu2_GetFlyoutPalette(&m_Pal);
                 break;
         }
         BuildTiles();
@@ -10988,6 +11186,15 @@ public:
         return 0;
     }
 
+    LRESULT OnDevicesChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        QueryDevices();
+        BuildTiles();
+        Layout();
+        InvalidateRect(NULL, FALSE);
+        return 0;
+    }
+
     LRESULT OnSettingChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
     {
         SetTimer(TFY_TIMER_QSTHEME, 150, NULL);
@@ -11001,7 +11208,6 @@ public:
             KillTimer(TFY_TIMER_QSTHEME);
             StartMenu2_GetFlyoutPalette(&m_Pal);
             RefreshFlyoutMaterial(m_hWnd, m_Pal.PanelBg);
-            m_bDark = !TfyQsReadLightTheme();
             BuildTiles();
             Layout();
             InvalidateRect(NULL, FALSE);
@@ -11107,6 +11313,7 @@ public:
     BEGIN_MSG_MAP(CTrayQuickSettingsWnd)
         MESSAGE_HANDLER(TFY_WM_VOLUMECHANGED, OnVolumeChanged)
         MESSAGE_HANDLER(TFY_WM_BRIGHTNESSCHANGED, OnBrightnessChanged)
+        MESSAGE_HANDLER(TFY_WM_DEVICESCHANGED, OnDevicesChanged)
         MESSAGE_HANDLER(WM_PAINT, OnPaint)
         MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBkgnd)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)
@@ -11174,6 +11381,402 @@ VOID TrayQuickSettings_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor)
     }
     g_pTrayQuickSettings = pQuickSettings;
     pQuickSettings->Toggle(hwndOwner, prcAnchor);
+}
+
+#define TFY_TIMER_BTREFRESH 0x56
+#define TFY_BT_ROWS 6
+
+#define TFY_BTHIT_NONE   -1
+#define TFY_BTHIT_BACK   -2
+#define TFY_BTHIT_SWITCH -3
+#define TFY_BTHIT_LINK   -4
+
+static LPCWSTR
+TfyBluetoothGlyph(ULONG ulClass)
+{
+    switch (GET_COD_MAJOR(ulClass))
+    {
+        case COD_MAJOR_COMPUTER: return L"laptop_20_regular";
+        case COD_MAJOR_PHONE: return L"phone_laptop_20_regular";
+        case COD_MAJOR_AUDIO: return L"headphones_20_regular";
+        case COD_MAJOR_PERIPHERAL: return L"keyboard_20_regular";
+        case COD_MAJOR_IMAGING: return L"print_20_regular";
+        default: return L"bluetooth_20_regular";
+    }
+}
+
+class CTrayBluetoothWnd :
+    public CWindowImpl<CTrayBluetoothWnd, CWindow, CTrayFlyoutTraits>,
+    public CTrayFlyoutAnimation
+{
+public:
+    DECLARE_WND_CLASS_EX(L"TrayBluetoothFlyout", CS_DROPSHADOW, COLOR_WINDOW)
+
+    SM2_FLYOUT_PALETTE m_Pal;
+    HFONT m_hFontHeader;
+    HFONT m_hFontRow;
+    HFONT m_hFontSmall;
+    BOOL m_bFrameStarted;
+    TFYDEVICES m_Radios;
+    TFYBTDEVICE m_Devices[16];
+    UINT m_cDevices;
+    int m_nScroll;
+    int m_iHot;
+    BOOL m_bTracking;
+    BOOL m_bLaunching;
+    RECT m_rcAnchor;
+    RECT m_rcBack;
+    RECT m_rcSwitch;
+    RECT m_rcList;
+    RECT m_rcLink;
+    int m_yFooter;
+    SIZE m_size;
+
+    CTrayBluetoothWnd() : m_hFontHeader(NULL), m_hFontRow(NULL), m_hFontSmall(NULL), m_bFrameStarted(FALSE),
+                          m_cDevices(0), m_nScroll(0), m_iHot(TFY_BTHIT_NONE), m_bTracking(FALSE),
+                          m_bLaunching(FALSE), m_yFooter(0)
+    {
+        ZeroMemory(&m_Pal, sizeof(m_Pal));
+        ZeroMemory(&m_Radios, sizeof(m_Radios));
+        ZeroMemory(m_Devices, sizeof(m_Devices));
+        SetRectEmpty(&m_rcAnchor);
+        SetRectEmpty(&m_rcBack);
+        SetRectEmpty(&m_rcSwitch);
+        SetRectEmpty(&m_rcList);
+        SetRectEmpty(&m_rcLink);
+        ZeroMemory(&m_size, sizeof(m_size));
+    }
+
+    int Sc(int v) const { return ShellScaleForDpi(v); }
+
+    VOID Reload()
+    {
+        TfyQueryBluetoothRadios(&m_Radios);
+        m_cDevices = TfyDevicesOn(&m_Radios) ? TfyBluetoothDevices(m_Devices, _countof(m_Devices)) : 0;
+    }
+
+    VOID Layout()
+    {
+        const int cx = Sc(360);
+        int cRows = (int)min(m_cDevices, (UINT)TFY_BT_ROWS);
+        int y = Sc(56);
+
+        m_size.cx = cx;
+        SetRect(&m_rcBack, Sc(12), Sc(12), Sc(12) + Sc(32), Sc(12) + Sc(32));
+        SetRect(&m_rcSwitch, cx - Sc(20) - Sc(40), Sc(18), cx - Sc(20), Sc(18) + Sc(20));
+        if (m_nScroll > (int)m_cDevices - cRows)
+            m_nScroll = (int)m_cDevices - cRows;
+        if (m_nScroll < 0)
+            m_nScroll = 0;
+        SetRect(&m_rcList, Sc(8), y, cx - Sc(8), y + max(cRows, 2) * Sc(48));
+        y = m_rcList.bottom + Sc(6);
+        m_yFooter = y;
+        SetRect(&m_rcLink, Sc(16), y + Sc(8), cx - Sc(16), y + Sc(8) + Sc(32));
+        m_size.cy = y + Sc(48);
+    }
+
+    VOID Relayout()
+    {
+        POINT pt;
+
+        Layout();
+        TfyW11Position(::GetWindow(m_hWnd, GW_OWNER), &m_rcAnchor, m_size, FALSE, &pt);
+        m_ptFinal = pt;
+        if (m_AnimPhase == TFY_NONE)
+            SetWindowPos(NULL, pt.x, pt.y, m_size.cx, m_size.cy, SWP_NOZORDER | SWP_NOACTIVATE);
+        else
+            SetWindowPos(NULL, 0, 0, m_size.cx, m_size.cy, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        InvalidateRect(NULL, FALSE);
+    }
+
+    VOID Toggle(HWND hwndOwner, const RECT *prcAnchor)
+    {
+        POINT pt;
+
+        StartMenu2_GetFlyoutPalette(&m_Pal);
+        if (!m_hFontHeader)
+            m_hFontHeader = TfyCreateFont(14, FW_SEMIBOLD);
+        if (!m_hFontRow)
+            m_hFontRow = TfyCreateFont(12, FW_NORMAL);
+        if (!m_hFontSmall)
+            m_hFontSmall = TfyCreateFont(11, FW_NORMAL);
+        if (!m_bFrameStarted)
+            m_bFrameStarted = ShellFrame::Startup();
+        m_rcAnchor = *prcAnchor;
+        Reload();
+        Layout();
+        TfyW11Position(hwndOwner, &m_rcAnchor, m_size, FALSE, &pt);
+        BeginFlyoutOpen(m_hWnd, pt.x, pt.y, m_size.cx, m_size.cy, m_Pal.PanelBg);
+    }
+
+    VOID FadeOut();
+
+    int HitTest(POINT pt)
+    {
+        if (PtInRect(&m_rcBack, pt))
+            return TFY_BTHIT_BACK;
+        if (m_Radios.cDevices && PtInRect(&m_rcSwitch, pt))
+            return TFY_BTHIT_SWITCH;
+        if (PtInRect(&m_rcLink, pt))
+            return TFY_BTHIT_LINK;
+        return TFY_BTHIT_NONE;
+    }
+
+    VOID PaintDevices(ShellFrame::Canvas &canvas)
+    {
+        LPCWSTR pszEmpty = NULL;
+
+        if (!m_Radios.cDevices)
+            pszEmpty = L"No Bluetooth adapter was found";
+        else if (!TfyDevicesOn(&m_Radios))
+            pszEmpty = L"Bluetooth is turned off";
+        else if (!m_cDevices)
+            pszEmpty = L"No devices are paired with this PC.";
+        if (pszEmpty)
+        {
+            canvas.Text(pszEmpty, m_rcList, m_hFontSmall, m_Pal.DimText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            return;
+        }
+
+        for (int k = 0; k < TFY_BT_ROWS && m_nScroll + k < (int)m_cDevices; k++)
+        {
+            const TFYBTDEVICE *pDevice = &m_Devices[m_nScroll + k];
+            RECT rcRow = { m_rcList.left, m_rcList.top + k * Sc(48), m_rcList.right, m_rcList.top + (k + 1) * Sc(48) };
+            RECT rcBadge = { rcRow.left + Sc(8), rcRow.top + Sc(8), rcRow.left + Sc(40), rcRow.top + Sc(40) };
+            RECT rcGlyph = { rcBadge.left + Sc(6), rcBadge.top + Sc(6), rcBadge.right - Sc(6), rcBadge.bottom - Sc(6) };
+            RECT rcName = { rcBadge.right + Sc(12), rcRow.top + Sc(6), rcRow.right - Sc(8), rcRow.top + Sc(25) };
+            RECT rcStatus = { rcName.left, rcName.bottom, rcName.right, rcRow.bottom - Sc(5) };
+
+            canvas.FillRound(rcBadge, (float)Sc(6),
+                             pDevice->bConnected ? m_Pal.AccentBg : TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 40));
+            canvas.Icon(TfyBluetoothGlyph(pDevice->ulClass), rcGlyph,
+                        pDevice->bConnected ? m_Pal.AccentText : m_Pal.PanelText);
+            canvas.Text(pDevice->szName, rcName, m_hFontRow, m_Pal.PanelText,
+                        DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_END_ELLIPSIS);
+            canvas.Text(pDevice->bConnected ? L"Connected" : pDevice->bAuthenticated ? L"Paired" : L"Remembered",
+                        rcStatus, m_hFontSmall, m_Pal.DimText, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
+        }
+    }
+
+    LRESULT OnPaint(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        PAINTSTRUCT ps;
+        HDC hdcWnd = BeginPaint(&ps);
+        RECT rc;
+
+        GetClientRect(&rc);
+        {
+            ShellFrame::Canvas canvas(hdcWnd, rc);
+            RECT rcTitle = { m_rcBack.right + Sc(8), m_rcBack.top, m_rcSwitch.left - Sc(8), m_rcBack.bottom };
+            RECT rcArrow = { m_rcBack.left + Sc(8), m_rcBack.top + Sc(8), m_rcBack.right - Sc(8), m_rcBack.bottom - Sc(8) };
+            RECT rcSep = { 0, m_yFooter, rc.right, m_yFooter + 1 };
+            RECT rcLinkText = m_rcLink;
+
+            canvas.Fill(rc, m_Pal.PanelBg);
+            if (m_iHot == TFY_BTHIT_BACK)
+                canvas.FillRound(m_rcBack, (float)Sc(4), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 24));
+            canvas.Text(L"Bluetooth", rcTitle, m_hFontHeader, m_Pal.PanelText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+            PaintDevices(canvas);
+            canvas.Fill(rcSep, TfyMix(m_Pal.PanelBg, m_Pal.Border, 140));
+            if (m_iHot == TFY_BTHIT_LINK)
+                canvas.FillRound(m_rcLink, (float)Sc(4), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 24));
+            rcLinkText.left += Sc(4);
+            canvas.Text(L"More Bluetooth settings", rcLinkText, m_hFontRow, m_Pal.PanelText,
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+            canvas.Graphics().Flush(Gdiplus::FlushIntentionSync);
+            TfyDrawFluent(canvas.Dc(), &rcArrow, IDI_FLU_ARROWLEFT);
+            TfyDrawSwitch(canvas.Dc(), &m_rcSwitch, TfyDevicesOn(&m_Radios), m_iHot == TFY_BTHIT_SWITCH,
+                          m_Radios.cDevices != 0, &m_Pal);
+        }
+        EndPaint(&ps);
+        return 0;
+    }
+
+    LRESULT OnEraseBkgnd(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        return 1;
+    }
+
+    LRESULT OnMouseMove(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        int iHot = HitTest(pt);
+
+        if (!m_bTracking)
+        {
+            TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, m_hWnd, 0 };
+            TrackMouseEvent(&tme);
+            m_bTracking = TRUE;
+        }
+        if (iHot != m_iHot)
+        {
+            m_iHot = iHot;
+            InvalidateRect(NULL, FALSE);
+        }
+        return 0;
+    }
+
+    LRESULT OnMouseLeave(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        m_bTracking = FALSE;
+        if (m_iHot != TFY_BTHIT_NONE)
+        {
+            m_iHot = TFY_BTHIT_NONE;
+            InvalidateRect(NULL, FALSE);
+        }
+        return 0;
+    }
+
+    LRESULT OnMouseWheel(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        int nOld = m_nScroll;
+
+        m_nScroll -= GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
+        Layout();
+        if (m_nScroll != nOld)
+            InvalidateRect(NULL, FALSE);
+        return 0;
+    }
+
+    LRESULT OnLButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        int iHit = HitTest(pt);
+
+        if (iHit == TFY_BTHIT_BACK)
+        {
+            HWND hwndOwner = ::GetWindow(m_hWnd, GW_OWNER);
+            RECT rcAnchor = m_rcAnchor;
+
+            HandOffFlyout(m_hWnd);
+            FadeOut();
+            TrayQuickSettings_Toggle(hwndOwner, &rcAnchor);
+        }
+        else if (iHit == TFY_BTHIT_SWITCH)
+        {
+            if (TfyToggleDevices(m_hWnd, &m_Radios, !TfyDevicesOn(&m_Radios)))
+            {
+                if (!TfyDevicesOn(&m_Radios))
+                    m_cDevices = 0;
+                Relayout();
+            }
+        }
+        else if (iHit == TFY_BTHIT_LINK)
+        {
+            m_bLaunching = TRUE;
+            ShellExecuteW(NULL, NULL, L"ms-settings:bluetooth", NULL, NULL, SW_SHOWNORMAL);
+            m_bLaunching = FALSE;
+            FadeOut();
+        }
+        return 0;
+    }
+
+    LRESULT OnDevicesChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        Reload();
+        Relayout();
+        if (TfyDevicesOn(&m_Radios))
+            SetTimer(TFY_TIMER_BTREFRESH, 1500, NULL);
+        return 0;
+    }
+
+    LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        if (wParam == TFY_TIMER_BTREFRESH)
+        {
+            KillTimer(TFY_TIMER_BTREFRESH);
+            Reload();
+            Relayout();
+            return 0;
+        }
+        HandleFlyoutAnimation(m_hWnd, wParam);
+        return 0;
+    }
+
+    LRESULT OnActivate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        if (LOWORD(wParam) == WA_INACTIVE && !m_bLaunching)
+            FadeOut();
+        return 0;
+    }
+
+    LRESULT OnKeyDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        if (wParam == VK_ESCAPE)
+            FadeOut();
+        return 0;
+    }
+
+    LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        KillTimer(TFY_TIMER_ANIM);
+        KillTimer(TFY_TIMER_BTREFRESH);
+        if (m_hFontHeader) { DeleteObject(m_hFontHeader); m_hFontHeader = NULL; }
+        if (m_hFontRow) { DeleteObject(m_hFontRow); m_hFontRow = NULL; }
+        if (m_hFontSmall) { DeleteObject(m_hFontSmall); m_hFontSmall = NULL; }
+        return 0;
+    }
+
+    virtual void OnFinalMessage(HWND hWnd) override;
+
+    BEGIN_MSG_MAP(CTrayBluetoothWnd)
+        MESSAGE_HANDLER(WM_PAINT, OnPaint)
+        MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBkgnd)
+        MESSAGE_HANDLER(WM_TIMER, OnTimer)
+        MESSAGE_HANDLER(WM_MOUSEMOVE, OnMouseMove)
+        MESSAGE_HANDLER(WM_MOUSELEAVE, OnMouseLeave)
+        MESSAGE_HANDLER(WM_MOUSEWHEEL, OnMouseWheel)
+        MESSAGE_HANDLER(WM_LBUTTONUP, OnLButtonUp)
+        MESSAGE_HANDLER(WM_ACTIVATE, OnActivate)
+        MESSAGE_HANDLER(WM_KEYDOWN, OnKeyDown)
+        MESSAGE_HANDLER(TFY_WM_DEVICESCHANGED, OnDevicesChanged)
+        MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
+    END_MSG_MAP()
+};
+
+static CTrayBluetoothWnd *g_pTrayBluetooth = NULL;
+static ULONGLONG g_BtDismissTick = 0;
+
+void CTrayBluetoothWnd::OnFinalMessage(HWND hWnd)
+{
+    if (g_pTrayBluetooth == this)
+        g_pTrayBluetooth = NULL;
+    delete this;
+}
+
+VOID CTrayBluetoothWnd::FadeOut()
+{
+    if (!BeginFlyoutClose(m_hWnd))
+        return;
+    g_BtDismissTick = m_AnimT0;
+    KillTimer(TFY_TIMER_BTREFRESH);
+}
+
+VOID TrayBluetooth_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor)
+{
+    if (GetTickCount64() - g_BtDismissTick < TFY_REOPEN_GUARD_MS)
+        return;
+    if (g_pTrayBluetooth && g_pTrayBluetooth->IsWindow())
+    {
+        if (g_pTrayBluetooth->IsWindowVisible() && g_pTrayBluetooth->m_AnimPhase != TFY_CLOSE)
+        {
+            g_pTrayBluetooth->FadeOut();
+            return;
+        }
+        ::DestroyWindow(g_pTrayBluetooth->m_hWnd);
+        g_pTrayBluetooth = NULL;
+    }
+
+    CTrayBluetoothWnd *pBluetooth = new CTrayBluetoothWnd();
+    if (!pBluetooth)
+        return;
+    if (!pBluetooth->Create(hwndOwner, CWindow::rcDefault, NULL))
+    {
+        delete pBluetooth;
+        return;
+    }
+    g_pTrayBluetooth = pBluetooth;
+    pBluetooth->Toggle(hwndOwner, prcAnchor);
 }
 
 #define TFY_TIMER_MEDIAPOLL 0x55
@@ -11912,4 +12515,7 @@ VOID TrayFlyoutsAux_Destroy(VOID)
     if (g_pTrayNetwork && g_pTrayNetwork->IsWindow())
         ::DestroyWindow(g_pTrayNetwork->m_hWnd);
     g_pTrayNetwork = NULL;
+    if (g_pTrayBluetooth && g_pTrayBluetooth->IsWindow())
+        ::DestroyWindow(g_pTrayBluetooth->m_hWnd);
+    g_pTrayBluetooth = NULL;
 }

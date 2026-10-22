@@ -1,0 +1,43 @@
+Source: Microsoft Fluent UI System Icons
+Repository: https://github.com/microsoft/fluentui-system-icons
+Revision: 4d685f77b2cb8f3f412a74ec8d920c8c91149528
+License: MIT (see LICENSE)
+
+Files used, copied unmodified and rasterized by render-tray-icons.py:
+- assets/Bluetooth/SVG/ic_fluent_bluetooth_16_regular.svg
+- assets/Bluetooth/SVG/ic_fluent_bluetooth_20_regular.svg
+- assets/Bluetooth/SVG/ic_fluent_bluetooth_24_regular.svg
+- assets/Bluetooth/SVG/ic_fluent_bluetooth_28_regular.svg
+- assets/Bluetooth/SVG/ic_fluent_bluetooth_32_regular.svg
+- assets/Bluetooth/SVG/ic_fluent_bluetooth_48_regular.svg
+- assets/Speaker 0/SVG/ic_fluent_speaker_0_16_regular.svg
+- assets/Speaker 0/SVG/ic_fluent_speaker_0_20_regular.svg
+- assets/Speaker 0/SVG/ic_fluent_speaker_0_24_regular.svg
+- assets/Speaker 0/SVG/ic_fluent_speaker_0_28_regular.svg
+- assets/Speaker 0/SVG/ic_fluent_speaker_0_32_regular.svg
+- assets/Speaker 0/SVG/ic_fluent_speaker_0_48_regular.svg
+- assets/Speaker 1/SVG/ic_fluent_speaker_1_16_regular.svg
+- assets/Speaker 1/SVG/ic_fluent_speaker_1_20_regular.svg
+- assets/Speaker 1/SVG/ic_fluent_speaker_1_24_regular.svg
+- assets/Speaker 1/SVG/ic_fluent_speaker_1_28_regular.svg
+- assets/Speaker 1/SVG/ic_fluent_speaker_1_32_regular.svg
+- assets/Speaker 1/SVG/ic_fluent_speaker_1_48_regular.svg
+- assets/Speaker 2/SVG/ic_fluent_speaker_2_16_regular.svg
+- assets/Speaker 2/SVG/ic_fluent_speaker_2_20_regular.svg
+- assets/Speaker 2/SVG/ic_fluent_speaker_2_24_regular.svg
+- assets/Speaker 2/SVG/ic_fluent_speaker_2_28_regular.svg
+- assets/Speaker 2/SVG/ic_fluent_speaker_2_32_regular.svg
+- assets/Speaker 2/SVG/ic_fluent_speaker_2_48_regular.svg
+- assets/Speaker Mute/SVG/ic_fluent_speaker_mute_16_regular.svg
+- assets/Speaker Mute/SVG/ic_fluent_speaker_mute_20_regular.svg
+- assets/Speaker Mute/SVG/ic_fluent_speaker_mute_24_regular.svg
+- assets/Speaker Mute/SVG/ic_fluent_speaker_mute_28_regular.svg
+- assets/Speaker Mute/SVG/ic_fluent_speaker_mute_32_regular.svg
+- assets/Speaker Mute/SVG/ic_fluent_speaker_mute_48_regular.svg
+- assets/Warning/SVG/ic_fluent_warning_12_filled.svg
+- assets/Warning/SVG/ic_fluent_warning_16_filled.svg
+- assets/Warning/SVG/ic_fluent_warning_20_filled.svg
+- assets/Warning/SVG/ic_fluent_warning_24_filled.svg
+- assets/Warning/SVG/ic_fluent_warning_28_filled.svg
+- assets/Warning/SVG/ic_fluent_warning_32_filled.svg
+- assets/Warning/SVG/ic_fluent_warning_48_filled.svg

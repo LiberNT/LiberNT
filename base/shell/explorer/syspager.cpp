@@ -63,6 +63,7 @@ TrayCursorAnchor(VOID)
 #define TRAY_STOBJECT_CLASS    L"SystemTray_Main"
 #define TRAY_STOBJECT_VOLUME   (WM_APP + 0x4CB)
 #define TRAY_STOBJECT_POWER    (WM_APP + 0x4CD)
+#define TRAY_STOBJECT_BLUETOOTH (WM_APP + 0x4CF)
 #define TRAY_ICONSETTINGS_KEY  L"Control Panel\\NotifyIconSettings"
 
 static INT
@@ -80,6 +81,8 @@ TrayClassifyIcon(_In_ HWND hWnd, _In_ UINT uID)
             return TRAYICON_VOLUME;
         if (uID == TRAY_STOBJECT_POWER)
             return TRAYICON_POWER;
+        if (uID == TRAY_STOBJECT_BLUETOOTH)
+            return TRAYICON_BLUETOOTH;
         return TRAYICON_APP;
     }
 
@@ -88,6 +91,19 @@ TrayClassifyIcon(_In_ HWND hWnd, _In_ UINT uID)
         return TRAYICON_NETWORK;
 
     return TRAYICON_APP;
+}
+
+static INT
+TraySystemIconRank(_In_ INT Kind)
+{
+    static const INT SystemOrder[] = { TRAYICON_BLUETOOTH, TRAYICON_NETWORK, TRAYICON_VOLUME, TRAYICON_POWER };
+
+    for (INT i = 0; i < (INT)_countof(SystemOrder); i++)
+    {
+        if (SystemOrder[i] == Kind)
+            return i;
+    }
+    return -1;
 }
 
 static BOOL
@@ -345,7 +361,8 @@ public:
     VOID SetModern(BOOL bModern, INT cyButton);
     VOID UpdateVisibility();
     int IndexFromCommand(int idCommand);
-    VOID GetIcons(INT Filter, PTRAYICONLIST pList);
+    int InsertIndex(INT Kind);
+    VOID GetIcons(PTRAYICONLIST pList);
     BOOL ForwardIconEvent(CONST TRAYICONEVENT *pEvent);
     BOOL SetPromoted(HWND hWnd, UINT uID, BOOL bPromoted);
     POINT GetIconAnchor(INT iBtn);
@@ -1192,7 +1209,7 @@ BOOL CNotifyToolbar::AddButton(_In_ CONST NOTIFYICONDATA *iconData)
 
     /* TODO: support VERSION_4 (NIF_GUID, NIF_REALTIME, NIF_SHOWTIP) */
 
-    CToolbar::AddButton(&tbBtn);
+    CToolbar::InsertButton(InsertIndex(notifyItem->Kind), &tbBtn);
     ApplyButtonSize();
     UpdateVisibility();
 
@@ -1384,11 +1401,24 @@ BOOL CNotifyToolbar::IsItemVisible(InternalIconData *pItem)
 {
     if (pItem->dwState & NIS_HIDDEN)
         return FALSE;
-    if (!m_bModern)
+    if (!m_bModern || pItem->Kind != TRAYICON_APP)
         return TRUE;
-    if (pItem->Kind != TRAYICON_APP)
-        return FALSE;
     return pItem->bPromoted || !g_TaskbarSettings.bHideInactiveIcons;
+}
+
+int CNotifyToolbar::InsertIndex(INT Kind)
+{
+    INT Rank = TraySystemIconRank(Kind);
+    int count = GetButtonCount();
+
+    for (int i = 0; i < count; i++)
+    {
+        INT Other = GetItemData(i)->Kind;
+
+        if (Other != TRAYICON_APP && (Kind == TRAYICON_APP || TraySystemIconRank(Other) > Rank))
+            return i;
+    }
+    return count;
 }
 
 VOID CNotifyToolbar::UpdateVisibility()
@@ -1441,45 +1471,31 @@ int CNotifyToolbar::IndexFromCommand(int idCommand)
     return (int)SendMessageW(TB_COMMANDTOINDEX, idCommand, 0);
 }
 
-VOID CNotifyToolbar::GetIcons(INT Filter, PTRAYICONLIST pList)
+VOID CNotifyToolbar::GetIcons(PTRAYICONLIST pList)
 {
-    static const INT QuickSettingsOrder[] = { TRAYICON_NETWORK, TRAYICON_VOLUME, TRAYICON_POWER };
     int count = GetButtonCount();
-    UINT Pass, PassCount = (Filter == TRAYICONS_QUICKSETTINGS) ? _countof(QuickSettingsOrder) : 1;
 
     pList->himl = m_ImageList;
     pList->cItems = 0;
     if (!m_bModern)
         return;
 
-    for (Pass = 0; Pass < PassCount; Pass++)
+    for (int i = 0; i < count && pList->cItems < _countof(pList->Items); i++)
     {
-        for (int i = 0; i < count && pList->cItems < _countof(pList->Items); i++)
-        {
-            InternalIconData *pItem = GetItemData(i);
-            TBBUTTON btn;
-            PTRAYICONITEM pOut;
+        InternalIconData *pItem = GetItemData(i);
+        TBBUTTON btn;
+        PTRAYICONITEM pOut;
 
-            if (pItem->dwState & NIS_HIDDEN)
-                continue;
-            if (Filter == TRAYICONS_QUICKSETTINGS)
-            {
-                if (pItem->Kind != QuickSettingsOrder[Pass])
-                    continue;
-            }
-            else if (pItem->Kind != TRAYICON_APP || IsItemVisible(pItem))
-            {
-                continue;
-            }
+        if ((pItem->dwState & NIS_HIDDEN) || IsItemVisible(pItem))
+            continue;
 
-            GetButton(i, &btn);
-            pOut = &pList->Items[pList->cItems++];
-            pOut->hWnd = pItem->hWnd;
-            pOut->uID = pItem->uID;
-            pOut->Kind = pItem->Kind;
-            pOut->iImage = btn.iBitmap;
-            StringCchCopyW(pOut->szTip, _countof(pOut->szTip), pItem->szTip);
-        }
+        GetButton(i, &btn);
+        pOut = &pList->Items[pList->cItems++];
+        pOut->hWnd = pItem->hWnd;
+        pOut->uID = pItem->uID;
+        pOut->Kind = pItem->Kind;
+        pOut->iImage = btn.iBitmap;
+        StringCchCopyW(pOut->szTip, _countof(pOut->szTip), pItem->szTip);
     }
 }
 
@@ -1522,7 +1538,6 @@ BOOL CNotifyToolbar::SetPromoted(HWND hWnd, UINT uID, BOOL bPromoted)
 
 UINT CNotifyToolbar::GetLayoutSignature()
 {
-    UINT nQuickSettings = 0, nOverflow = 0;
     int count = GetButtonCount();
 
     if (!m_bModern)
@@ -1532,14 +1547,10 @@ UINT CNotifyToolbar::GetLayoutSignature()
     {
         InternalIconData *pItem = GetItemData(i);
 
-        if (pItem->dwState & NIS_HIDDEN)
-            continue;
-        if (pItem->Kind != TRAYICON_APP)
-            nQuickSettings++;
-        else if (!IsItemVisible(pItem))
-            nOverflow++;
+        if (!(pItem->dwState & NIS_HIDDEN) && !IsItemVisible(pItem))
+            return 1;
     }
-    return (nQuickSettings << 1) | (nOverflow ? 1 : 0);
+    return 0;
 }
 
 VOID CNotifyToolbar::NotifyParentRealign()
@@ -2170,7 +2181,7 @@ LRESULT CSysPagerWnd::OnGetTrayIcons(UINT uMsg, WPARAM wParam, LPARAM lParam, BO
 
     if (!pList)
         return FALSE;
-    Toolbar.GetIcons((INT)wParam, pList);
+    Toolbar.GetIcons(pList);
     return TRUE;
 }
 

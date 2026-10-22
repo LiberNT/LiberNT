@@ -50,4 +50,7 @@ BEGIN
     IDS_KEYS_STICKY "StickyKeys"
     IDS_KEYS_MOUSE "MouseKeys"
     IDS_KEYS_FILTER "FilterKeys"
+    IDS_BT_DEVICES "Bluetooth Devices"
+    IDS_BT_SHOW "Show Bluetooth &Devices"
+    IDS_BT_SETTINGS "Open &Settings"
 END

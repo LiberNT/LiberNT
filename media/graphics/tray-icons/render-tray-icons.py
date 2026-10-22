@@ -2,11 +2,12 @@
 """
 PROJECT:     LiberNT shell
 LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
-PURPOSE:     Render the notification area status icons on the pixel grid
+PURPOSE:     Render the notification area status icons from the pixel grid and Fluent glyphs
 COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 """
 
 import math
+import re
 import struct
 import sys
 import zlib
@@ -78,6 +79,132 @@ def grow(pts, r, s):
     return out
 
 
+FLUENT = Path(__file__).resolve().parent / "fluent"
+
+
+def svg_contours(name, s):
+    sizes = sorted(int(f.stem.split("_")[-2]) for f in FLUENT.glob("ic_fluent_%s_*.svg" % name))
+    size = min(sizes, key=lambda n: (abs(n - s), -n))
+    text = next(FLUENT.glob("ic_fluent_%s_%d_*.svg" % (name, size))).read_text()
+    box = float(re.search(r'viewBox="0 0 ([\d.]+)', text).group(1))
+    toks = re.findall(r"[MLHVCZ]|-?(?:\d+\.?\d*|\.\d+)", re.search(r' d="([^"]+)"', text).group(1))
+    contours, cur = [], []
+    x = y = 0.0
+    i = 0
+    cmd = None
+
+    def num():
+        nonlocal i
+        i += 1
+        return float(toks[i - 1])
+
+    while i < len(toks):
+        if toks[i] in "MLHVCZ":
+            cmd = toks[i]
+            i += 1
+            if cmd == "Z":
+                if cur:
+                    contours.append(cur)
+                    x, y = cur[0]
+                cur = []
+                continue
+        if cmd == "M":
+            if cur:
+                contours.append(cur)
+            x, y = num(), num()
+            cur = [(x, y)]
+            cmd = "L"
+        elif cmd == "L":
+            x, y = num(), num()
+            cur.append((x, y))
+        elif cmd == "H":
+            x = num()
+            cur.append((x, y))
+        elif cmd == "V":
+            y = num()
+            cur.append((x, y))
+        elif cmd == "C":
+            p = [num() for _ in range(6)]
+            for k in range(1, 17):
+                t = k / 16.0
+                u = 1.0 - t
+                cur.append((u * u * u * x + 3 * u * u * t * p[0] + 3 * u * t * t * p[2] + t * t * t * p[4],
+                            u * u * u * y + 3 * u * u * t * p[1] + 3 * u * t * t * p[3] + t * t * t * p[5]))
+            x, y = p[4], p[5]
+    if cur:
+        contours.append(cur)
+    return box, contours
+
+
+def coverage(contours, scale, ox, oy, s, sub=16):
+    edges = []
+    for c in contours:
+        pts = [(px * scale + ox, py * scale + oy) for px, py in c]
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:] + pts[:1]):
+            if y0 != y1:
+                edges.append((x0, y0, x1, y1))
+    cov = [0.0] * (s * s)
+    for j in range(s * sub):
+        yc = (j + 0.5) / sub
+        xs = sorted((x0 + (yc - y0) * (x1 - x0) / (y1 - y0), 1 if y1 > y0 else -1)
+                    for x0, y0, x1, y1 in edges if min(y0, y1) <= yc < max(y0, y1))
+        row = (j // sub) * s
+        wind = 0
+        for k in range(len(xs) - 1):
+            wind += xs[k][1]
+            if not wind:
+                continue
+            a, b = max(xs[k][0], 0.0), min(xs[k + 1][0], float(s))
+            for px in range(int(math.floor(a)), int(math.ceil(b))):
+                cov[row + px] += (min(b, px + 1) - max(a, px)) / sub
+    return [min(1.0, v) for v in cov]
+
+
+def over(dst, cov, rgba):
+    for p, a in enumerate(cov):
+        a *= rgba[3] / 255.0
+        if a <= 0.0:
+            continue
+        r, g, b, da = dst[p]
+        oa = a + da * (1.0 - a)
+        dst[p] = tuple((rgba[q] * a + (r, g, b)[q] * da * (1.0 - a)) / oa for q in range(3)) + (oa,)
+
+
+class Fluent:
+    def __init__(self, glyph):
+        self.glyph = glyph
+
+    def pixels(self, s, light):
+        box, contours = svg_contours(self.glyph, s)
+        out = [(0.0, 0.0, 0.0, 0.0)] * (s * s)
+        over(out, coverage(contours, s / box, 0.0, 0.0, s), LIGHT_GLYPH if light else WHITE)
+        return [tuple(int(round(v)) for v in px[:3]) + (int(round(px[3] * 255)),) for px in out]
+
+
+class Grid:
+    def __init__(self, draw):
+        self.draw = draw
+
+    def pixels(self, s, light):
+        c = Canvas(s)
+        self.draw(c)
+        knock_badge(c)
+        out = [(0.0, 0.0, 0.0, 0.0)] * (s * s)
+        for name, rgba in (("dim", DIM), ("white", LIGHT_GLYPH if light else WHITE), ("red", RED), ("bwhite", WHITE)):
+            cov = [0.0] * (s * s)
+            for i, j in c.px[name]:
+                cov[j * s + i] = 1.0
+            over(out, cov, rgba)
+        if c.px["yellow"]:
+            xs = [i for i, j in c.px["yellow"]]
+            ys = [j for i, j in c.px["yellow"]]
+            size = max(max(xs) - min(xs), max(ys) - min(ys)) + 1
+            box, contours = svg_contours("warning", size)
+            over(out, coverage(contours[:1], size / box, min(xs), min(ys), s), INK)
+            over(out, coverage(contours, size / box, min(xs), min(ys), s), YELLOW)
+        return [tuple(int(round(v)) for v in px[:3]) + (int(round(px[3] * 255)),) for px in out]
+
+
 def prune(c, least, cut):
     edge = grow(cut, 1, c.s)
     glyph = c.px["white"] | c.px["dim"]
@@ -99,14 +226,18 @@ def prune(c, least, cut):
                 c.px[name] -= part
 
 
-def compose(c, light):
-    s = c.s
+def knock_badge(c):
     badge = c.px["red"] | c.px["yellow"]
     if badge:
         xs = [i for i, j in badge]
         ys = [j for i, j in badge]
         box = {(i, j) for i in range(min(xs), max(xs) + 1) for j in range(min(ys), max(ys) + 1)}
         prune(c, 6 * c.w * c.w, c.knock(box, c.h))
+
+
+def compose(c, light):
+    s = c.s
+    knock_badge(c)
     glyph = c.px["white"] | c.px["dim"]
     halo = grow(glyph, c.h, s) | c.px["dark"]
     out = []
@@ -246,49 +377,6 @@ def bars(lit, badge=None):
     return draw
 
 
-def arc(c, x0, cy, r, rows):
-    pts = set()
-    for dy in range(-rows, rows + 1):
-        x = x0 + int(math.floor(math.sqrt(r * r - dy * dy) + 0.5))
-        for e in range(c.w):
-            pts.add((x - e, cy + dy))
-    c.cells("white", pts)
-
-
-def speaker(waves, mute=False):
-    def draw(c):
-        w = c.w
-        k = c.k
-        T = near(11 * k, 1)
-        bh = near(0.45 * T, 1)
-        rise = (T - bh) // 2
-        step = max(1, round(k))
-        cols = -(-rise // step)
-        cy0 = c.m + (c.H - T) // 2
-        cy = cy0 + T // 2
-        gap = max(1, round(k))
-        r1 = round(4 * k)
-        dr = max(w + 2, round(3 * k))
-        rows1 = min(int(r1 * 0.72), (c.H - 1) // 2)
-        lead = gap + w - int(math.floor(math.sqrt(r1 * r1 - rows1 * rows1) + 0.5))
-        width = w + gap + cols * w + lead + r1 + 2 * dr
-        x0 = c.mx + (c.s - 2 * c.mx - width) // 2
-        c.rect("white", x0, cy - bh // 2, x0 + w, cy - bh // 2 + bh)
-        xc = x0 + w + gap
-        for i in range(cols):
-            hh = min(T, bh + 2 * step * (i + 1))
-            c.rect("white", xc + i * w, cy - hh // 2, xc + (i + 1) * w, cy - hh // 2 + hh)
-        xe = xc + cols * w
-        ax = xe + lead - w
-        for j in range(waves):
-            r = r1 + j * dr
-            arc(c, ax, cy, r, min(int(r * 0.72), (c.H - 1) // 2))
-        if mute:
-            n = max(2, round(2 * k))
-            c.cells("white", cross(xe + gap + round(2 * k) + n, cy, n, w))
-    return draw
-
-
 def wired(badge=None):
     def draw(c):
         k = c.k
@@ -353,15 +441,15 @@ NETSHELL = "dll/shellext/netshell/res/tray/"
 STOBJECT = "dll/shellext/stobject/resources/tray/"
 
 ICONS = (
-    (NETSHELL + "wired.ico", wired()),
-    (NETSHELL + "wired_warn.ico", wired(badge_warn)),
-    (NETSHELL + "wired_x.ico", wired(badge_x)),
-    (NETSHELL + "wifi_1.ico", bars(5)),
-    (NETSHELL + "wifi_2.ico", bars(4)),
-    (NETSHELL + "wifi_3.ico", bars(2)),
-    (NETSHELL + "wifi_4.ico", bars(1)),
-    (NETSHELL + "wifi_warn.ico", bars(5, badge_warn)),
-    (NETSHELL + "wifi_x.ico", bars(0, badge_x)),
+    (NETSHELL + "wired.ico", Grid(wired())),
+    (NETSHELL + "wired_warn.ico", Grid(wired(badge_warn))),
+    (NETSHELL + "wired_x.ico", Grid(wired(badge_x))),
+    (NETSHELL + "wifi_1.ico", Grid(bars(5))),
+    (NETSHELL + "wifi_2.ico", Grid(bars(4))),
+    (NETSHELL + "wifi_3.ico", Grid(bars(2))),
+    (NETSHELL + "wifi_4.ico", Grid(bars(1))),
+    (NETSHELL + "wifi_warn.ico", Grid(bars(5, badge_warn))),
+    (NETSHELL + "wifi_x.ico", Grid(bars(0, badge_x))),
     (STOBJECT + "battery_0.ico", battery(0)),
     (STOBJECT + "battery_1.ico", battery(0.25)),
     (STOBJECT + "battery_2.ico", battery(0.5)),
@@ -374,16 +462,19 @@ ICONS = (
     (STOBJECT + "battery_charge_4.ico", battery_charge(1.0)),
     (STOBJECT + "battery_error.ico", battery_error),
     (STOBJECT + "power_ac.ico", power_ac),
-    (STOBJECT + "speaker_0.ico", speaker(0)),
-    (STOBJECT + "speaker_1.ico", speaker(1)),
-    (STOBJECT + "speaker_2.ico", speaker(2)),
-    (STOBJECT + "speaker_3.ico", speaker(3)),
-    (STOBJECT + "speaker_mute.ico", speaker(0, True)),
+    (STOBJECT + "speaker_0.ico", Fluent("speaker_0")),
+    (STOBJECT + "speaker_1.ico", Fluent("speaker_1")),
+    (STOBJECT + "speaker_2.ico", Fluent("speaker_2")),
+    (STOBJECT + "speaker_3.ico", Fluent("speaker_2")),
+    (STOBJECT + "speaker_mute.ico", Fluent("speaker_mute")),
     (STOBJECT + "usb.ico", usb),
+    (STOBJECT + "bluetooth.ico", Fluent("bluetooth")),
 )
 
 
 def render(draw, s, light=False):
+    if isinstance(draw, (Fluent, Grid)):
+        return draw.pixels(s, light)
     c = Canvas(s)
     draw(c)
     for name, pts in c.px.items():

@@ -3791,6 +3791,16 @@ HandleTrayContextMenu:
         return TRUE;
     }
 
+    LRESULT OnShowBluetoothFlyout(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        RECT rcAnchor;
+        if (!m_TrayNotify)
+            return FALSE;
+        ::GetWindowRect(m_TrayNotify, &rcAnchor);
+        TrayBluetooth_Toggle(m_hWnd, &rcAnchor);
+        return TRUE;
+    }
+
     LRESULT OnShowPowerFlyout(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
         RECT rcAnchor;
@@ -4236,6 +4246,7 @@ HandleTrayContextMenu:
         MESSAGE_HANDLER(TWM_OPENSTARTMENU, OnOpenStartMenu)
         MESSAGE_HANDLER(TWM_SHOWVOLUMEFLYOUT, OnShowVolumeFlyout)
         MESSAGE_HANDLER(TWM_SHOWNETWORKFLYOUT, OnShowNetworkFlyout)
+        MESSAGE_HANDLER(TWM_SHOWBLUETOOTHFLYOUT, OnShowBluetoothFlyout)
         MESSAGE_HANDLER(TWM_SHOWCALENDARFLYOUT, OnShowCalendarFlyout)
         MESSAGE_HANDLER(TWM_SHOWPOWERFLYOUT, OnShowPowerFlyout)
         MESSAGE_HANDLER(TWM_DOEXITWINDOWS, OnDoExitWindows)

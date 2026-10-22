@@ -219,4 +219,5 @@ BEGIN
     IDS_TRAYCHEVRON_TOOLTIP "Show hidden icons"
     IDS_TRAYCLOCK_NEWNOTIFICATION "%u new notification"
     IDS_TRAYCLOCK_NEWNOTIFICATIONS "%u new notifications"
+    IDS_TRAYQUICKSETTINGS_TOOLTIP "Quick settings"
 END

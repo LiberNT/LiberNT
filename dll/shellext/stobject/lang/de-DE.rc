@@ -50,4 +50,7 @@ BEGIN
     IDS_KEYS_STICKY "Einrastfunktion"
     IDS_KEYS_MOUSE "Tastaturmaus"
     IDS_KEYS_FILTER "Anschlagverzögerung"
+    IDS_BT_DEVICES "Bluetooth Devices"
+    IDS_BT_SHOW "Show Bluetooth &Devices"
+    IDS_BT_SETTINGS "Open &Settings"
 END

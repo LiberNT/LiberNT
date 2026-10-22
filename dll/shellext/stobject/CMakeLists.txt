@@ -9,6 +9,7 @@ add_rc_deps(stobject.rc ${stobject_rc_deps})
 list(APPEND SOURCE
     csystray.cpp
     stobject.cpp
+    bluetooth.cpp
     hotplug.cpp
     mouse.cpp
     power.cpp

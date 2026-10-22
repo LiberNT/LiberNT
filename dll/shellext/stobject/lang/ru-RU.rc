@@ -58,4 +58,7 @@ BEGIN
     IDS_KEYS_STICKY "Залипание клавиш"
     IDS_KEYS_MOUSE "Управление указателем с клавиатуры"
     IDS_KEYS_FILTER "Фильтрация ввода"
+    IDS_BT_DEVICES "Bluetooth Devices"
+    IDS_BT_SHOW "Show Bluetooth &Devices"
+    IDS_BT_SETTINGS "Open &Settings"
 END

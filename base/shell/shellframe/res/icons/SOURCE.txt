@@ -125,6 +125,7 @@ Files used, copied unmodified and drawn from their path data at run time:
 - assets/Text Bullet List LTR/SVG/ic_fluent_text_bullet_list_ltr_20_regular.svg
 - assets/Text Bullet List Square/SVG/ic_fluent_text_bullet_list_square_20_regular.svg
 - assets/Text Font/SVG/ic_fluent_text_font_20_regular.svg
+- assets/Toggle Multiple/SVG/ic_fluent_toggle_multiple_20_regular.svg
 - assets/Video/SVG/ic_fluent_video_20_regular.svg
 - assets/Weather Moon/SVG/ic_fluent_weather_moon_20_regular.svg
 - assets/WiFi 1/SVG/ic_fluent_wifi_1_20_regular.svg

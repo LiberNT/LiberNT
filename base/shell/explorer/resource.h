@@ -207,6 +207,7 @@
 #define IDS_TRAYCHEVRON_TOOLTIP            815
 #define IDS_TRAYCLOCK_NEWNOTIFICATION      816
 #define IDS_TRAYCLOCK_NEWNOTIFICATIONS     817
+#define IDS_TRAYQUICKSETTINGS_TOOLTIP      818
 
 /* These values must be synchronized with shell32 */
 #define IDS_ADVANCED_DISPLAY_FAVORITES              30466

@@ -17,6 +17,7 @@ VOID TrayVolume_StartWatch(VOID);
 VOID TrayBrightness_StartWatch(VOID);
 HWND TrayMedia_FindSession(BOOL *pbPlaying);
 VOID TrayNetwork_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor);
+VOID TrayBluetooth_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor);
 VOID TrayMixer_Open(IN const RECT *prcAnchor);
 VOID TrayPower_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor);
 
