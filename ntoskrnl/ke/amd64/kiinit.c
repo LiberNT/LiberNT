@@ -351,29 +351,31 @@ KiInitializeP0BootStructures(
 
 CODE_SEG("INIT")
 static
-BOOLEAN
-KiHvApicMsrsRecommended(VOID)
+ULONG
+KiQueryHypervisorRecommendations(
+    _Out_ PULONG Privileges)
 {
     INT CpuInfo[4];
 
+    *Privileges = 0;
+
     __cpuid(CpuInfo, 1);
     if (!(CpuInfo[2] & 0x80000000))
-        return FALSE;
+        return 0;
 
     __cpuid(CpuInfo, 0x40000000);
     if ((ULONG)CpuInfo[0] < 0x40000004)
-        return FALSE;
+        return 0;
 
     __cpuid(CpuInfo, 0x40000001);
-    if ((ULONG)CpuInfo[0] != 0x31237648)
-        return FALSE;
+    if ((ULONG)CpuInfo[0] != HV_CPUID_INTERFACE_HV1)
+        return 0;
 
     __cpuid(CpuInfo, 0x40000003);
-    if (!(CpuInfo[0] & 0x10))
-        return FALSE;
+    *Privileges = (ULONG)CpuInfo[0];
 
     __cpuid(CpuInfo, 0x40000004);
-    return (CpuInfo[0] & 0x108) != 0;
+    return (ULONG)CpuInfo[0];
 }
 
 CODE_SEG("INIT")
@@ -384,8 +386,12 @@ KiInitializeKernelMachineDependent(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     ULONG64 FeatureBits = KeFeatureBits;
+    ULONG HvPrivileges, HvRecommendations;
 
-    KiHvApicMsrs = KiHvApicMsrsRecommended();
+    HvRecommendations = KiQueryHypervisorRecommendations(&HvPrivileges);
+    KiHvApicMsrs = (HvPrivileges & HV_ACCESS_INTR_CTRL_REGS) &&
+                   (HvRecommendations & (HV_APIC_ACCESS_RECOMMENDED | HV_X2APIC_MSRS_RECOMMENDED));
+    KiRelaxedTiming = (HvRecommendations & HV_RELAXED_TIMING_RECOMMENDED) != 0;
 
     /* Set boot-level flags */
     KeI386CpuType = Prcb->CpuType;

@@ -23,6 +23,7 @@ static ULONGLONG KiLastClockInterruptTime;
 PKPRCB volatile KiClockOwnerPrcb;
 ULONG KeTimeAdjustment;
 BOOLEAN KiTimeAdjustmentEnabled = FALSE;
+BOOLEAN KiRelaxedTiming;
 
 /* FUNCTIONS ******************************************************************/
 
@@ -90,7 +91,7 @@ KiCheckClockWatchdog(
     ULONG Number;
     ULONG Timeout;
 
-    if (KdEnteredDebugger || KeBugCheckActive || (KeMaximumIncrement == 0))
+    if (KdEnteredDebugger || KeBugCheckActive || KiRelaxedTiming || (KeMaximumIncrement == 0))
         return;
 
     Timeout = KI_CLOCK_WATCHDOG_TIMEOUT / KeMaximumIncrement;
@@ -120,7 +121,7 @@ KiCheckClockOwnerWatchdog(
 
     OwnerPrcb = KiClockOwnerPrcb;
     if ((OwnerPrcb == NULL) || (OwnerPrcb == Prcb) ||
-        KdEnteredDebugger || KeBugCheckActive || (KeMaximumIncrement == 0) ||
+        KdEnteredDebugger || KeBugCheckActive || KiRelaxedTiming || (KeMaximumIncrement == 0) ||
         KiClockTickSuspended(OwnerPrcb))
     {
         return;
@@ -150,7 +151,7 @@ KiUpdateDpcWatchdog(
         return;
     }
 
-    if (KdEnteredDebugger || KeBugCheckActive)
+    if (KdEnteredDebugger || KeBugCheckActive || KiRelaxedTiming)
         return;
 
     if (Prcb->DpcRoutineActive)
