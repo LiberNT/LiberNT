@@ -462,7 +462,11 @@ static DWORD send_ssl_chunk( struct netconn *conn, const void *msg, size_t size,
     if ((res = EncryptMessage(&conn->ssl_ctx, 0, &buf_desc, 0)) != SEC_E_OK)
     {
         WARN( "EncryptMessage failed: %#lx\n", res );
+#ifdef __REACTOS__
+        return ERROR_WINHTTP_SECURE_CHANNEL_ERROR;
+#else
         return res;
+#endif
     }
 
     if (sock_send( conn->socket, conn->ssl_write_buf, bufs[0].cbBuffer + bufs[1].cbBuffer + bufs[2].cbBuffer, ovr ) < 1)
@@ -658,6 +662,12 @@ DWORD netconn_recv( struct netconn *conn, void *buf, size_t len, int flags, int 
             if ((res = read_ssl_chunk( conn, (BYTE *)buf + size, len - size, &cread, &eof )))
             {
                 WARN( "read_ssl_chunk failed: %lu\n", res );
+#ifdef __REACTOS__
+                if (res == SEC_E_INCOMPLETE_MESSAGE)
+                    res = ERROR_WINHTTP_CONNECTION_ERROR;
+                else if (FAILED((HRESULT)res) && HRESULT_FACILITY(res) == FACILITY_SECURITY)
+                    res = ERROR_WINHTTP_SECURE_CHANNEL_ERROR;
+#endif
                 if (!size) return res;
                 break;
             }
