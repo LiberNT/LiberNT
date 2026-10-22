@@ -44,7 +44,121 @@ typedef struct _WINE_REGSTOREINFO
     struct list      crlsToDelete;
     struct list      ctlsToDelete;
     HANDLE           key_modified_event;
+#ifdef __REACTOS__
+    struct list      notify_events;
+#endif
 } WINE_REGSTOREINFO;
+
+#ifdef __REACTOS__
+typedef struct _WINE_REGSTORE_NOTIFY
+{
+    struct list entry;
+    HANDLE      caller_event;
+    HANDLE      event;
+    BOOL        duplicated;
+    HANDLE      key_event;
+    HANDLE      wait;
+    HKEY        key;
+} WINE_REGSTORE_NOTIFY;
+
+static void CALLBACK CRYPT_RegNotifyCallback(PVOID context, BOOLEAN timed_out)
+{
+    WINE_REGSTORE_NOTIFY *notify = context;
+
+    SetEvent(notify->event);
+}
+
+static void CRYPT_RegFreeNotify(WINE_REGSTORE_NOTIFY *notify)
+{
+    list_remove(&notify->entry);
+    if (notify->wait)
+        UnregisterWaitEx(notify->wait, INVALID_HANDLE_VALUE);
+    if (notify->key)
+        RegCloseKey(notify->key);
+    if (notify->key_event)
+        CloseHandle(notify->key_event);
+    if (notify->duplicated)
+        CloseHandle(notify->event);
+    CryptMemFree(notify);
+}
+
+static WINE_REGSTORE_NOTIFY *CRYPT_RegFindNotify(WINE_REGSTOREINFO *store, HANDLE event)
+{
+    WINE_REGSTORE_NOTIFY *notify;
+
+    LIST_FOR_EACH_ENTRY(notify, &store->notify_events, WINE_REGSTORE_NOTIFY, entry)
+    {
+        if (notify->caller_event == event)
+            return notify;
+    }
+    return NULL;
+}
+
+static BOOL CRYPT_RegArmNotify(WINE_REGSTORE_NOTIFY *notify)
+{
+    LSTATUS status = RegNotifyChangeKeyValue(notify->key, TRUE,
+     REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET, notify->key_event, TRUE);
+
+    if (status)
+    {
+        SetLastError(status);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static BOOL CRYPT_RegAddNotify(WINE_REGSTOREINFO *store, HANDLE event, DWORD dwFlags)
+{
+    WINE_REGSTORE_NOTIFY *notify;
+    LSTATUS status;
+    DWORD error;
+
+    if (!(notify = CryptMemAlloc(sizeof(*notify))))
+    {
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+    notify->caller_event = event;
+    notify->event = event;
+    notify->duplicated = FALSE;
+    notify->key_event = NULL;
+    notify->wait = NULL;
+    notify->key = NULL;
+    list_add_tail(&store->notify_events, &notify->entry);
+    if ((status = RegOpenKeyExW(store->key, NULL, 0, KEY_NOTIFY, &notify->key)))
+    {
+        notify->key = NULL;
+        SetLastError(status);
+        goto fail;
+    }
+    if (!(dwFlags & CERT_STORE_CTRL_INHIBIT_DUPLICATE_HANDLE_FLAG))
+    {
+        if (!DuplicateHandle(GetCurrentProcess(), event, GetCurrentProcess(), &notify->event,
+         0, FALSE, DUPLICATE_SAME_ACCESS))
+        {
+            notify->event = event;
+            goto fail;
+        }
+        notify->duplicated = TRUE;
+    }
+    if (!(notify->key_event = CreateEventW(NULL, FALSE, FALSE, NULL)))
+        goto fail;
+    if (!RegisterWaitForSingleObject(&notify->wait, notify->key_event, CRYPT_RegNotifyCallback,
+     notify, INFINITE, WT_EXECUTEDEFAULT))
+    {
+        notify->wait = NULL;
+        goto fail;
+    }
+    if (CRYPT_RegArmNotify(notify))
+        return TRUE;
+
+fail:
+    error = GetLastError();
+    CRYPT_RegFreeNotify(notify);
+    SetLastError(error);
+    return FALSE;
+}
+#endif
 
 void CRYPT_HashToStr(const BYTE *hash, LPWSTR asciiHash)
 {
@@ -324,6 +438,10 @@ static void WINAPI CRYPT_RegCloseStore(HCERTSTORE hCertStore, DWORD dwFlags)
         FIXME("Unimplemented flags: %08lx\n", dwFlags);
 
     CRYPT_RegFlushStore(store, dwFlags & CERT_CLOSE_STORE_FORCE_FLAG);
+#ifdef __REACTOS__
+    while (!list_empty(&store->notify_events))
+        CRYPT_RegFreeNotify(LIST_ENTRY(list_head(&store->notify_events), WINE_REGSTORE_NOTIFY, entry));
+#endif
     RegCloseKey(store->key);
     CloseHandle(store->key_modified_event);
     store->cs.DebugInfo->Spare[0] = 0;
@@ -483,6 +601,18 @@ static BOOL WINAPI CRYPT_RegControl(HCERTSTORE hCertStore, DWORD dwFlags,
             I_CertUpdateStore(store->memStore, memStore, 0, 0);
             CertCloseStore(memStore, 0);
         }
+#ifdef __REACTOS__
+        if (pvCtrlPara)
+        {
+            HANDLE event = *(const HANDLE *)pvCtrlPara;
+            WINE_REGSTORE_NOTIFY *notify = CRYPT_RegFindNotify(store, event);
+
+            if (notify)
+                ret = CRYPT_RegArmNotify(notify);
+            else
+                ret = CRYPT_RegAddNotify(store, event, dwFlags);
+        }
+#endif
         LeaveCriticalSection(&store->cs);
         break;
     }
@@ -494,8 +624,35 @@ static BOOL WINAPI CRYPT_RegControl(HCERTSTORE hCertStore, DWORD dwFlags,
         FIXME("CERT_STORE_CTRL_AUTO_RESYNC: stub\n");
         break;
     case CERT_STORE_CTRL_NOTIFY_CHANGE:
+#ifdef __REACTOS__
+        if (pvCtrlPara)
+        {
+            EnterCriticalSection(&store->cs);
+            ret = CRYPT_RegAddNotify(store, *(const HANDLE *)pvCtrlPara, dwFlags);
+            LeaveCriticalSection(&store->cs);
+        }
+#else
         FIXME("CERT_STORE_CTRL_NOTIFY_CHANGE: stub\n");
+#endif
         break;
+#ifdef __REACTOS__
+    case CERT_STORE_CTRL_CANCEL_NOTIFY:
+    {
+        WINE_REGSTORE_NOTIFY *notify;
+
+        if (!pvCtrlPara)
+        {
+            SetLastError(E_INVALIDARG);
+            ret = FALSE;
+            break;
+        }
+        EnterCriticalSection(&store->cs);
+        if ((notify = CRYPT_RegFindNotify(store, *(const HANDLE *)pvCtrlPara)))
+            CRYPT_RegFreeNotify(notify);
+        LeaveCriticalSection(&store->cs);
+        break;
+    }
+#endif
     default:
         FIXME("%lu: stub\n", dwCtrlType);
         ret = FALSE;
@@ -591,6 +748,9 @@ WINECRYPT_CERTSTORE *CRYPT_RegOpenStore(HCRYPTPROV hCryptProv, DWORD dwFlags,
                     list_init(&regInfo->certsToDelete);
                     list_init(&regInfo->crlsToDelete);
                     list_init(&regInfo->ctlsToDelete);
+#ifdef __REACTOS__
+                    list_init(&regInfo->notify_events);
+#endif
                     regInfo->key_modified_event = CreateEventW(NULL, FALSE, FALSE, NULL);
                     if (RegNotifyChangeKeyValue(regInfo->key, TRUE, REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
                         regInfo->key_modified_event, TRUE))

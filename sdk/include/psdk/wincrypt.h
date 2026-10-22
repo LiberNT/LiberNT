@@ -2975,6 +2975,8 @@ static const WCHAR CERT_PHYSICAL_STORE_AUTH_ROOT_NAME[] =
 #define CERT_STORE_CTRL_AUTO_RESYNC   4
 #define CERT_STORE_CTRL_CANCEL_NOTIFY 5
 
+#define CERT_STORE_CTRL_INHIBIT_DUPLICATE_HANDLE_FLAG 0x1
+
 #define CERT_STORE_CTRL_COMMIT_FORCE_FLAG 0x1
 #define CERT_STORE_CTRL_COMMIT_CLEAR_FLAG 0x2
 
@@ -5868,6 +5870,20 @@ BOOL WINAPI CryptProtectData( DATA_BLOB* pDataIn, LPCWSTR szDataDescr,
 BOOL WINAPI CryptUnprotectData( DATA_BLOB* pDataIn, LPWSTR* ppszDataDescr,
  DATA_BLOB* pOptionalEntropy, PVOID pvReserved,
  CRYPTPROTECT_PROMPTSTRUCT* pPromptStruct, DWORD dwFlags, DATA_BLOB* pDataOut );
+
+BOOL
+WINAPI
+CryptProtectMemory(
+  _Inout_ LPVOID pDataIn,
+  _In_ DWORD cbDataIn,
+  _In_ DWORD dwFlags);
+
+BOOL
+WINAPI
+CryptUnprotectMemory(
+  _Inout_ LPVOID pDataIn,
+  _In_ DWORD cbDataIn,
+  _In_ DWORD dwFlags);
 
 DWORD
 WINAPI
