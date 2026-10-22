@@ -5,6 +5,10 @@ include_directories(${REACTOS_SOURCE_DIR}/sdk/include/wine)
 spec2def(combase.dll combase.spec ADD_IMPORTLIB)
 add_idl_headers(combase_idlheader dcom.idl)
 add_rpc_files(client irpcss.idl)
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/irpcss_c.c
+    DEPENDS ${REACTOS_SOURCE_DIR}/sdk/include/wine/irot.idl ${REACTOS_SOURCE_DIR}/sdk/include/wine/irpcss.idl
+    APPEND)
 
 list(APPEND SOURCE
     apartment.c

@@ -553,12 +553,32 @@ static ULONG WINAPI global_options_Release(IGlobalOptions *iface)
     return refcount;
 }
 
+#ifdef __REACTOS__
+ULONG_PTR get_global_option(GLOBALOPT_PROPERTIES property)
+{
+    return (ULONG_PTR)InterlockedCompareExchangePointer((void **)&global_options[property], NULL, NULL);
+}
+
+static HRESULT WINAPI global_options_Set(IGlobalOptions *iface, GLOBALOPT_PROPERTIES property, ULONG_PTR value)
+{
+    TRACE("%p, %u, %Ix.\n", iface, property, value);
+
+    if (property < COMGLB_EXCEPTION_HANDLING || property > COMGLB_PROPERTIES_RESERVED3)
+        return E_INVALIDARG;
+    if (property == COMGLB_EXCEPTION_HANDLING && value > COMGLB_EXCEPTION_DONOT_HANDLE_ANY)
+        return E_INVALIDARG;
+
+    InterlockedExchangePointer((void **)&global_options[property], (void *)value);
+    return S_OK;
+}
+#else
 static HRESULT WINAPI global_options_Set(IGlobalOptions *iface, GLOBALOPT_PROPERTIES property, ULONG_PTR value)
 {
     FIXME("%p, %u, %Ix.\n", iface, property, value);
 
     return S_OK;
 }
+#endif
 
 static HRESULT WINAPI global_options_Query(IGlobalOptions *iface, GLOBALOPT_PROPERTIES property, ULONG_PTR *value)
 {

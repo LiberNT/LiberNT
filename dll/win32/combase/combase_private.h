@@ -58,6 +58,9 @@ struct apartment
 
 HRESULT open_key_for_clsid(REFCLSID clsid, const WCHAR *keyname, REGSAM access, HKEY *subkey);
 HRESULT open_appidkey_from_clsid(REFCLSID clsid, REGSAM access, HKEY *subkey);
+#ifdef __REACTOS__
+ULONG_PTR get_global_option(GLOBALOPT_PROPERTIES property);
+#endif
 
 /* DCOM messages used by the apartment window (not compatible with native) */
 #define DM_EXECUTERPC   (WM_USER + 0) /* WPARAM = 0, LPARAM = (struct dispatch_params *) */
