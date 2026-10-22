@@ -3142,6 +3142,12 @@ HRESULT WINAPI ShellExecCmdLine(
         apPathList[1] = NULL;
         PathFindOnPathExW(szFile, apPathList, WHICH_DEFAULT);
 
+        if (GetFileAttributesW(szFile) == INVALID_FILE_ATTRIBUTES &&
+            SHELL_TryAppPathW(szFile, szFile2, NULL))
+        {
+            StringCchCopyW(szFile, _countof(szFile), szFile2);
+        }
+
         if (!(dwSeclFlags & SECL_ALLOW_NONEXE))
         {
             if (!GetBinaryTypeW(szFile, &dwType))
