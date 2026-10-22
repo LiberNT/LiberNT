@@ -655,7 +655,7 @@ HalpGicDetectVersion(VOID)
      *   0x3 = GICv3
      *   0x4 = GICv4
      */
-    Pidr2 = *HalpMmio((ULONG_PTR)HalpGicdBase, GICD_PIDR2);
+    Pidr2 = *HalpMmio((ULONG_PTR)HalpGicdBase, HalpGicUseSysRegs ? GICD_PIDR2 : GICD_ICPIDR2);
     ArchRev = (Pidr2 >> GICD_PIDR2_ARCHREV_SHIFT) & 0xF;
     if (ArchRev == 0)
     {
@@ -878,7 +878,7 @@ HalpInitGic(
     Pfr0Gic = (ULONG)((Pfr0 >> 24) & 0xF);
 
     /* Read distributor architecture revision from GICD_PIDR2 */
-    Pidr2 = *HalpMmio((ULONG_PTR)HalpGicdBase, GICD_PIDR2);
+    Pidr2 = *HalpMmio((ULONG_PTR)HalpGicdBase, HalpGicUseSysRegs ? GICD_PIDR2 : GICD_ICPIDR2);
     HalpGicArchRev = ((Pidr2 >> 4) & 0xF);
     if (HalpGicArchRev == 0)
         HalpGicArchRev = HalpGicUseSysRegs ? 3 : 2;
