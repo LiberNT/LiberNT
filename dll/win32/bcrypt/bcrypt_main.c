@@ -58,6 +58,12 @@ enum alg_id
     ALG_ID_AES,
     ALG_ID_AES_GMAC,
     ALG_ID_RC4,
+#ifdef __REACTOS__
+    ALG_ID_DES,
+    ALG_ID_DESX,
+    ALG_ID_3DES_112,
+    ALG_ID_RC2,
+#endif
 
     /* hash */
     ALG_ID_SHA256,
@@ -157,6 +163,20 @@ struct gcm_key
 #define BLOCK_LENGTH_3DES   8
 #define BLOCK_LENGTH_AES   16
 
+#ifdef __REACTOS__
+struct legacy_key
+{
+    PCSYMCRYPT_BLOCKCIPHER cipher;
+    union
+    {
+        SYMCRYPT_DES_EXPANDED_KEY des;
+        SYMCRYPT_3DES_EXPANDED_KEY tdes;
+        SYMCRYPT_DESX_EXPANDED_KEY desx;
+        SYMCRYPT_RC2_EXPANDED_KEY rc2;
+    } handle;
+};
+#endif
+
 struct symmetric_key
 {
     enum chain_mode  mode;
@@ -169,6 +189,9 @@ struct symmetric_key
     {
         struct aes_key aes;
         struct gcm_key gcm;
+#ifdef __REACTOS__
+        struct legacy_key legacy;
+#endif
     };
 };
 
@@ -472,11 +495,21 @@ static const struct
 }
 builtin_algorithms[] =
 {
+#ifdef __REACTOS__
+    {  BCRYPT_3DES_ALGORITHM,       BCRYPT_CIPHER_INTERFACE,                558,    0,    0 },
+#else
     {  BCRYPT_3DES_ALGORITHM,       BCRYPT_CIPHER_INTERFACE,                522,    0,    0 },
+#endif
     {  BCRYPT_CHACHA20_POLY1305_ALGORITHM, BCRYPT_CIPHER_INTERFACE,         166,    0,    0 },
     {  BCRYPT_AES_ALGORITHM,        BCRYPT_CIPHER_INTERFACE,                654,    0,    0 },
     {  BCRYPT_AES_GMAC_ALGORITHM,   BCRYPT_CIPHER_INTERFACE,                654,    0,    0, 0, CHAIN_MODE_GCM },
     {  BCRYPT_RC4_ALGORITHM,        BCRYPT_CIPHER_INTERFACE,                654,    0,    0 },
+#ifdef __REACTOS__
+    {  BCRYPT_DES_ALGORITHM,        BCRYPT_CIPHER_INTERFACE,                542,    0,    0 },
+    {  BCRYPT_DESX_ALGORITHM,       BCRYPT_CIPHER_INTERFACE,                574,    0,    0 },
+    {  BCRYPT_3DES_112_ALGORITHM,   BCRYPT_CIPHER_INTERFACE,                542,    0,    0 },
+    {  BCRYPT_RC2_ALGORITHM,        BCRYPT_CIPHER_INTERFACE,                414,    0,    0 },
+#endif
     {  BCRYPT_SHA256_ALGORITHM,     BCRYPT_HASH_INTERFACE,                  286,   32,  512 },
     {  BCRYPT_SHA384_ALGORITHM,     BCRYPT_HASH_INTERFACE,                  382,   48, 1024 },
     {  BCRYPT_SHA512_ALGORITHM,     BCRYPT_HASH_INTERFACE,                  382,   64, 1024 },
@@ -591,23 +624,47 @@ static const struct algorithm pseudo_algorithms[] =
     {{ MAGIC_ALG }, ALG_ID_3DES, CHAIN_MODE_CBC },
     {{ MAGIC_ALG }, ALG_ID_3DES, CHAIN_MODE_ECB },
     {{ MAGIC_ALG }, ALG_ID_3DES, CHAIN_MODE_CFB },
+#ifdef __REACTOS__
+    {{ MAGIC_ALG }, ALG_ID_3DES_112, CHAIN_MODE_CBC },
+    {{ MAGIC_ALG }, ALG_ID_3DES_112, CHAIN_MODE_ECB },
+    {{ MAGIC_ALG }, ALG_ID_3DES_112, CHAIN_MODE_CFB },
+#else
     {{ 0 }}, /* 3DES_112_CBC */
     {{ 0 }}, /* 3DES_112_ECB */
     {{ 0 }}, /* 3DES_112_CFB */
+#endif
     {{ MAGIC_ALG }, ALG_ID_AES, CHAIN_MODE_CBC },
     {{ MAGIC_ALG }, ALG_ID_AES, CHAIN_MODE_ECB },
     {{ MAGIC_ALG }, ALG_ID_AES, CHAIN_MODE_CFB },
     {{ MAGIC_ALG }, ALG_ID_AES, CHAIN_MODE_CCM },
     {{ MAGIC_ALG }, ALG_ID_AES, CHAIN_MODE_GCM },
+#ifdef __REACTOS__
+    {{ MAGIC_ALG }, ALG_ID_DES, CHAIN_MODE_CBC },
+    {{ MAGIC_ALG }, ALG_ID_DES, CHAIN_MODE_ECB },
+    {{ MAGIC_ALG }, ALG_ID_DES, CHAIN_MODE_CFB },
+#else
     {{ 0 }}, /* DES_CBC */
     {{ 0 }}, /* DES_ECB */
     {{ 0 }}, /* DES_CFB */
+#endif
+#ifdef __REACTOS__
+    {{ MAGIC_ALG }, ALG_ID_DESX, CHAIN_MODE_CBC },
+    {{ MAGIC_ALG }, ALG_ID_DESX, CHAIN_MODE_ECB },
+    {{ MAGIC_ALG }, ALG_ID_DESX, CHAIN_MODE_CFB },
+#else
     {{ 0 }}, /* DESX_CBC */
     {{ 0 }}, /* DESX_ECB */
     {{ 0 }}, /* DESX_CFB */
+#endif
+#ifdef __REACTOS__
+    {{ MAGIC_ALG }, ALG_ID_RC2, CHAIN_MODE_CBC },
+    {{ MAGIC_ALG }, ALG_ID_RC2, CHAIN_MODE_ECB },
+    {{ MAGIC_ALG }, ALG_ID_RC2, CHAIN_MODE_CFB },
+#else
     {{ 0 }}, /* RC2_CBC */
     {{ 0 }}, /* RC2_ECB */
     {{ 0 }}, /* RC2_CFB */
+#endif
     {{ MAGIC_ALG }, ALG_ID_DH },
     {{ MAGIC_ALG }, ALG_ID_ECDH },
     {{ MAGIC_ALG }, ALG_ID_ECDH_P256, 0, 0, ECC_CURVE_P256R1 },
@@ -842,6 +899,67 @@ static NTSTATUS get_generic_alg_property( enum alg_id id, const WCHAR *prop, UCH
     return STATUS_NOT_IMPLEMENTED;
 }
 
+#ifdef __REACTOS__
+static NTSTATUS get_legacy_property( enum alg_id id, enum chain_mode mode, const WCHAR *prop, UCHAR *buf, ULONG size,
+                                     ULONG *ret_size )
+{
+    if (!wcscmp( prop, BCRYPT_BLOCK_LENGTH ))
+        return get_dword_property( buf, size, ret_size, BLOCK_LENGTH_3DES );
+
+    if (!wcscmp( prop, BCRYPT_CHAINING_MODE ))
+    {
+        const WCHAR *str;
+        switch (mode)
+        {
+        case CHAIN_MODE_CBC:
+            str = BCRYPT_CHAIN_MODE_CBC; break;
+        case CHAIN_MODE_ECB:
+            str = BCRYPT_CHAIN_MODE_ECB; break;
+        case CHAIN_MODE_CFB:
+            str = BCRYPT_CHAIN_MODE_CFB; break;
+        default:
+            return STATUS_NOT_IMPLEMENTED;
+        }
+
+        *ret_size = (wcslen(str) + 1) * sizeof(WCHAR) * 2;
+        if (size < *ret_size) return STATUS_BUFFER_TOO_SMALL;
+        memcpy( buf, str, (wcslen(str) + 1) * sizeof(WCHAR) );
+        return STATUS_SUCCESS;
+    }
+    if (!wcscmp( prop, BCRYPT_KEY_LENGTHS ))
+    {
+        BCRYPT_KEY_LENGTHS_STRUCT *key_lengths = (void *)buf;
+        *ret_size = sizeof(*key_lengths);
+        if (key_lengths && size < *ret_size) return STATUS_BUFFER_TOO_SMALL;
+        if (key_lengths)
+        {
+            switch (id)
+            {
+            case ALG_ID_DES:
+                key_lengths->dwMinLength = key_lengths->dwMaxLength = 64;
+                key_lengths->dwIncrement = 0;
+                break;
+            case ALG_ID_3DES_112:
+                key_lengths->dwMinLength = key_lengths->dwMaxLength = 128;
+                key_lengths->dwIncrement = 0;
+                break;
+            case ALG_ID_RC2:
+                key_lengths->dwMinLength = 16;
+                key_lengths->dwMaxLength = 128;
+                key_lengths->dwIncrement = 8;
+                break;
+            default:
+                key_lengths->dwMinLength = key_lengths->dwMaxLength = 192;
+                key_lengths->dwIncrement = 0;
+                break;
+            }
+        }
+        return STATUS_SUCCESS;
+    }
+    FIXME( "unsupported property %s\n", debugstr_w(prop) );
+    return STATUS_NOT_IMPLEMENTED;
+}
+#else
 static NTSTATUS get_3des_property( enum chain_mode mode, const WCHAR *prop, UCHAR *buf, ULONG size, ULONG *ret_size )
 {
     if (!wcscmp( prop, BCRYPT_BLOCK_LENGTH ))
@@ -880,6 +998,7 @@ static NTSTATUS get_3des_property( enum chain_mode mode, const WCHAR *prop, UCHA
     return STATUS_NOT_IMPLEMENTED;
 }
 
+#endif
 static NTSTATUS get_aes_property( enum chain_mode mode, const WCHAR *prop, UCHAR *buf, ULONG size, ULONG *ret_size )
 {
     if (!wcscmp( prop, BCRYPT_BLOCK_LENGTH ))
@@ -1001,8 +1120,17 @@ static NTSTATUS get_alg_property( const struct algorithm *alg, const WCHAR *prop
 
     switch (alg->id)
     {
+#ifdef __REACTOS__
+    case ALG_ID_3DES:
+    case ALG_ID_DES:
+    case ALG_ID_DESX:
+    case ALG_ID_3DES_112:
+    case ALG_ID_RC2:
+        return get_legacy_property( alg->id, alg->mode, prop, buf, size, ret_size );
+#else
     case ALG_ID_3DES:
         return get_3des_property( alg->mode, prop, buf, size, ret_size );
+#endif
 
     case ALG_ID_CHACHA20_POLY1305:
         return get_chacha20_poly1305_property( prop, buf, size, ret_size );
@@ -1035,6 +1163,28 @@ static NTSTATUS set_alg_property( struct algorithm *alg, const WCHAR *prop, UCHA
 {
     switch (alg->id)
     {
+#ifdef __REACTOS__
+    case ALG_ID_3DES:
+    case ALG_ID_DES:
+    case ALG_ID_DESX:
+    case ALG_ID_3DES_112:
+    case ALG_ID_RC2:
+        if (!wcscmp( prop, BCRYPT_CHAINING_MODE ))
+        {
+            TRACE( "mode %s\n", debugstr_w((WCHAR *)value) );
+            if (!wcscmp( (WCHAR *)value, BCRYPT_CHAIN_MODE_CBC )) alg->mode = CHAIN_MODE_CBC;
+            else if (!wcscmp( (WCHAR *)value, BCRYPT_CHAIN_MODE_ECB )) alg->mode = CHAIN_MODE_ECB;
+            else if (!wcscmp( (WCHAR *)value, BCRYPT_CHAIN_MODE_CFB )) alg->mode = CHAIN_MODE_CFB;
+            else
+            {
+                FIXME( "unsupported mode %s\n", debugstr_w((WCHAR *)value) );
+                return STATUS_NOT_SUPPORTED;
+            }
+            return STATUS_SUCCESS;
+        }
+        FIXME( "unsupported block cipher algorithm property %s\n", debugstr_w(prop) );
+        return STATUS_NOT_IMPLEMENTED;
+#else
     case ALG_ID_3DES:
         if (!wcscmp( prop, BCRYPT_CHAINING_MODE ))
         {
@@ -1052,6 +1202,7 @@ static NTSTATUS set_alg_property( struct algorithm *alg, const WCHAR *prop, UCHA
         }
         FIXME( "unsupported 3des algorithm property %s\n", debugstr_w(prop) );
         return STATUS_NOT_IMPLEMENTED;
+#endif
 
     case ALG_ID_CHACHA20_POLY1305:
         if (!wcscmp( prop, BCRYPT_CHAINING_MODE ))
@@ -1303,8 +1454,18 @@ static NTSTATUS get_key_property( const struct key *key, const WCHAR *prop, UCHA
 
     switch (key->alg_id)
     {
+#ifdef __REACTOS__
+    case ALG_ID_3DES:
+    case ALG_ID_DES:
+    case ALG_ID_DESX:
+    case ALG_ID_3DES_112:
+    case ALG_ID_RC2:
+        if (!wcscmp( prop, BCRYPT_EFFECTIVE_KEY_LENGTH )) return STATUS_NOT_SUPPORTED;
+        return get_legacy_property( key->alg_id, key->s.mode, prop, buf, size, ret_size );
+#else
     case ALG_ID_3DES:
         return get_3des_property( key->s.mode, prop, buf, size, ret_size );
+#endif
 
     case ALG_ID_AES:
     case ALG_ID_AES_GMAC:
@@ -1653,6 +1814,175 @@ static NTSTATUS alloc_aes_key( struct key *key, enum chain_mode mode, ULONG bloc
     return STATUS_SUCCESS;
 }
 
+#ifdef __REACTOS__
+static NTSTATUS alloc_legacy_key( struct key *key, enum chain_mode mode, const BCRYPT_KEY_LENGTHS_STRUCT *key_lengths,
+                                  const UCHAR *secret, ULONG secret_len )
+{
+    SYMCRYPT_ERROR error;
+
+    if (key_lengths &&
+        (secret_len * 8 < key_lengths->dwMinLength || secret_len * 8 > key_lengths->dwMaxLength ||
+         (key_lengths->dwIncrement && (secret_len * 8 - key_lengths->dwMinLength) % key_lengths->dwIncrement)))
+        return STATUS_INVALID_PARAMETER;
+
+    key->s.mode       = mode;
+    key->s.block_size = BLOCK_LENGTH_3DES;
+
+    if (!(key->s.secret = malloc( secret_len ))) return STATUS_NO_MEMORY;
+    memcpy( key->s.secret, secret, secret_len );
+    key->s.secret_len = secret_len;
+
+    InitializeCriticalSection( &key->s.cs );
+
+    switch (key->alg_id)
+    {
+    case ALG_ID_DES:
+        key->s.legacy.cipher = SymCryptDesBlockCipher;
+        error = SymCryptDesExpandKey( &key->s.legacy.handle.des, secret, secret_len );
+        break;
+    case ALG_ID_DESX:
+        key->s.legacy.cipher = SymCryptDesxBlockCipher;
+        error = SymCryptDesxExpandKey( &key->s.legacy.handle.desx, secret, secret_len );
+        break;
+    case ALG_ID_RC2:
+        key->s.legacy.cipher = SymCryptRc2BlockCipher;
+        error = SymCryptRc2ExpandKey( &key->s.legacy.handle.rc2, secret, secret_len );
+        break;
+    default:
+        key->s.legacy.cipher = SymCrypt3DesBlockCipher;
+        error = SymCrypt3DesExpandKey( &key->s.legacy.handle.tdes, secret, secret_len );
+        break;
+    }
+    return error ? STATUS_INVALID_PARAMETER : STATUS_SUCCESS;
+}
+
+static NTSTATUS encrypt_legacy( struct key *key, const UCHAR *input, ULONG input_len, UCHAR *iv, ULONG iv_len,
+                                UCHAR *output, ULONG output_len, ULONG *ret_len, ULONG flags )
+{
+    PCSYMCRYPT_BLOCKCIPHER cipher = key->s.legacy.cipher;
+    void *expanded = &key->s.legacy.handle;
+    ULONG bytes_left = input_len, offset, block_size = key->s.block_size;
+    UCHAR buf[BLOCK_LENGTH_3DES], *out;
+    const UCHAR *in;
+
+    if (key->s.mode != CHAIN_MODE_ECB && iv && iv_len != block_size) return STATUS_INVALID_PARAMETER;
+    if (flags & BCRYPT_BLOCK_PADDING) *ret_len = (input_len + block_size) & ~(block_size - 1);
+    else if (key->s.mode != CHAIN_MODE_CFB && (input_len & (block_size - 1))) return STATUS_INVALID_BUFFER_SIZE;
+
+    if (!output) return STATUS_SUCCESS;
+    if (output_len < *ret_len) return STATUS_BUFFER_TOO_SMALL;
+
+    if (key->s.mode == CHAIN_MODE_ECB)
+    {
+        bytes_left = input_len % block_size;
+        offset = input_len - bytes_left;
+        SymCryptEcbEncrypt( cipher, expanded, input, output, offset );
+        if (flags & BCRYPT_BLOCK_PADDING)
+        {
+            memcpy( buf, input + offset, bytes_left );
+            memset( buf + bytes_left, block_size - bytes_left, block_size - bytes_left );
+            SymCryptEcbEncrypt( cipher, expanded, buf, output + offset, block_size );
+        }
+        return STATUS_SUCCESS;
+    }
+
+    EnterCriticalSection( &key->s.cs );
+    if (iv) memcpy( key->s.vector, iv, block_size );
+    in = input;
+    out = output;
+    while (bytes_left >= block_size)
+    {
+        if (key->s.mode == CHAIN_MODE_CFB)
+            SymCryptCfbEncrypt( cipher, 1, expanded, key->s.vector, in, out, block_size );
+        else
+            SymCryptCbcEncrypt( cipher, expanded, key->s.vector, in, out, block_size );
+        bytes_left -= block_size;
+        in += block_size;
+        out += block_size;
+    }
+    if (flags & BCRYPT_BLOCK_PADDING)
+    {
+        memcpy( buf, in, bytes_left );
+        memset( buf + bytes_left, block_size - bytes_left, block_size - bytes_left );
+        if (key->s.mode == CHAIN_MODE_CFB)
+            SymCryptCfbEncrypt( cipher, 1, expanded, key->s.vector, buf, out, block_size );
+        else
+            SymCryptCbcEncrypt( cipher, expanded, key->s.vector, buf, out, block_size );
+    }
+    else if (bytes_left)
+        SymCryptCfbEncrypt( cipher, 1, expanded, key->s.vector, in, out, bytes_left );
+    if (iv) memcpy( iv, key->s.vector, block_size );
+    LeaveCriticalSection( &key->s.cs );
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS decrypt_legacy( struct key *key, const UCHAR *input, ULONG input_len, UCHAR *iv, ULONG iv_len,
+                                UCHAR *output, ULONG output_len, ULONG *ret_len, ULONG flags )
+{
+    PCSYMCRYPT_BLOCKCIPHER cipher = key->s.legacy.cipher;
+    void *expanded = &key->s.legacy.handle;
+    ULONG bytes_left = input_len, block_size = key->s.block_size;
+    UCHAR buf[BLOCK_LENGTH_3DES], *out;
+    NTSTATUS status = STATUS_SUCCESS;
+    const UCHAR *in;
+
+    if (key->s.mode != CHAIN_MODE_ECB && iv && iv_len != block_size) return STATUS_INVALID_PARAMETER;
+    if (input_len & (block_size - 1)) return STATUS_INVALID_BUFFER_SIZE;
+    if (!output) return STATUS_SUCCESS;
+
+    if (flags & BCRYPT_BLOCK_PADDING)
+    {
+        if (output_len + block_size < *ret_len || input_len < block_size) return STATUS_BUFFER_TOO_SMALL;
+        bytes_left -= block_size;
+    }
+    else if (output_len < *ret_len) return STATUS_BUFFER_TOO_SMALL;
+
+    EnterCriticalSection( &key->s.cs );
+    if (key->s.mode != CHAIN_MODE_ECB && iv) memcpy( key->s.vector, iv, block_size );
+    in = input;
+    out = output;
+    if (key->s.mode == CHAIN_MODE_ECB)
+    {
+        SymCryptEcbDecrypt( cipher, expanded, in, out, bytes_left );
+        in += bytes_left;
+        out += bytes_left;
+    }
+    else
+    {
+        while (bytes_left >= block_size)
+        {
+            if (key->s.mode == CHAIN_MODE_CFB)
+                SymCryptCfbDecrypt( cipher, 1, expanded, key->s.vector, in, out, block_size );
+            else
+                SymCryptCbcDecrypt( cipher, expanded, key->s.vector, in, out, block_size );
+            bytes_left -= block_size;
+            in += block_size;
+            out += block_size;
+        }
+    }
+    if (flags & BCRYPT_BLOCK_PADDING)
+    {
+        if (key->s.mode == CHAIN_MODE_ECB)
+            SymCryptEcbDecrypt( cipher, expanded, in, buf, block_size );
+        else if (key->s.mode == CHAIN_MODE_CFB)
+            SymCryptCfbDecrypt( cipher, 1, expanded, key->s.vector, in, buf, block_size );
+        else
+            SymCryptCbcDecrypt( cipher, expanded, key->s.vector, in, buf, block_size );
+
+        if (buf[block_size - 1] && buf[block_size - 1] <= block_size)
+        {
+            *ret_len -= buf[block_size - 1];
+            if (output_len < *ret_len) status = STATUS_BUFFER_TOO_SMALL;
+            else memcpy( out, buf, block_size - buf[block_size - 1] );
+        }
+        else status = STATUS_UNSUCCESSFUL;
+    }
+    if (key->s.mode != CHAIN_MODE_ECB && iv) memcpy( iv, key->s.vector, block_size );
+    LeaveCriticalSection( &key->s.cs );
+    return status;
+}
+#endif
+
 static NTSTATUS alloc_key( enum alg_id alg_id, ULONG flags, struct key **ret_key )
 {
     struct key *key;
@@ -1716,6 +2046,20 @@ static NTSTATUS generate_symmetric_key( const struct algorithm *alg, const UCHAR
             return status;
         }
         break;
+
+#ifdef __REACTOS__
+    case ALG_ID_3DES:
+    case ALG_ID_DES:
+    case ALG_ID_DESX:
+    case ALG_ID_3DES_112:
+    case ALG_ID_RC2:
+        if ((status = alloc_legacy_key( key, alg->mode, &key_lengths, secret, secret_len )))
+        {
+            destroy_key( key );
+            return status;
+        }
+        break;
+#endif
 
     case ALG_ID_PBKDF2:
         if (secret_len > key_lengths.dwMaxLength / 8 || secret_len < key_lengths.dwMinLength / 8)
@@ -1910,6 +2254,14 @@ static NTSTATUS decrypt_symmetric( struct key *key, const UCHAR *input, ULONG in
             if (iv && iv_len != key->s.block_size) return STATUS_INVALID_PARAMETER;
             return decrypt_aes_vector( key, input, input_len, iv, output, output_len, ret_len, flags );
         }
+#ifdef __REACTOS__
+    case ALG_ID_3DES:
+    case ALG_ID_DES:
+    case ALG_ID_DESX:
+    case ALG_ID_3DES_112:
+    case ALG_ID_RC2:
+        return decrypt_legacy( key, input, input_len, iv, iv_len, output, output_len, ret_len, flags );
+#endif
     default:
         FIXME( "unhandled algorithm %u\n", key->alg_id );
         break;
@@ -2266,6 +2618,14 @@ static NTSTATUS encrypt_symmetric( struct key *key, const UCHAR *input, ULONG in
             if (iv && iv_len != key->s.block_size) return STATUS_INVALID_PARAMETER;
             return encrypt_aes_vector( key, input, input_len, iv, output, output_len, ret_len, flags );
         }
+#ifdef __REACTOS__
+    case ALG_ID_3DES:
+    case ALG_ID_DES:
+    case ALG_ID_DESX:
+    case ALG_ID_3DES_112:
+    case ALG_ID_RC2:
+        return encrypt_legacy( key, input, input_len, iv, iv_len, output, output_len, ret_len, flags );
+#endif
     default:
         FIXME( "unhandled algorithm %u\n", key->alg_id );
         break;
@@ -3700,6 +4060,22 @@ static NTSTATUS duplicate_key( const struct key *src, struct key **ret_key )
         }
         else SymCryptAesKeyCopy( &src->s.aes.handle, &dst->s.aes.handle );
         break;
+
+#ifdef __REACTOS__
+    case ALG_ID_3DES:
+    case ALG_ID_DES:
+    case ALG_ID_DESX:
+    case ALG_ID_3DES_112:
+    case ALG_ID_RC2:
+        if ((status = alloc_key( src->alg_id, src->flags, &dst ))) return status;
+        if ((status = alloc_legacy_key( dst, src->s.mode, NULL, src->s.secret, src->s.secret_len )))
+        {
+            destroy_key( dst );
+            return status;
+        }
+        memcpy( dst->s.vector, src->s.vector, sizeof(dst->s.vector) );
+        break;
+#endif
 
     default:
         FIXME( "algorithm %u not supported\n", src->alg_id );
