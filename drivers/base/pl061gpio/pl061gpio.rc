@@ -1,0 +1,12 @@
+/*
+ * PROJECT:     LiberNT Arm PL061 GPIO driver
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Arm PL061 GPIO driver version resource
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION "Arm PL061 GPIO controller driver"
+#define REACTOS_STR_INTERNAL_NAME "pl061gpio"
+#define REACTOS_STR_ORIGINAL_FILENAME "pl061gpio.sys"
+#include <reactos/version.rc>

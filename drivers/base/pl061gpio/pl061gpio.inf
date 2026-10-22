@@ -1,0 +1,49 @@
+; PROJECT:     LiberNT Arm PL061 GPIO driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Arm PL061 GPIO driver installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=System
+ClassGUID={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+CatalogFile=pl061gpio.cat
+DriverVer=10/22/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=ArmMfg,NTARM64
+
+[ArmMfg.NTARM64]
+%PL061GPIO.DeviceDesc%=PL061GPIO_Inst,ACPI\ARMH0061
+
+[PL061GPIO_Inst.NT]
+CopyFiles=PL061GPIO_CopyFiles.NT
+
+[PL061GPIO_CopyFiles.NT]
+pl061gpio.sys
+
+[PL061GPIO_Inst.NT.Services]
+AddService=pl061gpio,0x00000002,PL061GPIO_Service_Inst
+
+[PL061GPIO_Service_Inst]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\pl061gpio.sys
+LoadOrderGroup=Extended Base
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+pl061gpio.sys=1
+
+[Strings]
+ProviderName="Ahmed ARIF"
+ManufacturerName="Arm"
+DiskName="Arm PL061 GPIO Driver Disk"
+PL061GPIO.DeviceDesc="Arm PL061 GPIO controller"
