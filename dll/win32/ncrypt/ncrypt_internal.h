@@ -22,6 +22,13 @@ enum algid
 {
     /* symmetric */
     AES,
+#ifdef __REACTOS__
+    RC2,
+    TDES,
+    DES,
+    DESX,
+    TDES_112,
+#endif
     /* asymmetric */
     RSA,
     DSA,

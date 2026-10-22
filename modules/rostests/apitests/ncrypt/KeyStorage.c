@@ -481,6 +481,76 @@ TestSymmetricKey(
     ok(Status == ERROR_SUCCESS, "persisted AES delete: %#lx\n", Status);
 }
 
+static void
+TestLegacySymmetricKey(
+    _In_ NCRYPT_PROV_HANDLE Provider,
+    _In_ const WCHAR *Algorithm,
+    _In_ DWORD Length,
+    _In_ DWORD MinLength,
+    _In_ DWORD Increment)
+{
+    NCRYPT_CIPHER_PADDING_INFO Info;
+    NCRYPT_SUPPORTED_LENGTHS Lengths = { 0 };
+    NCRYPT_KEY_HANDLE Key;
+    SECURITY_STATUS Status;
+    BYTE Iv[8], Plain[16], Cipher[64], Decrypted[64];
+    WCHAR KeyName[96];
+    DWORD Size = 0, PlainSize = 0, i;
+
+    for (i = 0; i < sizeof(Plain); i++)
+        Plain[i] = (BYTE)(i * 5 + 1);
+    Status = NCryptCreatePersistedKey(Provider, &Key, Algorithm, NULL, 0, 0);
+    ok(Status == ERROR_SUCCESS, "%ls create: %#lx\n", Algorithm, Status);
+    if (Status != ERROR_SUCCESS)
+        return;
+    Status = NCryptGetProperty(Key, NCRYPT_LENGTHS_PROPERTY, (BYTE *)&Lengths, sizeof(Lengths), &Size, 0);
+    ok(DwordProperty(Key, NCRYPT_LENGTH_PROPERTY) == Length && DwordProperty(Key, NCRYPT_BLOCK_LENGTH_PROPERTY) == 8,
+       "%ls length %lu block %lu\n", Algorithm, DwordProperty(Key, NCRYPT_LENGTH_PROPERTY),
+       DwordProperty(Key, NCRYPT_BLOCK_LENGTH_PROPERTY));
+    ok(Status == ERROR_SUCCESS && Lengths.dwMinLength == MinLength && Lengths.dwMaxLength == Length &&
+       Lengths.dwIncrement == Increment && Lengths.dwDefaultLength == Length, "%ls lengths %#lx: %lu %lu %lu %lu\n",
+       Algorithm, Status, Lengths.dwMinLength, Lengths.dwMaxLength, Lengths.dwIncrement, Lengths.dwDefaultLength);
+    Status = NCryptFinalizeKey(Key, 0);
+    ok(Status == ERROR_SUCCESS, "%ls finalize: %#lx\n", Algorithm, Status);
+    memset(Iv, 0x33, sizeof(Iv));
+    Info.cbSize = sizeof(Info);
+    Info.dwFlags = NCRYPT_CIPHER_BLOCK_PADDING_FLAG;
+    Info.pbIV = Iv;
+    Info.cbIV = sizeof(Iv);
+    Info.pbOtherInfo = NULL;
+    Info.cbOtherInfo = 0;
+    Size = 0;
+    Status = NCryptEncrypt(Key, Plain, 10, &Info, Cipher, sizeof(Cipher), &Size, NCRYPT_PAD_CIPHER_FLAG);
+    ok(Status == ERROR_SUCCESS && Size == 16, "%ls encrypt: %#lx size %lu\n", Algorithm, Status, Size);
+    memset(Iv, 0x33, sizeof(Iv));
+    Status = NCryptDecrypt(Key, Cipher, Size, &Info, Decrypted, sizeof(Decrypted), &PlainSize, NCRYPT_PAD_CIPHER_FLAG);
+    ok(Status == ERROR_SUCCESS && PlainSize == 10 && !memcmp(Plain, Decrypted, 10), "%ls decrypt: %#lx size %lu\n",
+       Algorithm, Status, PlainSize);
+    NCryptFreeObject(Key);
+
+    swprintf(KeyName, ARRAYSIZE(KeyName), L"LiberNT.ApiTest.%ls.%lu", Algorithm, GetCurrentProcessId());
+    Status = NCryptCreatePersistedKey(Provider, &Key, Algorithm, KeyName, 0, 0);
+    ok(Status == ERROR_SUCCESS, "persisted %ls create: %#lx\n", Algorithm, Status);
+    if (Status != ERROR_SUCCESS)
+        return;
+    ok(NCryptFinalizeKey(Key, 0) == ERROR_SUCCESS, "persisted %ls finalize failed\n", Algorithm);
+    memset(Iv, 0x44, sizeof(Iv));
+    Size = 0;
+    Status = NCryptEncrypt(Key, Plain, sizeof(Plain), &Info, Cipher, sizeof(Cipher), &Size, NCRYPT_PAD_CIPHER_FLAG);
+    ok(Status == ERROR_SUCCESS && Size == 24, "persisted %ls encrypt: %#lx size %lu\n", Algorithm, Status, Size);
+    NCryptFreeObject(Key);
+    Status = NCryptOpenKey(Provider, &Key, KeyName, 0, 0);
+    ok(Status == ERROR_SUCCESS, "persisted %ls open: %#lx\n", Algorithm, Status);
+    if (Status != ERROR_SUCCESS)
+        return;
+    memset(Iv, 0x44, sizeof(Iv));
+    PlainSize = 0;
+    Status = NCryptDecrypt(Key, Cipher, Size, &Info, Decrypted, sizeof(Decrypted), &PlainSize, NCRYPT_PAD_CIPHER_FLAG);
+    ok(Status == ERROR_SUCCESS && PlainSize == sizeof(Plain) && !memcmp(Plain, Decrypted, sizeof(Plain)),
+       "persisted %ls decrypt after reopen: %#lx size %lu\n", Algorithm, Status, PlainSize);
+    ok(NCryptDeleteKey(Key, 0) == ERROR_SUCCESS, "persisted %ls delete failed\n", Algorithm);
+}
+
 START_TEST(KeyStorage)
 {
     NCRYPT_PROV_HANDLE Provider;
@@ -496,6 +566,11 @@ START_TEST(KeyStorage)
     TestAlgorithms(Provider);
     TestExportPolicy(Provider);
     TestSymmetricKey(Provider);
+    TestLegacySymmetricKey(Provider, L"RC2", 128, 16, 8);
+    TestLegacySymmetricKey(Provider, L"3DES", 192, 192, 0);
+    TestLegacySymmetricKey(Provider, L"DES", 64, 64, 0);
+    TestLegacySymmetricKey(Provider, L"DESX", 192, 192, 0);
+    TestLegacySymmetricKey(Provider, L"3DES_112", 128, 128, 0);
     TestPersistedKey(Provider, NCRYPT_RSA_ALGORITHM, 2048, 0);
     TestPersistedKey(Provider, NCRYPT_ECDSA_P256_ALGORITHM, 256, 0);
     TestPersistedKey(Provider, NCRYPT_RSA_ALGORITHM, 2048, NCRYPT_MACHINE_KEY_FLAG);

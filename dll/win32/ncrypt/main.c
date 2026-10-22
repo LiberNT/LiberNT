@@ -141,6 +141,46 @@ static SECURITY_STATUS set_object_property(struct object *object, const WCHAR *n
     return ERROR_SUCCESS;
 }
 
+#ifdef __REACTOS__
+static const struct symmetric_algorithm
+{
+    enum algid algid;
+    const WCHAR *name;
+    BCRYPT_ALG_HANDLE cbc;
+    DWORD length;
+    DWORD min_length;
+    DWORD increment;
+    DWORD block_length;
+}
+symmetric_algorithms[] =
+{
+    { AES,      BCRYPT_AES_ALGORITHM,      BCRYPT_AES_CBC_ALG_HANDLE,      256, 128, 64, 16 },
+    { RC2,      BCRYPT_RC2_ALGORITHM,      BCRYPT_RC2_CBC_ALG_HANDLE,      128, 16,  8,  8 },
+    { TDES,     BCRYPT_3DES_ALGORITHM,     BCRYPT_3DES_CBC_ALG_HANDLE,     192, 192, 0,  8 },
+    { DES,      BCRYPT_DES_ALGORITHM,      BCRYPT_DES_CBC_ALG_HANDLE,      64,  64,  0,  8 },
+    { DESX,     BCRYPT_DESX_ALGORITHM,     BCRYPT_DESX_CBC_ALG_HANDLE,     192, 192, 0,  8 },
+    { TDES_112, BCRYPT_3DES_112_ALGORITHM, BCRYPT_3DES_112_CBC_ALG_HANDLE, 128, 128, 0,  8 },
+};
+
+static const struct symmetric_algorithm *symmetric_from_algid(enum algid algid)
+{
+    unsigned int i;
+
+    for (i = 0; i < sizeof(symmetric_algorithms) / sizeof(symmetric_algorithms[0]); i++)
+        if (symmetric_algorithms[i].algid == algid) return &symmetric_algorithms[i];
+    return NULL;
+}
+
+static const struct symmetric_algorithm *symmetric_from_name(const WCHAR *name)
+{
+    unsigned int i;
+
+    for (i = 0; name && i < sizeof(symmetric_algorithms) / sizeof(symmetric_algorithms[0]); i++)
+        if (!lstrcmpiW(symmetric_algorithms[i].name, name)) return &symmetric_algorithms[i];
+    return NULL;
+}
+#endif
+
 static struct object *create_key_object(enum algid algid, NCRYPT_PROV_HANDLE provider)
 {
     NCRYPT_SUPPORTED_LENGTHS supported_lengths = {512, 16384, 8, 1024};
@@ -173,20 +213,30 @@ static struct object *create_key_object(enum algid algid, NCRYPT_PROV_HANDLE pro
 
 #ifdef __REACTOS__
     case AES:
+    case RC2:
+    case TDES:
+    case DES:
+    case DESX:
+    case TDES_112:
     {
-        NCRYPT_SUPPORTED_LENGTHS aes_lengths = {128, 256, 64, 256};
+        const struct symmetric_algorithm *symmetric = symmetric_from_algid(algid);
+        NCRYPT_SUPPORTED_LENGTHS lengths;
 
         if (!(object = allocate_object(KEY))) return NULL;
 
-        object->key.algid = AES;
-        set_object_property(object, NCRYPT_ALGORITHM_PROPERTY, (BYTE *)BCRYPT_AES_ALGORITHM,
-                            sizeof(BCRYPT_AES_ALGORITHM));
-        set_object_property(object, NCRYPT_ALGORITHM_GROUP_PROPERTY, (BYTE *)BCRYPT_AES_ALGORITHM,
-                            sizeof(BCRYPT_AES_ALGORITHM));
-        set_object_property(object, NCRYPT_LENGTHS_PROPERTY, (BYTE *)&aes_lengths, sizeof(aes_lengths));
-        dw_value = 256;
+        object->key.algid = algid;
+        lengths.dwMinLength = symmetric->min_length;
+        lengths.dwMaxLength = symmetric->length;
+        lengths.dwIncrement = symmetric->increment;
+        lengths.dwDefaultLength = symmetric->length;
+        set_object_property(object, NCRYPT_ALGORITHM_PROPERTY, (BYTE *)symmetric->name,
+                            (lstrlenW(symmetric->name) + 1) * sizeof(WCHAR));
+        set_object_property(object, NCRYPT_ALGORITHM_GROUP_PROPERTY, (BYTE *)symmetric->name,
+                            (lstrlenW(symmetric->name) + 1) * sizeof(WCHAR));
+        set_object_property(object, NCRYPT_LENGTHS_PROPERTY, (BYTE *)&lengths, sizeof(lengths));
+        dw_value = symmetric->length;
         set_object_property(object, NCRYPT_LENGTH_PROPERTY, (BYTE *)&dw_value, sizeof(dw_value));
-        dw_value = 16;
+        dw_value = symmetric->block_length;
         set_object_property(object, NCRYPT_BLOCK_LENGTH_PROPERTY, (BYTE *)&dw_value, sizeof(dw_value));
         break;
     }
@@ -232,15 +282,16 @@ static DWORD dword_property(struct object *object, const WCHAR *name, DWORD fall
 
 static SECURITY_STATUS keystore_save(struct object *object)
 {
+    const struct symmetric_algorithm *symmetric = symmetric_from_algid(object->key.algid);
     const WCHAR *blob_type = object->key.algid == RSA ? BCRYPT_RSAFULLPRIVATE_BLOB :
-                             object->key.algid == AES ? BCRYPT_KEY_DATA_BLOB : BCRYPT_ECCPRIVATE_BLOB;
+                             symmetric ? BCRYPT_KEY_DATA_BLOB : BCRYPT_ECCPRIVATE_BLOB;
     struct keystore_record record = {0};
     SECURITY_STATUS ret;
     NTSTATUS status;
     ULONG size = 0;
 
     record.algorithm = object->key.algid == RSA ? (WCHAR *)NCRYPT_RSA_ALGORITHM :
-                       object->key.algid == AES ? (WCHAR *)NCRYPT_AES_ALGORITHM : (WCHAR *)NCRYPT_ECDSA_P256_ALGORITHM;
+                       symmetric ? (WCHAR *)symmetric->name : (WCHAR *)NCRYPT_ECDSA_P256_ALGORITHM;
     record.length = dword_property(object, NCRYPT_LENGTH_PROPERTY, 0);
     record.export_policy = dword_property(object, NCRYPT_EXPORT_POLICY_PROPERTY, 0);
     record.key_usage = dword_property(object, NCRYPT_KEY_USAGE_PROPERTY, NCRYPT_ALLOW_ALL_USAGES);
@@ -274,28 +325,30 @@ static BOOL is_private_blob(const WCHAR *type)
     return FALSE;
 }
 
-static SECURITY_STATUS finalize_aes_key(struct object *object)
+static SECURITY_STATUS finalize_symmetric_key(struct object *object)
 {
-    DWORD length = dword_property(object, NCRYPT_LENGTH_PROPERTY, 256);
+    const struct symmetric_algorithm *symmetric = symmetric_from_algid(object->key.algid);
+    DWORD length = dword_property(object, NCRYPT_LENGTH_PROPERTY, symmetric->length);
     UCHAR secret[32];
     NTSTATUS status;
 
     if (object->key.finalized) return NTE_BAD_KEY_STATE;
-    if (length != 128 && length != 192 && length != 256) return NTE_INVALID_PARAMETER;
+    if (length < symmetric->min_length || length > symmetric->length || length % 8 ||
+        (symmetric->increment && (length - symmetric->min_length) % symmetric->increment))
+        return NTE_INVALID_PARAMETER;
     if ((status = BCryptGenRandom(NULL, secret, length / 8, BCRYPT_USE_SYSTEM_PREFERRED_RNG)))
         return map_ntstatus(status);
-    status = BCryptGenerateSymmetricKey(BCRYPT_AES_CBC_ALG_HANDLE, &object->key.bcrypt_key, NULL, 0, secret,
-                                        length / 8, 0);
+    status = BCryptGenerateSymmetricKey(symmetric->cbc, &object->key.bcrypt_key, NULL, 0, secret, length / 8, 0);
     SecureZeroMemory(secret, sizeof(secret));
     return map_ntstatus(status);
 }
 
-static SECURITY_STATUS crypt_aes_key(struct object *object, BOOL encrypt, BYTE *input, DWORD insize, void *padding,
-                                     BYTE *output, DWORD outsize, DWORD *result, DWORD flags)
+static SECURITY_STATUS crypt_symmetric_key(struct object *object, BOOL encrypt, BYTE *input, DWORD insize,
+                                           void *padding, BYTE *output, DWORD outsize, DWORD *result, DWORD flags)
 {
     NCRYPT_CIPHER_PADDING_INFO *info = padding;
     UCHAR *iv = object->key.iv;
-    ULONG iv_size = sizeof(object->key.iv), bcrypt_flags = 0;
+    ULONG iv_size = symmetric_from_algid(object->key.algid)->block_length, bcrypt_flags = 0;
 
     if (!object->key.finalized) return NTE_BAD_KEY_STATE;
     if (flags & ~(NCRYPT_PAD_CIPHER_FLAG | NCRYPT_SILENT_FLAG)) return NTE_BAD_FLAGS;
@@ -373,9 +426,9 @@ SECURITY_STATUS WINAPI NCryptCreatePersistedKey(NCRYPT_PROV_HANDLE provider, NCR
         set_object_property(object, BCRYPT_PUBLIC_KEY_LENGTH, (BYTE *)&bitlen, sizeof(bitlen));
     }
 #ifdef __REACTOS__
-    else if (!lstrcmpiW(algid, BCRYPT_AES_ALGORITHM))
+    else if (symmetric_from_name(algid))
     {
-        if (!(object = create_key_object(AES, provider))) return NTE_NO_MEMORY;
+        if (!(object = create_key_object(symmetric_from_name(algid)->algid, provider))) return NTE_NO_MEMORY;
     }
 #endif
     else
@@ -404,8 +457,8 @@ SECURITY_STATUS WINAPI NCryptDecrypt(NCRYPT_KEY_HANDLE key, BYTE *input, DWORD i
     TRACE("(%#Ix, %p, %lu, %p, %p, %lu, %p, %#lx)\n", key, input, insize, padding,
           output, outsize, result, flags);
 
-    if (key_object && key_object->type == KEY && key_object->key.algid == AES)
-        return crypt_aes_key(key_object, FALSE, input, insize, padding, output, outsize, result, flags);
+    if (key_object && key_object->type == KEY && symmetric_from_algid(key_object->key.algid))
+        return crypt_symmetric_key(key_object, FALSE, input, insize, padding, output, outsize, result, flags);
     if (flags & ~(NCRYPT_NO_PADDING_FLAG | NCRYPT_PAD_OAEP_FLAG | NCRYPT_PAD_PKCS1_FLAG | NCRYPT_SILENT_FLAG))
         return NTE_BAD_FLAGS;
     if (!key_object || key_object->type != KEY) return NTE_INVALID_HANDLE;
@@ -447,8 +500,8 @@ SECURITY_STATUS WINAPI NCryptEncrypt(NCRYPT_KEY_HANDLE key, BYTE *input, DWORD i
           output, outsize, result, flags);
 
 #ifdef __REACTOS__
-    if (key_object && key_object->type == KEY && key_object->key.algid == AES)
-        return crypt_aes_key(key_object, TRUE, input, insize, padding, output, outsize, result, flags);
+    if (key_object && key_object->type == KEY && symmetric_from_algid(key_object->key.algid))
+        return crypt_symmetric_key(key_object, TRUE, input, insize, padding, output, outsize, result, flags);
 #endif
     if (flags & ~(NCRYPT_NO_PADDING_FLAG | NCRYPT_PAD_OAEP_FLAG
                 | NCRYPT_PAD_PKCS1_FLAG | NCRYPT_SILENT_FLAG))
@@ -496,6 +549,11 @@ SECURITY_STATUS WINAPI NCryptEnumAlgorithms(NCRYPT_PROV_HANDLE provider, DWORD a
           NCRYPT_ASYMMETRIC_ENCRYPTION_OPERATION | NCRYPT_SIGNATURE_OPERATION },
         { NCRYPT_ECDSA_P256_ALGORITHM, BCRYPT_SIGNATURE_INTERFACE, NCRYPT_SIGNATURE_OPERATION },
         { NCRYPT_AES_ALGORITHM, BCRYPT_CIPHER_INTERFACE, NCRYPT_CIPHER_OPERATION },
+        { BCRYPT_RC2_ALGORITHM, BCRYPT_CIPHER_INTERFACE, NCRYPT_CIPHER_OPERATION },
+        { BCRYPT_3DES_ALGORITHM, BCRYPT_CIPHER_INTERFACE, NCRYPT_CIPHER_OPERATION },
+        { BCRYPT_DES_ALGORITHM, BCRYPT_CIPHER_INTERFACE, NCRYPT_CIPHER_OPERATION },
+        { BCRYPT_DESX_ALGORITHM, BCRYPT_CIPHER_INTERFACE, NCRYPT_CIPHER_OPERATION },
+        { BCRYPT_3DES_112_ALGORITHM, BCRYPT_CIPHER_INTERFACE, NCRYPT_CIPHER_OPERATION },
     };
     NCryptAlgorithmName *names;
     DWORD count = 0, size = 0, i;
@@ -565,9 +623,9 @@ SECURITY_STATUS WINAPI NCryptFinalizeKey(NCRYPT_KEY_HANDLE handle, DWORD flags)
     if (!object || object->type != KEY) return NTE_INVALID_HANDLE;
 
 #ifdef __REACTOS__
-    if (object->key.algid == AES)
+    if (symmetric_from_algid(object->key.algid))
     {
-        if ((ret = finalize_aes_key(object))) return ret;
+        if ((ret = finalize_symmetric_key(object))) return ret;
         if (object->key.name && (ret = keystore_save(object)))
         {
             BCryptDestroyKey(object->key.bcrypt_key);
@@ -910,7 +968,7 @@ SECURITY_STATUS WINAPI NCryptOpenKey(NCRYPT_PROV_HANDLE provider, NCRYPT_KEY_HAN
     if ((ret = keystore_read(name, !!(flags & NCRYPT_MACHINE_KEY_FLAG), &record))) return ret;
     if (!lstrcmpiW(record.algorithm, NCRYPT_RSA_ALGORITHM)) algid = RSA;
     else if (!lstrcmpiW(record.algorithm, NCRYPT_ECDSA_P256_ALGORITHM)) algid = ECDSA_P256;
-    else if (!lstrcmpiW(record.algorithm, NCRYPT_AES_ALGORITHM)) algid = AES;
+    else if (symmetric_from_name(record.algorithm)) algid = symmetric_from_name(record.algorithm)->algid;
     else
     {
         keystore_free_record(&record);
@@ -921,9 +979,9 @@ SECURITY_STATUS WINAPI NCryptOpenKey(NCRYPT_PROV_HANDLE provider, NCRYPT_KEY_HAN
         keystore_free_record(&record);
         return NTE_NO_MEMORY;
     }
-    if (algid == AES)
-        status = BCryptImportKey(BCRYPT_AES_CBC_ALG_HANDLE, NULL, BCRYPT_KEY_DATA_BLOB, &object->key.bcrypt_key, NULL,
-                                 0, record.blob, record.blob_size, 0);
+    if (symmetric_from_algid(algid))
+        status = BCryptImportKey(symmetric_from_algid(algid)->cbc, NULL, BCRYPT_KEY_DATA_BLOB, &object->key.bcrypt_key,
+                                 NULL, 0, record.blob, record.blob_size, 0);
     else
         status = BCryptImportKeyPair(algid == RSA ? BCRYPT_RSA_ALG_HANDLE : BCRYPT_ECDSA_P256_ALG_HANDLE, NULL,
                                      algid == RSA ? BCRYPT_RSAFULLPRIVATE_BLOB : BCRYPT_ECCPRIVATE_BLOB,
@@ -935,7 +993,7 @@ SECURITY_STATUS WINAPI NCryptOpenKey(NCRYPT_PROV_HANDLE provider, NCRYPT_KEY_HAN
         return map_ntstatus(status);
     }
     set_object_property(object, NCRYPT_LENGTH_PROPERTY, (BYTE *)&record.length, sizeof(record.length));
-    if (algid != AES)
+    if (!symmetric_from_algid(algid))
         set_object_property(object, BCRYPT_PUBLIC_KEY_LENGTH, (BYTE *)&record.length, sizeof(record.length));
     set_object_property(object, NCRYPT_EXPORT_POLICY_PROPERTY, (BYTE *)&record.export_policy,
                         sizeof(record.export_policy));
