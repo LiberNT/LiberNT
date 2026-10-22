@@ -1,0 +1,40 @@
+[Version]
+Signature = "$Windows NT$"
+Class = System
+ClassGUID = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider = %LiberNT%
+DriverVer = 10/22/2026,1.0.0.0
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%LiberNT% = LiberNT
+
+[LiberNT]
+%GenBtn.DeviceDesc% = GenBtn_Inst,ACPI\ACPI0011
+
+[GenBtn_Inst.NT]
+CopyFiles = GenBtn_CopyFiles
+
+[GenBtn_CopyFiles]
+genbtn.sys
+
+[GenBtn_Inst.NT.Services]
+AddService = GENBTN,0x00000002,GenBtn_Service
+
+[GenBtn_Service]
+DisplayName = %GenBtn.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\genbtn.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+GenBtn.DeviceDesc = "ACPI Generic Buttons"
+GenBtn.ServiceDesc = "LiberNT ACPI Generic Button Driver"
