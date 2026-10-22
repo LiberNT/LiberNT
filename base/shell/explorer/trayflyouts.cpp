@@ -353,10 +353,16 @@ TfyAABegin(TFYAA *pAA, HDC hdcRef, const RECT *prc, int ss, COLORREF crBg)
 
     pAA->hbmOld = SelectObject(pAA->hdc, pAA->hbm);
 
-    RECT rcFill = { 0, 0, w, h };
-    HBRUSH hbr = CreateSolidBrush(crBg);
-    FillRect(pAA->hdc, &rcFill, hbr);
-    DeleteObject(hbr);
+    int nOldMode = SetStretchBltMode(pAA->hdc, COLORONCOLOR);
+    if (!StretchBlt(pAA->hdc, 0, 0, w, h, hdcRef, prc->left, prc->top,
+                    prc->right - prc->left, prc->bottom - prc->top, SRCCOPY))
+    {
+        RECT rcFill = { 0, 0, w, h };
+        HBRUSH hbr = CreateSolidBrush(crBg);
+        FillRect(pAA->hdc, &rcFill, hbr);
+        DeleteObject(hbr);
+    }
+    SetStretchBltMode(pAA->hdc, nOldMode);
     return pAA->hdc;
 }
 
