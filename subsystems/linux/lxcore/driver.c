@@ -1,0 +1,709 @@
+/*
+ * PROJECT:     LiberNT Linux Subsystem
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Driver entry, control device and pico provider callbacks
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include "lxcore.h"
+
+#define NDEBUG
+#include <debug.h>
+
+DRIVER_INITIALIZE DriverEntry;
+
+static PICO_SYSTEM_CALL_DISPATCH LxPicoSystemCall;
+static PICO_DISPATCH_EXCEPTION LxPicoDispatchException;
+static PICO_THREAD_START LxPicoThreadStart;
+static PICO_THREAD_EXIT LxPicoThreadExit;
+static PICO_PROCESS_EXIT LxPicoProcessExit;
+
+static
+VOID
+NTAPI
+LxPicoSystemCall(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame)
+{
+    LX_CALL Call;
+    LONG64 Result;
+
+    RtlZeroMemory(&Call, sizeof(Call));
+    Call.Thread = PsPicoGetThreadContext(PsGetCurrentThread());
+    Call.Process = Call.Thread->Process;
+    Call.TrapFrame = TrapFrame;
+    Call.ExceptionFrame = ExceptionFrame;
+    LxArchGetSyscall(TrapFrame, &Call.Number, Call.Args);
+
+    Result = LxSysCall(&Call);
+    if (Result != LX_SYSCALL_NO_RESULT)
+        LxArchSetSyscallResult(TrapFrame, Result);
+
+    LxSignalCheckPending(Call.Thread, TrapFrame, ExceptionFrame);
+}
+
+static
+BOOLEAN
+NTAPI
+LxPicoDispatchException(
+    _Inout_ PEXCEPTION_RECORD ExceptionRecord,
+    _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame)
+{
+    PLX_THREAD Thread = PsPicoGetThreadContext(PsGetCurrentThread());
+    LX_SIGINFO Info;
+    LONG Code;
+    LONG Signal = LxSignalFromException(ExceptionRecord->ExceptionCode, &Code);
+
+    RtlZeroMemory(&Info, sizeof(Info));
+    Info.Signo = Signal;
+    Info.Code = Code;
+    Info.Address = (ExceptionRecord->NumberParameters >= 2) ?
+                   (ULONG64)ExceptionRecord->ExceptionInformation[1] :
+                   (ULONG64)(ULONG_PTR)ExceptionRecord->ExceptionAddress;
+
+    if (LxSignalDeliverFault(Thread, TrapFrame, ExceptionFrame, Signal, &Info))
+        return TRUE;
+
+    DPRINT1("Linux process %lu was killed by signal %ld: exception 0x%08lx at %p, address %p\n",
+            Thread->Process->Pid,
+            Signal,
+            ExceptionRecord->ExceptionCode,
+            (PVOID)(ULONG_PTR)LxArchGetUserPc(TrapFrame),
+            (ExceptionRecord->NumberParameters >= 2) ?
+                (PVOID)ExceptionRecord->ExceptionInformation[1] : NULL);
+
+    LxProcessExitGroup(Thread->Process, Signal);
+}
+
+static
+VOID
+NTAPI
+LxPicoThreadStart(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame)
+{
+    PLX_THREAD Thread = PsPicoGetThreadContext(PsGetCurrentThread());
+    PLX_EXEC_REQUEST Request = Thread->Exec;
+
+    if (Request != NULL)
+    {
+        LONG Errno = 0;
+        NTSTATUS Status;
+
+        Thread->Exec = NULL;
+        LxThreadAttach(Thread);
+        LxArchSetThreadPointer(0);
+        Status = LxExecImage(Thread, Request, TrapFrame, ExceptionFrame, &Errno);
+        Request->Status = Status;
+        Request->Errno = Errno;
+        KeSetEvent(&Request->Done, IO_NO_INCREMENT, FALSE);
+        if (!NT_SUCCESS(Status))
+            LxProcessExitGroup(Thread->Process, 127 << 8);
+        return;
+    }
+
+    LxThreadAttach(Thread);
+    LxArchSetThreadPointer(Thread->Tls);
+    if (Thread->SetChildTid != 0)
+        LxCopyToUser(Thread->SetChildTid, &Thread->Tid, sizeof(Thread->Tid));
+}
+
+static
+VOID
+NTAPI
+LxPicoThreadExit(
+    _In_ PETHREAD EThread)
+{
+    PLX_THREAD Thread = PsPicoGetThreadContext(EThread);
+    ULONG Zero = 0;
+
+    if (Thread == NULL)
+        return;
+
+    if (Thread->ClearChildTid != 0)
+    {
+        if (LxCopyToUser(Thread->ClearChildTid, &Zero, sizeof(Zero)) == 0)
+            LxFutexWake(Thread->ClearChildTid, 1);
+    }
+
+    LxThreadDetach(Thread);
+    LxThreadFree(Thread);
+}
+
+static
+VOID
+NTAPI
+LxPicoProcessExit(
+    _In_ PEPROCESS EProcess)
+{
+    PLX_PROCESS Process = PsPicoGetProcessContext(EProcess);
+
+    if (Process == NULL)
+        return;
+
+    LxProcessExited(Process, PsGetProcessExitStatus(EProcess));
+    InterlockedDecrement((PLONG)&Process->Instance->ProcessCount);
+    LxProcessDereference(Process);
+}
+
+static
+NTSTATUS
+LxCaptureRange(
+    _In_ PUCHAR Buffer,
+    _In_ ULONG BufferLength,
+    _In_ ULONG Offset,
+    _In_ ULONG Length,
+    _In_ ULONG MaxLength,
+    _Out_ PUCHAR *Data)
+{
+    if ((Length > MaxLength) ||
+        (Offset > BufferLength) ||
+        (Length > BufferLength - Offset))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    *Data = Buffer + Offset;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+LxCaptureStringList(
+    _In_ PUCHAR Data,
+    _In_ ULONG Length,
+    _In_ ULONG Count,
+    _Out_ PSTR *Copy)
+{
+    ULONG Index, Strings = 0;
+
+    *Copy = NULL;
+    if ((Length == 0) != (Count == 0))
+        return STATUS_INVALID_PARAMETER;
+    if (Length == 0)
+        return STATUS_SUCCESS;
+    if (Data[Length - 1] != '\0')
+        return STATUS_INVALID_PARAMETER;
+
+    for (Index = 0; Index < Length; Index++)
+    {
+        if (Data[Index] == '\0')
+            Strings++;
+    }
+    if (Strings != Count)
+        return STATUS_INVALID_PARAMETER;
+
+    *Copy = LxAlloc(Length);
+    if (*Copy == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(*Copy, Data, Length);
+    return STATUS_SUCCESS;
+}
+
+static
+PSTR
+LxCaptureUtf8(
+    _In_ PUCHAR Data,
+    _In_ ULONG Length)
+{
+    PSTR Copy = LxAlloc(Length + 1);
+
+    if (Copy != NULL)
+    {
+        RtlCopyMemory(Copy, Data, Length);
+        Copy[Length] = '\0';
+    }
+    return Copy;
+}
+
+static
+VOID
+LxFreeRequest(
+    _In_ PLX_EXEC_REQUEST Request)
+{
+    LxFree(Request->FileName);
+    LxFree(Request->Args);
+    LxFree(Request->Env);
+    LxFree(Request);
+}
+
+static
+NTSTATUS
+LxCaptureUserFile(
+    _In_ HANDLE UserHandle,
+    _In_ ACCESS_MASK Access,
+    _Out_ PHANDLE KernelHandle)
+{
+    PFILE_OBJECT FileObject;
+    NTSTATUS Status;
+
+    Status = ObReferenceObjectByHandle(UserHandle,
+                                       Access,
+                                       *IoFileObjectType,
+                                       UserMode,
+                                       (PVOID*)&FileObject,
+                                       NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ObOpenObjectByPointer(FileObject,
+                                   OBJ_KERNEL_HANDLE,
+                                   NULL,
+                                   Access | SYNCHRONIZE | FILE_READ_ATTRIBUTES,
+                                   *IoFileObjectType,
+                                   KernelMode,
+                                   KernelHandle);
+    ObDereferenceObject(FileObject);
+    return Status;
+}
+
+static
+NTSTATUS
+LxInstallFile(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_FILE File,
+    _In_ LONG Fd)
+{
+    LONG Result = LxFdInstall(Process, File, Fd, FALSE);
+
+    LxFileDereference(File);
+    return (Result == Fd) ? STATUS_SUCCESS : STATUS_TOO_MANY_OPENED_FILES;
+}
+
+static
+NTSTATUS
+LxInstallStdHandle(
+    _In_ PLX_PROCESS Process,
+    _In_ HANDLE UserHandle,
+    _In_ LONG Fd)
+{
+    HANDLE KernelHandle;
+    PLX_FILE File;
+    NTSTATUS Status;
+
+    Status = LxCaptureUserFile(UserHandle, (Fd == 0) ? FILE_READ_DATA : FILE_WRITE_DATA, &KernelHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    File = LxFileFromNtHandle(KernelHandle, (Fd == 0) ? LX_O_RDONLY : LX_O_WRONLY);
+    if (File == NULL)
+    {
+        ZwClose(KernelHandle);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    if (File->NtPipe)
+        File->Path = LxStrPrintf("pipe:[%llu]", File->Ino);
+
+    return LxInstallFile(Process, File, Fd);
+}
+
+static
+NTSTATUS
+LxInstallTty(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_CREATE_PROCESS_IN In)
+{
+    HANDLE Input = NULL, Output = NULL;
+    NTSTATUS Status;
+    LONG Fd;
+
+    PLX_TTY Tty;
+
+    Status = LxCaptureUserFile(In->StdHandles[0], FILE_READ_DATA, &Input);
+    if (NT_SUCCESS(Status))
+        Status = LxCaptureUserFile(In->StdHandles[1], FILE_WRITE_DATA, &Output);
+    if (NT_SUCCESS(Status))
+        Status = LxTtyCreate(Input, Output, In->Rows, In->Columns, &Tty);
+    if (!NT_SUCCESS(Status))
+    {
+        if (Input != NULL)
+            ZwClose(Input);
+        if (Output != NULL)
+            ZwClose(Output);
+        return Status;
+    }
+    Tty->Instance = Process->Instance;
+
+    if ((In->Flags & LX_CREATE_BOOT) || (Process->Instance->Console == NULL))
+    {
+        LxTtyReference(Tty);
+        Process->Instance->Console = Tty;
+    }
+    if (!(In->Flags & LX_CREATE_BOOT))
+    {
+        LxTtyReference(Tty);
+        Process->Tty = Tty;
+    }
+
+    for (Fd = 0; Fd < 3; Fd++)
+    {
+        PLX_FILE File;
+
+        if (!(In->TtyMask & (1UL << Fd)))
+            continue;
+
+        File = LxTtyOpen(Tty, LX_O_RDWR);
+        if (File == NULL)
+        {
+            LxTtyDereference(Tty);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        File->Rdev = (In->Flags & LX_CREATE_BOOT) ? ((5 << 8) | 1) : (136 << 8);
+        File->Path = LxStrDup((In->Flags & LX_CREATE_BOOT) ? "/dev/console" : "/dev/pts/0");
+        Status = LxInstallFile(Process, File, Fd);
+        if (!NT_SUCCESS(Status))
+        {
+            LxTtyDereference(Tty);
+            return Status;
+        }
+    }
+    LxTtyDereference(Tty);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+LxIoctlCreateProcess(
+    _Inout_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION Stack)
+{
+    PLX_CREATE_PROCESS_IN In = Irp->AssociatedIrp.SystemBuffer;
+    PLX_CREATE_PROCESS_OUT Out = Irp->AssociatedIrp.SystemBuffer;
+    ULONG InLength = Stack->Parameters.DeviceIoControl.InputBufferLength;
+    ULONG OutLength = Stack->Parameters.DeviceIoControl.OutputBufferLength;
+    PUCHAR Buffer = (PUCHAR)In;
+    PUCHAR Root, Cwd, FileName, Args, Env;
+    PLX_EXEC_REQUEST Request = NULL;
+    PLX_PROCESS Process = NULL;
+    PLX_THREAD Thread = NULL;
+    PLX_INSTANCE Instance = NULL;
+    UNICODE_STRING RootNt;
+    HANDLE ProcessHandle = NULL, ThreadHandle = NULL, UserHandle = NULL;
+    PEPROCESS EProcess = NULL;
+    CONTEXT Context;
+    BOOLEAN Listed = FALSE;
+    NTSTATUS Status;
+    LONG Fd;
+
+    if ((InLength < sizeof(*In)) || (OutLength < sizeof(*Out)) ||
+        (In->Size != InLength) || (In->Version != LX_CREATE_PROCESS_VERSION))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Status = LxCaptureRange(Buffer, InLength, In->RootOffset, In->RootLength, 32767 * sizeof(WCHAR), &Root);
+    if (NT_SUCCESS(Status))
+        Status = LxCaptureRange(Buffer, InLength, In->CwdOffset, In->CwdLength, LX_PATH_MAX - 1, &Cwd);
+    if (NT_SUCCESS(Status))
+        Status = LxCaptureRange(Buffer, InLength, In->FileOffset, In->FileLength, LX_PATH_MAX - 1, &FileName);
+    if (NT_SUCCESS(Status))
+        Status = LxCaptureRange(Buffer, InLength, In->ArgOffset, In->ArgLength, LX_MAX_ARG_TOTAL, &Args);
+    if (NT_SUCCESS(Status))
+        Status = LxCaptureRange(Buffer, InLength, In->EnvOffset, In->EnvLength, LX_MAX_ARG_TOTAL, &Env);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if ((In->RootLength < 2 * sizeof(WCHAR)) || (In->RootLength & 1) ||
+        (In->FileLength == 0) || (In->ArgCount == 0))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (In->Flags & ~(LX_CREATE_BOOT | LX_CREATE_NEW_INSTANCE | LX_CREATE_TRACE | LX_CREATE_TRACE_ALL))
+        return STATUS_INVALID_PARAMETER;
+
+    RootNt.Buffer = (PWCHAR)Root;
+    RootNt.Length = (USHORT)In->RootLength;
+    while ((RootNt.Length > 2 * sizeof(WCHAR)) && (RootNt.Buffer[RootNt.Length / sizeof(WCHAR) - 1] == L'\\'))
+        RootNt.Length -= sizeof(WCHAR);
+    RootNt.MaximumLength = RootNt.Length;
+
+    Instance = LxInstanceFind(&RootNt);
+    if ((Instance != NULL) && (Instance->ShuttingDown || (In->Flags & LX_CREATE_NEW_INSTANCE)))
+    {
+        BOOLEAN Busy = !Instance->ShuttingDown;
+
+        LxInstanceDereference(Instance);
+        Instance = NULL;
+        if (Busy && (In->Flags & LX_CREATE_BOOT))
+            return STATUS_OBJECT_NAME_COLLISION;
+    }
+    if (Instance == NULL)
+    {
+        Instance = LxInstanceCreate(&RootNt, (In->Flags & LX_CREATE_BOOT) != 0);
+        if (Instance == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    if (In->Flags & LX_CREATE_TRACE_ALL)
+        Instance->Trace = 2;
+    else if (In->Flags & LX_CREATE_TRACE)
+        Instance->Trace = max(Instance->Trace, 1);
+
+    Request = LxAlloc(sizeof(*Request));
+    Process = LxProcessCreate(Instance);
+    LxInstanceDereference(Instance);
+    if ((Request == NULL) || (Process == NULL))
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Cleanup;
+    }
+    KeInitializeEvent(&Request->Done, NotificationEvent, FALSE);
+
+    Request->FileName = LxCaptureUtf8(FileName, In->FileLength);
+    Request->ArgLength = In->ArgLength;
+    Request->ArgCount = In->ArgCount;
+    Request->EnvLength = In->EnvLength;
+    Request->EnvCount = In->EnvCount;
+    Status = LxCaptureStringList(Args, In->ArgLength, In->ArgCount, &Request->Args);
+    if (NT_SUCCESS(Status))
+        Status = LxCaptureStringList(Env, In->EnvLength, In->EnvCount, &Request->Env);
+    if (NT_SUCCESS(Status) && (Request->FileName == NULL))
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+
+    if ((In->CwdLength != 0) && (Cwd[0] == '/'))
+        Process->Cwd = LxCaptureUtf8(Cwd, In->CwdLength);
+    else
+        Process->Cwd = LxStrDup("/");
+    if (Process->Cwd == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Cleanup;
+    }
+    Process->Pid = LxInstanceAllocatePid(Process->Instance);
+    Process->Pgid = Process->Pid;
+    Process->Sid = Process->Pid;
+    LxCgroupAttach(Process, Process->Instance->RootCgroup);
+
+    if ((In->TtyMask & ~7UL) || ((In->TtyMask != 0) && ((In->TtyMask & 3) != 3)))
+    {
+        Status = STATUS_INVALID_PARAMETER;
+        goto Cleanup;
+    }
+    if (In->TtyMask != 0)
+    {
+        Status = LxInstallTty(Process, In);
+        if (!NT_SUCCESS(Status))
+            goto Cleanup;
+    }
+
+    for (Fd = 0; Fd < 3; Fd++)
+    {
+        if ((In->StdHandles[Fd] != NULL) && !(In->TtyMask & (1UL << Fd)))
+        {
+            Status = LxInstallStdHandle(Process, In->StdHandles[Fd], Fd);
+            if (!NT_SUCCESS(Status))
+                goto Cleanup;
+        }
+    }
+
+    Thread = LxThreadCreate(Process);
+    if (Thread == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Cleanup;
+    }
+    Thread->Exec = Request;
+
+    Status = PsPicoCreateProcess(FALSE, Process, &ProcessHandle);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+
+    Status = ObReferenceObjectByHandle(ProcessHandle,
+                                       0,
+                                       *PsProcessType,
+                                       KernelMode,
+                                       (PVOID*)&EProcess,
+                                       NULL);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+
+    Process->NtPid = HandleToUlong(PsGetProcessId(EProcess));
+    Process->ParentPid = 0;
+    Thread->Tid = Process->Pid;
+    if (Process->Tty != NULL)
+    {
+        Process->Tty->Session = Process->Pid;
+        Process->Tty->ForegroundPgrp = Process->Pid;
+    }
+    else if ((Process->Instance->Console != NULL) && (In->Flags & LX_CREATE_BOOT))
+    {
+        Process->Instance->Console->Session = 0;
+        Process->Instance->Console->ForegroundPgrp = 0;
+    }
+
+    LxProcessRegister(Process);
+    InterlockedIncrement((PLONG)&Process->Instance->ProcessCount);
+    Listed = TRUE;
+
+    RtlZeroMemory(&Context, sizeof(Context));
+    Context.ContextFlags = CONTEXT_FULL;
+    Status = PsPicoCreateThread(ProcessHandle, &Context, Thread, &ThreadHandle, NULL);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+    Thread = NULL;
+
+    KeWaitForSingleObject(&Request->Done, Executive, KernelMode, FALSE, NULL);
+    Status = Request->Status;
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Linux program '%s' could not start: status 0x%08lx, errno %ld\n",
+                Request->FileName, Status, Request->Errno);
+        goto Done;
+    }
+
+    Status = ObOpenObjectByPointer(EProcess,
+                                   0,
+                                   NULL,
+                                   SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
+                                   *PsProcessType,
+                                   UserMode,
+                                   &UserHandle);
+    if (!NT_SUCCESS(Status))
+        goto Done;
+
+    Out->ProcessHandle = UserHandle;
+    Out->ProcessId = HandleToUlong(PsGetProcessId(EProcess));
+    Out->Reserved = 0;
+    Irp->IoStatus.Information = sizeof(*Out);
+
+Done:
+    ZwClose(ThreadHandle);
+    ZwClose(ProcessHandle);
+    ObDereferenceObject(EProcess);
+    LxFreeRequest(Request);
+    return Status;
+
+Cleanup:
+    if (Listed)
+    {
+        LxProcessUnregister(Process);
+        InterlockedDecrement((PLONG)&Process->Instance->ProcessCount);
+    }
+    if (ProcessHandle != NULL)
+    {
+        ZwTerminateProcess(ProcessHandle, Status);
+        ZwClose(ProcessHandle);
+    }
+    if (EProcess != NULL)
+        ObDereferenceObject(EProcess);
+    if (Thread != NULL)
+        LxThreadFree(Thread);
+    if (Process != NULL)
+        LxProcessDereference(Process);
+    if (Request != NULL)
+        LxFreeRequest(Request);
+    return Status;
+}
+
+static
+NTSTATUS
+NTAPI
+LxDispatchCreateClose(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+LxDispatchDeviceControl(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    Irp->IoStatus.Information = 0;
+    switch (Stack->Parameters.DeviceIoControl.IoControlCode)
+    {
+        case IOCTL_LX_CREATE_PROCESS:
+            Status = LxIoctlCreateProcess(Irp, Stack);
+            break;
+
+        default:
+            Status = STATUS_INVALID_DEVICE_REQUEST;
+            break;
+    }
+
+    Irp->IoStatus.Status = Status;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+DriverEntry(
+    _In_ PDRIVER_OBJECT DriverObject,
+    _In_ PUNICODE_STRING RegistryPath)
+{
+    static const PICO_PROVIDER_ROUTINES Routines =
+    {
+        sizeof(PICO_PROVIDER_ROUTINES),
+        LxPicoSystemCall,
+        LxPicoDispatchException,
+        LxPicoThreadStart,
+        LxPicoThreadExit,
+        LxPicoProcessExit
+    };
+    UNICODE_STRING DeviceName = RTL_CONSTANT_STRING(LX_DEVICE_NAME);
+    UNICODE_STRING DosName = RTL_CONSTANT_STRING(LX_DOS_DEVICE_NAME);
+    PDEVICE_OBJECT DeviceObject;
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(RegistryPath);
+
+    LxProcessInitialize();
+    InitializeListHead(&LxInstanceList);
+    ExInitializeFastMutex(&LxInstanceListLock);
+    LxPipeInitialize();
+    LxSynthInitialize();
+    LxFdObjectsInitialize();
+    LxSocketInitialize();
+
+    Status = IoCreateDevice(DriverObject,
+                            0,
+                            &DeviceName,
+                            FILE_DEVICE_UNKNOWN,
+                            FILE_DEVICE_SECURE_OPEN,
+                            FALSE,
+                            &DeviceObject);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = IoCreateSymbolicLink(&DosName, &DeviceName);
+    if (!NT_SUCCESS(Status))
+    {
+        IoDeleteDevice(DeviceObject);
+        return Status;
+    }
+
+    Status = PsPicoRegisterProvider(&Routines);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("The Linux subsystem could not register as the pico provider: 0x%08lx\n", Status);
+        IoDeleteSymbolicLink(&DosName);
+        IoDeleteDevice(DeviceObject);
+        return Status;
+    }
+
+    DriverObject->MajorFunction[IRP_MJ_CREATE] = LxDispatchCreateClose;
+    DriverObject->MajorFunction[IRP_MJ_CLOSE] = LxDispatchCreateClose;
+    DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = LxDispatchDeviceControl;
+    DeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
+
+    return STATUS_SUCCESS;
+}
