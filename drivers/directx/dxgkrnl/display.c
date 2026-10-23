@@ -1836,7 +1836,7 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
      * An empty topology on an adapter that has never committed a path is not
      * a mode set: there is no path to make cofunctional, to time or to
      * remove, and a full miniport may reject an empty constraining VidPn in
-     * DxgkDdiEnumVidPnCofuncModality (amdkmdag answers STATUS_NO_MEMORY).
+     * DxgkDdiEnumVidPnCofuncModality (one answers STATUS_NO_MEMORY).
      * Child status fills the topology in later and the hot-plug rebuild
      * commits the first real path as an added one.
      */

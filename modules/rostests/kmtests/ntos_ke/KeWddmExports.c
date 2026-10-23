@@ -202,7 +202,7 @@ static
 VOID
 TestStringHelpers(VOID)
 {
-    CHAR Buffer[] = "amdkmdag sys;driver";
+    CHAR Buffer[] = "miniport sys;driver";
     CHAR *Context = NULL;
     CHAR *Token;
     WCHAR Wide[] = L"1280 720";
@@ -214,7 +214,7 @@ TestStringHelpers(VOID)
     int Width = 0, Height = 0, Converted;
 
     Token = strtok_s(Buffer, " ;", &Context);
-    ok(Token != NULL && strcmp(Token, "amdkmdag") == 0,
+    ok(Token != NULL && strcmp(Token, "miniport") == 0,
        "First token is '%s'\n", Token ? Token : "(null)");
     Token = strtok_s(NULL, " ;", &Context);
     ok(Token != NULL && strcmp(Token, "sys") == 0,
