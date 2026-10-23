@@ -197,9 +197,18 @@
 #define LX_MAP_PRIVATE          0x02
 #define LX_MAP_FIXED            0x10
 #define LX_MAP_ANONYMOUS        0x20
+#define LX_MAP_GROWSDOWN        0x0100
+#define LX_MAP_LOCKED           0x2000
+#define LX_MAP_POPULATE         0x8000
+#define LX_MAP_STACK            0x20000
 #define LX_MAP_FIXED_NOREPLACE  0x100000
 
 #define LX_MREMAP_MAYMOVE   1
+#define LX_MREMAP_FIXED     2
+#define LX_MREMAP_DONTUNMAP 4
+
+#define LX_MADV_DONTNEED    4
+#define LX_MADV_FREE        8
 
 #define LX_AT_NULL          0
 #define LX_AT_PHDR          3

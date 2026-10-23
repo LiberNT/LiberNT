@@ -14,6 +14,7 @@ list(APPEND SOURCE
     socket.c
     sys.c
     tty.c
+    unistd.c
     vfs.c)
 
 if(ARCH STREQUAL "arm64")

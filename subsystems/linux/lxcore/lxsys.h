@@ -63,6 +63,12 @@ LX_SYSCALL(LxSysXattrList);
 LX_SYSCALL(LxSysXattrSet);
 LX_SYSCALL(LxSysMemfdCreate);
 LX_SYSCALL(LxSysNameToHandleAt);
+LX_SYSCALL(LxSysFsopen);
+LX_SYSCALL(LxSysFsconfig);
+LX_SYSCALL(LxSysFsmount);
+LX_SYSCALL(LxSysMoveMount);
+LX_SYSCALL(LxSysMountSetattr);
+LX_SYSCALL(LxSysOpenTree);
 
 LX_SYSCALL(LxSysPipe2);
 LX_SYSCALL(LxSysPpoll);
@@ -107,7 +113,15 @@ LX_SYSCALL(LxSysMmap);
 LX_SYSCALL(LxSysMunmap);
 LX_SYSCALL(LxSysMprotect);
 LX_SYSCALL(LxSysMremap);
+LX_SYSCALL(LxSysMadvise);
 LX_SYSCALL(LxSysMincore);
+LX_SYSCALL(LxSysSetitimer);
+LX_SYSCALL(LxSysTimerCreate);
+LX_SYSCALL(LxSysTimerSettime);
+LX_SYSCALL(LxSysTimerGettime);
+LX_SYSCALL(LxSysTimerGetoverrun);
+LX_SYSCALL(LxSysTimerDelete);
+LX_SYSCALL(LxSysGetitimer);
 
 LX_SYSCALL(LxSysExit);
 LX_SYSCALL(LxSysExitGroup);

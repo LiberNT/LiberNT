@@ -41,9 +41,10 @@ VOID
 LxUsage(VOID)
 {
     fwprintf(stderr,
-             L"Usage: lxrun [-t] [-n] [--boot] [-r rootdir] [-C linuxdir] [-e NAME=VALUE]... program [arguments...]\n"
+             L"Usage: lxrun [-t] [-n|-j] [--boot] [-r rootdir] [-C linuxdir] [-e NAME=VALUE]... program [arguments...]\n"
              L"  -t             Treat standard input and output as a terminal even when they are not a console\n"
              L"  -n             Start a new Linux instance instead of joining the running one\n"
+             L"  -j             Only join the running Linux instance; fail when there is none\n"
              L"  --boot         Boot the root as a Linux instance with program (default /sbin/init) as PID 1\n"
              L"  --trace        Log failing Linux system calls of the instance to the kernel debugger\n"
              L"  --trace-all    Log every Linux system call of the instance to the kernel debugger\n"
@@ -310,6 +311,10 @@ wmain(
         else if (wcscmp(argv[Index], L"-n") == 0)
         {
             CreateFlags |= LX_CREATE_NEW_INSTANCE;
+        }
+        else if (wcscmp(argv[Index], L"-j") == 0)
+        {
+            CreateFlags |= LX_CREATE_JOIN;
         }
         else if (wcscmp(argv[Index], L"--boot") == 0)
         {

@@ -38,6 +38,22 @@ LxTracePathArgument(
 }
 
 static
+BOOLEAN
+LxSyscallMayBlock(
+    _In_ PLX_SYSCALL_HANDLER Handler)
+{
+    return (Handler == LxSysEpollPwait) || (Handler == LxSysEpollPwait2) || (Handler == LxSysPpoll) ||
+           (Handler == LxSysPselect6) || (Handler == LxSysWaitid) || (Handler == LxSysWait4) ||
+           (Handler == LxSysFutex) || (Handler == LxSysNanosleep) || (Handler == LxSysClockNanosleep) ||
+           (Handler == LxSysRead) || (Handler == LxSysReadv) || (Handler == LxSysRecvmsg) ||
+           (Handler == LxSysRecvfrom) || (Handler == LxSysRecvmmsg) || (Handler == LxSysRtSigtimedwait) ||
+           (Handler == LxSysRtSigsuspend) || (Handler == LxSysAccept) || (Handler == LxSysAccept4) ||
+           (Handler == LxSysWrite) || (Handler == LxSysWritev) || (Handler == LxSysSendmsg) ||
+           (Handler == LxSysSendto) || (Handler == LxSysConnect) || (Handler == LxSysOpenat) ||
+           (Handler == LxSysFlock);
+}
+
+static
 VOID
 LxTraceCall(
     _In_ PLX_CALL Call,
@@ -62,7 +78,8 @@ LxSysCall(
     _Inout_ PLX_CALL Call)
 {
     PLX_SYSCALL_ENTRY Entry = LxArchSyscallEntry(Call->Number);
-    ULONG Trace = Call->Process->Instance->Trace;
+    ULONG Trace = Call->Process->Trace;
+    LONG64 Start;
 
     if ((Entry != NULL) && (Entry->Handler != NULL))
     {
@@ -70,8 +87,14 @@ LxSysCall(
 
         Call->Thread->CurrentSyscall = Call->Number;
         RtlCopyMemory(Call->Thread->CurrentArgs, Call->Args, sizeof(Call->Args));
+        Start = (LONG64)KeQueryInterruptTime();
         Result = Entry->Handler(Call);
         Call->Thread->CurrentSyscall = MAXULONG;
+        if (((LONG64)KeQueryInterruptTime() - Start > 10000000LL) && !LxSyscallMayBlock(Entry->Handler))
+        {
+            DbgPrint("lx %lu/%lu slow %s took %lld ms\n", Call->Process->Pid, Call->Thread->Tid,
+                     (Entry->Name != NULL) ? Entry->Name : "?", ((LONG64)KeQueryInterruptTime() - Start) / 10000);
+        }
 
         if ((Trace > 1) || ((Trace != 0) && (Result < 0) && (Result > -4096)))
             LxTraceCall(Call, Entry, Result);
@@ -1155,7 +1178,11 @@ LxForkProcess(
     if (Request->Flags & LX_CLONE_CHILD_SETTID)
         Thread->SetChildTid = Request->ChildTid;
 
-    Status = PsPicoCreateProcess(TRUE, Child, &ProcessHandle);
+    LxMmLock(Parent);
+    Status = (LxMmFork(Child, Parent) == 0) ? STATUS_SUCCESS : STATUS_NO_MEMORY;
+    if (NT_SUCCESS(Status))
+        Status = PsPicoCreateProcess(TRUE, Child, &ProcessHandle);
+    LxMmUnlock(Parent);
     if (NT_SUCCESS(Status))
         Status = ObReferenceObjectByHandle(ProcessHandle, 0, *PsProcessType, KernelMode, (PVOID*)&EProcess, NULL);
     if (!NT_SUCCESS(Status))
@@ -2053,14 +2080,523 @@ LX_SYSCALL(LxSysPersonality)
 
 LX_SYSCALL(LxSysMincore)
 {
-    ULONG64 Pages = (Call->Args[1] + LX_PAGE_SIZE - 1) / LX_PAGE_SIZE, Index;
-    UCHAR Ones[64];
-    LONG64 Result = 0;
+    ULONG64 Address = Call->Args[0];
+    ULONG64 End = Address + LX_ALIGN_UP(Call->Args[1], LX_PAGE_SIZE);
+    ULONG64 Output = Call->Args[2];
+    UCHAR Vector[64];
 
-    if (Call->Args[0] & (LX_PAGE_SIZE - 1))
+    if (Address & (LX_PAGE_SIZE - 1))
         return -LX_EINVAL;
-    RtlFillMemory(Ones, sizeof(Ones), 1);
-    for (Index = 0; (Index < Pages) && (Result == 0); Index += sizeof(Ones))
-        Result = LxCopyToUser(Call->Args[2] + Index, Ones, (SIZE_T)min(Pages - Index, sizeof(Ones)));
+    if (End < Address)
+        return -LX_ENOMEM;
+    if (!LxMmIsMapped(Call->Process, Address, End))
+        return -LX_ENOMEM;
+
+    while (Address < End)
+    {
+        MEMORY_BASIC_INFORMATION Information;
+        ULONG64 RegionEnd;
+        NTSTATUS Status;
+        UCHAR Value;
+
+        Status = ZwQueryVirtualMemory(NtCurrentProcess(), (PVOID)(ULONG_PTR)Address, MemoryBasicInformation,
+                                      &Information, sizeof(Information), NULL);
+        if (!NT_SUCCESS(Status) || (Information.State == MEM_FREE))
+            return -LX_ENOMEM;
+        Value = (Information.State == MEM_COMMIT) ? 1 : 0;
+        RegionEnd = min(End, (ULONG64)(ULONG_PTR)Information.BaseAddress + Information.RegionSize);
+
+        RtlFillMemory(Vector, sizeof(Vector), Value);
+        while (Address < RegionEnd)
+        {
+            ULONG64 Pages = min((RegionEnd - Address) / LX_PAGE_SIZE, sizeof(Vector));
+            LONG64 Result = LxCopyToUser(Output, Vector, (SIZE_T)Pages);
+
+            if (Result != 0)
+                return Result;
+            Output += Pages;
+            Address += Pages * LX_PAGE_SIZE;
+        }
+    }
+    return 0;
+}
+
+static
+VOID
+NTAPI
+LxItimerWork(
+    _In_ PVOID Context)
+{
+    PLX_ITIMER Timer = Context;
+    PLX_PROCESS Process = Timer->Process;
+    LX_SIGINFO Info;
+
+    InterlockedExchange(&Timer->WorkQueued, 0);
+    if (!Process->Exited)
+    {
+        RtlZeroMemory(&Info, sizeof(Info));
+        Info.Code = LX_SI_KERNEL;
+        LxSignalSend(Process, NULL, LX_SIGALRM, &Info);
+    }
+    LxProcessDereference(Process);
+}
+
+static
+VOID
+NTAPI
+LxItimerDpc(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID Context,
+    _In_opt_ PVOID Argument1,
+    _In_opt_ PVOID Argument2)
+{
+    PLX_ITIMER Timer = Context;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(Argument1);
+    UNREFERENCED_PARAMETER(Argument2);
+
+    if (Timer->IntervalNs != 0)
+        Timer->Due += Timer->IntervalNs / 100;
+    else
+        Timer->Due = 0;
+    if (InterlockedExchange(&Timer->WorkQueued, 1) == 0)
+    {
+        InterlockedIncrement(&Timer->Process->RefCount);
+        ExQueueWorkItem(&Timer->Work, DelayedWorkQueue);
+    }
+}
+
+VOID
+LxItimerRelease(
+    _In_ PLX_PROCESS Process)
+{
+    if (Process->RealTimer == NULL)
+        return;
+    KeCancelTimer(&Process->RealTimer->Timer);
+    KeFlushQueuedDpcs();
+    LxFree(Process->RealTimer);
+    Process->RealTimer = NULL;
+}
+
+static
+VOID
+LxItimerCurrent(
+    _In_opt_ PLX_ITIMER Timer,
+    _Out_writes_(4) PLX_TIMEVAL Value)
+{
+    LONG64 Remaining = 0, Interval = 0;
+
+    if ((Timer != NULL) && (Timer->Due != 0))
+    {
+        Remaining = Timer->Due - (LONG64)KeQueryInterruptTime();
+        if (Remaining <= 0)
+            Remaining = 10;
+        Interval = Timer->IntervalNs / 100;
+    }
+    Value[0].Seconds = Interval / 10000000LL;
+    Value[0].Microseconds = (Interval % 10000000LL) / 10;
+    Value[1].Seconds = Remaining / 10000000LL;
+    Value[1].Microseconds = (Remaining % 10000000LL) / 10;
+}
+
+LX_SYSCALL(LxSysGetitimer)
+{
+    LX_TIMEVAL Value[2];
+
+    if (Call->Args[0] > 2)
+        return -LX_EINVAL;
+    LxItimerCurrent((Call->Args[0] == 0) ? Call->Process->RealTimer : NULL, Value);
+    return LxCopyToUser(Call->Args[1], Value, sizeof(Value));
+}
+
+LX_SYSCALL(LxSysSetitimer)
+{
+    PLX_PROCESS Process = Call->Process;
+    PLX_ITIMER Timer;
+    LX_TIMEVAL New[2], Old[2];
+    LARGE_INTEGER DueTime;
+    LONG64 Value, Interval, Result;
+
+    if (Call->Args[0] > 2)
+        return -LX_EINVAL;
+    RtlZeroMemory(New, sizeof(New));
+    if (Call->Args[1] != 0)
+    {
+        Result = LxCopyFromUser(New, Call->Args[1], sizeof(New));
+        if (Result != 0)
+            return Result;
+        if ((New[0].Microseconds < 0) || (New[0].Microseconds >= 1000000) ||
+            (New[1].Microseconds < 0) || (New[1].Microseconds >= 1000000))
+        {
+            return -LX_EINVAL;
+        }
+    }
+    if (Call->Args[0] != 0)
+    {
+        RtlZeroMemory(Old, sizeof(Old));
+        return (Call->Args[2] != 0) ? LxCopyToUser(Call->Args[2], Old, sizeof(Old)) : 0;
+    }
+
+    Timer = Process->RealTimer;
+    if (Timer == NULL)
+    {
+        Timer = LxAlloc(sizeof(*Timer));
+        if (Timer == NULL)
+            return -LX_ENOMEM;
+        KeInitializeTimerEx(&Timer->Timer, NotificationTimer);
+        KeInitializeDpc(&Timer->Dpc, LxItimerDpc, Timer);
+        ExInitializeWorkItem(&Timer->Work, LxItimerWork, Timer);
+        Timer->Process = Process;
+        if (InterlockedCompareExchangePointer((PVOID *)&Process->RealTimer, Timer, NULL) != NULL)
+        {
+            LxFree(Timer);
+            Timer = Process->RealTimer;
+        }
+    }
+
+    LxItimerCurrent(Timer, Old);
+    KeCancelTimer(&Timer->Timer);
+
+    Value = New[1].Seconds * 10000000LL + New[1].Microseconds * 10;
+    Interval = New[0].Seconds * 10000000LL + New[0].Microseconds * 10;
+    Timer->IntervalNs = (Value != 0) ? Interval * 100 : 0;
+    Timer->Due = (Value != 0) ? (LONG64)KeQueryInterruptTime() + Value : 0;
+    if (Value != 0)
+    {
+        DueTime.QuadPart = -Value;
+        KeSetTimerEx(&Timer->Timer, DueTime, (Interval != 0) ? (LONG)max(1, Interval / 10000) : 0, &Timer->Dpc);
+    }
+
+    if (Call->Args[2] != 0)
+        return LxCopyToUser(Call->Args[2], Old, sizeof(Old));
+    return 0;
+}
+
+#define LX_SIGEV_SIGNAL     0
+#define LX_SIGEV_NONE       1
+#define LX_SIGEV_THREAD     2
+#define LX_SIGEV_THREAD_ID  4
+
+typedef struct _LX_POSIX_TIMER
+{
+    LIST_ENTRY Link;
+    KTIMER Timer;
+    KDPC Dpc;
+    WORK_QUEUE_ITEM Work;
+    PLX_PROCESS Process;
+    volatile LONG WorkQueued;
+    LONG Id;
+    ULONG Clock;
+    LONG Signal;
+    ULONG Notify;
+    ULONG Tid;
+    ULONG64 Value;
+    LONG64 IntervalNs;
+    LONG64 DueNs;
+    volatile LONG Overrun;
+    LONG LastOverrun;
+} LX_POSIX_TIMER, *PLX_POSIX_TIMER;
+
+typedef struct _LX_SIGEVENT
+{
+    ULONG64 Value;
+    LONG Signal;
+    LONG Notify;
+    LONG ThreadId;
+    UCHAR Pad[44];
+} LX_SIGEVENT, *PLX_SIGEVENT;
+
+C_ASSERT(sizeof(LX_SIGEVENT) == 64);
+
+static
+LONG64
+LxClockNow(
+    _In_ ULONG Clock)
+{
+    LX_TIMESPEC Now;
+
+    if (LxQueryClock(Clock, &Now) != 0)
+        return 0;
+    return Now.Seconds * 1000000000LL + Now.Nanoseconds;
+}
+
+static
+VOID
+NTAPI
+LxPosixTimerWork(
+    _In_ PVOID Context)
+{
+    PLX_POSIX_TIMER Timer = Context;
+    PLX_PROCESS Process = Timer->Process;
+    PLX_THREAD Thread = NULL;
+    PLX_PROCESS Owner = NULL;
+    LX_SIGINFO Info;
+
+    InterlockedExchange(&Timer->WorkQueued, 0);
+    if (!Process->Exited && (Timer->Notify != LX_SIGEV_NONE))
+    {
+        RtlZeroMemory(&Info, sizeof(Info));
+        Info.Code = LX_SI_TIMER;
+        Timer->LastOverrun = InterlockedExchange(&Timer->Overrun, 0);
+        RtlCopyMemory(&Info.Raw[0], &Timer->Id, sizeof(LONG));
+        RtlCopyMemory(&Info.Raw[4], &Timer->LastOverrun, sizeof(LONG));
+        RtlCopyMemory(&Info.Raw[8], &Timer->Value, sizeof(ULONG64));
+        if (Timer->Notify & LX_SIGEV_THREAD_ID)
+            Thread = LxThreadLookupReferenced(Process->Instance, Timer->Tid, &Owner);
+        if ((Thread != NULL) && (Owner == Process))
+            LxSignalSend(Process, Thread, Timer->Signal, &Info);
+        else
+            LxSignalSend(Process, NULL, Timer->Signal, &Info);
+        if (Owner != NULL)
+            LxProcessDereference(Owner);
+    }
+    LxProcessDereference(Process);
+}
+
+static
+VOID
+NTAPI
+LxPosixTimerDpc(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID Context,
+    _In_opt_ PVOID Argument1,
+    _In_opt_ PVOID Argument2)
+{
+    PLX_POSIX_TIMER Timer = Context;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(Argument1);
+    UNREFERENCED_PARAMETER(Argument2);
+
+    if (Timer->IntervalNs != 0)
+        Timer->DueNs += Timer->IntervalNs;
+    else
+        Timer->DueNs = 0;
+    if (InterlockedExchange(&Timer->WorkQueued, 1) == 0)
+    {
+        InterlockedIncrement(&Timer->Process->RefCount);
+        ExQueueWorkItem(&Timer->Work, DelayedWorkQueue);
+    }
+    else
+    {
+        InterlockedIncrement(&Timer->Overrun);
+    }
+}
+
+VOID
+LxPosixTimersRelease(
+    _In_ PLX_PROCESS Process,
+    _In_ BOOLEAN Free)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = Process->Timers.Flink; Entry != &Process->Timers; Entry = Entry->Flink)
+        KeCancelTimer(&CONTAINING_RECORD(Entry, LX_POSIX_TIMER, Link)->Timer);
+    if (!Free)
+        return;
+    KeFlushQueuedDpcs();
+    while (!IsListEmpty(&Process->Timers))
+    {
+        PLX_POSIX_TIMER Timer = CONTAINING_RECORD(RemoveHeadList(&Process->Timers), LX_POSIX_TIMER, Link);
+
+        while (Timer->WorkQueued)
+        {
+            LARGE_INTEGER Delay;
+
+            Delay.QuadPart = -10000;
+            KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+        }
+        LxFree(Timer);
+    }
+}
+
+static
+PLX_POSIX_TIMER
+LxPosixTimerFind(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG Id)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = Process->Timers.Flink; Entry != &Process->Timers; Entry = Entry->Flink)
+    {
+        PLX_POSIX_TIMER Timer = CONTAINING_RECORD(Entry, LX_POSIX_TIMER, Link);
+
+        if (Timer->Id == Id)
+            return Timer;
+    }
+    return NULL;
+}
+
+LX_SYSCALL(LxSysTimerCreate)
+{
+    PLX_PROCESS Process = Call->Process;
+    ULONG Clock = (ULONG)Call->Args[0];
+    PLX_POSIX_TIMER Timer;
+    LX_SIGEVENT Event;
+    LX_TIMESPEC Probe;
+    LONG64 Result;
+
+    if (LxQueryClock((Clock == 8) ? LX_CLOCK_REALTIME : ((Clock == 9) ? LX_CLOCK_BOOTTIME : Clock), &Probe) != 0)
+        return -LX_EINVAL;
+    RtlZeroMemory(&Event, sizeof(Event));
+    if (Call->Args[1] != 0)
+    {
+        Result = LxCopyFromUser(&Event, Call->Args[1], sizeof(Event));
+        if (Result != 0)
+            return Result;
+        if ((Event.Notify != LX_SIGEV_SIGNAL) && (Event.Notify != LX_SIGEV_NONE) &&
+            (Event.Notify != (LX_SIGEV_SIGNAL | LX_SIGEV_THREAD_ID)))
+        {
+            return -LX_EINVAL;
+        }
+        if ((Event.Notify != LX_SIGEV_NONE) && ((Event.Signal <= 0) || (Event.Signal > LX_NSIG)))
+            return -LX_EINVAL;
+    }
+    else
+    {
+        Event.Notify = LX_SIGEV_SIGNAL;
+        Event.Signal = LX_SIGALRM;
+    }
+
+    Timer = LxAlloc(sizeof(*Timer));
+    if (Timer == NULL)
+        return -LX_ENOMEM;
+    KeInitializeTimerEx(&Timer->Timer, NotificationTimer);
+    KeInitializeDpc(&Timer->Dpc, LxPosixTimerDpc, Timer);
+    ExInitializeWorkItem(&Timer->Work, LxPosixTimerWork, Timer);
+    Timer->Process = Process;
+    Timer->Clock = (Clock == 8) ? LX_CLOCK_REALTIME : ((Clock == 9) ? LX_CLOCK_BOOTTIME : Clock);
+    Timer->Signal = Event.Signal;
+    Timer->Notify = (ULONG)Event.Notify;
+    Timer->Tid = (ULONG)Event.ThreadId;
+    Timer->Value = (Call->Args[1] != 0) ? Event.Value : 0;
+
+    ExAcquireFastMutex(&Process->Lock);
+    Timer->Id = Process->NextTimerId++;
+    if (Call->Args[1] == 0)
+        Timer->Value = (ULONG64)Timer->Id;
+    InsertTailList(&Process->Timers, &Timer->Link);
+    ExReleaseFastMutex(&Process->Lock);
+
+    Result = LxCopyToUser(Call->Args[2], &Timer->Id, sizeof(LONG));
     return Result;
+}
+
+static
+VOID
+LxPosixTimerCurrent(
+    _In_ PLX_POSIX_TIMER Timer,
+    _Out_ PLX_ITIMERSPEC Value)
+{
+    LONG64 Remaining = 0;
+
+    if (Timer->DueNs != 0)
+    {
+        Remaining = Timer->DueNs - LxClockNow(Timer->Clock);
+        if (Remaining <= 0)
+            Remaining = 1;
+    }
+    Value->Value.Seconds = Remaining / 1000000000LL;
+    Value->Value.Nanoseconds = Remaining % 1000000000LL;
+    Value->Interval.Seconds = Timer->IntervalNs / 1000000000LL;
+    Value->Interval.Nanoseconds = Timer->IntervalNs % 1000000000LL;
+}
+
+LX_SYSCALL(LxSysTimerSettime)
+{
+    PLX_PROCESS Process = Call->Process;
+    PLX_POSIX_TIMER Timer;
+    LX_ITIMERSPEC New, Old;
+    LARGE_INTEGER DueTime;
+    LONG64 Result, Due, Interval, Now;
+
+    Result = LxCopyFromUser(&New, Call->Args[2], sizeof(New));
+    if (Result != 0)
+        return Result;
+    if ((New.Value.Nanoseconds < 0) || (New.Value.Nanoseconds >= 1000000000) || (New.Value.Seconds < 0) ||
+        (New.Interval.Nanoseconds < 0) || (New.Interval.Nanoseconds >= 1000000000) || (New.Interval.Seconds < 0))
+    {
+        return -LX_EINVAL;
+    }
+
+    ExAcquireFastMutex(&Process->Lock);
+    Timer = LxPosixTimerFind(Process, (LONG)Call->Args[0]);
+    ExReleaseFastMutex(&Process->Lock);
+    if (Timer == NULL)
+        return -LX_EINVAL;
+
+    LxPosixTimerCurrent(Timer, &Old);
+    KeCancelTimer(&Timer->Timer);
+    Due = New.Value.Seconds * 1000000000LL + New.Value.Nanoseconds;
+    Interval = New.Interval.Seconds * 1000000000LL + New.Interval.Nanoseconds;
+    Now = LxClockNow(Timer->Clock);
+    Timer->IntervalNs = (Due != 0) ? Interval : 0;
+    Timer->DueNs = (Due == 0) ? 0 : ((Call->Args[1] & LX_TFD_TIMER_ABSTIME) ? Due : Now + Due);
+    if (Timer->DueNs != 0)
+    {
+        LONG64 Relative = Timer->DueNs - Now;
+
+        if (Relative < 100)
+            Relative = 100;
+        DueTime.QuadPart = -((Relative + 99) / 100);
+        KeSetTimerEx(&Timer->Timer, DueTime, (Interval != 0) ? (LONG)max(1, min(Interval / 1000000LL, MAXLONG)) : 0,
+                     &Timer->Dpc);
+    }
+
+    if (Call->Args[3] != 0)
+        return LxCopyToUser(Call->Args[3], &Old, sizeof(Old));
+    return 0;
+}
+
+LX_SYSCALL(LxSysTimerGettime)
+{
+    PLX_PROCESS Process = Call->Process;
+    PLX_POSIX_TIMER Timer;
+    LX_ITIMERSPEC Value;
+
+    ExAcquireFastMutex(&Process->Lock);
+    Timer = LxPosixTimerFind(Process, (LONG)Call->Args[0]);
+    ExReleaseFastMutex(&Process->Lock);
+    if (Timer == NULL)
+        return -LX_EINVAL;
+    LxPosixTimerCurrent(Timer, &Value);
+    return LxCopyToUser(Call->Args[1], &Value, sizeof(Value));
+}
+
+LX_SYSCALL(LxSysTimerGetoverrun)
+{
+    PLX_PROCESS Process = Call->Process;
+    PLX_POSIX_TIMER Timer;
+
+    ExAcquireFastMutex(&Process->Lock);
+    Timer = LxPosixTimerFind(Process, (LONG)Call->Args[0]);
+    ExReleaseFastMutex(&Process->Lock);
+    return (Timer != NULL) ? Timer->LastOverrun : -LX_EINVAL;
+}
+
+LX_SYSCALL(LxSysTimerDelete)
+{
+    PLX_PROCESS Process = Call->Process;
+    PLX_POSIX_TIMER Timer;
+
+    ExAcquireFastMutex(&Process->Lock);
+    Timer = LxPosixTimerFind(Process, (LONG)Call->Args[0]);
+    if (Timer != NULL)
+        RemoveEntryList(&Timer->Link);
+    ExReleaseFastMutex(&Process->Lock);
+    if (Timer == NULL)
+        return -LX_EINVAL;
+    KeCancelTimer(&Timer->Timer);
+    KeFlushQueuedDpcs();
+    while (Timer->WorkQueued)
+    {
+        LARGE_INTEGER Delay;
+
+        Delay.QuadPart = -10000;
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
+    LxFree(Timer);
+    return 0;
 }

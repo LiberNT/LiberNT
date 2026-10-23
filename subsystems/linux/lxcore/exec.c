@@ -162,6 +162,7 @@ LxElfProtection(
 static
 LONG
 LxElfMap(
+    _In_ PLX_PROCESS Process,
     _In_ PLX_ELF_IMAGE Image,
     _In_ ULONG64 DynamicBase,
     _Out_ PLX_ELF_INFO Info)
@@ -171,6 +172,7 @@ LxElfMap(
     PVOID Address;
     SIZE_T RegionSize;
     NTSTATUS Status;
+    LONG64 Result;
     LONG Error;
 
     RtlZeroMemory(Info, sizeof(*Info));
@@ -193,7 +195,7 @@ LxElfMap(
         Bias = DynamicBase - LX_ALIGN_DOWN(Low, LX_ALLOC_GRANULARITY);
 
     Base = LX_ALIGN_DOWN(Low + Bias, LX_ALLOC_GRANULARITY);
-    Size = High + Bias - Base;
+    Size = LX_ALIGN_UP(High + Bias, LX_ALLOC_GRANULARITY) - Base;
     Address = (PVOID)(ULONG_PTR)Base;
     RegionSize = (SIZE_T)Size;
     Status = ZwAllocateVirtualMemory(NtCurrentProcess(), &Address, 0, &RegionSize, MEM_RESERVE, PAGE_NOACCESS);
@@ -206,69 +208,40 @@ LxElfMap(
     for (Index = 0; Index < Image->Header.PhNum; Index++)
     {
         PLX_ELF64_PHDR Phdr = &Image->Phdrs[Index];
-        ULONG64 Start, End;
-
-        if (Phdr->Type != LX_PT_LOAD)
-            continue;
-
-        Start = LX_ALIGN_DOWN(Phdr->VAddr + Bias, LX_PAGE_SIZE);
-        End = LX_ALIGN_UP(Phdr->VAddr + Phdr->MemSz + Bias, LX_PAGE_SIZE);
-        Address = (PVOID)(ULONG_PTR)Start;
-        RegionSize = (SIZE_T)(End - Start);
-        Status = ZwAllocateVirtualMemory(NtCurrentProcess(), &Address, 0, &RegionSize, MEM_COMMIT, PAGE_READWRITE);
-        if (!NT_SUCCESS(Status))
-            return -LX_ENOMEM;
-
-        if (Phdr->FileSz != 0)
-        {
-            PUCHAR Bounce = LxAllocPaged(LX_IO_CHUNK);
-            ULONG64 Done = 0;
-
-            if (Bounce == NULL)
-                return -LX_ENOMEM;
-
-            while (Done < Phdr->FileSz)
-            {
-                ULONG Chunk = (ULONG)min(Phdr->FileSz - Done, LX_IO_CHUNK);
-                LONG64 Read = LxFileReadKernel(Image->File, Bounce, Chunk, Phdr->Offset + Done);
-
-                if (Read != Chunk)
-                {
-                    LxFreePaged(Bounce);
-                    return (Read < 0) ? (LONG)Read : -LX_ENOEXEC;
-                }
-                Error = (LONG)LxCopyToUser(Phdr->VAddr + Bias + Done, Bounce, Chunk);
-                if (Error != 0)
-                {
-                    LxFreePaged(Bounce);
-                    return Error;
-                }
-                Done += Chunk;
-            }
-            LxFreePaged(Bounce);
-        }
-    }
-
-    for (Index = 0; Index < Image->Header.PhNum; Index++)
-    {
-        PLX_ELF64_PHDR Phdr = &Image->Phdrs[Index];
-        ULONG64 Start, End;
+        ULONG64 Start, FileEnd, End;
         ULONG Prot;
 
         if (Phdr->Type != LX_PT_LOAD)
             continue;
+        if ((Phdr->FileSz != 0) && ((Phdr->VAddr - Phdr->Offset) & (LX_PAGE_SIZE - 1)))
+            return -LX_ENOEXEC;
 
         Start = LX_ALIGN_DOWN(Phdr->VAddr + Bias, LX_PAGE_SIZE);
+        FileEnd = (Phdr->FileSz != 0) ? LX_ALIGN_UP(Phdr->VAddr + Phdr->FileSz + Bias, LX_PAGE_SIZE) : Start;
         End = LX_ALIGN_UP(Phdr->VAddr + Phdr->MemSz + Bias, LX_PAGE_SIZE);
         Prot = LxElfProtection(Phdr->Flags);
 
-        if (Start < PreviousEnd)
+        if (FileEnd > Start)
         {
-            LxMmProtect(Start, LX_PAGE_SIZE, Prot | PreviousProt);
-            Start += LX_PAGE_SIZE;
+            Result = LxMmMap(Process, Start, FileEnd - Start, Prot, LX_MAP_PRIVATE | LX_MAP_FIXED,
+                             Image->File, LX_ALIGN_DOWN(Phdr->Offset, LX_PAGE_SIZE));
+            if (Result < 0)
+                return (LONG)Result;
         }
-        if (Start < End)
-            LxMmProtect(Start, End - Start, Prot);
+        if (End > FileEnd)
+        {
+            Result = LxMmMap(Process, FileEnd, End - FileEnd, Prot, LX_MAP_PRIVATE | LX_MAP_FIXED, NULL, 0);
+            if (Result < 0)
+                return (LONG)Result;
+        }
+        if ((Phdr->MemSz > Phdr->FileSz) && (Phdr->FileSz != 0))
+        {
+            Error = LxMmZero(Process, Phdr->VAddr + Phdr->FileSz + Bias, FileEnd);
+            if (Error != 0)
+                return Error;
+        }
+        if (Start < PreviousEnd)
+            LxMmProtect(Process, Start, LX_PAGE_SIZE, Prot | PreviousProt);
 
         PreviousEnd = End;
         PreviousProt = Prot;
@@ -409,6 +382,7 @@ LxApplyShebang(
 static
 LONG
 LxBuildStack(
+    _In_ PLX_PROCESS Process,
     _In_ PLX_EXEC_REQUEST Request,
     _In_ PCSTR ExecFn,
     _In_ PLX_ELF_INFO Main,
@@ -421,17 +395,13 @@ LxBuildStack(
     PULONG64 Vector;
     ULONG AuxCount = 0, Words, Index, Offset;
     UCHAR Random[16];
-    PVOID Address = NULL;
-    SIZE_T Size = LX_STACK_SIZE;
-    NTSTATUS Status;
     LONG64 Error;
 
-    Status = ZwAllocateVirtualMemory(NtCurrentProcess(), &Address, 0, &Size,
-                                     MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN, PAGE_READWRITE);
-    if (!NT_SUCCESS(Status))
-        return -LX_ENOMEM;
-    Base = (ULONG64)(ULONG_PTR)Address;
-    Top = Base + Size;
+    Error = LxMmMap(Process, 0, LX_STACK_SIZE, LX_PROT_READ | LX_PROT_WRITE, LX_MAP_PRIVATE | LX_VMA_STACK, NULL, 0);
+    if (Error < 0)
+        return (LONG)Error;
+    Base = (ULONG64)Error;
+    Top = Base + LX_STACK_SIZE;
 
     Cursor = Top - 16;
     Cursor -= strlen(ExecFn) + 1;
@@ -509,24 +479,22 @@ LxBuildStack(
 
 static
 ULONG64
-LxMapSigTrampoline(VOID)
+LxMapSigTrampoline(
+    _In_ PLX_PROCESS Process)
 {
     UCHAR Code[16];
     ULONG Size = LxArchSigTrampoline(Code);
-    PVOID Base = NULL;
-    SIZE_T RegionSize = LX_PAGE_SIZE;
+    LONG64 Base;
 
-    if (!NT_SUCCESS(ZwAllocateVirtualMemory(NtCurrentProcess(), &Base, 0, &RegionSize,
-                                            MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN, PAGE_READWRITE)))
+    Base = LxMmMap(Process, 0, LX_PAGE_SIZE, LX_PROT_READ | LX_PROT_WRITE, LX_MAP_PRIVATE, NULL, 0);
+    if (Base < 0)
+        return 0;
+    if ((LxCopyToUser((ULONG64)Base, Code, Size) != 0) ||
+        (LxMmProtect(Process, (ULONG64)Base, LX_PAGE_SIZE, LX_PROT_READ | LX_PROT_EXEC) != 0))
     {
         return 0;
     }
-    if ((LxCopyToUser((ULONG64)(ULONG_PTR)Base, Code, Size) != 0) ||
-        (LxMmProtect((ULONG64)(ULONG_PTR)Base, LX_PAGE_SIZE, LX_PROT_READ | LX_PROT_EXEC) != 0))
-    {
-        return 0;
-    }
-    return (ULONG64)(ULONG_PTR)Base;
+    return (ULONG64)Base;
 }
 
 NTSTATUS
@@ -609,9 +577,9 @@ LxExecImage(
     }
     ExReleaseFastMutex(&Process->Lock);
 
-    Error = LxElfMap(&Main, LX_PIE_BASE, &MainInfo);
+    Error = LxElfMap(Process, &Main, LX_PIE_BASE, &MainInfo);
     if ((Error == 0) && (Interp.File != NULL))
-        Error = LxElfMap(&Interp, LX_INTERP_BASE, &InterpInfo);
+        Error = LxElfMap(Process, &Interp, LX_INTERP_BASE, &InterpInfo);
     if (Error == 0)
     {
         Process->BrkBase = LX_ALIGN_UP(MainInfo.ImageEnd, LX_ALLOC_GRANULARITY);
@@ -619,7 +587,8 @@ LxExecImage(
         Process->BrkCommitted = Process->BrkBase;
         Process->BrkLimit = Process->BrkBase;
         Process->BrkReserved = FALSE;
-        Error = LxBuildStack(Request,
+        Error = LxBuildStack(Process,
+                             Request,
                              FileName,
                              &MainInfo,
                              (Interp.File != NULL) ? InterpInfo.LoadBias : 0,
@@ -628,7 +597,7 @@ LxExecImage(
 
     if (Error == 0)
     {
-        Process->SigTrampoline = LxMapSigTrampoline();
+        Process->SigTrampoline = LxMapSigTrampoline(Process);
         Entry = (Interp.File != NULL) ? InterpInfo.Entry : MainInfo.Entry;
         LxArchSetExecContext(TrapFrame, ExceptionFrame, Entry, StackPointer);
         LxArchSetThreadPointer(0);
@@ -637,6 +606,7 @@ LxExecImage(
         Thread->SetChildTid = 0;
 
         LxProcessSetCommand(Process, Request->Args, Request->ArgLength, Request->Env, Request->EnvLength, ExecPath);
+        LxPosixTimersRelease(Process, TRUE);
         Process->Execed = TRUE;
         RtlZeroMemory(&Thread->AltStack, sizeof(Thread->AltStack));
         Thread->AltStack.Flags = LX_SS_DISABLE;

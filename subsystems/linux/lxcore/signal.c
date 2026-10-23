@@ -114,7 +114,7 @@ LxSignalTerminate(
     PEPROCESS EProcess;
     HANDLE Handle;
 
-    if (Target->Instance->Trace || (Target->Pid == 1))
+    if (Target->Trace || (Target->Pid == 1))
         DPRINT1("Linux process %lu (%s) is killed by signal %ld\n", Target->Pid, Target->Comm, Signal);
     if (Target->NtPid == HandleToUlong(PsGetCurrentProcessId()))
         LxProcessExitGroup(Target, Signal);

@@ -1138,6 +1138,8 @@ LX_SYSCALL(LxSysFtruncate)
         Result = -LX_EINVAL;
     else
         Result = File->Ops->Truncate(File, (LONG64)Call->Args[1]);
+    if ((File->Mount != NULL) && (File->Path != NULL))
+        LxVcacheInvalidatePath(File->Mount->Instance, File->Path);
     LxFileDereference(File);
     return Result;
 }
@@ -1163,6 +1165,8 @@ LX_SYSCALL(LxSysFallocate)
         Result = LxFileStat(File, &Stat);
         if ((Result == 0) && (Stat.Size < Offset + Length))
             Result = File->Ops->Truncate(File, Offset + Length);
+        if ((File->Mount != NULL) && (File->Path != NULL))
+            LxVcacheInvalidatePath(File->Mount->Instance, File->Path);
     }
     LxFileDereference(File);
     return Result;
@@ -1538,8 +1542,8 @@ LX_SYSCALL(LxSysMount)
         if ((Mount == NULL) || (Relative[0] != '\0'))
             Error = (Flags & LX_MS_BIND) ? 0 : -LX_EINVAL;
         else
-            Mount->Flags = (Mount->Flags & ~(LX_MS_RDONLY | LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC)) |
-                           (Flags & (LX_MS_RDONLY | LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC));
+            LxMountSetFlags(Process->Instance, Mount, Flags & (LX_MS_RDONLY | LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC),
+                            LX_MS_RDONLY | LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC);
         LxNodeFree(&Target);
         return Error;
     }
@@ -1548,10 +1552,32 @@ LX_SYSCALL(LxSysMount)
         LxNodeFree(&Target);
         return 0;
     }
-    if (Flags & (LX_MS_BIND | LX_MS_MOVE))
+    if (Flags & LX_MS_BIND)
     {
+        LX_NODE Source;
+
+        Error = LxLookupUser(Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW, &Source);
+        if (Error == 0)
+        {
+            Error = LxMountBind(Process->Instance, &Source, Target.Path, Flags);
+            LxNodeFree(&Source);
+        }
         LxNodeFree(&Target);
-        return -LX_EINVAL;
+        return Error;
+    }
+    if (Flags & LX_MS_MOVE)
+    {
+        LX_NODE Source;
+
+        Error = LxLookupUser(Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW, &Source);
+        if (Error == 0)
+        {
+            Error = ((Source.Mount == NULL) || (Source.Relative[0] != '\0')) ? -LX_EINVAL :
+                    LxMountMove(Process->Instance, Source.Mount, Target.Path);
+            LxNodeFree(&Source);
+        }
+        LxNodeFree(&Target);
+        return Error;
     }
     if (Target.Type != LX_S_IFDIR)
     {
@@ -1608,4 +1634,425 @@ LX_SYSCALL(LxSysNameToHandleAt)
 {
     UNREFERENCED_PARAMETER(Call);
     return -LX_EOPNOTSUPP;
+}
+
+#define LX_FSOPEN_CLOEXEC           0x00000001
+#define LX_FSMOUNT_CLOEXEC          0x00000001
+#define LX_FSCONFIG_SET_FLAG        0
+#define LX_FSCONFIG_SET_STRING      1
+#define LX_FSCONFIG_CMD_CREATE      6
+#define LX_FSCONFIG_CMD_RECONFIGURE 7
+#define LX_FSCONFIG_CMD_CREATE_EXCL 8
+#define LX_MOVE_MOUNT_F_EMPTY_PATH  0x00000004
+#define LX_MOVE_MOUNT_T_EMPTY_PATH  0x00000040
+#define LX_OPEN_TREE_CLONE          0x00000001
+#define LX_MOUNT_ATTR_RDONLY        0x00000001
+#define LX_MOUNT_ATTR_NOSUID        0x00000002
+#define LX_MOUNT_ATTR_NODEV         0x00000004
+#define LX_MOUNT_ATTR_NOEXEC        0x00000008
+
+typedef struct _LX_FSCONTEXT
+{
+    CHAR FsType[32];
+    CHAR Source[128];
+    ULONG Mode;
+    ULONG Flags;
+    BOOLEAN Created;
+    BOOLEAN Mounted;
+} LX_FSCONTEXT, *PLX_FSCONTEXT;
+
+static
+VOID
+LxFsContextRelease(
+    _In_ PLX_FILE File)
+{
+    LxFree(File->Object);
+    File->Object = NULL;
+}
+
+static const LX_FILE_OPS LxFsContextOps =
+{
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, LxFsContextRelease
+};
+
+static
+ULONG
+LxMountAttrToFlags(
+    _In_ ULONG64 Attributes)
+{
+    ULONG Flags = 0;
+
+    if (Attributes & LX_MOUNT_ATTR_RDONLY)
+        Flags |= LX_MS_RDONLY;
+    if (Attributes & LX_MOUNT_ATTR_NOSUID)
+        Flags |= LX_MS_NOSUID;
+    if (Attributes & LX_MOUNT_ATTR_NODEV)
+        Flags |= LX_MS_NODEV;
+    if (Attributes & LX_MOUNT_ATTR_NOEXEC)
+        Flags |= LX_MS_NOEXEC;
+    return Flags;
+}
+
+static
+LONG64
+LxInstallMountRoot(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_MOUNT Mount,
+    _In_ BOOLEAN CloseOnExec)
+{
+    PLX_FILE File;
+    PSTR Target;
+    LONG64 Result;
+    LONG Error;
+
+    ExAcquireFastMutex(&Process->Instance->Lock);
+    Target = LxStrDup(Mount->Target);
+    ExReleaseFastMutex(&Process->Instance->Lock);
+    if (Target == NULL)
+        return -LX_ENOMEM;
+    Error = LxVfsOpen(Process, LX_AT_FDCWD, Target, LX_O_PATH | LX_O_DIRECTORY, 0, &File);
+    LxFree(Target);
+    if (Error != 0)
+        return Error;
+    Result = LxFdInstall(Process, File, 0, CloseOnExec);
+    LxFileDereference(File);
+    return Result;
+}
+
+static
+PLX_MOUNT
+LxMountFromFd(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG Fd,
+    _In_ ULONG64 UserPath,
+    _In_ BOOLEAN EmptyPath,
+    _Out_ PLONG Error)
+{
+    PLX_MOUNT Mount = NULL;
+    PCSTR Relative;
+    CHAR First = 0;
+
+    *Error = 0;
+    if ((UserPath != 0) && (LxCopyFromUser(&First, UserPath, 1) != 0))
+    {
+        *Error = -LX_EFAULT;
+        return NULL;
+    }
+    if (EmptyPath && (First == '\0'))
+    {
+        PLX_FILE File = LxFdGet(Process, Fd);
+
+        if (File == NULL)
+        {
+            *Error = -LX_EBADF;
+            return NULL;
+        }
+        if ((File->Path != NULL) && (File->Path[0] == '/'))
+            Mount = LxMountFind(Process->Instance, File->Path, &Relative);
+        LxFileDereference(File);
+        if ((Mount == NULL) || (Relative[0] != '\0'))
+        {
+            *Error = -LX_EINVAL;
+            return NULL;
+        }
+        return Mount;
+    }
+    else
+    {
+        LX_NODE Node;
+
+        *Error = LxLookupUser(Process, Fd, UserPath, LX_LOOKUP_FOLLOW, &Node);
+        if (*Error != 0)
+            return NULL;
+        if ((Node.Mount == NULL) || (Node.Relative[0] != '\0'))
+            *Error = -LX_EINVAL;
+        else
+            Mount = Node.Mount;
+        LxNodeFree(&Node);
+        return Mount;
+    }
+}
+
+LX_SYSCALL(LxSysFsopen)
+{
+    PLX_FSCONTEXT Context;
+    PLX_FILE File;
+    PSTR Name;
+    LONG64 Result;
+    LONG Fd;
+
+    if (Call->Args[1] & ~LX_FSOPEN_CLOEXEC)
+        return -LX_EINVAL;
+    Result = LxCopyStringFromUser(Call->Args[0], &Name, 31);
+    if (Result != 0)
+        return Result;
+    if ((strcmp(Name, "tmpfs") != 0) && (strcmp(Name, "ramfs") != 0) && (strcmp(Name, "proc") != 0) &&
+        (strcmp(Name, "sysfs") != 0) && (strcmp(Name, "cgroup2") != 0) && (strcmp(Name, "devpts") != 0) &&
+        (strcmp(Name, "mqueue") != 0) && (strcmp(Name, "devtmpfs") != 0))
+    {
+        LxFree(Name);
+        return -LX_ENODEV;
+    }
+
+    Context = LxAlloc(sizeof(*Context));
+    File = LxFileAlloc(&LxFsContextOps, LX_O_RDWR, 0);
+    if ((Context == NULL) || (File == NULL))
+    {
+        LxFree(Context);
+        LxFree(Name);
+        if (File != NULL)
+            LxFileDereference(File);
+        return -LX_ENOMEM;
+    }
+    RtlStringCbCopyA(Context->FsType, sizeof(Context->FsType), Name);
+    RtlStringCbCopyA(Context->Source, sizeof(Context->Source), Name);
+    Context->Mode = 01777;
+    LxFree(Name);
+    File->Object = Context;
+    File->Path = LxStrDup("anon_inode:[fscontext]");
+    Fd = LxFdInstall(Call->Process, File, 0, (Call->Args[1] & LX_FSOPEN_CLOEXEC) != 0);
+    LxFileDereference(File);
+    return Fd;
+}
+
+static
+PLX_FSCONTEXT
+LxFsContextGet(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG Fd,
+    _Out_ PLX_FILE *File)
+{
+    *File = LxFdGet(Process, Fd);
+    if (*File == NULL)
+        return NULL;
+    if ((*File)->Ops != &LxFsContextOps)
+    {
+        LxFileDereference(*File);
+        *File = NULL;
+        return NULL;
+    }
+    return (*File)->Object;
+}
+
+LX_SYSCALL(LxSysFsconfig)
+{
+    PLX_FSCONTEXT Context;
+    PLX_FILE File;
+    PSTR Key = NULL, Value = NULL;
+    ULONG Command = (ULONG)Call->Args[1];
+    LONG64 Result = 0;
+
+    Context = LxFsContextGet(Call->Process, (LONG)Call->Args[0], &File);
+    if (Context == NULL)
+        return (File == NULL) ? -LX_EBADF : -LX_EINVAL;
+
+    if ((Command == LX_FSCONFIG_SET_FLAG) || (Command == LX_FSCONFIG_SET_STRING))
+    {
+        Result = LxCopyStringFromUser(Call->Args[2], &Key, 255);
+        if ((Result == 0) && (Command == LX_FSCONFIG_SET_STRING))
+            Result = LxCopyStringFromUser(Call->Args[3], &Value, 1023);
+        if (Result == 0)
+        {
+            if ((strcmp(Key, "ro") == 0) && (Command == LX_FSCONFIG_SET_FLAG))
+                Context->Flags |= LX_MS_RDONLY;
+            else if ((strcmp(Key, "rw") == 0) && (Command == LX_FSCONFIG_SET_FLAG))
+                Context->Flags &= ~LX_MS_RDONLY;
+            else if ((strcmp(Key, "source") == 0) && (Value != NULL))
+                RtlStringCbCopyA(Context->Source, sizeof(Context->Source), Value);
+            else if ((strcmp(Key, "mode") == 0) && (Value != NULL))
+            {
+                ULONG Mode = 0;
+                PCSTR Cursor = Value;
+
+                while ((*Cursor >= '0') && (*Cursor <= '7'))
+                    Mode = Mode * 8 + (*Cursor++ - '0');
+                if ((*Cursor != '\0') || (Mode > 07777))
+                    Result = -LX_EINVAL;
+                else
+                    Context->Mode = Mode;
+            }
+        }
+    }
+    else if ((Command == LX_FSCONFIG_CMD_CREATE) || (Command == LX_FSCONFIG_CMD_CREATE_EXCL))
+    {
+        if (Context->Created)
+            Result = -LX_EBUSY;
+        else
+            Context->Created = TRUE;
+    }
+    else if (Command == LX_FSCONFIG_CMD_RECONFIGURE)
+    {
+        Result = 0;
+    }
+    else if (Command > LX_FSCONFIG_CMD_CREATE_EXCL)
+    {
+        Result = -LX_EOPNOTSUPP;
+    }
+
+    LxFree(Key);
+    LxFree(Value);
+    LxFileDereference(File);
+    return Result;
+}
+
+LX_SYSCALL(LxSysFsmount)
+{
+    PLX_FSCONTEXT Context;
+    PLX_MOUNT Mount;
+    PLX_FILE File;
+    LONG64 Result;
+    LONG Error;
+
+    if (Call->Args[1] & ~LX_FSMOUNT_CLOEXEC)
+        return -LX_EINVAL;
+    Context = LxFsContextGet(Call->Process, (LONG)Call->Args[0], &File);
+    if (Context == NULL)
+        return (File == NULL) ? -LX_EBADF : -LX_EINVAL;
+    if (!Context->Created || Context->Mounted)
+    {
+        LxFileDereference(File);
+        return -LX_EBUSY;
+    }
+
+    Error = LxMountCreateDetached(Call->Process->Instance, Context->FsType, Context->Source,
+                                  Context->Flags | LxMountAttrToFlags(Call->Args[2]), Context->Mode, &Mount);
+    if (Error != 0)
+    {
+        LxFileDereference(File);
+        return Error;
+    }
+    Context->Mounted = TRUE;
+    LxFileDereference(File);
+    Result = LxInstallMountRoot(Call->Process, Mount, (Call->Args[1] & LX_FSMOUNT_CLOEXEC) != 0);
+    return Result;
+}
+
+LX_SYSCALL(LxSysMoveMount)
+{
+    ULONG Flags = (ULONG)Call->Args[4];
+    PLX_MOUNT Mount;
+    LX_NODE Target;
+    CHAR First = 0;
+    LONG Error;
+
+    Mount = LxMountFromFd(Call->Process, (LONG)Call->Args[0], Call->Args[1], (Flags & LX_MOVE_MOUNT_F_EMPTY_PATH) != 0, &Error);
+    if (Mount == NULL)
+        return Error;
+
+    if ((Flags & LX_MOVE_MOUNT_T_EMPTY_PATH) && (Call->Args[3] != 0) &&
+        (LxCopyFromUser(&First, Call->Args[3], 1) == 0) && (First == '\0'))
+    {
+        PLX_FILE File = LxFdGet(Call->Process, (LONG)Call->Args[2]);
+        PSTR Path;
+
+        if (File == NULL)
+            return -LX_EBADF;
+        Path = ((File->Path != NULL) && (File->Path[0] == '/')) ? LxStrDup(File->Path) : NULL;
+        LxFileDereference(File);
+        if (Path == NULL)
+            return -LX_EINVAL;
+        Error = LxMountMove(Call->Process->Instance, Mount, Path);
+        LxFree(Path);
+        return Error;
+    }
+
+    Error = LxLookupUser(Call->Process, (LONG)Call->Args[2], Call->Args[3], LX_LOOKUP_FOLLOW, &Target);
+    if (Error != 0)
+        return Error;
+    Error = LxMountMove(Call->Process->Instance, Mount, Target.Path);
+    LxNodeFree(&Target);
+    return Error;
+}
+
+LX_SYSCALL(LxSysMountSetattr)
+{
+    struct
+    {
+        ULONG64 Set;
+        ULONG64 Clear;
+        ULONG64 Propagation;
+        ULONG64 UserNamespace;
+    } Attributes;
+    ULONG Flags = (ULONG)Call->Args[2];
+    PLX_MOUNT Mount;
+    LONG64 Result;
+    LONG Error;
+
+    if ((LONG)Call->Args[0] < 0 && (LONG)Call->Args[0] != LX_AT_FDCWD)
+        return -LX_EBADF;
+    if (Call->Args[4] < sizeof(Attributes))
+        return -LX_EINVAL;
+    Result = LxCopyFromUser(&Attributes, Call->Args[3], sizeof(Attributes));
+    if (Result != 0)
+        return Result;
+    Mount = LxMountFromFd(Call->Process, (LONG)Call->Args[0], Call->Args[1], (Flags & LX_AT_EMPTY_PATH) != 0, &Error);
+    if (Mount == NULL)
+        return Error;
+    LxMountSetFlags(Call->Process->Instance, Mount, LxMountAttrToFlags(Attributes.Set), LxMountAttrToFlags(Attributes.Clear));
+    return 0;
+}
+
+LX_SYSCALL(LxSysOpenTree)
+{
+    ULONG Flags = (ULONG)Call->Args[2];
+    LX_NODE Node;
+    PLX_MOUNT Mount;
+    LONG Error;
+    CHAR First = 0;
+
+    if (!(Flags & LX_OPEN_TREE_CLONE))
+    {
+        PLX_FILE File;
+        PSTR Path;
+        LONG64 Result = LxCopyPath(Call->Args[1], &Path);
+
+        if (Result != 0)
+            return Result;
+        if ((Path[0] == '\0') && (Flags & LX_AT_EMPTY_PATH))
+        {
+            LxFree(Path);
+            File = LxFdGet(Call->Process, (LONG)Call->Args[0]);
+            if (File == NULL)
+                return -LX_EBADF;
+        }
+        else
+        {
+            Error = LxVfsOpen(Call->Process, (LONG)Call->Args[0], Path,
+                              LX_O_PATH | ((Flags & LX_AT_SYMLINK_NOFOLLOW) ? LX_O_NOFOLLOW : 0), 0, &File);
+            LxFree(Path);
+            if (Error != 0)
+                return Error;
+        }
+        Result = LxFdInstall(Call->Process, File, 0, (Flags & LX_O_CLOEXEC) != 0);
+        LxFileDereference(File);
+        return Result;
+    }
+
+    if ((Flags & LX_AT_EMPTY_PATH) && (Call->Args[1] != 0) && (LxCopyFromUser(&First, Call->Args[1], 1) == 0) &&
+        (First == '\0'))
+    {
+        PLX_FILE File = LxFdGet(Call->Process, (LONG)Call->Args[0]);
+
+        if (File == NULL)
+            return -LX_EBADF;
+        if ((File->Path == NULL) || (File->Path[0] != '/'))
+        {
+            LxFileDereference(File);
+            return -LX_EINVAL;
+        }
+        Error = LxLookup(Call->Process, LX_AT_FDCWD, File->Path, LX_LOOKUP_FOLLOW, &Node);
+        LxFileDereference(File);
+    }
+    else
+    {
+        Error = LxLookupUser(Call->Process, (LONG)Call->Args[0], Call->Args[1], LX_LOOKUP_FOLLOW, &Node);
+    }
+    if (Error != 0)
+        return Error;
+
+    Error = LxMountBindDetached(Call->Process->Instance, &Node, &Mount);
+    LxNodeFree(&Node);
+    if (Error != 0)
+        return Error;
+    return LxInstallMountRoot(Call->Process, Mount, (Flags & LX_O_CLOEXEC) != 0);
 }

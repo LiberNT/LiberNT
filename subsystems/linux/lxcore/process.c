@@ -146,18 +146,23 @@ LxCopyFromUser(
     if (Length == 0)
         return 0;
 
-    _SEH2_TRY
+    for (;;)
     {
-        ProbeForRead((PVOID)(ULONG_PTR)Source, Length, 1);
-        RtlCopyMemory(Destination, (PVOID)(ULONG_PTR)Source, Length);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Result = -LX_EFAULT;
-    }
-    _SEH2_END;
+        _SEH2_TRY
+        {
+            ProbeForRead((PVOID)(ULONG_PTR)Source, Length, 1);
+            RtlCopyMemory(Destination, (PVOID)(ULONG_PTR)Source, Length);
+            Result = 0;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Result = -LX_EFAULT;
+        }
+        _SEH2_END;
 
-    return Result;
+        if ((Result == 0) || !LxMmFaultIn(Source, Length, FALSE))
+            return Result;
+    }
 }
 
 LONG64
@@ -171,18 +176,23 @@ LxCopyToUser(
     if (Length == 0)
         return 0;
 
-    _SEH2_TRY
+    for (;;)
     {
-        ProbeForWrite((PVOID)(ULONG_PTR)Destination, Length, 1);
-        RtlCopyMemory((PVOID)(ULONG_PTR)Destination, Source, Length);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Result = -LX_EFAULT;
-    }
-    _SEH2_END;
+        _SEH2_TRY
+        {
+            ProbeForWrite((PVOID)(ULONG_PTR)Destination, Length, 1);
+            RtlCopyMemory((PVOID)(ULONG_PTR)Destination, Source, Length);
+            Result = 0;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Result = -LX_EFAULT;
+        }
+        _SEH2_END;
 
-    return Result;
+        if ((Result == 0) || !LxMmFaultIn(Destination, Length, TRUE))
+            return Result;
+    }
 }
 
 LONG64
@@ -195,18 +205,23 @@ LxZeroUser(
     if (Length == 0)
         return 0;
 
-    _SEH2_TRY
+    for (;;)
     {
-        ProbeForWrite((PVOID)(ULONG_PTR)Destination, Length, 1);
-        RtlZeroMemory((PVOID)(ULONG_PTR)Destination, Length);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Result = -LX_EFAULT;
-    }
-    _SEH2_END;
+        _SEH2_TRY
+        {
+            ProbeForWrite((PVOID)(ULONG_PTR)Destination, Length, 1);
+            RtlZeroMemory((PVOID)(ULONG_PTR)Destination, Length);
+            Result = 0;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Result = -LX_EFAULT;
+        }
+        _SEH2_END;
 
-    return Result;
+        if ((Result == 0) || !LxMmFaultIn(Destination, Length, TRUE))
+            return Result;
+    }
 }
 
 LONG64
@@ -224,24 +239,31 @@ LxCopyStringFromUser(
     if (Buffer == NULL)
         return -LX_ENOMEM;
 
-    _SEH2_TRY
+    for (;;)
     {
-        for (Index = 0; Index < MaxLength; Index++)
+        _SEH2_TRY
         {
-            ProbeForRead((PVOID)(ULONG_PTR)(Source + Index), 1, 1);
-            Buffer[Index] = *(volatile CHAR *)(ULONG_PTR)(Source + Index);
-            if (Buffer[Index] == '\0')
+            for (; Index < MaxLength; Index++)
             {
-                Result = 0;
-                break;
+                ProbeForRead((PVOID)(ULONG_PTR)(Source + Index), 1, 1);
+                Buffer[Index] = *(volatile CHAR *)(ULONG_PTR)(Source + Index);
+                if (Buffer[Index] == '\0')
+                {
+                    Result = 0;
+                    break;
+                }
             }
         }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Result = -LX_EFAULT;
+        }
+        _SEH2_END;
+
+        if ((Result != -LX_EFAULT) || !LxMmFaultIn(Source + Index, 1, FALSE))
+            break;
+        Result = -LX_ENAMETOOLONG;
     }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Result = -LX_EFAULT;
-    }
-    _SEH2_END;
 
     if (Result != 0)
     {
@@ -309,6 +331,8 @@ LxProcessCreate(
     InitializeListHead(&Process->GlobalLink);
     InitializeListHead(&Process->Children);
     InitializeListHead(&Process->Threads);
+    InitializeListHead(&Process->Timers);
+    InitializeListHead(&Process->Vmas);
     ExInitializeFastMutex(&Process->Lock);
     KeInitializeEvent(&Process->VforkDone, NotificationEvent, FALSE);
     KeInitializeEvent(&Process->MmLock, SynchronizationEvent, TRUE);
@@ -370,6 +394,7 @@ LxProcessFork(
     Process->CapAmbient = Parent->CapAmbient;
     Process->Dumpable = Parent->Dumpable;
     Process->OomScoreAdj = Parent->OomScoreAdj;
+    Process->Trace = Parent->Trace;
     for (Fd = 0; Fd < LX_MAX_FDS; Fd++)
     {
         if (Parent->Fds[Fd] != NULL)
@@ -432,6 +457,9 @@ LxProcessDereference(
     }
     if (Process->Cgroup != NULL)
         LxCgroupAttach(Process, NULL);
+    LxItimerRelease(Process);
+    LxPosixTimersRelease(Process, TRUE);
+    LxMmRelease(Process);
     if (Process->Tty != NULL)
         LxTtyDereference(Process->Tty);
     LxFree(Process->Cwd);
@@ -726,6 +754,9 @@ LxProcessExited(
 
     LxProcessExitStatus(Process, (ExitStatus & 0xFF) << 8);
     Process->ExitTime = (LONG64)KeQueryInterruptTime();
+    if (Process->RealTimer != NULL)
+        KeCancelTimer(&Process->RealTimer->Timer);
+    LxPosixTimersRelease(Process, FALSE);
     LxFdCloseAll(Process);
     KeSetEvent(&Process->VforkDone, IO_NO_INCREMENT, FALSE);
 

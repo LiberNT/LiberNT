@@ -35,6 +35,7 @@ typedef struct _LX_EPOLL_ITEM
     ULONG Events;
     ULONG64 Data;
     BOOLEAN OnReady;
+    BOOLEAN Rearm;
     BOOLEAN Disabled;
     BOOLEAN Detached;
     LX_POLL_ENTRY PollEntry;
@@ -67,6 +68,22 @@ LxPollHeadInit(
 {
     KeInitializeSpinLock(&Head->Lock);
     InitializeListHead(&Head->Entries);
+}
+
+VOID
+LxEventSourceInit(
+    _Out_ PLX_EVENT_SOURCE Source)
+{
+    LxPollHeadInit(&Source->Poll);
+    Source->Generation = 0;
+}
+
+VOID
+LxEventSourceSignal(
+    _In_ PLX_EVENT_SOURCE Source)
+{
+    InterlockedIncrement64(&Source->Generation);
+    LxPollWake(&Source->Poll, LX_POLLPRI | LX_POLLERR);
 }
 
 VOID
@@ -578,7 +595,11 @@ LxEpollQueue(
     KIRQL Irql;
 
     KeAcquireSpinLock(&Epoll->Lock, &Irql);
-    if (!Item->OnReady && !Item->Disabled && !Item->Detached)
+    if (Item->OnReady)
+    {
+        Item->Rearm = TRUE;
+    }
+    else if (!Item->Disabled && !Item->Detached)
     {
         InsertTailList(&Epoll->Ready, &Item->ReadyLink);
         Item->OnReady = TRUE;
@@ -945,7 +966,7 @@ LxEpollWait(
         {
             PLX_EPOLL_ITEM Item = CONTAINING_RECORD(RemoveHeadList(&Epoll->Ready), LX_EPOLL_ITEM, ReadyLink);
 
-            Item->OnReady = FALSE;
+            Item->Rearm = FALSE;
             InsertTailList(&Local, &Item->ReadyLink);
         }
         KeClearEvent(&Epoll->Event);
@@ -954,41 +975,42 @@ LxEpollWait(
         while (!IsListEmpty(&Local))
         {
             PLX_EPOLL_ITEM Item = CONTAINING_RECORD(RemoveHeadList(&Local), LX_EPOLL_ITEM, ReadyLink);
-            ULONG Mask;
+            BOOLEAN Requeue = FALSE;
+            ULONG Mask = 0;
 
             if (Count >= MaxEvents)
             {
-                KeAcquireSpinLock(&Epoll->Lock, &Irql);
-                InsertTailList(&Epoll->Ready, &Item->ReadyLink);
-                Item->OnReady = TRUE;
-                KeSetEvent(&Epoll->Event, IO_NO_INCREMENT, FALSE);
-                KeReleaseSpinLock(&Epoll->Lock, Irql);
-                continue;
+                Requeue = TRUE;
             }
-
-            Mask = LxFilePoll(Item->File, NULL) & Item->Events;
-            if (Mask == 0)
-                continue;
-
-            Output[Count].Events = Mask;
-            Output[Count].Pad = 0;
-            Output[Count].Data = Item->Data;
-            Count++;
-
-            if (Item->Events & LX_EPOLLONESHOT)
+            else
             {
-                Item->Disabled = TRUE;
-            }
-            else if (!(Item->Events & LX_EPOLLET))
-            {
-                KeAcquireSpinLock(&Epoll->Lock, &Irql);
-                if (!Item->OnReady)
+                Mask = LxFilePoll(Item->File, NULL) & Item->Events;
+                if (Mask != 0)
                 {
-                    InsertTailList(&Epoll->Ready, &Item->ReadyLink);
-                    Item->OnReady = TRUE;
+                    Output[Count].Events = Mask;
+                    Output[Count].Pad = 0;
+                    Output[Count].Data = Item->Data;
+                    Count++;
+
+                    if (Item->Events & LX_EPOLLONESHOT)
+                        Item->Disabled = TRUE;
+                    else if (!(Item->Events & LX_EPOLLET))
+                        Requeue = TRUE;
                 }
-                KeReleaseSpinLock(&Epoll->Lock, Irql);
             }
+
+            KeAcquireSpinLock(&Epoll->Lock, &Irql);
+            if ((Requeue || Item->Rearm) && !Item->Disabled && !Item->Detached)
+            {
+                InsertTailList(&Epoll->Ready, &Item->ReadyLink);
+                KeSetEvent(&Epoll->Event, IO_NO_INCREMENT, FALSE);
+            }
+            else
+            {
+                Item->OnReady = FALSE;
+            }
+            Item->Rearm = FALSE;
+            KeReleaseSpinLock(&Epoll->Lock, Irql);
         }
         LxEpollUnlock(Epoll);
 

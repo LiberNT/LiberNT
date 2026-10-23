@@ -280,6 +280,8 @@ LxFileWrite(
     if ((Result > 0) && (File->Mount != NULL))
     {
         File->Written = TRUE;
+        if (File->Path != NULL)
+            LxVcacheInvalidatePath(File->Mount->Instance, File->Path);
         LxInotifyFileEvent(File, LX_IN_MODIFY);
     }
     return Result;
@@ -1013,14 +1015,21 @@ LxDataPoll(
     _In_ PLX_FILE File,
     _In_opt_ PLX_POLL_ENTRY Entry)
 {
-    PLX_POLL_HEAD Head = File->HandlerContext;
+    PLX_EVENT_SOURCE Source = File->EventSource;
     ULONG Mask = LX_POLLIN | LX_POLLOUT | LX_POLLRDNORM | LX_POLLWRNORM;
 
-    if ((Head != NULL) && (File->Object == (PVOID)Head))
+    if (Source != NULL)
     {
+        LONG64 Generation;
+
         if (Entry != NULL)
-            LxPollAdd(Head, Entry);
-        Mask |= LX_POLLPRI;
+            LxPollAdd(&Source->Poll, Entry);
+        Generation = Source->Generation;
+        if (Generation != File->EventSeen)
+        {
+            File->EventSeen = Generation;
+            Mask |= LX_POLLPRI | LX_POLLERR;
+        }
     }
     return Mask;
 }

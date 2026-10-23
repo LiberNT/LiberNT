@@ -55,6 +55,16 @@ LxPicoDispatchException(
     LONG Code;
     LONG Signal = LxSignalFromException(ExceptionRecord->ExceptionCode, &Code);
 
+    if ((ExceptionRecord->ExceptionCode == STATUS_ACCESS_VIOLATION) &&
+        (ExceptionRecord->NumberParameters >= 2) &&
+        LxMmHandleFault(Thread->Process,
+                        (ULONG64)ExceptionRecord->ExceptionInformation[1],
+                        (ExceptionRecord->ExceptionInformation[0] == 1) ? LX_PROT_WRITE :
+                        (ExceptionRecord->ExceptionInformation[0] == 8) ? LX_PROT_EXEC : LX_PROT_READ))
+    {
+        return TRUE;
+    }
+
     RtlZeroMemory(&Info, sizeof(Info));
     Info.Signo = Signal;
     Info.Code = Code;
@@ -142,6 +152,9 @@ LxPicoProcessExit(
     if (Process == NULL)
         return;
 
+    LxMmLock(Process);
+    LxMmRelease(Process);
+    LxMmUnlock(Process);
     LxProcessExited(Process, PsGetProcessExitStatus(EProcess));
     InterlockedDecrement((PLONG)&Process->Instance->ProcessCount);
     LxProcessDereference(Process);
@@ -411,7 +424,9 @@ LxIoctlCreateProcess(
         return STATUS_INVALID_PARAMETER;
     }
 
-    if (In->Flags & ~(LX_CREATE_BOOT | LX_CREATE_NEW_INSTANCE | LX_CREATE_TRACE | LX_CREATE_TRACE_ALL))
+    if (In->Flags & ~(LX_CREATE_BOOT | LX_CREATE_NEW_INSTANCE | LX_CREATE_TRACE | LX_CREATE_TRACE_ALL | LX_CREATE_JOIN))
+        return STATUS_INVALID_PARAMETER;
+    if ((In->Flags & LX_CREATE_JOIN) && (In->Flags & (LX_CREATE_BOOT | LX_CREATE_NEW_INSTANCE)))
         return STATUS_INVALID_PARAMETER;
 
     RootNt.Buffer = (PWCHAR)Root;
@@ -420,6 +435,7 @@ LxIoctlCreateProcess(
         RootNt.Length -= sizeof(WCHAR);
     RootNt.MaximumLength = RootNt.Length;
 
+    KeWaitForSingleObject(&LxInstanceCreateLock, Executive, KernelMode, FALSE, NULL);
     Instance = LxInstanceFind(&RootNt);
     if ((Instance != NULL) && (Instance->ShuttingDown || (In->Flags & LX_CREATE_NEW_INSTANCE)))
     {
@@ -428,23 +444,27 @@ LxIoctlCreateProcess(
         LxInstanceDereference(Instance);
         Instance = NULL;
         if (Busy && (In->Flags & LX_CREATE_BOOT))
+        {
+            KeSetEvent(&LxInstanceCreateLock, IO_NO_INCREMENT, FALSE);
             return STATUS_OBJECT_NAME_COLLISION;
+        }
+    }
+    if ((Instance == NULL) && (In->Flags & LX_CREATE_JOIN))
+    {
+        KeSetEvent(&LxInstanceCreateLock, IO_NO_INCREMENT, FALSE);
+        return STATUS_NOT_FOUND;
     }
     if (Instance == NULL)
-    {
         Instance = LxInstanceCreate(&RootNt, (In->Flags & LX_CREATE_BOOT) != 0);
-        if (Instance == NULL)
-            return STATUS_INSUFFICIENT_RESOURCES;
-    }
-
-    if (In->Flags & LX_CREATE_TRACE_ALL)
-        Instance->Trace = 2;
-    else if (In->Flags & LX_CREATE_TRACE)
-        Instance->Trace = max(Instance->Trace, 1);
+    KeSetEvent(&LxInstanceCreateLock, IO_NO_INCREMENT, FALSE);
+    if (Instance == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
 
     Request = LxAlloc(sizeof(*Request));
     Process = LxProcessCreate(Instance);
     LxInstanceDereference(Instance);
+    if (Process != NULL)
+        Process->Trace = (In->Flags & LX_CREATE_TRACE_ALL) ? 2 : ((In->Flags & LX_CREATE_TRACE) ? 1 : 0);
     if ((Request == NULL) || (Process == NULL))
     {
         Status = STATUS_INSUFFICIENT_RESOURCES;
@@ -669,7 +689,9 @@ DriverEntry(
     LxProcessInitialize();
     InitializeListHead(&LxInstanceList);
     ExInitializeFastMutex(&LxInstanceListLock);
+    KeInitializeEvent(&LxInstanceCreateLock, SynchronizationEvent, TRUE);
     LxPipeInitialize();
+    LxVcacheInitialize();
     LxSynthInitialize();
     LxFdObjectsInitialize();
     LxSocketInitialize();

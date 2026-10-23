@@ -247,7 +247,7 @@ LxCgroupCreateRoot(VOID)
     InitializeListHead(&Root->Children);
     InitializeListHead(&Root->DeadLink);
     InitializeListHead(&Root->DeadList);
-    LxPollHeadInit(&Root->EventsPoll);
+    LxEventSourceInit(&Root->Events);
     Root->Root = Root;
     Root->Id = (ULONG64)InterlockedIncrement64(&LxCgroupNextId);
     Root->Created = (LONG64)KeQueryInterruptTime();
@@ -273,7 +273,7 @@ LxCgroupCreateChild(
     InitializeListHead(&Child->Children);
     InitializeListHead(&Child->DeadLink);
     InitializeListHead(&Child->DeadList);
-    LxPollHeadInit(&Child->EventsPoll);
+    LxEventSourceInit(&Child->Events);
     Child->Parent = Parent;
     Child->Root = Parent->Root;
     Child->Instance = Parent->Instance;
@@ -368,7 +368,7 @@ LxCgroupNotifyEvents(
     PLIST_ENTRY Entry;
     PSTR Target = NULL, Path;
 
-    LxPollWake(&Cgroup->EventsPoll, LX_POLLPRI | LX_POLLERR);
+    LxEventSourceSignal(&Cgroup->Events);
     if (Instance == NULL)
         return;
 
@@ -920,9 +920,51 @@ LxGenPidMaps(
     _In_ PLX_SYNTH Synth,
     _Inout_ PLX_TEXT Text)
 {
-    UNREFERENCED_PARAMETER(Self);
-    UNREFERENCED_PARAMETER(Synth);
-    UNREFERENCED_PARAMETER(Text);
+    PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+    PLIST_ENTRY Entry;
+
+    if (Process == NULL)
+        return;
+
+    LxMmLock(Process);
+    for (Entry = Process->Vmas.Flink; Entry != &Process->Vmas; Entry = Entry->Flink)
+    {
+        PLX_VMA Vma = CONTAINING_RECORD(Entry, LX_VMA, Link);
+        PCSTR Name = NULL;
+        CHAR Line[128];
+        ULONG Length;
+
+        if (Vma->File != NULL)
+            Name = Vma->File->Path;
+        else if (Vma->Flags & LX_VMA_HEAP)
+            Name = "[heap]";
+        else if (Vma->Flags & LX_VMA_STACK)
+            Name = "[stack]";
+
+        if (!NT_SUCCESS(RtlStringCbPrintfA(Line, sizeof(Line), "%08llx-%08llx %c%c%c%c %08llx 00:00 %llu ",
+                                           Vma->Start,
+                                           Vma->End,
+                                           (Vma->Prot & LX_PROT_READ) ? 'r' : '-',
+                                           (Vma->Prot & LX_PROT_WRITE) ? 'w' : '-',
+                                           (Vma->Prot & LX_PROT_EXEC) ? 'x' : '-',
+                                           (Vma->Flags & LX_MAP_SHARED) ? 's' : 'p',
+                                           Vma->Offset,
+                                           (Vma->File != NULL) ? Vma->File->Ino : 0ULL)))
+        {
+            continue;
+        }
+        Length = (ULONG)strlen(Line);
+        LxTextAppend(Text, Line, Length);
+        if (Name != NULL)
+        {
+            for (; Length < 73; Length++)
+                LxTextAppend(Text, " ", 1);
+            LxTextAppend(Text, Name, (ULONG)strlen(Name));
+        }
+        LxTextAppend(Text, "\n", 1);
+    }
+    LxMmUnlock(Process);
+    LxProcessDereference(Process);
 }
 
 static
@@ -1142,6 +1184,36 @@ LxGenKernelVersion(
     LxTextPrintf(Text, "%s\n", LX_KERNEL_VERSION);
 }
 
+static
+LONG
+LxWriteTrace(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_THREAD Current = LxCurrentThread();
+    PLX_PROCESS Process;
+    ULONG Pid = 0, Level = 0;
+    PCSTR Cursor = Data;
+
+    UNREFERENCED_PARAMETER(File);
+    UNREFERENCED_PARAMETER(Length);
+    if (Current == NULL)
+        return -LX_ESRCH;
+    while ((*Cursor >= '0') && (*Cursor <= '9'))
+        Pid = Pid * 10 + (*Cursor++ - '0');
+    while (*Cursor == ' ')
+        Cursor++;
+    while ((*Cursor >= '0') && (*Cursor <= '9'))
+        Level = Level * 10 + (*Cursor++ - '0');
+    Process = LxProcessLookup(Current->Process->Instance, Pid);
+    if (Process == NULL)
+        return -LX_ESRCH;
+    Process->Trace = Level;
+    LxProcessDereference(Process);
+    return 0;
+}
+
 static const LX_TABLE_ENTRY LxProcSysTable[] =
 {
     { "fs/file-max", 0644, "9223372036854775807\n", NULL, LxWriteAccept },
@@ -1178,6 +1250,7 @@ static const LX_TABLE_ENTRY LxProcSysTable[] =
     { "kernel/threads-max", 0644, "63429\n", NULL, LxWriteAccept },
     { "kernel/unprivileged_bpf_disabled", 0644, "2\n", NULL, LxWriteAccept },
     { "kernel/version", 0444, LX_KERNEL_UTS_VERSION "\n", NULL, NULL },
+    { "lxcore/trace", 0200, "", NULL, LxWriteTrace },
     { "net/core/somaxconn", 0644, "4096\n", NULL, LxWriteAccept },
     { "net/unix/max_dgram_qlen", 0644, "512\n", NULL, LxWriteAccept },
     { "vm/max_map_count", 0644, "65530\n", NULL, LxWriteAccept },
@@ -2600,7 +2673,7 @@ LxSynthOpen(
     }
     else
     {
-        PLX_POLL_HEAD Poll = NULL;
+        PLX_EVENT_SOURCE Events = NULL;
         PVOID Context = NULL;
 
         switch (Synth.Id)
@@ -2670,7 +2743,7 @@ LxSynthOpen(
                 else if (strcmp(Name, "cgroup.subtree_control") == 0)
                     Writer = LxCgroupWriteSubtree;
                 else if (strcmp(Name, "cgroup.events") == 0)
-                    Poll = &Synth.Cgroup->EventsPoll;
+                    Events = &Synth.Cgroup->Events;
                 else if (Synth.Mode & 0200)
                     Writer = LxWriteAccept;
                 break;
@@ -2698,9 +2771,17 @@ LxSynthOpen(
         }
         File->Flags = Flags & (LX_O_ACCMODE | LX_O_NONBLOCK | LX_O_APPEND);
         File->WriteHandler = Writer;
-        File->HandlerContext = (Poll != NULL) ? (PVOID)Poll : Context;
-        if (Poll != NULL)
-            File->Object = Poll;
+        File->HandlerContext = Context;
+        if ((Synth.Id == LxProcPidFile) && (Synth.Index < RTL_NUMBER_OF(LxPidEntries)) &&
+            (strncmp(LxPidEntries[Synth.Index].Name, "mount", 5) == 0))
+        {
+            Events = &Process->Instance->MountEvents;
+        }
+        if (Events != NULL)
+        {
+            File->EventSource = Events;
+            File->EventSeen = Events->Generation;
+        }
         File->Ino = LxHashPath(Node->Mount->Id, Node->Relative);
         File->Mount = Node->Mount;
         *Result = File;

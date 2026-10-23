@@ -32,13 +32,16 @@
 #define LX_IO_CHUNK         (64 * 1024)
 #define LX_STACK_SIZE       (8 * 1024 * 1024)
 #define LX_BRK_RESERVE      (1024ULL * 1024 * 1024)
+#define LX_MMAP_MIN_ADDR    0x10000ULL
+#define LX_VMA_HEAP         0x40000000
+#define LX_VMA_STACK        0x80000000
 #define LX_PIE_BASE         0x0000555555550000ULL
 #define LX_INTERP_BASE      0x00007FF000000000ULL
 #define LX_MAX_SYMLINKS     40
 
 #define LX_SYSCALL_NO_RESULT ((LONG64)0x7FFFFFFFFFFFFFFFLL)
 
-#define LX_KERNEL_RELEASE       "6.8.0-libernt"
+#define LX_KERNEL_RELEASE       "7.0.0-libernt"
 #define LX_KERNEL_UTS_VERSION   "#1 SMP PREEMPT_DYNAMIC LiberNT"
 #define LX_KERNEL_VERSION       "Linux version " LX_KERNEL_RELEASE " (lxcore@libernt) " LX_KERNEL_UTS_VERSION
 
@@ -51,6 +54,17 @@ typedef struct _LX_THREAD LX_THREAD, *PLX_THREAD;
 typedef struct _LX_INSTANCE LX_INSTANCE, *PLX_INSTANCE;
 typedef struct _LX_MOUNT LX_MOUNT, *PLX_MOUNT;
 typedef struct _LX_CGROUP LX_CGROUP, *PLX_CGROUP;
+
+typedef struct _LX_VMA
+{
+    LIST_ENTRY Link;
+    ULONG64 Start;
+    ULONG64 End;
+    ULONG Prot;
+    ULONG Flags;
+    PLX_FILE File;
+    ULONG64 Offset;
+} LX_VMA, *PLX_VMA;
 
 typedef struct _LX_POLL_HEAD
 {
@@ -68,6 +82,12 @@ struct _LX_POLL_ENTRY
     PLX_POLL_NOTIFY Notify;
     PVOID Context;
 };
+
+typedef struct _LX_EVENT_SOURCE
+{
+    LX_POLL_HEAD Poll;
+    volatile LONG64 Generation;
+} LX_EVENT_SOURCE, *PLX_EVENT_SOURCE;
 
 typedef struct _LX_FILE_OPS
 {
@@ -138,6 +158,8 @@ struct _LX_FILE
     ULONG Seals;
     ULONG Mode;
     BOOLEAN Written;
+    PLX_EVENT_SOURCE EventSource;
+    LONG64 EventSeen;
 };
 
 typedef enum _LX_FS_KIND
@@ -164,6 +186,8 @@ struct _LX_MOUNT
     ULONG Dev;
     UNICODE_STRING NtRoot;
     PSTR Root;
+    PSTR Alias;
+    BOOLEAN Detached;
 };
 
 #define LX_MS_RDONLY        0x00000001
@@ -205,7 +229,8 @@ struct _LX_INSTANCE
     LONG RebootCommand;
     KEVENT InitExited;
     LONG InitStatus;
-    ULONG Trace;
+    LX_EVENT_SOURCE MountEvents;
+    ULONG NextDetachedId;
 };
 
 typedef struct _LX_NODE
@@ -222,6 +247,17 @@ typedef struct _LX_NODE
 #define LX_LOOKUP_FOLLOW    0x00000001
 #define LX_LOOKUP_DIRECTORY 0x00000002
 #define LX_LOOKUP_CREATE    0x00000004
+
+typedef struct _LX_ITIMER
+{
+    KTIMER Timer;
+    KDPC Dpc;
+    WORK_QUEUE_ITEM Work;
+    PLX_PROCESS Process;
+    volatile LONG WorkQueued;
+    LONG64 IntervalNs;
+    LONG64 Due;
+} LX_ITIMER, *PLX_ITIMER;
 
 typedef struct _LX_CHILD
 {
@@ -246,7 +282,7 @@ struct _LX_CGROUP
     ULONG64 Id;
     BOOLEAN Frozen;
     BOOLEAN Removed;
-    LX_POLL_HEAD EventsPoll;
+    LX_EVENT_SOURCE Events;
     LONG64 Created;
     LIST_ENTRY DeadList;
 };
@@ -270,6 +306,9 @@ struct _LX_PROCESS
     PSTR ExePath;
     ULONG Umask;
     KEVENT MmLock;
+    PKTHREAD MmLockOwner;
+    ULONG MmLockDepth;
+    LIST_ENTRY Vmas;
     ULONG64 BrkBase;
     ULONG64 BrkCurrent;
     ULONG64 BrkCommitted;
@@ -314,6 +353,10 @@ struct _LX_PROCESS
     ULONG ExitSignal;
     ULONG64 MinFlt;
     LONG64 ExitTime;
+    PLX_ITIMER RealTimer;
+    ULONG Trace;
+    LIST_ENTRY Timers;
+    LONG NextTimerId;
 };
 
 typedef struct _LX_EXEC_REQUEST
@@ -341,6 +384,8 @@ struct _LX_THREAD
     ULONG64 Tls;
     PLX_EXEC_REQUEST Exec;
     PETHREAD EThread;
+    ULONG64 FaultAddress;
+    ULONG FaultRetries;
     LIST_ENTRY Link;
     volatile LONG64 Pending;
     LX_STACK AltStack;
@@ -427,6 +472,7 @@ extern LIST_ENTRY LxProcessList;
 extern FAST_MUTEX LxProcessListLock;
 extern LIST_ENTRY LxInstanceList;
 extern FAST_MUTEX LxInstanceListLock;
+extern KEVENT LxInstanceCreateLock;
 
 VOID LxProcessInitialize(VOID);
 PVOID LxAlloc(_In_ SIZE_T Size);
@@ -447,6 +493,8 @@ LONG64 LxTimespecToNtTime(_In_ PLX_TIMESPEC Timespec);
 PLX_THREAD LxCurrentThread(VOID);
 
 VOID LxPollHeadInit(_Out_ PLX_POLL_HEAD Head);
+VOID LxEventSourceInit(_Out_ PLX_EVENT_SOURCE Source);
+VOID LxEventSourceSignal(_In_ PLX_EVENT_SOURCE Source);
 VOID LxPollAdd(_In_ PLX_POLL_HEAD Head, _Inout_ PLX_POLL_ENTRY Entry);
 VOID LxPollRemove(_Inout_ PLX_POLL_ENTRY Entry);
 VOID LxPollWake(_In_ PLX_POLL_HEAD Head, _In_ ULONG Events);
@@ -485,6 +533,11 @@ ULONG LxInstanceAllocatePid(_In_ PLX_INSTANCE Instance);
 PLX_MOUNT LxMountFind(_In_ PLX_INSTANCE Instance, _In_ PCSTR Path, _Out_opt_ PCSTR *Relative);
 LONG LxMountAdd(_In_ PLX_INSTANCE Instance, _In_ PCSTR Target, _In_ PCSTR Source, _In_ PCSTR FsType, _In_ ULONG Flags, _In_opt_ PCSTR Data);
 LONG LxMountRemove(_In_ PLX_INSTANCE Instance, _In_ PCSTR Target);
+LONG LxMountCreateDetached(_In_ PLX_INSTANCE Instance, _In_ PCSTR FsType, _In_ PCSTR Source, _In_ ULONG Flags, _In_ ULONG Mode, _Out_ PLX_MOUNT *Mount);
+LONG LxMountBindDetached(_In_ PLX_INSTANCE Instance, _In_ PLX_NODE Source, _Out_ PLX_MOUNT *Mount);
+LONG LxMountBind(_In_ PLX_INSTANCE Instance, _In_ PLX_NODE Source, _In_ PCSTR Target, _In_ ULONG Flags);
+LONG LxMountMove(_In_ PLX_INSTANCE Instance, _In_ PLX_MOUNT Mount, _In_ PCSTR Target);
+VOID LxMountSetFlags(_In_ PLX_INSTANCE Instance, _In_ PLX_MOUNT Mount, _In_ ULONG Set, _In_ ULONG Clear);
 PSTR LxMountInfo(_In_ PLX_PROCESS Process, _In_ BOOLEAN Full, _Out_ PULONG Length);
 LONG LxMountStatfs(_In_ PLX_MOUNT Mount, _Out_writes_bytes_(120) PVOID Statfs);
 
@@ -522,6 +575,10 @@ PLX_FILE LxPidfdCreate(_In_ PLX_PROCESS Process, _In_ ULONG Flags);
 VOID LxFdinfoExtra(_In_ PLX_FILE File, _In_opt_ PVOID Context);
 VOID LxFdinfoAppend(_In_ PVOID Context, _In_ PCSTR Line);
 VOID LxFdObjectsInitialize(VOID);
+VOID LxVcacheInitialize(VOID);
+VOID LxVcacheInvalidate(VOID);
+VOID LxVcacheInvalidatePath(_In_ PLX_INSTANCE Instance, _In_ PCSTR Path);
+VOID LxVcachePurgeInstance(_In_ PLX_INSTANCE Instance);
 LONG LxNtCreateDirectory(_In_ PCUNICODE_STRING NtPath, _In_ ULONG Mode);
 LONG LxNtDeleteTree(_In_ PCUNICODE_STRING NtPath);
 LONG LxNtWriteLxAttributes(_In_ HANDLE Handle, _In_ ULONG Mode, _In_ ULONG Uid, _In_ ULONG Gid, _In_ ULONG64 Device, _In_ BOOLEAN WriteDevice);
@@ -563,15 +620,25 @@ PLX_THREAD LxThreadLookupReferenced(_In_ PLX_INSTANCE Instance, _In_ ULONG Tid, 
 VOID LxProcessExitStatus(_In_ PLX_PROCESS Process, _In_ LONG WaitStatus);
 DECLSPEC_NORETURN VOID LxProcessExitGroup(_In_ PLX_PROCESS Process, _In_ LONG WaitStatus);
 VOID LxProcessExited(_In_ PLX_PROCESS Process, _In_ NTSTATUS ExitStatus);
+VOID LxItimerRelease(_In_ PLX_PROCESS Process);
+VOID LxPosixTimersRelease(_In_ PLX_PROCESS Process, _In_ BOOLEAN Free);
 VOID LxProcessRegister(_In_ PLX_PROCESS Process);
 VOID LxProcessUnregister(_In_ PLX_PROCESS Process);
 VOID LxProcessCloseFiles(_In_ PLX_PROCESS Process);
 VOID LxProcessSetCommand(_In_ PLX_PROCESS Process, _In_ PCSTR Args, _In_ ULONG ArgLength, _In_ PCSTR Env, _In_ ULONG EnvLength, _In_ PCSTR ExePath);
 
 LONG64 LxMmMap(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG64 Length, _In_ ULONG Prot, _In_ ULONG Flags, _In_opt_ PLX_FILE File, _In_ ULONG64 Offset);
-LONG64 LxMmUnmap(_In_ ULONG64 Address, _In_ ULONG64 Length);
-LONG64 LxMmProtect(_In_ ULONG64 Address, _In_ ULONG64 Length, _In_ ULONG Prot);
+LONG64 LxMmUnmap(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG64 Length);
+LONG64 LxMmProtect(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG64 Length, _In_ ULONG Prot);
 VOID LxMmReset(_In_ PLX_PROCESS Process);
+VOID LxMmLock(_In_ PLX_PROCESS Process);
+VOID LxMmUnlock(_In_ PLX_PROCESS Process);
+LONG LxMmFork(_In_ PLX_PROCESS Child, _In_ PLX_PROCESS Parent);
+VOID LxMmRelease(_In_ PLX_PROCESS Process);
+BOOLEAN LxMmHandleFault(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG Access);
+BOOLEAN LxMmFaultIn(_In_ ULONG64 Address, _In_ SIZE_T Length, _In_ BOOLEAN Write);
+LONG LxMmZero(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG64 End);
+BOOLEAN LxMmIsMapped(_In_ PLX_PROCESS Process, _In_ ULONG64 Start, _In_ ULONG64 End);
 ULONG LxProtToNt(_In_ ULONG Prot);
 
 NTSTATUS LxExecImage(_In_ PLX_THREAD Thread, _In_ PLX_EXEC_REQUEST Request, _Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame, _Out_ PLONG Errno);
@@ -603,6 +670,7 @@ VOID LxArchSetThreadPointer(_In_ ULONG64 Value);
 ULONG64 LxArchGetThreadPointer(VOID);
 ULONG64 LxArchGetUserPc(_In_ PKTRAP_FRAME TrapFrame);
 PLX_SYSCALL_ENTRY LxArchSyscallEntry(_In_ ULONG Number);
+PLX_SYSCALL_ENTRY LxGenericSyscallEntry(_In_ ULONG Number);
 ULONG64 LxArchGetUserSp(_In_ PKTRAP_FRAME TrapFrame);
 BOOLEAN LxArchSetupSignalFrame(_Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame, _In_ ULONG64 StackTop, _In_ LONG Signal, _In_ PLX_SIGINFO Info, _In_ PLX_SIGACTION Action, _In_ ULONG64 Restorer, _In_ ULONG64 SavedMask, _In_ PLX_STACK AltStack);
 LONG64 LxArchSignalReturn(_Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame, _Out_ PULONG64 Mask);
