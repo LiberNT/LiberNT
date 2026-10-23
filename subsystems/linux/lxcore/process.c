@@ -626,19 +626,20 @@ LxProcessSetCommand(
     _In_ ULONG ArgLength,
     _In_ PCSTR Env,
     _In_ ULONG EnvLength,
-    _In_ PCSTR ExePath)
+    _In_ PCSTR ExePath,
+    _In_ PCSTR CommPath)
 {
     PSTR NewArgs = (ArgLength != 0) ? LxAlloc(ArgLength) : NULL;
     PSTR NewEnv = (EnvLength != 0) ? LxAlloc(EnvLength) : NULL;
     PSTR NewExe = LxStrDup(ExePath);
-    PCSTR Base = strrchr(ExePath, '/');
+    PCSTR Base = strrchr(CommPath, '/');
     PSTR OldArgs, OldEnv, OldExe;
 
     if (NewArgs != NULL)
         RtlCopyMemory(NewArgs, Args, ArgLength);
     if (NewEnv != NULL)
         RtlCopyMemory(NewEnv, Env, EnvLength);
-    Base = (Base != NULL) ? Base + 1 : ExePath;
+    Base = (Base != NULL) ? Base + 1 : CommPath;
 
     ExAcquireFastMutex(&Process->Lock);
     OldArgs = Process->Cmdline;

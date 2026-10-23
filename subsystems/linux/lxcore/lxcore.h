@@ -33,6 +33,7 @@
 #define LX_STACK_SIZE       (8 * 1024 * 1024)
 #define LX_BRK_RESERVE      (1024ULL * 1024 * 1024)
 #define LX_MMAP_MIN_ADDR    0x10000ULL
+#define LX_VMA_VIEW         0x20000000
 #define LX_VMA_HEAP         0x40000000
 #define LX_VMA_STACK        0x80000000
 #define LX_PIE_BASE         0x0000555555550000ULL
@@ -247,6 +248,12 @@ typedef struct _LX_NODE
 #define LX_LOOKUP_FOLLOW    0x00000001
 #define LX_LOOKUP_DIRECTORY 0x00000002
 #define LX_LOOKUP_CREATE    0x00000004
+#define LX_LOOKUP_NO_XDEV       0x00000010
+#define LX_LOOKUP_NO_MAGICLINKS 0x00000020
+#define LX_LOOKUP_NO_SYMLINKS   0x00000040
+#define LX_LOOKUP_BENEATH       0x00000080
+#define LX_LOOKUP_IN_ROOT       0x00000100
+#define LX_LOOKUP_RESOLVE       0x000001F0
 
 typedef struct _LX_ITIMER
 {
@@ -546,6 +553,7 @@ VOID LxNodeFree(_Inout_ PLX_NODE Node);
 LONG LxPathNormalize(_In_ PCSTR Input, _Out_writes_(LX_PATH_MAX) PSTR Output);
 LONG LxNtPath(_In_ PLX_MOUNT Mount, _In_ PCSTR Relative, _Out_ PUNICODE_STRING NtPath);
 LONG LxVfsOpen(_In_ PLX_PROCESS Process, _In_ LONG DirFd, _In_ PCSTR Path, _In_ ULONG Flags, _In_ ULONG Mode, _Out_ PLX_FILE *File);
+LONG LxVfsOpenResolve(_In_ PLX_PROCESS Process, _In_ LONG DirFd, _In_ PCSTR Path, _In_ ULONG Flags, _In_ ULONG Mode, _In_ ULONG Resolve, _Out_ PLX_FILE *File);
 LONG LxVfsOpenNode(_In_ PLX_PROCESS Process, _Inout_ PLX_NODE Node, _In_ ULONG Flags, _In_ ULONG Mode, _Out_ PLX_FILE *File);
 LONG LxVfsStatNode(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _Out_ PLX_STAT Stat);
 LONG LxVfsMkdir(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ ULONG Mode);
@@ -625,7 +633,7 @@ VOID LxPosixTimersRelease(_In_ PLX_PROCESS Process, _In_ BOOLEAN Free);
 VOID LxProcessRegister(_In_ PLX_PROCESS Process);
 VOID LxProcessUnregister(_In_ PLX_PROCESS Process);
 VOID LxProcessCloseFiles(_In_ PLX_PROCESS Process);
-VOID LxProcessSetCommand(_In_ PLX_PROCESS Process, _In_ PCSTR Args, _In_ ULONG ArgLength, _In_ PCSTR Env, _In_ ULONG EnvLength, _In_ PCSTR ExePath);
+VOID LxProcessSetCommand(_In_ PLX_PROCESS Process, _In_ PCSTR Args, _In_ ULONG ArgLength, _In_ PCSTR Env, _In_ ULONG EnvLength, _In_ PCSTR ExePath, _In_ PCSTR CommPath);
 
 LONG64 LxMmMap(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG64 Length, _In_ ULONG Prot, _In_ ULONG Flags, _In_opt_ PLX_FILE File, _In_ ULONG64 Offset);
 LONG64 LxMmUnmap(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG64 Length);

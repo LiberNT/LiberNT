@@ -1487,11 +1487,11 @@ LxLookupWalk(
     _Out_ PLX_NODE Node,
     _Out_ PBOOLEAN Synthetic)
 {
-    PSTR Current = NULL, Rest = NULL, Candidate = NULL, Normalized = NULL;
+    PSTR Current = NULL, Rest = NULL, Candidate = NULL, Normalized = NULL, Root = NULL;
     SIZE_T PathLength = strlen(Path);
     ULONG Links = 0, Type = 0;
     PSTR LinkTarget = NULL;
-    PLX_MOUNT Mount = NULL;
+    PLX_MOUNT Mount = NULL, StartMount = NULL;
     PCSTR Relative;
     LONG Error = 0;
 
@@ -1505,7 +1505,10 @@ LxLookupWalk(
     if ((PathLength > 1) && (Path[PathLength - 1] == '/'))
         Flags |= LX_LOOKUP_DIRECTORY | LX_LOOKUP_FOLLOW;
 
-    if (Path[0] == '/')
+    if ((Path[0] == '/') && (Flags & LX_LOOKUP_BENEATH))
+        return -LX_EXDEV;
+
+    if ((Path[0] == '/') && !(Flags & LX_LOOKUP_IN_ROOT))
     {
         Current = LxStrDup("/");
     }
@@ -1533,13 +1536,24 @@ LxLookupWalk(
         return -LX_ENOMEM;
 
     Normalized = LxAlloc(LX_PATH_MAX);
+    if ((Normalized != NULL) && (Flags & (LX_LOOKUP_BENEATH | LX_LOOKUP_IN_ROOT)))
+    {
+        Root = LxStrDup(Current);
+        if (Root == NULL)
+        {
+            LxFree(Normalized);
+            Normalized = NULL;
+        }
+    }
     if (Normalized == NULL)
     {
         LxFree(Current);
         return -LX_ENOMEM;
     }
+    if (Flags & LX_LOOKUP_NO_XDEV)
+        StartMount = LxMountFind(Process->Instance, Current, &Relative);
 
-    if (strstr(Path, "..") == NULL)
+    if ((strstr(Path, "..") == NULL) && !(Flags & LX_LOOKUP_RESOLVE))
     {
         PSTR Joined = (Path[0] == '/') ? LxStrDup(Path) : LxPathJoin(Current, Path);
 
@@ -1554,6 +1568,7 @@ LxLookupWalk(
             {
                 LxFree(Joined);
                 LxFree(Current);
+                LxFree(Root);
                 if ((Flags & LX_LOOKUP_DIRECTORY) && (Type != LX_S_IFDIR) && (Type != LX_S_IFLNK))
                 {
                     LxFree(LinkTarget);
@@ -1573,12 +1588,13 @@ LxLookupWalk(
     {
         LxFree(Current);
         LxFree(Normalized);
+        LxFree(Root);
         return -LX_ENOMEM;
     }
     if (Rest[0] == '/')
     {
         LxFree(Current);
-        Current = LxStrDup("/");
+        Current = LxStrDup((Root != NULL) ? Root : "/");
     }
 
     for (;;)
@@ -1601,6 +1617,7 @@ LxLookupWalk(
                 {
                     LxFree(Rest);
                     LxFree(Normalized);
+                    LxFree(Root);
                     return LxLookupFinish(Process, Node, Current, TRUE, Type, NULL);
                 }
             }
@@ -1627,10 +1644,25 @@ LxLookupWalk(
         {
             PSTR Slash = strrchr(Current, '/');
 
+            if ((Root != NULL) && (strcmp(Current, Root) == 0))
+            {
+                if (Flags & LX_LOOKUP_BENEATH)
+                {
+                    Error = -LX_EXDEV;
+                    break;
+                }
+                RtlMoveMemory(Rest, NextRest, strlen(NextRest) + 1);
+                continue;
+            }
             if ((Slash != NULL) && (Slash != Current))
                 *Slash = '\0';
             else
                 Current[1] = '\0';
+            if ((StartMount != NULL) && (LxMountFind(Process->Instance, Current, &Relative) != StartMount))
+            {
+                Error = -LX_EXDEV;
+                break;
+            }
             RtlMoveMemory(Rest, NextRest, strlen(NextRest) + 1);
             continue;
         }
@@ -1657,15 +1689,27 @@ LxLookupWalk(
                 LxFree(Current);
                 LxFree(Rest);
                 LxFree(Normalized);
+                LxFree(Root);
                 return LxLookupFinish(Process, Node, Candidate, FALSE, 0, NULL);
             }
             break;
         }
         if (Error != 0)
             break;
+        if ((StartMount != NULL) && (Mount != StartMount))
+        {
+            Error = -LX_EXDEV;
+            break;
+        }
 
         if ((Type == LX_S_IFLNK) && (LinkTarget == NULL) && (Mount->Kind != LxFsNt))
         {
+            if ((Flags & (LX_LOOKUP_NO_MAGICLINKS | LX_LOOKUP_NO_SYMLINKS | LX_LOOKUP_BENEATH | LX_LOOKUP_IN_ROOT)) &&
+                (!Last || (Flags & LX_LOOKUP_FOLLOW)))
+            {
+                Error = -LX_ELOOP;
+                break;
+            }
             if (!Last)
             {
                 Error = -LX_ENOTDIR;
@@ -1677,9 +1721,19 @@ LxLookupWalk(
             PSTR NewRest;
             SIZE_T TargetLength, RestLength;
 
+            if (Flags & LX_LOOKUP_NO_SYMLINKS)
+            {
+                Error = -LX_ELOOP;
+                break;
+            }
             if ((++Links > LX_MAX_SYMLINKS) || (LinkTarget == NULL) || (LinkTarget[0] == '\0'))
             {
                 Error = (Links > LX_MAX_SYMLINKS) ? -LX_ELOOP : -LX_ENOENT;
+                break;
+            }
+            if ((LinkTarget[0] == '/') && (Flags & LX_LOOKUP_BENEATH))
+            {
+                Error = -LX_EXDEV;
                 break;
             }
 
@@ -1710,7 +1764,7 @@ LxLookupWalk(
             if (LinkTarget[0] == '/')
             {
                 LxFree(Current);
-                Current = LxStrDup("/");
+                Current = LxStrDup((Root != NULL) ? Root : "/");
             }
             LxFree(Rest);
             Rest = NewRest;
@@ -1731,6 +1785,7 @@ LxLookupWalk(
             LxFree(Current);
             LxFree(Rest);
             LxFree(Normalized);
+            LxFree(Root);
             if ((Flags & LX_LOOKUP_DIRECTORY) && (Type != LX_S_IFDIR))
             {
                 LxFree(LinkTarget);
@@ -1759,6 +1814,7 @@ LxLookupWalk(
     LxFree(Current);
     LxFree(Rest);
     LxFree(Normalized);
+    LxFree(Root);
     return (Error != 0) ? Error : -LX_ENOENT;
 }
 
@@ -2233,8 +2289,21 @@ LxVfsOpen(
     _In_ ULONG Mode,
     _Out_ PLX_FILE *File)
 {
+    return LxVfsOpenResolve(Process, DirFd, Path, Flags, Mode, 0, File);
+}
+
+LONG
+LxVfsOpenResolve(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG DirFd,
+    _In_ PCSTR Path,
+    _In_ ULONG Flags,
+    _In_ ULONG Mode,
+    _In_ ULONG Resolve,
+    _Out_ PLX_FILE *File)
+{
     LX_NODE Node;
-    ULONG LookupFlags = 0;
+    ULONG LookupFlags = Resolve & LX_LOOKUP_RESOLVE;
     LONG Error;
 
     if (!(Flags & LX_O_NOFOLLOW))

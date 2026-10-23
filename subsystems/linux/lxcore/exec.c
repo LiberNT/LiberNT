@@ -605,7 +605,7 @@ LxExecImage(
         Thread->ClearChildTid = 0;
         Thread->SetChildTid = 0;
 
-        LxProcessSetCommand(Process, Request->Args, Request->ArgLength, Request->Env, Request->EnvLength, ExecPath);
+        LxProcessSetCommand(Process, Request->Args, Request->ArgLength, Request->Env, Request->EnvLength, ExecPath, Request->FileName);
         LxPosixTimersRelease(Process, TRUE);
         Process->Execed = TRUE;
         RtlZeroMemory(&Thread->AltStack, sizeof(Thread->AltStack));

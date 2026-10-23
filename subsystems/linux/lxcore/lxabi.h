@@ -207,6 +207,24 @@
 #define LX_MREMAP_FIXED     2
 #define LX_MREMAP_DONTUNMAP 4
 
+#define LX_RESOLVE_NO_XDEV          0x01
+#define LX_RESOLVE_NO_MAGICLINKS    0x02
+#define LX_RESOLVE_NO_SYMLINKS      0x04
+#define LX_RESOLVE_BENEATH          0x08
+#define LX_RESOLVE_IN_ROOT          0x10
+#define LX_RESOLVE_CACHED           0x20
+
+typedef struct _LX_OPEN_HOW
+{
+    ULONG64 Flags;
+    ULONG64 Mode;
+    ULONG64 Resolve;
+} LX_OPEN_HOW, *PLX_OPEN_HOW;
+
+#define LX_MS_ASYNC         1
+#define LX_MS_INVALIDATE    2
+#define LX_MS_SYNC          4
+
 #define LX_MADV_DONTNEED    4
 #define LX_MADV_FREE        8
 

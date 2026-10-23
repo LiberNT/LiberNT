@@ -436,6 +436,8 @@ LxVmDecommitRange(
         RegionEnd = min((ULONG64)(ULONG_PTR)Information.BaseAddress + Information.RegionSize, End);
         if ((Information.State == MEM_COMMIT) && (Information.Type == MEM_PRIVATE))
             LxVmFree(Cursor, RegionEnd - Cursor, MEM_DECOMMIT);
+        else if ((Information.State == MEM_COMMIT) && (Information.Type == MEM_MAPPED))
+            LxVmProtect(Cursor, RegionEnd - Cursor, PAGE_NOACCESS);
         Cursor = RegionEnd;
     }
 }
@@ -458,11 +460,17 @@ LxVmReleaseRange(
             break;
         RegionEnd = min((ULONG64)(ULONG_PTR)Information.BaseAddress + Information.RegionSize, End);
         AllocationBase = (ULONG64)(ULONG_PTR)Information.AllocationBase;
-        if ((Information.State != MEM_FREE) && (Information.Type == MEM_PRIVATE) && (AllocationBase != Last))
+        if ((Information.State != MEM_FREE) && (AllocationBase != Last) &&
+            ((Information.Type == MEM_PRIVATE) || (Information.Type == MEM_MAPPED)))
         {
             Last = AllocationBase;
             if (!LxVmaOverlaps(Process, AllocationBase, LxVmAllocationEnd(AllocationBase)))
-                LxVmFree(AllocationBase, 0, MEM_RELEASE);
+            {
+                if (Information.Type == MEM_MAPPED)
+                    ZwUnmapViewOfSection(NtCurrentProcess(), (PVOID)(ULONG_PTR)AllocationBase);
+                else
+                    LxVmFree(AllocationBase, 0, MEM_RELEASE);
+            }
         }
         Cursor = RegionEnd;
     }
@@ -603,6 +611,8 @@ LxMmPopulate(
 
         RegionStart = (ULONG64)(ULONG_PTR)Information.BaseAddress;
         RegionEnd = min(RegionStart + Information.RegionSize, Vma->End);
+        if ((Vma->Flags & LX_VMA_VIEW) && (Information.State != MEM_COMMIT))
+            return -LX_EFAULT;
         if (Information.State == MEM_COMMIT)
         {
             if (!LxNtAllows(Information.Protect, Access))
@@ -722,6 +732,130 @@ LxMmIsMapped(
     return Mapped;
 }
 
+static
+LONG
+LxMmUnmapRange(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 Start,
+    _In_ ULONG64 End)
+{
+    LONG Error = LxVmaRemove(Process, Start, End);
+
+    if (Error == 0)
+    {
+        LxVmDecommitRange(Start, End);
+        LxVmReleaseRange(Process, Start, End);
+    }
+    return Error;
+}
+
+static
+BOOLEAN
+LxVmIsFree(
+    _In_ ULONG64 Start,
+    _In_ ULONG64 End)
+{
+    MEMORY_BASIC_INFORMATION Information;
+
+    return NT_SUCCESS(LxVmQuery(Start, &Information)) &&
+           (Information.State == MEM_FREE) &&
+           ((ULONG64)(ULONG_PTR)Information.BaseAddress + Information.RegionSize >= End);
+}
+
+static
+LONG
+LxMmMapView(
+    _In_ ULONG64 Address,
+    _In_ ULONG64 Length,
+    _In_ ULONG Prot,
+    _In_ BOOLEAN Fixed,
+    _In_opt_ PLX_FILE File,
+    _In_ ULONG64 Offset,
+    _Out_ PULONG64 Result)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    FILE_STANDARD_INFORMATION Standard;
+    IO_STATUS_BLOCK Iosb;
+    LARGE_INTEGER MaximumSize, SectionOffset;
+    ULONG64 Delta = Offset & (LX_ALLOC_GRANULARITY - 1);
+    BOOLEAN Writable = (File == NULL) || ((File->Flags & LX_O_ACCMODE) == LX_O_RDWR);
+    SIZE_T ViewSize = (SIZE_T)(Length + Delta);
+    PVOID Base = NULL;
+    HANDLE Section;
+    NTSTATUS Status;
+
+    if (Prot & LX_PROT_EXEC)
+        return 1;
+    if ((Prot & LX_PROT_WRITE) && !Writable)
+        return -LX_EACCES;
+
+    if (File != NULL)
+    {
+        if (File->Handle == NULL)
+            return 2;
+        Status = ZwQueryInformationFile(File->Handle, &Iosb, &Standard, sizeof(Standard), FileStandardInformation);
+        if (!NT_SUCCESS(Status) || (Standard.EndOfFile.QuadPart <= 0) ||
+            (Offset + Length > LX_ALIGN_UP((ULONG64)Standard.EndOfFile.QuadPart, LX_PAGE_SIZE)))
+        {
+            DPRINT1("Linux shared mapping %I64x+%I64x is past the end of the file (%I64d, 0x%08lx)\n",
+                    Offset, Length, Standard.EndOfFile.QuadPart, Status);
+            return 3;
+        }
+        ViewSize = (SIZE_T)min(Length + Delta, (ULONG64)Standard.EndOfFile.QuadPart - (Offset - Delta));
+    }
+
+    if (Fixed)
+    {
+        if ((Address - Delta) & (LX_ALLOC_GRANULARITY - 1))
+            return 4;
+        if (!LxVmIsFree(Address - Delta, Address + Length))
+            return 5;
+        Base = (PVOID)(ULONG_PTR)(Address - Delta);
+    }
+    else if ((Address >= LX_MMAP_MIN_ADDR + Delta) &&
+             !((Address - Delta) & (LX_ALLOC_GRANULARITY - 1)) &&
+             LxVmIsFree(Address - Delta, Address + Length))
+    {
+        Base = (PVOID)(ULONG_PTR)(Address - Delta);
+    }
+
+    MaximumSize.QuadPart = (LONG64)Length;
+    InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwCreateSection(&Section,
+                             SECTION_ALL_ACCESS,
+                             &ObjectAttributes,
+                             (File == NULL) ? &MaximumSize : NULL,
+                             Writable ? PAGE_READWRITE : PAGE_READONLY,
+                             SEC_COMMIT,
+                             (File != NULL) ? File->Handle : NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Linux shared mapping cannot create a section: 0x%08lx\n", Status);
+        return 6;
+    }
+
+    SectionOffset.QuadPart = (LONG64)(Offset - Delta);
+    Status = ZwMapViewOfSection(Section, NtCurrentProcess(), &Base, 0, 0, &SectionOffset, &ViewSize, ViewShare, 0,
+                                (Prot & LX_PROT_WRITE) ? PAGE_READWRITE : PAGE_READONLY);
+    if (!NT_SUCCESS(Status) && !Fixed && (Base != NULL))
+    {
+        Base = NULL;
+        Status = ZwMapViewOfSection(Section, NtCurrentProcess(), &Base, 0, 0, &SectionOffset, &ViewSize, ViewShare, 0,
+                                    (Prot & LX_PROT_WRITE) ? PAGE_READWRITE : PAGE_READONLY);
+    }
+    ZwClose(Section);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Linux shared mapping cannot map a view at %p: 0x%08lx\n", Base, Status);
+        return 7;
+    }
+
+    if ((Prot & (LX_PROT_READ | LX_PROT_WRITE)) == LX_PROT_NONE)
+        LxVmProtect((ULONG64)(ULONG_PTR)Base, Length + Delta, PAGE_NOACCESS);
+    *Result = (ULONG64)(ULONG_PTR)Base + Delta;
+    return 0;
+}
+
 LONG64
 LxMmMap(
     _In_ PLX_PROCESS Process,
@@ -750,6 +884,32 @@ LxMmMap(
         return -LX_EPERM;
 
     LxMmLock(Process);
+
+    if ((VmaFlags & LX_MAP_SHARED) &&
+        !((Flags & LX_MAP_FIXED_NOREPLACE) && LxVmaOverlaps(Process, Address, Address + Length)))
+    {
+        if (Fixed)
+            Error = LxMmUnmapRange(Process, Address, Address + Length);
+        if (Error == 0)
+            Error = LxMmMapView(Address, Length, Prot, Fixed, File, Offset, &Base);
+        if (Error == 0)
+        {
+            Error = LxVmaInsert(Process, Base, Base + Length, Prot, VmaFlags | LX_VMA_VIEW, File, Offset);
+            if (Error != 0)
+                ZwUnmapViewOfSection(NtCurrentProcess(), (PVOID)(ULONG_PTR)LX_ALIGN_DOWN(Base, LX_ALLOC_GRANULARITY));
+            LxMmUnlock(Process);
+            return (Error != 0) ? Error : (LONG64)Base;
+        }
+        if (Error < 0)
+        {
+            LxMmUnlock(Process);
+            return Error;
+        }
+        DPRINT1("Linux shared mapping of '%s' in process %lu is a private copy (reason %ld)\n",
+                (File != NULL) ? File->Path : "anonymous memory", Process->Pid, Error);
+        Error = 0;
+        Base = 0;
+    }
 
     if (Fixed)
     {
@@ -825,12 +985,7 @@ LxMmUnmap(
         return -LX_EINVAL;
 
     LxMmLock(Process);
-    Error = LxVmaRemove(Process, Address, End);
-    if (Error == 0)
-    {
-        LxVmDecommitRange(Address, End);
-        LxVmReleaseRange(Process, Address, End);
-    }
+    Error = LxMmUnmapRange(Process, Address, End);
     LxMmUnlock(Process);
     return Error;
 }
@@ -936,6 +1091,8 @@ LxMmReset(
 
         if ((Information.State != MEM_FREE) && (Information.Type == MEM_PRIVATE))
             LxVmFree((ULONG64)(ULONG_PTR)Information.AllocationBase, 0, MEM_RELEASE);
+        else if ((Information.State != MEM_FREE) && (Information.Type == MEM_MAPPED))
+            ZwUnmapViewOfSection(NtCurrentProcess(), Information.AllocationBase);
         if (Next <= Cursor)
             break;
         Cursor = Next;
@@ -952,7 +1109,7 @@ LxMmReset(
 
 LX_SYSCALL(LxSysMmap)
 {
-    ULONG Flags = (ULONG)Call->Args[3] & ~(LX_VMA_HEAP | LX_VMA_STACK);
+    ULONG Flags = (ULONG)Call->Args[3] & ~(LX_VMA_VIEW | LX_VMA_HEAP | LX_VMA_STACK);
     PLX_FILE File = NULL;
     LONG64 Result;
 
@@ -1026,6 +1183,50 @@ LX_SYSCALL(LxSysMadvise)
     return Result;
 }
 
+LX_SYSCALL(LxSysMsync)
+{
+    PLX_PROCESS Process = Call->Process;
+    ULONG64 Address = Call->Args[0];
+    ULONG64 End = Address + LX_ALIGN_UP(Call->Args[1], LX_PAGE_SIZE);
+    ULONG Flags = (ULONG)Call->Args[2];
+    MEMORY_BASIC_INFORMATION Information;
+    ULONG64 Cursor;
+    LONG64 Result = 0;
+
+    if ((Address & (LX_PAGE_SIZE - 1)) || (End < Address) ||
+        (Flags & ~(LX_MS_ASYNC | LX_MS_INVALIDATE | LX_MS_SYNC)) ||
+        ((Flags & LX_MS_ASYNC) && (Flags & LX_MS_SYNC)))
+    {
+        return -LX_EINVAL;
+    }
+    if (End == Address)
+        return 0;
+
+    LxMmLock(Process);
+    if (!LxVmaCovers(Process, Address, End))
+        Result = -LX_ENOMEM;
+    for (Cursor = Address; (Result == 0) && (Flags & LX_MS_SYNC) && (Cursor < End);)
+    {
+        ULONG64 RegionEnd;
+
+        if (!NT_SUCCESS(LxVmQuery(Cursor, &Information)))
+            break;
+        RegionEnd = min((ULONG64)(ULONG_PTR)Information.BaseAddress + Information.RegionSize, End);
+        if ((Information.State == MEM_COMMIT) && (Information.Type == MEM_MAPPED))
+        {
+            PVOID Base = (PVOID)(ULONG_PTR)Cursor;
+            SIZE_T Size = (SIZE_T)(RegionEnd - Cursor);
+            IO_STATUS_BLOCK Iosb;
+
+            if (!NT_SUCCESS(ZwFlushVirtualMemory(NtCurrentProcess(), &Base, &Size, &Iosb)))
+                Result = -LX_EIO;
+        }
+        Cursor = RegionEnd;
+    }
+    LxMmUnlock(Process);
+    return Result;
+}
+
 LX_SYSCALL(LxSysMremap)
 {
     PLX_PROCESS Process = Call->Process;
@@ -1059,6 +1260,12 @@ LX_SYSCALL(LxSysMremap)
             LxMmUnmap(Process, Old + NewLength, OldLength - NewLength);
         LxMmUnlock(Process);
         return (LONG64)Old;
+    }
+
+    if (Vma->Flags & LX_VMA_VIEW)
+    {
+        LxMmUnlock(Process);
+        return -LX_ENOMEM;
     }
 
     Prot = Vma->Prot;

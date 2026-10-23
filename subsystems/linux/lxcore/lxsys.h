@@ -114,6 +114,8 @@ LX_SYSCALL(LxSysMunmap);
 LX_SYSCALL(LxSysMprotect);
 LX_SYSCALL(LxSysMremap);
 LX_SYSCALL(LxSysMadvise);
+LX_SYSCALL(LxSysMsync);
+LX_SYSCALL(LxSysOpenat2);
 LX_SYSCALL(LxSysMincore);
 LX_SYSCALL(LxSysSetitimer);
 LX_SYSCALL(LxSysTimerCreate);

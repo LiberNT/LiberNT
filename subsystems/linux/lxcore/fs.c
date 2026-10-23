@@ -232,10 +232,16 @@ LX_SYSCALL(LxSysPwritev)
     return LxPositionalIo(Call, TRUE, TRUE, (LONG64)Call->Args[3]);
 }
 
-LX_SYSCALL(LxSysOpenat)
+static
+LONG64
+LxOpenCommon(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG DirFd,
+    _In_ ULONG64 UserPath,
+    _In_ ULONG Flags,
+    _In_ ULONG Mode,
+    _In_ ULONG Resolve)
 {
-    PLX_PROCESS Process = Call->Process;
-    ULONG Flags = (ULONG)Call->Args[2];
     PSTR Path;
     PLX_FILE File;
     PLX_TTY Tty;
@@ -245,7 +251,7 @@ LX_SYSCALL(LxSysOpenat)
     if ((Flags & LX_O_TMPFILE) == LX_O_TMPFILE)
         return -LX_EOPNOTSUPP;
 
-    Result = LxCopyPath(Call->Args[1], &Path);
+    Result = LxCopyPath(UserPath, &Path);
     if (Result != 0)
         return Result;
     if (Path[0] == '\0')
@@ -254,7 +260,7 @@ LX_SYSCALL(LxSysOpenat)
         return -LX_ENOENT;
     }
 
-    Error = LxVfsOpen(Process, (LONG)Call->Args[0], Path, Flags, (ULONG)Call->Args[3], &File);
+    Error = LxVfsOpenResolve(Process, DirFd, Path, Flags, Mode, Resolve, &File);
     LxFree(Path);
     if (Error != 0)
         return Error;
@@ -273,6 +279,73 @@ LX_SYSCALL(LxSysOpenat)
     Result = LxFdInstall(Process, File, 0, (Flags & LX_O_CLOEXEC) != 0);
     LxFileDereference(File);
     return Result;
+}
+
+LX_SYSCALL(LxSysOpenat)
+{
+    return LxOpenCommon(Call->Process, (LONG)Call->Args[0], Call->Args[1], (ULONG)Call->Args[2], (ULONG)Call->Args[3], 0);
+}
+
+LX_SYSCALL(LxSysOpenat2)
+{
+    LX_OPEN_HOW How;
+    ULONG64 Size = Call->Args[3];
+    ULONG Resolve = 0;
+    LONG64 Result;
+
+    if (Size < sizeof(How))
+        return -LX_EINVAL;
+    if (Size > LX_PAGE_SIZE)
+        return -LX_E2BIG;
+    Result = LxCopyFromUser(&How, Call->Args[2], sizeof(How));
+    if (Result != 0)
+        return Result;
+    if (Size > sizeof(How))
+    {
+        UCHAR Tail[64];
+        ULONG64 Done;
+
+        for (Done = sizeof(How); Done < Size; Done += sizeof(Tail))
+        {
+            ULONG Chunk = (ULONG)min(sizeof(Tail), Size - Done);
+            ULONG Index;
+
+            Result = LxCopyFromUser(Tail, Call->Args[2] + Done, Chunk);
+            if (Result != 0)
+                return Result;
+            for (Index = 0; Index < Chunk; Index++)
+            {
+                if (Tail[Index] != 0)
+                    return -LX_E2BIG;
+            }
+        }
+    }
+
+    if ((How.Flags >> 32) != 0)
+        return -LX_EINVAL;
+    if (How.Resolve & ~(ULONG64)(LX_RESOLVE_NO_XDEV | LX_RESOLVE_NO_MAGICLINKS | LX_RESOLVE_NO_SYMLINKS |
+                                 LX_RESOLVE_BENEATH | LX_RESOLVE_IN_ROOT | LX_RESOLVE_CACHED))
+        return -LX_EINVAL;
+    if ((How.Resolve & LX_RESOLVE_BENEATH) && (How.Resolve & LX_RESOLVE_IN_ROOT))
+        return -LX_EINVAL;
+    if ((How.Mode & ~07777ULL) ||
+        ((How.Mode != 0) && !(How.Flags & LX_O_CREAT) && ((How.Flags & LX_O_TMPFILE) != LX_O_TMPFILE)))
+        return -LX_EINVAL;
+    if ((How.Resolve & LX_RESOLVE_CACHED) && (How.Flags & (LX_O_CREAT | LX_O_TRUNC | LX_O_TMPFILE)))
+        return -LX_EAGAIN;
+
+    if (How.Resolve & LX_RESOLVE_NO_XDEV)
+        Resolve |= LX_LOOKUP_NO_XDEV;
+    if (How.Resolve & LX_RESOLVE_NO_MAGICLINKS)
+        Resolve |= LX_LOOKUP_NO_MAGICLINKS;
+    if (How.Resolve & LX_RESOLVE_NO_SYMLINKS)
+        Resolve |= LX_LOOKUP_NO_SYMLINKS;
+    if (How.Resolve & LX_RESOLVE_BENEATH)
+        Resolve |= LX_LOOKUP_BENEATH;
+    if (How.Resolve & LX_RESOLVE_IN_ROOT)
+        Resolve |= LX_LOOKUP_IN_ROOT;
+
+    return LxOpenCommon(Call->Process, (LONG)Call->Args[0], Call->Args[1], (ULONG)How.Flags, (ULONG)How.Mode, Resolve);
 }
 
 LX_SYSCALL(LxSysClose)
