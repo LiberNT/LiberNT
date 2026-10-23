@@ -54,6 +54,38 @@ HalpReadOrderedTsc(VOID)
     return __rdtsc();
 }
 
+/* A Hyper-V compatible hypervisor that grants the frequency MSRs reports the
+ * TSC and local APIC timer frequencies directly. Measuring them against its
+ * emulated timers can be off when its virtual clock is catching up. */
+BOOLEAN
+HalpReadHypervisorFrequency(
+    _In_ ULONG Msr,
+    _Out_ PULONG64 Frequency)
+{
+    INT CpuInfo[4];
+
+    *Frequency = 0;
+
+    __cpuid(CpuInfo, 1);
+    if (!(CpuInfo[2] & 0x80000000))
+        return FALSE;
+
+    __cpuid(CpuInfo, 0x40000000);
+    if ((ULONG)CpuInfo[0] < 0x40000003)
+        return FALSE;
+
+    __cpuid(CpuInfo, 0x40000001);
+    if ((ULONG)CpuInfo[0] != HV_CPUID_INTERFACE_HV1)
+        return FALSE;
+
+    __cpuid(CpuInfo, 0x40000003);
+    if (!(CpuInfo[0] & HV_ACCESS_FREQUENCY_MSRS) || !(CpuInfo[3] & HV_FREQUENCY_MSRS_AVAILABLE))
+        return FALSE;
+
+    *Frequency = __readmsr(Msr);
+    return *Frequency != 0;
+}
+
 static
 BOOLEAN
 HalpCalibrateTscWithPmTimer(OUT PULONG64 Frequency)
@@ -159,6 +191,13 @@ HalpInitializeTsc(VOID)
     if (!(KeGetCurrentPrcb()->FeatureBits & KF_RDTSC))
     {
         KeBugCheck(HAL_INITIALIZATION_FAILED);
+    }
+
+    if (HalpReadHypervisorFrequency(HV_X64_MSR_TSC_FREQUENCY, &Frequency))
+    {
+        HalpCpuClockFrequency.QuadPart = Frequency;
+        DPRINT1("TSC frequency from the hypervisor: %I64u Hz\n", Frequency);
+        return;
     }
 
      /* Save flags and disable interrupts */

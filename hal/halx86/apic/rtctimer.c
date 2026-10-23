@@ -63,6 +63,13 @@ HalpCalibrateApicTimer(VOID)
     ULONG64 Start, Ticks;
     ULONG Elapsed;
 
+    /* The timer runs with divide-by-1, so the reported frequency is its rate. */
+    if (HalpReadHypervisorFrequency(HV_X64_MSR_APIC_FREQUENCY, &HalpApicTimerFrequency))
+    {
+        DPRINT1("Local APIC timer clock from the hypervisor: %I64u Hz\n", HalpApicTimerFrequency);
+        return;
+    }
+
     LvtEntry.Long = 0;
     LvtEntry.Vector = APIC_CLOCK_VECTOR;
     LvtEntry.Mask = 1;

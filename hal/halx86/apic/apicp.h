@@ -81,6 +81,7 @@ extern UCHAR HalpVectorToIndex[256];
 extern BOOLEAN HalpApicHvMsrs;
 
 VOID HalpRequestSelfInterrupt(_In_ UCHAR Vector);
+BOOLEAN HalpReadHypervisorFrequency(_In_ ULONG Msr, _Out_ PULONG64 Frequency);
 VOID HalpSecondaryInitialize(VOID);
 BOOLEAN HalpSecondaryIsGsiv(_In_ ULONG Gsiv);
 BOOLEAN HalpSecondaryIsVector(_In_ ULONG Vector);
@@ -146,6 +147,10 @@ typedef enum _APIC_REGISTER
 #define HV_ACCESS_INTR_CTRL_REGS 0x00000010
 #define HV_APIC_ACCESS_RECOMMENDED 0x00000008
 #define HV_X2APIC_MSRS_RECOMMENDED 0x00000100
+#define HV_X64_MSR_TSC_FREQUENCY 0x40000022
+#define HV_X64_MSR_APIC_FREQUENCY 0x40000023
+#define HV_ACCESS_FREQUENCY_MSRS 0x00000800
+#define HV_FREQUENCY_MSRS_AVAILABLE 0x00000100
 #define IOAPIC_PHYS_BASE 0xFEC00000
 #define APIC_CLOCK_INDEX 8
 #define ApicLogicalId(Cpu) ((UCHAR)(((Cpu) < 8) ? (1u << (Cpu)) : 0))
