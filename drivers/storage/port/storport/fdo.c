@@ -84,10 +84,22 @@ PortFdoConnectMessageInterrupts(
     }
     else
     {
+        ULONG Vector;
+        KIRQL Irql;
+        KINTERRUPT_MODE InterruptMode;
+        BOOLEAN ShareVector;
+        KAFFINITY Affinity;
+
         /* The kernel connected the fallback line interrupt instead. */
         DeviceExtension->Interrupt = (PKINTERRUPT)DeviceExtension->MessageInfo;
         DeviceExtension->InterruptConnectedEx = TRUE;
         DeviceExtension->MessageInfo = NULL;
+        if (DeviceExtension->TranslatedResources != NULL &&
+            NT_SUCCESS(GetResourceListInterrupt(DeviceExtension, &Vector, &Irql,
+                                                &InterruptMode, &ShareVector, &Affinity)))
+        {
+            DeviceExtension->InterruptIrql = Irql;
+        }
         DPRINT1("Storport: message connect fell back to a line interrupt\n");
     }
     return STATUS_SUCCESS;
