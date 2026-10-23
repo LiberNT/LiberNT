@@ -2003,6 +2003,13 @@ static UINT get_physical_processor_count( const char *buf, UINT len, UINT *num_l
 #endif
         package_count++;
     }
+#ifdef __REACTOS__
+    if (!package_count)
+    {
+        thread_count = NtCurrentTeb()->Peb->NumberOfProcessors;
+        package_count = 1;
+    }
+#endif
     if (num_logical) *num_logical = thread_count;
     return package_count;
 }
@@ -4093,6 +4100,74 @@ static enum fill_status fill_cache_memory( struct table *table, const struct exp
     return status;
 }
 
+#ifdef __REACTOS__
+static WCHAR *get_processor_reg_str( const WCHAR *value, const WCHAR *fallback )
+{
+    WCHAR *ret = get_reg_str( HKEY_LOCAL_MACHINE, L"Hardware\\Description\\System\\CentralProcessor\\0", value );
+    if (!ret) ret = wcsdup( fallback );
+    return ret;
+}
+
+static UINT get_processor_core_count(void)
+{
+    SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *buffer, *entry;
+    DWORD size = 0, offset;
+    UINT cores = 0;
+
+    if (GetLogicalProcessorInformationEx( RelationProcessorCore, NULL, &size ) ||
+        GetLastError() != ERROR_INSUFFICIENT_BUFFER || !(buffer = malloc( size )))
+        return NtCurrentTeb()->Peb->NumberOfProcessors;
+
+    if (GetLogicalProcessorInformationEx( RelationProcessorCore, buffer, &size ))
+    {
+        for (offset = 0; offset < size; offset += entry->Size)
+        {
+            entry = (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *)((char *)buffer + offset);
+            if (entry->Relationship == RelationProcessorCore) cores++;
+        }
+    }
+    free( buffer );
+    return cores ? cores : NtCurrentTeb()->Peb->NumberOfProcessors;
+}
+
+static enum fill_status fill_processor_without_smbios( struct table *table, const struct expr *cond,
+                                                       const SYSTEM_CPU_INFORMATION *info, const WCHAR *version )
+{
+    struct record_processor *rec = (struct record_processor *)table->data;
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+
+    rec->addresswidth           = wcscmp( get_osarchitecture(), L"64-bit" ) ? 32 : 64;
+    rec->architecture           = info->ProcessorArchitecture;
+    rec->caption                = get_processor_caption( 0 );
+    rec->cpu_status             = 1;
+    rec->currentclockspeed      = get_processor_currentclockspeed( 0 );
+    rec->datawidth              = rec->addresswidth;
+    rec->description            = get_processor_caption( 0 );
+    rec->device_id              = wcsdup( L"CPU0" );
+    rec->family                 = 2;
+    rec->level                  = info->ProcessorLevel;
+    rec->manufacturer           = get_processor_reg_str( L"VendorIdentifier", L"Unknown" );
+    rec->maxclockspeed          = get_processor_maxclockspeed( 0 );
+    rec->name                   = get_processor_reg_str( L"ProcessorNameString", L"Unknown CPU" );
+    rec->num_cores              = get_processor_core_count();
+    rec->num_logical_processors = NtCurrentTeb()->Peb->NumberOfProcessors;
+    rec->processor_id           = wcsdup( L"0000000000000000" );
+    rec->processortype          = 3;
+    rec->revision               = info->ProcessorRevision;
+    rec->unique_id              = NULL;
+    rec->version                = wcsdup( version );
+
+    table->num_rows = 0;
+    if (!match_row( table, 0, cond, &status ))
+    {
+        free_row_values( table, 0 );
+        return status;
+    }
+    table->num_rows = 1;
+    return status;
+}
+#endif
+
 static enum fill_status fill_processor( struct table *table, const struct expr *cond )
 {
     WCHAR device_id[14], processor_id[17], version[50];
@@ -4119,6 +4194,14 @@ static enum fill_status fill_processor( struct table *table, const struct expr *
     RtlGetNativeSystemInformation( SystemCpuInformation, &info, sizeof(info), NULL );
     swprintf( version, sizeof(version), L"Model %u, Stepping %u",
               HIBYTE(info.ProcessorRevision), LOBYTE(info.ProcessorRevision) );
+
+#ifdef __REACTOS__
+    if (!find_smbios_entry( SMBIOS_TYPE_PROCESSOR, 0, buf, len ))
+    {
+        free( buf );
+        return fill_processor_without_smbios( table, cond, &info, version );
+    }
+#endif
 
     for (i = 0; i < num_packages; i++)
     {
