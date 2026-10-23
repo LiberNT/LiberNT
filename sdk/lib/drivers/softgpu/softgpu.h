@@ -293,6 +293,7 @@ typedef struct _SOFTGPU_DEVICE
     PHYSICAL_ADDRESS    ScanoutPhys;
     SIZE_T              ScanoutSize;
     ULONG               ScanoutPitch;
+    BOOLEAN             ScanoutShadowed;
     KSPIN_LOCK          ScanoutLock;
     KMUTEX              ScanoutMutex;
     KMUTEX              PointerMutex;
@@ -411,6 +412,7 @@ typedef struct _SOFTGPU_PLATFORM_CONFIG
     PHYSICAL_ADDRESS    ScanoutPhysicalAddress;
     ULONG               ScanoutPitch;
     ULONGLONG           ScanoutSize;
+    PVOID               ScanoutShadow;
     PHYSICAL_ADDRESS    HighestFrameBufferAddress;
     SIZE_T              MinimumAllocationSlabSize;
     ULONG               ModeCount;

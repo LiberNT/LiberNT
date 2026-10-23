@@ -455,6 +455,306 @@ SoftGpuVbeQueryModes(
     FreeBuffer(Segment, Offset);
 }
 
+typedef struct _SOFTGPU_ROOT_SHADOW
+{
+    PULONG Shadow;
+    SIZE_T ShadowSize;
+    PUCHAR FrameBuffer;
+    SIZE_T FrameBufferSize;
+    ULONG Pitch;
+    ULONG Width;
+    ULONG Height;
+    ULONG BytesPerPixel;
+    UCHAR RedSize;
+    UCHAR RedPosition;
+    UCHAR GreenSize;
+    UCHAR GreenPosition;
+    UCHAR BlueSize;
+    UCHAR BluePosition;
+} SOFTGPU_ROOT_SHADOW, *PSOFTGPU_ROOT_SHADOW;
+
+static BOOLEAN
+SoftGpuVbeColorField(
+    _In_ UCHAR Size,
+    _In_ UCHAR Position,
+    _In_ ULONG BitsPerPixel)
+{
+    return Size != 0 && Size <= 8 && Position < BitsPerPixel && Size <= BitsPerPixel - Position;
+}
+
+static BOOLEAN
+SoftGpuResourcesDecodeAddress(
+    _In_ const CM_RESOURCE_LIST *Resources,
+    _In_ ULONGLONG Address)
+{
+    const CM_FULL_RESOURCE_DESCRIPTOR *Full = Resources->List;
+    ULONG List;
+    ULONG Index;
+
+    for (List = 0; List < Resources->Count; List++)
+    {
+        for (Index = 0; Index < Full->PartialResourceList.Count; Index++)
+        {
+            const CM_PARTIAL_RESOURCE_DESCRIPTOR *Partial = &Full->PartialResourceList.PartialDescriptors[Index];
+
+            if (Partial->Type == CmResourceTypeMemory &&
+                Address >= (ULONGLONG)Partial->u.Memory.Start.QuadPart &&
+                Address - (ULONGLONG)Partial->u.Memory.Start.QuadPart < Partial->u.Memory.Length)
+            {
+                return TRUE;
+            }
+        }
+        Full = (const CM_FULL_RESOURCE_DESCRIPTOR *)(Full->PartialResourceList.PartialDescriptors +
+                                                     Full->PartialResourceList.Count);
+    }
+
+    return FALSE;
+}
+
+static VOID
+SoftGpuVbeReadDirectColorLayout(
+    _In_reads_bytes_(SOFTGPU_VBE_MODE_INFO_SIZE) const UCHAR *ModeInfo,
+    _In_ USHORT VbeVersion,
+    _Out_ PULONG Pitch,
+    _Out_writes_(6) PUCHAR Fields)
+{
+    BOOLEAN Linear = VbeVersion >= 0x0300;
+    ULONG Index;
+
+    *Pitch = Linear && SoftGpuReadUshort(ModeInfo, 0x32) != 0 ? SoftGpuReadUshort(ModeInfo, 0x32)
+                                                               : SoftGpuReadUshort(ModeInfo, 0x10);
+    for (Index = 0; Index < 6; Index += 2)
+    {
+        BOOLEAN UseLinear = Linear && ModeInfo[0x36 + Index] != 0;
+
+        Fields[Index] = ModeInfo[(UseLinear ? 0x36 : 0x1F) + Index];
+        Fields[Index + 1] = ModeInfo[(UseLinear ? 0x37 : 0x20) + Index];
+    }
+}
+
+static VOID
+SoftGpuFreeRootShadow(
+    _In_ PSOFTGPU_ROOT_SHADOW Shadow)
+{
+    if (Shadow->FrameBuffer != NULL)
+        MmUnmapIoSpace(Shadow->FrameBuffer, Shadow->FrameBufferSize);
+    if (Shadow->Shadow != NULL)
+        ExFreePoolWithTag(Shadow->Shadow, SOFTGPU_POOL_TAG);
+    ExFreePoolWithTag(Shadow, SOFTGPU_POOL_TAG);
+}
+
+static NTSTATUS
+SoftGpuVbeColdStart(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_opt_ PDXGK_INTERFACE OwnFrameBuffer,
+    _Inout_ PSOFTGPU_PLATFORM_CONFIG Config)
+{
+    DXGK_DEVICE_INFO DeviceInfo;
+    PSOFTGPU_X86_BIOS_ALLOCATE_BUFFER AllocateBuffer;
+    PSOFTGPU_X86_BIOS_FREE_BUFFER FreeBuffer;
+    PSOFTGPU_X86_BIOS_READ_MEMORY ReadMemory;
+    PSOFTGPU_X86_BIOS_WRITE_MEMORY WriteMemory;
+    PSOFTGPU_X86_BIOS_CALL Call;
+    PSOFTGPU_GET_FIRMWARE_TYPE GetFirmwareType;
+    SOFTGPU_X86_BIOS_REGISTERS Registers;
+    UCHAR Info[SOFTGPU_VBE_INFO_SIZE];
+    UCHAR ModeInfo[SOFTGPU_VBE_MODE_INFO_SIZE];
+    UCHAR Best[SOFTGPU_VBE_MODE_INFO_SIZE];
+    ULONG Size = SOFTGPU_VBE_INFO_SIZE + SOFTGPU_VBE_MODE_INFO_SIZE;
+    ULONGLONG VideoMemorySize;
+    ULONGLONG BestPixels = 0;
+    ULONG BestBitsPerPixel = 0;
+    USHORT BestMode = 0;
+    USHORT Segment;
+    USHORT Offset;
+    USHORT VbeVersion;
+    USHORT ListSegment;
+    USHORT ListOffset;
+    USHORT ModeNumber;
+    ULONG Index;
+    ULONG Width;
+    ULONG Height;
+    ULONG Pitch;
+    ULONG BitsPerPixel;
+    ULONG Base;
+    UCHAR Fields[6];
+    PSOFTGPU_ROOT_SHADOW Shadow;
+    PHYSICAL_ADDRESS FrameBufferAddress;
+    BOOLEAN Direct;
+
+    AllocateBuffer = (PSOFTGPU_X86_BIOS_ALLOCATE_BUFFER)SoftGpuGetHalRoutine(L"x86BiosAllocateBuffer");
+    FreeBuffer = (PSOFTGPU_X86_BIOS_FREE_BUFFER)SoftGpuGetHalRoutine(L"x86BiosFreeBuffer");
+    ReadMemory = (PSOFTGPU_X86_BIOS_READ_MEMORY)SoftGpuGetHalRoutine(L"x86BiosReadMemory");
+    WriteMemory = (PSOFTGPU_X86_BIOS_WRITE_MEMORY)SoftGpuGetHalRoutine(L"x86BiosWriteMemory");
+    Call = (PSOFTGPU_X86_BIOS_CALL)SoftGpuGetHalRoutine(L"x86BiosCall");
+    GetFirmwareType = (PSOFTGPU_GET_FIRMWARE_TYPE)SoftGpuGetHalRoutine(L"ExGetFirmwareType");
+    if (AllocateBuffer == NULL || FreeBuffer == NULL || ReadMemory == NULL || WriteMemory == NULL || Call == NULL ||
+        GetFirmwareType == NULL || GetFirmwareType() != FirmwareTypeBios)
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    RtlZeroMemory(&DeviceInfo, sizeof(DeviceInfo));
+    if (OwnFrameBuffer != NULL &&
+        (OwnFrameBuffer->DxgkCbGetDeviceInformation == NULL ||
+         !NT_SUCCESS(OwnFrameBuffer->DxgkCbGetDeviceInformation(OwnFrameBuffer->DeviceHandle, &DeviceInfo)) ||
+         DeviceInfo.TranslatedResourceList == NULL))
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    if (!NT_SUCCESS(AllocateBuffer(&Size, &Segment, &Offset)))
+        return STATUS_NOT_SUPPORTED;
+
+    RtlZeroMemory(Info, sizeof(Info));
+    RtlCopyMemory(Info, "VBE2", 4);
+    RtlZeroMemory(&Registers, sizeof(Registers));
+    Registers.Eax = 0x4F00;
+    Registers.SegEs = Segment;
+    Registers.Edi = Offset;
+    if (!NT_SUCCESS(WriteMemory(Segment, Offset, Info, sizeof(Info))) ||
+        !Call(0x10, &Registers) ||
+        (Registers.Eax & 0xFFFF) != SOFTGPU_VBE_SUCCESS ||
+        !NT_SUCCESS(ReadMemory(Segment, Offset, Info, sizeof(Info))) ||
+        !RtlEqualMemory(Info, "VESA", 4))
+    {
+        FreeBuffer(Segment, Offset);
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    VbeVersion = SoftGpuReadUshort(Info, 0x04);
+    ListOffset = SoftGpuReadUshort(Info, 0x0E);
+    ListSegment = SoftGpuReadUshort(Info, 0x10);
+    VideoMemorySize = (ULONGLONG)SoftGpuReadUshort(Info, 0x12) * 0x10000;
+    for (Index = 0; Index < SOFTGPU_VBE_MAX_LISTED_MODES; Index++)
+    {
+        if (!NT_SUCCESS(ReadMemory(ListSegment,
+                                   (USHORT)(ListOffset + Index * sizeof(USHORT)),
+                                   &ModeNumber,
+                                   sizeof(ModeNumber))) ||
+            ModeNumber == 0xFFFF)
+        {
+            break;
+        }
+
+        RtlZeroMemory(&Registers, sizeof(Registers));
+        Registers.Eax = 0x4F01;
+        Registers.Ecx = ModeNumber;
+        Registers.SegEs = Segment;
+        Registers.Edi = Offset + SOFTGPU_VBE_INFO_SIZE;
+        if (!Call(0x10, &Registers) ||
+            (Registers.Eax & 0xFFFF) != SOFTGPU_VBE_SUCCESS ||
+            !NT_SUCCESS(ReadMemory(Segment, (USHORT)(Offset + SOFTGPU_VBE_INFO_SIZE), ModeInfo, sizeof(ModeInfo))))
+        {
+            continue;
+        }
+
+        Width = SoftGpuReadUshort(ModeInfo, 0x12);
+        Height = SoftGpuReadUshort(ModeInfo, 0x14);
+        SoftGpuVbeReadDirectColorLayout(ModeInfo, VbeVersion, &Pitch, Fields);
+        BitsPerPixel = ModeInfo[0x19];
+        Base = ModeInfo[0x28] | (ModeInfo[0x29] << 8) | (ModeInfo[0x2A] << 16) | ((ULONG)ModeInfo[0x2B] << 24);
+        if ((SoftGpuReadUshort(ModeInfo, 0) & SOFTGPU_VBE_MODE_REQUIRED) != SOFTGPU_VBE_MODE_REQUIRED ||
+            ModeInfo[0x1B] != SOFTGPU_VBE_DIRECT_COLOR ||
+            (BitsPerPixel != 16 && BitsPerPixel != 24 && BitsPerPixel != 32) ||
+            !SoftGpuVbeColorField(Fields[0], Fields[1], BitsPerPixel) ||
+            !SoftGpuVbeColorField(Fields[2], Fields[3], BitsPerPixel) ||
+            !SoftGpuVbeColorField(Fields[4], Fields[5], BitsPerPixel) ||
+            Base == 0 ||
+            (OwnFrameBuffer != NULL && !SoftGpuResourcesDecodeAddress(DeviceInfo.TranslatedResourceList, Base)) ||
+            Width < SOFTGPU_VBE_MIN_WIDTH ||
+            Height < SOFTGPU_VBE_MIN_HEIGHT ||
+            Width > SOFTGPU_DEFAULT_WIDTH ||
+            Height > SOFTGPU_DEFAULT_HEIGHT ||
+            Pitch < Width * (BitsPerPixel / 8) ||
+            (ULONGLONG)Pitch * Height > VideoMemorySize)
+        {
+            continue;
+        }
+
+        if (BitsPerPixel > BestBitsPerPixel ||
+            (BitsPerPixel == BestBitsPerPixel && (ULONGLONG)Width * Height > BestPixels))
+        {
+            BestMode = ModeNumber;
+            BestBitsPerPixel = BitsPerPixel;
+            BestPixels = (ULONGLONG)Width * Height;
+            RtlCopyMemory(Best, ModeInfo, sizeof(Best));
+        }
+    }
+
+    if (BestMode == 0)
+    {
+        FreeBuffer(Segment, Offset);
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    RtlZeroMemory(&Registers, sizeof(Registers));
+    Registers.Eax = 0x4F02;
+    Registers.Ebx = BestMode | SOFTGPU_VBE_LINEAR_FRAMEBUFFER;
+    if (!Call(0x10, &Registers) || (Registers.Eax & 0xFFFF) != SOFTGPU_VBE_SUCCESS)
+    {
+        FreeBuffer(Segment, Offset);
+        return STATUS_NOT_SUPPORTED;
+    }
+    FreeBuffer(Segment, Offset);
+
+    Width = SoftGpuReadUshort(Best, 0x12);
+    Height = SoftGpuReadUshort(Best, 0x14);
+    SoftGpuVbeReadDirectColorLayout(Best, VbeVersion, &Pitch, Fields);
+    FrameBufferAddress.QuadPart = Best[0x28] | (Best[0x29] << 8) | (Best[0x2A] << 16) | ((ULONG)Best[0x2B] << 24);
+    Direct = BestBitsPerPixel == 32 &&
+             Fields[0] == 8 && Fields[1] == 16 &&
+             Fields[2] == 8 && Fields[3] == 8 &&
+             Fields[4] == 8 && Fields[5] == 0;
+
+    Config->Width = Width;
+    Config->Height = Height;
+    Config->Format = D3DDDIFMT_X8R8G8B8;
+    Config->ScanoutPhysicalAddress = FrameBufferAddress;
+    if (Direct)
+    {
+        Config->ScanoutPitch = Pitch;
+        Config->ScanoutSize = (ULONGLONG)Pitch * Height;
+    }
+    else
+    {
+        Shadow = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Shadow), SOFTGPU_POOL_TAG);
+        if (Shadow == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        RtlZeroMemory(Shadow, sizeof(*Shadow));
+        Shadow->Width = Width;
+        Shadow->Height = Height;
+        Shadow->Pitch = Pitch;
+        Shadow->BytesPerPixel = BestBitsPerPixel / 8;
+        Shadow->RedSize = Fields[0];
+        Shadow->RedPosition = Fields[1];
+        Shadow->GreenSize = Fields[2];
+        Shadow->GreenPosition = Fields[3];
+        Shadow->BlueSize = Fields[4];
+        Shadow->BluePosition = Fields[5];
+        Shadow->ShadowSize = (SIZE_T)Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL * Height;
+        Shadow->Shadow = ExAllocatePoolWithTag(NonPagedPool, Shadow->ShadowSize, SOFTGPU_POOL_TAG);
+        Shadow->FrameBufferSize = (SIZE_T)Pitch * Height;
+        Shadow->FrameBuffer = MmMapIoSpace(FrameBufferAddress, Shadow->FrameBufferSize, MmWriteCombined);
+        if (Shadow->FrameBuffer == NULL)
+            Shadow->FrameBuffer = MmMapIoSpace(FrameBufferAddress, Shadow->FrameBufferSize, MmNonCached);
+        if (Shadow->Shadow == NULL || Shadow->FrameBuffer == NULL)
+        {
+            SoftGpuFreeRootShadow(Shadow);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        RtlZeroMemory(Shadow->Shadow, Shadow->ShadowSize);
+        Device->PlatformContext = Shadow;
+        Config->ScanoutPitch = Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL;
+        Config->ScanoutSize = Shadow->ShadowSize;
+        Config->ScanoutShadow = Shadow->Shadow;
+    }
+
+    DPRINT1("SOFTGPU: no POST framebuffer; set VBE mode 0x%x, %lux%lu at %lu bpp\n",
+            BestMode, Width, Height, BestBitsPerPixel);
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 SoftGpuPlatformValidatePdo(
     _In_ PDEVICE_OBJECT PhysicalDeviceObject)
@@ -553,11 +853,14 @@ SoftGpuPlatformQueryStart(
                                                 &ResultLength)) &&
                  BusType == PCIBus)
         {
-            DPRINT1("SOFTGPU: PCI display device has no POST framebuffer; "
-                    "not starting\n");
-            return STATUS_UNSUCCESSFUL;
+            if (!NT_SUCCESS(SoftGpuVbeColdStart(Device, DxgkInterface, Config)))
+            {
+                DPRINT1("SOFTGPU: PCI display device has no POST framebuffer; "
+                        "not starting\n");
+                return STATUS_UNSUCCESSFUL;
+            }
         }
-        else
+        else if (Device == NULL || !NT_SUCCESS(SoftGpuVbeColdStart(Device, NULL, Config)))
         {
             DPRINT1("SOFTGPU: no POST framebuffer; starting headless "
                     "%lux%lu software output\n",
@@ -567,7 +870,7 @@ SoftGpuPlatformQueryStart(
     }
 #endif
 
-    if (Config->ScanoutPhysicalAddress.QuadPart != 0)
+    if (Config->ScanoutPhysicalAddress.QuadPart != 0 && Config->ScanoutShadow == NULL)
         SoftGpuVbeQueryModes(Config);
 
     for (Index = 0; Index < Config->ModeCount; Index++)
@@ -629,7 +932,14 @@ NTSTATUS
 SoftGpuPlatformStopScanout(
     _Inout_ PSOFTGPU_DEVICE Device)
 {
-    UNREFERENCED_PARAMETER(Device);
+    PSOFTGPU_ROOT_SHADOW Shadow;
+
+    if (Device == NULL || Device->PlatformContext == NULL)
+        return STATUS_SUCCESS;
+
+    Shadow = Device->PlatformContext;
+    Device->PlatformContext = NULL;
+    SoftGpuFreeRootShadow(Shadow);
     return STATUS_SUCCESS;
 }
 
@@ -674,8 +984,41 @@ SoftGpuPlatformScanoutWritten(
     _Inout_ PSOFTGPU_DEVICE Device,
     _In_ const RECT *Rect)
 {
-    UNREFERENCED_PARAMETER(Device);
-    UNREFERENCED_PARAMETER(Rect);
+    PSOFTGPU_ROOT_SHADOW Shadow;
+    LONG Left;
+    LONG Top;
+    LONG Right;
+    LONG Bottom;
+    LONG X;
+    LONG Y;
+    ULONG Byte;
+
+    if (Device == NULL || Rect == NULL || Device->PlatformContext == NULL)
+        return;
+
+    Shadow = Device->PlatformContext;
+    Left = max(Rect->left, 0);
+    Top = max(Rect->top, 0);
+    Right = min(Rect->right, (LONG)Shadow->Width);
+    Bottom = min(Rect->bottom, (LONG)Shadow->Height);
+    for (Y = Top; Y < Bottom; Y++)
+    {
+        const ULONG *Source = Shadow->Shadow + (SIZE_T)Y * Shadow->Width;
+        PUCHAR Destination = Shadow->FrameBuffer + (SIZE_T)Y * Shadow->Pitch +
+                             (SIZE_T)Left * Shadow->BytesPerPixel;
+
+        for (X = Left; X < Right; X++)
+        {
+            ULONG Pixel = Source[X];
+            ULONG Value = ((((Pixel >> 16) & 0xFF) >> (8 - Shadow->RedSize)) << Shadow->RedPosition) |
+                          ((((Pixel >> 8) & 0xFF) >> (8 - Shadow->GreenSize)) << Shadow->GreenPosition) |
+                          (((Pixel & 0xFF) >> (8 - Shadow->BlueSize)) << Shadow->BluePosition);
+
+            for (Byte = 0; Byte < Shadow->BytesPerPixel; Byte++)
+                Destination[Byte] = (UCHAR)(Value >> (Byte * 8));
+            Destination += Shadow->BytesPerPixel;
+        }
+    }
 }
 
 VOID

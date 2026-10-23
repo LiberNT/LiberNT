@@ -1562,9 +1562,13 @@ SoftGpuScanoutStart(
         return STATUS_DEVICE_CONFIGURATION_ERROR;
 
     MappingSize = (SIZE_T)Config->ScanoutSize;
-    Mapping = MmMapIoSpace(Config->ScanoutPhysicalAddress,
-                           MappingSize,
-                           MmWriteCombined);
+    Mapping = Config->ScanoutShadow;
+    if (Mapping == NULL)
+    {
+        Mapping = MmMapIoSpace(Config->ScanoutPhysicalAddress,
+                               MappingSize,
+                               MmWriteCombined);
+    }
     if (Mapping == NULL)
     {
         Mapping = MmMapIoSpace(Config->ScanoutPhysicalAddress,
@@ -1579,6 +1583,7 @@ SoftGpuScanoutStart(
     Device->ScanoutPhys = Config->ScanoutPhysicalAddress;
     Device->ScanoutSize = MappingSize;
     Device->ScanoutPitch = Config->ScanoutPitch;
+    Device->ScanoutShadowed = Config->ScanoutShadow != NULL;
     Device->CurrentPrimaryOffset = 0;
     Device->CurrentPrimaryPitch = 0;
     Device->CurrentPrimaryWidth = 0;
@@ -1626,8 +1631,9 @@ SoftGpuScanoutStop(
         Device->PresentStageWidth = 0;
     }
     KeAcquireSpinLock(&Device->ScanoutLock, &OldIrql);
-    Mapping = Device->Scanout;
+    Mapping = Device->ScanoutShadowed ? NULL : Device->Scanout;
     MappingSize = Device->ScanoutSize;
+    Device->ScanoutShadowed = FALSE;
     Device->Scanout = NULL;
     Device->ScanoutPhys.QuadPart = 0;
     Device->ScanoutSize = 0;
