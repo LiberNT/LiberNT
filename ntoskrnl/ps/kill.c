@@ -576,6 +576,9 @@ PspExitThread(IN NTSTATUS ExitStatus)
     /* Run Thread Notify Routines before we desintegrate the thread */
     PspRunCreateThreadNotifyRoutines(Thread, FALSE);
 
+    if (Thread->Tcb.Header.Minimal)
+        PspPicoThreadExit(Thread);
+
     /* Run down kernel thread-local storage while the thread is still valid. */
     PspTlsThreadCleanup(Thread);
 
@@ -660,6 +663,9 @@ PspExitThread(IN NTSTATUS ExitStatus)
 
     /* Check if we had a previous thread to dereference */
     if (PreviousThread) ObDereferenceObject(PreviousThread);
+
+    if (Last && CurrentProcess->PicoCreated)
+        PspPicoProcessExit(CurrentProcess);
 
     /* Check if the process has a debug port and if this is a user thread */
     if ((CurrentProcess->DebugPort) && !(Thread->SystemThread))

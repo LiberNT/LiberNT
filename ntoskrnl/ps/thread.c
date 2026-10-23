@@ -44,6 +44,12 @@ PspUserThreadStartup(IN PKSTART_ROUTINE StartRoutine,
         /* Remember that we're dead */
         DeadThread = TRUE;
     }
+    else if (Thread->Tcb.Header.Minimal)
+    {
+        PspPicoThreadStartup(KeGetTrapFrame(&Thread->Tcb),
+                             KeGetExceptionFrame(&Thread->Tcb));
+        return;
+    }
     else
     {
         /* Get the Locale ID and save Preferred Proc */
@@ -319,7 +325,9 @@ PspCreateThread(OUT PHANDLE ThreadHandle,
     if (ThreadContext)
     {
         /* User-mode Thread, create Teb */
-        Status = MmCreateTeb(Process, &Thread->Cid, InitialTeb, Wow64InitialTeb, &TebBase);
+        Status = Process->PicoCreated ?
+                 STATUS_SUCCESS :
+                 MmCreateTeb(Process, &Thread->Cid, InitialTeb, Wow64InitialTeb, &TebBase);
         if (!NT_SUCCESS(Status))
         {
             /* Failed to create the TEB. Release rundown and dereference */
@@ -351,6 +359,8 @@ PspCreateThread(OUT PHANDLE ThreadHandle,
                                   ThreadContext,
                                   TebBase,
                                   &Process->Pcb);
+            if (NT_SUCCESS(Status) && Process->PicoCreated)
+                Thread->Tcb.Header.Minimal = TRUE;
         }
     }
     else

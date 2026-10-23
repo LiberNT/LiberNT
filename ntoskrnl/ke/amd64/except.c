@@ -425,6 +425,11 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
     }
     else
     {
+        if (PspPicoDispatchException(ExceptionRecord, ExceptionFrame, TrapFrame))
+        {
+            return;
+        }
+
         /* User mode exception, was it first-chance? */
         if (FirstChance && ExceptionRecord->ExceptionCode != STATUS_STACK_BUFFER_OVERRUN)
         {

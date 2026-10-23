@@ -940,7 +940,8 @@ typedef struct _DISPATCHER_HEADER {
           _ANONYMOUS_STRUCT struct {
             BOOLEAN ActiveDR7:1;
             BOOLEAN Instrumented:1;
-            BOOLEAN Reserved2:4;
+            BOOLEAN Minimal:1;
+            BOOLEAN Reserved4:3;
             BOOLEAN UmsScheduled:1;
             BOOLEAN UmsPrimary:1;
           } DUMMYSTRUCTNAME;

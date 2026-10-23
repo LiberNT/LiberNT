@@ -2935,6 +2935,12 @@
 @ stdcall PsIsWin32KFilterEnabledForProcess(ptr)
 @ stdcall PsLeavePriorityRegion()
 @ stub -arch=win64 PsMakeSiloContextPermanent
+@ stdcall PsPicoCreateProcess(long ptr ptr)
+@ stdcall PsPicoCreateThread(ptr ptr ptr ptr ptr)
+@ stdcall PsPicoGetProcessContext(ptr)
+@ stdcall PsPicoGetThreadContext(ptr)
+@ stdcall PsPicoRegisterProvider(ptr)
+@ stdcall PsPicoTerminateCurrentThread(long)
 @ stdcall PsQueryCurrentApiSetSchema()
 @ stdcall PsQueryProcessAttributesByToken(ptr ptr ptr)
 @ stub -arch=win64 PsQueryProcessAvailableCpus

@@ -721,6 +721,39 @@ PspArchInitializeUserThreadStartup(
     _In_ PKEXCEPTION_FRAME ExceptionFrame,
     _Inout_ PKTRAP_FRAME TrapFrame);
 
+#define PSP_PROCESS_CREATE_PICO       0x40000000
+#define PSP_PROCESS_CREATE_PICO_CLONE 0x80000000
+#define PSP_PROCESS_CREATE_PICO_MASK  (PSP_PROCESS_CREATE_PICO | PSP_PROCESS_CREATE_PICO_CLONE)
+
+VOID
+NTAPI
+PspPicoSystemCallDispatch(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame);
+
+BOOLEAN
+NTAPI
+PspPicoDispatchException(
+    _Inout_ PEXCEPTION_RECORD ExceptionRecord,
+    _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame);
+
+VOID
+NTAPI
+PspPicoThreadStartup(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame);
+
+VOID
+NTAPI
+PspPicoThreadExit(
+    _In_ PETHREAD Thread);
+
+VOID
+NTAPI
+PspPicoProcessExit(
+    _In_ PEPROCESS Process);
+
 NTSTATUS
 NTAPI
 PspArchCaptureXStateContext(

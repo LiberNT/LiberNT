@@ -72,6 +72,8 @@ KiTrapReturn:
     cbz     x16, .Lno_teb
     ldr     x16, [x16, #PcCurrentThread]
     cbz     x16, .Lno_teb
+    ldrb    w17, [x16, #ThDebugActive]
+    tbnz    w17, #2, .Lno_teb
 
     ldr     x18, [x16, #ThTeb]
     msr     tpidr_el0, x18
@@ -242,6 +244,16 @@ KiTrapReturn:
     ldr     w16, [x18, #TfSpsr]
     ands    w16, w16, #0xF
     b.ne    .Lrestore_kernel_x18
+    mrs     x16, tpidr_el1
+    cbz     x16, .Lrestore_teb_x18
+    ldr     x16, [x16, #PcCurrentThread]
+    cbz     x16, .Lrestore_teb_x18
+    ldrb    w16, [x16, #ThDebugActive]
+    tbz     w16, #2, .Lrestore_teb_x18
+    ldp     x16, x17, [x18, #TfX16]
+    ldr     x18, [x18, #TfX18]
+    b       .Lx18_restored
+.Lrestore_teb_x18:
     ldp     x16, x17, [x18, #TfX16]
     mrs     x18, tpidr_el0
     b       .Lx18_restored

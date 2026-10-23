@@ -975,7 +975,10 @@ KiArm64HandleSystemService(
     {
         KiArm64ClearTrapActive();
     }
-    KiSystemService(Thread, TrapFrame, Instruction);
+    if ((TrapFrame->PreviousMode == UserMode) && Thread->Header.Minimal)
+        PspPicoSystemCallDispatch(TrapFrame, ExceptionFrame);
+    else
+        KiSystemService(Thread, TrapFrame, Instruction);
 
     /* A first win32k call can relocate the entire kernel stack. */
     TrapFrame = Thread->TrapFrame;

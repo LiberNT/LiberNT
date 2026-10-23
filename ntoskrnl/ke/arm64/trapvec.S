@@ -1632,11 +1632,15 @@ KiArm64VectorTable:
     lsr x10, x9, #26
     cmp x10, #0x15
     b.ne 1f
+    mrs x9, tpidr_el1
+    ldr x9, [x9, #PcCurrentThread]
+    ldrb w9, [x9, #ThDebugActive]
+    tbnz w9, #2, 1f
     b KiArm64UserServiceEntry
 1:
     ldp x9, x10, [sp, #(TfX9 - ARM64_SERVICE_FRAME_SIZE)]
     b KiArm64PermVectorSyncLowerA64_Handler
-    .space 0x60
+    .space 0x50
 
 /* Entry 9 - 0x480: IRQ, Lower EL A64 */
     b KiArm64PermVectorIrqLowerA64_Handler

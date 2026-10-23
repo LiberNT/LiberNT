@@ -223,6 +223,8 @@ KiSwapContext:
      */
     adr     x9, .Lrestore_context  /* Get address of restore label */
     str     x9, [sp, #SwLr]        /* Save for KiSwapContextInternal */
+    mrs     x9, tpidr_el0
+    str     x9, [sp, #SwTpidr]
 
     /*
      * Locate the target (new) thread from the per-CPU PCR.
@@ -261,6 +263,8 @@ KiSwapContext:
     ldp     x25, x26, [sp, #SwX25]
     ldp     x27, x28, [sp, #SwX27]
     ldr     x29, [sp, #SwFp]
+    ldr     x9, [sp, #SwTpidr]
+    msr     tpidr_el0, x9
 
     /*
      * ARM64 ABI: x18 remains the EL1 platform register across context

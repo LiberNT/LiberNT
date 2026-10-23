@@ -395,7 +395,16 @@ PspCreateProcess(OUT PHANDLE ProcessHandle,
 
 
     /* Validate flags */
-    if (Flags & ~PROCESS_CREATE_FLAGS_LEGAL_MASK) return STATUS_INVALID_PARAMETER;
+    if (Flags & ~(PROCESS_CREATE_FLAGS_LEGAL_MASK |
+                  ((PreviousMode == KernelMode) ? PSP_PROCESS_CREATE_PICO_MASK : 0)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if ((Flags & PSP_PROCESS_CREATE_PICO_MASK) &&
+        ((SectionHandle != NULL) || ((Flags & PSP_PROCESS_CREATE_PICO_MASK) == PSP_PROCESS_CREATE_PICO_MASK)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
 
     if ((PreviousMode != KernelMode) &&
         (PsGetProcessMitigationPolicyFlags(CurrentProcess, PSP_CHILD_PROCESS_POLICY) & 1))
@@ -454,6 +463,11 @@ PspCreateProcess(OUT PHANDLE ProcessHandle,
     Process->Machine = Parent ? PsGetProcessMachine(Parent) : IMAGE_FILE_MACHINE_NATIVE;
     Process->SequenceNumber =
         (ULONGLONG)InterlockedIncrement64(&PspProcessSequenceNumber);
+    if (Flags & PSP_PROCESS_CREATE_PICO_MASK)
+    {
+        Process->PicoCreated = TRUE;
+        Process->Minimal = TRUE;
+    }
 
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
     Process->DefaultPagePriority = Parent ? Parent->DefaultPagePriority : PSP_PAGE_PRIORITY_NORMAL;
@@ -508,7 +522,8 @@ PspCreateProcess(OUT PHANDLE ProcessHandle,
 
         /* Is the parent the initial process?
          * Check for NULL also, as at initialization PsInitialSystemProcess is NULL */
-        if (Parent != PsInitialSystemProcess && (Parent != NULL))
+        if (Parent != PsInitialSystemProcess && (Parent != NULL) &&
+            !(Flags & PSP_PROCESS_CREATE_PICO_MASK))
         {
             /* It's not, so acquire the process rundown */
             if (ExAcquireRundownProtection(&Parent->RundownProtect))
@@ -684,8 +699,27 @@ PspCreateProcess(OUT PHANDLE ProcessHandle,
     }
     else if (Parent)
     {
+        if (Flags & PSP_PROCESS_CREATE_PICO_MASK)
+        {
+            Status = MmInitializeProcessAddressSpace(Process,
+                                                     (Flags & PSP_PROCESS_CREATE_PICO_CLONE) ? Parent : NULL,
+                                                     NULL,
+                                                     &Flags,
+                                                     NULL);
+            if (!NT_SUCCESS(Status)) goto CleanupWithRef;
+
+            Process->SeAuditProcessCreationInfo.ImageFileName =
+                ExAllocatePoolZero(PagedPool,
+                                   sizeof(OBJECT_NAME_INFORMATION),
+                                   TAG_SEPA);
+            if (!Process->SeAuditProcessCreationInfo.ImageFileName)
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                goto CleanupWithRef;
+            }
+        }
         /* Check if this is a child of the system process */
-        if (Parent != PsInitialSystemProcess)
+        else if (Parent != PsInitialSystemProcess)
         {
             //
             // We need a PEB

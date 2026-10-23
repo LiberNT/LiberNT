@@ -236,6 +236,9 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
     }
     else
     {
+        if (PspPicoDispatchException(ExceptionRecord, ExceptionFrame, TrapFrame))
+            return;
+
         /* FIXME: TODO */
         /* 3rd strike, kill the process */
         DPRINT1("Kill %.16s, ExceptionCode: %lx, ExceptionAddress: %lx\n",

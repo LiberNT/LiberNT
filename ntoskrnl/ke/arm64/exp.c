@@ -541,6 +541,11 @@ KiDispatchException(_In_ PEXCEPTION_RECORD ExceptionRecord,
     }
     else
     {
+        if (PspPicoDispatchException(ExceptionRecord, ExceptionFrame, TrapFrame))
+        {
+            return;
+        }
+
         if (FirstChance)
         {
             if ((!(PsGetCurrentProcess()->DebugPort) &&
