@@ -67,7 +67,7 @@ PortCreatePdo(
     /* Add the PDO to the PDO list*/
     KeAcquireInStackQueuedSpinLock(&FdoDeviceExtension->PdoListLock,
                                    &LockHandle);
-    InsertHeadList(&FdoDeviceExtension->PdoListHead,
+    InsertTailList(&FdoDeviceExtension->PdoListHead,
                    &DeviceExtension->PdoListEntry);
     FdoDeviceExtension->PdoCount++;
     KeReleaseInStackQueuedSpinLock(&LockHandle);
