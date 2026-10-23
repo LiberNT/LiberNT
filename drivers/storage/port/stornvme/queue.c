@@ -1,9 +1,8 @@
 /*
- * PROJECT:     ReactOS Storport NVMe miniport
+ * PROJECT:     LiberNT Storport NVMe miniport
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     I/O queue pairs, submission slots and interrupt service
- * COPYRIGHT:   Copyright 2026 ReactOS Project
- *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include "stornvme.h"
