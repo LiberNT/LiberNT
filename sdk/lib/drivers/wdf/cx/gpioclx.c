@@ -63,7 +63,9 @@ typedef struct _GPIOCLX_DEVICE_CONTEXT
     USHORT OwnerNameLength;
     PIO_WORKITEM WorkItem;
     KSPIN_LOCK PendingLock;
+    KEVENT WorkIdle;
     BOOLEAN WorkQueued;
+    BOOLEAN LinesReady;
     ULONG PendingCount;
     struct { ULONG Gsiv; KINTERRUPT_MODE Mode; KINTERRUPT_POLARITY Polarity; BOOLEAN Enable; } Pending[64];
     PGPIO_CLIENT_REGISTRATION_PACKET Packet;
@@ -429,6 +431,7 @@ GpioCxSecondaryWorker(
         if (Device->PendingCount == 0)
         {
             Device->WorkQueued = FALSE;
+            KeSetEvent(&Device->WorkIdle, IO_NO_INCREMENT, FALSE);
             KeReleaseSpinLock(&Device->PendingLock, OldIrql);
             return;
         }
@@ -458,6 +461,11 @@ GpioCxQueueInterruptLine(
     if (Device->WorkItem == NULL || !Device->Started)
         return STATUS_INVALID_DEVICE_STATE;
     KeAcquireSpinLock(&Device->PendingLock, &OldIrql);
+    if (!Device->LinesReady)
+    {
+        KeReleaseSpinLock(&Device->PendingLock, OldIrql);
+        return STATUS_INVALID_DEVICE_STATE;
+    }
     if (Device->PendingCount >= RTL_NUMBER_OF(Device->Pending))
     {
         KeReleaseSpinLock(&Device->PendingLock, OldIrql);
@@ -471,6 +479,7 @@ GpioCxQueueInterruptLine(
     if (!Device->WorkQueued)
     {
         Device->WorkQueued = TRUE;
+        KeClearEvent(&Device->WorkIdle);
         Queue = TRUE;
     }
     KeReleaseSpinLock(&Device->PendingLock, OldIrql);
@@ -522,6 +531,7 @@ GpioCxRegisterSecondaryController(
     if (Device->WorkItem == NULL)
     {
         KeInitializeSpinLock(&Device->PendingLock);
+        KeInitializeEvent(&Device->WorkIdle, NotificationEvent, TRUE);
         Device->WorkItem = IoAllocateWorkItem(WdfDeviceWdmGetDeviceObject(DeviceHandle));
         if (Device->WorkItem == NULL)
             return;
@@ -849,7 +859,54 @@ GpioCxEvtPreD0Entry(
 
     Device->Started = TRUE;
     Device->StartedOnce = TRUE;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+GpioCxEvtPreD0EntryPostHardwareEnabled(
+    _In_ WDFDEVICE DeviceHandle,
+    _In_ WDF_POWER_DEVICE_STATE PreviousState)
+{
+    PGPIOCLX_DEVICE_CONTEXT Device = GpioCxGetDeviceContext(DeviceHandle);
+
+    UNREFERENCED_PARAMETER(PreviousState);
+
+    if (Device == NULL || !Device->Started)
+        return STATUS_SUCCESS;
+
+    Device->LinesReady = TRUE;
     GpioCxRegisterSecondaryController(DeviceHandle, Device);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+GpioCxEvtPreD0ExitPreHardwareDisabled(
+    _In_ WDFDEVICE DeviceHandle,
+    _In_ WDF_POWER_DEVICE_STATE TargetState)
+{
+    PGPIOCLX_DEVICE_CONTEXT Device = GpioCxGetDeviceContext(DeviceHandle);
+    KIRQL OldIrql;
+
+    UNREFERENCED_PARAMETER(TargetState);
+
+    if (Device == NULL)
+        return STATUS_SUCCESS;
+
+    if (Device->WorkItem == NULL)
+    {
+        Device->LinesReady = FALSE;
+        return STATUS_SUCCESS;
+    }
+
+    KeAcquireSpinLock(&Device->PendingLock, &OldIrql);
+    Device->LinesReady = FALSE;
+    Device->PendingCount = 0;
+    KeReleaseSpinLock(&Device->PendingLock, OldIrql);
+    KeWaitForSingleObject(&Device->WorkIdle, Executive, KernelMode, FALSE, NULL);
     return STATUS_SUCCESS;
 }
 
@@ -1331,6 +1388,8 @@ GpioCxDdiProcessAddDevicePreDeviceCreate(
     PnpCallbacks.EvtCxDevicePrePrepareHardware = GpioCxEvtPrePrepareHardware;
     PnpCallbacks.EvtCxDevicePostReleaseHardware = GpioCxEvtPostReleaseHardware;
     PnpCallbacks.EvtCxDevicePreD0Entry = GpioCxEvtPreD0Entry;
+    PnpCallbacks.EvtCxDevicePreD0EntryPostHardwareEnabled = GpioCxEvtPreD0EntryPostHardwareEnabled;
+    PnpCallbacks.EvtCxDevicePreD0ExitPreHardwareDisabled = GpioCxEvtPreD0ExitPreHardwareDisabled;
     PnpCallbacks.EvtCxDevicePostD0Exit = GpioCxEvtPostD0Exit;
     WdfCxDeviceInitSetPnpPowerEventCallbacks(WdfDriverGlobals, CxInit, &PnpCallbacks);
 
