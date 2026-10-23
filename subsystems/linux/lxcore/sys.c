@@ -87,6 +87,11 @@ LxSysCall(
 
         Call->Thread->CurrentSyscall = Call->Number;
         RtlCopyMemory(Call->Thread->CurrentArgs, Call->Args, sizeof(Call->Args));
+        if (Trace > 1)
+        {
+            DbgPrint("lx %lu/%lu -> %s(0x%llx, 0x%llx, 0x%llx, 0x%llx)\n", Call->Process->Pid, Call->Thread->Tid,
+                     (Entry->Name != NULL) ? Entry->Name : "?", Call->Args[0], Call->Args[1], Call->Args[2], Call->Args[3]);
+        }
         Start = (LONG64)KeQueryInterruptTime();
         Result = Entry->Handler(Call);
         Call->Thread->CurrentSyscall = MAXULONG;

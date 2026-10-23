@@ -5,6 +5,7 @@ list(APPEND SOURCE
     fdobj.c
     file.c
     fs.c
+    inet.c
     mm.c
     pipe.c
     poll.c

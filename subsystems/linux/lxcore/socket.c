@@ -456,7 +456,30 @@ BOOLEAN
 LxFileIsSocket(
     _In_ PLX_FILE File)
 {
-    return File->Ops == &LxUnixOps;
+    return (File->Ops == &LxUnixOps) || LxInetIsFile(File);
+}
+
+static
+PLX_FILE
+LxSocketFromFd(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG Fd,
+    _Out_ PLONG64 Error)
+{
+    PLX_FILE File = LxFdGet(Process, Fd);
+
+    *Error = 0;
+    if (File == NULL)
+    {
+        *Error = -LX_EBADF;
+    }
+    else if (!LxFileIsSocket(File))
+    {
+        LxFileDereference(File);
+        File = NULL;
+        *Error = -LX_ENOTSOCK;
+    }
+    return File;
 }
 
 LX_SYSCALL(LxSysSocket)
@@ -470,6 +493,8 @@ LX_SYSCALL(LxSysSocket)
 
     if (Flags & ~(LX_SOCK_NONBLOCK | LX_SOCK_CLOEXEC))
         return -LX_EINVAL;
+    if ((Domain == LX_AF_INET) || (Domain == LX_AF_INET6))
+        return LxInetSocket(Call->Process, Domain, Type, (ULONG)Call->Args[2], Flags);
     if (Domain != LX_AF_UNIX)
         return -LX_EAFNOSUPPORT;
     if ((Type != LX_SOCK_STREAM) && (Type != LX_SOCK_DGRAM) && (Type != LX_SOCK_SEQPACKET))
@@ -818,10 +843,20 @@ LxUnixBindAddress(
 
 LX_SYSCALL(LxSysBind)
 {
+    PLX_FILE InetFile;
+    LONG64 InetResult;
     LX_UNIX_ADDRESS Address;
     PLX_UNIX_SOCKET Socket;
     PLX_FILE File;
     LONG64 Result;
+
+    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    if (InetFile != NULL)
+    {
+        InetResult = LxInetBind(Call, InetFile);
+        LxFileDereference(InetFile);
+        return InetResult;
+    }
 
     Socket = LxUnixFromFd(Call->Process, (LONG)Call->Args[0], &File, &Result);
     if (Socket == NULL)
@@ -841,10 +876,20 @@ LX_SYSCALL(LxSysBind)
 
 LX_SYSCALL(LxSysListen)
 {
+    PLX_FILE InetFile;
+    LONG64 InetResult;
     PLX_UNIX_SOCKET Socket;
     PLX_FILE File;
     LONG64 Result;
     LONG Backlog = (LONG)Call->Args[1];
+
+    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    if (InetFile != NULL)
+    {
+        InetResult = LxInetListen(Call, InetFile);
+        LxFileDereference(InetFile);
+        return InetResult;
+    }
 
     Socket = LxUnixFromFd(Call->Process, (LONG)Call->Args[0], &File, &Result);
     if (Socket == NULL)
@@ -962,10 +1007,20 @@ LxUnixConnectStream(
 
 LX_SYSCALL(LxSysConnect)
 {
+    PLX_FILE InetFile;
+    LONG64 InetResult;
     LX_UNIX_ADDRESS Address;
     PLX_UNIX_SOCKET Socket, Target;
     PLX_FILE File;
     LONG64 Result;
+
+    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    if (InetFile != NULL)
+    {
+        InetResult = LxInetConnect(Call, InetFile);
+        LxFileDereference(InetFile);
+        return InetResult;
+    }
 
     Socket = LxUnixFromFd(Call->Process, (LONG)Call->Args[0], &File, &Result);
     if (Socket == NULL)
@@ -1142,12 +1197,26 @@ LxUnixAccept(
 
 LX_SYSCALL(LxSysAccept)
 {
-    return LxUnixAccept(Call, 0);
+    PLX_FILE InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    LONG64 Result;
+
+    if (InetFile == NULL)
+        return LxUnixAccept(Call, 0);
+    Result = LxInetAccept(Call, InetFile, 0);
+    LxFileDereference(InetFile);
+    return Result;
 }
 
 LX_SYSCALL(LxSysAccept4)
 {
-    return LxUnixAccept(Call, (ULONG)Call->Args[3]);
+    PLX_FILE InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    LONG64 Result;
+
+    if (InetFile == NULL)
+        return LxUnixAccept(Call, (ULONG)Call->Args[3]);
+    Result = LxInetAccept(Call, InetFile, (ULONG)Call->Args[3]);
+    LxFileDereference(InetFile);
+    return Result;
 }
 
 static
@@ -1189,17 +1258,30 @@ LxUnixName(
 
 LX_SYSCALL(LxSysGetsockname)
 {
-    return LxUnixName(Call, FALSE);
+    PLX_FILE InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    LONG64 Result;
+
+    if (InetFile == NULL)
+        return LxUnixName(Call, FALSE);
+    Result = LxInetName(Call, InetFile, FALSE);
+    LxFileDereference(InetFile);
+    return Result;
 }
 
 LX_SYSCALL(LxSysGetpeername)
 {
-    return LxUnixName(Call, TRUE);
+    PLX_FILE InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    LONG64 Result;
+
+    if (InetFile == NULL)
+        return LxUnixName(Call, TRUE);
+    Result = LxInetName(Call, InetFile, TRUE);
+    LxFileDereference(InetFile);
+    return Result;
 }
 
-static
 LONG64
-LxUnixGatherIov(
+LxSocketGatherIov(
     _In_ PLX_MSGHDR Header,
     _In_ BOOLEAN KernelIov,
     _Out_ PLX_IOVEC *Vectors,
@@ -1246,9 +1328,8 @@ LxUnixGatherIov(
     return 0;
 }
 
-static
 LONG64
-LxUnixCopyIn(
+LxSocketCopyIn(
     _In_reads_(Count) PLX_IOVEC Vectors,
     _In_ ULONG64 Count,
     _In_ ULONG64 Skip,
@@ -1277,9 +1358,8 @@ LxUnixCopyIn(
     return 0;
 }
 
-static
 LONG64
-LxUnixCopyOut(
+LxSocketCopyOut(
     _In_reads_(Count) PLX_IOVEC Vectors,
     _In_ ULONG64 Count,
     _In_ ULONG64 Skip,
@@ -1459,6 +1539,9 @@ LxUnixSendInternal(
 {
     PLX_UNIX_SOCKET Socket = File->Object, Target = NULL;
     BOOLEAN NoSignal = (Flags != MAXULONG) && (Flags & LX_MSG_NOSIGNAL);
+
+    if (File->Ops != &LxUnixOps)
+        return LxInetSendmsg(File, Header, KernelIov, (Flags == MAXULONG) ? 0 : Flags);
     BOOLEAN NonBlock = (File->Flags & LX_O_NONBLOCK) || ((Flags != MAXULONG) && (Flags & LX_MSG_DONTWAIT));
     PLX_IOVEC Vectors;
     ULONG64 Total, Sent = 0;
@@ -1467,7 +1550,7 @@ LxUnixSendInternal(
     LX_UCRED Cred;
     LONG64 Result;
 
-    Result = LxUnixGatherIov(Header, KernelIov, &Vectors, &Total);
+    Result = LxSocketGatherIov(Header, KernelIov, &Vectors, &Total);
     if (Result != 0)
         return Result;
 
@@ -1574,7 +1657,7 @@ LxUnixSendInternal(
             Result = -LX_ENOMEM;
             goto Exit;
         }
-        Result = LxUnixCopyIn(Vectors, Header->IovLength, Sent, Message->Data, Chunk);
+        Result = LxSocketCopyIn(Vectors, Header->IovLength, Sent, Message->Data, Chunk);
         if (Result != 0)
         {
             LxFree(Message);
@@ -1731,6 +1814,9 @@ LxUnixRecvInternal(
     PLX_UNIX_SOCKET Socket = File->Object;
     ULONG Options = (Flags == MAXULONG) ? 0 : Flags;
     BOOLEAN NonBlock = (File->Flags & LX_O_NONBLOCK) || (Options & LX_MSG_DONTWAIT);
+
+    if (File->Ops != &LxUnixOps)
+        return LxInetRecvmsg(File, Header, KernelIov, Options);
     BOOLEAN Peek = (Options & LX_MSG_PEEK) != 0;
     PLX_IOVEC Vectors;
     ULONG64 Total, Done = 0;
@@ -1738,7 +1824,7 @@ LxUnixRecvInternal(
     LONG64 Result;
     LARGE_INTEGER Timeout;
 
-    Result = LxUnixGatherIov(Header, KernelIov, &Vectors, &Total);
+    Result = LxSocketGatherIov(Header, KernelIov, &Vectors, &Total);
     if (Result != 0)
         return Result;
 
@@ -1768,7 +1854,7 @@ LxUnixRecvInternal(
                     LxUnixUnlock(Socket);
                     break;
                 }
-                Result = LxUnixCopyOut(Vectors, Header->IovLength, Done, Message->Data + Message->Offset, Chunk);
+                Result = LxSocketCopyOut(Vectors, Header->IovLength, Done, Message->Data + Message->Offset, Chunk);
                 if (Result != 0)
                 {
                     LxUnixUnlock(Socket);
@@ -1831,7 +1917,7 @@ LxUnixRecvInternal(
             }
             LxUnixUnlock(Socket);
 
-            Result = LxUnixCopyOut(Vectors, Header->IovLength, 0, Message->Data, (ULONG)min(Message->Length, Total));
+            Result = LxSocketCopyOut(Vectors, Header->IovLength, 0, Message->Data, (ULONG)min(Message->Length, Total));
             if ((Result == 0) && (Message->Length > Total))
                 OutFlags |= LX_MSG_TRUNC;
             if ((Result == 0) && (Header->Name != 0))
@@ -1937,7 +2023,8 @@ LX_SYSCALL(LxSysSendmsg)
     PLX_FILE File;
     LONG64 Result;
 
-    if (LxUnixFromFd(Call->Process, (LONG)Call->Args[0], &File, &Result) == NULL)
+    File = LxSocketFromFd(Call->Process, (LONG)Call->Args[0], &Result);
+    if (File == NULL)
         return Result;
     Result = LxUnixSendmsgOne(Call, File, Call->Args[1], (ULONG)Call->Args[2]);
     LxFileDereference(File);
@@ -1949,7 +2036,8 @@ LX_SYSCALL(LxSysRecvmsg)
     PLX_FILE File;
     LONG64 Result;
 
-    if (LxUnixFromFd(Call->Process, (LONG)Call->Args[0], &File, &Result) == NULL)
+    File = LxSocketFromFd(Call->Process, (LONG)Call->Args[0], &Result);
+    if (File == NULL)
         return Result;
     Result = LxUnixRecvmsgOne(Call, File, Call->Args[1], (ULONG)Call->Args[2]);
     LxFileDereference(File);
@@ -1963,7 +2051,8 @@ LX_SYSCALL(LxSysSendto)
     LX_IOVEC Vector;
     LONG64 Result;
 
-    if (LxUnixFromFd(Call->Process, (LONG)Call->Args[0], &File, &Result) == NULL)
+    File = LxSocketFromFd(Call->Process, (LONG)Call->Args[0], &Result);
+    if (File == NULL)
         return Result;
     RtlZeroMemory(&Header, sizeof(Header));
     Vector.Base = Call->Args[1];
@@ -1985,7 +2074,8 @@ LX_SYSCALL(LxSysRecvfrom)
     LONG64 Result, Copy;
     LONG Available = 0;
 
-    if (LxUnixFromFd(Call->Process, (LONG)Call->Args[0], &File, &Result) == NULL)
+    File = LxSocketFromFd(Call->Process, (LONG)Call->Args[0], &Result);
+    if (File == NULL)
         return Result;
     RtlZeroMemory(&Header, sizeof(Header));
     Vector.Base = Call->Args[1];
@@ -2020,7 +2110,8 @@ LX_SYSCALL(LxSysSendmmsg)
     ULONG Count = (ULONG)min(Call->Args[2], 1024), Index;
     LONG64 Result;
 
-    if (LxUnixFromFd(Call->Process, (LONG)Call->Args[0], &File, &Result) == NULL)
+    File = LxSocketFromFd(Call->Process, (LONG)Call->Args[0], &Result);
+    if (File == NULL)
         return Result;
     for (Index = 0; Index < Count; Index++)
     {
@@ -2046,7 +2137,8 @@ LX_SYSCALL(LxSysRecvmmsg)
     ULONG Flags = (ULONG)Call->Args[3];
     LONG64 Result;
 
-    if (LxUnixFromFd(Call->Process, (LONG)Call->Args[0], &File, &Result) == NULL)
+    File = LxSocketFromFd(Call->Process, (LONG)Call->Args[0], &Result);
+    if (File == NULL)
         return Result;
     for (Index = 0; Index < Count; Index++)
     {
@@ -2069,11 +2161,21 @@ LX_SYSCALL(LxSysRecvmmsg)
 
 LX_SYSCALL(LxSysShutdown)
 {
+    PLX_FILE InetFile;
+    LONG64 InetResult;
     PLX_UNIX_SOCKET Socket;
     PLX_FILE File;
     LONG64 Result;
     ULONG How = (ULONG)Call->Args[1];
     PLX_UNIX_SOCKET Peer;
+
+    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    if (InetFile != NULL)
+    {
+        InetResult = LxInetShutdown(Call, InetFile);
+        LxFileDereference(InetFile);
+        return InetResult;
+    }
 
     if (How > LX_SHUT_RDWR)
         return -LX_EINVAL;
@@ -2105,7 +2207,6 @@ LX_SYSCALL(LxSysShutdown)
     return 0;
 }
 
-static
 LONG64
 LxSockoptInt(
     _In_ ULONG64 Value,
@@ -2119,11 +2220,21 @@ LxSockoptInt(
 
 LX_SYSCALL(LxSysSetsockopt)
 {
+    PLX_FILE InetFile;
+    LONG64 InetResult;
     PLX_UNIX_SOCKET Socket;
     PLX_FILE File;
     LONG64 Result;
     LONG Value = 0;
     ULONG Level = (ULONG)Call->Args[1], Name = (ULONG)Call->Args[2];
+
+    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    if (InetFile != NULL)
+    {
+        InetResult = LxInetSetsockopt(Call, InetFile);
+        LxFileDereference(InetFile);
+        return InetResult;
+    }
 
     Socket = LxUnixFromFd(Call->Process, (LONG)Call->Args[0], &File, &Result);
     if (Socket == NULL)
@@ -2205,7 +2316,6 @@ LX_SYSCALL(LxSysSetsockopt)
     return Result;
 }
 
-static
 LONG64
 LxSockoptReturn(
     _In_ PLX_CALL Call,
@@ -2230,11 +2340,21 @@ LxSockoptReturn(
 
 LX_SYSCALL(LxSysGetsockopt)
 {
+    PLX_FILE InetFile;
+    LONG64 InetResult;
     PLX_UNIX_SOCKET Socket;
     PLX_FILE File;
     LONG64 Result;
     LONG Value;
     ULONG Level = (ULONG)Call->Args[1], Name = (ULONG)Call->Args[2];
+
+    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    if (InetFile != NULL)
+    {
+        InetResult = LxInetGetsockopt(Call, InetFile);
+        LxFileDereference(InetFile);
+        return InetResult;
+    }
 
     Socket = LxUnixFromFd(Call->Process, (LONG)Call->Args[0], &File, &Result);
     if (Socket == NULL)

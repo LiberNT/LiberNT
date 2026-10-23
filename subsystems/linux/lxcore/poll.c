@@ -44,6 +44,7 @@ typedef struct _LX_EPOLL_ITEM
 typedef struct _LX_POLL_WAITER
 {
     KEVENT Event;
+    ULONG Events;
 } LX_POLL_WAITER, *PLX_POLL_WAITER;
 
 static
@@ -203,7 +204,8 @@ LxPollWaiterNotify(
 {
     PLX_POLL_WAITER Waiter = Entry->Context;
 
-    UNREFERENCED_PARAMETER(Events);
+    if ((Waiter->Events != 0) && (Events != 0) && !(Events & (Waiter->Events | LX_POLLERR | LX_POLLHUP)))
+        return;
     KeSetEvent(&Waiter->Event, IO_NO_INCREMENT, FALSE);
 }
 
@@ -254,6 +256,7 @@ LxFileWait(
         return -LX_ENOMEM;
 
     KeInitializeEvent(&Wait->Waiter.Event, NotificationEvent, FALSE);
+    Wait->Waiter.Events = Events;
     Wait->Entry.Notify = LxPollWaiterNotify;
     Wait->Entry.Context = &Wait->Waiter;
     Mask = LxFilePoll(File, &Wait->Entry);
