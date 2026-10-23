@@ -189,6 +189,7 @@ DxgkpDisplayPublishInitialMode(
     PCWSTR Names[] = {L"DefaultSettings.XResolution", L"DefaultSettings.YResolution",
                       L"DefaultSettings.VRefresh"};
     ULONG Values[RTL_NUMBER_OF(Names)];
+    BOOLEAN Preferred;
 
     if (g_DisplayAdapter != Adapter || !g_DisplayInitialModePending ||
         (!Adapter->VidPnCommitted && !Adapter->HeadlessDesktop))
@@ -209,7 +210,8 @@ DxgkpDisplayPublishInitialMode(
     Status = ZwOpenKey(&Key, KEY_SET_VALUE, &Attributes);
     if (!NT_SUCCESS(Status))
         return;
-    if (!DxgkVidPnQueryMonitorPreferredMode(Adapter, &Values[0], &Values[1], &Values[2]))
+    Preferred = DxgkVidPnQueryMonitorPreferredMode(Adapter, &Values[0], &Values[1], &Values[2]);
+    if (!Preferred)
     {
         Values[0] = Current.DisplayMode.Width;
         Values[1] = Current.DisplayMode.Height;
@@ -222,7 +224,7 @@ DxgkpDisplayPublishInitialMode(
             break;
     }
     ZwClose(Key);
-    if (NT_SUCCESS(Status) && Adapter->VidPnCommitted)
+    if (NT_SUCCESS(Status) && Adapter->VidPnCommitted && Preferred)
         g_DisplayInitialModePending = FALSE;
 }
 
