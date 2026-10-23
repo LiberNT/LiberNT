@@ -314,7 +314,7 @@ PVOID LockRequest( PIRP Irp,
                 /* We're using a user-mode buffer directly */
                 if (LockMode != NULL)
                 {
-                    *LockMode = UserMode;
+                    *LockMode = Irp->RequestorMode;
                 }
             }
             else return NULL;
