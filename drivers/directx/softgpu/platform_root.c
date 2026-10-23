@@ -19,6 +19,7 @@
 #define SOFTGPU_VBE_PRESERVE_MEMORY     0x8000
 #define SOFTGPU_VBE_MIN_WIDTH           640UL
 #define SOFTGPU_VBE_MIN_HEIGHT          480UL
+#define SOFTGPU_VBE_MEMORY_BLOCK        0x10000ULL
 
 typedef struct _SOFTGPU_X86_BIOS_REGISTERS
 {
@@ -183,7 +184,7 @@ SoftGpuVbeAddMode(
         Height > SOFTGPU_MAX_DISPLAY_HEIGHT ||
         Pitch < Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL ||
         Pitch > SOFTGPU_MAX_DISPLAY_PITCH ||
-        (ULONGLONG)Pitch * Height > VideoMemorySize ||
+        (ULONGLONG)Pitch * Height >= VideoMemorySize + SOFTGPU_VBE_MEMORY_BLOCK ||
         Config->ModeCount >= SOFTGPU_MAX_DISPLAY_MODES)
     {
         return FALSE;
@@ -439,6 +440,11 @@ SoftGpuVbeQueryModes(
         {
             Config->CurrentMode = Index;
             Config->ScanoutSize = max(Config->ScanoutSize, VideoMemorySize);
+            for (Index = 0; Index < Config->ModeCount; Index++)
+            {
+                Config->ScanoutSize = max(Config->ScanoutSize,
+                                          (ULONGLONG)Config->Modes[Index].Pitch * Config->Modes[Index].Height);
+            }
             Config->SetMode = SoftGpuVbeSetMode;
             SoftGpuX86BiosCall = Call;
             DPRINT("SOFTGPU: VBE %x.%x offers %lu display modes\n",
@@ -667,7 +673,7 @@ SoftGpuVbeColdStart(
             Width > SOFTGPU_DEFAULT_WIDTH ||
             Height > SOFTGPU_DEFAULT_HEIGHT ||
             Pitch < Width * (BitsPerPixel / 8) ||
-            (ULONGLONG)Pitch * Height > VideoMemorySize)
+            (ULONGLONG)Pitch * Height >= VideoMemorySize + SOFTGPU_VBE_MEMORY_BLOCK)
         {
             continue;
         }
