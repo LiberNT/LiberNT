@@ -5,6 +5,7 @@
  *              Implements a configurable WDDM ABI miniport with a
  *              physical/software engine and a bounded system-RAM segment.
  * COPYRIGHT:   Copyright 2024 LiberNT WDDM Team
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  *
  * Target device: a platform provider supplies the adapter binding and
  * firmware-display contract; this file contains only the software engine.
@@ -914,13 +915,45 @@ SoftGpuValidatePlatformModes(
             Mode->Height > SOFTGPU_MAX_DISPLAY_HEIGHT ||
             Mode->Pitch < Mode->Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL ||
             Mode->Pitch > SOFTGPU_MAX_DISPLAY_PITCH ||
-            (ULONGLONG)Mode->Pitch * Mode->Height > Config->ScanoutSize)
+            (ULONGLONG)Mode->Pitch * Mode->Height > Config->ScanoutSize ||
+            Mode->AllocationSlabSize > SOFTGPU_MAX_ALLOCATION_SLAB_SIZE)
         {
             return FALSE;
         }
     }
 
     return TRUE;
+}
+
+static VOID
+SoftGpuDropUnbackedModes(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    ULONG Index;
+    ULONG Kept = 0;
+    ULONG CurrentMode = 0;
+
+    for (Index = 0; Index < Device->ModeCount; Index++)
+    {
+        if (Index != Device->CurrentMode &&
+            Device->Modes[Index].AllocationSlabSize > Device->FrameBufferSize)
+        {
+            continue;
+        }
+
+        if (Index == Device->CurrentMode)
+            CurrentMode = Kept;
+        Device->Modes[Kept++] = Device->Modes[Index];
+    }
+
+    if (Kept == Device->ModeCount)
+        return;
+
+    DPRINT1("SOFTGPU: %Iu-byte framebuffer backs %lu of %lu display modes\n",
+            Device->FrameBufferSize, Kept, Device->ModeCount);
+    Device->ModeCount = Kept;
+    Device->CurrentMode = CurrentMode;
+    Device->PreferredMode = CurrentMode;
 }
 
 /* =========================================================================
@@ -950,6 +983,8 @@ SoftGpuDdiStartDevice(
     KIRQL OldIrql;
     NTSTATUS Status;
     SIZE_T RequiredFrameBufferSize;
+    SIZE_T PreferredFrameBufferSize;
+    ULONG Index;
 
     UNREFERENCED_PARAMETER(DxgkStartInfo);
 
@@ -1016,6 +1051,13 @@ SoftGpuDdiStartDevice(
     RequiredFrameBufferSize = max(
         RequiredFrameBufferSize,
         PlatformConfig.MinimumAllocationSlabSize);
+    PreferredFrameBufferSize = RequiredFrameBufferSize;
+    for (Index = 0; Index < PlatformConfig.ModeCount; Index++)
+    {
+        PreferredFrameBufferSize = max(
+            PreferredFrameBufferSize,
+            PlatformConfig.Modes[Index].AllocationSlabSize);
+    }
 
     Device->Width = PlatformConfig.Width;
     Device->Height = PlatformConfig.Height;
@@ -1032,10 +1074,19 @@ SoftGpuDdiStartDevice(
 
     Status = SoftGpuAllocateFrameBuffer(
                  Device,
-                 RequiredFrameBufferSize,
+                 PreferredFrameBufferSize,
                  PlatformConfig.HighestFrameBufferAddress);
+    if (Status == STATUS_INSUFFICIENT_RESOURCES &&
+        PreferredFrameBufferSize > RequiredFrameBufferSize)
+    {
+        Status = SoftGpuAllocateFrameBuffer(
+                     Device,
+                     RequiredFrameBufferSize,
+                     PlatformConfig.HighestFrameBufferAddress);
+    }
     if (!NT_SUCCESS(Status))
         goto CleanupStart;
+    SoftGpuDropUnbackedModes(Device);
 
     Status = SoftGpuScanoutStart(Device, &PlatformConfig);
     if (!NT_SUCCESS(Status))

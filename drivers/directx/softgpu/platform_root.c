@@ -471,8 +471,6 @@ SoftGpuPlatformQueryStart(
     _Out_ PSOFTGPU_PLATFORM_CONFIG Config)
 {
     SIZE_T WorkingSetSize;
-    ULONG SlabWidth;
-    ULONG SlabHeight;
     ULONG Index;
     NTSTATUS Status;
 
@@ -572,16 +570,18 @@ SoftGpuPlatformQueryStart(
     if (Config->ScanoutPhysicalAddress.QuadPart != 0)
         SoftGpuVbeQueryModes(Config);
 
-    SlabWidth = Config->Width;
-    SlabHeight = Config->Height;
     for (Index = 0; Index < Config->ModeCount; Index++)
     {
-        if ((ULONGLONG)Config->Modes[Index].Width * Config->Modes[Index].Height >
-            (ULONGLONG)SlabWidth * SlabHeight)
-        {
-            SlabWidth = Config->Modes[Index].Width;
-            SlabHeight = Config->Modes[Index].Height;
-        }
+        Status = SoftGpu2dComputeAllocationSlabSize(
+                     Config->Modes[Index].Width,
+                     Config->Modes[Index].Height,
+                     SOFTGPU_ROOT_WORKING_SURFACE_COUNT,
+                     MAXULONG_PTR,
+                     &WorkingSetSize);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Config->Modes[Index].AllocationSlabSize =
+            min(WorkingSetSize, SOFTGPU_MAX_ALLOCATION_SLAB_SIZE);
     }
 
     /*
@@ -592,8 +592,8 @@ SoftGpuPlatformQueryStart(
      * contiguous allocation on either 32-bit or 64-bit systems.
      */
     Status = SoftGpu2dComputeAllocationSlabSize(
-                 SlabWidth,
-                 SlabHeight,
+                 Config->Width,
+                 Config->Height,
                  SOFTGPU_ROOT_WORKING_SURFACE_COUNT,
                  MAXULONG_PTR,
                  &WorkingSetSize);
