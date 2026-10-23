@@ -228,6 +228,13 @@ PIP_INTERFACE AddrLocateInterface(
 
     TcpipReleaseSpinLock(&InterfaceListLock, OldIrql);
 
+    if ((RetIF == NULL) && (MatchAddress->Type == IP_ADDRESS_V4) &&
+        ((MatchAddress->Address.IPv4Address & 0xFF) == 127) &&
+        (Loopback != NULL) && IPReferenceInterface(Loopback))
+    {
+        RetIF = Loopback;
+    }
+
     return RetIF;
 }
 
