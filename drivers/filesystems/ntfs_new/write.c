@@ -182,7 +182,6 @@ NtfsCachedWrite(_In_ PVolumeContextBlock VolCB,
         ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
         if (!FileCB->StreamCB ||
             FileCB->StreamCB->Deleted ||
-            ByteOffset->QuadPart > Header->ValidDataLength.QuadPart ||
             !NtfsGrowForCachedWrite(VolCB, FileCB, FileObj, EndOffset))
         {
             ExReleaseResourceLite(NtfsGetMainResource(FileCB));
@@ -390,7 +389,8 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
     else if (Length != 0 &&
              FileObj->SectionObjectPointer != NULL &&
-             FileObj->SectionObjectPointer->SharedCacheMap != NULL)
+             (FileObj->SectionObjectPointer->SharedCacheMap != NULL ||
+              FileObj->SectionObjectPointer->DataSectionObject != NULL))
     {
         IO_STATUS_BLOCK FlushStatus;
 
