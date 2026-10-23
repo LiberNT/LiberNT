@@ -3,6 +3,7 @@
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     VidPN (Video Present Network) topology management
  * COPYRIGHT:   Copyright 2024-2026 LiberNT WDDM Team
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  *
  * This file implements the VidPN manager subsystem for dxgkrnl.  It provides
  * the interface tables that miniport drivers (particularly DOD drivers like
@@ -3045,6 +3046,34 @@ DxgkpBuildHotPlugCandidate(
     return STATUS_SUCCESS;
 }
 
+static BOOLEAN
+DxgkpUnpinHotPlugCandidateModes(
+    _Inout_ PDXGKP_VIDPN VidPn)
+{
+    BOOLEAN Unpinned = FALSE;
+    SIZE_T Index;
+
+    for (Index = 0; Index < VidPn->NumPaths; Index++)
+    {
+        D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId = VidPn->Paths[Index].VidPnSourceId;
+        ULONG TargetIndex = DxgkVidPnTargetIndexFromId(VidPn, VidPn->Paths[Index].VidPnTargetId);
+
+        if (SourceId < DXGKP_MAX_SOURCES && VidPn->SourceModeSets[SourceId] != NULL &&
+            VidPn->SourceModeSets[SourceId]->PinnedModeId != (UINT)-1)
+        {
+            VidPn->SourceModeSets[SourceId]->PinnedModeId = (UINT)-1;
+            Unpinned = TRUE;
+        }
+        if (TargetIndex != MAXULONG && VidPn->TargetModeSets[TargetIndex] != NULL &&
+            VidPn->TargetModeSets[TargetIndex]->PinnedModeId != (UINT)-1)
+        {
+            VidPn->TargetModeSets[TargetIndex]->PinnedModeId = (UINT)-1;
+            Unpinned = TRUE;
+        }
+    }
+    return Unpinned;
+}
+
 /*
  * Wire the connected output to a source when the miniport recommended nothing.
  *
@@ -3640,6 +3669,13 @@ DxgkpVidPnRebuildForHotPlugGeneration(
         DXGKRNL_WARN("DxgkVidPnRebuildForHotPlug: %Iu-path topology refused 0x%08lX; "
                      "driving the desktop output alone\n", CandidateObject->NumPaths, Status);
         CandidateObject->NumPaths = 1;
+        Status = DxgkpDisplayCommitVidPnCandidate(Adapter, Candidate, &CommitResult);
+    }
+    if (Status == STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY &&
+        DxgkpUnpinHotPlugCandidateModes(CandidateObject))
+    {
+        DXGKRNL_WARN("DxgkVidPnRebuildForHotPlug: the adapter refused the pinned modes; "
+                     "committing a mode the adapter offers\n");
         Status = DxgkpDisplayCommitVidPnCandidate(Adapter, Candidate, &CommitResult);
     }
     if (!NT_SUCCESS(Status))
