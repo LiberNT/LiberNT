@@ -497,6 +497,7 @@ LONG64 LxCopyStringFromUser(_In_ ULONG64 Source, _Out_ PSTR *String, _In_ SIZE_T
 NTSTATUS LxFillRandom(_Out_writes_bytes_(Length) PUCHAR Buffer, _In_ ULONG Length);
 VOID LxNtTimeToTimespec(_In_ LONG64 NtTime, _Out_ PLX_TIMESPEC Timespec);
 LONG64 LxTimespecToNtTime(_In_ PLX_TIMESPEC Timespec);
+LONG64 LxTimespecToNs(_In_ PLX_TIMESPEC Timespec);
 PLX_THREAD LxCurrentThread(VOID);
 
 VOID LxPollHeadInit(_Out_ PLX_POLL_HEAD Head);
@@ -531,8 +532,27 @@ LONG64 LxSocketCopyIn(_In_reads_(Count) PLX_IOVEC Vectors, _In_ ULONG64 Count, _
 LONG64 LxSocketCopyOut(_In_reads_(Count) PLX_IOVEC Vectors, _In_ ULONG64 Count, _In_ ULONG64 Skip, _In_reads_bytes_(Length) PUCHAR Buffer, _In_ ULONG Length);
 LONG64 LxSockoptInt(_In_ ULONG64 Value, _In_ ULONG64 Length, _Out_ PLONG Result);
 LONG64 LxSockoptReturn(_In_ PLX_CALL Call, _In_reads_bytes_(Length) const VOID *Value, _In_ ULONG Length);
+typedef struct _LX_SOCKET_OPS
+{
+    LONG64 (*Bind)(_In_ PLX_CALL Call, _In_ PLX_FILE File);
+    LONG64 (*Listen)(_In_ PLX_CALL Call, _In_ PLX_FILE File);
+    LONG64 (*Connect)(_In_ PLX_CALL Call, _In_ PLX_FILE File);
+    LONG64 (*Accept)(_In_ PLX_CALL Call, _In_ PLX_FILE File, _In_ ULONG Flags);
+    LONG64 (*Name)(_In_ PLX_CALL Call, _In_ PLX_FILE File, _In_ BOOLEAN Peer);
+    LONG64 (*Sendmsg)(_In_ PLX_FILE File, _In_ PLX_MSGHDR Header, _In_ BOOLEAN KernelIov, _In_ ULONG Flags);
+    LONG64 (*Recvmsg)(_In_ PLX_FILE File, _Inout_ PLX_MSGHDR Header, _In_ BOOLEAN KernelIov, _In_ ULONG Flags);
+    LONG64 (*Shutdown)(_In_ PLX_CALL Call, _In_ PLX_FILE File);
+    LONG64 (*Setsockopt)(_In_ PLX_CALL Call, _In_ PLX_FILE File);
+    LONG64 (*Getsockopt)(_In_ PLX_CALL Call, _In_ PLX_FILE File);
+} LX_SOCKET_OPS, *PLX_SOCKET_OPS;
+
+extern const LX_SOCKET_OPS LxInetSocketOps;
+extern const LX_SOCKET_OPS LxNetlinkSocketOps;
+
 LONG64 LxInetSocket(_In_ PLX_PROCESS Process, _In_ ULONG Family, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
-PLX_FILE LxInetFromFd(_In_ PLX_PROCESS Process, _In_ LONG Fd);
+LONG64 LxNetlinkSocket(_In_ PLX_PROCESS Process, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
+BOOLEAN LxNetlinkIsFile(_In_ PLX_FILE File);
+ULONG LxNetlinkAddressIndex(_In_ ULONG Address);
 BOOLEAN LxInetIsFile(_In_ PLX_FILE File);
 LONG64 LxInetBind(_In_ PLX_CALL Call, _In_ PLX_FILE File);
 LONG64 LxInetListen(_In_ PLX_CALL Call, _In_ PLX_FILE File);

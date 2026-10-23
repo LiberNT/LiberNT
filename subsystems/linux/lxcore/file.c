@@ -49,6 +49,15 @@ LxTimespecToNtTime(
     return Timespec->Seconds * 10000000 + Timespec->Nanoseconds / 100 + LX_UNIX_EPOCH_100NS;
 }
 
+LONG64
+LxTimespecToNs(
+    _In_ PLX_TIMESPEC Timespec)
+{
+    if (Timespec->Seconds >= MAXLONG64 / 1000000000LL - 1)
+        return MAXLONG64;
+    return Timespec->Seconds * 1000000000LL + Timespec->Nanoseconds;
+}
+
 NTSTATUS
 LxFillRandom(
     _Out_writes_bytes_(Length) PUCHAR Buffer,

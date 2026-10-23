@@ -370,8 +370,10 @@ LxPollCore(
 
     if (Timeout != NULL)
     {
+        LONG64 Ns = LxTimespecToNs(Timeout);
+
         Now.QuadPart = (LONG64)KeQueryInterruptTime();
-        Deadline.QuadPart = Now.QuadPart + Timeout->Seconds * 10000000 + Timeout->Nanoseconds / 100;
+        Deadline.QuadPart = (Ns / 100 >= MAXLONGLONG - Now.QuadPart) ? MAXLONGLONG : Now.QuadPart + Ns / 100;
     }
     else
     {

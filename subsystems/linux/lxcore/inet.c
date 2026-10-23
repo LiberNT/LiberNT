@@ -55,6 +55,8 @@ typedef struct _LX_INET_SOCKET
     volatile LONG Error;
     ULONG PeerAddress;
     USHORT PeerPort;
+    ULONG BoundAddress;
+    ULONG BoundIndex;
     LONG64 RecvTimeout;
     LONG64 SendTimeout;
     ULONG OptionCount;
@@ -81,6 +83,7 @@ typedef struct _LX_INET_SELECT
 
 static volatile LONG64 LxInetInode = 0x400000;
 
+static PLX_INET_OPTION LxInetFindOption(_In_ PLX_INET_SOCKET Socket, _In_ ULONG Level, _In_ ULONG Name);
 static LONG64 LxInetRead(_In_ PLX_FILE File, _In_ ULONG64 Buffer, _In_ ULONG64 Length, _Inout_opt_ PLONG64 Offset);
 static LONG64 LxInetWrite(_In_ PLX_FILE File, _In_ ULONG64 Buffer, _In_ ULONG64 Length, _Inout_opt_ PLONG64 Offset);
 static LONG64 LxInetIoctl(_In_ PLX_FILE File, _In_ ULONG Request, _In_ ULONG64 Argument);
@@ -865,21 +868,6 @@ LxInetIsFile(
     return File->Ops == &LxInetOps;
 }
 
-PLX_FILE
-LxInetFromFd(
-    _In_ PLX_PROCESS Process,
-    _In_ LONG Fd)
-{
-    PLX_FILE File = LxFdGet(Process, Fd);
-
-    if ((File != NULL) && (File->Ops != &LxInetOps))
-    {
-        LxFileDereference(File);
-        return NULL;
-    }
-    return File;
-}
-
 static
 LONG
 LxInetBindAddress(
@@ -898,6 +886,8 @@ LxInetBindAddress(
     if (!NT_SUCCESS(Status))
         return -LxInetErrno(Status);
     Socket->State = LX_INET_BOUND;
+    Socket->BoundAddress = Address;
+    Socket->BoundIndex = (Address != 0) ? LxNetlinkAddressIndex(Address) : 0;
     return 0;
 }
 
@@ -1315,6 +1305,54 @@ LxInetSendmsg(
     return Result;
 }
 
+static
+LONG64
+LxInetDeliverPktinfo(
+    _In_ PLX_INET_SOCKET Socket,
+    _Inout_ PLX_MSGHDR Header)
+{
+    PLX_INET_OPTION Option;
+    struct
+    {
+        ULONG64 Length;
+        LONG Level;
+        LONG Type;
+        LONG Index;
+        ULONG SpecificDestination;
+        ULONG Address;
+        ULONG Pad;
+    } Message;
+    ULONG64 Available = Header->ControlLength;
+    LONG64 Result;
+
+    Header->ControlLength = 0;
+    if ((Socket->Type != LX_SOCK_DGRAM) || (Socket->Family != LX_AF_INET) ||
+        (Socket->BoundAddress == 0) || (Header->Control == 0))
+    {
+        return 0;
+    }
+    Option = LxInetFindOption(Socket, LX_IPPROTO_IP, LX_IP_PKTINFO);
+    if ((Option == NULL) || (Option->Value == 0))
+        return 0;
+    if (Available < sizeof(Message))
+    {
+        Header->Flags |= LX_MSG_CTRUNC;
+        return 0;
+    }
+
+    RtlZeroMemory(&Message, sizeof(Message));
+    Message.Length = sizeof(LX_CMSGHDR) + 3 * sizeof(ULONG);
+    Message.Level = LX_IPPROTO_IP;
+    Message.Type = LX_IP_PKTINFO;
+    Message.Index = (LONG)Socket->BoundIndex;
+    Message.SpecificDestination = Socket->BoundAddress;
+    Message.Address = Socket->BoundAddress;
+    Result = LxCopyToUser(Header->Control, &Message, sizeof(Message));
+    if (Result == 0)
+        Header->ControlLength = sizeof(Message);
+    return Result;
+}
+
 LONG64
 LxInetRecvmsg(
     _In_ PLX_FILE File,
@@ -1385,8 +1423,13 @@ LxInetRecvmsg(
     LxFree(Vectors);
 
     Header->Flags = Truncated ? LX_MSG_TRUNC : 0;
-    Header->ControlLength = 0;
     if ((Done == 0) && (Result != 0))
+    {
+        Header->ControlLength = 0;
+        return Result;
+    }
+    Result = LxInetDeliverPktinfo(Socket, Header);
+    if (Result != 0)
         return Result;
     if ((Header->Name != 0) && (Header->NameLength > 0))
     {
@@ -1492,6 +1535,9 @@ LxInetKnownOption(
                 case LX_SO_PRIORITY:
                 case LX_SO_REUSEPORT:
                 case LX_SO_TIMESTAMP:
+                case LX_SO_TIMESTAMPNS:
+                case LX_SO_MARK:
+                case LX_SO_BINDTOIFINDEX:
                 case LX_SO_PASSCRED:
                 case LX_SO_PASSSEC:
                     return TRUE;
@@ -1552,6 +1598,10 @@ LxInetKnownOption(
                 case LX_IP_RECVTOS:
                 case LX_IP_FREEBIND:
                 case LX_IP_BIND_ADDRESS_NO_PORT:
+                case LX_IP_TRANSPARENT:
+                case LX_IP_RECVFRAGSIZE:
+                case LX_IP_MULTICAST_ALL:
+                case LX_IP_UNICAST_IF:
                     return TRUE;
             }
             return FALSE;
@@ -1573,6 +1623,11 @@ LxInetKnownOption(
                 case LX_IPV6_RECVERR:
                 case LX_IPV6_RECVPKTINFO:
                 case LX_IPV6_TCLASS:
+                case LX_IPV6_RECVHOPLIMIT:
+                case LX_IPV6_RECVTCLASS:
+                case LX_IPV6_UNICAST_IF:
+                case LX_IPV6_RECVFRAGSIZE:
+                case LX_IPV6_FREEBIND:
                     return TRUE;
             }
             return FALSE;
@@ -1640,7 +1695,10 @@ LxInetSetsockopt(
         return 0;
 
     if (!LxInetKnownOption(Socket, Level, Name, &Default))
+    {
+        DPRINT1("Linux socket option level %lu name %lu is not supported\n", Level, Name);
         return -LX_ENOPROTOOPT;
+    }
     Result = LxSockoptInt(Call->Args[3], Call->Args[4], &Value);
     if (Result != 0)
         return Result;
@@ -1716,7 +1774,10 @@ LxInetGetsockopt(
     }
 
     if (!LxInetKnownOption(Socket, Level, Name, &Default))
+    {
+        DPRINT1("Linux socket option level %lu name %lu cannot be read\n", Level, Name);
         return -LX_ENOPROTOOPT;
+    }
     LxInetLock(Socket);
     Option = LxInetFindOption(Socket, Level, Name);
     Value = (Option != NULL) ? Option->Value : Default;
@@ -1880,3 +1941,17 @@ LxInetRelease(
     ZwClose(Handle);
     LxInetDereference(Socket);
 }
+
+const LX_SOCKET_OPS LxInetSocketOps =
+{
+    LxInetBind,
+    LxInetListen,
+    LxInetConnect,
+    LxInetAccept,
+    LxInetName,
+    LxInetSendmsg,
+    LxInetRecvmsg,
+    LxInetShutdown,
+    LxInetSetsockopt,
+    LxInetGetsockopt
+};

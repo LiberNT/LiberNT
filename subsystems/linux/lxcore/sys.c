@@ -2534,12 +2534,17 @@ LX_SYSCALL(LxSysTimerSettime)
 
     LxPosixTimerCurrent(Timer, &Old);
     KeCancelTimer(&Timer->Timer);
-    Due = New.Value.Seconds * 1000000000LL + New.Value.Nanoseconds;
-    Interval = New.Interval.Seconds * 1000000000LL + New.Interval.Nanoseconds;
+    Due = LxTimespecToNs(&New.Value);
+    Interval = LxTimespecToNs(&New.Interval);
     Now = LxClockNow(Timer->Clock);
     Timer->IntervalNs = (Due != 0) ? Interval : 0;
-    Timer->DueNs = (Due == 0) ? 0 : ((Call->Args[1] & LX_TFD_TIMER_ABSTIME) ? Due : Now + Due);
-    if (Timer->DueNs != 0)
+    if (Due == 0)
+        Timer->DueNs = 0;
+    else if (Call->Args[1] & LX_TFD_TIMER_ABSTIME)
+        Timer->DueNs = Due;
+    else
+        Timer->DueNs = (Due >= MAXLONG64 - Now) ? MAXLONG64 : Now + Due;
+    if ((Timer->DueNs != 0) && (Timer->DueNs != MAXLONG64))
     {
         LONG64 Relative = Timer->DueNs - Now;
 

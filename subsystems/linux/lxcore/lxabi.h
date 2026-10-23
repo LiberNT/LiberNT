@@ -630,6 +630,10 @@ typedef struct _LX_WINSIZE
 #define LX_IP_RECVTTL       12
 #define LX_IP_RECVTOS       13
 #define LX_IP_FREEBIND      15
+#define LX_IP_TRANSPARENT   19
+#define LX_IP_RECVFRAGSIZE  25
+#define LX_IP_MULTICAST_ALL 49
+#define LX_IP_UNICAST_IF    50
 #define LX_IP_BIND_ADDRESS_NO_PORT 24
 #define LX_IP_MULTICAST_IF  32
 #define LX_IP_MULTICAST_TTL 33
@@ -645,6 +649,12 @@ typedef struct _LX_WINSIZE
 #define LX_IPV6_RECVERR     25
 #define LX_IPV6_V6ONLY      26
 #define LX_IPV6_RECVPKTINFO 49
+#define LX_IPV6_PKTINFO     50
+#define LX_IPV6_RECVHOPLIMIT 51
+#define LX_IPV6_RECVTCLASS  66
+#define LX_IPV6_UNICAST_IF  76
+#define LX_IPV6_RECVFRAGSIZE 77
+#define LX_IPV6_FREEBIND    78
 #define LX_IPV6_TCLASS      67
 #define LX_TCP_NODELAY      1
 #define LX_TCP_MAXSEG       2
@@ -699,6 +709,9 @@ typedef struct _LX_SOCKADDR_IN6
 #define LX_SO_RCVTIMEO_OLD  20
 #define LX_SO_SNDTIMEO_OLD  21
 #define LX_SO_TIMESTAMP     29
+#define LX_SO_TIMESTAMPNS   35
+#define LX_SO_MARK          36
+#define LX_SO_BINDTOIFINDEX 62
 #define LX_SO_ACCEPTCONN    30
 #define LX_SO_PEERSEC       31
 #define LX_SO_SNDBUFFORCE   32

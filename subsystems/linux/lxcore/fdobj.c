@@ -494,8 +494,8 @@ LX_SYSCALL(LxSysTimerfdSettime)
     LxTimerfdCurrent(Timer, &Old);
     KeCancelTimer(&Timer->Timer);
 
-    Due = New.Value.Seconds * 1000000000LL + New.Value.Nanoseconds;
-    Interval = New.Interval.Seconds * 1000000000LL + New.Interval.Nanoseconds;
+    Due = LxTimespecToNs(&New.Value);
+    Interval = LxTimespecToNs(&New.Interval);
     Now = LxClockNs(Timer->Clock);
 
     KeAcquireSpinLock(&Timer->Lock, &Irql);
@@ -503,12 +503,14 @@ LX_SYSCALL(LxSysTimerfdSettime)
     Timer->IntervalNs = (Due != 0) ? Interval : 0;
     if (Due == 0)
         Timer->DueNs = 0;
+    else if ((Flags & LX_TFD_TIMER_ABSTIME) || (Due >= MAXLONG64 - Now))
+        Timer->DueNs = (Flags & LX_TFD_TIMER_ABSTIME) ? Due : MAXLONG64;
     else
-        Timer->DueNs = (Flags & LX_TFD_TIMER_ABSTIME) ? Due : Now + Due;
+        Timer->DueNs = Now + Due;
     Due = Timer->DueNs;
     KeReleaseSpinLock(&Timer->Lock, Irql);
 
-    if (Due != 0)
+    if ((Due != 0) && (Due != MAXLONG64))
     {
         LONG64 Relative = Due - Now;
         LONG Period = 0;

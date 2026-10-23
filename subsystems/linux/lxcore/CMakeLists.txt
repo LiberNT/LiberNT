@@ -6,6 +6,7 @@ list(APPEND SOURCE
     file.c
     fs.c
     inet.c
+    netlink.c
     mm.c
     pipe.c
     poll.c

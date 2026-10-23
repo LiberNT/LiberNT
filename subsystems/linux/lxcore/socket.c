@@ -452,11 +452,46 @@ LxUnixFromFd(
     return (*File)->Object;
 }
 
+static const LX_SOCKET_OPS *LxSocketFamily(_In_ PLX_FILE File);
+
 BOOLEAN
 LxFileIsSocket(
     _In_ PLX_FILE File)
 {
-    return (File->Ops == &LxUnixOps) || LxInetIsFile(File);
+    return (File->Ops == &LxUnixOps) || (LxSocketFamily(File) != NULL);
+}
+
+static
+const LX_SOCKET_OPS *
+LxSocketFamily(
+    _In_ PLX_FILE File)
+{
+    if (LxInetIsFile(File))
+        return &LxInetSocketOps;
+    if (LxNetlinkIsFile(File))
+        return &LxNetlinkSocketOps;
+    return NULL;
+}
+
+static
+const LX_SOCKET_OPS *
+LxSocketFamilyFromFd(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG Fd,
+    _Out_ PLX_FILE *File)
+{
+    const LX_SOCKET_OPS *Family;
+
+    *File = LxFdGet(Process, Fd);
+    if (*File == NULL)
+        return NULL;
+    Family = LxSocketFamily(*File);
+    if (Family == NULL)
+    {
+        LxFileDereference(*File);
+        *File = NULL;
+    }
+    return Family;
 }
 
 static
@@ -495,6 +530,8 @@ LX_SYSCALL(LxSysSocket)
         return -LX_EINVAL;
     if ((Domain == LX_AF_INET) || (Domain == LX_AF_INET6))
         return LxInetSocket(Call->Process, Domain, Type, (ULONG)Call->Args[2], Flags);
+    if (Domain == LX_AF_NETLINK)
+        return LxNetlinkSocket(Call->Process, Type, (ULONG)Call->Args[2], Flags);
     if (Domain != LX_AF_UNIX)
         return -LX_EAFNOSUPPORT;
     if ((Type != LX_SOCK_STREAM) && (Type != LX_SOCK_DGRAM) && (Type != LX_SOCK_SEQPACKET))
@@ -843,6 +880,7 @@ LxUnixBindAddress(
 
 LX_SYSCALL(LxSysBind)
 {
+    const LX_SOCKET_OPS *Family;
     PLX_FILE InetFile;
     LONG64 InetResult;
     LX_UNIX_ADDRESS Address;
@@ -850,10 +888,10 @@ LX_SYSCALL(LxSysBind)
     PLX_FILE File;
     LONG64 Result;
 
-    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
-    if (InetFile != NULL)
+    Family = LxSocketFamilyFromFd(Call->Process, (LONG)Call->Args[0], &InetFile);
+    if (Family != NULL)
     {
-        InetResult = LxInetBind(Call, InetFile);
+        InetResult = Family->Bind(Call, InetFile);
         LxFileDereference(InetFile);
         return InetResult;
     }
@@ -876,6 +914,7 @@ LX_SYSCALL(LxSysBind)
 
 LX_SYSCALL(LxSysListen)
 {
+    const LX_SOCKET_OPS *Family;
     PLX_FILE InetFile;
     LONG64 InetResult;
     PLX_UNIX_SOCKET Socket;
@@ -883,10 +922,10 @@ LX_SYSCALL(LxSysListen)
     LONG64 Result;
     LONG Backlog = (LONG)Call->Args[1];
 
-    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
-    if (InetFile != NULL)
+    Family = LxSocketFamilyFromFd(Call->Process, (LONG)Call->Args[0], &InetFile);
+    if (Family != NULL)
     {
-        InetResult = LxInetListen(Call, InetFile);
+        InetResult = Family->Listen(Call, InetFile);
         LxFileDereference(InetFile);
         return InetResult;
     }
@@ -1007,6 +1046,7 @@ LxUnixConnectStream(
 
 LX_SYSCALL(LxSysConnect)
 {
+    const LX_SOCKET_OPS *Family;
     PLX_FILE InetFile;
     LONG64 InetResult;
     LX_UNIX_ADDRESS Address;
@@ -1014,10 +1054,10 @@ LX_SYSCALL(LxSysConnect)
     PLX_FILE File;
     LONG64 Result;
 
-    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
-    if (InetFile != NULL)
+    Family = LxSocketFamilyFromFd(Call->Process, (LONG)Call->Args[0], &InetFile);
+    if (Family != NULL)
     {
-        InetResult = LxInetConnect(Call, InetFile);
+        InetResult = Family->Connect(Call, InetFile);
         LxFileDereference(InetFile);
         return InetResult;
     }
@@ -1197,24 +1237,26 @@ LxUnixAccept(
 
 LX_SYSCALL(LxSysAccept)
 {
-    PLX_FILE InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    PLX_FILE InetFile;
+    const LX_SOCKET_OPS *Family = LxSocketFamilyFromFd(Call->Process, (LONG)Call->Args[0], &InetFile);
     LONG64 Result;
 
-    if (InetFile == NULL)
+    if (Family == NULL)
         return LxUnixAccept(Call, 0);
-    Result = LxInetAccept(Call, InetFile, 0);
+    Result = Family->Accept(Call, InetFile, 0);
     LxFileDereference(InetFile);
     return Result;
 }
 
 LX_SYSCALL(LxSysAccept4)
 {
-    PLX_FILE InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    PLX_FILE InetFile;
+    const LX_SOCKET_OPS *Family = LxSocketFamilyFromFd(Call->Process, (LONG)Call->Args[0], &InetFile);
     LONG64 Result;
 
-    if (InetFile == NULL)
+    if (Family == NULL)
         return LxUnixAccept(Call, (ULONG)Call->Args[3]);
-    Result = LxInetAccept(Call, InetFile, (ULONG)Call->Args[3]);
+    Result = Family->Accept(Call, InetFile, (ULONG)Call->Args[3]);
     LxFileDereference(InetFile);
     return Result;
 }
@@ -1258,24 +1300,26 @@ LxUnixName(
 
 LX_SYSCALL(LxSysGetsockname)
 {
-    PLX_FILE InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    PLX_FILE InetFile;
+    const LX_SOCKET_OPS *Family = LxSocketFamilyFromFd(Call->Process, (LONG)Call->Args[0], &InetFile);
     LONG64 Result;
 
-    if (InetFile == NULL)
+    if (Family == NULL)
         return LxUnixName(Call, FALSE);
-    Result = LxInetName(Call, InetFile, FALSE);
+    Result = Family->Name(Call, InetFile, FALSE);
     LxFileDereference(InetFile);
     return Result;
 }
 
 LX_SYSCALL(LxSysGetpeername)
 {
-    PLX_FILE InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
+    PLX_FILE InetFile;
+    const LX_SOCKET_OPS *Family = LxSocketFamilyFromFd(Call->Process, (LONG)Call->Args[0], &InetFile);
     LONG64 Result;
 
-    if (InetFile == NULL)
+    if (Family == NULL)
         return LxUnixName(Call, TRUE);
-    Result = LxInetName(Call, InetFile, TRUE);
+    Result = Family->Name(Call, InetFile, TRUE);
     LxFileDereference(InetFile);
     return Result;
 }
@@ -1541,7 +1585,7 @@ LxUnixSendInternal(
     BOOLEAN NoSignal = (Flags != MAXULONG) && (Flags & LX_MSG_NOSIGNAL);
 
     if (File->Ops != &LxUnixOps)
-        return LxInetSendmsg(File, Header, KernelIov, (Flags == MAXULONG) ? 0 : Flags);
+        return LxSocketFamily(File)->Sendmsg(File, Header, KernelIov, (Flags == MAXULONG) ? 0 : Flags);
     BOOLEAN NonBlock = (File->Flags & LX_O_NONBLOCK) || ((Flags != MAXULONG) && (Flags & LX_MSG_DONTWAIT));
     PLX_IOVEC Vectors;
     ULONG64 Total, Sent = 0;
@@ -1816,7 +1860,7 @@ LxUnixRecvInternal(
     BOOLEAN NonBlock = (File->Flags & LX_O_NONBLOCK) || (Options & LX_MSG_DONTWAIT);
 
     if (File->Ops != &LxUnixOps)
-        return LxInetRecvmsg(File, Header, KernelIov, Options);
+        return LxSocketFamily(File)->Recvmsg(File, Header, KernelIov, Options);
     BOOLEAN Peek = (Options & LX_MSG_PEEK) != 0;
     PLX_IOVEC Vectors;
     ULONG64 Total, Done = 0;
@@ -2161,6 +2205,7 @@ LX_SYSCALL(LxSysRecvmmsg)
 
 LX_SYSCALL(LxSysShutdown)
 {
+    const LX_SOCKET_OPS *Family;
     PLX_FILE InetFile;
     LONG64 InetResult;
     PLX_UNIX_SOCKET Socket;
@@ -2169,10 +2214,10 @@ LX_SYSCALL(LxSysShutdown)
     ULONG How = (ULONG)Call->Args[1];
     PLX_UNIX_SOCKET Peer;
 
-    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
-    if (InetFile != NULL)
+    Family = LxSocketFamilyFromFd(Call->Process, (LONG)Call->Args[0], &InetFile);
+    if (Family != NULL)
     {
-        InetResult = LxInetShutdown(Call, InetFile);
+        InetResult = Family->Shutdown(Call, InetFile);
         LxFileDereference(InetFile);
         return InetResult;
     }
@@ -2220,6 +2265,7 @@ LxSockoptInt(
 
 LX_SYSCALL(LxSysSetsockopt)
 {
+    const LX_SOCKET_OPS *Family;
     PLX_FILE InetFile;
     LONG64 InetResult;
     PLX_UNIX_SOCKET Socket;
@@ -2228,10 +2274,10 @@ LX_SYSCALL(LxSysSetsockopt)
     LONG Value = 0;
     ULONG Level = (ULONG)Call->Args[1], Name = (ULONG)Call->Args[2];
 
-    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
-    if (InetFile != NULL)
+    Family = LxSocketFamilyFromFd(Call->Process, (LONG)Call->Args[0], &InetFile);
+    if (Family != NULL)
     {
-        InetResult = LxInetSetsockopt(Call, InetFile);
+        InetResult = Family->Setsockopt(Call, InetFile);
         LxFileDereference(InetFile);
         return InetResult;
     }
@@ -2340,6 +2386,7 @@ LxSockoptReturn(
 
 LX_SYSCALL(LxSysGetsockopt)
 {
+    const LX_SOCKET_OPS *Family;
     PLX_FILE InetFile;
     LONG64 InetResult;
     PLX_UNIX_SOCKET Socket;
@@ -2348,10 +2395,10 @@ LX_SYSCALL(LxSysGetsockopt)
     LONG Value;
     ULONG Level = (ULONG)Call->Args[1], Name = (ULONG)Call->Args[2];
 
-    InetFile = LxInetFromFd(Call->Process, (LONG)Call->Args[0]);
-    if (InetFile != NULL)
+    Family = LxSocketFamilyFromFd(Call->Process, (LONG)Call->Args[0], &InetFile);
+    if (Family != NULL)
     {
-        InetResult = LxInetGetsockopt(Call, InetFile);
+        InetResult = Family->Getsockopt(Call, InetFile);
         LxFileDereference(InetFile);
         return InetResult;
     }
