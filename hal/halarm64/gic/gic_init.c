@@ -547,10 +547,22 @@ HalpInitGicDistributor(
         }
     }
 
+    HalpGicSpiPriorityDoubled = FALSE;
+    if (Lines > 32)
+    {
+        *HalpMmio((ULONG_PTR)HalpGicdBase, GICD_IPRIORITYR + 32) = 0x60402010;
+        if (*HalpMmio((ULONG_PTR)HalpGicdBase, GICD_IPRIORITYR + 32) == 0xC0804020)
+        {
+            HalpGicSpiPriorityDoubled = TRUE;
+            DPRINT1("[arm64][GIC] The distributor stores SPI priorities shifted left by one bit\n");
+        }
+    }
+
     /* Set priorities to medium (0xD0) */
     for (i = 32; i < Lines; i += 4)
     {
-        *HalpMmio((ULONG_PTR)HalpGicdBase, GICD_IPRIORITYR + (i & ~3)) = 0xD0D0D0D0;
+        *HalpMmio((ULONG_PTR)HalpGicdBase, GICD_IPRIORITYR + (i & ~3)) =
+            HalpGicSpiPriorityDoubled ? 0x68686868 : 0xD0D0D0D0;
     }
 
     /* Configure SPI routing */

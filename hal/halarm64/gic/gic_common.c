@@ -43,6 +43,7 @@ ULONGLONG HalpGiccBase = HAL_ARM64_GICC_BASE_DEFAULT;
 ULONGLONG HalpGicrRegionBase = 0;                            /* Populated from MADT GICR entries */
 ULONGLONG HalpGicrRegionLength = 0;
 ULONG HalpGicrStride = HAL_ARM64_GICR_STRIDE_DEFAULT;
+BOOLEAN HalpGicSpiPriorityDoubled = FALSE;
 ULONG HalpGicrSgiOffset = HAL_ARM64_GICR_SGI_OFFSET_DEFAULT;
 ULONG_PTR HalpGicrCpuBase[MAXIMUM_PROCESSORS] = {0};
 
@@ -882,6 +883,11 @@ HalpGicSetInterruptPriority(
 
     /* Read-modify-write the priority */
     Value = *RegPtr;
+    if (IntId >= 32 && HalpGicSpiPriorityDoubled)
+    {
+        Value = (Value >> 1) & 0x7F7F7F7Fu;
+        Priority >>= 1;
+    }
     Value &= ~(0xFFu << Shift);
     Value |= ((Priority & 0xFF) << Shift);
     *RegPtr = Value;

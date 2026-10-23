@@ -727,6 +727,7 @@ extern ULONG HalpGicRedistStride;
 
 /* GIC base addresses */
 extern ULONGLONG HalpGicdBase;
+extern BOOLEAN HalpGicSpiPriorityDoubled;
 extern ULONGLONG HalpGiccBase;
 extern ULONGLONG HalpGicrRegionBase;      /* Legacy: first region base (for compatibility) */
 extern ULONGLONG HalpGicrRegionLength;    /* Legacy: first region length */
