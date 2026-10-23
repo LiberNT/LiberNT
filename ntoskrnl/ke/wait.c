@@ -587,7 +587,7 @@ KeDelayExecutionThread(IN KPROCESSOR_MODE WaitMode,
         {
             /* Unlock the dispatcher */
             KiReleaseDispatcherObject(&Timer->Header);
-            KiExitDispatcher(Thread->WaitIrql);
+            KxExitDispatcherForRetry(Thread);
         }
         else
         {
@@ -626,7 +626,7 @@ KeDelayExecutionThread(IN KPROCESSOR_MODE WaitMode,
             {
                 KiReleaseDispatcherObject(&Timer->Header);
                 KiUndoActivateWaiterQueue(Thread);
-                KiExitDispatcher(Thread->WaitIrql);
+                KxExitDispatcherForRetry(Thread);
                 goto WaitStart;
             }
 
@@ -776,7 +776,7 @@ WaitStart:
         {
             /* Unlock the dispatcher and let the APC run */
             KiReleaseDispatcherObject(&Timer->Header);
-            KiExitDispatcher(Thread->WaitIrql);
+            KxExitDispatcherForRetry(Thread);
         }
         else
         {
@@ -790,7 +790,7 @@ WaitStart:
             if (!KxTryBeginThreadWait(Thread))
             {
                 KiReleaseDispatcherObject(&Timer->Header);
-                KiExitDispatcher(Thread->WaitIrql);
+                KxExitDispatcherForRetry(Thread);
                 goto WaitStart;
             }
             AlertedByThreadId = InterlockedBitTestAndReset(&Thread->ThreadFlags, KTHREAD_ALERTED_BY_THREAD_ID_BIT);
@@ -832,7 +832,7 @@ WaitStart:
             {
                 KiReleaseDispatcherObject(&Timer->Header);
                 KiUndoActivateWaiterQueue(Thread);
-                KiExitDispatcher(Thread->WaitIrql);
+                KxExitDispatcherForRetry(Thread);
                 goto WaitStart;
             }
             AlertedByThreadId = InterlockedBitTestAndReset(&Thread->ThreadFlags, KTHREAD_ALERTED_BY_THREAD_ID_BIT);
@@ -944,7 +944,7 @@ KeWaitForSingleObject(IN PVOID Object,
         {
             /* Unlock the dispatcher */
             KiReleaseDispatcherObject(&CurrentObject->Header);
-            KiExitDispatcher(Thread->WaitIrql);
+            KxExitDispatcherForRetry(Thread);
         }
         else
         {
@@ -1028,7 +1028,7 @@ KeWaitForSingleObject(IN PVOID Object,
                 if (Timeout) KiReleaseDispatcherObject(&Timer->Header);
                 KiReleaseDispatcherObject(&CurrentObject->Header);
                 KiUndoActivateWaiterQueue(Thread);
-                KiExitDispatcher(Thread->WaitIrql);
+                KxExitDispatcherForRetry(Thread);
                 goto WaitStart;
             }
 
@@ -1194,7 +1194,7 @@ KeWaitForMultipleObjects(IN ULONG Count,
         {
             /* Unlock the dispatcher */
             KiReleaseObjectLocks(Object, Count);
-            KiExitDispatcher(Thread->WaitIrql);
+            KxExitDispatcherForRetry(Thread);
         }
         else
         {
@@ -1372,7 +1372,7 @@ KeWaitForMultipleObjects(IN ULONG Count,
                 if (Timeout) KiReleaseDispatcherObject(&Timer->Header);
                 KiReleaseObjectLocks(Object, Count);
                 KiUndoActivateWaiterQueue(Thread);
-                KiExitDispatcher(Thread->WaitIrql);
+                KxExitDispatcherForRetry(Thread);
                 goto WaitStart;
             }
 

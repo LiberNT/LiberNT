@@ -53,6 +53,10 @@ KeWaitForGate(IN PKGATE Gate,
         {
             /* Release the lock, this will fire the APC */
             KiReleaseApcLock(&ApcLock);
+
+            /* Ask again if the interrupt was not delivered, see KxExitDispatcherForRetry */
+            if (KiIsKernelApcDeliverable(Thread, ApcLock.OldIrql))
+                HalRequestSoftwareInterrupt(APC_LEVEL);
         }
         else
         {

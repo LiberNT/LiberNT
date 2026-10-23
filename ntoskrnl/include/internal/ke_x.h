@@ -1468,6 +1468,25 @@ KxTryBeginThreadWait(IN PKTHREAD Thread)
 }
 
 //
+// Leaves the dispatcher on the way back to the top of a wait loop. When the
+// loop retries for a deliverable kernel APC, the APC interrupt was requested
+// while IRQL masked it and fires as IRQL drops. A hypervisor that does not
+// see the guest lower CR8 (VirtualBox on Hyper-V) injects it only at the next
+// VM exit, and the retry loop makes none, so the thread would spin without
+// running the APC. Request the interrupt again once IRQL is low.
+//
+FORCEINLINE
+VOID
+KxExitDispatcherForRetry(IN PKTHREAD Thread)
+{
+    KIRQL WaitIrql = Thread->WaitIrql;
+
+    KiExitDispatcher(WaitIrql);
+    if (KiIsKernelApcDeliverable(Thread, WaitIrql))
+        HalRequestSoftwareInterrupt(APC_LEVEL);
+}
+
+//
 // Publishes the wait under the thread lock taken by KxTryBeginThreadWait:
 // State, the PRCB wait-list insertion (publishing WaitPrcb), and SwapBusy
 // must be serialized against the signaler's KiUnwaitThread/KiUnlinkThread.
