@@ -136,6 +136,7 @@ typedef struct _NVME_DEVICE_EXTENSION
     BOOLEAN MessageInterrupts;
     ULONG MessageCount;
     BOOLEAN InterruptsLive;
+    BOOLEAN LineMasked;
     BOOLEAN InHwInitialize;
     BOOLEAN ControllerStarted;
     BOOLEAN AdminReady;

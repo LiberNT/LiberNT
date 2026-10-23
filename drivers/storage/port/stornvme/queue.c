@@ -3,6 +3,7 @@
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     I/O queue pairs, submission slots and interrupt service
  * COPYRIGHT:   Copyright 2026 ReactOS Project
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include "stornvme.h"
@@ -260,14 +261,36 @@ NvmeAdminDpc(_In_ PSTOR_DPC Dpc,
              _In_opt_ PVOID SystemArgument2)
 {
     PNVME_DEVICE_EXTENSION Device = (PNVME_DEVICE_EXTENSION)HwDeviceExtension;
+    BOOLEAN Again = FALSE;
+    NVME_LOCK Lock;
+    ULONG Index;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     NvmeDrainAdminQueue(Device);
-    if (!Device->MessageInterrupts)
-        NvmeWriteRegister(Device, NVME_REG_INTMC, 0xFFFFFFFF);
+    if (Device->MessageInterrupts)
+        return;
+
+    for (Index = 0; Index < Device->IoQueueCount; Index++)
+    {
+        PNVME_QUEUE Queue = &Device->IoQueues[Index];
+
+        if (Queue->Created && NvmeDrainIoQueue(Device, Queue))
+            Again = TRUE;
+    }
+
+    if (Again)
+    {
+        StorPortIssueDpc(Device, &Device->AdminQueue.Dpc, NULL, NULL);
+        return;
+    }
+
+    NvmeAcquireLock(Device, 0, &Lock);
+    Device->LineMasked = FALSE;
+    NvmeWriteRegister(Device, NVME_REG_INTMC, 0xFFFFFFFF);
+    NvmeReleaseLock(Device, &Lock);
 }
 
 VOID
@@ -284,13 +307,7 @@ NvmeIoQueueDpc(_In_ PSTOR_DPC Dpc,
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     if (NvmeDrainIoQueue(Device, Queue))
-    {
         StorPortIssueDpc(Device, &Queue->Dpc, Queue, NULL);
-        return;
-    }
-
-    if (!Device->MessageInterrupts)
-        NvmeWriteRegister(Device, NVME_REG_INTMC, 0xFFFFFFFF);
 }
 
 /*
@@ -334,7 +351,7 @@ NvmeHwInterrupt(_In_ PVOID DeviceExtension)
     BOOLEAN Pending;
     ULONG Index;
 
-    if (!Device->InterruptsLive)
+    if (!Device->InterruptsLive || Device->LineMasked)
         return FALSE;
 
     /*
@@ -351,14 +368,8 @@ NvmeHwInterrupt(_In_ PVOID DeviceExtension)
     if (!Pending)
         return FALSE;
 
+    Device->LineMasked = TRUE;
     NvmeWriteRegister(Device, NVME_REG_INTMS, 0xFFFFFFFF);
     StorPortIssueDpc(Device, &Device->AdminQueue.Dpc, NULL, NULL);
-    for (Index = 0; Index < Device->IoQueueCount; Index++)
-    {
-        PNVME_QUEUE Queue = &Device->IoQueues[Index];
-
-        if (Queue->Created)
-            StorPortIssueDpc(Device, &Queue->Dpc, Queue, NULL);
-    }
     return TRUE;
 }

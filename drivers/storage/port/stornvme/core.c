@@ -523,6 +523,7 @@ NvmeStartController(_In_ PNVME_DEVICE_EXTENSION Device, _In_ BOOLEAN FirstStart)
     Device->ControllerStarted = FALSE;
     Device->AdminReady = FALSE;
 
+    Device->LineMasked = TRUE;
     NvmeWriteRegister(Device, NVME_REG_INTMS, 0xFFFFFFFF);
     NvmeWriteRegister(Device, NVME_REG_CC, 0);
     if (!NvmeWaitReady(Device, 0))
@@ -574,6 +575,7 @@ NvmeDisableController(_In_ PNVME_DEVICE_EXTENSION Device)
 {
     Device->ControllerStarted = FALSE;
     Device->AdminReady = FALSE;
+    Device->LineMasked = TRUE;
     NvmeWriteRegister(Device, NVME_REG_INTMS, 0xFFFFFFFF);
     NvmeWriteRegister(Device, NVME_REG_CC, 0);
     NvmeWaitReady(Device, 0);
@@ -647,6 +649,7 @@ NvmeResetController(_In_ PNVME_DEVICE_EXTENSION Device)
     if (!NvmeCreateIoQueues(Device))
         return FALSE;
 
+    Device->LineMasked = FALSE;
     NvmeWriteRegister(Device, NVME_REG_INTMC, 0xFFFFFFFF);
 
     NvmeAcquireLock(Device, 0, &Lock);

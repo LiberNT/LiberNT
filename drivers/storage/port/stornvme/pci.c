@@ -285,6 +285,7 @@ NvmeHwInitialize(_In_ PVOID DeviceExtension)
         return FALSE;
     }
 
+    Device->LineMasked = FALSE;
     NvmeWriteRegister(Device, NVME_REG_INTMC, 0xFFFFFFFF);
     NvmeMaskDeviceInterrupts(Device, FALSE);
 
@@ -343,6 +344,7 @@ NvmeHwAdapterControl(_In_ PVOID DeviceExtension,
 
             if (!NvmeStartController(Device, FALSE) || !NvmeCreateIoQueues(Device))
                 return ScsiAdapterControlUnsuccessful;
+            Device->LineMasked = FALSE;
             NvmeWriteRegister(Device, NVME_REG_INTMC, 0xFFFFFFFF);
             NvmeAcquireLock(Device, 0, &Lock);
             NvmeArmAerLocked(Device);
