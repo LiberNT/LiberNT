@@ -31,6 +31,8 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <map>
+#include <tuple>
 
 #include <ntfslib_new.h>
 #include <ntfsformat.h>
@@ -2627,6 +2629,330 @@ Done:
     return Status;
 }
 
+#ifndef FILE_ATTRIBUTE_SYSTEM
+#define FILE_ATTRIBUTE_SYSTEM 0x00000004
+#endif
+#ifndef FILE_ATTRIBUTE_ARCHIVE
+#define FILE_ATTRIBUTE_ARCHIVE 0x00000020
+#endif
+
+static UINT64
+UnixTimeToNtfsTime(int64_t Seconds)
+{
+    return (UINT64)((Seconds * 10000000LL) + 116444736000000000LL);
+}
+
+static std::string
+EncodeLinuxName(const std::string& Path)
+{
+    std::string Result;
+
+    for (unsigned char Character : Path)
+    {
+        if (Character == ':' || Character == '*' || Character == '?' ||
+            Character == '"' || Character == '<' || Character == '>' ||
+            Character == '|' || Character == '\\' ||
+            (Character >= 1 && Character < 0x20))
+        {
+            unsigned int Code = 0xF000 + Character;
+
+            Result.push_back((char)(0xE0 | (Code >> 12)));
+            Result.push_back((char)(0x80 | ((Code >> 6) & 0x3F)));
+            Result.push_back((char)(0x80 | (Code & 0x3F)));
+        }
+        else
+        {
+            Result.push_back((char)Character);
+        }
+    }
+    return Result;
+}
+
+static NTSTATUS
+SetLinuxAttributes(NtfsFuseState* State,
+                   const std::string& Path,
+                   UINT32 Mode,
+                   UINT32 Uid,
+                   UINT32 Gid,
+                   UINT32 Major,
+                   UINT32 Minor,
+                   bool Device)
+{
+    static const UCHAR UidName[] = "$LXUID";
+    static const UCHAR GidName[] = "$LXGID";
+    static const UCHAR ModName[] = "$LXMOD";
+    static const UCHAR DevName[] = "$LXDEV";
+    NtfsExtendedAttributeUpdate Updates[4] = {};
+    PNtfsFileRecord File = NULL;
+    UINT32 DeviceValue[2] = { Major, Minor };
+    ULONG Count = 3;
+    NTSTATUS Status;
+
+    Status = Lookup(State->Volume, Path.c_str(), &File);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Updates[0].Operation = NTFS_EA_UPDATE_SET;
+    Updates[0].NameLength = (UINT8)(sizeof(UidName) - 1);
+    Updates[0].ValueLength = sizeof(Uid);
+    Updates[0].Name = UidName;
+    Updates[0].Value = (const UCHAR*)&Uid;
+    Updates[1].Operation = NTFS_EA_UPDATE_SET;
+    Updates[1].NameLength = (UINT8)(sizeof(GidName) - 1);
+    Updates[1].ValueLength = sizeof(Gid);
+    Updates[1].Name = GidName;
+    Updates[1].Value = (const UCHAR*)&Gid;
+    Updates[2].Operation = NTFS_EA_UPDATE_SET;
+    Updates[2].NameLength = (UINT8)(sizeof(ModName) - 1);
+    Updates[2].ValueLength = sizeof(Mode);
+    Updates[2].Name = ModName;
+    Updates[2].Value = (const UCHAR*)&Mode;
+    if (Device)
+    {
+        Updates[3].Operation = NTFS_EA_UPDATE_SET;
+        Updates[3].NameLength = (UINT8)(sizeof(DevName) - 1);
+        Updates[3].ValueLength = sizeof(DeviceValue);
+        Updates[3].Name = DevName;
+        Updates[3].Value = (const UCHAR*)DeviceValue;
+        Count = 4;
+    }
+
+    Status = NtfsFileRecordUpdateExtendedAttributes(File, Updates, Count);
+    NtfsFileRecordDestroy(File);
+    return Status;
+}
+
+static NTSTATUS
+SetLinuxTimes(NtfsFuseState* State,
+              const std::string& Path,
+              bool Special,
+              int64_t MTime)
+{
+    NtfsFileBasicInformation Basic = {};
+    PNtfsFileRecord File = NULL;
+    NTSTATUS Status;
+
+    Status = Lookup(State->Volume, Path.c_str(), &File);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Basic.Fields = NTFS_BASIC_INFO_ALL_FIELDS;
+    Basic.CreationTime = UnixTimeToNtfsTime(MTime);
+    Basic.LastAccessTime = Basic.CreationTime;
+    Basic.LastWriteTime = Basic.CreationTime;
+    Basic.ChangeTime = Basic.CreationTime;
+    Basic.FileAttributes = (NtfsFileRecordGetHeader(File)->Flags & FR_IS_DIRECTORY)
+        ? FILE_ATTRIBUTE_DIRECTORY
+        : (Special ? FILE_ATTRIBUTE_SYSTEM : FILE_ATTRIBUTE_ARCHIVE);
+    Status = NtfsFileRecordSetBasicInformation(File, &Basic);
+    NtfsFileRecordDestroy(File);
+    return Status;
+}
+
+static NTSTATUS
+WriteImageBytes(NtfsFuseState* State,
+                const std::string& Path,
+                const std::string& Data)
+{
+    PNtfsFileRecord File = NULL;
+    LARGE_INTEGER Offset = {};
+    ULONG Length = (ULONG)Data.size();
+    NTSTATUS Status;
+
+    Status = Lookup(State->Volume, Path.c_str(), &File);
+    if (NT_SUCCESS(Status) && Length != 0)
+    {
+        Status = NtfsFileRecordWriteFileData(File,
+                                             TypeData,
+                                             NULL,
+                                             (PUCHAR)Data.data(),
+                                             &Length,
+                                             &Offset);
+    }
+    NtfsFileRecordDestroy(File);
+    return Status;
+}
+
+static int
+AddLinuxTreeFromList(NtfsFuseState* State,
+                     const char* ListPath)
+{
+    static const size_t CopyBufferSize = 1024 * 1024;
+    FILE* List = fopen(ListPath, "rb");
+    char* Line = NULL;
+    size_t Capacity = 0;
+    unsigned long LineNumber = 0;
+    unsigned long Failures = 0;
+
+    if (!List)
+    {
+        fprintf(stderr, "%s: %s\n", ListPath, strerror(errno));
+        return 1;
+    }
+
+    std::vector<UCHAR> CopyBuffer(CopyBufferSize);
+    std::map<std::string, std::tuple<UINT32, UINT32, UINT32, std::string>> Sources;
+
+    for (;;)
+    {
+        std::vector<std::string> Fields;
+        std::string Destination;
+        std::string Parent;
+        ssize_t Length;
+        NTSTATUS Status = STATUS_SUCCESS;
+        UINT32 Mode, Uid, Gid, Major, Minor;
+        int64_t MTime;
+        char Type;
+        size_t Start = 0;
+
+        Length = getline(&Line, &Capacity, List);
+        if (Length < 0)
+            break;
+        LineNumber++;
+        while (Length > 0 && (Line[Length - 1] == '\n' || Line[Length - 1] == '\r'))
+            Line[--Length] = '\0';
+        if (Length == 0)
+            continue;
+
+        for (size_t Index = 0; Index <= (size_t)Length; Index++)
+        {
+            if (Index == (size_t)Length || (Line[Index] == '\t' && Fields.size() < 8))
+            {
+                Fields.push_back(std::string(Line + Start, Index - Start));
+                Start = Index + 1;
+            }
+        }
+        if (Fields.size() != 9 || Fields[0].size() != 1)
+        {
+            fprintf(stderr, "%s:%lu: malformed entry\n", ListPath, LineNumber);
+            Failures++;
+            continue;
+        }
+
+        Type = Fields[0][0];
+        Mode = (UINT32)strtoul(Fields[1].c_str(), NULL, 8);
+        Uid = (UINT32)strtoul(Fields[2].c_str(), NULL, 10);
+        Gid = (UINT32)strtoul(Fields[3].c_str(), NULL, 10);
+        Major = (UINT32)strtoul(Fields[4].c_str(), NULL, 10);
+        Minor = (UINT32)strtoul(Fields[5].c_str(), NULL, 10);
+        MTime = strtoll(Fields[6].c_str(), NULL, 10);
+        Destination = NormalizeImagePath(EncodeLinuxName(Fields[7]));
+        if (Destination.empty())
+            continue;
+
+        size_t Slash = Destination.rfind('/');
+        if (Slash != std::string::npos)
+            Parent = Destination.substr(0, Slash);
+
+        switch (Type)
+        {
+            case 'd':
+                Mode |= 0040000;
+                break;
+            case 'f':
+                Mode |= 0100000;
+                break;
+            case 'l':
+                Mode |= 0120000;
+                break;
+            case 'c':
+                Mode |= 0020000;
+                break;
+            case 'b':
+                Mode |= 0060000;
+                break;
+            case 'p':
+                Mode |= 0010000;
+                break;
+            case 's':
+                Mode |= 0140000;
+                break;
+        }
+
+        if (Type == 'h')
+        {
+            std::vector<WCHAR> OldPath, NewPath;
+            std::string Existing = NormalizeImagePath(EncodeLinuxName(Fields[8]));
+
+            Status = EnsureImageDirectory(State, Parent);
+            if (NT_SUCCESS(Status) &&
+                (!Utf8ToNtfsPath(Existing.c_str(), OldPath) ||
+                 !Utf8ToNtfsPath(Destination.c_str(), NewPath)))
+            {
+                Status = STATUS_OBJECT_NAME_INVALID;
+            }
+            if (NT_SUCCESS(Status))
+            {
+                Status = NtfsMasterFileTableCreateHardLink(
+                    NtfsVolumeGetMft(State->Volume),
+                    OldPath.data(),
+                    (ULONG)(OldPath.size() - 1),
+                    NewPath.data(),
+                    (ULONG)(NewPath.size() - 1));
+            }
+            if (!NT_SUCCESS(Status))
+            {
+                auto Original = Sources.find(Existing);
+
+                if (Original != Sources.end())
+                {
+                    Status = PrepareImageFile(State, Destination);
+                    if (NT_SUCCESS(Status))
+                        Status = SetLinuxAttributes(State, Destination, std::get<0>(Original->second),
+                                                    std::get<1>(Original->second), std::get<2>(Original->second),
+                                                    0, 0, false);
+                    if (NT_SUCCESS(Status))
+                        Status = CopyHostFileToImage(State, Destination, std::get<3>(Original->second), CopyBuffer);
+                    if (NT_SUCCESS(Status))
+                        Status = SetLinuxTimes(State, Destination, false, MTime);
+                }
+            }
+            if (!NT_SUCCESS(Status))
+            {
+                fprintf(stderr, "%s:%lu: %s: ntfslib status 0x%08" PRIx32 "\n",
+                        ListPath, LineNumber, Destination.c_str(), (uint32_t)Status);
+                Failures++;
+            }
+            continue;
+        }
+
+        if (Type == 'd')
+        {
+            Status = EnsureImageDirectory(State, Destination);
+        }
+        else
+        {
+            Status = EnsureImageDirectory(State, Parent);
+            if (NT_SUCCESS(Status))
+                Status = PrepareImageFile(State, Destination);
+        }
+        if (NT_SUCCESS(Status))
+            Status = SetLinuxAttributes(State, Destination, Mode, Uid, Gid, Major, Minor, (Type == 'c') || (Type == 'b'));
+        if (NT_SUCCESS(Status) && Type == 'f')
+        {
+            Status = CopyHostFileToImage(State, Destination, Fields[8], CopyBuffer);
+            Sources[Destination] = std::make_tuple(Mode, Uid, Gid, Fields[8]);
+        }
+        if (NT_SUCCESS(Status) && Type == 'l')
+            Status = WriteImageBytes(State, Destination, Fields[8]);
+        if (NT_SUCCESS(Status))
+            Status = SetLinuxTimes(State, Destination, (Type != 'd') && (Type != 'f'), MTime);
+
+        if (!NT_SUCCESS(Status))
+        {
+            fprintf(stderr, "%s:%lu: %s: ntfslib status 0x%08" PRIx32 " (%s)\n",
+                    ListPath, LineNumber, Destination.c_str(), (uint32_t)Status,
+                    strerror(NtStatusToErrno(Status)));
+            Failures++;
+        }
+    }
+
+    free(Line);
+    fclose(List);
+    fprintf(stderr, "%s: %lu entries, %lu failures\n", ListPath, LineNumber, Failures);
+    return Failures ? 1 : 0;
+}
+
 static int
 AddFilesFromList(NtfsFuseState* State,
                  const char* ListPath)
@@ -4651,6 +4977,7 @@ PrintUsage(const char* Program)
             "  %s --link IMAGE EXISTING NEW\n"
             "  %s --write IMAGE PATH OFFSET SOURCE\n"
             "  %s --addfiles IMAGE LIST\n"
+            "  %s --add-lx IMAGE LIST\n"
             "  %s --truncate IMAGE PATH SIZE\n"
             "  %s --allocate IMAGE PATH SIZE\n"
             "  %s --set-sparse IMAGE PATH 0|1\n"
@@ -4665,6 +4992,7 @@ PrintUsage(const char* Program)
             "  %s [--show-metadata] --streams IMAGE PATH\n"
             "  %s [--show-metadata] [--writable] IMAGE MOUNTPOINT"
             " [FUSE options]\n",
+            Program,
             Program,
             Program,
             Program,
@@ -5417,6 +5745,29 @@ main(int Argc, char** Argv)
                                    Argv[First + 2],
                                    Offset,
                                    Argv[First + 4]);
+        CloseImage(&State);
+        return Result;
+    }
+
+    if (strcmp(Argv[First], "--add-lx") == 0)
+    {
+        if (First + 3 != Argc || ShowMetadata)
+        {
+            PrintUsage(Argv[0]);
+            return 2;
+        }
+
+        Status = OpenImageWritable(Argv[First + 1], &State);
+        if (!NT_SUCCESS(Status))
+        {
+            fprintf(stderr,
+                    "%s: ntfslib status 0x%08" PRIx32 " (%s)\n",
+                    Argv[First + 1],
+                    (uint32_t)Status,
+                    strerror(NtStatusToErrno(Status)));
+            return 1;
+        }
+        Result = AddLinuxTreeFromList(&State, Argv[First + 2]);
         CloseImage(&State);
         return Result;
     }
