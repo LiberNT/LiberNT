@@ -373,8 +373,12 @@ PcVideoGetBiosMode(
     Regs.b.ah = 0x0F;
     Int386(0x10, &Regs, &Regs);
 
-    if (Regs.b.ah == 0)
+    if (Regs.b.ah == 0 ||
+        Regs.b.al != ((*(PUCHAR)0x449) & 0x7F) ||
+        Regs.b.ah != *(PUSHORT)0x44A)
+    {
         return FALSE;
+    }
 
     *Mode = Regs.b.al;
     *WidthInChars = Regs.b.ah;
