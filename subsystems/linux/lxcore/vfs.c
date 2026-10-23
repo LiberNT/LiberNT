@@ -676,8 +676,6 @@ LxPopulateDev(
         { "tty", LX_S_IFCHR | 0666, 5, 0, NULL },
         { "console", LX_S_IFCHR | 0600, 5, 1, NULL },
         { "ptmx", LX_S_IFCHR | 0666, 5, 2, NULL },
-        { "tty0", LX_S_IFCHR | 0620, 4, 0, NULL },
-        { "tty1", LX_S_IFCHR | 0620, 4, 1, NULL },
         { "fd", LX_S_IFLNK | 0777, 0, 0, "/proc/self/fd" },
         { "stdin", LX_S_IFLNK | 0777, 0, 0, "/proc/self/fd/0" },
         { "stdout", LX_S_IFLNK | 0777, 0, 0, "/proc/self/fd/1" },
@@ -798,7 +796,7 @@ LxInstanceCreate(
     LxInstanceMountNt(Instance, "/", "/dev/root", "lxfs", 0, &Instance->RootNt, LX_MAGIC_NTFS, NULL);
     LxInstanceMountSynthetic(Instance, "/proc", "proc", "proc", LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC,
                              LxFsProc, LX_MAGIC_PROC, NULL);
-    LxInstanceMountSynthetic(Instance, "/sys", "sysfs", "sysfs", LX_MS_RDONLY | LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC,
+    LxInstanceMountSynthetic(Instance, "/sys", "sysfs", "sysfs", LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC,
                              LxFsSys, LX_MAGIC_SYSFS, NULL);
     LxInstanceMountSynthetic(Instance, "/sys/fs/cgroup", "cgroup2", "cgroup2",
                              LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC, LxFsCgroup, LX_MAGIC_CGROUP2, NULL);
@@ -2173,17 +2171,28 @@ LxVfsOpenNode(
             case 0060000:
                 if (!(Flags & LX_O_PATH))
                 {
+                    FILE_INTERNAL_INFORMATION Internal;
+                    IO_STATUS_BLOCK Iosb;
                     ULONG ModeValue, Uid, Gid;
                     ULONG64 Device = MAXULONG64;
 
-                    if (LxNtOpenHandle(&Node->NtPath, FILE_READ_EA, FILE_OPEN, 0, 0, &Handle) == 0)
+                    Internal.IndexNumber.QuadPart = 0;
+                    if (LxNtOpenHandle(&Node->NtPath, FILE_READ_EA | FILE_READ_ATTRIBUTES, FILE_OPEN, 0, 0, &Handle) == 0)
                     {
                         LxNtReadLxAttributes(Handle, &ModeValue, &Uid, &Gid, &Device);
+                        if (!NT_SUCCESS(ZwQueryInformationFile(Handle, &Iosb, &Internal, sizeof(Internal),
+                                                               FileInternalInformation)))
+                        {
+                            Internal.IndexNumber.QuadPart = 0;
+                        }
                         ZwClose(Handle);
                     }
                     File = LxDeviceOpen(Process, Device, Flags, Node->Path);
                     if (File == NULL)
                         return -LX_ENXIO;
+                    File->Mount = Node->Mount;
+                    if (Internal.IndexNumber.QuadPart != 0)
+                        File->Ino = (ULONG64)Internal.IndexNumber.QuadPart;
                     *Result = File;
                     return 0;
                 }

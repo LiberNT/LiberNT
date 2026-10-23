@@ -221,6 +221,39 @@ typedef struct _LX_OPEN_HOW
     ULONG64 Resolve;
 } LX_OPEN_HOW, *PLX_OPEN_HOW;
 
+#define LX_SCHED_NORMAL     0
+#define LX_SCHED_FIFO       1
+#define LX_SCHED_RR         2
+#define LX_SCHED_BATCH      3
+#define LX_SCHED_IDLE       5
+#define LX_SCHED_DEADLINE   6
+#define LX_SCHED_EXT        7
+#define LX_SCHED_RESET_ON_FORK          0x40000000
+#define LX_SCHED_FLAG_RESET_ON_FORK     0x01
+#define LX_SCHED_FLAG_KEEP_POLICY       0x08
+#define LX_SCHED_FLAG_KEEP_PARAMS       0x10
+#define LX_SCHED_FLAG_UTIL_CLAMP_MIN    0x20
+#define LX_SCHED_FLAG_UTIL_CLAMP_MAX    0x40
+#define LX_SCHED_FLAG_ALL               0x7F
+#define LX_SCHED_ATTR_SIZE_VER0         48
+#define LX_PRIO_PROCESS     0
+#define LX_PRIO_PGRP        1
+#define LX_PRIO_USER        2
+
+typedef struct _LX_SCHED_ATTR
+{
+    ULONG Size;
+    ULONG Policy;
+    ULONG64 Flags;
+    LONG Nice;
+    ULONG Priority;
+    ULONG64 Runtime;
+    ULONG64 Deadline;
+    ULONG64 Period;
+    ULONG UtilMin;
+    ULONG UtilMax;
+} LX_SCHED_ATTR, *PLX_SCHED_ATTR;
+
 #define LX_MS_ASYNC         1
 #define LX_MS_INVALIDATE    2
 #define LX_MS_SYNC          4

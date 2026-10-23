@@ -675,7 +675,7 @@ LxTtyFileStat(
     Stat->Nlink = 1;
     Stat->Rdev = File->Rdev ? File->Rdev : (136 << 8);
     Stat->Ino = File->Ino;
-    Stat->Dev = 0x16;
+    Stat->Dev = (File->Mount != NULL) ? File->Mount->Dev : 0x16;
     Stat->BlkSize = 1024;
     Stat->Gid = 5;
     KeQuerySystemTime(&Now);

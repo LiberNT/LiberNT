@@ -331,16 +331,303 @@ LX_SYSCALL(LxSysSchedGetaffinity)
     return (Result != 0) ? Result : (LONG64)sizeof(Mask);
 }
 
+static
+LONG
+LxSchedTarget(
+    _In_ PLX_CALL Call,
+    _In_ LONG Pid,
+    _Out_ PLX_THREAD *Thread,
+    _Out_ PLX_PROCESS *Owner)
+{
+    *Owner = NULL;
+    *Thread = NULL;
+    if (Pid < 0)
+        return -LX_EINVAL;
+    if ((Pid == 0) || ((ULONG)Pid == Call->Thread->Tid))
+    {
+        *Thread = Call->Thread;
+        return 0;
+    }
+    *Thread = LxThreadLookupReferenced(Call->Process->Instance, (ULONG)Pid, Owner);
+    return (*Thread != NULL) ? 0 : -LX_ESRCH;
+}
+
+static
+VOID
+LxSchedRelease(
+    _In_opt_ PLX_PROCESS Owner)
+{
+    if (Owner != NULL)
+        LxProcessDereference(Owner);
+}
+
+static
+LONG
+LxSchedValidate(
+    _In_ PLX_SCHED_ATTR Attr)
+{
+    switch (Attr->Policy)
+    {
+        case LX_SCHED_FIFO:
+        case LX_SCHED_RR:
+            return ((Attr->Priority >= 1) && (Attr->Priority <= 99)) ? 0 : -LX_EINVAL;
+        case LX_SCHED_NORMAL:
+        case LX_SCHED_BATCH:
+        case LX_SCHED_IDLE:
+        case LX_SCHED_EXT:
+            return (Attr->Priority == 0) ? 0 : -LX_EINVAL;
+        case LX_SCHED_DEADLINE:
+            if ((Attr->Priority != 0) || (Attr->Deadline == 0) || (Attr->Runtime < 1024) ||
+                (Attr->Runtime > Attr->Deadline) || ((Attr->Period != 0) && (Attr->Period < Attr->Deadline)))
+            {
+                return -LX_EINVAL;
+            }
+            return 0;
+    }
+    return -LX_EINVAL;
+}
+
+VOID
+LxSchedInherit(
+    _Inout_ PLX_THREAD Child,
+    _In_ PLX_THREAD Parent)
+{
+    Child->Sched = Parent->Sched;
+    if (Child->Sched.Flags & LX_SCHED_FLAG_RESET_ON_FORK)
+    {
+        if ((Child->Sched.Policy == LX_SCHED_FIFO) || (Child->Sched.Policy == LX_SCHED_RR) ||
+            (Child->Sched.Policy == LX_SCHED_DEADLINE))
+        {
+            Child->Sched.Policy = LX_SCHED_NORMAL;
+            Child->Sched.Priority = 0;
+            Child->Sched.Runtime = Child->Sched.Deadline = Child->Sched.Period = 0;
+        }
+        if (Child->Sched.Nice < 0)
+            Child->Sched.Nice = 0;
+        Child->Sched.Flags &= ~(ULONG64)LX_SCHED_FLAG_RESET_ON_FORK;
+    }
+}
+
+LX_SYSCALL(LxSysSchedSetattr)
+{
+    LX_SCHED_ATTR Attr, New;
+    PLX_PROCESS Owner;
+    PLX_THREAD Thread;
+    ULONG Size;
+    LONG64 Result;
+
+    if ((Call->Args[2] != 0) || (Call->Args[1] == 0))
+        return -LX_EINVAL;
+    Result = LxCopyFromUser(&Size, Call->Args[1], sizeof(Size));
+    if (Result != 0)
+        return Result;
+    if (Size == 0)
+        Size = LX_SCHED_ATTR_SIZE_VER0;
+    if ((Size < LX_SCHED_ATTR_SIZE_VER0) || (Size > LX_PAGE_SIZE))
+    {
+        Size = sizeof(Attr);
+        LxCopyToUser(Call->Args[1], &Size, sizeof(Size));
+        return -LX_E2BIG;
+    }
+    RtlZeroMemory(&Attr, sizeof(Attr));
+    Result = LxCopyFromUser(&Attr, Call->Args[1], min(Size, sizeof(Attr)));
+    if (Result != 0)
+        return Result;
+    if (Size > sizeof(Attr))
+    {
+        UCHAR Byte;
+        ULONG Offset;
+
+        for (Offset = sizeof(Attr); Offset < Size; Offset++)
+        {
+            Result = LxCopyFromUser(&Byte, Call->Args[1] + Offset, 1);
+            if (Result != 0)
+                return Result;
+            if (Byte != 0)
+                return -LX_E2BIG;
+        }
+    }
+    if (Attr.Flags & ~(ULONG64)LX_SCHED_FLAG_ALL)
+        return -LX_EINVAL;
+    if (((Attr.Flags & LX_SCHED_FLAG_UTIL_CLAMP_MIN) && (Attr.UtilMin > 1024)) ||
+        ((Attr.Flags & LX_SCHED_FLAG_UTIL_CLAMP_MAX) && (Attr.UtilMax > 1024)))
+    {
+        return -LX_EINVAL;
+    }
+
+    Result = LxSchedTarget(Call, (LONG)Call->Args[0], &Thread, &Owner);
+    if (Result != 0)
+        return Result;
+
+    New = Thread->Sched;
+    if (Attr.Flags & LX_SCHED_FLAG_KEEP_POLICY)
+        Attr.Policy = New.Policy;
+    if (!(Attr.Flags & LX_SCHED_FLAG_KEEP_PARAMS))
+    {
+        Result = LxSchedValidate(&Attr);
+        if (Result == 0)
+        {
+            New.Policy = Attr.Policy;
+            New.Priority = Attr.Priority;
+            New.Runtime = Attr.Runtime;
+            New.Deadline = Attr.Deadline;
+            New.Period = Attr.Period;
+            if ((Attr.Policy != LX_SCHED_FIFO) && (Attr.Policy != LX_SCHED_RR) && (Attr.Policy != LX_SCHED_DEADLINE))
+                New.Nice = max(-20, min(19, Attr.Nice));
+        }
+    }
+    else
+    {
+        New.Policy = Attr.Policy;
+    }
+    if ((Result == 0) && (Attr.Flags & LX_SCHED_FLAG_UTIL_CLAMP_MIN))
+        New.UtilMin = Attr.UtilMin;
+    if ((Result == 0) && (Attr.Flags & LX_SCHED_FLAG_UTIL_CLAMP_MAX))
+        New.UtilMax = Attr.UtilMax;
+    if ((Result == 0) && (New.UtilMin > New.UtilMax))
+        Result = -LX_EINVAL;
+    if (Result == 0)
+    {
+        New.Flags = (New.Flags & ~(ULONG64)LX_SCHED_FLAG_RESET_ON_FORK) | (Attr.Flags & LX_SCHED_FLAG_RESET_ON_FORK);
+        Thread->Sched = New;
+    }
+    LxSchedRelease(Owner);
+    return Result;
+}
+
+LX_SYSCALL(LxSysSchedGetattr)
+{
+    LX_SCHED_ATTR Attr;
+    PLX_PROCESS Owner;
+    PLX_THREAD Thread;
+    ULONG64 Size = Call->Args[2];
+    LONG64 Result;
+
+    if ((Call->Args[3] != 0) || (Call->Args[1] == 0) || (Size < LX_SCHED_ATTR_SIZE_VER0) || (Size > LX_PAGE_SIZE))
+        return -LX_EINVAL;
+    Result = LxSchedTarget(Call, (LONG)Call->Args[0], &Thread, &Owner);
+    if (Result != 0)
+        return Result;
+    Attr = Thread->Sched;
+    LxSchedRelease(Owner);
+    Attr.Size = (ULONG)min(Size, sizeof(Attr));
+    Attr.Flags &= LX_SCHED_FLAG_RESET_ON_FORK | LX_SCHED_FLAG_UTIL_CLAMP_MIN | LX_SCHED_FLAG_UTIL_CLAMP_MAX;
+    return LxCopyToUser(Call->Args[1], &Attr, Attr.Size);
+}
+
+LX_SYSCALL(LxSysSchedSetscheduler)
+{
+    LONG Policy = (LONG)Call->Args[1];
+    LX_SCHED_ATTR Attr;
+    PLX_PROCESS Owner;
+    PLX_THREAD Thread;
+    LONG Priority;
+    LONG64 Result;
+
+    if ((Policy < 0) || (Call->Args[2] == 0))
+        return -LX_EINVAL;
+    Result = LxCopyFromUser(&Priority, Call->Args[2], sizeof(Priority));
+    if (Result != 0)
+        return Result;
+    Result = LxSchedTarget(Call, (LONG)Call->Args[0], &Thread, &Owner);
+    if (Result != 0)
+        return Result;
+
+    Attr = Thread->Sched;
+    Attr.Policy = (ULONG)Policy & ~LX_SCHED_RESET_ON_FORK;
+    Attr.Priority = (ULONG)Priority;
+    Result = (Priority < 0) ? -LX_EINVAL : LxSchedValidate(&Attr);
+    if ((Result == 0) && (Attr.Policy == LX_SCHED_DEADLINE))
+        Result = -LX_EINVAL;
+    if (Result == 0)
+    {
+        if (Policy & LX_SCHED_RESET_ON_FORK)
+            Attr.Flags |= LX_SCHED_FLAG_RESET_ON_FORK;
+        else
+            Attr.Flags &= ~(ULONG64)LX_SCHED_FLAG_RESET_ON_FORK;
+        Thread->Sched = Attr;
+    }
+    LxSchedRelease(Owner);
+    return Result;
+}
+
+LX_SYSCALL(LxSysSchedSetparam)
+{
+    LX_SCHED_ATTR Attr;
+    PLX_PROCESS Owner;
+    PLX_THREAD Thread;
+    LONG Priority;
+    LONG64 Result;
+
+    if (Call->Args[1] == 0)
+        return -LX_EINVAL;
+    Result = LxCopyFromUser(&Priority, Call->Args[1], sizeof(Priority));
+    if (Result != 0)
+        return Result;
+    Result = LxSchedTarget(Call, (LONG)Call->Args[0], &Thread, &Owner);
+    if (Result != 0)
+        return Result;
+    Attr = Thread->Sched;
+    Attr.Priority = (ULONG)Priority;
+    Result = (Priority < 0) ? -LX_EINVAL : LxSchedValidate(&Attr);
+    if (Result == 0)
+        Thread->Sched.Priority = Attr.Priority;
+    LxSchedRelease(Owner);
+    return Result;
+}
+
 LX_SYSCALL(LxSysSchedGetparam)
 {
-    LONG Priority = 0;
+    PLX_PROCESS Owner;
+    PLX_THREAD Thread;
+    LONG Priority;
+    LONG64 Result;
 
+    if (Call->Args[1] == 0)
+        return -LX_EINVAL;
+    Result = LxSchedTarget(Call, (LONG)Call->Args[0], &Thread, &Owner);
+    if (Result != 0)
+        return Result;
+    Priority = (LONG)Thread->Sched.Priority;
+    LxSchedRelease(Owner);
     return LxCopyToUser(Call->Args[1], &Priority, sizeof(Priority));
 }
 
 LX_SYSCALL(LxSysSchedGetscheduler)
 {
-    UNREFERENCED_PARAMETER(Call);
+    PLX_PROCESS Owner;
+    PLX_THREAD Thread;
+    LONG64 Result;
+
+    Result = LxSchedTarget(Call, (LONG)Call->Args[0], &Thread, &Owner);
+    if (Result != 0)
+        return Result;
+    Result = (LONG64)(Thread->Sched.Policy |
+                      ((Thread->Sched.Flags & LX_SCHED_FLAG_RESET_ON_FORK) ? LX_SCHED_RESET_ON_FORK : 0));
+    LxSchedRelease(Owner);
+    return Result;
+}
+
+LX_SYSCALL(LxSysSetpriority)
+{
+    ULONG Which = (ULONG)Call->Args[0];
+    LONG Nice = max(-20, min(19, (LONG)Call->Args[2]));
+    PLX_PROCESS Owner;
+    PLX_THREAD Thread;
+    LONG64 Result;
+
+    if (Which > LX_PRIO_USER)
+        return -LX_EINVAL;
+    if (Which != LX_PRIO_PROCESS)
+    {
+        Call->Thread->Sched.Nice = Nice;
+        return 0;
+    }
+    Result = LxSchedTarget(Call, (LONG)Call->Args[1], &Thread, &Owner);
+    if (Result != 0)
+        return Result;
+    Thread->Sched.Nice = Nice;
+    LxSchedRelease(Owner);
     return 0;
 }
 
@@ -1085,6 +1372,7 @@ LxCreateThread(
     Thread->Tid = Tid;
     Thread->Tls = (Request->Flags & LX_CLONE_SETTLS) ? Request->Tls : LxArchGetThreadPointer();
     Thread->SigMask = Call->Thread->SigMask;
+    LxSchedInherit(Thread, Call->Thread);
     if (Request->Flags & LX_CLONE_CHILD_CLEARTID)
         Thread->ClearChildTid = Request->ChildTid;
     if (Request->Flags & LX_CLONE_CHILD_SETTID)
@@ -1176,6 +1464,7 @@ LxForkProcess(
     Thread->Tid = Pid;
     Thread->Tls = (Request->Flags & LX_CLONE_SETTLS) ? Request->Tls : LxArchGetThreadPointer();
     Thread->SigMask = Call->Thread->SigMask;
+    LxSchedInherit(Thread, Call->Thread);
     Thread->AltStack = Call->Thread->AltStack;
     RtlCopyMemory(Thread->Comm, Call->Thread->Comm, sizeof(Thread->Comm));
     if (Request->Flags & LX_CLONE_CHILD_CLEARTID)
@@ -2022,8 +2311,21 @@ LX_SYSCALL(LxSysReboot)
 
 LX_SYSCALL(LxSysGetpriority)
 {
-    UNREFERENCED_PARAMETER(Call);
-    return 20;
+    ULONG Which = (ULONG)Call->Args[0];
+    PLX_PROCESS Owner;
+    PLX_THREAD Thread;
+    LONG64 Result;
+
+    if (Which > LX_PRIO_USER)
+        return -LX_EINVAL;
+    if (Which != LX_PRIO_PROCESS)
+        return 20 - Call->Thread->Sched.Nice;
+    Result = LxSchedTarget(Call, (LONG)Call->Args[1], &Thread, &Owner);
+    if (Result != 0)
+        return Result;
+    Result = 20 - Thread->Sched.Nice;
+    LxSchedRelease(Owner);
+    return Result;
 }
 
 LX_SYSCALL(LxSysUnshare)

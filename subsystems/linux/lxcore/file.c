@@ -289,7 +289,7 @@ LxFileWrite(
     if ((Result > 0) && (File->Mount != NULL))
     {
         File->Written = TRUE;
-        if (File->Path != NULL)
+        if ((File->Path != NULL) && (File->Type == LX_S_IFREG))
             LxVcacheInvalidatePath(File->Mount->Instance, File->Path);
         LxInotifyFileEvent(File, LX_IN_MODIFY);
     }
@@ -1181,7 +1181,7 @@ LxDeviceStat(
     Stat->Rdev = File->Rdev;
     Stat->Ino = File->Ino;
     Stat->BlkSize = 4096;
-    Stat->Dev = 5;
+    Stat->Dev = (File->Mount != NULL) ? File->Mount->Dev : 5;
     return 0;
 }
 

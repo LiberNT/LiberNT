@@ -396,6 +396,7 @@ struct _LX_THREAD
     LIST_ENTRY Link;
     volatile LONG64 Pending;
     LX_STACK AltStack;
+    LX_SCHED_ATTR Sched;
     ULONG64 SuspendMask;
     BOOLEAN Suspended;
     CHAR Comm[16];
@@ -498,6 +499,7 @@ NTSTATUS LxFillRandom(_Out_writes_bytes_(Length) PUCHAR Buffer, _In_ ULONG Lengt
 VOID LxNtTimeToTimespec(_In_ LONG64 NtTime, _Out_ PLX_TIMESPEC Timespec);
 LONG64 LxTimespecToNtTime(_In_ PLX_TIMESPEC Timespec);
 LONG64 LxTimespecToNs(_In_ PLX_TIMESPEC Timespec);
+VOID LxSchedInherit(_Inout_ PLX_THREAD Child, _In_ PLX_THREAD Parent);
 PLX_THREAD LxCurrentThread(VOID);
 
 VOID LxPollHeadInit(_Out_ PLX_POLL_HEAD Head);

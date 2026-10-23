@@ -512,6 +512,7 @@ LxThreadCreate(
     Thread->Process = Process;
     InitializeListHead(&Thread->Link);
     Thread->AltStack.Flags = LX_SS_DISABLE;
+    Thread->Sched.UtilMax = 1024;
     Thread->CurrentSyscall = MAXULONG;
     RtlCopyMemory(Thread->Comm, Process->Comm, sizeof(Thread->Comm));
     return Thread;
