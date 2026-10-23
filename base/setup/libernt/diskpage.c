@@ -506,6 +506,12 @@ GetInstallBlocker(
     if (!PartEntry)
         return IDS_DISK_SELECT;
 
+    if (PartEntry->SectorCount.QuadPart * PartEntry->DiskEntry->BytesPerSector <
+        (ULONGLONG)SetupData.USetupData.RequiredPartitionDiskSpace * DISK_MEGABYTE)
+    {
+        return IDS_DISK_TOO_SMALL;
+    }
+
     if (!PartEntry->IsPartitioned)
         return (PartitionCreateChecks(PartEntry, 0ULL, 0) == NOT_AN_ERROR) ? 0 : IDS_DISK_NO_REGION;
 

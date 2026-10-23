@@ -259,6 +259,7 @@
 #define IDS_DISK_FORMAT_EXISTING    5547
 #define IDS_DISK_ERASE_WARN         5548
 #define IDS_NEWPART_RANGE           5549
+#define IDS_DISK_TOO_SMALL          5550
 
 #define IDS_READY_TARGET            5560
 #define IDS_READY_ERASE             5561

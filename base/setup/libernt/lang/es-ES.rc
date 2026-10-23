@@ -218,6 +218,7 @@ BEGIN
     IDS_DISK_SELECT "Seleccione dónde instalar LiberNT."
     IDS_DISK_NO_REGION "Este espacio es demasiado pequeño para una nueva partición."
     IDS_DISK_NOT_BASIC "No se puede instalar LiberNT en esta partición. Seleccione una partición principal o un espacio sin asignar."
+    IDS_DISK_TOO_SMALL "Esta partición es demasiado pequeña para instalar LiberNT."
     IDS_DISK_NOT_FIRMWARE "El firmware de este equipo no ve la unidad seleccionada, por lo que es posible que LiberNT no pueda arrancar desde ella.\n\nHaga clic en Aceptar para usarla de todos modos."
     IDS_DISK_NEW_SYSTEM "Para que todas las funciones de LiberNT funcionen correctamente, el programa también crea particiones para los archivos del sistema."
     IDS_DISK_FORMAT_WARN "Si formatea esta partición, se perderán todos los datos que contiene. Haga antes una copia de seguridad de los archivos que quiera conservar."
