@@ -4220,6 +4220,47 @@ XHCI_SgListHasHighAddress(
 }
 
 static
+BOOLEAN
+XHCI_SgListBouncedByHal(
+    _In_opt_ PUSBPORT_SCATTER_GATHER_LIST SgList)
+{
+    ULONG Index;
+
+    if (!SgList || !SgList->MappedSystemVa)
+        return FALSE;
+
+    for (Index = 0; Index < SgList->SgElementCount; Index++)
+    {
+        PHYSICAL_ADDRESS Physical;
+
+        if (SgList->SgElement[Index].SgTransferLength == 0)
+            continue;
+
+        Physical = MmGetPhysicalAddress((PUCHAR)SgList->MappedSystemVa +
+                                        SgList->SgElement[Index].SgOffset);
+        if ((Physical.QuadPart >> 32) != 0 &&
+            (SgList->SgElement[Index].SgPhysicalAddress.QuadPart >> 32) == 0)
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static
+BOOLEAN
+XHCI_UsesNonCoherentBounce(
+    _In_ PXHCI_EXTENSION Extension,
+    _In_opt_ PUSBPORT_SCATTER_GATHER_LIST SgList)
+{
+    if (!(Extension->Quirks & XHCI_QUIRK_NON_COHERENT_DMA))
+        return FALSE;
+
+    return !(XHCI_Requires32BitDma(Extension) && XHCI_SgListBouncedByHal(SgList));
+}
+
+static
 ULONG
 XHCI_CopySgListToBuffer(
     _In_ PUSBPORT_SCATTER_GATHER_LIST SgList,
@@ -11398,7 +11439,7 @@ XHCI_SubmitControlTransfer(
 
     if (HasDataStage &&
         (ForceBounce ||
-         (Extension->Quirks & XHCI_QUIRK_NON_COHERENT_DMA) ||
+         XHCI_UsesNonCoherentBounce(Extension, SgList) ||
          (XHCI_Requires32BitDma(Extension) &&
           XHCI_SgListHasHighAddress(SgList, &HighAddress))))
     {
@@ -12021,7 +12062,7 @@ XHCI_SubmitSgTransfer(
      * noncached page. Do not allocate and copy through a second bounce page. */
     if (Remaining &&
         !(TransferParameters->TransferFlags & USBPORT_TRANSFER_FLAG_DUMP) &&
-        ((Extension->Quirks & XHCI_QUIRK_NON_COHERENT_DMA) ||
+        (XHCI_UsesNonCoherentBounce(Extension, SgList) ||
          (XHCI_Requires32BitDma(Extension) &&
           XHCI_SgListHasHighAddress(SgList, &HighAddress))))
     {
@@ -13940,7 +13981,7 @@ XHCI_SubmitIsochronousTransfer(
         if (!SgList || SgList->SgElementCount == 0)
             return MP_STATUS_NO_RESOURCES;
 
-        if ((Extension->Quirks & XHCI_QUIRK_NON_COHERENT_DMA) ||
+        if (XHCI_UsesNonCoherentBounce(Extension, SgList) ||
             (XHCI_Requires32BitDma(Extension) &&
              XHCI_SgListHasHighAddress(SgList, &HighAddress)))
         {
