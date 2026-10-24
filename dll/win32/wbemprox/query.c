@@ -1261,6 +1261,23 @@ HRESULT get_propval( const struct view *view, UINT index, const WCHAR *name, VAR
         vartype = VT_BSTR;
         val_ptr = get_value_bstr( table, row, column );
         break;
+#ifdef __REACTOS__
+    case CIM_BOOLEAN:
+        if ((table->columns[column].type & COL_FLAG_NULLABLE) && val == WBEMPROX_NULL_BOOLEAN)
+            vartype = VT_NULL;
+        break;
+    case CIM_UINT32:
+        if ((table->columns[column].type & COL_FLAG_NULLABLE) && val == WBEMPROX_NULL_UINT32)
+            vartype = VT_NULL;
+        break;
+    case CIM_SINT8:
+    case CIM_UINT8:
+    case CIM_SINT16:
+    case CIM_UINT16:
+    case CIM_SINT32:
+    case CIM_REAL32:
+        break;
+#else
     case CIM_BOOLEAN:
     case CIM_SINT8:
     case CIM_UINT8:
@@ -1270,6 +1287,7 @@ HRESULT get_propval( const struct view *view, UINT index, const WCHAR *name, VAR
     case CIM_UINT32:
     case CIM_REAL32:
         break;
+#endif
     default:
         ERR("unhandled column type %u\n", table->columns[column].type);
         return WBEM_E_FAILED;

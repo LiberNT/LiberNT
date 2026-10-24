@@ -662,6 +662,35 @@ static const struct column col_sysrestore[] =
     { L"GetLastRestoreStatus", CIM_FLAG_ARRAY|COL_FLAG_METHOD },
     { L"Restore",              CIM_FLAG_ARRAY|COL_FLAG_METHOD },
 };
+#ifdef __REACTOS__
+static const struct column col_timezone[] =
+{
+    { L"Bias",                CIM_SINT32 },
+    { L"Caption",             CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"DaylightBias",        CIM_SINT32 },
+    { L"DaylightDay",         CIM_UINT32 },
+    { L"DaylightDayOfWeek",   CIM_UINT8 },
+    { L"DaylightHour",        CIM_UINT32 },
+    { L"DaylightMillisecond", CIM_UINT32 },
+    { L"DaylightMinute",      CIM_UINT32 },
+    { L"DaylightMonth",       CIM_UINT32 },
+    { L"DaylightName",        CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"DaylightSecond",      CIM_UINT32 },
+    { L"DaylightYear",        CIM_UINT32 },
+    { L"Description",         CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"SettingID",           CIM_STRING },
+    { L"StandardBias",        CIM_UINT32 },
+    { L"StandardDay",         CIM_UINT32 },
+    { L"StandardDayOfWeek",   CIM_UINT8 },
+    { L"StandardHour",        CIM_UINT32 },
+    { L"StandardMillisecond", CIM_UINT32 },
+    { L"StandardMinute",      CIM_UINT32 },
+    { L"StandardMonth",       CIM_UINT32 },
+    { L"StandardName",        CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"StandardSecond",      CIM_UINT32 },
+    { L"StandardYear",        CIM_UINT32 },
+};
+#endif
 static const struct column col_videocontroller[] =
 {
     { L"AcceleratorCapabilities",     CIM_UINT16|CIM_FLAG_ARRAY },
@@ -726,8 +755,36 @@ static const struct column col_videocontroller[] =
 
 static const struct column col_volume[] =
 {
+#ifdef __REACTOS__
+    { L"Automount",                    CIM_BOOLEAN },
+    { L"BlockSize",                    CIM_UINT64|COL_FLAG_NULLABLE },
+    { L"BootVolume",                   CIM_BOOLEAN|COL_FLAG_NULLABLE },
+    { L"Capacity",                     CIM_UINT64|COL_FLAG_NULLABLE },
+    { L"Caption",                      CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Compressed",                   CIM_BOOLEAN|COL_FLAG_NULLABLE },
+    { L"DeviceId",                     CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"DirtyBitSet",                  CIM_BOOLEAN|COL_FLAG_NULLABLE },
+    { L"DriveLetter",                  CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"DriveType",                    CIM_UINT32 },
+    { L"FileSystem",                   CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"FreeSpace",                    CIM_UINT64|COL_FLAG_NULLABLE },
+    { L"IndexingEnabled",              CIM_BOOLEAN|COL_FLAG_NULLABLE },
+    { L"Label",                        CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"MaximumFileNameLength",        CIM_UINT32|COL_FLAG_NULLABLE },
+    { L"Name",                         CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"PageFilePresent",              CIM_BOOLEAN|COL_FLAG_NULLABLE },
+    { L"QuotasEnabled",                CIM_BOOLEAN|COL_FLAG_NULLABLE },
+    { L"QuotasIncomplete",             CIM_BOOLEAN|COL_FLAG_NULLABLE },
+    { L"QuotasRebuilding",             CIM_BOOLEAN|COL_FLAG_NULLABLE },
+    { L"SerialNumber",                 CIM_UINT32|COL_FLAG_NULLABLE },
+    { L"SupportsDiskQuotas",           CIM_BOOLEAN|COL_FLAG_NULLABLE },
+    { L"SupportsFileBasedCompression", CIM_BOOLEAN|COL_FLAG_NULLABLE },
+    { L"SystemName",                   CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"SystemVolume",                 CIM_BOOLEAN|COL_FLAG_NULLABLE },
+#else
     { L"DeviceId",      CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { L"DriveLetter",   CIM_STRING|COL_FLAG_DYNAMIC },
+#endif
 };
 
 static const struct column col_winsat[] =
@@ -1313,6 +1370,35 @@ struct record_systemenclosure
     const WCHAR        *serial_number;
     const WCHAR        *tag;
 };
+#ifdef __REACTOS__
+struct record_timezone
+{
+    INT32        bias;
+    const WCHAR *caption;
+    INT32        daylightbias;
+    UINT32       daylightday;
+    UINT8        daylightdayofweek;
+    UINT32       daylighthour;
+    UINT32       daylightmillisecond;
+    UINT32       daylightminute;
+    UINT32       daylightmonth;
+    const WCHAR *daylightname;
+    UINT32       daylightsecond;
+    UINT32       daylightyear;
+    const WCHAR *description;
+    const WCHAR *settingid;
+    UINT32       standardbias;
+    UINT32       standardday;
+    UINT8        standarddayofweek;
+    UINT32       standardhour;
+    UINT32       standardmillisecond;
+    UINT32       standardminute;
+    UINT32       standardmonth;
+    const WCHAR *standardname;
+    UINT32       standardsecond;
+    UINT32       standardyear;
+};
+#endif
 struct record_videocontroller
 {
     const struct array *accelerator_caps;
@@ -1377,8 +1463,36 @@ struct record_videocontroller
 
 struct record_volume
 {
+#ifdef __REACTOS__
+    int          automount;
+    UINT64       blocksize;
+    int          bootvolume;
+    UINT64       capacity;
+    const WCHAR *caption;
+    int          compressed;
+    const WCHAR *deviceid;
+    int          dirtybitset;
+    const WCHAR *driveletter;
+    UINT32       drivetype;
+    const WCHAR *filesystem;
+    UINT64       freespace;
+    int          indexingenabled;
+    const WCHAR *label;
+    UINT32       maximumfilenamelength;
+    const WCHAR *name;
+    int          pagefilepresent;
+    int          quotasenabled;
+    int          quotasincomplete;
+    int          quotasrebuilding;
+    UINT32       serialnumber;
+    int          supportsdiskquotas;
+    int          supportsfilebasedcompression;
+    const WCHAR *systemname;
+    int          systemvolume;
+#else
     const WCHAR *deviceid;
     const WCHAR *driveletter;
+#endif
 };
 
 struct record_winsat
@@ -3838,6 +3952,69 @@ static enum fill_status fill_localtime( struct table *table, const struct expr *
     return status;
 }
 
+#ifdef __REACTOS__
+static WCHAR *get_timezone_display( const WCHAR *key_name )
+{
+    WCHAR path[MAX_PATH], system_dir[MAX_PATH], buf[256];
+    DWORD size = sizeof(buf);
+    HKEY key;
+
+    if (!key_name[0]) return NULL;
+    if (!GetSystemDirectoryW( system_dir, ARRAY_SIZE( system_dir ) )) system_dir[0] = 0;
+    swprintf( path, ARRAY_SIZE( path ), L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Time Zones\\%s", key_name );
+    if (RegOpenKeyExW( HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &key )) return NULL;
+    if (RegLoadMUIStringW( key, L"MUI_Display", buf, sizeof(buf), NULL, 0, system_dir[0] ? system_dir : NULL ))
+    {
+        size = sizeof(buf);
+        if (RegGetValueW( key, NULL, L"Display", RRF_RT_REG_SZ, NULL, buf, &size )) buf[0] = 0;
+    }
+    RegCloseKey( key );
+    return buf[0] ? wcsdup( buf ) : NULL;
+}
+
+static enum fill_status fill_timezone( struct table *table, const struct expr *cond )
+{
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+    DYNAMIC_TIME_ZONE_INFORMATION tzi;
+    struct record_timezone *rec;
+
+    if (!resize_table( table, 1, sizeof(*rec) )) return FILL_STATUS_FAILED;
+    if (GetDynamicTimeZoneInformation( &tzi ) == TIME_ZONE_ID_INVALID) return FILL_STATUS_FAILED;
+
+    rec = (struct record_timezone *)table->data;
+    rec->bias                = -tzi.Bias;
+    rec->caption             = get_timezone_display( tzi.TimeZoneKeyName );
+    rec->daylightbias        = tzi.DaylightBias;
+    rec->daylightday         = tzi.DaylightDate.wDay;
+    rec->daylightdayofweek   = tzi.DaylightDate.wDayOfWeek;
+    rec->daylighthour        = tzi.DaylightDate.wHour;
+    rec->daylightmillisecond = tzi.DaylightDate.wMilliseconds;
+    rec->daylightminute      = tzi.DaylightDate.wMinute;
+    rec->daylightmonth       = tzi.DaylightDate.wMonth;
+    rec->daylightname        = wcsdup( tzi.DaylightName );
+    rec->daylightsecond      = tzi.DaylightDate.wSecond;
+    rec->daylightyear        = tzi.DaylightDate.wYear;
+    rec->description         = rec->caption ? wcsdup( rec->caption ) : NULL;
+    rec->settingid           = NULL;
+    rec->standardbias        = tzi.StandardBias;
+    rec->standardday         = tzi.StandardDate.wDay;
+    rec->standarddayofweek   = tzi.StandardDate.wDayOfWeek;
+    rec->standardhour        = tzi.StandardDate.wHour;
+    rec->standardmillisecond = tzi.StandardDate.wMilliseconds;
+    rec->standardminute      = tzi.StandardDate.wMinute;
+    rec->standardmonth       = tzi.StandardDate.wMonth;
+    rec->standardname        = wcsdup( tzi.StandardName );
+    rec->standardsecond      = tzi.StandardDate.wSecond;
+    rec->standardyear        = tzi.StandardDate.wYear;
+
+    if (!match_row( table, 0, cond, &status )) free_row_values( table, 0 );
+    else table->num_rows = 1;
+
+    TRACE("created %u rows\n", table->num_rows);
+    return status;
+}
+#endif
+
 static WCHAR *get_volumename( const WCHAR *root )
 {
     WCHAR buf[MAX_PATH + 1] = {0};
@@ -5963,6 +6140,187 @@ static WCHAR *get_volume_driveletter( const WCHAR *volume )
     return ret;
 }
 
+#ifdef __REACTOS__
+struct wbemprox_fs_control_information
+{
+    LARGE_INTEGER FreeSpaceStartFiltering;
+    LARGE_INTEGER FreeSpaceThreshold;
+    LARGE_INTEGER FreeSpaceStopFiltering;
+    LARGE_INTEGER DefaultQuotaThreshold;
+    LARGE_INTEGER DefaultQuotaLimit;
+    ULONG         FileSystemControlFlags;
+};
+
+#define WBEMPROX_FILE_VC_QUOTA_MASK        0x00000003
+#define WBEMPROX_FILE_VC_QUOTAS_INCOMPLETE 0x00000100
+#define WBEMPROX_FILE_VC_QUOTAS_REBUILDING 0x00000200
+#define WBEMPROX_VOLUME_IS_DIRTY           0x00000001
+
+static BOOL get_volume_nt_name( const WCHAR *volume, WCHAR *buf, DWORD len )
+{
+    WCHAR name[MAX_PATH];
+    size_t count = wcslen( volume );
+
+    if (count < 6 || count >= ARRAY_SIZE( name ) || wcsncmp( volume, L"\\\\?\\", 4 )) return FALSE;
+    memcpy( name, volume + 4, (count - 4) * sizeof(WCHAR) );
+    name[count - 4] = 0;
+    if (name[count - 5] == '\\') name[count - 5] = 0;
+    return QueryDosDeviceW( name, buf, len ) != 0;
+}
+
+static int get_volume_dirty( const WCHAR *volume )
+{
+    WCHAR name[MAX_PATH];
+    size_t count = wcslen( volume );
+    ULONG flags = 0;
+    DWORD bytes;
+    HANDLE handle;
+    BOOL ret;
+
+    if (!count || count >= ARRAY_SIZE( name )) return WBEMPROX_NULL_BOOLEAN;
+    wcscpy( name, volume );
+    if (name[count - 1] == '\\') name[count - 1] = 0;
+    handle = CreateFileW( name, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL );
+    if (handle == INVALID_HANDLE_VALUE) return WBEMPROX_NULL_BOOLEAN;
+    ret = DeviceIoControl( handle, FSCTL_IS_VOLUME_DIRTY, NULL, 0, &flags, sizeof(flags), &bytes, NULL );
+    CloseHandle( handle );
+    if (!ret) return WBEMPROX_NULL_BOOLEAN;
+    return (flags & WBEMPROX_VOLUME_IS_DIRTY) ? -1 : 0;
+}
+
+static void get_volume_quota_state( const WCHAR *volume, struct record_volume *rec )
+{
+    struct wbemprox_fs_control_information info;
+    IO_STATUS_BLOCK io;
+    HANDLE handle;
+    NTSTATUS status;
+
+    handle = CreateFileW( volume, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                          OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL );
+    if (handle == INVALID_HANDLE_VALUE) return;
+    status = NtQueryVolumeInformationFile( handle, &io, &info, sizeof(info), FileFsControlInformation );
+    CloseHandle( handle );
+    if (status) return;
+    rec->quotasenabled    = (info.FileSystemControlFlags & WBEMPROX_FILE_VC_QUOTA_MASK) ? -1 : 0;
+    rec->quotasincomplete = (info.FileSystemControlFlags & WBEMPROX_FILE_VC_QUOTAS_INCOMPLETE) ? -1 : 0;
+    rec->quotasrebuilding = (info.FileSystemControlFlags & WBEMPROX_FILE_VC_QUOTAS_REBUILDING) ? -1 : 0;
+}
+
+static void fill_volume_filesystem( struct record_volume *rec, const WCHAR *volume, const WCHAR *boot_volume,
+                                    const WCHAR *system_partition )
+{
+    WCHAR fs[MAX_PATH], label[MAX_PATH], file[MAX_PATH], nt_name[MAX_PATH];
+    DWORD serial, max_length, flags, sectors, bytes, free_clusters, clusters, attrs;
+    ULARGE_INTEGER total, free;
+
+    rec->blocksize = rec->capacity = rec->freespace = ~0ull;
+    rec->bootvolume = rec->compressed = rec->dirtybitset = rec->indexingenabled = WBEMPROX_NULL_BOOLEAN;
+    rec->pagefilepresent = rec->quotasenabled = rec->quotasincomplete = rec->quotasrebuilding = WBEMPROX_NULL_BOOLEAN;
+    rec->supportsdiskquotas = rec->supportsfilebasedcompression = rec->systemvolume = WBEMPROX_NULL_BOOLEAN;
+    rec->maximumfilenamelength = rec->serialnumber = WBEMPROX_NULL_UINT32;
+    rec->filesystem = rec->label = NULL;
+
+    if (!GetVolumeInformationW( volume, label, ARRAY_SIZE( label ), &serial, &max_length, &flags, fs, ARRAY_SIZE( fs ) ) ||
+        !fs[0] || !wcsicmp( fs, L"RAW" ))
+        return;
+
+    rec->filesystem            = wcsdup( fs );
+    rec->label                 = wcsdup( label );
+    rec->serialnumber          = serial;
+    rec->maximumfilenamelength = max_length;
+    if (GetDiskFreeSpaceExW( volume, NULL, &total, &free ))
+    {
+        rec->capacity  = total.QuadPart;
+        rec->freespace = free.QuadPart;
+    }
+    if (GetDiskFreeSpaceW( volume, &sectors, &bytes, &free_clusters, &clusters ))
+        rec->blocksize = (UINT64)sectors * bytes;
+    rec->bootvolume   = !wcsicmp( volume, boot_volume ) ? -1 : 0;
+    rec->systemvolume = (system_partition[0] && get_volume_nt_name( volume, nt_name, ARRAY_SIZE( nt_name ) ) &&
+                         !wcsicmp( nt_name, system_partition )) ? -1 : 0;
+    swprintf( file, ARRAY_SIZE( file ), L"%spagefile.sys", volume );
+    rec->pagefilepresent              = GetFileAttributesW( file ) != INVALID_FILE_ATTRIBUTES ? -1 : 0;
+    rec->dirtybitset                  = get_volume_dirty( volume );
+    rec->supportsdiskquotas           = (flags & FILE_VOLUME_QUOTAS) ? -1 : 0;
+    rec->supportsfilebasedcompression = (flags & FILE_FILE_COMPRESSION) ? -1 : 0;
+
+    attrs = GetFileAttributesW( volume );
+    if ((flags & FILE_FILE_COMPRESSION) && attrs != INVALID_FILE_ATTRIBUTES)
+        rec->compressed = (attrs & FILE_ATTRIBUTE_COMPRESSED) ? -1 : 0;
+    if (flags & FILE_VOLUME_QUOTAS)
+    {
+        if (attrs != INVALID_FILE_ATTRIBUTES)
+            rec->indexingenabled = (attrs & FILE_ATTRIBUTE_NOT_CONTENT_INDEXED) ? 0 : -1;
+        get_volume_quota_state( volume, rec );
+    }
+}
+
+static enum fill_status fill_volume( struct table *table, const struct expr *cond )
+{
+    struct record_volume *rec;
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+    UINT row = 0, offset = 0;
+    WCHAR path[MAX_PATH], root[MAX_PATH], boot_volume[MAX_PATH], system_partition[MAX_PATH];
+    WCHAR computer[MAX_COMPUTERNAME_LENGTH + 1];
+    DWORD size;
+    HANDLE handle;
+
+    if (!resize_table( table, 2, sizeof(*rec) )) return FILL_STATUS_FAILED;
+
+    size = ARRAY_SIZE( computer );
+    if (!GetComputerNameW( computer, &size )) computer[0] = 0;
+    if (!GetWindowsDirectoryW( path, ARRAY_SIZE( path ) ) || !GetVolumePathNameW( path, root, ARRAY_SIZE( root ) ) ||
+        !GetVolumeNameForVolumeMountPointW( root, boot_volume, ARRAY_SIZE( boot_volume ) ))
+        boot_volume[0] = 0;
+    size = sizeof( system_partition );
+    if (RegGetValueW( HKEY_LOCAL_MACHINE, L"SYSTEM\\Setup", L"SystemPartition", RRF_RT_REG_SZ, NULL,
+                      system_partition, &size ))
+        system_partition[0] = 0;
+
+    handle = FindFirstVolumeW( path, ARRAY_SIZE(path) );
+    while (handle != INVALID_HANDLE_VALUE)
+    {
+        if (!resize_table( table, row + 1, sizeof(*rec) ))
+        {
+            FindVolumeClose( handle );
+            return FILL_STATUS_FAILED;
+        }
+
+        rec = (struct record_volume *)(table->data + offset);
+        rec->automount   = -1;
+        rec->deviceid    = wcsdup( path );
+        rec->driveletter = get_volume_driveletter( path );
+        if (rec->driveletter)
+        {
+            swprintf( root, ARRAY_SIZE( root ), L"%s\\", rec->driveletter );
+            rec->caption = wcsdup( root );
+        }
+        else
+            rec->caption = wcsdup( path );
+        rec->name       = wcsdup( rec->caption );
+        rec->drivetype  = GetDriveTypeW( path );
+        rec->systemname = wcsdup( computer );
+        fill_volume_filesystem( rec, path, boot_volume, system_partition );
+
+        if (!match_row( table, row, cond, &status )) free_row_values( table, row );
+        else
+        {
+            offset += sizeof(*rec);
+            row++;
+        }
+
+        if (!FindNextVolumeW( handle, path, ARRAY_SIZE(path) ))
+        {
+            FindVolumeClose( handle );
+            handle = INVALID_HANDLE_VALUE;
+        }
+    }
+
+    TRACE("created %u rows\n", row);
+    table->num_rows = row;
+    return status;
+}
+#else
 static enum fill_status fill_volume( struct table *table, const struct expr *cond )
 {
     struct record_volume *rec;
@@ -6000,6 +6358,7 @@ static enum fill_status fill_volume( struct table *table, const struct expr *con
     table->num_rows = row;
     return status;
 }
+#endif
 
 #define MAX_THERMAL_ZONE_COUNT 32
 #define MAX_FAN_COUNT          32
@@ -6521,6 +6880,9 @@ static struct table cimv2_builtin_classes[] =
     { L"Win32_Service", C(col_service), 0, 0, NULL, fill_service },
     { L"Win32_SoundDevice", C(col_sounddevice), 0, 0, NULL, fill_sounddevice },
     { L"Win32_SystemEnclosure", C(col_systemenclosure), 0, 0, NULL, fill_systemenclosure },
+#ifdef __REACTOS__
+    { L"Win32_TimeZone", C(col_timezone), 0, 0, NULL, fill_timezone },
+#endif
     { L"Win32_VideoController", C(col_videocontroller), 0, 0, NULL, fill_videocontroller },
     { L"Win32_Volume", C(col_volume), 0, 0, NULL, fill_volume },
     { L"Win32_WinSAT", C(col_winsat), D(data_winsat) },
