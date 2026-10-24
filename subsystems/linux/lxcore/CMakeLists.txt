@@ -5,6 +5,7 @@ list(APPEND SOURCE
     fdobj.c
     file.c
     fs.c
+    futex.c
     inet.c
     netlink.c
     mm.c

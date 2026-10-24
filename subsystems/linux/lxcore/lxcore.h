@@ -65,6 +65,7 @@ typedef struct _LX_VMA
     ULONG Flags;
     PLX_FILE File;
     ULONG64 Offset;
+    PVOID Section;
 } LX_VMA, *PLX_VMA;
 
 typedef struct _LX_POLL_HEAD
@@ -402,6 +403,9 @@ struct _LX_THREAD
     CHAR Comm[16];
     ULONG CurrentSyscall;
     ULONG64 CurrentArgs[6];
+    ULONG64 RobustList;
+    LONG64 Restart;
+    ULONG64 RestartArgument;
 };
 
 typedef struct _LX_CALL
@@ -692,7 +696,9 @@ ULONG LxProtToNt(_In_ ULONG Prot);
 NTSTATUS LxExecImage(_In_ PLX_THREAD Thread, _In_ PLX_EXEC_REQUEST Request, _Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame, _Out_ PLONG Errno);
 
 LONG64 LxFutexWake(_In_ ULONG64 Address, _In_ LONG Count);
-LONG64 LxFutexWait(_In_ ULONG64 Address, _In_ ULONG Value, _In_opt_ PLARGE_INTEGER Timeout);
+VOID LxFutexInitialize(VOID);
+VOID LxFutexExitRobustList(_In_ PLX_THREAD Thread);
+BOOLEAN LxMmSharedKey(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _Out_ PVOID *Object, _Out_ PULONG64 Offset);
 
 LONG LxSignalFromException(_In_ NTSTATUS ExceptionCode, _Out_ PLONG Code);
 VOID LxSignalSend(_In_ PLX_PROCESS Target, _In_opt_ PLX_THREAD TargetThread, _In_ LONG Signal, _In_opt_ PLX_SIGINFO Info);
@@ -711,6 +717,7 @@ ULONG64 LxArchHwcap(VOID);
 PCSTR LxArchPlatform(VOID);
 VOID LxArchGetSyscall(_In_ PKTRAP_FRAME TrapFrame, _Out_ PULONG Number, _Out_writes_(6) PULONG64 Args);
 VOID LxArchSetSyscallResult(_Inout_ PKTRAP_FRAME TrapFrame, _In_ LONG64 Result);
+VOID LxArchRestartSyscall(_Inout_ PKTRAP_FRAME TrapFrame, _In_ ULONG64 Argument);
 VOID LxArchSetExecContext(_Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame, _In_ ULONG64 Pc, _In_ ULONG64 Sp);
 VOID LxArchCaptureContext(_In_ PKTRAP_FRAME TrapFrame, _In_opt_ PKEXCEPTION_FRAME ExceptionFrame, _Out_ PCONTEXT Context);
 VOID LxArchSetForkContext(_Inout_ PCONTEXT Context, _In_ ULONG64 StackPointer);

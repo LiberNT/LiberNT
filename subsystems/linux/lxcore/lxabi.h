@@ -43,6 +43,9 @@
 #define LX_ELOOP            40
 #define LX_ELIBBAD          80
 #define LX_ETIMEDOUT        110
+#define LX_ERESTARTSYS      512
+#define LX_ERESTARTNOINTR   513
+#define LX_ERESTARTNOHAND   514
 #define LX_ENOTBLK          15
 #define LX_ETXTBSY          26
 #define LX_EMLINK           31
@@ -475,10 +478,47 @@ typedef struct _LX_SCHED_ATTR
 
 #define LX_FUTEX_WAIT           0
 #define LX_FUTEX_WAKE           1
+#define LX_FUTEX_REQUEUE        3
+#define LX_FUTEX_CMP_REQUEUE    4
+#define LX_FUTEX_WAKE_OP        5
+#define LX_FUTEX_LOCK_PI        6
+#define LX_FUTEX_UNLOCK_PI      7
+#define LX_FUTEX_TRYLOCK_PI     8
 #define LX_FUTEX_WAIT_BITSET    9
 #define LX_FUTEX_WAKE_BITSET    10
+#define LX_FUTEX_WAIT_REQUEUE_PI 11
+#define LX_FUTEX_LOCK_PI2       13
 #define LX_FUTEX_PRIVATE        128
 #define LX_FUTEX_CLOCK_REALTIME 256
+#define LX_FUTEX_OP_OPARG_SHIFT 8
+#define LX_FUTEX_BITSET_MATCH_ANY 0xFFFFFFFF
+#define LX_FUTEX_WAITERS        0x80000000
+#define LX_FUTEX_OWNER_DIED     0x40000000
+#define LX_FUTEX_TID_MASK       0x3FFFFFFF
+#define LX_ROBUST_LIST_LIMIT    2048
+#define LX_FUTEX2_SIZE_U32      0x02
+#define LX_FUTEX2_SIZE_MASK     0x03
+#define LX_FUTEX2_NUMA          0x04
+#define LX_FUTEX2_MPOL          0x08
+#define LX_FUTEX2_PRIVATE       LX_FUTEX_PRIVATE
+#define LX_FUTEX2_VALID_MASK    (LX_FUTEX2_SIZE_MASK | LX_FUTEX2_NUMA | LX_FUTEX2_MPOL | LX_FUTEX2_PRIVATE)
+#define LX_FUTEX_NO_NODE        0xFFFFFFFF
+#define LX_FUTEX_WAITV_MAX      128
+
+typedef struct _LX_FUTEX_WAITV
+{
+    ULONG64 Value;
+    ULONG64 Address;
+    ULONG Flags;
+    ULONG Reserved;
+} LX_FUTEX_WAITV, *PLX_FUTEX_WAITV;
+
+typedef struct _LX_ROBUST_LIST_HEAD
+{
+    ULONG64 List;
+    LONG64 FutexOffset;
+    ULONG64 ListOpPending;
+} LX_ROBUST_LIST_HEAD, *PLX_ROBUST_LIST_HEAD;
 
 #define LX_RLIMIT_STACK     3
 #define LX_RLIMIT_NOFILE    7

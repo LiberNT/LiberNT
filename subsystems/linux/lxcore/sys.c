@@ -44,7 +44,8 @@ LxSyscallMayBlock(
 {
     return (Handler == LxSysEpollPwait) || (Handler == LxSysEpollPwait2) || (Handler == LxSysPpoll) ||
            (Handler == LxSysPselect6) || (Handler == LxSysWaitid) || (Handler == LxSysWait4) ||
-           (Handler == LxSysFutex) || (Handler == LxSysNanosleep) || (Handler == LxSysClockNanosleep) ||
+           (Handler == LxSysFutex) || (Handler == LxSysFutexWaitv) || (Handler == LxSysFutexWait) ||
+           (Handler == LxSysNanosleep) || (Handler == LxSysClockNanosleep) ||
            (Handler == LxSysRead) || (Handler == LxSysReadv) || (Handler == LxSysRecvmsg) ||
            (Handler == LxSysRecvfrom) || (Handler == LxSysRecvmmsg) || (Handler == LxSysRtSigtimedwait) ||
            (Handler == LxSysRtSigsuspend) || (Handler == LxSysAccept) || (Handler == LxSysAccept4) ||
@@ -1101,58 +1102,6 @@ LX_SYSCALL(LxSysSetTidAddress)
 {
     Call->Thread->ClearChildTid = Call->Args[0];
     return Call->Thread->Tid;
-}
-
-LX_SYSCALL(LxSysFutex)
-{
-    ULONG Operation = (ULONG)Call->Args[1] & ~(LX_FUTEX_PRIVATE | LX_FUTEX_CLOCK_REALTIME);
-    LARGE_INTEGER Timeout;
-    PLARGE_INTEGER TimeoutPointer = NULL;
-    LX_TIMESPEC Timespec;
-    LONG64 Result;
-
-    switch (Operation)
-    {
-        case LX_FUTEX_WAIT:
-        case LX_FUTEX_WAIT_BITSET:
-            if (Call->Args[3] != 0)
-            {
-                Result = LxCopyFromUser(&Timespec, Call->Args[3], sizeof(Timespec));
-                if (Result != 0)
-                    return Result;
-                if (Operation == LX_FUTEX_WAIT_BITSET)
-                {
-                    LX_TIMESPEC Now;
-
-                    LxQueryClock((Call->Args[1] & LX_FUTEX_CLOCK_REALTIME) ? LX_CLOCK_REALTIME : LX_CLOCK_MONOTONIC, &Now);
-                    Timeout.QuadPart = (Timespec.Seconds - Now.Seconds) * 10000000 +
-                                       (Timespec.Nanoseconds - Now.Nanoseconds) / 100;
-                    if (Timeout.QuadPart <= 0)
-                        return -LX_ETIMEDOUT;
-                    Timeout.QuadPart = -Timeout.QuadPart;
-                }
-                else
-                {
-                    Timeout.QuadPart = -(Timespec.Seconds * 10000000 + Timespec.Nanoseconds / 100);
-                    if (Timeout.QuadPart == 0)
-                        Timeout.QuadPart = -1;
-                }
-                TimeoutPointer = &Timeout;
-            }
-            return LxFutexWait(Call->Args[0], (ULONG)Call->Args[2], TimeoutPointer);
-
-        case LX_FUTEX_WAKE:
-        case LX_FUTEX_WAKE_BITSET:
-            return LxFutexWake(Call->Args[0], (LONG)Call->Args[2]);
-
-        case 3:
-        case 4:
-            Result = LxFutexWake(Call->Args[0], (LONG)Call->Args[2]);
-            return Result + LxFutexWake(Call->Args[4], MAXLONG);
-
-        default:
-            return -LX_ENOSYS;
-    }
 }
 
 LX_SYSCALL(LxSysExit)

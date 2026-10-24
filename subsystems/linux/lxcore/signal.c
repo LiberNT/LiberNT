@@ -330,7 +330,9 @@ LxSignalCheckPending(
     _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame)
 {
     PLX_PROCESS Process = Thread->Process;
+    LONG64 Restart = Thread->Restart;
 
+    Thread->Restart = 0;
     for (;;)
     {
         ULONG64 Deliverable = ((ULONG64)Thread->Pending | (ULONG64)Process->Pending) & ~Thread->SigMask;
@@ -361,10 +363,15 @@ LxSignalCheckPending(
             LxProcessExitGroup(Process, Signal);
         }
 
+        if ((Restart == -LX_ERESTARTNOINTR) || ((Restart == -LX_ERESTARTSYS) && (Action.Flags & LX_SA_RESTART)))
+            LxArchRestartSyscall(TrapFrame, Thread->RestartArgument);
         if (!LxSignalDeliver(Thread, TrapFrame, ExceptionFrame, Signal, &Info, &Action))
             LxProcessExitGroup(Process, LX_SIGSEGV);
         return;
     }
+
+    if (Restart != 0)
+        LxArchRestartSyscall(TrapFrame, Thread->RestartArgument);
 
     if (Thread->Suspended)
     {

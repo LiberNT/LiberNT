@@ -567,6 +567,7 @@ LxExecImage(
         }
     }
 
+    LxFutexExitRobustList(Thread);
     LxMmReset(Process);
     LxFdCloseOnExec(Process);
     ExAcquireFastMutex(&Process->Lock);

@@ -101,7 +101,8 @@ static LX_SYSCALL_ENTRY LxGenericSyscalls[] =
     LX_ENTRY(96, LxSysSetTidAddress, "set_tid_address"),
     LX_ENTRY(97, LxSysUnshare, "unshare"),
     LX_ENTRY(98, LxSysFutex, "futex"),
-    LX_ENTRY(99, LxSysSucceed, "set_robust_list"),
+    LX_ENTRY(99, LxSysSetRobustList, "set_robust_list"),
+    LX_ENTRY(100, LxSysGetRobustList, "get_robust_list"),
     LX_ENTRY(101, LxSysNanosleep, "nanosleep"),
     LX_ENTRY(102, LxSysGetitimer, "getitimer"),
     LX_ENTRY(103, LxSysSetitimer, "setitimer"),
@@ -245,7 +246,11 @@ static LX_SYSCALL_ENTRY LxGenericSyscalls[] =
     LX_ENTRY(439, LxSysFaccessat2, "faccessat2"),
     LX_ENTRY(441, LxSysEpollPwait2, "epoll_pwait2"),
     LX_ENTRY(442, LxSysMountSetattr, "mount_setattr"),
+    LX_ENTRY(449, LxSysFutexWaitv, "futex_waitv"),
     LX_ENTRY(452, LxSysFchmodat, "fchmodat2"),
+    LX_ENTRY(454, LxSysFutexWake, "futex_wake"),
+    LX_ENTRY(455, LxSysFutexWait, "futex_wait"),
+    LX_ENTRY(456, LxSysFutexRequeue, "futex_requeue"),
 };
 
 PLX_SYSCALL_ENTRY

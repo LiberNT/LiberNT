@@ -36,6 +36,12 @@ LxPicoSystemCall(
     LxArchGetSyscall(TrapFrame, &Call.Number, Call.Args);
 
     Result = LxSysCall(&Call);
+    if ((Result == -LX_ERESTARTSYS) || (Result == -LX_ERESTARTNOINTR) || (Result == -LX_ERESTARTNOHAND))
+    {
+        Call.Thread->Restart = Result;
+        Call.Thread->RestartArgument = Call.Args[0];
+        Result = -LX_EINTR;
+    }
     if (Result != LX_SYSCALL_NO_RESULT)
         LxArchSetSyscallResult(TrapFrame, Result);
 
@@ -131,6 +137,7 @@ LxPicoThreadExit(
     if (Thread == NULL)
         return;
 
+    LxFutexExitRobustList(Thread);
     if (Thread->ClearChildTid != 0)
     {
         if (LxCopyToUser(Thread->ClearChildTid, &Zero, sizeof(Zero)) == 0)

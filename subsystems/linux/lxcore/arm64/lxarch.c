@@ -81,6 +81,15 @@ LxArchSetSyscallResult(
 }
 
 VOID
+LxArchRestartSyscall(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG64 Argument)
+{
+    TrapFrame->X0 = Argument;
+    TrapFrame->Pc -= 4;
+}
+
+VOID
 LxArchSetExecContext(
     _Inout_ PKTRAP_FRAME TrapFrame,
     _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame,
