@@ -45,6 +45,7 @@
 #include <acpiioct.h>
 #ifdef __REACTOS__
 #include <cfgmgr32.h>
+#include <lm.h>
 #include <wmistr.h>
 #include <wmium.h>
 #include <wmidata.h>
@@ -663,6 +664,17 @@ static const struct column col_sysrestore[] =
     { L"Restore",              CIM_FLAG_ARRAY|COL_FLAG_METHOD },
 };
 #ifdef __REACTOS__
+static const struct column col_environment[] =
+{
+    { L"Caption",        CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Description",    CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"InstallDate",    CIM_DATETIME },
+    { L"Name",           CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"Status",         CIM_STRING },
+    { L"SystemVariable", CIM_BOOLEAN },
+    { L"UserName",       CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"VariableValue",  CIM_STRING|COL_FLAG_DYNAMIC },
+};
 static const struct column col_timezone[] =
 {
     { L"Bias",                CIM_SINT32 },
@@ -689,6 +701,25 @@ static const struct column col_timezone[] =
     { L"StandardName",        CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { L"StandardSecond",      CIM_UINT32 },
     { L"StandardYear",        CIM_UINT32 },
+};
+static const struct column col_useraccount[] =
+{
+    { L"AccountType",        CIM_UINT32 },
+    { L"Caption",            CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Description",        CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Disabled",           CIM_BOOLEAN },
+    { L"Domain",             CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"FullName",           CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"InstallDate",        CIM_DATETIME },
+    { L"LocalAccount",       CIM_BOOLEAN },
+    { L"Lockout",            CIM_BOOLEAN },
+    { L"Name",               CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"PasswordChangeable", CIM_BOOLEAN },
+    { L"PasswordExpires",    CIM_BOOLEAN },
+    { L"PasswordRequired",   CIM_BOOLEAN },
+    { L"SID",                CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"SIDType",            CIM_UINT8 },
+    { L"Status",             CIM_STRING },
 };
 #endif
 static const struct column col_videocontroller[] =
@@ -1371,6 +1402,17 @@ struct record_systemenclosure
     const WCHAR        *tag;
 };
 #ifdef __REACTOS__
+struct record_environment
+{
+    const WCHAR *caption;
+    const WCHAR *description;
+    const WCHAR *installdate;
+    const WCHAR *name;
+    const WCHAR *status;
+    int          systemvariable;
+    const WCHAR *username;
+    const WCHAR *variablevalue;
+};
 struct record_timezone
 {
     INT32        bias;
@@ -1397,6 +1439,25 @@ struct record_timezone
     const WCHAR *standardname;
     UINT32       standardsecond;
     UINT32       standardyear;
+};
+struct record_useraccount
+{
+    UINT32       accounttype;
+    const WCHAR *caption;
+    const WCHAR *description;
+    int          disabled;
+    const WCHAR *domain;
+    const WCHAR *fullname;
+    const WCHAR *installdate;
+    int          localaccount;
+    int          lockout;
+    const WCHAR *name;
+    int          passwordchangeable;
+    int          passwordexpires;
+    int          passwordrequired;
+    const WCHAR *sid;
+    UINT8        sidtype;
+    const WCHAR *status;
 };
 #endif
 struct record_videocontroller
@@ -4011,6 +4072,226 @@ static enum fill_status fill_timezone( struct table *table, const struct expr *c
     else table->num_rows = 1;
 
     TRACE("created %u rows\n", table->num_rows);
+    return status;
+}
+
+static WCHAR *get_environment_caption( const WCHAR *user, const WCHAR *name )
+{
+    size_t len = wcslen( user ) + wcslen( name ) + 2;
+    WCHAR *ret;
+
+    if (!(ret = malloc( len * sizeof(WCHAR) ))) return NULL;
+    swprintf( ret, len, L"%s\\%s", user, name );
+    return ret;
+}
+
+static BOOL add_environment_rows( struct table *table, HKEY key, const WCHAR *user, BOOL system,
+                                  const struct expr *cond, enum fill_status *status, UINT *row, UINT *offset )
+{
+    struct record_environment *rec;
+    WCHAR name[1024], *value;
+    DWORD index, name_len, type, size;
+    LONG ret;
+
+    for (index = 0;; index++)
+    {
+        name_len = ARRAY_SIZE( name );
+        size = 0;
+        ret = RegEnumValueW( key, index, name, &name_len, NULL, &type, NULL, &size );
+        if (ret == ERROR_NO_MORE_ITEMS) break;
+        if (ret != ERROR_SUCCESS || (type != REG_SZ && type != REG_EXPAND_SZ)) continue;
+        if (!(value = malloc( size + sizeof(WCHAR) ))) return FALSE;
+        name_len = ARRAY_SIZE( name );
+        if (RegEnumValueW( key, index, name, &name_len, NULL, &type, (BYTE *)value, &size ))
+        {
+            free( value );
+            continue;
+        }
+        value[size / sizeof(WCHAR)] = 0;
+
+        if (!resize_table( table, *row + 1, sizeof(*rec) ))
+        {
+            free( value );
+            return FALSE;
+        }
+        rec = (struct record_environment *)(table->data + *offset);
+        rec->caption        = get_environment_caption( user, name );
+        rec->description    = get_environment_caption( user, name );
+        rec->installdate    = NULL;
+        rec->name           = wcsdup( name );
+        rec->status         = L"OK";
+        rec->systemvariable = system ? -1 : 0;
+        rec->username       = wcsdup( user );
+        rec->variablevalue  = value;
+        if (!match_row( table, *row, cond, status ))
+        {
+            free_row_values( table, *row );
+            continue;
+        }
+        *offset += sizeof(*rec);
+        (*row)++;
+    }
+    return TRUE;
+}
+
+static enum fill_status fill_environment( struct table *table, const struct expr *cond )
+{
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+    WCHAR sid_string[256], path[300], account[MAX_PATH], domain[MAX_PATH], user[2 * MAX_PATH + 2];
+    DWORD index, len, account_len, domain_len;
+    UINT row = 0, offset = 0;
+    SID_NAME_USE use;
+    HKEY key, profiles;
+    PSID sid;
+
+    if (!resize_table( table, 1, sizeof(struct record_environment) )) return FILL_STATUS_FAILED;
+
+    if (!RegOpenKeyExW( HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment", 0,
+                        KEY_READ, &key ))
+    {
+        if (!add_environment_rows( table, key, L"<SYSTEM>", TRUE, cond, &status, &row, &offset ))
+        {
+            RegCloseKey( key );
+            table->num_rows = row;
+            return FILL_STATUS_FAILED;
+        }
+        RegCloseKey( key );
+    }
+
+    if (!RegOpenKeyExW( HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList", 0,
+                        KEY_READ, &profiles ))
+    {
+        for (index = 0;; index++)
+        {
+            len = ARRAY_SIZE( sid_string );
+            if (RegEnumKeyExW( profiles, index, sid_string, &len, NULL, NULL, NULL, NULL )) break;
+
+            swprintf( path, ARRAY_SIZE( path ), L"%s\\Environment", sid_string );
+            if (RegOpenKeyExW( HKEY_USERS, path, 0, KEY_READ, &key )) continue;
+            if (!ConvertStringSidToSidW( sid_string, &sid ))
+            {
+                RegCloseKey( key );
+                continue;
+            }
+            account_len = ARRAY_SIZE( account );
+            domain_len = ARRAY_SIZE( domain );
+            if (!LookupAccountSidW( NULL, sid, account, &account_len, domain, &domain_len, &use ))
+            {
+                LocalFree( sid );
+                RegCloseKey( key );
+                continue;
+            }
+            LocalFree( sid );
+            if (domain[0]) swprintf( user, ARRAY_SIZE( user ), L"%s\\%s", domain, account );
+            else wcscpy( user, account );
+
+            if (!add_environment_rows( table, key, user, FALSE, cond, &status, &row, &offset ))
+            {
+                RegCloseKey( key );
+                RegCloseKey( profiles );
+                table->num_rows = row;
+                return FILL_STATUS_FAILED;
+            }
+            RegCloseKey( key );
+        }
+        RegCloseKey( profiles );
+    }
+
+    TRACE("created %u rows\n", row);
+    table->num_rows = row;
+    return status;
+}
+
+static WCHAR *get_account_sid_string( const WCHAR *account )
+{
+    BYTE sid[SECURITY_MAX_SID_SIZE];
+    WCHAR domain[MAX_PATH], *str, *ret;
+    DWORD sid_size = sizeof(sid), domain_size = ARRAY_SIZE( domain );
+    SID_NAME_USE use;
+
+    if (!LookupAccountNameW( NULL, account, sid, &sid_size, domain, &domain_size, &use )) return NULL;
+    if (!ConvertSidToStringSidW( sid, &str )) return NULL;
+    ret = wcsdup( str );
+    LocalFree( str );
+    return ret;
+}
+
+static int __cdecl compare_user_record( const void *a, const void *b )
+{
+    return wcsicmp( ((const struct record_useraccount *)a)->name, ((const struct record_useraccount *)b)->name );
+}
+
+static enum fill_status fill_useraccount( struct table *table, const struct expr *cond )
+{
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+    struct record_useraccount *rec;
+    USER_INFO_2 *users;
+    WCHAR computer[MAX_COMPUTERNAME_LENGTH + 1], caption[MAX_COMPUTERNAME_LENGTH + UNLEN + 2];
+    DWORD size, read, total, resume = 0, i, flags;
+    NET_API_STATUS ret;
+    UINT row = 0, offset = 0;
+
+    size = ARRAY_SIZE( computer );
+    if (!GetComputerNameW( computer, &size )) return FILL_STATUS_FAILED;
+    if (!resize_table( table, 1, sizeof(*rec) )) return FILL_STATUS_FAILED;
+
+    do
+    {
+        users = NULL;
+        read = total = 0;
+        ret = NetUserEnum( NULL, 2, FILTER_NORMAL_ACCOUNT, (BYTE **)&users, MAX_PREFERRED_LENGTH, &read, &total,
+                           &resume );
+        if (ret != NERR_Success && ret != ERROR_MORE_DATA)
+        {
+            if (users) NetApiBufferFree( users );
+            break;
+        }
+
+        for (i = 0; i < read; i++)
+        {
+            if (!resize_table( table, row + 1, sizeof(*rec) ))
+            {
+                NetApiBufferFree( users );
+                table->num_rows = row;
+                return FILL_STATUS_FAILED;
+            }
+
+            flags = users[i].usri2_flags;
+            swprintf( caption, ARRAY_SIZE( caption ), L"%s\\%s", computer, users[i].usri2_name );
+
+            rec = (struct record_useraccount *)(table->data + offset);
+            rec->accounttype        = flags & UF_ACCOUNT_TYPE_MASK;
+            rec->caption            = wcsdup( caption );
+            rec->description        = wcsdup( users[i].usri2_comment ? users[i].usri2_comment : L"" );
+            rec->disabled           = (flags & UF_ACCOUNTDISABLE) ? -1 : 0;
+            rec->domain             = wcsdup( computer );
+            rec->fullname           = wcsdup( users[i].usri2_full_name ? users[i].usri2_full_name : L"" );
+            rec->installdate        = NULL;
+            rec->localaccount       = -1;
+            rec->lockout            = (flags & UF_LOCKOUT) ? -1 : 0;
+            rec->name               = wcsdup( users[i].usri2_name );
+            rec->passwordchangeable = (flags & UF_PASSWD_CANT_CHANGE) ? 0 : -1;
+            rec->passwordexpires    = (flags & UF_DONT_EXPIRE_PASSWD) ? 0 : -1;
+            rec->passwordrequired   = (flags & UF_PASSWD_NOTREQD) ? 0 : -1;
+            rec->sid                = get_account_sid_string( caption );
+            rec->sidtype            = SidTypeUser;
+            rec->status             = (flags & UF_ACCOUNTDISABLE) ? L"Degraded" : L"OK";
+            if (!match_row( table, row, cond, &status ))
+            {
+                free_row_values( table, row );
+                continue;
+            }
+            offset += sizeof(*rec);
+            row++;
+        }
+        NetApiBufferFree( users );
+    }
+    while (ret == ERROR_MORE_DATA);
+
+    qsort( table->data, row, sizeof(*rec), compare_user_record );
+
+    TRACE("created %u rows\n", row);
+    table->num_rows = row;
     return status;
 }
 #endif
@@ -6857,6 +7138,9 @@ static struct table cimv2_builtin_classes[] =
     { L"Win32_DiskDrive", C(col_diskdrive), 0, 0, NULL, fill_diskdrive },
     { L"Win32_DiskDriveToDiskPartition", C(col_diskdrivetodiskpartition), 0, 0, NULL, fill_diskdrivetodiskpartition },
     { L"Win32_DiskPartition", C(col_diskpartition), 0, 0, NULL, fill_diskpartition },
+#ifdef __REACTOS__
+    { L"Win32_Environment", C(col_environment), 0, 0, NULL, fill_environment },
+#endif
     { L"Win32_DisplayControllerConfiguration", C(col_displaycontrollerconfig), 0, 0, NULL, fill_displaycontrollerconfig },
     { L"Win32_Fan", C(col_fan), 0, 0, NULL, fill_fan },
     { L"Win32_IP4RouteTable", C(col_ip4routetable), 0, 0, NULL, fill_ip4routetable },
@@ -6882,6 +7166,7 @@ static struct table cimv2_builtin_classes[] =
     { L"Win32_SystemEnclosure", C(col_systemenclosure), 0, 0, NULL, fill_systemenclosure },
 #ifdef __REACTOS__
     { L"Win32_TimeZone", C(col_timezone), 0, 0, NULL, fill_timezone },
+    { L"Win32_UserAccount", C(col_useraccount), 0, 0, NULL, fill_useraccount },
 #endif
     { L"Win32_VideoController", C(col_videocontroller), 0, 0, NULL, fill_videocontroller },
     { L"Win32_Volume", C(col_volume), 0, 0, NULL, fill_volume },
