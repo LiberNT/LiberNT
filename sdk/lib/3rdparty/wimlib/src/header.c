@@ -210,21 +210,21 @@ write_wim_header_flags(u32 hdr_flags, struct filedes *out_fd)
 
 static const struct {
 	u32 flag;
-	const char *name;
+	const tchar *name;
 } hdr_flags[] = {
-	{WIM_HDR_FLAG_RESERVED,		"RESERVED"},
-	{WIM_HDR_FLAG_COMPRESSION,	"COMPRESSION"},
-	{WIM_HDR_FLAG_READONLY,		"READONLY"},
-	{WIM_HDR_FLAG_SPANNED,		"SPANNED"},
-	{WIM_HDR_FLAG_RESOURCE_ONLY,	"RESOURCE_ONLY"},
-	{WIM_HDR_FLAG_METADATA_ONLY,	"METADATA_ONLY"},
-	{WIM_HDR_FLAG_WRITE_IN_PROGRESS,"WRITE_IN_PROGRESS"},
-	{WIM_HDR_FLAG_RP_FIX,		"RP_FIX"},
-	{WIM_HDR_FLAG_COMPRESS_RESERVED,"COMPRESS_RESERVED"},
-	{WIM_HDR_FLAG_COMPRESS_LZX,	"COMPRESS_LZX"},
-	{WIM_HDR_FLAG_COMPRESS_XPRESS,	"COMPRESS_XPRESS"},
-	{WIM_HDR_FLAG_COMPRESS_LZMS,	"COMPRESS_LZMS"},
-	{WIM_HDR_FLAG_COMPRESS_XPRESS_2,"COMPRESS_XPRESS_2"},
+	{WIM_HDR_FLAG_RESERVED,		T("RESERVED")},
+	{WIM_HDR_FLAG_COMPRESSION,	T("COMPRESSION")},
+	{WIM_HDR_FLAG_READONLY,		T("READONLY")},
+	{WIM_HDR_FLAG_SPANNED,		T("SPANNED")},
+	{WIM_HDR_FLAG_RESOURCE_ONLY,	T("RESOURCE_ONLY")},
+	{WIM_HDR_FLAG_METADATA_ONLY,	T("METADATA_ONLY")},
+	{WIM_HDR_FLAG_WRITE_IN_PROGRESS,T("WRITE_IN_PROGRESS")},
+	{WIM_HDR_FLAG_RP_FIX,		T("RP_FIX")},
+	{WIM_HDR_FLAG_COMPRESS_RESERVED,T("COMPRESS_RESERVED")},
+	{WIM_HDR_FLAG_COMPRESS_LZX,	T("COMPRESS_LZX")},
+	{WIM_HDR_FLAG_COMPRESS_XPRESS,	T("COMPRESS_XPRESS")},
+	{WIM_HDR_FLAG_COMPRESS_LZMS,	T("COMPRESS_LZMS")},
+	{WIM_HDR_FLAG_COMPRESS_XPRESS_2,T("COMPRESS_XPRESS_2")},
 };
 
 /* API function documented in wimlib.h  */
@@ -248,7 +248,7 @@ wimlib_print_header(const WIMStruct *wim)
 	tprintf(T("Flags                       = 0x%x\n"), hdr->flags);
 	for (size_t i = 0; i < ARRAY_LEN(hdr_flags); i++)
 		if (hdr_flags[i].flag & hdr->flags)
-			tprintf(T("    WIM_HDR_FLAG_%s is set\n"), hdr_flags[i].name);
+			tprintf(T("    WIM_HDR_FLAG_%"TS" is set\n"), hdr_flags[i].name);
 
 	tprintf(T("Chunk Size                  = %u\n"), hdr->chunk_size);
 	tfputs (T("GUID                        = "), stdout);
