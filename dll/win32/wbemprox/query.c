@@ -1251,6 +1251,13 @@ HRESULT get_propval( const struct view *view, UINT index, const WCHAR *name, VAR
         val_ptr = get_value_bstr( table, row, column );
         break;
     case CIM_UINT64:
+#ifdef __REACTOS__
+        if ((table->columns[column].type & COL_FLAG_NULLABLE) && (ULONGLONG)val == ~0ull)
+        {
+            vartype = VT_NULL;
+            break;
+        }
+#endif
         vartype = VT_BSTR;
         val_ptr = get_value_bstr( table, row, column );
         break;

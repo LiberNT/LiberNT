@@ -152,14 +152,23 @@ static const struct column col_directory[] =
 };
 static const struct column col_diskdrive[] =
 {
+#ifdef __REACTOS__
+    { L"Caption",       CIM_STRING|COL_FLAG_DYNAMIC },
+#else
     { L"Caption",       CIM_STRING },
+#endif
     { L"DeviceId",      CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { L"Index",         CIM_UINT32 },
     { L"InterfaceType", CIM_STRING },
     { L"Manufacturer",  CIM_STRING },
     { L"MediaType",     CIM_STRING },
+#ifdef __REACTOS__
+    { L"Model",         CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"PNPDeviceID",   CIM_STRING|COL_FLAG_DYNAMIC },
+#else
     { L"Model",         CIM_STRING },
     { L"PNPDeviceID",   CIM_STRING },
+#endif
     { L"SerialNumber",  CIM_STRING|COL_FLAG_DYNAMIC },
     { L"Signature",     CIM_UINT32 },
     { L"Size",          CIM_UINT64 },
@@ -217,9 +226,17 @@ static const struct column col_logicaldisk[] =
     { L"DeviceId",           CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { L"DriveType",          CIM_UINT32 },
     { L"FileSystem",         CIM_STRING|COL_FLAG_DYNAMIC },
+#ifdef __REACTOS__
+    { L"FreeSpace",          CIM_UINT64|COL_FLAG_NULLABLE },
+#else
     { L"FreeSpace",          CIM_UINT64 },
+#endif
     { L"Name",               CIM_STRING|COL_FLAG_DYNAMIC },
+#ifdef __REACTOS__
+    { L"Size",               CIM_UINT64|COL_FLAG_NULLABLE },
+#else
     { L"Size",               CIM_UINT64 },
+#endif
     { L"VolumeName",         CIM_STRING|COL_FLAG_DYNAMIC },
     { L"VolumeSerialNumber", CIM_STRING|COL_FLAG_DYNAMIC },
 };
@@ -396,7 +413,11 @@ static const struct column col_pnpentity[] =
     { L"Caption",              CIM_STRING|COL_FLAG_DYNAMIC },
     { L"ClassGuid",            CIM_STRING|COL_FLAG_DYNAMIC },
     { L"DeviceId",             CIM_STRING|COL_FLAG_DYNAMIC },
+#ifdef __REACTOS__
+    { L"Manufacturer",         CIM_STRING|COL_FLAG_DYNAMIC },
+#else
     { L"Manufacturer",         CIM_STRING },
+#endif
     { L"Name",                 CIM_STRING|COL_FLAG_DYNAMIC },
     { L"Service",              CIM_STRING|COL_FLAG_DYNAMIC },
 };
@@ -2747,6 +2768,7 @@ static UINT64 get_freespace( const WCHAR *dir, UINT64 *disksize )
     }
     return free.QuadPart;
 }
+#ifndef __REACTOS__
 static WCHAR *get_diskdrive_serialnumber( WCHAR letter )
 {
     WCHAR *ret = NULL;
@@ -2783,7 +2805,205 @@ done:
     if (!ret) ret = wcsdup( L"WINEHDISK" );
     return ret;
 }
+#endif
 
+#ifdef __REACTOS__
+static WCHAR *get_device_registry_string( HDEVINFO devices, SP_DEVINFO_DATA *device, DWORD property );
+static WCHAR *get_device_instance_id( HDEVINFO devices, SP_DEVINFO_DATA *device );
+static SP_DEVICE_INTERFACE_DETAIL_DATA_W *get_device_interface_detail(
+    HDEVINFO devices, SP_DEVICE_INTERFACE_DATA *interface_data, SP_DEVINFO_DATA *device_data );
+
+#define MAX_PHYSICAL_DISKS 64
+
+struct physical_disk
+{
+    DWORD number;
+    WCHAR *model;
+    WCHAR *pnpdevice_id;
+    WCHAR *serialnumber;
+    STORAGE_BUS_TYPE bus;
+    BOOLEAN removable;
+    UINT64 size;
+    UINT32 heads;
+};
+
+static WCHAR *get_storage_descriptor_string( const STORAGE_DEVICE_DESCRIPTOR *desc, DWORD size, DWORD offset );
+
+static const GUID disk_interface_guid =
+    { 0x53f56307, 0xb6bf, 0x11d0, { 0x94, 0xf2, 0x00, 0xa0, 0xc9, 0x1e, 0xfb, 0x8b } };
+
+static STORAGE_DEVICE_DESCRIPTOR *get_storage_device_descriptor( HANDLE handle, DWORD *size )
+{
+    STORAGE_PROPERTY_QUERY query = {0};
+    STORAGE_DESCRIPTOR_HEADER header;
+    STORAGE_DEVICE_DESCRIPTOR *desc;
+    DWORD bytes;
+
+    query.PropertyId = StorageDeviceProperty;
+    query.QueryType  = PropertyStandardQuery;
+    if (!DeviceIoControl( handle, IOCTL_STORAGE_QUERY_PROPERTY, &query, sizeof(query), &header, sizeof(header), &bytes, NULL ) ||
+        header.Size < sizeof(*desc))
+        return NULL;
+    if (!(desc = malloc( header.Size ))) return NULL;
+    if (!DeviceIoControl( handle, IOCTL_STORAGE_QUERY_PROPERTY, &query, sizeof(query), desc, header.Size, &bytes, NULL ) ||
+        bytes < sizeof(*desc))
+    {
+        free( desc );
+        return NULL;
+    }
+    *size = bytes;
+    return desc;
+}
+
+static const WCHAR *get_diskdrive_interfacetype( STORAGE_BUS_TYPE bus )
+{
+    switch (bus)
+    {
+    case BusTypeAta:
+    case BusTypeSata:
+        return L"IDE";
+    case BusTypeUsb:
+        return L"USB";
+    case BusType1394:
+        return L"1394";
+    default:
+        return L"SCSI";
+    }
+}
+
+static const WCHAR *get_diskdrive_mediatype( const struct physical_disk *disk )
+{
+    if (disk->bus == BusTypeUsb || disk->bus == BusType1394) return L"External hard disk media";
+    if (disk->removable) return L"Removable Media";
+    return L"Fixed hard disk media";
+}
+
+static int __cdecl compare_physical_disks( const void *a, const void *b )
+{
+    const struct physical_disk *disk1 = a, *disk2 = b;
+
+    if (disk1->number < disk2->number) return -1;
+    return disk1->number > disk2->number;
+}
+
+static UINT get_physical_disks( struct physical_disk *disks, UINT capacity )
+{
+    SP_DEVICE_INTERFACE_DETAIL_DATA_W *detail;
+    SP_DEVICE_INTERFACE_DATA iface;
+    STORAGE_DEVICE_DESCRIPTOR *desc;
+    STORAGE_DEVICE_NUMBER number;
+    DISK_GEOMETRY_EX geometry;
+    SP_DEVINFO_DATA device;
+    struct physical_disk *disk;
+    HDEVINFO devices;
+    HANDLE handle;
+    DWORD bytes, size;
+    UINT count = 0, i;
+
+    devices = SetupDiGetClassDevsW( &disk_interface_guid, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE );
+    if (devices == INVALID_HANDLE_VALUE) return 0;
+
+    iface.cbSize = sizeof(iface);
+    for (i = 0; count < capacity && SetupDiEnumDeviceInterfaces( devices, NULL, &disk_interface_guid, i, &iface ); i++)
+    {
+        device.cbSize = sizeof(device);
+        if (!(detail = get_device_interface_detail( devices, &iface, &device ))) continue;
+        handle = CreateFileW( detail->DevicePath, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL );
+        free( detail );
+        if (handle == INVALID_HANDLE_VALUE) continue;
+
+        if (!DeviceIoControl( handle, IOCTL_STORAGE_GET_DEVICE_NUMBER, NULL, 0, &number, sizeof(number), &bytes, NULL ))
+        {
+            CloseHandle( handle );
+            continue;
+        }
+
+        disk = &disks[count];
+        memset( disk, 0, sizeof(*disk) );
+        disk->number = number.DeviceNumber;
+        disk->bus = BusTypeUnknown;
+        disk->model = get_device_registry_string( devices, &device, SPDRP_FRIENDLYNAME );
+        disk->pnpdevice_id = get_device_instance_id( devices, &device );
+
+        if ((desc = get_storage_device_descriptor( handle, &size )))
+        {
+            disk->bus = desc->BusType;
+            disk->removable = desc->RemovableMedia;
+            disk->serialnumber = get_storage_descriptor_string( desc, size, desc->SerialNumberOffset );
+            if (!disk->model) disk->model = get_storage_descriptor_string( desc, size, desc->ProductIdOffset );
+            free( desc );
+        }
+        if (!disk->model) disk->model = get_device_registry_string( devices, &device, SPDRP_DEVICEDESC );
+
+        if (DeviceIoControl( handle, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, NULL, 0, &geometry, sizeof(geometry), &bytes, NULL ))
+        {
+            disk->size = geometry.DiskSize.QuadPart;
+            disk->heads = geometry.Geometry.TracksPerCylinder;
+        }
+        CloseHandle( handle );
+        count++;
+    }
+    SetupDiDestroyDeviceInfoList( devices );
+
+    qsort( disks, count, sizeof(*disks), compare_physical_disks );
+    return count;
+}
+
+static enum fill_status fill_diskdrive( struct table *table, const struct expr *cond )
+{
+    static const WCHAR fmtW[] = L"\\\\\\\\.\\\\PHYSICALDRIVE%u";
+    WCHAR device_id[ARRAY_SIZE( fmtW ) + 10];
+    struct physical_disk *disks;
+    struct record_diskdrive *rec;
+    UINT i, count, row = 0, offset = 0;
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+
+    if (!(disks = calloc( MAX_PHYSICAL_DISKS, sizeof(*disks) ))) return FILL_STATUS_FAILED;
+    count = get_physical_disks( disks, MAX_PHYSICAL_DISKS );
+
+    if (!resize_table( table, count ? count : 1, sizeof(*rec) ))
+    {
+        for (i = 0; i < count; i++)
+        {
+            free( disks[i].model );
+            free( disks[i].pnpdevice_id );
+            free( disks[i].serialnumber );
+        }
+        free( disks );
+        return FILL_STATUS_FAILED;
+    }
+
+    for (i = 0; i < count; i++)
+    {
+        rec = (struct record_diskdrive *)(table->data + offset);
+        swprintf( device_id, ARRAY_SIZE( device_id ), fmtW, disks[i].number );
+        rec->caption       = disks[i].model ? wcsdup( disks[i].model ) : NULL;
+        rec->device_id     = wcsdup( device_id );
+        rec->index         = disks[i].number;
+        rec->interfacetype = get_diskdrive_interfacetype( disks[i].bus );
+        rec->manufacturer  = L"(Standard disk drives)";
+        rec->mediatype     = get_diskdrive_mediatype( &disks[i] );
+        rec->model         = disks[i].model;
+        rec->pnpdevice_id  = disks[i].pnpdevice_id;
+        rec->serialnumber  = disks[i].serialnumber;
+        rec->signature     = 0;
+        rec->size          = disks[i].size;
+        rec->total_heads   = disks[i].heads;
+        if (!match_row( table, row, cond, &status ))
+        {
+            free_row_values( table, row );
+            continue;
+        }
+        offset += sizeof(*rec);
+        row++;
+    }
+    free( disks );
+
+    TRACE("created %u rows\n", row);
+    table->num_rows = row;
+    return status;
+}
+#else
 static enum fill_status fill_diskdrive( struct table *table, const struct expr *cond )
 {
     static const WCHAR fmtW[] = L"\\\\\\\\.\\\\PHYSICALDRIVE%u";
@@ -2835,6 +3055,7 @@ static enum fill_status fill_diskdrive( struct table *table, const struct expr *
     table->num_rows = row;
     return status;
 }
+#endif
 
 struct association
 {
@@ -2872,6 +3093,40 @@ static struct association *get_diskdrivetodiskpartition_pairs( UINT *count )
                            &query2->view, &query2->mem )) != S_OK) goto done;
     if ((hr = execute_view( query2->view )) != S_OK) goto done;
 
+#ifdef __REACTOS__
+    {
+        UINT j, pairs = 0;
+
+        if (!(ret = calloc( query2->view->result_count ? query2->view->result_count : 1, sizeof(*ret) ))) goto done;
+
+        for (i = 0; i < query2->view->result_count; i++)
+        {
+            VARIANT disk_index, drive_index;
+            BOOL match = FALSE;
+
+            if (get_propval( query2->view, i, L"DiskIndex", &disk_index, NULL, NULL ) != S_OK) continue;
+            for (j = 0; j < query->view->result_count && !match; j++)
+            {
+                if (get_propval( query->view, j, L"Index", &drive_index, NULL, NULL ) != S_OK) continue;
+                match = (V_I4( &drive_index ) == V_I4( &disk_index ));
+                VariantClear( &drive_index );
+                if (!match) continue;
+
+                if ((hr = get_propval( query->view, j, L"__PATH", &val, NULL, NULL )) != S_OK) goto done;
+                ret[pairs].ref = wcsdup( V_BSTR(&val) );
+                VariantClear( &val );
+                if ((hr = get_propval( query2->view, i, L"__PATH", &val, NULL, NULL )) != S_OK) goto done;
+                ret[pairs].ref2 = wcsdup( V_BSTR(&val) );
+                VariantClear( &val );
+                if (!ret[pairs].ref || !ret[pairs].ref2) goto done;
+                pairs++;
+            }
+            VariantClear( &disk_index );
+        }
+
+        *count = pairs;
+    }
+#else
     if (!(ret = calloc( query->view->result_count, sizeof(*ret) ))) goto done;
 
     for (i = 0; i < query->view->result_count; i++)
@@ -2886,6 +3141,7 @@ static struct association *get_diskdrivetodiskpartition_pairs( UINT *count )
     }
 
     *count = query->view->result_count;
+#endif
 
 done:
     if (!ret) free_associations( ret, query->view->result_count );
@@ -2968,9 +3224,35 @@ static enum fill_status fill_diskpartition( struct table *table, const struct ex
             rec = (struct record_diskpartition *)(table->data + offset);
             rec->bootable       = (i == 2) ? -1 : 0;
             rec->bootpartition  = (i == 2) ? -1 : 0;
+#ifdef __REACTOS__
+            {
+                WCHAR volume[] = L"\\\\.\\A:";
+                STORAGE_DEVICE_NUMBER number;
+                HANDLE handle;
+                DWORD bytes;
+                UINT disk = index, partition = 0;
+
+                volume[4] = root[0];
+                handle = CreateFileW( volume, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL );
+                if (handle != INVALID_HANDLE_VALUE)
+                {
+                    if (DeviceIoControl( handle, IOCTL_STORAGE_GET_DEVICE_NUMBER, NULL, 0, &number, sizeof(number), &bytes, NULL ))
+                    {
+                        disk = number.DeviceNumber;
+                        partition = number.PartitionNumber ? number.PartitionNumber - 1 : 0;
+                    }
+                    CloseHandle( handle );
+                }
+                index++;
+                swprintf( device_id, ARRAY_SIZE( device_id ), L"Disk #%u, Partition #%u", disk, partition );
+                rec->device_id      = wcsdup( device_id );
+                rec->diskindex      = disk;
+            }
+#else
             swprintf( device_id, ARRAY_SIZE( device_id ), L"Disk #%u, Partition #0", index );
             rec->device_id      = wcsdup( device_id );
             rec->diskindex      = index++;
+#endif
             rec->pnpdevice_id   = wcsdup( device_id );
             get_freespace( root, &size );
             rec->size           = size;
@@ -3149,12 +3431,34 @@ static enum fill_status fill_logicaldisk( struct table *table, const struct expr
             rec->caption            = wcsdup( device_id );
             rec->device_id          = wcsdup( device_id );
             rec->drivetype          = type;
+#ifdef __REACTOS__
+            if (type != DRIVE_FIXED &&
+                !GetVolumeInformationW( root, NULL, 0, NULL, NULL, NULL, NULL, 0 ))
+            {
+                rec->filesystem         = NULL;
+                rec->freespace          = ~0ull;
+                rec->name               = wcsdup( device_id );
+                rec->size               = ~0ull;
+                rec->volumename         = NULL;
+                rec->volumeserialnumber = NULL;
+            }
+            else
+            {
+                rec->filesystem         = get_filesystem( root );
+                rec->freespace          = get_freespace( root, &size );
+                rec->name               = wcsdup( device_id );
+                rec->size               = size;
+                rec->volumename         = get_volumename( root );
+                rec->volumeserialnumber = get_volumeserialnumber( root );
+            }
+#else
             rec->filesystem         = get_filesystem( root );
             rec->freespace          = get_freespace( root, &size );
             rec->name               = wcsdup( device_id );
             rec->size               = size;
             rec->volumename         = get_volumename( root );
             rec->volumeserialnumber = get_volumeserialnumber( root );
+#endif
             if (!match_row( table, row, cond, &status ))
             {
                 free_row_values( table, row );
@@ -3743,7 +4047,11 @@ static struct record_pnpentity *get_pnp_entities( UINT *count )
                             ret[i].caption = get_reg_value( key_instance, L"DeviceDesc" );
                             ret[i].class_guid = wcslwr( get_reg_value( key_instance, L"ClassGUID" ) );
                             ret[i].device_id = wcsupr( build_pnp_device_id( class, product, instance ) );
+#ifdef __REACTOS__
+                            ret[i].manufacturer = get_reg_value( key_instance, L"Mfg" );
+#else
                             ret[i].manufacturer = L"The Wine Project";
+#endif
                             ret[i].name = get_reg_value( key_instance, L"DeviceDesc" );
                             ret[i].service = get_reg_value( key_instance, L"Service" );
                             RegCloseKey( key_instance );
@@ -4501,7 +4809,11 @@ static enum fill_status fill_operatingsystem( struct table *table, const struct 
     rec->lastbootuptime         = get_lastbootuptime();
     rec->localdatetime          = get_localdatetime();
     rec->locale                 = get_locale();
+#ifdef __REACTOS__
+    rec->manufacturer           = L"Microsoft Corporation";
+#else
     rec->manufacturer           = L"The Wine Project";
+#endif
     rec->name                   = get_osname( rec->caption );
     rec->operatingsystemsku     = get_operatingsystemsku();
     rec->organization           = get_organization();
