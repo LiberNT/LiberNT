@@ -483,6 +483,7 @@ struct _LX_PROCESS
 typedef struct _LX_EXEC_REQUEST
 {
     PSTR FileName;
+    PLX_FILE File;
     PSTR Args;
     ULONG ArgLength;
     ULONG ArgCount;

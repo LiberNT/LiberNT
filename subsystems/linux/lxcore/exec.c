@@ -37,6 +37,7 @@ LONG
 LxElfOpen(
     _In_ PLX_PROCESS Process,
     _In_ PCSTR Path,
+    _In_opt_ PLX_FILE Source,
     _Out_ PLX_ELF_IMAGE Image,
     _Out_opt_ PCHAR Shebang)
 {
@@ -48,7 +49,9 @@ LxElfOpen(
     if (Shebang != NULL)
         Shebang[0] = '\0';
 
-    Error = LxVfsOpen(Process, LX_AT_FDCWD, Path, LX_O_RDONLY, 0, &Image->File);
+    Error = (Source != NULL) ? LxVfsReopen(Process, Source, LX_O_RDONLY, &Image->File) : 1;
+    if (Error == 1)
+        Error = LxVfsOpen(Process, LX_AT_FDCWD, Path, LX_O_RDONLY, 0, &Image->File);
     if (Error != 0)
         return Error;
     if (Image->File->Directory || (Image->File->Handle == NULL) || Image->File->NtPipe)
@@ -654,7 +657,7 @@ LxExecImage(
 
     for (Depth = 0;; Depth++)
     {
-        Error = LxElfOpen(Process, FileName, &Main, Shebang);
+        Error = LxElfOpen(Process, FileName, (Depth == 0) ? Request->File : NULL, &Main, Shebang);
         if (Error != 1)
             break;
         if (Depth >= LX_MAX_INTERP_DEPTH)
@@ -670,7 +673,7 @@ LxExecImage(
         Error = LxElfInterpreter(&Main, &InterpreterPath);
     if ((Error == 0) && (InterpreterPath != NULL))
     {
-        Error = LxElfOpen(Process, InterpreterPath, &Interp, NULL);
+        Error = LxElfOpen(Process, InterpreterPath, NULL, &Interp, NULL);
         if ((Error == 0) && (Interp.Header.Type != LX_ET_DYN))
             Error = -LX_ELIBBAD;
     }

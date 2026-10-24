@@ -2098,6 +2098,7 @@ LONG64
 LxExecCommon(
     _In_ PLX_CALL Call,
     _In_ PSTR FileName,
+    _In_opt_ PLX_FILE File,
     _In_ ULONG64 Argv,
     _In_ ULONG64 Envp)
 {
@@ -2108,6 +2109,7 @@ LxExecCommon(
 
     RtlZeroMemory(&Request, sizeof(Request));
     Request.FileName = FileName;
+    Request.File = File;
     Result = LxCaptureVector(Argv, &Request.Args, &Request.ArgLength, &Request.ArgCount);
     if (Result == 0)
         Result = LxCaptureVector(Envp, &Request.Env, &Request.EnvLength, &Request.EnvCount);
@@ -2126,6 +2128,8 @@ LxExecCommon(
     LxFree(Request.FileName);
     LxFree(Request.Args);
     LxFree(Request.Env);
+    if (File != NULL)
+        LxFileDereference(File);
 
     if (Result == LX_SIGSEGV)
         LxProcessExitGroup(Call->Process, LX_SIGSEGV);
@@ -2139,13 +2143,14 @@ LX_SYSCALL(LxSysExecve)
 
     if (Result != 0)
         return Result;
-    return LxExecCommon(Call, FileName, Call->Args[1], Call->Args[2]);
+    return LxExecCommon(Call, FileName, NULL, Call->Args[1], Call->Args[2]);
 }
 
 LX_SYSCALL(LxSysExecveat)
 {
     LONG DirFd = (LONG)Call->Args[0];
     ULONG Flags = (ULONG)Call->Args[4];
+    PLX_FILE Source = NULL;
     PSTR Path, FileName;
     LONG64 Result;
 
@@ -2168,18 +2173,31 @@ LX_SYSCALL(LxSysExecveat)
             LxFree(Path);
             return -LX_EBADF;
         }
-        if ((File->Path == NULL) || (File->Path[0] != '/'))
+        if ((Path[0] == '\0') && (Flags & LX_AT_EMPTY_PATH))
+        {
+            FileName = LxStrPrintf("/dev/fd/%ld", DirFd);
+            Source = File;
+            File = NULL;
+        }
+        else if ((File->Path == NULL) || (File->Path[0] != '/') || (Path[0] == '\0'))
+        {
             FileName = NULL;
-        else if (Path[0] == '\0')
-            FileName = (Flags & LX_AT_EMPTY_PATH) ? LxStrDup(File->Path) : NULL;
+        }
         else
+        {
             FileName = LxStrPrintf("%s/%s", File->Path, Path);
-        LxFileDereference(File);
+        }
+        if (File != NULL)
+            LxFileDereference(File);
         LxFree(Path);
         if (FileName == NULL)
+        {
+            if (Source != NULL)
+                LxFileDereference(Source);
             return -LX_ENOENT;
+        }
     }
-    return LxExecCommon(Call, FileName, Call->Args[2], Call->Args[3]);
+    return LxExecCommon(Call, FileName, Source, Call->Args[2], Call->Args[3]);
 }
 
 typedef struct _LX_WAIT_SELECTOR
