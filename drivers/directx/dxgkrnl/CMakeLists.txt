@@ -77,6 +77,7 @@ endif()
 add_library(dxgkrnl MODULE
     ${SOURCE}
     dxgkrnl.rc
+    ${CMAKE_CURRENT_BINARY_DIR}/dxgkrnl_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/dxgkrnl.def)
 
 target_compile_definitions(dxgkrnl PRIVATE
@@ -84,6 +85,9 @@ target_compile_definitions(dxgkrnl PRIVATE
 
 set_module_type(dxgkrnl kernelmodedriver)
 target_link_libraries(dxgkrnl ${PSEH_LIB} wdmguid)
+if(MSVC)
+    target_link_libraries(dxgkrnl libcntpr)
+endif()
 add_importlibs(dxgkrnl dxgmms2 ntoskrnl hal)
 add_pch(dxgkrnl dxgkrnl_private.h "${SOURCE}")
 add_cd_file(TARGET dxgkrnl DESTINATION reactos/system32/drivers FOR all)

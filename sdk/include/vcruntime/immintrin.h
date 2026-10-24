@@ -111,6 +111,8 @@ void __cdecl _xrstor64(void const *, unsigned __int64);
 void __cdecl _xrstors64(void const *, unsigned __int64);
 #endif
 
+#define _XCR_XFEATURE_ENABLED_MASK 0
+
 unsigned __int64 __cdecl _xgetbv(unsigned int);
 void __cdecl _xsetbv(unsigned int, unsigned __int64);
 

@@ -1093,7 +1093,8 @@
 @ cdecl -arch=arm ?xsputn@streambuf@@UAAHPBDH@Z(ptr ptr long) msvcirt.?xsputn@streambuf@@UAAHPBDH@Z
 @ thiscall -arch=i386 ?xsputn@streambuf@@UAEHPBDH@Z(ptr ptr long) msvcirt.?xsputn@streambuf@@UAEHPBDH@Z
 @ cdecl -arch=win64 ?xsputn@streambuf@@UEAAHPEBDH@Z(ptr ptr long) msvcirt.?xsputn@streambuf@@UEAAHPEBDH@Z
-@ cdecl -norelay $I10_OUTPUT(double long long ptr) msvcrt.$I10_OUTPUT
+@ cdecl -version=0x502 -arch=win64 -norelay $I10_OUTPUT(double long long ptr) msvcrt.$I10_OUTPUT
+@ cdecl -arch=i386 -norelay $I10_OUTPUT(double long long ptr) msvcrt.$I10_OUTPUT
 @ cdecl -arch=i386 _CIacos() msvcrt._CIacos
 @ cdecl -arch=i386 _CIasin() msvcrt._CIasin
 @ cdecl -arch=i386 _CIatan() msvcrt._CIatan
@@ -1161,7 +1162,7 @@
 @ extern __wargv msvcrt.__wargv
 @ cdecl __wgetmainargs(ptr ptr ptr long long) MSVCRT20__wgetmainargs
 @ extern __winitenv msvcrt.__winitenv
-@ cdecl _abnormal_termination() msvcrt._abnormal_termination
+@ cdecl -arch=i386 _abnormal_termination() msvcrt._abnormal_termination
 @ cdecl _access(str long) msvcrt._access
 @ extern _acmdln msvcrt._acmdln
 @ stdcall -arch=i386 _adj_fdiv_m16i(long) msvcrt._adj_fdiv_m16i

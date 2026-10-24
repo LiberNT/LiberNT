@@ -10,11 +10,19 @@
 PUBLIC _OslHiberTrampoline
 PUBLIC _OslHiberTrampolineEnd
 
+#ifdef _USE_ML
+#define HJ_OPS 8
+#define HJ_STUBBASE 24
+#define HJ_STUBENTRY 32
+#define HJ_STUBGDTR 46
+#define HJ_STACK HEX(1000)
+#else
 .equ HJ_OPS, 8
 .equ HJ_STUBBASE, 24
 .equ HJ_STUBENTRY, 32
 .equ HJ_STUBGDTR, 46
 .equ HJ_STACK, HEX(1000)
+#endif
 
 .code32
 _OslHiberTrampoline:
@@ -58,7 +66,7 @@ OslHiberPageDone:
     jmp OslHiberPage
 
 OslHiberDone:
-    lgdt [ebx + HJ_STUBGDTR]
+    lgdt lXdtPrefix [ebx + HJ_STUBGDTR]
     mov ebp, [ebx + HJ_STUBBASE]
     mov esi, [ebx + HJ_STUBENTRY]
     push HEX(08)

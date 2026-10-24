@@ -24,14 +24,17 @@ std::wstring LoadText(UINT id)
     return length > 0 && text ? std::wstring(text, length) : std::wstring();
 }
 
-std::wstring FormatText(UINT id, std::initializer_list<std::wstring> args)
+namespace
+{
+
+std::wstring FormatArgs(UINT id, const std::wstring *args, size_t count)
 {
     std::wstring pattern = LoadText(id), out;
     std::vector<DWORD_PTR> values;
     WCHAR *buffer = NULL;
 
-    for (const std::wstring &arg : args)
-        values.push_back((DWORD_PTR)arg.c_str());
+    for (size_t i = 0; i < count; i++)
+        values.push_back((DWORD_PTR)args[i].c_str());
     values.push_back(0);
     if (FormatMessageW(FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ARGUMENT_ARRAY | FORMAT_MESSAGE_ALLOCATE_BUFFER,
                        pattern.c_str(), 0, 0, (LPWSTR)&buffer, 0, (va_list *)values.data()) && buffer)
@@ -40,6 +43,44 @@ std::wstring FormatText(UINT id, std::initializer_list<std::wstring> args)
         LocalFree(buffer);
     }
     return out.empty() ? pattern : out;
+}
+
+}
+
+std::wstring FormatText(UINT id, const std::wstring &first)
+{
+    return FormatArgs(id, &first, 1);
+}
+
+std::wstring FormatText(UINT id, const std::wstring &first, const std::wstring &second)
+{
+    const std::wstring args[] = { first, second };
+
+    return FormatArgs(id, args, _countof(args));
+}
+
+std::wstring FormatText(UINT id, const std::wstring &first, const std::wstring &second, const std::wstring &third)
+{
+    const std::wstring args[] = { first, second, third };
+
+    return FormatArgs(id, args, _countof(args));
+}
+
+std::wstring FormatText(UINT id, const std::wstring &first, const std::wstring &second, const std::wstring &third,
+                        const std::wstring &fourth)
+{
+    const std::wstring args[] = { first, second, third, fourth };
+
+    return FormatArgs(id, args, _countof(args));
+}
+
+std::wstring NumberText(ULONGLONG value)
+{
+    WCHAR text[32];
+
+    _snwprintf(text, _countof(text) - 1, L"%I64u", value);
+    text[_countof(text) - 1] = L'\0';
+    return text;
 }
 
 bool IsOfflineError(DWORD error)
@@ -97,15 +138,16 @@ std::wstring ErrorText(DWORD error)
     {
         out = text;
         LocalFree(text);
-        while (!out.empty() && (out.back() == L'\n' || out.back() == L'\r' || out.back() == L' '))
+        while (!out.empty() && (out[out.size() - 1] == L'\n' || out[out.size() - 1] == L'\r' ||
+                                out[out.size() - 1] == L' '))
             out.pop_back();
     }
     _snwprintf(code, _countof(code) - 1, L"0x%08lX", error);
     code[_countof(code) - 1] = L'\0';
     if ((error & 0xFFFF0000) == 0x800B0000 || (error & 0xFFFFF000) == 0x80096000)
-        return FormatText(IDS_ERROR_SIGNATURE, { out.empty() ? std::wstring(code) : out });
+        return FormatText(IDS_ERROR_SIGNATURE, out.empty() ? std::wstring(code) : out);
     if (out.empty())
-        out = FormatText(IDS_ERROR_CODE, { code });
+        out = FormatText(IDS_ERROR_CODE, code);
     return out;
 }
 

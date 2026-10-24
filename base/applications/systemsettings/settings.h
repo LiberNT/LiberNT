@@ -15,7 +15,6 @@
 #include <shlobj.h>
 #include <strsafe.h>
 #include <algorithm>
-#include <functional>
 #include <string>
 #include <vector>
 #include "resource.h"
@@ -99,6 +98,143 @@ enum class RowKind
     Text
 };
 
+namespace Settings
+{
+
+template <class Result>
+class RowCallback
+{
+public:
+    RowCallback() : m_Target(NULL)
+    {
+    }
+
+    RowCallback(decltype(nullptr)) : m_Target(NULL)
+    {
+    }
+
+    template <class Function>
+    RowCallback(Function function) : m_Target(new Holder<Function>(function))
+    {
+    }
+
+    RowCallback(const RowCallback &other) : m_Target(other.m_Target)
+    {
+        if (m_Target)
+            m_Target->AddRef();
+    }
+
+    ~RowCallback()
+    {
+        if (m_Target)
+            m_Target->Release();
+    }
+
+    RowCallback &operator=(const RowCallback &other)
+    {
+        if (other.m_Target)
+            other.m_Target->AddRef();
+        if (m_Target)
+            m_Target->Release();
+        m_Target = other.m_Target;
+        return *this;
+    }
+
+    explicit operator bool() const
+    {
+        return m_Target != NULL;
+    }
+
+    Result operator()(int value) const
+    {
+        return m_Target->Call(value);
+    }
+
+private:
+    class Target
+    {
+    public:
+        Target() : m_References(1)
+        {
+        }
+
+        virtual ~Target()
+        {
+        }
+
+        virtual Result Call(int value) = 0;
+
+        void AddRef()
+        {
+            InterlockedIncrement(&m_References);
+        }
+
+        void Release()
+        {
+            if (!InterlockedDecrement(&m_References))
+                delete this;
+        }
+
+    private:
+        volatile LONG m_References;
+    };
+
+    template <class Function>
+    class Holder : public Target
+    {
+    public:
+        explicit Holder(const Function &function) : m_Function(function)
+        {
+        }
+
+        Result Call(int value) override
+        {
+            return m_Function(value);
+        }
+
+    private:
+        Function m_Function;
+    };
+
+    Target *m_Target;
+};
+
+class Job
+{
+public:
+    virtual ~Job()
+    {
+    }
+
+    virtual void Work() = 0;
+    virtual void Done() = 0;
+};
+
+template <class WorkFunction, class DoneFunction>
+class JobOf : public Job
+{
+public:
+    JobOf(const WorkFunction &work, const DoneFunction &done) : m_Work(work), m_Done(done)
+    {
+    }
+
+    void Work() override
+    {
+        m_Work();
+    }
+
+    void Done() override
+    {
+        m_Done();
+    }
+
+private:
+    WorkFunction m_Work;
+    DoneFunction m_Done;
+};
+
+}
+
 struct SettingRow
 {
     RowKind Kind = RowKind::Info;
@@ -122,9 +258,9 @@ struct SettingRow
     PageId Target = PageId::None;
     std::wstring Param;
     std::wstring Keywords;
-    std::function<void(int)> Change;
-    std::function<void(int)> Invoke;
-    std::function<std::wstring(int)> Label;
+    Settings::RowCallback<void> Change;
+    Settings::RowCallback<void> Invoke;
+    Settings::RowCallback<std::wstring> Label;
 };
 
 struct SettingGroup
@@ -142,8 +278,14 @@ public:
     virtual void Refresh() = 0;
     virtual void Open(PageId page, const std::wstring &param) = 0;
     virtual void Back() = 0;
-    virtual void RunJob(std::function<void()> work, std::function<void()> done) = 0;
+    virtual void StartJob(Settings::Job *job) = 0;
     virtual void SetTimerRefresh(UINT milliseconds) = 0;
+
+    template <class WorkFunction, class DoneFunction>
+    void RunJob(WorkFunction work, DoneFunction done)
+    {
+        StartJob(new Settings::JobOf<WorkFunction, DoneFunction>(work, done));
+    }
 };
 
 class PageBuilder
@@ -164,15 +306,15 @@ public:
     SettingRow &Navigate(const std::wstring &title, const std::wstring &detail, LPCWSTR icon, PageId target,
                          const std::wstring &param = std::wstring());
     SettingRow &Toggle(const std::wstring &title, const std::wstring &detail, LPCWSTR icon, bool checked,
-                       std::function<void(int)> change);
+                       Settings::RowCallback<void> change);
     SettingRow &Choice(const std::wstring &title, const std::wstring &detail, LPCWSTR icon,
-                       const std::vector<std::wstring> &options, int selected, std::function<void(int)> change);
+                       const std::vector<std::wstring> &options, int selected, Settings::RowCallback<void> change);
     SettingRow &Slider(const std::wstring &title, const std::wstring &detail, LPCWSTR icon, int minimum,
-                       int maximum, int position, std::function<void(int)> change);
+                       int maximum, int position, Settings::RowCallback<void> change);
     SettingRow &Button(const std::wstring &title, const std::wstring &detail, LPCWSTR icon,
-                       const std::wstring &action, std::function<void(int)> invoke);
+                       const std::wstring &action, Settings::RowCallback<void> invoke);
     SettingRow &Link(const std::wstring &title, const std::wstring &detail, LPCWSTR icon,
-                     std::function<void(int)> invoke);
+                     Settings::RowCallback<void> invoke);
     SettingRow &Text(const std::wstring &text);
 
     SettingsHost *Host;

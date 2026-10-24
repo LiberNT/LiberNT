@@ -50,14 +50,12 @@ list(APPEND SOURCE
     wmpformat.c
     xmpmetadata.c)
 
-if(MSVC)
-    if(ARCH STREQUAL "i386")
-        list(APPEND SOURCE msvc-thiscall.c)
-    endif()
-    set_source_files_properties(bitmap.c PROPERTIES COMPILE_OPTIONS "/FImsvc.h")
-    list(APPEND PCH_SKIP_SOURCE bitmap.c)
-else()
-    list(APPEND SOURCE bitmap.c)
+list(APPEND SOURCE bitmap.c)
+
+if(MSVC AND (ARCH STREQUAL "i386"))
+    add_definitions(-D__ASM_EXTERN_THISCALL_WRAPPER)
+    add_asm_files(windowscodecs_asm i386/thiscall.s)
+    list(APPEND SOURCE ${windowscodecs_asm})
 endif()
 
 list(APPEND PCH_SKIP_SOURCE
@@ -85,6 +83,7 @@ if(MSVC)
     target_compile_options(windowscodecs PRIVATE /wd4133 /wd4146)
 
     target_compile_options(windowscodecs PRIVATE /FItypeof.h)
+    target_compile_definitions(windowscodecs PRIVATE __thiscall=__stdcall)
 endif()
 
 set_module_type(windowscodecs win32dll)

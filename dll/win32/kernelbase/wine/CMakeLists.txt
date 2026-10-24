@@ -52,6 +52,17 @@ list(APPEND SOURCE_STATIC
     version.c
     )
 
+if(MSVC AND ARCH STREQUAL "amd64")
+    add_asm_files(kernelbase_static_asm amd64/fiber.s)
+    list(APPEND SOURCE_STATIC ${kernelbase_static_asm})
+elseif(MSVC AND ARCH STREQUAL "i386")
+    add_asm_files(kernelbase_static_asm i386/fiber.s)
+    list(APPEND SOURCE_STATIC ${kernelbase_static_asm})
+elseif(MSVC AND ARCH STREQUAL "arm64")
+    add_asm_files(kernelbase_static_asm arm64/fiber.s)
+    list(APPEND SOURCE_STATIC ${kernelbase_static_asm})
+endif()
+
 add_library(kernelbase_static ${SOURCE_STATIC})
 target_compile_definitions(kernelbase_static PRIVATE WINSHLWAPI= WINPATHCCHAPI= PATHCCH_NO_DEPRECATE=)
 target_link_libraries(kernelbase_static psapi_static ${PSEH_LIB})

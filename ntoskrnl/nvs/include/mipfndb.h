@@ -86,13 +86,13 @@ typedef struct _MI_PFN_LIST
     ULONG64 Count;
 } MI_PFN_LIST, *PMI_PFN_LIST;
 
-typedef struct _MI_PFN_SHARD
+typedef struct MI_CACHE_ALIGNED _MI_PFN_SHARD
 {
     MI_SPINLOCK Lock;
     MI_PFN_LIST List[MiPageListCount];
-} MI_CACHE_ALIGNED MI_PFN_SHARD, *PMI_PFN_SHARD;
+} MI_PFN_SHARD, *PMI_PFN_SHARD;
 
-typedef struct _MI_PFN_CPU_CACHE
+typedef struct MI_CACHE_ALIGNED _MI_PFN_CPU_CACHE
 {
     MI_SPINLOCK Lock;
     ULONG Depth;
@@ -103,7 +103,7 @@ typedef struct _MI_PFN_CPU_CACHE
     ULONG64 Drains;
     ULONG Frame[MI_PFN_CACHE_DEPTH];
     ULONG ZeroFrame[MI_PFN_CACHE_BATCH];
-} MI_CACHE_ALIGNED MI_PFN_CPU_CACHE, *PMI_PFN_CPU_CACHE;
+} MI_PFN_CPU_CACHE, *PMI_PFN_CPU_CACHE;
 
 typedef struct _MI_PFN_WINDOW
 {

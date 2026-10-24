@@ -49,16 +49,6 @@ bool SharedLibrary::open(const char *libName)
     return (handle_ != nullptr);
 }
 
-bool SharedLibrary::open_from_alternatives(std::initializer_list<const char*> alt_names)
-{
-    for (const char *name : alt_names) {
-        if (open(name))
-            return true;
-    }
-
-    return false;
-}
-
 void SharedLibrary::close()
 {
     if (handle_)

@@ -102,7 +102,7 @@
 
 static inline uint64_t align(uint64_t addr, size_t alignment)
 {
-    return (addr + (alignment - 1)) & ~(alignment - 1);
+    return (addr + (alignment - 1)) & ~((uint64_t)alignment - 1);
 }
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -120,7 +120,11 @@ static inline uint64_t align(uint64_t addr, size_t alignment)
 # define VKD3D_NORETURN
 # define VKD3D_PRINTF_FUNC(fmt, args)
 # define VKD3D_UNUSED
-# define VKD3D_UNREACHABLE (void)0
+# ifdef _MSC_VER
+#  define VKD3D_UNREACHABLE __assume(0)
+# else
+#  define VKD3D_UNREACHABLE (void)0
+# endif
 #endif  /* __GNUC__ */
 
 #define vkd3d_unreachable() \

@@ -43,7 +43,7 @@ public:
 
 protected:
     ResultsFile() = default;
-    static std::unique_ptr<ResultsFile> singleton;
+    static ResultsFile *singleton;
 };
 
 #endif

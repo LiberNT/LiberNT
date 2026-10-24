@@ -19,36 +19,36 @@ VOID MiArm64TlbAll(MI_TLB_SCOPE Scope);
 FORCEINLINE
 VOID MiArm64TlbStoreBarrier(VOID)
 {
-    __asm__ __volatile__("dsb ishst" ::: "memory");
+    ARM64_DSB(ISHST);
 }
 
 FORCEINLINE
 VOID MiArm64TlbCompleteBarrier(VOID)
 {
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
 }
 
 FORCEINLINE
 VOID MiArm64TlbInstructionBarrier(VOID)
 {
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_ISB();
 }
 
 FORCEINLINE
 VOID MiArm64TlbPage(ULONG64 Page, MI_TLB_SCOPE Scope)
 {
     if (Scope == MiTlbAllProcessors)
-        __asm__ __volatile__("tlbi vaae1is, %0" :: "r"(Page) : "memory");
+        ARM64_TLBI(VAAE1IS, Page);
     else
-        __asm__ __volatile__("tlbi vaae1, %0" :: "r"(Page) : "memory");
+        ARM64_TLBI(VAAE1, Page);
 }
 
 FORCEINLINE
 VOID MiArm64TlbAll(MI_TLB_SCOPE Scope)
 {
     if (Scope == MiTlbAllProcessors)
-        __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
+        ARM64_TLBI_ALL(VMALLE1IS);
     else
-        __asm__ __volatile__("tlbi vmalle1" ::: "memory");
+        ARM64_TLBI_ALL(VMALLE1);
 }
 #endif

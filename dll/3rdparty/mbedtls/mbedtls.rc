@@ -1,6 +1,6 @@
 #include <windef.h>
 #include <winuser.h>
-#define MBEDTLS_CONFIG_H
+#define MBEDTLS_CHECK_CONFIG_H
 #include <mbedtls/version.h>
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL

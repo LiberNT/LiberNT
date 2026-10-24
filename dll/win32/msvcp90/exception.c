@@ -977,7 +977,7 @@ DEFINE_RTTI_DATA(regex_error, 0, ".?AVregex_error@std@@",
 DEFINE_CXX_TYPE(regex_error, MSVCP_runtime_error_dtor,
         runtime_error_cxx_type_info, exception_cxx_type_info)
 
-void __cdecl DECLSPEC_NORETURN _Xregex_error(enum regex_constants err)
+void DECLSPEC_NORETURN __cdecl _Xregex_error(enum regex_constants err)
 {
     regex_error e;
 
@@ -989,7 +989,7 @@ void __cdecl DECLSPEC_NORETURN _Xregex_error(enum regex_constants err)
 #endif
 
 /* ?_Nomemory@std@@YAXXZ */
-void __cdecl DECLSPEC_NORETURN _Nomemory(void)
+void DECLSPEC_NORETURN __cdecl _Nomemory(void)
 {
     bad_alloc e;
 
@@ -1000,7 +1000,7 @@ void __cdecl DECLSPEC_NORETURN _Nomemory(void)
 }
 
 /* ?_Xmem@tr1@std@@YAXXZ */
-void __cdecl DECLSPEC_NORETURN _Xmem(void)
+void DECLSPEC_NORETURN __cdecl _Xmem(void)
 {
     bad_alloc e;
 
@@ -1012,7 +1012,7 @@ void __cdecl DECLSPEC_NORETURN _Xmem(void)
 
 /* ?_Xinvalid_argument@std@@YAXPBD@Z */
 /* ?_Xinvalid_argument@std@@YAXPEBD@Z */
-void __cdecl DECLSPEC_NORETURN _Xinvalid_argument(const char *str)
+void DECLSPEC_NORETURN __cdecl _Xinvalid_argument(const char *str)
 {
     exception_name name = EXCEPTION_NAME(str);
     invalid_argument e;
@@ -1025,7 +1025,7 @@ void __cdecl DECLSPEC_NORETURN _Xinvalid_argument(const char *str)
 
 /* ?_Xlength_error@std@@YAXPBD@Z */
 /* ?_Xlength_error@std@@YAXPEBD@Z */
-void __cdecl DECLSPEC_NORETURN _Xlength_error(const char *str)
+void DECLSPEC_NORETURN __cdecl _Xlength_error(const char *str)
 {
     exception_name name = EXCEPTION_NAME(str);
     length_error e;
@@ -1038,7 +1038,7 @@ void __cdecl DECLSPEC_NORETURN _Xlength_error(const char *str)
 
 /* ?_Xout_of_range@std@@YAXPBD@Z */
 /* ?_Xout_of_range@std@@YAXPEBD@Z */
-void __cdecl DECLSPEC_NORETURN _Xout_of_range(const char *str)
+void DECLSPEC_NORETURN __cdecl _Xout_of_range(const char *str)
 {
     exception_name name = EXCEPTION_NAME(str);
     out_of_range e;
@@ -1051,7 +1051,7 @@ void __cdecl DECLSPEC_NORETURN _Xout_of_range(const char *str)
 
 /* ?_Xruntime_error@std@@YAXPBD@Z */
 /* ?_Xruntime_error@std@@YAXPEBD@Z */
-void __cdecl DECLSPEC_NORETURN _Xruntime_error(const char *str)
+void DECLSPEC_NORETURN __cdecl _Xruntime_error(const char *str)
 {
     exception_name name = EXCEPTION_NAME(str);
     runtime_error e;
@@ -1144,7 +1144,7 @@ DEFINE_CXX_TYPE(future_error, MSVCP_logic_error_dtor, logic_error_cxx_type_info,
 
 /* ?_Throw_future_error@std@@YAXABVerror_code@1@@Z */
 /* ?_Throw_future_error@std@@YAXAEBVerror_code@1@@Z */
-void __cdecl DECLSPEC_NORETURN _Throw_future_error( const error_code *error_code )
+void DECLSPEC_NORETURN __cdecl _Throw_future_error( const error_code *error_code )
 {
     future_error e;
     const char *name = "";

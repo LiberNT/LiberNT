@@ -169,7 +169,7 @@ twain_autodetect(void)
 	detectionrun = TRUE;
 
 	GetWindowsDirectoryW(szWindowsDir, MAX_PATH);
-	swprintf( szTwainDir, MAX_PATH, L"%s\\twain_%u", szWindowsDir, sizeof(void *) * 8 );
+	swprintf( szTwainDir, MAX_PATH, L"%s\\twain_%u", szWindowsDir, (UINT)(sizeof(void *) * 8) );
 
 	twain_autodetect_recurse(szTwainDir);
 }

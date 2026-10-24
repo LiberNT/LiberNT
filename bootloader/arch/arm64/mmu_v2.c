@@ -102,16 +102,16 @@ extern volatile BOOLEAN BootServicesExitedFlag;
 
 /* ---------- Barrier & TLBI helpers (multicore-safe) ---------- */
 
-#define ARM64_DSB_ISH()   __asm__ volatile("dsb ish" ::: "memory")
-#define ARM64_DSB_ISHST() __asm__ volatile("dsb ishst" ::: "memory")
+#define ARM64_DSB_ISH()   ARM64_DSB(ISH)
+#define ARM64_DSB_ISHST() ARM64_DSB(ISHST)
 
 /* Global/all-ASID TLBI */
-#define TLBI_VMALLE1IS()  __asm__ volatile("tlbi vmalle1is" ::: "memory")
+#define TLBI_VMALLE1IS()  ARM64_TLBI_ALL(VMALLE1IS)
 
 /* Per-VA, all ASIDs (EL1&0) */
 static inline void tlbi_vaae1is_by_va(ULONGLONG va)
 {
-    __asm__ volatile("tlbi vaae1is, %0" :: "r"(va >> 12) : "memory");
+    ARM64_TLBI(VAAE1IS, va >> 12);
 }
 
 static inline void tlbi_va_entry(ULONGLONG va, ULONGLONG size)
@@ -340,13 +340,6 @@ static BOOLEAN page_table_memory_allocated = FALSE;
 /* Cached physical limit so TCR composition needs no UEFI calls post-EBS */
 static UINT64 cached_max_physical_address = 0x100000000ULL;
 
-/* EL1/EL2-with-E2H register aliases */
-#define SCTLR_EL12_SYSREG  "S3_5_C1_C0_0"
-#define TTBR0_EL12_SYSREG  "S3_5_C2_C0_0"
-#define TTBR1_EL12_SYSREG  "S3_5_C2_C0_1"
-#define TCR_EL12_SYSREG    "S3_5_C2_C0_2"
-#define MAIR_EL12_SYSREG   "S3_5_C10_C2_0"
-
 /* Convert identity-mapped pointer to physical address */
 static UINT64 phys_from_ptr(const VOID *ptr)
 {
@@ -354,56 +347,44 @@ static UINT64 phys_from_ptr(const VOID *ptr)
 
     if (va == 0)
     {
-        for (;;) __asm__ volatile("wfi");
+        for (;;) ARM64_WFI();
     }
 
     if (va >= ARM64_KSEG0_BASE)
     {
         EarlyUartPuts("[PT] FATAL: VA outside identity window\n");
-        for (;;) __asm__ volatile("wfi");
+        for (;;) ARM64_WFI();
     }
 
     return va;
 }
 
 /* Static fallback storage (used once Boot Services are gone) */
-static UINT8 arm64_l0_page_table_storage_raw[ARM64_PT_BYTES + PAGE_SIZE]
-    __attribute__((aligned(4096)));
-static UINT8 arm64_kernel_l0_table_storage_raw[ARM64_PT_BYTES + PAGE_SIZE]
-    __attribute__((aligned(4096)));
+static DECLSPEC_ALIGN(4096) UINT8 arm64_l0_page_table_storage_raw[ARM64_PT_BYTES + PAGE_SIZE];
+static DECLSPEC_ALIGN(4096) UINT8 arm64_kernel_l0_table_storage_raw[ARM64_PT_BYTES + PAGE_SIZE];
 
-static UINT8 arm64_l1_page_tables_storage_raw[ARM64_USER_L1_TABLES * ARM64_PT_BYTES + PAGE_SIZE]
-    __attribute__((aligned(4096)));
-static UINT8 arm64_kernel_l1_tables_storage_raw[ARM64_KERNEL_L1_TABLES * ARM64_PT_BYTES + PAGE_SIZE]
-    __attribute__((aligned(4096)));
+static DECLSPEC_ALIGN(4096) UINT8 arm64_l1_page_tables_storage_raw[ARM64_USER_L1_TABLES * ARM64_PT_BYTES + PAGE_SIZE];
+static DECLSPEC_ALIGN(4096) UINT8 arm64_kernel_l1_tables_storage_raw[ARM64_KERNEL_L1_TABLES * ARM64_PT_BYTES + PAGE_SIZE];
 
-static UINT8 arm64_kernel_l2_tables_storage_raw[
-    ARM64_KERNEL_L1_TABLES * ARM64_L2_TABLES_PER_L1 * ARM64_PT_BYTES + PAGE_SIZE]
-    __attribute__((aligned(4096)));
-static UINT8 arm64_kernel_l3_tables_storage_raw[
-    ARM64_KERNEL_L1_TABLES * ARM64_L2_TABLES_PER_L1 * ARM64_L3_TABLES_PER_L2 * ARM64_PT_BYTES + PAGE_SIZE]
-    __attribute__((aligned(4096)));
-static UINT8 arm64_user_l2_tables_storage_raw[
-    ARM64_USER_L1_TABLES * ARM64_L2_TABLES_PER_L1 * ARM64_PT_BYTES + PAGE_SIZE]
-    __attribute__((aligned(4096)));
-static UINT8 arm64_user_l3_tables_storage_raw[
-    ARM64_USER_L1_TABLES * ARM64_L2_TABLES_PER_L1 * ARM64_L3_TABLES_PER_L2 * ARM64_PT_BYTES + PAGE_SIZE]
-    __attribute__((aligned(4096)));
+static DECLSPEC_ALIGN(4096) UINT8 arm64_kernel_l2_tables_storage_raw[
+    ARM64_KERNEL_L1_TABLES * ARM64_L2_TABLES_PER_L1 * ARM64_PT_BYTES + PAGE_SIZE];
+static DECLSPEC_ALIGN(4096) UINT8 arm64_kernel_l3_tables_storage_raw[
+    ARM64_KERNEL_L1_TABLES * ARM64_L2_TABLES_PER_L1 * ARM64_L3_TABLES_PER_L2 * ARM64_PT_BYTES + PAGE_SIZE];
+static DECLSPEC_ALIGN(4096) UINT8 arm64_user_l2_tables_storage_raw[
+    ARM64_USER_L1_TABLES * ARM64_L2_TABLES_PER_L1 * ARM64_PT_BYTES + PAGE_SIZE];
+static DECLSPEC_ALIGN(4096) UINT8 arm64_user_l3_tables_storage_raw[
+    ARM64_USER_L1_TABLES * ARM64_L2_TABLES_PER_L1 * ARM64_L3_TABLES_PER_L2 * ARM64_PT_BYTES + PAGE_SIZE];
 
 /* Static storage for extra kernel L0 slots (Hyperspace, Paged Pool, PFN DB, etc.) */
-static UINT8 arm64_extra_l1_tables_storage_raw[
-    ARM64_EXTRA_KERNEL_SLOTS * ARM64_PT_BYTES + PAGE_SIZE]
-    __attribute__((aligned(4096)));
-static UINT8 arm64_extra_l2_tables_storage_raw[
-    ARM64_EXTRA_KERNEL_SLOTS * ARM64_EXTRA_L2_PER_SLOT * ARM64_PT_BYTES + PAGE_SIZE]
-    __attribute__((aligned(4096)));
-static UINT8 arm64_extra_l3_tables_storage_raw[
-    ARM64_EXTRA_KERNEL_SLOTS * ARM64_EXTRA_L2_PER_SLOT * ARM64_EXTRA_L3_PER_L2 * ARM64_PT_BYTES + PAGE_SIZE]
-    __attribute__((aligned(4096)));
+static DECLSPEC_ALIGN(4096) UINT8 arm64_extra_l1_tables_storage_raw[
+    ARM64_EXTRA_KERNEL_SLOTS * ARM64_PT_BYTES + PAGE_SIZE];
+static DECLSPEC_ALIGN(4096) UINT8 arm64_extra_l2_tables_storage_raw[
+    ARM64_EXTRA_KERNEL_SLOTS * ARM64_EXTRA_L2_PER_SLOT * ARM64_PT_BYTES + PAGE_SIZE];
+static DECLSPEC_ALIGN(4096) UINT8 arm64_extra_l3_tables_storage_raw[
+    ARM64_EXTRA_KERNEL_SLOTS * ARM64_EXTRA_L2_PER_SLOT * ARM64_EXTRA_L3_PER_L2 * ARM64_PT_BYTES + PAGE_SIZE];
 
 #define ARM64_STATIC_EXTRA_PT_PAGES 1024
-static UINT8 arm64_static_extra_pt_arena[ARM64_STATIC_EXTRA_PT_PAGES * PAGE_SIZE]
-    __attribute__((aligned(4096)));
+static DECLSPEC_ALIGN(4096) UINT8 arm64_static_extra_pt_arena[ARM64_STATIC_EXTRA_PT_PAGES * PAGE_SIZE];
 static UINT64 arm64_static_extra_pt_offset = 0;
 
 /* Retype page-table allocations so the kernel won't reclaim them as LoaderLoadedProgram. */
@@ -551,7 +532,7 @@ static VOID verify_page_aligned(const VOID *ptr, const char *name)
         name, (unsigned long long)(UINT64)(uintptr_t)ptr);
     UartPuts("ARM64: FATAL static table misalignment\n");
     for (;;)
-        __asm__ volatile("wfi");
+        ARM64_WFI();
 }
 
 static VOID* align_page_storage(VOID *storage)
@@ -579,7 +560,11 @@ static inline UINT64 get_extra_kernel_slot_index(UINT64 l0_idx)
 /*
  * Check if an L0 index belongs to the extra kernel slots.
  */
+#if defined(_MSC_VER) && !defined(__clang__)
+static inline BOOLEAN is_extra_kernel_slot(UINT64 l0_idx)
+#else
 static __attribute__((unused)) inline BOOLEAN is_extra_kernel_slot(UINT64 l0_idx)
+#endif
 {
     return get_extra_kernel_slot_index(l0_idx) < ARM64_EXTRA_KERNEL_SLOTS;
 }
@@ -910,9 +895,9 @@ static BOOLEAN allocate_page_table_memory(VOID)
 static inline VOID write_ttbr1(BOOLEAN el12, UINT64 value)
 {
     if (el12)
-        __asm__ volatile("msr " TTBR1_EL12_SYSREG ", %0" :: "r"(value) : "memory");
+        ARM64_WRITE_SYSREG(S3_5_C2_C0_1, value);
     else
-        __asm__ volatile("msr ttbr1_el1, %0" :: "r"(value) : "memory");
+        ARM64_WRITE_SYSREG(TTBR1_EL1, value);
 }
 
 static inline UINT64
@@ -990,7 +975,7 @@ static UINT64  g_parange_field      = 0;
 static VOID query_mmfr0_caps(VOID)
 {
     UINT64 mmfr0;
-    __asm__ volatile("mrs %0, id_aa64mmfr0_el1" : "=r"(mmfr0));
+    mmfr0 = ARM64_READ_SYSREG(ID_AA64MMFR0_EL1);
     g_parange_field = (mmfr0 & 0xFULL);               /* PARange */
     UINT64 tgran4   = (mmfr0 >> 28) & 0xFULL;         /* TGran4 */
     /*
@@ -1008,7 +993,7 @@ static VOID query_mmfr0_caps(VOID)
 
 static int get_effective_el(VOID)
 {
-    return (int)((ARM64_READ_SYSREG(CurrentEL) >> 2) & 3);
+    return (int)((ARM64_READ_SYSREG(CURRENTEL) >> 2) & 3);
 }
 
 static BOOLEAN use_el12_registers(VOID)
@@ -1016,7 +1001,7 @@ static BOOLEAN use_el12_registers(VOID)
     int el = get_effective_el();
     if (el != 2) return FALSE;
     UINT64 hcr_el2;
-    __asm__ volatile("mrs %0, hcr_el2" : "=r"(hcr_el2));
+    hcr_el2 = ARM64_READ_SYSREG(HCR_EL2);
     return (hcr_el2 & (1ULL << 34)) != 0; /* HCR_EL2.E2H */
 }
 
@@ -1099,7 +1084,11 @@ get_tcr_for_el(
      */
     {
         UINT64 current_pc;
+#if defined(_MSC_VER) && !defined(__clang__)
+        current_pc = (UINT64)(uintptr_t)get_tcr_for_el;
+#else
         __asm__ volatile("adr %0, ." : "=r"(current_pc));
+#endif
 
         if (current_pc > max_addr)
             max_addr = current_pc;
@@ -1180,20 +1169,20 @@ static VOID set_ttbr_tcr_mair(int el, UINT64 table0, UINT64 table1, UINT64 tcr, 
 
     if (el == 1 || el12) {
         if (el12) {
-            __asm__ volatile("msr " TTBR0_EL12_SYSREG ", %0" :: "r"(phys_table0) : "memory");
+            ARM64_WRITE_SYSREG(S3_5_C2_C0_0, phys_table0);
             write_ttbr1(TRUE, ttbr1_table_base);
-            __asm__ volatile("msr " TCR_EL12_SYSREG   ", %0" :: "r"(tcr)    : "memory");
-            __asm__ volatile("msr " MAIR_EL12_SYSREG  ", %0" :: "r"(attr)   : "memory");
+            ARM64_WRITE_SYSREG(S3_5_C2_C0_2, tcr);
+            ARM64_WRITE_SYSREG(S3_5_C10_C2_0, attr);
         } else {
-            __asm__ volatile("msr ttbr0_el1, %0" :: "r"(phys_table0) : "memory");
+            ARM64_WRITE_SYSREG(TTBR0_EL1, phys_table0);
             write_ttbr1(FALSE, ttbr1_table_base);
-            __asm__ volatile("msr tcr_el1, %0"  :: "r"(tcr)     : "memory");
-            __asm__ volatile("msr mair_el1, %0" :: "r"(attr)    : "memory");
+            ARM64_WRITE_SYSREG(TCR_EL1, tcr);
+            ARM64_WRITE_SYSREG(MAIR_EL1, attr);
         }
     } else if (el == 2) {
-        __asm__ volatile("msr ttbr0_el2, %0" :: "r"(phys_table0) : "memory");
-        __asm__ volatile("msr tcr_el2, %0"   :: "r"(tcr)    : "memory");
-        __asm__ volatile("msr mair_el2, %0"  :: "r"(attr)   : "memory");
+        ARM64_WRITE_SYSREG(TTBR0_EL2, phys_table0);
+        ARM64_WRITE_SYSREG(TCR_EL2, tcr);
+        ARM64_WRITE_SYSREG(MAIR_EL2, attr);
     }
 
     ARM64_ISB();
@@ -1624,7 +1613,7 @@ static inline VOID arm64_icache_sync_range(UINT64 start, UINT64 end)
         return;
     }
 
-    __asm__ volatile("ic iallu" ::: "memory");
+    ARM64_IC_ALL(IALLU);
     ARM64_DSB_ISH();
     ARM64_ISB();
 }
@@ -2486,7 +2475,7 @@ static VOID setup_pgtables(VOID)
     if (!arm64_l0_page_table || !arm64_kernel_l0_table || !arm64_l1_page_tables ||
         !arm64_kernel_l1_tables || !arm64_kernel_l2_tables || !arm64_kernel_l3_tables)
     {
-        for (;;) __asm__ volatile("wfi");
+        for (;;) ARM64_WFI();
     }
 
     RtlZeroMemory(arm64_l0_page_table, ARM64_PT_BYTES);
@@ -2687,14 +2676,14 @@ static VOID setup_pgtables(VOID)
         {
             UartPuts("[PT] FATAL - Kernel mapping failed\n");
             for (;;)
-                __asm__ volatile("wfi");
+                ARM64_WFI();
         }
 
         if (!Arm64MappingPlanApply(&Plan, Arm64MappingPhysicalAlias))
         {
             UartPuts("[PT] FATAL - Physical alias mapping failed\n");
             for (;;)
-                __asm__ volatile("wfi");
+                ARM64_WFI();
         }
     }
 }
@@ -2733,11 +2722,11 @@ VOID Arm64EnablePageTables(VOID)
 
     /* 1. Read current SCTLR and Disable MMU (M) and Cache (C) */
     if (el == 1 || el12) {
-        if (el12) __asm__ volatile("mrs %0, " SCTLR_EL12_SYSREG : "=r"(sctlr));
-        else      __asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
+        if (el12) sctlr = ARM64_READ_SYSREG(S3_5_C1_C0_0);
+        else      sctlr = ARM64_READ_SYSREG(SCTLR_EL1);
     }
     else if (el == 2) {
-        __asm__ volatile("mrs %0, sctlr_el2" : "=r"(sctlr));
+        sctlr = ARM64_READ_SYSREG(SCTLR_EL2);
     }
 
 
@@ -2754,11 +2743,11 @@ VOID Arm64EnablePageTables(VOID)
     ARM64_ISB();
 
     if (el == 1 || el12) {
-        if (el12) __asm__ volatile("msr " SCTLR_EL12_SYSREG ", %0" :: "r"(sctlr_off) : "memory");
-        else      __asm__ volatile("msr sctlr_el1, %0" :: "r"(sctlr_off) : "memory");
+        if (el12) ARM64_WRITE_SYSREG(S3_5_C1_C0_0, sctlr_off);
+        else      ARM64_WRITE_SYSREG(SCTLR_EL1, sctlr_off);
     }
     else if (el == 2) {
-        __asm__ volatile("msr sctlr_el2, %0" :: "r"(sctlr_off) : "memory");
+        ARM64_WRITE_SYSREG(SCTLR_EL2, sctlr_off);
     }
     ARM64_ISB();
 
@@ -2783,7 +2772,7 @@ VOID Arm64EnablePageTables(VOID)
             !arm64_l1_page_tables || !arm64_kernel_l1_tables ||
             !arm64_kernel_l2_tables || !arm64_kernel_l3_tables)
         {
-            for (;;) __asm__ volatile("wfi");
+            for (;;) ARM64_WFI();
         }
 
         /*
@@ -2805,36 +2794,36 @@ VOID Arm64EnablePageTables(VOID)
 
     if (el == 1 || el12) {
         if (el12) {
-            __asm__ volatile("msr " MAIR_EL12_SYSREG  ", %0" :: "r"(mair)   : "memory");
+            ARM64_WRITE_SYSREG(S3_5_C10_C2_0, mair);
         } else {
-            __asm__ volatile("msr mair_el1, %0" :: "r"(mair)    : "memory");
+            ARM64_WRITE_SYSREG(MAIR_EL1, mair);
         }
     }
     else if (el == 2) {
-        __asm__ volatile("msr mair_el2, %0"  :: "r"(mair)   : "memory");
+        ARM64_WRITE_SYSREG(MAIR_EL2, mair);
     }
     if (el == 1 || el12) {
         if (el12) {
-            __asm__ volatile("msr " TCR_EL12_SYSREG   ", %0" :: "r"(tcr)    : "memory");
+            ARM64_WRITE_SYSREG(S3_5_C2_C0_2, tcr);
         } else {
-            __asm__ volatile("msr tcr_el1, %0"  :: "r"(tcr)     : "memory");
+            ARM64_WRITE_SYSREG(TCR_EL1, tcr);
         }
     }
     else if (el == 2) {
-        __asm__ volatile("msr tcr_el2, %0"   :: "r"(tcr)    : "memory");
+        ARM64_WRITE_SYSREG(TCR_EL2, tcr);
     }
     if (el == 1 || el12) {
         if (el12) {
-            __asm__ volatile("msr " TTBR0_EL12_SYSREG ", %0" :: "r"(phys_table0) : "memory");
+            ARM64_WRITE_SYSREG(S3_5_C2_C0_0, phys_table0);
             write_ttbr1(TRUE, ttbr1_table_base);
         } else {
-            __asm__ volatile("msr ttbr0_el1, %0" :: "r"(phys_table0) : "memory");
+            ARM64_WRITE_SYSREG(TTBR0_EL1, phys_table0);
             write_ttbr1(FALSE, ttbr1_table_base);
         }
         TLBI_VMALLE1IS();
     }
     else if (el == 2) {
-        __asm__ volatile("msr ttbr0_el2, %0" :: "r"(phys_table0) : "memory");
+        ARM64_WRITE_SYSREG(TTBR0_EL2, phys_table0);
         /* EL2 usually only uses TTBR0 unless E2H is set (handled above).
            If strict EL2 separation is needed, TTBR1 might be ignored or used differently. */
     }
@@ -2867,8 +2856,13 @@ VOID Arm64EnablePageTables(VOID)
                             PTE_BLOCK_INNER_SHARE | PTE_BLOCK_AF;
 
         /* Get current PC and SP */
+#if defined(_MSC_VER) && !defined(__clang__)
+        pc_val = (UINT64)(uintptr_t)Arm64EnablePageTables;
+        sp_val = __getReg(31);
+#else
         __asm__ volatile("adr %0, ." : "=r"(pc_val));
         __asm__ volatile("mov %0, sp" : "=r"(sp_val));
+#endif
 
         /* Map PC region (2MB aligned) */
         {
@@ -2935,13 +2929,13 @@ VOID Arm64EnablePageTables(VOID)
 
     if (el == 1 || el12) {
         if (el12) {
-            __asm__ volatile("msr " SCTLR_EL12_SYSREG ", %0" :: "r"(sctlr_on) : "memory");
+            ARM64_WRITE_SYSREG(S3_5_C1_C0_0, sctlr_on);
         } else {
-            __asm__ volatile("msr sctlr_el1, %0" :: "r"(sctlr_on) : "memory");
+            ARM64_WRITE_SYSREG(SCTLR_EL1, sctlr_on);
         }
     }
     else if (el == 2) {
-        __asm__ volatile("msr sctlr_el2, %0" :: "r"(sctlr_on) : "memory");
+        ARM64_WRITE_SYSREG(SCTLR_EL2, sctlr_on);
     }
     ARM64_ISB();
 
@@ -2959,7 +2953,7 @@ static VOID ensure_page_tables_initialized(VOID)
         ERR("ARM64: Page table allocation failed\n");
         UartPuts("ARM64: FATAL unable to allocate page table arena\n");
         for (;;)
-            __asm__ volatile("wfi");
+            ARM64_WFI();
     }
 
     setup_pgtables();
@@ -3001,9 +2995,9 @@ VOID Arm64InitializeMMU(VOID)
     /* Enable MMU + caches */
     if (el == 1 || el12) {
         if (el12)
-            __asm__ volatile("mrs %0, " SCTLR_EL12_SYSREG : "=r"(sctlr));
+            sctlr = ARM64_READ_SYSREG(S3_5_C1_C0_0);
         else
-            __asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
+            sctlr = ARM64_READ_SYSREG(SCTLR_EL1);
 
         /*
          * Do not inherit firmware SCTLR_EL1.A. Windows/NT code routinely uses
@@ -3013,17 +3007,17 @@ VOID Arm64InitializeMMU(VOID)
         sctlr |= SCTLR_EL1_M | SCTLR_EL1_C | SCTLR_EL1_I | SCTLR_EL1_SA;
 
         if (el12)
-            __asm__ volatile("msr " SCTLR_EL12_SYSREG ", %0" :: "r"(sctlr) : "memory");
+            ARM64_WRITE_SYSREG(S3_5_C1_C0_0, sctlr);
         else
-            __asm__ volatile("msr sctlr_el1, %0" :: "r"(sctlr) : "memory");
+            ARM64_WRITE_SYSREG(SCTLR_EL1, sctlr);
     } else if (el == 2) {
-        __asm__ volatile("mrs %0, sctlr_el2" : "=r"(sctlr));
+        sctlr = ARM64_READ_SYSREG(SCTLR_EL2);
         sctlr |= (1ULL << 0) | (1ULL << 2) | (1ULL << 12);
-        __asm__ volatile("msr sctlr_el2, %0" :: "r"(sctlr) : "memory");
+        ARM64_WRITE_SYSREG(SCTLR_EL2, sctlr);
     } else if (el == 3) {
-        __asm__ volatile("mrs %0, sctlr_el3" : "=r"(sctlr));
+        sctlr = ARM64_READ_SYSREG(SCTLR_EL3);
         sctlr |= (1ULL << 0) | (1ULL << 2) | (1ULL << 12);
-        __asm__ volatile("msr sctlr_el3, %0" :: "r"(sctlr) : "memory");
+        ARM64_WRITE_SYSREG(SCTLR_EL3, sctlr);
     }
     ARM64_ISB();
 
@@ -3099,7 +3093,7 @@ VOID Arm64ClearIdentityMappings(VOID)
     }
 
     ARM64_DSB_ISHST();
-    __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
+    ARM64_TLBI_ALL(VMALLE1IS);
     ARM64_DSB_ISH();
     ARM64_ISB();
 }

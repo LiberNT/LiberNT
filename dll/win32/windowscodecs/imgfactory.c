@@ -778,7 +778,7 @@ static HRESULT WINAPI ImagingFactory_CreateBitmapFromHBITMAP(IWICImagingFactory2
     {
         BYTE *buffer;
         HDC hdc;
-        char bmibuf[FIELD_OFFSET(BITMAPINFO, bmiColors[256])];
+        char bmibuf[FIELD_OFFSET(BITMAPINFO, bmiColors) + 256 * sizeof(RGBQUAD)];
         BITMAPINFO *bmi = (BITMAPINFO *)bmibuf;
 
         IWICBitmapLock_GetDataPointer(lock, &size, &buffer);

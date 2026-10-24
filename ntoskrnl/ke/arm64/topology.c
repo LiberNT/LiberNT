@@ -1111,7 +1111,7 @@ KiArm64CollectCacheGeometry(_Out_writes_(KI_ARM64_MAX_CACHE_GEOMETRY)
        migration so the whole walk reads a single processor's hierarchy */
     KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
 
-    __asm__ __volatile__("mrs %0, clidr_el1" : "=r"(Clidr));
+    Clidr = ARM64_READ_SYSREG(CLIDR_EL1);
 
     for (Level = 1; Level <= KI_ARM64_MAX_CACHE_LEVELS; Level++)
     {

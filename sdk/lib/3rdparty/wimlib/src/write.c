@@ -506,8 +506,8 @@ end_chunk_table(struct write_blobs_ctx *ctx, u64 res_actual_size,
 						0 != (ctx->write_resource_flags &
 						      WRITE_RESOURCE_FLAG_SOLID));
 
-	typedef le64 __attribute__((may_alias)) aliased_le64_t;
-	typedef le32 __attribute__((may_alias)) aliased_le32_t;
+	typedef le64 _may_alias_attribute aliased_le64_t;
+	typedef le32 _may_alias_attribute aliased_le32_t;
 
 	if (chunk_entry_size == 4) {
 		aliased_le32_t *entries = (aliased_le32_t*)ctx->chunk_csizes;
@@ -3247,7 +3247,9 @@ overwrite_wim_via_tmpfile(WIMStruct *wim, int write_flags, unsigned num_threads)
 	/* Write the WIM to a temporary file in the same directory as the
 	 * original WIM. */
 	wim_name_len = tstrlen(wim->filename);
-	tchar tmpfile[wim_name_len + 10];
+	tchar *tmpfile = MALLOC((wim_name_len + 10) * sizeof(tchar));
+	if (!tmpfile)
+		return WIMLIB_ERR_NOMEM;
 	tmemcpy(tmpfile, wim->filename, wim_name_len);
 	get_random_alnum_chars(tmpfile + wim_name_len, 9);
 	tmpfile[wim_name_len + 9] = T('\0');
@@ -3259,7 +3261,7 @@ overwrite_wim_via_tmpfile(WIMStruct *wim, int write_flags, unsigned num_threads)
 			   num_threads);
 	if (ret) {
 		tunlink(tmpfile);
-		return ret;
+		goto out;
 	}
 
 	if (filedes_valid(&wim->in_fd)) {
@@ -3280,14 +3282,18 @@ overwrite_wim_via_tmpfile(WIMStruct *wim, int write_flags, unsigned num_threads)
 		{
 			tunlink(tmpfile);
 		}
-		return WIMLIB_ERR_RENAME;
+		ret = WIMLIB_ERR_RENAME;
+		goto out;
 	}
 
 	union wimlib_progress_info progress;
 	progress.rename.from = tmpfile;
 	progress.rename.to = wim->filename;
-	return call_progress(wim->progfunc, WIMLIB_PROGRESS_MSG_RENAME,
-			     &progress, wim->progctx);
+	ret = call_progress(wim->progfunc, WIMLIB_PROGRESS_MSG_RENAME,
+			    &progress, wim->progctx);
+out:
+	FREE(tmpfile);
+	return ret;
 }
 
 /* Determine if the specified WIM file may be updated in-place rather than by

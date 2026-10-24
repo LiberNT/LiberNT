@@ -178,7 +178,10 @@
 
 # ifdef _MSC_VER
 
-#ifdef __REACTOS__
+#if defined(__REACTOS__) && defined(__ASM_EXTERN_THISCALL_WRAPPER)
+#  define DEFINE_THISCALL_WRAPPER(func,args) \
+    extern void __thiscall_##func(void);
+#elif defined(__REACTOS__)
 #  define DEFINE_THISCALL_WRAPPER(func,args) \
     __declspec(naked) void __thiscall_##func(void) \
     { \

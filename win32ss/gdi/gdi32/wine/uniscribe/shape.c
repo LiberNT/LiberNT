@@ -4030,3 +4030,38 @@ HRESULT SHAPE_GetFontFeatureTags( HDC hdc, ScriptCache *psc,
         *pcTags = 0;
     return hr;
 }
+
+#ifdef __REACTOS__
+static LoadedFeature *load_single_glyph_feature(ScriptCache *psc, OPENTYPE_TAG script, OPENTYPE_TAG language,
+        OPENTYPE_TAG tag, char table_type)
+{
+    LoadedFeature *feature = NULL;
+    OPENTYPE_TAG found;
+    int count;
+
+    if (!language || FAILED(OpenType_GetFontLanguageTags(psc, script, language, 1, &found, &count)))
+        language = MS_MAKE_TAG('d','f','l','t');
+    OpenType_GetFontFeatureTags(psc, script, language, FALSE, tag, table_type, 1, &found, &count, &feature);
+    return feature;
+}
+
+void SHAPE_SubstituteSingleGlyph(HDC hdc, ScriptCache *psc, OPENTYPE_TAG script, OPENTYPE_TAG language,
+        OPENTYPE_TAG tag, LONG param, WORD *glyph)
+{
+    LoadedFeature *feature;
+
+    load_ot_tables(hdc, psc);
+    if (psc->GSUB_Table && (feature = load_single_glyph_feature(psc, script, language, tag, FEATURE_GSUB_TABLE)))
+        OpenType_GSUB_SubstituteSingleGlyph(psc->GSUB_Table, feature, param, glyph);
+}
+
+void SHAPE_PositionSingleGlyph(HDC hdc, ScriptCache *psc, OPENTYPE_TAG script, OPENTYPE_TAG language,
+        OPENTYPE_TAG tag, WORD glyph, int *advance, GOFFSET *goffset)
+{
+    LoadedFeature *feature;
+
+    load_ot_tables(hdc, psc);
+    if (psc->GPOS_Table && psc->otm && (feature = load_single_glyph_feature(psc, script, language, tag, FEATURE_GPOS_TABLE)))
+        OpenType_GPOS_PositionSingleGlyph(psc, feature, glyph, advance, goffset);
+}
+#endif

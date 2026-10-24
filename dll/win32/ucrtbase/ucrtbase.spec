@@ -1202,7 +1202,7 @@
 @ cdecl _o__localtime64_s(ptr ptr) _localtime64_s
 @ cdecl _o__lock_file(ptr) _lock_file
 @ cdecl _o__locking(long long long) _locking
-@ cdecl _o__logb(double) logb
+@ cdecl _o__logb(double) _logb
 @ cdecl -arch=!i386 _o__logbf(float) logbf
 @ cdecl _o__lsearch(ptr ptr ptr long ptr) _lsearch
 @ cdecl _o__lsearch_s() _lsearch_s # FIXME: params
@@ -1759,9 +1759,9 @@
 @ cdecl _o_log2(double) log2
 @ cdecl _o_log2f(float) log2f
 @ cdecl _o_log2l(double) log2
-@ cdecl _o_logb(double) logb
+@ cdecl _o_logb(double) _logb
 @ cdecl _o_logbf(float) logbf
-@ cdecl _o_logbl(double) logb
+@ cdecl _o_logbl(double) _logb
 @ cdecl -arch=!i386 _o_logf(float) logf
 @ cdecl _o_lrint(double) lrint
 @ cdecl _o_lrintf(float) lrintf
@@ -2475,9 +2475,9 @@
 @ cdecl log2(double)
 @ cdecl log2f(float)
 @ cdecl log2l(double) log2
-@ cdecl logb(double)
+@ cdecl logb(double) _logb
 @ cdecl logbf(float)
-@ cdecl logbl(double) logb
+@ cdecl logbl(double) _logb
 @ cdecl -arch=!i386 logf(float)
 @ cdecl longjmp(ptr long)
 @ cdecl lrint(double)

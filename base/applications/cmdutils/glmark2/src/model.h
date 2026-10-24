@@ -30,7 +30,6 @@
 #include <map>
 #include "vec.h"
 #include <memory>
-#include <filesystem>
 
 // Forward declare the mesh object.  We don't need the whole header here.
 class Mesh;
@@ -48,21 +47,21 @@ enum ModelFormat
 class ModelDescriptor
 {
     std::string name_;
-    std::filesystem::path pathname_;
+    std::string pathname_;
     ModelFormat format_;
     ModelDescriptor();
 public:
     ModelDescriptor(const std::string& name, ModelFormat format,
-                    const std::filesystem::path& pathname) :
+                    const std::string& pathname) :
         name_(name),
         pathname_(pathname),
         format_(format) {}
     ~ModelDescriptor() {}
-    const std::filesystem::path& pathname() const { return pathname_; }
+    const std::string& pathname() const { return pathname_; }
     ModelFormat format() const { return format_; }
 };
 
-typedef std::map<std::string, std::unique_ptr<ModelDescriptor>> ModelMap;
+typedef std::map<std::string, ModelDescriptor> ModelMap;
 
 /**
  * A model as loaded from a 3D object data file.
@@ -128,8 +127,8 @@ private:
     void append_object_to_mesh(const Object &object, Mesh &mesh,
                                int p_pos, int n_pos, int t_pos,
                                int nt_pos, int nb_pos);
-    bool load_3ds(const std::filesystem::path &filename);
-    bool load_obj(const std::filesystem::path &filename);
+    bool load_3ds(const std::string &filename);
+    bool load_obj(const std::string &filename);
     void obj_get_attrib(const std::string& description, LibMatrix::vec2& v);
     void obj_get_attrib(const std::string& description, LibMatrix::vec3& v);
     void obj_face_get_index(const std::string& tuple, unsigned int& which,

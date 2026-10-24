@@ -28,8 +28,8 @@ _changestack:
 
 PUBLIC Amd64LoadDescriptorTables
 Amd64LoadDescriptorTables:
-    lgdt [rcx]
-    lidt [rdx]
+    lgdt lXdtPrefix [rcx]
+    lidt lXdtPrefix [rdx]
     mov ax, KGDT64_R0_DATA
     mov ds, ax
     mov es, ax

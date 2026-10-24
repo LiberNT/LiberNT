@@ -18,6 +18,9 @@
 #include <kddll.h>
 
 #include <pstypes.h>
+#if defined(_M_ARM64)
+#include <reactos/arm64/sysreg.h>
+#endif
 
 // #define KDDEBUG /* uncomment to enable debugging this dll */
 
@@ -88,14 +91,12 @@ FORCEINLINE VOID KdpSwitchAddressSpace(ULONG_PTR DirectoryTableBase)
      * Only TTBR0 (the user half) is switched; TTBR1 keeps mapping the kernel.
      * The TLB must be invalidated because the ASID is not being changed.
      */
-    __asm__ __volatile__(
-        "dsb ishst\n"
-        "msr ttbr0_el1, %0\n"
-        "isb\n"
-        "tlbi vmalle1\n"
-        "dsb ish\n"
-        "isb\n"
-        :: "r"(DirectoryTableBase) : "memory");
+    ARM64_DSB(ISHST);
+    ARM64_WRITE_SYSREG(TTBR0_EL1, DirectoryTableBase);
+    ARM64_ISB();
+    ARM64_TLBI_ALL(VMALLE1);
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 #else
     __writecr3(DirectoryTableBase);
 #endif

@@ -1793,7 +1793,7 @@ static int scaledown_resource_frames(HINSTANCE hinst, const WCHAR *name, SCALEDO
 
 static int scaledown_file_frames(const WCHAR *path, SCALEDOWN_FRAME *frames)
 {
-    BYTE buffer[FIELD_OFFSET(SCALEDOWN_ICONFILEDIR, idEntries[SCALEDOWN_MAX_FRAMES])];
+    BYTE buffer[FIELD_OFFSET(SCALEDOWN_ICONFILEDIR, idEntries) + SCALEDOWN_MAX_FRAMES * sizeof(SCALEDOWN_ICONFILEDIRENTRY)];
     const SCALEDOWN_ICONFILEDIR *dir = (const SCALEDOWN_ICONFILEDIR *)buffer;
     HANDLE file;
     DWORD read = 0;

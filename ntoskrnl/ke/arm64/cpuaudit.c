@@ -26,7 +26,8 @@ static AUDIT_CPU AuditCpus[CPU_AUDIT_CPUS];
 ULONGLONG KiCpuAuditClock(VOID)
 {
     ULONGLONG Value;
-    __asm__ __volatile__("isb; mrs %0, cntvct_el0" : "=r"(Value) :: "memory");
+    ARM64_ISB();
+    Value = ARM64_READ_SYSREG(CNTVCT_EL0);
     return Value;
 }
 static ULONG AuditThreadPid(PKTHREAD Thread)
@@ -37,10 +38,18 @@ static VOID AuditRecord(CPU_AUDIT_EVENT *Event)
 {
     AUDIT_CPU *Cpu = &AuditCpus[Event->Cpu];
     ULONG Producer = Cpu->Producer;
+#if defined(_MSC_VER) && !defined(__clang__)
+    if (Producer - ReadULongAcquire(&Cpu->Consumer) >= CPU_AUDIT_RING)
+#else
     if (Producer - __atomic_load_n(&Cpu->Consumer, __ATOMIC_ACQUIRE) >= CPU_AUDIT_RING)
+#endif
     { Cpu->Dropped++; return; }
     Cpu->Ring[Producer % CPU_AUDIT_RING] = *Event;
+#if defined(_MSC_VER) && !defined(__clang__)
+    WriteULongRelease(&Cpu->Producer, Producer + 1);
+#else
     __atomic_store_n(&Cpu->Producer, Producer + 1, __ATOMIC_RELEASE);
+#endif
 }
 static VOID AuditReadCounters(CPU_AUDIT_EVENT *Event)
 {
@@ -50,8 +59,9 @@ static VOID AuditReadCounters(CPU_AUDIT_EVENT *Event)
     for (i = 0; i < 6; ++i)
     {
         ULONGLONG Value;
-        __asm__ __volatile__("msr pmselr_el0, %0; isb" :: "r"((ULONGLONG)i) : "memory");
-        __asm__ __volatile__("mrs %0, pmxevcntr_el0" : "=r"(Value));
+        ARM64_WRITE_SYSREG(PMSELR_EL0, (ULONGLONG)i);
+        ARM64_ISB();
+        Value = ARM64_READ_SYSREG(PMXEVCNTR_EL0);
         Event->Values[i] = (ULONG)(Value - Cpu->Last[i]);
         Cpu->Last[i] = Value;
     }
@@ -61,7 +71,8 @@ static VOID AuditCapture(ULONG Kind, PKTHREAD Old, PKTHREAD New, ULONG_PTR Pc)
     CPU_AUDIT_EVENT Event = {0};
     ULONGLONG Daif;
     ULONG Cpu;
-    __asm__ __volatile__("mrs %0, daif; msr daifset, #3" : "=r"(Daif) :: "memory");
+    Daif = ARM64_READ_SYSREG(DAIF);
+    ARM64_DAIFSET(3);
     Cpu = KeGetCurrentProcessorNumber();
     if (!KiCpuAuditActive || Cpu >= CPU_AUDIT_CPUS) goto Done;
     Event.Tick = KiCpuAuditClock();
@@ -74,7 +85,7 @@ static VOID AuditCapture(ULONG Kind, PKTHREAD Old, PKTHREAD New, ULONG_PTR Pc)
     AuditCpus[Cpu].LastTick = Event.Tick;
     AuditRecord(&Event);
 Done:
-    __asm__ __volatile__("msr daif, %0" :: "r"(Daif) : "memory");
+    ARM64_WRITE_SYSREG(DAIF, Daif);
 }
 VOID KiCpuAuditTick(ULONG_PTR Pc)
 {
@@ -93,7 +104,8 @@ static VOID AuditReady(PKTHREAD Thread, ULONG Kind, ULONG Processor, KAFFINITY I
     CPU_AUDIT_EVENT Event = {0};
     ULONGLONG Daif;
     if (!KiCpuAuditActive || AuditThreadPid(Thread) != AuditPid) return;
-    __asm__ __volatile__("mrs %0, daif; msr daifset, #3" : "=r"(Daif) :: "memory");
+    Daif = ARM64_READ_SYSREG(DAIF);
+    ARM64_DAIFSET(3);
     Event.Cpu = KeGetCurrentProcessorNumber();
     if (KiCpuAuditActive && Event.Cpu < CPU_AUDIT_CPUS)
     {
@@ -104,7 +116,7 @@ static VOID AuditReady(PKTHREAD Thread, ULONG Kind, ULONG Processor, KAFFINITY I
         Event.Pid = AuditPid; Event.Tid = (ULONG_PTR)PsGetThreadId((PETHREAD)Thread);
         AuditRecord(&Event);
     }
-    __asm__ __volatile__("msr daif, %0" :: "r"(Daif) : "memory");
+    ARM64_WRITE_SYSREG(DAIF, Daif);
 }
 VOID KiCpuAuditReady(PKTHREAD Thread)
 {
@@ -119,7 +131,8 @@ VOID KiCpuAuditEvent(ULONG Kind, ULONG_PTR Pc, ULONGLONG A, ULONGLONG B)
     CPU_AUDIT_EVENT Event = {0};
     ULONGLONG Daif;
     if (!KiCpuAuditActive) return;
-    __asm__ __volatile__("mrs %0, daif; msr daifset, #3" : "=r"(Daif) :: "memory");
+    Daif = ARM64_READ_SYSREG(DAIF);
+    ARM64_DAIFSET(3);
     Event.Cpu = KeGetCurrentProcessorNumber();
     if (KiCpuAuditActive && Event.Cpu < CPU_AUDIT_CPUS)
     {
@@ -132,7 +145,7 @@ VOID KiCpuAuditEvent(ULONG Kind, ULONG_PTR Pc, ULONGLONG A, ULONGLONG B)
             AuditRecord(&Event);
         }
     }
-    __asm__ __volatile__("msr daif, %0" :: "r"(Daif) : "memory");
+    ARM64_WRITE_SYSREG(DAIF, Daif);
 }
 VOID KiCpuAuditProcessTimes(VOID)
 {
@@ -160,10 +173,11 @@ VOID KiCpuAuditProcessTimes(VOID)
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) { Event.Aux = 1; }
     _SEH2_END;
-    __asm__ __volatile__("mrs %0, daif; msr daifset, #3" : "=r"(Daif) :: "memory");
+    Daif = ARM64_READ_SYSREG(DAIF);
+    ARM64_DAIFSET(3);
     Event.Cpu = KeGetCurrentProcessorNumber();
     if (KiCpuAuditActive && Event.Cpu < CPU_AUDIT_CPUS) AuditRecord(&Event);
-    __asm__ __volatile__("msr daif, %0" :: "r"(Daif) : "memory");
+    ARM64_WRITE_SYSREG(DAIF, Daif);
 }
 static ULONG_PTR NTAPI AuditPmu(ULONG_PTR Operation)
 {
@@ -175,31 +189,39 @@ static ULONG_PTR NTAPI AuditPmu(ULONG_PTR Operation)
     Cpu = &AuditCpus[Number];
     if (Operation == CPU_AUDIT_START)
     {
-        __asm__ __volatile__("mrs %0, id_aa64dfr0_el1" : "=r"(Dfr));
+        Dfr = ARM64_READ_SYSREG(ID_AA64DFR0_EL1);
         if (((Dfr >> 8) & 15) == 0 || ((Dfr >> 8) & 15) == 15) { Cpu->Error = 1; return 0; }
-        __asm__ __volatile__("mrs %0, pmcr_el0" : "=r"(Pmcr));
-        __asm__ __volatile__("mrs %0, pmcntenset_el0" : "=r"(Enabled));
-        __asm__ __volatile__("mrs %0, pmceid0_el0" : "=r"(Pmceid));
-        __asm__ __volatile__("mrs %0, pmceid1_el0" : "=r"(Pmceid1));
+        Pmcr = ARM64_READ_SYSREG(PMCR_EL0);
+        Enabled = ARM64_READ_SYSREG(PMCNTENSET_EL0);
+        Pmceid = ARM64_READ_SYSREG(PMCEID0_EL0);
+        Pmceid1 = ARM64_READ_SYSREG(PMCEID1_EL0);
         Pmceid = (ULONG)Pmceid | ((ULONGLONG)(ULONG)Pmceid1 << 32);
         if (((Pmcr >> 11) & 31) < 6 || (Enabled & 0x7fffffff)) { Cpu->Error = 2; return 0; }
         Cpu->Pmcr = Pmcr;
-        __asm__ __volatile__("mrs %0, pmselr_el0" : "=r"(Cpu->Selector));
-        __asm__ __volatile__("mrs %0, pmintenset_el1" : "=r"(Cpu->IntEnable));
-        __asm__ __volatile__("msr pmintenclr_el1, %0" :: "r"(63ULL) : "memory");
+        Cpu->Selector = ARM64_READ_SYSREG(PMSELR_EL0);
+        Cpu->IntEnable = ARM64_READ_SYSREG(PMINTENSET_EL1);
+        ARM64_WRITE_SYSREG(PMINTENCLR_EL1, 63ULL);
         for (i = 0; i < 6; ++i)
         {
             ULONGLONG Type = EventTypes[i] | (i ? (1ULL << 31) : 0);
             if (!(Pmceid & (1ULL << EventTypes[i]))) Cpu->Error |= 1UL << (8 + i);
-            __asm__ __volatile__("msr pmselr_el0, %0; isb" :: "r"((ULONGLONG)i) : "memory");
-            __asm__ __volatile__("mrs %0, pmxevtyper_el0" : "=r"(Cpu->Types[i]));
-            __asm__ __volatile__("mrs %0, pmxevcntr_el0" : "=r"(Cpu->Counters[i]));
+            ARM64_WRITE_SYSREG(PMSELR_EL0, (ULONGLONG)i);
+            ARM64_ISB();
+            Cpu->Types[i] = ARM64_READ_SYSREG(PMXEVTYPER_EL0);
+            Cpu->Counters[i] = ARM64_READ_SYSREG(PMXEVCNTR_EL0);
+#if defined(_MSC_VER) && !defined(__clang__)
+            ARM64_WRITE_SYSREG(PMXEVTYPER_EL0, Type);
+            ARM64_WRITE_SYSREG(PMXEVCNTR_EL0, 0);
+#else
             __asm__ __volatile__("msr pmxevtyper_el0, %0; msr pmxevcntr_el0, xzr" :: "r"(Type) : "memory");
+#endif
             Cpu->Last[i] = 0;
         }
-        __asm__ __volatile__("msr pmovsclr_el0, %0; msr pmcntenset_el0, %0" :: "r"(63ULL) : "memory");
+        ARM64_WRITE_SYSREG(PMOVSCLR_EL0, 63ULL);
+        ARM64_WRITE_SYSREG(PMCNTENSET_EL0, 63ULL);
         Pmcr = (Pmcr & ~6ULL) | 1;
-        __asm__ __volatile__("msr pmcr_el0, %0; isb" :: "r"(Pmcr) : "memory");
+        ARM64_WRITE_SYSREG(PMCR_EL0, Pmcr);
+        ARM64_ISB();
         Cpu->Owned = 1;
         Cpu->LastTick = KiCpuAuditClock();
         Event.Tick = Cpu->LastTick; Event.Kind = CPU_AUDIT_CONFIG; Event.Cpu = Number;
@@ -213,16 +235,21 @@ static ULONG_PTR NTAPI AuditPmu(ULONG_PTR Operation)
         Event.Tick = KiCpuAuditClock(); Event.Kind = CPU_AUDIT_SAMPLE; Event.Cpu = Number;
         Event.Pid = HandleToUlong(PsGetCurrentProcessId()); Event.Tid = (ULONG_PTR)PsGetThreadId(PsGetCurrentThread());
         AuditReadCounters(&Event); AuditRecord(&Event);
-        __asm__ __volatile__("msr pmcntenclr_el0, %0; isb" :: "r"(63ULL) : "memory");
+        ARM64_WRITE_SYSREG(PMCNTENCLR_EL0, 63ULL);
+        ARM64_ISB();
         for (i = 0; i < 6; ++i)
         {
-            __asm__ __volatile__("msr pmselr_el0, %0; isb" :: "r"((ULONGLONG)i) : "memory");
-            __asm__ __volatile__("msr pmxevtyper_el0, %0" :: "r"(Cpu->Types[i]) : "memory");
-            __asm__ __volatile__("msr pmxevcntr_el0, %0" :: "r"(Cpu->Counters[i]) : "memory");
+            ARM64_WRITE_SYSREG(PMSELR_EL0, (ULONGLONG)i);
+            ARM64_ISB();
+            ARM64_WRITE_SYSREG(PMXEVTYPER_EL0, Cpu->Types[i]);
+            ARM64_WRITE_SYSREG(PMXEVCNTR_EL0, Cpu->Counters[i]);
         }
-        __asm__ __volatile__("msr pmovsclr_el0, %0; msr pmintenclr_el1, %0" :: "r"(63ULL) : "memory");
-        __asm__ __volatile__("msr pmintenset_el1, %0" :: "r"(Cpu->IntEnable & 63) : "memory");
-        __asm__ __volatile__("msr pmselr_el0, %0; msr pmcr_el0, %1; isb" :: "r"(Cpu->Selector), "r"(Cpu->Pmcr & ~6ULL) : "memory");
+        ARM64_WRITE_SYSREG(PMOVSCLR_EL0, 63ULL);
+        ARM64_WRITE_SYSREG(PMINTENCLR_EL1, 63ULL);
+        ARM64_WRITE_SYSREG(PMINTENSET_EL1, Cpu->IntEnable & 63);
+        ARM64_WRITE_SYSREG(PMSELR_EL0, Cpu->Selector);
+        ARM64_WRITE_SYSREG(PMCR_EL0, Cpu->Pmcr & ~6ULL);
+        ARM64_ISB();
         Cpu->Owned = 0;
     }
     return 0;
@@ -253,7 +280,7 @@ NTSTATUS KiCpuAuditControl(PVOID Buffer, ULONG Length, KPROCESSOR_MODE Mode)
             {
                 RtlZeroMemory(AuditCpus, sizeof(AuditCpus));
                 AuditPid = Packet->Pid; AuditOwner = PsGetCurrentProcessId();
-                __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(AuditFrequency));
+                AuditFrequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
                 KeIpiGenericCall(AuditPmu, CPU_AUDIT_START);
                 InterlockedExchange(&KiCpuAuditActive, 1);
             }
@@ -280,10 +307,18 @@ NTSTATUS KiCpuAuditControl(PVOID Buffer, ULONG Length, KPROCESSOR_MODE Mode)
                 AUDIT_CPU *Cpu = &AuditCpus[Number];
                 Packet->Dropped += Cpu->Dropped; Packet->Errors |= Cpu->Error;
                 Consumer = Cpu->Consumer;
+#if defined(_MSC_VER) && !defined(__clang__)
+                Producer = ReadULongAcquire(&Cpu->Producer);
+#else
                 Producer = __atomic_load_n(&Cpu->Producer, __ATOMIC_ACQUIRE);
+#endif
                 Limit = min(Producer - Consumer, CPU_AUDIT_EVENTS - Packet->Count);
                 while (Limit--) Packet->Data.Events[Packet->Count++] = Cpu->Ring[Consumer++ % CPU_AUDIT_RING];
+#if defined(_MSC_VER) && !defined(__clang__)
+                WriteULongRelease(&Cpu->Consumer, Consumer);
+#else
                 __atomic_store_n(&Cpu->Consumer, Consumer, __ATOMIC_RELEASE);
+#endif
             }
         }
         InterlockedExchange(&AuditBusy, 0); Held = FALSE;

@@ -280,7 +280,8 @@ HalpGicv3SendSgi(
         HalpWriteIccSgi1r(SgiVal);
     }
 
-    __asm__ __volatile__("dsb sy; sev" ::: "memory");
+    ARM64_DSB(SY);
+    ARM64_SEV();
 }
 
 /*
@@ -324,7 +325,7 @@ HalpInitGicv3SpiRouting(
         HalpMmioWrite64((ULONG_PTR)HalpGicdBase, GICD_IROUTER + (i * 8), Route);
     }
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
     DPRINT("[arm64][GICv3] SPI routing configured to current CPU (route=0x%llx)\n", Route);
 }
 

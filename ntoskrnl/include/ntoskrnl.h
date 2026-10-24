@@ -21,6 +21,8 @@
 #define IoAllocateAdapterChannel _IoAllocateAdapterChannel
 #define KeGetCurrentThread _KeGetCurrentThread
 #define RtlFillMemoryUlong _RtlFillMemoryUlong
+#elif defined(_WIN64) && defined(_MSC_VER) && !defined(__clang__)
+#define IoAllocateAdapterChannel _IoAllocateAdapterChannel
 #endif
 
 /* Version Data */

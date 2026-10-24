@@ -1925,7 +1925,7 @@ typedef struct _PEB {
 
 #if defined(_MSC_VER) || __GNUC__ >= 15
 __kernel_entry
-NTSTATUS NTAPI ZwQueryInformationProcess(
+NTSYSAPI NTSTATUS NTAPI ZwQueryInformationProcess(
     IN HANDLE ProcessHandle,
     IN PROCESSINFOCLASS ProcessInformationClass,
     OUT PVOID ProcessInformation,

@@ -187,8 +187,8 @@ is_all_zeroes(const u8 *p, const size_t size)
 bool
 detect_sparse_region(const void *data, size_t size, size_t *len_ret)
 {
-	const void *p = data;
-	const void * const end = data + size;
+	const u8 *p = data;
+	const u8 * const end = p + size;
 	size_t len = 0;
 	bool zeroes = false;
 
@@ -820,7 +820,14 @@ file_name_valid(utf16lechar *name, size_t num_chars, bool fix)
 	for (i = 0; i < num_chars; i++) {
 		switch (le16_to_cpu(name[i])) {
 	#ifdef _WIN32
-		case '\x01'...'\x1F':
+		case '\x01': case '\x02': case '\x03': case '\x04':
+		case '\x05': case '\x06': case '\x07': case '\x08':
+		case '\x09': case '\x0A': case '\x0B': case '\x0C':
+		case '\x0D': case '\x0E': case '\x0F': case '\x10':
+		case '\x11': case '\x12': case '\x13': case '\x14':
+		case '\x15': case '\x16': case '\x17': case '\x18':
+		case '\x19': case '\x1A': case '\x1B': case '\x1C':
+		case '\x1D': case '\x1E': case '\x1F':
 		case '\\':
 		case ':':
 		case '*':
@@ -911,8 +918,10 @@ dentry_calculate_extraction_name(struct wim_dentry *dentry,
 
 out_replace:
 	{
-		utf16lechar utf16_name_copy[dentry->d_name_nbytes / 2];
+		utf16lechar *utf16_name_copy = MALLOC(dentry->d_name_nbytes);
 
+		if (!utf16_name_copy)
+			return WIMLIB_ERR_NOMEM;
 		memcpy(utf16_name_copy, dentry->d_name, dentry->d_name_nbytes);
 		file_name_valid(utf16_name_copy, dentry->d_name_nbytes / 2, true);
 
@@ -922,24 +931,30 @@ out_replace:
 		ret = utf16le_get_tstr(utf16_name_copy,
 				       dentry->d_name_nbytes,
 				       &tchar_name, &tchar_nchars);
-		if (ret)
+		if (ret) {
+			FREE(utf16_name_copy);
 			return ret;
+		}
 
 		tchar_nchars /= sizeof(tchar);
 
 		size_t fixed_name_num_chars = tchar_nchars;
-		tchar fixed_name[tchar_nchars + 50];
+		tchar *fixed_name = MALLOC((tchar_nchars + 50) * sizeof(tchar));
 
+		if (!fixed_name) {
+			utf16le_put_tstr(tchar_name);
+			FREE(utf16_name_copy);
+			return WIMLIB_ERR_NOMEM;
+		}
 		tmemcpy(fixed_name, tchar_name, tchar_nchars);
 		fixed_name_num_chars += tsprintf(fixed_name + tchar_nchars,
 						 T(" (invalid filename #%lu)"),
 						 ++ctx->invalid_sequence);
 
 		utf16le_put_tstr(tchar_name);
+		FREE(utf16_name_copy);
 
-		dentry->d_extraction_name = TSTRDUP(fixed_name);
-		if (!dentry->d_extraction_name)
-			return WIMLIB_ERR_NOMEM;
+		dentry->d_extraction_name = fixed_name;
 		dentry->d_extraction_name_nchars = fixed_name_num_chars;
 	}
 	return 0;
@@ -1895,7 +1910,7 @@ static int
 extract_all_images(WIMStruct *wim, const tchar *target, int extract_flags)
 {
 	size_t output_path_len = tstrlen(target);
-	tchar buf[output_path_len + 1 + 128 + 1];
+	tchar *buf;
 	int ret;
 	int image;
 	const tchar *image_name;
@@ -1908,6 +1923,9 @@ extract_all_images(WIMStruct *wim, const tchar *target, int extract_flags)
 	ret = mkdir_if_needed(target);
 	if (ret)
 		return ret;
+	buf = MALLOC((output_path_len + 1 + 128 + 1) * sizeof(tchar));
+	if (!buf)
+		return WIMLIB_ERR_NOMEM;
 	tmemcpy(buf, target, output_path_len);
 	buf[output_path_len] = OS_PREFERRED_PATH_SEPARATOR;
 	for (image = 1; image <= wim->hdr.image_count; image++) {
@@ -1921,9 +1939,10 @@ extract_all_images(WIMStruct *wim, const tchar *target, int extract_flags)
 		}
 		ret = extract_single_image(wim, image, buf, extract_flags);
 		if (ret)
-			return ret;
+			break;
 	}
-	return 0;
+	FREE(buf);
+	return ret;
 }
 
 static int

@@ -111,7 +111,7 @@ Texture::load(const std::string &textureName, GLuint *pTexture, ...)
     }
 
     // Pull the pathname out of the descriptor and use it for the PNG load.
-    TextureDescriptor* desc = textureIt->second.get();
+    const TextureDescriptor* desc = &textureIt->second;
     ImageData image;
 
     if (desc->filetype() == TextureDescriptor::FileTypePNG) {
@@ -149,7 +149,7 @@ Texture::find_textures()
     {
         return TexturePrivate::textureMap;
     }
-    vector<std::filesystem::path> pathVec;
+    vector<string> pathVec;
     string dataDir(Options::data_path + "/textures");
     Util::list_files(dataDir, pathVec);
     // Now that we have a list of all of the image files available to us,
@@ -157,8 +157,13 @@ Texture::find_textures()
     // so the scene can decide which ones to use.
     for(const auto &curPath : pathVec)
     {
-        auto ext = curPath.extension();
-        auto name = curPath.stem().string();
+        string name(curPath.substr(curPath.find_last_of("/\\") + 1));
+        string ext;
+        string::size_type dot = name.rfind('.');
+        if (dot != string::npos && dot != 0) {
+            ext = name.substr(dot);
+            name.erase(dot);
+        }
 
         // Set the file type based on the extension
         TextureDescriptor::FileType type(TextureDescriptor::FileTypeUnknown);
@@ -167,8 +172,7 @@ Texture::find_textures()
         else if (ext == ".jpg")
             type = TextureDescriptor::FileTypeJPEG;
 
-        std::unique_ptr<TextureDescriptor> desc(new TextureDescriptor(name, curPath, type));
-        TexturePrivate::textureMap.insert(std::make_pair(name, std::move(desc)));
+        TexturePrivate::textureMap.insert(std::make_pair(name, TextureDescriptor(name, curPath, type)));
     }
 
     return TexturePrivate::textureMap;

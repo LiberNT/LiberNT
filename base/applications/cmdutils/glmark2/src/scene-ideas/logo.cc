@@ -537,11 +537,11 @@ void
 SGILogo::drawDoubleCylinder(void)
 {
     glVertexAttribPointer(vertexIndex_, 3, GL_FLOAT, GL_FALSE, 0, 
-        reinterpret_cast<const GLvoid*>(dataMap_.dcvOffset));
+        reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.dcvOffset)));
     if (drawStyle_ == LOGO_NORMAL)
     {
         glVertexAttribPointer(normalNormalIndex_, 3, GL_FLOAT, GL_FALSE, 0, 
-            reinterpret_cast<const GLvoid*>(dataMap_.dcnOffset));
+            reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.dcnOffset)));
     }
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 18);
 }
@@ -550,11 +550,11 @@ void
 SGILogo::drawSingleCylinder(void)
 {
     glVertexAttribPointer(vertexIndex_, 3, GL_FLOAT, GL_FALSE, 0,
-        reinterpret_cast<const GLvoid*>(dataMap_.scvOffset));
+        reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.scvOffset)));
     if (drawStyle_ == LOGO_NORMAL)
     {
         glVertexAttribPointer(normalNormalIndex_, 3, GL_FLOAT, GL_FALSE, 0, 
-            reinterpret_cast<const GLvoid*>(dataMap_.scnOffset));
+            reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.scnOffset)));
     }
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 18);
 }
@@ -567,22 +567,22 @@ SGILogo::drawElbow(void)
     if (drawStyle_ == LOGO_NORMAL)
     {
         glVertexAttribPointer(vertexIndex_, 3, GL_FLOAT, GL_FALSE, 0,
-            reinterpret_cast<const GLvoid*>(dataMap_.evOffset));
+            reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.evOffset)));
         glVertexAttribPointer(normalNormalIndex_, 3, GL_FLOAT, GL_FALSE, 0,
-            reinterpret_cast<const GLvoid*>(dataMap_.enOffset));
+            reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.enOffset)));
     }
     else
     {
         endIdx = 8;
         glVertexAttribPointer(vertexIndex_, 3, GL_FLOAT, GL_FALSE, 0,
-            reinterpret_cast<const GLvoid*>(dataMap_.esvOffset));
+            reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.esvOffset)));
     }
 
     for (unsigned int i = startIdx; i < endIdx; i++)
     {
         unsigned int curOffset(i * 18 * sizeof(unsigned short));
         glDrawElements(GL_TRIANGLE_STRIP, 18, GL_UNSIGNED_SHORT, 
-             reinterpret_cast<const GLvoid*>(curOffset));
+             reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(curOffset)));
     }
 }
 

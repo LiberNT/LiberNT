@@ -42,3 +42,8 @@ add_importlibs(d3d11 dxgi d3dwine gdi32 msvcrt kernel32 ntdll)
 add_dependencies(d3d11 d3d_idl_headers wineheaders)
 add_cd_file(TARGET d3d11 DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(d3d11)
+
+if(MSVC)
+    remove_target_compile_option(d3d11 "/we4098")
+    remove_target_compile_option(d3d11 "/we4133")
+endif()

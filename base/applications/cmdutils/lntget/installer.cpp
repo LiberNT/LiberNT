@@ -29,7 +29,7 @@ void TraceInstaller(const std::string &message)
     OutputDebugStringA(line.c_str());
 }
 
-std::wstring SafePathComponent(std::string_view value)
+std::wstring SafePathComponent(const std::string &value)
 {
     std::wstring result = WideFromUtf8(value);
     for (wchar_t &character : result)
@@ -60,7 +60,7 @@ std::string InstallerArguments(const InstallerEntry &installer, InstallMode mode
     if (AsciiEquals(installer.type, "inno")) return "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-";
     if (AsciiEquals(installer.type, "nullsoft")) return "/S";
     if (AsciiEquals(installer.type, "burn")) return "/quiet /norestart";
-    return {};
+    return std::string();
 }
 
 } // namespace
@@ -70,8 +70,8 @@ std::wstring InstallerService::DefaultPackageDirectory(const PackageRecord &pack
     return JoinPath(JoinPath(JoinPath(TemporaryDirectory(), L"lntget"), SafePathComponent(package.id)), SafePathComponent(package.version));
 }
 
-Status InstallerService::Download(const PackageRecord &package, const InstallerEntry &installer, std::optional<std::wstring> directory,
-                                  std::wstring &path, DownloadProgressCallback progress, InstallerStageCallback stage)
+Status InstallerService::Download(const PackageRecord &package, const InstallerEntry &installer, const std::wstring *directory,
+                                  std::wstring &path, DownloadProgressCallback *progress, InstallerStageCallback *stage)
 {
     const std::wstring targetDirectory = directory ? *directory : DefaultPackageDirectory(package);
     Status status = EnsureDirectory(targetDirectory);
@@ -81,34 +81,34 @@ Status InstallerService::Download(const PackageRecord &package, const InstallerE
     for (unsigned attempt = 0; attempt < VerifiedDownloadAttempts; ++attempt)
     {
         std::printf("Downloading %s %s [%s]\n", package.name.c_str(), package.version.c_str(), installer.architecture.c_str());
-        if (stage) stage(InstallerDownloadStage::Downloading);
-        status = http_.Download(WideFromUtf8(installer.url), path, {}, ~0ull, progress);
+        if (stage) stage->Stage(InstallerDownloadStage::Downloading);
+        status = http_.Download(WideFromUtf8(installer.url), path, std::wstring(), ~0ull, progress);
         if (!status)
             return status;
         std::printf("Verifying installer SHA-256...\n");
-        if (stage) stage(InstallerDownloadStage::Verifying);
+        if (stage) stage->Stage(InstallerDownloadStage::Verifying);
         status = VerifyFileSha256(path, installer.sha256);
         if (status)
             break;
         DeleteFileW(path.c_str());
-        TraceInstaller("verification attempt " + std::to_string(attempt + 1) + "/" + std::to_string(VerifiedDownloadAttempts) + " failed: " + status.message);
+        TraceInstaller("verification attempt " + DecimalString(attempt + 1) + "/" + DecimalString(VerifiedDownloadAttempts) + " failed: " + status.message);
         if (status.code != ERROR_CRC || attempt + 1 == VerifiedDownloadAttempts)
             return status;
         TraceInstaller("discarded untrusted download and retrying from the vendor URL");
     }
     std::printf("Installer hash verified.\n");
-    if (stage) stage(InstallerDownloadStage::Verified);
+    if (stage) stage->Stage(InstallerDownloadStage::Verified);
     return Status::Ok();
 }
 
-Status InstallerService::Execute(std::wstring commandLine, std::wstring_view workingDirectory, DWORD &exitCode) const
+Status InstallerService::Execute(const std::wstring &commandLine, const std::wstring &workingDirectory, DWORD &exitCode) const
 {
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process{};
     std::vector<wchar_t> mutableCommand(commandLine.begin(), commandLine.end());
     mutableCommand.push_back(L'\0');
-    if (!CreateProcessW(nullptr, mutableCommand.data(), nullptr, nullptr, FALSE, 0, nullptr, workingDirectory.empty() ? nullptr : std::wstring(workingDirectory).c_str(), &startup, &process))
+    if (!CreateProcessW(nullptr, mutableCommand.data(), nullptr, nullptr, FALSE, 0, nullptr, workingDirectory.empty() ? nullptr : workingDirectory.c_str(), &startup, &process))
     {
         const DWORD error = GetLastError();
         return Status::Fail(error, "cannot launch installer: " + WindowsErrorMessage(error));
@@ -125,7 +125,7 @@ Status InstallerService::Execute(std::wstring commandLine, std::wstring_view wor
     return Status::Ok();
 }
 
-Status InstallerService::Install(const InstallerEntry &installer, std::wstring_view path, InstallMode mode, DWORD &exitCode)
+Status InstallerService::Install(const InstallerEntry &installer, const std::wstring &path, InstallMode mode, DWORD &exitCode)
 {
     const std::wstring ownedPath(path);
     HANDLE lockedInstaller = CreateFileW(ownedPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
@@ -168,7 +168,7 @@ Status InstallerService::Install(const InstallerEntry &installer, std::wstring_v
     }
 
     std::printf("Starting installer (%s, %s)...\n", installer.type.c_str(), installer.architecture.c_str());
-    status = Execute(std::move(commandLine), ParentPath(path), exitCode);
+    status = Execute(commandLine, ParentPath(path), exitCode);
     CloseHandle(lockedInstaller);
     if (!status)
         return status;
@@ -177,7 +177,7 @@ Status InstallerService::Install(const InstallerEntry &installer, std::wstring_v
     {
         const auto expected = installer.expectedReturnCodes.find(exitCode);
         const std::string response = expected == installer.expectedReturnCodes.end() ? std::string() : " (" + expected->second + ")";
-        return Status::Fail(exitCode, "installer returned exit code " + std::to_string(exitCode) + response);
+        return Status::Fail(exitCode, "installer returned exit code " + DecimalString(exitCode) + response);
     }
     return Status::Ok();
 }

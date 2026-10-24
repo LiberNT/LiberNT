@@ -28,4 +28,6 @@ DEFINE_ALIAS ??_V@YAXPEAXAEBUnothrow_t@std@@@Z, ??3@YAXPEAX@Z
 ; void __cdecl operator delete(void *,unsigned __int64)
 DEFINE_ALIAS ??3@YAXPEAX_K@Z, ??3@YAXPEAX@Z
 
+DEFINE_ALIAS ??_V@YAXPEAX_K@Z, ??3@YAXPEAX@Z
+
 END

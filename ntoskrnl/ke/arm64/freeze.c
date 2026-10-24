@@ -55,7 +55,8 @@ KiProcessorFreezeHandler(
         ULONG64 Spins = 0;
         ULONG64 Daif;
 
-        __asm__ __volatile__("mrs %0, daif\n\tmsr daifset, #2" : "=r"(Daif) :: "memory");
+        Daif = ARM64_READ_SYSREG(DAIF);
+        ARM64_DAIFSET(2);
 
         for (;;)
         {
@@ -85,7 +86,7 @@ KiProcessorFreezeHandler(
                 /* IRQs are masked while the interrupted state is frozen.
                  * Wait on the architectural event register so the owner can
                  * wake us without relying on interrupt delivery. */
-                __asm__ __volatile__("wfe" ::: "memory");
+                ARM64_WFE();
             }
             else
             {
@@ -94,7 +95,7 @@ KiProcessorFreezeHandler(
             KeMemoryBarrier();
         }
 
-        __asm__ __volatile__("msr daif, %0" :: "r"(Daif) : "memory");
+        ARM64_WRITE_SYSREG(DAIF, Daif);
     }
 
     KiRestoreProcessorState(TrapFrame, ExceptionFrame);
@@ -216,7 +217,8 @@ KiArm64RequestThaw(
     }
 
     KeMemoryBarrier();
-    __asm__ __volatile__("dsb sy; sev" ::: "memory");
+    ARM64_DSB(SY);
+    ARM64_SEV();
     HalRequestDebugWakeIpi(KiFreezeTargetSet);
 
     for (ULONG i = 0; i < KeNumberProcessors; i++)
@@ -236,7 +238,8 @@ KiArm64RequestThaw(
                     /* RUNNING is an acknowledgement from the target, never
                      * an owner-side recovery value. Re-signal the event and
                      * keep waiting until the saved frame has been restored. */
-                    __asm__ __volatile__("dsb sy; sev" ::: "memory");
+                    ARM64_DSB(SY);
+                    ARM64_SEV();
                     HalRequestDebugWakeIpi(TargetPrcb->SetMember);
                     Spins = 0;
                 }
@@ -273,7 +276,8 @@ KxSwitchKdProcessor(
     CurrentPrcb->IpiFrozen &= ~IPI_FROZEN_FLAG_ACTIVE;
     TargetPrcb->IpiFrozen |= IPI_FROZEN_FLAG_ACTIVE;
     KeMemoryBarrier();
-    __asm__ __volatile__("dsb sy; sev" ::: "memory");
+    ARM64_DSB(SY);
+    ARM64_SEV();
     HalRequestDebugWakeIpi(TargetPrcb->SetMember);
 
     if (KiFreezeOwner != CurrentPrcb)

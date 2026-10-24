@@ -1259,7 +1259,7 @@ static void adapter_dns_suffix( const WCHAR *name, WCHAR *suffix )
 
 static DWORD dns_info_alloc( IP_ADAPTER_ADDRESSES *aa, ULONG family, ULONG flags )
 {
-    char buf[FIELD_OFFSET(DNS_ADDR_ARRAY, AddrArray[3])];
+    char buf[FIELD_OFFSET(DNS_ADDR_ARRAY, AddrArray) + 3 * sizeof(DNS_ADDR)];
     IP_ADAPTER_DNS_SERVER_ADDRESS *dns, **next;
     DWORD query = dns_servers_query_code( family );
     DWORD err, i, size, attempt, sockaddr_len;
@@ -2902,7 +2902,7 @@ DWORD WINAPI GetIpStatisticsEx( MIB_IPSTATS *stats, DWORD family )
  */
 static DWORD get_dns_server_list( const NET_LUID *luid, IP_ADDR_STRING *list, IP_ADDR_STRING *second, DWORD *len )
 {
-    char buf[FIELD_OFFSET(IP4_ARRAY, AddrArray[3])];
+    char buf[FIELD_OFFSET(IP4_ARRAY, AddrArray) + 3 * sizeof(IP4_ADDRESS)];
     IP4_ARRAY *servers = (IP4_ARRAY *)buf;
     DWORD needed, num, err, i, array_len = sizeof(buf);
     IP_ADDR_STRING *ptr;
@@ -4941,8 +4941,8 @@ DWORD WINAPI ConvertInterfaceLuidToNameW(const NET_LUID *luid, WCHAR *name, SIZE
         }
     }
 
-    if (prefix) needed = swprintf( buf, len, L"%s_%d", prefix, luid->Info.NetLuidIndex );
-    else needed = swprintf( buf, len, L"iftype%d_%d", luid->Info.IfType, luid->Info.NetLuidIndex );
+    if (prefix) needed = swprintf( buf, len, L"%s_%d", prefix, (int)luid->Info.NetLuidIndex );
+    else needed = swprintf( buf, len, L"iftype%d_%d", (int)luid->Info.IfType, (int)luid->Info.NetLuidIndex );
 
     if (needed >= len) return ERROR_NOT_ENOUGH_MEMORY;
     memcpy( name, buf, (needed + 1) * sizeof(WCHAR) );

@@ -67,6 +67,7 @@ enum _ARCH
 typedef int (*PFNOUTLINE)(FILE *, EXPORT *);
 int gbMSComp = 0;
 int gbImportLib = 0;
+int gbForwardResolution = 0;
 int gbNotPrivateNoWarn = 0;
 int gbTracing = 0;
 int giArch = ARCH_X86;
@@ -237,12 +238,25 @@ OutputHeader_stub(FILE *file)
     fprintf(file, "\n");
 }
 
+int NeedsX86MsCxxAlias(EXPORT *pexp);
+void PrintExportName(FILE *fileDest, EXPORT *pexp, int fDeco);
+void PrintX86MsCxxAliasTarget(FILE *fileDest, EXPORT *pexp);
+
 int
 OutputLine_stub(FILE *file, EXPORT *pexp)
 {
     int i;
     int bRelay = 0;
     int bInPrototype = 0;
+
+    if (NeedsX86MsCxxAlias(pexp))
+    {
+        fprintf(file, "#pragma comment(linker,\"/alternatename:");
+        PrintExportName(file, pexp, 0);
+        fprintf(file, "=");
+        PrintX86MsCxxAliasTarget(file, pexp);
+        fprintf(file, "\")\n\n");
+    }
 
     /* Workaround for forwarded externs. See here for an explanation:
      * https://stackoverflow.com/questions/4060143/forwarding-data-in-a-dll */
@@ -512,16 +526,14 @@ Output_stublabel(FILE *fileDest, char* pszSymbolName)
     }
 }
 
-int
-OutputLine_asmstub(FILE *fileDest, EXPORT *pexp)
+static int
+GetAsmStubName(EXPORT *pexp, char *pszName, size_t cchName)
 {
-    char szNameBuffer[128];
-
     /* Handle autoname */
     if (pexp->strName.len == 1 && pexp->strName.buf[0] == '@')
     {
-        sprintf(szNameBuffer, "%s_stub_ordinal%d",
-                gpszUnderscore, pexp->nOrdinal);
+        snprintf(pszName, cchName, "%s_stub_ordinal%d",
+                 gpszUnderscore, pexp->nOrdinal);
     }
     else if (giArch != ARCH_X86)
     {
@@ -531,35 +543,70 @@ OutputLine_asmstub(FILE *fileDest, EXPORT *pexp)
             (pexp->strName.buf[0] == '_'))
         {
             /* Skip leading underscore and remove trailing decoration */
-            sprintf(szNameBuffer, "_stub_%.*s",
-                    (int)(pcAt - pexp->strName.buf - 1),
-                    pexp->strName.buf + 1);
+            snprintf(pszName, cchName, "_stub_%.*s",
+                     (int)(pcAt - pexp->strName.buf - 1),
+                     pexp->strName.buf + 1);
         }
         else
         {
-            sprintf(szNameBuffer, "_stub_%.*s",
-                    pexp->strName.len, pexp->strName.buf);
+            snprintf(pszName, cchName, "_stub_%.*s",
+                     pexp->strName.len, pexp->strName.buf);
         }
     }
     else if (pexp->nCallingConvention == CC_STDCALL)
     {
-        sprintf(szNameBuffer, "__stub_%.*s@%d",
-                pexp->strName.len, pexp->strName.buf, pexp->nStackBytes);
+        snprintf(pszName, cchName, "__stub_%.*s@%d",
+                 pexp->strName.len, pexp->strName.buf, pexp->nStackBytes);
     }
     else if (pexp->nCallingConvention == CC_FASTCALL)
     {
-        sprintf(szNameBuffer, "@_stub_%.*s@%d",
-                pexp->strName.len, pexp->strName.buf, pexp->nStackBytes);
+        snprintf(pszName, cchName, "@_stub_%.*s@%d",
+                 pexp->strName.len, pexp->strName.buf, pexp->nStackBytes);
     }
     else if ((pexp->nCallingConvention == CC_CDECL) ||
              (pexp->nCallingConvention == CC_THISCALL) ||
              (pexp->nCallingConvention == CC_EXTERN) ||
              (pexp->nCallingConvention == CC_STUB))
     {
-        sprintf(szNameBuffer, "__stub_%.*s",
-                pexp->strName.len, pexp->strName.buf);
+        snprintf(pszName, cchName, "__stub_%.*s",
+                 pexp->strName.len, pexp->strName.buf);
     }
     else
+    {
+        return 0;
+    }
+
+    return 1;
+}
+
+static int
+IsDuplicateAsmStub(EXPORT *pexports, unsigned int index)
+{
+    char szName[512], szPrevious[512];
+    unsigned int i;
+
+    if (!GetAsmStubName(&pexports[index], szName, sizeof(szName)))
+        return 0;
+
+    for (i = 0; i < index; i++)
+    {
+        if (pexports[i].bVersionIncluded &&
+            GetAsmStubName(&pexports[i], szPrevious, sizeof(szPrevious)) &&
+            !strcmp(szName, szPrevious))
+        {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+int
+OutputLine_asmstub(FILE *fileDest, EXPORT *pexp)
+{
+    char szNameBuffer[512];
+
+    if (!GetAsmStubName(pexp, szNameBuffer, sizeof(szNameBuffer)))
     {
         fprintf(stderr, "Invalid calling convention");
         return 0;
@@ -691,7 +738,7 @@ ExportNameNeedsRedirect(EXPORT *pexp)
 {
     const char *pcAt;
 
-    if (giArch == ARCH_X86)
+    if ((giArch == ARCH_X86) && !gbMSComp)
         return 0;
 
     if ((pexp->strExportName.len != pexp->strName.len) ||
@@ -705,10 +752,56 @@ ExportNameNeedsRedirect(EXPORT *pexp)
            (pcAt < pexp->strName.buf + pexp->strName.len);
 }
 
+int
+NeedsX86MsCxxAlias(EXPORT *pexp)
+{
+    if (!gbMSComp || gbImportLib || (giArch != ARCH_X86) || (pexp->strName.buf[0] != '?'))
+        return 0;
+
+    if (pexp->strTarget.buf)
+    {
+        if ((pexp->strTarget.len > 2) && !strncmp(pexp->strTarget.buf, "_Z", 2))
+            return 0;
+        return !ScanToken(pexp->strTarget.buf, '.');
+    }
+
+    if (ExportNameNeedsRedirect(pexp))
+        return 1;
+
+    return (pexp->uFlags & FL_STUB) || (pexp->nCallingConvention == CC_STUB);
+}
+
+void
+PrintX86MsCxxAliasTarget(FILE *fileDest, EXPORT *pexp)
+{
+    if (pexp->strTarget.buf)
+    {
+        if (pexp->strTarget.buf[0] == '?')
+            fprintf(fileDest, "%.*s", pexp->strTarget.len, pexp->strTarget.buf);
+        else if (pexp->nCallingConvention == CC_THISCALL)
+            fprintf(fileDest, "___thiscall_%.*s", pexp->strTarget.len, pexp->strTarget.buf);
+        else if (pexp->nCallingConvention == CC_EXTERN)
+            fprintf(fileDest, "_%.*s", pexp->strTarget.len, pexp->strTarget.buf);
+        else
+            PrintName(fileDest, pexp, &pexp->strTarget, 1);
+    }
+    else if (ExportNameNeedsRedirect(pexp))
+    {
+        fprintf(fileDest, "%.*s", pexp->strName.len, pexp->strName.buf);
+    }
+    else
+    {
+        fprintf(fileDest, "_stub_function%d", pexp->nNumber);
+    }
+}
+
 void
 OutputLine_def_MS(FILE *fileDest, EXPORT *pexp)
 {
     PrintExportName(fileDest, pexp, 0);
+
+    if (NeedsX86MsCxxAlias(pexp))
+        return;
 
     if (gbImportLib)
     {
@@ -718,10 +811,16 @@ OutputLine_def_MS(FILE *fileDest, EXPORT *pexp)
     }
     else if (pexp->strTarget.buf)
     {
-        if (pexp->strName.buf[0] == '?')
+        if ((pexp->strName.buf[0] == '?') &&
+            (pexp->strTarget.len > 2) && !strncmp(pexp->strTarget.buf, "_Z", 2))
         {
             //fprintf(stderr, "warning: ignoring C++ redirection %.*s -> %.*s\n",
             //        pexp->strName.len, pexp->strName.buf, pexp->strTarget.len, pexp->strTarget.buf);
+        }
+        else if ((pexp->nCallingConvention == CC_THISCALL) && (giArch == ARCH_X86) &&
+                 !ScanToken(pexp->strTarget.buf, '.'))
+        {
+            fprintf(fileDest, "=__thiscall_%.*s", pexp->strTarget.len, pexp->strTarget.buf);
         }
         else
         {
@@ -842,11 +941,15 @@ int
 OutputLine_def(FILE *fileDest, EXPORT *pexp)
 {
     /* Don't add private exports to the import lib */
-    if (gbImportLib && (pexp->uFlags & FL_PRIVATE))
+    if (gbImportLib && !gbForwardResolution && (pexp->uFlags & FL_PRIVATE))
     {
         DbgPrint("OutputLine_def: skipping private export '%.*s'...\n", pexp->strName.len, pexp->strName.buf);
         return 1;
     }
+
+    if (gbImportLib && gbForwardResolution &&
+        !(pexp->uFlags & FL_PRIVATE) && (pexp->nCallingConvention != CC_EXTERN))
+        return 1;
 
     /* Handle import symbols */
     if (pexp->uFlags & FL_IMPSYM)
@@ -888,11 +991,11 @@ OutputLine_def(FILE *fileDest, EXPORT *pexp)
     }
 
     /* Either PRIVATE, DATA, or an import-library-only CONSTANT */
-    if (pexp->uFlags & FL_PRIVATE)
+    if ((pexp->uFlags & FL_PRIVATE) && !gbForwardResolution)
     {
         fprintf(fileDest, " PRIVATE");
     }
-    else if (pexp->nCallingConvention == CC_EXTERN)
+    else if ((pexp->nCallingConvention == CC_EXTERN) && !gbForwardResolution)
     {
         if (gbImportLib && (pexp->uFlags & FL_CONSTANT))
             fprintf(fileDest, " CONSTANT");
@@ -1021,7 +1124,7 @@ Fatal(
 }
 
 EXPORT *
-ParseFile(char* pcStart, FILE *fileDest, unsigned *cExports)
+ParseFile(char* pcStart, unsigned *cExports)
 {
     EXPORT *pexports;
     const char *pc, *pcLine;
@@ -1659,6 +1762,7 @@ void usage(void)
            "  -n=<name>               name of the dll\n"
            "  --version=<version>     Sets the version to create exports for\n"
            "  --implib                generate a def file for an import library\n"
+           "  --forward-resolution    with --implib, list only the private and data exports, as code\n"
            "  --no-private-warnings   suppress warnings about symbols that should be -private\n"
            "  -a=<arch>               set architecture to <arch> (i386, x86_64, arm, arm64, arm64ec, riscv64)\n"
            "  --with-tracing          generate wine-like \"+relay\" trace trampolines (needs -s)\n");
@@ -1717,6 +1821,10 @@ int main(int argc, char *argv[])
         else if (strcasecmp(argv[i], "--implib") == 0)
         {
             gbImportLib = 1;
+        }
+        else if (strcasecmp(argv[i], "--forward-resolution") == 0)
+        {
+            gbForwardResolution = 1;
         }
         else if (strcasecmp(argv[i], "--ms") == 0)
         {
@@ -1825,7 +1933,7 @@ int main(int argc, char *argv[])
     /* Zero terminate the source */
     pszSource[nFileSize] = '\0';
 
-    pexports = ParseFile(pszSource, file, &cExports);
+    pexports = ParseFile(pszSource, &cExports);
     if (pexports == NULL)
     {
         fprintf(stderr, "error: could not parse file!\n");
@@ -1894,7 +2002,7 @@ int main(int argc, char *argv[])
 
         for (i = 0; i < cExports; i++)
         {
-            if (pexports[i].bVersionIncluded)
+            if (pexports[i].bVersionIncluded && !IsDuplicateAsmStub(pexports, i))
                 OutputLine_asmstub(file, &pexports[i]);
         }
 

@@ -42,13 +42,13 @@ PoolCaptureTrailer(_In_ PVOID Block, _Inout_ PPOOL_BLOCK_INFO Info)
 #include "poollfh.h"
 #include "poolvs.h"
 
-typedef struct _POOL_HEAP_CPU
+typedef struct POOL_CACHE_ALIGNED _POOL_HEAP_CPU
 {
     volatile LONG64 Allocations;
     volatile LONG64 Frees;
     volatile LONG64 BytesInUse;
     volatile LONG64 Failures;
-} POOL_CACHE_ALIGNED POOL_HEAP_CPU, *PPOOL_HEAP_CPU;
+} POOL_HEAP_CPU, *PPOOL_HEAP_CPU;
 
 typedef struct _POOL_HEAP_STATISTICS
 {

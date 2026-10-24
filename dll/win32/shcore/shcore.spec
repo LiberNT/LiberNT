@@ -193,6 +193,6 @@
 282 stub -noname SuspendSHNotify
 283 stub -noname ResumeSHNotify
 284 stub -noname IsNotifySuspended
-290 stub -noname SHCreateDirectoryExW
-291 stub -noname SHCreateDirectoryExA
-292 stub -noname SHCreateDirectory
+290 stub -noname -private SHCreateDirectoryExW
+291 stub -noname -private SHCreateDirectoryExA
+292 stub -noname -private SHCreateDirectory

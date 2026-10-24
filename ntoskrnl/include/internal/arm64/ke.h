@@ -149,10 +149,10 @@ KeInvalidateTlbEntry(
      * ASID/global context. This keeps the operation targeted to one VA while
      * avoiding the broad vmalle1is workaround.
      */
-    __asm__ __volatile__("dsb ishst" ::: "memory");
-    __asm__ __volatile__("tlbi vaae1is, %0" :: "r"(Va) : "memory");
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_DSB(ISHST);
+    ARM64_TLBI(VAAE1IS, Va);
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 }
 
 FORCEINLINE
@@ -161,7 +161,7 @@ KiArm64CurrentTlbAsid(VOID)
 {
     ULONG64 Ttbr1;
 
-    __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Ttbr1));
+    Ttbr1 = ARM64_READ_SYSREG(TTBR1_EL1);
     return Ttbr1 & KI_ARM64_TLBI_ASID_MASK;
 }
 
@@ -174,17 +174,17 @@ KiArm64InvalidateUserTlbEntry(
     ULONG64 Operand = Asid |
         (((ULONG_PTR)Address >> PAGE_SHIFT) & KI_ARM64_TLBI_VA_MASK);
 
-    __asm__ __volatile__("dsb ishst" ::: "memory");
+    ARM64_DSB(ISHST);
     if (Asid != 0)
     {
-        __asm__ __volatile__("tlbi vae1is, %0" :: "r"(Operand) : "memory");
+        ARM64_TLBI(VAE1IS, Operand);
     }
     else
     {
-        __asm__ __volatile__("tlbi vaae1is, %0" :: "r"(Operand) : "memory");
+        ARM64_TLBI(VAAE1IS, Operand);
     }
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 }
 
 /*
@@ -209,11 +209,11 @@ KeInvalidateTlbRange(
         return;
     }
 
-    __asm__ __volatile__("dsb ishst" ::: "memory");
+    ARM64_DSB(ISHST);
 
     if (PageCount >= KI_ARM64_TLBI_RANGE_FULL_THRESHOLD)
     {
-        __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
+        ARM64_TLBI_ALL(VMALLE1IS);
     }
     else
     {
@@ -221,12 +221,12 @@ KeInvalidateTlbRange(
         for (Index = 0; Index < PageCount; Index++, Va++)
         {
             /* All-ASID, all-level invalidation also covers a removed table. */
-            __asm__ __volatile__("tlbi vaae1is, %0" :: "r"(Va) : "memory");
+            ARM64_TLBI(VAAE1IS, Va);
         }
     }
 
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 }
 
 FORCEINLINE
@@ -251,10 +251,10 @@ KiArm64InvalidateUserTlbRange(
         return;
     }
 
-    __asm__ __volatile__("dsb ishst" ::: "memory");
+    ARM64_DSB(ISHST);
     if (PageCount >= KI_ARM64_TLBI_RANGE_FULL_THRESHOLD)
     {
-        __asm__ __volatile__("tlbi aside1is, %0" :: "r"(Asid) : "memory");
+        ARM64_TLBI(ASIDE1IS, Asid);
     }
     else
     {
@@ -262,12 +262,12 @@ KiArm64InvalidateUserTlbRange(
             (((ULONG_PTR)BaseAddress >> PAGE_SHIFT) & KI_ARM64_TLBI_VA_MASK);
         for (Index = 0; Index < PageCount; Index++, Operand++)
         {
-            __asm__ __volatile__("tlbi vae1is, %0" :: "r"(Operand) : "memory");
+            ARM64_TLBI(VAE1IS, Operand);
         }
     }
 
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 }
 
 FORCEINLINE
@@ -276,17 +276,17 @@ KeFlushProcessTb(VOID)
 {
     ULONG64 Asid = KiArm64CurrentTlbAsid();
 
-    __asm__ __volatile__("dsb ishst" ::: "memory");
+    ARM64_DSB(ISHST);
     if (Asid != 0)
     {
-        __asm__ __volatile__("tlbi aside1is, %0" :: "r"(Asid) : "memory");
+        ARM64_TLBI(ASIDE1IS, Asid);
     }
     else
     {
-        __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
+        ARM64_TLBI_ALL(VMALLE1IS);
     }
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 }
 
 /*
@@ -303,7 +303,7 @@ KiArm64GetCounterFrequency(VOID)
 {
     ULONGLONG Frequency;
 
-    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(Frequency));
+    Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
     if ((Frequency == 0) || (Frequency > 10000000000ULL))
     {
         return KI_ARM64_COUNTER_FREQUENCY_FALLBACK;
@@ -398,7 +398,7 @@ KiArm64KernelTtbrBase(
     ULONGLONG TcrEl1;
     ULONGLONG T1sz;
 
-    __asm__ __volatile__("mrs %0, tcr_el1" : "=r"(TcrEl1));
+    TcrEl1 = ARM64_READ_SYSREG(TCR_EL1);
     T1sz = (TcrEl1 >> 16) & 0x3FULL;
     ASSERT(T1sz == 17);
 #endif
@@ -426,23 +426,23 @@ KiArm64WriteUserTtbr(
                                  ((ULONGLONG)Asid << KI_ARM64_TTBR_ASID_SHIFT);
     ULONGLONG SavedDaif;
 
-    __asm__ __volatile__("mrs %0, daif" : "=r"(SavedDaif));
-    __asm__ __volatile__("msr daifset, #0xF" ::: "memory");
+    SavedDaif = ARM64_READ_SYSREG(DAIF);
+    ARM64_DAIFSET(0xF);
 
-    __asm__ __volatile__("dsb ishst" ::: "memory");
-    __asm__ __volatile__("msr ttbr0_el1, %0" :: "r"(TaggedUserRoot) : "memory");
-    __asm__ __volatile__("isb" ::: "memory");
-    __asm__ __volatile__("msr ttbr1_el1, %0" :: "r"(TaggedKernelRoot) : "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_DSB(ISHST);
+    ARM64_WRITE_SYSREG(TTBR0_EL1, TaggedUserRoot);
+    ARM64_ISB();
+    ARM64_WRITE_SYSREG(TTBR1_EL1, TaggedKernelRoot);
+    ARM64_ISB();
 
     if (FlushAll)
     {
-        __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
-        __asm__ __volatile__("dsb ish" ::: "memory");
-        __asm__ __volatile__("isb" ::: "memory");
+        ARM64_TLBI_ALL(VMALLE1IS);
+        ARM64_DSB(ISH);
+        ARM64_ISB();
     }
 
-    __asm__ __volatile__("msr daif, %0" :: "r"(SavedDaif) : "memory");
+    ARM64_WRITE_SYSREG(DAIF, SavedDaif);
 }
 
 ULONG
@@ -460,8 +460,8 @@ KeDisableInterrupts(VOID)
 {
     ULONG_PTR Flags;
 
-    __asm__ __volatile__("mrs %0, daif" : "=r"(Flags));
-    __asm__ __volatile__("msr daifset, #2" ::: "memory");
+    Flags = ARM64_READ_SYSREG(DAIF);
+    ARM64_DAIFSET(2);
 
     return ((Flags & ARM64_PSTATE_IRQ_MASK) == 0);
 }
@@ -473,7 +473,7 @@ KeRestoreInterrupts(
 {
     if (WereEnabled)
     {
-        __asm__ __volatile__("msr daifclr, #2" ::: "memory");
+        ARM64_DAIFCLR(2);
     }
 }
 
@@ -649,8 +649,14 @@ KiSetCurrentIrql(
         return;
     }
 
+#if defined(_MSC_VER) && !defined(__clang__)
+    _ReadWriteBarrier();
+    __writex18byte(ARM64_KPCR_CURRENT_IRQL, (UCHAR)Value);
+    _ReadWriteBarrier();
+#else
     __asm__ __volatile__("strb %w0, [x18, #" ARM64_KPCR_STRINGIFY(ARM64_KPCR_CURRENT_IRQL) "]"
                          :: "r"(Value) : "memory");
+#endif
 }
 
 VOID
@@ -703,7 +709,7 @@ KiReadDirectoryTableBase(VOID)
 {
     ULONG64 Ttbr0;
 
-    __asm__ __volatile__("mrs %0, ttbr0_el1" : "=r"(Ttbr0));
+    Ttbr0 = ARM64_READ_SYSREG(TTBR0_EL1);
     return Ttbr0;
 }
 
@@ -771,7 +777,7 @@ KiArm64GetCacheLineSizes(
         return;
     }
 
-    __asm__ __volatile__("mrs %0, ctr_el0" : "=r"(Ctr));
+    Ctr = ARM64_READ_SYSREG(CTR_EL0);
     *DcacheLineSize = 4u << ((Ctr >> 16) & 0xF);
     *IcacheLineSize = 4u << (Ctr & 0xF);
 }
@@ -788,7 +794,9 @@ KeSweepICache(
     if (!BaseAddress || FlushSize == 0)
     {
         /* ic ialluis broadcasts to all CPUs in inner shareable domain (SMP-safe) */
-        __asm__ __volatile__("ic ialluis\n\tdsb ish\n\tisb" ::: "memory");
+        ARM64_IC_ALL(IALLUIS);
+        ARM64_DSB(ISH);
+        ARM64_ISB();
         return;
     }
 
@@ -805,16 +813,17 @@ KeSweepICache(
          * large or frequent code-publication ranges because it also invalidates
          * the data-cache line and pushes maintenance to the point of coherency.
          */
-        __asm__ __volatile__("dc civac, %0" :: "r"(Addr) : "memory");
+        ARM64_DC(CIVAC, Addr);
     }
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
 
     Start = (ULONG_PTR)BaseAddress & ~(ULONG_PTR)(ILine - 1);
     for (Addr = Start; Addr < End; Addr += ILine)
     {
-        __asm__ __volatile__("ic ivau, %0" :: "r"(Addr) : "memory");
+        ARM64_IC(IVAU, Addr);
     }
-    __asm__ __volatile__("dsb ish\n\tisb" ::: "memory");
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 }
 
 VOID
@@ -852,6 +861,14 @@ KiSaveVfpState(_Out_ PKARM64_VFP_STATE State);
 
 VOID
 KiRestoreVfpState(_In_ PKARM64_VFP_STATE State);
+
+#if defined(_MSC_VER) && !defined(__clang__)
+VOID
+KiArm64SetPcrRegister(_In_ PKIPCR Pcr);
+
+VOID
+KiArm64RelocateStackPointers(_In_ LONG_PTR Offset);
+#endif
 
 /*
  * A system-service frame initially contains only the nonvolatile vector bank

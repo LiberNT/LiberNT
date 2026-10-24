@@ -1647,7 +1647,7 @@ static HRESULT CALLBACK dict_cb( void *state, const WS_XML_STRING *str, BOOL *fo
     return hr;
 }
 
-static CALLBACK HRESULT write_callback( void *state, const WS_BYTES *buf, ULONG count, const WS_ASYNC_CONTEXT *ctx,
+static HRESULT CALLBACK write_callback( void *state, const WS_BYTES *buf, ULONG count, const WS_ASYNC_CONTEXT *ctx,
                                         WS_ERROR *error )
 {
     SOCKET socket = *(SOCKET *)state;
@@ -1889,7 +1889,7 @@ static HRESULT resize_read_buffer( struct channel *channel, ULONG size )
     return S_OK;
 }
 
-static CALLBACK HRESULT read_callback( void *state, void *buf, ULONG buflen, ULONG *retlen,
+static HRESULT CALLBACK read_callback( void *state, void *buf, ULONG buflen, ULONG *retlen,
                                        const WS_ASYNC_CONTEXT *ctx, WS_ERROR *error )
 {
     SOCKET socket = *(SOCKET *)state;

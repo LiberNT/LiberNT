@@ -174,7 +174,7 @@ struct vector_view_hstring
     HSTRING elements[];
 };
 
-C_ASSERT(sizeof(struct vector_view_hstring) == offsetof(struct vector_view_hstring, elements[0]));
+C_ASSERT(sizeof(struct vector_view_hstring) == offsetof(struct vector_view_hstring, elements));
 
 static inline struct vector_view_hstring *impl_from_IVectorView_HSTRING( IVectorView_HSTRING *iface )
 {
@@ -927,7 +927,7 @@ struct vector_view_inspectable
     IInspectable *elements[];
 };
 
-C_ASSERT(sizeof(struct vector_view_inspectable) == offsetof(struct vector_view_inspectable, elements[0]));
+C_ASSERT(sizeof(struct vector_view_inspectable) == offsetof(struct vector_view_inspectable, elements));
 
 static inline struct vector_view_inspectable *impl_from_IVectorView_IInspectable( IVectorView_IInspectable *iface )
 {

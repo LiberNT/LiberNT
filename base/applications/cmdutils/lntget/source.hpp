@@ -19,7 +19,7 @@ public:
     SourceManager();
 
     Status Update();
-    Status Import(std::wstring_view packagePath);
+    Status Import(const std::wstring &packagePath);
     Status EnsureReady();
     Status Search(const PackageQuery &query, std::vector<PackageRecord> &results);
     Status Resolve(const PackageQuery &query, PackageRecord &package);
@@ -27,7 +27,7 @@ public:
     const std::wstring &IndexPath() const { return indexPath_; }
 
 private:
-    Status ActivateSource(std::wstring_view sourcePackage, bool copyPackage);
+    Status ActivateSource(const std::wstring &sourcePackage, bool copyPackage);
     Status UpdateUnlocked();
 
     HttpClient http_;

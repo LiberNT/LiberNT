@@ -1,5 +1,11 @@
 spec2def(wow64.dll wow64.spec ADD_IMPORTLIB)
 
+if(MSVC AND ARCH STREQUAL "amd64")
+    add_asm_files(wow64_asm amd64/syscall.s)
+elseif(MSVC AND ARCH STREQUAL "arm64")
+    add_asm_files(wow64_asm arm64/syscall.s)
+endif()
+
 add_library(wow64 MODULE
     alpc.c
     file.c
@@ -11,6 +17,7 @@ add_library(wow64 MODULE
     syscall.c
     system.c
     virtual.c
+    ${wow64_asm}
     ${CMAKE_CURRENT_BINARY_DIR}/wow64_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/wow64.def)
 

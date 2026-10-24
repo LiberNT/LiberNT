@@ -78,7 +78,7 @@ HRESULT WINAPI BufferedPaintUnInit(VOID)
 HPAINTBUFFER WINAPI BeginBufferedPaint(HDC targetdc, const RECT *rect,
         BP_BUFFERFORMAT format, BP_PAINTPARAMS *params, HDC *retdc)
 {
-    char bmibuf[FIELD_OFFSET(BITMAPINFO, bmiColors[256])];
+    char bmibuf[FIELD_OFFSET(BITMAPINFO, bmiColors) + 256 * sizeof(RGBQUAD)];
     BITMAPINFO *bmi = (BITMAPINFO *)bmibuf;
     struct paintbuffer *buffer;
 

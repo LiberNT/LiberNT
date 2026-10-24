@@ -212,12 +212,12 @@ BSTR get_value_bstr( const struct table *table, UINT row, UINT column )
 
     case CIM_SINT16:
     case CIM_SINT32:
-        swprintf( number, ARRAY_SIZE( number ), L"%d", val );
+        swprintf( number, ARRAY_SIZE( number ), L"%d", (int)val );
         return SysAllocString( number );
 
     case CIM_UINT16:
     case CIM_UINT32:
-        swprintf( number, ARRAY_SIZE( number ), L"%u", val );
+        swprintf( number, ARRAY_SIZE( number ), L"%u", (UINT)val );
         return SysAllocString( number );
 
     case CIM_SINT64:

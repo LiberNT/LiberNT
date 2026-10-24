@@ -7,16 +7,16 @@
 #include "wimlib/compiler.h"
 #include "wimlib/types.h"
 
-void _format_attribute(printf, 1, 2) __attribute__((cold))
+void _format_attribute(printf, 1, 2) _cold_attribute
 wimlib_error(const tchar *format, ...);
 
-void _format_attribute(printf, 1, 2) __attribute__((cold))
+void _format_attribute(printf, 1, 2) _cold_attribute
 wimlib_error_with_errno(const tchar *format, ...);
 
-void _format_attribute(printf, 1, 2) __attribute__((cold))
+void _format_attribute(printf, 1, 2) _cold_attribute
 wimlib_warning(const tchar *format, ...);
 
-void _format_attribute(printf, 1, 2) __attribute__((cold))
+void _format_attribute(printf, 1, 2) _cold_attribute
 wimlib_warning_with_errno(const tchar *format, ...);
 
 #define ERROR(format, ...)		wimlib_error(T(format), ## __VA_ARGS__)

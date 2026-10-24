@@ -260,7 +260,7 @@ struct lzx_block_split_stats {
  * since items cannot be written until all items for the block have been chosen
  * and the block's Huffman codes have been computed.
  */
-struct lzx_sequence {
+struct _aligned_attribute(8) lzx_sequence {
 
 	/*
 	 * Bits 9..31: the number of literals in this run.  This may be 0 and
@@ -287,7 +287,7 @@ struct lzx_sequence {
 	u32 adjusted_offset_and_mainsym;
 #define SEQ_MAINSYM_BITS	10
 #define SEQ_MAINSYM_MASK	(((u32)1 << SEQ_MAINSYM_BITS) - 1)
-} __attribute__((aligned(8)));
+};
 
 /*
  * This structure represents a byte position in the input buffer and a node in
@@ -298,7 +298,7 @@ struct lzx_sequence {
  * each outgoing edge from this node is labeled with a literal or a match that
  * can be taken to advance from this position to a later position.
  */
-struct lzx_optimum_node {
+struct _aligned_attribute(8) lzx_optimum_node {
 
 	/* The cost, in bits, of the lowest-cost path that has been found to
 	 * reach this position.  This can change as progressively lower cost
@@ -333,7 +333,7 @@ struct lzx_optimum_node {
 #  define OPTIMUM_GAP_MATCH 0x80000000
 #endif
 
-} __attribute__((aligned(8)));
+};
 
 /* The cost model for near-optimal parsing */
 struct lzx_costs {
@@ -719,10 +719,10 @@ lzx_reset_symbol_frequencies(struct lzx_compressor *c)
 }
 
 static unsigned
-lzx_compute_precode_items(const u8 lens[restrict],
-			  const u8 prev_lens[restrict],
-			  u32 precode_freqs[restrict],
-			  unsigned precode_items[restrict])
+lzx_compute_precode_items(const u8 * restrict lens,
+			  const u8 * restrict prev_lens,
+			  u32 * restrict precode_freqs,
+			  unsigned * restrict precode_items)
 {
 	unsigned *itemptr;
 	unsigned run_start;
@@ -842,14 +842,14 @@ lzx_compute_precode_items(const u8 lens[restrict],
  */
 static void
 lzx_write_compressed_code(struct lzx_output_bitstream *os,
-			  const u8 lens[restrict],
-			  const u8 prev_lens[restrict],
+			  const u8 * restrict lens,
+			  const u8 * restrict prev_lens,
 			  unsigned num_lens)
 {
 	u32 precode_freqs[LZX_PRECODE_NUM_SYMBOLS];
 	u8 precode_lens[LZX_PRECODE_NUM_SYMBOLS];
 	u32 precode_codewords[LZX_PRECODE_NUM_SYMBOLS];
-	unsigned precode_items[num_lens];
+	unsigned precode_items[LZX_MAINCODE_MAX_NUM_SYMBOLS];
 	unsigned num_precode_items;
 	unsigned precode_item;
 	unsigned precode_sym;
@@ -1313,9 +1313,9 @@ lzx_should_end_block(struct lzx_block_split_stats *stats)
  * This is represented as a 64-bit integer for efficiency.  There are three
  * offsets of 21 bits each.  Bit 64 is garbage.
  */
-struct lzx_lru_queue {
+struct _aligned_attribute(8) lzx_lru_queue {
 	u64 R;
-} __attribute__((aligned(8)));
+};
 
 #define LZX_QUEUE_OFFSET_SHIFT	21
 #define LZX_QUEUE_OFFSET_MASK	(((u64)1 << LZX_QUEUE_OFFSET_SHIFT) - 1)

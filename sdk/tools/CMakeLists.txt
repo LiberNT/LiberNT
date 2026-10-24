@@ -23,6 +23,7 @@ if(MSVC)
 endif()
 
 add_host_tool(bin2c bin2c.c)
+add_host_tool(gas2armasm gas2armasm/gas2armasm.c)
 add_host_tool(gendib gendib/gendib.c)
 add_host_tool(geninc geninc/geninc.c)
 

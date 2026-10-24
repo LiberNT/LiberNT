@@ -69,20 +69,19 @@ MiArchDebugMapFrame(_In_ ULONG64 Frame)
 MI_PTE
 MiArchPteRead(_In_ PMI_PTE Slot)
 {
-    return __atomic_load_n(Slot, __ATOMIC_ACQUIRE);
+    return MI_AMD64_READ_ACQUIRE64(Slot);
 }
 
 VOID
 MiArchPteWrite(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value)
 {
-    __atomic_store_n(Slot, Value, __ATOMIC_RELEASE);
+    MI_AMD64_WRITE_RELEASE64(Slot, Value);
 }
 
 BOOLEAN
 MiArchPteCompareExchange(_Inout_ PMI_PTE Slot, _In_ MI_PTE Expected, _In_ MI_PTE Value)
 {
-    return (BOOLEAN)__atomic_compare_exchange_n(Slot, &Expected, Value, FALSE,
-                                                __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+    return (BOOLEAN)MI_AMD64_COMPARE_EXCHANGE64(Slot, Expected, Value);
 }
 
 ULONG64

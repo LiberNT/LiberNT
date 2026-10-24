@@ -122,9 +122,9 @@ echo   CC      !_NAME!.c
 set "_TEMP_OBJECT=%_BUILD_DIR%\!_NAME!.tmp.obj"
 if exist "!_TEMP_OBJECT!" del /q "!_TEMP_OBJECT!"
 if "%_CC_KIND%" == "gnu" (
-    "%_CC%" -O2 -I"%_SRC_DIR%" -c "!_SOURCE!" -o "!_TEMP_OBJECT!" || exit /b 1
+    "%_CC%" -O2 -I"%_SRC_DIR%." -c "!_SOURCE!" -o "!_TEMP_OBJECT!" || exit /b 1
 ) else (
-    cl /nologo /O2 /I"%_SRC_DIR%" /c "/Fo!_TEMP_OBJECT!" "!_SOURCE!" || exit /b 1
+    cl /nologo /O2 /I"%_SRC_DIR%." /c "/Fo!_TEMP_OBJECT!" "!_SOURCE!" || exit /b 1
 )
 move /y "!_TEMP_OBJECT!" "!_OBJECT!" >NUL
 > "!_LINK_PENDING!" echo pending

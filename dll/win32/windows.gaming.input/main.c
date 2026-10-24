@@ -79,7 +79,7 @@ static LRESULT CALLBACK devnotify_wndproc( HWND hwnd, UINT msg, WPARAM wparam, L
 
 static void initialize_provider_class( const GUID *guid )
 {
-    char buffer[offsetof( SP_DEVICE_INTERFACE_DETAIL_DATA_W, DevicePath[MAX_PATH] )];
+    char buffer[offsetof( SP_DEVICE_INTERFACE_DETAIL_DATA_W, DevicePath ) + MAX_PATH * sizeof(WCHAR)];
     SP_DEVICE_INTERFACE_DETAIL_DATA_W *detail = (void *)buffer;
     SP_DEVICE_INTERFACE_DATA iface = {sizeof(iface)};
     HDEVINFO set;

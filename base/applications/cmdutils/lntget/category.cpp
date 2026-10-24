@@ -11,8 +11,6 @@
 #include "category.hpp"
 #include "util.hpp"
 
-#include <functional>
-
 namespace lntget
 {
 
@@ -91,7 +89,8 @@ const CategoryDefinition Definitions[] = {
     {L"Other", RGB(0x88, 0x88, 0x88), "", ""},
 };
 
-void SplitWords(const char *text, const std::function<void(std::string)> &sink)
+template <typename Sink>
+void SplitWords(const char *text, const Sink &sink)
 {
     std::string word;
     for (const char *cursor = text; ; ++cursor)
@@ -132,16 +131,16 @@ CategoryClassifier::CategoryClassifier()
 {
     for (std::size_t index = 0; index < CategoryCount(); ++index)
     {
-        const std::uint32_t bit = 1u << index;
-        SplitWords(Definitions[index].tags, [this, bit](std::string word) { exact_[word] |= bit; });
-        SplitWords(Definitions[index].roots, [this, bit](std::string word) { roots_.emplace_back(std::move(word), bit); });
+        const uint32_t bit = 1u << index;
+        SplitWords(Definitions[index].tags, [this, bit](const std::string &word) { exact_[word] |= bit; });
+        SplitWords(Definitions[index].roots, [this, bit](const std::string &word) { roots_.push_back(std::make_pair(word, bit)); });
     }
 }
 
-std::uint32_t CategoryClassifier::Classify(const std::vector<std::uint32_t> &tags, const std::vector<std::string> &names) const
+uint32_t CategoryClassifier::Classify(const std::vector<uint32_t> &tags, const std::vector<std::string> &names) const
 {
-    std::uint32_t mask = 0;
-    for (const std::uint32_t tag : tags)
+    uint32_t mask = 0;
+    for (const uint32_t tag : tags)
     {
         if (tag >= names.size())
             continue;
@@ -152,7 +151,7 @@ std::uint32_t CategoryClassifier::Classify(const std::vector<std::uint32_t> &tag
     if (mask)
         return mask;
 
-    for (const std::uint32_t tag : tags)
+    for (const uint32_t tag : tags)
     {
         if (tag >= names.size())
             continue;
@@ -165,12 +164,12 @@ std::uint32_t CategoryClassifier::Classify(const std::vector<std::uint32_t> &tag
     return mask ? mask : (1u << OtherCategoryIndex());
 }
 
-std::uint32_t CategoryClassifier::ClassifyText(std::string_view loweredText) const
+uint32_t CategoryClassifier::ClassifyText(const std::string &loweredText) const
 {
-    std::uint32_t mask = 0;
+    uint32_t mask = 0;
     for (const auto &root : roots_)
     {
-        if (loweredText.find(root.first) != std::string_view::npos)
+        if (loweredText.find(root.first) != std::string::npos)
             mask |= root.second;
     }
     return mask ? mask : (1u << OtherCategoryIndex());

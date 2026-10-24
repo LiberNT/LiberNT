@@ -593,11 +593,11 @@ MiArm64IsAddressValid(
 
     if (MiIsUserAddress(Address))
     {
-        __asm__ __volatile__("mrs %0, ttbr0_el1" : "=r"(Ttbr));
+        Ttbr = ARM64_READ_SYSREG(TTBR0_EL1);
     }
     else if (Va >= (ULONG_PTR)MmSystemRangeStart)
     {
-        __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Ttbr));
+        Ttbr = ARM64_READ_SYSREG(TTBR1_EL1);
     }
     else
     {
@@ -658,14 +658,14 @@ MiArm64ProbeForAccess(
     WereEnabled = KeDisableInterrupts();
     if (Write)
     {
-        __asm__ __volatile__("at s1e1w, %0" :: "r"(Address));
+        ARM64_AT(S1E1W, Address);
     }
     else
     {
-        __asm__ __volatile__("at s1e1r, %0" :: "r"(Address));
+        ARM64_AT(S1E1R, Address);
     }
-    __asm__ __volatile__("isb" ::: "memory");
-    __asm__ __volatile__("mrs %0, par_el1" : "=r"(Par));
+    ARM64_ISB();
+    Par = ARM64_READ_SYSREG(PAR_EL1);
     KeRestoreInterrupts(WereEnabled);
 
     return ((Par & 1ULL) == 0);
@@ -691,23 +691,15 @@ MiArm64TranslateToPhysical(
     WereEnabled = KeDisableInterrupts();
     if (MiIsUserAddress(Address))
     {
-        __asm__ __volatile__(
-            "at s1e0r, %1\n\t"
-            "isb\n\t"
-            "mrs %0, par_el1"
-            : "=r"(Par)
-            : "r"(Va)
-            : "memory");
+        ARM64_AT(S1E0R, Va);
+        ARM64_ISB();
+        Par = ARM64_READ_SYSREG(PAR_EL1);
     }
     else
     {
-        __asm__ __volatile__(
-            "at s1e1r, %1\n\t"
-            "isb\n\t"
-            "mrs %0, par_el1"
-            : "=r"(Par)
-            : "r"(Va)
-            : "memory");
+        ARM64_AT(S1E1R, Va);
+        ARM64_ISB();
+        Par = ARM64_READ_SYSREG(PAR_EL1);
     }
     KeRestoreInterrupts(WereEnabled);
 
@@ -724,9 +716,9 @@ VOID
 MiArm64CleanEntryToPoC(
     _In_ volatile VOID *Entry)
 {
-    __asm__ __volatile__("dsb ishst" ::: "memory");
-    __asm__ __volatile__("dc civac, %0" :: "r"(Entry) : "memory");
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISHST);
+    ARM64_DC(CIVAC, Entry);
+    ARM64_DSB(ISH);
 }
 
 /* Publish cached page-table stores to the hardware walker. With both
@@ -739,11 +731,11 @@ MiArm64PublishPageTableEntry(_In_ volatile VOID *Entry)
 {
     ULONG64 Tcr, Sctlr;
 
-    __asm__ __volatile__("mrs %0, tcr_el1" : "=r"(Tcr));
-    __asm__ __volatile__("mrs %0, sctlr_el1" : "=r"(Sctlr));
+    Tcr = ARM64_READ_SYSREG(TCR_EL1);
+    Sctlr = ARM64_READ_SYSREG(SCTLR_EL1);
     if ((Sctlr & (1ULL << 2)) && ((Tcr & 0x3F003F00ULL) == 0x35003500ULL))
     {
-        __asm__ __volatile__("dsb ishst" ::: "memory");
+        ARM64_DSB(ISHST);
         return;
     }
     MiArm64CleanEntryToPoC(Entry);
@@ -770,13 +762,13 @@ MiArm64CleanPteRangeToPoC(
     Current = (ULONG_PTR)FirstEntry & ~(ULONG_PTR)(DcacheLineSize - 1);
     End = (ULONG_PTR)(FirstEntry + EntryCount);
 
-    __asm__ __volatile__("dsb ishst" ::: "memory");
+    ARM64_DSB(ISHST);
     while (Current < End)
     {
-        __asm__ __volatile__("dc civac, %0" :: "r"(Current) : "memory");
+        ARM64_DC(CIVAC, Current);
         Current += DcacheLineSize;
     }
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
 }
 
 /* Invalidate a leaf in the address space currently installed on this CPU. */
@@ -820,9 +812,9 @@ MiArm64CleanPageToPoC(
 
     for (; Va < End; Va += DcacheLineSize)
     {
-        __asm__ __volatile__("dc civac, %0" :: "r"((PVOID)Va) : "memory");
+        ARM64_DC(CIVAC, (PVOID)Va);
     }
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
 }
 
 /*
@@ -850,7 +842,7 @@ MiArm64SyncPxeWrite(
     if (Index >= PXE_PER_PAGE)
         return;
 
-    __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Root));
+    Root = ARM64_READ_SYSREG(TTBR1_EL1);
 
     Root &= ARM64_PTE_ADDR_MASK;
     if (Root == 0)
@@ -900,7 +892,7 @@ MiArm64KernelTableKseg0(
 
     ASSERT(Address >= MmSystemRangeStart);
 
-    __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Ttbr1));
+    Ttbr1 = ARM64_READ_SYSREG(TTBR1_EL1);
     Table = (PULONG64)MI_ARM64_PHYS_TO_VA(Ttbr1 & ARM64_PTE_ADDR_MASK);
 
     for (Level = 0; Level < StopLevel; Level++)
@@ -961,7 +953,7 @@ MiArm64UserPteKseg0ForPfn(
 
     *L3TablePfn = 0;
 
-    __asm__ __volatile__("mrs %0, ttbr0_el1" : "=r"(Ttbr0));
+    Ttbr0 = ARM64_READ_SYSREG(TTBR0_EL1);
     L0 = (PULONG64)MI_ARM64_PHYS_TO_VA(Ttbr0 & ARM64_PTE_ADDR_MASK);
 
     E0 = L0[((ULONG_PTR)Address >> PXI_SHIFT) & PXI_MASK];

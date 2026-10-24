@@ -38,5 +38,5 @@ void __cdecl longjmp(
 
     __longjmp_noframe(jumpBuffer, _Value);
 
-    __builtin_unreachable();
+    UNREACHABLE;
 }

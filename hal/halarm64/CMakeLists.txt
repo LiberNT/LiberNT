@@ -64,6 +64,12 @@ list(APPEND SOURCES
     ${HAL_ARM64_SOURCE_DIR}/kernstubs.c
     ${GIC_SOURCES})
 
+if(MSVC)
+    list(REMOVE_ITEM SOURCES ${HAL_ARM64_SOURCE_DIR}/smp_trampoline.S)
+    add_asm_files(hal_arm64_asm ${HAL_ARM64_SOURCE_DIR}/psci.S ${HAL_ARM64_SOURCE_DIR}/smp_trampoline.S)
+    list(APPEND SOURCES ${hal_arm64_asm})
+endif()
+
 add_library(hal MODULE
     ${SOURCES}
     ${CMAKE_CURRENT_BINARY_DIR}/hal.def)
@@ -80,6 +86,10 @@ add_library(halmacpi MODULE
     ${SOURCES}
     ${CMAKE_CURRENT_BINARY_DIR}/hal.def)
 reactos_hal_setup(halmacpi 0)
+
+if(MSVC)
+    set_property(GLOBAL APPEND PROPERTY _SPEC2DEF_FORWARD_USERS_hal halup halmacpi)
+endif()
 
 # halacpi.c names PCI devices from the shared tables
 set_source_files_properties(${HAL_ARM64_SOURCE_DIR}/acpi/halacpi.c PROPERTIES

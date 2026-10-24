@@ -163,6 +163,7 @@ MmCreateProcessAddressSpace(
     return TRUE;
 }
 
+CODE_SEG("INIT")
 NTSTATUS
 NTAPI
 MmInitializeHandBuiltProcess(
@@ -180,6 +181,7 @@ MmInitializeHandBuiltProcess(
     return STATUS_SUCCESS;
 }
 
+CODE_SEG("INIT")
 NTSTATUS
 NTAPI
 MmInitializeHandBuiltProcess2(

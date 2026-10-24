@@ -1,6 +1,6 @@
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_compile_options(/Ox /Ob2 /Ot /Oy)
+    add_compile_options(/Ox /Ob2 /Ot /Oy-)
     # Avoid spam in clang-cl as it doesn't support /GT
     if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
         add_compile_options(/GT)
@@ -15,6 +15,12 @@ elseif(OPTIMIZE STREQUAL "4")
     add_compile_options(/Ob0 /Od)
 elseif(OPTIMIZE STREQUAL "5")
     add_compile_options(/Ob2 /Os /Ox /GS-)
+endif()
+
+if(LTCG AND CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/GL>)
+    add_link_options(/LTCG)
+    string(APPEND CMAKE_STATIC_LINKER_FLAGS " /LTCG")
 endif()
 
 # Always use string pooling: this helps reducing the binaries size since a lot
@@ -89,6 +95,19 @@ if(ARCH STREQUAL "arm64" AND MSVC_VERSION GREATER_EQUAL 1944)
     add_compile_options("/forceInterlockedFunctions-")
 endif()
 
+if(ARCH STREQUAL "arm64" AND NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    get_filename_component(_msvc_bin_dir "${CMAKE_C_COMPILER}" DIRECTORY)
+    find_file(MSVC_ARM64_NEON_HEADER arm64_neon.h
+        PATHS "${_msvc_bin_dir}/../../../include" ENV INCLUDE
+        NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+    if(NOT MSVC_ARM64_NEON_HEADER)
+        message(FATAL_ERROR "arm64_neon.h was not found next to ${CMAKE_C_COMPILER} or in INCLUDE")
+    endif()
+    file(CONFIGURE OUTPUT ${REACTOS_BINARY_DIR}/sdk/include/arm64_neon.h CONTENT
+        "#ifndef _VCRUNTIME_DISABLED_WARNINGS\n#define _VCRUNTIME_DISABLED_WARNINGS 4514 4820\n#endif\n#include \"${MSVC_ARM64_NEON_HEADER}\"\n")
+    file(CONFIGURE OUTPUT ${REACTOS_BINARY_DIR}/sdk/include/arm_neon.h CONTENT "#include <arm64_neon.h>\n")
+endif()
+
 # Generate Warnings Level 3
 add_compile_options(/W3)
 
@@ -107,11 +126,6 @@ add_compile_options(/wd4018)
 # Allow all warnings on msbuild/VS IDE
 if (MSVC_IDE)
     set(ALLOW_WARNINGS TRUE)
-endif()
-
-# On x86 Debug builds, if it's not Clang-CL or msbuild, treat all warnings as errors
-if ((ARCH STREQUAL "i386") AND (CMAKE_BUILD_TYPE STREQUAL "Debug") AND (CMAKE_C_COMPILER_ID STREQUAL "MSVC") AND (NOT MSVC_IDE))
-    set(TREAT_ALL_WARNINGS_AS_ERRORS TRUE)
 endif()
 
 # Define ALLOW_WARNINGS=TRUE on the cmake/configure command line to bypass errors
@@ -320,6 +334,10 @@ function(set_module_type_toolchain MODULE TYPE)
         target_link_libraries(${MODULE} runtmchk)
     endif()
 
+    if(ARCH STREQUAL "i386")
+        target_link_libraries(${MODULE} chkstk)
+    endif()
+
 endfunction()
 
 function(add_delay_importlibs _module)
@@ -442,6 +460,149 @@ function(spec2def _dllname _spec_file)
             set_property(TARGET lib${_file} APPEND PROPERTY STATIC_LIBRARY_OPTIONS /ignore:4104)
         endif()
     endif()
+
+    get_filename_component(_spec_path ${_spec_file} ABSOLUTE)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_spec_path})
+    file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file} _spec_lines REGEX "^[ \t]*[@0-9]")
+    set(_forwards)
+    set(_unresolvable)
+    set(_unresolvable_lines)
+    foreach(_line IN LISTS _spec_lines)
+        string(REGEX REPLACE "[ \t]#.*$" "" _line "${_line}")
+        if(_line MATCHES "[ \t]([A-Za-z0-9_]+)\\.([^ \t]+)[ \t]*$" AND NOT CMAKE_MATCH_1 STREQUAL _file)
+            list(APPEND _forwards "${CMAKE_MATCH_1}|${CMAKE_MATCH_2}")
+        endif()
+        if(_line MATCHES "[ \t]-private[ \t]" AND _line MATCHES "[ \t]([^ \t(-][^ \t(]*)\\(")
+            list(APPEND _unresolvable "${CMAKE_MATCH_1}")
+            list(APPEND _unresolvable_lines "${_line}")
+        elseif(_line MATCHES "^[ \t]*[@0-9]+[ \t]+extern[ \t]+(-[^ \t]+[ \t]+)*([^ \t]+)")
+            list(APPEND _unresolvable "${CMAKE_MATCH_2}")
+            list(APPEND _unresolvable_lines "${_line}")
+        endif()
+    endforeach()
+    set_property(GLOBAL PROPERTY _SPEC2DEF_UNRESOLVABLE_${_file} "${_unresolvable}")
+    set_property(GLOBAL PROPERTY _SPEC2DEF_UNRESOLVABLE_LINES_${_file} "${_unresolvable_lines}")
+    set_property(GLOBAL PROPERTY _SPEC2DEF_SPECFILE_${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file})
+    set_property(GLOBAL PROPERTY _SPEC2DEF_DLLNAME_${_file} ${_dllname})
+    set_property(GLOBAL PROPERTY _SPEC2DEF_VERSIONARG_${_file} "${__version_arg}")
+    set_property(GLOBAL PROPERTY _SPEC2DEF_DBGARG_${_file} "${__dbg_arg}")
+    if(_forwards)
+        set_property(GLOBAL PROPERTY _SPEC2DEF_FORWARDS_${_file} "${_forwards}")
+        set_property(GLOBAL APPEND PROPERTY _SPEC2DEF_FORWARDING_MODULES ${_file})
+        get_property(_registered GLOBAL PROPERTY _SPEC2DEF_RESOLVE_REGISTERED)
+        if(NOT _registered)
+            set_property(GLOBAL PROPERTY _SPEC2DEF_RESOLVE_REGISTERED TRUE)
+            cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL _spec2def_resolve_forwarders)
+        endif()
+    endif()
+endfunction()
+
+function(_spec2def_forward_import_lib _target _kind _libname _dir _spec)
+    if(TARGET ${_libname})
+        return()
+    endif()
+    set(_mode_arg)
+    if(_kind STREQUAL "fwdres")
+        set(_mode_arg --forward-resolution)
+    endif()
+    get_property(_dllname GLOBAL PROPERTY _SPEC2DEF_DLLNAME_${_target})
+    get_property(_version_arg GLOBAL PROPERTY _SPEC2DEF_VERSIONARG_${_target})
+    get_property(_dbg_arg GLOBAL PROPERTY _SPEC2DEF_DBGARG_${_target})
+
+    file(MAKE_DIRECTORY ${_dir})
+    set(_def_file ${_dir}/${_libname}_implib.def)
+    set(_asm_stubs_file ${_dir}/${_libname}_stubs.asm)
+    set(_libfile_tmp ${_dir}/${_libname}_tmp.lib)
+
+    add_custom_command(
+        OUTPUT ${_asm_stubs_file} ${_def_file}
+        COMMAND native-spec2def --ms ${_version_arg} ${_dbg_arg} -a=${SPEC2DEF_ARCH} --implib ${_mode_arg} -n=${_dllname} -d=${_def_file} -l=${_asm_stubs_file} ${_spec}
+        DEPENDS ${_spec} native-spec2def)
+
+    if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
+        set(_asm_stub_command ${CMAKE_ASM_MASM_COMPILER} -nologo -o ${_asm_stubs_file}.obj ${_asm_stubs_file})
+    else()
+        set(_asm_stub_command ${CMAKE_ASM_MASM_COMPILER} /nologo ${_quiet_flag} /Cp /Fo${_asm_stubs_file}.obj /c /Ta ${_asm_stubs_file})
+    endif()
+    add_custom_command(
+        OUTPUT ${_asm_stubs_file}.obj
+        COMMAND ${_asm_stub_command}
+        DEPENDS ${_asm_stubs_file})
+
+    add_custom_command(
+        OUTPUT ${_libfile_tmp}
+        COMMAND ${CMAKE_LINKER} /LIB /NOLOGO /MACHINE:${WINARCH} /DEF:${_def_file} /OUT:${_libfile_tmp} ${_asm_stubs_file}.obj
+        DEPENDS ${_asm_stubs_file}.obj ${_def_file})
+
+    set_source_files_properties(${_libfile_tmp} PROPERTIES EXTERNAL_OBJECT TRUE)
+    add_library(${_libname} STATIC ${_libfile_tmp})
+    set_target_properties(${_libname} PROPERTIES LINKER_LANGUAGE "C")
+endfunction()
+
+function(_spec2def_resolve_forwarders)
+    get_property(_modules GLOBAL PROPERTY _SPEC2DEF_FORWARDING_MODULES)
+    foreach(_module IN LISTS _modules)
+        if(NOT TARGET ${_module})
+            continue()
+        endif()
+        get_property(_forwards GLOBAL PROPERTY _SPEC2DEF_FORWARDS_${_module})
+        get_property(_users GLOBAL PROPERTY _SPEC2DEF_FORWARD_USERS_${_module})
+        set(_link_targets ${_module})
+        foreach(_user IN LISTS _users)
+            if(TARGET ${_user})
+                list(APPEND _link_targets ${_user})
+            endif()
+        endforeach()
+        set(_linked)
+        set(_fwdres_targets)
+        foreach(_forward IN LISTS _forwards)
+            string(REPLACE "|" ";" _parts "${_forward}")
+            list(GET _parts 0 _target)
+            list(GET _parts 1 _function)
+            get_property(_spec GLOBAL PROPERTY _SPEC2DEF_SPECFILE_${_target})
+            if(NOT _spec)
+                continue()
+            endif()
+            set(_public lib${_target})
+            if(NOT TARGET ${_public})
+                set(_public lib${_target}_fwd)
+                _spec2def_forward_import_lib(${_target} fwd ${_public} ${CMAKE_BINARY_DIR}/spec2def_forward/${_target} ${_spec})
+            endif()
+            if(NOT "${_public}" IN_LIST _linked)
+                foreach(_link_target IN LISTS _link_targets)
+                    target_link_libraries(${_link_target} $<TARGET_FILE:${_public}>)
+                    add_dependencies(${_link_target} ${_public})
+                endforeach()
+                list(APPEND _linked "${_public}")
+            endif()
+            get_property(_unresolvable GLOBAL PROPERTY _SPEC2DEF_UNRESOLVABLE_${_target})
+            list(FIND _unresolvable "${_function}" _index)
+            if(NOT _index EQUAL -1)
+                get_property(_unresolvable_lines GLOBAL PROPERTY _SPEC2DEF_UNRESOLVABLE_LINES_${_target})
+                list(GET _unresolvable_lines ${_index} _line)
+                if(NOT "${_target}" IN_LIST _fwdres_targets)
+                    list(APPEND _fwdres_targets "${_target}")
+                    set(_fwdres_lines_${_target})
+                endif()
+                if(NOT "${_line}" IN_LIST _fwdres_lines_${_target})
+                    list(APPEND _fwdres_lines_${_target} "${_line}")
+                endif()
+            endif()
+        endforeach()
+        foreach(_target IN LISTS _fwdres_targets)
+            set(_dir ${CMAKE_BINARY_DIR}/spec2def_forward/${_module})
+            set(_spec ${_dir}/${_target}.spec)
+            string(REPLACE ";" "\n" _content "${_fwdres_lines_${_target}}")
+            file(WRITE ${_spec}.tmp "${_content}\n")
+            execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_spec}.tmp ${_spec})
+            set(_libname lib${_module}_${_target}_fwdres)
+            _spec2def_forward_import_lib(${_target} fwdres ${_libname} ${_dir} ${_spec})
+            foreach(_link_target IN LISTS _link_targets)
+                target_link_libraries(${_link_target} $<TARGET_FILE:${_libname}>)
+                add_dependencies(${_link_target} ${_libname})
+            endforeach()
+        endforeach()
+    endforeach()
 endfunction()
 
 # PSEH workaround
@@ -517,10 +678,40 @@ macro(add_asm_files _target)
                     list(APPEND _source_file_defines -D${_define})
                 endif()
             endforeach()
-            add_custom_command(
-                OUTPUT ${_preprocessed_asm_file}
-                COMMAND cl /nologo /X /I${REACTOS_SOURCE_DIR}/sdk/include/asm /I${REACTOS_BINARY_DIR}/sdk/include/asm ${_directory_includes} ${_source_file_defines} ${_directory_defines} /D__ASM__ /D_USE_ML /EP /c ${_source_file_full_path} > ${_preprocessed_asm_file}
-                DEPENDS ${_source_file_full_path})
+            if(ARCH STREQUAL "arm64")
+                set(_asm_preprocess_command cl /nologo /X /I${REACTOS_SOURCE_DIR}/sdk/include/asm /I${REACTOS_BINARY_DIR}/sdk/include/asm ${_directory_includes} ${_source_file_defines} ${_directory_defines} /D__ASM__ /FI${REACTOS_SOURCE_DIR}/sdk/include/ndk/asm.h /EP /c)
+                set(_gas_file ${CMAKE_CURRENT_BINARY_DIR}/asm/${_source_file_base_name}_${_target}.gas)
+                if((CMAKE_GENERATOR MATCHES "Ninja") AND (CMAKE_C_COMPILER_ID STREQUAL "MSVC") AND (MSVC_VERSION GREATER_EQUAL 1927) AND NOT (CMAKE_VERSION VERSION_LESS 3.19))
+                    add_custom_command(
+                        OUTPUT ${_preprocessed_asm_file}
+                        COMMAND ${_asm_preprocess_command} /sourceDependencies ${_gas_file}.json ${_source_file_full_path} > ${_gas_file}
+                        COMMAND ${CMAKE_COMMAND} -DJSON=${_gas_file}.json -DOUTPUT=${_preprocessed_asm_file} -DDEPFILE=${_preprocessed_asm_file}.d -P ${REACTOS_SOURCE_DIR}/sdk/cmake/msvc_sourcedeps.cmake
+                        COMMAND native-gas2armasm ${_gas_file} -o ${_preprocessed_asm_file}
+                        DEPENDS ${_source_file_full_path} native-gas2armasm
+                        DEPFILE ${_preprocessed_asm_file}.d)
+                else()
+                    add_custom_command(
+                        OUTPUT ${_preprocessed_asm_file}
+                        COMMAND ${_asm_preprocess_command} ${_source_file_full_path} > ${_gas_file}
+                        COMMAND native-gas2armasm ${_gas_file} -o ${_preprocessed_asm_file}
+                        DEPENDS ${_source_file_full_path} native-gas2armasm)
+                endif()
+            else()
+                set(_asm_preprocess_command cl /nologo /X /I${REACTOS_SOURCE_DIR}/sdk/include/asm /I${REACTOS_BINARY_DIR}/sdk/include/asm ${_directory_includes} ${_source_file_defines} ${_directory_defines} /D__ASM__ /D_USE_ML /EP /c)
+                if((CMAKE_GENERATOR MATCHES "Ninja") AND (CMAKE_C_COMPILER_ID STREQUAL "MSVC") AND (MSVC_VERSION GREATER_EQUAL 1927) AND NOT (CMAKE_VERSION VERSION_LESS 3.19))
+                    add_custom_command(
+                        OUTPUT ${_preprocessed_asm_file}
+                        COMMAND ${_asm_preprocess_command} /sourceDependencies ${_preprocessed_asm_file}.json ${_source_file_full_path} > ${_preprocessed_asm_file}
+                        COMMAND ${CMAKE_COMMAND} -DJSON=${_preprocessed_asm_file}.json -DOUTPUT=${_preprocessed_asm_file} -DDEPFILE=${_preprocessed_asm_file}.d -P ${REACTOS_SOURCE_DIR}/sdk/cmake/msvc_sourcedeps.cmake
+                        DEPENDS ${_source_file_full_path}
+                        DEPFILE ${_preprocessed_asm_file}.d)
+                else()
+                    add_custom_command(
+                        OUTPUT ${_preprocessed_asm_file}
+                        COMMAND ${_asm_preprocess_command} ${_source_file_full_path} > ${_preprocessed_asm_file}
+                        DEPENDS ${_source_file_full_path})
+                endif()
+            endif()
             list(APPEND ${_target} ${_preprocessed_asm_file})
         endif()
     endforeach()

@@ -12,7 +12,9 @@ Abstract:
 
 --*/
 
+#ifndef __ASM__
 #pragma once
+#endif
 #ifndef _INC_SDKDDKVER
 #define _INC_SDKDDKVER
 

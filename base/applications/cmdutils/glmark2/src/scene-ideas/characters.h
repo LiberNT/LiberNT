@@ -38,7 +38,7 @@ public:
     void issue() const
     {
         glDrawElements(type_, count_, GL_UNSIGNED_SHORT, 
-            reinterpret_cast<const GLvoid*>(bufferOffset_));
+            reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(bufferOffset_)));
     }
 private:
     PrimitiveState();

@@ -12,7 +12,7 @@
 #include "util.hpp"
 
 #include <algorithm>
-#include <array>
+#include <ctype.h>
 #include <cerrno>
 #include <cstdlib>
 #include <limits>
@@ -36,7 +36,7 @@ enum class NestedSection
     Markets,
 };
 
-std::string RemoveYamlComment(std::string_view line)
+std::string RemoveYamlComment(const std::string &line)
 {
     bool singleQuoted = false;
     bool doubleQuoted = false;
@@ -48,35 +48,35 @@ std::string RemoveYamlComment(std::string_view line)
             doubleQuoted = !doubleQuoted;
         else if (line[index] == '#' && !singleQuoted && !doubleQuoted &&
                  (index == 0 || line[index - 1] == ' ' || line[index - 1] == '\t'))
-            return std::string(line.substr(0, index));
+            return line.substr(0, index);
     }
-    return std::string(line);
+    return line;
 }
 
-bool SplitProperty(std::string_view line, std::string &key, std::string &value)
+bool SplitProperty(const std::string &line, std::string &key, std::string &value)
 {
-    const auto colon = line.find(':');
-    if (colon == std::string_view::npos)
+    const std::size_t colon = line.find(':');
+    if (colon == std::string::npos)
         return false;
     key = Trim(line.substr(0, colon));
     value = UnquoteYaml(line.substr(colon + 1));
     return !key.empty();
 }
 
-std::vector<std::string> ParseInlineList(std::string_view value)
+std::vector<std::string> ParseInlineList(const std::string &value)
 {
     std::string text = Trim(value);
-    if (text.size() < 2 || text.front() != '[' || text.back() != ']')
-        return {};
+    if (text.size() < 2 || text[0] != '[' || text[text.size() - 1] != ']')
+        return std::vector<std::string>();
     text = text.substr(1, text.size() - 2);
     std::vector<std::string> result;
     std::size_t offset = 0;
     while (offset <= text.size())
     {
         const std::size_t comma = text.find(',', offset);
-        std::string item = UnquoteYaml(std::string_view(text).substr(offset, comma == std::string::npos ? text.size() - offset : comma - offset));
+        const std::string item = UnquoteYaml(text.substr(offset, comma == std::string::npos ? text.size() - offset : comma - offset));
         if (!item.empty())
-            result.push_back(std::move(item));
+            result.push_back(item);
         if (comma == std::string::npos)
             break;
         offset = comma + 1;
@@ -84,10 +84,10 @@ std::vector<std::string> ParseInlineList(std::string_view value)
     return result;
 }
 
-bool ParseCode(std::string_view value, DWORD &code)
+bool ParseCode(const std::string &value, DWORD &code)
 {
     const std::string owned = Trim(value);
-    if (owned.empty() || owned.front() == '-')
+    if (owned.empty() || owned[0] == '-')
         return false;
     errno = 0;
     char *end = nullptr;
@@ -98,7 +98,7 @@ bool ParseCode(std::string_view value, DWORD &code)
     return true;
 }
 
-bool ParseBoolean(std::string_view value, bool &result)
+bool ParseBoolean(const std::string &value, bool &result)
 {
     if (AsciiEquals(value, "true"))
     {
@@ -129,35 +129,35 @@ std::string FoldBlock(const std::vector<std::string> &lines, bool folded, bool k
             text.push_back('\n');
             continue;
         }
-        if (!text.empty() && text.back() != '\n')
+        if (!text.empty() && text[text.size() - 1] != '\n')
             text.push_back(' ');
         text += line;
     }
     if (!keepTrailing)
     {
-        while (!text.empty() && (text.back() == '\n' || text.back() == ' '))
+        while (!text.empty() && (text[text.size() - 1] == '\n' || text[text.size() - 1] == ' '))
             text.pop_back();
     }
     return text;
 }
 
-void SetSwitch(InstallerSwitches &switches, std::string_view key, std::string value)
+void SetSwitch(InstallerSwitches &switches, const std::string &key, const std::string &value)
 {
-    if (key == "Silent") switches.silent = std::move(value);
-    else if (key == "SilentWithProgress") switches.silentWithProgress = std::move(value);
-    else if (key == "Interactive") switches.interactive = std::move(value);
-    else if (key == "Custom") switches.custom = std::move(value);
+    if (key == "Silent") switches.silent = value;
+    else if (key == "SilentWithProgress") switches.silentWithProgress = value;
+    else if (key == "Interactive") switches.interactive = value;
+    else if (key == "Custom") switches.custom = value;
 }
 
-NestedSection SetInstallerProperty(InstallerEntry &installer, std::string_view key, std::string value)
+NestedSection SetInstallerProperty(InstallerEntry &installer, const std::string &key, const std::string &value)
 {
-    if (key == "Architecture") installer.architecture = std::move(value);
-    else if (key == "InstallerType") installer.type = std::move(value);
-    else if (key == "InstallerUrl") installer.url = std::move(value);
-    else if (key == "InstallerSha256") installer.sha256 = std::move(value);
-    else if (key == "Scope") installer.scope = std::move(value);
-    else if (key == "InstallerLocale") installer.locale = std::move(value);
-    else if (key == "MinimumOSVersion") installer.minimumOsVersion = std::move(value);
+    if (key == "Architecture") installer.architecture = value;
+    else if (key == "InstallerType") installer.type = value;
+    else if (key == "InstallerUrl") installer.url = value;
+    else if (key == "InstallerSha256") installer.sha256 = value;
+    else if (key == "Scope") installer.scope = value;
+    else if (key == "InstallerLocale") installer.locale = value;
+    else if (key == "MinimumOSVersion") installer.minimumOsVersion = value;
     else if (key == "InstallerSwitches") return NestedSection::Switches;
     else if (key == "UnsupportedOSArchitectures")
     {
@@ -230,7 +230,7 @@ void InheritInstaller(InstallerEntry &installer, const InstallerEntry &defaults)
     installer.downloadCommandProhibited = installer.downloadCommandProhibited || defaults.downloadCommandProhibited;
 }
 
-int ArchitectureRank(std::string_view installerArchitecture, MachineArchitecture machine)
+int ArchitectureRank(const std::string &installerArchitecture, MachineArchitecture machine)
 {
     const std::string architecture = AsciiLower(installerArchitecture);
     if (architecture == "neutral") return 3;
@@ -258,7 +258,7 @@ int ArchitectureRank(std::string_view installerArchitecture, MachineArchitecture
     return -1;
 }
 
-int TypeRank(std::string_view type)
+int TypeRank(const std::string &type)
 {
     if (AsciiEquals(type, "wix") || AsciiEquals(type, "msi")) return 0;
     if (AsciiEquals(type, "inno") || AsciiEquals(type, "nullsoft") || AsciiEquals(type, "burn")) return 1;
@@ -266,9 +266,14 @@ int TypeRank(std::string_view type)
     return -1;
 }
 
-bool ContainsCaseInsensitive(const std::vector<std::string> &values, std::string_view wanted)
+bool ContainsCaseInsensitive(const std::vector<std::string> &values, const std::string &wanted)
 {
-    return std::any_of(values.begin(), values.end(), [wanted](const std::string &value) { return AsciiEquals(value, wanted); });
+    for (const std::string &value : values)
+    {
+        if (AsciiEquals(value, wanted))
+            return true;
+    }
+    return false;
 }
 
 bool HasNonInteractiveArguments(const InstallerEntry &installer, InstallMode mode)
@@ -293,25 +298,26 @@ bool SupportsMode(const InstallerEntry &installer, InstallMode mode)
            ContainsCaseInsensitive(installer.installModes, "silent");
 }
 
-bool ParseVersion(std::string_view text, std::array<DWORD, 4> &parts)
+bool ParseVersion(const std::string &text, DWORD (&parts)[4])
 {
-    parts = {};
-    for (std::size_t index = 0; index < parts.size(); ++index)
+    std::fill(parts, parts + 4, 0);
+    std::size_t offset = 0;
+    for (std::size_t index = 0; index < 4; ++index)
     {
-        const std::size_t dot = text.find('.');
-        const std::string_view component = dot == std::string_view::npos ? text : text.substr(0, dot);
+        const std::size_t dot = text.find('.', offset);
+        const std::string component = dot == std::string::npos ? text.substr(offset) : text.substr(offset, dot - offset);
         DWORD value = 0;
         if (!ParseCode(component, value))
             return false;
         parts[index] = value;
-        if (dot == std::string_view::npos)
+        if (dot == std::string::npos)
             return true;
-        text.remove_prefix(dot + 1);
+        offset = dot + 1;
     }
-    return text.empty();
+    return offset == text.size();
 }
 
-std::array<DWORD, 4> CurrentOsVersion()
+void CurrentOsVersion(DWORD (&version)[4])
 {
     struct RtlVersionInfo
     {
@@ -326,30 +332,41 @@ std::array<DWORD, 4> CurrentOsVersion()
     using RtlGetVersionFunction = LONG (WINAPI *)(RtlVersionInfo *);
     const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     const auto rtlGetVersion = ntdll ? reinterpret_cast<RtlGetVersionFunction>(GetProcAddress(ntdll, "RtlGetVersion")) : nullptr;
+    std::fill(version, version + 4, 0);
     if (rtlGetVersion && rtlGetVersion(&information) >= 0)
-        return {information.major, information.minor, information.build, 0};
-    return {};
+    {
+        version[0] = information.major;
+        version[1] = information.minor;
+        version[2] = information.build;
+    }
 }
 
-bool MeetsMinimumOsVersion(std::string_view minimum)
+bool MeetsMinimumOsVersion(const std::string &minimum)
 {
     if (minimum.empty())
         return true;
-    std::array<DWORD, 4> required{};
+    DWORD required[4]{};
     if (!ParseVersion(minimum, required))
         return false;
-    return CurrentOsVersion() >= required;
+    DWORD current[4]{};
+    CurrentOsVersion(current);
+    return !std::lexicographical_compare(current, current + 4, required, required + 4);
 }
 
-bool IsSha256(std::string_view value)
+bool IsSha256(const std::string &value)
 {
-    return value.size() == 64 && std::all_of(value.begin(), value.end(), [](char character) {
-        return (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f') ||
-               (character >= 'A' && character <= 'F');
-    });
+    if (value.size() != 64)
+        return false;
+    for (const char character : value)
+    {
+        if (!((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f') ||
+              (character >= 'A' && character <= 'F')))
+            return false;
+    }
+    return true;
 }
 
-Status ParsePackageAgreements(std::string_view yaml, std::vector<PackageAgreement> &agreements)
+Status ParsePackageAgreements(const std::string &yaml, std::vector<PackageAgreement> &agreements)
 {
     agreements.clear();
     std::vector<std::string> lines;
@@ -357,10 +374,10 @@ Status ParsePackageAgreements(std::string_view yaml, std::vector<PackageAgreemen
     while (offset <= yaml.size())
     {
         const std::size_t end = yaml.find('\n', offset);
-        std::string line(yaml.substr(offset, end == std::string_view::npos ? yaml.size() - offset : end - offset));
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        lines.push_back(std::move(line));
-        if (end == std::string_view::npos) break;
+        std::string line(yaml.substr(offset, end == std::string::npos ? yaml.size() - offset : end - offset));
+        if (!line.empty() && line[line.size() - 1] == '\r') line.pop_back();
+        lines.push_back(line);
+        if (end == std::string::npos) break;
         offset = end + 1;
     }
 
@@ -375,7 +392,7 @@ Status ParsePackageAgreements(std::string_view yaml, std::vector<PackageAgreemen
         while (indent < line.size() && line[indent] == ' ') ++indent;
         if (indent < line.size() && line[indent] == '\t')
             return Status::Fail(ERROR_BAD_FORMAT, "package agreements use a tab for YAML indentation");
-        std::string_view content(line.data() + indent, line.size() - indent);
+        const std::string content = line.substr(indent);
         if (!inAgreements)
         {
             if (Trim(content) == "Agreements:")
@@ -388,14 +405,14 @@ Status ParsePackageAgreements(std::string_view yaml, std::vector<PackageAgreemen
         if (indent <= agreementsIndent && content.rfind("- ", 0) != 0)
             break;
 
-        std::string_view property = content;
+        std::string property = content;
         if (content.rfind("- ", 0) == 0 && (agreements.empty() || indent <= itemIndent))
         {
             if (agreements.size() >= 32)
                 return Status::Fail(ERROR_BAD_FORMAT, "package manifest contains too many agreements");
-            agreements.emplace_back();
+            agreements.push_back(PackageAgreement());
             itemIndent = indent;
-            property.remove_prefix(2);
+            property.erase(0, 2);
         }
         else if (agreements.empty() || indent <= itemIndent)
         {
@@ -409,7 +426,7 @@ Status ParsePackageAgreements(std::string_view yaml, std::vector<PackageAgreemen
                            value == ">" || value == ">-" || value == ">+";
         if (block)
         {
-            const bool folded = value.front() == '>';
+            const bool folded = value[0] == '>';
             const bool keep = value.size() > 1 && value[1] == '+';
             std::vector<std::string> blockLines;
             std::size_t blockIndent = 0;
@@ -420,7 +437,7 @@ Status ParsePackageAgreements(std::string_view yaml, std::vector<PackageAgreemen
                 while (nextIndent < next.size() && next[nextIndent] == ' ') ++nextIndent;
                 if (nextIndent == next.size())
                 {
-                    blockLines.emplace_back();
+                    blockLines.push_back(std::string());
                     ++index;
                     continue;
                 }
@@ -434,9 +451,9 @@ Status ParsePackageAgreements(std::string_view yaml, std::vector<PackageAgreemen
         }
 
         PackageAgreement &agreement = agreements.back();
-        if (key == "AgreementLabel") agreement.label = std::move(value);
-        else if (key == "Agreement") agreement.text = std::move(value);
-        else if (key == "AgreementUrl") agreement.url = std::move(value);
+        if (key == "AgreementLabel") agreement.label = value;
+        else if (key == "Agreement") agreement.text = value;
+        else if (key == "AgreementUrl") agreement.url = value;
     }
     for (const PackageAgreement &agreement : agreements)
     {
@@ -449,8 +466,8 @@ Status ParsePackageAgreements(std::string_view yaml, std::vector<PackageAgreemen
 
 Status SelectInstallerForMachine(const Manifest &manifest, const SelectionOptions &options, MachineArchitecture machine, InstallerEntry &installer)
 {
-    if (options.architecture && ArchitectureRank(*options.architecture, machine) < 0)
-        return Status::Fail(ERROR_NOT_SUPPORTED, "requested architecture " + *options.architecture +
+    if (options.hasArchitecture && ArchitectureRank(options.architecture, machine) < 0)
+        return Status::Fail(ERROR_NOT_SUPPORTED, "requested architecture " + options.architecture +
                             " cannot run on " + ArchitectureName(machine));
 
     int bestRank = 1000;
@@ -460,22 +477,22 @@ Status SelectInstallerForMachine(const Manifest &manifest, const SelectionOption
     for (const InstallerEntry &candidate : manifest.installers)
     {
         int architectureRank = ArchitectureRank(candidate.architecture, machine);
-        if (options.architecture)
+        if (options.hasArchitecture)
         {
-            if (AsciiEquals(candidate.architecture, *options.architecture)) architectureRank = 0;
+            if (AsciiEquals(candidate.architecture, options.architecture)) architectureRank = 0;
             else if (AsciiEquals(candidate.architecture, "neutral")) architectureRank = 1;
             else architectureRank = -1;
         }
         const int typeRank = TypeRank(candidate.type);
         unsupportedType = unsupportedType || typeRank < 0;
         if (architectureRank < 0 || typeRank < 0 || candidate.url.empty() || !IsSha256(candidate.sha256) ||
-            (options.installerType && !AsciiEquals(candidate.type, *options.installerType)))
+            (options.hasInstallerType && !AsciiEquals(candidate.type, options.installerType)))
             continue;
         if (ContainsCaseInsensitive(candidate.unsupportedOsArchitectures, ArchitectureName(machine)) ||
             !MeetsMinimumOsVersion(candidate.minimumOsVersion) || candidate.hasDependencies ||
             candidate.hasAuthentication || candidate.hasMarketRestrictions ||
-            (options.scope && !AsciiEquals(candidate.scope, *options.scope)) ||
-            (options.locale && !AsciiEquals(candidate.locale, *options.locale)) ||
+            (options.hasScope && !AsciiEquals(candidate.scope, options.scope)) ||
+            (options.hasLocale && !AsciiEquals(candidate.locale, options.locale)) ||
             (options.downloadOnly && candidate.downloadCommandProhibited) || !SupportsMode(candidate, options.mode) ||
             (options.mode != InstallMode::Interactive && !HasNonInteractiveArguments(candidate, options.mode)))
         {
@@ -496,7 +513,7 @@ Status SelectInstallerForMachine(const Manifest &manifest, const SelectionOption
         if (unsupportedType)
             return Status::Fail(ERROR_NOT_SUPPORTED, "matching manifests only contain installer types lntget does not implement");
         return Status::Fail(ERROR_NOT_SUPPORTED, "no supported installer applies to architecture " +
-                            (options.architecture ? *options.architecture : ArchitectureName(machine)));
+                            (options.hasArchitecture ? options.architecture : ArchitectureName(machine)));
     }
     installer = *best;
     return Status::Ok();
@@ -504,9 +521,9 @@ Status SelectInstallerForMachine(const Manifest &manifest, const SelectionOption
 
 } // namespace
 
-Status ParseInstallerManifest(std::string_view yaml, Manifest &manifest)
+Status ParseInstallerManifest(const std::string &yaml, Manifest &manifest)
 {
-    manifest = {};
+    manifest = Manifest();
     InstallerEntry defaults;
     InstallerEntry *current = nullptr;
     bool inInstallers = false;
@@ -514,15 +531,16 @@ Status ParseInstallerManifest(std::string_view yaml, Manifest &manifest)
     NestedSection section = NestedSection::None;
     std::size_t sectionIndent = 0;
     InstallerEntry *sectionTarget = nullptr;
-    std::optional<DWORD> expectedCode;
+    bool hasExpectedCode = false;
+    DWORD expectedCode = 0;
 
     std::size_t offset = 0;
     while (offset <= yaml.size())
     {
         const std::size_t end = yaml.find('\n', offset);
-        std::string line = RemoveYamlComment(yaml.substr(offset, end == std::string_view::npos ? yaml.size() - offset : end - offset));
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        offset = end == std::string_view::npos ? yaml.size() + 1 : end + 1;
+        std::string line = RemoveYamlComment(yaml.substr(offset, end == std::string::npos ? yaml.size() - offset : end - offset));
+        if (!line.empty() && line[line.size() - 1] == '\r') line.pop_back();
+        offset = end == std::string::npos ? yaml.size() + 1 : end + 1;
         if (Trim(line).empty()) continue;
 
         if (Trim(line) == "Agreements:") manifest.hasAgreements = true;
@@ -531,22 +549,22 @@ Status ParseInstallerManifest(std::string_view yaml, Manifest &manifest)
         while (indent < line.size() && line[indent] == ' ') ++indent;
         if (indent < line.size() && line[indent] == '\t')
             return Status::Fail(ERROR_BAD_FORMAT, "manifest uses a tab for YAML indentation");
-        std::string_view content(line.data() + indent, line.size() - indent);
+        const std::string content = line.substr(indent);
 
         if (inInstallers && content.rfind("- ", 0) == 0 &&
             (!current || indent <= installerItemIndent))
         {
-            manifest.installers.emplace_back();
+            manifest.installers.push_back(InstallerEntry());
             current = &manifest.installers.back();
             installerItemIndent = indent;
             section = NestedSection::None;
             sectionTarget = nullptr;
-            expectedCode.reset();
+            hasExpectedCode = false;
             std::string key;
             std::string value;
             if (SplitProperty(content.substr(2), key, value))
             {
-                section = SetInstallerProperty(*current, key, std::move(value));
+                section = SetInstallerProperty(*current, key, value);
                 if (section != NestedSection::None)
                 {
                     sectionIndent = indent;
@@ -575,6 +593,7 @@ Status ParseInstallerManifest(std::string_view yaml, Manifest &manifest)
                 {
                     DWORD code = 0;
                     if (!ParseCode(value, code)) return Status::Fail(ERROR_BAD_FORMAT, "ExpectedReturnCodes contains a non-numeric code");
+                    hasExpectedCode = true;
                     expectedCode = code;
                     sectionTarget->expectedReturnCodes[code] = "expected installer response";
                 }
@@ -592,9 +611,9 @@ Status ParseInstallerManifest(std::string_view yaml, Manifest &manifest)
 
         if (section != NestedSection::None && indent > sectionIndent && sectionTarget)
         {
-            if (section == NestedSection::Switches) SetSwitch(sectionTarget->switches, key, std::move(value));
-            else if (section == NestedSection::ExpectedReturnCodes && key == "ReturnResponse" && expectedCode)
-                sectionTarget->expectedReturnCodes[*expectedCode] = std::move(value);
+            if (section == NestedSection::Switches) SetSwitch(sectionTarget->switches, key, value);
+            else if (section == NestedSection::ExpectedReturnCodes && key == "ReturnResponse" && hasExpectedCode)
+                sectionTarget->expectedReturnCodes[expectedCode] = value;
             else if (section == NestedSection::Dependencies) sectionTarget->hasDependencies = true;
             else if (section == NestedSection::Authentication) sectionTarget->hasAuthentication = true;
             else if (section == NestedSection::Markets) sectionTarget->hasMarketRestrictions = true;
@@ -603,7 +622,7 @@ Status ParseInstallerManifest(std::string_view yaml, Manifest &manifest)
 
         section = NestedSection::None;
         sectionTarget = nullptr;
-        expectedCode.reset();
+        hasExpectedCode = false;
         if (indent == 0 && key == "Installers")
         {
             inInstallers = true;
@@ -613,11 +632,11 @@ Status ParseInstallerManifest(std::string_view yaml, Manifest &manifest)
         if (indent == 0)
         {
             inInstallers = false;
-            if (key == "PackageIdentifier") manifest.id = std::move(value);
-            else if (key == "PackageVersion") manifest.version = std::move(value);
+            if (key == "PackageIdentifier") manifest.id = value;
+            else if (key == "PackageVersion") manifest.version = value;
             else
             {
-                section = SetInstallerProperty(defaults, key, std::move(value));
+                section = SetInstallerProperty(defaults, key, value);
                 if (section != NestedSection::None)
                 {
                     sectionIndent = indent;
@@ -628,7 +647,7 @@ Status ParseInstallerManifest(std::string_view yaml, Manifest &manifest)
         }
         if (inInstallers && current && indent > installerItemIndent)
         {
-            section = SetInstallerProperty(*current, key, std::move(value));
+            section = SetInstallerProperty(*current, key, value);
             if (section != NestedSection::None)
             {
                 sectionIndent = indent;
@@ -671,24 +690,24 @@ Status ParseInstallerManifest(std::string_view yaml, Manifest &manifest)
 namespace
 {
 
-void SetDetailProperty(PackageDetails &details, std::string_view key, std::string value)
+void SetDetailProperty(PackageDetails &details, const std::string &key, const std::string &value)
 {
-    if (key == "Publisher") details.publisher = std::move(value);
-    else if (key == "PublisherUrl") details.publisherUrl = std::move(value);
-    else if (key == "PublisherSupportUrl") details.supportUrl = std::move(value);
-    else if (key == "Author") details.author = std::move(value);
-    else if (key == "PackageName") details.packageName = std::move(value);
-    else if (key == "PackageUrl") details.packageUrl = std::move(value);
-    else if (key == "License") details.license = std::move(value);
-    else if (key == "LicenseUrl") details.licenseUrl = std::move(value);
-    else if (key == "Copyright") details.copyright = std::move(value);
-    else if (key == "ShortDescription") details.shortDescription = std::move(value);
-    else if (key == "Description") details.description = std::move(value);
-    else if (key == "ReleaseNotesUrl") details.releaseNotesUrl = std::move(value);
-    else if (key == "Documentations" || key == "DocumentUrl") details.documentationUrl = std::move(value);
+    if (key == "Publisher") details.publisher = value;
+    else if (key == "PublisherUrl") details.publisherUrl = value;
+    else if (key == "PublisherSupportUrl") details.supportUrl = value;
+    else if (key == "Author") details.author = value;
+    else if (key == "PackageName") details.packageName = value;
+    else if (key == "PackageUrl") details.packageUrl = value;
+    else if (key == "License") details.license = value;
+    else if (key == "LicenseUrl") details.licenseUrl = value;
+    else if (key == "Copyright") details.copyright = value;
+    else if (key == "ShortDescription") details.shortDescription = value;
+    else if (key == "Description") details.description = value;
+    else if (key == "ReleaseNotesUrl") details.releaseNotesUrl = value;
+    else if (key == "Documentations" || key == "DocumentUrl") details.documentationUrl = value;
 }
 
-bool FlowScalarComplete(std::string_view text, char quote)
+bool FlowScalarComplete(const std::string &text, char quote)
 {
     if (text.size() < 2)
         return false;
@@ -740,7 +759,7 @@ void AppendUtf8(std::string &text, unsigned long code)
     }
 }
 
-std::string DecodeFlowScalar(std::string_view text, char quote)
+std::string DecodeFlowScalar(const std::string &text, char quote)
 {
     std::string value;
     std::size_t index = 1;
@@ -786,7 +805,7 @@ std::string DecodeFlowScalar(std::string_view text, char quote)
                 {
                     unsigned long code = 0;
                     std::size_t digits = 0;
-                    while (digits < 4 && index < text.size() && std::isxdigit(static_cast<unsigned char>(text[index])))
+                    while (digits < 4 && index < text.size() && isxdigit(static_cast<unsigned char>(text[index])))
                     {
                         const char digit = text[index];
                         code = code * 16 + static_cast<unsigned long>(digit <= '9' ? digit - '0' : (digit | 0x20) - 'a' + 10);
@@ -808,19 +827,19 @@ std::string DecodeFlowScalar(std::string_view text, char quote)
 
 } // namespace
 
-Status ParseLocaleManifest(std::string_view yaml, PackageDetails &details)
+Status ParseLocaleManifest(const std::string &yaml, PackageDetails &details)
 {
-    details = {};
+    details = PackageDetails();
     std::vector<std::string> lines;
     std::size_t offset = 0;
     while (offset <= yaml.size())
     {
         const std::size_t end = yaml.find('\n', offset);
-        std::string line(yaml.substr(offset, end == std::string_view::npos ? yaml.size() - offset : end - offset));
-        offset = end == std::string_view::npos ? yaml.size() + 1 : end + 1;
-        if (!line.empty() && line.back() == '\r')
+        std::string line(yaml.substr(offset, end == std::string::npos ? yaml.size() - offset : end - offset));
+        offset = end == std::string::npos ? yaml.size() + 1 : end + 1;
+        if (!line.empty() && line[line.size() - 1] == '\r')
             line.pop_back();
-        lines.push_back(std::move(line));
+        lines.push_back(line);
     }
 
     const auto indentOf = [](const std::string &line) {
@@ -865,7 +884,7 @@ Status ParseLocaleManifest(std::string_view yaml, PackageDetails &details)
             {
                 if (isBlank(lines[index + 1]))
                 {
-                    block.emplace_back();
+                    block.push_back(std::string());
                     ++index;
                     continue;
                 }
@@ -876,19 +895,19 @@ Status ParseLocaleManifest(std::string_view yaml, PackageDetails &details)
                     break;
                 block.push_back(lines[++index].substr(blockIndent));
             }
-            SetDetailProperty(details, key, FoldBlock(block, raw.front() == '>', raw.size() > 1 && raw[1] == '+'));
+            SetDetailProperty(details, key, FoldBlock(block, raw[0] == '>', raw.size() > 1 && raw[1] == '+'));
             continue;
         }
 
-        if (raw.front() == '"' || raw.front() == '\'')
+        if (raw[0] == '"' || raw[0] == '\'')
         {
             std::string text = raw;
-            while (!FlowScalarComplete(text, raw.front()) && index + 1 < lines.size())
+            while (!FlowScalarComplete(text, raw[0]) && index + 1 < lines.size())
             {
                 text.push_back('\n');
                 text += Trim(lines[++index]);
             }
-            SetDetailProperty(details, key, DecodeFlowScalar(text, raw.front()));
+            SetDetailProperty(details, key, DecodeFlowScalar(text, raw[0]));
             continue;
         }
 
@@ -936,7 +955,7 @@ Status SelectInstaller(const Manifest &manifest, const SelectionOptions &options
 
 Status RunManifestSelfTests()
 {
-    static constexpr std::string_view Fixture =
+    static constexpr char Fixture[] =
         "PackageIdentifier: Example.Tool\n"
         "PackageVersion: 1.2.3\n"
         "InstallerType: exe\n"
@@ -961,12 +980,13 @@ Status RunManifestSelfTests()
         return Status::Fail(ERROR_ASSERTION_FAILURE, "manifest parser self-test failed");
     if (manifest.installers[1].type != "exe" || manifest.installers[1].switches.silent != "/S")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "manifest inheritance self-test failed");
-    if (manifest.installers[0].architecture != "x86" || manifest.installers[0].successCodes != std::vector<DWORD>{42})
+    if (manifest.installers[0].architecture != "x86" || manifest.installers[0].successCodes.size() != 1 ||
+        manifest.installers[0].successCodes[0] != 42)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "order-independent installer parser self-test failed");
     if (manifest.installers[0].expectedReturnCodes[1602] != "cancelledByUser")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "expected return code parser self-test failed");
 
-    static constexpr std::string_view NestedTailFixture =
+    static constexpr char NestedTailFixture[] =
         "PackageIdentifier: Example.NestedTail\n"
         "PackageVersion: 1.0\n"
         "InstallerType: exe\n"
@@ -988,6 +1008,7 @@ Status RunManifestSelfTests()
         return Status::Fail(ERROR_ASSERTION_FAILURE, "nested-list installer boundary self-test failed");
 
     SelectionOptions options;
+    options.hasArchitecture = true;
     options.architecture = "arm64";
     InstallerEntry installer;
     status = SelectInstallerForMachine(manifest, options, MachineArchitecture::X64, installer);
@@ -997,17 +1018,19 @@ Status RunManifestSelfTests()
     status = SelectInstallerForMachine(manifest, options, MachineArchitecture::X64, installer);
     if (!status || installer.architecture != "x86")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "compatible architecture selection self-test failed");
+    options.hasScope = true;
     options.scope = "machine";
     status = SelectInstallerForMachine(manifest, options, MachineArchitecture::X64, installer);
     if (status)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "unspecified installer scope self-test failed");
-    options.scope.reset();
+    options.hasScope = false;
+    options.hasLocale = true;
     options.locale = "en-US";
     status = SelectInstallerForMachine(manifest, options, MachineArchitecture::X64, installer);
     if (status)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "unspecified installer locale self-test failed");
-    options.locale.reset();
-    static constexpr std::string_view AgreementFixture =
+    options.hasLocale = false;
+    static constexpr char AgreementFixture[] =
         "PackageIdentifier: Example.Agreement\n"
         "PackageVersion: 1.0\n"
         "Agreements:\n"

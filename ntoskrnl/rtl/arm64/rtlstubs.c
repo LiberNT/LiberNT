@@ -1061,6 +1061,7 @@ void _local_unwind2(void) {}
 void _global_unwind2(void) {}
 int _except_handler2(void) { return 1; }
 int _except_handler3(void) { return 1; }
+#if defined(__GNUC__)
 __asm__(
     ".text\n"
     ".globl _abnormal_termination\n"
@@ -1068,3 +1069,4 @@ __asm__(
     "_abnormal_termination:\n"
     "    mov w0, wzr\n"
     "    ret\n");
+#endif

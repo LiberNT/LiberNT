@@ -80,8 +80,8 @@ private:
     void* native_window_;
     GLenum gl_color_format_;
     GLenum gl_depth_format_;
-    std::vector<FBO> fbos_;
-    std::vector<std::unique_ptr<GLStateSync>> fbo_syncs_;
+    std::vector<FBO*> fbos_;
+    std::vector<GLStateSync*> fbo_syncs_;
     int current_fbo_index_;
     bool gl_sync_supported_;
     bool window_initialized_;

@@ -166,6 +166,7 @@ RealEntryPoint:
     bl Arm64SetupExceptionVectors
     
     /* Initialize BSS section */
+#if !defined(_MSC_VER) || defined(__clang__)
     ldr x0, =__bss_start__
     ldr x1, =__bss_end__
     sub x2, x1, x0
@@ -177,6 +178,7 @@ clear_bss:
     b.ne clear_bss
     
 bss_done:
+#endif
     /* Publish UEFI handles before we touch MM services */
     ldr x0, =GlobalImageHandle
     str x19, [x0]

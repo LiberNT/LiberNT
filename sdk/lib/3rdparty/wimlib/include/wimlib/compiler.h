@@ -51,10 +51,18 @@
 
 /* Declare that the annotated function should always be inlined.  This might be
  * desirable in highly tuned code, e.g. compression codecs.  */
+#ifdef _MSC_VER
+#  define forceinline		__forceinline
+#else
 #define forceinline		inline __attribute__((always_inline))
+#endif
 
 /* Declare that the annotated function should *not* be inlined.  */
+#ifdef _MSC_VER
+#  define noinline		__declspec(noinline)
+#else
 #define noinline		__attribute__((noinline))
+#endif
 
 /* Functionally the same as 'noinline', but documents that the reason for not
  * inlining is to prevent the annotated function from being inlined into a
@@ -62,16 +70,32 @@
 #define noinline_for_stack	noinline
 
 /* Hint that the expression is usually true.  */
+#ifdef _MSC_VER
+#  define likely(expr)		(!!(expr))
+#else
 #define likely(expr)		__builtin_expect(!!(expr), 1)
+#endif
 
 /* Hint that the expression is usually false.  */
+#ifdef _MSC_VER
+#  define unlikely(expr)	(!!(expr))
+#else
 #define unlikely(expr)		__builtin_expect(!!(expr), 0)
+#endif
 
 /* Prefetch into L1 cache for read.  */
+#ifdef _MSC_VER
+#  define prefetchr(addr)	((void)(addr))
+#else
 #define prefetchr(addr)		__builtin_prefetch((addr), 0)
+#endif
 
 /* Prefetch into L1 cache for write.  */
+#ifdef _MSC_VER
+#  define prefetchw(addr)	((void)(addr))
+#else
 #define prefetchw(addr)		__builtin_prefetch((addr), 1)
+#endif
 
 /* Hint that the annotated function takes a printf()-like format string and
  * arguments.  This is currently disabled on Windows because MinGW does not
@@ -81,6 +105,19 @@
 #else
 #  define _format_attribute(type, format_str, format_start)	\
 			__attribute__((format(type, format_str, format_start)))
+#endif
+
+#ifdef _MSC_VER
+#  define _aligned_attribute(n)	__declspec(align(n))
+#  define _may_alias_attribute
+#  define _cold_attribute
+#  define _unused_attribute
+#  define __builtin_constant_p(expr)	0
+#else
+#  define _aligned_attribute(n)	__attribute__((aligned(n)))
+#  define _may_alias_attribute	__attribute__((may_alias))
+#  define _cold_attribute	__attribute__((cold))
+#  define _unused_attribute	__attribute__((unused))
 #endif
 
 /* Endianness definitions.  Either CPU_IS_BIG_ENDIAN() or CPU_IS_LITTLE_ENDIAN()
@@ -110,15 +147,23 @@
 
 /* Get the minimum of two variables, without multiple evaluation.  */
 #undef min
+#ifdef _MSC_VER
+#  define min(a, b)	(((a) < (b)) ? (a) : (b))
+#else
 #define min(a, b)  ({ typeof(a) _a = (a); typeof(b) _b = (b); \
 		    (_a < _b) ? _a : _b; })
+#endif
 #undef MIN
 #define MIN(a, b)	min((a), (b))
 
 /* Get the maximum of two variables, without multiple evaluation.  */
 #undef max
+#ifdef _MSC_VER
+#  define max(a, b)	(((a) > (b)) ? (a) : (b))
+#else
 #define max(a, b)  ({ typeof(a) _a = (a); typeof(b) _b = (b); \
 		    (_a > _b) ? _a : _b; })
+#endif
 #undef MAX
 #define MAX(a, b)	max((a), (b))
 
@@ -128,7 +173,7 @@
 
 /* Swap the values of two variables, without multiple evaluation.  */
 #ifndef swap
-#  define swap(a, b) ({ typeof(a) _a = (a); (a) = (b); (b) = _a; })
+#  define swap(a, b) do { __typeof__(a) _a = (a); (a) = (b); (b) = _a; } while (0)
 #endif
 #define SWAP(a, b)	swap((a), (b))
 
@@ -152,7 +197,7 @@
 
 /* STATIC_ASSERT_ZERO() - verify the truth of an expression at compilation time
  * and also produce a result of value '0' to be used in constant expressions */
-#define STATIC_ASSERT_ZERO(expr) ((int)sizeof(char[-!(expr)]))
+#define STATIC_ASSERT_ZERO(expr) ((int)(0 * sizeof(char[1 - 2 * !(expr)])))
 
 #define CONCAT_IMPL(s1, s2)	s1##s2
 

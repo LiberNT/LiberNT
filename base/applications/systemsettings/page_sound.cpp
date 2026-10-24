@@ -223,8 +223,9 @@ ProcessName(DWORD pid)
     return name;
 }
 
+template <class Action>
 static void
-WithSession(const std::wstring &id, std::function<void(ISimpleAudioVolume *)> action)
+WithSession(const std::wstring &id, Action action)
 {
     IAudioSessionEnumerator *sessions = AudioSessions();
     int count = 0;

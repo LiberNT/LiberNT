@@ -186,12 +186,6 @@ CountClipboardFormats(VOID)
     return NtUserCountClipboardFormats();
 }
 
-EXTINLINE BOOL WINAPI
-EmptyClipboard(VOID)
-{
-    return NtUserEmptyClipboard();
-}
-
 EXTINLINE HWND WINAPI
 GetClipboardOwner(VOID)
 {

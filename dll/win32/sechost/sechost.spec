@@ -10,7 +10,7 @@
 @ stub AuditQueryGlobalSaclW
 @ stub AuditQueryPerUserPolicy
 @ stub AuditQuerySecurity
-@ stdcall AuditQuerySystemPolicy(ptr long ptr) advapi32.AuditQuerySystemPolicy
+@ stub AuditQuerySystemPolicy
 @ stub AuditSetGlobalSaclW
 @ stub AuditSetPerUserPolicy
 @ stub AuditSetSecurity
@@ -89,7 +89,7 @@
 @ stdcall EnumDependentServicesW(long long ptr long ptr ptr) advapi32.EnumDependentServicesW
 @ stdcall EnumServicesStatusExW(long long long long ptr long ptr ptr ptr wstr) advapi32.EnumServicesStatusExW
 @ stub EnumerateIdentityProviders
-@ stdcall EnumerateTraceGuidsEx(long ptr long ptr long ptr) advapi32.EnumerateTraceGuidsEx
+@ stub EnumerateTraceGuidsEx
 @ stub EtwQueryRealtimeConsumer
 @ stub EventAccessControl
 @ stub EventAccessQuery

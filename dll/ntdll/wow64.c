@@ -293,9 +293,12 @@ RtlWow64GetThreadSelectorEntry(HANDLE handle,
 #else
     if (RtlWow64GetThreadContext(handle, &context))
     {
+        CONTEXT native;
+
+        RtlCaptureContext(&native);
         context.SegCs = 0x23;
-        __asm__("movw %%fs,%0" : "=m" (context.SegFs));
-        __asm__("movw %%ss,%0" : "=m" (context.SegSs));
+        context.SegFs = native.SegFs;
+        context.SegSs = native.SegSs;
     }
 
     selector = info->Selector | 3;

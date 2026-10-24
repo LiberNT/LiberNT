@@ -104,20 +104,35 @@ MiArchDebugMapFrame(ULONG64 Frame)
 MI_PTE
 MiArchPteRead(PMI_PTE Slot)
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+    MI_PTE Value = *(volatile MI_PTE *)Slot;
+    _ReadWriteBarrier();
+    return Value;
+#else
     return __atomic_load_n(Slot, __ATOMIC_ACQUIRE);
+#endif
 }
 
 VOID
 MiArchPteWrite(PMI_PTE Slot, MI_PTE Value)
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+    _ReadWriteBarrier();
+    *(volatile MI_PTE *)Slot = Value;
+#else
     __atomic_store_n(Slot, Value, __ATOMIC_RELEASE);
+#endif
 }
 
 BOOLEAN
 MiArchPteCompareExchange(PMI_PTE Slot, MI_PTE Expected, MI_PTE Value)
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+    return (BOOLEAN)(InterlockedCompareExchange((volatile LONG *)Slot, (LONG)Value, (LONG)Expected) == (LONG)Expected);
+#else
     return (BOOLEAN)__atomic_compare_exchange_n(Slot, &Expected, Value, FALSE,
                                                 __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+#endif
 }
 
 ULONG64

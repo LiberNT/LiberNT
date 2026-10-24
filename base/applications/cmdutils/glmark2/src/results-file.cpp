@@ -29,6 +29,8 @@
 namespace
 {
 
+std::ofstream results_fs;
+
 class NullResultsFile : public ResultsFile
 {
 public:
@@ -65,7 +67,7 @@ std::string escape_csv_text(const std::string &str)
 class CSVResultsFile : public ResultsFile
 {
 public:
-    CSVResultsFile(std::ofstream &&fs) : fs{std::move(fs)} {}
+    CSVResultsFile(std::ofstream &fs) : fs(fs) {}
 
     std::string type() override { return "CSV"; }
 
@@ -100,7 +102,7 @@ public:
     }
 
 private:
-    std::ofstream fs;
+    std::ofstream &fs;
     bool first_field = true;
 };
 
@@ -125,7 +127,7 @@ std::string xml_text_escape(const std::string &str)
 class XMLResultsFile : public ResultsFile
 {
 public:
-    XMLResultsFile(std::ofstream &&fs) : fs{std::move(fs)} {}
+    XMLResultsFile(std::ofstream &fs) : fs(fs) {}
 
     std::string type() override { return "XML"; }
 
@@ -167,7 +169,7 @@ public:
     }
 
 private:
-    std::ofstream fs;
+    std::ofstream &fs;
 };
 
 std::string get_file_extension(const std::string &str)
@@ -176,18 +178,17 @@ std::string get_file_extension(const std::string &str)
     if (i != std::string::npos)
         return str.substr(i);
     else
-        return {};
+        return std::string();
 }
 
 }
 
-std::unique_ptr<ResultsFile> ResultsFile::singleton =
-    std::make_unique<NullResultsFile>();
+ResultsFile *ResultsFile::singleton = new NullResultsFile();
 
 bool ResultsFile::init(const std::string &file)
 {
-    std::ofstream fs{file};
-    std::unique_ptr<ResultsFile> results_file;
+    std::ofstream &fs = results_fs;
+    fs.open(file.c_str());
     std::string ext = get_file_extension(file);
 
     if (file.empty())
@@ -208,11 +209,13 @@ bool ResultsFile::init(const std::string &file)
 
     if (ext == ".csv")
     {
-        ResultsFile::singleton = std::make_unique<CSVResultsFile>(std::move(fs));
+        delete ResultsFile::singleton;
+        ResultsFile::singleton = new CSVResultsFile(fs);
     }
     else if (ext == ".xml")
     {
-        ResultsFile::singleton = std::make_unique<XMLResultsFile>(std::move(fs));
+        delete ResultsFile::singleton;
+        ResultsFile::singleton = new XMLResultsFile(fs);
     }
     else
     {

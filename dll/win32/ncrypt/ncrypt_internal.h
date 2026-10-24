@@ -50,6 +50,9 @@ struct key
 
 struct storage_provider
 {
+#ifdef _MSC_VER
+    char unused;
+#endif
 };
 
 enum object_type

@@ -9,8 +9,6 @@
 
 #include "model.hpp"
 
-#include <functional>
-
 namespace lntget
 {
 
@@ -35,34 +33,39 @@ struct PackageQuery
 class SQLiteIndex
 {
 public:
-    Status Open(std::wstring_view path);
+    Status Open(const std::wstring &path);
     Status Search(const PackageQuery &query, std::vector<PackageRecord> &results) const;
-    Status FindExactId(std::string_view id, PackageRecord &package) const;
+    Status FindExactId(const std::string &id, PackageRecord &package) const;
     Status LoadCatalog(Catalog &catalog) const;
+    void Swap(SQLiteIndex &other);
 
 private:
     struct Value;
-    using RowCallback = std::function<Status(std::int64_t, const std::vector<Value> &)>;
 
     Status FindRoots();
     Status ValidateSchema();
-    std::uint32_t Root(std::string_view table) const;
-    Status ScanTable(std::uint32_t rootPage, const RowCallback &callback) const;
-    Status ScanTablePage(std::uint32_t pageNumber, const RowCallback &callback, std::vector<bool> &visited) const;
-    Status ScanIndex(std::uint32_t rootPage, const RowCallback &callback) const;
-    Status ScanIndexPage(std::uint32_t pageNumber, const RowCallback &callback, std::vector<bool> &visited) const;
-    Status ParseRecord(const std::uint8_t *payload, std::size_t payloadSize, std::vector<Value> &values) const;
-    Status ReadPayload(const std::uint8_t *page, std::size_t cursor, std::uint64_t payloadSize,
-                       std::uint64_t localSize, std::vector<std::uint8_t> &payload) const;
-    Status ForEachPackage(const std::function<Status(std::int64_t, PackageRecord &)> &callback) const;
-    const std::uint8_t *Page(std::uint32_t pageNumber) const;
+    uint32_t Root(const std::string &table) const;
+    template <typename RowCallback>
+    Status ScanTable(uint32_t rootPage, const RowCallback &callback) const;
+    template <typename RowCallback>
+    Status ScanTablePage(uint32_t pageNumber, const RowCallback &callback, std::vector<bool> &visited) const;
+    template <typename RowCallback>
+    Status ScanIndex(uint32_t rootPage, const RowCallback &callback) const;
+    template <typename RowCallback>
+    Status ScanIndexPage(uint32_t pageNumber, const RowCallback &callback, std::vector<bool> &visited) const;
+    Status ParseRecord(const uint8_t *payload, std::size_t payloadSize, std::vector<Value> &values) const;
+    Status ReadPayload(const uint8_t *page, std::size_t cursor, uint64_t payloadSize,
+                       uint64_t localSize, std::vector<uint8_t> &payload) const;
+    template <typename PackageCallback>
+    Status ForEachPackage(const PackageCallback &callback) const;
+    const uint8_t *Page(uint32_t pageNumber) const;
 
-    std::vector<std::uint8_t> data_;
-    std::map<std::string, std::uint32_t> roots_;
+    std::vector<uint8_t> data_;
+    std::map<std::string, uint32_t> roots_;
     std::map<std::string, std::string> schemas_;
-    std::uint32_t pageSize_ = 0;
-    std::uint32_t usableSize_ = 0;
-    std::uint32_t pageCount_ = 0;
+    uint32_t pageSize_ = 0;
+    uint32_t usableSize_ = 0;
+    uint32_t pageCount_ = 0;
 };
 
 Status RunSQLiteIndexSelfTests();

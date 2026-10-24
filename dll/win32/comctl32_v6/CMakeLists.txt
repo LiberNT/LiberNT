@@ -64,7 +64,7 @@ add_library(comctl32_v6 MODULE
     rsrc.rc
     ${CMAKE_CURRENT_BINARY_DIR}/comctl32.def)
 
-set_target_properties(comctl32_v6 PROPERTIES OUTPUT_NAME comctl32)
+set_target_properties(comctl32_v6 PROPERTIES OUTPUT_NAME comctl32 PDB_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 set_module_type(comctl32_v6 win32dll UNICODE)
 target_link_libraries(comctl32_v6 uuid wine ${PSEH_LIB} oldnames)
 add_delay_importlibs(comctl32_v6 oleacc winmm uxtheme ole32)

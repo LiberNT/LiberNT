@@ -260,16 +260,16 @@ KiIdleLoop(VOID)
 #ifndef CONFIG_SMP
     if (Prcb != NULL && Prcb->Number != 0)
     {
-        __asm__ __volatile__("msr daifset, #3" ::: "memory");
-        __asm__ __volatile__("isb" ::: "memory");
+        ARM64_DAIFSET(3);
+        ARM64_ISB();
         for (;;)
         {
-            __asm__ __volatile__("wfi" ::: "memory");
+            ARM64_WFI();
         }
     }
 #endif
 
-    __asm__ __volatile__("msr daifclr, #0x4" ::: "memory");
+    ARM64_DAIFCLR(0x4);
 
     /* NT contract: the idle thread runs at DISPATCH_LEVEL; normalize from the boot (HIGH_LEVEL) or AP entry state */
     if (KeGetCurrentIrql() > DISPATCH_LEVEL) KeLowerIrql(DISPATCH_LEVEL);
@@ -281,7 +281,7 @@ KiIdleLoop(VOID)
         _disable();
 
         Prcb->Sleeping = TRUE;
-        __asm__ __volatile__("dmb ish" ::: "memory");
+        ARM64_DMB(ISH);
 
         if (Prcb->DpcData[0].DpcQueueDepth || Prcb->TimerRequest || Prcb->DeferredReadyListHead.Next ||
             KiIsDpcInterruptRequested(Prcb))
@@ -325,7 +325,7 @@ KiIdleLoop(VOID)
          * immediately instead of leaving a runnable NextThread parked.
          */
         _disable();
-        __asm__ __volatile__("dmb ish" ::: "memory");
+        ARM64_DMB(ISH);
         if (Prcb->NextThread ||
             Prcb->DpcData[0].DpcQueueDepth ||
             Prcb->TimerRequest ||
@@ -360,9 +360,9 @@ KiIdleLoop(VOID)
         {
             ULONG64 IdleStart, IdleEnd;
 
-            __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(IdleStart));
+            IdleStart = ARM64_READ_SYSREG(CNTVCT_EL0);
             Prcb->PowerState.IdleFunction(&Prcb->PowerState);
-            __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(IdleEnd));
+            IdleEnd = ARM64_READ_SYSREG(CNTVCT_EL0);
             _enable();
             KiArm64IdleCounterTicks[Prcb->Number] += IdleEnd - IdleStart;
         }

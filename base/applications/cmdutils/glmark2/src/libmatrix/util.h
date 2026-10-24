@@ -18,7 +18,6 @@
 #include <istream>
 #include <iomanip>
 #include <sstream>
-#include <filesystem>
 #include <stdint.h>
 
 #ifdef ANDROID
@@ -66,7 +65,19 @@ struct Util {
      * Returns a pointer to an input stream, which must be deleted when no
      * longer in use.
      */
-    static std::istream *get_resource(const std::filesystem::path &path);
+    static std::istream *get_resource(const std::string &path);
+    class ResourcePtr
+    {
+    public:
+        explicit ResourcePtr(std::istream *is) : is_(is) {}
+        ~ResourcePtr() { delete is_; }
+        ResourcePtr(const ResourcePtr&) = delete;
+        ResourcePtr& operator=(const ResourcePtr&) = delete;
+        std::istream& operator*() const { return *is_; }
+        std::istream *get() const { return is_; }
+    private:
+        std::istream *is_;
+    };
     /**
      * list_files() - Get a list of the files in a given directory.
      *
@@ -76,8 +87,8 @@ struct Util {
      * Obtains a list of the files in @dirName, and returns them in the string
      * vector @fileVec.
      */
-    static void list_files(const std::filesystem::path& dirName,
-                           std::vector<std::filesystem::path>& fileVec);
+    static void list_files(const std::string& dirName,
+                           std::vector<std::string>& fileVec);
     /**
      * dispose_pointer_vector() - cleans up a vector of pointers
      *

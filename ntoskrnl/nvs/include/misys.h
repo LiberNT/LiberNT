@@ -32,7 +32,7 @@ typedef enum _MI_CACHE_TYPE
     MiCacheWriteCombined
 } MI_CACHE_TYPE;
 
-typedef struct _MI_SYSPTE_CPU_CACHE
+typedef struct MI_CACHE_ALIGNED _MI_SYSPTE_CPU_CACHE
 {
     MI_SPINLOCK Lock;
     ULONG Depth[MI_SYSPTE_CLASSES];
@@ -41,7 +41,7 @@ typedef struct _MI_SYSPTE_CPU_CACHE
     ULONG64 Stack[MI_KSTACK_CACHE_DEPTH];
     ULONG64 Reservations;
     ULONG64 CacheHits;
-} MI_CACHE_ALIGNED MI_SYSPTE_CPU_CACHE, *PMI_SYSPTE_CPU_CACHE;
+} MI_SYSPTE_CPU_CACHE, *PMI_SYSPTE_CPU_CACHE;
 
 typedef struct _MI_SYSTEM_PTES
 {

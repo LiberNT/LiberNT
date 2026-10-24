@@ -1,6 +1,8 @@
 
 if(ARCH STREQUAL "i386")
     list(APPEND ASM_SOURCE
+        i386/except_handler4.s
+        i386/local_unwind4.s
         i386/seh.s
         i386/seh_prolog.s)
 endif()

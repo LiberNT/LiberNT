@@ -362,7 +362,7 @@ struct drag_drop_post_params
     BYTE files[];
 };
 
-C_ASSERT( sizeof(struct drag_drop_post_params) == offsetof(struct drag_drop_post_params, files[0]) );
+C_ASSERT( sizeof(struct drag_drop_post_params) == offsetof(struct drag_drop_post_params, files) );
 
 /* DPI awareness contexts */
 #define MAKE_NTUSER_DPI_CONTEXT( awareness, version, dpi, flags )  ((awareness) | ((version) << 4) | ((dpi) << 8) | (flags))
@@ -1611,7 +1611,7 @@ struct hid_packet
     BYTE data[];
 };
 
-C_ASSERT(sizeof(struct hid_packet) == offsetof(struct hid_packet, data[0]));
+C_ASSERT(sizeof(struct hid_packet) == offsetof(struct hid_packet, data));
 
 struct raw_mouse
 {

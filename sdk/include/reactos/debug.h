@@ -111,7 +111,7 @@ RtlAssert(
     #else
 
 #if defined(_MSC_VER)
-        #define DPRINT   __noop
+        #define DPRINT(fmt, ...) do { if(0) { DbgPrint(fmt, ##__VA_ARGS__); } } while(0)
 #else
         #define DPRINT(...) do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
 #endif

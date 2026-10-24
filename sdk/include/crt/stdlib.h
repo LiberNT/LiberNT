@@ -356,6 +356,12 @@ extern "C" {
     _In_ unsigned __int64 _Int64);
 #endif
 
+#pragma intrinsic(_byteswap_ushort)
+#pragma intrinsic(_byteswap_ulong)
+#if _INTEGRAL_MAX_BITS >= 64
+#pragma intrinsic(_byteswap_uint64)
+#endif
+
 #endif /* !defined(__GNUC__) && !defined(__clang__) */
 
   _Check_return_
