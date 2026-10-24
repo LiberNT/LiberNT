@@ -66,7 +66,11 @@ ExpGetCurrentProcessorNumber(VOID)
 #ifdef _M_ARM64
     ULONG Number;
 
+#if defined(_MSC_VER) && !defined(__clang__)
+    Number = __readx18dword(ARM64_KPCR_PRCB_NUMBER);
+#else
     __asm__ __volatile__("ldr %w0, [x18, #" ARM64_KPCR_STRINGIFY(ARM64_KPCR_PRCB_NUMBER) "]" : "=r"(Number) :: "memory");
+#endif
     return Number;
 #else
     return KeGetCurrentProcessorNumber();

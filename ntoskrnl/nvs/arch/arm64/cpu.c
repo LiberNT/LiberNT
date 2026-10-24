@@ -13,8 +13,8 @@
 #include <nvs/include/mipte.h>
 #include "archdef.h"
 
-#define MiArm64Dsb(scope)  __asm__ __volatile__("dsb " #scope ::: "memory")
-#define MiArm64Isb()       __asm__ __volatile__("isb" ::: "memory")
+#define MiArm64Dsb(scope)  ARM64_DSB(scope)
+#define MiArm64Isb()       ARM64_ISB()
 
 VOID
 NTAPI
@@ -34,8 +34,8 @@ MiArchSyncInstructionCache(
 
     KiArm64GetCacheLineSizes(&DLine, &ILine);
     for (Address = (ULONG_PTR)BaseAddress & ~(ULONG_PTR)(DLine - 1); Address < End; Address += DLine)
-        __asm__ __volatile__("dc cvau, %0" :: "r"(Address) : "memory");
-    __asm__ __volatile__("dsb ish" ::: "memory");
+        ARM64_DC(CVAU, Address);
+    ARM64_DSB(ISH);
     KeSweepICache(NULL, 0);
 }
 
@@ -88,7 +88,11 @@ MI_PTE
 MiArchPteRead(
     _In_ PMI_PTE Slot)
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+    return ReadULong64Acquire((volatile ULONG64 *)Slot);
+#else
     return __atomic_load_n((volatile ULONG64 *)Slot, __ATOMIC_ACQUIRE);
+#endif
 }
 
 VOID
@@ -100,22 +104,38 @@ MiArchPteWrite(
 
     if (!(Value & 1ULL))
     {
+#if defined(_MSC_VER) && !defined(__clang__)
+        WriteULong64Release((volatile ULONG64 *)Slot, Value);
+#else
         __atomic_store_n((volatile ULONG64 *)Slot, Value, __ATOMIC_RELEASE);
+#endif
         return;
     }
 
+#if defined(_MSC_VER) && !defined(__clang__)
+    Old = ReadULong64NoFence((volatile ULONG64 *)Slot);
+#else
     Old = __atomic_load_n((volatile ULONG64 *)Slot, __ATOMIC_RELAXED);
+#endif
     if ((Old & 1ULL) && MiArchPteNeedsBreak(Old, Value))
     {
+#if defined(_MSC_VER) && !defined(__clang__)
+        WriteULong64Release((volatile ULONG64 *)Slot, 0ULL);
+#else
         __atomic_store_n((volatile ULONG64 *)Slot, 0ULL, __ATOMIC_RELEASE);
+#endif
         MiArchInvalidateTlbAll(MiTlbAllProcessors);
     }
 
+#if defined(_MSC_VER) && !defined(__clang__)
+    WriteULong64Release((volatile ULONG64 *)Slot, Value);
+#else
     __atomic_store_n((volatile ULONG64 *)Slot, Value, __ATOMIC_RELEASE);
+#endif
 
     if (!MiArchPteIsUser(Value))
     {
-        MiArm64Dsb(ishst);
+        MiArm64Dsb(ISHST);
         MiArm64Isb();
     }
 }
@@ -126,12 +146,17 @@ MiArchPteCompareExchange(
     _In_ MI_PTE Expected,
     _In_ MI_PTE Value)
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+    BOOLEAN Swapped = (BOOLEAN)(_InterlockedCompareExchange64((volatile LONG64 *)Slot, (LONG64)Value, (LONG64)Expected) ==
+                                (LONG64)Expected);
+#else
     BOOLEAN Swapped = (BOOLEAN)__atomic_compare_exchange_n((volatile ULONG64 *)Slot, &Expected, Value, 0,
                                                            __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+#endif
 
     if (Swapped && (Value & 1ULL) && !MiArchPteIsUser(Value))
     {
-        MiArm64Dsb(ishst);
+        MiArm64Dsb(ISHST);
         MiArm64Isb();
     }
 
@@ -143,7 +168,7 @@ MiArchBootRootFrame(VOID)
 {
     ULONG64 Ttbr1;
 
-    __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Ttbr1));
+    Ttbr1 = ARM64_READ_SYSREG(TTBR1_EL1);
     return (Ttbr1 & 0x0000FFFFFFFFF000ULL) >> PAGE_SHIFT;
 }
 
@@ -153,9 +178,9 @@ MiArchDebugRootFrame(_In_ ULONG64 VirtualAddress)
     ULONG64 Ttbr;
 
     if (VirtualAddress & (1ULL << 63))
-        __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Ttbr));
+        Ttbr = ARM64_READ_SYSREG(TTBR1_EL1);
     else
-        __asm__ __volatile__("mrs %0, ttbr0_el1" : "=r"(Ttbr));
+        Ttbr = ARM64_READ_SYSREG(TTBR0_EL1);
 
     return (Ttbr & 0x0000FFFFFFFFF000ULL) >> PAGE_SHIFT;
 }
@@ -168,9 +193,13 @@ MiArchBootClearUserHalf(
     ULONG Index;
 
     for (Index = 0; Index < 256; Index++)
+#if defined(_MSC_VER) && !defined(__clang__)
+        WriteULong64Release((volatile ULONG64 *)&Root[Index], 0ULL);
+#else
         __atomic_store_n((volatile ULONG64 *)&Root[Index], 0ULL, __ATOMIC_RELEASE);
+#endif
 
-    MiArm64Dsb(ishst);
+    MiArm64Dsb(ISHST);
     MiArchInvalidateTlbAll(MiTlbAllProcessors);
     DbgPrint("TLB shootdown: broadcast TLBI\n");
 }

@@ -43,8 +43,12 @@ KiQueryCurrentProcessorNumber(VOID)
         return 0;
     }
 
+#if defined(_MSC_VER) && !defined(__clang__)
+    Number = __readx18dword(ARM64_KPCR_PRCB_NUMBER);
+#else
     __asm__ __volatile__("ldr %w0, [x18, #" ARM64_KPCR_STRINGIFY(ARM64_KPCR_PRCB_NUMBER) "]"
                          : "=r"(Number) :: "memory");
+#endif
     return Number;
 }
 
@@ -104,7 +108,7 @@ KiShouldDeliverApcOnLower(
         return FALSE;
     }
 
-    __asm__ __volatile__("mrs %0, daif" : "=r"(Daif));
+    Daif = ARM64_READ_SYSREG(DAIF);
     if (Daif & ARM64_PSTATE_IRQ_MASK)
     {
         return FALSE;
@@ -218,7 +222,7 @@ KeGetEffectiveIrql(VOID)
 {
     ULONG64 Daif;
 
-    __asm__ __volatile__("mrs %0, daif" : "=r"(Daif));
+    Daif = ARM64_READ_SYSREG(DAIF);
     if (Daif & ARM64_PSTATE_IRQ_MASK)
     {
         return HIGH_LEVEL;

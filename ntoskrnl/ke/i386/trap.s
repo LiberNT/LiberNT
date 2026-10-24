@@ -140,7 +140,11 @@ _KiInterruptTemplate2ndDispatch:
     mov edx, 0
 PUBLIC _KiInterruptTemplateObject
 _KiInterruptTemplateObject:
+#ifdef _USE_ML
+    mov eax, offset @KiInterruptTemplateHandler@8
+#else
     mov eax, offset "@KiInterruptTemplateHandler@8"
+#endif
     jmp eax
 PUBLIC _KiInterruptTemplateDispatch
 _KiInterruptTemplateDispatch:

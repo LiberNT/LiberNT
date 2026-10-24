@@ -24,6 +24,7 @@
 int _SEH2_Volatile0 = 0;
 int _SEH2_VolatileExceptionCode = 0;
 
+#if defined(__GNUC__)
 /* Out-of-line linkage symbols; the bodies defer to the compiler builtins the
  * inline versions in sdk/include/vcruntime/mingw32/intrin_arm64.h use. */
 unsigned short
@@ -121,6 +122,7 @@ __atomic_compare_exchange_16(
         }
     }
 }
+#endif
 
 extern BOOLEAN KdDebuggerEnabled;
 extern BOOLEAN KdDebuggerNotPresent;
@@ -216,6 +218,7 @@ DebugService2(
     }
 }
 
+#if defined(__GNUC__)
 #ifndef __has_builtin
 #define __has_builtin(x) 0
 #endif
@@ -270,6 +273,7 @@ _enable(VOID)
 {
     __asm__ __volatile__("msr daifclr, #0x2\n\tisb" ::: "memory");
 }
+#endif
 
 KIRQL
 (__cdecl * const __imp_KeGetCurrentIrql)(VOID) = KeGetCurrentIrql;

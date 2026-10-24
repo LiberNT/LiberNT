@@ -82,9 +82,10 @@ PspArm64PrimeUserInstructionPage(
     Status = MmAccessFaultEx(FALSE, UserPage, UserMode, NULL, FALSE);
     if (NT_SUCCESS(Status))
     {
-        __asm__ __volatile__("dsb ishst" ::: "memory");
-        __asm__ __volatile__("tlbi vaale1is, %0" :: "r"(Address >> PAGE_SHIFT) : "memory");
-        __asm__ __volatile__("dsb ish\n\tisb" ::: "memory");
+        ARM64_DSB(ISHST);
+        ARM64_TLBI(VAALE1IS, Address >> PAGE_SHIFT);
+        ARM64_DSB(ISH);
+        ARM64_ISB();
 
         /*
          * The ARM64 user mapping paths already perform cache maintenance via a

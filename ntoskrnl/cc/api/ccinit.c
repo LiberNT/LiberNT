@@ -274,6 +274,7 @@ CcWaitForCurrentLazyWriterActivity(VOID)
     return KeWaitForSingleObject(&CcNtLazyPassEvent, Executive, KernelMode, FALSE, NULL);
 }
 
+CODE_SEG("INIT")
 BOOLEAN
 CcInitializeCacheManager(VOID)
 {
@@ -332,6 +333,7 @@ CcShutdownSystem(VOID)
     CcNtExpireClosedMaps();
 }
 
+CODE_SEG("INIT")
 VOID
 NTAPI
 CcPfInitializePrefetcher(VOID)

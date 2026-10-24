@@ -11,6 +11,7 @@
 #include <ntoskrnl.h>
 #include <ndk/rtlfuncs.h>
 
+#if defined(__GNUC__)
 PVOID Arm64InterlockedCompareExchangePointer(
     _Inout_ PVOID volatile *Destination,
     _In_ PVOID Exchange,
@@ -96,7 +97,6 @@ SHORT Arm64InterlockedIncrement16(
     return __atomic_add_fetch(Destination, 1, __ATOMIC_SEQ_CST);
 }
 
-#if defined(__GNUC__)
 __asm__(".globl _InterlockedCompareExchangePointer\n"
         "_InterlockedCompareExchangePointer = Arm64InterlockedCompareExchangePointer\n"
         ".globl _InterlockedOr\n"

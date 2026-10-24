@@ -51,13 +51,13 @@ KiArm64ReadCpuFeatures(VOID)
     ULONG64 Pfr0, Pfr1, Isar0, Isar1, Mmfr0, Mmfr1, Ctr;
     ULONG AsidField;
 
-    __asm__ __volatile__("mrs %0, id_aa64pfr0_el1" : "=r"(Pfr0));
-    __asm__ __volatile__("mrs %0, id_aa64pfr1_el1" : "=r"(Pfr1));
-    __asm__ __volatile__("mrs %0, id_aa64isar0_el1" : "=r"(Isar0));
-    __asm__ __volatile__("mrs %0, id_aa64isar1_el1" : "=r"(Isar1));
-    __asm__ __volatile__("mrs %0, id_aa64mmfr0_el1" : "=r"(Mmfr0));
-    __asm__ __volatile__("mrs %0, id_aa64mmfr1_el1" : "=r"(Mmfr1));
-    __asm__ __volatile__("mrs %0, ctr_el0" : "=r"(Ctr));
+    Pfr0 = ARM64_READ_SYSREG(ID_AA64PFR0_EL1);
+    Pfr1 = ARM64_READ_SYSREG(ID_AA64PFR1_EL1);
+    Isar0 = ARM64_READ_SYSREG(ID_AA64ISAR0_EL1);
+    Isar1 = ARM64_READ_SYSREG(ID_AA64ISAR1_EL1);
+    Mmfr0 = ARM64_READ_SYSREG(ID_AA64MMFR0_EL1);
+    Mmfr1 = ARM64_READ_SYSREG(ID_AA64MMFR1_EL1);
+    Ctr = ARM64_READ_SYSREG(CTR_EL0);
 
     Features.HafdbsSupported = (ULONG)(Mmfr1 & 0xFULL);
     Features.PanSupported = (((Mmfr1 >> 20) & 0xFULL) != 0);
@@ -165,15 +165,15 @@ KiArm64ApplySctlrPolicy(VOID)
     ULONG64 Sctlr;
     ULONG64 NewSctlr;
 
-    __asm__ __volatile__("mrs %0, sctlr_el1" : "=r"(Sctlr));
+    Sctlr = ARM64_READ_SYSREG(SCTLR_EL1);
     /* Permit the architectural EL0 instructions used by optimized runtimes. */
     NewSctlr = (Sctlr & ~(SCTLR_EL1_A | SCTLR_EL1_BT0 | SCTLR_EL1_BT1)) |
                SCTLR_EL1_SA | SCTLR_EL1_SA0 | SCTLR_EL1_I | SCTLR_EL1_DZE |
                SCTLR_EL1_nTWE | SCTLR_EL1_UCI;
     if (NewSctlr != Sctlr)
     {
-        __asm__ __volatile__("msr sctlr_el1, %0" :: "r"(NewSctlr) : "memory");
-        __asm__ __volatile__("isb" ::: "memory");
+        ARM64_WRITE_SYSREG(SCTLR_EL1, NewSctlr);
+        ARM64_ISB();
     }
 }
 
@@ -185,22 +185,22 @@ KiArm64EnableUserPerformanceCounter(
     ULONG64 CounterControl, Dfr0, Frequency, Midr, PmuUserEnable;
     ULONG Implementer, PartNumber, PmuVersion;
 
-    __asm__ __volatile__("mrs %0, id_aa64dfr0_el1" : "=r"(Dfr0));
+    Dfr0 = ARM64_READ_SYSREG(ID_AA64DFR0_EL1);
     PmuVersion = (ULONG)((Dfr0 >> 8) & 0xF);
     if ((PmuVersion != 0) && (PmuVersion != 0xF))
     {
-        __asm__ __volatile__("mrs %0, pmuserenr_el0" : "=r"(PmuUserEnable));
+        PmuUserEnable = ARM64_READ_SYSREG(PMUSERENR_EL0);
         PmuUserEnable |= KI_ARM64_PMUSERENR_CR;
-        __asm__ __volatile__("msr pmuserenr_el0, %0" :: "r"(PmuUserEnable) : "memory");
-        __asm__ __volatile__("isb" ::: "memory");
+        ARM64_WRITE_SYSREG(PMUSERENR_EL0, PmuUserEnable);
+        ARM64_ISB();
     }
 
-    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(Frequency));
+    Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
     *CounterFrequency = Frequency;
     if ((Frequency == 0) || (Frequency > 10000000000ULL))
         return FALSE;
 
-    __asm__ __volatile__("mrs %0, midr_el1" : "=r"(Midr));
+    Midr = ARM64_READ_SYSREG(MIDR_EL1);
     Implementer = (ULONG)((Midr >> 24) & 0xFF);
     PartNumber = (ULONG)((Midr >> 4) & 0xFFF);
     if ((Implementer == KI_ARM64_IMPLEMENTER_ARM) &&
@@ -210,10 +210,10 @@ KiArm64EnableUserPerformanceCounter(
         return FALSE;
     }
 
-    __asm__ __volatile__("mrs %0, cntkctl_el1" : "=r"(CounterControl));
+    CounterControl = ARM64_READ_SYSREG(CNTKCTL_EL1);
     CounterControl |= KI_ARM64_CNTKCTL_EL0VCTEN;
-    __asm__ __volatile__("msr cntkctl_el1, %0" :: "r"(CounterControl) : "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_WRITE_SYSREG(CNTKCTL_EL1, CounterControl);
+    ARM64_ISB();
     return TRUE;
 }
 
@@ -368,6 +368,7 @@ KiArm64InitializeStubPcr(VOID)
     KeArm64DpcRoutineActive = FALSE;
 }
 
+CODE_SEG("INIT")
 VOID
 NTAPI
 KiInitMachineDependent(VOID)
@@ -431,8 +432,8 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
             ULONG64 Ttbr0;
             ULONG64 Ttbr1;
 
-            __asm__ __volatile__("mrs %0, ttbr0_el1" : "=r"(Ttbr0));
-            __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Ttbr1));
+            Ttbr0 = ARM64_READ_SYSREG(TTBR0_EL1);
+            Ttbr1 = ARM64_READ_SYSREG(TTBR1_EL1);
 
             DirectoryTableBase[0] = (ULONG_PTR)KiArm64TtbrToPa(Ttbr0);
             DirectoryTableBase[1] = (ULONG_PTR)KiArm64TtbrToPa(Ttbr1);
@@ -452,23 +453,23 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
             ULONG64 Ttbr1;
             ULONG64 Ttbr1Root;
 
-            __asm__ __volatile__("mrs %0, tcr_el1" : "=r"(TcrEl1));
+            TcrEl1 = ARM64_READ_SYSREG(TCR_EL1);
             T0sz = TcrEl1 & 0x3FULL;
             T1sz = (TcrEl1 >> 16) & 0x3FULL;
             Ips = (TcrEl1 >> 32) & 0x7ULL;
 
             if ((T0sz != 17) || (T1sz != 17) || (Ips != 5))
             {
-                __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Ttbr1));
+                Ttbr1 = ARM64_READ_SYSREG(TTBR1_EL1);
                 Ttbr1Root = KiArm64TtbrToPa(Ttbr1);
 
                 if ((Ttbr1Root != 0) && (T1sz != 17))
                 {
                     ULONG64 Ttbr1Upper = Ttbr1Root + KE_ARM64_TTBR1_L0_OFFSET;
 
-                    __asm__ __volatile__("dsb ishst" ::: "memory");
-                    __asm__ __volatile__("msr ttbr1_el1, %0" :: "r"(Ttbr1Upper) : "memory");
-                    __asm__ __volatile__("isb" ::: "memory");
+                    ARM64_DSB(ISHST);
+                    ARM64_WRITE_SYSREG(TTBR1_EL1, Ttbr1Upper);
+                    ARM64_ISB();
                 }
 
                 NewTcr = TcrEl1;
@@ -509,12 +510,12 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
                 if (Arm64CpuFeatures.HaEnabled)
                     NewTcr |= (1ULL << 39);
 
-                __asm__ __volatile__("dsb ish" ::: "memory");
-                __asm__ __volatile__("msr tcr_el1, %0" :: "r"(NewTcr) : "memory");
-                __asm__ __volatile__("isb" ::: "memory");
-                __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
-                __asm__ __volatile__("dsb ish" ::: "memory");
-                __asm__ __volatile__("isb" ::: "memory");
+                ARM64_DSB(ISH);
+                ARM64_WRITE_SYSREG(TCR_EL1, NewTcr);
+                ARM64_ISB();
+                ARM64_TLBI_ALL(VMALLE1IS);
+                ARM64_DSB(ISH);
+                ARM64_ISB();
             }
         }
 
@@ -531,13 +532,13 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
         {
             ULONG64 CurrentTcr, FixedTcr;
 
-            __asm__ __volatile__("mrs %0, tcr_el1" : "=r"(CurrentTcr));
+            CurrentTcr = ARM64_READ_SYSREG(TCR_EL1);
             FixedTcr = CurrentTcr | (1ULL << 22);
             if (FixedTcr != CurrentTcr)
             {
-                __asm__ __volatile__("dsb ish" ::: "memory");
-                __asm__ __volatile__("msr tcr_el1, %0" :: "r"(FixedTcr) : "memory");
-                __asm__ __volatile__("isb" ::: "memory");
+                ARM64_DSB(ISH);
+                ARM64_WRITE_SYSREG(TCR_EL1, FixedTcr);
+                ARM64_ISB();
             }
         }
 
@@ -666,8 +667,8 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
     /* quiet */
 
     /* Clear SP_EL0 to a known value so we can detect if it's being used */
-    __asm__ volatile("msr sp_el0, %0" :: "r"((UINT64)0xDEAD0000DEAD0000ULL));
-    __asm__ volatile("isb");
+    ARM64_WRITE_SYSREG(SP_EL0, (UINT64)0xDEAD0000DEAD0000ULL);
+    ARM64_ISB();
 
     ExpInitializeExecutive(Number, LoaderBlock);
 
@@ -744,29 +745,29 @@ KiArm64MeasureCpuClockHz(_In_ ULONG64 CounterFrequency)
     ULONG64 Dfr0, Pmcr, StartTicks, NowTicks, StartCycles, EndCycles;
     ULONG64 WindowTicks, Cycles, Ticks, PmuVer;
 
-    __asm__ __volatile__("mrs %0, id_aa64dfr0_el1" : "=r"(Dfr0));
+    Dfr0 = ARM64_READ_SYSREG(ID_AA64DFR0_EL1);
     PmuVer = (Dfr0 >> 8) & 0xF;
     if (PmuVer == 0 || PmuVer == 0xF)
     {
         return 0;
     }
 
-    __asm__ __volatile__("mrs %0, pmcr_el0" : "=r"(Pmcr));
-    __asm__ __volatile__("msr pmccfiltr_el0, %0" : : "r"(0ULL));
-    __asm__ __volatile__("msr pmcntenset_el0, %0" : : "r"(1ULL << 31));
+    Pmcr = ARM64_READ_SYSREG(PMCR_EL0);
+    ARM64_WRITE_SYSREG(PMCCFILTR_EL0, 0ULL);
+    ARM64_WRITE_SYSREG(PMCNTENSET_EL0, 1ULL << 31);
     Pmcr = (Pmcr | 0x45ULL) & ~0x8ULL;
-    __asm__ __volatile__("msr pmcr_el0, %0" : : "r"(Pmcr));
-    __asm__ __volatile__("isb");
+    ARM64_WRITE_SYSREG(PMCR_EL0, Pmcr);
+    ARM64_ISB();
 
     WindowTicks = (CounterFrequency + 499ULL) / 500ULL;
-    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(StartTicks));
-    __asm__ __volatile__("mrs %0, pmccntr_el0" : "=r"(StartCycles));
+    StartTicks = ARM64_READ_SYSREG(CNTVCT_EL0);
+    StartCycles = ARM64_READ_SYSREG(PMCCNTR_EL0);
     do
     {
-        __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(NowTicks));
+        NowTicks = ARM64_READ_SYSREG(CNTVCT_EL0);
     } while ((NowTicks - StartTicks) < WindowTicks);
-    __asm__ __volatile__("isb");
-    __asm__ __volatile__("mrs %0, pmccntr_el0" : "=r"(EndCycles));
+    ARM64_ISB();
+    EndCycles = ARM64_READ_SYSREG(PMCCNTR_EL0);
 
     Cycles = EndCycles - StartCycles;
     Ticks = NowTicks - StartTicks;
@@ -792,7 +793,7 @@ KiArm64SaveProcessorClock(_In_ ULONG ProcessorNumber)
         return;
     }
 
-    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(CounterFrequency));
+    CounterFrequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
     if (CounterFrequency == 0)
     {
         CounterFrequency = 62500000ULL;
@@ -843,15 +844,15 @@ KiArm64QueryEffectiveClockMHz(_In_ ULONG ProcessorNumber)
         return MaxMhz;
     }
 
-    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(CounterFrequency));
+    CounterFrequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
     if (CounterFrequency == 0)
     {
         return MaxMhz;
     }
 
-    __asm__ __volatile__("isb");
-    __asm__ __volatile__("mrs %0, pmccntr_el0" : "=r"(Cycles));
-    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(Ref));
+    ARM64_ISB();
+    Cycles = ARM64_READ_SYSREG(PMCCNTR_EL0);
+    Ref = ARM64_READ_SYSREG(CNTVCT_EL0);
     Idle = KiArm64IdleCounterTicks[ProcessorNumber];
 
     DeltaCycles = Cycles - KiArm64ClockSample[ProcessorNumber].Cycles;
@@ -937,9 +938,13 @@ KiInitializePcr(_In_ ULONG ProcessorNumber,
          * KeGetPcr(). This path is only valid when we are bringing up the
          * currently running CPU.
          */
-        __asm__ __volatile__("msr tpidr_el1, %0" : : "r"(Pcr) : "memory");
+        ARM64_WRITE_SYSREG(TPIDR_EL1, Pcr);
+#if defined(_MSC_VER) && !defined(__clang__)
+        KiArm64SetPcrRegister(Pcr);
+#else
         __asm__ __volatile__("mov x18, %0" : : "r"(Pcr) : "memory");
-        __asm__ __volatile__("isb" ::: "memory");
+#endif
+        ARM64_ISB();
 
         /*
          * Set global early-boot current CPU state.
@@ -956,7 +961,7 @@ KiInitializePcr(_In_ ULONG ProcessorNumber,
             KeArm64DpcRoutineActive = FALSE;
             KeArm64CurrentThread = IdleThread;
         }
-        __asm__ __volatile__("dmb ish" ::: "memory");
+        ARM64_DMB(ISH);
     }
     else
     {
@@ -1021,9 +1026,10 @@ KiInitializePcr(_In_ ULONG ProcessorNumber,
         ULONG64 CntKctl;
 
         /* Allow EL0 (user mode) to read CNTPCT/CNTVCT and CNTFRQ, as Windows does */
-        __asm__ __volatile__("mrs %0, cntkctl_el1" : "=r"(CntKctl));
+        CntKctl = ARM64_READ_SYSREG(CNTKCTL_EL1);
         CntKctl |= 0x3; /* EL0PCTEN | EL0VCTEN */
-        __asm__ __volatile__("msr cntkctl_el1, %0; isb" :: "r"(CntKctl) : "memory");
+        ARM64_WRITE_SYSREG(CNTKCTL_EL1, CntKctl);
+        ARM64_ISB();
     }
 
     Arm64Block = (KeLoaderBlock != NULL) ? &KeLoaderBlock->u.Arm64 : NULL;
@@ -1102,6 +1108,7 @@ KiInitializePcr(_In_ ULONG ProcessorNumber,
     Pcr->Prcb.CacheCount = (UCHAR)CacheCount;
 }
 
+CODE_SEG("INIT")
 VOID
 KiInitializeMachineType(VOID)
 {
@@ -1110,7 +1117,7 @@ KiInitializeMachineType(VOID)
 
     Arm64Info = (KeLoaderBlock != NULL) ? &KeLoaderBlock->u.Arm64 : NULL;
 
-    __asm__ __volatile__("mrs %0, midr_el1" : "=r"(Midr));
+    Midr = ARM64_READ_SYSREG(MIDR_EL1);
 
     KeNumberTbEntries = 64;
     KeNumberProcessIds = 256;
@@ -1279,7 +1286,7 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
         *(volatile USHORT *)&MmWriteableSharedUserData->QpcData = 0;
         MmWriteableSharedUserData->QpcFrequency = QpcFrequency;
         MmWriteableSharedUserData->QpcBias = 0;
-        __asm__ __volatile__("dmb ishst" ::: "memory");
+        ARM64_DMB(ISHST);
         if (QpcBypassSafe)
             *(volatile USHORT *)&MmWriteableSharedUserData->QpcData = KI_ARM64_QPC_BYPASS_CONFIGURATION;
     }
@@ -1287,7 +1294,7 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
              (QpcFrequency != MmWriteableSharedUserData->QpcFrequency))
     {
         *(volatile USHORT *)&MmWriteableSharedUserData->QpcData = 0;
-        __asm__ __volatile__("dmb ishst" ::: "memory");
+        ARM64_DMB(ISHST);
     }
 
     /*
@@ -1326,7 +1333,7 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
              * syntax when building for -march=armv8-a. Use the encoded sysreg
              * form for PSTATE.PAN instead (op0=3, op1=0, CRn=4, CRm=2, op2=3).
              */
-            __asm__ __volatile__("msr s3_0_c4_c2_3, %0" :: "r"(PanVal) : "memory");
+            ARM64_WRITE_SYSREG(S3_0_C4_C2_3, PanVal);
 
             /*
              * CRITICAL: Set SCTLR_EL1.SPAN (bit 23) to prevent the CPU from
@@ -1336,10 +1343,10 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
              * memory (ProbeForWrite, memmove in APC delivery, etc.) fault with
              * a PAN permission fault that the fault handler cannot resolve.
              */
-            __asm__ __volatile__("mrs %0, sctlr_el1" : "=r"(Sctlr));
+            Sctlr = ARM64_READ_SYSREG(SCTLR_EL1);
             Sctlr |= (1ULL << 23);  /* SPAN = 1 */
-            __asm__ __volatile__("msr sctlr_el1, %0" :: "r"(Sctlr) : "memory");
-            __asm__ __volatile__("isb" ::: "memory");
+            ARM64_WRITE_SYSREG(SCTLR_EL1, Sctlr);
+            ARM64_ISB();
 
         }
 
@@ -1354,7 +1361,7 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
             BOOLEAN EnableHd = FALSE;
             ULONG64 CurrentTcr, NewTcr;
 
-            __asm__ __volatile__("mrs %0, tcr_el1" : "=r"(CurrentTcr));
+            CurrentTcr = ARM64_READ_SYSREG(TCR_EL1);
             NewTcr = CurrentTcr & ~((1ULL << 39) | (1ULL << 40));
             if (EnableHa)
                 NewTcr |= (1ULL << 39);
@@ -1362,19 +1369,19 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
                 NewTcr |= (1ULL << 40);
             if (NewTcr != CurrentTcr)
             {
-                __asm__ __volatile__("dsb ish" ::: "memory");
-                __asm__ __volatile__("msr tcr_el1, %0" :: "r"(NewTcr) : "memory");
-                __asm__ __volatile__("isb" ::: "memory");
-                __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
-                __asm__ __volatile__("dsb ish" ::: "memory");
-                __asm__ __volatile__("isb" ::: "memory");
+                ARM64_DSB(ISH);
+                ARM64_WRITE_SYSREG(TCR_EL1, NewTcr);
+                ARM64_ISB();
+                ARM64_TLBI_ALL(VMALLE1IS);
+                ARM64_DSB(ISH);
+                ARM64_ISB();
             }
             Arm64CpuFeatures.HaEnabled = EnableHa;
             Arm64CpuFeatures.HdEnabled = EnableHd;
         }
 
         /* Read current CPACR_EL1 */
-        __asm__ __volatile__("mrs %0, cpacr_el1" : "=r"(Cpacr));
+        Cpacr = ARM64_READ_SYSREG(CPACR_EL1);
 
         /* Windows ARM64 keeps base FP/ASIMD enabled and switches it eagerly. */
         Cpacr |= (3ULL << 20); /* FPEN = 11 (no trap on FP) */
@@ -1395,8 +1402,8 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
         }
 
         /* Apply configuration */
-        __asm__ __volatile__("msr cpacr_el1, %0" : : "r"(Cpacr));
-        __asm__ __volatile__("isb" ::: "memory");
+        ARM64_WRITE_SYSREG(CPACR_EL1, Cpacr);
+        ARM64_ISB();
     }
     else
     {
@@ -1429,20 +1436,20 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
             ULONG64 PanVal = 0;
             ULONG64 Sctlr;
 
-            __asm__ __volatile__("msr s3_0_c4_c2_3, %0" :: "r"(PanVal) : "memory");
+            ARM64_WRITE_SYSREG(S3_0_C4_C2_3, PanVal);
 
             /* SCTLR_EL1.SPAN = 1 to prevent PAN auto-enable on exception entry */
-            __asm__ __volatile__("mrs %0, sctlr_el1" : "=r"(Sctlr));
+            Sctlr = ARM64_READ_SYSREG(SCTLR_EL1);
             Sctlr |= (1ULL << 23);
-            __asm__ __volatile__("msr sctlr_el1, %0" :: "r"(Sctlr) : "memory");
-            __asm__ __volatile__("isb" ::: "memory");
+            ARM64_WRITE_SYSREG(SCTLR_EL1, Sctlr);
+            ARM64_ISB();
         }
 
         /* Apply the same HA/HD TCR_EL1 bits configured by the BSP. */
         {
             ULONG64 CurrentTcr, NewTcr;
 
-            __asm__ __volatile__("mrs %0, tcr_el1" : "=r"(CurrentTcr));
+            CurrentTcr = ARM64_READ_SYSREG(TCR_EL1);
             NewTcr = CurrentTcr & ~((1ULL << 39) | (1ULL << 40));
             NewTcr |= (1ULL << 22); /* A1: TTBR1 ASID selector */
             NewTcr &= ~(1ULL << 36);
@@ -1452,12 +1459,12 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
                 NewTcr |= (1ULL << 40);
             if (NewTcr != CurrentTcr)
             {
-                __asm__ __volatile__("dsb ish" ::: "memory");
-                __asm__ __volatile__("msr tcr_el1, %0" :: "r"(NewTcr) : "memory");
-                __asm__ __volatile__("isb" ::: "memory");
-                __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
-                __asm__ __volatile__("dsb ish" ::: "memory");
-                __asm__ __volatile__("isb" ::: "memory");
+                ARM64_DSB(ISH);
+                ARM64_WRITE_SYSREG(TCR_EL1, NewTcr);
+                ARM64_ISB();
+                ARM64_TLBI_ALL(VMALLE1IS);
+                ARM64_DSB(ISH);
+                ARM64_ISB();
             }
         }
 
@@ -1467,7 +1474,7 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
          * the first FP/SIMD instruction, which triggers recursive trap reentry
          * because the trap handler itself may use compiler-generated SIMD code.
          */
-        __asm__ __volatile__("mrs %0, cpacr_el1" : "=r"(Cpacr));
+        Cpacr = ARM64_READ_SYSREG(CPACR_EL1);
         Cpacr |= (3ULL << 20); /* FPEN = 11 (no trap on FP) */
 
         if (Arm64CpuFeatures.SveSupported)
@@ -1480,8 +1487,8 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
             Cpacr &= ~(3ULL << 24); /* SMEN = 00 (trap SME) */
         }
 
-        __asm__ __volatile__("msr cpacr_el1, %0" : : "r"(Cpacr));
-        __asm__ __volatile__("isb" ::: "memory");
+        ARM64_WRITE_SYSREG(CPACR_EL1, Cpacr);
+        ARM64_ISB();
 
         DPRINT("CPU %lu: Per-CPU registers configured (CPACR, PAN, HA)\n",
                 ProcessorNumber);
@@ -1535,7 +1542,7 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 
         KdInitSystem(0, KeLoaderBlock);
 
-        __asm__ __volatile__("msr daifclr, #0x4");
+        ARM64_DAIFCLR(0x4);
 
         /* KD is present right after banner; continue */
         if (KdPollBreakIn())

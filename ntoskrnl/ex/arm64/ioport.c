@@ -27,7 +27,7 @@ READ_REGISTER_UCHAR(
     _In_ volatile UCHAR *Register)
 {
     UCHAR Value = *(volatile UCHAR const *)Register;
-    __asm__ __volatile__("dsb ld" ::: "memory");
+    ARM64_DSB(LD);
     return Value;
 }
 
@@ -37,7 +37,7 @@ READ_REGISTER_USHORT(
     _In_ volatile USHORT *Register)
 {
     USHORT Value = *(volatile USHORT const *)Register;
-    __asm__ __volatile__("dsb ld" ::: "memory");
+    ARM64_DSB(LD);
     return Value;
 }
 
@@ -47,7 +47,7 @@ READ_REGISTER_ULONG(
     _In_ volatile ULONG *Register)
 {
     ULONG Value = *(volatile ULONG const *)Register;
-    __asm__ __volatile__("dsb ld" ::: "memory");
+    ARM64_DSB(LD);
     return Value;
 }
 
@@ -58,7 +58,7 @@ WRITE_REGISTER_UCHAR(
     _In_ UCHAR Value)
 {
     *(volatile UCHAR *)Register = Value;
-    __asm__ __volatile__("dsb st" ::: "memory");
+    ARM64_DSB(ST);
 }
 
 VOID
@@ -68,7 +68,7 @@ WRITE_REGISTER_USHORT(
     _In_ USHORT Value)
 {
     *(volatile USHORT *)Register = Value;
-    __asm__ __volatile__("dsb st" ::: "memory");
+    ARM64_DSB(ST);
 }
 
 VOID
@@ -78,7 +78,7 @@ WRITE_REGISTER_ULONG(
     _In_ ULONG Value)
 {
     *(volatile ULONG *)Register = Value;
-    __asm__ __volatile__("dsb st" ::: "memory");
+    ARM64_DSB(ST);
 }
 
 VOID
@@ -91,7 +91,7 @@ READ_REGISTER_BUFFER_UCHAR(
     volatile const UCHAR *Src = (volatile const UCHAR *)Register;
     while (Count--)
         *Buffer++ = *Src;
-    __asm__ __volatile__("dsb ld" ::: "memory");
+    ARM64_DSB(LD);
 }
 
 VOID
@@ -104,7 +104,7 @@ READ_REGISTER_BUFFER_USHORT(
     volatile const USHORT *Src = (volatile const USHORT *)Register;
     while (Count--)
         *Buffer++ = *Src;
-    __asm__ __volatile__("dsb ld" ::: "memory");
+    ARM64_DSB(LD);
 }
 
 VOID
@@ -117,7 +117,7 @@ READ_REGISTER_BUFFER_ULONG(
     volatile const ULONG *Src = (volatile const ULONG *)Register;
     while (Count--)
         *Buffer++ = *Src;
-    __asm__ __volatile__("dsb ld" ::: "memory");
+    ARM64_DSB(LD);
 }
 
 VOID
@@ -130,7 +130,7 @@ WRITE_REGISTER_BUFFER_UCHAR(
     volatile UCHAR *Dst = (volatile UCHAR *)Register;
     while (Count--)
         *Dst = *Buffer++;
-    __asm__ __volatile__("dsb st" ::: "memory");
+    ARM64_DSB(ST);
 }
 
 VOID
@@ -143,7 +143,7 @@ WRITE_REGISTER_BUFFER_USHORT(
     volatile USHORT *Dst = (volatile USHORT *)Register;
     while (Count--)
         *Dst = *Buffer++;
-    __asm__ __volatile__("dsb st" ::: "memory");
+    ARM64_DSB(ST);
 }
 
 VOID
@@ -156,5 +156,5 @@ WRITE_REGISTER_BUFFER_ULONG(
     volatile ULONG *Dst = (volatile ULONG *)Register;
     while (Count--)
         *Dst = *Buffer++;
-    __asm__ __volatile__("dsb st" ::: "memory");
+    ARM64_DSB(ST);
 }

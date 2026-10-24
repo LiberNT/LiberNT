@@ -44,14 +44,15 @@ ExArchPostHalInitSystemPhase1(
     CurrentIrql = KeGetCurrentIrql();
     KiHalInitialized = TRUE;
     HalSetGicPriorityMask(CurrentIrql);
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 
     if (CurrentIrql < HIGH_LEVEL)
     {
-        __asm__ __volatile__("msr daifclr, #0xb\n\tisb" ::: "memory");
+        ARM64_DAIFCLR(0xb);
+        ARM64_ISB();
     }
     else
     {
-        __asm__ __volatile__("isb" ::: "memory");
+        ARM64_ISB();
     }
 }
