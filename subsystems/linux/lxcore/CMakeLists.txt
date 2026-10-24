@@ -7,6 +7,7 @@ list(APPEND SOURCE
     fs.c
     futex.c
     ipc.c
+    lxwin.c
     inet.c
     netlink.c
     mm.c

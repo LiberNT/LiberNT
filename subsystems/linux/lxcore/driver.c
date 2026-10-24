@@ -684,6 +684,7 @@ LxDispatchCreate(
 {
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     UNICODE_STRING PtyName = RTL_CONSTANT_STRING(LX_PTY_FILE_NAME);
+    UNICODE_STRING WindowName = RTL_CONSTANT_STRING(LX_WIN_FILE_NAME);
     PFILE_OBJECT FileObject = Stack->FileObject;
     PLX_NT_PTY Pty;
 
@@ -691,6 +692,8 @@ LxDispatchCreate(
 
     if (FileObject->FileName.Length == 0)
         return LxCompleteIrp(Irp, STATUS_SUCCESS, 0);
+    if (RtlEqualUnicodeString(&FileObject->FileName, &WindowName, TRUE))
+        return LxCompleteIrp(Irp, LxWinHostCreate(FileObject), FILE_OPENED);
     if (!RtlEqualUnicodeString(&FileObject->FileName, &PtyName, TRUE))
         return LxCompleteIrp(Irp, STATUS_OBJECT_NAME_NOT_FOUND, 0);
 
@@ -713,6 +716,7 @@ LxDispatchCleanup(
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
+    LxWinHostCleanup(IoGetCurrentIrpStackLocation(Irp)->FileObject);
     if (Pty != NULL)
     {
         InterlockedExchange(&Pty->Closed, TRUE);
@@ -735,6 +739,7 @@ LxDispatchClose(
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
+    LxWinHostClose(FileObject);
     if (Pty != NULL)
     {
         FileObject->FsContext = NULL;
@@ -812,6 +817,9 @@ LxDispatchDeviceControl(
     NTSTATUS Status;
 
     UNREFERENCED_PARAMETER(DeviceObject);
+
+    if (LxWinHostIoctl(Stack->FileObject, Irp, Stack, &Status))
+        return Status;
 
     Irp->IoStatus.Information = 0;
     switch (Stack->Parameters.DeviceIoControl.IoControlCode)

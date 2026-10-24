@@ -20,6 +20,7 @@ LxProcessInitialize(VOID)
     ExInitializeFastMutex(&LxProcessListLock);
     LxFutexInitialize();
     LxIpcInitialize();
+    LxWinInitialize();
 }
 
 PVOID

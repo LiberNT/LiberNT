@@ -1235,6 +1235,10 @@ LxDeviceOpen(
             File->Path = LxStrDup(Path);
         return File;
     }
+    else if ((Major == LX_WIN_DEVICE_MAJOR) && (Minor == LX_WIN_DEVICE_MINOR))
+    {
+        return LxWinOpen(Process, Flags, Path);
+    }
     else if ((Major == 5) && (Minor == 0))
     {
         Tty = Process->Tty;
