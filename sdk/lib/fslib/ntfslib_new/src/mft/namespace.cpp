@@ -1854,6 +1854,34 @@ MasterFileTable::RenameFile(
                 &NewValue);
         }
     }
+    if (Status == STATUS_BUFFER_TOO_SMALL &&
+        !Child->FindAttributeInRecord(TypeAttributeList, NULL, NULL))
+    {
+        Status = Child->CreateInitialAttributeList();
+        if (NT_SUCCESS(Status))
+        {
+            Status = FindFileNamePair(
+                Child,
+                OldParentReference,
+                &OldNameString,
+                &NameAttribute,
+                &NameValue,
+                &AliasAttribute,
+                &AliasValue);
+        }
+        if (NT_SUCCESS(Status))
+        {
+            Status = InsertFileNameLink(
+                Child,
+                NameValue,
+                NewParentReference,
+                NewName,
+                NewNameLength,
+                ShortNameLength ? NAME_TYPE_WIN32 : (OwnShortName ? NAME_TYPE_WIN32_AND_DOS : NAME_TYPE_POSIX),
+                &NewAttribute,
+                &NewValue);
+        }
+    }
     if (!NT_SUCCESS(Status))
         goto Done;
     Status = WriteFileRecordToMFT(Child);
@@ -1933,6 +1961,34 @@ MasterFileTable::RenameFile(
             Directory ChildIndex(DiskVolume);
 
             Status = ChildIndex.PushDownResidentRoot(Child);
+            if (NT_SUCCESS(Status))
+            {
+                Status = FindFileNamePair(
+                    Child,
+                    NewParentReference,
+                    &NewNameString,
+                    &NameAttribute,
+                    &NameValue,
+                    &AliasAttribute,
+                    &AliasValue);
+            }
+            if (NT_SUCCESS(Status))
+            {
+                Status = InsertFileNameLink(
+                    Child,
+                    NameValue,
+                    NewParentReference,
+                    ShortName,
+                    ShortNameLength,
+                    NAME_TYPE_DOS,
+                    &NewAttribute,
+                    &NewValue);
+            }
+        }
+        if (Status == STATUS_BUFFER_TOO_SMALL &&
+            !Child->FindAttributeInRecord(TypeAttributeList, NULL, NULL))
+        {
+            Status = Child->CreateInitialAttributeList();
             if (NT_SUCCESS(Status))
             {
                 Status = FindFileNamePair(
