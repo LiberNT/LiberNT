@@ -1777,6 +1777,8 @@ typedef struct _LX_CLONE_REQUEST
     ULONG64 ChildTid;
     ULONG64 Pidfd;
     LONG CgroupFd;
+    ULONG SetTidCount;
+    ULONG SetTid[LX_PIDNS_MAX_LEVEL];
 } LX_CLONE_REQUEST, *PLX_CLONE_REQUEST;
 
 static
@@ -1791,6 +1793,7 @@ LxCreateThread(
     HANDLE Handle;
     NTSTATUS Status;
     ULONG Tid;
+    LONG Error;
 
     if ((Request->Flags & (LX_CLONE_VM | LX_CLONE_SIGHAND)) != (LX_CLONE_VM | LX_CLONE_SIGHAND))
         return -LX_EINVAL;
@@ -1799,10 +1802,11 @@ LxCreateThread(
     if (Thread == NULL)
         return -LX_ENOMEM;
 
-    if (LxTidAssign(Call->Process, Thread) != 0)
+    Error = LxTidAssign(Call->Process, Thread, Request->SetTid, Request->SetTidCount);
+    if (Error != 0)
     {
         LxThreadFree(Thread);
-        return -LX_EAGAIN;
+        return Error;
     }
     LxNsThreadInherit(Thread, Call->Thread);
     Tid = LxTidNr(Call->Process, Thread);
@@ -1909,7 +1913,7 @@ LxForkProcess(
         LxProcessDereference(ListParent);
         return -LX_ENOMEM;
     }
-    Error = LxPidAssign(Child, Thread);
+    Error = LxPidAssign(Child, Thread, Request->SetTid, Request->SetTidCount);
     if (Error != 0)
     {
         LxThreadFree(Thread);
@@ -2049,8 +2053,11 @@ LX_SYSCALL(LxSysClone3)
     Result = LxCopyFromUser(&Args, Call->Args[0], min(Size, sizeof(Args)));
     if (Result != 0)
         return Result;
-    if ((Args.SetTid != 0) || (Args.SetTidSize != 0) || (Args.ExitSignal > LX_NSIG))
+    if ((Args.SetTidSize > LX_PIDNS_MAX_LEVEL) || ((Args.SetTid == 0) != (Args.SetTidSize == 0)) ||
+        (Args.ExitSignal > LX_NSIG))
+    {
         return -LX_EINVAL;
+    }
     if ((Args.Flags & LX_CLONE_INTO_CGROUP) && (Size < 88))
         return -LX_EINVAL;
     if ((Args.Flags & LX_CLONE_PIDFD) && (Args.Flags & LX_CLONE_THREAD))
@@ -2065,6 +2072,13 @@ LX_SYSCALL(LxSysClone3)
     Request.Tls = Args.Tls;
     Request.Pidfd = Args.Pidfd;
     Request.CgroupFd = (LONG)Args.Cgroup;
+    if (Args.SetTidSize != 0)
+    {
+        Result = LxCopyFromUser(Request.SetTid, Args.SetTid, (SIZE_T)Args.SetTidSize * sizeof(ULONG));
+        if (Result != 0)
+            return Result;
+        Request.SetTidCount = (ULONG)Args.SetTidSize;
+    }
 
     if (Request.Flags & LX_CLONE_CLEAR_SIGHAND)
     {
@@ -2564,8 +2578,6 @@ LX_SYSCALL(LxSysWaitid)
 #define LX_PR_SET_MM_EXE_FILE       13
 #define LX_PR_SET_MM_MAP            14
 #define LX_PR_SET_MM_MAP_SIZE       15
-#define LX_CAP_SYS_RESOURCE         24
-#define LX_CAP_CHECKPOINT_RESTORE   40
 
 typedef struct _LX_PRCTL_MM_MAP
 {

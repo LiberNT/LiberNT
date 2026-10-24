@@ -1819,6 +1819,55 @@ LxMmMapsPath(
     return Found;
 }
 
+PLX_FILE
+LxMmFileAt(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 Start,
+    _In_ ULONG64 End)
+{
+    PLIST_ENTRY Entry;
+    PLX_FILE File = NULL;
+
+    LxMmLock(Process);
+    for (Entry = Process->Vmas.Flink; Entry != &Process->Vmas; Entry = Entry->Flink)
+    {
+        PLX_VMA Vma = CONTAINING_RECORD(Entry, LX_VMA, Link);
+
+        if ((Vma->Start == Start) && (Vma->End == End) && (Vma->File != NULL))
+        {
+            File = Vma->File;
+            LxFileReference(File);
+            break;
+        }
+    }
+    LxMmUnlock(Process);
+    return File;
+}
+
+ULONG
+LxMmFileRanges(
+    _In_ PLX_PROCESS Process,
+    _Out_writes_(Max * 2) PULONG64 Ranges,
+    _In_ ULONG Max)
+{
+    PLIST_ENTRY Entry;
+    ULONG Count = 0;
+
+    LxMmLock(Process);
+    for (Entry = Process->Vmas.Flink; (Entry != &Process->Vmas) && (Count < Max); Entry = Entry->Flink)
+    {
+        PLX_VMA Vma = CONTAINING_RECORD(Entry, LX_VMA, Link);
+
+        if (Vma->File == NULL)
+            continue;
+        Ranges[Count * 2] = Vma->Start;
+        Ranges[Count * 2 + 1] = Vma->End;
+        Count++;
+    }
+    LxMmUnlock(Process);
+    return Count;
+}
+
 VOID
 LxMmSetBrk(
     _In_ PLX_PROCESS Process,

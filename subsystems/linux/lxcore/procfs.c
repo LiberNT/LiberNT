@@ -40,6 +40,8 @@ typedef enum _LX_SYNTH_ID
     LxProcFdLink,
     LxProcFdinfoDir,
     LxProcFdinfoFile,
+    LxProcMapFilesDir,
+    LxProcMapFileLink,
     LxSysDir,
     LxSysFile,
     LxCgDir,
@@ -68,6 +70,8 @@ typedef struct _LX_SYNTH
     CHAR Prefix[128];
     PSTR LinkTarget;
     BOOLEAN Magic;
+    ULONG64 MapStart;
+    ULONG64 MapEnd;
 } LX_SYNTH, *PLX_SYNTH;
 
 static const PCSTR LxProcNsEntries[] =
@@ -1168,6 +1172,33 @@ LxGenPidEnviron(
 
 static
 VOID
+LxGenTaskChildren(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+    PLIST_ENTRY Entry;
+
+    if (Process == NULL)
+        return;
+    if (Synth->Tid == Process->Pid)
+    {
+        ExAcquireFastMutex(&Process->Lock);
+        for (Entry = Process->Children.Flink; Entry != &Process->Children; Entry = Entry->Flink)
+        {
+            ULONG Nr = LxGlobalToNrIn(LxProcPidNs(Self, Synth), CONTAINING_RECORD(Entry, LX_CHILD, Link)->Pid);
+
+            if (Nr != 0)
+                LxTextPrintf(Text, "%lu ", Nr);
+        }
+        ExReleaseFastMutex(&Process->Lock);
+    }
+    LxProcessDereference(Process);
+}
+
+static
+VOID
 LxGenPidStatm(
     _In_ PLX_PROCESS Self,
     _In_ PLX_SYNTH Synth,
@@ -1539,6 +1570,7 @@ static const LX_PID_ENTRY LxPidEntries[] =
     { "attr", LX_S_IFDIR, 0555, NULL, NULL, NULL },
     { "auxv", LX_S_IFREG, 0400, NULL, LxGenPidAuxv, NULL },
     { "cgroup", LX_S_IFREG, 0444, NULL, LxGenPidCgroup, NULL },
+    { "children", LX_S_IFREG, 0444, NULL, LxGenTaskChildren, NULL },
     { "cmdline", LX_S_IFREG, 0444, NULL, LxGenPidCmdline, NULL },
     { "comm", LX_S_IFREG, 0644, NULL, LxGenPidComm, LxWritePidComm },
     { "coredump_filter", LX_S_IFREG, 0644, "00000033\n", NULL, LxWriteAccept },
@@ -1551,6 +1583,7 @@ static const LX_PID_ENTRY LxPidEntries[] =
     { "io", LX_S_IFREG, 0400, "rchar: 0\nwchar: 0\nsyscr: 0\nsyscw: 0\nread_bytes: 0\nwrite_bytes: 0\ncancelled_write_bytes: 0\n", NULL, NULL },
     { "limits", LX_S_IFREG, 0444, NULL, LxGenPidLimits, NULL },
     { "loginuid", LX_S_IFREG, 0644, "4294967295", NULL, LxWriteAccept },
+    { "map_files", LX_S_IFDIR, 0500, NULL, NULL, NULL },
     { "maps", LX_S_IFREG, 0444, NULL, LxGenPidMaps, NULL },
     { "mountinfo", LX_S_IFREG, 0444, NULL, LxGenPidMountinfo, NULL },
     { "mounts", LX_S_IFREG, 0444, NULL, LxGenPidMounts, NULL },
@@ -1696,6 +1729,47 @@ LxWriteName(
 }
 
 static
+VOID
+LxGenNsLastPid(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    UNREFERENCED_PARAMETER(Synth);
+    LxTextPrintf(Text, "%lu\n", LxPidNsLastPid(Self));
+}
+
+static
+LONG
+LxWriteNsLastPid(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_THREAD Current = LxCurrentThread();
+    CHAR Number[16];
+    ULONG Count = 0, Value = 0;
+
+    UNREFERENCED_PARAMETER(File);
+    if (Current == NULL)
+        return -LX_ESRCH;
+    while ((Count < Length) && ((Data[Count] == ' ') || (Data[Count] == '\t')))
+        Count++;
+    Data += Count;
+    Length -= Count;
+    for (Count = 0; (Count < Length) && (Data[Count] >= '0') && (Data[Count] <= '9'); Count++)
+    {
+        if (Count >= sizeof(Number) - 1)
+            return -LX_EINVAL;
+        Number[Count] = Data[Count];
+    }
+    Number[Count] = '\0';
+    if ((Count == 0) || ((Count < Length) && (Data[Count] != '\n')) || !LxParseNumber(Number, &Value))
+        return -LX_EINVAL;
+    return LxPidNsSetLastPid(Current->Process, Value);
+}
+
+static
 LONG
 LxWriteHostname(
     _In_ PLX_FILE File,
@@ -1790,6 +1864,7 @@ static const LX_TABLE_ENTRY LxProcSysTable[] =
     { "kernel/hostname", 0644, NULL, LxGenHostname, LxWriteHostname },
     { "kernel/kptr_restrict", 0644, "1\n", NULL, LxWriteAccept },
     { "kernel/ngroups_max", 0444, "65536\n", NULL, NULL },
+    { "kernel/ns_last_pid", 0666, NULL, LxGenNsLastPid, LxWriteNsLastPid },
     { "kernel/osrelease", 0444, NULL, LxGenRelease, NULL },
     { "kernel/ostype", 0444, "Linux\n", NULL, NULL },
     { "kernel/overflowgid", 0644, "65534\n", NULL, LxWriteAccept },
@@ -2099,6 +2174,54 @@ LxDescribeFile(
 }
 
 static
+BOOLEAN
+LxParseHex(
+    _Inout_ PCSTR *Cursor,
+    _Out_ PULONG64 Value)
+{
+    PCSTR Text = *Cursor;
+    ULONG Digits = 0;
+
+    *Value = 0;
+    if ((Text[0] == '0') && (Text[1] != '\0') && (Text[1] != '-'))
+        return FALSE;
+    for (;; Text++, Digits++)
+    {
+        CHAR Character = *Text;
+        ULONG Digit;
+
+        if ((Character >= '0') && (Character <= '9'))
+            Digit = Character - '0';
+        else if ((Character >= 'a') && (Character <= 'f'))
+            Digit = Character - 'a' + 10;
+        else if ((Character >= 'A') && (Character <= 'F'))
+            Digit = Character - 'A' + 10;
+        else
+            break;
+        if ((Digits >= 16) || (*Value > (MAXULONG64 >> 4)))
+            return FALSE;
+        *Value = (*Value << 4) | Digit;
+    }
+    *Cursor = Text;
+    return Digits != 0;
+}
+
+static
+BOOLEAN
+LxParseMapRange(
+    _In_ PCSTR Name,
+    _Out_ PULONG64 Start,
+    _Out_ PULONG64 End)
+{
+    PCSTR Cursor = Name;
+
+    if (!LxParseHex(&Cursor, Start) || (*Cursor != '-'))
+        return FALSE;
+    Cursor++;
+    return LxParseHex(&Cursor, End) && (*Cursor == '\0');
+}
+
+static
 LONG
 LxResolveFdLink(
     _In_ PLX_PROCESS Self,
@@ -2149,6 +2272,8 @@ LxResolvePidEntry(
     if (Index == RTL_NUMBER_OF(LxPidEntries))
         return -LX_ENOENT;
     if ((Synth->Tid != 0) && (strcmp(Components[0], "task") == 0))
+        return -LX_ENOENT;
+    if ((Synth->Tid == 0) && (strcmp(Components[0], "children") == 0))
         return -LX_ENOENT;
 
     Synth->Index = Index;
@@ -2234,6 +2359,38 @@ LxResolvePidEntry(
         Synth->Type = LX_S_IFLNK;
         Synth->Mode = 0700;
         return LxResolveFdLink(Self, Synth);
+    }
+
+    if (strcmp(Components[0], "map_files") == 0)
+    {
+        PLX_PROCESS Process;
+        PLX_FILE File;
+        ULONG Access;
+
+        if (Count == 1)
+        {
+            Synth->Id = LxProcMapFilesDir;
+            return 0;
+        }
+        if ((Count != 2) || !LxParseMapRange(Components[1], &Synth->MapStart, &Synth->MapEnd))
+            return -LX_ENOENT;
+        Process = LxProcessLookup(Self->Instance, Synth->Pid);
+        File = (Process != NULL) ? LxMmFileAt(Process, Synth->MapStart, Synth->MapEnd) : NULL;
+        if (Process != NULL)
+            LxProcessDereference(Process);
+        if (File == NULL)
+            return -LX_ENOENT;
+        Access = File->Flags & LX_O_ACCMODE;
+        Synth->Id = LxProcMapFileLink;
+        Synth->Type = LX_S_IFLNK;
+        Synth->Mode = ((Access != LX_O_WRONLY) ? 0400 : 0) | ((Access != LX_O_RDONLY) ? 0200 : 0);
+        if ((File->Path != NULL) && (File->Path[0] == '/') && (File->Mount != NULL))
+            Synth->LinkTarget = LxPathVisible(Self, File->Path);
+        else
+            Synth->LinkTarget = LxDescribeFile(File);
+        Synth->Magic = TRUE;
+        LxFileDereference(File);
+        return (Synth->LinkTarget != NULL) ? 0 : -LX_ENOMEM;
     }
 
     if (Count != 1)
@@ -2894,6 +3051,8 @@ LxListProc(
 
                 if ((Synth->Tid != 0) && (strcmp(LxPidEntries[Index].Name, "task") == 0))
                     continue;
+                if ((Synth->Tid == 0) && (strcmp(LxPidEntries[Index].Name, "children") == 0))
+                    continue;
                 LxDirAdd(List, Type, LxPidEntries[Index].Name);
             }
             break;
@@ -2933,6 +3092,30 @@ LxListProc(
             for (Index = 0; Index < RTL_NUMBER_OF(LxProcNsEntries); Index++)
                 LxDirAdd(List, LX_DT_LNK, LxProcNsEntries[Index]);
             break;
+
+        case LxProcMapFilesDir:
+        {
+            PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+            PULONG64 Ranges = LxAllocPaged(2 * 4096 * sizeof(ULONG64));
+            ULONG Count = 0;
+
+            LxDirAdd(List, LX_DT_DIR, ".");
+            LxDirAdd(List, LX_DT_DIR, "..");
+            if ((Process != NULL) && (Ranges != NULL))
+                Count = LxMmFileRanges(Process, Ranges, 4096);
+            for (Index = 0; Index < Count; Index++)
+            {
+                CHAR Name[40];
+
+                RtlStringCbPrintfA(Name, sizeof(Name), "%llx-%llx", Ranges[Index * 2], Ranges[Index * 2 + 1]);
+                LxDirAdd(List, LX_DT_LNK, Name);
+            }
+            if (Ranges != NULL)
+                LxFreePaged(Ranges);
+            if (Process != NULL)
+                LxProcessDereference(Process);
+            break;
+        }
 
         case LxProcFdDir:
         case LxProcFdinfoDir:
@@ -3343,11 +3526,23 @@ LxSynthOpen(
     }
     else if (Synth.Type == LX_S_IFLNK)
     {
-        if ((Synth.Id == LxProcFdLink) && !(Flags & LX_O_NOFOLLOW))
+        if (((Synth.Id == LxProcFdLink) || (Synth.Id == LxProcMapFileLink)) && !(Flags & LX_O_NOFOLLOW))
         {
             PLX_PROCESS Target = LxProcessLookup(Process->Instance, Synth.Pid);
+            ULONG64 Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
 
-            File = (Target != NULL) ? LxFdGet(Target, Synth.Fd) : NULL;
+            if ((Synth.Id == LxProcMapFileLink) &&
+                !(Effective & ((1ULL << LX_CAP_CHECKPOINT_RESTORE) | (1ULL << LX_CAP_SYS_ADMIN))))
+            {
+                if (Target != NULL)
+                    LxProcessDereference(Target);
+                Error = -LX_EPERM;
+                goto Exit;
+            }
+            if (Synth.Id == LxProcMapFileLink)
+                File = (Target != NULL) ? LxMmFileAt(Target, Synth.MapStart, Synth.MapEnd) : NULL;
+            else
+                File = (Target != NULL) ? LxFdGet(Target, Synth.Fd) : NULL;
             if (Target != NULL)
                 LxProcessDereference(Target);
             if (File == NULL)

@@ -960,6 +960,28 @@ LxInstanceDereference(
     LxFree(Instance);
 }
 
+BOOLEAN
+LxInstancePidInUse(
+    _In_ PLX_INSTANCE Instance,
+    _In_ ULONG Pid)
+{
+    PLX_PROCESS Existing = LxProcessLookup(Instance, Pid);
+    PLX_PROCESS Owner = NULL;
+
+    if (Existing != NULL)
+    {
+        LxProcessDereference(Existing);
+        return TRUE;
+    }
+    LxThreadLookupReferenced(Instance, Pid, &Owner);
+    if (Owner != NULL)
+    {
+        LxProcessDereference(Owner);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 ULONG
 LxInstanceAllocatePid(
     _In_ PLX_INSTANCE Instance)

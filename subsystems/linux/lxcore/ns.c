@@ -921,6 +921,8 @@ LONG
 LxPidFill(
     _In_ PLX_NS PidNs,
     _In_ ULONG Global,
+    _In_reads_opt_(SetTidCount) const ULONG *SetTid,
+    _In_ ULONG SetTidCount,
     _Out_writes_(LX_PIDNS_MAX_LEVEL) PULONG Numbers)
 {
     PLX_NS Ns;
@@ -929,8 +931,17 @@ LxPidFill(
     Numbers[0] = Global;
     for (Ns = PidNs; (Ns != NULL) && (Ns->Level > 0); Ns = Ns->Parent)
     {
+        ULONG Depth = PidNs->Level - Ns->Level;
+
         if (Ns->Pid.Dead)
             return -LX_ENOMEM;
+        if (Depth < SetTidCount)
+        {
+            if (LxNrToGlobalIn(Ns, SetTid[Depth]) != 0)
+                return -LX_EEXIST;
+            Numbers[Ns->Level] = SetTid[Depth];
+            continue;
+        }
         Numbers[Ns->Level] = LxPidNsAllocate(Ns);
         if (Numbers[Ns->Level] == 0)
             return -LX_EAGAIN;
@@ -938,16 +949,99 @@ LxPidFill(
     return 0;
 }
 
+static
+LONG
+LxPidAllocate(
+    _In_ PLX_PROCESS Process,
+    _In_reads_opt_(SetTidCount) const ULONG *SetTid,
+    _In_ ULONG SetTidCount,
+    _Out_ PULONG Global,
+    _Out_writes_(LX_PIDNS_MAX_LEVEL) PULONG Numbers)
+{
+    PLX_NS PidNs = Process->PidNs, Ns = Process->PidNs;
+    ULONG64 Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
+    ULONG Depth;
+
+    if (SetTidCount > PidNs->Level + 1)
+        return -LX_EINVAL;
+    for (Depth = 0; Depth < SetTidCount; Depth++, Ns = Ns->Parent)
+    {
+        if ((SetTid[Depth] < 1) || (SetTid[Depth] >= LX_PID_MAX))
+            return -LX_EINVAL;
+        if ((Ns->Level > 0) && (SetTid[Depth] != 1) && !Ns->Pid.HasInit)
+            return -LX_EINVAL;
+        if (!(Effective & ((1ULL << LX_CAP_CHECKPOINT_RESTORE) | (1ULL << LX_CAP_SYS_ADMIN))))
+            return -LX_EPERM;
+    }
+    if (SetTidCount > PidNs->Level)
+    {
+        *Global = SetTid[PidNs->Level];
+        if (LxInstancePidInUse(Process->Instance, *Global))
+            return -LX_EEXIST;
+    }
+    else
+    {
+        *Global = LxInstanceAllocatePid(Process->Instance);
+    }
+    return LxPidFill(PidNs, *Global, SetTid, SetTidCount, Numbers);
+}
+
+ULONG
+LxPidNsLastPid(
+    _In_ PLX_PROCESS Process)
+{
+    PLX_NS PidNs = Process->PidNs;
+    ULONG Last;
+
+    if (PidNs->Level == 0)
+    {
+        ExAcquireFastMutex(&Process->Instance->Lock);
+        Last = Process->Instance->NextPid - 1;
+        ExReleaseFastMutex(&Process->Instance->Lock);
+        return Last;
+    }
+    ExAcquireFastMutex(&LxNsLock);
+    Last = PidNs->Pid.NextPid - 1;
+    ExReleaseFastMutex(&LxNsLock);
+    return Last;
+}
+
+LONG
+LxPidNsSetLastPid(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG Value)
+{
+    PLX_NS PidNs = Process->PidNs;
+    ULONG64 Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
+
+    if (!(Effective & ((1ULL << LX_CAP_CHECKPOINT_RESTORE) | (1ULL << LX_CAP_SYS_ADMIN))))
+        return -LX_EPERM;
+    if (Value >= LX_PID_MAX)
+        return -LX_EINVAL;
+    if (PidNs->Level == 0)
+    {
+        ExAcquireFastMutex(&Process->Instance->Lock);
+        Process->Instance->NextPid = Value + 1;
+        ExReleaseFastMutex(&Process->Instance->Lock);
+        return 0;
+    }
+    ExAcquireFastMutex(&LxNsLock);
+    PidNs->Pid.NextPid = Value + 1;
+    ExReleaseFastMutex(&LxNsLock);
+    return 0;
+}
+
 LONG
 LxPidAssign(
     _Inout_ PLX_PROCESS Process,
-    _Inout_ PLX_THREAD Thread)
+    _Inout_ PLX_THREAD Thread,
+    _In_reads_opt_(SetTidCount) const ULONG *SetTid,
+    _In_ ULONG SetTidCount)
 {
     PLX_NS PidNs = Process->PidNs;
     LONG Error;
 
-    Process->Pid = LxInstanceAllocatePid(Process->Instance);
-    Error = LxPidFill(PidNs, Process->Pid, Process->NsPid);
+    Error = LxPidAllocate(Process, SetTid, SetTidCount, &Process->Pid, Process->NsPid);
     if (Error != 0)
         return Error;
     Thread->Tid = Process->Pid;
@@ -963,10 +1057,11 @@ LxPidAssign(
 LONG
 LxTidAssign(
     _In_ PLX_PROCESS Process,
-    _Inout_ PLX_THREAD Thread)
+    _Inout_ PLX_THREAD Thread,
+    _In_reads_opt_(SetTidCount) const ULONG *SetTid,
+    _In_ ULONG SetTidCount)
 {
-    Thread->Tid = LxInstanceAllocatePid(Process->Instance);
-    return LxPidFill(Process->PidNs, Thread->Tid, Thread->NsTid);
+    return LxPidAllocate(Process, SetTid, SetTidCount, &Thread->Tid, Thread->NsTid);
 }
 
 static
