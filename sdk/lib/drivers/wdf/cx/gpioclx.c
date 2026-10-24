@@ -194,6 +194,25 @@ GpioCxReleaseBankLock(
 }
 
 static
+ULONG
+GpioCxLowestPin(
+    _In_ ULONG64 Mask)
+{
+#ifdef _MSC_VER
+    ULONG Index;
+
+    if (!_BitScanForward(&Index, (ULONG)Mask))
+    {
+        _BitScanForward(&Index, (ULONG)(Mask >> 32));
+        Index += 32;
+    }
+    return Index;
+#else
+    return (ULONG)__builtin_ctzll(Mask);
+#endif
+}
+
+static
 BOOLEAN
 GpioCxServiceBank(
     _In_ PGPIOCLX_BANK Bank)
@@ -243,7 +262,7 @@ GpioCxServiceBank(
 
         while (Active != 0)
         {
-            ULONG Pin = (ULONG)__builtin_ctzll(Active);
+            ULONG Pin = GpioCxLowestPin(Active);
             ULONG Line = (ULONG)Bank->BankId * Device->Info.NumberOfPinsPerBank + Pin;
 
             Active &= ~(1ULL << Pin);

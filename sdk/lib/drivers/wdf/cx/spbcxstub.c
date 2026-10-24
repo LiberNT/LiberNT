@@ -11,7 +11,13 @@
 
 #define WDFCX_STRING2(_Text) #_Text
 #define WDFCX_STRING(_Text) WDFCX_STRING2(_Text)
+#ifdef __USER_LABEL_PREFIX__
 #define WDFCX_SYMBOL_PREFIX WDFCX_STRING(__USER_LABEL_PREFIX__)
+#elif defined(_M_IX86)
+#define WDFCX_SYMBOL_PREFIX "_"
+#else
+#define WDFCX_SYMBOL_PREFIX ""
+#endif
 
 #pragma section(".kmdfclassbind$b", read, write)
 #pragma comment(linker, "/include:" WDFCX_SYMBOL_PREFIX "_SPBCx_BIND_INFO")
