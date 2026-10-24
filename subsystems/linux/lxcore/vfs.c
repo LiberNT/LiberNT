@@ -2420,13 +2420,36 @@ LxLookupWalk(
                 NewRest[TargetLength] = '\0';
             }
 
+            LxFree(Rest);
+            Rest = NewRest;
             if (LinkTarget[0] == '/')
             {
                 LxFree(Current);
-                Current = LxStrDup((Root != NULL) ? Root : ProcRoot);
+                if ((Root == NULL) && (strncmp(NewRest, "/.lxcore-detached/", 18) == 0))
+                {
+                    PSTR Inner = NewRest + 18;
+
+                    while ((*Inner >= '0') && (*Inner <= '9'))
+                        Inner++;
+                    Current = LxAlloc((SIZE_T)(Inner - NewRest) + 1);
+                    if (Current != NULL)
+                    {
+                        RtlCopyMemory(Current, NewRest, (SIZE_T)(Inner - NewRest));
+                        Current[Inner - NewRest] = '\0';
+                        Rest = LxStrDup(Inner);
+                        LxFree(NewRest);
+                        if (Rest == NULL)
+                        {
+                            LxFree(Current);
+                            Current = NULL;
+                        }
+                    }
+                }
+                else
+                {
+                    Current = LxStrDup((Root != NULL) ? Root : ProcRoot);
+                }
             }
-            LxFree(Rest);
-            Rest = NewRest;
             LxFree(LinkTarget);
             LinkTarget = NULL;
             LxFree(Candidate);

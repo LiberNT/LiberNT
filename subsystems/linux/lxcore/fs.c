@@ -1376,6 +1376,7 @@ LX_SYSCALL(LxSysReadlinkat)
 {
     LX_NODE Node;
     PSTR Target;
+    PCSTR Visible;
     SIZE_T Length;
     LONG64 Result;
     LONG Error;
@@ -1389,8 +1390,17 @@ LX_SYSCALL(LxSysReadlinkat)
     LxNodeFree(&Node);
     if (Error != 0)
         return Error;
-    Length = min(strlen(Target), Call->Args[3]);
-    Result = LxCopyToUser(Call->Args[2], Target, Length);
+    Visible = Target;
+    if (strncmp(Target, "/.lxcore-detached/", 18) == 0)
+    {
+        Visible = Target + 18;
+        while ((*Visible >= '0') && (*Visible <= '9'))
+            Visible++;
+        if (*Visible == '\0')
+            Visible = "/";
+    }
+    Length = min(strlen(Visible), Call->Args[3]);
+    Result = LxCopyToUser(Call->Args[2], Visible, Length);
     LxFree(Target);
     return (Result != 0) ? Result : (LONG64)Length;
 }
