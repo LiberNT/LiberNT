@@ -1412,6 +1412,7 @@ LxProvisionGui(
         { L"protocols\\cursor-shape-v1.xml", "usr/local/lib/libernt/lxwayland/protocols/cursor-shape-v1.xml", 0644 },
         { L"lxapp", "usr/local/lib/libernt/lxapp", 0755 },
         { L"gui-setup", "usr/local/lib/libernt/gui-setup", 0755 },
+        { L"user-setup", "usr/local/lib/libernt/user-setup", 0755 },
         { L"lxwayland.service", "etc/systemd/system/lxwayland.service", 0644 },
         { L"lx-gui-setup.service", "etc/systemd/system/lx-gui-setup.service", 0644 },
     };

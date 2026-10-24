@@ -28,6 +28,15 @@ if [ ! -S "$WAYLAND_DISPLAY" ]; then
     done
 fi
 
+USER_NAME=$(sed -n '/^\[user\]/,/^\[/s/^[[:space:]]*default[[:space:]]*=[[:space:]]*//p' /etc/wsl.conf 2>/dev/null | head -n 1)
+if [ -n "$USER_NAME" ] && [ "$(id -u)" = 0 ] && USER_ID=$(id -u "$USER_NAME" 2>/dev/null); then
+    RUNTIME=/run/user/$USER_ID
+    mkdir -p "$RUNTIME" && chown "$USER_ID:$(id -g "$USER_NAME")" "$RUNTIME" && chmod 700 "$RUNTIME"
+    [ $# -gt 0 ] || exit 0
+    exec runuser -u "$USER_NAME" -- env HOME="$(getent passwd "$USER_NAME" | cut -d: -f6)" USER="$USER_NAME" \
+        LOGNAME="$USER_NAME" XDG_RUNTIME_DIR="$RUNTIME" "$@"
+fi
+
 if [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && [ -S "$XDG_RUNTIME_DIR/bus" ]; then
     export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 fi

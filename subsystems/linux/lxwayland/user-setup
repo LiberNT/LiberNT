@@ -1,0 +1,38 @@
+#!/bin/sh
+# PROJECT:     LiberNT Linux Subsystem
+# LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+# PURPOSE:     Creates the default user account on the first start of the Linux terminal
+# COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+echo "Create the default user account of this Linux system."
+echo "It does not need to match your Windows user name."
+name=
+while [ -z "$name" ]; do
+    printf 'New user name: '
+    IFS= read -r name || exit 1
+    case "$name" in
+        [a-z_]*) ;;
+        *) name= ;;
+    esac
+    case "$name" in
+        *[!a-z0-9_-]*) name= ;;
+    esac
+    [ -n "$name" ] || echo 'Use lowercase letters, digits, "-" and "_", starting with a letter.'
+done
+
+if ! id "$name" >/dev/null 2>&1; then
+    groups=
+    for group in adm sudo users; do
+        getent group "$group" >/dev/null && groups="${groups:+$groups,}$group"
+    done
+    useradd -m -s /bin/bash ${groups:+-G "$groups"} "$name" || exit 1
+fi
+
+tries=0
+until passwd "$name"; do
+    tries=$((tries + 1))
+    [ "$tries" -lt 3 ] || break
+done
+
+printf '[user]\ndefault=%s\n' "$name" >> /etc/wsl.conf
+exec runuser -l "$name"
