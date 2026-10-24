@@ -198,6 +198,7 @@ struct _LX_FILE
     PLX_EVENT_SOURCE EventSource;
     LONG64 EventSeen;
     PLX_PROCESS PidProcess;
+    struct _LX_FILE_ASYNC *Async;
 };
 
 typedef enum _LX_FS_KIND
@@ -716,6 +717,11 @@ extern const LX_SOCKET_OPS LxNetlinkSocketOps;
 LONG64 LxInetSocket(_In_ PLX_PROCESS Process, _In_ ULONG Family, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
 LONG64 LxNetlinkSocket(_In_ PLX_PROCESS Process, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
 VOID LxProcessUsage(_In_ PLX_PROCESS Process, _In_opt_ PEPROCESS EProcess, _Out_ PLX_USAGE Usage);
+LONG LxFileSetOwner(_In_ PLX_FILE File, _In_ LONG Type, _In_ ULONG Owner);
+VOID LxFileGetOwner(_In_ PLX_FILE File, _Out_ PLONG Type, _Out_ PULONG Owner);
+LONG LxFileSetSignal(_In_ PLX_FILE File, _In_ LONG Signal);
+LONG LxFileGetSignal(_In_ PLX_FILE File);
+VOID LxFileSetAsync(_In_ PLX_FILE File, _In_ LONG Fd, _In_ BOOLEAN Enable);
 NTSTATUS NTAPI MmCopyVirtualMemory(_In_ PEPROCESS SourceProcess, _In_ PVOID SourceAddress, _In_ PEPROCESS TargetProcess,
                                    _Out_ PVOID TargetAddress, _In_ SIZE_T BufferSize, _In_ KPROCESSOR_MODE PreviousMode,
                                    _Out_ PSIZE_T ReturnSize);

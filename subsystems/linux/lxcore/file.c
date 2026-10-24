@@ -119,6 +119,288 @@ LxFileReference(
     InterlockedIncrement(&File->RefCount);
 }
 
+#define LX_POLL_IN          1
+#define LX_POLL_OUT         2
+#define LX_POLL_ERR         4
+#define LX_POLL_PRI         5
+#define LX_POLL_HUP         6
+
+typedef struct _LX_FILE_ASYNC
+{
+    volatile LONG RefCount;
+    FAST_MUTEX Lock;
+    PLX_INSTANCE Instance;
+    LX_POLL_ENTRY Entry;
+    WORK_QUEUE_ITEM Work;
+    volatile LONG Queued;
+    volatile LONG Events;
+    ULONG Access;
+    LONG OwnerType;
+    ULONG Owner;
+    LONG Signal;
+    LONG Fd;
+    BOOLEAN Registered;
+} LX_FILE_ASYNC, *PLX_FILE_ASYNC;
+
+static
+VOID
+LxFileAsyncDereference(
+    _In_ PLX_FILE_ASYNC Async)
+{
+    if (InterlockedDecrement(&Async->RefCount) != 0)
+        return;
+    if (Async->Instance != NULL)
+        LxInstanceDereference(Async->Instance);
+    LxFree(Async);
+}
+
+static
+VOID
+LxFileAsyncDeliver(
+    _In_ PLX_FILE_ASYNC Async,
+    _In_ ULONG Events)
+{
+    static const ULONG Bands[6] =
+    {
+        LX_POLLIN | LX_POLLRDNORM,
+        LX_POLLOUT | LX_POLLWRNORM | LX_POLLWRBAND,
+        LX_POLLIN | LX_POLLRDNORM | 0x400,
+        LX_POLLERR,
+        LX_POLLPRI | LX_POLLRDBAND,
+        LX_POLLHUP | LX_POLLERR
+    };
+    PLX_PROCESS Target = NULL;
+    PLX_THREAD Thread = NULL;
+    LX_SIGINFO Info;
+    LONG Type, Signal, Fd, Reason;
+    ULONG Owner, Access;
+    BOOLEAN Registered;
+
+    ExAcquireFastMutex(&Async->Lock);
+    Registered = Async->Registered;
+    Type = Async->OwnerType;
+    Owner = Async->Owner;
+    Signal = Async->Signal;
+    Fd = Async->Fd;
+    Access = Async->Access;
+    ExReleaseFastMutex(&Async->Lock);
+    if (!Registered || (Owner == 0) || (Async->Instance == NULL))
+        return;
+
+    if ((Access != LX_O_WRONLY) && (Events & (LX_POLLIN | LX_POLLRDNORM)))
+        Reason = LX_POLL_IN;
+    else if ((Access != LX_O_RDONLY) && (Events & (LX_POLLOUT | LX_POLLWRNORM | LX_POLLWRBAND)))
+        Reason = LX_POLL_OUT;
+    else if (Events & (LX_POLLPRI | LX_POLLRDBAND))
+        Reason = LX_POLL_PRI;
+    else if (Events & LX_POLLHUP)
+        Reason = LX_POLL_HUP;
+    else if (Events & LX_POLLERR)
+        Reason = LX_POLL_ERR;
+    else
+        return;
+
+    RtlZeroMemory(&Info, sizeof(Info));
+    if (Signal != 0)
+    {
+        LONG64 Band = Bands[Reason - LX_POLL_IN];
+
+        Info.Signo = Signal;
+        Info.Code = Reason;
+        RtlCopyMemory(&Info.Raw[0], &Band, sizeof(Band));
+        RtlCopyMemory(&Info.Raw[8], &Fd, sizeof(Fd));
+    }
+    else
+    {
+        Signal = LX_SIGIO;
+        Info.Signo = LX_SIGIO;
+        Info.Code = LX_SI_KERNEL;
+    }
+
+    if (Type == LX_F_OWNER_PGRP)
+    {
+        LxSignalGroupInfo(Async->Instance, NULL, Owner, Signal, &Info);
+        return;
+    }
+    if (Type == LX_F_OWNER_TID)
+        Thread = LxThreadLookupReferenced(Async->Instance, Owner, &Target);
+    else
+        Target = LxProcessLookup(Async->Instance, Owner);
+    if (Target == NULL)
+        return;
+    if ((Type != LX_F_OWNER_TID) || (Thread != NULL))
+        LxSignalSend(Target, Thread, Signal, &Info);
+    LxProcessDereference(Target);
+}
+
+static
+VOID
+NTAPI
+LxFileAsyncWork(
+    _In_ PVOID Context)
+{
+    PLX_FILE_ASYNC Async = Context;
+    LONG Events;
+
+    InterlockedExchange(&Async->Queued, 0);
+    Events = InterlockedExchange(&Async->Events, 0);
+    LxFileAsyncDeliver(Async, (ULONG)Events);
+    LxFileAsyncDereference(Async);
+}
+
+static
+VOID
+LxFileAsyncNotify(
+    _In_ PLX_POLL_ENTRY Entry,
+    _In_ ULONG Events)
+{
+    PLX_FILE_ASYNC Async = Entry->Context;
+
+    InterlockedOr(&Async->Events, (LONG)Events);
+    if (InterlockedExchange(&Async->Queued, 1) == 0)
+    {
+        InterlockedIncrement(&Async->RefCount);
+        ExQueueWorkItem(&Async->Work, DelayedWorkQueue);
+    }
+}
+
+static
+PLX_FILE_ASYNC
+LxFileAsyncGet(
+    _In_ PLX_FILE File,
+    _In_ BOOLEAN Create)
+{
+    PLX_FILE_ASYNC Async = File->Async;
+    PLX_THREAD Current = LxCurrentThread();
+
+    if ((Async != NULL) || !Create)
+        return Async;
+    Async = LxAlloc(sizeof(*Async));
+    if (Async == NULL)
+        return NULL;
+    Async->RefCount = 1;
+    ExInitializeFastMutex(&Async->Lock);
+    Async->OwnerType = LX_F_OWNER_PID;
+    Async->Fd = -1;
+    Async->Entry.Notify = LxFileAsyncNotify;
+    Async->Entry.Context = Async;
+    ExInitializeWorkItem(&Async->Work, LxFileAsyncWork, Async);
+    if (Current != NULL)
+    {
+        Async->Instance = Current->Process->Instance;
+        LxInstanceReference(Async->Instance);
+    }
+    if (InterlockedCompareExchangePointer((PVOID *)&File->Async, Async, NULL) != NULL)
+    {
+        LxFileAsyncDereference(Async);
+        Async = File->Async;
+    }
+    return Async;
+}
+
+LONG
+LxFileSetOwner(
+    _In_ PLX_FILE File,
+    _In_ LONG Type,
+    _In_ ULONG Owner)
+{
+    PLX_FILE_ASYNC Async = LxFileAsyncGet(File, TRUE);
+
+    if (Async == NULL)
+        return -LX_ENOMEM;
+    ExAcquireFastMutex(&Async->Lock);
+    Async->OwnerType = Type;
+    Async->Owner = Owner;
+    ExReleaseFastMutex(&Async->Lock);
+    return 0;
+}
+
+VOID
+LxFileGetOwner(
+    _In_ PLX_FILE File,
+    _Out_ PLONG Type,
+    _Out_ PULONG Owner)
+{
+    PLX_FILE_ASYNC Async = LxFileAsyncGet(File, FALSE);
+
+    *Type = LX_F_OWNER_PID;
+    *Owner = 0;
+    if (Async == NULL)
+        return;
+    ExAcquireFastMutex(&Async->Lock);
+    *Type = Async->OwnerType;
+    *Owner = Async->Owner;
+    ExReleaseFastMutex(&Async->Lock);
+}
+
+LONG
+LxFileSetSignal(
+    _In_ PLX_FILE File,
+    _In_ LONG Signal)
+{
+    PLX_FILE_ASYNC Async = LxFileAsyncGet(File, TRUE);
+
+    if (Async == NULL)
+        return -LX_ENOMEM;
+    Async->Signal = Signal;
+    return 0;
+}
+
+LONG
+LxFileGetSignal(
+    _In_ PLX_FILE File)
+{
+    PLX_FILE_ASYNC Async = LxFileAsyncGet(File, FALSE);
+
+    return (Async != NULL) ? Async->Signal : 0;
+}
+
+VOID
+LxFileSetAsync(
+    _In_ PLX_FILE File,
+    _In_ LONG Fd,
+    _In_ BOOLEAN Enable)
+{
+    PLX_FILE_ASYNC Async = LxFileAsyncGet(File, Enable);
+
+    if (Async == NULL)
+        return;
+    ExAcquireFastMutex(&Async->Lock);
+    Async->Fd = Fd;
+    if (Enable && !Async->Registered && (File->Ops->Poll != NULL))
+    {
+        Async->Access = File->Flags & LX_O_ACCMODE;
+        Async->Registered = TRUE;
+        File->Ops->Poll(File, &Async->Entry);
+    }
+    else if (!Enable && Async->Registered)
+    {
+        LxPollRemove(&Async->Entry);
+        Async->Registered = FALSE;
+    }
+    ExReleaseFastMutex(&Async->Lock);
+}
+
+static
+VOID
+LxFileAsyncRelease(
+    _In_ PLX_FILE File)
+{
+    PLX_FILE_ASYNC Async = File->Async;
+
+    if (Async == NULL)
+        return;
+    ExAcquireFastMutex(&Async->Lock);
+    if (Async->Registered)
+    {
+        LxPollRemove(&Async->Entry);
+        Async->Registered = FALSE;
+    }
+    ExReleaseFastMutex(&Async->Lock);
+    File->Async = NULL;
+    LxFileAsyncDereference(Async);
+}
+
 VOID
 LxFileDereference(
     _In_ PLX_FILE File)
@@ -127,6 +409,7 @@ LxFileDereference(
         return;
 
     LxEpollFileReleased(File);
+    LxFileAsyncRelease(File);
     if (File->Written)
         LxInotifyFileEvent(File, LX_IN_CLOSE_WRITE);
     if (File->Ops->Release != NULL)

@@ -453,6 +453,8 @@ LX_SYSCALL(LxSysFcntl)
             break;
 
         case LX_F_SETFL:
+            if ((File->Flags ^ (ULONG)Call->Args[2]) & LX_O_ASYNC)
+                LxFileSetAsync(File, Fd, ((ULONG)Call->Args[2] & LX_O_ASYNC) != 0);
             File->Flags = (File->Flags & ~(LX_O_APPEND | LX_O_NONBLOCK | LX_O_ASYNC | LX_O_DIRECT | LX_O_NOATIME)) |
                           ((ULONG)Call->Args[2] & (LX_O_APPEND | LX_O_NONBLOCK | LX_O_ASYNC | LX_O_DIRECT | LX_O_NOATIME));
             break;
@@ -485,14 +487,82 @@ LX_SYSCALL(LxSysFcntl)
         }
 
         case LX_F_SETOWN:
-        case LX_F_SETSIG:
-        case LX_F_SETLEASE:
-        case LX_F_NOTIFY:
-            Result = 0;
+        {
+            LONG Who = (LONG)Call->Args[2];
+            ULONG Global = 0;
+
+            if (Who != 0)
+            {
+                Global = LxNrToGlobal(Process, (Who < 0) ? (ULONG)-Who : (ULONG)Who);
+                if ((Global == 0) || !LxInstancePidInUse(Process->Instance, Global))
+                {
+                    Result = -LX_ESRCH;
+                    break;
+                }
+            }
+            Result = LxFileSetOwner(File, (Who < 0) ? LX_F_OWNER_PGRP : LX_F_OWNER_PID, Global);
             break;
+        }
 
         case LX_F_GETOWN:
+        {
+            LONG Type;
+            ULONG Owner;
+
+            LxFileGetOwner(File, &Type, &Owner);
+            Result = (Owner != 0) ? (LONG)LxGlobalToNr(Process, Owner) : 0;
+            if (Type == LX_F_OWNER_PGRP)
+                Result = -Result;
+            break;
+        }
+
+        case LX_F_SETOWN_EX:
+        case LX_F_GETOWN_EX:
+        {
+            LONG Owner[2];
+            ULONG Global = 0;
+            LONG Type;
+
+            if (Command == LX_F_GETOWN_EX)
+            {
+                LxFileGetOwner(File, &Type, &Global);
+                Owner[0] = Type;
+                Owner[1] = (Global != 0) ? (LONG)LxGlobalToNr(Process, Global) : 0;
+                Result = LxCopyToUser(Call->Args[2], Owner, sizeof(Owner));
+                break;
+            }
+            Result = LxCopyFromUser(Owner, Call->Args[2], sizeof(Owner));
+            if (Result != 0)
+                break;
+            if ((Owner[0] < LX_F_OWNER_TID) || (Owner[0] > LX_F_OWNER_PGRP) || (Owner[1] < 0))
+            {
+                Result = -LX_EINVAL;
+                break;
+            }
+            if (Owner[1] != 0)
+            {
+                Global = LxNrToGlobal(Process, (ULONG)Owner[1]);
+                if ((Global == 0) || !LxInstancePidInUse(Process->Instance, Global))
+                {
+                    Result = -LX_ESRCH;
+                    break;
+                }
+            }
+            Result = LxFileSetOwner(File, Owner[0], Global);
+            break;
+        }
+
+        case LX_F_SETSIG:
+            Result = (((LONG)Call->Args[2] < 0) || ((LONG)Call->Args[2] > LX_NSIG)) ? -LX_EINVAL :
+                     LxFileSetSignal(File, (LONG)Call->Args[2]);
+            break;
+
         case LX_F_GETSIG:
+            Result = LxFileGetSignal(File);
+            break;
+
+        case LX_F_SETLEASE:
+        case LX_F_NOTIFY:
             Result = 0;
             break;
 
@@ -568,8 +638,20 @@ LX_SYSCALL(LxSysIoctl)
             break;
 
         case LX_FIOASYNC:
-            Result = 0;
+        {
+            LONG Enable;
+
+            Result = LxCopyFromUser(&Enable, Call->Args[2], sizeof(Enable));
+            if (Result != 0)
+                break;
+            if (((File->Flags & LX_O_ASYNC) != 0) != (Enable != 0))
+                LxFileSetAsync(File, Fd, Enable != 0);
+            if (Enable != 0)
+                File->Flags |= LX_O_ASYNC;
+            else
+                File->Flags &= ~LX_O_ASYNC;
             break;
+        }
 
         default:
             Result = (File->Ops->Ioctl != NULL) ? File->Ops->Ioctl(File, Request, Call->Args[2]) : -LX_ENOTTY;

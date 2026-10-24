@@ -120,6 +120,11 @@
 #define LX_F_GETOWN         9
 #define LX_F_SETSIG         10
 #define LX_F_GETSIG         11
+#define LX_F_SETOWN_EX      15
+#define LX_F_GETOWN_EX      16
+#define LX_F_OWNER_TID      0
+#define LX_F_OWNER_PID      1
+#define LX_F_OWNER_PGRP     2
 #define LX_F_OFD_GETLK      36
 #define LX_F_OFD_SETLK      37
 #define LX_F_OFD_SETLKW     38
