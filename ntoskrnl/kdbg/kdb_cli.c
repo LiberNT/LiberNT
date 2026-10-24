@@ -617,7 +617,7 @@ static const struct
     { "!pci", "!pci bus:device.function", "Display live PCI BAR, interrupt and MSI/MSI-X configuration.", KdbpCmdPci },
     { "!devtree", "!devtree", "List the PnP device tree and DEVICE_NODE addresses.", KdbpCmdDeviceTree },
     { "!devnode", "!devnode address", "Display a PnP device node and its assigned resources.", KdbpCmdDeviceNode },
-    { "!locks", "!locks [address]", "List executive resources or display one resource.", KdbpCmdLocks },
+    { "!locks", "!locks [-v|address]", "List held or waited-on executive resources (-v: all), or display one resource.", KdbpCmdLocks },
     { "!apc", "!apc [tid]", "Display queued kernel and user APCs for a thread.", KdbpCmdApc },
     { "!dispatcher", "!dispatcher address", "Display a dispatcher object header and waiters.", KdbpCmdDispatcher },
 };
@@ -6584,10 +6584,17 @@ KdbpCmdLocks(ULONG Argc, PCHAR Argv[])
     LIST_ENTRY Head;
     PLIST_ENTRY Entry;
     ULONG Count = 0;
+    ULONG Held = 0;
+    BOOLEAN Verbose = FALSE;
 
+    if (Argc == 2 && strcmp(Argv[1], "-v") == 0)
+    {
+        Verbose = TRUE;
+        Argc = 1;
+    }
     if (Argc > 2)
     {
-        KdbpPrint("Usage: !locks [address]\n");
+        KdbpPrint("Usage: !locks [-v|address]\n");
         return TRUE;
     }
     if (Argc == 2)
@@ -6608,7 +6615,9 @@ KdbpCmdLocks(ULONG Argc, PCHAR Argv[])
     while (Entry != NULL && Entry != &ExpSystemResourcesList && Count++ < 65536)
     {
         LIST_ENTRY Links;
+        ERESOURCE Snapshot;
         PERESOURCE Resource;
+        BOOLEAN Busy;
 
         if (!NT_SUCCESS(KdbpSafeReadMemory(&Links, Entry, sizeof(Links))))
         {
@@ -6616,7 +6625,14 @@ KdbpCmdLocks(ULONG Argc, PCHAR Argv[])
             break;
         }
         Resource = CONTAINING_RECORD(Entry, ERESOURCE, SystemResourcesList);
-        KdbpPrintResource(Resource);
+        Busy = !NT_SUCCESS(KdbpSafeReadMemory(&Snapshot, Resource, sizeof(Snapshot))) ||
+               Snapshot.ActiveCount != 0 ||
+               Snapshot.NumberOfSharedWaiters != 0 ||
+               Snapshot.NumberOfExclusiveWaiters != 0;
+        if (Busy)
+            Held++;
+        if (Busy || Verbose)
+            KdbpPrintResource(Resource);
         if (Links.Flink == Entry)
         {
             KdbpPrint("!locks: Self-linked resource entry %p.\n", Entry);
@@ -6628,6 +6644,7 @@ KdbpCmdLocks(ULONG Argc, PCHAR Argv[])
     }
     if (Count >= 65536)
         KdbpPrint("!locks: Enumeration stopped at 65536 resources.\n");
+    KdbpPrint("%lu total locks, %lu held or waited on\n", Count, Held);
     return TRUE;
 }
 
