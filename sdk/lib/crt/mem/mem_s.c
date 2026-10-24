@@ -4,7 +4,9 @@
  * PURPOSE:     Bounds-checked (secure) memory copy functions.
  */
 
-typedef __SIZE_TYPE__ crt_size_t;
+#include <stddef.h>
+
+typedef size_t crt_size_t;
 typedef int crt_errno_t;
 
 #define CRT_EINVAL 22

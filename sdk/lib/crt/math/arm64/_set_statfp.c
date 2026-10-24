@@ -5,6 +5,7 @@
  */
 
 #include <stdint.h>
+#include <reactos/arm64/sysreg.h>
 
 void _set_statfp(uintptr_t mask)
 {
@@ -18,7 +19,7 @@ void _set_statfp(uintptr_t mask)
     if (mask & 0x0010) flags |= 0x08; /* underflow */
     if (mask & 0x0020) flags |= 0x10; /* inexact */
 
-    __asm__ __volatile__("mrs %0, fpsr" : "=r"(fpsr));
+    fpsr = ARM64_READ_SYSREG(FPSR);
     fpsr |= flags;
-    __asm__ __volatile__("msr fpsr, %0" :: "r"(fpsr));
+    ARM64_WRITE_SYSREG(FPSR, fpsr);
 }

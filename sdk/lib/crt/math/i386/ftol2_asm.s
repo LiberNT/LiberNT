@@ -11,7 +11,6 @@
 
 EXTERN __ftol:PROC
 PUBLIC __ftol2
-PUBLIC __ftol2_sse
 
 /* FUNCTIONS ***************************************************************/
 .code
@@ -22,7 +21,6 @@ PUBLIC __ftol2_sse
  * on the top of the floating point stack.
  */
 __ftol2:
-__ftol2_sse:
     jmp __ftol
 
 END

@@ -778,6 +778,23 @@ long _InterlockedExchangeAdd_nf(_Interlocked_operand_ long volatile * _Addend, l
 long _InterlockedOr_nf(_Interlocked_operand_ long volatile * _Value, long _Mask);
 void __break(int);
 void __yield(void);
+void __wfi(void);
+void __wfe(void);
+void __sev(void);
+void __emit(unsigned __int32);
+unsigned int __sys(int, __int64);
+void __cdecl __prefetch(const void *);
+void __prefetch2(const void *, unsigned char);
+unsigned char __readx18byte(unsigned long);
+unsigned short __readx18word(unsigned long);
+unsigned long __readx18dword(unsigned long);
+unsigned __int64 __readx18qword(unsigned long);
+void __writex18byte(unsigned long, unsigned char);
+void __writex18word(unsigned long, unsigned short);
+void __writex18dword(unsigned long, unsigned long);
+void __writex18qword(unsigned long, unsigned __int64);
+unsigned char _interlockedbittestandreset64(__int64 volatile *, __int64);
+unsigned char _interlockedbittestandset64(__int64 volatile *, __int64);
 
 #endif /* _VCRT_ARM64_CODEGEN */
 

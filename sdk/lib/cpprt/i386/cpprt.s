@@ -28,4 +28,6 @@ DEFINE_ALIAS ??3@YAXPAXABUnothrow_t@std@@@Z, ??3@YAXPAX@Z
 ; void __cdecl operator delete[](void *,struct std::nothrow_t const &)
 DEFINE_ALIAS ??_V@YAXPAXABUnothrow_t@std@@@Z, ??3@YAXPAX@Z
 
+DEFINE_ALIAS ??_V@YAXPAXI@Z, ??3@YAXPAX@Z
+
 END

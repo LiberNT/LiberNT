@@ -123,6 +123,12 @@ else()
             ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcopy.c
             string/arm64/strcmp.c
         )
+        if(MSVC)
+            set_source_files_properties(
+                ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcopy.c
+                string/arm64/strcmp.c
+                PROPERTIES COMPILE_OPTIONS /Oi-)
+        endif()
     else()
         list(APPEND UCRT_STRING_SOURCES
             string/arm/strlen.c

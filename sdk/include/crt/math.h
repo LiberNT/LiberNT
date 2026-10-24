@@ -182,7 +182,15 @@ _Check_return_ double __cdecl trunc(_In_ double x);
 #define isnan(x) __builtin_isnan(x)
 #endif
 #else
+_Check_return_ __MINGW_NOTHROW _CRTIMP int __cdecl _finite(_In_ double x);
 #define isnan _isnan
+#ifndef isfinite
+#define isfinite(x) _finite(x)
+#endif
+#ifndef isinf
+static __inline int __cdecl _crt_isinf(double x) { return !_finite(x) && !_isnan(x); }
+#define isinf(x) _crt_isinf(x)
+#endif
 #endif
 #endif
 
@@ -344,6 +352,7 @@ _Check_return_ __CRT_INLINE long long llrintf(_In_ float x) { return (long long)
 _Check_return_ __CRT_INLINE long long llrintl(_In_ long double x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
 #ifdef _MSC_VER
 #define log2 _log2 // nasty hack, see CORE-18255
+#define log2f _log2f
 #endif
 _Check_return_ __CRT_INLINE double log2(_In_ double x) { return log(x) / log(2); }
 _Check_return_ __CRT_INLINE float log2f(_In_ float x) { return (float)(log((double)x) / 0.69314718055994530942); }

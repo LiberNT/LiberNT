@@ -1,0 +1,20 @@
+
+.macro DEFINE_ALIAS alias, orig
+    .weakref \alias, \orig
+.endm
+
+DEFINE_ALIAS ??_L@YAXPEAX_KHP6AX0@Z2@Z, ?MSVCRTEX_eh_vector_constructor_iterator@@YAXPEAX_KHP6AX0@Z2@Z
+
+DEFINE_ALIAS ??_L@YAXPEAX_K1P6AX0@Z2@Z, ?MSVCRTEX_eh_vector_constructor_iterator@@YAXPEAX_KHP6AX0@Z2@Z
+
+DEFINE_ALIAS ??_M@YAXPEAX_K1P6AX0@Z@Z, ?MSVCRTEX_eh_vector_destructor_iterator@@YAXPEAX_KHP6AX0@Z@Z
+
+DEFINE_ALIAS ??_M@YAXPEAX_KHP6AX0@Z@Z, ?MSVCRTEX_eh_vector_destructor_iterator@@YAXPEAX_KHP6AX0@Z@Z
+
+DEFINE_ALIAS ??3@YAXPEAXAEBUnothrow_t@std@@@Z, ??3@YAXPEAX@Z
+
+DEFINE_ALIAS ??_V@YAXPEAXAEBUnothrow_t@std@@@Z, ??3@YAXPEAX@Z
+
+DEFINE_ALIAS ??3@YAXPEAX_K@Z, ??3@YAXPEAX@Z
+
+DEFINE_ALIAS ??_V@YAXPEAX_K@Z, ??3@YAXPEAX@Z

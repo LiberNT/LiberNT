@@ -221,7 +221,9 @@ allow GCC to optimize away some EH unwind code, at least in DW2 case.  */
 #endif
 
 /* Disable deprecation for now! */
+#ifndef _CRT_SECURE_NO_DEPRECATE
 #define _CRT_SECURE_NO_DEPRECATE
+#endif
 #define _CRT_SECURE_NO_DEPRECATE_CORE
 
 #define __crt_typefix(ctype)
