@@ -2361,6 +2361,13 @@ LxLookupWalk(
             break;
         }
 
+        if ((Type == LX_S_IFLNK) && (LinkTarget == NULL) && (Mount->Kind != LxFsNt) &&
+            (!Last || (Flags & LX_LOOKUP_FOLLOW)) &&
+            !(Flags & (LX_LOOKUP_NO_MAGICLINKS | LX_LOOKUP_NO_SYMLINKS | LX_LOOKUP_BENEATH | LX_LOOKUP_IN_ROOT)))
+        {
+            LinkTarget = LxSynthFollowPath(Process, Mount, Relative);
+        }
+
         if ((Type == LX_S_IFLNK) && (LinkTarget == NULL) && (Mount->Kind != LxFsNt))
         {
             if ((Flags & (LX_LOOKUP_NO_MAGICLINKS | LX_LOOKUP_NO_SYMLINKS | LX_LOOKUP_BENEATH | LX_LOOKUP_IN_ROOT)) &&
@@ -3050,6 +3057,57 @@ LxVfsOpenResolve(
         return Error;
 
     Error = LxVfsOpenNode(Process, &Node, Flags, Mode, File);
+    LxNodeFree(&Node);
+    return Error;
+}
+
+LONG
+LxVfsReopen(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_FILE Source,
+    _In_ ULONG Flags,
+    _Out_ PLX_FILE *File)
+{
+    ULONG Size = sizeof(OBJECT_NAME_INFORMATION) + LX_PATH_MAX * sizeof(WCHAR), Returned = 0;
+    POBJECT_NAME_INFORMATION Name;
+    LX_NODE Node;
+    NTSTATUS Status;
+    LONG Error;
+
+    *File = NULL;
+    if ((Source->Mount == NULL) || (Source->Mount->Kind != LxFsNt) || (Source->Handle == NULL) || (Source->Path == NULL))
+        return 1;
+
+    Name = LxAllocPaged(Size);
+    if (Name == NULL)
+        return -LX_ENOMEM;
+    Status = ZwQueryObject(Source->Handle, ObjectNameInformation, Name, Size, &Returned);
+    if (!NT_SUCCESS(Status) || (Name->Name.Length == 0))
+    {
+        LxFreePaged(Name);
+        return 1;
+    }
+
+    RtlZeroMemory(&Node, sizeof(Node));
+    Node.Path = LxStrDup(Source->Path);
+    Node.NtPath.Buffer = LxAllocPaged(Name->Name.Length + sizeof(WCHAR));
+    if ((Node.Path == NULL) || (Node.NtPath.Buffer == NULL))
+    {
+        LxFreePaged(Name);
+        LxNodeFree(&Node);
+        return -LX_ENOMEM;
+    }
+    RtlCopyMemory(Node.NtPath.Buffer, Name->Name.Buffer, Name->Name.Length);
+    Node.NtPath.Length = Name->Name.Length;
+    Node.NtPath.MaximumLength = Name->Name.Length + sizeof(WCHAR);
+    Node.NtPath.Buffer[Name->Name.Length / sizeof(WCHAR)] = L'\0';
+    LxFreePaged(Name);
+    Node.Mount = Source->Mount;
+    Node.Relative = "";
+    Node.Exists = TRUE;
+    Node.Type = Source->Type;
+
+    Error = LxVfsOpenNode(Process, &Node, Flags & ~(LX_O_CREAT | LX_O_EXCL | LX_O_NOFOLLOW), 0, File);
     LxNodeFree(&Node);
     return Error;
 }

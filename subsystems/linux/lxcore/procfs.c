@@ -1938,15 +1938,10 @@ LxResolveFdLink(
         return -LX_ENOENT;
 
     if ((File->Path != NULL) && (File->Path[0] == '/') && (File->Mount != NULL))
-    {
         Synth->LinkTarget = LxPathVisible(Self, File->Path);
-        Synth->Magic = FALSE;
-    }
     else
-    {
         Synth->LinkTarget = LxDescribeFile(File);
-        Synth->Magic = TRUE;
-    }
+    Synth->Magic = TRUE;
     LxFileDereference(File);
     return (Synth->LinkTarget != NULL) ? 0 : -LX_ENOMEM;
 }
@@ -2461,6 +2456,34 @@ LxSynthResolve(
         Synth->LinkTarget = NULL;
     }
     return Error;
+}
+
+PSTR
+LxSynthFollowPath(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_MOUNT Mount,
+    _In_ PCSTR Relative)
+{
+    LX_SYNTH Synth;
+    PLX_PROCESS Target;
+    PLX_FILE File;
+    PSTR Path = NULL;
+
+    if (LxSynthResolve(Process, Mount, Relative, &Synth) != 0)
+        return NULL;
+    LxFree(Synth.LinkTarget);
+    if (Synth.Id != LxProcFdLink)
+        return NULL;
+    Target = LxProcessLookup(Process->Instance, Synth.Pid);
+    File = (Target != NULL) ? LxFdGet(Target, Synth.Fd) : NULL;
+    if (Target != NULL)
+        LxProcessDereference(Target);
+    if (File == NULL)
+        return NULL;
+    if ((File->Type == LX_S_IFDIR) && (File->Path != NULL) && (File->Path[0] == '/') && (File->Mount != NULL))
+        Path = LxPathVisible(Process, File->Path);
+    LxFileDereference(File);
+    return Path;
 }
 
 LONG
@@ -3143,7 +3166,7 @@ LxSynthOpen(
     }
     else if (Synth.Type == LX_S_IFLNK)
     {
-        if (Synth.Id == LxProcFdLink)
+        if ((Synth.Id == LxProcFdLink) && !(Flags & LX_O_NOFOLLOW))
         {
             PLX_PROCESS Target = LxProcessLookup(Process->Instance, Synth.Pid);
 
@@ -3154,6 +3177,13 @@ LxSynthOpen(
             {
                 Error = -LX_ENOENT;
                 goto Exit;
+            }
+            if (!(Flags & LX_O_PATH))
+            {
+                Error = LxVfsReopen(Process, File, Flags, Result);
+                if (Error <= 0)
+                    goto Exit;
+                Error = 0;
             }
             *Result = File;
             File = NULL;
