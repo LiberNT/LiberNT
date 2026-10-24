@@ -4134,3 +4134,62 @@ HRESULT WINAPI ScriptGetFontAlternateGlyphs( HDC hdc, SCRIPT_CACHE *sc, SCRIPT_A
 
     return E_NOTIMPL;
 }
+
+#ifdef __REACTOS__
+static BOOL usp10_script_tag_matches(const SCRIPT_ANALYSIS *psa, OPENTYPE_TAG tag)
+{
+    if (!psa)
+        return TRUE;
+    if (psa->eScript >= ARRAY_SIZE(scriptInformation))
+        return FALSE;
+    return !scriptInformation[psa->eScript].scriptTag || scriptInformation[psa->eScript].scriptTag == tag;
+}
+
+static HRESULT usp10_check_font_for_script(HDC hdc, ScriptCache *sc, SCRIPT_ANALYSIS *psa, OPENTYPE_TAG script,
+                 OPENTYPE_TAG language)
+{
+    OPENTYPE_TAG user_script = sc->userScript, user_lang = sc->userLang;
+    HRESULT hr;
+
+    if (!psa)
+        return S_OK;
+    sc->userScript = script;
+    sc->userLang = language;
+    hr = SHAPE_CheckFontForRequiredFeatures(hdc, sc, psa);
+    sc->userScript = user_script;
+    sc->userLang = user_lang;
+    return hr;
+}
+
+HRESULT WINAPI ScriptSubstituteSingleGlyph( HDC hdc, SCRIPT_CACHE *psc, SCRIPT_ANALYSIS *psa, OPENTYPE_TAG tagScript,
+                 OPENTYPE_TAG tagLangSys, OPENTYPE_TAG tagFeature, LONG lParameter, WORD wGlyphId, WORD *pwOutGlyphId )
+{
+    HRESULT hr;
+
+    if (!psc || !pwOutGlyphId || !usp10_script_tag_matches(psa, tagScript)) return E_INVALIDARG;
+    if ((hr = init_script_cache(hdc, psc)) != S_OK) return hr;
+    if ((hr = usp10_check_font_for_script(hdc, (ScriptCache *)*psc, psa, tagScript, tagLangSys)) != S_OK) return hr;
+
+    *pwOutGlyphId = wGlyphId;
+    if (lParameter)
+        SHAPE_SubstituteSingleGlyph(hdc, (ScriptCache *)*psc, tagScript, tagLangSys, tagFeature, lParameter, pwOutGlyphId);
+    return S_OK;
+}
+
+HRESULT WINAPI ScriptPositionSingleGlyph( HDC hdc, SCRIPT_CACHE *psc, SCRIPT_ANALYSIS *psa, OPENTYPE_TAG tagScript,
+                 OPENTYPE_TAG tagLangSys, OPENTYPE_TAG tagFeature, LONG lParameter, WORD wGlyphId, int iAdvance,
+                 GOFFSET GOffset, int *piOutAdvance, GOFFSET *pOutGoffset )
+{
+    HRESULT hr;
+
+    if (!psc || !piOutAdvance || !pOutGoffset || !usp10_script_tag_matches(psa, tagScript)) return E_INVALIDARG;
+    if ((hr = init_script_cache(hdc, psc)) != S_OK) return hr;
+    if ((hr = usp10_check_font_for_script(hdc, (ScriptCache *)*psc, psa, tagScript, tagLangSys)) != S_OK) return hr;
+
+    *piOutAdvance = iAdvance;
+    *pOutGoffset = GOffset;
+    if (lParameter)
+        SHAPE_PositionSingleGlyph(hdc, (ScriptCache *)*psc, tagScript, tagLangSys, tagFeature, wGlyphId, piOutAdvance, pOutGoffset);
+    return S_OK;
+}
+#endif
