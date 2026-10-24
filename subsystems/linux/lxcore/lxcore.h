@@ -486,6 +486,13 @@ typedef struct _LX_EXEC_REQUEST
     NTSTATUS Status;
     LONG Errno;
     KEVENT Done;
+    BOOLEAN User;
+    BOOLEAN RuntimeDir;
+    BOOLEAN SearchPath;
+    ULONG Uid;
+    ULONG Gid;
+    ULONG GroupCount;
+    ULONG Groups[LX_CREATE_MAX_GROUPS];
 } LX_EXEC_REQUEST, *PLX_EXEC_REQUEST;
 
 struct _LX_THREAD

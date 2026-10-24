@@ -1,0 +1,21 @@
+[Unit]
+Description=LiberNT GUI package setup
+ConditionPathExists=!/var/lib/libernt/gui-setup-done
+
+[Service]
+Type=oneshot
+ExecStart=-/sbin/ldconfig
+ExecStart=-/usr/bin/glib-compile-schemas /usr/share/glib-2.0/schemas
+ExecStart=-/usr/lib/@LX_GNU_TRIPLET@/gdk-pixbuf-2.0/gdk-pixbuf-query-loaders --update-cache
+ExecStart=-/usr/bin/gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor
+ExecStart=-/usr/bin/gtk-update-icon-cache -q -t -f /usr/share/icons/Adwaita
+ExecStart=-/usr/bin/update-mime-database /usr/share/mime
+ExecStart=-/usr/bin/fc-cache -s
+ExecStart=-/usr/bin/update-desktop-database -q /usr/share/applications
+ExecStart=/usr/bin/mkdir -p /var/lib/libernt
+ExecStart=/usr/bin/touch /var/lib/libernt/gui-setup-done
+RemainAfterExit=yes
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

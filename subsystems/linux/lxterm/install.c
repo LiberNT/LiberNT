@@ -1408,9 +1408,6 @@ LxProvisionGui(
     } Files[] =
     {
         { L"lxwayland", "usr/local/lib/libernt/lxwayland/lxwayland", 0755, FALSE },
-        { L"lxapp", "usr/local/lib/libernt/lxapp", 0755, TRUE },
-        { L"gui-setup", "usr/local/lib/libernt/gui-setup", 0755, TRUE },
-        { L"user-setup", "usr/local/lib/libernt/user-setup", 0755, TRUE },
         { L"lxwayland.service", "etc/systemd/system/lxwayland.service", 0644, TRUE },
         { L"lx-gui-setup.service", "etc/systemd/system/lx-gui-setup.service", 0644, TRUE },
     };
@@ -1615,6 +1612,32 @@ LxCleanupInstall(
         wprintf(L"  Removing the unfinished installation...\n");
         LxDeleteTree(Long);
     }
+}
+
+BOOL
+LxAppendRootFile(
+    _In_ PCWSTR Root,
+    _In_ PCWSTR Relative,
+    _In_ PCSTR Text)
+{
+    WCHAR Path[MAX_PATH];
+    HANDLE File;
+    DWORD Written;
+    BOOL Created, Success;
+
+    if (!GetFullPathNameW(Root, MAX_PATH, Path, NULL) || (wcslen(Path) + wcslen(Relative) >= MAX_PATH))
+        return FALSE;
+    wcscat(Path, Relative);
+    File = CreateFileW(Path, FILE_APPEND_DATA | FILE_WRITE_EA | SYNCHRONIZE, FILE_SHARE_READ, NULL, OPEN_ALWAYS,
+                       FILE_ATTRIBUTE_NORMAL, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+    Created = (GetLastError() != ERROR_ALREADY_EXISTS);
+    Success = WriteFile(File, Text, (DWORD)strlen(Text), &Written, NULL) && (Written == strlen(Text));
+    if (Success && Created)
+        Success = NT_SUCCESS(LxSetAttributes(File, LX_S_IFREG | 0644, 0, 0, 0, 0));
+    CloseHandle(File);
+    return Success;
 }
 
 BOOL

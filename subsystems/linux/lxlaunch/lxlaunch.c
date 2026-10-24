@@ -548,10 +548,31 @@ LxLaunch(
                        DISABLE_NEWLINE_AUTO_RETURN);
     }
 
-    if (!Launch->Terminal)
+    if (Launch->Detached)
     {
         for (Index = 0; Index < 3; Index++)
         {
+            ChildStd[Index] = CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                          NULL, OPEN_EXISTING, 0, NULL);
+            if (ChildStd[Index] == INVALID_HANDLE_VALUE)
+                ChildStd[Index] = NULL;
+        }
+    }
+    else if (!Launch->Terminal)
+    {
+        for (Index = 0; Index < 3; Index++)
+        {
+            if ((Index == 0) && (Launch->Input != NULL))
+            {
+                HANDLE WriteEnd;
+                DWORD Written;
+
+                if (!CreatePipe(&ChildStd[0], &WriteEnd, NULL, 0))
+                    return 1;
+                WriteFile(WriteEnd, Launch->Input, (DWORD)strlen(Launch->Input), &Written, NULL);
+                CloseHandle(WriteEnd);
+                continue;
+            }
             if (!LxPrepareStd(StdIds[Index], Index == 0, &ChildStd[Index], &Pumps[Index]))
             {
                 fwprintf(stderr, L"%s: cannot set up standard handles (error %lu)\n", Launch->Name, GetLastError());
@@ -569,6 +590,16 @@ LxLaunch(
     In->Size = Size;
     In->Version = LX_CREATE_PROCESS_VERSION;
     In->Flags = Launch->Flags;
+    if (Launch->User)
+    {
+        In->Flags |= LX_CREATE_USER | (Launch->RuntimeDir ? LX_CREATE_RUNTIME_DIR : 0);
+        In->Uid = Launch->Uid;
+        In->Gid = Launch->Gid;
+        In->GroupCount = min(Launch->GroupCount, LX_CREATE_MAX_GROUPS);
+        memcpy(In->Groups, Launch->Groups, In->GroupCount * sizeof(ULONG));
+    }
+    if (Launch->SearchPath)
+        In->Flags |= LX_CREATE_SEARCH_PATH;
     for (Index = 0; Index < 3; Index++)
         In->StdHandles[Index] = ChildStd[Index];
 
@@ -632,6 +663,14 @@ LxLaunch(
         {
             if (ChildStd[Index] != NULL)
                 CloseHandle(ChildStd[Index]);
+        }
+        if (Launch->Detached)
+        {
+            CloseHandle(Out.ProcessHandle);
+            LxChildProcess = NULL;
+            CloseHandle(Device);
+            free(In);
+            return 0;
         }
 
         if (Launch->Terminal)

@@ -6,6 +6,7 @@
  */
 
 #include "lxcore.h"
+#include <ntstrsafe.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -497,6 +498,117 @@ LxMapSigTrampoline(
     return (ULONG64)Base;
 }
 
+static
+VOID
+LxCreateRuntimeDir(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_EXEC_REQUEST Request)
+{
+    CHAR Path[32];
+    LX_NODE Node;
+
+    if (LxLookup(Process, LX_AT_FDCWD, "/run/user", LX_LOOKUP_CREATE, &Node) == 0)
+    {
+        if (!Node.Exists)
+            LxVfsMkdir(Process, &Node, 0755);
+        LxNodeFree(&Node);
+    }
+    RtlStringCbPrintfA(Path, sizeof(Path), "/run/user/%lu", Request->Uid);
+    if (LxLookup(Process, LX_AT_FDCWD, Path, LX_LOOKUP_CREATE, &Node) != 0)
+        return;
+    if (Node.Exists || (LxVfsMkdir(Process, &Node, 0700) != 0))
+    {
+        LxNodeFree(&Node);
+        return;
+    }
+    LxNodeFree(&Node);
+    if (LxLookup(Process, LX_AT_FDCWD, Path, 0, &Node) != 0)
+        return;
+    LxVfsSetAttributes(Process, &Node, NULL, LX_S_IFDIR | 0700, Request->Uid, Request->Gid);
+    LxNodeFree(&Node);
+}
+
+static
+VOID
+LxApplyRequestUser(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_EXEC_REQUEST Request)
+{
+    ULONG Count = min(Request->GroupCount, (ULONG)ARRAYSIZE(Process->Groups));
+
+    ExAcquireFastMutex(&Process->Lock);
+    Process->Uid[0] = Process->Uid[1] = Process->Uid[2] = Process->Fsuid = Request->Uid;
+    Process->Gid[0] = Process->Gid[1] = Process->Gid[2] = Process->Fsgid = Request->Gid;
+    Process->GroupCount = Count;
+    RtlCopyMemory(Process->Groups, Request->Groups, Count * sizeof(ULONG));
+    if (Request->Uid != 0)
+        Process->CapAmbient = 0;
+    ExReleaseFastMutex(&Process->Lock);
+}
+
+static
+LONG
+LxSearchPath(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_EXEC_REQUEST Request,
+    _Inout_ PSTR *FileName)
+{
+    PCSTR Search = "/bin:/usr/bin", Entry = Request->Env;
+    SIZE_T NameLength = strlen(*FileName);
+    BOOLEAN Denied = FALSE;
+    ULONG Index;
+
+    for (Index = 0; (Entry != NULL) && (Index < Request->EnvCount); Index++)
+    {
+        if (strncmp(Entry, "PATH=", 5) == 0)
+        {
+            Search = Entry + 5;
+            break;
+        }
+        Entry += strlen(Entry) + 1;
+    }
+
+    while (TRUE)
+    {
+        PCSTR Colon = strchr(Search, ':');
+        SIZE_T DirLength = (Colon != NULL) ? (SIZE_T)(Colon - Search) : strlen(Search);
+        PSTR Candidate = LxAlloc(DirLength + NameLength + 3);
+        PLX_FILE File;
+        LONG Error;
+
+        if (Candidate == NULL)
+            return -LX_ENOMEM;
+        if (DirLength == 0)
+            Candidate[0] = '.';
+        else
+            RtlCopyMemory(Candidate, Search, DirLength);
+        Candidate[DirLength ? DirLength : 1] = '/';
+        RtlCopyMemory(Candidate + (DirLength ? DirLength : 1) + 1, *FileName, NameLength + 1);
+        Error = LxVfsOpen(Process, LX_AT_FDCWD, Candidate, LX_O_RDONLY, 0, &File);
+        if (Error == 0)
+        {
+            BOOLEAN Directory = File->Directory;
+
+            LxFileDereference(File);
+            if (!Directory)
+            {
+                LxFree(*FileName);
+                *FileName = Candidate;
+                return 0;
+            }
+        }
+        else if (Error == -LX_EACCES)
+        {
+            Denied = TRUE;
+        }
+        LxFree(Candidate);
+        if (Search[DirLength] == '\0')
+            break;
+        Search += DirLength + 1;
+    }
+    return Denied ? -LX_EACCES : -LX_ENOENT;
+}
+
 NTSTATUS
 LxExecImage(
     _In_ PLX_THREAD Thread,
@@ -522,6 +634,22 @@ LxExecImage(
     {
         *Errno = LX_ENOMEM;
         return STATUS_NO_MEMORY;
+    }
+    if (Request->User)
+    {
+        if (Request->RuntimeDir)
+            LxCreateRuntimeDir(Process, Request);
+        LxApplyRequestUser(Process, Request);
+    }
+    if (Request->SearchPath && (strchr(FileName, '/') == NULL))
+    {
+        Error = LxSearchPath(Process, Request, &FileName);
+        if (Error != 0)
+        {
+            LxFree(FileName);
+            *Errno = -Error;
+            return (Error == -LX_EACCES) ? STATUS_ACCESS_DENIED : STATUS_OBJECT_NAME_NOT_FOUND;
+        }
     }
 
     for (Depth = 0;; Depth++)
