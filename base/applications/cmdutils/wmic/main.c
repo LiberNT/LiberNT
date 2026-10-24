@@ -243,6 +243,9 @@ static int query_prop( const WCHAR *class, int argc, WCHAR *argv[] )
     ULONG count, width = 0;
     VARIANT v;
     int i;
+#ifdef __REACTOS__
+    BOOL list = FALSE;
+#endif
 
     WINE_TRACE( "%s", debugstr_w(class) );
     for (i = 0; i < argc; i++) WINE_TRACE( " %s", debugstr_w(argv[i]) );
@@ -269,6 +272,30 @@ static int query_prop( const WCHAR *class, int argc, WCHAR *argv[] )
         goto done;
     }
 
+#ifdef __REACTOS__
+    {
+        int props = 0;
+
+        for (i = 0; i < argc; i++)
+        {
+            if (argv[i][0] != '/')
+            {
+                argv[props++] = argv[i];
+                continue;
+            }
+            if (!wcsicmp( argv[i], L"/value" ) || !wcsicmp( argv[i], L"/format:list" ))
+                list = TRUE;
+            else if (wcsicmp( argv[i], L"/all" ) && wcsicmp( argv[i], L"/format:table" ))
+            {
+                IWbemClassObject_Release( obj );
+                output_error( STRING_INVALID_QUERY );
+                goto done;
+            }
+        }
+        argc = props;
+    }
+#endif
+
     /* Check that this class supports all requested properties. */
     hr = process_property_list( obj, argc, argv, &proplist );
     IWbemClassObject_Release( obj );
@@ -277,6 +304,13 @@ static int query_prop( const WCHAR *class, int argc, WCHAR *argv[] )
         output_error( STRING_INVALID_QUERY );
         goto done;
     }
+#ifdef __REACTOS__
+    if (!*proplist)
+    {
+        free( proplist );
+        if (!(proplist = wcsdup( L"*" ))) goto done;
+    }
+#endif
 
     len = lstrlenW( class ) + lstrlenW( proplist ) + ARRAY_SIZE(L"SELECT * FROM ");
     if (!(query = SysAllocStringLen( NULL, len ))) goto done;
@@ -285,6 +319,30 @@ static int query_prop( const WCHAR *class, int argc, WCHAR *argv[] )
     if (!(wql = SysAllocString(L"WQL" ))) goto done;
     hr = IWbemServices_ExecQuery( services, wql, query, flags, NULL, &result );
     if (hr != S_OK) goto done;
+
+#ifdef __REACTOS__
+    if (list)
+    {
+        for (;;)
+        {
+            IEnumWbemClassObject_Next( result, WBEM_INFINITE, 1, &obj, &count );
+            if (!count) break;
+            output_string( L"\n\n" );
+            IWbemClassObject_BeginEnumeration( obj, WBEM_FLAG_NONSYSTEM_ONLY );
+            while (IWbemClassObject_Next( obj, 0, &name, &v, NULL, NULL ) == S_OK)
+            {
+                convert_to_bstr( &v );
+                output_string( L"%s=%s\n", name, V_BSTR( &v ) );
+                VariantClear( &v );
+                SysFreeString( name );
+            }
+            IWbemClassObject_Release( obj );
+        }
+        output_string( L"\n\n" );
+        ret = 0;
+        goto done;
+    }
+#endif
 
     for (;;) /* get column width */
     {
@@ -401,9 +459,14 @@ static int process_args( int argc, WCHAR *argv[] )
 
     if (!wcsicmp( argv[i], L"get" ))
     {
+#ifdef __REACTOS__
+        ++i;
+        return query_prop( class, argc - i, argv + i );
+#else
         if (++i >= argc)
             goto not_supported;
         return query_prop( class, argc - i, argv + i );
+#endif
     }
 
 not_supported:
