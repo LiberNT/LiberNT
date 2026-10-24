@@ -29,6 +29,7 @@
 #include "../include/lxioctl.h"
 #include "../include/lxwin.h"
 #include "../include/lxappid.h"
+#include "../include/lxlaunch.h"
 #include "lxwinhost.h"
 
 #define WM_LX_MESSAGE   (WM_APP + 1)
@@ -73,6 +74,9 @@ typedef struct _LX_HOST_WINDOW
 
 static HANDLE LxDevice = INVALID_HANDLE_VALUE;
 static ULONG LxRootTagValue;
+static PCWSTR LxRoot;
+static int LxPendingFirst;
+static int LxPendingCount;
 static HWND LxMessageWindow;
 static PLX_HOST_WINDOW LxWindows;
 static HANDLE LxSendEvent;
@@ -638,6 +642,82 @@ LxSendHello(VOID)
 
 static
 VOID
+LxStartCompositor(
+    _In_ PCWSTR Root)
+{
+    LX_LAUNCH Launch;
+
+    if (!LxRootHasFile(Root, L"\\usr\\local\\lib\\libernt\\lxwayland\\lxwayland"))
+        return;
+    ZeroMemory(&Launch, sizeof(Launch));
+    Launch.Name = L"lxwinhost";
+    Launch.Root = Root;
+    Launch.Cwd = "/";
+    Launch.FileName = "/usr/local/lib/libernt/lxwayland/lxwayland";
+    Launch.Detached = TRUE;
+    if (LxStringsAdd(&Launch.Args, "lxwayland") &&
+        LxEnvSet(&Launch.Env, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"))
+    {
+        LxLaunch(&Launch);
+    }
+    free(Launch.Args.Buffer);
+    free(Launch.Env.Buffer);
+}
+
+static
+VOID
+LxLaunchProgram(
+    _In_ PCWSTR Root,
+    _In_ int First,
+    _In_ int Count)
+{
+    LX_ACCOUNT Account;
+    LX_LAUNCH Launch;
+    CHAR UserName[64];
+    PCHAR Program = NULL;
+    int Index;
+
+    if (Count <= 0)
+        return;
+    if ((!LxRootDefaultUser(Root, UserName, sizeof(UserName)) || !LxRootAccount(Root, UserName, 0, &Account)) &&
+        !LxRootAccount(Root, NULL, 0, &Account))
+    {
+        return;
+    }
+    ZeroMemory(&Launch, sizeof(Launch));
+    Launch.Name = L"lxwinhost";
+    Launch.Root = Root;
+    Launch.Detached = TRUE;
+    Launch.SearchPath = TRUE;
+    if (LxSetSession(&Launch, Root, &Account))
+    {
+        for (Index = First; Index < First + Count; Index++)
+        {
+            PCHAR Argument = LxToUtf8(__wargv[Index]);
+
+            if ((Argument == NULL) || !LxStringsAdd(&Launch.Args, Argument))
+            {
+                free(Argument);
+                break;
+            }
+            if (Index == First)
+                Program = Argument;
+            else
+                free(Argument);
+        }
+        if ((Program != NULL) && (Index == First + Count))
+        {
+            Launch.FileName = Program;
+            LxLaunch(&Launch);
+        }
+    }
+    free(Program);
+    free(Launch.Args.Buffer);
+    free(Launch.Env.Buffer);
+}
+
+static
+VOID
 LxHandleMessage(
     _In_ PLX_WIN_HEADER Header,
     _In_ ULONG Size)
@@ -662,6 +742,14 @@ LxHandleMessage(
 
         case LX_WIN_COMPOSITOR_DETACHED:
             LxDestroyAll();
+            return;
+
+        case LX_WIN_READY:
+            if (LxPendingCount > 0)
+            {
+                LxLaunchProgram(LxRoot, LxPendingFirst, LxPendingCount);
+                LxPendingCount = 0;
+            }
             return;
 
         case LX_WIN_CREATE:
@@ -1134,69 +1222,6 @@ LxReaderThread(
 
 static
 VOID
-LxAppendArgument(
-    _Inout_ PWSTR CommandLine,
-    _In_ SIZE_T Capacity,
-    _In_ PCWSTR Argument)
-{
-    SIZE_T Length = wcslen(CommandLine);
-    PCWSTR Cursor;
-
-    if (Length + wcslen(Argument) * 2 + 4 >= Capacity)
-        return;
-    CommandLine[Length++] = L' ';
-    CommandLine[Length++] = L'"';
-    for (Cursor = Argument; *Cursor != UNICODE_NULL; Cursor++)
-    {
-        if (*Cursor == L'"')
-            CommandLine[Length++] = L'\\';
-        CommandLine[Length++] = *Cursor;
-    }
-    CommandLine[Length++] = L'"';
-    CommandLine[Length] = UNICODE_NULL;
-}
-
-static
-VOID
-LxLaunch(
-    _In_ PCWSTR Root,
-    _In_ int First,
-    _In_ int Count)
-{
-    SECURITY_ATTRIBUTES Security = { sizeof(Security), NULL, TRUE };
-    PROCESS_INFORMATION Process;
-    STARTUPINFOW Startup;
-    WCHAR CommandLine[4096];
-    HANDLE Null;
-    int Index;
-
-    if (Count <= 0)
-        return;
-    wcscpy(CommandLine, L"lxrun.exe -r");
-    LxAppendArgument(CommandLine, ARRAYSIZE(CommandLine), Root);
-    LxAppendArgument(CommandLine, ARRAYSIZE(CommandLine), L"/usr/local/lib/libernt/lxapp");
-    for (Index = First; Index < First + Count; Index++)
-        LxAppendArgument(CommandLine, ARRAYSIZE(CommandLine), __wargv[Index]);
-
-    Null = CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &Security,
-                       OPEN_EXISTING, 0, NULL);
-    ZeroMemory(&Startup, sizeof(Startup));
-    Startup.cb = sizeof(Startup);
-    Startup.dwFlags = STARTF_USESTDHANDLES;
-    Startup.hStdInput = Null;
-    Startup.hStdOutput = Null;
-    Startup.hStdError = Null;
-    if (CreateProcessW(NULL, CommandLine, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &Startup, &Process))
-    {
-        CloseHandle(Process.hThread);
-        CloseHandle(Process.hProcess);
-    }
-    if (Null != INVALID_HANDLE_VALUE)
-        CloseHandle(Null);
-}
-
-static
-VOID
 LxStartDriver(VOID)
 {
     WCHAR ImagePath[] = L"System32\\drivers\\lxcore.sys";
@@ -1296,9 +1321,12 @@ wWinMain(
     LxSendEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if ((LxSendEvent == NULL) || !LxAttach(Root))
     {
-        LxLaunch(Root, First, __argc - First);
+        LxLaunchProgram(Root, First, __argc - First);
         return 2;
     }
+    LxRoot = Root;
+    LxPendingFirst = First;
+    LxPendingCount = __argc - First;
 
     if (LxNormalizeRoot(Root, FullRoot, ARRAYSIZE(FullRoot)))
         LxRootTagValue = LxRootTag(FullRoot);
@@ -1333,7 +1361,7 @@ wWinMain(
     Reader = CreateThread(NULL, 0, LxReaderThread, NULL, 0, NULL);
     if (Reader == NULL)
         return 4;
-    LxLaunch(Root, First, __argc - First);
+    LxStartCompositor(Root);
 
     while (GetMessageW(&Message, NULL, 0, 0) > 0)
     {
