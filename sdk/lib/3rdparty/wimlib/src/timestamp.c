@@ -71,7 +71,7 @@ wim_timestamp_to_wimlib_timespec(u64 timestamp, struct wimlib_timespec *wts,
 }
 
 #ifdef _WIN32
-static void __attribute__((unused))
+static void _unused_attribute
 check_sizeof_time_t(void)
 {
 	/* Windows builds should always be using 64-bit time_t now. */

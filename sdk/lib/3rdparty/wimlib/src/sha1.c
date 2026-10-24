@@ -70,7 +70,8 @@ rol32(u32 v, int bits)
  * Expands to FORCE_NOT_CACHED() if the architecture has 16 or fewer general
  * purpose registers, otherwise does nothing.
  */
-#if defined(__i386__) || defined(__x86_64__) || defined(__arm__)
+#if (defined(__i386__) || defined(__x86_64__) || defined(__arm__)) && \
+	defined(__GNUC__)
 #  define FORCE_NOT_CACHED_IF_FEW_REGS(array)	FORCE_NOT_CACHED(array)
 #else
 #  define FORCE_NOT_CACHED_IF_FEW_REGS(array)	(void)(array)
@@ -88,7 +89,7 @@ rol32(u32 v, int bits)
 #define SHA1_GENERIC_ROUND(i, a, b, c, d, e)				\
 	FORCE_NOT_CACHED_IF_FEW_REGS(w);				\
 	if ((i) < 16)							\
-		w[i] = get_unaligned_be32(data + ((i) * 4));		\
+		w[(i) % 16] = get_unaligned_be32(data + ((i) * 4));	\
 	else								\
 		w[(i) % 16] = rol32(w[((i) - 16) % 16] ^		\
 				    w[((i) - 14) % 16] ^		\
@@ -112,7 +113,7 @@ rol32(u32 v, int bits)
 	SHA1_GENERIC_5ROUNDS((i) + 15);
 
 static void
-sha1_blocks_generic(u32 h[5], const void *data, size_t num_blocks)
+sha1_blocks_generic(u32 h[5], const u8 *data, size_t num_blocks)
 {
 	do {
 		u32 a = h[0];
@@ -160,7 +161,7 @@ sha1_blocks_generic(u32 h[5], const void *data, size_t num_blocks)
  * During rounds 80-95, the first 16 message schedule words for the next block
  * are prepared.
  */
-#if defined(__i386__) || defined(__x86_64__)
+#if (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
 #include <immintrin.h>
 
 #define SHA1_SSSE3_PRECALC(i, w0, w1, w2, w3, w4, w5, w6, w7)		\
@@ -533,7 +534,7 @@ sha1_blocks(u32 h[5], const void *data, size_t num_blocks)
 	if (cpu_features & ARM_CPU_FEATURE_SHA1)
 		return sha1_blocks_arm_ce(h, data, num_blocks);
 #endif
-	return sha1_blocks_generic(h, data, num_blocks);
+	sha1_blocks_generic(h, data, num_blocks);
 }
 
 /*
@@ -572,14 +573,14 @@ sha1_update(struct sha1_ctx *ctx, const void *data, size_t len)
 		}
 		memcpy(&ctx->buffer[buffered], data, remaining);
 		sha1_blocks(ctx->h, ctx->buffer, 1);
-		data += remaining;
+		data = (const u8 *)data + remaining;
 		len -= remaining;
 	}
 
 	blocks = len / SHA1_BLOCK_SIZE;
 	if (blocks) {
 		sha1_blocks(ctx->h, data, blocks);
-		data += blocks * SHA1_BLOCK_SIZE;
+		data = (const u8 *)data + blocks * SHA1_BLOCK_SIZE;
 		len -= blocks * SHA1_BLOCK_SIZE;
 	}
 

@@ -15,7 +15,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _MSC_VER
 #include <dirent.h>
+#endif
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -57,6 +59,62 @@ typedef ssize_t capture_read_t;
 #define capture_is_dir(mode) S_ISDIR(mode)
 #define capture_is_reg(mode) S_ISREG(mode)
 #define capture_strdup(string) strdup(string)
+#endif
+
+#ifdef _MSC_VER
+struct dirent
+{
+    char d_name[260];
+};
+
+typedef struct
+{
+    intptr_t handle;
+    int first;
+    struct _finddata_t data;
+    struct dirent ent;
+} DIR;
+
+static DIR* opendir(const char* path)
+{
+    size_t len = strlen(path);
+    char* pattern = (char*)malloc(len + 3);
+    DIR* dir;
+
+    if (!pattern)
+        return NULL;
+    memcpy(pattern, path, len);
+    memcpy(pattern + len, "/*", 3);
+
+    dir = (DIR*)calloc(1, sizeof(*dir));
+    if (dir) {
+        dir->handle = _findfirst(pattern, &dir->data);
+        if (dir->handle == -1) {
+            free(dir);
+            dir = NULL;
+        } else {
+            dir->first = 1;
+        }
+    }
+    free(pattern);
+    return dir;
+}
+
+static struct dirent* readdir(DIR* dir)
+{
+    if (!dir->first && _findnext(dir->handle, &dir->data) != 0)
+        return NULL;
+    dir->first = 0;
+    strcpy(dir->ent.d_name, dir->data.name);
+    return &dir->ent;
+}
+
+static int closedir(DIR* dir)
+{
+    int ret = _findclose(dir->handle);
+    free(dir);
+    return ret;
+}
 #endif
 
 #define MMAP_CAPTURE_THRESHOLD (1u << 20)

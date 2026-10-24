@@ -462,6 +462,80 @@ CALLING_CONVENTION_AMD64_MSFT_NESTED = CallingConvention(
     "msft_x64", "amd64", MAPPING_AMD64_MSFT, 6, 4, 7,
     gen_prologue_amd64_msft_nested, gen_epilogue_amd64_msft_nested, gen_get_memslot_offset_amd64_msft_nested)
 
+def gen_prologue_amd64_msft_masm(self, arg_count, reg_count, stack_alloc_size, xmm_reg_count, mul_fixup="", nested=False):
+
+    prologue = "\n"
+
+    reg_save_size, xmm_save_size, stack_alloc_aligned_size, shadow_space_allocation_size = calc_amd64_stack_allocation_sizes(
+        self, reg_count, stack_alloc_size, xmm_reg_count, nested)
+
+    if reg_count > self.volatile_registers:
+        prologue += "rex_push_reg Q%s\n" % self.volatile_registers
+        for i in range(self.volatile_registers+1, reg_count):
+            prologue += "push_reg Q%s\n" % i
+
+    stack_total_size = xmm_save_size + stack_alloc_aligned_size + shadow_space_allocation_size
+    if stack_total_size > 0:
+        prologue += "alloc_stack %d\n" % stack_total_size
+
+    if xmm_save_size > 0:
+        for i in range(6, xmm_reg_count):
+            prologue += "save_xmm128 xmm%d, %d\n" % (i, shadow_space_allocation_size + stack_alloc_aligned_size + 16 * (i - 6))
+
+    if prologue != "\n":
+        prologue += "\nEND_PROLOGUE\n\n"
+
+    prologue += mul_fixup
+
+    stack_offset = 32 + 8 + reg_save_size + xmm_save_size + stack_alloc_aligned_size + shadow_space_allocation_size
+    for i in range(self.argument_registers+1, arg_count+1):
+        prologue += "mov Q%s, [rsp + %d]\n" % (i, stack_offset)
+        stack_offset += 8
+    return prologue
+
+def gen_prologue_amd64_msft_masm_mul(self, arg_count, reg_count, stack_alloc_size, xmm_reg_count):
+    return gen_prologue_amd64_msft_masm(self, arg_count, reg_count, stack_alloc_size, xmm_reg_count, mul_fixup = "mov Q2, QH\n", nested = False)
+
+def gen_prologue_amd64_msft_masm_nested(self, arg_count, reg_count, stack_alloc_size, xmm_reg_count):
+    return gen_prologue_amd64_msft_masm(self, arg_count, reg_count, stack_alloc_size, xmm_reg_count, mul_fixup = "", nested = True)
+
+def gen_epilogue_amd64_msft_masm(self, arg_count, reg_count, stack_alloc_size, xmm_reg_count, nested = False):
+
+    epilogue = "\n"
+
+    reg_save_size, xmm_save_size, stack_alloc_aligned_size, shadow_space_allocation_size = calc_amd64_stack_allocation_sizes(
+        self, reg_count, stack_alloc_size, xmm_reg_count, nested)
+
+    if xmm_save_size > 0:
+        for i in range(6, xmm_reg_count):
+            epilogue += "movdqa xmm%d, xmmword ptr [rsp + %d]\n" % (i, shadow_space_allocation_size + stack_alloc_aligned_size + 16 * (i - 6))
+
+    stack_total_size = xmm_save_size + stack_alloc_aligned_size + shadow_space_allocation_size
+    if stack_total_size > 0:
+        epilogue += "add rsp, %d\n" % stack_total_size
+
+    epilogue += "BEGIN_EPILOGUE\n"
+
+    if reg_count > self.volatile_registers:
+        for i in reversed(range(self.volatile_registers, reg_count)):
+            epilogue += "pop Q%s\n" % i
+
+    epilogue += "ret\n"
+    return epilogue
+
+def gen_epilogue_amd64_msft_masm_nested(self, arg_count, reg_count, stack_alloc_size, xmm_reg_count):
+    return gen_epilogue_amd64_msft_masm(self, arg_count, reg_count, stack_alloc_size, xmm_reg_count, nested = True)
+
+CALLING_CONVENTION_AMD64_MSFT_MASM = CallingConvention(
+    "msft_x64", "amd64", MAPPING_AMD64_MSFT, 6, 4, 7,
+    gen_prologue_amd64_msft_masm, gen_epilogue_amd64_msft_masm, gen_get_memslot_offset_amd64_msft)
+CALLING_CONVENTION_AMD64_MSFT_MASM_MUL = CallingConvention(
+    "msft_x64", "amd64", get_mul_mapping_from_normal_mapping(MAPPING_AMD64_MSFT, 4), 6, 4, 6,
+    gen_prologue_amd64_msft_masm_mul, gen_epilogue_amd64_msft_masm, gen_get_memslot_offset_amd64_msft)
+CALLING_CONVENTION_AMD64_MSFT_MASM_NESTED = CallingConvention(
+    "msft_x64", "amd64", MAPPING_AMD64_MSFT, 6, 4, 7,
+    gen_prologue_amd64_msft_masm_nested, gen_epilogue_amd64_msft_masm_nested, gen_get_memslot_offset_amd64_msft_nested)
+
 # AMD64 System V calling convention
 MAPPING_AMD64_SYSTEMV = {
     0: AMD64_RAX, # Result register / volatile
@@ -1261,7 +1335,11 @@ def gen_file_header(assembler, architecture, calling_convention):
 def process_file(assembler, architecture, calling_convention, infilename, outfilename):
     normal_calling_convention = None
 
-    if assembler in [ASSEMBLER_MASM, ASSEMBLER_GAS_PE]:
+    if assembler == ASSEMBLER_MASM and architecture == "amd64" and calling_convention == "msft":
+        normal_calling_convention = CALLING_CONVENTION_AMD64_MSFT_MASM
+        mul_calling_convention = CALLING_CONVENTION_AMD64_MSFT_MASM_MUL
+        nested_calling_convention = CALLING_CONVENTION_AMD64_MSFT_MASM_NESTED
+    elif assembler in [ASSEMBLER_MASM, ASSEMBLER_GAS_PE]:
         if architecture == "amd64" and calling_convention == "msft":
             normal_calling_convention = CALLING_CONVENTION_AMD64_MSFT
             mul_calling_convention = CALLING_CONVENTION_AMD64_MSFT_MUL

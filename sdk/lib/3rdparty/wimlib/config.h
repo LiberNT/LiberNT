@@ -1,3 +1,6 @@
+#ifndef _WIMLIB_CONFIG_H
+#define _WIMLIB_CONFIG_H
+
 #define HAVE_ERRNO_H 1
 #define HAVE_INTTYPES_H 1
 #define HAVE_STDARG_H 1
@@ -59,4 +62,6 @@ static __inline struct tm *gmtime_r(const __time64_t *timer, struct tm *result)
 #define gmtime _gmtime64
 #define localtime _localtime64
 #define mktime _mktime64
+#endif
+
 #endif

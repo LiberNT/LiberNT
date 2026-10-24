@@ -142,12 +142,82 @@ elseif(ARCH STREQUAL "arm64" AND ARM64EC_RUNTIME)
         lib/arm64ec/fdef369_asm.S
         lib/arm64ec/fdef_asm.S
         lib/arm64ec/wipe.S)
+elseif(ARCH STREQUAL "arm64" AND MSVC)
+    include_directories(inc lib)
+    set_source_files_properties(lib/arm64/fdef369_asm.S lib/arm64/fdef_asm.S lib/arm64/wipe.S
+        PROPERTIES COMPILE_DEFINITIONS SYMCRYPT_PLATFORM_WINE=1)
+    add_asm_files(symcrypt_arm64_asm
+        lib/arm64/fdef369_asm.S
+        lib/arm64/fdef_asm.S
+        lib/arm64/wipe.S)
+    list(APPEND SOURCE ${symcrypt_arm64_asm})
 elseif(ARCH STREQUAL "arm64")
     list(APPEND SOURCE
         lib/arm64/fdef369_asm.S
         lib/arm64/fdef_asm.S
         lib/arm64/wipe.S)
 endif()
+
+if(MSVC AND ARCH STREQUAL "i386")
+    set(SYMCRYPT_MASM_SOURCE
+        lib/i386/aesasm.cppasm
+        lib/i386/fdef_asm.cppasm
+        lib/i386/wipe.asm)
+    set(SYMCRYPT_MASM_DEPENDS
+        inc/C_asm_shared.inc
+        inc/symcrypt_internal_shared.inc
+        lib/i386/symcrypt_magic.inc)
+    set(SYMCRYPT_MASM_CPU X86)
+    set(SYMCRYPT_MASM_FLAGS /safeseh)
+elseif(MSVC AND ARCH STREQUAL "amd64")
+    find_program(SYMCRYPT_PYTHON_EXECUTABLE NAMES python3 python REQUIRED NO_CMAKE_FIND_ROOT_PATH)
+    set(SYMCRYPT_MASM_SOURCE
+        lib/amd64/aesasm.symcryptasm
+        lib/amd64/fdef369_asm.symcryptasm
+        lib/amd64/fdef_asm.symcryptasm
+        lib/amd64/fdef_mulx.symcryptasm
+        lib/amd64/sha256xmm_asm.symcryptasm
+        lib/amd64/wipe.symcryptasm)
+    set(SYMCRYPT_MASM_DEPENDS
+        inc/C_asm_shared.inc
+        inc/symcrypt_internal_shared.inc
+        lib/symcryptasm_shared.cppasm
+        lib/amd64/sha2common_asm.symcryptasm
+        scripts/symcryptasm_processor.py)
+    set(SYMCRYPT_MASM_CPU AMD64)
+    set(SYMCRYPT_MASM_FLAGS /I${REACTOS_SOURCE_DIR}/sdk/lib/ucrt/inc)
+endif()
+
+foreach(_file ${SYMCRYPT_MASM_SOURCE})
+    get_filename_component(_name ${_file} NAME_WE)
+    get_filename_component(_ext ${_file} EXT)
+    set(_input ${CMAKE_CURRENT_SOURCE_DIR}/${_file})
+    set(_output ${CMAKE_CURRENT_BINARY_DIR}/masm/${_name})
+    if(_ext STREQUAL ".symcryptasm")
+        add_custom_command(
+            OUTPUT ${_output}.cppasm
+            COMMAND ${SYMCRYPT_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/symcryptasm_processor.py masm amd64 msft ${_input} ${_output}.cppasm
+            DEPENDS ${_input} ${SYMCRYPT_MASM_DEPENDS}
+            VERBATIM)
+        set(_input ${_output}.cppasm)
+    endif()
+    if(NOT _ext STREQUAL ".asm")
+        add_custom_command(
+            OUTPUT ${_output}.asm
+            COMMAND ${CMAKE_C_COMPILER} /nologo /X /EP /P /Fi${_output}.asm
+                /I${CMAKE_CURRENT_SOURCE_DIR}/inc /I${CMAKE_CURRENT_SOURCE_DIR}/lib
+                /DSYMCRYPT_MASM /DSYMCRYPT_CPU_${SYMCRYPT_MASM_CPU} /DDBG=$<BOOL:${DBG}> ${_input}
+            DEPENDS ${_input} ${SYMCRYPT_MASM_DEPENDS}
+            VERBATIM)
+        set(_input ${_output}.asm)
+    endif()
+    add_custom_command(
+        OUTPUT ${_output}.obj
+        COMMAND ${CMAKE_ASM_MASM_COMPILER} /nologo ${_quiet_flag} /X ${SYMCRYPT_MASM_FLAGS} /Fo${_output}.obj /c /Ta ${_input}
+        DEPENDS ${_input}
+        VERBATIM)
+    list(APPEND SOURCE ${_output}.obj)
+endforeach()
 
 set(SYMCRYPT_USER_SOURCE ${SOURCE})
 set(SYMCRYPT_KERNEL_SOURCE ${SOURCE})
@@ -185,4 +255,7 @@ target_include_directories(symcrypt_km
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(symcrypt PRIVATE -Wno-missing-braces -Wno-unused-but-set-variable -Wno-unused-function)
     target_compile_options(symcrypt_km PRIVATE -Wno-missing-braces -Wno-unused-but-set-variable -Wno-unused-function)
+elseif(MSVC)
+    target_compile_options(symcrypt PRIVATE /wd4068)
+    target_compile_options(symcrypt_km PRIVATE /wd4068)
 endif()
