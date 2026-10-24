@@ -22,6 +22,8 @@
 #define LX_SYSDEV_MAX_RANGES        16
 #define LX_SYSDEV_MAX_DEPTH         7
 #define LX_SYSDEV_MAX_PORTS         31
+#define LX_SYSDEV_MAX_INTERFACES    32
+#define LX_SYSDEV_MAX_USB_DRIVERS   128
 
 #define LX_IORESOURCE_IO            0x00000100
 #define LX_IORESOURCE_MEM           0x00000200
@@ -39,6 +41,28 @@ typedef struct _LX_SYSDEV_NODE
     ULONG Public;
 } LX_SYSDEV_NODE, *PLX_SYSDEV_NODE;
 
+typedef struct _LX_SYSDEV_USB
+{
+    ULONG Bus;
+    ULONG Devnum;
+    ULONG Port;
+    UCHAR Speed;
+    BOOLEAN RootHub;
+    PWSTR ParentHub;
+    PWSTR OwnHub;
+    PUCHAR Descriptors;
+    ULONG DescriptorLength;
+    PSTR Strings[4];
+    PSTR Drivers[LX_SYSDEV_MAX_INTERFACES];
+} LX_SYSDEV_USB, *PLX_SYSDEV_USB;
+
+typedef struct _LX_SYSDEV_USB_DRIVER
+{
+    WCHAR DriverKey[96];
+    WCHAR Hardware[48];
+    CHAR Service[32];
+} LX_SYSDEV_USB_DRIVER, *PLX_SYSDEV_USB_DRIVER;
+
 typedef struct _LX_SYSDEV_TREE
 {
     volatile LONG References;
@@ -47,7 +71,10 @@ typedef struct _LX_SYSDEV_TREE
     ULONG Capacity;
     PLX_SYSDEV_NODE Nodes;
     ULONG UsbCount;
-    ULONG UsbDevices[256];
+    ULONG UsbCapacity;
+    PLX_SYSDEV_USB Usb;
+    ULONG UsbDriverCount;
+    PLX_SYSDEV_USB_DRIVER UsbDrivers;
     ULONG NextBus;
     BOOLEAN Failed;
 } LX_SYSDEV_TREE, *PLX_SYSDEV_TREE;
@@ -257,6 +284,23 @@ LxSysDevLinkIn(
 
 static
 VOID
+LxSysDevFreeUsb(
+    _Inout_ PLX_SYSDEV_USB Usb)
+{
+    ULONG Index;
+
+    LxFree(Usb->ParentHub);
+    LxFree(Usb->OwnHub);
+    LxFree(Usb->Descriptors);
+    for (Index = 0; Index < RTL_NUMBER_OF(Usb->Strings); Index++)
+        LxFree(Usb->Strings[Index]);
+    for (Index = 0; Index < LX_SYSDEV_MAX_INTERFACES; Index++)
+        LxFree(Usb->Drivers[Index]);
+    RtlZeroMemory(Usb, sizeof(*Usb));
+}
+
+static
+VOID
 LxSysDevFree(
     _In_ PLX_SYSDEV_TREE Tree)
 {
@@ -267,8 +311,108 @@ LxSysDevFree(
         LxFree(Tree->Nodes[Index].Path);
         LxFree(Tree->Nodes[Index].Data);
     }
+    for (Index = 0; Index < Tree->UsbCount; Index++)
+        LxSysDevFreeUsb(&Tree->Usb[Index]);
+    LxFree(Tree->Usb);
+    if (Tree->UsbDrivers != NULL)
+        LxFreePaged(Tree->UsbDrivers);
     LxFree(Tree->Nodes);
     LxFree(Tree);
+}
+
+static
+PWSTR
+LxSysDevWideDup(
+    _In_opt_ PCWSTR Text)
+{
+    SIZE_T Bytes;
+    PWSTR Copy;
+
+    if (Text == NULL)
+        return NULL;
+    Bytes = (wcslen(Text) + 1) * sizeof(WCHAR);
+    Copy = LxAlloc(Bytes);
+    if (Copy != NULL)
+        RtlCopyMemory(Copy, Text, Bytes);
+    return Copy;
+}
+
+static
+BOOLEAN
+LxSysDevCopyUsb(
+    _Out_ PLX_SYSDEV_USB Usb,
+    _In_ PLX_SYSDEV_USB Source)
+{
+    ULONG Index;
+
+    RtlZeroMemory(Usb, sizeof(*Usb));
+    Usb->Bus = Source->Bus;
+    Usb->Devnum = Source->Devnum;
+    Usb->Port = Source->Port;
+    Usb->Speed = Source->Speed;
+    Usb->RootHub = Source->RootHub;
+    Usb->ParentHub = LxSysDevWideDup(Source->ParentHub);
+    Usb->OwnHub = LxSysDevWideDup(Source->OwnHub);
+    Usb->DescriptorLength = Source->DescriptorLength;
+    Usb->Descriptors = LxAlloc(Source->DescriptorLength + 1);
+    if (Usb->Descriptors != NULL)
+        RtlCopyMemory(Usb->Descriptors, Source->Descriptors, Source->DescriptorLength);
+    for (Index = 0; Index < RTL_NUMBER_OF(Usb->Strings); Index++)
+    {
+        if (Source->Strings[Index] != NULL)
+        {
+            Usb->Strings[Index] = LxStrDup(Source->Strings[Index]);
+            if (Usb->Strings[Index] == NULL)
+                return FALSE;
+        }
+    }
+    for (Index = 0; Index < LX_SYSDEV_MAX_INTERFACES; Index++)
+    {
+        if (Source->Drivers[Index] != NULL)
+        {
+            Usb->Drivers[Index] = LxStrDup(Source->Drivers[Index]);
+            if (Usb->Drivers[Index] == NULL)
+                return FALSE;
+        }
+    }
+    return (Usb->Descriptors != NULL) && ((Source->ParentHub == NULL) || (Usb->ParentHub != NULL)) &&
+           ((Source->OwnHub == NULL) || (Usb->OwnHub != NULL));
+}
+
+static
+BOOLEAN
+LxSysDevAddUsb(
+    _Inout_ PLX_SYSDEV_TREE Tree,
+    _Inout_ PLX_SYSDEV_USB Source,
+    _In_reads_bytes_(Length) PUCHAR Descriptors,
+    _In_ ULONG Length)
+{
+    PLX_SYSDEV_USB Usb;
+    BOOLEAN Result;
+
+    if (Tree->UsbCount == Tree->UsbCapacity)
+    {
+        ULONG Capacity = Tree->UsbCapacity ? Tree->UsbCapacity * 2 : 16;
+        PLX_SYSDEV_USB Grown = LxAlloc(Capacity * sizeof(*Grown));
+
+        if (Grown == NULL)
+            return FALSE;
+        RtlZeroMemory(Grown, Capacity * sizeof(*Grown));
+        if (Tree->Usb != NULL)
+        {
+            RtlCopyMemory(Grown, Tree->Usb, Tree->UsbCount * sizeof(*Grown));
+            LxFree(Tree->Usb);
+        }
+        Tree->Usb = Grown;
+        Tree->UsbCapacity = Capacity;
+    }
+    Usb = &Tree->Usb[Tree->UsbCount++];
+    Source->Descriptors = Descriptors;
+    Source->DescriptorLength = Length;
+    Result = LxSysDevCopyUsb(Usb, Source);
+    Source->Descriptors = NULL;
+    Source->DescriptorLength = 0;
+    return Result;
 }
 
 static
@@ -982,7 +1126,7 @@ LxSysDevUsbAttributes(
     _In_ PCSTR Manufacturer,
     _In_ PCSTR Product,
     _In_ PCSTR Serial,
-    _In_opt_ PCSTR Driver)
+    _Inout_ PLX_SYSDEV_USB Source)
 {
     PUCHAR Descriptors = LxAlloc(sizeof(*Descriptor) + ConfigLength);
     PUCHAR Config = NULL, Cursor, Limit;
@@ -1007,6 +1151,10 @@ LxSysDevUsbAttributes(
         RtlCopyMemory(Descriptors, Descriptor, sizeof(*Descriptor));
         RtlCopyMemory(Descriptors + sizeof(*Descriptor), Configs, ConfigLength);
         LxSysDevBinary(Tree, Directory, "descriptors", 0444, Descriptors, sizeof(*Descriptor) + ConfigLength, MAXULONG);
+        Source->Bus = Bus->Number;
+        Source->Devnum = Devnum;
+        if (!LxSysDevAddUsb(Tree, Source, Descriptors, sizeof(*Descriptor) + ConfigLength))
+            Tree->Failed = TRUE;
         LxFree(Descriptors);
     }
     else
@@ -1061,15 +1209,13 @@ LxSysDevUsbAttributes(
     LxSysDevLinkIn(Tree, Directory, "subsystem", "bus/usb");
     LxSysDevLinkIn(Tree, Directory, "driver", "bus/usb/drivers/usb");
 
-    if (Tree->UsbCount < RTL_NUMBER_OF(Tree->UsbDevices))
-        Tree->UsbDevices[Tree->UsbCount++] = (Bus->Number << 16) | Devnum;
-
     if (Config == NULL)
         return;
     Limit = min(Config + *(PUSHORT)&Config[2], Configs + ConfigLength);
     for (Cursor = Config + Config[0]; Cursor + 2 <= Limit; Cursor += Cursor[0])
     {
         PSTR Interface;
+        PCSTR Driver;
 
         if (Cursor[0] < 2)
             break;
@@ -1084,6 +1230,7 @@ LxSysDevUsbAttributes(
             Tree->Failed = TRUE;
             return;
         }
+        Driver = (Cursor[2] < LX_SYSDEV_MAX_INTERFACES) ? Source->Drivers[Cursor[2]] : NULL;
         LxSysDevDirectory(Tree, Interface);
         LxSysDevText(Tree, Interface, "authorized", "1\n");
         LxSysDevText(Tree, Interface, "bAlternateSetting", "%2u\n", Cursor[3]);
@@ -1142,6 +1289,129 @@ LxSysDevSpeed(
 }
 
 static
+VOID
+LxSysDevReadUsbDrivers(
+    _Inout_ PLX_SYSDEV_TREE Tree)
+{
+    static const WCHAR EnumUsb[] = L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Enum\\USB";
+    UCHAR Buffer[sizeof(KEY_BASIC_INFORMATION) + 256 * sizeof(WCHAR)];
+    UCHAR InstanceBuffer[sizeof(KEY_BASIC_INFORMATION) + 256 * sizeof(WCHAR)];
+    PKEY_BASIC_INFORMATION Hardware = (PKEY_BASIC_INFORMATION)Buffer;
+    PKEY_BASIC_INFORMATION Instance = (PKEY_BASIC_INFORMATION)InstanceBuffer;
+    HANDLE Root, HardwareKey, InstanceKey;
+    ULONG HardwareIndex, InstanceIndex, Length;
+
+    Tree->UsbDrivers = LxAllocPaged(LX_SYSDEV_MAX_USB_DRIVERS * sizeof(LX_SYSDEV_USB_DRIVER));
+    if (Tree->UsbDrivers == NULL)
+        return;
+    Root = LxSysDevOpenKey(NULL, EnumUsb, sizeof(EnumUsb) - sizeof(WCHAR));
+    if (Root == NULL)
+        return;
+    for (HardwareIndex = 0;
+         (Tree->UsbDriverCount < LX_SYSDEV_MAX_USB_DRIVERS) &&
+         NT_SUCCESS(ZwEnumerateKey(Root, HardwareIndex, KeyBasicInformation, Hardware, sizeof(Buffer) - sizeof(WCHAR), &Length));
+         HardwareIndex++)
+    {
+        HardwareKey = LxSysDevOpenKey(Root, Hardware->Name, (USHORT)Hardware->NameLength);
+        if (HardwareKey == NULL)
+            continue;
+        for (InstanceIndex = 0;
+             (Tree->UsbDriverCount < LX_SYSDEV_MAX_USB_DRIVERS) &&
+             NT_SUCCESS(ZwEnumerateKey(HardwareKey, InstanceIndex, KeyBasicInformation, Instance,
+                                       sizeof(InstanceBuffer) - sizeof(WCHAR), &Length));
+             InstanceIndex++)
+        {
+            PLX_SYSDEV_USB_DRIVER Entry = &Tree->UsbDrivers[Tree->UsbDriverCount];
+            PKEY_VALUE_PARTIAL_INFORMATION Driver, Service;
+
+            InstanceKey = LxSysDevOpenKey(HardwareKey, Instance->Name, (USHORT)Instance->NameLength);
+            if (InstanceKey == NULL)
+                continue;
+            Driver = LxSysDevQueryValue(InstanceKey, L"Driver");
+            Service = LxSysDevQueryValue(InstanceKey, L"Service");
+            if ((Driver != NULL) && (Driver->Type == REG_SZ) && (Service != NULL) && (Service->Type == REG_SZ))
+            {
+                RtlZeroMemory(Entry, sizeof(*Entry));
+                RtlCopyMemory(Entry->DriverKey, Driver->Data,
+                              min(Driver->DataLength, sizeof(Entry->DriverKey) - sizeof(WCHAR)));
+                RtlCopyMemory(Entry->Hardware, Hardware->Name,
+                              min(Hardware->NameLength, sizeof(Entry->Hardware) - sizeof(WCHAR)));
+                LxSysDevUtf8(Service->Data,
+                             (ULONG)(wcsnlen((PCWSTR)Service->Data, Service->DataLength / sizeof(WCHAR)) * sizeof(WCHAR)),
+                             Entry->Service, sizeof(Entry->Service));
+                Tree->UsbDriverCount++;
+            }
+            if (Driver != NULL)
+                LxFreePaged(Driver);
+            if (Service != NULL)
+                LxFreePaged(Service);
+            ZwClose(InstanceKey);
+        }
+        ZwClose(HardwareKey);
+    }
+    ZwClose(Root);
+}
+
+static
+VOID
+LxSysDevUsbDrivers(
+    _In_ PLX_SYSDEV_TREE Tree,
+    _In_ PDEVICE_OBJECT Hub,
+    _In_ PFILE_OBJECT HubFile,
+    _In_ ULONG Port,
+    _In_ PUSB_DEVICE_DESCRIPTOR Descriptor,
+    _Out_writes_(LX_SYSDEV_MAX_INTERFACES) PSTR *Drivers)
+{
+    ULONG Size = sizeof(USB_NODE_CONNECTION_DRIVERKEY_NAME) + 256 * sizeof(WCHAR), Returned, Index, Entry;
+    PUSB_NODE_CONNECTION_DRIVERKEY_NAME Key;
+    PSTR Service = NULL;
+
+    RtlZeroMemory(Drivers, LX_SYSDEV_MAX_INTERFACES * sizeof(PSTR));
+    if (Tree->UsbDrivers == NULL)
+        return;
+    Key = LxAllocPaged(Size);
+    if (Key == NULL)
+        return;
+    RtlZeroMemory(Key, Size);
+    Key->ConnectionIndex = Port;
+    if (NT_SUCCESS(LxSysDevIoctl(Hub, HubFile, IOCTL_USB_GET_NODE_CONNECTION_DRIVERKEY_NAME, Key, Size - sizeof(WCHAR),
+                                 Size - sizeof(WCHAR), &Returned)) &&
+        (Key->DriverKeyName[0] != UNICODE_NULL))
+    {
+        for (Entry = 0; Entry < Tree->UsbDriverCount; Entry++)
+        {
+            if (_wcsicmp(Tree->UsbDrivers[Entry].DriverKey, Key->DriverKeyName) == 0)
+            {
+                Service = Tree->UsbDrivers[Entry].Service;
+                break;
+            }
+        }
+    }
+    LxFreePaged(Key);
+    if ((Service == NULL) || (Service[0] == '\0'))
+        return;
+    for (Index = 0; Index < LX_SYSDEV_MAX_INTERFACES; Index++)
+    {
+        WCHAR Hardware[48];
+
+        Drivers[Index] = Service;
+        if (_stricmp(Service, "usbccgp") != 0)
+            continue;
+        Drivers[Index] = NULL;
+        RtlStringCbPrintfW(Hardware, sizeof(Hardware), L"VID_%04X&PID_%04X&MI_%02X", Descriptor->idVendor,
+                           Descriptor->idProduct, Index);
+        for (Entry = 0; Entry < Tree->UsbDriverCount; Entry++)
+        {
+            if (_wcsicmp(Tree->UsbDrivers[Entry].Hardware, Hardware) == 0)
+            {
+                Drivers[Index] = Tree->UsbDrivers[Entry].Service;
+                break;
+            }
+        }
+    }
+}
+
+static
 ULONG
 LxSysDevPortCount(
     _In_ PDEVICE_OBJECT Hub,
@@ -1166,6 +1436,7 @@ LxSysDevUsbHub(
     _Inout_ PLX_SYSDEV_TREE Tree,
     _In_ PDEVICE_OBJECT Hub,
     _In_ PFILE_OBJECT HubFile,
+    _In_ PCWSTR HubName,
     _In_ ULONG Ports,
     _In_ PLX_SYSDEV_BUS Bus2,
     _In_opt_ PLX_SYSDEV_BUS Bus3,
@@ -1180,6 +1451,7 @@ LxSysDevUsbPort(
     _Inout_ PLX_SYSDEV_TREE Tree,
     _In_ PDEVICE_OBJECT Hub,
     _In_ PFILE_OBJECT HubFile,
+    _In_ PCWSTR HubName,
     _In_ ULONG Port,
     _In_ PLX_SYSDEV_BUS Bus2,
     _In_opt_ PLX_SYSDEV_BUS Bus3,
@@ -1202,7 +1474,9 @@ LxSysDevUsbPort(
     PSTR Directory = NULL, Link = NULL;
     PDEVICE_OBJECT Child = NULL;
     PFILE_OBJECT ChildFile = NULL;
-    ULONG MaxChild = 0;
+    ULONG MaxChild = 0, NameSize = sizeof(USB_NODE_CONNECTION_NAME) + 512 * sizeof(WCHAR);
+    PUSB_NODE_CONNECTION_NAME ChildName = NULL;
+    LX_SYSDEV_USB Source;
 
     if (Info == NULL)
     {
@@ -1291,24 +1565,37 @@ LxSysDevUsbPort(
     }
     if (Info->DeviceIsHub && (Depth < LX_SYSDEV_MAX_DEPTH))
     {
-        ULONG NameSize = sizeof(USB_NODE_CONNECTION_NAME) + 512 * sizeof(WCHAR);
-        PUSB_NODE_CONNECTION_NAME HubName = LxAllocPaged(NameSize);
-
-        if (HubName != NULL)
+        ChildName = LxAllocPaged(NameSize);
+        if (ChildName != NULL)
         {
-            RtlZeroMemory(HubName, NameSize);
-            HubName->ConnectionIndex = Port;
-            if (NT_SUCCESS(LxSysDevIoctl(Hub, HubFile, IOCTL_USB_GET_NODE_CONNECTION_NAME, HubName, NameSize,
-                                         NameSize, &Returned)) &&
-                (HubName->NodeName[0] != UNICODE_NULL) &&
-                NT_SUCCESS(LxSysDevOpen(HubName->NodeName, (ULONG)wcsnlen(HubName->NodeName, 512), &ChildFile,
+            RtlZeroMemory(ChildName, NameSize);
+            ChildName->ConnectionIndex = Port;
+            if (NT_SUCCESS(LxSysDevIoctl(Hub, HubFile, IOCTL_USB_GET_NODE_CONNECTION_NAME, ChildName,
+                                         NameSize - sizeof(WCHAR), NameSize - sizeof(WCHAR), &Returned)) &&
+                (ChildName->NodeName[0] != UNICODE_NULL) &&
+                NT_SUCCESS(LxSysDevOpen(ChildName->NodeName, (ULONG)wcsnlen(ChildName->NodeName, 512), &ChildFile,
                                         &Child)))
             {
                 MaxChild = LxSysDevPortCount(Child, ChildFile);
             }
-            LxFreePaged(HubName);
         }
     }
+
+    RtlZeroMemory(&Source, sizeof(Source));
+    Source.ParentHub = (PWSTR)HubName;
+    Source.Port = Port;
+    Source.OwnHub = (Child != NULL) ? ChildName->NodeName : NULL;
+    if (SuperPlus)
+        Source.Speed = LX_USB_SPEED_SUPER_PLUS;
+    else if (Super)
+        Source.Speed = LX_USB_SPEED_SUPER;
+    else if (Info->Speed == UsbHighSpeed)
+        Source.Speed = LX_USB_SPEED_HIGH;
+    else if (Info->Speed == UsbFullSpeed)
+        Source.Speed = LX_USB_SPEED_FULL;
+    else
+        Source.Speed = LX_USB_SPEED_LOW;
+    LxSysDevUsbDrivers(Tree, Hub, HubFile, Port, &Info->DeviceDescriptor, Source.Drivers);
 
     Directory = LxStrPrintf("%s/%s", Parent, Name);
     Link = LxStrPrintf("bus/usb/devices/%s", Name);
@@ -1316,10 +1603,11 @@ LxSysDevUsbPort(
     {
         LxSysDevUsbAttributes(Tree, Bus, Directory, DevPath, Devnum, &Info->DeviceDescriptor, Configs, ConfigLength,
                               Info->CurrentConfigurationValue, LxSysDevSpeed(Info->Speed, Super, SuperPlus), MaxChild,
-                              Manufacturer, Product, Serial, Info->DeviceIsHub ? "hub" : NULL);
+                              Manufacturer, Product, Serial, &Source);
         LxSysDevLink(Tree, Link, Directory);
         if (Child != NULL)
-            LxSysDevUsbHub(Tree, Child, ChildFile, MaxChild, Bus, NULL, Directory, NULL, DevPath, Depth + 1);
+            LxSysDevUsbHub(Tree, Child, ChildFile, ChildName->NodeName, MaxChild, Bus, NULL, Directory, NULL, DevPath,
+                           Depth + 1);
     }
     else
     {
@@ -1327,6 +1615,8 @@ LxSysDevUsbPort(
     }
     if (ChildFile != NULL)
         ObDereferenceObject(ChildFile);
+    if (ChildName != NULL)
+        LxFreePaged(ChildName);
     LxFree(Link);
     LxFree(Configs);
     LxFree(Directory);
@@ -1339,6 +1629,7 @@ LxSysDevUsbHub(
     _Inout_ PLX_SYSDEV_TREE Tree,
     _In_ PDEVICE_OBJECT Hub,
     _In_ PFILE_OBJECT HubFile,
+    _In_ PCWSTR HubName,
     _In_ ULONG Ports,
     _In_ PLX_SYSDEV_BUS Bus2,
     _In_opt_ PLX_SYSDEV_BUS Bus3,
@@ -1350,7 +1641,7 @@ LxSysDevUsbHub(
     ULONG Port;
 
     for (Port = 1; (Port <= Ports) && !Tree->Failed; Port++)
-        LxSysDevUsbPort(Tree, Hub, HubFile, Port, Bus2, Bus3, Parent2, Parent3, Prefix, Depth);
+        LxSysDevUsbPort(Tree, Hub, HubFile, HubName, Port, Bus2, Bus3, Parent2, Parent3, Prefix, Depth);
 }
 
 static
@@ -1375,9 +1666,11 @@ LxSysDevRootHub(
     _Inout_ PLX_SYSDEV_TREE Tree,
     _In_ PLX_SYSDEV_BUS Bus,
     _In_ PLX_SYSDEV_HC Hc,
+    _In_ PCWSTR HubName,
     _In_ ULONG Ports)
 {
     USB_DEVICE_DESCRIPTOR Device;
+    LX_SYSDEV_USB Source;
     UCHAR Config[31] =
     {
         9, USB_CONFIGURATION_DESCRIPTOR_TYPE, 25, 0, 1, 1, 0, 0xE0, 0,
@@ -1419,9 +1712,18 @@ LxSysDevRootHub(
         Config[24] = 0xFF;
     }
     RtlStringCbPrintfA(Manufacturer, sizeof(Manufacturer), "Linux %s %s", LX_KERNEL_RELEASE, Hc->DriverName);
+    RtlZeroMemory(&Source, sizeof(Source));
+    Source.RootHub = TRUE;
+    Source.OwnHub = (PWSTR)HubName;
+    Source.Speed = (Bus->BcdUsb >= 0x0300) ? LX_USB_SPEED_SUPER :
+                   ((Bus->BcdUsb >= 0x0200) ? LX_USB_SPEED_HIGH : LX_USB_SPEED_FULL);
+    Source.Strings[1] = (PSTR)Hc->Serial;
+    Source.Strings[2] = (PSTR)Hc->Product;
+    Source.Strings[3] = Manufacturer;
+    Source.Drivers[0] = "hub";
     LxSysDevUsbAttributes(Tree, Bus, Bus->Path, "0", Bus->NextDevnum++, &Device, Config, Config[2], 1,
                           (Bus->BcdUsb >= 0x0300) ? "5000" : ((Bus->BcdUsb >= 0x0200) ? "480" : "12"), Ports,
-                          Manufacturer, Hc->Product, Hc->Serial, "hub");
+                          Manufacturer, Hc->Product, Hc->Serial, &Source);
     Link = LxStrPrintf("bus/usb/devices/usb%u", Bus->Number);
     if (Link == NULL)
     {
@@ -1519,14 +1821,14 @@ LxSysDevController(
     if (RootName == NULL)
         return;
     RtlZeroMemory(RootName, RootSize);
-    if (!NT_SUCCESS(LxSysDevIoctl(Device, File, IOCTL_USB_GET_ROOT_HUB_NAME, RootName, RootSize, RootSize, &Length)) ||
+    if (!NT_SUCCESS(LxSysDevIoctl(Device, File, IOCTL_USB_GET_ROOT_HUB_NAME, RootName, RootSize - sizeof(WCHAR),
+                                  RootSize - sizeof(WCHAR), &Length)) ||
         (RootName->RootHubName[0] == UNICODE_NULL) ||
         !NT_SUCCESS(LxSysDevOpen(RootName->RootHubName, (ULONG)wcsnlen(RootName->RootHubName, 512), &HubFile, &Hub)))
     {
         LxFreePaged(RootName);
         return;
     }
-    LxFreePaged(RootName);
     Ports = LxSysDevPortCount(Hub, HubFile);
 
     RtlZeroMemory(&Bus2, sizeof(Bus2));
@@ -1544,11 +1846,11 @@ LxSysDevController(
     }
     if ((Bus2.Path != NULL) && ((ProgIf != 0x30) || (Bus3.Path != NULL)))
     {
-        LxSysDevRootHub(Tree, &Bus2, &Hc, Ports);
+        LxSysDevRootHub(Tree, &Bus2, &Hc, RootName->RootHubName, Ports);
         if (ProgIf == 0x30)
-            LxSysDevRootHub(Tree, &Bus3, &Hc, Ports);
-        LxSysDevUsbHub(Tree, Hub, HubFile, Ports, &Bus2, (ProgIf == 0x30) ? &Bus3 : NULL, Bus2.Path,
-                       (ProgIf == 0x30) ? Bus3.Path : NULL, "", 0);
+            LxSysDevRootHub(Tree, &Bus3, &Hc, RootName->RootHubName, Ports);
+        LxSysDevUsbHub(Tree, Hub, HubFile, RootName->RootHubName, Ports, &Bus2, (ProgIf == 0x30) ? &Bus3 : NULL,
+                       Bus2.Path, (ProgIf == 0x30) ? Bus3.Path : NULL, "", 0);
     }
     else
     {
@@ -1556,6 +1858,7 @@ LxSysDevController(
     }
     LxFree((PVOID)Bus2.Path);
     LxFree((PVOID)Bus3.Path);
+    LxFreePaged(RootName);
     ObDereferenceObject(HubFile);
 }
 
@@ -1613,6 +1916,7 @@ LxSysDevBuild(VOID)
         LxSysDevScanBus(Tree, Pci, 0, "devices/pci0000:00", 0, Seen);
         LxFreePaged(Pci);
     }
+    LxSysDevReadUsbDrivers(Tree);
     LxSysDevUsb(Tree);
     LxSysDevSort(Tree);
     Tree->Built = (LONG64)KeQueryInterruptTime();
@@ -1831,12 +2135,13 @@ LxSysDevUsbNodes(
     _In_ ULONG Count)
 {
     PLX_SYSDEV_TREE Tree = LxSysDevAcquire();
-    ULONG Copied;
+    ULONG Copied, Index;
 
     if (Tree == NULL)
         return 0;
     Copied = min(Count, Tree->UsbCount);
-    RtlCopyMemory(Nodes, Tree->UsbDevices, Copied * sizeof(ULONG));
+    for (Index = 0; Index < Copied; Index++)
+        Nodes[Index] = (Tree->Usb[Index].Bus << 16) | Tree->Usb[Index].Devnum;
     LxSysDevRelease(Tree);
     return Copied;
 }

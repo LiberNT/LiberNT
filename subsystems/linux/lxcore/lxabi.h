@@ -703,6 +703,12 @@ typedef struct _LX_MSGINFO
 #define LX_CAP_SYS_ADMIN        21
 #define LX_CAP_SYS_TIME         25
 
+#define LX_USB_SPEED_LOW            1
+#define LX_USB_SPEED_FULL           2
+#define LX_USB_SPEED_HIGH           3
+#define LX_USB_SPEED_SUPER          5
+#define LX_USB_SPEED_SUPER_PLUS     6
+
 #define LX_SPLICE_F_NONBLOCK    0x02
 #define LX_SPLICE_F_ALL         0x0F
 
