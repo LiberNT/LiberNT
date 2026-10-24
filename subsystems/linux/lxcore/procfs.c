@@ -664,6 +664,174 @@ LxProcessTtyNumber(
     return (ULONG)LxTtyDevice(Process->Tty);
 }
 
+#define LX_TIMENS_MAX_SECONDS (MAXLONG64 / 1000000000LL / 2)
+
+static
+LONG64
+LxTimeNsSeconds(
+    _In_ LONG64 Offset)
+{
+    return (Offset >= 0) ? (Offset / 1000000000LL) : -((-Offset + 999999999LL) / 1000000000LL);
+}
+
+static
+LONG64
+LxTimeNsNanoseconds(
+    _In_ LONG64 Offset)
+{
+    return Offset - LxTimeNsSeconds(Offset) * 1000000000LL;
+}
+
+static
+VOID
+LxGenPidTimensOffsets(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+    LONG64 Monotonic = 0, Boottime = 0;
+
+    if (Process == NULL)
+        return;
+    ExAcquireFastMutex(&Process->Lock);
+    if (Process->Ns[LxNsTime] != NULL)
+    {
+        Monotonic = Process->Ns[LxNsTime]->Time.Monotonic;
+        Boottime = Process->Ns[LxNsTime]->Time.Boottime;
+    }
+    ExReleaseFastMutex(&Process->Lock);
+    LxProcessDereference(Process);
+    LxTextPrintf(Text, "%-10s %10lld %9ld\n%-10s %10lld %9ld\n",
+                 "monotonic", LxTimeNsSeconds(Monotonic), (LONG)LxTimeNsNanoseconds(Monotonic),
+                 "boottime", LxTimeNsSeconds(Boottime), (LONG)LxTimeNsNanoseconds(Boottime));
+}
+
+static
+PCSTR
+LxParseTimensField(
+    _In_ PCSTR Data,
+    _Out_writes_(Size) PSTR Field,
+    _In_ ULONG Size)
+{
+    ULONG Length = 0;
+
+    while ((*Data == ' ') || (*Data == '\t'))
+        Data++;
+    while ((*Data != '\0') && (*Data != ' ') && (*Data != '\t') && (*Data != '\n'))
+    {
+        if (Length + 1 >= Size)
+            return NULL;
+        Field[Length++] = *Data++;
+    }
+    Field[Length] = '\0';
+    return (Length != 0) ? Data : NULL;
+}
+
+static
+LONG
+LxWritePidTimensOffsets(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_THREAD Current = LxCurrentThread();
+    PLX_PROCESS Process;
+    PLX_NS Ns;
+    LONG64 Offsets[2];
+    BOOLEAN Set[2] = { FALSE, FALSE };
+    ULONG64 Effective;
+    LONG Error = 0;
+
+    UNREFERENCED_PARAMETER(Length);
+    if (Current == NULL)
+        return -LX_ESRCH;
+    Effective = (Current->Process->Uid[1] == 0) ? Current->Process->CapBounding : Current->Process->CapAmbient;
+    if (!(Effective & (1ULL << LX_CAP_SYS_TIME)))
+        return -LX_EPERM;
+    Process = LxProcessLookup(Current->Process->Instance, (ULONG)(ULONG_PTR)File->HandlerContext);
+    if (Process == NULL)
+        return -LX_ESRCH;
+    ExAcquireFastMutex(&Process->Lock);
+    Ns = Process->Ns[LxNsTime];
+    if (Ns != NULL)
+        LxNsReference(Ns);
+    ExReleaseFastMutex(&Process->Lock);
+    LxProcessDereference(Process);
+    if (Ns == NULL)
+        return -LX_ESRCH;
+
+    Offsets[0] = Ns->Time.Monotonic;
+    Offsets[1] = Ns->Time.Boottime;
+    while ((Error == 0) && (*Data != '\0'))
+    {
+        CHAR Clock[16], Seconds[24], Nanoseconds[16];
+        LONG64 SecondsValue, NanosecondsValue, Offset, Now;
+        LX_TIMESPEC Sample;
+        ULONG Index;
+
+        while ((*Data == ' ') || (*Data == '\t') || (*Data == '\n'))
+            Data++;
+        if (*Data == '\0')
+            break;
+        Data = LxParseTimensField(Data, Clock, sizeof(Clock));
+        if (Data != NULL)
+            Data = LxParseTimensField(Data, Seconds, sizeof(Seconds));
+        if (Data != NULL)
+            Data = LxParseTimensField(Data, Nanoseconds, sizeof(Nanoseconds));
+        while ((Data != NULL) && ((*Data == ' ') || (*Data == '\t')))
+            Data++;
+        if ((Data == NULL) || ((*Data != '\n') && (*Data != '\0')) ||
+            (LxParseWriteNumber(Seconds, &SecondsValue) != 0) ||
+            (LxParseWriteNumber(Nanoseconds, &NanosecondsValue) != 0) || (Nanoseconds[0] == '-'))
+        {
+            Error = -LX_EINVAL;
+            break;
+        }
+        if ((strcmp(Clock, "monotonic") == 0) || (strcmp(Clock, "1") == 0))
+            Index = 0;
+        else if ((strcmp(Clock, "boottime") == 0) || (strcmp(Clock, "7") == 0))
+            Index = 1;
+        else
+        {
+            Error = -LX_EINVAL;
+            break;
+        }
+        if (NanosecondsValue > 999999999)
+        {
+            Error = -LX_EINVAL;
+            break;
+        }
+        if ((SecondsValue > LX_TIMENS_MAX_SECONDS) || (SecondsValue < -LX_TIMENS_MAX_SECONDS))
+        {
+            Error = -LX_ERANGE;
+            break;
+        }
+        Offset = SecondsValue * 1000000000LL + NanosecondsValue;
+        LxQueryClock(Index ? LX_CLOCK_BOOTTIME : LX_CLOCK_MONOTONIC, &Sample);
+        Now = Sample.Seconds * 1000000000LL + Sample.Nanoseconds;
+        if ((Now + Offset < 0) || ((Now + Offset) / 1000000000LL > LX_TIMENS_MAX_SECONDS))
+        {
+            Error = -LX_ERANGE;
+            break;
+        }
+        Offsets[Index] = Offset;
+        Set[Index] = TRUE;
+    }
+
+    if ((Error == 0) && Ns->Time.Frozen)
+        Error = -LX_EACCES;
+    if (Error == 0)
+    {
+        if (Set[0])
+            Ns->Time.Monotonic = Offsets[0];
+        if (Set[1])
+            Ns->Time.Boottime = Offsets[1];
+    }
+    LxNsDereference(Ns);
+    return Error;
+}
+
 static
 VOID
 LxGenPidStat(
@@ -685,7 +853,7 @@ LxGenPidStat(
     ExReleaseFastMutex(&Process->Lock);
     Threads = Process->Exited ? 1 : (ULONG)max(Process->ThreadCount, 1);
     State = Process->Exited ? 'Z' : 'S';
-    Start = Process->StartTime / LX_PROC_TICKS;
+    Start = (Process->StartTime + LxTimeNsOffset(Self, LX_CLOCK_BOOTTIME) / 100) / LX_PROC_TICKS;
 
     LxTextPrintf(Text, "%lu (%s) %c %lu %lu %lu %lu %ld %u %lu %lu %lu %lu %llu %llu %lld %lld %ld %ld %lu %ld %lld ",
                  LxGlobalToNrIn(LxProcPidNs(Self, Synth), Synth->Tid ? Synth->Tid : Process->Pid), Comm, State,
@@ -1209,6 +1377,7 @@ static const LX_PID_ENTRY LxPidEntries[] =
     { "status", LX_S_IFREG, 0444, NULL, LxGenPidStatus, NULL },
     { "syscall", LX_S_IFREG, 0400, NULL, LxGenPidSyscall, NULL },
     { "task", LX_S_IFDIR, 0555, NULL, NULL, NULL },
+    { "timens_offsets", LX_S_IFREG, 0644, NULL, LxGenPidTimensOffsets, LxWritePidTimensOffsets },
     { "timerslack_ns", LX_S_IFREG, 0666, "50000\n", NULL, LxWriteAccept },
     { "uid_map", LX_S_IFREG, 0644, "         0          0 4294967295\n", NULL, NULL },
     { "wchan", LX_S_IFREG, 0444, "0", NULL, NULL },
@@ -1580,9 +1749,8 @@ LxGenUptime(
     _In_ PLX_SYNTH Synth,
     _Inout_ PLX_TEXT Text)
 {
-    LONG64 Now = (LONG64)KeQueryInterruptTime();
+    LONG64 Now = (LONG64)KeQueryInterruptTime() + LxTimeNsOffset(Self, LX_CLOCK_BOOTTIME) / 100;
 
-    UNREFERENCED_PARAMETER(Self);
     UNREFERENCED_PARAMETER(Synth);
     LxTextPrintf(Text, "%lld.%02lld %lld.%02lld\n", Now / 10000000LL, (Now / 100000LL) % 100,
                  Now / 10000000LL, (Now / 100000LL) % 100);

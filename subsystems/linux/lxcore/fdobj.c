@@ -504,7 +504,7 @@ LX_SYSCALL(LxSysTimerfdSettime)
     if (Due == 0)
         Timer->DueNs = 0;
     else if ((Flags & LX_TFD_TIMER_ABSTIME) || (Due >= MAXLONG64 - Now))
-        Timer->DueNs = (Flags & LX_TFD_TIMER_ABSTIME) ? Due : MAXLONG64;
+        Timer->DueNs = (Flags & LX_TFD_TIMER_ABSTIME) ? max(Due - LxTimeNsOffset(Call->Process, Timer->Clock), 1) : MAXLONG64;
     else
         Timer->DueNs = Now + Due;
     Due = Timer->DueNs;

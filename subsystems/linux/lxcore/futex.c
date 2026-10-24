@@ -869,7 +869,9 @@ LxFutexTimeout(
         return -LX_EINVAL;
     if (Absolute)
     {
-        LxQueryClock(Clock, &Now);
+        PLX_THREAD Thread = LxCurrentThread();
+
+        LxQueryClockIn((Thread != NULL) ? Thread->Process : NULL, Clock, &Now);
         Timespec.Seconds -= Now.Seconds;
         Timespec.Nanoseconds -= Now.Nanoseconds;
         if (Timespec.Nanoseconds < 0)

@@ -240,6 +240,53 @@ LxNsAttachRoot(
         LxNsSet(&Process->Ns[Index], Instance->RootNs[Index]);
     LxNsSet(&Process->PidNs, Instance->RootNs[LxNsPid]);
     LxNsSet(&Process->TimeNs, Instance->RootNs[LxNsTime]);
+    if (Process->TimeNs != NULL)
+        Process->TimeNs->Time.Frozen = TRUE;
+}
+
+LONG64
+LxTimeNsOffset(
+    _In_opt_ PLX_PROCESS Process,
+    _In_ ULONG Clock)
+{
+    PLX_NS Ns = (Process != NULL) ? Process->TimeNs : NULL;
+
+    if (Ns == NULL)
+        return 0;
+    switch (Clock)
+    {
+        case LX_CLOCK_MONOTONIC:
+        case LX_CLOCK_MONOTONIC_RAW:
+        case LX_CLOCK_MONOTONIC_COARSE:
+            return Ns->Time.Monotonic;
+        case LX_CLOCK_BOOTTIME:
+        case LX_CLOCK_BOOTTIME_ALARM:
+            return Ns->Time.Boottime;
+        default:
+            return 0;
+    }
+}
+
+LONG
+LxQueryClockIn(
+    _In_opt_ PLX_PROCESS Process,
+    _In_ ULONG Clock,
+    _Out_ PLX_TIMESPEC Timespec)
+{
+    LONG Error = LxQueryClock(Clock, Timespec);
+    LONG64 Offset;
+
+    if (Error != 0)
+        return Error;
+    Offset = LxTimeNsOffset(Process, Clock);
+    if (Offset != 0)
+    {
+        LONG64 Value = Timespec->Seconds * 1000000000LL + Timespec->Nanoseconds + Offset;
+
+        Timespec->Seconds = Value / 1000000000LL;
+        Timespec->Nanoseconds = Value % 1000000000LL;
+    }
+    return 0;
 }
 
 VOID
@@ -646,6 +693,8 @@ LxNsInheritProcess(
 
     if (Child->PidNs->Pid.Dead)
         return -LX_ENOMEM;
+    if (Child->TimeNs != NULL)
+        Child->TimeNs->Time.Frozen = TRUE;
     return 0;
 }
 
@@ -1133,6 +1182,17 @@ LxNsJoin(
             Error = LxNsSetForCaller(Thread, LxNsMnt, Ns);
             if (Error == 0)
                 Error = LxNsResetFsToRoot(Thread);
+            return Error;
+
+        case LxNsTime:
+            Error = LxNsSetForCaller(Thread, LxNsTime, Ns);
+            if (Error == 0)
+            {
+                ExAcquireFastMutex(&Process->Lock);
+                LxNsSet(&Process->TimeNs, Ns);
+                ExReleaseFastMutex(&Process->Lock);
+                Ns->Time.Frozen = TRUE;
+            }
             return Error;
 
         default:

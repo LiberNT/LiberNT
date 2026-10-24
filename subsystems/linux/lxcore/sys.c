@@ -618,7 +618,7 @@ LX_SYSCALL(LxSysMembarrier)
 LX_SYSCALL(LxSysClockGettime)
 {
     LX_TIMESPEC Timespec;
-    LONG Error = LxQueryClock((ULONG)Call->Args[0], &Timespec);
+    LONG Error = LxQueryClockIn(Call->Process, (ULONG)Call->Args[0], &Timespec);
 
     if (Error != 0)
         return Error;
@@ -692,7 +692,7 @@ LX_SYSCALL(LxSysClockNanosleep)
     Interval = Request.Seconds * 10000000 + (Request.Nanoseconds + 99) / 100;
     if (Call->Args[1] & LX_TIMER_ABSTIME)
     {
-        LONG Error = LxQueryClock((ULONG)Call->Args[0], &Now);
+        LONG Error = LxQueryClockIn(Call->Process, (ULONG)Call->Args[0], &Now);
 
         if (Error != 0)
             return Error;
@@ -1127,7 +1127,7 @@ LX_SYSCALL(LxSysSysinfo)
     C_ASSERT(sizeof(Info) == 112);
 
     RtlZeroMemory(&Info, sizeof(Info));
-    Now.QuadPart = (LONG64)KeQueryInterruptTime();
+    Now.QuadPart = (LONG64)KeQueryInterruptTime() + LxTimeNsOffset(Call->Process, LX_CLOCK_BOOTTIME) / 100;
     Info.Uptime = Now.QuadPart / 10000000;
     if (NT_SUCCESS(ZwQuerySystemInformation(SystemBasicInformation, &Basic, sizeof(Basic), NULL)))
     {
@@ -3261,7 +3261,7 @@ LX_SYSCALL(LxSysTimerSettime)
     if (Due == 0)
         Timer->DueNs = 0;
     else if (Call->Args[1] & LX_TFD_TIMER_ABSTIME)
-        Timer->DueNs = Due;
+        Timer->DueNs = max(Due - LxTimeNsOffset(Process, Timer->Clock), 1);
     else
         Timer->DueNs = (Due >= MAXLONG64 - Now) ? MAXLONG64 : Now + Due;
     if ((Timer->DueNs != 0) && (Timer->DueNs != MAXLONG64))
