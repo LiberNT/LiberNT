@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    bpf.c
     driver.c
     exec.c
     fdobj.c

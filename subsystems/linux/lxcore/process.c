@@ -19,6 +19,7 @@ LxProcessInitialize(VOID)
     InitializeListHead(&LxProcessList);
     ExInitializeFastMutex(&LxProcessListLock);
     LxNsInitialize();
+    LxBpfInitialize();
     LxFutexInitialize();
     LxIpcInitialize();
     LxWinInitialize();

@@ -2877,6 +2877,16 @@ LxVfsOpenNode(
                         }
                         ZwClose(Handle);
                     }
+                    if (Device != MAXULONG64)
+                    {
+                        ULONG Access = ((Flags & LX_O_ACCMODE) == LX_O_WRONLY) ? 4 :
+                                       ((Flags & LX_O_ACCMODE) == LX_O_RDWR) ? 6 : 2;
+
+                        Error = LxBpfDeviceCheck(Process, Node->Type == 0060000, (ULONG)(Device >> 32), (ULONG)Device,
+                                                 Access);
+                        if (Error != 0)
+                            return Error;
+                    }
                     File = LxDeviceOpen(Process, Device, Flags, Node->Path);
                     if (File == NULL)
                         return -LX_ENXIO;
@@ -3132,6 +3142,12 @@ LxVfsMknod(
         return -LX_EPERM;
     if (Type == 0)
         Type = LX_S_IFREG;
+    if ((Type == LX_S_IFCHR) || (Type == 0060000))
+    {
+        Error = LxBpfDeviceCheck(Process, Type == 0060000, (ULONG)(Device >> 32), (ULONG)Device, 1);
+        if (Error != 0)
+            return Error;
+    }
 
     Error = LxNtCreateNode(&Node->NtPath, Type | (Mode & ~Process->Umask & 07777), Device, NULL);
     LxVcacheInvalidate();

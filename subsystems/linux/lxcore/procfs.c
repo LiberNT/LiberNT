@@ -340,6 +340,7 @@ LxCgroupCreateRoot(VOID)
     InitializeListHead(&Root->Children);
     InitializeListHead(&Root->DeadLink);
     InitializeListHead(&Root->DeadList);
+    InitializeListHead(&Root->BpfDevice);
     LxEventSourceInit(&Root->Events);
     Root->Root = Root;
     Root->Id = (ULONG64)InterlockedIncrement64(&LxCgroupNextId);
@@ -366,6 +367,7 @@ LxCgroupCreateChild(
     InitializeListHead(&Child->Children);
     InitializeListHead(&Child->DeadLink);
     InitializeListHead(&Child->DeadList);
+    InitializeListHead(&Child->BpfDevice);
     LxEventSourceInit(&Child->Events);
     Child->Parent = Parent;
     Child->Root = Parent->Root;
@@ -383,6 +385,7 @@ LxCgroupFreeOne(
 {
     while (!IsListEmpty(&Cgroup->Children))
         LxCgroupFreeOne(CONTAINING_RECORD(RemoveHeadList(&Cgroup->Children), LX_CGROUP, Sibling));
+    LxBpfCgroupRelease(Cgroup);
     LxFree(Cgroup->Name);
     LxFree(Cgroup);
 }

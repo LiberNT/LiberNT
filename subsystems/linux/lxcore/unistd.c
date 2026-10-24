@@ -241,7 +241,7 @@ static LX_SYSCALL_ENTRY LxGenericSyscalls[] =
     LX_ENTRY(277, NULL, "seccomp"),
     LX_ENTRY(278, LxSysGetrandom, "getrandom"),
     LX_ENTRY(279, LxSysMemfdCreate, "memfd_create"),
-    LX_ENTRY(280, NULL, "bpf"),
+    LX_ENTRY(280, LxSysBpf, "bpf"),
     LX_ENTRY(281, LxSysExecveat, "execveat"),
     LX_ENTRY(283, LxSysMembarrier, "membarrier"),
     LX_ENTRY(284, LxSysSucceed, "mlock2"),

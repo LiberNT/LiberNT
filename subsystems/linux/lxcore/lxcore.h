@@ -394,6 +394,8 @@ struct _LX_CGROUP
     LX_EVENT_SOURCE Events;
     LONG64 Created;
     LIST_ENTRY DeadList;
+    LIST_ENTRY BpfDevice;
+    ULONG BpfDeviceFlags;
 };
 
 struct _LX_PROCESS
@@ -936,6 +938,9 @@ PCSTR LxArchCpuinfo(VOID);
 PCSTR LxArchConfigName(VOID);
 PCSTR LxArchKernelConfig(VOID);
 PUCHAR LxKernelConfigGzip(_Out_ PULONG Length);
+VOID LxBpfInitialize(VOID);
+LONG LxBpfDeviceCheck(_In_ PLX_PROCESS Process, _In_ BOOLEAN Block, _In_ ULONG Major, _In_ ULONG Minor, _In_ ULONG Access);
+VOID LxBpfCgroupRelease(_In_ PLX_CGROUP Cgroup);
 
 FORCEINLINE
 PLX_NS
