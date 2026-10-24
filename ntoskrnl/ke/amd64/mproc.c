@@ -119,7 +119,7 @@ KeStartAllProcessors(VOID)
         ProcessorState->SpecialRegisters.Idtr.Limit = sizeof(APInfo->Idt) - 1;
         ProcessorState->SpecialRegisters.Tr = KGDT64_SYS_TSS;
 
-        ProcessorState->ContextFrame.Rsp = ALIGN_DOWN_BY((ULONG64)KernelStack, 16) - 8;
+        ProcessorState->ContextFrame.Rsp = ALIGN_DOWN_BY((ULONG64)KernelStack, 16) - 5 * sizeof(ULONG64);
         ProcessorState->ContextFrame.Rip = (ULONG64)(ULONG_PTR)KiSystemStartup;
         ProcessorState->ContextFrame.Rcx = (ULONG64)(ULONG_PTR)KeLoaderBlock;
         ProcessorState->ContextFrame.EFlags = __readeflags() & ~EFLAGS_INTERRUPT_MASK;
