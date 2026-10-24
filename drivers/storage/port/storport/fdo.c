@@ -225,6 +225,7 @@ PortFdoStartMiniport(
     }
 
     MiniportQuerySupportedControlTypes(&DeviceExtension->Miniport);
+    MiniportQuerySupportedUnitControlTypes(&DeviceExtension->Miniport);
 
     Status = PortInitializeDma(DeviceExtension, &DeviceExtension->Miniport.PortConfig);
     if (!NT_SUCCESS(Status))
@@ -772,6 +773,56 @@ PortReportLuns(
 
 
 static
+VOID
+PortReadRichDescription(
+    _In_ PPDO_DEVICE_EXTENSION PdoExtension)
+{
+    STOR_RICH_DEVICE_DESCRIPTION_V2 Description;
+    STOR_ADDR_BTL8 Address;
+    ULONG Length;
+
+    PdoExtension->ModelNumber[0] = ANSI_NULL;
+    PdoExtension->FirmwareRevision[0] = ANSI_NULL;
+
+    RtlZeroMemory(&Address, sizeof(Address));
+    Address.Type = STOR_ADDRESS_TYPE_BTL8;
+    Address.Port = (USHORT)PdoExtension->FdoExtension->PortNumber;
+    Address.AddressLength = STOR_ADDR_BTL8_ADDRESS_LENGTH;
+    Address.Path = (UCHAR)PdoExtension->Bus;
+    Address.Target = (UCHAR)PdoExtension->Target;
+    Address.Lun = (UCHAR)PdoExtension->Lun;
+
+    RtlZeroMemory(&Description, sizeof(Description));
+    Description.Version = STOR_RICH_DEVICE_DESCRIPTION_STRUCTURE_VERSION_V2;
+    Description.Size = sizeof(Description);
+    Description.Address = (PSTOR_ADDRESS)&Address;
+
+    if (MiniportUnitControl(&PdoExtension->FdoExtension->Miniport,
+                            ScsiUnitRichDescription,
+                            &Description) != ScsiUnitControlSuccess)
+    {
+        return;
+    }
+
+    Description.ModelNumber[STOR_MODEL_NUMBER_LENGTH] = ANSI_NULL;
+    Length = (ULONG)strlen(Description.ModelNumber);
+    while ((Length > 0) && (Description.ModelNumber[Length - 1] == ' '))
+        Length--;
+
+    RtlCopyMemory(PdoExtension->ModelNumber, Description.ModelNumber, Length);
+    PdoExtension->ModelNumber[Length] = ANSI_NULL;
+
+    Description.FirmwareRevision[STOR_FIRMWARE_REVISION_LENGTH] = ANSI_NULL;
+    Length = (ULONG)strlen(Description.FirmwareRevision);
+    while ((Length > 0) && (Description.FirmwareRevision[Length - 1] == ' '))
+        Length--;
+
+    RtlCopyMemory(PdoExtension->FirmwareRevision, Description.FirmwareRevision, Length);
+    PdoExtension->FirmwareRevision[Length] = ANSI_NULL;
+}
+
+
+static
 BOOLEAN
 PortScanLun(
     _In_ PPDO_DEVICE_EXTENSION PdoExtension)
@@ -792,6 +843,7 @@ PortScanLun(
     }
 
     PortReadSerialNumber(PdoExtension);
+    PortReadRichDescription(PdoExtension);
     PortRegisterLunMap(PdoExtension);
     DPRINT("VendorId: %.8s\n", PdoExtension->InquiryBuffer->VendorId);
     DPRINT("ProductId: %.16s\n", PdoExtension->InquiryBuffer->ProductId);

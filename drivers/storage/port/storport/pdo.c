@@ -1204,17 +1204,106 @@ PortPdoAllocateId(
 }
 
 
+static VOID
+PortPdoCopyTrimmedIdField(
+    _Out_writes_(Length + 1) PCHAR Destination,
+    _In_reads_(Length) PUCHAR Source,
+    _In_ ULONG Length)
+{
+    ULONG First, Last;
+
+    for (First = 0; (First < Length) && (Source[First] == ' '); First++);
+    for (Last = Length; (Last > First) && (Source[Last - 1] == ' '); Last--);
+
+    PortPdoCopyIdField(Destination, &Source[First], Last - First);
+}
+
+
+static VOID
+PortPdoCopyJustifiedIdField(
+    _Out_writes_(Width + 1) PCHAR Destination,
+    _In_z_ PCSTR Text,
+    _In_ ULONG Width)
+{
+    UCHAR Field[STOR_MODEL_NUMBER_LENGTH];
+    ULONG Length;
+
+    NT_ASSERT(Width <= sizeof(Field));
+
+    Length = (ULONG)strlen(Text);
+    RtlFillMemory(Field, Width, ' ');
+    if (Length >= Width)
+        RtlCopyMemory(Field, Text, Width);
+    else
+        RtlCopyMemory(&Field[Width - Length], Text, Length);
+
+    PortPdoCopyIdField(Destination, Field, Width);
+}
+
+
+static PWSTR
+PortPdoAllocateIdList(
+    _In_reads_(Count) PCSTR *Ids,
+    _In_ ULONG Count)
+{
+    ULONG Index, Character, Offset, CharacterCount;
+    PWSTR Buffer;
+
+    CharacterCount = 1;
+    for (Index = 0; Index < Count; Index++)
+    {
+        CharacterCount += (ULONG)strlen(Ids[Index]) + 1;
+    }
+
+    Buffer = ExAllocatePoolWithTag(PagedPool,
+                                   CharacterCount * sizeof(WCHAR),
+                                   TAG_PNP_ID);
+    if (Buffer == NULL)
+    {
+        return NULL;
+    }
+
+    Offset = 0;
+    for (Index = 0; Index < Count; Index++)
+    {
+        for (Character = 0; Ids[Index][Character] != ANSI_NULL; Character++)
+        {
+            Buffer[Offset++] = (WCHAR)(UCHAR)Ids[Index][Character];
+        }
+        Buffer[Offset++] = UNICODE_NULL;
+    }
+    Buffer[Offset++] = UNICODE_NULL;
+
+    NT_ASSERT(Offset == CharacterCount);
+    return Buffer;
+}
+
+
 static NTSTATUS
 PortPdoQueryId(
     _In_ PPDO_DEVICE_EXTENSION PdoExtension,
     _In_ BUS_QUERY_ID_TYPE IdType,
     _Out_ PULONG_PTR Information)
 {
-    CHAR DeviceId[128];
+    CHAR DeviceId[64];
     CHAR InstanceId[32];
+    CHAR LongRevisionId[96];
+    CHAR LongId[96];
+    CHAR RevisionId[64];
+    CHAR ProductId[64];
+    CHAR VendorId[32];
+    CHAR BusProductRevisionId[64];
+    CHAR ProductRevisionId[48];
+    CHAR TypeId[32];
+    CHAR LongProduct[41];
+    CHAR LongRevision[9];
+    CHAR TrimmedProduct[17];
+    CHAR TrimmedVendor[9];
     CHAR Product[17];
     CHAR Revision[5];
     CHAR Vendor[9];
+    PCSTR Ids[8];
+    ULONG Count;
     PCSTR GenericType;
     PCSTR DeviceType;
     PWSTR Buffer;
@@ -1236,13 +1325,18 @@ PortPdoQueryId(
     PortPdoCopyIdField(Revision,
                        PdoExtension->InquiryBuffer->ProductRevisionLevel,
                        sizeof(PdoExtension->InquiryBuffer->ProductRevisionLevel));
+    PortPdoCopyTrimmedIdField(TrimmedVendor,
+                              PdoExtension->InquiryBuffer->VendorId,
+                              sizeof(PdoExtension->InquiryBuffer->VendorId));
+    PortPdoCopyTrimmedIdField(TrimmedProduct,
+                              PdoExtension->InquiryBuffer->ProductId,
+                              sizeof(PdoExtension->InquiryBuffer->ProductId));
 
     sprintf(DeviceId,
-            "SCSI\\%s&Ven_%s&Prod_%s&Rev_%s",
+            "SCSI\\%s&Ven_%s&Prod_%s",
             DeviceType,
-            Vendor,
-            Product,
-            Revision);
+            TrimmedVendor,
+            TrimmedProduct);
 
     Buffer = NULL;
     switch (IdType)
@@ -1252,11 +1346,36 @@ PortPdoQueryId(
             break;
 
         case BusQueryHardwareIDs:
-            Buffer = PortPdoAllocateId(DeviceId, GenericType, TRUE);
+            Count = 0;
+            if ((PdoExtension->ModelNumber[0] != ANSI_NULL) &&
+                (PortStorageBusType(PdoExtension->FdoExtension) == BusTypeNvme))
+            {
+                PortPdoCopyJustifiedIdField(LongProduct, PdoExtension->ModelNumber, sizeof(LongProduct) - 1);
+                PortPdoCopyJustifiedIdField(LongRevision, PdoExtension->FirmwareRevision, sizeof(LongRevision) - 1);
+                sprintf(LongRevisionId, "SCSI\\%s%s%s%s", DeviceType, Vendor, LongProduct, LongRevision);
+                sprintf(LongId, "SCSI\\%s%s%s", DeviceType, Vendor, LongProduct);
+                Ids[Count++] = LongRevisionId;
+                Ids[Count++] = LongId;
+            }
+            sprintf(RevisionId, "SCSI\\%s%s%s%s", DeviceType, Vendor, Product, Revision);
+            sprintf(ProductId, "SCSI\\%s%s%s", DeviceType, Vendor, Product);
+            sprintf(VendorId, "SCSI\\%s%s", DeviceType, Vendor);
+            sprintf(BusProductRevisionId, "SCSI\\%s%s%c", Vendor, Product, Revision[0]);
+            sprintf(ProductRevisionId, "%s%s%c", Vendor, Product, Revision[0]);
+            Ids[Count++] = RevisionId;
+            Ids[Count++] = ProductId;
+            Ids[Count++] = VendorId;
+            Ids[Count++] = BusProductRevisionId;
+            Ids[Count++] = ProductRevisionId;
+            Ids[Count++] = GenericType;
+            Buffer = PortPdoAllocateIdList(Ids, Count);
             break;
 
         case BusQueryCompatibleIDs:
-            Buffer = PortPdoAllocateId(GenericType, NULL, TRUE);
+            sprintf(TypeId, "SCSI\\%s", DeviceType);
+            Ids[0] = TypeId;
+            Ids[1] = "SCSI\\RAW";
+            Buffer = PortPdoAllocateIdList(Ids, 2);
             break;
 
         case BusQueryInstanceID:
@@ -1306,9 +1425,11 @@ PortPdoQueryDeviceText(
     _In_ DEVICE_TEXT_TYPE TextType,
     _Out_ PULONG_PTR Information)
 {
-    CHAR Text[64];
+    CHAR Text[STOR_MODEL_NUMBER_LENGTH + 1];
     CHAR Product[17];
     CHAR Vendor[9];
+    PCHAR VendorText;
+    PCHAR ProductText;
     PWSTR Buffer;
 
     switch (TextType)
@@ -1319,17 +1440,25 @@ PortPdoQueryDeviceText(
                 return STATUS_NOT_SUPPORTED;
             }
 
+            if (PdoExtension->ModelNumber[0] != ANSI_NULL)
+            {
+                strcpy(Text, PdoExtension->ModelNumber);
+                break;
+            }
+
             PortPdoCopyTextField(Vendor,
                                  PdoExtension->InquiryBuffer->VendorId,
                                  sizeof(PdoExtension->InquiryBuffer->VendorId));
             PortPdoCopyTextField(Product,
                                  PdoExtension->InquiryBuffer->ProductId,
                                  sizeof(PdoExtension->InquiryBuffer->ProductId));
+            for (VendorText = Vendor; *VendorText == ' '; VendorText++);
+            for (ProductText = Product; *ProductText == ' '; ProductText++);
             sprintf(Text,
-                    "%s %s SCSI %s Device",
-                    Vendor,
-                    Product,
-                    PortPdoGetDeviceType(PdoExtension->InquiryBuffer));
+                    "%s%s%s",
+                    VendorText,
+                    (VendorText[0] != ANSI_NULL && ProductText[0] != ANSI_NULL) ? " " : "",
+                    ProductText);
             break;
 
         case DeviceTextLocationInformation:

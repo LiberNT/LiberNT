@@ -729,7 +729,6 @@ PortDispatchClose(
 }
 
 
-static
 STORAGE_BUS_TYPE
 PortStorageBusType(
     _In_ PFDO_DEVICE_EXTENSION FdoExtension)

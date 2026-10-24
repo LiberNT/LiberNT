@@ -442,6 +442,51 @@ MiniportAdapterControl(
                                                 Parameters);
 }
 
+VOID
+MiniportQuerySupportedUnitControlTypes(
+    _In_ PMINIPORT Miniport)
+{
+    ULONG Buffer[(FIELD_OFFSET(SCSI_SUPPORTED_CONTROL_TYPE_LIST, SupportedTypeList) +
+                  ScsiUnitControlMax * sizeof(BOOLEAN) + sizeof(ULONG) - 1) / sizeof(ULONG)];
+    PSCSI_SUPPORTED_CONTROL_TYPE_LIST List = (PSCSI_SUPPORTED_CONTROL_TYPE_LIST)Buffer;
+    ULONG Type;
+
+    Miniport->SupportedUnitControlTypes = 0;
+    if (Miniport->InitData->HwUnitControl == NULL)
+        return;
+
+    RtlZeroMemory(Buffer, sizeof(Buffer));
+    List->MaxControlType = ScsiUnitControlMax;
+    if (Miniport->InitData->HwUnitControl(&Miniport->MiniportExtension->HwDeviceExtension,
+                                          ScsiQuerySupportedUnitControlTypes,
+                                          List) != ScsiUnitControlSuccess)
+        return;
+
+    for (Type = 0; Type < ScsiUnitControlMax; Type++)
+    {
+        if (List->SupportedTypeList[Type])
+            Miniport->SupportedUnitControlTypes |= 1UL << Type;
+    }
+}
+
+SCSI_UNIT_CONTROL_STATUS
+MiniportUnitControl(
+    _In_ PMINIPORT Miniport,
+    _In_ SCSI_UNIT_CONTROL_TYPE ControlType,
+    _In_opt_ PVOID Parameters)
+{
+    if ((Miniport->MiniportExtension == NULL) ||
+        (Miniport->InitData == NULL) ||
+        (Miniport->InitData->HwUnitControl == NULL) ||
+        (ControlType >= ScsiUnitControlMax) ||
+        !(Miniport->SupportedUnitControlTypes & (1UL << ControlType)))
+        return ScsiUnitControlUnsuccessful;
+
+    return Miniport->InitData->HwUnitControl(&Miniport->MiniportExtension->HwDeviceExtension,
+                                             ControlType,
+                                             Parameters);
+}
+
 BOOLEAN
 MiniportHwMSInterrupt(
     _In_ PMINIPORT Miniport,

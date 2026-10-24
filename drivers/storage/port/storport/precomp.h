@@ -91,6 +91,7 @@ typedef struct _MINIPORT
     PORT_CONFIGURATION_INFORMATION PortConfig;
     PMINIPORT_DEVICE_EXTENSION MiniportExtension;
     ULONG SupportedControlTypes;
+    ULONG SupportedUnitControlTypes;
 } MINIPORT, *PMINIPORT;
 
 typedef struct _UNIT_DATA
@@ -237,6 +238,8 @@ typedef struct _PDO_DEVICE_EXTENSION
     BOOLEAN DeviceClaimed;
     PINQUIRYDATA InquiryBuffer;
     CHAR SerialNumber[252]; /* Cached SCSI VPD page 0x80, NUL terminated. */
+    CHAR ModelNumber[STOR_MODEL_NUMBER_LENGTH + 1];
+    CHAR FirmwareRevision[STOR_FIRMWARE_REVISION_LENGTH + 1];
     struct _PORT_DUMP_CONTEXT *DumpContext;
 
 } PDO_DEVICE_EXTENSION, *PPDO_DEVICE_EXTENSION;
@@ -414,6 +417,20 @@ SCSI_ADAPTER_CONTROL_STATUS
 MiniportAdapterControl(
     _In_ PMINIPORT Miniport,
     _In_ SCSI_ADAPTER_CONTROL_TYPE ControlType,
+    _In_opt_ PVOID Parameters);
+
+STORAGE_BUS_TYPE
+PortStorageBusType(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension);
+
+VOID
+MiniportQuerySupportedUnitControlTypes(
+    _In_ PMINIPORT Miniport);
+
+SCSI_UNIT_CONTROL_STATUS
+MiniportUnitControl(
+    _In_ PMINIPORT Miniport,
+    _In_ SCSI_UNIT_CONTROL_TYPE ControlType,
     _In_opt_ PVOID Parameters);
 
 BOOLEAN
