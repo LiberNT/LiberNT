@@ -2292,7 +2292,16 @@ LX_SYSCALL(LxSysShutdown)
     LxPollWake(&Socket->Poll, LX_POLLIN | LX_POLLOUT | LX_POLLHUP | LX_POLLRDHUP);
     if (Peer != NULL)
     {
-        LxPollWake(&Peer->Poll, LX_POLLIN | LX_POLLRDHUP | LX_POLLHUP);
+        if (Socket->Type != LX_SOCK_DGRAM)
+        {
+            LxUnixLock(Peer);
+            if ((How == LX_SHUT_WR) || (How == LX_SHUT_RDWR))
+                Peer->ShutRead = TRUE;
+            if ((How == LX_SHUT_RD) || (How == LX_SHUT_RDWR))
+                Peer->ShutWrite = TRUE;
+            LxUnixUnlock(Peer);
+        }
+        LxPollWake(&Peer->Poll, LX_POLLIN | LX_POLLOUT | LX_POLLRDHUP | LX_POLLHUP);
         LxUnixDereference(Peer);
     }
     LxFileDereference(File);
