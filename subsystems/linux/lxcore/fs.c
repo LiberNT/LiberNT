@@ -1375,7 +1375,7 @@ LX_SYSCALL(LxSysFchownat)
 LX_SYSCALL(LxSysReadlinkat)
 {
     LX_NODE Node;
-    PSTR Target;
+    PSTR Target, Path;
     PCSTR Visible;
     SIZE_T Length;
     LONG64 Result;
@@ -1383,7 +1383,25 @@ LX_SYSCALL(LxSysReadlinkat)
 
     if ((LONG64)Call->Args[3] <= 0)
         return -LX_EINVAL;
-    Error = LxLookupUser(Call->Process, (LONG)Call->Args[0], Call->Args[1], 0, &Node);
+    Result = LxCopyPath(Call->Args[1], &Path);
+    if (Result != 0)
+        return Result;
+    if (Path[0] == '\0')
+    {
+        PLX_FILE File = LxFdGet(Call->Process, (LONG)Call->Args[0]);
+
+        LxFree(Path);
+        if (File == NULL)
+            return -LX_EBADF;
+        Error = ((File->Type == LX_S_IFLNK) && (File->Path != NULL)) ?
+                LxLookup(Call->Process, LX_AT_FDCWD, File->Path, 0, &Node) : -LX_EINVAL;
+        LxFileDereference(File);
+    }
+    else
+    {
+        Error = LxLookup(Call->Process, (LONG)Call->Args[0], Path, 0, &Node);
+        LxFree(Path);
+    }
     if (Error != 0)
         return Error;
     Error = LxVfsReadlink(Call->Process, &Node, &Target);
