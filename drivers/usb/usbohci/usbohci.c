@@ -2569,7 +2569,8 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
     RegPacket.MiniPortVersion = USB_MINIPORT_VERSION_OHCI;
 
     RegPacket.MiniPortFlags = USB_MINIPORT_FLAGS_INTERRUPT |
-                              USB_MINIPORT_FLAGS_MEMORY_IO;
+                              USB_MINIPORT_FLAGS_MEMORY_IO |
+                              USB_MINIPORT_FLAGS_DUMP_POLLING;
 
     RegPacket.MiniPortBusBandwidth = TOTAL_USB11_BUS_BANDWIDTH;
 
