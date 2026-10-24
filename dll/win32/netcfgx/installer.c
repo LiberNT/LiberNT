@@ -787,7 +787,7 @@ InstallNetDevice(
                          0,
                          NULL,
                          REG_OPTION_NON_VOLATILE,
-                         KEY_CREATE_SUB_KEY | KEY_QUERY_VALUE,
+                         KEY_CREATE_SUB_KEY | KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE,
                          NULL,
                          &hNetworkKey,
                          NULL);
