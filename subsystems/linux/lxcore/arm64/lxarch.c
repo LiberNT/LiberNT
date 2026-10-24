@@ -10,6 +10,86 @@
 #define LX_EM_AARCH64     183
 #define LX_HWCAP_FP       (1ULL << 0)
 #define LX_HWCAP_ASIMD    (1ULL << 1)
+#define LX_HWCAP_CPUID    (1ULL << 11)
+
+typedef struct _LX_ARM64_ID_REGISTER
+{
+    UCHAR Crm;
+    UCHAR Op2;
+    ULONG64 Visible;
+} LX_ARM64_ID_REGISTER;
+
+static const LX_ARM64_ID_REGISTER LxArm64IdRegisters[] =
+{
+    { 0, 0, 0x00000000FFFFFFFFULL },
+    { 2, 5, 0x00000000000FFFF0ULL },
+    { 3, 0, 0x0000000000000F00ULL },
+    { 3, 1, 0x00000000F00FFF00ULL },
+    { 4, 0, 0x000F000F00FF0000ULL },
+    { 4, 1, 0x000000000F000FFFULL },
+    { 4, 4, 0x0FF0FF0F0FFF00FFULL },
+    { 6, 0, 0xF0FFFFFFF0FFFFF0ULL },
+    { 6, 1, 0x00FFF0FFFFFFFFFFULL },
+    { 6, 2, 0x00FF000000FFFFFFULL },
+    { 7, 0, 0xF000000000000000ULL },
+    { 7, 1, 0x0000F00000000000ULL },
+    { 7, 2, 0x0000000F00000000ULL },
+};
+
+static
+ULONG64
+LxArm64ReadIdRegister(
+    _In_ ULONG Crm,
+    _In_ ULONG Op2)
+{
+    ULONG64 Value = 0;
+
+    switch ((Crm << 3) | Op2)
+    {
+        case 0x00: __asm__ __volatile__("mrs %0, midr_el1" : "=r"(Value)); break;
+        case 0x15: __asm__ __volatile__("mrs %0, S3_0_C0_C2_5" : "=r"(Value)); break;
+        case 0x18: __asm__ __volatile__("mrs %0, S3_0_C0_C3_0" : "=r"(Value)); break;
+        case 0x19: __asm__ __volatile__("mrs %0, S3_0_C0_C3_1" : "=r"(Value)); break;
+        case 0x20: __asm__ __volatile__("mrs %0, S3_0_C0_C4_0" : "=r"(Value)); break;
+        case 0x21: __asm__ __volatile__("mrs %0, S3_0_C0_C4_1" : "=r"(Value)); break;
+        case 0x24: __asm__ __volatile__("mrs %0, S3_0_C0_C4_4" : "=r"(Value)); break;
+        case 0x30: __asm__ __volatile__("mrs %0, S3_0_C0_C6_0" : "=r"(Value)); break;
+        case 0x31: __asm__ __volatile__("mrs %0, S3_0_C0_C6_1" : "=r"(Value)); break;
+        case 0x32: __asm__ __volatile__("mrs %0, S3_0_C0_C6_2" : "=r"(Value)); break;
+        case 0x38: __asm__ __volatile__("mrs %0, S3_0_C0_C7_0" : "=r"(Value)); break;
+        case 0x39: __asm__ __volatile__("mrs %0, S3_0_C0_C7_1" : "=r"(Value)); break;
+        case 0x3A: __asm__ __volatile__("mrs %0, S3_0_C0_C7_2" : "=r"(Value)); break;
+        default: break;
+    }
+    return Value;
+}
+
+static
+BOOLEAN
+LxArm64EmulateIdRegister(
+    _In_ ULONG Instruction,
+    _Out_ PULONG64 Value)
+{
+    ULONG Crm = (Instruction >> 8) & 0xF, Op2 = (Instruction >> 5) & 0x7;
+    ULONG Index;
+
+    if ((Instruction & 0xFFFFF000) != 0xD5380000)
+        return FALSE;
+    if ((Crm == 1) || (Crm > 7))
+        return FALSE;
+    *Value = 0;
+    if ((Crm == 0) && (Op2 == 5))
+        *Value = 0x80000000ULL;
+    for (Index = 0; Index < RTL_NUMBER_OF(LxArm64IdRegisters); Index++)
+    {
+        if ((LxArm64IdRegisters[Index].Crm == Crm) && (LxArm64IdRegisters[Index].Op2 == Op2))
+        {
+            *Value = LxArm64ReadIdRegister(Crm, Op2) & LxArm64IdRegisters[Index].Visible;
+            break;
+        }
+    }
+    return TRUE;
+}
 
 #define LX_A64_FRAME_SIZE       4688
 #define LX_A64_UC               128
@@ -44,7 +124,7 @@ LxArchElfMachine(VOID)
 ULONG64
 LxArchHwcap(VOID)
 {
-    return LX_HWCAP_FP | LX_HWCAP_ASIMD;
+    return LX_HWCAP_FP | LX_HWCAP_ASIMD | LX_HWCAP_CPUID;
 }
 
 PCSTR
@@ -94,10 +174,10 @@ LxArchEmulateInstruction(
         return FALSE;
     if (LxCopyFromUser(&Instruction, TrapFrame->Pc, sizeof(Instruction)) != 0)
         return FALSE;
-    if ((Instruction & 0xFFFFFFE0) != 0xD53B0020)
+    if ((Instruction & 0xFFFFFFE0) == 0xD53B0020)
+        __asm__ __volatile__("mrs %0, ctr_el0" : "=r"(Value));
+    else if (!LxArm64EmulateIdRegister(Instruction, &Value))
         return FALSE;
-
-    __asm__ __volatile__("mrs %0, ctr_el0" : "=r"(Value));
     Rt = Instruction & 0x1F;
     if (Rt <= 18)
         TrapFrame->X[Rt] = Value;
