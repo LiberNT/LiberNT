@@ -307,7 +307,7 @@ HvVidSendPointerShape(
     RtlCopyMemory(Shape + 14, &Device->PointerHotY, sizeof(ULONG));
     for (Y = 0; Y < Device->PointerHeight; Y++)
     {
-        RtlCopyMemory(Shape + SYNTHVID_POINTER_SHAPE_SIZE + Y * RowBytes,
+        RtlCopyMemory(Shape + SYNTHVID_POINTER_SHAPE_SIZE + (Device->PointerHeight - 1 - Y) * RowBytes,
                       &Device->PointerPixels[Y * SOFTGPU_POINTER_MAX_WIDTH],
                       RowBytes);
     }
