@@ -40,6 +40,7 @@
 #include <ioaccess.h>
 #include <halfuncs.h>
 #include <halacpi_arm64.h>
+#include <reactos/arm64/sysreg.h>
 #include <debug.h>
 
 /*
@@ -64,16 +65,16 @@ HalpArm64FindGicrForMpidr(_In_ ULONGLONG Mpidr);
 #define ARM64_DCACHE_LINE_SIZE 64
 
 FORCEINLINE VOID
-HalpArm64CleanDcacheRange(_In_ PVOID Base, _In_ SIZE_T Length)
+HalpArm64SmpCleanDcacheRange(_In_ PVOID Base, _In_ SIZE_T Length)
 {
     ULONG_PTR Start = (ULONG_PTR)Base & ~(ARM64_DCACHE_LINE_SIZE - 1);
     ULONG_PTR End = ((ULONG_PTR)Base + Length + ARM64_DCACHE_LINE_SIZE - 1) &
                     ~(ARM64_DCACHE_LINE_SIZE - 1);
 
     for (ULONG_PTR Addr = Start; Addr < End; Addr += ARM64_DCACHE_LINE_SIZE)
-        __asm__ __volatile__("dc cvac, %0" :: "r"(Addr) : "memory");
+        ARM64_DC(CVAC, Addr);
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 /*
@@ -81,23 +82,23 @@ HalpArm64CleanDcacheRange(_In_ PVOID Base, _In_ SIZE_T Length)
  */
 FORCEINLINE VOID HalpWriteIccSre(unsigned int v)
 {
-    __asm__ __volatile__("msr icc_sre_el1, %0" :: "r"((UINT64)v));
-    __asm__ __volatile__("isb");
+    ARM64_WRITE_SYSREG(ICC_SRE_EL1, (UINT64)v);
+    ARM64_ISB();
 }
 
 FORCEINLINE VOID HalpWriteIccPmr(unsigned int v)
 {
-    __asm__ __volatile__("msr icc_pmr_el1, %0" :: "r"((UINT64)v));
+    ARM64_WRITE_SYSREG(ICC_PMR_EL1, (UINT64)v);
 }
 
 FORCEINLINE VOID HalpWriteIccBpr1(unsigned int v)
 {
-    __asm__ __volatile__("msr icc_bpr1_el1, %0" :: "r"((UINT64)v));
+    ARM64_WRITE_SYSREG(ICC_BPR1_EL1, (UINT64)v);
 }
 
 FORCEINLINE VOID HalpWriteIccIgrpen1(unsigned int v)
 {
-    __asm__ __volatile__("msr icc_igrpen1_el1, %0" :: "r"((UINT64)v));
+    ARM64_WRITE_SYSREG(ICC_IGRPEN1_EL1, (UINT64)v);
 }
 
 /*
@@ -187,7 +188,7 @@ FORCEINLINE UINT64
 HalpArm64ReadSctlrEl1(VOID)
 {
     UINT64 Value;
-    __asm__ __volatile__("mrs %0, sctlr_el1" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(SCTLR_EL1);
     return Value;
 }
 
@@ -195,7 +196,7 @@ FORCEINLINE UINT64
 HalpArm64ReadTcrEl1(VOID)
 {
     UINT64 Value;
-    __asm__ __volatile__("mrs %0, tcr_el1" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(TCR_EL1);
     return Value;
 }
 
@@ -203,7 +204,7 @@ FORCEINLINE UINT64
 HalpArm64ReadTtbr1El1(VOID)
 {
     UINT64 Value;
-    __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(TTBR1_EL1);
     return Value;
 }
 
@@ -211,7 +212,7 @@ FORCEINLINE UINT64
 HalpArm64ReadMairEl1(VOID)
 {
     UINT64 Value;
-    __asm__ __volatile__("mrs %0, mair_el1" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(MAIR_EL1);
     return Value;
 }
 
@@ -219,7 +220,7 @@ FORCEINLINE UINT64
 HalpArm64ReadVbarEl1(VOID)
 {
     UINT64 Value;
-    __asm__ __volatile__("mrs %0, vbar_el1" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(VBAR_EL1);
     return Value;
 }
 
@@ -299,9 +300,9 @@ HalpArm64BuildIdmapPageTable(
                   IDMAP_ATTRINDX(IDMAP_MAIR_WB_IDX);
 
     /* Clean cache so AP sees the tables from main memory */
-    HalpArm64CleanDcacheRange(L0Va, PAGE_SIZE);
-    HalpArm64CleanDcacheRange(L1Va, PAGE_SIZE);
-    HalpArm64CleanDcacheRange(L2Va, PAGE_SIZE);
+    HalpArm64SmpCleanDcacheRange(L0Va, PAGE_SIZE);
+    HalpArm64SmpCleanDcacheRange(L1Va, PAGE_SIZE);
+    HalpArm64SmpCleanDcacheRange(L2Va, PAGE_SIZE);
 
     DPRINT1("[arm64][HAL] Identity-map page table: L0[%lu]→L1[%lu]→L2[%lu] block=0x%llx (trampoline PA=0x%llx)\n",
             L0Idx, L1Idx, L2Idx, BlockPa, TrampolinePa);
@@ -390,9 +391,11 @@ HalpArm64InitApTrampoline(
     }
 
     /* Clean data cache and invalidate instruction cache */
-    HalpArm64CleanDcacheRange(HalpApTrampolineVa, PAGE_SIZE);
-    HalpArm64CleanDcacheRange(HalpApDataVa, PAGE_SIZE);
-    __asm__ __volatile__("ic iallu\n\tdsb sy\n\tisb" ::: "memory");
+    HalpArm64SmpCleanDcacheRange(HalpApTrampolineVa, PAGE_SIZE);
+    HalpArm64SmpCleanDcacheRange(HalpApDataVa, PAGE_SIZE);
+    ARM64_IC_ALL(IALLU);
+    ARM64_DSB(SY);
+    ARM64_ISB();
 
     /* Build identity-map page table for AP's TTBR0 */
     HalpApIdmapTtbr0Pa = HalpArm64BuildIdmapPageTable(LoaderBlock,
@@ -436,7 +439,7 @@ HalpArm64PrepareApData(
     HalpApDataVa->SctlrEl1 = HalpArm64ReadSctlrEl1();
     {
         UINT64 Cpacr;
-        __asm__ __volatile__("mrs %0, cpacr_el1" : "=r"(Cpacr));
+        Cpacr = ARM64_READ_SYSREG(CPACR_EL1);
         HalpApDataVa->CpacrEl1 = Cpacr;
     }
     HalpApDataVa->VbarEl1 = HalpArm64ReadVbarEl1();
@@ -469,8 +472,8 @@ HalpArm64PrepareApData(
     HalpApDataVa->ProgressPad = 0;
 
     /* Ensure all writes are visible */
-    HalpArm64CleanDcacheRange(HalpApDataVa, sizeof(HAL_ARM64_AP_TRAMPOLINE_DATA));
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    HalpArm64SmpCleanDcacheRange(HalpApDataVa, sizeof(HAL_ARM64_AP_TRAMPOLINE_DATA));
+    ARM64_DSB(SY);
 
     DPRINT("[arm64][HAL] AP data prepared: CPU=%lu entry=0x%llx stack=0x%llx GICR=disabled\n",
             ProcessorNumber, EntryPoint, StackPointer);
@@ -501,8 +504,8 @@ HalpArm64WaitForApSync(
             return TRUE;
         }
 
-        __asm__ __volatile__("dmb ld" ::: "memory");
-        __asm__ __volatile__("yield");
+        ARM64_DMB(LD);
+        ARM64_YIELD();
     }
 
     /* Read AP progress via the private physical alias. */
@@ -510,7 +513,7 @@ HalpArm64WaitForApSync(
         volatile PHAL_ARM64_AP_TRAMPOLINE_DATA DataKseg0 =
             (volatile PHAL_ARM64_AP_TRAMPOLINE_DATA)(
                 (ULONG_PTR)(HalpApDataPa.QuadPart + HAL_ARM64_PHYS_MAP_BASE));
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
         DPRINT1("[arm64][HAL] AP sync timeout after %lu iterations, Progress=0x%x\n",
                 Iterations, DataKseg0->Progress);
         DPRINT1("[arm64][HAL]   Expected: 0x11=data_loaded 0x22=gicr_done 0x33=tlb_mair_tcr "
@@ -617,13 +620,13 @@ HalpArm64WakeParkedCpu(
         return FALSE;
     }
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
     Mailbox[1] = EntryPoint;
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 
-    HalpArm64CleanDcacheRange((PVOID)Mailbox, 16);
-    __asm__ __volatile__("dsb sy" ::: "memory");
-    __asm__ __volatile__("sev" ::: "memory");
+    HalpArm64SmpCleanDcacheRange((PVOID)Mailbox, 16);
+    ARM64_DSB(SY);
+    ARM64_SEV();
 
     DPRINT1("[arm64][HAL] Sent parking wake to CPU %lu\n", ProcessorNumber);
     return TRUE;

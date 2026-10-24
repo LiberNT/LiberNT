@@ -43,6 +43,7 @@
 #include <halfuncs.h>
 #include <reactos/drivers/acpi/acpi.h>
 #include <halacpi.h>
+#include <reactos/arm64/sysreg.h>
 #include "halext.h"
 #include "bcm2837.h"
 
@@ -123,7 +124,7 @@ ULONG
 Bcm2837CurrentCore(VOID)
 {
     ULONGLONG Mpidr;
-    __asm__ __volatile__("mrs %0, mpidr_el1" : "=r"(Mpidr));
+    Mpidr = ARM64_READ_SYSREG(MPIDR_EL1);
     return (ULONG)(Mpidr & (BCM2837_CORE_COUNT - 1));
 }
 
@@ -132,8 +133,8 @@ ULONGLONG
 Bcm2837MaskInterrupts(VOID)
 {
     ULONGLONG Daif;
-    __asm__ __volatile__("mrs %0, daif" : "=r"(Daif));
-    __asm__ __volatile__("msr daifset, #3" ::: "memory");
+    Daif = ARM64_READ_SYSREG(DAIF);
+    ARM64_DAIFSET(3);
     return Daif;
 }
 
@@ -142,8 +143,23 @@ VOID
 Bcm2837RestoreInterrupts(
     _In_ ULONGLONG Daif)
 {
-    __asm__ __volatile__("msr daif, %0" :: "r"(Daif) : "memory");
+    ARM64_WRITE_SYSREG(DAIF, Daif);
 }
+
+#if defined(_MSC_VER) && !defined(__clang__)
+FORCEINLINE
+ULONG
+Bcm2837BitIndex(
+    _In_ ULONG Bit)
+{
+    ULONG Index;
+
+    _BitScanReverse(&Index, Bit);
+    return Index;
+}
+#else
+#define Bcm2837BitIndex(Bit) (31 - __builtin_clz(Bit))
+#endif
 
 FORCEINLINE
 ULONG
@@ -160,7 +176,7 @@ Bcm2837LocalWrite(
     _In_ ULONG Value)
 {
     *HalpMmio((ULONG_PTR)Bcm2837LocalBase, Offset) = Value;
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 FORCEINLINE
@@ -178,7 +194,7 @@ Bcm2837ArmctrlWrite(
     _In_ ULONG Value)
 {
     *HalpMmio((ULONG_PTR)Bcm2837ArmctrlBase, Offset) = Value;
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 /*
@@ -200,21 +216,21 @@ Bcm2837SetTimerImask(
 
     if (IntId == 27)
     {
-        __asm__ __volatile__("mrs %0, cntv_ctl_el0" : "=r"(Ctl));
+        Ctl = ARM64_READ_SYSREG(CNTV_CTL_EL0);
         if (!(Ctl & BCM2837_CNT_CTL_ENABLE))
             return;
         Ctl = Mask ? (Ctl | BCM2837_CNT_CTL_IMASK) : (Ctl & ~BCM2837_CNT_CTL_IMASK);
-        __asm__ __volatile__("msr cntv_ctl_el0, %0" :: "r"(Ctl));
+        ARM64_WRITE_SYSREG(CNTV_CTL_EL0, Ctl);
     }
     else if (IntId == 30)
     {
-        __asm__ __volatile__("mrs %0, cntp_ctl_el0" : "=r"(Ctl));
+        Ctl = ARM64_READ_SYSREG(CNTP_CTL_EL0);
         if (!(Ctl & BCM2837_CNT_CTL_ENABLE))
             return;
         Ctl = Mask ? (Ctl | BCM2837_CNT_CTL_IMASK) : (Ctl & ~BCM2837_CNT_CTL_IMASK);
-        __asm__ __volatile__("msr cntp_ctl_el0, %0" :: "r"(Ctl));
+        ARM64_WRITE_SYSREG(CNTP_CTL_EL0, Ctl);
     }
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_ISB();
 }
 
 static
@@ -333,7 +349,7 @@ Bcm2837AcknowledgeInterrupt(VOID)
 
                 Bit = Pending & (0 - Pending);     /* lowest set bit */
                 Pending &= ~Bit;
-                Irq = (Bank * 32) + (31 - __builtin_clz(Bit));
+                Irq = (Bank * 32) + Bcm2837BitIndex(Bit);
                 Priority = Bcm2837GpuPriority[Irq];
 
                 if (Priority < Pmr)
@@ -363,7 +379,7 @@ Bcm2837AcknowledgeInterrupt(VOID)
             while (Pending != 0)
             {
                 ULONG Bit = Pending & (0 - Pending);
-                ULONG Irq = 31 - __builtin_clz(Bit);
+                ULONG Irq = Bcm2837BitIndex(Bit);
                 UCHAR Priority;
 
                 Pending &= ~Bit;
@@ -633,7 +649,7 @@ Bcm2837SetPriorityMask(
     Core = Bcm2837CurrentCore();
 
     Bcm2837PmrShadow[Core] = Pmr;
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 
     /* Reopen deferred per-core sources that the new IRQL permits. */
     if (Bcm2837DeferredLocal[Core] != 0)
@@ -685,7 +701,7 @@ Bcm2837SetPriorityMask(
             while (Pending != 0)
             {
                 ULONG Bit = Pending & (0 - Pending);
-                ULONG Irq = (Bank * 32) + (31 - __builtin_clz(Bit));
+                ULONG Irq = (Bank * 32) + Bcm2837BitIndex(Bit);
 
                 Pending &= ~Bit;
                 if (Bcm2837GpuPriority[Irq] >= Pmr)
@@ -720,7 +736,7 @@ Bcm2837SetPriorityMask(
             while (Pending != 0)
             {
                 ULONG Bit = Pending & (0 - Pending);
-                ULONG Irq = 31 - __builtin_clz(Bit);
+                ULONG Irq = Bcm2837BitIndex(Bit);
 
                 Pending &= ~Bit;
                 if (Bcm2837BasicPriority[Irq] >= Pmr)
@@ -759,7 +775,7 @@ Bcm2837SendSgi(
     if (SgiId >= BCM2837_SGI_COUNT)
         return;
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 
     for (Cpu = 0; Cpu < MAXIMUM_PROCESSORS && Cpu < 64; Cpu++)
     {
@@ -775,7 +791,7 @@ Bcm2837SendSgi(
         Bcm2837LocalWrite(BCM2837_LOCAL_MAILBOX_SET(Core, SgiId), 1);
     }
 
-    __asm__ __volatile__("sev" ::: "memory");
+    ARM64_SEV();
 }
 
 static

@@ -441,7 +441,7 @@ HalpGicItsPostCommandOnNode(
     HalpArm64CleanDcacheRange(QueueEntry, HAL_ARM64_ITS_CMD_ENTRY_SIZE);
 
     /* Memory barrier before updating write pointer */
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 
     /* Update write pointer */
     ItsNode->CmdWriteIndex = Next;
@@ -1131,7 +1131,7 @@ HalpGicItsCreateDevice(
     /* Check if already initialized */
     if (Device->InitState == 2)
     {
-        __asm__ __volatile__("dmb ish" ::: "memory");
+        ARM64_DMB(ISH);
         return Device;
     }
     if (Device->InitState == -1)
@@ -1144,7 +1144,7 @@ HalpGicItsCreateDevice(
         {
             if (Device->InitState == 2)
             {
-                __asm__ __volatile__("dmb ish" ::: "memory");
+                ARM64_DMB(ISH);
                 return Device;
             }
             if (Device->InitState == -1)
@@ -1367,7 +1367,7 @@ HalpGicItsValidateCpuTables(
     if (!(Ctlr & HALP_GICR_CTLR_ENABLE_LPIS))
         return FALSE;
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
     Pend = HalpMmioRead64(Base, GICR_PENDBASER);
     if ((Pend & GICR_PENDBASER_ADDR_MASK) != (ExpectedPend & GICR_PENDBASER_ADDR_MASK))
         return FALSE;
@@ -1377,7 +1377,7 @@ HalpGicItsValidateCpuTables(
     if ((Outer != 0) && (Outer != HALP_GICR_LPI_OUTER_CACHEABILITY_WBRAWA))
         return FALSE;
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
     Prop = HalpMmioRead64(Base, GICR_PROPBASER);
     if ((Prop & GICR_PROPBASER_ADDR_MASK) != (ExpectedProp & GICR_PROPBASER_ADDR_MASK))
         return FALSE;
@@ -1428,13 +1428,13 @@ HalpGicItsProgramCpuTablesLocal(
     Ctlr = *HalpMmio(Base, GICR_CTLR);
     if (!(Ctlr & HALP_GICR_CTLR_ENABLE_LPIS))
     {
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
         HalpMmioWrite64(Base, GICR_PROPBASER, Prop);
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
         HalpMmioWrite64(Base, GICR_PENDBASER, Pend);
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
         *HalpMmio(Base, GICR_CTLR) = Ctlr | HALP_GICR_CTLR_ENABLE_LPIS;
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
     }
 
     return HalpGicItsValidateCpuTables(Cpu, Base, Prop, Pend);

@@ -596,7 +596,7 @@ HalpInitGicDistributor(
     }
 
     /* Memory barrier before enabling distributor */
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 
     /*
      * Enable the distributor.
@@ -616,7 +616,7 @@ HalpInitGicDistributor(
         *HalpMmio((ULONG_PTR)HalpGicdBase, GICD_CTLR) = GICD_CTLR_ENABLE_GRP0;
     }
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 
     DPRINT1("[arm64][GIC] Distributor initialized and enabled\n");
 }
