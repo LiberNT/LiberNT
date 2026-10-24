@@ -1312,6 +1312,39 @@ Done:
 }
 
 NTSTATUS
+FileRecord::EnsureExtendedAttributeSpace(
+    _In_ ULONG FinalLength)
+{
+    PAttribute DataAttribute;
+    PAttribute Existing;
+    ULONG Available;
+    ULONG Required;
+
+    if (Header->Flags & FR_IS_DIRECTORY)
+        return STATUS_SUCCESS;
+    if (Header->ActualSize > Header->AllocatedSize)
+        return STATUS_FILE_CORRUPT_ERROR;
+    Available = Header->AllocatedSize - Header->ActualSize;
+    Existing = FindAttributeInRecord(TypeEAInformation, NULL, NULL);
+    if (Existing)
+        Available += Existing->Length;
+    Existing = FindAttributeInRecord(TypeEA, NULL, NULL);
+    if (Existing)
+        Available += Existing->Length;
+    Required = ALIGN_UP_BY(0x18 + sizeof(EAInformationEx), sizeof(ULONGLONG)) +
+               ALIGN_UP_BY(0x18 + FinalLength, sizeof(ULONGLONG));
+    if (Required <= Available)
+        return STATUS_SUCCESS;
+    DataAttribute = FindAttributeInRecord(TypeData, NULL, NULL);
+    if (!DataAttribute || DataAttribute->IsNonResident ||
+        !DataAttribute->Resident.DataLength)
+        return STATUS_SUCCESS;
+    return PromoteResidentData(DataAttribute, NULL, 0, 0,
+                               DataAttribute->Resident.DataLength,
+                               DataAttribute->Resident.DataLength);
+}
+
+NTSTATUS
 FileRecord::UpdateExtendedAttributes(
     _In_reads_(UpdateCount)
         const NtfsExtendedAttributeUpdate* Updates,
@@ -1419,6 +1452,13 @@ FileRecord::UpdateExtendedAttributes(
     {
         Status = STATUS_SUCCESS;
         goto Done;
+    }
+
+    if (!HasAttributeList && FinalLength != 0)
+    {
+        Status = EnsureExtendedAttributeSpace(FinalLength);
+        if (!NT_SUCCESS(Status))
+            goto Done;
     }
 
     InformationAttribute =

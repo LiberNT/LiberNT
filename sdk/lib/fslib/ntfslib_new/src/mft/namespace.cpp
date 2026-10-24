@@ -1274,6 +1274,8 @@ MasterFileTable::CreateHardLink(
         goto Done;
 
     Status = EnsureFileNameSpace(Child, NewNameLength, OldParent, NewParent);
+    if (Status == STATUS_BUFFER_TOO_SMALL)
+        Status = Child->CreateInitialAttributeList();
     if (!NT_SUCCESS(Status))
         goto Done;
 

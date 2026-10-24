@@ -1122,6 +1122,9 @@ private:
         _In_ ULONG FinalLength);
 
     NTSTATUS
+    EnsureExtendedAttributeSpace(_In_ ULONG FinalLength);
+
+    NTSTATUS
     ApplySecurityId(_In_ ULONG SecurityId);
 
     NTSTATUS
