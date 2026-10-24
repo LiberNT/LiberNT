@@ -778,10 +778,10 @@ typedef struct _NET_PNP_EVENT {
 #include "ntddndis.h"
 
 #if defined(NDIS_WRAPPER)
-#define NDISAPI NTAPI
+#define NDISAPI
 #define NDISAPIV
 #else
-#define NDISAPI DECLSPEC_IMPORT NTAPI
+#define NDISAPI DECLSPEC_IMPORT
 #define NDISAPIV DECLSPEC_IMPORT
 #endif
 
@@ -4937,6 +4937,7 @@ NdisSystemProcessorCount(VOID);
 
 ULONG
 NDISAPI
+NTAPI
 NdisSystemActiveProcessorCount(
     PKAFFINITY ActiveProcessors);
 #endif
@@ -7085,28 +7086,33 @@ typedef struct _NET_BUFFER_POOL_PARAMETERS {
 /* Pool allocation / free entrypoints (resolved at link time against ndis.sys) */
 NDIS_HANDLE
 NDISAPI
+NTAPI
 NdisAllocateNetBufferListPool(
   _In_opt_ NDIS_HANDLE NdisHandle,
   _In_     PNET_BUFFER_LIST_POOL_PARAMETERS Parameters);
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeNetBufferListPool(
   _In_ NDIS_HANDLE PoolHandle);
 
 NDIS_HANDLE
 NDISAPI
+NTAPI
 NdisAllocateNetBufferPool(
   _In_opt_ NDIS_HANDLE NdisHandle,
   _In_     PNET_BUFFER_POOL_PARAMETERS Parameters);
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeNetBufferPool(
   _In_ NDIS_HANDLE PoolHandle);
 
 PNET_BUFFER_LIST
 NDISAPI
+NTAPI
 NdisAllocateNetBufferList(
   _In_ NDIS_HANDLE PoolHandle,
   _In_ USHORT      ContextSize,
@@ -7114,11 +7120,13 @@ NdisAllocateNetBufferList(
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeNetBufferList(
   _In_ PNET_BUFFER_LIST NetBufferList);
 
 PNET_BUFFER_LIST
 NDISAPI
+NTAPI
 NdisAllocateNetBufferAndNetBufferList(
   _In_     NDIS_HANDLE PoolHandle,
   _In_     USHORT      ContextSize,
@@ -7129,6 +7137,7 @@ NdisAllocateNetBufferAndNetBufferList(
 
 PNET_BUFFER
 NDISAPI
+NTAPI
 NdisAllocateNetBuffer(
   _In_     NDIS_HANDLE PoolHandle,
   _In_opt_ PMDL        MdlChain,
@@ -7137,11 +7146,13 @@ NdisAllocateNetBuffer(
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeNetBuffer(
   _In_ PNET_BUFFER NetBuffer);
 
 PNET_BUFFER_LIST
 NDISAPI
+NTAPI
 NdisAllocateCloneNetBufferList(
   _In_     PNET_BUFFER_LIST OriginalNetBufferList,
   _In_opt_ NDIS_HANDLE      NetBufferListPoolHandle,
@@ -7150,24 +7161,28 @@ NdisAllocateCloneNetBufferList(
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeCloneNetBufferList(
   _In_ PNET_BUFFER_LIST CloneNetBufferList,
   _In_ ULONG            FreeCloneFlags);
 
 VOID
 NDISAPI
+NTAPI
 NdisCopySendNetBufferListInfo(
   _In_ PNET_BUFFER_LIST Destination,
   _In_ const NET_BUFFER_LIST *Source);
 
 VOID
 NDISAPI
+NTAPI
 NdisCopyReceiveNetBufferListInfo(
   _In_ PNET_BUFFER_LIST Destination,
   _In_ const NET_BUFFER_LIST *Source);
 
 PNET_BUFFER_LIST
 NDISAPI
+NTAPI
 NdisAllocateFragmentNetBufferList(
   _In_     PNET_BUFFER_LIST OriginalNetBufferList,
   _In_opt_ NDIS_HANDLE      NetBufferListPool,
@@ -7180,6 +7195,7 @@ NdisAllocateFragmentNetBufferList(
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeFragmentNetBufferList(
   _In_ PNET_BUFFER_LIST FragmentNetBufferList,
   _In_ ULONG            DataOffsetDelta,
@@ -7187,6 +7203,7 @@ NdisFreeFragmentNetBufferList(
 
 PNET_BUFFER_LIST
 NDISAPI
+NTAPI
 NdisAllocateReassembledNetBufferList(
   _In_     PNET_BUFFER_LIST FragmentNetBufferList,
   _In_opt_ NDIS_HANDLE      NetBufferAndNetBufferListPoolHandle,
@@ -7197,6 +7214,7 @@ NdisAllocateReassembledNetBufferList(
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeReassembledNetBufferList(
   _In_ PNET_BUFFER_LIST ReassembledNetBufferList,
   _In_ ULONG            DataOffsetDelta,
@@ -7204,6 +7222,7 @@ NdisFreeReassembledNetBufferList(
 
 PNET_BUFFER
 NDISAPI
+NTAPI
 NdisAllocateNetBufferMdlAndData(
   _In_ NDIS_HANDLE PoolHandle);
 
@@ -7219,6 +7238,7 @@ VOID
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisRetreatNetBufferDataStart(
   _In_     PNET_BUFFER NetBuffer,
   _In_     ULONG       DataOffsetDelta,
@@ -7227,6 +7247,7 @@ NdisRetreatNetBufferDataStart(
 
 VOID
 NDISAPI
+NTAPI
 NdisAdvanceNetBufferDataStart(
   _In_     PNET_BUFFER NetBuffer,
   _In_     ULONG       DataOffsetDelta,
@@ -7235,6 +7256,7 @@ NdisAdvanceNetBufferDataStart(
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisRetreatNetBufferListDataStart(
   _In_     PNET_BUFFER_LIST NetBufferList,
   _In_     ULONG            DataOffsetDelta,
@@ -7244,6 +7266,7 @@ NdisRetreatNetBufferListDataStart(
 
 VOID
 NDISAPI
+NTAPI
 NdisAdvanceNetBufferListDataStart(
   _In_     PNET_BUFFER_LIST NetBufferList,
   _In_     ULONG            DataOffsetDelta,
@@ -7252,11 +7275,13 @@ NdisAdvanceNetBufferListDataStart(
 
 VOID
 NDISAPI
+NTAPI
 NdisAdjustNetBufferCurrentMdl(
   _In_ PNET_BUFFER NetBuffer);
 
 PVOID
 NDISAPI
+NTAPI
 NdisGetDataBuffer(
   _In_      PNET_BUFFER NetBuffer,
   _In_      ULONG       BytesNeeded,
@@ -7266,21 +7291,25 @@ NdisGetDataBuffer(
 
 NDIS_HANDLE
 NDISAPI
+NTAPI
 NdisGetPoolFromNetBufferList(
   _In_ PNET_BUFFER_LIST NetBufferList);
 
 NDIS_HANDLE
 NDISAPI
+NTAPI
 NdisGetPoolFromNetBuffer(
   _In_ PNET_BUFFER NetBuffer);
 
 UCHAR
 NDISAPI
+NTAPI
 NdisGetNetBufferListProtocolId(
   _In_ const NET_BUFFER_LIST *NetBufferList);
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisCopyFromNetBufferToNetBuffer(
   _In_  PNET_BUFFER Destination,
   _In_  ULONG       DestinationOffset,
@@ -7291,11 +7320,13 @@ NdisCopyFromNetBufferToNetBuffer(
 
 ULONG
 NDISAPI
+NTAPI
 NdisQueryNetBufferPhysicalCount(
   _In_ PNET_BUFFER NetBuffer);
 
 PMDL
 NDISAPI
+NTAPI
 NdisAllocateMdl(
   _In_ NDIS_HANDLE NdisHandle,
   _In_reads_bytes_(Length) PVOID VirtualAddress,
@@ -7303,11 +7334,13 @@ NdisAllocateMdl(
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeMdl(
   _In_ PMDL Mdl);
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisAllocateNetBufferListContext(
   _In_ PNET_BUFFER_LIST NetBufferList,
   _In_ USHORT           ContextSize,
@@ -7316,6 +7349,7 @@ NdisAllocateNetBufferListContext(
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeNetBufferListContext(
   _In_ PNET_BUFFER_LIST NetBufferList,
   _In_ USHORT           ContextSize);
@@ -7435,6 +7469,7 @@ typedef struct _NDIS_TIMER_CHARACTERISTICS {
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisAllocateTimerObject(
   _In_  NDIS_HANDLE NdisHandle,
   _In_  PNDIS_TIMER_CHARACTERISTICS TimerCharacteristics,
@@ -7442,6 +7477,7 @@ NdisAllocateTimerObject(
 
 BOOLEAN
 NDISAPI
+NTAPI
 NdisSetTimerObject(
   _In_     NDIS_HANDLE TimerObject,
   _In_     LARGE_INTEGER DueTime,
@@ -7450,6 +7486,7 @@ NdisSetTimerObject(
 
 BOOLEAN
 NDISAPI
+NTAPI
 NdisSetCoalescableTimerObject(
   _In_     NDIS_HANDLE TimerObject,
   _In_     LARGE_INTEGER DueTime,
@@ -7459,11 +7496,13 @@ NdisSetCoalescableTimerObject(
 
 BOOLEAN
 NDISAPI
+NTAPI
 NdisCancelTimerObject(
   _In_ NDIS_HANDLE TimerObject);
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeTimerObject(
   _In_ NDIS_HANDLE TimerObject);
 
@@ -7543,18 +7582,21 @@ typedef struct _NDIS_PORT {
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisMAllocatePort(
   _In_    NDIS_HANDLE NdisMiniportHandle,
   _Inout_ PNDIS_PORT_CHARACTERISTICS PortCharacteristics);
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisMFreePort(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _In_ NDIS_PORT_NUMBER PortNumber);
 
 VOID
 NDISAPI
+NTAPI
 NdisMResetMiniport(
   _In_ NDIS_HANDLE NdisMiniportHandle);
 
@@ -8014,6 +8056,7 @@ typedef MINIPORT_UNLOAD (*MINIPORT_UNLOAD_HANDLER);
 
 NDIS_HANDLE
 NDISAPI
+NTAPI
 NdisAllocateIoWorkItem(
   _In_ NDIS_HANDLE NdisObjectHandle);
 
@@ -8025,6 +8068,7 @@ typedef NDIS_IO_WORKITEM_FUNCTION *NDIS_IO_WORKITEM_ROUTINE;
 
 VOID
 NDISAPI
+NTAPI
 NdisQueueIoWorkItem(
   _In_ NDIS_HANDLE NdisIoWorkItemHandle,
   _In_ NDIS_IO_WORKITEM_ROUTINE Routine,
@@ -8032,6 +8076,7 @@ NdisQueueIoWorkItem(
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeIoWorkItem(
   _In_ NDIS_HANDLE NdisIoWorkItemHandle);
 
@@ -8189,6 +8234,7 @@ typedef struct _NDIS_MINIPORT_INTERRUPT_CHARACTERISTICS {
 /* NDIS 6 interrupt registration entry points */
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisMRegisterInterruptEx(
   _In_     NDIS_HANDLE NdisMiniportHandle,
   _In_     NDIS_HANDLE MiniportInterruptContext,
@@ -8197,11 +8243,13 @@ NdisMRegisterInterruptEx(
 
 VOID
 NDISAPI
+NTAPI
 NdisMDeregisterInterruptEx(
   _In_ NDIS_HANDLE NdisInterruptHandle);
 
 BOOLEAN
 NDISAPI
+NTAPI
 NdisMSynchronizeWithInterruptEx(
   _In_ NDIS_HANDLE NdisInterruptHandle,
   _In_ ULONG MessageId,
@@ -8211,6 +8259,7 @@ NdisMSynchronizeWithInterruptEx(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 ULONG
 NDISAPI
+NTAPI
 NdisMQueueDpc(
   _In_ NDIS_HANDLE NdisInterruptHandle,
   _In_ ULONG MessageId,
@@ -8220,6 +8269,7 @@ NdisMQueueDpc(
 #if (NDIS_SUPPORT_NDIS620)
 KAFFINITY
 NDISAPI
+NTAPI
 NdisMQueueDpcEx(
   _In_ NDIS_HANDLE NdisInterruptHandle,
   _In_ ULONG MessageId,
@@ -8230,6 +8280,7 @@ NdisMQueueDpcEx(
 /* NDIS 6 scatter-gather DMA registration */
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisMRegisterScatterGatherDma(
   _In_  NDIS_HANDLE NdisMiniportHandle,
   _In_  PNDIS_SG_DMA_DESCRIPTION DmaDescription,
@@ -8237,6 +8288,7 @@ NdisMRegisterScatterGatherDma(
 
 VOID
 NDISAPI
+NTAPI
 NdisMDeregisterScatterGatherDma(
   _In_ NDIS_HANDLE NdisMiniportDmaHandle);
 
@@ -8396,6 +8448,7 @@ typedef union _NDIS_MINIPORT_ADAPTER_ATTRIBUTES {
 /* Registration / deregistration entry points */
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisMRegisterMiniportDriver(
   _In_     PDRIVER_OBJECT DriverObject,
   _In_     PUNICODE_STRING RegistryPath,
@@ -8405,11 +8458,13 @@ NdisMRegisterMiniportDriver(
 
 VOID
 NDISAPI
+NTAPI
 NdisMDeregisterMiniportDriver(
   _In_ NDIS_HANDLE NdisMiniportDriverHandle);
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisMSetMiniportAttributes(
   _In_ NDIS_HANDLE NdisMiniportAdapterHandle,
   _In_ PNDIS_MINIPORT_ADAPTER_ATTRIBUTES MiniportAttributes);
@@ -8419,6 +8474,7 @@ NdisMSetMiniportAttributes(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisMEnableVirtualization(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _In_ USHORT NumVFs,
@@ -8429,6 +8485,7 @@ NdisMEnableVirtualization(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 ULONG
 NDISAPI
+NTAPI
 NdisMGetVirtualFunctionBusData(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _In_ NDIS_SRIOV_FUNCTION_ID VFId,
@@ -8439,6 +8496,7 @@ NdisMGetVirtualFunctionBusData(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 ULONG
 NDISAPI
+NTAPI
 NdisMSetVirtualFunctionBusData(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _In_ NDIS_SRIOV_FUNCTION_ID VFId,
@@ -8449,6 +8507,7 @@ NdisMSetVirtualFunctionBusData(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisMGetVirtualFunctionLocation(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _In_ NDIS_SRIOV_FUNCTION_ID VFId,
@@ -8459,6 +8518,7 @@ NdisMGetVirtualFunctionLocation(
 _IRQL_requires_max_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisMQueryProbedBars(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _Out_writes_(PCI_TYPE0_ADDRESSES) PULONG BaseRegisterValues);
@@ -8466,12 +8526,14 @@ NdisMQueryProbedBars(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisMIdleNotificationComplete(
   _In_ NDIS_HANDLE MiniportAdapterHandle);
 
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisMIdleNotificationConfirm(
   _In_ NDIS_HANDLE MiniportAdapterHandle,
   _In_ NDIS_DEVICE_POWER_STATE IdlePowerState);
@@ -8480,6 +8542,7 @@ NdisMIdleNotificationConfirm(
 
 VOID
 NDISAPI
+NTAPI
 NdisMSendNetBufferListsComplete(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _In_ PNET_BUFFER_LIST NetBufferList,
@@ -8487,6 +8550,7 @@ NdisMSendNetBufferListsComplete(
 
 VOID
 NDISAPI
+NTAPI
 NdisMIndicateReceiveNetBufferLists(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _In_ PNET_BUFFER_LIST NetBufferLists,
@@ -8496,12 +8560,14 @@ NdisMIndicateReceiveNetBufferLists(
 
 VOID
 NDISAPI
+NTAPI
 NdisMIndicateStatusEx(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _In_ PNDIS_STATUS_INDICATION StatusIndication);
 
 VOID
 NDISAPI
+NTAPI
 NdisMOidRequestComplete(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _In_ PNDIS_OID_REQUEST OidRequest,
@@ -8867,6 +8933,7 @@ typedef struct _NDIS_FILTER_ATTRIBUTES {
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisFRegisterFilterDriver(
   _In_     PDRIVER_OBJECT DriverObject,
   _In_     NDIS_HANDLE FilterDriverContext,
@@ -8875,17 +8942,20 @@ NdisFRegisterFilterDriver(
 
 VOID
 NDISAPI
+NTAPI
 NdisFDeregisterFilterDriver(
   _In_ NDIS_HANDLE NdisFilterDriverHandle);
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisSetOptionalHandlers(
   _In_ NDIS_HANDLE NdisHandle,
   _In_ PNDIS_DRIVER_OPTIONAL_HANDLERS OptionalHandlers);
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisFSetAttributes(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ NDIS_HANDLE FilterModuleContext,
@@ -8893,22 +8963,26 @@ NdisFSetAttributes(
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisFRestartFilter(
   _In_ NDIS_HANDLE NdisFilterHandle);
 
 VOID
 NDISAPI
+NTAPI
 NdisFRestartComplete(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ NDIS_STATUS Status);
 
 VOID
 NDISAPI
+NTAPI
 NdisFPauseComplete(
   _In_ NDIS_HANDLE NdisFilterHandle);
 
 VOID
 NDISAPI
+NTAPI
 NdisFSendNetBufferLists(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PNET_BUFFER_LIST NetBufferList,
@@ -8917,6 +8991,7 @@ NdisFSendNetBufferLists(
 
 VOID
 NDISAPI
+NTAPI
 NdisFReturnNetBufferLists(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PNET_BUFFER_LIST NetBufferLists,
@@ -8924,6 +8999,7 @@ NdisFReturnNetBufferLists(
 
 VOID
 NDISAPI
+NTAPI
 NdisFSendNetBufferListsComplete(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PNET_BUFFER_LIST NetBufferList,
@@ -8931,6 +9007,7 @@ NdisFSendNetBufferListsComplete(
 
 VOID
 NDISAPI
+NTAPI
 NdisFIndicateReceiveNetBufferLists(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PNET_BUFFER_LIST NetBufferLists,
@@ -8940,18 +9017,21 @@ NdisFIndicateReceiveNetBufferLists(
 
 VOID
 NDISAPI
+NTAPI
 NdisFCancelSendNetBufferLists(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PVOID CancelId);
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisFOidRequest(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PNDIS_OID_REQUEST OidRequest);
 
 VOID
 NDISAPI
+NTAPI
 NdisFOidRequestComplete(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PNDIS_OID_REQUEST OidRequest,
@@ -8959,24 +9039,28 @@ NdisFOidRequestComplete(
 
 VOID
 NDISAPI
+NTAPI
 NdisFCancelOidRequest(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PVOID RequestId);
 
 VOID
 NDISAPI
+NTAPI
 NdisFIndicateStatus(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PNDIS_STATUS_INDICATION StatusIndication);
 
 VOID
 NDISAPI
+NTAPI
 NdisFDevicePnPEventNotify(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PNET_DEVICE_PNP_EVENT NetDevicePnPEvent);
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisFNetPnPEvent(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ struct _NET_PNP_EVENT_NOTIFICATION *NetPnPEventNotification);
@@ -8984,12 +9068,14 @@ NdisFNetPnPEvent(
 #if NDIS_SUPPORT_NDIS61
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisFDirectOidRequest(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PNDIS_OID_REQUEST OidRequest);
 
 VOID
 NDISAPI
+NTAPI
 NdisFDirectOidRequestComplete(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PNDIS_OID_REQUEST OidRequest,
@@ -8997,6 +9083,7 @@ NdisFDirectOidRequestComplete(
 
 VOID
 NDISAPI
+NTAPI
 NdisFCancelDirectOidRequest(
   _In_ NDIS_HANDLE NdisFilterHandle,
   _In_ PVOID RequestId);
@@ -9005,6 +9092,7 @@ NdisFCancelDirectOidRequest(
 #if NDIS_SUPPORT_NDIS680
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisFSynchronousOidRequest(
   _In_ NDIS_HANDLE NdisFilterModuleHandle,
   _In_ PNDIS_OID_REQUEST OidRequest);
@@ -9147,6 +9235,7 @@ typedef struct _NET_PNP_EVENT_NOTIFICATION {
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisMNetPnPEvent(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _In_ PNET_PNP_EVENT_NOTIFICATION NetPnPEventNotification);
@@ -9315,6 +9404,7 @@ typedef struct _NDIS_PROTOCOL_DRIVER_CHARACTERISTICS {
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisRegisterProtocolDriver(
   _In_     NDIS_HANDLE ProtocolDriverContext,
   _In_     PNDIS_PROTOCOL_DRIVER_CHARACTERISTICS ProtocolDriverCharacteristics,
@@ -9322,11 +9412,13 @@ NdisRegisterProtocolDriver(
 
 VOID
 NDISAPI
+NTAPI
 NdisDeregisterProtocolDriver(
   _In_ NDIS_HANDLE NdisProtocolHandle);
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisOpenAdapterEx(
   _In_ NDIS_HANDLE NdisProtocolHandle,
   _In_ NDIS_HANDLE ProtocolBindingContext,
@@ -9336,22 +9428,26 @@ NdisOpenAdapterEx(
 
 VOID
 NDISAPI
+NTAPI
 NdisCompleteBindAdapterEx(
   _In_ NDIS_HANDLE BindAdapterContext,
   _In_ NDIS_STATUS Status);
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisCloseAdapterEx(
   _In_ NDIS_HANDLE NdisBindingHandle);
 
 VOID
 NDISAPI
+NTAPI
 NdisCompleteUnbindAdapterEx(
   _In_ NDIS_HANDLE UnbindContext);
 
 VOID
 NDISAPI
+NTAPI
 NdisCompleteNetPnPEvent(
   _In_ NDIS_HANDLE NdisBindingHandle,
   _In_ PNET_PNP_EVENT_NOTIFICATION NetPnPEventNotification,
@@ -9359,6 +9455,7 @@ NdisCompleteNetPnPEvent(
 
 VOID
 NDISAPI
+NTAPI
 NdisSendNetBufferLists(
   _In_ NDIS_HANDLE NdisBindingHandle,
   _In_ PNET_BUFFER_LIST NetBufferList,
@@ -9367,6 +9464,7 @@ NdisSendNetBufferLists(
 
 VOID
 NDISAPI
+NTAPI
 NdisReturnNetBufferLists(
   _In_ NDIS_HANDLE NdisBindingHandle,
   _In_ PNET_BUFFER_LIST NetBufferLists,
@@ -9374,6 +9472,7 @@ NdisReturnNetBufferLists(
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisOidRequest(
   _In_ NDIS_HANDLE NdisBindingHandle,
   _In_ PNDIS_OID_REQUEST OidRequest);
@@ -9381,6 +9480,7 @@ NdisOidRequest(
 #if NDIS_SUPPORT_NDIS680
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisSynchronousOidRequest(
   _In_ NDIS_HANDLE NdisBindingHandle,
   _In_ PNDIS_OID_REQUEST OidRequest);
@@ -9388,6 +9488,7 @@ NdisSynchronousOidRequest(
 
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisAllocateCloneOidRequest(
   _In_ NDIS_HANDLE SourceHandle,
   _In_ PNDIS_OID_REQUEST OidRequest,
@@ -9396,6 +9497,7 @@ NdisAllocateCloneOidRequest(
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeCloneOidRequest(
   _In_ NDIS_HANDLE SourceHandle,
   _In_ PNDIS_OID_REQUEST Request);
@@ -9404,18 +9506,21 @@ NdisFreeCloneOidRequest(
 /* NDIS 6.1+ direct (unserialized) OID request path. */
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisDirectOidRequest(
   _In_ NDIS_HANDLE NdisBindingHandle,
   _In_ PNDIS_OID_REQUEST OidRequest);
 
 VOID
 NDISAPI
+NTAPI
 NdisCancelDirectOidRequest(
   _In_ NDIS_HANDLE NdisBindingHandle,
   _In_ PVOID RequestId);
 
 VOID
 NDISAPI
+NTAPI
 NdisMDirectOidRequestComplete(
   _In_ NDIS_HANDLE NdisMiniportHandle,
   _In_ PNDIS_OID_REQUEST OidRequest,
@@ -9578,6 +9683,7 @@ __drv_allocatesMem(ndisrwlockex)
 _IRQL_requires_max_(DISPATCH_LEVEL)
 PNDIS_RW_LOCK_EX
 NDISAPI
+NTAPI
 NdisAllocateRWLock(
     _In_ NDIS_HANDLE NdisHandle
     );
@@ -9585,6 +9691,7 @@ NdisAllocateRWLock(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisFreeRWLock(
     _In_ __drv_freesMem(ndisrwlockex) PNDIS_RW_LOCK_EX Lock
     );
@@ -9593,6 +9700,7 @@ _Acquires_shared_lock_(Lock)
 _IRQL_raises_(DISPATCH_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisAcquireRWLockRead(
     _In_  PNDIS_RW_LOCK_EX Lock,
     _Out_ _IRQL_saves_ PLOCK_STATE_EX   LockState,
@@ -9603,6 +9711,7 @@ _Acquires_exclusive_lock_(Lock)
 _IRQL_raises_(DISPATCH_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisAcquireRWLockWrite(
     _In_  PNDIS_RW_LOCK_EX Lock,
     _Out_ _IRQL_saves_ PLOCK_STATE_EX   LockState,
@@ -9613,6 +9722,7 @@ _Releases_lock_(Lock)
 _IRQL_requires_(DISPATCH_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisReleaseRWLock(
     _In_ PNDIS_RW_LOCK_EX Lock,
     _In_ _IRQL_restores_ PLOCK_STATE_EX   LockState
@@ -9646,6 +9756,7 @@ _Must_inspect_result_
 _IRQL_requires_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisOpenConfigurationEx(
     _In_      PNDIS_CONFIGURATION_OBJECT    ConfigObject,
     _Out_ _When_(return==NDIS_STATUS_SUCCESS, _At_(*ConfigurationHandle, __drv_allocatesMem(mem)))
@@ -9657,6 +9768,7 @@ NdisOpenConfigurationEx(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisGetRssProcessorInformation(
     _In_                    NDIS_HANDLE                                    NdisHandle,
     _Out_writes_bytes_to_opt_(*Size, *Size) PNDIS_RSS_PROCESSOR_INFO       RssProcessorInfo,
@@ -9665,40 +9777,48 @@ NdisGetRssProcessorInformation(
 
 USHORT
 NDISAPI
+NTAPI
 NdisActiveGroupCount(VOID);
 
 USHORT
 NDISAPI
+NTAPI
 NdisMaxGroupCount(VOID);
 
 ULONG
 NDISAPI
+NTAPI
 NdisGroupMaxProcessorCount(
     USHORT Group);
 
 ULONG
 NDISAPI
+NTAPI
 NdisGroupActiveProcessorCount(
     USHORT Group);
 
 KAFFINITY
 NDISAPI
+NTAPI
 NdisGroupActiveProcessorMask(
     USHORT Group);
 
 PROCESSOR_NUMBER
 NDISAPI
+NTAPI
 NdisCurrentGroupAndProcessor(VOID);
 
 _IRQL_requires_max_(HIGH_LEVEL)
 ULONG
 NDISAPI
+NTAPI
 NdisProcessorNumberToIndex(
     _In_ PROCESSOR_NUMBER ProcNum);
 
 _IRQL_requires_max_(HIGH_LEVEL)
 NTSTATUS
 NDISAPI
+NTAPI
 NdisProcessorIndexToNumber(
     _In_ ULONG ProcIndex,
     _Out_ PPROCESSOR_NUMBER ProcNum);
@@ -9711,6 +9831,7 @@ NdisProcessorIndexToNumber(
 _IRQL_requires_max_(HIGH_LEVEL)
 PVOID
 NDISAPI
+NTAPI
 NdisGetDeviceReservedExtension(
     _In_  PDEVICE_OBJECT                    DeviceObject
     );
@@ -9762,6 +9883,7 @@ typedef struct _NDIS_SHARED_MEMORY_PARAMETERS
 _IRQL_requires_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisAllocateSharedMemory(
     _In_    NDIS_HANDLE                     NdisHandle,
     _Inout_ PNDIS_SHARED_MEMORY_PARAMETERS  SharedMemoryParameters,
@@ -9770,12 +9892,14 @@ NdisAllocateSharedMemory(
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisFreeSharedMemory(
     _In_  NDIS_HANDLE                     NdisHandle,
     _In_  NDIS_HANDLE                     AllocationHandle);
 
 VOID
 NDISAPI
+NTAPI
 NdisFreeMemoryWithTagPriority(
     _In_  NDIS_HANDLE             NdisHandle,
     _In_ __drv_freesMem(Mem) PVOID VirtualAddress,
@@ -10351,6 +10475,7 @@ typedef struct _NDIS_TCP_IP_CHECKSUM_NET_BUFFER_LIST_INFO
 _IRQL_requires_max_(DISPATCH_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisCancelSendNetBufferLists(
     _In_  NDIS_HANDLE     NdisBindingHandle,
     _In_ _Points_to_data_
@@ -10360,6 +10485,7 @@ NdisCancelSendNetBufferLists(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisCancelOidRequest(
     _In_    NDIS_HANDLE             NdisBindingHandle,
     _In_ _Points_to_data_
@@ -10437,6 +10563,7 @@ typedef struct _NDIS_MINIPORT_ADAPTER_HARDWARE_ASSIST_ATTRIBUTES
 _IRQL_requires_(DISPATCH_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisMFreeNetBufferSGList(
     _In_  NDIS_HANDLE             NdisMiniportDmaHandle,
     _In_  PSCATTER_GATHER_LIST    pSGL,
@@ -10446,6 +10573,7 @@ NdisMFreeNetBufferSGList(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisMPauseComplete(
     _In_  NDIS_HANDLE             MiniportAdapterHandle
     );
@@ -10454,6 +10582,7 @@ _Must_inspect_result_
 _IRQL_requires_max_(HIGH_LEVEL)
 ULONG
 NDISAPI
+NTAPI
 NdisMGetBusData(
     _In_ NDIS_HANDLE              NdisMiniportHandle,
     _In_ ULONG                    WhichSpace,
@@ -10465,6 +10594,7 @@ NdisMGetBusData(
 _IRQL_requires_max_(HIGH_LEVEL)
 ULONG
 NDISAPI
+NTAPI
 NdisMSetBusData(
     _In_ NDIS_HANDLE              NdisMiniportHandle,
     _In_ ULONG                    WhichSpace,
@@ -10716,6 +10846,7 @@ typedef struct _NDIS_SWITCH_OPTIONAL_HANDLERS
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisFGetOptionalSwitchHandlers(
     _In_     NDIS_HANDLE                      NdisFilterHandle,
     _Out_    PNDIS_SWITCH_CONTEXT             NdisSwitchContext,
@@ -10727,6 +10858,7 @@ NdisFGetOptionalSwitchHandlers(
 _IRQL_requires_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisIfAddIfStackEntry(
     _In_ NET_IFINDEX          HigherLayerIfIndex,
     _In_ NET_IFINDEX          LowerLayerIfIndex
@@ -10735,6 +10867,7 @@ NdisIfAddIfStackEntry(
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisIfDeleteIfStackEntry(
     _In_ NET_IFINDEX          HigherLayerIfIndex,
     _In_ NET_IFINDEX          LowerLayerIfIndex
@@ -10835,6 +10968,7 @@ typedef struct _NET_IF_INFORMATION {
 _IRQL_requires_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisIfRegisterProvider(
   _In_ PNDIS_IF_PROVIDER_CHARACTERISTICS ProviderCharacteristics,
   _In_opt_ NDIS_HANDLE IfProviderContext,
@@ -10843,12 +10977,14 @@ NdisIfRegisterProvider(
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisIfDeregisterProvider(
   _In_ NDIS_HANDLE NdisProviderHandle);
 
 _IRQL_requires_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisIfAllocateNetLuidIndex(
   _In_ NET_IFTYPE ifType,
   _Out_ PUINT32 pNetLuidIndex);
@@ -10856,6 +10992,7 @@ NdisIfAllocateNetLuidIndex(
 _IRQL_requires_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisIfFreeNetLuidIndex(
   _In_ NET_IFTYPE ifType,
   _In_ UINT32 NetLuidIndex);
@@ -10863,6 +11000,7 @@ NdisIfFreeNetLuidIndex(
 _IRQL_requires_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisIfRegisterInterface(
   _In_ NDIS_HANDLE NdisProviderHandle,
   _In_ NET_LUID NetLuid,
@@ -10873,12 +11011,14 @@ NdisIfRegisterInterface(
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID
 NDISAPI
+NTAPI
 NdisIfDeregisterInterface(
   _In_ NET_IFINDEX ifIndex);
 
 _IRQL_requires_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisIfGetInterfaceIndexFromNetLuid(
   _In_ NET_LUID NetLuid,
   _Out_ PNET_IFINDEX pIfIndex);
@@ -10886,6 +11026,7 @@ NdisIfGetInterfaceIndexFromNetLuid(
 _IRQL_requires_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisIfGetNetLuidFromInterfaceIndex(
   _In_ NET_IFINDEX ifIndex,
   _Out_ PNET_LUID pNetLuid);
@@ -10893,6 +11034,7 @@ NdisIfGetNetLuidFromInterfaceIndex(
 _IRQL_requires_(PASSIVE_LEVEL)
 NDIS_STATUS
 NDISAPI
+NTAPI
 NdisIfQueryBindingIfIndex(
   _In_ NDIS_HANDLE NdisBindingHandle,
   _Out_ PNET_IFINDEX pBoundIfIndex,

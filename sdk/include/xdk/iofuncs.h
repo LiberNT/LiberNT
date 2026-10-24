@@ -218,6 +218,14 @@ WRITE_REGISTER_USHORT(
 #endif
 
 #if (defined(_M_ARM64) || defined(_M_ARM64EC)) && !defined(NO_PORT_MACROS)
+#if defined(_MSC_VER) && !defined(__clang__)
+#define _ARM64_REGISTER_LOAD_BARRIER() __dsb(_ARM64_BARRIER_LD)
+#define _ARM64_REGISTER_STORE_BARRIER() __dsb(_ARM64_BARRIER_ST)
+#else
+#define _ARM64_REGISTER_LOAD_BARRIER() __asm__ __volatile__("dsb ld" ::: "memory")
+#define _ARM64_REGISTER_STORE_BARRIER() __asm__ __volatile__("dsb st" ::: "memory")
+#endif
+
 FORCEINLINE
 UCHAR
 READ_REGISTER_NOFENCE_UCHAR(
@@ -412,7 +420,7 @@ READ_REGISTER_UCHAR(
   IN volatile UCHAR *Register)
 {
   UCHAR Value = *(volatile UCHAR * const)Register;
-  __asm__ __volatile__("dsb ld" ::: "memory");
+  _ARM64_REGISTER_LOAD_BARRIER();
   return Value;
 }
 
@@ -422,7 +430,7 @@ READ_REGISTER_USHORT(
   IN volatile USHORT *Register)
 {
   USHORT Value = *(volatile USHORT * const)Register;
-  __asm__ __volatile__("dsb ld" ::: "memory");
+  _ARM64_REGISTER_LOAD_BARRIER();
   return Value;
 }
 
@@ -432,7 +440,7 @@ READ_REGISTER_ULONG(
   IN volatile ULONG *Register)
 {
   ULONG Value = *(volatile ULONG * const)Register;
-  __asm__ __volatile__("dsb ld" ::: "memory");
+  _ARM64_REGISTER_LOAD_BARRIER();
   return Value;
 }
 
@@ -446,7 +454,7 @@ READ_REGISTER_BUFFER_UCHAR(
   volatile const UCHAR *Src = (volatile const UCHAR *)Register;
   while (Count--)
     *Buffer++ = *Src;
-  __asm__ __volatile__("dsb ld" ::: "memory");
+  _ARM64_REGISTER_LOAD_BARRIER();
 }
 
 FORCEINLINE
@@ -459,7 +467,7 @@ READ_REGISTER_BUFFER_USHORT(
   volatile const USHORT *Src = (volatile const USHORT *)Register;
   while (Count--)
     *Buffer++ = *Src;
-  __asm__ __volatile__("dsb ld" ::: "memory");
+  _ARM64_REGISTER_LOAD_BARRIER();
 }
 
 FORCEINLINE
@@ -472,7 +480,7 @@ READ_REGISTER_BUFFER_ULONG(
   volatile const ULONG *Src = (volatile const ULONG *)Register;
   while (Count--)
     *Buffer++ = *Src;
-  __asm__ __volatile__("dsb ld" ::: "memory");
+  _ARM64_REGISTER_LOAD_BARRIER();
 }
 
 FORCEINLINE
@@ -482,7 +490,7 @@ WRITE_REGISTER_UCHAR(
   IN UCHAR Value)
 {
   *(volatile UCHAR *)Register = Value;
-  __asm__ __volatile__("dsb st" ::: "memory");
+  _ARM64_REGISTER_STORE_BARRIER();
 }
 
 FORCEINLINE
@@ -492,7 +500,7 @@ WRITE_REGISTER_USHORT(
   IN USHORT Value)
 {
   *(volatile USHORT *)Register = Value;
-  __asm__ __volatile__("dsb st" ::: "memory");
+  _ARM64_REGISTER_STORE_BARRIER();
 }
 
 FORCEINLINE
@@ -502,7 +510,7 @@ WRITE_REGISTER_ULONG(
   IN ULONG Value)
 {
   *(volatile ULONG *)Register = Value;
-  __asm__ __volatile__("dsb st" ::: "memory");
+  _ARM64_REGISTER_STORE_BARRIER();
 }
 
 FORCEINLINE
@@ -515,7 +523,7 @@ WRITE_REGISTER_BUFFER_UCHAR(
   volatile UCHAR *Dst = (volatile UCHAR *)Register;
   while (Count--)
     *Dst = *Buffer++;
-  __asm__ __volatile__("dsb st" ::: "memory");
+  _ARM64_REGISTER_STORE_BARRIER();
 }
 
 FORCEINLINE
@@ -528,7 +536,7 @@ WRITE_REGISTER_BUFFER_USHORT(
   volatile USHORT *Dst = (volatile USHORT *)Register;
   while (Count--)
     *Dst = *Buffer++;
-  __asm__ __volatile__("dsb st" ::: "memory");
+  _ARM64_REGISTER_STORE_BARRIER();
 }
 
 FORCEINLINE
@@ -541,7 +549,7 @@ WRITE_REGISTER_BUFFER_ULONG(
   volatile ULONG *Dst = (volatile ULONG *)Register;
   while (Count--)
     *Dst = *Buffer++;
-  __asm__ __volatile__("dsb st" ::: "memory");
+  _ARM64_REGISTER_STORE_BARRIER();
 }
 
 FORCEINLINE
@@ -550,7 +558,7 @@ READ_REGISTER_ULONG64(
   IN volatile ULONG64 *Register)
 {
   ULONG64 Value = *(volatile ULONG64 * const)Register;
-  __asm__ __volatile__("dsb ld" ::: "memory");
+  _ARM64_REGISTER_LOAD_BARRIER();
   return Value;
 }
 
@@ -564,7 +572,7 @@ READ_REGISTER_BUFFER_ULONG64(
   volatile const ULONG64 *Src = (volatile const ULONG64 *)Register;
   while (Count--)
     *Buffer++ = *Src;
-  __asm__ __volatile__("dsb ld" ::: "memory");
+  _ARM64_REGISTER_LOAD_BARRIER();
 }
 
 FORCEINLINE
@@ -574,7 +582,7 @@ WRITE_REGISTER_ULONG64(
   IN ULONG64 Value)
 {
   *(volatile ULONG64 *)Register = Value;
-  __asm__ __volatile__("dsb st" ::: "memory");
+  _ARM64_REGISTER_STORE_BARRIER();
 }
 
 FORCEINLINE
@@ -587,7 +595,7 @@ WRITE_REGISTER_BUFFER_ULONG64(
   volatile ULONG64 *Dst = (volatile ULONG64 *)Register;
   while (Count--)
     *Dst = *Buffer++;
-  __asm__ __volatile__("dsb st" ::: "memory");
+  _ARM64_REGISTER_STORE_BARRIER();
 }
 #endif
 

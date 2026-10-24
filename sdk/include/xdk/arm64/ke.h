@@ -40,7 +40,9 @@ typedef struct _KFLOATING_SAVE
 extern NTKERNELAPI volatile KSYSTEM_TIME KeTickCount;
 
 #ifndef _ReadWriteBarrier
+#if defined(__clang__) || defined(__GNUC__)
 #define _ReadWriteBarrier() __asm__ __volatile__("" ::: "memory")
+#endif
 #endif
 
 FORCEINLINE
@@ -56,10 +58,27 @@ YieldProcessor(
 }
 
 #ifndef MemoryBarrier
+#if defined(__clang__) || defined(__GNUC__)
 #define MemoryBarrier()                      __asm__ __volatile__("dmb sy" ::: "memory")
+#else
+#define MemoryBarrier()                      __dmb(_ARM64_BARRIER_SY)
+#endif
+#endif
+
+#ifndef ARM64_SYSREG
+#define ARM64_SYSREG(op0, op1, crn, crm, op2) \
+        ( ((op0 & 1) << 14) | \
+          ((op1 & 7) << 11) | \
+          ((crn & 15) << 7) | \
+          ((crm & 15) << 3) | \
+          ((op2 & 7) << 0) )
+#endif
+#ifndef ARM64_CNTVCT
+#define ARM64_CNTVCT            ARM64_SYSREG(3,3,14, 0,2)
 #endif
 
 /* The architected virtual counter, the time base of the kernel's cycle accounting. */
+#if defined(__clang__) || defined(__GNUC__)
 FORCEINLINE
 ULONG64
 ReadTimeStampCounter(
@@ -70,11 +89,23 @@ ReadTimeStampCounter(
     __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(Value) :: "memory");
     return Value;
 }
+#else
+#define ReadTimeStampCounter() ((ULONG64)_ReadStatusReg(ARM64_CNTVCT))
+#endif
+#if defined(__clang__) || defined(__GNUC__)
 #ifndef PreFetchCacheLine
 #define PreFetchCacheLine(l,a)               __builtin_prefetch((const void *)(a))
 #endif
 #ifndef PrefetchForWrite
 #define PrefetchForWrite(p)                  __builtin_prefetch((const void *)(p), 1)
+#endif
+#else
+#ifndef PreFetchCacheLine
+#define PreFetchCacheLine(l,a)               __prefetch((const void *)(a))
+#endif
+#ifndef PrefetchForWrite
+#define PrefetchForWrite(p)                  __prefetch2((const void *)(p), 0x10)
+#endif
 #endif
 #ifndef ReadForWriteAccess
 #define ReadForWriteAccess(p)                (*(p))
