@@ -182,7 +182,7 @@ extern NTKERNELAPI PVOID MmSystemRangeStart;
  */
 #define DXGK_CB_FULL(Adapter, Field) \
     ((Adapter)->MiniportContext->UseDodLayout \
-        ? (typeof((Adapter)->MiniportContext->InitData.s.Field))NULL \
+        ? (__typeof__((Adapter)->MiniportContext->InitData.s.Field))NULL \
         : (Adapter)->MiniportContext->InitData.s.Field)
 
 typedef struct _DXGKVMM_ALLOCATION DXGKVMM_ALLOCATION, *PDXGKVMM_ALLOCATION;

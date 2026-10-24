@@ -46,7 +46,10 @@ target_include_directories(tcpip BEFORE
     PRIVATE ${LWIP_INCLUDE_DIRS}
     PRIVATE include)
 
-if(ARCH STREQUAL "arm64")
+if(ARCH STREQUAL "arm64" AND MSVC)
+    add_asm_files(tcpip_arm64_asm tcpip/arm64/chksum.S)
+    target_sources(tcpip PRIVATE ${tcpip_arm64_asm})
+elseif(ARCH STREQUAL "arm64")
     target_sources(tcpip PRIVATE tcpip/arm64/chksum.S)
 else()
     target_sources(tcpip PRIVATE tcpip/chksum.c)

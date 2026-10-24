@@ -1918,7 +1918,7 @@ DxgkpRollbackCreatedContext(
  *
  * IRQL: PASSIVE_LEVEL (miniport DDI contract).
  */
-static NTSTATUS __attribute__((unused))
+static NTSTATUS __MINGW_ATTRIB_UNUSED
 DxgkpQueryFence(
     _In_  PDXGKRNL_ADAPTER Adapter,
     _Out_ PULONG           OutFence)

@@ -20,7 +20,7 @@
 
 #if (NTDDI_VERSION >= NTDDI_WIN10)
 // not currently in mingw - introduced with Windows 10
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || defined(__REACTOS__)
 #define FileIdInformation (enum _FILE_INFORMATION_CLASS)59
 #define FileHardLinkFullIdInformation (enum _FILE_INFORMATION_CLASS)62
 #define FileDispositionInformationEx (enum _FILE_INFORMATION_CLASS)64

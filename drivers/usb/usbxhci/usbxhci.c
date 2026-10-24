@@ -5,6 +5,9 @@
  */
 
 #include "usbxhci.h"
+#if defined(_M_ARM64)
+#include <reactos/arm64/sysreg.h>
+#endif
 
 /*
  * The bugcheck writer enters the miniport at HIGH_LEVEL after the other
@@ -2020,7 +2023,7 @@ XHCI_RingEndpointDoorbell(
     Value = EndpointId & 0x1F;
     Value |= (StreamId & 0xFFFF) << 16;
 #if defined(_M_ARM64)
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 #endif
     XHCI_WRITE_REGISTER_ULONG(&Extension->DoorbellArray->Doorbell[SlotIndex], Value);
     /*
@@ -2656,7 +2659,7 @@ XHCI_RingHasSpace(
  */
 static
 ULONG
-__attribute__((unused))
+XHCI_UNUSED
 XHCI_EstimateTrbsNeeded(
     _In_ ULONG TransferLength,
     _In_ BOOLEAN IsControl)

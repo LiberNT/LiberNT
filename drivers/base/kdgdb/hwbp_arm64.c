@@ -43,7 +43,7 @@ arm64_debug_register_counts(
 {
     ULONG64 Dfr0;
 
-    __asm__ __volatile__("mrs %0, id_aa64dfr0_el1" : "=r"(Dfr0));
+    Dfr0 = ARM64_READ_SYSREG(ID_AA64DFR0_EL1);
     *BreakpointCount = (ULONG)(((Dfr0 >> 12) & 0xF) + 1);
     *WatchpointCount = (ULONG)(((Dfr0 >> 20) & 0xF) + 1);
 

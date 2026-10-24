@@ -8,6 +8,9 @@
 /* INCLUDES *******************************************************************/
 
 #include "ksecdd.h"
+#if defined(_M_ARM64) || defined(__aarch64__)
+#include <reactos/arm64/sysreg.h>
+#endif
 
 #define NDEBUG
 #include <debug.h>
@@ -235,7 +238,7 @@ KsecReadMachineSpecificCounters(
 #elif defined(_M_ARM64) || defined(__aarch64__)
     {
         ULONG64 cntvct;
-        __asm__ volatile("mrs %0, CNTVCT_EL0" : "=r"(cntvct));
+        cntvct = ARM64_READ_SYSREG(CNTVCT_EL0);
         *MachineSpecificCounters = (ULONG)cntvct;
     }
 #elif defined(_M_RISCV64)

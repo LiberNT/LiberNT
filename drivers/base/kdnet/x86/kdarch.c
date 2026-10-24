@@ -13,7 +13,7 @@ KdNetArchRandom(
 {
     int Information[4];
     unsigned char Valid;
-    ULONG Number;
+    unsigned int Number;
 
     __cpuid(Information, 0);
     if (Information[0] < 1)
@@ -23,7 +23,11 @@ KdNetArchRandom(
     if (!(Information[2] & (1 << 30)))
         return FALSE;
 
+#ifdef _MSC_VER
+    Valid = (unsigned char)_rdrand32_step(&Number);
+#else
     __asm__ __volatile__("rdrand %0; setc %1" : "=r"(Number), "=qm"(Valid) : : "cc");
+#endif
     *Value = Number;
     return Valid != 0;
 }
