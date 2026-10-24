@@ -855,7 +855,7 @@ KdpPrintCaptured(
     {
         /* Fail */
         *Handled = TRUE;
-        return STATUS_DEVICE_NOT_CONNECTED;
+        return KdDebuggerEnabled ? STATUS_DEVICE_NOT_CONNECTED : STATUS_SUCCESS;
     }
 
     if ((KdEnteredDebugger && KdpPortLocked) || KdpDebuggerLockOwnedByCurrentThread())
