@@ -358,6 +358,63 @@ NvmeHwAdapterControl(_In_ PVOID DeviceExtension,
     }
 }
 
+static
+SCSI_UNIT_CONTROL_STATUS
+NTAPI
+NvmeHwUnitControl(_In_ PVOID DeviceExtension,
+                  _In_ SCSI_UNIT_CONTROL_TYPE ControlType,
+                  _In_ PVOID Parameters)
+{
+    PNVME_DEVICE_EXTENSION Device = (PNVME_DEVICE_EXTENSION)DeviceExtension;
+
+    switch (ControlType)
+    {
+        case ScsiQuerySupportedUnitControlTypes:
+        {
+            PSCSI_SUPPORTED_CONTROL_TYPE_LIST List = (PSCSI_SUPPORTED_CONTROL_TYPE_LIST)Parameters;
+            PBOOLEAN SupportedTypes = (PBOOLEAN)((PUCHAR)List + FIELD_OFFSET(SCSI_SUPPORTED_CONTROL_TYPE_LIST, SupportedTypeList));
+
+            if (ScsiQuerySupportedUnitControlTypes < List->MaxControlType)
+                SupportedTypes[ScsiQuerySupportedUnitControlTypes] = TRUE;
+            if (ScsiUnitRichDescription < List->MaxControlType)
+                SupportedTypes[ScsiUnitRichDescription] = TRUE;
+            return ScsiUnitControlSuccess;
+        }
+
+        case ScsiUnitRichDescription:
+        {
+            PSTOR_RICH_DEVICE_DESCRIPTION_V2 Description = (PSTOR_RICH_DEVICE_DESCRIPTION_V2)Parameters;
+            PSTOR_ADDR_BTL8 Address;
+
+            if (Description->Version < STOR_RICH_DEVICE_DESCRIPTION_STRUCTURE_VERSION_V2 ||
+                Description->Size < sizeof(*Description) ||
+                Description->Address == NULL ||
+                Description->Address->Type != STOR_ADDRESS_TYPE_BTL8)
+            {
+                return ScsiUnitControlUnsuccessful;
+            }
+
+            Address = (PSTOR_ADDR_BTL8)Description->Address;
+            if (Address->Path != 0 || Address->Target != 0 || Address->Lun >= Device->NamespaceCount ||
+                Device->Model[0] == 0)
+            {
+                return ScsiUnitControlUnsuccessful;
+            }
+
+            RtlZeroMemory(Description->VendorId, sizeof(Description->VendorId));
+            RtlZeroMemory(Description->ModelNumber, sizeof(Description->ModelNumber));
+            RtlZeroMemory(Description->FirmwareRevision, sizeof(Description->FirmwareRevision));
+            RtlCopyMemory(Description->VendorId, "NVMe", sizeof("NVMe") - 1);
+            RtlCopyMemory(Description->ModelNumber, Device->Model, sizeof(Device->Model) - 1);
+            RtlCopyMemory(Description->FirmwareRevision, Device->Firmware, sizeof(Device->Firmware) - 1);
+            return ScsiUnitControlSuccess;
+        }
+
+        default:
+            return ScsiUnitControlUnsuccessful;
+    }
+}
+
 ULONG
 NTAPI
 DriverEntry(_In_ PVOID DriverObject, _In_ PVOID RegistryPath)
@@ -373,6 +430,7 @@ DriverEntry(_In_ PVOID DriverObject, _In_ PVOID RegistryPath)
     InitData.HwFindAdapter = NvmeFindAdapter;
     InitData.HwResetBus = NvmeHwResetBus;
     InitData.HwAdapterControl = NvmeHwAdapterControl;
+    InitData.HwUnitControl = NvmeHwUnitControl;
     InitData.DeviceExtensionSize = sizeof(NVME_DEVICE_EXTENSION);
     InitData.SrbExtensionSize = sizeof(NVME_SRB_EXTENSION);
     InitData.NumberOfAccessRanges = 1;

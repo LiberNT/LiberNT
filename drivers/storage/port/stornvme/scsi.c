@@ -234,7 +234,13 @@ NvmeHandleInquiry(_In_ PNVME_DEVICE_EXTENSION Device,
         for (StringLength = 0; StringLength < 16 && Device->Model[StringLength] != 0; StringLength++)
             NOTHING;
         RtlCopyMemory(Inquiry->ProductId, Device->Model, StringLength);
-        RtlCopyMemory(Inquiry->ProductRevisionLevel, "1.0 ", 4);
+        for (StringLength = 0; StringLength < sizeof(Device->Firmware) - 1 && Device->Firmware[StringLength] != 0; StringLength++)
+            NOTHING;
+        RtlFillMemory(Inquiry->ProductRevisionLevel, 4, ' ');
+        if (StringLength > 4)
+            RtlCopyMemory(Inquiry->ProductRevisionLevel, &Device->Firmware[StringLength - 4], 4);
+        else
+            RtlCopyMemory(Inquiry->ProductRevisionLevel, Device->Firmware, StringLength);
         Length = INQUIRYDATABUFFERSIZE;
     }
 
