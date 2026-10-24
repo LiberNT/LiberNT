@@ -26,6 +26,8 @@
 /* INCLUDES ******************************************************************/
 
 #include <ntoskrnl.h>
+#include <initguid.h>
+#include <devpkey.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -1502,13 +1504,28 @@ PiSetDevNodeText(
 
     UNICODE_STRING valDeviceDesc = RTL_CONSTANT_STRING(L"DeviceDesc");
     ULONG len;
+    PWSTR deviceDesc = NULL;
+    NTSTATUS textStatus;
+
+    textStatus = PiIrpQueryDeviceText(DeviceNode, localeId, DeviceTextDescription, &deviceDesc);
+    if (deviceDesc && deviceDesc[0] != UNICODE_NULL)
+    {
+        status = IoSetDevicePropertyData(DeviceNode->PhysicalDeviceObject,
+                                         &DEVPKEY_Device_BusReportedDeviceDesc,
+                                         LOCALE_NEUTRAL,
+                                         0,
+                                         DEVPROP_TYPE_STRING,
+                                         ((ULONG)wcslen(deviceDesc) + 1) * sizeof(WCHAR),
+                                         deviceDesc);
+        if (!NT_SUCCESS(status))
+        {
+            DPRINT1("IoSetDevicePropertyData() failed (Status %x)\n", status);
+        }
+    }
 
     status = ZwQueryValueKey(InstanceKey, &valDeviceDesc, KeyValueBasicInformation, NULL, 0, &len);
     if (status == STATUS_OBJECT_NAME_NOT_FOUND)
     {
-        PWSTR deviceDesc = NULL;
-        status = PiIrpQueryDeviceText(DeviceNode, localeId, DeviceTextDescription, &deviceDesc);
-
         if (deviceDesc && deviceDesc[0] != UNICODE_NULL)
         {
             status = ZwSetValueKey(InstanceKey,
@@ -1527,7 +1544,7 @@ PiSetDevNodeText(
         {
             // This key is mandatory, so even if the Irp fails, we still write it
             UNICODE_STRING unknownDeviceDesc = RTL_CONSTANT_STRING(L"Unknown device");
-            DPRINT("Driver didn't return DeviceDesc (status %x)\n", status);
+            DPRINT("Driver didn't return DeviceDesc (status %x)\n", textStatus);
 
             status = ZwSetValueKey(InstanceKey,
                                    &valDeviceDesc,
@@ -1540,11 +1557,11 @@ PiSetDevNodeText(
                 DPRINT1("ZwSetValueKey() failed (Status %x)\n", status);
             }
         }
+    }
 
-        if (deviceDesc)
-        {
-            ExFreePoolWithTag(deviceDesc, 0);
-        }
+    if (deviceDesc)
+    {
+        ExFreePoolWithTag(deviceDesc, 0);
     }
 
     // Step 2: LocaltionInformation is overwritten unconditionally
