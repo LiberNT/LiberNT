@@ -1361,7 +1361,8 @@ LxCopyGuiFile(
     _In_ PCWSTR Directory,
     _In_ PCWSTR Source,
     _In_ PCSTR Target,
-    _In_ ULONG Mode)
+    _In_ ULONG Mode,
+    _In_ BOOL Text)
 {
     WCHAR Path[MAX_PATH];
     PCHAR Data;
@@ -1385,7 +1386,7 @@ LxCopyGuiFile(
     CloseHandle(File);
     for (Index = 0; Index < Read; Index++)
     {
-        if (Data[Index] != '\r')
+        if (!Text || (Data[Index] != '\r'))
             Data[Length++] = Data[Index];
     }
     Status = LxWriteFileData(Extract, Target, Data, Length, Mode);
@@ -1403,18 +1404,15 @@ LxProvisionGui(
         PCWSTR Source;
         PCSTR Target;
         ULONG Mode;
+        BOOL Text;
     } Files[] =
     {
-        { L"lxwayland.py", "usr/local/lib/libernt/lxwayland/lxwayland.py", 0755 },
-        { L"protocols\\wayland.xml", "usr/local/lib/libernt/lxwayland/protocols/wayland.xml", 0644 },
-        { L"protocols\\xdg-shell.xml", "usr/local/lib/libernt/lxwayland/protocols/xdg-shell.xml", 0644 },
-        { L"protocols\\xdg-decoration-unstable-v1.xml", "usr/local/lib/libernt/lxwayland/protocols/xdg-decoration-unstable-v1.xml", 0644 },
-        { L"protocols\\cursor-shape-v1.xml", "usr/local/lib/libernt/lxwayland/protocols/cursor-shape-v1.xml", 0644 },
-        { L"lxapp", "usr/local/lib/libernt/lxapp", 0755 },
-        { L"gui-setup", "usr/local/lib/libernt/gui-setup", 0755 },
-        { L"user-setup", "usr/local/lib/libernt/user-setup", 0755 },
-        { L"lxwayland.service", "etc/systemd/system/lxwayland.service", 0644 },
-        { L"lx-gui-setup.service", "etc/systemd/system/lx-gui-setup.service", 0644 },
+        { L"lxwayland", "usr/local/lib/libernt/lxwayland/lxwayland", 0755, FALSE },
+        { L"lxapp", "usr/local/lib/libernt/lxapp", 0755, TRUE },
+        { L"gui-setup", "usr/local/lib/libernt/gui-setup", 0755, TRUE },
+        { L"user-setup", "usr/local/lib/libernt/user-setup", 0755, TRUE },
+        { L"lxwayland.service", "etc/systemd/system/lxwayland.service", 0644, TRUE },
+        { L"lx-gui-setup.service", "etc/systemd/system/lx-gui-setup.service", 0644, TRUE },
     };
     static const PCSTR Units[] = { "lxwayland.service", "lx-gui-setup.service" };
     PLX_TAR_ENTRY Entry = &Extract->Entry;
@@ -1426,7 +1424,8 @@ LxProvisionGui(
     wcscat(Directory, L"\\lxwayland");
     for (Index = 0; Index < ARRAYSIZE(Files); Index++)
     {
-        if (!NT_SUCCESS(LxCopyGuiFile(Extract, Directory, Files[Index].Source, Files[Index].Target, Files[Index].Mode)))
+        if (!NT_SUCCESS(LxCopyGuiFile(Extract, Directory, Files[Index].Source, Files[Index].Target, Files[Index].Mode,
+                                       Files[Index].Text)))
             return FALSE;
     }
     for (Index = 0; Index < ARRAYSIZE(Units); Index++)

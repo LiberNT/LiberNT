@@ -29,6 +29,8 @@
 #define LX_WIN_SIZES                11
 #define LX_WIN_ACTIVATE             12
 #define LX_WIN_CLIPBOARD            13
+#define LX_WIN_APP_ID               14
+#define LX_WIN_ICON                 15
 
 #define LX_WIN_HELLO                100
 #define LX_WIN_CONFIGURE            101
@@ -131,6 +133,19 @@ typedef struct _LX_WIN_POINTER_MSG
     LONG X;
     LONG Y;
 } LX_WIN_POINTER_MSG, *PLX_WIN_POINTER_MSG;
+
+typedef struct _LX_WIN_ICON_MSG
+{
+    LX_WIN_HEADER Header;
+    ULONG Count;
+    ULONG Reserved;
+} LX_WIN_ICON_MSG, *PLX_WIN_ICON_MSG;
+
+typedef struct _LX_WIN_ICON_IMAGE
+{
+    ULONG Width;
+    ULONG Height;
+} LX_WIN_ICON_IMAGE, *PLX_WIN_ICON_IMAGE;
 
 typedef struct _LX_WIN_SIZES_MSG
 {
