@@ -1862,6 +1862,7 @@ LxUnixRecvInternal(
     if (File->Ops != &LxUnixOps)
         return LxSocketFamily(File)->Recvmsg(File, Header, KernelIov, Options);
     BOOLEAN Peek = (Options & LX_MSG_PEEK) != 0;
+    BOOLEAN ControlDelivered = FALSE;
     PLX_IOVEC Vectors;
     ULONG64 Total, Done = 0;
     ULONG OutFlags = 0;
@@ -1907,6 +1908,7 @@ LxUnixRecvInternal(
                 if (Done == 0)
                 {
                     LxUnixUnlock(Socket);
+                    ControlDelivered = TRUE;
                     Result = LxUnixDeliverControl(Process, Socket, Message, Header, Flags, &OutFlags);
                     LxUnixLock(Socket);
                     if (!Peek)
@@ -1973,7 +1975,10 @@ LxUnixRecvInternal(
                 Header->NameLength = Message->AddressLength;
             }
             if (Result == 0)
+            {
+                ControlDelivered = TRUE;
                 Result = LxUnixDeliverControl(Process, Socket, Message, Header, Peek ? MAXULONG : Flags, &OutFlags);
+            }
             Done = (Options & LX_MSG_TRUNC) ? Message->Length : min(Message->Length, Total);
             if (!Peek)
                 LxUnixFreeMessage(Message);
@@ -2006,6 +2011,8 @@ LxUnixRecvInternal(
 
     LxFree(Vectors);
     Header->Flags = OutFlags;
+    if (!ControlDelivered)
+        Header->ControlLength = 0;
     if ((Socket->Type == LX_SOCK_STREAM) && (Header->Name != 0))
         Header->NameLength = 0;
     if (Done != 0)

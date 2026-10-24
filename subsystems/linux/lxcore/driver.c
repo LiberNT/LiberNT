@@ -61,6 +61,8 @@ LxPicoDispatchException(
     LONG Code;
     LONG Signal = LxSignalFromException(ExceptionRecord->ExceptionCode, &Code);
 
+    if (LxArchEmulateInstruction(ExceptionRecord, ExceptionFrame, TrapFrame))
+        return TRUE;
     if ((ExceptionRecord->ExceptionCode == STATUS_ACCESS_VIOLATION) &&
         (ExceptionRecord->NumberParameters >= 2) &&
         LxMmHandleFault(Thread->Process,

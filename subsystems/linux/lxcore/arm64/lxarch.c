@@ -80,6 +80,39 @@ LxArchSetSyscallResult(
     TrapFrame->X0 = (ULONG64)Result;
 }
 
+BOOLEAN
+LxArchEmulateInstruction(
+    _In_ PEXCEPTION_RECORD ExceptionRecord,
+    _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame)
+{
+    ULONG Instruction;
+    ULONG64 Value;
+    ULONG Rt;
+
+    if (ExceptionRecord->ExceptionCode != STATUS_ILLEGAL_INSTRUCTION)
+        return FALSE;
+    if (LxCopyFromUser(&Instruction, TrapFrame->Pc, sizeof(Instruction)) != 0)
+        return FALSE;
+    if ((Instruction & 0xFFFFFFE0) != 0xD53B0020)
+        return FALSE;
+
+    __asm__ __volatile__("mrs %0, ctr_el0" : "=r"(Value));
+    Rt = Instruction & 0x1F;
+    if (Rt <= 18)
+        TrapFrame->X[Rt] = Value;
+    else if ((Rt <= 28) && (ExceptionFrame != NULL))
+        (&ExceptionFrame->X19)[Rt - 19] = Value;
+    else if (Rt == 29)
+        TrapFrame->Fp = Value;
+    else if (Rt == 30)
+        TrapFrame->Lr = Value;
+    else if (Rt != 31)
+        return FALSE;
+    TrapFrame->Pc += 4;
+    return TRUE;
+}
+
 VOID
 LxArchRestartSyscall(
     _Inout_ PKTRAP_FRAME TrapFrame,
