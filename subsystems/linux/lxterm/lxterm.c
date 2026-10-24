@@ -270,6 +270,38 @@ LxEnvPrintf(
     return Result;
 }
 
+static
+VOID
+LxStartWindowHost(
+    _In_ PCWSTR Root)
+{
+    WCHAR Normalized[MAX_PATH], Program[MAX_PATH], Marker[MAX_PATH], CommandLine[2 * MAX_PATH + 16];
+    STARTUPINFOW Startup;
+    PROCESS_INFORMATION Process;
+    PWCHAR Slash;
+
+    if (!LxNormalizeRoot(Root, Normalized, ARRAYSIZE(Normalized)) ||
+        !LxRootPath(Normalized, L"\\usr\\local\\lib\\libernt\\lxapp", Marker) ||
+        (GetFileAttributesW(Marker) == INVALID_FILE_ATTRIBUTES) ||
+        !GetModuleFileNameW(NULL, Program, ARRAYSIZE(Program)))
+    {
+        return;
+    }
+    Slash = wcsrchr(Program, L'\\');
+    if ((Slash == NULL) || ((Slash - Program) + 16 >= ARRAYSIZE(Program)))
+        return;
+    wcscpy(Slash + 1, L"lxwinhost.exe");
+    _snwprintf(CommandLine, ARRAYSIZE(CommandLine), L"\"%s\" -r \"%s\"", Program, Normalized);
+    CommandLine[ARRAYSIZE(CommandLine) - 1] = UNICODE_NULL;
+    ZeroMemory(&Startup, sizeof(Startup));
+    Startup.cb = sizeof(Startup);
+    if (CreateProcessW(Program, CommandLine, NULL, NULL, FALSE, 0, NULL, NULL, &Startup, &Process))
+    {
+        CloseHandle(Process.hThread);
+        CloseHandle(Process.hProcess);
+    }
+}
+
 int
 wmain(
     int argc,
@@ -343,6 +375,7 @@ wmain(
     }
     if (GetFullPathNameW(Launch.Root, MAX_PATH, FullRoot, NULL))
         LxKeepResolvConf(FullRoot);
+    LxStartWindowHost(Launch.Root);
 
     if (!LxEnvSet(&Launch.Env, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin") ||
         !LxEnvSet(&Launch.Env, "TERM=xterm-256color") ||
