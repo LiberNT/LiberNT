@@ -314,6 +314,14 @@ static void convert_to_bstr( VARIANT *v )
     /* treat VT_I4 values as unsigned */
     if (V_VT(v) == VT_I4) V_VT(v) = VT_UI4;
 
+#ifdef __REACTOS__
+    if (V_VT(v) == VT_BOOL)
+    {
+        vt = VT_BOOL;
+        out = SysAllocString( V_BOOL(v) ? L"TRUE" : L"FALSE" );
+        goto done;
+    }
+#endif
     if (SUCCEEDED(VariantChangeType( v, v, 0, VT_BSTR ))) return;
     vt = V_VT(v);
     if (vt == (VT_ARRAY | VT_BSTR))
