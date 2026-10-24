@@ -578,9 +578,9 @@ LxExecImage(
     }
     ExReleaseFastMutex(&Process->Lock);
 
-    Error = LxElfMap(Process, &Main, LX_PIE_BASE, &MainInfo);
+    Error = LxElfMap(Process, &Main, LxArchImageBase(FALSE), &MainInfo);
     if ((Error == 0) && (Interp.File != NULL))
-        Error = LxElfMap(Process, &Interp, LX_INTERP_BASE, &InterpInfo);
+        Error = LxElfMap(Process, &Interp, LxArchImageBase(TRUE), &InterpInfo);
     if (Error == 0)
     {
         Process->BrkBase = LX_ALIGN_UP(MainInfo.ImageEnd, LX_ALLOC_GRANULARITY);
@@ -601,7 +601,7 @@ LxExecImage(
         Process->SigTrampoline = LxMapSigTrampoline(Process);
         Entry = (Interp.File != NULL) ? InterpInfo.Entry : MainInfo.Entry;
         LxArchSetExecContext(TrapFrame, ExceptionFrame, Entry, StackPointer);
-        LxArchSetThreadPointer(0);
+        LxArchSetThreadPointer(TrapFrame, 0);
         Thread->Tls = 0;
         Thread->ClearChildTid = 0;
         Thread->SetChildTid = 0;

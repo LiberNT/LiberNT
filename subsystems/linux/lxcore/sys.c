@@ -1624,7 +1624,7 @@ LX_SYSCALL(LxSysRtSigaction)
     {
         if ((Signal == LX_SIGKILL) || (Signal == LX_SIGSTOP))
             return -LX_EINVAL;
-        Result = LxCopyFromUser(&New, Call->Args[1], sizeof(New));
+        Result = LxArchReadSigaction(Call->Args[1], &New);
         if (Result != 0)
             return Result;
     }
@@ -1648,7 +1648,7 @@ LX_SYSCALL(LxSysRtSigaction)
     }
 
     if (Call->Args[2] != 0)
-        return LxCopyToUser(Call->Args[2], &Old, sizeof(Old));
+        return LxArchWriteSigaction(Call->Args[2], &Old);
     return 0;
 }
 
@@ -1723,7 +1723,7 @@ LxCreateThread(
 
     Tid = LxInstanceAllocatePid(Call->Process->Instance);
     Thread->Tid = Tid;
-    Thread->Tls = (Request->Flags & LX_CLONE_SETTLS) ? Request->Tls : LxArchGetThreadPointer();
+    Thread->Tls = (Request->Flags & LX_CLONE_SETTLS) ? Request->Tls : LxArchGetThreadPointer(Call->TrapFrame);
     Thread->SigMask = Call->Thread->SigMask;
     LxSchedInherit(Thread, Call->Thread);
     if (Request->Flags & LX_CLONE_CHILD_CLEARTID)
@@ -1815,7 +1815,7 @@ LxForkProcess(
         return -LX_ENOMEM;
     }
     Thread->Tid = Pid;
-    Thread->Tls = (Request->Flags & LX_CLONE_SETTLS) ? Request->Tls : LxArchGetThreadPointer();
+    Thread->Tls = (Request->Flags & LX_CLONE_SETTLS) ? Request->Tls : LxArchGetThreadPointer(Call->TrapFrame);
     Thread->SigMask = Call->Thread->SigMask;
     LxSchedInherit(Thread, Call->Thread);
     Thread->AltStack = Call->Thread->AltStack;

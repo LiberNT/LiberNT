@@ -119,7 +119,7 @@ LxPicoThreadStart(
 
         Thread->Exec = NULL;
         LxThreadAttach(Thread);
-        LxArchSetThreadPointer(0);
+        LxArchSetThreadPointer(TrapFrame, 0);
         Status = LxExecImage(Thread, Request, TrapFrame, ExceptionFrame, &Errno);
         Request->Status = Status;
         Request->Errno = Errno;
@@ -130,7 +130,7 @@ LxPicoThreadStart(
     }
 
     LxThreadAttach(Thread);
-    LxArchSetThreadPointer(Thread->Tls);
+    LxArchSetThreadPointer(TrapFrame, Thread->Tls);
     if (Thread->SetChildTid != 0)
         LxCopyToUser(Thread->SetChildTid, &Thread->Tid, sizeof(Thread->Tid));
 }
