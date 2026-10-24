@@ -6,6 +6,7 @@
 #include <usbbusif.h>
 #include <usb100.h>
 #include <usbdlib.h>
+#include <reactos/drivers/dumpstor.h>
 
 #include <stdio.h>
 

@@ -1211,6 +1211,12 @@ PDO_HandleInternalDeviceControl(
         Status = IoCallDriver(PDODeviceExtension->NextDeviceObject, Irp);
         return Status;
     }
+    else if (IoStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_INTERNAL_REACTOS_USB_GET_KEYBOARD_INTERFACE)
+    {
+        IoSkipCurrentIrpStackLocation(Irp);
+        Status = IoCallDriver(PDODeviceExtension->NextDeviceObject, Irp);
+        return Status;
+    }
 
     DPRINT1("[USBCCGP] Unhandled IOCTL %x\n", IoStack->Parameters.DeviceIoControl.IoControlCode);
 
