@@ -209,7 +209,11 @@ MempSetupPaging(
     if (!KernelMapping)
     {
         ULONGLONG current_pc;
+#if defined(_MSC_VER) && !defined(__clang__)
+        current_pc = (ULONGLONG)(ULONG_PTR)MempSetupPaging;
+#else
         __asm__ volatile("adr %0, ." : "=r"(current_pc));
+#endif
         if (current_pc >= phys_start && current_pc < phys_end)
         {
             attrs_id = attrs_id_exec;
@@ -237,8 +241,8 @@ MempSetupPaging(
     }
 
     /* Ensure page table updates are visible before returning */
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb");
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 
     return TRUE;
 }
@@ -269,7 +273,7 @@ Arm64FillCacheInfoFromCtr(PLOADER_PARAMETER_BLOCK LoaderBlock)
      *  LineBytes = 4 * 2^(field)
      */
     UINT64 ctr_el0 = 0;
-    __asm__ volatile("mrs %0, ctr_el0" : "=r"(ctr_el0));
+    ctr_el0 = ARM64_READ_SYSREG(CTR_EL0);
 
     UINT64 IminLine = (ctr_el0 & 0xF);
     UINT64 DminLine = ((ctr_el0 >> 16) & 0xF);

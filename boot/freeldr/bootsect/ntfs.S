@@ -328,6 +328,12 @@ StartSearch:
     mul   cx
     mov   word ptr [SectsPerMFT], ax
     jmp   SearchNext
+    MftFileSystemError:
+#ifdef _USE_ML
+    jmp   near ptr PrintFileSystemError
+#else
+    jmp   PrintFileSystemError
+#endif
     NegativeOffset:
     // ClustersPerMftRecord is negative, so we need to perform 1 << (-ClustersPerMftRecord)
     // to get the number of bytes needed for a MFT entry
@@ -356,16 +362,16 @@ StartSearch:
     mov   cx, word ptr [SectsPerMFT]
     call  ReadSectors
     cmp   dword ptr es:[bx], FILE_MAGIC
-    jnz   PrintFileSystemError
+    jnz   MftFileSystemError
     call  ApplyFixups
     xor   ax, ax
     mov   ebx, ATTRIBUTE_DATA
     call  FindAttributeHdr
     test  ax, ax
-    jz    PrintFileSystemError
+    jz    MftFileSystemError
     mov   si, ax
     cmp   byte ptr es:[si + 8], 1
-    jnz   PrintFileSystemError
+    jnz   MftFileSystemError
     add   ax, word ptr es:[si + HEX(20)]
     mov   word ptr [MftRunList], ax
 

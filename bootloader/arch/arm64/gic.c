@@ -21,14 +21,14 @@ VOID Arm64GicInitialize(VOID)
     ULONGLONG val;
     /* Priority mask: allow all priorities */
     val = 0xFF;
-    __asm__ volatile("msr icc_pmr_el1, %0" :: "r" (val) : "memory");
+    ARM64_WRITE_SYSREG(ICC_PMR_EL1, val);
     /* Binary point: no preemption groups */
     val = 0;
-    __asm__ volatile("msr icc_bpr1_el1, %0" :: "r" (val) : "memory");
+    ARM64_WRITE_SYSREG(ICC_BPR1_EL1, val);
     /* Enable Group1 interrupts */
     val = 1;
-    __asm__ volatile("msr icc_igrpen1_el1, %0" :: "r" (val) : "memory");
-    __asm__ volatile("isb");
+    ARM64_WRITE_SYSREG(ICC_IGRPEN1_EL1, val);
+    ARM64_ISB();
     TRACE("ARM64 GIC: CPU interface enabled (GICv3-style)\n");
 }
 
@@ -41,7 +41,7 @@ ULONG Arm64GicGetVersion(VOID)
 ULONG Arm64GicAcknowledgeInterrupt(VOID)
 {
     ULONGLONG iar;
-    __asm__ volatile("mrs %0, icc_iar1_el1" : "=r" (iar));
+    iar = ARM64_READ_SYSREG(ICC_IAR1_EL1);
     /* Spurious interrupt ID for GICv3 is 1023 */
     if ((iar & 0x3FF) == 1023)
         return (ULONG)~0U;
@@ -51,7 +51,7 @@ ULONG Arm64GicAcknowledgeInterrupt(VOID)
 VOID Arm64GicEndOfInterrupt(ULONG IntId)
 {
     ULONGLONG eoi = (ULONGLONG)IntId;
-    __asm__ volatile("msr icc_eoir1_el1, %0" :: "r" (eoi) : "memory");
+    ARM64_WRITE_SYSREG(ICC_EOIR1_EL1, eoi);
 }
 
 VOID Arm64GicEnableInterrupt(ULONG IntId)
@@ -68,8 +68,8 @@ VOID Arm64GicDisableInterrupt(ULONG IntId)
 VOID Arm64GicSetPriorityMask(UCHAR Priority)
 {
     ULONGLONG val = (ULONGLONG)Priority;
-    __asm__ volatile("msr icc_pmr_el1, %0" :: "r" (val) : "memory");
-    __asm__ volatile("isb");
+    ARM64_WRITE_SYSREG(ICC_PMR_EL1, val);
+    ARM64_ISB();
 }
 
 VOID Arm64GicSendSGI(UCHAR SgiId, UCHAR TargetList, BOOLEAN ToAll)

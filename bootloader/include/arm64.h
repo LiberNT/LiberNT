@@ -169,31 +169,16 @@ VOID Arm64RegisterIrqHandler(ULONG IntId, ARM64_IRQ_HANDLER Handler);
 #define ARM64_KERNEL_DS     0
 
 /* ARM64 cache operations */
-#define ARM64_DC_CIVAC(addr) __asm__ volatile ("dc civac, %0" :: "r" (addr) : "memory")
-#define ARM64_IC_IALLU()     __asm__ volatile ("ic iallu" ::: "memory")
-#define ARM64_DSB_SY()       __asm__ volatile ("dsb sy" ::: "memory")
-#define ARM64_ISB()          __asm__ volatile ("isb" ::: "memory")
+#define ARM64_DC_CIVAC(addr) ARM64_DC(CIVAC, addr)
+#define ARM64_IC_IALLU()     ARM64_IC_ALL(IALLU)
+#define ARM64_DSB_SY()       ARM64_DSB(SY)
 
 /* Memory barrier macros */
-#define ARM64_DMB_SY()       __asm__ volatile ("dmb sy" ::: "memory")
-#define ARM64_DMB_ISH()      __asm__ volatile ("dmb ish" ::: "memory")
+#define ARM64_DMB_SY()       ARM64_DMB(SY)
+#define ARM64_DMB_ISH()      ARM64_DMB(ISH)
 
 /* ARM64 system register access */
-#define __ARM64_STR(x) #x
-#define ARM64_STR(x) __ARM64_STR(x)
-
-#define ARM64_READ_SYSREG(reg) ({          \
-    ULONGLONG _val;                        \
-    __asm__ volatile (                     \
-        "mrs %0, " ARM64_STR(reg)          \
-        : "=r" (_val));                    \
-    _val;                                  \
-})
-
-#define ARM64_WRITE_SYSREG(reg, val)       \
-    __asm__ volatile (                     \
-        "msr " ARM64_STR(reg) ", %0"       \
-        :: "r" ((ULONGLONG)(val)))
+#include <reactos/arm64/sysreg.h>
 
 /* Common system registers */
 #define ARM64_SCTLR_EL1        sctlr_el1
