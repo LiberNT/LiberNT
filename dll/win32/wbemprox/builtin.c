@@ -98,7 +98,11 @@ static const struct column col_cache_memory[] =
     { L"BlockSize",      CIM_UINT64 },
     { L"CacheSpeed",     CIM_UINT32 },
     { L"CacheType",      CIM_UINT16 },
+#ifdef __REACTOS__
+    { L"DeviceID",       CIM_STRING|COL_FLAG_DYNAMIC },
+#else
     { L"DeviceId",       CIM_STRING|COL_FLAG_DYNAMIC },
+#endif
     { L"InstalledSize",  CIM_UINT32 },
     { L"Level",          CIM_UINT16 },
     { L"MaxCacheSize",   CIM_UINT32 },
@@ -110,7 +114,7 @@ static const struct column col_cdromdrive[] =
 #ifdef __REACTOS__
     { L"Caption",      CIM_STRING|COL_FLAG_DYNAMIC },
     { L"Description",  CIM_STRING|COL_FLAG_DYNAMIC },
-    { L"DeviceId",     CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"DeviceID",     CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { L"Drive",        CIM_STRING|COL_FLAG_DYNAMIC },
     { L"Id",           CIM_STRING|COL_FLAG_DYNAMIC },
     { L"Manufacturer", CIM_STRING|COL_FLAG_DYNAMIC },
@@ -174,7 +178,11 @@ static const struct column col_diskdrive[] =
 #else
     { L"Caption",       CIM_STRING },
 #endif
+#ifdef __REACTOS__
+    { L"DeviceID",      CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#else
     { L"DeviceId",      CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#endif
 #ifdef __REACTOS__
     { L"Description",   CIM_STRING },
 #endif
@@ -222,7 +230,11 @@ static const struct column col_diskpartition[] =
 {
     { L"Bootable",       CIM_BOOLEAN },
     { L"BootPartition",  CIM_BOOLEAN },
+#ifdef __REACTOS__
+    { L"DeviceID",       CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#else
     { L"DeviceId",       CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#endif
     { L"DiskIndex",      CIM_UINT32 },
     { L"Index",          CIM_UINT32 },
 #ifdef __REACTOS__
@@ -268,7 +280,11 @@ static const struct column col_localtime[] =
 static const struct column col_logicaldisk[] =
 {
     { L"Caption",            CIM_STRING|COL_FLAG_DYNAMIC },
+#ifdef __REACTOS__
+    { L"DeviceID",           CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#else
     { L"DeviceId",           CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#endif
     { L"DriveType",          CIM_UINT32 },
     { L"FileSystem",         CIM_STRING|COL_FLAG_DYNAMIC },
 #ifdef __REACTOS__
@@ -341,7 +357,11 @@ static const struct column col_networkadapter[] =
     { L"AdapterType",         CIM_STRING },
     { L"AdapterTypeID",       CIM_UINT16 },
     { L"Description",         CIM_STRING|COL_FLAG_DYNAMIC },
+#ifdef __REACTOS__
+    { L"DeviceID",            CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#else
     { L"DeviceId",            CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#endif
     { L"GUID",                CIM_STRING|COL_FLAG_DYNAMIC },
     { L"Index",               CIM_UINT32 },
     { L"InterfaceIndex",      CIM_UINT32 },
@@ -474,7 +494,11 @@ static const struct column col_pnpentity[] =
 {
     { L"Caption",              CIM_STRING|COL_FLAG_DYNAMIC },
     { L"ClassGuid",            CIM_STRING|COL_FLAG_DYNAMIC },
+#ifdef __REACTOS__
+    { L"DeviceID",             CIM_STRING|COL_FLAG_DYNAMIC },
+#else
     { L"DeviceId",             CIM_STRING|COL_FLAG_DYNAMIC },
+#endif
 #ifdef __REACTOS__
     { L"Description",          CIM_STRING|COL_FLAG_DYNAMIC },
     { L"Manufacturer",         CIM_STRING|COL_FLAG_DYNAMIC },
@@ -491,7 +515,11 @@ static const struct column col_pnpentity[] =
 static const struct column col_printer[] =
 {
     { L"Attributes",           CIM_UINT32 },
+#ifdef __REACTOS__
+    { L"DeviceID",             CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#else
     { L"DeviceId",             CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#endif
     { L"DriverName",           CIM_STRING|COL_FLAG_DYNAMIC },
     { L"HorizontalResolution", CIM_UINT32 },
     { L"Local",                CIM_BOOLEAN },
@@ -525,7 +553,11 @@ static const struct column col_processor[] =
     { L"CurrentClockSpeed",         CIM_UINT32 },
     { L"DataWidth",                 CIM_UINT16 },
     { L"Description",               CIM_STRING|COL_FLAG_DYNAMIC },
+#ifdef __REACTOS__
+    { L"DeviceID",                  CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#else
     { L"DeviceId",                  CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#endif
     { L"Family",                    CIM_UINT16 },
     { L"Level",                     CIM_UINT16 },
     { L"Manufacturer",              CIM_STRING|COL_FLAG_DYNAMIC },
@@ -845,7 +877,7 @@ static const struct column col_volume[] =
     { L"Capacity",                     CIM_UINT64|COL_FLAG_NULLABLE },
     { L"Caption",                      CIM_STRING|COL_FLAG_DYNAMIC },
     { L"Compressed",                   CIM_BOOLEAN|COL_FLAG_NULLABLE },
-    { L"DeviceId",                     CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"DeviceID",                     CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { L"DirtyBitSet",                  CIM_BOOLEAN|COL_FLAG_NULLABLE },
     { L"DriveLetter",                  CIM_STRING|COL_FLAG_DYNAMIC },
     { L"DriveType",                    CIM_UINT32 },
