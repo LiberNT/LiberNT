@@ -30,6 +30,7 @@
 #define MAXIMUM_QUEUE_BUFFER_SIZE           255
 #define MAXIMUM_COMPLETION_QUEUE_SIZE       (2 * MAXIMUM_QUEUE_BUFFER_SIZE)
 #define MAXIMUM_TRANSFER_LENGTH             (128*1024) // 128 KB
+#define AHCI_LINK_ERROR_HISTORY             4
 #define AHCI_PORT_PRESENCE_DETECT_MS        30
 
 #define DEVICE_ATA_BLOCK_SIZE               512
@@ -518,6 +519,12 @@ typedef struct _AHCI_PORT_EXTENSION
     BOOLEAN RecoveryIsCommandError;
     BOOLEAN RecoveryIsNcqError;
     BOOLEAN RecoveryNcqLogError;
+    UCHAR RecoveryLinkSpeed;
+    BOOLEAN LinkTransferVerified;
+    BOOLEAN LinkErrorDubious[AHCI_LINK_ERROR_HISTORY];
+    ULONG LinkErrorNext;
+    ULONG LinkErrorCount;
+    LONGLONG LinkErrorTime[AHCI_LINK_ERROR_HISTORY];
 
     struct
     {

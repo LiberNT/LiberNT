@@ -741,6 +741,112 @@ AhciResetNcqRecoveryContext(
 
 static
 VOID
+AhciNoteLinkTransfer(
+    __in PAHCI_PORT_EXTENSION PortExtension,
+    __in ULONG CompletedSlots)
+{
+    ULONG i, NCS;
+    PSCSI_REQUEST_BLOCK Srb;
+
+    NCS = AHCI_Global_Port_CAP_NCS(PortExtension->AdapterExtension->CAP);
+    for (i = 0; i < NCS; i++)
+    {
+        Srb = PortExtension->Slot[i];
+        if (((CompletedSlots & (1UL << i)) != 0) &&
+            (Srb != NULL) &&
+            (Srb->DataTransferLength != 0) &&
+            ((Srb->SrbFlags & (SRB_FLAGS_DATA_IN | SRB_FLAGS_DATA_OUT)) != 0))
+        {
+            PortExtension->LinkTransferVerified = TRUE;
+            return;
+        }
+    }
+}
+
+static
+VOID
+AhciRecordLinkError(
+    __in PAHCI_PORT_EXTENSION PortExtension)
+{
+    static const PCSTR SpeedNames[] = { "1.5", "3.0", "6.0" };
+    ULONG i, Index, Errors, DubiousErrors, Speed;
+    LONGLONG Age;
+    BOOLEAN TransferVerified;
+    LARGE_INTEGER Frequency, Now;
+    AHCI_SERIAL_ATA_STATUS ssts;
+    AHCI_SERIAL_ATA_CONTROL sctl;
+    PAHCI_ADAPTER_EXTENSION AdapterExtension;
+
+    AdapterExtension = PortExtension->AdapterExtension;
+    if ((StorPortQueryPerformanceCounter(AdapterExtension, &Frequency, &Now) != STOR_STATUS_SUCCESS) ||
+        (Frequency.QuadPart == 0))
+    {
+        return;
+    }
+
+    Index = PortExtension->LinkErrorNext;
+    PortExtension->LinkErrorTime[Index] = Now.QuadPart;
+    PortExtension->LinkErrorDubious[Index] = !PortExtension->LinkTransferVerified;
+    PortExtension->LinkErrorNext = (Index + 1) % AHCI_LINK_ERROR_HISTORY;
+    if (PortExtension->LinkErrorCount < AHCI_LINK_ERROR_HISTORY)
+    {
+        PortExtension->LinkErrorCount++;
+    }
+
+    Errors = 0;
+    DubiousErrors = 0;
+    TransferVerified = FALSE;
+    for (i = 0; i < PortExtension->LinkErrorCount; i++)
+    {
+        Index = (PortExtension->LinkErrorNext + AHCI_LINK_ERROR_HISTORY - 1 - i) % AHCI_LINK_ERROR_HISTORY;
+        Age = Now.QuadPart - PortExtension->LinkErrorTime[Index];
+        if (Age > 600 * Frequency.QuadPart)
+        {
+            break;
+        }
+
+        if (!PortExtension->LinkErrorDubious[Index])
+        {
+            TransferVerified = TRUE;
+        }
+
+        if (TransferVerified)
+        {
+            Errors++;
+        }
+        else if (Age <= 300 * Frequency.QuadPart)
+        {
+            DubiousErrors++;
+        }
+    }
+
+    if ((Errors <= 3) && (DubiousErrors <= 1))
+    {
+        return;
+    }
+
+    ssts.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SSTS);
+    sctl.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SCTL);
+    Speed = (ssts.SPD != 0) ? ssts.SPD : sctl.SPD;
+    if ((Speed <= 1) || (Speed > RTL_NUMBER_OF(SpeedNames)))
+    {
+        return;
+    }
+
+    PortExtension->RecoveryLinkSpeed = (UCHAR)(Speed - 1);
+    PortExtension->LinkTransferVerified = FALSE;
+    if (Errors > 3)
+    {
+        PortExtension->LinkErrorCount = 0;
+    }
+
+    AhciDebugPrint("\tPort %u: limiting SATA link speed to %s Gbps\n",
+                   PortExtension->PortNumber,
+                   SpeedNames[Speed - 2]);
+}
+
+static
+VOID
 AhciClearIssuedCommands(
     __in PAHCI_PORT_EXTENSION PortExtension)
 {
@@ -1356,7 +1462,8 @@ AhciPortRecoveryStep(
             if (PortExtension->RecoveryIsNcqError &&
                 HadNcq &&
                 !tfd.STS.BSY &&
-                !tfd.STS.DRQ)
+                !tfd.STS.DRQ &&
+                (PortExtension->RecoveryLinkSpeed == 0))
             {
                 if (AhciIssueNcqErrorLog(PortExtension))
                 {
@@ -1372,6 +1479,7 @@ AhciPortRecoveryStep(
                 !HadNcq &&
                 !tfd.STS.BSY &&
                 !tfd.STS.DRQ &&
+                (PortExtension->RecoveryLinkSpeed == 0) &&
                 AhciBeginRequestSense(PortExtension))
             {
                 cmd.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->CMD);
@@ -1389,9 +1497,16 @@ AhciPortRecoveryStep(
             AhciClearIssuedCommands(PortExtension);
             PortExtension->RecoveryIsCommandError = FALSE;
 
-            if (HadNcq || tfd.STS.BSY || tfd.STS.DRQ)
+            if (HadNcq || tfd.STS.BSY || tfd.STS.DRQ || (PortExtension->RecoveryLinkSpeed != 0))
             {
                 sctl.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SCTL);
+                if (PortExtension->RecoveryLinkSpeed != 0)
+                {
+                    sctl.SPD = PortExtension->RecoveryLinkSpeed;
+                    sctl.DET = 4;
+                    StorPortWriteRegisterUlong(AdapterExtension, &PortExtension->Port->SCTL, sctl.Status);
+                    PortExtension->RecoveryLinkSpeed = 0;
+                }
                 sctl.DET = 1;
                 StorPortWriteRegisterUlong(AdapterExtension, &PortExtension->Port->SCTL, sctl.Status);
 
@@ -1659,6 +1774,7 @@ VOID AhciInterruptHandler(__in PAHCI_PORT_EXTENSION PortExtension)
     ULONG ci, sact;
     ULONG completed, ncqCompleted, nonNcqCompleted, nonNcqIssued;
     AHCI_INTERRUPT_STATUS PxIS;
+    AHCI_TASK_FILE_DATA tfd;
     PAHCI_ADAPTER_EXTENSION AdapterExtension;
 
     DPRINT("AhciInterruptHandler() port %u\n", PortExtension->PortNumber);
@@ -1734,6 +1850,15 @@ VOID AhciInterruptHandler(__in PAHCI_PORT_EXTENSION PortExtension)
                 sact & PortExtension->NcqIssuedSlots;
         }
 
+        tfd.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->TFD);
+        if (PxIS.IFS ||
+            (PxIS.TFES &&
+             (PortExtension->DeviceParams.DeviceType == AHCI_DEVICE_TYPE_ATA) &&
+             ((tfd.ERR & IDE_ERROR_CRC_ERROR) != 0)))
+        {
+            AhciRecordLinkError(PortExtension);
+        }
+
         if (!CommandError && (PortExtension->ErrorLogCount < 4))
         {
             AhciDebugPrint("\tFatal transport error on port %u: IS=%08x TFD=%08x SERR=%08x\n", PortExtension->PortNumber, PxIS.Status, StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->TFD), StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SERR));
@@ -1779,6 +1904,10 @@ VOID AhciInterruptHandler(__in PAHCI_PORT_EXTENSION PortExtension)
 
     if (completed != 0)
     {
+        if (!PortExtension->LinkTransferVerified)
+        {
+            AhciNoteLinkTransfer(PortExtension, completed);
+        }
         PortExtension->CommandIssuedSlots &= ~completed;
         PortExtension->NcqIssuedSlots &= ~completed;
         AhciCompleteIssuedSrb(PortExtension, completed, FALSE);
