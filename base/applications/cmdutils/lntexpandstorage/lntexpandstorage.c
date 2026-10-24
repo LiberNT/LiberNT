@@ -39,6 +39,10 @@
 #define BCD_MAX_DEVICES             32
 #define BCD_MAX_DEVICE_SIZE         0x200
 
+#define MOUNTED_DEVICES_KEY         L"SYSTEM\\MountedDevices"
+#define MOUNTED_DEVICES_WAIT_MS     5000
+#define MBR_UNIQUE_ID_SIZE          12
+
 typedef struct _DISK_CONTEXT
 {
     HANDLE Handle;
@@ -617,12 +621,68 @@ FlushBcd(void)
     }
 }
 
+static BOOL
+MountedDevicesUseSignature(HKEY Key, ULONG Signature)
+{
+    WCHAR Name[256];
+    BYTE Data[MBR_UNIQUE_ID_SIZE];
+    DWORD Index, NameLength, DataLength, Type;
+    ULONG Value;
+
+    for (Index = 0;; Index++)
+    {
+        NameLength = sizeof(Name) / sizeof(Name[0]);
+        DataLength = sizeof(Data);
+        switch (RegEnumValueW(Key, Index, Name, &NameLength, NULL, &Type, Data, &DataLength))
+        {
+            case ERROR_SUCCESS:
+                memcpy(&Value, Data, sizeof(Value));
+                if (Type == REG_BINARY && DataLength == MBR_UNIQUE_ID_SIZE && Value == Signature)
+                    return TRUE;
+                break;
+
+            case ERROR_MORE_DATA:
+                break;
+
+            default:
+                return FALSE;
+        }
+    }
+}
+
+static void
+WaitForMountedDevices(HKEY Key, HANDLE Changed, ULONG OldSignature)
+{
+    DWORD Start = GetTickCount();
+    DWORD Elapsed;
+
+    for (;;)
+    {
+        if (RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, Changed, TRUE) != ERROR_SUCCESS)
+            break;
+        if (!MountedDevicesUseSignature(Key, OldSignature))
+            break;
+
+        Elapsed = GetTickCount() - Start;
+        if (Elapsed >= MOUNTED_DEVICES_WAIT_MS ||
+            WaitForSingleObject(Changed, MOUNTED_DEVICES_WAIT_MS - Elapsed) != WAIT_OBJECT_0)
+        {
+            Print("lntexpandstorage: the mount manager still lists the old disk signature\n");
+            break;
+        }
+    }
+
+    RegFlushKey(Key);
+}
+
 static int
 MakeDiskUnique(ULONG DriveNumber)
 {
     PDRIVE_LAYOUT_INFORMATION_EX Layout;
     BCD_DEVICE_VALUE* Devices;
     WCHAR DevicePath[64];
+    HKEY MountedDevices = NULL;
+    HANDLE Changed = NULL;
     HANDLE Handle;
     DWORD Returned;
     ULONG OldSignature, Signature, Count, Index, BootDrive;
@@ -706,6 +766,12 @@ MakeDiskUnique(ULONG DriveNumber)
         goto Done;
     }
 
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, MOUNTED_DEVICES_KEY, 0, KEY_QUERY_VALUE | KEY_NOTIFY, &MountedDevices) ==
+        ERROR_SUCCESS)
+    {
+        Changed = CreateEventW(NULL, FALSE, FALSE, NULL);
+    }
+
     Layout->Mbr.Signature = Signature;
     if (!DeviceIoControl(Handle,
                          IOCTL_DISK_SET_DRIVE_LAYOUT_EX,
@@ -721,6 +787,9 @@ MakeDiskUnique(ULONG DriveNumber)
         goto Done;
     }
 
+    if (MountedDevices && Changed)
+        WaitForMountedDevices(MountedDevices, Changed, OldSignature);
+
     Print("PhysicalDrive%lu: disk signature %08lX -> %08lX, %lu boot configuration device(s) updated\n",
           DriveNumber,
           OldSignature,
@@ -729,6 +798,10 @@ MakeDiskUnique(ULONG DriveNumber)
     Result = 0;
 
 Done:
+    if (Changed)
+        CloseHandle(Changed);
+    if (MountedDevices)
+        RegCloseKey(MountedDevices);
     FlushBcd();
     for (Index = 0; Index < Count; Index++)
         RegCloseKey(Devices[Index].Key);
