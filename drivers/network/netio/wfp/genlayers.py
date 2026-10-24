@@ -74,15 +74,14 @@ def main():
         if fields is None and short.endswith('_DISCARD'):
             base = short[:-len('_DISCARD')]
             fields = tables.get('FWPS_FIELDS_' + base)
-        if fields is None:
+        fields = [field for field in fields or [] if not field.endswith('_MAX')]
+        if not fields:
             rows.append('    { %s, NULL, 0 },' % key)
             continue
         if base == short:
             prefix = 'FWPS_FIELD_' + base + '_'
             out.append('static const GUID WfpFields_%s[] =\n{' % base)
             for field in fields:
-                if field.endswith('_MAX'):
-                    continue
                 condition = 'FWPM_CONDITION_' + field[len(prefix):] if field.startswith(prefix) else ''
                 condition = aliases.get(condition, condition)
                 out.append('    %s,' % guids.get(condition, zero))

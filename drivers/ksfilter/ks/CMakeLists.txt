@@ -30,7 +30,7 @@ list(APPEND SOURCE
     swenum.c
     precomp.h)
 
-if(MSVC)
+if(MSVC AND NOT ARCH STREQUAL "arm64")
     add_asm_files(ks_asm msvc.S)
 endif()
 

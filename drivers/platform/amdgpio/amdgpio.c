@@ -68,6 +68,25 @@ AmdGpioWrite(
 }
 
 static
+ULONG
+AmdGpioLowestPin(
+    _In_ ULONG64 Mask)
+{
+#ifdef _MSC_VER
+    ULONG Index;
+
+    if (!_BitScanForward(&Index, (ULONG)Mask))
+    {
+        _BitScanForward(&Index, (ULONG)(Mask >> 32));
+        Index += 32;
+    }
+    return Index;
+#else
+    return (ULONG)__builtin_ctzll(Mask);
+#endif
+}
+
+static
 BOOLEAN
 AmdGpioResolvePin(
     _In_ PAMDGPIO_CONTEXT Context,
@@ -365,7 +384,7 @@ AmdGpioMaskInterrupts(
     Parameters->FailedMask = 0;
     while (Pending)
     {
-        Pin = (ULONG)__builtin_ctzll(Pending);
+        Pin = AmdGpioLowestPin(Pending);
         Pending &= Pending - 1;
         if (!AmdGpioResolvePin(Context, Parameters->BankId, Pin, &Offset))
         {
@@ -397,7 +416,7 @@ AmdGpioQueryActiveInterrupts(
     Pending = Parameters->EnabledMask;
     while (Pending)
     {
-        Pin = (ULONG)__builtin_ctzll(Pending);
+        Pin = AmdGpioLowestPin(Pending);
         Pending &= Pending - 1;
         if (!AmdGpioResolvePin(Context, Parameters->BankId, Pin, &Offset))
             continue;
@@ -426,7 +445,7 @@ AmdGpioClearActiveInterrupts(
     Parameters->FailedClearMask = 0;
     while (Pending)
     {
-        Pin = (ULONG)__builtin_ctzll(Pending);
+        Pin = AmdGpioLowestPin(Pending);
         Pending &= Pending - 1;
         if (!AmdGpioResolvePin(Context, Parameters->BankId, Pin, &Offset))
         {
@@ -554,7 +573,7 @@ AmdGpioWritePins(
 
     while (Pending)
     {
-        Pin = (ULONG)__builtin_ctzll(Pending);
+        Pin = AmdGpioLowestPin(Pending);
         Pending &= Pending - 1;
         if (!AmdGpioResolvePin(Context, Parameters->BankId, Pin, &Offset))
             return STATUS_INVALID_PARAMETER;

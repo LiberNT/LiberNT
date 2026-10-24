@@ -50,7 +50,7 @@
 
 #include <ntstrsafe.h>
 
-#if defined(_ARM64_) && defined(__GNUC__) && !defined(__clang__)
+#if defined(_ARM64_) && !defined(__clang__)
 #include <arm_neon.h>
 #endif
 

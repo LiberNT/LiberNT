@@ -6,6 +6,13 @@
  */
 
 #include "../kdnet.h"
+#include <reactos/arm64/sysreg.h>
+
+#if defined(_MSC_VER) && !defined(__clang__)
+BOOLEAN
+KdNetArchReadRndr(
+    _Out_ PULONG64 Number);
+#endif
 
 BOOLEAN
 KdNetArchRandom(
@@ -13,11 +20,15 @@ KdNetArchRandom(
 {
     ULONG64 Features, Number, Valid;
 
-    __asm__ __volatile__("mrs %0, id_aa64isar0_el1" : "=r"(Features));
+    Features = ARM64_READ_SYSREG(ID_AA64ISAR0_EL1);
     if (!((Features >> 60) & 0xF))
         return FALSE;
 
+#if defined(_MSC_VER) && !defined(__clang__)
+    Valid = KdNetArchReadRndr(&Number);
+#else
     __asm__ __volatile__("mrs %0, s3_3_c2_c4_0; cset %1, ne" : "=r"(Number), "=r"(Valid) : : "cc");
+#endif
     *Value = (ULONG)Number;
     return Valid != 0;
 }

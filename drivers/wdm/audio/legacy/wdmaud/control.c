@@ -747,11 +747,13 @@ WdmAudDeviceControl(
 #endif
     {
         /* invalid parameter */
+#if defined(_WIN64)
         DPRINT1("Input buffer too small size %u expected %u\n",
                 IoStack->Parameters.DeviceIoControl.InputBufferLength,
-#if defined(_WIN64)
                 IsWow64 ? sizeof(WDMAUD_DEVICE_INFO32) : sizeof(WDMAUD_DEVICE_INFO));
 #else
+        DPRINT1("Input buffer too small size %u expected %u\n",
+                IoStack->Parameters.DeviceIoControl.InputBufferLength,
                 sizeof(WDMAUD_DEVICE_INFO));
 #endif
         return SetIrpIoStatus(Irp, STATUS_INVALID_PARAMETER, 0);
