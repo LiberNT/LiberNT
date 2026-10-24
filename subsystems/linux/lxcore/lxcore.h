@@ -942,6 +942,9 @@ LONG64 LxMmUnmap(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG64 Le
 LONG64 LxMmProtect(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG64 Length, _In_ ULONG Prot);
 VOID LxMmReset(_In_ PLX_PROCESS Process);
 VOID LxMmLock(_In_ PLX_PROCESS Process);
+BOOLEAN LxMmHasVmaAbove(_In_ PLX_PROCESS Process, _In_ ULONG64 Address);
+BOOLEAN LxMmMapsPath(_In_ PLX_PROCESS Process, _In_opt_ PCSTR Path);
+VOID LxMmSetBrk(_In_ PLX_PROCESS Process, _In_ ULONG64 StartBrk, _In_ ULONG64 Brk);
 VOID LxMmUnlock(_In_ PLX_PROCESS Process);
 LONG LxMmFork(_In_ PLX_PROCESS Child, _In_ PLX_PROCESS Parent);
 VOID LxMmRelease(_In_ PLX_PROCESS Process);

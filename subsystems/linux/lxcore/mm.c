@@ -1783,6 +1783,65 @@ LX_SYSCALL(LxSysMremap)
     return Result;
 }
 
+BOOLEAN
+LxMmHasVmaAbove(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 Address)
+{
+    PLIST_ENTRY Entry;
+    BOOLEAN Found = FALSE;
+
+    LxMmLock(Process);
+    for (Entry = Process->Vmas.Flink; (Entry != &Process->Vmas) && !Found; Entry = Entry->Flink)
+        Found = CONTAINING_RECORD(Entry, LX_VMA, Link)->End > Address;
+    LxMmUnlock(Process);
+    return Found;
+}
+
+BOOLEAN
+LxMmMapsPath(
+    _In_ PLX_PROCESS Process,
+    _In_opt_ PCSTR Path)
+{
+    PLIST_ENTRY Entry;
+    BOOLEAN Found = FALSE;
+
+    if (Path == NULL)
+        return FALSE;
+    LxMmLock(Process);
+    for (Entry = Process->Vmas.Flink; (Entry != &Process->Vmas) && !Found; Entry = Entry->Flink)
+    {
+        PLX_VMA Vma = CONTAINING_RECORD(Entry, LX_VMA, Link);
+
+        Found = (Vma->File != NULL) && (Vma->File->Path != NULL) && (strcmp(Vma->File->Path, Path) == 0);
+    }
+    LxMmUnlock(Process);
+    return Found;
+}
+
+VOID
+LxMmSetBrk(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 StartBrk,
+    _In_ ULONG64 Brk)
+{
+    ULONG64 Base;
+
+    LxMmLock(Process);
+    if ((StartBrk != Process->BrkBase) || (Brk != Process->BrkCurrent))
+    {
+        Process->BrkBase = StartBrk;
+        Process->BrkCurrent = Brk;
+        Process->BrkCommitted = LX_ALIGN_UP(Brk, LX_PAGE_SIZE);
+        Process->BrkLimit = Process->BrkCommitted;
+        Process->BrkReserved = TRUE;
+        Base = Process->BrkCommitted;
+        if (NT_SUCCESS(LxVmAllocate(&Base, LX_BRK_RESERVE, MEM_RESERVE, PAGE_NOACCESS)) && (Base == Process->BrkCommitted))
+            Process->BrkLimit = Base + LX_BRK_RESERVE;
+    }
+    LxMmUnlock(Process);
+}
+
 LX_SYSCALL(LxSysBrk)
 {
     PLX_PROCESS Process = Call->Process;

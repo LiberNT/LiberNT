@@ -2549,6 +2549,258 @@ LX_SYSCALL(LxSysWaitid)
     return 0;
 }
 
+#define LX_PR_SET_MM_START_CODE     1
+#define LX_PR_SET_MM_END_CODE       2
+#define LX_PR_SET_MM_START_DATA     3
+#define LX_PR_SET_MM_END_DATA       4
+#define LX_PR_SET_MM_START_STACK    5
+#define LX_PR_SET_MM_START_BRK      6
+#define LX_PR_SET_MM_BRK            7
+#define LX_PR_SET_MM_ARG_START      8
+#define LX_PR_SET_MM_ARG_END        9
+#define LX_PR_SET_MM_ENV_START      10
+#define LX_PR_SET_MM_ENV_END        11
+#define LX_PR_SET_MM_AUXV           12
+#define LX_PR_SET_MM_EXE_FILE       13
+#define LX_PR_SET_MM_MAP            14
+#define LX_PR_SET_MM_MAP_SIZE       15
+#define LX_CAP_SYS_RESOURCE         24
+#define LX_CAP_CHECKPOINT_RESTORE   40
+
+typedef struct _LX_PRCTL_MM_MAP
+{
+    ULONG64 StartCode;
+    ULONG64 EndCode;
+    ULONG64 StartData;
+    ULONG64 EndData;
+    ULONG64 StartBrk;
+    ULONG64 Brk;
+    ULONG64 StartStack;
+    ULONG64 ArgStart;
+    ULONG64 ArgEnd;
+    ULONG64 EnvStart;
+    ULONG64 EnvEnd;
+    ULONG64 Auxv;
+    ULONG AuxvSize;
+    ULONG ExeFd;
+} LX_PRCTL_MM_MAP, *PLX_PRCTL_MM_MAP;
+
+static
+VOID
+LxPrctlMmCurrent(
+    _In_ PLX_PROCESS Process,
+    _Out_ PLX_PRCTL_MM_MAP Map)
+{
+    RtlZeroMemory(Map, sizeof(*Map));
+    ExAcquireFastMutex(&Process->Lock);
+    Map->StartCode = Process->StartCode;
+    Map->EndCode = Process->EndCode;
+    Map->StartData = Process->StartData;
+    Map->EndData = Process->EndData;
+    Map->StartStack = Process->StartStack;
+    Map->ArgStart = Process->ArgStart;
+    Map->ArgEnd = Process->ArgEnd;
+    Map->EnvStart = Process->EnvStart;
+    Map->EnvEnd = Process->EnvEnd;
+    ExReleaseFastMutex(&Process->Lock);
+    LxMmLock(Process);
+    Map->StartBrk = Process->BrkBase;
+    Map->Brk = Process->BrkCurrent;
+    LxMmUnlock(Process);
+    Map->ExeFd = MAXULONG;
+}
+
+static
+LONG
+LxPrctlMmValidate(
+    _In_ PLX_PRCTL_MM_MAP Map)
+{
+    const ULONG64 Values[] = { Map->StartCode, Map->EndCode, Map->StartData, Map->EndData, Map->StartBrk, Map->Brk,
+                               Map->StartStack, Map->ArgStart, Map->ArgEnd, Map->EnvStart, Map->EnvEnd };
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Values); Index++)
+    {
+        if ((Values[Index] > (ULONG64)(ULONG_PTR)MM_HIGHEST_USER_ADDRESS) || (Values[Index] < LX_MMAP_MIN_ADDR))
+            return -LX_EINVAL;
+    }
+    if ((Map->StartCode >= Map->EndCode) || (Map->StartData > Map->EndData) || (Map->StartBrk > Map->Brk) ||
+        (Map->ArgStart > Map->ArgEnd) || (Map->EnvStart > Map->EnvEnd))
+    {
+        return -LX_EINVAL;
+    }
+    return 0;
+}
+
+static
+VOID
+LxPrctlMmApply(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_PRCTL_MM_MAP Map)
+{
+    ExAcquireFastMutex(&Process->Lock);
+    Process->StartCode = Map->StartCode;
+    Process->EndCode = Map->EndCode;
+    Process->StartData = Map->StartData;
+    Process->EndData = Map->EndData;
+    Process->StartStack = Map->StartStack;
+    Process->ArgStart = Map->ArgStart;
+    Process->ArgEnd = Map->ArgEnd;
+    Process->EnvStart = Map->EnvStart;
+    Process->EnvEnd = Map->EnvEnd;
+    ExReleaseFastMutex(&Process->Lock);
+    LxMmSetBrk(Process, Map->StartBrk, Map->Brk);
+}
+
+static
+LONG
+LxPrctlSetExeFile(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG Fd)
+{
+    PLX_FILE File = LxFdGet(Process, (LONG)Fd);
+    PSTR Path = NULL, Old;
+    LONG Error = 0;
+
+    if (File == NULL)
+        return -LX_EBADF;
+    if ((File->Type != LX_S_IFREG) || File->Directory || (File->Handle == NULL) || (File->Path == NULL) ||
+        ((File->Mount != NULL) && (File->Mount->Flags & LX_MS_NOEXEC)))
+    {
+        Error = -LX_EACCES;
+    }
+    else if (LxMmMapsPath(Process, Process->ExePath))
+    {
+        Error = -LX_EBUSY;
+    }
+    else
+    {
+        Path = LxStrDup(File->Path);
+        if (Path == NULL)
+            Error = -LX_ENOMEM;
+    }
+    LxFileDereference(File);
+    if (Error != 0)
+        return Error;
+    ExAcquireFastMutex(&Process->Lock);
+    Old = Process->ExePath;
+    Process->ExePath = Path;
+    ExReleaseFastMutex(&Process->Lock);
+    LxFree(Old);
+    return 0;
+}
+
+static
+LONG
+LxPrctlSetMm(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG Option,
+    _In_ ULONG64 Address,
+    _In_ ULONG64 Arg4,
+    _In_ ULONG64 Arg5)
+{
+    ULONG64 Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
+    ULONG64 Auxv[LX_AUXV_WORDS];
+    LX_PRCTL_MM_MAP Map;
+    LONG64 Result;
+    LONG Error;
+
+    if (Arg5 || (Arg4 && (Option != LX_PR_SET_MM_AUXV) && (Option != LX_PR_SET_MM_MAP) && (Option != LX_PR_SET_MM_MAP_SIZE)))
+        return -LX_EINVAL;
+
+    if (Option == LX_PR_SET_MM_MAP_SIZE)
+    {
+        ULONG Size = sizeof(LX_PRCTL_MM_MAP);
+
+        return (LONG)LxCopyToUser(Address, &Size, sizeof(Size));
+    }
+    if (Option == LX_PR_SET_MM_MAP)
+    {
+        if (Arg4 != sizeof(Map))
+            return -LX_EINVAL;
+        Result = LxCopyFromUser(&Map, Address, sizeof(Map));
+        if (Result != 0)
+            return (LONG)Result;
+        Error = LxPrctlMmValidate(&Map);
+        if (Error != 0)
+            return Error;
+        if (Map.AuxvSize != 0)
+        {
+            if ((Map.Auxv == 0) || (Map.AuxvSize > sizeof(Auxv)))
+                return -LX_EINVAL;
+            RtlZeroMemory(Auxv, sizeof(Auxv));
+            Result = LxCopyFromUser(Auxv, Map.Auxv, Map.AuxvSize);
+            if (Result != 0)
+                return (LONG)Result;
+            Auxv[LX_AUXV_WORDS - 2] = 0;
+            Auxv[LX_AUXV_WORDS - 1] = 0;
+        }
+        if (Map.ExeFd != MAXULONG)
+        {
+            if (!(Effective & ((1ULL << LX_CAP_CHECKPOINT_RESTORE) | (1ULL << LX_CAP_SYS_ADMIN))))
+                return -LX_EPERM;
+            Error = LxPrctlSetExeFile(Process, Map.ExeFd);
+            if (Error != 0)
+                return Error;
+        }
+        LxPrctlMmApply(Process, &Map);
+        if (Map.AuxvSize != 0)
+        {
+            ExAcquireFastMutex(&Process->Lock);
+            RtlCopyMemory(Process->Auxv, Auxv, sizeof(Auxv));
+            ExReleaseFastMutex(&Process->Lock);
+        }
+        return 0;
+    }
+
+    if (!(Effective & (1ULL << LX_CAP_SYS_RESOURCE)))
+        return -LX_EPERM;
+    if (Option == LX_PR_SET_MM_EXE_FILE)
+        return LxPrctlSetExeFile(Process, (ULONG)Address);
+    if (Option == LX_PR_SET_MM_AUXV)
+    {
+        if (Arg4 > sizeof(Auxv))
+            return -LX_EINVAL;
+        Result = LxCopyFromUser(Auxv, Address, (SIZE_T)Arg4);
+        if (Result != 0)
+            return (LONG)Result;
+        ExAcquireFastMutex(&Process->Lock);
+        RtlCopyMemory(Process->Auxv, Auxv, (SIZE_T)Arg4);
+        ExReleaseFastMutex(&Process->Lock);
+        return 0;
+    }
+    if ((Address > (ULONG64)(ULONG_PTR)MM_HIGHEST_USER_ADDRESS) || (Address < LX_MMAP_MIN_ADDR))
+        return -LX_EINVAL;
+
+    LxPrctlMmCurrent(Process, &Map);
+    switch (Option)
+    {
+        case LX_PR_SET_MM_START_CODE: Map.StartCode = Address; break;
+        case LX_PR_SET_MM_END_CODE: Map.EndCode = Address; break;
+        case LX_PR_SET_MM_START_DATA: Map.StartData = Address; break;
+        case LX_PR_SET_MM_END_DATA: Map.EndData = Address; break;
+        case LX_PR_SET_MM_START_STACK: Map.StartStack = Address; break;
+        case LX_PR_SET_MM_START_BRK: Map.StartBrk = Address; break;
+        case LX_PR_SET_MM_BRK: Map.Brk = Address; break;
+        case LX_PR_SET_MM_ARG_START: Map.ArgStart = Address; break;
+        case LX_PR_SET_MM_ARG_END: Map.ArgEnd = Address; break;
+        case LX_PR_SET_MM_ENV_START: Map.EnvStart = Address; break;
+        case LX_PR_SET_MM_ENV_END: Map.EnvEnd = Address; break;
+        default: return -LX_EINVAL;
+    }
+    Error = LxPrctlMmValidate(&Map);
+    if (Error != 0)
+        return Error;
+    if (((Option == LX_PR_SET_MM_START_STACK) || (Option == LX_PR_SET_MM_ARG_START) || (Option == LX_PR_SET_MM_ARG_END) ||
+         (Option == LX_PR_SET_MM_ENV_START) || (Option == LX_PR_SET_MM_ENV_END)) &&
+        !LxMmHasVmaAbove(Process, Address))
+    {
+        return -LX_EFAULT;
+    }
+    LxPrctlMmApply(Process, &Map);
+    return 0;
+}
+
 LX_SYSCALL(LxSysPrctl)
 {
     PLX_PROCESS Process = Call->Process;
@@ -2616,8 +2868,10 @@ LX_SYSCALL(LxSysPrctl)
 
         case LX_PR_GET_SECCOMP:
         case LX_PR_SET_SECCOMP:
-        case LX_PR_SET_MM:
             return -LX_EINVAL;
+
+        case LX_PR_SET_MM:
+            return LxPrctlSetMm(Process, (ULONG)Arg, Call->Args[2], Call->Args[3], Call->Args[4]);
 
         case LX_PR_CAPBSET_READ:
             if (Arg > 40)
