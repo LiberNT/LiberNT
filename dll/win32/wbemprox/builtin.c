@@ -46,6 +46,7 @@
 #ifdef __REACTOS__
 #include <cfgmgr32.h>
 #include <lm.h>
+#include <shlobj.h>
 #include <wmistr.h>
 #include <wmium.h>
 #include <wmidata.h>
@@ -674,6 +675,17 @@ static const struct column col_environment[] =
     { L"SystemVariable", CIM_BOOLEAN },
     { L"UserName",       CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { L"VariableValue",  CIM_STRING|COL_FLAG_DYNAMIC },
+};
+static const struct column col_startupcommand[] =
+{
+    { L"Caption",     CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Command",     CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"Description", CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Location",    CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"Name",        CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"SettingID",   CIM_STRING },
+    { L"User",        CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"UserSID",     CIM_STRING|COL_FLAG_DYNAMIC },
 };
 static const struct column col_timezone[] =
 {
@@ -1412,6 +1424,17 @@ struct record_environment
     int          systemvariable;
     const WCHAR *username;
     const WCHAR *variablevalue;
+};
+struct record_startupcommand
+{
+    const WCHAR *caption;
+    const WCHAR *command;
+    const WCHAR *description;
+    const WCHAR *location;
+    const WCHAR *name;
+    const WCHAR *settingid;
+    const WCHAR *user;
+    const WCHAR *usersid;
 };
 struct record_timezone
 {
@@ -4200,6 +4223,222 @@ static enum fill_status fill_environment( struct table *table, const struct expr
     TRACE("created %u rows\n", row);
     table->num_rows = row;
     return status;
+}
+
+static WCHAR *get_startup_name( const WCHAR *file )
+{
+    const WCHAR *ext = wcsrchr( file, '.' );
+    size_t len = ext ? ext - file : wcslen( file );
+    WCHAR *ret;
+
+    if (!(ret = malloc( (len + 1) * sizeof(WCHAR) ))) return NULL;
+    memcpy( ret, file, len * sizeof(WCHAR) );
+    ret[len] = 0;
+    return ret;
+}
+
+static WCHAR *get_startup_link_command( const WCHAR *folder, const WCHAR *file )
+{
+    WCHAR path[MAX_PATH], target[MAX_PATH], args[1024], *ret = NULL;
+    IPersistFile *persist;
+    IShellLinkW *link;
+    HRESULT hr, init;
+    size_t len;
+
+    if (swprintf( path, ARRAY_SIZE( path ), L"%s\\%s", folder, file ) < 0) return NULL;
+    init = CoInitialize( NULL );
+    if (SUCCEEDED(CoCreateInstance( &CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLinkW, (void **)&link )))
+    {
+        if (SUCCEEDED(IShellLinkW_QueryInterface( link, &IID_IPersistFile, (void **)&persist )))
+        {
+            hr = IPersistFile_Load( persist, path, STGM_READ );
+            IPersistFile_Release( persist );
+            if (SUCCEEDED(hr) && IShellLinkW_GetPath( link, target, ARRAY_SIZE( target ), NULL, 0 ) == S_OK)
+            {
+                if (FAILED(IShellLinkW_GetArguments( link, args, ARRAY_SIZE( args ) ))) args[0] = 0;
+                len = wcslen( target ) + wcslen( args ) + 2;
+                if ((ret = malloc( len * sizeof(WCHAR) ))) swprintf( ret, len, L"%s %s", target, args );
+            }
+        }
+        IShellLinkW_Release( link );
+    }
+    if (SUCCEEDED(init)) CoUninitialize();
+    return ret;
+}
+
+static BOOL add_startup_row( struct table *table, WCHAR *name, WCHAR *command, const WCHAR *location,
+                             const WCHAR *user, const WCHAR *usersid, const struct expr *cond,
+                             enum fill_status *status, UINT *row, UINT *offset )
+{
+    struct record_startupcommand *rec;
+
+    if (!resize_table( table, *row + 1, sizeof(*rec) ))
+    {
+        free( name );
+        free( command );
+        return FALSE;
+    }
+    rec = (struct record_startupcommand *)(table->data + *offset);
+    rec->caption     = name ? wcsdup( name ) : NULL;
+    rec->command     = command;
+    rec->description = name ? wcsdup( name ) : NULL;
+    rec->location    = wcsdup( location );
+    rec->name        = name;
+    rec->settingid   = NULL;
+    rec->user        = wcsdup( user );
+    rec->usersid     = usersid ? wcsdup( usersid ) : NULL;
+    if (!match_row( table, *row, cond, status ))
+    {
+        free_row_values( table, *row );
+        return TRUE;
+    }
+    *offset += sizeof(*rec);
+    (*row)++;
+    return TRUE;
+}
+
+static BOOL add_startup_folder_rows( struct table *table, const WCHAR *folder, BOOL resolve_links,
+                                     const WCHAR *location, const WCHAR *user, const WCHAR *usersid,
+                                     const struct expr *cond, enum fill_status *status, UINT *row, UINT *offset )
+{
+    WIN32_FIND_DATAW data;
+    WCHAR pattern[MAX_PATH], *command, *ext;
+    HANDLE find;
+    BOOL ret = TRUE;
+
+    if (swprintf( pattern, ARRAY_SIZE( pattern ), L"%s\\*", folder ) < 0) return TRUE;
+    if ((find = FindFirstFileW( pattern, &data )) == INVALID_HANDLE_VALUE) return TRUE;
+    do
+    {
+        if (data.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_HIDDEN)) continue;
+        ext = wcsrchr( data.cFileName, '.' );
+        command = NULL;
+        if (resolve_links && ext && !wcsicmp( ext, L".lnk" ))
+            command = get_startup_link_command( folder, data.cFileName );
+        if (!command) command = wcsdup( data.cFileName );
+        if (!(ret = add_startup_row( table, get_startup_name( data.cFileName ), command, location, user, usersid,
+                                     cond, status, row, offset ))) break;
+    } while (FindNextFileW( find, &data ));
+    FindClose( find );
+    return ret;
+}
+
+static BOOL add_startup_run_rows( struct table *table, HKEY root, const WCHAR *path, const WCHAR *location,
+                                  const WCHAR *user, const WCHAR *usersid, const struct expr *cond,
+                                  enum fill_status *status, UINT *row, UINT *offset )
+{
+    WCHAR name[16384], *command;
+    DWORD index, name_len, type, size;
+    HKEY key;
+    LONG ret;
+
+    if (RegOpenKeyExW( root, path, 0, KEY_READ | KEY_WOW64_64KEY, &key )) return TRUE;
+    for (index = 0;; index++)
+    {
+        name_len = ARRAY_SIZE( name );
+        size = 0;
+        ret = RegEnumValueW( key, index, name, &name_len, NULL, &type, NULL, &size );
+        if (ret == ERROR_NO_MORE_ITEMS) break;
+        if (ret != ERROR_SUCCESS) continue;
+        if (type != REG_SZ && type != REG_EXPAND_SZ && type != REG_MULTI_SZ) size = 0;
+        if (!(command = calloc( 1, size + sizeof(WCHAR) )))
+        {
+            RegCloseKey( key );
+            return FALSE;
+        }
+        if (size)
+        {
+            name_len = ARRAY_SIZE( name );
+            if (RegEnumValueW( key, index, name, &name_len, NULL, NULL, (BYTE *)command, &size )) command[0] = 0;
+            else command[size / sizeof(WCHAR)] = 0;
+        }
+        if (!add_startup_row( table, wcsdup( name ), command, location, user, usersid, cond, status, row, offset ))
+        {
+            RegCloseKey( key );
+            return FALSE;
+        }
+    }
+    RegCloseKey( key );
+    return TRUE;
+}
+
+static enum fill_status fill_startupcommand( struct table *table, const struct expr *cond )
+{
+    static const WCHAR run_key[] = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
+    static const WCHAR shell_folders[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders";
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+    WCHAR sid_string[256], path[512], location[520], account[MAX_PATH], domain[MAX_PATH], user[2 * MAX_PATH + 2];
+    DWORD index, len, account_len, domain_len;
+    UINT row = 0, offset = 0;
+    SID_NAME_USE use;
+    WCHAR *folder;
+    HKEY profiles;
+    BOOL ok = TRUE;
+    PSID sid;
+
+    if (!resize_table( table, 1, sizeof(struct record_startupcommand) )) return FILL_STATUS_FAILED;
+
+    if (!RegOpenKeyExW( HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList", 0,
+                        KEY_READ, &profiles ))
+    {
+        for (index = 0; ok; index++)
+        {
+            len = ARRAY_SIZE( sid_string );
+            if (RegEnumKeyExW( profiles, index, sid_string, &len, NULL, NULL, NULL, NULL )) break;
+
+            user[0] = 0;
+            if (ConvertStringSidToSidW( sid_string, &sid ))
+            {
+                account_len = ARRAY_SIZE( account );
+                domain_len = ARRAY_SIZE( domain );
+                if (LookupAccountSidW( NULL, sid, account, &account_len, domain, &domain_len, &use ))
+                {
+                    if (domain[0]) swprintf( user, ARRAY_SIZE( user ), L"%s\\%s", domain, account );
+                    else wcscpy( user, account );
+                }
+                LocalFree( sid );
+            }
+
+            swprintf( path, ARRAY_SIZE( path ), L"%s\\%s", sid_string, shell_folders );
+            if ((folder = get_reg_str( HKEY_USERS, path, L"Startup" )))
+            {
+                ok = add_startup_folder_rows( table, folder, FALSE, L"Startup", user, sid_string, cond, &status,
+                                              &row, &offset );
+                free( folder );
+                if (!ok) break;
+            }
+
+            swprintf( path, ARRAY_SIZE( path ), L"%s\\%s", sid_string, run_key );
+            swprintf( location, ARRAY_SIZE( location ), L"HKU\\%s", path );
+            ok = add_startup_run_rows( table, HKEY_USERS, path, location, user, sid_string, cond, &status, &row,
+                                       &offset );
+        }
+        RegCloseKey( profiles );
+    }
+
+    if (ok)
+    {
+        swprintf( path, ARRAY_SIZE( path ), L".DEFAULT\\%s", run_key );
+        swprintf( location, ARRAY_SIZE( location ), L"HKU\\%s", path );
+        ok = add_startup_run_rows( table, HKEY_USERS, path, location, L".DEFAULT", NULL, cond, &status, &row,
+                                   &offset );
+    }
+    if (ok && (folder = get_reg_str( HKEY_LOCAL_MACHINE, shell_folders, L"Common Startup" )))
+    {
+        ok = add_startup_folder_rows( table, folder, TRUE, L"Common Startup", L"Public", NULL, cond, &status, &row,
+                                      &offset );
+        free( folder );
+    }
+    if (ok)
+    {
+        swprintf( location, ARRAY_SIZE( location ), L"HKLM\\%s", run_key );
+        ok = add_startup_run_rows( table, HKEY_LOCAL_MACHINE, run_key, location, L"Public", NULL, cond, &status,
+                                   &row, &offset );
+    }
+
+    TRACE("created %u rows\n", row);
+    table->num_rows = row;
+    return ok ? status : FILL_STATUS_FAILED;
 }
 
 static WCHAR *get_account_sid_string( const WCHAR *account )
@@ -7163,6 +7402,9 @@ static struct table cimv2_builtin_classes[] =
     { L"Win32_SID", C(col_sid), 0, 0, NULL, fill_sid },
     { L"Win32_Service", C(col_service), 0, 0, NULL, fill_service },
     { L"Win32_SoundDevice", C(col_sounddevice), 0, 0, NULL, fill_sounddevice },
+#ifdef __REACTOS__
+    { L"Win32_StartupCommand", C(col_startupcommand), 0, 0, NULL, fill_startupcommand },
+#endif
     { L"Win32_SystemEnclosure", C(col_systemenclosure), 0, 0, NULL, fill_systemenclosure },
 #ifdef __REACTOS__
     { L"Win32_TimeZone", C(col_timezone), 0, 0, NULL, fill_timezone },
