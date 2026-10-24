@@ -154,6 +154,7 @@ LxQueryClock(
     {
         case LX_CLOCK_REALTIME:
         case LX_CLOCK_REALTIME_COARSE:
+        case LX_CLOCK_TAI:
             LxQueryRealtime(Timespec);
             return 0;
 
@@ -212,6 +213,220 @@ LxSleep(
     }
 }
 
+static
+BOOLEAN
+LxClockKnown(
+    _In_ ULONG64 Clock)
+{
+    return (Clock <= LX_CLOCK_BOOTTIME_ALARM) || (Clock == LX_CLOCK_TAI);
+}
+
+static
+LONG64
+LxAdjtimex(
+    _In_ ULONG64 Pointer)
+{
+    LX_TIMESPEC Now;
+    LX_TIMEX Timex;
+    ULONG Modes;
+    LONG64 Result = LxCopyFromUser(&Timex, Pointer, sizeof(Timex));
+
+    if (Result != 0)
+        return Result;
+    if ((Timex.Modes != 0) && (Timex.Modes != LX_ADJ_OFFSET_SS_READ))
+        return -LX_EPERM;
+
+    Modes = Timex.Modes;
+    RtlZeroMemory(&Timex, sizeof(Timex));
+    LxQueryRealtime(&Now);
+    Timex.Modes = Modes;
+    Timex.MaxError = LX_NTP_PHASE_LIMIT;
+    Timex.EstError = LX_NTP_PHASE_LIMIT;
+    Timex.Status = LX_STA_UNSYNC;
+    Timex.Constant = 2;
+    Timex.Precision = 1;
+    Timex.Tolerance = LX_NTP_TOLERANCE;
+    Timex.TimeSeconds = Now.Seconds;
+    Timex.TimeMicroseconds = Now.Nanoseconds / 1000;
+    Timex.Tick = LX_USER_TICK_USEC;
+    Result = LxCopyToUser(Pointer, &Timex, sizeof(Timex));
+    return (Result != 0) ? Result : LX_TIME_ERROR;
+}
+
+LX_SYSCALL(LxSysAdjtimex)
+{
+    return LxAdjtimex(Call->Args[0]);
+}
+
+LX_SYSCALL(LxSysClockAdjtime)
+{
+    if (!LxClockKnown(Call->Args[0]))
+        return -LX_EINVAL;
+    if (Call->Args[0] != LX_CLOCK_REALTIME)
+        return -LX_EOPNOTSUPP;
+    return LxAdjtimex(Call->Args[1]);
+}
+
+LX_SYSCALL(LxSysClockSettime)
+{
+    LX_TIMESPEC Timespec;
+    LONG64 Result;
+
+    if (!LxClockKnown(Call->Args[0]) ||
+        ((Call->Args[0] != LX_CLOCK_REALTIME) && (Call->Args[0] != LX_CLOCK_PROCESS_CPUTIME_ID) &&
+         (Call->Args[0] != LX_CLOCK_THREAD_CPUTIME_ID)))
+    {
+        return -LX_EINVAL;
+    }
+    Result = LxCopyFromUser(&Timespec, Call->Args[1], sizeof(Timespec));
+    if (Result != 0)
+        return Result;
+    if ((Call->Args[0] == LX_CLOCK_REALTIME) &&
+        ((Timespec.Seconds < 0) || (Timespec.Nanoseconds < 0) || (Timespec.Nanoseconds >= 1000000000)))
+    {
+        return -LX_EINVAL;
+    }
+    return -LX_EPERM;
+}
+
+LX_SYSCALL(LxSysSettimeofday)
+{
+    LX_TIMEVAL Timeval;
+    LONG Zone[2];
+    LONG64 Result;
+
+    if (Call->Args[0] != 0)
+    {
+        Result = LxCopyFromUser(&Timeval, Call->Args[0], sizeof(Timeval));
+        if (Result != 0)
+            return Result;
+        if ((Timeval.Seconds < 0) || (Timeval.Microseconds < 0) || (Timeval.Microseconds >= 1000000))
+            return -LX_EINVAL;
+    }
+    if (Call->Args[1] != 0)
+    {
+        Result = LxCopyFromUser(Zone, Call->Args[1], sizeof(Zone));
+        if (Result != 0)
+            return Result;
+        if ((Zone[0] > 15 * 60) || (Zone[0] < -15 * 60))
+            return -LX_EINVAL;
+    }
+    return -LX_EPERM;
+}
+
+static
+BOOLEAN
+LxPtraceMayRead(
+    _In_ PLX_PROCESS Caller,
+    _In_ PLX_PROCESS Target)
+{
+    ULONG Index;
+
+    if ((Caller == Target) ||
+        ((Caller->Uid[1] == 0) && (Caller->CapBounding & (1ULL << LX_CAP_SYS_PTRACE))))
+    {
+        return TRUE;
+    }
+    for (Index = 0; Index < 3; Index++)
+    {
+        if ((Target->Uid[Index] != Caller->Uid[0]) || (Target->Gid[Index] != Caller->Gid[0]))
+            return FALSE;
+    }
+    return Target->Dumpable != 0;
+}
+
+static
+LONG64
+LxKcmpOrder(
+    _In_ PVOID Left,
+    _In_ PVOID Right)
+{
+    return ((ULONG_PTR)Left < (ULONG_PTR)Right) | (((ULONG_PTR)Left > (ULONG_PTR)Right) << 1);
+}
+
+LX_SYSCALL(LxSysKcmp)
+{
+    PLX_PROCESS First = NULL, Second = NULL;
+    PLX_FILE Left = NULL, Right = NULL;
+    LX_KCMP_EPOLL_SLOT Slot;
+    LONG64 Result;
+    LONG Error;
+
+    if (((LONG)Call->Args[0] <= 0) || ((LONG)Call->Args[1] <= 0) ||
+        (LxThreadLookupReferenced(Call->Process->Instance, (ULONG)Call->Args[0], &First) == NULL) ||
+        (LxThreadLookupReferenced(Call->Process->Instance, (ULONG)Call->Args[1], &Second) == NULL))
+    {
+        Result = -LX_ESRCH;
+        goto Exit;
+    }
+    if (!LxPtraceMayRead(Call->Process, First) || !LxPtraceMayRead(Call->Process, Second))
+    {
+        Result = -LX_EPERM;
+        goto Exit;
+    }
+
+    switch ((ULONG)Call->Args[2])
+    {
+        case LX_KCMP_FILE:
+            Left = LxFdGet(First, (LONG)Call->Args[3]);
+            Right = LxFdGet(Second, (LONG)Call->Args[4]);
+            Result = ((Left != NULL) && (Right != NULL)) ? LxKcmpOrder(Left, Right) : -LX_EBADF;
+            break;
+
+        case LX_KCMP_VM:
+        case LX_KCMP_FILES:
+        case LX_KCMP_FS:
+        case LX_KCMP_SIGHAND:
+        case LX_KCMP_IO:
+            Result = LxKcmpOrder(First, Second);
+            break;
+
+        case LX_KCMP_SYSVSEM:
+            Result = 0;
+            break;
+
+        case LX_KCMP_EPOLL_TFD:
+            Left = LxFdGet(First, (LONG)Call->Args[3]);
+            if (Left == NULL)
+            {
+                Result = -LX_EBADF;
+                break;
+            }
+            Result = LxCopyFromUser(&Slot, Call->Args[4], sizeof(Slot));
+            if (Result != 0)
+                break;
+            Right = LxFdGet(Second, (LONG)Slot.Efd);
+            if (Right == NULL)
+            {
+                Result = -LX_EBADF;
+                break;
+            }
+            {
+                PLX_FILE Target = LxEpollTarget(Right, (LONG)Slot.Tfd, Slot.Toff, &Error);
+
+                Result = (Target != NULL) ? LxKcmpOrder(Left, Target) : Error;
+                if (Target != NULL)
+                    LxFileDereference(Target);
+            }
+            break;
+
+        default:
+            Result = -LX_EINVAL;
+            break;
+    }
+
+Exit:
+    if (Left != NULL)
+        LxFileDereference(Left);
+    if (Right != NULL)
+        LxFileDereference(Right);
+    if (First != NULL)
+        LxProcessDereference(First);
+    if (Second != NULL)
+        LxProcessDereference(Second);
+    return Result;
+}
+
 LX_SYSCALL(LxSysClockGettime)
 {
     LX_TIMESPEC Timespec;
@@ -226,9 +441,10 @@ LX_SYSCALL(LxSysClockGetres)
 {
     LX_TIMESPEC Resolution = { 0, 1 };
 
-    if (Call->Args[0] > LX_CLOCK_BOOTTIME)
+    if ((Call->Args[0] > LX_CLOCK_BOOTTIME) && (Call->Args[0] != LX_CLOCK_TAI))
         return -LX_EINVAL;
-    if ((Call->Args[0] == LX_CLOCK_REALTIME) || (Call->Args[0] == LX_CLOCK_REALTIME_COARSE))
+    if ((Call->Args[0] == LX_CLOCK_REALTIME) || (Call->Args[0] == LX_CLOCK_REALTIME_COARSE) ||
+        (Call->Args[0] == LX_CLOCK_TAI))
         Resolution.Nanoseconds = 100;
     if (Call->Args[1] == 0)
         return 0;

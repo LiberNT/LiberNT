@@ -1543,6 +1543,133 @@ Exit:
     return Result;
 }
 
+static
+BOOLEAN
+LxSpliceWouldBlock(
+    _In_ PLX_FILE File,
+    _In_ ULONG Events)
+{
+    return LxFileIsPipe(File) && !(LxFilePoll(File, NULL) & (Events | LX_POLLHUP | LX_POLLERR));
+}
+
+static
+LONG64
+LxSpliceOffset(
+    _In_ PLX_FILE File,
+    _In_ ULONG64 Pointer,
+    _Out_ PLONG64 Offset)
+{
+    LONG64 Result;
+
+    *Offset = 0;
+    if (Pointer == 0)
+        return 0;
+    if (LxFileIsPipe(File))
+        return -LX_ESPIPE;
+    if ((File->Ops->Seek == NULL) || File->NtPipe)
+        return -LX_EINVAL;
+    Result = LxCopyFromUser(Offset, Pointer, sizeof(*Offset));
+    if ((Result == 0) && (*Offset < 0))
+        Result = -LX_EINVAL;
+    return Result;
+}
+
+LX_SYSCALL(LxSysSplice)
+{
+    PLX_FILE In = LxCallFile(Call, 0), Out = LxCallFile(Call, 2);
+    ULONG Flags = (ULONG)Call->Args[5];
+    LONG64 InOffset, OutOffset, Result;
+
+    if ((In == NULL) || (Out == NULL) ||
+        ((In->Flags & LX_O_ACCMODE) == LX_O_WRONLY) || ((Out->Flags & LX_O_ACCMODE) == LX_O_RDONLY))
+    {
+        Result = -LX_EBADF;
+        goto Exit;
+    }
+    if ((Flags & ~LX_SPLICE_F_ALL) || (!LxFileIsPipe(In) && !LxFileIsPipe(Out)) ||
+        (LxFileIsPipe(In) && LxFileIsPipe(Out) && (In->Object == Out->Object)) ||
+        (!LxFileIsPipe(Out) && (Out->Flags & LX_O_APPEND)))
+    {
+        Result = -LX_EINVAL;
+        goto Exit;
+    }
+    Result = LxSpliceOffset(In, Call->Args[1], &InOffset);
+    if (Result == 0)
+        Result = LxSpliceOffset(Out, Call->Args[3], &OutOffset);
+    if ((Result != 0) || (Call->Args[4] == 0))
+        goto Exit;
+    if ((Flags & LX_SPLICE_F_NONBLOCK) &&
+        (LxSpliceWouldBlock(In, LX_POLLIN) || LxSpliceWouldBlock(Out, LX_POLLOUT)))
+    {
+        Result = -LX_EAGAIN;
+        goto Exit;
+    }
+
+    Result = LxTransfer(Call->Process, In, (Call->Args[1] != 0) ? &InOffset : NULL,
+                        Out, (Call->Args[3] != 0) ? &OutOffset : NULL, Call->Args[4]);
+    if (Result > 0)
+    {
+        if (Call->Args[1] != 0)
+            LxCopyToUser(Call->Args[1], &InOffset, sizeof(InOffset));
+        if (Call->Args[3] != 0)
+            LxCopyToUser(Call->Args[3], &OutOffset, sizeof(OutOffset));
+    }
+
+Exit:
+    if (In != NULL)
+        LxFileDereference(In);
+    if (Out != NULL)
+        LxFileDereference(Out);
+    return Result;
+}
+
+LX_SYSCALL(LxSysTee)
+{
+    PLX_FILE In = LxCallFile(Call, 0), Out = LxCallFile(Call, 1);
+    ULONG Flags = (ULONG)Call->Args[3];
+    LONG64 Result;
+
+    if (Flags & ~LX_SPLICE_F_ALL)
+        Result = -LX_EINVAL;
+    else if ((In == NULL) || (Out == NULL) ||
+             ((In->Flags & LX_O_ACCMODE) == LX_O_WRONLY) || ((Out->Flags & LX_O_ACCMODE) == LX_O_RDONLY))
+        Result = -LX_EBADF;
+    else if (!LxFileIsPipe(In) || !LxFileIsPipe(Out))
+        Result = -LX_EINVAL;
+    else
+        Result = LxPipeTee(In, Out, Call->Args[2], (Flags & LX_SPLICE_F_NONBLOCK) != 0);
+
+    if (In != NULL)
+        LxFileDereference(In);
+    if (Out != NULL)
+        LxFileDereference(Out);
+    return Result;
+}
+
+LX_SYSCALL(LxSysVmsplice)
+{
+    PLX_FILE File;
+    ULONG Flags = (ULONG)Call->Args[3];
+    ULONG Access;
+    LONG64 Result = 0;
+
+    if (Flags & ~LX_SPLICE_F_ALL)
+        return -LX_EINVAL;
+    File = LxCallFile(Call, 0);
+    if (File == NULL)
+        return -LX_EBADF;
+    Access = File->Flags & LX_O_ACCMODE;
+    if (!LxFileIsPipe(File))
+        Result = -LX_EBADF;
+    else if ((Flags & LX_SPLICE_F_NONBLOCK) &&
+             LxSpliceWouldBlock(File, (Access == LX_O_RDONLY) ? LX_POLLIN : LX_POLLOUT))
+        Result = -LX_EAGAIN;
+    LxFileDereference(File);
+    if (Result != 0)
+        return Result;
+    return LxVectorIo(Call, Access != LX_O_RDONLY, NULL);
+}
+
 LX_SYSCALL(LxSysCopyFileRange)
 {
     PLX_FILE In = LxCallFile(Call, 0), Out = LxCallFile(Call, 2);

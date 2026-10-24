@@ -323,6 +323,67 @@ LxFileIsPipe(
     return File->Ops == &LxPipeOps;
 }
 
+LONG64
+LxPipeTee(
+    _In_ PLX_FILE In,
+    _In_ PLX_FILE Out,
+    _In_ ULONG64 Length,
+    _In_ BOOLEAN NonBlocking)
+{
+    PLX_PIPE Source = In->Object, Target = Out->Object;
+    PLX_PIPE First = (Source < Target) ? Source : Target;
+    PLX_PIPE Second = (Source < Target) ? Target : Source;
+    LONG64 Result;
+
+    if (Source == Target)
+        return -LX_EINVAL;
+    if (Length == 0)
+        return 0;
+
+    for (;;)
+    {
+        BOOLEAN WaitInput;
+
+        LxPipeLock(First);
+        LxPipeLock(Second);
+        if (Target->Readers == 0)
+        {
+            LxPipeUnlock(Second);
+            LxPipeUnlock(First);
+            return LxWriteFailed(LX_EPIPE);
+        }
+        if ((Source->Count != 0) && (Target->Count < Target->Size))
+        {
+            ULONG Total = (ULONG)min(min(Length, (ULONG64)Source->Count), (ULONG64)(Target->Size - Target->Count));
+            ULONG Tail = (Target->Head + Target->Count) % Target->Size;
+            ULONG Index;
+
+            for (Index = 0; Index < Total; Index++)
+                Target->Buffer[(Tail + Index) % Target->Size] = Source->Buffer[(Source->Head + Index) % Source->Size];
+            Target->Count += Total;
+            LxPipeUnlock(Second);
+            LxPipeUnlock(First);
+            LxPollWake(&Target->Poll, LX_POLLIN | LX_POLLRDNORM);
+            return Total;
+        }
+        if ((Source->Count == 0) && (Source->Writers == 0))
+        {
+            LxPipeUnlock(Second);
+            LxPipeUnlock(First);
+            return 0;
+        }
+        WaitInput = (Source->Count == 0);
+        LxPipeUnlock(Second);
+        LxPipeUnlock(First);
+
+        if (NonBlocking)
+            return -LX_EAGAIN;
+        Result = WaitInput ? LxFileWait(In, LX_POLLIN | LX_POLLHUP, NULL) : LxFileWait(Out, LX_POLLOUT, NULL);
+        if (Result < 0)
+            return Result;
+    }
+}
+
 LONG
 LxPipeSetSize(
     _In_ PLX_FILE File,

@@ -733,6 +733,42 @@ LxEpollStat(
     return 0;
 }
 
+static const LX_FILE_OPS LxEpollOps;
+
+PLX_FILE
+LxEpollTarget(
+    _In_ PLX_FILE EpollFile,
+    _In_ LONG Fd,
+    _In_ ULONG Offset,
+    _Out_ PLONG Error)
+{
+    PLX_EPOLL Epoll = EpollFile->Object;
+    PLX_FILE Found = NULL;
+    PLIST_ENTRY Entry;
+
+    if (EpollFile->Ops != &LxEpollOps)
+    {
+        *Error = -LX_EINVAL;
+        return NULL;
+    }
+
+    LxEpollLock(Epoll);
+    for (Entry = Epoll->Items.Flink; Entry != &Epoll->Items; Entry = Entry->Flink)
+    {
+        PLX_EPOLL_ITEM Item = CONTAINING_RECORD(Entry, LX_EPOLL_ITEM, Link);
+
+        if (!Item->Detached && (Item->Fd == Fd) && (Offset-- == 0))
+        {
+            Found = Item->File;
+            LxFileReference(Found);
+            break;
+        }
+    }
+    LxEpollUnlock(Epoll);
+    *Error = (Found != NULL) ? 0 : -LX_ENOENT;
+    return Found;
+}
+
 static const LX_FILE_OPS LxEpollOps =
 {
     NULL, NULL, NULL, LxEpollPoll, LxEpollStat, NULL, NULL, NULL, LxEpollRelease

@@ -329,7 +329,7 @@ LxProcessCreate(
     Process->Umask = 022;
     Process->Dumpable = 1;
     Process->ExitSignal = LX_SIGCHLD;
-    Process->CapBounding = (1ULL << 41) - 1;
+    Process->CapBounding = ((1ULL << 41) - 1) & ~(1ULL << LX_CAP_SYS_TIME);
     Process->StartTime = (LONG64)KeQueryInterruptTime();
     LxProcessDefaultLimits(Process->Limits);
     return Process;

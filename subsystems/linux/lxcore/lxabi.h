@@ -291,6 +291,9 @@ typedef struct _LX_SCHED_ATTR
 #define LX_CLOCK_REALTIME_COARSE    5
 #define LX_CLOCK_MONOTONIC_COARSE   6
 #define LX_CLOCK_BOOTTIME           7
+#define LX_CLOCK_REALTIME_ALARM     8
+#define LX_CLOCK_BOOTTIME_ALARM     9
+#define LX_CLOCK_TAI                11
 
 #define LX_TCGETS           0x5401
 #define LX_TCSETS           0x5402
@@ -504,6 +507,66 @@ typedef struct _LX_SCHED_ATTR
 #define LX_FUTEX2_VALID_MASK    (LX_FUTEX2_SIZE_MASK | LX_FUTEX2_NUMA | LX_FUTEX2_MPOL | LX_FUTEX2_PRIVATE)
 #define LX_FUTEX_NO_NODE        0xFFFFFFFF
 #define LX_FUTEX_WAITV_MAX      128
+
+#define LX_CAP_SYS_PTRACE       19
+#define LX_CAP_SYS_TIME         25
+
+#define LX_SPLICE_F_NONBLOCK    0x02
+#define LX_SPLICE_F_ALL         0x0F
+
+#define LX_KCMP_FILE            0
+#define LX_KCMP_VM              1
+#define LX_KCMP_FILES           2
+#define LX_KCMP_FS              3
+#define LX_KCMP_SIGHAND         4
+#define LX_KCMP_IO              5
+#define LX_KCMP_SYSVSEM         6
+#define LX_KCMP_EPOLL_TFD       7
+
+typedef struct _LX_KCMP_EPOLL_SLOT
+{
+    ULONG Efd;
+    ULONG Tfd;
+    ULONG Toff;
+} LX_KCMP_EPOLL_SLOT, *PLX_KCMP_EPOLL_SLOT;
+
+#define LX_ADJ_OFFSET_SS_READ   0xA001
+#define LX_STA_UNSYNC           0x0040
+#define LX_TIME_ERROR           5
+#define LX_NTP_PHASE_LIMIT      16000000
+#define LX_NTP_TOLERANCE        32768000
+#define LX_USER_TICK_USEC       10000
+
+typedef struct _LX_TIMEX
+{
+    ULONG Modes;
+    LONG Pad0;
+    LONG64 Offset;
+    LONG64 Freq;
+    LONG64 MaxError;
+    LONG64 EstError;
+    LONG Status;
+    LONG Pad1;
+    LONG64 Constant;
+    LONG64 Precision;
+    LONG64 Tolerance;
+    LONG64 TimeSeconds;
+    LONG64 TimeMicroseconds;
+    LONG64 Tick;
+    LONG64 PpsFreq;
+    LONG64 Jitter;
+    LONG Shift;
+    LONG Pad2;
+    LONG64 Stabil;
+    LONG64 JitCnt;
+    LONG64 CalCnt;
+    LONG64 ErrCnt;
+    LONG64 StbCnt;
+    LONG Tai;
+    LONG Reserved[11];
+} LX_TIMEX, *PLX_TIMEX;
+
+C_ASSERT(sizeof(LX_TIMEX) == 208);
 
 typedef struct _LX_FUTEX_WAITV
 {

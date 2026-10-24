@@ -616,6 +616,8 @@ LONG LxPipeCreatePair(_In_ ULONG Flags, _Out_ PLX_FILE *ReadEnd, _Out_ PLX_FILE 
 LONG LxPipeSetSize(_In_ PLX_FILE File, _In_ ULONG Size);
 LONG LxPipeGetSize(_In_ PLX_FILE File);
 BOOLEAN LxFileIsPipe(_In_ PLX_FILE File);
+LONG64 LxPipeTee(_In_ PLX_FILE In, _In_ PLX_FILE Out, _In_ ULONG64 Length, _In_ BOOLEAN NonBlocking);
+PLX_FILE LxEpollTarget(_In_ PLX_FILE EpollFile, _In_ LONG Fd, _In_ ULONG Offset, _Out_ PLONG Error);
 VOID LxPipeInitialize(VOID);
 BOOLEAN LxFileIsSocket(_In_ PLX_FILE File);
 VOID LxSocketInitialize(VOID);
