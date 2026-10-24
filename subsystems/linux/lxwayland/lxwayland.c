@@ -3708,6 +3708,7 @@ HostHello(const uint8_t *Payload, uint32_t Length)
     memcpy(&ScreenHeight, Payload + 4, 4);
     Host = true;
     LxLog("window host ready, screen %ux%u", ScreenWidth, ScreenHeight);
+    HostSend(LX_WIN_READY, 0, NULL, 0);
     for (Client = Clients; Client != NULL; Client = Client->Next)
     {
         Count = ClientResources(Client, &wl_output_interface, Found, 256);

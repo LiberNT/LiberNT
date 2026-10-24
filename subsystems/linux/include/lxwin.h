@@ -31,6 +31,7 @@
 #define LX_WIN_CLIPBOARD            13
 #define LX_WIN_APP_ID               14
 #define LX_WIN_ICON                 15
+#define LX_WIN_READY                16
 
 #define LX_WIN_HELLO                100
 #define LX_WIN_CONFIGURE            101
