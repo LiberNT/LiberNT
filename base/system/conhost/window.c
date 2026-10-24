@@ -539,8 +539,11 @@ static void fill_mem_dc( struct console *console, const RECT *update )
                 line[count] = (cell[k].attr & COMMON_LVB_TRAILING_BYTE) ? ' ' : cell[k].ch;
                 dx[count++] = console->active->font.width;
             }
-            ExtTextOutW( console->window->mem_dc, i * console->active->font.width,
-                         j * console->active->font.height, 0, NULL, line, count, dx );
+            r.left   = i * console->active->font.width;
+            r.top    = j * console->active->font.height;
+            r.right  = k * console->active->font.width;
+            r.bottom = (j + 1) * console->active->font.height;
+            ExtTextOutW( console->window->mem_dc, r.left, r.top, ETO_OPAQUE | ETO_CLIPPED, &r, line, count, dx );
             if (console->window->ext_leading && (brush = CreateSolidBrush( bg )))
             {
                 r.left   = i * console->active->font.width;
