@@ -206,6 +206,19 @@ PsPicoTerminateCurrentThread(
     UNREACHABLE;
 }
 
+NTSTATUS
+NTAPI
+PsPicoTerminateThread(
+    _In_ PETHREAD Thread,
+    _In_ NTSTATUS ExitStatus)
+{
+    PAGED_CODE();
+
+    if (!Thread->Tcb.Header.Minimal)
+        return STATUS_INVALID_PARAMETER;
+    return PspTerminateThreadByPointer(Thread, ExitStatus, FALSE);
+}
+
 PVOID
 NTAPI
 PsPicoGetProcessContext(

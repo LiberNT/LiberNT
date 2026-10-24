@@ -89,6 +89,13 @@ PsPicoTerminateCurrentThread(
     _In_ NTSTATUS ExitStatus);
 
 NTKERNELAPI
+NTSTATUS
+NTAPI
+PsPicoTerminateThread(
+    _In_ PETHREAD Thread,
+    _In_ NTSTATUS ExitStatus);
+
+NTKERNELAPI
 PVOID
 NTAPI
 PsPicoGetProcessContext(

@@ -2941,6 +2941,7 @@
 @ stdcall PsPicoGetThreadContext(ptr)
 @ stdcall PsPicoRegisterProvider(ptr)
 @ stdcall PsPicoTerminateCurrentThread(long)
+@ stdcall PsPicoTerminateThread(ptr long)
 @ stdcall PsQueryCurrentApiSetSchema()
 @ stdcall PsQueryProcessAttributesByToken(ptr ptr ptr)
 @ stub -arch=win64 PsQueryProcessAvailableCpus
