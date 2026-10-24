@@ -5678,6 +5678,9 @@ XHCI_AcknowledgeInterrupter(
     if ((Iman & XHCI_IMAN_IP) == 0)
         return;
 
+    if (Extension->OperationalRegisters)
+        XHCI_WRITE_REGISTER_ULONG(&Extension->OperationalRegisters->UsbSts, XHCI_USBSTS_EINT);
+
     /* IMAN.IP is RW1C. Preserve IE and flush the posted acknowledgement. */
     XHCI_WRITE_REGISTER_ULONG(&Interrupter->Iman, XHCI_IMAN_IP | (Iman & XHCI_IMAN_IE));
     (VOID)XHCI_READ_REGISTER_ULONG(&Interrupter->Iman);
@@ -14887,7 +14890,8 @@ XHCI_DisableInterrupts(PVOID MiniPortExtension)
     PXHCI_EXTENSION Extension = MiniPortExtension;
     ULONG Command;
     ULONG StsAck;
-    PXHCI_INTERRUPTER_REGISTER_SET Interrupter;
+    ULONG Iman = 0;
+    PXHCI_INTERRUPTER_REGISTER_SET Interrupter = NULL;
 
     if (!Extension || !Extension->OperationalRegisters)
         return;
@@ -14897,6 +14901,12 @@ XHCI_DisableInterrupts(PVOID MiniPortExtension)
     Command &= ~XHCI_USBCMD_INTE;
     XHCI_WRITE_REGISTER_ULONG(&Extension->OperationalRegisters->UsbCmd, Command);
     Extension->InterruptsEnabled = FALSE;
+
+    if (Extension->RuntimeRegisters)
+    {
+        Interrupter = &Extension->RuntimeRegisters->Interrupter[0];
+        Iman = XHCI_READ_REGISTER_ULONG(&Interrupter->Iman);
+    }
 
     /*
      * Clear all pending USBSTS write-to-clear bits. This deasserts the
@@ -14908,19 +14918,20 @@ XHCI_DisableInterrupts(PVOID MiniPortExtension)
     StsAck = XHCI_READ_REGISTER_ULONG(&Extension->OperationalRegisters->UsbSts);
     StsAck &= (XHCI_USBSTS_EINT | XHCI_USBSTS_PCD |
                 XHCI_USBSTS_HSE | XHCI_USBSTS_HCE);
+    if (!(Iman & XHCI_IMAN_IP))
+        StsAck &= ~XHCI_USBSTS_EINT;
     if (StsAck)
     {
         XHCI_WRITE_REGISTER_ULONG(&Extension->OperationalRegisters->UsbSts, StsAck);
     }
 
-    if (Extension->RuntimeRegisters)
+    if (Interrupter)
     {
-        Interrupter = &Extension->RuntimeRegisters->Interrupter[0];
         /*
          * Clear IE to disable interrupter. Also write IP=1 (RW1C) to clear
          * any pending interrupt. Only write the defined bits, IE=0 disables.
          */
-        XHCI_WRITE_REGISTER_ULONG(&Interrupter->Iman, XHCI_IMAN_IP);
+        XHCI_WRITE_REGISTER_ULONG(&Interrupter->Iman, Iman & XHCI_IMAN_IP);
         (VOID)XHCI_READ_REGISTER_ULONG(&Interrupter->Iman);
     }
 }
