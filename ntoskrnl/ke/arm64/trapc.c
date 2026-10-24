@@ -2156,7 +2156,7 @@ KiArm64HandleSynchronousException(
             }
 
 
-            WriteAccess = (Iss & (1u << 6)) != 0;
+            WriteAccess = ((Iss & (1u << 6)) != 0) && ((Iss & (1u << 8)) == 0);
 
             /* ARM64: skip accessed-bit fast path to avoid dereferencing
              * an unmapped PTE alias during bring-up. Fallback to the
