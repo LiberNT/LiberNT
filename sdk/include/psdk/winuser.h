@@ -4405,6 +4405,9 @@ typedef struct tagPOINTER_TYPE_INFO {
 #endif /* WINVER >= 0x0602 || _WIN32K_ */
 
 HKL WINAPI ActivateKeyboardLayout(_In_ HKL, _In_ UINT);
+#if (WINVER >= 0x0600)
+BOOL WINAPI AddClipboardFormatListener(_In_ HWND);
+#endif
 BOOL WINAPI AdjustWindowRect(_Inout_ LPRECT, _In_ DWORD, _In_ BOOL);
 BOOL WINAPI AdjustWindowRectEx(_Inout_ LPRECT, _In_ DWORD, _In_ BOOL, _In_ DWORD);
 #if (WINVER >= 0x0605)
@@ -5700,6 +5703,9 @@ UINT WINAPI RegisterWindowMessageA(_In_ LPCSTR);
 UINT WINAPI RegisterWindowMessageW(_In_ LPCWSTR);
 BOOL WINAPI ReleaseCapture(void);
 int WINAPI ReleaseDC(_In_opt_ HWND, _In_ HDC);
+#if (WINVER >= 0x0600)
+BOOL WINAPI RemoveClipboardFormatListener(_In_ HWND);
+#endif
 BOOL WINAPI RemoveMenu(_In_ HMENU, _In_ UINT, _In_ UINT);
 HANDLE WINAPI RemovePropA(_In_ HWND, _In_ LPCSTR);
 HANDLE WINAPI RemovePropW(_In_ HWND, _In_ LPCWSTR);
