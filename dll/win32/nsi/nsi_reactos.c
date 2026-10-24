@@ -193,6 +193,8 @@ static DWORD finish_enumeration(struct nsi_enumerate_all_ex *params, UINT_PTR to
     return ERROR_MORE_DATA;
 }
 
+static ULONG64 interface_speed(UINT index);
+
 static BOOL fill_ndis_entry(UINT index, NET_LUID *key, struct nsi_ndis_ifinfo_rw *rw,
                             struct nsi_ndis_ifinfo_dynamic *dynamic, struct nsi_ndis_ifinfo_static *stat)
 {
@@ -242,8 +244,9 @@ static BOOL fill_ndis_entry(UINT index, NET_LUID *key, struct nsi_ndis_ifinfo_rw
         dynamic->oper_status = oper_status(row.dwOperStatus);
         dynamic->media_conn_state = dynamic->oper_status == NET_IF_OPER_STATUS_UP ? MediaConnectStateConnected : MediaConnectStateDisconnected;
         dynamic->mtu = row.dwMtu;
-        dynamic->xmit_speed = row.dwSpeed;
-        dynamic->rcv_speed = row.dwSpeed;
+        dynamic->xmit_speed = interface_speed(index);
+        if (!dynamic->xmit_speed) dynamic->xmit_speed = row.dwSpeed;
+        dynamic->rcv_speed = dynamic->xmit_speed;
         dynamic->in_discards = row.dwInDiscards;
         dynamic->in_errors = row.dwInErrors;
         dynamic->in_octets = row.dwInOctets;
