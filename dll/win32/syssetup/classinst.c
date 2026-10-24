@@ -8,6 +8,9 @@
 
 #include "precomp.h"
 
+#include <initguid.h>
+#include <devpkey.h>
+
 #define NDEBUG
 #include <debug.h>
 
@@ -174,6 +177,7 @@ StorageCoInstaller(
     ULONG ulStatus, ulProblem;
     DWORD dwBufferSize = 0;
     PWSTR pszDeviceDescription;
+    DEVPROPTYPE PropertyType;
     CONFIGRET ret;
 
     DPRINT("StorageCoInstaller(%u %p %p %p)\n",
@@ -211,6 +215,39 @@ StorageCoInstaller(
 
         if (ulStatus & DN_ROOT_ENUMERATED)
             return ERROR_SUCCESS;
+
+        SetupDiGetDevicePropertyW(DeviceInfoSet,
+                                  DeviceInfoData,
+                                  &DEVPKEY_Device_BusReportedDeviceDesc,
+                                  &PropertyType,
+                                  NULL,
+                                  0,
+                                  &dwBufferSize,
+                                  0);
+        if (dwBufferSize != 0)
+        {
+            pszDeviceDescription = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dwBufferSize);
+            if (pszDeviceDescription == NULL)
+                return ERROR_SUCCESS;
+
+            if (SetupDiGetDevicePropertyW(DeviceInfoSet,
+                                          DeviceInfoData,
+                                          &DEVPKEY_Device_BusReportedDeviceDesc,
+                                          &PropertyType,
+                                          (PBYTE)pszDeviceDescription,
+                                          dwBufferSize,
+                                          NULL,
+                                          0) &&
+                PropertyType == DEVPROP_TYPE_STRING &&
+                pszDeviceDescription[0] != UNICODE_NULL)
+            {
+                Context->PrivateData = (PVOID)pszDeviceDescription;
+                return ERROR_DI_POSTPROCESSING_REQUIRED;
+            }
+
+            HeapFree(GetProcessHeap(), 0, pszDeviceDescription);
+            dwBufferSize = 0;
+        }
 
         /* Get the device description size */
         SetupDiGetDeviceRegistryPropertyW(DeviceInfoSet,
