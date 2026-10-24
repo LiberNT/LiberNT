@@ -1148,7 +1148,8 @@ SampInitializeSAM(VOID)
                                szComment,
                                AccountDomainInfo->DomainSid,
                                DOMAIN_USER_RID_GUEST,
-                               USER_ACCOUNT_DISABLED | USER_DONT_EXPIRE_PASSWORD | USER_NORMAL_ACCOUNT);
+                               USER_ACCOUNT_DISABLED | USER_DONT_EXPIRE_PASSWORD | USER_PASSWORD_NOT_REQUIRED |
+                               USER_NORMAL_ACCOUNT);
 
     /* Add the Guest user to the Guests alias */
     SampSetupAddMemberToGroup(hAccountDomainKey,
