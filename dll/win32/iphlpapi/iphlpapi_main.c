@@ -1418,6 +1418,11 @@ static DWORD adapters_addresses_alloc( ULONG family, ULONG flags, IP_ADAPTER_ADD
     for (i = 0; i < *count; i++)
     {
         MIB_IPINTERFACE_ROW row;
+        IP_ADAPTER_INFO dhcp;
+
+        memset( &dhcp, 0, sizeof(dhcp) );
+        getDhcpInfoForAdapter( aa[i].AdapterName, &dhcp );
+        if (dhcp.DhcpEnabled) aa[i].Flags |= IP_ADAPTER_DHCP_ENABLED;
 
         memset( &row, 0, sizeof(row) );
         row.Family = AF_INET;
