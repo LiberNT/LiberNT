@@ -5,6 +5,9 @@
 
 extern void func_action(void);
 extern void func_automation(void);
+#ifdef __REACTOS__
+extern void func_customserver(void);
+#endif
 extern void func_db(void);
 extern void func_format(void);
 extern void func_install(void);
@@ -19,6 +22,9 @@ const struct test winetest_testlist[] =
 {
     { "action", func_action },
     { "automation", func_automation },
+#ifdef __REACTOS__
+    { "customserver", func_customserver },
+#endif
     { "db", func_db },
     { "format", func_format },
     { "install", func_install },

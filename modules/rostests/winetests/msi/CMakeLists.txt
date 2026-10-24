@@ -15,6 +15,7 @@ add_importlibs(msi_selfreg advapi32 msvcrt kernel32)
 list(APPEND SOURCE
     action.c
     automation.c
+    customserver.c
     db.c
     format.c
     install.c
