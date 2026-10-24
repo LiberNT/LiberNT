@@ -19,7 +19,7 @@ if [ ! -S "$WAYLAND_DISPLAY" ]; then
     if [ -d /run/systemd/system ] && systemctl -q is-enabled lxwayland.service 2>/dev/null; then
         systemctl start lxwayland.service
     else
-        setsid /usr/bin/python3 "$LIB/lxwayland/lxwayland.py" </dev/null >/dev/null 2>&1 &
+        setsid "$LIB/lxwayland/lxwayland" </dev/null >/dev/null 2>&1 &
     fi
     i=0
     while [ ! -S "$WAYLAND_DISPLAY" ] && [ $i -lt 50 ]; do
