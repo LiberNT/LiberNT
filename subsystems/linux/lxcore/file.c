@@ -219,7 +219,7 @@ LxFileAsyncDeliver(
 
     if (Type == LX_F_OWNER_PGRP)
     {
-        LxSignalGroupInfo(Async->Instance, NULL, Owner, Signal, &Info);
+        LxSignalGroupInfo(Async->Instance, NULL, Owner, Signal, &Info, NULL, NULL);
         return;
     }
     if (Type == LX_F_OWNER_TID)

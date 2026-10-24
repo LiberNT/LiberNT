@@ -959,7 +959,8 @@ ULONG LxTtyList(_In_ PLX_INSTANCE Instance, _Out_writes_(Count) PULONG Indexes, 
 VOID LxTtyAttachControlling(_In_ PLX_PROCESS Process, _In_ PLX_TTY Tty);
 ULONG LxSignalGroup(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULONG Pgid, _In_ LONG Signal);
 ULONG LxSignalGroupInfo(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULONG Pgid, _In_ LONG Signal,
-                        _In_opt_ PLX_SIGINFO Info);
+                        _In_opt_ PLX_SIGINFO Info, _In_opt_ PLX_PROCESS Sender, _Out_opt_ PULONG Denied);
+LONG LxSignalPermitted(_In_ PLX_PROCESS Sender, _In_ PLX_PROCESS Target, _In_ LONG Signal);
 
 PLX_PROCESS LxProcessCreate(_In_ PLX_INSTANCE Instance);
 PLX_PROCESS LxProcessFork(_In_ PLX_PROCESS Parent);

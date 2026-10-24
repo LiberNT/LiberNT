@@ -1263,12 +1263,16 @@ LX_SYSCALL(LxSysPidfdSendSignal)
         Result = -LX_EINVAL;
     if ((Result == 0) && Target->Exited)
         Result = -LX_ESRCH;
+    if ((Result == 0) && !(Flags & LX_PIDFD_SIGNAL_PROCESS_GROUP))
+        Result = LxSignalPermitted(Call->Process, Target, Signal);
     if ((Result == 0) && (Signal != 0))
     {
         if (Flags & LX_PIDFD_SIGNAL_PROCESS_GROUP)
         {
-            if (LxSignalGroupInfo(Target->Instance, NULL, Target->Pgid, Signal, &Info) == 0)
-                Result = -LX_ESRCH;
+            ULONG Denied = 0;
+
+            if (LxSignalGroupInfo(Target->Instance, NULL, Target->Pgid, Signal, &Info, Call->Process, &Denied) == 0)
+                Result = (Denied != 0) ? -LX_EPERM : -LX_ESRCH;
         }
         else if (Flags & LX_PIDFD_SIGNAL_THREAD)
         {

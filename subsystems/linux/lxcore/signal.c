@@ -579,10 +579,11 @@ LxSignalQueue(
             return -LX_ESRCH;
     }
 
-    if (Signal != 0)
+    Result = LxSignalPermitted(Call->Process, Target, Signal);
+    if ((Result == 0) && (Signal != 0))
         LxSignalSend(Target, Thread, Signal, &Info);
     LxProcessDereference(Target);
-    return 0;
+    return Result;
 }
 
 LX_SYSCALL(LxSysRtSigqueueinfo)
@@ -646,7 +647,30 @@ LxSignalGroup(
     _In_ ULONG Pgid,
     _In_ LONG Signal)
 {
-    return LxSignalGroupInfo(Instance, PidNs, Pgid, Signal, NULL);
+    return LxSignalGroupInfo(Instance, PidNs, Pgid, Signal, NULL, NULL, NULL);
+}
+
+LONG
+LxSignalPermitted(
+    _In_ PLX_PROCESS Sender,
+    _In_ PLX_PROCESS Target,
+    _In_ LONG Signal)
+{
+    ULONG64 Effective;
+
+    if (Sender == Target)
+        return 0;
+    if ((Sender->Uid[1] == Target->Uid[2]) || (Sender->Uid[1] == Target->Uid[0]) ||
+        (Sender->Uid[0] == Target->Uid[2]) || (Sender->Uid[0] == Target->Uid[0]))
+    {
+        return 0;
+    }
+    Effective = (Sender->Uid[1] == 0) ? Sender->CapBounding : Sender->CapAmbient;
+    if (Effective & (1ULL << LX_CAP_KILL))
+        return 0;
+    if ((Signal == LX_SIGCONT) && (Sender->Sid == Target->Sid))
+        return 0;
+    return -LX_EPERM;
 }
 
 ULONG
@@ -655,7 +679,9 @@ LxSignalGroupInfo(
     _In_opt_ PLX_NS PidNs,
     _In_ ULONG Pgid,
     _In_ LONG Signal,
-    _In_opt_ PLX_SIGINFO SignalInfo)
+    _In_opt_ PLX_SIGINFO SignalInfo,
+    _In_opt_ PLX_PROCESS Sender,
+    _Out_opt_ PULONG Denied)
 {
     PLX_PROCESS Targets[128];
     PLX_PROCESS Self = NULL;
@@ -705,11 +731,22 @@ LxSignalGroupInfo(
             Info.Child.Pid = (LONG)Current->Process->Pid;
     }
 
-    Total = Count;
+    Total = 0;
+    if (Denied != NULL)
+        *Denied = 0;
     for (Index = 0; Index < Count; Index++)
     {
-        if (Signal != 0)
-            LxSignalSend(Targets[Index], NULL, Signal, &Info);
+        if ((Sender != NULL) && (LxSignalPermitted(Sender, Targets[Index], Signal) != 0))
+        {
+            if (Denied != NULL)
+                (*Denied)++;
+        }
+        else
+        {
+            if (Signal != 0)
+                LxSignalSend(Targets[Index], NULL, Signal, &Info);
+            Total++;
+        }
         LxProcessDereference(Targets[Index]);
     }
     if (Self != NULL)

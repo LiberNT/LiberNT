@@ -1599,26 +1599,34 @@ LX_SYSCALL(LxSysKill)
     LONG Signal = (LONG)Call->Args[1];
     PLX_PROCESS Target;
     LX_SIGINFO Info;
+    ULONG Sent, Denied = 0;
 
     if ((Signal < 0) || (Signal > LX_NSIG))
         return -LX_EINVAL;
 
-    if (Pid == 0)
-        return LxSignalGroup(Instance, NULL, Call->Process->Pgid, Signal) ? 0 : -LX_ESRCH;
     if (Pid == -1)
-        return LxSignalGroup(Instance, Call->Process->PidNs, 0, Signal) ? 0 : -LX_ESRCH;
-    if (Pid < -1)
     {
-        ULONG Pgid = LxNrToGlobal(Call->Process, (ULONG)-Pid);
+        Sent = LxSignalGroupInfo(Instance, Call->Process->PidNs, 0, Signal, NULL, Call->Process, &Denied);
+        return ((Sent + Denied) != 0) ? 0 : -LX_ESRCH;
+    }
+    if (Pid <= 0)
+    {
+        ULONG Pgid = (Pid == 0) ? Call->Process->Pgid : LxNrToGlobal(Call->Process, (ULONG)-Pid);
 
         if (Pgid == 0)
             return -LX_ESRCH;
-        return LxSignalGroup(Instance, NULL, Pgid, Signal) ? 0 : -LX_ESRCH;
+        Sent = LxSignalGroupInfo(Instance, NULL, Pgid, Signal, NULL, Call->Process, &Denied);
+        return (Sent != 0) ? 0 : ((Denied != 0) ? -LX_EPERM : -LX_ESRCH);
     }
 
     Target = LxProcessLookupNr(Call->Process, (ULONG)Pid);
     if (Target == NULL)
         return -LX_ESRCH;
+    if (LxSignalPermitted(Call->Process, Target, Signal) != 0)
+    {
+        LxProcessDereference(Target);
+        return -LX_EPERM;
+    }
 
     if ((Signal != 0) && !Target->Exited)
     {
@@ -1662,6 +1670,11 @@ LxSignalThread(
     {
         LxProcessDereference(Owner);
         return -LX_ESRCH;
+    }
+    if (LxSignalPermitted(Call->Process, Owner, Signal) != 0)
+    {
+        LxProcessDereference(Owner);
+        return -LX_EPERM;
     }
 
     if (Signal != 0)
