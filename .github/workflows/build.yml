@@ -177,3 +177,52 @@ jobs:
 
     - name: Check build dependencies
       run: python3 sdk/tools/depcheck.py ${{steps.configure.outputs.outdir}} --mode depfiles --nested --fail-on-gaps
+
+  build-msvc:
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            vsarch: amd64
+          - arch: i386
+            vsarch: amd64_x86
+          - arch: arm64
+            vsarch: amd64_arm64
+      fail-fast: false
+    runs-on: windows-2025
+    steps:
+    - name: Source checkout
+      uses: actions/checkout@v6
+
+    - name: Set up the MSVC build environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{matrix.vsarch}}
+
+    - name: Install host build tools
+      shell: pwsh
+      run: |
+        choco install -y --no-progress ninja winflexbison3
+        python -m pip install --upgrade mako pyyaml packaging
+        # LiberNT's CMake looks for flex/bison; winflexbison3 ships them as
+        # win_flex/win_bison, so expose both names on PATH.
+        $tools = "C:\ProgramData\chocolatey\lib\winflexbison3\tools"
+        if (-not (Test-Path "$tools\win_flex.exe")) { $tools = Split-Path (Get-Command win_flex).Source }
+        Copy-Item "$tools\win_flex.exe" "$tools\flex.exe" -Force
+        Copy-Item "$tools\win_bison.exe" "$tools\bison.exe" -Force
+        echo "$tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Configure
+      id: configure
+      shell: cmd
+      run: |
+        call configure.cmd /arch=${{matrix.arch}} -DREACTOS_TARGET_NT=0xA00 -DDIAGDATA_CHANNEL= -DENABLE_CCACHE=0
+        echo outdir=output-VS-${{matrix.arch}}-debug>> "%GITHUB_OUTPUT%"
+
+    - name: Build submodules
+      shell: cmd
+      run: ninja -C ${{steps.configure.outputs.outdir}} submodules
+
+    - name: Build
+      shell: cmd
+      run: ninja -C ${{steps.configure.outputs.outdir}} -k0
