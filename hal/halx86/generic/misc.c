@@ -286,6 +286,8 @@ HalGetProcessorIdByNtNumber(
 }
 
 #ifdef _M_AMD64
+#undef KeGetCurrentIrql
+#undef KeRaiseIrqlToSynchLevel
 #undef KfLowerIrql
 #undef KeRaiseIrql
 #undef KeAcquireSpinLock

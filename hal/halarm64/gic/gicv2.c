@@ -90,8 +90,8 @@ HalpInitGicv2CpuInterface(VOID)
      * ISB ensures the barrier effects are synchronized with the
      * instruction stream.
      */
-    __asm__ __volatile__("dsb sy" ::: "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_DSB(SY);
+    ARM64_ISB();
 
     DPRINT1("[arm64][GICv2] CPU interface initialized (PMR=0xFF, CTLR=0x%x)\n",
             HalpGicv2ForceGroup0 ? 0x1 : 0x3);
@@ -163,7 +163,7 @@ HalpInitGicv2SgiPpi(VOID)
         DPRINT1("[arm64][GICv2] Restored PPI enables: 0x%08lx\n", SavedEnables);
     }
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
     DPRINT1("[arm64][GICv2] SGI/PPI bank configured with preserved enables\n");
 }
 
@@ -240,7 +240,7 @@ HalpGicv2EndInterrupt(
     *HalpMmio((ULONG_PTR)HalpGiccBase, GICC_EOIR) = IntId & 0x1FFF;
 
     /* Memory barrier to ensure EOI completes */
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 /*
@@ -277,7 +277,7 @@ HalpGicv2SetSpiTarget(
                                                 GICD_ITARGETSR + IntId);
     *TargetRegister = (UCHAR)CpuTarget;
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 /*
@@ -306,7 +306,7 @@ HalpGicv2RegisterCpuTarget(
     }
 
     HalpGicv2CpuTarget[ProcessorNumber] = CpuTarget;
-    __asm__ __volatile__("dmb ishst" ::: "memory");
+    ARM64_DMB(ISHST);
     DPRINT("[arm64][GICv2] CPU %lu target bit 0x%02x\n",
            ProcessorNumber,
            CpuTarget);
@@ -347,7 +347,7 @@ HalpGicv2ConfigureSpiAffinity(
         if (ProcessorCount > sizeof(KAFFINITY) * 8)
             ProcessorCount = sizeof(KAFFINITY) * 8;
 
-        __asm__ __volatile__("dmb ishld" ::: "memory");
+        ARM64_DMB(ISHLD);
         for (Cpu = 0; Cpu < ProcessorCount; Cpu++)
         {
             CpuTarget = HalpGicv2CpuTarget[Cpu];
@@ -410,6 +410,6 @@ HalpInitGicv2SpiTargets(
         *HalpMmio((ULONG_PTR)HalpGicdBase, GICD_ITARGETSR + (i & ~3)) = TargetWord;
     }
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
     DPRINT("[arm64][GICv2] SPI targets set to CPU0\n");
 }

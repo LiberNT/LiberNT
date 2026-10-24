@@ -22,13 +22,27 @@ PUBLIC _HalpSleepSaveContext
 PUBLIC _HalpSleepReadXcr0
 PUBLIC _HalpSleepResume
 
+#ifdef _USE_ML
+#define OFF_PROCSTATE (_HalpWakeEntryProcState - _HalpWakeEntry16)
+#define OFF_HIGH (_HalpWakeEntryHigh - _HalpWakeEntry16)
+#define OFF_PAGEDIR (_HalpWakeEntryPageDir - _HalpWakeEntry16)
+#define OFF_CR4 (_HalpWakeEntryCr4 - _HalpWakeEntry16)
+#define OFF_GDTR (_HalpWakeEntryGdtr - _HalpWakeEntry16)
+#else
 .equ OFF_PROCSTATE, _HalpWakeEntryProcState - _HalpWakeEntry16
 .equ OFF_HIGH, _HalpWakeEntryHigh - _HalpWakeEntry16
 .equ OFF_PAGEDIR, _HalpWakeEntryPageDir - _HalpWakeEntry16
 .equ OFF_CR4, _HalpWakeEntryCr4 - _HalpWakeEntry16
 .equ OFF_GDTR, _HalpWakeEntryGdtr - _HalpWakeEntry16
+#endif
 
+#ifdef _USE_ML
+.text$wk16 SEGMENT use16 PUBLIC 'CODE'
+    ASSUME nothing
+    .586P
+#else
 .code16
+#endif
 _HalpWakeEntry16:
     cli
     cld
@@ -43,7 +57,11 @@ _HalpWakeEntry16:
     mov es, ax
     mov ss, ax
 
+#ifdef _USE_ML
+    data32 lgdt fword ptr cs:[OFF_GDTR]
+#else
     data32 lgdt cs:[OFF_GDTR]
+#endif
 
     mov eax, cr0
     and eax, HEX(DFFFFFFF)
@@ -58,9 +76,33 @@ _HalpWakeEntry16:
 _HalpWakeEntryJump32:
     .long 0
     .word HEX(08)
+
+.align 4
+_HalpWakeEntryProcState:
+    .long 0
+_HalpWakeEntryHigh:
+    .long 0
+_HalpWakeEntryPageDir:
+    .long 0
+_HalpWakeEntryCr4:
+    .long 0
+_HalpWakeEntryGdtr:
+    .word 0
+    .long 0
+    .word 0
+.align 8
+_HalpWakeEntryGdt:
+    .quad HEX(0000000000000000)
+    .quad HEX(00CF9A000000FFFF)
+    .quad HEX(00CF92000000FFFF)
+#ifdef _USE_ML
+.text$wk16 ENDS
+.text$wk32 SEGMENT use32 PUBLIC 'CODE'
+#else
 .endcode16
 
 .code32
+#endif
 _HalpWakeEntryProt32:
     mov ax, HEX(10)
     mov ds, ax
@@ -81,25 +123,13 @@ _HalpWakeEntryProt32:
     mov eax, [ebp + OFF_HIGH]
     jmp eax
 
-.align 4
-_HalpWakeEntryProcState:
-    .long 0
-_HalpWakeEntryHigh:
-    .long 0
-_HalpWakeEntryPageDir:
-    .long 0
-_HalpWakeEntryCr4:
-    .long 0
-_HalpWakeEntryGdtr:
-    .word 0
-    .long 0
-    .word 0
-.align 8
-_HalpWakeEntryGdt:
-    .quad HEX(0000000000000000)
-    .quad HEX(00CF9A000000FFFF)
-    .quad HEX(00CF92000000FFFF)
 _HalpWakeEntry16End:
+#ifdef _USE_ML
+.text$wk32 ENDS
+.code
+.686P
+.XMM
+#endif
 
 _HalpSleepSaveContext:
     mov ecx, [esp + 4]
@@ -179,8 +209,8 @@ _HalpSleepResume:
     and eax, HEX(FFFFFFF7)
     mov cr0, eax
 
-    lgdt [esi + PsSpecialRegisters + SrGdtr + 2]
-    lidt [esi + PsSpecialRegisters + SrIdtr + 2]
+    lgdt lXdtPrefix [esi + PsSpecialRegisters + SrGdtr + 2]
+    lidt lXdtPrefix [esi + PsSpecialRegisters + SrIdtr + 2]
 
     push KGDT_R0_CODE
     push offset HalpSleepResumeKernelCs

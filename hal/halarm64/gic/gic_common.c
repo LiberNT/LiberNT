@@ -160,7 +160,7 @@ HalpArm64GetCacheLineSize(VOID)
         return HalpGicCacheLineSize;
 
     /* Read Cache Type Register */
-    __asm__ __volatile__("mrs %0, ctr_el0" : "=r"(Ctr));
+    Ctr = ARM64_READ_SYSREG(CTR_EL0);
 
     /* DminLine is bits [19:16], gives log2 of words in minimum D-cache line */
     Line = 4u << ((ULONG)((Ctr >> 16) & 0xF));
@@ -203,11 +203,11 @@ HalpArm64CleanDcacheRange(
     for (ULONG_PTR Address = Start; Address < End; Address += Line)
     {
         /* DC CVAC - Clean by VA to Point of Coherency */
-        __asm__ __volatile__("dc cvac, %0" :: "r"(Address) : "memory");
+        ARM64_DC(CVAC, Address);
     }
 
     /* Ensure all cache operations complete before continuing */
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
 }
 
 /*
@@ -237,16 +237,16 @@ HalpArm64CleanInvalidateDcacheRange(
     End = (ULONG_PTR)Base + Length;
 
     /* Barrier before invalidate to ensure ordering */
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
 
     for (ULONG_PTR Address = Start; Address < End; Address += Line)
     {
         /* DC CIVAC - Clean and Invalidate by VA to Point of Coherency */
-        __asm__ __volatile__("dc civac, %0" :: "r"(Address) : "memory");
+        ARM64_DC(CIVAC, Address);
     }
 
     /* Ensure all cache operations complete */
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
 }
 
 VOID
@@ -265,14 +265,14 @@ HalpArm64InvalidateDcacheRange(
     Start = (ULONG_PTR)Base & ~((ULONG_PTR)Line - 1);
     End = (ULONG_PTR)Base + Length;
 
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
 
     for (ULONG_PTR Address = Start; Address < End; Address += Line)
     {
-        __asm__ __volatile__("dc ivac, %0" :: "r"(Address) : "memory");
+        ARM64_DC(IVAC, Address);
     }
 
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
 }
 
 /*
@@ -369,7 +369,7 @@ HalpArm64ProgramGicTrigger(
         }
 
         *RegPtr = NewVal;
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
 
         DPRINT("[arm64][GIC] PPI %lu: GICR_ICFGR1 0x%08lx -> 0x%08lx (%s)\n",
                IntId, OldVal, NewVal, EdgeTriggered ? "edge" : "level");
@@ -394,7 +394,7 @@ HalpArm64ProgramGicTrigger(
         }
 
         *RegPtr = NewVal;
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
 
         DPRINT("[arm64][GIC] SPI %lu: GICD_ICFGR[0x%03lx] 0x%08lx -> 0x%08lx (%s)\n",
                IntId, RegOffset, OldVal, NewVal, EdgeTriggered ? "edge" : "level");
@@ -461,7 +461,8 @@ HalpArm64SendSgi(
             return;
 
         *HalpMmio((ULONG_PTR)HalpGicdBase, GICD_SGIR) = (SgiId & 0xF) | (TargetList << 16);
-        __asm__ __volatile__("dsb sy; sev" ::: "memory");
+        ARM64_DSB(SY);
+        ARM64_SEV();
     }
 }
 
@@ -484,9 +485,9 @@ HalpArm64SendSgiSelf(
     }
     else
     {
-        __asm__ __volatile__("dsb ishst" ::: "memory");
+        ARM64_DSB(ISHST);
         *HalpMmio((ULONG_PTR)HalpGicdBase, GICD_SGIR) = (2u << 24) | (SgiId & 0xF);
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
     }
 }
 
@@ -521,7 +522,7 @@ HalpArm64ClearSelfSgi(
         Reg[SgiId & 3] = 0xFF;
     }
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 VOID
@@ -592,7 +593,7 @@ HalpArm64RependInterrupt(
         *HalpMmio((ULONG_PTR)HalpGicdBase, GICD_ISPENDR + (IntId / 32) * 4) = (1u << (IntId % 32));
     }
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 /*
@@ -739,7 +740,7 @@ HalpGicEnableInterrupt(
         HalpGicItsEnableLpi(IntId);
     }
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 /*
@@ -805,7 +806,7 @@ HalpGicDisableInterrupt(
         HalpGicItsDisableLpi(IntId);
     }
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 /*
@@ -892,7 +893,7 @@ HalpGicSetInterruptPriority(
     Value |= ((Priority & 0xFF) << Shift);
     *RegPtr = Value;
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 /*

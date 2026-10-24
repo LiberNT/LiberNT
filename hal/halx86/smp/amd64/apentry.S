@@ -36,6 +36,10 @@ PUBLIC HalpSleepSaveContext
 PUBLIC HalpSleepReadXcr0
 PUBLIC HalpSleepResume
 
+#ifdef _USE_ML
+.code64
+#include "apentry16.inc"
+#else
 .equ OFF_PROCSTATE, HalpAPEntryProcState - HalpAPEntry16
 .equ OFF_HIGH, HalpAPEntryHigh - HalpAPEntry16
 .equ OFF_PMLROOT, HalpAPEntryPmlRoot - HalpAPEntry16
@@ -151,6 +155,7 @@ HalpAPEntryGdt:
     .quad HEX(00CF92000000FFFF)
     .quad HEX(00209A0000000000)
 HalpAPEntry16End:
+#endif
 
 .code64
 HalpAPEntry64:
@@ -163,8 +168,8 @@ HalpAPEntry64:
     mov cr0, rax
 
     /* Load the real GDT/IDT (KDESCRIPTOR: +6 skips Pad[3] to reach Limit) */
-    lgdt [rcx + PsSpecialRegisters + SrGdtr + 6]
-    lidt [rcx + PsSpecialRegisters + SrIdtr + 6]
+    lgdt lXdtPrefix [rcx + PsSpecialRegisters + SrGdtr + 6]
+    lidt lXdtPrefix [rcx + PsSpecialRegisters + SrIdtr + 6]
 
     /* Reload the segment registers */
     mov ax, KGDT64_R0_DATA
@@ -297,8 +302,8 @@ HalpSleepResume:
     mov rax, [rcx + PsSpecialRegisters + SrCr0]
     mov cr0, rax
 
-    lgdt [rcx + PsSpecialRegisters + SrGdtr + 6]
-    lidt [rcx + PsSpecialRegisters + SrIdtr + 6]
+    lgdt lXdtPrefix [rcx + PsSpecialRegisters + SrGdtr + 6]
+    lidt lXdtPrefix [rcx + PsSpecialRegisters + SrIdtr + 6]
 
     mov ax, KGDT64_R0_DATA
     mov ds, ax

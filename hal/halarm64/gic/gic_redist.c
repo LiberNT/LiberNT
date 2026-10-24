@@ -646,7 +646,7 @@ HalpInitGicRedistributor(
     {
         if (((*Waker) & GICR_WAKER_CHILDREN_ASLEEP) == 0)
             break;
-        __asm__ __volatile__("yield");
+        ARM64_YIELD();
     }
 
     if (Spins == 0)
@@ -690,7 +690,7 @@ HalpInitGicRedistributor(
         (1u << HAL_ARM64_SGI_FREEZE);
 
     /* Memory barrier before enabling interrupts */
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 
     /*
      * Register this CPU's MPIDR for dynamic IRQ affinity routing.
@@ -853,7 +853,7 @@ HalpGicrProgramVpropbaser(
 
     HalpMmioWrite64(VlpiBase, GICR_VPROPBASER, Vpropbaser);
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 
     DPRINT("[arm64][GICR] Programmed VPROPBASER for CPU %lu: 0x%llx\n", Cpu, Vpropbaser);
 
@@ -937,7 +937,7 @@ HalpGicrProgramVpendbaser(
             DPRINT1("[arm64][GICR] Warning: VPENDBASER Dirty bit did not clear for CPU %lu\n", Cpu);
         }
 
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
 
         DPRINT("[arm64][GICR] Cleared VPENDBASER for CPU %lu (PendingLast=%u)\n",
                Cpu, (Vpendbaser & GICR_VPENDBASER_PendingLast) ? 1 : 0);
@@ -1012,7 +1012,7 @@ HalpGicrProgramVpendbaser(
 
     HalpMmioWrite64(VlpiBase, GICR_VPENDBASER, Vpendbaser);
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 
     DPRINT("[arm64][GICR] Programmed VPENDBASER for CPU %lu, vPE %lu: 0x%llx\n",
            Cpu, Vpe->VpeId, Vpendbaser);

@@ -2234,7 +2234,8 @@ HalpArm64LockInterruptState(VOID)
     ULONG64 Daif;
 
     /* IRQL lowering also takes this lock; mask IRQs without changing IRQL. */
-    __asm__ __volatile__("mrs %0, daif\n\tmsr daifset, #3" : "=r"(Daif) :: "memory");
+    Daif = ARM64_READ_SYSREG(DAIF);
+    ARM64_DAIFSET(3);
     while (InterlockedCompareExchange(&HalpArm64InterruptStateLock, 1, 0) != 0)
         YieldProcessor();
     return Daif;
@@ -2245,7 +2246,7 @@ VOID
 HalpArm64UnlockInterruptState(_In_ ULONG64 Daif)
 {
     InterlockedExchange(&HalpArm64InterruptStateLock, 0);
-    __asm__ __volatile__("msr daif, %0" :: "r"(Daif) : "memory");
+    ARM64_WRITE_SYSREG(DAIF, Daif);
 }
 
 static
@@ -2413,14 +2414,15 @@ HalpArm64FlushDroppedLpis(
         ULONG Lpi = 0;
         ULONG64 Daif;
 
-        __asm__ __volatile__("mrs %0, daif\n\tmsr daifset, #3" : "=r"(Daif) :: "memory");
+        Daif = ARM64_READ_SYSREG(DAIF);
+        ARM64_DAIFSET(3);
         if (HalpArm64DroppedLpiCount[Cpu] != 0)
         {
             ULONG Slot = HalpArm64DroppedLpiCount[Cpu] - 1;
             Lpi = HalpArm64DroppedLpi[Cpu][Slot];
             HalpArm64DroppedLpiCount[Cpu] = Slot;
         }
-        __asm__ __volatile__("msr daif, %0" :: "r"(Daif) : "memory");
+        ARM64_WRITE_SYSREG(DAIF, Daif);
         if (Lpi == 0)
             break;
         HalpGicItsRependLpi(Lpi);
@@ -2458,6 +2460,22 @@ HalpGicv3SendSgi(
  * These invoke SMC or HVC based on the FADT ARM_BOOT_ARCH flags.
  * The choice is indicated by HalpArm64PsciInfo.UseHvc.
  */
+#if defined(_MSC_VER) && !defined(__clang__)
+LONG
+HalpArm64PsciSmc(
+    _In_ ULONGLONG FunctionId,
+    _In_ ULONGLONG Arg0,
+    _In_ ULONGLONG Arg1,
+    _In_ ULONGLONG Arg2);
+
+LONG
+HalpArm64PsciHvc(
+    _In_ ULONGLONG FunctionId,
+    _In_ ULONGLONG Arg0,
+    _In_ ULONGLONG Arg1,
+    _In_ ULONGLONG Arg2);
+#endif
+
 static LONG
 HalpPsciCallSmc(
     _In_ ULONGLONG FunctionId,
@@ -2465,6 +2483,9 @@ HalpPsciCallSmc(
     _In_ ULONGLONG Arg1,
     _In_ ULONGLONG Arg2)
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+    return HalpArm64PsciSmc(FunctionId, Arg0, Arg1, Arg2);
+#else
     register ULONGLONG x0 __asm__("x0") = FunctionId;
     register ULONGLONG x1 __asm__("x1") = Arg0;
     register ULONGLONG x2 __asm__("x2") = Arg1;
@@ -2479,6 +2500,7 @@ HalpPsciCallSmc(
     );
 
     return (LONG)x0;
+#endif
 }
 
 static LONG
@@ -2488,6 +2510,9 @@ HalpPsciCallHvc(
     _In_ ULONGLONG Arg1,
     _In_ ULONGLONG Arg2)
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+    return HalpArm64PsciHvc(FunctionId, Arg0, Arg1, Arg2);
+#else
     register ULONGLONG x0 __asm__("x0") = FunctionId;
     register ULONGLONG x1 __asm__("x1") = Arg0;
     register ULONGLONG x2 __asm__("x2") = Arg1;
@@ -2502,6 +2527,7 @@ HalpPsciCallHvc(
     );
 
     return (LONG)x0;
+#endif
 }
 
 static LONG
@@ -2543,8 +2569,8 @@ HalpPsciCpuOn(
     LONG Result;
     ULONGLONG PendingIsr;
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
-    __asm__ __volatile__("mrs %0, isr_el1" : "=r"(PendingIsr));
+    ARM64_DSB(SY);
+    PendingIsr = ARM64_READ_SYSREG(ISR_EL1);
     if (PendingIsr & (1ULL << 8))
     {
         DPRINT1("[arm64][HAL] PSCI CPU_ON aborted: SError pending (ISR_EL1=0x%llx)\n",
@@ -2577,15 +2603,17 @@ HalpPsciSystemReset(VOID)
             HalpArm64PsciInfo.UseHvc ? "HVC" : "SMC");
 
     /* Ensure all writes are visible before reset */
-    __asm__ __volatile__("dsb sy; isb" ::: "memory");
+    ARM64_DSB(SY);
+    ARM64_ISB();
 
     HalpPsciCall(PSCI_FN_SYSTEM_RESET, 0, 0, 0);
 
     /* Should not reach here */
-    __asm__ __volatile__("dsb sy; wfi");
+    ARM64_DSB(SY);
+    ARM64_WFI();
     for (;;)
     {
-        __asm__ __volatile__("wfi");
+        ARM64_WFI();
     }
 }
 
@@ -2600,15 +2628,17 @@ HalpPsciSystemOff(VOID)
             HalpArm64PsciInfo.UseHvc ? "HVC" : "SMC");
 
     /* Ensure all writes are visible before power off */
-    __asm__ __volatile__("dsb sy; isb" ::: "memory");
+    ARM64_DSB(SY);
+    ARM64_ISB();
 
     HalpPsciCall(PSCI_FN_SYSTEM_OFF, 0, 0, 0);
 
     /* Should not reach here */
-    __asm__ __volatile__("dsb sy; wfi");
+    ARM64_DSB(SY);
+    ARM64_WFI();
     for (;;)
     {
-        __asm__ __volatile__("wfi");
+        ARM64_WFI();
     }
 }
 
@@ -2620,6 +2650,7 @@ HalpArm64GetDmaAdapter(
     _In_ PDEVICE_DESCRIPTION DeviceDescription,
     _Out_ PULONG NumberOfMapRegisters);
 
+CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 HalInitSystem(
@@ -2713,8 +2744,8 @@ HalInitSystem(
         /* Disable identity mapping for BOTH GICv2 and GICv3 */
         SwitchIrql = KfRaiseIrql(HIGH_LEVEL);
         HalpUseIdentityMapping = FALSE;
-        __asm__ __volatile__("dsb sy" ::: "memory");
-        __asm__ __volatile__("isb" ::: "memory");
+        ARM64_DSB(SY);
+        ARM64_ISB();
         KfLowerIrql(SwitchIrql);
 
         if (!HalpLoggedGicOnce)
@@ -2733,8 +2764,8 @@ HalInitSystem(
 
                 OldIrql = KfRaiseIrql(HIGH_LEVEL);
                 HalpWriteIccIgrpen1(1); /* Enable Group1 interrupt delivery */
-                __asm__ __volatile__("dsb sy" ::: "memory");
-                __asm__ __volatile__("isb" ::: "memory");
+                ARM64_DSB(SY);
+                ARM64_ISB();
                 KfLowerIrql(OldIrql);
             }
         }
@@ -3300,7 +3331,7 @@ HalAllocateCommonBuffer(
     if (CacheType == MmCached && !HalpArm64DmaCoherency.SystemCoherent)
     {
         HalpArm64CleanInvalidateDcacheRange(VirtualAddress, Length);
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
     }
 
     /* Track the allocation for cleanup */
@@ -3558,7 +3589,7 @@ HalDisableSystemInterrupt(
         /* LPI: disable via the ITS. */
         DPRINT1("[arm64][LPI] Disabling LPI %lu\n", Vector);
         HalpGicItsDisableLpi(Vector);
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
         return;
     }
 
@@ -3672,7 +3703,7 @@ HalEnableSystemInterrupt(
 
         HalpGicItsSetLpiPriority(Vector, priority);
         HalpGicItsEnableLpi(Vector);
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
         return TRUE;
     }
 
@@ -3979,7 +4010,7 @@ HalFlushCommonBuffer(
     }
 
     /* Data synchronization barrier to ensure completion */
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 /*
@@ -5741,10 +5772,10 @@ HalpArm64SetPmrExact(
         {
             *HalpMmio((ULONG_PTR)HalpGiccBase, GICC_PMR) = Priority;
             /* Memory barrier to ensure PMR write completes */
-            __asm__ __volatile__("dsb sy" ::: "memory");
+            ARM64_DSB(SY);
         }
     }
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_ISB();
 
     if (Cpu < MAXIMUM_PROCESSORS)
     {
@@ -5760,7 +5791,8 @@ HalSetGicPriorityMask(
     ULONG Cpu;
     ULONG64 Daif;
 
-    __asm__ __volatile__("mrs %0, daif\n\tmsr daifset, #3" : "=r"(Daif) :: "memory");
+    Daif = ARM64_READ_SYSREG(DAIF);
+    ARM64_DAIFSET(3);
     Cpu = KeGetCurrentProcessorNumber();
 
     if (Irql > HIGH_LEVEL)
@@ -5785,13 +5817,13 @@ HalSetGicPriorityMask(
         Shadow = HalpArm64PmrShadow[Cpu];
         if ((Shadow != 0) && (Shadow <= (UCHAR)(Irql + 1)))
         {
-            __asm__ __volatile__("msr daif, %0" :: "r"(Daif) : "memory");
+            ARM64_WRITE_SYSREG(DAIF, Daif);
             return;
         }
     }
 
     HalpArm64SetPmrExact(Irql);
-    __asm__ __volatile__("msr daif, %0" :: "r"(Daif) : "memory");
+    ARM64_WRITE_SYSREG(DAIF, Daif);
 }
 
 /*
@@ -5886,7 +5918,7 @@ HalInitializeProcessor(
             Sre = HalpReadIccSre();
             Sre |= 0x1; /* SRE = 1 */
             HalpWriteIccSre(Sre);
-            __asm__ __volatile__("isb" ::: "memory");
+            ARM64_ISB();
 
             HalpArm64SetPmrExact(HIGH_LEVEL);
 
@@ -5896,8 +5928,8 @@ HalInitializeProcessor(
             /* Enable Group 1 interrupt delivery */
             HalpWriteIccIgrpen1(1);
 
-            __asm__ __volatile__("dsb sy" ::: "memory");
-            __asm__ __volatile__("isb" ::: "memory");
+            ARM64_DSB(SY);
+            ARM64_ISB();
         }
     }
     else
@@ -5940,8 +5972,8 @@ HalInitializeProcessor(
             HalpArm64ProgramSgiPriorities();
 
             /* Memory barrier to ensure GICC configuration takes effect */
-            __asm__ __volatile__("dsb sy" ::: "memory");
-            __asm__ __volatile__("isb" ::: "memory");
+            ARM64_DSB(SY);
+            ARM64_ISB();
         }
         else
         {
@@ -5974,7 +6006,9 @@ NTAPI
 HalProcessorIdle(VOID)
 {
     HalpArm64SetPmrExact(KeGetCurrentIrql());
-    __asm__ __volatile__("dsb sy; isb; wfi" ::: "memory");
+    ARM64_DSB(SY);
+    ARM64_ISB();
+    ARM64_WFI();
 }
 
 #define HAL_ARM64_RTC_EARLIEST_SECONDS 1767225600UL
@@ -6305,7 +6339,8 @@ HalStartNextProcessor(
         (UINT64)LoaderBlock
     );
 
-    __asm__ __volatile__("dsb sy; isb" ::: "memory");
+    ARM64_DSB(SY);
+    ARM64_ISB();
 
     /* Check if PSCI is available */
     if (!HalpArm64PsciInfo.Present)
@@ -6375,14 +6410,17 @@ VOID
 FASTCALL
 HalSweepDcache(VOID)
 {
-    __asm__ __volatile__("dsb sy\n\tisb" ::: "memory");
+    ARM64_DSB(SY);
+    ARM64_ISB();
 }
 
 VOID
 FASTCALL
 HalSweepIcache(VOID)
 {
-    __asm__ __volatile__("ic iallu\n\tdsb sy\n\tisb" ::: "memory");
+    ARM64_IC_ALL(IALLU);
+    ARM64_DSB(SY);
+    ARM64_ISB();
 }
 
 BOOLEAN
@@ -6489,7 +6527,7 @@ IoFlushAdapterBuffers(
          * invalidating the CPU cache. A posted PCIe write may still be in
          * transit otherwise.
          */
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
 
         if (!HalpArm64FlushMdlDcacheRange(Mdl, CurrentVa, Length, WriteToDevice))
         {
@@ -6504,7 +6542,7 @@ IoFlushAdapterBuffers(
         }
 
         /* Ensure cache operations complete before returning */
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
     }
 
     /* Copy device reads back only after stale original cache lines are gone. */
@@ -6541,9 +6579,9 @@ IoFlushAdapterBuffers(
                     CopyEnd = EntryEnd < FlushEnd ? EntryEnd : FlushEnd;
                     EntryOffset = (ULONG)(CopyStart - EntryStart);
                     CopyLength = (ULONG)(CopyEnd - CopyStart + 1);
-                    __asm__ __volatile__("dsb sy" ::: "memory");
+                    ARM64_DSB(SY);
                     RtlCopyMemory((PUCHAR)Entry->OriginalVa + EntryOffset, (PUCHAR)Entry->BounceBuffer + EntryOffset, CopyLength);
-                    __asm__ __volatile__("dsb sy" ::: "memory");
+                    ARM64_DSB(SY);
                     if (!EntryOffset && CopyLength == Entry->Length)
                         Entry->CopyBackDone = TRUE;
                 }
@@ -6616,9 +6654,9 @@ IoFreeMapRegisters(
             if (!Entry->WriteToDevice && !Entry->CopyBackDone && Entry->OriginalVa && Entry->Length > 0)
             {
                 HalpArm64CleanInvalidateDcacheRange(Entry->OriginalVa, Entry->Length);
-                __asm__ __volatile__("dsb sy" ::: "memory");
+                ARM64_DSB(SY);
                 RtlCopyMemory(Entry->OriginalVa, Entry->BounceBuffer, Entry->Length);
-                __asm__ __volatile__("dsb sy" ::: "memory");
+                ARM64_DSB(SY);
             }
 
             MmFreeContiguousMemorySpecifyCache(Entry->BounceBuffer,
@@ -6822,16 +6860,16 @@ IoMapTransfer(
         {
             /* Device will read from memory - clean cache */
             for (; Aligned < End; Aligned += 64)
-                __asm__ __volatile__("dc cvac, %0" :: "r"(Aligned) : "memory");
+                ARM64_DC(CVAC, Aligned);
         }
         else
         {
             /* Device will write to memory - clean and invalidate cache */
             for (; Aligned < End; Aligned += 64)
-                __asm__ __volatile__("dc civac, %0" :: "r"(Aligned) : "memory");
+                ARM64_DC(CIVAC, Aligned);
         }
 
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
     }
 
     /* Return the actual transfer length */
@@ -6863,10 +6901,11 @@ HalReturnToFirmware(
              * We use WFI (Wait For Interrupt) which is the ARM64 way to halt.
              */
             DPRINT1("[arm64][HAL] HalReturnToFirmware: HalHaltRoutine - halting CPU\n");
-            __asm__ __volatile__("dsb sy; isb" ::: "memory");
+            ARM64_DSB(SY);
+            ARM64_ISB();
             for (;;)
             {
-                __asm__ __volatile__("wfi");
+                ARM64_WFI();
             }
             break;
 
@@ -6883,10 +6922,11 @@ HalReturnToFirmware(
             else
             {
                 DPRINT1("[arm64][HAL] HalReturnToFirmware: PSCI not available, halting instead\n");
-                __asm__ __volatile__("dsb sy; isb" ::: "memory");
+                ARM64_DSB(SY);
+                ARM64_ISB();
                 for (;;)
                 {
-                    __asm__ __volatile__("wfi");
+                    ARM64_WFI();
                 }
             }
             break;
@@ -6906,10 +6946,11 @@ HalReturnToFirmware(
             else
             {
                 DPRINT1("[arm64][HAL] HalReturnToFirmware: PSCI not available, halting instead\n");
-                __asm__ __volatile__("dsb sy; isb" ::: "memory");
+                ARM64_DSB(SY);
+                ARM64_ISB();
                 for (;;)
                 {
-                    __asm__ __volatile__("wfi");
+                    ARM64_WFI();
                 }
             }
             break;
@@ -6920,10 +6961,11 @@ HalReturnToFirmware(
              */
             DPRINT1("[arm64][HAL] HalReturnToFirmware: unknown action %d\n", Action);
             DbgBreakPoint();
-            __asm__ __volatile__("dsb sy; isb" ::: "memory");
+            ARM64_DSB(SY);
+            ARM64_ISB();
             for (;;)
             {
-                __asm__ __volatile__("wfi");
+                ARM64_WFI();
             }
             break;
     }
@@ -6931,7 +6973,7 @@ HalReturnToFirmware(
     /* Should never reach here */
     for (;;)
     {
-        __asm__ __volatile__("wfi");
+        ARM64_WFI();
     }
 }
 
@@ -7088,7 +7130,7 @@ VOID
 NTAPI
 KeFlushWriteBuffer(VOID)
 {
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
 }
 
 LARGE_INTEGER
@@ -7120,7 +7162,7 @@ KeStallExecutionProcessor(
     Ticks = (Frequency / 1000000ULL) * (ULONGLONG)MicroSeconds;
     while ((HalpReadCntvct() - Start) < Ticks)
     {
-        __asm__ __volatile__("yield");
+        ARM64_YIELD();
     }
 }
 
