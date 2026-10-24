@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <lxarchabi.h>
+
 #define LX_EPERM            1
 #define LX_ENOENT           2
 #define LX_ESRCH            3
@@ -95,17 +97,13 @@
 #define LX_O_TRUNC          01000
 #define LX_O_APPEND         02000
 #define LX_O_NONBLOCK       04000
-#define LX_O_DIRECTORY      040000
-#define LX_O_NOFOLLOW       0100000
 #define LX_O_CLOEXEC        02000000
 #define LX_O_PATH           010000000
 #define LX_O_DSYNC          010000
 #define LX_O_ASYNC          020000
-#define LX_O_DIRECT         0200000
-#define LX_O_LARGEFILE      0400000
 #define LX_O_NOATIME        01000000
 #define LX_O_SYNC           04010000
-#define LX_O_TMPFILE        020040000
+#define LX_O_TMPFILE        (020000000 | LX_O_DIRECTORY)
 
 #define LX_F_DUPFD          0
 #define LX_F_GETFD          1

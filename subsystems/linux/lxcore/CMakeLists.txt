@@ -22,11 +22,10 @@ list(APPEND SOURCE
     unistd.c
     vfs.c)
 
-if(ARCH STREQUAL "arm64")
-    list(APPEND SOURCE arm64/lxarch.c)
-endif()
+list(APPEND SOURCE ${ARCH}/lxarch.c)
 
 add_library(lxcore MODULE ${SOURCE} lxcore.rc)
+target_include_directories(lxcore PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${ARCH})
 target_link_libraries(lxcore ${PSEH_LIB})
 set_module_type(lxcore kernelmodedriver)
 add_importlibs(lxcore ntoskrnl hal ksecdd)

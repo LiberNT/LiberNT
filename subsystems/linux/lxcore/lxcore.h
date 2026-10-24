@@ -38,8 +38,6 @@
 #define LX_VMA_VIEW         0x20000000
 #define LX_VMA_HEAP         0x40000000
 #define LX_VMA_STACK        0x80000000
-#define LX_PIE_BASE         0x0000555555550000ULL
-#define LX_INTERP_BASE      0x00007FF000000000ULL
 #define LX_MAX_SYMLINKS     40
 
 #define LX_SYSCALL_NO_RESULT ((LONG64)0x7FFFFFFFFFFFFFFFLL)
@@ -772,8 +770,11 @@ BOOLEAN LxArchEmulateInstruction(_In_ PEXCEPTION_RECORD ExceptionRecord, _Inout_
 VOID LxArchSetExecContext(_Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame, _In_ ULONG64 Pc, _In_ ULONG64 Sp);
 VOID LxArchCaptureContext(_In_ PKTRAP_FRAME TrapFrame, _In_opt_ PKEXCEPTION_FRAME ExceptionFrame, _Out_ PCONTEXT Context);
 VOID LxArchSetForkContext(_Inout_ PCONTEXT Context, _In_ ULONG64 StackPointer);
-VOID LxArchSetThreadPointer(_In_ ULONG64 Value);
-ULONG64 LxArchGetThreadPointer(VOID);
+VOID LxArchSetThreadPointer(_Inout_ PKTRAP_FRAME TrapFrame, _In_ ULONG64 Value);
+ULONG64 LxArchGetThreadPointer(_In_ PKTRAP_FRAME TrapFrame);
+ULONG64 LxArchImageBase(_In_ BOOLEAN Interpreter);
+LONG64 LxArchReadSigaction(_In_ ULONG64 Address, _Out_ PLX_SIGACTION Action);
+LONG64 LxArchWriteSigaction(_In_ ULONG64 Address, _In_ PLX_SIGACTION Action);
 ULONG64 LxArchGetUserPc(_In_ PKTRAP_FRAME TrapFrame);
 PLX_SYSCALL_ENTRY LxArchSyscallEntry(_In_ ULONG Number);
 PLX_SYSCALL_ENTRY LxGenericSyscallEntry(_In_ ULONG Number);

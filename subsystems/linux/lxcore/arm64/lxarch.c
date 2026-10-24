@@ -214,15 +214,20 @@ LxArchSetForkContext(
 
 VOID
 LxArchSetThreadPointer(
+    _Inout_ PKTRAP_FRAME TrapFrame,
     _In_ ULONG64 Value)
 {
+    UNREFERENCED_PARAMETER(TrapFrame);
     __asm__ __volatile__("msr tpidr_el0, %0" : : "r"(Value) : "memory");
 }
 
 ULONG64
-LxArchGetThreadPointer(VOID)
+LxArchGetThreadPointer(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     ULONG64 Value;
+
+    UNREFERENCED_PARAMETER(TrapFrame);
 
     __asm__ __volatile__("mrs %0, tpidr_el0" : "=r"(Value));
     return Value;
@@ -401,4 +406,27 @@ LxArchSignalReturn(
     *Mask = *(PULONG64)(Buffer + LX_A64_UC_SIGMASK);
     ExFreePoolWithTag(Buffer, LX_TAG);
     return 0;
+}
+
+ULONG64
+LxArchImageBase(
+    _In_ BOOLEAN Interpreter)
+{
+    return Interpreter ? 0x00007FF000000000ULL : 0x0000555555550000ULL;
+}
+
+LONG64
+LxArchReadSigaction(
+    _In_ ULONG64 Address,
+    _Out_ PLX_SIGACTION Action)
+{
+    return LxCopyFromUser(Action, Address, sizeof(*Action));
+}
+
+LONG64
+LxArchWriteSigaction(
+    _In_ ULONG64 Address,
+    _In_ PLX_SIGACTION Action)
+{
+    return LxCopyToUser(Address, Action, sizeof(*Action));
 }
