@@ -1805,6 +1805,12 @@ VOID AhciInterruptHandler(__in PAHCI_PORT_EXTENSION PortExtension)
             PortExtension->RecoveryNcqLogError = TRUE;
         }
 
+        if (PxIS.PCS || PxIS.PRCS)
+        {
+            StorPortWriteRegisterUlong(AdapterExtension,
+                                       &PortExtension->Port->SERR,
+                                       StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SERR));
+        }
         StorPortWriteRegisterUlong(AdapterExtension, &PortExtension->Port->IS, PxIS.Status);
         StorPortWriteRegisterUlong(AdapterExtension, AdapterExtension->IS, (1U << PortExtension->PortNumber));
         return;
@@ -1885,6 +1891,12 @@ VOID AhciInterruptHandler(__in PAHCI_PORT_EXTENSION PortExtension)
      * completion subset leaves PCS/PRCS or a non-fatal status asserted and
      * turns one event into a shared-interrupt storm.
      */
+    if (PxIS.PCS || PxIS.PRCS)
+    {
+        StorPortWriteRegisterUlong(AdapterExtension,
+                                   &PortExtension->Port->SERR,
+                                   StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SERR));
+    }
     StorPortWriteRegisterUlong(AdapterExtension, &PortExtension->Port->IS, PxIS.Status);
     StorPortWriteRegisterUlong(AdapterExtension, AdapterExtension->IS, (1U << PortExtension->PortNumber));
 
