@@ -309,6 +309,15 @@ int OpenType_apply_GSUB_lookup(const void *table, unsigned int lookup_index, WOR
 unsigned int OpenType_apply_GPOS_lookup(const ScriptCache *psc, const OUTLINETEXTMETRICW *otm,
         const LOGFONTW *logfont, const SCRIPT_ANALYSIS *analysis, int *advance, unsigned int lookup_index,
         const WORD *glyphs, unsigned int glyph_index, unsigned int glyph_count, GOFFSET *goffset);
+#ifdef __REACTOS__
+void OpenType_GSUB_SubstituteSingleGlyph(const void *table, const LoadedFeature *feature, LONG param, WORD *glyph);
+void OpenType_GPOS_PositionSingleGlyph(const ScriptCache *script_cache, const LoadedFeature *feature, WORD glyph,
+                                       int *advance, GOFFSET *goffset);
+void SHAPE_SubstituteSingleGlyph(HDC hdc, ScriptCache *psc, OPENTYPE_TAG script, OPENTYPE_TAG language,
+                                 OPENTYPE_TAG tag, LONG param, WORD *glyph);
+void SHAPE_PositionSingleGlyph(HDC hdc, ScriptCache *psc, OPENTYPE_TAG script, OPENTYPE_TAG language,
+                               OPENTYPE_TAG tag, WORD glyph, int *advance, GOFFSET *goffset);
+#endif
 HRESULT OpenType_GetFontScriptTags(ScriptCache *psc, OPENTYPE_TAG searchingFor, int cMaxTags,
                                    OPENTYPE_TAG *pScriptTags, int *pcTags);
 HRESULT OpenType_GetFontLanguageTags(ScriptCache *psc, OPENTYPE_TAG script_tag, OPENTYPE_TAG searchingFor,
