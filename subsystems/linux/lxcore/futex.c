@@ -1137,10 +1137,7 @@ LX_SYSCALL(LxSysGetRobustList)
         if (Target == NULL)
             return -LX_ESRCH;
         Head = Target->RobustList;
-        if ((Call->Process->Uid[1] != 0) && (Owner->Uid[0] != Call->Process->Uid[0]))
-            Result = -LX_EPERM;
-        else
-            Result = 0;
+        Result = LxPtraceMayRead(Call->Process, Owner) ? 0 : -LX_EPERM;
         LxProcessDereference(Owner);
         if (Result != 0)
             return Result;

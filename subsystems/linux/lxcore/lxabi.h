@@ -704,14 +704,43 @@ typedef struct _LX_MSGINFO
 #define LX_PKEY_ACCESS_MASK     0x0F
 #define LX_UIO_MAXIOV           1024
 
+#define LX_CAP_CHOWN            0
 #define LX_CAP_DAC_OVERRIDE     1
+#define LX_CAP_DAC_READ_SEARCH  2
 #define LX_CAP_FOWNER           3
+#define LX_CAP_FSETID           4
 #define LX_CAP_KILL             5
+#define LX_CAP_SETGID           6
+#define LX_CAP_SETUID           7
+#define LX_CAP_SETPCAP          8
+#define LX_CAP_LINUX_IMMUTABLE  9
+#define LX_CAP_NET_ADMIN        12
+#define LX_CAP_IPC_LOCK         14
+#define LX_CAP_IPC_OWNER        15
+#define LX_CAP_SYS_CHROOT       18
 #define LX_CAP_SYS_PTRACE       19
 #define LX_CAP_SYS_ADMIN        21
+#define LX_CAP_SYS_BOOT         22
 #define LX_CAP_SYS_RESOURCE     24
 #define LX_CAP_SYS_TIME         25
+#define LX_CAP_MKNOD            27
+#define LX_CAP_MAC_OVERRIDE     32
+#define LX_CAP_BPF              39
 #define LX_CAP_CHECKPOINT_RESTORE 40
+#define LX_CAP_LAST_CAP         40
+#define LX_CAP_FULL_SET         ((1ULL << (LX_CAP_LAST_CAP + 1)) - 1)
+#define LX_CAP_FS_SET           ((1ULL << LX_CAP_CHOWN) | (1ULL << LX_CAP_MKNOD) | (1ULL << LX_CAP_DAC_OVERRIDE) | \
+                                 (1ULL << LX_CAP_DAC_READ_SEARCH) | (1ULL << LX_CAP_FOWNER) | (1ULL << LX_CAP_FSETID) | \
+                                 (1ULL << LX_CAP_MAC_OVERRIDE) | (1ULL << LX_CAP_LINUX_IMMUTABLE))
+
+#define LX_SECBIT_NOROOT                0x001
+#define LX_SECBIT_NO_SETUID_FIXUP       0x004
+#define LX_SECBIT_KEEP_CAPS             0x010
+#define LX_SECBIT_KEEP_CAPS_LOCKED      0x020
+#define LX_SECBIT_NO_CAP_AMBIENT_RAISE  0x040
+#define LX_SECURE_ALL_BITS              0x555
+#define LX_SECURE_ALL_LOCKS             0xAAA
+#define LX_SECURE_ALL_UNPRIVILEGED      0x500
 
 #define LX_USB_SPEED_LOW            1
 #define LX_USB_SPEED_FULL           2

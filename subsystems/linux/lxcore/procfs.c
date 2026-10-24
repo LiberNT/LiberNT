@@ -798,14 +798,12 @@ LxWritePidTimensOffsets(
     PLX_NS Ns;
     LONG64 Offsets[2];
     BOOLEAN Set[2] = { FALSE, FALSE };
-    ULONG64 Effective;
     LONG Error = 0;
 
     UNREFERENCED_PARAMETER(Length);
     if (Current == NULL)
         return -LX_ESRCH;
-    Effective = (Current->Process->Uid[1] == 0) ? Current->Process->CapBounding : Current->Process->CapAmbient;
-    if (!(Effective & (1ULL << LX_CAP_SYS_TIME)))
+    if (!LxCapable(Current->Process, LX_CAP_SYS_TIME))
         return -LX_EPERM;
     Process = LxProcessLookup(Current->Process->Instance, (ULONG)(ULONG_PTR)File->HandlerContext);
     if (Process == NULL)
@@ -979,7 +977,7 @@ LxGenPidStatus(
 {
     PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
     PLX_NS ProcNs;
-    ULONG64 Ignored = 0, Caught = 0, Blocked = 0, Effective;
+    ULONG64 Ignored = 0, Caught = 0, Blocked = 0;
     ULONG Count = KeQueryActiveProcessorCount(NULL);
     PLIST_ENTRY Entry;
     CHAR Comm[16];
@@ -1015,7 +1013,6 @@ LxGenPidStatus(
     }
     ExReleaseFastMutex(&Process->Lock);
 
-    Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
     ProcNs = LxProcPidNs(Self, Synth);
     LxTextPrintf(Text,
                  "Name:\t%s\nUmask:\t%04lo\nState:\t%s\nTgid:\t%lu\nNgid:\t0\nPid:\t%lu\nPPid:\t%lu\nTracerPid:\t0\n"
@@ -1089,11 +1086,12 @@ LxGenPidStatus(
                  Process->Exited ? 1L : (LONG)Process->ThreadCount);
     LxTextPrintf(Text,
                  "SigPnd:\t%016llx\nShdPnd:\t%016llx\nSigBlk:\t%016llx\nSigIgn:\t%016llx\nSigCgt:\t%016llx\n"
-                 "CapInh:\t0000000000000000\nCapPrm:\t%016llx\nCapEff:\t%016llx\nCapBnd:\t%016llx\nCapAmb:\t%016llx\n"
+                 "CapInh:\t%016llx\nCapPrm:\t%016llx\nCapEff:\t%016llx\nCapBnd:\t%016llx\nCapAmb:\t%016llx\n"
                  "NoNewPrivs:\t%u\nSeccomp:\t0\nSeccomp_filters:\t0\nSpeculation_Store_Bypass:\tthread vulnerable\n"
                  "SpeculationIndirectBranch:\tunknown\nCpus_allowed:\t%llx\nCpus_allowed_list:\t0-%lu\n"
                  "Mems_allowed:\t1\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t0\nnonvoluntary_ctxt_switches:\t0\n",
-                 0ULL, (ULONG64)Process->Pending, Blocked, Ignored, Caught, Effective, Effective,
+                 0ULL, (ULONG64)Process->Pending, Blocked, Ignored, Caught, Process->CapInheritable,
+                 Process->CapPermitted, Process->CapEffective,
                  Process->CapBounding, Process->CapAmbient, Process->NoNewPrivs ? 1U : 0U,
                  (Count >= 64) ? MAXULONG64 : ((1ULL << Count) - 1), Count - 1);
     LxProcessDereference(Process);
@@ -3673,10 +3671,8 @@ LxSynthOpen(
         if (((Synth.Id == LxProcFdLink) || (Synth.Id == LxProcMapFileLink)) && !(Flags & LX_O_NOFOLLOW))
         {
             PLX_PROCESS Target = LxProcessLookup(Process->Instance, Synth.Pid);
-            ULONG64 Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
-
-            if ((Synth.Id == LxProcMapFileLink) &&
-                !(Effective & ((1ULL << LX_CAP_CHECKPOINT_RESTORE) | (1ULL << LX_CAP_SYS_ADMIN))))
+            if ((Synth.Id == LxProcMapFileLink) && !LxCapable(Process, LX_CAP_CHECKPOINT_RESTORE) &&
+                !LxCapable(Process, LX_CAP_SYS_ADMIN))
             {
                 if (Target != NULL)
                     LxProcessDereference(Target);

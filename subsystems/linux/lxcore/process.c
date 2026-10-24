@@ -334,7 +334,8 @@ LxProcessCreate(
     Process->Umask = 022;
     Process->Dumpable = 1;
     Process->ExitSignal = LX_SIGCHLD;
-    Process->CapBounding = ((1ULL << 41) - 1) & ~(1ULL << LX_CAP_SYS_TIME);
+    Process->CapBounding = LX_CAP_FULL_SET & ~(1ULL << LX_CAP_SYS_TIME);
+    Process->CapPermitted = Process->CapEffective = Process->CapBounding;
     Process->StartTime = (LONG64)KeQueryInterruptTime();
     LxProcessDefaultLimits(Process->Limits);
     LxNsAttachRoot(Process, Instance);
@@ -383,7 +384,10 @@ LxProcessFork(
     Process->GroupCount = Parent->GroupCount;
     RtlCopyMemory(Process->Groups, Parent->Groups, sizeof(Process->Groups));
     Process->NoNewPrivs = Parent->NoNewPrivs;
-    Process->KeepCaps = Parent->KeepCaps;
+    Process->SecureBits = Parent->SecureBits;
+    Process->CapInheritable = Parent->CapInheritable;
+    Process->CapPermitted = Parent->CapPermitted;
+    Process->CapEffective = Parent->CapEffective;
     Process->CapBounding = Parent->CapBounding;
     Process->CapAmbient = Parent->CapAmbient;
     Process->Dumpable = Parent->Dumpable;

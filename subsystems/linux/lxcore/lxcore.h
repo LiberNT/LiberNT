@@ -482,8 +482,11 @@ struct _LX_PROCESS
     ULONG Groups[32];
     ULONG Dumpable;
     BOOLEAN NoNewPrivs;
-    BOOLEAN KeepCaps;
     BOOLEAN Execed;
+    ULONG SecureBits;
+    ULONG64 CapInheritable;
+    ULONG64 CapPermitted;
+    ULONG64 CapEffective;
     ULONG64 CapBounding;
     ULONG64 CapAmbient;
     ULONG ExitSignal;
@@ -511,6 +514,15 @@ struct _LX_PROCESS
     LONG NextTimerId;
     volatile LONG Membarrier;
 };
+
+typedef struct _LX_CRED_SAVE
+{
+    ULONG Uid[3];
+    ULONG Gid[3];
+    ULONG Fsuid;
+    ULONG Fsgid;
+    ULONG64 CapPermitted;
+} LX_CRED_SAVE, *PLX_CRED_SAVE;
 
 typedef struct _LX_EXEC_REQUEST
 {
@@ -961,6 +973,18 @@ ULONG LxSignalGroup(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULON
 ULONG LxSignalGroupInfo(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULONG Pgid, _In_ LONG Signal,
                         _In_opt_ PLX_SIGINFO Info, _In_opt_ PLX_PROCESS Sender, _Out_opt_ PULONG Denied);
 LONG LxSignalPermitted(_In_ PLX_PROCESS Sender, _In_ PLX_PROCESS Target, _In_ LONG Signal);
+
+BOOLEAN LxCapable(_In_ PLX_PROCESS Process, _In_ ULONG Capability);
+BOOLEAN LxInGroup(_In_ PLX_PROCESS Process, _In_ ULONG Gid);
+ULONG LxCredMakeId(_In_ PLX_PROCESS Process, _In_ BOOLEAN Group, _In_ ULONG Id);
+VOID LxCredSave(_In_ PLX_PROCESS Process, _Out_ PLX_CRED_SAVE Save);
+VOID LxCredFixSetuid(_Inout_ PLX_PROCESS Process, _In_ PLX_CRED_SAVE Old, _In_ BOOLEAN FileSystem);
+VOID LxCredCommit(_Inout_ PLX_PROCESS Process, _In_ PLX_CRED_SAVE Old);
+VOID LxCredExec(_Inout_ PLX_PROCESS Process, _In_ PLX_CRED_SAVE Old);
+LONG LxCredSetCapabilities(_Inout_ PLX_PROCESS Process, _In_ ULONG64 Effective, _In_ ULONG64 Permitted,
+                           _In_ ULONG64 Inheritable);
+LONG LxCredSetSecureBits(_Inout_ PLX_PROCESS Process, _In_ ULONG64 Bits);
+BOOLEAN LxPtraceMayRead(_In_ PLX_PROCESS Caller, _In_ PLX_PROCESS Target);
 
 PLX_PROCESS LxProcessCreate(_In_ PLX_INSTANCE Instance);
 PLX_PROCESS LxProcessFork(_In_ PLX_PROCESS Parent);

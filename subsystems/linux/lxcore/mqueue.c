@@ -118,9 +118,7 @@ LxMqPrivileged(
     _In_ PLX_PROCESS Process,
     _In_ ULONG Capability)
 {
-    ULONG64 Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
-
-    return (Effective & (1ULL << Capability)) != 0;
+    return LxCapable(Process, Capability);
 }
 
 static

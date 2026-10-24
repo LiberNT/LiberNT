@@ -656,8 +656,6 @@ LxSignalPermitted(
     _In_ PLX_PROCESS Target,
     _In_ LONG Signal)
 {
-    ULONG64 Effective;
-
     if (Sender == Target)
         return 0;
     if ((Sender->Uid[1] == Target->Uid[2]) || (Sender->Uid[1] == Target->Uid[0]) ||
@@ -665,8 +663,7 @@ LxSignalPermitted(
     {
         return 0;
     }
-    Effective = (Sender->Uid[1] == 0) ? Sender->CapBounding : Sender->CapAmbient;
-    if (Effective & (1ULL << LX_CAP_KILL))
+    if (LxCapable(Sender, LX_CAP_KILL))
         return 0;
     if ((Signal == LX_SIGCONT) && (Sender->Sid == Target->Sid))
         return 0;

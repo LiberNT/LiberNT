@@ -960,7 +960,6 @@ LxPidAllocate(
     _Out_writes_(LX_PIDNS_MAX_LEVEL) PULONG Numbers)
 {
     PLX_NS PidNs = Process->PidNs, Ns = Process->PidNs;
-    ULONG64 Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
     ULONG Depth;
 
     if (SetTidCount > PidNs->Level + 1)
@@ -971,7 +970,7 @@ LxPidAllocate(
             return -LX_EINVAL;
         if ((Ns->Level > 0) && (SetTid[Depth] != 1) && !Ns->Pid.HasInit)
             return -LX_EINVAL;
-        if (!(Effective & ((1ULL << LX_CAP_CHECKPOINT_RESTORE) | (1ULL << LX_CAP_SYS_ADMIN))))
+        if (!LxCapable(Process, LX_CAP_CHECKPOINT_RESTORE) && !LxCapable(Process, LX_CAP_SYS_ADMIN))
             return -LX_EPERM;
     }
     if (SetTidCount > PidNs->Level)
@@ -1013,9 +1012,8 @@ LxPidNsSetLastPid(
     _In_ ULONG Value)
 {
     PLX_NS PidNs = Process->PidNs;
-    ULONG64 Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
 
-    if (!(Effective & ((1ULL << LX_CAP_CHECKPOINT_RESTORE) | (1ULL << LX_CAP_SYS_ADMIN))))
+    if (!LxCapable(Process, LX_CAP_CHECKPOINT_RESTORE) && !LxCapable(Process, LX_CAP_SYS_ADMIN))
         return -LX_EPERM;
     if (Value >= LX_PID_MAX)
         return -LX_EINVAL;
@@ -1219,7 +1217,7 @@ LX_SYSCALL(LxSysUnshare)
     }
     if (Flags & LX_CLONE_NEWUSER)
         return -LX_EINVAL;
-    if ((Flags & NsFlags) && (Process->Uid[1] != 0))
+    if ((Flags & NsFlags) && !LxCapable(Process, LX_CAP_SYS_ADMIN))
         return -LX_EPERM;
     if ((Flags & (LX_CLONE_THREAD | LX_CLONE_SIGHAND | LX_CLONE_VM)) && (Process->ThreadCount > 1))
         return -LX_EINVAL;
@@ -1306,7 +1304,7 @@ LX_SYSCALL(LxSysSetns)
     PLX_NS Ns;
     LONG Error = 0;
 
-    if (Process->Uid[1] != 0)
+    if (!LxCapable(Process, LX_CAP_SYS_ADMIN))
         return -LX_EPERM;
     File = LxFdGet(Process, (LONG)Call->Args[0]);
     if (File == NULL)

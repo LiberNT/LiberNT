@@ -558,14 +558,15 @@ LxApplyRequestUser(
     _In_ PLX_EXEC_REQUEST Request)
 {
     ULONG Count = min(Request->GroupCount, (ULONG)ARRAYSIZE(Process->Groups));
+    LX_CRED_SAVE Old;
 
     ExAcquireFastMutex(&Process->Lock);
+    LxCredSave(Process, &Old);
     Process->Uid[0] = Process->Uid[1] = Process->Uid[2] = Process->Fsuid = Request->Uid;
     Process->Gid[0] = Process->Gid[1] = Process->Gid[2] = Process->Fsgid = Request->Gid;
     Process->GroupCount = Count;
     RtlCopyMemory(Process->Groups, Request->Groups, Count * sizeof(ULONG));
-    if (Request->Uid != 0)
-        Process->CapAmbient = 0;
+    LxCredFixSetuid(Process, &Old, FALSE);
     ExReleaseFastMutex(&Process->Lock);
 }
 
@@ -698,6 +699,7 @@ LxExecImage(
     ULONG64 StackPointer, Entry, Device;
     ULONG Depth, Mode, FileUid, FileGid;
     BOOLEAN SetUid = FALSE, SetGid = FALSE;
+    LX_CRED_SAVE Old;
     LONG Error;
     LONG Sig;
 
@@ -785,16 +787,12 @@ LxExecImage(
         if (Process->SigAction[Sig].Handler != LX_SIG_IGN)
             RtlZeroMemory(&Process->SigAction[Sig], sizeof(Process->SigAction[Sig]));
     }
-    if ((SetUid && (FileUid != Process->Uid[1])) || (SetGid && (FileGid != Process->Gid[1])))
-        Process->Dumpable = 0;
-    if (SetUid || SetGid)
-        Process->CapAmbient = 0;
+    LxCredSave(Process, &Old);
     if (SetUid)
         Process->Uid[1] = FileUid;
     if (SetGid)
         Process->Gid[1] = FileGid;
-    Process->Uid[2] = Process->Fsuid = Process->Uid[1];
-    Process->Gid[2] = Process->Fsgid = Process->Gid[1];
+    LxCredExec(Process, &Old);
     ExReleaseFastMutex(&Process->Lock);
 
     Error = LxElfMap(Process, &Main, LxArchImageBase(FALSE), &MainInfo);

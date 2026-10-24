@@ -1550,7 +1550,18 @@ LxUnixParseControl(
                     break;
                 }
                 RtlCopyMemory(&Supplied, Message + 1, sizeof(Supplied));
-                if ((Supplied.Pid != LxPidNr(Process, Process)) && (Process->Uid[1] != 0))
+                Supplied.Uid = LxCredMakeId(Process, FALSE, Supplied.Uid);
+                Supplied.Gid = LxCredMakeId(Process, TRUE, Supplied.Gid);
+                if ((Supplied.Uid == MAXULONG) || (Supplied.Gid == MAXULONG))
+                {
+                    Result = -LX_EINVAL;
+                    break;
+                }
+                if (((Supplied.Pid != LxPidNr(Process, Process)) && !LxCapable(Process, LX_CAP_SYS_ADMIN)) ||
+                    ((Supplied.Uid != Process->Uid[0]) && (Supplied.Uid != Process->Uid[1]) &&
+                     (Supplied.Uid != Process->Uid[2]) && !LxCapable(Process, LX_CAP_SETUID)) ||
+                    ((Supplied.Gid != Process->Gid[0]) && (Supplied.Gid != Process->Gid[1]) &&
+                     (Supplied.Gid != Process->Gid[2]) && !LxCapable(Process, LX_CAP_SETGID)))
                 {
                     Result = -LX_EPERM;
                     break;

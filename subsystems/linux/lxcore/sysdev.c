@@ -2092,7 +2092,6 @@ LxSysDevRead(
     _Out_ PULONG Length)
 {
     PLX_SYSDEV_TREE Tree;
-    ULONG64 Effective;
     ULONG Index;
     LONG Error = -LX_ENOENT;
 
@@ -2110,8 +2109,7 @@ LxSysDevRead(
         PLX_SYSDEV_NODE Node = &Tree->Nodes[Index];
         ULONG Size = Node->Length;
 
-        Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
-        if (!(Effective & (1ULL << LX_CAP_SYS_ADMIN)))
+        if (!LxCapable(Process, LX_CAP_SYS_ADMIN))
             Size = min(Size, Node->Public);
         *Data = LxAlloc(Size + 1);
         if (*Data != NULL)

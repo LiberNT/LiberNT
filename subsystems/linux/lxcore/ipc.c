@@ -371,7 +371,7 @@ LxIpcCheck(
         Granted >>= 6;
     else if (LxIpcInGroup(Process, Object->Cgid) || LxIpcInGroup(Process, Object->Gid))
         Granted >>= 3;
-    if ((Requested & ~Granted & 0007) && (Process->Uid[1] != 0))
+    if ((Requested & ~Granted & 0007) && !LxCapable(Process, LX_CAP_IPC_OWNER))
         return -LX_EACCES;
     return 0;
 }
@@ -382,7 +382,7 @@ LxIpcOwner(
     _In_ PLX_PROCESS Process,
     _In_ PLX_IPC_OBJECT Object)
 {
-    return (Process->Uid[1] == 0) || (Process->Uid[1] == Object->Uid) || (Process->Uid[1] == Object->Cuid);
+    return (Process->Uid[1] == Object->Uid) || (Process->Uid[1] == Object->Cuid) || LxCapable(Process, LX_CAP_SYS_ADMIN);
 }
 
 static
@@ -797,7 +797,7 @@ LX_SYSCALL(LxSysShmctl)
                 Result = -LX_EINVAL;
             else if (!LxIpcOwner(Process, &Shm->Object))
                 Result = -LX_EPERM;
-            else if ((Command == LX_SHM_LOCK) && (Process->Uid[1] != 0) &&
+            else if ((Command == LX_SHM_LOCK) && !LxCapable(Process, LX_CAP_IPC_LOCK) &&
                      (Process->Limits[LX_RLIMIT_MEMLOCK].Cur == 0))
                 Result = -LX_EPERM;
             else if (Command == LX_IPC_SET)
@@ -1794,7 +1794,7 @@ LX_SYSCALL(LxSysMsgctl)
                 Result = -LX_EPERM;
             else if (Command == LX_IPC_SET)
             {
-                if ((Stat.Qbytes > LX_MSGMNB) && (Process->Uid[1] != 0))
+                if ((Stat.Qbytes > LX_MSGMNB) && !LxCapable(Process, LX_CAP_SYS_RESOURCE))
                 {
                     Result = -LX_EPERM;
                 }

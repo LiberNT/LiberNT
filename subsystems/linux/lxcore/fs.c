@@ -1100,7 +1100,7 @@ LX_SYSCALL(LxSysChroot)
     LX_NODE Node;
     LONG Error;
 
-    if (Call->Process->Uid[1] != 0)
+    if (!LxCapable(Call->Process, LX_CAP_SYS_CHROOT))
         return -LX_EPERM;
     Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW | LX_LOOKUP_DIRECTORY, &Node);
     if (Error != 0)
@@ -1118,7 +1118,7 @@ LX_SYSCALL(LxSysPivotRoot)
     LX_NODE NewRoot, PutOld;
     LONG Error;
 
-    if (Call->Process->Uid[1] != 0)
+    if (!LxCapable(Call->Process, LX_CAP_SYS_ADMIN))
         return -LX_EPERM;
     Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW | LX_LOOKUP_DIRECTORY, &NewRoot);
     if (Error != 0)
@@ -2000,7 +2000,7 @@ LX_SYSCALL(LxSysUmount2)
 
     if (Call->Args[1] & ~(ULONG64)(LX_MNT_FORCE | LX_MNT_DETACH | LX_MNT_EXPIRE | LX_UMOUNT_NOFOLLOW))
         return -LX_EINVAL;
-    if (Call->Process->Uid[1] != 0)
+    if (!LxCapable(Call->Process, LX_CAP_SYS_ADMIN))
         return -LX_EPERM;
     Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0],
                          (Call->Args[1] & LX_UMOUNT_NOFOLLOW) ? 0 : LX_LOOKUP_FOLLOW, &Target);
@@ -2141,24 +2141,29 @@ LxXattrPermission(
     _In_ PLX_XATTR_TARGET Target,
     _In_ BOOLEAN Write)
 {
-    BOOLEAN Root = (Process->Uid[1] == 0);
+    BOOLEAN Admin = LxCapable(Process, LX_CAP_SYS_ADMIN);
     ULONG Type = Target->Type & LX_S_IFMT;
     ULONG Bits;
 
     if (strncmp(Name, "security.", 9) == 0)
-        return (Write && !Root) ? -LX_EPERM : 0;
+        return (Write && !Admin) ? -LX_EPERM : 0;
     if (strncmp(Name, "trusted.", 8) == 0)
-        return Root ? 0 : (Write ? -LX_EPERM : -LX_ENODATA);
+        return Admin ? 0 : (Write ? -LX_EPERM : -LX_ENODATA);
     if (strncmp(Name, "user.", 5) != 0)
         return -LX_EOPNOTSUPP;
 
     if ((Type != LX_S_IFREG) && (Type != LX_S_IFDIR))
         return Write ? -LX_EPERM : -LX_ENODATA;
-    if (Root || (Target->Mode == MAXULONG))
+    if (Target->Mode == MAXULONG)
         return 0;
-    if ((Type == LX_S_IFDIR) && (Target->Mode & LX_S_ISVTX) && (Process->Uid[1] != Target->Uid))
-        return Write ? -LX_EPERM : -LX_ENODATA;
-    if (Process->Uid[1] == Target->Uid)
+    if ((Type == LX_S_IFDIR) && (Target->Mode & LX_S_ISVTX) && Write && (Process->Fsuid != Target->Uid) &&
+        !LxCapable(Process, LX_CAP_FOWNER))
+    {
+        return -LX_EPERM;
+    }
+    if (LxCapable(Process, LX_CAP_DAC_OVERRIDE) || (!Write && LxCapable(Process, LX_CAP_DAC_READ_SEARCH)))
+        return 0;
+    if (Process->Fsuid == Target->Uid)
         Bits = Target->Mode >> 6;
     else if (LxXattrInGroup(Process, Target->Gid))
         Bits = Target->Mode >> 3;
@@ -2371,7 +2376,7 @@ LxXattrListCommon(
         if (Offset + 4 + EntryName + EntryValue > Length)
             break;
         if (!((EntryName >= 8) && (RtlCompareMemory(Blob + Offset + 4, "trusted.", 8) == 8) &&
-              (Call->Process->Uid[1] != 0)))
+              !LxCapable(Call->Process, LX_CAP_SYS_ADMIN)))
         {
             RtlCopyMemory(Names + Total, Blob + Offset + 4, EntryName);
             Total += EntryName;
@@ -2583,7 +2588,6 @@ LX_SYSCALL(LxSysRemovexattrat)
 #define LX_MAX_HANDLE_SZ            128
 #define LX_FILEID_INO32_GEN         1
 #define LX_FILEID_INVALID           0xFF
-#define LX_CAP_DAC_READ_SEARCH      2
 
 static
 LONG
@@ -2849,7 +2853,7 @@ LX_SYSCALL(LxSysOpenByHandleAt)
     ULONG Flags = (ULONG)Call->Args[2];
     PLX_PROCESS Process = Call->Process;
     ULONG Header[2], Data[2];
-    ULONG64 Effective, FileId, Check = 0;
+    ULONG64 FileId, Check = 0;
     PLX_MOUNT Mount;
     PLX_FILE File;
     PLX_TTY Tty;
@@ -2858,8 +2862,7 @@ LX_SYSCALL(LxSysOpenByHandleAt)
     LONG64 Result;
     LONG Error;
 
-    Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
-    if (!(Effective & (1ULL << LX_CAP_DAC_READ_SEARCH)))
+    if (!LxCapable(Process, LX_CAP_DAC_READ_SEARCH))
         return -LX_EPERM;
     Result = LxCopyFromUser(Header, Call->Args[1], sizeof(Header));
     if (Result != 0)

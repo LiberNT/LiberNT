@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     bpf.c
+    cred.c
     driver.c
     exec.c
     fdobj.c

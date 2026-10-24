@@ -528,8 +528,11 @@ LxBpfProgLoad(
 
     if (Type != LX_BPF_PROG_TYPE_CGROUP_DEVICE)
         return -LX_EINVAL;
-    if (Call->Process->Uid[1] != 0)
+    if ((!LxCapable(Call->Process, LX_CAP_BPF) && !LxCapable(Call->Process, LX_CAP_SYS_ADMIN)) ||
+        (!LxCapable(Call->Process, LX_CAP_NET_ADMIN) && !LxCapable(Call->Process, LX_CAP_SYS_ADMIN)))
+    {
         return -LX_EPERM;
+    }
     if ((Count == 0) || (Count > LX_BPF_MAXINSNS))
         return -LX_E2BIG;
 
@@ -653,8 +656,6 @@ LxBpfAttach(
 
     if (AttachType != LX_BPF_CGROUP_DEVICE)
         return -LX_EINVAL;
-    if (Call->Process->Uid[1] != 0)
-        return -LX_EPERM;
     if (!Detach)
     {
         if (Flags & ~(LX_BPF_F_ALLOW_OVERRIDE | LX_BPF_F_ALLOW_MULTI | LX_BPF_F_REPLACE))
@@ -822,7 +823,7 @@ LxBpfQuery(
         return -LX_EINVAL;
     if (QueryFlags & ~LX_BPF_F_QUERY_EFFECTIVE)
         return -LX_EINVAL;
-    if (Call->Process->Uid[1] != 0)
+    if (!LxCapable(Call->Process, LX_CAP_NET_ADMIN) && !LxCapable(Call->Process, LX_CAP_SYS_ADMIN))
         return -LX_EPERM;
     Cgroup = LxBpfCgroupFromFd(Call->Process, (LONG)TargetFd);
     if (Cgroup == NULL)
@@ -977,7 +978,7 @@ LX_SYSCALL(LxSysBpf)
 
         case LX_BPF_PROG_GET_NEXT_ID:
         case LX_BPF_PROG_GET_FD_BY_ID:
-            if (Call->Process->Uid[1] != 0)
+            if (!LxCapable(Call->Process, LX_CAP_SYS_ADMIN))
                 return -LX_EPERM;
             RtlCopyMemory(&Id, Attr, 4);
             Prog = LxBpfFindById(Id, Command == LX_BPF_PROG_GET_NEXT_ID);
