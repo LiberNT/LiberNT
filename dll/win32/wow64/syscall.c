@@ -1319,12 +1319,14 @@ static void thread_init(void)
 static BOOL init_native_thread( CONTEXT *context )
 {
     TEB32 *teb32 = NtCurrentTeb32();
+    TEB *teb = NtCurrentTeb();
     WOW64_CPU_INIT *cpu;
     XSAVE_FORMAT fxsave;
     IMAGE_NT_HEADERS *nt;
-    ULONG_PTR pc = host_context_pc( context ), start, arg;
-    SIZE_T size = 0x100000;
-    void *base = NULL;
+    IMAGE_NT_HEADERS32 *nt32;
+    ULONG_PTR pc = host_context_pc( context ), start, arg, top;
+    SIZE_T size, reserve, commit, guard_size = 0x1000;
+    void *base = NULL, *commit_base, *guard_base;
 
     if (teb32->Tib.StackBase) return TRUE;
     start = pc == (ULONG_PTR)RtlUserThreadStart ? host_context_param( context, 0 ) : pc;
@@ -1332,11 +1334,32 @@ static BOOL init_native_thread( CONTEXT *context )
     if (start > 0xffffffff) return FALSE;
     if (RtlPcToFileHeader( (void *)start, &base ) && (nt = RtlImageNtHeader( base )) &&
         nt->FileHeader.Machine != IMAGE_FILE_MACHINE_I386) return FALSE;
+    reserve = (ULONG_PTR)teb->Tib.StackBase - (ULONG_PTR)teb->DeallocationStack;
+    commit = guard_size;
+    nt32 = (IMAGE_NT_HEADERS32 *)RtlImageNtHeader( teb->Peb->ImageBaseAddress );
+    if (nt32 && nt32->FileHeader.Machine == IMAGE_FILE_MACHINE_I386)
+    {
+        reserve = max( reserve, nt32->OptionalHeader.SizeOfStackReserve );
+        commit = max( commit, nt32->OptionalHeader.SizeOfStackCommit );
+    }
+    commit = ((commit + guard_size - 1) & ~(guard_size - 1)) + guard_size;
+    reserve = max( reserve, commit + 2 * guard_size );
+    reserve = (reserve + 0xffff) & ~0xffff;
+
     base = NULL;
-    if (NtAllocateVirtualMemory( GetCurrentProcess(), &base, get_zero_bits( 0 ), &size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE ))
+    size = reserve;
+    if (NtAllocateVirtualMemory( GetCurrentProcess(), &base, get_zero_bits( 0 ), &size, MEM_RESERVE, PAGE_READWRITE ))
         NtTerminateThread( GetCurrentThread(), STATUS_NO_MEMORY );
 
-    cpu = (WOW64_CPU_INIT *)(((ULONG_PTR)base + size - sizeof(*cpu)) & ~15);
+    top = (ULONG_PTR)base + size;
+    commit_base = (void *)(top - commit);
+    if (NtAllocateVirtualMemory( GetCurrentProcess(), &commit_base, 0, &commit, MEM_COMMIT, PAGE_READWRITE ))
+        NtTerminateThread( GetCurrentThread(), STATUS_NO_MEMORY );
+    guard_base = (void *)(top - commit - guard_size);
+    if (NtAllocateVirtualMemory( GetCurrentProcess(), &guard_base, 0, &guard_size, MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD ))
+        NtTerminateThread( GetCurrentThread(), STATUS_NO_MEMORY );
+
+    cpu = (WOW64_CPU_INIT *)((top - sizeof(*cpu)) & ~15);
     cpu->Cpu.Machine = IMAGE_FILE_MACHINE_I386;
     cpu->Context.ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS;
     cpu->Context.FloatSave.ControlWord = 0x27f;
@@ -1358,7 +1381,7 @@ static BOOL init_native_thread( CONTEXT *context )
     cpu->Context.SegSs = 0x2b;
 
     teb32->Tib.StackBase = PtrToUlong( cpu );
-    teb32->Tib.StackLimit = PtrToUlong( base );
+    teb32->Tib.StackLimit = PtrToUlong( commit_base );
     teb32->DeallocationStack = PtrToUlong( base );
     NtCurrentTeb()->TlsSlots[WOW64_TLS_CPURESERVED] = cpu;
     return TRUE;
