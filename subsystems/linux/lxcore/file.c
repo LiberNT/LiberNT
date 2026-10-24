@@ -1239,6 +1239,10 @@ LxDeviceOpen(
     {
         return LxWinOpen(Process, Flags, Path);
     }
+    else if (Major == LX_USB_DEVICE_MAJOR)
+    {
+        return LxUsbfsOpen(Minor, Flags, Path);
+    }
     else if ((Major == 5) && (Minor == 0))
     {
         Tty = Process->Tty;

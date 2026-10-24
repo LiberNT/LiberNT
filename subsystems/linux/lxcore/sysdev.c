@@ -2151,3 +2151,479 @@ LxSysDevInitialize(VOID)
 {
     ExInitializeFastMutex(&LxSysDevLock);
 }
+
+typedef struct _LX_USBFS
+{
+    LX_POLL_HEAD Poll;
+    KSPIN_LOCK Lock;
+    ULONG First;
+    ULONG Count;
+    ULONG64 Completed[64];
+    LX_SYSDEV_USB Usb;
+} LX_USBFS, *PLX_USBFS;
+
+static
+LONG
+LxUsbfsForward(
+    _In_ PLX_SYSDEV_USB Usb,
+    _In_ USHORT Value,
+    _In_ USHORT Index,
+    _Out_writes_bytes_(Length) PUCHAR Data,
+    _In_ USHORT Length,
+    _Out_ PULONG Returned)
+{
+    PDEVICE_OBJECT Hub;
+    PFILE_OBJECT HubFile;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(LxSysDevOpen(Usb->ParentHub, (ULONG)wcslen(Usb->ParentHub), &HubFile, &Hub)))
+        return -LX_ENODEV;
+    Status = LxSysDevDescriptor(Hub, HubFile, Usb->Port, Value, Index, Data, Length, Returned);
+    ObDereferenceObject(HubFile);
+    return NT_SUCCESS(Status) ? 0 : -LX_EPIPE;
+}
+
+static
+LONG
+LxUsbfsHubDescriptor(
+    _In_ PLX_SYSDEV_USB Usb,
+    _In_ UCHAR Type,
+    _Out_writes_bytes_(Length) PUCHAR Data,
+    _In_ USHORT Length,
+    _Out_ PULONG Returned)
+{
+    USB_HUB_INFORMATION_EX Information;
+    PDEVICE_OBJECT Hub;
+    PFILE_OBJECT HubFile;
+    PUCHAR Descriptor = NULL;
+    ULONG Size;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(LxSysDevOpen(Usb->OwnHub, (ULONG)wcslen(Usb->OwnHub), &HubFile, &Hub)))
+        return -LX_ENODEV;
+    RtlZeroMemory(&Information, sizeof(Information));
+    Status = LxSysDevIoctl(Hub, HubFile, IOCTL_USB_GET_HUB_INFORMATION_EX, &Information, sizeof(Information),
+                           sizeof(Information), &Size);
+    ObDereferenceObject(HubFile);
+    if (!NT_SUCCESS(Status))
+        return -LX_EPIPE;
+    if ((Information.HubType == Usb30Hub) && (Type == USB_30_HUB_DESCRIPTOR_TYPE))
+        Descriptor = (PUCHAR)&Information.u.Usb30HubDescriptor;
+    else if ((Information.HubType != Usb30Hub) && (Type == USB_20_HUB_DESCRIPTOR_TYPE))
+        Descriptor = (PUCHAR)&Information.u.UsbHubDescriptor;
+    if ((Descriptor == NULL) || (Descriptor[0] < 2) || (Descriptor[0] > sizeof(Information.u)) ||
+        (Descriptor[1] != Type))
+    {
+        return -LX_EPIPE;
+    }
+    *Returned = min(Length, Descriptor[0]);
+    RtlCopyMemory(Data, Descriptor, *Returned);
+    return 0;
+}
+
+static
+LONG
+LxUsbfsRootDescriptor(
+    _In_ PLX_SYSDEV_USB Usb,
+    _In_ USHORT Value,
+    _Out_writes_bytes_(Length) PUCHAR Data,
+    _In_ USHORT Length,
+    _Out_ PULONG Returned)
+{
+    UCHAR Type = (UCHAR)(Value >> 8), Index = (UCHAR)Value;
+    UCHAR String[2 + 2 * 126];
+    ULONG Size = 0, Character;
+
+    if ((Type == USB_DEVICE_DESCRIPTOR_TYPE) && (Usb->DescriptorLength >= sizeof(USB_DEVICE_DESCRIPTOR)))
+    {
+        Size = sizeof(USB_DEVICE_DESCRIPTOR);
+        RtlCopyMemory(String, Usb->Descriptors, Size);
+    }
+    else if ((Type == USB_CONFIGURATION_DESCRIPTOR_TYPE) && (Index == 0) &&
+             (Usb->DescriptorLength > sizeof(USB_DEVICE_DESCRIPTOR)))
+    {
+        Size = min(Usb->DescriptorLength - sizeof(USB_DEVICE_DESCRIPTOR), sizeof(String));
+        RtlCopyMemory(String, Usb->Descriptors + sizeof(USB_DEVICE_DESCRIPTOR), Size);
+    }
+    else if ((Type == USB_STRING_DESCRIPTOR_TYPE) && (Index == 0))
+    {
+        String[2] = 0x09;
+        String[3] = 0x04;
+        Size = 4;
+    }
+    else if ((Type == USB_STRING_DESCRIPTOR_TYPE) && (Index < RTL_NUMBER_OF(Usb->Strings)) &&
+             (Usb->Strings[Index] != NULL))
+    {
+        for (Character = 0; (Usb->Strings[Index][Character] != '\0') && (Character < 126); Character++)
+        {
+            String[2 + Character * 2] = (UCHAR)Usb->Strings[Index][Character];
+            String[3 + Character * 2] = 0;
+        }
+        Size = 2 + Character * 2;
+    }
+    else
+    {
+        return -LX_EPIPE;
+    }
+    if (Type == USB_STRING_DESCRIPTOR_TYPE)
+    {
+        String[0] = (UCHAR)Size;
+        String[1] = USB_STRING_DESCRIPTOR_TYPE;
+    }
+    *Returned = min(Length, Size);
+    RtlCopyMemory(Data, String, *Returned);
+    return 0;
+}
+
+static
+LONG
+LxUsbfsRequest(
+    _In_ PLX_USBFS Usbfs,
+    _In_ UCHAR RequestType,
+    _In_ UCHAR Request,
+    _In_ USHORT Value,
+    _In_ USHORT Index,
+    _Out_writes_bytes_(Length) PUCHAR Data,
+    _In_ USHORT Length,
+    _Out_ PULONG Returned)
+{
+    PLX_SYSDEV_USB Usb = &Usbfs->Usb;
+
+    *Returned = 0;
+    if ((RequestType == 0x80) && (Request == USB_REQUEST_GET_DESCRIPTOR))
+    {
+        if (Usb->RootHub)
+            return LxUsbfsRootDescriptor(Usb, Value, Data, Length, Returned);
+        if (Usb->ParentHub == NULL)
+            return -LX_EPIPE;
+        return LxUsbfsForward(Usb, Value, Index, Data, Length, Returned);
+    }
+    if ((RequestType == 0xA0) && (Request == USB_REQUEST_GET_DESCRIPTOR) && (Usb->OwnHub != NULL))
+        return LxUsbfsHubDescriptor(Usb, (UCHAR)(Value >> 8), Data, Length, Returned);
+    return -LX_EPERM;
+}
+
+static
+BOOLEAN
+LxUsbfsReady(
+    _In_ PVOID Context)
+{
+    PLX_USBFS Usbfs = Context;
+
+    return *(volatile ULONG *)&Usbfs->Count != 0;
+}
+
+static
+LONG64
+LxUsbfsSubmit(
+    _In_ PLX_USBFS Usbfs,
+    _In_ ULONG64 Argument)
+{
+    LX_USBDEVFS_URB Urb;
+    UCHAR Setup[8];
+    PUCHAR Data = NULL;
+    ULONG Returned = 0;
+    USHORT Length;
+    LONG Status;
+    KIRQL Irql;
+
+    if (LxCopyFromUser(&Urb, Argument, sizeof(Urb)) != 0)
+        return -LX_EFAULT;
+    if (Urb.Type != LX_USBDEVFS_URB_TYPE_CONTROL)
+        return -LX_EBUSY;
+    if ((Urb.BufferLength < (INT)sizeof(Setup)) || (LxCopyFromUser(Setup, Urb.Buffer, sizeof(Setup)) != 0))
+        return (Urb.BufferLength < (INT)sizeof(Setup)) ? -LX_EINVAL : -LX_EFAULT;
+    Length = *(PUSHORT)&Setup[6];
+    if ((ULONG)Urb.BufferLength < sizeof(Setup) + Length)
+        return -LX_EINVAL;
+
+    if (!(Setup[0] & 0x80))
+        return -LX_EPERM;
+    Data = LxAlloc(Length + 1);
+    if (Data == NULL)
+        return -LX_ENOMEM;
+    Status = LxUsbfsRequest(Usbfs, Setup[0], Setup[1], *(PUSHORT)&Setup[2], *(PUSHORT)&Setup[4], Data, Length,
+                            &Returned);
+    if ((Status == 0) && (Returned != 0) && (LxCopyToUser(Urb.Buffer + sizeof(Setup), Data, Returned) != 0))
+        Status = -LX_EFAULT;
+    LxFree(Data);
+    if ((Status == -LX_EPERM) || (Status == -LX_EFAULT))
+        return Status;
+    if (Status != 0)
+        Returned = 0;
+    Urb.Status = Status;
+    Urb.ActualLength = (INT)Returned;
+    if ((LxCopyToUser(Argument + FIELD_OFFSET(LX_USBDEVFS_URB, Status), &Urb.Status, sizeof(Urb.Status)) != 0) ||
+        (LxCopyToUser(Argument + FIELD_OFFSET(LX_USBDEVFS_URB, ActualLength), &Urb.ActualLength,
+                      sizeof(Urb.ActualLength)) != 0))
+    {
+        return -LX_EFAULT;
+    }
+
+    KeAcquireSpinLock(&Usbfs->Lock, &Irql);
+    if (Usbfs->Count == RTL_NUMBER_OF(Usbfs->Completed))
+    {
+        KeReleaseSpinLock(&Usbfs->Lock, Irql);
+        return -LX_ENOMEM;
+    }
+    Usbfs->Completed[(Usbfs->First + Usbfs->Count) % RTL_NUMBER_OF(Usbfs->Completed)] = Argument;
+    Usbfs->Count++;
+    KeReleaseSpinLock(&Usbfs->Lock, Irql);
+    LxPollWake(&Usbfs->Poll, LX_POLLOUT | LX_POLLWRNORM);
+    return 0;
+}
+
+static
+LONG64
+LxUsbfsReap(
+    _In_ PLX_USBFS Usbfs,
+    _In_ ULONG64 Argument,
+    _In_ BOOLEAN Wait)
+{
+    ULONG64 Urb;
+    LONG64 Result;
+    KIRQL Irql;
+
+    for (;;)
+    {
+        KeAcquireSpinLock(&Usbfs->Lock, &Irql);
+        if (Usbfs->Count != 0)
+        {
+            Urb = Usbfs->Completed[Usbfs->First];
+            Usbfs->First = (Usbfs->First + 1) % RTL_NUMBER_OF(Usbfs->Completed);
+            Usbfs->Count--;
+            KeReleaseSpinLock(&Usbfs->Lock, Irql);
+            return LxCopyToUser(Argument, &Urb, sizeof(Urb));
+        }
+        KeReleaseSpinLock(&Usbfs->Lock, Irql);
+        if (!Wait)
+            return -LX_EAGAIN;
+        Result = LxWaitHead(&Usbfs->Poll, LxUsbfsReady, Usbfs, NULL);
+        if (Result < 0)
+            return Result;
+    }
+}
+
+static
+LONG64
+LxUsbfsIoctl(
+    _In_ PLX_FILE File,
+    _In_ ULONG Request,
+    _In_ ULONG64 Argument)
+{
+    PLX_USBFS Usbfs = File->Object;
+    PLX_SYSDEV_USB Usb = &Usbfs->Usb;
+
+    switch (Request)
+    {
+        case LX_USBDEVFS_GET_CAPABILITIES:
+        {
+            ULONG Capabilities = 0;
+
+            return LxCopyToUser(Argument, &Capabilities, sizeof(Capabilities));
+        }
+
+        case LX_USBDEVFS_GET_SPEED:
+            return Usb->Speed;
+
+        case LX_USBDEVFS_CONNECTINFO:
+        {
+            ULONG Information[2];
+
+            Information[0] = Usb->Devnum;
+            Information[1] = (Usb->Speed == LX_USB_SPEED_LOW) ? 1 : 0;
+            return LxCopyToUser(Argument, Information, sizeof(Information));
+        }
+
+        case LX_USBDEVFS_GETDRIVER:
+        {
+            ULONG Interface;
+            SIZE_T Length;
+
+            if (LxCopyFromUser(&Interface, Argument, sizeof(Interface)) != 0)
+                return -LX_EFAULT;
+            if ((Interface >= LX_SYSDEV_MAX_INTERFACES) || (Usb->Drivers[Interface] == NULL))
+                return -LX_ENODATA;
+            Length = min(strlen(Usb->Drivers[Interface]), 255);
+            if ((LxCopyToUser(Argument + sizeof(ULONG), Usb->Drivers[Interface], Length) != 0) ||
+                (LxCopyToUser(Argument + sizeof(ULONG) + Length, "", 1) != 0))
+            {
+                return -LX_EFAULT;
+            }
+            return 0;
+        }
+
+        case LX_USBDEVFS_CLAIMINTERFACE:
+            return -LX_EBUSY;
+
+        case LX_USBDEVFS_RELEASEINTERFACE:
+        case LX_USBDEVFS_DISCARDURB:
+            return -LX_EINVAL;
+
+        case LX_USBDEVFS_CONTROL:
+        {
+            LX_USBDEVFS_CTRLTRANSFER Transfer;
+            PUCHAR Data;
+            ULONG Returned = 0;
+            LONG Status;
+
+            if (LxCopyFromUser(&Transfer, Argument, sizeof(Transfer)) != 0)
+                return -LX_EFAULT;
+            if (!(Transfer.RequestType & 0x80))
+                return -LX_EPERM;
+            Data = LxAlloc(Transfer.Length + 1);
+            if (Data == NULL)
+                return -LX_ENOMEM;
+            Status = LxUsbfsRequest(Usbfs, Transfer.RequestType, Transfer.Request, Transfer.Value, Transfer.Index, Data,
+                                    Transfer.Length, &Returned);
+            if ((Status == 0) && (Returned != 0) && (LxCopyToUser(Transfer.Data, Data, Returned) != 0))
+                Status = -LX_EFAULT;
+            LxFree(Data);
+            return (Status != 0) ? Status : (LONG64)Returned;
+        }
+
+        case LX_USBDEVFS_SUBMITURB:
+            return LxUsbfsSubmit(Usbfs, Argument);
+
+        case LX_USBDEVFS_REAPURB:
+            return LxUsbfsReap(Usbfs, Argument, TRUE);
+
+        case LX_USBDEVFS_REAPURBNDELAY:
+            return LxUsbfsReap(Usbfs, Argument, FALSE);
+
+        default:
+            return -LX_ENOTTY;
+    }
+}
+
+static
+LONG64
+LxUsbfsRead(
+    _In_ PLX_FILE File,
+    _In_ ULONG64 Buffer,
+    _In_ ULONG64 Length,
+    _Inout_opt_ PLONG64 Offset)
+{
+    PLX_USBFS Usbfs = File->Object;
+    LONG64 Position, Result;
+    ULONG Count;
+
+    KeWaitForSingleObject(&File->Lock, Executive, KernelMode, FALSE, NULL);
+    Position = (Offset != NULL) ? *Offset : File->Position;
+    if ((Position < 0) || ((ULONG64)Position >= Usbfs->Usb.DescriptorLength))
+    {
+        KeSetEvent(&File->Lock, IO_NO_INCREMENT, FALSE);
+        return 0;
+    }
+    Count = (ULONG)min(Length, Usbfs->Usb.DescriptorLength - (ULONG64)Position);
+    Result = LxCopyToUser(Buffer, Usbfs->Usb.Descriptors + Position, Count);
+    if (Result == 0)
+    {
+        Result = Count;
+        if (Offset != NULL)
+            *Offset = Position + Count;
+        else
+            File->Position = Position + Count;
+    }
+    KeSetEvent(&File->Lock, IO_NO_INCREMENT, FALSE);
+    return Result;
+}
+
+static
+ULONG
+LxUsbfsPoll(
+    _In_ PLX_FILE File,
+    _In_opt_ PLX_POLL_ENTRY Entry)
+{
+    PLX_USBFS Usbfs = File->Object;
+
+    if (Entry != NULL)
+        LxPollAdd(&Usbfs->Poll, Entry);
+    if (((File->Flags & LX_O_ACCMODE) != LX_O_RDONLY) && LxUsbfsReady(Usbfs))
+        return LX_POLLOUT | LX_POLLWRNORM;
+    return 0;
+}
+
+static
+LONG
+LxUsbfsStat(
+    _In_ PLX_FILE File,
+    _Out_ PLX_STAT Stat)
+{
+    RtlZeroMemory(Stat, sizeof(*Stat));
+    Stat->Mode = LX_S_IFCHR | 0664;
+    Stat->Nlink = 1;
+    Stat->Rdev = File->Rdev;
+    Stat->Ino = File->Ino;
+    Stat->BlkSize = 4096;
+    Stat->Dev = (File->Mount != NULL) ? File->Mount->Dev : 5;
+    return 0;
+}
+
+static
+VOID
+LxUsbfsRelease(
+    _In_ PLX_FILE File)
+{
+    PLX_USBFS Usbfs = File->Object;
+
+    if (Usbfs == NULL)
+        return;
+    LxSysDevFreeUsb(&Usbfs->Usb);
+    LxFree(Usbfs);
+    File->Object = NULL;
+}
+
+static const LX_FILE_OPS LxUsbfsOps =
+{
+    LxUsbfsRead, NULL, LxUsbfsIoctl, LxUsbfsPoll, LxUsbfsStat, NULL, NULL, NULL, LxUsbfsRelease
+};
+
+PLX_FILE
+LxUsbfsOpen(
+    _In_ ULONG Minor,
+    _In_ ULONG Flags,
+    _In_ PCSTR Path)
+{
+    PLX_SYSDEV_TREE Tree = LxSysDevAcquire();
+    PLX_USBFS Usbfs = NULL;
+    PLX_FILE File = NULL;
+    ULONG Index;
+
+    if (Tree == NULL)
+        return NULL;
+    for (Index = 0; Index < Tree->UsbCount; Index++)
+    {
+        PLX_SYSDEV_USB Usb = &Tree->Usb[Index];
+
+        if ((Usb->Bus - 1) * 128 + (Usb->Devnum - 1) != Minor)
+            continue;
+        Usbfs = LxAlloc(sizeof(*Usbfs));
+        if (Usbfs == NULL)
+            break;
+        RtlZeroMemory(Usbfs, sizeof(*Usbfs));
+        LxPollHeadInit(&Usbfs->Poll);
+        KeInitializeSpinLock(&Usbfs->Lock);
+        if (!LxSysDevCopyUsb(&Usbfs->Usb, Usb))
+        {
+            LxSysDevFreeUsb(&Usbfs->Usb);
+            LxFree(Usbfs);
+            Usbfs = NULL;
+        }
+        break;
+    }
+    LxSysDevRelease(Tree);
+    if (Usbfs == NULL)
+        return NULL;
+    File = LxFileAlloc(&LxUsbfsOps, Flags & (LX_O_ACCMODE | LX_O_NONBLOCK), LX_S_IFCHR);
+    if (File == NULL)
+    {
+        LxSysDevFreeUsb(&Usbfs->Usb);
+        LxFree(Usbfs);
+        return NULL;
+    }
+    File->Object = Usbfs;
+    File->Rdev = ((ULONG64)LX_USB_DEVICE_MAJOR << 8) | (Minor & 0xFF) | ((ULONG64)(Minor & 0xFFF00) << 12);
+    File->Path = LxStrDup(Path);
+    return File;
+}

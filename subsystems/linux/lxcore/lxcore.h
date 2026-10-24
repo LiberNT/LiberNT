@@ -816,6 +816,7 @@ VOID LxSysDevList(_In_ PCSTR Path, _In_ PLX_SYSDEV_LIST_ROUTINE Routine, _In_ PV
 LONG LxSysDevRead(_In_ PLX_PROCESS Process, _In_ PCSTR Path, _Out_ PVOID *Data, _Out_ PULONG Length);
 ULONG LxSysDevUsbNodes(_Out_writes_(Count) PULONG Nodes, _In_ ULONG Count);
 VOID LxSysDevInitialize(VOID);
+PLX_FILE LxUsbfsOpen(_In_ ULONG Minor, _In_ ULONG Flags, _In_ PCSTR Path);
 PLX_CGROUP LxCgroupFromFile(_In_ PLX_FILE File);
 PLX_CGROUP LxCgroupCreateRoot(VOID);
 VOID LxCgroupAttach(_In_ PLX_PROCESS Process, _In_ PLX_CGROUP Cgroup);
