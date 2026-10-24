@@ -612,6 +612,56 @@ LxSearchPath(
     return Denied ? -LX_EACCES : -LX_ENOENT;
 }
 
+static
+VOID
+LxExecKillOtherThreads(
+    _In_ PLX_THREAD Thread)
+{
+    PLX_PROCESS Process = Thread->Process;
+    PETHREAD Current = PsGetCurrentThread();
+
+    for (;;)
+    {
+        PETHREAD Other = NULL;
+        PLIST_ENTRY Entry;
+        NTSTATUS Status;
+
+        ExAcquireFastMutex(&Process->Lock);
+        for (Entry = Process->Threads.Flink; Entry != &Process->Threads; Entry = Entry->Flink)
+        {
+            PLX_THREAD Candidate = CONTAINING_RECORD(Entry, LX_THREAD, Link);
+
+            if (Candidate->EThread != Current)
+            {
+                Other = Candidate->EThread;
+                ObReferenceObject(Other);
+                break;
+            }
+        }
+        ExReleaseFastMutex(&Process->Lock);
+        if (Other == NULL)
+            break;
+
+        Status = PsPicoTerminateThread(Other, STATUS_SUCCESS);
+        if (NT_SUCCESS(Status))
+            KeWaitForSingleObject(Other, Executive, KernelMode, FALSE, NULL);
+        ObDereferenceObject(Other);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("Linux process %lu could not end a thread before exec: 0x%08lx\n", Process->Pid, Status);
+            break;
+        }
+    }
+
+    ExAcquireFastMutex(&Process->Lock);
+    if (Thread->Tid != Process->Pid)
+    {
+        Thread->Tid = Process->Pid;
+        RtlCopyMemory(Thread->NsTid, Process->NsPid, sizeof(Thread->NsTid));
+    }
+    ExReleaseFastMutex(&Process->Lock);
+}
+
 NTSTATUS
 LxExecImage(
     _In_ PLX_THREAD Thread,
@@ -705,6 +755,7 @@ LxExecImage(
         }
     }
 
+    LxExecKillOtherThreads(Thread);
     LxFutexExitRobustList(Thread);
     LxMmReset(Process);
     LxFdCloseOnExec(Process);

@@ -21,6 +21,7 @@ LxMmLock(
         Process->MmLockDepth++;
         return;
     }
+    KeEnterCriticalRegion();
     KeWaitForSingleObject(&Process->MmLock, Executive, KernelMode, FALSE, NULL);
     Process->MmLockOwner = Self;
     Process->MmLockDepth = 1;
@@ -34,6 +35,7 @@ LxMmUnlock(
         return;
     Process->MmLockOwner = NULL;
     KeSetEvent(&Process->MmLock, IO_NO_INCREMENT, FALSE);
+    KeLeaveCriticalRegion();
 }
 
 ULONG
