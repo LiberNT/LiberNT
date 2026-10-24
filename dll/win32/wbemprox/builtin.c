@@ -44,6 +44,7 @@
 #include <poclass.h>
 #include <acpiioct.h>
 #ifdef __REACTOS__
+#include <cfgmgr32.h>
 #include <wmistr.h>
 #include <wmium.h>
 #include <wmidata.h>
@@ -104,11 +105,24 @@ static const struct column col_cache_memory[] =
 };
 static const struct column col_cdromdrive[] =
 {
+#ifdef __REACTOS__
+    { L"Caption",      CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Description",  CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"DeviceId",     CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"Drive",        CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Id",           CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Manufacturer", CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"MediaLoaded",  CIM_BOOLEAN },
+    { L"MediaType",    CIM_STRING },
+    { L"Name",         CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"PNPDeviceID",  CIM_STRING|COL_FLAG_DYNAMIC },
+#else
     { L"DeviceId",    CIM_STRING|COL_FLAG_KEY },
     { L"Drive",       CIM_STRING|COL_FLAG_DYNAMIC },
     { L"MediaType",   CIM_STRING },
     { L"Name",        CIM_STRING },
     { L"PNPDeviceID", CIM_STRING },
+#endif
 };
 static const struct column col_compsys[] =
 {
@@ -414,11 +428,16 @@ static const struct column col_pnpentity[] =
     { L"ClassGuid",            CIM_STRING|COL_FLAG_DYNAMIC },
     { L"DeviceId",             CIM_STRING|COL_FLAG_DYNAMIC },
 #ifdef __REACTOS__
+    { L"Description",          CIM_STRING|COL_FLAG_DYNAMIC },
     { L"Manufacturer",         CIM_STRING|COL_FLAG_DYNAMIC },
 #else
     { L"Manufacturer",         CIM_STRING },
 #endif
     { L"Name",                 CIM_STRING|COL_FLAG_DYNAMIC },
+#ifdef __REACTOS__
+    { L"PNPClass",             CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"PNPDeviceID",          CIM_STRING|COL_FLAG_DYNAMIC },
+#endif
     { L"Service",              CIM_STRING|COL_FLAG_DYNAMIC },
 };
 static const struct column col_printer[] =
@@ -536,12 +555,22 @@ static const struct column col_softwarelicensingproduct[] =
  };
 static const struct column col_sounddevice[] =
 {
+#ifdef __REACTOS__
+    { L"Caption",      CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Description",  CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"DeviceID",     CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+    { L"Manufacturer", CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Name",         CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"PNPDeviceID",  CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"ProductName",  CIM_STRING|COL_FLAG_DYNAMIC },
+#else
     { L"Caption",      CIM_STRING },
     { L"DeviceID",     CIM_STRING },
     { L"Manufacturer", CIM_STRING },
     { L"Name",         CIM_STRING },
     { L"PNPDeviceID",  CIM_STRING },
     { L"ProductName",  CIM_STRING },
+#endif
     { L"Status",       CIM_STRING },
     { L"StatusInfo",   CIM_UINT16 },
 };
@@ -757,11 +786,24 @@ struct record_cache_memory
 };
 struct record_cdromdrive
 {
+#ifdef __REACTOS__
+    const WCHAR *caption;
+    const WCHAR *description;
+    const WCHAR *device_id;
+    const WCHAR *drive;
+    const WCHAR *id;
+    const WCHAR *manufacturer;
+    int          medialoaded;
+    const WCHAR *mediatype;
+    const WCHAR *name;
+    const WCHAR *pnpdevice_id;
+#else
     const WCHAR *device_id;
     const WCHAR *drive;
     const WCHAR *mediatype;
     const WCHAR *name;
     const WCHAR *pnpdevice_id;
+#endif
 };
 struct record_computersystem
 {
@@ -1040,8 +1082,15 @@ struct record_pnpentity
     const WCHAR *caption;
     const WCHAR *class_guid;
     const WCHAR *device_id;
+#ifdef __REACTOS__
+    const WCHAR *description;
+#endif
     const WCHAR *manufacturer;
     const WCHAR *name;
+#ifdef __REACTOS__
+    const WCHAR *pnp_class;
+    const WCHAR *pnp_device_id;
+#endif
     const WCHAR *service;
 };
 struct record_printer
@@ -1160,6 +1209,9 @@ struct record_softwarelicensingproduct
 struct record_sounddevice
 {
     const WCHAR *caption;
+#ifdef __REACTOS__
+    const WCHAR *description;
+#endif
     const WCHAR *deviceid;
     const WCHAR *manufacturer;
     const WCHAR *name;
@@ -1967,6 +2019,7 @@ static enum fill_status fill_rawbiosdata( struct table *table, const struct expr
     return status;
 }
 
+#ifndef __REACTOS__
 static enum fill_status fill_cdromdrive( struct table *table, const struct expr *cond )
 {
     WCHAR drive[3], root[] = L"A:\\";
@@ -2007,6 +2060,7 @@ static enum fill_status fill_cdromdrive( struct table *table, const struct expr 
     table->num_rows = row;
     return status;
 }
+#endif
 
 static UINT get_physical_processor_count( const char *buf, UINT len, UINT *num_logical )
 {
@@ -2998,6 +3052,107 @@ static enum fill_status fill_diskdrive( struct table *table, const struct expr *
         row++;
     }
     free( disks );
+
+    TRACE("created %u rows\n", row);
+    table->num_rows = row;
+    return status;
+}
+static const GUID cdrom_interface_guid =
+    { 0x53f56308, 0xb6bf, 0x11d0, { 0x94, 0xf2, 0x00, 0xa0, 0xc9, 0x1e, 0xfb, 0x8b } };
+
+static WCHAR get_cdrom_drive_letter( const STORAGE_DEVICE_NUMBER *number )
+{
+    WCHAR path[] = L"\\\\.\\A:", root[] = L"A:\\";
+    STORAGE_DEVICE_NUMBER drive_number;
+    DWORD drives = GetLogicalDrives(), bytes;
+    HANDLE handle;
+    BOOL match;
+    UINT i;
+
+    for (i = 0; i < 26; i++)
+    {
+        if (!(drives & (1 << i))) continue;
+        root[0] = path[4] = 'A' + i;
+        if (GetDriveTypeW( root ) != DRIVE_CDROM) continue;
+        handle = CreateFileW( path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL );
+        if (handle == INVALID_HANDLE_VALUE) continue;
+        match = DeviceIoControl( handle, IOCTL_STORAGE_GET_DEVICE_NUMBER, NULL, 0, &drive_number,
+                                 sizeof(drive_number), &bytes, NULL ) &&
+                drive_number.DeviceType == number->DeviceType &&
+                drive_number.DeviceNumber == number->DeviceNumber;
+        CloseHandle( handle );
+        if (match) return 'A' + i;
+    }
+    return 0;
+}
+
+static enum fill_status fill_cdromdrive( struct table *table, const struct expr *cond )
+{
+    SP_DEVICE_INTERFACE_DETAIL_DATA_W *detail;
+    SP_DEVICE_INTERFACE_DATA iface;
+    STORAGE_DEVICE_NUMBER number;
+    SP_DEVINFO_DATA device;
+    struct record_cdromdrive *rec;
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+    WCHAR drive[3], root[] = L"A:\\", letter;
+    UINT i, row = 0, offset = 0;
+    HDEVINFO devices;
+    HANDLE handle;
+    DWORD bytes;
+    BOOL ok;
+
+    devices = SetupDiGetClassDevsW( &cdrom_interface_guid, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE );
+    if (devices == INVALID_HANDLE_VALUE) return FILL_STATUS_FAILED;
+
+    iface.cbSize = sizeof(iface);
+    for (i = 0; SetupDiEnumDeviceInterfaces( devices, NULL, &cdrom_interface_guid, i, &iface ); i++)
+    {
+        device.cbSize = sizeof(device);
+        if (!(detail = get_device_interface_detail( devices, &iface, &device ))) continue;
+        handle = CreateFileW( detail->DevicePath, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL );
+        free( detail );
+        if (handle == INVALID_HANDLE_VALUE) continue;
+        ok = DeviceIoControl( handle, IOCTL_STORAGE_GET_DEVICE_NUMBER, NULL, 0, &number, sizeof(number), &bytes, NULL );
+        CloseHandle( handle );
+        if (!ok) continue;
+
+        if (!resize_table( table, row + 1, sizeof(*rec) ))
+        {
+            SetupDiDestroyDeviceInfoList( devices );
+            return FILL_STATUS_FAILED;
+        }
+
+        rec = (struct record_cdromdrive *)(table->data + offset);
+        rec->description  = get_device_registry_string( devices, &device, SPDRP_DEVICEDESC );
+        if (!(rec->name = get_device_registry_string( devices, &device, SPDRP_FRIENDLYNAME )) && rec->description)
+            rec->name = wcsdup( rec->description );
+        rec->caption      = rec->name ? wcsdup( rec->name ) : NULL;
+        rec->device_id    = get_device_instance_id( devices, &device );
+        if (rec->device_id) wcsupr( (WCHAR *)rec->device_id );
+        rec->pnpdevice_id = rec->device_id ? wcsdup( rec->device_id ) : NULL;
+        rec->manufacturer = get_device_registry_string( devices, &device, SPDRP_MFG );
+        rec->medialoaded  = 0;
+        rec->mediatype    = L"UNKNOWN";
+        rec->drive        = NULL;
+        rec->id           = NULL;
+        if ((letter = get_cdrom_drive_letter( &number )))
+        {
+            swprintf( drive, ARRAY_SIZE( drive ), L"%c:", letter );
+            rec->drive = wcsdup( drive );
+            rec->id    = wcsdup( drive );
+            root[0] = letter;
+            if (GetVolumeInformationW( root, NULL, 0, NULL, NULL, NULL, NULL, 0 ))
+                rec->medialoaded = -1;
+        }
+        if (!match_row( table, row, cond, &status ))
+        {
+            free_row_values( table, row );
+            continue;
+        }
+        offset += sizeof(*rec);
+        row++;
+    }
+    SetupDiDestroyDeviceInfoList( devices );
 
     TRACE("created %u rows\n", row);
     table->num_rows = row;
@@ -4044,15 +4199,24 @@ static struct record_pnpentity *get_pnp_entities( UINT *count )
                     {
                         if (!RegOpenKeyExW( key_product, instance, 0, KEY_READ, &key_instance ))
                         {
+#ifdef __REACTOS__
+                            if (!(ret[i].caption = get_reg_value( key_instance, L"FriendlyName" )))
+                                ret[i].caption = get_reg_value( key_instance, L"DeviceDesc" );
+#else
                             ret[i].caption = get_reg_value( key_instance, L"DeviceDesc" );
+#endif
                             ret[i].class_guid = wcslwr( get_reg_value( key_instance, L"ClassGUID" ) );
                             ret[i].device_id = wcsupr( build_pnp_device_id( class, product, instance ) );
 #ifdef __REACTOS__
+                            ret[i].description = get_reg_value( key_instance, L"DeviceDesc" );
                             ret[i].manufacturer = get_reg_value( key_instance, L"Mfg" );
+                            ret[i].name = ret[i].caption ? wcsdup( ret[i].caption ) : NULL;
+                            ret[i].pnp_class = get_reg_value( key_instance, L"Class" );
+                            ret[i].pnp_device_id = ret[i].device_id ? wcsdup( ret[i].device_id ) : NULL;
 #else
                             ret[i].manufacturer = L"The Wine Project";
-#endif
                             ret[i].name = get_reg_value( key_instance, L"DeviceDesc" );
+#endif
                             ret[i].service = get_reg_value( key_instance, L"Service" );
                             RegCloseKey( key_instance );
                             if (++i >= nb_allocated)
@@ -4066,6 +4230,12 @@ static struct record_pnpentity *get_pnp_entities( UINT *count )
                                         free( (void *)ret[i].caption );
                                         free( (void *)ret[i].class_guid );
                                         free( (void *)ret[i].device_id );
+#ifdef __REACTOS__
+                                        free( (void *)ret[i].description );
+                                        free( (void *)ret[i].manufacturer );
+                                        free( (void *)ret[i].pnp_class );
+                                        free( (void *)ret[i].pnp_device_id );
+#endif
                                         free( (void *)ret[i].name );
                                         free( (void *)ret[i].service );
                                     }
@@ -4113,8 +4283,15 @@ static enum fill_status fill_pnpentity( struct table *table, const struct expr *
         rec->caption      = entities[i].caption;
         rec->class_guid   = entities[i].class_guid;
         rec->device_id    = entities[i].device_id;
+#ifdef __REACTOS__
+        rec->description  = entities[i].description;
+#endif
         rec->manufacturer = entities[i].manufacturer;
         rec->name         = entities[i].name;
+#ifdef __REACTOS__
+        rec->pnp_class     = entities[i].pnp_class;
+        rec->pnp_device_id = entities[i].pnp_device_id;
+#endif
         rec->service      = entities[i].service;
         if (!match_row( table, row, cond, &status ))
         {
@@ -5853,6 +6030,60 @@ failed:
     return FILL_STATUS_FAILED;
 }
 
+#ifdef __REACTOS__
+static enum fill_status fill_sounddevice( struct table *table, const struct expr *cond )
+{
+    struct record_sounddevice *rec;
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+    SP_DEVINFO_DATA device;
+    ULONG dev_status, problem;
+    UINT i, row = 0, offset = 0;
+    HDEVINFO devices;
+    WCHAR *name;
+
+    devices = SetupDiGetClassDevsW( &GUID_DEVCLASS_MEDIA, NULL, NULL, DIGCF_PRESENT );
+    if (devices == INVALID_HANDLE_VALUE) return FILL_STATUS_FAILED;
+
+    device.cbSize = sizeof(device);
+    for (i = 0; SetupDiEnumDeviceInfo( devices, i, &device ); i++)
+    {
+        if (!resize_table( table, row + 1, sizeof(*rec) ))
+        {
+            SetupDiDestroyDeviceInfoList( devices );
+            return FILL_STATUS_FAILED;
+        }
+
+        rec = (struct record_sounddevice *)(table->data + offset);
+        rec->description = get_device_registry_string( devices, &device, SPDRP_DEVICEDESC );
+        if (!(name = get_device_registry_string( devices, &device, SPDRP_FRIENDLYNAME )) && rec->description)
+            name = wcsdup( rec->description );
+        rec->name         = name;
+        rec->caption      = name ? wcsdup( name ) : NULL;
+        rec->productname  = name ? wcsdup( name ) : NULL;
+        rec->deviceid     = get_device_instance_id( devices, &device );
+        if (rec->deviceid) wcsupr( (WCHAR *)rec->deviceid );
+        rec->pnpdeviceid  = rec->deviceid ? wcsdup( rec->deviceid ) : NULL;
+        rec->manufacturer = get_device_registry_string( devices, &device, SPDRP_MFG );
+        if (CM_Get_DevNode_Status( &dev_status, &problem, device.DevInst, 0 ) == CR_SUCCESS && problem)
+            rec->status = L"Error";
+        else
+            rec->status = L"OK";
+        rec->statusinfo = 3;
+        if (!match_row( table, row, cond, &status ))
+        {
+            free_row_values( table, row );
+            continue;
+        }
+        offset += sizeof(*rec);
+        row++;
+    }
+    SetupDiDestroyDeviceInfoList( devices );
+
+    TRACE("created %u rows\n", row);
+    table->num_rows = row;
+    return status;
+}
+#else
 static enum fill_status fill_sounddevice( struct table *table, const struct expr *cond )
 {
     struct record_sounddevice *rec;
@@ -5877,6 +6108,7 @@ static enum fill_status fill_sounddevice( struct table *table, const struct expr
     table->num_rows = row;
     return status;
 }
+#endif
 
 #define C(c) sizeof(c)/sizeof(c[0]), c
 #define D(d) sizeof(d)/sizeof(d[0]), 0, (BYTE *)d
