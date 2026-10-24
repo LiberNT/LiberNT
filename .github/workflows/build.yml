@@ -169,5 +169,11 @@ jobs:
         name: LiberNT-vhd-${{steps.images.outputs.tag}}
         path: ${{steps.configure.outputs.outdir}}/LiberNT.vhd
 
+    - name: Upload LiberNT.vhdx
+      uses: actions/upload-artifact@v7
+      with:
+        name: LiberNT-vhdx-${{steps.images.outputs.tag}}
+        path: ${{steps.configure.outputs.outdir}}/LiberNT.vhdx
+
     - name: Check build dependencies
       run: python3 sdk/tools/depcheck.py ${{steps.configure.outputs.outdir}} --mode depfiles --nested --fail-on-gaps

@@ -120,6 +120,7 @@ Every build on the [Releases](https://github.com/LiberNT/LiberNT/releases) page 
 | `bootcd-iso-…-<arch>-…zip` | `bootcd.iso`, a CD image that runs LiberNT or starts LiberNT Setup |
 | `LiberNT-img-…-<arch>-…zip` | `LiberNT.img`, a disk with LiberNT already installed |
 | `LiberNT-vhd-…-<arch>-…zip` | `LiberNT.vhd`, the same preinstalled disk for VHD-based virtual machines |
+| `LiberNT-vhdx-…-<arch>-…zip` | `LiberNT.vhdx`, the same preinstalled disk for Hyper-V Generation 2 |
 
 > [!NOTE]
 > These are Clang Debug builds, made by GitHub Actions from the `main-nt10` branch.
@@ -129,7 +130,7 @@ Every build on the [Releases](https://github.com/LiberNT/LiberNT/releases) page 
 The quickest way to try LiberNT is the preinstalled disk:
 
 1. Unzip `LiberNT.img` (or `LiberNT.vhd`)
-2. Start it in a virtual machine such as **QEMU**, or use the VHD in **Hyper-V** or **VirtualBox**
+2. Start it in a virtual machine such as **QEMU**, or use the VHD in **VirtualBox** or a **Hyper-V** Generation 1 virtual machine. Hyper-V Generation 2 takes only `LiberNT.vhdx`, with Secure Boot turned off
 3. Or write `LiberNT.img` to a USB drive or an SD card and boot the machine from it. It boots with UEFI or BIOS
 
 > [!CAUTION]
@@ -221,7 +222,7 @@ ninja liberntimg
 | --- | --- | --- |
 | `ninja bootcd` | `bootcd.iso` | Install LiberNT from a CD image, in a virtual machine or on a PC. |
 | `ninja liberntimg` | `LiberNT.img` | Boot a disk with LiberNT already installed. Start it in a virtual machine such as QEMU, or write it to a USB drive or SD card. It boots with UEFI or BIOS. |
-| `ninja liberntvhd` | `LiberNT.vhd` | Use the same preinstalled disk in virtual machines that take VHD disks, such as Hyper-V and VirtualBox. |
+| `ninja liberntvhd` | `LiberNT.vhd`, `LiberNT.vhdx` | Use the same preinstalled disk in virtual machines: the VHD in VirtualBox and Hyper-V Generation 1, the VHDX in Hyper-V Generation 2, which does not take VHD disks. |
 
 Each target builds everything it needs first, and the files are written to the output folder.
 

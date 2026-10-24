@@ -486,6 +486,7 @@ set(_preinstall_boot_partition_file ${CMAKE_CURRENT_BINARY_DIR}/partition.boot.f
 set(_preinstall_system_partition_file ${CMAKE_CURRENT_BINARY_DIR}/partition.ntfs)
 set(_preinstall_image_file ${REACTOS_BINARY_DIR}/LiberNT.img)
 set(_preinstall_vhd_file ${REACTOS_BINARY_DIR}/LiberNT.vhd)
+set(_preinstall_vhdx_file ${REACTOS_BINARY_DIR}/LiberNT.vhdx)
 # Keep ROSBOOT as an active MBR ESP. UEFI discovers it by type, while the BIOS
 # MBR follows the active flag and loads its FAT32 boot sector. The Raspberry Pi
 # 1-3 boot ROM only scans for FAT MBR ids and skips 0xEF, so the Raspberry Pi
@@ -979,21 +980,21 @@ if(STARFIVE_JH7110_SUPPORT)
     add_dependencies(liberntimg jh7110sdimg)
 endif()
 
+set(_liberntvhd_layout_args
+    ${_liberntimg_mbr_args}
+    ${_liberntimg_leading_args}
+    -partition ${_preinstall_boot_partition_file}
+    -start ${_preinstall_boot_partition_start}
+    -type ${_preinstall_boot_partition_type}
+    ${_liberntimg_boot_partition_args}
+    -partition ${_preinstall_system_partition_file}
+    -start ${_preinstall_system_partition_start}
+    -type 07
+    ${_liberntimg_system_partition_args})
 add_custom_target(liberntvhd
-    COMMAND ${CMAKE_COMMAND} -E rm -f ${_preinstall_vhd_file}
-    COMMAND native-mkdiskimg
-        -o ${_preinstall_vhd_file}
-        ${_liberntimg_mbr_args}
-        ${_liberntimg_leading_args}
-        -partition ${_preinstall_boot_partition_file}
-        -start ${_preinstall_boot_partition_start}
-        -type ${_preinstall_boot_partition_type}
-        ${_liberntimg_boot_partition_args}
-        -partition ${_preinstall_system_partition_file}
-        -start ${_preinstall_system_partition_start}
-        -type 07
-        ${_liberntimg_system_partition_args}
-        -vhd
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${_preinstall_vhd_file} ${_preinstall_vhdx_file}
+    COMMAND native-mkdiskimg -o ${_preinstall_vhd_file} ${_liberntvhd_layout_args} -vhd
+    COMMAND native-mkdiskimg -o ${_preinstall_vhdx_file} ${_liberntvhd_layout_args} -vhdx
     DEPENDS ${_liberntimg_deps}
     VERBATIM)
 add_dependencies(liberntvhd preinstall_partition)

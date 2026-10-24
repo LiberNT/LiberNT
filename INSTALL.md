@@ -8,7 +8,7 @@ Set up the build environment and configure a build as described in [Building](RE
 |---|---|---|
 | `ninja bootcd` | `bootcd.iso` | Run LiberNT from a CD image, or start LiberNT Setup from it and install LiberNT on a disk. |
 | `ninja liberntimg` | `LiberNT.img` | Boot a disk with LiberNT already installed. It boots with UEFI or BIOS. |
-| `ninja liberntvhd` | `LiberNT.vhd` | Use the same preinstalled disk in virtual machines that take VHD disks, such as Hyper-V and VirtualBox. |
+| `ninja liberntvhd` | `LiberNT.vhd`, `LiberNT.vhdx` | Use the same preinstalled disk in virtual machines: the VHD in VirtualBox and Hyper-V Generation 1, the VHDX in Hyper-V Generation 2, which does not take VHD disks. |
 
 Each target builds everything it needs first, and the files are written to the output folder.
 
@@ -18,7 +18,7 @@ Boot `bootcd.iso` in a virtual machine or on a PC, and follow the instructions o
 
 ## Using the preinstalled disk
 
-`LiberNT.img` needs no setup. Start it in a virtual machine such as QEMU, or write it to a USB drive or an SD card and boot the machine from it. Use `LiberNT.vhd` for virtual machines that take VHD disks.
+`LiberNT.img` needs no setup. Start it in a virtual machine such as QEMU, or write it to a USB drive or an SD card and boot the machine from it. Use `LiberNT.vhd` for virtual machines that take VHD disks, and `LiberNT.vhdx` for Hyper-V Generation 2 virtual machines, with Secure Boot turned off.
 
 The preinstalled disk also carries LiberNT Setup. Run `C:\<architecture>\libernt.exe`, for example `C:\arm64\libernt.exe`, to install LiberNT on another disk from the running system.
 
