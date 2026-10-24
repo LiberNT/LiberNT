@@ -3,6 +3,17 @@ include_directories(include)
 
 add_definitions(-D_CRTBLD)
 
+if(MSVC AND LTCG)
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/GL->)
+endif()
+
+if(MSVC AND ARCH STREQUAL "arm64")
+    set_source_files_properties(
+        math/atan.c math/exp.c math/fabsf.c math/fmod.c math/log.c math/log10.c
+        math/pow.c math/powf.c math/sqrt.c string/arm64/strcopy.c
+        PROPERTIES COMPILE_OPTIONS /Oi-)
+endif()
+
 include(except/except.cmake)
 include(float/float.cmake)
 include(math/math.cmake)
@@ -40,6 +51,7 @@ target_compile_definitions(user32_wsprintf PRIVATE _USER32_WSPRINTF)
 if(MSVC AND ARCH STREQUAL "i386")
     add_asm_files(ftol2_asm
         math/i386/ftol2_asm.s
+        math/i386/ftol2_sse_asm.s
         math/i386/ftoul2_legacy_asm.s
     )
     add_library(ftol2 ${ftol2_asm})

@@ -82,7 +82,7 @@ add_asm_files(vcrt_setjmp_asm ${VCRT_SETJMP_ASM_SOURCES})
 add_library(setjmp ${VCRT_SETJMP_SOURCES} ${vcrt_setjmp_asm})
 add_dependencies(setjmp psdk asm)
 
-if(${ARCH} STREQUAL "arm64" AND NOT ARM64EC_RUNTIME)
+if(${ARCH} STREQUAL "arm64" AND NOT ARM64EC_RUNTIME AND NOT MSVC)
     foreach(_lse_op CAS SWP LDADD LDCLR LDEOR LDSET)
         foreach(_lse_size 1 2 4 8 16)
             if(_lse_size EQUAL 16 AND NOT _lse_op STREQUAL "CAS")

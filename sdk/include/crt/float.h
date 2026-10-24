@@ -23,7 +23,7 @@
 #include "mingw32/gcc_float.h"
 #elif defined(_MSC_VER)
 #include "msc/msc_float.h"
-#else
+#elif !defined(RC_INVOKED)
 #error
 #endif
 

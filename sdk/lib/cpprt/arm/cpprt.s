@@ -36,4 +36,6 @@ _Target SETS "|$Target|"
     ; void __cdecl operator delete(void *,unsigned int)
     DEFINE_ALIAS ??3@YAXPAXI@Z, ??3@YAXPAX@Z
 
+    DEFINE_ALIAS ??_V@YAXPAXI@Z, ??3@YAXPAX@Z
+
     END
