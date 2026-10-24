@@ -1080,7 +1080,7 @@ MountMgrMountedDeviceArrival(IN PDEVICE_EXTENSION DeviceExtension,
     ULONG SymLinkCount, i;
     PLIST_ENTRY NextEntry;
     PUNICODE_STRING SymLinks;
-    NTSTATUS Status, IntStatus;
+    NTSTATUS Status, IntStatus, LinkStatus;
     OBJECT_ATTRIBUTES ObjectAttributes;
     PSYMLINK_INFORMATION SymlinkInformation;
     PMOUNTDEV_UNIQUE_ID UniqueId, NewUniqueId;
@@ -1253,17 +1253,17 @@ MountMgrMountedDeviceArrival(IN PDEVICE_EXTENSION DeviceExtension,
                                        NULL);
 
             /* Try to open the associated symlink */
-            Status = ZwOpenSymbolicLinkObject(&LinkHandle, SYMBOLIC_LINK_QUERY, &ObjectAttributes);
-            if (!NT_SUCCESS(Status))
+            LinkStatus = ZwOpenSymbolicLinkObject(&LinkHandle, SYMBOLIC_LINK_QUERY, &ObjectAttributes);
+            if (!NT_SUCCESS(LinkStatus))
             {
                 continue;
             }
 
             /* And query its target */
-            Status = ZwQuerySymbolicLinkObject(LinkHandle, &LinkTarget, NULL);
+            LinkStatus = ZwQuerySymbolicLinkObject(LinkHandle, &LinkTarget, NULL);
             ZwClose(LinkHandle);
 
-            if (!NT_SUCCESS(Status))
+            if (!NT_SUCCESS(LinkStatus))
             {
                 continue;
             }

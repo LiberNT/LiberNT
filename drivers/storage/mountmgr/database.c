@@ -2111,7 +2111,7 @@ DeleteNoDriveLetterEntryRoutine(IN PWSTR ValueName,
     }
 
     /* And then, if unique ID matching, delete entry */
-    if (RtlCompareMemory(UniqueId->UniqueId, ValueData, ValueLength) != ValueLength)
+    if (RtlCompareMemory(UniqueId->UniqueId, ValueData, ValueLength) == ValueLength)
     {
         RtlDeleteRegistryValue(RTL_REGISTRY_ABSOLUTE,
                                DatabasePath,

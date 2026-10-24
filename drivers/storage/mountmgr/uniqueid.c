@@ -295,7 +295,7 @@ CreateNoDriveLetterEntry(IN PMOUNTDEV_UNIQUE_ID UniqueId)
     /* Write the complete string */
     String[0] = L'#';
     RtlCopyMemory(String + 1, GuidString.Buffer, GuidString.Length);
-    String[GuidString.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    String[GuidString.Length / sizeof(WCHAR) + 1] = UNICODE_NULL;
 
     /* Don't need that one anymore */
     ExFreePoolWithTag(GuidString.Buffer, 0);
