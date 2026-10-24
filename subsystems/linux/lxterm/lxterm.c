@@ -11,9 +11,12 @@
 
 #include <windef.h>
 #include <winbase.h>
+#include <wincon.h>
+#include <shlobj.h>
 
 #include "../include/lxioctl.h"
 #include "../include/lxlaunch.h"
+#include "lxinstall.h"
 
 #define LX_PASSWD_MAX (1024 * 1024)
 
@@ -29,10 +32,43 @@ VOID
 LxUsage(VOID)
 {
     fwprintf(stderr,
-             L"Usage: lxterm [-n|-j] [-r rootdir]\n"
+             L"Usage: lxterm [-n|-j] [-y] [-u source] [-r rootdir]\n"
              L"  -n             Start a new Linux instance instead of joining the running one\n"
              L"  -j             Only join the running Linux instance; fail when there is none\n"
-             L"  -r rootdir     Windows directory used as the Linux root (default: current directory)\n");
+             L"  -y             Install the Linux system without asking when the root holds none\n"
+             L"  -u source      Install from this URL or file (.tar, .tar.gz or .tar.xz) instead of Ubuntu 26.04 LTS\n"
+             L"  -r rootdir     Windows directory used as the Linux root\n"
+             L"                 (default: LiberNT\\Ubuntu in the local application data folder)\n");
+}
+
+static
+VOID
+LxPauseIfOwnConsole(VOID)
+{
+    DWORD Processes[2];
+    WCHAR Line[8];
+
+    if (GetConsoleProcessList(Processes, ARRAYSIZE(Processes)) != 1)
+        return;
+    wprintf(L"Press Enter to close this window.");
+    fflush(stdout);
+    fgetws(Line, ARRAYSIZE(Line), stdin);
+}
+
+static
+BOOL
+LxDefaultRoot(
+    _Out_writes_(MAX_PATH) PWCHAR Root)
+{
+    if (FAILED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA | CSIDL_FLAG_CREATE, NULL, 0, Root)) ||
+        (wcslen(Root) + wcslen(L"\\LiberNT\\Ubuntu") >= MAX_PATH))
+    {
+        return FALSE;
+    }
+    wcscat(Root, L"\\LiberNT");
+    CreateDirectoryW(Root, NULL);
+    wcscat(Root, L"\\Ubuntu");
+    return TRUE;
 }
 
 static
@@ -140,6 +176,9 @@ wmain(
     WCHAR *argv[])
 {
     LX_ACCOUNT Account = { "root", "/root", "/bin/sh" };
+    static WCHAR DefaultRoot[MAX_PATH], FullRoot[MAX_PATH];
+    PCWSTR Url = NULL;
+    BOOL AssumeYes = FALSE;
     LX_LAUNCH Launch;
     PCSTR Base;
     PCHAR Argv0;
@@ -147,7 +186,7 @@ wmain(
 
     ZeroMemory(&Launch, sizeof(Launch));
     Launch.Name = L"lxterm";
-    Launch.Root = L".";
+    Launch.Root = NULL;
     Launch.Terminal = TRUE;
 
     for (Index = 1; Index < argc; Index++)
@@ -159,6 +198,14 @@ wmain(
         else if (wcscmp(argv[Index], L"-j") == 0)
         {
             Launch.Flags |= LX_CREATE_JOIN;
+        }
+        else if (wcscmp(argv[Index], L"-y") == 0)
+        {
+            AssumeYes = TRUE;
+        }
+        else if ((wcscmp(argv[Index], L"-u") == 0) && (Index + 1 < argc))
+        {
+            Url = argv[++Index];
         }
         else if ((wcscmp(argv[Index], L"-r") == 0) && (Index + 1 < argc))
         {
@@ -175,6 +222,24 @@ wmain(
             return 1;
         }
     }
+
+    if (Launch.Root == NULL)
+    {
+        if (!LxDefaultRoot(DefaultRoot))
+        {
+            fwprintf(stderr, L"lxterm: cannot find the local application data folder; pass -r rootdir\n");
+            LxPauseIfOwnConsole();
+            return 1;
+        }
+        Launch.Root = DefaultRoot;
+    }
+    if (!LxRootInstalled(Launch.Root) && (LxInstallRoot(Launch.Root, Url, AssumeYes) != 0))
+    {
+        LxPauseIfOwnConsole();
+        return 1;
+    }
+    if (GetFullPathNameW(Launch.Root, MAX_PATH, FullRoot, NULL))
+        LxKeepResolvConf(FullRoot);
 
     LxLookupAccount(Launch.Root, "0", &Account);
 
