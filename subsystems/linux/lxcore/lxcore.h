@@ -82,6 +82,9 @@ typedef struct _LX_VMA
     PLX_FILE File;
     ULONG64 Offset;
     PVOID Section;
+    ULONG64 ViewBase;
+    ULONG64 ViewOffset;
+    ULONG64 MapEnd;
 } LX_VMA, *PLX_VMA;
 
 typedef struct _LX_POLL_HEAD

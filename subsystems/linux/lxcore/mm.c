@@ -215,6 +215,9 @@ LxVmaSplit(
     Tail->File = Vma->File;
     Tail->Section = Vma->Section;
     Tail->Offset = ((Vma->File != NULL) || (Vma->Section != NULL)) ? Vma->Offset + (Address - Vma->Start) : 0;
+    Tail->ViewBase = Vma->ViewBase;
+    Tail->ViewOffset = Vma->ViewOffset;
+    Tail->MapEnd = Vma->MapEnd;
     if (Tail->File != NULL)
         LxFileReference(Tail->File);
     if (Tail->Section != NULL)
@@ -248,6 +251,7 @@ LxVmaMerge(
             (Vma->Flags == Next->Flags) &&
             (Vma->File == Next->File) &&
             (Vma->Section == Next->Section) &&
+            (Vma->ViewBase == Next->ViewBase) &&
             (((Vma->File == NULL) && (Vma->Section == NULL)) || (Vma->Offset + (Vma->End - Vma->Start) == Next->Offset)))
         {
             Vma->End = Next->End;
@@ -294,7 +298,7 @@ LxVmaRemove(
 
 static
 LONG
-LxVmaInsert(
+LxVmaInsertView(
     _In_ PLX_PROCESS Process,
     _In_ ULONG64 Start,
     _In_ ULONG64 End,
@@ -302,7 +306,10 @@ LxVmaInsert(
     _In_ ULONG Flags,
     _In_opt_ PLX_FILE File,
     _In_ ULONG64 Offset,
-    _In_opt_ PVOID Section)
+    _In_opt_ PVOID Section,
+    _In_ ULONG64 ViewBase,
+    _In_ ULONG64 ViewOffset,
+    _In_ ULONG64 MapEnd)
 {
     PLX_VMA Vma = LxAlloc(sizeof(*Vma));
     PLIST_ENTRY Entry;
@@ -324,6 +331,9 @@ LxVmaInsert(
     Vma->File = File;
     Vma->Section = Section;
     Vma->Offset = ((File != NULL) || (Section != NULL)) ? Offset : 0;
+    Vma->ViewBase = ViewBase;
+    Vma->ViewOffset = ViewOffset;
+    Vma->MapEnd = MapEnd;
     if (File != NULL)
         LxFileReference(File);
     if (Section != NULL)
@@ -339,6 +349,21 @@ LxVmaInsert(
     InsertTailList(Entry, &Vma->Link);
     LxVmaMerge(Process, Start, End);
     return 0;
+}
+
+static
+LONG
+LxVmaInsert(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 Start,
+    _In_ ULONG64 End,
+    _In_ ULONG Prot,
+    _In_ ULONG Flags,
+    _In_opt_ PLX_FILE File,
+    _In_ ULONG64 Offset,
+    _In_opt_ PVOID Section)
+{
+    return LxVmaInsertView(Process, Start, End, Prot, Flags, File, Offset, Section, 0, 0, 0);
 }
 
 static
@@ -602,6 +627,113 @@ LxMmPopulateRun(
 }
 
 static
+VOID
+LxVmReleaseReservations(
+    _In_ ULONG64 Start,
+    _In_ ULONG64 End)
+{
+    MEMORY_BASIC_INFORMATION Information;
+    ULONG64 Cursor = Start;
+
+    while (Cursor < End)
+    {
+        if (!NT_SUCCESS(LxVmQuery(Cursor, &Information)))
+            break;
+        if ((Information.State == MEM_RESERVE) && (Information.Type == MEM_PRIVATE) &&
+            ((ULONG64)(ULONG_PTR)Information.AllocationBase >= Start))
+        {
+            LxVmFree((ULONG64)(ULONG_PTR)Information.AllocationBase, 0, MEM_RELEASE);
+        }
+        Cursor = (ULONG64)(ULONG_PTR)Information.BaseAddress + Information.RegionSize;
+    }
+}
+
+static
+LONG
+LxMmGrowView(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_VMA Vma,
+    _In_ ULONG64 Address)
+{
+    ULONG64 Base = Vma->ViewBase, FileOffset = Vma->ViewOffset, MapEnd = Base, FileEnd, NewSize, OldEnd = Base;
+    PLX_FILE File = Vma->File;
+    BOOLEAN Writable = ((File->Flags & LX_O_ACCMODE) == LX_O_RDWR), AnyWrite = FALSE;
+    FILE_STANDARD_INFORMATION Standard;
+    MEMORY_BASIC_INFORMATION Information;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    LARGE_INTEGER SectionOffset;
+    IO_STATUS_BLOCK Iosb;
+    PLIST_ENTRY Entry;
+    SIZE_T ViewSize;
+    PVOID View;
+    HANDLE Section;
+    NTSTATUS Status;
+
+    if ((File == NULL) || (File->Handle == NULL))
+        return -LX_EFAULT;
+    for (Entry = Process->Vmas.Flink; Entry != &Process->Vmas; Entry = Entry->Flink)
+    {
+        PLX_VMA Piece = CONTAINING_RECORD(Entry, LX_VMA, Link);
+
+        if (Piece->ViewBase != Base)
+            continue;
+        MapEnd = max(MapEnd, min(Piece->End, Piece->MapEnd));
+        if (Piece->Prot & LX_PROT_WRITE)
+            AnyWrite = TRUE;
+    }
+    if (!NT_SUCCESS(ZwQueryInformationFile(File->Handle, &Iosb, &Standard, sizeof(Standard), FileStandardInformation)))
+        return -LX_EFAULT;
+    FileEnd = (ULONG64)Standard.EndOfFile.QuadPart;
+    if (FileEnd <= FileOffset + (LX_ALIGN_DOWN(Address, LX_PAGE_SIZE) - Base))
+        return -LX_EFAULT;
+    NewSize = min(FileEnd - FileOffset, MapEnd - Base);
+
+    if (NT_SUCCESS(LxVmQuery(Base, &Information)) && (Information.Type == MEM_MAPPED) &&
+        ((ULONG64)(ULONG_PTR)Information.AllocationBase == Base))
+    {
+        OldEnd = LxVmAllocationEnd(Base);
+        if (OldEnd >= LX_ALIGN_UP(Base + NewSize, LX_PAGE_SIZE))
+            return -LX_EFAULT;
+        ZwUnmapViewOfSection(NtCurrentProcess(), (PVOID)(ULONG_PTR)Base);
+    }
+    LxVmReleaseReservations(LX_ALIGN_UP(OldEnd, LX_ALLOC_GRANULARITY), LX_ALIGN_UP(MapEnd, LX_ALLOC_GRANULARITY));
+
+    InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwCreateSection(&Section, SECTION_ALL_ACCESS, &ObjectAttributes, NULL,
+                             Writable ? PAGE_READWRITE : PAGE_READONLY, SEC_COMMIT, File->Handle);
+    if (NT_SUCCESS(Status))
+    {
+        View = (PVOID)(ULONG_PTR)Base;
+        ViewSize = (SIZE_T)NewSize;
+        SectionOffset.QuadPart = (LONG64)FileOffset;
+        Status = ZwMapViewOfSection(Section, NtCurrentProcess(), &View, 0, 0, &SectionOffset, &ViewSize, ViewShare, 0,
+                                    (Writable && AnyWrite) ? PAGE_READWRITE : PAGE_READONLY);
+        ZwClose(Section);
+    }
+    if (LX_ALIGN_UP(Base + NewSize, LX_ALLOC_GRANULARITY) < LX_ALIGN_UP(MapEnd, LX_ALLOC_GRANULARITY))
+    {
+        ULONG64 Tail = LX_ALIGN_UP(Base + NewSize, LX_ALLOC_GRANULARITY);
+
+        LxVmAllocate(&Tail, LX_ALIGN_UP(MapEnd, LX_ALLOC_GRANULARITY) - Tail, MEM_RESERVE, PAGE_NOACCESS);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Linux shared mapping cannot grow its view at %I64x: 0x%08lx\n", Base, Status);
+        return -LX_EFAULT;
+    }
+
+    for (Entry = Process->Vmas.Flink; Entry != &Process->Vmas; Entry = Entry->Flink)
+    {
+        PLX_VMA Piece = CONTAINING_RECORD(Entry, LX_VMA, Link);
+        ULONG64 Start = max(Piece->Start, Base), End = min(Piece->End, LX_ALIGN_UP(Base + NewSize, LX_PAGE_SIZE));
+
+        if ((Piece->ViewBase == Base) && (Start < End))
+            LxVmProtect(Start, End - Start, LxProtToNt(Piece->Prot));
+    }
+    return 0;
+}
+
+static
 LONG
 LxMmPopulate(
     _In_ PLX_PROCESS Process,
@@ -622,6 +754,15 @@ LxMmPopulate(
 
         if ((Vma == NULL) || !LxProtAllows(Vma->Prot, Access))
             return -LX_EFAULT;
+        if ((Vma->Flags & LX_VMA_VIEW) && (Vma->MapEnd != 0) &&
+            (!NT_SUCCESS(LxVmQuery(Cursor, &Information)) || (Information.State != MEM_COMMIT)))
+        {
+            Error = LxMmGrowView(Process, Vma, Cursor);
+            if (Error != 0)
+                return Error;
+            Populated++;
+            continue;
+        }
         if (!NT_SUCCESS(LxVmQuery(Cursor, &Information)) || (Information.State == MEM_FREE))
             return -LX_EFAULT;
 
@@ -824,7 +965,8 @@ LxMmMapView(
     _In_opt_ PLX_FILE File,
     _In_ ULONG64 Offset,
     _Out_ PULONG64 Result,
-    _Out_ PVOID *SectionObject)
+    _Out_ PVOID *SectionObject,
+    _Out_ PULONG64 GrowBase)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
     FILE_STANDARD_INFORMATION Standard;
@@ -832,12 +974,14 @@ LxMmMapView(
     LARGE_INTEGER MaximumSize, SectionOffset;
     ULONG64 Delta = Offset & (LX_ALLOC_GRANULARITY - 1);
     BOOLEAN Writable = (File == NULL) || ((File->Flags & LX_O_ACCMODE) == LX_O_RDWR);
+    BOOLEAN Grow = FALSE;
     SIZE_T ViewSize = (SIZE_T)(Length + Delta);
     PVOID Base = NULL;
     HANDLE Section;
     NTSTATUS Status;
 
     *SectionObject = NULL;
+    *GrowBase = 0;
     if (Prot & LX_PROT_EXEC)
         return 1;
     if ((Prot & LX_PROT_WRITE) && !Writable)
@@ -848,14 +992,14 @@ LxMmMapView(
         if (File->Handle == NULL)
             return 2;
         Status = ZwQueryInformationFile(File->Handle, &Iosb, &Standard, sizeof(Standard), FileStandardInformation);
-        if (!NT_SUCCESS(Status) || (Standard.EndOfFile.QuadPart <= 0) ||
-            (Offset + Length > LX_ALIGN_UP((ULONG64)Standard.EndOfFile.QuadPart, LX_PAGE_SIZE)))
+        if (!NT_SUCCESS(Status) || (Standard.EndOfFile.QuadPart < 0))
         {
-            DPRINT1("Linux shared mapping %I64x+%I64x is past the end of the file (%I64d, 0x%08lx)\n",
-                    Offset, Length, Standard.EndOfFile.QuadPart, Status);
+            DPRINT1("Linux shared mapping cannot query the file size: 0x%08lx\n", Status);
             return 3;
         }
-        ViewSize = (SIZE_T)min(Length + Delta, (ULONG64)Standard.EndOfFile.QuadPart - (Offset - Delta));
+        Grow = (Offset + Length > LX_ALIGN_UP((ULONG64)Standard.EndOfFile.QuadPart, LX_PAGE_SIZE));
+        ViewSize = ((ULONG64)Standard.EndOfFile.QuadPart > Offset - Delta) ?
+                   (SIZE_T)min(Length + Delta, (ULONG64)Standard.EndOfFile.QuadPart - (Offset - Delta)) : 0;
     }
 
     if (Fixed)
@@ -871,6 +1015,51 @@ LxMmMapView(
              LxVmIsFree(Address - Delta, Address + Length))
     {
         Base = (PVOID)(ULONG_PTR)(Address - Delta);
+    }
+
+    if (Grow)
+    {
+        ULONG64 Region = LX_ALIGN_UP(Length + Delta, LX_ALLOC_GRANULARITY), Tail;
+
+        if (Base == NULL)
+        {
+            ULONG64 Probe = 0;
+
+            if (!NT_SUCCESS(LxVmAllocate(&Probe, Region, MEM_RESERVE, PAGE_NOACCESS)))
+                return -LX_ENOMEM;
+            LxVmFree(Probe, 0, MEM_RELEASE);
+            Base = (PVOID)(ULONG_PTR)Probe;
+        }
+        if (ViewSize != 0)
+        {
+            InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+            Status = ZwCreateSection(&Section, SECTION_ALL_ACCESS, &ObjectAttributes, NULL,
+                                     Writable ? PAGE_READWRITE : PAGE_READONLY, SEC_COMMIT, File->Handle);
+            if (!NT_SUCCESS(Status))
+                return 6;
+            SectionOffset.QuadPart = (LONG64)(Offset - Delta);
+            Status = ZwMapViewOfSection(Section, NtCurrentProcess(), &Base, 0, 0, &SectionOffset, &ViewSize, ViewShare,
+                                        0, (Prot & LX_PROT_WRITE) ? PAGE_READWRITE : PAGE_READONLY);
+            ZwClose(Section);
+            if (!NT_SUCCESS(Status))
+            {
+                DPRINT1("Linux shared mapping cannot map a view at %p: 0x%08lx\n", Base, Status);
+                return 7;
+            }
+            if ((Prot & (LX_PROT_READ | LX_PROT_WRITE)) == LX_PROT_NONE)
+                LxVmProtect((ULONG64)(ULONG_PTR)Base, ViewSize, PAGE_NOACCESS);
+        }
+        Tail = LX_ALIGN_UP((ULONG64)(ULONG_PTR)Base + ViewSize, LX_ALLOC_GRANULARITY);
+        if ((Tail < (ULONG64)(ULONG_PTR)Base + Region) &&
+            !NT_SUCCESS(LxVmAllocate(&Tail, (ULONG64)(ULONG_PTR)Base + Region - Tail, MEM_RESERVE, PAGE_NOACCESS)))
+        {
+            if (ViewSize != 0)
+                ZwUnmapViewOfSection(NtCurrentProcess(), Base);
+            return -LX_ENOMEM;
+        }
+        *Result = (ULONG64)(ULONG_PTR)Base + Delta;
+        *GrowBase = (ULONG64)(ULONG_PTR)Base;
+        return 0;
     }
 
     MaximumSize.QuadPart = (LONG64)Length;
@@ -1005,7 +1194,7 @@ LxMmMap(
     BOOLEAN Fixed = (Flags & (LX_MAP_FIXED | LX_MAP_FIXED_NOREPLACE)) != 0;
     ULONG VmaFlags = Flags & (LX_MAP_SHARED | LX_MAP_PRIVATE | LX_VMA_HEAP | LX_VMA_STACK);
     BOOLEAN Fresh = FALSE;
-    ULONG64 Base = 0;
+    ULONG64 Base = 0, GrowBase = 0;
     PVOID Section = NULL;
     LONG Error = 0;
 
@@ -1028,10 +1217,12 @@ LxMmMap(
         if (Fixed)
             Error = LxMmUnmapRange(Process, Address, Address + Length);
         if (Error == 0)
-            Error = LxMmMapView(Address, Length, Prot, Fixed, File, Offset, &Base, &Section);
+            Error = LxMmMapView(Address, Length, Prot, Fixed, File, Offset, &Base, &Section, &GrowBase);
         if (Error == 0)
         {
-            Error = LxVmaInsert(Process, Base, Base + Length, Prot, VmaFlags | LX_VMA_VIEW, File, Offset, Section);
+            Error = LxVmaInsertView(Process, Base, Base + Length, Prot, VmaFlags | LX_VMA_VIEW, File, Offset, Section,
+                                    GrowBase, (GrowBase != 0) ? (Offset - (Base - GrowBase)) : 0,
+                                    (GrowBase != 0) ? (Base + Length) : 0);
             if (Section != NULL)
                 ObDereferenceObject(Section);
             if (Error != 0)
@@ -1210,6 +1401,9 @@ LxMmFork(
         Copy->File = Vma->File;
         Copy->Offset = Vma->Offset;
         Copy->Section = Vma->Section;
+        Copy->ViewBase = Vma->ViewBase;
+        Copy->ViewOffset = Vma->ViewOffset;
+        Copy->MapEnd = Vma->MapEnd;
         if (Copy->File != NULL)
             LxFileReference(Copy->File);
         if (Copy->Section != NULL)
