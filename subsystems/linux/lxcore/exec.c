@@ -427,11 +427,11 @@ LxBuildStack(
     LX_AUX(LX_AT_BASE, InterpreterBase);
     LX_AUX(LX_AT_FLAGS, 0);
     LX_AUX(LX_AT_ENTRY, Main->Entry);
-    LX_AUX(LX_AT_UID, 0);
-    LX_AUX(LX_AT_EUID, 0);
-    LX_AUX(LX_AT_GID, 0);
-    LX_AUX(LX_AT_EGID, 0);
-    LX_AUX(LX_AT_SECURE, 0);
+    LX_AUX(LX_AT_UID, Process->Uid[0]);
+    LX_AUX(LX_AT_EUID, Process->Uid[1]);
+    LX_AUX(LX_AT_GID, Process->Gid[0]);
+    LX_AUX(LX_AT_EGID, Process->Gid[1]);
+    LX_AUX(LX_AT_SECURE, (Process->Uid[0] != Process->Uid[1]) || (Process->Gid[0] != Process->Gid[1]));
     LX_AUX(LX_AT_HWCAP, LxArchHwcap());
     LX_AUX(LX_AT_CLKTCK, 100);
     LX_AUX(LX_AT_RANDOM, RandomAddress);
@@ -510,8 +510,9 @@ LxExecImage(
     LX_ELF_INFO MainInfo, InterpInfo;
     PSTR FileName = NULL, InterpreterPath = NULL, ExecPath = NULL;
     CHAR Shebang[LX_SHEBANG_MAX];
-    ULONG64 StackPointer, Entry;
-    ULONG Depth;
+    ULONG64 StackPointer, Entry, Device;
+    ULONG Depth, Mode, FileUid, FileGid;
+    BOOLEAN SetUid = FALSE, SetGid = FALSE;
     LONG Error;
     LONG Sig;
 
@@ -551,6 +552,12 @@ LxExecImage(
         if (ExecPath == NULL)
             Error = -LX_ENOMEM;
     }
+    if ((Error == 0) && !Process->NoNewPrivs &&
+        (LxNtReadLxAttributes(Main.File->Handle, &Mode, &FileUid, &FileGid, &Device) == 0) && (Mode != MAXULONG))
+    {
+        SetUid = ((Mode & LX_S_ISUID) != 0) && (FileUid != MAXULONG);
+        SetGid = ((Mode & (LX_S_ISGID | LX_S_IXGRP)) == (LX_S_ISGID | LX_S_IXGRP)) && (FileGid != MAXULONG);
+    }
     if (Error != 0)
     {
         LxElfClose(&Main);
@@ -576,6 +583,16 @@ LxExecImage(
         if (Process->SigAction[Sig].Handler != LX_SIG_IGN)
             RtlZeroMemory(&Process->SigAction[Sig], sizeof(Process->SigAction[Sig]));
     }
+    if ((SetUid && (FileUid != Process->Uid[1])) || (SetGid && (FileGid != Process->Gid[1])))
+        Process->Dumpable = 0;
+    if (SetUid || SetGid)
+        Process->CapAmbient = 0;
+    if (SetUid)
+        Process->Uid[1] = FileUid;
+    if (SetGid)
+        Process->Gid[1] = FileGid;
+    Process->Uid[2] = Process->Fsuid = Process->Uid[1];
+    Process->Gid[2] = Process->Fsgid = Process->Gid[1];
     ExReleaseFastMutex(&Process->Lock);
 
     Error = LxElfMap(Process, &Main, LxArchImageBase(FALSE), &MainInfo);
