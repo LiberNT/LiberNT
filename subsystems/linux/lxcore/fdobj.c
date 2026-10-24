@@ -1196,7 +1196,7 @@ LX_SYSCALL(LxSysPidfdOpen)
         return -LX_EINVAL;
     if ((LONG)Call->Args[0] <= 0)
         return -LX_EINVAL;
-    Target = LxProcessLookup(Call->Process->Instance, (ULONG)Call->Args[0]);
+    Target = LxProcessLookupNr(Call->Process, (ULONG)Call->Args[0]);
     if (Target == NULL)
         return -LX_ESRCH;
     File = LxPidfdCreate(Target, Flags);
@@ -1345,10 +1345,30 @@ LxFdinfoExtra(
     if (File->Ops == &LxPidfdOps)
     {
         PLX_PROCESS Process = File->Object;
+        PLX_THREAD Viewer = LxCurrentThread();
+        ULONG First = ((Viewer != NULL) && (Viewer->Process->PidNs != NULL)) ? Viewer->Process->PidNs->Level : 0;
+        ULONG Last = (Process->PidNs != NULL) ? Process->PidNs->Level : 0;
+        LONG Pid = (Viewer != NULL) ? (LONG)LxPidNr(Viewer->Process, Process) : (LONG)Process->Pid;
+        ULONG Level;
 
-        RtlStringCbPrintfA(Line, sizeof(Line), "Pid:\t%ld\nNSpid:\t%ld\n",
-                           Process->Exited ? -1L : (LONG)Process->Pid, Process->Exited ? -1L : (LONG)Process->Pid);
+        if (Process->Exited)
+            Pid = -1;
+        RtlStringCbPrintfA(Line, sizeof(Line), "Pid:\t%ld\nNSpid:", Pid);
         LxFdinfoAppend(Context, Line);
+        if ((Pid <= 0) || (First > Last))
+        {
+            RtlStringCbPrintfA(Line, sizeof(Line), "\t%ld", Pid);
+            LxFdinfoAppend(Context, Line);
+        }
+        else
+        {
+            for (Level = First; Level <= Last; Level++)
+            {
+                RtlStringCbPrintfA(Line, sizeof(Line), "\t%lu", Process->NsPid[Level]);
+                LxFdinfoAppend(Context, Line);
+            }
+        }
+        LxFdinfoAppend(Context, "\n");
     }
     else if (File->Ops == &LxEventfdOps)
     {

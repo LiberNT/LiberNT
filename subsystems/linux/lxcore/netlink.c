@@ -1072,7 +1072,7 @@ LxNlAutobind(
     _In_ PLX_NL_SOCKET Socket)
 {
     PLX_THREAD Thread = LxCurrentThread();
-    ULONG Candidate = (Thread != NULL) ? Thread->Process->Pid : 0;
+    ULONG Candidate = (Thread != NULL) ? LxPidNr(Thread->Process, Thread->Process) : 0;
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
     BOOLEAN Used;

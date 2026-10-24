@@ -59,6 +59,7 @@
 #define LX_ENODATA          61
 #define LX_EBADMSG          74
 #define LX_EOVERFLOW        75
+#define LX_EUSERS           87
 #define LX_ENOTSOCK         88
 #define LX_EDESTADDRREQ     89
 #define LX_EMSGSIZE         90
@@ -173,7 +174,10 @@
 #define LX_SEEK_END         2
 
 #define LX_S_IFMT           0170000
+#define LX_S_ISUID          0004000
+#define LX_S_ISGID          0002000
 #define LX_S_ISVTX          0001000
+#define LX_S_IXGRP          0000010
 #define LX_S_IFDIR          0040000
 #define LX_S_IFCHR          0020000
 #define LX_S_IFREG          0100000

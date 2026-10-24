@@ -18,6 +18,7 @@ LxProcessInitialize(VOID)
 {
     InitializeListHead(&LxProcessList);
     ExInitializeFastMutex(&LxProcessListLock);
+    LxNsInitialize();
     LxFutexInitialize();
     LxIpcInitialize();
     LxWinInitialize();
@@ -334,6 +335,7 @@ LxProcessCreate(
     Process->CapBounding = ((1ULL << 41) - 1) & ~(1ULL << LX_CAP_SYS_TIME);
     Process->StartTime = (LONG64)KeQueryInterruptTime();
     LxProcessDefaultLimits(Process->Limits);
+    LxNsAttachRoot(Process, Instance);
     return Process;
 }
 
@@ -349,6 +351,7 @@ LxProcessFork(
 
     ExAcquireFastMutex(&Parent->Lock);
     Process->Cwd = LxStrDup(Parent->Cwd);
+    Process->Root = (Parent->Root != NULL) ? LxStrDup(Parent->Root) : NULL;
     Process->ExePath = (Parent->ExePath != NULL) ? LxStrDup(Parent->ExePath) : NULL;
     if (Parent->CmdlineLength != 0)
     {
@@ -395,7 +398,8 @@ LxProcessFork(
     }
     ExReleaseFastMutex(&Parent->Lock);
 
-    if ((Process->Cwd == NULL) || ((Parent->ExePath != NULL) && (Process->ExePath == NULL)))
+    if ((Process->Cwd == NULL) || ((Parent->ExePath != NULL) && (Process->ExePath == NULL)) ||
+        ((Parent->Root != NULL) && (Process->Root == NULL)))
     {
         LxProcessDereference(Process);
         return NULL;
@@ -451,7 +455,9 @@ LxProcessDereference(
     LxMmRelease(Process);
     if (Process->Tty != NULL)
         LxTtyDereference(Process->Tty);
+    LxNsReleaseProcess(Process);
     LxFree(Process->Cwd);
+    LxFree(Process->Root);
     LxFree(Process->ExePath);
     LxFree(Process->Cmdline);
     LxFree(Process->Environ);
@@ -513,6 +519,7 @@ LxThreadFree(
 {
     PLX_PROCESS Process = Thread->Process;
 
+    LxNsThreadRelease(Thread);
     InterlockedDecrement(&Process->ThreadCount);
     LxProcessDereference(Process);
     LxFree(Thread);
@@ -656,21 +663,28 @@ LxProcessFindReaper(
     _In_ PLX_PROCESS Process)
 {
     PLX_INSTANCE Instance = Process->Instance;
+    PLX_NS PidNs = Process->PidNs;
+    ULONG Reaper = ((PidNs != NULL) && (PidNs->Level > 0)) ? PidNs->Pid.ReaperPid : 1;
     ULONG Pid = Process->ParentPid;
     ULONG Depth;
 
-    for (Depth = 0; (Pid > 1) && (Depth < 256); Depth++)
+    for (Depth = 0; (Pid > 1) && (Pid != Reaper) && (Depth < 256); Depth++)
     {
         PLX_PROCESS Ancestor = LxProcessLookup(Instance, Pid);
 
         if (Ancestor == NULL)
             break;
+        if ((PidNs != NULL) && ((Ancestor->PidNs == NULL) || !LxPidNsContains(PidNs, Ancestor->PidNs)))
+        {
+            LxProcessDereference(Ancestor);
+            break;
+        }
         if (Ancestor->ChildSubreaper && !Ancestor->Exited)
             return Ancestor;
         Pid = Ancestor->ParentPid;
         LxProcessDereference(Ancestor);
     }
-    return LxProcessLookup(Instance, 1);
+    return LxProcessLookup(Instance, Reaper);
 }
 
 static
@@ -727,7 +741,7 @@ LxProcessNotifyParent(
             Info.Code = LX_CLD_EXITED;
             Info.Child.Status = (Status >> 8) & 0xFF;
         }
-        Info.Child.Pid = (LONG)Child->Pid;
+        Info.Child.Pid = (LONG)LxPidNr(Parent, Child);
         Info.Child.Uid = Child->Uid[0];
         LxSignalSend(Parent, NULL, (LONG)Child->ExitSignal, &Info);
     }
@@ -764,7 +778,20 @@ LxProcessExited(
         DPRINT1("Linux instance init '%s' exited with wait status 0x%lx\n", Process->Comm, Process->WaitStatus);
         Instance->InitStatus = Process->WaitStatus;
         Instance->ShuttingDown = TRUE;
-        LxSignalGroup(Instance, 0, LX_SIGKILL);
+        LxSignalGroup(Instance, NULL, 0, LX_SIGKILL);
+        while (!IsListEmpty(&Orphans))
+        {
+            PLX_CHILD Child = CONTAINING_RECORD(RemoveHeadList(&Orphans), LX_CHILD, Link);
+
+            LxProcessUnregister(Child->Lx);
+            LxProcessDereference(Child->Lx);
+            LxFree(Child);
+        }
+    }
+    else if (LxPidNsIsInit(Process))
+    {
+        Process->PidNs->Pid.Dead = TRUE;
+        LxSignalGroup(Instance, Process->PidNs, 0, LX_SIGKILL);
         while (!IsListEmpty(&Orphans))
         {
             PLX_CHILD Child = CONTAINING_RECORD(RemoveHeadList(&Orphans), LX_CHILD, Link);

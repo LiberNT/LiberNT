@@ -290,7 +290,7 @@ LxFileWrite(
     {
         File->Written = TRUE;
         if ((File->Path != NULL) && (File->Type == LX_S_IFREG))
-            LxVcacheInvalidatePath(File->Mount->Instance, File->Path);
+            LxVcacheInvalidatePath(File->Mount->Ns, File->Path);
         LxInotifyFileEvent(File, LX_IN_MODIFY);
     }
     return Result;

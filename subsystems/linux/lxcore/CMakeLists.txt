@@ -11,6 +11,7 @@ list(APPEND SOURCE
     inet.c
     netlink.c
     mm.c
+    ns.c
     pipe.c
     poll.c
     process.c

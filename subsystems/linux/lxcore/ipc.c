@@ -50,7 +50,7 @@ typedef struct _LX_IPC_IDS
 struct _LX_IPC_NAMESPACE
 {
     LIST_ENTRY Link;
-    PLX_INSTANCE Instance;
+    PLX_NS Owner;
     LX_IPC_IDS Ids[LX_IPC_TYPES];
     ULONG64 ShmPages;
     LONG64 UsedSems;
@@ -147,7 +147,7 @@ LxIpcNow(VOID)
 static
 PLX_IPC_NAMESPACE
 LxIpcNamespace(
-    _In_ PLX_INSTANCE Instance,
+    _In_ PLX_NS Owner,
     _In_ BOOLEAN Create)
 {
     PLX_IPC_NAMESPACE Namespace;
@@ -157,7 +157,7 @@ LxIpcNamespace(
     for (Entry = LxIpcNamespaces.Flink; Entry != &LxIpcNamespaces; Entry = Entry->Flink)
     {
         Namespace = CONTAINING_RECORD(Entry, LX_IPC_NAMESPACE, Link);
-        if (Namespace->Instance == Instance)
+        if (Namespace->Owner == Owner)
             return Namespace;
     }
     if (!Create)
@@ -166,7 +166,7 @@ LxIpcNamespace(
     Namespace = LxAlloc(sizeof(*Namespace));
     if (Namespace == NULL)
         return NULL;
-    Namespace->Instance = Instance;
+    Namespace->Owner = Owner;
     for (Type = 0; Type < LX_IPC_TYPES; Type++)
     {
         InitializeListHead(&Namespace->Ids[Type].Objects);
@@ -208,7 +208,7 @@ LxIpcFindId(
 {
     if (Id < 0)
         return NULL;
-    return LxIpcFind(LxIpcNamespace(Process->Instance, FALSE), Type, Id & (LX_IPCMNI - 1), Id >> LX_IPCMNI_SHIFT);
+    return LxIpcFind(LxIpcNamespace(LxProcessNs(Process, LxNsIpc), FALSE), Type, Id & (LX_IPCMNI - 1), Id >> LX_IPCMNI_SHIFT);
 }
 
 static
@@ -425,7 +425,7 @@ LxIpcStatObject(
 {
     PLX_IPC_OBJECT Object;
 
-    Object = ByIndex ? LxIpcFind(LxIpcNamespace(Process->Instance, FALSE), Type, Id, -1) :
+    Object = ByIndex ? LxIpcFind(LxIpcNamespace(LxProcessNs(Process, LxNsIpc), FALSE), Type, Id, -1) :
                        LxIpcFindId(Process, Type, Id);
     if (Object == NULL)
     {
@@ -562,7 +562,7 @@ LX_SYSCALL(LxSysShmget)
     for (;;)
     {
         ExAcquireFastMutex(&LxIpcLock);
-        Namespace = LxIpcNamespace(Process->Instance, TRUE);
+        Namespace = LxIpcNamespace(LxProcessNs(Process, LxNsIpc), TRUE);
         if (Namespace == NULL)
         {
             Result = -LX_ENOMEM;
@@ -737,7 +737,7 @@ LX_SYSCALL(LxSysShmctl)
             Info.Shmseg = LX_SHMMNI;
             Info.Shmall = LX_SHMMAX;
             ExAcquireFastMutex(&LxIpcLock);
-            Result = LxIpcMaxIndex(LxIpcNamespace(Process->Instance, FALSE), LX_IPC_SHM);
+            Result = LxIpcMaxIndex(LxIpcNamespace(LxProcessNs(Process, LxNsIpc), FALSE), LX_IPC_SHM);
             ExReleaseFastMutex(&LxIpcLock);
             return (LxCopyToUser(Buffer, &Info, sizeof(Info)) != 0) ? -LX_EFAULT : Result;
         }
@@ -749,7 +749,7 @@ LX_SYSCALL(LxSysShmctl)
 
             RtlZeroMemory(&Info, sizeof(Info));
             ExAcquireFastMutex(&LxIpcLock);
-            Namespace = LxIpcNamespace(Process->Instance, FALSE);
+            Namespace = LxIpcNamespace(LxProcessNs(Process, LxNsIpc), FALSE);
             if (Namespace != NULL)
             {
                 Info.UsedIds = Namespace->Ids[LX_IPC_SHM].InUse;
@@ -775,8 +775,8 @@ LX_SYSCALL(LxSysShmctl)
                 Stat.Atime = Shm->Atime;
                 Stat.Dtime = Shm->Dtime;
                 Stat.Ctime = Shm->Object.Ctime;
-                Stat.Cpid = Shm->Cpid;
-                Stat.Lpid = Shm->Lpid;
+                Stat.Cpid = LxGlobalToNr(Process, Shm->Cpid);
+                Stat.Lpid = LxGlobalToNr(Process, Shm->Lpid);
                 Stat.Nattch = Shm->Nattch;
             }
             ExReleaseFastMutex(&LxIpcLock);
@@ -937,7 +937,7 @@ LX_SYSCALL(LxSysSemget)
         return -LX_EINVAL;
 
     ExAcquireFastMutex(&LxIpcLock);
-    Namespace = LxIpcNamespace(Process->Instance, TRUE);
+    Namespace = LxIpcNamespace(LxProcessNs(Process, LxNsIpc), TRUE);
     if (Namespace == NULL)
     {
         Result = -LX_ENOMEM;
@@ -1255,7 +1255,7 @@ LX_SYSCALL(LxSysSemctl)
             Info.Semusz = LX_SEMUSZ;
             Info.Semaem = LX_SEMAEM;
             ExAcquireFastMutex(&LxIpcLock);
-            Namespace = LxIpcNamespace(Process->Instance, FALSE);
+            Namespace = LxIpcNamespace(LxProcessNs(Process, LxNsIpc), FALSE);
             if (Command == LX_SEM_INFO)
             {
                 Info.Semusz = (Namespace != NULL) ? Namespace->Ids[LX_IPC_SEM].InUse : 0;
@@ -1309,7 +1309,7 @@ LX_SYSCALL(LxSysSemctl)
             else if (Command == LX_GETVAL)
                 Result = Array->Sems[Num].Value;
             else if (Command == LX_GETPID)
-                Result = Array->Sems[Num].Pid;
+                Result = LxGlobalToNr(Process, Array->Sems[Num].Pid);
             else
                 Result = LxIpcSemCount(Array, Num, Command == LX_GETZCNT);
             ExReleaseFastMutex(&LxIpcLock);
@@ -1424,7 +1424,7 @@ LX_SYSCALL(LxSysMsgget)
     LONG64 Result;
 
     ExAcquireFastMutex(&LxIpcLock);
-    Namespace = LxIpcNamespace(Process->Instance, TRUE);
+    Namespace = LxIpcNamespace(LxProcessNs(Process, LxNsIpc), TRUE);
     if (Namespace == NULL)
     {
         Result = -LX_ENOMEM;
@@ -1745,7 +1745,7 @@ LX_SYSCALL(LxSysMsgctl)
             Info.Msgpool = LX_MSGPOOL;
             Info.Msgtql = LX_MSGMNB;
             ExAcquireFastMutex(&LxIpcLock);
-            Namespace = LxIpcNamespace(Process->Instance, FALSE);
+            Namespace = LxIpcNamespace(LxProcessNs(Process, LxNsIpc), FALSE);
             if (Command == LX_MSG_INFO)
             {
                 Info.Msgpool = (Namespace != NULL) ? Namespace->Ids[LX_IPC_MSG].InUse : 0;
@@ -1773,8 +1773,8 @@ LX_SYSCALL(LxSysMsgctl)
                 Stat.Cbytes = Queue->Bytes;
                 Stat.Qnum = Queue->Count;
                 Stat.Qbytes = Queue->MaxBytes;
-                Stat.Lspid = Queue->Lspid;
-                Stat.Lrpid = Queue->Lrpid;
+                Stat.Lspid = LxGlobalToNr(Process, Queue->Lspid);
+                Stat.Lrpid = LxGlobalToNr(Process, Queue->Lrpid);
             }
             ExReleaseFastMutex(&LxIpcLock);
             if ((Queue != NULL) && (LxCopyToUser(Buffer, &Stat, sizeof(Stat)) != 0))
@@ -1856,14 +1856,14 @@ LxIpcProcessExit(
 }
 
 VOID
-LxIpcInstanceCleanup(
-    _In_ PLX_INSTANCE Instance)
+LxIpcNamespaceCleanup(
+    _In_ PLX_NS Ns)
 {
     PLX_IPC_NAMESPACE Namespace;
     ULONG Type;
 
     ExAcquireFastMutex(&LxIpcLock);
-    Namespace = LxIpcNamespace(Instance, FALSE);
+    Namespace = LxIpcNamespace(Ns, FALSE);
     if (Namespace != NULL)
         RemoveEntryList(&Namespace->Link);
     ExReleaseFastMutex(&LxIpcLock);
