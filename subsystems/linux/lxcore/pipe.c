@@ -149,7 +149,7 @@ LxPipeRead(
             return -LX_EAGAIN;
         Result = LxFileWait(File, LX_POLLIN | LX_POLLHUP, NULL);
         if (Result < 0)
-            return Result;
+            return (Result == -LX_EINTR) ? -LX_ERESTARTSYS : Result;
     }
 }
 
@@ -189,7 +189,7 @@ LxPipeWrite(
                 return (Written != 0) ? (LONG64)Written : -LX_EAGAIN;
             Result = LxFileWait(File, LX_POLLOUT, NULL);
             if (Result < 0)
-                return (Written != 0) ? (LONG64)Written : Result;
+                return (Written != 0) ? (LONG64)Written : (Result == -LX_EINTR) ? -LX_ERESTARTSYS : Result;
             continue;
         }
 
