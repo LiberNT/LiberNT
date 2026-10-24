@@ -466,7 +466,11 @@ LxIoctlCreateProcess(
         return STATUS_INVALID_PARAMETER;
     }
 
-    if (In->Flags & ~(LX_CREATE_BOOT | LX_CREATE_NEW_INSTANCE | LX_CREATE_TRACE | LX_CREATE_TRACE_ALL | LX_CREATE_JOIN))
+    if (In->Flags & ~(LX_CREATE_BOOT | LX_CREATE_NEW_INSTANCE | LX_CREATE_TRACE | LX_CREATE_TRACE_ALL | LX_CREATE_JOIN |
+                      LX_CREATE_USER | LX_CREATE_SEARCH_PATH | LX_CREATE_RUNTIME_DIR))
+        return STATUS_INVALID_PARAMETER;
+    if (((In->Flags & LX_CREATE_RUNTIME_DIR) && !(In->Flags & LX_CREATE_USER)) ||
+        (In->GroupCount > LX_CREATE_MAX_GROUPS))
         return STATUS_INVALID_PARAMETER;
     if ((In->Flags & LX_CREATE_JOIN) && (In->Flags & (LX_CREATE_BOOT | LX_CREATE_NEW_INSTANCE)))
         return STATUS_INVALID_PARAMETER;
@@ -515,6 +519,13 @@ LxIoctlCreateProcess(
     KeInitializeEvent(&Request->Done, NotificationEvent, FALSE);
 
     Request->FileName = LxCaptureUtf8(FileName, In->FileLength);
+    Request->User = (In->Flags & LX_CREATE_USER) != 0;
+    Request->RuntimeDir = (In->Flags & LX_CREATE_RUNTIME_DIR) != 0;
+    Request->SearchPath = (In->Flags & LX_CREATE_SEARCH_PATH) != 0;
+    Request->Uid = In->Uid;
+    Request->Gid = In->Gid;
+    Request->GroupCount = In->GroupCount;
+    RtlCopyMemory(Request->Groups, In->Groups, In->GroupCount * sizeof(ULONG));
     Request->ArgLength = In->ArgLength;
     Request->ArgCount = In->ArgCount;
     Request->EnvLength = In->EnvLength;
