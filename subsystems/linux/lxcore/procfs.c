@@ -2927,7 +2927,22 @@ LxSynthOpen(
             File = NULL;
             goto Exit;
         }
-        Error = -LX_ELOOP;
+        if (!(Flags & LX_O_PATH))
+        {
+            Error = -LX_ELOOP;
+            goto Exit;
+        }
+        File = LxDataFileCreate(Node->Path, NULL, 0, LX_S_IFLNK | 0777);
+        if (File == NULL)
+        {
+            Error = -LX_ENOMEM;
+            goto Exit;
+        }
+        File->Flags = LX_O_PATH;
+        File->Ino = LxHashPath(Node->Mount->Id, Node->Relative);
+        File->Mount = Node->Mount;
+        *Result = File;
+        File = NULL;
         goto Exit;
     }
     else if (Synth.Id == LxPtsTty)
