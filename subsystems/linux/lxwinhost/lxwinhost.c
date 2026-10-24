@@ -17,11 +17,19 @@
 #include <winnls.h>
 #include <winioctl.h>
 #include <winsvc.h>
+#define COBJMACROS
+#include <objbase.h>
+#include <shellapi.h>
+#include <initguid.h>
+#include <propsys.h>
+#include <propkey.h>
 #define NTOS_MODE_USER
 #include <ndk/rtlfuncs.h>
 
 #include "../include/lxioctl.h"
 #include "../include/lxwin.h"
+#include "../include/lxappid.h"
+#include "lxwinhost.h"
 
 #define WM_LX_MESSAGE   (WM_APP + 1)
 #define WM_LX_GONE      (WM_APP + 2)
@@ -57,9 +65,14 @@ typedef struct _LX_HOST_WINDOW
     BOOL Tracking;
     BOOL Applying;
     BOOL Shown;
+    HICON BigIcon;
+    HICON SmallIcon;
+    CHAR AppId[LX_APP_ID_MAX];
+    ULONG AppIdLength;
 } LX_HOST_WINDOW, *PLX_HOST_WINDOW;
 
 static HANDLE LxDevice = INVALID_HANDLE_VALUE;
+static ULONG LxRootTagValue;
 static HWND LxMessageWindow;
 static PLX_HOST_WINDOW LxWindows;
 static HANDLE LxSendEvent;
@@ -247,7 +260,99 @@ LxDestroyWindow(
         }
         DeleteDC(Window->MemoryDc);
     }
+    if (Window->BigIcon != NULL)
+        DestroyIcon(Window->BigIcon);
+    if (Window->SmallIcon != NULL)
+        DestroyIcon(Window->SmallIcon);
     HeapFree(GetProcessHeap(), 0, Window);
+}
+
+static
+VOID
+LxApplyIcons(
+    _In_ PLX_HOST_WINDOW Window,
+    _In_opt_ HICON BigIcon,
+    _In_opt_ HICON SmallIcon)
+{
+    SendMessageW(Window->Hwnd, WM_SETICON, ICON_BIG, (LPARAM)BigIcon);
+    SendMessageW(Window->Hwnd, WM_SETICON, ICON_SMALL, (LPARAM)SmallIcon);
+    if (Window->BigIcon != NULL)
+        DestroyIcon(Window->BigIcon);
+    if (Window->SmallIcon != NULL)
+        DestroyIcon(Window->SmallIcon);
+    Window->BigIcon = BigIcon;
+    Window->SmallIcon = SmallIcon;
+}
+
+static
+VOID
+LxSetAppId(
+    _In_ PLX_HOST_WINDOW Window,
+    _In_reads_bytes_(Length) PCSTR AppId,
+    _In_ ULONG Length)
+{
+    WCHAR Name[LX_APP_ID_MAX], Value[LX_APP_ID_MAX];
+    HICON BigIcon, SmallIcon;
+    IPropertyStore *Store;
+    PROPVARIANT Variant;
+    int Count;
+
+    if ((Length == 0) || (Length >= sizeof(Window->AppId)))
+        return;
+    Count = MultiByteToWideChar(CP_UTF8, 0, AppId, (int)Length, Name, ARRAYSIZE(Name) - 1);
+    if (Count <= 0)
+        return;
+    Name[Count] = UNICODE_NULL;
+    if (_snwprintf(Value, ARRAYSIZE(Value), LX_APP_ID_FORMAT, LxRootTagValue, Name) < 0)
+        return;
+    Value[ARRAYSIZE(Value) - 1] = UNICODE_NULL;
+    memcpy(Window->AppId, AppId, Length);
+    Window->AppIdLength = Length;
+
+    if (SUCCEEDED(SHGetPropertyStoreForWindow(Window->Hwnd, &IID_IPropertyStore, (void **)&Store)))
+    {
+        PropVariantInit(&Variant);
+        Variant.vt = VT_LPWSTR;
+        Variant.pwszVal = Value;
+        if (SUCCEEDED(IPropertyStore_SetValue(Store, &PKEY_AppUserModel_ID, &Variant)))
+            IPropertyStore_Commit(Store);
+        IPropertyStore_Release(Store);
+    }
+
+    if (LxIconCacheLoad(Window->AppId, Window->AppIdLength, &BigIcon, &SmallIcon))
+        LxApplyIcons(Window, BigIcon, SmallIcon);
+}
+
+static
+VOID
+LxSetIcon(
+    _In_ PLX_HOST_WINDOW Window,
+    _In_ PLX_WIN_ICON_MSG Message,
+    _In_ ULONG Size)
+{
+    HICON BigIcon = NULL, SmallIcon = NULL;
+    PUCHAR Icon;
+    ULONG IconSize;
+
+    if (Message->Count == 0)
+    {
+        if ((Window->AppIdLength == 0) || !LxIconCacheLoad(Window->AppId, Window->AppIdLength, &BigIcon, &SmallIcon))
+            BigIcon = SmallIcon = NULL;
+        LxApplyIcons(Window, BigIcon, SmallIcon);
+        return;
+    }
+    Icon = LxBuildIcon(Message, Size, &IconSize);
+    if (Icon == NULL)
+        return;
+    BigIcon = LxCreateIconFromIco(Icon, IconSize, GetSystemMetrics(SM_CXICON));
+    SmallIcon = LxCreateIconFromIco(Icon, IconSize, GetSystemMetrics(SM_CXSMICON));
+    if ((BigIcon != NULL) || (SmallIcon != NULL))
+    {
+        LxApplyIcons(Window, BigIcon, SmallIcon);
+        if (Window->AppIdLength != 0)
+            LxIconCacheStore(Window->AppId, Window->AppIdLength, Icon, IconSize);
+    }
+    HeapFree(GetProcessHeap(), 0, Icon);
 }
 
 static
@@ -588,6 +693,15 @@ LxHandleMessage(
             }
             break;
         }
+
+        case LX_WIN_APP_ID:
+            LxSetAppId(Window, (PCSTR)(Header + 1), Size - sizeof(*Header));
+            break;
+
+        case LX_WIN_ICON:
+            if (Header->Size >= sizeof(LX_WIN_ICON_MSG))
+                LxSetIcon(Window, (PLX_WIN_ICON_MSG)Header, Header->Size);
+            break;
 
         case LX_WIN_SHOW:
             if (Size >= sizeof(LX_WIN_VALUE_MSG))
@@ -1154,6 +1268,7 @@ wWinMain(
     _In_ int ShowCommand)
 {
     WNDCLASSEXW Class;
+    WCHAR FullRoot[MAX_PATH];
     PCWSTR Root = NULL;
     HANDLE Reader;
     MSG Message;
@@ -1185,16 +1300,26 @@ wWinMain(
         return 2;
     }
 
+    if (LxNormalizeRoot(Root, FullRoot, ARRAYSIZE(FullRoot)))
+        LxRootTagValue = LxRootTag(FullRoot);
+    LxIconCacheInitialize(Root);
+
     ZeroMemory(&Class, sizeof(Class));
     Class.cbSize = sizeof(Class);
     Class.lpfnWndProc = LxWindowProc;
     Class.hInstance = Instance;
     Class.hCursor = LoadCursorW(NULL, (LPCWSTR)IDC_ARROW);
+    Class.hIcon = LoadImageW(Instance, MAKEINTRESOURCEW(IDI_LXWINHOST), IMAGE_ICON, GetSystemMetrics(SM_CXICON),
+                             GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR);
+    Class.hIconSm = LoadImageW(Instance, MAKEINTRESOURCEW(IDI_LXWINHOST), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+                               GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
     Class.lpszClassName = LX_HOST_CLASS;
     Class.style = CS_DBLCLKS;
     if (!RegisterClassExW(&Class))
         return 3;
 
+    Class.hIcon = NULL;
+    Class.hIconSm = NULL;
     Class.lpfnWndProc = LxMessageProc;
     Class.lpszClassName = LX_HOST_MESSAGE;
     Class.style = 0;
