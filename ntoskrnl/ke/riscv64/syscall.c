@@ -55,7 +55,7 @@ KiRiscvNeedsGuiConversion(
     _In_ PKTHREAD Thread,
     _In_ PKTRAP_FRAME Frame)
 {
-    return ((Frame->Context.T0 >> TABLE_OFFSET_BITS) == WIN32K_SERVICE_INDEX) &&
+    return !Thread->Header.Minimal && ((Frame->Context.T0 >> TABLE_OFFSET_BITS) == WIN32K_SERVICE_INDEX) &&
            !Thread->GuiThread && KeServiceDescriptorTableShadow[WIN32K_SERVICE_INDEX].Base &&
            PspW32ProcessCallout && PspW32ThreadCallout;
 }
@@ -190,6 +190,11 @@ KiRiscvSystemService(_Inout_ PKTRAP_FRAME Frame)
     /* ECALL is always four bytes, unlike a compressed breakpoint. */
     Frame->Context.Pc += 4;
     _enable();
+    if (Thread->Header.Minimal)
+    {
+        PspPicoSystemCallDispatch(Frame, NULL);
+        goto CheckExit;
+    }
     if (KiRiscvNeedsGuiConversion(Thread, Frame))
     {
         /* The trap entry already moved the thread to a large stack. */
@@ -222,6 +227,7 @@ Exit:
     Frame = ((PKTRAP_FRAME)Thread->InitialStack) - 1;
     Frame->Context.A0 = Result;
 
+CheckExit:
     if (KeGetCurrentIrql() != PASSIVE_LEVEL)
         KeBugCheckEx(IRQL_GT_ZERO_AT_SYSTEM_SERVICE, Frame->Context.T0, KeGetCurrentIrql(), 0, 0);
     if ((Thread->ApcStateIndex != OriginalApcEnvironment) || Thread->CombinedApcDisable)
