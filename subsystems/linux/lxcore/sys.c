@@ -1863,7 +1863,8 @@ LxForkProcess(
     Thread->Tls = (Request->Flags & LX_CLONE_SETTLS) ? Request->Tls : LxArchGetThreadPointer(Call->TrapFrame);
     Thread->SigMask = Call->Thread->SigMask;
     LxSchedInherit(Thread, Call->Thread);
-    Thread->AltStack = Call->Thread->AltStack;
+    if ((Request->Flags & (LX_CLONE_VM | LX_CLONE_VFORK)) != LX_CLONE_VM)
+        Thread->AltStack = Call->Thread->AltStack;
     RtlCopyMemory(Thread->Comm, Call->Thread->Comm, sizeof(Thread->Comm));
     if (Request->Flags & LX_CLONE_CHILD_CLEARTID)
         Thread->ClearChildTid = Request->ChildTid;
