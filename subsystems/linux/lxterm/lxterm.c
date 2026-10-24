@@ -12,10 +12,16 @@
 #include <windef.h>
 #include <winbase.h>
 #include <wincon.h>
+#include <winuser.h>
+#define COBJMACROS
 #include <shlobj.h>
+#include <propsys.h>
+#include <initguid.h>
+#include <propkey.h>
 
 #include "../include/lxioctl.h"
 #include "../include/lxlaunch.h"
+#include "../include/lxappid.h"
 #include "lxinstall.h"
 
 #define LX_PASSWD_MAX (1024 * 1024)
@@ -53,6 +59,36 @@ LxPauseIfOwnConsole(VOID)
     wprintf(L"Press Enter to close this window.");
     fflush(stdout);
     fgetws(Line, ARRAYSIZE(Line), stdin);
+}
+
+static
+VOID
+LxSetTerminalAppId(
+    _In_ PCWSTR Root)
+{
+    WCHAR Normalized[MAX_PATH], Value[LX_APP_ID_MAX];
+    HWND Console = GetConsoleWindow();
+    IPropertyStore *Store;
+    PROPVARIANT Variant;
+    DWORD Processes[2];
+
+    if ((Console == NULL) || (GetConsoleProcessList(Processes, ARRAYSIZE(Processes)) != 1) ||
+        !LxNormalizeRoot(Root, Normalized, ARRAYSIZE(Normalized)))
+    {
+        return;
+    }
+    _snwprintf(Value, ARRAYSIZE(Value), LX_TERMINAL_ID_FORMAT, LxRootTag(Normalized));
+    Value[ARRAYSIZE(Value) - 1] = UNICODE_NULL;
+    if (SUCCEEDED(SHGetPropertyStoreForWindow(Console, &IID_IPropertyStore, (void **)&Store)))
+    {
+        PropVariantInit(&Variant);
+        Variant.vt = VT_LPWSTR;
+        Variant.pwszVal = Value;
+        if (SUCCEEDED(IPropertyStore_SetValue(Store, &PKEY_AppUserModel_ID, &Variant)))
+            IPropertyStore_Commit(Store);
+        IPropertyStore_Release(Store);
+    }
+    SetConsoleTitleW(L"Linux Terminal");
 }
 
 static
@@ -306,6 +342,7 @@ wmain(
         }
         Launch.Root = DefaultRoot;
     }
+    LxSetTerminalAppId(Launch.Root);
     if (!LxRootInstalled(Launch.Root) && (LxInstallRoot(Launch.Root, Url, AssumeYes) != 0))
     {
         LxPauseIfOwnConsole();

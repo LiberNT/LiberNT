@@ -11,6 +11,6 @@ add_executable(lxterm
     lxterm.rc)
 target_compile_definitions(lxterm PRIVATE _7ZIP_ST)
 set_module_type(lxterm win32cui UNICODE)
-target_link_libraries(lxterm lxlaunch zlib)
-add_importlibs(lxterm winhttp bcrypt shell32 iphlpapi advapi32 msvcrt kernel32 ntdll)
+target_link_libraries(lxterm lxlaunch zlib uuid)
+add_importlibs(lxterm winhttp bcrypt shell32 user32 iphlpapi advapi32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET lxterm DESTINATION reactos/system32 FOR all)
