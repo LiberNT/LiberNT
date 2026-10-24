@@ -170,6 +170,17 @@ LxQueryClock(
             return 0;
 
         case LX_CLOCK_PROCESS_CPUTIME_ID:
+        {
+            KERNEL_USER_TIMES Times;
+            LONG64 Time = 0;
+
+            if (NT_SUCCESS(ZwQueryInformationProcess(NtCurrentProcess(), ProcessTimes, &Times, sizeof(Times), NULL)))
+                Time = Times.UserTime.QuadPart + Times.KernelTime.QuadPart;
+            Timespec->Seconds = Time / 10000000;
+            Timespec->Nanoseconds = (Time % 10000000) * 100;
+            return 0;
+        }
+
         case LX_CLOCK_THREAD_CPUTIME_ID:
         {
             ULONG UserTime = 0;
@@ -430,17 +441,6 @@ Exit:
         LxProcessDereference(Second);
     return Result;
 }
-
-NTSTATUS
-NTAPI
-MmCopyVirtualMemory(
-    _In_ PEPROCESS SourceProcess,
-    _In_ PVOID SourceAddress,
-    _In_ PEPROCESS TargetProcess,
-    _Out_ PVOID TargetAddress,
-    _In_ SIZE_T BufferSize,
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _Out_ PSIZE_T ReturnSize);
 
 static
 LONG64
@@ -704,12 +704,23 @@ LX_SYSCALL(LxSysClockNanosleep)
 
 LX_SYSCALL(LxSysTimes)
 {
+    PLX_PROCESS Process = Call->Process;
     LARGE_INTEGER Now;
     LONG64 Times[4] = { 0, 0, 0, 0 };
     LONG64 Result = 0;
+    LX_USAGE Usage;
 
     if (Call->Args[0] != 0)
+    {
+        LxProcessUsage(Process, NULL, &Usage);
+        Times[0] = Usage.UserTime / 100000;
+        Times[1] = Usage.KernelTime / 100000;
+        ExAcquireFastMutex(&Process->Lock);
+        Times[2] = Process->ChildUserTime / 100000;
+        Times[3] = Process->ChildKernelTime / 100000;
+        ExReleaseFastMutex(&Process->Lock);
         Result = LxCopyToUser(Call->Args[0], Times, sizeof(Times));
+    }
     if (Result != 0)
         return Result;
 
@@ -1241,12 +1252,61 @@ LX_SYSCALL(LxSysPrlimit64)
     return Result;
 }
 
-LX_SYSCALL(LxSysGetrusage)
+static
+LONG64
+LxCopyRusage(
+    _In_ ULONG64 Address,
+    _In_ LONG64 UserTime,
+    _In_ LONG64 KernelTime,
+    _In_ ULONG64 MaxRss,
+    _In_ ULONG64 MinFlt)
 {
-    UCHAR Usage[144];
+    LONG64 Usage[18];
 
     RtlZeroMemory(Usage, sizeof(Usage));
-    return LxCopyToUser(Call->Args[1], Usage, sizeof(Usage));
+    Usage[0] = UserTime / 10000000;
+    Usage[1] = (UserTime % 10000000) / 10;
+    Usage[2] = KernelTime / 10000000;
+    Usage[3] = (KernelTime % 10000000) / 10;
+    Usage[4] = (LONG64)(MaxRss / 1024);
+    Usage[8] = (LONG64)MinFlt;
+    return LxCopyToUser(Address, Usage, sizeof(Usage));
+}
+
+LX_SYSCALL(LxSysGetrusage)
+{
+    PLX_PROCESS Process = Call->Process;
+    LONG Who = (LONG)Call->Args[0];
+    LX_USAGE Usage;
+
+    if (Who == 0)
+    {
+        LxProcessUsage(Process, NULL, &Usage);
+        return LxCopyRusage(Call->Args[1], Usage.UserTime, Usage.KernelTime, Usage.MaxRss, Usage.MinFlt);
+    }
+    if (Who == -1)
+    {
+        LONG64 UserTime, KernelTime;
+        ULONG64 MaxRss, MinFlt;
+
+        ExAcquireFastMutex(&Process->Lock);
+        UserTime = Process->ChildUserTime;
+        KernelTime = Process->ChildKernelTime;
+        MaxRss = Process->ChildMaxRss;
+        MinFlt = Process->ChildMinFlt;
+        ExReleaseFastMutex(&Process->Lock);
+        return LxCopyRusage(Call->Args[1], UserTime, KernelTime, MaxRss, MinFlt);
+    }
+    if (Who == 1)
+    {
+        ULONG UserTicks = 0;
+        ULONG KernelTicks = KeQueryRuntimeThread(KeGetCurrentThread(), &UserTicks);
+
+        LxProcessUsage(Process, NULL, &Usage);
+        return LxCopyRusage(Call->Args[1], (LONG64)UserTicks * KeQueryTimeIncrement(),
+                            (LONG64)KernelTicks * KeQueryTimeIncrement(), Usage.MaxRss, 0);
+    }
+    return -LX_EINVAL;
 }
 
 LX_SYSCALL(LxSysGetpid)
@@ -2262,13 +2322,15 @@ LxWaitChild(
     _In_ PLX_WAIT_SELECTOR Selector,
     _Out_ PULONG FoundPid,
     _Out_ PLONG WaitStatus,
-    _Out_ PULONG Uid)
+    _Out_ PULONG Uid,
+    _Out_ PLX_USAGE ChildUsage)
 {
     PLX_PROCESS Process = Selector->Process;
 
     *FoundPid = 0;
     *WaitStatus = 0;
     *Uid = 0;
+    RtlZeroMemory(ChildUsage, sizeof(*ChildUsage));
 
     for (;;)
     {
@@ -2300,8 +2362,19 @@ LxWaitChild(
             *FoundPid = LxPidNr(Process, Found->Lx);
             *WaitStatus = Found->Lx->WaitStatus;
             *Uid = Found->Lx->Uid[0];
+            LxProcessUsage(Found->Lx, Found->Process, ChildUsage);
+            ChildUsage->UserTime += Found->Lx->ChildUserTime;
+            ChildUsage->KernelTime += Found->Lx->ChildKernelTime;
+            ChildUsage->MinFlt += Found->Lx->ChildMinFlt;
+            ChildUsage->MaxRss = max(ChildUsage->MaxRss, Found->Lx->ChildMaxRss);
             if (!(Selector->Options & LX_WNOWAIT))
             {
+                ExAcquireFastMutex(&Process->Lock);
+                Process->ChildUserTime += ChildUsage->UserTime;
+                Process->ChildKernelTime += ChildUsage->KernelTime;
+                Process->ChildMinFlt += ChildUsage->MinFlt;
+                Process->ChildMaxRss = max(Process->ChildMaxRss, ChildUsage->MaxRss);
+                ExReleaseFastMutex(&Process->Lock);
                 LxProcessUnregister(Found->Lx);
                 LxProcessDereference(Found->Lx);
                 LxFree(Found);
@@ -2322,6 +2395,7 @@ LxWaitChild(
 LX_SYSCALL(LxSysWait4)
 {
     LX_WAIT_SELECTOR Selector;
+    LX_USAGE Usage;
     LONG Pid = (LONG)Call->Args[0];
     ULONG FoundPid, Uid;
     LONG Status;
@@ -2357,7 +2431,7 @@ LX_SYSCALL(LxSysWait4)
         Selector.Type = LX_P_ALL;
     }
 
-    Result = LxWaitChild(&Selector, &FoundPid, &Status, &Uid);
+    Result = LxWaitChild(&Selector, &FoundPid, &Status, &Uid, &Usage);
     if (Result != 0)
         return Result;
     if (FoundPid == 0)
@@ -2369,13 +2443,18 @@ LX_SYSCALL(LxSysWait4)
             return Result;
     }
     if (Call->Args[3] != 0)
-        LxZeroUser(Call->Args[3], 144);
+    {
+        Result = LxCopyRusage(Call->Args[3], Usage.UserTime, Usage.KernelTime, Usage.MaxRss, Usage.MinFlt);
+        if (Result != 0)
+            return Result;
+    }
     return FoundPid;
 }
 
 LX_SYSCALL(LxSysWaitid)
 {
     LX_WAIT_SELECTOR Selector;
+    LX_USAGE Usage;
     ULONG Type = (ULONG)Call->Args[0];
     ULONG Options = (ULONG)Call->Args[3];
     PLX_FILE Pidfd = NULL;
@@ -2434,7 +2513,7 @@ LX_SYSCALL(LxSysWaitid)
     if (!(Options & LX_WEXITED))
         Selector.Options |= LX_WNOHANG;
 
-    Result = LxWaitChild(&Selector, &FoundPid, &Status, &Uid);
+    Result = LxWaitChild(&Selector, &FoundPid, &Status, &Uid, &Usage);
     if ((Result == 0) && (FoundPid == 0) && (Type == LX_P_PIDFD) && !(Options & LX_WNOHANG) && (Pidfd->Flags & LX_O_NONBLOCK))
         Result = -LX_EAGAIN;
     if (Pidfd != NULL)
@@ -2466,7 +2545,7 @@ LX_SYSCALL(LxSysWaitid)
             return Result;
     }
     if (Call->Args[4] != 0)
-        LxZeroUser(Call->Args[4], 144);
+        return LxCopyRusage(Call->Args[4], Usage.UserTime, Usage.KernelTime, Usage.MaxRss, Usage.MinFlt);
     return 0;
 }
 

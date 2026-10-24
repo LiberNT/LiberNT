@@ -180,6 +180,7 @@ LxElfMap(
     LONG Error;
 
     RtlZeroMemory(Info, sizeof(*Info));
+    Info->StartCode = MAXULONG64;
 
     for (Index = 0; Index < Image->Header.PhNum; Index++)
     {
@@ -219,6 +220,14 @@ LxElfMap(
             continue;
         if ((Phdr->FileSz != 0) && ((Phdr->VAddr - Phdr->Offset) & (LX_PAGE_SIZE - 1)))
             return -LX_ENOEXEC;
+
+        if (Phdr->Flags & LX_PF_X)
+        {
+            Info->StartCode = min(Info->StartCode, Phdr->VAddr + Bias);
+            Info->EndCode = max(Info->EndCode, Phdr->VAddr + Phdr->FileSz + Bias);
+        }
+        Info->StartData = max(Info->StartData, Phdr->VAddr + Bias);
+        Info->EndData = max(Info->EndData, Phdr->VAddr + Phdr->FileSz + Bias);
 
         Start = LX_ALIGN_DOWN(Phdr->VAddr + Bias, LX_PAGE_SIZE);
         FileEnd = (Phdr->FileSz != 0) ? LX_ALIGN_UP(Phdr->VAddr + Phdr->FileSz + Bias, LX_PAGE_SIZE) : Start;
@@ -267,6 +276,8 @@ LxElfMap(
         }
     }
 
+    if (Info->StartCode == MAXULONG64)
+        Info->StartCode = 0;
     Info->Entry = Image->Header.Entry + Bias;
     Info->PhEnt = sizeof(LX_ELF64_PHDR);
     Info->PhNum = Image->Header.PhNum;
@@ -395,7 +406,7 @@ LxBuildStack(
 {
     PCSTR Platform = LxArchPlatform();
     ULONG64 Base = 0, Top, Cursor, ExecFnAddress, PlatformAddress, RandomAddress, ArgAddress, EnvAddress;
-    ULONG64 Auxv[2 * 20];
+    ULONG64 Auxv[LX_AUXV_WORDS];
     PULONG64 Vector;
     ULONG AuxCount = 0, Words, Index, Offset;
     UCHAR Random[16];
@@ -477,6 +488,15 @@ LxBuildStack(
     if (Error != 0)
         return (LONG)Error;
 
+    ExAcquireFastMutex(&Process->Lock);
+    Process->ArgStart = ArgAddress;
+    Process->ArgEnd = ArgAddress + Request->ArgLength;
+    Process->EnvStart = EnvAddress;
+    Process->EnvEnd = EnvAddress + Request->EnvLength;
+    Process->StartStack = Cursor;
+    RtlZeroMemory(Process->Auxv, sizeof(Process->Auxv));
+    RtlCopyMemory(Process->Auxv, Auxv, AuxCount * sizeof(ULONG64));
+    ExReleaseFastMutex(&Process->Lock);
     *StackPointer = Cursor;
     return 0;
 }
@@ -782,6 +802,10 @@ LxExecImage(
         Error = LxElfMap(Process, &Interp, LxArchImageBase(TRUE), &InterpInfo);
     if (Error == 0)
     {
+        Process->StartCode = MainInfo.StartCode;
+        Process->EndCode = MainInfo.EndCode;
+        Process->StartData = MainInfo.StartData;
+        Process->EndData = MainInfo.EndData;
         Process->BrkBase = LX_ALIGN_UP(MainInfo.ImageEnd, LX_ALLOC_GRANULARITY);
         Process->BrkCurrent = Process->BrkBase;
         Process->BrkCommitted = Process->BrkBase;

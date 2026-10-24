@@ -14,6 +14,7 @@
 
 #define LX_PROC_MAX_COMPONENTS  16
 #define LX_PROC_TICKS           100000LL
+#define LX_RLIMIT_RSS           5
 
 typedef struct _LX_TEXT
 {
@@ -855,19 +856,55 @@ LxGenPidStat(
     _Inout_ PLX_TEXT Text)
 {
     PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+    LONG64 UserTime, KernelTime, ChildUser, ChildKernel;
+    PETHREAD Target = NULL;
+    PLIST_ENTRY Entry;
+    LX_USAGE Usage;
+    ULONG64 ChildFaults;
     CHAR Comm[16];
     ULONG Threads;
     CHAR State;
     LONG64 Start;
+    BOOLEAN Mapped;
 
     if (Process == NULL)
         return;
+    LxProcessUsage(Process, NULL, &Usage);
+    Mapped = !Process->Exited;
+    State = Process->Exited ? 'Z' : ((Process == Self) ? 'R' : 'S');
     ExAcquireFastMutex(&Process->Lock);
     RtlCopyMemory(Comm, Process->Comm, sizeof(Comm));
     Comm[15] = '\0';
+    for (Entry = Process->Threads.Flink; Entry != &Process->Threads; Entry = Entry->Flink)
+    {
+        PLX_THREAD Thread = CONTAINING_RECORD(Entry, LX_THREAD, Link);
+
+        if ((Synth->Tid != 0) && (Thread->Tid != Synth->Tid))
+            continue;
+        if ((State == 'S') && (Thread->CurrentSyscall == MAXULONG))
+            State = 'R';
+        if ((Synth->Tid != 0) && (Thread->EThread != NULL))
+        {
+            Target = Thread->EThread;
+            ObReferenceObject(Target);
+        }
+    }
+    ChildUser = Process->ChildUserTime;
+    ChildKernel = Process->ChildKernelTime;
+    ChildFaults = Process->ChildMinFlt;
     ExReleaseFastMutex(&Process->Lock);
+    UserTime = Usage.UserTime;
+    KernelTime = Usage.KernelTime;
+    if (Target != NULL)
+    {
+        ULONG UserTicks = 0;
+        ULONG KernelTicks = KeQueryRuntimeThread(&Target->Tcb, &UserTicks);
+
+        UserTime = (LONG64)UserTicks * KeQueryTimeIncrement();
+        KernelTime = (LONG64)KernelTicks * KeQueryTimeIncrement();
+        ObDereferenceObject(Target);
+    }
     Threads = Process->Exited ? 1 : (ULONG)max(Process->ThreadCount, 1);
-    State = Process->Exited ? 'Z' : 'S';
     Start = (Process->StartTime + LxTimeNsOffset(Self, LX_CLOCK_BOOTTIME) / 100) / LX_PROC_TICKS;
 
     LxTextPrintf(Text, "%lu (%s) %c %lu %lu %lu %lu %ld %u %lu %lu %lu %lu %llu %llu %lld %lld %ld %ld %lu %ld %lld ",
@@ -876,13 +913,18 @@ LxGenPidStat(
                  LxGlobalToNrIn(LxProcPidNs(Self, Synth), Process->Pgid), LxGlobalToNrIn(LxProcPidNs(Self, Synth), Process->Sid),
                  LxProcessTtyNumber(Process),
                  Process->Tty ? (LONG)LxGlobalToNrIn(LxProcPidNs(Self, Synth), Process->Tty->ForegroundPgrp) : -1L,
-                 0x400000U, 0UL, 0UL, 0UL, 0UL, 0ULL, 0ULL, 0LL, 0LL, 20L, 0L, Threads, 0L, Start);
+                 0x400000U, (ULONG)Usage.MinFlt, (ULONG)ChildFaults, 0UL, 0UL, (ULONG64)UserTime / LX_PROC_TICKS,
+                 (ULONG64)KernelTime / LX_PROC_TICKS, ChildUser / LX_PROC_TICKS, ChildKernel / LX_PROC_TICKS, 20L, 0L,
+                 Threads, 0L, Start);
     LxTextPrintf(Text, "%llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %ld %ld %lu %lu %llu %llu %lld ",
-                 0ULL, 0ULL, LX_RLIM_INFINITY, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
+                 Mapped ? Usage.VirtualSize : 0ULL, Mapped ? Usage.WorkingSet / LX_PAGE_SIZE : 0ULL,
+                 Process->Limits[LX_RLIMIT_RSS].Cur, Mapped ? Process->StartCode : 0ULL, Mapped ? Process->EndCode : 0ULL,
+                 Mapped ? Process->StartStack : 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
                  (LONG)Process->ExitSignal, 0L, 0UL, 0UL, 0ULL, 0ULL, 0LL);
     LxTextPrintf(Text, "%llu %llu %llu %llu %llu %llu %llu %ld\n",
-                 0ULL, 0ULL, Process->BrkBase, 0ULL, 0ULL, 0ULL, 0ULL,
-                 Process->Exited ? (LONG)Process->WaitStatus : 0L);
+                 Mapped ? Process->StartData : 0ULL, Mapped ? Process->EndData : 0ULL, Mapped ? Process->BrkBase : 0ULL,
+                 Mapped ? Process->ArgStart : 0ULL, Mapped ? Process->ArgEnd : 0ULL, Mapped ? Process->EnvStart : 0ULL,
+                 Mapped ? Process->EnvEnd : 0ULL, Process->Exited ? (LONG)Process->WaitStatus : 0L);
     LxProcessDereference(Process);
 }
 
@@ -982,12 +1024,25 @@ LxGenPidStatus(
             LxTextAppend(Text, "\n", 1);
         }
     }
+    if (!Process->Exited)
+    {
+        LX_USAGE Usage;
+
+        LxProcessUsage(Process, NULL, &Usage);
+        LxTextPrintf(Text,
+                     "Kthread:\t0\n"
+                     "VmPeak:\t%8llu kB\nVmSize:\t%8llu kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\n"
+                     "VmHWM:\t%8llu kB\nVmRSS:\t%8llu kB\nRssAnon:\t       0 kB\nRssFile:\t       0 kB\n"
+                     "RssShmem:\t       0 kB\nVmData:\t%8llu kB\nVmStk:\t       0 kB\nVmExe:\t%8llu kB\n"
+                     "VmLib:\t       0 kB\nVmPTE:\t       0 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\n",
+                     Usage.PeakVirtualSize / 1024, Usage.VirtualSize / 1024, Usage.MaxRss / 1024, Usage.WorkingSet / 1024,
+                     Usage.PrivateBytes / 1024, (Process->EndCode - Process->StartCode) / 1024);
+    }
+    else
+    {
+        LxTextAppend(Text, "Kthread:\t0\n", 10);
+    }
     LxTextPrintf(Text,
-                 "Kthread:\t0\n"
-                 "VmPeak:\t       0 kB\nVmSize:\t       0 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\n"
-                 "VmHWM:\t       0 kB\nVmRSS:\t       0 kB\nRssAnon:\t       0 kB\nRssFile:\t       0 kB\n"
-                 "RssShmem:\t       0 kB\nVmData:\t       0 kB\nVmStk:\t       0 kB\nVmExe:\t       0 kB\n"
-                 "VmLib:\t       0 kB\nVmPTE:\t       0 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\n"
                  "CoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffff\nThreads:\t%ld\nSigQ:\t0/63429\n",
                  Process->Exited ? 1L : (LONG)Process->ThreadCount);
     LxTextPrintf(Text,
@@ -1003,6 +1058,60 @@ LxGenPidStatus(
 }
 
 static
+SIZE_T
+LxProcReadMemory(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 Address,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ SIZE_T Length)
+{
+    PEPROCESS EProcess;
+    SIZE_T Copied = 0;
+
+    if (Process->Exited || !NT_SUCCESS(PsLookupProcessByProcessId(ULongToHandle(Process->NtPid), &EProcess)))
+        return 0;
+    if (LxMmPrepareRemote(Process, EProcess, Address, Length, FALSE) == 0)
+        MmCopyVirtualMemory(EProcess, (PVOID)(ULONG_PTR)Address, PsGetCurrentProcess(), Buffer, Length, KernelMode, &Copied);
+    ObDereferenceObject(EProcess);
+    return Copied;
+}
+
+static
+VOID
+LxProcAppendMemory(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 Start,
+    _In_ ULONG64 End,
+    _In_ BOOLEAN StopAtNul,
+    _Inout_ PLX_TEXT Text)
+{
+    CHAR Buffer[512];
+
+    while (Start < End)
+    {
+        SIZE_T Chunk = (SIZE_T)min(End - Start, sizeof(Buffer));
+        SIZE_T Got = LxProcReadMemory(Process, Start, Buffer, Chunk);
+
+        if (Got == 0)
+            return;
+        if (StopAtNul)
+        {
+            PCHAR Nul = memchr(Buffer, 0, Got);
+
+            if (Nul != NULL)
+            {
+                LxTextAppend(Text, Buffer, (ULONG)(Nul - Buffer) + 1);
+                return;
+            }
+        }
+        LxTextAppend(Text, Buffer, (ULONG)Got);
+        if (Got < Chunk)
+            return;
+        Start += Got;
+    }
+}
+
+static
 VOID
 LxGenPidCmdline(
     _In_ PLX_PROCESS Self,
@@ -1010,13 +1119,27 @@ LxGenPidCmdline(
     _Inout_ PLX_TEXT Text)
 {
     PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+    ULONG64 ArgStart, ArgEnd, EnvStart, EnvEnd;
+    CHAR Last = 0;
 
     if (Process == NULL)
         return;
     ExAcquireFastMutex(&Process->Lock);
-    if ((Process->Cmdline != NULL) && !Process->Exited)
+    ArgStart = Process->ArgStart;
+    ArgEnd = Process->ArgEnd;
+    EnvStart = Process->EnvStart;
+    EnvEnd = Process->EnvEnd;
+    if ((ArgEnd <= ArgStart) && (Process->Cmdline != NULL) && !Process->Exited)
         LxTextAppend(Text, Process->Cmdline, Process->CmdlineLength);
     ExReleaseFastMutex(&Process->Lock);
+    if ((ArgEnd > ArgStart) && (LxProcReadMemory(Process, ArgEnd - 1, &Last, 1) == 1))
+    {
+        if (Last == 0)
+            LxProcAppendMemory(Process, ArgStart, ArgEnd, FALSE, Text);
+        else
+            LxProcAppendMemory(Process, ArgStart, min(((EnvStart == ArgEnd) ? EnvEnd : ArgEnd), ArgStart + LX_PAGE_SIZE),
+                               TRUE, Text);
+    }
     LxProcessDereference(Process);
 }
 
@@ -1028,12 +1151,65 @@ LxGenPidEnviron(
     _Inout_ PLX_TEXT Text)
 {
     PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+    ULONG64 EnvStart, EnvEnd;
 
     if (Process == NULL)
         return;
     ExAcquireFastMutex(&Process->Lock);
-    if ((Process->Environ != NULL) && !Process->Exited)
+    EnvStart = Process->EnvStart;
+    EnvEnd = Process->EnvEnd;
+    if ((EnvEnd <= EnvStart) && (Process->Environ != NULL) && !Process->Exited)
         LxTextAppend(Text, Process->Environ, Process->EnvironLength);
+    ExReleaseFastMutex(&Process->Lock);
+    if (EnvEnd > EnvStart)
+        LxProcAppendMemory(Process, EnvStart, EnvEnd, FALSE, Text);
+    LxProcessDereference(Process);
+}
+
+static
+VOID
+LxGenPidStatm(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+    LX_USAGE Usage;
+    ULONG64 Code = 0;
+
+    if (Process == NULL)
+        return;
+    LxProcessUsage(Process, NULL, &Usage);
+    if (Process->Exited)
+        RtlZeroMemory(&Usage, sizeof(Usage));
+    else if (Process->EndCode > Process->StartCode)
+        Code = (LX_ALIGN_UP(Process->EndCode, LX_PAGE_SIZE) - LX_ALIGN_DOWN(Process->StartCode, LX_PAGE_SIZE)) / LX_PAGE_SIZE;
+    LxTextPrintf(Text, "%llu %llu 0 %llu 0 %llu 0\n", Usage.VirtualSize / LX_PAGE_SIZE, Usage.WorkingSet / LX_PAGE_SIZE,
+                 Code, Usage.PrivateBytes / LX_PAGE_SIZE);
+    LxProcessDereference(Process);
+}
+
+static
+VOID
+LxGenPidAuxv(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+    ULONG Words = 0;
+
+    if (Process == NULL)
+        return;
+    ExAcquireFastMutex(&Process->Lock);
+    if (!Process->Exited)
+    {
+        while ((Words + 2 <= LX_AUXV_WORDS) && (Process->Auxv[Words] != 0))
+            Words += 2;
+        if (Words + 2 <= LX_AUXV_WORDS)
+            Words += 2;
+        LxTextAppend(Text, (PCSTR)Process->Auxv, Words * sizeof(ULONG64));
+    }
     ExReleaseFastMutex(&Process->Lock);
     LxProcessDereference(Process);
 }
@@ -1361,6 +1537,7 @@ LxGenPidSyscall(
 static const LX_PID_ENTRY LxPidEntries[] =
 {
     { "attr", LX_S_IFDIR, 0555, NULL, NULL, NULL },
+    { "auxv", LX_S_IFREG, 0400, NULL, LxGenPidAuxv, NULL },
     { "cgroup", LX_S_IFREG, 0444, NULL, LxGenPidCgroup, NULL },
     { "cmdline", LX_S_IFREG, 0444, NULL, LxGenPidCmdline, NULL },
     { "comm", LX_S_IFREG, 0644, NULL, LxGenPidComm, LxWritePidComm },
@@ -1388,7 +1565,7 @@ static const LX_PID_ENTRY LxPidEntries[] =
     { "setgroups", LX_S_IFREG, 0644, "allow\n", NULL, LxWriteAccept },
     { "smaps", LX_S_IFREG, 0444, NULL, LxGenPidMaps, NULL },
     { "stat", LX_S_IFREG, 0444, NULL, LxGenPidStat, NULL },
-    { "statm", LX_S_IFREG, 0444, "0 0 0 0 0 0 0\n", NULL, NULL },
+    { "statm", LX_S_IFREG, 0444, NULL, LxGenPidStatm, NULL },
     { "status", LX_S_IFREG, 0444, NULL, LxGenPidStatus, NULL },
     { "syscall", LX_S_IFREG, 0400, NULL, LxGenPidSyscall, NULL },
     { "task", LX_S_IFDIR, 0555, NULL, NULL, NULL },

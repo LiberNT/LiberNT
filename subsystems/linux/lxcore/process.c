@@ -418,6 +418,16 @@ LxProcessFork(
     Process->BrkCommitted = Parent->BrkCommitted;
     Process->BrkLimit = Parent->BrkLimit;
     Process->BrkReserved = Parent->BrkReserved;
+    Process->StartCode = Parent->StartCode;
+    Process->EndCode = Parent->EndCode;
+    Process->StartData = Parent->StartData;
+    Process->EndData = Parent->EndData;
+    Process->StartStack = Parent->StartStack;
+    Process->ArgStart = Parent->ArgStart;
+    Process->ArgEnd = Parent->ArgEnd;
+    Process->EnvStart = Parent->EnvStart;
+    Process->EnvEnd = Parent->EnvEnd;
+    RtlCopyMemory(Process->Auxv, Parent->Auxv, sizeof(Process->Auxv));
     Process->SigTrampoline = Parent->SigTrampoline;
     LxCgroupAttach(Process, Parent->Cgroup);
     return Process;
@@ -584,6 +594,52 @@ LxThreadLookupReferenced(
     }
     ExReleaseFastMutex(&LxProcessListLock);
     return Found;
+}
+
+VOID
+LxProcessUsage(
+    _In_ PLX_PROCESS Process,
+    _In_opt_ PEPROCESS EProcess,
+    _Out_ PLX_USAGE Usage)
+{
+    PEPROCESS Referenced = NULL;
+    KERNEL_USER_TIMES Times;
+    VM_COUNTERS_EX Counters;
+    HANDLE Handle;
+
+    if (Process->ExitUsageValid)
+    {
+        *Usage = Process->ExitUsage;
+        return;
+    }
+    RtlZeroMemory(Usage, sizeof(*Usage));
+    Usage->MinFlt = Process->MinFlt;
+    if (EProcess == NULL)
+    {
+        if (Process->Exited || !NT_SUCCESS(PsLookupProcessByProcessId(ULongToHandle(Process->NtPid), &Referenced)))
+            return;
+        EProcess = Referenced;
+    }
+    if (NT_SUCCESS(ObOpenObjectByPointer(EProcess, OBJ_KERNEL_HANDLE, NULL, PROCESS_QUERY_LIMITED_INFORMATION,
+                                         *PsProcessType, KernelMode, &Handle)))
+    {
+        if (NT_SUCCESS(ZwQueryInformationProcess(Handle, ProcessTimes, &Times, sizeof(Times), NULL)))
+        {
+            Usage->UserTime = Times.UserTime.QuadPart;
+            Usage->KernelTime = Times.KernelTime.QuadPart;
+        }
+        if (NT_SUCCESS(ZwQueryInformationProcess(Handle, ProcessVmCounters, &Counters, sizeof(Counters), NULL)))
+        {
+            Usage->MaxRss = Counters.PeakWorkingSetSize;
+            Usage->VirtualSize = Counters.VirtualSize;
+            Usage->PeakVirtualSize = Counters.PeakVirtualSize;
+            Usage->WorkingSet = Counters.WorkingSetSize;
+            Usage->PrivateBytes = Counters.PrivateUsage;
+        }
+        ZwClose(Handle);
+    }
+    if (Referenced != NULL)
+        ObDereferenceObject(Referenced);
 }
 
 VOID

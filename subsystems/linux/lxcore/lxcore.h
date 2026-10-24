@@ -33,6 +33,7 @@
 #define LX_IO_CHUNK         (64 * 1024)
 #define LX_STACK_SIZE       (8 * 1024 * 1024)
 #define LX_BRK_RESERVE      (1024ULL * 1024 * 1024)
+#define LX_AUXV_WORDS       40
 #define LX_MMAP_MIN_ADDR    0x10000ULL
 #define LX_VMA_SHM          0x10000000
 #define LX_VMA_VIEW         0x20000000
@@ -372,6 +373,18 @@ typedef struct _LX_ITIMER
     LONG64 Due;
 } LX_ITIMER, *PLX_ITIMER;
 
+typedef struct _LX_USAGE
+{
+    LONG64 UserTime;
+    LONG64 KernelTime;
+    ULONG64 MaxRss;
+    ULONG64 MinFlt;
+    ULONG64 VirtualSize;
+    ULONG64 PeakVirtualSize;
+    ULONG64 WorkingSet;
+    ULONG64 PrivateBytes;
+} LX_USAGE, *PLX_USAGE;
+
 typedef struct _LX_CHILD
 {
     LIST_ENTRY Link;
@@ -472,6 +485,22 @@ struct _LX_PROCESS
     ULONG64 CapAmbient;
     ULONG ExitSignal;
     ULONG64 MinFlt;
+    LX_USAGE ExitUsage;
+    BOOLEAN ExitUsageValid;
+    LONG64 ChildUserTime;
+    LONG64 ChildKernelTime;
+    ULONG64 ChildMinFlt;
+    ULONG64 ChildMaxRss;
+    ULONG64 StartCode;
+    ULONG64 EndCode;
+    ULONG64 StartData;
+    ULONG64 EndData;
+    ULONG64 StartStack;
+    ULONG64 ArgStart;
+    ULONG64 ArgEnd;
+    ULONG64 EnvStart;
+    ULONG64 EnvEnd;
+    ULONG64 Auxv[LX_AUXV_WORDS];
     LONG64 ExitTime;
     PLX_ITIMER RealTimer;
     ULONG Trace;
@@ -558,6 +587,10 @@ typedef struct _LX_ELF_INFO
     ULONG64 PhNum;
     ULONG64 LoadBias;
     ULONG64 ImageEnd;
+    ULONG64 StartCode;
+    ULONG64 EndCode;
+    ULONG64 StartData;
+    ULONG64 EndData;
 } LX_ELF_INFO, *PLX_ELF_INFO;
 
 typedef struct _LX_ELF64_EHDR
@@ -681,6 +714,10 @@ extern const LX_SOCKET_OPS LxNetlinkSocketOps;
 
 LONG64 LxInetSocket(_In_ PLX_PROCESS Process, _In_ ULONG Family, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
 LONG64 LxNetlinkSocket(_In_ PLX_PROCESS Process, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
+VOID LxProcessUsage(_In_ PLX_PROCESS Process, _In_opt_ PEPROCESS EProcess, _Out_ PLX_USAGE Usage);
+NTSTATUS NTAPI MmCopyVirtualMemory(_In_ PEPROCESS SourceProcess, _In_ PVOID SourceAddress, _In_ PEPROCESS TargetProcess,
+                                   _Out_ PVOID TargetAddress, _In_ SIZE_T BufferSize, _In_ KPROCESSOR_MODE PreviousMode,
+                                   _Out_ PSIZE_T ReturnSize);
 
 typedef struct _LX_UNIX_DIAG
 {

@@ -173,6 +173,8 @@ LxPicoProcessExit(
     LxMmLock(Process);
     LxMmRelease(Process);
     LxMmUnlock(Process);
+    LxProcessUsage(Process, EProcess, &Process->ExitUsage);
+    Process->ExitUsageValid = TRUE;
     LxProcessExited(Process, PsGetProcessExitStatus(EProcess));
     InterlockedDecrement((PLONG)&Process->Instance->ProcessCount);
     LxProcessDereference(Process);
