@@ -12,7 +12,6 @@
 //
 #include <sstream>
 #include <fstream>
-#include <chrono>
 #ifdef ANDROID
 #include <android/asset_manager.h>
 #endif
@@ -225,33 +224,44 @@ Util::split(const string& src, char delim, vector<string>& elementVec,
 uint64_t
 Util::get_timestamp_us()
 {
-    return
-        std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
+    LARGE_INTEGER frequency;
+    LARGE_INTEGER counter;
+
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&counter);
+
+    return counter.QuadPart / frequency.QuadPart * 1000000 +
+           counter.QuadPart % frequency.QuadPart * 1000000 / frequency.QuadPart;
 }
 
 #ifndef ANDROID
 
 std::istream *
-Util::get_resource(const std::filesystem::path &path)
+Util::get_resource(const std::string &path)
 {
-    std::ifstream *ifs = new std::ifstream(path, std::ios::binary);
+    std::ifstream *ifs = new std::ifstream(path.c_str(), std::ios::binary);
 
     return static_cast<std::istream *>(ifs);
 }
 
 void
-Util::list_files(const std::filesystem::path& dirName,
-                 std::vector<std::filesystem::path>& fileVec)
+Util::list_files(const std::string& dirName,
+                 std::vector<std::string>& fileVec)
 {
-    try
+    WIN32_FIND_DATAA data;
+    HANDLE find = FindFirstFileA((dirName + "/*").c_str(), &data);
+
+    if (find == INVALID_HANDLE_VALUE)
+        return;
+
+    do
     {
-        for (const auto& entry : std::filesystem::directory_iterator{dirName})
-            fileVec.push_back(entry.path());
-    }
-    catch (...)
-    {
-    }
+        std::string name(data.cFileName);
+        if (name != "." && name != "..")
+            fileVec.push_back(dirName + "/" + name);
+    } while (FindNextFileA(find, &data));
+
+    FindClose(find);
 }
 
 #else

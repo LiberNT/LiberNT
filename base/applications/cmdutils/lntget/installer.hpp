@@ -19,18 +19,25 @@ enum class InstallerDownloadStage
     Verified,
 };
 
-using InstallerStageCallback = std::function<void(InstallerDownloadStage)>;
+class InstallerStageCallback
+{
+public:
+    virtual void Stage(InstallerDownloadStage stage) = 0;
+
+protected:
+    ~InstallerStageCallback() {}
+};
 
 class InstallerService
 {
 public:
-    Status Download(const PackageRecord &package, const InstallerEntry &installer, std::optional<std::wstring> directory,
-                    std::wstring &path, DownloadProgressCallback progress = {}, InstallerStageCallback stage = {});
-    Status Install(const InstallerEntry &installer, std::wstring_view path, InstallMode mode, DWORD &exitCode);
+    Status Download(const PackageRecord &package, const InstallerEntry &installer, const std::wstring *directory,
+                    std::wstring &path, DownloadProgressCallback *progress = nullptr, InstallerStageCallback *stage = nullptr);
+    Status Install(const InstallerEntry &installer, const std::wstring &path, InstallMode mode, DWORD &exitCode);
 
 private:
     std::wstring DefaultPackageDirectory(const PackageRecord &package) const;
-    Status Execute(std::wstring commandLine, std::wstring_view workingDirectory, DWORD &exitCode) const;
+    Status Execute(const std::wstring &commandLine, const std::wstring &workingDirectory, DWORD &exitCode) const;
 
     HttpClient http_;
 };

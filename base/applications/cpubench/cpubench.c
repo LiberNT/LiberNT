@@ -10,6 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _MSC_VER
+#pragma function(strlen)
+#endif
+
 #define VAX_DHRY_PER_SEC 1757
 #define FP_FLOPS_PER_ITER 11
 #define MAX_CPUS 64

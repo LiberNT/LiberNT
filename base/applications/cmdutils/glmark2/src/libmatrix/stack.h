@@ -81,13 +81,13 @@ public:
     {
         *this *= Mat4::rotate(angle, x, y, z);
     }
-    void frustum(float left, float right, float bottom, float top, float near, float far)
+    void frustum(float left, float right, float bottom, float top, float zNear, float zFar)
     {
-        *this *= Mat4::frustum(left, right, bottom, top, near, far);
+        *this *= Mat4::frustum(left, right, bottom, top, zNear, zFar);
     }
-    void ortho(float left, float right, float bottom, float top, float near, float far)
+    void ortho(float left, float right, float bottom, float top, float zNear, float zFar)
     {
-        *this *= Mat4::ortho(left, right, bottom, top, near, far);
+        *this *= Mat4::ortho(left, right, bottom, top, zNear, zFar);
     }
     void perspective(float fovy, float aspect, float zNear, float zFar)
     {

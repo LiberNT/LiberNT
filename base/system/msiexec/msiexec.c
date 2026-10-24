@@ -414,6 +414,7 @@ static int custom_action_server(const WCHAR *arg)
 #ifdef __REACTOS__
     WCHAR buffer[48];
     USHORT process_machine, native_machine;
+    BOOL is_64bit = sizeof(void *) == 8;
     IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)GetModuleHandleW(NULL);
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)((BYTE *)dos + dos->e_lfanew);
 #else
@@ -432,12 +433,12 @@ static int custom_action_server(const WCHAR *arg)
     }
 
 #ifdef __REACTOS__
-    if (sizeof(void *) == 8 && IsWow64Process2(GetCurrentProcess(), &process_machine, &native_machine) &&
+    if (is_64bit && IsWow64Process2(GetCurrentProcess(), &process_machine, &native_machine) &&
         nt->FileHeader.Machine != native_machine)
         swprintf(buffer, ARRAY_SIZE(buffer), L"\\\\.\\pipe\\msica_%x_64_%04x", client_pid, nt->FileHeader.Machine);
     else
 #endif
-    swprintf(buffer, ARRAY_SIZE(buffer), L"\\\\.\\pipe\\msica_%x_%d", client_pid, sizeof(void *) * 8);
+    swprintf(buffer, ARRAY_SIZE(buffer), L"\\\\.\\pipe\\msica_%x_%d", client_pid, (int)(sizeof(void *) * 8));
     pipe = CreateFileW(buffer, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
     if (pipe == INVALID_HANDLE_VALUE)
     {

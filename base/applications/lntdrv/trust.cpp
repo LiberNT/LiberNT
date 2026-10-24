@@ -16,7 +16,7 @@
 
 #include <algorithm>
 #include <cstring>
-#include <cwctype>
+#include <wctype.h>
 
 namespace lntdrv
 {
@@ -354,7 +354,7 @@ bool Contains(const std::vector<BYTE> &content, const std::vector<BYTE> &digest)
 DWORD HashFile(const std::wstring &path, LPCWSTR algorithm, std::vector<BYTE> &digest)
 {
     std::vector<std::vector<BYTE>> digests;
-    DWORD error = DigestFile(path, false, { algorithm }, digests);
+    DWORD error = DigestFile(path, false, std::vector<LPCWSTR>(1, algorithm), digests);
 
     digest = error || digests.empty() ? std::vector<BYTE>() : digests.front();
     return error;
@@ -364,9 +364,12 @@ DWORD VerifyPackage(const std::wstring &directory, std::wstring &file)
 {
     std::vector<std::wstring> files;
     std::vector<std::vector<BYTE>> contents;
+    std::vector<LPCWSTR> algorithms;
     std::wstring infText;
 
     file.clear();
+    algorithms.push_back(BCRYPT_SHA1_ALGORITHM);
+    algorithms.push_back(BCRYPT_SHA256_ALGORITHM);
     ListFiles(directory, files);
     for (const std::wstring &path : files)
     {
@@ -409,8 +412,7 @@ DWORD VerifyPackage(const std::wstring &directory, std::wstring &file)
         {
             continue;
         }
-        error = DigestFile(path, !HasExtension(path, L".inf"), { BCRYPT_SHA1_ALGORITHM, BCRYPT_SHA256_ALGORITHM },
-                           digests);
+        error = DigestFile(path, !HasExtension(path, L".inf"), algorithms, digests);
         if (error)
         {
             file = name;

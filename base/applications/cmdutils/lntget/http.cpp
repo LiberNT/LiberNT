@@ -13,9 +13,7 @@
 #include "util.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cstdio>
-#include <memory>
 
 namespace lntget
 {
@@ -32,14 +30,14 @@ void TraceHttp(const std::string &message)
     OutputDebugStringA(line.c_str());
 }
 
-void TraceInternetFailure(std::string_view stage, DWORD error)
+void TraceInternetFailure(const std::string &stage, DWORD error)
 {
     DWORD responseError = 0;
     DWORD size = 0;
     std::string message(stage);
-    message += " failed error=" + std::to_string(error) + " (0x";
+    message += " failed error=" + DecimalString(error) + " (0x";
     char errorHex[9]{};
-    std::snprintf(errorHex, sizeof(errorHex), "%08lx", error);
+    snprintf(errorHex, sizeof(errorHex), "%08lx", error);
     message += errorHex;
     message += ") " + WindowsErrorMessage(error);
 
@@ -48,7 +46,7 @@ void TraceInternetFailure(std::string_view stage, DWORD error)
     {
         std::vector<wchar_t> text(size + 1);
         if (InternetGetLastResponseInfoW(&responseError, text.data(), &size))
-            message += " extended=" + std::to_string(responseError) + " " + Utf8FromWide(text.data());
+            message += " extended=" + DecimalString(responseError) + " " + Utf8FromWide(text.data());
     }
     TraceHttp(message);
 }
@@ -56,31 +54,36 @@ void TraceInternetFailure(std::string_view stage, DWORD error)
 class InternetRequest
 {
 public:
-    explicit InternetRequest(HINTERNET handle) : handle_(handle) {}
+    InternetRequest() {}
     ~InternetRequest() { if (handle_) InternetCloseHandle(handle_); }
     InternetRequest(const InternetRequest &) = delete;
     InternetRequest &operator=(const InternetRequest &) = delete;
     HINTERNET Get() const { return handle_; }
+    void Reset(HINTERNET handle)
+    {
+        if (handle_) InternetCloseHandle(handle_);
+        handle_ = handle;
+    }
 
 private:
     HINTERNET handle_ = nullptr;
 };
 
-Status ValidateHttpsUrl(std::wstring_view url)
+Status ValidateHttpsUrl(const std::wstring &url)
 {
-    if (url.size() < 8 || _wcsnicmp(url.data(), L"https://", 8) != 0)
+    if (url.size() < 8 || _wcsnicmp(url.c_str(), L"https://", 8) != 0)
         return Status::Fail(ERROR_INTERNET_INVALID_URL, "lntget only downloads HTTPS URLs");
     return Status::Ok();
 }
 
-Status OpenRequest(HINTERNET session, std::wstring_view url, std::wstring_view headers, std::unique_ptr<InternetRequest> &request)
+Status OpenRequest(HINTERNET session, const std::wstring &url, const std::wstring &headers, InternetRequest &request)
 {
     Status status = ValidateHttpsUrl(url);
     if (!status) return status;
     TraceHttp("opening " + Utf8FromWide(url));
     const DWORD flags = INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_COOKIES |
                         INTERNET_FLAG_SECURE | INTERNET_FLAG_NO_UI;
-    HINTERNET handle = InternetOpenUrlW(session, std::wstring(url).c_str(), headers.empty() ? nullptr : std::wstring(headers).c_str(),
+    HINTERNET handle = InternetOpenUrlW(session, url.c_str(), headers.empty() ? nullptr : headers.c_str(),
                                         headers.empty() ? 0 : static_cast<DWORD>(headers.size()), flags, 0);
     if (!handle)
     {
@@ -89,7 +92,7 @@ Status OpenRequest(HINTERNET session, std::wstring_view url, std::wstring_view h
         return Status::Fail(error, "HTTPS request failed: " + WindowsErrorMessage(error));
     }
     TraceHttp("request handle opened");
-    request = std::make_unique<InternetRequest>(handle);
+    request.Reset(handle);
     return Status::Ok();
 }
 
@@ -142,17 +145,17 @@ void WaitBeforeRetry(unsigned attempt, HINTERNET request = nullptr)
     Sleep(delay);
 }
 
-std::wstring UniquePartialPath(std::wstring_view destination)
+std::wstring UniquePartialPath(const std::wstring &destination)
 {
     static LONG sequence = 0;
     const LONG number = InterlockedIncrement(&sequence);
     std::wstring path(destination);
     path += L".partial.";
-    path += std::to_wstring(GetCurrentProcessId());
+    path += DecimalWideString(GetCurrentProcessId());
     path.push_back(L'.');
-    path += std::to_wstring(GetCurrentThreadId());
+    path += DecimalWideString(GetCurrentThreadId());
     path.push_back(L'.');
-    path += std::to_wstring(static_cast<unsigned long>(number));
+    path += DecimalWideString(static_cast<unsigned long>(number));
     return path;
 }
 
@@ -179,8 +182,8 @@ HttpClient::~HttpClient()
     if (session_) InternetCloseHandle(static_cast<HINTERNET>(session_));
 }
 
-Status HttpClient::ProbeContentLength(std::wstring_view url, unsigned long long &length,
-                                      std::wstring_view headers) const
+Status HttpClient::ProbeContentLength(const std::wstring &url, unsigned long long &length,
+                                      const std::wstring &headers) const
 {
     length = 0;
     if (!session_)
@@ -189,30 +192,30 @@ Status HttpClient::ProbeContentLength(std::wstring_view url, unsigned long long 
         return Status::Fail(error, "cannot initialize WinINet: " + WindowsErrorMessage(error));
     }
 
-    std::unique_ptr<InternetRequest> request;
+    InternetRequest request;
     Status status = OpenRequest(static_cast<HINTERNET>(session_), url, headers, request);
     if (!status)
         return status;
 
     DWORD statusCode = 0;
-    status = QueryStatusCode(request->Get(), statusCode);
+    status = QueryStatusCode(request.Get(), statusCode);
     if (!status)
         return status;
-    TraceHttp("size probe HTTP status=" + std::to_string(statusCode));
+    TraceHttp("size probe HTTP status=" + DecimalString(statusCode));
     if (statusCode < 200 || statusCode >= 300)
         return Status::Fail(ERROR_HTTP_INVALID_SERVER_RESPONSE,
-                            "installer size request returned HTTP " + std::to_string(statusCode));
+                            "installer size request returned HTTP " + DecimalString(statusCode));
 
-    length = QueryContentLength(request->Get());
+    length = QueryContentLength(request.Get());
     if (!length)
         return Status::Fail(ERROR_NOT_FOUND, "installer response has no content length");
-    TraceHttp("size probe content-length=" + std::to_string(length));
+    TraceHttp("size probe content-length=" + DecimalString(length));
     return Status::Ok();
 }
 
-Status HttpClient::Get(std::wstring_view url, std::wstring_view headers, HttpResponse &response) const
+Status HttpClient::Get(const std::wstring &url, const std::wstring &headers, HttpResponse &response) const
 {
-    response = {};
+    response = HttpResponse();
     if (!session_)
     {
         const DWORD error = GetLastError();
@@ -222,9 +225,9 @@ Status HttpClient::Get(std::wstring_view url, std::wstring_view headers, HttpRes
     Status last = Status::Fail(ERROR_RETRY, "HTTPS request retries exhausted");
     for (unsigned attempt = 0; attempt < MaximumAttempts; ++attempt)
     {
-        TraceHttp("GET attempt " + std::to_string(attempt + 1) + "/" + std::to_string(MaximumAttempts));
-        response = {};
-        std::unique_ptr<InternetRequest> request;
+        TraceHttp("GET attempt " + DecimalString(attempt + 1) + "/" + DecimalString(MaximumAttempts));
+        response = HttpResponse();
+        InternetRequest request;
         last = OpenRequest(static_cast<HINTERNET>(session_), url, headers, request);
         if (!last)
         {
@@ -235,20 +238,20 @@ Status HttpClient::Get(std::wstring_view url, std::wstring_view headers, HttpRes
             }
             return last;
         }
-        last = QueryStatusCode(request->Get(), response.statusCode);
+        last = QueryStatusCode(request.Get(), response.statusCode);
         if (!last) return last;
-        TraceHttp("GET HTTP status=" + std::to_string(response.statusCode));
+        TraceHttp("GET HTTP status=" + DecimalString(response.statusCode));
         if (IsTransientHttpStatus(response.statusCode) && attempt + 1 < MaximumAttempts)
         {
-            WaitBeforeRetry(attempt, request->Get());
+            WaitBeforeRetry(attempt, request.Get());
             continue;
         }
 
-        std::array<std::uint8_t, 64 * 1024> buffer{};
+        uint8_t buffer[64 * 1024]{};
         for (;;)
         {
             DWORD read = 0;
-            if (!InternetReadFile(request->Get(), buffer.data(), static_cast<DWORD>(buffer.size()), &read))
+            if (!InternetReadFile(request.Get(), buffer, static_cast<DWORD>(sizeof(buffer)), &read))
             {
                 const DWORD error = GetLastError();
                 TraceInternetFailure("InternetReadFile(GET)", error);
@@ -257,13 +260,13 @@ Status HttpClient::Get(std::wstring_view url, std::wstring_view headers, HttpRes
             }
             if (!read)
             {
-                TraceHttp("GET complete bytes=" + std::to_string(response.body.size()));
+                TraceHttp("GET complete bytes=" + DecimalString(response.body.size()));
                 return Status::Ok();
             }
-            TraceHttp("GET read bytes=" + std::to_string(read));
+            TraceHttp("GET read bytes=" + DecimalString(read));
             if (response.body.size() > MaximumMemoryResponse - std::min<std::size_t>(read, MaximumMemoryResponse))
                 return Status::Fail(ERROR_INSUFFICIENT_BUFFER, "HTTPS response exceeds the 4 MiB manifest limit");
-            response.body.insert(response.body.end(), buffer.begin(), buffer.begin() + read);
+            response.body.insert(response.body.end(), buffer, buffer + read);
         }
         if (attempt + 1 < MaximumAttempts && IsTransientInternetError(last.code))
         {
@@ -275,8 +278,8 @@ Status HttpClient::Get(std::wstring_view url, std::wstring_view headers, HttpRes
     return last;
 }
 
-Status HttpClient::Download(std::wstring_view url, std::wstring_view destination, std::wstring_view headers,
-                            unsigned long long maximumBytes, DownloadProgressCallback progress) const
+Status HttpClient::Download(const std::wstring &url, const std::wstring &destination, const std::wstring &headers,
+                            unsigned long long maximumBytes, DownloadProgressCallback *progress) const
 {
     if (!session_)
     {
@@ -289,8 +292,8 @@ Status HttpClient::Download(std::wstring_view url, std::wstring_view destination
     Status last = Status::Fail(ERROR_RETRY, "download retries exhausted");
     for (unsigned attempt = 0; attempt < MaximumAttempts; ++attempt)
     {
-        TraceHttp("download attempt " + std::to_string(attempt + 1) + "/" + std::to_string(MaximumAttempts) + " destination=" + Utf8FromWide(destination));
-        std::unique_ptr<InternetRequest> request;
+        TraceHttp("download attempt " + DecimalString(attempt + 1) + "/" + DecimalString(MaximumAttempts) + " destination=" + Utf8FromWide(destination));
+        InternetRequest request;
         last = OpenRequest(static_cast<HINTERNET>(session_), url, headers, request);
         if (!last)
         {
@@ -302,22 +305,22 @@ Status HttpClient::Download(std::wstring_view url, std::wstring_view destination
             return last;
         }
         DWORD statusCode = 0;
-        last = QueryStatusCode(request->Get(), statusCode);
+        last = QueryStatusCode(request.Get(), statusCode);
         if (!last) return last;
-        TraceHttp("download HTTP status=" + std::to_string(statusCode));
+        TraceHttp("download HTTP status=" + DecimalString(statusCode));
         if (IsTransientHttpStatus(statusCode) && attempt + 1 < MaximumAttempts)
         {
-            WaitBeforeRetry(attempt, request->Get());
+            WaitBeforeRetry(attempt, request.Get());
             continue;
         }
         if (statusCode < 200 || statusCode >= 300)
-            return Status::Fail(ERROR_INVALID_DATA, "HTTP server returned status " + std::to_string(statusCode));
+            return Status::Fail(ERROR_INVALID_DATA, "HTTP server returned status " + DecimalString(statusCode));
 
-        const unsigned long long expected = QueryContentLength(request->Get());
-        TraceHttp("download content-length=" + std::to_string(expected));
+        const unsigned long long expected = QueryContentLength(request.Get());
+        TraceHttp("download content-length=" + DecimalString(expected));
         if (expected && expected > maximumBytes)
             return Status::Fail(ERROR_FILE_TOO_LARGE, "download exceeds its permitted size");
-        if (progress) progress(0, expected);
+        if (progress) progress->Progress(0, expected);
 
         const std::wstring partial = UniquePartialPath(destination);
         HANDLE file = CreateFileW(partial.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -327,13 +330,13 @@ Status HttpClient::Download(std::wstring_view url, std::wstring_view destination
             return Status::Fail(error, "cannot create download file: " + WindowsErrorMessage(error));
         }
 
-        std::array<std::uint8_t, 64 * 1024> buffer{};
+        uint8_t buffer[64 * 1024]{};
         unsigned long long total = 0;
         bool complete = false;
         for (;;)
         {
             DWORD read = 0;
-            if (!InternetReadFile(request->Get(), buffer.data(), static_cast<DWORD>(buffer.size()), &read))
+            if (!InternetReadFile(request.Get(), buffer, static_cast<DWORD>(sizeof(buffer)), &read))
             {
                 const DWORD error = GetLastError();
                 TraceInternetFailure("InternetReadFile(download)", error);
@@ -351,15 +354,15 @@ Status HttpClient::Download(std::wstring_view url, std::wstring_view destination
                 break;
             }
             DWORD written = 0;
-            if (!WriteFile(file, buffer.data(), read, &written, nullptr) || written != read)
+            if (!WriteFile(file, buffer, read, &written, nullptr) || written != read)
             {
                 const DWORD error = GetLastError();
                 last = Status::Fail(error, "download write failed: " + WindowsErrorMessage(error));
                 break;
             }
             total += read;
-            TraceHttp("download received=" + std::to_string(total) + " chunk=" + std::to_string(read));
-            if (progress) progress(total, expected);
+            TraceHttp("download received=" + DecimalString(total) + " chunk=" + DecimalString(read));
+            if (progress) progress->Progress(total, expected);
         }
         if (complete && !FlushFileBuffers(file))
         {
@@ -380,9 +383,9 @@ Status HttpClient::Download(std::wstring_view url, std::wstring_view destination
         }
         status = AtomicReplaceFile(partial, destination, "download");
         if (!status) return status;
-        if (progress) progress(total, expected ? expected : total);
+        if (progress) progress->Progress(total, expected ? expected : total);
         std::printf("Downloaded %llu bytes.\n", total);
-        TraceHttp("download complete bytes=" + std::to_string(total));
+        TraceHttp("download complete bytes=" + DecimalString(total));
         return Status::Ok();
     }
     return last;

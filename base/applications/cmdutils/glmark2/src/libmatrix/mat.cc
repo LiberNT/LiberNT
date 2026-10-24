@@ -9,8 +9,8 @@
 // Contributors:
 //     Jesse Barker - original implementation.
 //
-#include <math.h>
 #include "mat.h"
+#include <math.h>
 
 namespace LibMatrix
 {
@@ -91,37 +91,37 @@ rotate(float angle, float x, float y, float z)
 }
 
 mat4
-frustum(float left, float right, float bottom, float top, float near, float far)
+frustum(float left, float right, float bottom, float top, float zNear, float zFar)
 {
-    float twiceNear(2 * near);
+    float twiceNear(2 * zNear);
     float width(right - left);
     float height(top - bottom);
-    float depth(far - near);
+    float depth(zFar - zNear);
     mat4 f;
     f[0][0] = twiceNear / width;
     f[0][2] = (right + left) / width;
     f[1][1] = twiceNear / height;
     f[1][2] = (top + bottom) / height;
-    f[2][2] = -(far + near) / depth;
-    f[2][3] = -(twiceNear * far) / depth;
+    f[2][2] = -(zFar + zNear) / depth;
+    f[2][3] = -(twiceNear * zFar) / depth;
     f[3][2] = -1;
     f[3][3] = 0;
     return f;
 }
 
 mat4
-ortho(float left, float right, float bottom, float top, float near, float far)
+ortho(float left, float right, float bottom, float top, float zNear, float zFar)
 {
     float width(right - left);
     float height(top - bottom);
-    float depth(far - near);
+    float depth(zFar - zNear);
     mat4 o;
     o[0][0] = 2 / width;
     o[0][3] = (right + left) / width;
     o[1][1] = 2 / height;
     o[1][3] = (top + bottom) / height;
     o[2][2] = -2 / depth;
-    o[2][3] = (far + near) / depth;
+    o[2][3] = (zFar + zNear) / depth;
     return o;
 }
 

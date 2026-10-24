@@ -103,8 +103,12 @@ struct SearchEntry
 
 struct JobData
 {
-    std::function<void()> Work;
-    std::function<void()> Done;
+    ~JobData()
+    {
+        delete Job;
+    }
+
+    Settings::Job *Job;
     HWND Window;
 };
 
@@ -114,8 +118,7 @@ JobThread(LPVOID parameter)
     JobData *job = (JobData *)parameter;
 
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    if (job->Work)
-        job->Work();
+    job->Job->Work();
     CoUninitialize();
     if (!PostMessageW(job->Window, WM_SETTINGS_JOB, 0, (LPARAM)job))
         delete job;
@@ -233,23 +236,20 @@ public:
         GoBack();
     }
 
-    void RunJob(std::function<void()> work, std::function<void()> done) override
+    void StartJob(Settings::Job *work) override
     {
         JobData *job = new JobData;
         HANDLE thread;
 
-        job->Work = work;
-        job->Done = done;
+        job->Job = work;
         job->Window = m_hwnd;
         thread = CreateThread(NULL, 0, JobThread, job, 0, NULL);
         if (thread)
             CloseHandle(thread);
         else
         {
-            if (job->Work)
-                job->Work();
-            if (job->Done)
-                job->Done();
+            job->Job->Work();
+            job->Job->Done();
             delete job;
         }
     }
@@ -687,8 +687,7 @@ protected:
             case WM_SETTINGS_JOB:
             {
                 JobData *job = (JobData *)lParam;
-                if (job->Done)
-                    job->Done();
+                job->Job->Done();
                 delete job;
                 return 0;
             }
@@ -1938,7 +1937,7 @@ private:
                 return;
             if (control.Action >= 0)
             {
-                std::function<void(int)> invoke = row.Invoke;
+                Settings::RowCallback<void> invoke = row.Invoke;
                 if (invoke)
                     invoke(control.Action);
                 Rebuild(FALSE);
@@ -1949,7 +1948,7 @@ private:
                 case RowKind::Navigate:
                     if (row.Invoke)
                     {
-                        std::function<void(int)> invoke = row.Invoke;
+                        Settings::RowCallback<void> invoke = row.Invoke;
                         invoke(0);
                     }
                     else if (row.Target != PageId::None)
@@ -1962,14 +1961,14 @@ private:
                 case RowKind::Link:
                     if (row.Invoke)
                     {
-                        std::function<void(int)> invoke = row.Invoke;
+                        Settings::RowCallback<void> invoke = row.Invoke;
                         invoke(0);
                     }
                     return;
                 case RowKind::Toggle:
                     if (row.Change)
                     {
-                        std::function<void(int)> change = row.Change;
+                        Settings::RowCallback<void> change = row.Change;
                         change(row.Checked ? 0 : 1);
                     }
                     Rebuild(FALSE);
@@ -1977,7 +1976,7 @@ private:
                 case RowKind::Choice:
                     if (value >= 0 && value != row.Selected && row.Change)
                     {
-                        std::function<void(int)> change = row.Change;
+                        Settings::RowCallback<void> change = row.Change;
                         change(value);
                     }
                     Rebuild(FALSE);
@@ -1985,7 +1984,7 @@ private:
                 case RowKind::Slider:
                     if (!row.Live && row.Change)
                     {
-                        std::function<void(int)> change = row.Change;
+                        Settings::RowCallback<void> change = row.Change;
                         change(value);
                     }
                     Rebuild(FALSE);
@@ -2247,12 +2246,11 @@ public:
     void Refresh() override {}
     void Open(PageId page, const std::wstring &param) override {}
     void Back() override {}
-    void RunJob(std::function<void()> work, std::function<void()> done) override
+    void StartJob(Settings::Job *job) override
     {
-        if (work)
-            work();
-        if (done)
-            done();
+        job->Work();
+        job->Done();
+        delete job;
     }
     void SetTimerRefresh(UINT milliseconds) override {}
 };

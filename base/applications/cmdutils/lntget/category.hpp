@@ -28,12 +28,12 @@ class CategoryClassifier
 {
 public:
     CategoryClassifier();
-    std::uint32_t Classify(const std::vector<std::uint32_t> &tags, const std::vector<std::string> &loweredNames) const;
-    std::uint32_t ClassifyText(std::string_view loweredText) const;
+    uint32_t Classify(const std::vector<uint32_t> &tags, const std::vector<std::string> &loweredNames) const;
+    uint32_t ClassifyText(const std::string &loweredText) const;
 
 private:
-    std::map<std::string, std::uint32_t> exact_;
-    std::vector<std::pair<std::string, std::uint32_t>> roots_;
+    std::map<std::string, uint32_t> exact_;
+    std::vector<std::pair<std::string, uint32_t>> roots_;
 };
 
 } // namespace lntget

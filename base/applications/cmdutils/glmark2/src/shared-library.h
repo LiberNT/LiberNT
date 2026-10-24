@@ -22,8 +22,6 @@
 #ifndef GLMARK2_SHARED_LIBRARY_H_
 #define GLMARK2_SHARED_LIBRARY_H_
 
-#include <initializer_list>
-
 class SharedLibrary
 {
 public:
@@ -31,7 +29,6 @@ public:
     ~SharedLibrary();
 
     bool open(const char *name);
-    bool open_from_alternatives(std::initializer_list<const char*> alt_names);
     void close();
 
     void *handle() const;

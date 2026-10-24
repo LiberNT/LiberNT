@@ -17,7 +17,6 @@
 #include <setupapi.h>
 #include <cfgmgr32.h>
 #include <algorithm>
-#include <memory>
 
 #define EXPLORER_KEY L"Software\\ReactOS\\Explorer"
 
@@ -349,7 +348,7 @@ BuildNetworkAdvanced(PageBuilder &page)
                                               host->Open(PageId::Adapter, connection.Guid);
                                               return;
                                           }
-                                          std::shared_ptr<DWORD> result = std::make_shared<DWORD>(ERROR_SUCCESS);
+                                          DWORD *result = new DWORD(ERROR_SUCCESS);
                                           host->RunJob([connection, result]()
                                                        {
                                                            *result = SetDeviceEnabled(connection.Instance,
@@ -359,6 +358,7 @@ BuildNetworkAdvanced(PageBuilder &page)
                                                        {
                                                            if (*result != ERROR_SUCCESS)
                                                                ShowError(host->Window(), *result);
+                                                           delete result;
                                                            host->Refresh();
                                                        });
                                       });
@@ -688,7 +688,8 @@ public:
             m_Config->Release();
     }
 
-    HRESULT Update(GUID adapter, std::function<void(TcpipConfig &)> change)
+    template <class Change>
+    HRESULT Update(GUID adapter, Change change)
     {
         PTCPIP_PROPERTIES current = NULL;
         TCPIP_PROPERTIES next;
@@ -770,10 +771,11 @@ PrefixMask(UINT8 length)
     return Printf(L"%u.%u.%u.%u", (mask >> 24) & 0xFF, (mask >> 16) & 0xFF, (mask >> 8) & 0xFF, mask & 0xFF);
 }
 
+template <class Change>
 static void
-ApplyTcpip(SettingsHost *host, const std::wstring &adapterName, std::function<void(TcpipConfig &)> change)
+ApplyTcpip(SettingsHost *host, const std::wstring &adapterName, Change change)
 {
-    std::shared_ptr<HRESULT> result = std::make_shared<HRESULT>(E_FAIL);
+    HRESULT *result;
     GUID adapter;
 
     if (FAILED(CLSIDFromString(adapterName.c_str(), &adapter)))
@@ -781,6 +783,7 @@ ApplyTcpip(SettingsHost *host, const std::wstring &adapterName, std::function<vo
         ShowError(host->Window(), ERROR_NOT_FOUND);
         return;
     }
+    result = new HRESULT(E_FAIL);
     host->RunJob([result, adapter, change]()
                  {
                      HRESULT init = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -795,6 +798,7 @@ ApplyTcpip(SettingsHost *host, const std::wstring &adapterName, std::function<vo
                  {
                      if (FAILED(*result))
                          ShowError(host->Window(), (DWORD)*result);
+                     delete result;
                      host->Refresh();
                  });
 }
@@ -892,11 +896,20 @@ BuildAdapter(PageBuilder &page)
         page.Button(Str(IDS_IP_ASSIGNMENT), Str(dhcp ? IDS_DHCP : IDS_MANUAL), L"edit_20_regular", Str(IDS_EDIT),
                     [host, name, dhcp, firstIp, mask, firstGateway](int)
                     {
-                        std::vector<std::wstring> options = { Str(IDS_DHCP), Str(IDS_MANUAL) };
-                        std::vector<std::wstring> labels = { Str(IDS_IP_ADDRESS), Str(IDS_SUBNET_MASK), Str(IDS_GATEWAY) };
-                        std::vector<std::wstring> values = { firstIp, mask, firstGateway };
-                        int choice = PickFromMenu(host->Window(), options, dhcp ? 0 : 1);
+                        std::vector<std::wstring> options;
+                        std::vector<std::wstring> labels;
+                        std::vector<std::wstring> values;
+                        int choice;
 
+                        options.push_back(Str(IDS_DHCP));
+                        options.push_back(Str(IDS_MANUAL));
+                        labels.push_back(Str(IDS_IP_ADDRESS));
+                        labels.push_back(Str(IDS_SUBNET_MASK));
+                        labels.push_back(Str(IDS_GATEWAY));
+                        values.push_back(firstIp);
+                        values.push_back(mask);
+                        values.push_back(firstGateway);
+                        choice = PickFromMenu(host->Window(), options, dhcp ? 0 : 1);
                         if (choice < 0)
                             return;
                         if (choice == 1)
@@ -930,12 +943,19 @@ BuildAdapter(PageBuilder &page)
                     Str(IDS_EDIT),
                     [host, name, manualDns, dns1, dns2](int)
                     {
-                        std::vector<std::wstring> options = { Str(IDS_DHCP), Str(IDS_MANUAL) };
-                        std::vector<std::wstring> labels = { Str(IDS_PREFERRED_DNS), Str(IDS_ALTERNATE_DNS) };
-                        std::vector<std::wstring> values = { dns1, dns2 };
+                        std::vector<std::wstring> options;
+                        std::vector<std::wstring> labels;
+                        std::vector<std::wstring> values;
                         std::wstring list;
-                        int choice = PickFromMenu(host->Window(), options, manualDns.empty() ? 0 : 1);
+                        int choice;
 
+                        options.push_back(Str(IDS_DHCP));
+                        options.push_back(Str(IDS_MANUAL));
+                        labels.push_back(Str(IDS_PREFERRED_DNS));
+                        labels.push_back(Str(IDS_ALTERNATE_DNS));
+                        values.push_back(dns1);
+                        values.push_back(dns2);
+                        choice = PickFromMenu(host->Window(), options, manualDns.empty() ? 0 : 1);
                         if (choice < 0)
                             return;
                         if (choice == 1)
@@ -1098,7 +1118,7 @@ BuildProxy(PageBuilder &page)
                     else if (!on && at != std::wstring::npos)
                     {
                         list.erase(at, 7);
-                        while (!list.empty() && list.back() == L';')
+                        while (!list.empty() && list[list.size() - 1] == L';')
                             list.pop_back();
                         if (!list.empty() && list[0] == L';')
                             list.erase(0, 1);

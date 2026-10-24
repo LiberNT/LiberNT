@@ -14,8 +14,7 @@
 #include "util.hpp"
 
 #include <algorithm>
-#include <cwctype>
-#include <memory>
+#include <wctype.h>
 #include <set>
 
 namespace lntget
@@ -133,7 +132,7 @@ void EnumerateView(HKEY root, REGSAM view, std::vector<InstalledApp> &apps, std:
         std::transform(identity.begin(), identity.end(), identity.begin(),
                        [](wchar_t character) { return static_cast<wchar_t>(towlower(character)); });
         if (seen.insert(identity).second)
-            apps.push_back(std::move(app));
+            apps.push_back(app);
     }
     RegCloseKey(uninstall);
 }
@@ -143,7 +142,8 @@ std::vector<InstalledApp> EnumerateInstalledApps()
     std::vector<InstalledApp> apps;
     std::set<std::wstring> seen;
     const REGSAM views[] = {0, KEY_WOW64_32KEY, KEY_WOW64_64KEY};
-    for (HKEY root : {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE})
+    const HKEY roots[] = {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    for (HKEY root : roots)
     {
         for (REGSAM view : views)
             EnumerateView(root, view, apps, seen);
@@ -159,10 +159,10 @@ std::wstring FormatInstalledSize(unsigned long long bytes)
     if (!bytes)
         return L"";
     if (bytes >= 1024ull * 1024 * 1024)
-        return std::to_wstring(bytes / (1024ull * 1024 * 1024)) + L" GB";
+        return DecimalWideString(bytes / (1024ull * 1024 * 1024)) + L" GB";
     if (bytes >= 1024ull * 1024)
-        return std::to_wstring(bytes / (1024ull * 1024)) + L" MB";
-    return std::to_wstring(bytes / 1024) + L" KB";
+        return DecimalWideString(bytes / (1024ull * 1024)) + L" MB";
+    return DecimalWideString(bytes / 1024) + L" KB";
 }
 
 void RefreshInstalled(InstalledWindow &state)
@@ -183,7 +183,7 @@ void RefreshInstalled(InstalledWindow &state)
         std::wstring size = FormatInstalledSize(app.estimatedBytes);
         ListView_SetItemText(state.list, row, 3, const_cast<LPWSTR>(size.c_str()));
     }
-    const std::wstring status = std::to_wstring(state.apps.size()) + L" installed applications";
+    const std::wstring status = DecimalWideString(state.apps.size()) + L" installed applications";
     SetWindowTextW(state.status, status.c_str());
     EnableWindow(state.uninstall, FALSE);
 }
@@ -286,7 +286,8 @@ LRESULT CALLBACK InstalledProc(HWND window, UINT message, WPARAM wParam, LPARAM 
             metrics.cbSize = sizeof(metrics);
             if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0))
                 state->font = CreateFontIndirectW(&metrics.lfMessageFont);
-            for (HWND child : {state->list, state->status, state->uninstall, state->refresh, state->close})
+            const HWND children[] = {state->list, state->status, state->uninstall, state->refresh, state->close};
+            for (HWND child : children)
                 SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(state->font), TRUE);
             RefreshInstalled(*state);
             return 0;

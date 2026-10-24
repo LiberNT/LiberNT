@@ -21,7 +21,7 @@
 #include "util.hpp"
 
 #include <algorithm>
-#include <memory>
+#include <cstring>
 
 namespace lntget
 {
@@ -99,14 +99,14 @@ struct GuiPackage
     std::string utf8Version;
     std::string searchKey;
     std::string sortKey;
-    std::array<std::uint8_t, 32> manifestHash{};
-    std::uint32_t categories = 0;
+    uint8_t manifestHash[32]{};
+    uint32_t categories = 0;
 };
 
 struct PreparedCatalog
 {
     std::vector<GuiPackage> packages;
-    std::vector<std::uint32_t> counts;
+    std::vector<uint32_t> counts;
 };
 
 struct CatalogResult
@@ -118,7 +118,7 @@ struct CatalogResult
 
 struct DetailResult
 {
-    std::uint32_t generation = 0;
+    uint32_t generation = 0;
     int stage = 0;
     bool ok = false;
     std::string error;
@@ -148,7 +148,7 @@ enum class OperationStage
 
 struct OperationUpdate
 {
-    std::uint32_t generation = 0;
+    uint32_t generation = 0;
     OperationStage stage = OperationStage::Preparing;
     bool install = false;
     unsigned long long received = 0;
@@ -169,7 +169,7 @@ COLORREF Blend(COLORREF front, COLORREF back, int weight)
 
 std::wstring FormatCount(unsigned long long value)
 {
-    std::wstring digits = std::to_wstring(value);
+    std::wstring digits = DecimalWideString(value);
     std::wstring grouped;
     for (std::size_t index = 0; index < digits.size(); ++index)
     {
@@ -190,10 +190,10 @@ std::wstring FormatByteCount(unsigned long long value)
         divisor *= 1024;
         ++unit;
     }
-    if (!unit) return std::to_wstring(value) + L" B";
+    if (!unit) return DecimalWideString(value) + L" B";
     const unsigned long long whole = value / divisor;
     const unsigned long long tenth = (value % divisor) * 10 / divisor;
-    return std::to_wstring(whole) + L"." + std::to_wstring(tenth) + L" " + Units[unit];
+    return DecimalWideString(whole) + L"." + DecimalWideString(tenth) + L" " + Units[unit];
 }
 
 unsigned ScaleProgress(unsigned long long received, unsigned long long total, unsigned scale)
@@ -205,11 +205,11 @@ unsigned ScaleProgress(unsigned long long received, unsigned long long total, un
     return static_cast<unsigned>((static_cast<long double>(received) * scale) / total);
 }
 
-std::wstring JoinTags(const std::vector<std::uint32_t> &tags, const std::vector<std::wstring> &wide,
+std::wstring JoinTags(const std::vector<uint32_t> &tags, const std::vector<std::wstring> &wide,
                       const std::vector<std::string> &lower, std::string &searchKey)
 {
     std::wstring text;
-    for (const std::uint32_t tag : tags)
+    for (const uint32_t tag : tags)
     {
         if (tag >= wide.size())
             continue;
@@ -222,9 +222,9 @@ std::wstring JoinTags(const std::vector<std::uint32_t> &tags, const std::vector<
     return text;
 }
 
-PreparedCatalog PrepareCatalog(const Catalog &catalog)
+void PrepareCatalog(const Catalog &catalog, PreparedCatalog &prepared)
 {
-    PreparedCatalog prepared;
+    prepared.packages.clear();
     prepared.counts.assign(CategoryCount(), 0);
     prepared.packages.reserve(catalog.entries.size());
     const CategoryClassifier classifier;
@@ -244,7 +244,7 @@ PreparedCatalog PrepareCatalog(const Catalog &catalog)
         package.utf8Id = entry.package.id;
         package.utf8Name = entry.package.name;
         package.utf8Version = entry.package.version;
-        package.manifestHash = entry.package.manifestHash;
+        std::memcpy(package.manifestHash, entry.package.manifestHash, sizeof(package.manifestHash));
         package.name = WideFromUtf8(entry.package.name);
         package.id = WideFromUtf8(entry.package.id);
         package.version = WideFromUtf8(entry.package.version);
@@ -265,9 +265,8 @@ PreparedCatalog PrepareCatalog(const Catalog &catalog)
             if (package.categories & (1u << index))
                 ++prepared.counts[index];
         }
-        prepared.packages.push_back(std::move(package));
+        prepared.packages.push_back(package);
     }
-    return prepared;
 }
 
 int RankPackage(const GuiPackage &package, const std::string &query)
@@ -358,9 +357,9 @@ public:
         SetEvent(signal_);
     }
 
-    std::uint32_t RequestDetails(const PackageRecord &package)
+    uint32_t RequestDetails(const PackageRecord &package)
     {
-        const std::uint32_t generation = static_cast<std::uint32_t>(InterlockedIncrement(&generation_));
+        const uint32_t generation = static_cast<uint32_t>(InterlockedIncrement(&generation_));
         EnterCriticalSection(&lock_);
         detailsPending_ = true;
         pending_ = package;
@@ -372,9 +371,9 @@ public:
 
     void CancelDetails() { InterlockedIncrement(&generation_); }
 
-    std::uint32_t RequestOperation(const PackageRecord &package, bool install)
+    uint32_t RequestOperation(const PackageRecord &package, bool install)
     {
-        const std::uint32_t generation = static_cast<std::uint32_t>(InterlockedIncrement(&operationGeneration_));
+        const uint32_t generation = static_cast<uint32_t>(InterlockedIncrement(&operationGeneration_));
         EnterCriticalSection(&lock_);
         operationPending_ = true;
         operationPackage_ = package;
@@ -390,7 +389,47 @@ private:
     {
         HWND window = nullptr;
         HANDLE stop = nullptr;
-        std::unique_ptr<DetailResult> result;
+        DetailResult *result = nullptr;
+    };
+
+    class OperationCallbacks : public DownloadProgressCallback, public InstallerStageCallback
+    {
+    public:
+        OperationCallbacks(Worker &worker, const OperationUpdate &update) : worker_(worker), update_(update) {}
+
+        void Progress(unsigned long long received, unsigned long long total) override
+        {
+            if (total)
+            {
+                const unsigned percent = ScaleProgress(received, total, 100);
+                if (received != total && percent == lastPercent_) return;
+                lastPercent_ = percent;
+            }
+            else if (received && received != lastReceived_ && received - lastReceived_ < 256 * 1024)
+            {
+                return;
+            }
+            lastReceived_ = received;
+            OperationUpdate current = update_;
+            current.stage = OperationStage::Downloading;
+            current.received = received;
+            current.total = total;
+            worker_.PostOperation(current);
+        }
+
+        void Stage(InstallerDownloadStage value) override
+        {
+            if (value == InstallerDownloadStage::Verified) return;
+            OperationUpdate current = update_;
+            current.stage = value == InstallerDownloadStage::Verifying ? OperationStage::Verifying : OperationStage::Downloading;
+            worker_.PostOperation(current);
+        }
+
+    private:
+        Worker &worker_;
+        const OperationUpdate &update_;
+        unsigned lastPercent_ = 101;
+        unsigned long long lastReceived_ = 0;
     };
 
     static DWORD WINAPI ThreadMain(LPVOID parameter)
@@ -401,7 +440,7 @@ private:
 
     static DWORD WINAPI SizeProbeMain(LPVOID parameter)
     {
-        std::unique_ptr<SizeProbeContext> context(static_cast<SizeProbeContext *>(parameter));
+        SizeProbeContext *context = static_cast<SizeProbeContext *>(parameter);
         unsigned long long installerSize = 0;
         HttpClient http;
         const Status status = http.ProbeContentLength(WideFromUtf8(context->result->installerUrl), installerSize);
@@ -419,15 +458,17 @@ private:
 
         if (WaitForSingleObject(context->stop, 0) != WAIT_OBJECT_0 &&
             PostMessageW(context->window, MessageDetailsReady, context->result->generation,
-                         reinterpret_cast<LPARAM>(context->result.get())))
+                         reinterpret_cast<LPARAM>(context->result)))
         {
-            context->result.release();
+            context->result = nullptr;
         }
         CloseHandle(context->stop);
+        delete context->result;
+        delete context;
         return 0;
     }
 
-    void StartSizeProbe(std::unique_ptr<DetailResult> result)
+    void StartSizeProbe(DetailResult *result)
     {
         HANDLE stop = nullptr;
         if (!DuplicateHandle(GetCurrentProcess(), probeStop_, GetCurrentProcess(), &stop, 0, FALSE,
@@ -436,29 +477,31 @@ private:
             result->stage = 3;
             result->sizePending = false;
             result->sizeError = "cannot start installer size query";
-            PostDetails(result);
+            PostDetails(*result);
+            delete result;
             return;
         }
 
-        std::unique_ptr<SizeProbeContext> context(new SizeProbeContext());
+        SizeProbeContext *context = new SizeProbeContext();
         context->window = window_;
         context->stop = stop;
-        context->result = std::move(result);
-        HANDLE thread = CreateThread(nullptr, 0, SizeProbeMain, context.get(), 0, nullptr);
+        context->result = result;
+        HANDLE thread = CreateThread(nullptr, 0, SizeProbeMain, context, 0, nullptr);
         if (!thread)
         {
             CloseHandle(stop);
             context->result->stage = 3;
             context->result->sizePending = false;
             context->result->sizeError = "cannot start installer size query";
-            PostDetails(context->result);
+            PostDetails(*context->result);
+            delete context->result;
+            delete context;
             return;
         }
-        context.release();
         CloseHandle(thread);
     }
 
-    std::uint32_t Generation() { return static_cast<std::uint32_t>(InterlockedCompareExchange(&generation_, 0, 0)); }
+    uint32_t Generation() { return static_cast<uint32_t>(InterlockedCompareExchange(&generation_, 0, 0)); }
 
     void Run()
     {
@@ -473,7 +516,7 @@ private:
                 bool operation = false;
                 bool install = false;
                 PackageRecord package;
-                std::uint32_t generation = 0;
+                uint32_t generation = 0;
                 EnterCriticalSection(&lock_);
                 const bool quit = quit_;
                 if (operationPending_)
@@ -515,7 +558,7 @@ private:
 
     void RunCatalogJob(bool refresh)
     {
-        std::unique_ptr<CatalogResult> result(new CatalogResult());
+        CatalogResult *result = new CatalogResult();
         Catalog catalog;
         Status status = refresh ? source_->Update() : source_->EnsureReady();
         if (status)
@@ -531,28 +574,28 @@ private:
         }
         else
         {
-            result->catalog = PrepareCatalog(catalog);
+            PrepareCatalog(catalog, result->catalog);
             result->ok = true;
         }
-        if (PostMessageW(window_, MessageCatalogReady, 0, reinterpret_cast<LPARAM>(result.get())))
-            result.release();
+        if (!PostMessageW(window_, MessageCatalogReady, 0, reinterpret_cast<LPARAM>(result)))
+            delete result;
     }
 
-    void PostDetails(std::unique_ptr<DetailResult> &result)
+    void PostDetails(const DetailResult &result)
     {
-        std::unique_ptr<DetailResult> copy(new DetailResult(*result));
-        if (PostMessageW(window_, MessageDetailsReady, copy->generation, reinterpret_cast<LPARAM>(copy.get())))
-            copy.release();
+        DetailResult *copy = new DetailResult(result);
+        if (!PostMessageW(window_, MessageDetailsReady, copy->generation, reinterpret_cast<LPARAM>(copy)))
+            delete copy;
     }
 
     void PostOperation(const OperationUpdate &update)
     {
-        std::unique_ptr<OperationUpdate> copy(new OperationUpdate(update));
-        if (PostMessageW(window_, MessageOperationUpdate, copy->generation, reinterpret_cast<LPARAM>(copy.get())))
-            copy.release();
+        OperationUpdate *copy = new OperationUpdate(update);
+        if (!PostMessageW(window_, MessageOperationUpdate, copy->generation, reinterpret_cast<LPARAM>(copy)))
+            delete copy;
     }
 
-    void RunOperationJob(const PackageRecord &package, bool install, std::uint32_t generation)
+    void RunOperationJob(const PackageRecord &package, bool install, uint32_t generation)
     {
         OperationUpdate update;
         update.generation = generation;
@@ -582,36 +625,11 @@ private:
             return;
         }
 
-        unsigned lastPercent = 101;
-        unsigned long long lastReceived = 0;
-        const auto progress = [&](unsigned long long received, unsigned long long total) {
-            if (total)
-            {
-                const unsigned percent = ScaleProgress(received, total, 100);
-                if (received != total && percent == lastPercent) return;
-                lastPercent = percent;
-            }
-            else if (received && received != lastReceived && received - lastReceived < 256 * 1024)
-            {
-                return;
-            }
-            lastReceived = received;
-            OperationUpdate current = update;
-            current.stage = OperationStage::Downloading;
-            current.received = received;
-            current.total = total;
-            PostOperation(current);
-        };
-        const auto stage = [&](InstallerDownloadStage value) {
-            if (value == InstallerDownloadStage::Verified) return;
-            OperationUpdate current = update;
-            current.stage = value == InstallerDownloadStage::Verifying ? OperationStage::Verifying : OperationStage::Downloading;
-            PostOperation(current);
-        };
+        OperationCallbacks callbacks(*this, update);
 
         InstallerService service;
         std::wstring path;
-        status = service.Download(package, installer, std::nullopt, path, progress, stage);
+        status = service.Download(package, installer, nullptr, path, &callbacks, &callbacks);
         if (!status)
         {
             update.stage = OperationStage::Failed;
@@ -642,25 +660,25 @@ private:
         std::printf("LNTGET_GUI_%s_DONE id=%s\n", install ? "INSTALL" : "DOWNLOAD", package.id.c_str());
     }
 
-    void RunDetailsJob(const PackageRecord &package, std::uint32_t generation)
+    void RunDetailsJob(const PackageRecord &package, uint32_t generation)
     {
-        std::unique_ptr<DetailResult> result(new DetailResult());
-        result->generation = generation;
+        DetailResult result;
+        result.generation = generation;
         std::string yaml;
         Status status = source_->FetchInstallerManifest(package, yaml);
         if (status)
-            status = ParseLocaleManifest(yaml, result->details);
+            status = ParseLocaleManifest(yaml, result.details);
         if (!status)
         {
-            result->error = status.message;
-            result->stage = 3;
+            result.error = status.message;
+            result.stage = 3;
             PostDetails(result);
             return;
         }
-        result->ok = true;
-        result->stage = 1;
+        result.ok = true;
+        result.stage = 1;
         PostDetails(result);
-        if (result->generation != Generation())
+        if (result.generation != Generation())
             return;
 
         Manifest manifest;
@@ -668,40 +686,40 @@ private:
             status = ParseInstallerManifest(yaml, manifest);
         if (!status)
         {
-            result->stage = 3;
-            result->selectedError = status.message;
+            result.stage = 3;
+            result.selectedError = status.message;
             PostDetails(result);
             return;
         }
-        result->agreements = manifest.agreements;
+        result.agreements = manifest.agreements;
         for (const InstallerEntry &installer : manifest.installers)
         {
             std::string entry = installer.architecture.empty() ? "unknown" : installer.architecture;
             if (!installer.type.empty())
                 entry += " (" + installer.type + ")";
-            if (std::find(result->installers.begin(), result->installers.end(), entry) == result->installers.end())
-                result->installers.push_back(std::move(entry));
+            if (std::find(result.installers.begin(), result.installers.end(), entry) == result.installers.end())
+                result.installers.push_back(entry);
         }
         InstallerEntry selected;
         const Status selection = SelectInstaller(manifest, SelectionOptions(), selected);
         if (selection)
         {
-            result->selectedArchitecture = selected.architecture.empty() ? "unknown" : selected.architecture;
-            result->selected = selected.architecture + " \xc2\xb7 " + selected.type;
-            result->installerUrl = selected.url;
-            result->installerHash = selected.sha256;
-            result->stage = 2;
-            result->sizePending = true;
+            result.selectedArchitecture = selected.architecture.empty() ? "unknown" : selected.architecture;
+            result.selected = selected.architecture + " \xc2\xb7 " + selected.type;
+            result.installerUrl = selected.url;
+            result.installerHash = selected.sha256;
+            result.stage = 2;
+            result.sizePending = true;
             PostDetails(result);
-            if (result->generation != Generation())
+            if (result.generation != Generation())
                 return;
-            StartSizeProbe(std::move(result));
+            StartSizeProbe(new DetailResult(result));
             return;
         }
         else
         {
-            result->stage = 3;
-            result->selectedError = selection.message;
+            result.stage = 3;
+            result.selectedError = selection.message;
         }
         PostDetails(result);
     }
@@ -714,8 +732,8 @@ private:
     CRITICAL_SECTION lock_{};
     PackageRecord pending_;
     PackageRecord operationPackage_;
-    std::uint32_t pendingGeneration_ = 0;
-    std::uint32_t pendingOperationGeneration_ = 0;
+    uint32_t pendingGeneration_ = 0;
+    uint32_t pendingOperationGeneration_ = 0;
     volatile LONG generation_ = 0;
     volatile LONG operationGeneration_ = 0;
     bool quit_ = false;
@@ -815,13 +833,15 @@ struct Theme
 
     void Destroy()
     {
-        for (HFONT *font : {&ui, &bold, &title, &mini})
+        HFONT *const fonts[] = {&ui, &bold, &title, &mini};
+        for (HFONT *font : fonts)
         {
             if (*font)
                 DeleteObject(*font);
             *font = nullptr;
         }
-        for (HBRUSH *brush : {&windowBrush, &faceBrush, &operationBrush, &lineBrush, &accentBrush})
+        HBRUSH *const brushes[] = {&windowBrush, &faceBrush, &operationBrush, &lineBrush, &accentBrush};
+        for (HBRUSH *brush : brushes)
         {
             if (*brush)
                 DeleteObject(*brush);
@@ -1009,7 +1029,7 @@ int RenderInfo(HDC dc, InfoPane &pane, int width, int originY, bool draw)
                     RECT value{pad + labelWidth, y, pad + labelWidth + valueWidth, y + height};
                     DrawTextW(dc, block.text.c_str(), -1, &value, DT_WORDBREAK | DT_NOPREFIX);
                     if (block.kind == BlockKind::Link)
-                        pane.links.emplace_back(value, block.text);
+                        pane.links.push_back(std::make_pair(value, block.text));
                 }
                 y += height + theme.Px(5);
                 break;
@@ -1212,7 +1232,7 @@ struct CatalogWindow
     Worker worker;
     SourceManager *source = nullptr;
     PreparedCatalog catalog;
-    std::vector<std::uint32_t> filtered;
+    std::vector<uint32_t> filtered;
     std::map<std::string, DetailResult> cache;
     std::string query;
     std::string failure;
@@ -1221,8 +1241,8 @@ struct CatalogWindow
     int sortColumn = -1;
     bool sortDescending = false;
     int selected = -1;
-    std::uint32_t generation = 0;
-    std::uint32_t operationGeneration = 0;
+    uint32_t generation = 0;
+    uint32_t operationGeneration = 0;
     bool loading = true;
     bool operationVisible = false;
     bool operationBusy = false;
@@ -1364,7 +1384,8 @@ void LayoutWindow(CatalogWindow &state)
     const int operationMargin = state.theme.Px(16);
     const int percentWidth = state.theme.Px(74);
     const int operationTextWidth = std::max(state.theme.Px(80), width - operationMargin * 2 - percentWidth);
-    for (HWND child : {state.operationTitle, state.operationDetail, state.operationProgress, state.operationPercent})
+    const HWND operationChildren[] = {state.operationTitle, state.operationDetail, state.operationProgress, state.operationPercent};
+    for (HWND child : operationChildren)
         ShowWindow(child, state.operationVisible ? SW_SHOW : SW_HIDE);
     if (state.operationVisible)
     {
@@ -1430,8 +1451,8 @@ void ApplyFilter(CatalogWindow &state)
     if (!term.empty())
         terms.push_back(term);
 
-    const std::uint32_t mask = state.category >= 0 ? (1u << state.category) : 0;
-    std::vector<std::pair<int, std::uint32_t>> scored;
+    const uint32_t mask = state.category >= 0 ? (1u << state.category) : 0;
+    std::vector<std::pair<int, uint32_t>> scored;
     scored.reserve(state.catalog.packages.size());
     for (std::size_t index = 0; index < state.catalog.packages.size(); ++index)
     {
@@ -1449,13 +1470,13 @@ void ApplyFilter(CatalogWindow &state)
         }
         if (!matched)
             continue;
-        scored.emplace_back(RankPackage(package, state.query), static_cast<std::uint32_t>(index));
+        scored.push_back(std::make_pair(RankPackage(package, state.query), static_cast<uint32_t>(index)));
     }
 
     const PreparedCatalog *catalog = &state.catalog;
     const int column = state.sortColumn;
     const bool descending = state.sortDescending;
-    std::sort(scored.begin(), scored.end(), [catalog, column, descending](const std::pair<int, std::uint32_t> &left, const std::pair<int, std::uint32_t> &right) {
+    std::sort(scored.begin(), scored.end(), [catalog, column, descending](const std::pair<int, uint32_t> &left, const std::pair<int, uint32_t> &right) {
         const GuiPackage &first = catalog->packages[left.second];
         const GuiPackage &second = catalog->packages[right.second];
         int order = 0;
@@ -1580,12 +1601,12 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
     InfoBlock title;
     title.kind = BlockKind::Title;
     title.text = package.name;
-    blocks.push_back(std::move(title));
+    blocks.push_back(title);
 
     InfoBlock subtitle;
     subtitle.kind = BlockKind::Subtitle;
     subtitle.text = package.id + L"   ·   version " + package.version;
-    blocks.push_back(std::move(subtitle));
+    blocks.push_back(subtitle);
 
     InfoBlock categories;
     categories.kind = BlockKind::Chips;
@@ -1597,7 +1618,7 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
         categories.chipAccents.push_back(CategoryTable()[index].accent);
     }
     if (!categories.chips.empty())
-        blocks.push_back(std::move(categories));
+        blocks.push_back(categories);
 
     if (!result)
     {
@@ -1605,14 +1626,14 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
         loading.kind = BlockKind::Status;
         loading.spinner = true;
         loading.text = L"Fetching the description from winget-pkgs…";
-        blocks.push_back(std::move(loading));
+        blocks.push_back(loading);
     }
     else if (!result->ok)
     {
         InfoBlock failed;
         failed.kind = BlockKind::Status;
         failed.text = L"No description available: " + WideFromUtf8(result->error);
-        blocks.push_back(std::move(failed));
+        blocks.push_back(failed);
     }
     else
     {
@@ -1622,20 +1643,20 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
             InfoBlock summary;
             summary.kind = BlockKind::Body;
             summary.text = WideFromUtf8(details.shortDescription);
-            blocks.push_back(std::move(summary));
+            blocks.push_back(summary);
         }
         if (!details.description.empty() && details.description != details.shortDescription)
         {
             InfoBlock body;
             body.kind = BlockKind::Body;
             body.text = WideFromUtf8(details.description);
-            blocks.push_back(std::move(body));
+            blocks.push_back(body);
         }
 
         InfoBlock section;
         section.kind = BlockKind::Section;
         section.text = L"About";
-        blocks.push_back(std::move(section));
+        blocks.push_back(section);
 
         const std::pair<const wchar_t *, const std::string *> fields[] = {
             {L"Publisher", &details.publisher},
@@ -1651,7 +1672,7 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
             entry.kind = BlockKind::Field;
             entry.label = field.first;
             entry.text = WideFromUtf8(*field.second);
-            blocks.push_back(std::move(entry));
+            blocks.push_back(entry);
         }
         const std::pair<const wchar_t *, const std::string *> links[] = {
             {L"Homepage", &details.packageUrl},
@@ -1668,30 +1689,30 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
             entry.kind = AsciiStartsWith(*field.second, "https://") ? BlockKind::Link : BlockKind::Field;
             entry.label = field.first;
             entry.text = WideFromUtf8(*field.second);
-            blocks.push_back(std::move(entry));
+            blocks.push_back(entry);
         }
         if (!details.tags.empty())
         {
             InfoBlock section2;
             section2.kind = BlockKind::Section;
             section2.text = L"Tags";
-            blocks.push_back(std::move(section2));
+            blocks.push_back(section2);
             InfoBlock chips;
             chips.kind = BlockKind::Chips;
             for (const std::string &tag : details.tags)
                 chips.chips.push_back(WideFromUtf8(tag));
-            blocks.push_back(std::move(chips));
+            blocks.push_back(chips);
         }
         else if (!package.tagText.empty())
         {
             InfoBlock section2;
             section2.kind = BlockKind::Section;
             section2.text = L"Tags";
-            blocks.push_back(std::move(section2));
+            blocks.push_back(section2);
             InfoBlock chips;
             chips.kind = BlockKind::Chips;
             chips.chips = SplitChips(package.tagText);
-            blocks.push_back(std::move(chips));
+            blocks.push_back(chips);
         }
 
         if (!result->agreements.empty())
@@ -1699,7 +1720,7 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
             InfoBlock agreementsSection;
             agreementsSection.kind = BlockKind::Section;
             agreementsSection.text = L"Package agreements";
-            blocks.push_back(std::move(agreementsSection));
+            blocks.push_back(agreementsSection);
             for (const PackageAgreement &agreement : result->agreements)
             {
                 if (!agreement.label.empty())
@@ -1708,14 +1729,14 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
                     label.kind = BlockKind::Field;
                     label.label = L"Agreement";
                     label.text = WideFromUtf8(agreement.label);
-                    blocks.push_back(std::move(label));
+                    blocks.push_back(label);
                 }
                 if (!agreement.text.empty())
                 {
                     InfoBlock text;
                     text.kind = BlockKind::Body;
                     text.text = WideFromUtf8(agreement.text);
-                    blocks.push_back(std::move(text));
+                    blocks.push_back(text);
                 }
                 if (!agreement.url.empty())
                 {
@@ -1723,7 +1744,7 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
                     url.kind = AsciiStartsWith(agreement.url, "https://") ? BlockKind::Link : BlockKind::Field;
                     url.label = L"Terms";
                     url.text = WideFromUtf8(agreement.url);
-                    blocks.push_back(std::move(url));
+                    blocks.push_back(url);
                 }
             }
         }
@@ -1731,7 +1752,7 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
         InfoBlock section3;
         section3.kind = BlockKind::Section;
         section3.text = L"Installer";
-        blocks.push_back(std::move(section3));
+        blocks.push_back(section3);
 
         if (result->stage < 2)
         {
@@ -1739,7 +1760,7 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
             loading.kind = BlockKind::Status;
             loading.spinner = true;
             loading.text = L"Reading the installer manifest…";
-            blocks.push_back(std::move(loading));
+            blocks.push_back(loading);
         }
         else
         {
@@ -1756,7 +1777,7 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
                 available.kind = BlockKind::Field;
                 available.label = L"Available";
                 available.text = WideFromUtf8(joined);
-                blocks.push_back(std::move(available));
+                blocks.push_back(available);
             }
             InfoBlock selected;
             selected.kind = BlockKind::Field;
@@ -1771,14 +1792,14 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
                 selected.useAccent = true;
                 selected.accent = state.theme.dim;
             }
-            blocks.push_back(std::move(selected));
+            blocks.push_back(selected);
             if (!result->selectedArchitecture.empty())
             {
                 InfoBlock architecture;
                 architecture.kind = BlockKind::Field;
                 architecture.label = L"Architecture";
                 architecture.text = WideFromUtf8(result->selectedArchitecture);
-                blocks.push_back(std::move(architecture));
+                blocks.push_back(architecture);
             }
             if (!result->installerUrl.empty())
             {
@@ -1796,7 +1817,7 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
                     size.useAccent = true;
                     size.accent = state.theme.dim;
                 }
-                blocks.push_back(std::move(size));
+                blocks.push_back(size);
             }
             if (!result->installerUrl.empty())
             {
@@ -1804,7 +1825,7 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
                 url.kind = BlockKind::Field;
                 url.label = L"Installer URL";
                 url.text = WideFromUtf8(result->installerUrl);
-                blocks.push_back(std::move(url));
+                blocks.push_back(url);
             }
             if (!result->installerHash.empty())
             {
@@ -1812,12 +1833,12 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
                 hash.kind = BlockKind::Field;
                 hash.label = L"SHA-256";
                 hash.text = WideFromUtf8(result->installerHash);
-                blocks.push_back(std::move(hash));
+                blocks.push_back(hash);
             }
         }
     }
 
-    state.info.blocks = std::move(blocks);
+    state.info.blocks.swap(blocks);
     state.info.scroll = 0;
     RelayoutInfo(state.info);
 }
@@ -1852,7 +1873,7 @@ void ShowDetails(CatalogWindow &state)
     record.id = package.utf8Id;
     record.name = package.utf8Name;
     record.version = package.utf8Version;
-    record.manifestHash = package.manifestHash;
+    std::memcpy(record.manifestHash, package.manifestHash, sizeof(record.manifestHash));
     state.generation = state.worker.RequestDetails(record);
     SetInfoBlocks(state, package, nullptr);
     StartSpinner(state);
@@ -1929,7 +1950,7 @@ void BeginOperation(CatalogWindow &state, bool install)
     record.id = package.utf8Id;
     record.name = package.utf8Name;
     record.version = package.utf8Version;
-    record.manifestHash = package.manifestHash;
+    std::memcpy(record.manifestHash, package.manifestHash, sizeof(record.manifestHash));
 
     state.backgroundProgress = false;
     state.operationVisible = true;
@@ -1965,7 +1986,7 @@ void ApplyOperationUpdate(CatalogWindow &state, const OperationUpdate &update)
                 const unsigned percent = ScaleProgress(update.received, update.total, 100);
                 const int position = static_cast<int>(ScaleProgress(update.received, update.total, 1000));
                 const std::wstring detail = FormatByteCount(update.received) + L" of " + FormatByteCount(update.total);
-                const std::wstring percentText = std::to_wstring(percent) + L"%";
+                const std::wstring percentText = DecimalWideString(percent) + L"%";
                 SetWindowTextW(state.operationDetail, detail.c_str());
                 SetWindowTextW(state.operationPercent, percentText.c_str());
                 SetOperationMarquee(state, false);
@@ -2140,8 +2161,9 @@ void CreateChildren(CatalogWindow &state)
     SendMessageW(state.operationProgress, PBM_SETBARCOLOR, 0, state.theme.accent);
     SendMessageW(state.operationProgress, PBM_SETBKCOLOR, 0, state.theme.window);
 
-    for (HWND child : {state.search, state.install, state.download, state.refresh, state.installed, state.about, state.tree, state.list, state.status,
-                       state.operationDetail})
+    const HWND children[] = {state.search, state.install, state.download, state.refresh, state.installed, state.about, state.tree, state.list, state.status,
+                             state.operationDetail};
+    for (HWND child : children)
         SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(state.theme.ui), TRUE);
     SendMessageW(state.appTitle, WM_SETFONT, reinterpret_cast<WPARAM>(state.theme.title), TRUE);
     SendMessageW(state.appSubtitle, WM_SETFONT, reinterpret_cast<WPARAM>(state.theme.mini), TRUE);
@@ -2473,7 +2495,7 @@ LRESULT CALLBACK CatalogProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
             return 0;
         case MessageCatalogReady:
         {
-            std::unique_ptr<CatalogResult> result(reinterpret_cast<CatalogResult *>(lParam));
+            CatalogResult *result = reinterpret_cast<CatalogResult *>(lParam);
             state->loading = false;
             HideBackgroundProgress(*state);
             UpdateActionButtons(*state);
@@ -2491,14 +2513,17 @@ LRESULT CALLBACK CatalogProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
                 hint.kind = BlockKind::Status;
                 hint.text = L"Run \u201clntget source update\u201d, or import a source2.msix, then press Refresh.";
                 state->info.blocks.clear();
-                state->info.blocks.push_back(std::move(title));
-                state->info.blocks.push_back(std::move(reason));
-                state->info.blocks.push_back(std::move(hint));
+                state->info.blocks.push_back(title);
+                state->info.blocks.push_back(reason);
+                state->info.blocks.push_back(hint);
                 RelayoutInfo(state->info);
+                delete result;
                 return 0;
             }
             state->failure.clear();
-            state->catalog = std::move(result->catalog);
+            state->catalog.packages.swap(result->catalog.packages);
+            state->catalog.counts.swap(result->catalog.counts);
+            delete result;
             state->placeholder = L"Search " + FormatCount(state->catalog.packages.size()) + L" packages…";
             InvalidateRect(state->search, nullptr, TRUE);
             BuildTree(*state);
@@ -2516,11 +2541,13 @@ LRESULT CALLBACK CatalogProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
         }
         case MessageDetailsReady:
         {
-            std::unique_ptr<DetailResult> result(reinterpret_cast<DetailResult *>(lParam));
-            if (static_cast<std::uint32_t>(wParam) != state->generation)
+            DetailResult *result = reinterpret_cast<DetailResult *>(lParam);
+            if (static_cast<uint32_t>(wParam) != state->generation ||
+                state->selected < 0 || static_cast<std::size_t>(state->selected) >= state->filtered.size())
+            {
+                delete result;
                 return 0;
-            if (state->selected < 0 || static_cast<std::size_t>(state->selected) >= state->filtered.size())
-                return 0;
+            }
             const GuiPackage &package = state->catalog.packages[state->filtered[state->selected]];
             if (result->stage >= 2)
             {
@@ -2531,20 +2558,23 @@ LRESULT CALLBACK CatalogProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
             {
                 state->cache[package.utf8Id + "/" + package.utf8Version] = *result;
             }
-            SetInfoBlocks(*state, package, result.get());
+            SetInfoBlocks(*state, package, result);
             if (result->sizePending)
                 StartSizeAnimation(*state);
             else
                 StopSizeAnimation(*state);
+            delete result;
             return 0;
         }
         case MessageOperationUpdate:
         {
-            std::unique_ptr<OperationUpdate> update(reinterpret_cast<OperationUpdate *>(lParam));
-            if (static_cast<std::uint32_t>(wParam) != state->operationGeneration)
-                return 0;
-            ApplyOperationUpdate(*state, *update);
-            InvalidateRect(window, nullptr, TRUE);
+            OperationUpdate *update = reinterpret_cast<OperationUpdate *>(lParam);
+            if (static_cast<uint32_t>(wParam) == state->operationGeneration)
+            {
+                ApplyOperationUpdate(*state, *update);
+                InvalidateRect(window, nullptr, TRUE);
+            }
+            delete update;
             return 0;
         }
         case WM_DESTROY:

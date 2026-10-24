@@ -12,19 +12,16 @@
 #endif
 #include <windows.h>
 
-#include <array>
-#include <cstdint>
+#include <stdint.h>
 #include <map>
-#include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace lntget
 {
 
-inline constexpr std::string_view Version = "0.1.0";
-inline constexpr std::wstring_view CommunitySourceUrl = L"https://cdn.winget.microsoft.com/cache/source2.msix";
+inline constexpr char Version[] = "0.1.0";
+inline constexpr wchar_t CommunitySourceUrl[] = L"https://cdn.winget.microsoft.com/cache/source2.msix";
 
 struct Status
 {
@@ -33,7 +30,7 @@ struct Status
     std::string message;
 
     static Status Ok();
-    static Status Fail(DWORD error, std::string text);
+    static Status Fail(DWORD error, const std::string &text);
     explicit operator bool() const { return success; }
 };
 
@@ -43,14 +40,14 @@ struct PackageRecord
     std::string name;
     std::string moniker;
     std::string version;
-    std::array<std::uint8_t, 32> manifestHash{};
+    uint8_t manifestHash[32]{};
 };
 
 struct CatalogEntry
 {
     PackageRecord package;
-    std::vector<std::uint32_t> tags;
-    std::vector<std::uint32_t> commands;
+    std::vector<uint32_t> tags;
+    std::vector<uint32_t> commands;
 };
 
 struct Catalog
@@ -156,10 +153,14 @@ enum class InstallMode
 
 struct SelectionOptions
 {
-    std::optional<std::string> architecture;
-    std::optional<std::string> installerType;
-    std::optional<std::string> scope;
-    std::optional<std::string> locale;
+    bool hasArchitecture = false;
+    std::string architecture;
+    bool hasInstallerType = false;
+    std::string installerType;
+    bool hasScope = false;
+    std::string scope;
+    bool hasLocale = false;
+    std::string locale;
     InstallMode mode = InstallMode::Default;
     bool disableInteractivity = false;
     bool downloadOnly = false;

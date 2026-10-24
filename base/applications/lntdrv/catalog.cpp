@@ -14,7 +14,7 @@
 
 #include <algorithm>
 #include <cstring>
-#include <cwctype>
+#include <wctype.h>
 
 namespace lntdrv
 {
@@ -174,7 +174,7 @@ std::string Inner(const std::string &html, const std::string &key, const char *c
 
 std::wstring Cell(const std::string &row, const std::string &id, int column)
 {
-    return HtmlText(Inner(row, "id=\"" + id + "_C" + std::to_string(column) + "_R", "</td>"));
+    return HtmlText(Inner(row, "id=\"" + id + "_C" + Utf8(NumberText(column)) + "_R", "</td>"));
 }
 
 bool LastPage(const std::string &html)
@@ -391,7 +391,7 @@ DWORD WINAPI DetailsWorker(LPVOID parameter)
 
 std::wstring Key(const CatalogUpdate &update)
 {
-    return update.Title + L"|" + update.Version + L"|" + std::to_wstring(update.Bytes);
+    return update.Title + L"|" + update.Version + L"|" + NumberText(update.Bytes);
 }
 
 class InternetHandle
@@ -442,8 +442,7 @@ bool Catalog::Cancelled() const
     return m_Cancel && InterlockedCompareExchange(m_Cancel, 0, 0) != 0;
 }
 
-DWORD Catalog::SendOnce(LPCWSTR verb, const std::wstring &url, const std::string &body, const Sink &sink,
-                        DWORD &status)
+DWORD Catalog::SendOnce(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink, DWORD &status)
 {
     static const WCHAR Form[] = L"Content-Type: application/x-www-form-urlencoded\r\n";
     LPCWSTR accept[] = { L"*/*", NULL };
@@ -504,15 +503,14 @@ DWORD Catalog::SendOnce(LPCWSTR verb, const std::wstring &url, const std::string
             return GetLastError();
         if (!read)
             break;
-        error = sink(buffer.data(), read, total);
+        error = sink.Write(buffer.data(), read, total);
         if (error)
             return error;
     }
     return ERROR_SUCCESS;
 }
 
-DWORD Catalog::Send(LPCWSTR verb, const std::wstring &url, const std::string &body, const Sink &sink,
-                    const std::function<DWORD()> &reset)
+DWORD Catalog::Send(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink)
 {
     DWORD error = ERROR_SUCCESS;
 
@@ -529,7 +527,7 @@ DWORD Catalog::Send(LPCWSTR verb, const std::wstring &url, const std::string &bo
                 Sleep(100);
             if (Cancelled())
                 return ERROR_CANCELLED;
-            error = reset();
+            error = sink.Reset();
             if (error)
                 return error;
         }
@@ -546,27 +544,40 @@ DWORD Catalog::Send(LPCWSTR verb, const std::wstring &url, const std::string &bo
 
 DWORD Catalog::Fetch(LPCWSTR verb, const std::wstring &url, const std::string &body, std::string &text)
 {
-    text.clear();
-    return Send(
-        verb, url, body,
-        [&text](const BYTE *data, DWORD size, ULONGLONG) -> DWORD {
-            if (text.size() + size > MaximumPage)
+    class TextSink : public Sink
+    {
+    public:
+        explicit TextSink(std::string &out) : m_Text(out) {}
+
+        DWORD Write(const BYTE *data, DWORD size, ULONGLONG)
+        {
+            if (m_Text.size() + size > MaximumPage)
                 return ERROR_BUFFER_OVERFLOW;
-            text.append((const char *)data, size);
+            m_Text.append((const char *)data, size);
             return ERROR_SUCCESS;
-        },
-        [&text]() -> DWORD {
-            text.clear();
+        }
+
+        DWORD Reset()
+        {
+            m_Text.clear();
             return ERROR_SUCCESS;
-        });
+        }
+
+    private:
+        std::string &m_Text;
+    };
+    TextSink sink(text);
+
+    text.clear();
+    return Send(verb, url, body, sink);
 }
 
 DWORD Catalog::SearchPage(const std::wstring &query, unsigned page, std::vector<CatalogUpdate> &updates, bool &last)
 {
-    std::wstring key = query + L"#" + std::to_wstring(page);
+    std::wstring key = query + L"#" + NumberText(page);
     auto cached = m_Pages.find(key);
     std::wstring url = std::wstring(CatalogRoot) + L"Search.aspx?q=" + Wide(UrlEncode(Utf8(query))) +
-                       L"&scol=DateComputed&sdir=desc" + (page ? L"&p=" + std::to_wstring(page) : std::wstring());
+                       L"&scol=DateComputed&sdir=desc" + (page ? L"&p=" + NumberText(page) : std::wstring());
     std::string html;
     size_t rows = 0;
     DWORD error;
@@ -621,7 +632,7 @@ DWORD Catalog::QueryDetails(CatalogUpdate &update)
     update.Architecture = HtmlText(html.substr(pos + 7, end - pos - 7));
     models = HtmlText(Inner(html, "id=\"ScopedViewHandler_driverModel\"", "</span>"));
     update.Model = models.substr(0, models.find(L','));
-    while (!update.Model.empty() && update.Model.back() == L' ')
+    while (!update.Model.empty() && update.Model[update.Model.size() - 1] == L' ')
         update.Model.pop_back();
     update.HardwareIds.clear();
     pos = html.find("id=\"driverhwIDs\"");
@@ -858,14 +869,53 @@ DWORD Catalog::QueryFiles(const std::wstring &id, std::vector<CatalogFile> &file
     return files.empty() ? ERROR_NOT_FOUND : ERROR_SUCCESS;
 }
 
-DWORD Catalog::Download(const CatalogFile &file, const std::wstring &path, const ProgressCallback &progress)
+DWORD Catalog::Download(const CatalogFile &file, const std::wstring &path, ProgressCallback *progress)
 {
+    class FileSink : public Sink
+    {
+    public:
+        FileSink(HANDLE handle, BCRYPT_ALG_HANDLE algorithm, BCRYPT_HASH_HANDLE &hash, ProgressCallback *progress)
+            : m_Handle(handle), m_Algorithm(algorithm), m_Hash(hash), m_Progress(progress), m_Received(0)
+        {
+        }
+
+        DWORD Write(const BYTE *data, DWORD size, ULONGLONG total)
+        {
+            DWORD written = 0;
+
+            if (!WriteFile(m_Handle, data, size, &written, NULL) || written != size)
+                return GetLastError() ? GetLastError() : ERROR_WRITE_FAULT;
+            if (BCryptHashData(m_Hash, (PUCHAR)data, size, 0) != 0)
+                return ERROR_NOT_SUPPORTED;
+            m_Received += size;
+            if (m_Progress)
+                (*m_Progress)(m_Received, total);
+            return ERROR_SUCCESS;
+        }
+
+        DWORD Reset()
+        {
+            m_Received = 0;
+            BCryptDestroyHash(m_Hash);
+            m_Hash = NULL;
+            if (SetFilePointer(m_Handle, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER || !SetEndOfFile(m_Handle))
+                return GetLastError();
+            return BCryptCreateHash(m_Algorithm, &m_Hash, NULL, 0, NULL, 0, 0) == 0 ? ERROR_SUCCESS
+                                                                                     : ERROR_NOT_SUPPORTED;
+        }
+
+    private:
+        HANDLE m_Handle;
+        BCRYPT_ALG_HANDLE m_Algorithm;
+        BCRYPT_HASH_HANDLE &m_Hash;
+        ProgressCallback *m_Progress;
+        ULONGLONG m_Received;
+    };
     BCRYPT_ALG_HANDLE algorithm = NULL;
     BCRYPT_HASH_HANDLE hash = NULL;
     BYTE digest[20];
     std::vector<BYTE> existing;
     std::wstring partial = path + L".partial";
-    ULONGLONG received = 0;
     HANDLE handle;
     DWORD error = ERROR_SUCCESS;
 
@@ -875,7 +925,7 @@ DWORD Catalog::Download(const CatalogFile &file, const std::wstring &path, const
         if (progress && GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data))
         {
             ULONGLONG size = ((ULONGLONG)data.nFileSizeHigh << 32) | data.nFileSizeLow;
-            progress(size, size);
+            (*progress)(size, size);
         }
         return ERROR_SUCCESS;
     }
@@ -891,29 +941,9 @@ DWORD Catalog::Download(const CatalogFile &file, const std::wstring &path, const
         error = GetLastError();
     else
     {
-        error = Send(
-            L"GET", file.Url, std::string(),
-            [&](const BYTE *data, DWORD size, ULONGLONG total) -> DWORD {
-                DWORD written = 0;
+        FileSink sink(handle, algorithm, hash, progress);
 
-                if (!WriteFile(handle, data, size, &written, NULL) || written != size)
-                    return GetLastError() ? GetLastError() : ERROR_WRITE_FAULT;
-                if (BCryptHashData(hash, (PUCHAR)data, size, 0) != 0)
-                    return ERROR_NOT_SUPPORTED;
-                received += size;
-                if (progress)
-                    progress(received, total);
-                return ERROR_SUCCESS;
-            },
-            [&]() -> DWORD {
-                received = 0;
-                BCryptDestroyHash(hash);
-                hash = NULL;
-                if (SetFilePointer(handle, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER || !SetEndOfFile(handle))
-                    return GetLastError();
-                return BCryptCreateHash(algorithm, &hash, NULL, 0, NULL, 0, 0) == 0 ? ERROR_SUCCESS
-                                                                                     : ERROR_NOT_SUPPORTED;
-            });
+        error = Send(L"GET", file.Url, std::string(), sink);
         CloseHandle(handle);
     }
     if (!error && (!hash || BCryptFinishHash(hash, digest, sizeof(digest), 0) != 0))

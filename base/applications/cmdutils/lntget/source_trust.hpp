@@ -14,10 +14,10 @@ namespace lntget
 
 struct SourcePackageContents
 {
-    std::vector<std::uint8_t> signature;
-    std::vector<std::uint8_t> blockMap;
-    std::vector<std::uint8_t> manifest;
-    std::vector<std::uint8_t> index;
+    std::vector<uint8_t> signature;
+    std::vector<uint8_t> blockMap;
+    std::vector<uint8_t> manifest;
+    std::vector<uint8_t> index;
 };
 
 Status VerifySourcePackageTrust(const SourcePackageContents &contents);
