@@ -1,5 +1,5 @@
 
-foreach(_file lxwayland.py lxapp gui-setup lxwayland.service lx-gui-setup.service)
+foreach(_file lxwayland.py lxapp gui-setup user-setup lxwayland.service lx-gui-setup.service)
     add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/${_file} DESTINATION reactos/system32/lxwayland NO_CAB FOR all)
 endforeach()
 
