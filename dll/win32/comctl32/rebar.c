@@ -3454,8 +3454,14 @@ REBAR_NCPaint (const REBAR_INFO *infoPtr)
     if (infoPtr->dwStyle & WS_MINIMIZE)
 	return 0; /* Nothing to do */
 
+#ifdef __REACTOS__
+    if (!(infoPtr->dwStyle & WS_BORDER) &&
+        (!COMCTL32_IsThemed (infoPtr->hwndSelf) || (infoPtr->dwStyle & CCS_NODIVIDER)))
+        return 0;
+#else
     if (!(infoPtr->dwStyle & WS_BORDER) && !COMCTL32_IsThemed (infoPtr->hwndSelf))
         return 0;
+#endif
 
     /* adjust rectangle and draw the necessary edge */
     if (!(hdc = GetDCEx (infoPtr->hwndSelf, 0, DCX_USESTYLE | DCX_WINDOW)))
