@@ -346,13 +346,24 @@ static const struct column col_networkadapter[] =
     { L"Index",               CIM_UINT32 },
     { L"InterfaceIndex",      CIM_UINT32 },
     { L"MACAddress",          CIM_STRING|COL_FLAG_DYNAMIC },
+#ifdef __REACTOS__
+    { L"Manufacturer",        CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Name",                CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"NetConnectionID",     CIM_STRING|COL_FLAG_DYNAMIC },
+#else
     { L"Manufacturer",        CIM_STRING },
     { L"Name",                CIM_STRING|COL_FLAG_DYNAMIC },
     { L"NetConnectionID",     CIM_STRING },
+#endif
     { L"NetConnectionStatus", CIM_UINT16 },
     { L"NetEnabled",          CIM_BOOLEAN },
     { L"PhysicalAdapter",     CIM_BOOLEAN },
+#ifdef __REACTOS__
+    { L"PNPDeviceID",         CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"ProductName",         CIM_STRING|COL_FLAG_DYNAMIC },
+#else
     { L"PNPDeviceID",         CIM_STRING },
+#endif
     { L"ServiceName",         CIM_STRING|COL_FLAG_DYNAMIC },
     { L"Speed",               CIM_UINT64 },
 };
@@ -361,10 +372,16 @@ static const struct column col_networkadapterconfig[] =
     { L"DefaultIPGateway",     CIM_STRING|CIM_FLAG_ARRAY|COL_FLAG_DYNAMIC },
     { L"Description",          CIM_STRING|COL_FLAG_DYNAMIC },
     { L"DHCPEnabled",          CIM_BOOLEAN },
+#ifdef __REACTOS__
+    { L"DHCPServer",           CIM_STRING|COL_FLAG_DYNAMIC },
+#endif
     { L"DNSDomain",            CIM_STRING },
     { L"DNSHostName",          CIM_STRING|COL_FLAG_DYNAMIC },
     { L"DNSServerSearchOrder", CIM_STRING|CIM_FLAG_ARRAY|COL_FLAG_DYNAMIC },
     { L"Index",                CIM_UINT32|COL_FLAG_KEY },
+#ifdef __REACTOS__
+    { L"InterfaceIndex",       CIM_UINT32 },
+#endif
     { L"IPAddress",            CIM_STRING|CIM_FLAG_ARRAY|COL_FLAG_DYNAMIC },
     { L"IPConnectionMetric",   CIM_UINT32 },
     { L"IPEnabled",            CIM_BOOLEAN },
@@ -1137,6 +1154,9 @@ struct record_networkadapter
     int          netenabled;
     int          physicaladapter;
     const WCHAR *pnpdevice_id;
+#ifdef __REACTOS__
+    const WCHAR *productname;
+#endif
     const WCHAR *servicename;
     UINT64       speed;
 };
@@ -1145,10 +1165,16 @@ struct record_networkadapterconfig
     const struct array *defaultipgateway;
     const WCHAR        *description;
     int                 dhcpenabled;
+#ifdef __REACTOS__
+    const WCHAR        *dhcpserver;
+#endif
     const WCHAR        *dnsdomain;
     const WCHAR        *dnshostname;
     const struct array *dnsserversearchorder;
     UINT32              index;
+#ifdef __REACTOS__
+    UINT32              interface_index;
+#endif
     const struct array *ipaddress;
     UINT32              ipconnectionmetric;
     int                 ipenabled;
@@ -4891,7 +4917,11 @@ static WCHAR *get_mac_address( const BYTE *addr, DWORD len )
 {
     WCHAR *ret;
     if (len != 6 || !(ret = malloc( 18 * sizeof(WCHAR) ))) return NULL;
+#ifdef __REACTOS__
+    swprintf( ret, 18, L"%02X:%02X:%02X:%02X:%02X:%02X", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5] );
+#else
     swprintf( ret, 18, L"%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5] );
+#endif
     return ret;
 }
 static const WCHAR *get_adaptertype( DWORD type, int *id, int *physical )
@@ -4961,6 +4991,61 @@ static IP_ADAPTER_ADDRESSES *get_network_adapters(void)
     return NULL;
 }
 
+#ifdef __REACTOS__
+static void get_networkadapter_device( const char *adapter_name, const WCHAR **pnpdevice_id,
+                                       const WCHAR **manufacturer, const WCHAR **servicename )
+{
+    WCHAR path[160], *instance_id;
+    SP_DEVINFO_DATA device;
+    HDEVINFO devices;
+
+    *pnpdevice_id = *manufacturer = *servicename = NULL;
+
+    swprintf( path, ARRAY_SIZE( path ),
+              L"SYSTEM\\CurrentControlSet\\Control\\Network\\{4D36E972-E325-11CE-BFC1-08002BE10318}\\%S\\Connection",
+              adapter_name );
+    if (!(instance_id = get_reg_str( HKEY_LOCAL_MACHINE, path, L"PnpInstanceID" ))) return;
+    *pnpdevice_id = instance_id;
+
+    devices = SetupDiCreateDeviceInfoList( NULL, NULL );
+    if (devices == INVALID_HANDLE_VALUE) return;
+    device.cbSize = sizeof(device);
+    if (SetupDiOpenDeviceInfoW( devices, instance_id, NULL, 0, &device ))
+    {
+        *manufacturer = get_device_registry_string( devices, &device, SPDRP_MFG );
+        *servicename = get_device_registry_string( devices, &device, SPDRP_SERVICE );
+    }
+    SetupDiDestroyDeviceInfoList( devices );
+}
+
+static WCHAR *get_dhcp_server( const IP_ADAPTER_INFO *info, DWORD index )
+{
+    for (; info; info = info->Next)
+    {
+        if (info->Index != index) continue;
+        if (!info->DhcpEnabled || !info->DhcpServer.IpAddress.String[0]) return NULL;
+        return heap_strdupAW( info->DhcpServer.IpAddress.String );
+    }
+    return NULL;
+}
+
+static IP_ADAPTER_INFO *get_adapters_info(void)
+{
+    IP_ADAPTER_INFO *info = NULL;
+    ULONG size = 0;
+    DWORD ret;
+
+    for (;;)
+    {
+        ret = GetAdaptersInfo( info, &size );
+        if (ret == ERROR_SUCCESS) return info;
+        free( info );
+        info = NULL;
+        if (ret != ERROR_BUFFER_OVERFLOW || !(info = malloc( size ))) return NULL;
+    }
+}
+#endif
+
 static enum fill_status fill_networkadapter( struct table *table, const struct expr *cond )
 {
     WCHAR device_id[11];
@@ -4998,6 +5083,16 @@ static enum fill_status fill_networkadapter( struct table *table, const struct e
         rec->index                = aa->IfIndex;
         rec->interface_index      = aa->IfIndex;
         rec->mac_address          = get_mac_address( aa->PhysicalAddress, aa->PhysicalAddressLength );
+#ifdef __REACTOS__
+        get_networkadapter_device( aa->AdapterName, &rec->pnpdevice_id, &rec->manufacturer, &rec->servicename );
+        rec->name                 = wcsdup( aa->Description );
+        rec->netconnection_id     = wcsdup( aa->FriendlyName );
+        rec->netenabled           = connection_status ? -1 : 0;
+        rec->netconnection_status = connection_status;
+        rec->physicaladapter      = physical;
+        rec->productname          = wcsdup( aa->Description );
+        rec->speed                = aa->TransmitLinkSpeed;
+#else
         rec->manufacturer         = L"The Wine Project";
         rec->name                 = wcsdup( aa->FriendlyName );
         rec->netenabled           = connection_status ? -1 : 0;
@@ -5006,6 +5101,7 @@ static enum fill_status fill_networkadapter( struct table *table, const struct e
         rec->pnpdevice_id         = L"PCI\\VEN_8086&DEV_100E&SUBSYS_001E8086&REV_02\\3&267A616A&1&18";
         rec->servicename          = wcsdup( aa->FriendlyName );
         rec->speed                = 1000000;
+#endif
         if (!match_row( table, row, cond, &status ))
         {
             free_row_values( table, row );
@@ -5210,6 +5306,9 @@ static enum fill_status fill_networkadapterconfig( struct table *table, const st
     IP_ADAPTER_ADDRESSES *aa, *buffer;
     UINT row = 0, offset = 0, count = 0;
     enum fill_status status = FILL_STATUS_UNFILTERED;
+#ifdef __REACTOS__
+    IP_ADAPTER_INFO *info;
+#endif
 
     if (!(buffer = get_network_adapters())) return FILL_STATUS_FAILED;
 
@@ -5222,6 +5321,9 @@ static enum fill_status fill_networkadapterconfig( struct table *table, const st
         free( buffer );
         return FILL_STATUS_FAILED;
     }
+#ifdef __REACTOS__
+    info = get_adapters_info();
+#endif
     for (aa = buffer; aa; aa = aa->Next)
     {
         if (aa->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
@@ -5229,13 +5331,24 @@ static enum fill_status fill_networkadapterconfig( struct table *table, const st
         rec = (struct record_networkadapterconfig *)(table->data + offset);
         rec->defaultipgateway     = get_defaultipgateway( aa->FirstGatewayAddress );
         rec->description          = wcsdup( aa->Description );
+#ifdef __REACTOS__
+        rec->dhcpenabled          = (aa->Flags & IP_ADAPTER_DHCP_ENABLED) ? -1 : 0;
+        rec->dhcpserver           = get_dhcp_server( info, aa->IfIndex );
+#else
         rec->dhcpenabled          = -1;
+#endif
         rec->dnsdomain            = L"";
         rec->dnshostname          = get_dnshostname( aa->FirstUnicastAddress );
         rec->dnsserversearchorder = get_dnsserversearchorder( aa->FirstDnsServerAddress );
         rec->index                = aa->IfIndex;
+#ifdef __REACTOS__
+        rec->interface_index      = aa->IfIndex;
+        rec->ipaddress            = get_ipaddress( aa->FirstUnicastAddress );
+        rec->ipconnectionmetric   = aa->Ipv4Metric;
+#else
         rec->ipaddress            = get_ipaddress( aa->FirstUnicastAddress );
         rec->ipconnectionmetric   = 20;
+#endif
         rec->ipenabled            = -1;
         rec->ipsubnet             = get_ipsubnet( aa->FirstUnicastAddress );
         rec->mac_address          = get_mac_address( aa->PhysicalAddress, aa->PhysicalAddressLength );
@@ -5251,6 +5364,9 @@ static enum fill_status fill_networkadapterconfig( struct table *table, const st
     TRACE("created %u rows\n", row);
     table->num_rows = row;
 
+#ifdef __REACTOS__
+    free( info );
+#endif
     free( buffer );
     return status;
 }
