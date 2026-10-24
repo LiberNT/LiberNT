@@ -169,26 +169,49 @@ static const struct column col_directory[] =
 static const struct column col_diskdrive[] =
 {
 #ifdef __REACTOS__
+    { L"BytesPerSector", CIM_UINT32 },
     { L"Caption",       CIM_STRING|COL_FLAG_DYNAMIC },
 #else
     { L"Caption",       CIM_STRING },
 #endif
     { L"DeviceId",      CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
+#ifdef __REACTOS__
+    { L"Description",   CIM_STRING },
+#endif
     { L"Index",         CIM_UINT32 },
     { L"InterfaceType", CIM_STRING },
     { L"Manufacturer",  CIM_STRING },
+#ifdef __REACTOS__
+    { L"MediaLoaded",   CIM_BOOLEAN },
+#endif
     { L"MediaType",     CIM_STRING },
 #ifdef __REACTOS__
     { L"Model",         CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Name",          CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"Partitions",    CIM_UINT32 },
     { L"PNPDeviceID",   CIM_STRING|COL_FLAG_DYNAMIC },
+    { L"SectorsPerTrack", CIM_UINT32 },
 #else
     { L"Model",         CIM_STRING },
     { L"PNPDeviceID",   CIM_STRING },
 #endif
     { L"SerialNumber",  CIM_STRING|COL_FLAG_DYNAMIC },
+#ifdef __REACTOS__
+    { L"Signature",     CIM_UINT32|COL_FLAG_NULLABLE },
+#else
     { L"Signature",     CIM_UINT32 },
+#endif
     { L"Size",          CIM_UINT64 },
+#ifdef __REACTOS__
+    { L"Status",        CIM_STRING },
+    { L"TotalCylinders", CIM_UINT64 },
+#endif
     { L"TotalHeads",    CIM_UINT32 },
+#ifdef __REACTOS__
+    { L"TotalSectors",  CIM_UINT64 },
+    { L"TotalTracks",   CIM_UINT64 },
+    { L"TracksPerCylinder", CIM_UINT32 },
+#endif
 };
 static const struct column col_diskdrivetodiskpartition[] =
 {
@@ -953,18 +976,43 @@ struct record_directory
 };
 struct record_diskdrive
 {
+#ifdef __REACTOS__
+    UINT32       bytespersector;
+#endif
     const WCHAR *caption;
     const WCHAR *device_id;
+#ifdef __REACTOS__
+    const WCHAR *description;
+#endif
     UINT32       index;
     const WCHAR *interfacetype;
     const WCHAR *manufacturer;
+#ifdef __REACTOS__
+    int          medialoaded;
+#endif
     const WCHAR *mediatype;
     const WCHAR *model;
+#ifdef __REACTOS__
+    const WCHAR *name;
+    UINT32       partitions;
+#endif
     const WCHAR *pnpdevice_id;
+#ifdef __REACTOS__
+    UINT32       sectorspertrack;
+#endif
     const WCHAR *serialnumber;
     UINT32       signature;
     UINT64       size;
+#ifdef __REACTOS__
+    const WCHAR *status;
+    UINT64       totalcylinders;
+#endif
     UINT32       total_heads;
+#ifdef __REACTOS__
+    UINT64       totalsectors;
+    UINT64       totaltracks;
+    UINT32       trackspercylinder;
+#endif
 };
 struct record_diskdrivetodiskpartition
 {
@@ -3089,6 +3137,9 @@ struct physical_disk
     BOOLEAN removable;
     UINT64 size;
     UINT32 heads;
+    UINT64 cylinders;
+    UINT32 sectors_per_track;
+    UINT32 bytes_per_sector;
 };
 
 static WCHAR *get_storage_descriptor_string( const STORAGE_DEVICE_DESCRIPTOR *desc, DWORD size, DWORD offset );
@@ -3203,6 +3254,9 @@ static UINT get_physical_disks( struct physical_disk *disks, UINT capacity )
         {
             disk->size = geometry.DiskSize.QuadPart;
             disk->heads = geometry.Geometry.TracksPerCylinder;
+            disk->cylinders = geometry.Geometry.Cylinders.QuadPart;
+            disk->sectors_per_track = geometry.Geometry.SectorsPerTrack;
+            disk->bytes_per_sector = geometry.Geometry.BytesPerSector;
         }
         CloseHandle( handle );
         count++;
@@ -3228,10 +3282,12 @@ static void free_physical_disks( struct physical_disk *disks, UINT count )
 }
 #endif
 
+static void get_disk_partition_info( UINT disk, UINT32 *partitions, UINT32 *signature );
+
 static enum fill_status fill_diskdrive( struct table *table, const struct expr *cond )
 {
     static const WCHAR fmtW[] = L"\\\\\\\\.\\\\PHYSICALDRIVE%u";
-    WCHAR device_id[ARRAY_SIZE( fmtW ) + 10];
+    WCHAR device_id[ARRAY_SIZE( fmtW ) + 10], name[ARRAY_SIZE( fmtW ) + 10];
     struct physical_disk *disks;
     struct record_diskdrive *rec;
     UINT i, count, row = 0, offset = 0;
@@ -3256,18 +3312,30 @@ static enum fill_status fill_diskdrive( struct table *table, const struct expr *
     {
         rec = (struct record_diskdrive *)(table->data + offset);
         swprintf( device_id, ARRAY_SIZE( device_id ), fmtW, disks[i].number );
-        rec->caption       = disks[i].model ? wcsdup( disks[i].model ) : NULL;
-        rec->device_id     = wcsdup( device_id );
-        rec->index         = disks[i].number;
-        rec->interfacetype = get_diskdrive_interfacetype( disks[i].bus );
-        rec->manufacturer  = L"(Standard disk drives)";
-        rec->mediatype     = get_diskdrive_mediatype( &disks[i] );
-        rec->model         = disks[i].model;
-        rec->pnpdevice_id  = disks[i].pnpdevice_id;
-        rec->serialnumber  = disks[i].serialnumber;
-        rec->signature     = 0;
-        rec->size          = disks[i].size;
-        rec->total_heads   = disks[i].heads;
+        rec->bytespersector    = disks[i].bytes_per_sector;
+        rec->caption           = disks[i].model ? wcsdup( disks[i].model ) : NULL;
+        rec->device_id         = wcsdup( device_id );
+        rec->description       = L"Disk drive";
+        rec->index             = disks[i].number;
+        rec->interfacetype     = get_diskdrive_interfacetype( disks[i].bus );
+        rec->manufacturer      = L"(Standard disk drives)";
+        rec->medialoaded       = -1;
+        rec->mediatype         = get_diskdrive_mediatype( &disks[i] );
+        rec->model             = disks[i].model;
+        swprintf( name, ARRAY_SIZE( name ), L"\\\\.\\PHYSICALDRIVE%u", disks[i].number );
+        rec->name              = wcsdup( name );
+        rec->pnpdevice_id      = disks[i].pnpdevice_id;
+        rec->sectorspertrack   = disks[i].sectors_per_track;
+        rec->serialnumber      = disks[i].serialnumber;
+        get_disk_partition_info( disks[i].number, &rec->partitions, &rec->signature );
+        rec->size              = disks[i].cylinders * disks[i].heads * disks[i].sectors_per_track *
+                                 disks[i].bytes_per_sector;
+        rec->status            = L"OK";
+        rec->totalcylinders    = disks[i].cylinders;
+        rec->total_heads       = disks[i].heads;
+        rec->totalsectors      = disks[i].cylinders * disks[i].heads * disks[i].sectors_per_track;
+        rec->totaltracks       = disks[i].cylinders * disks[i].heads;
+        rec->trackspercylinder = disks[i].heads;
         if (!match_row( table, row, cond, &status ))
         {
             free_row_values( table, row );
@@ -3674,28 +3742,35 @@ static const WCHAR *get_mbr_partition_type( BYTE type )
     }
 }
 
+static struct wbemprox_drive_layout_ex *get_drive_layout( HANDLE handle )
+{
+    struct wbemprox_drive_layout_ex *layout;
+    DWORD size = sizeof(*layout) + 16 * sizeof(struct wbemprox_partition_info_ex), bytes;
+
+    for (;;)
+    {
+        if (!(layout = malloc( size ))) return NULL;
+        if (DeviceIoControl( handle, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, layout, size, &bytes, NULL )) return layout;
+        free( layout );
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || size > 64 * 1024) return NULL;
+        size *= 2;
+    }
+}
+
 static UINT get_wmi_partitions( UINT disk, struct wmi_partition *parts, UINT capacity )
 {
-    struct wbemprox_drive_layout_ex *layout = NULL;
+    struct wbemprox_drive_layout_ex *layout;
     LARGE_INTEGER length;
     WCHAR path[32];
     HANDLE handle;
-    DWORD size = sizeof(*layout) + 16 * sizeof(struct wbemprox_partition_info_ex), bytes, i, entries;
+    DWORD bytes, i, entries;
     UINT count = 0;
 
     swprintf( path, ARRAY_SIZE( path ), L"\\\\.\\PhysicalDrive%u", disk );
     handle = CreateFileW( path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL );
     if (handle == INVALID_HANDLE_VALUE) return 0;
 
-    for (;;)
-    {
-        if (!(layout = malloc( size ))) break;
-        if (DeviceIoControl( handle, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, layout, size, &bytes, NULL )) break;
-        free( layout );
-        layout = NULL;
-        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || size > 64 * 1024) break;
-        size *= 2;
-    }
+    layout = get_drive_layout( handle );
 
     if (layout && layout->PartitionStyle == WBEMPROX_PARTITION_STYLE_GPT)
     {
@@ -3765,6 +3840,34 @@ static UINT get_wmi_partitions( UINT disk, struct wmi_partition *parts, UINT cap
     free( layout );
     CloseHandle( handle );
     return count;
+}
+
+static void get_disk_partition_info( UINT disk, UINT32 *partitions, UINT32 *signature )
+{
+    struct wbemprox_drive_layout_ex *layout;
+    struct wmi_partition *parts;
+    WCHAR path[32];
+    HANDLE handle;
+
+    *partitions = 0;
+    *signature = WBEMPROX_NULL_UINT32;
+
+    if ((parts = malloc( 128 * sizeof(*parts) )))
+    {
+        *partitions = get_wmi_partitions( disk, parts, 128 );
+        free( parts );
+    }
+
+    swprintf( path, ARRAY_SIZE( path ), L"\\\\.\\PhysicalDrive%u", disk );
+    handle = CreateFileW( path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL );
+    if (handle == INVALID_HANDLE_VALUE) return;
+
+    if ((layout = get_drive_layout( handle )))
+    {
+        if (layout->PartitionStyle == WBEMPROX_PARTITION_STYLE_MBR) *signature = layout->Mbr.Signature;
+        free( layout );
+    }
+    CloseHandle( handle );
 }
 
 static BOOL get_volume_partition_id( WCHAR letter, WCHAR *buf, UINT len )
