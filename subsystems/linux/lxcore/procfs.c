@@ -48,7 +48,8 @@ typedef enum _LX_SYNTH_ID
     LxPtsTty,
     LxProcNsDir,
     LxProcNsLink,
-    LxNsfsFile
+    LxNsfsFile,
+    LxSysDevNode
 } LX_SYNTH_ID;
 
 typedef struct _LX_SYNTH
@@ -245,6 +246,16 @@ LxDirAdd(
 {
     LxTextAppend(List, (PCSTR)&Type, 1);
     LxTextAppend(List, Name, (ULONG)strlen(Name) + 1);
+}
+
+static
+VOID
+LxSysDevDirAdd(
+    _In_ PVOID Context,
+    _In_ UCHAR Type,
+    _In_ PCSTR Name)
+{
+    LxDirAdd((PLX_TEXT)Context, Type, Name);
 }
 
 static
@@ -2049,7 +2060,13 @@ LxResolveSys(
     }
 
     if (LxTableResolve(LxSysTable, RTL_NUMBER_OF(LxSysTable), Path, &Index, &Type) != 0)
-        return -LX_ENOENT;
+    {
+        if (LxSysDevQuery(Path, &Type, &Synth->Mode, &Synth->LinkTarget) != 0)
+            return -LX_ENOENT;
+        Synth->Id = LxSysDevNode;
+        Synth->Type = Type;
+        return 0;
+    }
     Synth->Index = Index;
     Synth->Type = Type;
     Synth->Id = (Type == LX_S_IFDIR) ? LxSysDir : LxSysFile;
@@ -2805,6 +2822,12 @@ LxSynthOpen(
         }
         if (Node->Mount->Kind == LxFsCgroup)
             LxListCgroup(&Synth, &Text);
+        else if (Synth.Id == LxSysDevNode)
+        {
+            LxDirAdd(&Text, LX_DT_DIR, ".");
+            LxDirAdd(&Text, LX_DT_DIR, "..");
+            LxSysDevList(Synth.Prefix, LxSysDevDirAdd, &Text);
+        }
         else if ((Synth.Id == LxSysDir) || (Synth.Id == LxProcRoot) || (Synth.Id == LxPtsRoot))
         {
             if (Synth.Id == LxSysDir)
@@ -2818,6 +2841,7 @@ LxSynthOpen(
                 else
                 {
                     LxTableList(LxSysTable, RTL_NUMBER_OF(LxSysTable), Synth.Prefix, &Text);
+                    LxSysDevList(Synth.Prefix, LxSysDevDirAdd, &Text);
                     if (strcmp(Synth.Prefix, "devices/system/cpu") == 0)
                     {
                         ULONG Cpu, Count = KeQueryActiveProcessorCount(NULL);
@@ -2988,6 +3012,19 @@ LxSynthOpen(
                     LxTextAppend(&Text, LxProcSysTable[Synth.Index].Text, (ULONG)strlen(LxProcSysTable[Synth.Index].Text));
                 Writer = LxProcSysTable[Synth.Index].Writer;
                 break;
+
+            case LxSysDevNode:
+            {
+                PVOID Data;
+                ULONG Length;
+
+                if (LxSysDevRead(Process, Synth.Prefix, &Data, &Length) == 0)
+                {
+                    LxTextAppend(&Text, Data, Length);
+                    LxFree(Data);
+                }
+                break;
+            }
 
             case LxSysFile:
                 if (Synth.Index == MAXULONG - 1)

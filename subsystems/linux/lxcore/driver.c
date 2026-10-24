@@ -884,6 +884,7 @@ DriverEntry(
     LxPipeInitialize();
     LxVcacheInitialize();
     LxSynthInitialize();
+    LxSysDevInitialize();
     LxFdObjectsInitialize();
     LxSocketInitialize();
 

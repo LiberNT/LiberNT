@@ -806,6 +806,16 @@ LONG LxSynthMkdir(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node);
 LONG LxSynthRmdir(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node);
 LONG LxSynthReadlink(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _Out_ PSTR *Target);
 VOID LxSynthInitialize(VOID);
+
+#define LX_USB_DEVICE_MAJOR 189
+
+typedef VOID (*PLX_SYSDEV_LIST_ROUTINE)(_In_ PVOID Context, _In_ UCHAR Type, _In_ PCSTR Name);
+
+LONG LxSysDevQuery(_In_ PCSTR Path, _Out_ PULONG Type, _Out_ PULONG Mode, _Out_opt_ PSTR *LinkTarget);
+VOID LxSysDevList(_In_ PCSTR Path, _In_ PLX_SYSDEV_LIST_ROUTINE Routine, _In_ PVOID Context);
+LONG LxSysDevRead(_In_ PLX_PROCESS Process, _In_ PCSTR Path, _Out_ PVOID *Data, _Out_ PULONG Length);
+ULONG LxSysDevUsbNodes(_Out_writes_(Count) PULONG Nodes, _In_ ULONG Count);
+VOID LxSysDevInitialize(VOID);
 PLX_CGROUP LxCgroupFromFile(_In_ PLX_FILE File);
 PLX_CGROUP LxCgroupCreateRoot(VOID);
 VOID LxCgroupAttach(_In_ PLX_PROCESS Process, _In_ PLX_CGROUP Cgroup);

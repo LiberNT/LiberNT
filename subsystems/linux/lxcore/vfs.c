@@ -709,7 +709,7 @@ LxPopulateDev(
         { "core", LX_S_IFLNK | 0777, 0, 0, "/proc/kcore" },
     };
     static const PCSTR Directories[] = { "pts", "shm", "mqueue", "hugepages" };
-    ULONG Index;
+    ULONG Index, UsbNodes[256], UsbCount;
 
     for (Index = 0; Index < RTL_NUMBER_OF(Nodes); Index++)
     {
@@ -736,6 +736,41 @@ LxPopulateDev(
         if (LxNtPath(&Mount, Directories[Index], &Path) == 0)
         {
             LxNtCreateDirectory(&Path, (Index == 1) ? 01777 : 0755);
+            LxFreePaged(Path.Buffer);
+        }
+    }
+
+    UsbCount = LxSysDevUsbNodes(UsbNodes, RTL_NUMBER_OF(UsbNodes));
+    for (Index = 0; Index < UsbCount; Index++)
+    {
+        ULONG Bus = UsbNodes[Index] >> 16, Devnum = UsbNodes[Index] & 0xFFFF;
+        CHAR Name[24];
+        LX_MOUNT Mount;
+        UNICODE_STRING Path;
+
+        RtlZeroMemory(&Mount, sizeof(Mount));
+        Mount.NtRoot = *DevRoot;
+        if ((Index == 0) && (LxNtPath(&Mount, "bus", &Path) == 0))
+        {
+            LxNtCreateDirectory(&Path, 0755);
+            LxFreePaged(Path.Buffer);
+        }
+        if ((Index == 0) && (LxNtPath(&Mount, "bus/usb", &Path) == 0))
+        {
+            LxNtCreateDirectory(&Path, 0755);
+            LxFreePaged(Path.Buffer);
+        }
+        RtlStringCbPrintfA(Name, sizeof(Name), "bus/usb/%03lu", Bus);
+        if (LxNtPath(&Mount, Name, &Path) == 0)
+        {
+            LxNtCreateDirectory(&Path, 0755);
+            LxFreePaged(Path.Buffer);
+        }
+        RtlStringCbPrintfA(Name, sizeof(Name), "bus/usb/%03lu/%03lu", Bus, Devnum);
+        if (LxNtPath(&Mount, Name, &Path) == 0)
+        {
+            LxNtCreateNode(&Path, LX_S_IFCHR | 0664,
+                           ((ULONG64)LX_USB_DEVICE_MAJOR << 32) | ((Bus - 1) * 128 + (Devnum - 1)), NULL);
             LxFreePaged(Path.Buffer);
         }
     }

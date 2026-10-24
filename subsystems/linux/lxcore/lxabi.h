@@ -700,6 +700,7 @@ typedef struct _LX_MSGINFO
 #define LX_UIO_MAXIOV           1024
 
 #define LX_CAP_SYS_PTRACE       19
+#define LX_CAP_SYS_ADMIN        21
 #define LX_CAP_SYS_TIME         25
 
 #define LX_SPLICE_F_NONBLOCK    0x02

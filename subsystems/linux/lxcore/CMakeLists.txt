@@ -19,6 +19,7 @@ list(APPEND SOURCE
     signal.c
     socket.c
     sys.c
+    sysdev.c
     tty.c
     unistd.c
     vfs.c)
