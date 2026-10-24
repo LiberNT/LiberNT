@@ -2328,6 +2328,86 @@ ULONG NTAPI AhciHwFindAdapter(__in PVOID DeviceExtension, __in PVOID HwContext, 
     return SP_RETURN_FOUND;
 }// -- AhciHwFindAdapter();
 
+static
+ULONG
+AhciModelVendorLength(
+    __in PCHAR Model)
+{
+    ULONG Index;
+
+    for (Index = 0; (Index < 8) && (Model[Index] != '\0'); Index++)
+    {
+        if (Model[Index] == ' ')
+            return Index;
+    }
+
+    return 0;
+}
+
+SCSI_UNIT_CONTROL_STATUS
+NTAPI
+AhciHwUnitControl(
+    __in PVOID DeviceExtension,
+    __in SCSI_UNIT_CONTROL_TYPE ControlType,
+    __in PVOID Parameters)
+{
+    PAHCI_ADAPTER_EXTENSION AdapterExtension = DeviceExtension;
+    PSCSI_SUPPORTED_CONTROL_TYPE_LIST List;
+    PSTOR_RICH_DEVICE_DESCRIPTION_V2 Description;
+    PAHCI_PORT_EXTENSION PortExtension;
+    PSTOR_ADDR_BTL8 Address;
+
+    switch (ControlType)
+    {
+        case ScsiQuerySupportedUnitControlTypes:
+            List = Parameters;
+            if (List->MaxControlType > ScsiQuerySupportedUnitControlTypes)
+                List->SupportedTypeList[ScsiQuerySupportedUnitControlTypes] = TRUE;
+            if (List->MaxControlType > ScsiUnitRichDescription)
+                List->SupportedTypeList[ScsiUnitRichDescription] = TRUE;
+            return ScsiUnitControlSuccess;
+
+        case ScsiUnitRichDescription:
+            Description = Parameters;
+            if ((Description->Version < STOR_RICH_DEVICE_DESCRIPTION_STRUCTURE_VERSION_V2) ||
+                (Description->Size < sizeof(*Description)) ||
+                (Description->Address == NULL) ||
+                (Description->Address->Type != STOR_ADDRESS_TYPE_BTL8))
+            {
+                return ScsiUnitControlUnsuccessful;
+            }
+
+            Address = (PSTOR_ADDR_BTL8)Description->Address;
+            if ((Address->Target != 0) || (Address->Lun != 0) || !IsPortValid(AdapterExtension, Address->Path))
+                return ScsiUnitControlUnsuccessful;
+
+            PortExtension = &AdapterExtension->PortExtension[Address->Path];
+            if (!PortExtension->DeviceParams.IsActive ||
+                (PortExtension->DeviceParams.DeviceType != AHCI_DEVICE_TYPE_ATA) ||
+                (PortExtension->DeviceParams.VendorId[0] == '\0'))
+            {
+                return ScsiUnitControlUnsuccessful;
+            }
+
+            RtlZeroMemory(Description->VendorId, sizeof(Description->VendorId));
+            RtlZeroMemory(Description->ModelNumber, sizeof(Description->ModelNumber));
+            RtlZeroMemory(Description->FirmwareRevision, sizeof(Description->FirmwareRevision));
+            StorPortCopyMemory(Description->VendorId,
+                               PortExtension->DeviceParams.VendorId,
+                               AhciModelVendorLength((PCHAR)PortExtension->DeviceParams.VendorId));
+            StorPortCopyMemory(Description->ModelNumber,
+                               PortExtension->DeviceParams.VendorId,
+                               min(sizeof(Description->ModelNumber), sizeof(PortExtension->DeviceParams.VendorId)) - 1);
+            StorPortCopyMemory(Description->FirmwareRevision,
+                               PortExtension->DeviceParams.RevisionID,
+                               min(sizeof(Description->FirmwareRevision), sizeof(PortExtension->DeviceParams.RevisionID)) - 1);
+            return ScsiUnitControlSuccess;
+
+        default:
+            return ScsiUnitControlUnsuccessful;
+    }
+}
+
 /**
  * @name DriverEntry
  * @implemented
@@ -2355,6 +2435,7 @@ ULONG NTAPI DriverEntry(__in PVOID DriverObject, __in PVOID RegistryPath)
     hwInitializationData.HwInterrupt = AhciHwInterrupt;
     hwInitializationData.HwInitialize = AhciHwInitialize;
     hwInitializationData.HwFindAdapter = AhciHwFindAdapter;
+    hwInitializationData.HwUnitControl = AhciHwUnitControl;
 
     // adapter specific information
     hwInitializationData.TaggedQueuing = TRUE;
@@ -2995,6 +3076,8 @@ VOID InquiryCompletion(__in PVOID _Extension, __in PVOID _Srb)
     PINQUIRYDATA InquiryData;
     PAHCI_SRB_EXTENSION SrbExtension;
     PIDENTIFY_DEVICE_DATA IdentifyDeviceData;
+    ULONG VendorLength, ProductLength;
+    PCHAR Model, Product;
 
     DPRINT("InquiryCompletion()\n");
 
@@ -3105,6 +3188,8 @@ VOID InquiryCompletion(__in PVOID _Extension, __in PVOID _Srb)
         AhciDebugPrint("\tATAPI Device\n");
         PortExtension->DeviceParams.DeviceType = AHCI_DEVICE_TYPE_ATAPI;
         PortExtension->DeviceParams.AccessType = READ_ONLY_DIRECT_ACCESS_DEVICE;
+        Srb->SrbStatus = SRB_STATUS_BUSY;
+        return;
     }
 
     // INQUIRYDATABUFFERSIZE = 36 ; Defined in storport.h
@@ -3128,17 +3213,22 @@ VOID InquiryCompletion(__in PVOID _Extension, __in PVOID _Srb)
     InquiryData->DeviceType = PortExtension->DeviceParams.AccessType;
     InquiryData->RemovableMedia = PortExtension->DeviceParams.RemovableDevice;
 
-    /* SAT-2 5.4.2: for an ATA device the INQUIRY strings are
-     *   Vendor   = "ATA     "
-     *   Product  = the IDENTIFY model number
-     *   Revision = the IDENTIFY firmware revision
-     * SCSI text fields are space padded and are not NUL terminated.
-     *
-     * The old code put the firmware revision in ProductId and the serial
-     * number in ProductRevisionLevel, and NUL terminated both fields, so the
-     * disk showed up under the wrong name. */
-    AhciFillScsiString(InquiryData->VendorId, sizeof(InquiryData->VendorId), (PUCHAR)"ATA");
-    AhciFillScsiString(InquiryData->ProductId, sizeof(InquiryData->ProductId), PortExtension->DeviceParams.VendorId);
+    Model = (PCHAR)PortExtension->DeviceParams.VendorId;
+    VendorLength = AhciModelVendorLength(Model);
+    Product = (VendorLength != 0) ? &Model[VendorLength + 1] : Model;
+
+    AhciFillScsiString(InquiryData->VendorId, sizeof(InquiryData->VendorId), (PUCHAR)"");
+    AhciFillScsiString(InquiryData->ProductId, sizeof(InquiryData->ProductId), (PUCHAR)"");
+    StorPortCopyMemory(InquiryData->VendorId, Model, VendorLength);
+    ProductLength = (ULONG)strlen(Product);
+    if (ProductLength >= sizeof(InquiryData->ProductId))
+    {
+        StorPortCopyMemory(InquiryData->ProductId, Product, sizeof(InquiryData->ProductId));
+    }
+    else
+    {
+        StorPortCopyMemory(&InquiryData->ProductId[sizeof(InquiryData->ProductId) - ProductLength], Product, ProductLength);
+    }
     AhciFillScsiString(InquiryData->ProductRevisionLevel, sizeof(InquiryData->ProductRevisionLevel), PortExtension->DeviceParams.RevisionID);
 
     return;
