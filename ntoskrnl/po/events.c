@@ -555,6 +555,7 @@ NTAPI
 PoNotifySystemTimeSet(VOID)
 {
     KIRQL OldIrql;
+    WIN32_POWEREVENT_PARAMETERS Parameters;
 
     /* Check if Win32k registered a notification callback */
     if (PopEventCallout)
@@ -567,6 +568,10 @@ PoNotifySystemTimeSet(VOID)
 
         /* Lower IRQL back */
         KeLowerIrql(OldIrql);
+
+        Parameters.EventNumber = PsW32SystemTime;
+        Parameters.Code = 0;
+        (VOID)PopEventCallout(&Parameters);
     }
 }
 
