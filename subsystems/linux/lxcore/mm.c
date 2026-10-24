@@ -627,6 +627,35 @@ LxMmPopulateRun(
 }
 
 static
+LONG
+LxMmFillPrivateFile(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 Start,
+    _In_ ULONG64 End)
+{
+    ULONG64 Cursor = Start;
+
+    while (Cursor < End)
+    {
+        PLX_VMA Vma = LxVmaFind(Process, Cursor);
+        ULONG64 Stop;
+        LONG Error;
+
+        if (Vma == NULL)
+            return -LX_EFAULT;
+        Stop = min(Vma->End, End);
+        if ((Vma->File != NULL) && !(Vma->Flags & LX_VMA_VIEW))
+        {
+            Error = LxMmPopulateRun(Vma, Cursor, Stop);
+            if (Error != 0)
+                return Error;
+        }
+        Cursor = Stop;
+    }
+    return 0;
+}
+
+static
 VOID
 LxVmReleaseReservations(
     _In_ ULONG64 Start,
@@ -1284,6 +1313,12 @@ LxMmMap(
         if ((Error != 0) && Fresh)
             LxVmFree(Base, 0, MEM_RELEASE);
     }
+    if ((Error == 0) && (File != NULL))
+    {
+        Error = LxMmFillPrivateFile(Process, Base, Base + Length);
+        if (Error != 0)
+            LxMmUnmapRange(Process, Base, Base + Length);
+    }
     if (Error != 0)
     {
         LxMmUnlock(Process);
@@ -1563,6 +1598,8 @@ LX_SYSCALL(LxSysMadvise)
             if ((Advice == LX_MADV_FREE) && (Vma->File != NULL))
                 continue;
             LxVmDecommitRange(max(Vma->Start, Address), min(Vma->End, End));
+            if ((Vma->File != NULL) && !(Vma->Flags & LX_VMA_VIEW))
+                LxMmPopulateRun(Vma, max(Vma->Start, Address), min(Vma->End, End));
         }
     }
     LxMmUnlock(Process);
@@ -1666,6 +1703,8 @@ LX_SYSCALL(LxSysMremap)
     {
         Result = LxVmaInsert(Process, Old + OldLength, Old + NewLength, Prot, VmaFlags, File,
                              (File != NULL) ? Offset + OldLength : 0, NULL);
+        if ((Result == 0) && (File != NULL))
+            Result = LxMmFillPrivateFile(Process, Old + OldLength, Old + NewLength);
         if (Result == 0)
             Result = (LONG64)Old;
     }
@@ -1723,6 +1762,8 @@ LX_SYSCALL(LxSysMremap)
             Cursor = RegionEnd;
         }
 
+        if ((Result == 0) && (File != NULL))
+            Result = LxMmFillPrivateFile(Process, New + OldLength, New + NewLength);
         if (Result == 0)
         {
             LxMmUnmap(Process, Old, OldLength);
