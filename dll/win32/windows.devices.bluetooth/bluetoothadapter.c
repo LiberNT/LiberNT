@@ -208,7 +208,7 @@ static inline struct bluetoothadapter *impl_from_IBluetoothAdapter( IBluetoothAd
     return CONTAINING_RECORD( iface, struct bluetoothadapter, IBluetoothAdapter_iface );
 }
 
-static WINAPI HRESULT bluetoothadapter_QueryInterface( IBluetoothAdapter *iface, REFIID iid, void **out )
+static HRESULT WINAPI bluetoothadapter_QueryInterface( IBluetoothAdapter *iface, REFIID iid, void **out )
 {
     TRACE( "iface %p, iid %s, out %p\n", iface, debugstr_guid( iid ), out );
 
@@ -226,7 +226,7 @@ static WINAPI HRESULT bluetoothadapter_QueryInterface( IBluetoothAdapter *iface,
     return E_NOINTERFACE;
 }
 
-static WINAPI ULONG bluetoothadapter_AddRef( IBluetoothAdapter *iface )
+static ULONG WINAPI bluetoothadapter_AddRef( IBluetoothAdapter *iface )
 {
     struct bluetoothadapter *impl = impl_from_IBluetoothAdapter( iface );
     ULONG ref = InterlockedIncrement( &impl->ref );
@@ -234,7 +234,7 @@ static WINAPI ULONG bluetoothadapter_AddRef( IBluetoothAdapter *iface )
     return ref;
 }
 
-static WINAPI ULONG bluetoothadapter_Release( IBluetoothAdapter *iface )
+static ULONG WINAPI bluetoothadapter_Release( IBluetoothAdapter *iface )
 {
     struct bluetoothadapter *impl = impl_from_IBluetoothAdapter( iface );
     ULONG ref = InterlockedDecrement( &impl->ref );

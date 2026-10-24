@@ -1,0 +1,381 @@
+/*
+ * PROJECT:     LiberNT msvcirt.dll
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     x86 thiscall wrappers for MSVC builds
+ * COPYRIGHT:   Copyright 2007-2026 Wine team
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <asm.inc>
+
+.code
+
+MACRO(DEFINE_VTBL_WRAPPER, off)
+PUBLIC _vtbl_wrapper_&off
+_vtbl_wrapper_&off:
+    pop eax
+    pop ecx
+    push eax
+    mov eax, [ecx]
+    jmp dword ptr [eax + off]
+ENDM
+
+MACRO(DEFINE_THISCALL_WRAPPER, func, args)
+EXTERN _&func&@&args:PROC
+PUBLIC ___thiscall_&func
+___thiscall_&func:
+    pop eax
+    push ecx
+    push eax
+    jmp _&func&@&args
+ENDM
+
+DEFINE_VTBL_WRAPPER 0
+DEFINE_VTBL_WRAPPER 4
+DEFINE_VTBL_WRAPPER 8
+DEFINE_VTBL_WRAPPER 12
+DEFINE_VTBL_WRAPPER 16
+DEFINE_VTBL_WRAPPER 20
+DEFINE_VTBL_WRAPPER 24
+DEFINE_VTBL_WRAPPER 28
+DEFINE_VTBL_WRAPPER 32
+DEFINE_VTBL_WRAPPER 36
+DEFINE_VTBL_WRAPPER 40
+DEFINE_VTBL_WRAPPER 44
+DEFINE_VTBL_WRAPPER 48
+DEFINE_VTBL_WRAPPER 52
+DEFINE_VTBL_WRAPPER 56
+
+DEFINE_THISCALL_WRAPPER type_info_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_exception_ctor, 8
+DEFINE_THISCALL_WRAPPER exception_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_exception_default_ctor, 4
+DEFINE_THISCALL_WRAPPER MSVCP_exception_dtor, 4
+DEFINE_THISCALL_WRAPPER MSVCP_exception_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_exception_scalar_dtor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_exception_assign, 8
+DEFINE_THISCALL_WRAPPER MSVCP_exception__Doraise, 4
+DEFINE_THISCALL_WRAPPER MSVCP_exception_what, 4
+DEFINE_THISCALL_WRAPPER MSVCP_bad_alloc_ctor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_bad_alloc_default_ctor, 4
+DEFINE_THISCALL_WRAPPER bad_alloc_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_bad_alloc_dtor, 4
+DEFINE_THISCALL_WRAPPER MSVCP_bad_alloc_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_bad_alloc_assign, 8
+DEFINE_THISCALL_WRAPPER MSVCP_logic_error_ctor, 8
+DEFINE_THISCALL_WRAPPER logic_error_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_logic_error_dtor, 4
+DEFINE_THISCALL_WRAPPER MSVCP_logic_error_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_logic_error_scalar_dtor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_logic_error_assign, 8
+DEFINE_THISCALL_WRAPPER MSVCP_logic_error_what, 4
+DEFINE_THISCALL_WRAPPER length_error_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_length_error_assign, 8
+DEFINE_THISCALL_WRAPPER out_of_range_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_out_of_range_assign, 8
+DEFINE_THISCALL_WRAPPER invalid_argument_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER runtime_error_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_runtime_error_dtor, 4
+DEFINE_THISCALL_WRAPPER MSVCP_runtime_error_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_runtime_error_assign, 8
+DEFINE_THISCALL_WRAPPER MSVCP_runtime_error_what, 4
+DEFINE_THISCALL_WRAPPER failure_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_failure_dtor, 4
+DEFINE_THISCALL_WRAPPER MSVCP_failure_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_failure_what, 4
+DEFINE_THISCALL_WRAPPER MSVCP_bad_cast_ctor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_bad_cast_default_ctor, 4
+DEFINE_THISCALL_WRAPPER bad_cast_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_bad_cast_dtor, 4
+DEFINE_THISCALL_WRAPPER MSVCP_bad_cast_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_bad_cast_opequals, 8
+DEFINE_THISCALL_WRAPPER range_error_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER MSVCP_range_error_assign, 8
+DEFINE_THISCALL_WRAPPER streambuf_reserve_ctor, 12
+DEFINE_THISCALL_WRAPPER streambuf_ctor, 4
+DEFINE_THISCALL_WRAPPER streambuf_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER streambuf_dtor, 4
+DEFINE_THISCALL_WRAPPER streambuf_assign, 8
+DEFINE_THISCALL_WRAPPER streambuf_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER streambuf_scalar_dtor, 8
+DEFINE_THISCALL_WRAPPER streambuf_doallocate, 4
+DEFINE_THISCALL_WRAPPER streambuf_allocate, 4
+DEFINE_THISCALL_WRAPPER streambuf_base, 4
+DEFINE_THISCALL_WRAPPER streambuf_blen, 4
+DEFINE_THISCALL_WRAPPER streambuf_eback, 4
+DEFINE_THISCALL_WRAPPER streambuf_ebuf, 4
+DEFINE_THISCALL_WRAPPER streambuf_egptr, 4
+DEFINE_THISCALL_WRAPPER streambuf_epptr, 4
+DEFINE_THISCALL_WRAPPER streambuf_gptr, 4
+DEFINE_THISCALL_WRAPPER streambuf_pbase, 4
+DEFINE_THISCALL_WRAPPER streambuf_pptr, 4
+DEFINE_THISCALL_WRAPPER streambuf_clrlock, 4
+DEFINE_THISCALL_WRAPPER streambuf_lock, 4
+DEFINE_THISCALL_WRAPPER streambuf_lockptr, 4
+DEFINE_THISCALL_WRAPPER streambuf_gbump, 8
+DEFINE_THISCALL_WRAPPER streambuf_pbump, 8
+DEFINE_THISCALL_WRAPPER streambuf_in_avail, 4
+DEFINE_THISCALL_WRAPPER streambuf_out_waiting, 4
+DEFINE_THISCALL_WRAPPER streambuf_overflow, 8
+DEFINE_THISCALL_WRAPPER streambuf_seekoff, 16
+DEFINE_THISCALL_WRAPPER streambuf_seekpos, 12
+DEFINE_THISCALL_WRAPPER streambuf_pbackfail, 8
+DEFINE_THISCALL_WRAPPER streambuf_setb, 16
+DEFINE_THISCALL_WRAPPER streambuf_setbuf, 12
+DEFINE_THISCALL_WRAPPER streambuf_setg, 16
+DEFINE_THISCALL_WRAPPER streambuf_setlock, 4
+DEFINE_THISCALL_WRAPPER streambuf_setp, 12
+DEFINE_THISCALL_WRAPPER streambuf_sync, 4
+DEFINE_THISCALL_WRAPPER streambuf_unbuffered_set, 8
+DEFINE_THISCALL_WRAPPER streambuf_unbuffered_get, 4
+DEFINE_THISCALL_WRAPPER streambuf_underflow, 4
+DEFINE_THISCALL_WRAPPER streambuf_unlock, 4
+DEFINE_THISCALL_WRAPPER streambuf_xsgetn, 12
+DEFINE_THISCALL_WRAPPER streambuf_xsputn, 12
+DEFINE_THISCALL_WRAPPER streambuf_sgetc, 4
+DEFINE_THISCALL_WRAPPER streambuf_sputc, 8
+DEFINE_THISCALL_WRAPPER streambuf_sgetn, 12
+DEFINE_THISCALL_WRAPPER streambuf_sputn, 12
+DEFINE_THISCALL_WRAPPER streambuf_snextc, 4
+DEFINE_THISCALL_WRAPPER streambuf_sbumpc, 4
+DEFINE_THISCALL_WRAPPER streambuf_stossc, 4
+DEFINE_THISCALL_WRAPPER streambuf_sputbackc, 8
+DEFINE_THISCALL_WRAPPER streambuf_dbp, 4
+DEFINE_THISCALL_WRAPPER filebuf_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER filebuf_fd_reserve_ctor, 16
+DEFINE_THISCALL_WRAPPER filebuf_fd_ctor, 8
+DEFINE_THISCALL_WRAPPER filebuf_ctor, 4
+DEFINE_THISCALL_WRAPPER filebuf_dtor, 4
+DEFINE_THISCALL_WRAPPER filebuf_assign, 8
+DEFINE_THISCALL_WRAPPER filebuf_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER filebuf_scalar_dtor, 8
+DEFINE_THISCALL_WRAPPER filebuf_attach, 8
+DEFINE_THISCALL_WRAPPER filebuf_close, 4
+DEFINE_THISCALL_WRAPPER filebuf_fd, 4
+DEFINE_THISCALL_WRAPPER filebuf_is_open, 4
+DEFINE_THISCALL_WRAPPER filebuf_open, 16
+DEFINE_THISCALL_WRAPPER filebuf_overflow, 8
+DEFINE_THISCALL_WRAPPER filebuf_seekoff, 16
+DEFINE_THISCALL_WRAPPER filebuf_setbuf, 12
+DEFINE_THISCALL_WRAPPER filebuf_setmode, 8
+DEFINE_THISCALL_WRAPPER filebuf_sync, 4
+DEFINE_THISCALL_WRAPPER filebuf_underflow, 4
+DEFINE_THISCALL_WRAPPER strstreambuf_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER strstreambuf_dynamic_ctor, 8
+DEFINE_THISCALL_WRAPPER strstreambuf_funcs_ctor, 12
+DEFINE_THISCALL_WRAPPER strstreambuf_buffer_ctor, 16
+DEFINE_THISCALL_WRAPPER strstreambuf_ubuffer_ctor, 16
+DEFINE_THISCALL_WRAPPER strstreambuf_ctor, 4
+DEFINE_THISCALL_WRAPPER strstreambuf_dtor, 4
+DEFINE_THISCALL_WRAPPER strstreambuf_assign, 8
+DEFINE_THISCALL_WRAPPER strstreambuf_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER strstreambuf_scalar_dtor, 8
+DEFINE_THISCALL_WRAPPER strstreambuf_doallocate, 4
+DEFINE_THISCALL_WRAPPER strstreambuf_freeze, 8
+DEFINE_THISCALL_WRAPPER strstreambuf_overflow, 8
+DEFINE_THISCALL_WRAPPER strstreambuf_seekoff, 16
+DEFINE_THISCALL_WRAPPER strstreambuf_setbuf, 12
+DEFINE_THISCALL_WRAPPER strstreambuf_str, 4
+DEFINE_THISCALL_WRAPPER strstreambuf_sync, 4
+DEFINE_THISCALL_WRAPPER strstreambuf_underflow, 4
+DEFINE_THISCALL_WRAPPER stdiobuf_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER stdiobuf_file_ctor, 8
+DEFINE_THISCALL_WRAPPER stdiobuf_dtor, 4
+DEFINE_THISCALL_WRAPPER stdiobuf_assign, 8
+DEFINE_THISCALL_WRAPPER stdiobuf_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER stdiobuf_scalar_dtor, 8
+DEFINE_THISCALL_WRAPPER stdiobuf_overflow, 8
+DEFINE_THISCALL_WRAPPER stdiobuf_pbackfail, 8
+DEFINE_THISCALL_WRAPPER stdiobuf_seekoff, 16
+DEFINE_THISCALL_WRAPPER stdiobuf_setrwbuf, 12
+DEFINE_THISCALL_WRAPPER stdiobuf_stdiofile, 4
+DEFINE_THISCALL_WRAPPER stdiobuf_sync, 4
+DEFINE_THISCALL_WRAPPER stdiobuf_underflow, 4
+DEFINE_THISCALL_WRAPPER ios_copy_ctor, 8
+DEFINE_THISCALL_WRAPPER ios_sb_ctor, 8
+DEFINE_THISCALL_WRAPPER ios_ctor, 4
+DEFINE_THISCALL_WRAPPER ios_dtor, 4
+DEFINE_THISCALL_WRAPPER ios_assign, 8
+DEFINE_THISCALL_WRAPPER ios_op_not, 4
+DEFINE_THISCALL_WRAPPER ios_op_void, 4
+DEFINE_THISCALL_WRAPPER ios_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER ios_scalar_dtor, 8
+DEFINE_THISCALL_WRAPPER ios_bad, 4
+DEFINE_THISCALL_WRAPPER ios_clear, 8
+DEFINE_THISCALL_WRAPPER ios_delbuf_set, 8
+DEFINE_THISCALL_WRAPPER ios_delbuf_get, 4
+DEFINE_THISCALL_WRAPPER ios_eof, 4
+DEFINE_THISCALL_WRAPPER ios_fail, 4
+DEFINE_THISCALL_WRAPPER ios_fill_set, 8
+DEFINE_THISCALL_WRAPPER ios_fill_get, 4
+DEFINE_THISCALL_WRAPPER ios_flags_set, 8
+DEFINE_THISCALL_WRAPPER ios_flags_get, 4
+DEFINE_THISCALL_WRAPPER ios_good, 4
+DEFINE_THISCALL_WRAPPER ios_init, 8
+DEFINE_THISCALL_WRAPPER ios_iword, 8
+DEFINE_THISCALL_WRAPPER ios_lockptr, 4
+DEFINE_THISCALL_WRAPPER ios_precision_set, 8
+DEFINE_THISCALL_WRAPPER ios_precision_get, 4
+DEFINE_THISCALL_WRAPPER ios_pword, 8
+DEFINE_THISCALL_WRAPPER ios_rdbuf, 4
+DEFINE_THISCALL_WRAPPER ios_rdstate, 4
+DEFINE_THISCALL_WRAPPER ios_setf, 8
+DEFINE_THISCALL_WRAPPER ios_setf_mask, 12
+DEFINE_THISCALL_WRAPPER ios_tie_set, 8
+DEFINE_THISCALL_WRAPPER ios_tie_get, 4
+DEFINE_THISCALL_WRAPPER ios_unsetf, 8
+DEFINE_THISCALL_WRAPPER ios_width_set, 8
+DEFINE_THISCALL_WRAPPER ios_width_get, 4
+DEFINE_THISCALL_WRAPPER ostream_ctor, 8
+DEFINE_THISCALL_WRAPPER ostream_sb_ctor, 12
+DEFINE_THISCALL_WRAPPER ostream_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER ostream_dtor, 4
+DEFINE_THISCALL_WRAPPER ostream_assign_sb, 8
+DEFINE_THISCALL_WRAPPER ostream_assign, 8
+DEFINE_THISCALL_WRAPPER ostream_vbase_dtor, 4
+DEFINE_THISCALL_WRAPPER ostream_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER ostream_scalar_dtor, 8
+DEFINE_THISCALL_WRAPPER ostream_flush, 4
+DEFINE_THISCALL_WRAPPER ostream_opfx, 4
+DEFINE_THISCALL_WRAPPER ostream_osfx, 4
+DEFINE_THISCALL_WRAPPER ostream_put, 8
+DEFINE_THISCALL_WRAPPER ostream_seekp, 8
+DEFINE_THISCALL_WRAPPER ostream_seekp_offset, 12
+DEFINE_THISCALL_WRAPPER ostream_tellp, 4
+DEFINE_THISCALL_WRAPPER ostream_write, 12
+DEFINE_THISCALL_WRAPPER ostream_writepad, 12
+DEFINE_THISCALL_WRAPPER ostream_print_char, 8
+DEFINE_THISCALL_WRAPPER ostream_print_str, 8
+DEFINE_THISCALL_WRAPPER ostream_print_short, 8
+DEFINE_THISCALL_WRAPPER ostream_print_unsigned_short, 8
+DEFINE_THISCALL_WRAPPER ostream_print_int, 8
+DEFINE_THISCALL_WRAPPER ostream_print_unsigned_int, 8
+DEFINE_THISCALL_WRAPPER ostream_print_float, 8
+DEFINE_THISCALL_WRAPPER ostream_print_double, 12
+DEFINE_THISCALL_WRAPPER ostream_print_ptr, 8
+DEFINE_THISCALL_WRAPPER ostream_print_streambuf, 8
+DEFINE_THISCALL_WRAPPER ostream_print_manip, 8
+DEFINE_THISCALL_WRAPPER ostream_print_ios_manip, 8
+DEFINE_THISCALL_WRAPPER ostream_withassign_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER ostream_withassign_sb_ctor, 12
+DEFINE_THISCALL_WRAPPER ostream_withassign_ctor, 8
+DEFINE_THISCALL_WRAPPER ostrstream_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER ostrstream_buffer_ctor, 20
+DEFINE_THISCALL_WRAPPER ostrstream_ctor, 8
+DEFINE_THISCALL_WRAPPER ostrstream_pcount, 4
+DEFINE_THISCALL_WRAPPER ostrstream_rdbuf, 4
+DEFINE_THISCALL_WRAPPER ostrstream_str, 4
+DEFINE_THISCALL_WRAPPER ofstream_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER ofstream_buffer_ctor, 20
+DEFINE_THISCALL_WRAPPER ofstream_fd_ctor, 12
+DEFINE_THISCALL_WRAPPER ofstream_open_ctor, 20
+DEFINE_THISCALL_WRAPPER ofstream_ctor, 8
+DEFINE_THISCALL_WRAPPER ofstream_rdbuf, 4
+DEFINE_THISCALL_WRAPPER ofstream_fd, 4
+DEFINE_THISCALL_WRAPPER ofstream_attach, 8
+DEFINE_THISCALL_WRAPPER ofstream_close, 4
+DEFINE_THISCALL_WRAPPER ofstream_is_open, 4
+DEFINE_THISCALL_WRAPPER ofstream_open, 16
+DEFINE_THISCALL_WRAPPER ofstream_setbuf, 12
+DEFINE_THISCALL_WRAPPER ofstream_setmode, 8
+DEFINE_THISCALL_WRAPPER istream_ctor, 8
+DEFINE_THISCALL_WRAPPER istream_sb_ctor, 12
+DEFINE_THISCALL_WRAPPER istream_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER istream_dtor, 4
+DEFINE_THISCALL_WRAPPER istream_assign_sb, 8
+DEFINE_THISCALL_WRAPPER istream_assign, 8
+DEFINE_THISCALL_WRAPPER istream_vbase_dtor, 4
+DEFINE_THISCALL_WRAPPER istream_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER istream_scalar_dtor, 8
+DEFINE_THISCALL_WRAPPER istream_eatwhite, 4
+DEFINE_THISCALL_WRAPPER istream_gcount, 4
+DEFINE_THISCALL_WRAPPER istream_ipfx, 8
+DEFINE_THISCALL_WRAPPER istream_isfx, 4
+DEFINE_THISCALL_WRAPPER istream_get_str_delim, 16
+DEFINE_THISCALL_WRAPPER istream_get_str, 16
+DEFINE_THISCALL_WRAPPER istream_get_char, 8
+DEFINE_THISCALL_WRAPPER istream_get, 4
+DEFINE_THISCALL_WRAPPER istream_get_sb, 12
+DEFINE_THISCALL_WRAPPER istream_getline, 16
+DEFINE_THISCALL_WRAPPER istream_ignore, 12
+DEFINE_THISCALL_WRAPPER istream_peek, 4
+DEFINE_THISCALL_WRAPPER istream_putback, 8
+DEFINE_THISCALL_WRAPPER istream_read, 12
+DEFINE_THISCALL_WRAPPER istream_seekg, 8
+DEFINE_THISCALL_WRAPPER istream_seekg_offset, 12
+DEFINE_THISCALL_WRAPPER istream_sync, 4
+DEFINE_THISCALL_WRAPPER istream_tellg, 4
+DEFINE_THISCALL_WRAPPER istream_getint, 8
+DEFINE_THISCALL_WRAPPER istream_getdouble, 12
+DEFINE_THISCALL_WRAPPER istream_read_char, 8
+DEFINE_THISCALL_WRAPPER istream_read_str, 8
+DEFINE_THISCALL_WRAPPER istream_read_short, 8
+DEFINE_THISCALL_WRAPPER istream_read_unsigned_short, 8
+DEFINE_THISCALL_WRAPPER istream_read_int, 8
+DEFINE_THISCALL_WRAPPER istream_read_unsigned_int, 8
+DEFINE_THISCALL_WRAPPER istream_read_long, 8
+DEFINE_THISCALL_WRAPPER istream_read_unsigned_long, 8
+DEFINE_THISCALL_WRAPPER istream_read_float, 8
+DEFINE_THISCALL_WRAPPER istream_read_double, 8
+DEFINE_THISCALL_WRAPPER istream_read_long_double, 8
+DEFINE_THISCALL_WRAPPER istream_read_streambuf, 8
+DEFINE_THISCALL_WRAPPER istream_read_manip, 8
+DEFINE_THISCALL_WRAPPER istream_read_ios_manip, 8
+DEFINE_THISCALL_WRAPPER istream_withassign_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER istream_withassign_sb_ctor, 12
+DEFINE_THISCALL_WRAPPER istream_withassign_ctor, 8
+DEFINE_THISCALL_WRAPPER istrstream_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER istrstream_buffer_ctor, 16
+DEFINE_THISCALL_WRAPPER istrstream_str_ctor, 12
+DEFINE_THISCALL_WRAPPER istrstream_rdbuf, 4
+DEFINE_THISCALL_WRAPPER istrstream_str, 4
+DEFINE_THISCALL_WRAPPER ifstream_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER ifstream_buffer_ctor, 20
+DEFINE_THISCALL_WRAPPER ifstream_fd_ctor, 12
+DEFINE_THISCALL_WRAPPER ifstream_open_ctor, 20
+DEFINE_THISCALL_WRAPPER ifstream_ctor, 8
+DEFINE_THISCALL_WRAPPER ifstream_rdbuf, 4
+DEFINE_THISCALL_WRAPPER ifstream_fd, 4
+DEFINE_THISCALL_WRAPPER ifstream_attach, 8
+DEFINE_THISCALL_WRAPPER ifstream_close, 4
+DEFINE_THISCALL_WRAPPER ifstream_is_open, 4
+DEFINE_THISCALL_WRAPPER ifstream_open, 16
+DEFINE_THISCALL_WRAPPER ifstream_setbuf, 12
+DEFINE_THISCALL_WRAPPER ifstream_setmode, 8
+DEFINE_THISCALL_WRAPPER iostream_ctor, 8
+DEFINE_THISCALL_WRAPPER iostream_sb_ctor, 12
+DEFINE_THISCALL_WRAPPER iostream_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER iostream_dtor, 4
+DEFINE_THISCALL_WRAPPER iostream_assign_sb, 8
+DEFINE_THISCALL_WRAPPER iostream_assign, 8
+DEFINE_THISCALL_WRAPPER iostream_vbase_dtor, 4
+DEFINE_THISCALL_WRAPPER iostream_vector_dtor, 8
+DEFINE_THISCALL_WRAPPER iostream_scalar_dtor, 8
+DEFINE_THISCALL_WRAPPER strstream_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER strstream_buffer_ctor, 20
+DEFINE_THISCALL_WRAPPER strstream_ctor, 8
+DEFINE_THISCALL_WRAPPER strstream_pcount, 4
+DEFINE_THISCALL_WRAPPER strstream_rdbuf, 4
+DEFINE_THISCALL_WRAPPER strstream_str, 4
+DEFINE_THISCALL_WRAPPER stdiostream_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER stdiostream_file_ctor, 12
+DEFINE_THISCALL_WRAPPER stdiostream_rdbuf, 4
+DEFINE_THISCALL_WRAPPER fstream_copy_ctor, 12
+DEFINE_THISCALL_WRAPPER fstream_buffer_ctor, 20
+DEFINE_THISCALL_WRAPPER fstream_fd_ctor, 12
+DEFINE_THISCALL_WRAPPER fstream_open_ctor, 20
+DEFINE_THISCALL_WRAPPER fstream_ctor, 8
+DEFINE_THISCALL_WRAPPER fstream_rdbuf, 4
+DEFINE_THISCALL_WRAPPER fstream_fd, 4
+DEFINE_THISCALL_WRAPPER fstream_attach, 8
+DEFINE_THISCALL_WRAPPER fstream_close, 4
+DEFINE_THISCALL_WRAPPER fstream_is_open, 4
+DEFINE_THISCALL_WRAPPER fstream_open, 16
+DEFINE_THISCALL_WRAPPER fstream_setbuf, 12
+DEFINE_THISCALL_WRAPPER fstream_setmode, 8
+DEFINE_THISCALL_WRAPPER Iostream_init_ios_ctor, 12
+DEFINE_THISCALL_WRAPPER Iostream_init_ctor, 4
+DEFINE_THISCALL_WRAPPER Iostream_init_dtor, 4
+DEFINE_THISCALL_WRAPPER Iostream_init_assign, 8
+
+END

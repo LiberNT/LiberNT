@@ -4875,7 +4875,12 @@ static const struct IDirect3DDevice9ExVtbl d3d9_device_vtbl =
 
 #pragma pack(push,1)
 
+#ifdef _MSC_VER
+#pragma comment(linker, "/include:_d3d9_overlay_scanner_marker")
+const struct
+#else
 static const __attribute__((used)) struct
+#endif
 {
     unsigned char op_mov_to_this[2];
     const struct IDirect3DDevice9ExVtbl *vtable_addr;

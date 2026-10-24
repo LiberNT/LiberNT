@@ -13,3 +13,7 @@ target_link_libraries(wevtapi wine)
 add_importlibs(wevtapi msvcrt kernel32 ntdll)
 add_cd_file(TARGET wevtapi DESTINATION reactos/system32 FOR all)
 set_wine_module(wevtapi)
+
+if(MSVC)
+    remove_target_compile_option(wevtapi "/we4312")
+endif()

@@ -241,6 +241,138 @@ TEXTAREA
 
     LEAF_END call_server_func
 
+#elif defined(_M_ARM64)
+
+    .text
+
+    .align 4
+    .seh_proc call_stubless_func
+    .global call_stubless_func
+call_stubless_func:
+    stp x29, x30, [sp, #-0x90]!
+    .seh_save_fplr_x 0x90
+    mov x29, sp
+    .seh_set_fp
+    .seh_endprologue
+    stp d0, d1, [sp, #0x10]
+    stp d2, d3, [sp, #0x20]
+    stp d4, d5, [sp, #0x30]
+    stp d6, d7, [sp, #0x40]
+    stp x0, x1, [sp, #0x50]
+    stp x2, x3, [sp, #0x60]
+    stp x4, x5, [sp, #0x70]
+    stp x6, x7, [sp, #0x80]
+    mov w0, w16
+    add x1, sp, #0x50
+    add x2, sp, #0x10
+    bl ndr_stubless_client_call
+    ldp x29, x30, [sp], #0x90
+    ret
+    .seh_endproc
+
+    .align 4
+    .seh_proc call_server_func
+    .global call_server_func
+call_server_func:
+    stp x29, x30, [sp, #-0x20]!
+    .seh_save_fplr_x 0x20
+    stp x19, x20, [sp, #0x10]
+    .seh_save_regp x19, 0x10
+    mov x29, sp
+    .seh_set_fp
+    .seh_endprologue
+    add x9, x2, #16*8+15
+    lsr x9, x9, #4
+    sub sp, sp, x9, lsl #4
+    mov x19, x0
+    mov x0, x1
+    mov x1, sp
+    add x2, sp, #16*8
+    bl args_stack_to_regs
+    ldp x2, x3, [sp, #0x10]
+    ldp x4, x5, [sp, #0x20]
+    ldp x6, x7, [sp, #0x30]
+    ldp d0, d1, [sp, #0x40]
+    ldp d2, d3, [sp, #0x50]
+    ldp d4, d5, [sp, #0x60]
+    ldp d6, d7, [sp, #0x70]
+    ldp x0, x1, [sp], #0x80
+    blr x19
+    mov sp, x29
+    ldp x19, x20, [sp, #0x10]
+    ldp x29, x30, [sp], #0x20
+    ret
+    .seh_endproc
+
+    .align 4
+    .seh_proc NdrClientCall2
+    .global NdrClientCall2
+NdrClientCall2:
+    stp x29, x30, [sp, #-0x40]!
+    .seh_save_fplr_x 0x40
+    .seh_endprologue
+    stp x2, x3, [sp, #0x10]
+    stp x4, x5, [sp, #0x20]
+    stp x6, x7, [sp, #0x30]
+    add x2, sp, #0x10
+    mov x3, #0
+    bl NdrpClientCall2
+    ldp x29, x30, [sp], #0x40
+    ret
+    .seh_endproc
+
+    .align 4
+    .seh_proc NdrAsyncClientCall
+    .global NdrAsyncClientCall
+NdrAsyncClientCall:
+    stp x29, x30, [sp, #-0x40]!
+    .seh_save_fplr_x 0x40
+    .seh_endprologue
+    stp x2, x3, [sp, #0x10]
+    stp x4, x5, [sp, #0x20]
+    stp x6, x7, [sp, #0x30]
+    add x2, sp, #0x10
+    mov x3, #0
+    bl ndr_async_client_call
+    ldp x29, x30, [sp], #0x40
+    ret
+    .seh_endproc
+
+    .align 4
+    .seh_proc NdrClientCall3
+    .global NdrClientCall3
+NdrClientCall3:
+    stp x29, x30, [sp, #-0x40]!
+    .seh_save_fplr_x 0x40
+    .seh_endprologue
+    str x3, [sp, #0x18]
+    stp x4, x5, [sp, #0x20]
+    stp x6, x7, [sp, #0x30]
+    add x3, sp, #0x18
+    bl ndr64_client_call
+    ldp x29, x30, [sp], #0x40
+    ret
+    .seh_endproc
+
+    .align 4
+    .seh_proc Ndr64AsyncClientCall
+    .global Ndr64AsyncClientCall
+Ndr64AsyncClientCall:
+    stp x29, x30, [sp, #-0x40]!
+    .seh_save_fplr_x 0x40
+    .seh_endprologue
+    str x3, [sp, #0x18]
+    stp x4, x5, [sp, #0x20]
+    stp x6, x7, [sp, #0x30]
+    add x3, sp, #0x18
+    mov x4, #0
+    bl ndr64_async_client_call
+    ldp x29, x30, [sp], #0x40
+    ret
+    .seh_endproc
+
 #endif
 
+#ifndef _M_ARM64
 END
+#endif

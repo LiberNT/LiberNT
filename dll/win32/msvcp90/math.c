@@ -26,10 +26,14 @@
 #include "windef.h"
 #include "winbase.h"
 
+#ifndef isinf
+#define isinf(x) (!_finite(x) && !_isnan(x))
+#endif
+
 typedef double LDOUBLE;  /* long double is just a double */
 
-typedef struct { } std_Num_base;
-typedef struct { } std_Ctraits;
+typedef struct std_Num_base std_Num_base;
+typedef struct std_Ctraits std_Ctraits;
 
 enum std_float_denorm_style
 {

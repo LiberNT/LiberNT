@@ -2015,7 +2015,7 @@ struct device_notify
     DEV_BROADCAST_HDR header[]; /* variable size */
 };
 
-C_ASSERT( sizeof(struct device_notify) == offsetof(struct device_notify, header[0]) );
+C_ASSERT( sizeof(struct device_notify) == offsetof(struct device_notify, header) );
 
 static struct device_notify *device_notify_copy( struct device_notify *notify, DEV_BROADCAST_HDR *header )
 {

@@ -13,6 +13,7 @@
 
 #include <ntdll.h>
 #include <reactos/chpe.h>
+#include <reactos/arm64/sysreg.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -132,7 +133,11 @@ typedef struct _CHPE_DISPATCH_TABLE
     PVOID BeginSimulationFromContext;
 } CHPE_DISPATCH_TABLE, *PCHPE_DISPATCH_TABLE;
 
+#if defined(_MSC_VER) && !defined(__clang__)
+typedef VOID (NTAPI *PCHPE_BEGIN_SIMULATION)(VOID);
+#else
 typedef DECLSPEC_NORETURN VOID (NTAPI *PCHPE_BEGIN_SIMULATION)(VOID);
+#endif
 
 /* CHPE emulator state, stored in ntdll globals (per-process) */
 static HMODULE ChpeEmulatorModule;
@@ -153,7 +158,11 @@ static PCHPE_NOTIFY_READ_FILE          pChpeNotifyReadFile;
 static PCHPE_IS_PROCESSOR_FEATURE_PRESENT pChpeIsProcessorFeaturePresent;
 static PCHPE_UPDATE_PROCESSOR_INFO     pChpeUpdateProcessorInfo;
 typedef NTSTATUS (NTAPI *PCHPE_DISPATCH_EXCEPTION_NATIVE)(PEXCEPTION_RECORD ExceptionRecord, PARM64_NT_CONTEXT NativeContext);
+#if defined(_MSC_VER) && !defined(__clang__)
+typedef VOID (NTAPI *PCHPE_EMULATION_DISPATCH)(PCONTEXT);
+#else
 typedef DECLSPEC_NORETURN VOID (NTAPI *PCHPE_EMULATION_DISPATCH)(PCONTEXT);
+#endif
 static PCHPE_DISPATCH_EXCEPTION_NATIVE pChpeDispatchExceptionNative;
 
 static
@@ -907,6 +916,7 @@ ChpepPatchArm64EcPointer(PVOID ImageBase,
  * Copyright 1999, 2005, 2023 Alexandre Julliard.
  * SPDX-License-Identifier: LGPL-2.1-or-later
  */
+#if !defined(_MSC_VER) || defined(__clang__)
 static
 VOID
 __attribute__((naked))
@@ -959,6 +969,10 @@ ChpepArm64EcCheckCall(VOID)
         "7:\n"
         ".byte 0x5d, 0xe9, 0, 0, 0, 0, 0, 0\n");
 }
+#else
+VOID
+ChpepArm64EcCheckCall(VOID);
+#endif
 
 /*
  * The MXCSR/FPCR/FPSR conversion and x64 information helpers below are
@@ -1036,7 +1050,8 @@ ChpepGetX64Information(ULONG Type,
     switch (Type)
     {
         case 0:
-            __asm__ volatile("mrs %0, fpcr; mrs %1, fpsr" : "=r" (Fpcr), "=r" (Fpsr));
+            Fpcr = ARM64_READ_SYSREG(FPCR);
+            Fpsr = ARM64_READ_SYSREG(FPSR);
             *(PULONG)Output = ChpepFpCsrToMxCsr((ULONG)Fpcr, (ULONG)Fpsr);
             return STATUS_SUCCESS;
 
@@ -1064,7 +1079,8 @@ ChpepSetX64Information(ULONG Type,
         return STATUS_INVALID_PARAMETER;
 
     FpCsr = ChpepMxCsrToFpCsr((ULONG)Input);
-    __asm__ volatile("msr fpcr, %0; msr fpsr, %1" :: "r" (FpCsr), "r" (FpCsr >> 32));
+    ARM64_WRITE_SYSREG(FPCR, FpCsr);
+    ARM64_WRITE_SYSREG(FPSR, FpCsr >> 32);
     return STATUS_SUCCESS;
 }
 
@@ -1282,6 +1298,17 @@ ChpeCallArm64Routine(PVOID EntryPoint,
                      ULONG_PTR Arg3,
                      ULONG_PTR Arg4);
 
+#if defined(_MSC_VER) && !defined(__clang__)
+ULONG_PTR
+ChpepInvokeX64Routine(ULONG_PTR Arg0,
+                      ULONG_PTR Arg1,
+                      ULONG_PTR Arg2,
+                      ULONG_PTR Arg3,
+                      ULONG_PTR Arg4,
+                      PVOID EntryPoint,
+                      PVOID Dispatch);
+#endif
+
 static
 ULONG_PTR
 ChpepCallX64Routine(PVOID EntryPoint,
@@ -1297,6 +1324,7 @@ ChpepCallX64Routine(PVOID EntryPoint,
         return 0;
 
     /* FEX uses the ARM64EC static register map, including x8 for x64 RAX. */
+#if !defined(_MSC_VER) || defined(__clang__)
     __asm__ volatile(
         "sub sp, sp, #0x110\n"
         "stp x19, x20, [sp, #0x30]\n"
@@ -1344,6 +1372,9 @@ ChpepCallX64Routine(PVOID EntryPoint,
           "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
           "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
           "cc", "memory");
+#else
+    Result = ChpepInvokeX64Routine(Arg0, Arg1, Arg2, Arg3, Arg4, EntryPoint, ChpeDispatchTable.ExitToX64);
+#endif
 
     return Result;
 }

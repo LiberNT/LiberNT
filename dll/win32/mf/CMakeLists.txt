@@ -24,3 +24,7 @@ add_importlibs(mf advapi32 mfplat ole32 kernelbase msvcrt kernel32 ntdll)
 add_delay_importlibs(mf evr urlmon user32)
 add_cd_file(TARGET mf DESTINATION reactos/system32 FOR all)
 set_wine_module(mf)
+
+if(MSVC)
+    remove_target_compile_option(mf "/we4098")
+endif()

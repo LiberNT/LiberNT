@@ -70,7 +70,7 @@ list(APPEND SOURCE
 
 set_source_files_properties(nsembed.c PROPERTIES COMPILE_DEFINITIONS "INSTALL_DATADIR=\"\"")
 
-if(MSVC)
+if(MSVC AND NOT ARCH STREQUAL "arm64")
     add_asm_files(mshtml_asm msvc.S)
 endif()
 

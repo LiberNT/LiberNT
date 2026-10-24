@@ -1320,7 +1320,7 @@ LSTATUS WINAPI RegQueryInfoKeyA( HKEY hkey, LPSTR class, LPDWORD class_len, LPDW
 LSTATUS WINAPI DECLSPEC_HOTPATCH RegCloseKey( HKEY hkey )
 {
     if (!hkey) return ERROR_INVALID_HANDLE;
-    if (hkey >= (HKEY)0x80000000) return ERROR_SUCCESS;
+    if (HandleToUlong(hkey) >= HandleToUlong(HKEY_SPECIAL_ROOT_FIRST)) return ERROR_SUCCESS;
     return RtlNtStatusToDosError( NtClose( hkey ) );
 }
 

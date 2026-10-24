@@ -29,6 +29,10 @@
 
 #include "wine/debug.h"
 
+#ifdef _MSC_VER
+#define __builtin_return_address(x) _ReturnAddress()
+#endif
+
 WINE_DEFAULT_DEBUG_CHANNEL(seh);
 
 /*******************************************************************

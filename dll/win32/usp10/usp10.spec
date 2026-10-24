@@ -1,4 +1,4 @@
-@ stdcall LpkPresent() gdi32.LpkPresent
+@ stub LpkPresent
 @ stdcall ScriptApplyDigitSubstitution(ptr ptr ptr) gdi32.ScriptApplyDigitSubstitution
 @ stdcall ScriptApplyLogicalWidth(ptr long long ptr ptr ptr ptr ptr ptr) gdi32.ScriptApplyLogicalWidth
 @ stdcall ScriptBreak(ptr long ptr ptr) gdi32.ScriptBreak
@@ -21,7 +21,7 @@
 @ stdcall ScriptLayout(long ptr ptr ptr) gdi32.ScriptLayout
 @ stdcall ScriptPlace(ptr ptr ptr long ptr ptr ptr ptr ptr) gdi32.ScriptPlace
 @ stdcall ScriptPlaceOpenType(ptr ptr ptr long long ptr ptr long wstr ptr ptr long ptr ptr long ptr ptr ptr) gdi32.ScriptPlaceOpenType
-@ stdcall ScriptPositionSingleGlyph() gdi32.ScriptPositionSingleGlyph
+@ stdcall ScriptPositionSingleGlyph(ptr ptr ptr long long long long long long int64 ptr ptr) gdi32.ScriptPositionSingleGlyph
 @ stdcall ScriptRecordDigitSubstitution(long ptr) gdi32.ScriptRecordDigitSubstitution
 @ stdcall ScriptShape(ptr ptr ptr long long ptr ptr ptr ptr ptr) gdi32.ScriptShape
 @ stdcall ScriptShapeOpenType(ptr ptr ptr long long ptr ptr long wstr long long ptr ptr ptr ptr ptr) gdi32.ScriptShapeOpenType
@@ -36,9 +36,9 @@
 @ stdcall ScriptString_pLogAttr(ptr) gdi32.ScriptString_pLogAttr
 @ stdcall ScriptString_pSize(ptr) gdi32.ScriptString_pSize
 @ stdcall ScriptString_pcOutChars(ptr) gdi32.ScriptString_pcOutChars
-@ stdcall ScriptSubstituteSingleGlyph() gdi32.ScriptSubstituteSingleGlyph
+@ stdcall ScriptSubstituteSingleGlyph(ptr ptr ptr long long long long long ptr) gdi32.ScriptSubstituteSingleGlyph
 @ stdcall ScriptTextOut(ptr ptr long long long ptr ptr ptr long ptr long ptr ptr ptr) gdi32.ScriptTextOut
 @ stdcall ScriptXtoCP(long long long ptr ptr ptr ptr ptr ptr) gdi32.ScriptXtoCP
-@ stdcall UspAllocCache() gdi32.UspAllocCache
-@ stdcall UspAllocTemp() gdi32.UspAllocTemp
-@ stdcall UspFreeMem() gdi32.UspFreeMem
+@ stub UspAllocCache
+@ stub UspAllocTemp
+@ stub UspFreeMem

@@ -6257,11 +6257,12 @@ static sltg_ref_lookup_t *SLTG_DoRefs(SLTG_RefInfo *pRef, ITypeLibImpl *pTL,
 			  &import->wVersionMinor,
 			  &import->lcid, fname) != 4) {
 #endif
-		  FIXME_(typelib)("can't sscanf ref %s\n",
 #ifdef __REACTOS__
+		  FIXME_(typelib)("can't sscanf ref %s\n",
 			import_name + 40);
                   goto invalid;
 #else
+		  FIXME_(typelib)("can't sscanf ref %s\n",
 			pNameTable + lib_offs + 40);
 #endif
 		}
@@ -6894,10 +6895,11 @@ static void SLTG_DoFuncs(char *pBlk, char *pFirstItem, ITypeInfoImpl *pTI,
 	    pArg++;
 #endif
 
-            TRACE_(typelib)("param %d: paramName %s, *pArg %#x\n",
 #ifdef __REACTOS__
+            TRACE_(typelib)("param %d: paramName %s, *pArg %#x\n",
                 param, debugstr_a(param_name), type);
 #else
+            TRACE_(typelib)("param %d: paramName %s, *pArg %#x\n",
                 param, debugstr_a(paramName), *pArg);
 #endif
 
@@ -7578,10 +7580,11 @@ static ITypeLib2* ITypeLib2_Constructor_SLTG(LPVOID pLib, DWORD dwTLBLength)
     memcpy(&table_size, hlp_strings + sizeof(WORD), sizeof(table_size));
     if (table_size > end - (char *)hlp_strings - sizeof(WORD) - sizeof(DWORD)) goto invalid;
 #endif
-    TRACE("max help string length %#x, help strings length %#lx\n",
 #ifdef __REACTOS__
+    TRACE("max help string length %#x, help strings length %#lx\n",
         w, table_size);
 #else
+    TRACE("max help string length %#x, help strings length %#lx\n",
         *(WORD *)hlp_strings, *(DWORD *)(hlp_strings + 2));
 #endif
 

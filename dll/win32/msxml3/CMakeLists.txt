@@ -75,6 +75,7 @@ if(MSVC)
 
     # Disable warning C4090: 'function': different 'const' qualifiers
     target_compile_options(msxml3 PRIVATE /wd4090)
+    remove_target_compile_option(msxml3 "/we4098")
 
     if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")
         # Disable warning C4267: 'function': conversion from 'size_t' to 'UINT', possible loss of data

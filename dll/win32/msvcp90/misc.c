@@ -1532,7 +1532,7 @@ DWORD CDECL MSVCP__crtGetCurrentProcessorNumber(void)
  */
 VOID CDECL MSVCP__crtFlushProcessWriteBuffers(void)
 {
-    return FlushProcessWriteBuffers();
+    FlushProcessWriteBuffers();
 }
 
 /*********************************************************************
@@ -1573,7 +1573,7 @@ VOID CDECL MSVCP__crtSetThreadpoolTimer(TP_TIMER *timer,
         FILETIME *due_time, DWORD period, DWORD window_length)
 {
     TRACE("(%p %p %#lx %#lx)\n", timer, due_time, period, window_length);
-    return SetThreadpoolTimer(timer, due_time, period, window_length);
+    SetThreadpoolTimer(timer, due_time, period, window_length);
 }
 
 /*********************************************************************
@@ -1610,7 +1610,7 @@ VOID CDECL MSVCP__crtCloseThreadpoolWait(TP_WAIT *wait)
 VOID CDECL MSVCP__crtSetThreadpoolWait(TP_WAIT *wait, HANDLE handle, FILETIME *due_time)
 {
     TRACE("(%p %p %p)\n", wait, handle, due_time);
-    return SetThreadpoolWait(wait, handle, due_time);
+    SetThreadpoolWait(wait, handle, due_time);
 }
 
 /*********************************************************************

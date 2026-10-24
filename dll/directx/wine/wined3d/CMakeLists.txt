@@ -63,3 +63,8 @@ add_pch(d3dwine precomp.h SOURCE)
 add_cd_file(TARGET d3dwine DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(d3dwine) # CORE-5743: No ARRAY_SIZE
 
+
+if(MSVC)
+    remove_target_compile_option(d3dwine "/we4098")
+    remove_target_compile_option(d3dwine "/we4312")
+endif()

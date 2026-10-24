@@ -26,3 +26,7 @@ target_link_libraries(dinput8 dxguid uuid wine wine_dll_register wine_dll_canunl
 add_importlibs(dinput8 cfgmgr32 comctl32 ole32 user32_vista user32 advapi32 hid setupapi msvcrt kernel32_vista kernel32 ntdll)
 add_cd_file(TARGET dinput8 DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(dinput8) # CORE-5743: No ARRAY_SIZE and CONST_VTABLE
+
+if(MSVC)
+    remove_target_compile_option(dinput8 "/we4098")
+endif()

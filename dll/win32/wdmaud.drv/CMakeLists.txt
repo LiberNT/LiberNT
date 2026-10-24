@@ -20,7 +20,7 @@ add_library(wdmaud.drv MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/wdmaud.def)
 
 set_module_type(wdmaud.drv win32dll UNICODE)
-set_target_properties(wdmaud.drv PROPERTIES OUTPUT_NAME "wdmaud" SUFFIX ".drv")
+set_target_properties(wdmaud.drv PROPERTIES OUTPUT_NAME "wdmaud" SUFFIX ".drv" PDB_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 if(WOW64_I386_RUNTIME)
     target_compile_definitions(wdmaud.drv PRIVATE WOW64_I386_RUNTIME)
 endif()

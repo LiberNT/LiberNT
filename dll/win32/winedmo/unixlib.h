@@ -52,7 +52,7 @@ struct stream_context
     BYTE buffer[];
 };
 
-C_ASSERT( sizeof(struct stream_context) == offsetof( struct stream_context, buffer[0] ) );
+C_ASSERT( sizeof(struct stream_context) == offsetof( struct stream_context, buffer ) );
 
 #ifndef __REACTOS__
 struct seek_callback_params

@@ -2778,12 +2778,12 @@ static HANDLE create_pseudo_console( COORD size, HANDLE input, HANDLE output, HA
         swprintf( cmd, ARRAY_SIZE(cmd),
                   L"\"%s\" --headless %s--width %u --height %u --signal 0x%x --server 0x%x",
                   conhost_path, (flags & PSEUDOCONSOLE_INHERIT_CURSOR) ? L"--inheritcursor " : L"",
-                  size.X, size.Y, signal, server );
+                  size.X, size.Y, HandleToULong( signal ), HandleToULong( server ) );
     }
     else
     {
         swprintf( cmd, ARRAY_SIZE(cmd), L"\"%s\" --unix --width %u --height %u --server 0x%x",
-                  conhost_path, size.X, size.Y, server );
+                  conhost_path, size.X, size.Y, HandleToULong( server ) );
     }
     Wow64DisableWow64FsRedirection( &redir );
     res = CreateProcessW( conhost_path, cmd, NULL, NULL, TRUE, DETACHED_PROCESS | EXTENDED_STARTUPINFO_PRESENT,
