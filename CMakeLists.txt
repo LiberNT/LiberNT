@@ -10,6 +10,10 @@ message(WARNING "Setting policy CMP0091 to OLD behaviour")
 cmake_policy(SET CMP0091 OLD)
 endif()
 
+if(POLICY CMP0116)
+    cmake_policy(SET CMP0116 OLD)
+endif()
+
 project(REACTOS)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -165,7 +169,7 @@ if(NOT CMAKE_CROSSCOMPILING)
     add_subdirectory(sdk/tools)
     add_subdirectory(sdk/lib)
 
-    set(NATIVE_TARGETS asmpp bin2c widl gendib cabman fatten hpp isohybrid mkhive mkisofs obj2bin spec2def geninc mkshelllink utf16le windmc xml2sdb)
+    set(NATIVE_TARGETS asmpp bin2c gas2armasm widl gendib cabman fatten hpp isohybrid mkhive mkisofs obj2bin spec2def geninc mkshelllink utf16le windmc xml2sdb)
     if(NOT CMAKE_HOST_WIN32)
         list(APPEND NATIVE_TARGETS ntfsimg)
     endif()
