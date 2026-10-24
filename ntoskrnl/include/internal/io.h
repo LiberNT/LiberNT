@@ -789,6 +789,10 @@ PiClearDevNodeFlag(
 extern BOOLEAN PnpEnableParallelEnum;
 
 VOID
+PiDevNodeAddDrivers(
+    _In_ PDEVICE_NODE DeviceNode);
+
+VOID
 PiDevNodeStateMachine(
     _In_ PDEVICE_NODE RootNode);
 

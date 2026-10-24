@@ -3264,6 +3264,23 @@ PiFakeResourceRebalance(
 }
 
 VOID
+PiDevNodeAddDrivers(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    if (DeviceNode->Flags & DNF_HAS_PROBLEM)
+        return;
+
+    if (DeviceNode->State == DeviceNodeUninitialized &&
+        (!NT_SUCCESS(PiInitializeDevNode(DeviceNode)) || (DeviceNode->Flags & DNF_HAS_PROBLEM)))
+    {
+        return;
+    }
+
+    if (DeviceNode->State == DeviceNodeInitialized)
+        PiCallDriverAddDevice(DeviceNode, PnPBootDriversInitialized);
+}
+
+VOID
 PiDevNodeStateMachine(
     _In_ PDEVICE_NODE RootNode)
 {

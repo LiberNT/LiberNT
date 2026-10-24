@@ -285,11 +285,27 @@ PiProcessChildrenParallel(_In_ PDEVICE_NODE Parent)
         return FALSE;
     }
 
-    DPRINT("PnP: dispatching %d child subtrees of %wZ in parallel\n", (int)count, &Parent->InstancePath);
+    for (i = 0; i < count; i++)
+        PiDevNodeAddDrivers(children[i]);
 
-    if (!PiRunParallel((PVOID *)children, count, PiWalkSubtreeRoutine))
+    workCount = 0;
+    for (i = 0; i < count; i++)
     {
-        for (i = 0; i < count; i++)
+        child = children[i];
+        if ((child->State == DeviceNodeUninitialized || child->State == DeviceNodeInitialized) &&
+            child->Child == NULL)
+        {
+            ObDereferenceObject(child->PhysicalDeviceObject);
+            continue;
+        }
+        children[workCount++] = child;
+    }
+
+    DPRINT("PnP: dispatching %d child subtrees of %wZ in parallel\n", (int)workCount, &Parent->InstancePath);
+
+    if (!PiRunParallel((PVOID *)children, workCount, PiWalkSubtreeRoutine))
+    {
+        for (i = 0; i < workCount; i++)
             PiWalkSubtreeRoutine(children[i]);
     }
 
