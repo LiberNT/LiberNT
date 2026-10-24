@@ -1374,6 +1374,63 @@ LX_SYSCALL(LxSysFsync)
     return 0;
 }
 
+static
+VOID
+LxFlushVolume(
+    _In_ PCUNICODE_STRING NtPath)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING Volume;
+    IO_STATUS_BLOCK Iosb;
+    USHORT Count = NtPath->Length / sizeof(WCHAR), Index, Separators = 0;
+    HANDLE Handle;
+
+    if ((Count >= 4) && (NtPath->Buffer[0] == L'\\') && (NtPath->Buffer[1] == L'?') &&
+        (NtPath->Buffer[2] == L'?') && (NtPath->Buffer[3] == L'\\'))
+    {
+        if ((Count < 6) || (NtPath->Buffer[5] != L':'))
+            return;
+        Index = 6;
+    }
+    else
+    {
+        for (Index = 0; Index < Count; Index++)
+        {
+            if ((NtPath->Buffer[Index] == L'\\') && (++Separators == 3))
+                break;
+        }
+    }
+    if (Index == 0)
+        return;
+
+    Volume.Buffer = NtPath->Buffer;
+    Volume.Length = Volume.MaximumLength = Index * sizeof(WCHAR);
+    InitializeObjectAttributes(&ObjectAttributes, &Volume, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (NT_SUCCESS(ZwOpenFile(&Handle, FILE_WRITE_DATA | SYNCHRONIZE, &ObjectAttributes, &Iosb,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_SYNCHRONOUS_IO_NONALERT)))
+    {
+        ZwFlushBuffersFile(Handle, &Iosb);
+        ZwClose(Handle);
+    }
+}
+
+LX_SYSCALL(LxSysSync)
+{
+    LxFlushVolume(&Call->Process->Instance->RootNt);
+    return 0;
+}
+
+LX_SYSCALL(LxSysSyncfs)
+{
+    PLX_FILE File = LxCallFile(Call, 0);
+
+    if (File == NULL)
+        return -LX_EBADF;
+    LxFileDereference(File);
+    LxFlushVolume(&Call->Process->Instance->RootNt);
+    return 0;
+}
+
 LX_SYSCALL(LxSysUtimensat)
 {
     LX_TIMESPEC Times[2];

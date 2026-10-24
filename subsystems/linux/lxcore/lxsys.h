@@ -53,6 +53,8 @@ LX_SYSCALL(LxSysStatx);
 LX_SYSCALL(LxSysStatfs);
 LX_SYSCALL(LxSysFstatfs);
 LX_SYSCALL(LxSysFsync);
+LX_SYSCALL(LxSysSync);
+LX_SYSCALL(LxSysSyncfs);
 LX_SYSCALL(LxSysUtimensat);
 LX_SYSCALL(LxSysUmask);
 LX_SYSCALL(LxSysFlock);
