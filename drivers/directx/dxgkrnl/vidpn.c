@@ -7564,6 +7564,18 @@ DxgkpInitializeDisplayMode(
     Mode->DisplayFixedOutput = 0;
 }
 
+static BOOLEAN
+DxgkpIsRefreshRateSpecified(
+    _In_ CONST D3DDDI_RATIONAL *Rate)
+{
+    return Rate->Numerator != 0 && Rate->Denominator != 0 &&
+           Rate->Numerator != D3DKMDT_FREQUENCY_NOTSPECIFIED &&
+           Rate->Numerator != D3DKMDT_FREQUENCY_UNINITIALIZED &&
+           Rate->Denominator != D3DKMDT_FREQUENCY_NOTSPECIFIED &&
+           Rate->Denominator != D3DKMDT_FREQUENCY_UNINITIALIZED &&
+           Rate->Numerator >= Rate->Denominator;
+}
+
 BOOLEAN
 DxgkVidPnQueryMonitorPreferredMode(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -7704,8 +7716,11 @@ DxgkVidPnQueryCurrentDisplayMode(
         TargetMode->VideoSignalInfo.VSyncFreq.Numerator != 0 &&
         TargetMode->VideoSignalInfo.VSyncFreq.Denominator != 0)
     {
-        Mode.RefreshRate = TargetMode->VideoSignalInfo.VSyncFreq;
-        Mode.IntegerRefreshRate = Mode.RefreshRate.Numerator / Mode.RefreshRate.Denominator;
+        if (DxgkpIsRefreshRateSpecified(&TargetMode->VideoSignalInfo.VSyncFreq))
+        {
+            Mode.RefreshRate = TargetMode->VideoSignalInfo.VSyncFreq;
+            Mode.IntegerRefreshRate = Mode.RefreshRate.Numerator / Mode.RefreshRate.Denominator;
+        }
         Mode.ScanLineOrdering = TargetMode->VideoSignalInfo.ScanLineOrdering;
     }
 
@@ -7787,7 +7802,7 @@ DxgkpDisplayModeFromVidPnModes(
 {
     DxgkpInitializeDisplayMode(Mode, Source->Format.Graphics.PrimSurfSize.cx, Source->Format.Graphics.PrimSurfSize.cy);
     Mode->Format = Source->Format.Graphics.PixelFormat;
-    if (Target->VSyncFreq.Numerator != 0 && Target->VSyncFreq.Denominator != 0)
+    if (DxgkpIsRefreshRateSpecified(&Target->VSyncFreq))
     {
         Mode->RefreshRate = Target->VSyncFreq;
         Mode->IntegerRefreshRate = Mode->RefreshRate.Numerator / Mode->RefreshRate.Denominator;
