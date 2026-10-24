@@ -681,6 +681,31 @@ extern const LX_SOCKET_OPS LxNetlinkSocketOps;
 
 LONG64 LxInetSocket(_In_ PLX_PROCESS Process, _In_ ULONG Family, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
 LONG64 LxNetlinkSocket(_In_ PLX_PROCESS Process, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
+
+typedef struct _LX_UNIX_DIAG
+{
+    ULONG Type;
+    ULONG State;
+    ULONG64 Ino;
+    ULONG PeerIno;
+    ULONG Uid;
+    ULONG RecvQueue;
+    ULONG SendQueue;
+    ULONG RecvBytes;
+    ULONG RecvBuffer;
+    ULONG SendBuffer;
+    ULONG VfsIno;
+    ULONG VfsDev;
+    BOOLEAN HasVfs;
+    UCHAR Shutdown;
+    USHORT NameLength;
+    UCHAR Name[108];
+    ULONG IconCount;
+    PULONG Icons;
+} LX_UNIX_DIAG, *PLX_UNIX_DIAG;
+
+LONG LxUnixDiagCollect(_In_ PLX_NS NetNs, _In_ ULONG64 Ino, _Out_ PLX_UNIX_DIAG *Entries, _Out_ PULONG Count);
+VOID LxUnixDiagFree(_In_opt_ PLX_UNIX_DIAG Entries, _In_ ULONG Count);
 BOOLEAN LxNetlinkIsFile(_In_ PLX_FILE File);
 ULONG LxNetlinkAddressIndex(_In_ ULONG Address);
 BOOLEAN LxInetIsFile(_In_ PLX_FILE File);

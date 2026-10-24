@@ -75,10 +75,13 @@ struct _LX_UNIX_SOCKET
     LONG64 RecvTimeout;
     LONG64 SendTimeout;
     ULONG64 Ino;
+    LIST_ENTRY AllLink;
 };
 
 static LIST_ENTRY LxUnixBound = { &LxUnixBound, &LxUnixBound };
 static FAST_MUTEX LxUnixBindLock;
+static LIST_ENTRY LxUnixAll = { &LxUnixAll, &LxUnixAll };
+static FAST_MUTEX LxUnixAllLock;
 static volatile LONG64 LxSocketInode = 0x300000;
 
 static
@@ -123,12 +126,27 @@ LxUnixReference(
 
 static
 VOID
+LxUnixUnlist(
+    _In_ PLX_UNIX_SOCKET Socket)
+{
+    ExAcquireFastMutex(&LxUnixAllLock);
+    if (!IsListEmpty(&Socket->AllLink))
+    {
+        RemoveEntryList(&Socket->AllLink);
+        InitializeListHead(&Socket->AllLink);
+    }
+    ExReleaseFastMutex(&LxUnixAllLock);
+}
+
+static
+VOID
 LxUnixDereference(
     _In_ PLX_UNIX_SOCKET Socket)
 {
     if (InterlockedDecrement(&Socket->RefCount) != 0)
         return;
 
+    LxUnixUnlist(Socket);
     while (!IsListEmpty(&Socket->RecvQueue))
         LxUnixFreeMessage(CONTAINING_RECORD(RemoveHeadList(&Socket->RecvQueue), LX_UNIX_MSG, Link));
     if (Socket->Peer != NULL)
@@ -170,6 +188,9 @@ LxUnixCreate(
     Socket->NetNs = LxProcessNs(Process, LxNsNet);
     LxNsReference(Socket->NetNs);
     Socket->Ino = (ULONG64)InterlockedIncrement64(&LxSocketInode);
+    ExAcquireFastMutex(&LxUnixAllLock);
+    InsertTailList(&LxUnixAll, &Socket->AllLink);
+    ExReleaseFastMutex(&LxUnixAllLock);
     return Socket;
 }
 
@@ -272,6 +293,7 @@ LxUnixRelease(
 {
     PLX_UNIX_SOCKET Socket = File->Object;
 
+    LxUnixUnlist(Socket);
     LxUnixUnbind(Socket);
     LxUnixLock(Socket);
     Socket->Closed = TRUE;
@@ -2557,4 +2579,149 @@ VOID
 LxSocketInitialize(VOID)
 {
     ExInitializeFastMutex(&LxUnixBindLock);
+    ExInitializeFastMutex(&LxUnixAllLock);
+}
+
+#define LX_TCP_ESTABLISHED  1
+#define LX_TCP_CLOSE        7
+#define LX_TCP_LISTEN       10
+
+static
+VOID
+LxUnixDiagFill(
+    _In_ PLX_UNIX_SOCKET Socket,
+    _Out_ PLX_UNIX_DIAG Item)
+{
+    PLX_UNIX_SOCKET Peer;
+    PLIST_ENTRY Entry;
+    ULONG Major, Minor;
+
+    RtlZeroMemory(Item, sizeof(*Item));
+    LxUnixLock(Socket);
+    Peer = Socket->Peer;
+    Item->Type = Socket->Type;
+    if (Socket->State == LX_UNIX_LISTENING)
+        Item->State = LX_TCP_LISTEN;
+    else if ((Socket->State == LX_UNIX_CONNECTED) || ((Socket->Type == LX_SOCK_DGRAM) && (Peer != NULL)))
+        Item->State = LX_TCP_ESTABLISHED;
+    else
+        Item->State = LX_TCP_CLOSE;
+    Item->Ino = Socket->Ino;
+    Item->PeerIno = (Peer != NULL) ? (ULONG)Peer->Ino : 0;
+    Item->Uid = Socket->Cred.Uid;
+    Item->RecvBytes = Socket->RecvBytes;
+    Item->RecvBuffer = Socket->RecvLimit;
+    Item->SendBuffer = Socket->SendLimit;
+    if (Socket->State == LX_UNIX_LISTENING)
+    {
+        Item->RecvQueue = Socket->BacklogCount;
+        Item->SendQueue = Socket->BacklogMax;
+    }
+    else
+    {
+        if (Socket->Type != LX_SOCK_DGRAM)
+            Item->RecvQueue = Socket->RecvBytes;
+        else if (!IsListEmpty(&Socket->RecvQueue))
+            Item->RecvQueue = CONTAINING_RECORD(Socket->RecvQueue.Flink, LX_UNIX_MSG, Link)->Length;
+        if ((Socket->Type != LX_SOCK_DGRAM) && (Peer != NULL))
+            Item->SendQueue = Peer->RecvBytes;
+    }
+    Item->Shutdown = ((Socket->ShutRead || Socket->PeerClosed) ? 1 : 0) | ((Socket->ShutWrite || Socket->PeerClosed) ? 2 : 0);
+    if (Socket->Bound && (Socket->AddressLength > sizeof(USHORT)))
+    {
+        Item->NameLength = (USHORT)min(Socket->AddressLength - sizeof(USHORT), sizeof(Item->Name));
+        RtlCopyMemory(Item->Name, Socket->Address + sizeof(USHORT), Item->NameLength);
+        if ((Item->Name[0] != '\0') && (Socket->BoundMount != NULL))
+        {
+            Major = (Socket->BoundMount->Dev >> 8) & 0xFFF;
+            Minor = (Socket->BoundMount->Dev & 0xFF) | ((Socket->BoundMount->Dev >> 12) & 0xFFF00);
+            Item->HasVfs = TRUE;
+            Item->VfsIno = (ULONG)Socket->BoundId;
+            Item->VfsDev = (Major << 20) | Minor;
+        }
+    }
+    if (Socket->State == LX_UNIX_LISTENING)
+    {
+        for (Entry = Socket->Backlog.Flink; Entry != &Socket->Backlog; Entry = Entry->Flink)
+            Item->IconCount++;
+        if (Item->IconCount != 0)
+            Item->Icons = LxAlloc(Item->IconCount * sizeof(ULONG));
+        if (Item->Icons == NULL)
+            Item->IconCount = 0;
+        Minor = 0;
+        for (Entry = Socket->Backlog.Flink; (Entry != &Socket->Backlog) && (Minor < Item->IconCount); Entry = Entry->Flink)
+            Item->Icons[Minor++] = (ULONG)CONTAINING_RECORD(Entry, LX_UNIX_SOCKET, BacklogLink)->Ino;
+    }
+    LxUnixUnlock(Socket);
+}
+
+LONG
+LxUnixDiagCollect(
+    _In_ PLX_NS NetNs,
+    _In_ ULONG64 Ino,
+    _Out_ PLX_UNIX_DIAG *Entries,
+    _Out_ PULONG Count)
+{
+    PLX_UNIX_SOCKET *Sockets;
+    PLX_UNIX_DIAG Diag = NULL;
+    PLIST_ENTRY Entry;
+    ULONG Capacity = 16, Found = 0, Index;
+
+    *Entries = NULL;
+    *Count = 0;
+    ExAcquireFastMutex(&LxUnixAllLock);
+    for (Entry = LxUnixAll.Flink; Entry != &LxUnixAll; Entry = Entry->Flink)
+        Capacity++;
+    ExReleaseFastMutex(&LxUnixAllLock);
+
+    Sockets = LxAlloc(Capacity * sizeof(*Sockets));
+    if (Sockets == NULL)
+        return -LX_ENOMEM;
+    ExAcquireFastMutex(&LxUnixAllLock);
+    for (Entry = LxUnixAll.Flink; (Entry != &LxUnixAll) && (Found < Capacity); Entry = Entry->Flink)
+    {
+        PLX_UNIX_SOCKET Socket = CONTAINING_RECORD(Entry, LX_UNIX_SOCKET, AllLink);
+        LONG Old;
+
+        if ((Socket->NetNs != NetNs) || ((Ino != 0) && (Socket->Ino != Ino)))
+            continue;
+        Old = Socket->RefCount;
+        while ((Old != 0) && (InterlockedCompareExchange(&Socket->RefCount, Old + 1, Old) != Old))
+            Old = Socket->RefCount;
+        if (Old != 0)
+            Sockets[Found++] = Socket;
+    }
+    ExReleaseFastMutex(&LxUnixAllLock);
+
+    if (Found != 0)
+        Diag = LxAlloc(Found * sizeof(*Diag));
+    for (Index = 0; Index < Found; Index++)
+    {
+        if (Diag != NULL)
+            LxUnixDiagFill(Sockets[Index], &Diag[Index]);
+        LxUnixDereference(Sockets[Index]);
+    }
+    LxFree(Sockets);
+    if ((Found != 0) && (Diag == NULL))
+        return -LX_ENOMEM;
+    *Entries = Diag;
+    *Count = Found;
+    return 0;
+}
+
+VOID
+LxUnixDiagFree(
+    _In_opt_ PLX_UNIX_DIAG Entries,
+    _In_ ULONG Count)
+{
+    ULONG Index;
+
+    if (Entries == NULL)
+        return;
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Entries[Index].Icons != NULL)
+            LxFree(Entries[Index].Icons);
+    }
+    LxFree(Entries);
 }

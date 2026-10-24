@@ -13,6 +13,7 @@
 #include <debug.h>
 
 #define LX_NETLINK_ROUTE            0
+#define LX_NETLINK_SOCK_DIAG        4
 #define LX_NETLINK_KOBJECT_UEVENT   15
 #define LX_NETLINK_GENERIC          16
 
@@ -138,6 +139,90 @@ typedef struct _LX_NLMSGHDR
     ULONG Seq;
     ULONG Pid;
 } LX_NLMSGHDR, *PLX_NLMSGHDR;
+
+#define LX_TCPDIAG_GETSOCK          18
+#define LX_DCCPDIAG_GETSOCK         19
+#define LX_SOCK_DIAG_BY_FAMILY      20
+#define LX_SOCK_DESTROY             21
+#define LX_DIAG_NOCOOKIE            0xFFFFFFFF
+#define LX_SK_MEMINFO_VARS          9
+
+#define LX_UDIAG_SHOW_NAME          0x00000001
+#define LX_UDIAG_SHOW_VFS           0x00000002
+#define LX_UDIAG_SHOW_PEER          0x00000004
+#define LX_UDIAG_SHOW_ICONS         0x00000008
+#define LX_UDIAG_SHOW_RQLEN         0x00000010
+#define LX_UDIAG_SHOW_MEMINFO       0x00000020
+#define LX_UDIAG_SHOW_UID           0x00000040
+
+#define LX_UNIX_DIAG_NAME           0
+#define LX_UNIX_DIAG_VFS            1
+#define LX_UNIX_DIAG_PEER           2
+#define LX_UNIX_DIAG_ICONS          3
+#define LX_UNIX_DIAG_RQLEN          4
+#define LX_UNIX_DIAG_MEMINFO        5
+#define LX_UNIX_DIAG_SHUTDOWN       6
+#define LX_UNIX_DIAG_UID            7
+
+#define LX_NDIAG_PROTO_ALL          0xFF
+#define LX_NDIAG_SHOW_MEMINFO       0x00000001
+#define LX_NDIAG_SHOW_GROUPS        0x00000002
+#define LX_NDIAG_SHOW_FLAGS         0x00000008
+#define LX_NETLINK_DIAG_MEMINFO     0
+#define LX_NETLINK_DIAG_GROUPS      1
+#define LX_NETLINK_DIAG_FLAGS       4
+#define LX_NDIAG_FLAG_PKTINFO           0x00000002
+#define LX_NDIAG_FLAG_BROADCAST_ERROR   0x00000004
+#define LX_NDIAG_FLAG_NO_ENOBUFS        0x00000008
+#define LX_NDIAG_FLAG_LISTEN_ALL_NSID   0x00000010
+#define LX_NDIAG_FLAG_CAP_ACK           0x00000020
+#define LX_NETLINK_UNCONNECTED      0
+#define LX_TCP_LISTEN               10
+#define LX_NETLINK_CONNECTED        1
+
+typedef struct _LX_UNIX_DIAG_REQ
+{
+    UCHAR Family;
+    UCHAR Protocol;
+    USHORT Pad;
+    ULONG States;
+    ULONG Ino;
+    ULONG Show;
+    ULONG Cookie[2];
+} LX_UNIX_DIAG_REQ, *PLX_UNIX_DIAG_REQ;
+
+typedef struct _LX_UNIX_DIAG_MSG
+{
+    UCHAR Family;
+    UCHAR Type;
+    UCHAR State;
+    UCHAR Pad;
+    ULONG Ino;
+    ULONG Cookie[2];
+} LX_UNIX_DIAG_MSG, *PLX_UNIX_DIAG_MSG;
+
+typedef struct _LX_NETLINK_DIAG_REQ
+{
+    UCHAR Family;
+    UCHAR Protocol;
+    USHORT Pad;
+    ULONG Ino;
+    ULONG Show;
+    ULONG Cookie[2];
+} LX_NETLINK_DIAG_REQ, *PLX_NETLINK_DIAG_REQ;
+
+typedef struct _LX_NETLINK_DIAG_MSG
+{
+    UCHAR Family;
+    UCHAR Type;
+    UCHAR Protocol;
+    UCHAR State;
+    ULONG PortId;
+    ULONG DstPortId;
+    ULONG DstGroup;
+    ULONG Ino;
+    ULONG Cookie[2];
+} LX_NETLINK_DIAG_MSG, *PLX_NETLINK_DIAG_MSG;
 
 typedef struct _LX_SOCKADDR_NL
 {
@@ -271,6 +356,9 @@ typedef struct _LX_NL_SOCKET
     ULONG Type;
     ULONG PortId;
     ULONG Groups;
+    ULONG DstPortId;
+    ULONG DstGroup;
+    BOOLEAN Connected;
     BOOLEAN Bound;
     BOOLEAN PassCred;
     BOOLEAN PktInfo;
@@ -1209,6 +1297,224 @@ LxNlGeneric(
 
 static
 VOID
+LxNlEmitUnix(
+    _Inout_ PLX_NL_BUILDER Builder,
+    _In_ PLX_NLMSGHDR Request,
+    _In_ PLX_UNIX_DIAG Item,
+    _In_ ULONG Show,
+    _In_ USHORT Flags)
+{
+    PLX_UNIX_DIAG_MSG Message = LxNlBegin(Builder, Request, LX_SOCK_DIAG_BY_FAMILY, Flags, sizeof(*Message));
+    ULONG Pair[2], Memory[LX_SK_MEMINFO_VARS];
+
+    Message->Family = LX_AF_UNIX;
+    Message->Type = (UCHAR)Item->Type;
+    Message->State = (UCHAR)Item->State;
+    Message->Ino = (ULONG)Item->Ino;
+    Message->Cookie[0] = (ULONG)Item->Ino;
+    Message->Cookie[1] = (ULONG)(Item->Ino >> 32);
+    if ((Show & LX_UDIAG_SHOW_NAME) && (Item->NameLength != 0))
+        LxNlAttr(Builder, LX_UNIX_DIAG_NAME, Item->Name, Item->NameLength);
+    if ((Show & LX_UDIAG_SHOW_VFS) && Item->HasVfs)
+    {
+        Pair[0] = Item->VfsIno;
+        Pair[1] = Item->VfsDev;
+        LxNlAttr(Builder, LX_UNIX_DIAG_VFS, Pair, sizeof(Pair));
+    }
+    if ((Show & LX_UDIAG_SHOW_PEER) && (Item->PeerIno != 0))
+        LxNlAttrU32(Builder, LX_UNIX_DIAG_PEER, Item->PeerIno);
+    if ((Show & LX_UDIAG_SHOW_ICONS) && (Item->State == LX_TCP_LISTEN))
+        LxNlAttr(Builder, LX_UNIX_DIAG_ICONS, Item->Icons, min(Item->IconCount, LX_NL_HEADROOM / 8) * sizeof(ULONG));
+    if (Show & LX_UDIAG_SHOW_RQLEN)
+    {
+        Pair[0] = Item->RecvQueue;
+        Pair[1] = Item->SendQueue;
+        LxNlAttr(Builder, LX_UNIX_DIAG_RQLEN, Pair, sizeof(Pair));
+    }
+    if (Show & LX_UDIAG_SHOW_MEMINFO)
+    {
+        RtlZeroMemory(Memory, sizeof(Memory));
+        Memory[0] = Item->RecvBytes;
+        Memory[1] = Item->RecvBuffer;
+        Memory[2] = Item->SendQueue;
+        Memory[3] = Item->SendBuffer;
+        LxNlAttr(Builder, LX_UNIX_DIAG_MEMINFO, Memory, sizeof(Memory));
+    }
+    LxNlAttrU8(Builder, LX_UNIX_DIAG_SHUTDOWN, Item->Shutdown);
+    if (Show & LX_UDIAG_SHOW_UID)
+        LxNlAttrU32(Builder, LX_UNIX_DIAG_UID, Item->Uid);
+    LxNlEnd(Builder);
+}
+
+static
+LONG
+LxNlUnixDiag(
+    _Inout_ PLX_NL_BUILDER Builder,
+    _In_ PLX_NLMSGHDR Request,
+    _Out_ PBOOLEAN Replied)
+{
+    BOOLEAN Dump = (Request->Flags & LX_NLM_F_DUMP) == LX_NLM_F_DUMP;
+    LX_UNIX_DIAG_REQ Query;
+    PLX_UNIX_DIAG Entries;
+    ULONG Count, Index;
+    LONG Error;
+
+    if (Request->Length - sizeof(LX_NLMSGHDR) < sizeof(Query))
+        return -LX_EINVAL;
+    RtlCopyMemory(&Query, Request + 1, sizeof(Query));
+    if (!Dump && (Query.Ino == 0))
+        return -LX_ENOENT;
+    Error = LxUnixDiagCollect(Builder->Socket->NetNs, Dump ? 0 : Query.Ino, &Entries, &Count);
+    if (Error != 0)
+        return Error;
+    if (Dump)
+    {
+        for (Index = 0; Index < Count; Index++)
+        {
+            if ((Entries[Index].State < 32) && (Query.States & (1UL << Entries[Index].State)))
+                LxNlEmitUnix(Builder, Request, &Entries[Index], Query.Show, LX_NLM_F_MULTI);
+        }
+        LxNlDone(Builder, Request);
+    }
+    else if (Count == 0)
+    {
+        Error = -LX_ENOENT;
+    }
+    else if (((Query.Cookie[0] != LX_DIAG_NOCOOKIE) || (Query.Cookie[1] != LX_DIAG_NOCOOKIE)) &&
+             ((Query.Cookie[0] != (ULONG)Entries[0].Ino) || (Query.Cookie[1] != (ULONG)(Entries[0].Ino >> 32))))
+    {
+        Error = -LX_ESTALE;
+    }
+    else
+    {
+        LxNlEmitUnix(Builder, Request, &Entries[0], Query.Show, 0);
+    }
+    LxUnixDiagFree(Entries, Count);
+    *Replied = (Error == 0);
+    return Error;
+}
+
+static
+LONG
+LxNlNetlinkDiag(
+    _Inout_ PLX_NL_BUILDER Builder,
+    _In_ PLX_NLMSGHDR Request,
+    _Out_ PBOOLEAN Replied)
+{
+    LX_NETLINK_DIAG_REQ Query;
+    PLX_NETLINK_DIAG_MSG Rows = NULL;
+    PULONG Extra = NULL;
+    PLIST_ENTRY Entry;
+    ULONG Capacity = 16, Count = 0, Index, Memory[LX_SK_MEMINFO_VARS];
+    KIRQL OldIrql;
+
+    if (Request->Length - sizeof(LX_NLMSGHDR) < sizeof(Query))
+        return -LX_EINVAL;
+    if ((Request->Flags & LX_NLM_F_DUMP) != LX_NLM_F_DUMP)
+        return -LX_EOPNOTSUPP;
+    RtlCopyMemory(&Query, Request + 1, sizeof(Query));
+
+    KeAcquireSpinLock(&LxNlSocketsLock, &OldIrql);
+    for (Entry = LxNlSockets.Flink; Entry != &LxNlSockets; Entry = Entry->Flink)
+        Capacity++;
+    KeReleaseSpinLock(&LxNlSocketsLock, OldIrql);
+    Rows = LxAlloc(Capacity * sizeof(*Rows));
+    Extra = LxAlloc(Capacity * 6 * sizeof(ULONG));
+    if ((Rows == NULL) || (Extra == NULL))
+    {
+        if (Rows != NULL)
+            LxFree(Rows);
+        if (Extra != NULL)
+            LxFree(Extra);
+        return -LX_ENOMEM;
+    }
+
+    KeAcquireSpinLock(&LxNlSocketsLock, &OldIrql);
+    for (Entry = LxNlSockets.Flink; (Entry != &LxNlSockets) && (Count < Capacity); Entry = Entry->Flink)
+    {
+        PLX_NL_SOCKET Other = CONTAINING_RECORD(Entry, LX_NL_SOCKET, GlobalLink);
+        PULONG Values = Extra + Count * 6;
+
+        if ((Other->NetNs != Builder->Socket->NetNs) || (!Other->Bound && (Other->Groups == 0)))
+            continue;
+        if ((Query.Protocol != LX_NDIAG_PROTO_ALL) && (Other->Protocol != Query.Protocol))
+            continue;
+        RtlZeroMemory(&Rows[Count], sizeof(Rows[Count]));
+        Rows[Count].Family = LX_AF_NETLINK;
+        Rows[Count].Type = (UCHAR)Other->Type;
+        Rows[Count].Protocol = (UCHAR)Other->Protocol;
+        Rows[Count].State = Other->Connected ? LX_NETLINK_CONNECTED : LX_NETLINK_UNCONNECTED;
+        Rows[Count].PortId = Other->PortId;
+        Rows[Count].DstPortId = Other->DstPortId;
+        Rows[Count].DstGroup = Other->DstGroup;
+        Rows[Count].Ino = (ULONG)Other->Ino;
+        Rows[Count].Cookie[0] = (ULONG)Other->Ino;
+        Rows[Count].Cookie[1] = (ULONG)(Other->Ino >> 32);
+        Values[0] = Other->Groups;
+        Values[1] = Other->QueueBytes;
+        Values[2] = (ULONG)Other->RecvBuffer;
+        Values[3] = (ULONG)Other->SendBuffer;
+        Values[4] = (Other->PktInfo ? LX_NDIAG_FLAG_PKTINFO : 0) |
+                    (Other->BroadcastError ? LX_NDIAG_FLAG_BROADCAST_ERROR : 0) |
+                    (Other->NoEnobufs ? LX_NDIAG_FLAG_NO_ENOBUFS : 0) |
+                    (Other->ListenAllNsid ? LX_NDIAG_FLAG_LISTEN_ALL_NSID : 0) |
+                    (Other->CapAck ? LX_NDIAG_FLAG_CAP_ACK : 0);
+        Count++;
+    }
+    KeReleaseSpinLock(&LxNlSocketsLock, OldIrql);
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        PULONG Values = Extra + Index * 6;
+        PLX_NETLINK_DIAG_MSG Message = LxNlBegin(Builder, Request, LX_SOCK_DIAG_BY_FAMILY, LX_NLM_F_MULTI, sizeof(*Message));
+
+        *Message = Rows[Index];
+        if (Query.Show & LX_NDIAG_SHOW_GROUPS)
+            LxNlAttrU32(Builder, LX_NETLINK_DIAG_GROUPS, Values[0]);
+        if (Query.Show & LX_NDIAG_SHOW_MEMINFO)
+        {
+            RtlZeroMemory(Memory, sizeof(Memory));
+            Memory[0] = Values[1];
+            Memory[1] = Values[2];
+            Memory[3] = Values[3];
+            LxNlAttr(Builder, LX_NETLINK_DIAG_MEMINFO, Memory, sizeof(Memory));
+        }
+        if (Query.Show & LX_NDIAG_SHOW_FLAGS)
+            LxNlAttrU32(Builder, LX_NETLINK_DIAG_FLAGS, Values[4]);
+        LxNlEnd(Builder);
+    }
+    LxNlDone(Builder, Request);
+    LxFree(Rows);
+    LxFree(Extra);
+    *Replied = TRUE;
+    return 0;
+}
+
+static
+LONG
+LxNlSockDiag(
+    _Inout_ PLX_NL_BUILDER Builder,
+    _In_ PLX_NLMSGHDR Request,
+    _Out_ PBOOLEAN Replied)
+{
+    PUCHAR Body = (PUCHAR)(Request + 1);
+
+    *Replied = FALSE;
+    if ((Request->Type == LX_TCPDIAG_GETSOCK) || (Request->Type == LX_DCCPDIAG_GETSOCK))
+        return -LX_EOPNOTSUPP;
+    if ((Request->Type != LX_SOCK_DIAG_BY_FAMILY) && (Request->Type != LX_SOCK_DESTROY))
+        return -LX_EINVAL;
+    if (Request->Length - sizeof(LX_NLMSGHDR) < 2)
+        return -LX_EINVAL;
+    if ((Body[0] != LX_AF_UNIX) && (Body[0] != LX_AF_NETLINK))
+        return -LX_ENOENT;
+    if (Request->Type == LX_SOCK_DESTROY)
+        return -LX_EOPNOTSUPP;
+    return (Body[0] == LX_AF_UNIX) ? LxNlUnixDiag(Builder, Request, Replied) : LxNlNetlinkDiag(Builder, Request, Replied);
+}
+
+static
+VOID
 LxNlAutobind(
     _In_ PLX_NL_SOCKET Socket)
 {
@@ -1325,8 +1631,11 @@ LxNetlinkSocket(
 
     if ((Type != LX_SOCK_RAW) && (Type != LX_SOCK_DGRAM))
         return -LX_ESOCKTNOSUPPORT;
-    if ((Protocol != LX_NETLINK_ROUTE) && (Protocol != LX_NETLINK_KOBJECT_UEVENT) && (Protocol != LX_NETLINK_GENERIC))
+    if ((Protocol != LX_NETLINK_ROUTE) && (Protocol != LX_NETLINK_KOBJECT_UEVENT) && (Protocol != LX_NETLINK_GENERIC) &&
+        (Protocol != LX_NETLINK_SOCK_DIAG))
+    {
         return -LX_EPROTONOSUPPORT;
+    }
 
     Socket = LxAlloc(sizeof(*Socket));
     if (Socket == NULL)
@@ -1407,10 +1716,26 @@ LxNlConnect(
     if (Result != 0)
         return Result;
     if (Address.Family == LX_AF_UNSPEC)
+    {
+        Socket->Connected = FALSE;
+        Socket->DstPortId = 0;
+        Socket->DstGroup = 0;
         return 0;
+    }
     if ((Address.Family != LX_AF_NETLINK) || (Call->Args[2] < sizeof(Address)))
         return -LX_EINVAL;
     LxNlAutobind(Socket);
+    Socket->DstPortId = Address.Pid;
+    Socket->DstGroup = 0;
+    if (Address.Groups != 0)
+    {
+        ULONG Bit;
+
+        for (Bit = 0; !(Address.Groups & (1UL << Bit)); Bit++)
+            ;
+        Socket->DstGroup = Bit + 1;
+    }
+    Socket->Connected = TRUE;
     return 0;
 }
 
@@ -1455,6 +1780,11 @@ LxNlName(
         LxNlAutobind(Socket);
         Address.Pid = Socket->PortId;
         Address.Groups = Socket->Groups;
+    }
+    else
+    {
+        Address.Pid = Socket->DstPortId;
+        Address.Groups = (Socket->DstGroup != 0) ? (1UL << (Socket->DstGroup - 1)) : 0;
     }
     {
         LONG Available;
@@ -1548,6 +1878,8 @@ LxNlSendmsg(
         {
             if (Socket->Protocol == LX_NETLINK_ROUTE)
                 Error = LxNlRoute(&Builder, Request, &Replied);
+            else if (Socket->Protocol == LX_NETLINK_SOCK_DIAG)
+                Error = LxNlSockDiag(&Builder, Request, &Replied);
             else
                 Error = LxNlGeneric(&Builder, Request, &Replied);
             if ((Error != 0) || (Request->Flags & LX_NLM_F_ACK))

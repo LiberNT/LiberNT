@@ -42,6 +42,8 @@ static const PCSTR LxKernelConfig[] =
     "CONFIG_DEVTMPFS=y",
     "CONFIG_INOTIFY_USER=y",
     "CONFIG_UNIX=y",
+    "CONFIG_UNIX_DIAG=y",
+    "CONFIG_NETLINK_DIAG=y",
     "CONFIG_INET=y",
     "CONFIG_IPV6=y",
 };
