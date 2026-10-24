@@ -31,3 +31,4 @@ BOOL LxStringsAdd(_Inout_ PLX_STRINGS Strings, _In_ PCSTR String);
 BOOL LxEnvSet(_Inout_ PLX_STRINGS Env, _In_ PCSTR Assignment);
 BOOL LxIsConsole(_In_ DWORD StdId);
 int LxLaunch(_Inout_ PLX_LAUNCH Launch);
+VOID LxKeepResolvConf(_In_ PCWSTR Root);
