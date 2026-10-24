@@ -6,6 +6,7 @@
  */
 
 #include "../lxcore.h"
+#include <reactos/arm64/sysreg.h>
 
 #define LX_EM_AARCH64     183
 #define LX_HWCAP_FP       (1ULL << 0)
@@ -46,19 +47,19 @@ LxArm64ReadIdRegister(
 
     switch ((Crm << 3) | Op2)
     {
-        case 0x00: __asm__ __volatile__("mrs %0, midr_el1" : "=r"(Value)); break;
-        case 0x15: __asm__ __volatile__("mrs %0, S3_0_C0_C2_5" : "=r"(Value)); break;
-        case 0x18: __asm__ __volatile__("mrs %0, S3_0_C0_C3_0" : "=r"(Value)); break;
-        case 0x19: __asm__ __volatile__("mrs %0, S3_0_C0_C3_1" : "=r"(Value)); break;
-        case 0x20: __asm__ __volatile__("mrs %0, S3_0_C0_C4_0" : "=r"(Value)); break;
-        case 0x21: __asm__ __volatile__("mrs %0, S3_0_C0_C4_1" : "=r"(Value)); break;
-        case 0x24: __asm__ __volatile__("mrs %0, S3_0_C0_C4_4" : "=r"(Value)); break;
-        case 0x30: __asm__ __volatile__("mrs %0, S3_0_C0_C6_0" : "=r"(Value)); break;
-        case 0x31: __asm__ __volatile__("mrs %0, S3_0_C0_C6_1" : "=r"(Value)); break;
-        case 0x32: __asm__ __volatile__("mrs %0, S3_0_C0_C6_2" : "=r"(Value)); break;
-        case 0x38: __asm__ __volatile__("mrs %0, S3_0_C0_C7_0" : "=r"(Value)); break;
-        case 0x39: __asm__ __volatile__("mrs %0, S3_0_C0_C7_1" : "=r"(Value)); break;
-        case 0x3A: __asm__ __volatile__("mrs %0, S3_0_C0_C7_2" : "=r"(Value)); break;
+        case 0x00: Value = ARM64_READ_SYSREG(MIDR_EL1); break;
+        case 0x15: Value = ARM64_READ_SYSREG(S3_0_C0_C2_5); break;
+        case 0x18: Value = ARM64_READ_SYSREG(S3_0_C0_C3_0); break;
+        case 0x19: Value = ARM64_READ_SYSREG(S3_0_C0_C3_1); break;
+        case 0x20: Value = ARM64_READ_SYSREG(S3_0_C0_C4_0); break;
+        case 0x21: Value = ARM64_READ_SYSREG(S3_0_C0_C4_1); break;
+        case 0x24: Value = ARM64_READ_SYSREG(S3_0_C0_C4_4); break;
+        case 0x30: Value = ARM64_READ_SYSREG(S3_0_C0_C6_0); break;
+        case 0x31: Value = ARM64_READ_SYSREG(S3_0_C0_C6_1); break;
+        case 0x32: Value = ARM64_READ_SYSREG(S3_0_C0_C6_2); break;
+        case 0x38: Value = ARM64_READ_SYSREG(S3_0_C0_C7_0); break;
+        case 0x39: Value = ARM64_READ_SYSREG(S3_0_C0_C7_1); break;
+        case 0x3A: Value = ARM64_READ_SYSREG(S3_0_C0_C7_2); break;
         default: break;
     }
     return Value;
@@ -187,7 +188,7 @@ LxArchEmulateInstruction(
     if (LxCopyFromUser(&Instruction, TrapFrame->Pc, sizeof(Instruction)) != 0)
         return FALSE;
     if ((Instruction & 0xFFFFFFE0) == 0xD53B0020)
-        __asm__ __volatile__("mrs %0, ctr_el0" : "=r"(Value));
+        Value = ARM64_READ_SYSREG(CTR_EL0);
     else if (!LxArm64EmulateIdRegister(Instruction, &Value))
         return FALSE;
     Rt = Instruction & 0x1F;
@@ -310,7 +311,7 @@ LxArchSetThreadPointer(
     _In_ ULONG64 Value)
 {
     UNREFERENCED_PARAMETER(TrapFrame);
-    __asm__ __volatile__("msr tpidr_el0, %0" : : "r"(Value) : "memory");
+    ARM64_WRITE_SYSREG(TPIDR_EL0, Value);
 }
 
 ULONG64
@@ -321,7 +322,7 @@ LxArchGetThreadPointer(
 
     UNREFERENCED_PARAMETER(TrapFrame);
 
-    __asm__ __volatile__("mrs %0, tpidr_el0" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(TPIDR_EL0);
     return Value;
 }
 
