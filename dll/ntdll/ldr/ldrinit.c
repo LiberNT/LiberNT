@@ -120,7 +120,7 @@ VOID NTAPI RtlpInitDeferredCriticalSection(VOID);
 VOID NTAPI RtlInitializeHeapManager(VOID);
 NTSTATUS NTAPI RtlpInitializeLocaleTable(VOID);
 
-ULONG RtlpDisableHeapLookaside; // TODO: Move to heap.c
+extern ULONG RtlpDisableHeapLookaside;
 ULONG RtlpShutdownProcessFlags; // TODO: Use it
 
 NTSTATUS LdrPerformRelocations(PIMAGE_NT_HEADERS NTHeaders, PVOID ImageBase);

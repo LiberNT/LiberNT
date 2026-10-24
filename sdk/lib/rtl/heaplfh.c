@@ -69,11 +69,13 @@ RtlpLfhBucketOfSize(SIZE_T Size)
     return (ULONG)(RtlpLfhSlotSize(Size) >> HEAP_ENTRY_SHIFT);
 }
 
+ULONG RtlpDisableHeapLookaside = 0;
+
 static
 BOOLEAN
 RtlpLfhFlagsEligible(PHEAP Heap, ULONG Flags)
 {
-    if (!Heap->FrontEndHeapUsageData)
+    if (!Heap->FrontEndHeapUsageData || RtlpDisableHeapLookaside)
         return FALSE;
     if (Flags & (HEAP_NO_SERIALIZE | HEAP_EXTRA_FLAGS_MASK))
         return FALSE;
