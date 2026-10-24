@@ -796,5 +796,41 @@
   "size": "64x64",
   "file": "64x64/apps/yast-vm-install.svg",
   "sha256": "d448368070ce96ef22ffbde4184f59513eb58cc5cfc4e464fca5784a166a20ce"
+ },
+ {
+  "name": "tux",
+  "size": "16x16",
+  "file": "16x16/apps/tux.svg",
+  "sha256": "fc97d5794c8175ffd864f3c380ddb5e0d4b0468ae159bd02006d9fa27f5e256d"
+ },
+ {
+  "name": "tux",
+  "size": "22x22",
+  "file": "22x22/apps/tux.svg",
+  "sha256": "19115245f12782ddb85e7aae1e78a12b48bf02ae360a7abaa118e91b119f5538"
+ },
+ {
+  "name": "tux",
+  "size": "24x24",
+  "file": "24x24/apps/tux.svg",
+  "sha256": "ecd071cdf116a4d71cb583a44b8ef57c075f2372ca4f00d8da5beaab297acb4c"
+ },
+ {
+  "name": "tux",
+  "size": "32x32",
+  "file": "32x32/apps/tux.svg",
+  "sha256": "b0be1368cdbdc35299504ac4c476772fd9d262f25a18d7e9161d5eef0d40fca2"
+ },
+ {
+  "name": "tux",
+  "size": "48x48",
+  "file": "48x48/apps/tux.svg",
+  "sha256": "3ef9998c96b810bd01e73c104d982eef43a072abd50cea2eee44060c9792d91e"
+ },
+ {
+  "name": "tux",
+  "size": "64x64",
+  "file": "64x64/apps/tux.svg",
+  "sha256": "9ee88d4e1802e4d4bc44c05fbec37494120307e9bac8ee8c957bdb621459c1dc"
  }
 ]
