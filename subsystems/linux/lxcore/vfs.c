@@ -676,6 +676,7 @@ LxPopulateDev(
         { "tty", LX_S_IFCHR | 0666, 5, 0, NULL },
         { "console", LX_S_IFCHR | 0600, 5, 1, NULL },
         { "ptmx", LX_S_IFCHR | 0666, 5, 2, NULL },
+        { "lxwin", LX_S_IFCHR | 0666, LX_WIN_DEVICE_MAJOR, LX_WIN_DEVICE_MINOR, NULL },
         { "fd", LX_S_IFLNK | 0777, 0, 0, "/proc/self/fd" },
         { "stdin", LX_S_IFLNK | 0777, 0, 0, "/proc/self/fd/0" },
         { "stdout", LX_S_IFLNK | 0777, 0, 0, "/proc/self/fd/1" },

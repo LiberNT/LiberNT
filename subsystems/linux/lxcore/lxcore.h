@@ -21,6 +21,7 @@
 
 #include "lxabi.h"
 #include "../include/lxioctl.h"
+#include "../include/lxwin.h"
 
 #define LX_TAG              'xcxL'
 #define LX_PAGE_SIZE        0x1000ULL
@@ -742,6 +743,12 @@ VOID LxIpcProcessExit(_In_ PLX_PROCESS Process);
 VOID LxIpcInstanceCleanup(_In_ PLX_INSTANCE Instance);
 PVOID LxIpcSemUndoList(_In_ PLX_PROCESS Process);
 VOID LxIpcInitialize(VOID);
+VOID LxWinInitialize(VOID);
+PLX_FILE LxWinOpen(_In_ PLX_PROCESS Process, _In_ ULONG Flags, _In_ PCSTR Path);
+NTSTATUS LxWinHostCreate(_Inout_ PFILE_OBJECT FileObject);
+VOID LxWinHostCleanup(_Inout_ PFILE_OBJECT FileObject);
+VOID LxWinHostClose(_Inout_ PFILE_OBJECT FileObject);
+BOOLEAN LxWinHostIoctl(_In_ PFILE_OBJECT FileObject, _Inout_ PIRP Irp, _In_ PIO_STACK_LOCATION Stack, _Out_ PNTSTATUS Status);
 
 LONG LxSignalFromException(_In_ NTSTATUS ExceptionCode, _Out_ PLONG Code);
 VOID LxSignalSend(_In_ PLX_PROCESS Target, _In_opt_ PLX_THREAD TargetThread, _In_ LONG Signal, _In_opt_ PLX_SIGINFO Info);

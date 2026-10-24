@@ -1,0 +1,12 @@
+[Unit]
+Description=LiberNT GUI package setup
+ConditionPathExists=!/var/lib/libernt/gui-setup-done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/libernt/gui-setup
+RemainAfterExit=yes
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
