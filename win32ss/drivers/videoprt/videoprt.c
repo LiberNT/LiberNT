@@ -2212,8 +2212,6 @@ VpAllocateInterruptThunk(
     stub[6] = 0xE0;
 #endif
 
-    __builtin___clear_cache((char*)stub, (char*)stub + codeSize);
-
     DriverExtension->InterruptThunk.CodeBase = stub;
     DriverExtension->InterruptThunk.CodeSize = codeSize;
 

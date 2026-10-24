@@ -20,6 +20,9 @@
  */
 #include <stdarg.h>
 #include <stdlib.h>
+#ifdef __REACTOS__
+#include <math.h>
+#endif
 
 #include "windef.h"
 #include "winbase.h"
@@ -1636,6 +1639,52 @@ int OpenType_apply_GSUB_lookup(const void *table, unsigned int lookup_index, WOR
     return GSUB_apply_lookup(lookup, lookup_index, glyphs, glyph_index, write_dir, glyph_count);
 }
 
+#ifdef __REACTOS__
+void OpenType_GSUB_SubstituteSingleGlyph(const void *table, const LoadedFeature *feature, LONG param, WORD *glyph)
+{
+    const GSUB_Header *header = (const GSUB_Header *)table;
+    const OT_LookupList *lookup = (const OT_LookupList*)((const BYTE*)header + GET_BE_WORD(header->LookupList));
+    int count = 1;
+    int i, j;
+
+    for (i = 0; i < feature->lookup_count; i++)
+    {
+        const OT_LookupTable *look = (const OT_LookupTable*)((const BYTE*)lookup + GET_BE_WORD(lookup->Lookup[feature->lookups[i]]));
+        enum gsub_lookup_type type = GET_BE_WORD(look->LookupType);
+
+        if (type == GSUB_LOOKUP_EXTENSION && GET_BE_WORD(look->SubTableCount))
+        {
+            const GSUB_ExtensionPosFormat1 *ext = (const GSUB_ExtensionPosFormat1 *)((const BYTE *)look + GET_BE_WORD(look->SubTable[0]));
+            if (GET_BE_WORD(ext->SubstFormat) == 1)
+                type = GET_BE_WORD(ext->ExtensionLookupType);
+        }
+
+        if (type == GSUB_LOOKUP_SINGLE)
+        {
+            GSUB_apply_SingleSubst(look, glyph, 0, 1, &count);
+        }
+        else if (type == GSUB_LOOKUP_ALTERNATE)
+        {
+            for (j = 0; j < GET_BE_WORD(look->SubTableCount); j++)
+            {
+                const GSUB_AlternateSubstFormat1 *asf1 = (const GSUB_AlternateSubstFormat1*)GSUB_get_subtable(look, j);
+                const GSUB_AlternateSet *as;
+                int index = GSUB_is_glyph_covered((const BYTE*)asf1 + GET_BE_WORD(asf1->Coverage), *glyph);
+
+                if (index == -1)
+                    continue;
+                if (index >= GET_BE_WORD(asf1->AlternateSetCount))
+                    break;
+                as = (const GSUB_AlternateSet*)((const BYTE*)asf1 + GET_BE_WORD(asf1->AlternateSet[index]));
+                if (param > 0 && param <= GET_BE_WORD(as->GlyphCount))
+                    *glyph = GET_BE_WORD(as->Alternate[param - 1]);
+                break;
+            }
+        }
+    }
+}
+#endif
+
 /**********
  * GPOS
  **********/
@@ -2692,6 +2741,49 @@ unsigned int OpenType_apply_GPOS_lookup(const ScriptCache *script_cache, const O
     return GPOS_apply_lookup(script_cache, otm, logfont, analysis, advance, lookup,
             lookup_index, glyphs, glyph_index, glyph_count, goffset);
 }
+
+#ifdef __REACTOS__
+void OpenType_GPOS_PositionSingleGlyph(const ScriptCache *script_cache, const LoadedFeature *feature, WORD glyph,
+        int *advance, GOFFSET *goffset)
+{
+    const GPOS_Header *header = (const GPOS_Header *)script_cache->GPOS_Table;
+    const OT_LookupList *lookup = (const OT_LookupList*)((const BYTE*)header + GET_BE_WORD(header->LookupList));
+    const OUTLINETEXTMETRICW *otm = script_cache->otm;
+    int ppem = otm->otmTextMetrics.tmAscent + otm->otmTextMetrics.tmDescent - otm->otmTextMetrics.tmInternalLeading;
+    int i;
+
+    for (i = 0; i < feature->lookup_count; i++)
+    {
+        const OT_LookupTable *look = (const OT_LookupTable*)((const BYTE*)lookup + GET_BE_WORD(lookup->Lookup[feature->lookups[i]]));
+        enum gpos_lookup_type type = GET_BE_WORD(look->LookupType);
+        POINT adjust = {0,0};
+        POINT adv = {0,0};
+        double devX, devY;
+
+        if (type == GPOS_LOOKUP_POSITION_EXTENSION && GET_BE_WORD(look->SubTableCount))
+        {
+            const GPOS_ExtensionPosFormat1 *ext = (const GPOS_ExtensionPosFormat1 *)((const BYTE *)look + GET_BE_WORD(look->SubTable[0]));
+            if (GET_BE_WORD(ext->PosFormat) == 1)
+                type = GET_BE_WORD(ext->ExtensionLookupType);
+        }
+        if (type != GPOS_LOOKUP_ADJUST_SINGLE)
+            continue;
+
+        GPOS_apply_SingleAdjustment(look, NULL, &glyph, 0, 1, ppem, &adjust, &adv);
+        if (adjust.x || adjust.y)
+        {
+            GPOS_convert_design_units_to_device(otm, &script_cache->lf, adjust.x, adjust.y, &devX, &devY);
+            goffset->du += floor(devX + 0.5);
+            goffset->dv += floor(devY + 0.5);
+        }
+        if (adv.x)
+        {
+            GPOS_convert_design_units_to_device(otm, &script_cache->lf, adv.x, 0, &devX, &devY);
+            *advance += floor(devX + 0.5);
+        }
+    }
+}
+#endif
 
 #ifdef __REACTOS__
 static CRITICAL_SECTION cs_opentype_cache;

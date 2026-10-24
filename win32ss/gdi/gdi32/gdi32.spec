@@ -634,6 +634,7 @@
 @ stdcall ScriptLayout(long ptr ptr ptr)
 @ stdcall ScriptPlace(ptr ptr ptr long ptr ptr ptr ptr ptr)
 @ stdcall ScriptPlaceOpenType(ptr ptr ptr long long ptr ptr long wstr ptr ptr long ptr ptr long ptr ptr ptr)
+@ stdcall ScriptPositionSingleGlyph(ptr ptr ptr long long long long long long int64 ptr ptr)
 @ stdcall ScriptRecordDigitSubstitution(long ptr)
 @ stdcall ScriptShape(ptr ptr ptr long long ptr ptr ptr ptr ptr)
 @ stdcall ScriptShapeOpenType(ptr ptr ptr long long ptr ptr long wstr long long ptr ptr ptr ptr ptr)
@@ -648,6 +649,7 @@
 @ stdcall ScriptString_pLogAttr(ptr)
 @ stdcall ScriptString_pSize(ptr)
 @ stdcall ScriptString_pcOutChars(ptr)
+@ stdcall ScriptSubstituteSingleGlyph(ptr ptr ptr long long long long long ptr)
 @ stdcall ScriptTextOut(ptr ptr long long long ptr ptr ptr long ptr long ptr ptr ptr)
 @ stdcall ScriptXtoCP(long long long ptr ptr ptr ptr ptr ptr)
 
