@@ -203,6 +203,10 @@ set(_wow64_i386_cmake_args
     -DENABLE_ROSTESTS:BOOL=${ENABLE_ROSTESTS}
     -DENABLE_APPSMOKE_TESTS:BOOL=${ENABLE_APPSMOKE_TESTS})
 
+if(MSVC)
+    list(APPEND _wow64_i386_cmake_args -DLTCG:BOOL=${LTCG})
+endif()
+
 if(WOW64_I386_DXILCONV_FILE)
     list(APPEND _wow64_i386_cmake_args -DENABLE_DXILCONV:BOOL=ON)
 else()
@@ -225,6 +229,17 @@ set(_wow64_i386_signature_file "${REACTOS_BINARY_DIR}/CMakeFiles/wow64-i386-conf
 set(_wow64_i386_configure_stamp "${REACTOS_BINARY_DIR}/CMakeFiles/wow64-i386-configure.stamp")
 file(GENERATE OUTPUT "${_wow64_i386_signature_file}" CONTENT "${_wow64_i386_configure_signature}\n")
 
+set(_wow64_i386_env)
+if(MSVC)
+    set(_wow64_i386_env_script "${REACTOS_BINARY_DIR}/CMakeFiles/wow64-i386-env.cmd")
+    file(WRITE "${_wow64_i386_env_script}"
+        "@set VSCMD_ARG_no_logo=1\n"
+        "@call \"$ENV{VCINSTALLDIR}\\Auxiliary\\Build\\vcvarsall.bat\" /clean_env\n"
+        "@call \"$ENV{VCINSTALLDIR}\\Auxiliary\\Build\\vcvarsall.bat\" $ENV{VSCMD_ARG_HOST_ARCH}_x86\n"
+        "%*\n")
+    set(_wow64_i386_env call "${_wow64_i386_env_script}")
+endif()
+
 set(_wow64_i386_runtime)
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     find_program(NESTED_BUILD_PYTHON_EXECUTABLE NAMES python3 python REQUIRED)
@@ -234,7 +249,7 @@ endif()
 
 add_custom_command(
     OUTPUT "${_wow64_i386_configure_stamp}"
-    COMMAND ${CMAKE_COMMAND} -S "${REACTOS_SOURCE_DIR}" -B "${WOW64_I386_BINARY_DIR}" -G "${CMAKE_GENERATOR}" ${_wow64_i386_cmake_args}
+    COMMAND ${_wow64_i386_env} ${CMAKE_COMMAND} -S "${REACTOS_SOURCE_DIR}" -B "${WOW64_I386_BINARY_DIR}" -G "${CMAKE_GENERATOR}" ${_wow64_i386_cmake_args}
     ${_wow64_i386_runtime}
     COMMAND ${CMAKE_COMMAND} -E touch "${_wow64_i386_configure_stamp}"
     BYPRODUCTS "${WOW64_I386_BINARY_DIR}/build.ninja"
@@ -258,15 +273,19 @@ endif()
 
 set(_wow64_i386_validate)
 if(VALIDATE_COMPAT_BINARIES)
+    set(_wow64_i386_validate_list "${REACTOS_BINARY_DIR}/CMakeFiles/wow64-i386-validate.txt")
+    string(REPLACE ";" "\n" _wow64_i386_validate_text "${WOW64_I386_VALIDATION_FILES}")
+    file(WRITE "${_wow64_i386_validate_list}" "${_wow64_i386_validate_text}\n")
     set(_wow64_i386_validate COMMAND ${CMAKE_COMMAND}
-        -P "${REACTOS_SOURCE_DIR}/sdk/cmake/wow64-validate.cmake" -- ${WOW64_I386_VALIDATION_FILES})
+        "-DWOW64_VALIDATE_LIST=${_wow64_i386_validate_list}"
+        -P "${REACTOS_SOURCE_DIR}/sdk/cmake/wow64-validate.cmake")
 endif()
 
 include("${REACTOS_SOURCE_DIR}/sdk/cmake/nested-build.cmake")
 
 add_custom_target(wow64_i386 ALL
     ${_wow64_i386_heal}
-    COMMAND ${REACTOS_NESTED_BUILD} "${WOW64_I386_BINARY_DIR}" --target ${WOW64_I386_TARGETS}
+    COMMAND ${_wow64_i386_env} ${REACTOS_NESTED_BUILD} "${WOW64_I386_BINARY_DIR}" --target ${WOW64_I386_TARGETS}
     ${_wow64_i386_validate}
     BYPRODUCTS ${WOW64_I386_VALIDATION_FILES}
     COMMENT "Building ${_wow64_i386_target_count} i386 WoW64 targets"

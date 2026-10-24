@@ -11,6 +11,10 @@ foreach(_index RANGE 0 ${_last_argument})
     endif()
 endforeach()
 
+if(DEFINED WOW64_VALIDATE_LIST)
+    file(STRINGS "${WOW64_VALIDATE_LIST}" _files)
+endif()
+
 if(NOT _files)
     message(FATAL_ERROR "No WoW64 i386 files were provided for validation")
 endif()
