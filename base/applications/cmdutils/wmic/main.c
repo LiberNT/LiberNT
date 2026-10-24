@@ -59,6 +59,55 @@ alias_map[] =
     { L"systemenclosure", L"Win32_SystemEnclosure" },
 };
 
+#ifdef __REACTOS__
+static WCHAR *where_clause;
+static const WCHAR *raw_command;
+
+static WCHAR *get_raw_where_clause( const WCHAR *cmdline )
+{
+    const WCHAR *p = cmdline, *start, *cond = NULL, *cond_end = NULL;
+    BOOL in_quotes;
+    WCHAR *ret;
+    int len;
+
+    if (!p) return NULL;
+    while (*p)
+    {
+        while (*p == ' ' || *p == '\t') p++;
+        if (!*p) break;
+        start = p;
+        in_quotes = FALSE;
+        while (*p && (in_quotes || (*p != ' ' && *p != '\t')))
+        {
+            if (*p == '"') in_quotes = !in_quotes;
+            p++;
+        }
+        if (cond)
+        {
+            if (p - start == 3 && !wcsnicmp( start, L"get", 3 )) break;
+            cond_end = p;
+        }
+        else if (p - start == 5 && !wcsnicmp( start, L"where", 5 ))
+        {
+            cond = p;
+        }
+    }
+    if (!cond || !cond_end) return NULL;
+
+    while (*cond == ' ' || *cond == '\t') cond++;
+    len = cond_end - cond;
+    if (len >= 2 && cond[0] == '"' && cond[len - 1] == '"')
+    {
+        cond++;
+        len -= 2;
+    }
+    if (!(ret = malloc( (len + 1) * sizeof(WCHAR) ))) return NULL;
+    memcpy( ret, cond, len * sizeof(WCHAR) );
+    ret[len] = 0;
+    return ret;
+}
+#endif
+
 static const WCHAR *find_class( const WCHAR *alias )
 {
     unsigned int i;
@@ -312,9 +361,19 @@ static int query_prop( const WCHAR *class, int argc, WCHAR *argv[] )
     }
 #endif
 
+#ifdef __REACTOS__
+    len = lstrlenW( class ) + lstrlenW( proplist ) + ARRAY_SIZE(L"SELECT * FROM ");
+    if (where_clause) len += lstrlenW( where_clause ) + ARRAY_SIZE(L" WHERE ");
+    if (!(query = SysAllocStringLen( NULL, len ))) goto done;
+    if (where_clause)
+        swprintf( query, len, L"SELECT %s FROM %s WHERE %s", proplist, class, where_clause );
+    else
+        swprintf( query, len, L"SELECT %s FROM %s", proplist, class );
+#else
     len = lstrlenW( class ) + lstrlenW( proplist ) + ARRAY_SIZE(L"SELECT * FROM ");
     if (!(query = SysAllocStringLen( NULL, len ))) goto done;
     swprintf( query, len, L"SELECT %s FROM %s", proplist, class );
+#endif
 
     if (!(wql = SysAllocString(L"WQL" ))) goto done;
     hr = IWbemServices_ExecQuery( services, wql, query, flags, NULL, &result );
@@ -457,6 +516,33 @@ static int process_args( int argc, WCHAR *argv[] )
     if (++i >= argc)
         goto not_supported;
 
+#ifdef __REACTOS__
+    if (!wcsicmp( argv[i], L"where" ))
+    {
+        int first = ++i, len = 0, j;
+
+        while (i < argc && wcsicmp( argv[i], L"get" )) len += lstrlenW( argv[i++] ) + 1;
+        if (i == first)
+        {
+            output_error( STRING_INVALID_QUERY );
+            return 1;
+        }
+        free( where_clause );
+        if (!(where_clause = get_raw_where_clause( raw_command )))
+        {
+            if (!(where_clause = malloc( len * sizeof(WCHAR) ))) return 1;
+            where_clause[0] = 0;
+            for (j = first; j < i; j++)
+            {
+                if (j > first) lstrcatW( where_clause, L" " );
+                lstrcatW( where_clause, argv[j] );
+            }
+        }
+        if (i >= argc)
+            goto not_supported;
+    }
+#endif
+
     if (!wcsicmp( argv[i], L"get" ))
     {
 #ifdef __REACTOS__
@@ -504,6 +590,9 @@ int __cdecl wmain(int argc, WCHAR *argv[])
                 WCHAR **new_argv;
 
                 if (!(new_argv = CommandLineToArgvW( stripped, &new_argc ))) return 1;
+#ifdef __REACTOS__
+                raw_command = stripped;
+#endif
                 ret = process_args( new_argc, new_argv );
                 LocalFree( new_argv );
 
@@ -514,5 +603,8 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         return ret;
     }
 
+#ifdef __REACTOS__
+    raw_command = GetCommandLineW();
+#endif
     return process_args( argc - 1, argv + 1 );
 }
