@@ -14927,11 +14927,7 @@ XHCI_DisableInterrupts(PVOID MiniPortExtension)
 
     if (Interrupter)
     {
-        /*
-         * Clear IE to disable interrupter. Also write IP=1 (RW1C) to clear
-         * any pending interrupt. Only write the defined bits, IE=0 disables.
-         */
-        XHCI_WRITE_REGISTER_ULONG(&Interrupter->Iman, Iman & XHCI_IMAN_IP);
+        XHCI_WRITE_REGISTER_ULONG(&Interrupter->Iman, (Iman & XHCI_IMAN_IP) | XHCI_IMAN_IE);
         (VOID)XHCI_READ_REGISTER_ULONG(&Interrupter->Iman);
     }
 }
