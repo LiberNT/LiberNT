@@ -408,6 +408,7 @@ typedef struct
     DWORD arch;
 #ifdef __REACTOS__
     USHORT emulated_machine;
+    MSIHANDLE remote_handle;
 #endif
 } custom_action_info;
 
@@ -416,6 +417,10 @@ static void free_custom_action_data( custom_action_info *info )
     EnterCriticalSection( &custom_action_cs );
 
     list_remove( &info->entry );
+#ifdef __REACTOS__
+    if (info->remote_handle)
+        MsiCloseHandle( info->remote_handle );
+#endif
     if (info->handle)
         CloseHandle( info->handle );
     free( info->action );
@@ -677,6 +682,19 @@ static USHORT get_emulated_server_machine( const WCHAR *name, DWORD arch )
     return attrs != INVALID_FILE_ATTRIBUTES ? machine : 0;
 }
 
+static BOOL custom_server_running( HANDLE *process, HANDLE *pipe )
+{
+    if (!*process)
+        return FALSE;
+    if (WaitForSingleObject( *process, 0 ) != WAIT_OBJECT_0)
+        return TRUE;
+    CloseHandle( *process );
+    CloseHandle( *pipe );
+    *process = NULL;
+    *pipe = NULL;
+    return FALSE;
+}
+
 static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch, USHORT emulated_machine)
 #else
 static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch)
@@ -699,14 +717,21 @@ static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch)
 #ifdef __REACTOS__
     if (emulated_machine)
     {
-        if (package->custom_server_emulated_process)
+        if (custom_server_running(&package->custom_server_emulated_process, &package->custom_server_emulated_pipe))
             return ERROR_SUCCESS;
     }
-    else
-#endif
+    else if (arch == SCS_32BIT_BINARY)
+    {
+        if (custom_server_running(&package->custom_server_32_process, &package->custom_server_32_pipe))
+            return ERROR_SUCCESS;
+    }
+    else if (custom_server_running(&package->custom_server_64_process, &package->custom_server_64_pipe))
+        return ERROR_SUCCESS;
+#else
     if ((arch == SCS_32BIT_BINARY && package->custom_server_32_process) ||
         (arch == SCS_64BIT_BINARY && package->custom_server_64_process))
         return ERROR_SUCCESS;
+#endif
 
 #ifdef __REACTOS__
     if (emulated_machine)
@@ -959,6 +984,9 @@ static custom_action_info *do_msidbCustomActionTypeDll(
     info->source = wcsdup( source );
     info->action = wcsdup( action );
     info->handle = NULL;
+#ifdef __REACTOS__
+    info->remote_handle = 0;
+#endif
     CoCreateGuid( &info->guid );
 
     EnterCriticalSection( &custom_action_cs );
@@ -1852,6 +1880,21 @@ void ACTION_FinishCustomActions(const MSIPACKAGE* package)
     LeaveCriticalSection( &custom_action_cs );
 }
 
+#ifdef __REACTOS__
+void custom_release_remote_handle( MSIHANDLE handle )
+{
+    custom_action_info *info;
+
+    EnterCriticalSection( &custom_action_cs );
+    LIST_FOR_EACH_ENTRY( info, &pending_custom_actions, custom_action_info, entry )
+    {
+        if (info->remote_handle == handle)
+            info->remote_handle = 0;
+    }
+    LeaveCriticalSection( &custom_action_cs );
+}
+#endif
+
 UINT __cdecl s_remote_GetActionInfo(const GUID *guid, WCHAR **name, int *type, WCHAR **dll, char **func, MSIHANDLE *hinst)
 {
     custom_action_info *info;
@@ -1863,6 +1906,11 @@ UINT __cdecl s_remote_GetActionInfo(const GUID *guid, WCHAR **name, int *type, W
     *name = wcsdup(info->action);
     *type = info->type;
     *hinst = alloc_msihandle(&info->package->hdr);
+#ifdef __REACTOS__
+    EnterCriticalSection( &custom_action_cs );
+    info->remote_handle = *hinst;
+    LeaveCriticalSection( &custom_action_cs );
+#endif
     *dll = wcsdup(info->source);
     *func = strdupWtoA(info->target);
 

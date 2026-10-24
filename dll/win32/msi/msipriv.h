@@ -1037,6 +1037,9 @@ extern UINT ACTION_PerformAction(MSIPACKAGE *package, const WCHAR *action);
 extern void ACTION_FinishCustomActions( const MSIPACKAGE* package);
 extern UINT ACTION_CustomAction(MSIPACKAGE *package, const WCHAR *action);
 extern void custom_stop_server(HANDLE process, HANDLE pipe);
+#ifdef __REACTOS__
+extern void custom_release_remote_handle(MSIHANDLE handle);
+#endif
 
 /* actions in other modules */
 extern UINT ACTION_AppSearch(MSIPACKAGE *package);

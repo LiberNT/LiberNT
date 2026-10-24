@@ -350,5 +350,8 @@ UINT WINAPI MsiCloseAllHandles(void)
 
 UINT __cdecl s_remote_CloseHandle(MSIHANDLE handle)
 {
+#ifdef __REACTOS__
+    custom_release_remote_handle(handle);
+#endif
     return MsiCloseHandle(handle);
 }
