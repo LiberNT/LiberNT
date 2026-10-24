@@ -7,13 +7,20 @@
 
 #include <asm.inc>
 
+#ifdef _USE_ML
+HVCALL SEGMENT ALIGN(4096) READ EXECUTE ALIAS(".text") 'CODE'
+#else
 .code64
 
 .align 4096
+#endif
 PUBLIC HvHypercallPage
 HvHypercallPage:
     mov rax, HEX(FFFF)
     ret
     .fill 4088, 1, HEX(CC)
+#ifdef _USE_ML
+HVCALL ENDS
+#endif
 
 END

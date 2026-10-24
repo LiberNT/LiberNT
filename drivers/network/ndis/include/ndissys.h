@@ -20,7 +20,7 @@
 
 FORCEINLINE
 ULONG
-NdisCurrentProcessorIndex(VOID)
+NdisICurrentProcessorIndex(VOID)
 {
 #if (NTDDI_VERSION >= NTDDI_WIN7)
     ULONG ProcessorIndex = KeGetCurrentProcessorIndex();

@@ -414,8 +414,8 @@ KdpReceiveByte(OUT PUCHAR OutByte)
      * of one UART poll varies greatly between hardware and QEMU, while the
      * acknowledgement deadline must remain finite in both environments.
      */
-    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(CounterFrequency));
-    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(Start));
+    CounterFrequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
+    Start = ARM64_READ_SYSREG(CNTVCT_EL0);
     TimeoutTicks = (CounterFrequency * GDB_RECEIVE_TIMEOUT_US) / 1000000;
 
     do
@@ -423,8 +423,8 @@ KdpReceiveByte(OUT PUCHAR OutByte)
         if (EarlyUartGetc(OutByte))
             return KdPacketReceived;
 
-        __asm__ __volatile__("yield");
-        __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(Now));
+        ARM64_YIELD();
+        Now = ARM64_READ_SYSREG(CNTVCT_EL0);
     } while ((Now - Start) < TimeoutTicks);
 
     return KdPacketTimedOut;
