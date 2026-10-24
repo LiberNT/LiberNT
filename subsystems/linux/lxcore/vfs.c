@@ -3006,8 +3006,11 @@ LxVfsOpenNode(
     }
     File->Path = LxStrDup(Node->Path);
     File->Mount = Node->Mount;
-    if (Node->Type == LX_S_IFLNK)
-        File->Type = LX_S_IFLNK;
+    if ((Node->Type == LX_S_IFLNK) || (Node->Type == LX_S_IFIFO) || (Node->Type == LX_S_IFCHR) ||
+        (Node->Type == 0060000) || (Node->Type == 0140000))
+    {
+        File->Type = Node->Type;
+    }
 
     if ((Flags & LX_O_DIRECTORY) && !File->Directory)
     {
