@@ -574,4 +574,19 @@ DWORD IphlpapiNotifyRouteChange2(ADDRESS_FAMILY family, PIPFORWARD_CHANGE_CALLBA
     network_callback.route_callback = callback;
     return register_network_change(NETWORK_CHANGE_ROUTE, network_callback, family, context, initial, handle);
 }
+
+VOID
+WINAPI
+InitializeIpInterfaceEntry(
+    _Inout_ PMIB_IPINTERFACE_ROW Row)
+{
+    FillMemory(Row, sizeof(*Row), 0xFF);
+    Row->Family = AF_UNSPEC;
+    Row->InterfaceLuid.Value = 0;
+    Row->InterfaceIndex = 0;
+    Row->BaseReachableTime = 0;
+    Row->RetransmitTime = 0;
+    Row->PathMtuDiscoveryTimeout = 0;
+    Row->NlMtu = 0;
+}
 #endif
