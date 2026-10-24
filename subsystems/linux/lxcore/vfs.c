@@ -733,6 +733,7 @@ LxInstanceCreate(
     Instance->RefCount = 1;
     ExInitializeFastMutex(&Instance->Lock);
     InitializeListHead(&Instance->Mounts);
+    InitializeListHead(&Instance->Ptys);
     LxEventSourceInit(&Instance->MountEvents);
     Instance->NextMountId = 20;
     Instance->NextPid = 1;

@@ -18,6 +18,14 @@ static PICO_THREAD_START LxPicoThreadStart;
 static PICO_THREAD_EXIT LxPicoThreadExit;
 static PICO_PROCESS_EXIT LxPicoProcessExit;
 
+typedef struct _LX_NT_PTY
+{
+    PLX_TTY volatile Tty;
+    volatile LONG Closed;
+} LX_NT_PTY, *PLX_NT_PTY;
+
+static PDEVICE_OBJECT LxDeviceObject;
+
 static
 VOID
 NTAPI
@@ -327,33 +335,51 @@ LxInstallTty(
     _In_ PLX_PROCESS Process,
     _In_ PLX_CREATE_PROCESS_IN In)
 {
-    HANDLE Input = NULL, Output = NULL;
+    BOOLEAN Boot = (In->Flags & LX_CREATE_BOOT) != 0;
+    PFILE_OBJECT FileObject;
+    PLX_NT_PTY Pty;
+    PLX_TTY Tty;
     NTSTATUS Status;
     LONG Fd;
 
-    PLX_TTY Tty;
-
-    Status = LxCaptureUserFile(In->StdHandles[0], FILE_READ_DATA, &Input);
-    if (NT_SUCCESS(Status))
-        Status = LxCaptureUserFile(In->StdHandles[1], FILE_WRITE_DATA, &Output);
-    if (NT_SUCCESS(Status))
-        Status = LxTtyCreate(Input, Output, In->Rows, In->Columns, &Tty);
+    Status = ObReferenceObjectByHandle(In->Pty,
+                                       FILE_READ_DATA | FILE_WRITE_DATA,
+                                       *IoFileObjectType,
+                                       UserMode,
+                                       (PVOID*)&FileObject,
+                                       NULL);
     if (!NT_SUCCESS(Status))
-    {
-        if (Input != NULL)
-            ZwClose(Input);
-        if (Output != NULL)
-            ZwClose(Output);
         return Status;
-    }
-    Tty->Instance = Process->Instance;
 
-    if ((In->Flags & LX_CREATE_BOOT) || (Process->Instance->Console == NULL))
+    Pty = (FileObject->DeviceObject == LxDeviceObject) ? FileObject->FsContext : NULL;
+    if ((Pty == NULL) || Pty->Closed || (Pty->Tty != NULL))
+    {
+        ObDereferenceObject(FileObject);
+        return STATUS_INVALID_HANDLE;
+    }
+
+    Status = LxTtyCreate(Process->Instance,
+                         (Boot ? LX_TTY_CONSOLE : 0) | LX_TTY_NT_MASTER,
+                         0,
+                         In->Rows ? In->Rows : 25,
+                         In->Columns ? In->Columns : 80,
+                         &Tty);
+    if (NT_SUCCESS(Status) && (InterlockedCompareExchangePointer((PVOID volatile *)&Pty->Tty, Tty, NULL) != NULL))
+    {
+        LxTtyMasterClose(Tty);
+        LxTtyDereference(Tty);
+        Status = STATUS_INVALID_HANDLE;
+    }
+    ObDereferenceObject(FileObject);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (Boot || (Process->Instance->Console == NULL))
     {
         LxTtyReference(Tty);
         Process->Instance->Console = Tty;
     }
-    if (!(In->Flags & LX_CREATE_BOOT))
+    if (!Boot)
     {
         LxTtyReference(Tty);
         Process->Tty = Tty;
@@ -361,27 +387,34 @@ LxInstallTty(
 
     for (Fd = 0; Fd < 3; Fd++)
     {
-        PLX_FILE File;
+        PLX_FILE File = NULL;
+        PSTR Path;
 
         if (!(In->TtyMask & (1UL << Fd)))
             continue;
 
-        File = LxTtyOpen(Tty, LX_O_RDWR);
+        if (!Boot)
+        {
+            Path = LxStrPrintf("/dev/pts/%ld", Tty->Index);
+            if (Path != NULL)
+            {
+                if (LxVfsOpenResolve(Process, LX_AT_FDCWD, Path, LX_O_RDWR | LX_O_NOCTTY, 0, 0, &File) != 0)
+                    File = NULL;
+                LxFree(Path);
+            }
+        }
         if (File == NULL)
         {
-            LxTtyDereference(Tty);
-            return STATUS_INSUFFICIENT_RESOURCES;
+            File = LxTtyOpen(Tty, LX_O_RDWR);
+            if (File == NULL)
+                return STATUS_INSUFFICIENT_RESOURCES;
+            File->Rdev = Boot ? ((5 << 8) | 1) : LxTtyDevice(Tty);
+            File->Path = Boot ? LxStrDup("/dev/console") : LxStrPrintf("/dev/pts/%ld", Tty->Index);
         }
-        File->Rdev = (In->Flags & LX_CREATE_BOOT) ? ((5 << 8) | 1) : (136 << 8);
-        File->Path = LxStrDup((In->Flags & LX_CREATE_BOOT) ? "/dev/console" : "/dev/pts/0");
         Status = LxInstallFile(Process, File, Fd);
         if (!NT_SUCCESS(Status))
-        {
-            LxTtyDereference(Tty);
             return Status;
-        }
     }
-    LxTtyDereference(Tty);
     return STATUS_SUCCESS;
 }
 
@@ -508,7 +541,7 @@ LxIoctlCreateProcess(
     Process->Sid = Process->Pid;
     LxCgroupAttach(Process, Process->Instance->RootCgroup);
 
-    if ((In->TtyMask & ~7UL) || ((In->TtyMask != 0) && ((In->TtyMask & 3) != 3)))
+    if ((In->TtyMask & ~7UL) || ((In->TtyMask != 0) && (In->Pty == NULL)))
     {
         Status = STATUS_INVALID_PARAMETER;
         goto Cleanup;
@@ -631,16 +664,140 @@ Cleanup:
 
 static
 NTSTATUS
+LxCompleteIrp(
+    _Inout_ PIRP Irp,
+    _In_ NTSTATUS Status,
+    _In_ ULONG_PTR Information)
+{
+    Irp->IoStatus.Status = Status;
+    Irp->IoStatus.Information = Information;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
+}
+
+static
+NTSTATUS
 NTAPI
-LxDispatchCreateClose(
+LxDispatchCreate(
     _In_ PDEVICE_OBJECT DeviceObject,
     _Inout_ PIRP Irp)
 {
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    UNICODE_STRING PtyName = RTL_CONSTANT_STRING(LX_PTY_FILE_NAME);
+    PFILE_OBJECT FileObject = Stack->FileObject;
+    PLX_NT_PTY Pty;
+
     UNREFERENCED_PARAMETER(DeviceObject);
 
-    Irp->IoStatus.Status = STATUS_SUCCESS;
-    Irp->IoStatus.Information = 0;
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    if (FileObject->FileName.Length == 0)
+        return LxCompleteIrp(Irp, STATUS_SUCCESS, 0);
+    if (!RtlEqualUnicodeString(&FileObject->FileName, &PtyName, TRUE))
+        return LxCompleteIrp(Irp, STATUS_OBJECT_NAME_NOT_FOUND, 0);
+
+    Pty = LxAlloc(sizeof(*Pty));
+    if (Pty == NULL)
+        return LxCompleteIrp(Irp, STATUS_INSUFFICIENT_RESOURCES, 0);
+    FileObject->FsContext = Pty;
+    return LxCompleteIrp(Irp, STATUS_SUCCESS, FILE_OPENED);
+}
+
+static
+NTSTATUS
+NTAPI
+LxDispatchCleanup(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PLX_NT_PTY Pty = IoGetCurrentIrpStackLocation(Irp)->FileObject->FsContext;
+    PLX_TTY Tty;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    if (Pty != NULL)
+    {
+        InterlockedExchange(&Pty->Closed, TRUE);
+        Tty = InterlockedCompareExchangePointer((PVOID volatile *)&Pty->Tty, NULL, NULL);
+        if (Tty != NULL)
+            LxTtyMasterClose(Tty);
+    }
+    return LxCompleteIrp(Irp, STATUS_SUCCESS, 0);
+}
+
+static
+NTSTATUS
+NTAPI
+LxDispatchClose(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PFILE_OBJECT FileObject = IoGetCurrentIrpStackLocation(Irp)->FileObject;
+    PLX_NT_PTY Pty = FileObject->FsContext;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    if (Pty != NULL)
+    {
+        FileObject->FsContext = NULL;
+        if (Pty->Tty != NULL)
+            LxTtyDereference(Pty->Tty);
+        LxFree(Pty);
+    }
+    return LxCompleteIrp(Irp, STATUS_SUCCESS, 0);
+}
+
+static
+NTSTATUS
+LxPtyStatus(
+    _In_ LONG64 Result)
+{
+    if (Result >= 0)
+        return STATUS_SUCCESS;
+    if (Result == -LX_EIO)
+        return STATUS_PIPE_BROKEN;
+    if (Result == -LX_EINTR)
+        return STATUS_CANCELLED;
+    return STATUS_UNSUCCESSFUL;
+}
+
+static
+NTSTATUS
+NTAPI
+LxDispatchReadWrite(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+    PLX_NT_PTY Pty = Stack->FileObject->FsContext;
+    PLX_TTY Tty = (Pty != NULL) ? Pty->Tty : NULL;
+    LONG64 Result;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    if (Tty == NULL)
+        return LxCompleteIrp(Irp, STATUS_INVALID_DEVICE_REQUEST, 0);
+
+    if (Stack->MajorFunction == IRP_MJ_READ)
+        Result = LxTtyMasterRead(Tty, Irp->AssociatedIrp.SystemBuffer, Stack->Parameters.Read.Length, FALSE);
+    else
+        Result = LxTtyMasterWrite(Tty, Irp->AssociatedIrp.SystemBuffer, Stack->Parameters.Write.Length, FALSE);
+
+    return LxCompleteIrp(Irp, LxPtyStatus(Result), (Result > 0) ? (ULONG_PTR)Result : 0);
+}
+
+static
+NTSTATUS
+LxIoctlPtyResize(
+    _Inout_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION Stack)
+{
+    PLX_NT_PTY Pty = Stack->FileObject->FsContext;
+    PLX_PTY_SIZE Size = Irp->AssociatedIrp.SystemBuffer;
+
+    if ((Pty == NULL) || (Pty->Tty == NULL))
+        return STATUS_INVALID_DEVICE_REQUEST;
+    if (Stack->Parameters.DeviceIoControl.InputBufferLength < sizeof(*Size))
+        return STATUS_INVALID_PARAMETER;
+    LxTtySetWinSize(Pty->Tty, Size->Rows, Size->Columns);
     return STATUS_SUCCESS;
 }
 
@@ -661,6 +818,10 @@ LxDispatchDeviceControl(
     {
         case IOCTL_LX_CREATE_PROCESS:
             Status = LxIoctlCreateProcess(Irp, Stack);
+            break;
+
+        case IOCTL_LX_PTY_RESIZE:
+            Status = LxIoctlPtyResize(Irp, Stack);
             break;
 
         default:
@@ -731,9 +892,14 @@ DriverEntry(
         return Status;
     }
 
-    DriverObject->MajorFunction[IRP_MJ_CREATE] = LxDispatchCreateClose;
-    DriverObject->MajorFunction[IRP_MJ_CLOSE] = LxDispatchCreateClose;
+    LxDeviceObject = DeviceObject;
+    DriverObject->MajorFunction[IRP_MJ_CREATE] = LxDispatchCreate;
+    DriverObject->MajorFunction[IRP_MJ_CLEANUP] = LxDispatchCleanup;
+    DriverObject->MajorFunction[IRP_MJ_CLOSE] = LxDispatchClose;
+    DriverObject->MajorFunction[IRP_MJ_READ] = LxDispatchReadWrite;
+    DriverObject->MajorFunction[IRP_MJ_WRITE] = LxDispatchReadWrite;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = LxDispatchDeviceControl;
+    DeviceObject->Flags |= DO_BUFFERED_IO;
     DeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
 
     return STATUS_SUCCESS;

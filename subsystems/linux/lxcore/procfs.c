@@ -551,9 +551,7 @@ LxProcessTtyNumber(
 {
     if (Process->Tty == NULL)
         return 0;
-    if (Process->Tty == Process->Instance->Console)
-        return (5 << 8) | 1;
-    return 136 << 8;
+    return (ULONG)LxTtyDevice(Process->Tty);
 }
 
 static
@@ -1943,11 +1941,17 @@ LxResolvePts(
         Synth->Mode = 0666;
         return 0;
     }
-    if (LxParseNumber(Components[0], &Number) && (Number == 0) && (Self->Tty != NULL))
+    if (LxParseNumber(Components[0], &Number))
     {
+        PLX_TTY Tty = LxTtyLookup(Self->Instance, Number);
+
+        if (Tty == NULL)
+            return -LX_ENOENT;
+        LxTtyDereference(Tty);
         Synth->Id = LxPtsTty;
         Synth->Type = LX_S_IFCHR;
         Synth->Mode = 0620;
+        Synth->Index = Number;
         return 0;
     }
     return -LX_ENOENT;
@@ -2581,9 +2585,17 @@ LxSynthOpen(
             {
                 LxDirAdd(&Text, LX_DT_DIR, ".");
                 LxDirAdd(&Text, LX_DT_DIR, "..");
+                ULONG Indexes[64], Count, Slot;
+
                 LxDirAdd(&Text, LX_DT_CHR, "ptmx");
-                if (Process->Tty != NULL)
-                    LxDirAdd(&Text, LX_DT_CHR, "0");
+                Count = LxTtyList(Process->Instance, Indexes, RTL_NUMBER_OF(Indexes));
+                for (Slot = 0; Slot < Count; Slot++)
+                {
+                    CHAR Name[16];
+
+                    RtlStringCbPrintfA(Name, sizeof(Name), "%lu", Indexes[Slot]);
+                    LxDirAdd(&Text, LX_DT_CHR, Name);
+                }
             }
             else
             {
@@ -2649,27 +2661,25 @@ LxSynthOpen(
     }
     else if (Synth.Id == LxPtsTty)
     {
-        if (Process->Tty == NULL)
+        PLX_TTY Tty = LxTtyLookup(Process->Instance, Synth.Index);
+
+        if (Tty == NULL)
         {
-            Error = -LX_ENXIO;
+            Error = -LX_EIO;
             goto Exit;
         }
-        File = LxTtyOpen(Process->Tty, Flags);
-        if (File == NULL)
-        {
-            Error = -LX_ENOMEM;
+        Error = LxTtyOpenSlave(Process, Tty, Flags, &File);
+        LxTtyDereference(Tty);
+        if (Error != 0)
             goto Exit;
-        }
-        File->Rdev = 136 << 8;
-        File->Path = LxStrDup(Node->Path);
-        *Result = File;
-        File = NULL;
-        goto Exit;
+        File->Ino = LxHashPath(Node->Mount->Id, Node->Relative);
     }
     else if (Synth.Id == LxPtsPtmx)
     {
-        Error = -LX_ENXIO;
-        goto Exit;
+        Error = LxPtmxOpen(Process, Flags, &File);
+        if (Error != 0)
+            goto Exit;
+        File->Ino = LxHashPath(Node->Mount->Id, Node->Relative);
     }
     else
     {
@@ -2824,9 +2834,21 @@ LxSynthStat(
     Stat->BlkSize = 4096;
     Stat->Dev = Node->Mount->Dev;
     if (Synth.Id == LxPtsTty)
-        Stat->Rdev = (136 << 8);
+    {
+        PLX_TTY Tty = LxTtyLookup(Process->Instance, Synth.Index);
+
+        if (Tty == NULL)
+            return -LX_ENOENT;
+        Stat->Rdev = LxTtyDevice(Tty);
+        Stat->Uid = Tty->Uid;
+        Stat->Gid = Tty->Gid;
+        LxTtyDereference(Tty);
+    }
     else if (Synth.Id == LxPtsPtmx)
+    {
         Stat->Rdev = (5 << 8) | 2;
+        Stat->Gid = 5;
+    }
     if (Synth.Type == LX_S_IFLNK && Synth.LinkTarget != NULL)
         Stat->Size = (LONG64)strlen(Synth.LinkTarget);
 

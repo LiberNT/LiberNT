@@ -1,0 +1,205 @@
+/*
+ * PROJECT:     LiberNT Linux Subsystem
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Linux terminal: the login shell of the Linux root on a pseudo-terminal
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <windef.h>
+#include <winbase.h>
+
+#include "../include/lxioctl.h"
+#include "../include/lxlaunch.h"
+
+#define LX_PASSWD_MAX (1024 * 1024)
+
+typedef struct _LX_ACCOUNT
+{
+    CHAR Name[64];
+    CHAR Home[MAX_PATH];
+    CHAR Shell[MAX_PATH];
+} LX_ACCOUNT, *PLX_ACCOUNT;
+
+static
+VOID
+LxUsage(VOID)
+{
+    fwprintf(stderr,
+             L"Usage: lxterm [-n|-j] [-r rootdir]\n"
+             L"  -n             Start a new Linux instance instead of joining the running one\n"
+             L"  -j             Only join the running Linux instance; fail when there is none\n"
+             L"  -r rootdir     Windows directory used as the Linux root (default: current directory)\n");
+}
+
+static
+VOID
+LxCopyField(
+    _Out_writes_z_(Size) PCHAR Target,
+    _In_ SIZE_T Size,
+    _In_ PCSTR Field)
+{
+    if (strlen(Field) < Size)
+        strcpy(Target, Field);
+}
+
+static
+VOID
+LxLookupAccount(
+    _In_ PCWSTR Root,
+    _In_ PCSTR Uid,
+    _Inout_ PLX_ACCOUNT Account)
+{
+    WCHAR Path[MAX_PATH];
+    HANDLE File;
+    PCHAR Data, Line, Next;
+    DWORD Size, Read;
+
+    if (!GetFullPathNameW(Root, MAX_PATH, Path, NULL) ||
+        (wcslen(Path) + wcslen(L"\\etc\\passwd") >= MAX_PATH))
+    {
+        return;
+    }
+    wcscat(Path, L"\\etc\\passwd");
+
+    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    Size = GetFileSize(File, NULL);
+    Data = ((Size != INVALID_FILE_SIZE) && (Size < LX_PASSWD_MAX)) ? malloc(Size + 1) : NULL;
+    if ((Data == NULL) || !ReadFile(File, Data, Size, &Read, NULL))
+    {
+        free(Data);
+        CloseHandle(File);
+        return;
+    }
+    CloseHandle(File);
+    Data[Read] = '\0';
+
+    for (Line = Data; Line != NULL; Line = Next)
+    {
+        PCHAR Fields[7];
+        int Count = 0;
+        PCHAR Cursor;
+
+        Next = strchr(Line, '\n');
+        if (Next != NULL)
+            *Next++ = '\0';
+
+        for (Cursor = Line; Count < 7; Count++)
+        {
+            Fields[Count] = Cursor;
+            Cursor = strchr(Cursor, ':');
+            if (Cursor == NULL)
+            {
+                Count++;
+                break;
+            }
+            *Cursor++ = '\0';
+        }
+        if ((Count < 7) || (strcmp(Fields[2], Uid) != 0))
+            continue;
+
+        Cursor = Fields[6] + strcspn(Fields[6], "\r");
+        *Cursor = '\0';
+        LxCopyField(Account->Name, sizeof(Account->Name), Fields[0]);
+        if (Fields[5][0] == '/')
+            LxCopyField(Account->Home, sizeof(Account->Home), Fields[5]);
+        if (Fields[6][0] == '/')
+            LxCopyField(Account->Shell, sizeof(Account->Shell), Fields[6]);
+        break;
+    }
+    free(Data);
+}
+
+static
+BOOL
+LxEnvPrintf(
+    _Inout_ PLX_STRINGS Env,
+    _In_ PCSTR Name,
+    _In_ PCSTR Value)
+{
+    SIZE_T Length = strlen(Name) + strlen(Value) + 2;
+    PCHAR Assignment = malloc(Length);
+    BOOL Result;
+
+    if (Assignment == NULL)
+        return FALSE;
+    _snprintf(Assignment, Length, "%s=%s", Name, Value);
+    Result = LxEnvSet(Env, Assignment);
+    free(Assignment);
+    return Result;
+}
+
+int
+wmain(
+    int argc,
+    WCHAR *argv[])
+{
+    LX_ACCOUNT Account = { "root", "/root", "/bin/sh" };
+    LX_LAUNCH Launch;
+    PCSTR Base;
+    PCHAR Argv0;
+    int Index;
+
+    ZeroMemory(&Launch, sizeof(Launch));
+    Launch.Name = L"lxterm";
+    Launch.Root = L".";
+    Launch.Terminal = TRUE;
+
+    for (Index = 1; Index < argc; Index++)
+    {
+        if (wcscmp(argv[Index], L"-n") == 0)
+        {
+            Launch.Flags |= LX_CREATE_NEW_INSTANCE;
+        }
+        else if (wcscmp(argv[Index], L"-j") == 0)
+        {
+            Launch.Flags |= LX_CREATE_JOIN;
+        }
+        else if ((wcscmp(argv[Index], L"-r") == 0) && (Index + 1 < argc))
+        {
+            Launch.Root = argv[++Index];
+        }
+        else if ((wcscmp(argv[Index], L"-h") == 0) || (wcscmp(argv[Index], L"/?") == 0))
+        {
+            LxUsage();
+            return 0;
+        }
+        else
+        {
+            LxUsage();
+            return 1;
+        }
+    }
+
+    LxLookupAccount(Launch.Root, "0", &Account);
+
+    Base = strrchr(Account.Shell, '/');
+    Base = (Base != NULL) ? Base + 1 : Account.Shell;
+    Argv0 = malloc(strlen(Base) + 2);
+    if (Argv0 == NULL)
+        return 1;
+    Argv0[0] = '-';
+    strcpy(Argv0 + 1, Base);
+
+    Launch.FileName = Account.Shell;
+    Launch.Cwd = Account.Home;
+    if (!LxStringsAdd(&Launch.Args, Argv0) ||
+        !LxEnvSet(&Launch.Env, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin") ||
+        !LxEnvPrintf(&Launch.Env, "HOME", Account.Home) ||
+        !LxEnvPrintf(&Launch.Env, "USER", Account.Name) ||
+        !LxEnvPrintf(&Launch.Env, "LOGNAME", Account.Name) ||
+        !LxEnvPrintf(&Launch.Env, "SHELL", Account.Shell) ||
+        !LxEnvSet(&Launch.Env, "TERM=xterm-256color") ||
+        !LxEnvSet(&Launch.Env, "COLORTERM=truecolor") ||
+        !LxEnvSet(&Launch.Env, "LANG=C.UTF-8"))
+    {
+        return 1;
+    }
+
+    return LxLaunch(&Launch);
+}
