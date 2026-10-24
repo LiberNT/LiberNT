@@ -21,11 +21,14 @@ endif()
 
 add_library(genincdata MODULE genincdata.c)
 target_compile_definitions(genincdata PRIVATE NTDDI_VERSION=${REACTOS_TARGET_NTDDI})
+if(MSVC AND LTCG)
+    target_compile_options(genincdata PRIVATE /GL-)
+endif()
 
 set_entrypoint(genincdata 0)
 add_dependencies(genincdata bugcodes psdk xdk)
 
-if(MSVC)
+if(MSVC AND NOT ARCH STREQUAL "arm64")
     set(OPT_MS "-ms")
 else()
     set(OPT_MS "")

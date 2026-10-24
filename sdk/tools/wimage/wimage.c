@@ -29,6 +29,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _MSC_VER
+#define strtok_r strtok_s
+#endif
+
 /* ---- Command enum ---- */
 
 enum Command {

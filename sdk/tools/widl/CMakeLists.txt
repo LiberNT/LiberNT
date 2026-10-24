@@ -38,7 +38,7 @@ list(APPEND SOURCE
     ../port/mkstemps.c)
 
 add_definitions(-DINT16=SHORT -DLANG_SCOTTISH_GAELIC=0x91 -DINCLUDEDIR="unused" -DLIBDIR="unused")
-include_directories(${REACTOS_SOURCE_DIR}/sdk/tools/wpp/)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/tools/wpp/ ${REACTOS_SOURCE_DIR}/sdk/include/host/widl)
 add_host_tool(widl ${SOURCE})
 target_link_libraries(widl PRIVATE host_includes wpphost)
 
@@ -54,6 +54,8 @@ if(MSVC)
 
     # Disable warning "warning C4090: 'function': different 'const' qualifiers"
     target_compile_options(widl PRIVATE "/wd4090")
+
+    target_compile_options(widl PRIVATE "/wd4098" "/wd4715")
 
     target_compile_options(widl PRIVATE "-WX")
 endif()
