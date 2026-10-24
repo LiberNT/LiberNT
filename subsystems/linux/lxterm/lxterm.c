@@ -24,7 +24,7 @@
 #include "../include/lxappid.h"
 #include "lxinstall.h"
 
-#define LX_PASSWD_MAX (1024 * 1024)
+#define LX_USER_GROUPS_MAX 3
 
 static
 VOID
@@ -101,86 +101,6 @@ LxDefaultRoot(
 }
 
 static
-VOID
-LxCopyField(
-    _Out_writes_z_(Size) PCHAR Target,
-    _In_ SIZE_T Size,
-    _In_ PCSTR Field)
-{
-    if (strlen(Field) < Size)
-        strcpy(Target, Field);
-}
-
-static
-VOID
-LxLookupAccount(
-    _In_ PCWSTR Root,
-    _In_ PCSTR Uid,
-    _Inout_ PLX_ACCOUNT Account)
-{
-    WCHAR Path[MAX_PATH];
-    HANDLE File;
-    PCHAR Data, Line, Next;
-    DWORD Size, Read;
-
-    if (!GetFullPathNameW(Root, MAX_PATH, Path, NULL) ||
-        (wcslen(Path) + wcslen(L"\\etc\\passwd") >= MAX_PATH))
-    {
-        return;
-    }
-    wcscat(Path, L"\\etc\\passwd");
-
-    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-    if (File == INVALID_HANDLE_VALUE)
-        return;
-    Size = GetFileSize(File, NULL);
-    Data = ((Size != INVALID_FILE_SIZE) && (Size < LX_PASSWD_MAX)) ? malloc(Size + 1) : NULL;
-    if ((Data == NULL) || !ReadFile(File, Data, Size, &Read, NULL))
-    {
-        free(Data);
-        CloseHandle(File);
-        return;
-    }
-    CloseHandle(File);
-    Data[Read] = '\0';
-
-    for (Line = Data; Line != NULL; Line = Next)
-    {
-        PCHAR Fields[7];
-        int Count = 0;
-        PCHAR Cursor;
-
-        Next = strchr(Line, '\n');
-        if (Next != NULL)
-            *Next++ = '\0';
-
-        for (Cursor = Line; Count < 7; Count++)
-        {
-            Fields[Count] = Cursor;
-            Cursor = strchr(Cursor, ':');
-            if (Cursor == NULL)
-            {
-                Count++;
-                break;
-            }
-            *Cursor++ = '\0';
-        }
-        if ((Count < 7) || (strcmp(Fields[2], Uid) != 0))
-            continue;
-
-        Cursor = Fields[6] + strcspn(Fields[6], "\r");
-        *Cursor = '\0';
-        LxCopyField(Account->Name, sizeof(Account->Name), Fields[0]);
-        if (Fields[5][0] == '/')
-            LxCopyField(Account->Home, sizeof(Account->Home), Fields[5]);
-        if (Fields[6][0] == '/')
-            LxCopyField(Account->Shell, sizeof(Account->Shell), Fields[6]);
-        break;
-    }
-    free(Data);
-}
-
-static
 BOOL
 LxRootPath(
     _In_ PCWSTR Root,
@@ -195,79 +115,174 @@ LxRootPath(
 
 static
 BOOL
-LxDefaultUser(
-    _In_ PCWSTR Root,
-    _Out_writes_z_(Size) PCHAR Name,
-    _In_ SIZE_T Size)
+LxReadAnswer(
+    _Out_writes_z_(Size) PCHAR Answer,
+    _In_ SIZE_T Size,
+    _In_ BOOL Secret)
 {
-    WCHAR Path[MAX_PATH];
-    CHAR Data[4096];
-    PCHAR Line, Next;
-    BOOL InUser = FALSE;
-    DWORD Read = 0;
-    HANDLE File;
+    HANDLE Input = GetStdHandle(STD_INPUT_HANDLE);
+    WCHAR Line[256];
+    DWORD Mode = 0, Read = 0;
+    SIZE_T Length = 0;
+    CHAR Byte;
 
-    Name[0] = '\0';
-    if (!LxRootPath(Root, L"\\etc\\wsl.conf", Path))
-        return FALSE;
-    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-    if (File == INVALID_HANDLE_VALUE)
-        return FALSE;
-    if (!ReadFile(File, Data, sizeof(Data) - 1, &Read, NULL))
-        Read = 0;
-    CloseHandle(File);
-    Data[Read] = '\0';
-
-    for (Line = Data; Line != NULL; Line = Next)
+    fflush(stdout);
+    if (!GetConsoleMode(Input, &Mode))
     {
-        PCHAR Value;
-
-        Next = strchr(Line, '\n');
-        if (Next != NULL)
-            *Next++ = '\0';
-        Line[strcspn(Line, "\r")] = '\0';
-        Line += strspn(Line, " \t");
-        if (Line[0] == '[')
+        while (ReadFile(Input, &Byte, 1, &Read, NULL) && (Read == 1) && (Byte != '\n'))
         {
-            InUser = (strncmp(Line, "[user]", 6) == 0);
-            continue;
+            if ((Byte != '\r') && (Length + 1 < Size))
+                Answer[Length++] = Byte;
         }
-        if (!InUser || (strncmp(Line, "default", 7) != 0))
-            continue;
-        Value = Line + 7 + strspn(Line + 7, " \t");
-        if (*Value != '=')
-            continue;
-        Value++;
-        Value += strspn(Value, " \t");
-        Value[strcspn(Value, " \t#")] = '\0';
-        if ((Value[0] == '\0') || (strlen(Value) >= Size) ||
-            (Value[strspn(Value, "abcdefghijklmnopqrstuvwxyz0123456789_-")] != '\0'))
-        {
-            return FALSE;
-        }
-        strcpy(Name, Value);
-        return TRUE;
+        Answer[Length] = '\0';
+        return (Read == 1) || (Length != 0);
     }
-    return FALSE;
+    if (Secret)
+        SetConsoleMode(Input, Mode & ~ENABLE_ECHO_INPUT);
+    if (!ReadConsoleW(Input, Line, ARRAYSIZE(Line) - 1, &Read, NULL))
+        Read = 0;
+    if (Secret)
+    {
+        SetConsoleMode(Input, Mode);
+        wprintf(L"\n");
+    }
+    if (Read == 0)
+        return FALSE;
+    Line[Read] = UNICODE_NULL;
+    Line[wcscspn(Line, L"\r\n")] = UNICODE_NULL;
+    return WideCharToMultiByte(CP_UTF8, 0, Line, -1, Answer, (int)Size, NULL, NULL) > 0;
+}
+
+static
+int
+LxRunRootTool(
+    _In_ PCWSTR Root,
+    _In_ PCSTR FileName,
+    _In_reads_(Count) PCSTR *Args,
+    _In_ ULONG Count,
+    _In_opt_ PCSTR Input)
+{
+    LX_LAUNCH Tool;
+    ULONG Index;
+
+    ZeroMemory(&Tool, sizeof(Tool));
+    Tool.Name = L"lxterm";
+    Tool.Root = Root;
+    Tool.Cwd = "/";
+    Tool.FileName = FileName;
+    Tool.Input = Input;
+    if (!LxEnvSet(&Tool.Env, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"))
+        return 1;
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (!LxStringsAdd(&Tool.Args, Args[Index]))
+            return 1;
+    }
+    return LxLaunch(&Tool);
 }
 
 static
 BOOL
-LxEnvPrintf(
-    _Inout_ PLX_STRINGS Env,
-    _In_ PCSTR Name,
-    _In_ PCSTR Value)
+LxValidUserName(
+    _In_ PCSTR Name)
 {
-    SIZE_T Length = strlen(Name) + strlen(Value) + 2;
-    PCHAR Assignment = malloc(Length);
-    BOOL Result;
+    SIZE_T Length = strlen(Name);
 
-    if (Assignment == NULL)
+    return (Length > 0) && (Length <= 32) &&
+           (((Name[0] >= 'a') && (Name[0] <= 'z')) || (Name[0] == '_')) &&
+           (Name[strspn(Name, "abcdefghijklmnopqrstuvwxyz0123456789_-")] == '\0');
+}
+
+static
+BOOL
+LxCreateDefaultUser(
+    _In_ PCWSTR Root,
+    _Out_writes_z_(Size) PCHAR Name,
+    _In_ SIZE_T Size)
+{
+    static const PCSTR Wanted[LX_USER_GROUPS_MAX] = { "adm", "sudo", "users" };
+    CHAR Password[256], Again[256], Groups[64] = "", Entry[512], Config[128];
+    PCSTR Args[8];
+    LX_ACCOUNT Existing;
+    ULONG Count = 0, Index, Gid;
+    int Try;
+
+    wprintf(L"Create the default user account of this Linux system.\n");
+    wprintf(L"It does not need to match your Windows user name.\n");
+    for (Try = 0;; Try++)
+    {
+        if (Try == 3)
+            return FALSE;
+        wprintf(L"New user name: ");
+        if (!LxReadAnswer(Name, Size, FALSE))
+            return FALSE;
+        if (!LxValidUserName(Name))
+        {
+            wprintf(L"Use lowercase letters, digits, '_' or '-', starting with a letter.\n");
+            continue;
+        }
+        if (LxRootAccount(Root, Name, 0, &Existing))
+        {
+            wprintf(L"The user %S already exists.\n", Name);
+            continue;
+        }
+        break;
+    }
+    for (Try = 0;; Try++)
+    {
+        if (Try == 3)
+            return FALSE;
+        wprintf(L"New password: ");
+        if (!LxReadAnswer(Password, sizeof(Password), TRUE))
+            return FALSE;
+        wprintf(L"Retype new password: ");
+        if (!LxReadAnswer(Again, sizeof(Again), TRUE))
+            return FALSE;
+        if ((Password[0] != '\0') && (strcmp(Password, Again) == 0) && (strchr(Password, ':') == NULL))
+            break;
+        wprintf(L"The passwords do not match or are empty.\n");
+    }
+
+    for (Index = 0; Index < LX_USER_GROUPS_MAX; Index++)
+    {
+        if (LxRootGroupId(Root, Wanted[Index], &Gid))
+        {
+            if (Groups[0] != '\0')
+                strcat(Groups, ",");
+            strcat(Groups, Wanted[Index]);
+        }
+    }
+    Args[Count++] = "useradd";
+    Args[Count++] = "-m";
+    Args[Count++] = "-s";
+    Args[Count++] = LxRootHasFile(Root, L"\\usr\\bin\\bash") ? "/bin/bash" : "/bin/sh";
+    if (Groups[0] != '\0')
+    {
+        Args[Count++] = "-G";
+        Args[Count++] = Groups;
+    }
+    Args[Count++] = Name;
+    if (LxRunRootTool(Root, "/usr/sbin/useradd", Args, Count, NULL) != 0)
+    {
+        wprintf(L"The user account could not be created.\n");
         return FALSE;
-    _snprintf(Assignment, Length, "%s=%s", Name, Value);
-    Result = LxEnvSet(Env, Assignment);
-    free(Assignment);
-    return Result;
+    }
+
+    _snprintf(Entry, sizeof(Entry), "%s:%s\n", Name, Password);
+    Entry[sizeof(Entry) - 1] = '\0';
+    SecureZeroMemory(Password, sizeof(Password));
+    SecureZeroMemory(Again, sizeof(Again));
+    Args[0] = "chpasswd";
+    Index = LxRunRootTool(Root, "/usr/sbin/chpasswd", Args, 1, Entry);
+    SecureZeroMemory(Entry, sizeof(Entry));
+    if (Index != 0)
+        wprintf(L"The password could not be set.\n");
+
+    _snprintf(Config, sizeof(Config), "[user]\ndefault=%s\n", Name);
+    Config[sizeof(Config) - 1] = '\0';
+    if (!LxAppendRootFile(Root, L"\\etc\\wsl.conf", Config))
+        wprintf(L"The default user could not be saved in /etc/wsl.conf.\n");
+    return TRUE;
 }
 
 static
@@ -307,10 +322,10 @@ wmain(
     int argc,
     WCHAR *argv[])
 {
-    LX_ACCOUNT Account = { .Name = "root", .Home = "/root", .Shell = "/bin/sh" };
+    LX_ACCOUNT Account;
     static WCHAR DefaultRoot[MAX_PATH], FullRoot[MAX_PATH];
-    WCHAR SetupPath[MAX_PATH];
     CHAR UserName[64];
+    BOOL Installed;
     PCWSTR Url = NULL;
     BOOL AssumeYes = FALSE;
     LX_LAUNCH Launch;
@@ -368,7 +383,8 @@ wmain(
         Launch.Root = DefaultRoot;
     }
     LxSetTerminalAppId(Launch.Root);
-    if (!LxRootInstalled(Launch.Root) && (LxInstallRoot(Launch.Root, Url, AssumeYes) != 0))
+    Installed = !LxRootInstalled(Launch.Root);
+    if (Installed && (LxInstallRoot(Launch.Root, Url, AssumeYes) != 0))
     {
         LxPauseIfOwnConsole();
         return 1;
@@ -377,28 +393,27 @@ wmain(
         LxKeepResolvConf(FullRoot);
     LxStartWindowHost(Launch.Root);
 
-    if (!LxEnvSet(&Launch.Env, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin") ||
-        !LxEnvSet(&Launch.Env, "TERM=xterm-256color") ||
-        !LxEnvSet(&Launch.Env, "COLORTERM=truecolor") ||
-        !LxEnvSet(&Launch.Env, "LANG=C.UTF-8"))
+    if (!LxEnvSet(&Launch.Env, "TERM=xterm-256color") ||
+        !LxEnvSet(&Launch.Env, "COLORTERM=truecolor"))
     {
         return 1;
     }
 
-    if (LxDefaultUser(Launch.Root, UserName, sizeof(UserName)))
+    if (!LxRootDefaultUser(Launch.Root, UserName, sizeof(UserName)) &&
+        (!Installed || !LxCreateDefaultUser(Launch.Root, UserName, sizeof(UserName))))
     {
-        Launch.FileName = "/usr/sbin/runuser";
-        Launch.Cwd = "/";
-        if (!LxStringsAdd(&Launch.Args, "runuser") || !LxStringsAdd(&Launch.Args, "-l") ||
-            !LxStringsAdd(&Launch.Args, "-w") || !LxStringsAdd(&Launch.Args, "COLORTERM") ||
-            !LxStringsAdd(&Launch.Args, UserName))
-        {
-            return 1;
-        }
-        return LxLaunch(&Launch);
+        UserName[0] = '\0';
     }
-
-    LxLookupAccount(Launch.Root, "0", &Account);
+    if (((UserName[0] == '\0') || !LxRootAccount(Launch.Root, UserName, 0, &Account)) &&
+        !LxRootAccount(Launch.Root, NULL, 0, &Account))
+    {
+        ZeroMemory(&Account, sizeof(Account));
+        strcpy(Account.Name, "root");
+        strcpy(Account.Home, "/root");
+        strcpy(Account.Shell, "/bin/sh");
+    }
+    if (!LxSetSession(&Launch, Launch.Root, &Account))
+        return 1;
 
     Base = strrchr(Account.Shell, '/');
     Base = (Base != NULL) ? Base + 1 : Account.Shell;
@@ -407,23 +422,7 @@ wmain(
         return 1;
     Argv0[0] = '-';
     strcpy(Argv0 + 1, Base);
-
     Launch.FileName = Account.Shell;
-    Launch.Cwd = Account.Home;
-    if (!LxEnvPrintf(&Launch.Env, "HOME", Account.Home) ||
-        !LxEnvPrintf(&Launch.Env, "USER", Account.Name) ||
-        !LxEnvPrintf(&Launch.Env, "LOGNAME", Account.Name) ||
-        !LxEnvPrintf(&Launch.Env, "SHELL", Account.Shell))
-    {
-        return 1;
-    }
-    if (LxRootPath(Launch.Root, L"\\usr\\local\\lib\\libernt\\user-setup", SetupPath) &&
-        (GetFileAttributesW(SetupPath) != INVALID_FILE_ATTRIBUTES))
-    {
-        Launch.FileName = "/bin/sh";
-        return (LxStringsAdd(&Launch.Args, "sh") && LxStringsAdd(&Launch.Args, "/usr/local/lib/libernt/user-setup"))
-               ? LxLaunch(&Launch) : 1;
-    }
     if (!LxStringsAdd(&Launch.Args, Argv0))
         return 1;
 

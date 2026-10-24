@@ -1618,6 +1618,32 @@ LxCleanupInstall(
 }
 
 BOOL
+LxAppendRootFile(
+    _In_ PCWSTR Root,
+    _In_ PCWSTR Relative,
+    _In_ PCSTR Text)
+{
+    WCHAR Path[MAX_PATH];
+    HANDLE File;
+    DWORD Written;
+    BOOL Created, Success;
+
+    if (!GetFullPathNameW(Root, MAX_PATH, Path, NULL) || (wcslen(Path) + wcslen(Relative) >= MAX_PATH))
+        return FALSE;
+    wcscat(Path, Relative);
+    File = CreateFileW(Path, FILE_APPEND_DATA | FILE_WRITE_EA | SYNCHRONIZE, FILE_SHARE_READ, NULL, OPEN_ALWAYS,
+                       FILE_ATTRIBUTE_NORMAL, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+    Created = (GetLastError() != ERROR_ALREADY_EXISTS);
+    Success = WriteFile(File, Text, (DWORD)strlen(Text), &Written, NULL) && (Written == strlen(Text));
+    if (Success && Created)
+        Success = NT_SUCCESS(LxSetAttributes(File, LX_S_IFREG | 0644, 0, 0, 0, 0));
+    CloseHandle(File);
+    return Success;
+}
+
+BOOL
 LxRootInstalled(
     _In_ PCWSTR Root)
 {

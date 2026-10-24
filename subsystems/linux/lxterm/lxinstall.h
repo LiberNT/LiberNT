@@ -22,4 +22,5 @@ ULONG64 LxGzPosition(_In_ PLX_GZ Gz);
 VOID LxGzClose(_In_ PLX_GZ Gz);
 
 BOOL LxRootInstalled(_In_ PCWSTR Root);
+BOOL LxAppendRootFile(_In_ PCWSTR Root, _In_ PCWSTR Relative, _In_ PCSTR Text);
 int LxInstallRoot(_In_ PCWSTR Root, _In_opt_ PCWSTR Url, _In_ BOOL AssumeYes);
