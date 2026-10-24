@@ -1862,6 +1862,29 @@ LxUnixDeliverControl(
 }
 
 static
+VOID
+LxUnixWakeWriters(
+    _In_ PLX_UNIX_SOCKET Socket)
+{
+    PLX_UNIX_SOCKET Peer;
+
+    LxPollWake(&Socket->Poll, LX_POLLOUT | LX_POLLWRNORM);
+    if (Socket->Type == LX_SOCK_DGRAM)
+        return;
+
+    LxUnixLock(Socket);
+    Peer = Socket->Peer;
+    if (Peer != NULL)
+        LxUnixReference(Peer);
+    LxUnixUnlock(Socket);
+    if (Peer != NULL)
+    {
+        LxPollWake(&Peer->Poll, LX_POLLOUT | LX_POLLWRNORM);
+        LxUnixDereference(Peer);
+    }
+}
+
+static
 LONG64
 LxUnixRecvInternal(
     _In_ PLX_PROCESS Process,
@@ -1950,8 +1973,8 @@ LxUnixRecvInternal(
                 LxUnixUnlock(Socket);
                 if (Consumed != NULL)
                     LxUnixFreeMessage(Consumed);
-                if (Socket->Peer != NULL)
-                    LxPollWake(&Socket->Poll, LX_POLLOUT | LX_POLLWRNORM);
+                if (!Peek)
+                    LxUnixWakeWriters(Socket);
                 if (Peek || (Done >= Total) || !(Options & LX_MSG_WAITALL))
                 {
                     if ((Done < Total) && !Peek && !(Options & LX_MSG_WAITALL))
@@ -1996,8 +2019,10 @@ LxUnixRecvInternal(
             }
             Done = (Options & LX_MSG_TRUNC) ? Message->Length : min(Message->Length, Total);
             if (!Peek)
+            {
                 LxUnixFreeMessage(Message);
-            LxPollWake(&Socket->Poll, LX_POLLOUT | LX_POLLWRNORM);
+                LxUnixWakeWriters(Socket);
+            }
             break;
         }
 
