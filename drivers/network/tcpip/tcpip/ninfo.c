@@ -14,6 +14,7 @@
 
 #define IP_ROUTE_TYPE_ADD 3
 #define IP_ROUTE_TYPE_DEL 2
+#define IP_NOT_FORWARDING 2
 
 /* Get IPRouteEntry s for each of the routes in the system */
 TDI_STATUS InfoTdiQueryGetRouteTable( PIP_INTERFACE IF, PNDIS_BUFFER Buffer, PUINT BufferSize ) {
@@ -202,6 +203,9 @@ TDI_STATUS InfoTdiQueryGetIPSnmpInfo( TDIEntityID ID,
     TI_DbgPrint(DEBUG_INFO, ("Called.\n"));
 
     RtlZeroMemory(&SnmpInfo, sizeof(SnmpInfo));
+
+    SnmpInfo.ipsi_forwarding = IP_NOT_FORWARDING;
+    SnmpInfo.ipsi_defaultttl = IP_DEFAULT_TTL;
 
     SnmpInfo.ipsi_numif = IfCount;
     SnmpInfo.ipsi_numaddr = max(CountInterfaceAddresses(IF), 1);
