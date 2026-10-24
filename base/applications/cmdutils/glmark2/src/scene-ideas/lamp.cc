@@ -238,7 +238,7 @@ Lamp::draw(Stack4& modelview, Stack4& projection, const vec4* lightPositions)
     static const unsigned int sus(sizeof(unsigned short));
     for (unsigned int i = 0; i < 5; i++)
     {
-        glDrawElements(GL_TRIANGLE_STRIP, 26, GL_UNSIGNED_SHORT, reinterpret_cast<const GLvoid*>(i * 26 * sus));
+        glDrawElements(GL_TRIANGLE_STRIP, 26, GL_UNSIGNED_SHORT, reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(i * 26 * sus)));
     }
     glDisableVertexAttribArray(normalIndex);
     glDisableVertexAttribArray(vertexIndex);

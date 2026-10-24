@@ -1181,7 +1181,7 @@ GetBcdPartitionElement(
     union
     {
         DRIVE_LAYOUT_INFORMATION_EX Layout;
-        UCHAR Buffer[FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry[128])];
+        UCHAR Buffer[FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry) + 128 * sizeof(PARTITION_INFORMATION_EX)];
     } Drive;
     PARTITION_INFORMATION_EX Partition;
     IO_STATUS_BLOCK IoStatusBlock;
@@ -1431,7 +1431,7 @@ GetFirmwarePartitionNode(
     union
     {
         DRIVE_LAYOUT_INFORMATION_EX Layout;
-        UCHAR Buffer[FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry[128])];
+        UCHAR Buffer[FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry) + 128 * sizeof(PARTITION_INFORMATION_EX)];
     } Drive;
     PARTITION_INFORMATION_EX Partition;
     DISK_GEOMETRY Geometry;

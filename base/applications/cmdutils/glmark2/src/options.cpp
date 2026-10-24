@@ -23,6 +23,9 @@
 
 #include <cstring>
 #include <cstdio>
+#include <errno.h>
+#include <stdlib.h>
+#include <stdexcept>
 #include <getopt.h>
 
 #include "options.h"
@@ -197,7 +200,10 @@ offscreen_from_str(std::string const& str)
     int ret = 0;
     try
     {
-        ret = std::stol(str);
+        char *end;
+        errno = 0;
+        ret = strtol(str.c_str(), &end, 10);
+        if (end == str.c_str() || errno == ERANGE) throw std::runtime_error{""};
         if (ret < 0) throw std::runtime_error{""};
     }
     catch (...)

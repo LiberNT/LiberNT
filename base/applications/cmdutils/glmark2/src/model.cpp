@@ -371,13 +371,13 @@ Model::calculate_normals()
  * @return whether loading succeeded
  */
 bool
-Model::load_3ds(const std::filesystem::path &filename)
+Model::load_3ds(const std::string &filename)
 {
     Object *object(0);
 
     Log::debug("Loading model from 3ds file '%s'\n", filename.c_str());
 
-    const std::unique_ptr<std::istream> input_file_ptr(Util::get_resource(filename));
+    const Util::ResourcePtr input_file_ptr(Util::get_resource(filename));
     std::istream& input_file(*input_file_ptr);
 
     if (!input_file) {
@@ -693,11 +693,11 @@ Model::obj_get_face(const string& source, Face& f)
  * @return whether loading succeeded
  */
 bool
-Model::load_obj(const std::filesystem::path &filename)
+Model::load_obj(const std::string &filename)
 {
     Log::debug("Loading model from obj file '%s'\n", filename.c_str());
 
-    const std::unique_ptr<std::istream> input_file_ptr(Util::get_resource(filename));
+    const Util::ResourcePtr input_file_ptr(Util::get_resource(filename));
     std::istream& inputFile(*input_file_ptr);
     if (!inputFile)
     {
@@ -829,7 +829,7 @@ Model::find_models()
     {
         return ModelPrivate::modelMap;
     }
-    vector<std::filesystem::path> pathVec;
+    vector<string> pathVec;
     string dataDir(Options::data_path + "/models");
     Util::list_files(dataDir, pathVec);
 #ifdef GLMARK_EXTRAS_PATH
@@ -842,8 +842,13 @@ Model::find_models()
     // so the scene can decide which ones to use.
     for(const auto &curPath : pathVec)
     {
-        auto ext = curPath.extension();
-        auto name = curPath.stem().string();
+        string name(curPath.substr(curPath.find_last_of("/\\") + 1));
+        string ext;
+        string::size_type dot = name.rfind('.');
+        if (dot != string::npos && dot != 0) {
+            ext = name.substr(dot);
+            name.erase(dot);
+        }
 
         ModelFormat format(MODEL_INVALID);
         if (ext == ".3ds")
@@ -851,8 +856,7 @@ Model::find_models()
         else if (ext == ".obj")
             format = MODEL_OBJ;
 
-        std::unique_ptr<ModelDescriptor> desc(new ModelDescriptor(name, format, curPath));
-        ModelPrivate::modelMap.insert(std::make_pair(name, std::move(desc)));
+        ModelPrivate::modelMap.insert(std::make_pair(name, ModelDescriptor(name, format, curPath)));
     }
 
     return ModelPrivate::modelMap;
@@ -878,7 +882,7 @@ Model::load(const string& modelName)
         return retVal;
     }
 
-    ModelDescriptor* desc = modelIt->second.get();
+    const ModelDescriptor* desc = &modelIt->second;
     switch (desc->format())
     {
         case MODEL_INVALID:

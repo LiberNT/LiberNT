@@ -23,8 +23,8 @@ namespace
 {
 
 Status HashFileHandleSha256Streamed(HANDLE file,
-                                    std::array<std::uint8_t, 32> &digest,
-                                    const std::uint8_t *expectedBytes = nullptr,
+                                    uint8_t (&digest)[32],
+                                    const uint8_t *expectedBytes = nullptr,
                                     std::size_t expectedSize = 0)
 {
     LARGE_INTEGER beginning{};
@@ -33,7 +33,7 @@ Status HashFileHandleSha256Streamed(HANDLE file,
 
     BCRYPT_ALG_HANDLE algorithm = nullptr;
     BCRYPT_HASH_HANDLE hash = nullptr;
-    std::vector<std::uint8_t> object;
+    std::vector<uint8_t> object;
     NTSTATUS result = BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
     DWORD objectSize = 0;
     DWORD returned = 0;
@@ -48,11 +48,11 @@ Status HashFileHandleSha256Streamed(HANDLE file,
     DWORD readError = ERROR_SUCCESS;
     bool contentMismatch = false;
     std::size_t offset = 0;
-    std::array<std::uint8_t, 128 * 1024> buffer{};
+    uint8_t buffer[128 * 1024]{};
     while (BCRYPT_SUCCESS(result))
     {
         DWORD read = 0;
-        if (!ReadFile(file, buffer.data(), static_cast<DWORD>(buffer.size()), &read, nullptr))
+        if (!ReadFile(file, buffer, static_cast<DWORD>(sizeof(buffer)), &read, nullptr))
         {
             readError = GetLastError();
             break;
@@ -61,18 +61,18 @@ Status HashFileHandleSha256Streamed(HANDLE file,
             break;
         if (expectedBytes &&
             (offset > expectedSize || read > expectedSize - offset ||
-             std::memcmp(buffer.data(), expectedBytes + offset, read)))
+             std::memcmp(buffer, expectedBytes + offset, read)))
         {
             contentMismatch = true;
             break;
         }
         offset += read;
-        result = BCryptHashData(hash, buffer.data(), read, 0);
+        result = BCryptHashData(hash, buffer, read, 0);
     }
     if (expectedBytes && !contentMismatch && offset != expectedSize)
         contentMismatch = true;
     if (BCRYPT_SUCCESS(result) && !readError && !contentMismatch)
-        result = BCryptFinishHash(hash, digest.data(), static_cast<ULONG>(digest.size()), 0);
+        result = BCryptFinishHash(hash, digest, static_cast<ULONG>(sizeof(digest)), 0);
     if (hash)
         BCryptDestroyHash(hash);
     if (algorithm)
@@ -84,10 +84,10 @@ Status HashFileHandleSha256Streamed(HANDLE file,
     return BCRYPT_SUCCESS(result) ? Status::Ok() : Status::Fail(static_cast<DWORD>(result), "cannot calculate streamed installer SHA-256");
 }
 
-Status WriteHashSelfTestFile(std::wstring_view path,
-                             const std::vector<std::uint8_t> &bytes)
+Status WriteHashSelfTestFile(const std::wstring &path,
+                             const std::vector<uint8_t> &bytes)
 {
-    HANDLE file = CreateFileW(std::wstring(path).c_str(), GENERIC_WRITE, 0, nullptr,
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE)
         return Status::Fail(GetLastError(), "cannot create SHA-256 file self-test input");
@@ -117,13 +117,13 @@ Status WriteHashSelfTestFile(std::wstring_view path,
 
 } // namespace
 
-Status HashBytesSha256(const std::uint8_t *bytes, std::size_t size, std::array<std::uint8_t, 32> &digest)
+Status HashBytesSha256(const uint8_t *bytes, std::size_t size, uint8_t (&digest)[32])
 {
     if (size > std::numeric_limits<ULONG>::max())
         return Status::Fail(ERROR_FILE_TOO_LARGE, "SHA-256 input exceeds the BCrypt one-shot limit");
     BCRYPT_ALG_HANDLE algorithm = nullptr;
     BCRYPT_HASH_HANDLE hash = nullptr;
-    std::vector<std::uint8_t> object;
+    std::vector<uint8_t> object;
     NTSTATUS result = BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
     if (!BCRYPT_SUCCESS(result))
         return Status::Fail(static_cast<DWORD>(result), "BCryptOpenAlgorithmProvider(SHA256) failed");
@@ -138,16 +138,16 @@ Status HashBytesSha256(const std::uint8_t *bytes, std::size_t size, std::array<s
     if (BCRYPT_SUCCESS(result) && size)
         result = BCryptHashData(hash, const_cast<PUCHAR>(bytes), static_cast<ULONG>(size), 0);
     if (BCRYPT_SUCCESS(result))
-        result = BCryptFinishHash(hash, digest.data(), static_cast<ULONG>(digest.size()), 0);
+        result = BCryptFinishHash(hash, digest, static_cast<ULONG>(sizeof(digest)), 0);
     if (hash)
         BCryptDestroyHash(hash);
     BCryptCloseAlgorithmProvider(algorithm, 0);
     return BCRYPT_SUCCESS(result) ? Status::Ok() : Status::Fail(static_cast<DWORD>(result), "SHA-256 operation failed");
 }
 
-Status HashFileSha256(std::wstring_view path, std::array<std::uint8_t, 32> &digest)
+Status HashFileSha256(const std::wstring &path, uint8_t (&digest)[32])
 {
-    HANDLE file = CreateFileW(std::wstring(path).c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     if (file == INVALID_HANDLE_VALUE)
     {
         const DWORD error = GetLastError();
@@ -171,7 +171,7 @@ Status HashFileSha256(std::wstring_view path, std::array<std::uint8_t, 32> &dige
         HANDLE mapping = CreateFileMappingW(file, nullptr, PAGE_READONLY, 0, 0, nullptr);
         if (mapping)
         {
-            const std::uint8_t *view = static_cast<const std::uint8_t *>(MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0));
+            const uint8_t *view = static_cast<const uint8_t *>(MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0));
             if (view)
             {
                 Status status = HashBytesSha256(view, static_cast<std::size_t>(fileSize.QuadPart), digest);
@@ -189,38 +189,38 @@ Status HashFileSha256(std::wstring_view path, std::array<std::uint8_t, 32> &dige
     return status;
 }
 
-Status VerifyFileSha256(std::wstring_view path, std::string_view expectedHex)
+Status VerifyFileSha256(const std::wstring &path, const std::string &expectedHex)
 {
-    std::array<std::uint8_t, 32> expected{};
+    uint8_t expected[32]{};
     if (!ParseHex256(expectedHex, expected))
         return Status::Fail(ERROR_BAD_FORMAT, "manifest InstallerSha256 is invalid");
-    std::array<std::uint8_t, 32> actual{};
+    uint8_t actual[32]{};
     Status status = HashFileSha256(path, actual);
     if (!status)
         return status;
-    if (!std::equal(actual.begin(), actual.end(), expected.begin()))
-        return Status::Fail(ERROR_CRC, "installer SHA-256 mismatch: expected " + HexLower(expected.data(), expected.size()) + ", got " + HexLower(actual.data(), actual.size()));
+    if (!std::equal(actual, actual + sizeof(actual), expected))
+        return Status::Fail(ERROR_CRC, "installer SHA-256 mismatch: expected " + HexLower(expected, sizeof(expected)) + ", got " + HexLower(actual, sizeof(actual)));
     return Status::Ok();
 }
 
 Status RunHashSelfTests()
 {
-    static constexpr std::uint8_t Input[] = {'a', 'b', 'c'};
-    static constexpr std::string_view Expected = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
-    std::array<std::uint8_t, 32> digest{};
+    static constexpr uint8_t Input[] = {'a', 'b', 'c'};
+    static constexpr char Expected[] = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    uint8_t digest[32]{};
     Status status = HashBytesSha256(Input, sizeof(Input), digest);
     if (!status)
         return status;
-    if (HexLower(digest.data(), digest.size()) != Expected)
+    if (HexLower(digest, sizeof(digest)) != Expected)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "SHA-256 short-vector self-test failed");
 
     /* Match the byte count of the installer that exposed the original failure. */
-    std::vector<std::uint8_t> longInput(23684672);
+    std::vector<uint8_t> longInput(23684672);
     for (std::size_t index = 0; index < longInput.size(); ++index)
-        longInput[index] = static_cast<std::uint8_t>(index * 37 + 11);
-    static constexpr std::string_view LongExpected = "6817bf691b42ce0f9ea59fa05b5dc9e9c8331a4554b23594fcdcd9c6c40cc751";
+        longInput[index] = static_cast<uint8_t>(index * 37 + 11);
+    static constexpr char LongExpected[] = "6817bf691b42ce0f9ea59fa05b5dc9e9c8331a4554b23594fcdcd9c6c40cc751";
     status = HashBytesSha256(longInput.data(), longInput.size(), digest);
-    if (!status || HexLower(digest.data(), digest.size()) != LongExpected)
+    if (!status || HexLower(digest, sizeof(digest)) != LongExpected)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "SHA-256 long-vector self-test failed");
 
     wchar_t temporary[MAX_PATH]{};
@@ -229,7 +229,7 @@ Status RunHashSelfTests()
     status = WriteHashSelfTestFile(temporary, longInput);
     if (status)
         status = HashFileSha256(temporary, digest);
-    if (!status || HexLower(digest.data(), digest.size()) != LongExpected)
+    if (!status || HexLower(digest, sizeof(digest)) != LongExpected)
     {
         DeleteFileW(temporary);
         return Status::Fail(ERROR_ASSERTION_FAILURE, "SHA-256 mapped-file self-test failed");
@@ -247,7 +247,7 @@ Status RunHashSelfTests()
     DeleteFileW(temporary);
     if (!status)
         return status;
-    if (HexLower(digest.data(), digest.size()) != LongExpected)
+    if (HexLower(digest, sizeof(digest)) != LongExpected)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "SHA-256 streamed-file self-test failed");
     return Status::Ok();
 }

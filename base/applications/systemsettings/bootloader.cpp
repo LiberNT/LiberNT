@@ -945,7 +945,8 @@ BuildBootLoader(PageBuilder &page)
         timeoutValues.push_back(std::make_pair(true, BootTimeouts[i]));
     timeoutValues.push_back(std::make_pair(false, 0ULL));
     if (state.HasTimeout && state.Timeout &&
-        std::find(std::begin(BootTimeouts), std::end(BootTimeouts), state.Timeout) == std::end(BootTimeouts))
+        std::find(BootTimeouts, BootTimeouts + _countof(BootTimeouts), state.Timeout) ==
+            BootTimeouts + _countof(BootTimeouts))
         timeoutValues.insert(timeoutValues.end() - 1, std::make_pair(true, state.Timeout));
     for (size_t i = 0; i < timeoutValues.size(); i++)
     {

@@ -12,8 +12,8 @@
 namespace lntget
 {
 
-Status ParseInstallerManifest(std::string_view yaml, Manifest &manifest);
-Status ParseLocaleManifest(std::string_view yaml, PackageDetails &details);
+Status ParseInstallerManifest(const std::string &yaml, Manifest &manifest);
+Status ParseLocaleManifest(const std::string &yaml, PackageDetails &details);
 MachineArchitecture CurrentMachineArchitecture();
 std::string ArchitectureName(MachineArchitecture architecture);
 Status SelectInstaller(const Manifest &manifest, const SelectionOptions &options, InstallerEntry &installer);

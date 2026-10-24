@@ -29,7 +29,6 @@
 #include <string>
 #include <map>
 #include <memory>
-#include <filesystem>
 
 /**
  * A descriptor for a texture file.
@@ -43,22 +42,22 @@ public:
         FileTypeJPEG,
     };
 
-    TextureDescriptor(const std::string& name, const std::filesystem::path& pathname,
+    TextureDescriptor(const std::string& name, const std::string& pathname,
                       FileType filetype) :
         name_(name),
         pathname_(pathname),
         filetype_(filetype) {}
     ~TextureDescriptor() {}
-    const std::filesystem::path& pathname() const { return pathname_; }
+    const std::string& pathname() const { return pathname_; }
     FileType filetype() const { return filetype_; }
 private:
     std::string name_;
-    std::filesystem::path pathname_;
+    std::string pathname_;
     FileType filetype_;
     TextureDescriptor();
 };
 
-typedef std::map<std::string, std::unique_ptr<TextureDescriptor>> TextureMap;
+typedef std::map<std::string, TextureDescriptor> TextureMap;
 
 class Texture
 {

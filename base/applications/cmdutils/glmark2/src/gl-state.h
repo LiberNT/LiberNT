@@ -49,7 +49,7 @@ public:
     virtual bool gotNativeConfig(intptr_t& vid, std::vector<uint64_t>& mods) = 0;
     virtual void getVisualConfig(GLVisualConfig& vc) = 0;
     virtual bool supports_sync() = 0;
-    virtual std::unique_ptr<GLStateSync> sync() = 0;
+    virtual GLStateSync* sync() = 0;
 };
 
 #endif /* GLMARK2_GL_STATE_H_ */

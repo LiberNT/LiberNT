@@ -41,7 +41,7 @@ public:
     bool gotNativeConfig(intptr_t& vid, std::vector<uint64_t>& mods);
     void getVisualConfig(GLVisualConfig& vc);
     bool supports_sync();
-    std::unique_ptr<GLStateSync> sync();
+    GLStateSync* sync();
 
 private:
     using api_proc = void (*)();

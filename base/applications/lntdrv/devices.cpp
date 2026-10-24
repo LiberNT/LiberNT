@@ -16,7 +16,7 @@
 #include <sddl.h>
 
 #include <algorithm>
-#include <cwctype>
+#include <wctype.h>
 
 namespace lntdrv
 {
@@ -322,6 +322,7 @@ std::wstring MatchingId(HDEVINFO set, SP_DEVINFO_DATA *data, SP_DRVINFO_DATA_W *
     std::vector<BYTE> buffer;
     SP_DRVINFO_DETAIL_DATA_W *detail;
     std::vector<std::wstring> ids;
+    const std::vector<std::wstring> *lists[] = { &device.HardwareIds, &device.CompatibleIds };
     DWORD size = 0;
 
     SetupDiGetDriverInfoDetailW(set, data, driver, NULL, 0, &size);
@@ -341,7 +342,7 @@ std::wstring MatchingId(HDEVINFO set, SP_DEVINFO_DATA *data, SP_DRVINFO_DATA_W *
         for (const WCHAR *id = detail->HardwareID + detail->CompatIDsOffset; id < end && *id; id += wcslen(id) + 1)
             ids.push_back(id);
     }
-    for (const std::vector<std::wstring> *list : { &device.HardwareIds, &device.CompatibleIds })
+    for (const std::vector<std::wstring> *list : lists)
     {
         for (const std::wstring &own : *list)
         {
@@ -482,24 +483,25 @@ std::wstring DeviceStatus(const DeviceInfo &device)
     if (NeedsDriver(device))
         return LoadText(IDS_STATUS_MISSING);
     if (device.Problem)
-        return FormatText(IDS_STATUS_PROBLEM, { std::to_wstring(device.Problem) });
+        return FormatText(IDS_STATUS_PROBLEM, NumberText(device.Problem));
     return LoadText(device.Started ? IDS_STATUS_WORKING : IDS_STATUS_STOPPED);
 }
 
 std::wstring DeviceDetails(const DeviceInfo &device, const std::vector<HistoryEntry> &history)
 {
+    static const UINT Titles[] = { IDS_DETAIL_HARDWARE, IDS_DETAIL_COMPATIBLE, IDS_DETAIL_QUERIES };
     std::wstring text;
     std::vector<std::wstring> queries = CatalogQueries(device);
 
-    text += FormatText(IDS_DETAIL_NAME, { device.Name }) + L"\r\n";
-    text += FormatText(IDS_DETAIL_STATUS, { DeviceStatus(device) }) + L"\r\n";
-    text += FormatText(IDS_DETAIL_CLASS, { device.Class }) + L"\r\n";
-    text += FormatText(IDS_DETAIL_INSTANCE, { device.InstanceId }) + L"\r\n";
-    text += FormatText(IDS_DETAIL_DRIVER, { device.Provider, device.DriverVersion, device.DriverDate }) + L"\r\n";
-    text += FormatText(IDS_DETAIL_INF, { device.Inf }) + L"\r\n";
-    text += FormatText(IDS_DETAIL_SOURCE, { DriverSource(device, history) }) + L"\r\n";
-    text += FormatText(IDS_DETAIL_SERVICE, { device.Service }) + L"\r\n\r\n";
-    for (UINT title : { IDS_DETAIL_HARDWARE, IDS_DETAIL_COMPATIBLE, IDS_DETAIL_QUERIES })
+    text += FormatText(IDS_DETAIL_NAME, device.Name) + L"\r\n";
+    text += FormatText(IDS_DETAIL_STATUS, DeviceStatus(device)) + L"\r\n";
+    text += FormatText(IDS_DETAIL_CLASS, device.Class) + L"\r\n";
+    text += FormatText(IDS_DETAIL_INSTANCE, device.InstanceId) + L"\r\n";
+    text += FormatText(IDS_DETAIL_DRIVER, device.Provider, device.DriverVersion, device.DriverDate) + L"\r\n";
+    text += FormatText(IDS_DETAIL_INF, device.Inf) + L"\r\n";
+    text += FormatText(IDS_DETAIL_SOURCE, DriverSource(device, history)) + L"\r\n";
+    text += FormatText(IDS_DETAIL_SERVICE, device.Service) + L"\r\n\r\n";
+    for (UINT title : Titles)
     {
         const std::vector<std::wstring> &list = title == IDS_DETAIL_HARDWARE     ? device.HardwareIds
                                                 : title == IDS_DETAIL_COMPATIBLE ? device.CompatibleIds
@@ -518,19 +520,20 @@ std::wstring DeviceDetails(const DeviceInfo &device, const std::vector<HistoryEn
 std::vector<std::wstring> CatalogQueries(const DeviceInfo &device)
 {
     std::vector<std::wstring> queries;
+    const std::vector<std::wstring> *lists[] = { &device.HardwareIds, &device.CompatibleIds };
 
     if (StartsWith(device.InstanceId, L"ROOT\\") || StartsWith(device.InstanceId, L"SWD\\") ||
         StartsWith(device.InstanceId, L"HTREE\\"))
     {
         return queries;
     }
-    for (const std::vector<std::wstring> *list : { &device.HardwareIds, &device.CompatibleIds })
+    for (const std::vector<std::wstring> *list : lists)
     {
         for (const std::wstring &id : *list)
         {
-            bool seen = std::any_of(queries.begin(), queries.end(), [&id](const std::wstring &other) {
+            bool seen = std::find_if(queries.begin(), queries.end(), [&id](const std::wstring &other) {
                 return _wcsicmp(other.c_str(), id.c_str()) == 0;
-            });
+            }) != queries.end();
             if (!seen && IsSpecificId(id))
                 queries.push_back(id);
         }
@@ -910,6 +913,7 @@ DWORD RollBackDriver(HWND owner, const HistoryEntry &entry, BOOL &reboot)
 {
     DeviceInfo device;
     PackageDriver driver;
+    std::vector<std::wstring> infs;
     WCHAR windows[MAX_PATH];
     DWORD error;
 
@@ -922,7 +926,8 @@ DWORD RollBackDriver(HWND owner, const HistoryEntry &entry, BOOL &reboot)
         return RemoveCatalogDriver(entry, reboot);
     if (!GetWindowsDirectoryW(windows, _countof(windows)))
         return GetLastError();
-    error = FindPackageDriver(device, { std::wstring(windows) + L"\\inf\\" + entry.PreviousInf }, driver);
+    infs.push_back(std::wstring(windows) + L"\\inf\\" + entry.PreviousInf);
+    error = FindPackageDriver(device, infs, driver);
     if (error)
         return error;
     return InstallPackageDriver(owner, driver, true, reboot);

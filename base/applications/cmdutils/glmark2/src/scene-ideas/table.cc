@@ -234,7 +234,7 @@ Table::draw(Stack4& modelview,
     tableProgram_[logoDirectionName_] = logoDirection;
     tableProgram_[curTimeName_] = currentTime;
     glVertexAttribPointer(tableVertexIndex_, 3, GL_FLOAT, GL_FALSE, 0,
-        reinterpret_cast<const GLvoid*>(dataMap_.tvOffset));
+        reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.tvOffset)));
     glEnableVertexAttribArray(tableVertexIndex_);
     static const unsigned int twiceRes(2 * (TABLERES_ + 1));
     for (unsigned int i = 0; i < TABLERES_; i++)
@@ -258,7 +258,7 @@ Table::draw(Stack4& modelview,
     paperProgram_[logoDirectionName_] = logoDirection;
     paperProgram_[curTimeName_] = currentTime;
     glVertexAttribPointer(paperVertexIndex_, 3, GL_FLOAT, GL_FALSE, 0,
-        reinterpret_cast<const GLvoid*>(dataMap_.pvOffset));
+        reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.pvOffset)));
     glEnableVertexAttribArray(paperVertexIndex_);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glDisableVertexAttribArray(paperVertexIndex_);
@@ -336,7 +336,7 @@ Table::drawUnder(Stack4& modelview, Stack4& projection)
     underProgram_[modelviewName_] = modelview.getCurrent();
     underProgram_[projectionName_] = projection.getCurrent();
     glVertexAttribPointer(underVertexIndex_, 3, GL_FLOAT, GL_FALSE, 0,
-        reinterpret_cast<const GLvoid*>(dataMap_.tvOffset));
+        reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.tvOffset)));
     glEnableVertexAttribArray(underVertexIndex_);
     static const unsigned int twiceRes(2 * (TABLERES_ + 1));
     for (unsigned int i = 0; i < TABLERES_; i++)

@@ -23,6 +23,9 @@ set_property(TARGET systemsettings PROPERTY CXX_STANDARD 17)
 set_property(TARGET systemsettings PROPERTY CXX_STANDARD_REQUIRED ON)
 target_include_directories(systemsettings PRIVATE ${REACTOS_SOURCE_DIR}/base/system/dwm)
 set_module_type(systemsettings win32gui UNICODE)
+if(MSVC)
+    set_target_cpp_properties(systemsettings WITH_EXCEPTIONS)
+endif()
 target_link_libraries(systemsettings shellframe cppstl cpprt uuid)
 add_importlibs(systemsettings advapi32 user32 gdi32 gdiplus shell32 shlwapi comctl32 comdlg32 dwmapi uxtheme ole32
                oleaut32 secur32 netapi32 samlib powrprof wlanapi iphlpapi ws2_32 wininet bluetoothapis setupapi cfgmgr32 winspool winmm

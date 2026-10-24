@@ -37,6 +37,8 @@
 
 CanvasGeneric::~CanvasGeneric()
 {
+    Util::dispose_pointer_vector(fbo_syncs_);
+    Util::dispose_pointer_vector(fbos_);
 }
 
 bool
@@ -111,6 +113,7 @@ CanvasGeneric::update()
     if (m == Options::FrameEndDefault) {
         if (offscreen_) {
             if (gl_sync_supported_) {
+                delete fbo_syncs_[current_fbo_index_];
                 fbo_syncs_[current_fbo_index_] = gl_state_.sync();
                 m = Options::FrameEndNone;
             } else {
@@ -143,9 +146,10 @@ CanvasGeneric::update()
         current_fbo_index_ = (current_fbo_index_ + 1) % fbos_.size();
         if (fbo_syncs_[current_fbo_index_]) {
             fbo_syncs_[current_fbo_index_]->wait();
-            fbo_syncs_[current_fbo_index_].reset();
+            delete fbo_syncs_[current_fbo_index_];
+            fbo_syncs_[current_fbo_index_] = nullptr;
         }
-        GLExtensions::BindFramebuffer(GL_FRAMEBUFFER, fbos_[current_fbo_index_].fbo);
+        GLExtensions::BindFramebuffer(GL_FRAMEBUFFER, fbos_[current_fbo_index_]->fbo);
     }
 }
 
@@ -236,7 +240,7 @@ CanvasGeneric::resize(int width, int height)
 unsigned int
 CanvasGeneric::fbo()
 {
-    return fbos_.empty() ? 0 : fbos_[current_fbo_index_].fbo;
+    return fbos_.empty() ? 0 : fbos_[current_fbo_index_]->fbo;
 }
 
 
@@ -312,7 +316,7 @@ CanvasGeneric::resize_no_viewport(int width, int height)
     if (!fbos_.empty())
     {
         // Clear FBOs so that they are recreated (if needed) with the correct size
-        fbos_.clear();
+        Util::dispose_pointer_vector(fbos_);
         ensure_fbo();
     }
 
@@ -358,7 +362,7 @@ CanvasGeneric::do_make_current()
                 warned = true;
             }
         }
-        GLExtensions::BindFramebuffer(GL_FRAMEBUFFER, fbos_[current_fbo_index_].fbo);
+        GLExtensions::BindFramebuffer(GL_FRAMEBUFFER, fbos_[current_fbo_index_]->fbo);
     }
 
     return true;
@@ -450,15 +454,15 @@ bool
 CanvasGeneric::ensure_fbo()
 {
     if (fbos_.size() != offscreen_) {
-        fbos_.clear();
-        fbo_syncs_.clear();
+        Util::dispose_pointer_vector(fbos_);
+        Util::dispose_pointer_vector(fbo_syncs_);
 
         if (!ensure_gl_formats())
             return false;
 
         for (unsigned int i = 0; i < offscreen_; ++i) {
-            fbos_.emplace_back(width_, height_, gl_color_format_,
-                               gl_depth_format_);
+            fbos_.push_back(new FBO(width_, height_, gl_color_format_,
+                                    gl_depth_format_));
         }
         fbo_syncs_.resize(offscreen_);
 
@@ -471,8 +475,8 @@ CanvasGeneric::ensure_fbo()
 void
 CanvasGeneric::release_fbo()
 {
-    fbos_.clear();
-    fbo_syncs_.clear();
+    Util::dispose_pointer_vector(fbos_);
+    Util::dispose_pointer_vector(fbo_syncs_);
     gl_color_format_ = 0;
     gl_depth_format_ = 0;
     current_fbo_index_ = 0;

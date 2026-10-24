@@ -199,7 +199,12 @@ main(int argc, char *argv[])
         return 1;
 
     /* Initialize Log class */
-    Log::init(std::filesystem::path(argv[0]).stem().string(), Options::show_debug);
+    std::string appname(argv[0]);
+    appname.erase(0, appname.find_last_of("/\\") + 1);
+    std::string::size_type dot = appname.rfind('.');
+    if (dot != std::string::npos && dot != 0)
+        appname.erase(dot);
+    Log::init(appname, Options::show_debug);
 
     if (!ResultsFile::init(Options::results_file)) {
         Log::error("%s: Could not initialize results file\n", __FUNCTION__);
