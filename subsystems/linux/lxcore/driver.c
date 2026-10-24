@@ -91,8 +91,9 @@ LxPicoDispatchException(
     if (LxSignalDeliverFault(Thread, TrapFrame, ExceptionFrame, Signal, &Info))
         return TRUE;
 
-    DPRINT1("Linux process %lu was killed by signal %ld: exception 0x%08lx at %p, address %p\n",
+    DPRINT1("Linux process %lu (%s) was killed by signal %ld: exception 0x%08lx at %p, address %p\n",
             Thread->Process->Pid,
+            Thread->Process->Comm,
             Signal,
             ExceptionRecord->ExceptionCode,
             (PVOID)(ULONG_PTR)LxArchGetUserPc(TrapFrame),
