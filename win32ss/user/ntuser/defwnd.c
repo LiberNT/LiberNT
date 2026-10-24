@@ -505,6 +505,12 @@ DefWndSetIcon(PWND pWnd, WPARAM wParam, LPARAM lParam)
     if ((pWnd->style & WS_CAPTION ) == WS_CAPTION)
        UserPaintCaption(pWnd, DC_ICON);
 
+    if ((wParam == ICON_BIG || wParam == ICON_SMALL) && (HICON)lParam != hIconOld &&
+        !pWnd->spwndOwner && !IntGetParent(pWnd))
+    {
+       co_IntShellHookNotify(HSHELL_REDRAW, (WPARAM)UserHMGetHandle(pWnd), FALSE);
+    }
+
     return (LRESULT)hIconOld;
 }
 

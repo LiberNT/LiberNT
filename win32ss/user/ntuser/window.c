@@ -4787,7 +4787,7 @@ DefSetText(PWND Wnd, PCWSTR WindowText)
    // In User32, these are called after: NotifyWinEvent EVENT_OBJECT_NAMECHANGE than
    // RepaintButton, StaticRepaint, NtUserCallHwndLock HWNDLOCK_ROUTINE_REDRAWFRAMEANDHOOK, etc.
    /* Send shell notifications */
-   if (!Wnd->spwndOwner && !IntGetParent(Wnd))
+   if (!Wnd->spwndOwner && !IntGetParent(Wnd) && (Wnd->state2 & WNDS2_WMCREATEMSGPROCESSED))
    {
       co_IntShellHookNotify(HSHELL_REDRAW, (WPARAM) UserHMGetHandle(Wnd), FALSE); // FIXME Flashing?
    }
@@ -4920,7 +4920,7 @@ NtUserDefSetText(HWND hWnd, PLARGE_STRING WindowText)
    // In User32, these are called after: NotifyWinEvent EVENT_OBJECT_NAMECHANGE than
    // RepaintButton, StaticRepaint, NtUserCallHwndLock HWNDLOCK_ROUTINE_REDRAWFRAMEANDHOOK, etc.
    /* Send shell notifications */
-   if (!Wnd->spwndOwner && !IntGetParent(Wnd))
+   if (!Wnd->spwndOwner && !IntGetParent(Wnd) && (Wnd->state2 & WNDS2_WMCREATEMSGPROCESSED))
    {
       co_IntShellHookNotify(HSHELL_REDRAW, (WPARAM) hWnd, FALSE); // FIXME Flashing?
    }

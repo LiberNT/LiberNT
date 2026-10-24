@@ -2096,7 +2096,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
          if ((Window->style & WS_POPUP) && (Window->ExStyle & WS_EX_APPWINDOW))
          {
             co_IntShellHookNotify(HSHELL_WINDOWCREATED, (WPARAM)UserHMGetHandle(Window), 0);
-            if (!(WinPos.flags & SWP_NOACTIVATE))
+            if (!(WinPos.flags & SWP_NOACTIVATE) && Window->head.pti->MessageQueue->spwndActive == Window)
                UpdateShellHook(Window);
          }
       }
@@ -2107,7 +2107,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
          if (!UserIsDesktopWindow(Window))
          {
             co_IntShellHookNotify(HSHELL_WINDOWCREATED, (WPARAM)UserHMGetHandle(Window), 0);
-            if (!(WinPos.flags & SWP_NOACTIVATE))
+            if (!(WinPos.flags & SWP_NOACTIVATE) && Window->head.pti->MessageQueue->spwndActive == Window)
                UpdateShellHook(Window);
          }
       }
