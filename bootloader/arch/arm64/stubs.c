@@ -27,7 +27,7 @@ unsigned __int64
 __rdtsc(void)
 {
     unsigned __int64 value;
-    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(value));
+    value = ARM64_READ_SYSREG(CNTVCT_EL0);
     return value;
 }
 
@@ -35,6 +35,7 @@ __rdtsc(void)
 #define __has_builtin(x) 0
 #endif
 
+#if !defined(_MSC_VER) || defined(__clang__)
 static void __reactos_debugbreak_impl(void)
 {
     __asm__ volatile("brk #0");
@@ -49,10 +50,11 @@ static void __reactos_fastfail_impl(unsigned int code)
 }
 
 void __fastfail(unsigned int code) __attribute__((alias("__reactos_fastfail_impl")));
+#endif
 
 void DbgBreakPoint(void)
 {
-    __asm__ volatile("brk #0");
+    ARM64_BRK(0);
 }
 
 VOID
@@ -69,7 +71,7 @@ FrLdrBugCheckWithMessage(
     RtlStringCbVPrintfA(buf, sizeof(buf), Format, ap);
     va_end(ap);
     UiMessageBoxCritical(buf);
-    for (;;) { __asm__ volatile("wfi"); }
+    for (;;) { ARM64_WFI(); }
 }
 
 /*

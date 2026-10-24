@@ -528,7 +528,7 @@ VOID Arm64HandleSynchronousException(PARM64_CONTEXT Context, ULONGLONG Esr, ULON
     ERR("ARM64: Halting due to unhandled exception\n");
     for (;;)
     {
-        __asm__ volatile ("wfi");
+        ARM64_WFI();
     }
 }
 
@@ -596,7 +596,7 @@ VOID Arm64HandleSerror(PARM64_CONTEXT Context, ULONGLONG Esr)
     ERR("ARM64: System error - halting\n");
     for (;;)
     {
-        __asm__ volatile ("wfi");
+        ARM64_WFI();
     }
 }
 

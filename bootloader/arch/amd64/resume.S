@@ -10,6 +10,16 @@
 PUBLIC OslHiberTrampoline
 PUBLIC OslHiberTrampolineEnd
 
+#ifdef _USE_ML
+#define HJ_CR3 0
+#define HJ_OPS 8
+#define HJ_STUBBASE 24
+#define HJ_STUBENTRY 32
+#define HJ_STUBGDTR 46
+#define HJ_CODE HEX(100)
+#define HJ_STACK HEX(1000)
+#define OFF_COMPAT (OslHiberCompat - OslHiberTrampoline)
+#else
 .equ HJ_CR3, 0
 .equ HJ_OPS, 8
 .equ HJ_STUBBASE, 24
@@ -18,6 +28,7 @@ PUBLIC OslHiberTrampolineEnd
 .equ HJ_CODE, HEX(100)
 .equ HJ_STACK, HEX(1000)
 .equ OFF_COMPAT, OslHiberCompat - OslHiberTrampoline
+#endif
 
 .code64
 OslHiberTrampoline:
@@ -60,7 +71,7 @@ OslHiberPageDone:
     jmp OslHiberPage
 
 OslHiberDone:
-    lgdt [rbx + HJ_STUBGDTR]
+    lgdt lXdtPrefix [rbx + HJ_STUBGDTR]
     mov ebp, [rbx + HJ_STUBBASE]
     mov esi, [rbx + HJ_STUBENTRY]
     lea rax, [rbx + HJ_CODE + OFF_COMPAT]
@@ -68,6 +79,9 @@ OslHiberDone:
     push rax
     .byte HEX(48), HEX(CB)
 
+#ifdef _USE_ML
+#include "resume32.inc"
+#else
 .code32
 OslHiberCompat:
     mov ax, HEX(10)
@@ -82,5 +96,6 @@ OslHiberCompat:
     mov cr4, eax
     jmp esi
 OslHiberTrampolineEnd:
+#endif
 
 END

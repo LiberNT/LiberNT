@@ -53,7 +53,7 @@ ULONGLONG Arm64GetTimerFrequency(VOID)
      * timestamp calculations to be incorrect.
      */
     ULONGLONG cntfrq;
-    __asm__ volatile("mrs %0, cntfrq_el0" : "=r" (cntfrq));
+    cntfrq = ARM64_READ_SYSREG(CNTFRQ_EL0);
 
     /* Sanity check: if frequency is 0, use a reasonable default */
     if (cntfrq == 0)
@@ -91,8 +91,8 @@ static ULONGLONG timer_read_counter_safe(VOID)
 #ifdef UEFIBOOT
     /* Under UEFI: simple read without errata workarounds */
     /* Most modern ARM64 SoCs don't need the errata workarounds */
-    __asm__ volatile("isb");
-    __asm__ volatile("mrs %0, cntpct_el0" : "=r" (cntpct));
+    ARM64_ISB();
+    cntpct = ARM64_READ_SYSREG(CNTPCT_EL0);
     return cntpct;
 #else
     /* Non-UEFI path with errata workarounds */
@@ -103,12 +103,12 @@ static ULONGLONG timer_read_counter_safe(VOID)
          * of core clock cycles every time the timer value changes.
          * Workaround: Read twice and only return when values match.
          */
-        __asm__ volatile("isb");
-        __asm__ volatile("mrs %0, cntpct_el0" : "=r" (cntpct));
-        __asm__ volatile("mrs %0, cntpct_el0" : "=r" (temp));
+        ARM64_ISB();
+        cntpct = ARM64_READ_SYSREG(CNTPCT_EL0);
+        temp = ARM64_READ_SYSREG(CNTPCT_EL0);
         while (temp != cntpct) {
-            __asm__ volatile("mrs %0, cntpct_el0" : "=r" (cntpct));
-            __asm__ volatile("mrs %0, cntpct_el0" : "=r" (temp));
+            cntpct = ARM64_READ_SYSREG(CNTPCT_EL0);
+            temp = ARM64_READ_SYSREG(CNTPCT_EL0);
         }
         return cntpct;
     } else if (sunxi_a64_erratum) {
@@ -117,14 +117,14 @@ static ULONGLONG timer_read_counter_safe(VOID)
          * to all 0's or all 1's. Workaround: Check and discard these values.
          */
         do {
-            __asm__ volatile("isb");
-            __asm__ volatile("mrs %0, cntpct_el0" : "=r" (cntpct));
+            ARM64_ISB();
+            cntpct = ARM64_READ_SYSREG(CNTPCT_EL0);
         } while ((cntpct & 0x7FF) == 0x7FF || (cntpct & 0x7FF) == 0x000);
         return cntpct;
     } else {
         /* Standard read */
-        __asm__ volatile("isb");
-        __asm__ volatile("mrs %0, cntpct_el0" : "=r" (cntpct));
+        ARM64_ISB();
+        cntpct = ARM64_READ_SYSREG(CNTPCT_EL0);
         return cntpct;
     }
 #endif
@@ -159,7 +159,7 @@ VOID Arm64InitializeTimer(VOID)
 
 #ifndef UEFIBOOT
     /* Check for known timer erratas based on CPU ID */
-    midr = ARM64_READ_SYSREG(midr_el1);
+    midr = ARM64_READ_SYSREG(MIDR_EL1);
 
     /* Simple detection for common errata-prone cores */
     {
@@ -181,15 +181,15 @@ VOID Arm64InitializeTimer(VOID)
     
 #ifndef UEFIBOOT
     /* Enable timer access for lower exception levels if needed */
-    cntkctl = ARM64_READ_SYSREG(cntkctl_el1);
+    cntkctl = ARM64_READ_SYSREG(CNTKCTL_EL1);
     cntkctl |= CNTKCTL_EL1_EL0PCTEN | CNTKCTL_EL1_EL0VCTEN;
-    ARM64_WRITE_SYSREG(cntkctl_el1, cntkctl);
+    ARM64_WRITE_SYSREG(CNTKCTL_EL1, cntkctl);
 
     /* Disable virtual timer (we'll use physical timer) */
-    ARM64_WRITE_SYSREG(cntv_ctl_el0, CNTV_CTL_IMASK);
+    ARM64_WRITE_SYSREG(CNTV_CTL_EL0, CNTV_CTL_IMASK);
 
     /* Disable physical timer initially */
-    ARM64_WRITE_SYSREG(cntp_ctl_el0, CNTP_CTL_IMASK);
+    ARM64_WRITE_SYSREG(CNTP_CTL_EL0, CNTP_CTL_IMASK);
 #else
     /* Under UEFI, skip timer control register writes to avoid traps */
     /* UEFI firmware has already configured timer access appropriately */
@@ -270,7 +270,7 @@ VOID Arm64DelayMicroseconds(ULONG microseconds)
     
     while ((Arm64GetTimerCount() - start_count) < target_ticks) {
         /* Busy wait */
-        __asm__ volatile("nop");
+        ARM64_NOP();
     }
 }
 
@@ -301,11 +301,11 @@ BOOLEAN Arm64SetTimerInterrupt(ULONGLONG microseconds)
     target_count = current_count + Arm64MicrosecondsToTimerTicks(microseconds);
     
     /* Set compare value */
-    ARM64_WRITE_SYSREG(cntp_cval_el0, target_count);
+    ARM64_WRITE_SYSREG(CNTP_CVAL_EL0, target_count);
     
     /* Enable timer with interrupt unmasked */
     cntp_ctl = CNTP_CTL_ENABLE;  /* Enable, interrupt unmasked */
-    ARM64_WRITE_SYSREG(cntp_ctl_el0, cntp_ctl);
+    ARM64_WRITE_SYSREG(CNTP_CTL_EL0, cntp_ctl);
     
     ARM64_ISB();
     
@@ -321,7 +321,7 @@ VOID Arm64DisableTimerInterrupt(VOID)
     }
     
     /* Disable and mask timer interrupt */
-    ARM64_WRITE_SYSREG(cntp_ctl_el0, CNTP_CTL_IMASK);
+    ARM64_WRITE_SYSREG(CNTP_CTL_EL0, CNTP_CTL_IMASK);
     ARM64_ISB();
 }
 
@@ -334,7 +334,7 @@ BOOLEAN Arm64IsTimerInterruptPending(VOID)
         return FALSE;
     }
     
-    cntp_ctl = ARM64_READ_SYSREG(cntp_ctl_el0);
+    cntp_ctl = ARM64_READ_SYSREG(CNTP_CTL_EL0);
     return (cntp_ctl & CNTP_CTL_ISTATUS) != 0;
 }
 
@@ -346,7 +346,7 @@ VOID Arm64HandleTimerInterrupt(VOID)
     }
     
     /* Disable timer to clear interrupt */
-    ARM64_WRITE_SYSREG(cntp_ctl_el0, CNTP_CTL_IMASK);
+    ARM64_WRITE_SYSREG(CNTP_CTL_EL0, CNTP_CTL_IMASK);
     ARM64_ISB();
     
     TRACE("ARM64: Timer interrupt handled\n");
