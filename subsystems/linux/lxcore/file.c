@@ -1216,11 +1216,30 @@ LxDeviceOpen(
             default: return NULL;
         }
     }
+    else if ((Major == 5) && (Minor == 2))
+    {
+        if (LxPtmxOpen(Process, Flags, &File) != 0)
+            return NULL;
+        File->Path = LxStrDup(Path);
+        return File;
+    }
+    else if (Major == 136)
+    {
+        Tty = LxTtyLookup(Process->Instance, Minor);
+        if (Tty == NULL)
+            return NULL;
+        if (LxTtyOpenSlave(Process, Tty, Flags | LX_O_NOCTTY, &File) != 0)
+            File = NULL;
+        LxTtyDereference(Tty);
+        if (File != NULL)
+            File->Path = LxStrDup(Path);
+        return File;
+    }
     else if ((Major == 5) && (Minor == 0))
     {
         Tty = Process->Tty;
     }
-    else if (((Major == 5) && (Minor == 1)) || (Major == 136) || ((Major == 4) && (Minor <= 1)))
+    else if (((Major == 5) && (Minor == 1)) || ((Major == 4) && (Minor <= 1)))
     {
         Tty = Process->Instance->Console ? Process->Instance->Console : Process->Tty;
     }
@@ -1229,7 +1248,7 @@ LxDeviceOpen(
         return NULL;
     }
 
-    if ((Major == 5) || (Major == 136) || (Major == 4))
+    if ((Major == 5) || (Major == 4))
     {
         if (Tty == NULL)
             return NULL;

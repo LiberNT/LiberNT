@@ -266,15 +266,8 @@ LxOpenCommon(
         return Error;
 
     Tty = LxFileGetTty(File);
-    if ((Tty != NULL) && !(Flags & LX_O_NOCTTY) && (Process->Sid == Process->Pid) && (Process->Tty == NULL))
-    {
-        LxTtyReference(Tty);
-        Process->Tty = Tty;
-        Tty->Session = Process->Sid;
-        Tty->ForegroundPgrp = Process->Pgid;
-        if (Tty->Instance == NULL)
-            Tty->Instance = Process->Instance;
-    }
+    if ((Tty != NULL) && !(Flags & LX_O_NOCTTY))
+        LxTtyAttachControlling(Process, Tty);
 
     Result = LxFdInstall(Process, File, 0, (Flags & LX_O_CLOEXEC) != 0);
     LxFileDereference(File);
