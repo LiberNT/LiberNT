@@ -296,7 +296,7 @@ LxStartWindowHost(
     PWCHAR Slash;
 
     if (!LxNormalizeRoot(Root, Normalized, ARRAYSIZE(Normalized)) ||
-        !LxRootPath(Normalized, L"\\usr\\local\\lib\\libernt\\lxapp", Marker) ||
+        !LxRootPath(Normalized, L"\\usr\\local\\lib\\libernt\\lxwayland\\lxwayland", Marker) ||
         (GetFileAttributesW(Marker) == INVALID_FILE_ATTRIBUTES) ||
         !GetModuleFileNameW(NULL, Program, ARRAYSIZE(Program)))
     {

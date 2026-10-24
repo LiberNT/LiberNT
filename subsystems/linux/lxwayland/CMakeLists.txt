@@ -25,6 +25,7 @@ add_custom_command(
 add_custom_target(lxwayland_agent ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/lxwayland)
 add_cd_file(TARGET lxwayland_agent FILE ${CMAKE_CURRENT_BINARY_DIR}/lxwayland DESTINATION reactos/system32/lxwayland NO_CAB FOR all)
 
-foreach(_file lxapp gui-setup user-setup lxwayland.service lx-gui-setup.service)
-    add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/${_file} DESTINATION reactos/system32/lxwayland NO_CAB FOR all)
-endforeach()
+set(LX_GNU_TRIPLET ${_lxwayland_target})
+configure_file(lx-gui-setup.service.in ${CMAKE_CURRENT_BINARY_DIR}/lx-gui-setup.service @ONLY NEWLINE_STYLE UNIX)
+add_cd_file(FILE ${CMAKE_CURRENT_BINARY_DIR}/lx-gui-setup.service DESTINATION reactos/system32/lxwayland NO_CAB FOR all)
+add_cd_file(FILE ${CMAKE_CURRENT_SOURCE_DIR}/lxwayland.service DESTINATION reactos/system32/lxwayland NO_CAB FOR all)

@@ -1408,9 +1408,6 @@ LxProvisionGui(
     } Files[] =
     {
         { L"lxwayland", "usr/local/lib/libernt/lxwayland/lxwayland", 0755, FALSE },
-        { L"lxapp", "usr/local/lib/libernt/lxapp", 0755, TRUE },
-        { L"gui-setup", "usr/local/lib/libernt/gui-setup", 0755, TRUE },
-        { L"user-setup", "usr/local/lib/libernt/user-setup", 0755, TRUE },
         { L"lxwayland.service", "etc/systemd/system/lxwayland.service", 0644, TRUE },
         { L"lx-gui-setup.service", "etc/systemd/system/lx-gui-setup.service", 0644, TRUE },
     };
