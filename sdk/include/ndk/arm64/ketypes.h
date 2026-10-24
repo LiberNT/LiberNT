@@ -1054,7 +1054,11 @@ extern NTKERNELAPI BOOLEAN KeArm64DpcRoutineActive;
  * _NTOSKRNL_EARLY_INIT_ can still be used to force the fallback path.
  */
 #if defined(_M_ARM64) && !defined(_NTOSKRNL_EARLY_INIT_)
+#if defined(_MSC_VER) && !defined(__clang__)
+#define KeArm64PcrRegister ((PKIPCR)__getReg(18))
+#else
 register PKIPCR KeArm64PcrRegister __asm__("x18");
+#endif
 
 /* Runtime path: read PCR from fixed x18. */
 FORCEINLINE
@@ -1083,6 +1087,9 @@ KeGetCurrentPrcb(VOID)
 //
 #ifdef _NTOSKRNL_
 /* IRQL is per-CPU and x18 contains the current processor's KPCR. */
+#if defined(_MSC_VER) && !defined(__clang__)
+#define KeGetCurrentIrql() ((KIRQL)__readx18byte(ARM64_KPCR_CURRENT_IRQL))
+#else
 #define KeGetCurrentIrql() \
     __extension__ ({ \
         ULONG _ci_irql; \
@@ -1091,6 +1098,26 @@ KeGetCurrentPrcb(VOID)
         (KIRQL)_ci_irql; \
     })
 #endif
+#endif
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <reactos/arm64/sysreg.h>
+#define _KeGetCurrentThread() ((PKTHREAD)__readx18qword(ARM64_KPCR_PRCB_CURRENT_THREAD))
+#define _KeGetPreviousMode() (_KeGetCurrentThread()->PreviousMode)
+FORCEINLINE
+BOOLEAN
+_KeIsExecutingDpc(VOID)
+{
+    BOOLEAN DpcActive;
+    PKIPCR Pcr;
+    ULONG64 Daif = ARM64_READ_SYSREG(DAIF);
+
+    ARM64_DAIFSET(3);
+    Pcr = KeGetPcr();
+    DpcActive = (Pcr != NULL) ? Pcr->Prcb.DpcRoutineActive : KeArm64DpcRoutineActive;
+    ARM64_WRITE_SYSREG(DAIF, Daif);
+    return DpcActive;
+}
+#else
 #define _KeGetCurrentThread() \
     __extension__ ({ \
         PKTHREAD _ct_thread; \
@@ -1116,6 +1143,7 @@ KeGetCurrentPrcb(VOID)
         __asm__ __volatile__("msr daif, %0" :: "r"(_dpc_daif) : "memory"); \
         _dpc_active; \
     })
+#endif
 
 
 #ifdef __cplusplus

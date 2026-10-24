@@ -39,7 +39,11 @@ typedef enum _WAIT_TYPE
 #endif
 #pragma push_macro("FORCEINLINE")
 #undef FORCEINLINE
+#ifdef _MSC_VER
+#define FORCEINLINE __forceinline
+#else
 #define FORCEINLINE inline __attribute__((always_inline))
+#endif
 #endif
 
 #ifdef _WIN64
@@ -1883,7 +1887,7 @@ void      WINAPI KeAcquireSpinLock(KSPIN_LOCK*,KIRQL*);
 KIRQL     WINAPI KeAcquireSpinLockRaiseToDpc(KSPIN_LOCK*);
 #endif
 void      WINAPI KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK*);
-void      WINAPI DECLSPEC_NORETURN KeBugCheckEx(ULONG,ULONG_PTR,ULONG_PTR,ULONG_PTR,ULONG_PTR);
+void      DECLSPEC_NORETURN WINAPI KeBugCheckEx(ULONG,ULONG_PTR,ULONG_PTR,ULONG_PTR,ULONG_PTR);
 BOOLEAN   WINAPI KeCancelTimer(KTIMER*);
 void      WINAPI KeClearEvent(PRKEVENT);
 NTSTATUS  WINAPI KeDelayExecutionThread(KPROCESSOR_MODE,BOOLEAN,LARGE_INTEGER*);

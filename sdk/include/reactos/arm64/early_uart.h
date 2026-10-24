@@ -219,6 +219,12 @@ extern volatile UINT32 EarlyUartRxCachedByteCount;
 #define EARLY_UART_WRITE8_AT(BaseVa, offset, value) \
     (*(volatile UCHAR*)(ULONG_PTR)((BaseVa) + (offset)) = (UCHAR)(value))
 
+#if defined(_MSC_VER) && !defined(__clang__)
+#define EARLY_UART_YIELD() __yield()
+#else
+#define EARLY_UART_YIELD() __asm__ __volatile__("yield")
+#endif
+
 #define EARLY_UART_READ(offset) \
     EARLY_UART_READ_AT(EarlyUartPhysToVa(EarlyUartBaseAddress), offset)
 
@@ -257,7 +263,7 @@ EarlyUartQcomGeniPollBit(UINT32 Offset, UINT32 Bit, BOOLEAN Set)
         if ((EARLY_UART_READ(Offset) & Bit) == (Set ? Bit : 0))
             return TRUE;
 
-        __asm__ __volatile__("yield");
+        EARLY_UART_YIELD();
     }
 
     return FALSE;
@@ -559,7 +565,7 @@ EarlyUartPutc(CHAR Ch)
         case Arm64UartNs16550:
             while (!(EARLY_UART_READ8_AT(BaseVa, ARM64_NS16550_LSR) & ARM64_NS16550_LSR_THRE))
             {
-                __asm__ __volatile__("yield");
+                EARLY_UART_YIELD();
             }
 
             EARLY_UART_WRITE8_AT(BaseVa, ARM64_NS16550_THR, (UCHAR)Ch);
@@ -568,7 +574,7 @@ EarlyUartPutc(CHAR Ch)
         case Arm64UartBcm2835Mini:
             while (!(EARLY_UART_READ_AT(BaseVa, ARM64_BCM2835_MINI_UART_LSR) & ARM64_BCM2835_MINI_UART_LSR_TX_EMPTY))
             {
-                __asm__ __volatile__("yield");
+                EARLY_UART_YIELD();
             }
 
             EARLY_UART_WRITE_AT(BaseVa, ARM64_BCM2835_MINI_UART_IO, (UINT32)(UCHAR)Ch);
@@ -581,7 +587,7 @@ EarlyUartPutc(CHAR Ch)
         case Arm64UartPl011:
             while (EARLY_UART_READ_AT(BaseVa, ARM64_PL011_FR) & ARM64_PL011_FR_TXFF)
             {
-                __asm__ __volatile__("yield");
+                EARLY_UART_YIELD();
             }
 
             EARLY_UART_WRITE_AT(BaseVa, ARM64_PL011_DR, (UINT32)(UCHAR)Ch);

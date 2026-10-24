@@ -507,6 +507,37 @@ ScriptGetFontFeatureTags(
 _Check_return_
 HRESULT
 WINAPI
+ScriptSubstituteSingleGlyph(
+  _In_opt_ HDC hdc,
+  _Inout_ SCRIPT_CACHE *psc,
+  _In_opt_ SCRIPT_ANALYSIS *psa,
+  _In_ OPENTYPE_TAG tagScript,
+  _In_ OPENTYPE_TAG tagLangSys,
+  _In_ OPENTYPE_TAG tagFeature,
+  _In_ LONG lParameter,
+  _In_ WORD wGlyphId,
+  _Out_ WORD *pwOutGlyphId);
+
+_Check_return_
+HRESULT
+WINAPI
+ScriptPositionSingleGlyph(
+  _In_opt_ HDC hdc,
+  _Inout_ SCRIPT_CACHE *psc,
+  _In_opt_ SCRIPT_ANALYSIS *psa,
+  _In_ OPENTYPE_TAG tagScript,
+  _In_ OPENTYPE_TAG tagLangSys,
+  _In_ OPENTYPE_TAG tagFeature,
+  _In_ LONG lParameter,
+  _In_ WORD wGlyphId,
+  _In_ int iAdvance,
+  _In_ GOFFSET GOffset,
+  _Out_ int *piOutAdvance,
+  _Out_ GOFFSET *pOutGoffset);
+
+_Check_return_
+HRESULT
+WINAPI
 ScriptBreak(
   _In_reads_(cChars) const WCHAR *pwcChars,
   _In_ int cChars,
