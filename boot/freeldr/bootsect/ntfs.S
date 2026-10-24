@@ -326,7 +326,7 @@ StartSearch:
     js    NegativeOffset
     mov   cx, word ptr [SectsPerCluster]
     mul   cx
-    mov   word ptr [SectsPerMFT], cx
+    mov   word ptr [SectsPerMFT], ax
     jmp   SearchNext
     NegativeOffset:
     // ClustersPerMftRecord is negative, so we need to perform 1 << (-ClustersPerMftRecord)
