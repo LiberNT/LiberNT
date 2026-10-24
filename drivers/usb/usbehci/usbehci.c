@@ -4445,7 +4445,8 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
                               USB_MINIPORT_FLAGS_USB2 |
                               USB_MINIPORT_FLAGS_ASYNC_ENDPOINT_STATE |
                               USB_MINIPORT_FLAGS_WAKE_SUPPORT |
-                              USB_MINIPORT_FLAGS_POLLING;
+                              USB_MINIPORT_FLAGS_POLLING |
+                              USB_MINIPORT_FLAGS_DUMP_POLLING;
 
     RegPacket.MiniPortBusBandwidth = TOTAL_USB20_BUS_BANDWIDTH;
 
