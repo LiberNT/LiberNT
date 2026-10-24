@@ -114,7 +114,7 @@ copy(TCHAR source[MAX_PATH],
 
     TRACE ("getting time\n");
 
-    bHaveTime = GetFileTime (hFileSrc, &srctime, NULL, NULL);
+    bHaveTime = GetFileTime (hFileSrc, NULL, NULL, &srctime);
 
     TRACE ("copy: flags has %s\n",
         lpdwFlags & COPY_ASCII ? "ASCII" : "BINARY");
@@ -243,8 +243,8 @@ copy(TCHAR source[MAX_PATH],
     while (!bEof);
 
     TRACE ("setting time\n");
-    if (bHaveTime)
-        SetFileTime (hFileDest, &srctime, NULL, NULL);
+    if (bHaveTime && !append)
+        SetFileTime (hFileDest, NULL, NULL, &srctime);
 
     VirtualFree (buffer, 0, MEM_RELEASE);
     CloseHandle (hFileDest);
