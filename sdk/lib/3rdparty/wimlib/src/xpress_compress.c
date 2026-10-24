@@ -98,8 +98,8 @@ struct xpress_item;
 struct xpress_compressor {
 
 	/* Pointer to the compress() implementation chosen at allocation time */
-	size_t (*impl)(struct xpress_compressor *,
-		       const void *, size_t, void *, size_t);
+	size_t (*impl)(struct xpress_compressor * restrict,
+		       const void * restrict, size_t, void * restrict, size_t);
 
 	/* Symbol frequency counters for the Huffman code  */
 	u32 freqs[XPRESS_NUM_SYMBOLS];

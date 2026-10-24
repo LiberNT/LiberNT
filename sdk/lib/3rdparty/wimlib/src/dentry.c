@@ -71,6 +71,7 @@
 
 /* On-disk format of a WIM dentry (directory entry), located in the metadata
  * resource for a WIM image.  */
+#pragma pack(push, 1)
 struct wim_dentry_on_disk {
 
 	/* Length of this directory entry in bytes, not including any extra
@@ -149,10 +150,10 @@ struct wim_dentry_on_disk {
 			le32 reparse_tag;
 			le16 rp_reserved;
 			le16 rp_flags;
-		} __attribute__((packed)) reparse;
+		} reparse;
 		struct {
 			le64 hard_link_group_id;
-		} __attribute__((packed)) nonreparse;
+		} nonreparse;
 	};
 
 	/* Number of extra stream entries that directly follow this dentry
@@ -190,7 +191,7 @@ struct wim_dentry_on_disk {
 	 * for more information.  */
 	/* u8 tagged_items[] __attribute__((aligned(8))); */
 
-} __attribute__((packed));
+};
 	/* If num_extra_streams != 0, then there are that many extra stream
 	 * entries following the dentry, starting on the next 8-byte aligned
 	 * boundary.  They are not counted in the 'length' field of the dentry.
@@ -220,7 +221,8 @@ struct wim_extra_stream_entry_on_disk {
 	 * the null terminator.  There is a null terminator character if
 	 * @name_nbytes != 0; i.e., if this stream is named.  */
 	utf16lechar name[];
-} __attribute__((packed));
+};
+#pragma pack(pop)
 
 static void
 do_dentry_set_name(struct wim_dentry *dentry, utf16lechar *name,
@@ -488,7 +490,12 @@ calculate_dentry_full_path(struct wim_dentry *dentry)
 		d = d->d_parent;  /* assumes d == d->d_parent for root  */
 	} while (!dentry_is_root(d));
 
-	utf16lechar ubuf[ulen];
+	utf16lechar *ubuf = MALLOC(ulen * sizeof(utf16lechar));
+	int ret;
+
+	if (!ubuf)
+		return WIMLIB_ERR_NOMEM;
+
 	utf16lechar *p = &ubuf[ulen];
 
 	d = dentry;
@@ -502,8 +509,10 @@ calculate_dentry_full_path(struct wim_dentry *dentry)
 
 	wimlib_assert(p == ubuf);
 
-	return utf16le_to_tstr(ubuf, ulen * sizeof(utf16lechar),
-			       &dentry->d_full_path, NULL);
+	ret = utf16le_to_tstr(ubuf, ulen * sizeof(utf16lechar),
+			      &dentry->d_full_path, NULL);
+	FREE(ubuf);
+	return ret;
 }
 
 /*
@@ -846,11 +855,17 @@ get_parent_dentry(WIMStruct *wim, const tchar *path,
 		  CASE_SENSITIVITY_TYPE case_type)
 {
 	size_t path_len = tstrlen(path);
-	tchar buf[path_len + 1];
+	tchar *buf = TSTRDUP(path);
+	struct wim_dentry *dentry;
 
-	tmemcpy(buf, path, path_len + 1);
+	if (!buf) {
+		errno = ENOMEM;
+		return NULL;
+	}
 	to_parent_name(buf, path_len);
-	return get_dentry(wim, buf, case_type);
+	dentry = get_dentry(wim, buf, case_type);
+	FREE(buf);
+	return dentry;
 }
 
 /*

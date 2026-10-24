@@ -180,8 +180,8 @@ blob_release_location(struct blob_descriptor *blob)
 			      (void*)&blob->staging_file_name);
 #endif
 	case BLOB_IN_ATTACHED_BUFFER:
-		STATIC_ASSERT((void*)&blob->file_on_disk ==
-			      (void*)&blob->attached_buffer);
+		STATIC_ASSERT(offsetof(struct blob_descriptor, file_on_disk) ==
+			      offsetof(struct blob_descriptor, attached_buffer));
 		FREE(blob->file_on_disk);
 		break;
 #ifdef _WIN32
@@ -570,6 +570,7 @@ for_blob_in_table_sorted_by_sequential_order(struct blob_table *table,
  * Note: if the WIM file contains solid resource(s), then this structure is
  * sometimes overloaded to describe a "resource" rather than a "blob".  See the
  * code for details.  */
+#pragma pack(push, 1)
 struct blob_descriptor_disk {
 
 	/* Size, offset, and flags of the blob.  */
@@ -585,7 +586,8 @@ struct blob_descriptor_disk {
 	/* SHA-1 message digest of the uncompressed data of this blob, or all
 	 * zeroes if this blob is of zero length.  */
 	u8 hash[SHA1_HASH_SIZE];
-} __attribute__((packed));
+};
+#pragma pack(pop)
 
 /* Given a nonempty run of consecutive blob descriptors with the SOLID flag set,
  * count how many specify resources (as opposed to blobs within those

@@ -76,7 +76,7 @@ lzms_update_probability_entry(struct lzms_probability_entry *entry, int bit)
 {
 	STATIC_ASSERT(LZMS_PROBABILITY_DENOMINATOR == sizeof(entry->recent_bits) * 8);
 
-#ifdef __x86_64__
+#if defined(__x86_64__) && defined(__GNUC__)
 	if (__builtin_constant_p(bit)) {
 		/* Optimized implementation for x86_64 using carry flag  */
 		if (bit) {

@@ -754,7 +754,7 @@ get_random_bytes(void *p, size_t n)
 			wimlib_assert(0);
 			count = 0;
 		}
-		p += count;
+		p = (u8 *)p + count;
 		n -= count;
 	}
 }

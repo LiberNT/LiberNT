@@ -219,6 +219,7 @@ typedef struct _WIM_PROVIDER_UPDATE_OVERLAY_INPUT {
  * WOF, although they document the structures which must be passed into the
  * ioctls, which are often similar.
  */
+#pragma pack(push, 1)
 struct wim_provider_rpdata {
 	/* Set to 2.  Uncertain meaning.  */
 	le32 version;
@@ -248,7 +249,7 @@ struct wim_provider_rpdata {
 
 	/* Byte offset of the file's unnamed data stream in the WIM.  */
 	le64 unnamed_data_stream_offset_in_wim;
-} __attribute__((packed));
+};
 
 /* WIM-specific information about a WIM data source  */
 struct WimOverlay_dat_entry_1 {
@@ -277,7 +278,7 @@ struct WimOverlay_dat_entry_1 {
 
 	/* GUID of the WIM file (copied from the WIM header, offset +0x18).  */
 	u8 guid[16];
-} __attribute__((packed));
+};
 
 /*
  * Format of file: "\System Volume Information\WimOverlay.dat"
@@ -308,7 +309,7 @@ struct WimOverlay_dat_header {
 	le64 next_data_source_id;
 
 	struct WimOverlay_dat_entry_1 entry_1s[];
-} __attribute__((packed));
+};
 
 /* Location information about a WIM data source  */
 struct WimOverlay_dat_entry_2 {
@@ -414,10 +415,11 @@ struct WimOverlay_dat_entry_2 {
 		/* Null-terminated path to WIM file.  Begins with \ but does
 		 * *not* include drive letter!  */
 		utf16lechar wim_file_name[];
-	} __attribute__((packed));
-} __attribute__((packed));
+	};
+};
+#pragma pack(pop)
 
-static void __attribute__((unused))
+static void _unused_attribute
 wof_check_structs(void)
 {
 	STATIC_ASSERT(sizeof(struct WimOverlay_dat_header) == 24);

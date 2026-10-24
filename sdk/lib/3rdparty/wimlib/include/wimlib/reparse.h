@@ -49,7 +49,7 @@ struct reparse_buffer_disk {
 
 #define REPARSE_DATA_MAX_SIZE (REPARSE_POINT_MAX_SIZE - REPARSE_DATA_OFFSET)
 
-static void __attribute__((unused))
+static void _unused_attribute
 check_reparse_buffer_disk(void)
 {
 	STATIC_ASSERT(offsetof(struct reparse_buffer_disk, rpdata) == 8);

@@ -61,7 +61,7 @@ full_read(struct filedes *fd, void *buf, size_t count)
 				continue;
 			return WIMLIB_ERR_READ;
 		}
-		buf += ret;
+		buf = (u8 *)buf + ret;
 		count -= ret;
 		fd->offset += ret;
 	}
@@ -86,7 +86,7 @@ pipe_read(struct filedes *fd, void *buf, size_t count, off_t offset)
 	/* Manually seek to the requested position.  */
 	while (fd->offset != offset) {
 		size_t bytes_to_read = min(offset - fd->offset, BUFFER_SIZE);
-		u8 dummy[bytes_to_read];
+		u8 dummy[BUFFER_SIZE];
 
 		ret = full_read(fd, dummy, bytes_to_read);
 		if (ret)
@@ -131,7 +131,7 @@ full_pread(struct filedes *fd, void *buf, size_t count, off_t offset)
 			}
 			return WIMLIB_ERR_READ;
 		}
-		buf += ret;
+		buf = (u8 *)buf + ret;
 		count -= ret;
 		offset += ret;
 	}
@@ -159,7 +159,7 @@ full_write(struct filedes *fd, const void *buf, size_t count)
 				continue;
 			return WIMLIB_ERR_WRITE;
 		}
-		buf += ret;
+		buf = (const u8 *)buf + ret;
 		count -= ret;
 		fd->offset += ret;
 	}
@@ -185,7 +185,7 @@ full_pwrite(struct filedes *fd, const void *buf, size_t count, off_t offset)
 				continue;
 			return WIMLIB_ERR_WRITE;
 		}
-		buf += ret;
+		buf = (const u8 *)buf + ret;
 		count -= ret;
 		offset += ret;
 	}

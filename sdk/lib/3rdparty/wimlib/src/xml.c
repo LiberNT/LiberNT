@@ -173,9 +173,10 @@ do_xml_path_walk(struct xml_node *element, const tchar *path, bool create,
 		 struct xml_node **result_ret)
 {
 	size_t n = tstrlen(path) + 1;
-	tchar buf[n];
+	tchar *buf;
 	tchar *p;
 	tchar c;
+	int ret = 0;
 
 	*result_ret = NULL;
 
@@ -183,6 +184,9 @@ do_xml_path_walk(struct xml_node *element, const tchar *path, bool create,
 		return 0;
 
 	/* Copy the path to a temporary buffer.  */
+	buf = MALLOC(n * sizeof(tchar));
+	if (!buf)
+		return WIMLIB_ERR_NOMEM;
 	tmemcpy(buf, path, n);
 	p = buf;
 
@@ -219,16 +223,20 @@ do_xml_path_walk(struct xml_node *element, const tchar *path, bool create,
 		/* No child matched the path.  If create=false, the lookup
 		 * failed.  If create=true, create the needed element.  */
 		if (!create)
-			return 0;
+			goto out;
 
 		/* We can't create an element at index 'n' if indices 1...n-1
 		 * didn't already exist.  */
-		if (index != 1)
-			return WIMLIB_ERR_INVALID_PARAM;
+		if (index != 1) {
+			ret = WIMLIB_ERR_INVALID_PARAM;
+			goto out;
+		}
 
 		child = xml_new_element(element, name);
-		if (!child)
-			return WIMLIB_ERR_NOMEM;
+		if (!child) {
+			ret = WIMLIB_ERR_NOMEM;
+			goto out;
+		}
 	next_step:
 		/* Continue to the next path component, if there is one.  */
 		element = child;
@@ -236,11 +244,14 @@ do_xml_path_walk(struct xml_node *element, const tchar *path, bool create,
 	}
 
 	*result_ret = element;
-	return 0;
+	goto out;
 
 bad_syntax:
 	ERROR("The XML path \"%"TS"\" has invalid syntax.", path);
-	return WIMLIB_ERR_INVALID_PARAM;
+	ret = WIMLIB_ERR_INVALID_PARAM;
+out:
+	FREE(buf);
+	return ret;
 }
 
 /* Retrieve the XML element, if any, at the specified 'path'.  This supports a

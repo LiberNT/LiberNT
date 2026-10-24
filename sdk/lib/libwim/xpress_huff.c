@@ -58,8 +58,7 @@ static int wimage_avx2_enabled  = 0;
 
 /* PSHUFB masks for small-offset RLE expansion. */
 #  if WIMAGE_HAVE_SSSE3
-static int8_t wimage_rle_pshufb_masks[16][16][16]
-    __attribute__((aligned(16)));
+static _Alignas(16) int8_t wimage_rle_pshufb_masks[16][16][16];
 
 static void wimage_init_rle_masks(void)
 {
@@ -612,6 +611,29 @@ static inline uint32_t h3(const uint8_t* p)
     return (((uint32_t)p[0] << 10) ^ ((uint32_t)p[1] << 5) ^ p[2]) & 0x7FFF;
 }
 
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <intrin.h>
+
+static inline uint32_t wimage_ctz32(uint32_t v)
+{
+    unsigned long index;
+    _BitScanForward(&index, v);
+    return (uint32_t)index;
+}
+
+static inline uint32_t wimage_ctz64(uint64_t v)
+{
+    unsigned long index;
+    if (_BitScanForward(&index, (unsigned long)v))
+        return (uint32_t)index;
+    _BitScanForward(&index, (unsigned long)(v >> 32));
+    return (uint32_t)index + 32;
+}
+#else
+#define wimage_ctz32(v) ((uint32_t)__builtin_ctz(v))
+#define wimage_ctz64(v) ((uint32_t)__builtin_ctzll(v))
+#endif
+
 /* Fast match extension with SSE2 on Intel x86_64. */
 static inline uint32_t match_len(const uint8_t* a, const uint8_t* b, uint32_t max_len)
 {
@@ -627,7 +649,7 @@ static inline uint32_t match_len(const uint8_t* a, const uint8_t* b, uint32_t ma
             if (mask != 0xFFFF) {
                 /* Mask has a 1 bit per matching byte (LSB = first byte).
                  * The first zero bit is the first mismatch position. */
-                len += (uint32_t)__builtin_ctz(~mask & 0xFFFF);
+                len += wimage_ctz32(~mask & 0xFFFF);
                 return len;
             }
             len += 16;
@@ -642,7 +664,7 @@ static inline uint32_t match_len(const uint8_t* a, const uint8_t* b, uint32_t ma
         memcpy(&vb, b + len, 8);
         if (va != vb) {
             uint64_t diff = va ^ vb;
-            len += (uint32_t)(__builtin_ctzll(diff) / 8);
+            len += wimage_ctz64(diff) / 8;
             return len < max_len ? len : max_len;
         }
         len += 8;
