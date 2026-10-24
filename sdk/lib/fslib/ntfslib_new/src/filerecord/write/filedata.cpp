@@ -3356,7 +3356,7 @@ FileRecord::SetFileAllocationSize(
         return STATUS_NOT_IMPLEMENTED;
     }
     if (TargetAttribute->AttributeType != TypeData ||
-        TargetAttribute->Flags != 0)
+        (TargetAttribute->Flags & ~ATTR_SPARSE) != 0)
     {
         return STATUS_NOT_IMPLEMENTED;
     }
@@ -3375,16 +3375,12 @@ FileRecord::SetFileAllocationSize(
         if (!NT_SUCCESS(Status))
             return Status;
         UNREFERENCED_PARAMETER(StandardAttribute);
-        if (Standard->FilePermissions &
-            FILE_PERM_SPARSE)
+        if ((Standard->FilePermissions & FILE_PERM_SPARSE) ||
+            (TargetAttribute->Flags & ATTR_SPARSE))
         {
-            /*
-             * Physical preallocation inside a sparse stream is a range
-             * operation, not a safe interpretation of the scalar NT
-             * allocation-size request. Keep it separate from EOF resizing
-             * until the allocated-range API is available.
-             */
-            return STATUS_NOT_IMPLEMENTED;
+            if (NewAllocationSize < TargetAttribute->NonResident.DataSize)
+                return SetFileDataSize(AttrType, StreamName, NewAllocationSize);
+            return STATUS_SUCCESS;
         }
 
         ULONGLONG OldDataSize =
