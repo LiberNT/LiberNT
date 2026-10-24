@@ -2215,7 +2215,21 @@ Hid_PnpStart(
     //
     ASSERT(DescriptorLength);
     ASSERT(HidDeviceExtension->ConfigurationDescriptor);
-    ASSERT(HidDeviceExtension->ConfigurationDescriptor->bLength);
+
+    if (DescriptorLength < sizeof(USB_CONFIGURATION_DESCRIPTOR) ||
+        HidDeviceExtension->ConfigurationDescriptor->bLength < sizeof(USB_CONFIGURATION_DESCRIPTOR) ||
+        HidDeviceExtension->ConfigurationDescriptor->bDescriptorType != USB_CONFIGURATION_DESCRIPTOR_TYPE ||
+        HidDeviceExtension->ConfigurationDescriptor->wTotalLength < sizeof(USB_CONFIGURATION_DESCRIPTOR))
+    {
+        DPRINT1("[HIDUSB] invalid configuration descriptor (length %lu, bLength %u, type %u, total %u)\n",
+                DescriptorLength,
+                HidDeviceExtension->ConfigurationDescriptor->bLength,
+                HidDeviceExtension->ConfigurationDescriptor->bDescriptorType,
+                HidDeviceExtension->ConfigurationDescriptor->wTotalLength);
+        ExFreePoolWithTag(HidDeviceExtension->ConfigurationDescriptor, HIDUSB_TAG);
+        HidDeviceExtension->ConfigurationDescriptor = NULL;
+        return STATUS_DEVICE_DATA_ERROR;
+    }
 
     //
     // store full length
