@@ -131,6 +131,8 @@ LxFileDereference(
         LxInotifyFileEvent(File, LX_IN_CLOSE_WRITE);
     if (File->Ops->Release != NULL)
         File->Ops->Release(File);
+    if (File->PidProcess != NULL)
+        LxProcessDereference(File->PidProcess);
     if (File->Handle != NULL)
         ZwClose(File->Handle);
     LxFree(File->DirBuffer);

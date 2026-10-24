@@ -1206,29 +1206,38 @@ LX_SYSCALL(LxSysPidfdOpen)
     return LxInstallNewFile(Call->Process, File, TRUE);
 }
 
+#define LX_PIDFD_SIGNAL_THREAD          0x00000001
+#define LX_PIDFD_SIGNAL_THREAD_GROUP    0x00000002
+#define LX_PIDFD_SIGNAL_PROCESS_GROUP   0x00000004
+
 LX_SYSCALL(LxSysPidfdSendSignal)
 {
     LONG Signal = (LONG)Call->Args[1];
+    ULONG Flags = (ULONG)Call->Args[3];
     PLX_PROCESS Target;
     PLX_FILE File;
     LX_SIGINFO Info;
     LONG64 Result = 0;
 
-    if ((Signal < 0) || (Signal > LX_NSIG))
+    if (Flags & ~(LX_PIDFD_SIGNAL_THREAD | LX_PIDFD_SIGNAL_THREAD_GROUP | LX_PIDFD_SIGNAL_PROCESS_GROUP))
+        return -LX_EINVAL;
+    if (Flags & (Flags - 1))
         return -LX_EINVAL;
     File = LxFdGet(Call->Process, (LONG)Call->Args[0]);
     if (File == NULL)
         return -LX_EBADF;
     Target = LxPidfdProcess(File);
     if (Target == NULL)
+        Target = File->PidProcess;
+    if (Target == NULL)
     {
         LxFileDereference(File);
         return -LX_EBADF;
     }
-    if (Target->Exited)
+    if ((Call->Process->PidNs != NULL) && ((Target->PidNs == NULL) || !LxPidNsContains(Call->Process->PidNs, Target->PidNs)))
     {
         LxFileDereference(File);
-        return -LX_ESRCH;
+        return -LX_EINVAL;
     }
 
     RtlZeroMemory(&Info, sizeof(Info));
@@ -1237,15 +1246,47 @@ LX_SYSCALL(LxSysPidfdSendSignal)
         Result = LxCopyFromUser(&Info, Call->Args[2], sizeof(Info));
         if ((Result == 0) && (Info.Signo != Signal))
             Result = -LX_EINVAL;
+        if ((Result == 0) && ((Target != Call->Process) || (Flags & LX_PIDFD_SIGNAL_PROCESS_GROUP)) &&
+            ((Info.Code >= 0) || (Info.Code == LX_SI_TKILL)))
+        {
+            Result = -LX_EPERM;
+        }
     }
     else
     {
+        Info.Signo = Signal;
         Info.Code = LX_SI_USER;
         Info.Child.Pid = (LONG)Call->Process->Pid;
         Info.Child.Uid = Call->Process->Uid[0];
     }
+    if ((Result == 0) && ((Signal < 0) || (Signal > LX_NSIG)))
+        Result = -LX_EINVAL;
+    if ((Result == 0) && Target->Exited)
+        Result = -LX_ESRCH;
     if ((Result == 0) && (Signal != 0))
-        LxSignalSend(Target, NULL, Signal, &Info);
+    {
+        if (Flags & LX_PIDFD_SIGNAL_PROCESS_GROUP)
+        {
+            if (LxSignalGroupInfo(Target->Instance, NULL, Target->Pgid, Signal, &Info) == 0)
+                Result = -LX_ESRCH;
+        }
+        else if (Flags & LX_PIDFD_SIGNAL_THREAD)
+        {
+            PLX_PROCESS Owner = NULL;
+            PLX_THREAD Leader = LxThreadLookupReferenced(Target->Instance, Target->Pid, &Owner);
+
+            if ((Leader == NULL) || (Owner != Target))
+                Result = -LX_ESRCH;
+            else
+                LxSignalSend(Target, Leader, Signal, &Info);
+            if (Owner != NULL)
+                LxProcessDereference(Owner);
+        }
+        else
+        {
+            LxSignalSend(Target, NULL, Signal, &Info);
+        }
+    }
     LxFileDereference(File);
     return Result;
 }

@@ -197,6 +197,7 @@ struct _LX_FILE
     BOOLEAN Written;
     PLX_EVENT_SOURCE EventSource;
     LONG64 EventSeen;
+    PLX_PROCESS PidProcess;
 };
 
 typedef enum _LX_FS_KIND
@@ -923,6 +924,8 @@ ULONG64 LxTtyDevice(_In_ PLX_TTY Tty);
 ULONG LxTtyList(_In_ PLX_INSTANCE Instance, _Out_writes_(Count) PULONG Indexes, _In_ ULONG Count);
 VOID LxTtyAttachControlling(_In_ PLX_PROCESS Process, _In_ PLX_TTY Tty);
 ULONG LxSignalGroup(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULONG Pgid, _In_ LONG Signal);
+ULONG LxSignalGroupInfo(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULONG Pgid, _In_ LONG Signal,
+                        _In_opt_ PLX_SIGINFO Info);
 
 PLX_PROCESS LxProcessCreate(_In_ PLX_INSTANCE Instance);
 PLX_PROCESS LxProcessFork(_In_ PLX_PROCESS Parent);

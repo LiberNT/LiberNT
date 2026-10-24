@@ -646,6 +646,17 @@ LxSignalGroup(
     _In_ ULONG Pgid,
     _In_ LONG Signal)
 {
+    return LxSignalGroupInfo(Instance, PidNs, Pgid, Signal, NULL);
+}
+
+ULONG
+LxSignalGroupInfo(
+    _In_ PLX_INSTANCE Instance,
+    _In_opt_ PLX_NS PidNs,
+    _In_ ULONG Pgid,
+    _In_ LONG Signal,
+    _In_opt_ PLX_SIGINFO SignalInfo)
+{
     PLX_PROCESS Targets[128];
     PLX_PROCESS Self = NULL;
     PLX_THREAD Current = LxCurrentThread();
@@ -682,10 +693,17 @@ LxSignalGroup(
     }
     ExReleaseFastMutex(&LxProcessListLock);
 
-    RtlZeroMemory(&Info, sizeof(Info));
-    Info.Code = LX_SI_USER;
-    if (Current != NULL)
-        Info.Child.Pid = (LONG)Current->Process->Pid;
+    if (SignalInfo != NULL)
+    {
+        Info = *SignalInfo;
+    }
+    else
+    {
+        RtlZeroMemory(&Info, sizeof(Info));
+        Info.Code = LX_SI_USER;
+        if (Current != NULL)
+            Info.Child.Pid = (LONG)Current->Process->Pid;
+    }
 
     Total = Count;
     for (Index = 0; Index < Count; Index++)

@@ -286,12 +286,48 @@ LxSynthIno(
 {
     PLX_MOUNT Mount = Node->Mount;
 
+    PCSTR Relative = Node->Relative;
+    ULONG64 Ino;
+    ULONG Number = 0;
+
     if ((Mount->Kind == LxFsProc) && ((Mount->Root == NULL) || (strcmp(Mount->Root, "/") == 0)) &&
-        ((Node->Relative[0] == '\0') || (strcmp(Node->Relative, "/") == 0)))
+        ((Relative[0] == '\0') || (strcmp(Relative, "/") == 0)))
     {
         return LX_PROC_ROOT_INO;
     }
-    return LxHashPath(Mount->Id, Node->Relative);
+    Ino = LxHashPath(Mount->Id, Relative);
+    if (Mount->Kind != LxFsProc)
+        return Ino;
+    if (*Relative == '/')
+        Relative++;
+    while ((*Relative >= '0') && (*Relative <= '9') && (Number < 429496729))
+        Number = Number * 10 + (*Relative++ - '0');
+    if ((Number != 0) && ((*Relative == '\0') || (*Relative == '/')))
+    {
+        PLX_PROCESS Process = LxProcessLookup(Mount->Instance,
+                                              (Mount->PidNs != NULL) ? LxNrToGlobalIn(Mount->PidNs, Number) : Number);
+
+        if (Process != NULL)
+        {
+            Ino ^= (ULONG64)Process->StartTime * 0x9E3779B97F4A7C15ULL;
+            LxProcessDereference(Process);
+        }
+    }
+    return Ino;
+}
+
+static
+BOOLEAN
+LxProcIsPidRoot(
+    _In_ PCSTR Relative)
+{
+    if (*Relative == '/')
+        Relative++;
+    if (*Relative == '\0')
+        return FALSE;
+    while ((*Relative >= '0') && (*Relative <= '9'))
+        Relative++;
+    return (*Relative == '\0') || ((Relative[0] == '/') && (Relative[1] == '\0'));
 }
 
 static
@@ -3503,6 +3539,11 @@ LxSynthOpen(
         File->Ino = LxSynthIno(Node);
         if (Node->Mount->Kind == LxFsCgroup)
             File->HandlerContext = Synth.Cgroup;
+        if ((Node->Mount->Kind == LxFsProc) && (Synth.Id == LxProcPidDir) && (Synth.Tid == 0) && (Synth.Pid != 0) &&
+            LxProcIsPidRoot(Node->Relative))
+        {
+            File->PidProcess = LxProcessLookup(Process->Instance, Synth.Pid);
+        }
     }
     else if ((Synth.Id == LxNsfsFile) || (Synth.Id == LxProcNsLink))
     {
