@@ -218,16 +218,16 @@ win32_get_drive_path(const wchar_t *file_path, wchar_t drive_path[7]);
 bool
 win32_try_to_attach_wof(const wchar_t *drive);
 
-void __attribute__((cold))
+void _cold_attribute
 win32_warning(DWORD err, const wchar_t *format, ...);
 
-void __attribute__((cold))
+void _cold_attribute
 win32_error(DWORD err, const wchar_t *format, ...);
 
-void __attribute__((cold))
+void _cold_attribute
 winnt_warning(NTSTATUS status, const wchar_t *format, ...);
 
-void __attribute__((cold))
+void _cold_attribute
 winnt_error(NTSTATUS status, const wchar_t *format, ...);
 
 NTSTATUS

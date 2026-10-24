@@ -48,6 +48,7 @@
 		 ((u64)'\0' << 54))
 
 /* On-disk format of the WIM header.  */
+#pragma pack(push, 1)
 struct wim_header_disk {
 
 	/* +0x00: Magic characters WIM_MAGIC or PWM_MAGIC.  */
@@ -110,7 +111,8 @@ struct wim_header_disk {
 	u8 unused[60];
 
 	/* +0xd0 (208)  */
-} __attribute__((packed));
+};
+#pragma pack(pop)
 
 /*
  * Arbitrarily limit the maximum number of images to 65535, to prevent huge

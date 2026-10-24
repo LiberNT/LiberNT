@@ -721,7 +721,7 @@ lzms_decompress(const void * const restrict in, const size_t in_nbytes,
 {
 	struct lzms_decompressor *d = _d;
 	u8 *out_next = out;
-	u8 * const out_end = out + out_nbytes;
+	u8 * const out_end = (u8 *)out + out_nbytes;
 	struct lzms_range_decoder rd;
 	struct lzms_input_bitstream is;
 

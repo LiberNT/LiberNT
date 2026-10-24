@@ -30,6 +30,8 @@ target_compile_definitions(faudio PRIVATE $<$<CONFIG:Debug>:NDEBUG>)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(faudio PRIVATE -Wno-unused-variable -Wno-unused-but-set-variable)
+elseif(MSVC)
+    remove_target_compile_option(faudio "/we4189")
 endif()
 
 add_dependencies(faudio psdk)

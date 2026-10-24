@@ -12,7 +12,7 @@
 
 #define ARM_CPU_FEATURE_SHA1		0x00000001
 
-#if (defined(__i386__) || defined(__x86_64__)) || \
+#if ((defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)) || \
     (defined(__aarch64__) && defined(__linux__)) || \
     (defined(__aarch64__) && defined(__APPLE__)) || \
     (defined(__aarch64__) && defined(_WIN32))

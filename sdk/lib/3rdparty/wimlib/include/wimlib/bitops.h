@@ -31,6 +31,10 @@
 #include "wimlib/compiler.h"
 #include "wimlib/types.h"
 
+#ifdef _MSC_VER
+#  include <intrin.h>
+#endif
+
 /*
  * Bit Scan Reverse (BSR) - find the 0-based index (relative to the least
  * significant bit) of the *most* significant 1 bit in the input value.  The
@@ -40,13 +44,29 @@
 static forceinline unsigned
 bsr32(u32 v)
 {
+#ifdef _MSC_VER
+	unsigned long i;
+
+	_BitScanReverse(&i, v);
+	return i;
+#else
 	return 31 - __builtin_clz(v);
+#endif
 }
 
 static forceinline unsigned
 bsr64(u64 v)
 {
+#ifdef _MSC_VER
+	unsigned long i;
+
+	if (_BitScanReverse(&i, (u32)(v >> 32)))
+		return i + 32;
+	_BitScanReverse(&i, (u32)v);
+	return i;
+#else
 	return 63 - __builtin_clzll(v);
+#endif
 }
 
 static forceinline unsigned
@@ -68,13 +88,29 @@ bsrw(machine_word_t v)
 static forceinline unsigned
 bsf32(u32 v)
 {
+#ifdef _MSC_VER
+	unsigned long i;
+
+	_BitScanForward(&i, v);
+	return i;
+#else
 	return __builtin_ctz(v);
+#endif
 }
 
 static forceinline unsigned
 bsf64(u64 v)
 {
+#ifdef _MSC_VER
+	unsigned long i;
+
+	if (_BitScanForward(&i, (u32)v))
+		return i;
+	_BitScanForward(&i, (u32)(v >> 32));
+	return i + 32;
+#else
 	return __builtin_ctzll(v);
+#endif
 }
 
 static forceinline unsigned

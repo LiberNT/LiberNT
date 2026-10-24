@@ -27,7 +27,7 @@
 #include "wimlib/lzms_common.h"
 #include "wimlib/unaligned.h"
 
-#ifdef __x86_64__
+#if defined(__x86_64__) && defined(__GNUC__)
 #  include <emmintrin.h>
 #endif
 
@@ -378,7 +378,7 @@ lzms_dilute_symbol_frequencies(u32 freqs[], unsigned num_syms)
 }
 
 
-#ifdef __x86_64__
+#if defined(__x86_64__) && defined(__GNUC__)
 static forceinline u8 *
 find_next_opcode_sse4_2(u8 *p)
 {
@@ -551,8 +551,8 @@ have_opcode:
  * @last_target_usages must be a temporary array of length >= 65536.
  */
 void
-lzms_x86_filter(u8 data[restrict], s32 size,
-		s32 last_target_usages[restrict], bool undo)
+lzms_x86_filter(u8 * restrict data, s32 size,
+		s32 * restrict last_target_usages, bool undo)
 {
 	/*
 	 * Note: this filter runs unconditionally and uses a custom algorithm to
@@ -613,7 +613,7 @@ lzms_x86_filter(u8 data[restrict], s32 size,
 	p = data + 1;
 	tail_ptr = &data[size - 16];
 
-#ifdef __x86_64__
+#if defined(__x86_64__) && defined(__GNUC__)
 	if (cpu_features & X86_CPU_FEATURE_SSE4_2) {
 		u8 saved_byte = *tail_ptr;
 		*tail_ptr = 0xE8;

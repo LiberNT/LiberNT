@@ -870,7 +870,11 @@ struct d3d12_descriptor_heap
 
     unsigned int volatile dirty_list_head;
 
+#ifdef _MSC_VER
+    uint8_t DECLSPEC_ALIGN(8) descriptors[];
+#else
     uint8_t DECLSPEC_ALIGN(sizeof(void *)) descriptors[];
+#endif
 };
 
 void d3d12_desc_flush_vk_heap_updates_locked(struct d3d12_descriptor_heap *descriptor_heap, struct d3d12_device *device);

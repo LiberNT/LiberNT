@@ -70,7 +70,7 @@
 
 #define LZX_READ_LENS_MAX_OVERRUN 50
 
-struct lzx_decompressor {
+struct _aligned_attribute(DECODE_TABLE_ALIGNMENT) lzx_decompressor {
 
 	DECODE_TABLE(maincode_decode_table, LZX_MAINCODE_MAX_NUM_SYMBOLS,
 		     LZX_MAINCODE_TABLEBITS, LZX_MAX_MAIN_CODEWORD_LEN);
@@ -115,7 +115,7 @@ struct lzx_decompressor {
 	 * bits of aligned offset blocks */
 	u8 extra_offset_bits_minus_aligned[LZX_MAX_OFFSET_SLOTS];
 
-} __attribute__((aligned(DECODE_TABLE_ALIGNMENT)));
+};
 
 /* Read a Huffman-encoded symbol using the precode. */
 static forceinline unsigned

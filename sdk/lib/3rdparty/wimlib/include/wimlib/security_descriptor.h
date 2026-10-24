@@ -35,6 +35,7 @@
  * conflicts with the same types being defined in the libntfs-3g headers.  */
 
 /* Windows NT security descriptor, in self-relative format  */
+#pragma pack(push, 1)
 typedef struct {
 	/* Security descriptor revision; should be 1  */
 	u8 revision;
@@ -58,7 +59,7 @@ typedef struct {
 	/* Offset of Discretionary Access Control List (DACL) in security
 	 * descriptor, or 0 if no DACL is present  */
 	le32 dacl_offset;
-} __attribute__((packed)) wimlib_SECURITY_DESCRIPTOR_RELATIVE;
+} wimlib_SECURITY_DESCRIPTOR_RELATIVE;
 
 #define wimlib_SE_OWNER_DEFAULTED		0x0001
 #define wimlib_SE_GROUP_DEFAULTED		0x0002
@@ -85,7 +86,7 @@ typedef struct {
 	u8  identifier_authority[6];
 
 	le32 sub_authority[];
-} __attribute__((packed)) wimlib_SID;
+} wimlib_SID;
 
 /* Header of a Windows NT access control list  */
 typedef struct {
@@ -104,7 +105,7 @@ typedef struct {
 
 	/* padding  */
 	le16 sbz2;
-} __attribute__((packed)) wimlib_ACL;
+} wimlib_ACL;
 
 #define wimlib_ACCESS_ALLOWED_ACE_TYPE		0
 #define wimlib_ACCESS_DENIED_ACE_TYPE		1
@@ -120,27 +121,28 @@ typedef struct {
 
 	/* Size of the access control entry, including this header  */
 	le16 size;
-} __attribute__((packed)) wimlib_ACE_HEADER;
+} wimlib_ACE_HEADER;
 
 /* Windows NT access control entry to grant rights to a user or group  */
 typedef struct {
 	wimlib_ACE_HEADER hdr;
 	le32 mask;
 	wimlib_SID sid;
-} __attribute__((packed)) wimlib_ACCESS_ALLOWED_ACE;
+} wimlib_ACCESS_ALLOWED_ACE;
 
 /* Windows NT access control entry to deny rights to a user or group  */
 typedef struct {
 	wimlib_ACE_HEADER hdr;
 	le32 mask;
 	wimlib_SID sid;
-} __attribute__((packed)) wimlib_ACCESS_DENIED_ACE;
+} wimlib_ACCESS_DENIED_ACE;
 
 /* Windows NT access control entry to audit access to the object  */
 typedef struct {
 	wimlib_ACE_HEADER hdr;
 	le32 mask;
 	wimlib_SID sid;
-} __attribute__((packed)) wimlib_SYSTEM_AUDIT_ACE;
+} wimlib_SYSTEM_AUDIT_ACE;
+#pragma pack(pop)
 
 #endif /* _WIMLIB_SECURITY_DESCRIPTOR_H */

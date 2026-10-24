@@ -76,7 +76,7 @@
 /* This value is chosen for fast decompression.  */
 #define XPRESS_TABLEBITS 11
 
-struct xpress_decompressor {
+struct _aligned_attribute(DECODE_TABLE_ALIGNMENT) xpress_decompressor {
 	union {
 		DECODE_TABLE(decode_table, XPRESS_NUM_SYMBOLS,
 			     XPRESS_TABLEBITS, XPRESS_MAX_CODEWORD_LEN);
@@ -84,7 +84,7 @@ struct xpress_decompressor {
 	};
 	DECODE_TABLE_WORKING_SPACE(working_space, XPRESS_NUM_SYMBOLS,
 				   XPRESS_MAX_CODEWORD_LEN);
-} __attribute__((aligned(DECODE_TABLE_ALIGNMENT)));
+};
 
 static int
 xpress_decompress(const void *restrict compressed_data, size_t compressed_size,
