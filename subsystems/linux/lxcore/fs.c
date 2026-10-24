@@ -1812,22 +1812,567 @@ LX_SYSCALL(LxSysUmount2)
     return Error;
 }
 
-LX_SYSCALL(LxSysXattrGet)
+#define LX_XATTR_CREATE     0x1
+#define LX_XATTR_REPLACE    0x2
+#define LX_XATTR_NAME_MAX   255
+#define LX_XATTR_SIZE_MAX   65536
+#define LX_XATTR_BLOB_MAX   65535
+
+typedef struct _LX_XATTR_TARGET
 {
-    UNREFERENCED_PARAMETER(Call);
-    return -LX_ENODATA;
+    PLX_FILE File;
+    HANDLE Handle;
+    BOOLEAN Close;
+    ULONG Type;
+    ULONG Mode;
+    ULONG Uid;
+    ULONG Gid;
+} LX_XATTR_TARGET, *PLX_XATTR_TARGET;
+
+typedef struct _LX_XATTR_ARGS
+{
+    ULONG64 Value;
+    ULONG Size;
+    ULONG Flags;
+} LX_XATTR_ARGS, *PLX_XATTR_ARGS;
+
+static
+VOID
+LxXattrRelease(
+    _Inout_ PLX_XATTR_TARGET Target)
+{
+    if (Target->Close && (Target->Handle != NULL))
+        ZwClose(Target->Handle);
+    if (Target->File != NULL)
+        LxFileDereference(Target->File);
+    RtlZeroMemory(Target, sizeof(*Target));
 }
 
-LX_SYSCALL(LxSysXattrList)
+static
+LONG
+LxXattrResolve(
+    _In_ PLX_CALL Call,
+    _In_ LONG DirFd,
+    _In_ ULONG64 UserPath,
+    _In_ ULONG AtFlags,
+    _In_ BOOLEAN UseFd,
+    _In_ BOOLEAN Write,
+    _Out_ PLX_XATTR_TARGET Target)
 {
-    UNREFERENCED_PARAMETER(Call);
+    ULONG64 Device;
+    LX_NODE Node;
+    PSTR Path = NULL;
+    LONG Error;
+
+    RtlZeroMemory(Target, sizeof(*Target));
+    if (!UseFd)
+    {
+        LONG64 Result = (UserPath != 0) ? LxCopyPath(UserPath, &Path) : 0;
+
+        if (Result != 0)
+            return (LONG)Result;
+        if (((Path == NULL) || (Path[0] == '\0')) && (AtFlags & LX_AT_EMPTY_PATH))
+        {
+            UseFd = TRUE;
+        }
+        else if (Path == NULL)
+        {
+            return -LX_EFAULT;
+        }
+    }
+
+    if (UseFd)
+    {
+        LxFree(Path);
+        Target->File = LxFdGet(Call->Process, DirFd);
+        if (Target->File == NULL)
+            return -LX_EBADF;
+        Target->Type = Target->File->Type;
+        Error = LxXattrOpenFile(Target->File, Write, &Target->Handle, &Target->Close);
+    }
+    else
+    {
+        Error = LxLookup(Call->Process, DirFd, Path, (AtFlags & LX_AT_SYMLINK_NOFOLLOW) ? 0 : LX_LOOKUP_FOLLOW, &Node);
+        LxFree(Path);
+        if (Error != 0)
+            return Error;
+        Target->Type = Node.Type;
+        Error = LxXattrOpenNode(&Node, Write, &Target->Handle);
+        Target->Close = (Error == 0);
+        LxNodeFree(&Node);
+    }
+    if (Error != 0)
+    {
+        LxXattrRelease(Target);
+        return Error;
+    }
+    if (LxNtReadLxAttributes(Target->Handle, &Target->Mode, &Target->Uid, &Target->Gid, &Device) != 0)
+        Target->Mode = Target->Uid = Target->Gid = MAXULONG;
+    if ((Target->Mode != MAXULONG) && (Target->Mode & LX_S_IFMT))
+        Target->Type = Target->Mode & LX_S_IFMT;
     return 0;
 }
 
-LX_SYSCALL(LxSysXattrSet)
+static
+BOOLEAN
+LxXattrInGroup(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG Gid)
 {
-    UNREFERENCED_PARAMETER(Call);
-    return -LX_EOPNOTSUPP;
+    ULONG Index;
+
+    if (Process->Gid[1] == Gid)
+        return TRUE;
+    for (Index = 0; Index < Process->GroupCount; Index++)
+    {
+        if (Process->Groups[Index] == Gid)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static
+LONG
+LxXattrPermission(
+    _In_ PLX_PROCESS Process,
+    _In_ PCSTR Name,
+    _In_ PLX_XATTR_TARGET Target,
+    _In_ BOOLEAN Write)
+{
+    BOOLEAN Root = (Process->Uid[1] == 0);
+    ULONG Type = Target->Type & LX_S_IFMT;
+    ULONG Bits;
+
+    if (strncmp(Name, "security.", 9) == 0)
+        return (Write && !Root) ? -LX_EPERM : 0;
+    if (strncmp(Name, "trusted.", 8) == 0)
+        return Root ? 0 : (Write ? -LX_EPERM : -LX_ENODATA);
+    if (strncmp(Name, "user.", 5) != 0)
+        return -LX_EOPNOTSUPP;
+
+    if ((Type != LX_S_IFREG) && (Type != LX_S_IFDIR))
+        return Write ? -LX_EPERM : -LX_ENODATA;
+    if (Root || (Target->Mode == MAXULONG))
+        return 0;
+    if ((Type == LX_S_IFDIR) && (Target->Mode & LX_S_ISVTX) && (Process->Uid[1] != Target->Uid))
+        return Write ? -LX_EPERM : -LX_ENODATA;
+    if (Process->Uid[1] == Target->Uid)
+        Bits = Target->Mode >> 6;
+    else if (LxXattrInGroup(Process, Target->Gid))
+        Bits = Target->Mode >> 3;
+    else
+        Bits = Target->Mode;
+    return (Bits & (Write ? 2 : 4)) ? 0 : -LX_EACCES;
+}
+
+static
+LONG
+LxXattrName(
+    _In_ ULONG64 UserName,
+    _Out_ PSTR *Name)
+{
+    LONG64 Result = LxCopyStringFromUser(UserName, Name, LX_XATTR_NAME_MAX + 1);
+
+    if (Result == -LX_ENAMETOOLONG)
+        return -LX_ERANGE;
+    if (Result != 0)
+        return (LONG)Result;
+    if (((*Name)[0] == '\0') || (strlen(*Name) > LX_XATTR_NAME_MAX))
+    {
+        LxFree(*Name);
+        *Name = NULL;
+        return -LX_ERANGE;
+    }
+    return 0;
+}
+
+static
+PUCHAR
+LxXattrFind(
+    _In_reads_bytes_(Length) PUCHAR Blob,
+    _In_ ULONG Length,
+    _In_ PCSTR Name,
+    _Out_ PULONG RecordLength,
+    _Out_ PUSHORT ValueLength)
+{
+    ULONG NameLength = (ULONG)strlen(Name);
+    ULONG Offset = 0;
+
+    while (Offset + 4 <= Length)
+    {
+        USHORT EntryName, EntryValue;
+
+        RtlCopyMemory(&EntryName, Blob + Offset, 2);
+        RtlCopyMemory(&EntryValue, Blob + Offset + 2, 2);
+        if (Offset + 4 + EntryName + EntryValue > Length)
+            break;
+        if ((EntryName == NameLength) && (RtlCompareMemory(Blob + Offset + 4, Name, NameLength) == NameLength))
+        {
+            *RecordLength = 4 + EntryName + EntryValue;
+            *ValueLength = EntryValue;
+            return Blob + Offset;
+        }
+        Offset += 4 + EntryName + EntryValue;
+    }
+    *RecordLength = 0;
+    *ValueLength = 0;
+    return NULL;
+}
+
+static
+LONG64
+LxXattrGetCommon(
+    _In_ PLX_CALL Call,
+    _In_ PLX_XATTR_TARGET Target,
+    _In_ ULONG64 UserName,
+    _In_ ULONG64 Value,
+    _In_ ULONG64 Size)
+{
+    PUCHAR Blob = LxAlloc(LX_XATTR_BLOB_MAX), Record;
+    ULONG Length, RecordLength;
+    USHORT ValueLength;
+    PSTR Name = NULL;
+    LONG64 Result;
+
+    if (Blob == NULL)
+        return -LX_ENOMEM;
+    Result = LxXattrName(UserName, &Name);
+    if (Result == 0)
+        Result = LxXattrPermission(Call->Process, Name, Target, FALSE);
+    if (Result == 0)
+        Result = LxXattrRead(Target->Handle, Blob, LX_XATTR_BLOB_MAX, &Length);
+    if (Result == 0)
+    {
+        Record = LxXattrFind(Blob, Length, Name, &RecordLength, &ValueLength);
+        if (Record == NULL)
+            Result = -LX_ENODATA;
+        else if (Size == 0)
+            Result = ValueLength;
+        else if (Size < ValueLength)
+            Result = -LX_ERANGE;
+        else
+        {
+            Result = LxCopyToUser(Value, Record + 4 + strlen(Name), ValueLength);
+            if (Result == 0)
+                Result = ValueLength;
+        }
+    }
+    LxFree(Name);
+    LxFree(Blob);
+    return Result;
+}
+
+static
+LONG64
+LxXattrSetCommon(
+    _In_ PLX_CALL Call,
+    _In_ PLX_XATTR_TARGET Target,
+    _In_ ULONG64 UserName,
+    _In_ ULONG64 Value,
+    _In_ ULONG64 Size,
+    _In_ ULONG Flags,
+    _In_ BOOLEAN Remove)
+{
+    PUCHAR Blob = LxAlloc(2 * LX_XATTR_BLOB_MAX + LX_XATTR_SIZE_MAX), Record, Updated;
+    ULONG Length, RecordLength, NameLength, NewLength;
+    USHORT ValueLength;
+    PSTR Name = NULL;
+    LONG64 Result;
+
+    if (Blob == NULL)
+        return -LX_ENOMEM;
+    Updated = Blob + LX_XATTR_BLOB_MAX;
+    Result = LxXattrName(UserName, &Name);
+    if ((Result == 0) && !Remove && (Flags & ~(LX_XATTR_CREATE | LX_XATTR_REPLACE)))
+        Result = -LX_EINVAL;
+    if ((Result == 0) && !Remove && (Size > LX_XATTR_SIZE_MAX))
+        Result = -LX_E2BIG;
+    if (Result == 0)
+        Result = LxXattrPermission(Call->Process, Name, Target, TRUE);
+    if (Result == 0)
+        Result = LxXattrRead(Target->Handle, Blob, LX_XATTR_BLOB_MAX, &Length);
+    if (Result != 0)
+        goto Exit;
+
+    NameLength = (ULONG)strlen(Name);
+    Record = LxXattrFind(Blob, Length, Name, &RecordLength, &ValueLength);
+    if ((Record == NULL) && (Remove || (Flags & LX_XATTR_REPLACE)))
+    {
+        Result = -LX_ENODATA;
+        goto Exit;
+    }
+    if ((Record != NULL) && !Remove && (Flags & LX_XATTR_CREATE))
+    {
+        Result = -LX_EEXIST;
+        goto Exit;
+    }
+
+    NewLength = 0;
+    if (Record != NULL)
+    {
+        RtlCopyMemory(Updated, Blob, Record - Blob);
+        NewLength = (ULONG)(Record - Blob);
+        RtlCopyMemory(Updated + NewLength, Record + RecordLength, Length - NewLength - RecordLength);
+        NewLength += Length - (ULONG)(Record - Blob) - RecordLength;
+    }
+    else
+    {
+        RtlCopyMemory(Updated, Blob, Length);
+        NewLength = Length;
+    }
+    if (!Remove)
+    {
+        USHORT Lengths[2] = { (USHORT)NameLength, (USHORT)Size };
+
+        if (NewLength + 4 + NameLength + Size > LX_XATTR_BLOB_MAX)
+        {
+            Result = -LX_ENOSPC;
+            goto Exit;
+        }
+        RtlCopyMemory(Updated + NewLength, Lengths, 4);
+        RtlCopyMemory(Updated + NewLength + 4, Name, NameLength);
+        Result = LxCopyFromUser(Updated + NewLength + 4 + NameLength, Value, (SIZE_T)Size);
+        if (Result != 0)
+            goto Exit;
+        NewLength += 4 + NameLength + (ULONG)Size;
+    }
+    Result = LxXattrWrite(Target->Handle, Updated, NewLength);
+
+Exit:
+    LxFree(Name);
+    LxFree(Blob);
+    return Result;
+}
+
+static
+LONG64
+LxXattrListCommon(
+    _In_ PLX_CALL Call,
+    _In_ PLX_XATTR_TARGET Target,
+    _In_ ULONG64 List,
+    _In_ ULONG64 Size)
+{
+    PUCHAR Blob = LxAlloc(2 * LX_XATTR_BLOB_MAX), Names;
+    ULONG Length, Offset = 0, Total = 0;
+    LONG64 Result;
+
+    if (Blob == NULL)
+        return -LX_ENOMEM;
+    Names = Blob + LX_XATTR_BLOB_MAX;
+    Result = LxXattrRead(Target->Handle, Blob, LX_XATTR_BLOB_MAX, &Length);
+    while ((Result == 0) && (Offset + 4 <= Length))
+    {
+        USHORT EntryName, EntryValue;
+
+        RtlCopyMemory(&EntryName, Blob + Offset, 2);
+        RtlCopyMemory(&EntryValue, Blob + Offset + 2, 2);
+        if (Offset + 4 + EntryName + EntryValue > Length)
+            break;
+        if (!((EntryName >= 8) && (RtlCompareMemory(Blob + Offset + 4, "trusted.", 8) == 8) &&
+              (Call->Process->Uid[1] != 0)))
+        {
+            RtlCopyMemory(Names + Total, Blob + Offset + 4, EntryName);
+            Total += EntryName;
+            Names[Total++] = '\0';
+        }
+        Offset += 4 + EntryName + EntryValue;
+    }
+    if (Result == 0)
+    {
+        if (Size == 0)
+            Result = Total;
+        else if (Size < Total)
+            Result = -LX_ERANGE;
+        else
+        {
+            Result = LxCopyToUser(List, Names, Total);
+            if (Result == 0)
+                Result = Total;
+        }
+    }
+    LxFree(Blob);
+    return Result;
+}
+
+static
+LONG64
+LxXattrCall(
+    _In_ PLX_CALL Call,
+    _In_ ULONG Operation,
+    _In_ LONG DirFd,
+    _In_ ULONG64 Path,
+    _In_ ULONG AtFlags,
+    _In_ BOOLEAN UseFd,
+    _In_ ULONG64 Name,
+    _In_ ULONG64 Value,
+    _In_ ULONG64 Size,
+    _In_ ULONG Flags)
+{
+    LX_XATTR_TARGET Target;
+    LONG64 Result;
+
+    Result = LxXattrResolve(Call, DirFd, Path, AtFlags, UseFd, (Operation == 1) || (Operation == 3), &Target);
+    if (Result != 0)
+        return Result;
+    switch (Operation)
+    {
+        case 0:
+            Result = LxXattrGetCommon(Call, &Target, Name, Value, Size);
+            break;
+        case 1:
+            Result = LxXattrSetCommon(Call, &Target, Name, Value, Size, Flags, FALSE);
+            break;
+        case 2:
+            Result = LxXattrListCommon(Call, &Target, Value, Size);
+            break;
+        default:
+            Result = LxXattrSetCommon(Call, &Target, Name, 0, 0, 0, TRUE);
+            break;
+    }
+    LxXattrRelease(&Target);
+    return Result;
+}
+
+LX_SYSCALL(LxSysSetxattr)
+{
+    return LxXattrCall(Call, 1, LX_AT_FDCWD, Call->Args[0], 0, FALSE, Call->Args[1], Call->Args[2], Call->Args[3], (ULONG)Call->Args[4]);
+}
+
+LX_SYSCALL(LxSysLsetxattr)
+{
+    return LxXattrCall(Call, 1, LX_AT_FDCWD, Call->Args[0], LX_AT_SYMLINK_NOFOLLOW, FALSE, Call->Args[1], Call->Args[2],
+                       Call->Args[3], (ULONG)Call->Args[4]);
+}
+
+LX_SYSCALL(LxSysFsetxattr)
+{
+    return LxXattrCall(Call, 1, (LONG)Call->Args[0], 0, 0, TRUE, Call->Args[1], Call->Args[2], Call->Args[3], (ULONG)Call->Args[4]);
+}
+
+LX_SYSCALL(LxSysGetxattr)
+{
+    return LxXattrCall(Call, 0, LX_AT_FDCWD, Call->Args[0], 0, FALSE, Call->Args[1], Call->Args[2], Call->Args[3], 0);
+}
+
+LX_SYSCALL(LxSysLgetxattr)
+{
+    return LxXattrCall(Call, 0, LX_AT_FDCWD, Call->Args[0], LX_AT_SYMLINK_NOFOLLOW, FALSE, Call->Args[1], Call->Args[2],
+                       Call->Args[3], 0);
+}
+
+LX_SYSCALL(LxSysFgetxattr)
+{
+    return LxXattrCall(Call, 0, (LONG)Call->Args[0], 0, 0, TRUE, Call->Args[1], Call->Args[2], Call->Args[3], 0);
+}
+
+LX_SYSCALL(LxSysListxattr)
+{
+    return LxXattrCall(Call, 2, LX_AT_FDCWD, Call->Args[0], 0, FALSE, 0, Call->Args[1], Call->Args[2], 0);
+}
+
+LX_SYSCALL(LxSysLlistxattr)
+{
+    return LxXattrCall(Call, 2, LX_AT_FDCWD, Call->Args[0], LX_AT_SYMLINK_NOFOLLOW, FALSE, 0, Call->Args[1], Call->Args[2], 0);
+}
+
+LX_SYSCALL(LxSysFlistxattr)
+{
+    return LxXattrCall(Call, 2, (LONG)Call->Args[0], 0, 0, TRUE, 0, Call->Args[1], Call->Args[2], 0);
+}
+
+LX_SYSCALL(LxSysRemovexattr)
+{
+    return LxXattrCall(Call, 3, LX_AT_FDCWD, Call->Args[0], 0, FALSE, Call->Args[1], 0, 0, 0);
+}
+
+LX_SYSCALL(LxSysLremovexattr)
+{
+    return LxXattrCall(Call, 3, LX_AT_FDCWD, Call->Args[0], LX_AT_SYMLINK_NOFOLLOW, FALSE, Call->Args[1], 0, 0, 0);
+}
+
+LX_SYSCALL(LxSysFremovexattr)
+{
+    return LxXattrCall(Call, 3, (LONG)Call->Args[0], 0, 0, TRUE, Call->Args[1], 0, 0, 0);
+}
+
+static
+LONG64
+LxXattrArgs(
+    _In_ ULONG64 Pointer,
+    _In_ ULONG64 Size,
+    _Out_ PLX_XATTR_ARGS Args)
+{
+    UCHAR Extra[64];
+    ULONG64 Offset;
+    LONG64 Result;
+
+    RtlZeroMemory(Args, sizeof(*Args));
+    if (Size < sizeof(*Args))
+        return -LX_EINVAL;
+    if (Size > LX_PAGE_SIZE)
+        return -LX_E2BIG;
+    Result = LxCopyFromUser(Args, Pointer, sizeof(*Args));
+    for (Offset = sizeof(*Args); (Result == 0) && (Offset < Size); Offset += sizeof(Extra))
+    {
+        ULONG Chunk = (ULONG)min(sizeof(Extra), Size - Offset), Index;
+
+        Result = LxCopyFromUser(Extra, Pointer + Offset, Chunk);
+        for (Index = 0; (Result == 0) && (Index < Chunk); Index++)
+        {
+            if (Extra[Index] != 0)
+                Result = -LX_E2BIG;
+        }
+    }
+    return Result;
+}
+
+LX_SYSCALL(LxSysSetxattrat)
+{
+    ULONG AtFlags = (ULONG)Call->Args[2];
+    LX_XATTR_ARGS Args;
+    LONG64 Result;
+
+    if (AtFlags & ~(LX_AT_SYMLINK_NOFOLLOW | LX_AT_EMPTY_PATH))
+        return -LX_EINVAL;
+    Result = LxXattrArgs(Call->Args[4], Call->Args[5], &Args);
+    if (Result != 0)
+        return Result;
+    return LxXattrCall(Call, 1, (LONG)Call->Args[0], Call->Args[1], AtFlags, FALSE, Call->Args[3], Args.Value, Args.Size,
+                       Args.Flags);
+}
+
+LX_SYSCALL(LxSysGetxattrat)
+{
+    ULONG AtFlags = (ULONG)Call->Args[2];
+    LX_XATTR_ARGS Args;
+    LONG64 Result;
+
+    if (AtFlags & ~(LX_AT_SYMLINK_NOFOLLOW | LX_AT_EMPTY_PATH))
+        return -LX_EINVAL;
+    Result = LxXattrArgs(Call->Args[4], Call->Args[5], &Args);
+    if ((Result == 0) && (Args.Flags != 0))
+        Result = -LX_EINVAL;
+    if (Result != 0)
+        return Result;
+    return LxXattrCall(Call, 0, (LONG)Call->Args[0], Call->Args[1], AtFlags, FALSE, Call->Args[3], Args.Value, Args.Size, 0);
+}
+
+LX_SYSCALL(LxSysListxattrat)
+{
+    ULONG AtFlags = (ULONG)Call->Args[2];
+
+    if (AtFlags & ~(LX_AT_SYMLINK_NOFOLLOW | LX_AT_EMPTY_PATH))
+        return -LX_EINVAL;
+    return LxXattrCall(Call, 2, (LONG)Call->Args[0], Call->Args[1], AtFlags, FALSE, 0, Call->Args[3], Call->Args[4], 0);
+}
+
+LX_SYSCALL(LxSysRemovexattrat)
+{
+    ULONG AtFlags = (ULONG)Call->Args[2];
+
+    if (AtFlags & ~(LX_AT_SYMLINK_NOFOLLOW | LX_AT_EMPTY_PATH))
+        return -LX_EINVAL;
+    return LxXattrCall(Call, 3, (LONG)Call->Args[0], Call->Args[1], AtFlags, FALSE, Call->Args[3], 0, 0, 0);
 }
 
 LX_SYSCALL(LxSysNameToHandleAt)

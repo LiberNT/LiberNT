@@ -2890,3 +2890,121 @@ LxVfsReadlink(
         return LxNtReadLink(&Node->NtPath, Target);
     return -LX_EINVAL;
 }
+
+#define LX_XATTR_EA_NAME "$LXXATTR"
+
+LONG
+LxXattrOpenNode(
+    _In_ PLX_NODE Node,
+    _In_ BOOLEAN Write,
+    _Out_ PHANDLE Handle)
+{
+    *Handle = NULL;
+    if (!Node->Exists)
+        return -LX_ENOENT;
+    if ((Node->Mount == NULL) || (Node->Mount->Kind != LxFsNt))
+        return -LX_EOPNOTSUPP;
+    return LxNtOpenHandle(&Node->NtPath, FILE_READ_EA | FILE_READ_ATTRIBUTES | (Write ? FILE_WRITE_EA : 0),
+                          FILE_OPEN, 0, 0, Handle);
+}
+
+LONG
+LxXattrRead(
+    _In_ HANDLE Handle,
+    _Out_writes_bytes_to_(Capacity, *Length) PUCHAR Buffer,
+    _In_ ULONG Capacity,
+    _Out_ PULONG Length)
+{
+    ULONG NameLength = sizeof(LX_XATTR_EA_NAME) - 1;
+    ULONG ListLength = (ULONG)LX_ALIGN_UP(FIELD_OFFSET(FILE_GET_EA_INFORMATION, EaName) + NameLength + 1, 4);
+    ULONG OutputLength = FIELD_OFFSET(FILE_FULL_EA_INFORMATION, EaName) + NameLength + 1 + MAXUSHORT + 8;
+    PFILE_GET_EA_INFORMATION Get;
+    PFILE_FULL_EA_INFORMATION Entry;
+    IO_STATUS_BLOCK Iosb;
+    UCHAR List[32];
+    NTSTATUS Status;
+
+    *Length = 0;
+    RtlZeroMemory(List, sizeof(List));
+    Get = (PFILE_GET_EA_INFORMATION)List;
+    Get->EaNameLength = (UCHAR)NameLength;
+    RtlCopyMemory(Get->EaName, LX_XATTR_EA_NAME, NameLength);
+
+    Entry = LxAlloc(OutputLength);
+    if (Entry == NULL)
+        return -LX_ENOMEM;
+    Status = ZwQueryEaFile(Handle, &Iosb, Entry, OutputLength, TRUE, List, ListLength, NULL, TRUE);
+    if (NT_SUCCESS(Status) && (Entry->EaValueLength != 0))
+    {
+        *Length = min((ULONG)Entry->EaValueLength, Capacity);
+        RtlCopyMemory(Buffer, (PUCHAR)Entry->EaName + Entry->EaNameLength + 1, *Length);
+    }
+    else if (!NT_SUCCESS(Status) && (Status != STATUS_NO_EAS_ON_FILE) && (Status != STATUS_NONEXISTENT_EA_ENTRY) &&
+             (Status != STATUS_EAS_NOT_SUPPORTED))
+    {
+        LxFree(Entry);
+        return -LxStatusToErrno(Status);
+    }
+    LxFree(Entry);
+    return 0;
+}
+
+LONG
+LxXattrWrite(
+    _In_ HANDLE Handle,
+    _In_reads_bytes_(Length) PUCHAR Blob,
+    _In_ ULONG Length)
+{
+    ULONG NameLength = sizeof(LX_XATTR_EA_NAME) - 1;
+    ULONG Size = (ULONG)LX_ALIGN_UP(FIELD_OFFSET(FILE_FULL_EA_INFORMATION, EaName) + NameLength + 1 + Length, 4);
+    PFILE_FULL_EA_INFORMATION Entry;
+    IO_STATUS_BLOCK Iosb;
+    NTSTATUS Status;
+
+    if (Length > MAXUSHORT)
+        return -LX_ENOSPC;
+    Entry = LxAlloc(Size);
+    if (Entry == NULL)
+        return -LX_ENOMEM;
+    Entry->EaNameLength = (UCHAR)NameLength;
+    Entry->EaValueLength = (USHORT)Length;
+    RtlCopyMemory(Entry->EaName, LX_XATTR_EA_NAME, NameLength);
+    RtlCopyMemory((PUCHAR)Entry->EaName + NameLength + 1, Blob, Length);
+    Status = ZwSetEaFile(Handle, &Iosb, Entry, Size);
+    LxFree(Entry);
+    if (Status == STATUS_EA_TOO_LARGE)
+        return -LX_ENOSPC;
+    if (Status == STATUS_EAS_NOT_SUPPORTED)
+        return -LX_EOPNOTSUPP;
+    return NT_SUCCESS(Status) ? 0 : -LxStatusToErrno(Status);
+}
+
+LONG
+LxXattrOpenFile(
+    _In_ PLX_FILE File,
+    _In_ BOOLEAN Write,
+    _Out_ PHANDLE Handle,
+    _Out_ PBOOLEAN Close)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING Empty = { 0, 0, NULL };
+    IO_STATUS_BLOCK Iosb;
+
+    *Handle = NULL;
+    *Close = FALSE;
+    if ((File->Handle == NULL) || (File->NtPipe) || (File->Mount == NULL) || (File->Mount->Kind != LxFsNt))
+        return -LX_EOPNOTSUPP;
+    if (Write)
+    {
+        InitializeObjectAttributes(&ObjectAttributes, &Empty, OBJ_KERNEL_HANDLE, File->Handle, NULL);
+        if (NT_SUCCESS(ZwCreateFile(Handle, FILE_READ_EA | FILE_WRITE_EA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                                    &ObjectAttributes, &Iosb, NULL, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                    FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0)))
+        {
+            *Close = TRUE;
+            return 0;
+        }
+    }
+    *Handle = File->Handle;
+    return 0;
+}

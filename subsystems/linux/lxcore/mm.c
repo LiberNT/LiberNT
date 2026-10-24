@@ -1289,6 +1289,54 @@ LX_SYSCALL(LxSysMprotect)
     return LxMmProtect(Call->Process, Call->Args[0], Call->Args[1], (ULONG)Call->Args[2]);
 }
 
+LX_SYSCALL(LxSysPkeyAlloc)
+{
+    if ((Call->Args[0] != 0) || (Call->Args[1] & ~(ULONG64)LX_PKEY_ACCESS_MASK))
+        return -LX_EINVAL;
+    return -LX_ENOSPC;
+}
+
+LX_SYSCALL(LxSysPkeyFree)
+{
+    UNREFERENCED_PARAMETER(Call);
+    return -LX_EINVAL;
+}
+
+LX_SYSCALL(LxSysPkeyMprotect)
+{
+    if ((LONG)Call->Args[3] != -1)
+    {
+        if (Call->Args[0] & (LX_PAGE_SIZE - 1))
+            return -LX_EINVAL;
+        if (Call->Args[1] == 0)
+            return 0;
+        if (Call->Args[0] + LX_ALIGN_UP(Call->Args[1], LX_PAGE_SIZE) <= Call->Args[0])
+            return -LX_ENOMEM;
+        return -LX_EINVAL;
+    }
+    return LxMmProtect(Call->Process, Call->Args[0], Call->Args[1], (ULONG)Call->Args[2]);
+}
+
+LONG
+LxMmPrepareRemote(
+    _In_ PLX_PROCESS Process,
+    _In_ PEPROCESS EProcess,
+    _In_ ULONG64 Address,
+    _In_ ULONG64 Length,
+    _In_ BOOLEAN Write)
+{
+    KAPC_STATE ApcState;
+    LONG Result;
+
+    KeStackAttachProcess((PKPROCESS)EProcess, &ApcState);
+    LxMmLock(Process);
+    Result = LxMmPopulate(Process, LX_ALIGN_DOWN(Address, LX_PAGE_SIZE), LX_ALIGN_UP(Address + Length, LX_PAGE_SIZE),
+                          Write ? LX_PROT_WRITE : LX_PROT_READ, FALSE);
+    LxMmUnlock(Process);
+    KeUnstackDetachProcess(&ApcState);
+    return (Result < 0) ? Result : 0;
+}
+
 LX_SYSCALL(LxSysMadvise)
 {
     PLX_PROCESS Process = Call->Process;

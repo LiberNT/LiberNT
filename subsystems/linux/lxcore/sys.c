@@ -30,7 +30,9 @@ LxTracePathArgument(
     }
     if ((Handler == LxSysExecve) || (Handler == LxSysChdir) || (Handler == LxSysStatfs) ||
         (Handler == LxSysTruncate) || (Handler == LxSysUmount2) || (Handler == LxSysChroot) ||
-        (Handler == LxSysXattrGet) || (Handler == LxSysXattrSet) || (Handler == LxSysXattrList))
+        (Handler == LxSysSetxattr) || (Handler == LxSysLsetxattr) || (Handler == LxSysGetxattr) ||
+        (Handler == LxSysLgetxattr) || (Handler == LxSysListxattr) || (Handler == LxSysLlistxattr) ||
+        (Handler == LxSysRemovexattr) || (Handler == LxSysLremovexattr))
     {
         return 0;
     }
@@ -427,6 +429,190 @@ Exit:
     if (Second != NULL)
         LxProcessDereference(Second);
     return Result;
+}
+
+NTSTATUS
+NTAPI
+MmCopyVirtualMemory(
+    _In_ PEPROCESS SourceProcess,
+    _In_ PVOID SourceAddress,
+    _In_ PEPROCESS TargetProcess,
+    _Out_ PVOID TargetAddress,
+    _In_ SIZE_T BufferSize,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_ PSIZE_T ReturnSize);
+
+static
+LONG64
+LxProcessVm(
+    _In_ PLX_CALL Call,
+    _In_ BOOLEAN Write)
+{
+    ULONG64 LocalCount = Call->Args[2], RemoteCount = Call->Args[4];
+    ULONG64 LocalIndex = 0, RemoteIndex = 0, LocalDone = 0, RemoteDone = 0, Total = 0, Index;
+    PLX_IOVEC Local = NULL, Remote = NULL;
+    PLX_PROCESS Target = NULL;
+    PEPROCESS EProcess = NULL;
+    LONG64 Result = 0;
+
+    if (Call->Args[5] != 0)
+        return -LX_EINVAL;
+    if ((LocalCount > LX_UIO_MAXIOV) || (RemoteCount > LX_UIO_MAXIOV))
+        return -LX_EINVAL;
+
+    Local = LxAlloc((SIZE_T)(LocalCount + RemoteCount + 1) * sizeof(LX_IOVEC));
+    if (Local == NULL)
+        return -LX_ENOMEM;
+    Remote = Local + LocalCount;
+    Result = LxCopyFromUser(Local, Call->Args[1], (SIZE_T)LocalCount * sizeof(LX_IOVEC));
+    for (Index = 0; (Result == 0) && (Index < LocalCount); Index++)
+        Total += Local[Index].Length;
+    if ((Result != 0) || (Total == 0))
+        goto Exit;
+    Total = 0;
+    Result = LxCopyFromUser(Remote, Call->Args[3], (SIZE_T)RemoteCount * sizeof(LX_IOVEC));
+    if (Result != 0)
+        goto Exit;
+
+    if (((LONG)Call->Args[0] <= 0) ||
+        (LxThreadLookupReferenced(Call->Process->Instance, (ULONG)Call->Args[0], &Target) == NULL))
+    {
+        Result = -LX_ESRCH;
+        goto Exit;
+    }
+    if (!LxPtraceMayRead(Call->Process, Target))
+    {
+        Result = -LX_EPERM;
+        goto Exit;
+    }
+    if (!NT_SUCCESS(PsLookupProcessByProcessId(ULongToHandle(Target->NtPid), &EProcess)))
+    {
+        EProcess = NULL;
+        Result = -LX_ESRCH;
+        goto Exit;
+    }
+
+    while ((LocalIndex < LocalCount) && (RemoteIndex < RemoteCount))
+    {
+        ULONG64 Chunk, LocalAddress, RemoteAddress;
+        SIZE_T Copied = 0;
+        NTSTATUS Status;
+
+        if (LocalDone == Local[LocalIndex].Length)
+        {
+            LocalIndex++;
+            LocalDone = 0;
+            continue;
+        }
+        if (RemoteDone == Remote[RemoteIndex].Length)
+        {
+            RemoteIndex++;
+            RemoteDone = 0;
+            continue;
+        }
+        Chunk = min(min(Local[LocalIndex].Length - LocalDone, Remote[RemoteIndex].Length - RemoteDone), 1024 * 1024);
+        LocalAddress = Local[LocalIndex].Base + LocalDone;
+        RemoteAddress = Remote[RemoteIndex].Base + RemoteDone;
+
+        LxMmFaultIn(LocalAddress, (SIZE_T)Chunk, !Write);
+        Result = LxMmPrepareRemote(Target, EProcess, RemoteAddress, Chunk, Write);
+        if (Result != 0)
+            break;
+        Status = Write ? MmCopyVirtualMemory(PsGetCurrentProcess(), (PVOID)(ULONG_PTR)LocalAddress, EProcess,
+                                             (PVOID)(ULONG_PTR)RemoteAddress, (SIZE_T)Chunk, UserMode, &Copied) :
+                         MmCopyVirtualMemory(EProcess, (PVOID)(ULONG_PTR)RemoteAddress, PsGetCurrentProcess(),
+                                             (PVOID)(ULONG_PTR)LocalAddress, (SIZE_T)Chunk, UserMode, &Copied);
+        Total += Copied;
+        LocalDone += Copied;
+        RemoteDone += Copied;
+        if (!NT_SUCCESS(Status) || (Copied < Chunk))
+        {
+            Result = -LX_EFAULT;
+            break;
+        }
+    }
+
+Exit:
+    if (EProcess != NULL)
+        ObDereferenceObject(EProcess);
+    if (Target != NULL)
+        LxProcessDereference(Target);
+    LxFree(Local);
+    return (Total != 0) ? (LONG64)Total : Result;
+}
+
+LX_SYSCALL(LxSysProcessVmReadv)
+{
+    return LxProcessVm(Call, FALSE);
+}
+
+LX_SYSCALL(LxSysProcessVmWritev)
+{
+    return LxProcessVm(Call, TRUE);
+}
+
+static
+ULONG_PTR
+NTAPI
+LxMembarrierIpi(
+    _In_ ULONG_PTR Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    KeMemoryBarrier();
+    return 0;
+}
+
+LX_SYSCALL(LxSysMembarrier)
+{
+    static const LONG Supported = LX_MEMBARRIER_CMD_GLOBAL | LX_MEMBARRIER_CMD_GLOBAL_EXPEDITED |
+                                  LX_MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED | LX_MEMBARRIER_CMD_PRIVATE_EXPEDITED |
+                                  LX_MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED |
+                                  LX_MEMBARRIER_CMD_PRIVATE_EXPEDITED_SYNC_CORE |
+                                  LX_MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED_SYNC_CORE |
+                                  LX_MEMBARRIER_CMD_GET_REGISTRATIONS;
+    PLX_PROCESS Process = Call->Process;
+    LONG Command = (LONG)Call->Args[0];
+    ULONG Flags = (ULONG)Call->Args[1];
+
+    if ((Command == LX_MEMBARRIER_CMD_PRIVATE_EXPEDITED_RSEQ) ?
+        ((Flags != 0) && (Flags != LX_MEMBARRIER_CMD_FLAG_CPU)) : (Flags != 0))
+    {
+        return -LX_EINVAL;
+    }
+
+    switch (Command)
+    {
+        case LX_MEMBARRIER_CMD_QUERY:
+            return Supported;
+
+        case LX_MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED:
+        case LX_MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED:
+        case LX_MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED_SYNC_CORE:
+            InterlockedOr(&Process->Membarrier, Command);
+            return 0;
+
+        case LX_MEMBARRIER_CMD_GET_REGISTRATIONS:
+            return Process->Membarrier;
+
+        case LX_MEMBARRIER_CMD_PRIVATE_EXPEDITED:
+        case LX_MEMBARRIER_CMD_PRIVATE_EXPEDITED_SYNC_CORE:
+        case LX_MEMBARRIER_CMD_GLOBAL:
+        case LX_MEMBARRIER_CMD_GLOBAL_EXPEDITED:
+            if (((Command == LX_MEMBARRIER_CMD_PRIVATE_EXPEDITED) ||
+                 (Command == LX_MEMBARRIER_CMD_PRIVATE_EXPEDITED_SYNC_CORE)) &&
+                !(Process->Membarrier & (Command << 1)))
+            {
+                return -LX_EPERM;
+            }
+            KeMemoryBarrier();
+            if (KeQueryActiveProcessorCount(NULL) > 1)
+                KeIpiGenericCall(LxMembarrierIpi, 0);
+            KeMemoryBarrier();
+            return 0;
+
+        default:
+            return -LX_EINVAL;
+    }
 }
 
 LX_SYSCALL(LxSysClockGettime)

@@ -366,6 +366,7 @@ struct _LX_PROCESS
     ULONG Trace;
     LIST_ENTRY Timers;
     LONG NextTimerId;
+    volatile LONG Membarrier;
 };
 
 typedef struct _LX_EXEC_REQUEST
@@ -638,6 +639,10 @@ LONG LxNtCreateDirectory(_In_ PCUNICODE_STRING NtPath, _In_ ULONG Mode);
 LONG LxNtDeleteTree(_In_ PCUNICODE_STRING NtPath);
 LONG LxNtWriteLxAttributes(_In_ HANDLE Handle, _In_ ULONG Mode, _In_ ULONG Uid, _In_ ULONG Gid, _In_ ULONG64 Device, _In_ BOOLEAN WriteDevice);
 LONG LxNtReadLxAttributes(_In_ HANDLE Handle, _Out_ PULONG Mode, _Out_ PULONG Uid, _Out_ PULONG Gid, _Out_ PULONG64 Device);
+LONG LxXattrOpenNode(_In_ PLX_NODE Node, _In_ BOOLEAN Write, _Out_ PHANDLE Handle);
+LONG LxXattrRead(_In_ HANDLE Handle, _Out_writes_bytes_to_(Capacity, *Length) PUCHAR Buffer, _In_ ULONG Capacity, _Out_ PULONG Length);
+LONG LxXattrWrite(_In_ HANDLE Handle, _In_reads_bytes_(Length) PUCHAR Blob, _In_ ULONG Length);
+LONG LxXattrOpenFile(_In_ PLX_FILE File, _In_ BOOLEAN Write, _Out_ PHANDLE Handle, _Out_ PBOOLEAN Close);
 PLX_FILE LxDeviceOpen(_In_ PLX_PROCESS Process, _In_ ULONG64 Device, _In_ ULONG Flags, _In_ PCSTR Path);
 
 LONG LxSynthQuery(_In_ PLX_PROCESS Process, _In_ PLX_MOUNT Mount, _In_ PCSTR Relative, _Out_ PULONG Type, _Out_opt_ PSTR *LinkTarget);
@@ -704,6 +709,7 @@ VOID LxFutexExitRobustList(_In_ PLX_THREAD Thread);
 BOOLEAN LxMmSharedKey(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _Out_ PVOID *Object, _Out_ PULONG64 Offset);
 LONG64 LxMmMapSection(_In_ PLX_PROCESS Process, _In_ PVOID Section, _In_ ULONG64 Address, _In_ ULONG64 Length, _In_ ULONG Prot, _In_ BOOLEAN Remap);
 LONG LxMmDetachSection(_In_ PLX_PROCESS Process, _In_ ULONG64 Address);
+LONG LxMmPrepareRemote(_In_ PLX_PROCESS Process, _In_ PEPROCESS EProcess, _In_ ULONG64 Address, _In_ ULONG64 Length, _In_ BOOLEAN Write);
 VOID LxIpcShmVmaOpen(_In_ PVOID Section);
 VOID LxIpcShmVmaClose(_In_ PVOID Section);
 VOID LxIpcProcessExit(_In_ PLX_PROCESS Process);
