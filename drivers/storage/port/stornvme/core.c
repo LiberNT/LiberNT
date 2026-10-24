@@ -531,6 +531,7 @@ NvmeStartController(_In_ PNVME_DEVICE_EXTENSION Device, _In_ BOOLEAN FirstStart)
         DPRINT1("stornvme: controller did not leave ready state\n");
         return FALSE;
     }
+    NvmeWriteRegister(Device, NVME_REG_INTMS, 0xFFFFFFFF);
 
     NvmeResetAdminState(Device);
     NvmeWriteRegister(Device, NVME_REG_AQA,
