@@ -306,13 +306,21 @@ error:
     return hr;
 }
 
+#ifdef __REACTOS__
+static void convert_to_bstr( VARIANT *v, CIMTYPE type )
+#else
 static void convert_to_bstr( VARIANT *v )
+#endif
 {
     BSTR out = NULL;
     VARTYPE vt;
 
     /* treat VT_I4 values as unsigned */
+#ifdef __REACTOS__
+    if (V_VT(v) == VT_I4 && type != CIM_SINT32) V_VT(v) = VT_UI4;
+#else
     if (V_VT(v) == VT_I4) V_VT(v) = VT_UI4;
+#endif
 
 #ifdef __REACTOS__
     if (V_VT(v) == VT_BOOL)
@@ -385,6 +393,7 @@ static int query_prop( const WCHAR *class, int argc, WCHAR *argv[] )
     int i;
 #ifdef __REACTOS__
     BOOL list = FALSE;
+    CIMTYPE type;
 #endif
 
     WINE_TRACE( "%s", debugstr_w(class) );
@@ -479,9 +488,9 @@ static int query_prop( const WCHAR *class, int argc, WCHAR *argv[] )
             if (!count) break;
             output_string( L"\n\n" );
             IWbemClassObject_BeginEnumeration( obj, WBEM_FLAG_NONSYSTEM_ONLY );
-            while (IWbemClassObject_Next( obj, 0, &name, &v, NULL, NULL ) == S_OK)
+            while (IWbemClassObject_Next( obj, 0, &name, &v, &type, NULL ) == S_OK)
             {
-                convert_to_bstr( &v );
+                convert_to_bstr( &v, type );
                 output_string( L"%s=%s\n", name, V_BSTR( &v ) );
                 VariantClear( &v );
                 SysFreeString( name );
@@ -500,9 +509,15 @@ static int query_prop( const WCHAR *class, int argc, WCHAR *argv[] )
         if (!count) break;
 
         IWbemClassObject_BeginEnumeration( obj, WBEM_FLAG_NONSYSTEM_ONLY );
+#ifdef __REACTOS__
+        while (IWbemClassObject_Next( obj, 0, &name, &v, &type, NULL ) == S_OK)
+        {
+            convert_to_bstr( &v, type );
+#else
         while (IWbemClassObject_Next( obj, 0, &name, &v, NULL, NULL ) == S_OK)
         {
             convert_to_bstr( &v );
+#endif
             width = max( lstrlenW( V_BSTR( &v ) ), width );
             VariantClear( &v );
             SysFreeString( name );
@@ -534,9 +549,15 @@ static int query_prop( const WCHAR *class, int argc, WCHAR *argv[] )
         IEnumWbemClassObject_Next( result, WBEM_INFINITE, 1, &obj, &count );
         if (!count) break;
         IWbemClassObject_BeginEnumeration( obj, WBEM_FLAG_NONSYSTEM_ONLY );
+#ifdef __REACTOS__
+        while (IWbemClassObject_Next( obj, 0, NULL, &v, &type, NULL ) == S_OK)
+        {
+            convert_to_bstr( &v, type );
+#else
         while (IWbemClassObject_Next( obj, 0, NULL, &v, NULL, NULL ) == S_OK)
         {
             convert_to_bstr( &v );
+#endif
             output_text( V_BSTR( &v ), width );
             VariantClear( &v );
         }
