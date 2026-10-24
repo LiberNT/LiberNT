@@ -168,6 +168,18 @@ LxSignalNotifyFds(
     LxPollWake(&Process->SignalPoll, LX_POLLIN | LX_POLLRDNORM);
 }
 
+BOOLEAN
+LxSignalInfoHasUid(
+    _In_ LONG Signal,
+    _In_ PLX_SIGINFO Info)
+{
+    if (Info->Code == LX_SI_USER)
+        return TRUE;
+    if (Info->Code < 0)
+        return (Info->Code != LX_SI_TIMER) && (Info->Code != LX_SI_SIGIO);
+    return (Signal == LX_SIGCHLD) && (Info->Code <= LX_CLD_CONTINUED);
+}
+
 VOID
 LxSignalSend(
     _In_ PLX_PROCESS Target,
@@ -232,9 +244,18 @@ LxSignalSend(
 
     ExAcquireFastMutex(&Target->Lock);
     if (Info != NULL)
+    {
         Target->PendingInfo[Signal - 1] = *Info;
+        if (LxSignalInfoHasUid(Signal, Info))
+        {
+            Target->PendingInfo[Signal - 1].Child.Uid = LxIdFromKernelMunged(LxCredUserNs(Target), FALSE,
+                                                                             Info->Child.Uid);
+        }
+    }
     else
+    {
         RtlZeroMemory(&Target->PendingInfo[Signal - 1], sizeof(LX_SIGINFO));
+    }
     Target->PendingInfo[Signal - 1].Signo = Signal;
     if (TargetThread != NULL)
         InterlockedOr64(&TargetThread->Pending, (LONG64)Bit);
@@ -561,6 +582,8 @@ LxSignalQueue(
     if (((Info.Code >= 0) || (Info.Code == LX_SI_TKILL)) && (Tgid != LxPidNr(Call->Process, Call->Process)))
         return -LX_EPERM;
     Info.Signo = Signal;
+    if (LxSignalInfoHasUid(Signal, &Info))
+        Info.Child.Uid = LxCredMakeId(Call->Process, FALSE, Info.Child.Uid);
 
     if (Tid != 0)
     {
@@ -663,8 +686,14 @@ LxSignalPermitted(
     {
         return 0;
     }
-    if (LxCapable(Sender, LX_CAP_KILL))
-        return 0;
+    {
+        PLX_NS TargetNs = LxUserNsOf(Target);
+        BOOLEAN Capable = LxNsCapable(Sender, TargetNs, LX_CAP_KILL);
+
+        LxNsDereference(TargetNs);
+        if (Capable)
+            return 0;
+    }
     if ((Signal == LX_SIGCONT) && (Sender->Sid == Target->Sid))
         return 0;
     return -LX_EPERM;

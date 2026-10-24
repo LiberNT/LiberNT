@@ -1246,6 +1246,8 @@ LX_SYSCALL(LxSysPidfdSendSignal)
         Result = LxCopyFromUser(&Info, Call->Args[2], sizeof(Info));
         if ((Result == 0) && (Info.Signo != Signal))
             Result = -LX_EINVAL;
+        if ((Result == 0) && LxSignalInfoHasUid(Signal, &Info))
+            Info.Child.Uid = LxCredMakeId(Call->Process, FALSE, Info.Child.Uid);
         if ((Result == 0) && ((Target != Call->Process) || (Flags & LX_PIDFD_SIGNAL_PROCESS_GROUP)) &&
             ((Info.Code >= 0) || (Info.Code == LX_SI_TKILL)))
         {

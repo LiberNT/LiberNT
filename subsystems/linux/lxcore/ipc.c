@@ -371,8 +371,11 @@ LxIpcCheck(
         Granted >>= 6;
     else if (LxIpcInGroup(Process, Object->Cgid) || LxIpcInGroup(Process, Object->Gid))
         Granted >>= 3;
-    if ((Requested & ~Granted & 0007) && !LxCapable(Process, LX_CAP_IPC_OWNER))
+    if ((Requested & ~Granted & 0007) &&
+        !LxNsCapable(Process, LxNsOwner(Object->Namespace->Owner), LX_CAP_IPC_OWNER))
+    {
         return -LX_EACCES;
+    }
     return 0;
 }
 
@@ -382,35 +385,43 @@ LxIpcOwner(
     _In_ PLX_PROCESS Process,
     _In_ PLX_IPC_OBJECT Object)
 {
-    return (Process->Uid[1] == Object->Uid) || (Process->Uid[1] == Object->Cuid) || LxCapable(Process, LX_CAP_SYS_ADMIN);
+    return (Process->Uid[1] == Object->Uid) || (Process->Uid[1] == Object->Cuid) ||
+           LxNsCapable(Process, LxNsOwner(Object->Namespace->Owner), LX_CAP_SYS_ADMIN);
 }
 
 static
 VOID
 LxIpcFillPerm(
+    _In_ PLX_PROCESS Process,
     _In_ PLX_IPC_OBJECT Object,
     _Out_ PLX_IPC64_PERM Perm)
 {
     RtlZeroMemory(Perm, sizeof(*Perm));
     Perm->Key = Object->Key;
-    Perm->Uid = Object->Uid;
-    Perm->Gid = Object->Gid;
-    Perm->Cuid = Object->Cuid;
-    Perm->Cgid = Object->Cgid;
+    Perm->Uid = LxCredViewId(Process, FALSE, Object->Uid);
+    Perm->Gid = LxCredViewId(Process, TRUE, Object->Gid);
+    Perm->Cuid = LxCredViewId(Process, FALSE, Object->Cuid);
+    Perm->Cgid = LxCredViewId(Process, TRUE, Object->Cgid);
     Perm->Mode = Object->Mode;
     Perm->Seq = Object->Seq;
 }
 
 static
-VOID
+LONG
 LxIpcSetPerm(
+    _In_ PLX_PROCESS Process,
     _Inout_ PLX_IPC_OBJECT Object,
     _In_ PLX_IPC64_PERM Perm)
 {
-    Object->Uid = Perm->Uid;
-    Object->Gid = Perm->Gid;
+    ULONG Uid = LxCredMakeId(Process, FALSE, Perm->Uid), Gid = LxCredMakeId(Process, TRUE, Perm->Gid);
+
+    if ((Uid == MAXULONG) || (Gid == MAXULONG))
+        return -LX_EINVAL;
+    Object->Uid = Uid;
+    Object->Gid = Gid;
     Object->Mode = (Object->Mode & ~0777) | (Perm->Mode & 0777);
     Object->Ctime = LxIpcNow();
+    return 0;
 }
 
 static
@@ -770,7 +781,7 @@ LX_SYSCALL(LxSysShmctl)
             if (Shm != NULL)
             {
                 RtlZeroMemory(&Stat, sizeof(Stat));
-                LxIpcFillPerm(&Shm->Object, &Stat.Perm);
+                LxIpcFillPerm(Process, &Shm->Object, &Stat.Perm);
                 Stat.Segsz = Shm->Size;
                 Stat.Atime = Shm->Atime;
                 Stat.Dtime = Shm->Dtime;
@@ -801,7 +812,7 @@ LX_SYSCALL(LxSysShmctl)
                      (Process->Limits[LX_RLIMIT_MEMLOCK].Cur == 0))
                 Result = -LX_EPERM;
             else if (Command == LX_IPC_SET)
-                LxIpcSetPerm(&Shm->Object, &Stat.Perm);
+                Result = LxIpcSetPerm(Process, &Shm->Object, &Stat.Perm);
             else if (Command == LX_SHM_LOCK)
                 Shm->Object.Mode |= LX_SHM_LOCKED;
             else if (Command == LX_SHM_UNLOCK)
@@ -1275,7 +1286,7 @@ LX_SYSCALL(LxSysSemctl)
             if (Array != NULL)
             {
                 RtlZeroMemory(&Stat, sizeof(Stat));
-                LxIpcFillPerm(&Array->Object, &Stat.Perm);
+                LxIpcFillPerm(Process, &Array->Object, &Stat.Perm);
                 Stat.Otime = Array->Otime;
                 Stat.Ctime = Array->Object.Ctime;
                 Stat.Nsems = Array->Count;
@@ -1396,7 +1407,7 @@ LX_SYSCALL(LxSysSemctl)
             else if (!LxIpcOwner(Process, &Array->Object))
                 Result = -LX_EPERM;
             else if (Command == LX_IPC_SET)
-                LxIpcSetPerm(&Array->Object, &Stat.Perm);
+                Result = LxIpcSetPerm(Process, &Array->Object, &Stat.Perm);
             else
             {
                 LxIpcUndoClear(Array, -1, TRUE);
@@ -1766,7 +1777,7 @@ LX_SYSCALL(LxSysMsgctl)
             if (Queue != NULL)
             {
                 RtlZeroMemory(&Stat, sizeof(Stat));
-                LxIpcFillPerm(&Queue->Object, &Stat.Perm);
+                LxIpcFillPerm(Process, &Queue->Object, &Stat.Perm);
                 Stat.Stime = Queue->Stime;
                 Stat.Rtime = Queue->Rtime;
                 Stat.Ctime = Queue->Object.Ctime;
@@ -1800,9 +1811,12 @@ LX_SYSCALL(LxSysMsgctl)
                 }
                 else
                 {
-                    Queue->MaxBytes = Stat.Qbytes;
-                    LxIpcSetPerm(&Queue->Object, &Stat.Perm);
-                    LxIpcWake(&Queue->Object);
+                    Result = LxIpcSetPerm(Process, &Queue->Object, &Stat.Perm);
+                    if (Result == 0)
+                    {
+                        Queue->MaxBytes = Stat.Qbytes;
+                        LxIpcWake(&Queue->Object);
+                    }
                 }
             }
             else

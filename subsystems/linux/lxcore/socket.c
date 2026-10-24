@@ -1557,11 +1557,12 @@ LxUnixParseControl(
                     Result = -LX_EINVAL;
                     break;
                 }
-                if (((Supplied.Pid != LxPidNr(Process, Process)) && !LxCapable(Process, LX_CAP_SYS_ADMIN)) ||
+                if (((Supplied.Pid != LxPidNr(Process, Process)) &&
+                     !LxNsCapable(Process, LxNsOwner(Process->PidNs), LX_CAP_SYS_ADMIN)) ||
                     ((Supplied.Uid != Process->Uid[0]) && (Supplied.Uid != Process->Uid[1]) &&
-                     (Supplied.Uid != Process->Uid[2]) && !LxCapable(Process, LX_CAP_SETUID)) ||
+                     (Supplied.Uid != Process->Uid[2]) && !LxNsCapable(Process, NULL, LX_CAP_SETUID)) ||
                     ((Supplied.Gid != Process->Gid[0]) && (Supplied.Gid != Process->Gid[1]) &&
-                     (Supplied.Gid != Process->Gid[2]) && !LxCapable(Process, LX_CAP_SETGID)))
+                     (Supplied.Gid != Process->Gid[2]) && !LxNsCapable(Process, NULL, LX_CAP_SETGID)))
                 {
                     Result = -LX_EPERM;
                     break;
@@ -1840,7 +1841,11 @@ LxUnixDeliverControl(
                 LX_UCRED Cred = Message->Cred;
 
                 if (Receiver != NULL)
+                {
                     Cred.Pid = LxGlobalToNr(Receiver->Process, Cred.Pid);
+                    Cred.Uid = LxCredViewId(Receiver->Process, FALSE, Cred.Uid);
+                    Cred.Gid = LxCredViewId(Receiver->Process, TRUE, Cred.Gid);
+                }
                 RtlCopyMemory(Cmsg + 1, &Cred, sizeof(LX_UCRED));
             }
             Used += Space;
@@ -2549,6 +2554,8 @@ LX_SYSCALL(LxSysGetsockopt)
             {
                 Cred = Socket->PeerCred;
                 Cred.Pid = LxGlobalToNr(Call->Process, Cred.Pid);
+                Cred.Uid = LxCredViewId(Call->Process, FALSE, Cred.Uid);
+                Cred.Gid = LxCredViewId(Call->Process, TRUE, Cred.Gid);
             }
             Result = LxSockoptReturn(Call, &Cred, sizeof(Cred));
             break;

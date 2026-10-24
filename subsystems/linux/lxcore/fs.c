@@ -803,6 +803,16 @@ LxStatAt(
     return Error;
 }
 
+static
+VOID
+LxStatView(
+    _In_ PLX_PROCESS Process,
+    _Inout_ PLX_STAT Stat)
+{
+    Stat->Uid = LxCredViewId(Process, FALSE, Stat->Uid);
+    Stat->Gid = LxCredViewId(Process, TRUE, Stat->Gid);
+}
+
 LX_SYSCALL(LxSysFstat)
 {
     PLX_FILE File = LxCallFile(Call, 0);
@@ -815,6 +825,7 @@ LX_SYSCALL(LxSysFstat)
     LxFileDereference(File);
     if (Error != 0)
         return Error;
+    LxStatView(Call->Process, &Stat);
     return LxCopyToUser(Call->Args[1], &Stat, sizeof(Stat));
 }
 
@@ -829,6 +840,7 @@ LX_SYSCALL(LxSysNewfstatat)
     Error = LxStatAt(Call->Process, (LONG)Call->Args[0], Call->Args[1], Flags, &Stat, NULL, NULL);
     if (Error != 0)
         return Error;
+    LxStatView(Call->Process, &Stat);
     return LxCopyToUser(Call->Args[2], &Stat, sizeof(Stat));
 }
 
@@ -846,6 +858,7 @@ LX_SYSCALL(LxSysStatx)
     Error = LxStatAt(Call->Process, (LONG)Call->Args[0], Call->Args[1], Flags, &Stat, &Mount, &Root);
     if (Error != 0)
         return Error;
+    LxStatView(Call->Process, &Stat);
 
     RtlZeroMemory(&Statx, sizeof(Statx));
     Statx.Mask = LX_STATX_BASIC_STATS | LX_STATX_MNT_ID;
@@ -1100,7 +1113,7 @@ LX_SYSCALL(LxSysChroot)
     LX_NODE Node;
     LONG Error;
 
-    if (!LxCapable(Call->Process, LX_CAP_SYS_CHROOT))
+    if (!LxNsCapable(Call->Process, NULL, LX_CAP_SYS_CHROOT))
         return -LX_EPERM;
     Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW | LX_LOOKUP_DIRECTORY, &Node);
     if (Error != 0)
@@ -1118,7 +1131,7 @@ LX_SYSCALL(LxSysPivotRoot)
     LX_NODE NewRoot, PutOld;
     LONG Error;
 
-    if (!LxCapable(Call->Process, LX_CAP_SYS_ADMIN))
+    if (!LxMayMount(Call->Process))
         return -LX_EPERM;
     Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW | LX_LOOKUP_DIRECTORY, &NewRoot);
     if (Error != 0)
@@ -1436,22 +1449,51 @@ LX_SYSCALL(LxSysFchmodat)
                              (ULONG)Call->Args[2] & 07777, MAXULONG, MAXULONG);
 }
 
+static
+BOOLEAN
+LxChownIds(
+    _In_ PLX_PROCESS Process,
+    _Inout_ PULONG Uid,
+    _Inout_ PULONG Gid)
+{
+    if (*Uid != MAXULONG)
+    {
+        *Uid = LxCredMakeId(Process, FALSE, *Uid);
+        if (*Uid == MAXULONG)
+            return FALSE;
+    }
+    if (*Gid != MAXULONG)
+    {
+        *Gid = LxCredMakeId(Process, TRUE, *Gid);
+        if (*Gid == MAXULONG)
+            return FALSE;
+    }
+    return TRUE;
+}
+
 LX_SYSCALL(LxSysFchown)
 {
-    PLX_FILE File = LxCallFile(Call, 0);
+    ULONG Uid = (ULONG)Call->Args[1], Gid = (ULONG)Call->Args[2];
+    PLX_FILE File;
     LONG Error;
 
+    if (!LxChownIds(Call->Process, &Uid, &Gid))
+        return -LX_EINVAL;
+    File = LxCallFile(Call, 0);
     if (File == NULL)
         return -LX_EBADF;
-    Error = LxSetAttributesFile(Call->Process, File, MAXULONG, (ULONG)Call->Args[1], (ULONG)Call->Args[2]);
+    Error = LxSetAttributesFile(Call->Process, File, MAXULONG, Uid, Gid);
     LxFileDereference(File);
     return Error;
 }
 
 LX_SYSCALL(LxSysFchownat)
 {
-    return LxSetAttributesAt(Call, (LONG)Call->Args[0], Call->Args[1], (ULONG)Call->Args[4],
-                             MAXULONG, (ULONG)Call->Args[2], (ULONG)Call->Args[3]);
+    ULONG Uid = (ULONG)Call->Args[2], Gid = (ULONG)Call->Args[3];
+
+    if (!LxChownIds(Call->Process, &Uid, &Gid))
+        return -LX_EINVAL;
+    return LxSetAttributesAt(Call, (LONG)Call->Args[0], Call->Args[1], (ULONG)Call->Args[4], MAXULONG, Uid, Gid);
 }
 
 LX_SYSCALL(LxSysReadlinkat)
@@ -1927,6 +1969,11 @@ LX_SYSCALL(LxSysMount)
     Error = LxLookupUser(Process, LX_AT_FDCWD, Call->Args[1], LX_LOOKUP_FOLLOW, &Target);
     if (Error != 0)
         return Error;
+    if (!LxMayMount(Process))
+    {
+        LxNodeFree(&Target);
+        return -LX_EPERM;
+    }
 
     if (Flags & LX_MS_REMOUNT)
     {
@@ -2000,7 +2047,7 @@ LX_SYSCALL(LxSysUmount2)
 
     if (Call->Args[1] & ~(ULONG64)(LX_MNT_FORCE | LX_MNT_DETACH | LX_MNT_EXPIRE | LX_UMOUNT_NOFOLLOW))
         return -LX_EINVAL;
-    if (!LxCapable(Call->Process, LX_CAP_SYS_ADMIN))
+    if (!LxMayMount(Call->Process))
         return -LX_EPERM;
     Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0],
                          (Call->Args[1] & LX_UMOUNT_NOFOLLOW) ? 0 : LX_LOOKUP_FOLLOW, &Target);
@@ -2157,12 +2204,15 @@ LxXattrPermission(
     if (Target->Mode == MAXULONG)
         return 0;
     if ((Type == LX_S_IFDIR) && (Target->Mode & LX_S_ISVTX) && Write && (Process->Fsuid != Target->Uid) &&
-        !LxCapable(Process, LX_CAP_FOWNER))
+        !LxCapableWrtIds(Process, Target->Uid, Target->Gid, LX_CAP_FOWNER))
     {
         return -LX_EPERM;
     }
-    if (LxCapable(Process, LX_CAP_DAC_OVERRIDE) || (!Write && LxCapable(Process, LX_CAP_DAC_READ_SEARCH)))
+    if (LxCapableWrtIds(Process, Target->Uid, Target->Gid, LX_CAP_DAC_OVERRIDE) ||
+        (!Write && LxCapableWrtIds(Process, Target->Uid, Target->Gid, LX_CAP_DAC_READ_SEARCH)))
+    {
         return 0;
+    }
     if (Process->Fsuid == Target->Uid)
         Bits = Target->Mode >> 6;
     else if (LxXattrInGroup(Process, Target->Gid))
@@ -3069,6 +3119,8 @@ LX_SYSCALL(LxSysFsopen)
     LONG64 Result;
     LONG Fd;
 
+    if (!LxMayMount(Call->Process))
+        return -LX_EPERM;
     if (Call->Args[1] & ~LX_FSOPEN_CLOEXEC)
         return -LX_EINVAL;
     Result = LxCopyStringFromUser(Call->Args[0], &Name, 31);
@@ -3191,6 +3243,8 @@ LX_SYSCALL(LxSysFsmount)
     LONG64 Result;
     LONG Error;
 
+    if (!LxMayMount(Call->Process))
+        return -LX_EPERM;
     if (Call->Args[1] & ~LX_FSMOUNT_CLOEXEC)
         return -LX_EINVAL;
     Context = LxFsContextGet(Call->Process, (LONG)Call->Args[0], &File);
@@ -3223,6 +3277,8 @@ LX_SYSCALL(LxSysMoveMount)
     CHAR First = 0;
     LONG Error;
 
+    if (!LxMayMount(Call->Process))
+        return -LX_EPERM;
     Mount = LxMountFromFd(Call->Process, (LONG)Call->Args[0], Call->Args[1], (Flags & LX_MOVE_MOUNT_F_EMPTY_PATH) != 0, &Error);
     if (Mount == NULL)
         return Error;
@@ -3288,6 +3344,8 @@ LX_SYSCALL(LxSysOpenTree)
     LONG Error;
     CHAR First = 0;
 
+    if ((Flags & LX_OPEN_TREE_CLONE) && !LxMayMount(Call->Process))
+        return -LX_EPERM;
     if (!(Flags & LX_OPEN_TREE_CLONE))
     {
         PLX_FILE File;

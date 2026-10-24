@@ -12,12 +12,200 @@
 
 #define LX_SUID_DUMPABLE    2
 
+static volatile LONG LxOverflowIds[2] = { 65534, 65534 };
+
+PLX_NS
+LxCredUserNs(
+    _In_ PLX_PROCESS Process)
+{
+    return (Process->Ns[LxNsUser] != NULL) ? Process->Ns[LxNsUser] : Process->Instance->RootNs[LxNsUser];
+}
+
+PLX_ID_MAP
+LxUserNsMap(
+    _In_ PLX_NS UserNs,
+    _In_ BOOLEAN Group)
+{
+    return (PLX_ID_MAP)ReadPointerAcquire((PVOID volatile *)&UserNs->User.Maps[Group ? 1 : 0]);
+}
+
+ULONG
+LxIdToKernel(
+    _In_opt_ PLX_NS UserNs,
+    _In_ BOOLEAN Group,
+    _In_ ULONG Id)
+{
+    PLX_ID_MAP Map;
+    ULONG Index;
+
+    if ((UserNs == NULL) || (UserNs->Parent == NULL))
+        return Id;
+    Map = LxUserNsMap(UserNs, Group);
+    for (Index = 0; (Map != NULL) && (Index < Map->Count); Index++)
+    {
+        PLX_ID_EXTENT Extent = &Map->Extents[Index];
+
+        if ((Id >= Extent->First) && (Id - Extent->First < Extent->Count))
+            return Extent->LowerFirst + (Id - Extent->First);
+    }
+    return MAXULONG;
+}
+
+ULONG
+LxIdRangeToKernel(
+    _In_ PLX_NS UserNs,
+    _In_ BOOLEAN Group,
+    _In_ ULONG Id,
+    _In_ ULONG Count)
+{
+    PLX_ID_MAP Map;
+    ULONG Index;
+
+    if (UserNs->Parent == NULL)
+        return ((Id != MAXULONG) && (Count - 1 <= MAXULONG - 1 - Id)) ? Id : MAXULONG;
+    Map = LxUserNsMap(UserNs, Group);
+    for (Index = 0; (Map != NULL) && (Index < Map->Count); Index++)
+    {
+        PLX_ID_EXTENT Extent = &Map->Extents[Index];
+
+        if ((Id >= Extent->First) && (Id - Extent->First < Extent->Count) &&
+            (Count - 1 <= Extent->Count - 1 - (Id - Extent->First)))
+        {
+            return Extent->LowerFirst + (Id - Extent->First);
+        }
+    }
+    return MAXULONG;
+}
+
+ULONG
+LxIdFromKernel(
+    _In_opt_ PLX_NS UserNs,
+    _In_ BOOLEAN Group,
+    _In_ ULONG Id)
+{
+    PLX_ID_MAP Map;
+    ULONG Index;
+
+    if ((UserNs == NULL) || (UserNs->Parent == NULL))
+        return Id;
+    Map = LxUserNsMap(UserNs, Group);
+    for (Index = 0; (Map != NULL) && (Index < Map->Count); Index++)
+    {
+        PLX_ID_EXTENT Extent = &Map->Extents[Index];
+
+        if ((Id >= Extent->LowerFirst) && (Id - Extent->LowerFirst < Extent->Count))
+            return Extent->First + (Id - Extent->LowerFirst);
+    }
+    return MAXULONG;
+}
+
+ULONG
+LxIdFromKernelMunged(
+    _In_opt_ PLX_NS UserNs,
+    _In_ BOOLEAN Group,
+    _In_ ULONG Id)
+{
+    ULONG Value = LxIdFromKernel(UserNs, Group, Id);
+
+    if ((Value == MAXULONG) && (UserNs != NULL) && (UserNs->Parent != NULL))
+        Value = (ULONG)LxOverflowIds[Group ? 1 : 0];
+    return Value;
+}
+
+ULONG
+LxCredViewId(
+    _In_ PLX_PROCESS Viewer,
+    _In_ BOOLEAN Group,
+    _In_ ULONG Id)
+{
+    return LxIdFromKernelMunged(LxCredUserNs(Viewer), Group, Id);
+}
+
+ULONG
+LxCredViewIdFor(
+    _In_ PLX_PROCESS Viewer,
+    _In_ BOOLEAN Group,
+    _In_ ULONG Id)
+{
+    PLX_NS UserNs = LxUserNsOf(Viewer);
+    ULONG Value;
+
+    Value = LxIdFromKernelMunged(UserNs, Group, Id);
+    LxNsDereference(UserNs);
+    return Value;
+}
+
+ULONG
+LxCredOverflowId(
+    _In_ BOOLEAN Group)
+{
+    return (ULONG)LxOverflowIds[Group ? 1 : 0];
+}
+
+LONG
+LxCredSetOverflowId(
+    _In_ PLX_PROCESS Process,
+    _In_ BOOLEAN Group,
+    _In_ LONG64 Value)
+{
+    if (!LxCapable(Process, LX_CAP_SYS_ADMIN))
+        return -LX_EPERM;
+    if ((Value < 0) || (Value > 65535))
+        return -LX_EINVAL;
+    InterlockedExchange(&LxOverflowIds[Group ? 1 : 0], (LONG)Value);
+    return 0;
+}
+
+BOOLEAN
+LxNsCapable(
+    _In_ PLX_PROCESS Process,
+    _In_opt_ PLX_NS UserNs,
+    _In_ ULONG Capability)
+{
+    PLX_NS Own = LxCredUserNs(Process), Ns = (UserNs != NULL) ? UserNs : Own;
+
+    if (Capability > LX_CAP_LAST_CAP)
+        return FALSE;
+    for (;;)
+    {
+        if (Ns == Own)
+            return ((Process->CapEffective >> Capability) & 1) != 0;
+        if ((Ns == NULL) || (Ns->Level <= Own->Level))
+            return FALSE;
+        if ((Ns->Parent == Own) && (Ns->User.OwnerUid == Process->Uid[1]))
+            return TRUE;
+        Ns = Ns->Parent;
+    }
+}
+
 BOOLEAN
 LxCapable(
     _In_ PLX_PROCESS Process,
     _In_ ULONG Capability)
 {
-    return (Capability <= LX_CAP_LAST_CAP) && (((Process->CapEffective >> Capability) & 1) != 0);
+    return LxNsCapable(Process, Process->Instance->RootNs[LxNsUser], Capability);
+}
+
+BOOLEAN
+LxMayMount(
+    _In_ PLX_PROCESS Process)
+{
+    return LxNsCapable(Process, LxNsOwner(LxProcessNs(Process, LxNsMnt)), LX_CAP_SYS_ADMIN);
+}
+
+BOOLEAN
+LxCapableWrtIds(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG Uid,
+    _In_ ULONG Gid,
+    _In_ ULONG Capability)
+{
+    PLX_NS Own = LxCredUserNs(Process);
+
+    if (!LxNsCapable(Process, NULL, Capability))
+        return FALSE;
+    return (Own->Parent == NULL) ||
+           ((LxIdFromKernel(Own, FALSE, Uid) != MAXULONG) && (LxIdFromKernel(Own, TRUE, Gid) != MAXULONG));
 }
 
 BOOLEAN
@@ -43,9 +231,7 @@ LxCredMakeId(
     _In_ BOOLEAN Group,
     _In_ ULONG Id)
 {
-    UNREFERENCED_PARAMETER(Process);
-    UNREFERENCED_PARAMETER(Group);
-    return Id;
+    return LxIdToKernel(LxCredUserNs(Process), Group, Id);
 }
 
 VOID
@@ -145,7 +331,7 @@ LxCredSetCapabilities(
     _In_ ULONG64 Permitted,
     _In_ ULONG64 Inheritable)
 {
-    BOOLEAN Capped = !LxCapable(Process, LX_CAP_SETPCAP);
+    BOOLEAN Capped = !LxNsCapable(Process, NULL, LX_CAP_SETPCAP);
     LONG Error = 0;
 
     ExAcquireFastMutex(&Process->Lock);
@@ -173,7 +359,7 @@ LxCredSetSecureBits(
     _Inout_ PLX_PROCESS Process,
     _In_ ULONG64 Bits)
 {
-    BOOLEAN Capable = LxCapable(Process, LX_CAP_SETPCAP);
+    BOOLEAN Capable = LxNsCapable(Process, NULL, LX_CAP_SETPCAP);
     ULONG64 Old, Changed;
     LONG Error = 0;
 

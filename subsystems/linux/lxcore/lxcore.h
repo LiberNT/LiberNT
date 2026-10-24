@@ -72,6 +72,22 @@ typedef enum _LX_NS_KIND
 } LX_NS_KIND, *PLX_NS_KIND;
 
 #define LX_PIDNS_MAX_LEVEL  32
+#define LX_USERNS_MAX_PARENT_LEVEL  32
+#define LX_ID_MAP_MAX_EXTENTS       340
+#define LX_THREADS_MAX              63429
+
+typedef struct _LX_ID_EXTENT
+{
+    ULONG First;
+    ULONG LowerFirst;
+    ULONG Count;
+} LX_ID_EXTENT, *PLX_ID_EXTENT;
+
+typedef struct _LX_ID_MAP
+{
+    ULONG Count;
+    LX_ID_EXTENT Extents[LX_ID_MAP_MAX_EXTENTS];
+} LX_ID_MAP, *PLX_ID_MAP;
 
 typedef struct _LX_VMA
 {
@@ -302,6 +318,16 @@ struct _LX_NS
         {
             PLX_CGROUP Root;
         } Cgroup;
+        struct
+        {
+            PLX_ID_MAP Maps[2];
+            ULONG OwnerUid;
+            ULONG OwnerGid;
+            LONG MaxUserNamespaces;
+            BOOLEAN SetgroupsDenied;
+            BOOLEAN ParentCouldSetfcap;
+            BOOLEAN Charged;
+        } User;
         struct
         {
             LONG64 Monotonic;
@@ -830,7 +856,7 @@ VOID LxMountNsRelease(_In_ PLX_NS Ns);
 LONG LxMountPivotRoot(_In_ PLX_PROCESS Process, _In_ PLX_NODE NewRoot, _In_ PLX_NODE PutOld);
 PSTR LxPathRebase(_In_ PCSTR Path, _In_ PCSTR NewRoot, _In_ PCSTR PutOld);
 
-PLX_NS LxNsCreate(_In_ PLX_INSTANCE Instance, _In_ LX_NS_KIND Kind, _In_opt_ PLX_NS From);
+PLX_NS LxNsCreate(_In_ PLX_INSTANCE Instance, _In_ LX_NS_KIND Kind, _In_opt_ PLX_NS From, _In_opt_ PLX_NS Owner);
 VOID LxNsReference(_In_ PLX_NS Ns);
 VOID LxNsDereference(_In_ PLX_NS Ns);
 VOID LxNsInstanceShutdown(_In_ PLX_INSTANCE Instance);
@@ -973,8 +999,33 @@ ULONG LxSignalGroup(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULON
 ULONG LxSignalGroupInfo(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULONG Pgid, _In_ LONG Signal,
                         _In_opt_ PLX_SIGINFO Info, _In_opt_ PLX_PROCESS Sender, _Out_opt_ PULONG Denied);
 LONG LxSignalPermitted(_In_ PLX_PROCESS Sender, _In_ PLX_PROCESS Target, _In_ LONG Signal);
+BOOLEAN LxSignalInfoHasUid(_In_ LONG Signal, _In_ PLX_SIGINFO Info);
 
 BOOLEAN LxCapable(_In_ PLX_PROCESS Process, _In_ ULONG Capability);
+BOOLEAN LxNsCapable(_In_ PLX_PROCESS Process, _In_opt_ PLX_NS UserNs, _In_ ULONG Capability);
+BOOLEAN LxCapableWrtIds(_In_ PLX_PROCESS Process, _In_ ULONG Uid, _In_ ULONG Gid, _In_ ULONG Capability);
+BOOLEAN LxMayMount(_In_ PLX_PROCESS Process);
+PLX_NS LxCredUserNs(_In_ PLX_PROCESS Process);
+ULONG LxIdToKernel(_In_opt_ PLX_NS UserNs, _In_ BOOLEAN Group, _In_ ULONG Id);
+ULONG LxIdRangeToKernel(_In_ PLX_NS UserNs, _In_ BOOLEAN Group, _In_ ULONG Id, _In_ ULONG Count);
+ULONG LxIdFromKernel(_In_opt_ PLX_NS UserNs, _In_ BOOLEAN Group, _In_ ULONG Id);
+ULONG LxIdFromKernelMunged(_In_opt_ PLX_NS UserNs, _In_ BOOLEAN Group, _In_ ULONG Id);
+ULONG LxCredViewId(_In_ PLX_PROCESS Viewer, _In_ BOOLEAN Group, _In_ ULONG Id);
+ULONG LxCredViewIdFor(_In_ PLX_PROCESS Viewer, _In_ BOOLEAN Group, _In_ ULONG Id);
+ULONG LxCredOverflowId(_In_ BOOLEAN Group);
+LONG LxCredSetOverflowId(_In_ PLX_PROCESS Process, _In_ BOOLEAN Group, _In_ LONG64 Value);
+PLX_NS LxNsOwner(_In_ PLX_NS Ns);
+LONG LxUserNsCreate(_In_ PLX_PROCESS Process, _Out_ PLX_NS *Result);
+VOID LxUserNsEnter(_Inout_ PLX_PROCESS Process, _In_ PLX_NS UserNs);
+PLX_NS LxUserNsOf(_In_ PLX_PROCESS Process);
+PLX_ID_MAP LxUserNsMap(_In_ PLX_NS UserNs, _In_ BOOLEAN Group);
+LONG LxUserNsWriteMap(_In_ PLX_PROCESS Writer, _In_ PLX_NS UserNs, _In_ BOOLEAN Group,
+                      _In_reads_bytes_(Length) PCSTR Data, _In_ ULONG Length);
+LONG LxUserNsWriteSetgroups(_In_ PLX_PROCESS Writer, _In_ PLX_NS UserNs, _In_reads_bytes_(Length) PCSTR Data,
+                            _In_ ULONG Length);
+BOOLEAN LxUserNsMaySetgroups(_In_ PLX_NS UserNs);
+LONG LxUserNsGetMax(_In_ PLX_PROCESS Process);
+LONG LxUserNsSetMax(_In_ PLX_PROCESS Process, _In_ LONG64 Value);
 BOOLEAN LxInGroup(_In_ PLX_PROCESS Process, _In_ ULONG Gid);
 ULONG LxCredMakeId(_In_ PLX_PROCESS Process, _In_ BOOLEAN Group, _In_ ULONG Id);
 VOID LxCredSave(_In_ PLX_PROCESS Process, _Out_ PLX_CRED_SAVE Save);

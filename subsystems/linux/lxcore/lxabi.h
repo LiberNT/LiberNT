@@ -429,6 +429,7 @@ typedef struct _LX_SCHED_ATTR
 #define LX_SI_KERNEL        0x80
 #define LX_SI_QUEUE         (-1)
 #define LX_SI_TIMER         (-2)
+#define LX_SI_SIGIO         (-5)
 #define LX_CLD_DUMPED       3
 #define LX_CLD_TRAPPED      4
 #define LX_CLD_STOPPED      5
@@ -724,6 +725,7 @@ typedef struct _LX_MSGINFO
 #define LX_CAP_SYS_RESOURCE     24
 #define LX_CAP_SYS_TIME         25
 #define LX_CAP_MKNOD            27
+#define LX_CAP_SETFCAP          31
 #define LX_CAP_MAC_OVERRIDE     32
 #define LX_CAP_BPF              39
 #define LX_CAP_CHECKPOINT_RESTORE 40

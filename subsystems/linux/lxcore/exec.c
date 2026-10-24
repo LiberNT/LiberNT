@@ -442,10 +442,10 @@ LxBuildStack(
     LX_AUX(LX_AT_BASE, InterpreterBase);
     LX_AUX(LX_AT_FLAGS, 0);
     LX_AUX(LX_AT_ENTRY, Main->Entry);
-    LX_AUX(LX_AT_UID, Process->Uid[0]);
-    LX_AUX(LX_AT_EUID, Process->Uid[1]);
-    LX_AUX(LX_AT_GID, Process->Gid[0]);
-    LX_AUX(LX_AT_EGID, Process->Gid[1]);
+    LX_AUX(LX_AT_UID, LxCredViewId(Process, FALSE, Process->Uid[0]));
+    LX_AUX(LX_AT_EUID, LxCredViewId(Process, FALSE, Process->Uid[1]));
+    LX_AUX(LX_AT_GID, LxCredViewId(Process, TRUE, Process->Gid[0]));
+    LX_AUX(LX_AT_EGID, LxCredViewId(Process, TRUE, Process->Gid[1]));
     LX_AUX(LX_AT_SECURE, (Process->Uid[0] != Process->Uid[1]) || (Process->Gid[0] != Process->Gid[1]));
     LX_AUX(LX_AT_HWCAP, LxArchHwcap());
     LX_AUX(LX_AT_CLKTCK, 100);

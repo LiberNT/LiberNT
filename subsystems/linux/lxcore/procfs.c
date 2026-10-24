@@ -803,8 +803,6 @@ LxWritePidTimensOffsets(
     UNREFERENCED_PARAMETER(Length);
     if (Current == NULL)
         return -LX_ESRCH;
-    if (!LxCapable(Current->Process, LX_CAP_SYS_TIME))
-        return -LX_EPERM;
     Process = LxProcessLookup(Current->Process->Instance, (ULONG)(ULONG_PTR)File->HandlerContext);
     if (Process == NULL)
         return -LX_ESRCH;
@@ -816,6 +814,11 @@ LxWritePidTimensOffsets(
     LxProcessDereference(Process);
     if (Ns == NULL)
         return -LX_ESRCH;
+    if (!LxNsCapable(Current->Process, LxNsOwner(Ns), LX_CAP_SYS_TIME))
+    {
+        LxNsDereference(Ns);
+        return -LX_EPERM;
+    }
 
     Offsets[0] = Ns->Time.Monotonic;
     Offsets[1] = Ns->Time.Boottime;
@@ -1020,10 +1023,12 @@ LxGenPidStatus(
                  Comm, Process->Umask, Process->Exited ? "Z (zombie)" : "S (sleeping)", LxPidNrIn(ProcNs, Process),
                  LxGlobalToNrIn(ProcNs, Synth->Tid ? Synth->Tid : Process->Pid),
                  LxPidNsIsInit(Process) ? 0UL : LxGlobalToNrIn(ProcNs, Process->ParentPid),
-                 Process->Uid[0], Process->Uid[1], Process->Uid[2], Process->Fsuid,
-                 Process->Gid[0], Process->Gid[1], Process->Gid[2], Process->Fsgid, max(Fds, 64UL));
+                 LxCredViewId(Self, FALSE, Process->Uid[0]), LxCredViewId(Self, FALSE, Process->Uid[1]),
+                 LxCredViewId(Self, FALSE, Process->Uid[2]), LxCredViewId(Self, FALSE, Process->Fsuid),
+                 LxCredViewId(Self, TRUE, Process->Gid[0]), LxCredViewId(Self, TRUE, Process->Gid[1]),
+                 LxCredViewId(Self, TRUE, Process->Gid[2]), LxCredViewId(Self, TRUE, Process->Fsgid), max(Fds, 64UL));
     for (Index = 0; Index < Process->GroupCount; Index++)
-        LxTextPrintf(Text, "%lu ", Process->Groups[Index]);
+        LxTextPrintf(Text, "%lu ", LxCredViewId(Self, TRUE, Process->Groups[Index]));
     LxTextAppend(Text, "\n", 1);
     {
         static const PCSTR Labels[4] = { "NStgid", "NSpid", "NSpgid", "NSsid" };
@@ -1601,6 +1606,159 @@ LxGenPidSyscall(
                      Number, Args[0], Args[1], Args[2], Args[3], Args[4], Args[5]);
 }
 
+static
+VOID
+LxGenPidIdMap(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text,
+    _In_ BOOLEAN Group)
+{
+    PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+    PLX_NS UserNs, Lower;
+    PLX_ID_MAP Map;
+    ULONG Index;
+
+    if (Process == NULL)
+        return;
+    UserNs = LxUserNsOf(Process);
+    LxProcessDereference(Process);
+    Lower = LxCredUserNs(Self);
+    if ((Lower == UserNs) && (UserNs->Parent != NULL))
+        Lower = UserNs->Parent;
+    if (UserNs->Parent == NULL)
+    {
+        LxTextPrintf(Text, "%10lu %10lu %10lu\n", 0UL, LxIdFromKernel(Lower, Group, 0), MAXULONG);
+    }
+    else
+    {
+        Map = LxUserNsMap(UserNs, Group);
+        for (Index = 0; (Map != NULL) && (Index < Map->Count); Index++)
+        {
+            LxTextPrintf(Text, "%10lu %10lu %10lu\n", Map->Extents[Index].First,
+                         LxIdFromKernel(Lower, Group, Map->Extents[Index].LowerFirst), Map->Extents[Index].Count);
+        }
+    }
+    LxNsDereference(UserNs);
+}
+
+static
+VOID
+LxGenPidUidMap(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    LxGenPidIdMap(Self, Synth, Text, FALSE);
+}
+
+static
+VOID
+LxGenPidGidMap(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    LxGenPidIdMap(Self, Synth, Text, TRUE);
+}
+
+static
+VOID
+LxGenPidSetgroups(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+    PLX_NS UserNs;
+
+    if (Process == NULL)
+        return;
+    UserNs = LxUserNsOf(Process);
+    LxProcessDereference(Process);
+    LxTextAppend(Text, UserNs->User.SetgroupsDenied ? "deny\n" : "allow\n", UserNs->User.SetgroupsDenied ? 5 : 6);
+    LxNsDereference(UserNs);
+}
+
+static
+PLX_NS
+LxPidFileUserNs(
+    _In_ PLX_FILE File,
+    _Out_ PLX_PROCESS *Writer)
+{
+    PLX_THREAD Current = LxCurrentThread();
+    PLX_PROCESS Process;
+    PLX_NS UserNs;
+
+    *Writer = NULL;
+    if (Current == NULL)
+        return NULL;
+    Process = LxProcessLookup(Current->Process->Instance, (ULONG)(ULONG_PTR)File->HandlerContext);
+    if (Process == NULL)
+        return NULL;
+    UserNs = LxUserNsOf(Process);
+    LxProcessDereference(Process);
+    *Writer = Current->Process;
+    return UserNs;
+}
+
+static
+LONG
+LxWritePidIdMap(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length,
+    _In_ BOOLEAN Group)
+{
+    PLX_PROCESS Writer;
+    PLX_NS UserNs = LxPidFileUserNs(File, &Writer);
+    LONG Error;
+
+    if (UserNs == NULL)
+        return -LX_ESRCH;
+    Error = LxUserNsWriteMap(Writer, UserNs, Group, Data, Length);
+    LxNsDereference(UserNs);
+    return Error;
+}
+
+static
+LONG
+LxWritePidUidMap(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    return LxWritePidIdMap(File, Data, Length, FALSE);
+}
+
+static
+LONG
+LxWritePidGidMap(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    return LxWritePidIdMap(File, Data, Length, TRUE);
+}
+
+static
+LONG
+LxWritePidSetgroups(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_PROCESS Writer;
+    PLX_NS UserNs = LxPidFileUserNs(File, &Writer);
+    LONG Error;
+
+    if (UserNs == NULL)
+        return -LX_ESRCH;
+    Error = LxUserNsWriteSetgroups(Writer, UserNs, Data, Length);
+    LxNsDereference(UserNs);
+    return Error;
+}
+
 static const LX_PID_ENTRY LxPidEntries[] =
 {
     { "attr", LX_S_IFDIR, 0555, NULL, NULL, NULL },
@@ -1615,7 +1773,7 @@ static const LX_PID_ENTRY LxPidEntries[] =
     { "exe", LX_S_IFLNK, 0777, NULL, NULL, NULL },
     { "fd", LX_S_IFDIR, 0500, NULL, NULL, NULL },
     { "fdinfo", LX_S_IFDIR, 0500, NULL, NULL, NULL },
-    { "gid_map", LX_S_IFREG, 0644, "         0          0 4294967295\n", NULL, NULL },
+    { "gid_map", LX_S_IFREG, 0644, NULL, LxGenPidGidMap, LxWritePidGidMap },
     { "io", LX_S_IFREG, 0400, "rchar: 0\nwchar: 0\nsyscr: 0\nsyscw: 0\nread_bytes: 0\nwrite_bytes: 0\ncancelled_write_bytes: 0\n", NULL, NULL },
     { "limits", LX_S_IFREG, 0444, NULL, LxGenPidLimits, NULL },
     { "loginuid", LX_S_IFREG, 0644, "4294967295", NULL, LxWriteAccept },
@@ -1631,7 +1789,7 @@ static const LX_PID_ENTRY LxPidEntries[] =
     { "personality", LX_S_IFREG, 0400, "00000000\n", NULL, NULL },
     { "root", LX_S_IFLNK, 0777, NULL, NULL, NULL },
     { "sessionid", LX_S_IFREG, 0444, "4294967295", NULL, NULL },
-    { "setgroups", LX_S_IFREG, 0644, "allow\n", NULL, LxWriteAccept },
+    { "setgroups", LX_S_IFREG, 0644, NULL, LxGenPidSetgroups, LxWritePidSetgroups },
     { "smaps", LX_S_IFREG, 0444, NULL, LxGenPidMaps, NULL },
     { "stat", LX_S_IFREG, 0444, NULL, LxGenPidStat, NULL },
     { "statm", LX_S_IFREG, 0444, NULL, LxGenPidStatm, NULL },
@@ -1640,7 +1798,7 @@ static const LX_PID_ENTRY LxPidEntries[] =
     { "task", LX_S_IFDIR, 0555, NULL, NULL, NULL },
     { "timens_offsets", LX_S_IFREG, 0644, NULL, LxGenPidTimensOffsets, LxWritePidTimensOffsets },
     { "timerslack_ns", LX_S_IFREG, 0666, "50000\n", NULL, LxWriteAccept },
-    { "uid_map", LX_S_IFREG, 0644, "         0          0 4294967295\n", NULL, NULL },
+    { "uid_map", LX_S_IFREG, 0644, NULL, LxGenPidUidMap, LxWritePidUidMap },
     { "wchan", LX_S_IFREG, 0444, "0", NULL, NULL },
 };
 
@@ -1929,6 +2087,107 @@ LxWriteTrace(
     return 0;
 }
 
+static
+VOID
+LxGenOverflowId(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text,
+    _In_ BOOLEAN Group)
+{
+    UNREFERENCED_PARAMETER(Self);
+    UNREFERENCED_PARAMETER(Synth);
+    LxTextPrintf(Text, "%lu\n", LxCredOverflowId(Group));
+}
+
+static
+VOID
+LxGenOverflowUid(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    LxGenOverflowId(Self, Synth, Text, FALSE);
+}
+
+static
+VOID
+LxGenOverflowGid(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    LxGenOverflowId(Self, Synth, Text, TRUE);
+}
+
+static
+LONG
+LxWriteOverflowId(
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length,
+    _In_ BOOLEAN Group)
+{
+    PLX_THREAD Current = LxCurrentThread();
+    ULONG Value;
+    LONG Error;
+
+    if (Current == NULL)
+        return -LX_ESRCH;
+    Error = LxParseWrittenNumber(Data, Length, &Value);
+    return (Error != 0) ? Error : LxCredSetOverflowId(Current->Process, Group, Value);
+}
+
+static
+LONG
+LxWriteOverflowUid(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    UNREFERENCED_PARAMETER(File);
+    return LxWriteOverflowId(Data, Length, FALSE);
+}
+
+static
+LONG
+LxWriteOverflowGid(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    UNREFERENCED_PARAMETER(File);
+    return LxWriteOverflowId(Data, Length, TRUE);
+}
+
+static
+VOID
+LxGenMaxUserNamespaces(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    UNREFERENCED_PARAMETER(Synth);
+    LxTextPrintf(Text, "%ld\n", LxUserNsGetMax(Self));
+}
+
+static
+LONG
+LxWriteMaxUserNamespaces(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_THREAD Current = LxCurrentThread();
+    ULONG Value;
+    LONG Error;
+
+    UNREFERENCED_PARAMETER(File);
+    if (Current == NULL)
+        return -LX_ESRCH;
+    Error = LxParseWrittenNumber(Data, Length, &Value);
+    return (Error != 0) ? Error : LxUserNsSetMax(Current->Process, Value);
+}
+
 static const LX_TABLE_ENTRY LxProcSysTable[] =
 {
     { "fs/file-max", 0644, "9223372036854775807\n", NULL, LxWriteAccept },
@@ -1958,8 +2217,8 @@ static const LX_TABLE_ENTRY LxProcSysTable[] =
     { "kernel/ns_last_pid", 0666, NULL, LxGenNsLastPid, LxWriteNsLastPid },
     { "kernel/osrelease", 0444, NULL, LxGenRelease, NULL },
     { "kernel/ostype", 0444, "Linux\n", NULL, NULL },
-    { "kernel/overflowgid", 0644, "65534\n", NULL, LxWriteAccept },
-    { "kernel/overflowuid", 0644, "65534\n", NULL, LxWriteAccept },
+    { "kernel/overflowgid", 0644, NULL, LxGenOverflowGid, LxWriteOverflowGid },
+    { "kernel/overflowuid", 0644, NULL, LxGenOverflowUid, LxWriteOverflowUid },
     { "kernel/panic", 0644, "0\n", NULL, LxWriteAccept },
     { "kernel/pid_max", 0644, "4194304\n", NULL, LxWriteAccept },
     { "kernel/printk", 0644, "4\t4\t1\t7\n", NULL, LxWriteAccept },
@@ -1974,6 +2233,7 @@ static const LX_TABLE_ENTRY LxProcSysTable[] =
     { "lxcore/trace", 0200, "", NULL, LxWriteTrace },
     { "net/core/somaxconn", 0644, "4096\n", NULL, LxWriteAccept },
     { "net/unix/max_dgram_qlen", 0644, "512\n", NULL, LxWriteAccept },
+    { "user/max_user_namespaces", 0644, NULL, LxGenMaxUserNamespaces, LxWriteMaxUserNamespaces },
     { "vm/max_map_count", 0644, "65530\n", NULL, LxWriteAccept },
     { "vm/overcommit_memory", 0644, "0\n", NULL, LxWriteAccept },
     { "vm/swappiness", 0644, "60\n", NULL, LxWriteAccept },
@@ -3812,6 +4072,27 @@ LxSynthOpen(
                     LxTextAppend(&Text, LxPidEntries[Synth.Index].Text, (ULONG)strlen(LxPidEntries[Synth.Index].Text));
                 Writer = LxPidEntries[Synth.Index].Writer;
                 Context = (PVOID)(ULONG_PTR)Synth.Pid;
+                if ((Writer == LxWritePidSetgroups) && ((Flags & LX_O_ACCMODE) != LX_O_RDONLY))
+                {
+                    PLX_PROCESS Target = LxProcessLookup(Process->Instance, Synth.Pid);
+                    PLX_NS UserNs;
+                    BOOLEAN Capable;
+
+                    if (Target == NULL)
+                    {
+                        Error = -LX_ESRCH;
+                        goto Exit;
+                    }
+                    UserNs = LxUserNsOf(Target);
+                    LxProcessDereference(Target);
+                    Capable = LxNsCapable(Process, UserNs, LX_CAP_SYS_ADMIN);
+                    LxNsDereference(UserNs);
+                    if (!Capable)
+                    {
+                        Error = -LX_EACCES;
+                        goto Exit;
+                    }
+                }
                 break;
 
             case LxProcFdinfoFile:

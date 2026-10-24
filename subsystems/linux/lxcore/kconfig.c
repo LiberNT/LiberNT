@@ -27,6 +27,7 @@ static const PCSTR LxKernelConfig[] =
     "CONFIG_IPC_NS=y",
     "CONFIG_PID_NS=y",
     "CONFIG_TIME_NS=y",
+    "CONFIG_USER_NS=y",
     "CONFIG_FUTEX=y",
     "CONFIG_EPOLL=y",
     "CONFIG_SIGNALFD=y",

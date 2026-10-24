@@ -13,8 +13,18 @@
 #define LX_PROC_DYNAMIC_FIRST   0xF0000000ULL
 #define LX_PID_MAX              4194304
 
+typedef struct _LX_UCOUNT
+{
+    LIST_ENTRY Link;
+    PLX_NS Ns;
+    ULONG Uid;
+    LONG Count;
+} LX_UCOUNT, *PLX_UCOUNT;
+
 static LIST_ENTRY LxNsList;
 static FAST_MUTEX LxNsLock;
+static LIST_ENTRY LxUcountList;
+static FAST_MUTEX LxUserNsStateLock;
 static volatile LONG64 LxNsNextInum = LX_PROC_DYNAMIC_FIRST - 1;
 
 static const ULONG64 LxNsCloneFlags[LxNsCount] =
@@ -51,6 +61,8 @@ LxNsInitialize(VOID)
 {
     InitializeListHead(&LxNsList);
     ExInitializeFastMutex(&LxNsLock);
+    InitializeListHead(&LxUcountList);
+    ExInitializeFastMutex(&LxUserNsStateLock);
 }
 
 PCSTR
@@ -64,11 +76,14 @@ PLX_NS
 LxNsCreate(
     _In_ PLX_INSTANCE Instance,
     _In_ LX_NS_KIND Kind,
-    _In_opt_ PLX_NS From)
+    _In_opt_ PLX_NS From,
+    _In_opt_ PLX_NS Owner)
 {
     PLX_NS Ns;
 
-    if (((Kind == LxNsPid) || (Kind == LxNsUser)) && (From != NULL) && (From->Level + 1 >= LX_PIDNS_MAX_LEVEL))
+    if ((Kind == LxNsPid) && (From != NULL) && (From->Level + 1 >= LX_PIDNS_MAX_LEVEL))
+        return NULL;
+    if ((Kind == LxNsUser) && (From != NULL) && (From->Level > LX_USERNS_MAX_PARENT_LEVEL))
         return NULL;
 
     Ns = LxAlloc(sizeof(*Ns));
@@ -82,6 +97,11 @@ LxNsCreate(
         Ns->Inum = LxNsInitInums[Kind];
     else
         Ns->Inum = (ULONG64)InterlockedIncrement64(&LxNsNextInum);
+    if ((Owner != NULL) && (Kind != LxNsUser))
+    {
+        LxNsReference(Owner);
+        Ns->Owner = Owner;
+    }
 
     switch (Kind)
     {
@@ -90,6 +110,8 @@ LxNsCreate(
             LxEventSourceInit(&Ns->Mnt.Events);
             if ((From != NULL) && (LxMountNsCopy(Ns, From) != 0))
             {
+                if (Ns->Owner != NULL)
+                    LxNsDereference(Ns->Owner);
                 LxFree(Ns);
                 return NULL;
             }
@@ -109,13 +131,23 @@ LxNsCreate(
             break;
 
         case LxNsPid:
-        case LxNsUser:
             Ns->Pid.NextPid = 1;
             if (From != NULL)
             {
                 LxNsReference(From);
                 Ns->Parent = From;
                 Ns->Level = From->Level + 1;
+            }
+            break;
+
+        case LxNsUser:
+            Ns->User.MaxUserNamespaces = (From != NULL) ? MAXLONG : (LX_THREADS_MAX / 2);
+            if (From != NULL)
+            {
+                LxNsReference(From);
+                Ns->Parent = From;
+                Ns->Level = From->Level + 1;
+                Ns->User.SetgroupsDenied = From->User.SetgroupsDenied;
             }
             break;
 
@@ -153,20 +185,105 @@ LxNsReference(
     InterlockedIncrement(&Ns->RefCount);
 }
 
+static
+PLX_UCOUNT
+LxUcountFind(
+    _In_ PLX_NS Ns,
+    _In_ ULONG Uid,
+    _In_ BOOLEAN Create)
+{
+    PLIST_ENTRY Entry;
+    PLX_UCOUNT Count;
+
+    for (Entry = LxUcountList.Flink; Entry != &LxUcountList; Entry = Entry->Flink)
+    {
+        Count = CONTAINING_RECORD(Entry, LX_UCOUNT, Link);
+        if ((Count->Ns == Ns) && (Count->Uid == Uid))
+            return Count;
+    }
+    if (!Create)
+        return NULL;
+    Count = LxAlloc(sizeof(*Count));
+    if (Count == NULL)
+        return NULL;
+    Count->Ns = Ns;
+    Count->Uid = Uid;
+    Count->Count = 0;
+    InsertTailList(&LxUcountList, &Count->Link);
+    return Count;
+}
+
+static
+VOID
+LxUserNsUncharge(
+    _In_ PLX_NS Parent,
+    _In_ ULONG Uid,
+    _In_opt_ PLX_NS Stop)
+{
+    PLX_UCOUNT Count;
+    PLX_NS Ns;
+
+    for (Ns = Parent; (Ns != NULL) && (Ns != Stop); Uid = Ns->User.OwnerUid, Ns = Ns->Parent)
+    {
+        Count = LxUcountFind(Ns, Uid, FALSE);
+        if (Count == NULL)
+            continue;
+        if (--Count->Count <= 0)
+        {
+            RemoveEntryList(&Count->Link);
+            LxFree(Count);
+        }
+    }
+}
+
+static
+BOOLEAN
+LxUserNsCharge(
+    _In_ PLX_NS Parent,
+    _In_ ULONG Uid)
+{
+    PLX_UCOUNT Count;
+    PLX_NS Ns;
+    ULONG Owner;
+
+    ExAcquireFastMutex(&LxNsLock);
+    for (Ns = Parent, Owner = Uid; Ns != NULL; Owner = Ns->User.OwnerUid, Ns = Ns->Parent)
+    {
+        Count = LxUcountFind(Ns, Owner, TRUE);
+        if ((Count == NULL) || (Count->Count >= Ns->User.MaxUserNamespaces))
+        {
+            if ((Count != NULL) && (Count->Count == 0))
+            {
+                RemoveEntryList(&Count->Link);
+                LxFree(Count);
+            }
+            LxUserNsUncharge(Parent, Uid, Ns);
+            ExReleaseFastMutex(&LxNsLock);
+            return FALSE;
+        }
+        Count->Count++;
+    }
+    ExReleaseFastMutex(&LxNsLock);
+    return TRUE;
+}
+
 VOID
 LxNsDereference(
     _In_ PLX_NS Ns)
 {
-    PLX_NS Parent;
+    PLX_NS Parent, Owner;
 
     if (InterlockedDecrement(&Ns->RefCount) != 0)
         return;
 
     ExAcquireFastMutex(&LxNsLock);
     RemoveEntryList(&Ns->Link);
+    if ((Ns->Kind == LxNsUser) && Ns->User.Charged)
+        LxUserNsUncharge(Ns->Parent, Ns->User.OwnerUid, NULL);
     ExReleaseFastMutex(&LxNsLock);
 
     Parent = Ns->Parent;
+    Owner = Ns->Owner;
     switch (Ns->Kind)
     {
         case LxNsMnt:
@@ -176,12 +293,395 @@ LxNsDereference(
             LxIpcNamespaceCleanup(Ns);
             LxMqNamespaceCleanup(Ns);
             break;
+        case LxNsUser:
+            LxFree(Ns->User.Maps[0]);
+            LxFree(Ns->User.Maps[1]);
+            break;
         default:
             break;
     }
     LxFree(Ns);
+    if (Owner != NULL)
+        LxNsDereference(Owner);
     if (Parent != NULL)
         LxNsDereference(Parent);
+}
+
+PLX_NS
+LxNsOwner(
+    _In_ PLX_NS Ns)
+{
+    if (Ns->Kind == LxNsUser)
+        return Ns->Parent;
+    return (Ns->Owner != NULL) ? Ns->Owner : Ns->Instance->RootNs[LxNsUser];
+}
+
+PLX_NS
+LxUserNsOf(
+    _In_ PLX_PROCESS Process)
+{
+    PLX_NS UserNs;
+
+    ExAcquireFastMutex(&LxNsLock);
+    UserNs = LxCredUserNs(Process);
+    LxNsReference(UserNs);
+    ExReleaseFastMutex(&LxNsLock);
+    return UserNs;
+}
+
+LONG
+LxUserNsCreate(
+    _In_ PLX_PROCESS Process,
+    _Out_ PLX_NS *Result)
+{
+    PLX_NS Parent = LxCredUserNs(Process);
+    PLX_NS Ns;
+    PSTR Root;
+    BOOLEAN Chrooted;
+
+    *Result = NULL;
+    if (Parent->Level > LX_USERNS_MAX_PARENT_LEVEL)
+        return -LX_ENOSPC;
+    if (!LxUserNsCharge(Parent, Process->Uid[1]))
+        return -LX_ENOSPC;
+    Root = LxProcessRoot(Process);
+    Chrooted = (Root == NULL) || (strcmp(Root, "/") != 0);
+    LxFree(Root);
+    if (Chrooted || (LxIdFromKernel(Parent, FALSE, Process->Uid[1]) == MAXULONG) ||
+        (LxIdFromKernel(Parent, TRUE, Process->Gid[1]) == MAXULONG))
+    {
+        ExAcquireFastMutex(&LxNsLock);
+        LxUserNsUncharge(Parent, Process->Uid[1], NULL);
+        ExReleaseFastMutex(&LxNsLock);
+        return (Root == NULL) ? -LX_ENOMEM : -LX_EPERM;
+    }
+    Ns = LxNsCreate(Process->Instance, LxNsUser, Parent, NULL);
+    if (Ns == NULL)
+    {
+        ExAcquireFastMutex(&LxNsLock);
+        LxUserNsUncharge(Parent, Process->Uid[1], NULL);
+        ExReleaseFastMutex(&LxNsLock);
+        return -LX_ENOMEM;
+    }
+    Ns->User.OwnerUid = Process->Uid[1];
+    Ns->User.OwnerGid = Process->Gid[1];
+    Ns->User.ParentCouldSetfcap = ((Process->CapEffective >> LX_CAP_SETFCAP) & 1) != 0;
+    Ns->User.Charged = TRUE;
+    *Result = Ns;
+    return 0;
+}
+
+VOID
+LxUserNsEnter(
+    _Inout_ PLX_PROCESS Process,
+    _In_ PLX_NS UserNs)
+{
+    PLX_NS Old;
+
+    LxNsReference(UserNs);
+    ExAcquireFastMutex(&Process->Lock);
+    ExAcquireFastMutex(&LxNsLock);
+    Old = Process->Ns[LxNsUser];
+    Process->Ns[LxNsUser] = UserNs;
+    ExReleaseFastMutex(&LxNsLock);
+    Process->SecureBits = 0;
+    Process->CapInheritable = 0;
+    Process->CapAmbient = 0;
+    Process->CapPermitted = LX_CAP_FULL_SET;
+    Process->CapEffective = LX_CAP_FULL_SET;
+    Process->CapBounding = LX_CAP_FULL_SET;
+    ExReleaseFastMutex(&Process->Lock);
+    if (Old != NULL)
+        LxNsDereference(Old);
+}
+
+static
+BOOLEAN
+LxIdIsSpace(
+    _In_ CHAR Character)
+{
+    return (Character == ' ') || ((Character >= '\t') && (Character <= '\r'));
+}
+
+static
+PCSTR
+LxIdParseNumber(
+    _In_ PCSTR Cursor,
+    _In_ PCSTR End,
+    _Out_ PULONG Value)
+{
+    ULONG64 Number = 0;
+
+    while ((Cursor < End) && (*Cursor >= '0') && (*Cursor <= '9'))
+    {
+        Number = Number * 10 + (ULONG64)(*Cursor - '0');
+        Cursor++;
+    }
+    *Value = (ULONG)Number;
+    return Cursor;
+}
+
+static
+PCSTR
+LxIdSkipSpaces(
+    _In_ PCSTR Cursor,
+    _In_ PCSTR End)
+{
+    while ((Cursor < End) && LxIdIsSpace(*Cursor))
+        Cursor++;
+    return Cursor;
+}
+
+static
+BOOLEAN
+LxIdMapOverlaps(
+    _In_ PLX_ID_MAP Map,
+    _In_ PLX_ID_EXTENT Extent)
+{
+    ULONG UpperLast = Extent->First + Extent->Count - 1, LowerLast = Extent->LowerFirst + Extent->Count - 1;
+    ULONG Index;
+
+    for (Index = 0; Index < Map->Count; Index++)
+    {
+        PLX_ID_EXTENT Prev = &Map->Extents[Index];
+
+        if ((Prev->First <= UpperLast) && (Prev->First + Prev->Count - 1 >= Extent->First))
+            return TRUE;
+        if ((Prev->LowerFirst <= LowerLast) && (Prev->LowerFirst + Prev->Count - 1 >= Extent->LowerFirst))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static
+LONG
+LxIdMapParse(
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length,
+    _Out_ PLX_ID_MAP Map)
+{
+    PCSTR Line = Data, Limit = Data + strnlen(Data, Length);
+
+    Map->Count = 0;
+    while (Line < Limit)
+    {
+        PCSTR End = Line, Cursor;
+        LX_ID_EXTENT Extent;
+        BOOLEAN More;
+
+        while ((End < Limit) && (*End != '\n'))
+            End++;
+        More = (End < Limit) && (End + 1 < Limit);
+        Cursor = LxIdSkipSpaces(Line, End);
+        Cursor = LxIdParseNumber(Cursor, End, &Extent.First);
+        if ((Cursor >= End) || !LxIdIsSpace(*Cursor))
+            return -LX_EINVAL;
+        Cursor = LxIdSkipSpaces(Cursor, End);
+        Cursor = LxIdParseNumber(Cursor, End, &Extent.LowerFirst);
+        if ((Cursor >= End) || !LxIdIsSpace(*Cursor))
+            return -LX_EINVAL;
+        Cursor = LxIdSkipSpaces(Cursor, End);
+        Cursor = LxIdParseNumber(Cursor, End, &Extent.Count);
+        if ((Cursor < End) && !LxIdIsSpace(*Cursor))
+            return -LX_EINVAL;
+        if (LxIdSkipSpaces(Cursor, End) != End)
+            return -LX_EINVAL;
+        if ((Extent.First == MAXULONG) || (Extent.LowerFirst == MAXULONG))
+            return -LX_EINVAL;
+        if ((ULONG)(Extent.First + Extent.Count) <= Extent.First)
+            return -LX_EINVAL;
+        if ((ULONG)(Extent.LowerFirst + Extent.Count) <= Extent.LowerFirst)
+            return -LX_EINVAL;
+        if (LxIdMapOverlaps(Map, &Extent))
+            return -LX_EINVAL;
+        if ((Map->Count + 1 == LX_ID_MAP_MAX_EXTENTS) && More)
+            return -LX_EINVAL;
+        if (Map->Count >= LX_ID_MAP_MAX_EXTENTS)
+            return -LX_EINVAL;
+        Map->Extents[Map->Count++] = Extent;
+        if (!More)
+            break;
+        Line = End + 1;
+    }
+    return (Map->Count == 0) ? -LX_EINVAL : 0;
+}
+
+static
+BOOLEAN
+LxIdMapPermitted(
+    _In_ PLX_PROCESS Writer,
+    _In_ PLX_NS UserNs,
+    _In_ BOOLEAN Group,
+    _In_ PLX_ID_MAP Map)
+{
+    ULONG Index;
+
+    if (!Group)
+    {
+        for (Index = 0; Index < Map->Count; Index++)
+        {
+            if (Map->Extents[Index].LowerFirst == 0)
+                break;
+        }
+        if (Index < Map->Count)
+        {
+            if (UserNs == LxCredUserNs(Writer))
+            {
+                if (!UserNs->User.ParentCouldSetfcap)
+                    return FALSE;
+            }
+            else if (!LxNsCapable(Writer, UserNs->Parent, LX_CAP_SETFCAP))
+            {
+                return FALSE;
+            }
+        }
+    }
+    if ((Map->Count == 1) && (Map->Extents[0].Count == 1) && (UserNs->User.OwnerUid == Writer->Uid[1]))
+    {
+        ULONG Id = LxIdToKernel(UserNs->Parent, Group, Map->Extents[0].LowerFirst);
+
+        if (!Group && (Id == Writer->Uid[1]))
+            return TRUE;
+        if (Group && UserNs->User.SetgroupsDenied && (Id == Writer->Gid[1]))
+            return TRUE;
+    }
+    return LxNsCapable(Writer, UserNs->Parent, Group ? LX_CAP_SETGID : LX_CAP_SETUID);
+}
+
+LONG
+LxUserNsWriteMap(
+    _In_ PLX_PROCESS Writer,
+    _In_ PLX_NS UserNs,
+    _In_ BOOLEAN Group,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_NS WriterNs = LxCredUserNs(Writer);
+    PLX_ID_MAP Map;
+    ULONG Index;
+    LONG Error;
+
+    if (UserNs->Parent == NULL)
+        return -LX_EPERM;
+    if ((WriterNs != UserNs) && (WriterNs != UserNs->Parent))
+        return -LX_EPERM;
+    if (Length >= LX_PAGE_SIZE)
+        return -LX_EINVAL;
+    Map = LxAlloc(sizeof(*Map));
+    if (Map == NULL)
+        return -LX_ENOMEM;
+    RtlZeroMemory(Map, sizeof(*Map));
+
+    ExAcquireFastMutex(&LxUserNsStateLock);
+    Error = -LX_EPERM;
+    if ((UserNs->User.Maps[Group ? 1 : 0] != NULL) || !LxNsCapable(Writer, UserNs, LX_CAP_SYS_ADMIN))
+        goto Exit;
+    Error = LxIdMapParse(Data, Length, Map);
+    if (Error != 0)
+        goto Exit;
+    Error = -LX_EPERM;
+    if (!LxIdMapPermitted(Writer, UserNs, Group, Map))
+        goto Exit;
+    for (Index = 0; Index < Map->Count; Index++)
+    {
+        ULONG Lower = LxIdRangeToKernel(UserNs->Parent, Group, Map->Extents[Index].LowerFirst, Map->Extents[Index].Count);
+
+        if (Lower == MAXULONG)
+            goto Exit;
+        Map->Extents[Index].LowerFirst = Lower;
+    }
+    InterlockedExchangePointer((PVOID volatile *)&UserNs->User.Maps[Group ? 1 : 0], Map);
+    Map = NULL;
+    Error = 0;
+Exit:
+    ExReleaseFastMutex(&LxUserNsStateLock);
+    LxFree(Map);
+    return Error;
+}
+
+LONG
+LxUserNsWriteSetgroups(
+    _In_ PLX_PROCESS Writer,
+    _In_ PLX_NS UserNs,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PCSTR Cursor, Limit;
+    BOOLEAN Allow;
+    LONG Error = -LX_EPERM;
+
+    UNREFERENCED_PARAMETER(Writer);
+    if (Length >= 8)
+        return -LX_EINVAL;
+    Limit = Data + strnlen(Data, Length);
+    if (strncmp(Data, "allow", 5) == 0)
+    {
+        Allow = TRUE;
+        Cursor = Data + 5;
+    }
+    else if (strncmp(Data, "deny", 4) == 0)
+    {
+        Allow = FALSE;
+        Cursor = Data + 4;
+    }
+    else
+    {
+        return -LX_EINVAL;
+    }
+    if (LxIdSkipSpaces(Cursor, Limit) != Limit)
+        return -LX_EINVAL;
+
+    ExAcquireFastMutex(&LxUserNsStateLock);
+    if (Allow)
+    {
+        if (!UserNs->User.SetgroupsDenied)
+            Error = 0;
+    }
+    else if ((UserNs->Parent != NULL) && (UserNs->User.Maps[1] == NULL))
+    {
+        UserNs->User.SetgroupsDenied = TRUE;
+        Error = 0;
+    }
+    ExReleaseFastMutex(&LxUserNsStateLock);
+    return Error;
+}
+
+BOOLEAN
+LxUserNsMaySetgroups(
+    _In_ PLX_NS UserNs)
+{
+    BOOLEAN Allowed;
+
+    if (UserNs->Parent == NULL)
+        return TRUE;
+    ExAcquireFastMutex(&LxUserNsStateLock);
+    Allowed = (UserNs->User.Maps[1] != NULL) && !UserNs->User.SetgroupsDenied;
+    ExReleaseFastMutex(&LxUserNsStateLock);
+    return Allowed;
+}
+
+LONG
+LxUserNsGetMax(
+    _In_ PLX_PROCESS Process)
+{
+    return LxCredUserNs(Process)->User.MaxUserNamespaces;
+}
+
+LONG
+LxUserNsSetMax(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG64 Value)
+{
+    PLX_NS UserNs = LxCredUserNs(Process);
+
+    if (!LxNsCapable(Process, UserNs, LX_CAP_SYS_RESOURCE))
+        return -LX_EACCES;
+    if ((Value < 0) || (Value > MAXLONG))
+        return -LX_EINVAL;
+    ExAcquireFastMutex(&LxNsLock);
+    UserNs->User.MaxUserNamespaces = (LONG)Value;
+    ExReleaseFastMutex(&LxNsLock);
+    return 0;
 }
 
 VOID
@@ -671,15 +1171,23 @@ LxNsInheritProcess(
     }
 
     if (Flags & LX_CLONE_NEWUSER)
-        return -LX_EINVAL;
+    {
+        PLX_NS UserNs;
+        LONG Error = LxUserNsCreate(Child, &UserNs);
+
+        if (Error != 0)
+            return Error;
+        LxUserNsEnter(Child, UserNs);
+        LxNsDereference(UserNs);
+    }
 
     for (Index = 0; Index < LxNsCount; Index++)
     {
         PLX_NS Ns;
 
-        if (!(Flags & LxNsCloneFlags[Index]))
+        if (!(Flags & LxNsCloneFlags[Index]) || (Index == LxNsUser))
             continue;
-        Ns = LxNsCreate(Instance, (LX_NS_KIND)Index, Child->Ns[Index]);
+        Ns = LxNsCreate(Instance, (LX_NS_KIND)Index, Child->Ns[Index], LxCredUserNs(Child));
         if (Ns == NULL)
             return (Index == LxNsPid) ? -LX_EUSERS : -LX_ENOMEM;
         if (Index == LxNsCgroup)
@@ -970,8 +1478,11 @@ LxPidAllocate(
             return -LX_EINVAL;
         if ((Ns->Level > 0) && (SetTid[Depth] != 1) && !Ns->Pid.HasInit)
             return -LX_EINVAL;
-        if (!LxCapable(Process, LX_CAP_CHECKPOINT_RESTORE) && !LxCapable(Process, LX_CAP_SYS_ADMIN))
+        if (!LxNsCapable(Process, LxNsOwner(Ns), LX_CAP_CHECKPOINT_RESTORE) &&
+            !LxNsCapable(Process, LxNsOwner(Ns), LX_CAP_SYS_ADMIN))
+        {
             return -LX_EPERM;
+        }
     }
     if (SetTidCount > PidNs->Level)
     {
@@ -1013,8 +1524,11 @@ LxPidNsSetLastPid(
 {
     PLX_NS PidNs = Process->PidNs;
 
-    if (!LxCapable(Process, LX_CAP_CHECKPOINT_RESTORE) && !LxCapable(Process, LX_CAP_SYS_ADMIN))
+    if (!LxNsCapable(Process, LxNsOwner(PidNs), LX_CAP_CHECKPOINT_RESTORE) &&
+        !LxNsCapable(Process, LxNsOwner(PidNs), LX_CAP_SYS_ADMIN))
+    {
         return -LX_EPERM;
+    }
     if (Value >= LX_PID_MAX)
         return -LX_EINVAL;
     if (PidNs->Level == 0)
@@ -1079,6 +1593,20 @@ LxNsKindFromFlag(
 }
 
 static
+BOOLEAN
+LxUserNsWithin(
+    _In_opt_ PLX_NS Ns,
+    _In_ PLX_NS Ancestor)
+{
+    for (; Ns != NULL; Ns = Ns->Parent)
+    {
+        if (Ns == Ancestor)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static
 LONG64
 LxNsFileIoctl(
     _In_ PLX_FILE File,
@@ -1100,6 +1628,7 @@ LxNsFileIoctl(
         case LX_NS_GET_OWNER_UID:
             if (Ns->Kind != LxNsUser)
                 return -LX_EINVAL;
+            Uid = (Thread != NULL) ? LxCredViewId(Thread->Process, FALSE, Ns->User.OwnerUid) : Ns->User.OwnerUid;
             return LxCopyToUser(Argument, &Uid, sizeof(Uid));
 
         case LX_NS_GET_PARENT:
@@ -1110,13 +1639,15 @@ LxNsFileIoctl(
                 return -LX_EPERM;
             if ((Ns->Kind == LxNsPid) && (Thread != NULL) && !LxPidNsContains(Thread->Process->PidNs, Target))
                 return -LX_EPERM;
+            if ((Ns->Kind == LxNsUser) && (Thread != NULL) && !LxUserNsWithin(Target, LxCredUserNs(Thread->Process)))
+                return -LX_EPERM;
             break;
 
         case LX_NS_GET_USERNS:
             if ((Ns->Instance == NULL) || (Ns->Instance->RootNs[LxNsUser] == NULL))
                 return -LX_EPERM;
-            Target = (Ns->Kind == LxNsUser) ? Ns : Ns->Instance->RootNs[LxNsUser];
-            if (Ns->Kind == LxNsUser)
+            Target = LxNsOwner(Ns);
+            if ((Target == NULL) || ((Thread != NULL) && !LxUserNsWithin(Target, LxCredUserNs(Thread->Process))))
                 return -LX_EPERM;
             break;
 
@@ -1207,18 +1738,17 @@ LX_SYSCALL(LxSysUnshare)
     ULONG64 Flags = Call->Args[0];
     ULONG64 NsFlags = LX_CLONE_NEWNS | LX_CLONE_NEWUTS | LX_CLONE_NEWIPC | LX_CLONE_NEWUSER | LX_CLONE_NEWPID |
                       LX_CLONE_NEWNET | LX_CLONE_NEWCGROUP | LX_CLONE_NEWTIME;
+    PLX_NS UserNs = NULL;
     ULONG Index;
     LONG Error;
 
+    if (Flags & LX_CLONE_NEWUSER)
+        Flags |= LX_CLONE_THREAD | LX_CLONE_FS;
     if (Flags & ~(NsFlags | LX_CLONE_FS | LX_CLONE_FILES | LX_CLONE_SYSVSEM | LX_CLONE_THREAD | LX_CLONE_SIGHAND |
                   LX_CLONE_VM))
     {
         return -LX_EINVAL;
     }
-    if (Flags & LX_CLONE_NEWUSER)
-        return -LX_EINVAL;
-    if ((Flags & NsFlags) && !LxCapable(Process, LX_CAP_SYS_ADMIN))
-        return -LX_EPERM;
     if ((Flags & (LX_CLONE_THREAD | LX_CLONE_SIGHAND | LX_CLONE_VM)) && (Process->ThreadCount > 1))
         return -LX_EINVAL;
 
@@ -1228,14 +1758,28 @@ LX_SYSCALL(LxSysUnshare)
         if (Error != 0)
             return Error;
     }
+    if (Flags & LX_CLONE_NEWUSER)
+    {
+        Error = LxUserNsCreate(Process, &UserNs);
+        if (Error != 0)
+            return Error;
+    }
+    if ((Flags & NsFlags & ~LX_CLONE_NEWUSER) && (UserNs == NULL) && !LxNsCapable(Process, NULL, LX_CAP_SYS_ADMIN))
+        return -LX_EPERM;
+    if (UserNs != NULL)
+    {
+        LxUserNsEnter(Process, UserNs);
+        LxNsDereference(UserNs);
+    }
 
     for (Index = 0; Index < LxNsCount; Index++)
     {
         PLX_NS Ns;
 
-        if (!(Flags & LxNsCloneFlags[Index]))
+        if (!(Flags & LxNsCloneFlags[Index]) || (Index == LxNsUser))
             continue;
-        Ns = LxNsCreate(Process->Instance, (LX_NS_KIND)Index, LxProcessNs(Process, (LX_NS_KIND)Index));
+        Ns = LxNsCreate(Process->Instance, (LX_NS_KIND)Index, LxProcessNs(Process, (LX_NS_KIND)Index),
+                        LxCredUserNs(Process));
         if (Ns == NULL)
             return (Index == LxNsPid) ? -LX_EUSERS : -LX_ENOMEM;
         if (Index == LxNsCgroup)
@@ -1260,11 +1804,25 @@ LxNsJoin(
     if (Ns->Instance != Process->Instance)
         return -LX_EINVAL;
 
+    if (Ns->Kind == LxNsUser)
+    {
+        if (Ns == LxCredUserNs(Process))
+            return -LX_EINVAL;
+        if ((Process->ThreadCount > 1) || ((Thread->Fs != NULL) && (Thread->Fs->RefCount != 1)))
+            return -LX_EINVAL;
+        if (!LxNsCapable(Process, Ns, LX_CAP_SYS_ADMIN))
+            return -LX_EPERM;
+        LxUserNsEnter(Process, Ns);
+        return 0;
+    }
+    if (!LxNsCapable(Process, LxNsOwner(Ns), LX_CAP_SYS_ADMIN) || !LxNsCapable(Process, NULL, LX_CAP_SYS_ADMIN) ||
+        ((Ns->Kind == LxNsMnt) && !LxNsCapable(Process, NULL, LX_CAP_SYS_CHROOT)))
+    {
+        return -LX_EPERM;
+    }
+
     switch (Ns->Kind)
     {
-        case LxNsUser:
-            return -LX_EINVAL;
-
         case LxNsPid:
             if (!LxPidNsContains(Process->PidNs, Ns))
                 return -LX_EINVAL;
@@ -1304,8 +1862,6 @@ LX_SYSCALL(LxSysSetns)
     PLX_NS Ns;
     LONG Error = 0;
 
-    if (!LxCapable(Process, LX_CAP_SYS_ADMIN))
-        return -LX_EPERM;
     File = LxFdGet(Process, (LONG)Call->Args[0]);
     if (File == NULL)
         return -LX_EBADF;
@@ -1327,6 +1883,11 @@ LX_SYSCALL(LxSysSetns)
             LxFileDereference(File);
             return -LX_ESRCH;
         }
+        if (!LxPtraceMayRead(Process, Target))
+        {
+            LxFileDereference(File);
+            return -LX_EPERM;
+        }
         ExAcquireFastMutex(&Target->Lock);
         for (Index = 0; Index < LxNsCount; Index++)
         {
@@ -1335,6 +1896,8 @@ LX_SYSCALL(LxSysSetns)
                 LxNsReference(Joined[Index]);
         }
         ExReleaseFastMutex(&Target->Lock);
+        if ((Type & LX_CLONE_NEWUSER) && (Joined[LxNsUser] != NULL))
+            Error = LxNsJoin(Thread, Joined[LxNsUser]);
         for (Index = 0; (Index < LxNsCount) && (Error == 0); Index++)
         {
             if ((Type & LxNsCloneFlags[Index]) && (Joined[Index] != NULL) && (Index != LxNsUser))

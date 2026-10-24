@@ -810,7 +810,7 @@ LxInstanceCreate(
     if (Instance->RootCgroup != NULL)
         Instance->RootCgroup->Instance = Instance;
     for (Index = 0; Index < LxNsCount; Index++)
-        Instance->RootNs[Index] = LxNsCreate(Instance, (LX_NS_KIND)Index, NULL);
+        Instance->RootNs[Index] = LxNsCreate(Instance, (LX_NS_KIND)Index, NULL, NULL);
     for (Index = 0; Index < LxNsCount; Index++)
     {
         if (Instance->RootNs[Index] == NULL)
