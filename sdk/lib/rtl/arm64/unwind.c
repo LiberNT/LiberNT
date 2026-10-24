@@ -370,14 +370,25 @@ RtlpArm64RestoreAnyReg(
     }
 }
 
+#if defined(_MSC_VER) && !defined(__clang__)
+DWORD64
+RtlpArm64AutiB1716(
+    _In_ DWORD64 Lr,
+    _In_ DWORD64 Sp);
+#endif
+
 static VOID
 RtlpArm64DoPacAuth(
     _Inout_ PCONTEXT Context)
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+    Context->Lr = RtlpArm64AutiB1716(Context->Lr, Context->Sp);
+#else
     register DWORD64 x17 __asm__("x17") = Context->Lr;
     register DWORD64 x16 __asm__("x16") = Context->Sp;
     __asm__ volatile("hint 0xe" : "+r"(x17) : "r"(x16));
     Context->Lr = x17;
+#endif
 }
 
 static VOID
