@@ -275,6 +275,21 @@ LxHashPath(
 }
 
 static
+ULONG64
+LxSynthIno(
+    _In_ PLX_NODE Node)
+{
+    PLX_MOUNT Mount = Node->Mount;
+
+    if ((Mount->Kind == LxFsProc) && ((Mount->Root == NULL) || (strcmp(Mount->Root, "/") == 0)) &&
+        ((Node->Relative[0] == '\0') || (strcmp(Node->Relative, "/") == 0)))
+    {
+        return LX_PROC_ROOT_INO;
+    }
+    return LxHashPath(Mount->Id, Node->Relative);
+}
+
+static
 BOOLEAN
 LxParseNumber(
     _In_ PCSTR String,
@@ -3102,7 +3117,7 @@ LxSynthOpen(
         File->Data = (PUCHAR)Text.Buffer;
         File->DataLength = Text.Length;
         Text.Buffer = NULL;
-        File->Ino = LxHashPath(Node->Mount->Id, Node->Relative);
+        File->Ino = LxSynthIno(Node);
         if (Node->Mount->Kind == LxFsCgroup)
             File->HandlerContext = Synth.Cgroup;
     }
@@ -3156,7 +3171,7 @@ LxSynthOpen(
             goto Exit;
         }
         File->Flags = LX_O_PATH;
-        File->Ino = LxHashPath(Node->Mount->Id, Node->Relative);
+        File->Ino = LxSynthIno(Node);
         File->Mount = Node->Mount;
         *Result = File;
         File = NULL;
@@ -3175,14 +3190,14 @@ LxSynthOpen(
         LxTtyDereference(Tty);
         if (Error != 0)
             goto Exit;
-        File->Ino = LxHashPath(Node->Mount->Id, Node->Relative);
+        File->Ino = LxSynthIno(Node);
     }
     else if (Synth.Id == LxPtsPtmx)
     {
         Error = LxPtmxOpen(Process, Flags, &File);
         if (Error != 0)
             goto Exit;
-        File->Ino = LxHashPath(Node->Mount->Id, Node->Relative);
+        File->Ino = LxSynthIno(Node);
     }
     else
     {
@@ -3308,7 +3323,7 @@ LxSynthOpen(
             File->EventSource = Events;
             File->EventSeen = Events->Generation;
         }
-        File->Ino = LxHashPath(Node->Mount->Id, Node->Relative);
+        File->Ino = LxSynthIno(Node);
         File->Mount = Node->Mount;
         *Result = File;
         File = NULL;
@@ -3356,7 +3371,7 @@ LxSynthStat(
     }
     Stat->Mode = Synth.Type | Synth.Mode;
     Stat->Nlink = (Synth.Type == LX_S_IFDIR) ? 2 : 1;
-    Stat->Ino = LxHashPath(Node->Mount->Id, Node->Relative);
+    Stat->Ino = LxSynthIno(Node);
     Stat->BlkSize = 4096;
     Stat->Dev = Node->Mount->Dev;
     if (Synth.Id == LxPtsTty)
