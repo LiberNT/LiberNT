@@ -1072,6 +1072,10 @@ SoftGpuDdiStartDevice(
     Device->HighestDmaAddress =
         PlatformConfig.HighestFrameBufferAddress;
 
+    Status = SoftGpuScanoutStart(Device, &PlatformConfig);
+    if (!NT_SUCCESS(Status))
+        goto CleanupStart;
+
     Status = SoftGpuAllocateFrameBuffer(
                  Device,
                  PreferredFrameBufferSize,
@@ -1087,10 +1091,6 @@ SoftGpuDdiStartDevice(
     if (!NT_SUCCESS(Status))
         goto CleanupStart;
     SoftGpuDropUnbackedModes(Device);
-
-    Status = SoftGpuScanoutStart(Device, &PlatformConfig);
-    if (!NT_SUCCESS(Status))
-        goto CleanupStart;
 
     Status = SoftGpuPlatformStartScanout(Device);
     if (Status == STATUS_NOT_SUPPORTED)
