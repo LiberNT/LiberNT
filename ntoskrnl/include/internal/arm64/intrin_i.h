@@ -6,3 +6,4 @@
 #pragma once
 
 #include <ndk/arm64/ketypes.h>
+#include <reactos/arm64/sysreg.h>

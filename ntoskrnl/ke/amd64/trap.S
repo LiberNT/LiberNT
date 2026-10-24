@@ -1689,6 +1689,21 @@ __swapgs:
     swapgs
     ret
 
+PUBLIC __readss
+__readss:
+    mov ax, ss
+    ret
+
+PUBLIC __writess
+__writess:
+    mov ss, cx
+    ret
+
+PUBLIC __writefs
+__writefs:
+    mov fs, cx
+    ret
+
 #endif
 
 END

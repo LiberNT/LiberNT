@@ -72,5 +72,18 @@ CcResourceRelease(_Inout_ CC_RESOURCE *Resource)
 #define CC_ATOMIC_WRITE32(v, n)         InterlockedExchange((volatile LONG *)(v), (LONG)(n))
 #define CC_ATOMIC_READ64(v)             (*(volatile LONG64 *)(v))
 #define CC_ATOMIC_WRITE64(v, n)         InterlockedExchange64((volatile LONG64 *)(v), (LONG64)(n))
+#if defined(_MSC_VER) && !defined(__clang__)
+FORCEINLINE
+ULONG
+CcPopCount64(ULONG64 Value)
+{
+    Value = Value - ((Value >> 1) & 0x5555555555555555ULL);
+    Value = (Value & 0x3333333333333333ULL) + ((Value >> 2) & 0x3333333333333333ULL);
+    Value = (Value + (Value >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+    return (ULONG)((Value * 0x0101010101010101ULL) >> 56);
+}
+#define CC_POPCOUNT64(x)                CcPopCount64(x)
+#else
 #define CC_POPCOUNT64(x)                ((ULONG)__builtin_popcountll(x))
+#endif
 #define CC_ASSERT(e)                    ASSERT(e)

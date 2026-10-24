@@ -168,6 +168,12 @@ void __str(unsigned short *Destination);
 
 void __swapgs(void);
 
+unsigned short __readss(void);
+
+void __writess(unsigned short Value);
+
+void __writefs(unsigned short Value);
+
 #else
 #error Unknown compiler for inline assembler
 #endif

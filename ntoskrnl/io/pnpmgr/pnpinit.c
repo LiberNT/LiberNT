@@ -309,6 +309,7 @@ PiInitFirmwareResources(
     ZwClose(EsrtHandle);
 }
 
+CODE_SEG("INIT")
 NTSTATUS
 NTAPI
 IopInitializePlugPlayServices(VOID)

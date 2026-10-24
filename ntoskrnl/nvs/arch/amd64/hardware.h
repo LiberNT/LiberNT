@@ -48,3 +48,69 @@ MiAmd64CanonicalAddress(ULONG64 Address)
 {
     return Address < (1ULL << 47) || Address >= 0xFFFF800000000000ULL;
 }
+
+#if defined(_MSC_VER) && !defined(__clang__)
+FORCEINLINE
+ULONG
+MiAmd64ReadAcquire32(_In_ ULONG volatile *Address)
+{
+    ULONG Value = *Address;
+    _ReadWriteBarrier();
+    return Value;
+}
+
+FORCEINLINE
+ULONG64
+MiAmd64ReadAcquire64(_In_ ULONG64 volatile *Address)
+{
+    ULONG64 Value = *Address;
+    _ReadWriteBarrier();
+    return Value;
+}
+
+FORCEINLINE
+VOID
+MiAmd64WriteRelease32(_Out_ ULONG volatile *Address, _In_ ULONG Value)
+{
+    _ReadWriteBarrier();
+    *Address = Value;
+}
+
+FORCEINLINE
+VOID
+MiAmd64WriteRelease64(_Out_ ULONG64 volatile *Address, _In_ ULONG64 Value)
+{
+    _ReadWriteBarrier();
+    *Address = Value;
+}
+
+FORCEINLINE
+ULONG
+MiAmd64CountTrailingZeros64(_In_ ULONG64 Value)
+{
+    ULONG Index;
+
+    _BitScanForward64(&Index, Value);
+    return Index;
+}
+
+#define MI_AMD64_READ_ACQUIRE32(Address) MiAmd64ReadAcquire32(Address)
+#define MI_AMD64_READ_ACQUIRE64(Address) MiAmd64ReadAcquire64(Address)
+#define MI_AMD64_READ_NOFENCE64(Address) ReadULong64NoFence(Address)
+#define MI_AMD64_WRITE_RELEASE32(Address, Value) MiAmd64WriteRelease32(Address, Value)
+#define MI_AMD64_WRITE_RELEASE64(Address, Value) MiAmd64WriteRelease64(Address, Value)
+#define MI_AMD64_COMPARE_EXCHANGE64(Address, Expected, Value) \
+    (InterlockedCompareExchange64((volatile LONG64 *)(Address), (LONG64)(Value), (LONG64)(Expected)) == (LONG64)(Expected))
+#define MI_AMD64_INCREMENT_NOFENCE(Address) InterlockedIncrementNoFence(Address)
+#define MI_AMD64_CTZ64(Value) MiAmd64CountTrailingZeros64(Value)
+#else
+#define MI_AMD64_READ_ACQUIRE32(Address) __atomic_load_n(Address, __ATOMIC_ACQUIRE)
+#define MI_AMD64_READ_ACQUIRE64(Address) __atomic_load_n(Address, __ATOMIC_ACQUIRE)
+#define MI_AMD64_READ_NOFENCE64(Address) __atomic_load_n(Address, __ATOMIC_RELAXED)
+#define MI_AMD64_WRITE_RELEASE32(Address, Value) __atomic_store_n(Address, Value, __ATOMIC_RELEASE)
+#define MI_AMD64_WRITE_RELEASE64(Address, Value) __atomic_store_n(Address, Value, __ATOMIC_RELEASE)
+#define MI_AMD64_COMPARE_EXCHANGE64(Address, Expected, Value) \
+    __atomic_compare_exchange_n(Address, &(Expected), Value, FALSE, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)
+#define MI_AMD64_INCREMENT_NOFENCE(Address) __atomic_fetch_add(Address, 1, __ATOMIC_RELAXED)
+#define MI_AMD64_CTZ64(Value) ((ULONG)__builtin_ctzll(Value))
+#endif

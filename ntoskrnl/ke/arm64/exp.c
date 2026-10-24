@@ -25,7 +25,11 @@
  * that WOW64 exception dispatch is not wired yet.
  */
 
+#if defined(_MSC_VER) && !defined(__clang__)
+static VOID KiArm64DbgPrintBacktraceImpl(_In_ PCONTEXT Ctx)
+#else
 static __attribute__((unused)) VOID KiArm64DbgPrintBacktraceImpl(_In_ PCONTEXT Ctx)
+#endif
 {
     if (!Ctx || !(Ctx->ContextFlags & CONTEXT_ARM64)) return;
 
@@ -258,7 +262,7 @@ KiDispatchExceptionToUser(
 
     {
         ULONG64 Ttbr0Val;
-        __asm__ __volatile__("mrs %0, ttbr0_el1" : "=r"(Ttbr0Val));
+        Ttbr0Val = ARM64_READ_SYSREG(TTBR0_EL1);
         ULONG64 RootPa = Ttbr0Val & 0x0000FFFFFFFFF000ULL;
         ULONG_PTR BadPage = 0;
 
@@ -388,7 +392,11 @@ KiDispatchExceptionToUser(
     return TRUE;
 }
 
+#if defined(_MSC_VER) && !defined(__clang__)
+static
+#else
 static __attribute__((unused))
+#endif
 VOID
 KiPageInDirectory(
     _In_ PVOID ImageBase,

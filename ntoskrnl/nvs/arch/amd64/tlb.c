@@ -37,7 +37,7 @@ MiAmd64TlbCapabilities(VOID)
     int Registers[4];
 
     MI_ASSERT(Cpu < MAXIMUM_PROCESSORS);
-    Features = __atomic_load_n(&MiAmd64TlbFeatures[Cpu], __ATOMIC_ACQUIRE);
+    Features = MI_AMD64_READ_ACQUIRE32(&MiAmd64TlbFeatures[Cpu]);
     if (Features == 0)
     {
         Features = 1;
@@ -48,7 +48,7 @@ MiAmd64TlbCapabilities(VOID)
             if (Registers[1] & (1 << 10))
                 Features |= MI_AMD64_TLB_INVPCID;
         }
-        __atomic_store_n(&MiAmd64TlbFeatures[Cpu], Features, __ATOMIC_RELEASE);
+        MI_AMD64_WRITE_RELEASE32(&MiAmd64TlbFeatures[Cpu], Features);
     }
     MiAmd64TlbRestoreInterrupts(Enabled);
     return Features & ~1u;
@@ -98,11 +98,11 @@ MiAmd64ProcessTlbRequest(ULONG Source)
 
     MI_ASSERT(Cpu < MAXIMUM_PROCESSORS && Source < MAXIMUM_PROCESSORS);
     Message = &MiAmd64TlbMessages[Cpu][Source];
-    Published = __atomic_load_n(&Message->Published, __ATOMIC_ACQUIRE);
-    if (Published != __atomic_load_n(&Message->Completed, __ATOMIC_RELAXED))
+    Published = MI_AMD64_READ_ACQUIRE64(&Message->Published);
+    if (Published != MI_AMD64_READ_NOFENCE64(&Message->Completed))
     {
         MiAmd64FlushLocal(Message->Address, Message->Pages);
-        __atomic_store_n(&Message->Completed, Published, __ATOMIC_RELEASE);
+        MI_AMD64_WRITE_RELEASE64(&Message->Completed, Published);
     }
     MiAmd64TlbRestoreInterrupts(Enabled);
 }
@@ -128,14 +128,14 @@ MiAmd64FlushTargets(ULONG64 Targets, ULONG64 Address, ULONG64 Pages)
         MI_AMD64_TLB_MESSAGE *Message;
         ULONG64 Published;
 
-        Target = (ULONG)__builtin_ctzll(Remaining);
+        Target = MI_AMD64_CTZ64(Remaining);
         MI_ASSERT(Target < MAXIMUM_PROCESSORS);
         Message = &MiAmd64TlbMessages[Target][Cpu];
-        Published = __atomic_load_n(&Message->Published, __ATOMIC_RELAXED);
-        MI_ASSERT(Published == __atomic_load_n(&Message->Completed, __ATOMIC_ACQUIRE));
+        Published = MI_AMD64_READ_NOFENCE64(&Message->Published);
+        MI_ASSERT(Published == MI_AMD64_READ_ACQUIRE64(&Message->Completed));
         Message->Address = Address;
         Message->Pages = Pages;
-        __atomic_store_n(&Message->Published, Published + 1, __ATOMIC_RELEASE);
+        MI_AMD64_WRITE_RELEASE64(&Message->Published, Published + 1);
     }
     if (Remote != 0)
         KiSendMemoryIpi(Remote);
@@ -147,10 +147,10 @@ MiAmd64FlushTargets(ULONG64 Targets, ULONG64 Address, ULONG64 Pages)
         for (Remote = Remaining; Remote != 0; Remote &= Remote - 1)
         {
             MI_AMD64_TLB_MESSAGE *Message;
-            Target = (ULONG)__builtin_ctzll(Remote);
+            Target = MI_AMD64_CTZ64(Remote);
             Message = &MiAmd64TlbMessages[Target][Cpu];
-            if (__atomic_load_n(&Message->Completed, __ATOMIC_ACQUIRE) ==
-                __atomic_load_n(&Message->Published, __ATOMIC_RELAXED))
+            if (MI_AMD64_READ_ACQUIRE64(&Message->Completed) ==
+                MI_AMD64_READ_NOFENCE64(&Message->Published))
                 Remaining &= ~(1ULL << Target);
         }
         if (Remaining != 0)
@@ -211,7 +211,7 @@ KeFlushEntireTb(BOOLEAN Invalid, BOOLEAN AllProcessors)
 {
     UNREFERENCED_PARAMETER(Invalid);
     MiArchInvalidateTlbAll(AllProcessors ? MiTlbAllProcessors : MiTlbLocal);
-    __atomic_fetch_add(&KiTbFlushTimeStamp, 1, __ATOMIC_RELAXED);
+    MI_AMD64_INCREMENT_NOFENCE(&KiTbFlushTimeStamp);
 }
 
 VOID

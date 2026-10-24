@@ -1469,6 +1469,7 @@ MmFreeDriverInitialization(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
         MiSystemDecommitPages(&MiSystem, Start, (ULONG)((End - Start) >> PAGE_SHIFT));
 }
 
+CODE_SEG("INIT")
 VOID
 NTAPI
 MiReloadBootLoadedDrivers(IN PLOADER_PARAMETER_BLOCK LoaderBlock)

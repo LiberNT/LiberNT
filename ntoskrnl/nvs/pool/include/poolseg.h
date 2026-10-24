@@ -48,7 +48,7 @@ typedef struct _POOL_SEGMENT
     POOL_PAGE_RANGE Range[POOL_SEGMENT_PAGES];
 } POOL_SEGMENT, *PPOOL_SEGMENT;
 
-typedef struct _POOL_SEGMENT_SHARD
+typedef struct POOL_CACHE_ALIGNED _POOL_SEGMENT_SHARD
 {
     POOL_LOCK Lock;
     LIST_ENTRY Available;
@@ -56,7 +56,7 @@ typedef struct _POOL_SEGMENT_SHARD
     ULONG FreeCommittedPages;
     ULONG64 RangeAllocations;
     ULONG64 RangeFrees;
-} POOL_CACHE_ALIGNED POOL_SEGMENT_SHARD, *PPOOL_SEGMENT_SHARD;
+} POOL_SEGMENT_SHARD, *PPOOL_SEGMENT_SHARD;
 
 PVOID PoolSegAllocatePages(_Inout_ struct _POOL_HEAP *Heap, _In_ ULONG PageCount, _In_ UCHAR State,
                            _In_ USHORT Owner, _In_ ULONG Tag);

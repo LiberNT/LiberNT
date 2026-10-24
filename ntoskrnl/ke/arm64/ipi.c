@@ -20,7 +20,11 @@ static struct
     volatile LONG Busy;
 } KiArm64IpiPacket;
 
+#if defined(_MSC_VER) && !defined(__clang__)
+static __forceinline
+#else
 static __inline __attribute__((always_inline))
+#endif
 VOID
 KiArm64IpiSpinWait(
     _Inout_ PULONG SpinCount)
@@ -28,16 +32,21 @@ KiArm64IpiSpinWait(
     if (++(*SpinCount) <= 256)
         YieldProcessor();
     else
-        __asm__ __volatile__("wfe" ::: "memory");
+        ARM64_WFE();
 
     KeMemoryBarrier();
 }
 
+#if defined(_MSC_VER) && !defined(__clang__)
+static __forceinline
+#else
 static __inline __attribute__((always_inline))
+#endif
 VOID
 KiArm64IpiWakeWaiters(VOID)
 {
-    __asm__ __volatile__("dmb ishst; sev" ::: "memory");
+    ARM64_DMB(ISHST);
+    ARM64_SEV();
 }
 #endif
 
@@ -288,7 +297,7 @@ KeIpiGenericCall(
 
     ASSERT(KeGetCurrentIrql() < IPI_LEVEL);
 
-    __asm__ __volatile__("mrs %0, daif" : "=r"(Daif));
+    Daif = ARM64_READ_SYSREG(DAIF);
     InterruptsEnabled = ((Daif & ARM64_PSTATE_IRQ_MASK) == 0);
 
     /*

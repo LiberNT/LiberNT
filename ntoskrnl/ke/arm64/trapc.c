@@ -106,7 +106,7 @@ KiArm64IsKernelAddressMappedNoFault(
     if (Va < (ULONG_PTR)MmSystemRangeStart)
         return FALSE;
 
-    __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Ttbr1));
+    Ttbr1 = ARM64_READ_SYSREG(TTBR1_EL1);
     Depth = KiArm64WalkPageTable(Ttbr1, Va, Entries, Slots);
     if (Depth < 2)
         return FALSE;
@@ -208,7 +208,7 @@ KiArm64DumpKernelWalk(
     if ((ULONG_PTR)Va < (ULONG_PTR)MmSystemRangeStart)
         return;
 
-    __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Ttbr1));
+    Ttbr1 = ARM64_READ_SYSREG(TTBR1_EL1);
     Depth = KiArm64WalkPageTable(Ttbr1, Va, Entries, Slots);
 
     if ((Depth == 2) && ((Entries[1] & ARM64_PTE_TYPE_MASK) == ARM64_PTE_TYPE_BLOCK))
@@ -302,7 +302,7 @@ KiArm64DumpUserWalk(
 
     if ((ULONG_PTR)Va < (ULONG_PTR)MmSystemRangeStart)
     {
-        __asm__ __volatile__("mrs %0, ttbr0_el1" : "=r"(Ttbr0));
+        Ttbr0 = ARM64_READ_SYSREG(TTBR0_EL1);
         Depth = KiArm64WalkPageTable(Ttbr0, Va, Entries, Slots);
         if ((Depth != 0) && ((Entries[Depth - 1] & 1ULL) == 0))
         {
@@ -441,7 +441,7 @@ KiArm64FixupUserAccessFlagFault(
     TargetLevel = FaultStatus - 0x8;
     RequiredType = (FaultStatus == 0xB) ? ARM64_PTE_TYPE_PAGE : ARM64_PTE_TYPE_BLOCK;
 
-    __asm__ __volatile__("mrs %0, ttbr0_el1" : "=r"(Ttbr0));
+    Ttbr0 = ARM64_READ_SYSREG(TTBR0_EL1);
     Depth = KiArm64WalkPageTable(Ttbr0, (ULONG64)(ULONG_PTR)FaultAddress, Entries, Slots);
     if (Depth <= TargetLevel)
         return FALSE;
@@ -532,10 +532,10 @@ static
 VOID
 KiArm64FlushLocalAsidGeneration(VOID)
 {
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("tlbi vmalle1" ::: "memory");
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_DSB(ISH);
+    ARM64_TLBI_ALL(VMALLE1);
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 }
 
 static
@@ -623,8 +623,8 @@ KiArm64SwitchAddressSpace(
 
     /* The allocator lock spans the TTBR install. Mask exceptions so an
        interrupt-driven context switch cannot recurse on the same CPU. */
-    __asm__ __volatile__("mrs %0, daif" : "=r"(SavedDaif));
-    __asm__ __volatile__("msr daifset, #0xF" ::: "memory");
+    SavedDaif = ARM64_READ_SYSREG(DAIF);
+    ARM64_DAIFSET(0xF);
     ULONGLONG AuditStart = KiCpuAuditActive ? KiCpuAuditClock() : 0;
     KiArm64AcquireAsidLock();
     ULONGLONG AuditAcquired = AuditStart ? KiCpuAuditClock() : 0;
@@ -634,7 +634,7 @@ KiArm64SwitchAddressSpace(
         KiArm64WriteUserTtbr(NewUserRoot, NewKernelRoot, 0, TRUE);
         KiArm64ActiveAsid[Processor] = 0;
         KiArm64ReleaseAsidLock();
-        __asm__ __volatile__("msr daif, %0" :: "r"(SavedDaif) : "memory");
+        ARM64_WRITE_SYSREG(DAIF, SavedDaif);
         return FALSE;
     }
 
@@ -659,7 +659,7 @@ KiArm64SwitchAddressSpace(
                 KiArm64WriteUserTtbr(NewUserRoot, NewKernelRoot, 0, TRUE);
                 KiArm64ActiveAsid[Processor] = 0;
                 KiArm64ReleaseAsidLock();
-                __asm__ __volatile__("msr daif, %0" :: "r"(SavedDaif) : "memory");
+                ARM64_WRITE_SYSREG(DAIF, SavedDaif);
                 return FALSE;
             }
 
@@ -676,7 +676,7 @@ KiArm64SwitchAddressSpace(
                 KiArm64WriteUserTtbr(NewUserRoot, NewKernelRoot, 0, TRUE);
                 KiArm64ActiveAsid[Processor] = 0;
                 KiArm64ReleaseAsidLock();
-                __asm__ __volatile__("msr daif, %0" :: "r"(SavedDaif) : "memory");
+                ARM64_WRITE_SYSREG(DAIF, SavedDaif);
                 return FALSE;
             }
         }
@@ -690,7 +690,7 @@ KiArm64SwitchAddressSpace(
     KiArm64ActiveAsid[Processor] = (UCHAR)Asid;
     KiArm64ReleaseAsidLock();
     if (AuditStart) KiCpuAuditEvent(CPU_AUDIT_ASID, 0, AuditAcquired - AuditStart, KiCpuAuditClock() - AuditStart);
-    __asm__ __volatile__("msr daif, %0" :: "r"(SavedDaif) : "memory");
+    ARM64_WRITE_SYSREG(DAIF, SavedDaif);
     return TRUE;
 }
 
@@ -763,7 +763,7 @@ C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, State.ExceptionSyndrome) == 0x8)
 C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, State.FaultAddress) == 0x10);
 C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, State.Elr) == 0x18);
 C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, State.Spsr) == 0x20);
-C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, State.Registers.X[0]) == 0x28);
+C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, State.Registers.X) == 0x28);
 C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, State.Registers.Sp) == 0x120);
 C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, State.Registers.Pc) == 0x128);
 C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, State.Registers.Pstate) == 0x130);
@@ -1701,6 +1701,9 @@ KiArm64BugCheckSynchronousException(
     ULONG EsrClass = (Esr >> 26) & 0x3FULL;
     BOOLEAN WriteAccess = (Esr & (1u << 6)) != 0;
 
+    DBG_UNREFERENCED_LOCAL_VARIABLE(EsrClass);
+    DBG_UNREFERENCED_LOCAL_VARIABLE(WriteAccess);
+
     /* Reconstruct a trap frame so the bugcheck dump has architectural state. */
     KiArm64InitializeTrapFrame(Context, &TrapFrame);
 
@@ -1812,7 +1815,7 @@ KiArm64HandleSynchronousException(
     NTSTATUS Status;
     BOOLEAN WriteAccess;
 
-    __asm__ __volatile__("" ::: "memory");
+    ARM64_COMPILER_BARRIER();
 
     Context->TrapFramePointer = NULL;
     Context->ExceptionFramePointer = NULL;
@@ -1983,19 +1986,19 @@ KiArm64HandleSynchronousException(
                     {
                         for (ULONG_PTR offset = 0; offset < PAGE_SIZE; offset += DcacheLineSize)
                         {
-                            __asm__ __volatile__("dc ivac, %0" :: "r"(Va + offset) : "memory");
+                            ARM64_DC(IVAC, Va + offset);
                         }
-                        __asm__ __volatile__("dsb ish" ::: "memory");
+                        ARM64_DSB(ISH);
                     }
 
                     /* I-cache invalidation is always required for instruction fetches. */
                     for (ULONG_PTR offset = 0; offset < PAGE_SIZE; offset += IcacheLineSize)
                     {
-                        __asm__ __volatile__("ic ivau, %0" :: "r"(Va + offset) : "memory");
+                        ARM64_IC(IVAU, Va + offset);
                     }
 
-                    __asm__ __volatile__("dsb ish" ::: "memory");
-                    __asm__ __volatile__("isb" ::: "memory");
+                    ARM64_DSB(ISH);
+                    ARM64_ISB();
                 }
 
                 goto HandledExit;
@@ -2130,7 +2133,7 @@ KiArm64HandleSynchronousException(
 
                 for (;;)
                 {
-                    __asm__ __volatile__("wfe");
+                    ARM64_WFE();
                 }
             }
 
@@ -2151,7 +2154,7 @@ KiArm64HandleSynchronousException(
 
                 for (;;)
                 {
-                    __asm__ __volatile__("wfe");
+                    ARM64_WFE();
                 }
             }
 
@@ -2272,7 +2275,7 @@ KiArm64HandleSynchronousException(
                 PEPROCESS CurrentProcess = (PEPROCESS)EThread->Tcb.ApcState.Process;
                 ULONG64 TpidrEl0 = 0;
 
-                __asm__ __volatile__("mrs %0, tpidr_el0" : "=r"(TpidrEl0));
+                TpidrEl0 = ARM64_READ_SYSREG(TPIDR_EL0);
 
                 DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL,
                     "[DABORT-USER] FAIL VA=%p ELR=%p Status=0x%lx DFSC=0x%lx Write=%d Proc=%s TID=%p\n",
@@ -2407,8 +2410,8 @@ KiArm64HandleSynchronousException(
                     {
                         ULONG64 Ttbr0;
                         ULONG64 Ttbr1;
-                        __asm__ __volatile__("mrs %0, ttbr0_el1" : "=r"(Ttbr0));
-                        __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Ttbr1));
+                        Ttbr0 = ARM64_READ_SYSREG(TTBR0_EL1);
+                        Ttbr1 = ARM64_READ_SYSREG(TTBR1_EL1);
                         DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL,
                             "[DABORT-DIAG] TTBR0=0x%I64x TTBR1=0x%I64x\n",
                             Ttbr0, Ttbr1);
@@ -2721,7 +2724,7 @@ KiArm64HandleSynchronousException(
              */
             if (IsWatchpoint)
             {
-                __asm__ __volatile__("mrs %0, far_el1" : "=r"(WatchpointAddress));
+                WatchpointAddress = ARM64_READ_SYSREG(FAR_EL1);
             }
 
             /*
@@ -2982,7 +2985,7 @@ KiArm64HandleSynchronousException(
                     volatile ULONG64 *Slots[4];
                     ULONG64 Elr = Context->State.Elr;
 
-                    __asm__ __volatile__("mrs %0, ttbr0_el1" : "=r"(Ttbr0));
+                    Ttbr0 = ARM64_READ_SYSREG(TTBR0_EL1);
                     if (KiArm64WalkPageTable(Ttbr0, Elr, Entries, Slots) == 4)
                     {
                         L3Entry = Entries[3];
@@ -3077,8 +3080,8 @@ KiSErrorHandler(
     KPROCESSOR_MODE PreviousMode;
 
     /* Read exception syndrome and fault address */
-    __asm__ __volatile__("mrs %0, esr_el1" : "=r"(Esr));
-    __asm__ __volatile__("mrs %0, far_el1" : "=r"(Far));
+    Esr = ARM64_READ_SYSREG(ESR_EL1);
+    Far = ARM64_READ_SYSREG(FAR_EL1);
 
     /* Note: KTRAP_FRAME uses Pc (Program Counter), not Elr */
     Elr = TrapFrame->Pc;
@@ -3134,7 +3137,7 @@ KiSErrorHandler(
         PETHREAD Thread = PsGetCurrentThread();
         ULONG64 TpidrEl0 = 0;
 
-        __asm__ __volatile__("mrs %0, tpidr_el0" : "=r"(TpidrEl0));
+        TpidrEl0 = ARM64_READ_SYSREG(TPIDR_EL0);
 
         DPRINT1("[arm64][SErrorUser] x0=%p x1=%p x2=%p x3=%p x16=%p x17=%p "
                 "x18=%p tpidr_el0=%p\n",

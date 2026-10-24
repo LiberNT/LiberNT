@@ -19,7 +19,7 @@ CmpArm64ReadMidr(VOID)
 {
     ULONGLONG Midr;
 
-    __asm__ __volatile__("mrs %0, midr_el1" : "=r"(Midr));
+    Midr = ARM64_READ_SYSREG(MIDR_EL1);
     return Midr;
 }
 
@@ -166,15 +166,15 @@ CmpInitializeMachineDependentConfiguration(_In_ PLOADER_PARAMETER_BLOCK LoaderBl
     DPRINT("ARM64: Initializing machine-dependent configuration\n");
 
     Midr = CmpArm64ReadMidr();
-    __asm__ __volatile__("mrs %0, id_aa64pfr0_el1" : "=r"(Pfr0));
-    __asm__ __volatile__("mrs %0, id_aa64pfr1_el1" : "=r"(Pfr1));
-    __asm__ __volatile__("mrs %0, id_aa64isar0_el1" : "=r"(Isar0));
-    __asm__ __volatile__("mrs %0, id_aa64isar1_el1" : "=r"(Isar1));
-    __asm__ __volatile__("mrs %0, id_aa64isar2_el1" : "=r"(Isar2));
-    __asm__ __volatile__("mrs %0, id_aa64mmfr0_el1" : "=r"(Mmfr0));
-    __asm__ __volatile__("mrs %0, id_aa64mmfr1_el1" : "=r"(Mmfr1));
-    __asm__ __volatile__("mrs %0, id_aa64mmfr2_el1" : "=r"(Mmfr2));
-    __asm__ __volatile__("mrs %0, ctr_el0" : "=r"(Ctr));
+    Pfr0 = ARM64_READ_SYSREG(ID_AA64PFR0_EL1);
+    Pfr1 = ARM64_READ_SYSREG(ID_AA64PFR1_EL1);
+    Isar0 = ARM64_READ_SYSREG(ID_AA64ISAR0_EL1);
+    Isar1 = ARM64_READ_SYSREG(ID_AA64ISAR1_EL1);
+    Isar2 = ARM64_READ_SYSREG(ID_AA64ISAR2_EL1);
+    Mmfr0 = ARM64_READ_SYSREG(ID_AA64MMFR0_EL1);
+    Mmfr1 = ARM64_READ_SYSREG(ID_AA64MMFR1_EL1);
+    Mmfr2 = ARM64_READ_SYSREG(ID_AA64MMFR2_EL1);
+    Ctr = ARM64_READ_SYSREG(CTR_EL0);
     Implementer = (ULONG)((Midr >> 24) & 0xFF);
     Variant = (ULONG)((Midr >> 20) & 0xF);
     Architecture = (ULONG)((Midr >> 16) & 0xF);

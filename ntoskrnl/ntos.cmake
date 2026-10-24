@@ -411,6 +411,9 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntoskrnl/rtl/arm64/ehandler_asm.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcpy.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/wcscmp.S)
+    if(MSVC)
+        list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm64/msvc.S)
+    endif()
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntoskrnl/config/arm64/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ex/arm64/init.c
