@@ -574,7 +574,7 @@ IntsDisabled:
      * Push 16 bytes to maintain stack alignment for the call. */
     mov rax, cr8
     push rax
-    sub rsp, 8
+    sub rsp, HEX(28)
     cmp rax, APC_LEVEL
     jbe .LIrqlOk
     mov rax, APC_LEVEL
@@ -590,7 +590,7 @@ IntsDisabled:
     call MmAccessFault
 
     /* Restore previous IRQL */
-    add rsp, 8
+    add rsp, HEX(28)
     pop rcx
     mov cr8, rcx
 
