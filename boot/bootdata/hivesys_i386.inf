@@ -3,6 +3,7 @@
 ; PURPOSE:     i386-specific registry entries
 
 [AddReg]
+HKLM,"SOFTWARE\Microsoft\.NETFramework","InstallRoot",0x00000000,"C:\Windows\Microsoft.NET\Framework\"
 
 ; Native print environment. Keep this synchronized with winprint packaging.
 HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86","Directory",,"W32X86"

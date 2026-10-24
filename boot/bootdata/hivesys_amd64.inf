@@ -5,6 +5,7 @@
 [AddReg]
 
 HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management","LargeStackSize",0x00010001,0x00028000
+HKLM,"SOFTWARE\Microsoft\.NETFramework","InstallRoot",0x00000000,"C:\Windows\Microsoft.NET\Framework64\"
 
 ; Native print environment. Keep this synchronized with winprint packaging.
 HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64","Directory",,"x64"
