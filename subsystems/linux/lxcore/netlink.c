@@ -37,6 +37,8 @@
 #define LX_NLM_F_MULTI              0x02
 #define LX_NLM_F_ACK                0x04
 #define LX_NLM_F_DUMP               0x300
+#define LX_NLM_F_EXCL               0x200
+#define LX_NLM_F_CREATE             0x400
 
 #define LX_NLMSG_ERROR              2
 #define LX_NLMSG_DONE               3
@@ -44,6 +46,7 @@
 
 #define LX_RTM_NEWLINK              16
 #define LX_RTM_GETLINK              18
+#define LX_RTM_SETLINK              19
 #define LX_RTM_NEWADDR              20
 #define LX_RTM_GETADDR              22
 #define LX_RTM_NEWROUTE             24
@@ -98,6 +101,7 @@
 #define LX_IFF_RUNNING              0x40
 #define LX_IFF_MULTICAST            0x1000
 #define LX_IFF_LOWER_UP             0x10000
+#define LX_IFF_CHANGEABLE           0xF3A5
 
 #define LX_ARPHRD_ETHER             1
 #define LX_ARPHRD_LOOPBACK          772
@@ -214,6 +218,7 @@ typedef struct _LX_NL_LINK
     CHAR Name[16];
     BOOLEAN Loopback;
     BOOLEAN Running;
+    BOOLEAN Up;
     ULONG Mtu;
     ULONG MacLength;
     UCHAR Mac[8];
@@ -261,6 +266,7 @@ typedef struct _LX_NL_SOCKET
 {
     LIST_ENTRY GlobalLink;
     PLX_INSTANCE Instance;
+    PLX_NS NetNs;
     ULONG Protocol;
     ULONG Type;
     ULONG PortId;
@@ -404,9 +410,33 @@ LxNlFirstAddress(
 }
 
 static
+BOOLEAN
+LxNlIsRootNs(
+    _In_opt_ PLX_NS NetNs)
+{
+    return (NetNs == NULL) || (NetNs->Instance == NULL) || (NetNs == NetNs->Instance->RootNs[LxNsNet]);
+}
+
+static
+BOOLEAN
+LxNlLoopbackUp(
+    _In_ PLX_NL_STATE State)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < State->LinkCount; Index++)
+    {
+        if (State->Links[Index].Loopback)
+            return State->Links[Index].Up;
+    }
+    return FALSE;
+}
+
+static
 VOID
 LxNlSnapshot(
-    _Out_ PLX_NL_STATE State)
+    _Out_ PLX_NL_STATE State,
+    _In_opt_ PLX_NS NetNs)
 {
     UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\Tcp");
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -419,6 +449,26 @@ LxNlSnapshot(
     NTSTATUS Status;
 
     RtlZeroMemory(State, sizeof(*State));
+    if (!LxNlIsRootNs(NetNs))
+    {
+        PLX_NL_LINK Link = &State->Links[State->LinkCount++];
+
+        Link->Index = 1;
+        Link->NtIndex = MAXULONG;
+        Link->Loopback = TRUE;
+        Link->Up = NetNs->Net.LoopbackUp;
+        Link->Running = Link->Up;
+        Link->Mtu = 65536;
+        RtlStringCbCopyA(Link->Name, sizeof(Link->Name), "lo");
+        if (Link->Up)
+        {
+            State->Addresses[State->AddressCount].Index = 1;
+            State->Addresses[State->AddressCount].Address = 0x0100007F;
+            State->Addresses[State->AddressCount].Mask = 0x000000FF;
+            State->AddressCount++;
+        }
+        return;
+    }
     InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
     Status = ZwCreateFile(&Tcp, GENERIC_READ | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, FILE_ATTRIBUTE_NORMAL,
                           FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
@@ -569,6 +619,8 @@ LxNlSnapshot(
         }
     }
 
+    for (Index = 0; Index < State->LinkCount; Index++)
+        State->Links[Index].Up = TRUE;
     LxFreePaged(Entities);
     LxFreePaged(Buffer);
     if (Tcp != NULL)
@@ -728,13 +780,13 @@ LxNlEmitLink(
     Info->Family = LX_AF_UNSPEC;
     Info->Type = Link->Loopback ? LX_ARPHRD_LOOPBACK : LX_ARPHRD_ETHER;
     Info->Index = (LONG)Link->Index;
-    Info->Flags = LX_IFF_UP | (Link->Loopback ? LX_IFF_LOOPBACK : (LX_IFF_BROADCAST | LX_IFF_MULTICAST)) |
+    Info->Flags = (Link->Up ? LX_IFF_UP : 0) | (Link->Loopback ? LX_IFF_LOOPBACK : (LX_IFF_BROADCAST | LX_IFF_MULTICAST)) |
                   (Link->Running ? (LX_IFF_RUNNING | LX_IFF_LOWER_UP) : 0);
 
     LxNlAttrString(Builder, LX_IFLA_IFNAME, Link->Name);
     LxNlAttrU32(Builder, LX_IFLA_TXQLEN, Link->Loopback ? 1000 : 1000);
-    LxNlAttrU8(Builder, LX_IFLA_OPERSTATE, Link->Loopback ? LX_IF_OPER_UNKNOWN :
-               (Link->Running ? LX_IF_OPER_UP : LX_IF_OPER_DOWN));
+    LxNlAttrU8(Builder, LX_IFLA_OPERSTATE, !Link->Up ? LX_IF_OPER_DOWN : (Link->Loopback ? LX_IF_OPER_UNKNOWN :
+               (Link->Running ? LX_IF_OPER_UP : LX_IF_OPER_DOWN)));
     LxNlAttrU8(Builder, LX_IFLA_LINKMODE, 0);
     LxNlAttrU32(Builder, LX_IFLA_MTU, Link->Mtu);
     LxNlAttrU32(Builder, LX_IFLA_MIN_MTU, Link->Loopback ? 0 : 68);
@@ -744,7 +796,7 @@ LxNlEmitLink(
     LxNlAttrU32(Builder, LX_IFLA_NUM_TX_QUEUES, 1);
     LxNlAttrU32(Builder, LX_IFLA_NUM_RX_QUEUES, 1);
     LxNlAttrU8(Builder, LX_IFLA_CARRIER, Link->Running ? 1 : 0);
-    LxNlAttrString(Builder, LX_IFLA_QDISC, Link->Loopback ? "noqueue" : "fq_codel");
+    LxNlAttrString(Builder, LX_IFLA_QDISC, !Link->Up ? "noop" : (Link->Loopback ? "noqueue" : "fq_codel"));
     LxNlAttrU32(Builder, LX_IFLA_CARRIER_CHANGES, 0);
     LxNlAttr(Builder, LX_IFLA_ADDRESS, Link->Loopback ? Zero : Link->Mac, 6);
     LxNlAttr(Builder, LX_IFLA_BROADCAST, Link->Loopback ? Zero : Broadcast, 6);
@@ -896,6 +948,93 @@ LxNlStringLength(
 
 static
 LONG
+LxNlSetLink(
+    _In_ PLX_NL_SOCKET Socket,
+    _In_ PLX_NLMSGHDR Request)
+{
+    ULONG Payload = Request->Length - sizeof(LX_NLMSGHDR);
+    PLX_IFINFOMSG Info = (PLX_IFINFOMSG)(Request + 1);
+    PUCHAR Attributes = (PUCHAR)(Info + 1);
+    ULONG Length, Offset = 0, NameLength = 0, Current, Change, Wanted, Index;
+    PLX_NS NetNs = Socket->NetNs;
+    PCSTR Name = NULL;
+    PLX_NL_STATE State;
+    PLX_NL_LINK Link = NULL;
+    LONG Result = 0;
+
+    if (Payload < sizeof(LX_IFINFOMSG))
+        return -LX_EINVAL;
+    Length = Payload - sizeof(LX_IFINFOMSG);
+    while (Offset + 4 <= Length)
+    {
+        USHORT AttributeLength = *(PUSHORT)(Attributes + Offset);
+        USHORT AttributeType = *(PUSHORT)(Attributes + Offset + 2) & 0x3FFF;
+
+        if ((AttributeLength < 4) || (Offset + AttributeLength > Length))
+            return -LX_EINVAL;
+        if (AttributeType == LX_IFLA_IFNAME)
+        {
+            Name = (PCSTR)(Attributes + Offset + 4);
+            NameLength = LxNlStringLength(Name, AttributeLength - 4);
+        }
+        else
+        {
+            return -LX_EOPNOTSUPP;
+        }
+        Offset += LX_NL_ALIGN(AttributeLength);
+    }
+
+    State = LxAllocPaged(sizeof(*State));
+    if (State == NULL)
+        return -LX_ENOMEM;
+    LxNlSnapshot(State, NetNs);
+    for (Index = 0; Index < State->LinkCount; Index++)
+    {
+        PLX_NL_LINK Candidate = &State->Links[Index];
+
+        if (((Info->Index != 0) && ((ULONG)Info->Index == Candidate->Index)) ||
+            ((Info->Index == 0) && (Name != NULL) && (NameLength == strlen(Candidate->Name)) &&
+             (strncmp(Name, Candidate->Name, NameLength) == 0)))
+        {
+            Link = Candidate;
+            break;
+        }
+    }
+
+    if (Link == NULL)
+    {
+        Result = ((Request->Type == LX_RTM_NEWLINK) && (Request->Flags & LX_NLM_F_CREATE)) ? -LX_EOPNOTSUPP : -LX_ENODEV;
+    }
+    else if ((Request->Type == LX_RTM_NEWLINK) && (Request->Flags & LX_NLM_F_EXCL))
+    {
+        Result = -LX_EEXIST;
+    }
+    else if ((Name != NULL) && ((NameLength != strlen(Link->Name)) || (strncmp(Name, Link->Name, NameLength) != 0)))
+    {
+        Result = -LX_EOPNOTSUPP;
+    }
+    else
+    {
+        Current = (Link->Up ? LX_IFF_UP : 0) | (Link->Loopback ? 0 : LX_IFF_MULTICAST);
+        Change = (Info->Change != 0) ? Info->Change : MAXULONG;
+        Wanted = ((Info->Flags & Change) | (Current & ~Change)) & LX_IFF_CHANGEABLE;
+        if ((Wanted & ~LX_IFF_UP) != (Current & ~LX_IFF_UP))
+            Result = -LX_EOPNOTSUPP;
+        else if ((Wanted ^ Current) & LX_IFF_UP)
+        {
+            if (LxNlIsRootNs(NetNs) || !Link->Loopback)
+                Result = -LX_EOPNOTSUPP;
+            else
+                NetNs->Net.LoopbackUp = (Wanted & LX_IFF_UP) != 0;
+        }
+    }
+
+    LxFreePaged(State);
+    return Result;
+}
+
+static
+LONG
 LxNlRoute(
     _Inout_ PLX_NL_BUILDER Builder,
     _In_ PLX_NLMSGHDR Request,
@@ -911,6 +1050,8 @@ LxNlRoute(
     *Replied = FALSE;
     if ((Request->Type < LX_RTM_NEWLINK) || (Request->Type > LX_RTM_MAX))
         return -LX_EOPNOTSUPP;
+    if ((Request->Type == LX_RTM_NEWLINK) || (Request->Type == LX_RTM_SETLINK))
+        return LxNlSetLink(Builder->Socket, Request);
     if ((Request->Type & 3) != 2)
         return -LX_EOPNOTSUPP;
     if ((Request->Type != LX_RTM_GETLINK) && (Request->Type != LX_RTM_GETADDR) && (Request->Type != LX_RTM_GETROUTE))
@@ -925,7 +1066,7 @@ LxNlRoute(
     State = LxAllocPaged(sizeof(*State));
     if (State == NULL)
         return -LX_ENOMEM;
-    LxNlSnapshot(State);
+    LxNlSnapshot(State, Builder->Socket->NetNs);
 
     if (Request->Type == LX_RTM_GETLINK)
     {
@@ -976,7 +1117,7 @@ LxNlRoute(
             for (Index = 0; Index < State->AddressCount; Index++)
                 LxNlEmitAddress(Builder, Request, State, &State->Addresses[Index]);
         }
-        if ((Family == LX_AF_UNSPEC) || (Family == LX_AF_INET6))
+        if (((Family == LX_AF_UNSPEC) || (Family == LX_AF_INET6)) && LxNlLoopbackUp(State))
             LxNlEmitLoopback6(Builder, Request);
         LxNlDone(Builder, Request);
         *Replied = TRUE;
@@ -1157,7 +1298,7 @@ LxNetlinkAddressIndex(
     State = LxAllocPaged(sizeof(*State));
     if (State == NULL)
         return 0;
-    LxNlSnapshot(State);
+    LxNlSnapshot(State, NULL);
     for (Index = 0; Index < State->AddressCount; Index++)
     {
         if (State->Addresses[Index].Address == Address)
@@ -1192,6 +1333,8 @@ LxNetlinkSocket(
         return -LX_ENOMEM;
     LxInstanceReference(Process->Instance);
     Socket->Instance = Process->Instance;
+    Socket->NetNs = LxProcessNs(Process, LxNsNet);
+    LxNsReference(Socket->NetNs);
     Socket->Protocol = Protocol;
     Socket->Type = Type;
     Socket->RecvBuffer = 212992;
@@ -1204,6 +1347,7 @@ LxNetlinkSocket(
     File = LxFileAlloc(&LxNlOps, LX_O_RDWR | (Flags & LX_O_NONBLOCK), LX_S_IFSOCK);
     if (File == NULL)
     {
+        LxNsDereference(Socket->NetNs);
         LxInstanceDereference(Socket->Instance);
         LxFree(Socket);
         return -LX_ENOMEM;
@@ -1780,6 +1924,7 @@ LxNlRelease(
     KeReleaseSpinLock(&LxNlSocketsLock, OldIrql);
     while (!IsListEmpty(&Socket->Queue))
         LxFree(CONTAINING_RECORD(RemoveHeadList(&Socket->Queue), LX_NL_MSG, Link));
+    LxNsDereference(Socket->NetNs);
     LxInstanceDereference(Socket->Instance);
     LxFree(Socket);
 }
