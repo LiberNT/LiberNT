@@ -759,13 +759,36 @@ void CRYPT_ImportSystemRootCertsToReg(void)
     HCERTSTORE cached = NULL;
     HKEY key = NULL;
     LONG rc;
+#ifdef __REACTOS__
+    HANDLE mutex;
+    DWORD wait;
+#else
     HANDLE hsem;
+#endif
 
     static BOOL root_certs_imported = FALSE;
 
     if (root_certs_imported)
         return;
 
+#ifdef __REACTOS__
+    mutex = CreateMutexW(NULL, FALSE, L"crypt32_root_mutex");
+    if (!mutex)
+    {
+        ERR("Failed to create mutex\n");
+        return;
+    }
+
+    wait = WaitForSingleObject(mutex, INFINITE);
+    if (wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED)
+    {
+        CloseHandle(mutex);
+        return;
+    }
+
+    if (root_certs_imported)
+        goto done;
+#else
     hsem = CreateSemaphoreW( NULL, 0, 1, L"crypt32_root_semaphore");
     if (!hsem)
     {
@@ -778,6 +801,7 @@ void CRYPT_ImportSystemRootCertsToReg(void)
         WaitForSingleObject(hsem, INFINITE);
         goto done;
     }
+#endif
 
     rc = RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"Software\\Microsoft\\SystemCertificates\\Root\\Certificates", 0, NULL, 0,
             KEY_ALL_ACCESS, NULL, &key, 0);
@@ -797,6 +821,11 @@ done:
     RegCloseKey(key);
     CertCloseStore(cached, 0);
     root_certs_imported = TRUE;
+#ifdef __REACTOS__
+    ReleaseMutex(mutex);
+    CloseHandle(mutex);
+#else
     ReleaseSemaphore(hsem, 1, NULL);
     CloseHandle(hsem);
+#endif
 }
