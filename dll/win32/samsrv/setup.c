@@ -353,13 +353,53 @@ done:
 
 
 static
+VOID
+SampSetupDenyPasswordChange(PSECURITY_DESCRIPTOR Sd)
+{
+    SID_IDENTIFIER_AUTHORITY WorldAuthority = {SECURITY_WORLD_SID_AUTHORITY};
+    PACCESS_ALLOWED_ACE Ace;
+    BOOLEAN DaclPresent, DaclDefaulted;
+    PSID EveryoneSid = NULL;
+    PACL Dacl = NULL;
+    ULONG i;
+
+    if (!NT_SUCCESS(RtlGetDaclSecurityDescriptor(Sd, &DaclPresent, &Dacl, &DaclDefaulted)) ||
+        !DaclPresent || Dacl == NULL)
+    {
+        return;
+    }
+
+    if (!NT_SUCCESS(RtlAllocateAndInitializeSid(&WorldAuthority, 1, SECURITY_WORLD_RID,
+                                                0, 0, 0, 0, 0, 0, 0, &EveryoneSid)))
+    {
+        return;
+    }
+
+    for (i = 0; i < Dacl->AceCount; i++)
+    {
+        if (!NT_SUCCESS(RtlGetAce(Dacl, i, (PVOID*)&Ace)))
+            break;
+
+        if (Ace->Header.AceType == ACCESS_ALLOWED_ACE_TYPE &&
+            RtlEqualSid((PSID)&Ace->SidStart, EveryoneSid))
+        {
+            Ace->Mask &= ~USER_CHANGE_PASSWORD;
+        }
+    }
+
+    RtlFreeSid(EveryoneSid);
+}
+
+
+static
 NTSTATUS
 SampSetupCreateUserAccount(HANDLE hDomainKey,
                            LPCWSTR lpAccountName,
                            LPCWSTR lpComment,
                            PSID lpDomainSid,
                            ULONG ulRelativeId,
-                           ULONG UserAccountControl)
+                           ULONG UserAccountControl,
+                           BOOLEAN bPasswordCanChange)
 {
     SAM_USER_FIXED_DATA FixedUserData;
     GROUP_MEMBERSHIP GroupMembership;
@@ -382,6 +422,9 @@ SampSetupCreateUserAccount(HANDLE hDomainKey,
                               &SdSize);
     if (!NT_SUCCESS(Status))
         goto done;
+
+    if (!bPasswordCanChange)
+        SampSetupDenyPasswordChange(Sd);
 
     /* Initialize fixed user data */
     FixedUserData.Version = 1;
@@ -1132,7 +1175,8 @@ SampInitializeSAM(VOID)
                                szComment,
                                AccountDomainInfo->DomainSid,
                                DOMAIN_USER_RID_ADMIN,
-                               USER_DONT_EXPIRE_PASSWORD | USER_NORMAL_ACCOUNT);
+                               USER_DONT_EXPIRE_PASSWORD | USER_NORMAL_ACCOUNT,
+                               TRUE);
 
     /* Add the Adminitrator user to the Administrators alias */
     SampSetupAddMemberToGroup(hAccountDomainKey,
@@ -1149,7 +1193,8 @@ SampInitializeSAM(VOID)
                                AccountDomainInfo->DomainSid,
                                DOMAIN_USER_RID_GUEST,
                                USER_ACCOUNT_DISABLED | USER_DONT_EXPIRE_PASSWORD | USER_PASSWORD_NOT_REQUIRED |
-                               USER_NORMAL_ACCOUNT);
+                               USER_NORMAL_ACCOUNT,
+                               FALSE);
 
     /* Add the Guest user to the Guests alias */
     SampSetupAddMemberToGroup(hAccountDomainKey,
