@@ -138,4 +138,14 @@ ENDM
     DEFINE_WRAPPER_FUNC 98, 392, 784
     DEFINE_WRAPPER_FUNC 99, 396, 792
 
+#ifdef _M_IX86
+PUBLIC _call_thiscall_func
+_call_thiscall_func:
+    pop eax
+    pop edx
+    pop ecx
+    push eax
+    jmp edx
+#endif
+
     END

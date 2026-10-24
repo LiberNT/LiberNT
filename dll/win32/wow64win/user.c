@@ -2622,7 +2622,7 @@ NTSTATUS WINAPI wow64_NtUserGetClassInfoEx( UINT *args )
 
     struct client_menu_name *menu_name = NULL;
     UNICODE_STRING name;
-    WNDCLASSEXW wc;
+    WNDCLASSEXW wc = { 0 };
     ATOM ret;
 
     wc.cbSize = sizeof(wc);

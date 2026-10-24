@@ -1,7 +1,12 @@
 spec2def(wow64cpu.dll wow64cpu.spec ADD_IMPORTLIB)
 
+if(MSVC)
+    add_asm_files(wow64cpu_asm amd64/cpu.s)
+endif()
+
 add_library(wow64cpu MODULE
     cpu.c
+    ${wow64cpu_asm}
     ${CMAKE_CURRENT_BINARY_DIR}/wow64cpu.def)
 
 set_module_type(wow64cpu win32dll ENTRYPOINT DllMain 12 IMAGEBASE 0x7a400000)

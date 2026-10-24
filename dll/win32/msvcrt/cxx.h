@@ -76,7 +76,7 @@
 static type_info name ## _type_info = { &type_info_vtable, NULL, mangled_name }; \
 \
 static const rtti_base_descriptor name ## _rtti_base_descriptor[1] = \
-    { { &name ##_type_info, ARRAY_SIZE(((const void *[]){ __VA_ARGS__ })), { 0, -1, 0}, 64 } }; \
+    { { &name ##_type_info, ARRAY_SIZE(((const void *[]){ NULL, __VA_ARGS__ })) - 1, { 0, -1, 0}, 64 } }; \
 \
 static const rtti_base_array name ## _rtti_base_array = \
     { { name ## _rtti_base_descriptor, __VA_ARGS__ } }; \
@@ -124,7 +124,7 @@ void __asm_dummy_ ## name ## _rtti(void) \
 static type_info name ## _type_info = { &type_info_vtable, NULL, mangled_name }; \
 \
 static rtti_base_descriptor name ## _rtti_base_descriptor[1] = \
-    { { 0xdeadbeef, ARRAY_SIZE(((const void *[]){ __VA_ARGS__ })), { 0, -1, 0}, 64 } }; \
+    { { 0xdeadbeef, ARRAY_SIZE(((const void *[]){ NULL, __VA_ARGS__ })) - 1, { 0, -1, 0}, 64 } }; \
 \
 static rtti_base_array name ## _rtti_base_array; \
 \

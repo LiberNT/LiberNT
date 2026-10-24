@@ -51,7 +51,9 @@ list(APPEND SOURCE
     usrmarshal.c)
 
 if(MSVC AND (ARCH STREQUAL "i386"))
-    list(APPEND SOURCE msvc-thiscall.c)
+    add_definitions(-D__ASM_EXTERN_THISCALL_WRAPPER)
+    add_asm_files(ole32_asm i386/thiscall.s)
+    list(APPEND SOURCE ${ole32_asm})
 endif()
 
 list(APPEND PCH_SKIP_SOURCE

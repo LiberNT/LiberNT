@@ -14,6 +14,11 @@ list(APPEND SOURCE
     xaudio_allocator.c
     xaudio_dll.c)
 
+if(MSVC AND (ARCH STREQUAL "i386"))
+    add_asm_files(xaudio2_9_asm i386/xaudio.s)
+    list(APPEND SOURCE ${xaudio2_9_asm})
+endif()
+
 add_idl_headers(xaudio2_9_idlheader xaudio_classes.idl)
 
 add_library(xaudio2_9 MODULE
@@ -36,4 +41,8 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
         xapofx.c
         xaudio_dll.c
         APPEND PROPERTY COMPILE_OPTIONS -Wno-pragma-pack)
+endif()
+
+if(MSVC)
+    remove_target_compile_option(xaudio2_9 "/we4098")
 endif()

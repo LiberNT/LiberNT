@@ -524,10 +524,11 @@ static PROFILESECTION *PROFILE_Load(HANDLE hFile, ENCODING * pEncoding)
            next_key   = &key->next;
            prev_key   = key;
 
-           TRACE("New key: name=%s, value=%s\n",
 #ifdef __REACTOS__
+           TRACE("New key: name=%s, value=%s\n",
                debugstr_w(key->name), key->value ? debugstr_w(key->value) : L"(none)");
 #else
+           TRACE("New key: name=%s, value=%s\n",
                debugstr_w(key->name), key->value ? debugstr_w(key->value) : "(none)");
 #endif
         }

@@ -431,11 +431,11 @@ static void FAUDIOCALL XA2VCB_OnVoiceProcessingPassStart(FAudioVoiceCallback *if
     XA2VoiceImpl *This = impl_from_FAudioVoiceCallback(iface);
     TRACE("%p\n", This);
     if(This->cb)
-        IXAudio2VoiceCallback_OnVoiceProcessingPassStart(This->cb
 #if XAUDIO2_VER > 0
-                , BytesRequired
+        IXAudio2VoiceCallback_OnVoiceProcessingPassStart(This->cb, BytesRequired);
+#else
+        IXAudio2VoiceCallback_OnVoiceProcessingPassStart(This->cb);
 #endif
-                );
 }
 
 static void FAUDIOCALL XA2VCB_OnVoiceProcessingPassEnd(FAudioVoiceCallback *iface)

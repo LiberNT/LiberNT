@@ -6,6 +6,7 @@
  */
 
 #include <ntdll.h>
+#include <reactos/arm64/sysreg.h>
 
 #define RTL_ARM64_QPC_BYPASS_CONFIGURATION 0x0001
 
@@ -13,7 +14,6 @@ BOOLEAN
 RtlpArchQueryPerformanceCounter(
     _Out_ PLARGE_INTEGER Counter)
 {
-#if defined(__GNUC__) || defined(__clang__)
     ULONGLONG Bias, Value;
     USHORT Configuration;
 
@@ -21,27 +21,23 @@ RtlpArchQueryPerformanceCounter(
     if (Configuration != RTL_ARM64_QPC_BYPASS_CONFIGURATION)
         return FALSE;
 
-    __asm__ __volatile__("dmb ishld" ::: "memory");
+    ARM64_DMB(ISHLD);
     Bias = SharedUserData->QpcBias;
-    __asm__ __volatile__("isb\n\tmrs %0, cntvct_el0" : "=r"(Value) :: "memory");
-    __asm__ __volatile__("dmb ishld" ::: "memory");
+    ARM64_ISB();
+    Value = ARM64_READ_SYSREG(CNTVCT_EL0);
+    ARM64_DMB(ISHLD);
 
     if (Configuration != *(volatile USHORT *)&SharedUserData->QpcData)
         return FALSE;
 
     Counter->QuadPart = (LONGLONG)(Value + Bias);
     return TRUE;
-#else
-    UNREFERENCED_PARAMETER(Counter);
-    return FALSE;
-#endif
 }
 
 BOOLEAN
 RtlpArchQueryPerformanceFrequency(
     _Out_ PLARGE_INTEGER Frequency)
 {
-#if defined(__GNUC__) || defined(__clang__)
     ULONGLONG Value;
     USHORT Configuration;
 
@@ -49,16 +45,12 @@ RtlpArchQueryPerformanceFrequency(
     if (Configuration != RTL_ARM64_QPC_BYPASS_CONFIGURATION)
         return FALSE;
 
-    __asm__ __volatile__("dmb ishld" ::: "memory");
+    ARM64_DMB(ISHLD);
     Value = *(volatile ULONGLONG *)&SharedUserData->QpcFrequency;
-    __asm__ __volatile__("dmb ishld" ::: "memory");
+    ARM64_DMB(ISHLD);
     if ((Configuration != *(volatile USHORT *)&SharedUserData->QpcData) || !Value)
         return FALSE;
 
     Frequency->QuadPart = (LONGLONG)Value;
     return TRUE;
-#else
-    UNREFERENCED_PARAMETER(Frequency);
-    return FALSE;
-#endif
 }

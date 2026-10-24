@@ -1830,7 +1830,6 @@
 @ stdcall WriteConsoleInputVDMA(long long long long) kernelbase.WriteConsoleInputVDMA
 @ stdcall WriteConsoleInputVDMW(long long long long) kernelbase.WriteConsoleInputVDMW
 @ stdcall GetConsoleCursorMode(long ptr ptr) kernelbase.GetConsoleCursorMode
-@ stdcall GetConsoleAliasesA(str long str) kernelbase.GetConsoleAliasesA
 @ stdcall RegisterConsoleIME(ptr ptr) kernelbase.RegisterConsoleIME
 @ stdcall GetConsoleInputWaitHandle() kernelbase.GetConsoleInputWaitHandle
 @ stdcall GetConsoleFontInfo(long long long ptr) kernelbase.GetConsoleFontInfo
@@ -1842,7 +1841,6 @@
 @ stdcall SetConsoleNlsMode(long long) kernelbase.SetConsoleNlsMode
 @ stdcall DuplicateConsoleHandle(long long long long) kernelbase.DuplicateConsoleHandle
 @ stdcall SetConsoleNumberOfCommandsW(long long) kernelbase.SetConsoleNumberOfCommandsW
-@ stdcall GetConsoleAliasesW(wstr long wstr) kernelbase.GetConsoleAliasesW
 @ stdcall -version=0x502-0x600 -arch=win64 ConsoleIMERoutine(ptr) kernelbase.ConsoleIMERoutine
 @ stdcall SetConsoleCursorMode(long long long) kernelbase.SetConsoleCursorMode
 @ stdcall GetConsoleSelectionInfo(ptr) kernelbase.GetConsoleSelectionInfo
@@ -1853,7 +1851,6 @@
 @ stdcall SetConsoleLocalEUDC(long long long long) kernelbase.SetConsoleLocalEUDC
 @ stdcall GetConsoleKeyboardLayoutNameA(ptr) kernelbase.GetConsoleKeyboardLayoutNameA
 @ stdcall VerifyConsoleIoHandle(long) kernelbase.VerifyConsoleIoHandle
-@ stdcall GetConsoleAliasExesA(str long) kernelbase.GetConsoleAliasExesA
 @ stdcall GetConsoleKeyboardLayoutNameW(ptr) kernelbase.GetConsoleKeyboardLayoutNameW
 @ stdcall ConDllInitialize(long wstr) kernelbase.ConDllInitialize
 @ stdcall ReadConsoleInputExA(long ptr long ptr long) kernelbase.ReadConsoleInputExA
@@ -1866,7 +1863,6 @@
 @ stdcall -version=0x351-0x502 SetConsoleCommandHistoryMode(long) kernelbase.SetConsoleCommandHistoryMode
 @ stdcall SetConsoleCursor(long long) kernelbase.SetConsoleCursor
 @ stdcall SetConsoleFont(long long) kernelbase.SetConsoleFont
-@ stdcall GetConsoleAliasExesW(wstr long) kernelbase.GetConsoleAliasExesW
 @ stdcall SetConsoleOS2OemFormat(long) kernelbase.SetConsoleOS2OemFormat
 @ stdcall SetConsoleNumberOfCommandsA(long long) kernelbase.SetConsoleNumberOfCommandsA
 @ stdcall ReadConsoleInputExW(long ptr long ptr long) kernelbase.ReadConsoleInputExW

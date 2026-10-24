@@ -167,7 +167,7 @@ struct hstring_vector
     HSTRING values[];
 };
 
-C_ASSERT(sizeof(struct hstring_vector) == offsetof(struct hstring_vector, values[0]));
+C_ASSERT(sizeof(struct hstring_vector) == offsetof(struct hstring_vector, values));
 
 static inline struct hstring_vector *impl_from_IVectorView_HSTRING(IVectorView_HSTRING *iface)
 {

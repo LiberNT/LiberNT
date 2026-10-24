@@ -147,7 +147,7 @@ typedef struct winrt_exception_info
     void *error_info; /* IRestrictedErrorInfo */
     const cxx_exception_type *exception_type;
     UINT32 unknown3;
-    void (*WINAPI set_exception_info)(struct winrt_exception_info **);
+    void (WINAPI *set_exception_info)(struct winrt_exception_info **);
 } winrt_exception_info;
 
 DECLSPEC_NORETURN void WINAPI _CxxThrowException(void*,const cxx_exception_type*);

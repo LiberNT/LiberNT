@@ -46,12 +46,12 @@ typedef struct {
         BYTE data[1];
     } *strf;
     AVISUPERINDEX *indx;
-    BYTE indx_data[FIELD_OFFSET(AVISUPERINDEX, aIndex[AVISUPERINDEX_ENTRIES])];
+    BYTE indx_data[FIELD_OFFSET(AVISUPERINDEX, aIndex) + AVISUPERINDEX_ENTRIES * sizeof(struct _avisuperindex_entry)];
 
     /* movi chunk */
     int ix_off;
     AVISTDINDEX *ix;
-    BYTE ix_data[FIELD_OFFSET(AVISTDINDEX, aIndex[AVISTDINDEX_ENTRIES])];
+    BYTE ix_data[FIELD_OFFSET(AVISTDINDEX, aIndex) + AVISTDINDEX_ENTRIES * sizeof(AVISTDINDEX_ENTRY)];
 
     IMediaSample *samples_head;
     IMemAllocator *samples_allocator;

@@ -53,6 +53,9 @@
 
 #include "wine/asm.h"
 #include "wine/debug.h"
+#if defined(__REACTOS__) && defined(__aarch64__)
+#include <reactos/arm64/sysreg.h>
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(msvcrt);
 
@@ -1077,7 +1080,7 @@ static void _setfp( unsigned int *cw, unsigned int cw_mask,
 
     if (sw)
     {
-        __asm__ __volatile__( "mrs %0, fpsr" : "=r" (fpsr) );
+        fpsr = ARM64_READ_SYSREG(FPSR);
         old_fpsr = fpsr;
 
         flags = 0;
@@ -1102,7 +1105,7 @@ static void _setfp( unsigned int *cw, unsigned int cw_mask,
 
     if (cw)
     {
-        __asm__ __volatile__( "mrs %0, fpcr" : "=r" (fpcr) );
+        fpcr = ARM64_READ_SYSREG(FPCR);
         old_fpcr = fpcr;
 
         flags = 0;
@@ -1140,13 +1143,13 @@ static void _setfp( unsigned int *cw, unsigned int cw_mask,
     if (old_fpcr != fpcr && ~(old_fpcr >> 8) & fpsr & 0x9f != fpsr & 0x9f)
     {
         ULONG_PTR mask = fpcr & ~0x9f00;
-        __asm__ __volatile__( "msr fpcr, %0" :: "r" (mask) );
+        ARM64_WRITE_SYSREG(FPCR, mask);
     }
 
     if (old_fpsr != fpsr)
-        __asm__ __volatile__( "msr fpsr, %0" :: "r" (fpsr) );
+        ARM64_WRITE_SYSREG(FPSR, fpsr);
     if (old_fpcr != fpcr)
-        __asm__ __volatile__( "msr fpcr, %0" :: "r" (fpcr) );
+        ARM64_WRITE_SYSREG(FPCR, fpcr);
 #elif defined(__arm__)
     DWORD old_fpscr, fpscr;
     unsigned int flags;
@@ -1679,7 +1682,12 @@ void CDECL _fpreset(void)
 {
 #ifdef __i386__
     const unsigned int x86_cw = 0x27f;
+#ifdef _MSC_VER
+    __asm { fninit }
+    __asm { fldcw x86_cw }
+#else
     __asm__ __volatile__( "fninit; fldcw %0" : : "m" (x86_cw) );
+#endif
     if (sse2_supported)
     {
         unsigned int cw = _MCW_EM, sw = 0;
