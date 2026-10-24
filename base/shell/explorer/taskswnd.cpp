@@ -2,6 +2,7 @@
  * ReactOS Explorer
  *
  * Copyright 2006 - 2007 Thomas Weidenmueller <w3seek@reactos.org>
+ * Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -173,6 +174,31 @@ typedef struct _TASK_ANIM
     BOOL bSnapped;
 } TASK_ANIM, *PTASK_ANIM;
 
+static const PROPERTYKEY TaskPkeyAppUserModelId =
+    { { 0x9f4c2855, 0x9f79, 0x4b39, { 0xa8, 0xd0, 0xe1, 0xd4, 0x2d, 0xe1, 0xd5, 0xf3 } }, 5 };
+
+static BOOL
+GetWindowAppId(HWND hWnd, LPWSTR pszAppId, DWORD cchAppId)
+{
+    CComPtr<IPropertyStore> Store;
+    PROPVARIANT Value;
+    BOOL Found = FALSE;
+
+    pszAppId[0] = 0;
+    if (FAILED(SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&Store))))
+        return FALSE;
+    PropVariantInit(&Value);
+    if (SUCCEEDED(Store->GetValue(TaskPkeyAppUserModelId, &Value)) && Value.vt == VT_LPWSTR && Value.pwszVal &&
+        Value.pwszVal[0])
+    {
+        Found = SUCCEEDED(StringCchCopyW(pszAppId, cchAppId, Value.pwszVal));
+    }
+    PropVariantClear(&Value);
+    if (!Found)
+        pszAppId[0] = 0;
+    return Found;
+}
+
 typedef struct _TASK_GROUP
 {
     /* We have to use a linked list instead of an array so we don't have to
@@ -188,6 +214,7 @@ typedef struct _TASK_GROUP
     HANDLE hLaunchProcess;
     WCHAR szExePath[MAX_PATH];
     WCHAR szLinkPath[MAX_PATH];
+    WCHAR szAppId[128];
     FILETIME PinCreationTime;
     TASK_ANIM Anim;
     union
@@ -1030,7 +1057,7 @@ public:
         PTASK_GROUP TaskGroup = m_TaskGroups;
         while (TaskGroup != NULL)
         {
-            if (TaskGroup->szExePath[0] &&
+            if (TaskGroup->szExePath[0] && !TaskGroup->szAppId[0] &&
                 !lstrcmpiW(TaskGroup->szExePath, pszExePath))
             {
                 return TaskGroup;
@@ -2362,6 +2389,7 @@ public:
         DWORD dwProcessId;
         PTASK_GROUP TaskGroup;
         WCHAR szExePath[MAX_PATH];
+        WCHAR szAppId[128];
 
         if (!GetWindowThreadProcessId(hWnd,
             &dwProcessId))
@@ -2371,8 +2399,9 @@ public:
         }
 
         GetTaskExePath(dwProcessId, szExePath, _countof(szExePath));
+        GetWindowAppId(hWnd, szAppId, _countof(szAppId));
 
-        TaskGroup = FindLaunchingTaskGroup(dwProcessId);
+        TaskGroup = szAppId[0] ? NULL : FindLaunchingTaskGroup(dwProcessId);
         if (TaskGroup)
         {
             TaskGroup->dwTaskCount++;
@@ -2385,11 +2414,13 @@ public:
         TaskGroup = m_TaskGroups;
         while (TaskGroup != NULL)
         {
-            if ((szExePath[0] && TaskGroup->szExePath[0] &&
-                 _wcsicmp(TaskGroup->szExePath, szExePath) == 0) ||
-                (TaskGroup->dwTaskCount && TaskGroup->dwProcessId == dwProcessId) ||
-                (!szExePath[0] && !TaskGroup->szExePath[0] &&
-                 TaskGroup->dwProcessId == dwProcessId))
+            if (szAppId[0] ? (_wcsicmp(TaskGroup->szAppId, szAppId) == 0) :
+                (!TaskGroup->szAppId[0] &&
+                 ((szExePath[0] && TaskGroup->szExePath[0] &&
+                   _wcsicmp(TaskGroup->szExePath, szExePath) == 0) ||
+                  (TaskGroup->dwTaskCount && TaskGroup->dwProcessId == dwProcessId) ||
+                  (!szExePath[0] && !TaskGroup->szExePath[0] &&
+                   TaskGroup->dwProcessId == dwProcessId))))
             {
                 TaskGroup->dwTaskCount++;
                 TaskGroup->dwProcessId = dwProcessId;
@@ -2405,6 +2436,7 @@ public:
         {
             TaskGroup->dwTaskCount = 1;
             TaskGroup->dwProcessId = dwProcessId;
+            StringCchCopyW(TaskGroup->szAppId, _countof(TaskGroup->szAppId), szAppId);
         }
 
         return TaskGroup;
@@ -2667,9 +2699,28 @@ public:
         return CurrentGroup;
     }
 
+    BOOL RegroupTaskItemByAppId(IN PTASK_ITEM TaskItem)
+    {
+        WCHAR szAppId[128];
+
+        if (!TaskItem->Group)
+            return FALSE;
+        GetWindowAppId(TaskItem->hWnd, szAppId, _countof(szAppId));
+        if (_wcsicmp(szAppId, TaskItem->Group->szAppId) == 0)
+            return FALSE;
+
+        DeleteTaskItemButton(TaskItem);
+        RemoveTaskFromTaskGroup(TaskItem);
+        TaskItem->Group = AddToTaskGroup(TaskItem->hWnd);
+        AddTaskItemButton(TaskItem);
+        return TRUE;
+    }
+
     VOID RefreshTaskItemGroup(IN PTASK_ITEM TaskItem)
     {
-        if (!TaskItem->Group || TaskItem->Group->IsPinned)
+        if (RegroupTaskItemByAppId(TaskItem))
+            return;
+        if (!TaskItem->Group || TaskItem->Group->IsPinned || TaskItem->Group->szAppId[0])
             return;
         DWORD ProcessId = 0;
         WCHAR Path[MAX_PATH] = L"";
@@ -2859,6 +2910,7 @@ public:
         TaskItem = FindTaskItem(hWnd);
         if (TaskItem != NULL)
         {
+            RegroupTaskItemByAppId(TaskItem);
             RedrawTaskItem(TaskItem);
             return TRUE;
         }
