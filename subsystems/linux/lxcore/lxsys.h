@@ -227,6 +227,8 @@ LX_SYSCALL(LxSysCapset);
 LX_SYSCALL(LxSysReboot);
 LX_SYSCALL(LxSysGetpriority);
 LX_SYSCALL(LxSysUnshare);
+LX_SYSCALL(LxSysSetns);
+LX_SYSCALL(LxSysPivotRoot);
 LX_SYSCALL(LxSysGetcpu);
 LX_SYSCALL(LxSysGetgroups);
 LX_SYSCALL(LxSysSetgroups);

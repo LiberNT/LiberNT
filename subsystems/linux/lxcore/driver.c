@@ -537,6 +537,7 @@ LxIoctlCreateProcess(
         goto Cleanup;
     }
     Process->Pid = LxInstanceAllocatePid(Process->Instance);
+    Process->NsPid[0] = Process->Pid;
     Process->Pgid = Process->Pid;
     Process->Sid = Process->Pid;
     LxCgroupAttach(Process, Process->Instance->RootCgroup);
@@ -587,6 +588,7 @@ LxIoctlCreateProcess(
     Process->NtPid = HandleToUlong(PsGetProcessId(EProcess));
     Process->ParentPid = 0;
     Thread->Tid = Process->Pid;
+    Thread->NsTid[0] = Process->Pid;
     if (Process->Tty != NULL)
     {
         Process->Tty->Session = Process->Pid;

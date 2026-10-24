@@ -457,7 +457,7 @@ LxTtyMasterWrite(
             LxPollWake(&Tty->MasterPoll, LX_POLLIN | LX_POLLRDNORM);
         if (Instance != NULL)
         {
-            LxSignalGroup(Instance, Foreground, Signal);
+            LxSignalGroup(Instance, NULL, Foreground, Signal);
             LxInstanceDereference(Instance);
         }
 
@@ -545,7 +545,7 @@ LxTtyApplyWinSize(
     if (Instance == NULL)
         return;
     if (Changed && (Foreground != 0))
-        LxSignalGroup(Instance, Foreground, LX_SIGWINCH);
+        LxSignalGroup(Instance, NULL, Foreground, LX_SIGWINCH);
     LxInstanceDereference(Instance);
 }
 
@@ -842,6 +842,7 @@ LxTtyIoctl(
             LxTtyLock(Tty);
             Value = (LONG)Tty->ForegroundPgrp;
             LxTtyUnlock(Tty);
+            Value = (LONG)LxGlobalToNr(Process, (ULONG)Value);
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
         case LX_TIOCSPGRP:
@@ -850,6 +851,9 @@ LxTtyIoctl(
                 return Result;
             if (Value <= 0)
                 return -LX_EINVAL;
+            Value = (LONG)LxNrToGlobal(Process, (ULONG)Value);
+            if (Value <= 0)
+                return -LX_EPERM;
             LxTtyLock(Tty);
             Tty->ForegroundPgrp = (ULONG)Value;
             LxTtyUnlock(Tty);
@@ -859,6 +863,7 @@ LxTtyIoctl(
             LxTtyLock(Tty);
             Value = (LONG)Tty->Session;
             LxTtyUnlock(Tty);
+            Value = (LONG)LxGlobalToNr(Process, (ULONG)Value);
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
         case LX_TIOCSCTTY:

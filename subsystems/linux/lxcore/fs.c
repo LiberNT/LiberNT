@@ -666,9 +666,7 @@ LxStatAt(
         LxFree(Path);
         if (DirFd == LX_AT_FDCWD)
         {
-            ExAcquireFastMutex(&Process->Lock);
-            Path = LxStrDup(Process->Cwd);
-            ExReleaseFastMutex(&Process->Lock);
+            Path = LxProcessCwd(Process);
             if (Path == NULL)
                 return -LX_ENOMEM;
             Error = LxLookup(Process, LX_AT_FDCWD, Path, LX_LOOKUP_FOLLOW, &Node);
@@ -691,7 +689,7 @@ LxStatAt(
         if ((File->Mount != NULL) && (File->Path != NULL) && (MountOut != NULL))
         {
             PCSTR Relative;
-            PLX_MOUNT Mount = LxMountFind(File->Mount->Instance, File->Path, &Relative);
+            PLX_MOUNT Mount = (File->Mount->Ns != NULL) ? LxMountFind(File->Mount->Ns, File->Path, &Relative) : NULL;
 
             *MountOut = (Mount != NULL) ? Mount : File->Mount;
             if (MountRoot != NULL)
@@ -938,13 +936,28 @@ LX_SYSCALL(LxSysFaccessat2)
 LX_SYSCALL(LxSysGetcwd)
 {
     PLX_PROCESS Process = Call->Process;
-    SIZE_T Length;
+    SIZE_T Length, RootLength;
     LONG64 Result;
-    PSTR Cwd;
+    PSTR Cwd, Root, Visible;
 
-    ExAcquireFastMutex(&Process->Lock);
-    Cwd = LxStrDup(Process->Cwd);
-    ExReleaseFastMutex(&Process->Lock);
+    Cwd = LxProcessCwd(Process);
+    Root = LxProcessRoot(Process);
+    if ((Cwd == NULL) || (Root == NULL))
+    {
+        LxFree(Cwd);
+        LxFree(Root);
+        return -LX_ENOMEM;
+    }
+    RootLength = strlen(Root);
+    if (RootLength <= 1)
+        Visible = LxStrDup(Cwd);
+    else if ((strncmp(Cwd, Root, RootLength) == 0) && ((Cwd[RootLength] == '\0') || (Cwd[RootLength] == '/')))
+        Visible = LxStrDup((Cwd[RootLength] == '\0') ? "/" : Cwd + RootLength);
+    else
+        Visible = LxStrPrintf("(unreachable)%s", Cwd);
+    LxFree(Cwd);
+    LxFree(Root);
+    Cwd = Visible;
     if (Cwd == NULL)
         return -LX_ENOMEM;
 
@@ -963,16 +976,7 @@ LxChangeDirectory(
     _In_ PLX_PROCESS Process,
     _In_ PCSTR Path)
 {
-    PSTR Copy = LxStrDup(Path), Old;
-
-    if (Copy == NULL)
-        return -LX_ENOMEM;
-    ExAcquireFastMutex(&Process->Lock);
-    Old = Process->Cwd;
-    Process->Cwd = Copy;
-    ExReleaseFastMutex(&Process->Lock);
-    LxFree(Old);
-    return 0;
+    return LxProcessSetCwd(Process, Path);
 }
 
 LX_SYSCALL(LxSysChdir)
@@ -1014,11 +1018,41 @@ LX_SYSCALL(LxSysChroot)
     LX_NODE Node;
     LONG Error;
 
+    if (Call->Process->Uid[1] != 0)
+        return -LX_EPERM;
     Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW | LX_LOOKUP_DIRECTORY, &Node);
     if (Error != 0)
         return Error;
-    Error = (strcmp(Node.Path, "/") == 0) ? 0 : -LX_EPERM;
+    if (Node.Type != LX_S_IFDIR)
+        Error = -LX_ENOTDIR;
+    else
+        Error = LxProcessChroot(Call->Process, Node.Path);
     LxNodeFree(&Node);
+    return Error;
+}
+
+LX_SYSCALL(LxSysPivotRoot)
+{
+    LX_NODE NewRoot, PutOld;
+    LONG Error;
+
+    if (Call->Process->Uid[1] != 0)
+        return -LX_EPERM;
+    Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW | LX_LOOKUP_DIRECTORY, &NewRoot);
+    if (Error != 0)
+        return Error;
+    Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[1], LX_LOOKUP_FOLLOW | LX_LOOKUP_DIRECTORY, &PutOld);
+    if (Error != 0)
+    {
+        LxNodeFree(&NewRoot);
+        return Error;
+    }
+    if ((NewRoot.Type != LX_S_IFDIR) || (PutOld.Type != LX_S_IFDIR))
+        Error = -LX_ENOTDIR;
+    else
+        Error = LxMountPivotRoot(Call->Process, &NewRoot, &PutOld);
+    LxNodeFree(&PutOld);
+    LxNodeFree(&NewRoot);
     return Error;
 }
 
@@ -1205,7 +1239,7 @@ LX_SYSCALL(LxSysFtruncate)
     else
         Result = File->Ops->Truncate(File, (LONG64)Call->Args[1]);
     if ((File->Mount != NULL) && (File->Path != NULL))
-        LxVcacheInvalidatePath(File->Mount->Instance, File->Path);
+        LxVcacheInvalidatePath(File->Mount->Ns, File->Path);
     LxFileDereference(File);
     return Result;
 }
@@ -1232,7 +1266,7 @@ LX_SYSCALL(LxSysFallocate)
         if ((Result == 0) && (Stat.Size < Offset + Length))
             Result = File->Ops->Truncate(File, Offset + Length);
         if ((File->Mount != NULL) && (File->Path != NULL))
-            LxVcacheInvalidatePath(File->Mount->Instance, File->Path);
+            LxVcacheInvalidatePath(File->Mount->Ns, File->Path);
     }
     LxFileDereference(File);
     return Result;
@@ -1787,12 +1821,12 @@ LX_SYSCALL(LxSysMount)
     if (Flags & LX_MS_REMOUNT)
     {
         PCSTR Relative;
-        PLX_MOUNT Mount = LxMountFind(Process->Instance, Target.Path, &Relative);
+        PLX_MOUNT Mount = LxMountFind(LxProcessNs(Process, LxNsMnt), Target.Path, &Relative);
 
         if ((Mount == NULL) || (Relative[0] != '\0'))
             Error = (Flags & LX_MS_BIND) ? 0 : -LX_EINVAL;
         else
-            LxMountSetFlags(Process->Instance, Mount, Flags & (LX_MS_RDONLY | LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC),
+            LxMountSetFlags(Mount, Flags & (LX_MS_RDONLY | LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC),
                             LX_MS_RDONLY | LX_MS_NOSUID | LX_MS_NODEV | LX_MS_NOEXEC);
         LxNodeFree(&Target);
         return Error;
@@ -1809,7 +1843,7 @@ LX_SYSCALL(LxSysMount)
         Error = LxLookupUser(Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW, &Source);
         if (Error == 0)
         {
-            Error = LxMountBind(Process->Instance, &Source, Target.Path, Flags);
+            Error = LxMountBind(Process, &Source, Target.Path, Flags);
             LxNodeFree(&Source);
         }
         LxNodeFree(&Target);
@@ -1823,7 +1857,7 @@ LX_SYSCALL(LxSysMount)
         if (Error == 0)
         {
             Error = ((Source.Mount == NULL) || (Source.Relative[0] != '\0')) ? -LX_EINVAL :
-                    LxMountMove(Process->Instance, Source.Mount, Target.Path);
+                    LxMountMove(LxProcessNs(Process, LxNsMnt), Source.Mount, Target.Path);
             LxNodeFree(&Source);
         }
         LxNodeFree(&Target);
@@ -1841,7 +1875,7 @@ LX_SYSCALL(LxSysMount)
     if ((Result == 0) && (Type == NULL))
         Result = -LX_EINVAL;
     if (Result == 0)
-        Result = LxMountAdd(Process->Instance, Target.Path, (Source != NULL) ? Source : "none", Type, Flags, NULL);
+        Result = LxMountAdd(Process, Target.Path, (Source != NULL) ? Source : "none", Type, Flags, NULL);
 
     LxFree(Source);
     LxFree(Type);
@@ -1854,10 +1888,18 @@ LX_SYSCALL(LxSysUmount2)
     LX_NODE Target;
     LONG Error;
 
-    Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0], (Call->Args[1] & 8) ? 0 : LX_LOOKUP_FOLLOW, &Target);
+    if (Call->Args[1] & ~(ULONG64)(LX_MNT_FORCE | LX_MNT_DETACH | LX_MNT_EXPIRE | LX_UMOUNT_NOFOLLOW))
+        return -LX_EINVAL;
+    if (Call->Process->Uid[1] != 0)
+        return -LX_EPERM;
+    Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0],
+                         (Call->Args[1] & LX_UMOUNT_NOFOLLOW) ? 0 : LX_LOOKUP_FOLLOW, &Target);
     if (Error != 0)
         return Error;
-    Error = LxMountRemove(Call->Process->Instance, Target.Path);
+    if ((Target.Mount == NULL) || (Target.Relative[0] != '\0'))
+        Error = -LX_EINVAL;
+    else
+        Error = LxMountUnmount(LxProcessNs(Call->Process, LxNsMnt), Target.Mount, (ULONG)Call->Args[1]);
     LxNodeFree(&Target);
     return Error;
 }
@@ -2501,7 +2543,7 @@ LxInstallMountRoot(
     LONG Error;
 
     ExAcquireFastMutex(&Process->Instance->Lock);
-    Target = LxStrDup(Mount->Target);
+    Target = (Mount->Alias != NULL) ? LxStrDup(Mount->Alias) : LxStrDup(Mount->Target);
     ExReleaseFastMutex(&Process->Instance->Lock);
     if (Target == NULL)
         return -LX_ENOMEM;
@@ -2543,7 +2585,7 @@ LxMountFromFd(
             return NULL;
         }
         if ((File->Path != NULL) && (File->Path[0] == '/'))
-            Mount = LxMountFind(Process->Instance, File->Path, &Relative);
+            Mount = LxMountFind(LxProcessNs(Process, LxNsMnt), File->Path, &Relative);
         LxFileDereference(File);
         if ((Mount == NULL) || (Relative[0] != '\0'))
         {
@@ -2709,7 +2751,7 @@ LX_SYSCALL(LxSysFsmount)
         return -LX_EBUSY;
     }
 
-    Error = LxMountCreateDetached(Call->Process->Instance, Context->FsType, Context->Source,
+    Error = LxMountCreateDetached(Call->Process, Context->FsType, Context->Source,
                                   Context->Flags | LxMountAttrToFlags(Call->Args[2]), Context->Mode, &Mount);
     if (Error != 0)
     {
@@ -2746,7 +2788,7 @@ LX_SYSCALL(LxSysMoveMount)
         LxFileDereference(File);
         if (Path == NULL)
             return -LX_EINVAL;
-        Error = LxMountMove(Call->Process->Instance, Mount, Path);
+        Error = LxMountMove(LxProcessNs(Call->Process, LxNsMnt), Mount, Path);
         LxFree(Path);
         return Error;
     }
@@ -2754,7 +2796,7 @@ LX_SYSCALL(LxSysMoveMount)
     Error = LxLookupUser(Call->Process, (LONG)Call->Args[2], Call->Args[3], LX_LOOKUP_FOLLOW, &Target);
     if (Error != 0)
         return Error;
-    Error = LxMountMove(Call->Process->Instance, Mount, Target.Path);
+    Error = LxMountMove(LxProcessNs(Call->Process, LxNsMnt), Mount, Target.Path);
     LxNodeFree(&Target);
     return Error;
 }
@@ -2783,7 +2825,7 @@ LX_SYSCALL(LxSysMountSetattr)
     Mount = LxMountFromFd(Call->Process, (LONG)Call->Args[0], Call->Args[1], (Flags & LX_AT_EMPTY_PATH) != 0, &Error);
     if (Mount == NULL)
         return Error;
-    LxMountSetFlags(Call->Process->Instance, Mount, LxMountAttrToFlags(Attributes.Set), LxMountAttrToFlags(Attributes.Clear));
+    LxMountSetFlags(Mount, LxMountAttrToFlags(Attributes.Set), LxMountAttrToFlags(Attributes.Clear));
     return 0;
 }
 
@@ -2845,7 +2887,7 @@ LX_SYSCALL(LxSysOpenTree)
     if (Error != 0)
         return Error;
 
-    Error = LxMountBindDetached(Call->Process->Instance, &Node, &Mount);
+    Error = LxMountBindDetached(Call->Process, &Node, &Mount);
     LxNodeFree(&Node);
     if (Error != 0)
         return Error;

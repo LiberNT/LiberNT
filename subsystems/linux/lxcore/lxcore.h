@@ -55,6 +55,22 @@ typedef struct _LX_THREAD LX_THREAD, *PLX_THREAD;
 typedef struct _LX_INSTANCE LX_INSTANCE, *PLX_INSTANCE;
 typedef struct _LX_MOUNT LX_MOUNT, *PLX_MOUNT;
 typedef struct _LX_CGROUP LX_CGROUP, *PLX_CGROUP;
+typedef struct _LX_NS LX_NS, *PLX_NS;
+
+typedef enum _LX_NS_KIND
+{
+    LxNsMnt,
+    LxNsUts,
+    LxNsIpc,
+    LxNsPid,
+    LxNsNet,
+    LxNsCgroup,
+    LxNsUser,
+    LxNsTime,
+    LxNsCount
+} LX_NS_KIND, *PLX_NS_KIND;
+
+#define LX_PIDNS_MAX_LEVEL  32
 
 typedef struct _LX_VMA
 {
@@ -185,13 +201,20 @@ typedef enum _LX_FS_KIND
     LxFsProc,
     LxFsSys,
     LxFsCgroup,
-    LxFsDevpts
+    LxFsDevpts,
+    LxFsNsfs
 } LX_FS_KIND;
 
 struct _LX_MOUNT
 {
     LIST_ENTRY Link;
+    LIST_ENTRY InstanceLink;
     PLX_INSTANCE Instance;
+    PLX_NS Ns;
+    PLX_MOUNT Parent;
+    PLX_NS NsFile;
+    PLX_NS PidNs;
+    PLX_CGROUP CgroupRoot;
     ULONG Id;
     ULONG ParentId;
     LX_FS_KIND Kind;
@@ -223,6 +246,70 @@ struct _LX_MOUNT
 #define LX_MS_RELATIME      0x00200000
 #define LX_MS_STRICTATIME   0x01000000
 
+#define LX_MNT_FORCE        0x00000001
+#define LX_MNT_DETACH       0x00000002
+#define LX_MNT_EXPIRE       0x00000004
+#define LX_UMOUNT_NOFOLLOW  0x00000008
+
+#define LX_NSFS_MAGIC       0x6E736673ULL
+#define LX_NS_GET_USERNS    0xB701
+#define LX_NS_GET_PARENT    0xB702
+#define LX_NS_GET_NSTYPE    0xB703
+#define LX_NS_GET_OWNER_UID 0xB704
+
+struct _LX_NS
+{
+    volatile LONG RefCount;
+    LIST_ENTRY Link;
+    LX_NS_KIND Kind;
+    ULONG64 Inum;
+    PLX_INSTANCE Instance;
+    PLX_NS Parent;
+    PLX_NS Owner;
+    ULONG Level;
+    union
+    {
+        struct
+        {
+            LIST_ENTRY Mounts;
+            LX_EVENT_SOURCE Events;
+        } Mnt;
+        struct
+        {
+            CHAR Hostname[65];
+            CHAR DomainName[65];
+        } Uts;
+        struct
+        {
+            ULONG NextPid;
+            ULONG ReaperPid;
+            BOOLEAN HasInit;
+            BOOLEAN Dead;
+        } Pid;
+        struct
+        {
+            BOOLEAN LoopbackUp;
+        } Net;
+        struct
+        {
+            PLX_CGROUP Root;
+        } Cgroup;
+        struct
+        {
+            LONG64 Monotonic;
+            LONG64 Boottime;
+            BOOLEAN Frozen;
+        } Time;
+    };
+};
+
+typedef struct _LX_FS_STATE
+{
+    volatile LONG RefCount;
+    PSTR Cwd;
+    PSTR Root;
+} LX_FS_STATE, *PLX_FS_STATE;
+
 struct _LX_INSTANCE
 {
     volatile LONG RefCount;
@@ -230,12 +317,11 @@ struct _LX_INSTANCE
     UNICODE_STRING RootNt;
     UNICODE_STRING TmpNt;
     FAST_MUTEX Lock;
-    LIST_ENTRY Mounts;
+    LIST_ENTRY AllMounts;
+    PLX_NS RootNs[LxNsCount];
     ULONG NextMountId;
     ULONG NextPid;
     ULONG NextTmpId;
-    CHAR Hostname[65];
-    CHAR DomainName[65];
     CHAR BootId[37];
     LONG64 BootTime;
     PLX_CGROUP RootCgroup;
@@ -247,7 +333,6 @@ struct _LX_INSTANCE
     LONG RebootCommand;
     KEVENT InitExited;
     LONG InitStatus;
-    LX_EVENT_SOURCE MountEvents;
     ULONG NextDetachedId;
 };
 
@@ -355,6 +440,11 @@ struct _LX_PROCESS
     ULONG EnvironLength;
     CHAR Comm[16];
     PLX_CGROUP Cgroup;
+    PLX_NS Ns[LxNsCount];
+    PLX_NS PidNs;
+    PLX_NS TimeNs;
+    PSTR Root;
+    ULONG NsPid[LX_PIDNS_MAX_LEVEL];
     LONG64 StartTime;
     LONG OomScoreAdj;
     ULONG PdeathSignal;
@@ -402,6 +492,7 @@ struct _LX_THREAD
 {
     PLX_PROCESS Process;
     ULONG Tid;
+    ULONG NsTid[LX_PIDNS_MAX_LEVEL];
     ULONG NtTid;
     ULONG64 ClearChildTid;
     ULONG64 SetChildTid;
@@ -423,6 +514,8 @@ struct _LX_THREAD
     ULONG64 RobustList;
     LONG64 Restart;
     ULONG64 RestartArgument;
+    PLX_NS NsOverride[LxNsCount];
+    PLX_FS_STATE Fs;
 };
 
 typedef struct _LX_CALL
@@ -598,16 +691,54 @@ PLX_INSTANCE LxInstanceFind(_In_ PCUNICODE_STRING RootNt);
 VOID LxInstanceReference(_In_ PLX_INSTANCE Instance);
 VOID LxInstanceDereference(_In_ PLX_INSTANCE Instance);
 ULONG LxInstanceAllocatePid(_In_ PLX_INSTANCE Instance);
-PLX_MOUNT LxMountFind(_In_ PLX_INSTANCE Instance, _In_ PCSTR Path, _Out_opt_ PCSTR *Relative);
-LONG LxMountAdd(_In_ PLX_INSTANCE Instance, _In_ PCSTR Target, _In_ PCSTR Source, _In_ PCSTR FsType, _In_ ULONG Flags, _In_opt_ PCSTR Data);
-LONG LxMountRemove(_In_ PLX_INSTANCE Instance, _In_ PCSTR Target);
-LONG LxMountCreateDetached(_In_ PLX_INSTANCE Instance, _In_ PCSTR FsType, _In_ PCSTR Source, _In_ ULONG Flags, _In_ ULONG Mode, _Out_ PLX_MOUNT *Mount);
-LONG LxMountBindDetached(_In_ PLX_INSTANCE Instance, _In_ PLX_NODE Source, _Out_ PLX_MOUNT *Mount);
-LONG LxMountBind(_In_ PLX_INSTANCE Instance, _In_ PLX_NODE Source, _In_ PCSTR Target, _In_ ULONG Flags);
-LONG LxMountMove(_In_ PLX_INSTANCE Instance, _In_ PLX_MOUNT Mount, _In_ PCSTR Target);
-VOID LxMountSetFlags(_In_ PLX_INSTANCE Instance, _In_ PLX_MOUNT Mount, _In_ ULONG Set, _In_ ULONG Clear);
+PLX_MOUNT LxMountFind(_In_ PLX_NS Ns, _In_ PCSTR Path, _Out_opt_ PCSTR *Relative);
+LONG LxMountAdd(_In_ PLX_PROCESS Process, _In_ PCSTR Target, _In_ PCSTR Source, _In_ PCSTR FsType, _In_ ULONG Flags, _In_opt_ PCSTR Data);
+LONG LxMountUnmount(_In_ PLX_NS Ns, _In_ PLX_MOUNT Mount, _In_ ULONG Flags);
+LONG LxMountCreateDetached(_In_ PLX_PROCESS Process, _In_ PCSTR FsType, _In_ PCSTR Source, _In_ ULONG Flags, _In_ ULONG Mode, _Out_ PLX_MOUNT *Mount);
+LONG LxMountBindDetached(_In_ PLX_PROCESS Process, _In_ PLX_NODE Source, _Out_ PLX_MOUNT *Mount);
+LONG LxMountBind(_In_ PLX_PROCESS Process, _In_ PLX_NODE Source, _In_ PCSTR Target, _In_ ULONG Flags);
+LONG LxMountMove(_In_ PLX_NS Ns, _In_ PLX_MOUNT Mount, _In_ PCSTR Target);
+VOID LxMountSetFlags(_In_ PLX_MOUNT Mount, _In_ ULONG Set, _In_ ULONG Clear);
 PSTR LxMountInfo(_In_ PLX_PROCESS Process, _In_ BOOLEAN Full, _Out_ PULONG Length);
 LONG LxMountStatfs(_In_ PLX_MOUNT Mount, _Out_writes_bytes_(120) PVOID Statfs);
+LONG LxMountNsCopy(_In_ PLX_NS New, _In_ PLX_NS Old);
+VOID LxMountNsRelease(_In_ PLX_NS Ns);
+LONG LxMountPivotRoot(_In_ PLX_PROCESS Process, _In_ PLX_NODE NewRoot, _In_ PLX_NODE PutOld);
+PSTR LxPathRebase(_In_ PCSTR Path, _In_ PCSTR NewRoot, _In_ PCSTR PutOld);
+
+PLX_NS LxNsCreate(_In_ PLX_INSTANCE Instance, _In_ LX_NS_KIND Kind, _In_opt_ PLX_NS From);
+VOID LxNsReference(_In_ PLX_NS Ns);
+VOID LxNsDereference(_In_ PLX_NS Ns);
+VOID LxNsInstanceShutdown(_In_ PLX_INSTANCE Instance);
+PCSTR LxNsName(_In_ LX_NS_KIND Kind);
+LONG LxNsInheritProcess(_Inout_ PLX_PROCESS Child, _In_ PLX_PROCESS Parent, _In_ ULONG64 Flags);
+VOID LxNsAttachRoot(_Inout_ PLX_PROCESS Process, _In_ PLX_INSTANCE Instance);
+VOID LxNsReleaseProcess(_Inout_ PLX_PROCESS Process);
+PLX_NS LxNsFromFile(_In_ PLX_FILE File);
+PLX_NS LxNsFromNode(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node);
+PLX_FILE LxNsFileOpen(_In_ PLX_NS Ns, _In_ ULONG Flags);
+VOID LxNsRebaseProcesses(_In_ PLX_NS MntNs, _In_ PCSTR NewRoot, _In_ PCSTR PutOld);
+PSTR LxProcessRoot(_In_ PLX_PROCESS Process);
+PSTR LxProcessCwd(_In_ PLX_PROCESS Process);
+LONG LxProcessSetCwd(_In_ PLX_PROCESS Process, _In_ PCSTR Path);
+VOID LxNsInitialize(VOID);
+VOID LxNsThreadInherit(_Inout_ PLX_THREAD Thread, _In_opt_ PLX_THREAD Parent);
+VOID LxNsThreadRelease(_Inout_ PLX_THREAD Thread);
+LONG LxProcessChroot(_In_ PLX_PROCESS Process, _In_ PCSTR Path);
+PSTR LxPathVisible(_In_ PLX_PROCESS Viewer, _In_ PCSTR Path);
+LONG LxPidAssign(_Inout_ PLX_PROCESS Process, _Inout_ PLX_THREAD Thread);
+LONG LxTidAssign(_In_ PLX_PROCESS Process, _Inout_ PLX_THREAD Thread);
+ULONG LxPidNr(_In_ PLX_PROCESS Viewer, _In_ PLX_PROCESS Target);
+ULONG LxPidNrIn(_In_ PLX_NS PidNs, _In_ PLX_PROCESS Target);
+ULONG LxTidNr(_In_ PLX_PROCESS Viewer, _In_ PLX_THREAD Thread);
+ULONG LxGlobalToNr(_In_ PLX_PROCESS Viewer, _In_ ULONG Global);
+ULONG LxGlobalToNrIn(_In_ PLX_NS PidNs, _In_ ULONG Global);
+ULONG LxNrToGlobal(_In_ PLX_PROCESS Viewer, _In_ ULONG Nr);
+ULONG LxNrToGlobalIn(_In_ PLX_NS PidNs, _In_ ULONG Nr);
+BOOLEAN LxPidNsContains(_In_ PLX_NS Outer, _In_ PLX_NS Inner);
+PLX_PROCESS LxProcessLookupNr(_In_ PLX_PROCESS Viewer, _In_ ULONG Nr);
+PLX_THREAD LxThreadLookupNr(_In_ PLX_PROCESS Viewer, _In_ ULONG Nr, _Out_ PLX_PROCESS *Owner);
+BOOLEAN LxPidNsIsInit(_In_ PLX_PROCESS Process);
 
 LONG LxLookup(_In_ PLX_PROCESS Process, _In_ LONG DirFd, _In_ PCSTR Path, _In_ ULONG Flags, _Out_ PLX_NODE Node);
 VOID LxNodeFree(_Inout_ PLX_NODE Node);
@@ -648,8 +779,9 @@ VOID LxFdinfoAppend(_In_ PVOID Context, _In_ PCSTR Line);
 VOID LxFdObjectsInitialize(VOID);
 VOID LxVcacheInitialize(VOID);
 VOID LxVcacheInvalidate(VOID);
-VOID LxVcacheInvalidatePath(_In_ PLX_INSTANCE Instance, _In_ PCSTR Path);
+VOID LxVcacheInvalidatePath(_In_opt_ PLX_NS Owner, _In_ PCSTR Path);
 VOID LxVcachePurgeInstance(_In_ PLX_INSTANCE Instance);
+VOID LxVcachePurgeOwner(_In_ PLX_NS Owner);
 LONG LxNtCreateDirectory(_In_ PCUNICODE_STRING NtPath, _In_ ULONG Mode);
 LONG LxNtDeleteTree(_In_ PCUNICODE_STRING NtPath);
 LONG LxNtWriteLxAttributes(_In_ HANDLE Handle, _In_ ULONG Mode, _In_ ULONG Uid, _In_ ULONG Gid, _In_ ULONG64 Device, _In_ BOOLEAN WriteDevice);
@@ -692,7 +824,7 @@ LONG LxPtmxOpen(_In_ PLX_PROCESS Process, _In_ ULONG Flags, _Out_ PLX_FILE *File
 ULONG64 LxTtyDevice(_In_ PLX_TTY Tty);
 ULONG LxTtyList(_In_ PLX_INSTANCE Instance, _Out_writes_(Count) PULONG Indexes, _In_ ULONG Count);
 VOID LxTtyAttachControlling(_In_ PLX_PROCESS Process, _In_ PLX_TTY Tty);
-ULONG LxSignalGroup(_In_ PLX_INSTANCE Instance, _In_ ULONG Pgid, _In_ LONG Signal);
+ULONG LxSignalGroup(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULONG Pgid, _In_ LONG Signal);
 
 PLX_PROCESS LxProcessCreate(_In_ PLX_INSTANCE Instance);
 PLX_PROCESS LxProcessFork(_In_ PLX_PROCESS Parent);
@@ -738,7 +870,7 @@ LONG LxMmPrepareRemote(_In_ PLX_PROCESS Process, _In_ PEPROCESS EProcess, _In_ U
 VOID LxIpcShmVmaOpen(_In_ PVOID Section);
 VOID LxIpcShmVmaClose(_In_ PVOID Section);
 VOID LxIpcProcessExit(_In_ PLX_PROCESS Process);
-VOID LxIpcInstanceCleanup(_In_ PLX_INSTANCE Instance);
+VOID LxIpcNamespaceCleanup(_In_ PLX_NS Ns);
 PVOID LxIpcSemUndoList(_In_ PLX_PROCESS Process);
 VOID LxIpcInitialize(VOID);
 VOID LxWinInitialize(VOID);
@@ -783,6 +915,19 @@ BOOLEAN LxArchSetupSignalFrame(_Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXC
 LONG64 LxArchSignalReturn(_Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame, _Out_ PULONG64 Mask);
 ULONG LxArchSigTrampoline(_Out_writes_bytes_(16) PUCHAR Code);
 PCSTR LxArchCpuinfo(VOID);
+
+FORCEINLINE
+PLX_NS
+LxProcessNs(
+    _In_ PLX_PROCESS Process,
+    _In_ LX_NS_KIND Kind)
+{
+    PLX_THREAD Thread = LxCurrentThread();
+
+    if ((Thread != NULL) && (Thread->Process == Process) && (Thread->NsOverride[Kind] != NULL))
+        return Thread->NsOverride[Kind];
+    return Process->Ns[Kind];
+}
 
 #define LX_SYSCALL(Name) LONG64 Name(_Inout_ PLX_CALL Call)
 

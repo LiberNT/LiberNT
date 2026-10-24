@@ -45,7 +45,10 @@ typedef enum _LX_SYNTH_ID
     LxCgFile,
     LxPtsRoot,
     LxPtsPtmx,
-    LxPtsTty
+    LxPtsTty,
+    LxProcNsDir,
+    LxProcNsLink,
+    LxNsfsFile
 } LX_SYNTH_ID;
 
 typedef struct _LX_SYNTH
@@ -58,10 +61,89 @@ typedef struct _LX_SYNTH
     LONG Fd;
     ULONG Index;
     PLX_CGROUP Cgroup;
+    PLX_MOUNT Mount;
+    LX_NS_KIND NsKind;
     CHAR Prefix[128];
     PSTR LinkTarget;
     BOOLEAN Magic;
 } LX_SYNTH, *PLX_SYNTH;
+
+static const PCSTR LxProcNsEntries[] =
+{
+    "cgroup", "ipc", "mnt", "net", "pid", "pid_for_children", "time", "time_for_children", "user", "uts"
+};
+
+static
+PLX_NS
+LxProcPidNs(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth)
+{
+    if ((Synth->Mount != NULL) && (Synth->Mount->PidNs != NULL))
+        return Synth->Mount->PidNs;
+    return (Self->Instance->RootNs[LxNsPid] != NULL) ? Self->Instance->RootNs[LxNsPid] : Self->PidNs;
+}
+
+static
+PLX_NS
+LxProcTargetNs(
+    _In_ PLX_PROCESS Target,
+    _In_ PCSTR Name,
+    _Out_ PLX_NS_KIND Kind)
+{
+    if (strcmp(Name, "pid") == 0)
+    {
+        *Kind = LxNsPid;
+        return Target->PidNs;
+    }
+    if (strcmp(Name, "pid_for_children") == 0)
+    {
+        *Kind = LxNsPid;
+        return Target->Ns[LxNsPid];
+    }
+    if (strcmp(Name, "time") == 0)
+    {
+        *Kind = LxNsTime;
+        return Target->TimeNs;
+    }
+    if (strcmp(Name, "time_for_children") == 0)
+    {
+        *Kind = LxNsTime;
+        return Target->Ns[LxNsTime];
+    }
+    for (*Kind = LxNsMnt; *Kind < LxNsCount; (*Kind)++)
+    {
+        if (strcmp(Name, LxNsName(*Kind)) == 0)
+            return Target->Ns[*Kind];
+    }
+    return NULL;
+}
+
+static
+PLX_NS
+LxProcTaskNs(
+    _In_ PLX_PROCESS Target,
+    _In_ ULONG Tid,
+    _In_ PCSTR Name,
+    _Out_ PLX_NS_KIND Kind)
+{
+    PLX_NS Ns = LxProcTargetNs(Target, Name, Kind);
+    PLIST_ENTRY Entry;
+
+    if ((Ns == NULL) || (Tid == 0) || (strstr(Name, "_for_children") != NULL) || (strcmp(Name, "pid") == 0) ||
+        (strcmp(Name, "time") == 0))
+    {
+        return Ns;
+    }
+    for (Entry = Target->Threads.Flink; Entry != &Target->Threads; Entry = Entry->Flink)
+    {
+        PLX_THREAD Thread = CONTAINING_RECORD(Entry, LX_THREAD, Link);
+
+        if ((Thread->Tid == Tid) && (Thread->NsOverride[*Kind] != NULL))
+            return Thread->NsOverride[*Kind];
+    }
+    return Ns;
+}
 
 typedef VOID (*PLX_GENERATOR)(_In_ PLX_PROCESS Process, _In_ PLX_SYNTH Synth, _Inout_ PLX_TEXT Text);
 typedef LONG (*PLX_WRITER)(_In_ PLX_FILE File, _In_reads_bytes_(Length) PCSTR Data, _In_ ULONG Length);
@@ -366,40 +448,54 @@ LxCgroupNotifyEvents(
 {
     PLX_INSTANCE Instance = Cgroup->Instance;
     PLIST_ENTRY Entry;
-    PSTR Target = NULL, Path;
+    PSTR Targets[8];
+    PLX_CGROUP Roots[8];
+    ULONG Count = 0, Index;
+    PSTR Path;
 
     LxEventSourceSignal(&Cgroup->Events);
     if (Instance == NULL)
         return;
 
     ExAcquireFastMutex(&Instance->Lock);
-    for (Entry = Instance->Mounts.Flink; Entry != &Instance->Mounts; Entry = Entry->Flink)
+    for (Entry = Instance->AllMounts.Flink; (Entry != &Instance->AllMounts) && (Count < RTL_NUMBER_OF(Targets));
+         Entry = Entry->Flink)
     {
-        PLX_MOUNT Mount = CONTAINING_RECORD(Entry, LX_MOUNT, Link);
+        PLX_MOUNT Mount = CONTAINING_RECORD(Entry, LX_MOUNT, InstanceLink);
 
-        if (Mount->Kind == LxFsCgroup)
+        if ((Mount->Kind == LxFsCgroup) && !Mount->Detached && !IsListEmpty(&Mount->Link))
         {
-            Target = LxStrDup(Mount->Target);
-            break;
+            Targets[Count] = LxStrDup(Mount->Target);
+            Roots[Count] = Mount->CgroupRoot;
+            if (Targets[Count] != NULL)
+                Count++;
         }
     }
     ExReleaseFastMutex(&Instance->Lock);
-    if (Target == NULL)
-        return;
 
     Path = LxCgroupPath(Cgroup);
-    if (Path != NULL)
+    for (Index = 0; Index < Count; Index++)
     {
-        PSTR Full = LxStrPrintf("%s%s/cgroup.events", Target, (strcmp(Path, "/") == 0) ? "" : Path);
+        PSTR RootPath = ((Roots[Index] != NULL) && (Roots[Index]->Parent != NULL)) ? LxCgroupPath(Roots[Index]) : NULL;
+        SIZE_T RootLength = (RootPath != NULL) ? strlen(RootPath) : 0;
 
-        if (Full != NULL)
+        if ((Path != NULL) &&
+            ((RootLength <= 1) ||
+             ((strncmp(Path, RootPath, RootLength) == 0) && ((Path[RootLength] == '\0') || (Path[RootLength] == '/')))))
         {
-            LxInotifyNotify(Instance, Full, LX_IN_MODIFY, FALSE);
-            LxFree(Full);
+            PCSTR Rest = (RootLength > 1) ? Path + RootLength : Path;
+            PSTR Full = LxStrPrintf("%s%s/cgroup.events", Targets[Index], ((strcmp(Rest, "/") == 0) || (Rest[0] == '\0')) ? "" : Rest);
+
+            if (Full != NULL)
+            {
+                LxInotifyNotify(Instance, Full, LX_IN_MODIFY, FALSE);
+                LxFree(Full);
+            }
         }
-        LxFree(Path);
+        LxFree(RootPath);
+        LxFree(Targets[Index]);
     }
-    LxFree(Target);
+    LxFree(Path);
 }
 
 VOID
@@ -578,8 +674,11 @@ LxGenPidStat(
     Start = Process->StartTime / LX_PROC_TICKS;
 
     LxTextPrintf(Text, "%lu (%s) %c %lu %lu %lu %lu %ld %u %lu %lu %lu %lu %llu %llu %lld %lld %ld %ld %lu %ld %lld ",
-                 Synth->Tid ? Synth->Tid : Process->Pid, Comm, State, Process->ParentPid, Process->Pgid, Process->Sid,
-                 LxProcessTtyNumber(Process), Process->Tty ? (LONG)Process->Tty->ForegroundPgrp : -1L,
+                 LxGlobalToNrIn(LxProcPidNs(Self, Synth), Synth->Tid ? Synth->Tid : Process->Pid), Comm, State,
+                 LxPidNsIsInit(Process) ? 0UL : LxGlobalToNrIn(LxProcPidNs(Self, Synth), Process->ParentPid),
+                 LxGlobalToNrIn(LxProcPidNs(Self, Synth), Process->Pgid), LxGlobalToNrIn(LxProcPidNs(Self, Synth), Process->Sid),
+                 LxProcessTtyNumber(Process),
+                 Process->Tty ? (LONG)LxGlobalToNrIn(LxProcPidNs(Self, Synth), Process->Tty->ForegroundPgrp) : -1L,
                  0x400000U, 0UL, 0UL, 0UL, 0UL, 0ULL, 0ULL, 0LL, 0LL, 20L, 0L, Threads, 0L, Start);
     LxTextPrintf(Text, "%llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %ld %ld %lu %lu %llu %llu %lld ",
                  0ULL, 0ULL, LX_RLIM_INFINITY, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
@@ -598,6 +697,7 @@ LxGenPidStatus(
     _Inout_ PLX_TEXT Text)
 {
     PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+    PLX_NS ProcNs;
     ULONG64 Ignored = 0, Caught = 0, Blocked = 0, Effective;
     ULONG Count = KeQueryActiveProcessorCount(NULL);
     PLIST_ENTRY Entry;
@@ -635,23 +735,63 @@ LxGenPidStatus(
     ExReleaseFastMutex(&Process->Lock);
 
     Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
+    ProcNs = LxProcPidNs(Self, Synth);
     LxTextPrintf(Text,
                  "Name:\t%s\nUmask:\t%04lo\nState:\t%s\nTgid:\t%lu\nNgid:\t0\nPid:\t%lu\nPPid:\t%lu\nTracerPid:\t0\n"
                  "Uid:\t%lu\t%lu\t%lu\t%lu\nGid:\t%lu\t%lu\t%lu\t%lu\nFDSize:\t%lu\nGroups:\t",
-                 Comm, Process->Umask, Process->Exited ? "Z (zombie)" : "S (sleeping)", Process->Pid,
-                 Synth->Tid ? Synth->Tid : Process->Pid, Process->ParentPid,
+                 Comm, Process->Umask, Process->Exited ? "Z (zombie)" : "S (sleeping)", LxPidNrIn(ProcNs, Process),
+                 LxGlobalToNrIn(ProcNs, Synth->Tid ? Synth->Tid : Process->Pid),
+                 LxPidNsIsInit(Process) ? 0UL : LxGlobalToNrIn(ProcNs, Process->ParentPid),
                  Process->Uid[0], Process->Uid[1], Process->Uid[2], Process->Fsuid,
                  Process->Gid[0], Process->Gid[1], Process->Gid[2], Process->Fsgid, max(Fds, 64UL));
     for (Index = 0; Index < Process->GroupCount; Index++)
         LxTextPrintf(Text, "%lu ", Process->Groups[Index]);
+    LxTextAppend(Text, "\n", 1);
+    {
+        static const PCSTR Labels[4] = { "NStgid", "NSpid", "NSpgid", "NSsid" };
+        ULONG First = ProcNs->Level, Last = (Process->PidNs != NULL) ? Process->PidNs->Level : 0, Level, Which;
+        ULONG Tids[LX_PIDNS_MAX_LEVEL];
+        PLX_NS Levels[LX_PIDNS_MAX_LEVEL];
+        PLX_NS Walk;
+
+        RtlCopyMemory(Tids, Process->NsPid, sizeof(Tids));
+        ExAcquireFastMutex(&Process->Lock);
+        for (Entry = Process->Threads.Flink; Entry != &Process->Threads; Entry = Entry->Flink)
+        {
+            PLX_THREAD Thread = CONTAINING_RECORD(Entry, LX_THREAD, Link);
+
+            if ((Synth->Tid != 0) && (Thread->Tid == Synth->Tid))
+                RtlCopyMemory(Tids, Thread->NsTid, sizeof(Tids));
+        }
+        ExReleaseFastMutex(&Process->Lock);
+        RtlZeroMemory(Levels, sizeof(Levels));
+        for (Walk = Process->PidNs; Walk != NULL; Walk = Walk->Parent)
+            Levels[Walk->Level] = Walk;
+        for (Which = 0; Which < 4; Which++)
+        {
+            LxTextPrintf(Text, "%s:", Labels[Which]);
+            for (Level = First; (Level <= Last) && (Levels[Level] != NULL); Level++)
+            {
+                ULONG Value;
+
+                if (Which == 0)
+                    Value = Process->NsPid[Level];
+                else if (Which == 1)
+                    Value = Tids[Level];
+                else
+                    Value = LxGlobalToNrIn(Levels[Level], (Which == 2) ? Process->Pgid : Process->Sid);
+                LxTextPrintf(Text, "\t%lu", Value);
+            }
+            LxTextAppend(Text, "\n", 1);
+        }
+    }
     LxTextPrintf(Text,
-                 "\nNStgid:\t%lu\nNSpid:\t%lu\nNSpgid:\t%lu\nNSsid:\t%lu\nKthread:\t0\n"
+                 "Kthread:\t0\n"
                  "VmPeak:\t       0 kB\nVmSize:\t       0 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\n"
                  "VmHWM:\t       0 kB\nVmRSS:\t       0 kB\nRssAnon:\t       0 kB\nRssFile:\t       0 kB\n"
                  "RssShmem:\t       0 kB\nVmData:\t       0 kB\nVmStk:\t       0 kB\nVmExe:\t       0 kB\n"
                  "VmLib:\t       0 kB\nVmPTE:\t       0 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\n"
                  "CoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffff\nThreads:\t%ld\nSigQ:\t0/63429\n",
-                 Process->Pid, Synth->Tid ? Synth->Tid : Process->Pid, Process->Pgid, Process->Sid,
                  Process->Exited ? 1L : (LONG)Process->ThreadCount);
     LxTextPrintf(Text,
                  "SigPnd:\t%016llx\nShdPnd:\t%016llx\nSigBlk:\t%016llx\nSigIgn:\t%016llx\nSigCgt:\t%016llx\n"
@@ -764,16 +904,26 @@ LxGenPidCgroup(
     _Inout_ PLX_TEXT Text)
 {
     PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
-    PSTR Path;
+    PLX_CGROUP Root = LxProcessNs(Self, LxNsCgroup)->Cgroup.Root;
+    PSTR Path, RootPath;
 
     if (Process == NULL)
         return;
     Path = LxCgroupPath(Process->Cgroup);
+    RootPath = ((Root != NULL) && (Root->Parent != NULL)) ? LxCgroupPath(Root) : NULL;
     if (Path != NULL)
     {
-        LxTextPrintf(Text, "0::%s\n", Path);
+        SIZE_T Length = (RootPath != NULL) ? strlen(RootPath) : 0;
+
+        if ((Length > 1) && (strncmp(Path, RootPath, Length) == 0) && ((Path[Length] == '\0') || (Path[Length] == '/')))
+            LxTextPrintf(Text, "0::%s\n", (Path[Length] == '\0') ? "/" : Path + Length);
+        else if (Length > 1)
+            LxTextPrintf(Text, "0::/..%s\n", Path);
+        else
+            LxTextPrintf(Text, "0::%s\n", Path);
         LxFree(Path);
     }
+    LxFree(RootPath);
     LxProcessDereference(Process);
 }
 
@@ -784,10 +934,14 @@ LxGenPidMountinfo(
     _In_ PLX_SYNTH Synth,
     _Inout_ PLX_TEXT Text)
 {
+    PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
     ULONG Length;
-    PSTR Info = LxMountInfo(Self, TRUE, &Length);
+    PSTR Info;
 
-    UNREFERENCED_PARAMETER(Synth);
+    if (Process == NULL)
+        return;
+    Info = LxMountInfo((Process == Self) ? Self : Process, TRUE, &Length);
+    LxProcessDereference(Process);
     if (Info != NULL)
     {
         LxTextAppend(Text, Info, Length);
@@ -802,10 +956,14 @@ LxGenPidMounts(
     _In_ PLX_SYNTH Synth,
     _Inout_ PLX_TEXT Text)
 {
+    PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
     ULONG Length;
-    PSTR Info = LxMountInfo(Self, FALSE, &Length);
+    PSTR Info;
 
-    UNREFERENCED_PARAMETER(Synth);
+    if (Process == NULL)
+        return;
+    Info = LxMountInfo((Process == Self) ? Self : Process, FALSE, &Length);
+    LxProcessDereference(Process);
     if (Info != NULL)
     {
         LxTextAppend(Text, Info, Length);
@@ -1023,6 +1181,7 @@ static const LX_PID_ENTRY LxPidEntries[] =
     { "mountinfo", LX_S_IFREG, 0444, NULL, LxGenPidMountinfo, NULL },
     { "mounts", LX_S_IFREG, 0444, NULL, LxGenPidMounts, NULL },
     { "mountstats", LX_S_IFREG, 0400, "", NULL, NULL },
+    { "ns", LX_S_IFDIR, 0511, NULL, NULL, NULL },
     { "oom_adj", LX_S_IFREG, 0644, "0\n", NULL, LxWriteAccept },
     { "oom_score", LX_S_IFREG, 0444, "0\n", NULL, NULL },
     { "oom_score_adj", LX_S_IFREG, 0644, NULL, LxGenPidOomScoreAdj, LxWritePidOomScoreAdj },
@@ -1086,7 +1245,7 @@ LxGenHostname(
 {
     UNREFERENCED_PARAMETER(Synth);
     ExAcquireFastMutex(&Self->Instance->Lock);
-    LxTextPrintf(Text, "%s\n", Self->Instance->Hostname);
+    LxTextPrintf(Text, "%s\n", LxProcessNs(Self, LxNsUts)->Uts.Hostname);
     ExReleaseFastMutex(&Self->Instance->Lock);
 }
 
@@ -1099,7 +1258,7 @@ LxGenDomainname(
 {
     UNREFERENCED_PARAMETER(Synth);
     ExAcquireFastMutex(&Self->Instance->Lock);
-    LxTextPrintf(Text, "%s\n", Self->Instance->DomainName);
+    LxTextPrintf(Text, "%s\n", LxProcessNs(Self, LxNsUts)->Uts.DomainName);
     ExReleaseFastMutex(&Self->Instance->Lock);
 }
 
@@ -1113,6 +1272,7 @@ LxWriteName(
 {
     PLX_THREAD Current = LxCurrentThread();
     PLX_INSTANCE Instance;
+    PLX_NS Uts;
     ULONG Count = Length;
 
     UNREFERENCED_PARAMETER(File);
@@ -1123,16 +1283,17 @@ LxWriteName(
     if (Count > 64)
         return -LX_EINVAL;
     Instance = Current->Process->Instance;
+    Uts = LxProcessNs(Current->Process, LxNsUts);
     ExAcquireFastMutex(&Instance->Lock);
     if (Domain)
     {
-        RtlCopyMemory(Instance->DomainName, Data, Count);
-        Instance->DomainName[Count] = '\0';
+        RtlCopyMemory(Uts->Uts.DomainName, Data, Count);
+        Uts->Uts.DomainName[Count] = '\0';
     }
     else
     {
-        RtlCopyMemory(Instance->Hostname, Data, Count);
-        Instance->Hostname[Count] = '\0';
+        RtlCopyMemory(Uts->Uts.Hostname, Data, Count);
+        Uts->Uts.Hostname[Count] = '\0';
     }
     ExReleaseFastMutex(&Instance->Lock);
     return 0;
@@ -1559,7 +1720,7 @@ LxResolveFdLink(
 
     if ((File->Path != NULL) && (File->Path[0] == '/') && (File->Mount != NULL))
     {
-        Synth->LinkTarget = LxStrDup(File->Path);
+        Synth->LinkTarget = LxPathVisible(Self, File->Path);
         Synth->Magic = FALSE;
     }
     else
@@ -1610,10 +1771,45 @@ LxResolvePidEntry(
             Synth->Id = LxProcTaskDir;
             return 0;
         }
-        if (!LxParseNumber(Components[1], &Number) || !LxThreadVisible(Self, Synth->Pid, Number))
+        if (!LxParseNumber(Components[1], &Number))
+            return -LX_ENOENT;
+        Number = LxNrToGlobalIn(LxProcPidNs(Self, Synth), Number);
+        if ((Number == 0) || !LxThreadVisible(Self, Synth->Pid, Number))
             return -LX_ENOENT;
         Synth->Tid = Number;
         return LxResolvePidEntry(Self, Synth, Components + 2, Count - 2);
+    }
+
+    if (strcmp(Components[0], "ns") == 0)
+    {
+        PLX_PROCESS Process;
+        PLX_NS Ns;
+
+        if (Count == 1)
+        {
+            Synth->Id = LxProcNsDir;
+            return 0;
+        }
+        if (Count != 2)
+            return -LX_ENOENT;
+        Process = LxProcessLookup(Self->Instance, Synth->Pid);
+        if (Process == NULL)
+            return -LX_ENOENT;
+        ExAcquireFastMutex(&Process->Lock);
+        Ns = LxProcTaskNs(Process, Synth->Tid, Components[1], &Synth->NsKind);
+        Synth->LinkTarget = (Ns != NULL) ? LxStrPrintf("%s:[%llu]", LxNsName(Ns->Kind), Ns->Inum) : NULL;
+        ExReleaseFastMutex(&Process->Lock);
+        LxProcessDereference(Process);
+        if (Ns == NULL)
+            return -LX_ENOENT;
+        if (Synth->LinkTarget == NULL)
+            return -LX_ENOMEM;
+        RtlStringCbCopyA(Synth->Prefix, sizeof(Synth->Prefix), Components[1]);
+        Synth->Id = LxProcNsLink;
+        Synth->Type = LX_S_IFLNK;
+        Synth->Mode = 0777;
+        Synth->Magic = TRUE;
+        return 0;
     }
 
     if ((strcmp(Components[0], "fd") == 0) || (strcmp(Components[0], "fdinfo") == 0))
@@ -1672,15 +1868,23 @@ LxResolvePidEntry(
         if (Process == NULL)
             return -LX_ENOENT;
         Synth->Id = LxProcPidLink;
-        ExAcquireFastMutex(&Process->Lock);
-        if (strcmp(Components[0], "cwd") == 0)
-            Synth->LinkTarget = LxStrDup(Process->Cwd);
-        else if (strcmp(Components[0], "exe") == 0)
-            Synth->LinkTarget = LxStrDup((Process->ExePath != NULL) ? Process->ExePath : "/");
-        else
-            Synth->LinkTarget = LxStrDup("/");
-        ExReleaseFastMutex(&Process->Lock);
-        LxProcessDereference(Process);
+        {
+            PSTR Raw;
+
+            ExAcquireFastMutex(&Process->Lock);
+            if (strcmp(Components[0], "cwd") == 0)
+                Raw = LxStrDup(Process->Cwd);
+            else if (strcmp(Components[0], "exe") == 0)
+                Raw = LxStrDup((Process->ExePath != NULL) ? Process->ExePath : "/");
+            else
+                Raw = LxStrDup((Process->Root != NULL) ? Process->Root : "/");
+            ExReleaseFastMutex(&Process->Lock);
+            LxProcessDereference(Process);
+            if (Raw == NULL)
+                return -LX_ENOMEM;
+            Synth->LinkTarget = LxPathVisible(Self, Raw);
+            LxFree(Raw);
+        }
         return (Synth->LinkTarget != NULL) ? 0 : -LX_ENOMEM;
     }
 
@@ -1713,18 +1917,28 @@ LxResolveProc(
 
     if ((Count == 1) && (strcmp(Components[0], "self") == 0))
     {
+        ULONG Nr = LxPidNrIn(LxProcPidNs(Self, Synth), Self);
+
+        if (Nr == 0)
+            return -LX_ENOENT;
         Synth->Id = LxProcLink;
         Synth->Type = LX_S_IFLNK;
         Synth->Mode = 0777;
-        Synth->LinkTarget = LxStrPrintf("%lu", Self->Pid);
+        Synth->LinkTarget = LxStrPrintf("%lu", Nr);
         return (Synth->LinkTarget != NULL) ? 0 : -LX_ENOMEM;
     }
     if ((Count == 1) && (strcmp(Components[0], "thread-self") == 0))
     {
+        PLX_NS ProcNs = LxProcPidNs(Self, Synth);
+        ULONG Nr = LxPidNrIn(ProcNs, Self);
+
+        if (Nr == 0)
+            return -LX_ENOENT;
         Synth->Id = LxProcLink;
         Synth->Type = LX_S_IFLNK;
         Synth->Mode = 0777;
-        Synth->LinkTarget = LxStrPrintf("%lu/task/%lu", Self->Pid, (Current != NULL) ? Current->Tid : Self->Pid);
+        Synth->LinkTarget = LxStrPrintf("%lu/task/%lu", Nr,
+                                        (Current != NULL) ? LxGlobalToNrIn(ProcNs, Current->Tid) : Nr);
         return (Synth->LinkTarget != NULL) ? 0 : -LX_ENOMEM;
     }
     if ((Count == 1) && (strcmp(Components[0], "mounts") == 0))
@@ -1738,7 +1952,8 @@ LxResolveProc(
 
     if (LxParseNumber(Components[0], &Number))
     {
-        if (!LxProcessVisible(Self, Number))
+        Number = LxNrToGlobalIn(LxProcPidNs(Self, Synth), Number);
+        if ((Number == 0) || !LxProcessVisible(Self, Number))
             return -LX_ENOENT;
         Synth->Pid = Number;
         return LxResolvePidEntry(Self, Synth, Components + 1, Count - 1);
@@ -1886,7 +2101,8 @@ LxResolveCgroup(
     PLX_CGROUP Cgroup;
     ULONG Consumed, Index;
 
-    Cgroup = LxCgroupWalk(Self->Instance->RootCgroup, (PCSTR *)Components, Count, &Consumed);
+    Cgroup = LxCgroupWalk(((Synth->Mount != NULL) && (Synth->Mount->CgroupRoot != NULL)) ? Synth->Mount->CgroupRoot :
+                          Self->Instance->RootCgroup, (PCSTR *)Components, Count, &Consumed);
     Synth->Cgroup = Cgroup;
     if (Consumed == Count)
     {
@@ -1972,7 +2188,20 @@ LxSynthResolve(
 
     RtlZeroMemory(Synth, sizeof(*Synth));
     Synth->Fd = -1;
-    Buffer = LxStrDup(Relative);
+    Synth->Mount = Mount;
+    if (Mount->Kind == LxFsNsfs)
+    {
+        if (Relative[0] != '\0')
+            return -LX_ENOTDIR;
+        Synth->Id = LxNsfsFile;
+        Synth->Type = LX_S_IFREG;
+        Synth->Mode = 0444;
+        return 0;
+    }
+    if ((Mount->Root != NULL) && (strcmp(Mount->Root, "/") != 0))
+        Buffer = LxStrPrintf("%s%s%s", Mount->Root + 1, (Relative[0] != '\0') ? "/" : "", Relative);
+    else
+        Buffer = LxStrDup(Relative);
     if (Buffer == NULL)
         return -LX_ENOMEM;
     Count = LxSplitPath(Buffer, Components);
@@ -2182,14 +2411,19 @@ LxListProc(
         case LxProcRoot:
         {
             ULONG Pids[512], Count = 0;
+            PLX_NS ProcNs = LxProcPidNs(Self, Synth);
 
             ExAcquireFastMutex(&LxProcessListLock);
             for (Entry = LxProcessList.Flink; (Entry != &LxProcessList) && (Count < RTL_NUMBER_OF(Pids)); Entry = Entry->Flink)
             {
                 PLX_PROCESS Process = CONTAINING_RECORD(Entry, LX_PROCESS, GlobalLink);
+                ULONG Nr;
 
-                if (Process->Instance == Self->Instance)
-                    Pids[Count++] = Process->Pid;
+                if (Process->Instance != Self->Instance)
+                    continue;
+                Nr = LxPidNrIn(ProcNs, Process);
+                if (Nr != 0)
+                    Pids[Count++] = Nr;
             }
             ExReleaseFastMutex(&LxProcessListLock);
 
@@ -2242,6 +2476,7 @@ LxListProc(
         case LxProcTaskDir:
         {
             PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
+            ULONG Level = LxProcPidNs(Self, Synth)->Level;
 
             LxDirAdd(List, LX_DT_DIR, ".");
             LxDirAdd(List, LX_DT_DIR, "..");
@@ -2252,20 +2487,27 @@ LxListProc(
             {
                 CHAR Name[16];
 
-                RtlStringCbPrintfA(Name, sizeof(Name), "%lu", CONTAINING_RECORD(Entry, LX_THREAD, Link)->Tid);
+                RtlStringCbPrintfA(Name, sizeof(Name), "%lu", CONTAINING_RECORD(Entry, LX_THREAD, Link)->NsTid[Level]);
                 LxDirAdd(List, LX_DT_DIR, Name);
             }
             if (IsListEmpty(&Process->Threads))
             {
                 CHAR Name[16];
 
-                RtlStringCbPrintfA(Name, sizeof(Name), "%lu", Process->Pid);
+                RtlStringCbPrintfA(Name, sizeof(Name), "%lu", Process->NsPid[Level]);
                 LxDirAdd(List, LX_DT_DIR, Name);
             }
             ExReleaseFastMutex(&Process->Lock);
             LxProcessDereference(Process);
             break;
         }
+
+        case LxProcNsDir:
+            LxDirAdd(List, LX_DT_DIR, ".");
+            LxDirAdd(List, LX_DT_DIR, "..");
+            for (Index = 0; Index < RTL_NUMBER_OF(LxProcNsEntries); Index++)
+                LxDirAdd(List, LX_DT_LNK, LxProcNsEntries[Index]);
+            break;
 
         case LxProcFdDir:
         case LxProcFdinfoDir:
@@ -2385,9 +2627,15 @@ LxCgroupWriteProcs(
     }
     else
     {
-        Process = LxProcessLookup(Current->Process->Instance, (ULONG)Pid);
+        Process = LxProcessLookupNr(Current->Process, (ULONG)Pid);
         if (Process == NULL)
-            return -LX_ESRCH;
+        {
+            PLX_THREAD Thread = LxThreadLookupNr(Current->Process, (ULONG)Pid, &Process);
+
+            UNREFERENCED_PARAMETER(Thread);
+            if (Process == NULL)
+                return -LX_ESRCH;
+        }
     }
     if (Process->Exited)
     {
@@ -2481,8 +2729,11 @@ LxGenCgroupFile(
         {
             PLX_PROCESS Process = CONTAINING_RECORD(Entry, LX_PROCESS, GlobalLink);
 
-            if ((Process->Instance == Self->Instance) && (Process->Cgroup == Cgroup) && !Process->Exited)
-                LxTextPrintf(Text, "%lu\n", Process->Pid);
+            if ((Process->Instance == Self->Instance) && (Process->Cgroup == Cgroup) && !Process->Exited &&
+                (LxPidNr(Self, Process) != 0))
+            {
+                LxTextPrintf(Text, "%lu\n", LxPidNr(Self, Process));
+            }
         }
         ExReleaseFastMutex(&LxProcessListLock);
     }
@@ -2638,6 +2889,26 @@ LxSynthOpen(
         if (Node->Mount->Kind == LxFsCgroup)
             File->HandlerContext = Synth.Cgroup;
     }
+    else if ((Synth.Id == LxNsfsFile) || (Synth.Id == LxProcNsLink))
+    {
+        PLX_NS Ns = LxNsFromNode(Process, Node);
+
+        if (Ns == NULL)
+        {
+            Error = -LX_ENOENT;
+            goto Exit;
+        }
+        File = LxNsFileOpen(Ns, Flags);
+        LxNsDereference(Ns);
+        if (File == NULL)
+        {
+            Error = -LX_ENOMEM;
+            goto Exit;
+        }
+        *Result = File;
+        File = NULL;
+        goto Exit;
+    }
     else if (Synth.Type == LX_S_IFLNK)
     {
         if (Synth.Id == LxProcFdLink)
@@ -2785,7 +3056,7 @@ LxSynthOpen(
         if ((Synth.Id == LxProcPidFile) && (Synth.Index < RTL_NUMBER_OF(LxPidEntries)) &&
             (strncmp(LxPidEntries[Synth.Index].Name, "mount", 5) == 0))
         {
-            Events = &Process->Instance->MountEvents;
+            Events = &LxProcessNs(Process, LxNsMnt)->Mnt.Events;
         }
         if (Events != NULL)
         {
@@ -2828,6 +3099,16 @@ LxSynthStat(
     if (Error != 0)
         return Error;
     RtlZeroMemory(Stat, sizeof(*Stat));
+    if (Synth.Id == LxNsfsFile)
+    {
+        LxFree(Synth.LinkTarget);
+        Stat->Mode = LX_S_IFREG | 0444;
+        Stat->Nlink = 1;
+        Stat->Dev = 4;
+        Stat->Ino = (Node->Mount->NsFile != NULL) ? Node->Mount->NsFile->Inum : 0;
+        Stat->BlkSize = 4096;
+        return 0;
+    }
     Stat->Mode = Synth.Type | Synth.Mode;
     Stat->Nlink = (Synth.Type == LX_S_IFDIR) ? 2 : 1;
     Stat->Ino = LxHashPath(Node->Mount->Id, Node->Relative);
@@ -2971,4 +3252,40 @@ VOID
 LxSynthInitialize(VOID)
 {
     ExInitializeFastMutex(&LxCgroupLock);
+}
+
+PLX_NS
+LxNsFromNode(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_NODE Node)
+{
+    LX_SYNTH Synth;
+    PLX_PROCESS Target;
+    PLX_NS Ns;
+    LX_NS_KIND Kind;
+
+    if (Node->Mount == NULL)
+        return NULL;
+    if ((Node->Mount->Kind == LxFsNsfs) && (Node->Relative[0] == '\0') && (Node->Mount->NsFile != NULL))
+    {
+        LxNsReference(Node->Mount->NsFile);
+        return Node->Mount->NsFile;
+    }
+    if (Node->Mount->Kind != LxFsProc)
+        return NULL;
+    if (LxSynthResolve(Process, Node->Mount, Node->Relative, &Synth) != 0)
+        return NULL;
+    LxFree(Synth.LinkTarget);
+    if (Synth.Id != LxProcNsLink)
+        return NULL;
+    Target = LxProcessLookup(Process->Instance, Synth.Pid);
+    if (Target == NULL)
+        return NULL;
+    ExAcquireFastMutex(&Target->Lock);
+    Ns = LxProcTaskNs(Target, Synth.Tid, Synth.Prefix, &Kind);
+    if (Ns != NULL)
+        LxNsReference(Ns);
+    ExReleaseFastMutex(&Target->Lock);
+    LxProcessDereference(Target);
+    return Ns;
 }

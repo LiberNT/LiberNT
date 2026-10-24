@@ -178,6 +178,7 @@ LxSignalSend(
     ULONG64 Handler, Bit = LX_SIGNAL_BIT(Signal);
     ULONG Tid = (TargetThread != NULL) ? TargetThread->Tid : 0;
     PLX_THREAD Sender = LxCurrentThread();
+    LX_SIGINFO LocalInfo;
     BOOLEAN Blocked;
 
     if ((Signal <= 0) || (Signal > LX_NSIG))
@@ -197,6 +198,15 @@ LxSignalSend(
     {
         return;
     }
+    if (LxPidNsIsInit(Target) && (Sender != NULL) && (Sender->Process->Instance == Target->Instance) &&
+        (Handler == LX_SIG_DFL) && !Blocked)
+    {
+        if (((Sender->Process->PidNs != NULL) && LxPidNsContains(Target->PidNs, Sender->Process->PidNs)) ||
+            ((Signal != LX_SIGKILL) && (Signal != LX_SIGSTOP)))
+        {
+            return;
+        }
+    }
 
     if (Signal == LX_SIGCONT)
         LxSignalWake(Target, 0);
@@ -210,6 +220,14 @@ LxSignalSend(
     {
         LxSignalTerminate(Target, Signal);
         return;
+    }
+
+    if ((Info != NULL) && (Target->PidNs != NULL) && (Target->PidNs->Level > 0) &&
+        ((Info->Code == LX_SI_USER) || (Info->Code == LX_SI_TKILL)))
+    {
+        LocalInfo = *Info;
+        LocalInfo.Child.Pid = (LONG)LxGlobalToNrIn(Target->PidNs, (ULONG)Info->Child.Pid);
+        Info = &LocalInfo;
     }
 
     ExAcquireFastMutex(&Target->Lock);
@@ -358,7 +376,7 @@ LxSignalCheckPending(
             continue;
         if (Action.Handler == LX_SIG_DFL)
         {
-            if (LxSignalIgnoredByDefault(Signal) || (Process->Pid == 1))
+            if (LxSignalIgnoredByDefault(Signal) || (Process->Pid == 1) || LxPidNsIsInit(Process))
                 continue;
             LxProcessExitGroup(Process, Signal);
         }
@@ -540,14 +558,14 @@ LxSignalQueue(
     Result = LxCopyFromUser(&Info, InfoPointer, sizeof(Info));
     if (Result != 0)
         return Result;
-    if (((Info.Code >= 0) || (Info.Code == LX_SI_TKILL)) && (Tgid != Call->Process->Pid))
+    if (((Info.Code >= 0) || (Info.Code == LX_SI_TKILL)) && (Tgid != LxPidNr(Call->Process, Call->Process)))
         return -LX_EPERM;
     Info.Signo = Signal;
 
     if (Tid != 0)
     {
-        Thread = LxThreadLookupReferenced(Call->Process->Instance, Tid, &Target);
-        if ((Thread == NULL) || (Target->Pid != Tgid))
+        Thread = LxThreadLookupNr(Call->Process, Tid, &Target);
+        if ((Thread == NULL) || (LxPidNr(Call->Process, Target) != Tgid))
         {
             if (Target != NULL)
                 LxProcessDereference(Target);
@@ -556,7 +574,7 @@ LxSignalQueue(
     }
     else
     {
-        Target = LxProcessLookup(Call->Process->Instance, Tgid);
+        Target = LxProcessLookupNr(Call->Process, Tgid);
         if (Target == NULL)
             return -LX_ESRCH;
     }
@@ -624,6 +642,7 @@ LX_SYSCALL(LxSysSigaltstack)
 ULONG
 LxSignalGroup(
     _In_ PLX_INSTANCE Instance,
+    _In_opt_ PLX_NS PidNs,
     _In_ ULONG Pgid,
     _In_ LONG Signal)
 {
@@ -641,9 +660,13 @@ LxSignalGroup(
 
         if ((Process->Instance != Instance) || Process->Exited)
             continue;
+        if ((PidNs != NULL) && ((Process->PidNs == NULL) || !LxPidNsContains(PidNs, Process->PidNs)))
+            continue;
         if (Pgid == 0)
         {
             if ((Process->Pid == 1) || ((Current != NULL) && (Process == Current->Process)))
+                continue;
+            if ((PidNs != NULL) && (PidNs->Level > 0) && (Process->Pid == PidNs->Pid.ReaperPid))
                 continue;
         }
         else if (Process->Pgid != Pgid)

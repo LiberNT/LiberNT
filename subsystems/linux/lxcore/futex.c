@@ -574,11 +574,11 @@ LxFutexWakeOp(
 static
 BOOLEAN
 LxFutexOwnerAlive(
-    _In_ PLX_INSTANCE Instance,
+    _In_ PLX_PROCESS Viewer,
     _In_ ULONG Tid)
 {
     PLX_PROCESS Owner;
-    PLX_THREAD Thread = LxThreadLookupReferenced(Instance, Tid, &Owner);
+    PLX_THREAD Thread = LxThreadLookupNr(Viewer, Tid, &Owner);
 
     if (Owner != NULL)
         LxProcessDereference(Owner);
@@ -595,7 +595,7 @@ LxFutexLockPi(
     _In_ BOOLEAN Try)
 {
     LONG64 Deadline = (LONG64)KeQueryInterruptTime() - ((Timeout != NULL) ? Timeout->QuadPart : 0);
-    ULONG Tid = Thread->Tid;
+    ULONG Tid = LxTidNr(Thread->Process, Thread);
     PLX_FUTEX_WAITER Waiter;
     PLX_FUTEX_BLOCK Block;
     LARGE_INTEGER Remaining;
@@ -648,7 +648,7 @@ LxFutexLockPi(
             Result = -LX_EAGAIN;
             break;
         }
-        else if ((Result == 0) && !LxFutexOwnerAlive(Thread->Process->Instance, Value & LX_FUTEX_TID_MASK))
+        else if ((Result == 0) && !LxFutexOwnerAlive(Thread->Process, Value & LX_FUTEX_TID_MASK))
         {
             ExReleaseFastMutex(&LxFutexLock);
             Result = -LX_ESRCH;
@@ -839,7 +839,7 @@ LxFutexExitRobustList(
         LONG64 Fetch = LxCopyFromUser(&Next, Entry, sizeof(Next));
 
         if (Entry != Pending)
-            LxFutexHandleDeath(Entry + (ULONG64)Head.FutexOffset, Thread->Tid, Pi, FALSE);
+            LxFutexHandleDeath(Entry + (ULONG64)Head.FutexOffset, LxTidNr(Thread->Process, Thread), Pi, FALSE);
         if (Fetch != 0)
             return;
         Entry = Next & ~1ULL;
@@ -848,7 +848,7 @@ LxFutexExitRobustList(
             break;
     }
     if (Pending != 0)
-        LxFutexHandleDeath(Pending + (ULONG64)Head.FutexOffset, Thread->Tid, PendingPi, TRUE);
+        LxFutexHandleDeath(Pending + (ULONG64)Head.FutexOffset, LxTidNr(Thread->Process, Thread), PendingPi, TRUE);
 }
 
 static
@@ -960,7 +960,7 @@ LX_SYSCALL(LxSysFutex)
             return LxFutexLockPi(Call->Thread, Address, Flags, NULL, TRUE);
 
         case LX_FUTEX_UNLOCK_PI:
-            return LxFutexUnlockPi(Call->Thread->Tid, Address, Flags);
+            return LxFutexUnlockPi(LxTidNr(Call->Process, Call->Thread), Address, Flags);
 
         default:
             return -LX_ENOSYS;
@@ -1130,7 +1130,7 @@ LX_SYSCALL(LxSysGetRobustList)
     else
     {
         PLX_PROCESS Owner;
-        PLX_THREAD Target = (Pid > 0) ? LxThreadLookupReferenced(Call->Process->Instance, (ULONG)Pid, &Owner) : NULL;
+        PLX_THREAD Target = (Pid > 0) ? LxThreadLookupNr(Call->Process, (ULONG)Pid, &Owner) : NULL;
 
         if (Target == NULL)
             return -LX_ESRCH;

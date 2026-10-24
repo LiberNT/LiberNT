@@ -67,6 +67,7 @@ struct _LX_UNIX_SOCKET
     USHORT AddressLength;
     UCHAR Address[110];
     PLX_INSTANCE Instance;
+    PLX_NS NetNs;
     PLX_MOUNT BoundMount;
     LONG64 BoundId;
     LIST_ENTRY BindLink;
@@ -132,6 +133,8 @@ LxUnixDereference(
         LxUnixFreeMessage(CONTAINING_RECORD(RemoveHeadList(&Socket->RecvQueue), LX_UNIX_MSG, Link));
     if (Socket->Peer != NULL)
         LxUnixDereference(Socket->Peer);
+    if (Socket->NetNs != NULL)
+        LxNsDereference(Socket->NetNs);
     if (Socket->Instance != NULL)
         LxInstanceDereference(Socket->Instance);
     LxFree(Socket);
@@ -164,6 +167,8 @@ LxUnixCreate(
     *(PUSHORT)Socket->Address = LX_AF_UNIX;
     LxInstanceReference(Process->Instance);
     Socket->Instance = Process->Instance;
+    Socket->NetNs = LxProcessNs(Process, LxNsNet);
+    LxNsReference(Socket->NetNs);
     Socket->Ino = (ULONG64)InterlockedIncrement64(&LxSocketInode);
     return Socket;
 }
@@ -762,6 +767,8 @@ LxUnixLookupBound(
             continue;
         if (Address->Abstract)
         {
+            if (Socket->NetNs != LxProcessNs(Process, LxNsNet))
+                continue;
             if ((Socket->BoundMount == NULL) && (Socket->AddressLength == Address->RawLength) &&
                 (RtlCompareMemory(Socket->Address, Address->Raw, Address->RawLength) == Address->RawLength))
             {
@@ -843,7 +850,7 @@ LxUnixBindAddress(
         {
             PLX_UNIX_SOCKET Other = CONTAINING_RECORD(Entry, LX_UNIX_SOCKET, BindLink);
 
-            if ((Other->Instance == Socket->Instance) && (Other->BoundMount == NULL) &&
+            if ((Other->Instance == Socket->Instance) && (Other->NetNs == Socket->NetNs) && (Other->BoundMount == NULL) &&
                 (Other->AddressLength == Address->RawLength) &&
                 (RtlCompareMemory(Other->Address, Address->Raw, Address->RawLength) == Address->RawLength))
             {
@@ -1521,11 +1528,12 @@ LxUnixParseControl(
                     break;
                 }
                 RtlCopyMemory(&Supplied, Message + 1, sizeof(Supplied));
-                if ((Supplied.Pid != Process->Pid) && (Process->Uid[1] != 0))
+                if ((Supplied.Pid != LxPidNr(Process, Process)) && (Process->Uid[1] != 0))
                 {
                     Result = -LX_EPERM;
                     break;
                 }
+                Supplied.Pid = LxNrToGlobal(Process, Supplied.Pid);
                 *Cred = Supplied;
             }
             else
@@ -1794,7 +1802,14 @@ LxUnixDeliverControl(
             Cmsg->Length = sizeof(LX_CMSGHDR) + sizeof(LX_UCRED);
             Cmsg->Level = LX_SOL_SOCKET;
             Cmsg->Type = LX_SCM_CREDENTIALS;
-            RtlCopyMemory(Cmsg + 1, &Message->Cred, sizeof(LX_UCRED));
+            {
+                PLX_THREAD Receiver = LxCurrentThread();
+                LX_UCRED Cred = Message->Cred;
+
+                if (Receiver != NULL)
+                    Cred.Pid = LxGlobalToNr(Receiver->Process, Cred.Pid);
+                RtlCopyMemory(Cmsg + 1, &Cred, sizeof(LX_UCRED));
+            }
             Used += Space;
         }
         else
@@ -2466,6 +2481,7 @@ LX_SYSCALL(LxSysGetsockopt)
             else
             {
                 Cred = Socket->PeerCred;
+                Cred.Pid = LxGlobalToNr(Call->Process, Cred.Pid);
             }
             Result = LxSockoptReturn(Call, &Cred, sizeof(Cred));
             break;

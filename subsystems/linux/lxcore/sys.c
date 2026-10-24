@@ -357,8 +357,8 @@ LX_SYSCALL(LxSysKcmp)
     LONG Error;
 
     if (((LONG)Call->Args[0] <= 0) || ((LONG)Call->Args[1] <= 0) ||
-        (LxThreadLookupReferenced(Call->Process->Instance, (ULONG)Call->Args[0], &First) == NULL) ||
-        (LxThreadLookupReferenced(Call->Process->Instance, (ULONG)Call->Args[1], &Second) == NULL))
+        (LxThreadLookupNr(Call->Process, (ULONG)Call->Args[0], &First) == NULL) ||
+        (LxThreadLookupNr(Call->Process, (ULONG)Call->Args[1], &Second) == NULL))
     {
         Result = -LX_ESRCH;
         goto Exit;
@@ -475,7 +475,7 @@ LxProcessVm(
         goto Exit;
 
     if (((LONG)Call->Args[0] <= 0) ||
-        (LxThreadLookupReferenced(Call->Process->Instance, (ULONG)Call->Args[0], &Target) == NULL))
+        (LxThreadLookupNr(Call->Process, (ULONG)Call->Args[0], &Target) == NULL))
     {
         Result = -LX_ESRCH;
         goto Exit;
@@ -748,12 +748,12 @@ LxSchedTarget(
     *Thread = NULL;
     if (Pid < 0)
         return -LX_EINVAL;
-    if ((Pid == 0) || ((ULONG)Pid == Call->Thread->Tid))
+    if ((Pid == 0) || ((ULONG)Pid == LxTidNr(Call->Process, Call->Thread)))
     {
         *Thread = Call->Thread;
         return 0;
     }
-    *Thread = LxThreadLookupReferenced(Call->Process->Instance, (ULONG)Pid, Owner);
+    *Thread = LxThreadLookupNr(Call->Process, (ULONG)Pid, Owner);
     return (*Thread != NULL) ? 0 : -LX_ESRCH;
 }
 
@@ -1050,13 +1050,14 @@ LX_SYSCALL(LxSysSchedGetPriorityMax)
 LX_SYSCALL(LxSysUname)
 {
     PLX_INSTANCE Instance = Call->Process->Instance;
+    PLX_NS Uts = LxProcessNs(Call->Process, LxNsUts);
     LX_UTSNAME Name;
 
     RtlZeroMemory(&Name, sizeof(Name));
     RtlCopyMemory(Name.SysName, "Linux", sizeof("Linux"));
     ExAcquireFastMutex(&Instance->Lock);
-    RtlCopyMemory(Name.NodeName, Instance->Hostname, sizeof(Instance->Hostname));
-    RtlCopyMemory(Name.DomainName, Instance->DomainName, sizeof(Instance->DomainName));
+    RtlCopyMemory(Name.NodeName, Uts->Uts.Hostname, sizeof(Uts->Uts.Hostname));
+    RtlCopyMemory(Name.DomainName, Uts->Uts.DomainName, sizeof(Uts->Uts.DomainName));
     ExReleaseFastMutex(&Instance->Lock);
     RtlCopyMemory(Name.Release, LX_KERNEL_RELEASE, sizeof(LX_KERNEL_RELEASE));
     RtlCopyMemory(Name.Version, LX_KERNEL_UTS_VERSION, sizeof(LX_KERNEL_UTS_VERSION));
@@ -1071,6 +1072,7 @@ LxSetName(
     _In_ BOOLEAN Domain)
 {
     PLX_INSTANCE Instance = Call->Process->Instance;
+    PLX_NS Uts = LxProcessNs(Call->Process, LxNsUts);
     CHAR Name[65];
     LONG64 Result;
 
@@ -1083,7 +1085,7 @@ LxSetName(
         return Result;
     Name[Call->Args[1]] = '\0';
     ExAcquireFastMutex(&Instance->Lock);
-    RtlCopyMemory(Domain ? Instance->DomainName : Instance->Hostname, Name, (SIZE_T)Call->Args[1] + 1);
+    RtlCopyMemory(Domain ? Uts->Uts.DomainName : Uts->Uts.Hostname, Name, (SIZE_T)Call->Args[1] + 1);
     ExReleaseFastMutex(&Instance->Lock);
     return 0;
 }
@@ -1217,9 +1219,9 @@ LX_SYSCALL(LxSysPrlimit64)
     LX_RLIMIT New, Old;
     LONG64 Result;
 
-    if ((Call->Args[0] != 0) && ((ULONG)Call->Args[0] != Call->Process->Pid))
+    if ((Call->Args[0] != 0) && ((ULONG)Call->Args[0] != LxPidNr(Call->Process, Call->Process)))
     {
-        Target = LxProcessLookup(Call->Process->Instance, (ULONG)Call->Args[0]);
+        Target = LxProcessLookupNr(Call->Process, (ULONG)Call->Args[0]);
         if (Target == NULL)
             return -LX_ESRCH;
     }
@@ -1249,17 +1251,19 @@ LX_SYSCALL(LxSysGetrusage)
 
 LX_SYSCALL(LxSysGetpid)
 {
-    return Call->Process->Pid;
+    return LxPidNr(Call->Process, Call->Process);
 }
 
 LX_SYSCALL(LxSysGetppid)
 {
-    return Call->Process->ParentPid;
+    if (LxPidNsIsInit(Call->Process))
+        return 0;
+    return LxGlobalToNr(Call->Process, Call->Process->ParentPid);
 }
 
 LX_SYSCALL(LxSysGettid)
 {
-    return Call->Thread->Tid;
+    return LxTidNr(Call->Process, Call->Thread);
 }
 
 LX_SYSCALL(LxSysGetuid)
@@ -1414,13 +1418,13 @@ LxProcessIds(
     PLX_PROCESS Target;
     LONG64 Result;
 
-    if ((Pid == 0) || (Pid == Call->Process->Pid))
-        return Session ? Call->Process->Sid : Call->Process->Pgid;
+    if ((Pid == 0) || (Pid == LxPidNr(Call->Process, Call->Process)))
+        return LxGlobalToNr(Call->Process, Session ? Call->Process->Sid : Call->Process->Pgid);
 
-    Target = LxProcessLookup(Call->Process->Instance, Pid);
+    Target = LxProcessLookupNr(Call->Process, Pid);
     if (Target == NULL)
         return -LX_ESRCH;
-    Result = Session ? Target->Sid : Target->Pgid;
+    Result = LxGlobalToNr(Call->Process, Session ? Target->Sid : Target->Pgid);
     LxProcessDereference(Target);
     return Result;
 }
@@ -1438,14 +1442,22 @@ LX_SYSCALL(LxSysGetsid)
 LX_SYSCALL(LxSysSetpgid)
 {
     PLX_PROCESS Process = Call->Process, Target;
-    ULONG Pid = Call->Args[0] ? (ULONG)Call->Args[0] : Process->Pid;
+    ULONG Pid = Call->Args[0] ? LxNrToGlobal(Process, (ULONG)Call->Args[0]) : Process->Pid;
     LONG Pgid = (LONG)Call->Args[1];
     LONG64 Result = 0;
 
     if (Pgid < 0)
         return -LX_EINVAL;
+    if (Pid == 0)
+        return -LX_ESRCH;
     if (Pgid == 0)
         Pgid = (LONG)Pid;
+    else
+    {
+        Pgid = (LONG)LxNrToGlobal(Process, (ULONG)Pgid);
+        if (Pgid == 0)
+            return -LX_EPERM;
+    }
 
     if (Pid == Process->Pid)
     {
@@ -1493,7 +1505,7 @@ LX_SYSCALL(LxSysSetsid)
     ExReleaseFastMutex(&Process->Lock);
     if (Tty != NULL)
         LxTtyDereference(Tty);
-    return Process->Pid;
+    return LxPidNr(Process, Process);
 }
 
 LX_SYSCALL(LxSysSucceed)
@@ -1505,7 +1517,7 @@ LX_SYSCALL(LxSysSucceed)
 LX_SYSCALL(LxSysSetTidAddress)
 {
     Call->Thread->ClearChildTid = Call->Args[0];
-    return Call->Thread->Tid;
+    return LxTidNr(Call->Process, Call->Thread);
 }
 
 LX_SYSCALL(LxSysExit)
@@ -1532,13 +1544,19 @@ LX_SYSCALL(LxSysKill)
         return -LX_EINVAL;
 
     if (Pid == 0)
-        return LxSignalGroup(Instance, Call->Process->Pgid, Signal) ? 0 : -LX_ESRCH;
+        return LxSignalGroup(Instance, NULL, Call->Process->Pgid, Signal) ? 0 : -LX_ESRCH;
     if (Pid == -1)
-        return LxSignalGroup(Instance, 0, Signal) ? 0 : -LX_ESRCH;
+        return LxSignalGroup(Instance, Call->Process->PidNs, 0, Signal) ? 0 : -LX_ESRCH;
     if (Pid < -1)
-        return LxSignalGroup(Instance, (ULONG)-Pid, Signal) ? 0 : -LX_ESRCH;
+    {
+        ULONG Pgid = LxNrToGlobal(Call->Process, (ULONG)-Pid);
 
-    Target = LxProcessLookup(Instance, (ULONG)Pid);
+        if (Pgid == 0)
+            return -LX_ESRCH;
+        return LxSignalGroup(Instance, NULL, Pgid, Signal) ? 0 : -LX_ESRCH;
+    }
+
+    Target = LxProcessLookupNr(Call->Process, (ULONG)Pid);
     if (Target == NULL)
         return -LX_ESRCH;
 
@@ -1569,10 +1587,10 @@ LxSignalThread(
     if ((Signal < 0) || (Signal > LX_NSIG) || ((LONG)Tid <= 0))
         return -LX_EINVAL;
 
-    Thread = LxThreadLookupReferenced(Call->Process->Instance, Tid, &Owner);
+    Thread = LxThreadLookupNr(Call->Process, Tid, &Owner);
     if (Thread == NULL)
     {
-        Owner = LxProcessLookup(Call->Process->Instance, Tid);
+        Owner = LxProcessLookupNr(Call->Process, Tid);
         if ((Owner == NULL) || Owner->Exited)
         {
             if (Owner != NULL)
@@ -1580,7 +1598,7 @@ LxSignalThread(
             return -LX_ESRCH;
         }
     }
-    if ((Tgid > 0) && (Owner->Pid != (ULONG)Tgid))
+    if ((Tgid > 0) && (LxPidNr(Call->Process, Owner) != (ULONG)Tgid))
     {
         LxProcessDereference(Owner);
         return -LX_ESRCH;
@@ -1721,8 +1739,13 @@ LxCreateThread(
     if (Thread == NULL)
         return -LX_ENOMEM;
 
-    Tid = LxInstanceAllocatePid(Call->Process->Instance);
-    Thread->Tid = Tid;
+    if (LxTidAssign(Call->Process, Thread) != 0)
+    {
+        LxThreadFree(Thread);
+        return -LX_EAGAIN;
+    }
+    LxNsThreadInherit(Thread, Call->Thread);
+    Tid = LxTidNr(Call->Process, Thread);
     Thread->Tls = (Request->Flags & LX_CLONE_SETTLS) ? Request->Tls : LxArchGetThreadPointer(Call->TrapFrame);
     Thread->SigMask = Call->Thread->SigMask;
     LxSchedInherit(Thread, Call->Thread);
@@ -1757,13 +1780,19 @@ LxForkProcess(
     PEPROCESS EProcess = NULL;
     HANDLE ProcessHandle = NULL, ThreadHandle = NULL;
     NTSTATUS Status;
-    ULONG Pid;
+    ULONG Pid, UserPid;
+    LONG Error;
 
     if (Request->Flags & (LX_CLONE_NEWNS | LX_CLONE_NEWUTS | LX_CLONE_NEWIPC | LX_CLONE_NEWUSER |
                           LX_CLONE_NEWPID | LX_CLONE_NEWNET | LX_CLONE_NEWCGROUP | LX_CLONE_NEWTIME))
     {
-        return -LX_EPERM;
+        if ((Request->Flags & LX_CLONE_NEWUSER) || (Parent->Uid[1] != 0))
+            return (Request->Flags & LX_CLONE_NEWUSER) ? -LX_EINVAL : -LX_EPERM;
+        if ((Request->Flags & LX_CLONE_NEWNS) && (Request->Flags & LX_CLONE_FS))
+            return -LX_EINVAL;
     }
+    if ((Request->Flags & LX_CLONE_PARENT) && (LxPidNsIsInit(Parent) || (Parent->Pid == 1)))
+        return -LX_EINVAL;
 
     if (Request->Flags & LX_CLONE_INTO_CGROUP)
     {
@@ -1801,8 +1830,14 @@ LxForkProcess(
     }
     Child->ParentPid = ListParent->Pid;
     Child->ExitSignal = Request->ExitSignal;
-    Child->Pid = LxInstanceAllocatePid(Parent->Instance);
-    Pid = Child->Pid;
+    Error = LxNsInheritProcess(Child, Parent, Request->Flags);
+    if (Error != 0)
+    {
+        LxProcessDereference(Child);
+        LxFree(Entry);
+        LxProcessDereference(ListParent);
+        return Error;
+    }
     if (Cgroup != NULL)
         LxCgroupAttach(Child, Cgroup);
 
@@ -1814,7 +1849,17 @@ LxForkProcess(
         LxProcessDereference(ListParent);
         return -LX_ENOMEM;
     }
-    Thread->Tid = Pid;
+    Error = LxPidAssign(Child, Thread);
+    if (Error != 0)
+    {
+        LxThreadFree(Thread);
+        LxProcessDereference(Child);
+        LxFree(Entry);
+        LxProcessDereference(ListParent);
+        return Error;
+    }
+    Pid = Child->Pid;
+    UserPid = LxPidNr(Parent, Child);
     Thread->Tls = (Request->Flags & LX_CLONE_SETTLS) ? Request->Tls : LxArchGetThreadPointer(Call->TrapFrame);
     Thread->SigMask = Call->Thread->SigMask;
     LxSchedInherit(Thread, Call->Thread);
@@ -1873,7 +1918,7 @@ LxForkProcess(
         LxCopyToUser(Request->Pidfd, &Fd, sizeof(Fd));
     }
     if (Request->Flags & LX_CLONE_PARENT_SETTID)
-        LxCopyToUser(Request->ParentTid, &Pid, sizeof(Pid));
+        LxCopyToUser(Request->ParentTid, &UserPid, sizeof(UserPid));
 
     Status = PsPicoCreateThread(ProcessHandle, Context, Thread, &ThreadHandle, NULL);
     if (!NT_SUCCESS(Status))
@@ -1892,7 +1937,7 @@ LxForkProcess(
     if (Request->Flags & LX_CLONE_VFORK)
         KeWaitForSingleObject(&Child->VforkDone, UserRequest, KernelMode, FALSE, NULL);
 
-    return Pid;
+    return UserPid;
 }
 
 static
@@ -1970,7 +2015,7 @@ LX_SYSCALL(LxSysClone3)
         Result = LxCloneCommon(Call, &Request);
         if (Result > 0)
         {
-            PLX_PROCESS Child = LxProcessLookup(Process->Instance, (ULONG)Result);
+            PLX_PROCESS Child = LxProcessLookupNr(Process, (ULONG)Result);
 
             if (Child != NULL)
             {
@@ -2233,7 +2278,7 @@ LxWaitChild(
 
         if (Found != NULL)
         {
-            *FoundPid = Found->Lx->Pid;
+            *FoundPid = LxPidNr(Process, Found->Lx);
             *WaitStatus = Found->Lx->WaitStatus;
             *Uid = Found->Lx->Uid[0];
             if (!(Selector->Options & LX_WNOWAIT))
@@ -2272,7 +2317,9 @@ LX_SYSCALL(LxSysWait4)
     if (Pid > 0)
     {
         Selector.Type = LX_P_PID;
-        Selector.Id = (ULONG)Pid;
+        Selector.Id = LxNrToGlobal(Call->Process, (ULONG)Pid);
+        if (Selector.Id == 0)
+            return -LX_ECHILD;
     }
     else if (Pid == 0)
     {
@@ -2282,7 +2329,9 @@ LX_SYSCALL(LxSysWait4)
     else if (Pid < -1)
     {
         Selector.Type = LX_P_PGID;
-        Selector.Id = (ULONG)-Pid;
+        Selector.Id = LxNrToGlobal(Call->Process, (ULONG)-Pid);
+        if (Selector.Id == 0)
+            return -LX_ECHILD;
     }
     else
     {
@@ -2334,10 +2383,17 @@ LX_SYSCALL(LxSysWaitid)
         case LX_P_PID:
             if ((LONG)Selector.Id <= 0)
                 return -LX_EINVAL;
+            Selector.Id = LxNrToGlobal(Call->Process, Selector.Id);
+            if (Selector.Id == 0)
+                return -LX_ECHILD;
             break;
         case LX_P_PGID:
             if (Selector.Id == 0)
                 Selector.Id = Call->Process->Pgid;
+            else
+                Selector.Id = LxNrToGlobal(Call->Process, Selector.Id);
+            if (Selector.Id == 0)
+                return -LX_ECHILD;
             break;
         case LX_P_PIDFD:
             Pidfd = LxFdGet(Call->Process, (LONG)Selector.Id);
@@ -2567,9 +2623,9 @@ LX_SYSCALL(LxSysCapget)
     if (Call->Args[1] == 0)
         return 0;
 
-    if ((Header.Pid != 0) && ((ULONG)Header.Pid != Call->Process->Pid))
+    if ((Header.Pid != 0) && ((ULONG)Header.Pid != LxPidNr(Call->Process, Call->Process)))
     {
-        Target = LxProcessLookup(Call->Process->Instance, (ULONG)Header.Pid);
+        Target = LxProcessLookupNr(Call->Process, (ULONG)Header.Pid);
         if (Target == NULL)
             return -LX_ESRCH;
     }
@@ -2601,7 +2657,7 @@ LX_SYSCALL(LxSysCapset)
         return Result;
     if ((Header.Version != 0x19980330) && (Header.Version != 0x20071026) && (Header.Version != 0x20080522))
         return -LX_EINVAL;
-    if ((Header.Pid != 0) && ((ULONG)Header.Pid != Call->Process->Pid))
+    if ((Header.Pid != 0) && ((ULONG)Header.Pid != LxPidNr(Call->Process, Call->Process)))
         return -LX_EPERM;
     return 0;
 }
@@ -2639,10 +2695,30 @@ LX_SYSCALL(LxSysReboot)
             return -LX_EINVAL;
     }
 
+    if ((Process->PidNs != NULL) && (Process->PidNs->Level > 0))
+    {
+        PLX_NS PidNs = Process->PidNs;
+
+        LxSignalGroup(Instance, PidNs, 0, LX_SIGKILL);
+        if (LxPidNsIsInit(Process))
+            LxProcessExitGroup(Process, Signal);
+        else
+        {
+            PLX_PROCESS Init = LxProcessLookup(Instance, PidNs->Pid.ReaperPid);
+
+            if (Init != NULL)
+            {
+                LxSignalSend(Init, NULL, LX_SIGKILL, NULL);
+                LxProcessDereference(Init);
+            }
+        }
+        return 0;
+    }
+
     DPRINT1("Linux instance init requested %s\n", (Signal == LX_SIGHUP) ? "a restart" : "a power off");
     Instance->RebootCommand = (LONG)Command;
     Instance->ShuttingDown = TRUE;
-    LxSignalGroup(Instance, 0, LX_SIGKILL);
+    LxSignalGroup(Instance, NULL, 0, LX_SIGKILL);
     if (Process->Pid == 1)
         LxProcessExitGroup(Process, Signal);
     else
@@ -2679,18 +2755,6 @@ LX_SYSCALL(LxSysGetpriority)
     Result = 20 - Thread->Sched.Nice;
     LxSchedRelease(Owner);
     return Result;
-}
-
-LX_SYSCALL(LxSysUnshare)
-{
-    ULONG64 Flags = Call->Args[0];
-
-    if (Flags & (LX_CLONE_NEWNS | LX_CLONE_NEWUTS | LX_CLONE_NEWIPC | LX_CLONE_NEWUSER | LX_CLONE_NEWPID |
-                 LX_CLONE_NEWNET | LX_CLONE_NEWCGROUP | LX_CLONE_NEWTIME))
-    {
-        return -LX_EPERM;
-    }
-    return 0;
 }
 
 LX_SYSCALL(LxSysGetcpu)
@@ -3130,7 +3194,7 @@ LX_SYSCALL(LxSysTimerCreate)
     Timer->Clock = (Clock == 8) ? LX_CLOCK_REALTIME : ((Clock == 9) ? LX_CLOCK_BOOTTIME : Clock);
     Timer->Signal = Event.Signal;
     Timer->Notify = (ULONG)Event.Notify;
-    Timer->Tid = (ULONG)Event.ThreadId;
+    Timer->Tid = LxNrToGlobal(Process, (ULONG)Event.ThreadId);
     Timer->Value = (Call->Args[1] != 0) ? Event.Value : 0;
 
     ExAcquireFastMutex(&Process->Lock);
