@@ -802,6 +802,62 @@ HidUsb_ReportRequest(
     return Status;
 }
 
+static
+BOOLEAN
+HidUsb_HasReportIds(
+    IN PUCHAR Descriptor,
+    IN ULONG Length)
+{
+    ULONG Offset = 0, Size;
+
+    while (Offset < Length)
+    {
+        if (Descriptor[Offset] == USB_HID_ITEM_LONG)
+        {
+            if (Offset + 1 >= Length)
+                return FALSE;
+            Offset += 3 + Descriptor[Offset + 1];
+            continue;
+        }
+        if ((Descriptor[Offset] & 0xFC) == USB_HID_ITEM_REPORT_ID)
+            return TRUE;
+        Size = Descriptor[Offset] & 3;
+        Offset += 1 + ((Size == 3) ? 4 : Size);
+    }
+    return FALSE;
+}
+
+static
+VOID
+HidUsb_CheckDebuggerKey(
+    IN PHID_USB_DEVICE_EXTENSION HidDeviceExtension,
+    IN PUCHAR Report,
+    IN ULONG Length)
+{
+    BOOLEAN Pressed = FALSE, WasPressed = FALSE;
+    ULONG Index;
+
+    if (!KD_DEBUGGER_ENABLED || !HidDeviceExtension->BootReports || !Report || (Length < 3))
+        return;
+
+    Length = min(Length, ROS_USB_KEYBOARD_BOOT_REPORT_SIZE);
+    for (Index = 2; Index < ROS_USB_KEYBOARD_BOOT_REPORT_SIZE; Index++)
+    {
+        if ((Index < Length) && (Report[Index] == USB_HID_USAGE_KEYBOARD_B))
+            Pressed = TRUE;
+        if (HidDeviceExtension->LastBootReport[Index] == USB_HID_USAGE_KEYBOARD_B)
+            WasPressed = TRUE;
+    }
+    RtlZeroMemory(HidDeviceExtension->LastBootReport, sizeof(HidDeviceExtension->LastBootReport));
+    RtlCopyMemory(HidDeviceExtension->LastBootReport, Report, Length);
+
+    if (Pressed && !WasPressed && (Report[0] & USB_HID_BOOT_MODIFIER_CTRL))
+    {
+        DPRINT1("[HIDUSB] Ctrl+B pressed, entering the kernel debugger\n");
+        KeBugCheckEx(MANUALLY_INITIATED_CRASH, 0, 0, 0, 0);
+    }
+}
+
 NTSTATUS
 NTAPI
 HidUsb_ReadReportCompletion(
@@ -867,6 +923,13 @@ HidUsb_ReadReportCompletion(
         Irp->IoStatus.Information =
             !NT_SUCCESS(Irp->IoStatus.Status) ?
             0 : Urb->UrbBulkOrInterruptTransfer.TransferBufferLength;
+
+        if (NT_SUCCESS(Irp->IoStatus.Status))
+        {
+            HidUsb_CheckDebuggerKey(HidDeviceExtension,
+                                    Urb->UrbBulkOrInterruptTransfer.TransferBuffer,
+                                    Urb->UrbBulkOrInterruptTransfer.TransferBufferLength);
+        }
 
         //
         // free the urb
@@ -1147,6 +1210,11 @@ HidUsb_GetReportDescriptor(
     //
     IoStack = IoGetCurrentIrpStackLocation(Irp);
     DPRINT("[HIDUSB] GetReportDescriptor: Status %x ReportLength %lu OutputBufferLength %lu TransferredLength %lu\n", Status, HidDeviceExtension->HidDescriptor->DescriptorList[0].wReportLength, IoStack->Parameters.DeviceIoControl.OutputBufferLength, BufferLength);
+
+    HidDeviceExtension->BootReports =
+        (HidDeviceExtension->InterfaceInfo->SubClass == USB_HID_BOOT_INTERFACE_SUBCLASS) &&
+        (HidDeviceExtension->InterfaceInfo->Protocol == USB_HID_KEYBOARD_PROTOCOL) &&
+        !HidUsb_HasReportIds(Report, BufferLength);
 
     //
     // get length to copy
