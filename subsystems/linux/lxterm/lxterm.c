@@ -26,13 +26,6 @@
 
 #define LX_PASSWD_MAX (1024 * 1024)
 
-typedef struct _LX_ACCOUNT
-{
-    CHAR Name[64];
-    CHAR Home[MAX_PATH];
-    CHAR Shell[MAX_PATH];
-} LX_ACCOUNT, *PLX_ACCOUNT;
-
 static
 VOID
 LxUsage(VOID)
@@ -282,7 +275,7 @@ wmain(
     int argc,
     WCHAR *argv[])
 {
-    LX_ACCOUNT Account = { "root", "/root", "/bin/sh" };
+    LX_ACCOUNT Account = { .Name = "root", .Home = "/root", .Shell = "/bin/sh" };
     static WCHAR DefaultRoot[MAX_PATH], FullRoot[MAX_PATH];
     WCHAR SetupPath[MAX_PATH];
     CHAR UserName[64];
