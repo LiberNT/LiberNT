@@ -1954,7 +1954,10 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
                 (void)NtfsCaptureNotifyName(VolCB, Other);
         }
     }
-    NtfsForgetMissingName(VolCB, NewName.Buffer, NewName.Length / sizeof(WCHAR));
+    if (IsDirectory)
+        NtfsForgetAllMissingNames(VolCB);
+    else
+        NtfsForgetMissingName(VolCB, NewName.Buffer, NewName.Length / sizeof(WCHAR));
     InterlockedIncrement(&VolCB->DirGeneration);
     FileObject->Flags |= FO_FILE_MODIFIED;
 
