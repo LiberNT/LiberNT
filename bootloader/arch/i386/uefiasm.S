@@ -47,9 +47,9 @@ _I386TransferStart:
     or eax, HEX(80000000)
     mov cr0, eax
     mov eax, dword ptr [esp + 12]
-    lgdt [eax]
+    lgdt lXdtPrefix [eax]
     mov eax, dword ptr [esp + 16]
-    lidt [eax]
+    lidt lXdtPrefix [eax]
     call I386TransferBase
 I386TransferBase:
     pop eax
