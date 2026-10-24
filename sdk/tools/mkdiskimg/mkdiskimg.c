@@ -73,10 +73,22 @@
 #define VHD_DISK_TYPE_DYNAMIC 3
 #define VHD_TIMESTAMP_BASE 946684800UL /* 2000-01-01 00:00:00 UTC */
 
+#define VHDX_MB (1024ULL * 1024ULL)
+#define VHDX_BLOCK_SIZE (2 * 1024 * 1024)
+#define VHDX_LOG_OFFSET (1 * VHDX_MB)
+#define VHDX_LOG_SIZE (1 * 1024 * 1024)
+#define VHDX_METADATA_OFFSET (2 * VHDX_MB)
+#define VHDX_METADATA_SIZE (1 * 1024 * 1024)
+#define VHDX_BAT_OFFSET (3 * VHDX_MB)
+#define VHDX_PAYLOAD_BLOCK_FULLY_PRESENT 6ULL
+#define VHDX_METADATA_VIRTUAL_DISK 0x2
+#define VHDX_METADATA_REQUIRED 0x4
+
 typedef enum _OUTPUT_FORMAT
 {
     OUTPUT_FORMAT_RAW = 0,
-    OUTPUT_FORMAT_VHD
+    OUTPUT_FORMAT_VHD,
+    OUTPUT_FORMAT_VHDX
 } OUTPUT_FORMAT;
 
 typedef struct _PARTITION_INPUT
@@ -121,7 +133,7 @@ typedef struct _PARTITION_ENTRY
 
 static void print_usage(const char* name)
 {
-    printf("Usage: %s -o <output> [-gpt] [-mbr <mbr.bin>] {-partition <part.img>|-data <file>|-blank <sectors>} [-start <sector>] [-type <hex>] [-size <sectors>] [-name <label>] [-guid <type>] [-id <guid>] [-diskid <guid>] [-signature <hex>] [-bootable] ... [-raw <file> -at <sector>] ... [-format <raw|vhd>] [-vhd]\n\n", name);
+    printf("Usage: %s -o <output> [-gpt] [-mbr <mbr.bin>] {-partition <part.img>|-data <file>|-blank <sectors>} [-start <sector>] [-type <hex>] [-size <sectors>] [-name <label>] [-guid <type>] [-id <guid>] [-diskid <guid>] [-signature <hex>] [-bootable] ... [-raw <file> -at <sector>] ... [-format <raw|vhd|vhdx>] [-vhd] [-vhdx]\n\n", name);
     printf("  -gpt                Write a GUID partition table behind a protective MBR\n");
     printf("  -o <output>         Output image file\n");
     printf("  -mbr <mbr.bin>      MBR boot code binary (first 440 bytes used; shorter files are zero-padded).\n");
@@ -140,8 +152,9 @@ static void print_usage(const char* name)
     printf("  -bootable           Set the GPT legacy BIOS bootable attribute of the preceding partition\n");
     printf("  -raw <file>         Data written outside the partitions at the sector given by -at\n");
     printf("  -at <sector>        Start sector of the preceding -raw data (not sector 0)\n");
-    printf("  -format <raw|vhd>   Output container format (default: raw)\n");
+    printf("  -format <raw|vhd|vhdx> Output container format (default: raw)\n");
     printf("  -vhd                Shorthand for -format vhd\n");
+    printf("  -vhdx               Shorthand for -format vhdx (Hyper-V Generation 2 takes no VHD)\n");
 }
 
 static int copy_file_data(FILE* dst, FILE* src, long size)
@@ -1047,6 +1060,160 @@ static int parse_guid(const char* text, unsigned char guid[16])
     return index == 16 ? 0 : -1;
 }
 
+static unsigned int crc32c_update(unsigned int crc, const unsigned char* data, size_t size)
+{
+    size_t i;
+    int bit;
+
+    crc = ~crc;
+    for (i = 0; i < size; i++)
+    {
+        crc ^= data[i];
+        for (bit = 0; bit < 8; bit++)
+            crc = (crc >> 1) ^ (0x82F63B78U & (0U - (crc & 1)));
+    }
+    return ~crc;
+}
+
+static void write_vhdx_metadata_entry(unsigned char* entry, const char* item, unsigned int offset,
+                                      unsigned int length, unsigned int flags)
+{
+    parse_guid(item, entry);
+    write_le32(entry + 16, offset);
+    write_le32(entry + 20, length);
+    write_le32(entry + 24, flags);
+}
+
+static int write_dynamic_vhdx(FILE* dst, FILE* src, unsigned long long virtual_size)
+{
+    static const char creator[] = "LiberNT mkdiskimg";
+    unsigned char file_write_guid[16];
+    unsigned char data_write_guid[16];
+    unsigned char page83[16];
+    unsigned char* buffer = NULL;
+    unsigned char* block = NULL;
+    unsigned long long* bat = NULL;
+    unsigned long long chunk_ratio = (8388608ULL * SECTOR_SIZE) / VHDX_BLOCK_SIZE;
+    unsigned long long block_count = (virtual_size + VHDX_BLOCK_SIZE - 1) / VHDX_BLOCK_SIZE;
+    unsigned long long bat_entries = block_count + (block_count ? (block_count - 1) / chunk_ratio : 0);
+    unsigned long long bat_size = (bat_entries * 8 + VHDX_MB - 1) / VHDX_MB * VHDX_MB;
+    unsigned long long next_offset = VHDX_BAT_OFFSET + bat_size;
+    unsigned long long block_index;
+    unsigned int i;
+    int ret = -1;
+
+    buffer = (unsigned char*)calloc(1, 64 * 1024);
+    block = (unsigned char*)malloc(VHDX_BLOCK_SIZE);
+    bat = (unsigned long long*)calloc(bat_entries ? (size_t)bat_entries : 1, sizeof(*bat));
+    if (!buffer || !block || !bat)
+        goto cleanup;
+
+    generate_vhd_uuid(file_write_guid);
+    generate_vhd_uuid(data_write_guid);
+    generate_vhd_uuid(page83);
+
+    memcpy(buffer, "vhdxfile", 8);
+    for (i = 0; creator[i] != '\0'; i++)
+        buffer[8 + i * 2] = (unsigned char)creator[i];
+    if (fseek(dst, 0, SEEK_SET) != 0 || fwrite(buffer, 1, 64 * 1024, dst) != 64 * 1024)
+        goto cleanup;
+
+    for (i = 0; i < 2; i++)
+    {
+        memset(buffer, 0, 64 * 1024);
+        memcpy(buffer, "head", 4);
+        write_le64(buffer + 8, i);
+        memcpy(buffer + 16, file_write_guid, 16);
+        memcpy(buffer + 32, data_write_guid, 16);
+        buffer[66] = 1;
+        write_le32(buffer + 68, VHDX_LOG_SIZE);
+        write_le64(buffer + 72, VHDX_LOG_OFFSET);
+        write_le32(buffer + 4, crc32c_update(0, buffer, 4096));
+        if (fwrite(buffer, 1, 64 * 1024, dst) != 64 * 1024)
+            goto cleanup;
+    }
+
+    for (i = 0; i < 2; i++)
+    {
+        memset(buffer, 0, 64 * 1024);
+        memcpy(buffer, "regi", 4);
+        write_le32(buffer + 8, 2);
+        parse_guid("2DC27766-F623-4200-9D64-115E9BFD4A08", buffer + 16);
+        write_le64(buffer + 32, VHDX_BAT_OFFSET);
+        write_le32(buffer + 40, (unsigned int)bat_size);
+        write_le32(buffer + 44, 1);
+        parse_guid("8B7CA206-4790-4B9A-B8FE-575F050F886E", buffer + 48);
+        write_le64(buffer + 64, VHDX_METADATA_OFFSET);
+        write_le32(buffer + 72, VHDX_METADATA_SIZE);
+        write_le32(buffer + 76, 1);
+        write_le32(buffer + 4, crc32c_update(0, buffer, 64 * 1024));
+        if (fwrite(buffer, 1, 64 * 1024, dst) != 64 * 1024)
+            goto cleanup;
+    }
+
+    if (write_zero_bytes(dst, VHDX_METADATA_OFFSET - 5 * 64 * 1024) != 0)
+        goto cleanup;
+
+    memset(buffer, 0, 64 * 1024);
+    memcpy(buffer, "metadata", 8);
+    buffer[10] = 5;
+    write_vhdx_metadata_entry(buffer + 32, "CAA16737-FA36-4D43-B3B6-33F0AA44E76B", 65536, 8, VHDX_METADATA_REQUIRED);
+    write_vhdx_metadata_entry(buffer + 64, "2FA54224-CD1B-4876-B211-5DBED83BF4B8", 65544, 8, VHDX_METADATA_VIRTUAL_DISK | VHDX_METADATA_REQUIRED);
+    write_vhdx_metadata_entry(buffer + 96, "BECA12AB-B2E6-4523-93EF-C309E000C746", 65552, 16, VHDX_METADATA_VIRTUAL_DISK | VHDX_METADATA_REQUIRED);
+    write_vhdx_metadata_entry(buffer + 128, "8141BF1D-A96F-4709-BA47-F233A8FAAB5F", 65568, 4, VHDX_METADATA_VIRTUAL_DISK | VHDX_METADATA_REQUIRED);
+    write_vhdx_metadata_entry(buffer + 160, "CDA348C7-445D-4471-9CC9-E9885251C556", 65572, 4, VHDX_METADATA_VIRTUAL_DISK | VHDX_METADATA_REQUIRED);
+    if (fwrite(buffer, 1, 64 * 1024, dst) != 64 * 1024)
+        goto cleanup;
+    memset(buffer, 0, 64 * 1024);
+    write_le32(buffer + 0, VHDX_BLOCK_SIZE);
+    write_le64(buffer + 8, virtual_size);
+    memcpy(buffer + 16, page83, 16);
+    write_le32(buffer + 32, SECTOR_SIZE);
+    write_le32(buffer + 36, SECTOR_SIZE);
+    if (fwrite(buffer, 1, 64 * 1024, dst) != 64 * 1024 ||
+        write_zero_bytes(dst, VHDX_METADATA_SIZE - 2 * 64 * 1024) != 0)
+        goto cleanup;
+
+    if (fseek(src, 0, SEEK_SET) != 0 || fseek(dst, (long)next_offset, SEEK_SET) != 0)
+        goto cleanup;
+    for (block_index = 0; block_index < block_count; block_index++)
+    {
+        unsigned long long remaining = virtual_size - block_index * (unsigned long long)VHDX_BLOCK_SIZE;
+        size_t block_bytes = remaining > VHDX_BLOCK_SIZE ? VHDX_BLOCK_SIZE : (size_t)remaining;
+
+        memset(block, 0, VHDX_BLOCK_SIZE);
+        if (fread(block, 1, block_bytes, src) != block_bytes)
+            goto cleanup;
+        if (buffer_is_zero(block, block_bytes))
+            continue;
+
+        bat[block_index + block_index / chunk_ratio] = (next_offset / VHDX_MB) << 20 | VHDX_PAYLOAD_BLOCK_FULLY_PRESENT;
+        if (fwrite(block, 1, VHDX_BLOCK_SIZE, dst) != VHDX_BLOCK_SIZE)
+            goto cleanup;
+        next_offset += VHDX_BLOCK_SIZE;
+    }
+
+    if (fseek(dst, (long)VHDX_BAT_OFFSET, SEEK_SET) != 0)
+        goto cleanup;
+    for (block_index = 0; block_index < bat_entries; block_index++)
+    {
+        unsigned char entry[8];
+        write_le64(entry, bat[block_index]);
+        if (fwrite(entry, 1, sizeof(entry), dst) != sizeof(entry))
+            goto cleanup;
+    }
+    if (write_zero_bytes(dst, bat_size - bat_entries * 8) != 0)
+        goto cleanup;
+
+    ret = 0;
+
+cleanup:
+    free(bat);
+    free(block);
+    free(buffer);
+    return ret;
+}
+
 int main(int argc, char* argv[])
 {
     const char* output_path = NULL;
@@ -1235,6 +1402,8 @@ int main(int argc, char* argv[])
                 output_format = OUTPUT_FORMAT_RAW;
             else if (strcmp(format, "vhd") == 0)
                 output_format = OUTPUT_FORMAT_VHD;
+            else if (strcmp(format, "vhdx") == 0)
+                output_format = OUTPUT_FORMAT_VHDX;
             else
             {
                 fprintf(stderr, "Error: Unknown format '%s'.\n", format);
@@ -1245,6 +1414,10 @@ int main(int argc, char* argv[])
         else if (strcmp(argv[i], "-vhd") == 0)
         {
             output_format = OUTPUT_FORMAT_VHD;
+        }
+        else if (strcmp(argv[i], "-vhdx") == 0)
+        {
+            output_format = OUTPUT_FORMAT_VHDX;
         }
         else
         {
@@ -1548,7 +1721,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    if (output_format == OUTPUT_FORMAT_VHD)
+    if (output_format == OUTPUT_FORMAT_VHD || output_format == OUTPUT_FORMAT_VHDX)
     {
         if (fflush(f_output) != 0 || fseek(f_output, 0, SEEK_SET) != 0)
         {
@@ -1562,14 +1735,17 @@ int main(int argc, char* argv[])
             fprintf(stderr, "Error: Cannot create output file '%s'.\n", output_path);
             goto cleanup;
         }
-        if (write_dynamic_vhd(f_final, f_output, (unsigned long long)total_size) != 0)
+        if (output_format == OUTPUT_FORMAT_VHDX ?
+            write_dynamic_vhdx(f_final, f_output, (unsigned long long)total_size) != 0 :
+            write_dynamic_vhd(f_final, f_output, (unsigned long long)total_size) != 0)
         {
-            fprintf(stderr, "Error: Cannot write dynamic VHD image.\n");
+            fprintf(stderr, "Error: Cannot write dynamic %s image.\n", output_format == OUTPUT_FORMAT_VHDX ? "VHDX" : "VHD");
             goto cleanup;
         }
     }
 
     printf("Created %s '%s' (%ld bytes virtual disk, %u partition%s)\n",
+           output_format == OUTPUT_FORMAT_VHDX ? "dynamic VHDX image" :
            output_format == OUTPUT_FORMAT_VHD ? "dynamic VHD image" : "disk image",
            output_path,
            total_size,
