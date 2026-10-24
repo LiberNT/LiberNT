@@ -793,7 +793,7 @@ LxWindowProc(
             break;
 
         case WM_NCCALCSIZE:
-            if (WParam && !(Window->Flags & LX_WIN_FLAG_DECORATED))
+            if (!(Window->Flags & LX_WIN_FLAG_DECORATED))
                 return 0;
             break;
 
