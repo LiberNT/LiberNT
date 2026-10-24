@@ -51,7 +51,9 @@ LxSyscallMayBlock(
            (Handler == LxSysRtSigsuspend) || (Handler == LxSysAccept) || (Handler == LxSysAccept4) ||
            (Handler == LxSysWrite) || (Handler == LxSysWritev) || (Handler == LxSysSendmsg) ||
            (Handler == LxSysSendto) || (Handler == LxSysConnect) || (Handler == LxSysOpenat) ||
-           (Handler == LxSysFlock);
+           (Handler == LxSysFlock) || (Handler == LxSysSemop) || (Handler == LxSysSemtimedop) ||
+           (Handler == LxSysMsgsnd) || (Handler == LxSysMsgrcv) || (Handler == LxSysSplice) ||
+           (Handler == LxSysTee) || (Handler == LxSysVmsplice);
 }
 
 static
@@ -382,7 +384,7 @@ LX_SYSCALL(LxSysKcmp)
             break;
 
         case LX_KCMP_SYSVSEM:
-            Result = 0;
+            Result = LxKcmpOrder(LxIpcSemUndoList(First), LxIpcSemUndoList(Second));
             break;
 
         case LX_KCMP_EPOLL_TFD:

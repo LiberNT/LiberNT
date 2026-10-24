@@ -869,6 +869,7 @@ LxInstanceDereference(
         LxFree(Mount);
     }
     LxVcachePurgeInstance(Instance);
+    LxIpcInstanceCleanup(Instance);
     if (Instance->Console != NULL)
         LxTtyDereference(Instance->Console);
     LxCgroupFreeTree(Instance->RootCgroup);

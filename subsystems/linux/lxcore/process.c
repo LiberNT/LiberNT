@@ -19,6 +19,7 @@ LxProcessInitialize(VOID)
     InitializeListHead(&LxProcessList);
     ExInitializeFastMutex(&LxProcessListLock);
     LxFutexInitialize();
+    LxIpcInitialize();
 }
 
 PVOID
@@ -747,6 +748,7 @@ LxProcessExited(
         KeCancelTimer(&Process->RealTimer->Timer);
     LxPosixTimersRelease(Process, FALSE);
     LxFdCloseAll(Process);
+    LxIpcProcessExit(Process);
     KeSetEvent(&Process->VforkDone, IO_NO_INCREMENT, FALSE);
 
     ExAcquireFastMutex(&Process->Lock);

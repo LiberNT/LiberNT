@@ -33,6 +33,7 @@
 #define LX_STACK_SIZE       (8 * 1024 * 1024)
 #define LX_BRK_RESERVE      (1024ULL * 1024 * 1024)
 #define LX_MMAP_MIN_ADDR    0x10000ULL
+#define LX_VMA_SHM          0x10000000
 #define LX_VMA_VIEW         0x20000000
 #define LX_VMA_HEAP         0x40000000
 #define LX_VMA_STACK        0x80000000
@@ -701,6 +702,14 @@ LONG64 LxFutexWake(_In_ ULONG64 Address, _In_ LONG Count);
 VOID LxFutexInitialize(VOID);
 VOID LxFutexExitRobustList(_In_ PLX_THREAD Thread);
 BOOLEAN LxMmSharedKey(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _Out_ PVOID *Object, _Out_ PULONG64 Offset);
+LONG64 LxMmMapSection(_In_ PLX_PROCESS Process, _In_ PVOID Section, _In_ ULONG64 Address, _In_ ULONG64 Length, _In_ ULONG Prot, _In_ BOOLEAN Remap);
+LONG LxMmDetachSection(_In_ PLX_PROCESS Process, _In_ ULONG64 Address);
+VOID LxIpcShmVmaOpen(_In_ PVOID Section);
+VOID LxIpcShmVmaClose(_In_ PVOID Section);
+VOID LxIpcProcessExit(_In_ PLX_PROCESS Process);
+VOID LxIpcInstanceCleanup(_In_ PLX_INSTANCE Instance);
+PVOID LxIpcSemUndoList(_In_ PLX_PROCESS Process);
+VOID LxIpcInitialize(VOID);
 
 LONG LxSignalFromException(_In_ NTSTATUS ExceptionCode, _Out_ PLONG Code);
 VOID LxSignalSend(_In_ PLX_PROCESS Target, _In_opt_ PLX_THREAD TargetThread, _In_ LONG Signal, _In_opt_ PLX_SIGINFO Info);

@@ -6,6 +6,7 @@ list(APPEND SOURCE
     file.c
     fs.c
     futex.c
+    ipc.c
     inet.c
     netlink.c
     mm.c

@@ -186,6 +186,8 @@ LxVmaFree(
 {
     if (Vma->File != NULL)
         LxFileDereference(Vma->File);
+    if ((Vma->Flags & LX_VMA_SHM) && (Vma->Section != NULL))
+        LxIpcShmVmaClose(Vma->Section);
     if (Vma->Section != NULL)
         ObDereferenceObject(Vma->Section);
     LxFree(Vma);
@@ -217,6 +219,8 @@ LxVmaSplit(
         LxFileReference(Tail->File);
     if (Tail->Section != NULL)
         ObReferenceObject(Tail->Section);
+    if ((Tail->Flags & LX_VMA_SHM) && (Tail->Section != NULL))
+        LxIpcShmVmaOpen(Tail->Section);
     Vma->End = Address;
     InsertHeadList(&Vma->Link, &Tail->Link);
     return 0;
@@ -324,6 +328,8 @@ LxVmaInsert(
         LxFileReference(File);
     if (Section != NULL)
         ObReferenceObject(Section);
+    if ((Flags & LX_VMA_SHM) && (Section != NULL))
+        LxIpcShmVmaOpen(Section);
 
     for (Entry = Process->Vmas.Flink; Entry != &Process->Vmas; Entry = Entry->Flink)
     {
@@ -910,6 +916,83 @@ LxMmMapView(
 }
 
 LONG64
+LxMmMapSection(
+    _In_ PLX_PROCESS Process,
+    _In_ PVOID Section,
+    _In_ ULONG64 Address,
+    _In_ ULONG64 Length,
+    _In_ ULONG Prot,
+    _In_ BOOLEAN Remap)
+{
+    LARGE_INTEGER SectionOffset;
+    SIZE_T ViewSize = (SIZE_T)Length;
+    PVOID Base = (PVOID)(ULONG_PTR)Address;
+    HANDLE Handle;
+    NTSTATUS Status;
+    LONG Error = 0;
+
+    if (Address & (LX_ALLOC_GRANULARITY - 1))
+        return -LX_EINVAL;
+    Status = ObOpenObjectByPointer(Section, OBJ_KERNEL_HANDLE, NULL, SECTION_MAP_READ | SECTION_MAP_WRITE,
+                                   NULL, KernelMode, &Handle);
+    if (!NT_SUCCESS(Status))
+        return -LX_ENOMEM;
+
+    LxMmLock(Process);
+    if ((Address != 0) && LxVmaOverlaps(Process, Address, Address + Length))
+        Error = Remap ? LxMmUnmapRange(Process, Address, Address + Length) : -LX_EINVAL;
+    if ((Error == 0) && (Address != 0) && !LxVmIsFree(Address, Address + Length))
+        Error = -LX_EINVAL;
+    if (Error == 0)
+    {
+        SectionOffset.QuadPart = 0;
+        Status = ZwMapViewOfSection(Handle, NtCurrentProcess(), &Base, 0, 0, &SectionOffset, &ViewSize, ViewShare, 0,
+                                    (Prot & LX_PROT_WRITE) ? PAGE_READWRITE : PAGE_READONLY);
+        if (!NT_SUCCESS(Status))
+            Error = -LX_ENOMEM;
+    }
+    if (Error == 0)
+    {
+        Error = LxVmaInsert(Process, (ULONG64)(ULONG_PTR)Base, (ULONG64)(ULONG_PTR)Base + Length, Prot,
+                            LX_MAP_SHARED | LX_VMA_VIEW | LX_VMA_SHM, NULL, 0, Section);
+        if (Error != 0)
+            ZwUnmapViewOfSection(NtCurrentProcess(), Base);
+    }
+    LxMmUnlock(Process);
+    ZwClose(Handle);
+    return (Error != 0) ? Error : (LONG64)(ULONG_PTR)Base;
+}
+
+LONG
+LxMmDetachSection(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 Address)
+{
+    PLX_VMA Vma;
+    PLIST_ENTRY Entry;
+    ULONG64 End;
+    LONG Error = -LX_EINVAL;
+
+    LxMmLock(Process);
+    Vma = LxVmaFind(Process, Address);
+    if ((Vma != NULL) && (Vma->Start == Address) && (Vma->Flags & LX_VMA_SHM) && (Vma->Offset == 0))
+    {
+        End = Vma->End;
+        for (Entry = Vma->Link.Flink; Entry != &Process->Vmas; Entry = Entry->Flink)
+        {
+            PLX_VMA Next = CONTAINING_RECORD(Entry, LX_VMA, Link);
+
+            if ((Next->Start != End) || (Next->Section != Vma->Section) || !(Next->Flags & LX_VMA_SHM))
+                break;
+            End = Next->End;
+        }
+        Error = LxMmUnmapRange(Process, Address, End);
+    }
+    LxMmUnlock(Process);
+    return Error;
+}
+
+LONG64
 LxMmMap(
     _In_ PLX_PROCESS Process,
     _In_ ULONG64 Address,
@@ -1131,6 +1214,8 @@ LxMmFork(
             LxFileReference(Copy->File);
         if (Copy->Section != NULL)
             ObReferenceObject(Copy->Section);
+        if ((Copy->Flags & LX_VMA_SHM) && (Copy->Section != NULL))
+            LxIpcShmVmaOpen(Copy->Section);
         InsertTailList(&Child->Vmas, &Copy->Link);
     }
     return 0;
