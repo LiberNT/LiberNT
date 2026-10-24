@@ -738,6 +738,270 @@ static HRESULT WINAPI WshCollection_Invoke(IWshCollection *iface, DISPID dispIdM
     return hr;
 }
 
+#ifdef __REACTOS__
+static const struct
+{
+    const WCHAR *name;
+    int kind;
+} special_folders[] =
+{
+    { L"AllUsersDesktop",   CSIDL_COMMON_DESKTOPDIRECTORY },
+    { L"AllUsersStartMenu", CSIDL_COMMON_STARTMENU },
+    { L"AllUsersPrograms",  CSIDL_COMMON_PROGRAMS },
+    { L"AllUsersStartup",   CSIDL_COMMON_STARTUP },
+    { L"Desktop",           CSIDL_DESKTOP },
+    { L"AppData",           CSIDL_APPDATA },
+    { L"PrintHood",         CSIDL_PRINTHOOD },
+    { L"Templates",         CSIDL_TEMPLATES },
+    { L"Fonts",             CSIDL_FONTS },
+    { L"NetHood",           CSIDL_NETHOOD },
+    { NULL,                 CSIDL_DESKTOP },
+    { L"StartMenu",         CSIDL_STARTMENU },
+    { L"SendTo",            CSIDL_SENDTO },
+    { L"Recent",            CSIDL_RECENT },
+    { L"Startup",           CSIDL_STARTUP },
+    { L"Favorites",         CSIDL_FAVORITES },
+    { L"MyDocuments",       CSIDL_PERSONAL },
+    { L"Programs",          CSIDL_PROGRAMS },
+};
+
+static HRESULT get_special_folder(UINT index, VARIANT *value)
+{
+    PIDLIST_ABSOLUTE pidl;
+    WCHAR pathW[MAX_PATH];
+
+    pathW[0] = 0;
+    if (index < ARRAY_SIZE(special_folders) &&
+        SHGetSpecialFolderLocation(NULL, special_folders[index].kind, &pidl) == S_OK)
+    {
+        if (!SHGetPathFromIDListW(pidl, pathW))
+            pathW[0] = 0;
+        CoTaskMemFree(pidl);
+    }
+
+    V_VT(value) = VT_BSTR;
+    V_BSTR(value) = SysAllocString(pathW);
+    return V_BSTR(value) ? S_OK : E_OUTOFMEMORY;
+}
+
+typedef struct
+{
+    IEnumVARIANT IEnumVARIANT_iface;
+    LONG ref;
+    ULONG pos;
+} WshCollectionEnum;
+
+static inline WshCollectionEnum *impl_from_IEnumVARIANT(IEnumVARIANT *iface)
+{
+    return CONTAINING_RECORD(iface, WshCollectionEnum, IEnumVARIANT_iface);
+}
+
+static HRESULT create_collection_enum(ULONG pos, IEnumVARIANT **ret);
+
+static HRESULT WINAPI WshCollectionEnum_QueryInterface(IEnumVARIANT *iface, REFIID riid, void **ppv)
+{
+    TRACE("(%p)->(%s, %p)\n", iface, debugstr_guid(riid), ppv);
+
+    if (IsEqualGUID(riid, &IID_IUnknown) || IsEqualGUID(riid, &IID_IEnumVARIANT))
+    {
+        *ppv = iface;
+        IEnumVARIANT_AddRef(iface);
+        return S_OK;
+    }
+
+    *ppv = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI WshCollectionEnum_AddRef(IEnumVARIANT *iface)
+{
+    WshCollectionEnum *This = impl_from_IEnumVARIANT(iface);
+    return InterlockedIncrement(&This->ref);
+}
+
+static ULONG WINAPI WshCollectionEnum_Release(IEnumVARIANT *iface)
+{
+    WshCollectionEnum *This = impl_from_IEnumVARIANT(iface);
+    LONG ref = InterlockedDecrement(&This->ref);
+
+    if (!ref)
+        free(This);
+
+    return ref;
+}
+
+static HRESULT WINAPI WshCollectionEnum_Next(IEnumVARIANT *iface, ULONG celt, VARIANT *var, ULONG *fetched)
+{
+    WshCollectionEnum *This = impl_from_IEnumVARIANT(iface);
+    ULONG count = 0;
+    HRESULT hr;
+
+    TRACE("(%p)->(%lu %p %p)\n", This, celt, var, fetched);
+
+    if (fetched)
+        *fetched = 0;
+    if (!var)
+        return E_POINTER;
+
+    while (count < celt && This->pos < ARRAY_SIZE(special_folders))
+    {
+        hr = get_special_folder(This->pos, &var[count]);
+        if (FAILED(hr))
+        {
+            while (count)
+                VariantClear(&var[--count]);
+            return hr;
+        }
+        This->pos++;
+        count++;
+    }
+
+    if (fetched)
+        *fetched = count;
+    return count == celt ? S_OK : S_FALSE;
+}
+
+static HRESULT WINAPI WshCollectionEnum_Skip(IEnumVARIANT *iface, ULONG celt)
+{
+    WshCollectionEnum *This = impl_from_IEnumVARIANT(iface);
+    ULONG left = ARRAY_SIZE(special_folders) - min(This->pos, ARRAY_SIZE(special_folders));
+
+    TRACE("(%p)->(%lu)\n", This, celt);
+
+    This->pos += min(celt, left);
+    return celt <= left ? S_OK : S_FALSE;
+}
+
+static HRESULT WINAPI WshCollectionEnum_Reset(IEnumVARIANT *iface)
+{
+    WshCollectionEnum *This = impl_from_IEnumVARIANT(iface);
+
+    TRACE("(%p)\n", This);
+
+    This->pos = 0;
+    return S_OK;
+}
+
+static HRESULT WINAPI WshCollectionEnum_Clone(IEnumVARIANT *iface, IEnumVARIANT **ret)
+{
+    WshCollectionEnum *This = impl_from_IEnumVARIANT(iface);
+
+    TRACE("(%p)->(%p)\n", This, ret);
+
+    if (!ret)
+        return E_POINTER;
+    return create_collection_enum(This->pos, ret);
+}
+
+static const IEnumVARIANTVtbl WshCollectionEnumVtbl = {
+    WshCollectionEnum_QueryInterface,
+    WshCollectionEnum_AddRef,
+    WshCollectionEnum_Release,
+    WshCollectionEnum_Next,
+    WshCollectionEnum_Skip,
+    WshCollectionEnum_Reset,
+    WshCollectionEnum_Clone
+};
+
+static HRESULT create_collection_enum(ULONG pos, IEnumVARIANT **ret)
+{
+    WshCollectionEnum *object;
+
+    if (!(object = calloc(1, sizeof(*object))))
+        return E_OUTOFMEMORY;
+
+    object->IEnumVARIANT_iface.lpVtbl = &WshCollectionEnumVtbl;
+    object->ref = 1;
+    object->pos = pos;
+
+    *ret = &object->IEnumVARIANT_iface;
+    return S_OK;
+}
+
+static HRESULT WINAPI WshCollection_Item(IWshCollection *iface, VARIANT *index, VARIANT *value)
+{
+    WshCollection *This = impl_from_IWshCollection(iface);
+    const WCHAR *folder;
+    VARIANT arg;
+    HRESULT hr;
+    UINT i;
+
+    TRACE("(%p)->(%s %p)\n", This, debugstr_variant(index), value);
+
+    VariantInit(&arg);
+    hr = VariantCopyInd(&arg, index);
+    if (FAILED(hr))
+        return hr;
+
+    if (V_VT(&arg) == VT_BSTR)
+    {
+        folder = V_BSTR(&arg) ? V_BSTR(&arg) : L"";
+        for (i = 0; i < ARRAY_SIZE(special_folders); i++)
+        {
+            if (special_folders[i].name && !wcsicmp(folder, special_folders[i].name))
+                break;
+        }
+        VariantClear(&arg);
+
+        if (i < ARRAY_SIZE(special_folders))
+            return get_special_folder(i, value);
+
+        V_VT(value) = VT_BSTR;
+        V_BSTR(value) = SysAllocString(L"");
+        return V_BSTR(value) ? S_OK : E_OUTOFMEMORY;
+    }
+
+    hr = VariantChangeType(&arg, &arg, 0, VT_I4);
+    if (FAILED(hr))
+    {
+        VariantClear(&arg);
+        return hr;
+    }
+
+    if (V_I4(&arg) < 0 || V_I4(&arg) >= ARRAY_SIZE(special_folders))
+        return DISP_E_BADINDEX;
+
+    return get_special_folder(V_I4(&arg), value);
+}
+
+static HRESULT WINAPI WshCollection_Count(IWshCollection *iface, LONG *count)
+{
+    WshCollection *This = impl_from_IWshCollection(iface);
+
+    TRACE("(%p)->(%p)\n", This, count);
+
+    if (!count)
+        return E_POINTER;
+
+    *count = ARRAY_SIZE(special_folders);
+    return S_OK;
+}
+
+static HRESULT WINAPI WshCollection_get_length(IWshCollection *iface, LONG *count)
+{
+    WshCollection *This = impl_from_IWshCollection(iface);
+
+    TRACE("(%p)->(%p)\n", This, count);
+
+    if (!count)
+        return E_POINTER;
+
+    *count = ARRAY_SIZE(special_folders);
+    return S_OK;
+}
+
+static HRESULT WINAPI WshCollection__NewEnum(IWshCollection *iface, IUnknown **Enum)
+{
+    WshCollection *This = impl_from_IWshCollection(iface);
+
+    TRACE("(%p)->(%p)\n", This, Enum);
+
+    if (!Enum)
+        return E_POINTER;
+
+    return create_collection_enum(0, (IEnumVARIANT **)Enum);
+}
+#else
 static HRESULT WINAPI WshCollection_Item(IWshCollection *iface, VARIANT *index, VARIANT *value)
 {
     WshCollection *This = impl_from_IWshCollection(iface);
@@ -805,6 +1069,8 @@ static HRESULT WINAPI WshCollection__NewEnum(IWshCollection *iface, IUnknown **E
     FIXME("(%p)->(%p): stub\n", This, Enum);
     return E_NOTIMPL;
 }
+
+#endif
 
 static const IWshCollectionVtbl WshCollectionVtbl = {
     WshCollection_QueryInterface,
