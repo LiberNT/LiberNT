@@ -100,6 +100,7 @@ private:
     LRESULT DrawBackground(HDC hdc);
     LRESULT OnEraseBackground(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnTimeChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnGetMinimumSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnContextMenu(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnSetFont(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
@@ -154,6 +155,7 @@ public:
         MESSAGE_HANDLER(WM_PRINTCLIENT, OnPaint)
         MESSAGE_HANDLER(WM_THEMECHANGED, OnThemeChanged)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)
+        MESSAGE_HANDLER(WM_TIMECHANGE, OnTimeChange)
         MESSAGE_HANDLER(WM_CONTEXTMENU, OnContextMenu)
         MESSAGE_HANDLER(WM_SETFONT, OnSetFont)
         MESSAGE_HANDLER(TNWM_GETMINIMUMSIZE, OnGetMinimumSize)
@@ -794,6 +796,14 @@ LRESULT CTrayClockWnd::OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bH
         break;
     }
     return TRUE;
+}
+
+LRESULT CTrayClockWnd::OnTimeChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+{
+    if (!GetHideClock())
+        ResetTime();
+    Update();
+    return 0;
 }
 
 LRESULT CTrayClockWnd::OnGetMinimumSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)

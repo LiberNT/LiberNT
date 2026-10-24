@@ -3288,6 +3288,13 @@ ChangePos:
         return SendMessageW(m_Rebar, uMsg, wParam, lParam);
     }
 
+    LRESULT OnTimeChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        if (m_TrayNotify)
+            ::SendMessageW(m_TrayNotify, uMsg, wParam, lParam);
+        return 0;
+    }
+
     LRESULT OnNcHitTest(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
         RECT rcClient;
@@ -4220,6 +4227,7 @@ HandleTrayContextMenu:
         MESSAGE_HANDLER(WM_NCACTIVATE, OnNcActivate)
         MESSAGE_HANDLER(WM_CTLCOLORBTN, OnCtlColorBtn)
         MESSAGE_HANDLER(WM_SYSCOLORCHANGE, OnSysColorChange)
+        MESSAGE_HANDLER(WM_TIMECHANGE, OnTimeChange)
         MESSAGE_HANDLER(WM_MOVING, OnMoving)
         MESSAGE_HANDLER(WM_SIZING, OnSizing)
         MESSAGE_HANDLER(WM_WINDOWPOSCHANGING, OnWindowPosChanging)
