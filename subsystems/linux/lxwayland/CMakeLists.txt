@@ -7,6 +7,13 @@ elseif(ARCH STREQUAL "riscv64")
     set(_lxwayland_flags -mcmodel=medany)
 endif()
 
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+    set(_lxwayland_cc ${CMAKE_C_COMPILER})
+else()
+    find_program(LXWAYLAND_CLANG NAMES clang HINTS "${REACTOS_CLANG_LLVM_MINGW_ROOT}/bin" REQUIRED)
+    set(_lxwayland_cc ${LXWAYLAND_CLANG})
+endif()
+
 set(_lxwayland_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/lxwayland.c
     ${CMAKE_CURRENT_SOURCE_DIR}/wlproto.c
@@ -15,7 +22,7 @@ set(_lxwayland_sources
 
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/lxwayland
-    COMMAND ${CMAKE_C_COMPILER} --target=${_lxwayland_target} -std=c11 -O2 -Wall -ffreestanding -fno-stack-protector
+    COMMAND ${_lxwayland_cc} --target=${_lxwayland_target} -std=c11 -O2 -Wall -ffreestanding -fno-stack-protector
             -fno-pic -fno-asynchronous-unwind-tables -fno-unwind-tables ${_lxwayland_flags} -nostdlib -static
             -fuse-ld=lld -Wl,--gc-sections -Wl,-e,_start -Wl,--build-id=none -o ${CMAKE_CURRENT_BINARY_DIR}/lxwayland
             ${_lxwayland_sources}
