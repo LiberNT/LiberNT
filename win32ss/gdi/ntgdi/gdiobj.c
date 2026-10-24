@@ -886,6 +886,18 @@ GDIOBJ_LockObjectWithFlags(
         KeEnterCriticalRegion();
         ExAcquirePushLockExclusive(&pobj->pushlock);
 
+        if (!(fl & GDIOBJFLAG_IGNOREPID) &&
+            pentry->ObjectOwner.ulObj != GDI_OBJ_HMGR_PUBLIC &&
+            pentry->ObjectOwner.ulObj != PtrToUlong(PsGetCurrentProcessId()))
+        {
+            DPRINT("GDIOBJ: Handle 0x%p changed owner to %lx while waiting for its lock.\n",
+                   hobj, pentry->ObjectOwner.ulObj);
+            ExReleasePushLockExclusive(&pobj->pushlock);
+            KeLeaveCriticalRegion();
+            GDIOBJ_vDereferenceObject(pobj);
+            return NULL;
+        }
+
         /* Set us as lock owner */
         ASSERT(pobj->dwThreadId == 0);
         pobj->dwThreadId = dwThreadId;
