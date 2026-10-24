@@ -6,6 +6,7 @@
  */
 
 #include "../lxcore.h"
+#include <reactos/arm64/sysreg.h>
 
 #define LX_EM_AARCH64     183
 #define LX_HWCAP_FP       (1ULL << 0)
@@ -97,7 +98,7 @@ LxArchEmulateInstruction(
     if ((Instruction & 0xFFFFFFE0) != 0xD53B0020)
         return FALSE;
 
-    __asm__ __volatile__("mrs %0, ctr_el0" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(CTR_EL0);
     Rt = Instruction & 0x1F;
     if (Rt <= 18)
         TrapFrame->X[Rt] = Value;
@@ -216,7 +217,7 @@ VOID
 LxArchSetThreadPointer(
     _In_ ULONG64 Value)
 {
-    __asm__ __volatile__("msr tpidr_el0, %0" : : "r"(Value) : "memory");
+    ARM64_WRITE_SYSREG(TPIDR_EL0, Value);
 }
 
 ULONG64
@@ -224,7 +225,7 @@ LxArchGetThreadPointer(VOID)
 {
     ULONG64 Value;
 
-    __asm__ __volatile__("mrs %0, tpidr_el0" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(TPIDR_EL0);
     return Value;
 }
 
