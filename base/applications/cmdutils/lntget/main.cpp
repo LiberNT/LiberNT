@@ -33,7 +33,8 @@ struct CommandOptions
     bool exact = false;
     std::size_t count = 20;
     SelectionOptions selection;
-    std::optional<std::wstring> downloadDirectory;
+    bool hasDownloadDirectory = false;
+    std::wstring downloadDirectory;
 };
 
 void PrintHelp()
@@ -68,14 +69,13 @@ void PrintHelp()
         "  --disable-interactivity   Never prompt for user input\n"
         "  --accept-package-agreements\n"
         "                            Accept package license agreements\n",
-        static_cast<int>(Version.size()), Version.data());
+        static_cast<int>(sizeof(Version) - 1), Version);
 }
 
-Status ParseCount(std::string_view value, std::size_t &count)
+Status ParseCount(const std::string &value, std::size_t &count)
 {
-    const std::string owned(value);
     char *end = nullptr;
-    const unsigned long parsed = std::strtoul(owned.c_str(), &end, 10);
+    const unsigned long parsed = std::strtoul(value.c_str(), &end, 10);
     if (!end || *end || parsed < 1 || parsed > 1000)
         return Status::Fail(ERROR_INVALID_PARAMETER, "--count must be between 1 and 1000");
     count = parsed;
@@ -142,12 +142,14 @@ Status ParseOptions(const std::vector<std::string> &arguments, std::size_t first
             const std::string architecture = AsciiLower(*value);
             if (architecture != "x86" && architecture != "x64" && architecture != "arm" && architecture != "arm64")
                 return Status::Fail(ERROR_INVALID_PARAMETER, "unsupported architecture: " + *value);
+            options.selection.hasArchitecture = true;
             options.selection.architecture = architecture;
         }
         else if (argument == "--installer-type")
         {
             const std::string *value = next();
             if (!value || value->empty()) return Status::Fail(ERROR_INVALID_PARAMETER, "--installer-type requires a value");
+            options.selection.hasInstallerType = true;
             options.selection.installerType = AsciiLower(*value);
         }
         else if (argument == "--scope")
@@ -156,18 +158,21 @@ Status ParseOptions(const std::vector<std::string> &arguments, std::size_t first
             if (!value) return Status::Fail(ERROR_INVALID_PARAMETER, "--scope requires a value");
             const std::string scope = AsciiLower(*value);
             if (scope != "user" && scope != "machine") return Status::Fail(ERROR_INVALID_PARAMETER, "--scope must be user or machine");
+            options.selection.hasScope = true;
             options.selection.scope = scope;
         }
         else if (argument == "--locale")
         {
             const std::string *value = next();
             if (!value || value->empty()) return Status::Fail(ERROR_INVALID_PARAMETER, "--locale requires a value");
+            options.selection.hasLocale = true;
             options.selection.locale = *value;
         }
         else if (argument == "--download-directory")
         {
             const std::string *value = next();
             if (!value) return Status::Fail(ERROR_INVALID_PARAMETER, "--download-directory requires a value");
+            options.hasDownloadDirectory = true;
             options.downloadDirectory = WideFromUtf8(*value);
         }
         else if (argument == "--silent")
@@ -200,7 +205,7 @@ Status ParseOptions(const std::vector<std::string> &arguments, std::size_t first
         {
             return Status::Fail(ERROR_NOT_SUPPORTED, argument + " is not supported until lntget can retrieve and display the corresponding agreement text");
         }
-        else if (!argument.empty() && argument.front() == '-')
+        else if (!argument.empty() && argument[0] == '-')
         {
             return Status::Fail(ERROR_INVALID_PARAMETER, "unknown option: " + argument);
         }
@@ -342,7 +347,7 @@ Status DownloadOrInstallCommand(SourceManager &source, const CommandOptions &opt
 
     InstallerService service;
     std::wstring path;
-    status = service.Download(package, installer, options.downloadDirectory, path);
+    status = service.Download(package, installer, options.hasDownloadDirectory ? &options.downloadDirectory : nullptr, path);
     if (!status)
         return status;
     std::printf("Installer downloaded to: %s\n", Utf8FromWide(path).c_str());
@@ -383,11 +388,13 @@ Status SelfTestCommand()
     if (!status || count != 1000 || ParseCount("1001", count))
         return Status::Fail(ERROR_ASSERTION_FAILURE, "command count parser self-test failed");
     CommandOptions options;
-    status = ParseOptions({"lntget", "search", "--name", "Seven Zip", "--moniker", "7z"}, 2, options);
+    static const char *const FieldConflict[] = {"lntget", "search", "--name", "Seven Zip", "--moniker", "7z"};
+    status = ParseOptions(std::vector<std::string>(FieldConflict, FieldConflict + sizeof(FieldConflict) / sizeof(FieldConflict[0])), 2, options);
     if (status)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "command field conflict self-test failed");
-    options = {};
-    status = ParseOptions({"lntget", "install", "--silent", "--interactive", "Example.Tool"}, 2, options);
+    options = CommandOptions();
+    static const char *const ModeConflict[] = {"lntget", "install", "--silent", "--interactive", "Example.Tool"};
+    status = ParseOptions(std::vector<std::string>(ModeConflict, ModeConflict + sizeof(ModeConflict) / sizeof(ModeConflict[0])), 2, options);
     if (status)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "command mode conflict self-test failed");
     std::printf("LNTGET_SELFTEST_DONE architecture=%s\n", ArchitectureName(CurrentMachineArchitecture()).c_str());
@@ -409,7 +416,7 @@ int Main(const std::vector<std::string> &arguments)
             "lntget v%.*s\n"
             "Copyright (C) 2026 Ahmed Arif\n"
             "License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.\n",
-            static_cast<int>(Version.size()), Version.data());
+            static_cast<int>(sizeof(Version) - 1), Version);
         return 0;
     }
     if (arguments[1] == "selftest")

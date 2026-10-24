@@ -9,18 +9,23 @@
 
 #include "model.hpp"
 
-#include <functional>
-
 namespace lntget
 {
 
 struct HttpResponse
 {
     DWORD statusCode = 0;
-    std::vector<std::uint8_t> body;
+    std::vector<uint8_t> body;
 };
 
-using DownloadProgressCallback = std::function<void(unsigned long long received, unsigned long long total)>;
+class DownloadProgressCallback
+{
+public:
+    virtual void Progress(unsigned long long received, unsigned long long total) = 0;
+
+protected:
+    ~DownloadProgressCallback() {}
+};
 
 class HttpClient
 {
@@ -30,11 +35,11 @@ public:
     HttpClient(const HttpClient &) = delete;
     HttpClient &operator=(const HttpClient &) = delete;
 
-    Status Get(std::wstring_view url, std::wstring_view headers, HttpResponse &response) const;
-    Status ProbeContentLength(std::wstring_view url, unsigned long long &length,
-                              std::wstring_view headers = {}) const;
-    Status Download(std::wstring_view url, std::wstring_view destination, std::wstring_view headers = {},
-                    unsigned long long maximumBytes = ~0ull, DownloadProgressCallback progress = {}) const;
+    Status Get(const std::wstring &url, const std::wstring &headers, HttpResponse &response) const;
+    Status ProbeContentLength(const std::wstring &url, unsigned long long &length,
+                              const std::wstring &headers = std::wstring()) const;
+    Status Download(const std::wstring &url, const std::wstring &destination, const std::wstring &headers = std::wstring(),
+                    unsigned long long maximumBytes = ~0ull, DownloadProgressCallback *progress = nullptr) const;
 
 private:
     void *session_ = nullptr;

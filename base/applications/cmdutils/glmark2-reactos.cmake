@@ -1,9 +1,17 @@
 # PROJECT:     ReactOS Raspberry Pi 5 graphics validation
 # LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
-# PURPOSE:     Build the unmodified upstream glmark2 Win32/WGL flavor
+# PURPOSE:     Build the glmark2 Win32/WGL flavor, patched to the STLport C++98 library
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
 
 set(GLMARK2_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/glmark2")
+
+if(MSVC)
+    set(GLMARK2_UCRT_INCLUDE_DIR)
+    set(GLMARK2_UCRT_IMPORTLIB)
+else()
+    set(GLMARK2_UCRT_INCLUDE_DIR ${REACTOS_SOURCE_DIR}/sdk/include/ucrt)
+    set(GLMARK2_UCRT_IMPORTLIB ucrtbase)
+endif()
 
 set(GLMARK2_ZLIB_SOURCES
     ${GLMARK2_SOURCE_DIR}/src/zlib/adler32.c
@@ -43,7 +51,7 @@ set(GLMARK2_PNG_SOURCES
 
 add_library(glmark2-zlib STATIC ${GLMARK2_ZLIB_SOURCES})
 target_include_directories(glmark2-zlib BEFORE PRIVATE
-    ${REACTOS_SOURCE_DIR}/sdk/include/ucrt
+    ${GLMARK2_UCRT_INCLUDE_DIR}
     ${GLMARK2_SOURCE_DIR}/src/zlib)
 target_compile_definitions(glmark2-zlib PRIVATE
     WIN32
@@ -55,7 +63,7 @@ target_compile_definitions(glmark2-zlib PRIVATE
 
 add_library(glmark2-png STATIC ${GLMARK2_PNG_SOURCES})
 target_include_directories(glmark2-png BEFORE PRIVATE
-    ${REACTOS_SOURCE_DIR}/sdk/include/ucrt
+    ${GLMARK2_UCRT_INCLUDE_DIR}
     ${GLMARK2_SOURCE_DIR}/src/libpng
     ${GLMARK2_SOURCE_DIR}/src/zlib)
 target_compile_definitions(glmark2-png PRIVATE
@@ -144,7 +152,7 @@ add_executable(glmark2 ${GLMARK2_SOURCES})
 set_property(TARGET glmark2 PROPERTY CXX_STANDARD 17)
 set_property(TARGET glmark2 PROPERTY CXX_STANDARD_REQUIRED ON)
 target_include_directories(glmark2 BEFORE PRIVATE
-    "$<$<COMPILE_LANGUAGE:C>:${REACTOS_SOURCE_DIR}/sdk/include/ucrt>"
+    "$<$<COMPILE_LANGUAGE:C>:${GLMARK2_UCRT_INCLUDE_DIR}>"
     "$<$<COMPILE_LANG_AND_ID:CXX,Clang>:${REACTOS_SOURCE_DIR}/sdk/include/ucrt>"
     ${GLMARK2_SOURCE_DIR}/src
     ${GLMARK2_SOURCE_DIR}/src/libmatrix
@@ -193,7 +201,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     endif()
 endif()
 set_module_type(glmark2 win32cui)
-add_importlibs(glmark2 libjpeg opengl32 gdi32 user32 ucrtbase kernel32 msvcrt ntdll)
+add_importlibs(glmark2 libjpeg opengl32 gdi32 user32 ${GLMARK2_UCRT_IMPORTLIB} kernel32 msvcrt ntdll)
 add_cd_file(TARGET glmark2 DESTINATION reactos/system32 FOR all)
 
 add_executable(glmark2_runner glmark2-runner.c)

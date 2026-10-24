@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <reactos/arm64/sysreg.h>
 #include <wchar.h>
 #include <reactos/cpuaudit.h>
 
@@ -273,14 +274,15 @@ static void ReportSamples(void)
 static ULONGLONG ReadClockTicks(void)
 {
     ULONGLONG Value;
-    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(CNTVCT_EL0);
     return Value;
 }
 
 static ULONGLONG ReadClockCycles(void)
 {
     ULONGLONG Value;
-    __asm__ __volatile__("isb\n\tmrs %0, pmccntr_el0" : "=r"(Value) :: "memory");
+    ARM64_ISB();
+    Value = ARM64_READ_SYSREG(PMCCNTR_EL0);
     return Value;
 }
 
@@ -293,7 +295,7 @@ static DWORD WINAPI ClockWorker(void *Parameter)
         Sample->Error = GetLastError();
         return 1;
     }
-    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(Frequency));
+    Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
     WaitForSingleObject(Sample->Start, INFINITE);
     Start = ReadClockTicks();
     do { Now = ReadClockTicks(); } while (Now - Start < Frequency * 3);
@@ -319,7 +321,7 @@ static DWORD WINAPI ClockProbeWorker(PVOID Parameter)
     ULONGLONG Frequency;
     if (!SetThreadAffinityMask(GetCurrentThread(), (DWORD_PTR)1 << Cpu))
     { ProbeErrors[Cpu] = GetLastError(); return 1; }
-    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(Frequency));
+    Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
     while (WaitForSingleObject(ProbeStop, 167 + (ProbeCounts[Cpu] * 37 + Cpu * 29) % 71) == WAIT_TIMEOUT)
     {
         ULONG Index = ProbeCounts[Cpu];
@@ -365,7 +367,7 @@ static BOOL FinishClockProbe(const WCHAR *Path)
     CloseHandle(ProbeStop); ProbeStop = NULL;
     File = _wfopen(Path, L"wb");
     if (!File) return FALSE;
-    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(Frequency));
+    Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
     fprintf(File, "cpu,start_tick,end_tick,cycles\n");
     for (ULONG Cpu = 0; Cpu < 4; Cpu++)
     {
@@ -560,7 +562,7 @@ static int ProfileClocks(void)
     if (System.dwNumberOfProcessors != 4) return 2;
     ReportSensors("before");
     ReportThermals("before");
-    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(Frequency));
+    Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
     Start = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!Start) return 2;
     for (unsigned i = 0; i < 4; ++i)

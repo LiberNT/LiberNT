@@ -215,10 +215,10 @@ bool GLStateWGL::supports_sync()
     return fence_sync && client_wait_sync && delete_sync;
 }
 
-std::unique_ptr<GLStateSync>
+GLStateSync*
 GLStateWGL::sync()
 {
-    return std::make_unique<GLStateSyncWGL>();
+    return new GLStateSyncWGL();
 }
 
 /*******************

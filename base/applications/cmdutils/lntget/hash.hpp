@@ -12,9 +12,9 @@
 namespace lntget
 {
 
-Status HashBytesSha256(const std::uint8_t *bytes, std::size_t size, std::array<std::uint8_t, 32> &digest);
-Status HashFileSha256(std::wstring_view path, std::array<std::uint8_t, 32> &digest);
-Status VerifyFileSha256(std::wstring_view path, std::string_view expectedHex);
+Status HashBytesSha256(const uint8_t *bytes, std::size_t size, uint8_t (&digest)[32]);
+Status HashFileSha256(const std::wstring &path, uint8_t (&digest)[32]);
+Status VerifyFileSha256(const std::wstring &path, const std::string &expectedHex);
 Status RunHashSelfTests();
 
 } // namespace lntget

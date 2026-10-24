@@ -141,7 +141,7 @@ PageBuilder::Navigate(const std::wstring &title, const std::wstring &detail, LPC
 
 SettingRow &
 PageBuilder::Toggle(const std::wstring &title, const std::wstring &detail, LPCWSTR icon, bool checked,
-                    std::function<void(int)> change)
+                    Settings::RowCallback<void> change)
 {
     SettingRow &row = Add(RowKind::Toggle, title, detail, icon);
     row.Checked = checked;
@@ -151,7 +151,7 @@ PageBuilder::Toggle(const std::wstring &title, const std::wstring &detail, LPCWS
 
 SettingRow &
 PageBuilder::Choice(const std::wstring &title, const std::wstring &detail, LPCWSTR icon,
-                    const std::vector<std::wstring> &options, int selected, std::function<void(int)> change)
+                    const std::vector<std::wstring> &options, int selected, Settings::RowCallback<void> change)
 {
     SettingRow &row = Add(RowKind::Choice, title, detail, icon);
     row.Options = options;
@@ -162,7 +162,7 @@ PageBuilder::Choice(const std::wstring &title, const std::wstring &detail, LPCWS
 
 SettingRow &
 PageBuilder::Slider(const std::wstring &title, const std::wstring &detail, LPCWSTR icon, int minimum, int maximum,
-                    int position, std::function<void(int)> change)
+                    int position, Settings::RowCallback<void> change)
 {
     SettingRow &row = Add(RowKind::Slider, title, detail, icon);
     row.Min = minimum;
@@ -174,7 +174,7 @@ PageBuilder::Slider(const std::wstring &title, const std::wstring &detail, LPCWS
 
 SettingRow &
 PageBuilder::Button(const std::wstring &title, const std::wstring &detail, LPCWSTR icon, const std::wstring &action,
-                    std::function<void(int)> invoke)
+                    Settings::RowCallback<void> invoke)
 {
     SettingRow &row = Add(RowKind::Button, title, detail, icon);
     row.Action = action;
@@ -183,7 +183,8 @@ PageBuilder::Button(const std::wstring &title, const std::wstring &detail, LPCWS
 }
 
 SettingRow &
-PageBuilder::Link(const std::wstring &title, const std::wstring &detail, LPCWSTR icon, std::function<void(int)> invoke)
+PageBuilder::Link(const std::wstring &title, const std::wstring &detail, LPCWSTR icon,
+                  Settings::RowCallback<void> invoke)
 {
     SettingRow &row = Add(RowKind::Link, title, detail, icon);
     row.Invoke = invoke;
@@ -264,7 +265,8 @@ Win32Message(DWORD error)
                        module, error, 0, (LPWSTR)&text, 0, NULL) && text)
     {
         result = text;
-        while (!result.empty() && (result.back() == L'\n' || result.back() == L'\r' || result.back() == L' '))
+        while (!result.empty() && (result[result.size() - 1] == L'\n' || result[result.size() - 1] == L'\r' ||
+                                   result[result.size() - 1] == L' '))
             result.pop_back();
         LocalFree(text);
     }

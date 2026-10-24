@@ -24,6 +24,7 @@
  *  Jesse Barker (glmark2)
  */
 #include <stdlib.h>
+#include <time.h>
 #include "scene.h"
 #include "mat.h"
 #include "options.h"

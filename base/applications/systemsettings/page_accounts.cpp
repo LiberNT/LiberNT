@@ -25,8 +25,9 @@ CurrentUser()
     return name;
 }
 
+template <class Action>
 static bool
-WithLocalUser(const std::wstring &user, ACCESS_MASK access, const std::function<bool(SAM_HANDLE)> &action)
+WithLocalUser(const std::wstring &user, ACCESS_MASK access, const Action &action)
 {
     WCHAR computer[MAX_COMPUTERNAME_LENGTH + 1];
     DWORD length = _countof(computer);

@@ -13,7 +13,6 @@
 #include <windows.h>
 #include <wininet.h>
 
-#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -52,7 +51,11 @@ struct SystemTarget
     bool Server = false;
 };
 
-using ProgressCallback = std::function<void(ULONGLONG received, ULONGLONG total)>;
+class ProgressCallback
+{
+public:
+    virtual void operator()(ULONGLONG received, ULONGLONG total) = 0;
+};
 
 class Catalog
 {
@@ -68,17 +71,21 @@ public:
     DWORD QueryAllDetails(std::vector<CatalogUpdate> &updates);
     DWORD FindUpdates(const std::vector<std::wstring> &queries, std::vector<CatalogUpdate> &updates);
     DWORD QueryFiles(const std::wstring &id, std::vector<CatalogFile> &files);
-    DWORD Download(const CatalogFile &file, const std::wstring &path, const ProgressCallback &progress);
+    DWORD Download(const CatalogFile &file, const std::wstring &path, ProgressCallback *progress);
     const std::wstring &OtherArchitectures() const;
     const std::wstring &OtherModel() const;
 
 private:
-    using Sink = std::function<DWORD(const BYTE *data, DWORD size, ULONGLONG total)>;
+    class Sink
+    {
+    public:
+        virtual DWORD Write(const BYTE *data, DWORD size, ULONGLONG total) = 0;
+        virtual DWORD Reset() = 0;
+    };
 
     bool Cancelled() const;
-    DWORD SendOnce(LPCWSTR verb, const std::wstring &url, const std::string &body, const Sink &sink, DWORD &status);
-    DWORD Send(LPCWSTR verb, const std::wstring &url, const std::string &body, const Sink &sink,
-               const std::function<DWORD()> &reset);
+    DWORD SendOnce(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink, DWORD &status);
+    DWORD Send(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink);
     DWORD Fetch(LPCWSTR verb, const std::wstring &url, const std::string &body, std::string &text);
 
     HINTERNET m_Session;

@@ -20,11 +20,9 @@
 #include "zlib.h"
 
 #include <algorithm>
-#include <array>
-#include <cctype>
+#include <ctype.h>
 #include <cstdio>
 #include <cstring>
-#include <memory>
 
 namespace lntget
 {
@@ -32,7 +30,7 @@ namespace lntget
 namespace
 {
 
-inline constexpr std::wstring_view CommunitySourceBase = L"https://cdn.winget.microsoft.com/cache/";
+inline constexpr wchar_t CommunitySourceBase[] = L"https://cdn.winget.microsoft.com/cache/";
 inline constexpr unsigned long long MaximumSourcePackageSize = 512ull * 1024 * 1024;
 
 class CacheLock
@@ -80,19 +78,19 @@ private:
     unzFile archive_ = nullptr;
 };
 
-std::wstring UniquePath(std::wstring_view base, std::wstring_view suffix)
+std::wstring UniquePath(const std::wstring &base, const std::wstring &suffix)
 {
     static LONG sequence = 0;
     std::wstring result(base);
     result += suffix;
     result.push_back(L'.');
-    result += std::to_wstring(GetCurrentProcessId());
+    result += DecimalWideString(GetCurrentProcessId());
     result.push_back(L'.');
-    result += std::to_wstring(static_cast<unsigned long>(InterlockedIncrement(&sequence)));
+    result += DecimalWideString(static_cast<unsigned long>(InterlockedIncrement(&sequence)));
     return result;
 }
 
-Status ReadArchiveEntry(unzFile archive, const char *name, std::size_t maximumSize, std::vector<std::uint8_t> &bytes)
+Status ReadArchiveEntry(unzFile archive, const char *name, std::size_t maximumSize, std::vector<uint8_t> &bytes)
 {
     if (unzLocateFile(archive, name, 1) != UNZ_OK)
         return Status::Fail(ERROR_FILE_NOT_FOUND, "source MSIX does not contain " + std::string(name));
@@ -105,11 +103,11 @@ Status ReadArchiveEntry(unzFile archive, const char *name, std::size_t maximumSi
 
     bytes.clear();
     bytes.reserve(static_cast<std::size_t>(information.uncompressed_size));
-    std::array<std::uint8_t, 64 * 1024> buffer{};
+    uint8_t buffer[64 * 1024]{};
     int result = UNZ_OK;
     for (;;)
     {
-        result = unzReadCurrentFile(archive, buffer.data(), static_cast<unsigned>(buffer.size()));
+        result = unzReadCurrentFile(archive, buffer, static_cast<unsigned>(sizeof(buffer)));
         if (result < 0) break;
         if (!result) break;
         if (bytes.size() > maximumSize - static_cast<std::size_t>(result))
@@ -117,7 +115,7 @@ Status ReadArchiveEntry(unzFile archive, const char *name, std::size_t maximumSi
             result = UNZ_BADZIPFILE;
             break;
         }
-        bytes.insert(bytes.end(), buffer.begin(), buffer.begin() + result);
+        bytes.insert(bytes.end(), buffer, buffer + result);
     }
     const int closeResult = unzCloseCurrentFile(archive);
     if (result < 0 || closeResult != UNZ_OK || bytes.size() != information.uncompressed_size)
@@ -125,10 +123,10 @@ Status ReadArchiveEntry(unzFile archive, const char *name, std::size_t maximumSi
     return Status::Ok();
 }
 
-Status LoadSourcePackage(std::wstring_view packagePath, SourcePackageContents &contents)
+Status LoadSourcePackage(const std::wstring &packagePath, SourcePackageContents &contents)
 {
     WIN32_FILE_ATTRIBUTE_DATA attributes{};
-    if (!GetFileAttributesExW(std::wstring(packagePath).c_str(), GetFileExInfoStandard, &attributes))
+    if (!GetFileAttributesExW(packagePath.c_str(), GetFileExInfoStandard, &attributes))
     {
         const DWORD error = GetLastError();
         return Status::Fail(error, "cannot inspect the WinGet source package: " + WindowsErrorMessage(error));
@@ -139,7 +137,7 @@ Status LoadSourcePackage(std::wstring_view packagePath, SourcePackageContents &c
         return Status::Fail(ERROR_FILE_TOO_LARGE, "the WinGet source package exceeds the 512 MiB limit");
     zlib_filefunc64_def functions{};
     fill_win32_filefunc64W(&functions);
-    ZipArchive archive(unzOpen2_64(std::wstring(packagePath).c_str(), &functions));
+    ZipArchive archive(unzOpen2_64(packagePath.c_str(), &functions));
     if (!archive.Get())
         return Status::Fail(ERROR_BAD_FORMAT, "the WinGet source is not a readable MSIX package");
     Status status = ReadArchiveEntry(archive.Get(), "AppxSignature.p7x", 1024 * 1024, contents.signature);
@@ -151,7 +149,7 @@ Status LoadSourcePackage(std::wstring_view packagePath, SourcePackageContents &c
     return ReadArchiveEntry(archive.Get(), "Public/index.db", 256 * 1024 * 1024, contents.index);
 }
 
-Status WriteTemporaryBytes(std::wstring_view destination, const std::vector<std::uint8_t> &bytes, std::wstring &temporary)
+Status WriteTemporaryBytes(const std::wstring &destination, const std::vector<uint8_t> &bytes, std::wstring &temporary)
 {
     Status status = EnsureDirectory(ParentPath(destination));
     if (!status) return status;
@@ -187,25 +185,25 @@ Status WriteTemporaryBytes(std::wstring_view destination, const std::vector<std:
     return Status::Ok();
 }
 
-Status AtomicWriteBytes(std::wstring_view destination, const std::vector<std::uint8_t> &bytes)
+Status AtomicWriteBytes(const std::wstring &destination, const std::vector<uint8_t> &bytes)
 {
     std::wstring temporary;
     Status status = WriteTemporaryBytes(destination, bytes, temporary);
     return status ? AtomicReplaceFile(temporary, destination, "source cache file") : status;
 }
 
-std::uint32_t ReadLe32(const std::uint8_t *value)
+uint32_t ReadLe32(const uint8_t *value)
 {
-    return static_cast<std::uint32_t>(value[0]) | (static_cast<std::uint32_t>(value[1]) << 8) |
-           (static_cast<std::uint32_t>(value[2]) << 16) | (static_cast<std::uint32_t>(value[3]) << 24);
+    return static_cast<uint32_t>(value[0]) | (static_cast<uint32_t>(value[1]) << 8) |
+           (static_cast<uint32_t>(value[2]) << 16) | (static_cast<uint32_t>(value[3]) << 24);
 }
 
-std::uint64_t ReadLe64(const std::uint8_t *value)
+uint64_t ReadLe64(const uint8_t *value)
 {
-    return static_cast<std::uint64_t>(ReadLe32(value)) | (static_cast<std::uint64_t>(ReadLe32(value + 4)) << 32);
+    return static_cast<uint64_t>(ReadLe32(value)) | (static_cast<uint64_t>(ReadLe32(value + 4)) << 32);
 }
 
-Status DecompressMsZip(const std::vector<std::uint8_t> &input, std::string &output)
+Status DecompressMsZip(const std::vector<uint8_t> &input, std::string &output)
 {
     if (input.size() >= 3 && input[0] == 's' && input[1] == 'V' && input[2] == ':')
     {
@@ -214,18 +212,18 @@ Status DecompressMsZip(const std::vector<std::uint8_t> &input, std::string &outp
     }
     if (input.size() < 30 || input[28] != 'C' || input[29] != 'K')
         return Status::Fail(ERROR_BAD_FORMAT, "WinGet version metadata is not MSZIP YAML");
-    const std::uint64_t expectedSize = ReadLe64(input.data() + 8);
+    const uint64_t expectedSize = ReadLe64(input.data() + 8);
     if (!expectedSize || expectedSize != ReadLe64(input.data() + 16) || expectedSize > 16 * 1024 * 1024)
         return Status::Fail(ERROR_BAD_FORMAT, "WinGet version metadata has an invalid expanded size");
 
-    std::vector<std::uint8_t> expanded;
+    std::vector<uint8_t> expanded;
     expanded.reserve(static_cast<std::size_t>(expectedSize));
     std::size_t offset = 24;
     while (offset < input.size())
     {
         if (input.size() - offset < 6)
             return Status::Fail(ERROR_BAD_FORMAT, "WinGet MSZIP chunk header is truncated");
-        const std::uint32_t chunkSize = ReadLe32(input.data() + offset);
+        const uint32_t chunkSize = ReadLe32(input.data() + offset);
         if (chunkSize < 2 || chunkSize > input.size() - offset - 4 || input[offset + 4] != 'C' || input[offset + 5] != 'K')
             return Status::Fail(ERROR_BAD_FORMAT, "WinGet MSZIP chunk has an invalid CK header or size");
 
@@ -240,19 +238,19 @@ Status DecompressMsZip(const std::vector<std::uint8_t> &input, std::string &outp
             inflateSetDictionary(&stream, expanded.data() + expanded.size() - dictionarySize, dictionarySize);
         }
         int result = Z_OK;
-        std::array<std::uint8_t, 64 * 1024> buffer{};
+        uint8_t buffer[64 * 1024]{};
         while (result == Z_OK)
         {
-            stream.next_out = buffer.data();
-            stream.avail_out = static_cast<uInt>(buffer.size());
+            stream.next_out = buffer;
+            stream.avail_out = static_cast<uInt>(sizeof(buffer));
             result = inflate(&stream, Z_FINISH);
-            const std::size_t produced = buffer.size() - stream.avail_out;
+            const std::size_t produced = sizeof(buffer) - stream.avail_out;
             if (expanded.size() > static_cast<std::size_t>(expectedSize) - std::min<std::size_t>(produced, expectedSize))
             {
                 inflateEnd(&stream);
                 return Status::Fail(ERROR_BAD_COMPRESSION_BUFFER, "WinGet MSZIP output exceeds its declared size");
             }
-            expanded.insert(expanded.end(), buffer.begin(), buffer.begin() + produced);
+            expanded.insert(expanded.end(), buffer, buffer + produced);
         }
         const bool valid = result == Z_STREAM_END && stream.avail_in == 0;
         inflateEnd(&stream);
@@ -273,7 +271,7 @@ struct VersionDataRecord
     std::string sha256;
 };
 
-Status ParseVersionData(std::string_view yaml, std::string_view wantedVersion, VersionDataRecord &wanted)
+Status ParseVersionData(const std::string &yaml, const std::string &wantedVersion, VersionDataRecord &wanted)
 {
     bool inVersions = false;
     VersionDataRecord *current = nullptr;
@@ -282,9 +280,9 @@ Status ParseVersionData(std::string_view yaml, std::string_view wantedVersion, V
     while (offset <= yaml.size())
     {
         const std::size_t end = yaml.find('\n', offset);
-        std::string line = Trim(yaml.substr(offset, end == std::string_view::npos ? yaml.size() - offset : end - offset));
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        offset = end == std::string_view::npos ? yaml.size() + 1 : end + 1;
+        std::string line = Trim(yaml.substr(offset, end == std::string::npos ? yaml.size() - offset : end - offset));
+        if (!line.empty() && line[line.size() - 1] == '\r') line.pop_back();
+        offset = end == std::string::npos ? yaml.size() + 1 : end + 1;
         if (line.empty()) continue;
         if (line == "vD:")
         {
@@ -294,26 +292,26 @@ Status ParseVersionData(std::string_view yaml, std::string_view wantedVersion, V
         if (!inVersions) continue;
         if (line.rfind("- ", 0) == 0)
         {
-            records.emplace_back();
+            records.push_back(VersionDataRecord());
             current = &records.back();
             line.erase(0, 2);
         }
         if (!current) continue;
         const std::size_t colon = line.find(':');
         if (colon == std::string::npos) continue;
-        const std::string key = Trim(std::string_view(line).substr(0, colon));
-        const std::string value = UnquoteYaml(std::string_view(line).substr(colon + 1));
+        const std::string key = Trim(line.substr(0, colon));
+        const std::string value = UnquoteYaml(line.substr(colon + 1));
         if (key == "v") current->version = value;
         else if (key == "rP") current->relativePath = value;
         else if (key == "s256H") current->sha256 = value;
     }
-    const auto match = std::find_if(records.begin(), records.end(), [wantedVersion](const VersionDataRecord &record) {
+    const auto match = std::find_if(records.begin(), records.end(), [&wantedVersion](const VersionDataRecord &record) {
         return record.version == wantedVersion;
     });
     if (match == records.end())
-        return Status::Fail(ERROR_NOT_FOUND, "source version metadata does not contain package version " + std::string(wantedVersion));
+        return Status::Fail(ERROR_NOT_FOUND, "source version metadata does not contain package version " + wantedVersion);
     wanted = *match;
-    std::array<std::uint8_t, 32> hash{};
+    uint8_t hash[32]{};
     if (!ParseHex256(wanted.sha256, hash) || wanted.relativePath.rfind("manifests/", 0) != 0 ||
         wanted.relativePath.find("..") != std::string::npos || wanted.relativePath.find('\\') != std::string::npos ||
         wanted.relativePath.find(':') != std::string::npos || wanted.relativePath.find('?') != std::string::npos)
@@ -321,11 +319,16 @@ Status ParseVersionData(std::string_view yaml, std::string_view wantedVersion, V
     return Status::Ok();
 }
 
-bool ValidPackageIdentifier(std::string_view id)
+bool ValidPackageIdentifier(const std::string &id)
 {
-    return !id.empty() && std::all_of(id.begin(), id.end(), [](unsigned char character) {
-        return std::isalnum(character) || character == '.' || character == '-' || character == '_';
-    });
+    if (id.empty())
+        return false;
+    for (const unsigned char character : id)
+    {
+        if (!(isalnum(character) || character == '.' || character == '-' || character == '_'))
+            return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -337,7 +340,7 @@ SourceManager::SourceManager()
     indexPath_ = JoinPath(cacheDirectory_, L"index.db");
 }
 
-Status SourceManager::ActivateSource(std::wstring_view sourcePackage, bool copyPackage)
+Status SourceManager::ActivateSource(const std::wstring &sourcePackage, bool copyPackage)
 {
     SourcePackageContents contents;
     Status status = LoadSourcePackage(sourcePackage, contents);
@@ -358,7 +361,7 @@ Status SourceManager::ActivateSource(std::wstring_view sourcePackage, bool copyP
 
     if (copyPackage)
     {
-        std::vector<std::uint8_t> packageBytes;
+        std::vector<uint8_t> packageBytes;
         status = ReadFileBytes(sourcePackage, packageBytes, static_cast<std::size_t>(MaximumSourcePackageSize));
         if (!status)
         {
@@ -374,7 +377,7 @@ Status SourceManager::ActivateSource(std::wstring_view sourcePackage, bool copyP
     }
     status = AtomicReplaceFile(indexTemporary, indexPath_, "source index");
     if (!status) return status;
-    index_ = std::move(validatedIndex);
+    index_.Swap(validatedIndex);
     ready_ = true;
     return Status::Ok();
 }
@@ -386,7 +389,7 @@ Status SourceManager::UpdateUnlocked()
     if (!status) return status;
     const std::wstring downloaded = UniquePath(packagePath_, L".download");
     std::printf("Updating source: winget\n");
-    status = http_.Download(CommunitySourceUrl, downloaded, {}, MaximumSourcePackageSize);
+    status = http_.Download(CommunitySourceUrl, downloaded, std::wstring(), MaximumSourcePackageSize);
     if (!status) return status;
     status = ActivateSource(downloaded, true);
     DeleteFileW(downloaded.c_str());
@@ -403,13 +406,13 @@ Status SourceManager::Update()
     return status ? UpdateUnlocked() : status;
 }
 
-Status SourceManager::Import(std::wstring_view packagePath)
+Status SourceManager::Import(const std::wstring &packagePath)
 {
     CacheLock lock;
     Status status = lock.Acquire();
     if (!status) return status;
     ready_ = false;
-    const bool copy = _wcsicmp(std::wstring(packagePath).c_str(), packagePath_.c_str()) != 0;
+    const bool copy = _wcsicmp(packagePath.c_str(), packagePath_.c_str()) != 0;
     status = ActivateSource(packagePath, copy);
     if (!status) return status;
     std::printf("Source signature, block map, and index verified.\n");
@@ -454,7 +457,7 @@ Status SourceManager::Resolve(const PackageQuery &query, PackageRecord &package)
     if (results.size() > 1 && query.field == SearchField::Any &&
         results[0].id != query.text && results[0].name != query.text && results[0].moniker != query.text)
         return Status::Fail(ERROR_MORE_DATA, "multiple packages match; use --id with an exact package identifier");
-    package = std::move(results.front());
+    package = results[0];
     return Status::Ok();
 }
 
@@ -464,21 +467,27 @@ Status SourceManager::FetchInstallerManifest(const PackageRecord &package, std::
     if (!status) return status;
     if (!ValidPackageIdentifier(package.id))
         return Status::Fail(ERROR_BAD_FORMAT, "source index contains an invalid package identifier");
-    if (std::all_of(package.manifestHash.begin(), package.manifestHash.end(), [](std::uint8_t value) { return value == 0; }))
+    bool emptyHash = true;
+    for (const uint8_t value : package.manifestHash)
+    {
+        if (value != 0)
+            emptyHash = false;
+    }
+    if (emptyHash)
         return Status::Fail(ERROR_BAD_FORMAT, "source index package record has no version-data hash");
 
-    const std::string versionDataHash = HexLower(package.manifestHash.data(), package.manifestHash.size());
+    const std::string versionDataHash = HexLower(package.manifestHash, sizeof(package.manifestHash));
     const std::wstring versionDataUrl = std::wstring(CommunitySourceBase) + L"packages/" + UrlEncodePath(package.id) +
                                         L"/" + WideFromUtf8(versionDataHash.substr(0, 8)) + L"/versionData.mszyml";
     HttpResponse response;
-    status = http_.Get(versionDataUrl, {}, response);
+    status = http_.Get(versionDataUrl, std::wstring(), response);
     if (!status) return status;
     if (response.statusCode != HTTP_STATUS_OK)
-        return Status::Fail(ERROR_INVALID_DATA, "version metadata service returned status " + std::to_string(response.statusCode));
-    std::array<std::uint8_t, 32> actualVersionDataHash{};
+        return Status::Fail(ERROR_INVALID_DATA, "version metadata service returned status " + DecimalString(response.statusCode));
+    uint8_t actualVersionDataHash[32]{};
     status = HashBytesSha256(response.body.data(), response.body.size(), actualVersionDataHash);
     if (!status) return status;
-    if (actualVersionDataHash != package.manifestHash)
+    if (std::memcmp(actualVersionDataHash, package.manifestHash, sizeof(actualVersionDataHash)) != 0)
         return Status::Fail(ERROR_CRC, "downloaded version metadata does not match the signed source index hash");
 
     std::string versionDataYaml;
@@ -489,18 +498,18 @@ Status SourceManager::FetchInstallerManifest(const PackageRecord &package, std::
     if (!status) return status;
 
     const std::wstring manifestUrl = std::wstring(CommunitySourceBase) + UrlEncodePath(version.relativePath);
-    response = {};
-    status = http_.Get(manifestUrl, {}, response);
+    response = HttpResponse();
+    status = http_.Get(manifestUrl, std::wstring(), response);
     if (!status) return status;
     if (response.statusCode != HTTP_STATUS_OK)
-        return Status::Fail(ERROR_INVALID_DATA, "manifest service returned status " + std::to_string(response.statusCode));
-    std::array<std::uint8_t, 32> expectedManifestHash{};
-    std::array<std::uint8_t, 32> actualManifestHash{};
+        return Status::Fail(ERROR_INVALID_DATA, "manifest service returned status " + DecimalString(response.statusCode));
+    uint8_t expectedManifestHash[32]{};
+    uint8_t actualManifestHash[32]{};
     if (!ParseHex256(version.sha256, expectedManifestHash))
         return Status::Fail(ERROR_BAD_FORMAT, "version metadata manifest hash is invalid");
     status = HashBytesSha256(response.body.data(), response.body.size(), actualManifestHash);
     if (!status) return status;
-    if (actualManifestHash != expectedManifestHash)
+    if (std::memcmp(actualManifestHash, expectedManifestHash, sizeof(actualManifestHash)) != 0)
         return Status::Fail(ERROR_CRC, "downloaded manifest does not match the signed version metadata hash");
     yaml.assign(reinterpret_cast<const char *>(response.body.data()), response.body.size());
     return Status::Ok();

@@ -155,7 +155,7 @@ GradientRenderer::draw()
     glEnableVertexAttribArray(uvLocation_);
     glVertexAttribPointer(positionLocation_, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glVertexAttribPointer(uvLocation_, 2, GL_FLOAT, GL_FALSE, 0,
-                          reinterpret_cast<GLvoid*>(uvOffset_));
+                          reinterpret_cast<GLvoid*>(static_cast<uintptr_t>(uvOffset_)));
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glDisableVertexAttribArray(positionLocation_);
     glDisableVertexAttribArray(uvLocation_);
@@ -253,7 +253,7 @@ JellyfishPrivate::load_obj(const std::string &filename)
 {
     Log::debug("Loading model from file '%s'\n", filename.c_str());
 
-    const std::unique_ptr<std::istream> input_file_ptr(Util::get_resource(filename));
+    const Util::ResourcePtr input_file_ptr(Util::get_resource(filename));
     std::istream& inputFile(*input_file_ptr);
     if (!inputFile)
     {
@@ -592,13 +592,13 @@ JellyfishPrivate::draw()
     glEnableVertexAttribArray(colorLocation_);
     glEnableVertexAttribArray(texcoordLocation_);
     glVertexAttribPointer(positionLocation_ , 3, GL_FLOAT, GL_FALSE, 0,
-        reinterpret_cast<const GLvoid*>(dataMap_.positionOffset));
+        reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.positionOffset)));
     glVertexAttribPointer(normalLocation_ , 3, GL_FLOAT, GL_FALSE, 0,
-        reinterpret_cast<const GLvoid*>(dataMap_.normalOffset));
+        reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.normalOffset)));
     glVertexAttribPointer(colorLocation_ , 3, GL_FLOAT, GL_FALSE, 0,
-        reinterpret_cast<const GLvoid*>(dataMap_.colorOffset));
+        reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.colorOffset)));
     glVertexAttribPointer(texcoordLocation_ , 3, GL_FLOAT, GL_FALSE, 0,
-        reinterpret_cast<const GLvoid*>(dataMap_.texcoordOffset));
+        reinterpret_cast<const GLvoid*>(static_cast<uintptr_t>(dataMap_.texcoordOffset)));
 
     glDrawElements(GL_TRIANGLES, indices_.size(), GL_UNSIGNED_SHORT, 0);
 

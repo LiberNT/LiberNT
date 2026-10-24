@@ -13,7 +13,7 @@ namespace lntget
 
 Status RunDetailsSelfTests()
 {
-    static constexpr std::string_view Fixture =
+    static constexpr char Fixture[] =
         "PackageIdentifier: VideoLAN.VLC\n"
         "PackageVersion: 3.0.21\n"
         "PackageLocale: en-US\n"
@@ -45,12 +45,12 @@ Status RunDetailsSelfTests()
     if (details.packageUrl != "https://www.videolan.org/vlc/" || details.publisherUrl != "https://www.videolan.org/")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "locale manifest URL self-test failed");
     if (details.description.find("streaming protocols.") == std::string::npos ||
-        details.description.find("\n\n") == std::string::npos || details.description.back() == '\n')
+        details.description.find("\n\n") == std::string::npos || details.description[details.description.size() - 1] == '\n')
         return Status::Fail(ERROR_ASSERTION_FAILURE, "locale manifest block scalar self-test failed");
     if (details.tags.size() != 3 || details.tags.front() != "multimedia" || details.tags.back() != "video")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "locale manifest tag self-test failed");
 
-    static constexpr std::string_view FlowFixture =
+    static constexpr char FlowFixture[] =
         "Author: VideoLAN\n"
         "Description: \"Line one\\nLine two\n"
         "  continues here.\\n\\nNew paragraph.\"\n"
