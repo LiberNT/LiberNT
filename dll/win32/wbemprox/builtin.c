@@ -6849,7 +6849,15 @@ static enum fill_status fill_videocontroller( struct table *table, const struct 
     enum fill_status status = FILL_STATUS_UNFILTERED;
     WCHAR mode[44], device_id[32];
 
+#ifdef __REACTOS__
+    if (!(adapters = get_display_adapters( &count )))
+    {
+        table->num_rows = 0;
+        return status;
+    }
+#else
     if (!(adapters = get_display_adapters( &count ))) return FILL_STATUS_FAILED;
+#endif
     if (!resize_table( table, count, sizeof(*rec) ))
     {
         free( adapters );
