@@ -501,6 +501,9 @@ PrintRoutes(
     PWSTR DestinationPattern = NULL;
     DWORD Error;
 
+    while (argc > start && (argv[start][0] == L'-' || argv[start][0] == L'/') && !_wcsicmp(&argv[start][1], L"4"))
+        start++;
+
     if (argc > start)
         ParseCmdLine(argc, argv, start, 
                      &DestinationPattern, NULL, NULL, NULL);
@@ -836,6 +839,10 @@ wmain(
             else if (!_wcsicmp(&argv[i][1], L"p"))
             {
                 flags |= PERSISTENT_FLAG;
+            }
+            else if (!_wcsicmp(&argv[i][1], L"4"))
+            {
+                continue;
             }
             else
             {
