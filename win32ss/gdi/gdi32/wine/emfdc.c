@@ -758,7 +758,7 @@ static BOOL emfdc_add_palette_entry( struct emf *emf, PALETTEENTRY *entry )
 
 static DWORD emfdc_create_palette( struct emf *emf, HPALETTE hPal )
 {
-    BYTE data[offsetof( EMRCREATEPALETTE, lgpl.palPalEntry[256] )];
+    BYTE data[offsetof( EMRCREATEPALETTE, lgpl.palPalEntry ) + 256 * sizeof(PALETTEENTRY)];
     EMRCREATEPALETTE *hdr = (EMRCREATEPALETTE *)data;
     WORD i;
 
