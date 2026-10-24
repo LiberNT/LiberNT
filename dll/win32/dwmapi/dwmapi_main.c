@@ -819,7 +819,7 @@ static int get_display_frequency(void)
     memset(&mode, 0, sizeof(mode));
     mode.dmSize = sizeof(mode);
     ret = EnumDisplaySettingsExW(NULL, ENUM_CURRENT_SETTINGS, &mode, 0);
-    if (ret && mode.dmFields & DM_DISPLAYFREQUENCY && mode.dmDisplayFrequency)
+    if (ret && mode.dmFields & DM_DISPLAYFREQUENCY && mode.dmDisplayFrequency > 1)
     {
         return mode.dmDisplayFrequency;
     }
