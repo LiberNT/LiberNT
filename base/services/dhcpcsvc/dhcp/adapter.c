@@ -1,4 +1,6 @@
 #include <rosdhcp.h>
+#include <ws2tcpip.h>
+#include <netioapi.h>
 
 #define NDEBUG
 #include <reactos/debug.h>
@@ -417,6 +419,10 @@ AdapterRemove(
     FreeAdapter(Adapter);
 }
 
+static VOID NETIOAPI_API_ AdapterInterfaceChanged(PVOID Context, PMIB_IPINTERFACE_ROW Row, MIB_NOTIFICATION_TYPE NotificationType) {
+    SetEvent((HANDLE)Context);
+}
+
 /*
  * XXX Figure out the way to bind a specific adapter to a socket.
  */
@@ -425,11 +431,22 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
     DWORD Error, Size = sizeof(MIB_IFTABLE);
     PDHCP_ADAPTER Adapter = NULL;
     HANDLE hStopEvent = (HANDLE)Context;
+    HANDLE hInterfaceChanged = CreateEventW(NULL, FALSE, FALSE, NULL);
+    HANDLE hNotification = NULL;
+    HANDLE Waits[2];
     struct interface_info *ifi = NULL;
     struct protocol *proto;
     PLIST_ENTRY ListEntry, NextEntry;
     DWORD Entry;
     int i, Broadcast;
+
+    Waits[0] = hStopEvent;
+    Waits[1] = hInterfaceChanged;
+    if (hInterfaceChanged &&
+        NotifyIpInterfaceChange(AF_INET, AdapterInterfaceChanged, hInterfaceChanged, FALSE, &hNotification) != NO_ERROR)
+    {
+        hNotification = NULL;
+    }
 
     while (TRUE)
     {
@@ -611,13 +628,18 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
         if (Error != NO_ERROR)
             break;
 #else
-        if (WaitForSingleObject(hStopEvent, 3000) == WAIT_OBJECT_0)
+        if (WaitForMultipleObjects(hInterfaceChanged ? 2 : 1, Waits, FALSE, 3000) == WAIT_OBJECT_0)
         {
             DPRINT("Stopping the discovery thread!\n");
             break;
         }
 #endif
     }
+
+    if (hNotification)
+        CancelMibChangeNotify2(hNotification);
+    if (hInterfaceChanged)
+        CloseHandle(hInterfaceChanged);
 
     if (Table)
         free(Table);
