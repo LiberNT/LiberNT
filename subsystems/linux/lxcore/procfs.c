@@ -52,7 +52,9 @@ typedef enum _LX_SYNTH_ID
     LxProcNsDir,
     LxProcNsLink,
     LxNsfsFile,
-    LxSysDevNode
+    LxSysDevNode,
+    LxMqRoot,
+    LxMqFile
 } LX_SYNTH_ID;
 
 typedef struct _LX_SYNTH
@@ -1777,18 +1779,15 @@ LxGenNsLastPid(
 
 static
 LONG
-LxWriteNsLastPid(
-    _In_ PLX_FILE File,
+LxParseWrittenNumber(
     _In_reads_bytes_(Length) PCSTR Data,
-    _In_ ULONG Length)
+    _In_ ULONG Length,
+    _Out_ PULONG Value)
 {
-    PLX_THREAD Current = LxCurrentThread();
     CHAR Number[16];
-    ULONG Count = 0, Value = 0;
+    ULONG Count = 0;
 
-    UNREFERENCED_PARAMETER(File);
-    if (Current == NULL)
-        return -LX_ESRCH;
+    *Value = 0;
     while ((Count < Length) && ((Data[Count] == ' ') || (Data[Count] == '\t')))
         Count++;
     Data += Count;
@@ -1800,10 +1799,63 @@ LxWriteNsLastPid(
         Number[Count] = Data[Count];
     }
     Number[Count] = '\0';
-    if ((Count == 0) || ((Count < Length) && (Data[Count] != '\n')) || !LxParseNumber(Number, &Value))
+    if ((Count == 0) || ((Count < Length) && (Data[Count] != '\n')) || !LxParseNumber(Number, Value))
         return -LX_EINVAL;
-    return LxPidNsSetLastPid(Current->Process, Value);
+    return 0;
 }
+
+static
+LONG
+LxWriteNsLastPid(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_THREAD Current = LxCurrentThread();
+    ULONG Value;
+    LONG Error;
+
+    UNREFERENCED_PARAMETER(File);
+    if (Current == NULL)
+        return -LX_ESRCH;
+    Error = LxParseWrittenNumber(Data, Length, &Value);
+    return (Error != 0) ? Error : LxPidNsSetLastPid(Current->Process, Value);
+}
+
+static
+LONG
+LxWriteMqLimit(
+    _In_ LX_MQ_LIMIT Which,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_THREAD Current = LxCurrentThread();
+    ULONG Value;
+    LONG Error;
+
+    if (Current == NULL)
+        return -LX_ESRCH;
+    Error = LxParseWrittenNumber(Data, Length, &Value);
+    return (Error != 0) ? Error : LxMqSetLimit(Current->Process, Which, Value);
+}
+
+#define LX_MQ_SYSCTL(Name, Which) \
+    static VOID LxGenMq##Name(_In_ PLX_PROCESS Self, _In_ PLX_SYNTH Synth, _Inout_ PLX_TEXT Text) \
+    { \
+        UNREFERENCED_PARAMETER(Synth); \
+        LxTextPrintf(Text, "%lu\n", LxMqGetLimit(Self, Which)); \
+    } \
+    static LONG LxWriteMq##Name(_In_ PLX_FILE File, _In_reads_bytes_(Length) PCSTR Data, _In_ ULONG Length) \
+    { \
+        UNREFERENCED_PARAMETER(File); \
+        return LxWriteMqLimit(Which, Data, Length); \
+    }
+
+LX_MQ_SYSCTL(MsgDefault, LxMqMsgDefault)
+LX_MQ_SYSCTL(MsgMax, LxMqMsgMax)
+LX_MQ_SYSCTL(MsgSizeDefault, LxMqMsgSizeDefault)
+LX_MQ_SYSCTL(MsgSizeMax, LxMqMsgSizeMax)
+LX_MQ_SYSCTL(QueuesMax, LxMqQueuesMax)
 
 static
 LONG
@@ -1886,6 +1938,11 @@ static const LX_TABLE_ENTRY LxProcSysTable[] =
     { "fs/inotify/max_queued_events", 0644, "16384\n", NULL, LxWriteAccept },
     { "fs/inotify/max_user_instances", 0644, "128\n", NULL, LxWriteAccept },
     { "fs/inotify/max_user_watches", 0644, "65536\n", NULL, LxWriteAccept },
+    { "fs/mqueue/msg_default", 0644, NULL, LxGenMqMsgDefault, LxWriteMqMsgDefault },
+    { "fs/mqueue/msg_max", 0644, NULL, LxGenMqMsgMax, LxWriteMqMsgMax },
+    { "fs/mqueue/msgsize_default", 0644, NULL, LxGenMqMsgSizeDefault, LxWriteMqMsgSizeDefault },
+    { "fs/mqueue/msgsize_max", 0644, NULL, LxGenMqMsgSizeMax, LxWriteMqMsgSizeMax },
+    { "fs/mqueue/queues_max", 0644, NULL, LxGenMqQueuesMax, LxWriteMqQueuesMax },
     { "fs/nr_open", 0644, "1048576\n", NULL, LxWriteAccept },
     { "fs/protected_fifos", 0644, "1\n", NULL, LxWriteAccept },
     { "fs/protected_hardlinks", 0644, "1\n", NULL, LxWriteAccept },
@@ -2723,6 +2780,42 @@ LxResolveCgroup(
 
 static
 LONG
+LxResolveMqueue(
+    _In_ PLX_MOUNT Mount,
+    _In_reads_(Count) PCSTR *Components,
+    _In_ ULONG Count,
+    _Out_ PLX_SYNTH Synth)
+{
+    LX_STAT Stat;
+
+    if (Count == 0)
+    {
+        Synth->Id = LxMqRoot;
+        Synth->Type = LX_S_IFDIR;
+        Synth->Mode = 01777;
+        return 0;
+    }
+    RtlZeroMemory(&Stat, sizeof(Stat));
+    if ((Count != 1) || (Mount->NsFile == NULL) || !LxMqQuery(Mount->NsFile, Components[0], &Stat))
+        return -LX_ENOENT;
+    Synth->Id = LxMqFile;
+    Synth->Type = LX_S_IFREG;
+    Synth->Mode = Stat.Mode & 07777;
+    RtlStringCbCopyA(Synth->Prefix, sizeof(Synth->Prefix), Components[0]);
+    return 0;
+}
+
+static
+VOID
+LxMqDirAdd(
+    _In_ PVOID Context,
+    _In_ PCSTR Name)
+{
+    LxDirAdd((PLX_TEXT)Context, LX_DT_REG, Name);
+}
+
+static
+LONG
 LxResolvePts(
     _In_ PLX_PROCESS Self,
     _In_reads_(Count) PCSTR *Components,
@@ -2814,6 +2907,9 @@ LxSynthResolve(
             break;
         case LxFsDevpts:
             Error = LxResolvePts(Process, Components, Count, Synth);
+            break;
+        case LxFsMqueue:
+            Error = LxResolveMqueue(Mount, Components, Count, Synth);
             break;
         default:
             Error = -LX_ENOENT;
@@ -3455,6 +3551,13 @@ LxSynthOpen(
             LxDirAdd(&Text, LX_DT_DIR, "..");
             LxSysDevList(Synth.Prefix, LxSysDevDirAdd, &Text);
         }
+        else if (Synth.Id == LxMqRoot)
+        {
+            LxDirAdd(&Text, LX_DT_DIR, ".");
+            LxDirAdd(&Text, LX_DT_DIR, "..");
+            if (Node->Mount->NsFile != NULL)
+                LxMqList(Node->Mount->NsFile, LxMqDirAdd, &Text);
+        }
         else if ((Synth.Id == LxSysDir) || (Synth.Id == LxProcRoot) || (Synth.Id == LxPtsRoot))
         {
             if (Synth.Id == LxSysDir)
@@ -3619,6 +3722,13 @@ LxSynthOpen(
         *Result = File;
         File = NULL;
         goto Exit;
+    }
+    else if (Synth.Id == LxMqFile)
+    {
+        Error = LxMqOpenNamed(Process, Node->Mount->NsFile, Synth.Prefix, Flags & ~(LX_O_CREAT | LX_O_EXCL), 0, NULL,
+                              Node->Path, &File);
+        if (Error != 0)
+            goto Exit;
     }
     else if (Synth.Id == LxPtsTty)
     {
@@ -3817,6 +3927,15 @@ LxSynthStat(
     Stat->Ino = LxSynthIno(Node);
     Stat->BlkSize = 4096;
     Stat->Dev = Node->Mount->Dev;
+    if (Synth.Id == LxMqFile)
+    {
+        if (!LxMqQuery(Node->Mount->NsFile, Synth.Prefix, Stat))
+            return -LX_ENOENT;
+        Stat->Nlink = 1;
+        Stat->BlkSize = 4096;
+        Stat->Dev = Node->Mount->Dev;
+        return 0;
+    }
     if (Synth.Id == LxPtsTty)
     {
         PLX_TTY Tty = LxTtyLookup(Process->Instance, Synth.Index);

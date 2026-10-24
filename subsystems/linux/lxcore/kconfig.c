@@ -18,6 +18,7 @@ static const PCSTR LxKernelConfig[] =
     "CONFIG_SMP=y",
     "CONFIG_MULTIUSER=y",
     "CONFIG_SYSVIPC=y",
+    "CONFIG_POSIX_MQUEUE=y",
     "CONFIG_IKCONFIG=y",
     "CONFIG_IKCONFIG_PROC=y",
     "CONFIG_CGROUPS=y",

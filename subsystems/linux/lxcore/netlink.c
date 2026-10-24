@@ -735,6 +735,18 @@ LxNlQueue(
     LxPollWake(&Socket->Poll, LX_POLLIN | LX_POLLRDNORM);
 }
 
+LONG
+LxNetlinkDeliver(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PVOID Data,
+    _In_ ULONG Length)
+{
+    if (File->Ops != &LxNlOps)
+        return -LX_ENOTSOCK;
+    LxNlQueue(File->Object, Data, Length);
+    return 0;
+}
+
 static
 VOID
 LxNlFlush(

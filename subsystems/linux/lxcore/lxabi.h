@@ -704,6 +704,8 @@ typedef struct _LX_MSGINFO
 #define LX_PKEY_ACCESS_MASK     0x0F
 #define LX_UIO_MAXIOV           1024
 
+#define LX_CAP_DAC_OVERRIDE     1
+#define LX_CAP_FOWNER           3
 #define LX_CAP_SYS_PTRACE       19
 #define LX_CAP_SYS_ADMIN        21
 #define LX_CAP_SYS_RESOURCE     24

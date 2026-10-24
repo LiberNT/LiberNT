@@ -22,6 +22,7 @@ LxProcessInitialize(VOID)
     LxBpfInitialize();
     LxFutexInitialize();
     LxIpcInitialize();
+    LxMqInitialize();
     LxWinInitialize();
 }
 

@@ -18,6 +18,7 @@
 #define LX_MAGIC_TMPFS      0x01021994ULL
 #define LX_MAGIC_CGROUP2    0x63677270ULL
 #define LX_MAGIC_DEVPTS     0x00001CD1ULL
+#define LX_MAGIC_MQUEUE     0x19800202ULL
 
 LIST_ENTRY LxInstanceList;
 FAST_MUTEX LxInstanceListLock;
@@ -1091,6 +1092,11 @@ LxMountInheritNamespaces(
     {
         Mount->CgroupRoot = Process->Ns[LxNsCgroup]->Cgroup.Root;
     }
+    else if (Mount->Kind == LxFsMqueue)
+    {
+        Mount->NsFile = LxProcessNs(Process, LxNsIpc);
+        LxNsReference(Mount->NsFile);
+    }
 }
 
 LONG
@@ -1116,7 +1122,7 @@ LxMountAdd(
         return 0;
     }
 
-    if ((strcmp(FsType, "tmpfs") == 0) || (strcmp(FsType, "devtmpfs") == 0) || (strcmp(FsType, "mqueue") == 0) ||
+    if ((strcmp(FsType, "tmpfs") == 0) || (strcmp(FsType, "devtmpfs") == 0) ||
         (strcmp(FsType, "ramfs") == 0) || (strcmp(FsType, "hugetlbfs") == 0) || (strcmp(FsType, "configfs") == 0) ||
         (strcmp(FsType, "fusectl") == 0) || (strcmp(FsType, "tracefs") == 0) || (strcmp(FsType, "debugfs") == 0) ||
         (strcmp(FsType, "securityfs") == 0) || (strcmp(FsType, "pstore") == 0) || (strcmp(FsType, "bpf") == 0) ||
@@ -1132,6 +1138,8 @@ LxMountAdd(
         Error = LxInstanceMountSynthetic(Ns, Target, Source, "cgroup2", Flags, LxFsCgroup, LX_MAGIC_CGROUP2, &Mount);
     else if (strcmp(FsType, "devpts") == 0)
         Error = LxInstanceMountSynthetic(Ns, Target, Source, "devpts", Flags, LxFsDevpts, LX_MAGIC_DEVPTS, &Mount);
+    else if (strcmp(FsType, "mqueue") == 0)
+        Error = LxInstanceMountSynthetic(Ns, Target, Source, "mqueue", Flags, LxFsMqueue, LX_MAGIC_MQUEUE, &Mount);
     else
         return -LX_ENODEV;
     if (Error == 0)
@@ -1261,8 +1269,9 @@ LxMountCreateDetached(
         Error = LxInstanceMountSynthetic(Ns, Target, Source, "cgroup2", Flags, LxFsCgroup, LX_MAGIC_CGROUP2, Mount);
     else if (strcmp(FsType, "devpts") == 0)
         Error = LxInstanceMountSynthetic(Ns, Target, Source, "devpts", Flags, LxFsDevpts, LX_MAGIC_DEVPTS, Mount);
-    else if ((strcmp(FsType, "tmpfs") == 0) || (strcmp(FsType, "ramfs") == 0) || (strcmp(FsType, "devtmpfs") == 0) ||
-             (strcmp(FsType, "mqueue") == 0))
+    else if (strcmp(FsType, "mqueue") == 0)
+        Error = LxInstanceMountSynthetic(Ns, Target, Source, "mqueue", Flags, LxFsMqueue, LX_MAGIC_MQUEUE, Mount);
+    else if ((strcmp(FsType, "tmpfs") == 0) || (strcmp(FsType, "ramfs") == 0) || (strcmp(FsType, "devtmpfs") == 0))
         Error = LxInstanceTmpfs(Ns, Target, FsType, Flags, Mode, NULL, Mount);
     else
         Error = -LX_ENODEV;
@@ -2886,6 +2895,11 @@ LxVfsOpenNode(
 
     if (Node->Mount->Kind != LxFsNt)
     {
+        if (!Node->Exists && (Node->Mount->Kind == LxFsMqueue) && (Flags & LX_O_CREAT))
+        {
+            return LxMqOpenNamed(Process, Node->Mount->NsFile, (Node->Relative[0] == '/') ? Node->Relative + 1 : Node->Relative,
+                                 Flags, Mode, NULL, Node->Path, Result);
+        }
         if (!Node->Exists)
             return (Flags & LX_O_CREAT) ? -LX_EACCES : -LX_ENOENT;
         return LxSynthOpen(Process, Node, Flags, Result);
@@ -3362,6 +3376,8 @@ LxVfsUnlink(
 
     if (!Node->Exists)
         return -LX_ENOENT;
+    if ((Node->Mount->Kind == LxFsMqueue) && !Directory)
+        return LxMqUnlinkNamed(Process, Node->Mount->NsFile, (Node->Relative[0] == '/') ? Node->Relative + 1 : Node->Relative);
     if (Node->Mount->Kind != LxFsNt)
         return Directory ? LxSynthRmdir(Process, Node) : -LX_EPERM;
     if (Node->Relative[0] == '\0')

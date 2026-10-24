@@ -208,7 +208,8 @@ typedef enum _LX_FS_KIND
     LxFsSys,
     LxFsCgroup,
     LxFsDevpts,
-    LxFsNsfs
+    LxFsNsfs,
+    LxFsMqueue
 } LX_FS_KIND;
 
 struct _LX_MOUNT
@@ -717,6 +718,33 @@ extern const LX_SOCKET_OPS LxNetlinkSocketOps;
 LONG64 LxInetSocket(_In_ PLX_PROCESS Process, _In_ ULONG Family, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
 LONG64 LxNetlinkSocket(_In_ PLX_PROCESS Process, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
 VOID LxProcessUsage(_In_ PLX_PROCESS Process, _In_opt_ PEPROCESS EProcess, _Out_ PLX_USAGE Usage);
+
+typedef enum _LX_MQ_LIMIT
+{
+    LxMqMsgDefault,
+    LxMqMsgMax,
+    LxMqMsgSizeDefault,
+    LxMqMsgSizeMax,
+    LxMqQueuesMax,
+    LxMqLimitCount
+} LX_MQ_LIMIT;
+
+typedef struct _LX_MQ_ATTR_LIMITS
+{
+    LONG64 MaxMsg;
+    LONG64 MsgSize;
+} LX_MQ_ATTR_LIMITS, *PLX_MQ_ATTR_LIMITS;
+
+VOID LxMqInitialize(VOID);
+VOID LxMqNamespaceCleanup(_In_ PLX_NS Ns);
+LONG LxMqOpenNamed(_In_ PLX_PROCESS Process, _In_ PLX_NS IpcNs, _In_ PCSTR Name, _In_ ULONG Flags, _In_ ULONG Mode,
+                   _In_opt_ PLX_MQ_ATTR_LIMITS Attr, _In_ PCSTR Path, _Out_ PLX_FILE *Result);
+LONG LxMqUnlinkNamed(_In_ PLX_PROCESS Process, _In_ PLX_NS IpcNs, _In_ PCSTR Name);
+BOOLEAN LxMqQuery(_In_ PLX_NS IpcNs, _In_ PCSTR Name, _Out_opt_ PLX_STAT Stat);
+VOID LxMqList(_In_ PLX_NS IpcNs, _In_ VOID (*Add)(_In_ PVOID Context, _In_ PCSTR Name), _In_ PVOID Context);
+ULONG LxMqGetLimit(_In_ PLX_PROCESS Process, _In_ LX_MQ_LIMIT Which);
+LONG LxMqSetLimit(_In_ PLX_PROCESS Process, _In_ LX_MQ_LIMIT Which, _In_ ULONG Value);
+LONG LxNetlinkDeliver(_In_ PLX_FILE File, _In_reads_bytes_(Length) PVOID Data, _In_ ULONG Length);
 LONG LxFileSetOwner(_In_ PLX_FILE File, _In_ LONG Type, _In_ ULONG Owner);
 VOID LxFileGetOwner(_In_ PLX_FILE File, _Out_ PLONG Type, _Out_ PULONG Owner);
 LONG LxFileSetSignal(_In_ PLX_FILE File, _In_ LONG Signal);

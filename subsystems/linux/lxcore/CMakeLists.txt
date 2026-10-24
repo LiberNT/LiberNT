@@ -13,6 +13,7 @@ list(APPEND SOURCE
     inet.c
     netlink.c
     mm.c
+    mqueue.c
     ns.c
     pipe.c
     poll.c

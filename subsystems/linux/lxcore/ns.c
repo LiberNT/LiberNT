@@ -174,6 +174,7 @@ LxNsDereference(
             break;
         case LxNsIpc:
             LxIpcNamespaceCleanup(Ns);
+            LxMqNamespaceCleanup(Ns);
             break;
         default:
             break;
