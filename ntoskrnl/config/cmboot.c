@@ -648,6 +648,56 @@ CmpIsLoadType(
     return (*Data == LoadType);
 }
 
+CODE_SEG("INIT")
+static
+BOOLEAN
+CmpQueryDwordValue(
+    _In_ PHHIVE Hive,
+    _In_ HCELL_INDEX Cell,
+    _In_ PCWSTR ValueName,
+    _Out_ PULONG Data)
+{
+    PCM_KEY_NODE Node;
+    PCM_KEY_VALUE Value;
+    UNICODE_STRING Name;
+    HCELL_INDEX ValueCell;
+    ULONG Length;
+    PULONG ValueData;
+
+    RtlInitUnicodeString(&Name, ValueName);
+    Node = (PCM_KEY_NODE)HvGetCell(Hive, Cell);
+    if (!Node) return FALSE;
+    ValueCell = CmpFindValueByName(Hive, Node, &Name);
+    if (ValueCell == HCELL_NIL) return FALSE;
+    Value = (PCM_KEY_VALUE)HvGetCell(Hive, ValueCell);
+    if (!Value) return FALSE;
+    if (Value->Type != REG_DWORD) return FALSE;
+    ValueData = (PULONG)CmpValueToData(Hive, Value, &Length);
+    if (!ValueData || Length < sizeof(ULONG)) return FALSE;
+
+    *Data = *ValueData;
+    return TRUE;
+}
+
+CODE_SEG("INIT")
+static
+BOOLEAN
+CmpIsPromotedBootDriver(
+    _In_ PHHIVE Hive,
+    _In_ HCELL_INDEX Cell,
+    _In_ SERVICE_LOAD_TYPE LoadType,
+    _In_ ULONG BootDriverFlags)
+{
+    ULONG Start, BootFlags;
+
+    if (LoadType != BootLoad) return FALSE;
+    if (!(BootDriverFlags & CM_SERVICE_VALID_PROMOTION_MASK)) return FALSE;
+    if (!CmpQueryDwordValue(Hive, Cell, L"Start", &Start) || Start == DisableLoad) return FALSE;
+    if (!CmpQueryDwordValue(Hive, Cell, L"BootFlags", &BootFlags)) return FALSE;
+
+    return (BootFlags & BootDriverFlags & CM_SERVICE_VALID_PROMOTION_MASK) != 0;
+}
+
 /**
  * @brief
  * Enumerates all drivers within the given control set and load type,
@@ -686,6 +736,7 @@ CmpFindDrivers(
     HCELL_INDEX ServicesCell, ControlCell, GroupOrderCell, DriverCell;
     HCELL_INDEX SafeBootCell = HCELL_NIL;
     ULONG i;
+    ULONG BootDriverFlags;
     UNICODE_STRING Name;
     UNICODE_STRING KeyPath;
     PCM_KEY_NODE ControlNode, ServicesNode, Node;
@@ -718,6 +769,9 @@ CmpFindDrivers(
     RtlInitUnicodeString(&Name, L"GroupOrderList");
     GroupOrderCell = CmpFindSubKeyByName(Hive, Node, &Name);
     if (GroupOrderCell == HCELL_NIL) return FALSE;
+
+    if (!CmpQueryDwordValue(Hive, ControlCell, L"BootDriverFlags", &BootDriverFlags))
+        BootDriverFlags = 0;
 
     /* Get Safe Boot cell */
     if (InitSafeBootMode)
@@ -753,7 +807,8 @@ CmpFindDrivers(
     while (DriverCell != HCELL_NIL)
     {
         /* Make sure it's a driver of this start type AND is "safe" to load */
-        if (CmpIsLoadType(Hive, DriverCell, LoadType) &&
+        if ((CmpIsLoadType(Hive, DriverCell, LoadType) ||
+             CmpIsPromotedBootDriver(Hive, DriverCell, LoadType, BootDriverFlags)) &&
             CmpIsSafe(Hive, SafeBootCell, DriverCell))
         {
             /* Add it to the list */

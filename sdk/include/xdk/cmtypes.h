@@ -1041,10 +1041,22 @@ typedef enum _CM_ERROR_CONTROL_TYPE {
 #define CM_SERVICE_NETWORK_BOOT_LOAD      0x00000001
 #define CM_SERVICE_VIRTUAL_DISK_BOOT_LOAD 0x00000002
 #define CM_SERVICE_USB_DISK_BOOT_LOAD     0x00000004
+#define CM_SERVICE_SD_DISK_BOOT_LOAD      0x00000008
+#define CM_SERVICE_USB3_DISK_BOOT_LOAD    0x00000010
+#define CM_SERVICE_MEASURED_BOOT_LOAD     0x00000020
+#define CM_SERVICE_VERIFIER_BOOT_LOAD     0x00000040
+#define CM_SERVICE_WINPE_BOOT_LOAD        0x00000080
+#define CM_SERVICE_RAM_DISK_BOOT_LOAD     0x00000100
 
 #define CM_SERVICE_VALID_PROMOTION_MASK (CM_SERVICE_NETWORK_BOOT_LOAD |       \
                                          CM_SERVICE_VIRTUAL_DISK_BOOT_LOAD |  \
-                                         CM_SERVICE_USB_DISK_BOOT_LOAD)
+                                         CM_SERVICE_USB_DISK_BOOT_LOAD |      \
+                                         CM_SERVICE_SD_DISK_BOOT_LOAD |       \
+                                         CM_SERVICE_USB3_DISK_BOOT_LOAD |     \
+                                         CM_SERVICE_MEASURED_BOOT_LOAD |      \
+                                         CM_SERVICE_VERIFIER_BOOT_LOAD |      \
+                                         CM_SERVICE_WINPE_BOOT_LOAD |         \
+                                         CM_SERVICE_RAM_DISK_BOOT_LOAD)
 
 $endif (_WDMDDK_)
 $if (_NTDDK_)

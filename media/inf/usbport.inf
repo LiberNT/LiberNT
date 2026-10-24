@@ -94,10 +94,14 @@ AddService = usbehci, 0x00000002, usbehci_Service_Inst
 
 [usbehci_Service_Inst]
 ServiceType   = 1
-StartType     = 0
+StartType     = 3
 ErrorControl  = 1
 ServiceBinary = %12%\usbehci.sys
 LoadOrderGroup = Base
+AddReg = usbehci_Service_AddReg
+
+[usbehci_Service_AddReg]
+HKR,,BootFlags,0x00010003,0x4
 
 ;------------------------------ DWC2 DRIVER -----------------------------
 
