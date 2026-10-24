@@ -192,10 +192,18 @@ KiSwapContextResume(
     PVOID CompatTeb = NULL;
     USHORT StackSegment;
 
+#if defined(__GNUC__)
     __asm__ __volatile__("mov %%ss, %0" : "=r"(StackSegment));
+#else
+    StackSegment = __readss();
+#endif
     if (StackSegment != KGDT64_R0_DATA)
     {
+#if defined(__GNUC__)
         __asm__ __volatile__("mov %0, %%ss" :: "r"((USHORT)KGDT64_R0_DATA) : "memory");
+#else
+        __writess(KGDT64_R0_DATA);
+#endif
     }
 
     /* Setup ring 0 stack pointer */
@@ -234,7 +242,11 @@ KiSwapContextResume(
     KiSetGdtDescriptorBase(KiGetGdtEntry(Pcr->GdtBase, KGDT64_R3_CMTEB), (ULONG64)CompatTeb);
     if (NewThread->Teb)
     {
+#if defined(__GNUC__)
         __asm__ __volatile__("mov %0, %%ax\n\tmov %%ax, %%fs" :: "i"(KGDT64_R3_CMTEB | RPL_MASK) : "ax", "memory");
+#else
+        __writefs(KGDT64_R3_CMTEB | RPL_MASK);
+#endif
     }
 
     /* Increase context switch count */

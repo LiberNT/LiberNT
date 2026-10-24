@@ -43,14 +43,14 @@ ULONG KiDPCTimeout = 110;
 
 static PVOID volatile KiActiveDpc[MAXIMUM_PROCESSORS];
 
-static __inline__ VOID KiBeginDpcExecution(_In_ PKPRCB Prcb, _In_ PKDPC Dpc)
+static __inline VOID KiBeginDpcExecution(_In_ PKPRCB Prcb, _In_ PKDPC Dpc)
 {
     InterlockedOrAffinity((volatile LONG_PTR *)&Dpc->ProcessorHistory, (LONG_PTR)AFFINITY_MASK(Prcb->Number));
     InterlockedExchangePointer(&KiActiveDpc[Prcb->Number], Dpc);
     KiPrcbDpcTimeCount(Prcb) = 0;
 }
 
-static __inline__ VOID KiEndDpcExecution(_In_ PKPRCB Prcb, _In_ PKDPC Dpc)
+static __inline VOID KiEndDpcExecution(_In_ PKPRCB Prcb, _In_ PKDPC Dpc)
 {
     InterlockedCompareExchangePointer(&KiActiveDpc[Prcb->Number], NULL, Dpc);
 }

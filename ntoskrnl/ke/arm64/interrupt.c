@@ -416,14 +416,14 @@ KiArm64DeliverInterruptApc(
 static __inline ULONG KiArm64ReadCntpCtl(void)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, cntp_ctl_el0" : "=r"(v));
+    v = ARM64_READ_SYSREG(CNTP_CTL_EL0);
     return (ULONG)v;
 }
 
 static __inline ULONG KiArm64ReadCntvCtl(void)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, cntv_ctl_el0" : "=r"(v));
+    v = ARM64_READ_SYSREG(CNTV_CTL_EL0);
     return (ULONG)v;
 }
 
@@ -432,18 +432,24 @@ static __inline ULONGLONG KiArm64ReadCounter(VOID)
     ULONGLONG Value;
 
     if (KiArm64UseVirtualTimer)
-        __asm__ __volatile__("isb; mrs %0, cntvct_el0" : "=r"(Value));
+    {
+        ARM64_ISB();
+        Value = ARM64_READ_SYSREG(CNTVCT_EL0);
+    }
     else
-        __asm__ __volatile__("isb; mrs %0, cntpct_el0" : "=r"(Value));
+    {
+        ARM64_ISB();
+        Value = ARM64_READ_SYSREG(CNTPCT_EL0);
+    }
     return Value;
 }
 
 static __inline VOID KiArm64WriteTimerCompare(ULONGLONG Value)
 {
     if (KiArm64UseVirtualTimer)
-        __asm__ __volatile__("msr cntv_cval_el0, %0" :: "r"(Value) : "memory");
+        ARM64_WRITE_SYSREG(CNTV_CVAL_EL0, Value);
     else
-        __asm__ __volatile__("msr cntp_cval_el0, %0" :: "r"(Value) : "memory");
+        ARM64_WRITE_SYSREG(CNTP_CVAL_EL0, Value);
 }
 
 static __inline VOID KiArm64WriteCntpCtl(ULONG v)
@@ -453,7 +459,8 @@ static __inline VOID KiArm64WriteCntpCtl(ULONG v)
      * takes effect immediately. Without ISB, subsequent instructions may
      * execute before the timer state change is visible.
      */
-    __asm__ __volatile__("msr cntp_ctl_el0, %0; isb" :: "r"((ULONGLONG)v) : "memory");
+    ARM64_WRITE_SYSREG(CNTP_CTL_EL0, (ULONGLONG)v);
+    ARM64_ISB();
 }
 
 static
@@ -594,7 +601,8 @@ static __inline VOID KiArm64WriteCntvCtl(ULONG v)
      * takes effect immediately. Without ISB, subsequent instructions may
      * execute before the timer state change is visible.
      */
-    __asm__ __volatile__("msr cntv_ctl_el0, %0; isb" :: "r"((ULONGLONG)v) : "memory");
+    ARM64_WRITE_SYSREG(CNTV_CTL_EL0, (ULONGLONG)v);
+    ARM64_ISB();
 }
 
 /*
@@ -789,7 +797,7 @@ KiArm64StartLocalTimer(VOID)
     TimerState->ElapsedIncrement = 0;
     TimerState->PeriodicDeadline = Counter + TimerState->PeriodTicks;
     KiArm64WriteTimerCompare(TimerState->PeriodicDeadline);
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_ISB();
 
     if (KiArm64UseVirtualTimer)
     {

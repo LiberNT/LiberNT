@@ -608,6 +608,7 @@ MmArmInitSystem(
     return TRUE;
 }
 
+CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 MmInitSystem(

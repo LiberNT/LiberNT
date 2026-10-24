@@ -157,10 +157,10 @@ KiArm64MapIdentityAcpiRange(_In_ UINT64 PhysicalStart,
     KiArm64MapIdentityRange(Start, End, ARM64_IDENTITY_DEFAULT_ATTRS);
     if (KiArm64IdentityMapActive)
     {
-        __asm__ __volatile__("dsb ishst" ::: "memory");
-        __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
-        __asm__ __volatile__("dsb ish" ::: "memory");
-        __asm__ __volatile__("isb");
+        ARM64_DSB(ISHST);
+        ARM64_TLBI_ALL(VMALLE1IS);
+        ARM64_DSB(ISH);
+        ARM64_ISB();
     }
 }
 
@@ -547,47 +547,47 @@ KiArm64IsRangeMappedByDescriptors(_In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock,
 }
 
 CODE_SEG("INIT")
-static __inline__ UINT64
+static __inline UINT64
 KiArm64ReadSctlrEl1(VOID)
 {
     UINT64 Value;
-    __asm__ __volatile__("mrs %0, sctlr_el1" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(SCTLR_EL1);
     return Value;
 }
 
 CODE_SEG("INIT")
-static __inline__ UINT64
+static __inline UINT64
 KiArm64ReadTcrEl1(VOID)
 {
     UINT64 Value;
-    __asm__ __volatile__("mrs %0, tcr_el1" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(TCR_EL1);
     return Value;
 }
 
 CODE_SEG("INIT")
-static __inline__ UINT64
+static __inline UINT64
 KiArm64ReadTtbr0El1(VOID)
 {
     UINT64 Value;
-    __asm__ __volatile__("mrs %0, ttbr0_el1" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(TTBR0_EL1);
     return Value;
 }
 
 CODE_SEG("INIT")
-static __inline__ UINT64
+static __inline UINT64
 KiArm64ReadTtbr1El1(VOID)
 {
     UINT64 Value;
-    __asm__ __volatile__("mrs %0, ttbr1_el1" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(TTBR1_EL1);
     return Value;
 }
 
 CODE_SEG("INIT")
-static __inline__ UINT64
+static __inline UINT64
 KiArm64ReadMairEl1(VOID)
 {
     UINT64 Value;
-    __asm__ __volatile__("mrs %0, mair_el1" : "=r"(Value));
+    Value = ARM64_READ_SYSREG(MAIR_EL1);
     return Value;
 }
 
@@ -657,9 +657,9 @@ CODE_SEG("INIT")
 static VOID
 KiArm64FatalHalt(VOID)
 {
-    __asm__ __volatile__("msr daifset, #0xf" ::: "memory");
+    ARM64_DAIFSET(0xf);
     for (;;) {
-        __asm__ __volatile__("wfi" ::: "memory");
+        ARM64_WFI();
     }
 }
 
@@ -711,8 +711,8 @@ KiArm64EnsureMairNtLayout(_In_ UINT64 CurrentMair)
 {
     if (CurrentMair != ARM64_NT_MAIR_VALUE)
     {
-        __asm__ __volatile__("msr mair_el1, %0" :: "r"(ARM64_NT_MAIR_VALUE));
-        __asm__ __volatile__("isb");
+        ARM64_WRITE_SYSREG(MAIR_EL1, ARM64_NT_MAIR_VALUE);
+        ARM64_ISB();
     }
 
     return ARM64_NT_MAIR_VALUE;
@@ -752,15 +752,15 @@ KiArm64InstallEarlyExceptionVectors(VOID)
     UINT64 Cpacr;
 
     /* The early synchronous vector captures Q0-Q31 before calling C. */
-    __asm__ __volatile__("mrs %0, cpacr_el1" : "=r"(Cpacr));
+    Cpacr = ARM64_READ_SYSREG(CPACR_EL1);
     Cpacr |= (3ULL << 20);  /* FPEN = 11: base FP/NEON is part of the ABI. */
     Cpacr &= ~(3ULL << 16); /* ZEN = 00: no SVE state contract is exposed. */
     Cpacr &= ~(3ULL << 24); /* SMEN = 00: no SME/ZA state contract is exposed. */
-    __asm__ __volatile__("msr cpacr_el1, %0" :: "r"(Cpacr));
-    __asm__ __volatile__("isb");
+    ARM64_WRITE_SYSREG(CPACR_EL1, Cpacr);
+    ARM64_ISB();
 
-    __asm__ __volatile__("msr vbar_el1, %0" :: "r"((ULONG_PTR)&KiArm64EarlyVectorTable));
-    __asm__ __volatile__("isb");
+    ARM64_WRITE_SYSREG(VBAR_EL1, (ULONG_PTR)&KiArm64EarlyVectorTable);
+    ARM64_ISB();
 }
 
 CODE_SEG("INIT")
@@ -917,12 +917,12 @@ KiArm64EnsureIdentityMapping(_Inout_ PARM64_BOOT_CONTEXT BootContext)
 
     Ttbr0Physical = KiArm64VirtualToPhysical((ULONG_PTR)KiArm64IdentityL0);
 
-    __asm__ __volatile__("dsb ishst" ::: "memory");
-    __asm__ __volatile__("msr ttbr0_el1, %0" :: "r"(Ttbr0Physical));
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb");
+    ARM64_DSB(ISHST);
+    ARM64_WRITE_SYSREG(TTBR0_EL1, Ttbr0Physical);
+    ARM64_DSB(ISH);
+    ARM64_TLBI_ALL(VMALLE1IS);
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 
 
     BootContext->Ttbr0El1 = Ttbr0Physical;
@@ -931,10 +931,10 @@ KiArm64EnsureIdentityMapping(_Inout_ PARM64_BOOT_CONTEXT BootContext)
 
     KiArm64MapEarlyDeviceRanges(LoaderBlock, DeviceBlockAttrs);
 
-    __asm__ __volatile__("dsb ishst" ::: "memory");
-    __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb");
+    ARM64_DSB(ISHST);
+    ARM64_TLBI_ALL(VMALLE1IS);
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 
 
     /*
@@ -945,10 +945,10 @@ KiArm64EnsureIdentityMapping(_Inout_ PARM64_BOOT_CONTEXT BootContext)
      */
     KiArm64MapAllAcpiTables(LoaderBlock);
 
-    __asm__ __volatile__("dsb ishst" ::: "memory");
-    __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb");
+    ARM64_DSB(ISHST);
+    ARM64_TLBI_ALL(VMALLE1IS);
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 
 }
 

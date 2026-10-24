@@ -27,21 +27,25 @@ KeInitExceptions(VOID)
     UINT64 Disr;
 
     /* Program the permanent vector base and advertise readiness */
-    __asm__ __volatile__("msr vbar_el1, %0" :: "r"(Vbar));
-    __asm__ __volatile__("isb");
+    ARM64_WRITE_SYSREG(VBAR_EL1, Vbar);
+    ARM64_ISB();
 
-    __asm__ __volatile__("mrs %0, id_aa64pfr0_el1" : "=r"(Pfr0));
+    Pfr0 = ARM64_READ_SYSREG(ID_AA64PFR0_EL1);
     if (((Pfr0 >> 28) & 0xF) != 0)
     {
-        __asm__ __volatile__("dsb sy" ::: "memory");
-        __asm__ __volatile__("hint #16");
-        __asm__ __volatile__("isb");
-        __asm__ __volatile__("mrs %0, s3_0_c12_c1_1" : "=r"(Disr));
+        ARM64_DSB(SY);
+        ARM64_HINT(16);
+        ARM64_ISB();
+        Disr = ARM64_READ_SYSREG(S3_0_C12_C1_1);
         if (Disr & (1ULL << 31))
         {
             KiArm64BootSErrorDisr = Disr;
+#if defined(_MSC_VER) && !defined(__clang__)
+            ARM64_WRITE_SYSREG(S3_0_C12_C1_1, 0);
+#else
             __asm__ __volatile__("msr s3_0_c12_c1_1, xzr");
-            __asm__ __volatile__("isb");
+#endif
+            ARM64_ISB();
         }
     }
 

@@ -70,8 +70,8 @@ ExpSpinOnPushLockWaitBlock(
         ULONGLONG Counter, Current, Deadline, Divisor, Frequency, SpinTicks;
 
         if (!(*(volatile LONG *)&WaitBlock->Flags & EX_PUSH_LOCK_WAITING)) return;
-        __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(Counter));
-        __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(Frequency));
+        Counter = ARM64_READ_SYSREG(CNTVCT_EL0);
+        Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
         if (!Frequency) return;
 
         if (EXP_NOMINAL_SPIN_FREQUENCY > Frequency)
@@ -89,7 +89,7 @@ ExpSpinOnPushLockWaitBlock(
         Deadline = Counter + SpinTicks;
         do
         {
-            __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(Current));
+            Current = ARM64_READ_SYSREG(CNTVCT_EL0);
             if (Current < Counter || Current >= Deadline) break;
             __dmb(_ARM64_BARRIER_ISHST);
             YieldProcessor();

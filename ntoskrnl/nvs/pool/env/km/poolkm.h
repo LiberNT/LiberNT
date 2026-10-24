@@ -56,7 +56,16 @@ FORCEINLINE
 ULONG
 PoolCountTrailingZeros64(ULONG64 Value)
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+    ULONG Index;
+
+    if (_BitScanForward(&Index, (ULONG)Value))
+        return Index;
+    _BitScanForward(&Index, (ULONG)(Value >> 32));
+    return Index + 32;
+#else
     return (ULONG)__builtin_ctzll(Value);
+#endif
 }
 
 #define POOL_CACHE_ALIGNED              DECLSPEC_CACHEALIGN

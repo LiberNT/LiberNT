@@ -257,13 +257,13 @@ DbgBreakPointWithStatus(
      * point used after a crash.
      */
 #ifdef KDBG
-    __asm__ __volatile__("brk #0xf000" ::: "memory");
+    ARM64_BRK(0xf000);
 #else
     if (!KdDebuggerEnabled)
     {
         return;
     }
-    __asm__ __volatile__("brk #0xf000" ::: "memory");
+    ARM64_BRK(0xf000);
 #endif
 }
 
@@ -330,6 +330,7 @@ KeRaiseUserException(
     }
 }
 
+CODE_SEG("INIT")
 VOID
 NTAPI
 MmInitGlobalKernelPageDirectory(VOID)
@@ -384,7 +385,11 @@ KeSwitchKernelStack(
     /* Save the old stack base for return value */
     OldStackBase = CurrentThread->StackBase;
     OldStackLimit = CurrentThread->StackLimit;
+#if defined(_MSC_VER) && !defined(__clang__)
+    OldFramePointer = (ULONG_PTR)__getReg(29);
+#else
     __asm__ __volatile__("mov %0, x29" : "=r"(OldFramePointer));
+#endif
 
     /* Compute size of current stack contents */
     StackSize = (ULONG_PTR)CurrentThread->StackBase - OldStackLimit;
@@ -409,9 +414,9 @@ KeSwitchKernelStack(
      */
     {
         ULONGLONG _savedDaif;
-        __asm__ __volatile__("mrs %0, daif" : "=r"(_savedDaif));
-        __asm__ __volatile__("msr daifset, #0xF" ::: "memory");
-        __asm__ __volatile__("isb" ::: "memory");
+        _savedDaif = ARM64_READ_SYSREG(DAIF);
+        ARM64_DAIFSET(0xF);
+        ARM64_ISB();
 
     /* Copy the entire current stack to the new stack */
     RtlCopyMemory((PUCHAR)StackBase - StackSize,
@@ -634,6 +639,9 @@ KeSwitchKernelStack(
      * The saved frame pointer chain was relocated above so each caller restores
      * a frame pointer in the new stack as this function unwinds.
      */
+#if defined(_MSC_VER) && !defined(__clang__)
+    KiArm64RelocateStackPointers(StackOffset);
+#else
     __asm__ __volatile__(
         "mov x16, sp\n\t"
         "add x16, x16, %0\n\t"
@@ -641,9 +649,10 @@ KeSwitchKernelStack(
         "add x29, x29, %0\n\t"
         : : "r"(StackOffset) : "x16", "memory"
     );
+#endif
 
     /* Restore DAIF to pre-switch state */
-    __asm__ __volatile__("msr daif, %0" :: "r"(_savedDaif) : "memory");
+    ARM64_WRITE_SYSREG(DAIF, _savedDaif);
     }
 
     return OldStackBase;

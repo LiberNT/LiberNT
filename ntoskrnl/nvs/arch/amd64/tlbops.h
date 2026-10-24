@@ -10,6 +10,11 @@
 #pragma once
 
 #ifndef MM_HOST_TEST
+#if defined(_MSC_VER) && !defined(__clang__)
+void __cdecl _invpcid(unsigned int Type, void *Descriptor);
+#pragma intrinsic(_invpcid)
+#endif
+
 FORCEINLINE ULONG MiAmd64TlbCpu(VOID) { return KeGetCurrentProcessorNumber(); }
 FORCEINLINE ULONG64 MiAmd64TlbActiveCpus(VOID) { return (ULONG64)KeActiveProcessors; }
 FORCEINLINE ULONG64 MiAmd64TlbReadCr3(VOID) { return __readcr3(); }
@@ -66,6 +71,10 @@ MiAmd64TlbInvpcid(VOID)
     ULONG64 Type = 2;
     Descriptor.Pcid = 0;
     Descriptor.Address = 0;
+#if defined(_MSC_VER) && !defined(__clang__)
+    _invpcid((unsigned int)Type, (PVOID)&Descriptor);
+#else
     __asm__ __volatile__("invpcid %0, %1" : : "m"(Descriptor), "r"(Type) : "memory");
+#endif
 }
 #endif

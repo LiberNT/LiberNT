@@ -15,8 +15,8 @@
 
 #define ARM64_STUB() UNIMPLEMENTED_DBGBREAK()
 
-#define READ_SYSREG64(_var, _reg) __asm__ __volatile__("mrs %0, " #_reg : "=r"(_var))
-#define WRITE_SYSREG64(_reg, _val) __asm__ __volatile__("msr " #_reg ", %0" :: "r"(_val))
+#define READ_SYSREG64(_var, _reg) ((_var) = ARM64_READ_SYSREG(_reg))
+#define WRITE_SYSREG64(_reg, _val) ARM64_WRITE_SYSREG(_reg, _val)
 
 #define ARM64_MDSCR_SS             (1ULL << 0)
 #define ARM64_MDSCR_TDCC           (1ULL << 12)
@@ -29,8 +29,8 @@
     do                                                               \
     {                                                                \
         ULONGLONG _value;                                            \
-        __asm__ __volatile__("mrs %0, " _name #_slot "_el1"         \
-                             : "=r"(_value));                        \
+        _value =                                                     \
+            ARM64_READ_SYSREG(_name##_slot##_EL1);                   \
         ProcessorState->SpecialRegisters._array[_slot] = _value;      \
     } while (0)
 
@@ -38,8 +38,8 @@
     do                                                               \
     {                                                                \
         ULONGLONG _value = ProcessorState->SpecialRegisters._array[_slot]; \
-        __asm__ __volatile__("msr " _name #_slot "_el1, %0"         \
-                             :: "r"(_value));                        \
+        ARM64_WRITE_SYSREG(_name##_slot##_EL1,                       \
+                           _value);                                  \
     } while (0)
 
 ULONG KeFixedTbEntries;
@@ -78,9 +78,9 @@ KiArm64ReadCcsidr(
 
     /* Select the cache; the ISB orders the CSSELR_EL1 write before the
        CCSIDR_EL1 read */
-    __asm__ __volatile__("msr csselr_el1, %0" :: "r"(Csselr) : "memory");
-    __asm__ __volatile__("isb" ::: "memory");
-    __asm__ __volatile__("mrs %0, ccsidr_el1" : "=r"(Ccsidr));
+    ARM64_WRITE_SYSREG(CSSELR_EL1, Csselr);
+    ARM64_ISB();
+    Ccsidr = ARM64_READ_SYSREG(CCSIDR_EL1);
 
     *LineShift = (ULONG)(Ccsidr & 0x7) + 4;
     *Ways = (ULONG)((Ccsidr >> 3) & 0x3FF) + 1;
@@ -99,11 +99,11 @@ KiArm64EnsureDcacheSweepGeometry(VOID)
 
     if (KiArm64DcacheSweepGeometryValid)
     {
-        __asm__ __volatile__("dmb ish" ::: "memory");
+        ARM64_DMB(ISH);
         return;
     }
 
-    __asm__ __volatile__("mrs %0, clidr_el1" : "=r"(Clidr));
+    Clidr = ARM64_READ_SYSREG(CLIDR_EL1);
 
     for (Level = 0; Level < ARM64_MAX_CACHE_LEVELS; Level++)
     {
@@ -124,7 +124,11 @@ KiArm64EnsureDcacheSweepGeometry(VOID)
         LocalLevels[LocalCount].NumWays = NumWays;
         LocalLevels[LocalCount].SetShift = LineShift;
         LocalLevels[LocalCount].WayShift =
+#if defined(_MSC_VER) && !defined(__clang__)
+            (NumWays <= 1) ? 32 : (ULONG)_CountLeadingZeros(NumWays - 1);
+#else
             (NumWays <= 1) ? 32 : (ULONG)__builtin_clz(NumWays - 1);
+#endif
         LocalCount++;
 
         if ((1UL << LineShift) > LargestLine)
@@ -138,7 +142,7 @@ KiArm64EnsureDcacheSweepGeometry(VOID)
                   LocalCount * sizeof(LocalLevels[0]));
     KiArm64DcacheSweepLevelCount = LocalCount;
     KeLargestCacheLine = LargestLine;
-    __asm__ __volatile__("dmb ish" ::: "memory");
+    ARM64_DMB(ISH);
     KiArm64DcacheSweepGeometryValid = 1;
 }
 
@@ -166,10 +170,10 @@ KiInitializeDebugMonitors(VOID)
 {
     ULONGLONG Zero = 0;
 
-    WRITE_SYSREG64(osdlr_el1, Zero);
-    WRITE_SYSREG64(oslar_el1, Zero);
-    WRITE_SYSREG64(mdscr_el1, ARM64_MDSCR_TDCC);
-    __asm__ __volatile__("isb" ::: "memory");
+    WRITE_SYSREG64(OSDLR_EL1, Zero);
+    WRITE_SYSREG64(OSLAR_EL1, Zero);
+    WRITE_SYSREG64(MDSCR_EL1, ARM64_MDSCR_TDCC);
+    ARM64_ISB();
 }
 
 /*
@@ -181,7 +185,7 @@ KiInitializeDebugRegisterCounts(VOID)
 {
     ULONGLONG Dfr0;
 
-    __asm__ __volatile__("mrs %0, id_aa64dfr0_el1" : "=r"(Dfr0));
+    Dfr0 = ARM64_READ_SYSREG(ID_AA64DFR0_EL1);
 
     /* BRPs field (bits 15:12): number of breakpoints minus 1 */
     KiArm64NumBreakpoints = ((Dfr0 >> 12) & 0xF) + 1;
@@ -210,10 +214,10 @@ VOID
 KeFlushTb(VOID)
 {
     KiCpuAuditEvent(CPU_AUDIT_TLB, 0, 1, 0);
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_DSB(ISH);
+    ARM64_TLBI_ALL(VMALLE1IS);
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 }
 
 VOID
@@ -230,7 +234,7 @@ KiArm64PmuImplemented(VOID)
     ULONG64 Dfr0;
     ULONG PmuVersion;
 
-    READ_SYSREG64(Dfr0, id_aa64dfr0_el1);
+    READ_SYSREG64(Dfr0, ID_AA64DFR0_EL1);
     PmuVersion = (ULONG)((Dfr0 >> 8) & 0xF);
     return (PmuVersion != 0) && (PmuVersion != 0xF);
 }
@@ -247,12 +251,12 @@ KiSaveProcessorControlState(_Out_ PKPROCESSOR_STATE ProcessorState)
         return;
     }
 
-    READ_SYSREG64(ProcessorState->SpecialRegisters.Elr_El1, elr_el1);
-    READ_SYSREG64(Value, spsr_el1);
+    READ_SYSREG64(ProcessorState->SpecialRegisters.Elr_El1, ELR_EL1);
+    READ_SYSREG64(Value, SPSR_EL1);
     ProcessorState->SpecialRegisters.Spsr_El1 = (ULONG)Value;
-    READ_SYSREG64(ProcessorState->SpecialRegisters.Tpidr_El0, tpidr_el0);
-    READ_SYSREG64(ProcessorState->SpecialRegisters.Tpidrro_El0, tpidrro_el0);
-    READ_SYSREG64(ProcessorState->SpecialRegisters.Tpidr_El1, tpidr_el1);
+    READ_SYSREG64(ProcessorState->SpecialRegisters.Tpidr_El0, TPIDR_EL0);
+    READ_SYSREG64(ProcessorState->SpecialRegisters.Tpidrro_El0, TPIDRRO_EL0);
+    READ_SYSREG64(ProcessorState->SpecialRegisters.Tpidr_El1, TPIDR_EL1);
 
     /*
      * Save hardware breakpoint registers. Only access registers that exist
@@ -268,14 +272,14 @@ KiSaveProcessorControlState(_Out_ PKPROCESSOR_STATE ProcessorState)
                   sizeof(ProcessorState->SpecialRegisters.KernelBcr));
 
     /* Save only the breakpoint registers that exist */
-    if (NumBps > 0) { READ_DBG_SLOT(KernelBvr, 0, "dbgbvr"); READ_DBG_SLOT(KernelBcr, 0, "dbgbcr"); }
-    if (NumBps > 1) { READ_DBG_SLOT(KernelBvr, 1, "dbgbvr"); READ_DBG_SLOT(KernelBcr, 1, "dbgbcr"); }
-    if (NumBps > 2) { READ_DBG_SLOT(KernelBvr, 2, "dbgbvr"); READ_DBG_SLOT(KernelBcr, 2, "dbgbcr"); }
-    if (NumBps > 3) { READ_DBG_SLOT(KernelBvr, 3, "dbgbvr"); READ_DBG_SLOT(KernelBcr, 3, "dbgbcr"); }
-    if (NumBps > 4) { READ_DBG_SLOT(KernelBvr, 4, "dbgbvr"); READ_DBG_SLOT(KernelBcr, 4, "dbgbcr"); }
-    if (NumBps > 5) { READ_DBG_SLOT(KernelBvr, 5, "dbgbvr"); READ_DBG_SLOT(KernelBcr, 5, "dbgbcr"); }
-    if (NumBps > 6) { READ_DBG_SLOT(KernelBvr, 6, "dbgbvr"); READ_DBG_SLOT(KernelBcr, 6, "dbgbcr"); }
-    if (NumBps > 7) { READ_DBG_SLOT(KernelBvr, 7, "dbgbvr"); READ_DBG_SLOT(KernelBcr, 7, "dbgbcr"); }
+    if (NumBps > 0) { READ_DBG_SLOT(KernelBvr, 0, DBGBVR); READ_DBG_SLOT(KernelBcr, 0, DBGBCR); }
+    if (NumBps > 1) { READ_DBG_SLOT(KernelBvr, 1, DBGBVR); READ_DBG_SLOT(KernelBcr, 1, DBGBCR); }
+    if (NumBps > 2) { READ_DBG_SLOT(KernelBvr, 2, DBGBVR); READ_DBG_SLOT(KernelBcr, 2, DBGBCR); }
+    if (NumBps > 3) { READ_DBG_SLOT(KernelBvr, 3, DBGBVR); READ_DBG_SLOT(KernelBcr, 3, DBGBCR); }
+    if (NumBps > 4) { READ_DBG_SLOT(KernelBvr, 4, DBGBVR); READ_DBG_SLOT(KernelBcr, 4, DBGBCR); }
+    if (NumBps > 5) { READ_DBG_SLOT(KernelBvr, 5, DBGBVR); READ_DBG_SLOT(KernelBcr, 5, DBGBCR); }
+    if (NumBps > 6) { READ_DBG_SLOT(KernelBvr, 6, DBGBVR); READ_DBG_SLOT(KernelBcr, 6, DBGBCR); }
+    if (NumBps > 7) { READ_DBG_SLOT(KernelBvr, 7, DBGBVR); READ_DBG_SLOT(KernelBcr, 7, DBGBCR); }
 
     /*
      * Save hardware watchpoint registers. Same principle as breakpoints.
@@ -287,26 +291,26 @@ KiSaveProcessorControlState(_Out_ PKPROCESSOR_STATE ProcessorState)
     RtlZeroMemory(ProcessorState->SpecialRegisters.KernelWcr,
                   sizeof(ProcessorState->SpecialRegisters.KernelWcr));
 
-    if (NumWps > 0) { READ_DBG_SLOT(KernelWvr, 0, "dbgwvr"); READ_DBG_SLOT(KernelWcr, 0, "dbgwcr"); }
-    if (NumWps > 1) { READ_DBG_SLOT(KernelWvr, 1, "dbgwvr"); READ_DBG_SLOT(KernelWcr, 1, "dbgwcr"); }
+    if (NumWps > 0) { READ_DBG_SLOT(KernelWvr, 0, DBGWVR); READ_DBG_SLOT(KernelWcr, 0, DBGWCR); }
+    if (NumWps > 1) { READ_DBG_SLOT(KernelWvr, 1, DBGWVR); READ_DBG_SLOT(KernelWcr, 1, DBGWCR); }
 
-    READ_SYSREG64(ProcessorState->ArchState.Midr_El1, midr_el1);
-    READ_SYSREG64(ProcessorState->ArchState.Sctlr_El1, sctlr_el1);
-    READ_SYSREG64(ProcessorState->ArchState.Actlr_El1, actlr_el1);
-    READ_SYSREG64(ProcessorState->ArchState.Cpacr_El1, cpacr_el1);
-    READ_SYSREG64(ProcessorState->ArchState.Tcr_El1, tcr_el1);
-    READ_SYSREG64(ProcessorState->ArchState.Ttbr0_El1, ttbr0_el1);
-    READ_SYSREG64(ProcessorState->ArchState.Ttbr1_El1, ttbr1_el1);
-    READ_SYSREG64(ProcessorState->ArchState.Esr_El1, esr_el1);
-    READ_SYSREG64(ProcessorState->ArchState.Far_El1, far_el1);
+    READ_SYSREG64(ProcessorState->ArchState.Midr_El1, MIDR_EL1);
+    READ_SYSREG64(ProcessorState->ArchState.Sctlr_El1, SCTLR_EL1);
+    READ_SYSREG64(ProcessorState->ArchState.Actlr_El1, ACTLR_EL1);
+    READ_SYSREG64(ProcessorState->ArchState.Cpacr_El1, CPACR_EL1);
+    READ_SYSREG64(ProcessorState->ArchState.Tcr_El1, TCR_EL1);
+    READ_SYSREG64(ProcessorState->ArchState.Ttbr0_El1, TTBR0_EL1);
+    READ_SYSREG64(ProcessorState->ArchState.Ttbr1_El1, TTBR1_EL1);
+    READ_SYSREG64(ProcessorState->ArchState.Esr_El1, ESR_EL1);
+    READ_SYSREG64(ProcessorState->ArchState.Far_El1, FAR_EL1);
     if (KiArm64PmuImplemented())
     {
-        READ_SYSREG64(ProcessorState->ArchState.Pmcr_El0, pmcr_el0);
-        READ_SYSREG64(ProcessorState->ArchState.Pmcntenset_El0, pmcntenset_el0);
-        READ_SYSREG64(ProcessorState->ArchState.Pmccntr_El0, pmccntr_el0);
-        READ_SYSREG64(ProcessorState->ArchState.Pmovsclr_El0, pmovsclr_el0);
-        READ_SYSREG64(ProcessorState->ArchState.Pmselr_El0, pmselr_el0);
-        READ_SYSREG64(ProcessorState->ArchState.Pmuserenr_El0, pmuserenr_el0);
+        READ_SYSREG64(ProcessorState->ArchState.Pmcr_El0, PMCR_EL0);
+        READ_SYSREG64(ProcessorState->ArchState.Pmcntenset_El0, PMCNTENSET_EL0);
+        READ_SYSREG64(ProcessorState->ArchState.Pmccntr_El0, PMCCNTR_EL0);
+        READ_SYSREG64(ProcessorState->ArchState.Pmovsclr_El0, PMOVSCLR_EL0);
+        READ_SYSREG64(ProcessorState->ArchState.Pmselr_El0, PMSELR_EL0);
+        READ_SYSREG64(ProcessorState->ArchState.Pmuserenr_El0, PMUSERENR_EL0);
     }
     else
     {
@@ -317,8 +321,8 @@ KiSaveProcessorControlState(_Out_ PKPROCESSOR_STATE ProcessorState)
         ProcessorState->ArchState.Pmselr_El0 = 0;
         ProcessorState->ArchState.Pmuserenr_El0 = 0;
     }
-    READ_SYSREG64(ProcessorState->ArchState.Mair_El1, mair_el1);
-    READ_SYSREG64(ProcessorState->ArchState.Vbar_El1, vbar_el1);
+    READ_SYSREG64(ProcessorState->ArchState.Mair_El1, MAIR_EL1);
+    READ_SYSREG64(ProcessorState->ArchState.Vbar_El1, VBAR_EL1);
 
     RtlZeroMemory(ProcessorState->ArchState.Pmxevcntr_El0,
                   sizeof(ProcessorState->ArchState.Pmxevcntr_El0));
@@ -362,9 +366,9 @@ KiRestoreProcessorControlState(_In_ PKPROCESSOR_STATE ProcessorState)
         return;
     }
 
-    WRITE_SYSREG64(tpidr_el0, ProcessorState->SpecialRegisters.Tpidr_El0);
-    WRITE_SYSREG64(tpidrro_el0, ProcessorState->SpecialRegisters.Tpidrro_El0);
-    WRITE_SYSREG64(tpidr_el1, ProcessorState->SpecialRegisters.Tpidr_El1);
+    WRITE_SYSREG64(TPIDR_EL0, ProcessorState->SpecialRegisters.Tpidr_El0);
+    WRITE_SYSREG64(TPIDRRO_EL0, ProcessorState->SpecialRegisters.Tpidrro_El0);
+    WRITE_SYSREG64(TPIDR_EL1, ProcessorState->SpecialRegisters.Tpidr_El1);
 
     /*
      * Restore hardware breakpoint registers. Only access registers that exist
@@ -372,22 +376,22 @@ KiRestoreProcessorControlState(_In_ PKPROCESSOR_STATE ProcessorState)
      */
     NumBps = KiArm64NumBreakpoints;
 
-    if (NumBps > 0) { WRITE_DBG_SLOT(KernelBvr, 0, "dbgbvr"); WRITE_DBG_SLOT(KernelBcr, 0, "dbgbcr"); }
-    if (NumBps > 1) { WRITE_DBG_SLOT(KernelBvr, 1, "dbgbvr"); WRITE_DBG_SLOT(KernelBcr, 1, "dbgbcr"); }
-    if (NumBps > 2) { WRITE_DBG_SLOT(KernelBvr, 2, "dbgbvr"); WRITE_DBG_SLOT(KernelBcr, 2, "dbgbcr"); }
-    if (NumBps > 3) { WRITE_DBG_SLOT(KernelBvr, 3, "dbgbvr"); WRITE_DBG_SLOT(KernelBcr, 3, "dbgbcr"); }
-    if (NumBps > 4) { WRITE_DBG_SLOT(KernelBvr, 4, "dbgbvr"); WRITE_DBG_SLOT(KernelBcr, 4, "dbgbcr"); }
-    if (NumBps > 5) { WRITE_DBG_SLOT(KernelBvr, 5, "dbgbvr"); WRITE_DBG_SLOT(KernelBcr, 5, "dbgbcr"); }
-    if (NumBps > 6) { WRITE_DBG_SLOT(KernelBvr, 6, "dbgbvr"); WRITE_DBG_SLOT(KernelBcr, 6, "dbgbcr"); }
-    if (NumBps > 7) { WRITE_DBG_SLOT(KernelBvr, 7, "dbgbvr"); WRITE_DBG_SLOT(KernelBcr, 7, "dbgbcr"); }
+    if (NumBps > 0) { WRITE_DBG_SLOT(KernelBvr, 0, DBGBVR); WRITE_DBG_SLOT(KernelBcr, 0, DBGBCR); }
+    if (NumBps > 1) { WRITE_DBG_SLOT(KernelBvr, 1, DBGBVR); WRITE_DBG_SLOT(KernelBcr, 1, DBGBCR); }
+    if (NumBps > 2) { WRITE_DBG_SLOT(KernelBvr, 2, DBGBVR); WRITE_DBG_SLOT(KernelBcr, 2, DBGBCR); }
+    if (NumBps > 3) { WRITE_DBG_SLOT(KernelBvr, 3, DBGBVR); WRITE_DBG_SLOT(KernelBcr, 3, DBGBCR); }
+    if (NumBps > 4) { WRITE_DBG_SLOT(KernelBvr, 4, DBGBVR); WRITE_DBG_SLOT(KernelBcr, 4, DBGBCR); }
+    if (NumBps > 5) { WRITE_DBG_SLOT(KernelBvr, 5, DBGBVR); WRITE_DBG_SLOT(KernelBcr, 5, DBGBCR); }
+    if (NumBps > 6) { WRITE_DBG_SLOT(KernelBvr, 6, DBGBVR); WRITE_DBG_SLOT(KernelBcr, 6, DBGBCR); }
+    if (NumBps > 7) { WRITE_DBG_SLOT(KernelBvr, 7, DBGBVR); WRITE_DBG_SLOT(KernelBcr, 7, DBGBCR); }
 
     /*
      * Restore hardware watchpoint registers.
      */
     NumWps = KiArm64NumWatchpoints;
 
-    if (NumWps > 0) { WRITE_DBG_SLOT(KernelWvr, 0, "dbgwvr"); WRITE_DBG_SLOT(KernelWcr, 0, "dbgwcr"); }
-    if (NumWps > 1) { WRITE_DBG_SLOT(KernelWvr, 1, "dbgwvr"); WRITE_DBG_SLOT(KernelWcr, 1, "dbgwcr"); }
+    if (NumWps > 0) { WRITE_DBG_SLOT(KernelWvr, 0, DBGWVR); WRITE_DBG_SLOT(KernelWcr, 0, DBGWCR); }
+    if (NumWps > 1) { WRITE_DBG_SLOT(KernelWvr, 1, DBGWVR); WRITE_DBG_SLOT(KernelWcr, 1, DBGWCR); }
 
     /*
      * The debug registers above only take effect once MDSCR_EL1 enables monitor
@@ -411,23 +415,23 @@ KiRestoreProcessorControlState(_In_ PKPROCESSOR_STATE ProcessorState)
     if (ProcessorState->ContextFrame.Cpsr & ARM64_PSTATE_SS)
         Mdscr |= ARM64_MDSCR_SS | ARM64_MDSCR_KDE;
 
-    WRITE_SYSREG64(mdscr_el1, Mdscr);
+    WRITE_SYSREG64(MDSCR_EL1, Mdscr);
     /* Synchronize the new debug state before returning from the exception. */
-    __asm__ __volatile__("isb");
+    ARM64_ISB();
 
-    WRITE_SYSREG64(tcr_el1, ProcessorState->ArchState.Tcr_El1);
-    WRITE_SYSREG64(ttbr0_el1, ProcessorState->ArchState.Ttbr0_El1);
-    WRITE_SYSREG64(ttbr1_el1, ProcessorState->ArchState.Ttbr1_El1);
-    WRITE_SYSREG64(mair_el1, ProcessorState->ArchState.Mair_El1);
-    WRITE_SYSREG64(vbar_el1, ProcessorState->ArchState.Vbar_El1);
-    WRITE_SYSREG64(sctlr_el1, ProcessorState->ArchState.Sctlr_El1);
-    WRITE_SYSREG64(actlr_el1, ProcessorState->ArchState.Actlr_El1);
-    WRITE_SYSREG64(cpacr_el1, ProcessorState->ArchState.Cpacr_El1);
+    WRITE_SYSREG64(TCR_EL1, ProcessorState->ArchState.Tcr_El1);
+    WRITE_SYSREG64(TTBR0_EL1, ProcessorState->ArchState.Ttbr0_El1);
+    WRITE_SYSREG64(TTBR1_EL1, ProcessorState->ArchState.Ttbr1_El1);
+    WRITE_SYSREG64(MAIR_EL1, ProcessorState->ArchState.Mair_El1);
+    WRITE_SYSREG64(VBAR_EL1, ProcessorState->ArchState.Vbar_El1);
+    WRITE_SYSREG64(SCTLR_EL1, ProcessorState->ArchState.Sctlr_El1);
+    WRITE_SYSREG64(ACTLR_EL1, ProcessorState->ArchState.Actlr_El1);
+    WRITE_SYSREG64(CPACR_EL1, ProcessorState->ArchState.Cpacr_El1);
     if (KiArm64PmuImplemented())
     {
-        WRITE_SYSREG64(pmcr_el0, ProcessorState->ArchState.Pmcr_El0);
-        WRITE_SYSREG64(pmcntenset_el0, ProcessorState->ArchState.Pmcntenset_El0);
-        WRITE_SYSREG64(pmuserenr_el0, ProcessorState->ArchState.Pmuserenr_El0);
+        WRITE_SYSREG64(PMCR_EL0, ProcessorState->ArchState.Pmcr_El0);
+        WRITE_SYSREG64(PMCNTENSET_EL0, ProcessorState->ArchState.Pmcntenset_El0);
+        WRITE_SYSREG64(PMUSERENR_EL0, ProcessorState->ArchState.Pmuserenr_El0);
     }
 }
 
@@ -454,7 +458,7 @@ KeInvalidateAllCaches(VOID)
      * This is necessary when establishing new mappings to RAM (MmMapIoSpace with
      * MmCached) to prevent the cache manager from reading stale data.
      */
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
 
     KiArm64EnsureDcacheSweepGeometry();
 
@@ -469,17 +473,17 @@ KeInvalidateAllCaches(VOID)
                 ULONG64 SetWayValue = (((ULONG64)Geometry->Level) << 1) |
                                       (((ULONG64)SetLoop) << Geometry->SetShift) |
                                       (((ULONG64)WayLoop) << Geometry->WayShift);
-                __asm__ __volatile__("dc cisw, %0" :: "r"(SetWayValue) : "memory");
+                ARM64_DC(CISW, SetWayValue);
             }
         }
     }
 
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
 
     /* Invalidate instruction cache */
-    __asm__ __volatile__("ic iallu" ::: "memory");
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_IC_ALL(IALLU);
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 
     return TRUE;
 }
@@ -500,15 +504,15 @@ KeInvalidateRangeAllCaches(
     Address = (ULONG_PTR)BaseAddress & ~((ULONG_PTR)CacheLineSize - 1);
     EndAddress = (ULONG_PTR)BaseAddress + Length;
 
-    __asm__ __volatile__("dsb sy" ::: "memory");
+    ARM64_DSB(SY);
     do
     {
-        __asm__ __volatile__("dc civac, %0" :: "r"(Address) : "memory");
-        __asm__ __volatile__("ic ivau, %0" :: "r"(Address) : "memory");
+        ARM64_DC(CIVAC, Address);
+        ARM64_IC(IVAU, Address);
         Address += CacheLineSize;
     } while ((Address < EndAddress) && (Address != 0));
-    __asm__ __volatile__("dsb sy" ::: "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+    ARM64_DSB(SY);
+    ARM64_ISB();
 }
 
 ULONG
@@ -530,13 +534,13 @@ KeFlushEntireTb(_In_ BOOLEAN Invalid,
     /* Serialize with other TLB modifications. */
     OldIrql = KeRaiseIrqlToSynchLevel();
 
-    __asm__ __volatile__("dsb ish" ::: "memory");
+    ARM64_DSB(ISH);
     if (AllProcessors)
-        __asm__ __volatile__("tlbi vmalle1is" ::: "memory");
+        ARM64_TLBI_ALL(VMALLE1IS);
     else
-        __asm__ __volatile__("tlbi vmalle1" ::: "memory");
-    __asm__ __volatile__("dsb ish" ::: "memory");
-    __asm__ __volatile__("isb" ::: "memory");
+        ARM64_TLBI_ALL(VMALLE1);
+    ARM64_DSB(ISH);
+    ARM64_ISB();
 
     KeLowerIrql(OldIrql);
 }
@@ -712,7 +716,7 @@ KeFlushIoBuffers(_Inout_ PMDL Mdl,
     {
         if (ReadOperation)
         {
-            __asm__ __volatile__("dsb sy" ::: "memory");
+            ARM64_DSB(SY);
         }
 
         RemainingLength = Length;
@@ -741,16 +745,16 @@ KeFlushIoBuffers(_Inout_ PMDL Mdl,
                         CacheAddress >= ChunkStart &&
                         CacheAddress + CacheLineSize <= ChunkEnd)
                     {
-                        __asm__ __volatile__("dc ivac, %0" :: "r"(CacheAddress) : "memory");
+                        ARM64_DC(IVAC, CacheAddress);
                     }
                     else
                     {
-                        __asm__ __volatile__("dc civac, %0" :: "r"(CacheAddress) : "memory");
+                        ARM64_DC(CIVAC, CacheAddress);
                     }
                 }
                 else
                 {
-                    __asm__ __volatile__("dc cvac, %0" :: "r"(CacheAddress) : "memory");
+                    ARM64_DC(CVAC, CacheAddress);
                 }
             }
 
@@ -758,7 +762,7 @@ KeFlushIoBuffers(_Inout_ PMDL Mdl,
             ByteOffset = 0;
         }
 
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
         return;
     }
 
@@ -793,7 +797,7 @@ KeFlushIoBuffers(_Inout_ PMDL Mdl,
 
     if (ReadOperation)
     {
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
 
         for (CacheAddress = StartAddress; CacheAddress < EndAddress;
              CacheAddress += CacheLineSize)
@@ -803,25 +807,25 @@ KeFlushIoBuffers(_Inout_ PMDL Mdl,
                 CacheAddress + CacheLineSize <=
                     (ULONG_PTR)VirtualAddress + Length)
             {
-                __asm__ __volatile__("dc ivac, %0" :: "r"(CacheAddress) : "memory");
+                ARM64_DC(IVAC, CacheAddress);
             }
             else
             {
-                __asm__ __volatile__("dc civac, %0" :: "r"(CacheAddress) : "memory");
+                ARM64_DC(CIVAC, CacheAddress);
             }
         }
 
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
     }
     else
     {
         for (CacheAddress = StartAddress; CacheAddress < EndAddress;
              CacheAddress += CacheLineSize)
         {
-            __asm__ __volatile__("dc cvac, %0" :: "r"(CacheAddress) : "memory");
+            ARM64_DC(CVAC, CacheAddress);
         }
 
-        __asm__ __volatile__("dsb sy" ::: "memory");
+        ARM64_DSB(SY);
     }
 
     /*

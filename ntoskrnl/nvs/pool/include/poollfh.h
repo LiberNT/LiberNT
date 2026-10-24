@@ -97,7 +97,7 @@ PoolLfhBlockIndex(
     return TRUE;
 }
 
-typedef struct _POOL_LFH_SLOT
+typedef struct POOL_CACHE_ALIGNED _POOL_LFH_SLOT
 {
     POOL_LOCK Lock;
     LIST_ENTRY Partial;
@@ -105,7 +105,7 @@ typedef struct _POOL_LFH_SLOT
     ULONG64 Allocations;
     ULONG64 Frees;
     ULONG SubsegmentCount;
-} POOL_CACHE_ALIGNED POOL_LFH_SLOT, *PPOOL_LFH_SLOT;
+} POOL_LFH_SLOT, *PPOOL_LFH_SLOT;
 
 typedef struct _POOL_LFH_CLASS
 {
