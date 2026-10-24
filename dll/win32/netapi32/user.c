@@ -250,8 +250,9 @@ GetPasswordAge(IN PLARGE_INTEGER PasswordLastSet)
     if (!NT_SUCCESS(Status))
         return 0;
 
-    RtlTimeToSecondsSince1970(&SystemTime, &SystemSecondsSince1970);
-    RtlTimeToSecondsSince1970(PasswordLastSet, &PasswordSecondsSince1970);
+    if (!RtlTimeToSecondsSince1970(&SystemTime, &SystemSecondsSince1970) ||
+        !RtlTimeToSecondsSince1970(PasswordLastSet, &PasswordSecondsSince1970))
+        return 0;
 
     return SystemSecondsSince1970 - PasswordSecondsSince1970;
 }
