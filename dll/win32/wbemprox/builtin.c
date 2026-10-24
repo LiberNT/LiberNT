@@ -200,7 +200,13 @@ static const struct column col_diskpartition[] =
     { L"DeviceId",       CIM_STRING|COL_FLAG_DYNAMIC|COL_FLAG_KEY },
     { L"DiskIndex",      CIM_UINT32 },
     { L"Index",          CIM_UINT32 },
+#ifdef __REACTOS__
+    { L"Name",           CIM_STRING|COL_FLAG_DYNAMIC },
+#endif
     { L"PNPDeviceID",    CIM_STRING|COL_FLAG_DYNAMIC },
+#ifdef __REACTOS__
+    { L"PrimaryPartition", CIM_BOOLEAN },
+#endif
     { L"Size",           CIM_UINT64 },
     { L"StartingOffset", CIM_UINT64 },
     { L"Type",           CIM_STRING|COL_FLAG_DYNAMIC },
@@ -872,7 +878,13 @@ struct record_diskpartition
     const WCHAR *device_id;
     UINT32       diskindex;
     UINT32       index;
+#ifdef __REACTOS__
+    const WCHAR *name;
+#endif
     const WCHAR *pnpdevice_id;
+#ifdef __REACTOS__
+    int          primarypartition;
+#endif
     UINT64       size;
     UINT64       startingoffset;
     const WCHAR *type;
@@ -3003,6 +3015,21 @@ static UINT get_physical_disks( struct physical_disk *disks, UINT capacity )
     return count;
 }
 
+#ifdef __REACTOS__
+static void free_physical_disks( struct physical_disk *disks, UINT count )
+{
+    UINT i;
+
+    for (i = 0; i < count; i++)
+    {
+        free( disks[i].model );
+        free( disks[i].pnpdevice_id );
+        free( disks[i].serialnumber );
+    }
+    free( disks );
+}
+#endif
+
 static enum fill_status fill_diskdrive( struct table *table, const struct expr *cond )
 {
     static const WCHAR fmtW[] = L"\\\\\\\\.\\\\PHYSICALDRIVE%u";
@@ -3354,6 +3381,273 @@ static WCHAR *get_filesystem( const WCHAR *root )
     return wcsdup( L"NTFS" );
 }
 
+#ifdef __REACTOS__
+struct wbemprox_partition_info_ex
+{
+    DWORD         PartitionStyle;
+    LARGE_INTEGER StartingOffset;
+    LARGE_INTEGER PartitionLength;
+    DWORD         PartitionNumber;
+    BOOLEAN       RewritePartition;
+    BOOLEAN       IsServicePartition;
+    union
+    {
+        struct
+        {
+            BYTE    PartitionType;
+            BOOLEAN BootIndicator;
+            BOOLEAN RecognizedPartition;
+            DWORD   HiddenSectors;
+            GUID    PartitionId;
+        } Mbr;
+        struct
+        {
+            GUID    PartitionType;
+            GUID    PartitionId;
+            DWORD64 Attributes;
+            WCHAR   Name[36];
+        } Gpt;
+    };
+};
+
+struct wbemprox_drive_layout_ex
+{
+    DWORD PartitionStyle;
+    DWORD PartitionCount;
+    union
+    {
+        struct
+        {
+            DWORD Signature;
+            DWORD CheckSum;
+        } Mbr;
+        struct
+        {
+            GUID          DiskId;
+            LARGE_INTEGER StartingUsableOffset;
+            LARGE_INTEGER UsableLength;
+            DWORD         MaxPartitionCount;
+        } Gpt;
+    };
+    struct wbemprox_partition_info_ex PartitionEntry[1];
+};
+
+#define WBEMPROX_PARTITION_STYLE_MBR 0
+#define WBEMPROX_PARTITION_STYLE_GPT 1
+
+struct wmi_partition
+{
+    DWORD        number;
+    UINT64       offset;
+    UINT64       size;
+    const WCHAR *type;
+    BOOL         bootable;
+    BOOL         primary;
+};
+
+static const GUID partition_system_guid =
+    { 0xc12a7328, 0xf81f, 0x11d2, { 0xba, 0x4b, 0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b } };
+static const GUID partition_msft_reserved_guid =
+    { 0xe3c9e316, 0x0b5c, 0x4db8, { 0x81, 0x7d, 0xf9, 0x2d, 0xf0, 0x02, 0x15, 0xae } };
+static const GUID partition_basic_data_guid =
+    { 0xebd0a0a2, 0xb9e5, 0x4433, { 0x87, 0xc0, 0x68, 0xb6, 0xb7, 0x26, 0x99, 0xc7 } };
+static const GUID partition_ldm_metadata_guid =
+    { 0x5808c8aa, 0x7e8f, 0x42e0, { 0x85, 0xd2, 0xe1, 0xe9, 0x04, 0x34, 0xcf, 0xb3 } };
+static const GUID partition_ldm_data_guid =
+    { 0xaf9b60a0, 0x1431, 0x4f62, { 0xbc, 0x68, 0x33, 0x11, 0x71, 0x4a, 0x69, 0xad } };
+
+static const WCHAR *get_mbr_partition_type( BYTE type )
+{
+    switch (type)
+    {
+    case PARTITION_FAT_12:          return L"12-bit FAT";
+    case PARTITION_XENIX_1:         return L"Xenix Type 1";
+    case PARTITION_XENIX_2:         return L"Xenix Type 2";
+    case PARTITION_FAT_16:          return L"16-bit FAT";
+    case PARTITION_EXTENDED:        return L"Extended Partition";
+    case PARTITION_HUGE:            return L"MS-DOS V4 Huge";
+    case PARTITION_IFS:             return L"Installable File System";
+    case PARTITION_PREP:            return L"PowerPC Reference Platform";
+    case PARTITION_UNIX:            return L"UNIX";
+    case PARTITION_XINT13:          return L"Win95 w/Extended Int 13";
+    case PARTITION_XINT13_EXTENDED: return L"Extended w/Extended Int 13";
+    case PARTITION_LDM:             return L"Logical Disk Manager";
+    default:                        return L"Unknown";
+    }
+}
+
+static UINT get_wmi_partitions( UINT disk, struct wmi_partition *parts, UINT capacity )
+{
+    struct wbemprox_drive_layout_ex *layout = NULL;
+    LARGE_INTEGER length;
+    WCHAR path[32];
+    HANDLE handle;
+    DWORD size = sizeof(*layout) + 16 * sizeof(struct wbemprox_partition_info_ex), bytes, i, entries;
+    UINT count = 0;
+
+    swprintf( path, ARRAY_SIZE( path ), L"\\\\.\\PhysicalDrive%u", disk );
+    handle = CreateFileW( path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL );
+    if (handle == INVALID_HANDLE_VALUE) return 0;
+
+    for (;;)
+    {
+        if (!(layout = malloc( size ))) break;
+        if (DeviceIoControl( handle, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, layout, size, &bytes, NULL )) break;
+        free( layout );
+        layout = NULL;
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || size > 64 * 1024) break;
+        size *= 2;
+    }
+
+    if (layout && layout->PartitionStyle == WBEMPROX_PARTITION_STYLE_GPT)
+    {
+        for (i = 0; i < layout->PartitionCount && count < capacity; i++)
+        {
+            struct wbemprox_partition_info_ex *entry = &layout->PartitionEntry[i];
+            const GUID *type = &entry->Gpt.PartitionType;
+            static const GUID null_guid;
+
+            if (IsEqualGUID( type, &null_guid ) || IsEqualGUID( type, &partition_msft_reserved_guid )) continue;
+            parts[count].number   = entry->PartitionNumber;
+            parts[count].offset   = entry->StartingOffset.QuadPart;
+            parts[count].size     = entry->PartitionLength.QuadPart;
+            parts[count].bootable = IsEqualGUID( type, &partition_system_guid );
+            parts[count].primary  = TRUE;
+            if (IsEqualGUID( type, &partition_system_guid ))           parts[count].type = L"GPT: System";
+            else if (IsEqualGUID( type, &partition_basic_data_guid ))  parts[count].type = L"GPT: Basic Data";
+            else if (IsEqualGUID( type, &partition_ldm_metadata_guid )) parts[count].type = L"GPT: Logical Disk Manager Metadata";
+            else if (IsEqualGUID( type, &partition_ldm_data_guid ))    parts[count].type = L"GPT: Logical Disk Manager Data";
+            else
+            {
+                parts[count].type    = L"GPT: Unknown";
+                parts[count].primary = FALSE;
+            }
+            count++;
+        }
+    }
+    else if (layout && layout->PartitionStyle == WBEMPROX_PARTITION_STYLE_MBR)
+    {
+        entries = layout->PartitionCount < 4 ? layout->PartitionCount : 4;
+        for (i = 0; i < entries && count < capacity; i++)
+        {
+            struct wbemprox_partition_info_ex *entry = &layout->PartitionEntry[i];
+
+            if (entry->Mbr.PartitionType == PARTITION_ENTRY_UNUSED || !entry->PartitionLength.QuadPart) continue;
+            parts[count].number = entry->PartitionNumber;
+            parts[count].offset = entry->StartingOffset.QuadPart;
+            parts[count].size   = entry->PartitionLength.QuadPart;
+            if (!entry->StartingOffset.QuadPart)
+            {
+                parts[count].type     = L"Unknown";
+                parts[count].bootable = TRUE;
+                parts[count].primary  = TRUE;
+            }
+            else
+            {
+                parts[count].type     = get_mbr_partition_type( entry->Mbr.PartitionType );
+                parts[count].bootable = entry->Mbr.BootIndicator;
+                parts[count].primary  = entry->Mbr.PartitionType != PARTITION_EXTENDED &&
+                                        entry->Mbr.PartitionType != PARTITION_XINT13_EXTENDED;
+            }
+            count++;
+        }
+    }
+    else if (capacity && DeviceIoControl( handle, IOCTL_DISK_GET_LENGTH_INFO, NULL, 0, &length, sizeof(length), &bytes, NULL ) &&
+             length.QuadPart)
+    {
+        parts[0].number   = 0;
+        parts[0].offset   = 0;
+        parts[0].size     = length.QuadPart;
+        parts[0].type     = L"Unknown";
+        parts[0].bootable = TRUE;
+        parts[0].primary  = TRUE;
+        count = 1;
+    }
+
+    free( layout );
+    CloseHandle( handle );
+    return count;
+}
+
+static BOOL get_volume_partition_id( WCHAR letter, WCHAR *buf, UINT len )
+{
+    struct wmi_partition parts[128];
+    STORAGE_DEVICE_NUMBER number;
+    WCHAR volume[] = L"\\\\.\\A:";
+    HANDLE handle;
+    DWORD bytes;
+    UINT i, count;
+    BOOL ret;
+
+    volume[4] = letter;
+    handle = CreateFileW( volume, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL );
+    if (handle == INVALID_HANDLE_VALUE) return FALSE;
+    ret = DeviceIoControl( handle, IOCTL_STORAGE_GET_DEVICE_NUMBER, NULL, 0, &number, sizeof(number), &bytes, NULL );
+    CloseHandle( handle );
+    if (!ret) return FALSE;
+
+    count = get_wmi_partitions( number.DeviceNumber, parts, ARRAY_SIZE( parts ) );
+    for (i = 0; i < count; i++)
+    {
+        if (parts[i].number != number.PartitionNumber) continue;
+        swprintf( buf, len, L"Disk #%u, Partition #%u", number.DeviceNumber, i );
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static enum fill_status fill_diskpartition( struct table *table, const struct expr *cond )
+{
+    struct wmi_partition parts[128];
+    struct physical_disk *disks;
+    struct record_diskpartition *rec;
+    enum fill_status status = FILL_STATUS_UNFILTERED;
+    WCHAR device_id[32];
+    UINT d, i, ndisks, count, row = 0, offset = 0;
+
+    if (!(disks = calloc( MAX_PHYSICAL_DISKS, sizeof(*disks) ))) return FILL_STATUS_FAILED;
+    ndisks = get_physical_disks( disks, MAX_PHYSICAL_DISKS );
+
+    for (d = 0; d < ndisks; d++)
+    {
+        count = get_wmi_partitions( disks[d].number, parts, ARRAY_SIZE( parts ) );
+        for (i = 0; i < count; i++)
+        {
+            if (!resize_table( table, row + 1, sizeof(*rec) ))
+            {
+                free_physical_disks( disks, ndisks );
+                return FILL_STATUS_FAILED;
+            }
+
+            swprintf( device_id, ARRAY_SIZE( device_id ), L"Disk #%u, Partition #%u", disks[d].number, i );
+            rec = (struct record_diskpartition *)(table->data + offset);
+            rec->bootable         = parts[i].bootable ? -1 : 0;
+            rec->bootpartition    = parts[i].bootable ? -1 : 0;
+            rec->device_id        = wcsdup( device_id );
+            rec->diskindex        = disks[d].number;
+            rec->index            = i;
+            rec->name             = wcsdup( device_id );
+            rec->pnpdevice_id     = wcsdup( device_id );
+            rec->primarypartition = parts[i].primary ? -1 : 0;
+            rec->size             = parts[i].size;
+            rec->startingoffset   = parts[i].offset;
+            rec->type             = wcsdup( parts[i].type );
+            if (!match_row( table, row, cond, &status ))
+            {
+                free_row_values( table, row );
+                continue;
+            }
+            offset += sizeof(*rec);
+            row++;
+        }
+    }
+    free_physical_disks( disks, ndisks );
+
+    TRACE("created %u rows\n", row);
+    table->num_rows = row;
+    return status;
+}
+#else
 static enum fill_status fill_diskpartition( struct table *table, const struct expr *cond )
 {
     WCHAR device_id[32], root[] = L"A:\\";
@@ -3425,6 +3719,7 @@ static enum fill_status fill_diskpartition( struct table *table, const struct ex
     table->num_rows = row;
     return status;
 }
+#endif
 
 static UINT32 get_bitsperpixel( UINT *hres, UINT *vres )
 {
@@ -3628,6 +3923,73 @@ static enum fill_status fill_logicaldisk( struct table *table, const struct expr
     return status;
 }
 
+#ifdef __REACTOS__
+static struct association *get_logicaldisktopartition_pairs( UINT *count )
+{
+    struct association *ret = NULL;
+    struct query *query, *query2 = NULL;
+    WCHAR partition_id[32];
+    VARIANT val, id;
+    HRESULT hr;
+    UINT i, j, pairs = 0;
+
+    if (!(query = create_query( WBEMPROX_NAMESPACE_CIMV2 ))) return NULL;
+    if ((hr = parse_query( WBEMPROX_NAMESPACE_CIMV2, L"SELECT * FROM Win32_DiskPartition",
+                           &query->view, &query->mem )) != S_OK) goto done;
+    if ((hr = execute_view( query->view )) != S_OK) goto done;
+
+    if (!(query2 = create_query( WBEMPROX_NAMESPACE_CIMV2 ))) goto done;
+    if ((hr = parse_query( WBEMPROX_NAMESPACE_CIMV2,
+                           L"SELECT * FROM Win32_LogicalDisk WHERE DriveType=2 OR DriveType=3", &query2->view,
+                           &query2->mem )) != S_OK) goto done;
+    if ((hr = execute_view( query2->view )) != S_OK) goto done;
+
+    if (!(ret = calloc( query2->view->result_count ? query2->view->result_count : 1, sizeof(*ret) ))) goto done;
+
+    for (i = 0; i < query2->view->result_count; i++)
+    {
+        if (get_propval( query2->view, i, L"DeviceID", &id, NULL, NULL ) != S_OK) continue;
+        if (V_VT( &id ) != VT_BSTR || !V_BSTR( &id ) || !V_BSTR( &id )[0] ||
+            !get_volume_partition_id( V_BSTR( &id )[0], partition_id, ARRAY_SIZE( partition_id ) ))
+        {
+            VariantClear( &id );
+            continue;
+        }
+        VariantClear( &id );
+
+        for (j = 0; j < query->view->result_count; j++)
+        {
+            BOOL match;
+
+            if (get_propval( query->view, j, L"DeviceID", &id, NULL, NULL ) != S_OK) continue;
+            match = V_VT( &id ) == VT_BSTR && V_BSTR( &id ) && !wcscmp( V_BSTR( &id ), partition_id );
+            VariantClear( &id );
+            if (!match) continue;
+
+            if ((hr = get_propval( query->view, j, L"__PATH", &val, NULL, NULL )) != S_OK) goto done;
+            ret[pairs].ref = wcsdup( V_BSTR(&val) );
+            VariantClear( &val );
+            if ((hr = get_propval( query2->view, i, L"__PATH", &val, NULL, NULL )) != S_OK) goto done;
+            ret[pairs].ref2 = wcsdup( V_BSTR(&val) );
+            VariantClear( &val );
+            if (!ret[pairs].ref || !ret[pairs].ref2) goto done;
+            pairs++;
+            break;
+        }
+    }
+
+    *count = pairs;
+    free_query( query );
+    free_query( query2 );
+    return ret;
+
+done:
+    if (ret) free_associations( ret, query2 ? query2->view->result_count : 0 );
+    free_query( query );
+    free_query( query2 );
+    return NULL;
+}
+#else
 static struct association *get_logicaldisktopartition_pairs( UINT *count )
 {
     struct association *ret = NULL;
@@ -3669,6 +4031,7 @@ done:
     free_query( query2 );
     return ret;
 }
+#endif
 
 static enum fill_status fill_logicaldisktopartition( struct table *table, const struct expr *cond )
 {
