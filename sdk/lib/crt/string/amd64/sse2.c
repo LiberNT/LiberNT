@@ -44,6 +44,10 @@ SseMask16(__m128i Data, __m128i Value)
     return (unsigned int)_mm_movemask_epi8(_mm_cmpeq_epi16(Data, Value));
 }
 
+#ifdef _MSC_VER
+#pragma function(strlen, wcslen, wcscmp, wcsncmp)
+#endif
+
 size_t __cdecl
 strlen(const char *String)
 {

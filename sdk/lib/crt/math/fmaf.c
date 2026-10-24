@@ -37,6 +37,10 @@
  * direct double-precision arithmetic suffices, except where double
  * rounding occurs.
  */
+#ifdef _MSC_VER
+#pragma function(fmaf)
+#endif
+
 float __cdecl fmaf(float x, float y, float z)
 {
 	double xy, result;
