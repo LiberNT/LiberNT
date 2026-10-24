@@ -933,6 +933,9 @@ BOOLEAN LxArchSetupSignalFrame(_Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXC
 LONG64 LxArchSignalReturn(_Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame, _Out_ PULONG64 Mask);
 ULONG LxArchSigTrampoline(_Out_writes_bytes_(16) PUCHAR Code);
 PCSTR LxArchCpuinfo(VOID);
+PCSTR LxArchConfigName(VOID);
+PCSTR LxArchKernelConfig(VOID);
+PUCHAR LxKernelConfigGzip(_Out_ PULONG Length);
 
 FORCEINLINE
 PLX_NS

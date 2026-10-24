@@ -64,6 +64,18 @@ LxArchCpuinfo(VOID)
     return "isa\t\t: rv64imafdc\nmmu\t\t: sv39\n";
 }
 
+PCSTR
+LxArchConfigName(VOID)
+{
+    return "riscv";
+}
+
+PCSTR
+LxArchKernelConfig(VOID)
+{
+    return "CONFIG_RISCV=y\n";
+}
+
 ULONG64
 LxArchImageBase(
     _In_ BOOLEAN Interpreter)

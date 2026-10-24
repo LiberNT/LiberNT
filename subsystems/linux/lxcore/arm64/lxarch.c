@@ -139,6 +139,18 @@ LxArchCpuinfo(VOID)
     return "Features\t: fp asimd\nCPU architecture: 8\n";
 }
 
+PCSTR
+LxArchConfigName(VOID)
+{
+    return "arm64";
+}
+
+PCSTR
+LxArchKernelConfig(VOID)
+{
+    return "CONFIG_ARM64=y\n";
+}
+
 VOID
 LxArchGetSyscall(
     _In_ PKTRAP_FRAME TrapFrame,

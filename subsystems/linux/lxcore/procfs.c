@@ -1213,6 +1213,27 @@ static const LX_PID_ENTRY LxPidEntries[] =
 
 static
 VOID
+LxGenKernelConfig(
+    _In_ PLX_PROCESS Self,
+    _In_ PLX_SYNTH Synth,
+    _Inout_ PLX_TEXT Text)
+{
+    ULONG Length;
+    PUCHAR Gzip = LxKernelConfigGzip(&Length);
+
+    UNREFERENCED_PARAMETER(Self);
+    UNREFERENCED_PARAMETER(Synth);
+    if (Gzip == NULL)
+    {
+        Text->Failed = TRUE;
+        return;
+    }
+    LxTextAppend(Text, (PCSTR)Gzip, Length);
+    LxFree(Gzip);
+}
+
+static
+VOID
 LxGenBootId(
     _In_ PLX_PROCESS Self,
     _In_ PLX_SYNTH Synth,
@@ -1578,6 +1599,7 @@ LxGenLoadavg(
 static const LX_TABLE_ENTRY LxProcStaticTable[] =
 {
     { "cmdline", 0444, "init=/sbin/init\n", NULL, NULL },
+    { "config.gz", 0444, NULL, LxGenKernelConfig, NULL },
     { "consoles", 0444, "console              -W- (EC p a)    5:1\n", NULL, NULL },
     { "cpuinfo", 0444, NULL, LxGenCpuinfo, NULL },
     { "devices", 0444, "Character devices:\n  1 mem\n  4 /dev/vc/0\n  4 tty\n  5 /dev/tty\n  5 /dev/console\n  5 /dev/ptmx\n136 pts\n\nBlock devices:\n", NULL, NULL },
