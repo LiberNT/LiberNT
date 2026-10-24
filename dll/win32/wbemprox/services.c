@@ -401,6 +401,48 @@ void free_path( struct path *path )
     free( path );
 }
 
+#ifdef __REACTOS__
+static HRESULT convert_path_filter( struct path *path )
+{
+    const WCHAR *p = path->filter, *end = path->filter + path->filter_len;
+    WCHAR *ret, *q;
+
+    if (!(ret = malloc( (2 * path->filter_len + 1) * sizeof(WCHAR) ))) return E_OUTOFMEMORY;
+    for (q = ret; p < end; p++)
+    {
+        if (*p == '\'')
+        {
+            *q++ = '\"';
+            for (p++; p < end && *p != '\''; p++)
+            {
+                if (*p == '\\' || *p == '\"') *q++ = '\\';
+                *q++ = *p;
+            }
+            *q++ = '\"';
+            if (p >= end) break;
+        }
+        else if (*p == '\"')
+        {
+            *q++ = *p;
+            for (p++; p < end && *p != '\"'; p++)
+            {
+                if (*p == '\\' && p + 1 < end) *q++ = *p++;
+                *q++ = *p;
+            }
+            if (p >= end) break;
+            *q++ = *p;
+        }
+        else *q++ = *p;
+    }
+    *q = 0;
+
+    free( path->filter );
+    path->filter = ret;
+    path->filter_len = q - ret;
+    return S_OK;
+}
+#endif
+
 HRESULT parse_path( const WCHAR *str, struct path **ret )
 {
     struct path *path;
@@ -516,6 +558,13 @@ HRESULT parse_path( const WCHAR *str, struct path **ret )
         return WBEM_E_INVALID_OBJECT_PATH;
     }
 
+#ifdef __REACTOS__
+    if (path->filter && convert_path_filter( path ) != S_OK)
+    {
+        free_path( path );
+        return E_OUTOFMEMORY;
+    }
+#endif
     *ret = path;
     return S_OK;
 }
@@ -568,6 +617,9 @@ HRESULT get_object( enum wbm_namespace ns, const WCHAR *object_path, IWbemClassO
     if (hr != S_OK)
     {
         free_path( path );
+#ifdef __REACTOS__
+        if (hr == WBEM_E_INVALID_QUERY) hr = WBEM_E_INVALID_PARAMETER;
+#endif
         return hr;
     }
     hr = IEnumWbemClassObject_Next( iter, WBEM_INFINITE, 1, obj, &count );

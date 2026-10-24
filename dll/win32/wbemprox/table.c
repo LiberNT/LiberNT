@@ -186,10 +186,29 @@ BSTR get_value_bstr( const struct table *table, UINT row, UINT column )
     case CIM_REFERENCE:
     case CIM_STRING:
         if (!val) return NULL;
+#ifdef __REACTOS__
+        {
+            const WCHAR *src = (const WCHAR *)(INT_PTR)val;
+            UINT i, j;
+
+            for (i = len = 0; src[i]; i++) len += (src[i] == '\\' || src[i] == '\"') ? 2 : 1;
+            if (!(ret = SysAllocStringLen( NULL, len + 2 ))) return NULL;
+            ret[0] = '\"';
+            for (i = 0, j = 1; src[i]; i++)
+            {
+                if (src[i] == '\\' || src[i] == '\"') ret[j++] = '\\';
+                ret[j++] = src[i];
+            }
+            ret[j++] = '\"';
+            ret[j] = 0;
+            return ret;
+        }
+#else
         len = lstrlenW( (const WCHAR *)(INT_PTR)val ) + 2;
         if (!(ret = SysAllocStringLen( NULL, len ))) return NULL;
         swprintf( ret, len + 1, L"\"%s\"", (const WCHAR *)(INT_PTR)val );
         return ret;
+#endif
 
     case CIM_SINT16:
     case CIM_SINT32:

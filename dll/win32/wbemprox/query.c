@@ -94,13 +94,52 @@ void destroy_view( struct view *view )
     free( view );
 }
 
+#ifdef __REACTOS__
+static const WCHAR *eval_like_set( WCHAR c, const WCHAR *pattern, BOOL *match )
+{
+    const WCHAR *p = pattern + 1;
+    BOOL negate = FALSE, found = FALSE;
+
+    if (*p == '^')
+    {
+        negate = TRUE;
+        p++;
+    }
+    c = towupper( c );
+    while (*p && *p != ']')
+    {
+        if (p[1] == '=' && p[2] && p[2] != ']')
+        {
+            if (c >= towupper( p[0] ) && c <= towupper( p[2] )) found = TRUE;
+            p += 3;
+        }
+        else
+        {
+            if (c == towupper( *p )) found = TRUE;
+            p++;
+        }
+    }
+    if (*p != ']') return NULL;
+
+    *match = negate ? !found : found;
+    return p + 1;
+}
+#endif
+
 static BOOL eval_like( const WCHAR *text, const WCHAR *pattern )
 {
+#ifndef __REACTOS__
     if (wcsstr( pattern, L"[" )) FIXME( "character ranges (i.e. [abc], [^a-z]) are not supported\n" );
+#endif
 
     while (*text)
     {
+#ifdef __REACTOS__
+        const WCHAR *next;
+        BOOL match;
+#else
         if (pattern[0] == '\\' && pattern[1] == '\\') pattern++;
+#endif
 
         if (*pattern == '%')
         {
@@ -111,6 +150,15 @@ static BOOL eval_like( const WCHAR *text, const WCHAR *pattern )
             return !!*text;
         }
 
+#ifdef __REACTOS__
+        if (*pattern == '[' && (next = eval_like_set( *text, pattern, &match )))
+        {
+            if (!match) return FALSE;
+            text++;
+            pattern = next;
+            continue;
+        }
+#endif
         if (*pattern != '_' && towupper( *text ) != towupper( *pattern )) return FALSE;
         text++; pattern++;
     }
@@ -509,12 +557,29 @@ static HRESULT create_assoc_enum( enum wbm_namespace ns, const WCHAR *class, UIN
 static WCHAR *build_antecedent_query( const WCHAR *assocclass, const WCHAR *dependent )
 {
     static const WCHAR fmtW[] = L"SELECT Antecedent FROM %s WHERE Dependent='%s'";
+#ifdef __REACTOS__
+    UINT len = lstrlenW(assocclass) + 2 * lstrlenW(dependent) + ARRAY_SIZE(fmtW);
+    WCHAR *ret, *escaped, *q;
+    const WCHAR *p;
+
+    if (!(escaped = malloc( (2 * lstrlenW(dependent) + 1) * sizeof(WCHAR) ))) return NULL;
+    for (p = dependent, q = escaped; *p; p++)
+    {
+        if (*p == '\\' || *p == '\'') *q++ = '\\';
+        *q++ = *p;
+    }
+    *q = 0;
+    if ((ret = malloc( len * sizeof(WCHAR) ))) swprintf( ret, len, fmtW, assocclass, escaped );
+    free( escaped );
+    return ret;
+#else
     UINT len = lstrlenW(assocclass) + lstrlenW(dependent) + ARRAY_SIZE(fmtW);
     WCHAR *ret;
 
     if (!(ret = malloc( len * sizeof(WCHAR) ))) return NULL;
     swprintf( ret, len, fmtW, assocclass, dependent );
     return ret;
+#endif
 }
 
 static BSTR build_servername(void)

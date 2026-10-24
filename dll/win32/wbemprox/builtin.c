@@ -2680,6 +2680,42 @@ static WCHAR *build_glob( WCHAR drive, const WCHAR *path, UINT len )
     return ret;
 }
 
+#ifdef __REACTOS__
+static WCHAR *build_name( WCHAR drive, const WCHAR *path )
+{
+    UINT len = lstrlenW( path );
+    WCHAR *ret;
+
+    if (!(ret = malloc( (len + 4) * sizeof(WCHAR) ))) return NULL;
+    ret[0] = drive;
+    ret[1] = ':';
+    ret[2] = '\\';
+    memcpy( ret + 3, path, (len + 1) * sizeof(WCHAR) );
+    return ret;
+}
+
+static WCHAR *build_dirname( const WCHAR *path, UINT *ret_len )
+{
+    const WCHAR *p = path, *start;
+    UINT len;
+    WCHAR *ret;
+
+    if (!iswalpha( p[0] ) || p[1] != ':' || p[2] != '\\' || !p[3]) return NULL;
+    start = path + 3;
+    len = lstrlenW( start );
+    p = start + len - 1;
+    if (*p == '\\') return NULL;
+
+    while (p >= start && *p != '\\') { len--; p--; };
+    while (p >= start && *p == '\\') { len--; p--; };
+
+    if (!(ret = malloc( (len + 1) * sizeof(WCHAR) ))) return NULL;
+    memcpy( ret, start, len * sizeof(WCHAR) );
+    ret[len] = 0;
+    *ret_len = len;
+    return ret;
+}
+#else
 static WCHAR *build_name( WCHAR drive, const WCHAR *path )
 {
     UINT i = 0, len = 0;
@@ -2738,6 +2774,7 @@ static WCHAR *build_dirname( const WCHAR *path, UINT *ret_len )
     *ret_len = i;
     return ret;
 }
+#endif
 
 static BOOL seen_dir( struct dirstack *dirstack, const WCHAR *path )
 {
@@ -3312,8 +3349,8 @@ static void get_disk_partition_info( UINT disk, UINT32 *partitions, UINT32 *sign
 
 static enum fill_status fill_diskdrive( struct table *table, const struct expr *cond )
 {
-    static const WCHAR fmtW[] = L"\\\\\\\\.\\\\PHYSICALDRIVE%u";
-    WCHAR device_id[ARRAY_SIZE( fmtW ) + 10], name[ARRAY_SIZE( fmtW ) + 10];
+    static const WCHAR fmtW[] = L"\\\\.\\PHYSICALDRIVE%u";
+    WCHAR device_id[ARRAY_SIZE( fmtW ) + 10];
     struct physical_disk *disks;
     struct record_diskdrive *rec;
     UINT i, count, row = 0, offset = 0;
@@ -3348,8 +3385,7 @@ static enum fill_status fill_diskdrive( struct table *table, const struct expr *
         rec->medialoaded       = -1;
         rec->mediatype         = get_diskdrive_mediatype( &disks[i] );
         rec->model             = disks[i].model;
-        swprintf( name, ARRAY_SIZE( name ), L"\\\\.\\PHYSICALDRIVE%u", disks[i].number );
-        rec->name              = wcsdup( name );
+        rec->name              = wcsdup( device_id );
         rec->pnpdevice_id      = disks[i].pnpdevice_id;
         rec->sectorspertrack   = disks[i].sectors_per_track;
         rec->serialnumber      = disks[i].serialnumber;

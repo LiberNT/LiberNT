@@ -83,16 +83,39 @@ static WCHAR *get_string( struct parser *parser, const struct string *str )
     const WCHAR *p = str->data;
     int len = str->len;
     WCHAR *ret;
+#ifdef __REACTOS__
+    BOOL quoted = FALSE;
+    int i, j;
+#endif
 
     if ((p[0] == '\"' && p[len - 1] != '\"') ||
         (p[0] == '\'' && p[len - 1] != '\'')) return NULL;
     if ((p[0] == '\"' && p[len - 1] == '\"') ||
         (p[0] == '\'' && p[len - 1] == '\''))
     {
+#ifdef __REACTOS__
+        quoted = TRUE;
+#endif
         p++;
         len -= 2;
     }
     if (!(ret = alloc_mem( parser, (len + 1) * sizeof(WCHAR) ))) return NULL;
+#ifdef __REACTOS__
+    if (quoted)
+    {
+        for (i = j = 0; i < len; i++)
+        {
+            if (p[i] == '\\')
+            {
+                if (i + 1 >= len || (p[i + 1] != '\\' && p[i + 1] != '\'' && p[i + 1] != '\"')) return NULL;
+                i++;
+            }
+            ret[j++] = p[i];
+        }
+        ret[j] = 0;
+        return ret;
+    }
+#endif
     memcpy( ret, p, len * sizeof(WCHAR) );
     ret[len] = 0;
     return ret;
@@ -511,16 +534,6 @@ expr:
         }
   | prop_val TK_LIKE string_val
         {
-#ifdef __REACTOS__
-            const WCHAR *p;
-
-            for (p = $3->u.sval; *p; p++)
-            {
-                if (*p != '\\') continue;
-                if (p[1] != '\\') YYABORT;
-                p++;
-            }
-#endif
             $$ = expr_complex( ctx, $1, OP_LIKE, $3 );
             if (!$$)
                 YYABORT;
@@ -803,6 +816,13 @@ static int get_token( const WCHAR *s, int *token )
     case '\'':
         for (i = 1; s[i]; i++)
         {
+#ifdef __REACTOS__
+            if (s[i] == '\\' && s[i + 1])
+            {
+                i++;
+                continue;
+            }
+#endif
             if (s[i] == s[0]) break;
         }
         if (s[i]) i++;
