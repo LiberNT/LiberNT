@@ -1177,6 +1177,10 @@ EndSystemSetup(VOID)
     DWORD dwValue = 0;
     LONG Error;
 
+    Error = RegFlushKey(HKEY_LOCAL_MACHINE);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+
     Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\Setup", 0, KEY_SET_VALUE, &hKey);
     if (Error != ERROR_SUCCESS)
         return Error;
@@ -1184,6 +1188,8 @@ EndSystemSetup(VOID)
     Error = RegSetValueExW(hKey, L"SystemSetupInProgress", 0, REG_DWORD, (PBYTE)&dwValue, sizeof(dwValue));
     if (Error == ERROR_SUCCESS)
         Error = RegSetValueExW(hKey, L"SetupType", 0, REG_DWORD, (PBYTE)&dwValue, sizeof(dwValue));
+    if (Error == ERROR_SUCCESS)
+        Error = RegFlushKey(hKey);
     RegCloseKey(hKey);
 
     return Error;
