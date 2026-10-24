@@ -3,6 +3,11 @@ if(ARCH STREQUAL "i386")
     list(APPEND ASM_SOURCE
         i386/seh.s
         i386/seh_prolog.s)
+    if(MSVC)
+        list(APPEND ASM_SOURCE
+            i386/except_handler4.s
+            i386/local_unwind4.s)
+    endif()
 endif()
 
 if(MSVC OR ((CMAKE_C_COMPILER_ID STREQUAL "Clang") AND CLANG_NATIVE_SEH))
