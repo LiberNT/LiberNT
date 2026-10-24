@@ -228,6 +228,7 @@ static LX_SYSCALL_ENTRY LxGenericSyscalls[] =
     LX_ENTRY(260, LxSysWait4, "wait4"),
     LX_ENTRY(261, LxSysPrlimit64, "prlimit64"),
     LX_ENTRY(264, LxSysNameToHandleAt, "name_to_handle_at"),
+    LX_ENTRY(265, LxSysOpenByHandleAt, "open_by_handle_at"),
     LX_ENTRY(266, LxSysClockAdjtime, "clock_adjtime"),
     LX_ENTRY(267, LxSysSyncfs, "syncfs"),
     LX_ENTRY(268, LxSysSetns, "setns"),

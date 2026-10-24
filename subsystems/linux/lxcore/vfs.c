@@ -203,7 +203,6 @@ LxPathJoin(
     return Result;
 }
 
-static
 LONG
 LxNtOpenHandle(
     _In_ PCUNICODE_STRING NtPath,

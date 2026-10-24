@@ -760,6 +760,8 @@ LONG LxLookup(_In_ PLX_PROCESS Process, _In_ LONG DirFd, _In_ PCSTR Path, _In_ U
 VOID LxNodeFree(_Inout_ PLX_NODE Node);
 LONG LxPathNormalize(_In_ PCSTR Input, _Out_writes_(LX_PATH_MAX) PSTR Output);
 LONG LxNtPath(_In_ PLX_MOUNT Mount, _In_ PCSTR Relative, _Out_ PUNICODE_STRING NtPath);
+LONG LxNtOpenHandle(_In_ PCUNICODE_STRING NtPath, _In_ ACCESS_MASK Access, _In_ ULONG Disposition, _In_ ULONG Options,
+                    _In_ ULONG Attributes, _Out_ PHANDLE Handle);
 LONG LxVfsOpen(_In_ PLX_PROCESS Process, _In_ LONG DirFd, _In_ PCSTR Path, _In_ ULONG Flags, _In_ ULONG Mode, _Out_ PLX_FILE *File);
 LONG LxVfsOpenResolve(_In_ PLX_PROCESS Process, _In_ LONG DirFd, _In_ PCSTR Path, _In_ ULONG Flags, _In_ ULONG Mode, _In_ ULONG Resolve, _Out_ PLX_FILE *File);
 LONG LxVfsOpenNode(_In_ PLX_PROCESS Process, _Inout_ PLX_NODE Node, _In_ ULONG Flags, _In_ ULONG Mode, _Out_ PLX_FILE *File);

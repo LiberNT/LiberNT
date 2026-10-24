@@ -2495,10 +2495,348 @@ LX_SYSCALL(LxSysRemovexattrat)
     return LxXattrCall(Call, 3, (LONG)Call->Args[0], Call->Args[1], AtFlags, FALSE, Call->Args[3], 0, 0, 0);
 }
 
+#define LX_AT_HANDLE_MNT_ID_UNIQUE  0x001
+#define LX_AT_HANDLE_FID            0x200
+#define LX_AT_SYMLINK_FOLLOW        0x400
+#define LX_MAX_HANDLE_SZ            128
+#define LX_FILEID_INO32_GEN         1
+#define LX_FILEID_INVALID           0xFF
+#define LX_CAP_DAC_READ_SEARCH      2
+
+static
+LONG
+LxNtFileId(
+    _In_ HANDLE Handle,
+    _Out_ PULONG64 FileId)
+{
+    FILE_INTERNAL_INFORMATION Internal;
+    IO_STATUS_BLOCK Iosb;
+    NTSTATUS Status;
+
+    Status = ZwQueryInformationFile(Handle, &Iosb, &Internal, sizeof(Internal), FileInternalInformation);
+    if (!NT_SUCCESS(Status))
+        return -LxStatusToErrno(Status);
+    *FileId = (ULONG64)Internal.IndexNumber.QuadPart;
+    return 0;
+}
+
+static
+LONG
+LxNodeFileId(
+    _In_ PLX_NODE Node,
+    _Out_ PULONG64 FileId)
+{
+    HANDLE Handle;
+    LONG Error;
+
+    Error = LxNtOpenHandle(&Node->NtPath, FILE_READ_ATTRIBUTES, FILE_OPEN, 0, 0, &Handle);
+    if (Error != 0)
+        return Error;
+    Error = LxNtFileId(Handle, FileId);
+    ZwClose(Handle);
+    return Error;
+}
+
+static
+PLX_MOUNT
+LxFileMount(
+    _In_ PLX_FILE File)
+{
+    PLX_MOUNT Mount;
+    PCSTR Relative;
+
+    if ((File->Mount == NULL) || (File->Path == NULL) || (File->Mount->Ns == NULL))
+        return File->Mount;
+    Mount = LxMountFind(File->Mount->Ns, File->Path, &Relative);
+    return (Mount != NULL) ? Mount : File->Mount;
+}
+
+static
+POBJECT_NAME_INFORMATION
+LxNtObjectName(
+    _In_ HANDLE Handle)
+{
+    ULONG Size = sizeof(OBJECT_NAME_INFORMATION) + LX_PATH_MAX * sizeof(WCHAR), Returned = 0;
+    POBJECT_NAME_INFORMATION Name = LxAllocPaged(Size);
+    NTSTATUS Status;
+
+    if (Name == NULL)
+        return NULL;
+    Status = ZwQueryObject(Handle, ObjectNameInformation, Name, Size, &Returned);
+    if (!NT_SUCCESS(Status) || (Name->Name.Length == 0))
+    {
+        LxFreePaged(Name);
+        return NULL;
+    }
+    return Name;
+}
+
 LX_SYSCALL(LxSysNameToHandleAt)
 {
-    UNREFERENCED_PARAMETER(Call);
-    return -LX_EOPNOTSUPP;
+    LONG DirFd = (LONG)Call->Args[0];
+    ULONG Flags = (ULONG)Call->Args[4];
+    ULONG Header[2], Data[2];
+    PLX_MOUNT Mount = NULL;
+    ULONG64 FileId = 0, MountId;
+    LX_NODE Node;
+    PSTR Path;
+    LONG64 Result;
+    LONG Error;
+
+    if (Flags & ~(LX_AT_EMPTY_PATH | LX_AT_SYMLINK_FOLLOW | LX_AT_HANDLE_FID | LX_AT_HANDLE_MNT_ID_UNIQUE))
+        return -LX_EINVAL;
+    Result = LxCopyFromUser(Header, Call->Args[2], sizeof(Header));
+    if (Result != 0)
+        return Result;
+    if (Header[0] > LX_MAX_HANDLE_SZ)
+        return -LX_EINVAL;
+    Result = LxCopyPath(Call->Args[1], &Path);
+    if (Result != 0)
+        return Result;
+
+    if ((Path[0] == '\0') && (Flags & LX_AT_EMPTY_PATH) && (DirFd != LX_AT_FDCWD))
+    {
+        PLX_FILE File = LxFdGet(Call->Process, DirFd);
+
+        LxFree(Path);
+        if (File == NULL)
+            return -LX_EBADF;
+        Mount = LxFileMount(File);
+        if ((Mount == NULL) || (Mount->Kind != LxFsNt) || (File->Handle == NULL) || File->NtPipe)
+            Error = -LX_EOPNOTSUPP;
+        else
+            Error = LxNtFileId(File->Handle, &FileId);
+        LxFileDereference(File);
+    }
+    else
+    {
+        if (Path[0] == '\0')
+        {
+            LxFree(Path);
+            if (!(Flags & LX_AT_EMPTY_PATH))
+                return -LX_ENOENT;
+            Path = LxProcessCwd(Call->Process);
+            if (Path == NULL)
+                return -LX_ENOMEM;
+        }
+        Error = LxLookup(Call->Process, DirFd, Path, (Flags & LX_AT_SYMLINK_FOLLOW) ? LX_LOOKUP_FOLLOW : 0, &Node);
+        LxFree(Path);
+        if (Error != 0)
+            return Error;
+        Mount = Node.Mount;
+        if (!Node.Exists)
+            Error = -LX_ENOENT;
+        else if ((Mount == NULL) || (Mount->Kind != LxFsNt))
+            Error = -LX_EOPNOTSUPP;
+        else
+            Error = LxNodeFileId(&Node, &FileId);
+        LxNodeFree(&Node);
+    }
+    if (Error != 0)
+        return Error;
+
+    MountId = Mount->Id;
+    Result = (Flags & LX_AT_HANDLE_MNT_ID_UNIQUE) ? LxCopyToUser(Call->Args[3], &MountId, sizeof(MountId)) :
+                                                    LxCopyToUser(Call->Args[3], &MountId, sizeof(ULONG));
+    if (Result != 0)
+        return Result;
+    if (Header[0] < sizeof(Data))
+    {
+        Header[0] = sizeof(Data);
+        Header[1] = LX_FILEID_INVALID;
+        Result = LxCopyToUser(Call->Args[2], Header, sizeof(Header));
+        return (Result != 0) ? Result : -LX_EOVERFLOW;
+    }
+    Header[0] = sizeof(Data);
+    Header[1] = LX_FILEID_INO32_GEN;
+    Data[0] = (ULONG)FileId;
+    Data[1] = (ULONG)(FileId >> 48);
+    Result = LxCopyToUser(Call->Args[2], Header, sizeof(Header));
+    if (Result == 0)
+        Result = LxCopyToUser(Call->Args[2] + sizeof(Header), Data, sizeof(Data));
+    return Result;
+}
+
+static
+LONG
+LxHandleToPath(
+    _In_ PLX_MOUNT Mount,
+    _In_ ULONG64 FileId,
+    _Out_ PSTR *Path)
+{
+    POBJECT_NAME_INFORMATION RootName = NULL, TargetName = NULL;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING RootPath, ById;
+    IO_STATUS_BLOCK Iosb;
+    HANDLE Root = NULL, Target = NULL;
+    ULONG64 Check = 0;
+    ULONG RootChars, Chars, Index, Needed = 0, Written = 0;
+    SIZE_T TargetLength;
+    PWCHAR Relative;
+    NTSTATUS Status;
+    LONG Error;
+
+    *Path = NULL;
+    Error = LxNtPath(Mount, "", &RootPath);
+    if (Error != 0)
+        return Error;
+    Error = LxNtOpenHandle(&RootPath, FILE_READ_ATTRIBUTES, FILE_OPEN, 0, 0, &Root);
+    LxFreePaged(RootPath.Buffer);
+    if (Error != 0)
+        return -LX_ESTALE;
+
+    ById.Buffer = (PWCH)&FileId;
+    ById.Length = ById.MaximumLength = sizeof(FileId);
+    InitializeObjectAttributes(&ObjectAttributes, &ById, OBJ_KERNEL_HANDLE, Root, NULL);
+    Status = ZwCreateFile(&Target, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, 0,
+                          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN,
+                          FILE_OPEN_BY_FILE_ID | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
+    Error = -LX_ESTALE;
+    if (!NT_SUCCESS(Status))
+    {
+        Target = NULL;
+        goto Exit;
+    }
+    if ((LxNtFileId(Target, &Check) != 0) || (Check != FileId))
+        goto Exit;
+    RootName = LxNtObjectName(Root);
+    TargetName = LxNtObjectName(Target);
+    if ((RootName == NULL) || (TargetName == NULL))
+        goto Exit;
+
+    RootChars = RootName->Name.Length / sizeof(WCHAR);
+    while ((RootChars != 0) && (RootName->Name.Buffer[RootChars - 1] == L'\\'))
+        RootChars--;
+    RootName->Name.Length = (USHORT)(RootChars * sizeof(WCHAR));
+    Chars = TargetName->Name.Length / sizeof(WCHAR);
+    if (!RtlPrefixUnicodeString(&RootName->Name, &TargetName->Name, TRUE) ||
+        ((Chars != RootChars) && (TargetName->Name.Buffer[RootChars] != L'\\')))
+    {
+        goto Exit;
+    }
+
+    Relative = TargetName->Name.Buffer + RootChars;
+    Chars -= RootChars;
+    for (Index = 0; Index < Chars; Index++)
+    {
+        if (Relative[Index] == L'\\')
+            Relative[Index] = L'/';
+    }
+    LxUnicodeDecodeLinuxName(Relative, Chars);
+    if ((Chars != 0) && !NT_SUCCESS(RtlUnicodeToUTF8N(NULL, 0, &Needed, Relative, Chars * sizeof(WCHAR))))
+        goto Exit;
+
+    TargetLength = strlen(Mount->Target);
+    *Path = LxAlloc(TargetLength + Needed + 2);
+    Error = -LX_ENOMEM;
+    if (*Path == NULL)
+        goto Exit;
+    RtlCopyMemory(*Path, Mount->Target, TargetLength);
+    if ((TargetLength != 0) && ((*Path)[TargetLength - 1] == '/') && (Chars != 0))
+        TargetLength--;
+    if ((Chars != 0) &&
+        !NT_SUCCESS(RtlUnicodeToUTF8N(*Path + TargetLength, Needed, &Written, Relative, Chars * sizeof(WCHAR))))
+    {
+        LxFree(*Path);
+        *Path = NULL;
+        Error = -LX_ESTALE;
+        goto Exit;
+    }
+    (*Path)[TargetLength + Written] = '\0';
+    if ((*Path)[0] == '\0')
+    {
+        (*Path)[0] = '/';
+        (*Path)[1] = '\0';
+    }
+    Error = 0;
+
+Exit:
+    if (RootName != NULL)
+        LxFreePaged(RootName);
+    if (TargetName != NULL)
+        LxFreePaged(TargetName);
+    if (Target != NULL)
+        ZwClose(Target);
+    ZwClose(Root);
+    return Error;
+}
+
+LX_SYSCALL(LxSysOpenByHandleAt)
+{
+    LONG MountFd = (LONG)Call->Args[0];
+    ULONG Flags = (ULONG)Call->Args[2];
+    PLX_PROCESS Process = Call->Process;
+    ULONG Header[2], Data[2];
+    ULONG64 Effective, FileId, Check = 0;
+    PLX_MOUNT Mount;
+    PLX_FILE File;
+    PLX_TTY Tty;
+    LX_NODE Node;
+    PSTR Path;
+    LONG64 Result;
+    LONG Error;
+
+    Effective = (Process->Uid[1] == 0) ? Process->CapBounding : Process->CapAmbient;
+    if (!(Effective & (1ULL << LX_CAP_DAC_READ_SEARCH)))
+        return -LX_EPERM;
+    Result = LxCopyFromUser(Header, Call->Args[1], sizeof(Header));
+    if (Result != 0)
+        return Result;
+    if ((Header[0] == 0) || (Header[0] > LX_MAX_HANDLE_SZ) || ((LONG)Header[1] < 0))
+        return -LX_EINVAL;
+
+    if (MountFd == LX_AT_FDCWD)
+    {
+        Path = LxProcessCwd(Process);
+        if (Path == NULL)
+            return -LX_ENOMEM;
+        Error = LxLookup(Process, LX_AT_FDCWD, Path, LX_LOOKUP_FOLLOW, &Node);
+        LxFree(Path);
+        if (Error != 0)
+            return Error;
+        Mount = Node.Mount;
+        LxNodeFree(&Node);
+    }
+    else
+    {
+        File = LxFdGet(Process, MountFd);
+        if (File == NULL)
+            return -LX_EBADF;
+        Mount = LxFileMount(File);
+        LxFileDereference(File);
+    }
+    if ((Mount == NULL) || (Mount->Kind != LxFsNt))
+        return -LX_EOPNOTSUPP;
+    if ((Header[1] != LX_FILEID_INO32_GEN) || (Header[0] != sizeof(Data)))
+        return -LX_ESTALE;
+    Result = LxCopyFromUser(Data, Call->Args[1] + sizeof(Header), sizeof(Data));
+    if (Result != 0)
+        return Result;
+    FileId = ((ULONG64)Data[1] << 48) | Data[0];
+
+    Error = LxHandleToPath(Mount, FileId, &Path);
+    if (Error != 0)
+        return Error;
+    Error = LxLookup(Process, LX_AT_FDCWD, Path, 0, &Node);
+    LxFree(Path);
+    if (Error != 0)
+        return -LX_ESTALE;
+    if (!Node.Exists || (Node.Mount != Mount) || (LxNodeFileId(&Node, &Check) != 0) || (Check != FileId))
+    {
+        LxNodeFree(&Node);
+        return -LX_ESTALE;
+    }
+    Error = LxVfsOpenNode(Process, &Node, Flags & ~(LX_O_CREAT | LX_O_EXCL), 0, &File);
+    LxNodeFree(&Node);
+    if (Error != 0)
+        return Error;
+
+    Tty = LxFileGetTty(File);
+    if ((Tty != NULL) && !(Flags & LX_O_NOCTTY))
+        LxTtyAttachControlling(Process, Tty);
+    Result = LxFdInstall(Process, File, 0, (Flags & LX_O_CLOEXEC) != 0);
+    LxFileDereference(File);
+    return Result;
 }
 
 #define LX_FSOPEN_CLOEXEC           0x00000001

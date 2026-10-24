@@ -78,6 +78,7 @@ LX_SYSCALL(LxSysListxattrat);
 LX_SYSCALL(LxSysRemovexattrat);
 LX_SYSCALL(LxSysMemfdCreate);
 LX_SYSCALL(LxSysNameToHandleAt);
+LX_SYSCALL(LxSysOpenByHandleAt);
 LX_SYSCALL(LxSysFsopen);
 LX_SYSCALL(LxSysFsconfig);
 LX_SYSCALL(LxSysFsmount);

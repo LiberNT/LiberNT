@@ -30,6 +30,7 @@ static const PCSTR LxKernelConfig[] =
     "CONFIG_SIGNALFD=y",
     "CONFIG_TIMERFD=y",
     "CONFIG_EVENTFD=y",
+    "CONFIG_FHANDLE=y",
     "CONFIG_SHMEM=y",
     "CONFIG_MEMFD_CREATE=y",
     "CONFIG_MEMBARRIER=y",
