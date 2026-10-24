@@ -12,6 +12,21 @@
 #define NDEBUG
 #include <debug.h>
 
+#if defined(_M_AMD64) && !defined(__GNUC__)
+#undef READ_PORT_BUFFER_UCHAR
+#undef READ_PORT_BUFFER_USHORT
+#undef READ_PORT_BUFFER_ULONG
+#undef READ_PORT_UCHAR
+#undef READ_PORT_USHORT
+#undef READ_PORT_ULONG
+#undef WRITE_PORT_BUFFER_UCHAR
+#undef WRITE_PORT_BUFFER_USHORT
+#undef WRITE_PORT_BUFFER_ULONG
+#undef WRITE_PORT_UCHAR
+#undef WRITE_PORT_USHORT
+#undef WRITE_PORT_ULONG
+#endif
+
 //
 // HAL Port to Inlined Port
 //

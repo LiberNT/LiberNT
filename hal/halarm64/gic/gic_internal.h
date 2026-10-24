@@ -28,6 +28,7 @@
 #include <ioaccess.h>
 #include <halfuncs.h>
 #include <halacpi_arm64.h>
+#include <reactos/arm64/sysreg.h>
 #include <debug.h>
 
 /*
@@ -875,7 +876,7 @@ ULONGLONG
 HalpReadMidr(VOID)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, midr_el1" : "=r"(v));
+    v = ARM64_READ_SYSREG(MIDR_EL1);
     return v;
 }
 
@@ -884,7 +885,7 @@ ULONGLONG
 HalpReadMpidr(VOID)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, mpidr_el1" : "=r"(v));
+    v = ARM64_READ_SYSREG(MPIDR_EL1);
     return v;
 }
 
@@ -893,7 +894,7 @@ ULONGLONG
 HalpReadPfr0(VOID)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, id_aa64pfr0_el1" : "=r"(v));
+    v = ARM64_READ_SYSREG(ID_AA64PFR0_EL1);
     return v;
 }
 
@@ -902,7 +903,7 @@ ULONGLONG
 HalpReadCntfrq(VOID)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(v));
+    v = ARM64_READ_SYSREG(CNTFRQ_EL0);
     return v;
 }
 
@@ -911,7 +912,7 @@ ULONGLONG
 HalpReadCntvct(VOID)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(v));
+    v = ARM64_READ_SYSREG(CNTVCT_EL0);
     return v;
 }
 
@@ -926,7 +927,7 @@ unsigned int
 HalpReadIccSre(VOID)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, icc_sre_el1" : "=r"(v));
+    v = ARM64_READ_SYSREG(ICC_SRE_EL1);
     return (unsigned int)v;
 }
 
@@ -935,7 +936,8 @@ VOID
 HalpWriteIccSre(
     _In_ unsigned int v)
 {
-    __asm__ __volatile__("msr icc_sre_el1, %0; isb" :: "r"((ULONGLONG)v) : "memory");
+    ARM64_WRITE_SYSREG(ICC_SRE_EL1, (ULONGLONG)v);
+    ARM64_ISB();
 }
 
 FORCEINLINE
@@ -943,7 +945,7 @@ unsigned int
 HalpReadIccIar1(VOID)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, icc_iar1_el1" : "=r"(v));
+    v = ARM64_READ_SYSREG(ICC_IAR1_EL1);
     return (unsigned int)(v & 0xFFFFFFu);
 }
 
@@ -952,7 +954,8 @@ VOID
 HalpWriteIccEoir1(
     _In_ unsigned int id)
 {
-    __asm__ __volatile__("msr icc_eoir1_el1, %0; isb" :: "r"((ULONGLONG)id) : "memory");
+    ARM64_WRITE_SYSREG(ICC_EOIR1_EL1, (ULONGLONG)id);
+    ARM64_ISB();
 }
 
 FORCEINLINE
@@ -960,7 +963,8 @@ VOID
 HalpWriteIccPmr(
     _In_ unsigned int v)
 {
-    __asm__ __volatile__("msr icc_pmr_el1, %0; isb" :: "r"((ULONGLONG)v) : "memory");
+    ARM64_WRITE_SYSREG(ICC_PMR_EL1, (ULONGLONG)v);
+    ARM64_ISB();
 }
 
 FORCEINLINE
@@ -968,7 +972,8 @@ VOID
 HalpWriteIccBpr1(
     _In_ unsigned int v)
 {
-    __asm__ __volatile__("msr icc_bpr1_el1, %0; isb" :: "r"((ULONGLONG)v) : "memory");
+    ARM64_WRITE_SYSREG(ICC_BPR1_EL1, (ULONGLONG)v);
+    ARM64_ISB();
 }
 
 FORCEINLINE
@@ -976,7 +981,8 @@ VOID
 HalpWriteIccIgrpen1(
     _In_ unsigned int v)
 {
-    __asm__ __volatile__("msr icc_igrpen1_el1, %0; isb" :: "r"((ULONGLONG)v) : "memory");
+    ARM64_WRITE_SYSREG(ICC_IGRPEN1_EL1, (ULONGLONG)v);
+    ARM64_ISB();
 }
 
 FORCEINLINE
@@ -984,7 +990,7 @@ unsigned int
 HalpReadIccPmr(VOID)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, icc_pmr_el1" : "=r"(v));
+    v = ARM64_READ_SYSREG(ICC_PMR_EL1);
     return (unsigned int)v;
 }
 
@@ -993,7 +999,7 @@ unsigned int
 HalpReadIccIgrpen1(VOID)
 {
     ULONGLONG v;
-    __asm__ __volatile__("mrs %0, icc_igrpen1_el1" : "=r"(v));
+    v = ARM64_READ_SYSREG(ICC_IGRPEN1_EL1);
     return (unsigned int)v;
 }
 
@@ -1002,7 +1008,8 @@ VOID
 HalpWriteIccSgi1r(
     _In_ ULONGLONG v)
 {
-    __asm__ __volatile__("msr icc_sgi1r_el1, %0; isb" :: "r"(v) : "memory");
+    ARM64_WRITE_SYSREG(ICC_SGI1R_EL1, v);
+    ARM64_ISB();
 }
 
 /*
