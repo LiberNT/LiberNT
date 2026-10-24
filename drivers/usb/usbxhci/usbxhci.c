@@ -3856,6 +3856,24 @@ XHCI_PerformEndpointResetSequence(
                                                       &Endpoint->TransferRing);
         if (DeqStatus != MP_STATUS_SUCCESS)
         {
+            PXHCI_ENDPOINT_CONTEXT EpCtx = NULL;
+
+            DevCtx = Endpoint->Slot->DeviceContext.VirtualAddress;
+            if (DevCtx)
+                EpCtx = XHCI_GetDeviceEndpointContextVa(Extension, DevCtx, Endpoint->EndpointId - 1);
+            if (EpCtx &&
+                (EpCtx->EpInfo & XHCI_EPCTX_STATE_MASK) == XHCI_EPCTX_STATE_HALTED &&
+                XHCI_ResetEndpoint(Extension, Endpoint->Slot, Endpoint->EndpointId) == MP_STATUS_SUCCESS)
+            {
+                TransferStateReset = TRUE;
+                DeqStatus = XHCI_SetEndpointDequeue(Extension,
+                                                    Endpoint->Slot,
+                                                    Endpoint->EndpointId,
+                                                    &Endpoint->TransferRing);
+            }
+        }
+        if (DeqStatus != MP_STATUS_SUCCESS)
+        {
             DPRINT1("usbxhci: EndpointResetSequence slot=%u ep=%u SET_TR_DEQUEUE failed (status=%lu)\n",
                     Endpoint->SlotId,
                     Endpoint->EndpointId,
