@@ -3252,6 +3252,7 @@ LxVfsUnlink(
     IO_STATUS_BLOCK Iosb;
     HANDLE Handle;
     NTSTATUS Status;
+    BOOLEAN Moved;
     LONG Error;
 
     if (!Node->Exists)
@@ -3284,10 +3285,12 @@ LxVfsUnlink(
         ZwSetInformationFile(Handle, &Iosb, &Basic, sizeof(Basic), FileBasicInformation);
     }
 
-    LxNtMoveToTrash(Process, Handle);
+    Moved = (LxNtMoveToTrash(Process, Handle) == 0);
     Status = ZwSetInformationFile(Handle, &Iosb, &Disposition, sizeof(Disposition), FileDispositionInformation);
     ZwClose(Handle);
     LxVcacheInvalidate();
+    if (Moved && (Status == STATUS_CANNOT_DELETE))
+        Status = STATUS_SUCCESS;
     if (!NT_SUCCESS(Status))
         return -LxStatusToErrno(Status);
     LxInotifyEvent(Process, Node->Path, 0x00000200 | (Directory ? 0x40000000 : 0), TRUE);
