@@ -24,6 +24,9 @@
  *
  *    30-Apr-2005 (Magnus Olsen <magnus@greatlord.com>)
  *        Remove all hardcoded strings in En.rc
+ *
+ *    24-Oct-2026 (Ahmed ARIF <arif.ing@outlook.com>)
+ *        Type UTF-16 files as text.
  */
 
 #include "precomp.h"
@@ -75,6 +78,76 @@ FileGetString(
 }
 
 static BOOL
+DoTypeUnicodeFile(
+    IN HANDLE hFile,
+    IN HANDLE hConsoleOut,
+    IN DWORD dwFileSize,
+    IN BOOL bPaging)
+{
+    WCHAR buff[256];
+    CHAR abuff[ARRAYSIZE(buff) * 4];
+    DWORD dwRead, dwRet, dwFilePos;
+    INT len;
+
+    while (ReadFile(hFile, buff, sizeof(buff) - sizeof(WCHAR), &dwRead, NULL) && dwRead >= sizeof(WCHAR))
+    {
+        dwRead /= sizeof(WCHAR);
+        if (dwRead > 1 && IS_HIGH_SURROGATE(buff[dwRead - 1]))
+        {
+            dwRead--;
+            SetFilePointer(hFile, -(LONG)sizeof(WCHAR), NULL, FILE_CURRENT);
+        }
+
+        if (bPaging)
+        {
+            buff[dwRead] = UNICODE_NULL;
+            if (!ConOutPrintfPaging(FALSE, _T("%s"), buff))
+            {
+                bCtrlBreak = FALSE;
+                nErrorLevel = 1;
+                return FALSE;
+            }
+        }
+        else
+        {
+            if (IsConsoleHandle(hConsoleOut))
+            {
+                WriteConsoleW(hConsoleOut, buff, dwRead, &dwRet, NULL);
+            }
+            else if (OutputStreamMode == UTF16Text)
+            {
+                WriteFile(hConsoleOut, buff, dwRead * sizeof(WCHAR), &dwRet, NULL);
+            }
+            else
+            {
+                len = WideCharToMultiByte(OutputCodePage, 0, buff, dwRead, abuff, sizeof(abuff), NULL, NULL);
+                if (len > 0)
+                    WriteFile(hConsoleOut, abuff, len, &dwRet, NULL);
+            }
+
+            if (bCtrlBreak)
+            {
+                bCtrlBreak = FALSE;
+                nErrorLevel = 1;
+                return FALSE;
+            }
+        }
+
+        dwFilePos = SetFilePointer(hFile, 0, NULL, FILE_CURRENT);
+        if ((dwFilePos == INVALID_SET_FILE_POINTER) &&
+            (GetLastError() != ERROR_SUCCESS))
+        {
+            WARN("Error when getting file pointer\n");
+            break;
+        }
+        if (dwFilePos >= dwFileSize)
+            break;
+    }
+
+    return TRUE;
+}
+
+static BOOL
 DoTypeFile(
     IN LPTSTR FileName,
     IN HANDLE hConsoleOut,
@@ -83,6 +156,7 @@ DoTypeFile(
 {
     HANDLE hFile;
     BOOL   bIsFile;
+    BOOL   bResult;
     DWORD  dwFileSize;
     DWORD  dwFilePos;
     DWORD  dwRet;
@@ -151,6 +225,20 @@ DoTypeFile(
      */
     if (!bNoFileName)
         ConErrPrintf(_T("\n%s\n\n\n"), FileName);
+
+    if (bIsFile)
+    {
+        WCHAR wBom;
+
+        if (ReadFile(hFile, &wBom, sizeof(wBom), &dwRet, NULL) &&
+            (dwRet == sizeof(wBom)) && (wBom == 0xFEFF))
+        {
+            bResult = DoTypeUnicodeFile(hFile, hConsoleOut, dwFileSize, bPaging);
+            CloseHandle(hFile);
+            return bResult;
+        }
+        SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
+    }
 
     if (bPaging || (OutputStreamMode == UTF16Text && !IsConsoleHandle(hConsoleOut)))
     {
