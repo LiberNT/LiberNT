@@ -7,6 +7,56 @@
         __assertfail
     LEAF_END call_method
 
+#elif defined(_M_ARM64)
+
+    .text
+
+    .align 4
+    .seh_proc call_method
+    .global call_method
+call_method:
+    stp x29, x30, [sp, #-16]!
+    .seh_save_fplr_x 16
+    mov x29, sp
+    .seh_set_fp
+    .seh_endprologue
+    sub sp, sp, x1, lsl #3
+    cbz x1, 2f
+1:  sub x1, x1, #1
+    ldr x4, [x2, x1, lsl #3]
+    str x4, [sp, x1, lsl #3]
+    cbnz x1, 1b
+2:  mov x16, x0
+    mov x9, x3
+    ldp d0, d1, [x9]
+    ldp d2, d3, [x9, #0x10]
+    ldp d4, d5, [x9, #0x20]
+    ldp d6, d7, [x9, #0x30]
+    ldp x0, x1, [x9, #0x40]
+    ldp x2, x3, [x9, #0x50]
+    ldp x4, x5, [x9, #0x60]
+    ldp x6, x7, [x9, #0x70]
+    ldr x8, [x9, #0x80]
+    blr x16
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+    .seh_endproc
+
+    .align 4
+    .seh_proc call_float_method
+    .global call_float_method
+call_float_method:
+    b call_method
+    .seh_endproc
+
+    .align 4
+    .seh_proc call_double_method
+    .global call_double_method
+call_double_method:
+    b call_method
+    .seh_endproc
+
 #elif defined(_M_AMD64)
 
 #include <asm.inc>
@@ -112,4 +162,6 @@ _call_double_method:
 
 #endif
 
+#ifndef _M_ARM64
     END
+#endif

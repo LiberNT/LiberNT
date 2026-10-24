@@ -10,7 +10,11 @@ list(APPEND SOURCE
     main.c
     vector.c)
 
-set_source_files_properties(bluetoothadapter.c PROPERTIES COMPILE_FLAGS "-include reactos_compat.h")
+if(MSVC)
+    set_source_files_properties(bluetoothadapter.c PROPERTIES COMPILE_FLAGS "/FIreactos_compat.h")
+else()
+    set_source_files_properties(bluetoothadapter.c PROPERTIES COMPILE_FLAGS "-include reactos_compat.h")
+endif()
 add_library(windows_devices_bluetooth MODULE ${SOURCE} ${CMAKE_CURRENT_BINARY_DIR}/windows.devices.bluetooth.def ${CMAKE_CURRENT_BINARY_DIR}/windows.devices.bluetooth_stubs.c)
 set_target_properties(windows_devices_bluetooth PROPERTIES OUTPUT_NAME "windows.devices.bluetooth")
 add_idl_reg_scripts(windows_devices_bluetooth winrt classes.idl)

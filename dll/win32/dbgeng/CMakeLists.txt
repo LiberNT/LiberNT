@@ -8,6 +8,9 @@ list(APPEND SOURCE
 
 add_library(dbgeng MODULE ${SOURCE})
 set_module_type(dbgeng win32dll)
+if(MSVC)
+    remove_target_compile_option(dbgeng "/we4101")
+endif()
 target_link_libraries(dbgeng wine)
 add_importlibs(dbgeng psapi msvcrt ntdll)
 add_delay_importlibs(dbgeng version)

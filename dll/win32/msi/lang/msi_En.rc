@@ -26,6 +26,9 @@ STRINGTABLE
     4 "The specified installation package could not be opened. Please check the file path and try again."
     5 "path %s not found"
     9 "insert disk %s"
+#ifdef __REACTOS__
+    10 "Windows Installer %s\n\nUsage:\nmsiexec command {required parameter} [optional parameter]\n\nInstall a product:\n\t/i {package|product_code} [property]\n\t/package {package|product_code} [property]\n\t/a package [property]\nRepair an installation:\n\t/f[p|o|e|d|c|a|u|m|s|v] {package|product_code}\nUninstall a product:\n\t/uninstall {package|product_code} [property]\n\t/x {package|product_code} [property]\nAdvertise a product:\n\t/j[u|m] package [/t transform] [/g languageid]\nApply a patch:\n\t/p patch_package [property]\n\t/p patch_package /a package [property]\nLog and user interface modifiers for the above commands:\n\t/l[*][i|w|e|a|r|u|c|m|o|p|v|][+|!] log_file\n\t/q{|n|b|r|f|n+|b+|b-}\nRegister the MSI Service:\n\t/y\nUnregister the MSI Service:\n\t/z\nDisplay this help:\n\t/help\n\t/?\n"
+#else
     10 "Windows Installer %s\n\n" \
     "Usage:\n" \
     "msiexec command {required parameter} [optional parameter]\n\n" \
@@ -53,6 +56,7 @@ STRINGTABLE
     "Display this help:\n" \
     "\t/help\n" \
     "\t/?\n"
+#endif
     11 "enter which folder contains %s"
     12 "install source for feature missing"
     13 "network drive for feature missing"

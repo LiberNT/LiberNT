@@ -170,7 +170,7 @@ BYTE *msi_get_file_version_info( MSIPACKAGE *package, const WCHAR *path )
         SIZE_T len = sysdir_len;
 
         while (len && sysdir[len] != '\\') --len;
-        swprintf( temppath, ARRAY_SIZE(temppath), L"%.*s\\sysnative%s", len, sysdir, path + sysdir_len );
+        swprintf( temppath, ARRAY_SIZE(temppath), L"%.*s\\sysnative%s", (int)len, sysdir, path + sysdir_len );
         path = temppath;
     }
     if (!(size = GetFileVersionInfoSizeW( path, NULL ))) goto done;

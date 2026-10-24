@@ -18,7 +18,11 @@ list(APPEND SOURCE
     wbemlocator.c)
 
 BISON_TARGET(wql wql.y ${CMAKE_CURRENT_BINARY_DIR}/wql.tab.c)
-set_source_files_properties(builtin.c PROPERTIES COMPILE_FLAGS "-include wbemprox_ros.h")
+if(MSVC)
+    set_source_files_properties(builtin.c PROPERTIES COMPILE_FLAGS "/FIwbemprox_ros.h")
+else()
+    set_source_files_properties(builtin.c PROPERTIES COMPILE_FLAGS "-include wbemprox_ros.h")
+endif()
 
 add_library(wbemprox MODULE
     ${SOURCE}

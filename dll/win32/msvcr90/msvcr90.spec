@@ -608,9 +608,9 @@
 @ stub _initptd
 @ cdecl _initterm(ptr ptr)
 @ cdecl _initterm_e(ptr ptr)
-@ stub -arch=i386 _inp(long)
-@ stub -arch=i386 _inpd(long)
-@ stub -arch=i386 _inpw(long)
+@ cdecl -arch=i386 _inp(long)
+@ cdecl -arch=i386 _inpd(long)
+@ cdecl -arch=i386 _inpw(long)
 @ cdecl _invalid_parameter(wstr wstr wstr long long)
 @ cdecl _invalid_parameter_noinfo()
 @ stub _invoke_watson
@@ -893,9 +893,9 @@
 @ cdecl _onexit(ptr)
 @ varargs _open(str long)
 @ cdecl _open_osfhandle(long long)
-@ stub -arch=i386 _outp(long long)
-@ stub -arch=i386 _outpd(long long)
-@ stub -arch=i386 _outpw(long long)
+@ cdecl -arch=i386 _outp(long long)
+@ cdecl -arch=i386 _outpd(long long)
+@ cdecl -arch=i386 _outpw(long long)
 @ cdecl _pclose(ptr)
 @ extern _pctype MSVCRT__pctype
 @ extern _pgmptr MSVCRT__pgmptr
@@ -1336,6 +1336,7 @@
 @ cdecl exp(double)
 @ cdecl -arch=!i386 expf(float)
 @ cdecl fabs(double)
+@ cdecl -arch=arm,arm64,riscv64,ppc fabsf(float)
 @ cdecl fclose(ptr)
 @ cdecl feof(ptr)
 @ cdecl ferror(ptr)

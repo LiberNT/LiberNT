@@ -64,6 +64,11 @@ list(APPEND PCH_SKIP_SOURCE
     ${CMAKE_CURRENT_BINARY_DIR}/winemsi_s.c
     ${CMAKE_CURRENT_BINARY_DIR}/msi_stubs.c)
 
+if(MSVC AND (ARCH STREQUAL "i386"))
+    add_asm_files(msi_asm i386/custom.s)
+    list(APPEND SOURCE ${msi_asm})
+endif()
+
 add_library(msi MODULE
     ${SOURCE}
     ${PCH_SKIP_SOURCE}

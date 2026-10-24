@@ -174,7 +174,7 @@ static BTH_LE_UUID short_uuid( const BYTE *data )
 HRESULT WINAPI BluetoothGATTGetDescriptorValue( HANDLE device, BTH_LE_GATT_DESCRIPTOR *desc, ULONG size,
                                                 BTH_LE_GATT_DESCRIPTOR_VALUE *val, USHORT *required, ULONG flags )
 {
-    BYTE buffer[offsetof( BTHLE_GATT_VALUE, Data[BTH_LE_ATT_MAX_VALUE_SIZE] )];
+    BYTE buffer[offsetof( BTHLE_GATT_VALUE, Data ) + BTH_LE_ATT_MAX_VALUE_SIZE * sizeof(UCHAR)];
     BTHLE_GATT_VALUE *params = (BTHLE_GATT_VALUE *)buffer;
     const BYTE *data;
     ULONG needed;
@@ -253,7 +253,7 @@ HRESULT WINAPI BluetoothGATTGetDescriptorValue( HANDLE device, BTH_LE_GATT_DESCR
 
 static HRESULT gatt_write( HANDLE device, USHORT handle, const BYTE *data, ULONG size, ULONG write_flags )
 {
-    BYTE buffer[offsetof( BTHLE_GATT_VALUE, Data[BTH_LE_ATT_MAX_VALUE_SIZE] )];
+    BYTE buffer[offsetof( BTHLE_GATT_VALUE, Data ) + BTH_LE_ATT_MAX_VALUE_SIZE * sizeof(UCHAR)];
     BTHLE_GATT_VALUE *params = (BTHLE_GATT_VALUE *)buffer;
     DWORD bytes;
 
@@ -431,7 +431,7 @@ static DWORD WINAPI gatt_event_thread( void *param )
 {
     struct gatt_event_registration *reg = param;
     BTHLE_GATT_NOTIFICATION *notification;
-    BYTE value_buffer[offsetof( BTH_LE_GATT_CHARACTERISTIC_VALUE, Data[BTH_LE_ATT_MAX_VALUE_SIZE] )];
+    BYTE value_buffer[offsetof( BTH_LE_GATT_CHARACTERISTIC_VALUE, Data ) + BTH_LE_ATT_MAX_VALUE_SIZE * sizeof(UCHAR)];
     BTH_LE_GATT_CHARACTERISTIC_VALUE *value = (BTH_LE_GATT_CHARACTERISTIC_VALUE *)value_buffer;
     DWORD bytes;
     USHORT i;

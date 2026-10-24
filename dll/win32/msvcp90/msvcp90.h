@@ -738,12 +738,12 @@ static inline int mbstowcs_wrapper( size_t *ret, wchar_t *wcs, size_t size, cons
 #endif
 
 void CDECL __DestructExceptionObject(EXCEPTION_RECORD*);
-void WINAPI DECLSPEC_NORETURN _CxxThrowException(void*,const cxx_exception_type*);
-void __cdecl DECLSPEC_NORETURN _Xinvalid_argument(const char*);
-void __cdecl DECLSPEC_NORETURN _Xlength_error(const char*);
-void __cdecl DECLSPEC_NORETURN _Xmem(void);
-void __cdecl DECLSPEC_NORETURN _Xout_of_range(const char*);
-void __cdecl DECLSPEC_NORETURN _Xruntime_error(const char*);
+void DECLSPEC_NORETURN WINAPI _CxxThrowException(void*,const cxx_exception_type*);
+void DECLSPEC_NORETURN __cdecl _Xinvalid_argument(const char*);
+void DECLSPEC_NORETURN __cdecl _Xlength_error(const char*);
+void DECLSPEC_NORETURN __cdecl _Xmem(void);
+void DECLSPEC_NORETURN __cdecl _Xout_of_range(const char*);
+void DECLSPEC_NORETURN __cdecl _Xruntime_error(const char*);
 void DECLSPEC_NORETURN throw_exception(const char*);
 void DECLSPEC_NORETURN throw_failure(const char*);
 void DECLSPEC_NORETURN throw_range_error(const char*);

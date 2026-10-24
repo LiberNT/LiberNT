@@ -6,6 +6,10 @@
 # Use conforming swprintfs
 remove_definitions(-D_CRT_NON_CONFORMING_SWPRINTFS)
 
+if(MSVC AND LTCG)
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/GL->)
+endif()
+
 # Replace the global CRT include directory with the msvcrt include directory
 get_property(INCLUDE_DIRS DIRECTORY . PROPERTY INCLUDE_DIRECTORIES)
 list(REMOVE_ITEM INCLUDE_DIRS "${REACTOS_SOURCE_DIR}/sdk/include/crt")
@@ -120,6 +124,11 @@ if(MSVC)
             amd64/cpp_alias.s
             amd64/cpp_vtables.s
             amd64/except_x86_64.s
+        )
+    elseif(ARCH STREQUAL "arm64" AND NOT ARM64EC_RUNTIME)
+        list(APPEND SHARED_ASM_SOURCE
+            arm64/cpp_vtables.s
+            arm64/except_arm64.s
         )
     endif()
 endif()

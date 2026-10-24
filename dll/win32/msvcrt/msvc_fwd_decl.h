@@ -2,6 +2,7 @@
 #define bad_cast exception
 #define bad_typeid exception
 #define __non_rtti_object exception
+#define bad_alloc exception
 
 exception* __thiscall exception_ctor(exception* _this, const char** name);
 exception* __thiscall exception_copy_ctor(exception* _this, const exception* rhs);
@@ -41,7 +42,12 @@ const char* __thiscall type_info_name(type_info* _this);
 const char* __thiscall type_info_raw_name(type_info* _this);
 struct __type_info_node;
 const char * __thiscall type_info_name_internal_method(type_info * _this, struct __type_info_node *node);
+#if _MSVCR_VER >= 80
+bad_alloc* __thiscall bad_alloc_copy_ctor(bad_alloc* _this, const bad_alloc* rhs);
+void __thiscall bad_alloc_dtor(bad_alloc* _this);
+#endif
 
 #undef bad_cast
 #undef bad_typeid
 #undef __non_rtti_object
+#undef bad_alloc

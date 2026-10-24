@@ -13,3 +13,7 @@ target_link_libraries(odbc32 wine)
 add_importlibs(odbc32 advapi32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET odbc32 DESTINATION reactos/system32 FOR all)
 set_wine_module(odbc32)
+
+if(MSVC)
+    target_compile_definitions(odbc32 PRIVATE typeof=__typeof__)
+endif()

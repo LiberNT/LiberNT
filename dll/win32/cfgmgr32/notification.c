@@ -52,7 +52,7 @@ struct cm_notify_context
     PCM_NOTIFY_CALLBACK callback;
 };
 
-CALLBACK DWORD devnotify_callback( HANDLE handle, DWORD flags, DEV_BROADCAST_HDR *header )
+DWORD CALLBACK devnotify_callback( HANDLE handle, DWORD flags, DEV_BROADCAST_HDR *header )
 {
     struct cm_notify_context *ctx = handle;
     CM_NOTIFY_EVENT_DATA *event_data;

@@ -342,13 +342,13 @@ static const WCHAR *format_int( WCHAR *buf, UINT len, CIMTYPE type, LONGLONG val
     case CIM_SINT8:
     case CIM_SINT16:
     case CIM_SINT32:
-        swprintf( buf, len, L"%d", val );
+        swprintf( buf, len, L"%d", (int)val );
         return buf;
 
     case CIM_UINT8:
     case CIM_UINT16:
     case CIM_UINT32:
-        swprintf( buf, len, L"%u", val );
+        swprintf( buf, len, L"%u", (UINT)val );
         return buf;
 
     case CIM_SINT64:

@@ -782,7 +782,7 @@ struct auth_callback_data
     void *user_data;
 };
 
-static CALLBACK void tp_auth_callback_proc( TP_CALLBACK_INSTANCE *instance, void *ctx )
+static void CALLBACK tp_auth_callback_proc( TP_CALLBACK_INSTANCE *instance, void *ctx )
 {
     BLUETOOTH_AUTHENTICATION_CALLBACK_PARAMS params;
     struct auth_callback_data *data = ctx;
@@ -885,7 +885,7 @@ done:
     }
 }
 
-static CALLBACK DWORD bluetooth_auth_event_callback( HCMNOTIFICATION notify, void *ctx, CM_NOTIFY_ACTION action,
+static DWORD CALLBACK bluetooth_auth_event_callback( HCMNOTIFICATION notify, void *ctx, CM_NOTIFY_ACTION action,
                                                      CM_NOTIFY_EVENT_DATA *event_data, DWORD size )
 {
     struct winebth_authentication_request *request = (struct winebth_authentication_request *)event_data->u.DeviceHandle.Data;

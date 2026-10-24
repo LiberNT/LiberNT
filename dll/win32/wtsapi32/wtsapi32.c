@@ -182,7 +182,7 @@ BOOL WINAPI WTSEnumerateProcessesExW(HANDLE server, DWORD *level, DWORD session_
         {
             if (OpenProcessToken(process, TOKEN_QUERY, &token))
             {
-                char buffer[sizeof(TOKEN_USER) + offsetof(SID, SubAuthority[SID_MAX_SUB_AUTHORITIES])];
+                char buffer[sizeof(TOKEN_USER) + offsetof(SID, SubAuthority) + SID_MAX_SUB_AUTHORITIES * sizeof(DWORD)];
                 TOKEN_USER *user = (TOKEN_USER *)buffer;
                 DWORD size;
 

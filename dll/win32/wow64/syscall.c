@@ -41,6 +41,12 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(wow);
 
+#ifdef _MSC_VER
+#define WOW64_ASM_CALLEE
+#else
+#define WOW64_ASM_CALLEE static __attribute__((used))
+#endif
+
 USHORT native_machine = 0;
 USHORT current_machine = 0;
 ULONG_PTR args_alignment = 0;
@@ -246,7 +252,7 @@ BOOL WINAPI DllMain( HINSTANCE inst, DWORD reason, void *reserved )
     return TRUE;
 }
 
-void __cdecl DECLSPEC_NORETURN __wine_spec_unimplemented_stub( const char *module, const char *function )
+void DECLSPEC_NORETURN __cdecl __wine_spec_unimplemented_stub( const char *module, const char *function )
 {
     EXCEPTION_RECORD record;
 
@@ -317,8 +323,8 @@ static NTSTATUS get_context_return_value( void *wow_context )
 /**********************************************************************
  *           call_user_exception_dispatcher
  */
-static void __attribute__((used)) call_user_exception_dispatcher( EXCEPTION_RECORD32 *rec, void *ctx32_ptr,
-                                                                  void *ctx64_ptr )
+WOW64_ASM_CALLEE void call_user_exception_dispatcher( EXCEPTION_RECORD32 *rec, void *ctx32_ptr,
+                                                      void *ctx64_ptr )
 {
     switch (current_machine)
     {
@@ -418,7 +424,7 @@ static void __attribute__((used)) call_user_exception_dispatcher( EXCEPTION_RECO
 /**********************************************************************
  *           call_raise_user_exception_dispatcher
  */
-static void __attribute__((used)) call_raise_user_exception_dispatcher( ULONG code )
+WOW64_ASM_CALLEE void call_raise_user_exception_dispatcher( ULONG code )
 {
     NtCurrentTeb32()->ExceptionCode = code;
 

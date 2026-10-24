@@ -4179,7 +4179,7 @@ interface nsIDocShell : nsIDocShellTreeItem
 ]
 interface nsIMutationObserver : nsISupports
 {
-    typedef struct {} nsAttrValue;
+    typedef struct { char dummy; } nsAttrValue;
 
     void CharacterDataWillChange(nsIDocument *aDocument, nsIContent *aContent,
                                  void /*CharacterDataChangeInfo*/ *aInfo);

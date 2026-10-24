@@ -3,6 +3,10 @@ set(VC90_ASSEMBLY ${WINARCH}_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_
 
 remove_definitions(-D_CRT_NON_CONFORMING_SWPRINTFS)
 
+if(MSVC AND LTCG)
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/GL->)
+endif()
+
 get_property(INCLUDE_DIRS DIRECTORY . PROPERTY INCLUDE_DIRECTORIES)
 list(REMOVE_ITEM INCLUDE_DIRS "${REACTOS_SOURCE_DIR}/sdk/include/crt")
 set_property(DIRECTORY . PROPERTY INCLUDE_DIRECTORIES ${INCLUDE_DIRS})
@@ -75,6 +79,24 @@ elseif(ARCH STREQUAL "ppc")
     list(APPEND SOURCE
         ${MSVCRT_DIR}/except_ppc.c
         ${MSVCRT_DIR}/fpu_ppc.c)
+endif()
+
+if(MSVC)
+    add_compile_options(/wd4090 /wd4146 /wd4164 /wd4267 /wd4723)
+    if(ARCH STREQUAL "i386")
+        list(APPEND ASM_SOURCE
+            i386/cpp_vtables.s
+            ${MSVCRT_DIR}/i386/except_i386_asm.s)
+    elseif(ARCH STREQUAL "amd64")
+        add_compile_options(/wd4334)
+        list(APPEND ASM_SOURCE
+            amd64/cpp_vtables.s
+            ${MSVCRT_DIR}/amd64/except_x86_64.s)
+    elseif(ARCH STREQUAL "arm64")
+        list(APPEND ASM_SOURCE
+            arm64/cpp_vtables.s
+            ${MSVCRT_DIR}/arm64/except_arm64.s)
+    endif()
 endif()
 
 if(ASM_SOURCE)
