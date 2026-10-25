@@ -93,7 +93,7 @@
 93 stdcall -noname Win32CreateDirectory(wstr ptr) Win32CreateDirectoryW
 94 stdcall -noname Win32RemoveDirectory(wstr) Win32RemoveDirectoryW
 95 stdcall -noname SHLogILFromFSIL(ptr)
-96 stdcall -noname StrRetToStrN(ptr long ptr ptr) StrRetToStrNAW # FIXME
+96 stdcall -version=0x400-0x603 -noname StrRetToStrN(ptr long ptr ptr) StrRetToStrNAW
 97 stdcall -noname SHWaitForFileToOpen(long long long)
 98 stdcall SHGetRealIDL(ptr ptr ptr)
 99 stdcall -noname SetAppStartingCursor(long long)
