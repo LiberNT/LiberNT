@@ -1087,9 +1087,11 @@ BOOL myAddPrinterDriverEx(DWORD level, LPBYTE pDriverInfo, DWORD dwFileCopyFlags
     // Locate driver and send the event.
     //
 
-    hui = driver_load(env, di.pConfigFile);
+    hui = NULL;
+    if (env == validate_envW(wszCurrentEnvironment))
+        hui = driver_load(env, get_file_part(di.pConfigFile));
 
-    pDrvDriverEvent = (void *)GetProcAddress(hui, "DrvDriverEvent");
+    pDrvDriverEvent = hui ? (void *)GetProcAddress(hui, "DrvDriverEvent") : NULL;
 
     if (hui && pDrvDriverEvent)
     {
@@ -1099,7 +1101,8 @@ BOOL myAddPrinterDriverEx(DWORD level, LPBYTE pDriverInfo, DWORD dwFileCopyFlags
         res = pDrvDriverEvent(DRIVER_EVENT_INITIALIZE, 3, (LPBYTE) &di, 0);
         TRACE("got %d from DRIVER_EVENT_INITIALIZE\n", res);
     }
-    FreeLibrary(hui);
+    if (hui)
+        FreeLibrary(hui);
 
     FIXME("=> TRUE with %u\n", GetLastError());
     return TRUE;
