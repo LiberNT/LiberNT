@@ -1011,21 +1011,18 @@ Next:
              * WorkerDPC scheduled by FlushDoneTransfers is suppressed by
              * the IsrDpcHandlerCounter reentrancy guard.
              */
-            KeAcquireSpinLock(&Endpoint->EndpointSpinLock,
-                              &Endpoint->EndpointOldIrql);
+            InterlockedDecrement(&Endpoint->FlushPendingLock);
 
-            if (PendingDrained && !IsListEmpty(&Endpoint->PendingTransferList))
+            if (PendingDrained)
             {
-                KeReleaseSpinLock(&Endpoint->EndpointSpinLock,
-                                  Endpoint->EndpointOldIrql);
-                IsEnd = FALSE;
-                continue;
+                KeAcquireSpinLock(&Endpoint->EndpointSpinLock, &OldIrql);
+                IsEnd = IsListEmpty(&Endpoint->PendingTransferList);
+                KeReleaseSpinLock(&Endpoint->EndpointSpinLock, OldIrql);
+
+                if (!IsEnd && !InterlockedCompareExchange(&Endpoint->FlushPendingLock, 1, 0))
+                    continue;
             }
 
-            KeReleaseSpinLock(&Endpoint->EndpointSpinLock,
-                              Endpoint->EndpointOldIrql);
-
-            InterlockedDecrement(&Endpoint->FlushPendingLock);
             DPRINT_CORE("USBPORT_FlushPendingTransfers: Endpoint Unlocked. Exit\n");
             return;
         }
