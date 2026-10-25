@@ -1315,12 +1315,7 @@ HRESULT WINAPI CDrivesFolder::EnumSearches(IEnumExtraSearch ** ppenum)
 HRESULT WINAPI CDrivesFolder::GetDefaultColumn (DWORD dwRes, ULONG *pSort, ULONG *pDisplay)
 {
     TRACE("(%p)\n", this);
-
-    if (pSort)
-        *pSort = 0;
-    if (pDisplay)
-        *pDisplay = 0;
-    return S_OK;
+    return E_NOTIMPL;
 }
 
 HRESULT WINAPI CDrivesFolder::GetDefaultColumnState(UINT iColumn, SHCOLSTATEF * pcsFlags)

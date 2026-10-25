@@ -906,13 +906,7 @@ HRESULT WINAPI CDesktopFolder::EnumSearches(IEnumExtraSearch **ppenum)
 HRESULT WINAPI CDesktopFolder::GetDefaultColumn(DWORD dwRes, ULONG *pSort, ULONG *pDisplay)
 {
     TRACE ("(%p)\n", this);
-
-    if (pSort)
-        *pSort = 0;
-    if (pDisplay)
-        *pDisplay = 0;
-
-    return S_OK;
+    return E_NOTIMPL;
 }
 
 HRESULT WINAPI CDesktopFolder::GetDefaultColumnState(UINT iColumn, SHCOLSTATEF *pcsFlags)
