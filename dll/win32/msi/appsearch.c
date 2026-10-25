@@ -1170,7 +1170,11 @@ UINT ACTION_AppSearch(MSIPACKAGE *package)
 
     r = MSI_OpenQuery( package->db, &view, L"SELECT * FROM `AppSearch`" );
     if (r != ERROR_SUCCESS)
+#ifdef __REACTOS__
+        return ERROR_FUNCTION_NOT_CALLED;
+#else
         return ERROR_SUCCESS;
+#endif
 
     r = MSI_IterateRecords( view, NULL, ITERATE_AppSearch, package );
     msiobj_release( &view->hdr );

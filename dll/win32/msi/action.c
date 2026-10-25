@@ -7907,6 +7907,10 @@ static UINT ACTION_HandleStandardAction(MSIPACKAGE *package, LPCWSTR action)
                 ui_actioninfo( package, action, TRUE, 0 );
                 rc = StandardActions[i].handler( package );
                 ui_actioninfo( package, action, FALSE, !rc );
+#ifdef __REACTOS__
+                if (rc == ERROR_FUNCTION_NOT_CALLED)
+                    rc = ERROR_SUCCESS;
+#endif
 
                 if (StandardActions[i].action_rollback && !package->need_rollback)
                 {
