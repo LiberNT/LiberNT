@@ -52,7 +52,7 @@ E1000MiniportPause(
     /* Stop transmit engine */
     if (Adapter->IoBase != NULL)
     {
-        E1000_WRITE_REG(Adapter, E1000_REG_TCTL, 0);
+        E1000_WRITE_REG(Adapter, E1000_REG_TCTL, E1000_READ_REG(Adapter, E1000_REG_TCTL) & ~E1000_TCTL_EN);
     }
 
     /* Clear pausing, set paused */
@@ -95,7 +95,8 @@ E1000MiniportRestart(
     /* Re-enable transmit engine */
     if (Adapter->IoBase != NULL)
     {
-        TctlValue = E1000_TCTL_EN |          /* Enable TX */
+        TctlValue = E1000_READ_REG(Adapter, E1000_REG_TCTL) & ~(E1000_TCTL_CT_MASK | E1000_TCTL_COLD_MASK);
+        TctlValue |= E1000_TCTL_EN |         /* Enable TX */
                     E1000_TCTL_PSP |         /* Pad short packets */
                     E1000_TCTL_CT_IEEE |     /* Collision threshold */
                     E1000_TCTL_COLD_FD;      /* Collision distance (full duplex) */

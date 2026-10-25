@@ -2128,7 +2128,8 @@ E1000SetupLink(
     E1000_WRITE_REG(Adapter, E1000_REG_CTRL, CtrlValue);
 
     /* Enable transmitter */
-    TctlValue = E1000_TCTL_EN |          /* Enable TX */
+    TctlValue = E1000_READ_REG(Adapter, E1000_REG_TCTL) & ~(E1000_TCTL_CT_MASK | E1000_TCTL_COLD_MASK);
+    TctlValue |= E1000_TCTL_EN |         /* Enable TX */
                 E1000_TCTL_PSP |         /* Pad short packets */
                 E1000_TCTL_CT_IEEE |     /* Collision threshold */
                 E1000_TCTL_COLD_FD;      /* Collision distance (full duplex) */
