@@ -731,6 +731,10 @@ struct device_query_context
     ULONG prop_keys_len;
     DEVPROPCOMPKEY *prop_keys;
     BOOL filters;
+#ifdef __REACTOS__
+    DEVPROP_FILTER_EXPRESSION *filter_exprs;
+    ULONG filter_exprs_len;
+#endif
 
     CRITICAL_SECTION cs;
     PDEV_QUERY_RESULT_CALLBACK callback;
@@ -840,11 +844,72 @@ static void device_iface_path_free( struct rb_entry *entry, void *data )
     free( path );
 }
 
+#ifdef __REACTOS__
+static HRESULT device_query_context_copy_filters( struct device_query_context *ctx, ULONG filters_len,
+                                                  const DEVPROP_FILTER_EXPRESSION *filters )
+{
+    SIZE_T size = filters_len * sizeof(*filters);
+    BYTE *data;
+    ULONG i;
+
+    for (i = 0; i < filters_len; i++)
+    {
+        size += (filters[i].Property.BufferSize + 7) & ~7;
+        if (filters[i].Property.CompKey.LocaleName)
+            size += ((wcslen( filters[i].Property.CompKey.LocaleName ) + 1) * sizeof(WCHAR) + 7) & ~7;
+    }
+    if (!(ctx->filter_exprs = malloc( size ))) return E_OUTOFMEMORY;
+    memcpy( ctx->filter_exprs, filters, filters_len * sizeof(*filters) );
+    data = (BYTE *)(ctx->filter_exprs + filters_len);
+    for (i = 0; i < filters_len; i++)
+    {
+        DEVPROPERTY *prop = &ctx->filter_exprs[i].Property;
+
+        if (prop->CompKey.LocaleName)
+        {
+            SIZE_T len = (wcslen( prop->CompKey.LocaleName ) + 1) * sizeof(WCHAR);
+            memcpy( data, prop->CompKey.LocaleName, len );
+            prop->CompKey.LocaleName = (const WCHAR *)data;
+            data += (len + 7) & ~7;
+        }
+        if (prop->Buffer && prop->BufferSize)
+        {
+            memcpy( data, filters[i].Property.Buffer, prop->BufferSize );
+            prop->Buffer = data;
+            data += (prop->BufferSize + 7) & ~7;
+        }
+        else prop->Buffer = NULL;
+    }
+    ctx->filter_exprs_len = filters_len;
+    return S_OK;
+}
+
+static BOOL device_query_context_object_matches( struct device_query_context *ctx, const WCHAR *id )
+{
+    const DEVPROPERTY *props = NULL;
+    DEVPROPERTY *sorted;
+    ULONG props_len = 0;
+    BOOL matches;
+
+    if (FAILED( DevGetObjectProperties( ctx->type, id, DevQueryFlagAllProperties, 0, NULL, &props_len, &props ) ))
+        return FALSE;
+    sorted = (DEVPROPERTY *)props;
+    qsort( sorted, props_len, sizeof(*sorted), devproperty_compare );
+    matches = devprop_filter_matches_properties( sorted, props_len, DEVPROP_OPERATOR_AND_OPEN, ctx->filter_exprs,
+                                                 ctx->filter_exprs + ctx->filter_exprs_len );
+    DevFreeObjectProperties( props_len, props );
+    return matches;
+}
+
+#endif
 static void device_query_context_release( struct device_query_context *ctx )
 {
     if (!InterlockedDecrement( &ctx->ref ))
     {
         free( ctx->prop_keys );
+#ifdef __REACTOS__
+        free( ctx->filter_exprs );
+#endif
         ctx->cs.DebugInfo->Spare[0] = 0;
         DeleteCriticalSection( &ctx->cs );
         if (ctx->closed) CloseHandle( ctx->closed );
@@ -1004,6 +1069,14 @@ static DWORD CALLBACK device_query_context_cm_notify_callback( HCMNOTIFICATION n
     }
     else
     {
+#ifdef __REACTOS__
+        if (ctx->filter_exprs && !device_query_context_object_matches( ctx, iface_path ))
+        {
+            free( notify_data );
+            LeaveCriticalSection( &ctx->cs );
+            return 0;
+        }
+#endif
         if (!(iface_entry = calloc( 1, sizeof( *iface_entry ) )))
             goto abort;
         if (!(iface_entry->path = wcsdup( iface_path )))
@@ -1042,9 +1115,15 @@ static void CALLBACK device_query_enum_objects_async( TP_CALLBACK_INSTANCE *inst
     LSTATUS err = ERROR_SUCCESS;
     BOOL success;
 
+#ifdef __REACTOS__
+    err = enum_dev_objects( ctx->type, ctx->prop_keys, ctx->prop_keys_len, !!(ctx->flags & DevQueryFlagAllProperties),
+                            ctx->filter_exprs, ctx->filter_exprs ? ctx->filter_exprs + ctx->filter_exprs_len : NULL,
+                            device_query_context_add_object, ctx );
+#else
     if (!ctx->filters)
         err = enum_dev_objects( ctx->type, ctx->prop_keys, ctx->prop_keys_len, !!(ctx->flags & DevQueryFlagAllProperties),
                                0, NULL, device_query_context_add_object, ctx );
+#endif
 
     EnterCriticalSection( &ctx->cs );
     if (ctx->state == DevQueryStateClosed)
@@ -1055,7 +1134,11 @@ static void CALLBACK device_query_enum_objects_async( TP_CALLBACK_INSTANCE *inst
     case ERROR_SUCCESS:
         ctx->state = DevQueryStateEnumCompleted;
         success = TrySubmitThreadpoolCallback( device_query_context_notify_enum_completed_async, ctx, NULL );
+#ifdef __REACTOS__
+        if (!(ctx->flags & DevQueryFlagUpdateResults))
+#else
         if (ctx->filters || !(ctx->flags & DevQueryFlagUpdateResults))
+#endif
             break;
         switch (ctx->type)
         {
@@ -1135,14 +1218,23 @@ HRESULT WINAPI DevCreateObjectQueryEx( DEV_OBJECT_TYPE type, ULONG flags, ULONG 
         || (props_len && (flags & DevQueryFlagAllProperties))
         || (filters && !devprop_filters_validate( filters, filters + filters_len )))
         return E_INVALIDARG;
+#ifndef __REACTOS__
     if (filters)
         FIXME( "Query filters are not supported!\n" );
+#endif
     if (params)
         FIXME( "Query parameters are not supported!\n" );
 
     hr = device_query_context_create( &ctx, type, flags, props_len, props, callback, user_data );
     if (FAILED( hr ))
         return hr;
+#ifdef __REACTOS__
+    if (filters && FAILED( hr = device_query_context_copy_filters( ctx, filters_len, filters ) ))
+    {
+        device_query_context_release( ctx );
+        return hr;
+    }
+#endif
 
     ctx->filters = !!filters;
     device_query_context_addref( ctx );
