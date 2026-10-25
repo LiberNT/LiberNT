@@ -51,6 +51,12 @@ struct console_window
     BOOL              in_selection;    /* an area is being selected */
     COORD             selection_start; /* selection coordinates */
     COORD             selection_end;
+#ifdef __REACTOS__
+    BOOL              selection_block;
+    BOOL              selection_mark;
+    BOOL              selection_moved;
+    WPARAM            swallow_key;
+#endif
     unsigned int      ui_charset;      /* default UI charset */
     WCHAR            *config_key;      /* config registry key name */
     LONG              ext_leading;     /* external leading for font */
@@ -1140,6 +1146,60 @@ static void get_selection_rect( struct console *console, RECT *r )
                  console->active->win.top) * console->active->font.height;
 }
 
+#ifdef __REACTOS__
+static void get_selection_order( struct console *console, COORD *first, COORD *last )
+{
+    COORD a = console->window->selection_start, b = console->window->selection_end;
+
+    if (console->window->selection_block)
+    {
+        first->X = min( a.X, b.X );
+        first->Y = min( a.Y, b.Y );
+        last->X = max( a.X, b.X );
+        last->Y = max( a.Y, b.Y );
+        return;
+    }
+    if (a.Y > b.Y || (a.Y == b.Y && a.X > b.X))
+    {
+        *first = b;
+        *last = a;
+    }
+    else
+    {
+        *first = a;
+        *last = b;
+    }
+}
+
+static void invert_selection_rows( struct console *console, HDC dc, int left, int right, int top, int bottom )
+{
+    RECT r;
+
+    r.left   = (left - console->active->win.left) * console->active->font.width;
+    r.right  = (right + 1 - console->active->win.left) * console->active->font.width;
+    r.top    = (top - console->active->win.top) * console->active->font.height;
+    r.bottom = (bottom + 1 - console->active->win.top) * console->active->font.height;
+    InvertRect( dc, &r );
+}
+
+static void invert_selection( struct console *console, HDC dc )
+{
+    int width = console->active->width;
+    COORD first, last;
+
+    get_selection_order( console, &first, &last );
+    if (console->window->selection_block || first.Y == last.Y)
+    {
+        invert_selection_rows( console, dc, first.X, last.X, first.Y, last.Y );
+        return;
+    }
+    invert_selection_rows( console, dc, first.X, width - 1, first.Y, first.Y );
+    if (last.Y > first.Y + 1)
+        invert_selection_rows( console, dc, 0, width - 1, first.Y + 1, last.Y - 1 );
+    invert_selection_rows( console, dc, 0, last.X, last.Y, last.Y );
+}
+
+#endif
 static void update_selection( struct console *console, HDC ref_dc )
 {
     HDC dc;
@@ -1151,7 +1211,11 @@ static void update_selection( struct console *console, HDC ref_dc )
 
     if (console->win == GetFocus() && console->active->cursor_visible)
         HideCaret( console->win );
+#ifdef __REACTOS__
+    invert_selection( console, dc );
+#else
     InvertRect( dc, &r );
+#endif
     if (dc != ref_dc)
         ReleaseDC( console->win, dc );
     if (console->win == GetFocus() && console->active->cursor_visible)
@@ -1175,14 +1239,22 @@ static void move_selection( struct console *console, COORD c1, COORD c2 )
     {
         if (console->win == GetFocus() && console->active->cursor_visible)
             HideCaret( console->win );
+#ifdef __REACTOS__
+        invert_selection( console, dc );
+#else
         InvertRect( dc, &r );
+#endif
     }
     console->window->selection_start = c1;
     console->window->selection_end   = c2;
     if (dc)
     {
         get_selection_rect( console, &r );
+#ifdef __REACTOS__
+        invert_selection( console, dc );
+#else
         InvertRect( dc, &r );
+#endif
         ReleaseDC( console->win, dc );
         if (console->win == GetFocus() && console->active->cursor_visible)
             ShowCaret( console->win );
@@ -1190,6 +1262,53 @@ static void move_selection( struct console *console, COORD c1, COORD c2 )
 }
 
 /* copies the current selection into the clipboard */
+#ifdef __REACTOS__
+static void copy_selection( struct console *console )
+{
+    int width = console->active->width, x, y, left, right;
+    COORD first, last;
+    WCHAR *p, *buf, *line;
+    HANDLE mem, new_mem;
+
+    get_selection_order( console, &first, &last );
+    if (!OpenClipboard( console->win )) return;
+    EmptyClipboard();
+
+    mem = GlobalAlloc( GMEM_MOVEABLE, ((last.Y - first.Y + 1) * (width + 2) + 1) * sizeof(WCHAR) );
+    if (mem && (p = buf = GlobalLock( mem )))
+    {
+        for (y = first.Y; y <= last.Y; y++)
+        {
+            if (console->window->selection_block)
+            {
+                left = first.X;
+                right = last.X;
+            }
+            else
+            {
+                left = (y == first.Y) ? first.X : 0;
+                right = (y == last.Y) ? last.X : width - 1;
+            }
+            line = p;
+            for (x = left; x <= right; x++)
+                *p++ = console->active->data[y * width + x].ch;
+            while (p > line && p[-1] == ' ')
+                p--;
+            if (y < last.Y)
+            {
+                *p++ = '\r';
+                *p++ = '\n';
+            }
+        }
+        *p++ = 0;
+        GlobalUnlock( mem );
+        new_mem = GlobalReAlloc( mem, (p - buf) * sizeof(WCHAR), GMEM_MOVEABLE );
+        if (new_mem) mem = new_mem;
+        SetClipboardData( CF_UNICODETEXT, mem );
+    }
+    CloseClipboard();
+}
+#else
 static void copy_selection( struct console *console )
 {
     unsigned int w, h;
@@ -1238,7 +1357,37 @@ static void copy_selection( struct console *console )
     }
     CloseClipboard();
 }
+#endif
 
+#ifdef __REACTOS__
+static void insert_text( struct console *console, const WCHAR *text, unsigned int len );
+
+static void paste_clipboard( struct console *console )
+{
+    WCHAR *ptr, *text;
+    HANDLE h;
+
+    if (!OpenClipboard( console->win )) return;
+    h = GetClipboardData( CF_UNICODETEXT );
+    if (h && (ptr = GlobalLock( h )))
+    {
+        unsigned int i, len = 0, size = GlobalSize( h ) / sizeof(WCHAR);
+
+        if ((text = malloc( (size + 1) * sizeof(WCHAR) )))
+        {
+            for (i = 0; i < size && ptr[i]; i++)
+            {
+                if (ptr[i] == '\n' && i && ptr[i - 1] == '\r') continue;
+                text[len++] = (ptr[i] == '\n') ? '\r' : ptr[i];
+            }
+            if (len) insert_text( console, text, len );
+            free( text );
+        }
+        GlobalUnlock( h );
+    }
+    CloseClipboard();
+}
+#else
 static void paste_clipboard( struct console *console )
 {
     WCHAR *ptr;
@@ -1282,6 +1431,7 @@ static void paste_clipboard( struct console *console )
 
     CloseClipboard();
 }
+#endif
 
 #ifdef __REACTOS__
 static void insert_text( struct console *console, const WCHAR *text, unsigned int len )
@@ -1332,6 +1482,147 @@ static void drop_files( struct console *console, HDROP drop )
         free( path );
     }
     DragFinish( drop );
+}
+
+static COORD clamp_cell( struct console *console, COORD c )
+{
+    if (c.X < 0) c.X = 0;
+    if (c.Y < 0) c.Y = 0;
+    if (c.X >= (int)console->active->width) c.X = console->active->width - 1;
+    if (c.Y >= (int)console->active->height) c.Y = console->active->height - 1;
+    return c;
+}
+
+static void clear_selection( struct console *console )
+{
+    if (!console->window->in_selection) return;
+    update_selection( console, 0 );
+    console->window->in_selection = FALSE;
+    console->window->selection_mark = FALSE;
+}
+
+static void start_selection( struct console *console, COORD c, BOOL block )
+{
+    clear_selection( console );
+    console->window->selection_block = block;
+    console->window->selection_mark = FALSE;
+    console->window->selection_moved = FALSE;
+    console->window->selection_start = console->window->selection_end = clamp_cell( console, c );
+    update_selection( console, 0 );
+    console->window->in_selection = TRUE;
+}
+
+static void select_range( struct console *console, COORD first, COORD last )
+{
+    start_selection( console, first, FALSE );
+    move_selection( console, first, last );
+    console->window->selection_moved = TRUE;
+}
+
+static BOOL is_word_delimiter( WCHAR ch )
+{
+    return !ch || wcschr( L" /\\()\"'-.,:;<>~!@#$%^&*|+=[]{}?\x2502", ch ) != NULL;
+}
+
+static void select_word( struct console *console, COORD c )
+{
+    const char_info_t *row;
+    COORD first, last;
+
+    c = clamp_cell( console, c );
+    row = console->active->data + c.Y * console->active->width;
+    first = last = c;
+    if (!is_word_delimiter( row[c.X].ch ))
+    {
+        while (first.X > 0 && !is_word_delimiter( row[first.X - 1].ch ))
+            first.X--;
+        while (last.X < (int)console->active->width - 1 && !is_word_delimiter( row[last.X + 1].ch ))
+            last.X++;
+    }
+    select_range( console, first, last );
+}
+
+static void select_all( struct console *console )
+{
+    COORD first = { 0, 0 }, last;
+
+    last.X = console->active->width - 1;
+    last.Y = console->active->height - 1;
+    select_range( console, first, last );
+}
+
+static void copy_and_clear_selection( struct console *console )
+{
+    copy_selection( console );
+    clear_selection( console );
+}
+
+static BOOL handle_edit_key( struct console *console, WPARAM wparam )
+{
+    BYTE key_state[256];
+    DWORD state = get_ctrl_state( key_state );
+    BOOL ctrl = (state & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) != 0;
+    BOOL alt = (state & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)) != 0;
+    BOOL shift = (state & SHIFT_PRESSED) != 0;
+    COORD c1, c2;
+
+    if (!alt && ctrl && (wparam == 'C' || wparam == VK_INSERT))
+    {
+        if (console->window->in_selection)
+        {
+            copy_and_clear_selection( console );
+            return TRUE;
+        }
+        return shift || wparam == VK_INSERT;
+    }
+    if (!alt && ((ctrl && wparam == 'V') || (shift && !ctrl && wparam == VK_INSERT)))
+    {
+        clear_selection( console );
+        paste_clipboard( console );
+        return TRUE;
+    }
+    if (!alt && ctrl && shift && wparam == 'A')
+    {
+        select_all( console );
+        return TRUE;
+    }
+    if (!console->window->in_selection)
+        return FALSE;
+
+    switch (wparam)
+    {
+    case VK_SHIFT:
+    case VK_CONTROL:
+    case VK_MENU:
+    case VK_LWIN:
+    case VK_RWIN:
+    case VK_CAPITAL:
+    case VK_NUMLOCK:
+    case VK_SCROLL:
+        return FALSE;
+    case VK_ESCAPE:
+        clear_selection( console );
+        return TRUE;
+    case VK_RETURN:
+        if (ctrl || alt || shift) break;
+        copy_and_clear_selection( console );
+        return TRUE;
+    case VK_LEFT:
+    case VK_RIGHT:
+    case VK_UP:
+    case VK_DOWN:
+        if (!shift || ctrl || alt) break;
+        c1 = console->window->selection_start;
+        c2 = console->window->selection_end;
+        if (wparam == VK_LEFT) c2.X--;
+        else if (wparam == VK_RIGHT) c2.X++;
+        else if (wparam == VK_UP) c2.Y--;
+        else c2.Y++;
+        move_selection( console, c1, c2 );
+        return TRUE;
+    }
+    clear_selection( console );
+    return FALSE;
 }
 #endif
 
@@ -2432,10 +2723,21 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 
     case WM_KEYDOWN:
     case WM_KEYUP:
+#ifdef __REACTOS__
+        if (console->window && console->window->in_selection && console->window->selection_mark)
+            handle_selection_key( console, msg == WM_KEYDOWN, wparam, lparam );
+        else if (console->window && msg == WM_KEYDOWN && handle_edit_key( console, wparam ))
+            console->window->swallow_key = wparam;
+        else if (console->window && msg == WM_KEYUP && console->window->swallow_key == wparam)
+            console->window->swallow_key = 0;
+        else
+            record_key_input( console, msg == WM_KEYDOWN, wparam, lparam );
+#else
         if (console->window && console->window->in_selection)
             handle_selection_key( console, msg == WM_KEYDOWN, wparam, lparam );
         else
             record_key_input( console, msg == WM_KEYDOWN, wparam, lparam );
+#endif
         break;
 
     case WM_SYSKEYDOWN:
@@ -2451,6 +2753,28 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
         break;
 
     case WM_LBUTTONDOWN:
+#ifdef __REACTOS__
+        if (console->window && (console->window->quick_edit || console->window->in_selection))
+        {
+            COORD c = get_cell( console, lparam );
+
+            if ((wparam & MK_SHIFT) && console->window->in_selection && !console->window->selection_mark)
+            {
+                move_selection( console, console->window->selection_start, clamp_cell( console, c ) );
+                console->window->selection_moved = TRUE;
+            }
+            else
+            {
+                start_selection( console, c, GetKeyState( VK_MENU ) < 0 );
+            }
+            SetCapture( console->win );
+        }
+        else
+        {
+            record_mouse_input( console, get_cell(console, lparam), wparam, 0 );
+        }
+        break;
+#else
         if (console->window && (console->window->quick_edit || console->window->in_selection))
         {
             if (console->window->in_selection)
@@ -2474,8 +2798,30 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
             record_mouse_input( console, get_cell(console, lparam), wparam, 0 );
         }
         break;
+#endif
 
     case WM_MOUSEMOVE:
+#ifdef __REACTOS__
+        if (console->window && (console->window->quick_edit || console->window->in_selection))
+        {
+            if (GetCapture() == console->win && console->window->in_selection &&
+                (wparam & MK_LBUTTON))
+            {
+                COORD c = clamp_cell( console, get_cell( console, lparam ) );
+
+                if (c.X != console->window->selection_end.X || c.Y != console->window->selection_end.Y)
+                {
+                    move_selection( console, console->window->selection_start, c );
+                    console->window->selection_moved = TRUE;
+                }
+            }
+        }
+        else
+        {
+            record_mouse_input( console, get_cell(console, lparam), wparam, MOUSE_MOVED );
+        }
+        break;
+#else
         if (console->window && (console->window->quick_edit || console->window->in_selection))
         {
             if (GetCapture() == console->win && console->window->in_selection &&
@@ -2490,8 +2836,36 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
             record_mouse_input( console, get_cell(console, lparam), wparam, MOUSE_MOVED );
         }
         break;
+#endif
 
     case WM_LBUTTONUP:
+#ifdef __REACTOS__
+        if (console->window && (console->window->quick_edit || console->window->in_selection))
+        {
+            if (GetCapture() == console->win && console->window->in_selection)
+            {
+                COORD c = clamp_cell( console, get_cell( console, lparam ) );
+
+                if (c.X != console->window->selection_end.X || c.Y != console->window->selection_end.Y)
+                {
+                    move_selection( console, console->window->selection_start, c );
+                    console->window->selection_moved = TRUE;
+                }
+                ReleaseCapture();
+                if (!console->window->selection_moved)
+                    clear_selection( console );
+            }
+            else if (GetCapture() == console->win)
+            {
+                ReleaseCapture();
+            }
+        }
+        else
+        {
+            record_mouse_input( console, get_cell(console, lparam), wparam, 0 );
+        }
+        break;
+#else
         if (console->window && (console->window->quick_edit || console->window->in_selection))
         {
             if (GetCapture() == console->win && console->window->in_selection)
@@ -2506,9 +2880,23 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
             record_mouse_input( console, get_cell(console, lparam), wparam, 0 );
         }
         break;
+#endif
 
     case WM_RBUTTONDOWN:
+#ifdef __REACTOS__
+        if (console->window && console->window->quick_edit && !(wparam & (MK_CONTROL|MK_SHIFT)))
+        {
+            if (console->window->in_selection)
+                copy_and_clear_selection( console );
+            else
+                paste_clipboard( console );
+            break;
+        }
+        if (console->window && ((wparam & (MK_CONTROL|MK_SHIFT)) == console->window->menu_mask ||
+                                (console->window->quick_edit && (wparam & (MK_CONTROL|MK_SHIFT)) == MK_SHIFT)))
+#else
         if (console->window && (wparam & (MK_CONTROL|MK_SHIFT)) == console->window->menu_mask)
+#endif
         {
             POINT       pt;
             pt.x = (short)LOWORD(lparam);
@@ -2532,7 +2920,16 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
         record_mouse_input( console, get_cell(console, lparam), wparam, 0 );
         break;
 
+#ifdef __REACTOS__
     case WM_LBUTTONDBLCLK:
+        if (console->window && console->window->quick_edit)
+            select_word( console, get_cell( console, lparam ) );
+        else
+            record_mouse_input( console, get_cell(console, lparam), wparam, DOUBLE_CLICK );
+        break;
+#else
+    case WM_LBUTTONDBLCLK:
+#endif
     case WM_MBUTTONDBLCLK:
     case WM_RBUTTONDBLCLK:
         record_mouse_input( console, get_cell(console, lparam), wparam, DOUBLE_CLICK );
@@ -2723,28 +3120,42 @@ static LRESULT WINAPI window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
             config_dialog( console, TRUE );
             break;
         case IDS_MARK:
+#ifdef __REACTOS__
+            clear_selection( console );
+            console->window->selection_block = TRUE;
+            console->window->selection_mark = TRUE;
+#endif
             console->window->selection_start.X = console->window->selection_start.Y = 0;
             console->window->selection_end.X = console->window->selection_end.Y = 0;
             update_selection( console, 0 );
             console->window->in_selection = TRUE;
             break;
         case IDS_COPY:
+#ifdef __REACTOS__
+            if (console->window->in_selection)
+                copy_and_clear_selection( console );
+#else
             if (console->window->in_selection)
             {
                 console->window->in_selection = FALSE;
                 update_selection( console, 0 );
                 copy_selection( console );
             }
+#endif
             break;
         case IDS_PASTE:
             paste_clipboard( console );
             break;
         case IDS_SELECTALL:
+#ifdef __REACTOS__
+            select_all( console );
+#else
             console->window->selection_start.X = console->window->selection_start.Y = 0;
             console->window->selection_end.X = console->active->width - 1;
             console->window->selection_end.Y = console->active->height - 1;
             update_selection( console, 0 );
             console->window->in_selection = TRUE;
+#endif
             break;
         case IDS_SCROLL:
         case IDS_SEARCH:
