@@ -2738,15 +2738,55 @@ USBPORT_SynchronizeControllersStart(IN PDEVICE_OBJECT FdoDevice)
 
 static
 VOID
+USBPORT_TimeoutTransferList(IN PUSBPORT_DEVICE_EXTENSION FdoExtension,
+                            IN PUSBPORT_ENDPOINT Endpoint,
+                            IN PLIST_ENTRY Head,
+                            IN BOOLEAN Queued,
+                            IN ULONGLONG Now,
+                            OUT PBOOLEAN Expired,
+                            OUT PBOOLEAN Cancelled)
+{
+    PUSBPORT_TRANSFER Transfer;
+    PLIST_ENTRY Entry, Next;
+
+    for (Entry = Head->Flink; Entry != Head; Entry = Next)
+    {
+        Next = Entry->Flink;
+        Transfer = CONTAINING_RECORD(Entry, USBPORT_TRANSFER, TransferLink);
+        if (!Transfer->TimeOut || !Transfer->Time.QuadPart || Now < (ULONGLONG)Transfer->Time.QuadPart ||
+            (Transfer->Flags & (TRANSFER_FLAG_COMPLETED | TRANSFER_FLAG_ABORTED | TRANSFER_FLAG_CANCELED)))
+            continue;
+
+        DPRINT1("USBPORT: transfer timeout addr=%lu ep=%lu request=%02x after %lu ms, %s, endpoint state %lu/%lu flags %lx, controller flags %lx\n",
+                Endpoint->EndpointProperties.DeviceAddress, Endpoint->EndpointProperties.EndpointAddress,
+                Transfer->TransferParameters.SetupPacket.bRequest, Transfer->TimeOut,
+                Queued ? "queued" : (Transfer->Flags & TRANSFER_FLAG_SUBMITED) ? "submitted" : "not submitted",
+                Endpoint->StateLast, Endpoint->StateNext, Endpoint->Flags, FdoExtension->Flags);
+
+        if (!Transfer->Irp && !(Transfer->Flags & (TRANSFER_FLAG_SUBMITED | TRANSFER_FLAG_PARENT)))
+        {
+            InterlockedOr((PLONG)&Transfer->Flags, TRANSFER_FLAG_TIMED_OUT | TRANSFER_FLAG_CANCELED);
+            RemoveEntryList(&Transfer->TransferLink);
+            InsertTailList(&Endpoint->CancelList, &Transfer->TransferLink);
+            *Cancelled = TRUE;
+            continue;
+        }
+
+        InterlockedOr((PLONG)&Transfer->Flags, TRANSFER_FLAG_TIMED_OUT | TRANSFER_FLAG_ABORTED);
+        *Expired = TRUE;
+    }
+}
+
+static
+VOID
 USBPORT_TimeoutAllEndpoints(IN PDEVICE_OBJECT FdoDevice)
 {
     PUSBPORT_DEVICE_EXTENSION FdoExtension = FdoDevice->DeviceExtension;
     PUSBPORT_ENDPOINT Endpoint;
-    PUSBPORT_TRANSFER Transfer;
-    PLIST_ENTRY Entry, TransferEntry;
+    PLIST_ENTRY Entry;
     LIST_ENTRY Endpoints;
     ULONGLONG Now = KeQueryInterruptTime();
-    BOOLEAN Expired;
+    BOOLEAN Expired, Cancelled;
     KIRQL OldIrql;
 
     InitializeListHead(&Endpoints);
@@ -2766,21 +2806,15 @@ USBPORT_TimeoutAllEndpoints(IN PDEVICE_OBJECT FdoDevice)
         Entry = RemoveHeadList(&Endpoints);
         Endpoint = CONTAINING_RECORD(Entry, USBPORT_ENDPOINT, TimeoutLink);
         Expired = FALSE;
-        KeAcquireSpinLock(&Endpoint->EndpointSpinLock, &OldIrql);
-        for (TransferEntry = Endpoint->TransferList.Flink; TransferEntry != &Endpoint->TransferList; TransferEntry = TransferEntry->Flink)
-        {
-            Transfer = CONTAINING_RECORD(TransferEntry, USBPORT_TRANSFER, TransferLink);
-            if (!Transfer->TimeOut || !Transfer->Time.QuadPart || Now < (ULONGLONG)Transfer->Time.QuadPart ||
-                (Transfer->Flags & (TRANSFER_FLAG_COMPLETED | TRANSFER_FLAG_ABORTED | TRANSFER_FLAG_CANCELED)))
-                continue;
-
-            InterlockedOr((PLONG)&Transfer->Flags, TRANSFER_FLAG_TIMED_OUT | TRANSFER_FLAG_ABORTED);
-            Expired = TRUE;
-            DPRINT1("USBPORT: transfer timeout addr=%lu ep=%lu request=%02x after %lu ms\n",
-                    Endpoint->EndpointProperties.DeviceAddress, Endpoint->EndpointProperties.EndpointAddress,
-                    Transfer->TransferParameters.SetupPacket.bRequest, Transfer->TimeOut);
-        }
-        KeReleaseSpinLock(&Endpoint->EndpointSpinLock, OldIrql);
+        Cancelled = FALSE;
+        KeAcquireSpinLock(&FdoExtension->FlushTransferSpinLock, &OldIrql);
+        KeAcquireSpinLockAtDpcLevel(&Endpoint->EndpointSpinLock);
+        USBPORT_TimeoutTransferList(FdoExtension, Endpoint, &Endpoint->PendingTransferList, TRUE, Now, &Expired, &Cancelled);
+        USBPORT_TimeoutTransferList(FdoExtension, Endpoint, &Endpoint->TransferList, FALSE, Now, &Expired, &Cancelled);
+        KeReleaseSpinLockFromDpcLevel(&Endpoint->EndpointSpinLock);
+        KeReleaseSpinLock(&FdoExtension->FlushTransferSpinLock, OldIrql);
+        if (Cancelled)
+            USBPORT_FlushCancelList(Endpoint);
         if (Expired)
             USBPORT_InvalidateEndpointHandler(FdoDevice, Endpoint, INVALIDATE_ENDPOINT_WORKER_THREAD);
         InterlockedDecrement(&Endpoint->TimeoutPin);
