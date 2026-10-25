@@ -634,6 +634,9 @@ PortAddDevice(
     KeInitializeDpc(&DeviceExtension->RequestRestartDpc,
                     PortFdoRestartRequestsDpc,
                     DeviceExtension);
+    KeInitializeDpc(&DeviceExtension->BusChangeDpc,
+                    PortFdoBusChangeDpc,
+                    DeviceExtension);
     KeInitializeEvent(&DeviceExtension->RequestsDrained, NotificationEvent, TRUE);
 
     /* Attach the FDO to the device stack */
@@ -3185,6 +3188,15 @@ StorPortNotification(
             DPRINT("LockHandle %p\n", LockHandle);
             PortReleaseSpinLock(DeviceExtension,
                                 LockHandle);
+            break;
+
+        case BusChangeDetected:
+            DPRINT("BusChangeDetected\n");
+            if (DeviceExtension != NULL)
+            {
+                DeviceExtension->BusRescanPending = TRUE;
+                KeInsertQueueDpc(&DeviceExtension->BusChangeDpc, NULL, NULL);
+            }
             break;
 
         case MarkDeviceFailedEx:

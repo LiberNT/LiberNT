@@ -854,6 +854,36 @@ PortScanLun(
 
 
 static
+BOOLEAN
+PortFdoHasTarget(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ ULONG Bus,
+    _In_ ULONG Target)
+{
+    KLOCK_QUEUE_HANDLE LockHandle;
+    PPDO_DEVICE_EXTENSION PdoExtension;
+    PLIST_ENTRY Entry;
+    BOOLEAN Found = FALSE;
+
+    KeAcquireInStackQueuedSpinLock(&DeviceExtension->PdoListLock, &LockHandle);
+    for (Entry = DeviceExtension->PdoListHead.Flink;
+         Entry != &DeviceExtension->PdoListHead;
+         Entry = Entry->Flink)
+    {
+        PdoExtension = CONTAINING_RECORD(Entry, PDO_DEVICE_EXTENSION, PdoListEntry);
+        if ((PdoExtension->Bus == Bus) && (PdoExtension->Target == Target))
+        {
+            Found = TRUE;
+            break;
+        }
+    }
+    KeReleaseInStackQueuedSpinLock(&LockHandle);
+
+    return Found;
+}
+
+
+static
 NTSTATUS
 PortFdoScanBus(
     _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
@@ -881,6 +911,9 @@ PortFdoScanBus(
         for (Target = 0; Target < DeviceExtension->Miniport.PortConfig.MaximumNumberOfTargets; Target++)
         {
             DPRINT("  Scanning target %ld:%ld\n", Bus, Target);
+
+            if (PortFdoHasTarget(DeviceExtension, Bus, Target))
+                continue;
 
             Status = PortCreatePdo(DeviceExtension, Bus, Target, 0, &PdoExtension);
             if (!NT_SUCCESS(Status))
@@ -931,8 +964,9 @@ PortFdoQueryBusRelations(
     DPRINT("PortFdoQueryBusRelations(%p %p)\n",
             DeviceExtension, Information);
 
-    if (!DeviceExtension->BusScanned)
+    if (!DeviceExtension->BusScanned || DeviceExtension->BusRescanPending)
     {
+        DeviceExtension->BusRescanPending = FALSE;
         Status = PortFdoScanBus(DeviceExtension);
         if (!NT_SUCCESS(Status))
         {
@@ -1227,6 +1261,24 @@ PortFdoEndRequest(
 
     if (Restart)
         KeInsertQueueDpc(&DeviceExtension->RequestRestartDpc, NULL, NULL);
+}
+
+
+VOID
+NTAPI
+PortFdoBusChangeDpc(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    PFDO_DEVICE_EXTENSION DeviceExtension = DeferredContext;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    IoInvalidateDeviceRelations(DeviceExtension->PhysicalDevice, BusRelations);
 }
 
 

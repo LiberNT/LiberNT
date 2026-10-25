@@ -192,6 +192,7 @@ typedef struct _FDO_DEVICE_EXTENSION
     LIST_ENTRY PdoListHead;
     ULONG PdoCount;
     BOOLEAN BusScanned;
+    volatile BOOLEAN BusRescanPending;
     volatile BOOLEAN DumpMode;
     BOOLEAN InFindAdapter;
     ULONG AdapterBusType;
@@ -202,6 +203,7 @@ typedef struct _FDO_DEVICE_EXTENSION
     volatile LONG OutstandingRequests;
     ULONG RequestLimit;
     KDPC RequestRestartDpc;
+    KDPC BusChangeDpc;
     KEVENT RequestsDrained;
     DEVICE_POWER_STATE DevicePowerState;
     SYSTEM_POWER_STATE SystemPowerState;
@@ -324,6 +326,7 @@ VOID PortFreeSrbContext(_In_ PIRP Irp);
 NTSTATUS PortFdoInitializeRequestPools(_In_ PFDO_DEVICE_EXTENSION FdoExtension);
 
 KDEFERRED_ROUTINE PortFdoRestartRequestsDpc;
+KDEFERRED_ROUTINE PortFdoBusChangeDpc;
 
 NTSTATUS PortSrbStatusToNtStatus(_In_ UCHAR SrbStatus);
 
