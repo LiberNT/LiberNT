@@ -305,6 +305,17 @@ public:
 
     HRESULT Init(HKEY hKey, LPCWSTR lpSubKey);
 
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppvObject) override
+    {
+        if (ppvObject && ::IsEqualGUID(riid, IID_IPropertyBag2))
+        {
+            AddRef();
+            *ppvObject = static_cast<IPropertyBag2*>(this);
+            return S_OK;
+        }
+        return CBasePropertyBag::QueryInterface(riid, ppvObject);
+    }
+
     // Unhide the base IPropertyBag2 Read/Write overloads.
     using CBasePropertyBag::Read;
     using CBasePropertyBag::Write;
@@ -384,7 +395,7 @@ CRegPropertyBag::_ReadBinary(
     DWORD uBytes)
 {
     HRESULT hr = E_FAIL;
-    if (vt != VT_UNKNOWN || uBytes < sizeof(GUID))
+    if ((vt != VT_UNKNOWN && vt != VT_EMPTY) || uBytes < sizeof(GUID))
         return hr;
 
     LPBYTE pbData = (LPBYTE)::LocalAlloc(LMEM_ZEROINIT, uBytes);
