@@ -34,7 +34,8 @@ records the icon name, design size, file and SHA-256 of each one.
 | Task Manager | `devices/computer` with `apps/com.github.stsdc.monitor` centered on its screen | taskmgr.exe, taskmgr11.exe |
 | Device Manager | `devices/computer` with `emblems/emblem-system` over its bottom-right quarter | devmgmt.exe |
 | LiberNT Setup | `apps/yast-vm-install` | libernt.exe, oobe.exe |
-| Linux applications and terminal | `apps/tux` | lxwinhost.exe, lxterm.exe |
+| Linux applications | `apps/tux` | lxwinhost.exe |
+| Linux Terminal | `apps/utilities-terminal` with `apps/tux` over its bottom-right quarter | lxterm.exe |
 
 Every ICO holds 16, 20, 24, 32, 40, 48, 64, 96, 128 and 256 pixel frames as
 32-bit DIBs with alpha and legacy AND masks. Each frame is rasterized from the
