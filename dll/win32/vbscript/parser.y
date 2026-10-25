@@ -1517,6 +1517,65 @@ void *parser_alloc(parser_ctx_t *ctx, size_t size)
     return ret;
 }
 
+#ifdef __REACTOS__
+static statement_t *find_nested_function(statement_t *stat, BOOL nested)
+{
+    statement_t *found;
+    elseif_decl_t *elseif;
+    case_clausule_t *clausule;
+
+    for(; stat; stat = stat->next) {
+        switch(stat->type) {
+        case STAT_FUNC:
+            if(nested)
+                return stat;
+            if((found = find_nested_function(((function_statement_t*)stat)->func_decl->body, TRUE)))
+                return found;
+            break;
+        case STAT_IF:
+            if((found = find_nested_function(((if_statement_t*)stat)->if_stat, nested)))
+                return found;
+            for(elseif = ((if_statement_t*)stat)->elseifs; elseif; elseif = elseif->next) {
+                if((found = find_nested_function(elseif->stat, nested)))
+                    return found;
+            }
+            if((found = find_nested_function(((if_statement_t*)stat)->else_stat, nested)))
+                return found;
+            break;
+        case STAT_SELECT:
+            for(clausule = ((select_statement_t*)stat)->case_clausules; clausule; clausule = clausule->next) {
+                if((found = find_nested_function(clausule->stat, nested)))
+                    return found;
+            }
+            break;
+        case STAT_WHILE:
+        case STAT_WHILELOOP:
+        case STAT_UNTIL:
+        case STAT_DOWHILE:
+        case STAT_DOUNTIL:
+            if((found = find_nested_function(((while_statement_t*)stat)->body, TRUE)))
+                return found;
+            break;
+        case STAT_FORTO:
+            if((found = find_nested_function(((forto_statement_t*)stat)->body, TRUE)))
+                return found;
+            break;
+        case STAT_FOREACH:
+            if((found = find_nested_function(((foreach_statement_t*)stat)->body, TRUE)))
+                return found;
+            break;
+        case STAT_WITH:
+            if((found = find_nested_function(((with_statement_t*)stat)->body, nested)))
+                return found;
+            break;
+        default:
+            break;
+        }
+    }
+    return NULL;
+}
+#endif
+
 HRESULT parse_script(parser_ctx_t *ctx, const WCHAR *code, const WCHAR *delimiter, DWORD flags)
 {
     ctx->code = ctx->ptr = code;
@@ -1537,6 +1596,23 @@ HRESULT parse_script(parser_ctx_t *ctx, const WCHAR *code, const WCHAR *delimite
         ctx->last_token = tEXPRESSION;
 
     parser_parse(ctx);
+
+#ifdef __REACTOS__
+    if(ctx->hres == S_OK) {
+        statement_t *nested = find_nested_function(ctx->stats, FALSE);
+        class_decl_t *class_decl;
+        function_decl_t *func_decl;
+
+        for(class_decl = ctx->class_decls; !nested && class_decl; class_decl = class_decl->next) {
+            for(func_decl = class_decl->funcs; !nested && func_decl; func_decl = func_decl->next)
+                nested = find_nested_function(func_decl->body, TRUE);
+        }
+        if(nested) {
+            ctx->error_loc = ((function_statement_t*)nested)->func_decl->loc;
+            ctx->hres = MAKE_VBSERROR(VBSE_SYNTAX_ERROR);
+        }
+    }
+#endif
 
     return ctx->hres;
 }
