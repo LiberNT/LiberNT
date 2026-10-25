@@ -206,6 +206,11 @@ IsThisARootDirectory(IN HANDLE VolumeHandle,
         {
             return FALSE;
         }
+
+        if (FileNameInfo.FileNameLength == sizeof(WCHAR))
+        {
+            return TRUE;
+        }
     }
 
     /* If we have a path */
