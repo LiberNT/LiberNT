@@ -1856,9 +1856,72 @@ static HRESULT WINAPI MimeBody_SetData(
 
     IMimeBody_SetCurrentEncoding(iface, ietEncoding);
 
+#ifdef __REACTOS__
+    {
+        const char *pri = pszPriType ? pszPriType : "application";
+        const char *sub = pszSubType ? pszSubType : "octet-stream";
+        char *type, *pri_copy, *sub_copy;
+        header_t *header;
+        PROPVARIANT value;
+        param_t *param;
+        BOOL has_charset = FALSE;
+        HCHARSET hcs;
+        INETCSETINFO cs_info;
+
+        type = malloc(strlen(pri) + strlen(sub) + 2);
+        pri_copy = strdup(pri);
+        sub_copy = strdup(sub);
+        if (!type || !pri_copy || !sub_copy)
+        {
+            free(type);
+            free(pri_copy);
+            free(sub_copy);
+            return E_OUTOFMEMORY;
+        }
+        sprintf(type, "%s/%s", pri, sub);
+
+        if (find_prop(This, "Content-Type", &header) == S_OK)
+        {
+            PropVariantClear(&header->value);
+            header->value.vt = VT_LPSTR;
+            header->value.pszVal = strdup(type);
+        }
+        else
+        {
+            PropVariantInit(&value);
+            value.vt = VT_LPSTR;
+            value.pszVal = type;
+            IMimeBody_SetProp(iface, "Content-Type", 0, &value);
+            find_prop(This, "Content-Type", &header);
+        }
+        free(type);
+
+        free(This->content_pri_type);
+        free(This->content_sub_type);
+        This->content_pri_type = pri_copy;
+        This->content_sub_type = sub_copy;
+
+        if (header && !_stricmp(pri, "text"))
+        {
+            LIST_FOR_EACH_ENTRY(param, &header->params, param_t, entry)
+            {
+                if (!_stricmp(param->name, "charset"))
+                    has_charset = TRUE;
+            }
+            if (!has_charset && MimeOleGetDefaultCharset(&hcs) == S_OK &&
+                MimeOleGetCharsetInfo(hcs, &cs_info) == S_OK && (param = malloc(sizeof(*param))))
+            {
+                param->name = strdup("charset");
+                param->value = strdup(cs_info.szName);
+                list_add_tail(&header->params, &param->entry);
+            }
+        }
+    }
+#else
     /* FIXME: Update the content type.
        If pszPriType == NULL use 'application'
        If pszSubType == NULL use 'octet-stream' */
+#endif
 
     return S_OK;
 }
