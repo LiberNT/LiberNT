@@ -1322,7 +1322,7 @@ LX_SYSCALL(LxSysSysinfo)
         ULONG MemUnit;
         ULONG Pad3;
     } Info;
-    SYSTEM_BASIC_INFORMATION Basic;
+    LX_MEMORY_STATE Memory;
     LARGE_INTEGER Now;
     PLIST_ENTRY Entry;
 
@@ -1331,11 +1331,11 @@ LX_SYSCALL(LxSysSysinfo)
     RtlZeroMemory(&Info, sizeof(Info));
     Now.QuadPart = (LONG64)KeQueryInterruptTime() + LxTimeNsOffset(Call->Process, LX_CLOCK_BOOTTIME) / 100;
     Info.Uptime = Now.QuadPart / 10000000;
-    if (NT_SUCCESS(ZwQuerySystemInformation(SystemBasicInformation, &Basic, sizeof(Basic), NULL)))
-    {
-        Info.TotalRam = (ULONG64)Basic.NumberOfPhysicalPages * Basic.PageSize;
-        Info.FreeRam = Info.TotalRam / 2;
-    }
+    LxQueryMemoryState(&Memory);
+    Info.TotalRam = Memory.Total;
+    Info.FreeRam = Memory.Free;
+    Info.TotalSwap = Memory.SwapTotal;
+    Info.FreeSwap = Memory.SwapFree;
     Info.MemUnit = 1;
 
     ExAcquireFastMutex(&LxProcessListLock);

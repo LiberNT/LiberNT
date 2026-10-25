@@ -732,6 +732,20 @@ ULONG64 LxCgroupCpusAllowed(_In_ PLX_PROCESS Process);
 VOID LxCgroupRefreshAffinity(_In_ PLX_INSTANCE Instance, _In_ PLX_CGROUP Cgroup);
 VOID LxSchedRefreshProcess(_In_ PLX_PROCESS Process);
 VOID LxFormatCpuList(_In_ ULONG64 Mask, _Out_writes_(Size) PSTR Buffer, _In_ SIZE_T Size);
+
+typedef struct _LX_MEMORY_STATE
+{
+    ULONG64 Total;
+    ULONG64 Free;
+    ULONG64 Available;
+    ULONG64 Cached;
+    ULONG64 SwapTotal;
+    ULONG64 SwapFree;
+    ULONG64 CommitLimit;
+    ULONG64 Committed;
+} LX_MEMORY_STATE, *PLX_MEMORY_STATE;
+
+VOID LxQueryMemoryState(_Out_ PLX_MEMORY_STATE State);
 PLX_THREAD LxCurrentThread(VOID);
 
 VOID LxPollHeadInit(_Out_ PLX_POLL_HEAD Head);

@@ -2484,6 +2484,52 @@ LxGenCpuinfo(
         LxTextPrintf(Text, "processor\t: %lu\n%s\n", Index, LxArchCpuinfo());
 }
 
+VOID
+LxQueryMemoryState(
+    _Out_ PLX_MEMORY_STATE State)
+{
+    SYSTEM_BASIC_INFORMATION Basic;
+    SYSTEM_PERFORMANCE_INFORMATION Performance;
+    SYSTEM_FILECACHE_INFORMATION Cache;
+    PSYSTEM_PAGEFILE_INFORMATION PageFiles, Entry;
+    ULONG Size = 2 * PAGE_SIZE, Returned = 0;
+    ULONG64 PageSize = PAGE_SIZE;
+
+    RtlZeroMemory(State, sizeof(*State));
+    if (NT_SUCCESS(ZwQuerySystemInformation(SystemBasicInformation, &Basic, sizeof(Basic), NULL)))
+    {
+        PageSize = Basic.PageSize;
+        State->Total = (ULONG64)Basic.NumberOfPhysicalPages * PageSize;
+    }
+    if (NT_SUCCESS(ZwQuerySystemInformation(SystemPerformanceInformation, &Performance, sizeof(Performance), NULL)))
+    {
+        State->Available = min((ULONG64)Performance.AvailablePages * PageSize, State->Total);
+        State->Committed = (ULONG64)Performance.CommittedPages * PageSize;
+        State->CommitLimit = (ULONG64)Performance.CommitLimit * PageSize;
+    }
+    if (NT_SUCCESS(ZwQuerySystemInformation(SystemFileCacheInformation, &Cache, sizeof(Cache), NULL)))
+        State->Cached = min((ULONG64)Cache.CurrentSizeIncludingTransitionInPages * PageSize, State->Available);
+    State->Free = State->Available - State->Cached;
+
+    PageFiles = LxAllocPaged(Size);
+    if ((PageFiles != NULL) &&
+        NT_SUCCESS(ZwQuerySystemInformation(SystemPageFileInformation, PageFiles, Size, &Returned)) &&
+        (Returned >= sizeof(*PageFiles)))
+    {
+        for (Entry = PageFiles;; Entry = (PSYSTEM_PAGEFILE_INFORMATION)((PUCHAR)Entry + Entry->NextEntryOffset))
+        {
+            State->SwapTotal += (ULONG64)Entry->TotalSize * PageSize;
+            State->SwapFree += (ULONG64)(Entry->TotalSize - min(Entry->TotalInUse, Entry->TotalSize)) * PageSize;
+            if ((Entry->NextEntryOffset == 0) ||
+                ((PUCHAR)Entry + Entry->NextEntryOffset + sizeof(*Entry) > (PUCHAR)PageFiles + Returned))
+            {
+                break;
+            }
+        }
+    }
+    LxFreePaged(PageFiles);
+}
+
 static
 VOID
 LxGenMeminfo(
@@ -2491,25 +2537,62 @@ LxGenMeminfo(
     _In_ PLX_SYNTH Synth,
     _Inout_ PLX_TEXT Text)
 {
-    SYSTEM_BASIC_INFORMATION Basic;
-    ULONG64 Total = 0, Free;
+    LX_MEMORY_STATE State;
 
     UNREFERENCED_PARAMETER(Self);
     UNREFERENCED_PARAMETER(Synth);
-    if (NT_SUCCESS(ZwQuerySystemInformation(SystemBasicInformation, &Basic, sizeof(Basic), NULL)))
-        Total = (ULONG64)Basic.NumberOfPhysicalPages * Basic.PageSize / 1024;
-    Free = Total / 2;
+    LxQueryMemoryState(&State);
     LxTextPrintf(Text,
                  "MemTotal:       %8llu kB\nMemFree:        %8llu kB\nMemAvailable:   %8llu kB\n"
-                 "Buffers:               0 kB\nCached:                0 kB\nSwapCached:            0 kB\n"
-                 "Active:                0 kB\nInactive:              0 kB\nSwapTotal:             0 kB\n"
-                 "SwapFree:              0 kB\nDirty:                 0 kB\nWriteback:             0 kB\n"
+                 "Buffers:               0 kB\nCached:         %8llu kB\nSwapCached:            0 kB\n"
+                 "Active:                0 kB\nInactive:              0 kB\nSwapTotal:      %8llu kB\n"
+                 "SwapFree:       %8llu kB\nDirty:                 0 kB\nWriteback:             0 kB\n"
                  "AnonPages:             0 kB\nMapped:                0 kB\nShmem:                 0 kB\n"
                  "Slab:                  0 kB\nSReclaimable:          0 kB\nSUnreclaim:            0 kB\n"
                  "KernelStack:           0 kB\nPageTables:            0 kB\nCommitLimit:    %8llu kB\n"
-                 "Committed_AS:          0 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:           0 kB\n"
+                 "Committed_AS:   %8llu kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:           0 kB\n"
                  "HugePages_Total:       0\nHugePages_Free:        0\nHugepagesize:       2048 kB\n",
-                 Total, Free, Free, Total);
+                 State.Total / 1024, State.Free / 1024, State.Available / 1024, State.Cached / 1024,
+                 State.SwapTotal / 1024, State.SwapFree / 1024, State.CommitLimit / 1024, State.Committed / 1024);
+}
+
+static
+PSYSTEM_PROCESSOR_PERFORMANCE_INFORMATION
+LxQueryProcessorTimes(
+    _Out_ PULONG Count)
+{
+    PSYSTEM_PROCESSOR_PERFORMANCE_INFORMATION Times;
+    ULONG Returned = 0;
+
+    *Count = KeQueryActiveProcessorCount(NULL);
+    Times = LxAllocPaged(*Count * sizeof(*Times));
+    if ((Times != NULL) &&
+        !NT_SUCCESS(ZwQuerySystemInformation(SystemProcessorPerformanceInformation, Times,
+                                             *Count * sizeof(*Times), &Returned)))
+    {
+        LxFreePaged(Times);
+        Times = NULL;
+    }
+    if (Times != NULL)
+        *Count = Returned / sizeof(*Times);
+    return Times;
+}
+
+static
+VOID
+LxPrintCpuTimes(
+    _Inout_ PLX_TEXT Text,
+    _In_ PCSTR Name,
+    _In_ ULONG64 Idle,
+    _In_ ULONG64 Kernel,
+    _In_ ULONG64 User,
+    _In_ ULONG64 Dpc,
+    _In_ ULONG64 Interrupt)
+{
+    ULONG64 System = (Kernel > Idle + Dpc + Interrupt) ? (Kernel - Idle - Dpc - Interrupt) : 0;
+
+    LxTextPrintf(Text, "%s %llu 0 %llu %llu 0 %llu %llu 0 0 0\n", Name, User / 100000ULL, System / 100000ULL,
+                 Idle / 100000ULL, Interrupt / 100000ULL, Dpc / 100000ULL);
 }
 
 static
@@ -2519,16 +2602,44 @@ LxGenStat(
     _In_ PLX_SYNTH Synth,
     _Inout_ PLX_TEXT Text)
 {
-    ULONG Count = KeQueryActiveProcessorCount(NULL), Index, Processes = 0;
+    ULONG Count, Index, Processes = 0;
+    PSYSTEM_PROCESSOR_PERFORMANCE_INFORMATION Times = LxQueryProcessorTimes(&Count);
+    SYSTEM_PERFORMANCE_INFORMATION Performance;
+    ULONG64 Idle = 0, Kernel = 0, User = 0, Dpc = 0, Interrupt = 0, Interrupts = 0, Switches = 0;
     LARGE_INTEGER Now;
     PLIST_ENTRY Entry;
     LONG64 Uptime = (LONG64)KeQueryInterruptTime() / 10000000LL;
+    CHAR Name[16];
 
     UNREFERENCED_PARAMETER(Synth);
     KeQuerySystemTime(&Now);
-    LxTextPrintf(Text, "cpu  0 0 0 0 0 0 0 0 0 0\n");
+    for (Index = 0; (Times != NULL) && (Index < Count); Index++)
+    {
+        Idle += (ULONG64)Times[Index].IdleTime.QuadPart;
+        Kernel += (ULONG64)Times[Index].KernelTime.QuadPart;
+        User += (ULONG64)Times[Index].UserTime.QuadPart;
+        Dpc += (ULONG64)Times[Index].DpcTime.QuadPart;
+        Interrupt += (ULONG64)Times[Index].InterruptTime.QuadPart;
+        Interrupts += Times[Index].InterruptCount;
+    }
+    LxPrintCpuTimes(Text, "cpu ", Idle, Kernel, User, Dpc, Interrupt);
     for (Index = 0; Index < Count; Index++)
-        LxTextPrintf(Text, "cpu%lu 0 0 0 0 0 0 0 0 0 0\n", Index);
+    {
+        RtlStringCbPrintfA(Name, sizeof(Name), "cpu%lu", Index);
+        if (Times != NULL)
+        {
+            LxPrintCpuTimes(Text, Name, (ULONG64)Times[Index].IdleTime.QuadPart,
+                            (ULONG64)Times[Index].KernelTime.QuadPart, (ULONG64)Times[Index].UserTime.QuadPart,
+                            (ULONG64)Times[Index].DpcTime.QuadPart, (ULONG64)Times[Index].InterruptTime.QuadPart);
+        }
+        else
+        {
+            LxPrintCpuTimes(Text, Name, 0, 0, 0, 0, 0);
+        }
+    }
+    LxFreePaged(Times);
+    if (NT_SUCCESS(ZwQuerySystemInformation(SystemPerformanceInformation, &Performance, sizeof(Performance), NULL)))
+        Switches = Performance.ContextSwitches;
     ExAcquireFastMutex(&LxProcessListLock);
     for (Entry = LxProcessList.Flink; Entry != &LxProcessList; Entry = Entry->Flink)
     {
@@ -2536,8 +2647,8 @@ LxGenStat(
             Processes++;
     }
     ExReleaseFastMutex(&LxProcessListLock);
-    LxTextPrintf(Text, "intr 0\nctxt 0\nbtime %lld\nprocesses %lu\nprocs_running 1\nprocs_blocked 0\nsoftirq 0 0 0 0 0 0 0 0 0 0 0\n",
-                 (Now.QuadPart - 116444736000000000LL) / 10000000LL - Uptime, Processes);
+    LxTextPrintf(Text, "intr %llu\nctxt %llu\nbtime %lld\nprocesses %lu\nprocs_running 1\nprocs_blocked 0\nsoftirq 0 0 0 0 0 0 0 0 0 0 0\n",
+                 Interrupts, Switches, (Now.QuadPart - 116444736000000000LL) / 10000000LL - Uptime, Processes);
 }
 
 static
@@ -2548,10 +2659,16 @@ LxGenUptime(
     _Inout_ PLX_TEXT Text)
 {
     LONG64 Now = (LONG64)KeQueryInterruptTime() + LxTimeNsOffset(Self, LX_CLOCK_BOOTTIME) / 100;
+    ULONG Count, Index;
+    PSYSTEM_PROCESSOR_PERFORMANCE_INFORMATION Times = LxQueryProcessorTimes(&Count);
+    ULONG64 Idle = 0;
 
     UNREFERENCED_PARAMETER(Synth);
-    LxTextPrintf(Text, "%lld.%02lld %lld.%02lld\n", Now / 10000000LL, (Now / 100000LL) % 100,
-                 Now / 10000000LL, (Now / 100000LL) % 100);
+    for (Index = 0; (Times != NULL) && (Index < Count); Index++)
+        Idle += (ULONG64)Times[Index].IdleTime.QuadPart;
+    LxFreePaged(Times);
+    LxTextPrintf(Text, "%lld.%02lld %llu.%02llu\n", Now / 10000000LL, (Now / 100000LL) % 100,
+                 Idle / 10000000ULL, (Idle / 100000ULL) % 100);
 }
 
 static
