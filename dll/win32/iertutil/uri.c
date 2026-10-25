@@ -6354,7 +6354,11 @@ static HRESULT combine_uri(Uri *base, Uri *relative, DWORD flags, IUri **result,
             }
 
             /* Check if the dot segments need to be removed from the path. */
+#ifdef __REACTOS__
+            if(!(flags & URL_DONT_SIMPLIFY) && (!data.is_opaque || (data.is_relative && path_len && *path == '/'))) {
+#else
             if(!(flags & URL_DONT_SIMPLIFY) && !data.is_opaque) {
+#endif
                 DWORD offset = (path_offset > 0) ? path_offset+1 : 0;
                 DWORD new_len = remove_dot_segments(path+offset,path_len-offset);
 
