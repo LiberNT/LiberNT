@@ -127,7 +127,8 @@ LxPumpThread(
             break;
     }
 
-    CloseHandle(Pump->Source);
+    if (GetFileType(Pump->Source) == FILE_TYPE_PIPE)
+        CloseHandle(Pump->Source);
     if (GetFileType(Pump->Target) == FILE_TYPE_PIPE)
         CloseHandle(Pump->Target);
     return 0;
