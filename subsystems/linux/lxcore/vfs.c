@@ -234,6 +234,35 @@ LxNtOpenHandle(
     return 0;
 }
 
+static
+VOID
+LxNtReopenById(
+    _Inout_ PHANDLE Handle,
+    _In_ ACCESS_MASK Access,
+    _In_ ULONG Options)
+{
+    FILE_INTERNAL_INFORMATION Internal;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING Id;
+    IO_STATUS_BLOCK Iosb;
+    HANDLE ById;
+
+    if (!NT_SUCCESS(ZwQueryInformationFile(*Handle, &Iosb, &Internal, sizeof(Internal), FileInternalInformation)))
+        return;
+    Id.Buffer = (PWCH)&Internal.IndexNumber;
+    Id.Length = Id.MaximumLength = sizeof(Internal.IndexNumber);
+    InitializeObjectAttributes(&ObjectAttributes, &Id, OBJ_KERNEL_HANDLE, *Handle, NULL);
+    if (!NT_SUCCESS(ZwCreateFile(&ById, Access | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, 0,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN,
+                                 Options | FILE_OPEN_BY_FILE_ID | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
+                                 NULL, 0)))
+    {
+        return;
+    }
+    ZwClose(*Handle);
+    *Handle = ById;
+}
+
 LONG
 LxNtReadLxAttributes(
     _In_ HANDLE Handle,
@@ -3463,6 +3492,7 @@ LxVfsOpenNode(
         LxVcacheInvalidate();
         LxInotifyEvent(Process, Node->Path, 0x00000100, FALSE);
     }
+    LxNtReopenById(&Handle, Access, Options);
 
     File = LxFileFromNtHandle(Handle, Flags & (LX_O_ACCMODE | LX_O_APPEND | LX_O_NONBLOCK | LX_O_PATH));
     if (File == NULL)
