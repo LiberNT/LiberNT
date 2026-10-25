@@ -217,7 +217,7 @@ HRESULT STDMETHODCALLTYPE CACLCustomMRU::AddMRUString(LPCWSTR pwszEntry)
     if (m_bTypedURLs)
         return E_FAIL;
 
-    ATLASSERT(m_MRUData.GetSize() <= m_MRUList.GetLength());
+    ATLASSERT(m_MRUList.GetLength() <= m_MRUData.GetSize());
     m_bDirty = true;
 
     CStringW NewElement = pwszEntry;
