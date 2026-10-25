@@ -3152,11 +3152,6 @@ BOOLEAN co_UserDestroyWindow(PVOID Object)
       IntSendParentNotify(Window, WM_DESTROY);
    }
 
-   if (!Window->spwndOwner && !IntGetParent(Window) && !(Window->style & WS_VISIBLE))
-   {
-      co_IntShellHookNotify(HSHELL_WINDOWDESTROYED, (WPARAM) hWnd, 0);
-   }
-
    /* Hide the window */
    if (Window->style & WS_VISIBLE)
    {

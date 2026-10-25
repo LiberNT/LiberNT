@@ -2080,8 +2080,12 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
                            0,
                            RDW_VALIDATE | RDW_NOFRAME | RDW_NOERASE | RDW_NOINTERNALPAINT | RDW_ALLCHILDREN);
 
-      if (UserIsDesktopWindow(Window->spwndParent))
+      if (UserIsDesktopWindow(Window->spwndParent) &&
+          ((Window->ExStyle & WS_EX_APPWINDOW) ||
+           (!(Window->ExStyle & WS_EX_TOOLWINDOW) && !Window->spwndOwner)))
+      {
          co_IntShellHookNotify(HSHELL_WINDOWDESTROYED, (WPARAM)UserHMGetHandle(Window), 0);
+      }
 
       IntUpdatePaintCountVisibility(Window, FALSE);
       Window->style &= ~WS_VISIBLE; //IntSetStyle( Window, 0, WS_VISIBLE );
