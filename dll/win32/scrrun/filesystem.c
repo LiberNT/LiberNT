@@ -4288,7 +4288,12 @@ static HRESULT WINAPI filesys_MoveFolder(IFileSystem3 *iface, BSTR src, BSTR dst
         free(src_copy);
         if (ret)
             return S_OK;
+#ifdef __REACTOS__
+        if (GetLastError() == ERROR_INVALID_NAME || GetLastError() == ERROR_FILE_NOT_FOUND ||
+            GetLastError() == ERROR_DIRECTORY)
+#else
         if (GetLastError() == ERROR_INVALID_NAME || GetLastError() == ERROR_FILE_NOT_FOUND)
+#endif
             return CTL_E_PATHNOTFOUND;
         return create_error(GetLastError());
     }
