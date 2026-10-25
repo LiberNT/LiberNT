@@ -94,6 +94,16 @@ extern HANDLE hBootInstallComplete;
 extern HANDLE hDeviceInstallListMutex;
 extern LIST_ENTRY DeviceInstallListHead;
 extern HANDLE hDeviceInstallListNotEmpty;
+extern LIST_ENTRY DoNotInstallListHead;
+
+VOID
+SetDeviceDoNotInstall(
+    _In_ PCWSTR DeviceId,
+    _In_ BOOL DoNotInstall);
+
+BOOL
+IsDeviceDoNotInstall(
+    _In_ PCWSTR DeviceId);
 
 BOOL
 SetupIsActive(VOID);

@@ -3398,6 +3398,8 @@ PNP_CreateDevInst(
             RegOpenKeyEx(hEnumKey, pszDeviceID, 0, KEY_READ | KEY_WRITE, &hKey);
         }
 
+        SetDeviceDoNotInstall(pszDeviceID, (ulFlags & CM_CREATE_DEVNODE_DO_NOT_INSTALL) != 0);
+
         /* Create a device node for the device */
         RtlInitUnicodeString(&ControlData.DeviceInstance, pszDeviceID);
         Status = NtPlugPlayControl(PlugPlayControlInitializeDevice,

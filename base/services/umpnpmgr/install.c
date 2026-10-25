@@ -48,12 +48,79 @@ HANDLE hBootInstallComplete = NULL;
 HANDLE hDeviceInstallListMutex;
 LIST_ENTRY DeviceInstallListHead;
 HANDLE hDeviceInstallListNotEmpty;
+LIST_ENTRY DoNotInstallListHead;
+
+typedef struct _DO_NOT_INSTALL_ENTRY
+{
+    LIST_ENTRY ListEntry;
+    WCHAR DeviceId[ANYSIZE_ARRAY];
+} DO_NOT_INSTALL_ENTRY, *PDO_NOT_INSTALL_ENTRY;
 
 DWORD
 CreatePnpInstallEventSecurity(
     _Out_ PSECURITY_DESCRIPTOR *EventSd);
 
 /* FUNCTIONS *****************************************************************/
+
+static
+PDO_NOT_INSTALL_ENTRY
+FindDoNotInstallEntry(
+    _In_ PCWSTR DeviceId)
+{
+    PLIST_ENTRY Entry;
+    PDO_NOT_INSTALL_ENTRY Item;
+
+    for (Entry = DoNotInstallListHead.Flink; Entry != &DoNotInstallListHead; Entry = Entry->Flink)
+    {
+        Item = CONTAINING_RECORD(Entry, DO_NOT_INSTALL_ENTRY, ListEntry);
+        if (_wcsicmp(Item->DeviceId, DeviceId) == 0)
+            return Item;
+    }
+
+    return NULL;
+}
+
+VOID
+SetDeviceDoNotInstall(
+    _In_ PCWSTR DeviceId,
+    _In_ BOOL DoNotInstall)
+{
+    PDO_NOT_INSTALL_ENTRY Item;
+
+    WaitForSingleObject(hDeviceInstallListMutex, INFINITE);
+
+    Item = FindDoNotInstallEntry(DeviceId);
+    if (Item && !DoNotInstall)
+    {
+        RemoveEntryList(&Item->ListEntry);
+        HeapFree(GetProcessHeap(), 0, Item);
+    }
+    else if (!Item && DoNotInstall)
+    {
+        Item = HeapAlloc(GetProcessHeap(), 0,
+                         FIELD_OFFSET(DO_NOT_INSTALL_ENTRY, DeviceId[wcslen(DeviceId) + 1]));
+        if (Item)
+        {
+            wcscpy(Item->DeviceId, DeviceId);
+            InsertTailList(&DoNotInstallListHead, &Item->ListEntry);
+        }
+    }
+
+    ReleaseMutex(hDeviceInstallListMutex);
+}
+
+BOOL
+IsDeviceDoNotInstall(
+    _In_ PCWSTR DeviceId)
+{
+    BOOL Result;
+
+    WaitForSingleObject(hDeviceInstallListMutex, INFINITE);
+    Result = (FindDoNotInstallEntry(DeviceId) != NULL);
+    ReleaseMutex(hDeviceInstallListMutex);
+
+    return Result;
+}
 
 typedef enum _DEVICE_INSTALL_STATE
 {

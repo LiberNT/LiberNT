@@ -563,6 +563,12 @@ ProcessDeviceInstallEvent(
     DPRINT("Device enumerated: %S\n", PnpEvent->InstallDevice.DeviceId);
 
     DeviceIdLength = lstrlenW(PnpEvent->InstallDevice.DeviceId);
+    if (DeviceIdLength && IsDeviceDoNotInstall(PnpEvent->InstallDevice.DeviceId))
+    {
+        BroadcastDeviceNodesChanged();
+        return;
+    }
+
     if (DeviceIdLength)
     {
         /* Allocate a new device-install event */

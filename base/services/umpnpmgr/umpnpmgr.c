@@ -345,6 +345,7 @@ InitializePnPManager(VOID)
         return dwError;
     }
     InitializeListHead(&DeviceInstallListHead);
+    InitializeListHead(&DoNotInstallListHead);
 
     /* PnpEventThread can consume notifications before RpcServerThread runs. */
     InitializeListHead(&NotificationListHead);
