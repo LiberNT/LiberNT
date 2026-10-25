@@ -1763,6 +1763,9 @@ HRESULT WINAPI CFSFolder::GetDisplayNameOf(PCUITEMID_CHILD pidl,
         return E_FAIL;
     }
 
+    if (!(_ILGetFSType(pidl) & PT_FS))
+        return E_INVALIDARG;
+
     /* If it is a complex pidl, let the child handle it */
     if (!_ILIsPidlSimple (pidl)) /* complex pidl */
     {
@@ -2074,7 +2077,7 @@ HRESULT WINAPI CFSFolder::Initialize(PCIDLIST_ABSOLUTE pidl)
     m_sPathTarget = NULL;
 
     /* set my path */
-    HRESULT hr = E_FAIL;
+    HRESULT hr = S_OK;
     if (SHGetPathFromIDListW (pidl, wszTemp))
         hr = SHStrDupW(wszTemp, &m_sPathTarget);
 
