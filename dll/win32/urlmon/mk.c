@@ -339,6 +339,14 @@ static HRESULT WINAPI MkProtocol_StartEx(IInternetProtocolEx *iface, IUri *pUri,
         return report_result(pOIProtSink, hres, ERROR_INVALID_PARAMETER);
     }
 
+#ifdef __REACTOS__
+    if(SUCCEEDED(IUri_GetRawUri(pUri, &path))) {
+        if((colon_ptr = wcschr(path, ':')) && (colon_ptr = wcschr(colon_ptr+1, ':')))
+            IInternetProtocolSink_ReportProgress(pOIProtSink, BINDSTATUS_CACHEFILENAMEAVAILABLE, colon_ptr+1);
+        SysFreeString(path);
+    }
+
+#endif
     IInternetProtocolSink_ReportData(pOIProtSink,
             BSCF_FIRSTDATANOTIFICATION | BSCF_LASTDATANOTIFICATION,
             statstg.cbSize.u.LowPart, statstg.cbSize.u.LowPart);
