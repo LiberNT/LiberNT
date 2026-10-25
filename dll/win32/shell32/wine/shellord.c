@@ -4568,7 +4568,7 @@ HRESULT WINAPI CIDLData_CreateFromIDArray(
 	pdump (pidlFolder);
 	for (i=0; i<cpidlFiles; i++) pdump (lppidlFiles[i]);
     }
-    hResult = IDataObject_Constructor(hwnd, pidlFolder, lppidlFiles, cpidlFiles, FALSE, ppdataObject);
+    hResult = IDataObject_Constructor(hwnd, pidlFolder, lppidlFiles, cpidlFiles, TRUE, ppdataObject);
     return hResult;
 }
 

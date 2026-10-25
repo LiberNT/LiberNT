@@ -322,14 +322,17 @@ HRESULT WINAPI CIDLDataObj::QueryGetData(LPFORMATETC pformatetc)
 
 HRESULT WINAPI CIDLDataObj::GetCanonicalFormatEtc(LPFORMATETC pformatectIn, LPFORMATETC pformatetcOut)
 {
-    //FIXME("(%p)->()\n", this);
+    if (!pformatectIn || !pformatetcOut)
+        return E_INVALIDARG;
+    *pformatetcOut = *pformatectIn;
+    pformatetcOut->ptd = NULL;
     return DATA_S_SAMEFORMATETC;
 }
 
 HRESULT WINAPI CIDLDataObj::SetData(LPFORMATETC pformatetc, STGMEDIUM *pmedium, BOOL fRelease)
 {
     if (!fRelease)
-        return E_INVALIDARG;
+        return E_NOTIMPL;
 
     for (int n = 0; n < m_Formats.GetSize(); ++n)
     {
