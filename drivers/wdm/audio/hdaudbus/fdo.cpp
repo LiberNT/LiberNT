@@ -649,7 +649,7 @@ Fdo_EvtDevicePrepareHardware(
 #define HDAC_MAX_CAPS 10
 
         /* Lets walk the linked capabilities list */
-        do {
+        while (offset) {
             cur_cap = read32(fdoCtx->m_BAR0.Base.baseptr + offset);
 
             SklHdAudBusPrint(DEBUG_LEVEL_INFO, DBG_INIT,
@@ -714,7 +714,7 @@ Fdo_EvtDevicePrepareHardware(
             /* read the offset of next capability */
             offset = cur_cap & HDA_CAP_HDR_NXT_PTR_MASK;
 
-        } while (offset);
+        }
     }
 
     status = GetHDACapabilities(fdoCtx);
