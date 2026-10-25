@@ -425,7 +425,10 @@ BrFolder_InsertItem(
 
     pItemData->lpsfParent = lpsf;
     pItemData->pidlFull.Attach(pidlFull);
-    pItemData->pidlChild = ILFindLastID(pItemData->pidlFull);
+    if (pidlParent && pidlFull)
+        pItemData->pidlChild = (PCIDLIST_RELATIVE)((BYTE *)pidlFull + ILGetSize(pidlParent) - sizeof(USHORT));
+    else
+        pItemData->pidlChild = ILFindLastID(pItemData->pidlFull);
     BrFolder_GetIconPair(*pItemData, item);
 
     if (BrFolder_GetChildrenEnum(info, pItemData, NULL) == S_OK)
