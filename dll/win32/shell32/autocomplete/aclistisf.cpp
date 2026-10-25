@@ -431,8 +431,14 @@ STDMETHODIMP CACListISF::GetIDList(PIDLIST_ABSOLUTE *ppidl)
 // *** ICurrentWorkingDirectory methods ***
 STDMETHODIMP CACListISF::GetDirectory(LPWSTR pwzPath, DWORD cchSize)
 {
+    WCHAR szPath[MAX_PATH];
+
     TRACE("(%p, %p, %ld)\n", this, pwzPath, cchSize);
-    return E_NOTIMPL;
+    if (!m_pidlCurDir)
+        return E_UNEXPECTED;
+    if (!SHGetPathFromIDListW(m_pidlCurDir, szPath))
+        return E_FAIL;
+    return StringCchCopyW(pwzPath, cchSize, szPath);
 }
 
 STDMETHODIMP CACListISF::SetDirectory(LPCWSTR pwzPath)
