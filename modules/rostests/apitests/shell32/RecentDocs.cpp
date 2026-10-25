@@ -156,6 +156,111 @@ TestDocumentLists(void)
     ok_hr(Destinations->RemoveAllDestinations(), S_OK);
 }
 
+static const WCHAR g_Ext[] = L".lntrecentdoc";
+static const WCHAR g_ProgId[] = L"LiberNT.ApiTest.RecentDocs.Document";
+
+static BOOL
+WaitForListed(IApplicationDocumentLists *Lists, LPCWSTR Path, BOOL Expected, DWORD Milliseconds)
+{
+    DWORD Start = GetTickCount();
+
+    do
+    {
+        CComPtr<IObjectArray> Recent;
+
+        if (SUCCEEDED(Lists->GetList(ADLT_RECENT, 0, IID_PPV_ARG(IObjectArray, &Recent))) &&
+            ListContains(Recent, Path) == Expected)
+            return TRUE;
+        Sleep(100);
+    } while (GetTickCount() - Start < Milliseconds);
+    return FALSE;
+}
+
+static void
+SetClassValue(LPCWSTR SubKey, LPCWSTR Value, LPCWSTR Data)
+{
+    WCHAR Key[MAX_PATH];
+
+    wsprintfW(Key, L"Software\\Classes\\%s", SubKey);
+    SHSetValueW(HKEY_CURRENT_USER, Key, Value, REG_SZ, Data, (lstrlenW(Data) + 1) * sizeof(WCHAR));
+}
+
+static void
+DeleteClassKey(LPCWSTR SubKey)
+{
+    WCHAR Key[MAX_PATH];
+
+    wsprintfW(Key, L"Software\\Classes\\%s", SubKey);
+    SHDeleteKeyW(HKEY_CURRENT_USER, Key);
+}
+
+static void
+TestRegisteredDocumentLists(LPCWSTR Dir)
+{
+    CComPtr<IApplicationDocumentLists> Lists;
+    CComPtr<IApplicationDestinations> Destinations;
+    CComPtr<IShellItem> Item;
+    SHARDAPPIDINFO Info;
+    WCHAR Command[MAX_PATH + 16], Exe[MAX_PATH], Doc[MAX_PATH], Verb[MAX_PATH], Link[MAX_PATH];
+    LPWSTR Recent = NULL, Display = NULL;
+    HANDLE File;
+    HRESULT hr;
+
+    GetModuleFileNameW(NULL, Exe, _countof(Exe));
+    wsprintfW(Command, L"\"%s\" \"%%1\"", Exe);
+    wsprintfW(Verb, L"%s\\shell\\open\\command", g_ProgId);
+    SetClassValue(g_Ext, NULL, g_ProgId);
+    SetClassValue(g_ProgId, L"AppUserModelID", g_AppId);
+    SetClassValue(Verb, NULL, Command);
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
+
+    wsprintfW(Doc, L"%s\\recentdoc%lu%s", Dir, GetCurrentProcessId(), g_Ext);
+    File = CreateFileW(Doc, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "cannot create %ls\n", Doc);
+    if (File != INVALID_HANDLE_VALUE)
+        CloseHandle(File);
+
+    hr = CoCreateInstance(CLSID_ApplicationDocumentLists, NULL, CLSCTX_INPROC_SERVER,
+                          IID_PPV_ARG(IApplicationDocumentLists, &Lists));
+    if (SUCCEEDED(hr))
+        hr = CoCreateInstance(CLSID_ApplicationDestinations, NULL, CLSCTX_INPROC_SERVER,
+                              IID_PPV_ARG(IApplicationDestinations, &Destinations));
+    if (SUCCEEDED(hr))
+        hr = SHCreateItemFromParsingName(Doc, NULL, IID_PPV_ARG(IShellItem, &Item));
+    ok_hr(hr, S_OK);
+    if (SUCCEEDED(hr))
+    {
+        ok_hr(Lists->SetAppID(g_AppId), S_OK);
+        ok_hr(Destinations->SetAppID(g_AppId), S_OK);
+        Info.psi = Item;
+        Info.pszAppID = g_AppId;
+        SHAddToRecentDocs(SHARD_APPIDINFO, &Info);
+        ok(WaitForListed(Lists, Doc, TRUE, 5000), "the list of the registered app lacks %ls\n", Doc);
+        ok_hr(Destinations->RemoveDestination(Item), S_OK);
+        ok(WaitForListed(Lists, Doc, FALSE, 5000), "removed document still listed\n");
+        ok_hr(Destinations->RemoveDestination(Item), HRESULT_FROM_WIN32(ERROR_NOT_FOUND));
+        SHAddToRecentDocs(SHARD_APPIDINFO, &Info);
+        ok(WaitForListed(Lists, Doc, TRUE, 5000), "the document was not listed again\n");
+        ok_hr(Destinations->RemoveAllDestinations(), S_OK);
+        ok(WaitForListed(Lists, Doc, FALSE, 5000), "the document survived RemoveAllDestinations\n");
+
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Recent, 0, NULL, &Recent)) &&
+            SUCCEEDED(Item->GetDisplayName(SIGDN_NORMALDISPLAY, &Display)))
+        {
+            wsprintfW(Link, L"%s\\%s.lnk", Recent, Display);
+            trace("recent link %s\n", GetFileAttributesW(Link) != INVALID_FILE_ATTRIBUTES ? "created" : "absent");
+            DeleteFileW(Link);
+        }
+        CoTaskMemFree(Display);
+        CoTaskMemFree(Recent);
+    }
+
+    DeleteFileW(Doc);
+    DeleteClassKey(g_Ext);
+    DeleteClassKey(g_ProgId);
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
+}
+
 static const WCHAR g_Advanced[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
 
 START_TEST(RecentDocs)
@@ -187,6 +292,7 @@ START_TEST(RecentDocs)
 
     TestRecentFolder();
     TestDocumentLists();
+    TestRegisteredDocumentLists(Temp);
 
     DeleteFileW(g_File);
     CoUninitialize();

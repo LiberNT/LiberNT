@@ -388,6 +388,7 @@ START_TEST(ShellItemProperties)
     GetTempPathW(_countof(Temp), Temp);
     wsprintfW(g_Dir, L"%spropstest%lu", Temp, GetCurrentProcessId());
     CreateDirectoryW(g_Dir, NULL);
+    GetLongPathNameW(g_Dir, g_Dir, _countof(g_Dir));
     wsprintfW(g_Txt, L"%s\\note.txt", g_Dir);
     wsprintfW(g_Bmp, L"%s\\image.bmp", g_Dir);
     wsprintfW(g_Png, L"%s\\image.png", g_Dir);
