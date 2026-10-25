@@ -42,6 +42,7 @@ target_compile_options(windows_storage_sublib PRIVATE $<TARGET_PROPERTY:windows_
 add_dependencies(windows_storage_sublib psdk)
 
 list(APPEND SHELL_SOURCE
+    CAutomaticDestinations.cpp
     CDestinationList.cpp
     CEnumerableObjectCollection.cpp
     CFileSysBindData.cpp

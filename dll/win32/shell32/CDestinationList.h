@@ -19,7 +19,6 @@ private:
     DWORD m_Sections;
     CComAutoCriticalSection m_Lock;
 
-    HRESULT ResolveAppId(LPCWSTR pszAppID, CStringW &AppId);
     HRESULT ListPath(LPCWSTR pszAppID, BOOL Create, CStringW &Path);
     HRESULT WriteSection(DWORD Type, LPCWSTR Name, DWORD Category, IObjectArray *poa);
 

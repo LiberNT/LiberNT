@@ -264,6 +264,7 @@
 @ cdecl SHELL32_AssocGetFSDirectoryDescription(ptr long)
 @ cdecl SHELL32_AssocGetFileDescription(wstr ptr long)
 @ cdecl SHELL32_CreateSimpleIDListFromPath(wstr long)
+@ cdecl SHELL_AddAutomaticDestination(wstr ptr)
 @ cdecl SHELL_FS_HideExtension(wstr)
 @ cdecl SHELL_FS_ProcessDisplayFilename(ptr long)
 @ cdecl SHELL_GetCachedGlobalCounter(ptr ptr)

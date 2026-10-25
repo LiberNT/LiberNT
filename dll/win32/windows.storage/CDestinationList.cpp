@@ -40,56 +40,11 @@ DestListCreateEmpty(REFIID riid, void **ppv)
 }
 
 HRESULT
-CDestinationList::ResolveAppId(LPCWSTR pszAppID, CStringW &AppId)
-{
-    WCHAR Module[MAX_PATH];
-    PWSTR Explicit = NULL;
-
-    if (pszAppID && *pszAppID)
-        AppId = pszAppID;
-    else if (!m_AppId.IsEmpty())
-        AppId = m_AppId;
-    else if (SUCCEEDED(GetCurrentProcessExplicitAppUserModelID(&Explicit)) && Explicit && *Explicit)
-        AppId = Explicit;
-    else if (GetModuleFileNameW(NULL, Module, _countof(Module)))
-        AppId = Module;
-    else
-        AppId.Empty();
-
-    if (Explicit)
-        CoTaskMemFree(Explicit);
-    if (AppId.IsEmpty())
-        return E_FAIL;
-    AppId.MakeLower();
-    return S_OK;
-}
-
-HRESULT
 CDestinationList::ListPath(LPCWSTR pszAppID, BOOL Create, CStringW &Path)
 {
-    WCHAR Recent[MAX_PATH];
-    BYTE Hash[8];
-    CStringW AppId;
-    HRESULT hr;
-
-    hr = ResolveAppId(pszAppID, AppId);
-    if (FAILED(hr))
-        return hr;
-
-    hr = SHGetFolderPathW(NULL, CSIDL_RECENT | (Create ? CSIDL_FLAG_CREATE : 0), NULL, SHGFP_TYPE_CURRENT, Recent);
-    if (FAILED(hr))
-        return hr;
-    Path = Recent;
-    Path += L"\\CustomDestinations";
-    if (Create && !CreateDirectoryW(Path, NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
-        return HRESULT_FROM_WIN32(GetLastError());
-
-    hr = HashData((LPBYTE)AppId.GetString(), AppId.GetLength() * sizeof(WCHAR), Hash, sizeof(Hash));
-    if (FAILED(hr))
-        return hr;
-    Path.AppendFormat(L"\\%02x%02x%02x%02x%02x%02x%02x%02x.customDestinations-ms",
-                      Hash[0], Hash[1], Hash[2], Hash[3], Hash[4], Hash[5], Hash[6], Hash[7]);
-    return S_OK;
+    if (!pszAppID || !*pszAppID)
+        pszAppID = m_AppId;
+    return JumpListPath(pszAppID, L"CustomDestinations", L"customDestinations-ms", Create, Path);
 }
 
 HRESULT
