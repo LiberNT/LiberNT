@@ -68,7 +68,7 @@ RtlRaiseException(IN PEXCEPTION_RECORD ExceptionRecord)
     if (RtlpCheckForActiveDebugger())
     {
         /* Raise an exception immediately */
-        Context.ContextFlags &= ~(CONTEXT_DEBUG_REGISTERS & ~CONTEXT_FULL);
+        Context.ContextFlags &= ~RTLP_RAISE_DEBUG_CONTEXT_FLAGS;
         Status = ZwRaiseException(ExceptionRecord, &Context, TRUE);
     }
     else
@@ -77,12 +77,12 @@ RtlRaiseException(IN PEXCEPTION_RECORD ExceptionRecord)
         if (!RtlDispatchException(ExceptionRecord, &Context))
         {
             /* Raise the exception */
-            Context.ContextFlags &= ~(CONTEXT_DEBUG_REGISTERS & ~CONTEXT_FULL);
+            Context.ContextFlags &= ~RTLP_RAISE_DEBUG_CONTEXT_FLAGS;
             Status = ZwRaiseException(ExceptionRecord, &Context, FALSE);
         }
         else
         {
-            Context.ContextFlags &= ~(CONTEXT_DEBUG_REGISTERS & ~CONTEXT_FULL);
+            Context.ContextFlags &= ~RTLP_RAISE_DEBUG_CONTEXT_FLAGS;
 #ifdef RTLP_RAISE_USES_RESTORE_CONTEXT
             /* See RtlRaiseStatus: resume the handler-patched context directly;
              * ZwContinue cannot resume a kernel-mode context here. */
