@@ -907,6 +907,7 @@ LONG LxVfsOpenResolve(_In_ PLX_PROCESS Process, _In_ LONG DirFd, _In_ PCSTR Path
 LONG LxVfsOpenNode(_In_ PLX_PROCESS Process, _Inout_ PLX_NODE Node, _In_ ULONG Flags, _In_ ULONG Mode, _Out_ PLX_FILE *File);
 LONG LxVfsReopen(_In_ PLX_PROCESS Process, _In_ PLX_FILE Source, _In_ ULONG Flags, _Out_ PLX_FILE *File);
 PSTR LxSynthFollowPath(_In_ PLX_PROCESS Process, _In_ PLX_MOUNT Mount, _In_ PCSTR Relative);
+PSTR LxSynthFdPath(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node);
 LONG LxVfsStatNode(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _Out_ PLX_STAT Stat);
 LONG LxVfsMkdir(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ ULONG Mode);
 LONG LxVfsMknod(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ ULONG Mode, _In_ ULONG64 Device);

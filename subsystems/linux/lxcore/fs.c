@@ -1957,6 +1957,29 @@ Exit:
     return Result;
 }
 
+static
+LONG
+LxMountLookup(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG DirFd,
+    _In_ ULONG64 UserPath,
+    _In_ ULONG Flags,
+    _Out_ PLX_NODE Node)
+{
+    PSTR Path;
+    LONG Error = LxLookupUser(Process, DirFd, UserPath, Flags, Node);
+
+    if (Error != 0)
+        return Error;
+    Path = LxSynthFdPath(Process, Node);
+    if (Path == NULL)
+        return 0;
+    LxNodeFree(Node);
+    Error = LxLookup(Process, LX_AT_FDCWD, Path, Flags & ~LX_LOOKUP_FOLLOW, Node);
+    LxFree(Path);
+    return Error;
+}
+
 LX_SYSCALL(LxSysMount)
 {
     PLX_PROCESS Process = Call->Process;
@@ -1966,7 +1989,7 @@ LX_SYSCALL(LxSysMount)
     LONG64 Result;
     LONG Error;
 
-    Error = LxLookupUser(Process, LX_AT_FDCWD, Call->Args[1], LX_LOOKUP_FOLLOW, &Target);
+    Error = LxMountLookup(Process, LX_AT_FDCWD, Call->Args[1], LX_LOOKUP_FOLLOW, &Target);
     if (Error != 0)
         return Error;
     if (!LxMayMount(Process))
@@ -1997,7 +2020,7 @@ LX_SYSCALL(LxSysMount)
     {
         LX_NODE Source;
 
-        Error = LxLookupUser(Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW, &Source);
+        Error = LxMountLookup(Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW, &Source);
         if (Error == 0)
         {
             Error = LxMountBind(Process, &Source, Target.Path, Flags);
@@ -2010,7 +2033,7 @@ LX_SYSCALL(LxSysMount)
     {
         LX_NODE Source;
 
-        Error = LxLookupUser(Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW, &Source);
+        Error = LxMountLookup(Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW, &Source);
         if (Error == 0)
         {
             Error = ((Source.Mount == NULL) || (Source.Relative[0] != '\0')) ? -LX_EINVAL :
@@ -2049,8 +2072,8 @@ LX_SYSCALL(LxSysUmount2)
         return -LX_EINVAL;
     if (!LxMayMount(Call->Process))
         return -LX_EPERM;
-    Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0],
-                         (Call->Args[1] & LX_UMOUNT_NOFOLLOW) ? 0 : LX_LOOKUP_FOLLOW, &Target);
+    Error = LxMountLookup(Call->Process, LX_AT_FDCWD, Call->Args[0],
+                          (Call->Args[1] & LX_UMOUNT_NOFOLLOW) ? 0 : LX_LOOKUP_FOLLOW, &Target);
     if (Error != 0)
         return Error;
     if ((Target.Mount == NULL) || (Target.Relative[0] != '\0'))
@@ -3099,7 +3122,7 @@ LxMountFromFd(
     {
         LX_NODE Node;
 
-        *Error = LxLookupUser(Process, Fd, UserPath, LX_LOOKUP_FOLLOW, &Node);
+        *Error = LxMountLookup(Process, Fd, UserPath, LX_LOOKUP_FOLLOW, &Node);
         if (*Error != 0)
             return NULL;
         if ((Node.Mount == NULL) || (Node.Relative[0] != '\0'))
@@ -3300,7 +3323,7 @@ LX_SYSCALL(LxSysMoveMount)
         return Error;
     }
 
-    Error = LxLookupUser(Call->Process, (LONG)Call->Args[2], Call->Args[3], LX_LOOKUP_FOLLOW, &Target);
+    Error = LxMountLookup(Call->Process, (LONG)Call->Args[2], Call->Args[3], LX_LOOKUP_FOLLOW, &Target);
     if (Error != 0)
         return Error;
     Error = LxMountMove(LxProcessNs(Call->Process, LxNsMnt), Mount, Target.Path);
@@ -3391,7 +3414,7 @@ LX_SYSCALL(LxSysOpenTree)
     }
     else
     {
-        Error = LxLookupUser(Call->Process, (LONG)Call->Args[0], Call->Args[1], LX_LOOKUP_FOLLOW, &Node);
+        Error = LxMountLookup(Call->Process, (LONG)Call->Args[0], Call->Args[1], LX_LOOKUP_FOLLOW, &Node);
     }
     if (Error != 0)
         return Error;

@@ -3210,6 +3210,35 @@ LxSynthFollowPath(
     return Path;
 }
 
+PSTR
+LxSynthFdPath(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_NODE Node)
+{
+    LX_SYNTH Synth;
+    PLX_PROCESS Target;
+    PLX_FILE File;
+    PSTR Path = NULL;
+
+    if ((Node->Mount == NULL) || (Node->Mount->Kind == LxFsNt) || (Node->Type != LX_S_IFLNK) || (Node->Relative == NULL))
+        return NULL;
+    if (LxSynthResolve(Process, Node->Mount, Node->Relative, &Synth) != 0)
+        return NULL;
+    LxFree(Synth.LinkTarget);
+    if (Synth.Id != LxProcFdLink)
+        return NULL;
+    Target = LxProcessLookup(Process->Instance, Synth.Pid);
+    File = (Target != NULL) ? LxFdGet(Target, Synth.Fd) : NULL;
+    if (Target != NULL)
+        LxProcessDereference(Target);
+    if (File == NULL)
+        return NULL;
+    if ((File->Path != NULL) && (File->Path[0] == '/') && (File->Mount != NULL))
+        Path = LxPathVisible(Process, File->Path);
+    LxFileDereference(File);
+    return Path;
+}
+
 LONG
 LxSynthQuery(
     _In_ PLX_PROCESS Process,
