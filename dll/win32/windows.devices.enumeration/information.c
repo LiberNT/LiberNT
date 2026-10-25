@@ -20,6 +20,14 @@
 #include "private.h"
 
 #include "roapi.h"
+#ifdef __REACTOS__
+#include "devquery.h"
+#include "devpkey.h"
+#include "cfgmgr32.h"
+#ifndef CM_CLASS_PROPERTY_INTERFACE
+#define CM_CLASS_PROPERTY_INTERFACE 0x00000001
+#endif
+#endif
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(enumeration);
@@ -31,6 +39,9 @@ struct device_information
 
     IMap_HSTRING_IInspectable *properties;
     HSTRING id;
+#ifdef __REACTOS__
+    DEV_OBJECT_TYPE type;
+#endif
 };
 
 static inline struct device_information *impl_from_IDeviceInformation( IDeviceInformation *iface )
@@ -108,22 +119,102 @@ static HRESULT WINAPI device_information_get_Id( IDeviceInformation *iface, HSTR
     return WindowsDuplicateString( impl->id, id );
 }
 
+#ifdef __REACTOS__
+static BOOL device_information_get_property( struct device_information *impl, const DEVPROPKEY *key, DEVPROPTYPE type,
+                                             void *buffer, ULONG size )
+{
+    DEVPROPCOMPKEY compkey = { *key, DEVPROP_STORE_SYSTEM, NULL };
+    const DEVPROPERTY *props = NULL;
+    ULONG count = 0, i;
+    BOOL found = FALSE;
+
+    if (FAILED(DevGetObjectProperties( impl->type, WindowsGetStringRawBuffer( impl->id, NULL ), DevQueryFlagNone, 1,
+                                       &compkey, &count, &props )))
+        return FALSE;
+
+    for (i = 0; i < count; i++)
+    {
+        if (!IsEqualDevPropKey( props[i].CompKey.Key, *key ) || props[i].Type != type || props[i].BufferSize > size)
+            continue;
+        memcpy( buffer, props[i].Buffer, props[i].BufferSize );
+        found = TRUE;
+        break;
+    }
+
+    DevFreeObjectProperties( count, props );
+    return found;
+}
+#endif
+
 static HRESULT WINAPI device_information_get_Name( IDeviceInformation *iface, HSTRING *name )
 {
+#ifdef __REACTOS__
+    struct device_information *impl = impl_from_IDeviceInformation( iface );
+    WCHAR buffer[256];
+
+    TRACE( "iface %p, name %p\n", iface, name );
+
+    if (!name) return E_POINTER;
+    if (!device_information_get_property( impl, &DEVPKEY_NAME, DEVPROP_TYPE_STRING, buffer, sizeof(buffer) - sizeof(WCHAR) ))
+    {
+        *name = NULL;
+        return S_OK;
+    }
+    buffer[ARRAY_SIZE(buffer) - 1] = 0;
+    return WindowsCreateString( buffer, wcslen( buffer ), name );
+#else
     FIXME( "iface %p, name %p stub!\n", iface, name );
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI device_information_get_IsEnabled( IDeviceInformation *iface, boolean *value )
 {
+#ifdef __REACTOS__
+    struct device_information *impl = impl_from_IDeviceInformation( iface );
+    DEVPROP_BOOLEAN enabled = DEVPROP_FALSE;
+
+    TRACE( "iface %p, value %p\n", iface, value );
+
+    if (!value) return E_POINTER;
+    device_information_get_property( impl, &DEVPKEY_DeviceInterface_Enabled, DEVPROP_TYPE_BOOLEAN, &enabled, sizeof(enabled) );
+    *value = enabled != DEVPROP_FALSE;
+    return S_OK;
+#else
     FIXME( "iface %p, value %p stub!\n", iface, value );
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI device_information_IsDefault( IDeviceInformation *iface, boolean *value )
 {
+#ifdef __REACTOS__
+    struct device_information *impl = impl_from_IDeviceInformation( iface );
+    WCHAR default_iface[512];
+    DEVPROPTYPE type;
+    ULONG size;
+    GUID guid;
+
+    TRACE( "iface %p, value %p\n", iface, value );
+
+    if (!value) return E_POINTER;
+    *value = FALSE;
+
+    if (!device_information_get_property( impl, &DEVPKEY_DeviceInterface_ClassGuid, DEVPROP_TYPE_GUID, &guid, sizeof(guid) ))
+        return S_OK;
+
+    size = sizeof(default_iface) - sizeof(WCHAR);
+    if (CM_Get_Class_PropertyW( &guid, &DEVPKEY_DeviceInterfaceClass_DefaultInterface, &type, (BYTE *)default_iface, &size,
+                                CM_CLASS_PROPERTY_INTERFACE ) == CR_SUCCESS && type == DEVPROP_TYPE_STRING)
+    {
+        default_iface[ARRAY_SIZE(default_iface) - 1] = 0;
+        *value = !wcsicmp( default_iface, WindowsGetStringRawBuffer( impl->id, NULL ) );
+    }
+    return S_OK;
+#else
     FIXME( "iface %p, value %p stub!\n", iface, value );
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI device_information_get_EnclosureLocation( IDeviceInformation *iface, IEnclosureLocation **location )
@@ -336,6 +427,9 @@ HRESULT device_information_create( const DEV_OBJECT *obj, IDeviceInformation **i
     if (!(impl = calloc( 1, sizeof(*impl) ))) return E_OUTOFMEMORY;
     impl->IDeviceInformation_iface.lpVtbl = &device_information_vtbl;
     impl->ref = 1;
+#ifdef __REACTOS__
+    impl->type = obj->ObjectType;
+#endif
     if (FAILED(hr = create_device_properties( obj->pProperties, obj->cPropertyCount, &impl->properties )))
     {
         free( impl );
