@@ -54,7 +54,7 @@ HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders","Pe
 HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32",,0x00000012
 HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\LastVisitedMRU",,0x00000012
 HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\OpenSaveMRU",,0x00000012
-HKCU,"Software\ReactOS\StartMenu2","RecentlyAdded",0x00010000,"Applications Manager.lnk","Accessories\Command Prompt.lnk","Administrative Tools\Device Manager.lnk","Accessories\System Tools\LntGet.lnk","Accessories\System Tools\LiberNT Driver Installer.lnk","Accessories\System Tools\Task Manager.lnk","Accessories\System Tools\Task Manager 11.lnk"
+HKCU,"Software\ReactOS\StartMenu2","RecentlyAdded",0x00010000,"Applications Manager.lnk","Accessories\Command Prompt.lnk","Linux Terminal.lnk","Administrative Tools\Device Manager.lnk","Accessories\System Tools\LntGet.lnk","Accessories\System Tools\LiberNT Driver Installer.lnk","Accessories\System Tools\Task Manager.lnk","Accessories\System Tools\Task Manager 11.lnk"
 
 ; Policies overrides
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon","DisableLockWorkstation",0x00010001,1
