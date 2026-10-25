@@ -385,6 +385,7 @@ IopShutdownBaseFileSystems(IN PLIST_ENTRY ListHead)
                                            &StatusBlock);
         if (Irp)
         {
+            DPRINT1("Sending the shutdown request to file system %wZ\n", &DeviceObject->DriverObject->DriverName);
             Status = IoCallDriver(DeviceObject, Irp);
             if (Status == STATUS_PENDING)
             {

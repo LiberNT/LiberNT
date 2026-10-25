@@ -173,6 +173,7 @@ IoShutdownSystem(IN ULONG Phase)
                                                &StatusBlock);
             if (Irp)
             {
+                DPRINT1("Sending the shutdown request to %wZ\n", &DeviceObject->DriverObject->DriverName);
                 Status = IoCallDriver(DeviceObject, Irp);
                 if (Status == STATUS_PENDING)
                 {
@@ -233,6 +234,7 @@ IoShutdownSystem(IN ULONG Phase)
                                                &StatusBlock);
             if (Irp)
             {
+                DPRINT1("Sending the shutdown request to %wZ\n", &DeviceObject->DriverObject->DriverName);
                 Status = IoCallDriver(DeviceObject, Irp);
                 if (Status == STATUS_PENDING)
                 {

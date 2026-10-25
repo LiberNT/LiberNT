@@ -185,7 +185,7 @@ PopFlushVolumeWorker(IN PVOID Context)
         if ((NT_SUCCESS(Status)) && (NameInfo->Name.Buffer))
         {
             /* Open the volume */
-            DPRINT("Opening: %wZ\n", &NameInfo->Name);
+            DPRINT1("Opening: %wZ\n", &NameInfo->Name);
             InitializeObjectAttributes(&ObjectAttributes,
                                        &NameInfo->Name,
                                        OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
@@ -205,7 +205,7 @@ PopFlushVolumeWorker(IN PVOID Context)
             if (NT_SUCCESS(Status))
             {
                 /* Flush it and close it */
-                DPRINT("Sending flush to: %p\n", VolumeHandle);
+                DPRINT1("Sending flush to: %p\n", VolumeHandle);
                 ZwFlushBuffersFile(VolumeHandle, &IoStatusBlock);
                 ZwClose(VolumeHandle);
             }
@@ -247,7 +247,7 @@ PopFlushVolumes(IN BOOLEAN ShuttingDown)
     if ((FlushPolicy & 1))
     {
         /* Registry flush requested, so open it */
-        DPRINT("Opening registry\n");
+        DPRINT1("Opening registry\n");
         InitializeObjectAttributes(&ObjectAttributes,
                                    &RegistryName,
                                    OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
@@ -257,7 +257,7 @@ PopFlushVolumes(IN BOOLEAN ShuttingDown)
         if (NT_SUCCESS(Status))
         {
             /* Flush the registry */
-            DPRINT("Flushing registry\n");
+            DPRINT1("Flushing registry\n");
             ZwFlushKey(RegistryHandle);
             ZwClose(RegistryHandle);
         }
@@ -327,7 +327,7 @@ PopFlushVolumes(IN BOOLEAN ShuttingDown)
     {
         /* Create a new one */
         ThreadCount--;
-        DPRINT("Creating flush thread\n");
+        DPRINT1("Creating flush thread\n");
         Status = PsCreateSystemThread(&ThreadHandle,
                                       THREAD_ALL_ACCESS,
                                       &ObjectAttributes,
@@ -347,13 +347,13 @@ PopFlushVolumes(IN BOOLEAN ShuttingDown)
     KeReleaseGuardedMutex(&PopVolumeLock);
 
     /* Enter the flush work */
-    DPRINT("Local flush\n");
+    DPRINT1("Local flush\n");
     PopFlushVolumeWorker(&FlushContext);
 
     /* Wait for all flushes to be over */
-    DPRINT("Waiting for flushes\n");
+    DPRINT1("Waiting for flushes\n");
     KeWaitForSingleObject(&FlushContext.Wait, Executive, KernelMode, FALSE, NULL);
-    DPRINT("Flushes have completed\n");
+    DPRINT1("Flushes have completed\n");
 }
 
 VOID

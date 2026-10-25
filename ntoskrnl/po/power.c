@@ -630,6 +630,8 @@ PopSetSystemPowerStateTraverse(PDEVICE_NODE DeviceNode,
         return STATUS_SUCCESS;
     }
 
+    DPRINT1("Setting system power state %d on '%wZ'\n",
+            PowerStateContext->SystemPowerState, &DeviceNode->InstancePath);
     Status = PopSendSetSystemPowerState(TopDeviceObject,
                                         PowerStateContext->SystemPowerState,
                                         PowerStateContext->PowerAction);
@@ -2348,7 +2350,7 @@ NtSetSystemPowerState(IN POWER_ACTION SystemAction,
     if (SystemAction == PowerActionShutdown) PopReadShutdownPolicy();
 
     /* Disable lazy flushing of registry */
-    DPRINT("Stopping lazy flush\n");
+    DPRINT1("Stopping lazy flush\n");
     CmSetLazyFlushState(FALSE);
 
     /* Setup the power action */
@@ -2356,11 +2358,11 @@ NtSetSystemPowerState(IN POWER_ACTION SystemAction,
     Action.Flags = Flags;
 
     /* Notify callbacks */
-    DPRINT("Notifying callbacks\n");
+    DPRINT1("Notifying callbacks\n");
     ExNotifyCallback(PowerStateCallback, (PVOID)3, NULL);
 
     /* Swap in any worker thread stacks */
-    DPRINT("Swapping worker threads\n");
+    DPRINT1("Swapping worker threads\n");
     ExSwapinWorkerThreads(FALSE);
 
     /* Make our action global */
@@ -2398,19 +2400,19 @@ NtSetSystemPowerState(IN POWER_ACTION SystemAction,
 #endif
 
         /* Flush all volumes and the registry */
-        DPRINT("Flushing volumes\n");
+        DPRINT1("Flushing volumes\n");
         PopFlushVolumes(PopAction.Shutdown);
 
         /* Flush dirty cache pages */
         /* XXX: Is that still mandatory? As now we'll wait on lazy writer to complete? */
         CcRosFlushDirtyPages(MAXULONG, &Dummy, TRUE, FALSE);
-        DPRINT("Cache flushed %lu pages\n", Dummy);
+        DPRINT1("Cache flushed %lu pages\n", Dummy);
 
         /* Set IRP for drivers */
         PopAction.IrpMinor = IRP_MN_SET_POWER;
         if (PopAction.Shutdown)
         {
-            DPRINT("Queueing shutdown thread\n");
+            DPRINT1("Queueing shutdown thread\n");
             /* Check if we are running in the system context */
             if (PsGetCurrentProcess() != PsInitialSystemProcess)
             {

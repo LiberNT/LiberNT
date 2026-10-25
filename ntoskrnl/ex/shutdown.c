@@ -63,7 +63,7 @@ NtShutdownSystem(IN SHUTDOWN_ACTION Action)
     }
 
     /* Now call the power manager */
-    DPRINT("Setting state to: %lx\n", PowerAction);
+    DPRINT1("Setting state to: %lx\n", PowerAction);
     return NtSetSystemPowerState(PowerAction,
                                  PowerSystemSleeping3,
                                  POWER_ACTION_OVERRIDE_APPS |
