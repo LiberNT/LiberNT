@@ -27,6 +27,7 @@ USBCCGP_GetDescriptor(
     PURB Urb;
     NTSTATUS Status;
     PVOID Descriptor;
+    ULONG Attempt;
 
     //
     // sanity checks
@@ -60,23 +61,48 @@ USBCCGP_GetDescriptor(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    //
-    // initialize urb
-    //
-    UsbBuildGetDescriptorRequest(Urb,
-                                 sizeof(Urb->UrbControlDescriptorRequest),
-                                 DescriptorType,
-                                 DescriptorIndex,
-                                 LanguageId,
-                                 Descriptor,
-                                 NULL,
-                                 DescriptorLength,
-                                 NULL);
+    for (Attempt = 0; Attempt < 3; Attempt++)
+    {
+        //
+        // initialize urb
+        //
+        RtlZeroMemory(Descriptor, DescriptorLength);
+        UsbBuildGetDescriptorRequest(Urb,
+                                     sizeof(Urb->UrbControlDescriptorRequest),
+                                     DescriptorType,
+                                     DescriptorIndex,
+                                     LanguageId,
+                                     Descriptor,
+                                     NULL,
+                                     DescriptorLength,
+                                     NULL);
 
-    //
-    // submit urb
-    //
-    Status = USBCCGP_SyncUrbRequest(DeviceObject, Urb);
+        //
+        // submit urb
+        //
+        Status = USBCCGP_SyncUrbRequest(DeviceObject, Urb);
+        if (!NT_SUCCESS(Status))
+        {
+            if (Urb->UrbHeader.Status == USBD_STATUS_TIMEOUT)
+                break;
+            continue;
+        }
+
+        if (Urb->UrbControlDescriptorRequest.TransferBufferLength == 0)
+        {
+            Status = STATUS_DEVICE_DATA_ERROR;
+            continue;
+        }
+
+        if (Urb->UrbControlDescriptorRequest.TransferBufferLength > 1 &&
+            ((PUCHAR)Descriptor)[1] != DescriptorType)
+        {
+            Status = STATUS_DEVICE_DATA_ERROR;
+            continue;
+        }
+
+        break;
+    }
 
     //
     // free urb
