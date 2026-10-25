@@ -59,7 +59,7 @@ BOOL PathIsDotOrDotDotW(_In_ LPCWSTR pszPath)
 
 BOOL PathIsValidElement(_In_ LPCWSTR pszPath)
 {
-    if (!*pszPath || PathIsDotOrDotDotW(pszPath))
+    if (!*pszPath || PathIsDotOrDotDotW(pszPath) || pszPath[lstrlenW(pszPath) - 1] == L' ')
         return FALSE;
 
     for (LPCWSTR pch = pszPath; *pch; ++pch)
