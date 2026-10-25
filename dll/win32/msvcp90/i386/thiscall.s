@@ -1082,21 +1082,81 @@ DEFINE_THISCALL_WRAPPER num_put_char_ctor_refs, 8
 DEFINE_THISCALL_WRAPPER num_put_char_ctor, 4
 DEFINE_THISCALL_WRAPPER num_put_char_dtor, 4
 DEFINE_THISCALL_WRAPPER num_put_char_vector_dtor, 8
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_do_put_long, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_do_put_long, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_put_long, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_put_long, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_do_put_ulong, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_do_put_ulong, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_put_ulong, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_put_ulong, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_do_put_double, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_do_put_double, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_put_double, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_put_double, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_put_ldouble, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_put_ldouble, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_do_put_ptr, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_do_put_ptr, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_put_ptr, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_put_ptr, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_do_put_int64, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_do_put_int64, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_put_int64, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_put_int64, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_do_put_uint64, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_do_put_uint64, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_put_uint64, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_put_uint64, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_do_put_bool, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_do_put_bool, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_char_put_bool, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_char_put_bool, 28
+#endif
 DEFINE_THISCALL_WRAPPER num_put_wchar__Init, 8
 DEFINE_THISCALL_WRAPPER num_put_wchar_ctor_locinfo, 12
 DEFINE_THISCALL_WRAPPER num_put_short_ctor_locinfo, 12
@@ -1106,37 +1166,137 @@ DEFINE_THISCALL_WRAPPER num_put_wchar_ctor, 4
 DEFINE_THISCALL_WRAPPER num_put_short_ctor, 4
 DEFINE_THISCALL_WRAPPER num_put_wchar_dtor, 4
 DEFINE_THISCALL_WRAPPER num_put_wchar_vector_dtor, 8
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_long, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_long, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_short_do_put_long, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_short_do_put_long, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_put_long, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_put_long, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_ulong, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_ulong, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_short_do_put_ulong, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_short_do_put_ulong, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_put_ulong, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_put_ulong, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_double, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_double, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_short_do_put_double, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_short_do_put_double, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_put_double, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_put_double, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_put_ldouble, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_put_ldouble, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_ptr, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_ptr, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_short_do_put_ptr, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_short_do_put_ptr, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_put_ptr, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_put_ptr, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_int64, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_int64, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_short_do_put_int64, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_short_do_put_int64, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_put_int64, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_put_int64, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_uint64, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_uint64, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_short_do_put_uint64, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_short_do_put_uint64, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_put_uint64, 36
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_put_uint64, 32
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_bool, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_do_put_bool, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_short_do_put_bool, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_short_do_put_bool, 28
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER num_put_wchar_put_bool, 32
+#else
 DEFINE_THISCALL_WRAPPER num_put_wchar_put_bool, 28
+#endif
 DEFINE_THISCALL_WRAPPER time_put_char__Init, 8
 DEFINE_THISCALL_WRAPPER time_put_char_ctor_locinfo, 12
 DEFINE_THISCALL_WRAPPER time_put_char_ctor_refs, 8
 DEFINE_THISCALL_WRAPPER time_put_char_ctor, 4
 DEFINE_THISCALL_WRAPPER time_put_char_dtor, 4
 DEFINE_THISCALL_WRAPPER time_put_char_vector_dtor, 8
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER time_put_char_do_put, 40
+#else
 DEFINE_THISCALL_WRAPPER time_put_char_do_put, 36
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER time_put_char_put, 40
+#else
 DEFINE_THISCALL_WRAPPER time_put_char_put, 36
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER time_put_char_put_format, 40
+#else
 DEFINE_THISCALL_WRAPPER time_put_char_put_format, 36
+#endif
 DEFINE_THISCALL_WRAPPER time_put_wchar__Init, 8
 DEFINE_THISCALL_WRAPPER time_put_wchar_ctor_locinfo, 12
 DEFINE_THISCALL_WRAPPER time_put_short_ctor_locinfo, 12
@@ -1148,9 +1308,21 @@ DEFINE_THISCALL_WRAPPER time_put_wchar_ctor, 4
 DEFINE_THISCALL_WRAPPER time_put_short_ctor, 4
 DEFINE_THISCALL_WRAPPER time_put_wchar_dtor, 4
 DEFINE_THISCALL_WRAPPER time_put_wchar_vector_dtor, 8
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER time_put_wchar_do_put, 40
+#else
 DEFINE_THISCALL_WRAPPER time_put_wchar_do_put, 36
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER time_put_wchar_put, 40
+#else
 DEFINE_THISCALL_WRAPPER time_put_wchar_put, 36
+#endif
+#if _MSVCP_VER == 80
+DEFINE_THISCALL_WRAPPER time_put_wchar_put_format, 40
+#else
 DEFINE_THISCALL_WRAPPER time_put_wchar_put_format, 36
+#endif
 DEFINE_THISCALL_WRAPPER time_get_char__Init, 8
 DEFINE_THISCALL_WRAPPER time_get_char_ctor_locinfo, 12
 DEFINE_THISCALL_WRAPPER time_get_char_ctor_name, 12
