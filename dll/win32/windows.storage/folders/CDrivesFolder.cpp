@@ -1008,6 +1008,48 @@ HRESULT WINAPI CDrivesFolder::CompareIDs(LPARAM lParam, PCUIDLIST_RELATIVE pidl1
 /**************************************************************************
 *    CDrivesFolder::CreateViewObject
 */
+class CDrivesFolderDropTarget :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IDropTarget
+{
+public:
+    STDMETHOD(DragEnter)(IDataObject *pDataObj, DWORD grfKeyState, POINTL pt, DWORD *pdwEffect) override
+    {
+        if (!pdwEffect)
+            return E_INVALIDARG;
+        *pdwEffect = DROPEFFECT_NONE;
+        return S_OK;
+    }
+
+    STDMETHOD(DragOver)(DWORD grfKeyState, POINTL pt, DWORD *pdwEffect) override
+    {
+        if (!pdwEffect)
+            return E_INVALIDARG;
+        *pdwEffect = DROPEFFECT_NONE;
+        return S_OK;
+    }
+
+    STDMETHOD(DragLeave)() override
+    {
+        return S_OK;
+    }
+
+    STDMETHOD(Drop)(IDataObject *pDataObj, DWORD grfKeyState, POINTL pt, DWORD *pdwEffect) override
+    {
+        if (!pdwEffect)
+            return E_INVALIDARG;
+        *pdwEffect = DROPEFFECT_NONE;
+        return S_OK;
+    }
+
+DECLARE_NOT_AGGREGATABLE(CDrivesFolderDropTarget)
+DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+BEGIN_COM_MAP(CDrivesFolderDropTarget)
+    COM_INTERFACE_ENTRY_IID(IID_IDropTarget, IDropTarget)
+END_COM_MAP()
+};
+
 HRESULT WINAPI CDrivesFolder::CreateViewObject(HWND hwndOwner, REFIID riid, LPVOID * ppvOut)
 {
     CComPtr<IShellView> pShellView;
@@ -1023,8 +1065,7 @@ HRESULT WINAPI CDrivesFolder::CreateViewObject(HWND hwndOwner, REFIID riid, LPVO
 
     if (IsEqualIID(riid, IID_IDropTarget))
     {
-        WARN("IDropTarget not implemented\n");
-        hr = E_NOTIMPL;
+        hr = ShellObjectCreator<CDrivesFolderDropTarget>(riid, ppvOut);
     }
     else if (IsEqualIID(riid, IID_IContextMenu))
     {
