@@ -184,36 +184,46 @@ BOOL WINAPI PathFileExistsDefExtW(LPWSTR lpszPath,DWORD dwWhich)
   if (!lpszPath || PathIsUNCServerW(lpszPath) || PathIsUNCServerShareW(lpszPath))
     return FALSE;
 
+#ifdef __REACTOS__
+  if (dwWhich)
+  {
+    size_t iChoose;
+    int iLen;
+
+    if (*PathFindExtensionW(lpszPath) && (dwWhich & WHICH_OPTIONAL))
+      return PathFileExistsW(lpszPath);
+
+    iLen = lstrlenW(lpszPath);
+    if (iLen > (MAX_PATH - 5))
+      return FALSE;
+    for (iChoose = 0; pszExts[iChoose][0]; iChoose++)
+    {
+      if (!(dwWhich & (1 << iChoose)))
+        continue;
+      lstrcpyW(lpszPath + iLen, pszExts[iChoose]);
+      if (PathFileExistsW(lpszPath))
+        return TRUE;
+    }
+    lpszPath[iLen] = UNICODE_NULL;
+    if (iLen && (lpszPath[iLen - 1] == L'.' || lpszPath[iLen - 1] == L' '))
+      return FALSE;
+  }
+  return PathFileExistsW(lpszPath);
+#else
   if (dwWhich)
   {
     LPCWSTR szExt = PathFindExtensionW(lpszPath);
-#ifndef __REACTOS__
     if (!*szExt || dwWhich & 0x40)
-#else
-    if (!*szExt || dwWhich & WHICH_OPTIONAL)
-#endif
     {
       size_t iChoose = 0;
       int iLen = lstrlenW(lpszPath);
       if (iLen > (MAX_PATH - 5))
         return FALSE;
-#ifndef __REACTOS__
       while ( (dwWhich & 0x1) && pszExts[iChoose][0] )
-#else
-      while (pszExts[iChoose][0])
-#endif
       {
-#ifdef __REACTOS__
-        if (dwWhich & 0x1)
-        {
-        if (GetFileAttributes(lpszPath) != FILE_ATTRIBUTE_DIRECTORY)
-#endif
         lstrcpyW(lpszPath + iLen, pszExts[iChoose]);
         if (PathFileExistsW(lpszPath))
           return TRUE;
-#ifdef __REACTOS__
-        }
-#endif
         iChoose++;
         dwWhich >>= 1;
       }
@@ -222,6 +232,7 @@ BOOL WINAPI PathFileExistsDefExtW(LPWSTR lpszPath,DWORD dwWhich)
     }
   }
   return PathFileExistsW(lpszPath);
+#endif
 }
 
 /*************************************************************************
