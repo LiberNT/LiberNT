@@ -130,6 +130,8 @@ struct reactos_stream
     BOOL rt_client_writes;
     UINT32 rt_write_period;
     UINT32 rt_locked_period;
+    UINT32 rt_dma_offset;
+    UINT64 rt_dma_qpc_100ns;
     ULONG rt_next_packet_number;
     UINT32 rt_period_queued_frames[REACTOS_RT_NOTIFICATION_COUNT];
     UINT64 position_qpc_100ns;
@@ -1819,49 +1821,120 @@ static BOOL fill_wavert_period(struct reactos_stream *stream, UINT32 period)
     return fill_wavert_period_at(stream, period, 0);
 }
 
-static BOOL refill_cyclic_period(struct reactos_stream *stream)
+static BOOL query_wavert_position(struct reactos_stream *stream, KSAUDIO_POSITION *position)
 {
     KSPROPERTY property;
-    KSAUDIO_POSITION position;
-    struct reactos_wavert_position progress;
     DWORD returned;
-    UINT32 completed_frames, offset;
-
-    if (!stream->rt_enabled || stream->rt_packet_mode || !stream->started)
-        return FALSE;
 
     ZeroMemory(&property, sizeof(property));
     property.Set = audio_property_set;
     property.Id = KSPROPERTY_AUDIO_POSITION;
     property.Flags = KSPROPERTY_TYPE_GET;
-    if (!pin_ioctl(stream->user_pin, IOCTL_KS_PROPERTY, &property, sizeof(property),
-                   &position, sizeof(position), &returned) || returned < sizeof(position) ||
-        !reactos_wavert_cyclic_position(stream->rt_period_frames, stream->device_frame_size,
-                                       stream->rt_period_index, position.PlayOffset,
-                                       position.WriteOffset, &progress))
+    return pin_ioctl(stream->user_pin, IOCTL_KS_PROPERTY, &property, sizeof(property),
+                     position, sizeof(*position), &returned) && returned >= sizeof(*position);
+}
+
+static BYTE *rt_period_data(const struct reactos_stream *stream, UINT32 period)
+{
+    return stream->rt_buffer + (SIZE_T)period * stream->rt_period_frames * stream->device_frame_size;
+}
+
+static void release_client_period(struct reactos_stream *stream, UINT32 period)
+{
+    BOOL locked = stream->render_locked && stream->rt_locked_period == period;
+
+    if (!locked)
+    {
+        ZeroMemory(rt_period_data(stream, period), (SIZE_T)stream->rt_period_frames * stream->device_frame_size);
+        stream->rt_period_queued_frames[period] = 0;
+        MemoryBarrier();
+    }
+    stream->rt_write_period = period;
+    stream->rt_refill_ready = TRUE;
+    stream->padding = 0;
+    if (!locked && stream->event)
+        SetEvent(stream->event);
+}
+
+static BOOL advance_client_periods(struct reactos_stream *stream, const KSAUDIO_POSITION *position,
+                                   BOOL notified)
+{
+    UINT32 period_bytes = stream->rt_period_frames * stream->device_frame_size;
+    UINT32 buffer_bytes = period_bytes * REACTOS_RT_NOTIFICATION_COUNT;
+    UINT32 rate = stream->device_format.Format.nSamplesPerSec;
+    UINT64 buffer_time = (UINT64)stream->rt_buffer_frames * 10000000 / rate;
+    UINT64 now = query_performance_time_100ns();
+    UINT64 moved_time, elapsed;
+    UINT32 cursor, fifo, moved = 0, crossings, released, next;
+
+    if (position->PlayOffset >= buffer_bytes || position->WriteOffset >= buffer_bytes)
+        return FALSE;
+
+    cursor = (UINT32)position->PlayOffset;
+    fifo = (UINT32)((position->WriteOffset + buffer_bytes - position->PlayOffset) % buffer_bytes);
+    if (!stream->rt_dma_qpc_100ns)
+    {
+        crossings = cursor / period_bytes != stream->rt_period_index;
+    }
+    else
+    {
+        moved = (cursor + buffer_bytes - stream->rt_dma_offset) % buffer_bytes;
+        if (moved && moved >= buffer_bytes - fifo)
+        {
+            moved = 0;
+            cursor = stream->rt_dma_offset;
+        }
+        crossings = (stream->rt_dma_offset % period_bytes + moved) / period_bytes;
+    }
+    if (notified && !crossings)
+    {
+        next = (cursor / period_bytes + 1) % REACTOS_RT_NOTIFICATION_COUNT * period_bytes;
+        if ((next + buffer_bytes - (UINT32)position->PlayOffset) % buffer_bytes <= fifo)
+        {
+            moved += (next + buffer_bytes - cursor) % buffer_bytes;
+            cursor = next;
+            crossings = 1;
+        }
+    }
+    if (stream->rt_dma_qpc_100ns)
+    {
+        moved_time = (UINT64)(moved / stream->device_frame_size) * 10000000 / rate;
+        elapsed = now - stream->rt_dma_qpc_100ns;
+        if (elapsed > moved_time + buffer_time / 2)
+            crossings += REACTOS_RT_NOTIFICATION_COUNT *
+                         (UINT32)((elapsed - moved_time - buffer_time / 2 + buffer_time - 1) / buffer_time);
+    }
+    stream->rt_dma_offset = cursor;
+    stream->rt_dma_qpc_100ns = now;
+    if (!crossings)
+        return FALSE;
+
+    stream->rt_period_index = cursor / period_bytes;
+    released = (stream->rt_period_index + 1) % REACTOS_RT_NOTIFICATION_COUNT;
+    stream->position += (UINT64)crossings * stream->rt_period_frames;
+    stream->completed_render_frames += stream->rt_period_queued_frames[released];
+    stream->position_qpc_100ns = now;
+    release_client_period(stream, released);
+    return TRUE;
+}
+
+static BOOL refill_cyclic_period(struct reactos_stream *stream, BOOL notified)
+{
+    KSAUDIO_POSITION position;
+    struct reactos_wavert_position progress;
+    UINT32 completed_frames, offset;
+
+    if (!stream->rt_enabled || stream->rt_packet_mode || !stream->started ||
+        !query_wavert_position(stream, &position))
         return FALSE;
 
     if (stream->rt_client_writes)
-    {
-        if (progress.advanced)
-        {
-            stream->position += stream->rt_period_frames;
-            stream->completed_render_frames += stream->rt_period_queued_frames[progress.released];
-            stream->position_qpc_100ns = query_performance_time_100ns();
-            stream->rt_period_queued_frames[progress.released] = 0;
-            stream->rt_period_index = progress.playing;
-            ZeroMemory(stream->rt_buffer +
-                           (SIZE_T)progress.released * stream->rt_period_frames * stream->device_frame_size,
-                       (SIZE_T)stream->rt_period_frames * stream->device_frame_size);
-            MemoryBarrier();
-            stream->rt_write_period = progress.released;
-            stream->rt_refill_ready = TRUE;
-            stream->padding = 0;
-            if (stream->event)
-                SetEvent(stream->event);
-        }
-        return progress.advanced;
-    }
+        return advance_client_periods(stream, &position, notified);
+
+    if (!reactos_wavert_cyclic_position(stream->rt_period_frames, stream->device_frame_size,
+                                        stream->rt_period_index, position.PlayOffset,
+                                        position.WriteOffset, &progress))
+        return FALSE;
 
     if (progress.advanced)
     {
@@ -1909,27 +1982,19 @@ static BOOL prime_wavert_buffer(struct reactos_stream *stream)
 
 static void prime_client_wavert_buffer(struct reactos_stream *stream)
 {
-    SIZE_T period_bytes = (SIZE_T)stream->rt_period_frames * stream->device_frame_size;
+    UINT32 next = (stream->rt_period_index + 1) % REACTOS_RT_NOTIFICATION_COUNT;
 
-    if (stream->rt_refill_ready)
+    if (stream->rt_write_period == stream->rt_period_index)
     {
-        ZeroMemory(stream->rt_buffer + stream->rt_write_period * period_bytes, period_bytes);
-        stream->rt_period_queued_frames[stream->rt_write_period] = 0;
+        ZeroMemory(rt_period_data(stream, next), (SIZE_T)stream->rt_period_frames * stream->device_frame_size);
+        stream->rt_period_queued_frames[next] = 0;
+        MemoryBarrier();
+        stream->rt_write_period = next;
+        stream->rt_refill_ready = TRUE;
+        stream->padding = 0;
     }
-    if (stream->rt_write_period)
-    {
-        CopyMemory(stream->rt_buffer, stream->rt_buffer + stream->rt_write_period * period_bytes, period_bytes);
-        stream->rt_period_queued_frames[0] = stream->rt_period_queued_frames[stream->rt_write_period];
-    }
-    ZeroMemory(stream->rt_buffer + period_bytes, period_bytes);
-    stream->rt_period_queued_frames[1] = 0;
-    MemoryBarrier();
-
-    stream->rt_period_index = 0;
-    stream->rt_write_period = 1;
-    stream->rt_refill_ready = TRUE;
-    stream->padding = 0;
-    if (stream->event)
+    stream->rt_dma_qpc_100ns = 0;
+    if (stream->rt_refill_ready && stream->event)
         SetEvent(stream->event);
 }
 
@@ -2328,7 +2393,7 @@ static HRESULT stop_physical_stream(struct reactos_stream *stream)
         stream->timer_thread = NULL;
     }
     hr = set_stream_state(stream, KSSTATE_PAUSE);
-    if (stream->event)
+    if (stream->event && !stream->rt_client_writes)
         SetEvent(stream->event);
     return hr;
 }
@@ -2496,7 +2561,7 @@ static BOOL shared_render_transport_queue_frames(void *transport,
         (stream->render_ring_write_frame + frames) % stream->buffer_frames;
     stream->render_ring_frames += frames;
     stream->padding += frames;
-    refill_cyclic_period(stream);
+    refill_cyclic_period(stream, FALSE);
     LeaveCriticalSection(&stream->lock);
 
     if (stream->render_wake_event)
@@ -2905,6 +2970,7 @@ static NTSTATUS reactos_stop(struct stop_params *params)
 static NTSTATUS reactos_reset(struct reset_params *params)
 {
     struct reactos_stream *stream = stream_from_handle(params->stream);
+    HRESULT hr;
 
     if (!stream)
     {
@@ -2937,6 +3003,13 @@ static NTSTATUS reactos_reset(struct reset_params *params)
     }
 
     reset_stream_pin(stream);
+    if (stream->rt_client_writes &&
+        (FAILED(hr = set_stream_state(stream, KSSTATE_ACQUIRE)) ||
+         FAILED(hr = set_stream_state(stream, KSSTATE_PAUSE))))
+    {
+        params->result = hr;
+        return STATUS_SUCCESS;
+    }
     if (stream->render_ring)
         cancel_render_packets(stream);
     EnterCriticalSection(&stream->lock);
@@ -3676,7 +3749,7 @@ static void reactos_render_rt_timer_loop(struct reactos_stream *stream)
         {
             /* Events can be delayed, lost or coalesced. A bounded wait also
              * recovers a missed wake, but only hardware progress retires data. */
-            BOOL advanced = refill_cyclic_period(stream);
+            BOOL advanced = refill_cyclic_period(stream, wait == WAIT_OBJECT_0 + 1);
 
             LeaveCriticalSection(&stream->lock);
             if (advanced && stream->event && !stream->rt_client_writes)
