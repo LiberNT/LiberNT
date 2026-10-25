@@ -1254,17 +1254,24 @@ NTSTATUS TdiSendDatagram(
         return STATUS_INVALID_PARAMETER;
     }
 
-    if (BufferLength == 0)
-    {
-        DPRINT("Succeeding send with length 0.\n");
-        return STATUS_SUCCESS;
-    }
-
     *Irp = TdiAllocateThreadlessIrp(DeviceObject, &CompletionRoutine, &CompletionContext);
 
     if (!*Irp) {
         DPRINT("Insufficient resources.\n");
         return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    if (BufferLength == 0)
+    {
+        TdiBuildSendDatagram(*Irp,
+                             DeviceObject,
+                             TransportObject,
+                             CompletionRoutine,
+                             CompletionContext,
+                             NULL,
+                             0,
+                             Addr);
+        return TdiCall(*Irp, DeviceObject, NULL, NULL);
     }
 
     DPRINT("Allocating irp for %p:%u\n", Buffer,BufferLength);
