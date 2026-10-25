@@ -59,12 +59,14 @@ static IAudioClient *initialize_aligned(IMMDevice *device, const WAVEFORMATEX *f
         if (!client) return NULL;
         hr = IAudioClient_Initialize(client, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
                                      aligned, aligned, format, NULL);
-        ok(hr == S_OK, "period %I64d: Initialize after realignment %#lx\n", aligned, hr);
+        ok(hr == S_OK || hr == AUDCLNT_E_DEVICE_IN_USE, "period %I64d: Initialize after realignment %#lx\n", aligned, hr);
     }
     else
     {
-        ok(hr == S_OK, "period %I64d: Initialize %#lx\n", period, hr);
+        ok(hr == S_OK || hr == AUDCLNT_E_DEVICE_IN_USE, "period %I64d: Initialize %#lx\n", period, hr);
     }
+    if (hr == AUDCLNT_E_DEVICE_IN_USE)
+        skip("period %I64d: device in use, no exclusive event access\n", period);
     if (FAILED(hr))
     {
         IAudioClient_Release(client);
@@ -109,7 +111,7 @@ static void test_stream(IMMDevice *device, const WAVEFORMATEX *format, REFERENCE
     IAudioClock *clock = NULL;
     HANDLE event = NULL;
     UINT64 position = 0, frequency = 0;
-    UINT32 frames;
+    UINT32 frames = 0;
     DWORD start, wait;
     unsigned events = 0, pause, i;
     HRESULT hr;
