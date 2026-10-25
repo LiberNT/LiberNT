@@ -2094,7 +2094,11 @@ static HRESULT PropertyStorage_ReadFromStream(PropertyStorage_impl *This)
                             This->codePage = (USHORT)prop.iVal;
                         break;
                     case PID_LOCALE:
+#ifdef __REACTOS__
+                        if (prop.vt == VT_I4 || prop.vt == VT_UI4)
+#else
                         if (prop.vt == VT_I4)
+#endif
                             This->locale = (LCID)prop.lVal;
                         break;
                     case PID_BEHAVIOR:
@@ -2710,8 +2714,13 @@ static HRESULT PropertyStorage_WriteToStream(PropertyStorage_impl *This)
 
     if (This->locale != LOCALE_SYSTEM_DEFAULT)
     {
+#ifdef __REACTOS__
+        var.vt = VT_UI4;
+        var.ulVal = This->locale;
+#else
         var.vt = VT_I4;
         var.lVal = This->locale;
+#endif
         hr = PropertyStorage_WritePropertyToStream(This, prop++, PID_LOCALE,
          &var, &sectionOffset);
         if (FAILED(hr))
@@ -2892,7 +2901,11 @@ static HRESULT PropertyStorage_ConstructEmpty(IStream *stm, REFFMTID rfmtid,
             ps->codePage = GetACP();
         else
             ps->codePage = CP_UNICODE;
+#ifdef __REACTOS__
+        ps->locale = GetUserDefaultLCID();
+#else
         ps->locale = LOCALE_SYSTEM_DEFAULT;
+#endif
         TRACE("Code page is %d, locale is %ld\n", ps->codePage, ps->locale);
         *pps = &ps->IPropertyStorage_iface;
         TRACE("PropertyStorage %p constructed\n", ps);
