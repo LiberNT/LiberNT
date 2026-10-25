@@ -252,7 +252,11 @@ HRESULT compress_finalize_archive(struct zip_archive *archive)
             cdh.signature = ZIP32_CDFH;
             cdh.version = ZIP64_VERSION;
             cdh.min_version = ZIP64_VERSION;
+#ifdef __REACTOS__
+            cdh.flags = file->flags;
+#else
             cdh.flags = USE_DATA_DESCRIPTOR;
+#endif
             cdh.method = file->method;
             cdh.mtime = archive->mtime;
             cdh.crc32 = file->crc32;
@@ -317,7 +321,11 @@ HRESULT compress_finalize_archive(struct zip_archive *archive)
             cdh.signature = ZIP32_CDFH;
             cdh.version = ZIP32_VERSION;
             cdh.min_version = ZIP32_VERSION;
+#ifdef __REACTOS__
+            cdh.flags = file->flags;
+#else
             cdh.flags = USE_DATA_DESCRIPTOR;
+#endif
             cdh.method = file->method;
             cdh.mtime = archive->mtime;
             cdh.crc32 = file->crc32;
@@ -393,6 +401,26 @@ static void compress_write_content(struct zip_archive *archive, IStream *content
 
     move.QuadPart = 0;
     IStream_Seek(content, move, STREAM_SEEK_SET, NULL);
+
+#ifdef __REACTOS__
+    if (options == OPC_COMPRESSION_NONE)
+    {
+        do
+        {
+            if (FAILED(hr = IStream_Read(content, archive->input_buffer, sizeof(archive->input_buffer), &num_read)))
+            {
+                archive->status = hr;
+                break;
+            }
+
+            file->crc32 = RtlComputeCrc32(file->crc32, archive->input_buffer, num_read);
+            file->uncompressed_size += num_read;
+            file->compressed_size += num_read;
+            compress_write(archive, archive->input_buffer, num_read);
+        } while (num_read == sizeof(archive->input_buffer));
+        return;
+    }
+#endif
 
     switch (options)
     {
@@ -496,7 +524,11 @@ HRESULT compress_add_file(struct zip_archive *archive, const WCHAR *path,
     file->flags |= USE_DATA_DESCRIPTOR;
 
     local_header.signature = LOCAL_HEADER_SIGNATURE;
+#ifdef __REACTOS__
+    local_header.flags = file->flags;
+#else
     local_header.flags = USE_DATA_DESCRIPTOR;
+#endif
     local_header.method = file->method;
     local_header.mtime = archive->mtime;
     local_header.crc32 = 0;
