@@ -148,6 +148,9 @@ typedef struct
     BOOL text; /* last node was text node, so we shouldn't indent next node */
     BOOL newline; /* newline was already added as a part of previous call */
     UINT indent; /* indentation level for next node */
+#ifdef __REACTOS__
+    BOOL root_started;
+#endif
 
     BSTR version;
 
@@ -647,6 +650,20 @@ static void write_node_indent(mxwriter *writer)
     writer->text = FALSE;
 }
 
+#ifdef __REACTOS__
+static void write_node_end_newline(mxwriter *writer)
+{
+    if (writer->props[MXWriter_Indent] || writer->root_started)
+    {
+        writer->newline = FALSE;
+        return;
+    }
+
+    write_output_buffer(writer, L"\r\n", 2);
+    writer->newline = TRUE;
+}
+#endif
+
 static inline void writer_inc_indent(mxwriter *This)
 {
     This->indent++;
@@ -926,6 +943,11 @@ static HRESULT WINAPI mxwriter_put_output(IMXWriter *iface, VARIANT dest)
         return E_NOTIMPL;
     }
 
+#ifdef __REACTOS__
+    This->newline = TRUE;
+    This->text = FALSE;
+    This->root_started = FALSE;
+#endif
     return S_OK;
 }
 
@@ -1299,6 +1321,9 @@ static HRESULT WINAPI SAXContentHandler_startElement(
         return E_INVALIDARG;
 
     mxwriter_write_starttag(This, QName, nQName);
+#ifdef __REACTOS__
+    This->root_started = TRUE;
+#endif
 
     if (attr)
     {
@@ -1422,6 +1447,10 @@ static HRESULT WINAPI SAXContentHandler_processingInstruction(
 
     if (!target) return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    close_element_starttag(writer);
+    set_element_name(writer, NULL, 0);
+#endif
     write_node_indent(writer);
     write_output_buffer(writer, L"<?", 2);
 
@@ -1434,8 +1463,13 @@ static HRESULT WINAPI SAXContentHandler_processingInstruction(
         write_output_buffer(writer, data, ndata);
     }
 
+#ifdef __REACTOS__
+    write_output_buffer(writer, L"?>", 2);
+    write_node_end_newline(writer);
+#else
     write_output_buffer(writer, L"?>\r\n", 4);
     writer->newline = TRUE;
+#endif
 
     return S_OK;
 }
@@ -1594,12 +1628,20 @@ static HRESULT WINAPI SAXLexicalHandler_comment(ISAXLexicalHandler *iface, const
     if (!chars) return E_INVALIDARG;
 
     close_element_starttag(writer);
+#ifdef __REACTOS__
+    set_element_name(writer, NULL, 0);
+#endif
     write_node_indent(writer);
 
     write_output_buffer(writer, L"<!--", 4);
     if (nchars)
         write_output_buffer(writer, chars, nchars);
+#ifdef __REACTOS__
+    write_output_buffer(writer, L"-->", 3);
+    write_node_end_newline(writer);
+#else
     write_output_buffer(writer, L"-->\r\n", 5);
+#endif
 
     return S_OK;
 }
@@ -2113,6 +2155,9 @@ static HRESULT WINAPI VBSAXContentHandler_startElement(IVBSAXContentHandler *ifa
     TRACE("(%s %s %s)\n", debugstr_w(*namespaceURI), debugstr_w(*localName), debugstr_w(*QName));
 
     mxwriter_write_starttag(This, *QName, SysStringLen(*QName));
+#ifdef __REACTOS__
+    This->root_started = TRUE;
+#endif
 
     if (attrs)
     {
@@ -2579,6 +2624,9 @@ HRESULT MXWriter_create(MSXML_VERSION version, void **ppObj)
     This->indent = 0;
     This->text = FALSE;
     This->newline = TRUE;
+#ifdef __REACTOS__
+    This->root_started = FALSE;
+#endif
 
     This->dest = NULL;
 
