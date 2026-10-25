@@ -1330,6 +1330,10 @@ static HRESULT WINAPI domdoc_load(IXMLDOMDocument3 *iface, VARIANT source, VARIA
             hr = doc->error = domdoc_load_from_stream(doc, stream);
             if (hr == S_OK)
                 *result = VARIANT_TRUE;
+#ifdef __REACTOS__
+            else if (hr == E_FAIL)
+                hr = S_FALSE;
+#endif
             ISequentialStream_Release(stream);
             return hr;
         }
