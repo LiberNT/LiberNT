@@ -2118,7 +2118,7 @@ LX_SYSCALL(LxSysMount)
         if (Error == 0)
         {
             Error = ((Source.Mount == NULL) || (Source.Relative[0] != '\0')) ? -LX_EINVAL :
-                    LxMountMove(LxProcessNs(Process, LxNsMnt), Source.Mount, Target.Path);
+                    LxMountMove(LxProcessNs(Process, LxNsMnt), Source.Mount, Target.Path, FALSE);
             LxNodeFree(&Source);
         }
         LxNodeFree(&Target);
@@ -3087,6 +3087,9 @@ LX_SYSCALL(LxSysOpenByHandleAt)
 #define LX_FSCONFIG_CMD_CREATE_EXCL 8
 #define LX_MOVE_MOUNT_F_EMPTY_PATH  0x00000004
 #define LX_MOVE_MOUNT_T_EMPTY_PATH  0x00000040
+#define LX_MOVE_MOUNT_SET_GROUP     0x00000100
+#define LX_MOVE_MOUNT_BENEATH       0x00000200
+#define LX_MOVE_MOUNT_MASK          0x00000377
 #define LX_OPEN_TREE_CLONE          0x00000001
 #define LX_MOUNT_ATTR_RDONLY        0x00000001
 #define LX_MOUNT_ATTR_NOSUID        0x00000002
@@ -3383,9 +3386,28 @@ LX_SYSCALL(LxSysMoveMount)
 
     if (!LxMayMount(Call->Process))
         return -LX_EPERM;
+    if ((Flags & ~LX_MOVE_MOUNT_MASK) ||
+        ((Flags & (LX_MOVE_MOUNT_SET_GROUP | LX_MOVE_MOUNT_BENEATH)) == (LX_MOVE_MOUNT_SET_GROUP | LX_MOVE_MOUNT_BENEATH)))
+    {
+        return -LX_EINVAL;
+    }
     Mount = LxMountFromFd(Call->Process, (LONG)Call->Args[0], Call->Args[1], (Flags & LX_MOVE_MOUNT_F_EMPTY_PATH) != 0, &Error);
     if (Mount == NULL)
         return Error;
+    if (Flags & LX_MOVE_MOUNT_SET_GROUP)
+    {
+        PLX_MOUNT To = LxMountFromFd(Call->Process, (LONG)Call->Args[2], Call->Args[3],
+                                     (Flags & LX_MOVE_MOUNT_T_EMPTY_PATH) != 0, &Error);
+
+        if (To == NULL)
+            return Error;
+        if (((Mount->Ns != NULL) && !LxNsCapable(Call->Process, LxNsOwner(Mount->Ns), LX_CAP_SYS_ADMIN)) ||
+            ((To->Ns != NULL) && !LxNsCapable(Call->Process, LxNsOwner(To->Ns), LX_CAP_SYS_ADMIN)))
+        {
+            return -LX_EPERM;
+        }
+        return LxMountSetGroup(Mount, To);
+    }
 
     if ((Flags & LX_MOVE_MOUNT_T_EMPTY_PATH) && (Call->Args[3] != 0) &&
         (LxCopyFromUser(&First, Call->Args[3], 1) == 0) && (First == '\0'))
@@ -3399,7 +3421,7 @@ LX_SYSCALL(LxSysMoveMount)
         LxFileDereference(File);
         if (Path == NULL)
             return -LX_EINVAL;
-        Error = LxMountMove(LxProcessNs(Call->Process, LxNsMnt), Mount, Path);
+        Error = LxMountMove(LxProcessNs(Call->Process, LxNsMnt), Mount, Path, (Flags & LX_MOVE_MOUNT_BENEATH) != 0);
         LxFree(Path);
         return Error;
     }
@@ -3407,7 +3429,7 @@ LX_SYSCALL(LxSysMoveMount)
     Error = LxMountLookup(Call->Process, (LONG)Call->Args[2], Call->Args[3], LX_LOOKUP_FOLLOW, &Target);
     if (Error != 0)
         return Error;
-    Error = LxMountMove(LxProcessNs(Call->Process, LxNsMnt), Mount, Target.Path);
+    Error = LxMountMove(LxProcessNs(Call->Process, LxNsMnt), Mount, Target.Path, (Flags & LX_MOVE_MOUNT_BENEATH) != 0);
     LxNodeFree(&Target);
     return Error;
 }

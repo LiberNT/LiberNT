@@ -859,7 +859,8 @@ LONG LxMountSetPropagation(_In_ PLX_NS Ns, _In_ PLX_MOUNT Mount, _In_ ULONG Flag
 LONG LxMountCreateDetached(_In_ PLX_PROCESS Process, _In_ PCSTR FsType, _In_ PCSTR Source, _In_ ULONG Flags, _In_ ULONG Mode, _Out_ PLX_MOUNT *Mount);
 LONG LxMountBindDetached(_In_ PLX_PROCESS Process, _In_ PLX_NODE Source, _Out_ PLX_MOUNT *Mount);
 LONG LxMountBind(_In_ PLX_PROCESS Process, _In_ PLX_NODE Source, _In_ PCSTR Target, _In_ ULONG Flags);
-LONG LxMountMove(_In_ PLX_NS Ns, _In_ PLX_MOUNT Mount, _In_ PCSTR Target);
+LONG LxMountMove(_In_ PLX_NS Ns, _In_ PLX_MOUNT Mount, _In_ PCSTR Target, _In_ BOOLEAN Beneath);
+LONG LxMountSetGroup(_In_ PLX_MOUNT From, _In_ PLX_MOUNT To);
 VOID LxMountSetFlags(_In_ PLX_MOUNT Mount, _In_ ULONG Set, _In_ ULONG Clear);
 PSTR LxMountInfo(_In_ PLX_PROCESS Process, _In_ BOOLEAN Full, _Out_ PULONG Length);
 LONG LxMountStatfs(_In_ PLX_MOUNT Mount, _Out_writes_bytes_(120) PVOID Statfs);

@@ -1842,10 +1842,12 @@ LONG
 LxMountMove(
     _In_ PLX_NS Ns,
     _In_ PLX_MOUNT Mount,
-    _In_ PCSTR Target)
+    _In_ PCSTR Target,
+    _In_ BOOLEAN Beneath)
 {
     PLX_INSTANCE Instance = Ns->Instance;
     PSTR NewTarget = LxStrDup(Target), OldTarget;
+    PLX_MOUNT Top = NULL;
     SIZE_T OldLength;
     PLIST_ENTRY Entry;
 
@@ -1858,6 +1860,19 @@ LxMountMove(
     }
 
     ExAcquireFastMutex(&Instance->Lock);
+    if (Beneath)
+    {
+        PCSTR Relative;
+
+        Top = LxMountFindLocked(Ns, NewTarget, &Relative);
+        if ((Top == NULL) || (Relative[0] != '\0') || (Top->Parent == NULL) || (Top == Mount) ||
+            LxMountIsBelow(Top, Mount))
+        {
+            ExReleaseFastMutex(&Instance->Lock);
+            LxFree(NewTarget);
+            return -LX_EINVAL;
+        }
+    }
     OldTarget = Mount->Target;
     OldLength = strlen(OldTarget);
     for (Entry = Ns->Mnt.Mounts.Flink; Entry != &Ns->Mnt.Mounts; Entry = Entry->Flink)
@@ -1885,16 +1900,58 @@ LxMountMove(
     Mount->Ns = Ns;
     if (!IsListEmpty(&Mount->Link))
         RemoveEntryList(&Mount->Link);
-    InsertTailList(&Ns->Mnt.Mounts, &Mount->Link);
-    Mount->Parent = LxMountFindLocked(Ns, NewTarget, NULL);
-    if (Mount->Parent == Mount)
-        Mount->Parent = NULL;
+    if (Top != NULL)
+    {
+        InsertTailList(&Top->Link, &Mount->Link);
+        Mount->Parent = Top->Parent;
+        Top->Parent = Mount;
+        Top->ParentId = Mount->Id;
+    }
+    else
+    {
+        InsertTailList(&Ns->Mnt.Mounts, &Mount->Link);
+        Mount->Parent = LxMountFindLocked(Ns, NewTarget, NULL);
+        if (Mount->Parent == Mount)
+            Mount->Parent = NULL;
+    }
     Mount->ParentId = (Mount->Parent != NULL) ? Mount->Parent->Id : 1;
     ExReleaseFastMutex(&Instance->Lock);
     LxFree(OldTarget);
     LxEventSourceSignal(&Ns->Mnt.Events);
     LxVcacheInvalidate();
     return 0;
+}
+
+LONG
+LxMountSetGroup(
+    _In_ PLX_MOUNT From,
+    _In_ PLX_MOUNT To)
+{
+    PLX_INSTANCE Instance = From->Instance;
+    PCSTR FromRoot = (From->Root != NULL) ? From->Root : "/", ToRoot = (To->Root != NULL) ? To->Root : "/";
+    SIZE_T Length = (strcmp(FromRoot, "/") == 0) ? 0 : strlen(FromRoot);
+    LONG Error = 0;
+
+    ExAcquireFastMutex(&Instance->Lock);
+    if (!LxMountLive(From) || !LxMountLive(To) || (From->Kind != To->Kind) || (From->Dev != To->Dev))
+        Error = -LX_EINVAL;
+    else if ((Length != 0) &&
+             ((strncmp(ToRoot, FromRoot, Length) != 0) || ((ToRoot[Length] != '\0') && (ToRoot[Length] != '/'))))
+        Error = -LX_EINVAL;
+    else if ((To->PeerGroup != 0) || (To->MasterGroup != 0))
+        Error = -LX_EINVAL;
+    else if ((From->PeerGroup == 0) && (From->MasterGroup == 0))
+        Error = -LX_EINVAL;
+    if (Error == 0)
+    {
+        To->MasterGroup = From->MasterGroup;
+        To->PeerGroup = From->PeerGroup;
+        To->Unbindable = FALSE;
+    }
+    ExReleaseFastMutex(&Instance->Lock);
+    if ((Error == 0) && (To->Ns != NULL))
+        LxEventSourceSignal(&To->Ns->Mnt.Events);
+    return Error;
 }
 
 VOID
