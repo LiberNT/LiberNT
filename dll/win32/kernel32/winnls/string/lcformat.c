@@ -1343,7 +1343,10 @@ INT WINAPI GetNumberFormatW(LCID lcid, DWORD dwFlags,
     if (negative)
     {
         lpszValue++;
-        GetLocaleInfoW(lcid, LOCALE_SNEGATIVESIGN | dwFlags, fmt_neg, ARRAY_SIZE(fmt_neg));
+        if (strchrW(lpszValue, '0') && !lpszValue[strspnW(lpszValue, L"0.")])
+            negative = FALSE;
+        else
+            GetLocaleInfoW(lcid, LOCALE_SNEGATIVESIGN | dwFlags, fmt_neg, ARRAY_SIZE(fmt_neg));
     }
 
     if (!(num = NLS_FormatNumber(output + ARRAY_SIZE(output) - 6, lpszValue,
@@ -1352,6 +1355,8 @@ INT WINAPI GetNumberFormatW(LCID lcid, DWORD dwFlags,
         SetLastError(ERROR_INVALID_PARAMETER);
         return 0;
     }
+    if (!*num && strpbrkW(lpszValue, L"0123456789"))
+        num = NLS_PrependStr(num, L"0");
 
     if (negative)
     {
