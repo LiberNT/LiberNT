@@ -117,7 +117,7 @@ VfatFormat(
                         FILE_GENERIC_READ | FILE_GENERIC_WRITE | SYNCHRONIZE,
                         &ObjectAttributes,
                         &Iosb,
-                        FILE_SHARE_READ,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE,
                         FILE_SYNCHRONOUS_IO_ALERT);
     if (!NT_SUCCESS(Status))
     {
@@ -319,6 +319,26 @@ VfatFormat(
                                  0,
                                  NULL,
                                  0);
+    if (!NT_SUCCESS(LockStatus) && Callback && Callback(VOLUMEINUSE, 0, NULL))
+    {
+        NtFsControlFile(FileHandle, NULL, NULL, NULL, &Iosb, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0);
+        NtClose(FileHandle);
+
+        Status = NtOpenFile(&FileHandle,
+                            FILE_GENERIC_READ | FILE_GENERIC_WRITE | SYNCHRONIZE,
+                            &ObjectAttributes,
+                            &Iosb,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE,
+                            FILE_SYNCHRONOUS_IO_ALERT);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("NtOpenFile() failed with status 0x%08x\n", Status);
+            VfatFormatReport(Callback, "Unable to open the volume (status 0x%08lx)", Status);
+            return FALSE;
+        }
+
+        LockStatus = NtFsControlFile(FileHandle, NULL, NULL, NULL, &Iosb, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0);
+    }
     if (!NT_SUCCESS(LockStatus))
     {
         DPRINT1("Failed to lock volume for formatting (Status: 0x%x)\n", LockStatus);
