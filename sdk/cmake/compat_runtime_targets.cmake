@@ -8,22 +8,31 @@
 # Each nested build compiles these targets for its own architecture.
 
 set(COMPAT_RUNTIME_MODULES
+    aclui
+    activeds
     actxprxy
     advapi32
     advapi32_vista
     advpack
+    amstream
     apphelp
     appxalluserstore
+    atl
     authz
     avicap32
+    avifil32
     avrt
     bcp47langs
     bcrypt
     bcryptprimitives
+    bluetoothapis
     browseui
     cabinet
+    cabview
     cfgmgr32
+    clusapi
     combase
+    comcat
     comctl32
     comdlg32
     coml2
@@ -31,6 +40,9 @@ set(COMPAT_RUNTIME_MODULES
     credui
     crypt32
     cryptbase
+    cryptdlg
+    cryptdll
+    cryptext
     cryptnet
     cryptsp
     cryptui
@@ -51,6 +63,13 @@ set(COMPAT_RUNTIME_MODULES
     d3dumdrt
     d3dx9_43
     d3dxof
+    dciman32
+    devenum
+    dinput
+    dispex
+    dpnhpast
+    dsrole
+    dssenh
     dxdiagn
     dcomp
     ddraw
@@ -65,11 +84,15 @@ set(COMPAT_RUNTIME_MODULES
     dwrite
     dxgi
     dxva2
+    esent
     evr
     explorerframe
     faultrep
+    fltlib
     fmifs
+    fontext
     fontsub
+    fwpuclnt
     gdi32
     gdi32_vista
     gdiplus
@@ -79,12 +102,24 @@ set(COMPAT_RUNTIME_MODULES
     hid
     hlink
     hnetcfg
+    httpapi
+    icmp
     ieframe
+    ieproxy
+    iernonce
     iertutil
+    ifmon
+    imaadp32.acm
     imagehlp
     imm32
     inetcomm
+    inetmib1
+    inseng
+    iologmsg
     iphlpapi
+    itircl
+    itss
+    iyuv_32
     jscript
     jsproxy
     kernel32
@@ -93,70 +128,141 @@ set(COMPAT_RUNTIME_MODULES
     kernelbase_ros
     ksuser
     ktmw32
+    l3codeca.acm
     libjpeg
     libpng
     libtiff
     libxslt
+    loadperf
+    logoncli
     lpk
     lz32
     magnification
+    mapi32
     mbedtls
+    mciavi32
+    mcicda
+    mciqtz32
+    mciseq
+    mciwave
     mf
+    mf3216
+    mfasfsrcsnk
+    mferror
+    mfh264enc
+    mfmediaengine
+    mfmp4srcsnk
     mfplat
+    mfplay
     mfreadwrite
+    mfsrcsnk
+    mgmtapi
+    midimap
     mlang
+    mmcshext
     mmdevapi
     mpr
+    mprapi
     msacm32
+    msacm32.drv
+    msadp32.acm
     msafd
+    msauddecmft
+    mscat32
+    mscms
     mscoree
     msctf
     msctfime
+    msdmo
+    msftedit
+    msg711.acm
+    msgsm32.acm
+    mshtml
     msi
     msimg32
+    msimtf
     msisip
+    msmpeg2vdec
     mspatcha
+    msrle32
+    mssign32
+    mssip32
+    mssprxy
+    mstask
+    msutb
+    msvcirt
     msvcrt
     msvfw32
+    msvidc32
     mswsock
     msxml3
+    msxml3r
     msxml6
+    mydocs
     ncrypt
+    nddeapi
     netapi32
+    netevent
+    netlogon
+    netmsg
+    netplwiz
+    netprofm
+    netsetupshim
+    netutils
     newdev
     nfs41_np
     normaliz
     nsi
     ntdll_vista
     ntdsapi
+    ntlanman
     ntmarta
     ntobjshex
+    objsel
+    odbc32
     odbccp32
     ole32
     oleacc
     oleaut32
     oledlg
+    opcservices
     opengl32
     pdh
+    photometadatahandler
+    portabledevicetypes
     powrprof
     printui
+    prnfldr
     profapi
     propsys
     psapi
+    qasf
+    qcap
+    qedit
     qmgrprxy
+    quartz
+    query
     rasadhlp
     rasapi32
+    rasdlg
+    rasman
+    regapi
+    resutils
     riched20
     riched32
     rpcrt4
     rsaenh
+    rstrtmgr
     rtworkq
+    samcli
     samlib
     schannel
     scrrun
     sechost
     secur32
+    sendmail
     sensapi
+    sensorsapi
     settingsyncpolicy
     setupapi
     sfc
@@ -165,29 +271,52 @@ set(COMPAT_RUNTIME_MODULES
     shdocvw
     shell32
     shfolder
+    shimgvw
     shlwapi
     slc
     sndvolsso
+    snmpapi
+    softpub
     srclient
+    srvcli
     sspicli
+    sti
+    stobject
     sxs
+    t2embed
+    tapi32
+    tapiui
     taskschd
+    tdh
+    thumbcache
+    traffic
     twinapi
     tzres
     ucrtbase
     uiautomationcore
+    url
     urlmon
     user32
     user32_vista
     userenv
     usp10
+    utildll
     uxtheme
+    vbscript
+    verifier
     version
+    vssapi
     vulkan-1
     wbemdisp
     wbemprox
+    webservices
+    wer
     wevtapi
     win32u
+    windowscodecsext
+    winedmo
+    winscard
+    wintypes
     winusb
     windows_storage
     windows_ui
@@ -203,8 +332,13 @@ set(COMPAT_RUNTIME_MODULES
     wkscli
     wlanapi
     wldap32
+    wmi
+    wmvcore
     ws2_32
     ws2help
+    wsdapi
+    wshbth
+    wshom
     wshtcpip
     wshunix
     wtsapi32
@@ -216,7 +350,9 @@ set(COMPAT_RUNTIME_MODULES
     xinput1_4
     xinput9_1_0
     xaudio2_9
-    xmllite)
+    xmllite
+    xolehlp
+    zipfldr)
 
 if(NOT EXISTS "${REACTOS_SOURCE_DIR}/submodules/mesa/include/vulkan/vulkan.h")
     list(REMOVE_ITEM COMPAT_RUNTIME_MODULES vulkan-1)
