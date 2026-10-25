@@ -23,6 +23,7 @@
 //
 #define CPPORT_FLAG_MODEM_CONTROL   0x02
 #define CPPORT_FLAG_KEEP_BAUD       0x08
+#define CPPORT_FLAG_TX_STALLED      0x10
 
 typedef struct _CPPORT
 {
