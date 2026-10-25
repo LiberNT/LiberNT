@@ -16,7 +16,36 @@
 
 #include <wine/debug.h>
 
-#define TRANSACTION_ALL_ACCESS 0x001F0022
+#ifndef TRANSACTION_ALL_ACCESS
+#define TRANSACTIONMANAGER_QUERY_INFORMATION (0x0001)
+#define TRANSACTIONMANAGER_SET_INFORMATION   (0x0002)
+#define TRANSACTIONMANAGER_RECOVER           (0x0004)
+#define TRANSACTIONMANAGER_RENAME            (0x0008)
+#define TRANSACTIONMANAGER_CREATE_RM         (0x0010)
+#define TRANSACTIONMANAGER_BIND_TRANSACTION  (0x0020)
+#define TRANSACTIONMANAGER_GENERIC_READ      (STANDARD_RIGHTS_READ | TRANSACTIONMANAGER_QUERY_INFORMATION)
+#define TRANSACTIONMANAGER_GENERIC_WRITE     (STANDARD_RIGHTS_WRITE | TRANSACTIONMANAGER_SET_INFORMATION | \
+                                              TRANSACTIONMANAGER_RECOVER | TRANSACTIONMANAGER_RENAME | \
+                                              TRANSACTIONMANAGER_CREATE_RM)
+#define TRANSACTIONMANAGER_GENERIC_EXECUTE   (STANDARD_RIGHTS_EXECUTE)
+#define TRANSACTIONMANAGER_ALL_ACCESS        (STANDARD_RIGHTS_REQUIRED | TRANSACTIONMANAGER_GENERIC_READ | \
+                                              TRANSACTIONMANAGER_GENERIC_WRITE | TRANSACTIONMANAGER_GENERIC_EXECUTE | \
+                                              TRANSACTIONMANAGER_BIND_TRANSACTION)
+#define TRANSACTION_QUERY_INFORMATION        (0x0001)
+#define TRANSACTION_SET_INFORMATION          (0x0002)
+#define TRANSACTION_ENLIST                   (0x0004)
+#define TRANSACTION_COMMIT                   (0x0008)
+#define TRANSACTION_ROLLBACK                 (0x0010)
+#define TRANSACTION_PROPAGATE                (0x0020)
+#define TRANSACTION_GENERIC_READ             (STANDARD_RIGHTS_READ | TRANSACTION_QUERY_INFORMATION | SYNCHRONIZE)
+#define TRANSACTION_GENERIC_WRITE            (STANDARD_RIGHTS_WRITE | TRANSACTION_SET_INFORMATION | \
+                                              TRANSACTION_COMMIT | TRANSACTION_ENLIST | TRANSACTION_ROLLBACK | \
+                                              TRANSACTION_PROPAGATE | SYNCHRONIZE)
+#define TRANSACTION_GENERIC_EXECUTE          (STANDARD_RIGHTS_EXECUTE | TRANSACTION_COMMIT | TRANSACTION_ROLLBACK | \
+                                              SYNCHRONIZE)
+#define TRANSACTION_ALL_ACCESS               (STANDARD_RIGHTS_REQUIRED | TRANSACTION_GENERIC_READ | \
+                                              TRANSACTION_GENERIC_WRITE | TRANSACTION_GENERIC_EXECUTE)
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(ktmw32);
 
@@ -100,7 +129,7 @@ CreateTransactionManager(
         LogFileNamePointer = &LogFileNameString;
     }
 
-    Status = NtCreateTransactionManager(&Handle, TRANSACTION_ALL_ACCESS,
+    Status = NtCreateTransactionManager(&Handle, TRANSACTIONMANAGER_ALL_ACCESS,
                                         &ObjectAttributes, LogFileNamePointer,
                                         CreateOptions, CommitStrength);
     if (!SetStatus(Status))
