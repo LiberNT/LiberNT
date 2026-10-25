@@ -518,13 +518,7 @@ HRESULT WINAPI CNetFolder::EnumSearches(IEnumExtraSearch ** ppenum)
 HRESULT WINAPI CNetFolder::GetDefaultColumn (DWORD dwRes, ULONG *pSort, ULONG *pDisplay)
 {
     TRACE("(%p)\n", this);
-
-    if (pSort)
-        *pSort = 0;
-    if (pDisplay)
-        *pDisplay = 0;
-
-    return S_OK;
+    return E_NOTIMPL;
 }
 
 HRESULT WINAPI CNetFolder::GetDefaultColumnState(UINT iColumn, SHCOLSTATEF *pcsFlags)

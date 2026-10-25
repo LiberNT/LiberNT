@@ -212,11 +212,7 @@ HRESULT WINAPI CMyDocsFolder::EnumSearches(IEnumExtraSearch ** ppenum)
 
 HRESULT WINAPI CMyDocsFolder::GetDefaultColumn(DWORD dwRes, ULONG *pSort, ULONG *pDisplay)
 {
-    HRESULT hr = EnsureFolder();
-    if (FAILED(hr))
-        return hr;
-
-    return m_pisfInner->GetDefaultColumn(dwRes, pSort, pDisplay);
+    return E_NOTIMPL;
 }
 
 HRESULT WINAPI CMyDocsFolder::GetDefaultColumnState(UINT iColumn, DWORD *pcsFlags)
