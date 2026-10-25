@@ -945,6 +945,12 @@ HRESULT WINAPI CDrivesFolder::CompareIDs(LPARAM lParam, PCUIDLIST_RELATIVE pidl1
         return E_INVALIDARG;
     if (type1 != type2)
         return MAKE_COMPARE_HRESULT(type1 - type2);
+    if (type1 == 0)
+    {
+        int result = _stricmp(_ILGetDataPointer(pidl1)->u.drive.szDriveName, _ILGetDataPointer(pidl2)->u.drive.szDriveName);
+        if (result)
+            return MAKE_COMPARE_HRESULT(result);
+    }
     if (type1 != 1)
         return SHELL32_CompareDetails(this, lParam, pidl1, pidl2);
 

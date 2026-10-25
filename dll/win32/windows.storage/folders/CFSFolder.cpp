@@ -1335,6 +1335,8 @@ HRESULT WINAPI CFSFolder::CompareIDs(LPARAM lParam,
                                      PCUIDLIST_RELATIVE pidl2)
 {
     WCHAR szNameBuf1[MAX_PATH], szNameBuf2[_countof(szNameBuf1)];
+    if ((pidl1->mkid.cb && !(_ILGetFSType(pidl1) & PT_FS)) || (pidl2->mkid.cb && !(_ILGetFSType(pidl2) & PT_FS)))
+        return E_INVALIDARG;
     LPCWSTR pszName1 = GetItemFileName(pidl1, szNameBuf1, _countof(szNameBuf1));
     LPCWSTR pszName2 = GetItemFileName(pidl2, szNameBuf2, _countof(szNameBuf2));
     if (!pszName1 || !pszName2 || LOWORD(lParam) >= GENERICSHELLVIEWCOLUMNS)
