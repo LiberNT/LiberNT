@@ -271,6 +271,20 @@ NTSTATUS PortSrbStatusToNtStatus(_In_ UCHAR SrbStatus)
     }
 }
 
+static VOID PortDumpPollInterrupts(_In_ PFDO_DEVICE_EXTENSION FdoExtension)
+{
+    ULONG MessageId;
+
+    if ((FdoExtension->MessageInfo != NULL) && (FdoExtension->MessageInfo->MessageCount != 0))
+    {
+        for (MessageId = 0; MessageId < FdoExtension->MessageInfo->MessageCount; MessageId++)
+            MiniportHwMSInterrupt(&FdoExtension->Miniport, MessageId);
+        return;
+    }
+
+    MiniportHwInterrupt(&FdoExtension->Miniport);
+}
+
 static NTSTATUS PortDumpSubmitOnce(_In_ PPORT_DUMP_CONTEXT DumpContext, _In_ UCHAR Function, _In_ ULONG64 DiskByteOffset, _In_ PHYSICAL_ADDRESS Buffer, _In_ ULONG Length)
 {
     PFDO_DEVICE_EXTENSION FdoExtension;
@@ -326,7 +340,7 @@ static NTSTATUS PortDumpSubmitOnce(_In_ PPORT_DUMP_CONTEXT DumpContext, _In_ UCH
 
     for (Timeout = 0; Timeout < ROS_DUMP_POLL_ITERATIONS; Timeout++)
     {
-        MiniportHwInterrupt(&FdoExtension->Miniport);
+        PortDumpPollInterrupts(FdoExtension);
         if (InterlockedCompareExchange(&DumpContext->Completed, 0, 0) != 0)
             return DumpContext->Status;
 
