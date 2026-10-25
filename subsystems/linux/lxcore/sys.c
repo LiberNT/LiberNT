@@ -2085,6 +2085,19 @@ LxCloneCommon(
     _In_ PLX_CLONE_REQUEST Request)
 {
     CONTEXT Context;
+    LONG Probe = -1;
+
+    if (((Request->Flags & (LX_CLONE_NEWNS | LX_CLONE_FS)) == (LX_CLONE_NEWNS | LX_CLONE_FS)) ||
+        ((Request->Flags & (LX_CLONE_NEWUSER | LX_CLONE_FS)) == (LX_CLONE_NEWUSER | LX_CLONE_FS)) ||
+        ((Request->Flags & LX_CLONE_THREAD) && !(Request->Flags & LX_CLONE_SIGHAND)) ||
+        ((Request->Flags & LX_CLONE_SIGHAND) && !(Request->Flags & LX_CLONE_VM)) ||
+        ((Request->Flags & LX_CLONE_THREAD) && (Request->Flags & (LX_CLONE_NEWUSER | LX_CLONE_NEWPID))) ||
+        ((Request->Flags & LX_CLONE_PIDFD) && (Request->Flags & LX_CLONE_DETACHED)))
+    {
+        return -LX_EINVAL;
+    }
+    if ((Request->Flags & LX_CLONE_PIDFD) && (LxCopyToUser(Request->Pidfd, &Probe, sizeof(Probe)) != 0))
+        return -LX_EFAULT;
 
     LxArchCaptureContext(Call->TrapFrame, Call->ExceptionFrame, &Context);
     LxArchSetForkContext(&Context, Request->Stack);
@@ -2120,19 +2133,47 @@ LX_SYSCALL(LxSysClone3)
     SIZE_T Size = (SIZE_T)Call->Args[1];
     LONG64 Result;
 
-    if ((Size < 64) || (Size > 4096))
+    if (Size > 4096)
+        return -LX_E2BIG;
+    if (Size < 64)
         return -LX_EINVAL;
     RtlZeroMemory(&Args, sizeof(Args));
     Result = LxCopyFromUser(&Args, Call->Args[0], min(Size, sizeof(Args)));
     if (Result != 0)
         return Result;
+    if (Size > sizeof(Args))
+    {
+        UCHAR Extra[64];
+        SIZE_T Offset, Chunk, Index;
+
+        for (Offset = sizeof(Args); Offset < Size; Offset += Chunk)
+        {
+            Chunk = min(sizeof(Extra), Size - Offset);
+            if (LxCopyFromUser(Extra, Call->Args[0] + Offset, Chunk) != 0)
+                return -LX_EFAULT;
+            for (Index = 0; Index < Chunk; Index++)
+            {
+                if (Extra[Index] != 0)
+                    return -LX_E2BIG;
+            }
+        }
+    }
     if ((Args.SetTidSize > LX_PIDNS_MAX_LEVEL) || ((Args.SetTid == 0) != (Args.SetTidSize == 0)) ||
         (Args.ExitSignal > LX_NSIG))
     {
         return -LX_EINVAL;
     }
-    if ((Args.Flags & LX_CLONE_INTO_CGROUP) && (Size < 88))
+    if ((Args.Flags & LX_CLONE_INTO_CGROUP) && ((Size < 88) || (Args.Cgroup > MAXLONG)))
         return -LX_EINVAL;
+    if ((Args.Flags & ~(0xFFFFFFFFULL | LX_CLONE_CLEAR_SIGHAND | LX_CLONE_INTO_CGROUP)) ||
+        (Args.Flags & (LX_CLONE_DETACHED | 0x7FULL)) ||
+        ((Args.Flags & (LX_CLONE_THREAD | LX_CLONE_PARENT)) && (Args.ExitSignal != 0)) ||
+        ((Args.Stack == 0) && (Args.StackSize != 0)) || ((Args.Stack != 0) && (Args.StackSize == 0)) ||
+        ((Args.Stack != 0) && ((Args.Stack > (ULONG64)(ULONG_PTR)MM_HIGHEST_USER_ADDRESS) ||
+                               (Args.StackSize > (ULONG64)(ULONG_PTR)MM_HIGHEST_USER_ADDRESS - Args.Stack))))
+    {
+        return -LX_EINVAL;
+    }
     if ((Args.Flags & LX_CLONE_PIDFD) && (Args.Flags & LX_CLONE_THREAD))
         return -LX_EINVAL;
 
