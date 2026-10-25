@@ -59,6 +59,23 @@ LxElfOpen(
         LxElfClose(Image);
         return -LX_EACCES;
     }
+    {
+        LX_STAT Stat;
+
+        Error = LxFileStat(Image->File, &Stat);
+        if ((Error == 0) && (((Stat.Mode & LX_S_IFMT) != LX_S_IFREG) ||
+                             ((Image->File->Mount != NULL) && (Image->File->Mount->Flags & LX_MS_NOEXEC))))
+        {
+            Error = -LX_EACCES;
+        }
+        if (Error == 0)
+            Error = LxPermission(Process, Stat.Mode, Stat.Uid, Stat.Gid, LX_MAY_EXEC);
+        if (Error != 0)
+        {
+            LxElfClose(Image);
+            return Error;
+        }
+    }
 
     Read = LxFileReadKernel(Image->File, &Image->Header, sizeof(Image->Header), 0);
     if (Read < 0)

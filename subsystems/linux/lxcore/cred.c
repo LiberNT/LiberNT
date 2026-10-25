@@ -194,6 +194,88 @@ LxMayMount(
 }
 
 BOOLEAN
+LxIdsMapped(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG Uid,
+    _In_ ULONG Gid)
+{
+    PLX_NS Own = LxCredUserNs(Process);
+
+    return (Own->Parent == NULL) ||
+           ((LxIdFromKernel(Own, FALSE, Uid) != MAXULONG) && (LxIdFromKernel(Own, TRUE, Gid) != MAXULONG));
+}
+
+static
+BOOLEAN
+LxCapableWith(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 Effective,
+    _In_ ULONG Uid,
+    _In_ ULONG Gid,
+    _In_ ULONG Capability)
+{
+    return ((Effective >> Capability) & 1) && LxIdsMapped(Process, Uid, Gid);
+}
+
+LONG
+LxPermissionAs(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG Fsuid,
+    _In_ ULONG Fsgid,
+    _In_ ULONG64 Effective,
+    _In_ ULONG Mode,
+    _In_ ULONG Uid,
+    _In_ ULONG Gid,
+    _In_ ULONG Mask)
+{
+    ULONG Bits, Index;
+    BOOLEAN Member = (Fsgid == Gid);
+
+    Mask &= LX_MAY_READ | LX_MAY_WRITE | LX_MAY_EXEC;
+    for (Index = 0; !Member && (Index < Process->GroupCount); Index++)
+        Member = (Process->Groups[Index] == Gid);
+    if (Fsuid == Uid)
+        Bits = (Mode >> 6) & 7;
+    else if (Member)
+        Bits = (Mode >> 3) & 7;
+    else
+        Bits = Mode & 7;
+    if ((Mask & ~Bits) == 0)
+        return 0;
+    if ((Mode & LX_S_IFMT) == LX_S_IFDIR)
+    {
+        if (!(Mask & LX_MAY_WRITE) && LxCapableWith(Process, Effective, Uid, Gid, LX_CAP_DAC_READ_SEARCH))
+            return 0;
+        return LxCapableWith(Process, Effective, Uid, Gid, LX_CAP_DAC_OVERRIDE) ? 0 : -LX_EACCES;
+    }
+    if ((Mask == LX_MAY_READ) && LxCapableWith(Process, Effective, Uid, Gid, LX_CAP_DAC_READ_SEARCH))
+        return 0;
+    if ((!(Mask & LX_MAY_EXEC) || (Mode & 0111)) && LxCapableWith(Process, Effective, Uid, Gid, LX_CAP_DAC_OVERRIDE))
+        return 0;
+    return -LX_EACCES;
+}
+
+LONG
+LxPermission(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG Mode,
+    _In_ ULONG Uid,
+    _In_ ULONG Gid,
+    _In_ ULONG Mask)
+{
+    return LxPermissionAs(Process, Process->Fsuid, Process->Fsgid, Process->CapEffective, Mode, Uid, Gid, Mask);
+}
+
+BOOLEAN
+LxOwnerOrCapable(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG Uid,
+    _In_ ULONG Gid)
+{
+    return (Process->Fsuid == Uid) || LxCapableWrtIds(Process, Uid, Gid, LX_CAP_FOWNER);
+}
+
+BOOLEAN
 LxCapableWrtIds(
     _In_ PLX_PROCESS Process,
     _In_ ULONG Uid,

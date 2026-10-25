@@ -395,6 +395,11 @@ typedef struct _LX_NODE
 #define LX_LOOKUP_BENEATH       0x00000080
 #define LX_LOOKUP_IN_ROOT       0x00000100
 #define LX_LOOKUP_RESOLVE       0x000001F0
+#define LX_LOOKUP_ACCESS        0x00000200
+
+#define LX_MAY_EXEC         0x00000001
+#define LX_MAY_WRITE        0x00000002
+#define LX_MAY_READ         0x00000004
 
 typedef struct _LX_ITIMER
 {
@@ -1012,6 +1017,14 @@ BOOLEAN LxCapable(_In_ PLX_PROCESS Process, _In_ ULONG Capability);
 BOOLEAN LxNsCapable(_In_ PLX_PROCESS Process, _In_opt_ PLX_NS UserNs, _In_ ULONG Capability);
 BOOLEAN LxCapableWrtIds(_In_ PLX_PROCESS Process, _In_ ULONG Uid, _In_ ULONG Gid, _In_ ULONG Capability);
 BOOLEAN LxMayMount(_In_ PLX_PROCESS Process);
+LONG LxPermissionAs(_In_ PLX_PROCESS Process, _In_ ULONG Fsuid, _In_ ULONG Fsgid, _In_ ULONG64 Effective, _In_ ULONG Mode,
+                    _In_ ULONG Uid, _In_ ULONG Gid, _In_ ULONG Mask);
+LONG LxPermission(_In_ PLX_PROCESS Process, _In_ ULONG Mode, _In_ ULONG Uid, _In_ ULONG Gid, _In_ ULONG Mask);
+BOOLEAN LxOwnerOrCapable(_In_ PLX_PROCESS Process, _In_ ULONG Uid, _In_ ULONG Gid);
+BOOLEAN LxIdsMapped(_In_ PLX_PROCESS Process, _In_ ULONG Uid, _In_ ULONG Gid);
+LONG LxVfsNodePermission(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ ULONG Mask);
+LONG LxVfsParentPermission(_In_ PLX_PROCESS Process, _In_ PCSTR Path, _In_ ULONG Mask, _Out_opt_ PLX_STAT Parent);
+LONG LxVfsMayDelete(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node);
 PLX_NS LxCredUserNs(_In_ PLX_PROCESS Process);
 ULONG LxIdToKernel(_In_opt_ PLX_NS UserNs, _In_ BOOLEAN Group, _In_ ULONG Id);
 ULONG LxIdRangeToKernel(_In_ PLX_NS UserNs, _In_ BOOLEAN Group, _In_ ULONG Id, _In_ ULONG Count);

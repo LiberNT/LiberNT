@@ -260,7 +260,7 @@ LxOpenCommon(
         return -LX_ENOENT;
     }
 
-    Error = LxVfsOpenResolve(Process, DirFd, Path, Flags, Mode, Resolve, &File);
+    Error = LxVfsOpenResolve(Process, DirFd, Path, Flags, Mode, Resolve | LX_LOOKUP_ACCESS, &File);
     LxFree(Path);
     if (Error != 0)
         return Error;
@@ -947,10 +947,34 @@ LX_SYSCALL(LxSysFstatfs)
 
 static
 LONG
+LxAccessCheck(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_STAT Stat,
+    _In_ ULONG Mode,
+    _In_ ULONG Flags)
+{
+    ULONG Fsuid = Process->Fsuid, Fsgid = Process->Fsgid;
+    ULONG64 Effective = Process->CapEffective;
+
+    if (Mode == 0)
+        return 0;
+    if (!(Flags & LX_AT_EACCESS))
+    {
+        Fsuid = Process->Uid[0];
+        Fsgid = Process->Gid[0];
+        if (!(Process->SecureBits & LX_SECBIT_NO_SETUID_FIXUP))
+            Effective = (Process->Uid[0] == LxCredMakeId(Process, FALSE, 0)) ? Process->CapPermitted : 0;
+    }
+    return LxPermissionAs(Process, Fsuid, Fsgid, Effective, Stat->Mode, Stat->Uid, Stat->Gid, Mode);
+}
+
+static
+LONG
 LxAccessNode(
     _In_ PLX_PROCESS Process,
     _In_ PLX_NODE Node,
-    _In_ ULONG Mode)
+    _In_ ULONG Mode,
+    _In_ ULONG Flags)
 {
     LX_STAT Stat;
     LONG Error;
@@ -959,15 +983,12 @@ LxAccessNode(
         return -LX_EINVAL;
     if ((Mode & 2) && (Node->Mount->Flags & LX_MS_RDONLY))
         return -LX_EROFS;
-    if (Mode & 1)
-    {
-        Error = LxStatNodeFollow(Process, Node, &Stat);
-        if (Error != 0)
-            return Error;
-        if (((Stat.Mode & LX_S_IFMT) != LX_S_IFDIR) && !(Stat.Mode & 0111))
-            return -LX_EACCES;
-    }
-    return 0;
+    if (Mode == 0)
+        return 0;
+    Error = LxStatNodeFollow(Process, Node, &Stat);
+    if (Error != 0)
+        return Error;
+    return LxAccessCheck(Process, &Stat, Mode, Flags);
 }
 
 static
@@ -999,11 +1020,11 @@ LxAccess(
                 Error = -LX_EINVAL;
             else if ((Mode & 2) && (File->Mount != NULL) && (File->Mount->Flags & LX_MS_RDONLY))
                 Error = -LX_EROFS;
-            else if (Mode & 1)
+            else if (Mode != 0)
             {
                 Error = LxFileStat(File, &Stat);
-                if ((Error == 0) && ((Stat.Mode & LX_S_IFMT) != LX_S_IFDIR) && !(Stat.Mode & 0111))
-                    Error = -LX_EACCES;
+                if (Error == 0)
+                    Error = LxAccessCheck(Call->Process, &Stat, Mode, Flags);
             }
             LxFileDereference(File);
             return Error;
@@ -1013,7 +1034,7 @@ LxAccess(
                          (Flags & LX_AT_SYMLINK_NOFOLLOW) ? 0 : LX_LOOKUP_FOLLOW, &Node);
     if (Error != 0)
         return Error;
-    Error = LxAccessNode(Call->Process, &Node, Mode);
+    Error = LxAccessNode(Call->Process, &Node, Mode, Flags);
     LxNodeFree(&Node);
     return Error;
 }
@@ -1088,7 +1109,9 @@ LX_SYSCALL(LxSysChdir)
         LxNodeFree(&Node);
         return -LX_ENOTDIR;
     }
-    Result = LxChangeDirectory(Call->Process, Node.Path);
+    Result = LxVfsNodePermission(Call->Process, &Node, LX_MAY_EXEC);
+    if (Result == 0)
+        Result = LxChangeDirectory(Call->Process, Node.Path);
     LxNodeFree(&Node);
     return Result;
 }
@@ -1101,9 +1124,19 @@ LX_SYSCALL(LxSysFchdir)
     if (File == NULL)
         return -LX_EBADF;
     if ((File->Type != LX_S_IFDIR) || (File->Path == NULL))
+    {
         Result = -LX_ENOTDIR;
+    }
     else
-        Result = LxChangeDirectory(Call->Process, File->Path);
+    {
+        LX_STAT Stat;
+
+        Result = LxFileStat(File, &Stat);
+        if (Result == 0)
+            Result = LxPermission(Call->Process, Stat.Mode, Stat.Uid, Stat.Gid, LX_MAY_EXEC);
+        if (Result == 0)
+            Result = LxChangeDirectory(Call->Process, File->Path);
+    }
     LxFileDereference(File);
     return Result;
 }
@@ -1113,14 +1146,16 @@ LX_SYSCALL(LxSysChroot)
     LX_NODE Node;
     LONG Error;
 
-    if (!LxNsCapable(Call->Process, NULL, LX_CAP_SYS_CHROOT))
-        return -LX_EPERM;
     Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW | LX_LOOKUP_DIRECTORY, &Node);
     if (Error != 0)
         return Error;
     if (Node.Type != LX_S_IFDIR)
         Error = -LX_ENOTDIR;
     else
+        Error = LxVfsNodePermission(Call->Process, &Node, LX_MAY_EXEC);
+    if ((Error == 0) && !LxNsCapable(Call->Process, NULL, LX_CAP_SYS_CHROOT))
+        Error = -LX_EPERM;
+    if (Error == 0)
         Error = LxProcessChroot(Call->Process, Node.Path);
     LxNodeFree(&Node);
     return Error;
@@ -1313,7 +1348,10 @@ LX_SYSCALL(LxSysTruncate)
     Error = LxLookupUser(Call->Process, LX_AT_FDCWD, Call->Args[0], LX_LOOKUP_FOLLOW, &Node);
     if (Error != 0)
         return Error;
-    Error = LxVfsTruncate(&Node, (LONG64)Call->Args[1]);
+    if (Node.Type != LX_S_IFDIR)
+        Error = LxVfsNodePermission(Call->Process, &Node, LX_MAY_WRITE);
+    if (Error == 0)
+        Error = LxVfsTruncate(&Node, (LONG64)Call->Args[1]);
     LxNodeFree(&Node);
     return Error;
 }
@@ -1617,6 +1655,26 @@ LX_SYSCALL(LxSysSyncfs)
     return 0;
 }
 
+static
+LONG
+LxUtimePermission(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_STAT Stat,
+    _In_reads_(2) PLX_TIMESPEC Times)
+{
+    BOOLEAN Touch = (Times[0].Nanoseconds == LX_UTIME_NOW) && (Times[1].Nanoseconds == LX_UTIME_NOW);
+    BOOLEAN Set = ((Times[0].Nanoseconds != LX_UTIME_NOW) && (Times[0].Nanoseconds != LX_UTIME_OMIT)) ||
+                  ((Times[1].Nanoseconds != LX_UTIME_NOW) && (Times[1].Nanoseconds != LX_UTIME_OMIT));
+
+    if (LxOwnerOrCapable(Process, Stat->Uid, Stat->Gid))
+        return 0;
+    if (Set)
+        return -LX_EPERM;
+    if (Touch && (LxPermission(Process, Stat->Mode, Stat->Uid, Stat->Gid, LX_MAY_WRITE) != 0))
+        return -LX_EACCES;
+    return 0;
+}
+
 LX_SYSCALL(LxSysUtimensat)
 {
     LX_TIMESPEC Times[2];
@@ -1650,19 +1708,37 @@ LX_SYSCALL(LxSysUtimensat)
     if ((Path == NULL) || ((Path[0] == '\0') && (Flags & LX_AT_EMPTY_PATH)))
     {
         LxFree(Path);
+        LX_STAT Stat;
+
         File = LxCallFile(Call, 0);
         if (File == NULL)
             return -LX_EBADF;
-        Error = LxVfsSetTimes(NULL, File, Times);
+        Error = LxFileStat(File, &Stat);
+        if (Error == 0)
+            Error = LxUtimePermission(Call->Process, &Stat, Times);
+        if (Error == 0)
+        {
+            Error = LxVfsSetTimes(NULL, File, Times);
+            if (Error == -LX_EACCES)
+                Error = 0;
+        }
         LxFileDereference(File);
-        return (Error == -LX_EACCES) ? 0 : Error;
+        return Error;
     }
 
     Error = LxLookup(Call->Process, (LONG)Call->Args[0], Path, (Flags & LX_AT_SYMLINK_NOFOLLOW) ? 0 : LX_LOOKUP_FOLLOW, &Node);
     LxFree(Path);
     if (Error != 0)
         return Error;
-    Error = LxVfsSetTimes(&Node, NULL, Times);
+    {
+        LX_STAT Stat;
+
+        Error = LxVfsStatNode(Call->Process, &Node, &Stat);
+        if (Error == 0)
+            Error = LxUtimePermission(Call->Process, &Stat, Times);
+    }
+    if (Error == 0)
+        Error = LxVfsSetTimes(&Node, NULL, Times);
     LxNodeFree(&Node);
     return Error;
 }

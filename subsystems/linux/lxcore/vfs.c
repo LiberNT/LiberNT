@@ -486,6 +486,8 @@ LONG
 LxNtCreateNode(
     _In_ PCUNICODE_STRING NtPath,
     _In_ ULONG Mode,
+    _In_ ULONG Uid,
+    _In_ ULONG Gid,
     _In_ ULONG64 Device,
     _In_opt_ PCSTR LinkTarget)
 {
@@ -498,7 +500,7 @@ LxNtCreateNode(
     if (Error != 0)
         return Error;
 
-    Error = LxNtWriteLxAttributes(Handle, Mode, 0, 0, Device,
+    Error = LxNtWriteLxAttributes(Handle, Mode, Uid, Gid, Device,
                                   ((Mode & LX_S_IFMT) == LX_S_IFCHR) || ((Mode & LX_S_IFMT) == 0060000));
     if ((Error == 0) && (LinkTarget != NULL))
     {
@@ -536,6 +538,15 @@ VOID
 LxMountPropagateUnmountLocked(
     _In_ PLX_INSTANCE Instance,
     _In_ PLX_MOUNT Mount);
+
+static
+VOID
+LxVfsNewOwner(
+    _In_ PLX_PROCESS Process,
+    _In_ PCSTR Path,
+    _Inout_ PULONG Mode,
+    _Out_ PULONG Uid,
+    _Out_ PULONG Gid);
 
 static
 VOID
@@ -731,7 +742,7 @@ LxPopulateDev(
         Mount.NtRoot = *DevRoot;
         if (LxNtPath(&Mount, Nodes[Index].Name, &Path) == 0)
         {
-            LxNtCreateNode(&Path, Nodes[Index].Mode, ((ULONG64)Nodes[Index].Major << 32) | Nodes[Index].Minor,
+            LxNtCreateNode(&Path, Nodes[Index].Mode, 0, 0, ((ULONG64)Nodes[Index].Major << 32) | Nodes[Index].Minor,
                            Nodes[Index].Link);
             LxFreePaged(Path.Buffer);
         }
@@ -780,7 +791,7 @@ LxPopulateDev(
         RtlStringCbPrintfA(Name, sizeof(Name), "bus/usb/%03lu/%03lu", Bus, Devnum);
         if (LxNtPath(&Mount, Name, &Path) == 0)
         {
-            LxNtCreateNode(&Path, LX_S_IFCHR | 0664,
+            LxNtCreateNode(&Path, LX_S_IFCHR | 0664, 0, 0,
                            ((ULONG64)LX_USB_DEVICE_MAJOR << 32) | ((Bus - 1) * 128 + (Devnum - 1)), NULL);
             LxFreePaged(Path.Buffer);
         }
@@ -3375,7 +3386,10 @@ LxVfsOpenNode(
 
     if (!Node->Exists)
     {
-        LxNtWriteLxAttributes(Handle, LX_S_IFREG | (Mode & ~Process->Umask & 07777), 0, 0, 0, FALSE);
+        ULONG NewMode = LX_S_IFREG | (Mode & ~Process->Umask & 07777), Uid, Gid;
+
+        LxVfsNewOwner(Process, Node->Path, &NewMode, &Uid, &Gid);
+        LxNtWriteLxAttributes(Handle, NewMode, Uid, Gid, 0, FALSE);
         LxVcacheInvalidate();
         LxInotifyEvent(Process, Node->Path, 0x00000100, FALSE);
     }
@@ -3440,6 +3454,24 @@ LxVfsOpenResolve(
     Error = LxLookup(Process, DirFd, Path, LookupFlags, &Node);
     if (Error != 0)
         return Error;
+
+    if ((Resolve & LX_LOOKUP_ACCESS) && !(Flags & LX_O_PATH))
+    {
+        ULONG Mask = ((Flags & LX_O_ACCMODE) == LX_O_RDONLY) ? LX_MAY_READ :
+                     ((Flags & LX_O_ACCMODE) == LX_O_WRONLY) ? LX_MAY_WRITE : (LX_MAY_READ | LX_MAY_WRITE);
+
+        if (Flags & LX_O_TRUNC)
+            Mask |= LX_MAY_WRITE;
+        if (Node.Exists && (Node.Type != LX_S_IFLNK) && !((Node.Type == LX_S_IFDIR) && (Mask & LX_MAY_WRITE)))
+            Error = LxVfsNodePermission(Process, &Node, Mask);
+        else if (!Node.Exists && (Flags & LX_O_CREAT))
+            Error = LxVfsParentPermission(Process, Node.Path, LX_MAY_WRITE | LX_MAY_EXEC, NULL);
+        if (Error != 0)
+        {
+            LxNodeFree(&Node);
+            return Error;
+        }
+    }
 
     Error = LxVfsOpenNode(Process, &Node, Flags, Mode, File);
     LxNodeFree(&Node);
@@ -3565,6 +3597,121 @@ LxVfsStatNode(
     return Error;
 }
 
+static
+BOOLEAN
+LxVfsDacBypass(
+    _In_ PLX_PROCESS Process)
+{
+    return (LxCredUserNs(Process)->Parent == NULL) && LxCapable(Process, LX_CAP_DAC_OVERRIDE);
+}
+
+LONG
+LxVfsNodePermission(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_NODE Node,
+    _In_ ULONG Mask)
+{
+    LX_STAT Stat;
+    LONG Error;
+
+    if ((Mask == 0) || (Node->Mount == NULL) || !Node->Exists)
+        return 0;
+    if ((!(Mask & LX_MAY_EXEC) || (Node->Type == LX_S_IFDIR)) && LxVfsDacBypass(Process))
+        return 0;
+    Error = LxVfsStatNode(Process, Node, &Stat);
+    if (Error != 0)
+        return Error;
+    return LxPermission(Process, Stat.Mode, Stat.Uid, Stat.Gid, Mask);
+}
+
+LONG
+LxVfsParentPermission(
+    _In_ PLX_PROCESS Process,
+    _In_ PCSTR Path,
+    _In_ ULONG Mask,
+    _Out_opt_ PLX_STAT ParentStat)
+{
+    LX_NODE Parent;
+    LX_STAT Stat;
+    PSTR Copy, Slash;
+    LONG Error;
+
+    if ((ParentStat == NULL) && LxVfsDacBypass(Process))
+        return 0;
+    Copy = LxStrDup(Path);
+    if (Copy == NULL)
+        return -LX_ENOMEM;
+    Slash = strrchr(Copy, '/');
+    if ((Slash == NULL) || (Slash == Copy))
+        Copy[1] = '\0';
+    else
+        *Slash = '\0';
+    RtlZeroMemory(&Parent, sizeof(Parent));
+    Error = LxLookupFinish(Process, &Parent, Copy, TRUE, LX_S_IFDIR, NULL);
+    if (Error != 0)
+        return Error;
+    Error = (Parent.Mount != NULL) ? LxVfsStatNode(Process, &Parent, &Stat) : -LX_ENOENT;
+    LxNodeFree(&Parent);
+    if (Error != 0)
+        return Error;
+    if (ParentStat != NULL)
+        *ParentStat = Stat;
+    return LxPermission(Process, Stat.Mode, Stat.Uid, Stat.Gid, Mask);
+}
+
+LONG
+LxVfsMayDelete(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_NODE Node)
+{
+    LX_STAT Parent, Stat;
+    LONG Error;
+
+    if (LxVfsDacBypass(Process) && LxCapable(Process, LX_CAP_FOWNER))
+        return 0;
+    Error = LxVfsParentPermission(Process, Node->Path, LX_MAY_WRITE | LX_MAY_EXEC, &Parent);
+    if (Error != 0)
+        return Error;
+    Error = LxVfsStatNode(Process, Node, &Stat);
+    if (Error != 0)
+        return Error;
+    if (!LxIdsMapped(Process, Stat.Uid, Stat.Gid))
+        return -LX_EPERM;
+    if ((Parent.Mode & LX_S_ISVTX) && (Stat.Uid != Process->Fsuid) && (Parent.Uid != Process->Fsuid) &&
+        !LxCapableWrtIds(Process, Stat.Uid, Stat.Gid, LX_CAP_FOWNER))
+    {
+        return -LX_EPERM;
+    }
+    return 0;
+}
+
+static
+VOID
+LxVfsNewOwner(
+    _In_ PLX_PROCESS Process,
+    _In_ PCSTR Path,
+    _Inout_ PULONG Mode,
+    _Out_ PULONG Uid,
+    _Out_ PULONG Gid)
+{
+    LX_STAT Parent;
+
+    *Uid = Process->Fsuid;
+    *Gid = Process->Fsgid;
+    if ((LxVfsParentPermission(Process, Path, 0, &Parent) != 0) || !(Parent.Mode & LX_S_ISGID))
+        return;
+    *Gid = Parent.Gid;
+    if ((*Mode & LX_S_IFMT) == LX_S_IFDIR)
+    {
+        *Mode |= LX_S_ISGID;
+    }
+    else if (((*Mode & (LX_S_ISGID | LX_S_IXGRP)) == (LX_S_ISGID | LX_S_IXGRP)) && !LxInGroup(Process, Parent.Gid) &&
+             !LxCapableWrtIds(Process, Parent.Uid, Parent.Gid, LX_CAP_FSETID))
+    {
+        *Mode &= ~LX_S_ISGID;
+    }
+}
+
 LONG
 LxVfsMkdir(
     _In_ PLX_PROCESS Process,
@@ -3572,20 +3719,26 @@ LxVfsMkdir(
     _In_ ULONG Mode)
 {
     HANDLE Handle;
+    ULONG Uid, Gid;
     LONG Error;
 
     if (Node->Exists)
         return -LX_EEXIST;
+    Error = LxVfsParentPermission(Process, Node->Path, LX_MAY_WRITE | LX_MAY_EXEC, NULL);
+    if (Error != 0)
+        return Error;
     if (Node->Mount->Kind != LxFsNt)
         return LxSynthMkdir(Process, Node);
     if (Node->Mount->Flags & LX_MS_RDONLY)
         return -LX_EROFS;
 
+    Mode = LX_S_IFDIR | (Mode & ~Process->Umask & 07777);
+    LxVfsNewOwner(Process, Node->Path, &Mode, &Uid, &Gid);
     Error = LxNtOpenHandle(&Node->NtPath, FILE_LIST_DIRECTORY | FILE_WRITE_EA | FILE_READ_EA, FILE_CREATE,
                            FILE_DIRECTORY_FILE, FILE_ATTRIBUTE_NORMAL, &Handle);
     if (Error != 0)
         return Error;
-    LxNtWriteLxAttributes(Handle, LX_S_IFDIR | (Mode & ~Process->Umask & 07777), 0, 0, 0, FALSE);
+    LxNtWriteLxAttributes(Handle, Mode, Uid, Gid, 0, FALSE);
     ZwClose(Handle);
     LxVcacheInvalidate();
     LxInotifyEvent(Process, Node->Path, 0x00000100 | 0x40000000, FALSE);
@@ -3599,11 +3752,14 @@ LxVfsMknod(
     _In_ ULONG Mode,
     _In_ ULONG64 Device)
 {
-    ULONG Type = Mode & LX_S_IFMT;
+    ULONG Type = Mode & LX_S_IFMT, Uid, Gid;
     LONG Error;
 
     if (Node->Exists)
         return -LX_EEXIST;
+    Error = LxVfsParentPermission(Process, Node->Path, LX_MAY_WRITE | LX_MAY_EXEC, NULL);
+    if (Error != 0)
+        return Error;
     if (Node->Mount->Kind != LxFsNt)
         return -LX_EPERM;
     if (Type == 0)
@@ -3615,7 +3771,9 @@ LxVfsMknod(
             return Error;
     }
 
-    Error = LxNtCreateNode(&Node->NtPath, Type | (Mode & ~Process->Umask & 07777), Device, NULL);
+    Mode = Type | (Mode & ~Process->Umask & 07777);
+    LxVfsNewOwner(Process, Node->Path, &Mode, &Uid, &Gid);
+    Error = LxNtCreateNode(&Node->NtPath, Mode, Uid, Gid, Device, NULL);
     LxVcacheInvalidate();
     if (Error == 0)
         LxInotifyEvent(Process, Node->Path, 0x00000100, FALSE);
@@ -3628,14 +3786,19 @@ LxVfsSymlink(
     _In_ PLX_NODE Node,
     _In_ PCSTR Target)
 {
+    ULONG Mode = LX_S_IFLNK | 0777, Uid, Gid;
     LONG Error;
 
     if (Node->Exists)
         return -LX_EEXIST;
+    Error = LxVfsParentPermission(Process, Node->Path, LX_MAY_WRITE | LX_MAY_EXEC, NULL);
+    if (Error != 0)
+        return Error;
     if (Node->Mount->Kind != LxFsNt)
         return -LX_EPERM;
 
-    Error = LxNtCreateNode(&Node->NtPath, LX_S_IFLNK | 0777, 0, Target);
+    LxVfsNewOwner(Process, Node->Path, &Mode, &Uid, &Gid);
+    Error = LxNtCreateNode(&Node->NtPath, LX_S_IFLNK | 0777, Uid, Gid, 0, Target);
     LxVcacheInvalidate();
     if (Error == 0)
         LxInotifyEvent(Process, Node->Path, 0x00000100, FALSE);
@@ -3725,6 +3888,9 @@ LxVfsUnlink(
         return -LX_ENOENT;
     if ((Node->Mount->Kind == LxFsMqueue) && !Directory)
         return LxMqUnlinkNamed(Process, Node->Mount->NsFile, (Node->Relative[0] == '/') ? Node->Relative + 1 : Node->Relative);
+    Error = LxVfsMayDelete(Process, Node);
+    if (Error != 0)
+        return Error;
     if (Node->Mount->Kind != LxFsNt)
         return Directory ? LxSynthRmdir(Process, Node) : -LX_EPERM;
     if (Node->Relative[0] == '\0')
@@ -3787,6 +3953,26 @@ LxVfsRename(
         return -LX_EINVAL;
     if (strcmp(From->Path, To->Path) == 0)
         return 0;
+    Error = LxVfsMayDelete(Process, From);
+    if (Error == 0)
+    {
+        if (To->Exists)
+            Error = LxVfsMayDelete(Process, To);
+        else
+            Error = LxVfsParentPermission(Process, To->Path, LX_MAY_WRITE | LX_MAY_EXEC, NULL);
+    }
+    if ((Error == 0) && (From->Type == LX_S_IFDIR))
+    {
+        PCSTR FromSlash = strrchr(From->Path, '/'), ToSlash = strrchr(To->Path, '/');
+
+        if ((FromSlash - From->Path != ToSlash - To->Path) ||
+            (strncmp(From->Path, To->Path, (SIZE_T)(FromSlash - From->Path)) != 0))
+        {
+            Error = LxVfsNodePermission(Process, From, LX_MAY_WRITE);
+        }
+    }
+    if (Error != 0)
+        return Error;
 
     if (To->Exists)
     {
@@ -3845,10 +4031,30 @@ LxVfsLink(
         return -LX_ENOENT;
     if (To->Exists)
         return -LX_EEXIST;
-    if (From->Type == LX_S_IFDIR)
-        return -LX_EPERM;
     if ((From->Mount != To->Mount) || (From->Mount->Kind != LxFsNt))
         return -LX_EXDEV;
+    if (!(LxVfsDacBypass(Process) && LxCapable(Process, LX_CAP_FOWNER)))
+    {
+        LX_STAT Stat;
+
+        Error = LxVfsStatNode(Process, From, &Stat);
+        if (Error != 0)
+            return Error;
+        if (!LxIdsMapped(Process, Stat.Uid, Stat.Gid))
+            return -LX_EPERM;
+        if (!LxOwnerOrCapable(Process, Stat.Uid, Stat.Gid) &&
+            (((Stat.Mode & LX_S_IFMT) != LX_S_IFREG) || (Stat.Mode & LX_S_ISUID) ||
+             ((Stat.Mode & (LX_S_ISGID | LX_S_IXGRP)) == (LX_S_ISGID | LX_S_IXGRP)) ||
+             (LxPermission(Process, Stat.Mode, Stat.Uid, Stat.Gid, LX_MAY_READ | LX_MAY_WRITE) != 0)))
+        {
+            return -LX_EPERM;
+        }
+    }
+    Error = LxVfsParentPermission(Process, To->Path, LX_MAY_WRITE | LX_MAY_EXEC, NULL);
+    if (Error != 0)
+        return Error;
+    if (From->Type == LX_S_IFDIR)
+        return -LX_EPERM;
 
     Error = LxNtOpenHandle(&From->NtPath, FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES, FILE_OPEN, 0, 0, &Handle);
     if (Error != 0)
@@ -3930,6 +4136,38 @@ LxVfsSetAttributes(
     if (OldGid == MAXULONG)
         OldGid = 0;
 
+    Error = 0;
+    if ((Uid != MAXULONG) && !((Process->Fsuid == OldUid) && (Uid == OldUid)) &&
+        !LxCapableWrtIds(Process, OldUid, OldGid, LX_CAP_CHOWN))
+    {
+        Error = -LX_EPERM;
+    }
+    else if ((Gid != MAXULONG) && !((Process->Fsuid == OldUid) && ((Gid == OldGid) || LxInGroup(Process, Gid))) &&
+             !LxCapableWrtIds(Process, OldUid, OldGid, LX_CAP_CHOWN))
+    {
+        Error = -LX_EPERM;
+    }
+    else if ((Mode != MAXULONG) && !LxOwnerOrCapable(Process, OldUid, OldGid))
+    {
+        Error = -LX_EPERM;
+    }
+    if (Error != 0)
+    {
+        if (Close)
+            ZwClose(Handle);
+        return Error;
+    }
+    if ((Mode != MAXULONG) && !LxInGroup(Process, (Gid != MAXULONG) ? Gid : OldGid) &&
+        !LxCapableWrtIds(Process, OldUid, OldGid, LX_CAP_FSETID))
+    {
+        Mode &= ~LX_S_ISGID;
+    }
+    if (((Uid != MAXULONG) || (Gid != MAXULONG)) && ((OldMode & LX_S_IFMT) != LX_S_IFDIR))
+    {
+        OldMode &= ~LX_S_ISUID;
+        if (OldMode & LX_S_IXGRP)
+            OldMode &= ~LX_S_ISGID;
+    }
     if (Mode != MAXULONG)
         OldMode = (OldMode & LX_S_IFMT) | (Mode & 07777);
     if (Uid != MAXULONG)
