@@ -904,15 +904,20 @@ Ndis6FilterTerminalStatus(
         if (LinkState != NULL &&
             StatusIndication->StatusBufferSize >= sizeof(NDIS_LINK_STATE))
         {
+            NDIS_MEDIA_CONNECT_STATE PreviousState = Ext->GeneralAttrs.MediaConnectState;
+
             DbgPrint("NDIS6: LINK_STATE adapter=%p connect=%d rx=%llu tx=%llu\n", Adapter, LinkState->MediaConnectState, LinkState->RcvLinkSpeed, LinkState->XmitLinkSpeed);
             Ext->GeneralAttrs.MediaConnectState = LinkState->MediaConnectState;
             Ext->GeneralAttrs.MediaDuplexState  = LinkState->MediaDuplexState;
             Ext->GeneralAttrs.RcvLinkSpeed      = LinkState->RcvLinkSpeed;
             Ext->GeneralAttrs.XmitLinkSpeed     = LinkState->XmitLinkSpeed;
 
-            LegacyStatus = (LinkState->MediaConnectState == MediaConnectStateConnected)
-                ? NDIS_STATUS_MEDIA_CONNECT
-                : NDIS_STATUS_MEDIA_DISCONNECT;
+            if (LinkState->MediaConnectState != PreviousState)
+            {
+                LegacyStatus = (LinkState->MediaConnectState == MediaConnectStateConnected)
+                    ? NDIS_STATUS_MEDIA_CONNECT
+                    : NDIS_STATUS_MEDIA_DISCONNECT;
+            }
         }
         break;
     }

@@ -3080,14 +3080,22 @@ Ndis6WdiHandleLinkState(
 {
     NDIS6_WDI_TLV Tlv;
     BOOLEAN Associated;
+    BOOLEAN SpeedChanged;
+    ULONG64 TxLinkSpeed;
+    ULONG64 RxLinkSpeed;
     KIRQL OldIrql;
 
     if (!Ndis6WdiTlvFind(Tlvs, Length, WDI_TLV_LINK_STATE_CHANGE_PARAMETERS, &Tlv) || Tlv.Length < 15)
         return;
 
+    TxLinkSpeed = (ULONG64)Ndis6WdiRead32(Tlv.Value + 6) * 1000;
+    RxLinkSpeed = (ULONG64)Ndis6WdiRead32(Tlv.Value + 10) * 1000;
+
     KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
-    Wdi->Dot11.TxLinkSpeed = (ULONG64)Ndis6WdiRead32(Tlv.Value + 6) * 1000;
-    Wdi->Dot11.RxLinkSpeed = (ULONG64)Ndis6WdiRead32(Tlv.Value + 10) * 1000;
+    SpeedChanged = Wdi->Dot11.TxLinkSpeed != TxLinkSpeed ||
+                   Wdi->Dot11.RxLinkSpeed != RxLinkSpeed;
+    Wdi->Dot11.TxLinkSpeed = TxLinkSpeed;
+    Wdi->Dot11.RxLinkSpeed = RxLinkSpeed;
     Wdi->Dot11.LinkQuality = Tlv.Value[14];
     Associated = Wdi->Dot11.Associated;
     KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
@@ -3095,7 +3103,8 @@ Ndis6WdiHandleLinkState(
     if (!Associated)
         return;
 
-    Ndis6WdiIndicateLinkState(Wdi, TRUE);
+    if (SpeedChanged)
+        Ndis6WdiIndicateLinkState(Wdi, TRUE);
     Ndis6WdiIndicateLinkQuality(Wdi, Tlv.Value, Tlv.Value[14]);
 }
 
