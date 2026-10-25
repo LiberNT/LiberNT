@@ -4,6 +4,7 @@
 
 extern void func_ActCtxWithXmlNamespaces(void);
 extern void func_ApiSetCoreSynch(void);
+extern void func_BaseSetLastNTError(void);
 extern void func_Arm64ThreadContext(void);
 extern void func_ConsoleAlias(void);
 extern void func_ConsoleCP(void);
@@ -92,6 +93,7 @@ const struct test winetest_testlist[] =
     { "SetFileAllocationInfo", func_SetFileAllocationInfo },
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },
+    { "BaseSetLastNTError",          func_BaseSetLastNTError },
     { "Arm64ThreadContext",          func_Arm64ThreadContext },
     { "ConsoleAlias", func_ConsoleAlias },
     { "ConsoleCP",                   func_ConsoleCP },
