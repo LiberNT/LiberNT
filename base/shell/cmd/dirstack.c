@@ -118,6 +118,20 @@ INT CommandPushd (LPTSTR rest)
 
     if (rest[0] != _T('\0'))
     {
+        LPTSTR p;
+        BOOL bQuoted = FALSE;
+
+        for (p = rest; *p; p++)
+        {
+            if (*p == _T('"'))
+                bQuoted = !bQuoted;
+            else if (*p == _T('/') && !bQuoted)
+            {
+                error_syntax(NULL);
+                return 1;
+            }
+        }
+
         if (!SetRootPath(NULL, rest))
             return 1;
     }
