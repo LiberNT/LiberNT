@@ -1489,7 +1489,7 @@ EnumStart:
         {
             ULONG ix;
 
-            for (ix = 0; ix < 3; ++ix)
+            for (ix = 0; ix < 4; ++ix)
             {
                 if (ix != 0)
                 {
