@@ -566,8 +566,6 @@ LxFileWrite(
         return -LX_EBADF;
     if (File->Ops->Write == NULL)
         return -LX_EINVAL;
-    if (Length == 0)
-        return 0;
     if (Length > 0x7FFFF000)
         Length = 0x7FFFF000;
     Result = File->Ops->Write(File, Buffer, Length, Offset);

@@ -999,6 +999,8 @@ LxWritePidTimensOffsets(
             Error = -LX_EINVAL;
         Count++;
     }
+    if (Count == 0)
+        Error = -LX_EINVAL;
     if (Error != 0)
         return Error;
     if (Current == NULL)
@@ -2066,6 +2068,8 @@ LxWriteName(
     ULONG Count = Length;
 
     UNREFERENCED_PARAMETER(File);
+    if (Length == 0)
+        return 0;
     if (Current == NULL)
         return -LX_ESRCH;
     while ((Count != 0) && (Data[Count - 1] == '\n'))
@@ -2141,6 +2145,8 @@ LxWriteNsLastPid(
     UNREFERENCED_PARAMETER(File);
     if (Current == NULL)
         return -LX_ESRCH;
+    if (Length == 0)
+        return 0;
     Error = LxParseWrittenNumber(Data, Length, &Value);
     return (Error != 0) ? Error : LxPidNsSetLastPid(Current->Process, Value);
 }
@@ -2158,6 +2164,8 @@ LxWriteMqLimit(
 
     if (Current == NULL)
         return -LX_ESRCH;
+    if (Length == 0)
+        return 0;
     Error = LxParseWrittenNumber(Data, Length, &Value);
     return (Error != 0) ? Error : LxMqSetLimit(Current->Process, Which, Value);
 }
@@ -2237,7 +2245,8 @@ LxWriteTrace(
     PCSTR Cursor = Data;
 
     UNREFERENCED_PARAMETER(File);
-    UNREFERENCED_PARAMETER(Length);
+    if (Length == 0)
+        return 0;
     if (Current == NULL)
         return -LX_ESRCH;
     while ((*Cursor >= '0') && (*Cursor <= '9'))
@@ -2300,6 +2309,8 @@ LxWriteOverflowId(
 
     if (Current == NULL)
         return -LX_ESRCH;
+    if (Length == 0)
+        return 0;
     Error = LxParseWrittenNumber(Data, Length, &Value);
     return (Error != 0) ? Error : LxCredSetOverflowId(Current->Process, Group, Value);
 }
@@ -2351,6 +2362,8 @@ LxWriteMaxUserNamespaces(
     UNREFERENCED_PARAMETER(File);
     if (Current == NULL)
         return -LX_ESRCH;
+    if (Length == 0)
+        return 0;
     Error = LxParseWrittenNumber(Data, Length, &Value);
     return (Error != 0) ? Error : LxUserNsSetMax(Current->Process, Value);
 }
