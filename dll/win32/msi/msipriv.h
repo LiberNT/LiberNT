@@ -511,6 +511,7 @@ typedef struct tagMSISUMMARYINFO
     PROPVARIANT property[MSI_MAX_PROPS];
 #ifdef __REACTOS__
     DWORD updated;
+    DWORD extra_props;
 #endif
 } MSISUMMARYINFO;
 

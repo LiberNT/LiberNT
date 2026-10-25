@@ -174,14 +174,14 @@ static UINT propvar_changetype(PROPVARIANT *changed, PROPVARIANT *property, VART
 }
 
 #ifdef __REACTOS__
-static void read_properties_from_data( PROPVARIANT *prop, LPBYTE data, DWORD sz )
+static DWORD read_properties_from_data( PROPVARIANT *prop, LPBYTE data, DWORD sz )
 {
     struct property_section_header *section_hdr = (struct property_section_header *)data;
     struct property_id_offset *idofs = (struct property_id_offset *)&data[SECT_HDR_SIZE];
     struct property_data *propdata;
     PROPVARIANT property, changed;
     UINT type, codepage = CP_ACP;
-    DWORD i, size, count, len;
+    DWORD i, size, count, len, extra = 0;
     char *str;
 
     count = section_hdr->cProperties;
@@ -200,7 +200,10 @@ static void read_properties_from_data( PROPVARIANT *prop, LPBYTE data, DWORD sz 
     for( i = 0; i < count; i++ )
     {
         if( idofs[i].propid >= MSI_MAX_PROPS )
+        {
+            extra++;
             continue;
+        }
 
         type = get_type( idofs[i].propid );
         if( type == VT_EMPTY || idofs[i].dwOffset > sz - 2 * sizeof(DWORD) )
@@ -246,6 +249,7 @@ static void read_properties_from_data( PROPVARIANT *prop, LPBYTE data, DWORD sz 
         free_prop( &prop[ idofs[i].propid ] );
         prop[ idofs[i].propid ] = property;
     }
+    return extra;
 }
 #else
 /* FIXME: doesn't deal with endian conversion */
@@ -385,7 +389,11 @@ static UINT load_summary_info( MSISUMMARYINFO *si, IStream *stm )
     sz = section_hdr.cbSection - SECT_HDR_SIZE;
     r = IStream_Read( stm, &data[ SECT_HDR_SIZE ], sz, &count );
     if( SUCCEEDED(r) && count == sz )
+#ifdef __REACTOS__
+        si->extra_props = read_properties_from_data( si->property, data, sz + SECT_HDR_SIZE );
+#else
         read_properties_from_data( si->property, data, sz + SECT_HDR_SIZE );
+#endif
     else
         ERR( "failed to read properties %lu %lu\n", count, sz );
 
@@ -731,7 +739,11 @@ UINT WINAPI MsiSummaryInfoGetPropertyCount( MSIHANDLE hSummaryInfo, UINT *pCount
     }
 
     if( pCount )
+#ifdef __REACTOS__
+        *pCount = get_property_count( si->property ) + si->extra_props;
+#else
         *pCount = get_property_count( si->property );
+#endif
     msiobj_release( &si->hdr );
 
     return ERROR_SUCCESS;
