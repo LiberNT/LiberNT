@@ -533,6 +533,661 @@ static INVOKEKIND invoke_kind_for_func(function_type_t t)
     }
 }
 
+#ifdef __REACTOS__
+typedef struct {
+    MEMBERID memid;
+    INVOKEKIND invkind;
+    BOOL is_sub;
+    unsigned code_off;
+    unsigned name_cnt;
+    BSTR *names;
+} class_typeinfo_func_t;
+
+typedef struct {
+    MEMBERID memid;
+    BSTR name;
+} class_typeinfo_var_t;
+
+typedef struct {
+    ITypeInfo ITypeInfo_iface;
+    LONG ref;
+    BSTR name;
+    UINT func_cnt;
+    class_typeinfo_func_t *funcs;
+    UINT var_cnt;
+    class_typeinfo_var_t *vars;
+} ClassTypeInfo;
+
+static inline ClassTypeInfo *ClassTypeInfo_from_ITypeInfo(ITypeInfo *iface)
+{
+    return CONTAINING_RECORD(iface, ClassTypeInfo, ITypeInfo_iface);
+}
+
+static const class_typeinfo_func_t *class_typeinfo_find_func(const ClassTypeInfo *This, MEMBERID memid)
+{
+    UINT i;
+
+    for (i = 0; i < This->func_cnt; i++)
+        if (This->funcs[i].memid == memid)
+            return &This->funcs[i];
+    return NULL;
+}
+
+static const class_typeinfo_var_t *class_typeinfo_find_var(const ClassTypeInfo *This, MEMBERID memid)
+{
+    UINT i;
+
+    for (i = 0; i < This->var_cnt; i++)
+        if (This->vars[i].memid == memid)
+            return &This->vars[i];
+    return NULL;
+}
+
+static BOOL class_typeinfo_has_member(const ClassTypeInfo *This, MEMBERID memid)
+{
+    return class_typeinfo_find_func(This, memid) || class_typeinfo_find_var(This, memid);
+}
+
+static HRESULT WINAPI ClassTypeInfo_QueryInterface(ITypeInfo *iface, REFIID riid, void **ppv)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+
+    if (IsEqualGUID(&IID_IUnknown, riid) || IsEqualGUID(&IID_ITypeInfo, riid))
+    {
+        *ppv = &This->ITypeInfo_iface;
+        ITypeInfo_AddRef(&This->ITypeInfo_iface);
+        return S_OK;
+    }
+
+    WARN("(%p)->(%s %p)\n", This, debugstr_guid(riid), ppv);
+    *ppv = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI ClassTypeInfo_AddRef(ITypeInfo *iface)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    LONG ref = InterlockedIncrement(&This->ref);
+
+    TRACE("(%p) ref=%ld\n", This, ref);
+
+    return ref;
+}
+
+static void free_class_typeinfo(ClassTypeInfo *This)
+{
+    UINT i, j;
+
+    for (i = 0; i < This->func_cnt; i++)
+    {
+        for (j = 0; j < This->funcs[i].name_cnt; j++)
+            SysFreeString(This->funcs[i].names[j]);
+        free(This->funcs[i].names);
+    }
+    for (i = 0; i < This->var_cnt; i++)
+        SysFreeString(This->vars[i].name);
+    SysFreeString(This->name);
+    free(This->funcs);
+    free(This->vars);
+    free(This);
+}
+
+static ULONG WINAPI ClassTypeInfo_Release(ITypeInfo *iface)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    LONG ref = InterlockedDecrement(&This->ref);
+
+    TRACE("(%p) ref=%ld\n", This, ref);
+
+    if (!ref)
+        free_class_typeinfo(This);
+    return ref;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetTypeAttr(ITypeInfo *iface, TYPEATTR **ppTypeAttr)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    TYPEATTR *attr;
+
+    TRACE("(%p)->(%p)\n", This, ppTypeAttr);
+
+    if (!ppTypeAttr) return E_INVALIDARG;
+
+    attr = calloc(1, sizeof(*attr));
+    if (!attr) return E_OUTOFMEMORY;
+
+    attr->guid = GUID_VBScriptTypeInfo;
+    attr->lcid = LOCALE_USER_DEFAULT;
+    attr->memidConstructor = MEMBERID_NIL;
+    attr->memidDestructor = MEMBERID_NIL;
+    attr->cbSizeInstance = 4;
+    attr->typekind = TKIND_DISPATCH;
+    attr->cFuncs = This->func_cnt;
+    attr->cVars = This->var_cnt;
+    attr->cImplTypes = 1;
+    attr->cbSizeVft = sizeof(IDispatchVtbl);
+    attr->cbAlignment = 4;
+    attr->wTypeFlags = TYPEFLAG_FDISPATCHABLE;
+    attr->wMajorVerNum = VBSCRIPT_MAJOR_VERSION;
+    attr->wMinorVerNum = VBSCRIPT_MINOR_VERSION;
+
+    *ppTypeAttr = attr;
+    return S_OK;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetTypeComp(ITypeInfo *iface, ITypeComp **ppTComp)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+
+    FIXME("(%p)->(%p)\n", This, ppTComp);
+
+    if (!ppTComp) return E_INVALIDARG;
+    *ppTComp = NULL;
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetFuncDesc(ITypeInfo *iface, UINT index, FUNCDESC **ppFuncDesc)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    const class_typeinfo_func_t *func;
+    FUNCDESC *desc;
+    UINT i;
+
+    TRACE("(%p)->(%u %p)\n", This, index, ppFuncDesc);
+
+    if (!ppFuncDesc) return E_INVALIDARG;
+    if (index >= This->func_cnt) return TYPE_E_ELEMENTNOTFOUND;
+    func = &This->funcs[index];
+
+    desc = calloc(1, sizeof(*desc) + sizeof(ELEMDESC) * (func->name_cnt - 1));
+    if (!desc) return E_OUTOFMEMORY;
+
+    desc->memid = func->memid;
+    desc->funckind = FUNC_DISPATCH;
+    desc->invkind = func->invkind;
+    desc->callconv = CC_STDCALL;
+    desc->cParams = func->name_cnt - 1;
+    desc->elemdescFunc.tdesc.vt = func->is_sub ? VT_VOID : VT_VARIANT;
+
+    if (desc->cParams) desc->lprgelemdescParam = (ELEMDESC*)(desc + 1);
+    for (i = 0; i < desc->cParams; i++)
+        desc->lprgelemdescParam[i].tdesc.vt = VT_VARIANT;
+
+    *ppFuncDesc = desc;
+    return S_OK;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetVarDesc(ITypeInfo *iface, UINT index, VARDESC **ppVarDesc)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    VARDESC *desc;
+
+    TRACE("(%p)->(%u %p)\n", This, index, ppVarDesc);
+
+    if (!ppVarDesc) return E_INVALIDARG;
+    if (index >= This->var_cnt) return TYPE_E_ELEMENTNOTFOUND;
+
+    desc = calloc(1, sizeof(*desc));
+    if (!desc) return E_OUTOFMEMORY;
+
+    desc->memid = This->vars[index].memid;
+    desc->varkind = VAR_DISPATCH;
+    desc->elemdescVar.tdesc.vt = VT_VARIANT;
+
+    *ppVarDesc = desc;
+    return S_OK;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetNames(ITypeInfo *iface, MEMBERID memid, BSTR *rgBstrNames,
+        UINT cMaxNames, UINT *pcNames)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    const class_typeinfo_func_t *func;
+    const class_typeinfo_var_t *var;
+    ITypeInfo *disp_typeinfo;
+    HRESULT hr;
+    UINT i, num;
+
+    TRACE("(%p)->(%ld %p %u %p)\n", This, memid, rgBstrNames, cMaxNames, pcNames);
+
+    if (!rgBstrNames || !pcNames) return E_INVALIDARG;
+
+    func = class_typeinfo_find_func(This, memid);
+    var = func ? NULL : class_typeinfo_find_var(This, memid);
+    if (!func && !var)
+    {
+        hr = get_dispatch_typeinfo(&disp_typeinfo);
+        if (FAILED(hr)) return hr;
+
+        return ITypeInfo_GetNames(disp_typeinfo, memid, rgBstrNames, cMaxNames, pcNames);
+    }
+
+    *pcNames = 0;
+    if (!cMaxNames) return S_OK;
+
+    if (var)
+    {
+        if (!(rgBstrNames[0] = SysAllocString(var->name))) return E_OUTOFMEMORY;
+        *pcNames = 1;
+        return S_OK;
+    }
+
+    num = min(cMaxNames, func->name_cnt);
+    for (i = 0; i < num; i++)
+    {
+        if (!(rgBstrNames[i] = SysAllocString(func->names[i])))
+        {
+            while (i) SysFreeString(rgBstrNames[--i]);
+            return E_OUTOFMEMORY;
+        }
+    }
+    *pcNames = num;
+    return S_OK;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetRefTypeOfImplType(ITypeInfo *iface, UINT index, HREFTYPE *pRefType)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+
+    TRACE("(%p)->(%u %p)\n", This, index, pRefType);
+
+    if (!pRefType) return E_INVALIDARG;
+    if (index != 0) return TYPE_E_ELEMENTNOTFOUND;
+
+    *pRefType = 1;
+    return S_OK;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetImplTypeFlags(ITypeInfo *iface, UINT index, INT *pImplTypeFlags)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+
+    TRACE("(%p)->(%u %p)\n", This, index, pImplTypeFlags);
+
+    if (!pImplTypeFlags) return E_INVALIDARG;
+    if (index != 0) return TYPE_E_ELEMENTNOTFOUND;
+
+    *pImplTypeFlags = 0;
+    return S_OK;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetIDsOfNames(ITypeInfo *iface, LPOLESTR *rgszNames, UINT cNames,
+        MEMBERID *pMemId)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    ITypeInfo *disp_typeinfo;
+    HRESULT hr = S_OK;
+    UINT i, j, arg;
+
+    TRACE("(%p)->(%p %u %p)\n", This, rgszNames, cNames, pMemId);
+
+    if (!rgszNames || !cNames || !pMemId) return E_INVALIDARG;
+
+    for (i = 0; i < cNames; i++) pMemId[i] = MEMBERID_NIL;
+
+    for (i = 0; i < This->func_cnt; i++)
+    {
+        const class_typeinfo_func_t *func = &This->funcs[i];
+
+        if (vbs_wcsicmp(rgszNames[0], func->names[0])) continue;
+        pMemId[0] = func->memid;
+
+        for (j = 1; j < cNames; j++)
+        {
+            for (arg = 1; arg < func->name_cnt; arg++)
+                if (!vbs_wcsicmp(rgszNames[j], func->names[arg]))
+                    break;
+            if (arg < func->name_cnt)
+                pMemId[j] = arg - 1;
+            else
+                hr = DISP_E_UNKNOWNNAME;
+        }
+        return hr;
+    }
+
+    for (i = 0; i < This->var_cnt; i++)
+    {
+        if (vbs_wcsicmp(rgszNames[0], This->vars[i].name)) continue;
+        pMemId[0] = This->vars[i].memid;
+        return S_OK;
+    }
+
+    hr = get_dispatch_typeinfo(&disp_typeinfo);
+    if (FAILED(hr)) return hr;
+
+    return ITypeInfo_GetIDsOfNames(disp_typeinfo, rgszNames, cNames, pMemId);
+}
+
+static HRESULT WINAPI ClassTypeInfo_Invoke(ITypeInfo *iface, PVOID pvInstance, MEMBERID memid, WORD wFlags,
+        DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    ITypeInfo *disp_typeinfo;
+    IDispatch *disp;
+    HRESULT hr;
+
+    TRACE("(%p)->(%p %ld %d %p %p %p %p)\n", This, pvInstance, memid, wFlags,
+          pDispParams, pVarResult, pExcepInfo, puArgErr);
+
+    if (!pvInstance) return E_INVALIDARG;
+
+    if (!class_typeinfo_has_member(This, memid))
+    {
+        hr = get_dispatch_typeinfo(&disp_typeinfo);
+        if (FAILED(hr)) return hr;
+
+        return ITypeInfo_Invoke(disp_typeinfo, pvInstance, memid, wFlags, pDispParams,
+                                pVarResult, pExcepInfo, puArgErr);
+    }
+
+    hr = IUnknown_QueryInterface((IUnknown*)pvInstance, &IID_IDispatch, (void**)&disp);
+    if (FAILED(hr)) return hr;
+
+    hr = IDispatch_Invoke(disp, memid, &IID_NULL, LOCALE_USER_DEFAULT, wFlags,
+                          pDispParams, pVarResult, pExcepInfo, puArgErr);
+    IDispatch_Release(disp);
+
+    return hr;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetDocumentation(ITypeInfo *iface, MEMBERID memid, BSTR *pBstrName,
+        BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    const class_typeinfo_func_t *func;
+    const class_typeinfo_var_t *var;
+    ITypeInfo *disp_typeinfo;
+    HRESULT hr;
+
+    TRACE("(%p)->(%ld %p %p %p %p)\n", This, memid, pBstrName, pBstrDocString, pdwHelpContext, pBstrHelpFile);
+
+    if (pBstrDocString) *pBstrDocString = NULL;
+    if (pdwHelpContext) *pdwHelpContext = 0;
+    if (pBstrHelpFile) *pBstrHelpFile = NULL;
+
+    if (memid == MEMBERID_NIL)
+    {
+        if (pBstrName && !(*pBstrName = SysAllocString(This->name)))
+            return E_OUTOFMEMORY;
+        return S_OK;
+    }
+
+    func = class_typeinfo_find_func(This, memid);
+    var = func ? NULL : class_typeinfo_find_var(This, memid);
+    if (!func && !var)
+    {
+        hr = get_dispatch_typeinfo(&disp_typeinfo);
+        if (FAILED(hr)) return hr;
+
+        return ITypeInfo_GetDocumentation(disp_typeinfo, memid, pBstrName, pBstrDocString,
+                                          pdwHelpContext, pBstrHelpFile);
+    }
+
+    if (pBstrName && !(*pBstrName = SysAllocString(func ? func->names[0] : var->name)))
+        return E_OUTOFMEMORY;
+    return S_OK;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetDllEntry(ITypeInfo *iface, MEMBERID memid, INVOKEKIND invKind,
+        BSTR *pBstrDllName, BSTR *pBstrName, WORD *pwOrdinal)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    ITypeInfo *disp_typeinfo;
+    HRESULT hr;
+
+    TRACE("(%p)->(%ld %d %p %p %p)\n", This, memid, invKind, pBstrDllName, pBstrName, pwOrdinal);
+
+    if (pBstrDllName) *pBstrDllName = NULL;
+    if (pBstrName) *pBstrName = NULL;
+    if (pwOrdinal) *pwOrdinal = 0;
+
+    if (!class_typeinfo_has_member(This, memid))
+    {
+        hr = get_dispatch_typeinfo(&disp_typeinfo);
+        if (FAILED(hr)) return hr;
+
+        return ITypeInfo_GetDllEntry(disp_typeinfo, memid, invKind, pBstrDllName, pBstrName, pwOrdinal);
+    }
+    return TYPE_E_BADMODULEKIND;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetRefTypeInfo(ITypeInfo *iface, HREFTYPE hRefType, ITypeInfo **ppTInfo)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    HRESULT hr;
+
+    TRACE("(%p)->(%lx %p)\n", This, hRefType, ppTInfo);
+
+    if (!ppTInfo || (INT)hRefType < 0) return E_INVALIDARG;
+
+    if (hRefType & ~3) return E_FAIL;
+    if (hRefType & 1)
+    {
+        hr = get_dispatch_typeinfo(ppTInfo);
+        if (FAILED(hr)) return hr;
+    }
+    else
+        *ppTInfo = iface;
+
+    ITypeInfo_AddRef(*ppTInfo);
+    return S_OK;
+}
+
+static HRESULT WINAPI ClassTypeInfo_AddressOfMember(ITypeInfo *iface, MEMBERID memid, INVOKEKIND invKind, PVOID *ppv)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    ITypeInfo *disp_typeinfo;
+    HRESULT hr;
+
+    TRACE("(%p)->(%ld %d %p)\n", This, memid, invKind, ppv);
+
+    if (!ppv) return E_INVALIDARG;
+    *ppv = NULL;
+
+    if (!class_typeinfo_has_member(This, memid))
+    {
+        hr = get_dispatch_typeinfo(&disp_typeinfo);
+        if (FAILED(hr)) return hr;
+
+        return ITypeInfo_AddressOfMember(disp_typeinfo, memid, invKind, ppv);
+    }
+    return TYPE_E_BADMODULEKIND;
+}
+
+static HRESULT WINAPI ClassTypeInfo_CreateInstance(ITypeInfo *iface, IUnknown *pUnkOuter, REFIID riid, PVOID *ppvObj)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+
+    TRACE("(%p)->(%p %s %p)\n", This, pUnkOuter, debugstr_guid(riid), ppvObj);
+
+    if (!ppvObj) return E_INVALIDARG;
+
+    *ppvObj = NULL;
+    return TYPE_E_BADMODULEKIND;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetMops(ITypeInfo *iface, MEMBERID memid, BSTR *pBstrMops)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+    ITypeInfo *disp_typeinfo;
+    HRESULT hr;
+
+    TRACE("(%p)->(%ld %p)\n", This, memid, pBstrMops);
+
+    if (!pBstrMops) return E_INVALIDARG;
+
+    if (memid != MEMBERID_NIL && !class_typeinfo_has_member(This, memid))
+    {
+        hr = get_dispatch_typeinfo(&disp_typeinfo);
+        if (FAILED(hr)) return hr;
+
+        return ITypeInfo_GetMops(disp_typeinfo, memid, pBstrMops);
+    }
+
+    *pBstrMops = NULL;
+    return S_OK;
+}
+
+static HRESULT WINAPI ClassTypeInfo_GetContainingTypeLib(ITypeInfo *iface, ITypeLib **ppTLib, UINT *pIndex)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+
+    FIXME("(%p)->(%p %p)\n", This, ppTLib, pIndex);
+
+    return E_NOTIMPL;
+}
+
+static void WINAPI ClassTypeInfo_ReleaseTypeAttr(ITypeInfo *iface, TYPEATTR *pTypeAttr)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+
+    TRACE("(%p)->(%p)\n", This, pTypeAttr);
+
+    free(pTypeAttr);
+}
+
+static void WINAPI ClassTypeInfo_ReleaseFuncDesc(ITypeInfo *iface, FUNCDESC *pFuncDesc)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+
+    TRACE("(%p)->(%p)\n", This, pFuncDesc);
+
+    free(pFuncDesc);
+}
+
+static void WINAPI ClassTypeInfo_ReleaseVarDesc(ITypeInfo *iface, VARDESC *pVarDesc)
+{
+    ClassTypeInfo *This = ClassTypeInfo_from_ITypeInfo(iface);
+
+    TRACE("(%p)->(%p)\n", This, pVarDesc);
+
+    free(pVarDesc);
+}
+
+static const ITypeInfoVtbl ClassTypeInfoVtbl = {
+    ClassTypeInfo_QueryInterface,
+    ClassTypeInfo_AddRef,
+    ClassTypeInfo_Release,
+    ClassTypeInfo_GetTypeAttr,
+    ClassTypeInfo_GetTypeComp,
+    ClassTypeInfo_GetFuncDesc,
+    ClassTypeInfo_GetVarDesc,
+    ClassTypeInfo_GetNames,
+    ClassTypeInfo_GetRefTypeOfImplType,
+    ClassTypeInfo_GetImplTypeFlags,
+    ClassTypeInfo_GetIDsOfNames,
+    ClassTypeInfo_Invoke,
+    ClassTypeInfo_GetDocumentation,
+    ClassTypeInfo_GetDllEntry,
+    ClassTypeInfo_GetRefTypeInfo,
+    ClassTypeInfo_AddressOfMember,
+    ClassTypeInfo_CreateInstance,
+    ClassTypeInfo_GetMops,
+    ClassTypeInfo_GetContainingTypeLib,
+    ClassTypeInfo_ReleaseTypeAttr,
+    ClassTypeInfo_ReleaseFuncDesc,
+    ClassTypeInfo_ReleaseVarDesc
+};
+
+static HRESULT fill_class_typeinfo_func(class_typeinfo_func_t *func, unsigned memid,
+                                        const vbdisp_funcprop_desc_t *fp)
+{
+    function_t *fn;
+    unsigned i;
+
+    func->code_off = ~0u;
+    for (i = 0; i < VBDISP_ANY; i++)
+        if (fp->entries[i])
+            func->code_off = min(func->code_off, fp->entries[i]->code_off);
+
+    if (fp->entries[VBDISP_CALLGET]) fn = fp->entries[VBDISP_CALLGET];
+    else if (fp->entries[VBDISP_LET]) fn = fp->entries[VBDISP_LET];
+    else fn = fp->entries[VBDISP_SET];
+
+    func->memid = memid;
+    func->invkind = invoke_kind_for_func(fn->type);
+    func->is_sub = fn->type == FUNC_SUB;
+    func->name_cnt = fn->arg_cnt + 1;
+    func->names = calloc(func->name_cnt, sizeof(*func->names));
+    if (!func->names) return E_OUTOFMEMORY;
+
+    if (!(func->names[0] = SysAllocString(fp->name))) return E_OUTOFMEMORY;
+    for (i = 0; i < fn->arg_cnt; i++)
+        if (!(func->names[i + 1] = SysAllocString(fn->args[i].name ? fn->args[i].name : L"")))
+            return E_OUTOFMEMORY;
+    return S_OK;
+}
+
+static int __cdecl class_typeinfo_func_cmp(const void *a, const void *b)
+{
+    const class_typeinfo_func_t *fa = a, *fb = b;
+    return fa->code_off < fb->code_off ? -1 : fa->code_off > fb->code_off;
+}
+
+static HRESULT create_class_typeinfo(const class_desc_t *desc, ITypeInfo **out)
+{
+    ClassTypeInfo *type_info;
+    unsigned i, cnt;
+    HRESULT hr;
+
+    *out = NULL;
+
+    if (!(type_info = calloc(1, sizeof(*type_info))))
+        return E_OUTOFMEMORY;
+    type_info->ITypeInfo_iface.lpVtbl = &ClassTypeInfoVtbl;
+    type_info->ref = 1;
+
+    hr = E_OUTOFMEMORY;
+    if (!(type_info->name = SysAllocString(desc->name)))
+        goto fail;
+
+    for (i = 0, cnt = 0; i < desc->func_cnt; i++)
+        if (desc->funcs[i].is_public && desc->funcs[i].name)
+            cnt++;
+    if (cnt && !(type_info->funcs = calloc(cnt, sizeof(*type_info->funcs))))
+        goto fail;
+    for (i = 0; i < desc->func_cnt; i++)
+    {
+        const vbdisp_funcprop_desc_t *fp = &desc->funcs[i];
+        class_typeinfo_func_t *func;
+
+        if (!fp->is_public || !fp->name) continue;
+        if (desc->class_initialize_id && i == desc->class_initialize_id) continue;
+        if (desc->class_terminate_id && i == desc->class_terminate_id) continue;
+        if (!fp->entries[VBDISP_CALLGET] && !fp->entries[VBDISP_LET] && !fp->entries[VBDISP_SET]) continue;
+
+        func = &type_info->funcs[type_info->func_cnt++];
+        if (FAILED(hr = fill_class_typeinfo_func(func, i, fp)))
+            goto fail;
+    }
+    qsort(type_info->funcs, type_info->func_cnt, sizeof(*type_info->funcs), class_typeinfo_func_cmp);
+
+    hr = E_OUTOFMEMORY;
+    for (i = 0, cnt = 0; i < desc->prop_cnt; i++)
+        if (desc->props[i].is_public && desc->props[i].name)
+            cnt++;
+    if (cnt && !(type_info->vars = calloc(cnt, sizeof(*type_info->vars))))
+        goto fail;
+    for (i = 0; i < desc->prop_cnt; i++)
+    {
+        class_typeinfo_var_t *var;
+
+        if (!desc->props[i].is_public || !desc->props[i].name) continue;
+        var = &type_info->vars[type_info->var_cnt++];
+        var->memid = desc->func_cnt + i;
+        if (!(var->name = SysAllocString(desc->props[i].name)))
+            goto fail;
+    }
+
+    *out = &type_info->ITypeInfo_iface;
+    return S_OK;
+
+fail:
+    free_class_typeinfo(type_info);
+    return hr;
+}
+
+#else
 static HRESULT add_class_member_func(ICreateTypeInfo *cti, unsigned slot, DISPID memid,
                                      const vbdisp_funcprop_desc_t *fp, vbdisp_invoke_type_t which)
 {
@@ -651,6 +1306,7 @@ done:
     return hr;
 }
 
+#endif
 static HRESULT WINAPI DispatchEx_GetTypeInfo(IDispatchEx *iface, UINT iTInfo, LCID lcid,
                                               ITypeInfo **ppTInfo)
 {
@@ -663,7 +1319,11 @@ static HRESULT WINAPI DispatchEx_GetTypeInfo(IDispatchEx *iface, UINT iTInfo, LC
     if(iTInfo) return DISP_E_BADINDEX;
     if(!This->desc) return E_UNEXPECTED;
 
+#ifdef __REACTOS__
+    return create_class_typeinfo(This->desc, ppTInfo);
+#else
     return build_class_typeinfo((class_desc_t*)This->desc, ppTInfo);
+#endif
 }
 
 static HRESULT WINAPI DispatchEx_GetIDsOfNames(IDispatchEx *iface, REFIID riid,
