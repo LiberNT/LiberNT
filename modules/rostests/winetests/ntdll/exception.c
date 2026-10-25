@@ -8317,7 +8317,11 @@ static PVOID CALLBACK test_consolidate_dummy(EXCEPTION_RECORD *rec)
     return (PVOID)rec->ExceptionInformation[2];
 }
 
+#if defined(__REACTOS__) && defined(__clang__)
+__attribute__((optnone)) static void test_restore_context(void)
+#else
 static void test_restore_context(void)
+#endif
 {
     EXCEPTION_RECORD rec;
     _JUMP_BUFFER buf;
