@@ -122,6 +122,9 @@ struct connection_profile
 {
     IConnectionProfile IConnectionProfile_iface;
     IConnectionProfile2 IConnectionProfile2_iface;
+#ifdef __REACTOS__
+    IAgileObject IAgileObject_iface;
+#endif
     LONG ref;
 
     INetworkListManager *network_list_manager;
@@ -138,10 +141,23 @@ static HRESULT WINAPI connection_profile_QueryInterface( IConnectionProfile *ifa
 
     TRACE( "iface %p, iid %s, out %p.\n", iface, debugstr_guid( iid ), out );
 
+#ifdef __REACTOS__
+    if (IsEqualGUID( iid, &IID_IAgileObject ))
+    {
+        *out = &impl->IAgileObject_iface;
+        IConnectionProfile_AddRef( &impl->IConnectionProfile_iface );
+        return S_OK;
+    }
+
+    if (IsEqualGUID( iid, &IID_IUnknown ) ||
+        IsEqualGUID( iid, &IID_IInspectable ) ||
+        IsEqualGUID( iid, &IID_IConnectionProfile ))
+#else
     if (IsEqualGUID( iid, &IID_IUnknown ) ||
         IsEqualGUID( iid, &IID_IInspectable ) ||
         IsEqualGUID( iid, &IID_IAgileObject ) ||
         IsEqualGUID( iid, &IID_IConnectionProfile ))
+#endif
     {
         *out = &impl->IConnectionProfile_iface;
         IInspectable_AddRef( *out );
@@ -158,6 +174,38 @@ static HRESULT WINAPI connection_profile_QueryInterface( IConnectionProfile *ifa
     *out = NULL;
     return E_NOINTERFACE;
 }
+
+#ifdef __REACTOS__
+static inline struct connection_profile *impl_from_IAgileObject( IAgileObject *iface )
+{
+    return CONTAINING_RECORD( iface, struct connection_profile, IAgileObject_iface );
+}
+
+static HRESULT WINAPI connection_profile_agile_QueryInterface( IAgileObject *iface, REFIID iid, void **out )
+{
+    struct connection_profile *impl = impl_from_IAgileObject( iface );
+    return IConnectionProfile_QueryInterface( &impl->IConnectionProfile_iface, iid, out );
+}
+
+static ULONG WINAPI connection_profile_agile_AddRef( IAgileObject *iface )
+{
+    struct connection_profile *impl = impl_from_IAgileObject( iface );
+    return IConnectionProfile_AddRef( &impl->IConnectionProfile_iface );
+}
+
+static ULONG WINAPI connection_profile_agile_Release( IAgileObject *iface )
+{
+    struct connection_profile *impl = impl_from_IAgileObject( iface );
+    return IConnectionProfile_Release( &impl->IConnectionProfile_iface );
+}
+
+static const IAgileObjectVtbl connection_profile_agile_vtbl =
+{
+    connection_profile_agile_QueryInterface,
+    connection_profile_agile_AddRef,
+    connection_profile_agile_Release,
+};
+#endif
 
 static ULONG WINAPI connection_profile_AddRef( IConnectionProfile *iface )
 {
@@ -443,6 +491,9 @@ static HRESULT WINAPI network_information_statics_GetInternetConnectionProfile( 
 
     impl->IConnectionProfile_iface.lpVtbl = &connection_profile_vtbl;
     impl->IConnectionProfile2_iface.lpVtbl = &connection_profile2_vtbl;
+#ifdef __REACTOS__
+    impl->IAgileObject_iface.lpVtbl = &connection_profile_agile_vtbl;
+#endif
     impl->ref = 1;
     impl->network_list_manager = network_list_manager;
 
