@@ -570,14 +570,15 @@ HDA_AllocateDmaBufferWithNotification(
 	PHYSICAL_ADDRESS maxAddr;
 	maxAddr.QuadPart = devData->FdoContext->is64BitOK ? MAXULONG64 : MAXULONG32;
 
-	UINT32 allocSize = (UINT32)RequestedBufferSize;
+	UINT32 bufferSize = (UINT32)min(RequestedBufferSize, (SIZE_T)HDA_MAX_BDL_ENTRIES * PAGE_SIZE);
 	UINT32 allocOffset = 0;
 	UINT32 halfSize = 0;
 	if (NotificationCount == 2) {
-		halfSize = (UINT32)RequestedBufferSize / 2;
+		halfSize = (UINT32)min(RequestedBufferSize / 2, (SIZE_T)(HDA_MAX_BDL_ENTRIES / 2) * PAGE_SIZE);
+		bufferSize = halfSize * 2;
 		allocOffset = PAGE_SIZE - (halfSize % PAGE_SIZE);
-		allocSize = (UINT32)RequestedBufferSize + allocOffset;
 	}
+	UINT32 allocSize = bufferSize + allocOffset;
 
 	PMDL mdl = MmAllocatePagesForMdl(zeroAddr, maxAddr, zeroAddr, allocSize);
 	if (!mdl) {
@@ -591,10 +592,10 @@ HDA_AllocateDmaBufferWithNotification(
 
 	WdfInterruptAcquireLock(devData->FdoContext->Interrupt);
 	stream->mdlBuf = mdl;
-	stream->bufSz = (UINT32)RequestedBufferSize;
+	stream->bufSz = bufferSize;
 
 	*BufferMdl = mdl;
-	*AllocatedBufferSize = RequestedBufferSize;
+	*AllocatedBufferSize = bufferSize;
 	*OffsetFromFirstPage = allocOffset;
 	*StreamId = stream->streamTag;
 
@@ -604,12 +605,12 @@ HDA_AllocateDmaBufferWithNotification(
 
 		//Set up the BDL
 		PHDAC_BDLENTRY bdl = stream->bdl;
-		UINT32 size = (UINT32)RequestedBufferSize;
+		UINT32 size = bufferSize;
 
 		PPFN_NUMBER pfnArray = MmGetMdlPfnArray(mdl);
 		UINT32 offset = allocOffset;
 		while (halfSize > 0) {
-			if (numBlocks > HDA_MAX_BDL_ENTRIES) {
+			if (numBlocks >= HDA_MAX_BDL_ENTRIES) {
 				SklHdAudBusPrint(DEBUG_LEVEL_ERROR, DBG_IOCTL, "%s Too many BDL entries!\n", __func__);
 				numBlocks = HDA_MAX_BDL_ENTRIES;
 				break;
@@ -641,7 +642,7 @@ HDA_AllocateDmaBufferWithNotification(
 		}
 
 		while (size > 0) {
-			if (numBlocks > HDA_MAX_BDL_ENTRIES) {
+			if (numBlocks >= HDA_MAX_BDL_ENTRIES) {
 				SklHdAudBusPrint(DEBUG_LEVEL_ERROR, DBG_IOCTL, "%s Too many BDL entries!\n", __func__);
 				numBlocks = HDA_MAX_BDL_ENTRIES;
 				break;
