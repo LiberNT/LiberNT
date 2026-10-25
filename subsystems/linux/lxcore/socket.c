@@ -401,6 +401,8 @@ LxUnixRead(
         return -LX_ESPIPE;
     if (Thread == NULL)
         return -LX_EINVAL;
+    if (Length == 0)
+        return 0;
     RtlZeroMemory(&Header, sizeof(Header));
     Vector.Base = Buffer;
     Vector.Length = Length;

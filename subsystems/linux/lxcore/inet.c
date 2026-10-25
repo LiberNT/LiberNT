@@ -1797,6 +1797,8 @@ LxInetRead(
     LX_IOVEC Vector;
 
     UNREFERENCED_PARAMETER(Offset);
+    if (Length == 0)
+        return 0;
     RtlZeroMemory(&Header, sizeof(Header));
     Vector.Base = Buffer;
     Vector.Length = Length;

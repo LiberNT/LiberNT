@@ -546,8 +546,6 @@ LxFileRead(
         return -LX_EBADF;
     if (File->Ops->Read == NULL)
         return -LX_EINVAL;
-    if (Length == 0)
-        return 0;
     if (Length > 0x7FFFF000)
         Length = 0x7FFFF000;
     return File->Ops->Read(File, Buffer, Length, Offset);

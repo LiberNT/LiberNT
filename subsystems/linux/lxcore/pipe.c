@@ -114,6 +114,8 @@ LxPipeRead(
 
     if (Offset != NULL)
         return -LX_ESPIPE;
+    if (Length == 0)
+        return 0;
 
     for (;;)
     {
