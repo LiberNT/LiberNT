@@ -474,7 +474,7 @@ DuFmifsCallback(
             break;
         case VOLUMEINUSE:
             Work->Error = ERROR_SHARING_VIOLATION;
-            break;
+            return FALSE;
         case CLUSTERSIZETOOSMALL:
             Work->Error = ERROR_INVALID_PARAMETER;
             break;
