@@ -149,7 +149,7 @@ Arm64ChpeTestAddressRequirements(VOID)
         ok((ULONG_PTR)BaseAddress >= Cases[Index].Low, "Case %lu: base %p below lower bound\n", Index, BaseAddress);
         if (Cases[Index].High)
             ok((ULONG_PTR)BaseAddress + RegionSize - 1 <= Cases[Index].High,
-               "Case %lu: base %p size %Ix exceeds upper bound\n", Index, BaseAddress, RegionSize);
+               "Case %lu: base %p size %Ix exceeds upper bound\n", Index, BaseAddress, (size_t)RegionSize);
         if (Cases[Index].Alignment)
             ok(!((ULONG_PTR)BaseAddress & (Cases[Index].Alignment - 1)),
                "Case %lu: base %p is misaligned\n", Index, BaseAddress);
