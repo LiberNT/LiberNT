@@ -1,11 +1,15 @@
 /*
  * PROJECT:     LiberNT Intel Gigabit Ethernet Driver
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
- * PURPOSE:     Registers of the Intel I219 chipset LAN controller and its PHY
+ * PURPOSE:     Registers of the Intel I218 and I219 chipset LAN controllers and their PHY
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #pragma once
+
+#define E1000_PCH_LPT                   0
+#define E1000_PCH_SPT                   1
+#define E1000_PCH_TGP                   2
 
 #define E1000_PCH_REG_FEXTNVM4          0x0024
 #define E1000_PCH_REG_FEXTNVM           0x0028

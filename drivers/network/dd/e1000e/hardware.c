@@ -1997,7 +1997,7 @@ E1000RecognizeHardware(
 
     if (E1000PchRecognize(Adapter))
     {
-        DPRINT1("E1000: Device recognized: Intel I219 chipset LAN DeviceId=0x%04x\n", Adapter->DeviceId);
+        DPRINT1("E1000: Device recognized: Intel chipset LAN DeviceId=0x%04x\n", Adapter->DeviceId);
         return TRUE;
     }
 

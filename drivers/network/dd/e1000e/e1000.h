@@ -470,6 +470,7 @@ typedef struct _E1000_ADAPTER
     BOOLEAN                 HasFlash;           /* Has flash NVM */
     BOOLEAN                 IsPchLan;
     BOOLEAN                 PchHalting;
+    ULONG                   PchGeneration;
     ULONG                   PchPhyId;
     volatile LONG           PchPhyBusy;
     volatile LONG           PchLinkWorkState;
