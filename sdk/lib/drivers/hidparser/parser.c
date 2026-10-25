@@ -326,12 +326,17 @@ static BOOLEAN parse_new_value_caps(struct hid_parser_state *state, HIDP_REPORT_
     state->items.bit_size = (USHORT)state->bit_size;
     report_count = state->items.report_count;
 
-    if (!*bit_offset) *bit_offset = 8;
-    total_bits = (ULONGLONG)*bit_offset + (ULONGLONG)state->items.bit_size * state->items.report_count;
+    if (!state->usages_size && !(state->items.bit_field & INPUT_DATA_CONST))
+        return parser_fail(state, STATUS_COULD_NOT_INTERPRET);
+
+    total_bits = (ULONGLONG)(*bit_offset ? *bit_offset : 8) + (ULONGLONG)state->items.bit_size * state->items.report_count;
     if (total_bits + 7 > (ULONGLONG)MAXUSHORT * 8) return parser_fail(state, STATUS_INSUFFICIENT_RESOURCES);
-    *bit_offset = (ULONG)total_bits;
-    if (*byte_length < (*bit_offset + 7) / 8) *byte_length = (USHORT)((*bit_offset + 7) / 8);
-    start_bit = *bit_offset;
+    if (*bit_offset || total_bits > 8)
+    {
+        *bit_offset = (ULONG)total_bits;
+        if (*byte_length < (*bit_offset + 7) / 8) *byte_length = (USHORT)((*bit_offset + 7) / 8);
+    }
+    start_bit = (ULONG)total_bits;
 
     if (!state->usages_size && (state->items.bit_field & INPUT_DATA_CONST))
     {
@@ -516,6 +521,7 @@ static BOOLEAN parse_item(struct hid_parser_state *state, UCHAR item, ULONG valu
         state->items.units = signed_value;
         return TRUE;
     case SHORT_ITEM(TAG_GLOBAL_REPORT_SIZE, TAG_TYPE_GLOBAL):
+        if ((item & 0x03) == 0x03) return TRUE;
         state->bit_size = value;
         state->items.bit_size = (USHORT)value;
         return TRUE;
@@ -524,6 +530,7 @@ static BOOLEAN parse_item(struct hid_parser_state *state, UCHAR item, ULONG valu
         state->items.report_id = (UCHAR)value;
         return TRUE;
     case SHORT_ITEM(TAG_GLOBAL_REPORT_COUNT, TAG_TYPE_GLOBAL):
+        if ((item & 0x03) == 0x03) return TRUE;
         state->report_count = value;
         state->items.report_count = (USHORT)value;
         return TRUE;
@@ -624,6 +631,14 @@ static NTSTATUS parse_descriptor(const UCHAR *descriptor, ULONG length, POOL_TYP
         if (!parse_item(state, *ptr, value, signed_value)) break;
     }
 
+    if (NT_SUCCESS(state->status))
+    {
+        ULONG type, id;
+
+        for (type = HidP_Input; type <= HidP_Feature; ++type)
+            for (id = 0; id < 256; ++id)
+                if (state->bit_offset[type][id] % 8) parser_fail(state, STATUS_COULD_NOT_INTERPRET);
+    }
     if (NT_SUCCESS(state->status)) *preparsed = build_preparsed_data(state, pool_type, preparsed_size);
     if (NT_SUCCESS(state->status)) add_report_lengths(lengths, state->bit_offset, collection);
     status = state->status;
