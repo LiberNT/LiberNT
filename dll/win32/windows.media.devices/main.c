@@ -180,6 +180,10 @@ static HRESULT get_default_device_id(EDataFlow direction, AudioDeviceRole role, 
     {
         WARN("GetDefaultAudioEndpoint failed: %08lx\n", hr);
         IMMDeviceEnumerator_Release(devenum);
+#ifdef __REACTOS__
+        if (hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND))
+            return S_OK;
+#endif
         return hr;
     }
 
