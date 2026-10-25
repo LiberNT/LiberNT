@@ -166,6 +166,7 @@ BOOL Shell_FailForceReturn(_In_ HRESULT hr)
         case ERROR_BAD_NETPATH:
         case ERROR_BAD_NET_NAME:
         case ERROR_CANCELLED:
+        case ERROR_INVALID_DRIVE:
             return TRUE;
 
         default:
