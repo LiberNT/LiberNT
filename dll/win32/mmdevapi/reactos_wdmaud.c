@@ -2708,6 +2708,12 @@ static NTSTATUS reactos_create_stream(struct create_stream_params *params)
             params->result = AUDCLNT_E_DEVICE_IN_USE;
             goto failed;
         }
+        if (stream->rt_period_frames != stream->device_period_frames)
+        {
+            params->aligned_frames = stream->rt_period_frames;
+            params->result = AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED;
+            goto failed;
+        }
         stream->rt_client_writes = TRUE;
         stream->rt_write_period = 0;
         stream->rt_refill_ready = TRUE;

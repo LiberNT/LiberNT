@@ -81,6 +81,9 @@ struct create_stream_params
     HRESULT result;
     UINT32 *channel_count;
     stream_handle *stream;
+#ifdef __REACTOS__
+    UINT32 aligned_frames;
+#endif
 };
 
 struct release_stream_params

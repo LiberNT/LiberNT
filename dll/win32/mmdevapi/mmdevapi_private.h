@@ -125,6 +125,9 @@ struct audio_client {
     float *vols;
     UINT32 channel_count;
     stream_handle stream;
+#ifdef __REACTOS__
+    UINT32 aligned_frames;
+#endif
 
     struct audio_session *session;
     struct audio_session_wrapper *session_wrapper;

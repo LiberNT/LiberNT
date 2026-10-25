@@ -502,12 +502,19 @@ static HRESULT stream_init(struct audio_client *client, const BOOLEAN force_def_
     params.fmt           = fmt;
     params.channel_count = &channel_count;
     params.stream        = &stream;
+#ifdef __REACTOS__
+    params.aligned_frames = 0;
+#endif
 
     wine_unix_call(create_stream, &params);
 
     free(name);
 
     if (FAILED(params.result)) {
+#ifdef __REACTOS__
+        if (params.result == AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED)
+            client->aligned_frames = params.aligned_frames;
+#endif
         sessions_unlock();
         return params.result;
     }
@@ -750,6 +757,12 @@ static HRESULT WINAPI client_GetBufferSize(IAudioClient3 *iface, UINT32 *out)
     if (!out)
         return E_POINTER;
 
+#ifdef __REACTOS__
+    if (!This->stream && This->aligned_frames) {
+        *out = This->aligned_frames;
+        return S_OK;
+    }
+#endif
     if (!This->stream)
         return AUDCLNT_E_NOT_INITIALIZED;
 
