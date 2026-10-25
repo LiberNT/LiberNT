@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Intel Gigabit Ethernet Driver
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
- * PURPOSE:     Intel I219 chipset LAN controller: firmware handshake, PHY access, reset and link handling
+ * PURPOSE:     Intel I218 and I219 chipset LAN controllers: firmware handshake, PHY access, reset and link handling
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -11,9 +11,14 @@
 #define E1000_PCH_LINK_WORK_QUEUED  1
 #define E1000_PCH_LINK_WORK_AGAIN   2
 
-static const USHORT E1000PchDevices[] =
+static const struct
 {
-    0x15F9,
+    USHORT DeviceId;
+    ULONG Generation;
+} E1000PchDevices[] =
+{
+    { 0x15A0, E1000_PCH_LPT },
+    { 0x15F9, E1000_PCH_TGP },
 };
 
 static
@@ -90,7 +95,7 @@ E1000PchAcquirePhy(
             break;
         if (KeQueryInterruptTime() >= Deadline)
         {
-            DPRINT1("E1000: I219 PHY is held by the firmware, FWSM=0x%08lx EXTCNF_CTRL=0x%08lx\n",
+            DPRINT1("E1000: Chipset LAN PHY is held by the firmware, FWSM=0x%08lx EXTCNF_CTRL=0x%08lx\n",
                     E1000_READ_REG(Adapter, E1000_REG_FWSM), Value);
             E1000_WRITE_REG(Adapter, E1000_PCH_REG_EXTCNF_CTRL, Value & ~E1000_PCH_EXTCNF_CTRL_SWFLAG);
             InterlockedExchange(&Adapter->PchPhyBusy, 0);
@@ -319,6 +324,9 @@ E1000PchDisableUlp(
     ULONG Value;
     USHORT PhyValue;
 
+    if (Adapter->PchGeneration < E1000_PCH_SPT)
+        return;
+
     if (E1000_READ_REG(Adapter, E1000_REG_FWSM) & E1000_PCH_FWSM_FW_VALID)
     {
         Value = E1000_READ_REG(Adapter, E1000_PCH_REG_H2ME);
@@ -331,7 +339,7 @@ E1000PchDisableUlp(
         {
             if (KeQueryInterruptTime() >= Deadline)
             {
-                DPRINT1("E1000: I219 firmware did not take the PHY out of its low power mode\n");
+                DPRINT1("E1000: Chipset LAN firmware did not take the PHY out of its low power mode\n");
                 break;
             }
             E1000PchDelay(10000);
@@ -398,7 +406,7 @@ E1000PchPreparePhy(
 
     if (!E1000PchAcquirePhy(Adapter))
     {
-        DPRINT1("E1000: I219 PHY could not be reserved, FWSM=0x%08lx\n", E1000_READ_REG(Adapter, E1000_REG_FWSM));
+        DPRINT1("E1000: Chipset LAN PHY could not be reserved, FWSM=0x%08lx\n", E1000_READ_REG(Adapter, E1000_REG_FWSM));
         return;
     }
 
@@ -439,7 +447,7 @@ E1000PchPreparePhy(
         Blocked = E1000PchResetBlocked(Adapter);
     }
 
-    DPRINT1("E1000: I219 PHY id 0x%08lx %s, management firmware %s, PHY reset %s\n",
+    DPRINT1("E1000: Chipset LAN PHY id 0x%08lx %s, management firmware %s, PHY reset %s\n",
             Adapter->PchPhyId,
             Accessible ? "reachable" : "not reachable",
             (E1000_READ_REG(Adapter, E1000_REG_FWSM) & E1000_PCH_FWSM_FW_VALID) ? "present" : "absent",
@@ -470,7 +478,7 @@ E1000PchApplyLinkSettings(
             Value |= E1000_PCH_TIPG_IPGT_10HALF;
             Emi = E1000_PCH_EMI_RX_CONFIG_10HALF;
         }
-        else if (FullDuplex && Speed != E1000_STATUS_SPEED_1000)
+        else if (Adapter->PchGeneration >= E1000_PCH_SPT && FullDuplex && Speed != E1000_STATUS_SPEED_1000)
         {
             Value |= E1000_PCH_TIPG_IPGT_SLOW_FULL;
             Emi = E1000_PCH_EMI_RX_CONFIG_DEFAULT;
@@ -500,7 +508,8 @@ E1000PchApplyLinkSettings(
                 if (E1000PchReadPhy(Adapter, E1000_PCH_PHY_PM_CTRL, &PhyValue))
                     E1000PchWritePhy(Adapter, E1000_PCH_PHY_PM_CTRL, PhyValue | E1000_PCH_PHY_PM_CTRL_K1_CLK_REQ);
 
-                if (E1000PchReadPhy(Adapter, E1000_PCH_PHY_POINTER_GAP, &PhyValue) &&
+                if (Adapter->PchGeneration >= E1000_PCH_SPT &&
+                    E1000PchReadPhy(Adapter, E1000_PCH_PHY_POINTER_GAP, &PhyValue) &&
                     ((PhyValue & E1000_PCH_PHY_POINTER_GAP_MASK) >> E1000_PCH_PHY_POINTER_GAP_SHIFT) <
                         E1000_PCH_PHY_POINTER_GAP_1000_MINIMUM)
                 {
@@ -509,7 +518,7 @@ E1000PchApplyLinkSettings(
                     E1000PchWritePhy(Adapter, E1000_PCH_PHY_POINTER_GAP, PhyValue);
                 }
             }
-            else
+            else if (Adapter->PchGeneration >= E1000_PCH_SPT)
             {
                 E1000PchWritePhy(Adapter, E1000_PCH_PHY_POINTER_GAP, E1000_PCH_PHY_POINTER_GAP_SLOW);
             }
@@ -597,9 +606,10 @@ E1000PchRecognize(
     Adapter->IsPchLan = FALSE;
     for (Index = 0; Index < ARRAYSIZE(E1000PchDevices); Index++)
     {
-        if (E1000PchDevices[Index] == Adapter->DeviceId)
+        if (E1000PchDevices[Index].DeviceId == Adapter->DeviceId)
         {
             Adapter->IsPchLan = TRUE;
+            Adapter->PchGeneration = E1000PchDevices[Index].Generation;
             Adapter->IsPCIe = FALSE;
             return TRUE;
         }
@@ -662,7 +672,7 @@ E1000PchResetHardware(
     {
         if (E1000PchWaitConfigDone(Adapter) == 0xFFFFFFFF)
         {
-            DPRINT1("E1000: I219 does not answer after the reset\n");
+            DPRINT1("E1000: Chipset LAN does not answer after the reset\n");
             return NDIS_STATUS_HARD_ERRORS;
         }
 
@@ -677,7 +687,7 @@ E1000PchResetHardware(
             }
 
             if (E1000_READ_REG(Adapter, E1000_PCH_REG_FEXTNVM) & E1000_PCH_FEXTNVM_SW_CONFIG)
-                DPRINT1("E1000: I219 expects PHY settings from its NVM configuration region, which is not applied\n");
+                DPRINT1("E1000: Chipset LAN expects PHY settings from its NVM configuration region, which is not applied\n");
         }
     }
 
@@ -720,8 +730,11 @@ E1000PchResetHardware(
     for (Index = 0; Index < E1000_PCH_MTA_REG_COUNT; Index++)
         E1000_WRITE_REG_ARRAY(Adapter, E1000_REG_MTA, Index, 0);
 
-    Value = E1000_READ_REG(Adapter, E1000_PCH_REG_FFLT_DBG);
-    E1000_WRITE_REG(Adapter, E1000_PCH_REG_FFLT_DBG, Value | E1000_PCH_FFLT_DBG_DONT_GATE_WAKE_DMA_CLK);
+    if (Adapter->PchGeneration >= E1000_PCH_TGP)
+    {
+        Value = E1000_READ_REG(Adapter, E1000_PCH_REG_FFLT_DBG);
+        E1000_WRITE_REG(Adapter, E1000_PCH_REG_FFLT_DBG, Value | E1000_PCH_FFLT_DBG_DONT_GATE_WAKE_DMA_CLK);
+    }
 
     Value = E1000_READ_REG(Adapter, E1000_REG_CTRL_EXT);
     Value |= E1000_PCH_CTRL_EXT_RO_DIS | E1000_PCH_CTRL_EXT_DRV_LOAD;
@@ -730,7 +743,7 @@ E1000PchResetHardware(
     Adapter->CurrentPowerState = E1000PowerStateD0;
     Adapter->NdisPowerState = NdisDeviceStateD0;
 
-    DPRINT1("E1000: I219 reset done, STATUS=0x%08lx CTRL=0x%08lx FWSM=0x%08lx\n",
+    DPRINT1("E1000: Chipset LAN reset done, STATUS=0x%08lx CTRL=0x%08lx FWSM=0x%08lx\n",
             E1000_READ_REG(Adapter, E1000_REG_STATUS),
             E1000_READ_REG(Adapter, E1000_REG_CTRL),
             E1000_READ_REG(Adapter, E1000_REG_FWSM));
@@ -744,7 +757,7 @@ E1000PchSetupLink(
     ULONG Value;
     USHORT PhyValue;
 
-    if (Adapter->InterruptMode == E1000InterruptModeLegacy)
+    if (Adapter->PchGeneration >= E1000_PCH_SPT && Adapter->InterruptMode == E1000InterruptModeLegacy)
     {
         Value = E1000_READ_REG(Adapter, E1000_PCH_REG_FEXTNVM7);
         E1000_WRITE_REG(Adapter, E1000_PCH_REG_FEXTNVM7, Value | E1000_PCH_FEXTNVM7_SIDE_CLK_UNGATE);
