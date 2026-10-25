@@ -577,7 +577,7 @@ BaseInitializeStaticServerData(IN PCSR_SERVER_DLL LoadedServerDll)
     ASSERT(Success);
 
     /* Create the system directory */
-    wcscat(SystemRootString.Buffer, L"\\System32");
+    wcscat(SystemRootString.Buffer, L"\\system32");
     Success = RtlCreateUnicodeString(&BaseSrvWindowsSystemDirectory,
                                      SystemRootString.Buffer);
     ASSERT(Success);
