@@ -385,7 +385,7 @@ Skip:
 
 static void testCharPrevW(const TESTS_CHARPREV *pEntry, SIZE_T len, UINT i)
 {
-    LPWSTR wszStart, wszCurrent;
+    LPWSTR wszStart, wszCurrent = NULL;
     LPWSTR pchW;
     INT iRealOffset;
     BOOL b;
@@ -442,7 +442,7 @@ Cleanup:
 
 static void testCharPrevA(const TESTS_CHARPREV *pEntry, SIZE_T len, UINT i)
 {
-    LPSTR szStart, szCurrent;
+    LPSTR szStart, szCurrent = NULL;
     LPSTR pchA, pchEx;
     INT iRealOffset;
     BOOL b;

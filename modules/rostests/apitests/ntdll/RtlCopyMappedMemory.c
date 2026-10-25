@@ -11,7 +11,7 @@ static NTSTATUS (NTAPI *pRtlCopyMappedMemory)(PVOID, const VOID *, SIZE_T);
 
 START_TEST(RtlCopyMappedMemory)
 {
-    NTSTATUS Status;
+    NTSTATUS Status = STATUS_UNSUCCESSFUL;
     UCHAR Buffer1[32];
     UCHAR Buffer2[32];
 

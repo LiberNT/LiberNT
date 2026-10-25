@@ -74,7 +74,7 @@ set_array(PVOID *array, PVOID p0, PVOID p1, PVOID p2)
 static void
 MultiHeapAllocTest()
 {
-    INT ret, threw, err;
+    INT ret = 0, threw, err = -1;
     HANDLE HeapHandle = GetProcessHeap();
     PVOID Array[3] = {NULL, NULL, NULL};
 
@@ -174,7 +174,7 @@ MultiHeapAllocTest()
 static void
 MultiHeapFreeTest()
 {
-    INT ret, threw, err;
+    INT ret = 0, threw, err = -1;
     HANDLE HeapHandle = GetProcessHeap();
     PVOID Array[3] = {NULL, NULL, NULL};
 

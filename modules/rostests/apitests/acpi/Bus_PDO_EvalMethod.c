@@ -252,8 +252,8 @@ int
 acpi_bus_get_device(ACPI_HANDLE Handle, struct acpi_device **Device)
 {
     UNREFERENCED_PARAMETER(Handle);
-    UNREFERENCED_PARAMETER(Device);
     ok(0, "Unexpected call to acpi_bus_get_device\n");
+    *Device = NULL;
     return -1;
 }
 
@@ -344,9 +344,18 @@ AcpiGetName (
 {
     /* We don't support anything else */
     ok(NameType == ACPI_SINGLE_NAME, "Unexpected call to %s\n", __FUNCTION__);
+    if (NameType != ACPI_SINGLE_NAME)
+        return AE_BAD_PARAMETER;
 
     /* Return a NULL-terminated string */
-    if (Buffer->Length < (4 + 1))
+    if (Buffer->Length == ACPI_ALLOCATE_BUFFER)
+    {
+        Buffer->Pointer = AcpiOsAllocate(4 + 1);
+        if (Buffer->Pointer == NULL)
+            return AE_NO_MEMORY;
+        Buffer->Length = 4 + 1;
+    }
+    else if (Buffer->Length < (4 + 1))
         return AE_BUFFER_OVERFLOW;
 
     switch ((ULONG_PTR)Handle)

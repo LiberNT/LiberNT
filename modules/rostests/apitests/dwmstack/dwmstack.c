@@ -1509,7 +1509,7 @@ TestDwmApiPrivateCoreSessions(HMODULE DwmApi, HWND FirstWindow,
                 {
                     ACCESS_ALLOWED_ACE *Allowed = Ace;
                     PSID Sid = (PSID)&Allowed->SidStart;
-                    SID_IDENTIFIER_AUTHORITY ExpectedAuthority = SECURITY_NT_AUTHORITY;
+                    SID_IDENTIFIER_AUTHORITY ExpectedAuthority = {SECURITY_NT_AUTHORITY};
                     DWORD SessionId = 0;
 
                     ProcessIdToSessionId(GetCurrentProcessId(), &SessionId);

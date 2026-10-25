@@ -1381,7 +1381,7 @@ START_TEST(env)
     WCHAR szApphelp[MAX_PATH];
     ShimData_QueryOffset QueryOffset;
 #ifdef _M_IX86
-    DWORD ShimDataType;
+    DWORD ShimDataType = 0;
 #endif
     NTSTATUS ExceptionStatus = STATUS_SUCCESS;
 

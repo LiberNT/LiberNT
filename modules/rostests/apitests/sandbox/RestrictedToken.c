@@ -488,7 +488,7 @@ Cleanup:
 
 START_TEST(RestrictedToken)
 {
-    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+    SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
     HANDLE Base, Restricted, Impersonation;
     PSID RestrictingSid = NULL, UserSid;
     LPWSTR RestrictingString = NULL, UserString = NULL;

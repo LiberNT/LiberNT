@@ -126,6 +126,11 @@ BOOL get_module_version(
         *fileinfo = *lpFfi;
         res = TRUE;
     }
+    else
+    {
+        errmsg = "VerQueryValueW failed";
+        errcode = GetLastError();
+    }
 
 cleanup:
     /* cleanup */

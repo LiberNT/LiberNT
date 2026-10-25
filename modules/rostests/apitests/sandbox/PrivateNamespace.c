@@ -139,7 +139,7 @@ static void
 TestNamespaceLifetime(void)
 {
     HANDLE Boundary, LookupBoundary, Namespace, Second, Opened, Event, Raw;
-    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+    SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
     SID_IDENTIFIER_AUTHORITY WorldAuthority = {SECURITY_WORLD_SID_AUTHORITY};
     PSID Random = NULL, World = NULL;
     DWORD Error;

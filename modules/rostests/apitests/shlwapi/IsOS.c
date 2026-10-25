@@ -51,7 +51,7 @@ START_TEST(IsOS)
     hShlwapi = GetModuleHandleW(L"shlwapi.dll");
     if (!hShlwapi)
     {
-        skip(FALSE, "shlwapi.dll is not available\n");
+        skip("shlwapi.dll is not available\n");
         return;
     }
 
@@ -60,7 +60,7 @@ START_TEST(IsOS)
         pIsOS = (PFNISOS)GetProcAddress(hShlwapi, (LPCSTR)437);
     if (!pIsOS)
     {
-        skip(FALSE, "IsOS is not available\n");
+        skip("IsOS is not available\n");
         return;
     }
 

@@ -227,6 +227,7 @@ RunTestCases(
         _swprintf(FileName, Tests[i].FileName, CustomPath, CustomPath, CustomPath, CustomPath);
         RtlFillMemory(Buffer, sizeof(Buffer), 0x55);
         PartName = InvalidPointer;
+        Length = MAXULONG;
 
         StartSeh()
             Length = RtlDosSearchPath_U(SearchPath,

@@ -383,7 +383,7 @@ TestNamedCapabilityDerivation(void)
     HMODULE KernelBase = GetModuleHandleW(L"kernelbase.dll");
     PFN_DeriveCapabilitySidsFromName pDerive =
         (PFN_DeriveCapabilitySidsFromName)GetProcAddress(KernelBase, "DeriveCapabilitySidsFromName");
-    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+    SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
     SID_IDENTIFIER_AUTHORITY PackageAuthority = {SECURITY_APP_PACKAGE_AUTHORITY};
     PSID *Groups = NULL, *Capabilities = NULL, *UpperGroups = NULL, *UpperCapabilities = NULL;
     DWORD GroupCount = 0, CapabilityCount = 0, UpperGroupCount = 0, UpperCapabilityCount = 0;
@@ -517,7 +517,7 @@ TestTokenHelpers(void)
     HANDLE Process = NULL, Impersonation = NULL, LowBox = NULL, LowImpersonation = NULL;
     PSID Package = NULL, Capability = NULL, OtherCapability = NULL, Random = NULL, AllPackages = NULL;
     SID_IDENTIFIER_AUTHORITY PackageAuthority = {SECURITY_APP_PACKAGE_AUTHORITY};
-    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+    SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
     SID_AND_ATTRIBUTES CapabilityAttr;
     UCHAR UserBuffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
     DWORD Length;

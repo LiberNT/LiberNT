@@ -101,7 +101,7 @@ Test_ThreadBasicInformationClass(void)
     trace("ThreadInfoBasic->TebBaseAddress = %p\n", ThreadInfoBasic->TebBaseAddress);
     trace("ThreadInfoBasic->ClientId.UniqueProcess = %p\n", ThreadInfoBasic->ClientId.UniqueProcess);
     trace("ThreadInfoBasic->ClientId.UniqueThread = %p\n", ThreadInfoBasic->ClientId.UniqueThread);
-    trace("ThreadInfoBasic->AffinityMask = %llu\n", ThreadInfoBasic->AffinityMask);
+    trace("ThreadInfoBasic->AffinityMask = %Iu\n", ThreadInfoBasic->AffinityMask);
     trace("ThreadInfoBasic->Priority = %li\n", ThreadInfoBasic->Priority);
     trace("ThreadInfoBasic->BasePriority = %li\n", ThreadInfoBasic->BasePriority);
 

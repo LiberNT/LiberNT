@@ -61,7 +61,7 @@ void test_InProcess()
 {
     LARGE_INTEGER move;
     ULARGE_INTEGER size;
-    HRESULT res;
+    HRESULT res = E_FAIL;
     ULONG i;
 
     RTL_MEMORY_STREAM stream;

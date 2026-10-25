@@ -92,6 +92,7 @@ ChangeNtProductType(DWORD NtProductType)
     else
     {
         ok(FALSE, "Passed invalid product type to ChangeNtProduct: %lu", NtProductType);
+        return FALSE;
     }
 
     Result = RegOpenKeyExW(HKEY_LOCAL_MACHINE,

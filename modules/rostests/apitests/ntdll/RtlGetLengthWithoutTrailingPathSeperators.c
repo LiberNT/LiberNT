@@ -91,7 +91,7 @@ START_TEST(RtlGetLengthWithoutTrailingPathSeperators)
 {
     ULONG len;
     UNICODE_STRING str;
-    NTSTATUS res;
+    NTSTATUS res = (NTSTATUS)0xDEADBEEF;
     int i;
 
     struct test_data * pentry = test_entries;

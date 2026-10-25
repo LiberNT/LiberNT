@@ -150,7 +150,7 @@ PerformTest(
     PDEVICE_OBJECT DeviceObject)
 {
     PVOID Bcb;
-    BOOLEAN Ret;
+    BOOLEAN Ret = FALSE;
     PULONG Buffer;
     PTEST_FCB Fcb;
     LARGE_INTEGER Offset;

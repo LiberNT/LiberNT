@@ -61,7 +61,7 @@ CheckStringBuffer(
     EqualLength = RtlCompareMemory(String->Buffer, Expected, ExpectedLength);
     if (EqualLength != ExpectedLength)
     {
-        ok(0, "String is '%wZ', expected '%S'\n", String, Expected);
+        ok(0, "String is '%.*ls', expected '%S'\n", (int)(String->Length / sizeof(WCHAR)), String->Buffer, Expected);
         Result = FALSE;
     }
 
@@ -234,7 +234,7 @@ RunTestCases(VOID)
         ok(FullPathName.Buffer        == FullPathNameBuffer,         "Line %lu: Buffer modified\n", TestCases[i].Line);
         ok(FullPathName.MaximumLength == sizeof(FullPathNameBuffer), "Line %lu: MaximumLength modified\n", TestCases[i].Line);
         Okay = CheckStringBuffer(&FullPathName, ExpectedPathName);
-        ok(Okay, "Line %lu: Wrong path name '%wZ', expected '%S'\n", TestCases[i].Line, &FullPathName, ExpectedPathName);
+        ok(Okay, "Line %lu: Wrong path name '%.*ls', expected '%S'\n", TestCases[i].Line, (int)(FullPathName.Length / sizeof(WCHAR)), FullPathName.Buffer, ExpectedPathName);
         ok(StringUsed == &FullPathName, "Line %lu: StringUsed = %p, expected %p\n", TestCases[i].Line, StringUsed, &FullPathName);
         switch (TestCases[i].FilePartPrefixType)
         {

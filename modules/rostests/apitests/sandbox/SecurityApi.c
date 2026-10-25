@@ -52,7 +52,7 @@ TestSidClassification(void)
     PFN_RtlGetAppContainerSidType pRtlGetAppContainerSidType = (PFN_RtlGetAppContainerSidType)GetProcAddress(Ntdll, "RtlGetAppContainerSidType");
     PFN_RtlGetAppContainerParent pRtlGetAppContainerParent = (PFN_RtlGetAppContainerParent)GetProcAddress(Ntdll, "RtlGetAppContainerParent");
     PFN_RtlIsParentOfChildAppContainer pRtlIsParentOfChildAppContainer = (PFN_RtlIsParentOfChildAppContainer)GetProcAddress(Ntdll, "RtlIsParentOfChildAppContainer");
-    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+    SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
     PSID Parent = NULL, Child = NULL, Other = NULL, Capability = NULL, Ordinary = NULL, Derived = NULL;
     ULONG Type;
     NTSTATUS Status;
@@ -170,7 +170,7 @@ Cleanup:
 static void
 TestScopedPolicyAce(void)
 {
-    SID_IDENTIFIER_AUTHORITY PolicyAuthority = SECURITY_SCOPED_POLICY_ID_AUTHORITY;
+    SID_IDENTIFIER_AUTHORITY PolicyAuthority = {SECURITY_SCOPED_POLICY_ID_AUTHORITY};
     UCHAR AclBuffer[512];
     PACL Acl = (PACL)AclBuffer;
     PSID Policy = NULL;
@@ -301,7 +301,7 @@ TestSandboxedTokenClasses(void)
 {
     HANDLE Base = SbxOpenToken(TOKEN_QUERY | TOKEN_DUPLICATE);
     HANDLE Restricted = NULL;
-    SID_IDENTIFIER_AUTHORITY NullAuthority = SECURITY_NULL_SID_AUTHORITY;
+    SID_IDENTIFIER_AUTHORITY NullAuthority = {SECURITY_NULL_SID_AUTHORITY};
     SID_AND_ATTRIBUTES Restrict;
     PSID NullSid = NULL;
     DWORD Value, Length;

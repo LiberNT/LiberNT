@@ -37,7 +37,7 @@ VOID mbsncat_PerformTests(_In_ LPSTR fname, _In_opt_ PFN__mbsncat func)
     unsigned char dest[16];
     const unsigned char first[] = "dinosaur";
     const unsigned char second[] = "duck";
-    unsigned char *s;
+    unsigned char *s = NULL;
     BOOL MsVcrt = FALSE, CrtDll = FALSE;
 
 #ifdef TEST_MSVCRT

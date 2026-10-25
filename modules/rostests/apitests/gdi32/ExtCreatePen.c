@@ -391,7 +391,7 @@ Test_ExtCreatePen_Helper(
     ULONG_PTR lbHatch)
 {
     LOGBRUSH lb;
-    HPEN hpen;
+    HPEN hpen = NULL;
     BOOL bExpectSuccess, bExpectException, bGotException = FALSE;
     struct
     {

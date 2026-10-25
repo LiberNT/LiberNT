@@ -28,7 +28,7 @@ static PFN_NtCreateLowBoxToken pNtCreateLowBoxToken;
 static PSID
 CapabilitySid(DWORD Rid)
 {
-    SID_IDENTIFIER_AUTHORITY Authority = SECURITY_APP_PACKAGE_AUTHORITY;
+    SID_IDENTIFIER_AUTHORITY Authority = {SECURITY_APP_PACKAGE_AUTHORITY};
     PSID Sid = NULL;
     AllocateAndInitializeSid(&Authority, 2, SECURITY_CAPABILITY_BASE_RID, Rid, 0, 0, 0, 0, 0, 0, &Sid);
     return Sid;
