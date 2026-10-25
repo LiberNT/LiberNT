@@ -676,6 +676,10 @@ HRESULT WINAPI CDesktopFolder::CreateViewObject(
                 sfviewcb->Initialize((IShellView*)*ppvOut);
         }
     }
+    else
+    {
+        hr = E_NOINTERFACE;
+    }
     TRACE ("-- (%p)->(interface=%p)\n", this, ppvOut);
     return hr;
 }
