@@ -298,6 +298,10 @@ extern const GUID CLSID_UnixDosFolder DECLSPEC_HIDDEN;
 /* Default shell folder value registration */
 HRESULT SHELL_RegisterShellFolders(void) DECLSPEC_HIDDEN;
 
+#ifdef __REACTOS__
+HRESULT SHELL_AddAutomaticDestination(LPCWSTR pszAppID, PCIDLIST_ABSOLUTE pidl);
+#endif
+
 /* Detect Shell Links */
 BOOL SHELL_IsShortcut(LPCITEMIDLIST) DECLSPEC_HIDDEN;
 

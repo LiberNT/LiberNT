@@ -3069,6 +3069,8 @@ void WINAPI SHAddToRecentDocs (UINT uFlags,LPCVOID pv)
     IPersistFile *pPf = NULL;
     HRESULT hr;
     BYTE Buffer[(MAX_PATH + 64) * sizeof(WCHAR)];
+    LPCWSTR pszAppID = NULL;
+    PIDLIST_ABSOLUTE pidlItem = NULL;
 
     TRACE("%04x %p\n", uFlags, pv);
 
@@ -3102,9 +3104,41 @@ void WINAPI SHAddToRecentDocs (UINT uFlags,LPCVOID pv)
                 GetFullPathNameW(szLinkDir, ARRAYSIZE(szTargetPath), szTargetPath, NULL);
                 break;
 
+            case SHARD_APPIDINFO:
+                pszAppID = ((const SHARDAPPIDINFO *)pv)->pszAppID;
+                SHGetIDListFromObject((IUnknown *)((const SHARDAPPIDINFO *)pv)->psi, &pidlItem);
+                break;
+
+            case SHARD_APPIDINFOIDLIST:
+                pszAppID = ((const SHARDAPPIDINFOIDLIST *)pv)->pszAppID;
+                pidlItem = ILClone(((const SHARDAPPIDINFOIDLIST *)pv)->pidl);
+                break;
+
+            case SHARD_APPIDINFOLINK:
+                pszAppID = ((const SHARDAPPIDINFOLINK *)pv)->pszAppID;
+                IShellLinkW_GetIDList(((const SHARDAPPIDINFOLINK *)pv)->psl, &pidlItem);
+                break;
+
+            case SHARD_LINK:
+                IShellLinkW_GetIDList((IShellLinkW *)pv, &pidlItem);
+                break;
+
+            case SHARD_SHELLITEM:
+                SHGetIDListFromObject((IUnknown *)pv, &pidlItem);
+                break;
+
             default:
                 FIXME("Unsupported flags: %u\n", uFlags);
                 return;
+        }
+
+        if (pidlItem)
+        {
+            szLinkDir[0] = 0;
+            SHGetPathFromIDListW(pidlItem, szLinkDir);
+            GetFullPathNameW(szLinkDir, ARRAYSIZE(szTargetPath), szTargetPath, NULL);
+            ILFree(pidlItem);
+            pidlItem = NULL;
         }
     }
 
@@ -3197,6 +3231,13 @@ void WINAPI SHAddToRecentDocs (UINT uFlags,LPCVOID pv)
         goto Quit;
     }
 
+    pidlItem = ILCreateFromPathW(szTargetPath);
+    if (pidlItem)
+    {
+        SHELL_AddAutomaticDestination(pszAppID, pidlItem);
+        ILFree(pidlItem);
+    }
+
     /* ***  JOB 0: Build strings *** */
 
     pchTargetTitle = PathFindFileNameW(szTargetPath);
@@ -3277,8 +3318,10 @@ void WINAPI SHAddToRecentDocs (UINT uFlags,LPCVOID pv)
 
     if (uFlags == SHARD_PIDL)
         hr = IShellLinkW_SetIDList(psl, pv);
-    else
+    else if (uFlags == SHARD_PATHW)
         hr = IShellLinkW_SetPath(psl, pv);
+    else
+        hr = IShellLinkW_SetPath(psl, szTargetPath);
 
     IShellLinkW_SetDescription(psl, szDescription);
 
