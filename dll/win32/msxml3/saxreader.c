@@ -1534,6 +1534,19 @@ static const struct IVBSAXAttributesVtbl ivbsaxattributes_vtbl =
 static HRESULT WINAPI isaxattributes_QueryInterface(ISAXAttributes *iface, REFIID riid, void **obj)
 {
     struct saxlocator *locator = impl_from_ISAXAttributes(iface);
+#ifdef __REACTOS__
+    MSXML_VERSION version = locator->saxreader->version;
+
+    if (IsEqualGUID(riid, &IID_ISAXLocator) && version < MSXML4)
+    {
+        *obj = NULL;
+        return E_NOINTERFACE;
+    }
+    if ((IsEqualGUID(riid, &IID_ISAXXMLReader) && version >= MSXML4) ||
+        ((IsEqualGUID(riid, &IID_IVBSAXXMLReader) || IsEqualGUID(riid, &IID_IDispatch) ||
+          IsEqualGUID(riid, &IID_IDispatchEx)) && version >= MSXML6))
+        return ISAXXMLReader_QueryInterface(&locator->saxreader->ISAXXMLReader_iface, riid, obj);
+#endif
     return ISAXLocator_QueryInterface(&locator->ISAXLocator_iface, riid, obj);
 }
 
