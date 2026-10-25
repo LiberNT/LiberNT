@@ -145,7 +145,7 @@ HRESULT WINAPI CEnumIDListBase::Next(
     { return E_INVALIDARG;
     }
 
-    if(celt > 0 && !mpCurrent)
+    if(!mpCurrent)
     { return S_FALSE;
     }
 
