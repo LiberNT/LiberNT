@@ -429,11 +429,14 @@ CreateSymbolicLinkA(IN LPCSTR lpSymlinkFileName,
         return FALSE;
     }
 
-    if (!(SymlinkW = FilenameA2W(lpSymlinkFileName, FALSE)))
+    if (!(SymlinkW = FilenameA2W(lpSymlinkFileName, TRUE)))
         return FALSE;
 
     if (!(TargetW = FilenameA2W(lpTargetFileName, TRUE)))
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, SymlinkW);
         return FALSE;
+    }
 
     Ret = CreateSymbolicLinkW(SymlinkW,
                               TargetW,
