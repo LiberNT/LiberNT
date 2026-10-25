@@ -748,6 +748,33 @@ LxProcessSetCommand(
     LxFree(OldEnv);
     if (NewExe != NULL)
         LxFree(OldExe);
+    LxProcessPublishName(Process, NULL);
+}
+
+VOID
+LxProcessPublishName(
+    _In_ PLX_PROCESS Process,
+    _In_opt_ PEPROCESS EProcess)
+{
+    PEPROCESS Referenced = NULL;
+    CHAR Comm[sizeof(Process->Comm)];
+
+    if (EProcess == NULL)
+    {
+        if ((Process->NtPid == 0) ||
+            !NT_SUCCESS(PsLookupProcessByProcessId(ULongToHandle(Process->NtPid), &Referenced)))
+        {
+            return;
+        }
+        EProcess = Referenced;
+    }
+    ExAcquireFastMutex(&Process->Lock);
+    RtlCopyMemory(Comm, Process->Comm, sizeof(Comm));
+    ExReleaseFastMutex(&Process->Lock);
+    Comm[sizeof(Comm) - 1] = '\0';
+    PsPicoSetProcessName(EProcess, Comm);
+    if (Referenced != NULL)
+        ObDereferenceObject(Referenced);
 }
 
 static

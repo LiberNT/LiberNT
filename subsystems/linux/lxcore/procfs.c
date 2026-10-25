@@ -1506,6 +1506,7 @@ LxWritePidComm(
     ExAcquireFastMutex(&Process->Lock);
     RtlCopyMemory(Process->Comm, Comm, sizeof(Comm));
     ExReleaseFastMutex(&Process->Lock);
+    LxProcessPublishName(Process, NULL);
     LxProcessDereference(Process);
     return 0;
 }
@@ -2647,8 +2648,15 @@ LxGenStat(
             Processes++;
     }
     ExReleaseFastMutex(&LxProcessListLock);
-    LxTextPrintf(Text, "intr %llu\nctxt %llu\nbtime %lld\nprocesses %lu\nprocs_running 1\nprocs_blocked 0\nsoftirq 0 0 0 0 0 0 0 0 0 0 0\n",
-                 Interrupts, Switches, (Now.QuadPart - 116444736000000000LL) / 10000000LL - Uptime, Processes);
+    {
+        ULONG64 Load[3];
+        ULONG Runnable, Threads;
+
+        LxSchedQueryLoad(Load, &Runnable, &Threads);
+        LxTextPrintf(Text, "intr %llu\nctxt %llu\nbtime %lld\nprocesses %lu\nprocs_running %lu\nprocs_blocked 0\nsoftirq 0 0 0 0 0 0 0 0 0 0 0\n",
+                     Interrupts, Switches, (Now.QuadPart - 116444736000000000LL) / 10000000LL - Uptime, Processes,
+                     max(Runnable, 1));
+    }
 }
 
 static
@@ -2678,8 +2686,15 @@ LxGenLoadavg(
     _In_ PLX_SYNTH Synth,
     _Inout_ PLX_TEXT Text)
 {
+    ULONG64 Load[3];
+    ULONG Runnable, Threads;
+
     UNREFERENCED_PARAMETER(Synth);
-    LxTextPrintf(Text, "0.00 0.00 0.00 1/%lu %lu\n", Self->Instance->ProcessCount, Self->Instance->NextPid - 1);
+    LxSchedQueryLoad(Load, &Runnable, &Threads);
+    LxTextPrintf(Text, "%llu.%02llu %llu.%02llu %llu.%02llu %lu/%lu %lu\n",
+                 Load[0] / 2048, (Load[0] % 2048) * 100 / 2048, Load[1] / 2048, (Load[1] % 2048) * 100 / 2048,
+                 Load[2] / 2048, (Load[2] % 2048) * 100 / 2048, max(Runnable, 1),
+                 max(Threads, Self->Instance->ProcessCount), Self->Instance->NextPid - 1);
 }
 
 static const LX_TABLE_ENTRY LxProcStaticTable[] =

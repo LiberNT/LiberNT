@@ -760,10 +760,124 @@ LxSchedRelease(
 
 static KEVENT LxSchedAffinityLock;
 
+#define LX_LOAD_INTERVAL_MS 5000
+#define LX_LOAD_FIXED_ONE   2048
+
+static KTIMER LxLoadTimer;
+static KDPC LxLoadDpc;
+static WORK_QUEUE_ITEM LxLoadWork;
+static volatile LONG LxLoadQueued;
+static volatile LONG64 LxLoadAverage[3];
+static volatile LONG LxLoadRunnable;
+static volatile LONG LxLoadThreads;
+static PVOID LxLoadBuffer;
+static ULONG LxLoadBufferSize;
+
+static
+VOID
+NTAPI
+LxLoadSample(
+    _In_ PVOID Context)
+{
+    static const ULONG64 Decay[3] = { 1884, 2014, 2037 };
+    PSYSTEM_PROCESS_INFORMATION Entry;
+    HANDLE Self = PsGetCurrentThreadId();
+    ULONG Runnable = 0, Threads = 0, Index, Size = 0;
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(Context);
+    for (;;)
+    {
+        if (LxLoadBuffer == NULL)
+        {
+            LxLoadBufferSize = (Size > LxLoadBufferSize) ? ((Size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)) :
+                                                           max(LxLoadBufferSize, 64 * PAGE_SIZE);
+            LxLoadBuffer = LxAllocPaged(LxLoadBufferSize);
+            if (LxLoadBuffer == NULL)
+                break;
+        }
+        Status = ZwQuerySystemInformation(SystemProcessInformation, LxLoadBuffer, LxLoadBufferSize, &Size);
+        if (Status != STATUS_INFO_LENGTH_MISMATCH)
+            break;
+        LxFreePaged(LxLoadBuffer);
+        LxLoadBuffer = NULL;
+        Size += 16 * PAGE_SIZE;
+    }
+    if ((LxLoadBuffer != NULL) && NT_SUCCESS(Status))
+    {
+        for (Entry = LxLoadBuffer;; Entry = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)Entry + Entry->NextEntryOffset))
+        {
+            PSYSTEM_THREAD_INFORMATION Thread = (PSYSTEM_THREAD_INFORMATION)(Entry + 1);
+
+            for (Index = 0; Index < Entry->NumberOfThreads; Index++)
+            {
+                Threads++;
+                if ((Entry->UniqueProcessId != NULL) && (Thread[Index].ClientId.UniqueThread != Self) &&
+                    ((Thread[Index].ThreadState == Running) || (Thread[Index].ThreadState == Ready) ||
+                     (Thread[Index].ThreadState == Standby) || (Thread[Index].ThreadState == DeferredReady)))
+                {
+                    Runnable++;
+                }
+            }
+            if (Entry->NextEntryOffset == 0)
+                break;
+        }
+        for (Index = 0; Index < 3; Index++)
+        {
+            ULONG64 Old = (ULONG64)LxLoadAverage[Index];
+            ULONG64 New = (Old * Decay[Index] + (ULONG64)Runnable * LX_LOAD_FIXED_ONE * (LX_LOAD_FIXED_ONE - Decay[Index]) +
+                           LX_LOAD_FIXED_ONE / 2) / LX_LOAD_FIXED_ONE;
+
+            InterlockedExchange64(&LxLoadAverage[Index], (LONG64)New);
+        }
+        InterlockedExchange(&LxLoadRunnable, (LONG)Runnable);
+        InterlockedExchange(&LxLoadThreads, (LONG)Threads);
+    }
+    InterlockedExchange(&LxLoadQueued, 0);
+}
+
+static
+VOID
+NTAPI
+LxLoadTick(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID Context,
+    _In_opt_ PVOID Argument1,
+    _In_opt_ PVOID Argument2)
+{
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(Argument1);
+    UNREFERENCED_PARAMETER(Argument2);
+    if (InterlockedCompareExchange(&LxLoadQueued, 1, 0) == 0)
+        ExQueueWorkItem(&LxLoadWork, DelayedWorkQueue);
+}
+
 VOID
 LxSchedInitialize(VOID)
 {
+    LARGE_INTEGER DueTime;
+
     KeInitializeEvent(&LxSchedAffinityLock, SynchronizationEvent, TRUE);
+    ExInitializeWorkItem(&LxLoadWork, LxLoadSample, NULL);
+    KeInitializeDpc(&LxLoadDpc, LxLoadTick, NULL);
+    KeInitializeTimerEx(&LxLoadTimer, NotificationTimer);
+    DueTime.QuadPart = -(LONG64)LX_LOAD_INTERVAL_MS * 10000;
+    KeSetTimerEx(&LxLoadTimer, DueTime, LX_LOAD_INTERVAL_MS, &LxLoadDpc);
+}
+
+VOID
+LxSchedQueryLoad(
+    _Out_writes_(3) PULONG64 Load,
+    _Out_ PULONG Runnable,
+    _Out_ PULONG Threads)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < 3; Index++)
+        Load[Index] = (ULONG64)InterlockedCompareExchange64(&LxLoadAverage[Index], 0, 0);
+    *Runnable = (ULONG)LxLoadRunnable;
+    *Threads = (ULONG)LxLoadThreads;
 }
 
 static
@@ -1337,6 +1451,14 @@ LX_SYSCALL(LxSysSysinfo)
     Info.TotalSwap = Memory.SwapTotal;
     Info.FreeSwap = Memory.SwapFree;
     Info.MemUnit = 1;
+    {
+        ULONG64 Load[3];
+        ULONG Runnable, Threads, Index;
+
+        LxSchedQueryLoad(Load, &Runnable, &Threads);
+        for (Index = 0; Index < 3; Index++)
+            Info.Loads[Index] = Load[Index] << 5;
+    }
 
     ExAcquireFastMutex(&LxProcessListLock);
     for (Entry = LxProcessList.Flink; Entry != &LxProcessList; Entry = Entry->Flink)
@@ -2211,6 +2333,7 @@ LxForkProcess(
     }
 
     Child->NtPid = HandleToUlong(PsGetProcessId(EProcess));
+    LxProcessPublishName(Child, EProcess);
     ObDereferenceObject(EProcess);
     LxProcessRegister(Child);
     InterlockedIncrement((PLONG)&Parent->Instance->ProcessCount);
@@ -3173,6 +3296,8 @@ LX_SYSCALL(LxSysPrctl)
             if (Thread->Tid == Process->Pid)
                 RtlCopyMemory(Process->Comm, Name, sizeof(Name));
             ExReleaseFastMutex(&Process->Lock);
+            if (Thread->Tid == Process->Pid)
+                LxProcessPublishName(Process, NULL);
             return 0;
         }
 

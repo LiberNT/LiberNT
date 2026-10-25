@@ -800,6 +800,8 @@ extern const LX_SOCKET_OPS LxNetlinkSocketOps;
 LONG64 LxInetSocket(_In_ PLX_PROCESS Process, _In_ ULONG Family, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
 LONG64 LxNetlinkSocket(_In_ PLX_PROCESS Process, _In_ ULONG Type, _In_ ULONG Protocol, _In_ ULONG Flags);
 VOID LxProcessUsage(_In_ PLX_PROCESS Process, _In_opt_ PEPROCESS EProcess, _Out_ PLX_USAGE Usage);
+VOID LxProcessPublishName(_In_ PLX_PROCESS Process, _In_opt_ PEPROCESS EProcess);
+VOID LxSchedQueryLoad(_Out_writes_(3) PULONG64 Load, _Out_ PULONG Runnable, _Out_ PULONG Threads);
 
 typedef enum _LX_MQ_LIMIT
 {

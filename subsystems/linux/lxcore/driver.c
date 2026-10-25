@@ -600,6 +600,7 @@ LxIoctlCreateProcess(
         goto Cleanup;
 
     Process->NtPid = HandleToUlong(PsGetProcessId(EProcess));
+    LxProcessPublishName(Process, EProcess);
     Process->ParentPid = 0;
     Thread->Tid = Process->Pid;
     Thread->NsTid[0] = Process->Pid;
