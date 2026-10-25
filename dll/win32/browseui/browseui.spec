@@ -4,7 +4,6 @@
 104 stdcall -private DllGetVersion(ptr) explorerframe.DllGetVersion
 105 stdcall -noname SHCreateSavedWindows() explorerframe.#105
 106 stdcall -noname SHCreateFromDesktop(ptr) explorerframe.#106
-107 stdcall -noname SHExplorerParseCmdLine(ptr) explorerframe.#107
 118 stdcall -noname UEMRegisterNotify(long long) explorerframe.#118
 120 stdcall -noname SHCreateBandForPidl(ptr ptr long) explorerframe.#120
 121 stdcall -noname SHPidlFromDataObject(ptr ptr long ptr) explorerframe.#121
@@ -21,6 +20,5 @@
 133 stdcall -noname Channel_QuickLaunch() explorerframe.#133
 134 stdcall -noname SHGetNavigateTarget(long long long long) explorerframe.#134
 135 stdcall -noname GetInfoTip(ptr long wstr long) explorerframe.#135
-136 stdcall -noname SHEnumClassesOfCategories(long ptr long ptr ptr) explorerframe.#136
 137 stdcall -noname SHWriteClassesOfCategories(long long long long long long long) explorerframe.#137
 138 stdcall -noname SHIsExplorerBrowser() explorerframe.#138
