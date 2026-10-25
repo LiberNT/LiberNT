@@ -348,6 +348,10 @@ static const struct IHolographicSpaceVtbl holographic_space_vtbl =
 
 DEFINE_IINSPECTABLE( holographic_space_interop, IHolographicSpaceInterop, struct holographic_space_statics, IActivationFactory_iface )
 
+#ifdef __REACTOS__
+static const WCHAR holographic_space_propW[] = L"Windows.Perception.HolographicSpace";
+#endif
+
 static HRESULT WINAPI holographic_space_interop_CreateForWindow( IHolographicSpaceInterop *iface,
                                                                  HWND window, REFIID iid, void **holographic_space )
 {
@@ -356,7 +360,12 @@ static HRESULT WINAPI holographic_space_interop_CreateForWindow( IHolographicSpa
 
     TRACE( "iface %p, window %p, iid %s, holographic_space %p.\n", iface, window, debugstr_guid( iid ), holographic_space );
 
+#ifdef __REACTOS__
+    if (!window) return E_INVALIDARG;
+    if (!IsWindow( window ) || IsWindowVisible( window ) || GetPropW( window, holographic_space_propW ))
+#else
     if (!IsWindow( window ) || IsWindowVisible( window ))
+#endif
     {
         *holographic_space = NULL;
         return E_INVALIDARG;
@@ -368,6 +377,10 @@ static HRESULT WINAPI holographic_space_interop_CreateForWindow( IHolographicSpa
 
     hr = IHolographicSpace_QueryInterface( &impl->IHolographicSpace_iface, iid, holographic_space );
     IHolographicSpace_Release( &impl->IHolographicSpace_iface );
+#ifdef __REACTOS__
+    if (SUCCEEDED(hr))
+        SetPropW( window, holographic_space_propW, (HANDLE)1 );
+#endif
     TRACE( "created IHolographicSpace %p.\n", *holographic_space );
     return hr;
 }
