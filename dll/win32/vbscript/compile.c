@@ -2221,7 +2221,11 @@ static HRESULT compile_class(compile_ctx_t *ctx, class_decl_t *class_decl)
                 return E_FAIL;
             }
             if(func_decl->args) {
+#ifdef __REACTOS__
+                ctx->loc = func_decl->decl_end_loc;
+#else
                 ctx->loc = func_decl->loc;
+#endif
                 return MAKE_VBSERROR(VBSE_CLASS_INIT_NO_ARGS);
             }
 
@@ -2232,7 +2236,11 @@ static HRESULT compile_class(compile_ctx_t *ctx, class_decl_t *class_decl)
                 return E_FAIL;
             }
             if(func_decl->args) {
+#ifdef __REACTOS__
+                ctx->loc = func_decl->decl_end_loc;
+#else
                 ctx->loc = func_decl->loc;
+#endif
                 return MAKE_VBSERROR(VBSE_CLASS_INIT_NO_ARGS);
             }
 

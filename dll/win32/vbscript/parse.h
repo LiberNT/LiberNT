@@ -210,6 +210,9 @@ typedef struct _function_decl_t {
     statement_t *body;
     unsigned loc;
     unsigned name_loc;
+#ifdef __REACTOS__
+    unsigned decl_end_loc;
+#endif
     struct _function_decl_t *next;
     struct _function_decl_t *next_prop_func;
 } function_decl_t;
