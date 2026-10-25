@@ -340,11 +340,40 @@ static HRESULT xmlnodemap_invoke(IUnknown *iface, DISPID id, LCID lcid, WORD fla
 
     TRACE("%p, %ld, %lx, %x, %p, %p, %p.\n", iface, id, lcid, flags, params, res, ei);
 
+#ifdef __REACTOS__
+    if (id == DISPID_VALUE && (flags == DISPATCH_METHOD || flags == DISPATCH_PROPERTYGET ||
+                               flags == (DISPATCH_METHOD | DISPATCH_PROPERTYGET)))
+    {
+        IXMLDOMNode *item = NULL;
+        VARIANT index;
+        HRESULT hr;
+
+        if (params->cArgs - params->cNamedArgs != 1)
+            return DISP_E_BADPARAMCOUNT;
+
+        VariantInit(&index);
+        hr = VariantChangeType(&index, params->rgvarg, 0, VT_I4);
+        if (FAILED(hr))
+            return hr;
+
+        IXMLDOMNamedNodeMap_get_item(&map->IXMLDOMNamedNodeMap_iface, V_I4(&index), &item);
+        V_VT(res) = VT_DISPATCH;
+        V_DISPATCH(res) = (IDispatch *)item;
+        return S_OK;
+    }
+
+    if (id < DISPID_DOM_COLLECTION_BASE || id > DISPID_DOM_COLLECTION_MAX)
+        return DISP_E_UNKNOWNNAME;
+
+    V_VT(res) = VT_DISPATCH;
+    V_DISPATCH(res) = NULL;
+#else
     V_VT(res) = VT_DISPATCH;
     V_DISPATCH(res) = NULL;
 
     if (id < DISPID_DOM_COLLECTION_BASE || id > DISPID_DOM_COLLECTION_MAX)
         return DISP_E_UNKNOWNNAME;
+#endif
 
     switch(flags)
     {
