@@ -89,7 +89,7 @@ USBCCGP_SyncUrbRequest(
             {
                 DPRINT1("USBCCGP: URB function 0x%x timed out after %u ms\n",
                         UrbRequest->UrbHeader.Function, USBCCGP_SYNC_URB_TIMEOUT_MS);
-                Irp->IoStatus.Status = STATUS_IO_TIMEOUT;
+                Irp->IoStatus.Status = STATUS_UNSUCCESSFUL;
             }
         }
 

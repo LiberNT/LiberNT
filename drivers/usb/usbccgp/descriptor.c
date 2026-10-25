@@ -27,7 +27,6 @@ USBCCGP_GetDescriptor(
     PURB Urb;
     NTSTATUS Status;
     PVOID Descriptor;
-    ULONG Attempt;
 
     //
     // sanity checks
@@ -61,48 +60,23 @@ USBCCGP_GetDescriptor(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    for (Attempt = 0; Attempt < 3; Attempt++)
-    {
-        //
-        // initialize urb
-        //
-        RtlZeroMemory(Descriptor, DescriptorLength);
-        UsbBuildGetDescriptorRequest(Urb,
-                                     sizeof(Urb->UrbControlDescriptorRequest),
-                                     DescriptorType,
-                                     DescriptorIndex,
-                                     LanguageId,
-                                     Descriptor,
-                                     NULL,
-                                     DescriptorLength,
-                                     NULL);
+    //
+    // initialize urb
+    //
+    UsbBuildGetDescriptorRequest(Urb,
+                                 sizeof(Urb->UrbControlDescriptorRequest),
+                                 DescriptorType,
+                                 DescriptorIndex,
+                                 LanguageId,
+                                 Descriptor,
+                                 NULL,
+                                 DescriptorLength,
+                                 NULL);
 
-        //
-        // submit urb
-        //
-        Status = USBCCGP_SyncUrbRequest(DeviceObject, Urb);
-        if (!NT_SUCCESS(Status))
-        {
-            if (Status == STATUS_IO_TIMEOUT || Urb->UrbHeader.Status == USBD_STATUS_TIMEOUT)
-                break;
-            continue;
-        }
-
-        if (Urb->UrbControlDescriptorRequest.TransferBufferLength == 0)
-        {
-            Status = STATUS_DEVICE_DATA_ERROR;
-            continue;
-        }
-
-        if (Urb->UrbControlDescriptorRequest.TransferBufferLength > 1 &&
-            ((PUCHAR)Descriptor)[1] != DescriptorType)
-        {
-            Status = STATUS_DEVICE_DATA_ERROR;
-            continue;
-        }
-
-        break;
-    }
+    //
+    // submit urb
+    //
+    Status = USBCCGP_SyncUrbRequest(DeviceObject, Urb);
 
     //
     // free urb
@@ -202,6 +176,7 @@ USBCCGP_GetDescriptors(
     NTSTATUS Status;
     PFDO_DEVICE_EXTENSION DeviceExtension;
     USHORT DescriptorLength;
+    ULONG Attempt = 0;
 
     //
     // get device extension
@@ -221,12 +196,25 @@ USBCCGP_GetDescriptors(
          return Status;
      }
 
+RetryConfiguration:
+     Attempt++;
+
      //
      // now get basic configuration descriptor
      //
      Status = USBCCGP_GetDescriptor(DeviceExtension->NextDeviceObject, USB_CONFIGURATION_DESCRIPTOR_TYPE, sizeof(USB_CONFIGURATION_DESCRIPTOR), 0, 0, (PVOID*)&DeviceExtension->ConfigurationDescriptor);
+     if (NT_SUCCESS(Status) &&
+         DeviceExtension->ConfigurationDescriptor->wTotalLength < sizeof(USB_CONFIGURATION_DESCRIPTOR))
+     {
+         FreeItem(DeviceExtension->ConfigurationDescriptor);
+         DeviceExtension->ConfigurationDescriptor = NULL;
+         Status = STATUS_DEVICE_DATA_ERROR;
+     }
      if (!NT_SUCCESS(Status))
      {
+         if (Attempt < 3)
+             goto RetryConfiguration;
+
          //
          // failed to get configuration descriptor
          //
@@ -252,6 +240,9 @@ USBCCGP_GetDescriptors(
      Status = USBCCGP_GetDescriptor(DeviceExtension->NextDeviceObject, USB_CONFIGURATION_DESCRIPTOR_TYPE, DescriptorLength, 0, 0, (PVOID*)&DeviceExtension->ConfigurationDescriptor);
      if (!NT_SUCCESS(Status))
      {
+         if (Attempt < 3)
+             goto RetryConfiguration;
+
          //
          // failed to get configuration descriptor
          //
