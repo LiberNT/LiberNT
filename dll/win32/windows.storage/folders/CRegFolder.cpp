@@ -132,6 +132,16 @@ struct CRegFolderInfo
     PIDLTYPE GetPidlType() const { return m_pInfo->PidlType; }
     UINT GetRequiredItemsCount() const { return m_pInfo->Count; }
     const REQUIREDREGITEM& GetAt(size_t i) const { return m_pInfo->Items[i]; }
+
+    int GetRequiredItemOrder(REFCLSID clsid) const
+    {
+        for (UINT i = 0; i < GetRequiredItemsCount(); ++i)
+        {
+            if (IsEqualGUID(GetAt(i).clsid, clsid))
+                return GetAt(i).Order;
+        }
+        return -1;
+    }
 };
 
 HRESULT CGuidItemExtractIcon_CreateInstance(LPCITEMIDLIST pidl, REFIID iid, LPVOID * ppvOut)
@@ -473,7 +483,7 @@ HRESULT WINAPI CRegFolder::ParseDisplayName(HWND hwndOwner, LPBC pbc, LPOLESTR l
         return E_FAIL;
     }
 
-    CComHeapPtr<ITEMIDLIST> pidlTemp(CreateRegItem(GetPidlType(), clsid));
+    CComHeapPtr<ITEMIDLIST> pidlTemp(CreateRegItem(GetPidlType(), clsid, GetRequiredItemOrder(clsid)));
     if (!pidlTemp)
         return E_OUTOFMEMORY;
 
