@@ -69,3 +69,17 @@ extern HRESULT compress_add_file(struct zip_archive *archive, const WCHAR *path,
         OPC_COMPRESSION_OPTIONS options);
 extern HRESULT compress_finalize_archive(struct zip_archive *archive);
 extern void compress_release_archive(struct zip_archive *archive);
+
+#ifdef __REACTOS__
+struct zip_entry
+{
+    WCHAR *name;
+    OPC_COMPRESSION_OPTIONS options;
+    BYTE *data;
+    ULONG size;
+};
+
+extern HRESULT decompress_read_archive(IStream *input, struct zip_entry **entries, size_t *count);
+extern void decompress_release_entries(struct zip_entry *entries, size_t count);
+extern HRESULT opc_package_read(IOpcFactory *factory, IStream *stream, OPC_READ_FLAGS flags, IOpcPackage **package);
+#endif

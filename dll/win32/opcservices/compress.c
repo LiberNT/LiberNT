@@ -592,3 +592,314 @@ HRESULT compress_add_file(struct zip_archive *archive, const WCHAR *path,
 
     return S_OK;
 }
+
+#ifdef __REACTOS__
+static HRESULT zip_read_at(IStream *input, uint64_t offset, void *buffer, ULONG size)
+{
+    LARGE_INTEGER pos;
+    ULONG read = 0;
+    HRESULT hr;
+
+    pos.QuadPart = offset;
+    if (FAILED(hr = IStream_Seek(input, pos, STREAM_SEEK_SET, NULL)))
+        return hr;
+    if (FAILED(hr = IStream_Read(input, buffer, size, &read)))
+        return hr;
+
+    return read == size ? S_OK : OPC_E_ZIP_CORRUPTED_ARCHIVE;
+}
+
+static HRESULT zip_find_directory(IStream *input, uint64_t *offset, uint64_t *size, uint64_t *count)
+{
+    struct zip64_end_of_central_directory_locator locator;
+    struct zip64_end_of_central_directory eocd64;
+    struct zip32_end_of_central_directory eocd;
+    LARGE_INTEGER zero = {{0}};
+    ULARGE_INTEGER end;
+    uint32_t signature;
+    uint64_t start;
+    BOOL found = FALSE;
+    BYTE *buffer;
+    ULONG len, i;
+    HRESULT hr;
+
+    if (FAILED(hr = IStream_Seek(input, zero, STREAM_SEEK_END, &end)))
+        return hr;
+
+    if (end.QuadPart < sizeof(eocd))
+        return OPC_E_ZIP_CORRUPTED_ARCHIVE;
+
+    len = end.QuadPart < sizeof(eocd) + 0xffff ? end.QuadPart : sizeof(eocd) + 0xffff;
+    start = end.QuadPart - len;
+    if (!(buffer = malloc(len)))
+        return E_OUTOFMEMORY;
+
+    if (FAILED(hr = zip_read_at(input, start, buffer, len)))
+    {
+        free(buffer);
+        return hr;
+    }
+
+    for (i = len - sizeof(eocd) + 1; i-- > 0;)
+    {
+        memcpy(&signature, buffer + i, sizeof(signature));
+        if (signature == ZIP32_EOCD)
+        {
+            memcpy(&eocd, buffer + i, sizeof(eocd));
+            found = TRUE;
+            break;
+        }
+    }
+    free(buffer);
+
+    if (!found)
+        return OPC_E_ZIP_CORRUPTED_ARCHIVE;
+
+    *offset = eocd.directory_offset;
+    *size = eocd.directory_size;
+    *count = eocd.records_total;
+
+    if (eocd.records_total != 0xffff && eocd.directory_size != ~0u && eocd.directory_offset != ~0u)
+        return S_OK;
+
+    if (start + i < sizeof(locator))
+        return OPC_E_ZIP_CORRUPTED_ARCHIVE;
+
+    if (FAILED(hr = zip_read_at(input, start + i - sizeof(locator), &locator, sizeof(locator))))
+        return hr;
+
+    if (locator.signature != ZIP64_EOCD64_LOCATOR)
+        return OPC_E_ZIP_CORRUPTED_ARCHIVE;
+
+    if (FAILED(hr = zip_read_at(input, locator.eocd64_offset, &eocd64, sizeof(eocd64))))
+        return hr;
+
+    if (eocd64.signature != ZIP64_EOCD64)
+        return OPC_E_ZIP_CORRUPTED_ARCHIVE;
+
+    *offset = eocd64.directory_offset;
+    *size = eocd64.directory_size;
+    *count = eocd64.records_total;
+
+    return S_OK;
+}
+
+static void zip_read_zip64_extra(const BYTE *extra, ULONG length, const struct zip32_central_directory_header *header,
+        uint64_t *uncompressed_size, uint64_t *compressed_size, uint64_t *offset)
+{
+    uint16_t id, size;
+    ULONG pos = 0, field;
+
+    while (pos + 4 <= length)
+    {
+        memcpy(&id, extra + pos, sizeof(id));
+        memcpy(&size, extra + pos + 2, sizeof(size));
+        pos += 4;
+        if (pos + size > length)
+            return;
+
+        if (id == 1)
+        {
+            field = pos;
+            if (header->uncompressed_size == ~0u && field + 8 <= pos + size)
+            {
+                memcpy(uncompressed_size, extra + field, 8);
+                field += 8;
+            }
+            if (header->compressed_size == ~0u && field + 8 <= pos + size)
+            {
+                memcpy(compressed_size, extra + field, 8);
+                field += 8;
+            }
+            if (header->local_file_offset == ~0u && field + 8 <= pos + size)
+                memcpy(offset, extra + field, 8);
+            return;
+        }
+
+        pos += size;
+    }
+}
+
+static HRESULT zip_read_entry_data(IStream *input, const struct zip32_central_directory_header *header,
+        uint64_t compressed_size, uint64_t uncompressed_size, uint64_t offset, struct zip_entry *entry)
+{
+    struct local_file_header local_header;
+    z_stream z_str = {0};
+    BYTE *compressed;
+    HRESULT hr;
+    int ret;
+
+    if (compressed_size > ~0u || uncompressed_size > ~0u)
+        return OPC_E_ZIP_UNSUPPORTEDARCHIVE;
+
+    if (FAILED(hr = zip_read_at(input, offset, &local_header, sizeof(local_header))))
+        return hr;
+
+    if (local_header.signature != LOCAL_HEADER_SIGNATURE)
+        return OPC_E_ZIP_CORRUPTED_ARCHIVE;
+
+    offset += sizeof(local_header) + local_header.name_length + local_header.extra_length;
+
+    if (header->method == 0)
+    {
+        if (compressed_size != uncompressed_size)
+            return OPC_E_ZIP_INCORRECT_DATA_SIZE;
+    }
+    else if (header->method != Z_DEFLATED)
+        return OPC_E_ZIP_UNSUPPORTEDARCHIVE;
+
+    if (!(entry->data = malloc(uncompressed_size ? uncompressed_size : 1)))
+        return E_OUTOFMEMORY;
+    entry->size = uncompressed_size;
+
+    if (header->method == 0)
+        return zip_read_at(input, offset, entry->data, entry->size);
+
+    if (!(compressed = malloc(compressed_size ? compressed_size : 1)))
+        return E_OUTOFMEMORY;
+
+    if (FAILED(hr = zip_read_at(input, offset, compressed, compressed_size)))
+    {
+        free(compressed);
+        return hr;
+    }
+
+    z_str.zalloc = zalloc;
+    z_str.zfree = zfree;
+    z_str.next_in = compressed;
+    z_str.avail_in = compressed_size;
+    z_str.next_out = entry->data;
+    z_str.avail_out = entry->size;
+
+    if (inflateInit2(&z_str, -MAX_WBITS) != Z_OK)
+    {
+        free(compressed);
+        return OPC_E_ZIP_DECOMPRESSION_FAILED;
+    }
+
+    ret = inflate(&z_str, Z_FINISH);
+    inflateEnd(&z_str);
+    free(compressed);
+
+    if (ret != Z_STREAM_END || z_str.total_out != entry->size)
+        return OPC_E_ZIP_DECOMPRESSION_FAILED;
+
+    return S_OK;
+}
+
+void decompress_release_entries(struct zip_entry *entries, size_t count)
+{
+    size_t i;
+
+    for (i = 0; i < count; ++i)
+    {
+        free(entries[i].name);
+        free(entries[i].data);
+    }
+    free(entries);
+}
+
+HRESULT decompress_read_archive(IStream *input, struct zip_entry **out, size_t *out_count)
+{
+    uint64_t offset, size, count, compressed_size, uncompressed_size, file_offset;
+    struct zip32_central_directory_header header;
+    struct zip_entry *entries = NULL, *entry;
+    size_t entries_count = 0, entries_size = 0;
+    BYTE *directory;
+    ULONG pos = 0;
+    HRESULT hr;
+    UINT cp;
+    int len;
+
+    *out = NULL;
+    *out_count = 0;
+
+    if (FAILED(hr = zip_find_directory(input, &offset, &size, &count)))
+        return hr;
+
+    if (size > 0x10000000)
+        return OPC_E_ZIP_CENTRAL_DIRECTORY_TOO_LARGE;
+
+    if (!(directory = malloc(size ? size : 1)))
+        return E_OUTOFMEMORY;
+
+    if (FAILED(hr = zip_read_at(input, offset, directory, size)))
+    {
+        free(directory);
+        return hr;
+    }
+
+    while (count-- && SUCCEEDED(hr))
+    {
+        if (pos + sizeof(header) > size)
+        {
+            hr = OPC_E_ZIP_INCONSISTENT_DIRECTORY;
+            break;
+        }
+
+        memcpy(&header, directory + pos, sizeof(header));
+        if (header.signature != ZIP32_CDFH ||
+                pos + sizeof(header) + header.name_length + header.extra_length + header.comment_length > size)
+        {
+            hr = OPC_E_ZIP_INCONSISTENT_DIRECTORY;
+            break;
+        }
+
+        compressed_size = header.compressed_size;
+        uncompressed_size = header.uncompressed_size;
+        file_offset = header.local_file_offset;
+        zip_read_zip64_extra(directory + pos + sizeof(header) + header.name_length, header.extra_length, &header,
+                &uncompressed_size, &compressed_size, &file_offset);
+
+        if (header.name_length && directory[pos + sizeof(header) + header.name_length - 1] != '/')
+        {
+            if (!opc_array_reserve((void **)&entries, &entries_size, entries_count + 1, sizeof(*entries)))
+            {
+                hr = E_OUTOFMEMORY;
+                break;
+            }
+
+            entry = &entries[entries_count++];
+            memset(entry, 0, sizeof(*entry));
+
+            cp = (header.flags & 0x800) ? CP_UTF8 : CP_ACP;
+            len = MultiByteToWideChar(cp, 0, (char *)directory + pos + sizeof(header), header.name_length, NULL, 0);
+            if (!(entry->name = malloc((len + 1) * sizeof(WCHAR))))
+            {
+                hr = E_OUTOFMEMORY;
+                break;
+            }
+            MultiByteToWideChar(cp, 0, (char *)directory + pos + sizeof(header), header.name_length, entry->name, len);
+            entry->name[len] = 0;
+
+            if (header.method == 0)
+                entry->options = OPC_COMPRESSION_NONE;
+            else if ((header.flags & DEFLATE_SUPERFAST) == DEFLATE_SUPERFAST)
+                entry->options = OPC_COMPRESSION_SUPERFAST;
+            else if (header.flags & DEFLATE_FAST)
+                entry->options = OPC_COMPRESSION_FAST;
+            else if (header.flags & DEFLATE_MAX)
+                entry->options = OPC_COMPRESSION_MAXIMUM;
+            else
+                entry->options = OPC_COMPRESSION_NORMAL;
+
+            hr = zip_read_entry_data(input, &header, compressed_size, uncompressed_size, file_offset, entry);
+        }
+
+        pos += sizeof(header) + header.name_length + header.extra_length + header.comment_length;
+    }
+
+    free(directory);
+
+    if (FAILED(hr))
+    {
+        decompress_release_entries(entries, entries_count);
+        return hr;
+    }
+
+    *out = entries;
+    *out_count = entries_count;
+
+    return S_OK;
+}
+#endif

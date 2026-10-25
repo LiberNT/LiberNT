@@ -375,9 +375,23 @@ static HRESULT WINAPI opc_factory_CreatePackage(IOpcFactory *iface, IOpcPackage 
 static HRESULT WINAPI opc_factory_ReadPackageFromStream(IOpcFactory *iface, IStream *stream,
         OPC_READ_FLAGS flags, IOpcPackage **package)
 {
+#ifdef __REACTOS__
+    TRACE("iface %p, stream %p, flags %#x, package %p.\n", iface, stream, flags, package);
+
+    if (!package)
+        return E_POINTER;
+
+    *package = NULL;
+
+    if (!stream)
+        return E_POINTER;
+
+    return opc_package_read(iface, stream, flags, package);
+#else
     FIXME("iface %p, stream %p, flags %#x, package %p stub!\n", iface, stream, flags, package);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI opc_factory_WritePackageToStream(IOpcFactory *iface, IOpcPackage *package, OPC_WRITE_FLAGS flags,

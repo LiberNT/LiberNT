@@ -2054,3 +2054,398 @@ HRESULT opc_package_write(IOpcPackage *package, OPC_WRITE_FLAGS flags, IStream *
 
     return hr;
 }
+
+#ifdef __REACTOS__
+struct read_content_type
+{
+    WCHAR *key;
+    WCHAR *type;
+    BOOL is_override;
+};
+
+static HRESULT opc_package_create_xml_reader(const struct zip_entry *entry, IXmlReader **out)
+{
+    LARGE_INTEGER zero = {{0}};
+    IXmlReader *reader;
+    IStream *stream;
+    HRESULT hr;
+
+    *out = NULL;
+
+    if (FAILED(hr = CreateStreamOnHGlobal(NULL, TRUE, &stream)))
+        return hr;
+
+    hr = IStream_Write(stream, entry->data, entry->size, NULL);
+    if (SUCCEEDED(hr))
+        hr = IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+    if (SUCCEEDED(hr))
+        hr = CreateXmlReader(&IID_IXmlReader, (void **)&reader, NULL);
+    if (SUCCEEDED(hr))
+    {
+        if (SUCCEEDED(hr = IXmlReader_SetInput(reader, (IUnknown *)stream)))
+            *out = reader;
+        else
+            IXmlReader_Release(reader);
+    }
+
+    IStream_Release(stream);
+    return hr;
+}
+
+static HRESULT opc_package_get_attribute(IXmlReader *reader, const WCHAR *name, WCHAR **value)
+{
+    const WCHAR *local, *str;
+    HRESULT hr;
+
+    *value = NULL;
+
+    for (hr = IXmlReader_MoveToFirstAttribute(reader); hr == S_OK; hr = IXmlReader_MoveToNextAttribute(reader))
+    {
+        if (FAILED(hr = IXmlReader_GetLocalName(reader, &local, NULL)))
+            break;
+        if (wcscmp(local, name))
+            continue;
+        if (FAILED(hr = IXmlReader_GetValue(reader, &str, NULL)))
+            break;
+        hr = (*value = opc_strdupW(str)) ? S_OK : E_OUTOFMEMORY;
+        break;
+    }
+
+    IXmlReader_MoveToElement(reader);
+
+    if (FAILED(hr))
+        return hr;
+
+    return *value ? S_OK : S_FALSE;
+}
+
+static void opc_package_free_content_types(struct read_content_type *types, size_t count)
+{
+    size_t i;
+
+    for (i = 0; i < count; ++i)
+    {
+        free(types[i].key);
+        free(types[i].type);
+    }
+    free(types);
+}
+
+static HRESULT opc_package_read_content_types(const struct zip_entry *entry, struct read_content_type **out,
+        size_t *out_count)
+{
+    struct read_content_type *types = NULL, *type;
+    size_t count = 0, size = 0;
+    const WCHAR *name;
+    IXmlReader *reader;
+    XmlNodeType node;
+    BOOL is_override;
+    HRESULT hr;
+
+    if (FAILED(hr = opc_package_create_xml_reader(entry, &reader)))
+        return hr;
+
+    while ((hr = IXmlReader_Read(reader, &node)) == S_OK)
+    {
+        if (node != XmlNodeType_Element)
+            continue;
+
+        if (FAILED(hr = IXmlReader_GetLocalName(reader, &name, NULL)))
+            break;
+
+        if (!wcscmp(name, L"Default"))
+            is_override = FALSE;
+        else if (!wcscmp(name, L"Override"))
+            is_override = TRUE;
+        else
+            continue;
+
+        if (!opc_array_reserve((void **)&types, &size, count + 1, sizeof(*types)))
+        {
+            hr = E_OUTOFMEMORY;
+            break;
+        }
+
+        type = &types[count++];
+        memset(type, 0, sizeof(*type));
+        type->is_override = is_override;
+
+        if ((hr = opc_package_get_attribute(reader, is_override ? L"PartName" : L"Extension", &type->key)) != S_OK ||
+                (hr = opc_package_get_attribute(reader, L"ContentType", &type->type)) != S_OK)
+        {
+            if (hr == S_FALSE)
+                hr = OPC_E_INVALID_CONTENT_TYPE_XML;
+            break;
+        }
+    }
+
+    IXmlReader_Release(reader);
+
+    if (FAILED(hr))
+    {
+        opc_package_free_content_types(types, count);
+        return hr == E_OUTOFMEMORY ? hr : OPC_E_INVALID_CONTENT_TYPE_XML;
+    }
+
+    *out = types;
+    *out_count = count;
+    return S_OK;
+}
+
+static const WCHAR *opc_package_find_content_type(const struct read_content_type *types, size_t count,
+        const WCHAR *name)
+{
+    const WCHAR *ext, *slash;
+    size_t i;
+
+    for (i = 0; i < count; ++i)
+    {
+        if (types[i].is_override && !wcsicmp(types[i].key, name))
+            return types[i].type;
+    }
+
+    slash = wcsrchr(name, '/');
+    ext = wcsrchr(slash ? slash : name, '.');
+    if (!ext)
+        return NULL;
+
+    for (i = 0; i < count; ++i)
+    {
+        if (!types[i].is_override && !wcsicmp(types[i].key, ext + 1))
+            return types[i].type;
+    }
+
+    return NULL;
+}
+
+static BOOL opc_package_get_rels_source(const WCHAR *name, WCHAR **source)
+{
+    const WCHAR *file, *dir;
+    size_t len = wcslen(name);
+    WCHAR *ret;
+
+    *source = NULL;
+
+    if (len < 5 || wcsicmp(name + len - 5, L".rels"))
+        return FALSE;
+
+    file = wcsrchr(name, '/');
+    if (!file)
+        return FALSE;
+
+    for (dir = file; dir > name && dir[-1] != '/'; --dir)
+        ;
+    if (file - dir != 5 || wcsnicmp(dir, L"_rels", 5))
+        return FALSE;
+
+    if (!(ret = malloc((len + 2) * sizeof(WCHAR))))
+        return TRUE;
+
+    ret[0] = '/';
+    memcpy(ret + 1, name, (dir - name) * sizeof(WCHAR));
+    memcpy(ret + 1 + (dir - name), file + 1, (len - (file + 1 - name) - 5) * sizeof(WCHAR));
+    ret[1 + (dir - name) + (len - (file + 1 - name) - 5)] = 0;
+    *source = ret;
+
+    return TRUE;
+}
+
+static HRESULT opc_package_read_rels(const struct zip_entry *entry, IOpcRelationshipSet *rels)
+{
+    WCHAR *id, *type, *target, *mode;
+    IOpcRelationship *relationship;
+    IXmlReader *reader;
+    const WCHAR *name;
+    XmlNodeType node;
+    IUri *target_uri;
+    HRESULT hr;
+
+    if (FAILED(hr = opc_package_create_xml_reader(entry, &reader)))
+        return hr;
+
+    while ((hr = IXmlReader_Read(reader, &node)) == S_OK)
+    {
+        if (node != XmlNodeType_Element)
+            continue;
+
+        if (FAILED(hr = IXmlReader_GetLocalName(reader, &name, NULL)))
+            break;
+
+        if (wcscmp(name, L"Relationship"))
+            continue;
+
+        id = type = target = mode = NULL;
+        if ((hr = opc_package_get_attribute(reader, L"Id", &id)) == S_OK &&
+                (hr = opc_package_get_attribute(reader, L"Type", &type)) == S_OK &&
+                (hr = opc_package_get_attribute(reader, L"Target", &target)) == S_OK &&
+                SUCCEEDED(hr = opc_package_get_attribute(reader, L"TargetMode", &mode)))
+        {
+            if (SUCCEEDED(hr = CreateUri(target, Uri_CREATE_ALLOW_RELATIVE, 0, &target_uri)))
+            {
+                hr = IOpcRelationshipSet_CreateRelationship(rels, id, type, target_uri,
+                        mode && !wcscmp(mode, L"External") ? OPC_URI_TARGET_MODE_EXTERNAL : OPC_URI_TARGET_MODE_INTERNAL,
+                        &relationship);
+                if (SUCCEEDED(hr))
+                    IOpcRelationship_Release(relationship);
+                IUri_Release(target_uri);
+            }
+        }
+        else if (hr == S_FALSE)
+            hr = OPC_E_INVALID_RELS_XML;
+
+        free(id);
+        free(type);
+        free(target);
+        free(mode);
+
+        if (FAILED(hr))
+            break;
+    }
+
+    IXmlReader_Release(reader);
+
+    return FAILED(hr) ? hr : S_OK;
+}
+
+static HRESULT opc_package_write_part_content(IOpcPart *part, const struct zip_entry *entry)
+{
+    IStream *stream;
+    HRESULT hr;
+
+    if (FAILED(hr = IOpcPart_GetContentStream(part, &stream)))
+        return hr;
+
+    hr = IStream_Write(stream, entry->data, entry->size, NULL);
+    IStream_Release(stream);
+
+    return hr;
+}
+
+HRESULT opc_package_read(IOpcFactory *factory, IStream *stream, OPC_READ_FLAGS flags, IOpcPackage **out)
+{
+    struct read_content_type *types = NULL;
+    size_t i, entries_count, types_count = 0;
+    IOpcRelationshipSet *rels;
+    struct zip_entry *entries;
+    IOpcPackage *package;
+    IOpcPartSet *part_set;
+    IOpcPartUri *name;
+    IOpcPart *part;
+    const WCHAR *content_type;
+    WCHAR *source, *uri;
+    BOOL found = FALSE;
+    HRESULT hr;
+
+    *out = NULL;
+
+    if (FAILED(hr = decompress_read_archive(stream, &entries, &entries_count)))
+        return hr;
+
+    for (i = 0; i < entries_count; ++i)
+    {
+        if (!wcsicmp(entries[i].name, L"[Content_Types].xml"))
+        {
+            hr = opc_package_read_content_types(&entries[i], &types, &types_count);
+            found = TRUE;
+            break;
+        }
+    }
+
+    if (SUCCEEDED(hr) && !found)
+        hr = OPC_E_MISSING_CONTENT_TYPES;
+
+    if (FAILED(hr))
+    {
+        decompress_release_entries(entries, entries_count);
+        return hr;
+    }
+
+    if (FAILED(hr = opc_package_create(factory, &package)))
+    {
+        opc_package_free_content_types(types, types_count);
+        decompress_release_entries(entries, entries_count);
+        return hr;
+    }
+
+    hr = IOpcPackage_GetPartSet(package, &part_set);
+
+    for (i = 0; SUCCEEDED(hr) && i < entries_count; ++i)
+    {
+        if (!wcsicmp(entries[i].name, L"[Content_Types].xml"))
+            continue;
+
+        if (opc_package_get_rels_source(entries[i].name, &source))
+        {
+            free(source);
+            continue;
+        }
+
+        if (!(uri = malloc((wcslen(entries[i].name) + 2) * sizeof(WCHAR))))
+        {
+            hr = E_OUTOFMEMORY;
+            break;
+        }
+        uri[0] = '/';
+        lstrcpyW(uri + 1, entries[i].name);
+
+        content_type = opc_package_find_content_type(types, types_count, uri);
+        if (SUCCEEDED(hr = IOpcFactory_CreatePartUri(factory, uri, &name)))
+        {
+            if (SUCCEEDED(hr = IOpcPartSet_CreatePart(part_set, name, content_type ? content_type : L"",
+                    entries[i].options, &part)))
+            {
+                hr = opc_package_write_part_content(part, &entries[i]);
+                IOpcPart_Release(part);
+            }
+            IOpcPartUri_Release(name);
+        }
+        free(uri);
+    }
+
+    for (i = 0; SUCCEEDED(hr) && i < entries_count; ++i)
+    {
+        if (!opc_package_get_rels_source(entries[i].name, &source))
+            continue;
+
+        if (!source)
+        {
+            hr = E_OUTOFMEMORY;
+            break;
+        }
+
+        rels = NULL;
+        if (!wcscmp(source, L"/"))
+            hr = IOpcPackage_GetRelationshipSet(package, &rels);
+        else if (SUCCEEDED(hr = IOpcFactory_CreatePartUri(factory, source, &name)))
+        {
+            if (IOpcPartSet_GetPart(part_set, name, &part) == S_OK)
+            {
+                hr = IOpcPart_GetRelationshipSet(part, &rels);
+                IOpcPart_Release(part);
+            }
+            IOpcPartUri_Release(name);
+        }
+        free(source);
+
+        if (SUCCEEDED(hr) && rels)
+        {
+            hr = opc_package_read_rels(&entries[i], rels);
+            IOpcRelationshipSet_Release(rels);
+        }
+    }
+
+    if (part_set)
+        IOpcPartSet_Release(part_set);
+    opc_package_free_content_types(types, types_count);
+    decompress_release_entries(entries, entries_count);
+
+    if (FAILED(hr))
+    {
+        IOpcPackage_Release(package);
+        return hr;
+    }
+
+    *out = package;
+    return S_OK;
+}
+#endif
