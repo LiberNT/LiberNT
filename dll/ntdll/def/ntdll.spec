@@ -2122,5 +2122,8 @@
 @ stdcall -arch=arm __rt_udiv64()
 @ stdcall -arch=arm __rt_srsh()
 @ cdecl -arch=arm64 ChpeVsscanf(str str ptr)
+@ cdecl -arch=arm64 ChpeVsscanf_s(str str ptr)
+@ cdecl -arch=arm64 ChpeVswscanf_s(wstr wstr ptr)
+@ cdecl -arch=arm64 ChpeVsnwscanf_s(wstr long wstr ptr)
 @ stdcall -arch=arm64 ChpeVDbgPrintReturnControlC(str ptr)
 @ stdcall -version=0x602+ -ret64 RtlGetSystemTimePrecise()

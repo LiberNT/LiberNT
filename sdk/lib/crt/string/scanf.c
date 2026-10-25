@@ -135,6 +135,23 @@ int CDECL ChpeVsscanf(const char *str, const char *format, __ms_va_list args)
 #define SECURE 1
 #include "scanf.h"
 
+#ifdef _LIBCNT_
+int CDECL ChpeVsscanf_s(const char *str, const char *format, __ms_va_list args)
+{
+    return vsscanf_s_l(str, format, NULL, args);
+}
+
+int CDECL ChpeVswscanf_s(const wchar_t *str, const wchar_t *format, __ms_va_list args)
+{
+    return vswscanf_s_l(str, format, NULL, args);
+}
+
+int CDECL ChpeVsnwscanf_s(const wchar_t *input, size_t length, const wchar_t *format, __ms_va_list args)
+{
+    return vsnwscanf_s_l(input, length, format, NULL, args);
+}
+#endif
+
 #ifndef _LIBCNT_
 /* vcscanf_l */
 #undef WIDE_SCANF

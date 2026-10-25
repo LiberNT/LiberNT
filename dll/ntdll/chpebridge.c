@@ -28,6 +28,9 @@
 #include <sha1.h>
 
 INT CDECL ChpeVsscanf(PCSTR Buffer, PCSTR Format, va_list Arguments);
+INT CDECL ChpeVsscanf_s(PCSTR Buffer, PCSTR Format, va_list Arguments);
+INT CDECL ChpeVswscanf_s(PCWSTR Buffer, PCWSTR Format, va_list Arguments);
+INT CDECL ChpeVsnwscanf_s(PCWSTR Buffer, SIZE_T Length, PCWSTR Format, va_list Arguments);
 ULONG NTAPI ChpeVDbgPrintReturnControlC(PCCH Format, va_list Arguments);
 NTSTATUS NTAPI NtOpenKeyEx(PHANDLE KeyHandle, ACCESS_MASK DesiredAccess,
                             POBJECT_ATTRIBUTES ObjectAttributes, ULONG OpenOptions);
@@ -800,6 +803,30 @@ ChpeSwprintf(PWCHAR Buffer, PCWSTR Format, ...)
     return Result;
 }
 
+INT CDECL
+ChpeSnprintf_s(PCHAR Buffer, SIZE_T BufferSize, SIZE_T Count, PCSTR Format, ...)
+{
+    va_list Arguments;
+    INT Result;
+
+    va_start(Arguments, Format);
+    Result = _vsnprintf_s(Buffer, BufferSize, Count, Format, Arguments);
+    va_end(Arguments);
+    return Result;
+}
+
+INT CDECL
+ChpeSnwprintf_s(PWCHAR Buffer, SIZE_T BufferSize, SIZE_T Count, PCWSTR Format, ...)
+{
+    va_list Arguments;
+    INT Result;
+
+    va_start(Arguments, Format);
+    Result = _vsnwprintf_s(Buffer, BufferSize, Count, Format, Arguments);
+    va_end(Arguments);
+    return Result;
+}
+
 static const UNICODE_STRING ChpeNativeNtdllName = RTL_CONSTANT_STRING(L"ntdll.dll");
 static const UNICODE_STRING ChpeBridgeNtdllName = RTL_CONSTANT_STRING(L"ntdll_chpe.dll");
 
@@ -884,6 +911,29 @@ ChpeLdrGetDllHandleEx(ULONG Flags, PWSTR DllPath, PULONG DllCharacteristics, PUN
         DllName = (PUNICODE_STRING)&ChpeBridgeNtdllName;
 
     return LdrGetDllHandleEx(Flags, DllPath, DllCharacteristics, DllName, DllHandle);
+}
+
+NTSTATUS NTAPI
+ChpeLdrGetDllHandleByName(PUNICODE_STRING BaseDllName, PUNICODE_STRING FullDllName, PVOID *DllHandle)
+{
+    PLDR_DATA_TABLE_ENTRY NativeEntry, BridgeEntry;
+    PVOID NativeBase = NULL;
+    PVOID BridgeBase = NULL;
+
+    if (BaseDllName && RtlEqualUnicodeString(BaseDllName, &ChpeNativeNtdllName, TRUE))
+        BaseDllName = (PUNICODE_STRING)&ChpeBridgeNtdllName;
+
+    if (FullDllName &&
+        NT_SUCCESS(LdrGetDllHandle(NULL, NULL, (PUNICODE_STRING)&ChpeNativeNtdllName, &NativeBase)) &&
+        NT_SUCCESS(LdrGetDllHandle(NULL, NULL, (PUNICODE_STRING)&ChpeBridgeNtdllName, &BridgeBase)) &&
+        NT_SUCCESS(LdrFindEntryForAddress(NativeBase, &NativeEntry)) &&
+        NT_SUCCESS(LdrFindEntryForAddress(BridgeBase, &BridgeEntry)) &&
+        RtlEqualUnicodeString(FullDllName, &NativeEntry->FullDllName, TRUE))
+    {
+        FullDllName = &BridgeEntry->FullDllName;
+    }
+
+    return LdrGetDllHandleByName(BaseDllName, FullDllName, DllHandle);
 }
 
 NTSTATUS NTAPI
@@ -3233,6 +3283,60 @@ INT CDECL
 ChpeAutoVsscanf(PCSTR Buffer, PCSTR Format, va_list Arguments)
 {
     return ChpeVsscanf(Buffer, Format, Arguments);
+}
+
+INT CDECL
+ChpeSscanf_s(PCSTR Buffer, PCSTR Format, ...)
+{
+    va_list Arguments;
+    INT Result;
+
+    va_start(Arguments, Format);
+    Result = ChpeVsscanf_s(Buffer, Format, Arguments);
+    va_end(Arguments);
+    return Result;
+}
+
+INT CDECL
+ChpeSwscanf_s(PCWSTR Buffer, PCWSTR Format, ...)
+{
+    va_list Arguments;
+    INT Result;
+
+    va_start(Arguments, Format);
+    Result = ChpeVswscanf_s(Buffer, Format, Arguments);
+    va_end(Arguments);
+    return Result;
+}
+
+INT CDECL
+ChpeSnwscanf_s(PCWSTR Buffer, SIZE_T Length, PCWSTR Format, ...)
+{
+    va_list Arguments;
+    INT Result;
+
+    va_start(Arguments, Format);
+    Result = ChpeVsnwscanf_s(Buffer, Length, Format, Arguments);
+    va_end(Arguments);
+    return Result;
+}
+
+INT CDECL
+ChpeAutoVsscanf_s(PCSTR Buffer, PCSTR Format, va_list Arguments)
+{
+    return ChpeVsscanf_s(Buffer, Format, Arguments);
+}
+
+INT CDECL
+ChpeAutoVswscanf_s(PCWSTR Buffer, PCWSTR Format, va_list Arguments)
+{
+    return ChpeVswscanf_s(Buffer, Format, Arguments);
+}
+
+INT CDECL
+ChpeAutoVsnwscanf_s(PCWSTR Buffer, SIZE_T Length, PCWSTR Format, va_list Arguments)
+{
+    return ChpeVsnwscanf_s(Buffer, Length, Format, Arguments);
 }
 
 ULONG NTAPI
