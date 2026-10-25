@@ -186,6 +186,7 @@ CreateShortcutsFromSection(
     DWORD dwFieldCount;
     INT iIconNr;
     WCHAR szCommand[MAX_PATH];
+    WCHAR szTarget[MAX_PATH];
     WCHAR szName[MAX_PATH];
     WCHAR szDescription[MAX_PATH];
     WCHAR szDirectory[MAX_PATH];
@@ -206,6 +207,12 @@ CreateShortcutsFromSection(
 
         if (!SetupGetStringFieldW(&Context, 1, szCommand, ARRAYSIZE(szCommand), NULL))
             continue;
+
+        if (ExpandEnvironmentStringsW(szCommand, szTarget, ARRAYSIZE(szTarget)) == 0 ||
+            GetFileAttributesW(szTarget) == INVALID_FILE_ATTRIBUTES)
+        {
+            continue;
+        }
 
         if (!SetupGetStringFieldW(&Context, 2, szName, ARRAYSIZE(szName), NULL))
             continue;
