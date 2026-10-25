@@ -744,6 +744,8 @@ CFSFolder::CFSFolder()
     m_bGroupPolicyActive = 0;
     m_cBackReferences = 0;
     m_bTargetFromBag = FALSE;
+    m_bHasTargetInfo = FALSE;
+    ZeroMemory(&m_TargetInfo, sizeof(m_TargetInfo));
 }
 
 CFSFolder::~CFSFolder()
@@ -752,6 +754,7 @@ CFSFolder::~CFSFolder()
 
     SHFree(m_pidlRoot);
     SHFree(m_sPathTarget);
+    ILFree(m_TargetInfo.pidlTargetFolder);
 }
 
 static const shvheader GenericSFHeader[] = {
@@ -1164,6 +1167,15 @@ HRESULT WINAPI CFSFolder::EnumObjects(
     DWORD dwFlags,
     LPENUMIDLIST *ppEnumIDList)
 {
+    if (!m_sPathTarget)
+    {
+        if (!ppEnumIDList)
+            return E_INVALIDARG;
+        *ppEnumIDList = NULL;
+        if (m_pidlRoot)
+            return E_INVALIDARG;
+        return ShellObjectCreator<CEnumIDListBase>(IID_PPV_ARG(IEnumIDList, ppEnumIDList));
+    }
     return ShellObjectCreatorInit<CFileSysEnum>(m_sPathTarget, dwFlags, IID_PPV_ARG(IEnumIDList, ppEnumIDList));
 }
 
@@ -1734,6 +1746,21 @@ HRESULT WINAPI CFSFolder::GetDisplayNameOf(PCUITEMID_CHILD pidl,
     if (!strRet)
         return E_INVALIDARG;
 
+    if (!pidl || !pidl->mkid.cb)
+    {
+        if (!(GET_SHGDN_FOR(dwFlags) & SHGDN_FORPARSING) || GET_SHGDN_RELATION(dwFlags) == SHGDN_INFOLDER)
+            return E_INVALIDARG;
+        if (m_sPathTarget)
+            return SHSetStrRet(strRet, m_sPathTarget);
+        if (!m_pidlRoot)
+        {
+            WCHAR szDesktop[MAX_PATH];
+            if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, szDesktop)))
+                return SHSetStrRet(strRet, szDesktop);
+        }
+        return E_FAIL;
+    }
+
     /* If it is a complex pidl, let the child handle it */
     if (!_ILIsPidlSimple (pidl)) /* complex pidl */
     {
@@ -2084,6 +2111,9 @@ HRESULT WINAPI CFSFolder::InitializeEx(IBindCtx * pbc, LPCITEMIDLIST pidlRootx,
               debugstr_w (ppfti->szNetworkProvider), ppfti->dwAttributes,
               ppfti->csidl);
 
+    if (!pidlRootx)
+        return E_INVALIDARG;
+
     pdump (pidlRootx);
     if (ppfti && ppfti->pidlTargetFolder)
         pdump(ppfti->pidlTargetFolder);
@@ -2092,6 +2122,9 @@ HRESULT WINAPI CFSFolder::InitializeEx(IBindCtx * pbc, LPCITEMIDLIST pidlRootx,
         __SHFreeAndNil(&m_pidlRoot);    /* free the old */
     if (m_sPathTarget)
         __SHFreeAndNil(&m_sPathTarget);
+    ILFree(m_TargetInfo.pidlTargetFolder);
+    ZeroMemory(&m_TargetInfo, sizeof(m_TargetInfo));
+    m_bHasTargetInfo = FALSE;
 
     /*
      * Root path and pidl
@@ -2102,11 +2135,16 @@ HRESULT WINAPI CFSFolder::InitializeEx(IBindCtx * pbc, LPCITEMIDLIST pidlRootx,
      *  the target folder is spezified in csidl OR pidlTargetFolder OR
      *  szTargetParsingName
      */
-    HRESULT hr = E_FAIL;
+    HRESULT hr = S_OK;
     if (ppfti)
     {
-        if (ppfti->csidl != -1)
+        m_TargetInfo = *ppfti;
+        m_TargetInfo.pidlTargetFolder = ppfti->pidlTargetFolder ? ILClone(ppfti->pidlTargetFolder) : NULL;
+        m_bHasTargetInfo = TRUE;
+
+        if (ppfti->csidl != -1 && ppfti->csidl != 0)
         {
+            hr = E_FAIL;
             BOOL create = ppfti->csidl & CSIDL_FLAG_CREATE;
             if (SHGetSpecialFolderPathW(0, wszTemp, ppfti->csidl, create))
                 hr = SHStrDupW(wszTemp, &m_sPathTarget);
@@ -2117,6 +2155,7 @@ HRESULT WINAPI CFSFolder::InitializeEx(IBindCtx * pbc, LPCITEMIDLIST pidlRootx,
         }
         else if (ppfti->pidlTargetFolder)
         {
+            hr = E_FAIL;
             if (SHGetPathFromIDListW(ppfti->pidlTargetFolder, wszTemp))
                 hr = SHStrDupW(wszTemp, &m_sPathTarget);
         }
@@ -2128,9 +2167,15 @@ HRESULT WINAPI CFSFolder::InitializeEx(IBindCtx * pbc, LPCITEMIDLIST pidlRootx,
 
 HRESULT WINAPI CFSFolder::GetFolderTargetInfo(PERSIST_FOLDER_TARGET_INFO * ppfti)
 {
-    FIXME("(%p)->(%p)\n", this, ppfti);
+    TRACE("(%p)->(%p)\n", this, ppfti);
+    if (!ppfti)
+        return E_INVALIDARG;
     ZeroMemory(ppfti, sizeof (*ppfti));
-    return E_NOTIMPL;
+    if (!m_bHasTargetInfo)
+        return E_FAIL;
+    *ppfti = m_TargetInfo;
+    ppfti->pidlTargetFolder = m_TargetInfo.pidlTargetFolder ? ILClone(m_TargetInfo.pidlTargetFolder) : NULL;
+    return S_OK;
 }
 
 HRESULT CFSFolder::_CreateExtensionUIObject(PCUIDLIST_RELATIVE pidl, REFIID riid, LPVOID *ppvOut)

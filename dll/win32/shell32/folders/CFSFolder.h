@@ -42,6 +42,8 @@ class CFSFolder :
         LONG m_cBackReferences;
         CComHeapPtr<WCHAR> m_pszRemoteComputer;
         BOOL m_bTargetFromBag;
+        BOOL m_bHasTargetInfo;
+        PERSIST_FOLDER_TARGET_INFO m_TargetInfo;
         HRESULT _GetElementPath(LPCOLESTR pwcsName, LPWSTR pszPath);
         HRESULT _CreateShellExtInstance(const CLSID *pclsid, LPCITEMIDLIST pidl, REFIID riid, LPVOID *ppvOut);
         HRESULT _CreateExtensionUIObject(LPCITEMIDLIST pidl, REFIID riid, LPVOID *ppvOut);
