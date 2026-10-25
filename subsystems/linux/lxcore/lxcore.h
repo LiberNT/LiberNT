@@ -909,6 +909,7 @@ VOID LxNsThreadInherit(_Inout_ PLX_THREAD Thread, _In_opt_ PLX_THREAD Parent);
 VOID LxNsThreadRelease(_Inout_ PLX_THREAD Thread);
 LONG LxProcessChroot(_In_ PLX_PROCESS Process, _In_ PCSTR Path);
 PSTR LxPathVisible(_In_ PLX_PROCESS Viewer, _In_ PCSTR Path);
+PSTR LxFileCurrentPath(_In_ PLX_FILE File);
 LONG LxPidAssign(_Inout_ PLX_PROCESS Process, _Inout_ PLX_THREAD Thread, _In_reads_opt_(SetTidCount) const ULONG *SetTid,
                  _In_ ULONG SetTidCount);
 LONG LxTidAssign(_In_ PLX_PROCESS Process, _Inout_ PLX_THREAD Thread, _In_reads_opt_(SetTidCount) const ULONG *SetTid,

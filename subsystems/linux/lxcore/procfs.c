@@ -2696,6 +2696,19 @@ LxThreadVisible(
 
 static
 PSTR
+LxFileVisiblePath(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_FILE File)
+{
+    PSTR Current = LxFileCurrentPath(File), Path;
+
+    Path = LxPathVisible(Process, (Current != NULL) ? Current : File->Path);
+    LxFree(Current);
+    return Path;
+}
+
+static
+PSTR
 LxDescribeFile(
     _In_ PLX_FILE File)
 {
@@ -2769,7 +2782,7 @@ LxResolveFdLink(
         return -LX_ENOENT;
 
     if ((File->Path != NULL) && (File->Path[0] == '/') && (File->Mount != NULL))
-        Synth->LinkTarget = LxPathVisible(Self, File->Path);
+        Synth->LinkTarget = LxFileVisiblePath(Self, File);
     else
         Synth->LinkTarget = LxDescribeFile(File);
     Synth->Magic = TRUE;
@@ -2916,7 +2929,7 @@ LxResolvePidEntry(
         Synth->Type = LX_S_IFLNK;
         Synth->Mode = ((Access != LX_O_WRONLY) ? 0400 : 0) | ((Access != LX_O_RDONLY) ? 0200 : 0);
         if ((File->Path != NULL) && (File->Path[0] == '/') && (File->Mount != NULL))
-            Synth->LinkTarget = LxPathVisible(Self, File->Path);
+            Synth->LinkTarget = LxFileVisiblePath(Self, File);
         else
             Synth->LinkTarget = LxDescribeFile(File);
         Synth->Magic = TRUE;
@@ -3417,7 +3430,7 @@ LxSynthFollowPath(
     if (File == NULL)
         return NULL;
     if ((File->Type == LX_S_IFDIR) && (File->Path != NULL) && (File->Path[0] == '/') && (File->Mount != NULL))
-        Path = LxPathVisible(Process, File->Path);
+        Path = LxFileVisiblePath(Process, File);
     LxFileDereference(File);
     return Path;
 }
@@ -3446,7 +3459,7 @@ LxSynthFdPath(
     if (File == NULL)
         return NULL;
     if ((File->Path != NULL) && (File->Path[0] == '/') && (File->Mount != NULL))
-        Path = LxPathVisible(Process, File->Path);
+        Path = LxFileVisiblePath(Process, File);
     LxFileDereference(File);
     return Path;
 }

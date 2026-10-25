@@ -2899,46 +2899,19 @@ LX_SYSCALL(LxSysNameToHandleAt)
 
 static
 LONG
-LxHandleToPath(
+LxNtMountRelativePath(
     _In_ PLX_MOUNT Mount,
-    _In_ ULONG64 FileId,
+    _In_ HANDLE Root,
+    _In_ HANDLE Target,
     _Out_ PSTR *Path)
 {
     POBJECT_NAME_INFORMATION RootName = NULL, TargetName = NULL;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    UNICODE_STRING RootPath, ById;
-    IO_STATUS_BLOCK Iosb;
-    HANDLE Root = NULL, Target = NULL;
-    ULONG64 Check = 0;
     ULONG RootChars, Chars, Index, Needed = 0, Written = 0;
     SIZE_T TargetLength;
     PWCHAR Relative;
-    NTSTATUS Status;
-    LONG Error;
+    LONG Error = -LX_ESTALE;
 
     *Path = NULL;
-    Error = LxNtPath(Mount, "", &RootPath);
-    if (Error != 0)
-        return Error;
-    Error = LxNtOpenHandle(&RootPath, FILE_READ_ATTRIBUTES, FILE_OPEN, 0, 0, &Root);
-    LxFreePaged(RootPath.Buffer);
-    if (Error != 0)
-        return -LX_ESTALE;
-
-    ById.Buffer = (PWCH)&FileId;
-    ById.Length = ById.MaximumLength = sizeof(FileId);
-    InitializeObjectAttributes(&ObjectAttributes, &ById, OBJ_KERNEL_HANDLE, Root, NULL);
-    Status = ZwCreateFile(&Target, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, 0,
-                          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN,
-                          FILE_OPEN_BY_FILE_ID | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
-    Error = -LX_ESTALE;
-    if (!NT_SUCCESS(Status))
-    {
-        Target = NULL;
-        goto Exit;
-    }
-    if ((LxNtFileId(Target, &Check) != 0) || (Check != FileId))
-        goto Exit;
     RootName = LxNtObjectName(Root);
     TargetName = LxNtObjectName(Target);
     if ((RootName == NULL) || (TargetName == NULL))
@@ -2995,10 +2968,75 @@ Exit:
         LxFreePaged(RootName);
     if (TargetName != NULL)
         LxFreePaged(TargetName);
+    return Error;
+}
+
+static
+LONG
+LxHandleToPath(
+    _In_ PLX_MOUNT Mount,
+    _In_ ULONG64 FileId,
+    _Out_ PSTR *Path)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING RootPath, ById;
+    IO_STATUS_BLOCK Iosb;
+    HANDLE Root = NULL, Target = NULL;
+    ULONG64 Check = 0;
+    NTSTATUS Status;
+    LONG Error;
+
+    *Path = NULL;
+    Error = LxNtPath(Mount, "", &RootPath);
+    if (Error != 0)
+        return Error;
+    Error = LxNtOpenHandle(&RootPath, FILE_READ_ATTRIBUTES, FILE_OPEN, 0, 0, &Root);
+    LxFreePaged(RootPath.Buffer);
+    if (Error != 0)
+        return -LX_ESTALE;
+
+    ById.Buffer = (PWCH)&FileId;
+    ById.Length = ById.MaximumLength = sizeof(FileId);
+    InitializeObjectAttributes(&ObjectAttributes, &ById, OBJ_KERNEL_HANDLE, Root, NULL);
+    Status = ZwCreateFile(&Target, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, 0,
+                          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN,
+                          FILE_OPEN_BY_FILE_ID | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
+    Error = -LX_ESTALE;
+    if (!NT_SUCCESS(Status))
+    {
+        Target = NULL;
+        goto Exit;
+    }
+    if ((LxNtFileId(Target, &Check) != 0) || (Check != FileId))
+        goto Exit;
+    Error = LxNtMountRelativePath(Mount, Root, Target, Path);
+
+Exit:
     if (Target != NULL)
         ZwClose(Target);
     ZwClose(Root);
     return Error;
+}
+
+PSTR
+LxFileCurrentPath(
+    _In_ PLX_FILE File)
+{
+    UNICODE_STRING RootPath;
+    HANDLE Root;
+    PSTR Path = NULL;
+
+    if ((File->Mount == NULL) || (File->Mount->Kind != LxFsNt) || (File->Handle == NULL) || File->NtPipe)
+        return NULL;
+    if (LxNtPath(File->Mount, "", &RootPath) != 0)
+        return NULL;
+    if (LxNtOpenHandle(&RootPath, FILE_READ_ATTRIBUTES, FILE_OPEN, 0, 0, &Root) == 0)
+    {
+        LxNtMountRelativePath(File->Mount, Root, File->Handle, &Path);
+        ZwClose(Root);
+    }
+    LxFreePaged(RootPath.Buffer);
+    return Path;
 }
 
 LX_SYSCALL(LxSysOpenByHandleAt)
