@@ -76,7 +76,7 @@ CDesktopFolder::ShellUrlParseDisplayName(
     DWORD *pdwAttributes)
 {
     LPWSTR pch;
-    INT cch, csidl;
+    INT cch;
     HRESULT hr = HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND);
     PARSEDURLW ParsedURL = { sizeof(ParsedURL) };
 
@@ -104,15 +104,31 @@ CDesktopFolder::ShellUrlParseDisplayName(
     }
     else
     {
-        csidl = Shell_ParseSpecialFolder(ParsedURL.pszSuffix, &pch, &cch);
-        if (csidl == -1)
+        WCHAR szName[MAX_PATH];
+        pch = StrChrW(ParsedURL.pszSuffix, L'\\');
+        if (pch)
         {
-            ERR("\n");
+            cch = (INT)(pch - ParsedURL.pszSuffix) + 1;
+            StrCpyNW(szName, ParsedURL.pszSuffix, min(cch, (INT)_countof(szName)));
+            ++pch;
+        }
+        else
+        {
+            cch = lstrlenW(ParsedURL.pszSuffix);
+            StrCpyNW(szName, ParsedURL.pszSuffix, _countof(szName));
+        }
+
+        CComPtr<IKnownFolderManager> pManager;
+        CComPtr<IKnownFolder> pKnownFolder;
+        if (FAILED(CoCreateInstance(CLSID_KnownFolderManager, NULL, CLSCTX_INPROC_SERVER,
+                                    IID_PPV_ARG(IKnownFolderManager, &pManager))) ||
+            FAILED(pManager->GetFolderByName(szName, &pKnownFolder)))
+        {
             return hr;
         }
 
         CComHeapPtr<ITEMIDLIST> pidlLocation;
-        hr = SHGetFolderLocation(hwndOwner, (csidl | CSIDL_FLAG_CREATE), NULL, 0, &pidlLocation);
+        hr = pKnownFolder->GetIDList(KF_FLAG_CREATE, &pidlLocation);
         if (FAILED_UNEXPECTEDLY(hr))
             return hr;
 
