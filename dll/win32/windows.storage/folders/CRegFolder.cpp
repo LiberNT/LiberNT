@@ -589,6 +589,9 @@ HRESULT WINAPI CRegFolder::CompareIDs(LPARAM lParam, PCUIDLIST_RELATIVE pidl1, P
     }
     else if (clsid1 && clsid2)
     {
+        BOOL bOwn1 = pidl1->mkid.abID[0] == GetPidlType(), bOwn2 = pidl2->mkid.abID[0] == GetPidlType();
+        if (bOwn1 != bOwn2)
+            return MAKE_COMPARE_HRESULT(bOwn2 - bOwn1);
         if ((lParam & SHCIDS_COLUMNMASK) == COL_NAME && !(lParam & SHCIDS_CANONICALONLY))
         {
             HRESULT hrCmpOrder = CompareRegItemsSortOrder(pidl1, pidl2);
