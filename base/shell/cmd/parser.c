@@ -2024,14 +2024,14 @@ do { \
 
     case C_BLOCK:
     {
-        CHAR(_T('('));
+        STRING(_T("( "));
         for (Sub = Cmd->Subcommands; Sub; Sub = Sub->Next)
         {
             RECURSE(Sub);
             if (Sub->Next)
                 CHAR(_T('&'));
         }
-        CHAR(_T(')'));
+        STRING(_T(" )"));
         break;
     }
 
@@ -2095,7 +2095,9 @@ do { \
     {
         if (!SubstituteForVars(Redir->Filename, TempBuf))
             return NULL;
-        PRINTF(_T(" %c%s%s"), _T('0') + Redir->Number,
+        if (Out[-1] != _T(' '))
+            CHAR(_T(' '));
+        PRINTF(_T("%c%s%s"), _T('0') + Redir->Number,
                RedirString[Redir->Mode], TempBuf);
     }
     return Out;
