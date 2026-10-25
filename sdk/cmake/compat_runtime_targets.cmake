@@ -92,6 +92,7 @@ set(COMPAT_RUNTIME_MODULES
     kernelbase
     kernelbase_ros
     ksuser
+    ktmw32
     libjpeg
     libpng
     libtiff

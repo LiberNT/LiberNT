@@ -45,7 +45,6 @@ set(WOW64_I386_MODULES ${COMPAT_RUNTIME_MODULES}
     itircl
     itss
     iyuv_32
-    ktmw32
     l3codeca.acm
     loadperf
     logoncli
