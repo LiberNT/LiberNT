@@ -207,6 +207,15 @@ static UINT16 HDACommandAddr(UINT32 cmd) {
 	return (cmd >> 28) & 0xF;
 }
 
+void HDAAcquireCodecVerbs(PFDO_CONTEXT fdoCtx, UINT16 addr) {
+	KeWaitForSingleObject(&fdoCtx->verbLock[addr], Executive, KernelMode, FALSE, NULL);
+	KeClearEvent(&fdoCtx->rirb.xferEvent[addr]);
+}
+
+void HDAReleaseCodecVerbs(PFDO_CONTEXT fdoCtx, UINT16 addr) {
+	KeSetEvent(&fdoCtx->verbLock[addr], IO_NO_INCREMENT, FALSE);
+}
+
 NTSTATUS SendHDACmds(PFDO_CONTEXT fdoCtx, ULONG count, PHDAUDIO_CODEC_TRANSFER CodecTransfer) {
 	PKINTERRUPT wdmInterrupt;
 
@@ -234,33 +243,34 @@ NTSTATUS SendHDACmds(PFDO_CONTEXT fdoCtx, ULONG count, PHDAUDIO_CODEC_TRANSFER C
 	}
 
 	WdfInterruptAcquireLock(fdoCtx->Interrupt);
+
+	//Add command to corb
+	UINT16 wp = hda_read16(fdoCtx, CORBWP);
+	if (wp == 0xffff) {
+		//Something wrong, controller likely went to sleep
+		SklHdAudBusPrint(DEBUG_LEVEL_ERROR, DBG_IOCTL,
+			"%s: device not found\n", __func__);
+		WdfInterruptReleaseLock(fdoCtx->Interrupt);
+		return STATUS_DEVICE_DOES_NOT_EXIST;
+	}
+
+	UINT16 rp = hda_read16(fdoCtx, CORBRP);
+	if (((rp - wp - 1) & (HDA_MAX_CORB_ENTRIES - 1)) < count) {
+		//Oops it's full
+		SklHdAudBusPrint(DEBUG_LEVEL_ERROR, DBG_IOCTL,
+			"%s: device busy\n", __func__);
+		WdfInterruptReleaseLock(fdoCtx->Interrupt);
+		return STATUS_RETRY;
+	}
+
 	for (ULONG i = 0; i < count; i++) {
 		PHDAUDIO_CODEC_TRANSFER transfer = &CodecTransfer[i];
 		RtlZeroMemory(&transfer->Input, sizeof(transfer->Input));
 
 		UINT16 addr = HDACommandAddr(transfer->Output.Command);
 
-		//Add command to corb
-		UINT16 wp = hda_read16(fdoCtx, CORBWP);
-		if (wp == 0xffff) {
-			//Something wrong, controller likely went to sleep
-			SklHdAudBusPrint(DEBUG_LEVEL_ERROR, DBG_IOCTL,
-				"%s: device not found\n", __func__);
-			WdfInterruptReleaseLock(fdoCtx->Interrupt);
-			return STATUS_DEVICE_DOES_NOT_EXIST;
-		}
-
 		wp++;
 		wp %= HDA_MAX_CORB_ENTRIES;
-
-		UINT16 rp = hda_read16(fdoCtx, CORBRP);
-		if (wp == rp) {
-			//Oops it's full
-			SklHdAudBusPrint(DEBUG_LEVEL_ERROR, DBG_IOCTL,
-				"%s: device busy\n", __func__);
-			WdfInterruptReleaseLock(fdoCtx->Interrupt);
-			return STATUS_RETRY;
-		}
 
 		LONG oldVal = InterlockedIncrement(&fdoCtx->rirb.cmds[addr]);
 		fdoCtx->rirb.xfer[addr].xfer[oldVal - 1] = transfer;
@@ -286,13 +296,17 @@ NTSTATUS RunSingleHDACmd(PFDO_CONTEXT fdoCtx, ULONG val, ULONG* res) {
 		"%s: Called. Command: 0x%x\n", __func__, val);
 #endif
 
+	UINT16 addr = HDACommandAddr(transfer.Output.Command);
+	HDAAcquireCodecVerbs(fdoCtx, addr);
+
 	NTSTATUS status = SendHDACmds(fdoCtx, 1, &transfer);
 	if (!NT_SUCCESS(status)) {
+		HDAReleaseCodecVerbs(fdoCtx, addr);
 		return status;
 	}
 
-	UINT16 addr = HDACommandAddr(transfer.Output.Command);
 	status = HDA_WaitForTransfer(fdoCtx, addr, 1, &transfer);
+	HDAReleaseCodecVerbs(fdoCtx, addr);
 	if (transfer.Input.IsValid && res) {
 		*res = transfer.Input.Response;
 	}
@@ -304,17 +318,22 @@ NTSTATUS RunSingleHDACmd(PFDO_CONTEXT fdoCtx, ULONG val, ULONG* res) {
 static void HDAFlushRIRB(PFDO_CONTEXT fdoCtx) {
 	UINT16 wp, addr;
 
+	WdfInterruptAcquireLock(fdoCtx->Interrupt);
+
 	wp = hda_read16(fdoCtx, RIRBWP);
 	if (wp == 0xffff) {
 		//Invalid WP
+		WdfInterruptReleaseLock(fdoCtx->Interrupt);
 		return;
 	}
 
-	if (wp == fdoCtx->rirb.wp)
+	if (wp == fdoCtx->rirb.wp) {
+		WdfInterruptReleaseLock(fdoCtx->Interrupt);
 		return;
+	}
 	fdoCtx->rirb.wp = wp;
 
-	while (fdoCtx->rirb.rp != wp) {
+	while (fdoCtx->rirb.rp != fdoCtx->rirb.wp) {
 		fdoCtx->rirb.rp++;
 		fdoCtx->rirb.rp %= HDA_MAX_RIRB_ENTRIES;
 
@@ -345,7 +364,9 @@ static void HDAFlushRIRB(PFDO_CONTEXT fdoCtx) {
 			UINT Tag = response.Unsolicited.Tag;
 			CODEC_UNSOLICITED_CALLBACK callback = codec->unsolitCallbacks[Tag];
 			if (callback.inUse && callback.Routine) {
+				WdfInterruptReleaseLock(fdoCtx->Interrupt);
 				callback.Routine(response, callback.Context);
+				WdfInterruptAcquireLock(fdoCtx->Interrupt);
 			}
 		}
 		else if (InterlockedAdd(&fdoCtx->rirb.cmds[addr], 0)) {
@@ -367,7 +388,9 @@ static void HDAFlushRIRB(PFDO_CONTEXT fdoCtx) {
 			codecXfer->xfer[HDA_MAX_CORB_ENTRIES - 1] = NULL;
 			if (!InterlockedDecrement(&fdoCtx->rirb.cmds[addr])) {
 				SklHdAudBusPrint(DEBUG_LEVEL_VERBOSE, DBG_IOCTL, "Empty queue for 0x%x\n", addr);
+				WdfInterruptReleaseLock(fdoCtx->Interrupt);
 				KeSetEvent(&fdoCtx->rirb.xferEvent[addr], IO_NO_INCREMENT, FALSE);
+				WdfInterruptAcquireLock(fdoCtx->Interrupt);
 			}
 		}
 		else {
@@ -376,6 +399,8 @@ static void HDAFlushRIRB(PFDO_CONTEXT fdoCtx) {
 				rirb.response);
 		}
 	}
+
+	WdfInterruptReleaseLock(fdoCtx->Interrupt);
 }
 
 int hda_stream_interrupt(PFDO_CONTEXT fdoCtx, unsigned int status) {

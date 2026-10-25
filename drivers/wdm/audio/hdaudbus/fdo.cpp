@@ -206,6 +206,9 @@ Fdo_Create(
 
     fdoCtx = Fdo_GetContext(wdfDevice);
     fdoCtx->WdfDevice = wdfDevice;
+    for (UINT8 addr = 0; addr < HDA_MAX_CODECS; addr++) {
+        KeInitializeEvent(&fdoCtx->verbLock[addr], SynchronizationEvent, TRUE);
+    }
 
     status = Fdo_Initialize(fdoCtx);
     if (!NT_SUCCESS(status))
