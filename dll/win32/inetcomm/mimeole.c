@@ -212,6 +212,7 @@ static const property_t default_props[] =
     {"att:athena-account-name",      PID_ATT_ACCOUNTNAME,  0,                               VT_LPSTR},
     {NULL,                           0,                    0,                               0}
 };
+#endif
 
 typedef struct
 {
@@ -1120,7 +1121,12 @@ static HRESULT WINAPI MimeBody_GetPropInfo(
         if(pInfo->dwMask & PIM_CHARSET)
             pInfo->hCharset = 0;
         if(pInfo->dwMask & PIM_FLAGS)
+#ifdef __REACTOS__
+            pInfo->dwFlags = header->prop->flags | 0x10000000 |
+                             (find_default_prop(header->prop->name) ? 0x80000000 : 0);
+#else
             pInfo->dwFlags = 0x00000000;
+#endif
         if(pInfo->dwMask & PIM_ROWNUMBER)
             pInfo->dwRowNumber = 0;
         if(pInfo->dwMask & PIM_ENCODINGTYPE)
