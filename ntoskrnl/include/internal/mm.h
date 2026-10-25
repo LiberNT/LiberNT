@@ -847,6 +847,14 @@ BOOLEAN
 NTAPI
 MmIsFileObjectAPagingFile(PFILE_OBJECT FileObject);
 
+BOOLEAN
+NTAPI
+MmQueryPagingFileUsage(
+    _Out_ PULONG64 TotalPages,
+    _Out_ PULONG64 PagesInUse,
+    _Out_ PULONG64 PeakPagesInUse,
+    _Out_ PUNICODE_STRING Name);
+
 NTSTATUS
 NTAPI
 MmReadFromSwapPage(

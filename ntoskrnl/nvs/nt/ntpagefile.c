@@ -97,6 +97,29 @@ MmIsFileObjectAPagingFile(
                      PagingFile->FileObject->SectionObjectPointer == FileObject->SectionObjectPointer);
 }
 
+BOOLEAN
+NTAPI
+MmQueryPagingFileUsage(
+    _Out_ PULONG64 TotalPages,
+    _Out_ PULONG64 PagesInUse,
+    _Out_ PULONG64 PeakPagesInUse,
+    _Out_ PUNICODE_STRING Name)
+{
+    PMI_NT_PAGEFILE PagingFile = MiPagingFile;
+    KIRQL OldIrql;
+
+    if (PagingFile == NULL)
+        return FALSE;
+
+    MI_SPIN_ACQUIRE(&PagingFile->Core.Lock, &OldIrql);
+    *TotalPages = PagingFile->Core.SlotCount;
+    *PagesInUse = PagingFile->Core.SlotsInUse;
+    *PeakPagesInUse = PagingFile->Core.PeakSlotsInUse;
+    MI_SPIN_RELEASE(&PagingFile->Core.Lock, OldIrql);
+    *Name = PagingFile->Name;
+    return TRUE;
+}
+
 static
 BOOLEAN
 MiExtendPagingFileTo(

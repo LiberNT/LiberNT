@@ -289,6 +289,7 @@ typedef struct _MI_PAGEFILE
     PULONG64 Bitmap;
     ULONG64 SlotCount;
     ULONG64 SlotsInUse;
+    ULONG64 PeakSlotsInUse;
     ULONG64 Hint;
     volatile LONG64 PagesWritten;
     volatile LONG64 PagesRead;

@@ -98,6 +98,8 @@ MiPageFileReserveSlot(
 
         PageFile->Bitmap[Candidate >> 6] |= (ULONG64)1 << (Candidate & 63);
         PageFile->SlotsInUse++;
+        if (PageFile->SlotsInUse > PageFile->PeakSlotsInUse)
+            PageFile->PeakSlotsInUse = PageFile->SlotsInUse;
         PageFile->Hint = Candidate + 1;
         Slot = Candidate;
         break;

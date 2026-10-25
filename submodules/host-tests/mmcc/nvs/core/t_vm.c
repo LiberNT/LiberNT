@@ -1532,9 +1532,11 @@ PagingCommitExpansion(void)
     while (Count < 64 && (Slot = MiPageFileReserveSlot(&World.Paging.PageFile)) != 0)
         Slots[Count++] = Slot;
     CHECK(Count == 55);
+    CHECK(World.Paging.PageFile.PeakSlotsInUse == 55);
     for (i = 0; i < Count; i++)
         MiPageFileReleaseSlot(&World.Paging.PageFile, Slots[i]);
     CHECK(World.Paging.PageFile.SlotsInUse == 0);
+    CHECK(World.Paging.PageFile.PeakSlotsInUse == 55);
 
     MiCleanAddressSpace(&Space);
     CHECK(MI_ATOMIC_READ64(&World.System.CommittedPages) == 0);
