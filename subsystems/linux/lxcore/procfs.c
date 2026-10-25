@@ -796,11 +796,45 @@ LxWritePidTimensOffsets(
     PLX_THREAD Current = LxCurrentThread();
     PLX_PROCESS Process;
     PLX_NS Ns;
-    LONG64 Offsets[2];
+    LONG64 Offsets[2], Seconds[2], Nanoseconds[2];
+    ULONG Clocks[2], Count = 0, Item;
     BOOLEAN Set[2] = { FALSE, FALSE };
     LONG Error = 0;
 
     UNREFERENCED_PARAMETER(Length);
+    while ((Error == 0) && (*Data != '\0') && (Count < RTL_NUMBER_OF(Clocks)))
+    {
+        CHAR Clock[16], SecondsText[24], NanosecondsText[16];
+
+        while ((*Data == ' ') || (*Data == '\t') || (*Data == '\n'))
+            Data++;
+        if (*Data == '\0')
+            break;
+        Data = LxParseTimensField(Data, Clock, sizeof(Clock));
+        if (Data != NULL)
+            Data = LxParseTimensField(Data, SecondsText, sizeof(SecondsText));
+        if (Data != NULL)
+            Data = LxParseTimensField(Data, NanosecondsText, sizeof(NanosecondsText));
+        while ((Data != NULL) && ((*Data == ' ') || (*Data == '\t')))
+            Data++;
+        if ((Data == NULL) || ((*Data != '\n') && (*Data != '\0')) ||
+            (LxParseWriteNumber(SecondsText, &Seconds[Count]) != 0) ||
+            (LxParseWriteNumber(NanosecondsText, &Nanoseconds[Count]) != 0) || (NanosecondsText[0] == '-') ||
+            (Nanoseconds[Count] > 999999999))
+        {
+            Error = -LX_EINVAL;
+            break;
+        }
+        if ((strcmp(Clock, "monotonic") == 0) || (strcmp(Clock, "1") == 0))
+            Clocks[Count] = 0;
+        else if ((strcmp(Clock, "boottime") == 0) || (strcmp(Clock, "7") == 0))
+            Clocks[Count] = 1;
+        else
+            Error = -LX_EINVAL;
+        Count++;
+    }
+    if (Error != 0)
+        return Error;
     if (Current == NULL)
         return -LX_ESRCH;
     Process = LxProcessLookup(Current->Process->Instance, (ULONG)(ULONG_PTR)File->HandlerContext);
@@ -822,51 +856,18 @@ LxWritePidTimensOffsets(
 
     Offsets[0] = Ns->Time.Monotonic;
     Offsets[1] = Ns->Time.Boottime;
-    while ((Error == 0) && (*Data != '\0'))
+    for (Item = 0; (Item < Count) && (Error == 0); Item++)
     {
-        CHAR Clock[16], Seconds[24], Nanoseconds[16];
-        LONG64 SecondsValue, NanosecondsValue, Offset, Now;
+        ULONG Index = Clocks[Item];
+        LONG64 Offset, Now;
         LX_TIMESPEC Sample;
-        ULONG Index;
 
-        while ((*Data == ' ') || (*Data == '\t') || (*Data == '\n'))
-            Data++;
-        if (*Data == '\0')
-            break;
-        Data = LxParseTimensField(Data, Clock, sizeof(Clock));
-        if (Data != NULL)
-            Data = LxParseTimensField(Data, Seconds, sizeof(Seconds));
-        if (Data != NULL)
-            Data = LxParseTimensField(Data, Nanoseconds, sizeof(Nanoseconds));
-        while ((Data != NULL) && ((*Data == ' ') || (*Data == '\t')))
-            Data++;
-        if ((Data == NULL) || ((*Data != '\n') && (*Data != '\0')) ||
-            (LxParseWriteNumber(Seconds, &SecondsValue) != 0) ||
-            (LxParseWriteNumber(Nanoseconds, &NanosecondsValue) != 0) || (Nanoseconds[0] == '-'))
-        {
-            Error = -LX_EINVAL;
-            break;
-        }
-        if ((strcmp(Clock, "monotonic") == 0) || (strcmp(Clock, "1") == 0))
-            Index = 0;
-        else if ((strcmp(Clock, "boottime") == 0) || (strcmp(Clock, "7") == 0))
-            Index = 1;
-        else
-        {
-            Error = -LX_EINVAL;
-            break;
-        }
-        if (NanosecondsValue > 999999999)
-        {
-            Error = -LX_EINVAL;
-            break;
-        }
-        if ((SecondsValue > LX_TIMENS_MAX_SECONDS) || (SecondsValue < -LX_TIMENS_MAX_SECONDS))
+        if ((Seconds[Item] > LX_TIMENS_MAX_SECONDS) || (Seconds[Item] < -LX_TIMENS_MAX_SECONDS))
         {
             Error = -LX_ERANGE;
             break;
         }
-        Offset = SecondsValue * 1000000000LL + NanosecondsValue;
+        Offset = Seconds[Item] * 1000000000LL + Nanoseconds[Item];
         LxQueryClock(Index ? LX_CLOCK_BOOTTIME : LX_CLOCK_MONOTONIC, &Sample);
         Now = Sample.Seconds * 1000000000LL + Sample.Nanoseconds;
         if ((Now + Offset < 0) || ((Now + Offset) / 1000000000LL > LX_TIMENS_MAX_SECONDS))
