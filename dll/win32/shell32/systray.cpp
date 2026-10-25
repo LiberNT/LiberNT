@@ -232,6 +232,7 @@ BOOL WINAPI Shell_NotifyIconW(DWORD dwMessage, PNOTIFYICONDATAW pnid)
     if (SendMessageW(hShellTrayWnd, WM_COPYDATA, (WPARAM)pnid->hWnd, (LPARAM)&data))
         ret = TRUE;
 
+    SetLastError(ret ? ERROR_SUCCESS : (DWORD)E_FAIL);
     return ret;
 }
 
