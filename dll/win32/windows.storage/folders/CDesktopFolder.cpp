@@ -193,6 +193,35 @@ CDesktopFolderViewCB is responsible for filtering hidden regitems.
 The enumerator always shows My Computer.
 */
 
+static HRESULT
+InternetUrlParseDisplayName(IShellFolder *psfDesktop, HWND hwndOwner, LPBC pbc, LPCWSTR pszUrl,
+                            DWORD *pchEaten, PIDLIST_RELATIVE *ppidl, DWORD *pdwAttributes)
+{
+    CComHeapPtr<ITEMIDLIST> pidlInternet, pidlUrl;
+    CComPtr<IShellFolder> psfInternet;
+    CComHeapPtr<WCHAR> pszCanonical;
+    DWORD cch = lstrlenW(pszUrl) * 3 + 16;
+    HRESULT hr;
+
+    if (!pszCanonical.Allocate(cch))
+        return E_OUTOFMEMORY;
+    if (FAILED(UrlCanonicalizeW(pszUrl, pszCanonical, &cch, 0)))
+        StringCchCopyW(pszCanonical, lstrlenW(pszUrl) * 3 + 16, pszUrl);
+
+    hr = psfDesktop->ParseDisplayName(hwndOwner, NULL, const_cast<LPWSTR>(L"::{871C5380-42A0-1069-A2EA-08002B30309D}"),
+                                      NULL, &pidlInternet, NULL);
+    if (FAILED(hr))
+        return hr;
+    hr = psfDesktop->BindToObject(pidlInternet, NULL, IID_PPV_ARG(IShellFolder, &psfInternet));
+    if (FAILED(hr))
+        return hr;
+    hr = psfInternet->ParseDisplayName(hwndOwner, pbc, pszCanonical, pchEaten, &pidlUrl, pdwAttributes);
+    if (FAILED(hr))
+        return hr;
+    *ppidl = ILCombine(pidlInternet, pidlUrl);
+    return *ppidl ? S_OK : E_OUTOFMEMORY;
+}
+
 /* Undocumented functions from shdocvw */
 extern "C" HRESULT WINAPI IEParseDisplayNameWithBCW(DWORD codepage, LPCWSTR lpszDisplayName, LPBC pbc, LPITEMIDLIST *ppidl);
 
@@ -398,7 +427,8 @@ HRESULT CDesktopFolder::_ParseDisplayNameByParent(
         case URL_SCHEME_HTTPS: // "https:..."
         {
             if (!BindCtx_ContainsObject(pbc, STR_PARSE_PREFER_FOLDER_BROWSING))
-                return E_INVALIDARG;
+                return InternetUrlParseDisplayName(this, hwndOwner, pbc, lpszDisplayName, pchEaten, ppidl,
+                                                   pdwAttributes);
 
             return HttpUrlParseDisplayName(hwndOwner,
                                            pbc,
@@ -425,7 +455,8 @@ HRESULT CDesktopFolder::_ParseDisplayNameByParent(
         default:
         {
             TRACE("Scheme: %u\n", ParsedURL.nScheme);
-            break;
+            return InternetUrlParseDisplayName(this, hwndOwner, pbc, lpszDisplayName, pchEaten, ppidl,
+                                               pdwAttributes);
         }
     }
 
