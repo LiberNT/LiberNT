@@ -2506,7 +2506,11 @@ HRESULT compile_script(script_ctx_t *script, const WCHAR *src, const WCHAR *item
     HRESULT hres;
 
     if(item_name) {
+#ifdef __REACTOS__
+        item = lookup_context_named_item(script, item_name);
+#else
         item = lookup_named_item(script, item_name, 0);
+#endif
         if(!item) {
             WARN("Unknown context %s\n", debugstr_w(item_name));
             return E_INVALIDARG;

@@ -194,6 +194,9 @@ typedef struct {
 typedef struct named_item_t {
     ScriptDisp *script_obj;
     IDispatch *disp;
+#ifdef __REACTOS__
+    IDispatch *context_disp;
+#endif
     unsigned ref;
     DWORD flags;
     LPWSTR name;
@@ -474,6 +477,10 @@ BOOL is_exec_local_scope(exec_ctx_t*);
 HRESULT exec_add_caller_dynamic_var(script_ctx_t*,exec_ctx_t*,const WCHAR*);
 void release_dynamic_var(dynamic_var_t*);
 named_item_t *lookup_named_item(script_ctx_t*,const WCHAR*,unsigned);
+#ifdef __REACTOS__
+named_item_t *lookup_context_named_item(script_ctx_t*,const WCHAR*);
+IDispatch *get_named_item_context_disp(script_ctx_t*,named_item_t*);
+#endif
 void release_named_item(named_item_t*);
 void clear_error_loc(script_ctx_t*);
 void clear_ei(EXCEPINFO*);

@@ -93,6 +93,20 @@ static inline BOOL is_started(VBScript *This)
         || This->state == SCRIPTSTATE_DISCONNECTED;
 }
 
+#ifdef __REACTOS__
+static void query_context_name(script_ctx_t *ctx, named_item_t *item, const WCHAR *name)
+{
+    IDispatch *disp;
+    DISPID id;
+    BSTR bstr;
+
+    if(!(disp = get_named_item_context_disp(ctx, item)) || !(bstr = SysAllocString(name)))
+        return;
+    disp_get_id(disp, bstr, VBDISP_ANY, FALSE, &id);
+    SysFreeString(bstr);
+}
+
+#endif
 HRESULT exec_global_code(script_ctx_t *ctx, vbscode_t *code, VARIANT *res, BOOL extern_caller)
 {
     ScriptDisp *obj = ctx->script_obj;
@@ -153,6 +167,10 @@ HRESULT exec_global_code(script_ctx_t *ctx, vbscode_t *code, VARIANT *res, BOOL 
         if (existing && existing->type == SCRIPTDISP_VAR && !existing->u.var->is_const)
             continue;
 
+#ifdef __REACTOS__
+        if (code->named_item && !existing)
+            query_context_name(ctx, code->named_item, code->main_code.vars[i].name);
+#endif
         if (!(var = heap_pool_alloc(&obj->heap, sizeof(*var))))
             return E_OUTOFMEMORY;
 
@@ -179,6 +197,10 @@ HRESULT exec_global_code(script_ctx_t *ctx, vbscode_t *code, VARIANT *res, BOOL 
         else
             /* a new function, or one re-declaring a variable of the same name */
             func_iter->index = obj->global_funcs_cnt++;
+#ifdef __REACTOS__
+        if (code->named_item && !existing)
+            query_context_name(ctx, code->named_item, func_iter->name);
+#endif
 
         obj->global_funcs[func_iter->index] = func_iter;
         if (!script_disp_add_func(obj, func_iter))
@@ -317,6 +339,58 @@ named_item_t *lookup_named_item(script_ctx_t *ctx, const WCHAR *name, unsigned f
     return NULL;
 }
 
+#ifdef __REACTOS__
+IDispatch *get_named_item_context_disp(script_ctx_t *ctx, named_item_t *item)
+{
+    IUnknown *unk;
+    HRESULT hres;
+
+    if(item->context_disp || (item->flags & (SCRIPTITEM_CODEONLY | SCRIPTITEM_GLOBALMEMBERS)) || !ctx->site)
+        return item->context_disp;
+
+    hres = IActiveScriptSite_GetItemInfo(ctx->site, item->name, SCRIPTINFO_IUNKNOWN, &unk, NULL);
+    if(FAILED(hres)) {
+        WARN("GetItemInfo failed: %08lx\n", hres);
+        return NULL;
+    }
+
+    hres = IUnknown_QueryInterface(unk, &IID_IDispatch, (void**)&item->context_disp);
+    IUnknown_Release(unk);
+    if(FAILED(hres)) {
+        WARN("object does not implement IDispatch\n");
+        item->context_disp = NULL;
+    }
+    return item->context_disp;
+}
+
+named_item_t *lookup_context_named_item(script_ctx_t *ctx, const WCHAR *name)
+{
+    struct rb_entry *entry = rb_get(&ctx->named_item_tree, name);
+    named_item_bucket_t *bucket;
+    named_item_t *item;
+    HRESULT hres;
+
+    if(!entry)
+        return NULL;
+
+    bucket = RB_ENTRY_VALUE(entry, named_item_bucket_t, entry);
+    LIST_FOR_EACH_ENTRY(item, &bucket->items, named_item_t, bucket_entry) {
+        if(!item->script_obj && !(item->flags & SCRIPTITEM_GLOBALMEMBERS)) {
+            hres = create_script_disp(ctx, &item->script_obj);
+            if(FAILED(hres)) return NULL;
+        }
+
+        if(!(item->flags & (SCRIPTITEM_CODEONLY | SCRIPTITEM_GLOBALMEMBERS)) &&
+           !get_named_item_context_disp(ctx, item))
+            continue;
+
+        return item;
+    }
+
+    return NULL;
+}
+
+#endif
 static void release_named_item_script_obj(named_item_t *item)
 {
     if(!item->script_obj) return;
@@ -364,6 +438,13 @@ static void release_script(script_ctx_t *ctx)
             IDispatch_Release(item->disp);
             item->disp = NULL;
         }
+#ifdef __REACTOS__
+        if(item->context_disp)
+        {
+            IDispatch_Release(item->context_disp);
+            item->context_disp = NULL;
+        }
+#endif
         release_named_item_script_obj(item);
         if(!(item->flags & SCRIPTITEM_ISPERSISTENT))
         {
@@ -802,6 +883,13 @@ static HRESULT WINAPI VBScript_SetScriptSite(IActiveScript *iface, IActiveScript
             hres = retrieve_named_item_disp(pass, item);
             if(FAILED(hres)) return hres;
         }
+#ifdef __REACTOS__
+        if(!item->context_disp && item->disp)
+        {
+            item->context_disp = item->disp;
+            IDispatch_AddRef(item->context_disp);
+        }
+#endif
 
         /* For some reason, CODEONLY flag is lost in re-initialized scripts */
         item->flags &= ~SCRIPTITEM_CODEONLY;
@@ -948,6 +1036,9 @@ static HRESULT WINAPI VBScript_AddNamedItem(IActiveScript *iface, LPCOLESTR pstr
 
     item->ref = 1;
     item->disp = disp;
+#ifdef __REACTOS__
+    item->context_disp = NULL;
+#endif
     item->flags = dwFlags;
     item->script_obj = NULL;
     item->name = wcsdup(pstrName);

@@ -213,6 +213,23 @@ static HRESULT lookup_identifier(exec_ctx_t *ctx, BSTR name, vbdisp_invoke_type_
             return S_OK;
     }
 
+#ifdef __REACTOS__
+    if(ctx->func->code_ctx->named_item &&
+       !(ctx->func->code_ctx->named_item->flags & SCRIPTITEM_CODEONLY) &&
+       get_named_item_context_disp(ctx->script, ctx->func->code_ctx->named_item))
+    {
+        IDispatch *context_disp = ctx->func->code_ctx->named_item->context_disp;
+
+        hres = disp_get_id(context_disp, name, invoke_type, TRUE, &id);
+        if(SUCCEEDED(hres)) {
+            script_disp_add_hostprop(ctx->code->named_item->script_obj, name, context_disp, id);
+            ref->type = REF_DISP;
+            ref->u.d.disp = context_disp;
+            ref->u.d.id = id;
+            return S_OK;
+        }
+    }
+#else
     if(ctx->func->code_ctx->named_item && ctx->func->code_ctx->named_item->disp &&
        !(ctx->func->code_ctx->named_item->flags & SCRIPTITEM_CODEONLY))
     {
@@ -228,6 +245,7 @@ static HRESULT lookup_identifier(exec_ctx_t *ctx, BSTR name, vbdisp_invoke_type_
             return S_OK;
         }
     }
+#endif
 
     if(lookup_global_member(script_obj, name, ref))
         return S_OK;
@@ -2095,9 +2113,15 @@ static HRESULT interp_me(exec_ctx_t *ctx)
     if(ctx->vbthis) {
         disp = (IDispatch*)&ctx->vbthis->IDispatchEx_iface;
     }else if(ctx->code->named_item) {
+#ifdef __REACTOS__
+        disp = (ctx->code->named_item->flags & SCRIPTITEM_CODEONLY)
+               ? (IDispatch*)&ctx->code->named_item->script_obj->IDispatchEx_iface
+               : get_named_item_context_disp(ctx->script, ctx->code->named_item);
+#else
         disp = (ctx->code->named_item->flags & SCRIPTITEM_CODEONLY)
                ? (IDispatch*)&ctx->code->named_item->script_obj->IDispatchEx_iface
                : ctx->code->named_item->disp;
+#endif
     }else {
         named_item_t *item;
         disp = NULL;
