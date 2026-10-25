@@ -222,15 +222,14 @@ HidInputClose(
     if (Device->Handle)
     {
         if (Device->Status == STATUS_PENDING)
+        {
             (void)ZwCancelIoFile(Device->Handle, &Device->Iosb);
+            KeWaitForSingleObject(&Device->FileObject->Event, Executive, KernelMode, FALSE, NULL);
+        }
         ObCloseHandle(Device->Handle, KernelMode);
     }
     if (Device->FileObject)
-    {
-        if (Device->Status == STATUS_PENDING)
-            KeWaitForSingleObject(&Device->FileObject->Event, Executive, KernelMode, FALSE, NULL);
         ObDereferenceObject(Device->FileObject);
-    }
     if (Device->PreparsedData)
         ExFreePoolWithTag(Device->PreparsedData, USERTAG_HIDDESC);
     if (Device->Report)
