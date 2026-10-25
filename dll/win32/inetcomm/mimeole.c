@@ -54,6 +54,86 @@ typedef struct
     property_t prop;
 } property_list_entry_t;
 
+#ifdef __REACTOS__
+static const property_t default_props[] =
+{
+    {"X-Newsgroup",                  PID_HDR_NEWSGROUP,    0,                               VT_LPSTR},
+    {"Newsgroups",                   PID_HDR_NEWSGROUPS,   MPF_INETCSET | MPF_RFC1522,      VT_LPSTR},
+    {"References",                   PID_HDR_REFS,         MPF_INETCSET | MPF_RFC1522,      VT_LPSTR},
+    {"Subject",                      PID_HDR_SUBJECT,      MPF_INETCSET | MPF_RFC1522,      VT_LPSTR},
+    {"From",                         PID_HDR_FROM,         MPF_INETCSET | MPF_RFC1522 | MPF_ADDRESS, VT_LPSTR},
+    {"Message-ID",                   PID_HDR_MESSAGEID,    0,                               VT_LPSTR},
+    {"Return-Path",                  PID_HDR_RETURNPATH,   MPF_ADDRESS,                     VT_LPSTR},
+    {"Rr",                           PID_HDR_RR,           0,                               VT_LPSTR},
+    {"Return-Receipt-To",            PID_HDR_RETRCPTO,     MPF_ADDRESS,                     VT_LPSTR},
+    {"Apparently-To",                PID_HDR_APPARTO,      MPF_ADDRESS,                     VT_LPSTR},
+    {"Date",                         PID_HDR_DATE,         0,                               VT_LPSTR},
+    {"Received",                     PID_HDR_RECEIVED,     0,                               VT_LPSTR},
+    {"Reply-To",                     PID_HDR_REPLYTO,      MPF_INETCSET | MPF_RFC1522 | MPF_ADDRESS, VT_LPSTR},
+    {"X-Mailer",                     PID_HDR_XMAILER,      0,                               VT_LPSTR},
+    {"Bcc",                          PID_HDR_BCC,          MPF_INETCSET | MPF_RFC1522 | MPF_ADDRESS, VT_LPSTR},
+    {"MIME-Version",                 PID_HDR_MIMEVER,      MPF_MIME,                        VT_LPSTR},
+    {"Content-Type",                 PID_HDR_CNTTYPE,      MPF_MIME | MPF_HASPARAMS,        VT_LPSTR},
+    {"Content-Transfer-Encoding",    PID_HDR_CNTXFER,      MPF_MIME,                        VT_LPSTR},
+    {"Content-ID",                   PID_HDR_CNTID,        MPF_MIME,                        VT_LPSTR},
+    {"Content-Description",          PID_HDR_CNTDESC,      MPF_MIME,                        VT_LPSTR},
+    {"Content-Disposition",          PID_HDR_CNTDISP,      MPF_MIME | MPF_HASPARAMS,        VT_LPSTR},
+    {"Content-Base",                 PID_HDR_CNTBASE,      MPF_MIME,                        VT_LPSTR},
+    {"Content-Location",             PID_HDR_CNTLOC,       MPF_INETCSET | MPF_RFC1522 | MPF_MIME,  VT_LPSTR},
+    {"To",                           PID_HDR_TO,           MPF_INETCSET | MPF_RFC1522 | MPF_ADDRESS, VT_LPSTR},
+    {"Path",                         PID_HDR_PATH,         0,                               VT_LPSTR},
+    {"Followup-To",                  PID_HDR_FOLLOWUPTO,   0,                               VT_LPSTR},
+    {"Expires",                      PID_HDR_EXPIRES,      0,                               VT_LPSTR},
+    {"Cc",                           PID_HDR_CC,           MPF_INETCSET | MPF_RFC1522 | MPF_ADDRESS, VT_LPSTR},
+    {"Control",                      PID_HDR_CONTROL,      0,                               VT_LPSTR},
+    {"Distribution",                 PID_HDR_DISTRIB,      0,                               VT_LPSTR},
+    {"Keywords",                     PID_HDR_KEYWORDS,     MPF_INETCSET | MPF_RFC1522,      VT_LPSTR},
+    {"Summary",                      PID_HDR_SUMMARY,      0,                               VT_LPSTR},
+    {"Approved",                     PID_HDR_APPROVED,     0,                               VT_LPSTR},
+    {"Lines",                        PID_HDR_LINES,        0,                               VT_LPSTR},
+    {"Xref",                         PID_HDR_XREF,         0,                               VT_LPSTR},
+    {"Organization",                 PID_HDR_ORG,          0,                               VT_LPSTR},
+    {"X-Newsreader",                 PID_HDR_XNEWSRDR,     0,                               VT_LPSTR},
+    {"X-Priority",                   PID_HDR_XPRI,         0,                               VT_LPSTR},
+    {"X-MSMail-Priority",            PID_HDR_XMSPRI,       0,                               VT_LPSTR},
+    {"par:content-disposition:filename", PID_PAR_FILENAME, 0,                               VT_LPSTR},
+    {"par:content-type:boundary",    PID_PAR_BOUNDARY,     0,                               VT_LPSTR},
+    {"par:content-type:charset",     PID_PAR_CHARSET,      0,                               VT_LPSTR},
+    {"par:content-type:name",        PID_PAR_NAME,         0,                               VT_LPSTR},
+    {"att:filename",                 PID_ATT_FILENAME,     0,                               VT_LPSTR},
+    {"att:pri-content-type",         PID_ATT_PRITYPE,      0,                               VT_LPSTR},
+    {"att:sub-content-type",         PID_ATT_SUBTYPE,      0,                               VT_LPSTR},
+    {"att:illegal-lines",            PID_ATT_ILLEGAL,      0,                               VT_LPSTR},
+    {"att:rendered",                 PID_ATT_RENDERED,     0,                               VT_LPSTR},
+    {"att:sent-time",                PID_ATT_SENTTIME,     0,                               VT_LPSTR},
+    {"att:priority",                 PID_ATT_PRIORITY,     0,                               VT_LPSTR},
+    {"Comment",                      PID_HDR_COMMENT,      0,                               VT_LPSTR},
+    {"Encoding",                     PID_HDR_ENCODING,     0,                               VT_LPSTR},
+    {"Encrypted",                    PID_HDR_ENCRYPTED,    0,                               VT_LPSTR},
+    {"X-Offsets",                    PID_HDR_OFFSETS,      0,                               VT_LPSTR},
+    {"X-Unsent",                     PID_HDR_XUNSENT,      0,                               VT_LPSTR},
+    {"X-ArticleId",                  PID_HDR_ARTICLEID,    0,                               VT_LPSTR},
+    {"Sender",                       PID_HDR_SENDER,       MPF_ADDRESS,                     VT_LPSTR},
+    {"att:athena-server",            PID_ATT_SERVER,       0,                               VT_LPSTR},
+    {"att:athena-account-id",        PID_ATT_ACCOUNT,      0,                               VT_LPSTR},
+    {"att:athena-pop3-uidl",         PID_ATT_UIDL,         0,                               VT_LPSTR},
+    {"att:athena-store-msgid",       PID_ATT_STOREMSGID,   0,                               VT_LPSTR},
+    {"att:athena-user-name",         PID_ATT_USERNAME,     0,                               VT_LPSTR},
+    {"att:athena-forward-to",        PID_ATT_FORWARDTO,    0,                               VT_LPSTR},
+    {"att:athena-store-fdrid",       PID_ATT_STOREFOLDERID,0,                               VT_LPSTR},
+    {"att:athena-ghosted",           PID_ATT_GHOSTED,      0,                               VT_LPSTR},
+    {"att:athena-uncachedsize",      PID_ATT_UNCACHEDSIZE, 0,                               VT_LPSTR},
+    {"att:athena-combined",          PID_ATT_COMBINED,     0,                               VT_LPSTR},
+    {"att:auto-inlined",             PID_ATT_AUTOINLINED,  0,                               VT_LPSTR},
+    {"Disposition-Notification-To",  PID_HDR_DISP_NOTIFICATION_TO,  0,                      VT_LPSTR},
+    {"par:Content-Type:reply-type",  PID_PAR_REPLYTYPE,    0,                               VT_LPSTR},
+    {"par:Content-Type:format",      PID_PAR_FORMAT ,      0,                               VT_LPSTR},
+    {"att:format",                   PID_ATT_FORMAT ,      0,                               VT_LPSTR},
+    {"In-Reply-To",                  PID_HDR_INREPLYTO,    0,                               VT_LPSTR},
+    {"att:athena-account-name",      PID_ATT_ACCOUNTNAME,  0,                               VT_LPSTR},
+    {NULL,                           0,                    0,                               0}
+};
+#else
 static const property_t default_props[] =
 {
     {"X-Newsgroup",                  PID_HDR_NEWSGROUP,    0,                               VT_LPSTR},
@@ -1280,8 +1360,27 @@ static HRESULT WINAPI MimeBody_GetCharset(
                                  LPHCHARSET phCharset)
 {
     MimeBody *This = impl_from_IMimeBody(iface);
+#ifdef __REACTOS__
+    header_t *header;
+    param_t *param;
+
+    TRACE("(%p)->(%p)\n", This, phCharset);
+    *phCharset = NULL;
+    if (find_prop(This, "Content-Type", &header) == S_OK)
+    {
+        LIST_FOR_EACH_ENTRY(param, &header->params, param_t, entry)
+        {
+            if (!_stricmp(param->name, "charset") && param->value && param->value[0])
+            {
+                MimeOleFindCharset(param->value, phCharset);
+                break;
+            }
+        }
+    }
+#else
     FIXME("(%p)->(%p) stub\n", This, phCharset);
     *phCharset = NULL;
+#endif
     return S_OK;
 }
 
