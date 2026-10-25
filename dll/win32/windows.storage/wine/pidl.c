@@ -4738,7 +4738,7 @@ BOOL _ILIsSpecialFolder (LPCITEMIDLIST pidl)
 
     TRACE("(%p)\n",pidl);
 
-    return (pidl && ( (lpPData && (PT_GUID== lpPData->type || PT_SHELLEXT== lpPData->type || PT_YAGUID == lpPData->type)) ||
+    return (pidl && ( (lpPData && (PT_GUID== lpPData->type || PT_SHELLEXT== lpPData->type || PT_YAGUID == lpPData->type || PT_CONTROLS_NEWREGITEM == lpPData->type)) ||
               (pidl && pidl->mkid.cb == 0x00)
             ));
 }
@@ -4912,6 +4912,7 @@ static LPWSTR _ILGetTextPointerW(LPCITEMIDLIST pidl)
     case PT_GUID:
     case PT_SHELLEXT:
     case PT_YAGUID:
+    case PT_CONTROLS_NEWREGITEM:
         return NULL;
 
     case PT_DRIVE:
@@ -4969,6 +4970,7 @@ LPSTR _ILGetTextPointer(LPCITEMIDLIST pidl)
     case PT_GUID:
     case PT_SHELLEXT:
     case PT_YAGUID:
+    case PT_CONTROLS_NEWREGITEM:
         return NULL;
 
     case PT_IESPECIAL1:
@@ -5036,6 +5038,11 @@ IID* _ILGetGUIDPointer(LPCITEMIDLIST pidl)
     case PT_GUID:
     case PT_YAGUID:
         return &(pdata->u.guid.guid);
+
+    case PT_CONTROLS_NEWREGITEM:
+        if (pidl->mkid.cb < 14 + sizeof(GUID))
+            return NULL;
+        return (IID*)((BYTE*)pidl + 14);
 
     default:
         TRACE("Unknown pidl type 0x%04x\n", pdata->type);

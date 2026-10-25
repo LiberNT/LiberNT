@@ -69,10 +69,6 @@ static BYTE GetRegItemOrder(REFCLSID clsid)
 
 static LPITEMIDLIST CreateRegItem(PIDLTYPE type, REFCLSID clsid, int order = -1)
 {
-#if 1 // FIXME: CControlPanelFolder is not ready for this yet
-    if (type == PT_CONTROLS_NEWREGITEM)
-        type = PT_CONTROLS_OLDREGITEM;
-#endif
     const UINT offset = GetRegItemCLSIDOffset(type);
     const UINT cb = offset + sizeof(CLSID), cbTotal = cb + sizeof(WORD);
     LPITEMIDLIST pidl = (LPITEMIDLIST)SHAlloc(cbTotal);
@@ -589,7 +585,8 @@ HRESULT WINAPI CRegFolder::CompareIDs(LPARAM lParam, PCUIDLIST_RELATIVE pidl1, P
     }
     else if (clsid1 && clsid2)
     {
-        BOOL bOwn1 = pidl1->mkid.abID[0] == GetPidlType(), bOwn2 = pidl2->mkid.abID[0] == GetPidlType();
+        BOOL bOwn1 = pidl1->mkid.abID[0] == GetPidlType() || pidl1->mkid.abID[0] == PT_CONTROLS_OLDREGITEM;
+        BOOL bOwn2 = pidl2->mkid.abID[0] == GetPidlType() || pidl2->mkid.abID[0] == PT_CONTROLS_OLDREGITEM;
         if (bOwn1 != bOwn2)
             return MAKE_COMPARE_HRESULT(bOwn2 - bOwn1);
         if ((lParam & SHCIDS_COLUMNMASK) == COL_NAME && !(lParam & SHCIDS_CANONICALONLY))
