@@ -25,6 +25,9 @@ struct geographic_region
 {
     IGeographicRegion IGeographicRegion_iface;
     LONG ref;
+#ifdef __REACTOS__
+    WCHAR code[4];
+#endif
 };
 
 static inline struct geographic_region *impl_from_IGeographicRegion( IGeographicRegion *iface )
@@ -93,26 +96,57 @@ static HRESULT WINAPI geographic_region_get_Code( IGeographicRegion *iface, HSTR
     return E_NOTIMPL;
 }
 
+#ifdef __REACTOS__
+static HRESULT geographic_region_get_info( IGeographicRegion *iface, GEOTYPE type, HSTRING *value )
+{
+    struct geographic_region *impl = impl_from_IGeographicRegion( iface );
+    WCHAR buffer[16];
+    int len;
+
+    if (!value) return E_POINTER;
+    if (!(len = GetGeoInfoEx( impl->code, type, buffer, ARRAY_SIZE(buffer) ))) return E_INVALIDARG;
+    return WindowsCreateString( buffer, len - 1, value );
+}
+#endif
+
 static HRESULT WINAPI geographic_region_get_CodeTwoLetter( IGeographicRegion *iface, HSTRING *value )
 {
+#ifdef __REACTOS__
+    TRACE( "iface %p, value %p.\n", iface, value );
+
+    return geographic_region_get_info( iface, GEO_ISO2, value );
+#else
     WCHAR buffer[LOCALE_NAME_MAX_LENGTH];
 
     FIXME( "iface %p semi-stub!\n", iface );
 
     if (!GetLocaleInfoEx( LOCALE_NAME_USER_DEFAULT, LOCALE_SISO3166CTRYNAME, buffer, ARRAY_SIZE(buffer) )) return E_INVALIDARG;
     return WindowsCreateString( buffer, wcslen( buffer ), value );
+#endif
 }
 
 static HRESULT WINAPI geographic_region_get_CodeThreeLetter( IGeographicRegion *iface, HSTRING *value )
 {
+#ifdef __REACTOS__
+    TRACE( "iface %p, value %p.\n", iface, value );
+
+    return geographic_region_get_info( iface, GEO_ISO3, value );
+#else
     FIXME( "iface %p stub!\n", iface );
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI geographic_region_get_CodeThreeDigit( IGeographicRegion *iface, HSTRING *value )
 {
+#ifdef __REACTOS__
+    TRACE( "iface %p, value %p.\n", iface, value );
+
+    return geographic_region_get_info( iface, GEO_ISO_UN_NUMBER, value );
+#else
     FIXME( "iface %p stub!\n", iface );
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI geographic_region_get_DisplayName( IGeographicRegion *iface, HSTRING *value )
@@ -224,8 +258,34 @@ static HRESULT WINAPI activation_factory_GetTrustLevel( IActivationFactory *ifac
     return E_NOTIMPL;
 }
 
+#ifdef __REACTOS__
+static HRESULT geographic_region_create( const WCHAR *name, IGeographicRegion **out )
+{
+    struct geographic_region *region;
+    WCHAR code[4];
+
+    if (!GetGeoInfoEx( (WCHAR *)name, GEO_ISO2, code, ARRAY_SIZE(code) )) return E_INVALIDARG;
+
+    if (!(region = calloc( 1, sizeof(*region) ))) return E_OUTOFMEMORY;
+    region->IGeographicRegion_iface.lpVtbl = &geographic_region_vtbl;
+    region->ref = 1;
+    wcscpy( region->code, code );
+
+    *out = &region->IGeographicRegion_iface;
+    return S_OK;
+}
+#endif
+
 static HRESULT WINAPI activation_factory_ActivateInstance( IActivationFactory *iface, IInspectable **out )
 {
+#ifdef __REACTOS__
+    WCHAR name[16];
+
+    TRACE( "iface %p, out %p.\n", iface, out );
+
+    if (!GetUserDefaultGeoName( name, ARRAY_SIZE(name) )) return E_FAIL;
+    return geographic_region_create( name, (IGeographicRegion **)out );
+#else
     struct geographic_region *region;
 
     TRACE( "iface %p, out %p.\n", iface, out );
@@ -236,6 +296,7 @@ static HRESULT WINAPI activation_factory_ActivateInstance( IActivationFactory *i
 
     *out = (IInspectable *)&region->IGeographicRegion_iface;
     return S_OK;
+#endif
 }
 
 static const struct IActivationFactoryVtbl activation_factory_vtbl =
@@ -256,8 +317,16 @@ DEFINE_IINSPECTABLE( geographic_region_factory, IGeographicRegionFactory, struct
 static HRESULT WINAPI geographic_region_factory_CreateGeographicRegion( IGeographicRegionFactory *iface, HSTRING code,
                                                                         IGeographicRegion **value )
 {
+#ifdef __REACTOS__
+    TRACE( "iface %p, code %s, value %p.\n", iface, debugstr_hstring( code ), value );
+
+    if (!value) return E_POINTER;
+    *value = NULL;
+    return geographic_region_create( WindowsGetStringRawBuffer( code, NULL ), value );
+#else
     FIXME( "iface %p, code %p, value %p stub!\n", iface, code, value );
     return E_NOTIMPL;
+#endif
 }
 
 static const struct IGeographicRegionFactoryVtbl geographic_region_factory_vtbl =

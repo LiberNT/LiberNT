@@ -729,25 +729,84 @@ static HRESULT STDMETHODCALLTYPE globalization_preferences_GetTrustLevel(
     return E_NOTIMPL;
 }
 
+#ifdef __REACTOS__
+static HRESULT hstring_vector_create_one(const WCHAR *str, IVectorView_HSTRING **out)
+{
+    HSTRING hstring;
+    HRESULT hr;
+
+    if (FAILED(hr = WindowsCreateString(str, wcslen(str), &hstring)))
+        return hr;
+
+    return hstring_vector_create(&hstring, 1, out);
+}
+#endif
+
 static HRESULT STDMETHODCALLTYPE globalization_preferences_get_Calendars(
         IGlobalizationPreferencesStatics *iface, IVectorView_HSTRING **out)
 {
+#ifdef __REACTOS__
+    const WCHAR *name;
+    DWORD type = CAL_GREGORIAN;
+
+    TRACE("iface %p, out %p.\n", iface, out);
+
+    GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_ICALENDARTYPE | LOCALE_RETURN_NUMBER,
+                    (WCHAR *)&type, sizeof(type) / sizeof(WCHAR));
+    switch (type)
+    {
+        case CAL_JAPAN: name = L"JapaneseCalendar"; break;
+        case CAL_TAIWAN: name = L"TaiwanCalendar"; break;
+        case CAL_KOREA: name = L"KoreanCalendar"; break;
+        case CAL_HIJRI: name = L"HijriCalendar"; break;
+        case CAL_THAI: name = L"ThaiCalendar"; break;
+        case CAL_HEBREW: name = L"HebrewCalendar"; break;
+        case CAL_PERSIAN: name = L"PersianCalendar"; break;
+        case CAL_UMALQURA: name = L"UmAlQuraCalendar"; break;
+        default: name = L"GregorianCalendar"; break;
+    }
+
+    return hstring_vector_create_one(name, out);
+#else
     FIXME("iface %p, out %p stub!\n", iface, out);
     return hstring_vector_create(NULL, 0, out);
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE globalization_preferences_get_Clocks(
         IGlobalizationPreferencesStatics *iface, IVectorView_HSTRING **out)
 {
+#ifdef __REACTOS__
+    WCHAR format[80];
+
+    TRACE("iface %p, out %p.\n", iface, out);
+
+    if (!GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STIMEFORMAT, format, ARRAY_SIZE(format)))
+        return E_FAIL;
+
+    return hstring_vector_create_one(wcschr(format, 'H') ? L"24HourClock" : L"12HourClock", out);
+#else
     FIXME("iface %p, out %p stub!\n", iface, out);
     return hstring_vector_create(NULL, 0, out);
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE globalization_preferences_get_Currencies(
         IGlobalizationPreferencesStatics *iface, IVectorView_HSTRING **out)
 {
+#ifdef __REACTOS__
+    WCHAR currency[16];
+
+    TRACE("iface %p, out %p.\n", iface, out);
+
+    if (!GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SINTLSYMBOL, currency, ARRAY_SIZE(currency)))
+        return E_FAIL;
+
+    return hstring_vector_create_one(currency, out);
+#else
     FIXME("iface %p, out %p stub!\n", iface, out);
     return hstring_vector_create(NULL, 0, out);
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE globalization_preferences_get_Languages(
