@@ -4745,6 +4745,9 @@ static void saxreader_parse_characters_newparser(struct saxlocator *locator, str
     if (ctxt->ch == '\r')
     {
         bool move_position = false;
+#ifdef __REACTOS__
+        struct text_position block_position = locator->buffer.position;
+#endif
 
         saxreader_skip(locator, 1);
         ctxt->ch = *saxreader_get_ptr_noread(locator);
@@ -4755,7 +4758,11 @@ static void saxreader_parse_characters_newparser(struct saxlocator *locator, str
 
         /* Flush current block first, then new line separately */
         chars = saxreader_string_to_bstr(locator, &ctxt->buffer);
+#ifdef __REACTOS__
+        saxlocator_characters(locator, &block_position, chars);
+#else
         saxlocator_characters(locator, &ctxt->position, chars);
+#endif
         SysFreeString(chars);
 
         saxreader_shrink(locator);
