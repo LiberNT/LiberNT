@@ -507,8 +507,10 @@ UINT WINAPI MsiApplyMultiplePatchesW(LPCWSTR szPatchPackages,
         patch[len] = '\0';
 
 #ifdef __REACTOS__
-        if (GetFileAttributesW(patch) == INVALID_FILE_ATTRIBUTES)
-            r = GetLastError();
+        if (!*patch)
+            r = ERROR_PATH_NOT_FOUND;
+        else if (GetFileAttributesW(patch) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND)
+            r = ERROR_FILE_NOT_FOUND;
         else
 #endif
         r = MSI_ApplyPatchW(patch, szProductCode, szPropertiesList);
