@@ -2388,6 +2388,8 @@ UnloadUserProfile(
     _In_ HANDLE hProfile)
 {
     static const UNICODE_STRING LocalSystemSidString = RTL_CONSTANT_STRING(L"S-1-5-18");
+    static const UNICODE_STRING LocalServiceSidString = RTL_CONSTANT_STRING(L"S-1-5-19");
+    static const UNICODE_STRING NetworkServiceSidString = RTL_CONSTANT_STRING(L"S-1-5-20");
     UNICODE_STRING SidString = {0, 0, NULL};
     HANDLE hProfileMutex = NULL;
     HKEY hProfilesKey = NULL, hProfileKey = NULL;
@@ -2436,7 +2438,10 @@ UnloadUserProfile(
         goto cleanup;
     }
 
-    if (dwRefCount == 0 && !RtlEqualUnicodeString(&SidString, &LocalSystemSidString, TRUE))
+    if (dwRefCount == 0 &&
+        !RtlEqualUnicodeString(&SidString, &LocalSystemSidString, TRUE) &&
+        !RtlEqualUnicodeString(&SidString, &LocalServiceSidString, TRUE) &&
+        !RtlEqualUnicodeString(&SidString, &NetworkServiceSidString, TRUE))
     {
         DPRINT("RefCount is 0: Unload the Hive!\n");
 
