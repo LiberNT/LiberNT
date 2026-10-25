@@ -1412,7 +1412,11 @@ static HRESULT WINAPI SAXContentHandler_characters(ISAXContentHandler *iface, co
 
     TRACE("%p, %s, %d.\n", iface, debugstr_wn(chars, nchars), nchars);
 
+#ifdef __REACTOS__
+    if (!chars && (writer->class_version != MSXML6 || nchars)) return E_INVALIDARG;
+#else
     if (!chars) return E_INVALIDARG;
+#endif
 
     close_element_starttag(writer);
     set_element_name(writer, NULL, 0);
@@ -1442,7 +1446,12 @@ static HRESULT WINAPI SAXContentHandler_ignorableWhitespace(
 
     TRACE("(%p)->(%s)\n", This, debugstr_wn(chars, nchars));
 
+#ifdef __REACTOS__
+    if (!chars && (This->class_version != MSXML6 || nchars)) return E_INVALIDARG;
+    if (!chars) return S_OK;
+#else
     if (!chars) return E_INVALIDARG;
+#endif
 
     write_output_buffer(This, chars, nchars);
 
@@ -1460,7 +1469,11 @@ static HRESULT WINAPI SAXContentHandler_processingInstruction(
 
     TRACE("%p, %s, %s.\n", iface, debugstr_wn(target, ntarget), debugstr_wn(data, ndata));
 
+#ifdef __REACTOS__
+    if (!target && (writer->class_version != MSXML6 || ntarget)) return E_INVALIDARG;
+#else
     if (!target) return E_INVALIDARG;
+#endif
 
 #ifdef __REACTOS__
     close_element_starttag(writer);
@@ -1469,7 +1482,11 @@ static HRESULT WINAPI SAXContentHandler_processingInstruction(
     write_node_indent(writer);
     write_output_buffer(writer, L"<?", 2);
 
+#ifdef __REACTOS__
+    if (target && *target)
+#else
     if (*target)
+#endif
         write_output_buffer(writer, target, ntarget);
 
     if (data && *data && ndata)
@@ -1640,7 +1657,11 @@ static HRESULT WINAPI SAXLexicalHandler_comment(ISAXLexicalHandler *iface, const
 
     TRACE("%p, %s:%d.\n", iface, debugstr_wn(chars, nchars), nchars);
 
+#ifdef __REACTOS__
+    if (!chars && (writer->class_version != MSXML6 || nchars)) return E_INVALIDARG;
+#else
     if (!chars) return E_INVALIDARG;
+#endif
 
     close_element_starttag(writer);
 #ifdef __REACTOS__
@@ -2164,7 +2185,11 @@ static HRESULT WINAPI VBSAXContentHandler_startElement(IVBSAXContentHandler *ifa
 
     TRACE("(%p)->(%p %p %p %p)\n", This, namespaceURI, localName, QName, attrs);
 
+#ifdef __REACTOS__
+    if (!namespaceURI || (!*namespaceURI && This->class_version != MSXML6) || !localName || !QName)
+#else
     if (!namespaceURI || !*namespaceURI || !localName || !QName)
+#endif
         return E_INVALIDARG;
 
     TRACE("(%s %s %s)\n", debugstr_w(*namespaceURI), debugstr_w(*localName), debugstr_w(*QName));
