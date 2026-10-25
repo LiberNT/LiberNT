@@ -620,7 +620,11 @@ HRESULT node_insert_before(struct domnode *node, IXMLDOMNode *new_child, const V
             if (ref_node->parent != node)
             {
                 WARN("Reference node is not a child of this node.\n");
+#ifdef __REACTOS__
+                return E_INVALIDARG;
+#else
                 return E_FAIL;
+#endif
             }
             break;
 
