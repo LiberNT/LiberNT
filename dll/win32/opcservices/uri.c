@@ -349,9 +349,70 @@ static HRESULT WINAPI opc_uri_GetRelationshipsPartUri(IOpcPartUri *iface, IOpcPa
 static HRESULT WINAPI opc_uri_GetRelativeUri(IOpcPartUri *iface, IOpcPartUri *part_uri,
         IUri **relative_uri)
 {
+#ifdef __REACTOS__
+    struct opc_uri *uri = impl_from_IOpcPartUri(iface);
+    BSTR base = NULL, target = NULL;
+    size_t i, common = 0, dir_end, up = 0;
+    WCHAR *relative;
+    HRESULT hr;
+
+    TRACE("iface %p, part_uri %p, relative_uri %p.\n", iface, part_uri, relative_uri);
+
+    if (!relative_uri)
+        return E_POINTER;
+
+    *relative_uri = NULL;
+
+    if (!part_uri)
+        return E_POINTER;
+
+    if (FAILED(hr = IUri_GetPath(uri->uri, &base)))
+        return hr;
+
+    if (FAILED(hr = IUri_GetPath((IUri *)part_uri, &target)))
+    {
+        SysFreeString(base);
+        return hr;
+    }
+
+    if (!wcscmp(base, target))
+        common = wcslen(target);
+    else
+    {
+        dir_end = wcsrchr(base, '/') ? wcsrchr(base, '/') - base + 1 : 0;
+        for (i = 0; i < dir_end && base[i] == target[i]; ++i)
+        {
+            if (base[i] == '/')
+                common = i + 1;
+        }
+        for (i = common; i < dir_end; ++i)
+        {
+            if (base[i] == '/')
+                ++up;
+        }
+    }
+
+    if (!(relative = malloc((up * 3 + wcslen(target + common) + 1) * sizeof(WCHAR))))
+        hr = E_OUTOFMEMORY;
+    else
+    {
+        relative[0] = 0;
+        for (i = 0; i < up; ++i)
+            lstrcatW(relative, L"../");
+        lstrcatW(relative, target + common);
+        hr = CreateUri(relative, Uri_CREATE_ALLOW_RELATIVE, 0, relative_uri);
+        free(relative);
+    }
+
+    SysFreeString(target);
+    SysFreeString(base);
+
+    return hr;
+#else
     FIXME("iface %p, part_uri %p, relative_uri %p stub!\n", iface, part_uri, relative_uri);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI opc_uri_CombinePartUri(IOpcPartUri *iface, IUri *relative_uri, IOpcPartUri **combined)
@@ -493,11 +554,19 @@ static IUri *opc_part_uri_get_rels_uri(IUri *uri)
     }
     ret[0] = 0;
 
+#ifdef __REACTOS__
+    if (end != path)
+    {
+        memcpy(ret, path, (end - path) * sizeof(WCHAR));
+        ret[end - path] = 0;
+    }
+#else
     if (start != path)
     {
         memcpy(ret, path, (start - path) * sizeof(WCHAR));
         ret[start - path] = 0;
     }
+#endif
 
     lstrcatW(ret, relsdirW);
     lstrcatW(ret, end);
