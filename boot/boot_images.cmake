@@ -358,7 +358,7 @@ endfunction()
 
 function(add_system_dirs _image_filelist)
     foreach(_dir
-            Help Config Cursors Prefetch repair twain_32
+            Help Config Cursors Prefetch repair System twain_32
             security/Database security/logs security/templates
             system32/CatRoot system32/CatRoot2 system32/ShellExt
             system32/spool/PRINTERS system32/spool/drivers/color
