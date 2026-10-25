@@ -166,6 +166,7 @@
 @ stdcall LdrFlushAlternateResourceModules()
 @ stdcall LdrGetDllHandle(wstr ptr ptr ptr)
 @ stdcall LdrGetDllHandleEx(long wstr ptr ptr ptr)
+@ stdcall LdrGetDllHandleByName(ptr ptr ptr)
 @ stdcall -stub -version=0x600+ LdrGetFailureData()
 @ stdcall -stub -version=0x600+ LdrGetFileNameFromLoadAsDataTable(ptr ptr)
 @ stdcall -stub -version=0x600+ -arch=win64 LdrGetKnownDllSectionHandle(wstr long ptr)

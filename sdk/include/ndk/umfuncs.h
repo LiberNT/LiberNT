@@ -131,6 +131,13 @@ LdrGetDllHandleEx(
 
 NTSTATUS
 NTAPI
+LdrGetDllHandleByName(
+    _In_opt_ PUNICODE_STRING BaseDllName,
+    _In_opt_ PUNICODE_STRING FullDllName,
+    _Out_ PVOID *DllHandle);
+
+NTSTATUS
+NTAPI
 LdrFindEntryForAddress(
     _In_ PVOID Address,
     _Out_ PLDR_DATA_TABLE_ENTRY *Module

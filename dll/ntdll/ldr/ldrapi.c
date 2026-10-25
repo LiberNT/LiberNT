@@ -5,6 +5,7 @@
  * PURPOSE:         PE Loader Public APIs
  * PROGRAMMERS:     Alex Ionescu (alex@relsoft.net)
  *                  Aleksey Bragin (aleksey@reactos.org)
+ *                  Ahmed ARIF (arif.ing@outlook.com)
  */
 
 /* INCLUDES *****************************************************************/
@@ -1854,6 +1855,60 @@ LdrInitShimEngineDynamic(IN PVOID BaseAddress)
         return TRUE;
     }
     return FALSE;
+}
+
+NTSTATUS
+NTAPI
+LdrGetDllHandleByName(
+    _In_opt_ PUNICODE_STRING BaseDllName,
+    _In_opt_ PUNICODE_STRING FullDllName,
+    _Out_ PVOID *DllHandle)
+{
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PLIST_ENTRY ListHead, NextEntry;
+    NTSTATUS Status;
+    ULONG_PTR Cookie = 0;
+    BOOLEAN Locked = FALSE;
+
+    if (!BaseDllName && !FullDllName)
+        return STATUS_INVALID_PARAMETER;
+
+    if (!LdrpInLdrInit)
+    {
+        Status = LdrLockLoaderLock(0, NULL, &Cookie);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Locked = TRUE;
+    }
+
+    Status = STATUS_DLL_NOT_FOUND;
+    ListHead = &NtCurrentPeb()->Ldr->InLoadOrderModuleList;
+    for (NextEntry = ListHead->Flink; NextEntry != ListHead; NextEntry = NextEntry->Flink)
+    {
+        LdrEntry = CONTAINING_RECORD(NextEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        if (!LdrEntry->InMemoryOrderLinks.Flink)
+            continue;
+        if (BaseDllName && !RtlEqualUnicodeString(BaseDllName, &LdrEntry->BaseDllName, TRUE))
+            continue;
+        if (FullDllName && !RtlEqualUnicodeString(FullDllName, &LdrEntry->FullDllName, TRUE))
+            continue;
+
+        if (LdrEntry->LoadCount != 0xFFFF)
+        {
+            LdrEntry->LoadCount++;
+            LdrpUpdateLoadCount2(LdrEntry, LDRP_UPDATE_REFCOUNT);
+            LdrpClearLoadInProgress();
+        }
+
+        *DllHandle = LdrEntry->DllBase;
+        Status = STATUS_SUCCESS;
+        break;
+    }
+
+    if (Locked)
+        LdrUnlockLoaderLock(0, Cookie);
+
+    return Status;
 }
 
 /*
