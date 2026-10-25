@@ -1699,6 +1699,11 @@ LxUnixSendInternal(
         Result = -LX_EMSGSIZE;
         goto Exit;
     }
+    if ((Socket->Type == LX_SOCK_STREAM) && (Total == 0))
+    {
+        Result = 0;
+        goto Exit;
+    }
 
     do
     {
