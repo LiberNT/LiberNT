@@ -17,6 +17,22 @@ HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management","Large
 HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows ARM64","Directory",,"ARM64"
 HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows ARM64\Print Processors",,0x00000010
 HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows ARM64\Print Processors\winprint","Driver",,"winprint.dll"
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows ARM64\Drivers\Version-3","Directory",,"3"
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows ARM64\Drivers\Version-3","MajorVersion",0x00010001,3
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows ARM64\Drivers\Version-3","MinorVersion",0x00010001,0
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows ARM64\Drivers\Version-4","Directory",,"4"
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows ARM64\Drivers\Version-4","MajorVersion",0x00010001,4
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows ARM64\Drivers\Version-4","MinorVersion",0x00010001,0
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86","Directory",,"W32X86"
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Drivers\Version-3","Directory",,"3"
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Drivers\Version-3","MajorVersion",0x00010001,3
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Drivers\Version-3","MinorVersion",0x00010001,0
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Print Processors",,0x00000010
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64","Directory",,"x64"
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-3","Directory",,"3"
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-3","MajorVersion",0x00010001,3
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-3","MinorVersion",0x00010001,0
+HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Print Processors",,0x00000010
 
 ; Raspberry Pi 5 RP1 southbridge: no OS bus driver. The UEFI firmware exposes
 ; the RP1 functions (USB XHC0/XHC1, Ethernet ETH0) as standard ACPI devices
