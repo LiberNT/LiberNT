@@ -787,6 +787,8 @@ CDefView::CDefView() :
     m_FillListGeneration(0)
 {
     ZeroMemory(&m_FolderSettings, sizeof(m_FolderSettings));
+    m_FolderSettings.ViewMode = FVM_TILE;
+    m_FolderSettings.fFlags = FWF_USESEARCHFOLDER;
     ZeroMemory(&m_ptLastMousePos, sizeof(m_ptLastMousePos));
     ZeroMemory(&m_Category, sizeof(m_Category));
     SetRectEmpty(&m_ComputerFoldersHeader);
@@ -4712,7 +4714,7 @@ HRESULT STDMETHODCALLTYPE CDefView::GetSelectionMarkedItem(int *piItem)
 
     *piItem = m_ListView.GetSelectionMark();
 
-    return S_OK;
+    return *piItem >= 0 ? S_OK : S_FALSE;
 }
 
 HRESULT STDMETHODCALLTYPE CDefView::GetFocusedItem(int *piItem)
@@ -4721,7 +4723,7 @@ HRESULT STDMETHODCALLTYPE CDefView::GetFocusedItem(int *piItem)
 
     *piItem = m_ListView.GetNextItem(-1, LVNI_FOCUSED);
 
-    return S_OK;
+    return *piItem >= 0 ? S_OK : S_FALSE;
 }
 
 HRESULT STDMETHODCALLTYPE CDefView::GetItemPosition(PCUITEMID_CHILD pidl, POINT *ppt)
@@ -4905,9 +4907,8 @@ HRESULT STDMETHODCALLTYPE CDefView::SetCurrentFolderFlags(DWORD mask, DWORD flag
 
 HRESULT STDMETHODCALLTYPE CDefView::GetCurrentFolderFlags(DWORD *flags)
 {
-    if (!flags)
-        return E_POINTER;
-    *flags = m_FolderSettings.fFlags;
+    if (flags)
+        *flags = m_FolderSettings.fFlags;
     return S_OK;
 }
 
@@ -5538,7 +5539,9 @@ HRESULT WINAPI CDefView::QueryStatus(const GUID *pguidCmdGroup, ULONG cCmds, OLE
     FIXME("(%p)->(%p(%s) 0x%08x %p %p\n",
           this, pguidCmdGroup, debugstr_guid(pguidCmdGroup), cCmds, prgCmds, pCmdText);
 
-    if (pguidCmdGroup || !prgCmds)
+    if (!prgCmds)
+        return E_INVALIDARG;
+    if (pguidCmdGroup)
         return OLECMDERR_E_UNKNOWNGROUP;
 
     for (UINT i = 0; i < cCmds; i++)
