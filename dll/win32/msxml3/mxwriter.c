@@ -580,12 +580,19 @@ static void write_prolog_buffer(mxwriter *writer)
     write_output_buffer_quoted(writer, writer->version, -1);
 
     /* encoding */
+#ifdef __REACTOS__
+    if (writer->dest || writer->class_version != MSXML6)
+    {
+#endif
     write_output_buffer(writer, L" encoding=", 10);
 
     if (writer->dest)
         write_output_buffer_quoted(writer, writer->encoding, -1);
     else
         write_output_buffer_quoted(writer, L"UTF-16", 6);
+#ifdef __REACTOS__
+    }
+#endif
 
     /* standalone */
     write_output_buffer(writer, L" standalone=", 12);
@@ -1023,6 +1030,10 @@ static HRESULT WINAPI mxwriter_put_encoding(IMXWriter *iface, BSTR encoding)
 
     TRACE("(%p)->(%s)\n", This, debugstr_w(encoding));
 
+#ifdef __REACTOS__
+    if (This->class_version == MSXML6 && encoding && !*encoding)
+        return S_OK;
+#endif
     enc = parse_encoding_name(encoding);
     if (enc == XmlEncoding_Unknown)
     {
@@ -1126,6 +1137,10 @@ static HRESULT WINAPI mxwriter_put_version(IMXWriter *iface, BSTR version)
 
     TRACE("(%p)->(%s)\n", This, debugstr_w(version));
 
+#ifdef __REACTOS__
+    if (This->class_version == MSXML6 && (!version || !*version))
+        return S_OK;
+#endif
     if (!version) return E_INVALIDARG;
 
     SysFreeString(This->version);
