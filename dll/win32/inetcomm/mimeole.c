@@ -2099,6 +2099,9 @@ typedef struct MimeMessage
 
     struct list body_tree;
     DWORD next_index;
+#ifdef __REACTOS__
+    VARIANT_BOOL hide_tnef_attachments;
+#endif
 } MimeMessage;
 
 static inline MimeMessage *impl_from_IMimeMessage(IMimeMessage *iface)
@@ -2893,7 +2896,11 @@ static HRESULT WINAPI MimeMessage_SetOption(
     switch(oid)
     {
     case OID_HIDE_TNEF_ATTACHMENTS:
+#ifdef __REACTOS__
+        impl_from_IMimeMessage(iface)->hide_tnef_attachments = pValue->boolVal;
+#else
         FIXME("OID_HIDE_TNEF_ATTACHMENTS (value %d): ignoring\n", pValue->boolVal);
+#endif
         break;
     case OID_SHOW_MACBINARY:
         FIXME("OID_SHOW_MACBINARY (value %d): ignoring\n", pValue->boolVal);
@@ -2917,6 +2924,17 @@ static HRESULT WINAPI MimeMessage_GetOption(
     const TYPEDID oid,
     LPPROPVARIANT pValue)
 {
+#ifdef __REACTOS__
+    MimeMessage *This = impl_from_IMimeMessage(iface);
+
+    TRACE("(%p)->(%08lx, %p)\n", iface, oid, pValue);
+    if (oid == OID_HIDE_TNEF_ATTACHMENTS)
+    {
+        pValue->vt = VT_BOOL;
+        pValue->boolVal = This->hide_tnef_attachments;
+        return S_OK;
+    }
+#endif
     FIXME("(%p)->(%08lx, %p)\n", iface, oid, pValue);
     return E_NOTIMPL;
 }
@@ -3249,6 +3267,9 @@ HRESULT MimeMessage_create(IUnknown *outer, void **obj)
     This->IMimeMessage_iface.lpVtbl = &MimeMessageVtbl;
     This->ref = 1;
     This->stream = NULL;
+#ifdef __REACTOS__
+    This->hide_tnef_attachments = TRUE;
+#endif
     list_init(&This->body_tree);
     This->next_index = 1;
 
