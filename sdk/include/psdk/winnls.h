@@ -922,6 +922,15 @@ GetGeoInfoW(
   _In_ int cchData,
   _In_ LANGID LangId);
 
+WINBASEAPI
+int
+WINAPI
+GetGeoInfoEx(
+  _In_ PWSTR location,
+  _In_ GEOTYPE geoType,
+  _Out_writes_opt_(geoDataCount) PWSTR geoData,
+  _In_ int geoDataCount);
+
 int
 WINAPI
 GetLocaleInfoA(

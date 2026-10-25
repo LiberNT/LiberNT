@@ -97,6 +97,14 @@ GetPackageFamilyName(
     _Out_writes_opt_(*packageFamilyNameLength) PWSTR packageFamilyName);
 
 WINBASEAPI
+_Success_(return == ERROR_SUCCESS)
+LONG
+WINAPI
+GetCurrentPackageFullName(
+    _Inout_ UINT32* packageFullNameLength,
+    _Out_writes_opt_(*packageFullNameLength) PWSTR packageFullName);
+
+WINBASEAPI
 _Check_return_
 _Success_(return == ERROR_SUCCESS)
 _On_failure_(_Unchanged_(*count))
