@@ -162,6 +162,9 @@ typedef struct
     BSTR element;
 
     IStream *dest;
+#ifdef __REACTOS__
+    IUnknown *dest_unk;
+#endif
 
     output_buffer buffer;
 } mxwriter;
@@ -853,6 +856,9 @@ static ULONG WINAPI mxwriter_Release(IMXWriter *iface)
         free_output_buffer(&This->buffer);
 
         if (This->dest) IStream_Release(This->dest);
+#ifdef __REACTOS__
+        if (This->dest_unk) IUnknown_Release(This->dest_unk);
+#endif
         SysFreeString(This->version);
         SysFreeString(This->encoding);
 
@@ -917,6 +923,10 @@ static HRESULT WINAPI mxwriter_put_output(IMXWriter *iface, VARIANT dest)
     {
         if (This->dest) IStream_Release(This->dest);
         This->dest = NULL;
+#ifdef __REACTOS__
+        if (This->dest_unk) IUnknown_Release(This->dest_unk);
+        This->dest_unk = NULL;
+#endif
         close_output_buffer(This);
         break;
     }
@@ -932,6 +942,11 @@ static HRESULT WINAPI mxwriter_put_output(IMXWriter *iface, VARIANT dest)
 
             if (This->dest) IStream_Release(This->dest);
             This->dest = stream;
+#ifdef __REACTOS__
+            IUnknown_AddRef(V_UNKNOWN(&dest));
+            if (This->dest_unk) IUnknown_Release(This->dest_unk);
+            This->dest_unk = V_UNKNOWN(&dest);
+#endif
             break;
         }
 
@@ -2629,6 +2644,9 @@ HRESULT MXWriter_create(MSXML_VERSION version, void **ppObj)
 #endif
 
     This->dest = NULL;
+#ifdef __REACTOS__
+    This->dest_unk = NULL;
+#endif
 
     hr = init_output_buffer(This->xml_enc, &This->buffer);
     if (hr != S_OK) {
