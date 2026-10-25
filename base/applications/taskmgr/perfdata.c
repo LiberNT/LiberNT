@@ -32,6 +32,7 @@ SYSTEM_FILECACHE_INFORMATION               SystemCacheInfo;
 ULONG                                      SystemNumberOfHandles;
 PSYSTEM_PROCESSOR_PERFORMANCE_INFORMATION  SystemProcessorTimeInfo = NULL;
 PSID                                       SystemUserSid = NULL;
+static PSID                                CurrentUserSid = NULL;
 
 #define PERF_MAX_CPUS 64
 static LARGE_INTEGER                       liOldPerCpuIdle[PERF_MAX_CPUS];
@@ -59,6 +60,9 @@ BOOL PerfDataInitialize(void)
 {
     SID_IDENTIFIER_AUTHORITY NtSidAuthority = {SECURITY_NT_AUTHORITY};
     NTSTATUS    status;
+    HANDLE      hToken;
+    ULONG       TokenUserBuffer[64];
+    DWORD       dwLength;
 
     InitializeCriticalSection(&PerfDataCriticalSection);
     pGetProcessInformation = (PFN_GetProcessInformation)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetProcessInformation");
@@ -74,6 +78,20 @@ BOOL PerfDataInitialize(void)
      * Create the SYSTEM Sid
      */
     AllocateAndInitializeSid(&NtSidAuthority, 1, SECURITY_LOCAL_SYSTEM_RID, 0, 0, 0, 0, 0, 0, 0, &SystemUserSid);
+
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken))
+    {
+        if (GetTokenInformation(hToken, TokenUser, TokenUserBuffer, sizeof(TokenUserBuffer), &dwLength))
+        {
+            PSID Sid = ((PTOKEN_USER)TokenUserBuffer)->User.Sid;
+
+            dwLength = GetLengthSid(Sid);
+            CurrentUserSid = HeapAlloc(GetProcessHeap(), 0, dwLength);
+            if (CurrentUserSid != NULL)
+                CopySid(dwLength, CurrentUserSid, Sid);
+        }
+        CloseHandle(hToken);
+    }
 
     /*
      * Set up global info storage
@@ -98,6 +116,12 @@ void PerfDataUninitialize(void)
     {
         FreeSid(SystemUserSid);
         SystemUserSid = NULL;
+    }
+
+    if (CurrentUserSid != NULL)
+    {
+        HeapFree(GetProcessHeap(), 0, CurrentUserSid);
+        CurrentUserSid = NULL;
     }
 
     /* Free user names cache list */
@@ -466,6 +490,8 @@ ClearInfo:
 
         cwcUserName = _countof(pPerfData[0].UserName);
         CachedGetUserFromSid(ProcessUser, pPerfData[Idx].UserName, &cwcUserName);
+        pPerfData[Idx].IsCurrentUser = (CurrentUserSid != NULL && ProcessUser != NULL && IsValidSid(ProcessUser) &&
+                                        EqualSid(ProcessUser, CurrentUserSid));
 
         if (ProcessSD != NULL)
         {
@@ -604,6 +630,22 @@ BOOL PerfDataGetUserName(ULONG Index, LPWSTR lpUserName, ULONG nMaxCount)
     LeaveCriticalSection(&PerfDataCriticalSection);
 
     return bSuccessful;
+}
+
+BOOL PerfDataIsCurrentUserProcess(ULONG Index)
+{
+    BOOL  bCurrentUser;
+
+    EnterCriticalSection(&PerfDataCriticalSection);
+
+    if (Index < ProcessCount)
+        bCurrentUser = pPerfData[Index].IsCurrentUser;
+    else
+        bCurrentUser = FALSE;
+
+    LeaveCriticalSection(&PerfDataCriticalSection);
+
+    return bCurrentUser;
 }
 
 BOOL PerfDataGetCommandLine(ULONG Index, LPWSTR lpCommandLine, ULONG nMaxCount)

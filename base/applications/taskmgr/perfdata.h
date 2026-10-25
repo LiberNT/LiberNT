@@ -16,6 +16,7 @@ typedef struct _PERFDATA
 	USHORT				ImageMachine;
 	HANDLE				ProcessId;
 	WCHAR				UserName[MAX_PATH];
+	BOOL				IsCurrentUser;
 	ULONG				SessionId;
 	ULONG				CPUUsage;
 	LARGE_INTEGER		CPUTime;
@@ -61,6 +62,7 @@ ULONG	PerfDataGetProcessorUsagePerCpu(ULONG Cpu);
 BOOL	PerfDataGetImageName(ULONG Index, LPWSTR lpImageName, ULONG nMaxCount);
 ULONG	PerfDataGetProcessId(ULONG Index);
 BOOL	PerfDataGetUserName(ULONG Index, LPWSTR lpUserName, ULONG nMaxCount);
+BOOL	PerfDataIsCurrentUserProcess(ULONG Index);
 
 BOOL	PerfDataGetCommandLine(ULONG Index, LPWSTR lpCommandLine, ULONG nMaxCount);
 void	PerfDataDeallocCommandLineCache();

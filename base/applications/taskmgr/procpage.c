@@ -47,6 +47,7 @@ void ProcessPageShowContextMenu(DWORD dwProcessId);
 BOOL PerfDataGetText(ULONG Index, ULONG ColumnIndex, LPTSTR lpText, ULONG nMaxCount);
 DWORD WINAPI ProcessPageRefreshThread(void *lpParameter);
 int ProcessRunning(ULONG ProcessId);
+static BOOL ProcessShown(ULONG Index);
 
 void Cleanup(void)
 {
@@ -144,6 +145,7 @@ ProcessPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
         hProcessPageHeaderCtrl = ListView_GetHeader(hProcessPageListCtrl);
         hProcessPageEndProcessButton = GetDlgItem(hDlg, IDC_ENDPROCESS);
         hProcessPageShowAllProcessesButton = GetDlgItem(hDlg, IDC_SHOWALLPROCESSES);
+        CheckDlgButton(hDlg, IDC_SHOWALLPROCESSES, TaskManagerSettings.ShowProcessesFromAllUsers ? BST_CHECKED : BST_UNCHECKED);
 
         /*
          * Set the title, and extended window styles for the list control
@@ -184,6 +186,12 @@ ProcessPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
         {
                 case IDC_ENDPROCESS:
                         ProcessPage_OnEndProcess();
+                        break;
+
+                case IDC_SHOWALLPROCESSES:
+                        TaskManagerSettings.ShowProcessesFromAllUsers = (IsDlgButtonChecked(hDlg, IDC_SHOWALLPROCESSES) == BST_CHECKED);
+                        RefreshProcessPage();
+                        break;
         }
         break;
 
@@ -493,10 +501,11 @@ void UpdateProcesses()
         item.iItem = i;
         (void)ListView_GetItem(hProcessPageListCtrl, &item);
         pData = (LPPROCESS_PAGE_LIST_ITEM)item.lParam;
-        if (!ProcessRunning(pData->ProcessId))
+        if (!ProcessRunning(pData->ProcessId) || !ProcessShown(PerfDataGetProcessIndex(pData->ProcessId)))
         {
             (void)ListView_DeleteItem(hProcessPageListCtrl, i);
             HeapFree(GetProcessHeap(), 0, pData);
+            i--;
         }
     }
 
@@ -506,7 +515,8 @@ void UpdateProcesses()
         /* Add new processes by checking against the current items */
         for (l = 0; l < PerfDataGetProcessCount(); l++)
         {
-            AddProcess(l);
+            if (ProcessShown(l))
+                AddProcess(l);
         }
     }
 
@@ -530,6 +540,11 @@ void UpdateProcesses()
         bProcessPageSelectionMade = FALSE;
     }
     */
+}
+
+static BOOL ProcessShown(ULONG Index)
+{
+    return TaskManagerSettings.ShowProcessesFromAllUsers || PerfDataIsCurrentUserProcess(Index);
 }
 
 BOOL ProcessRunning(ULONG ProcessId)
