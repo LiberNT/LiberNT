@@ -14,6 +14,7 @@
 #define MI_IMAGE64_RELOCATION_TOP_ALIGN 0x40000000ULL
 #define MI_IMAGE32_RELOCATION_LOWEST 0x50000000ULL
 #define MI_IMAGE32_RELOCATION_HIGHEST 0x77FFFFFFULL
+#define MI_IMAGE32_EXECUTABLE_RANGE 0x1000000ULL
 
 POBJECT_TYPE MmSectionObjectType;
 
@@ -592,7 +593,8 @@ MiRelocateImageControlArea(
     ULONG64 Highest = (ULONG64)(ULONG_PTR)MM_HIGHEST_VAD_ADDRESS;
     ULONG64 Lowest = 0;
     ULONG64 Slots, Base, Delta;
-    PMI_IMAGE_WINDOW Window;
+    PMI_IMAGE_WINDOW Window = NULL;
+    BOOLEAN Executable = FALSE;
     BOOLEAN Reserved = FALSE;
     BOOLEAN Applied = FALSE;
     ULONG Seed, Page, Position = 0;
@@ -607,7 +609,14 @@ MiRelocateImageControlArea(
         return STATUS_SUCCESS;
     if (!Control->Image64)
     {
-        if (!(Information->ImageCharacteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) &&
+        if (!(Information->ImageCharacteristics & IMAGE_FILE_DLL) && OldBase >= MI_ALLOCATION_GRANULARITY &&
+            OldBase + Control->ImageSize + MI_IMAGE32_EXECUTABLE_RANGE <= MI_IMAGE32_RELOCATION_LOWEST)
+        {
+            Executable = TRUE;
+            Lowest = OldBase & ~(ULONG64)(MI_ALLOCATION_GRANULARITY - 1);
+            Highest = Lowest + Control->ImageSize + MI_IMAGE32_EXECUTABLE_RANGE - 1;
+        }
+        else if (!(Information->ImageCharacteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) &&
             Highest >= MI_IMAGE32_RELOCATION_HIGHEST &&
             Control->ImageSize < MI_IMAGE32_RELOCATION_HIGHEST - MI_IMAGE32_RELOCATION_LOWEST - MI_ALLOCATION_GRANULARITY)
         {
@@ -636,7 +645,8 @@ MiRelocateImageControlArea(
     Base = Lowest + ((ULONG64)RtlRandomEx(&Seed) % Slots + 1) * MI_ALLOCATION_GRANULARITY;
     if (Base == OldBase)
         Base = Lowest + ((Base - Lowest) / MI_ALLOCATION_GRANULARITY % Slots + 1) * MI_ALLOCATION_GRANULARITY;
-    Window = MiImageWindowFor(Lowest, Highest);
+    if (!Executable)
+        Window = MiImageWindowFor(Lowest, Highest);
     if (Window != NULL)
         Reserved = MiImageWindowReserve(Window, Control->ImageSize, (Base - Lowest) / MI_ALLOCATION_GRANULARITY, &Base);
     Delta = Base - OldBase;
