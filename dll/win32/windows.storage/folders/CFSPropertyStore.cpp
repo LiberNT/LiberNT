@@ -89,7 +89,7 @@ GetOwnerName(PCWSTR pszPath, PWSTR pszOwner, UINT cchOwner)
     LocalFree(pSD);
     if (!bFound)
         return HRESULT_FROM_WIN32(dwError);
-    if (*szDomain)
+    if (*szDomain && Use != SidTypeAlias && Use != SidTypeWellKnownGroup)
         return StringCchPrintfW(pszOwner, cchOwner, L"%s\\%s", szDomain, szName);
     return StringCchCopyW(pszOwner, cchOwner, szName);
 }
