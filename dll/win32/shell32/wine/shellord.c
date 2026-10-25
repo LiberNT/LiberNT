@@ -2387,13 +2387,22 @@ VOID WINAPI SHGetSetSettings(LPSHELLSTATE lpss, DWORD dwMask, BOOL bSet)
     do { \
         if (SHGSS_ReadAdv((name), (SSF))) \
             gpss->field = ((SSF) & inverted) ? data == FALSE : data != FALSE; \
+        else if (bHaveBlob && (g_CachedSSF & (SSF)) != (SSF)) \
+            gpss->field = rssBlob.ss.field; \
         SHGSS_GetFieldHelper(field, (SSF), gpss, lpss, read); \
     } while (0)
 
+        REGSHELLSTATE rssBlob;
+        BOOL bHaveBlob = (dwMask & ~g_CachedSSF) && SHELL32_ReadRegShellState(&rssBlob);
         if (SHGSS_ReadAdv(L"Hidden", SSF_SHOWALLOBJECTS | SSF_SHOWSYSFILES))
         {
             gpss->fShowAllObjects = data == 1;
             gpss->fShowSysFiles = data > 1;
+        }
+        else if (bHaveBlob && (g_CachedSSF & (SSF_SHOWALLOBJECTS | SSF_SHOWSYSFILES)) != (SSF_SHOWALLOBJECTS | SSF_SHOWSYSFILES))
+        {
+            gpss->fShowAllObjects = rssBlob.ss.fShowAllObjects;
+            gpss->fShowSysFiles = rssBlob.ss.fShowSysFiles;
         }
         SHGSS_GetField(fShowAllObjects, SSF_SHOWALLOBJECTS);
         SHGSS_GetField(fShowSysFiles, SSF_SHOWSYSFILES);
@@ -2445,14 +2454,13 @@ VOID WINAPI SHGetSettings(LPSHELLFLAGSTATE lpsfs, DWORD dwMask)
 {
 #ifdef __REACTOS__
     SHELLSTATE ss;
+    ZeroMemory(&ss, sizeof(ss));
     SHGetSetSettings(&ss, dwMask & ~(SSF_SORTCOLUMNS | SSF_FILTER), FALSE);
     *lpsfs = *(LPSHELLFLAGSTATE)&ss;
-    if (dwMask & SSF_HIDEICONS)
-        lpsfs->fHideIcons = ss.fHideIcons;
-    if (dwMask & ssf_autocheckselect)
-        lpsfs->fAutoCheckSelect = ss.fAutoCheckSelect;
-    if (dwMask & ssf_iconsonly)
-        lpsfs->fIconsOnly = ss.fIconsOnly;
+    lpsfs->fHideIcons = (dwMask & SSF_HIDEICONS) ? ss.fHideIcons : 0;
+    lpsfs->fAutoCheckSelect = (dwMask & ssf_autocheckselect) ? ss.fAutoCheckSelect : 0;
+    lpsfs->fIconsOnly = (dwMask & ssf_iconsonly) ? ss.fIconsOnly : 0;
+    lpsfs->fRestFlags = 0;
 #else
 	HKEY	hKey;
 	DWORD	dwData;
