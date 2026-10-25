@@ -16,6 +16,7 @@ QuickLaunchShortcuts=26, Microsoft\Internet Explorer\Quick Launch
 [ProgramShortcuts]
 %SystemRoot%\explorer.exe, %EXPLORER_TITLE%, %EXPLORER_DESC%, 1, %HOMEDRIVE%%HOMEPATH%
 %SystemRoot%\system32\rapps.exe, %RAPPS_TITLE%, %RAPPS_DESC%, 0
+%SystemRoot%\system32\lxterm.exe, %LXTERM_TITLE%, %LXTERM_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
 %16422%\Internet Explorer\iexplore.exe, %IEXPLORE_TITLE%, %IEXPLORE_DESC%, 0
 
 [AdminToolsShortcuts]
@@ -81,6 +82,8 @@ README_DESC=LiberNT Read-Me file
 
 CMD_TITLE=Command Prompt
 CMD_DESC=Open command prompt
+LXTERM_TITLE=Linux Terminal
+LXTERM_DESC=Open a Linux shell
 EXPLORER_TITLE=LiberNT Explorer
 EXPLORER_DESC=Launch Explorer
 RAPPS_TITLE=LiberNT Applications Manager
