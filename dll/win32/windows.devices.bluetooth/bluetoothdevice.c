@@ -142,9 +142,21 @@ static HRESULT WINAPI bluetoothdevice_statics_FromBluetoothAddressAsync( IBlueto
 
 static HRESULT WINAPI bluetoothdevice_statics_GetDeviceSelector( IBluetoothDeviceStatics *iface, HSTRING *value )
 {
+#ifdef __REACTOS__
+    static const WCHAR selectorW[] = L"System.Devices.DevObjectType:=5 AND "
+                                     L"System.Devices.Aep.ProtocolId:=\"{E0CBF06C-CD8B-4647-BB8A-263B43F0F974}\" AND "
+                                     L"(System.Devices.Aep.IsPaired:=System.StructuredQueryType.Boolean#True OR "
+                                     L"System.Devices.Aep.Bluetooth.IssueInquiry:=System.StructuredQueryType.Boolean#False)";
+
+    TRACE( "(%p, %p)\n", iface, value );
+
+    if (!value) return E_POINTER;
+    return WindowsCreateString( selectorW, wcslen( selectorW ), value );
+#else
     FIXME( "(%p, %p): stub!\n", iface, value );
     *value = NULL;
     return E_NOTIMPL;
+#endif
 }
 
 static const IBluetoothDeviceStaticsVtbl bluetoothdevice_statics_vtbl =
@@ -592,8 +604,20 @@ static HRESULT WINAPI bluetoothledevice_statics_FromBluetoothAddressAsync( IBlue
 
 static HRESULT WINAPI bluetoothledevice_statics_GetDeviceSelector( IBluetoothLEDeviceStatics *iface, HSTRING *result )
 {
+#ifdef __REACTOS__
+    static const WCHAR selectorW[] = L"System.Devices.DevObjectType:=5 AND "
+                                     L"System.Devices.Aep.ProtocolId:=\"{BB7BB05E-5972-42B5-94FC-76EAA7084D49}\" AND "
+                                     L"(System.Devices.Aep.IsPaired:=System.StructuredQueryType.Boolean#True OR "
+                                     L"System.Devices.Aep.Bluetooth.IssueInquiry:=System.StructuredQueryType.Boolean#False)";
+
+    TRACE( "(%p, %p)\n", iface, result );
+
+    if (!result) return E_POINTER;
+    return WindowsCreateString( selectorW, wcslen( selectorW ), result );
+#else
     FIXME( "(%p, %p): stub!\n", iface, result );
     return E_NOTIMPL;
+#endif
 }
 
 static const IBluetoothLEDeviceStaticsVtbl bluetoothledevice_statics_vtbl =
