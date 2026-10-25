@@ -162,10 +162,7 @@ static HRESULT Unknown_QueryInterface(InternetShortcut *This, REFIID riid, PVOID
         *ppvObject = &This->IPropertySetStorage_iface;
 #ifdef __REACTOS__
     else if (FAILED(InternetShortcutExt_QueryInterface(This, riid, ppvObject)))
-    {
-        FIXME("Interface with GUID %s not yet implemented by InternetShortcut\n", debugstr_guid(riid));
         return E_NOINTERFACE;
-    }
 #else
     else if (IsEqualGUID(&IID_IShellLinkA, riid))
     {

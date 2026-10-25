@@ -2668,7 +2668,15 @@ HRESULT InternetShortcutExt_QueryInterface(InternetShortcut *This, REFIID riid, 
         *ppv = &This->IInitializeWithBindCtx_iface;
     else if (IsEqualGUID(&IID_IShellPropSheetExt, riid))
         *ppv = &This->IShellPropSheetExt_iface;
-    else
+    else if (IsEqualGUID(&IID_IInitializeWithItem, riid) || IsEqualGUID(&IID_IInitializeWithStream, riid))
+    {
+        TRACE("Interface with GUID %s is not supported by InternetShortcut\n", debugstr_guid(riid));
         return E_NOINTERFACE;
+    }
+    else
+    {
+        FIXME("Interface with GUID %s not yet implemented by InternetShortcut\n", debugstr_guid(riid));
+        return E_NOINTERFACE;
+    }
     return S_OK;
 }
