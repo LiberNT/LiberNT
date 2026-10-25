@@ -595,9 +595,21 @@ static HRESULT WINAPI domdoc_hasChildNodes(IXMLDOMDocument3 *iface, VARIANT_BOOL
 
 static HRESULT WINAPI domdoc_get_ownerDocument(IXMLDOMDocument3 *iface, IXMLDOMDocument **owner)
 {
+#ifdef __REACTOS__
+    domdoc *doc = impl_from_IXMLDOMDocument3(iface);
+    HRESULT hr;
+#endif
+
     TRACE("%p, %p.\n", iface, owner);
 
+#ifdef __REACTOS__
+    hr = return_null_node((IXMLDOMNode **)owner);
+    if (hr == S_FALSE && doc->node->properties->version == MSXML4)
+        hr = S_OK;
+    return hr;
+#else
     return return_null_node((IXMLDOMNode **)owner);
+#endif
 }
 
 static HRESULT WINAPI domdoc_cloneNode(IXMLDOMDocument3 *iface, VARIANT_BOOL deep, IXMLDOMNode **node)
