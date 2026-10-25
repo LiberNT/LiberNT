@@ -445,6 +445,50 @@ struct enum_dev_object_params
     void                            *context;
 };
 
+#ifdef __REACTOS__
+static BOOL device_interface_may_match( const struct device_interface *iface, const DEVPROP_FILTER_EXPRESSION *filters,
+                                        const DEVPROP_FILTER_EXPRESSION *end )
+{
+    ULONG depth = 0;
+
+    for (const DEVPROP_FILTER_EXPRESSION *filter = filters; filters && filter < end; filter++)
+    {
+        const DEVPROPERTY *prop = &filter->Property;
+        DEVPROP_OPERATOR op = filter->Operator;
+
+        switch (op & DEVPROP_OPERATOR_MASK_LOGICAL)
+        {
+        case DEVPROP_OPERATOR_AND_OPEN:
+        case DEVPROP_OPERATOR_OR_OPEN:
+        case DEVPROP_OPERATOR_NOT_OPEN:
+            depth++;
+            continue;
+        case DEVPROP_OPERATOR_AND_CLOSE:
+        case DEVPROP_OPERATOR_OR_CLOSE:
+        case DEVPROP_OPERATOR_NOT_CLOSE:
+            if (depth) depth--;
+            continue;
+        }
+        if (depth || (op & ~DEVPROP_OPERATOR_MODIFIER_IGNORE_CASE) != DEVPROP_OPERATOR_EQUALS) continue;
+
+        if (IsEqualDevPropKey( prop->CompKey.Key, DEVPKEY_DeviceInterface_ClassGuid )
+            && prop->Type == DEVPROP_TYPE_GUID && prop->BufferSize == sizeof(GUID)
+            && !IsEqualGUID( (const GUID *)prop->Buffer, &iface->class_guid ))
+            return FALSE;
+        if (IsEqualDevPropKey( prop->CompKey.Key, DEVPKEY_DeviceInterface_ReferenceString )
+            && prop->Type == DEVPROP_TYPE_STRING && prop->BufferSize >= sizeof(WCHAR))
+        {
+            const WCHAR *value = prop->Buffer;
+            ULONG len = prop->BufferSize / sizeof(WCHAR);
+
+            if (value[len - 1]) continue;
+            if (!iface->refstr[1] || wcsicmp( value, iface->refstr + 1 )) return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+#endif
 static LSTATUS enum_dev_objects_device_interface( HKEY hkey, const void *object, const WCHAR *name, UINT name_len, void *context )
 {
     struct enum_dev_object_params *params = context;
@@ -456,6 +500,10 @@ static LSTATUS enum_dev_objects_device_interface( HKEY hkey, const void *object,
     BOOL matches;
 
     TRACE( "hkey %p object %s name %s\n", hkey, debugstr_device_interface(iface), debugstr_w(name) );
+
+#ifdef __REACTOS__
+    if (params->filters && !device_interface_may_match( iface, params->filters, params->filters_end )) return ERROR_SUCCESS;
+#endif
 
     /* If we're also filtering objects, get all properties for this object. Once the filters have been
      * evaluated, free properties that have not been requested, and set cPropertyCount to comp_keys_len.  */
@@ -486,6 +534,51 @@ static LSTATUS enum_dev_objects_device_interface( HKEY hkey, const void *object,
     return err;
 }
 
+#ifdef __REACTOS__
+static void get_device_interface_filter_hints( const DEVPROP_FILTER_EXPRESSION *filters, const DEVPROP_FILTER_EXPRESSION *end,
+                                               GUID *class_guid, BOOL *has_class, WCHAR *instance_id, BOOL *has_instance )
+{
+    ULONG depth = 0;
+
+    *has_class = *has_instance = FALSE;
+    for (const DEVPROP_FILTER_EXPRESSION *filter = filters; filters && filter < end; filter++)
+    {
+        const DEVPROPERTY *prop = &filter->Property;
+        DEVPROP_OPERATOR op = filter->Operator;
+
+        switch (op & DEVPROP_OPERATOR_MASK_LOGICAL)
+        {
+        case DEVPROP_OPERATOR_AND_OPEN:
+        case DEVPROP_OPERATOR_OR_OPEN:
+        case DEVPROP_OPERATOR_NOT_OPEN:
+            depth++;
+            continue;
+        case DEVPROP_OPERATOR_AND_CLOSE:
+        case DEVPROP_OPERATOR_OR_CLOSE:
+        case DEVPROP_OPERATOR_NOT_CLOSE:
+            if (depth) depth--;
+            continue;
+        }
+        if (depth || (op & ~DEVPROP_OPERATOR_MODIFIER_IGNORE_CASE) != DEVPROP_OPERATOR_EQUALS) continue;
+
+        if (!*has_class && IsEqualDevPropKey( prop->CompKey.Key, DEVPKEY_DeviceInterface_ClassGuid )
+            && prop->Type == DEVPROP_TYPE_GUID && prop->BufferSize == sizeof(GUID))
+        {
+            *class_guid = *(const GUID *)prop->Buffer;
+            *has_class = TRUE;
+        }
+        else if (!*has_instance && IsEqualDevPropKey( prop->CompKey.Key, DEVPKEY_Device_InstanceId )
+                 && prop->Type == DEVPROP_TYPE_STRING && prop->BufferSize >= sizeof(WCHAR)
+                 && prop->BufferSize <= MAX_DEVICE_ID_LEN * sizeof(WCHAR))
+        {
+            memcpy( instance_id, prop->Buffer, prop->BufferSize );
+            instance_id[prop->BufferSize / sizeof(WCHAR) - 1] = 0;
+            *has_instance = TRUE;
+        }
+    }
+}
+
+#endif
 static LSTATUS enum_dev_objects( DEV_OBJECT_TYPE type, const DEVPROPCOMPKEY *props, ULONG props_len, BOOL all_props,
                                  const DEVPROP_FILTER_EXPRESSION *filters, const DEVPROP_FILTER_EXPRESSION *filters_end,
                                  enum_device_object_cb callback, void *context )
@@ -506,7 +599,19 @@ static LSTATUS enum_dev_objects( DEV_OBJECT_TYPE type, const DEVPROPCOMPKEY *pro
     {
     case DevObjectTypeDeviceInterface:
     case DevObjectTypeDeviceInterfaceDisplay:
+#ifdef __REACTOS__
+    {
+        WCHAR instance_id[MAX_DEVICE_ID_LEN];
+        BOOL has_class, has_instance;
+        GUID class_guid;
+
+        get_device_interface_filter_hints( filters, filters_end, &class_guid, &has_class, instance_id, &has_instance );
+        return enum_device_interfaces_filtered( TRUE, has_class ? &class_guid : NULL, has_instance ? instance_id : NULL,
+                                                enum_dev_objects_device_interface, &params );
+    }
+#else
         return enum_device_interfaces( TRUE, enum_dev_objects_device_interface, &params );
+#endif
 
     case DevObjectTypeDeviceContainer:
     case DevObjectTypeDevice:

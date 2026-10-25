@@ -97,6 +97,10 @@ static inline const char *debugstr_device_interface( const struct device_interfa
 
 typedef LSTATUS (*enum_objects_cb)( HKEY hkey, const void *object, const WCHAR *path, UINT path_len, void *context );
 extern LSTATUS enum_device_interfaces( BOOL all, enum_objects_cb callback, void *context );
+#ifdef __REACTOS__
+extern LSTATUS enum_device_interfaces_filtered( BOOL all, const GUID *class_guid, const WCHAR *instance_id,
+                                                enum_objects_cb callback, void *context );
+#endif
 
 extern LSTATUS init_device_interface( struct device_interface *iface, const WCHAR *name );
 extern LSTATUS open_device_interface_key( const struct device_interface *iface, REGSAM access, BOOL open, HKEY *hkey );
