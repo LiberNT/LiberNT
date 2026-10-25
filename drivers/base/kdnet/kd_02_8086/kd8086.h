@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Intel Network Kernel Debugger Extension
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
- * PURPOSE:     Intel 8254x, 82574 and 8255x register layout and module interface
+ * PURPOSE:     Intel 8254x, 82574, I218 and 8255x register layout and module interface
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -15,7 +15,9 @@
 #define E1K_REG_STATUS  0x0008
 #define E1K_REG_EECD    0x0010
 #define E1K_REG_EERD    0x0014
+#define E1K_REG_CTRL_EXT    0x0018
 #define E1K_REG_MDIC    0x0020
+#define E1K_REG_FEXTNVM 0x0028
 #define E1K_REG_FCAL    0x0028
 #define E1K_REG_FCAH    0x002C
 #define E1K_REG_FCT     0x0030
@@ -25,8 +27,11 @@
 #define E1K_REG_FCTTV   0x0170
 #define E1K_REG_TCTL    0x0400
 #define E1K_REG_TIPG    0x0410
+#define E1K_REG_EXTCNF_CTRL 0x0F00
+#define E1K_REG_PHY_CTRL    0x0F10
 #define E1K_REG_EIMC    0x1528
 #define E1K_REG_RX      0x2800
+#define E1K_REG_KABGTXD 0x3004
 #define E1K_REG_TX      0x3800
 #define E1K_REG_RX_IGB  0xC000
 #define E1K_REG_TX_IGB  0xE000
@@ -41,7 +46,9 @@
 #define E1K_REG_MTA     0x5200
 #define E1K_REG_RAL     0x5400
 #define E1K_REG_RAH     0x5404
+#define E1K_REG_FWSM    0x5B54
 
+#define E1K_CTRL_GIO_MASTER_DISABLE 0x00000004
 #define E1K_CTRL_LRST       0x00000008
 #define E1K_CTRL_ASDE       0x00000020
 #define E1K_CTRL_SLU        0x00000040
@@ -55,6 +62,22 @@
 #define E1K_STATUS_SPEED    0x000000C0
 #define E1K_STATUS_SPEED_10   0x00000000
 #define E1K_STATUS_SPEED_100  0x00000040
+#define E1K_STATUS_LAN_INIT_DONE    0x00000200
+#define E1K_STATUS_PHYRA    0x00000400
+#define E1K_STATUS_GIO_MASTER_ENABLE    0x00080000
+
+#define E1K_CTRL_EXT_DRV_LOAD   0x10000000
+
+#define E1K_EXTCNF_CTRL_SWFLAG  0x00000020
+
+#define E1K_FWSM_RSPCIPHY   0x00000040
+
+#define E1K_FEXTNVM_SW_CONFIG   0x08000000
+
+#define E1K_PHY_CTRL_D0A_LPLU       0x00000002
+#define E1K_PHY_CTRL_GBE_DISABLE    0x00000040
+
+#define E1K_KABGTXD_BGSQLBIAS   0x00050000
 
 #define E1K_EECD_AUTO_RD     0x00000200
 
@@ -71,6 +94,17 @@
 #define E1K_PHY_CONTROL_RESTART     0x0200
 #define E1K_PHY_CONTROL_AUTONEG     0x1000
 
+#define E1K_PCH_PHY_PAGE_SELECT     0x1F
+#define E1K_PCH_PHY_PAGE_SHIFT      5
+#define E1K_PCH_PHY_PORT_PAGE       768
+#define E1K_PCH_PHY_OEM_BITS        25
+#define E1K_PCH_PHY_OEM_BITS_LPLU       0x0004
+#define E1K_PCH_PHY_OEM_BITS_GBE_DIS    0x0040
+#define E1K_PCH_PHY_OEM_BITS_RESTART_AN 0x0400
+#define E1K_PCH_PHY_PORT_GEN_CFG_PAGE   769
+#define E1K_PCH_PHY_PORT_GEN_CFG        17
+#define E1K_PCH_PHY_PORT_GEN_CFG_HOST_WU    0x0010
+
 #define E1K_SRRCTL_BSIZEPACKET  0x0000007F
 #define E1K_SRRCTL_DESCTYPE     0x0E000000
 #define E1K_SRRCTL_2K           0x00000002
@@ -86,12 +120,15 @@
 #define E1K_TCTL_PSP        0x00000008
 #define E1K_TCTL_CT         0x000000F0
 #define E1K_TCTL_COLD       0x00040000
+#define E1K_TCTL_CT_MASK    0x00000FF0
+#define E1K_TCTL_COLD_MASK  0x003FF000
 
 #define E1K_TIPG_COPPER     0x0060200A
 
 #define E1K_RAH_AV          0x80000000
 
 #define E1K_MTA_ENTRIES     128
+#define E1K_PCH_MTA_ENTRIES 32
 
 #define E1K_RXD_STATUS_DD   0x01
 #define E1K_RXD_STATUS_EOP  0x02
@@ -150,7 +187,8 @@ typedef enum _E1K_CLASS
     E1kClassNone,
     E1kClass8254x,
     E1kClass82574,
-    E1kClassIgb
+    E1kClassIgb,
+    E1kClassPch
 } E1K_CLASS;
 
 typedef struct _E1K_ADAPTER

@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Intel Network Kernel Debugger Extension
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
- * PURPOSE:     Polled Intel 8254x and 82574 Ethernet controller driver
+ * PURPOSE:     Polled Intel 8254x, 82574 and I218 Ethernet controller driver
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -25,6 +25,11 @@ static const USHORT E1kIgbDeviceIds[] =
     0x150E, 0x150F, 0x1510, 0x1511, 0x1516, 0x1527,
     0x1521, 0x1522, 0x1523, 0x1524,
     0x1533, 0x1536, 0x1537, 0x1538, 0x1539, 0x157B, 0x157C
+};
+
+static const USHORT E1kPchDeviceIds[] =
+{
+    0x15A0
 };
 
 static
@@ -100,6 +105,12 @@ E1kClassifyDevice(
     {
         if (E1kIgbDeviceIds[i] == Device->DeviceID)
             return E1kClassIgb;
+    }
+
+    for (i = 0; i < RTL_NUMBER_OF(E1kPchDeviceIds); i++)
+    {
+        if (E1kPchDeviceIds[i] == Device->DeviceID)
+            return E1kClassPch;
     }
 
     return E1kClassNone;
@@ -200,6 +211,142 @@ E1kRestartNegotiation(
 
 static
 BOOLEAN
+E1kPchResetBlocked(
+    _In_ PE1K_ADAPTER Adapter)
+{
+    ULONG i;
+
+    for (i = 0; i < 30; i++)
+    {
+        if (E1kRead(Adapter, E1K_REG_FWSM) & E1K_FWSM_RSPCIPHY)
+            return FALSE;
+
+        E1kStall(10000);
+    }
+
+    return TRUE;
+}
+
+static
+BOOLEAN
+E1kPchAcquire(
+    _In_ PE1K_ADAPTER Adapter)
+{
+    ULONG Value = 0, i;
+
+    for (i = 0; i < 100; i++)
+    {
+        Value = E1kRead(Adapter, E1K_REG_EXTCNF_CTRL);
+        if (!(Value & E1K_EXTCNF_CTRL_SWFLAG))
+            break;
+
+        E1kStall(1000);
+    }
+
+    if (i == 100)
+        return FALSE;
+
+    E1kWrite(Adapter, E1K_REG_EXTCNF_CTRL, Value | E1K_EXTCNF_CTRL_SWFLAG);
+    for (i = 0; i < 1000; i++)
+    {
+        if (E1kRead(Adapter, E1K_REG_EXTCNF_CTRL) & E1K_EXTCNF_CTRL_SWFLAG)
+            return TRUE;
+
+        E1kStall(1000);
+    }
+
+    E1kWrite(Adapter, E1K_REG_EXTCNF_CTRL, Value & ~E1K_EXTCNF_CTRL_SWFLAG);
+    return FALSE;
+}
+
+static
+VOID
+E1kPchRelease(
+    _In_ PE1K_ADAPTER Adapter)
+{
+    ULONG Value = E1kRead(Adapter, E1K_REG_EXTCNF_CTRL);
+
+    if (Value & E1K_EXTCNF_CTRL_SWFLAG)
+        E1kWrite(Adapter, E1K_REG_EXTCNF_CTRL, Value & ~E1K_EXTCNF_CTRL_SWFLAG);
+}
+
+static
+BOOLEAN
+E1kPchPhyAccess(
+    _In_ PE1K_ADAPTER Adapter,
+    _In_ ULONG Page,
+    _In_ ULONG Register,
+    _In_ ULONG Command,
+    _Out_ PUSHORT Value)
+{
+    ULONG Select = Page == E1K_PCH_PHY_PORT_PAGE ? 0 : Page << E1K_PCH_PHY_PAGE_SHIFT;
+
+    if (!E1kPhyAccess(Adapter, E1K_MDIC_WRITE | (E1K_PCH_PHY_PAGE_SELECT << E1K_MDIC_REGISTER) | Select, Value))
+        return FALSE;
+
+    return E1kPhyAccess(Adapter, Command | (Register << E1K_MDIC_REGISTER), Value);
+}
+
+static
+VOID
+E1kPchWaitConfigDone(
+    _In_ PE1K_ADAPTER Adapter)
+{
+    ULONG Status = 0, i;
+
+    E1kStall(10000);
+    for (i = 0; i < 1500; i++)
+    {
+        Status = E1kRead(Adapter, E1K_REG_STATUS);
+        if (Status & E1K_STATUS_LAN_INIT_DONE)
+            break;
+
+        E1kStall(100);
+    }
+
+    E1kWrite(Adapter, E1K_REG_STATUS, Status & ~E1K_STATUS_LAN_INIT_DONE);
+    Status = E1kRead(Adapter, E1K_REG_STATUS);
+    if (Status & E1K_STATUS_PHYRA)
+        E1kWrite(Adapter, E1K_REG_STATUS, Status & ~E1K_STATUS_PHYRA);
+}
+
+static
+VOID
+E1kPchConfigurePhy(
+    _In_ PE1K_ADAPTER Adapter)
+{
+    ULONG PhyControl;
+    USHORT Value, Ignored;
+
+    E1kStall(10000);
+    if (!E1kPchAcquire(Adapter))
+        return;
+
+    if (E1kPchPhyAccess(Adapter, E1K_PCH_PHY_PORT_GEN_CFG_PAGE, E1K_PCH_PHY_PORT_GEN_CFG, E1K_MDIC_READ, &Value))
+    {
+        E1kPchPhyAccess(Adapter, E1K_PCH_PHY_PORT_GEN_CFG_PAGE, E1K_PCH_PHY_PORT_GEN_CFG,
+                        E1K_MDIC_WRITE | (Value & ~E1K_PCH_PHY_PORT_GEN_CFG_HOST_WU), &Ignored);
+    }
+
+    if ((E1kRead(Adapter, E1K_REG_FEXTNVM) & E1K_FEXTNVM_SW_CONFIG) &&
+        E1kPchPhyAccess(Adapter, E1K_PCH_PHY_PORT_PAGE, E1K_PCH_PHY_OEM_BITS, E1K_MDIC_READ, &Value))
+    {
+        PhyControl = E1kRead(Adapter, E1K_REG_PHY_CTRL);
+        Value &= ~(E1K_PCH_PHY_OEM_BITS_GBE_DIS | E1K_PCH_PHY_OEM_BITS_LPLU);
+        if (PhyControl & E1K_PHY_CTRL_GBE_DISABLE)
+            Value |= E1K_PCH_PHY_OEM_BITS_GBE_DIS;
+        if (PhyControl & E1K_PHY_CTRL_D0A_LPLU)
+            Value |= E1K_PCH_PHY_OEM_BITS_LPLU;
+
+        E1kPchPhyAccess(Adapter, E1K_PCH_PHY_PORT_PAGE, E1K_PCH_PHY_OEM_BITS,
+                        E1K_MDIC_WRITE | Value | E1K_PCH_PHY_OEM_BITS_RESTART_AN, &Ignored);
+    }
+
+    E1kPchRelease(Adapter);
+}
+
+static
+BOOLEAN
 E1kEnableQueue(
     _In_ PE1K_ADAPTER Adapter,
     _In_ ULONG Base)
@@ -293,6 +440,9 @@ E1kReadAddress(
     if (E1kValidAddress(Address))
         return TRUE;
 
+    if (Adapter->Class == E1kClassPch)
+        return FALSE;
+
     for (i = 0; i < 3; i++)
     {
         if (!E1kReadEeprom(Adapter, i, 8, 0x10, &Words[i]) &&
@@ -343,8 +493,9 @@ E1kInitializeController(
     PUCHAR Registers = NULL, Base = KdNet->Hardware;
     UCHAR Address[MAC_ADDRESS_SIZE];
     ULONG64 Physical;
-    ULONG Control, i;
+    ULONG Control, MtaEntries, i;
     USHORT Command;
+    BOOLEAN Blocked = TRUE;
 
     for (i = 0; i < MAXIMUM_DEBUG_BARS; i++)
     {
@@ -375,14 +526,36 @@ E1kInitializeController(
     Command |= PCI_ENABLE_MEMORY_SPACE | PCI_ENABLE_BUS_MASTER;
     KdNetExtensibilityImports->SetPciDataByOffset(Device->Bus, Device->Slot, &Command, 4, sizeof(Command));
 
+    if (Adapter->Class == E1kClassPch)
+    {
+        E1kWrite(Adapter, E1K_REG_CTRL, E1kRead(Adapter, E1K_REG_CTRL) | E1K_CTRL_GIO_MASTER_DISABLE);
+        for (i = 0; i < 800; i++)
+        {
+            if (!(E1kRead(Adapter, E1K_REG_STATUS) & E1K_STATUS_GIO_MASTER_ENABLE))
+                break;
+
+            E1kStall(100);
+        }
+    }
+
     E1kWrite(Adapter, E1K_REG_IMC, 0xFFFFFFFF);
     E1kWrite(Adapter, E1K_REG_RCTL, 0);
     E1kWrite(Adapter, E1K_REG_TCTL, E1K_TCTL_PSP);
     E1kRead(Adapter, E1K_REG_STATUS);
     E1kStall(10000);
 
-    E1kWrite(Adapter, E1K_REG_CTRL, E1kRead(Adapter, E1K_REG_CTRL) | E1K_CTRL_RST);
-    E1kStall(5000);
+    Control = E1kRead(Adapter, E1K_REG_CTRL) | E1K_CTRL_RST;
+    if (Adapter->Class == E1kClassPch)
+    {
+        Blocked = E1kPchResetBlocked(Adapter);
+        if (!Blocked)
+            Control |= E1K_CTRL_PHY_RST;
+
+        E1kPchAcquire(Adapter);
+    }
+
+    E1kWrite(Adapter, E1K_REG_CTRL, Control);
+    E1kStall(Adapter->Class == E1kClassPch ? 20000 : 5000);
     for (i = 0; i < 100; i++)
     {
         if (!(E1kRead(Adapter, E1K_REG_CTRL) & E1K_CTRL_RST))
@@ -407,19 +580,34 @@ E1kInitializeController(
         E1kWrite(Adapter, E1K_REG_EIMC, 0xFFFFFFFF);
     }
 
+    if (Adapter->Class == E1kClassPch && !Blocked)
+    {
+        E1kPchWaitConfigDone(Adapter);
+        if (!E1kPchResetBlocked(Adapter))
+            E1kPchConfigurePhy(Adapter);
+    }
+
     E1kWrite(Adapter, E1K_REG_IMC, 0xFFFFFFFF);
     E1kRead(Adapter, E1K_REG_ICR);
 
+    if (Adapter->Class == E1kClassPch)
+        E1kWrite(Adapter, E1K_REG_KABGTXD, E1kRead(Adapter, E1K_REG_KABGTXD) | E1K_KABGTXD_BGSQLBIAS);
+
     Control = E1kRead(Adapter, E1K_REG_CTRL);
     Control &= ~(E1K_CTRL_LRST | E1K_CTRL_PHY_RST | E1K_CTRL_ILOS | E1K_CTRL_VME);
-    Control |= E1K_CTRL_SLU | E1K_CTRL_ASDE;
+    Control |= E1K_CTRL_SLU;
+    if (Adapter->Class != E1kClassPch)
+        Control |= E1K_CTRL_ASDE;
     E1kWrite(Adapter, E1K_REG_CTRL, Control);
     if (Adapter->Class == E1kClassIgb)
         E1kRestartNegotiation(Adapter);
 
-    E1kWrite(Adapter, E1K_REG_FCAL, 0);
-    E1kWrite(Adapter, E1K_REG_FCAH, 0);
-    E1kWrite(Adapter, E1K_REG_FCT, 0);
+    if (Adapter->Class != E1kClassPch)
+    {
+        E1kWrite(Adapter, E1K_REG_FCAL, 0);
+        E1kWrite(Adapter, E1K_REG_FCAH, 0);
+        E1kWrite(Adapter, E1K_REG_FCT, 0);
+    }
     E1kWrite(Adapter, E1K_REG_FCTTV, 0);
 
     if (!E1kReadAddress(Adapter, Address))
@@ -431,7 +619,8 @@ E1kInitializeController(
     for (i = 0; i < MAC_ADDRESS_SIZE; i++)
         KdNet->TargetMacAddress[i] = Address[i];
 
-    for (i = 0; i < E1K_MTA_ENTRIES; i++)
+    MtaEntries = Adapter->Class == E1kClassPch ? E1K_PCH_MTA_ENTRIES : E1K_MTA_ENTRIES;
+    for (i = 0; i < MtaEntries; i++)
         E1kWrite(Adapter, E1K_REG_MTA + i * sizeof(ULONG), 0);
 
     for (i = 0; i < E1K_RX_COUNT; i++)
@@ -475,11 +664,15 @@ E1kInitializeController(
     if (Adapter->Class == E1kClass8254x)
         E1kWrite(Adapter, E1K_REG_TIPG, E1K_TIPG_COPPER);
 
-    E1kWrite(Adapter, E1K_REG_TCTL, E1K_TCTL_EN | E1K_TCTL_PSP | E1K_TCTL_CT | E1K_TCTL_COLD);
+    Control = E1kRead(Adapter, E1K_REG_TCTL) & ~(E1K_TCTL_CT_MASK | E1K_TCTL_COLD_MASK);
+    E1kWrite(Adapter, E1K_REG_TCTL, Control | E1K_TCTL_EN | E1K_TCTL_PSP | E1K_TCTL_CT | E1K_TCTL_COLD);
     if (Adapter->Class == E1kClassIgb && !E1kEnableQueue(Adapter, Adapter->TxBase))
         return STATUS_IO_TIMEOUT;
 
     E1kWrite(Adapter, E1K_REG_RCTL, E1K_RCTL_EN | E1K_RCTL_BAM | E1K_RCTL_SECRC);
+
+    if (Adapter->Class == E1kClassPch)
+        E1kWrite(Adapter, E1K_REG_CTRL_EXT, E1kRead(Adapter, E1K_REG_CTRL_EXT) | E1K_CTRL_EXT_DRV_LOAD);
 
     for (i = 0; i < 400; i++)
     {
@@ -515,6 +708,8 @@ E1kShutdownController(
     E1kWrite(Adapter, E1K_REG_RCTL, 0);
     E1kWrite(Adapter, E1K_REG_TCTL, E1K_TCTL_PSP);
     E1kWrite(Adapter, E1K_REG_IMC, 0xFFFFFFFF);
+    if (Adapter->Class == E1kClassPch)
+        E1kWrite(Adapter, E1K_REG_CTRL_EXT, E1kRead(Adapter, E1K_REG_CTRL_EXT) & ~E1K_CTRL_EXT_DRV_LOAD);
     *Adapter->KdNet->LinkState = 0;
 }
 
