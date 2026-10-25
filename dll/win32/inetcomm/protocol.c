@@ -680,8 +680,21 @@ static HRESULT WINAPI MimeHtmlProtocolInfo_CombineUrl(IInternetProtocolInfo *ifa
         return hres;
 
     if(!wcsnicmp(pwzRelativeUrl, mhtml_prefixW, len)) {
+#ifdef __REACTOS__
+        const WCHAR *result = wcschr(pwzRelativeUrl, '!') ? pwzRelativeUrl : pwzRelativeUrl + len;
+
+        len = lstrlenW(result);
+        if(len >= cchResult) {
+            *pcchResult = 0;
+            return E_FAIL;
+        }
+        lstrcpyW(pwzResult, result);
+        *pcchResult = len;
+        return S_OK;
+#else
         FIXME("Relative URL is mhtml protocol\n");
         return INET_E_USE_DEFAULT_PROTOCOLHANDLER;
+#endif
     }
 
     len += url.mhtml_len;
