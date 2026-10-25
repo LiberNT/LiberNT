@@ -735,7 +735,11 @@ HRESULT node_put_data(struct domnode *node, const WCHAR *data)
 
     while (p && *p)
     {
+#ifdef __REACTOS__
+        if (*p == '\r' && !(node->type == NODE_ATTRIBUTE && node_get_doc(node)->properties->version >= MSXML6))
+#else
         if (*p == '\r')
+#endif
         {
             if (p[1] == '\n') ++p;
             string_append(&buffer, L"\n", 1);
