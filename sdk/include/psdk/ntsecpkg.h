@@ -61,6 +61,30 @@ typedef enum _SECPKG_NAME_TYPE {
     SecNameDN
 } SECPKG_NAME_TYPE;
 
+typedef struct _SEC_WINNT_AUTH_IDENTITY32 {
+    ULONG User;
+    ULONG UserLength;
+    ULONG Domain;
+    ULONG DomainLength;
+    ULONG Password;
+    ULONG PasswordLength;
+    ULONG Flags;
+} SEC_WINNT_AUTH_IDENTITY32, *PSEC_WINNT_AUTH_IDENTITY32;
+
+typedef struct _SEC_WINNT_AUTH_IDENTITY_EX32 {
+    ULONG Version;
+    ULONG Length;
+    ULONG User;
+    ULONG UserLength;
+    ULONG Domain;
+    ULONG DomainLength;
+    ULONG Password;
+    ULONG PasswordLength;
+    ULONG Flags;
+    ULONG PackageList;
+    ULONG PackageListLength;
+} SEC_WINNT_AUTH_IDENTITY_EX32, *PSEC_WINNT_AUTH_IDENTITY_EX32;
+
 /* struct definitions for SSP/AP */
 typedef struct _SECPKG_PRIMARY_CRED {
     LUID LogonId;

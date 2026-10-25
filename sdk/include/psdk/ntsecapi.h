@@ -289,12 +289,19 @@ typedef enum _POLICY_NOTIFICATION_INFORMATION_CLASS {
   PolicyNotifyMachineAccountPasswordInformation
 } POLICY_NOTIFICATION_INFORMATION_CLASS, *PPOLICY_NOTIFICATION_INFORMATION_CLASS;
 typedef enum _SECURITY_LOGON_TYPE {
+  UndefinedLogonType = 0,
   Interactive = 2,
   Network,
   Batch,
   Service,
   Proxy,
-  Unlock
+  Unlock,
+  NetworkCleartext,
+  NewCredentials,
+  RemoteInteractive,
+  CachedInteractive,
+  CachedRemoteInteractive,
+  CachedUnlock
 } SECURITY_LOGON_TYPE, *PSECURITY_LOGON_TYPE;
 #if (_WIN32_WINNT >= 0x0600)
 typedef struct _LSA_LAST_INTER_LOGON_INFO {
