@@ -54,3 +54,22 @@ DllMain(HINSTANCE hInstance,
 
     return TRUE;
 }
+
+void *
+SECUR32_identityView(void *auth_data, void *view)
+{
+    const SEC_WINNT_AUTH_IDENTITY_EXW *ex = auth_data;
+    SEC_WINNT_AUTH_IDENTITY_W *w = view;
+
+    if (!ex || ex->Version != SEC_WINNT_AUTH_IDENTITY_VERSION)
+        return auth_data;
+
+    w->User = ex->User;
+    w->UserLength = ex->UserLength;
+    w->Domain = ex->Domain;
+    w->DomainLength = ex->DomainLength;
+    w->Password = ex->Password;
+    w->PasswordLength = ex->PasswordLength;
+    w->Flags = ex->Flags;
+    return w;
+}

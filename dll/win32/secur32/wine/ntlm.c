@@ -108,6 +108,9 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcquireCredentialsHandleW(
     PNtlmCredentials ntlm_cred = NULL;
     LPWSTR domain = NULL, user = NULL, password = NULL;
     PSEC_WINNT_AUTH_IDENTITY_W auth_data = NULL;
+#ifdef __REACTOS__
+    SEC_WINNT_AUTH_IDENTITY_W ex_view;
+#endif
 
     TRACE("(%s, %s, 0x%08x, %p, %p, %p, %p, %p, %p)\n",
      debugstr_w(pszPrincipal), debugstr_w(pszPackage), fCredentialUse,
@@ -131,7 +134,11 @@ SECURITY_STATUS SEC_ENTRY ntlm_AcquireCredentialsHandleW(
         case SECPKG_CRED_OUTBOUND:
         case SECPKG_CRED_BOTH:
             {
+#ifdef __REACTOS__
+                auth_data = SECUR32_identityView(pAuthData, &ex_view);
+#else
                 auth_data = pAuthData;
+#endif
                 ntlm_cred = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*ntlm_cred));
                 if (!ntlm_cred)
                 {
@@ -252,6 +259,9 @@ static SECURITY_STATUS SEC_ENTRY ntlm_AcquireCredentialsHandleA(
     
     PSEC_WINNT_AUTH_IDENTITY_W pAuthDataW = NULL;
     PSEC_WINNT_AUTH_IDENTITY_A identity  = NULL;
+#ifdef __REACTOS__
+    SEC_WINNT_AUTH_IDENTITY_W ex_view;
+#endif
 
     TRACE("(%s, %s, 0x%08x, %p, %p, %p, %p, %p, %p)\n",
      debugstr_a(pszPrincipal), debugstr_a(pszPackage), fCredentialUse,
@@ -270,9 +280,15 @@ static SECURITY_STATUS SEC_ENTRY ntlm_AcquireCredentialsHandleA(
     
     if(pAuthData != NULL)
     {
+#ifdef __REACTOS__
+        identity = SECUR32_identityView(pAuthData, &ex_view);
+
+        if(identity->Flags & SEC_WINNT_AUTH_IDENTITY_ANSI)
+#else
         identity = pAuthData;
 
         if(identity->Flags == SEC_WINNT_AUTH_IDENTITY_ANSI)
+#endif
         {
             pAuthDataW = HeapAlloc(GetProcessHeap(), 0, 
                     sizeof(SEC_WINNT_AUTH_IDENTITY_W));

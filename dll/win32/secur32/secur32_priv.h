@@ -246,6 +246,9 @@ enum schan_funcs
 NTSTATUS schan_backend_call(enum schan_funcs func, void *params);
 PWSTR SECUR32_AllocWideFromMultiByte(PCSTR str);
 PSTR SECUR32_AllocMultiByteFromWide(PCWSTR str);
+
+void *SECUR32_identityView(void *auth_data, void *view);
+
 #include "wine/wine_supp.h"
 #endif
 
