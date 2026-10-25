@@ -4164,6 +4164,9 @@ HRESULT WINAPI SHParseDisplayName(LPCWSTR pszName, IBindCtx *pbc,
     if (psfgaoOut)
         *psfgaoOut = 0;
 
+    if (!pszName)
+        return E_INVALIDARG;
+
     pszNameDup = StrDupW(pszName);
     if (!pszNameDup)
         return E_OUTOFMEMORY;

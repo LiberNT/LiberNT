@@ -822,7 +822,7 @@ HRESULT WINAPI CDrivesFolder::ParseDisplayName(HWND hwndOwner, LPBC pbc, LPOLEST
         if (SHIsFileSysBindCtx(pbc, NULL) != S_OK && !(BindCtx_GetMode(pbc, 0) & STGM_CREATE))
         {
             if (::GetDriveType(szRoot) == DRIVE_NO_ROOT_DIR)
-                return HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND);
+                return HRESULT_FROM_WIN32(ERROR_INVALID_DRIVE);
         }
 
         CComHeapPtr<ITEMIDLIST> pidlTemp(_ILCreateDrive(szRoot));
