@@ -157,7 +157,7 @@ static
 LONG
 ExceptionFilter(
     _In_ PEXCEPTION_POINTERS Pointers,
-    _Out_ PULONG_PTR Parameter)
+    _Out_ volatile ULONG_PTR *Parameter)
 {
     *Parameter = 0;
     if (Pointers->ExceptionRecord->ExceptionCode != TEST_EXCEPTION) return EXCEPTION_CONTINUE_SEARCH;
@@ -171,7 +171,7 @@ TestStructuredExceptions(VOID)
 {
     ULONG_PTR Arguments[2] = { 1, 0x5EC0DE };
     volatile LONG Caught = 0, Unwound = 0;
-    ULONG_PTR Parameter = 0;
+    volatile ULONG_PTR Parameter = 0;
     DWORD OldProtect;
     PVOID Page;
 
