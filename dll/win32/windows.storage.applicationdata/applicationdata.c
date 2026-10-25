@@ -18,6 +18,9 @@
  */
 
 #include "private.h"
+#ifdef __REACTOS__
+#include "appmodel.h"
+#endif
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(data);
@@ -295,9 +298,19 @@ static HRESULT WINAPI application_data_statics_get_Current( IApplicationDataStat
 {
     struct application_data *impl;
 
+#ifdef __REACTOS__
+    UINT32 length = 0;
+    LONG error;
+#endif
+
     TRACE( "iface %p, value %p\n", iface, value );
 
     if (!value) return E_INVALIDARG;
+#ifdef __REACTOS__
+    *value = NULL;
+    if ((error = GetCurrentPackageFullName( &length, NULL )) == APPMODEL_ERROR_NO_PACKAGE)
+        return HRESULT_FROM_WIN32( error );
+#endif
     if (!(impl = calloc( 1, sizeof(*impl) ))) return E_OUTOFMEMORY;
 
     impl->IApplicationData_iface.lpVtbl = &application_data_vtbl;
