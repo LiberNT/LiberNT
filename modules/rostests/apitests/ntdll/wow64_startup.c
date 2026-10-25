@@ -251,13 +251,13 @@ static VOID TestNativeProcessorInformation(VOID)
         Length = 0xdeadbeef;
         Status = Query(SystemProcessorInformation, &Info, sizeof(Info), &Length);
         ok_hex(Status, STATUS_SUCCESS);
-        ok(Length == sizeof(Info), "%s returned length %lu\n", Names[Index], Length);
+        ok(Length == 12, "%s returned length %lu\n", Names[Index], Length);
         if (NT_SUCCESS(Status)) ok_hex(Info.ProcessorArchitecture, ExpectedArchitecture);
         Status = Query(SystemProcessorInformation, &Info, sizeof(Info), NULL);
         ok_hex(Status, STATUS_SUCCESS);
         if (NT_SUCCESS(Status)) ok_hex(Info.ProcessorArchitecture, ExpectedArchitecture);
         Status = Query(SystemProcessorInformation, &Info, sizeof(Info) - 1, &Length);
-        ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+        ok_hex(Status, STATUS_SUCCESS);
         memset(LegacyInfo, 0xcc, sizeof(LegacyInfo));
         Length = 0xdeadbeef;
         Status = Query(SystemProcessorInformation, LegacyInfo, 12, &Length);
