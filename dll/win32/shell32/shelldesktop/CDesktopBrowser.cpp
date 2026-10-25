@@ -44,15 +44,14 @@ static BOOL IsDesktopBrowserForwardShellViewCmd(WORD Cmd)
            (Cmd == FCIDM_SHVIEW_REFRESH);
 }
 
+class CDesktopAutomation;
+
 class CDesktopBrowser :
     public CWindowImpl<CDesktopBrowser, CWindow, CFrameWinTraits>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public IShellBrowser,
     public IShellBrowserService,
-    public IServiceProvider,
-    public IDispatchImpl<IWebBrowser2, &IID_IWebBrowser2, &LIBID_SHDocVw, 1, 1>,
-    public IConnectionPointContainerImpl<CDesktopBrowser>,
-    public IConnectionPointImpl<CDesktopBrowser, &DIID_DWebBrowserEvents2>
+    public IServiceProvider
 {
 private:
     HACCEL m_hAccel;
@@ -64,6 +63,7 @@ private:
     HWND                       m_hwndChangeNotifyServer;
     DWORD m_dwDrives;
     LONG m_lShellWindowsCookie;
+    CComObject<CDesktopAutomation> *m_pAutomation;
     CSimpleArray<CComBSTR> m_PropertyNames;
     CSimpleArray<CComVariant> m_PropertyValues;
 
@@ -124,70 +124,70 @@ public:
     // *** IServiceProvider methods ***
     STDMETHOD(QueryService)(REFGUID guidService, REFIID riid, void **ppvObject) override;
 
-    STDMETHOD(GoBack)() override;
-    STDMETHOD(GoForward)() override;
-    STDMETHOD(GoHome)() override;
-    STDMETHOD(GoSearch)() override;
-    STDMETHOD(Navigate)(BSTR URL, VARIANT *Flags, VARIANT *TargetFrameName, VARIANT *PostData, VARIANT *Headers) override;
-    STDMETHOD(Refresh)() override;
-    STDMETHOD(Refresh2)(VARIANT *Level) override;
-    STDMETHOD(Stop)() override;
-    STDMETHOD(get_Application)(IDispatch **ppDisp) override;
-    STDMETHOD(get_Parent)(IDispatch **ppDisp) override;
-    STDMETHOD(get_Container)(IDispatch **ppDisp) override;
-    STDMETHOD(get_Document)(IDispatch **ppDisp) override;
-    STDMETHOD(get_TopLevelContainer)(VARIANT_BOOL *pBool) override;
-    STDMETHOD(get_Type)(BSTR *Type) override;
-    STDMETHOD(get_Left)(LONG *pl) override;
-    STDMETHOD(put_Left)(LONG Left) override;
-    STDMETHOD(get_Top)(LONG *pl) override;
-    STDMETHOD(put_Top)(LONG Top) override;
-    STDMETHOD(get_Width)(LONG *pl) override;
-    STDMETHOD(put_Width)(LONG Width) override;
-    STDMETHOD(get_Height)(LONG *pl) override;
-    STDMETHOD(put_Height)(LONG Height) override;
-    STDMETHOD(get_LocationName)(BSTR *LocationName) override;
-    STDMETHOD(get_LocationURL)(BSTR *LocationURL) override;
-    STDMETHOD(get_Busy)(VARIANT_BOOL *pBool) override;
-    STDMETHOD(Quit)() override;
-    STDMETHOD(ClientToWindow)(int *pcx, int *pcy) override;
-    STDMETHOD(PutProperty)(BSTR Property, VARIANT vtValue) override;
-    STDMETHOD(GetProperty)(BSTR Property, VARIANT *pvtValue) override;
-    STDMETHOD(get_Name)(BSTR *Name) override;
-    STDMETHOD(get_HWND)(SHANDLE_PTR *pHWND) override;
-    STDMETHOD(get_FullName)(BSTR *FullName) override;
-    STDMETHOD(get_Path)(BSTR *Path) override;
-    STDMETHOD(get_Visible)(VARIANT_BOOL *pBool) override;
-    STDMETHOD(put_Visible)(VARIANT_BOOL Value) override;
-    STDMETHOD(get_StatusBar)(VARIANT_BOOL *pBool) override;
-    STDMETHOD(put_StatusBar)(VARIANT_BOOL Value) override;
-    STDMETHOD(get_StatusText)(BSTR *StatusText) override;
-    STDMETHOD(put_StatusText)(BSTR StatusText) override;
-    STDMETHOD(get_ToolBar)(int *Value) override;
-    STDMETHOD(put_ToolBar)(int Value) override;
-    STDMETHOD(get_MenuBar)(VARIANT_BOOL *Value) override;
-    STDMETHOD(put_MenuBar)(VARIANT_BOOL Value) override;
-    STDMETHOD(get_FullScreen)(VARIANT_BOOL *pbFullScreen) override;
-    STDMETHOD(put_FullScreen)(VARIANT_BOOL bFullScreen) override;
-    STDMETHOD(Navigate2)(VARIANT *URL, VARIANT *Flags, VARIANT *TargetFrameName, VARIANT *PostData, VARIANT *Headers) override;
-    STDMETHOD(QueryStatusWB)(OLECMDID cmdID, OLECMDF *pcmdf) override;
-    STDMETHOD(ExecWB)(OLECMDID cmdID, OLECMDEXECOPT cmdexecopt, VARIANT *pvaIn, VARIANT *pvaOut) override;
-    STDMETHOD(ShowBrowserBar)(VARIANT *pvaClsid, VARIANT *pvarShow, VARIANT *pvarSize) override;
-    STDMETHOD(get_ReadyState)(READYSTATE *plReadyState) override;
-    STDMETHOD(get_Offline)(VARIANT_BOOL *pbOffline) override;
-    STDMETHOD(put_Offline)(VARIANT_BOOL bOffline) override;
-    STDMETHOD(get_Silent)(VARIANT_BOOL *pbSilent) override;
-    STDMETHOD(put_Silent)(VARIANT_BOOL bSilent) override;
-    STDMETHOD(get_RegisterAsBrowser)(VARIANT_BOOL *pbRegister) override;
-    STDMETHOD(put_RegisterAsBrowser)(VARIANT_BOOL bRegister) override;
-    STDMETHOD(get_RegisterAsDropTarget)(VARIANT_BOOL *pbRegister) override;
-    STDMETHOD(put_RegisterAsDropTarget)(VARIANT_BOOL bRegister) override;
-    STDMETHOD(get_TheaterMode)(VARIANT_BOOL *pbRegister) override;
-    STDMETHOD(put_TheaterMode)(VARIANT_BOOL bRegister) override;
-    STDMETHOD(get_AddressBar)(VARIANT_BOOL *Value) override;
-    STDMETHOD(put_AddressBar)(VARIANT_BOOL Value) override;
-    STDMETHOD(get_Resizable)(VARIANT_BOOL *Value) override;
-    STDMETHOD(put_Resizable)(VARIANT_BOOL Value) override;
+    STDMETHOD(GoBack)();
+    STDMETHOD(GoForward)();
+    STDMETHOD(GoHome)();
+    STDMETHOD(GoSearch)();
+    STDMETHOD(Navigate)(BSTR URL, VARIANT *Flags, VARIANT *TargetFrameName, VARIANT *PostData, VARIANT *Headers);
+    STDMETHOD(Refresh)();
+    STDMETHOD(Refresh2)(VARIANT *Level);
+    STDMETHOD(Stop)();
+    STDMETHOD(get_Application)(IDispatch **ppDisp);
+    STDMETHOD(get_Parent)(IDispatch **ppDisp);
+    STDMETHOD(get_Container)(IDispatch **ppDisp);
+    STDMETHOD(get_Document)(IDispatch **ppDisp);
+    STDMETHOD(get_TopLevelContainer)(VARIANT_BOOL *pBool);
+    STDMETHOD(get_Type)(BSTR *Type);
+    STDMETHOD(get_Left)(LONG *pl);
+    STDMETHOD(put_Left)(LONG Left);
+    STDMETHOD(get_Top)(LONG *pl);
+    STDMETHOD(put_Top)(LONG Top);
+    STDMETHOD(get_Width)(LONG *pl);
+    STDMETHOD(put_Width)(LONG Width);
+    STDMETHOD(get_Height)(LONG *pl);
+    STDMETHOD(put_Height)(LONG Height);
+    STDMETHOD(get_LocationName)(BSTR *LocationName);
+    STDMETHOD(get_LocationURL)(BSTR *LocationURL);
+    STDMETHOD(get_Busy)(VARIANT_BOOL *pBool);
+    STDMETHOD(Quit)();
+    STDMETHOD(ClientToWindow)(int *pcx, int *pcy);
+    STDMETHOD(PutProperty)(BSTR Property, VARIANT vtValue);
+    STDMETHOD(GetProperty)(BSTR Property, VARIANT *pvtValue);
+    STDMETHOD(get_Name)(BSTR *Name);
+    STDMETHOD(get_HWND)(SHANDLE_PTR *pHWND);
+    STDMETHOD(get_FullName)(BSTR *FullName);
+    STDMETHOD(get_Path)(BSTR *Path);
+    STDMETHOD(get_Visible)(VARIANT_BOOL *pBool);
+    STDMETHOD(put_Visible)(VARIANT_BOOL Value);
+    STDMETHOD(get_StatusBar)(VARIANT_BOOL *pBool);
+    STDMETHOD(put_StatusBar)(VARIANT_BOOL Value);
+    STDMETHOD(get_StatusText)(BSTR *StatusText);
+    STDMETHOD(put_StatusText)(BSTR StatusText);
+    STDMETHOD(get_ToolBar)(int *Value);
+    STDMETHOD(put_ToolBar)(int Value);
+    STDMETHOD(get_MenuBar)(VARIANT_BOOL *Value);
+    STDMETHOD(put_MenuBar)(VARIANT_BOOL Value);
+    STDMETHOD(get_FullScreen)(VARIANT_BOOL *pbFullScreen);
+    STDMETHOD(put_FullScreen)(VARIANT_BOOL bFullScreen);
+    STDMETHOD(Navigate2)(VARIANT *URL, VARIANT *Flags, VARIANT *TargetFrameName, VARIANT *PostData, VARIANT *Headers);
+    STDMETHOD(QueryStatusWB)(OLECMDID cmdID, OLECMDF *pcmdf);
+    STDMETHOD(ExecWB)(OLECMDID cmdID, OLECMDEXECOPT cmdexecopt, VARIANT *pvaIn, VARIANT *pvaOut);
+    STDMETHOD(ShowBrowserBar)(VARIANT *pvaClsid, VARIANT *pvarShow, VARIANT *pvarSize);
+    STDMETHOD(get_ReadyState)(READYSTATE *plReadyState);
+    STDMETHOD(get_Offline)(VARIANT_BOOL *pbOffline);
+    STDMETHOD(put_Offline)(VARIANT_BOOL bOffline);
+    STDMETHOD(get_Silent)(VARIANT_BOOL *pbSilent);
+    STDMETHOD(put_Silent)(VARIANT_BOOL bSilent);
+    STDMETHOD(get_RegisterAsBrowser)(VARIANT_BOOL *pbRegister);
+    STDMETHOD(put_RegisterAsBrowser)(VARIANT_BOOL bRegister);
+    STDMETHOD(get_RegisterAsDropTarget)(VARIANT_BOOL *pbRegister);
+    STDMETHOD(put_RegisterAsDropTarget)(VARIANT_BOOL bRegister);
+    STDMETHOD(get_TheaterMode)(VARIANT_BOOL *pbRegister);
+    STDMETHOD(put_TheaterMode)(VARIANT_BOOL bRegister);
+    STDMETHOD(get_AddressBar)(VARIANT_BOOL *Value);
+    STDMETHOD(put_AddressBar)(VARIANT_BOOL Value);
+    STDMETHOD(get_Resizable)(VARIANT_BOOL *Value);
+    STDMETHOD(put_Resizable)(VARIANT_BOOL Value);
 
     // message handlers
     LRESULT OnEraseBkgnd(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
@@ -226,14 +226,104 @@ BEGIN_COM_MAP(CDesktopBrowser)
     COM_INTERFACE_ENTRY_IID(IID_IShellBrowser, IShellBrowser)
     COM_INTERFACE_ENTRY_IID(IID_IShellBrowserService, IShellBrowserService)
     COM_INTERFACE_ENTRY_IID(IID_IServiceProvider, IServiceProvider)
+END_COM_MAP()
+};
+
+class CDesktopAutomation :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IDispatchImpl<IWebBrowser2, &IID_IWebBrowser2, &LIBID_SHDocVw, 1, 1>,
+    public IServiceProvider,
+    public IConnectionPointContainerImpl<CDesktopAutomation>,
+    public IConnectionPointImpl<CDesktopAutomation, &DIID_DWebBrowserEvents2>
+{
+public:
+    CDesktopBrowser *m_pBrowser;
+
+    CDesktopAutomation() : m_pBrowser(NULL)
+    {
+    }
+
+    STDMETHOD(QueryService)(REFGUID guidService, REFIID riid, void **ppvObject) override
+    {
+        if (!m_pBrowser)
+            return E_FAIL;
+        return m_pBrowser->QueryService(guidService, riid, ppvObject);
+    }
+
+    STDMETHOD(GoBack)() override { return m_pBrowser ? m_pBrowser->GoBack() : E_FAIL; }
+    STDMETHOD(GoForward)() override { return m_pBrowser ? m_pBrowser->GoForward() : E_FAIL; }
+    STDMETHOD(GoHome)() override { return m_pBrowser ? m_pBrowser->GoHome() : E_FAIL; }
+    STDMETHOD(GoSearch)() override { return m_pBrowser ? m_pBrowser->GoSearch() : E_FAIL; }
+    STDMETHOD(Navigate)(BSTR URL, VARIANT *Flags, VARIANT *TargetFrameName, VARIANT *PostData, VARIANT *Headers) override { return m_pBrowser ? m_pBrowser->Navigate(URL, Flags, TargetFrameName, PostData, Headers) : E_FAIL; }
+    STDMETHOD(Refresh)() override { return m_pBrowser ? m_pBrowser->Refresh() : E_FAIL; }
+    STDMETHOD(Refresh2)(VARIANT *Level) override { return m_pBrowser ? m_pBrowser->Refresh2(Level) : E_FAIL; }
+    STDMETHOD(Stop)() override { return m_pBrowser ? m_pBrowser->Stop() : E_FAIL; }
+    STDMETHOD(get_Application)(IDispatch **ppDisp) override { return m_pBrowser ? m_pBrowser->get_Application(ppDisp) : E_FAIL; }
+    STDMETHOD(get_Parent)(IDispatch **ppDisp) override { return m_pBrowser ? m_pBrowser->get_Parent(ppDisp) : E_FAIL; }
+    STDMETHOD(get_Container)(IDispatch **ppDisp) override { return m_pBrowser ? m_pBrowser->get_Container(ppDisp) : E_FAIL; }
+    STDMETHOD(get_Document)(IDispatch **ppDisp) override { return m_pBrowser ? m_pBrowser->get_Document(ppDisp) : E_FAIL; }
+    STDMETHOD(get_TopLevelContainer)(VARIANT_BOOL *pBool) override { return m_pBrowser ? m_pBrowser->get_TopLevelContainer(pBool) : E_FAIL; }
+    STDMETHOD(get_Type)(BSTR *Type) override { return m_pBrowser ? m_pBrowser->get_Type(Type) : E_FAIL; }
+    STDMETHOD(get_Left)(LONG *pl) override { return m_pBrowser ? m_pBrowser->get_Left(pl) : E_FAIL; }
+    STDMETHOD(put_Left)(LONG Left) override { return m_pBrowser ? m_pBrowser->put_Left(Left) : E_FAIL; }
+    STDMETHOD(get_Top)(LONG *pl) override { return m_pBrowser ? m_pBrowser->get_Top(pl) : E_FAIL; }
+    STDMETHOD(put_Top)(LONG Top) override { return m_pBrowser ? m_pBrowser->put_Top(Top) : E_FAIL; }
+    STDMETHOD(get_Width)(LONG *pl) override { return m_pBrowser ? m_pBrowser->get_Width(pl) : E_FAIL; }
+    STDMETHOD(put_Width)(LONG Width) override { return m_pBrowser ? m_pBrowser->put_Width(Width) : E_FAIL; }
+    STDMETHOD(get_Height)(LONG *pl) override { return m_pBrowser ? m_pBrowser->get_Height(pl) : E_FAIL; }
+    STDMETHOD(put_Height)(LONG Height) override { return m_pBrowser ? m_pBrowser->put_Height(Height) : E_FAIL; }
+    STDMETHOD(get_LocationName)(BSTR *LocationName) override { return m_pBrowser ? m_pBrowser->get_LocationName(LocationName) : E_FAIL; }
+    STDMETHOD(get_LocationURL)(BSTR *LocationURL) override { return m_pBrowser ? m_pBrowser->get_LocationURL(LocationURL) : E_FAIL; }
+    STDMETHOD(get_Busy)(VARIANT_BOOL *pBool) override { return m_pBrowser ? m_pBrowser->get_Busy(pBool) : E_FAIL; }
+    STDMETHOD(Quit)() override { return m_pBrowser ? m_pBrowser->Quit() : E_FAIL; }
+    STDMETHOD(ClientToWindow)(int *pcx, int *pcy) override { return m_pBrowser ? m_pBrowser->ClientToWindow(pcx, pcy) : E_FAIL; }
+    STDMETHOD(PutProperty)(BSTR Property, VARIANT vtValue) override { return m_pBrowser ? m_pBrowser->PutProperty(Property, vtValue) : E_FAIL; }
+    STDMETHOD(GetProperty)(BSTR Property, VARIANT *pvtValue) override { return m_pBrowser ? m_pBrowser->GetProperty(Property, pvtValue) : E_FAIL; }
+    STDMETHOD(get_Name)(BSTR *Name) override { return m_pBrowser ? m_pBrowser->get_Name(Name) : E_FAIL; }
+    STDMETHOD(get_HWND)(SHANDLE_PTR *pHWND) override { return m_pBrowser ? m_pBrowser->get_HWND(pHWND) : E_FAIL; }
+    STDMETHOD(get_FullName)(BSTR *FullName) override { return m_pBrowser ? m_pBrowser->get_FullName(FullName) : E_FAIL; }
+    STDMETHOD(get_Path)(BSTR *Path) override { return m_pBrowser ? m_pBrowser->get_Path(Path) : E_FAIL; }
+    STDMETHOD(get_Visible)(VARIANT_BOOL *pBool) override { return m_pBrowser ? m_pBrowser->get_Visible(pBool) : E_FAIL; }
+    STDMETHOD(put_Visible)(VARIANT_BOOL Value) override { return m_pBrowser ? m_pBrowser->put_Visible(Value) : E_FAIL; }
+    STDMETHOD(get_StatusBar)(VARIANT_BOOL *pBool) override { return m_pBrowser ? m_pBrowser->get_StatusBar(pBool) : E_FAIL; }
+    STDMETHOD(put_StatusBar)(VARIANT_BOOL Value) override { return m_pBrowser ? m_pBrowser->put_StatusBar(Value) : E_FAIL; }
+    STDMETHOD(get_StatusText)(BSTR *StatusText) override { return m_pBrowser ? m_pBrowser->get_StatusText(StatusText) : E_FAIL; }
+    STDMETHOD(put_StatusText)(BSTR StatusText) override { return m_pBrowser ? m_pBrowser->put_StatusText(StatusText) : E_FAIL; }
+    STDMETHOD(get_ToolBar)(int *Value) override { return m_pBrowser ? m_pBrowser->get_ToolBar(Value) : E_FAIL; }
+    STDMETHOD(put_ToolBar)(int Value) override { return m_pBrowser ? m_pBrowser->put_ToolBar(Value) : E_FAIL; }
+    STDMETHOD(get_MenuBar)(VARIANT_BOOL *Value) override { return m_pBrowser ? m_pBrowser->get_MenuBar(Value) : E_FAIL; }
+    STDMETHOD(put_MenuBar)(VARIANT_BOOL Value) override { return m_pBrowser ? m_pBrowser->put_MenuBar(Value) : E_FAIL; }
+    STDMETHOD(get_FullScreen)(VARIANT_BOOL *pbFullScreen) override { return m_pBrowser ? m_pBrowser->get_FullScreen(pbFullScreen) : E_FAIL; }
+    STDMETHOD(put_FullScreen)(VARIANT_BOOL bFullScreen) override { return m_pBrowser ? m_pBrowser->put_FullScreen(bFullScreen) : E_FAIL; }
+    STDMETHOD(Navigate2)(VARIANT *URL, VARIANT *Flags, VARIANT *TargetFrameName, VARIANT *PostData, VARIANT *Headers) override { return m_pBrowser ? m_pBrowser->Navigate2(URL, Flags, TargetFrameName, PostData, Headers) : E_FAIL; }
+    STDMETHOD(QueryStatusWB)(OLECMDID cmdID, OLECMDF *pcmdf) override { return m_pBrowser ? m_pBrowser->QueryStatusWB(cmdID, pcmdf) : E_FAIL; }
+    STDMETHOD(ExecWB)(OLECMDID cmdID, OLECMDEXECOPT cmdexecopt, VARIANT *pvaIn, VARIANT *pvaOut) override { return m_pBrowser ? m_pBrowser->ExecWB(cmdID, cmdexecopt, pvaIn, pvaOut) : E_FAIL; }
+    STDMETHOD(ShowBrowserBar)(VARIANT *pvaClsid, VARIANT *pvarShow, VARIANT *pvarSize) override { return m_pBrowser ? m_pBrowser->ShowBrowserBar(pvaClsid, pvarShow, pvarSize) : E_FAIL; }
+    STDMETHOD(get_ReadyState)(READYSTATE *plReadyState) override { return m_pBrowser ? m_pBrowser->get_ReadyState(plReadyState) : E_FAIL; }
+    STDMETHOD(get_Offline)(VARIANT_BOOL *pbOffline) override { return m_pBrowser ? m_pBrowser->get_Offline(pbOffline) : E_FAIL; }
+    STDMETHOD(put_Offline)(VARIANT_BOOL bOffline) override { return m_pBrowser ? m_pBrowser->put_Offline(bOffline) : E_FAIL; }
+    STDMETHOD(get_Silent)(VARIANT_BOOL *pbSilent) override { return m_pBrowser ? m_pBrowser->get_Silent(pbSilent) : E_FAIL; }
+    STDMETHOD(put_Silent)(VARIANT_BOOL bSilent) override { return m_pBrowser ? m_pBrowser->put_Silent(bSilent) : E_FAIL; }
+    STDMETHOD(get_RegisterAsBrowser)(VARIANT_BOOL *pbRegister) override { return m_pBrowser ? m_pBrowser->get_RegisterAsBrowser(pbRegister) : E_FAIL; }
+    STDMETHOD(put_RegisterAsBrowser)(VARIANT_BOOL bRegister) override { return m_pBrowser ? m_pBrowser->put_RegisterAsBrowser(bRegister) : E_FAIL; }
+    STDMETHOD(get_RegisterAsDropTarget)(VARIANT_BOOL *pbRegister) override { return m_pBrowser ? m_pBrowser->get_RegisterAsDropTarget(pbRegister) : E_FAIL; }
+    STDMETHOD(put_RegisterAsDropTarget)(VARIANT_BOOL bRegister) override { return m_pBrowser ? m_pBrowser->put_RegisterAsDropTarget(bRegister) : E_FAIL; }
+    STDMETHOD(get_TheaterMode)(VARIANT_BOOL *pbRegister) override { return m_pBrowser ? m_pBrowser->get_TheaterMode(pbRegister) : E_FAIL; }
+    STDMETHOD(put_TheaterMode)(VARIANT_BOOL bRegister) override { return m_pBrowser ? m_pBrowser->put_TheaterMode(bRegister) : E_FAIL; }
+    STDMETHOD(get_AddressBar)(VARIANT_BOOL *Value) override { return m_pBrowser ? m_pBrowser->get_AddressBar(Value) : E_FAIL; }
+    STDMETHOD(put_AddressBar)(VARIANT_BOOL Value) override { return m_pBrowser ? m_pBrowser->put_AddressBar(Value) : E_FAIL; }
+    STDMETHOD(get_Resizable)(VARIANT_BOOL *Value) override { return m_pBrowser ? m_pBrowser->get_Resizable(Value) : E_FAIL; }
+    STDMETHOD(put_Resizable)(VARIANT_BOOL Value) override { return m_pBrowser ? m_pBrowser->put_Resizable(Value) : E_FAIL; }
+BEGIN_COM_MAP(CDesktopAutomation)
     COM_INTERFACE_ENTRY_IID(IID_IDispatch, IDispatch)
     COM_INTERFACE_ENTRY_IID(IID_IWebBrowser, IWebBrowser)
     COM_INTERFACE_ENTRY_IID(IID_IWebBrowserApp, IWebBrowserApp)
     COM_INTERFACE_ENTRY_IID(IID_IWebBrowser2, IWebBrowser2)
+    COM_INTERFACE_ENTRY_IID(IID_IServiceProvider, IServiceProvider)
     COM_INTERFACE_ENTRY_IID(IID_IConnectionPointContainer, IConnectionPointContainer)
 END_COM_MAP()
 
-BEGIN_CONNECTION_POINT_MAP(CDesktopBrowser)
+BEGIN_CONNECTION_POINT_MAP(CDesktopAutomation)
     CONNECTION_POINT_ENTRY(DIID_DWebBrowserEvents2)
 END_CONNECTION_POINT_MAP()
 };
@@ -243,13 +333,21 @@ CDesktopBrowser::CDesktopBrowser():
     m_hWndShellView(NULL),
     m_hwndChangeNotifyServer(NULL),
     m_dwDrives(::GetLogicalDrives()),
-    m_lShellWindowsCookie(0)
+    m_lShellWindowsCookie(0),
+    m_pAutomation(NULL)
 {
     SetTopBrowser();
 }
 
 CDesktopBrowser::~CDesktopBrowser()
 {
+    if (m_pAutomation)
+    {
+        m_pAutomation->m_pBrowser = NULL;
+        m_pAutomation->Release();
+        m_pAutomation = NULL;
+    }
+
     if (m_ShellView.p != NULL && m_hWndShellView != NULL)
     {
         m_ShellView->DestroyViewWindow();
@@ -373,10 +471,16 @@ HRESULT CDesktopBrowser::Initialize(IShellDesktopTray *ShellDesk)
     ShowWindow(SW_SHOW);
     UpdateWindow();
 
+    if (!m_pAutomation && SUCCEEDED(CComObject<CDesktopAutomation>::CreateInstance(&m_pAutomation)))
+    {
+        m_pAutomation->AddRef();
+        m_pAutomation->m_pBrowser = this;
+    }
+
     CComPtr<IShellWindows> pShellWindows;
     pShellWindows.Attach(WinList_GetShellWindows(TRUE));
-    if (pShellWindows)
-        pShellWindows->Register(static_cast<IDispatch *>(static_cast<IWebBrowser2 *>(this)),
+    if (pShellWindows && m_pAutomation)
+        pShellWindows->Register(static_cast<IDispatch *>(static_cast<IWebBrowser2 *>(m_pAutomation)),
                                 HandleToLong(m_hWnd), SWC_DESKTOP, &m_lShellWindowsCookie);
 
     return hRet;
@@ -585,7 +689,10 @@ HRESULT STDMETHODCALLTYPE CDesktopBrowser::CreateViewWindow(IShellItem *psi, ISh
 HRESULT STDMETHODCALLTYPE CDesktopBrowser::QueryService(REFGUID guidService, REFIID riid, PVOID *ppv)
 {
     /* FIXME - handle guidService (SID_STopLevelBrowser for IShellBrowserService etc) */
-    return QueryInterface(riid, ppv);
+    HRESULT hr = QueryInterface(riid, ppv);
+    if (FAILED(hr) && m_pAutomation && !IsEqualGUID(guidService, SID_STopLevelBrowser))
+        hr = m_pAutomation->QueryInterface(riid, ppv);
+    return hr;
 }
 
 HRESULT CDesktopBrowser::_GetWindowRect(RECT *prc)
@@ -648,14 +755,15 @@ HRESULT STDMETHODCALLTYPE CDesktopBrowser::get_Application(IDispatch **ppDisp)
 {
     if (!ppDisp)
         return E_POINTER;
-    return QueryInterface(IID_PPV_ARG(IDispatch, ppDisp));
+    *ppDisp = NULL;
+    if (!m_pAutomation)
+        return E_FAIL;
+    return m_pAutomation->QueryInterface(IID_PPV_ARG(IDispatch, ppDisp));
 }
 
 HRESULT STDMETHODCALLTYPE CDesktopBrowser::get_Parent(IDispatch **ppDisp)
 {
-    if (!ppDisp)
-        return E_POINTER;
-    return QueryInterface(IID_PPV_ARG(IDispatch, ppDisp));
+    return get_Application(ppDisp);
 }
 
 HRESULT STDMETHODCALLTYPE CDesktopBrowser::get_Container(IDispatch **ppDisp)
