@@ -40,7 +40,7 @@ typedef struct _PRINTER_COLUMN
 static const PRINTER_COLUMN PrinterColumns[] =
 {
     { IDS_COLUMN_NAME,      SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_LEFT, 15 },
-    { IDS_COLUMN_DOCUMENTS, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_LEFT, 15 },
+    { IDS_COLUMN_DOCUMENTS, SHCOLSTATE_TYPE_INT | SHCOLSTATE_ONBYDEFAULT, LVCFMT_LEFT, 15 },
     { IDS_COLUMN_STATUS,    SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_LEFT, 15 },
     { IDS_COLUMN_COMMENTS,  SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_LEFT, 15 },
     { IDS_COLUMN_LOCATION,  SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_LEFT, 15 },
@@ -511,8 +511,10 @@ STDMETHODIMP CPrinterFolder::GetDetailsOf(PCUITEMID_CHILD pidl, UINT iColumn, SH
 {
     WCHAR szText[MAX_PATH];
 
-    if (!psd || iColumn >= _countof(PrinterColumns))
+    if (!psd)
         return E_FAIL;
+    if (iColumn >= _countof(PrinterColumns))
+        return E_NOTIMPL;
 
     psd->fmt = PrinterColumns[iColumn].fmt;
     psd->cxChar = PrinterColumns[iColumn].cxChar;
@@ -558,8 +560,11 @@ STDMETHODIMP CPrinterFolder::GetCurFolder(PIDLIST_ABSOLUTE *pidl)
 {
     if (!pidl)
         return E_POINTER;
+    *pidl = NULL;
+    if (!m_pidlRoot)
+        return S_FALSE;
     *pidl = ILClone(m_pidlRoot);
-    return S_OK;
+    return *pidl ? S_OK : E_OUTOFMEMORY;
 }
 
 STDMETHODIMP CPrinterFolder::GetOverlayIndex(PCUITEMID_CHILD pidl, int *pIndex)
