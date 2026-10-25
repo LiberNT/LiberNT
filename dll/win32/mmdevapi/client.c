@@ -149,6 +149,12 @@ static HRESULT adjust_timing(struct audio_client *client, const BOOLEAN force_de
             else if (flags & AUDCLNT_STREAMFLAGS_EVENTCALLBACK) {
                 if (*duration != *period)
                     return AUDCLNT_E_BUFDURATION_PERIOD_NOT_EQUAL;
+#ifndef __REACTOS__
+
+                FIXME("EXCLUSIVE mode with EVENTCALLBACK\n");
+
+                return AUDCLNT_E_DEVICE_IN_USE;
+#endif
             } else if (*duration < 8 * *period)
                 *duration = 8 * *period; /* May grow above 2s. */
         }
