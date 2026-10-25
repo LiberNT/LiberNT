@@ -165,6 +165,7 @@ extern void func_RtlVirtualUnwindChainedHandler(void);
 extern void func_RtlxUnicodeStringToAnsiSize(void);
 extern void func_RtlxUnicodeStringToOemSize(void);
 extern void func_StackOverflow(void);
+extern void func_ScanfSecure(void);
 extern void func_TimerResolution(void);
 #if defined(_M_IX86) || defined(_M_AMD64)
 extern void func_UserModeException(void);
@@ -335,6 +336,7 @@ const struct test winetest_testlist[] =
     { "RtlWaitOnAddress",               func_RtlWaitOnAddress },
     { "RtlWaitOnAddressPriority",       func_RtlWaitOnAddressPriority },
     { "StackOverflow",                  func_StackOverflow },
+    { "ScanfSecure",                    func_ScanfSecure },
     { "TimerResolution",                func_TimerResolution },
 #if defined(_M_IX86) || defined(_M_AMD64)
     { "UserModeException",              func_UserModeException },

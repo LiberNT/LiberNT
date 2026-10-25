@@ -1993,6 +1993,7 @@
 @ varargs _snprintf_s(ptr long long str)
 @ varargs _snwprintf(ptr long wstr)
 @ varargs _snwprintf_s(ptr long long wstr)
+@ varargs _snwscanf_s(wstr long wstr)
 @ cdecl _splitpath(str ptr ptr ptr ptr)
 @ cdecl _strcmpi(str str) _stricmp
 @ cdecl _stricmp(str str)
@@ -2063,6 +2064,7 @@
 @ varargs sprintf(ptr str)
 @ cdecl sqrt(double)
 @ varargs sscanf(str str)
+@ varargs sscanf_s(str str)
 @ cdecl strcat(str str)
 @ cdecl strchr(str long)
 @ cdecl strcmp(str str)
@@ -2082,6 +2084,7 @@
 @ cdecl strtol(str ptr long)
 @ cdecl strtoul(str ptr long)
 @ varargs swprintf(ptr wstr) _swprintf # Non-conforming swprintf
+@ varargs swscanf_s(wstr wstr)
 @ cdecl tan(double)
 @ cdecl tolower(long)
 @ cdecl toupper(long) toupper_nt_mb

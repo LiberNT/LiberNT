@@ -180,6 +180,7 @@ list(APPEND SOURCE
     RtlWaitOnAddress.c
     RtlxUnicodeStringToAnsiSize.c
     RtlxUnicodeStringToOemSize.c
+    ScanfSecure.c
     StackOverflow.c
     SystemInfo.c
     Timer.c
