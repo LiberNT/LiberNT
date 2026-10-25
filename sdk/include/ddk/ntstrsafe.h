@@ -3054,6 +3054,8 @@ NTSTRSAFEAPI RtlpStringVPrintfExWorkerW(
             {
                 pszDestEnd = pszDest;
                 cchRemaining = 0;
+                if (pcchDestNewLen)
+                    *pcchDestNewLen = 0;
                 if (*pszFormat != L'\0')
                 {
                     if (!pszDest)
