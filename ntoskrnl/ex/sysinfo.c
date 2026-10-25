@@ -1883,24 +1883,27 @@ QSI_DEF(SystemObjectInformation)
 /* Class 18 -  Information */
 QSI_DEF(SystemPageFileInformation)
 {
-    UNICODE_STRING FileName; /* FIXME */
     SYSTEM_PAGEFILE_INFORMATION *Spfi = (SYSTEM_PAGEFILE_INFORMATION *) Buffer;
+    ULONG64 TotalPages, PagesInUse, PeakPages;
+    UNICODE_STRING FileName;
 
-    if (Size < sizeof(SYSTEM_PAGEFILE_INFORMATION))
-    {
-        * ReqSize = sizeof(SYSTEM_PAGEFILE_INFORMATION);
+    *ReqSize = 0;
+    if (!MmQueryPagingFileUsage(&TotalPages, &PagesInUse, &PeakPages, &FileName))
+        return STATUS_SUCCESS;
+
+    *ReqSize = sizeof(SYSTEM_PAGEFILE_INFORMATION) + FileName.Length + sizeof(WCHAR);
+    if (Size < *ReqSize)
         return STATUS_INFO_LENGTH_MISMATCH;
-    }
 
-    RtlInitUnicodeString(&FileName, NULL); /* FIXME */
-
-    /* FIXME */
     Spfi->NextEntryOffset = 0;
-
-    Spfi->TotalSize = MiFreeSwapPages + MiUsedSwapPages;
-    Spfi->TotalInUse = MiUsedSwapPages;
-    Spfi->PeakUsage = MiUsedSwapPages; /* FIXME */
-    Spfi->PageFileName = FileName;
+    Spfi->TotalSize = (ULONG)TotalPages;
+    Spfi->TotalInUse = (ULONG)PagesInUse;
+    Spfi->PeakUsage = (ULONG)PeakPages;
+    Spfi->PageFileName.Buffer = (PWSTR)(Spfi + 1);
+    Spfi->PageFileName.Length = FileName.Length;
+    Spfi->PageFileName.MaximumLength = FileName.Length + sizeof(WCHAR);
+    RtlCopyMemory(Spfi->PageFileName.Buffer, FileName.Buffer, FileName.Length);
+    Spfi->PageFileName.Buffer[FileName.Length / sizeof(WCHAR)] = UNICODE_NULL;
     return STATUS_SUCCESS;
 }
 
