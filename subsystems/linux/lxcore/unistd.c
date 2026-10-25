@@ -120,7 +120,7 @@ static LX_SYSCALL_ENTRY LxGenericSyscalls[] =
     LX_ENTRY(119, LxSysSchedSetscheduler, "sched_setscheduler"),
     LX_ENTRY(120, LxSysSchedGetscheduler, "sched_getscheduler"),
     LX_ENTRY(121, LxSysSchedGetparam, "sched_getparam"),
-    LX_ENTRY(122, LxSysSucceed, "sched_setaffinity"),
+    LX_ENTRY(122, LxSysSchedSetaffinity, "sched_setaffinity"),
     LX_ENTRY(123, LxSysSchedGetaffinity, "sched_getaffinity"),
     LX_ENTRY(124, LxSysSchedYield, "sched_yield"),
     LX_ENTRY(125, LxSysSchedGetPriorityMax, "sched_get_priority_max"),

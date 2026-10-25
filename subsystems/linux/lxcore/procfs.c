@@ -1043,12 +1043,11 @@ LxGenPidStatus(
 {
     PLX_PROCESS Process = LxProcessLookup(Self->Instance, Synth->Pid);
     PLX_NS ProcNs;
-    ULONG64 Ignored = 0, Caught = 0, Blocked = 0;
-    ULONG Count = KeQueryActiveProcessorCount(NULL);
+    ULONG64 Ignored = 0, Caught = 0, Blocked = 0, Affinity = LxSchedActiveMask();
     PLIST_ENTRY Entry;
-    CHAR Comm[16];
+    CHAR Comm[16], List[256];
     LONG Signal;
-    ULONG Index, Fds = 0;
+    ULONG Index, Fds = 0, Used = 0, Cpu;
 
     if (Process == NULL)
         return;
@@ -1069,6 +1068,7 @@ LxGenPidStatus(
         if ((Synth->Tid == 0) || (Thread->Tid == Synth->Tid))
         {
             Blocked = Thread->SigMask;
+            Affinity &= Thread->Affinity;
             break;
         }
     }
@@ -1078,6 +1078,22 @@ LxGenPidStatus(
             Fds = Index + 1;
     }
     ExReleaseFastMutex(&Process->Lock);
+    List[0] = '\0';
+    for (Cpu = 0; Cpu < 64; Cpu++)
+    {
+        ULONG Last = Cpu;
+
+        if (!(Affinity & (1ULL << Cpu)))
+            continue;
+        while ((Last + 1 < 64) && (Affinity & (1ULL << (Last + 1))))
+            Last++;
+        if (Last == Cpu)
+            RtlStringCbPrintfA(List + Used, sizeof(List) - Used, "%s%lu", Used ? "," : "", Cpu);
+        else
+            RtlStringCbPrintfA(List + Used, sizeof(List) - Used, "%s%lu-%lu", Used ? "," : "", Cpu, Last);
+        Used = (ULONG)strlen(List);
+        Cpu = Last;
+    }
 
     ProcNs = LxProcPidNs(Self, Synth);
     LxTextPrintf(Text,
@@ -1156,12 +1172,11 @@ LxGenPidStatus(
                  "SigPnd:\t%016llx\nShdPnd:\t%016llx\nSigBlk:\t%016llx\nSigIgn:\t%016llx\nSigCgt:\t%016llx\n"
                  "CapInh:\t%016llx\nCapPrm:\t%016llx\nCapEff:\t%016llx\nCapBnd:\t%016llx\nCapAmb:\t%016llx\n"
                  "NoNewPrivs:\t%u\nSeccomp:\t0\nSeccomp_filters:\t0\nSpeculation_Store_Bypass:\tthread vulnerable\n"
-                 "SpeculationIndirectBranch:\tunknown\nCpus_allowed:\t%llx\nCpus_allowed_list:\t0-%lu\n"
+                 "SpeculationIndirectBranch:\tunknown\nCpus_allowed:\t%llx\nCpus_allowed_list:\t%s\n"
                  "Mems_allowed:\t1\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t0\nnonvoluntary_ctxt_switches:\t0\n",
                  0ULL, (ULONG64)Process->Pending, Blocked, Ignored, Caught, Process->CapInheritable,
                  Process->CapPermitted, Process->CapEffective,
-                 Process->CapBounding, Process->CapAmbient, Process->NoNewPrivs ? 1U : 0U,
-                 (Count >= 64) ? MAXULONG64 : ((1ULL << Count) - 1), Count - 1);
+                 Process->CapBounding, Process->CapAmbient, Process->NoNewPrivs ? 1U : 0U, Affinity, List);
     LxProcessDereference(Process);
 }
 

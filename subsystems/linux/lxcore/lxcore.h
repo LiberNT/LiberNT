@@ -607,6 +607,7 @@ struct _LX_THREAD
     volatile LONG64 Pending;
     LX_STACK AltStack;
     LX_SCHED_ATTR Sched;
+    ULONG64 Affinity;
     ULONG64 SuspendMask;
     BOOLEAN Suspended;
     CHAR Comm[16];
@@ -719,6 +720,9 @@ VOID LxNtTimeToTimespec(_In_ LONG64 NtTime, _Out_ PLX_TIMESPEC Timespec);
 LONG64 LxTimespecToNtTime(_In_ PLX_TIMESPEC Timespec);
 LONG64 LxTimespecToNs(_In_ PLX_TIMESPEC Timespec);
 VOID LxSchedInherit(_Inout_ PLX_THREAD Child, _In_ PLX_THREAD Parent);
+VOID LxSchedInitialize(VOID);
+ULONG64 LxSchedActiveMask(VOID);
+VOID LxSchedApplyAffinity(_In_ PLX_THREAD Thread);
 PLX_THREAD LxCurrentThread(VOID);
 
 VOID LxPollHeadInit(_Out_ PLX_POLL_HEAD Head);

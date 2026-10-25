@@ -191,6 +191,7 @@ LX_SYSCALL(LxSysClockGetres);
 LX_SYSCALL(LxSysClockNanosleep);
 LX_SYSCALL(LxSysSchedYield);
 LX_SYSCALL(LxSysSchedGetaffinity);
+LX_SYSCALL(LxSysSchedSetaffinity);
 LX_SYSCALL(LxSysKill);
 LX_SYSCALL(LxSysTkill);
 LX_SYSCALL(LxSysTgkill);

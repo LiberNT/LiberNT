@@ -21,6 +21,7 @@ LxProcessInitialize(VOID)
     LxNsInitialize();
     LxBpfInitialize();
     LxFutexInitialize();
+    LxSchedInitialize();
     LxIpcInitialize();
     LxMqInitialize();
     LxWinInitialize();
@@ -535,6 +536,7 @@ LxThreadCreateCommon(
     Thread->AltStack.Flags = LX_SS_DISABLE;
     Thread->Sched.UtilMax = 1024;
     Thread->CurrentSyscall = MAXULONG;
+    Thread->Affinity = LxSchedActiveMask();
     RtlCopyMemory(Thread->Comm, Process->Comm, sizeof(Thread->Comm));
     *Result = Thread;
     return 0;

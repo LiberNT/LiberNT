@@ -722,6 +722,7 @@ typedef struct _LX_MSGINFO
 #define LX_CAP_SYS_PTRACE       19
 #define LX_CAP_SYS_ADMIN        21
 #define LX_CAP_SYS_BOOT         22
+#define LX_CAP_SYS_NICE         23
 #define LX_CAP_SYS_RESOURCE     24
 #define LX_CAP_SYS_TIME         25
 #define LX_CAP_MKNOD            27

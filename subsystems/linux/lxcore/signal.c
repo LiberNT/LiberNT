@@ -48,6 +48,7 @@ LxThreadAttach(
     ExAcquireFastMutex(&Process->Lock);
     InsertTailList(&Process->Threads, &Thread->Link);
     ExReleaseFastMutex(&Process->Lock);
+    LxSchedApplyAffinity(Thread);
 }
 
 VOID

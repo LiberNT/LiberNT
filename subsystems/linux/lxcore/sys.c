@@ -745,14 +745,100 @@ LX_SYSCALL(LxSysSchedYield)
     return 0;
 }
 
-LX_SYSCALL(LxSysSchedGetaffinity)
+static
+LONG
+LxSchedTarget(
+    _In_ PLX_CALL Call,
+    _In_ LONG Pid,
+    _Out_ PLX_THREAD *Thread,
+    _Out_ PLX_PROCESS *Owner);
+
+static
+VOID
+LxSchedRelease(
+    _In_opt_ PLX_PROCESS Owner);
+
+static KEVENT LxSchedAffinityLock;
+
+VOID
+LxSchedInitialize(VOID)
+{
+    KeInitializeEvent(&LxSchedAffinityLock, SynchronizationEvent, TRUE);
+}
+
+static
+VOID
+LxSchedLockAffinity(VOID)
+{
+    KeEnterCriticalRegion();
+    KeWaitForSingleObject(&LxSchedAffinityLock, Executive, KernelMode, FALSE, NULL);
+}
+
+static
+VOID
+LxSchedUnlockAffinity(VOID)
+{
+    KeSetEvent(&LxSchedAffinityLock, IO_NO_INCREMENT, FALSE);
+    KeLeaveCriticalRegion();
+}
+
+ULONG64
+LxSchedActiveMask(VOID)
 {
     ULONG Count = KeQueryActiveProcessorCount(NULL);
-    ULONG64 Mask = (Count >= 64) ? MAXULONG64 : ((1ULL << Count) - 1);
+
+    return (Count >= 64) ? MAXULONG64 : ((1ULL << Count) - 1);
+}
+
+static
+VOID
+LxSchedSetThreadAffinity(
+    _In_ PETHREAD EThread,
+    _In_ ULONG64 Affinity)
+{
+    KAFFINITY Mask = (KAFFINITY)(Affinity & LxSchedActiveMask());
+    HANDLE Handle;
+
+    if (Mask == 0)
+        return;
+    if (EThread == PsGetCurrentThread())
+    {
+        ZwSetInformationThread(NtCurrentThread(), ThreadAffinityMask, &Mask, sizeof(Mask));
+        return;
+    }
+    if (NT_SUCCESS(ObOpenObjectByPointer(EThread, OBJ_KERNEL_HANDLE, NULL, THREAD_SET_INFORMATION, *PsThreadType,
+                                         KernelMode, &Handle)))
+    {
+        ZwSetInformationThread(Handle, ThreadAffinityMask, &Mask, sizeof(Mask));
+        ZwClose(Handle);
+    }
+}
+
+VOID
+LxSchedApplyAffinity(
+    _In_ PLX_THREAD Thread)
+{
+    LxSchedLockAffinity();
+    if (Thread->EThread != NULL)
+        LxSchedSetThreadAffinity(Thread->EThread, Thread->Affinity);
+    LxSchedUnlockAffinity();
+}
+
+LX_SYSCALL(LxSysSchedGetaffinity)
+{
+    ULONG Count = KeQueryActiveProcessorCount(NULL), Length = (ULONG)Call->Args[1];
+    PLX_PROCESS Owner;
+    PLX_THREAD Thread;
+    ULONG64 Mask;
     LONG64 Result;
 
-    if (Call->Args[1] < sizeof(Mask))
+    if ((Length * 8 < Count) || (Length & (sizeof(ULONG64) - 1)))
         return -LX_EINVAL;
+    Result = LxSchedTarget(Call, (LONG)Call->Args[0], &Thread, &Owner);
+    if (Result != 0)
+        return Result;
+    Mask = Thread->Affinity & LxSchedActiveMask();
+    LxSchedRelease(Owner);
     Result = LxCopyToUser(Call->Args[2], &Mask, sizeof(Mask));
     return (Result != 0) ? Result : (LONG64)sizeof(Mask);
 }
@@ -813,11 +899,55 @@ LxSchedValidate(
     return -LX_EINVAL;
 }
 
+LX_SYSCALL(LxSysSchedSetaffinity)
+{
+    PLX_PROCESS Owner, Target;
+    PLX_THREAD Thread;
+    ULONG64 Mask = 0;
+    ULONG Length = (ULONG)Call->Args[1];
+    LONG64 Result;
+
+    if (Length != 0)
+    {
+        Result = LxCopyFromUser(&Mask, Call->Args[2], min(Length, sizeof(Mask)));
+        if (Result != 0)
+            return Result;
+    }
+    Result = LxSchedTarget(Call, (LONG)Call->Args[0], &Thread, &Owner);
+    if (Result != 0)
+        return Result;
+    Target = Thread->Process;
+    if ((Target != Call->Process) && (Call->Process->Uid[1] != Target->Uid[1]) &&
+        (Call->Process->Uid[1] != Target->Uid[0]))
+    {
+        PLX_NS TargetNs = LxUserNsOf(Target);
+        BOOLEAN Capable = LxNsCapable(Call->Process, TargetNs, LX_CAP_SYS_NICE);
+
+        LxNsDereference(TargetNs);
+        if (!Capable)
+        {
+            LxSchedRelease(Owner);
+            return -LX_EPERM;
+        }
+    }
+    Mask &= LxSchedActiveMask();
+    if (Mask == 0)
+    {
+        LxSchedRelease(Owner);
+        return -LX_EINVAL;
+    }
+    Thread->Affinity = Mask;
+    LxSchedApplyAffinity(Thread);
+    LxSchedRelease(Owner);
+    return 0;
+}
+
 VOID
 LxSchedInherit(
     _Inout_ PLX_THREAD Child,
     _In_ PLX_THREAD Parent)
 {
+    Child->Affinity = Parent->Affinity;
     Child->Sched = Parent->Sched;
     if (Child->Sched.Flags & LX_SCHED_FLAG_RESET_ON_FORK)
     {
