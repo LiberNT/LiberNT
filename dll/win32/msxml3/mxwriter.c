@@ -1563,10 +1563,23 @@ static HRESULT WINAPI SAXLexicalHandler_startDTD(ISAXLexicalHandler *iface,
     TRACE("%p, %s. %s. %s.\n", iface, debugstr_wn(name, name_len), debugstr_wn(publicId, publicId_len),
         debugstr_wn(systemId, systemId_len));
 
+#ifdef __REACTOS__
+    if (!name && (writer->class_version != MSXML6 || name_len)) return E_INVALIDARG;
+#else
     if (!name) return E_INVALIDARG;
+#endif
 
     write_output_buffer(writer, L"<!DOCTYPE ", 10);
 
+#ifdef __REACTOS__
+    if (writer->class_version == MSXML6)
+    {
+        if (name)
+            write_output_buffer(writer, name, name_len);
+        write_output_buffer(writer, L" ", 1);
+    }
+    else
+#endif
     if (*name)
     {
         write_output_buffer(writer, name, name_len);
@@ -1724,6 +1737,20 @@ static HRESULT WINAPI SAXDeclHandler_elementDecl(ISAXDeclHandler *iface,
     TRACE("(%p)->(%s:%d %s:%d)\n", This, debugstr_wn(name, n_name), n_name,
         debugstr_wn(model, n_model), n_model);
 
+#ifdef __REACTOS__
+    if (This->class_version == MSXML6)
+    {
+        if ((!name && n_name) || (!model && n_model)) return E_INVALIDARG;
+        write_output_buffer(This, L"<!ELEMENT ", 10);
+        if (name)
+            write_output_buffer(This, name, n_name);
+        write_output_buffer(This, L" ", 1);
+        if (model && n_model)
+            write_output_buffer(This, model, n_model);
+        write_output_buffer(This, L">\r\n", 3);
+        return S_OK;
+    }
+#endif
     if (!name || !model) return E_INVALIDARG;
 
     write_output_buffer(This, L"<!ELEMENT ", 10);
@@ -1765,6 +1792,16 @@ static HRESULT WINAPI SAXDeclHandler_attributeDecl(ISAXDeclHandler *iface,
         write_output_buffer(This, L" ", 1);
     }
 
+#ifdef __REACTOS__
+    if (This->class_version == MSXML6 && n_default &&
+        ((n_default == 9 && !wcsncmp(Default, L"#REQUIRED", 9)) ||
+         (n_default == 8 && !wcsncmp(Default, L"#IMPLIED", 8))))
+    {
+        write_output_buffer(This, Default, n_default);
+        write_output_buffer(This, L">\r\n", 3);
+        return S_OK;
+    }
+#endif
     if (n_default) {
         write_output_buffer(This, Default, n_default);
         write_output_buffer(This, L" ", 1);
@@ -1786,6 +1823,19 @@ static HRESULT WINAPI SAXDeclHandler_internalEntityDecl(ISAXDeclHandler *iface,
     TRACE("%p, %s:%d, %s:%d.\n", iface, debugstr_wn(name, n_name), n_name,
         debugstr_wn(value, n_value), n_value);
 
+#ifdef __REACTOS__
+    if (writer->class_version == MSXML6)
+    {
+        if (n_name < 0 || n_value < 0 || (!name && n_name) || (!value && n_value)) return E_INVALIDARG;
+        write_output_buffer(writer, L"<!ENTITY ", 9);
+        if (name)
+            write_output_buffer(writer, name, n_name);
+        write_output_buffer(writer, L" ", 1);
+        write_output_buffer_quoted(writer, value ? value : L"", n_value);
+        write_output_buffer(writer, L">\r\n", 3);
+        return S_OK;
+    }
+#endif
     if (!name || !value) return E_INVALIDARG;
 
     write_output_buffer(writer, L"<!ENTITY ", 9);
@@ -1811,6 +1861,32 @@ static HRESULT WINAPI SAXDeclHandler_externalEntityDecl(ISAXDeclHandler *iface,
     TRACE("%p, %s:%d, %s:%d, %s:%d.\n", iface, debugstr_wn(name, n_name), n_name,
         debugstr_wn(publicId, n_publicId), n_publicId, debugstr_wn(systemId, n_systemId), n_systemId);
 
+#ifdef __REACTOS__
+    if (writer->class_version == MSXML6)
+    {
+        if (n_name < 0) return E_INVALIDARG;
+        write_output_buffer(writer, L"<!ENTITY ", 9);
+        if (!name || !n_name) return E_INVALIDARG;
+        write_output_buffer(writer, name, n_name);
+        write_output_buffer(writer, L" ", 1);
+        if (publicId)
+        {
+            write_output_buffer(writer, L"PUBLIC ", 7);
+            write_output_buffer_quoted(writer, publicId, n_publicId);
+            if (!systemId) return E_INVALIDARG;
+            write_output_buffer(writer, L" ", 1);
+            write_output_buffer_quoted(writer, systemId, n_systemId);
+        }
+        else
+        {
+            if (!systemId) return E_INVALIDARG;
+            write_output_buffer(writer, L"SYSTEM ", 7);
+            write_output_buffer_quoted(writer, systemId, n_systemId);
+        }
+        write_output_buffer(writer, L">\r\n", 3);
+        return S_OK;
+    }
+#endif
     if (!name || !systemId) return E_INVALIDARG;
 
     write_output_buffer(writer, L"<!ENTITY ", 9);
@@ -2347,9 +2423,16 @@ static HRESULT WINAPI SAXDTDHandler_notationDecl(ISAXDTDHandler *iface,
     TRACE("(%p)->(%s:%d, %s:%d, %s:%d)\n", This, debugstr_wn(name, n_name), n_name,
         debugstr_wn(publicid, n_publicid), n_publicid, debugstr_wn(systemid, n_systemid), n_systemid);
 
+#ifdef __REACTOS__
+    if (This->class_version == MSXML6)
+        write_output_buffer(This, L"<!NOTATION ", 11);
+#endif
     if (!name || !n_name)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    if (This->class_version != MSXML6)
+#endif
     write_output_buffer(This, L"<!NOTATION ", 11);
     write_output_buffer(This, name, n_name);
 
