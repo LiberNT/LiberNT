@@ -2,6 +2,7 @@
 spec2def(kd_02_8086.dll kd_02_8086.spec)
 
 list(APPEND SOURCE
+    e100.c
     e1000.c
     kdext.c)
 

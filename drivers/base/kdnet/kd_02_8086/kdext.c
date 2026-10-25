@@ -34,6 +34,24 @@ KdInitializeLibrary(
     if (!Exports || Exports->FunctionCount != KDNET_EXT_EXPORTS)
         return STATUS_INVALID_PARAMETER;
 
+    if (E100IsDevice(Device))
+    {
+        KdNetExtensibilityImports = ImportTable;
+        Exports->KdInitializeController = E100InitializeController;
+        Exports->KdShutdownController = E100ShutdownController;
+        Exports->KdSetHibernateRange = E1kSetHibernateRange;
+        Exports->KdGetRxPacket = E100GetRxPacket;
+        Exports->KdReleaseRxPacket = E100ReleaseRxPacket;
+        Exports->KdGetTxPacket = E100GetTxPacket;
+        Exports->KdSendTxPacket = E100SendTxPacket;
+        Exports->KdGetPacketAddress = E100GetPacketAddress;
+        Exports->KdGetPacketLength = E100GetPacketLength;
+        Exports->KdGetHardwareContextSize = E100GetHardwareContextSize;
+        Device->Memory.Length = E100GetHardwareContextSize(Device);
+        Device->Memory.MaxEnd.QuadPart = 0xFFFFFFFF;
+        return STATUS_SUCCESS;
+    }
+
     if (E1kClassifyDevice(Device) == E1kClassNone)
         return STATUS_NOT_SUPPORTED;
 
