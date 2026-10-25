@@ -1404,6 +1404,31 @@ BOOL WINAPI PathCanonicalizeW(WCHAR *buffer, const WCHAR *path)
             *dst++ = *src++;
     }
 
+#ifdef __REACTOS__
+    {
+        WCHAR *seg = dst;
+        BOOL dots_only = TRUE;
+
+        while (seg > buffer && seg[-1] != '\\' && !(seg - 1 == buffer + 1 && seg[-1] == ':'))
+        {
+            if (seg[-1] != '.')
+                dots_only = FALSE;
+            seg--;
+        }
+        if (!dots_only)
+        {
+            while (dst > seg && dst[-1] == '.' && !(dst - 1 > seg && dst[-2] == '*'))
+                dst--;
+        }
+        else if (dst - seg == 1 && seg > buffer)
+        {
+            dst = seg;
+            if (dst[-1] == '\\' && dst - 1 > buffer && !(dst - 2 == buffer + 1 && buffer[1] == ':'))
+                dst--;
+        }
+    }
+#endif
+
     /* Append \ to naked drive specs */
     if (dst - buffer == 2 && dst[-1] == ':')
         *dst++ = '\\';
