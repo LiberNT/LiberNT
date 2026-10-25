@@ -633,6 +633,7 @@ BOOLEAN NTAPI KdpInitializeCrashDump(_In_ HANDLE DumpFileHandle)
     OBJECT_ATTRIBUTES ObjectAttributes;
     FILE_FS_SIZE_INFORMATION SizeInfo;
     FILE_STANDARD_INFORMATION StandardInfo;
+    FILE_VALID_DATA_LENGTH_INFORMATION ValidDataLength;
     PARTITION_INFORMATION_EX PartitionInfo;
     STARTING_VCN_INPUT_BUFFER StartingVcn;
     PDEVICE_OBJECT StorageDevice;
@@ -744,6 +745,11 @@ BOOLEAN NTAPI KdpInitializeCrashDump(_In_ HANDLE DumpFileHandle)
 
     DPRINT1("KD: Crash dump storage: partition %I64u, cluster %lu, sector %lu, extents %lu\n", KdpCrashDumpState.PartitionOffset.QuadPart, KdpCrashDumpState.ClusterSize, KdpCrashDumpState.Storage.BytesPerSector, KdpCrashDumpState.RetrievalPointers->ExtentCount);
     DPRINT1("KD: Crash dump first extent: VCN %I64d to %I64d, LCN %I64d, disk byte %I64u\n", KdpCrashDumpState.RetrievalPointers->StartingVcn.QuadPart, KdpCrashDumpState.RetrievalPointers->Extents[0].NextVcn.QuadPart, KdpCrashDumpState.RetrievalPointers->Extents[0].Lcn.QuadPart, KdpCrashDumpState.PartitionOffset.QuadPart + KdpCrashDumpState.RetrievalPointers->Extents[0].Lcn.QuadPart * KdpCrashDumpState.ClusterSize);
+
+    ValidDataLength.ValidDataLength = StandardInfo.EndOfFile;
+    Status = ZwSetInformationFile(KdpCrashDumpState.DumpHandle, &IoStatus, &ValidDataLength, sizeof(ValidDataLength), FileValidDataLengthInformation);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("KD: Crash dump target valid data length not extended to %I64d (0x%08lx); data past it reads back as zeros\n", StandardInfo.EndOfFile.QuadPart, Status);
 
     KdpCrashDumpState.Capacity = StandardInfo.EndOfFile;
     KdpCrashDumpInitializationStage = "validating the dump target";
