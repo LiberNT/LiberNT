@@ -244,6 +244,9 @@ typedef struct MimeBody
     void *data;
     IID data_iid;
     BODYOFFSETS body_offsets;
+#ifdef __REACTOS__
+    BOOL text_body;
+#endif
 } MimeBody;
 
 typedef struct
@@ -1546,6 +1549,10 @@ static HRESULT WINAPI MimeBody_IsType(
     {
     case IBT_EMPTY:
         return This->data ? S_FALSE : S_OK;
+#ifdef __REACTOS__
+    case IBT_ATTACHMENT:
+        return This->text_body ? S_FALSE : S_OK;
+#endif
     default:
         FIXME("Unimplemented bodytype %d - returning S_OK\n", bodytype);
     }
@@ -2054,6 +2061,9 @@ static MimeBody *mimebody_create(void)
     This->encoding = IET_7BIT;
     This->data = NULL;
     This->data_iid = IID_NULL;
+#ifdef __REACTOS__
+    This->text_body = FALSE;
+#endif
 
     body_offsets.cbBoundaryStart = body_offsets.cbHeaderStart = 0;
     body_offsets.cbBodyStart     = body_offsets.cbBodyEnd     = 0;
@@ -2355,6 +2365,37 @@ static body_t *create_sub_body(MimeMessage *msg, IStream *pStm, BODYOFFSETS *off
     return body;
 }
 
+#ifdef __REACTOS__
+static MimeBody *find_text_body(struct list *list)
+{
+    body_t *body;
+    MimeBody *found;
+    header_t *header;
+
+    LIST_FOR_EACH_ENTRY(body, list, body_t, entry)
+    {
+        MimeBody *mime_body = body->mime_body;
+
+        if (!mime_body->content_pri_type || !mime_body->content_sub_type)
+            continue;
+        if (!_stricmp(mime_body->content_pri_type, "multipart"))
+        {
+            if ((found = find_text_body(&body->children)))
+                return found;
+            continue;
+        }
+        if (_stricmp(mime_body->content_pri_type, "text") ||
+            (_stricmp(mime_body->content_sub_type, "plain") && _stricmp(mime_body->content_sub_type, "html")))
+            continue;
+        if (find_prop(mime_body, "Content-Disposition", &header) == S_OK && header->value.vt == VT_LPSTR &&
+            header->value.pszVal && !_strnicmp(header->value.pszVal, "attachment", 10))
+            continue;
+        return mime_body;
+    }
+    return NULL;
+}
+#endif
+
 static HRESULT WINAPI MimeMessage_Load(IMimeMessage *iface, IStream *pStm)
 {
     MimeMessage *This = impl_from_IMimeMessage(iface);
@@ -2386,6 +2427,14 @@ static HRESULT WINAPI MimeMessage_Load(IMimeMessage *iface, IStream *pStm)
     MimeBody_set_offsets(root_body->mime_body, &offsets);
 
     list_add_head(&This->body_tree, &root_body->entry);
+#ifdef __REACTOS__
+    {
+        MimeBody *text_body = find_text_body(&This->body_tree);
+
+        if (text_body)
+            text_body->text_body = TRUE;
+    }
+#endif
 
     return S_OK;
 }
