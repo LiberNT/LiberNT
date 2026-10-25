@@ -150,6 +150,7 @@ typedef struct
     UINT indent; /* indentation level for next node */
 #ifdef __REACTOS__
     BOOL root_started;
+    BOOL encoding_set;
 #endif
 
     BSTR version;
@@ -581,7 +582,7 @@ static void write_prolog_buffer(mxwriter *writer)
 
     /* encoding */
 #ifdef __REACTOS__
-    if (writer->dest || writer->class_version != MSXML6)
+    if (writer->dest || writer->class_version != MSXML6 || !writer->encoding_set)
     {
 #endif
     write_output_buffer(writer, L" encoding=", 10);
@@ -1047,6 +1048,9 @@ static HRESULT WINAPI mxwriter_put_encoding(IMXWriter *iface, BSTR encoding)
 
     SysReAllocString(&This->encoding, encoding);
     This->xml_enc = enc;
+#ifdef __REACTOS__
+    This->encoding_set = TRUE;
+#endif
 
     TRACE("got encoding %d\n", This->xml_enc);
     close_output_buffer(This);
@@ -2764,6 +2768,7 @@ HRESULT MXWriter_create(MSXML_VERSION version, void **ppObj)
     This->newline = TRUE;
 #ifdef __REACTOS__
     This->root_started = FALSE;
+    This->encoding_set = FALSE;
 #endif
 
     This->dest = NULL;

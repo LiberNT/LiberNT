@@ -6842,7 +6842,11 @@ static HRESULT WINAPI isaxxmlreader_putFeature(ISAXXMLReader *iface, const WCHAR
 #endif
 
     /* accepted cases */
+#ifdef __REACTOS__
+    if ((feature == ExhaustiveErrors && (value == VARIANT_FALSE || reader->version >= MSXML4)) ||
+#else
     if ((feature == ExhaustiveErrors && value == VARIANT_FALSE) ||
+#endif
         (feature == SchemaValidation && value == VARIANT_FALSE) ||
          feature == Namespaces ||
          feature == NamespacePrefixes ||
