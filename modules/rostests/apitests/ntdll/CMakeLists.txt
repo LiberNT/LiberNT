@@ -182,6 +182,7 @@ list(APPEND SOURCE
     RtlxUnicodeStringToOemSize.c
     ScanfSecure.c
     StackOverflow.c
+    StackProbe.c
     SystemInfo.c
     Timer.c
     precomp.h)

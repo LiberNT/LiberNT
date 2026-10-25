@@ -14,7 +14,20 @@
 PUBLIC __chkstk
 PUBLIC __alloca_probe
 PUBLIC __alloca_probe_16
+PUBLIC __alloca_probe_8
 .code
+
+__alloca_probe_8:
+    push ecx
+    lea ecx, [esp + 8]
+    sub ecx, eax
+    and ecx, 7
+    add eax, ecx
+    jnc l2
+    mov eax, HEX(0ffffffff)
+l2:
+    pop ecx
+    jmp __chkstk
 
     /* 16 byte aligned alloca probe
      * EAX = size to be allocated */

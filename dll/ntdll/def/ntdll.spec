@@ -1964,7 +1964,7 @@
 @ cdecl -arch=i386 -ret64 _allmul(double double)
 @ cdecl -arch=i386 -norelay -private _alloca_probe()
 @ cdecl -version=0x600+ -arch=i386 -private _alloca_probe_16()
-@ stub -version=0x600+ -arch=i386 _alloca_probe_8
+@ cdecl -version=0x600+ -arch=i386 -private _alloca_probe_8()
 @ cdecl -arch=i386 -ret64 _allrem(double double)
 @ cdecl -arch=i386 _allshl()
 @ cdecl -arch=i386 _allshr()
