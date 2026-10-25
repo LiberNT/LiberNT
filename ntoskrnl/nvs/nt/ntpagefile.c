@@ -166,6 +166,67 @@ MiExtendPagingFileWorker(
 
 static
 VOID
+MiCommitReportRegions(
+    _In_ HANDLE ProcessId)
+{
+    struct
+    {
+        ULONG64 Start;
+        ULONG64 End;
+        LONG64 Charge;
+        ULONG Protection;
+        UCHAR Type;
+    } Regions[8];
+    PEPROCESS Process;
+    PMI_PROCESS Native;
+    PMI_VAD_NODE Node;
+    ULONG Count = 0, i;
+
+    for (Process = PsGetNextProcess(NULL); Process != NULL; Process = PsGetNextProcess(Process))
+    {
+        if (PsGetProcessId(Process) != ProcessId)
+            continue;
+
+        Native = MI_PROCESS_OF(Process);
+        if (Native != NULL)
+        {
+            MI_RW_ACQUIRE_SHARED(&Native->Space.Lock);
+            for (Node = MiVadFirst(&Native->Space.VadRoot); Node != NULL; Node = MiVadNext(Node))
+            {
+                PMI_VAD Vad = CONTAINING_RECORD(Node, MI_VAD, Node);
+                LONG64 Charge = MI_ATOMIC_READ64(&Vad->CommitCharge);
+
+                for (i = Count; i > 0 && Regions[i - 1].Charge < Charge; i--)
+                {
+                    if (i < RTL_NUMBER_OF(Regions))
+                        Regions[i] = Regions[i - 1];
+                }
+                if (i < RTL_NUMBER_OF(Regions))
+                {
+                    Regions[i].Start = Node->StartingVpn << PAGE_SHIFT;
+                    Regions[i].End = (Node->EndingVpn + 1) << PAGE_SHIFT;
+                    Regions[i].Charge = Charge;
+                    Regions[i].Protection = Vad->Protection;
+                    Regions[i].Type = Vad->Type;
+                    if (Count < RTL_NUMBER_OF(Regions))
+                        Count++;
+                }
+            }
+            MI_RW_RELEASE_SHARED(&Native->Space.Lock);
+        }
+        ObDereferenceObject(Process);
+        break;
+    }
+
+    for (i = 0; i < Count; i++)
+    {
+        DbgPrint("        %I64x-%I64x: %I64d pages, protection %lx, type %u\n",
+                 Regions[i].Start, Regions[i].End, Regions[i].Charge, Regions[i].Protection, Regions[i].Type);
+    }
+}
+
+static
+VOID
 NTAPI
 MiCommitReportWorker(
     _In_ PVOID Context)
@@ -210,6 +271,8 @@ MiCommitReportWorker(
              MI_ATOMIC_READ64(&MiSystem.SystemSpace.CommittedPages), Total);
     for (i = 0; i < Count; i++)
         DbgPrint("    %s (%Iu): %Iu pages\n", Names[i], (ULONG_PTR)Ids[i], Pages[i]);
+    if (Count != 0)
+        MiCommitReportRegions(Ids[0]);
 }
 
 static
