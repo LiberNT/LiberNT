@@ -5,6 +5,7 @@
  * PURPOSE:         Icon extraction
  *
  * PROGRAMMERS:     Hervé Poussineau (hpoussin@reactos.org)
+ *                  Ahmed ARIF (arif.ing@outlook.com)
  */
 
 #include "precomp.h"
@@ -339,12 +340,92 @@ HRESULT WINAPI SHCreateDefaultExtractIcon(REFIID riid, void **ppv)
     return ShellObjectCreator<CExtractIcon>(riid, ppv);
 }
 
-/*
- * Partially implemented
- * See apitests\shell32\SHCreateFileExtractIconW.cpp for details
- * Currently (march 2018) our shell does not handle IExtractIconW with an invalid path,
- * so this (wrong) implementation actually works better for us.
- */
+class CFileExtractIcon :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IExtractIconW,
+    public IExtractIconA
+{
+private:
+    CComHeapPtr<WCHAR> m_pszFile;
+    DWORD m_dwFileAttributes;
+
+    HRESULT ExtractFromSystemImageList(UINT nIconIndex, HICON *phiconLarge, HICON *phiconSmall)
+    {
+        HIMAGELIST himlLarge, himlSmall;
+
+        if (!Shell_GetImageLists(&himlLarge, &himlSmall))
+            return E_FAIL;
+        if (phiconLarge)
+            *phiconLarge = ImageList_GetIcon(himlLarge, nIconIndex, ILD_NORMAL);
+        if (phiconSmall)
+            *phiconSmall = ImageList_GetIcon(himlSmall, nIconIndex, ILD_NORMAL);
+        return S_OK;
+    }
+
+public:
+    CFileExtractIcon() : m_dwFileAttributes(0)
+    {
+    }
+
+    HRESULT Initialize(LPCWSTR pszFile, DWORD dwFileAttributes)
+    {
+        HRESULT hr = SHStrDupW(pszFile, &m_pszFile);
+        m_dwFileAttributes = dwFileAttributes;
+        return hr;
+    }
+
+    STDMETHOD(GetIconLocation)(UINT uFlags, LPWSTR szIconFile, UINT cchMax, int *piIndex, UINT *pwFlags) override
+    {
+        SHFILEINFOW shfi;
+
+        if (uFlags & GIL_DEFAULTICON)
+            return S_FALSE;
+        if (!szIconFile || !cchMax || !piIndex || !pwFlags)
+            return E_INVALIDARG;
+        if (!SHGetFileInfoW(m_pszFile, m_dwFileAttributes, &shfi, sizeof(shfi), SHGFI_USEFILEATTRIBUTES | SHGFI_SYSICONINDEX))
+            return E_FAIL;
+        HRESULT hr = StringCchCopyW(szIconFile, cchMax, L"*");
+        if (FAILED(hr))
+            return hr;
+        *piIndex = shfi.iIcon;
+        *pwFlags = GIL_NOTFILENAME | GIL_PERCLASS;
+        return S_OK;
+    }
+
+    STDMETHOD(Extract)(LPCWSTR pszFile, UINT nIconIndex, HICON *phiconLarge, HICON *phiconSmall, UINT nIconSize) override
+    {
+        if (pszFile && !wcscmp(pszFile, L"*"))
+            return ExtractFromSystemImageList(nIconIndex, phiconLarge, phiconSmall);
+        return SHDefExtractIconW(pszFile, nIconIndex, 0, phiconLarge, phiconSmall, nIconSize);
+    }
+
+    STDMETHOD(GetIconLocation)(UINT uFlags, LPSTR szIconFile, UINT cchMax, int *piIndex, UINT *pwFlags) override
+    {
+        WCHAR szIconFileW[MAX_PATH];
+
+        if (!szIconFile || !cchMax)
+            return E_INVALIDARG;
+        HRESULT hr = GetIconLocation(uFlags, szIconFileW, _countof(szIconFileW), piIndex, pwFlags);
+        if (hr != S_OK)
+            return hr;
+        if (!WideCharToMultiByte(CP_ACP, 0, szIconFileW, -1, szIconFile, cchMax, NULL, NULL))
+            return E_FAIL;
+        return S_OK;
+    }
+
+    STDMETHOD(Extract)(LPCSTR pszFile, UINT nIconIndex, HICON *phiconLarge, HICON *phiconSmall, UINT nIconSize) override
+    {
+        if (pszFile && !strcmp(pszFile, "*"))
+            return ExtractFromSystemImageList(nIconIndex, phiconLarge, phiconSmall);
+        return SHDefExtractIconA(pszFile, nIconIndex, 0, phiconLarge, phiconSmall, nIconSize);
+    }
+
+BEGIN_COM_MAP(CFileExtractIcon)
+    COM_INTERFACE_ENTRY_IID(IID_IExtractIconW, IExtractIconW)
+    COM_INTERFACE_ENTRY_IID(IID_IExtractIconA, IExtractIconA)
+END_COM_MAP()
+};
+
 EXTERN_C
 HRESULT
 WINAPI
@@ -354,24 +435,10 @@ SHCreateFileExtractIconW(
     _In_ REFIID riid,
     _Outptr_ void **ppv)
 {
-    SHFILEINFOW shfi;
-    ULONG_PTR firet = SHGetFileInfoW(pszFile, dwFileAttributes, &shfi, sizeof(shfi), SHGFI_USEFILEATTRIBUTES | SHGFI_ICONLOCATION);
-    HRESULT hr = E_FAIL;
-    if (firet)
-    {
-        CComPtr<IDefaultExtractIconInit> iconInit;
-        hr = SHCreateDefaultExtractIcon(IID_PPV_ARG(IDefaultExtractIconInit, &iconInit));
-        if (FAILED_UNEXPECTEDLY(hr))
-            return hr;
-
-        hr = iconInit->SetNormalIcon(shfi.szDisplayName, shfi.iIcon);
-        if (FAILED_UNEXPECTEDLY(hr))
-            return hr;
-
-        return iconInit->QueryInterface(riid, ppv);
-    }
-    if (FAILED_UNEXPECTEDLY(hr))
-        return hr;
-
-    return hr;
+    if (!ppv)
+        return E_POINTER;
+    *ppv = NULL;
+    if (!pszFile)
+        return E_INVALIDARG;
+    return ShellObjectCreatorInit<CFileExtractIcon>(pszFile, dwFileAttributes, riid, ppv);
 }
