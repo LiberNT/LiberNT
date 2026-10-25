@@ -127,6 +127,9 @@ struct reactos_stream
     UINT32 rt_period_index;
     UINT32 rt_capture_frame;
     BOOL rt_refill_ready;
+    BOOL rt_client_writes;
+    UINT32 rt_write_period;
+    UINT32 rt_locked_period;
     ULONG rt_next_packet_number;
     UINT32 rt_period_queued_frames[REACTOS_RT_NOTIFICATION_COUNT];
     UINT64 position_qpc_100ns;
@@ -1214,6 +1217,7 @@ static void cleanup_wavert(struct reactos_stream *stream)
     stream->rt_period_frames = 0;
     stream->rt_period_index = 0;
     stream->rt_refill_ready = FALSE;
+    stream->rt_client_writes = FALSE;
     stream->rt_next_packet_number = 0;
     ZeroMemory(stream->rt_period_queued_frames, sizeof(stream->rt_period_queued_frames));
     if (stream->rt_event)
@@ -1837,6 +1841,28 @@ static BOOL refill_cyclic_period(struct reactos_stream *stream)
                                        position.WriteOffset, &progress))
         return FALSE;
 
+    if (stream->rt_client_writes)
+    {
+        if (progress.advanced)
+        {
+            stream->position += stream->rt_period_frames;
+            stream->completed_render_frames += stream->rt_period_queued_frames[progress.released];
+            stream->position_qpc_100ns = query_performance_time_100ns();
+            stream->rt_period_queued_frames[progress.released] = 0;
+            stream->rt_period_index = progress.playing;
+            ZeroMemory(stream->rt_buffer +
+                           (SIZE_T)progress.released * stream->rt_period_frames * stream->device_frame_size,
+                       (SIZE_T)stream->rt_period_frames * stream->device_frame_size);
+            MemoryBarrier();
+            stream->rt_write_period = progress.released;
+            stream->rt_refill_ready = TRUE;
+            stream->padding = 0;
+            if (stream->event)
+                SetEvent(stream->event);
+        }
+        return progress.advanced;
+    }
+
     if (progress.advanced)
     {
         completed_frames = stream->rt_period_queued_frames[progress.released];
@@ -1879,6 +1905,32 @@ static BOOL prime_wavert_buffer(struct reactos_stream *stream)
     stream->rt_refill_ready = FALSE;
     stream->rt_next_packet_number = 0;
     return TRUE;
+}
+
+static void prime_client_wavert_buffer(struct reactos_stream *stream)
+{
+    SIZE_T period_bytes = (SIZE_T)stream->rt_period_frames * stream->device_frame_size;
+
+    if (stream->rt_refill_ready)
+    {
+        ZeroMemory(stream->rt_buffer + stream->rt_write_period * period_bytes, period_bytes);
+        stream->rt_period_queued_frames[stream->rt_write_period] = 0;
+    }
+    if (stream->rt_write_period)
+    {
+        CopyMemory(stream->rt_buffer, stream->rt_buffer + stream->rt_write_period * period_bytes, period_bytes);
+        stream->rt_period_queued_frames[0] = stream->rt_period_queued_frames[stream->rt_write_period];
+    }
+    ZeroMemory(stream->rt_buffer + period_bytes, period_bytes);
+    stream->rt_period_queued_frames[1] = 0;
+    MemoryBarrier();
+
+    stream->rt_period_index = 0;
+    stream->rt_write_period = 1;
+    stream->rt_refill_ready = TRUE;
+    stream->padding = 0;
+    if (stream->event)
+        SetEvent(stream->event);
 }
 
 static BOOL set_wavert_write_packet(struct reactos_stream *stream,
@@ -2177,6 +2229,8 @@ static HRESULT start_physical_stream(struct reactos_stream *stream)
         EnterCriticalSection(&stream->lock);
         if (stream->flow == eCapture)
             stream->rt_capture_frame = 0;
+        else if (stream->rt_client_writes)
+            prime_client_wavert_buffer(stream);
         else if (!prime_wavert_buffer(stream))
         {
             stream->started = FALSE;
@@ -2217,7 +2271,7 @@ static HRESULT start_physical_stream(struct reactos_stream *stream)
             return E_FAIL;
         }
         SetThreadPriority(stream->timer_thread, THREAD_PRIORITY_TIME_CRITICAL);
-        if (stream->event && stream->flow != eCapture)
+        if (stream->event && stream->flow != eCapture && !stream->rt_client_writes)
             SetEvent(stream->event);
         return S_OK;
     }
@@ -2489,6 +2543,7 @@ static NTSTATUS reactos_create_stream(struct create_stream_params *params)
     BOOL capture_conversion = FALSE;
     BOOL render_conversion = FALSE;
     BOOL shared_render;
+    BOOL exclusive_event;
     EDataFlow flow;
     DWORD index;
     UINT32 i;
@@ -2497,6 +2552,14 @@ static NTSTATUS reactos_create_stream(struct create_stream_params *params)
     if (!parse_device_name(params->device, &flow, &index) || flow != params->flow)
     {
         params->result = AUDCLNT_E_DEVICE_INVALIDATED;
+        return STATUS_SUCCESS;
+    }
+
+    exclusive_event = params->share == AUDCLNT_SHAREMODE_EXCLUSIVE &&
+                      (params->flags & AUDCLNT_STREAMFLAGS_EVENTCALLBACK);
+    if (exclusive_event && flow != eRender)
+    {
+        params->result = AUDCLNT_E_DEVICE_IN_USE;
         return STATUS_SUCCESS;
     }
 
@@ -2587,6 +2650,9 @@ static NTSTATUS reactos_create_stream(struct create_stream_params *params)
         stream->period_frames = 1;
     stream->device_period_frames = (UINT32)(((UINT64)stream->device_format.Format.nSamplesPerSec *
                                              REACTOS_DEFAULT_PERIOD) / 10000000);
+    if (exclusive_event)
+        stream->device_period_frames = (UINT32)(((UINT64)stream->device_format.Format.nSamplesPerSec *
+                                                 params->period + 5000000) / 10000000);
     if (!stream->device_period_frames)
         stream->device_period_frames = 1;
     if (params->duration <= 0 ||
@@ -2633,6 +2699,19 @@ static NTSTATUS reactos_create_stream(struct create_stream_params *params)
     {
         params->result = hr;
         goto failed;
+    }
+
+    if (exclusive_event)
+    {
+        if (!stream->rt_enabled || stream->rt_packet_mode)
+        {
+            params->result = AUDCLNT_E_DEVICE_IN_USE;
+            goto failed;
+        }
+        stream->rt_client_writes = TRUE;
+        stream->rt_write_period = 0;
+        stream->rt_refill_ready = TRUE;
+        stream->buffer_frames = stream->rt_period_frames;
     }
 
     if (stream->flow == eRender && !stream->shared_render &&
@@ -2724,6 +2803,12 @@ static NTSTATUS reactos_start(struct start_params *params)
     if (!stream)
     {
         params->result = AUDCLNT_E_DEVICE_INVALIDATED;
+        return STATUS_SUCCESS;
+    }
+
+    if (stream->rt_client_writes && !stream->event)
+    {
+        params->result = AUDCLNT_E_EVENTHANDLE_NOT_SET;
         return STATUS_SUCCESS;
     }
 
@@ -2858,6 +2943,9 @@ static NTSTATUS reactos_reset(struct reset_params *params)
     stream->render_locked = FALSE;
     stream->render_locked_frames = 0;
     stream->rt_period_index = 0;
+    stream->rt_write_period = 0;
+    if (stream->rt_client_writes)
+        stream->rt_refill_ready = TRUE;
     ZeroMemory(stream->rt_period_queued_frames, sizeof(stream->rt_period_queued_frames));
     if (stream->rt_buffer)
     {
@@ -2919,6 +3007,23 @@ static NTSTATUS reactos_get_render_buffer(struct get_render_buffer_params *param
     if (!params->frames)
     {
         *params->data = NULL;
+        LeaveCriticalSection(&stream->lock);
+        params->result = S_OK;
+        return STATUS_SUCCESS;
+    }
+    if (stream->rt_client_writes)
+    {
+        if (!stream->rt_refill_ready || params->frames > stream->buffer_frames)
+        {
+            LeaveCriticalSection(&stream->lock);
+            params->result = AUDCLNT_E_BUFFER_TOO_LARGE;
+            return STATUS_SUCCESS;
+        }
+        stream->render_locked = TRUE;
+        stream->render_locked_frames = params->frames;
+        stream->rt_locked_period = stream->rt_write_period;
+        *params->data = stream->rt_buffer +
+                        (SIZE_T)stream->rt_locked_period * stream->rt_period_frames * stream->device_frame_size;
         LeaveCriticalSection(&stream->lock);
         params->result = S_OK;
         return STATUS_SUCCESS;
@@ -3048,6 +3153,44 @@ static NTSTATUS reactos_release_render_buffer(struct release_render_buffer_param
     {
         LeaveCriticalSection(&stream->lock);
         params->result = AUDCLNT_E_INVALID_SIZE;
+        return STATUS_SUCCESS;
+    }
+
+    if (stream->rt_client_writes)
+    {
+        BYTE *data = stream->rt_buffer +
+                     (SIZE_T)stream->rt_locked_period * stream->rt_period_frames * stream->device_frame_size;
+
+        stream->render_locked = FALSE;
+        stream->render_locked_frames = 0;
+        if (stream->render_error)
+        {
+            LeaveCriticalSection(&stream->lock);
+            params->result = AUDCLNT_E_DEVICE_INVALIDATED;
+            return STATUS_SUCCESS;
+        }
+        if (params->written_frames)
+        {
+            if (params->flags & AUDCLNT_BUFFERFLAGS_SILENT)
+                FillMemory(data, (SIZE_T)params->written_frames * stream->frame_size,
+                           stream->format.Format.wBitsPerSample == 8 ? 0x80 : 0);
+            else
+                apply_render_volume(stream, data, params->written_frames);
+            if (params->written_frames < stream->rt_period_frames)
+                ZeroMemory(data + (SIZE_T)params->written_frames * stream->frame_size,
+                           (SIZE_T)(stream->rt_period_frames - params->written_frames) * stream->frame_size);
+            stream->rt_period_queued_frames[stream->rt_locked_period] = params->written_frames;
+            if (stream->rt_locked_period == stream->rt_write_period)
+            {
+                stream->rt_refill_ready = FALSE;
+                stream->padding = stream->buffer_frames;
+                if (stream->event)
+                    ResetEvent(stream->event);
+            }
+            MemoryBarrier();
+        }
+        LeaveCriticalSection(&stream->lock);
+        params->result = S_OK;
         return STATUS_SUCCESS;
     }
 
@@ -3530,7 +3673,7 @@ static void reactos_render_rt_timer_loop(struct reactos_stream *stream)
             BOOL advanced = refill_cyclic_period(stream);
 
             LeaveCriticalSection(&stream->lock);
-            if (advanced && stream->event)
+            if (advanced && stream->event && !stream->rt_client_writes)
                 SetEvent(stream->event);
             continue;
         }
