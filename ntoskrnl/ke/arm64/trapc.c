@@ -2912,6 +2912,27 @@ KiArm64HandleSynchronousException(
             goto HandledExit;
         }
 
+        /* User-mode MRS/MSR of a privileged system register: Windows 11 raises
+           STATUS_ILLEGAL_INSTRUCTION (no emulation), and pico providers such as
+           lxcore emulate the ID register reads, so this is not an unhandled trap. */
+        case 0x18:
+        {
+            EXCEPTION_RECORD ExceptionRecord;
+            KPROCESSOR_MODE Mode = KiArm64PreviousModeFromVector(Context->State.VectorId);
+
+            if (Mode == UserMode)
+            {
+                if (!KiArm64TryEmulateCurrentEl(Context, TrapFrame, Mode))
+                {
+                    RtlZeroMemory(&ExceptionRecord, sizeof(ExceptionRecord));
+                    ExceptionRecord.ExceptionCode = STATUS_ILLEGAL_INSTRUCTION;
+                    ExceptionRecord.ExceptionAddress = (PVOID)(ULONG_PTR)Context->State.Elr;
+                    KiDispatchException(&ExceptionRecord, Context->ExceptionFramePointer, TrapFrame, Mode, TRUE);
+                }
+                goto HandledExit;
+            }
+        }
+
         default:
         {
             EXCEPTION_RECORD ExceptionRecord;
