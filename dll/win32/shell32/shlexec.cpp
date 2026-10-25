@@ -2036,10 +2036,12 @@ static UINT_PTR SHELL_execute_class(LPCWSTR wszApplicationName, LPSHELLEXECUTEIN
 
 }
 
-static BOOL SHELL_translate_idlist(LPSHELLEXECUTEINFOW sei, LPWSTR wszParameters, DWORD parametersLen, LPWSTR wszApplicationName, DWORD dwApplicationNameLen)
+static BOOL SHELL_translate_idlist(LPSHELLEXECUTEINFOW sei, LPWSTR wszParameters, DWORD parametersLen, LPWSTR wszApplicationName, DWORD dwApplicationNameLen, BOOL *pbVerbResolved)
 {
     WCHAR buffer[MAX_PATH];
     BOOL appKnownSingular = FALSE;
+
+    *pbVerbResolved = FALSE;
 
     /* last chance to translate IDList: now also allow CLSID paths */
     if (SUCCEEDED(SHELL_GetPathFromIDListForExecuteW((LPCITEMIDLIST)sei->lpIDList, buffer, ARRAY_SIZE(buffer)))) {
@@ -2067,6 +2069,7 @@ static BOOL SHELL_translate_idlist(LPSHELLEXECUTEINFOW sei, LPWSTR wszParameters
                 lstrcpynW(wszParameters, params, parametersLen);
                 PathRemoveArgsW(wszApplicationName);
                 PathUnquoteSpacesW(wszApplicationName);
+                *pbVerbResolved = TRUE;
             }
             else
             {
@@ -2106,6 +2109,7 @@ static BOOL SHELL_translate_idlist(LPSHELLEXECUTEINFOW sei, LPWSTR wszParameters
                 PathRemoveArgsW(wszApplicationName);
                 PathUnquoteSpacesW(wszApplicationName);
                 appKnownSingular = TRUE;
+                *pbVerbResolved = TRUE;
             }
             sei->fMask &= ~SEE_MASK_INVOKEIDLIST;
         }
@@ -2298,7 +2302,7 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
 
     DWORD len;
     UINT_PTR retval = SE_ERR_NOASSOC;
-    BOOL appKnownSingular = FALSE;
+    BOOL appKnownSingular = FALSE, bVerbResolved = FALSE;
 
     /* make a local copy of the LPSHELLEXECUTEINFO structure and work with this from now on */
     sei->hProcess = NULL;
@@ -2554,7 +2558,8 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
         appKnownSingular = SHELL_translate_idlist( &sei_tmp, wszParameters,
                            parametersLen,
                            wszApplicationName,
-                           dwApplicationNameLen );
+                           dwApplicationNameLen,
+                           &bVerbResolved );
     }
 
     /* convert file URLs */
@@ -2629,7 +2634,7 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
     CHeapPtr<WCHAR, CLocalAllocator> wcmdAlloc;
 
     /* Only execute if it has an executable extension */
-    if (PathIsExeW(lpFile) && (!sei_tmp.lpVerb || !*sei_tmp.lpVerb))
+    if (PathIsExeW(lpFile) && (!sei_tmp.lpVerb || !*sei_tmp.lpVerb || bVerbResolved))
     {
         WCHAR wszExePath[MAX_PATH];
         LPCWSTR SearchPaths[] = { sei_tmp.lpDirectory, NULL };
