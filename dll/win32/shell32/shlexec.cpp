@@ -751,7 +751,7 @@ static UINT_PTR SHELL_ExecuteW(const WCHAR *lpCmd, WCHAR *env, BOOL shWait,
         if (shWait)
             if (WaitForInputIdle(info.hProcess, 30000) == WAIT_FAILED)
                 WARN("WaitForInputIdle failed: Error %d\n", GetLastError() );
-        retval = 33;
+        retval = 42;
 
         if (psei->fMask & SEE_MASK_NOCLOSEPROCESS)
             psei_out->hProcess = info.hProcess;
@@ -2752,8 +2752,8 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
 
     if (retval <= 32)
         retval = ExecuteFailed(retval, *sei, lpFile);
-
-    sei->hInstApp = (HINSTANCE)(retval > 32 ? 33 : retval);
+    else
+        sei->hInstApp = (HINSTANCE)retval;
     return retval > 32;
 }
 
