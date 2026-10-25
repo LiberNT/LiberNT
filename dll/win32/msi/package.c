@@ -1706,6 +1706,15 @@ UINT WINAPI MsiOpenPackageExW( const WCHAR *szPackage, DWORD dwOptions, MSIHANDL
     if( dwOptions )
         FIXME( "dwOptions %#lx not supported\n", dwOptions );
 
+#ifdef __REACTOS__
+    if (szPackage[0] != '#' && PathIsRelativeW( szPackage ) && !UrlIsW( szPackage, URLIS_URL ) &&
+        GetFileAttributesW( szPackage ) != INVALID_FILE_ATTRIBUTES)
+    {
+        MSI_ProcessMessage( NULL, INSTALLMESSAGE_INITIALIZE, 0 );
+        MSI_ProcessMessage( NULL, INSTALLMESSAGE_TERMINATE, 0 );
+        return ERROR_INSTALL_PACKAGE_OPEN_FAILED;
+    }
+#endif
     ret = MSI_OpenPackageW( szPackage, 0, &package );
     if( ret == ERROR_SUCCESS )
     {
