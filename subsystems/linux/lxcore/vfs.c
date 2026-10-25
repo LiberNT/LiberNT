@@ -963,7 +963,11 @@ LxInstanceDereference(
         if (Mount->PidNs != NULL)
             LxNsDereference(Mount->PidNs);
         if (Mount->NsFile != NULL)
+        {
+            if (Mount->Kind == LxFsMqueue)
+                InterlockedDecrement(&Mount->NsFile->PassiveRefs);
             LxNsDereference(Mount->NsFile);
+        }
         LxFree(Mount->Target);
         LxFree(Mount->Source);
         LxFree(Mount->FsType);
@@ -1118,6 +1122,7 @@ LxMountInheritNamespaces(
     {
         Mount->NsFile = LxProcessNs(Process, LxNsIpc);
         LxNsReference(Mount->NsFile);
+        InterlockedIncrement(&Mount->NsFile->PassiveRefs);
     }
 }
 
@@ -1383,7 +1388,11 @@ LxMountClone(
     if (Mount->PidNs != NULL)
         LxNsReference(Mount->PidNs);
     if (Mount->NsFile != NULL)
+    {
         LxNsReference(Mount->NsFile);
+        if (Mount->Kind == LxFsMqueue)
+            InterlockedIncrement(&Mount->NsFile->PassiveRefs);
+    }
     Mount->PeerGroup = Source->PeerGroup;
     Mount->MasterGroup = Source->MasterGroup;
     LxMountInsert(Ns, Mount, TRUE);
@@ -1995,7 +2004,11 @@ LxMountNsCopy(
         if (Copy->PidNs != NULL)
             LxNsReference(Copy->PidNs);
         if (Copy->NsFile != NULL)
+        {
             LxNsReference(Copy->NsFile);
+            if (Copy->Kind == LxFsMqueue)
+                InterlockedIncrement(&Copy->NsFile->PassiveRefs);
+        }
         Copy->Instance = Instance;
         Copy->Ns = New;
     }

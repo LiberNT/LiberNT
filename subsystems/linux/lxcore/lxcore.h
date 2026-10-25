@@ -288,6 +288,7 @@ struct _LX_MOUNT
 struct _LX_NS
 {
     volatile LONG RefCount;
+    volatile LONG PassiveRefs;
     LIST_ENTRY Link;
     LX_NS_KIND Kind;
     ULONG64 Inum;

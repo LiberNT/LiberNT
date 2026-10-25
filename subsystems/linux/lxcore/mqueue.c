@@ -340,6 +340,10 @@ LxMqOpenNamed(
     {
         Error = -LX_ENOENT;
     }
+    else if (IpcNs->RefCount <= IpcNs->PassiveRefs)
+    {
+        Error = -LX_EACCES;
+    }
     else if (Namespace == NULL)
     {
         Error = -LX_ENOMEM;
