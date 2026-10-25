@@ -1670,7 +1670,11 @@ static BOOL register_classes( HINSTANCE instance )
     {
         wcW.lpszClassName = RICHEDIT_CLASS20W;
         if (!RegisterClassW( &wcW )) return FALSE;
+#ifdef __REACTOS__
+        wcW.lpszClassName = L"RICHEDIT50W";
+#else
         wcW.lpszClassName = MSFTEDIT_CLASS;
+#endif
         if (!RegisterClassW( &wcW )) return FALSE;
     }
     else
