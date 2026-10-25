@@ -1114,15 +1114,16 @@ MountMgrValidateBackPointer(IN PASSOCIATED_DEVICE_ENTRY AssociatedDeviceEntry,
     }
 
     /* Create a string with the substitute name */
-    SubstituteName.Length = ReparseData->SymbolicLinkReparseBuffer.SubstituteNameLength;
+    SubstituteName.Length = ReparseData->MountPointReparseBuffer.SubstituteNameLength;
     SubstituteName.MaximumLength = SubstituteName.Length;
-    SubstituteName.Buffer = (PWSTR)((ULONG_PTR)ReparseData->SymbolicLinkReparseBuffer.PathBuffer + ReparseData->SymbolicLinkReparseBuffer.SubstituteNameOffset);
+    SubstituteName.Buffer = (PWSTR)((ULONG_PTR)ReparseData->MountPointReparseBuffer.PathBuffer + ReparseData->MountPointReparseBuffer.SubstituteNameOffset);
 
     /* If that's a volume name that matches our associated device, that's a success! */
     if (MOUNTMGR_IS_VOLUME_NAME(&SubstituteName))
     {
         if (SubstituteName.Length == 98 && SubstituteName.Buffer[1] == L'?')
         {
+            SubstituteName.Length -= sizeof(WCHAR);
             for (SymlinksEntry = DeviceInformation->SymbolicLinksListHead.Flink;
                  SymlinksEntry != &(DeviceInformation->SymbolicLinksListHead);
                  SymlinksEntry = SymlinksEntry->Flink)
@@ -1339,7 +1340,7 @@ MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
         /* Move the next pointer to use in the array */
         ++CurrentPath;
         /* Multiply String.Length by the number of found paths, we always add it after a path */
-        OutputPathLength += (*CurrentPath)->MultiSzLength + InnerStrings * AssociatedDeviceEntry->String.Length - sizeof(UNICODE_NULL);
+        OutputPathLength += CurrentPath[-1]->MultiSzLength + InnerStrings * AssociatedDeviceEntry->String.Length - sizeof(UNICODE_NULL);
     }
 
     /* Allocate the output buffer */
@@ -1423,6 +1424,7 @@ MountMgrQueryVolumePaths(IN PDEVICE_EXTENSION DeviceExtension,
 
     /* MultiSz: don't forget last null char */
     (*VolumePaths)->MultiSz[Written] = UNICODE_NULL;
+    (*VolumePaths)->MultiSzLength = (Written + 1) * sizeof(WCHAR);
     /* Cleanup everything and return success! */
     if (Paths != NULL)
     {
