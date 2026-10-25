@@ -1095,6 +1095,13 @@ static BOOL duplicate_stream_pin(struct reactos_stream *stream)
     return stream->user_pin && stream->user_pin != INVALID_HANDLE_VALUE;
 }
 
+static void fill_rt_silence(const struct reactos_stream *stream, BYTE *data, UINT32 frames)
+{
+    FillMemory(data, (SIZE_T)frames * stream->device_frame_size,
+               is_pcm_format(&stream->device_format.Format) &&
+                   stream->device_format.Format.wBitsPerSample == 8 ? 0x80 : 0);
+}
+
 static BOOL initialize_wavert(struct reactos_stream *stream)
 {
     REACTOS_KSRTAUDIO_BUFFER_PROPERTY property;
@@ -1145,7 +1152,7 @@ static BOOL initialize_wavert(struct reactos_stream *stream)
     stream->rt_buffer_frames = buffer.ActualBufferSize / stream->device_frame_size;
     stream->rt_period_frames = stream->rt_buffer_frames / REACTOS_RT_NOTIFICATION_COUNT;
     ZeroMemory(stream->rt_period_queued_frames, sizeof(stream->rt_period_queued_frames));
-    ZeroMemory(stream->rt_buffer, buffer.ActualBufferSize);
+    fill_rt_silence(stream, stream->rt_buffer, stream->rt_buffer_frames);
     MemoryBarrier();
 
     stream->rt_event = CreateEventW(NULL, FALSE, FALSE, NULL);
@@ -1845,7 +1852,7 @@ static void release_client_period(struct reactos_stream *stream, UINT32 period)
 
     if (!locked)
     {
-        ZeroMemory(rt_period_data(stream, period), (SIZE_T)stream->rt_period_frames * stream->device_frame_size);
+        fill_rt_silence(stream, rt_period_data(stream, period), stream->rt_period_frames);
         stream->rt_period_queued_frames[period] = 0;
         MemoryBarrier();
     }
@@ -1986,7 +1993,7 @@ static void prime_client_wavert_buffer(struct reactos_stream *stream)
 
     if (stream->rt_write_period == stream->rt_period_index)
     {
-        ZeroMemory(rt_period_data(stream, next), (SIZE_T)stream->rt_period_frames * stream->device_frame_size);
+        fill_rt_silence(stream, rt_period_data(stream, next), stream->rt_period_frames);
         stream->rt_period_queued_frames[next] = 0;
         MemoryBarrier();
         stream->rt_write_period = next;
@@ -2785,7 +2792,7 @@ static NTSTATUS reactos_create_stream(struct create_stream_params *params)
         stream->buffer_frames = stream->rt_period_frames;
     }
 
-    if (stream->flow == eRender && !stream->shared_render &&
+    if (stream->flow == eRender && !stream->shared_render && !stream->rt_client_writes &&
         !initialize_render_queue(stream))
     {
         params->result = E_OUTOFMEMORY;
@@ -3028,8 +3035,7 @@ static NTSTATUS reactos_reset(struct reset_params *params)
     ZeroMemory(stream->rt_period_queued_frames, sizeof(stream->rt_period_queued_frames));
     if (stream->rt_buffer)
     {
-        ZeroMemory(stream->rt_buffer,
-                   stream->rt_buffer_frames * stream->device_frame_size);
+        fill_rt_silence(stream, stream->rt_buffer, stream->rt_buffer_frames);
         MemoryBarrier();
     }
     if (stream->render_ring)
@@ -3092,7 +3098,13 @@ static NTSTATUS reactos_get_render_buffer(struct get_render_buffer_params *param
     }
     if (stream->rt_client_writes)
     {
-        if (!stream->rt_refill_ready || params->frames > stream->buffer_frames)
+        if (params->frames != stream->buffer_frames)
+        {
+            LeaveCriticalSection(&stream->lock);
+            params->result = AUDCLNT_E_BUFFER_SIZE_ERROR;
+            return STATUS_SUCCESS;
+        }
+        if (!stream->rt_refill_ready)
         {
             LeaveCriticalSection(&stream->lock);
             params->result = AUDCLNT_E_BUFFER_TOO_LARGE;
@@ -3101,8 +3113,7 @@ static NTSTATUS reactos_get_render_buffer(struct get_render_buffer_params *param
         stream->render_locked = TRUE;
         stream->render_locked_frames = params->frames;
         stream->rt_locked_period = stream->rt_write_period;
-        *params->data = stream->rt_buffer +
-                        (SIZE_T)stream->rt_locked_period * stream->rt_period_frames * stream->device_frame_size;
+        *params->data = rt_period_data(stream, stream->rt_locked_period);
         LeaveCriticalSection(&stream->lock);
         params->result = S_OK;
         return STATUS_SUCCESS;
@@ -3237,8 +3248,7 @@ static NTSTATUS reactos_release_render_buffer(struct release_render_buffer_param
 
     if (stream->rt_client_writes)
     {
-        BYTE *data = stream->rt_buffer +
-                     (SIZE_T)stream->rt_locked_period * stream->rt_period_frames * stream->device_frame_size;
+        BYTE *data = rt_period_data(stream, stream->rt_locked_period);
 
         stream->render_locked = FALSE;
         stream->render_locked_frames = 0;
@@ -3248,16 +3258,12 @@ static NTSTATUS reactos_release_render_buffer(struct release_render_buffer_param
             params->result = AUDCLNT_E_DEVICE_INVALIDATED;
             return STATUS_SUCCESS;
         }
+        if (params->flags & AUDCLNT_BUFFERFLAGS_SILENT)
+            fill_rt_silence(stream, data, params->written_frames);
+        fill_rt_silence(stream, data + (SIZE_T)params->written_frames * stream->device_frame_size,
+                        stream->rt_period_frames - params->written_frames);
         if (params->written_frames)
         {
-            if (params->flags & AUDCLNT_BUFFERFLAGS_SILENT)
-                FillMemory(data, (SIZE_T)params->written_frames * stream->frame_size,
-                           stream->format.Format.wBitsPerSample == 8 ? 0x80 : 0);
-            else
-                apply_render_volume(stream, data, params->written_frames);
-            if (params->written_frames < stream->rt_period_frames)
-                ZeroMemory(data + (SIZE_T)params->written_frames * stream->frame_size,
-                           (SIZE_T)(stream->rt_period_frames - params->written_frames) * stream->frame_size);
             stream->rt_period_queued_frames[stream->rt_locked_period] = params->written_frames;
             if (stream->rt_locked_period == stream->rt_write_period)
             {
