@@ -18,6 +18,9 @@
  */
 
 #include "private.h"
+#ifdef __REACTOS__
+#include "appmodel.h"
+#endif
 #include "wine/debug.h"
 
 #include "pathcch.h"
@@ -500,9 +503,19 @@ static HRESULT WINAPI package_statics_get_Current( IPackageStatics *iface, IPack
 {
     struct package *impl;
 
+#ifdef __REACTOS__
+    UINT32 length = 0;
+    LONG error;
+#endif
+
     TRACE( "iface %p, value %p\n", iface, value );
 
     if (!value) return E_INVALIDARG;
+#ifdef __REACTOS__
+    *value = NULL;
+    if ((error = GetCurrentPackageFullName( &length, NULL )) == APPMODEL_ERROR_NO_PACKAGE)
+        return HRESULT_FROM_WIN32( error );
+#endif
     if (!(impl = calloc( 1, sizeof(*impl) ))) return E_OUTOFMEMORY;
 
     impl->IPackage_iface.lpVtbl = &package_vtbl;
