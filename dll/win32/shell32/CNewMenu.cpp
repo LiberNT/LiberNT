@@ -726,8 +726,13 @@ CNewMenu::QueryContextMenu(HMENU hMenu,
     UINT cItems = 0;
     WCHAR wszNew[200];
 
+    WCHAR wszPath[MAX_PATH];
+
     TRACE("%p %p %u %u %u %u\n", this,
           hMenu, indexMenu, idCmdFirst, idCmdLast, uFlags);
+
+    if (!m_pidlFolder || !SHGetPathFromIDListW(m_pidlFolder, wszPath))
+        return MAKE_HRESULT(SEVERITY_SUCCESS, 0, 0);
 
     if (!LoadStringW(shell32_hInstance, FCIDM_SHVIEW_NEW, wszNew, _countof(wszNew)))
         return E_FAIL;
@@ -736,13 +741,14 @@ CNewMenu::QueryContextMenu(HMENU hMenu,
     if (!m_hSubMenu)
         return E_FAIL;
 
-    cItems = InsertShellNewItems(m_hSubMenu, idCmdFirst, 0);
+    cItems = InsertShellNewItems(m_hSubMenu, idCmdFirst + 1, 0);
+    m_idCmdFirst = idCmdFirst;
 
     ZeroMemory(&mii, sizeof(mii));
     mii.cbSize = sizeof(mii);
     mii.fMask = MIIM_TYPE | MIIM_ID | MIIM_STATE | MIIM_SUBMENU;
     mii.fType = MFT_STRING;
-    mii.wID = -1;
+    mii.wID = idCmdFirst;
     mii.dwTypeData = wszNew;
     mii.cch = wcslen(mii.dwTypeData);
     mii.fState = MFS_ENABLED;
@@ -751,7 +757,7 @@ CNewMenu::QueryContextMenu(HMENU hMenu,
     if (!InsertMenuItemW(hMenu, indexMenu, TRUE, &mii))
         return E_FAIL;
 
-    return MAKE_HRESULT(SEVERITY_SUCCESS, 0, cItems);
+    return MAKE_HRESULT(SEVERITY_SUCCESS, 0, max(0x40, cItems + 1));
 }
 
 HRESULT
@@ -866,6 +872,9 @@ CNewMenu::Initialize(PCIDLIST_ABSOLUTE pidlFolder,
     const INT cx = GetSystemMetrics(SM_CXSMICON), cy = GetSystemMetrics(SM_CYSMICON);
     WCHAR wszIconPath[MAX_PATH];
     int icon_idx;
+
+    if (!pidlFolder)
+        return E_INVALIDARG;
 
     m_pidlFolder = ILClone(pidlFolder);
 
