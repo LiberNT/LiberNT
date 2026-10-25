@@ -213,7 +213,7 @@ public:
         m_pidlRoot.Attach(ILClone(pidl));
         if (!m_pidlRoot)
             return E_OUTOFMEMORY;
-        if (SHGetPathFromIDListW(pidl, szPath))
+        if ((_ILGetFSType(ILFindLastID(pidl)) & PT_FS) && SHGetPathFromIDListW(pidl, szPath))
         {
             WCHAR szLink[MAX_PATH];
             StringCchCopyW(m_szFolderPath, _countof(m_szFolderPath), szPath);
