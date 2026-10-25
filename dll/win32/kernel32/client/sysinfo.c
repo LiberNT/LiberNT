@@ -269,7 +269,6 @@ GetNativeSystemInfo(IN LPSYSTEM_INFO lpSystemInfo)
         if (Machines[Index].Machine == IMAGE_FILE_MACHINE_AMD64 && Machines[Index].UserMode)
         {
             lpSystemInfo->wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64;
-            lpSystemInfo->dwProcessorType = PROCESSOR_AMD_X8664;
             break;
         }
     }

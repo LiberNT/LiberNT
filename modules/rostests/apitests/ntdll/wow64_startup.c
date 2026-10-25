@@ -500,7 +500,7 @@ static VOID TestEmulatedSystemInfo(VOID)
     ok_hex(Info.wProcessorArchitecture, PROCESSOR_ARCHITECTURE_INTEL);
     GetNativeSystemInfo(&Info);
     ok_hex(Info.wProcessorArchitecture, PROCESSOR_ARCHITECTURE_AMD64);
-    ok_hex(Info.dwProcessorType, PROCESSOR_AMD_X8664);
+    ok_hex(Info.dwProcessorType, PROCESSOR_INTEL_PENTIUM);
 }
 
 #elif defined(_WIN64)
