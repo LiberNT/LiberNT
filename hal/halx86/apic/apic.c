@@ -15,6 +15,7 @@
 
 #include <hal.h>
 #include "apicp.h"
+#include <smp.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -28,6 +29,22 @@ ULONG ApicVersion;
 UCHAR HalpVectorToIndex[256];
 ULONG HalpIoApicMaxIrq = APIC_MAX_IRQ;
 BOOLEAN HalpApicHvMsrs;
+
+extern HALP_APIC_INFO_TABLE HalpApicInfoTable;
+
+typedef struct _HALP_IOAPIC
+{
+    ULONG_PTR Base;
+    ULONG GsiBase;
+    ULONG PinCount;
+    ULONG SavedId;
+} HALP_IOAPIC, *PHALP_IOAPIC;
+
+#define HALP_NO_IOAPIC 0xFF
+
+static HALP_IOAPIC HalpIoApics[APIC_MAX_GSI_PINS];
+static ULONG HalpIoApicCount;
+static UCHAR HalpGsiToIoApic[APIC_MAX_GSI_PINS];
 
 /* The shared IOREGSEL/IOWIN select/access pair must not interleave between
    CPUs, and level lines are masked from interrupt context: any-IRQL lock. */
@@ -113,39 +130,55 @@ HalVectorToIRQL[16] =
 /* Raw select/access pairs — caller must hold the pair lock */
 FORCEINLINE
 ULONG
-IOApicReadRaw(UCHAR Register)
+IOApicReadRaw(ULONG_PTR Base, UCHAR Register)
 {
-    WRITE_REGISTER_ULONG((PULONG)(IOAPIC_BASE + IOAPIC_IOREGSEL), Register);
-    return READ_REGISTER_ULONG((PULONG)(IOAPIC_BASE + IOAPIC_IOWIN));
+    WRITE_REGISTER_ULONG((PULONG)(Base + IOAPIC_IOREGSEL), Register);
+    return READ_REGISTER_ULONG((PULONG)(Base + IOAPIC_IOWIN));
 }
 
 FORCEINLINE
 VOID
-IOApicWriteRaw(UCHAR Register, ULONG Value)
+IOApicWriteRaw(ULONG_PTR Base, UCHAR Register, ULONG Value)
 {
-    WRITE_REGISTER_ULONG((PULONG)(IOAPIC_BASE + IOAPIC_IOREGSEL), Register);
-    WRITE_REGISTER_ULONG((PULONG)(IOAPIC_BASE + IOAPIC_IOWIN), Value);
+    WRITE_REGISTER_ULONG((PULONG)(Base + IOAPIC_IOREGSEL), Register);
+    WRITE_REGISTER_ULONG((PULONG)(Base + IOAPIC_IOWIN), Value);
 }
 
 static __inline
 ULONG
-IOApicRead(UCHAR Register)
+IOApicRead(ULONG_PTR Base, UCHAR Register)
 {
     ULONG Value;
 
     HalpAcquireIoApicPairLock();
-    Value = IOApicReadRaw(Register);
+    Value = IOApicReadRaw(Base, Register);
     HalpReleaseIoApicPairLock();
     return Value;
 }
 
 static __inline
 VOID
-IOApicWrite(UCHAR Register, ULONG Value)
+IOApicWrite(ULONG_PTR Base, UCHAR Register, ULONG Value)
 {
     HalpAcquireIoApicPairLock();
-    IOApicWriteRaw(Register, Value);
+    IOApicWriteRaw(Base, Register, Value);
     HalpReleaseIoApicPairLock();
+}
+
+static
+PHALP_IOAPIC
+HalpIoApicFromGsi(
+    _In_ ULONG Gsi,
+    _Out_ PUCHAR Pin)
+{
+    PHALP_IOAPIC IoApic;
+
+    if (Gsi >= HalpIoApicMaxIrq || HalpGsiToIoApic[Gsi] == HALP_NO_IOAPIC)
+        return NULL;
+
+    IoApic = &HalpIoApics[HalpGsiToIoApic[Gsi]];
+    *Pin = (UCHAR)(Gsi - IoApic->GsiBase);
+    return IoApic;
 }
 
 /* One lock hold covers both dwords, keeping the 64-bit entry access atomic */
@@ -155,10 +188,17 @@ ApicWriteIORedirectionEntry(
     UCHAR Index,
     IOAPIC_REDIRECTION_REGISTER ReDirReg)
 {
+    PHALP_IOAPIC IoApic;
+    UCHAR Pin;
+
     ASSERT(Index < HalpIoApicMaxIrq);
+    IoApic = HalpIoApicFromGsi(Index, &Pin);
+    if (IoApic == NULL)
+        return;
+
     HalpAcquireIoApicPairLock();
-    IOApicWriteRaw(IOAPIC_REDTBL + 2 * Index, ReDirReg.Long0);
-    IOApicWriteRaw(IOAPIC_REDTBL + 2 * Index + 1, ReDirReg.Long1);
+    IOApicWriteRaw(IoApic->Base, IOAPIC_REDTBL + 2 * Pin, ReDirReg.Long0);
+    IOApicWriteRaw(IoApic->Base, IOAPIC_REDTBL + 2 * Pin + 1, ReDirReg.Long1);
     HalpReleaseIoApicPairLock();
 }
 
@@ -168,11 +208,22 @@ ApicReadIORedirectionEntry(
     UCHAR Index)
 {
     IOAPIC_REDIRECTION_REGISTER ReDirReg;
+    PHALP_IOAPIC IoApic;
+    UCHAR Pin;
 
     ASSERT(Index < HalpIoApicMaxIrq);
+    IoApic = HalpIoApicFromGsi(Index, &Pin);
+    if (IoApic == NULL)
+    {
+        ReDirReg.LongLong = 0;
+        ReDirReg.Vector = APIC_FREE_VECTOR;
+        ReDirReg.Mask = 1;
+        return ReDirReg;
+    }
+
     HalpAcquireIoApicPairLock();
-    ReDirReg.Long0 = IOApicReadRaw(IOAPIC_REDTBL + 2 * Index);
-    ReDirReg.Long1 = IOApicReadRaw(IOAPIC_REDTBL + 2 * Index + 1);
+    ReDirReg.Long0 = IOApicReadRaw(IoApic->Base, IOAPIC_REDTBL + 2 * Pin);
+    ReDirReg.Long1 = IOApicReadRaw(IoApic->Base, IOAPIC_REDTBL + 2 * Pin + 1);
     HalpReleaseIoApicPairLock();
 
     return ReDirReg;
@@ -319,8 +370,10 @@ HalpIrqToVector(UCHAR Irq)
 {
     IOAPIC_REDIRECTION_REGISTER ReDirReg;
 
-    /* Read low dword of the redirection entry */
-    ReDirReg.Long0 = IOApicRead(IOAPIC_REDTBL + 2 * Irq);
+    if (Irq >= HalpIoApicMaxIrq)
+        return APIC_FREE_VECTOR;
+
+    ReDirReg = ApicReadIORedirectionEntry(Irq);
 
     /* Return the vector */
     return (UCHAR)ReDirReg.Vector;
@@ -515,7 +568,7 @@ HalpGetRootInterruptVector(
 
     /* Levels beyond the discovered pin count cannot be routed by a line;
      * reject so the caller falls back to MSI/deferred allocation. */
-    if (BusInterruptLevel >= HalpIoApicMaxIrq)
+    if (BusInterruptLevel >= HalpIoApicMaxIrq || HalpGsiToIoApic[BusInterruptLevel] == HALP_NO_IOAPIC)
     {
         DPRINT1("HalpGetRootInterruptVector: out-of-range IRQ %lu (max %lu)\n", BusInterruptLevel, HalpIoApicMaxIrq);
         goto Reject;
@@ -606,18 +659,83 @@ Reject:
     return 0;
 }
 
+static
+BOOLEAN
+HalpRegisterIoApic(
+    _In_ ULONG_PTR Base,
+    _In_ ULONG GsiBase,
+    _In_ BOOLEAN Primary)
+{
+    PHALP_IOAPIC IoApic;
+    ULONG VersionReg;
+    ULONG PinCount;
+    ULONG Gsi;
+
+    if (GsiBase >= APIC_MAX_GSI_PINS)
+        return FALSE;
+
+    VersionReg = IOApicRead(Base, IOAPIC_VER);
+    PinCount = ((VersionReg >> 16) & 0xFF) + 1;
+    if (VersionReg == 0xFFFFFFFF || PinCount == 0x100 || PinCount == 0)
+    {
+        if (!Primary)
+            return FALSE;
+        PinCount = APIC_MAX_IRQ;
+    }
+    if (PinCount > APIC_MAX_GSI_PINS - GsiBase)
+        PinCount = APIC_MAX_GSI_PINS - GsiBase;
+
+    for (Gsi = GsiBase; Gsi < GsiBase + PinCount; Gsi++)
+    {
+        if (HalpGsiToIoApic[Gsi] != HALP_NO_IOAPIC)
+            return FALSE;
+    }
+
+    IoApic = &HalpIoApics[HalpIoApicCount];
+    IoApic->Base = Base;
+    IoApic->GsiBase = GsiBase;
+    IoApic->PinCount = PinCount;
+    for (Gsi = GsiBase; Gsi < GsiBase + PinCount; Gsi++)
+        HalpGsiToIoApic[Gsi] = (UCHAR)HalpIoApicCount;
+    HalpIoApicCount++;
+
+    if (GsiBase + PinCount > HalpIoApicMaxIrq)
+        HalpIoApicMaxIrq = GsiBase + PinCount;
+
+    DPRINT1("APIC: I/O APIC at %p, GSI %lu-%lu\n", (PVOID)Base, GsiBase, GsiBase + PinCount - 1);
+    return TRUE;
+}
+
 VOID
 NTAPI
 ApicInitializeIOApic(VOID)
 {
     PHARDWARE_PTE Pte;
     IOAPIC_REDIRECTION_REGISTER ReDirReg;
+    PHYSICAL_ADDRESS PhysicalAddress;
+    PVOID Mapping;
+    ULONG PrimaryAddress;
+    ULONG Id;
     UCHAR Index;
     ULONG Vector;
 
+    RtlFillMemory(HalpGsiToIoApic, sizeof(HalpGsiToIoApic), HALP_NO_IOAPIC);
+    HalpIoApicCount = 0;
+    HalpIoApicMaxIrq = 0;
+
+    PrimaryAddress = IOAPIC_PHYS_BASE;
+    for (Id = 0; Id < HALP_APIC_INFO_TABLE_IOAPIC_NUMBER; Id++)
+    {
+        if (HalpApicInfoTable.IoApicPA[Id] != 0 && HalpApicInfoTable.IoApicIrqBase[Id] == 0)
+        {
+            PrimaryAddress = HalpApicInfoTable.IoApicPA[Id];
+            break;
+        }
+    }
+
     /* Map the I/O Apic page */
     Pte = HalAddressToPte(IOAPIC_BASE);
-    Pte->PageFrameNumber = IOAPIC_PHYS_BASE / PAGE_SIZE;
+    Pte->PageFrameNumber = PrimaryAddress / PAGE_SIZE;
     Pte->Valid = 1;
     Pte->Write = 1;
     Pte->Owner = 1;
@@ -625,19 +743,27 @@ ApicInitializeIOApic(VOID)
     Pte->Global = 1;
     _ReadWriteBarrier();
 
-    /* Version register bits 16-23 hold the max redirection entry index;
-       keep the historical 24 lines when the read is implausible. */
-    {
-        ULONG VersionReg;
-        ULONG PinCount;
+    HalpRegisterIoApic(IOAPIC_BASE + BYTE_OFFSET(PrimaryAddress), 0, TRUE);
 
-        VersionReg = IOApicRead(IOAPIC_VER);
-        PinCount = ((VersionReg >> 16) & 0xFF) + 1;
-        if (VersionReg == 0xFFFFFFFF || PinCount == 0x100 || PinCount == 0)
-            PinCount = APIC_MAX_IRQ;
-        if (PinCount > APIC_MAX_GSI_PINS)
-            PinCount = APIC_MAX_GSI_PINS;
-        HalpIoApicMaxIrq = PinCount;
+    for (Id = 0; Id < HALP_APIC_INFO_TABLE_IOAPIC_NUMBER; Id++)
+    {
+        if (HalpApicInfoTable.IoApicPA[Id] == 0 ||
+            HalpApicInfoTable.IoApicPA[Id] == PrimaryAddress ||
+            HalpApicInfoTable.IoApicIrqBase[Id] >= APIC_MAX_GSI_PINS)
+        {
+            continue;
+        }
+
+        PhysicalAddress.QuadPart = HalpApicInfoTable.IoApicPA[Id];
+        Mapping = HalpMapPhysicalMemory64(PhysicalAddress, 1);
+        if (Mapping == NULL)
+            continue;
+        Pte = HalAddressToPte(Mapping);
+        Pte->CacheDisable = 1;
+        HalpFlushTLB();
+
+        if (!HalpRegisterIoApic((ULONG_PTR)Mapping, HalpApicInfoTable.IoApicIrqBase[Id], FALSE))
+            HalpUnmapVirtualAddress(Mapping, 1);
     }
 
     /* Setup a redirection entry */
@@ -675,15 +801,16 @@ ApicInitializeIOApic(VOID)
     ApicWriteIORedirectionEntry(APIC_CLOCK_INDEX, ReDirReg);
 }
 
-static ULONG HalpSavedIoApicId;
 static IOAPIC_REDIRECTION_REGISTER HalpSavedIoApicEntries[APIC_MAX_GSI_PINS];
 
 VOID
 HalpSaveInterruptControllers(VOID)
 {
+    ULONG IoApic;
     UCHAR Index;
 
-    HalpSavedIoApicId = IOApicRead(IOAPIC_ID);
+    for (IoApic = 0; IoApic < HalpIoApicCount; IoApic++)
+        HalpIoApics[IoApic].SavedId = IOApicRead(HalpIoApics[IoApic].Base, IOAPIC_ID);
     for (Index = 0; Index < HalpIoApicMaxIrq; Index++)
         HalpSavedIoApicEntries[Index] = ApicReadIORedirectionEntry(Index);
 }
@@ -707,13 +834,15 @@ VOID
 HalpRestoreInterruptControllers(VOID)
 {
     IOAPIC_REDIRECTION_REGISTER ReDirReg;
+    ULONG IoApic;
     UCHAR Index;
 
     ASSERT(!(__readeflags() & EFLAGS_INTERRUPT_MASK));
 
     HalpInitializeLegacyPICs();
 
-    IOApicWrite(IOAPIC_ID, HalpSavedIoApicId);
+    for (IoApic = 0; IoApic < HalpIoApicCount; IoApic++)
+        IOApicWrite(HalpIoApics[IoApic].Base, IOAPIC_ID, HalpIoApics[IoApic].SavedId);
     for (Index = 0; Index < HalpIoApicMaxIrq; Index++)
     {
         ReDirReg = HalpSavedIoApicEntries[Index];
@@ -892,14 +1021,16 @@ HalpSetLineMask(
     _In_ BOOLEAN Masked)
 {
     IOAPIC_REDIRECTION_REGISTER ReDirReg;
-    UCHAR Index = HalpVectorToIndex[Vector];
+    PHALP_IOAPIC IoApic;
+    UCHAR Pin;
 
-    if (Index >= HalpIoApicMaxIrq)
+    IoApic = HalpIoApicFromGsi(HalpVectorToIndex[Vector], &Pin);
+    if (IoApic == NULL)
         return;
     HalpAcquireIoApicPairLock();
-    ReDirReg.Long0 = IOApicReadRaw(IOAPIC_REDTBL + 2 * Index);
+    ReDirReg.Long0 = IOApicReadRaw(IoApic->Base, IOAPIC_REDTBL + 2 * Pin);
     ReDirReg.Mask = Masked;
-    IOApicWriteRaw(IOAPIC_REDTBL + 2 * Index, ReDirReg.Long0);
+    IOApicWriteRaw(IoApic->Base, IOAPIC_REDTBL + 2 * Pin, ReDirReg.Long0);
     HalpReleaseIoApicPairLock();
 }
 
@@ -1082,7 +1213,9 @@ HalDisableSystemInterrupt(
     IN KIRQL Irql)
 {
     IOAPIC_REDIRECTION_REGISTER ReDirReg;
+    PHALP_IOAPIC IoApic;
     UCHAR Index;
+    UCHAR Pin;
     ASSERT(Irql <= HIGH_LEVEL);
     ASSERT(Vector < RTL_NUMBER_OF(HalpVectorToIndex));
 
@@ -1103,20 +1236,21 @@ HalDisableSystemInterrupt(
 
     /* No IOAPIC line behind this vector; a blind RMW through the stale
        index would target an unrelated register. */
-    if (Index >= HalpIoApicMaxIrq)
+    IoApic = HalpIoApicFromGsi(Index, &Pin);
+    if (IoApic == NULL)
     {
         DPRINT1("HalDisableSystemInterrupt: vector 0x%lx has no IOAPIC line (index 0x%x)\n", Vector, Index);
         return;
     }
 
     /* Read lower dword of redirection entry */
-    ReDirReg.Long0 = IOApicRead(IOAPIC_REDTBL + 2 * Index);
+    ReDirReg.Long0 = IOApicRead(IoApic->Base, IOAPIC_REDTBL + 2 * Pin);
 
     /* Mask it */
     ReDirReg.Mask = 1;
 
     /* Write back lower dword */
-    IOApicWrite(IOAPIC_REDTBL + 2 * Index, ReDirReg.Long0);
+    IOApicWrite(IoApic->Base, IOAPIC_REDTBL + 2 * Pin, ReDirReg.Long0);
 }
 
 BOOLEAN
