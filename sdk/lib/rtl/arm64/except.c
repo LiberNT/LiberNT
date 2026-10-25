@@ -192,6 +192,8 @@ RtlDispatchException(
     }
 
     UnwindContext = *ContextRecord;
+    if (ExceptionRecord->ExceptionFlags & EXCEPTION_SOFTWARE_ORIGINATE)
+        UnwindContext.ContextFlags |= CONTEXT_UNWOUND_TO_CALL;
     NestedFrame = 0;
     RtlpGetStackLimits(&StackLow, &StackHigh);
 

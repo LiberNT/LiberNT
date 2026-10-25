@@ -8081,9 +8081,14 @@ static void rtlraiseexception_handler_( EXCEPTION_RECORD *rec, void *frame, CONT
 
     ok( addr == (char *)code_mem + 0x0c,
         "ExceptionAddress at %p instead of %p\n", addr, (char *)code_mem + 0x0c );
+#ifdef __REACTOS__
+    ok( context->ContextFlags == (CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS),
+        "wrong context flags %lx\n", context->ContextFlags );
+#else
     ok( context->ContextFlags == (CONTEXT_FULL | CONTEXT_UNWOUND_TO_CALL) ||
         context->ContextFlags == (CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS | CONTEXT_UNWOUND_TO_CALL),
         "wrong context flags %lx\n", context->ContextFlags );
+#endif
     ok( context->Pc == (UINT_PTR)addr,
         "%d: Pc at %Ix instead of %Ix\n", test_stage, context->Pc, (UINT_PTR)addr );
 
