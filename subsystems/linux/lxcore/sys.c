@@ -790,6 +790,14 @@ LxSchedActiveMask(VOID)
     return (Count >= 64) ? MAXULONG64 : ((1ULL << Count) - 1);
 }
 
+ULONG64
+LxSchedCombineAffinity(
+    _In_ ULONG64 Requested,
+    _In_ ULONG64 Allowed)
+{
+    return ((Requested & Allowed) != 0) ? (Requested & Allowed) : Allowed;
+}
+
 static
 VOID
 LxSchedSetThreadAffinity(
@@ -819,9 +827,52 @@ LxSchedApplyAffinity(
     _In_ PLX_THREAD Thread)
 {
     LxSchedLockAffinity();
+    Thread->Affinity = LxSchedCombineAffinity(Thread->UserAffinity, LxCgroupCpusAllowed(Thread->Process));
     if (Thread->EThread != NULL)
         LxSchedSetThreadAffinity(Thread->EThread, Thread->Affinity);
     LxSchedUnlockAffinity();
+}
+
+VOID
+LxSchedRefreshProcess(
+    _In_ PLX_PROCESS Process)
+{
+    ULONG64 Allowed;
+    ULONG Capacity = (ULONG)Process->ThreadCount + 8, Count = 0, Index;
+    PETHREAD *Threads = LxAlloc(Capacity * sizeof(*Threads));
+    PULONG64 Masks = LxAlloc(Capacity * sizeof(*Masks));
+    PLIST_ENTRY Entry;
+
+    if ((Threads == NULL) || (Masks == NULL))
+    {
+        LxFree(Threads);
+        LxFree(Masks);
+        return;
+    }
+    LxSchedLockAffinity();
+    Allowed = LxCgroupCpusAllowed(Process);
+    ExAcquireFastMutex(&Process->Lock);
+    for (Entry = Process->Threads.Flink; Entry != &Process->Threads; Entry = Entry->Flink)
+    {
+        PLX_THREAD Thread = CONTAINING_RECORD(Entry, LX_THREAD, Link);
+
+        Thread->Affinity = LxSchedCombineAffinity(Thread->UserAffinity, Allowed);
+        if ((Thread->EThread != NULL) && (Count < Capacity))
+        {
+            ObReferenceObject(Thread->EThread);
+            Threads[Count] = Thread->EThread;
+            Masks[Count++] = Thread->Affinity;
+        }
+    }
+    ExReleaseFastMutex(&Process->Lock);
+    for (Index = 0; Index < Count; Index++)
+    {
+        LxSchedSetThreadAffinity(Threads[Index], Masks[Index]);
+        ObDereferenceObject(Threads[Index]);
+    }
+    LxSchedUnlockAffinity();
+    LxFree(Threads);
+    LxFree(Masks);
 }
 
 LX_SYSCALL(LxSysSchedGetaffinity)
@@ -930,13 +981,12 @@ LX_SYSCALL(LxSysSchedSetaffinity)
             return -LX_EPERM;
         }
     }
-    Mask &= LxSchedActiveMask();
-    if (Mask == 0)
+    if ((Mask & LxCgroupCpusAllowed(Target)) == 0)
     {
         LxSchedRelease(Owner);
         return -LX_EINVAL;
     }
-    Thread->Affinity = Mask;
+    Thread->UserAffinity = Mask;
     LxSchedApplyAffinity(Thread);
     LxSchedRelease(Owner);
     return 0;
@@ -948,6 +998,7 @@ LxSchedInherit(
     _In_ PLX_THREAD Parent)
 {
     Child->Affinity = Parent->Affinity;
+    Child->UserAffinity = Parent->UserAffinity;
     Child->Sched = Parent->Sched;
     if (Child->Sched.Flags & LX_SCHED_FLAG_RESET_ON_FORK)
     {

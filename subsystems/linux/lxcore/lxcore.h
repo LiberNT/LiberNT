@@ -454,6 +454,8 @@ struct _LX_CGROUP
     LIST_ENTRY BpfDevice;
     ULONG BpfDeviceFlags;
     ULONG SubtreeMask;
+    ULONG64 CpusetCpus;
+    ULONG64 CpusetMems;
     LONG64 PidsLimit;
     LONG64 PidsCount;
     LONG64 PidsPeak;
@@ -608,6 +610,7 @@ struct _LX_THREAD
     LX_STACK AltStack;
     LX_SCHED_ATTR Sched;
     ULONG64 Affinity;
+    ULONG64 UserAffinity;
     ULONG64 SuspendMask;
     BOOLEAN Suspended;
     CHAR Comm[16];
@@ -723,6 +726,11 @@ VOID LxSchedInherit(_Inout_ PLX_THREAD Child, _In_ PLX_THREAD Parent);
 VOID LxSchedInitialize(VOID);
 ULONG64 LxSchedActiveMask(VOID);
 VOID LxSchedApplyAffinity(_In_ PLX_THREAD Thread);
+ULONG64 LxSchedCombineAffinity(_In_ ULONG64 Requested, _In_ ULONG64 Allowed);
+ULONG64 LxCgroupCpusAllowed(_In_ PLX_PROCESS Process);
+VOID LxCgroupRefreshAffinity(_In_ PLX_INSTANCE Instance, _In_ PLX_CGROUP Cgroup);
+VOID LxSchedRefreshProcess(_In_ PLX_PROCESS Process);
+VOID LxFormatCpuList(_In_ ULONG64 Mask, _Out_writes_(Size) PSTR Buffer, _In_ SIZE_T Size);
 PLX_THREAD LxCurrentThread(VOID);
 
 VOID LxPollHeadInit(_Out_ PLX_POLL_HEAD Head);

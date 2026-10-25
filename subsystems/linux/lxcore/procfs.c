@@ -12,8 +12,9 @@
 #define NDEBUG
 #include <debug.h>
 
-#define LX_CGROUP_PIDS      0x00000001
-#define LX_CGROUP_ALL       LX_CGROUP_PIDS
+#define LX_CGROUP_CPUSET    0x00000001
+#define LX_CGROUP_PIDS      0x00000002
+#define LX_CGROUP_ALL       (LX_CGROUP_CPUSET | LX_CGROUP_PIDS)
 #define LX_PIDS_MAX         4194305
 
 #define LX_PROC_MAX_COMPONENTS  16
@@ -577,6 +578,107 @@ LxCgroupNotifyEvents(
 }
 
 static
+ULONG64
+LxCgroupCpusEffectiveLocked(
+    _In_opt_ PLX_CGROUP Cgroup)
+{
+    ULONG64 Parent, Mask;
+
+    if ((Cgroup == NULL) || (Cgroup->Parent == NULL))
+        return LxSchedActiveMask();
+    Parent = LxCgroupCpusEffectiveLocked(Cgroup->Parent);
+    if (!(Cgroup->Parent->SubtreeMask & LX_CGROUP_CPUSET))
+        return Parent;
+    Mask = Cgroup->CpusetCpus & Parent;
+    return (Mask != 0) ? Mask : Parent;
+}
+
+ULONG64
+LxCgroupCpusAllowed(
+    _In_ PLX_PROCESS Process)
+{
+    ULONG64 Mask;
+
+    ExAcquireFastMutex(&LxCgroupLock);
+    Mask = LxCgroupCpusEffectiveLocked(Process->Cgroup);
+    ExReleaseFastMutex(&LxCgroupLock);
+    return Mask;
+}
+
+VOID
+LxFormatCpuList(
+    _In_ ULONG64 Mask,
+    _Out_writes_(Size) PSTR Buffer,
+    _In_ SIZE_T Size)
+{
+    SIZE_T Used = 0;
+    ULONG Cpu;
+
+    Buffer[0] = '\0';
+    for (Cpu = 0; Cpu < 64; Cpu++)
+    {
+        ULONG Last = Cpu;
+
+        if (!(Mask & (1ULL << Cpu)))
+            continue;
+        while ((Last + 1 < 64) && (Mask & (1ULL << (Last + 1))))
+            Last++;
+        if (Last == Cpu)
+            RtlStringCbPrintfA(Buffer + Used, Size - Used, "%s%lu", Used ? "," : "", Cpu);
+        else
+            RtlStringCbPrintfA(Buffer + Used, Size - Used, "%s%lu-%lu", Used ? "," : "", Cpu, Last);
+        Used = strlen(Buffer);
+        Cpu = Last;
+    }
+}
+
+VOID
+LxCgroupRefreshAffinity(
+    _In_ PLX_INSTANCE Instance,
+    _In_ PLX_CGROUP Cgroup)
+{
+    PLX_PROCESS Targets[64];
+    ULONG Count, Index, Skip = 0;
+    PLIST_ENTRY Entry;
+    BOOLEAN More;
+
+    do
+    {
+        ULONG Seen = 0;
+
+        Count = 0;
+        More = FALSE;
+        ExAcquireFastMutex(&LxProcessListLock);
+        for (Entry = LxProcessList.Flink; Entry != &LxProcessList; Entry = Entry->Flink)
+        {
+            PLX_PROCESS Process = CONTAINING_RECORD(Entry, LX_PROCESS, GlobalLink);
+            PLX_CGROUP Walk;
+
+            if ((Process->Instance != Instance) || Process->Exited)
+                continue;
+            for (Walk = Process->Cgroup; (Walk != NULL) && (Walk != Cgroup); Walk = Walk->Parent)
+                ;
+            if ((Walk == NULL) || (Seen++ < Skip))
+                continue;
+            if (Count == RTL_NUMBER_OF(Targets))
+            {
+                More = TRUE;
+                break;
+            }
+            LxProcessReference(Process);
+            Targets[Count++] = Process;
+        }
+        ExReleaseFastMutex(&LxProcessListLock);
+        Skip += Count;
+        for (Index = 0; Index < Count; Index++)
+        {
+            LxSchedRefreshProcess(Targets[Index]);
+            LxProcessDereference(Targets[Index]);
+        }
+    } while (More);
+}
+
+static
 VOID
 LxCgroupChargeLocked(
     _In_opt_ PLX_CGROUP Cgroup,
@@ -674,6 +776,8 @@ LxCgroupAttach(
         if (Changed[Index]->Parent != NULL)
             LxCgroupNotifyEvents(Changed[Index]);
     }
+    if (!IsListEmpty(&Process->Threads))
+        LxSchedRefreshProcess(Process);
 }
 
 PLX_CGROUP
@@ -1047,7 +1151,7 @@ LxGenPidStatus(
     PLIST_ENTRY Entry;
     CHAR Comm[16], List[256];
     LONG Signal;
-    ULONG Index, Fds = 0, Used = 0, Cpu;
+    ULONG Index, Fds = 0;
 
     if (Process == NULL)
         return;
@@ -1078,22 +1182,7 @@ LxGenPidStatus(
             Fds = Index + 1;
     }
     ExReleaseFastMutex(&Process->Lock);
-    List[0] = '\0';
-    for (Cpu = 0; Cpu < 64; Cpu++)
-    {
-        ULONG Last = Cpu;
-
-        if (!(Affinity & (1ULL << Cpu)))
-            continue;
-        while ((Last + 1 < 64) && (Affinity & (1ULL << (Last + 1))))
-            Last++;
-        if (Last == Cpu)
-            RtlStringCbPrintfA(List + Used, sizeof(List) - Used, "%s%lu", Used ? "," : "", Cpu);
-        else
-            RtlStringCbPrintfA(List + Used, sizeof(List) - Used, "%s%lu-%lu", Used ? "," : "", Cpu, Last);
-        Used = (ULONG)strlen(List);
-        Cpu = Last;
-    }
+    LxFormatCpuList(Affinity, List, sizeof(List));
 
     ProcNs = LxProcPidNs(Self, Synth);
     LxTextPrintf(Text,
@@ -3042,6 +3131,7 @@ LxResolveSys(
 
 static const PCSTR LxCgroupControllers[] =
 {
+    "cpuset",
     "pids",
 };
 
@@ -3061,6 +3151,14 @@ static const PCSTR LxCgroupFiles[] =
     "cgroup.type",
     "cpu.stat",
     "cpu.stat.local",
+    "cpuset.cpus",
+    "cpuset.cpus.effective",
+    "cpuset.cpus.exclusive",
+    "cpuset.cpus.exclusive.effective",
+    "cpuset.cpus.isolated",
+    "cpuset.cpus.partition",
+    "cpuset.mems",
+    "cpuset.mems.effective",
     "pids.current",
     "pids.events",
     "pids.events.local",
@@ -3078,6 +3176,13 @@ LxCgroupFileAllowed(
 
     if (strncmp(Name, "pids.", 5) == 0)
         return (Cgroup->Parent != NULL) && (Cgroup->Parent->SubtreeMask & LX_CGROUP_PIDS);
+    if (strncmp(Name, "cpuset.", 7) == 0)
+    {
+        if (Cgroup->Parent == NULL)
+            return (strcmp(Name, "cpuset.cpus.effective") == 0) || (strcmp(Name, "cpuset.mems.effective") == 0) ||
+                   (strcmp(Name, "cpuset.cpus.isolated") == 0);
+        return (strcmp(Name, "cpuset.cpus.isolated") != 0) && (Cgroup->Parent->SubtreeMask & LX_CGROUP_CPUSET);
+    }
     if (Cgroup->Parent != NULL)
         return TRUE;
     return (strcmp(Name, "cgroup.events") != 0) && (strcmp(Name, "cgroup.freeze") != 0) &&
@@ -3120,7 +3225,9 @@ LxResolveCgroup(
                            (strcmp(LxCgroupFiles[Index], "cgroup.stat") == 0) ||
                            (strncmp(LxCgroupFiles[Index], "cpu.stat", 8) == 0) ||
                            ((strncmp(LxCgroupFiles[Index], "pids.", 5) == 0) &&
-                            (strcmp(LxCgroupFiles[Index], "pids.max") != 0))) ? 0444 : 0644;
+                            (strcmp(LxCgroupFiles[Index], "pids.max") != 0)) ||
+                           (strstr(LxCgroupFiles[Index], ".effective") != NULL) ||
+                           (strcmp(LxCgroupFiles[Index], "cpuset.cpus.isolated") == 0)) ? 0444 : 0644;
             Synth->Index = Index;
             return 0;
         }
@@ -3901,6 +4008,150 @@ LxCgroupWriteSubtree(
 
 static
 LONG
+LxParseCpuList(
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length,
+    _In_ ULONG Bits,
+    _Out_ PULONG64 Mask)
+{
+    PCSTR Cursor = Data, End = Data + strnlen(Data, Length);
+
+    *Mask = 0;
+    while ((End > Cursor) && ((End[-1] == ' ') || (End[-1] == '\t') || (End[-1] == '\n')))
+        End--;
+    while ((Cursor < End) && ((*Cursor == ' ') || (*Cursor == '\t')))
+        Cursor++;
+    while (Cursor < End)
+    {
+        ULONG64 Range[2] = { 0, 0 };
+        ULONG Part, Digits;
+
+        for (Part = 0; Part < 2; Part++)
+        {
+            for (Digits = 0; (Cursor < End) && (*Cursor >= '0') && (*Cursor <= '9'); Digits++)
+            {
+                Range[Part] = Range[Part] * 10 + (ULONG64)(*Cursor++ - '0');
+                if (Range[Part] > MAXULONG)
+                    return -LX_EOVERFLOW;
+            }
+            if (Digits == 0)
+                return -LX_EINVAL;
+            if ((Part != 0) || (Cursor >= End) || (*Cursor != '-'))
+                break;
+            Cursor++;
+        }
+        if (Part == 0)
+            Range[1] = Range[0];
+        if (Range[0] > Range[1])
+            return -LX_EINVAL;
+        if (Range[1] >= Bits)
+            return -LX_ERANGE;
+        for (; Range[0] <= Range[1]; Range[0]++)
+            *Mask |= 1ULL << Range[0];
+        if (Cursor >= End)
+            break;
+        if ((*Cursor != ',') || (++Cursor >= End))
+            return -LX_EINVAL;
+    }
+    return 0;
+}
+
+static
+LONG
+LxCgroupWriteCpusetCpus(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_CGROUP Cgroup = File->HandlerContext;
+    PLX_THREAD Current = LxCurrentThread();
+    ULONG64 Mask;
+    LONG Error;
+
+    if ((Cgroup == NULL) || Cgroup->Removed || (Current == NULL))
+        return -LX_ENODEV;
+    Error = LxParseCpuList(Data, Length, KeQueryActiveProcessorCount(NULL), &Mask);
+    if (Error != 0)
+        return Error;
+    ExAcquireFastMutex(&LxCgroupLock);
+    if ((Cgroup->Populated != 0) && (Cgroup->CpusetCpus != 0) && (Mask == 0))
+    {
+        ExReleaseFastMutex(&LxCgroupLock);
+        return -LX_ENOSPC;
+    }
+    Cgroup->CpusetCpus = Mask;
+    ExReleaseFastMutex(&LxCgroupLock);
+    LxCgroupRefreshAffinity(Current->Process->Instance, Cgroup);
+    return 0;
+}
+
+static
+LONG
+LxCgroupWriteCpusetMems(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_CGROUP Cgroup = File->HandlerContext;
+    ULONG64 Mask;
+    LONG Error;
+
+    if ((Cgroup == NULL) || Cgroup->Removed)
+        return -LX_ENODEV;
+    Error = LxParseCpuList(Data, Length, 64, &Mask);
+    if (Error != 0)
+        return Error;
+    if (Mask & ~1ULL)
+        return -LX_EINVAL;
+    ExAcquireFastMutex(&LxCgroupLock);
+    if ((Cgroup->Populated != 0) && (Cgroup->CpusetMems != 0) && (Mask == 0))
+    {
+        ExReleaseFastMutex(&LxCgroupLock);
+        return -LX_ENOSPC;
+    }
+    Cgroup->CpusetMems = Mask;
+    ExReleaseFastMutex(&LxCgroupLock);
+    return 0;
+}
+
+static
+LONG
+LxCgroupWriteCpusetExclusive(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_CGROUP Cgroup = File->HandlerContext;
+    ULONG64 Mask;
+    LONG Error;
+
+    if ((Cgroup == NULL) || Cgroup->Removed)
+        return -LX_ENODEV;
+    Error = LxParseCpuList(Data, Length, KeQueryActiveProcessorCount(NULL), &Mask);
+    if (Error != 0)
+        return Error;
+    return (Mask != 0) ? -LX_EINVAL : 0;
+}
+
+static
+LONG
+LxCgroupWriteCpusetPartition(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_CGROUP Cgroup = File->HandlerContext;
+    PCSTR End = Data + strnlen(Data, Length);
+
+    if ((Cgroup == NULL) || Cgroup->Removed)
+        return -LX_ENODEV;
+    while ((End > Data) && ((End[-1] == ' ') || (End[-1] == '\n')))
+        End--;
+    return ((End - Data == 6) && (strncmp(Data, "member", 6) == 0)) ? 0 : -LX_EINVAL;
+}
+
+static
+LONG
 LxCgroupWritePidsMax(
     _In_ PLX_FILE File,
     _In_reads_bytes_(Length) PCSTR Data,
@@ -4009,6 +4260,31 @@ LxGenCgroupFile(
             }
         }
         LxTextAppend(Text, "\n", 1);
+    }
+    else if (strncmp(Name, "cpuset.", 7) == 0)
+    {
+        CHAR List[256];
+        ULONG64 Mask = 0;
+
+        ExAcquireFastMutex(&LxCgroupLock);
+        if (strcmp(Name, "cpuset.cpus") == 0)
+            Mask = Cgroup->CpusetCpus;
+        else if (strcmp(Name, "cpuset.cpus.effective") == 0)
+            Mask = LxCgroupCpusEffectiveLocked(Cgroup);
+        else if (strcmp(Name, "cpuset.mems") == 0)
+            Mask = Cgroup->CpusetMems;
+        else if (strcmp(Name, "cpuset.mems.effective") == 0)
+            Mask = 1;
+        ExReleaseFastMutex(&LxCgroupLock);
+        if (strcmp(Name, "cpuset.cpus.partition") == 0)
+        {
+            LxTextAppend(Text, "member\n", 7);
+        }
+        else
+        {
+            LxFormatCpuList(Mask, List, sizeof(List));
+            LxTextPrintf(Text, "%s\n", List);
+        }
     }
     else if (strncmp(Name, "pids.", 5) == 0)
     {
@@ -4383,6 +4659,14 @@ LxSynthOpen(
                     Writer = LxCgroupWriteSubtree;
                 else if (strcmp(Name, "pids.max") == 0)
                     Writer = LxCgroupWritePidsMax;
+                else if (strcmp(Name, "cpuset.cpus") == 0)
+                    Writer = LxCgroupWriteCpusetCpus;
+                else if (strcmp(Name, "cpuset.mems") == 0)
+                    Writer = LxCgroupWriteCpusetMems;
+                else if (strcmp(Name, "cpuset.cpus.exclusive") == 0)
+                    Writer = LxCgroupWriteCpusetExclusive;
+                else if (strcmp(Name, "cpuset.cpus.partition") == 0)
+                    Writer = LxCgroupWriteCpusetPartition;
                 else if (strcmp(Name, "cgroup.events") == 0)
                     Events = &Synth.Cgroup->Events;
                 else if (Synth.Mode & 0200)
