@@ -290,6 +290,10 @@ UINT MSI_OpenDatabaseW(LPCWSTR szDBPath, LPCWSTR szPersist, MSIDATABASE **pdb)
         goto end;
 #endif
 
+#ifdef __REACTOS__
+    msi_add_system_strings( db );
+#endif
+
     ret = ERROR_SUCCESS;
 
     msiobj_addref( &db->hdr );

@@ -2991,15 +2991,87 @@ static UINT TransformView_Create( MSIDATABASE *db, string_table *st, LPCWSTR nam
     return ERROR_SUCCESS;
 }
 
+#ifdef __REACTOS__
+void msi_add_system_strings( MSIDATABASE *db )
+{
+    UINT i;
+
+    for (i = 0; i < ARRAY_SIZE(_Tables_cols); i++)
+        msi_add_string( db->strings, _Tables_cols[i].colname, -1, FALSE );
+    for (i = 0; i < ARRAY_SIZE(_Columns_cols); i++)
+        msi_add_string( db->strings, _Columns_cols[i].colname, -1, FALSE );
+}
+
+static UINT count_string_refs( MSIDATABASE *db, UINT **refs_ret )
+{
+    MSITABLE *tables, *table;
+    const WCHAR *name;
+    UINT r, i, j, id, count, *refs;
+
+    r = get_table( db, L"_Tables", &tables );
+    if (r != ERROR_SUCCESS)
+        return r;
+    for (i = 0; i < tables->row_count; i++)
+    {
+        id = read_table_int( tables->data, i, 0, LONG_STR_BYTES );
+        if (!(name = msi_string_lookup( db->strings, id, NULL )))
+            continue;
+        r = get_table( db, name, &table );
+        if (r != ERROR_SUCCESS && r != ERROR_INVALID_PARAMETER)
+            return r;
+    }
+
+    count = msi_get_string_table_size( db->strings );
+    if (!(refs = calloc( count, sizeof(*refs) )))
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    LIST_FOR_EACH_ENTRY( table, &db->tables, MSITABLE, entry )
+    {
+        if (table->persistent == MSICONDITION_FALSE)
+            continue;
+        for (i = 0; i < table->row_count; i++)
+        {
+            if (!table->data_persistent[i])
+                continue;
+            for (j = 0; j < table->col_count; j++)
+            {
+                if (!(table->colinfo[j].type & MSITYPE_STRING) || MSITYPE_IS_BINARY(table->colinfo[j].type))
+                    continue;
+                id = read_table_int( table->data, i, table->colinfo[j].offset, LONG_STR_BYTES );
+                if (id < count)
+                    refs[id]++;
+            }
+        }
+    }
+    refs[0] = 0;
+    *refs_ret = refs;
+    return ERROR_SUCCESS;
+}
+
+#endif
 UINT MSI_CommitTables( MSIDATABASE *db )
 {
     UINT r, bytes_per_strref;
     HRESULT hr;
     MSITABLE *table = NULL;
+#ifdef __REACTOS__
+    UINT *refs;
+#endif
 
     TRACE("%p\n",db);
 
+#ifdef __REACTOS__
+    r = count_string_refs( db, &refs );
+    if (r != ERROR_SUCCESS)
+    {
+        WARN("failed to count string references r=%08x\n", r);
+        return r;
+    }
+    r = msi_save_string_table( db->strings, refs, db->storage, &bytes_per_strref );
+    free( refs );
+#else
     r = msi_save_string_table( db->strings, db->storage, &bytes_per_strref );
+#endif
     if( r != ERROR_SUCCESS )
     {
         WARN("failed to save string table r=%08x\n",r);

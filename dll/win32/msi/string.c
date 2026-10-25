@@ -421,7 +421,11 @@ UINT msi_string2id( const string_table *st, const WCHAR *str, int len, UINT *id 
     return ERROR_INVALID_PARAMETER;
 }
 
+#ifdef __REACTOS__
+static void string_totalsize( const string_table *st, const UINT *refs, UINT count, UINT *datasize, UINT *poolsize )
+#else
 static void string_totalsize( const string_table *st, UINT *datasize, UINT *poolsize )
+#endif
 {
     UINT i, len, holesize;
 
@@ -431,9 +435,15 @@ static void string_totalsize( const string_table *st, UINT *datasize, UINT *pool
     *poolsize = 4;
     *datasize = 0;
     holesize = 0;
+#ifdef __REACTOS__
+    for( i=1; i<count; i++ )
+    {
+        if( !refs[i] )
+#else
     for( i=1; i<st->maxcount; i++ )
     {
         if( !st->strings[i].persistent_refcount )
+#endif
         {
             TRACE("[%u] nonpersistent = %s\n", i, debugstr_wn(st->strings[i].data, st->strings[i].len));
             (*poolsize) += 4;
@@ -561,17 +571,31 @@ end:
     return st;
 }
 
+#ifdef __REACTOS__
+UINT msi_save_string_table( const string_table *st, const UINT *refs, IStorage *storage, UINT *bytes_per_strref )
+#else
 UINT msi_save_string_table( const string_table *st, IStorage *storage, UINT *bytes_per_strref )
+#endif
 {
     UINT i, datasize = 0, poolsize = 0, sz, used, r, codepage, n;
     UINT ret = ERROR_FUNCTION_FAILED;
     CHAR *data = NULL;
     USHORT *pool = NULL;
+#ifdef __REACTOS__
+    UINT count = 1;
+#endif
 
     TRACE("\n");
 
+#ifdef __REACTOS__
+    for( i=1; i<st->maxcount; i++ )
+        if( refs[i] && st->strings[i].data )
+            count = i + 1;
+    string_totalsize( st, refs, count, &datasize, &poolsize );
+#else
     /* construct the new table in memory first */
     string_totalsize( st, &datasize, &poolsize );
+#endif
 
     TRACE("%u %u %u\n", st->maxcount, datasize, poolsize );
 
@@ -601,9 +625,15 @@ UINT msi_save_string_table( const string_table *st, IStorage *storage, UINT *byt
         *bytes_per_strref = sizeof(USHORT);
 
     n = 1;
+#ifdef __REACTOS__
+    for( i=1; i<count; i++ )
+    {
+        if( !refs[i] )
+#else
     for( i=1; i<st->maxcount; i++ )
     {
         if( !st->strings[i].persistent_refcount )
+#endif
         {
             pool[ n*2 ] = 0;
             pool[ n*2 + 1] = 0;
@@ -620,7 +650,11 @@ UINT msi_save_string_table( const string_table *st, IStorage *storage, UINT *byt
         }
 
         if (sz)
+#ifdef __REACTOS__
+            pool[ n*2 + 1 ] = min( refs[i], 0xffff );
+#else
             pool[ n*2 + 1 ] = st->strings[i].persistent_refcount;
+#endif
         else
             pool[ n*2 + 1 ] = 0;
         if (sz < 0x10000)
@@ -668,6 +702,13 @@ err:
     return ret;
 }
 
+#ifdef __REACTOS__
+UINT msi_get_string_table_size( const string_table *st )
+{
+    return st->maxcount;
+}
+
+#endif
 UINT msi_get_string_table_codepage( const string_table *st )
 {
     return st->codepage;

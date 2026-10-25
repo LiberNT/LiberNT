@@ -817,7 +817,13 @@ extern VOID msi_destroy_stringtable( string_table *st );
 extern const WCHAR *msi_string_lookup( const string_table *st, UINT id, int *len );
 extern HRESULT msi_init_string_table( IStorage *stg );
 extern string_table *msi_load_string_table( IStorage *stg, UINT *bytes_per_strref );
+#ifdef __REACTOS__
+extern UINT msi_save_string_table( const string_table *st, const UINT *refs, IStorage *storage, UINT *bytes_per_strref );
+extern UINT msi_get_string_table_size( const string_table *st );
+extern void msi_add_system_strings( MSIDATABASE *db );
+#else
 extern UINT msi_save_string_table( const string_table *st, IStorage *storage, UINT *bytes_per_strref );
+#endif
 extern UINT msi_get_string_table_codepage( const string_table *st );
 extern UINT msi_set_string_table_codepage( string_table *st, UINT codepage );
 extern WCHAR *msi_strdupW( const WCHAR *value, int len ) __WINE_DEALLOC(free) __WINE_MALLOC;
