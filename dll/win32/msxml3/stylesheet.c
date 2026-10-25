@@ -423,8 +423,25 @@ static HRESULT WINAPI xslprocessor_get_input( IXSLProcessor *iface, VARIANT *inp
 {
     xslprocessor *This = impl_from_IXSLProcessor( iface );
 
+#ifdef __REACTOS__
+    TRACE("(%p)->(%p)\n", This, input);
+
+    if (!input) return E_INVALIDARG;
+
+    if (This->input)
+    {
+        V_VT(input) = VT_DISPATCH;
+        V_DISPATCH(input) = (IDispatch *)This->input;
+        IXMLDOMNode_AddRef(This->input);
+    }
+    else
+        V_VT(input) = VT_EMPTY;
+
+    return S_OK;
+#else
     FIXME("(%p)->(%p): stub\n", This, input);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI xslprocessor_get_ownerTemplate(
