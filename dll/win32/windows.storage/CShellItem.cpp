@@ -105,6 +105,82 @@ HRESULT CShellItem::get_shellfolder(IBindCtx *pbc, REFIID riid, void **ppvOut)
     return psf->QueryInterface(riid, ppvOut);
 }
 
+class CShellItemChildEnum :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IEnumShellItems
+{
+    CComPtr<IShellFolder> m_pFolder;
+    CComPtr<IEnumIDList> m_pEnumIDList;
+    CComHeapPtr<ITEMIDLIST> m_pidlFolder;
+
+public:
+    HRESULT Initialize(PCIDLIST_ABSOLUTE pidlFolder, IShellFolder *pFolder, IEnumIDList *pEnumIDList)
+    {
+        m_pidlFolder.Attach(ILClone(pidlFolder));
+        if (!m_pidlFolder)
+            return E_OUTOFMEMORY;
+        m_pFolder = pFolder;
+        m_pEnumIDList = pEnumIDList;
+        return S_OK;
+    }
+
+    STDMETHODIMP Next(ULONG celt, IShellItem **rgelt, ULONG *pceltFetched) override
+    {
+        ULONG Fetched = 0;
+
+        if (!rgelt || (celt > 1 && !pceltFetched))
+            return E_INVALIDARG;
+        if (pceltFetched)
+            *pceltFetched = 0;
+
+        while (Fetched < celt)
+        {
+            CComHeapPtr<ITEMID_CHILD> pidlChild;
+            HRESULT hr = m_pEnumIDList->Next(1, &pidlChild, NULL);
+            if (FAILED(hr))
+                return hr;
+            if (hr != S_OK)
+                break;
+            hr = SHCreateShellItem(m_pidlFolder, m_pFolder, pidlChild, &rgelt[Fetched]);
+            if (FAILED(hr))
+            {
+                while (Fetched)
+                    rgelt[--Fetched]->Release();
+                return hr;
+            }
+            ++Fetched;
+        }
+
+        if (pceltFetched)
+            *pceltFetched = Fetched;
+        return (Fetched == celt) ? S_OK : S_FALSE;
+    }
+
+    STDMETHODIMP Skip(ULONG celt) override
+    {
+        return m_pEnumIDList->Skip(celt);
+    }
+
+    STDMETHODIMP Reset() override
+    {
+        return m_pEnumIDList->Reset();
+    }
+
+    STDMETHODIMP Clone(IEnumShellItems **ppenum) override
+    {
+        if (ppenum)
+            *ppenum = NULL;
+        return E_NOTIMPL;
+    }
+
+DECLARE_NO_REGISTRY()
+DECLARE_NOT_AGGREGATABLE(CShellItemChildEnum)
+
+BEGIN_COM_MAP(CShellItemChildEnum)
+    COM_INTERFACE_ENTRY_IID(IID_IEnumShellItems, IEnumShellItems)
+END_COM_MAP()
+};
+
 HRESULT WINAPI CShellItem::BindToHandler(IBindCtx *pbc, REFGUID rbhid, REFIID riid, void **ppvOut)
 {
     HRESULT ret;
@@ -163,6 +239,39 @@ HRESULT WINAPI CShellItem::BindToHandler(IBindCtx *pbc, REFGUID rbhid, REFIID ri
         LPCITEMIDLIST pidl = ILFindLastID(m_pidl);
         ret = psf_parent->GetUIObjectOf(NULL, 1, &pidl, riid, NULL, ppvOut);
         return ret == E_NOINTERFACE ? E_NOTIMPL : ret;
+    }
+
+    else if (IsEqualGUID(rbhid, BHID_EnumItems) || IsEqualGUID(rbhid, BHID_StorageEnum))
+    {
+        CComPtr<IShellFolder> psf;
+        CComPtr<IEnumIDList> pEnumIDList;
+        CComPtr<IEnumShellItems> pEnum;
+
+        ret = get_shellfolder(pbc, IID_PPV_ARG(IShellFolder, &psf));
+        if (FAILED(ret))
+            return ret;
+        ret = psf->EnumObjects(NULL, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS | SHCONTF_INCLUDEHIDDEN, &pEnumIDList);
+        if (FAILED(ret))
+            return ret;
+        if (ret != S_OK || !pEnumIDList)
+            return MK_E_NOOBJECT;
+        ret = ShellObjectCreatorInit<CShellItemChildEnum>(static_cast<PCIDLIST_ABSOLUTE>(m_pidl), static_cast<IShellFolder*>(psf),
+                                                         static_cast<IEnumIDList*>(pEnumIDList), IID_PPV_ARG(IEnumShellItems, &pEnum));
+        if (FAILED(ret))
+            return ret;
+        return pEnum->QueryInterface(riid, ppvOut);
+    }
+    else if (IsEqualGUID(rbhid, BHID_LinkTargetItem))
+    {
+        CComPtr<IShellLinkW> pShellLink;
+        CComHeapPtr<ITEMIDLIST> pidlTarget;
+
+        if (FAILED(BindToHandler(pbc, BHID_SFUIObject, IID_PPV_ARG(IShellLinkW, &pShellLink))))
+            return E_NOINTERFACE;
+        ret = pShellLink->GetIDList(&pidlTarget);
+        if (ret != S_OK)
+            return FAILED(ret) ? ret : E_FAIL;
+        return SHCreateItemFromIDList(pidlTarget, riid, ppvOut);
     }
 
     FIXME("Unsupported BHID %s.\n", debugstr_guid(&rbhid));
@@ -903,8 +1012,12 @@ cleanup:
 
 HRESULT WINAPI SHGetItemFromObject(IUnknown *punk, REFIID riid, void **ppv)
 {
+    CComPtr<IShellItem> pItem;
     LPITEMIDLIST pidl;
     HRESULT hr;
+
+    if (punk && SUCCEEDED(punk->QueryInterface(IID_PPV_ARG(IShellItem, &pItem))))
+        return pItem->QueryInterface(riid, ppv);
 
     hr = SHGetIDListFromObject(punk, &pidl);
     if (SUCCEEDED(hr))
@@ -1011,6 +1124,91 @@ SHGetItemFromDataObject(IDataObject *pdtobj, DATAOBJ_GET_ITEM_FLAGS dwFlags, REF
     return hr;
 }
 
+class CShellItemArrayEnum :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IEnumShellItems
+{
+    CComPtr<IShellItemArray> m_pArray;
+    DWORD m_Index;
+
+public:
+    CShellItemArrayEnum() : m_Index(0)
+    {
+    }
+
+    HRESULT Initialize(IShellItemArray *pArray)
+    {
+        m_pArray = pArray;
+        return S_OK;
+    }
+
+    STDMETHODIMP Next(ULONG celt, IShellItem **rgelt, ULONG *pceltFetched) override
+    {
+        DWORD Count = 0;
+        ULONG Fetched = 0;
+
+        if (!rgelt || (celt > 1 && !pceltFetched))
+            return E_INVALIDARG;
+        if (pceltFetched)
+            *pceltFetched = 0;
+
+        HRESULT hr = m_pArray->GetCount(&Count);
+        if (FAILED(hr))
+            return hr;
+        while (Fetched < celt && m_Index < Count)
+        {
+            hr = m_pArray->GetItemAt(m_Index, &rgelt[Fetched]);
+            if (FAILED(hr))
+            {
+                while (Fetched)
+                    rgelt[--Fetched]->Release();
+                return hr;
+            }
+            ++m_Index;
+            ++Fetched;
+        }
+
+        if (pceltFetched)
+            *pceltFetched = Fetched;
+        return (Fetched == celt) ? S_OK : S_FALSE;
+    }
+
+    STDMETHODIMP Skip(ULONG celt) override
+    {
+        DWORD Count = 0;
+        HRESULT hr = m_pArray->GetCount(&Count);
+        if (FAILED(hr))
+            return hr;
+        if (celt > Count - min(m_Index, Count))
+        {
+            m_Index = Count;
+            return S_FALSE;
+        }
+        m_Index += celt;
+        return S_OK;
+    }
+
+    STDMETHODIMP Reset() override
+    {
+        m_Index = 0;
+        return S_OK;
+    }
+
+    STDMETHODIMP Clone(IEnumShellItems **ppenum) override
+    {
+        if (ppenum)
+            *ppenum = NULL;
+        return E_NOTIMPL;
+    }
+
+DECLARE_NO_REGISTRY()
+DECLARE_NOT_AGGREGATABLE(CShellItemArrayEnum)
+
+BEGIN_COM_MAP(CShellItemArrayEnum)
+    COM_INTERFACE_ENTRY_IID(IID_IEnumShellItems, IEnumShellItems)
+END_COM_MAP()
+};
+
 class CShellItemArray :
     public CComCoClass<CShellItemArray, &CLSID_NULL>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
@@ -1061,9 +1259,36 @@ public:
 
     STDMETHODIMP GetAttributes(SIATTRIBFLAGS dwAttribFlags, SFGAOF sfgaoMask, SFGAOF *psfgaoAttribs) override
     {
-        UNIMPLEMENTED;
+        SIATTRIBFLAGS Combine = (SIATTRIBFLAGS)(dwAttribFlags & SIATTRIBFLAGS_MASK);
+        SFGAOF Result;
+
+        if (!psfgaoAttribs)
+            return E_INVALIDARG;
         *psfgaoAttribs = 0;
-        return E_NOTIMPL;
+        if (Combine != SIATTRIBFLAGS_AND && Combine != SIATTRIBFLAGS_OR && Combine != SIATTRIBFLAGS_APPCOMPAT)
+            return E_INVALIDARG;
+        if (!m_pCIDA)
+            return E_UNEXPECTED;
+
+        Result = (Combine == SIATTRIBFLAGS_OR) ? 0 : sfgaoMask;
+        for (UINT i = 0; i < GetCount(); ++i)
+        {
+            CComPtr<IShellItem> pItem;
+            SFGAOF Attribs = 0;
+            HRESULT hr = GetItemAt(i, &pItem);
+            if (FAILED(hr))
+                return hr;
+            hr = pItem->GetAttributes(sfgaoMask, &Attribs);
+            if (FAILED(hr))
+                return hr;
+            if (Combine == SIATTRIBFLAGS_OR)
+                Result |= Attribs & sfgaoMask;
+            else
+                Result &= Attribs;
+        }
+
+        *psfgaoAttribs = Result;
+        return (Result == sfgaoMask) ? S_OK : S_FALSE;
     }
 
     STDMETHODIMP GetCount(DWORD*pCount) override
@@ -1087,9 +1312,11 @@ public:
 
     STDMETHODIMP EnumItems(IEnumShellItems **ppESI) override
     {
-        UNIMPLEMENTED;
+        if (!ppESI)
+            return E_INVALIDARG;
         *ppESI = NULL;
-        return E_NOTIMPL;
+        return ShellObjectCreatorInit<CShellItemArrayEnum>(static_cast<IShellItemArray*>(this),
+                                                           IID_PPV_ARG(IEnumShellItems, ppESI));
     }
 
 DECLARE_NO_REGISTRY()
@@ -1120,7 +1347,9 @@ SHCreateShellItemArray(_In_opt_ PCIDLIST_ABSOLUTE pidlParent, _In_opt_ IShellFol
     PIDLIST_ABSOLUTE allocatedParent = NULL;
     HRESULT hr;
 
-    if (!ppsiItemArray || !ppidl || !cidl || (!pidlParent && !psf))
+    if (!pidlParent && !psf)
+        return E_POINTER;
+    if (!ppsiItemArray || !ppidl || !cidl)
         return E_INVALIDARG;
     *ppsiItemArray = NULL;
 
