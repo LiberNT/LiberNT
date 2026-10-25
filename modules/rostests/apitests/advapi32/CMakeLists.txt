@@ -17,6 +17,7 @@ list(APPEND SOURCE
     RegEnumKey.c
     RegEnumValueW.c
     RegOpenKeyExW.c
+    RegOpenKeyTransacted.c
     RegQueryInfoKey.c
     RegQueryValueExW.c
     RtlEncryptMemory.c

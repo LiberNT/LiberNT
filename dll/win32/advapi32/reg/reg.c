@@ -5,6 +5,7 @@
  * PURPOSE:         Registry functions
  * PROGRAMMER:      Ariadne ( ariadne@xs4all.nl)
  *                  Thomas Weidenmueller <w3seek@reactos.com>
+ *                  Ahmed ARIF <arif.ing@outlook.com>
  * UPDATE HISTORY:
  *                  Created 01/11/98
  *                  19990309 EA Stubs
@@ -3458,6 +3459,122 @@ Exit:
     }
 
     ClosePredefKey(KeyHandle);
+
+    return ErrorCode;
+}
+
+
+LONG WINAPI
+RegOpenKeyTransactedW(
+    _In_ HKEY hKey,
+    _In_opt_ LPCWSTR lpSubKey,
+    _In_opt_ DWORD ulOptions,
+    _In_ REGSAM samDesired,
+    _Out_ PHKEY phkResult,
+    _In_ HANDLE hTransaction,
+    _Reserved_ PVOID pExtendedParameter)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING SubKeyString;
+    HANDLE KeyHandle;
+    NTSTATUS Status;
+    ULONG Attributes = OBJ_CASE_INSENSITIVE;
+    BOOLEAN SubKeyStringAllocated = FALSE;
+
+    if (!phkResult || pExtendedParameter)
+        return ERROR_INVALID_PARAMETER;
+
+    if (!hTransaction || hTransaction == INVALID_HANDLE_VALUE)
+        return ERROR_INVALID_TRANSACTION;
+
+    if (IsPredefKey(hKey) && (!lpSubKey || !*lpSubKey))
+    {
+        *phkResult = hKey;
+        return ERROR_SUCCESS;
+    }
+
+    Status = MapDefaultKey(&KeyHandle, hKey);
+    if (!NT_SUCCESS(Status))
+        return RtlNtStatusToDosError(Status);
+
+    if (ulOptions & REG_OPTION_OPEN_LINK)
+        Attributes |= OBJ_OPENLINK;
+
+    if (lpSubKey == NULL || wcscmp(lpSubKey, L"\\") == 0)
+    {
+        RtlInitUnicodeString(&SubKeyString, L"");
+    }
+    else
+    {
+        RtlInitUnicodeString(&SubKeyString, lpSubKey);
+
+        if ((ULONG_PTR)lpSubKey & 1)
+        {
+            UNICODE_STRING AlignedString;
+
+            Status = RtlDuplicateUnicodeString(RTL_DUPLICATE_UNICODE_STRING_NULL_TERMINATE,
+                                               &SubKeyString,
+                                               &AlignedString);
+            if (!NT_SUCCESS(Status))
+                goto Exit;
+
+            SubKeyString = AlignedString;
+            SubKeyStringAllocated = TRUE;
+        }
+    }
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &SubKeyString,
+                               Attributes,
+                               (HANDLE)((ULONG_PTR)KeyHandle & ~0x2),
+                               NULL);
+
+    Status = NtOpenKeyTransactedEx((PHANDLE)phkResult,
+                                   samDesired,
+                                   &ObjectAttributes,
+                                   ulOptions & REG_OPTION_BACKUP_RESTORE,
+                                   hTransaction);
+
+Exit:
+    if (SubKeyStringAllocated)
+        RtlFreeUnicodeString(&SubKeyString);
+
+    ClosePredefKey(KeyHandle);
+
+    return NT_SUCCESS(Status) ? ERROR_SUCCESS : RtlNtStatusToDosError(Status);
+}
+
+
+LONG WINAPI
+RegOpenKeyTransactedA(
+    _In_ HKEY hKey,
+    _In_opt_ LPCSTR lpSubKey,
+    _In_opt_ DWORD ulOptions,
+    _In_ REGSAM samDesired,
+    _Out_ PHKEY phkResult,
+    _In_ HANDLE hTransaction,
+    _Reserved_ PVOID pExtendedParameter)
+{
+    UNICODE_STRING SubKeyString;
+    LONG ErrorCode;
+
+    if (lpSubKey)
+    {
+        if (!RtlCreateUnicodeStringFromAsciiz(&SubKeyString, lpSubKey))
+            return ERROR_NOT_ENOUGH_MEMORY;
+    }
+    else
+        RtlInitEmptyUnicodeString(&SubKeyString, NULL, 0);
+
+    ErrorCode = RegOpenKeyTransactedW(hKey,
+                                      SubKeyString.Buffer,
+                                      ulOptions,
+                                      samDesired,
+                                      phkResult,
+                                      hTransaction,
+                                      pExtendedParameter);
+
+    RtlFreeUnicodeString(&SubKeyString);
 
     return ErrorCode;
 }

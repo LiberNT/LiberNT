@@ -550,6 +550,8 @@
 @ stdcall RegOpenKeyA(long str ptr)
 @ stdcall RegOpenKeyExA(long str long long ptr) kernelbase.RegOpenKeyExA
 @ stdcall RegOpenKeyExW(long wstr long long ptr) kernelbase.RegOpenKeyExW
+@ stdcall -version=0x600+ RegOpenKeyTransactedA(long str long long ptr ptr ptr)
+@ stdcall -version=0x600+ RegOpenKeyTransactedW(long wstr long long ptr ptr ptr)
 @ stdcall RegOpenKeyW(long wstr ptr)
 @ stdcall RegOpenUserClassesRoot(ptr long long ptr) kernelbase.RegOpenUserClassesRoot
 @ stdcall RegOverridePredefKey(long long)
