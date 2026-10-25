@@ -18,6 +18,8 @@ IDR_QUERYASSOCIATIONS REGISTRY "res/rgs/queryassociations.rgs"
 IDR_SHELLDESKTOP REGISTRY "res/rgs/shelldesktop.rgs"
 IDR_SHELLFSFOLDER REGISTRY "res/rgs/shellfsfolder.rgs"
 IDR_SHELLLINK REGISTRY "res/rgs/shelllink.rgs"
+IDR_ENUMERABLEOBJECTCOLLECTION REGISTRY "res/rgs/enumerableobjectcollection.rgs"
+IDR_DESTINATIONLIST REGISTRY "res/rgs/destinationlist.rgs"
 
 #ifdef LANGUAGE_EN_GB
     #include "lang/en-GB.rc"

@@ -16,6 +16,8 @@ OBJECT_ENTRY_AUTO(CLSID_ShellDesktop, CDesktopFolder)
 OBJECT_ENTRY_AUTO(CLSID_ShellItem, CShellItem)
 OBJECT_ENTRY_AUTO(CLSID_ShellLink, CShellLink)
 OBJECT_ENTRY_AUTO(CLSID_QueryAssociations, CQueryAssociations)
+OBJECT_ENTRY_AUTO(CLSID_EnumerableObjectCollection, CEnumerableObjectCollection)
+OBJECT_ENTRY_AUTO(CLSID_DestinationList, CDestinationList)
 
 EXTERN_C VOID
 WSTORAGE_InitShell(HINSTANCE hInstance)

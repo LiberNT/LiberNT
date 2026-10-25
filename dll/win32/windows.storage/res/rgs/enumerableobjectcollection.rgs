@@ -1,0 +1,13 @@
+HKCR
+{
+    NoRemove CLSID
+    {
+        ForceRemove {2D3468C1-36A7-43B6-AC24-D3F02FD9607A} = s 'A collection of IUnknown objects that can be enumerated'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Apartment'
+            }
+        }
+    }
+}

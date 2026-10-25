@@ -79,8 +79,6 @@ list(APPEND SOURCE
     CCopyMoveToMenu.cpp
     CCopyAsPathMenu.cpp
     CStartMenuPin.cpp
-    CEnumerableObjectCollection.cpp
-    CDestinationList.cpp
     CTextPreviewHandler.cpp
     CFileOperation.cpp
     CShellDispatch.cpp
