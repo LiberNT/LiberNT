@@ -195,17 +195,8 @@ SHShouldShowWizards(_In_ IUnknown *pUnknown)
     if (FAILED(hr))
         return hr;
 
-    SHELLSTATE state;
-    SHGetSetSettings(&state, SSF_WEBVIEW, FALSE);
-    if (state.fWebView &&
-        !SHRegGetBoolUSValueW(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                              L"ShowWizardsTEST", FALSE, FALSE))
-    {
-        hr = S_FALSE;
-    }
-
     pBrowser->Release();
-    return hr;
+    return S_FALSE;
 }
 
 static BOOL
