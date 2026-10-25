@@ -503,6 +503,8 @@ class CMiniportWaveRT : public CUnknownImpl<IMiniportWaveRT>
     }
     virtual ~CMiniportWaveRT()
     {
+        if (m_AssociatedPins)
+            ExFreePoolWithTag(m_AssociatedPins, TAG_HDAUDIO);
     }
 
     CFunctionGroupNode*

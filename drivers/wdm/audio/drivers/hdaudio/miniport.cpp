@@ -139,10 +139,17 @@ HDAUDIO_NewMiniportWaveRT(
     IN PPCFILTER_DESCRIPTOR FilterDescription)
 {
     CMiniportWaveRT *This;
+    PULONG PinIds;
 
-    This = new (NonPagedPool, TAG_HDAUDIO) CMiniportWaveRT(NULL, AssociatedPinsCount, AssociatedPinIds, Node, Adapter, FilterDescription);
+    PinIds = (PULONG)ExAllocatePoolWithTag(NonPagedPool, sizeof(ULONG) * AssociatedPinsCount, TAG_HDAUDIO);
+    if (!PinIds)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlCopyMemory(PinIds, AssociatedPinIds, sizeof(ULONG) * AssociatedPinsCount);
+
+    This = new (NonPagedPool, TAG_HDAUDIO) CMiniportWaveRT(NULL, AssociatedPinsCount, PinIds, Node, Adapter, FilterDescription);
     if (!This)
     {
+        ExFreePoolWithTag(PinIds, TAG_HDAUDIO);
         // out of memory
         return STATUS_INSUFFICIENT_RESOURCES;
     }
