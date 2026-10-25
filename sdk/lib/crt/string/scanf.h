@@ -26,7 +26,11 @@
 #ifdef WIDE_SCANF
 #define _CHAR_ wchar_t
 #define _EOF_ WEOF
+#if defined(__REACTOS__) && defined(_LIBCNT_)
+#define _EOF_RET 0
+#else
 #define _EOF_RET (short)WEOF
+#endif
 #define _ISSPACE_(c) iswspace(c)
 #define _ISDIGIT_(c) iswdigit(c)
 #define _WIDE2SUPPORTED_(c) c /* No conversion needed (wide to wide) */
