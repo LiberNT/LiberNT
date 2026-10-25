@@ -313,7 +313,11 @@ static HRESULT propval_to_devprop( const PROPVARIANT *comparand_val, const DEVPR
     if (comparand_val->vt != VT_EMPTY)
     {
         if (FAILED(hr = PropVariantChangeType( &tmp, comparand_val, 0, prop_vt )))
+#ifdef __REACTOS__
+            return hr == E_OUTOFMEMORY ? hr : E_INVALIDARG;
+#else
             return (hr == E_FAIL || hr == E_NOTIMPL) ? E_INVALIDARG : hr;
+#endif
         switch (prop_vt)
         {
         case VT_CLSID:
@@ -358,7 +362,11 @@ static HRESULT propval_to_devprop( const PROPVARIANT *comparand_val, const DEVPR
             FIXME( "Unsupported property VARTYPE %d, treating comparand as string.\n", prop_vt );
             PropVariantClear( &tmp );
             if (FAILED(hr = PropVariantChangeType( &tmp, comparand_val, 0, VT_LPWSTR )))
+#ifdef __REACTOS__
+                return hr == E_OUTOFMEMORY ? hr : E_INVALIDARG;
+#else
                 return (hr == E_FAIL || hr == E_NOTIMPL) ? E_INVALIDARG : hr;
+#endif
             devprop->Type = DEVPROP_TYPE_STRING;
             devprop->BufferSize = (wcslen( tmp.pwszVal ) + 1) * sizeof( WCHAR );
             break;
