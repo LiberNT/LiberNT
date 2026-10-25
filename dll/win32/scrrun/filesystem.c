@@ -427,12 +427,14 @@ static HRESULT WINAPI textstream_get_AtEndOfStream(ITextStream *iface, VARIANT_B
     return S_OK;
 }
 
+#ifndef __REACTOS__
 static HRESULT WINAPI textstream_get_AtEndOfLine(ITextStream *iface, VARIANT_BOOL *eol)
 {
     struct textstream *This = impl_from_ITextStream(iface);
     FIXME("(%p)->(%p): stub\n", This, eol);
     return E_NOTIMPL;
 }
+#endif
 
 static HRESULT append_read_data(struct textstream *stream, const char *buf, size_t buf_size)
 {
@@ -497,6 +499,56 @@ static HRESULT read_more_data(struct textstream *stream)
     stream->eof = read != sizeof(buf);
     return append_read_data(stream, buf, read);
 }
+
+#ifdef __REACTOS__
+static HRESULT WINAPI textstream_get_AtEndOfLine(ITextStream *iface, VARIANT_BOOL *eol)
+{
+    struct textstream *This = impl_from_ITextStream(iface);
+    HRESULT hr;
+
+    TRACE("(%p)->(%p)\n", This, eol);
+
+    if (!eol)
+        return E_POINTER;
+
+    if (textstream_check_iomode(This, IORead))
+    {
+        *eol = VARIANT_FALSE;
+        return CTL_E_BADFILEMODE;
+    }
+
+    while (!This->eof && !This->read_buf_size)
+    {
+        if (FAILED(hr = read_more_data(This)))
+            return hr;
+    }
+
+    *eol = (!This->read_buf_size || This->read_buf[0] == '\r' || This->read_buf[0] == '\n') ? VARIANT_TRUE : VARIANT_FALSE;
+    return S_OK;
+}
+
+static HRESULT read_more_pipe_data(struct textstream *stream)
+{
+    char buf[256];
+    DWORD read;
+
+    if (stream->eof) return S_OK;
+
+    if (!ReadFile(stream->file, buf, sizeof(buf), &read, NULL))
+    {
+        if (GetLastError() != ERROR_BROKEN_PIPE)
+            return create_error(GetLastError());
+        read = 0;
+    }
+
+    if (!read)
+    {
+        stream->eof = TRUE;
+        return S_OK;
+    }
+    return append_read_data(stream, buf, read);
+}
+#endif
 
 static BOOL read_from_buffer(struct textstream *stream, size_t len, BSTR *ret, size_t skip)
 {
@@ -783,9 +835,44 @@ static HRESULT WINAPI pipestream_get_AtEndOfLine(ITextStream *iface, VARIANT_BOO
 
 static HRESULT WINAPI pipestream_Read(ITextStream *iface, LONG len, BSTR *text)
 {
+#ifdef __REACTOS__
+    struct textstream *stream = impl_from_ITextStream(iface);
+    HRESULT hr = S_OK;
+
+    TRACE("%p, %ld, %p.\n", iface, len, text);
+
+    if (!text)
+        return E_POINTER;
+
+    *text = NULL;
+    if (len <= 0)
+        return len == 0 ? S_OK : E_INVALIDARG;
+
+    if (textstream_check_iomode(stream, IORead))
+        return CTL_E_BADFILEMODE;
+
+    while (!stream->eof && len > stream->read_buf_size)
+    {
+        if (FAILED(hr = read_more_pipe_data(stream)))
+            return hr;
+    }
+
+    if (stream->eof && !stream->read_buf_size)
+        return CTL_E_ENDOFFILE;
+
+    hr = S_OK;
+    if (len > stream->read_buf_size)
+    {
+        len = stream->read_buf_size;
+        hr = S_FALSE;
+    }
+
+    return read_from_buffer(stream, len, text, 0) ? hr : E_OUTOFMEMORY;
+#else
     FIXME("%p, %ld, %p.\n", iface, len, text);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI pipestream_ReadLine(ITextStream *iface, BSTR *text)
