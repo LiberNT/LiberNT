@@ -2292,10 +2292,27 @@ HRESULT CShellLink::SetTargetFromPIDLOrPath(LPCITEMIDLIST pidl, LPCWSTR pszFile)
             StringCchCopyW(szPath, _countof(szPath), pszFile);
             PathResolveW(szPath, NULL, PRF_TRYPROGRAMEXTENSIONS);
 
-            if (PathIsFileSpecW(szPath))
+            LPCWSTR pszAfterRoot = PathSkipRootW(szPath);
+            if (wcschr(pszAfterRoot ? pszAfterRoot : szPath, L':'))
             {
                 hr = E_INVALIDARG;
                 szPath[0] = 0;
+            }
+            else if (PathIsFileSpecW(szPath))
+            {
+                WCHAR szDesktop[MAX_PATH];
+                if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, szDesktop)) &&
+                    PathAppendW(szDesktop, szPath))
+                {
+                    StringCchCopyW(szPath, _countof(szPath), szDesktop);
+                    hr = S_OK;
+                    pidlNew = SHSimpleIDListFromPathW(szPath);
+                }
+                else
+                {
+                    hr = E_INVALIDARG;
+                    szPath[0] = 0;
+                }
             }
             else
             {
