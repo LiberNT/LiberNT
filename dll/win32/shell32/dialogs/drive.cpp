@@ -506,6 +506,9 @@ FormatExCB(
             break;
 
         case VOLUMEINUSE:
+            pCtx->Result = FALSE;
+            return FALSE;
+
         case INSUFFICIENTRIGHTS:
         case FSNOTSUPPORTED:
         case CLUSTERSIZETOOSMALL:
