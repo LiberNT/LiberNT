@@ -67,6 +67,7 @@ extern void func_NcPaintRgn(void);
 extern void func_NextDlgItem(void);
 extern void func_NonClientPaint(void);
 extern void func_PhysicalPoint(void);
+extern void func_PhysicalToLogicalPoint(void);
 extern void func_PrivateExtractIcons(void);
 extern void func_RealGetWindowClass(void);
 extern void func_RedrawWindow(void);
@@ -171,6 +172,7 @@ const struct test winetest_testlist[] =
     { "NextDlgItem", func_NextDlgItem },
     { "NonClientPaint", func_NonClientPaint },
     { "PhysicalPoint", func_PhysicalPoint },
+    { "PhysicalToLogicalPoint", func_PhysicalToLogicalPoint },
     { "PrivateExtractIcons", func_PrivateExtractIcons },
     { "RealGetWindowClass", func_RealGetWindowClass },
     { "RedrawWindow", func_RedrawWindow },

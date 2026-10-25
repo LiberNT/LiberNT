@@ -588,6 +588,7 @@
 @ stdcall PaintMenuBar(long long long long long long) NtUserPaintMenuBar
 @ stdcall PeekMessageA(ptr long long long long)
 @ stdcall PeekMessageW(ptr long long long long)
+@ stdcall -version=0x600+ PhysicalToLogicalPoint(long ptr)
 @ stdcall -version=0x602+ PhysicalToLogicalPointForPerMonitorDPI(long ptr)
 @ stdcall PostMessageA(long long long long)
 @ stdcall PostMessageW(long long long long)

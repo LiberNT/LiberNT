@@ -67,6 +67,7 @@ list(APPEND SOURCE
     NextDlgItem.c
     NonClientPaint.c
     PhysicalPoint.c
+    PhysicalToLogicalPoint.c
     PrivateExtractIcons.c
     RealGetWindowClass.c
     RedrawWindow.c

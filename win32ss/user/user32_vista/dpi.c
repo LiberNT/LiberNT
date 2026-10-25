@@ -1004,3 +1004,12 @@ PhysicalToLogicalPointForPerMonitorDPI(
 {
     return IntValidatePerMonitorDpiPoint(hwnd, point);
 }
+
+BOOL
+WINAPI
+PhysicalToLogicalPoint(
+    _In_ HWND hWnd,
+    _Inout_ POINT *Point)
+{
+    return IntValidatePerMonitorDpiPoint(hWnd, Point);
+}
