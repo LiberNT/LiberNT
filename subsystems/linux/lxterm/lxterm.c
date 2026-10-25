@@ -170,7 +170,7 @@ LxRunRootTool(
     Tool.Root = Root;
     Tool.Cwd = "/";
     Tool.FileName = FileName;
-    Tool.Input = Input;
+    Tool.Input = (Input != NULL) ? Input : "";
     if (!LxEnvSet(&Tool.Env, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"))
         return 1;
     for (Index = 0; Index < Count; Index++)
