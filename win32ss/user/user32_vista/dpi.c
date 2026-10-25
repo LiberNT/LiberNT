@@ -953,22 +953,6 @@ WindowFromPhysicalPoint(
     return WindowFromPoint(Point);
 }
 
-BOOL
-WINAPI
-LogicalToPhysicalPoint(
-    _In_ HWND hWnd,
-    _Inout_ POINT *Point)
-{
-    if (!Point || !IsWindow(hWnd))
-    {
-        SetLastError(ERROR_INVALID_PARAMETER);
-        return FALSE;
-    }
-
-    /* ReactOS currently uses one physical coordinate space per desktop. */
-    return TRUE;
-}
-
 static BOOL
 IntValidatePerMonitorDpiPoint(
     _In_ HWND hwnd,
@@ -983,6 +967,15 @@ IntValidatePerMonitorDpiPoint(
     }
     if (!GetWindowRect(hwnd, &Rect)) return FALSE;
     return point->x >= Rect.left && point->y >= Rect.top && point->x <= Rect.right && point->y <= Rect.bottom;
+}
+
+BOOL
+WINAPI
+LogicalToPhysicalPoint(
+    _In_ HWND hWnd,
+    _Inout_ POINT *Point)
+{
+    return IntValidatePerMonitorDpiPoint(hWnd, Point);
 }
 
 /* ReactOS currently uses physical coordinates for all DPI awareness modes. */
