@@ -48,3 +48,7 @@ add_rostests_file(TARGET windowscodecs_winetest)
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(windowscodecs_winetest PRIVATE -Wno-constant-conversion -Wno-incompatible-pointer-types-discards-qualifiers)
 endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(windowscodecs_winetest PRIVATE -Wno-discarded-qualifiers)
+endif()

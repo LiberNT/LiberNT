@@ -2974,7 +2974,7 @@ static void subtest_pipe_name(const struct pipe_name_test *pnt)
 #ifdef __REACTOS__
     if ((GetNTVersion() < _WIN32_WINNT_VISTA) && (wcscmp(pnt->name, L"\\Device\\NamedPipe\\\\") == 0))
     {
-        win_skip("Skipping subtest_pipe_name for '%ws' on Windows 2003\n", pnt->name);
+        win_skip("Skipping subtest_pipe_name for '%ls' on Windows 2003\n", pnt->name);
         return;
     }
 #endif

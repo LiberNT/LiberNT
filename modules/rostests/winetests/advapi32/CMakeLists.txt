@@ -34,7 +34,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(advapi32_winetest PRIVATE -Wno-old-style-declaration)
+    target_compile_options(advapi32_winetest PRIVATE -Wno-old-style-declaration -Wno-missing-braces -Wno-format-overflow)
 endif()
 
 set_module_type(advapi32_winetest win32cui)

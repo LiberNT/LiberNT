@@ -823,7 +823,7 @@ static void delete_subkeys_and_values(HKEY hkey)
     while ((status = NtEnumerateKey(hkey, 0, KeyBasicInformation, keyInfo, sizeof(buffer), &size)) >= 0)
     {
         string = (UNICODE_STRING){ keyInfo->NameLength, keyInfo->NameLength, keyInfo->Name };
-        printf("got subkey %wZ\n", &string);
+        printf("got subkey %.*ls\n", (int)(string.Length / sizeof(WCHAR)), string.Buffer);
         HANDLE hsubkey;
         OBJECT_ATTRIBUTES attr = { sizeof(OBJECT_ATTRIBUTES), hkey, &string, OBJ_CASE_INSENSITIVE, NULL, NULL };
         status = NtOpenKey(&hsubkey, KEY_ALL_ACCESS, &attr);
@@ -839,7 +839,7 @@ static void delete_subkeys_and_values(HKEY hkey)
     while ((status = NtEnumerateValueKey(hkey, 0, KeyValueBasicInformation, valInfo, sizeof(buffer), &size)) >= 0)
     {
         string = (UNICODE_STRING){ valInfo->NameLength, valInfo->NameLength, valInfo->Name };
-        printf("Deleting value %wZ\n", &string);
+        printf("Deleting value %.*ls\n", (int)(string.Length / sizeof(WCHAR)), string.Buffer);
         status = NtDeleteValueKey(hkey, &string);
         ok(status == STATUS_SUCCESS, "NtDeleteValueKey failed: 0x%08lx\n", status);
         if (status != STATUS_SUCCESS) break;

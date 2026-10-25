@@ -30,6 +30,10 @@ function(add_d3dx9_winetest __version)
         target_compile_options(${module} PRIVATE -Wno-sizeof-array-div)
     endif()
 
+    if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(${module} PRIVATE -Wno-maybe-uninitialized)
+    endif()
+
     target_link_libraries(${module} uuid dxguid)
     set_module_type(${module} win32cui)
     add_importlibs(${module} d3dx9_${__version} d3d9 user32 gdi32 msvcrt kernel32)

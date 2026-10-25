@@ -8,3 +8,7 @@ add_rostests_file(TARGET localui_winetest)
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(localui_winetest PRIVATE -Wno-unused-but-set-global)
 endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(localui_winetest PRIVATE -Wno-format)
+endif()

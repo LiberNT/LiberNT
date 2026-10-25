@@ -19,3 +19,7 @@ set_module_type(d3dcompiler_47_winetest win32cui)
 add_dependencies(d3dcompiler_47_winetest d3d_idl_headers)
 add_importlibs(d3dcompiler_47_winetest d3d9 d3dcompiler_47 user32 msvcrt kernel32)
 add_rostests_file(TARGET d3dcompiler_47_winetest)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(d3dcompiler_47_winetest PRIVATE -Wno-format-overflow)
+endif()

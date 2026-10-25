@@ -45,7 +45,7 @@ if(MSVC)
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(shell32_winetest PRIVATE -Wno-format-overflow)
+    target_compile_options(shell32_winetest PRIVATE -Wno-format-overflow -Wno-maybe-uninitialized)
 endif()
 
 add_pch(shell32_winetest precomp.h "${PCH_SKIP_SOURCE}")

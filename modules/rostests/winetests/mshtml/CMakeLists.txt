@@ -66,3 +66,7 @@ set_module_type(mshtml_winetest win32cui)
 add_importlibs(mshtml_winetest ole32 oleaut32 shlwapi wininet user32 urlmon gdi32 advapi32 msvcrt kernel32)
 add_dependencies(mshtml_winetest test_tlb_header stdole2)
 add_rostests_file(TARGET mshtml_winetest)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(mshtml_winetest PRIVATE -Wno-sequence-point)
+endif()

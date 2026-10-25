@@ -66,3 +66,7 @@ add_rostests_file(TARGET user32_winetest)
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(user32_winetest PRIVATE -Wno-pragma-pack -Wno-unused-const-variable)
 endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(user32_winetest PRIVATE -Wno-format-overflow)
+endif()

@@ -78,3 +78,7 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(ntdll_winetest PRIVATE -Wno-unused-but-set-global -Wno-unused-function)
 endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(ntdll_winetest PRIVATE -Wno-maybe-uninitialized)
+endif()

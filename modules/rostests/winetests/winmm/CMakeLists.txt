@@ -20,6 +20,6 @@ set_module_type(winmm_winetest win32cui)
 add_importlibs(winmm_winetest winmm user32 advapi32 ole32 msvcrt kernel32)
 add_rostests_file(TARGET winmm_winetest)
 
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(winmm_winetest PRIVATE -Wno-missing-braces)
 endif()

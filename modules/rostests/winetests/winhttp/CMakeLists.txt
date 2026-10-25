@@ -10,3 +10,7 @@ target_link_libraries(winhttp_winetest uuid)
 set_module_type(winhttp_winetest win32cui)
 add_importlibs(winhttp_winetest winhttp oleaut32 ole32 crypt32 advapi32 ws2_32 msvcrt kernel32)
 add_rostests_file(TARGET winhttp_winetest)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(winhttp_winetest PRIVATE -Wno-maybe-uninitialized)
+endif()

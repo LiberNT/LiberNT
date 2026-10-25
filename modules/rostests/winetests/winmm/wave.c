@@ -36,6 +36,10 @@
 #include "mmreg.h"
 #include "ks.h"
 #include "ksguid.h"
+#ifdef __REACTOS__
+#undef DEFINE_GUIDEX
+#define DEFINE_GUIDEX(name) const CDECL GUID __declspec(selectany) name = { STATICGUIDOF(name) }
+#endif
 #include "ksmedia.h"
 
 #include "winmm_test.h"

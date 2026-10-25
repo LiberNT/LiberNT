@@ -1478,6 +1478,9 @@ static void test_IME(void)
     ok(!lstrcmpiA(ptr, "user32.dll") || !lstrcmpiA(ptr, "ntdll.dll"), "IME window proc implemented in %s\n", ptr);
 }
 
+#ifdef __REACTOS__
+#undef IS_INTRESOURCE
+#endif
 #define IS_INTRESOURCE(x)   (((ULONG_PTR)(x) >> 16) == 0)
 
 #define check_class_info_a( inst, name, expect ) check_class_info_a_( __FILE__, __LINE__, inst, name, expect, FALSE )
