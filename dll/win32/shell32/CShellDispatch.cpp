@@ -82,7 +82,7 @@ HRESULT STDMETHODCALLTYPE CShellDispatch::NameSpace(VARIANT vDir, Folder **ppsdf
     if (!SUCCEEDED(hr))
         return S_FALSE;
 
-    return CFolder::CreateInstance(idlist, this, IID_PPV_ARG(Folder, ppsdf));
+    return CFolder::CreateInstance(idlist, NULL, IID_PPV_ARG(Folder, ppsdf));
 }
 
 static BOOL is_optional_argument(const VARIANT *arg)

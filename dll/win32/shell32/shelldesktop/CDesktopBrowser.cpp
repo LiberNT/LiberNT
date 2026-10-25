@@ -629,7 +629,9 @@ HRESULT STDMETHODCALLTYPE CDesktopBrowser::Navigate(BSTR URL, VARIANT *Flags, VA
 
 HRESULT STDMETHODCALLTYPE CDesktopBrowser::Refresh()
 {
-    return E_NOTIMPL;
+    if (m_ShellView)
+        m_ShellView->Refresh();
+    return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE CDesktopBrowser::Refresh2(VARIANT *Level)

@@ -3,6 +3,7 @@
  * LICENSE:     LGPL-2.1+ (https://spdx.org/licenses/LGPL-2.1+)
  * PURPOSE:     FolderItem(s) implementation
  * COPYRIGHT:   Copyright 2015-2018 Mark Jansen (mark.jansen@reactos.org)
+ *              Copyright 2026 Ahmed ARIF (arif.ing@outlook.com)
  */
 
 #include "precomp.h"
@@ -281,10 +282,190 @@ HRESULT STDMETHODCALLTYPE CFolderItem::get_Path(BSTR *pbs)
     return StrRetToBSTR(&strret, NULL, pbs);
 }
 
+class CShellLinkObject :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IDispatchImpl<IShellLinkDual2, &IID_IShellLinkDual2>
+{
+private:
+    CComPtr<IShellLinkW> m_pShellLink;
+    WCHAR m_szFile[MAX_PATH];
+
+    static HRESULT ToBSTR(PCWSTR psz, BSTR *pbs)
+    {
+        if (!pbs)
+            return E_POINTER;
+        *pbs = SysAllocString(psz);
+        return *pbs ? S_OK : E_OUTOFMEMORY;
+    }
+
+public:
+    CShellLinkObject()
+    {
+        m_szFile[0] = UNICODE_NULL;
+    }
+
+    HRESULT Initialize(LPCITEMIDLIST pidl)
+    {
+        if (!SHGetPathFromIDListW(pidl, m_szFile))
+            return E_FAIL;
+        HRESULT hr = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARG(IShellLinkW, &m_pShellLink));
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+        CComPtr<IPersistFile> pPersistFile;
+        hr = m_pShellLink->QueryInterface(IID_PPV_ARG(IPersistFile, &pPersistFile));
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+        return pPersistFile->Load(m_szFile, STGM_READ);
+    }
+
+    STDMETHOD(get_Path)(BSTR *pbs) override
+    {
+        WCHAR szPath[MAX_PATH];
+        HRESULT hr = m_pShellLink->GetPath(szPath, _countof(szPath), NULL, 0);
+        if (FAILED(hr))
+            return hr;
+        return ToBSTR(hr == S_OK ? szPath : L"", pbs);
+    }
+
+    STDMETHOD(put_Path)(BSTR bs) override
+    {
+        return m_pShellLink->SetPath(bs);
+    }
+
+    STDMETHOD(get_Description)(BSTR *pbs) override
+    {
+        WCHAR szText[INFOTIPSIZE];
+        HRESULT hr = m_pShellLink->GetDescription(szText, _countof(szText));
+        return FAILED(hr) ? hr : ToBSTR(szText, pbs);
+    }
+
+    STDMETHOD(put_Description)(BSTR bs) override
+    {
+        return m_pShellLink->SetDescription(bs);
+    }
+
+    STDMETHOD(get_WorkingDirectory)(BSTR *pbs) override
+    {
+        WCHAR szPath[MAX_PATH];
+        HRESULT hr = m_pShellLink->GetWorkingDirectory(szPath, _countof(szPath));
+        return FAILED(hr) ? hr : ToBSTR(szPath, pbs);
+    }
+
+    STDMETHOD(put_WorkingDirectory)(BSTR bs) override
+    {
+        return m_pShellLink->SetWorkingDirectory(bs);
+    }
+
+    STDMETHOD(get_Arguments)(BSTR *pbs) override
+    {
+        WCHAR szArgs[INFOTIPSIZE];
+        HRESULT hr = m_pShellLink->GetArguments(szArgs, _countof(szArgs));
+        return FAILED(hr) ? hr : ToBSTR(szArgs, pbs);
+    }
+
+    STDMETHOD(put_Arguments)(BSTR bs) override
+    {
+        return m_pShellLink->SetArguments(bs);
+    }
+
+    STDMETHOD(get_Hotkey)(int *piHK) override
+    {
+        WORD wHotkey = 0;
+        if (!piHK)
+            return E_POINTER;
+        HRESULT hr = m_pShellLink->GetHotkey(&wHotkey);
+        *piHK = wHotkey;
+        return hr;
+    }
+
+    STDMETHOD(put_Hotkey)(int iHK) override
+    {
+        return m_pShellLink->SetHotkey((WORD)iHK);
+    }
+
+    STDMETHOD(get_ShowCommand)(int *piShowCommand) override
+    {
+        if (!piShowCommand)
+            return E_POINTER;
+        return m_pShellLink->GetShowCmd(piShowCommand);
+    }
+
+    STDMETHOD(put_ShowCommand)(int iShowCommand) override
+    {
+        return m_pShellLink->SetShowCmd(iShowCommand);
+    }
+
+    STDMETHOD(Resolve)(int fFlags) override
+    {
+        return m_pShellLink->Resolve(NULL, fFlags);
+    }
+
+    STDMETHOD(GetIconLocation)(BSTR *pbs, int *piIcon) override
+    {
+        WCHAR szPath[MAX_PATH];
+        int iIcon = 0;
+        if (!piIcon)
+            return E_POINTER;
+        HRESULT hr = m_pShellLink->GetIconLocation(szPath, _countof(szPath), &iIcon);
+        if (FAILED(hr))
+            return hr;
+        *piIcon = iIcon;
+        return ToBSTR(szPath, pbs);
+    }
+
+    STDMETHOD(SetIconLocation)(BSTR bs, int iIcon) override
+    {
+        return m_pShellLink->SetIconLocation(bs, iIcon);
+    }
+
+    STDMETHOD(Save)(VARIANT vWhere) override
+    {
+        CComPtr<IPersistFile> pPersistFile;
+        HRESULT hr = m_pShellLink->QueryInterface(IID_PPV_ARG(IPersistFile, &pPersistFile));
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+        PCWSTR pszFile = (V_VT(&vWhere) == VT_BSTR && !StrIsNullOrEmpty(V_BSTR(&vWhere))) ? V_BSTR(&vWhere) : m_szFile;
+        return pPersistFile->Save(pszFile, TRUE);
+    }
+
+    STDMETHOD(get_Target)(FolderItem **ppfi) override
+    {
+        CComHeapPtr<ITEMIDLIST> pidl;
+        if (!ppfi)
+            return E_POINTER;
+        *ppfi = NULL;
+        HRESULT hr = m_pShellLink->GetIDList(&pidl);
+        if (hr != S_OK)
+            return FAILED(hr) ? hr : E_FAIL;
+        CComPtr<IPersistFolder> pPersistFolder;
+        hr = ShellObjectCreator<CFolderItem>(IID_PPV_ARG(IPersistFolder, &pPersistFolder));
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+        hr = pPersistFolder->Initialize(pidl);
+        if (FAILED_UNEXPECTEDLY(hr))
+            return hr;
+        return pPersistFolder->QueryInterface(IID_PPV_ARG(FolderItem, ppfi));
+    }
+
+BEGIN_COM_MAP(CShellLinkObject)
+    COM_INTERFACE_ENTRY_IID(IID_IShellLinkDual2, IShellLinkDual2)
+    COM_INTERFACE_ENTRY_IID(IID_IShellLinkDual, IShellLinkDual)
+    COM_INTERFACE_ENTRY_IID(IID_IDispatch, IDispatch)
+END_COM_MAP()
+};
+
 HRESULT STDMETHODCALLTYPE CFolderItem::get_GetLink(IDispatch **ppid)
 {
     TRACE("(%p, %p)\n", this, ppid);
-    return E_NOTIMPL;
+
+    if (!ppid)
+        return E_POINTER;
+    *ppid = NULL;
+
+    if (!SHGetAttributes(NULL, GetAbsoluteIDList(), SFGAO_LINK))
+        return E_NOTIMPL;
+
+    return ShellObjectCreatorInit<CShellLinkObject>(GetAbsoluteIDList(), IID_PPV_ARG(IDispatch, ppid));
 }
 
 HRESULT STDMETHODCALLTYPE CFolderItem::get_GetFolder(IDispatch **ppid)
@@ -606,6 +787,10 @@ HRESULT STDMETHODCALLTYPE CFolderItems::Item(VARIANT var, FolderItem **ppid)
     CComVariant index;
     HRESULT hr;
 
+    if (!ppid)
+        return E_POINTER;
+    *ppid = NULL;
+
     hr = VariantCopyInd(&index, &var);
     if (FAILED(hr))
         return hr;
@@ -618,6 +803,8 @@ HRESULT STDMETHODCALLTYPE CFolderItems::Item(VARIANT var, FolderItem **ppid)
         if (FAILED(EnumObjects()))
             return E_FAIL;
 
+        if (V_I4(&index) < 0)
+            return S_FALSE;
         ULONG count = V_UI4(&index);
 
         hr = m_EnumIDList->Reset();
@@ -634,7 +821,7 @@ HRESULT STDMETHODCALLTYPE CFolderItems::Item(VARIANT var, FolderItem **ppid)
         if (FAILED_UNEXPECTEDLY(hr))
             return hr;
         if (hr != S_OK)
-            return E_INVALIDARG;
+            return S_FALSE;
 
         CComHeapPtr<ITEMIDLIST> pidlFull;
         if (FAILED_UNEXPECTEDLY(hr = SHILCombine(m_idlist, pidlChild, &pidlFull)))
@@ -653,6 +840,11 @@ HRESULT STDMETHODCALLTYPE CFolderItems::Item(VARIANT var, FolderItem **ppid)
         if (FAILED_UNEXPECTEDLY(hr))
             return hr;
         return hr;
+    }
+
+    else if (V_VT(&index) == VT_ERROR)
+    {
+        return ShellObjectCreatorInit<CFolderItem>(m_Folder, static_cast<LPCITEMIDLIST>(m_idlist), IID_PPV_ARG(FolderItem, ppid));
     }
 
     FIXME("Index type %d not handled.\n", V_VT(&index));
@@ -693,13 +885,19 @@ HRESULT STDMETHODCALLTYPE CFolderItems::get_Verbs(FolderItemVerbs **ppfic)
 {
     if (!ppfic)
         return E_POINTER;
+    *ppfic = NULL;
 
-    CComPtr<CFolderItemVerbs> pVerbs;
-    HRESULT hr = CFolderItemVerbs::CreateInstance(pVerbs);
+    long count;
+    HRESULT hr = get_Count(&count);
     if (FAILED(hr))
         return hr;
-    long count;
-    if (SUCCEEDED(hr = get_Count(&count)) && count)
+    if (!count)
+        return S_FALSE;
+
+    CComPtr<CFolderItemVerbs> pVerbs;
+    hr = CFolderItemVerbs::CreateInstance(pVerbs);
+    if (FAILED(hr))
+        return hr;
     {
         CComPtr<IContextMenu> pCM;
         if (SUCCEEDED(hr = GetUIObjectOfFolderItems(this, IID_PPV_ARG(IContextMenu, &pCM))))

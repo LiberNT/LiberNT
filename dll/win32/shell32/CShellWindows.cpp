@@ -232,7 +232,7 @@ public:
 
     STDMETHOD(Register)(IDispatch *pid, LONG hWnd, int swClass, LONG *plCookie) override
     {
-        if (!pid || !plCookie)
+        if (!hWnd || !plCookie)
             return E_POINTER;
 
         SHELLWINDOW_ENTRY *pEntry = new SHELLWINDOW_ENTRY();
@@ -340,6 +340,8 @@ public:
             if (!pvarLoc || FAILED(VariantChangeType(&var, pvarLoc, 0, VT_I4)))
                 return E_INVALIDARG;
             pFound = FindByCookie(V_I4(&var));
+            if (pFound && pFound->swClass != swClass)
+                pFound = NULL;
         }
         else
         {
@@ -367,7 +369,10 @@ public:
                     if (pidlRoot && !ILIsEqual(pEntry->pidlRoot, pidlRoot))
                         continue;
                 }
-                if (!pFound || pEntry->Activation > pFound->Activation)
+                if (!pFound)
+                    pFound = pEntry;
+                else if (swClass == SWC_DESKTOP ? pEntry->Activation < pFound->Activation
+                                                : pEntry->Activation > pFound->Activation)
                     pFound = pEntry;
             }
         }

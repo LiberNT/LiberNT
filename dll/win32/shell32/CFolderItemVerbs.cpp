@@ -149,6 +149,7 @@ HRESULT STDMETHODCALLTYPE CFolderItemVerbs::Item(VARIANT indexVar, FolderItemVer
 {
     if (!ppid)
         return E_POINTER;
+    *ppid = NULL;
 
     CComVariant var;
 
@@ -157,8 +158,8 @@ HRESULT STDMETHODCALLTYPE CFolderItemVerbs::Item(VARIANT indexVar, FolderItemVer
         return E_INVALIDARG;
 
     int index = V_I4(&var);
-    if (index > m_count)
-        return S_FALSE;
+    if (index < 0 || index > m_count)
+        return S_OK;
 
     BSTR name = NULL;
     if (index == m_count)
