@@ -304,6 +304,8 @@ Uart16550PutByte(
     _Inout_ PCPPORT Port,
     _In_ UCHAR Byte)
 {
+    ULONG LimitCount = (Port->Flags & CPPORT_FLAG_TX_STALLED) ? 1 : TIMEOUT_COUNT;
+
     /* Check if port is in modem control to handle CD */
     // while (Port->Flags & CPPORT_FLAG_MODEM_CONTROL)  // Commented for the moment.
     if (Port->Flags & CPPORT_FLAG_MODEM_CONTROL)    // To be removed when this becomes implemented.
@@ -314,7 +316,15 @@ Uart16550PutByte(
 
     /* Wait for LSR to say we can go ahead */
     while (!(Cp16550ReadLsr(Port, SERIAL_LSR_THRE) & SERIAL_LSR_THRE))
-        NOTHING;
+    {
+        if (--LimitCount == 0)
+        {
+            Port->Flags |= CPPORT_FLAG_TX_STALLED;
+            return;
+        }
+    }
+
+    Port->Flags &= ~CPPORT_FLAG_TX_STALLED;
 
     /* Send the byte */
     WRITE_PORT_UCHAR(Port->Address + TRANSMIT_HOLDING_REGISTER, Byte);
