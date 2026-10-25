@@ -734,6 +734,15 @@ static HRESULT WINAPI DispatchEx_InvokeEx(IDispatchEx *iface, DISPID id, LCID lc
     This->desc->ctx->vbcaller->caller = prev_caller;
     if(pspCaller)
         IServiceProvider_Release(pspCaller);
+#ifdef __REACTOS__
+    if(FAILED(hres) && hres != SCRIPT_E_REPORTED && HRESULT_FACILITY(hres) == FACILITY_CONTROL) {
+        if(pei) {
+            memset(pei, 0, sizeof(*pei));
+            pei->scode = hres;
+        }
+        hres = DISP_E_EXCEPTION;
+    }
+#endif
     return hres;
 }
 
@@ -959,7 +968,17 @@ static HRESULT WINAPI FuncRef_Invoke(IDispatch *iface, DISPID dispIdMember, REFI
      * reaching this vtable entry means the caller is outside the engine, so the
      * reference is entered as an external caller and errors are reported to the
      * host rather than propagated as an HRESULT. */
+#ifdef __REACTOS__
+    {
+        HRESULT hres = exec_script(This->ctx, TRUE, This->func, NULL, pDispParams, pVarResult);
+
+        if(FAILED(hres) && hres != SCRIPT_E_REPORTED && HRESULT_FACILITY(hres) == FACILITY_CONTROL)
+            hres = SCRIPT_E_RECORDED;
+        return hres;
+    }
+#else
     return exec_script(This->ctx, TRUE, This->func, NULL, pDispParams, pVarResult);
+#endif
 }
 
 static const IDispatchVtbl FuncRefVtbl = {
