@@ -725,8 +725,9 @@ VOID AhciCompleteIssuedSrb(__in PAHCI_PORT_EXTENSION PortExtension, __in ULONG C
 #define AHCI_RECOVERY_POLL_INTERVAL_US       10000
 #define AHCI_RECOVERY_ENGINE_TIMEOUT_TICKS   50
 #define AHCI_RECOVERY_LOG_TIMEOUT_TICKS      300
-#define AHCI_RECOVERY_LINK_TIMEOUT_TICKS     100
 #define AHCI_RECOVERY_READY_TIMEOUT_TICKS    3000
+
+static const ULONG AhciRecoveryLinkTimeoutTicks[] = { 1000, 1000, 3500, 500 };
 
 static
 VOID
@@ -1512,6 +1513,7 @@ AhciPortRecoveryStep(
 
                 PortExtension->RecoveryState = AhciRecoveryComresetAsserted;
                 PortExtension->RecoveryTicks = 0;
+                PortExtension->RecoveryResetAttempt = 0;
                 return TRUE;
             }
 
@@ -1613,8 +1615,20 @@ AhciPortRecoveryStep(
             ssts.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SSTS);
             if (ssts.DET != 0x3)
             {
-                if (++PortExtension->RecoveryTicks < AHCI_RECOVERY_LINK_TIMEOUT_TICKS)
+                if (++PortExtension->RecoveryTicks < AhciRecoveryLinkTimeoutTicks[PortExtension->RecoveryResetAttempt])
                 {
+                    return TRUE;
+                }
+
+                if (++PortExtension->RecoveryResetAttempt < RTL_NUMBER_OF(AhciRecoveryLinkTimeoutTicks))
+                {
+                    AhciDebugPrint("\tPort %u: link did not return after COMRESET, retrying (attempt %u)\n",
+                                   PortExtension->PortNumber, PortExtension->RecoveryResetAttempt + 1);
+                    sctl.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SCTL);
+                    sctl.DET = 1;
+                    StorPortWriteRegisterUlong(AdapterExtension, &PortExtension->Port->SCTL, sctl.Status);
+                    PortExtension->RecoveryState = AhciRecoveryComresetAsserted;
+                    PortExtension->RecoveryTicks = 0;
                     return TRUE;
                 }
 
@@ -1976,8 +1990,6 @@ BOOLEAN NTAPI AhciHwInterrupt(__in PVOID DeviceExtension)
         nextPort = (AdapterExtension->LastInterruptPort + i) % portCount;
         if ((portPending & (0x1 << nextPort)) == 0)
             continue;
-
-        NT_ASSERT(IsPortValid(AdapterExtension, nextPort));
 
         AdapterExtension->LastInterruptPort = nextPort;
         InterruptHandled = TRUE;
