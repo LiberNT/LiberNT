@@ -4539,7 +4539,12 @@ static void saxreader_parse_comment(struct saxlocator *locator)
         else
         {
 #ifdef __REACTOS__
-            if (locator->saxreader->features & NormalizeLineBreaks && ch == '\r')
+            if (locator->saxreader->features & NormalizeLineBreaks && saxreader_has_handler(locator, SAXExtensionHandler)
+                    && (saxreader_cmp(locator, L"\r\n") || saxreader_cmp(locator, L"\r")))
+            {
+                saxreader_string_append(locator, &buffer, L"\n", 1);
+            }
+            else if (locator->saxreader->features & NormalizeLineBreaks && ch == '\r')
             {
                 bool move_position = false;
 
