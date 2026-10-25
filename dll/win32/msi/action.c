@@ -2816,7 +2816,13 @@ static UINT ITERATE_WriteRegistryValues(MSIRECORD *row, LPVOID param)
     }
     free( deformated );
     str = msi_record_get_string( row, 5, NULL );
+#ifdef __REACTOS__
+    package->short_file_names = 1;
     len = deformat_string( package, str, &deformated );
+    package->short_file_names = 0;
+#else
+    len = deformat_string( package, str, &deformated );
+#endif
     new_value = parse_value( package, deformated, len, &type, &new_size );
 
     free( deformated );
@@ -4463,7 +4469,13 @@ static UINT ITERATE_WriteIniValues(MSIRECORD *row, LPVOID param)
 
     deformat_string(package,section,&deformated_section);
     deformat_string(package,key,&deformated_key);
+#ifdef __REACTOS__
+    package->short_file_names = 1;
     deformat_string(package,value,&deformated_value);
+    package->short_file_names = 0;
+#else
+    deformat_string(package,value,&deformated_value);
+#endif
 
     fullname = get_ini_file_name(package, row);
 
@@ -4554,7 +4566,13 @@ static UINT ITERATE_RemoveIniValuesOnUninstall( MSIRECORD *row, LPVOID param )
 
     deformat_string( package, section, &deformated_section );
     deformat_string( package, key, &deformated_key );
+#ifdef __REACTOS__
+    package->short_file_names = 1;
     deformat_string( package, value, &deformated_value );
+    package->short_file_names = 0;
+#else
+    deformat_string( package, value, &deformated_value );
+#endif
 
     if (action == msidbIniFileActionAddLine || action == msidbIniFileActionCreateLine)
     {
@@ -4616,7 +4634,13 @@ static UINT ITERATE_RemoveIniValuesOnInstall( MSIRECORD *row, LPVOID param )
 
     deformat_string( package, section, &deformated_section );
     deformat_string( package, key, &deformated_key );
+#ifdef __REACTOS__
+    package->short_file_names = 1;
     deformat_string( package, value, &deformated_value );
+    package->short_file_names = 0;
+#else
+    deformat_string( package, value, &deformated_value );
+#endif
 
     if (action == msidbIniFileActionRemoveLine)
     {

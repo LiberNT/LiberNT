@@ -490,6 +490,7 @@ typedef struct tagMSIPACKAGE
 #ifdef __REACTOS__
     unsigned char property_table_held : 1;
     unsigned char install_validated : 1;
+    unsigned char short_file_names : 1;
 #endif
 } MSIPACKAGE;
 

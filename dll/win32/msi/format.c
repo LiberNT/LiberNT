@@ -479,7 +479,11 @@ static WCHAR *deformat_literal( struct format *format, struct form_str *str, BOO
         case '#':
             replaced = deformat_file( format, str, FALSE, len ); break;
         case '!':
+#ifdef __REACTOS__
+            replaced = deformat_file( format, str, format->package && format->package->short_file_names, len ); break;
+#else
             replaced = deformat_file( format, str, TRUE, len ); break;
+#endif
         case '$':
             replaced = deformat_component( format, str, len ); break;
         }
@@ -1296,7 +1300,11 @@ static UINT format_key( struct format *format, enum format_pass pass, WCHAR *key
         case '#':
             value = deformat_file( format, &str, FALSE, &value_len ); break;
         case '!':
+#ifdef __REACTOS__
+            value = deformat_file( format, &str, format->package && format->package->short_file_names, &value_len ); break;
+#else
             value = deformat_file( format, &str, TRUE, &value_len ); break;
+#endif
         case '$':
             value = deformat_component( format, &str, &value_len ); break;
         }
