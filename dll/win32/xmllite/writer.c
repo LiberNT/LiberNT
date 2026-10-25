@@ -39,6 +39,9 @@ WINE_DEFAULT_DEBUG_CHANNEL(xmllite);
 DEFINE_GUID(IID_IXmlWriterOutput, 0xc1131708, 0x0f59, 0x477f, 0x93, 0x59, 0x7d, 0x33, 0x24, 0x51, 0xbc, 0x1a);
 
 static const WCHAR xmlnsuriW[] = L"http://www.w3.org/2000/xmlns/";
+#ifdef __REACTOS__
+static const WCHAR xmluriW[] = L"http://www.w3.org/XML/1998/namespace";
+#endif
 
 struct output_buffer
 {
@@ -63,6 +66,9 @@ typedef enum
 typedef struct
 {
     IXmlWriterOutput IXmlWriterOutput_iface;
+#ifdef __REACTOS__
+    IXmlWriterOutput IXmlWriterOutputImpl_iface;
+#endif
     LONG ref;
     IUnknown *output;
     ISequentialStream *stream;
@@ -74,6 +80,9 @@ typedef struct
 } xmlwriteroutput;
 
 static const struct IUnknownVtbl xmlwriteroutputvtbl;
+#ifdef __REACTOS__
+static const struct IUnknownVtbl xmlwriteroutputimplvtbl;
+#endif
 
 struct element
 {
@@ -81,7 +90,20 @@ struct element
     WCHAR *qname;
     unsigned int len; /* qname length in chars */
     struct list ns;
+#ifdef __REACTOS__
+    struct list attributes;
+    unsigned int attribute_ns;
+#endif
 };
+
+#ifdef __REACTOS__
+struct written_attribute
+{
+    struct list entry;
+    WCHAR *uri;
+    WCHAR *local;
+};
+#endif
 
 struct ns
 {
@@ -120,6 +142,13 @@ static inline xmlwriteroutput *impl_from_IXmlWriterOutput(IXmlWriterOutput *ifac
 {
     return CONTAINING_RECORD(iface, xmlwriteroutput, IXmlWriterOutput_iface);
 }
+
+#ifdef __REACTOS__
+static inline xmlwriteroutput *impl_from_IXmlWriterOutputImpl(IXmlWriterOutput *iface)
+{
+    return CONTAINING_RECORD(iface, xmlwriteroutput, IXmlWriterOutputImpl_iface);
+}
+#endif
 
 static const char *debugstr_writer_prop(XmlWriterProperty prop)
 {
@@ -202,6 +231,10 @@ static struct element *alloc_element(xmlwriter *writer, const WCHAR *prefix, con
     }
     lstrcatW(ret->qname, local);
     list_init(&ret->ns);
+#ifdef __REACTOS__
+    list_init(&ret->attributes);
+    ret->attribute_ns = 0;
+#endif
 
     return ret;
 }
@@ -209,6 +242,17 @@ static struct element *alloc_element(xmlwriter *writer, const WCHAR *prefix, con
 static void writer_free_element(xmlwriter *writer, struct element *element)
 {
     struct ns *ns, *ns2;
+#ifdef __REACTOS__
+    struct written_attribute *attr, *attr2;
+
+    LIST_FOR_EACH_ENTRY_SAFE(attr, attr2, &element->attributes, struct written_attribute, entry)
+    {
+        list_remove(&attr->entry);
+        writer_free(writer, attr->uri);
+        writer_free(writer, attr->local);
+        writer_free(writer, attr);
+    }
+#endif
 
     LIST_FOR_EACH_ENTRY_SAFE(ns, ns2, &element->ns, struct ns, entry)
     {
@@ -311,6 +355,7 @@ static struct ns *writer_push_ns(xmlwriter *writer, const WCHAR *prefix, int pre
     return ns;
 }
 
+#ifndef __REACTOS__
 static struct ns *writer_find_ns_current(const xmlwriter *writer, const WCHAR *prefix, const WCHAR *uri)
 {
     struct element *element;
@@ -329,6 +374,7 @@ static struct ns *writer_find_ns_current(const xmlwriter *writer, const WCHAR *p
 
     return NULL;
 }
+#endif
 
 static struct ns *writer_find_ns(const xmlwriter *writer, const WCHAR *prefix, const WCHAR *uri)
 {
@@ -360,6 +406,150 @@ static struct ns *writer_find_ns(const xmlwriter *writer, const WCHAR *prefix, c
 
     return NULL;
 }
+
+#ifdef __REACTOS__
+static struct ns *writer_find_attribute_ns(const xmlwriter *writer, const WCHAR *prefix, const WCHAR *uri)
+{
+    struct element *element;
+    struct ns *ns;
+
+    LIST_FOR_EACH_ENTRY(element, &writer->elements, struct element, entry)
+    {
+        LIST_FOR_EACH_ENTRY(ns, &element->ns, struct ns, entry)
+        {
+            if (is_empty_string(ns->prefix))
+                continue;
+            if (is_empty_string(uri))
+            {
+                if (!is_empty_string(prefix) && !wcscmp(ns->prefix, prefix))
+                    return ns;
+            }
+            else if (ns->uri && !wcscmp(uri, ns->uri) && (is_empty_string(prefix) || !wcscmp(prefix, ns->prefix)))
+                return ns;
+        }
+    }
+
+    return NULL;
+}
+
+static BOOL writer_is_prefix_in_scope(const xmlwriter *writer, const WCHAR *prefix)
+{
+    struct element *element;
+    struct ns *ns;
+
+    LIST_FOR_EACH_ENTRY(element, &writer->elements, struct element, entry)
+    {
+        LIST_FOR_EACH_ENTRY(ns, &element->ns, struct ns, entry)
+        {
+            if (ns->prefix && !wcscmp(ns->prefix, prefix))
+                return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static struct ns *writer_push_attribute_ns(xmlwriter *writer, const WCHAR *prefix, int prefix_len, const WCHAR *uri)
+{
+    struct element *element;
+    unsigned int count = 0;
+    WCHAR name[16];
+    struct ns *ns;
+    int len;
+
+    element = LIST_ENTRY(list_head(&writer->elements), struct element, entry);
+    if (!element)
+        return NULL;
+
+    if (!prefix_len)
+    {
+        struct element *scope;
+
+        LIST_FOR_EACH_ENTRY(scope, &writer->elements, struct element, entry)
+            count += 1 + scope->attribute_ns;
+
+        len = swprintf(name, ARRAY_SIZE(name), L"p%u", count);
+        while (writer_is_prefix_in_scope(writer, name) && len < ARRAY_SIZE(name) - 1)
+        {
+            name[len++] = '0';
+            name[len] = 0;
+        }
+        prefix = name;
+        prefix_len = len;
+    }
+
+    if ((ns = writer_push_ns(writer, prefix, prefix_len, uri)))
+        element->attribute_ns++;
+
+    return ns;
+}
+
+static HRESULT writer_declare_ns(xmlwriter *writer, const WCHAR *prefix, int prefix_len, const WCHAR *uri)
+{
+    struct element *element;
+    struct ns *ns;
+
+    element = LIST_ENTRY(list_head(&writer->elements), struct element, entry);
+    if (!element)
+        return S_OK;
+
+    if (!uri)
+        uri = L"";
+
+    LIST_FOR_EACH_ENTRY(ns, &element->ns, struct ns, entry)
+    {
+        if (prefix_len ? !ns->prefix || wcscmp(ns->prefix, prefix) : !is_empty_string(ns->prefix))
+            continue;
+        if (ns->emitted || !ns->uri || wcscmp(ns->uri, uri))
+            return WR_E_NSPREFIXDECLARED;
+        ns->emitted = TRUE;
+        return S_OK;
+    }
+
+    if (!prefix_len && !wcschr(element->qname, ':'))
+        return WR_E_NSPREFIXDECLARED;
+
+    if (!(ns = writer_push_attribute_ns(writer, prefix, prefix_len, uri)))
+        return E_OUTOFMEMORY;
+    ns->emitted = TRUE;
+
+    return S_OK;
+}
+
+static HRESULT writer_add_attribute(xmlwriter *writer, const WCHAR *uri, const WCHAR *local)
+{
+    struct written_attribute *attr;
+    struct element *element;
+
+    element = LIST_ENTRY(list_head(&writer->elements), struct element, entry);
+    if (!element)
+        return S_OK;
+
+    if (!uri)
+        uri = L"";
+
+    LIST_FOR_EACH_ENTRY(attr, &element->attributes, struct written_attribute, entry)
+    {
+        if (!wcscmp(attr->uri, uri) && !wcscmp(attr->local, local))
+            return WR_E_DUPLICATEATTRIBUTE;
+    }
+
+    if (!(attr = writer_alloc(writer, sizeof(*attr))))
+        return E_OUTOFMEMORY;
+    attr->uri = writer_strdupW(writer, uri);
+    attr->local = writer_strdupW(writer, local);
+    if (!attr->uri || !attr->local)
+    {
+        writer_free(writer, attr->uri);
+        writer_free(writer, attr->local);
+        writer_free(writer, attr);
+        return E_OUTOFMEMORY;
+    }
+    list_add_tail(&element->attributes, &attr->entry);
+
+    return S_OK;
+}
+#endif
 
 static HRESULT is_valid_ncname(const WCHAR *str, int *out)
 {
@@ -737,7 +927,11 @@ static HRESULT writer_output_ns(xmlwriter *writer, const struct element *element
     HRESULT hr = S_OK;
     struct ns *ns;
 
+#ifdef __REACTOS__
+    LIST_FOR_EACH_ENTRY_REV(ns, &element->ns, struct ns, entry)
+#else
     LIST_FOR_EACH_ENTRY(ns, &element->ns, struct ns, entry)
+#endif
     {
         if (ns->emitted)
             continue;
@@ -881,8 +1075,13 @@ static HRESULT WINAPI xmlwriter_SetOutput(IXmlWriter *iface, IUnknown *output)
     /* now try IXmlWriterOutput, ISequentialStream, IStream */
     hr = IUnknown_QueryInterface(output, &IID_IXmlWriterOutput, (void**)&writeroutput);
     if (hr == S_OK) {
+#ifdef __REACTOS__
+        if (writeroutput->lpVtbl == &xmlwriteroutputimplvtbl)
+            This->output = impl_from_IXmlWriterOutputImpl(writeroutput);
+#else
         if (writeroutput->lpVtbl == &xmlwriteroutputvtbl)
             This->output = impl_from_IXmlWriterOutput(writeroutput);
+#endif
         else {
             ERR("got external IXmlWriterOutput implementation: %p, vtbl=%p\n",
                 writeroutput, writeroutput->lpVtbl);
@@ -1029,6 +1228,115 @@ static BOOL is_valid_xml_space_value(const WCHAR *value)
     return value && (!wcscmp(value, L"preserve") || !wcscmp(value, L"default"));
 }
 
+#ifdef __REACTOS__
+static HRESULT WINAPI xmlwriter_WriteAttributeString(IXmlWriter *iface, LPCWSTR prefix,
+    LPCWSTR local, LPCWSTR uri, LPCWSTR value)
+{
+    xmlwriter *writer = impl_from_IXmlWriter(iface);
+    BOOL is_xmlns_prefix, is_xmlns_local;
+    int prefix_len, local_len;
+    struct ns *ns;
+    HRESULT hr;
+
+    TRACE("%p, %s, %s, %s, %s.\n", iface, debugstr_w(prefix), debugstr_w(local), debugstr_w(uri), debugstr_w(value));
+
+    switch (writer->state)
+    {
+    case XmlWriterState_Initial:
+        return E_UNEXPECTED;
+    case XmlWriterState_Ready:
+    case XmlWriterState_DocClosed:
+        writer->state = XmlWriterState_DocClosed;
+        return WR_E_INVALIDACTION;
+    case XmlWriterState_InvalidEncoding:
+        return MX_E_ENCODING;
+    default:
+        ;
+    }
+
+    is_xmlns_prefix = prefix && !wcscmp(prefix, L"xmlns");
+    if (is_xmlns_prefix && is_empty_string(uri) && is_empty_string(local))
+        return WR_E_NSPREFIXDECLARED;
+
+    if (is_xmlns_prefix && !is_empty_string(uri))
+        return WR_E_XMLNSPREFIXDECLARATION;
+
+    if (is_empty_string(local))
+        return E_INVALIDARG;
+
+    if (FAILED(hr = is_valid_ncname(prefix, &prefix_len)))
+        return hr;
+
+    if (FAILED(hr = is_valid_ncname(local, &local_len)))
+        return hr;
+
+    is_xmlns_local = !wcscmp(local, L"xmlns");
+
+    if (is_xmlns_local && prefix_len == 0 && is_empty_string(uri))
+    {
+        if (FAILED(hr = writer_declare_ns(writer, NULL, 0, value)))
+            return hr;
+        return write_output_attribute(writer, NULL, 0, local, local_len, value, &hr);
+    }
+
+    if (prefix_len == 0 && is_empty_string(uri))
+    {
+        if (FAILED(hr = writer_add_attribute(writer, NULL, local)))
+            return hr;
+        return write_output_attribute(writer, prefix, prefix_len, local, local_len, value, &hr);
+    }
+
+    if (prefix_len && !wcscmp(prefix, L"xml"))
+    {
+        if (!wcscmp(local, L"space") && !is_valid_xml_space_value(value))
+            return WR_E_INVALIDXMLSPACE;
+
+        if (!is_empty_string(uri))
+            return WR_E_XMLPREFIXDECLARATION;
+
+        if (FAILED(hr = writer_add_attribute(writer, xmluriW, local)))
+            return hr;
+        return write_output_attribute(writer, prefix, prefix_len, local, local_len, value, &hr);
+    }
+
+    if (is_xmlns_prefix || (prefix_len == 0 && uri && !wcscmp(uri, xmlnsuriW)))
+    {
+        if (prefix && !prefix_len)
+            return WR_E_XMLNSPREFIXDECLARATION;
+
+        if (FAILED(hr = writer_declare_ns(writer, local, local_len, value)))
+            return hr;
+
+        return write_output_attribute(writer, L"xmlns", 5, local, local_len, value, &hr);
+    }
+
+    if (prefix_len && uri && !wcscmp(uri, xmlnsuriW))
+        return WR_E_XMLNSURIDECLARATION;
+
+    if (is_xmlns_local && is_empty_string(uri))
+        return write_output_attribute(writer, NULL, 0, L"xmlns", 5, value, &hr);
+
+    if (is_xmlns_local && prefix_len == 0)
+        return WR_E_XMLNSPREFIXDECLARATION;
+
+    if (!(ns = writer_find_attribute_ns(writer, prefix, uri)) && !is_empty_string(uri))
+    {
+        if (!(ns = writer_push_attribute_ns(writer, prefix, prefix_len, uri)))
+            return E_OUTOFMEMORY;
+    }
+
+    if (ns)
+    {
+        if (FAILED(hr = writer_add_attribute(writer, ns->uri, local)))
+            return hr;
+        hr = write_output_attribute(writer, ns->prefix, ns->prefix_len, local, local_len, value, &hr);
+    }
+    else
+        hr = write_output_attribute(writer, prefix, prefix_len, local, local_len, value, &hr);
+
+    return hr;
+}
+#else
 static HRESULT WINAPI xmlwriter_WriteAttributeString(IXmlWriter *iface, LPCWSTR prefix,
     LPCWSTR local, LPCWSTR uri, LPCWSTR value)
 {
@@ -1124,6 +1432,8 @@ static HRESULT WINAPI xmlwriter_WriteAttributeString(IXmlWriter *iface, LPCWSTR 
 
     return hr;
 }
+
+#endif
 
 static HRESULT write_cdata_section(xmlwriter *writer, const WCHAR *data, int len)
 {
@@ -1745,6 +2055,11 @@ static HRESULT WINAPI xmlwriter_WriteNmToken(IXmlWriter *iface, const WCHAR *nmt
     if (is_empty_string(nmtoken))
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    if (!is_valid_nmtoken(nmtoken, &len))
+        return WC_E_NAMECHARACTER;
+#endif
+
     switch (writer->state)
     {
     case XmlWriterState_Initial:
@@ -1762,8 +2077,10 @@ static HRESULT WINAPI xmlwriter_WriteNmToken(IXmlWriter *iface, const WCHAR *nmt
         ;
     }
 
+#ifndef __REACTOS__
     if (SUCCEEDED(hr) && !is_valid_nmtoken(nmtoken, &len))
         hr = WC_E_NAMECHARACTER;
+#endif
 
     return write_output(writer, nmtoken, len, &hr);
 }
@@ -2304,8 +2621,16 @@ static HRESULT WINAPI xmlwriteroutput_QueryInterface(IXmlWriterOutput *iface, RE
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_guid(riid), ppvObject);
 
+#ifdef __REACTOS__
+    if (IsEqualGUID(riid, &IID_IXmlWriterOutput))
+    {
+        *ppvObject = &This->IXmlWriterOutputImpl_iface;
+    }
+    else if (IsEqualGUID(riid, &IID_IUnknown))
+#else
     if (IsEqualGUID(riid, &IID_IXmlWriterOutput) ||
         IsEqualGUID(riid, &IID_IUnknown))
+#endif
     {
         *ppvObject = iface;
     }
@@ -2357,6 +2682,33 @@ static const struct IUnknownVtbl xmlwriteroutputvtbl =
     xmlwriteroutput_Release
 };
 
+#ifdef __REACTOS__
+static HRESULT WINAPI xmlwriteroutputimpl_QueryInterface(IXmlWriterOutput *iface, REFIID riid, void **obj)
+{
+    xmlwriteroutput *This = impl_from_IXmlWriterOutputImpl(iface);
+    return xmlwriteroutput_QueryInterface(&This->IXmlWriterOutput_iface, riid, obj);
+}
+
+static ULONG WINAPI xmlwriteroutputimpl_AddRef(IXmlWriterOutput *iface)
+{
+    xmlwriteroutput *This = impl_from_IXmlWriterOutputImpl(iface);
+    return xmlwriteroutput_AddRef(&This->IXmlWriterOutput_iface);
+}
+
+static ULONG WINAPI xmlwriteroutputimpl_Release(IXmlWriterOutput *iface)
+{
+    xmlwriteroutput *This = impl_from_IXmlWriterOutputImpl(iface);
+    return xmlwriteroutput_Release(&This->IXmlWriterOutput_iface);
+}
+
+static const struct IUnknownVtbl xmlwriteroutputimplvtbl =
+{
+    xmlwriteroutputimpl_QueryInterface,
+    xmlwriteroutputimpl_AddRef,
+    xmlwriteroutputimpl_Release
+};
+#endif
+
 HRESULT WINAPI CreateXmlWriter(REFIID riid, void **obj, IMalloc *imalloc)
 {
     xmlwriter *writer;
@@ -2398,6 +2750,9 @@ static HRESULT create_writer_output(IUnknown *stream, IMalloc *imalloc, xml_enco
     memset(writeroutput, 0, sizeof(*writeroutput));
 
     writeroutput->IXmlWriterOutput_iface.lpVtbl = &xmlwriteroutputvtbl;
+#ifdef __REACTOS__
+    writeroutput->IXmlWriterOutputImpl_iface.lpVtbl = &xmlwriteroutputimplvtbl;
+#endif
     writeroutput->ref = 1;
     writeroutput->imalloc = imalloc;
     if (imalloc)
