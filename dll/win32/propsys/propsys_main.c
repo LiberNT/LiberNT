@@ -387,8 +387,19 @@ HRESULT WINAPI PSGetPropertyKeyFromName(PCWSTR name, PROPERTYKEY *key)
 
 HRESULT WINAPI PSRefreshPropertySchema(void)
 {
+#ifdef __REACTOS__
+    APTTYPEQUALIFIER qualifier;
+    APTTYPE type;
+
+    TRACE("\n");
+
+    if (CoGetApartmentType(&type, &qualifier) == CO_E_NOTINITIALIZED)
+        return CO_E_NOTINITIALIZED;
+    return S_OK;
+#else
     FIXME("\n");
     return S_OK;
+#endif
 }
 
 HRESULT WINAPI PSStringFromPropertyKey(REFPROPERTYKEY pkey, LPWSTR psz, UINT cch)
