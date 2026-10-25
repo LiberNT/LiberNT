@@ -88,6 +88,9 @@ static HRESULT PROPVAR_ConvertNumber(REFPROPVARIANT pv, int dest_bits,
                                      BOOL dest_signed, LONGLONG *res)
 {
     BOOL src_signed;
+#ifdef __REACTOS__
+    BOOL is_string = FALSE;
+#endif
 
     switch (pv->vt)
     {
@@ -124,6 +127,9 @@ static HRESULT PROPVAR_ConvertNumber(REFPROPVARIANT pv, int dest_bits,
         *res = pv->uhVal.QuadPart;
         break;
     case VT_EMPTY:
+#ifdef __REACTOS__
+    case VT_NULL:
+#endif
         src_signed = FALSE;
         *res = 0;
         break;
@@ -132,7 +138,12 @@ static HRESULT PROPVAR_ConvertNumber(REFPROPVARIANT pv, int dest_bits,
         char *end;
         *res = strtoll(pv->pszVal, &end, 0);
         if (pv->pszVal == end)
+#ifdef __REACTOS__
+            return TYPE_E_TYPEMISMATCH;
+        is_string = TRUE;
+#else
             return DISP_E_TYPEMISMATCH;
+#endif
         src_signed = *res < 0;
         break;
     }
@@ -142,7 +153,12 @@ static HRESULT PROPVAR_ConvertNumber(REFPROPVARIANT pv, int dest_bits,
         WCHAR *end;
         *res = wcstol(pv->pwszVal, &end, 0);
         if (pv->pwszVal == end)
+#ifdef __REACTOS__
+            return TYPE_E_TYPEMISMATCH;
+        is_string = TRUE;
+#else
             return DISP_E_TYPEMISMATCH;
+#endif
         src_signed = *res < 0;
         break;
     }
@@ -157,6 +173,10 @@ static HRESULT PROPVAR_ConvertNumber(REFPROPVARIANT pv, int dest_bits,
         return E_NOTIMPL;
     }
 
+#ifdef __REACTOS__
+    if (*res < 0 && is_string && !dest_signed)
+        return TYPE_E_TYPEMISMATCH;
+#endif
     if (*res < 0 && src_signed != dest_signed)
         return HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW);
 
@@ -340,6 +360,10 @@ HRESULT WINAPI PropVariantToBoolean(REFPROPVARIANT propvarIn, BOOL *ret)
 
     hr = PROPVAR_ConvertNumber(propvarIn, 64, TRUE, &res);
     *ret = !!res;
+#ifdef __REACTOS__
+    if (hr == TYPE_E_TYPEMISMATCH)
+        hr = DISP_E_TYPEMISMATCH;
+#endif
     return hr;
 }
 
@@ -377,9 +401,25 @@ HRESULT WINAPI PropVariantToBuffer(REFPROPVARIANT propvarIn, void *ret, UINT cb)
             memcpy(ret, propvarIn->caub.pElems, cb);
             break;
         case VT_ARRAY|VT_UI1:
+#ifdef __REACTOS__
+        {
+            void *data;
+
+            if (SafeArrayGetDim(propvarIn->parray) != 1 || cb > propvarIn->parray->rgsabound[0].cElements)
+                return E_FAIL;
+            if (!cb)
+                break;
+            if (FAILED(hr = SafeArrayAccessData(propvarIn->parray, &data)))
+                break;
+            memcpy(ret, data, cb);
+            SafeArrayUnaccessData(propvarIn->parray);
+            break;
+        }
+#else
             FIXME("Unsupported type: VT_ARRAY|VT_UI1\n");
             hr = E_NOTIMPL;
             break;
+#endif
         default:
             WARN("Unexpected type: %x\n", propvarIn->vt);
             hr = E_INVALIDARG;
@@ -474,6 +514,105 @@ static HRESULT string_alloc_from_int(const PROPVARIANT *var, WCHAR **ret)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static HRESULT string_alloc_from_double(double value, WCHAR **ret)
+{
+    WCHAR buffer[64];
+    BSTR str;
+
+    if (SUCCEEDED(VarBstrFromR8(value, LOCALE_INVARIANT, 0, &str)))
+    {
+        if (wcstod(str, NULL) == value && SysStringLen(str) < ARRAY_SIZE(buffer))
+            wcscpy(buffer, str);
+        else
+            swprintf(buffer, ARRAY_SIZE(buffer), L"%.18g", value);
+        SysFreeString(str);
+    }
+    else
+        swprintf(buffer, ARRAY_SIZE(buffer), L"%.18g", value);
+
+    if (!(*ret = CoTaskMemAlloc((wcslen(buffer) + 1) * sizeof(WCHAR))))
+        return E_OUTOFMEMORY;
+    wcscpy(*ret, buffer);
+
+    return S_OK;
+}
+
+static HRESULT string_alloc_from_vector(const PROPVARIANT *var, WCHAR **ret)
+{
+    VARTYPE vt = var->vt & VT_TYPEMASK;
+    WCHAR *res, *str, *tmp;
+    PROPVARIANT elem;
+    SIZE_T len = 1;
+    HRESULT hr;
+    ULONG i;
+
+    switch (vt)
+    {
+        case VT_I1:
+        case VT_UI1:
+        case VT_I2:
+        case VT_UI2:
+        case VT_I4:
+        case VT_UI4:
+        case VT_I8:
+        case VT_UI8:
+        case VT_R4:
+        case VT_R8:
+        case VT_BOOL:
+            break;
+        default:
+            return TYPE_E_TYPEMISMATCH;
+    }
+
+    if (!(res = CoTaskMemAlloc(sizeof(WCHAR))))
+        return E_OUTOFMEMORY;
+    res[0] = 0;
+
+    for (i = 0; i < var->caub.cElems; i++)
+    {
+        PropVariantInit(&elem);
+        elem.vt = vt;
+        switch (vt)
+        {
+            case VT_I1: elem.cVal = var->cac.pElems[i]; break;
+            case VT_UI1: elem.bVal = var->caub.pElems[i]; break;
+            case VT_I2: elem.iVal = var->cai.pElems[i]; break;
+            case VT_UI2: elem.uiVal = var->caui.pElems[i]; break;
+            case VT_I4: elem.lVal = var->cal.pElems[i]; break;
+            case VT_UI4: elem.ulVal = var->caul.pElems[i]; break;
+            case VT_I8: elem.hVal = var->cah.pElems[i]; break;
+            case VT_UI8: elem.uhVal = var->cauh.pElems[i]; break;
+            case VT_R4: elem.fltVal = var->caflt.pElems[i]; break;
+            case VT_R8: elem.dblVal = var->cadbl.pElems[i]; break;
+            case VT_BOOL: elem.boolVal = var->cabool.pElems[i]; break;
+        }
+
+        if (FAILED(hr = PropVariantToStringAlloc(&elem, &str)))
+        {
+            CoTaskMemFree(res);
+            return hr;
+        }
+
+        len += wcslen(str) + (i ? 2 : 0);
+        if (!(tmp = CoTaskMemRealloc(res, len * sizeof(WCHAR))))
+        {
+            CoTaskMemFree(str);
+            CoTaskMemFree(res);
+            return E_OUTOFMEMORY;
+        }
+        res = tmp;
+        if (i)
+            wcscat(res, L"; ");
+        wcscat(res, str);
+        CoTaskMemFree(str);
+    }
+
+    *ret = res;
+    return S_OK;
+}
+#endif
+
 HRESULT WINAPI PropVariantToStringAlloc(REFPROPVARIANT propvarIn, WCHAR **ret)
 {
     WCHAR *res = NULL;
@@ -551,6 +690,27 @@ HRESULT WINAPI PropVariantToStringAlloc(REFPROPVARIANT propvarIn, WCHAR **ret)
             break;
         }
 
+        case VT_R4:
+            hr = string_alloc_from_double(propvarIn->fltVal, &res);
+            break;
+
+        case VT_R8:
+            hr = string_alloc_from_double(propvarIn->dblVal, &res);
+            break;
+
+        case VT_DATE:
+        {
+            SYSTEMTIME st;
+
+            if (!VariantTimeToSystemTime(propvarIn->date, &st))
+                return TYPE_E_TYPEMISMATCH;
+            if (!(res = CoTaskMemAlloc(24 * sizeof(WCHAR))))
+                return E_OUTOFMEMORY;
+            swprintf(res, 24, L"%04u/%02u/%02u:%02u:%02u:%02u.%03u", st.wYear, st.wMonth, st.wDay,
+                     st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+            break;
+        }
+
         case VT_VECTOR | VT_LPWSTR:
         {
             SIZE_T len = 1;
@@ -572,8 +732,18 @@ HRESULT WINAPI PropVariantToStringAlloc(REFPROPVARIANT propvarIn, WCHAR **ret)
 #endif
 
         default:
+#ifdef __REACTOS__
+            if (propvarIn->vt & VT_VECTOR)
+            {
+                hr = string_alloc_from_vector(propvarIn, &res);
+                break;
+            }
+            FIXME("Unsupported conversion (%d)\n", propvarIn->vt);
+            hr = TYPE_E_TYPEMISMATCH;
+#else
             FIXME("Unsupported conversion (%d)\n", propvarIn->vt);
             hr = E_FAIL;
+#endif
             break;
     }
 
@@ -631,6 +801,10 @@ HRESULT WINAPI VariantToString(REFVARIANT var, PWSTR ret, UINT cch)
 
     switch (V_VT(var))
     {
+#ifdef __REACTOS__
+        case VT_EMPTY:
+            return S_OK;
+#endif
         case VT_BSTR:
             str = V_BSTR(var);
             break;
@@ -652,8 +826,13 @@ HRESULT WINAPI VariantToString(REFVARIANT var, PWSTR ret, UINT cch)
 /******************************************************************
  *  PropVariantChangeType   (PROPSYS.@)
  */
+#ifdef __REACTOS__
+static HRESULT propvar_change_type(PROPVARIANT *ppropvarDest, REFPROPVARIANT propvarSrc,
+                                   PROPVAR_CHANGE_FLAGS flags, VARTYPE vt)
+#else
 HRESULT WINAPI PropVariantChangeType(PROPVARIANT *ppropvarDest, REFPROPVARIANT propvarSrc,
                                      PROPVAR_CHANGE_FLAGS flags, VARTYPE vt)
+#endif
 {
     HRESULT hr;
 
@@ -844,6 +1023,19 @@ HRESULT WINAPI PropVariantChangeType(PROPVARIANT *ppropvarDest, REFPROPVARIANT p
         return E_FAIL;
     }
 }
+
+#ifdef __REACTOS__
+HRESULT WINAPI PropVariantChangeType(PROPVARIANT *ppropvarDest, REFPROPVARIANT propvarSrc,
+                                     PROPVAR_CHANGE_FLAGS flags, VARTYPE vt)
+{
+    HRESULT hr = propvar_change_type(ppropvarDest, propvarSrc, flags, vt);
+
+    if (FAILED(hr))
+        PropVariantInit(ppropvarDest);
+
+    return hr;
+}
+#endif
 HRESULT WINAPI InitPropVariantFromGUIDAsString(REFGUID guid, PROPVARIANT *ppropvar)
 {
     TRACE("(%p %p)\n", guid, ppropvar);
@@ -1082,10 +1274,33 @@ HRESULT WINAPI PropVariantToGUID(REFPROPVARIANT ppropvar, GUID *guid)
     case VT_CLSID:
         memcpy(guid, ppropvar->puuid, sizeof(*ppropvar->puuid));
         return S_OK;
+#ifdef __REACTOS__
+    case VT_EMPTY:
+    case VT_NULL:
+        memset(guid, 0, sizeof(*guid));
+        return S_OK;
+    case VT_ARRAY | VT_UI1:
+    {
+        void *data;
+        HRESULT hr;
+
+        if (SafeArrayGetDim(ppropvar->parray) != 1 || ppropvar->parray->rgsabound[0].cElements < sizeof(*guid))
+            return E_FAIL;
+        if (FAILED(hr = SafeArrayAccessData(ppropvar->parray, &data)))
+            return hr;
+        memcpy(guid, data, sizeof(*guid));
+        SafeArrayUnaccessData(ppropvar->parray);
+        return S_OK;
+    }
+#endif
 
     default:
         FIXME("unsupported vt: %d\n", ppropvar->vt);
+#ifdef __REACTOS__
+        return E_INVALIDARG;
+#else
         return E_NOTIMPL;
+#endif
     }
 }
 
@@ -1157,7 +1372,11 @@ INT WINAPI PropVariantCompareEx(REFPROPVARIANT propvar1, REFPROPVARIANT propvar2
         hr = PropVariantChangeType(&propvar2_static, propvar2, 0, propvar1->vt);
 
         if (FAILED(hr))
+#ifdef __REACTOS__
+            return (INT)propvar1->vt - (INT)propvar2->vt;
+#else
             return -1;
+#endif
 
         propvar2_converted = &propvar2_static;
     }
@@ -1301,16 +1520,33 @@ HRESULT WINAPI PropVariantToVariant(const PROPVARIANT *propvar, VARIANT *var)
         case VT_R8:
             V_R8(var) = propvar->dblVal;
             break;
+#ifdef __REACTOS__
+        case VT_CLSID:
+            var->vt = VT_BSTR;
+            if (!(V_BSTR(var) = SysAllocStringLen(NULL, GUID_STR_LEN)))
+                return E_OUTOFMEMORY;
+            hr = StringFromGUID2(propvar->puuid, V_BSTR(var), GUID_STR_LEN + 1);
+            break;
+        case VT_LPSTR:
+        case VT_LPWSTR:
+        case VT_BSTR:
+#else
         case VT_LPSTR:
         case VT_LPWSTR:
         case VT_BSTR:
         case VT_CLSID:
+#endif
             var->vt = VT_BSTR;
             hr = PropVariantToBSTR(propvar, &V_BSTR(var));
             break;
         default:
             FIXME("Unsupported type %d.\n", propvar->vt);
+#ifdef __REACTOS__
+            var->vt = VT_EMPTY;
+            return (propvar->vt & VT_RESERVED) ? E_OUTOFMEMORY : E_INVALIDARG;
+#else
             return E_INVALIDARG;
+#endif
     }
 
     return hr;
@@ -1324,6 +1560,13 @@ HRESULT WINAPI VariantToPropVariant(const VARIANT *var, PROPVARIANT *propvar)
 
     if (!var || !propvar)
         return E_INVALIDARG;
+
+#ifdef __REACTOS__
+    if (var->vt == VT_ILLEGAL)
+        return TYPE_E_TYPEMISMATCH;
+    if (var->vt == VT_CLSID)
+        return DISP_E_BADVARTYPE;
+#endif
 
     if (FAILED(hr = VARIANT_ValidateType(var->vt)))
         return hr;
