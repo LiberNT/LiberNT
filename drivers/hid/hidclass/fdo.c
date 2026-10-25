@@ -469,6 +469,7 @@ HidClassFDO_RemoveDevice(
 {
     NTSTATUS Status;
     PHIDCLASS_FDO_EXTENSION FDODeviceExtension;
+    ULONG Index;
 
     //
     // get device extension
@@ -494,6 +495,15 @@ HidClassFDO_RemoveDevice(
     //
     Irp->IoStatus.Status = Status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+    if (FDODeviceExtension->DeviceRelations != NULL)
+    {
+        for (Index = 0; Index < FDODeviceExtension->DeviceRelations->Count; Index++)
+            IoDeleteDevice(FDODeviceExtension->DeviceRelations->Objects[Index]);
+
+        ExFreePoolWithTag(FDODeviceExtension->DeviceRelations, HIDCLASS_TAG);
+        FDODeviceExtension->DeviceRelations = NULL;
+    }
 
     //
     // detach and delete device

@@ -459,7 +459,6 @@ HidClassPDO_PnP(
     NTSTATUS Status;
     PPNP_BUS_INFORMATION BusInformation;
     PDEVICE_RELATIONS DeviceRelation;
-    ULONG Index, bFound;
 
     //
     // get device extension
@@ -657,37 +656,14 @@ HidClassPDO_PnP(
 
             /* Disable the device interface */
             if (PDODeviceExtension->DeviceInterface.Length != 0)
+            {
                 if (!NT_SUCCESS(IoSetDeviceInterfaceState(&PDODeviceExtension->DeviceInterface, FALSE)))
                     DPRINT1("IoSetDeviceInterfaceState(%wZ) failed\n", &PDODeviceExtension->DeviceInterface);
-
-            //
-            // remove us from the fdo's pdo list
-            //
-            bFound = FALSE;
-            for (Index = 0; Index < PDODeviceExtension->FDODeviceExtension->DeviceRelations->Count; Index++)
-            {
-                if (PDODeviceExtension->FDODeviceExtension->DeviceRelations->Objects[Index] == DeviceObject)
-                {
-                    //
-                    // remove us
-                    //
-                    bFound = TRUE;
-                    PDODeviceExtension->FDODeviceExtension->DeviceRelations->Objects[Index] = NULL;
-                    break;
-                }
+                RtlFreeUnicodeString(&PDODeviceExtension->DeviceInterface);
             }
 
-            /* Complete the IRP */
-            Irp->IoStatus.Status = STATUS_SUCCESS;
-            IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-            if (bFound)
-            {
-                /* Delete our device object*/
-                IoDeleteDevice(DeviceObject);
-            }
-
-            return STATUS_SUCCESS;
+            Status = STATUS_SUCCESS;
+            break;
         }
         case IRP_MN_SURPRISE_REMOVAL:
         {
