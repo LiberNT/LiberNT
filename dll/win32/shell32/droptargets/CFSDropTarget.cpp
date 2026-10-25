@@ -349,9 +349,6 @@ CFSDropTarget::CFSDropTarget():
 
 HRESULT CFSDropTarget::Initialize(LPWSTR PathTarget)
 {
-    if (!PathTarget)
-        return E_UNEXPECTED;
-
     m_cfShellIDList = RegisterClipboardFormatW(CFSTR_SHELLIDLIST);
     if (!m_cfShellIDList)
         return E_FAIL;
@@ -359,6 +356,8 @@ HRESULT CFSDropTarget::Initialize(LPWSTR PathTarget)
     m_cfFileDescriptor = RegisterClipboardFormatW(CFSTR_FILEDESCRIPTORW);
     m_cfFileContents = RegisterClipboardFormatW(CFSTR_FILECONTENTSW);
 
+    if (!PathTarget)
+        return S_OK;
     return SHStrDupW(PathTarget, &m_sPathTarget);
 }
 
@@ -735,6 +734,11 @@ HRESULT WINAPI CFSDropTarget::DragEnter(IDataObject *pDataObject,
     const BOOL bAnyKeyMod = dwKeyState & (MK_SHIFT | MK_CONTROL);
     m_AllowedEffects = *pdwEffect;
 
+    if (!m_sPathTarget)
+    {
+        m_fAcceptFmt = FALSE;
+        *pdwEffect = DROPEFFECT_NONE;
+    }
     if (*pdwEffect == DROPEFFECT_NONE)
         return S_OK;
 
@@ -829,6 +833,12 @@ HRESULT WINAPI CFSDropTarget::DragOver(DWORD dwKeyState, POINTL pt,
 
     m_grfKeyState = dwKeyState;
 
+    if (!m_sPathTarget)
+    {
+        *pdwEffect = DROPEFFECT_NONE;
+        return S_OK;
+    }
+
     _QueryDrop(dwKeyState, pdwEffect);
 
     return S_OK;
@@ -850,6 +860,12 @@ HRESULT WINAPI CFSDropTarget::Drop(IDataObject *pDataObject,
 
     if (!pdwEffect)
         return E_INVALIDARG;
+
+    if (!m_sPathTarget)
+    {
+        *pdwEffect = DROPEFFECT_NONE;
+        return S_OK;
+    }
 
     IUnknown_GetWindow(m_site, &m_hwndSite);
 
