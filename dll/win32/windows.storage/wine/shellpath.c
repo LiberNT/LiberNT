@@ -5763,7 +5763,9 @@ BOOL WINAPI PathResolveW(_Inout_ LPWSTR path, _Inout_opt_ LPCWSTR *dirs, _In_ DW
 
     if (PathIsFileSpecW(path))
     {
-        if (PathFindOnPathExW(path, dirs, (flags & PRF_VERIFYEXISTS) ? dwWhich : 0))
+        if (!(flags & (PRF_VERIFYEXISTS | PRF_EXECUTABLE)) || *PathFindExtensionW(path))
+            dwWhich = 0;
+        if (PathFindOnPathExW(path, dirs, dwWhich) || (dwWhich && PathFindOnPathExW(path, dirs, 0)))
             return TRUE;
         SetLastError(ERROR_FILE_NOT_FOUND);
         return FALSE;
