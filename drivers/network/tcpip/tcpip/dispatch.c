@@ -1155,14 +1155,15 @@ NTSTATUS DispTdiSendDatagram(
         (PDRIVER_CANCEL)DispCancelRequest);
 
     if (NT_SUCCESS(Status)) {
-	PVOID DataBuffer;
-	UINT BufferSize;
+	PVOID DataBuffer = NULL;
+	UINT BufferSize = 0;
 
 	TI_DbgPrint(MID_TRACE,("About to query buffer %x\n", Irp->MdlAddress));
 
-	NdisQueryBuffer( (PNDIS_BUFFER)Irp->MdlAddress,
-			 &DataBuffer,
-			 &BufferSize );
+	if (Irp->MdlAddress)
+	    NdisQueryBuffer( (PNDIS_BUFFER)Irp->MdlAddress,
+			     &DataBuffer,
+			     &BufferSize );
 
         /* FIXME: DgramInfo->SendDatagramInformation->RemoteAddress
            must be of type PTDI_ADDRESS_IP */
