@@ -916,6 +916,9 @@ extern UINT MSI_SetInstallLevel( MSIPACKAGE *package, int iInstallLevel );
 
 /* package internals */
 #define WINE_OPENPACKAGEFLAGS_RECACHE 0x80000000
+#ifdef __REACTOS__
+#define REACTOS_OPENPACKAGEFLAGS_INSTALL 0x40000000
+#endif
 extern MSIPACKAGE *MSI_CreatePackage( MSIDATABASE * );
 extern UINT MSI_OpenPackageW( LPCWSTR szPackage, DWORD dwOptions, MSIPACKAGE **pPackage );
 extern UINT MSI_SetTargetPathW( MSIPACKAGE *, LPCWSTR, LPCWSTR );

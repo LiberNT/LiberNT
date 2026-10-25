@@ -1576,6 +1576,10 @@ UINT MSI_OpenPackageW(LPCWSTR szPackage, DWORD dwOptions, MSIPACKAGE **pPackage)
     MSI_RecordSetInteger(data_row, 2, package->num_langids ? package->langids[0] : 0);
     MSI_RecordSetInteger(data_row, 3, msi_get_string_table_codepage(package->db->strings));
     MSI_ProcessMessageVerbatim(package, INSTALLMESSAGE_COMMONDATA, data_row);
+#ifdef __REACTOS__
+    if (dwOptions & REACTOS_OPENPACKAGEFLAGS_INSTALL)
+        MSI_ProcessMessageVerbatim(package, INSTALLMESSAGE_COMMONDATA, data_row);
+#endif
 
     info_row = MSI_CreateRecord(0);
     if (!info_row)

@@ -257,6 +257,9 @@ UINT WINAPI MsiInstallProductW(LPCWSTR szPackagePath, LPCWSTR szCommandLine)
         }
     }
 
+#ifdef __REACTOS__
+    options |= REACTOS_OPENPACKAGEFLAGS_INSTALL;
+#endif
     r = MSI_OpenPackageW( szPackagePath, options, &package );
     if (r == ERROR_SUCCESS)
     {

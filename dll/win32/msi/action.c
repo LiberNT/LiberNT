@@ -8119,6 +8119,28 @@ UINT MSI_InstallPackage( MSIPACKAGE *package, LPCWSTR szPackagePath,
     free( reinstall );
     free( action );
 
+#ifdef __REACTOS__
+    {
+        MSIQUERY *view;
+        MSIRECORD *info;
+        WCHAR *template;
+
+        if (!MSI_OpenQuery( package->db, &view, L"SELECT * FROM `_Property`" ))
+        {
+            MSI_IterateRecords( view, NULL, iterate_properties, package );
+            msiobj_release( &view->hdr );
+        }
+        if ((info = MSI_CreateRecord( 0 )))
+        {
+            template = msi_get_error_message( package->db, MSIERR_INFO_LOGGINGSTOPPED );
+            MSI_RecordSetStringW( info, 0, template );
+            free( template );
+            MSI_ProcessMessage( package, INSTALLMESSAGE_INFO|MB_ICONHAND, info );
+            msiobj_release( &info->hdr );
+        }
+    }
+#endif
+
     if (rc == ERROR_SUCCESS && package->need_reboot_at_end)
         return ERROR_SUCCESS_REBOOT_REQUIRED;
 

@@ -87,6 +87,9 @@ STRINGTABLE
     IDS_INFO_ACTIONSTART "Action start [Time]: [1]."
     IDS_INFO_ACTIONENDED "Action ended [Time]: [1]. Return value [2]."
     IDS_INFO_LOGGINGSTART "=== Logging started: [Date]  [Time] ==="
+#ifdef __REACTOS__
+    IDS_INFO_LOGGINGSTOPPED "=== Logging stopped: [Date]  [Time] ==="
+#endif
 
     IDS_ERR_INSERTDISK "Please insert the disk: [2]"
     IDS_ERR_CABNOTFOUND "Source file not found{{(cabinet)}}: [2]. Verify that the file exists and that you can access it."
