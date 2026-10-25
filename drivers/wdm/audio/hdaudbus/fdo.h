@@ -166,6 +166,7 @@ typedef struct _FDO_CONTEXT
     HDAC_RB corb;
     HDAC_RB rirb;
     BOOL processRirb;
+    KEVENT verbLock[HDA_MAX_CODECS];
 
     UINT8 *rb; //CORB and RIRB buffers
     PVOID posbuf;

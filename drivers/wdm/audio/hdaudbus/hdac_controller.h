@@ -17,6 +17,8 @@ NTSTATUS StartHDAController(PFDO_CONTEXT fdoCtx);
 NTSTATUS StopHDAController(PFDO_CONTEXT fdoCtx);
 NTSTATUS SendHDACmds(PFDO_CONTEXT fdoCtx, ULONG count, PHDAUDIO_CODEC_TRANSFER CodecTransfer);
 NTSTATUS RunSingleHDACmd(PFDO_CONTEXT fdoCtx, ULONG val, ULONG* res);
+void HDAAcquireCodecVerbs(PFDO_CONTEXT fdoCtx, UINT16 addr);
+void HDAReleaseCodecVerbs(PFDO_CONTEXT fdoCtx, UINT16 addr);
 
 //Old
 BOOLEAN NTAPI hda_interrupt(WDFINTERRUPT Interrupt, ULONG MessageID);
