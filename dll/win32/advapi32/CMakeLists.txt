@@ -26,7 +26,6 @@ list(APPEND SOURCE
     misc/sysfunc.c
     misc/unicode.c
     misc/wmi.c
-    reg/transacted.c
     sec/ac.c
     sec/audit.c
     sec/lsa.c

@@ -16,6 +16,7 @@ extern void func_LookupAccountName(void);
 extern void func_LookupAccountSid(void);
 extern void func_QueryServiceConfig2(void);
 extern void func_RegCreateKeyEx(void);
+extern void func_RegCreateKeyTransacted(void);
 extern void func_RegEnumKey(void);
 extern void func_RegEnumValueW(void);
 extern void func_RegOpenKeyExW(void);
@@ -46,6 +47,7 @@ const struct test winetest_testlist[] =
     { "LookupAccountSid", func_LookupAccountSid },
     { "QueryServiceConfig2", func_QueryServiceConfig2 },
     { "RegCreateKeyEx", func_RegCreateKeyEx },
+    { "RegCreateKeyTransacted", func_RegCreateKeyTransacted },
     { "RegEnumKey", func_RegEnumKey },
     { "RegEnumValueW", func_RegEnumValueW },
     { "RegQueryInfoKey", func_RegQueryInfoKey },
