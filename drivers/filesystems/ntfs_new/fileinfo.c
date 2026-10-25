@@ -1453,8 +1453,71 @@ NtfsFreeRenameNames(_In_opt_ PFileContextBlock* Files,
 }
 
 static
+BOOLEAN
+NtfsIsBelowRenamedName(_In_ PFileContextBlock Other,
+                       _In_ PCUNICODE_STRING OldName)
+{
+    UNICODE_STRING Head;
+    WCHAR Next;
+
+    if (!(Other->CreateOptions & FILE_OPEN_BY_FILE_ID) || Other->NativeCcb.Lcb ||
+        OldName->Length == 0 || Other->FileName.Length < OldName->Length)
+    {
+        return FALSE;
+    }
+    Head.Buffer = Other->FileName.Buffer;
+    Head.Length = Head.MaximumLength = OldName->Length;
+    if (!RtlEqualUnicodeString(&Head, OldName, TRUE))
+        return FALSE;
+    if (Other->FileName.Length == OldName->Length)
+        return TRUE;
+    Next = Other->FileName.Buffer[OldName->Length / sizeof(WCHAR)];
+    return Next == L'\\' || Next == L':';
+}
+
+static
+SIZE_T
+NtfsCollectOpenByIdBelow(_In_ PVolumeContextBlock VolCB,
+                         _In_ PFileContextBlock FileCB,
+                         _Out_writes_opt_(Capacity) PFileContextBlock* Files,
+                         _In_ SIZE_T Capacity)
+{
+    PLIST_ENTRY StreamEntry;
+    SIZE_T Found = 0;
+
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource));
+    ExAcquireFastMutex(&VolCB->StreamListMutex);
+    for (StreamEntry = VolCB->StreamList.Flink;
+         StreamEntry != &VolCB->StreamList;
+         StreamEntry = StreamEntry->Flink)
+    {
+        PStreamContextBlock Stream = CONTAINING_RECORD(StreamEntry, StreamContextBlock, ListEntry);
+        PLIST_ENTRY CcbEntry;
+
+        for (CcbEntry = Stream->NativeScb.CcbList.Flink;
+             CcbEntry != &Stream->NativeScb.CcbList;
+             CcbEntry = CcbEntry->Flink)
+        {
+            PFileContextBlock Other =
+                CONTAINING_RECORD(CONTAINING_RECORD(CcbEntry, NTFS_NATIVE_CCB, StreamEntry),
+                                  FileContextBlock,
+                                  NativeCcb);
+
+            if (Other == FileCB || !NtfsIsBelowRenamedName(Other, &FileCB->FileName))
+                continue;
+            if (Files && Found < Capacity)
+                Files[Found] = Other;
+            Found++;
+        }
+    }
+    ExReleaseFastMutex(&VolCB->StreamListMutex);
+    return Files ? min(Found, Capacity) : Found;
+}
+
+static
 NTSTATUS
-NtfsPrepareRenameNames(_In_ PFileContextBlock FileCB,
+NtfsPrepareRenameNames(_In_ PVolumeContextBlock VolCB,
+                        _In_ PFileContextBlock FileCB,
                         _In_opt_ PNTFS_NATIVE_LCB Lcb,
                         _In_ PUNICODE_STRING NewName,
                         _Out_ PFileContextBlock** Files,
@@ -1462,7 +1525,7 @@ NtfsPrepareRenameNames(_In_ PFileContextBlock FileCB,
                         _Out_ PSIZE_T Count)
 {
     PLIST_ENTRY Entry;
-    SIZE_T Index = 1;
+    SIZE_T Index = 1, LinkCount, ById;
     NTSTATUS Status = STATUS_SUCCESS;
 
     *Files = NULL;
@@ -1478,6 +1541,11 @@ NtfsPrepareRenameNames(_In_ PFileContextBlock FileCB,
                 (*Count)++;
         }
     }
+    LinkCount = *Count;
+    ById = NtfsCollectOpenByIdBelow(VolCB, FileCB, NULL, 0);
+    if (ById > MAXULONG_PTR / sizeof(**Files) - *Count)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    *Count += ById;
     if (*Count > MAXULONG_PTR / sizeof(**Files) ||
         *Count > MAXULONG_PTR / sizeof(**Names))
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -1499,6 +1567,7 @@ NtfsPrepareRenameNames(_In_ PFileContextBlock FileCB,
                 (*Files)[Index++] = CONTAINING_RECORD(Ccb, FileContextBlock, NativeCcb);
         }
     }
+    *Count = LinkCount + NtfsCollectOpenByIdBelow(VolCB, FileCB, *Files + LinkCount, ById);
     for (Index = 0; Index < *Count; Index++)
     {
         PFileContextBlock Other = (*Files)[Index];
@@ -1506,10 +1575,17 @@ NtfsPrepareRenameNames(_In_ PFileContextBlock FileCB,
         ULONG SuffixLength;
         ULONG Length;
 
-        for (Offset = 0; Offset < Other->FileName.Length / sizeof(WCHAR); Offset++)
+        if (Index >= LinkCount)
         {
-            if (Other->FileName.Buffer[Offset] == L':')
-                break;
+            Offset = FileCB->FileName.Length / sizeof(WCHAR);
+        }
+        else
+        {
+            for (Offset = 0; Offset < Other->FileName.Length / sizeof(WCHAR); Offset++)
+            {
+                if (Other->FileName.Buffer[Offset] == L':')
+                    break;
+            }
         }
         SuffixLength = Other->FileName.Length - Offset * sizeof(WCHAR);
         Length = NewName->Length + SuffixLength;
@@ -1808,7 +1884,7 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
         }
         RtlCopyMemory(NewLeafBuffer, NewLeaf.Buffer, NewLeaf.Length);
     }
-    Status = NtfsPrepareRenameNames(FileCB, Lcb, &NewName,
+    Status = NtfsPrepareRenameNames(VolCB, FileCB, Lcb, &NewName,
                                    &RenamedFiles, &RenamedNames, &RenamedCount);
     if (!NT_SUCCESS(Status))
         goto Finish;
