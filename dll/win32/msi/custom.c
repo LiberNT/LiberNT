@@ -74,6 +74,18 @@ static CRITICAL_SECTION_DEBUG custom_action_cs_debug =
 };
 static CRITICAL_SECTION custom_action_cs = { &custom_action_cs_debug, -1, 0, 0, 0, 0 };
 
+#ifdef __REACTOS__
+static CRITICAL_SECTION custom_server_cs;
+static CRITICAL_SECTION_DEBUG custom_server_cs_debug =
+{
+    0, 0, &custom_server_cs,
+    { &custom_server_cs_debug.ProcessLocksList,
+      &custom_server_cs_debug.ProcessLocksList },
+      0, 0, { (DWORD_PTR)(__FILE__ ": custom_server_cs") }
+};
+static CRITICAL_SECTION custom_server_cs = { &custom_server_cs_debug, -1, 0, 0, 0, 0 };
+#endif
+
 static struct list pending_custom_actions = LIST_INIT( pending_custom_actions );
 
 void  __RPC_FAR * __RPC_USER MIDL_user_allocate(SIZE_T len)
@@ -858,6 +870,18 @@ void custom_stop_server(HANDLE process, HANDLE pipe)
     CloseHandle(pipe);
 }
 
+#ifdef __REACTOS__
+static DWORD custom_start_server_locked(MSIPACKAGE *package, DWORD arch, USHORT emulated_machine)
+{
+    DWORD r;
+
+    EnterCriticalSection(&custom_server_cs);
+    r = custom_start_server(package, arch, emulated_machine);
+    LeaveCriticalSection(&custom_server_cs);
+    return r;
+}
+#endif
+
 static DWORD WINAPI custom_client_thread(void *arg)
 {
     custom_action_info *info = arg;
@@ -867,17 +891,56 @@ static DWORD WINAPI custom_client_thread(void *arg)
     HANDLE pipe;
     DWORD size;
     DWORD rc;
+#ifdef __REACTOS__
+    UINT attempt;
+#endif
 
     CoInitializeEx(NULL, COINIT_MULTITHREADED); /* needed to marshal streams */
 
 #ifdef __REACTOS__
-    if (info->emulated_machine)
+    for (attempt = 0;; attempt++)
     {
-        process = info->package->custom_server_emulated_process;
-        pipe = info->package->custom_server_emulated_pipe;
+        if (info->emulated_machine)
+        {
+            process = info->package->custom_server_emulated_process;
+            pipe = info->package->custom_server_emulated_pipe;
+        }
+        else if (info->arch == SCS_32BIT_BINARY)
+        {
+            process = info->package->custom_server_32_process;
+            pipe = info->package->custom_server_32_pipe;
+        }
+        else
+        {
+            process = info->package->custom_server_64_process;
+            pipe = info->package->custom_server_64_pipe;
+        }
+
+        EnterCriticalSection(&custom_action_cs);
+        if (WriteFile(pipe, &info->guid, sizeof(info->guid), &size, NULL) && size == sizeof(info->guid))
+        {
+            if (!ReadFile(pipe, &thread64, sizeof(thread64), &size, NULL) || size != sizeof(thread64))
+            {
+                rc = GetLastError();
+                ERR("failed to read from custom action client pipe: %lu\n", rc);
+                LeaveCriticalSection(&custom_action_cs);
+                return rc;
+            }
+            LeaveCriticalSection(&custom_action_cs);
+            break;
+        }
+        rc = GetLastError();
+        LeaveCriticalSection(&custom_action_cs);
+        if (attempt || (rc != ERROR_NO_DATA && rc != ERROR_BROKEN_PIPE && rc != ERROR_PIPE_NOT_CONNECTED))
+        {
+            ERR("failed to write to custom action client pipe: %lu\n", rc);
+            return rc;
+        }
+        WaitForSingleObject(process, 5000);
+        if (custom_start_server_locked(info->package, info->arch, info->emulated_machine) != ERROR_SUCCESS)
+            return rc;
     }
-    else
-#endif
+#else
     if (info->arch == SCS_32BIT_BINARY)
     {
         process = info->package->custom_server_32_process;
@@ -906,6 +969,7 @@ static DWORD WINAPI custom_client_thread(void *arg)
     }
 
     LeaveCriticalSection(&custom_action_cs);
+#endif
 
     if (DuplicateHandle(process, (HANDLE)(DWORD_PTR)thread64, GetCurrentProcess(),
         &thread, 0, FALSE, DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE))
@@ -1032,7 +1096,7 @@ static custom_action_info *do_msidbCustomActionTypeDll(
 
 #ifdef __REACTOS__
     info->emulated_machine = get_emulated_server_machine(source, info->arch);
-    if (custom_start_server(package, info->arch, info->emulated_machine) != ERROR_SUCCESS)
+    if (custom_start_server_locked(package, info->arch, info->emulated_machine) != ERROR_SUCCESS)
 #else
     if (custom_start_server(package, info->arch) != ERROR_SUCCESS)
 #endif
