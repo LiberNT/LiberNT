@@ -81,6 +81,7 @@ list(APPEND SOURCE
     CStartMenuPin.cpp
     CEnumerableObjectCollection.cpp
     CDestinationList.cpp
+    CTextPreviewHandler.cpp
     CFileOperation.cpp
     CShellDispatch.cpp
     CFolder.cpp

@@ -1,0 +1,42 @@
+HKCR
+{
+    NoRemove CLSID
+    {
+        ForceRemove {1531d583-8375-4d3f-b5fb-d23bbd169f22} = s 'Windows TXT Previewer'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Apartment'
+            }
+        }
+    }
+    NoRemove SystemFileAssociations
+    {
+        NoRemove text
+        {
+            NoRemove ShellEx
+            {
+                ForceRemove {8895b1c6-b41f-4c1c-a562-0d564250836f} = s '{1531d583-8375-4d3f-b5fb-d23bbd169f22}'
+            }
+        }
+    }
+}
+HKLM
+{
+    NoRemove Software
+    {
+        NoRemove Microsoft
+        {
+            NoRemove Windows
+            {
+                NoRemove CurrentVersion
+                {
+                    NoRemove PreviewHandlers
+                    {
+                        val '{1531d583-8375-4d3f-b5fb-d23bbd169f22}' = s 'Windows TXT Previewer'
+                    }
+                }
+            }
+        }
+    }
+}

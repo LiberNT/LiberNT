@@ -2088,6 +2088,11 @@ HKCR,"CLSID\{13709620-C279-11CE-A49E-444553540000}\Version",,0x00000010
 HKCR,"CLSID\{13709620-C279-11CE-A49E-444553540000}\Version","",0x00000000,"1.1"
 HKCR,"CLSID\{13709620-C279-11CE-A49E-444553540000}\VersionIndependentProgID",,0x00000010
 HKCR,"CLSID\{13709620-C279-11CE-A49E-444553540000}\VersionIndependentProgID","",0x00000000,"Shell.Application"
+HKCR,"CLSID\{1531d583-8375-4d3f-b5fb-d23bbd169f22}",,0x00000010
+HKCR,"CLSID\{1531d583-8375-4d3f-b5fb-d23bbd169f22}","",0x00000000,"Windows TXT Previewer"
+HKCR,"CLSID\{1531d583-8375-4d3f-b5fb-d23bbd169f22}\InprocServer32",,0x00000010
+HKCR,"CLSID\{1531d583-8375-4d3f-b5fb-d23bbd169f22}\InprocServer32","",0x00000000,"%MODULE%"
+HKCR,"CLSID\{1531d583-8375-4d3f-b5fb-d23bbd169f22}\InprocServer32","ThreadingModel",0x00000000,"Apartment"
 HKCR,"CLSID\{169A0691-8DF9-11D1-A1C4-00C04FD75D13}",,0x00000010
 HKCR,"CLSID\{169A0691-8DF9-11D1-A1C4-00C04FD75D13}","",0x00000000,"In-pane search"
 HKCR,"CLSID\{169A0691-8DF9-11D1-A1C4-00C04FD75D13}\InprocServer32",,0x00000010
@@ -3011,6 +3016,8 @@ HKCR,"SystemFileAssociations\system","AlwaysShowExt",0x00000000,""
 HKCR,"SystemFileAssociations\system","NoOpen",0x00000000,""
 HKCR,"SystemFileAssociations\system\DefaultIcon",,0x00000010
 HKCR,"SystemFileAssociations\system\DefaultIcon","",0x00020000,"%%SystemRoot%%\system32\shell32.dll,-154"
+HKCR,"SystemFileAssociations\text\ShellEx\{8895b1c6-b41f-4c1c-a562-0d564250836f}",,0x00000010
+HKCR,"SystemFileAssociations\text\ShellEx\{8895b1c6-b41f-4c1c-a562-0d564250836f}","",0x00000000,"{1531d583-8375-4d3f-b5fb-d23bbd169f22}"
 HKCR,"SystemFileAssociations\video",,0x00000010
 HKCR,"SystemFileAssociations\video\DefaultIcon",,0x00000010
 HKCR,"SystemFileAssociations\video\DefaultIcon","",0x00020000,"%%SystemRoot%%\system32\mplay32.exe,-10"
@@ -3095,6 +3102,7 @@ HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\NetworkNeighborhood\Nam
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Recycle Bin",,0x00000010
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Recycle Bin","",0x00000000,"{5ef4af3a-f726-11d0-b8a2-00c04fc309a4}"
+HKLM,"Software\Microsoft\Windows\CurrentVersion\PreviewHandlers","{1531d583-8375-4d3f-b5fb-d23bbd169f22}",0x00000000,"Windows TXT Previewer"
 
 [softpub.dll]
 HKLM,"SOFTWARE\Microsoft\Cryptography\Providers\Trust\CertCheck\{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}",,0x00000010

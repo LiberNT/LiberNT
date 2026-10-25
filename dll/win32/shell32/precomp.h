@@ -91,6 +91,7 @@
 #include "CStartMenuPin.h"
 #include "CEnumerableObjectCollection.h"
 #include "CDestinationList.h"
+#include "CTextPreviewHandler.h"
 #include "dialogs/filedefext.h"
 #include "dialogs/drvdefext.h"
 #include "CQueryAssociations.h"
