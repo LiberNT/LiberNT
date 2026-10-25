@@ -1472,14 +1472,16 @@ RtlWow64EnableFsRedirectionEx(IN PVOID Wow64FsEnableRedirection,
 {
 #ifdef WOW64_I386_RUNTIME
     TEB64 *NativeTeb = UlongToPtr(NtCurrentTeb()->GdiBatchCount);
+    PVOID OldLevel;
 
     if (!NativeTeb) return STATUS_NOT_IMPLEMENTED;
 
     _SEH2_TRY
     {
         /* Save the old value before changing the native redirector's state. */
-        *OldFsRedirectionLevel = (PVOID)(ULONG_PTR)NativeTeb->TlsSlots[WOW64_TLS_FILESYSREDIR];
+        OldLevel = (PVOID)(ULONG_PTR)NativeTeb->TlsSlots[WOW64_TLS_FILESYSREDIR];
         NativeTeb->TlsSlots[WOW64_TLS_FILESYSREDIR] = (ULONG_PTR)Wow64FsEnableRedirection;
+        *OldFsRedirectionLevel = OldLevel;
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {

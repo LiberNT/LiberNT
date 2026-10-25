@@ -73,7 +73,7 @@ static VOID TestFsRedirection(VOID)
     ok_hex(Status, STATUS_ACCESS_VIOLATION);
     Status = RedirectEx(NULL, &Previous);
     ok_hex(Status, STATUS_SUCCESS);
-    ok_ptr(Previous, (PVOID)0xdeadbeef);
+    ok_ptr(Previous, (PVOID)1);
     Status = Redirect(FALSE);
     ok_hex(Status, STATUS_SUCCESS);
     Status = RedirectEx(NULL, &Previous);
