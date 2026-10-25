@@ -9,5 +9,5 @@ list(APPEND SOURCE
 add_library(sspicli MODULE ${SOURCE})
 set_module_type(sspicli win32dll ENTRYPOINT DllMain 12)
 target_link_libraries(sspicli wine)
-add_importlibs(sspicli secur32 msvcrt kernel32 ntdll)
+add_importlibs(sspicli secur32 advapi32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET sspicli DESTINATION reactos/system32 FOR all)

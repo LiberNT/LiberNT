@@ -65,9 +65,22 @@
 
 @ stdcall QueryContextAttributesExA(ptr long ptr long) secur32.QueryContextAttributesExA
 @ stdcall QueryContextAttributesExW(ptr long ptr long) secur32.QueryContextAttributesExW
+@ stdcall SspiCompareAuthIdentities(ptr ptr ptr ptr)
+@ stdcall SspiCopyAuthIdentity(ptr ptr)
+@ stdcall SspiDecryptAuthIdentity(ptr)
+@ stdcall SspiDecryptAuthIdentityEx(long ptr)
 @ stdcall SspiEncodeAuthIdentityAsStrings(ptr ptr ptr ptr)
 @ stdcall SspiEncodeStringsAsAuthIdentity(wstr wstr wstr ptr)
+@ stdcall SspiEncryptAuthIdentity(ptr)
+@ stdcall SspiEncryptAuthIdentityEx(long ptr)
+@ stdcall SspiExcludePackage(ptr wstr ptr)
 @ stdcall SspiFreeAuthIdentity(ptr)
+@ stdcall SspiGetTargetHostName(wstr ptr)
+@ stdcall SspiIsAuthIdentityEncrypted(ptr)
 @ stdcall SspiLocalFree(ptr)
+@ stdcall SspiMarshalAuthIdentity(ptr ptr ptr)
+@ stdcall SspiPrepareForCredRead(ptr wstr ptr ptr)
 @ stdcall SspiPrepareForCredWrite(ptr wstr ptr ptr ptr ptr ptr)
+@ stdcall SspiUnmarshalAuthIdentity(long ptr ptr)
+@ stdcall SspiValidateAuthIdentity(ptr)
 @ stdcall SspiZeroAuthIdentity(ptr)

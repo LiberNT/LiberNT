@@ -77,11 +77,22 @@
 
 @ stdcall SetCredentialsAttributesA(ptr long ptr long)
 @ stdcall SetCredentialsAttributesW(ptr long ptr long)
+@ stdcall SspiCompareAuthIdentities(ptr ptr ptr ptr) sspicli.SspiCompareAuthIdentities
+@ stdcall SspiCopyAuthIdentity(ptr ptr) sspicli.SspiCopyAuthIdentity
+@ stdcall SspiDecryptAuthIdentity(ptr) sspicli.SspiDecryptAuthIdentity
 @ stdcall SspiEncodeAuthIdentityAsStrings(ptr ptr ptr ptr) sspicli.SspiEncodeAuthIdentityAsStrings
 @ stdcall SspiEncodeStringsAsAuthIdentity(wstr wstr wstr ptr) sspicli.SspiEncodeStringsAsAuthIdentity
+@ stdcall SspiEncryptAuthIdentity(ptr) sspicli.SspiEncryptAuthIdentity
+@ stdcall SspiExcludePackage(ptr wstr ptr) sspicli.SspiExcludePackage
 @ stdcall SspiFreeAuthIdentity(ptr) sspicli.SspiFreeAuthIdentity
+@ stdcall SspiGetTargetHostName(wstr ptr) sspicli.SspiGetTargetHostName
+@ stdcall SspiIsAuthIdentityEncrypted(ptr) sspicli.SspiIsAuthIdentityEncrypted
 @ stdcall SspiLocalFree(ptr) sspicli.SspiLocalFree
+@ stdcall SspiMarshalAuthIdentity(ptr ptr ptr) sspicli.SspiMarshalAuthIdentity
+@ stdcall SspiPrepareForCredRead(ptr wstr ptr ptr) sspicli.SspiPrepareForCredRead
 @ stdcall SspiPrepareForCredWrite(ptr wstr ptr ptr ptr ptr ptr) sspicli.SspiPrepareForCredWrite
+@ stdcall SspiUnmarshalAuthIdentity(long ptr ptr) sspicli.SspiUnmarshalAuthIdentity
+@ stdcall SspiValidateAuthIdentity(ptr) sspicli.SspiValidateAuthIdentity
 @ stdcall SspiZeroAuthIdentity(ptr) sspicli.SspiZeroAuthIdentity
 
 @ stdcall QueryContextAttributesExA(ptr long ptr long)
