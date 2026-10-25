@@ -20,9 +20,7 @@ typedef enum _CPU_VENDOR
 
 CPU_VENDOR g_CpuVendor;
 ULONG g_CpuFeatures;
-#ifdef _M_AMD64
 static BOOL g_IsArm64Host;
-#endif
 
 #define CPU_FEATURE_VMX 0x01
 #define CPU_FEATURE_HV 0x02
@@ -105,10 +103,8 @@ DetermineCpuFeatures(void)
 {
     INT CpuInfo[4];
     ULONG Features = 0;
-#ifdef _M_AMD64
     BOOL (WINAPI *QueryMachines)(HANDLE, PUSHORT, PUSHORT);
     USHORT ProcessMachine, NativeMachine;
-#endif
 
     g_CpuVendor = DetermineCpuVendor();
 
@@ -125,10 +121,8 @@ DetermineCpuFeatures(void)
     }
 
     g_CpuFeatures = Features;
-#ifdef _M_AMD64
     QueryMachines = (void *)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "IsWow64Process2");
     g_IsArm64Host = QueryMachines && QueryMachines(GetCurrentProcess(), &ProcessMachine, &NativeMachine) && NativeMachine == IMAGE_FILE_MACHINE_ARM64;
-#endif
 }
 
 TEST_ENTRY TestEntries[] =
@@ -249,7 +243,7 @@ void Test_SingleInstruction(
 #ifdef _M_IX86
     if (Flags & FL_INVLS)
     {
-        ExpectedStatus = STATUS_INVALID_LOCK_SEQUENCE;
+        ExpectedStatus = g_IsArm64Host ? STATUS_ILLEGAL_INSTRUCTION : STATUS_INVALID_LOCK_SEQUENCE;
     }
     else
 #elif defined(_M_AMD64)
