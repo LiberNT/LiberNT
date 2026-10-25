@@ -3,6 +3,7 @@
  * LICENSE:     LGPL-2.1+ (https://spdx.org/licenses/LGPL-2.1+)
  * PURPOSE:     AssocCreateElement
  * COPYRIGHT:   Copyright 2026 Katayama Hirofumi MZ <katayama.hirofumi.mz@gmail.com>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 #include <windef.h>
 #include <shlobj.h>
@@ -400,6 +401,7 @@ static HRESULT _ExeFromCmd(PCWSTR pszCmdTemplate, PWSTR* ppszApplication)
 class CAssocElement
     : public IObjectWithQuerySourceOld
     , public IAssociationElementOld
+    , public IAssociationElement
 {
 protected:
     LONG m_cRefs = 1;
@@ -438,6 +440,8 @@ public:
     STDMETHODIMP QueryExists(ASSOCQUERY query, PCWSTR key) override;
     STDMETHODIMP QueryDirect(ASSOCQUERY query, PCWSTR key, FLAGGED_BYTE_BLOB** ppBlob) override;
     STDMETHODIMP QueryObject(ASSOCQUERY query, PCWSTR key, REFIID riid, PVOID* ppvObj) override;
+    /*** IAssociationElement ***/
+    STDMETHODIMP QueryGuid(ASSOCQUERY query, PCWSTR key, GUID* pguid) override;
 
 protected:
     virtual UINT _GetQueryKeyVal(const QUERYKEYVAL** ppItems);
@@ -725,9 +729,31 @@ STDMETHODIMP CAssocElement::QueryInterface(REFIID riid, PVOID* ppv)
         AddRef();
         return S_OK;
     }
+    if (riid == IID_IAssociationElement)
+    {
+        *ppv = static_cast<IAssociationElement*>(this);
+        AddRef();
+        return S_OK;
+    }
     ERR("E_NOINTERFACE: %s\n", wine_dbgstr_guid(&riid));
     *ppv = NULL;
     return E_NOINTERFACE;
+}
+
+STDMETHODIMP CAssocElement::QueryGuid(ASSOCQUERY query, PCWSTR key, GUID* pguid)
+{
+    PWSTR pszValue = NULL;
+
+    if (!pguid)
+        return E_POINTER;
+    ZeroMemory(pguid, sizeof(*pguid));
+
+    HRESULT hr = QueryString(query, key, &pszValue);
+    if (FAILED(hr))
+        return hr;
+    hr = CLSIDFromString(pszValue, pguid);
+    CoTaskMemFree(pszValue);
+    return hr;
 }
 
 STDMETHODIMP_(ULONG) CAssocElement::AddRef()
@@ -973,8 +999,20 @@ STDMETHODIMP CAssocShellElement::GetClassID(CLSID* pClassID)
 
 STDMETHODIMP CAssocShellElement::SetString(PCWSTR psz)
 {
+    if (!psz || !*psz)
+        return HRESULT_FROM_WIN32(ERROR_INVALID_PARAMETER);
+
     if (m_pszName)
-        return E_UNEXPECTED;
+    {
+        if (m_pszName != m_szBuff)
+            LocalFree(m_pszName);
+        m_pszName = NULL;
+        if (m_pSource)
+        {
+            m_pSource->Release();
+            m_pSource = NULL;
+        }
+    }
 
     UINT cchBuff, cchString = lstrlenW(psz);
     PWSTR pszBuff;
@@ -1283,6 +1321,12 @@ HRESULT CAssocProgidElement::_InitSource()
 {
     HRESULT hr = S_OK;
     PWSTR pszName;
+
+    if (m_pSource2)
+    {
+        m_pSource2->Release();
+        m_pSource2 = NULL;
+    }
 
     if (*m_pszName == L'.')
     {
