@@ -469,7 +469,31 @@ HRESULT STDMETHODCALLTYPE CQueryAssociations::GetString(
             LONG ret = RegOpenKeyExW(this->hkeySource, keypath, 0, KEY_READ, &hkey);
             if (ret)
             {
-                return HRESULT_FROM_WIN32(ret);
+                WCHAR perceived[64], classkey[MAX_PATH];
+                DWORD cbPerceived = sizeof(perceived);
+                HKEY hkeyClass;
+                LONG retFirst = ret;
+
+                if (this->hkeyProgID && this->hkeyProgID != this->hkeySource)
+                    ret = RegOpenKeyExW(this->hkeyProgID, keypath, 0, KEY_READ, &hkey);
+                if (ret && this->hkeySource &&
+                    !RegGetValueW(this->hkeySource, NULL, L"PerceivedType", RRF_RT_REG_SZ, NULL, perceived, &cbPerceived) &&
+                    SUCCEEDED(StringCchPrintfW(classkey, _countof(classkey), L"SystemFileAssociations\\%s", perceived)) &&
+                    !RegOpenKeyExW(HKEY_CLASSES_ROOT, classkey, 0, KEY_READ, &hkeyClass))
+                {
+                    ret = RegOpenKeyExW(hkeyClass, keypath, 0, KEY_READ, &hkey);
+                    RegCloseKey(hkeyClass);
+                }
+                if (ret && (flags & ASSOCF_INIT_DEFAULTTOSTAR) &&
+                    !RegOpenKeyExW(HKEY_CLASSES_ROOT, L"*", 0, KEY_READ, &hkeyClass))
+                {
+                    ret = RegOpenKeyExW(hkeyClass, keypath, 0, KEY_READ, &hkey);
+                    RegCloseKey(hkeyClass);
+                }
+                if (ret)
+                {
+                    return HRESULT_FROM_WIN32(retFirst);
+                }
             }
             DWORD size = sizeof(guid);
             ret = RegGetValueW(hkey, NULL, NULL, RRF_RT_REG_SZ, NULL, guid, &size);
