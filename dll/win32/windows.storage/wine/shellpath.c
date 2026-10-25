@@ -5736,39 +5736,61 @@ Cleanup:
     return ret;
 }
 
+static VOID
+PathResolveQualifyW(_Inout_updates_(MAX_PATH) LPWSTR path)
+{
+    WCHAR szFull[MAX_PATH];
+    DWORD cch = GetFullPathNameW(path, _countof(szFull), szFull, NULL);
+
+    if (cch && cch < _countof(szFull))
+        StringCchCopyW(path, MAX_PATH, szFull);
+    PathRemoveBackslashW(path);
+}
+
 BOOL WINAPI PathResolveW(_Inout_ LPWSTR path, _Inout_opt_ LPCWSTR *dirs, _In_ DWORD flags)
 {
-    BOOL is_file_spec = PathIsFileSpecW(path);
     DWORD dwWhich = (flags & PRF_DONTFINDLNK) ? (WHICH_PIF | WHICH_COM | WHICH_EXE | WHICH_BAT) : WHICH_DEFAULT;
+    WCHAR szPath[MAX_PATH];
+    UINT iDir;
 
     TRACE("(%s,%p,0x%08x)\n", debugstr_w(path), dirs, flags);
 
+    if (!*path)
+        return TRUE;
+
     if (flags & PRF_VERIFYEXISTS)
+        SetLastError(ERROR_FILE_NOT_FOUND);
+
+    if (PathIsFileSpecW(path))
     {
-        if (PathFindOnPathExW(path, dirs, dwWhich))
-        {
-            if (!PathIsFileSpecW(path))
-                GetFullPathNameW(path, MAX_PATH, path, NULL);
+        if (PathFindOnPathExW(path, dirs, (flags & PRF_VERIFYEXISTS) ? dwWhich : 0))
             return TRUE;
-        }
-        if (!is_file_spec)
-        {
-            GetFullPathNameW(path, MAX_PATH, path, NULL);
-            if (PathFileExistsDefExtW(path, dwWhich))
-                return TRUE;
-        }
         SetLastError(ERROR_FILE_NOT_FOUND);
         return FALSE;
     }
 
-    if (is_file_spec)
+    if (flags & PRF_FIRSTDIRDEF)
     {
-        SetLastError(ERROR_FILE_NOT_FOUND);
-        return FALSE;
+        for (iDir = 0; dirs[iDir] && PathIsRelativeW(path); ++iDir)
+        {
+            if (!PathCombineW(szPath, dirs[iDir], path))
+                continue;
+            PathResolveQualifyW(szPath);
+            if (!(flags & PRF_VERIFYEXISTS) || PathFileExistsDefExtW(szPath, dwWhich))
+            {
+                StringCchCopyW(path, MAX_PATH, szPath);
+                return TRUE;
+            }
+        }
     }
 
-    GetFullPathNameW(path, MAX_PATH, path, NULL);
-    return TRUE;
+    PathResolveQualifyW(path);
+
+    if (!(flags & PRF_VERIFYEXISTS) || PathFileExistsDefExtW(path, dwWhich))
+        return TRUE;
+
+    SetLastError(ERROR_FILE_NOT_FOUND);
+    return FALSE;
 }
 
 /*************************************************************************
