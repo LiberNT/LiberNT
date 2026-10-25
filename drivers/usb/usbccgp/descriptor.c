@@ -83,7 +83,7 @@ USBCCGP_GetDescriptor(
         Status = USBCCGP_SyncUrbRequest(DeviceObject, Urb);
         if (!NT_SUCCESS(Status))
         {
-            if (Urb->UrbHeader.Status == USBD_STATUS_TIMEOUT)
+            if (Status == STATUS_IO_TIMEOUT || Urb->UrbHeader.Status == USBD_STATUS_TIMEOUT)
                 break;
             continue;
         }

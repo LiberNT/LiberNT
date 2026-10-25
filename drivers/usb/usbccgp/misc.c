@@ -31,6 +31,8 @@ USBSTOR_SyncForwardIrpCompletionRoutine(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
+#define USBCCGP_SYNC_URB_TIMEOUT_MS 5000
+
 NTSTATUS
 USBCCGP_SyncUrbRequest(
     IN PDEVICE_OBJECT DeviceObject,
@@ -40,6 +42,7 @@ USBCCGP_SyncUrbRequest(
     PIO_STACK_LOCATION IoStack;
     KEVENT Event;
     NTSTATUS Status;
+    LARGE_INTEGER Timeout;
 
     /* Allocate irp */
     Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
@@ -77,7 +80,18 @@ USBCCGP_SyncUrbRequest(
     if (Status == STATUS_PENDING)
     {
         /* Wait for completion */
-        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Timeout.QuadPart = -(LONGLONG)USBCCGP_SYNC_URB_TIMEOUT_MS * 10000;
+        if (KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, &Timeout) == STATUS_TIMEOUT)
+        {
+            IoCancelIrp(Irp);
+            KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+            if (Irp->IoStatus.Status == STATUS_CANCELLED)
+            {
+                DPRINT1("USBCCGP: URB function 0x%x timed out after %u ms\n",
+                        UrbRequest->UrbHeader.Function, USBCCGP_SYNC_URB_TIMEOUT_MS);
+                Irp->IoStatus.Status = STATUS_IO_TIMEOUT;
+            }
+        }
 
         /* Update status */
         Status = Irp->IoStatus.Status;
