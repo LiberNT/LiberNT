@@ -2011,10 +2011,15 @@ LX_SYSCALL(LxSysMount)
         LxNodeFree(&Target);
         return Error;
     }
-    if (Flags & (LX_MS_PRIVATE | LX_MS_SLAVE | LX_MS_SHARED | LX_MS_UNBINDABLE))
+    if (!(Flags & LX_MS_BIND) && (Flags & (LX_MS_PRIVATE | LX_MS_SLAVE | LX_MS_SHARED | LX_MS_UNBINDABLE)))
     {
+        PLX_NS Ns = LxProcessNs(Process, LxNsMnt);
+        PCSTR Relative;
+        PLX_MOUNT Mount = LxMountFind(Ns, Target.Path, &Relative);
+
+        Error = ((Mount == NULL) || (Relative[0] != '\0')) ? -LX_EINVAL : LxMountSetPropagation(Ns, Mount, Flags);
         LxNodeFree(&Target);
-        return 0;
+        return Error;
     }
     if (Flags & LX_MS_BIND)
     {
@@ -3355,6 +3360,13 @@ LX_SYSCALL(LxSysMountSetattr)
     Mount = LxMountFromFd(Call->Process, (LONG)Call->Args[0], Call->Args[1], (Flags & LX_AT_EMPTY_PATH) != 0, &Error);
     if (Mount == NULL)
         return Error;
+    if (Attributes.Propagation != 0)
+    {
+        Error = LxMountSetPropagation(Mount->Ns, Mount,
+                                      (ULONG)Attributes.Propagation | ((Flags & LX_AT_RECURSIVE) ? LX_MS_REC : 0));
+        if (Error != 0)
+            return Error;
+    }
     LxMountSetFlags(Mount, LxMountAttrToFlags(Attributes.Set), LxMountAttrToFlags(Attributes.Clear));
     return 0;
 }

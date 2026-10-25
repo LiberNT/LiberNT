@@ -986,18 +986,20 @@ static
 PSTR
 LxRebaseRootPath(
     _In_ PCSTR Path,
+    _In_ PCSTR Root,
     _In_ PCSTR NewRoot,
     _In_ PCSTR PutOld)
 {
-    if (strcmp(Path, "/") == 0)
-        return LxStrDup("/");
-    return LxPathRebase(Path, NewRoot, PutOld);
+    if (strcmp(Path, Root) == 0)
+        return LxStrDup(Path);
+    return LxPathRebase(Path, Root, NewRoot, PutOld);
 }
 
 static
 VOID
 LxRebaseString(
     _Inout_ PSTR *Slot,
+    _In_ PCSTR Root,
     _In_ PCSTR NewRoot,
     _In_ PCSTR PutOld,
     _In_ BOOLEAN RootSlot)
@@ -1006,7 +1008,7 @@ LxRebaseString(
 
     if (*Slot == NULL)
         return;
-    Rebased = LxRebaseRootPath(*Slot, NewRoot, PutOld);
+    Rebased = LxRebaseRootPath(*Slot, Root, NewRoot, PutOld);
     if (Rebased == NULL)
         return;
     if (RootSlot && (strcmp(Rebased, "/") == 0))
@@ -1021,6 +1023,7 @@ LxRebaseString(
 VOID
 LxNsRebaseProcesses(
     _In_ PLX_NS MntNs,
+    _In_ PCSTR Root,
     _In_ PCSTR NewRoot,
     _In_ PCSTR PutOld)
 {
@@ -1036,10 +1039,10 @@ LxNsRebaseProcesses(
         ExAcquireFastMutex(&Process->Lock);
         if (Process->Ns[LxNsMnt] == MntNs)
         {
-            LxRebaseString(&Process->Cwd, NewRoot, PutOld, FALSE);
+            LxRebaseString(&Process->Cwd, Root, NewRoot, PutOld, FALSE);
             if (Process->Cwd == NULL)
                 Process->Cwd = LxStrDup("/");
-            LxRebaseString(&Process->Root, NewRoot, PutOld, TRUE);
+            LxRebaseString(&Process->Root, Root, NewRoot, PutOld, TRUE);
         }
         for (ThreadEntry = Process->Threads.Flink; ThreadEntry != &Process->Threads; ThreadEntry = ThreadEntry->Flink)
         {
@@ -1048,10 +1051,10 @@ LxNsRebaseProcesses(
 
             if ((Thread->Fs != NULL) && (ThreadNs == MntNs))
             {
-                LxRebaseString(&Thread->Fs->Cwd, NewRoot, PutOld, FALSE);
+                LxRebaseString(&Thread->Fs->Cwd, Root, NewRoot, PutOld, FALSE);
                 if (Thread->Fs->Cwd == NULL)
                     Thread->Fs->Cwd = LxStrDup("/");
-                LxRebaseString(&Thread->Fs->Root, NewRoot, PutOld, TRUE);
+                LxRebaseString(&Thread->Fs->Root, Root, NewRoot, PutOld, TRUE);
             }
         }
         ExReleaseFastMutex(&Process->Lock);

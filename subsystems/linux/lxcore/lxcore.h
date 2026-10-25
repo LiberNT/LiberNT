@@ -251,6 +251,9 @@ struct _LX_MOUNT
     PSTR Root;
     PSTR Alias;
     BOOLEAN Detached;
+    BOOLEAN Unbindable;
+    ULONG PeerGroup;
+    ULONG MasterGroup;
 };
 
 #define LX_MS_RDONLY        0x00000001
@@ -262,6 +265,7 @@ struct _LX_MOUNT
 #define LX_MS_BIND          0x00001000
 #define LX_MS_MOVE          0x00002000
 #define LX_MS_REC           0x00004000
+#define LX_MS_SILENT        0x00008000
 #define LX_MS_UNBINDABLE    0x00020000
 #define LX_MS_PRIVATE       0x00040000
 #define LX_MS_SLAVE         0x00080000
@@ -368,6 +372,7 @@ struct _LX_INSTANCE
     KEVENT InitExited;
     LONG InitStatus;
     ULONG NextDetachedId;
+    ULONG NextPeerGroup;
 };
 
 typedef struct _LX_NODE
@@ -844,6 +849,7 @@ BOOLEAN LxInstancePidInUse(_In_ PLX_INSTANCE Instance, _In_ ULONG Pid);
 PLX_MOUNT LxMountFind(_In_ PLX_NS Ns, _In_ PCSTR Path, _Out_opt_ PCSTR *Relative);
 LONG LxMountAdd(_In_ PLX_PROCESS Process, _In_ PCSTR Target, _In_ PCSTR Source, _In_ PCSTR FsType, _In_ ULONG Flags, _In_opt_ PCSTR Data);
 LONG LxMountUnmount(_In_ PLX_NS Ns, _In_ PLX_MOUNT Mount, _In_ ULONG Flags);
+LONG LxMountSetPropagation(_In_ PLX_NS Ns, _In_ PLX_MOUNT Mount, _In_ ULONG Flags);
 LONG LxMountCreateDetached(_In_ PLX_PROCESS Process, _In_ PCSTR FsType, _In_ PCSTR Source, _In_ ULONG Flags, _In_ ULONG Mode, _Out_ PLX_MOUNT *Mount);
 LONG LxMountBindDetached(_In_ PLX_PROCESS Process, _In_ PLX_NODE Source, _Out_ PLX_MOUNT *Mount);
 LONG LxMountBind(_In_ PLX_PROCESS Process, _In_ PLX_NODE Source, _In_ PCSTR Target, _In_ ULONG Flags);
@@ -854,7 +860,7 @@ LONG LxMountStatfs(_In_ PLX_MOUNT Mount, _Out_writes_bytes_(120) PVOID Statfs);
 LONG LxMountNsCopy(_In_ PLX_NS New, _In_ PLX_NS Old);
 VOID LxMountNsRelease(_In_ PLX_NS Ns);
 LONG LxMountPivotRoot(_In_ PLX_PROCESS Process, _In_ PLX_NODE NewRoot, _In_ PLX_NODE PutOld);
-PSTR LxPathRebase(_In_ PCSTR Path, _In_ PCSTR NewRoot, _In_ PCSTR PutOld);
+PSTR LxPathRebase(_In_ PCSTR Path, _In_ PCSTR Root, _In_ PCSTR NewRoot, _In_ PCSTR PutOld);
 
 PLX_NS LxNsCreate(_In_ PLX_INSTANCE Instance, _In_ LX_NS_KIND Kind, _In_opt_ PLX_NS From, _In_opt_ PLX_NS Owner);
 VOID LxNsReference(_In_ PLX_NS Ns);
@@ -869,7 +875,7 @@ VOID LxNsReleaseProcess(_Inout_ PLX_PROCESS Process);
 PLX_NS LxNsFromFile(_In_ PLX_FILE File);
 PLX_NS LxNsFromNode(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node);
 PLX_FILE LxNsFileOpen(_In_ PLX_NS Ns, _In_ ULONG Flags);
-VOID LxNsRebaseProcesses(_In_ PLX_NS MntNs, _In_ PCSTR NewRoot, _In_ PCSTR PutOld);
+VOID LxNsRebaseProcesses(_In_ PLX_NS MntNs, _In_ PCSTR Root, _In_ PCSTR NewRoot, _In_ PCSTR PutOld);
 PSTR LxProcessRoot(_In_ PLX_PROCESS Process);
 PSTR LxProcessCwd(_In_ PLX_PROCESS Process);
 LONG LxProcessSetCwd(_In_ PLX_PROCESS Process, _In_ PCSTR Path);

@@ -528,6 +528,17 @@ LxMountFindLocked(
 
 static
 VOID
+LxMountPropagate(
+    _In_ PLX_MOUNT Mount);
+
+static
+VOID
+LxMountPropagateUnmountLocked(
+    _In_ PLX_INSTANCE Instance,
+    _In_ PLX_MOUNT Mount);
+
+static
+VOID
 LxMountInsert(
     _In_ PLX_NS Ns,
     _Inout_ PLX_MOUNT Mount,
@@ -1128,7 +1139,10 @@ LxMountAdd(
         (strcmp(FsType, "securityfs") == 0) || (strcmp(FsType, "pstore") == 0) || (strcmp(FsType, "bpf") == 0) ||
         (strcmp(FsType, "efivarfs") == 0) || (strcmp(FsType, "binfmt_misc") == 0) || (strcmp(FsType, "autofs") == 0))
     {
-        return LxInstanceTmpfs(Ns, Target, FsType, Flags, 01777, NULL, NULL);
+        Error = LxInstanceTmpfs(Ns, Target, FsType, Flags, 01777, NULL, &Mount);
+        if (Error == 0)
+            LxMountPropagate(Mount);
+        return Error;
     }
     if (strcmp(FsType, "proc") == 0)
         Error = LxInstanceMountSynthetic(Ns, Target, Source, "proc", Flags, LxFsProc, LX_MAGIC_PROC, &Mount);
@@ -1143,7 +1157,10 @@ LxMountAdd(
     else
         return -LX_ENODEV;
     if (Error == 0)
+    {
         LxMountInheritNamespaces(Process, Mount);
+        LxMountPropagate(Mount);
+    }
     return Error;
 }
 
@@ -1201,6 +1218,7 @@ LxMountUnmount(
         ExReleaseFastMutex(&Instance->Lock);
         return -LX_EBUSY;
     }
+    LxMountPropagateUnmountLocked(Instance, Mount);
     for (Entry = Ns->Mnt.Mounts.Flink; Entry != &Ns->Mnt.Mounts; Entry = Next)
     {
         PLX_MOUNT Other = CONTAINING_RECORD(Entry, LX_MOUNT, Link);
@@ -1355,9 +1373,283 @@ LxMountClone(
         LxNsReference(Mount->PidNs);
     if (Mount->NsFile != NULL)
         LxNsReference(Mount->NsFile);
+    Mount->PeerGroup = Source->PeerGroup;
+    Mount->MasterGroup = Source->MasterGroup;
     LxMountInsert(Ns, Mount, TRUE);
     if (Out != NULL)
         *Out = Mount;
+    return 0;
+}
+
+static
+BOOLEAN
+LxMountLive(
+    _In_ PLX_MOUNT Mount)
+{
+    return !Mount->Detached && !IsListEmpty(&Mount->Link);
+}
+
+static
+PSTR
+LxMountPeerTarget(
+    _In_ PLX_MOUNT Parent,
+    _In_ PLX_MOUNT Receiver,
+    _In_ PCSTR Target)
+{
+    PCSTR Relative = Target + ((strcmp(Parent->Target, "/") == 0) ? 0 : strlen(Parent->Target));
+    PCSTR ParentRoot = (Parent->Root != NULL) ? Parent->Root : "/";
+    PCSTR ReceiverRoot = (Receiver->Root != NULL) ? Receiver->Root : "/";
+    PCSTR Rest;
+    PSTR FsPath, Result;
+    SIZE_T Length = 0;
+
+    while (*Relative == '/')
+        Relative++;
+    if (strcmp(ParentRoot, "/") == 0)
+        FsPath = LxStrPrintf("/%s", Relative);
+    else if (Relative[0] != '\0')
+        FsPath = LxStrPrintf("%s/%s", ParentRoot, Relative);
+    else
+        FsPath = LxStrDup(ParentRoot);
+    if (FsPath == NULL)
+        return NULL;
+    if (strcmp(ReceiverRoot, "/") != 0)
+    {
+        Length = strlen(ReceiverRoot);
+        if ((strncmp(FsPath, ReceiverRoot, Length) != 0) || ((FsPath[Length] != '\0') && (FsPath[Length] != '/')))
+        {
+            LxFree(FsPath);
+            return NULL;
+        }
+    }
+    Rest = FsPath + Length;
+    if (strcmp(Rest, "/") == 0)
+        Rest = "";
+    if (strcmp(Receiver->Target, "/") == 0)
+        Result = LxStrDup((Rest[0] != '\0') ? Rest : "/");
+    else
+        Result = LxStrPrintf("%s%s", Receiver->Target, Rest);
+    LxFree(FsPath);
+    return Result;
+}
+
+typedef struct _LX_MOUNT_RECEIVER
+{
+    PLX_MOUNT Mount;
+    PSTR Target;
+    ULONG PeerGroup;
+    ULONG MasterGroup;
+} LX_MOUNT_RECEIVER, *PLX_MOUNT_RECEIVER;
+
+#define LX_MOUNT_PROPAGATION_STEPS 64
+
+static
+ULONG
+LxMountReceiversLocked(
+    _In_ PLX_INSTANCE Instance,
+    _In_ PLX_MOUNT Parent,
+    _In_ PCSTR Target,
+    _In_ ULONG PeerGroup,
+    _In_ ULONG MasterGroup,
+    _Out_ PLX_MOUNT_RECEIVER *Result)
+{
+    ULONG Steps[LX_MOUNT_PROPAGATION_STEPS][3];
+    ULONG StepCount = 1, Step, Capacity = 0, Count = 0, Index;
+    PLX_MOUNT_RECEIVER Receivers;
+    PLIST_ENTRY Entry;
+
+    *Result = NULL;
+    for (Entry = Instance->AllMounts.Flink; Entry != &Instance->AllMounts; Entry = Entry->Flink)
+        Capacity++;
+    Receivers = LxAlloc((Capacity + 1) * sizeof(*Receivers));
+    if (Receivers == NULL)
+        return 0;
+    Steps[0][0] = Parent->PeerGroup;
+    Steps[0][1] = PeerGroup;
+    Steps[0][2] = MasterGroup;
+    for (Step = 0; Step < StepCount; Step++)
+    {
+        for (Entry = Instance->AllMounts.Flink; Entry != &Instance->AllMounts; Entry = Entry->Flink)
+        {
+            PLX_MOUNT Other = CONTAINING_RECORD(Entry, LX_MOUNT, InstanceLink);
+
+            if (!LxMountLive(Other) || (Other == Parent) || (Count >= Capacity))
+                continue;
+            if (Other->PeerGroup == Steps[Step][0])
+            {
+                Receivers[Count].Mount = Other;
+                Receivers[Count].PeerGroup = Steps[Step][1];
+                Receivers[Count].MasterGroup = Steps[Step][2];
+                Count++;
+            }
+            else if ((Other->MasterGroup == Steps[Step][0]) && (Other->PeerGroup == 0))
+            {
+                Receivers[Count].Mount = Other;
+                Receivers[Count].PeerGroup = 0;
+                Receivers[Count].MasterGroup = Steps[Step][1];
+                Count++;
+            }
+            else if ((Other->MasterGroup == Steps[Step][0]) && (StepCount < LX_MOUNT_PROPAGATION_STEPS))
+            {
+                for (Index = 0; (Index < StepCount) && (Steps[Index][0] != Other->PeerGroup); Index++)
+                    ;
+                if (Index == StepCount)
+                {
+                    Steps[StepCount][0] = Other->PeerGroup;
+                    Steps[StepCount][1] = (PeerGroup != 0) ? ++Instance->NextPeerGroup : 0;
+                    Steps[StepCount][2] = Steps[Step][1];
+                    StepCount++;
+                }
+            }
+        }
+    }
+    for (Index = 0; Index < Count; Index++)
+        Receivers[Index].Target = LxMountPeerTarget(Parent, Receivers[Index].Mount, Target);
+    *Result = Receivers;
+    return Count;
+}
+
+static
+VOID
+LxMountPropagate(
+    _In_ PLX_MOUNT Mount)
+{
+    PLX_INSTANCE Instance = Mount->Instance;
+    PLX_MOUNT_RECEIVER Receivers = NULL;
+    PLX_MOUNT Parent;
+    ULONG Count = 0, Index;
+
+    ExAcquireFastMutex(&Instance->Lock);
+    Parent = Mount->Parent;
+    if ((Parent != NULL) && (Parent->PeerGroup != 0) && LxMountLive(Parent) && LxMountLive(Mount))
+    {
+        if (Mount->PeerGroup == 0)
+            Mount->PeerGroup = ++Instance->NextPeerGroup;
+        Mount->Unbindable = FALSE;
+        Count = LxMountReceiversLocked(Instance, Parent, Mount->Target, Mount->PeerGroup, Mount->MasterGroup,
+                                       &Receivers);
+    }
+    ExReleaseFastMutex(&Instance->Lock);
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        PLX_MOUNT Copy;
+
+        if ((Receivers[Index].Target != NULL) &&
+            (LxMountClone(Receivers[Index].Mount->Ns, Mount, Receivers[Index].Target, NULL, Mount->Flags, TRUE,
+                          &Copy) == 0))
+        {
+            ExAcquireFastMutex(&Instance->Lock);
+            Copy->PeerGroup = Receivers[Index].PeerGroup;
+            Copy->MasterGroup = Receivers[Index].MasterGroup;
+            ExReleaseFastMutex(&Instance->Lock);
+        }
+        LxFree(Receivers[Index].Target);
+    }
+    LxFree(Receivers);
+}
+
+static
+VOID
+LxMountPropagateUnmountLocked(
+    _In_ PLX_INSTANCE Instance,
+    _In_ PLX_MOUNT Mount)
+{
+    PLX_MOUNT_RECEIVER Receivers;
+    PLX_MOUNT Parent = Mount->Parent;
+    ULONG Count, Index;
+    PLIST_ENTRY Entry;
+
+    if ((Parent == NULL) || (Parent->PeerGroup == 0))
+        return;
+    Count = LxMountReceiversLocked(Instance, Parent, Mount->Target, 0, 0, &Receivers);
+    for (Index = 0; Index < Count; Index++)
+    {
+        PLX_MOUNT Receiver = Receivers[Index].Mount, Top = NULL;
+        BOOLEAN Busy = FALSE;
+
+        if (Receivers[Index].Target == NULL)
+            continue;
+        for (Entry = Receiver->Ns->Mnt.Mounts.Flink; Entry != &Receiver->Ns->Mnt.Mounts; Entry = Entry->Flink)
+        {
+            PLX_MOUNT Other = CONTAINING_RECORD(Entry, LX_MOUNT, Link);
+
+            if ((Other->Parent == Receiver) && (strcmp(Other->Target, Receivers[Index].Target) == 0))
+                Top = Other;
+        }
+        if (Top != NULL)
+        {
+            for (Entry = Receiver->Ns->Mnt.Mounts.Flink; Entry != &Receiver->Ns->Mnt.Mounts; Entry = Entry->Flink)
+            {
+                if (CONTAINING_RECORD(Entry, LX_MOUNT, Link)->Parent == Top)
+                    Busy = TRUE;
+            }
+        }
+        if ((Top != NULL) && !Busy)
+        {
+            RemoveEntryList(&Top->Link);
+            InitializeListHead(&Top->Link);
+            LxEventSourceSignal(&Receiver->Ns->Mnt.Events);
+        }
+        LxFree(Receivers[Index].Target);
+    }
+    LxFree(Receivers);
+}
+
+LONG
+LxMountSetPropagation(
+    _In_ PLX_NS Ns,
+    _In_ PLX_MOUNT Mount,
+    _In_ ULONG Flags)
+{
+    PLX_INSTANCE Instance = Ns->Instance;
+    ULONG Type = Flags & ~(LX_MS_REC | LX_MS_SILENT);
+    PLIST_ENTRY Entry, Peer;
+
+    if ((Type & ~(LX_MS_SHARED | LX_MS_PRIVATE | LX_MS_SLAVE | LX_MS_UNBINDABLE)) || (Type == 0) ||
+        (Type & (Type - 1)))
+    {
+        return -LX_EINVAL;
+    }
+    ExAcquireFastMutex(&Instance->Lock);
+    if ((Mount->Ns != Ns) || !LxMountLive(Mount))
+    {
+        ExReleaseFastMutex(&Instance->Lock);
+        return -LX_EINVAL;
+    }
+    for (Entry = Ns->Mnt.Mounts.Flink; Entry != &Ns->Mnt.Mounts; Entry = Entry->Flink)
+    {
+        PLX_MOUNT Other = CONTAINING_RECORD(Entry, LX_MOUNT, Link);
+        BOOLEAN HasPeers = FALSE;
+
+        if ((Other != Mount) && (!(Flags & LX_MS_REC) || !LxMountIsBelow(Other, Mount)))
+            continue;
+        if (Type == LX_MS_SHARED)
+        {
+            if (Other->PeerGroup == 0)
+                Other->PeerGroup = ++Instance->NextPeerGroup;
+            Other->Unbindable = FALSE;
+            continue;
+        }
+        if (Other->PeerGroup != 0)
+        {
+            for (Peer = Instance->AllMounts.Flink; Peer != &Instance->AllMounts; Peer = Peer->Flink)
+            {
+                PLX_MOUNT Candidate = CONTAINING_RECORD(Peer, LX_MOUNT, InstanceLink);
+
+                if ((Candidate != Other) && LxMountLive(Candidate) && (Candidate->PeerGroup == Other->PeerGroup))
+                    HasPeers = TRUE;
+            }
+            if ((Type == LX_MS_SLAVE) && HasPeers)
+                Other->MasterGroup = Other->PeerGroup;
+            Other->PeerGroup = 0;
+        }
+        if (Type != LX_MS_SLAVE)
+            Other->MasterGroup = 0;
+        Other->Unbindable = (Type == LX_MS_UNBINDABLE);
+    }
+    ExReleaseFastMutex(&Instance->Lock);
+    LxEventSourceSignal(&Ns->Mnt.Events);
     return 0;
 }
 
@@ -1433,6 +1725,8 @@ LxMountBind(
     PLIST_ENTRY Entry;
     LONG Error;
 
+    if ((Source->Mount != NULL) && Source->Mount->Unbindable)
+        return -LX_EINVAL;
     if ((Flags & LX_MS_REC) && (Source->Mount != NULL))
     {
         ExAcquireFastMutex(&Instance->Lock);
@@ -1481,10 +1775,17 @@ LxMountBind(
     }
 
     Error = LxMountBindNode(Process, Ns, Source, Target, Flags, &Top);
+    if (Error == 0)
+        LxMountPropagate(Top);
     for (Index = 0; Index < Count; Index++)
     {
-        if ((Error == 0) && (Targets[Index] != NULL) && (Below[Index]->Kind != LxFsNsfs))
-            LxMountClone(Ns, Below[Index], Targets[Index], NULL, Below[Index]->Flags, FALSE, NULL);
+        PLX_MOUNT Copy;
+
+        if ((Error == 0) && (Targets[Index] != NULL) && (Below[Index]->Kind != LxFsNsfs) && !Below[Index]->Unbindable &&
+            (LxMountClone(Ns, Below[Index], Targets[Index], NULL, Below[Index]->Flags, FALSE, &Copy) == 0))
+        {
+            LxMountPropagate(Copy);
+        }
         LxFree(Targets[Index]);
     }
     LxFree(Below);
@@ -1649,6 +1950,14 @@ LxMountNsCopy(
         Copy->CgroupRoot = Source->CgroupRoot;
         Copy->PidNs = Source->PidNs;
         Copy->NsFile = Source->NsFile;
+        Copy->Unbindable = Source->Unbindable;
+        Copy->PeerGroup = Source->PeerGroup;
+        Copy->MasterGroup = Source->MasterGroup;
+        if ((Source->PeerGroup != 0) && (LxNsOwner(New) != LxNsOwner(Old)))
+        {
+            Copy->MasterGroup = Source->PeerGroup;
+            Copy->PeerGroup = 0;
+        }
         if (Source->NtRoot.Buffer != NULL)
         {
             Copy->NtRoot.Buffer = LxAlloc(Source->NtRoot.MaximumLength);
@@ -1736,20 +2045,33 @@ LxMountNsRelease(
 PSTR
 LxPathRebase(
     _In_ PCSTR Path,
+    _In_ PCSTR Root,
     _In_ PCSTR NewRoot,
     _In_ PCSTR PutOld)
 {
-    SIZE_T RootLength = strlen(NewRoot);
+    SIZE_T RootLength = (strcmp(Root, "/") == 0) ? 0 : strlen(Root), NewLength = strlen(NewRoot);
+    PCSTR Rest;
 
-    if (strcmp(NewRoot, "/") == 0)
+    if (strcmp(NewRoot, Root) == 0)
         return LxStrDup(Path);
-    if ((strncmp(Path, NewRoot, RootLength) == 0) && ((Path[RootLength] == '\0') || (Path[RootLength] == '/')))
-        return LxStrDup((Path[RootLength] == '\0') ? "/" : Path + RootLength);
+    if ((strncmp(Path, NewRoot, NewLength) == 0) && ((Path[NewLength] == '\0') || (Path[NewLength] == '/')))
+    {
+        Rest = Path + NewLength;
+        if (RootLength == 0)
+            return LxStrDup((Rest[0] != '\0') ? Rest : "/");
+        return LxStrPrintf("%s%s", Root, Rest);
+    }
+    if ((RootLength != 0) &&
+        ((strncmp(Path, Root, RootLength) != 0) || ((Path[RootLength] != '\0') && (Path[RootLength] != '/'))))
+    {
+        return LxStrDup(Path);
+    }
+    Rest = Path + RootLength;
+    if (strcmp(Rest, "/") == 0)
+        Rest = "";
     if (strcmp(PutOld, "/") == 0)
-        return LxStrDup(Path);
-    if (strcmp(Path, "/") == 0)
-        return LxStrDup(PutOld);
-    return LxStrPrintf("%s%s", PutOld, Path);
+        return (RootLength != 0) ? LxStrPrintf("%s%s", Root, Rest) : LxStrDup((Rest[0] != '\0') ? Rest : "/");
+    return LxStrPrintf("%s%s%s", (RootLength != 0) ? Root : "", PutOld, Rest);
 }
 
 LONG
@@ -1760,30 +2082,42 @@ LxMountPivotRoot(
 {
     PLX_NS Ns = LxProcessNs(Process, LxNsMnt);
     PLX_INSTANCE Instance = Ns->Instance;
-    PCSTR NewPath = NewRoot->Path;
+    PCSTR NewPath = NewRoot->Path, RootRelative = NULL;
     SIZE_T NewLength = strlen(NewPath);
-    PSTR OldRel;
-    PLX_MOUNT RootMount, NewMount;
+    PSTR OldRel, Root;
+    PLX_MOUNT RootMount, NewMount = NewRoot->Mount, OldMount = PutOld->Mount;
     PLIST_ENTRY Entry;
     LIST_ENTRY Moved;
+    LONG Error = 0;
 
-    if ((NewRoot->Mount == NULL) || (NewRoot->Relative[0] != '\0') || (strcmp(NewPath, "/") == 0))
+    if ((NewMount == NULL) || (OldMount == NULL))
         return -LX_EINVAL;
-    if ((strncmp(PutOld->Path, NewPath, NewLength) != 0) ||
-        ((PutOld->Path[NewLength] != '\0') && (PutOld->Path[NewLength] != '/')))
+    Root = LxProcessRoot(Process);
+    if (Root == NULL)
+        return -LX_ENOMEM;
+    RootMount = LxMountFind(Ns, Root, &RootRelative);
+    if (RootMount == NULL)
+        Error = -LX_EINVAL;
+    else if ((OldMount->PeerGroup != 0) || ((NewMount->Parent != NULL) && (NewMount->Parent->PeerGroup != 0)) ||
+             ((RootMount->Parent != NULL) && (RootMount->Parent->PeerGroup != 0)))
+        Error = -LX_EINVAL;
+    else if ((NewMount == RootMount) || (OldMount == RootMount))
+        Error = -LX_EBUSY;
+    else if ((RootRelative[0] != '\0') || (NewRoot->Relative[0] != '\0'))
+        Error = -LX_EINVAL;
+    else if ((strncmp(PutOld->Path, NewPath, NewLength) != 0) ||
+             ((PutOld->Path[NewLength] != '\0') && (PutOld->Path[NewLength] != '/')))
+        Error = -LX_EINVAL;
+    if (Error != 0)
     {
-        return -LX_EINVAL;
+        LxFree(Root);
+        return Error;
     }
     OldRel = LxStrDup((PutOld->Path[NewLength] == '\0') ? "/" : PutOld->Path + NewLength);
     if (OldRel == NULL)
-        return -LX_ENOMEM;
-
-    NewMount = NewRoot->Mount;
-    RootMount = LxMountFind(Ns, "/", NULL);
-    if ((RootMount == NULL) || (RootMount == NewMount))
     {
-        LxFree(OldRel);
-        return -LX_EBUSY;
+        LxFree(Root);
+        return -LX_ENOMEM;
     }
 
     InitializeListHead(&Moved);
@@ -1795,15 +2129,15 @@ LxMountPivotRoot(
 
         if (Mount->Detached)
             continue;
-        Rebased = LxPathRebase(Mount->Target, NewPath, OldRel);
+        Rebased = LxPathRebase(Mount->Target, Root, NewPath, OldRel);
         if (Rebased != NULL)
         {
             LxFree(Mount->Target);
             Mount->Target = Rebased;
         }
     }
-    NewMount->Parent = NULL;
-    NewMount->ParentId = 1;
+    NewMount->Parent = RootMount->Parent;
+    NewMount->ParentId = (NewMount->Parent != NULL) ? NewMount->Parent->Id : 1;
     RootMount->Parent = NewMount;
     RootMount->ParentId = NewMount->Id;
     for (Entry = Ns->Mnt.Mounts.Flink; Entry != &Ns->Mnt.Mounts;)
@@ -1821,8 +2155,9 @@ LxMountPivotRoot(
         InsertTailList(&Ns->Mnt.Mounts, RemoveHeadList(&Moved));
     ExReleaseFastMutex(&Instance->Lock);
 
-    LxNsRebaseProcesses(Ns, NewPath, OldRel);
+    LxNsRebaseProcesses(Ns, Root, NewPath, OldRel);
     LxFree(OldRel);
+    LxFree(Root);
     LxEventSourceSignal(&Ns->Mnt.Events);
     LxVcachePurgeOwner(Ns);
     LxVcacheInvalidate();
@@ -1896,10 +2231,22 @@ LxMountInfo(
             LxMountOptions(Mount, Options, sizeof(Options));
             if (Full)
             {
+                CHAR Optional[48];
+
+                Optional[0] = '\0';
+                if (Mount->PeerGroup != 0)
+                    RtlStringCbPrintfA(Optional, sizeof(Optional), " shared:%lu", Mount->PeerGroup);
+                if (Mount->MasterGroup != 0)
+                {
+                    RtlStringCbPrintfA(Optional + strlen(Optional), sizeof(Optional) - strlen(Optional), " master:%lu",
+                                       Mount->MasterGroup);
+                }
+                if (Mount->Unbindable)
+                    RtlStringCbCatA(Optional, sizeof(Optional), " unbindable");
                 Status = RtlStringCbPrintfExA(Buffer + Used, Remaining, &End, NULL, 0,
-                                              "%lu %lu 0:%lu %s %s %s shared:%lu - %s %s %s\n",
+                                              "%lu %lu 0:%lu %s %s %s%s - %s %s %s\n",
                                               Mount->Id, Mount->ParentId, Mount->Dev & 0xFF,
-                                              Mount->Root, Target, Options, Mount->Id,
+                                              Mount->Root, Target, Options, Optional,
                                               Mount->FsType, Mount->Source,
                                               (Mount->Flags & LX_MS_RDONLY) ? "ro" : "rw");
             }
