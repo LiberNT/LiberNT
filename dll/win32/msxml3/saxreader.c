@@ -805,6 +805,10 @@ struct input_buffer
     struct encoded_buffer raw;
     enum xmlencoding encoding;
     bool switched_encoding;
+#ifdef __REACTOS__
+    bool bom;
+    bool attvalue;
+#endif
     p_converter converter;
     UINT code_page;
     struct text_position position;
@@ -2307,6 +2311,21 @@ static void saxreader_update_position(struct saxlocator *locator, WCHAR ch)
 {
     struct input_buffer *input = &locator->buffer;
 
+#ifdef __REACTOS__
+    if (input->attvalue)
+    {
+        if (ch == '\n')
+        {
+            ++input->position.line;
+            input->position.column = 1;
+        }
+        else
+            ++input->position.column;
+        input->last_cr = false;
+        return;
+    }
+
+#endif
     /* Treat \r\n -> \n */
     if (ch == '\r' || (!input->last_cr && ch == '\n'))
     {
@@ -3364,6 +3383,12 @@ static void saxreader_parse_encdecl(struct saxlocator *locator, const struct par
 
     /* Switch encoding only in UTF-8 -> mbtowc-able direction. */
 
+#ifdef __REACTOS__
+    if (locator->buffer.encoding == XML_ENCODING_UTF8 && locator->buffer.bom &&
+            locator->saxreader->version < MSXML4 && !wcsicmp(value, L"UTF-16"))
+        return saxreader_set_error(locator, E_SAX_INVALIDSWITCH);
+
+#endif
     if (locator->buffer.encoding == XML_ENCODING_UTF8)
     {
         if (saxreader_get_encoding_codepage(locator->saxreader->xmldecl_encoding, &codepage))
@@ -4103,6 +4128,9 @@ static BSTR saxreader_parse_attvalue(struct saxlocator *locator)
 
     /* All references are resolved */
 
+#ifdef __REACTOS__
+    locator->buffer.attvalue = locator->saxreader->version < MSXML4;
+#endif
     while (locator->status == S_OK)
     {
         if (saxreader_cmp(locator, quote))
@@ -4168,6 +4196,9 @@ static BSTR saxreader_parse_attvalue(struct saxlocator *locator)
         }
     }
 
+#ifdef __REACTOS__
+    locator->buffer.attvalue = false;
+#endif
     if (locator->status != S_OK) return NULL;
 
     return saxreader_string_to_bstr(locator, &buffer);
@@ -4507,11 +4538,33 @@ static void saxreader_parse_comment(struct saxlocator *locator)
         }
         else
         {
+#ifdef __REACTOS__
+            if (locator->saxreader->features & NormalizeLineBreaks && ch == '\r')
+            {
+                bool move_position = false;
+
+                saxreader_skip(locator, 1);
+                ch = *saxreader_get_ptr_noread(locator);
+                if (ch == '\n')
+                    saxreader_skip(locator, 1);
+                else if (ch != '\r')
+                    move_position = true;
+
+                saxreader_string_append(locator, &buffer, L"\n", 1);
+                chars = saxreader_string_to_bstr(locator, &buffer);
+                saxlocator_comment(locator, &position, chars);
+                SysFreeString(chars);
+
+                if (move_position)
+                    position = locator->buffer.position;
+            }
+#else
             if (locator->saxreader->features & NormalizeLineBreaks
                     && (saxreader_cmp(locator, L"\r\n") || saxreader_cmp(locator, L"\r")))
             {
                 saxreader_string_append(locator, &buffer, L"\n", 1);
             }
+#endif
             else
             {
                 saxreader_string_append(locator, &buffer, &ch, 1);
@@ -5978,6 +6031,9 @@ static void saxreader_detect_encoding(struct saxlocator *locator, bool force_utf
     locator->buffer.encoding = encoding;
     locator->buffer.converter = convert_get_converter(encoding);
     locator->buffer.code_page = convert_get_codepage(encoding);
+#ifdef __REACTOS__
+    locator->buffer.bom = bom != 0;
+#endif
 
     TRACE("detected encoding %s\n", saxreader_get_encoding_name(encoding));
 
@@ -6773,6 +6829,10 @@ static HRESULT WINAPI isaxxmlreader_putFeature(ISAXXMLReader *iface, const WCHAR
 
     if (feature == NormalizeLineBreaks && reader->version >= MSXML4)
         return E_INVALIDARG;
+#ifdef __REACTOS__
+    if (feature == ExhaustiveErrors && reader->version < MSXML4)
+        return E_INVALIDARG;
+#endif
 
     /* accepted cases */
     if ((feature == ExhaustiveErrors && value == VARIANT_FALSE) ||
