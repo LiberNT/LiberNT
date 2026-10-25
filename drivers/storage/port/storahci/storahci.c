@@ -602,6 +602,17 @@ BOOLEAN NTAPI AhciHwPassiveInitialize(__in PVOID DeviceExtension)
             {
                 PortExtension->DeviceParams.IsActive = AhciStartPort(PortExtension);
             }
+            if (!PortExtension->DeviceParams.IsActive)
+            {
+                AHCI_INTERRUPT_ENABLE ie;
+
+                StorPortWriteRegisterUlong(AdapterExtension, &PortExtension->Port->SERR, (ULONG)~0);
+                StorPortWriteRegisterUlong(AdapterExtension, &PortExtension->Port->IS, (ULONG)~0);
+                ie.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->IE);
+                ie.PCE = 1;
+                ie.PRCE = 1;
+                StorPortWriteRegisterUlong(AdapterExtension, &PortExtension->Port->IE, ie.Status);
+            }
         }
     }
 
@@ -1264,6 +1275,7 @@ AhciRecoveryFailed(
     AhciFailQueuedRequests(PortExtension, SRB_STATUS_NO_DEVICE);
 
     PortExtension->DeviceParams.IsActive = FALSE;
+    PortExtension->HotPlugPending = FALSE;
     PortExtension->RecoveryState = AhciRecoveryIdle;
     PortExtension->RecoveryTicks = 0;
     PortExtension->RecoveryIsCommandError = FALSE;
@@ -1498,7 +1510,8 @@ AhciPortRecoveryStep(
             AhciClearIssuedCommands(PortExtension);
             PortExtension->RecoveryIsCommandError = FALSE;
 
-            if (HadNcq || tfd.STS.BSY || tfd.STS.DRQ || (PortExtension->RecoveryLinkSpeed != 0))
+            if (HadNcq || tfd.STS.BSY || tfd.STS.DRQ || (PortExtension->RecoveryLinkSpeed != 0) ||
+                PortExtension->HotPlugPending)
             {
                 sctl.Status = StorPortReadRegisterUlong(AdapterExtension, &PortExtension->Port->SCTL);
                 if (PortExtension->RecoveryLinkSpeed != 0)
@@ -1685,6 +1698,13 @@ AhciPortRecoveryStep(
             PortExtension->RecoveryTicks = 0;
             PortExtension->RecoveryIsCommandError = FALSE;
             AhciResetNcqRecoveryContext(PortExtension);
+            if (PortExtension->HotPlugPending)
+            {
+                AhciDebugPrint("\tPort %u: device is back after a connect change\n", PortExtension->PortNumber);
+                PortExtension->HotPlugPending = FALSE;
+                PortExtension->DeviceParams.IsActive = TRUE;
+                StorPortNotification(BusChangeDetected, AdapterExtension, (UCHAR)PortExtension->PortNumber);
+            }
             AhciSchedulePort(PortExtension);
             AhciActivatePort(PortExtension);
             return FALSE;
@@ -1771,6 +1791,29 @@ VOID AhciPortErrorRecovery(__in PAHCI_PORT_EXTENSION PortExtension)
     PortExtension->RecoveryState = AhciRecoveryWaitCommandEngine;
 
     StorPortIssueDpc(AdapterExtension, &PortExtension->ErrorRecovery, PortExtension, NULL);
+}
+
+static
+VOID
+AhciPortConnectChange(
+    __in PAHCI_PORT_EXTENSION PortExtension)
+{
+    AHCI_SERIAL_ATA_STATUS ssts;
+
+    if (PortExtension->RecoveryState != AhciRecoveryIdle || PortExtension->HotPlugPending)
+    {
+        return;
+    }
+
+    ssts.Status = StorPortReadRegisterUlong(PortExtension->AdapterExtension, &PortExtension->Port->SSTS);
+    if ((ssts.DET != 0x1) && (ssts.DET != 0x3))
+    {
+        return;
+    }
+
+    PortExtension->HotPlugPending = TRUE;
+    PortExtension->RecoveryResetAttempt = 0;
+    AhciPortErrorRecovery(PortExtension);
 }
 
 /**
@@ -2003,12 +2046,23 @@ BOOLEAN NTAPI AhciHwInterrupt(__in PVOID DeviceExtension)
              */
             PxIS.Status = StorPortReadRegisterUlong(AdapterExtension,
                                                     &AdapterExtension->PortExtension[nextPort].Port->IS);
+            if (PxIS.PCS || PxIS.PRCS)
+            {
+                StorPortWriteRegisterUlong(AdapterExtension,
+                                           &AdapterExtension->PortExtension[nextPort].Port->SERR,
+                                           StorPortReadRegisterUlong(AdapterExtension,
+                                                                     &AdapterExtension->PortExtension[nextPort].Port->SERR));
+            }
             StorPortWriteRegisterUlong(AdapterExtension,
                                        &AdapterExtension->PortExtension[nextPort].Port->IS,
                                        PxIS.Status);
             StorPortWriteRegisterUlong(AdapterExtension,
                                        AdapterExtension->IS,
                                        (1U << nextPort));
+            if (PxIS.PCS || PxIS.PRCS)
+            {
+                AhciPortConnectChange(&AdapterExtension->PortExtension[nextPort]);
+            }
             portPending &= ~(1U << nextPort);
             continue;
         }

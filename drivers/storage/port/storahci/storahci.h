@@ -515,6 +515,7 @@ typedef struct _AHCI_PORT_EXTENSION
     ULONG RecoveryState;
     ULONG RecoveryTicks;
     ULONG RecoveryResetAttempt;
+    BOOLEAN HotPlugPending;
     ULONG RecoveryNcqActiveSlots;
     ULONG RecoveryInternalSlot;
     BOOLEAN RecoveryIsCommandError;
