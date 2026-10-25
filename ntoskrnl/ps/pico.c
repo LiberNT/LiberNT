@@ -227,6 +227,27 @@ PsPicoGetProcessContext(
     return Process->PicoContext;
 }
 
+VOID
+NTAPI
+PsPicoSetProcessName(
+    _In_ PEPROCESS Process,
+    _In_ PCSTR Name)
+{
+    UCHAR ImageFileName[sizeof(Process->ImageFileName)];
+    SIZE_T Length = 0;
+
+    if (!Process->PicoCreated)
+        return;
+
+    RtlZeroMemory(ImageFileName, sizeof(ImageFileName));
+    while ((Length < sizeof(ImageFileName) - 1) && (Name[Length] != '\0'))
+    {
+        ImageFileName[Length] = (UCHAR)Name[Length];
+        Length++;
+    }
+    RtlCopyMemory(Process->ImageFileName, ImageFileName, sizeof(ImageFileName));
+}
+
 PVOID
 NTAPI
 PsPicoGetThreadContext(

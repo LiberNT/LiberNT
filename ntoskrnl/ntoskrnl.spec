@@ -2940,6 +2940,7 @@
 @ stdcall PsPicoGetProcessContext(ptr)
 @ stdcall PsPicoGetThreadContext(ptr)
 @ stdcall PsPicoRegisterProvider(ptr)
+@ stdcall PsPicoSetProcessName(ptr str)
 @ stdcall PsPicoTerminateCurrentThread(long)
 @ stdcall PsPicoTerminateThread(ptr long)
 @ stdcall PsQueryCurrentApiSetSchema()

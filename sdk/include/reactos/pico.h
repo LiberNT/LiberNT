@@ -107,4 +107,11 @@ NTAPI
 PsPicoGetThreadContext(
     _In_ PETHREAD Thread);
 
+NTKERNELAPI
+VOID
+NTAPI
+PsPicoSetProcessName(
+    _In_ PEPROCESS Process,
+    _In_ PCSTR Name);
+
 #endif
