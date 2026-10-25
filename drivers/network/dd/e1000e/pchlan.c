@@ -456,6 +456,34 @@ E1000PchPreparePhy(
 
 static
 VOID
+E1000PchApplyOemBits(
+    _Inout_ PE1000_ADAPTER Adapter)
+{
+    ULONG PhyCtrl;
+    USHORT OemBits;
+
+    if (!(E1000_READ_REG(Adapter, E1000_PCH_REG_FEXTNVM) & E1000_PCH_FEXTNVM_SW_CONFIG))
+        return;
+
+    if (!E1000PchAcquirePhy(Adapter))
+        return;
+
+    if (E1000PchReadPhy(Adapter, E1000_PCH_PHY_OEM_BITS, &OemBits))
+    {
+        PhyCtrl = E1000_READ_REG(Adapter, E1000_PCH_REG_PHY_CTRL);
+        OemBits &= ~(E1000_PCH_PHY_OEM_BITS_GBE_DIS | E1000_PCH_PHY_OEM_BITS_LPLU);
+        if (PhyCtrl & E1000_PCH_PHY_CTRL_GBE_DISABLE)
+            OemBits |= E1000_PCH_PHY_OEM_BITS_GBE_DIS;
+        if (PhyCtrl & E1000_PCH_PHY_CTRL_D0A_LPLU)
+            OemBits |= E1000_PCH_PHY_OEM_BITS_LPLU;
+        E1000PchWritePhy(Adapter, E1000_PCH_PHY_OEM_BITS, OemBits | E1000_PCH_PHY_OEM_BITS_RESTART_AN);
+    }
+
+    E1000PchReleasePhy(Adapter);
+}
+
+static
+VOID
 E1000PchApplyLinkSettings(
     _Inout_ PE1000_ADAPTER Adapter)
 {
@@ -685,6 +713,8 @@ E1000PchResetHardware(
                     E1000PchWritePhy(Adapter, E1000_PCH_PHY_PORT_GEN_CFG, PhyValue & ~E1000_PCH_PHY_PORT_GEN_CFG_HOST_WU);
                 E1000PchReleasePhy(Adapter);
             }
+
+            E1000PchApplyOemBits(Adapter);
 
             if (E1000_READ_REG(Adapter, E1000_PCH_REG_FEXTNVM) & E1000_PCH_FEXTNVM_SW_CONFIG)
                 DPRINT1("E1000: Chipset LAN expects PHY settings from its NVM configuration region, which is not applied\n");
