@@ -21,15 +21,10 @@ FCRET NoDifference(VOID)
     return FCRET_IDENTICAL;
 }
 
-FCRET Different(LPCWSTR file0, LPCWSTR file1)
-{
-    ConResPrintf(StdOut, IDS_DIFFERENT, file0, file1);
-    return FCRET_DIFFERENT;
-}
-
 FCRET LongerThan(LPCWSTR file0, LPCWSTR file1)
 {
     ConResPrintf(StdOut, IDS_LONGER_THAN, file0, file1);
+    ConPuts(StdOut, L"\n");
     return FCRET_DIFFERENT;
 }
 
@@ -192,7 +187,7 @@ static FCRET BinaryFileCompare(FILECOMPARE *pFC)
         else if (cb0.QuadPart > cb1.QuadPart)
             ret = LongerThan(pFC->file[0], pFC->file[1]);
         else if (fDifferent)
-            ret = Different(pFC->file[0], pFC->file[1]);
+            ret = FCRET_DIFFERENT;
         else
             ret = NoDifference();
     } while (0);
@@ -324,7 +319,8 @@ static FCRET FileCompare(FILECOMPARE *pFC)
         ret = TextFileCompare(pFC);
     }
 
-    ConPuts(StdOut, L"\n");
+    if (ret != FCRET_DIFFERENT)
+        ConPuts(StdOut, L"\n");
     return ret;
 }
 
@@ -513,6 +509,10 @@ quit:
 static FCRET WildcardFileCompare(FILECOMPARE *pFC)
 {
     BOOL fWild0, fWild1;
+    WIN32_FIND_DATAW find;
+    HANDLE hFind;
+    WCHAR szPath0[MAX_PATH], szPath1[MAX_PATH];
+    LPWSTR pszTitle;
 
     if (pFC->dwFlags & FLAG_HELP)
     {
@@ -543,6 +543,23 @@ static FCRET WildcardFileCompare(FILECOMPARE *pFC)
     {
         return FileCompareOneSideWild(pFC, TRUE);
     }
+
+    StringCbCopyW(szPath0, sizeof(szPath0), pFC->file[0]);
+    StringCbCopyW(szPath1, sizeof(szPath1), pFC->file[1]);
+    _wcsupr(szPath0);
+    _wcsupr(szPath1);
+    hFind = FindFirstFileW(szPath0, &find);
+    if (hFind == INVALID_HANDLE_VALUE)
+    {
+        ConResPrintf(StdErr, IDS_CANNOT_OPEN, szPath0);
+        ConPuts(StdOut, L"\n");
+        return FCRET_CANT_FIND;
+    }
+    FindClose(hFind);
+    pszTitle = PathFindFileNameW(szPath0);
+    StringCchCopyW(pszTitle, _countof(szPath0) - (pszTitle - szPath0), find.cFileName);
+    pFC->file[0] = szPath0;
+    pFC->file[1] = szPath1;
     return FileCompare(pFC);
 }
 

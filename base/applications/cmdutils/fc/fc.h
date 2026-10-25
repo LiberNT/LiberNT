@@ -82,7 +82,6 @@ VOID PrintCaption(LPCWSTR file);
 VOID PrintEndOfDiff(VOID);
 VOID PrintDots(VOID);
 FCRET NoDifference(VOID);
-FCRET Different(LPCWSTR file0, LPCWSTR file1);
 FCRET LongerThan(LPCWSTR file0, LPCWSTR file1);
 FCRET OutOfMemory(VOID);
 FCRET CannotRead(LPCWSTR file);
