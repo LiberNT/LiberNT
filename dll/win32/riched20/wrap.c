@@ -104,6 +104,49 @@ static HRESULT shape_run( ME_Context *c, ME_Run *run )
     return hr;
 }
 
+#ifdef __REACTOS__
+static BOOL move_tail_glyphs( ME_Run *run, ME_Run *run2 )
+{
+    const SCRIPT_PROPERTIES **props;
+    int num_props, start, count, i;
+
+    if (!(run->para->nFlags & MEPF_COMPLEX) || !run->glyphs || !run->clusters || !run->len || !run2->len)
+        return FALSE;
+    if (run->script_analysis.fRTL && !run->script_analysis.fLogicalOrder)
+        return FALSE;
+    if (FAILED( ScriptGetProperties( &props, &num_props ) ) ||
+        run->script_analysis.eScript >= num_props || props[run->script_analysis.eScript]->fComplex)
+        return FALSE;
+
+    start = run->clusters[run->len];
+    if (start == run->clusters[run->len - 1] || start >= run->num_glyphs)
+        return FALSE;
+    count = run->num_glyphs - start;
+
+    memmove( run->glyphs, run->glyphs + start, count * sizeof(*run->glyphs) );
+    memmove( run->vis_attrs, run->vis_attrs + start, count * sizeof(*run->vis_attrs) );
+    memmove( run->advances, run->advances + start, count * sizeof(*run->advances) );
+    memmove( run->offsets, run->offsets + start, count * sizeof(*run->offsets) );
+    for (i = 0; i < run2->len; i++)
+        run->clusters[i] = run->clusters[run->len + i] - start;
+
+    run2->glyphs = run->glyphs;
+    run2->vis_attrs = run->vis_attrs;
+    run2->advances = run->advances;
+    run2->offsets = run->offsets;
+    run2->max_glyphs = run->max_glyphs;
+    run2->num_glyphs = count;
+    run2->clusters = run->clusters;
+    run2->max_clusters = run->max_clusters;
+    for (i = 0, run2->nWidth = 0; i < count; i++)
+        run2->nWidth += run2->advances[i];
+
+    run->glyphs = NULL;
+    run->clusters = NULL;
+    return TRUE;
+}
+#endif
+
 /******************************************************************************
  * calc_run_extent
  *
@@ -144,8 +187,19 @@ static ME_Run *split_run_extents( ME_WrapContext *wc, ME_Run *run, int nVChar )
   run2 = cursor.run;
   run2->script_analysis = run->script_analysis;
 
+#ifdef __REACTOS__
+  if (!move_tail_glyphs( run, run2 ))
+    shape_run( wc->context, run2 );
+  free( run->glyphs );
+  run->glyphs = NULL;
+  free( run->clusters );
+  run->clusters = NULL;
+  run->max_clusters = 0;
+  shape_run( wc->context, run );
+#else
   shape_run( wc->context, run );
   shape_run( wc->context, run2 );
+#endif
   calc_run_extent(wc->context, wc->para, wc->nRow ? wc->nLeftMargin : wc->nFirstMargin, run);
 
   run2->pt.x = run->pt.x + run->nWidth;
