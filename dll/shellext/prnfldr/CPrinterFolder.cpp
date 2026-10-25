@@ -487,11 +487,7 @@ STDMETHODIMP CPrinterFolder::EnumSearches(IEnumExtraSearch **ppenum)
 
 STDMETHODIMP CPrinterFolder::GetDefaultColumn(DWORD dwRes, ULONG *pSort, ULONG *pDisplay)
 {
-    if (pSort)
-        *pSort = 0;
-    if (pDisplay)
-        *pDisplay = 0;
-    return S_OK;
+    return E_NOTIMPL;
 }
 
 STDMETHODIMP CPrinterFolder::GetDefaultColumnState(UINT iColumn, SHCOLSTATEF *pcsFlags)
