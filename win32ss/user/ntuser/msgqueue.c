@@ -1134,7 +1134,8 @@ co_MsqSendMessage(PTHREADINFO ptirec,
    if (pti->TIF_flags & TIF_INCLEANUP || ptirec->TIF_flags & TIF_INCLEANUP)
    {
        // Unless we are dying and need to tell our parents.
-       if (pti->TIF_flags & TIF_INCLEANUP && !(ptirec->TIF_flags & TIF_INCLEANUP))
+       if (pti->TIF_flags & TIF_INCLEANUP && !(ptirec->TIF_flags & TIF_INCLEANUP) &&
+           HookMessage == MSQ_NORMAL && !lParamMemorySize(Msg, wParam, lParam))
        {
            // Parent notify is the big one. Fire and forget!
            TRACE("Send message from dying thread %u\n", Msg);
@@ -1361,6 +1362,22 @@ co_MsqSendMessage(PTHREADINFO ptirec,
    {
      // The current thread is dying!
      TRACE("User APC\n");
+
+     UserDomainLockExclusive(DLT_QUEUE);
+     Entry = ptirec->SentMessagesListHead.Flink;
+     while (Entry != &ptirec->SentMessagesListHead)
+     {
+        if (CONTAINING_RECORD(Entry, USER_SENT_MESSAGE, ListEntry) == Message)
+        {
+           Message->pkCompletionEvent = NULL;
+           RemoveEntryList(&Message->ListEntry);
+           ClearMsgBitsMask(ptirec, Message->QS_Flags);
+           InsertTailList(&usmList, &Message->ListEntry);
+           break;
+        }
+        Entry = Entry->Flink;
+     }
+     UserDomainUnlockExclusive(DLT_QUEUE);
 
      // The Message will be on the Trouble list until Thread cleanup.
      co_IntDeliverUserAPC();
