@@ -138,11 +138,7 @@ extern "C" {
 #define REGITEMORDER_MYDOCS_AFTERMYCOMPUTER  0x54 // accepts these two values.
 #define REGITEMORDER_MYDOCS_DEFAULT          0x48
 #define REGITEMORDER_NETHOOD                 0x58
-#if (REGITEMLOCATION_CONTROLS == CSIDL_DESKTOP)
 #define REGITEMORDER_RECYCLEBIN              0x78
-#else
-#define REGITEMORDER_RECYCLEBIN              0x60
-#endif
 #define REGITEMORDER_INTERNET                0x68
 #define REGITEMORDER_DESKTOP_CONTROLS        0x70 // NT6
 #define REGITEMORDER_MYCOMPUTER_CONTROLS     0x1E // NT5
