@@ -484,6 +484,8 @@ WinLdrLoadDeviceDriver(PLIST_ENTRY LoadOrderListHead,
 
     // Separate the path to file name and directory path
     RtlStringCbPrintfA(DriverPath, sizeof(DriverPath), "%wZ", FilePath);
+    if (_strnicmp(DriverPath, "\\SystemRoot\\", 12) == 0)
+        RtlMoveMemory(DriverPath, DriverPath + 12, strlen(DriverPath + 12) + 1);
     DriverNamePos = strrchr(DriverPath, '\\');
     if (DriverNamePos != NULL)
     {
@@ -511,7 +513,7 @@ WinLdrLoadDeviceDriver(PLIST_ENTRY LoadOrderListHead,
     }
 
     // It's not loaded, we have to load it
-    RtlStringCbPrintfA(FullPath, sizeof(FullPath), "%s%wZ", BootPath, FilePath);
+    RtlStringCbPrintfA(FullPath, sizeof(FullPath), "%s%s%s", BootPath, DriverPath, DllName);
 
     NtLdrOutputLoadMsg(FullPath, NULL);
     Success = PeLdrLoadImage(FullPath, LoaderBootDriver, &DriverBase);
