@@ -297,6 +297,12 @@ IopDoSymbolicLinkTransmogrify(IN PIRP Irp,
 
     if (UnparsedLength)
     {
+        if (PathLength &&
+            Path[PathLength - 1] == OBJ_NAME_PATH_SEPARATOR &&
+            Unparsed[0] == OBJ_NAME_PATH_SEPARATOR)
+        {
+            PathLength--;
+        }
         RtlCopyMemory(&Path[PathLength], Unparsed, UnparsedLength);
         PathLength += UnparsedLength / sizeof(WCHAR);
     }
@@ -363,6 +369,15 @@ IopDoNameTransmogrify(IN PIRP Irp,
         Buffer = (PWSTR)((ULONG_PTR)DataBuffer->MountPointReparseBuffer.PathBuffer +
                                     DataBuffer->MountPointReparseBuffer.SubstituteNameOffset);
         Length = DataBuffer->MountPointReparseBuffer.SubstituteNameLength;
+        if (Length >= sizeof(WCHAR) &&
+            DataBuffer->Reserved >= sizeof(WCHAR) &&
+            DataBuffer->Reserved <= FileObject->FileName.Length &&
+            Buffer[Length / sizeof(WCHAR) - 1] == OBJ_NAME_PATH_SEPARATOR &&
+            *(PWSTR)((ULONG_PTR)FileObject->FileName.Buffer + FileObject->FileName.Length -
+                     DataBuffer->Reserved) == OBJ_NAME_PATH_SEPARATOR)
+        {
+            Length -= sizeof(WCHAR);
+        }
 
         /* Check we don't overflow */
         if (((ULONG)MAXUSHORT - DataBuffer->Reserved) <= (Length + sizeof(UNICODE_NULL)))
