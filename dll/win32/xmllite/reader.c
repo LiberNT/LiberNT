@@ -1158,6 +1158,17 @@ static void reader_skipn(xmlreader *reader, int n)
 }
 
 /* [3] S ::= (#x20 | #x9 | #xD | #xA)+ */
+#ifdef __REACTOS__
+static BOOL reader_at_nul(xmlreader *reader, BOOL input_end)
+{
+    encoded_buffer *buffer = &reader->input->buffer->utf16;
+
+    if (*reader_get_ptr(reader) || is_reader_pending(reader))
+        return FALSE;
+    return (buffer->cur >= buffer->written / sizeof(WCHAR)) == input_end;
+}
+#endif
+
 static int reader_skipspaces(xmlreader *reader)
 {
     const WCHAR *ptr = reader_get_ptr(reader);
@@ -1696,6 +1707,10 @@ static HRESULT reader_parse_whitespace(xmlreader *reader)
 
         reader_skipspaces(reader);
         if (is_reader_pending(reader)) return S_OK;
+#ifdef __REACTOS__
+        if (*reader_get_ptr(reader) != '<' && !reader_at_nul(reader, TRUE))
+            return WC_E_SYNTAX;
+#endif
 
         start = reader->resume[XmlReadResume_Body];
         reader_init_strvalue(start, reader_get_cur(reader)-start, &value);
@@ -2280,6 +2295,30 @@ static HRESULT reader_parse_stag(xmlreader *reader, strval *prefix, strval *loca
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static BOOL reader_is_prefix_declared(xmlreader *reader, const strval *prefix)
+{
+    return !prefix->len || strval_eq(reader, prefix, &strval_xml) || strval_eq(reader, prefix, &strval_xmlns) ||
+            reader_lookup_ns(reader, prefix);
+}
+
+static HRESULT reader_check_prefixes(xmlreader *reader, const strval *prefix)
+{
+    struct attribute *attr;
+
+    if (!reader_is_prefix_declared(reader, prefix))
+        return NC_E_UNDECLAREDPREFIX;
+
+    LIST_FOR_EACH_ENTRY(attr, &reader->attrs, struct attribute, entry)
+    {
+        if (!reader_is_prefix_declared(reader, &attr->prefix))
+            return NC_E_UNDECLAREDPREFIX;
+    }
+
+    return S_OK;
+}
+#endif
+
 /* [39] element ::= EmptyElemTag | STag content ETag */
 static HRESULT reader_parse_element(xmlreader *reader)
 {
@@ -2305,6 +2344,9 @@ static HRESULT reader_parse_element(xmlreader *reader)
         if (FAILED(hr)) return hr;
 
         /* FIXME: need to check for defined namespace to reject invalid prefix */
+#ifdef __REACTOS__
+        if (FAILED(hr = reader_check_prefixes(reader, &prefix))) return hr;
+#endif
 
         /* if we got empty element and stack is empty go straight to Misc */
         if (reader->is_empty_element && list_empty(&reader->elements))
@@ -2359,6 +2401,9 @@ static HRESULT reader_parse_endtag(xmlreader *reader)
     reader->nodetype = XmlNodeType_EndElement;
     reader->is_empty_element = FALSE;
     reader_set_strvalue(reader, StringValue_Prefix, &prefix);
+#ifdef __REACTOS__
+    reader_set_strvalue(reader, StringValue_QualifiedName, &qname);
+#endif
 
     return S_OK;
 }
@@ -2499,6 +2544,13 @@ static HRESULT reader_parse_content(xmlreader *reader)
 
     reader_shrink(reader);
 
+#ifdef __REACTOS__
+    if (reader_at_nul(reader, TRUE))
+        return MX_E_INPUTEND;
+    if (reader_at_nul(reader, FALSE))
+        return WC_E_XMLCHARACTER;
+#endif
+
     /* handle end tag here, it indicates end of content as well */
     if (!reader_cmp(reader, L"</"))
         return reader_parse_endtag(reader);
@@ -2614,14 +2666,25 @@ static HRESULT reader_parse_nextnode(xmlreader *reader)
                 return hr;
             break;
         case XmlReadInState_Element:
+#ifdef __REACTOS__
+            hr = reader_parse_element(reader);
+            if (hr == S_FALSE && !is_reader_pending(reader))
+                hr = reader_at_nul(reader, TRUE) ? WC_E_ROOTELEMENT : WC_E_SYNTAX;
+            return hr;
+#else
             return reader_parse_element(reader);
+#endif
         case XmlReadInState_Content:
             return reader_parse_content(reader);
         case XmlReadInState_MiscEnd:
             hr = reader_parse_misc(reader);
             if (hr != S_FALSE) return hr;
 
+#ifdef __REACTOS__
+            if (*reader_get_ptr(reader) || reader_at_nul(reader, FALSE))
+#else
             if (*reader_get_ptr(reader))
+#endif
             {
                 WARN("found garbage in the end of XML\n");
                 return WC_E_SYNTAX;
@@ -2912,7 +2975,13 @@ static HRESULT WINAPI xmlreader_GetNodeType(IXmlReader* iface, XmlNodeType *node
         return E_INVALIDARG;
 
     *node_type = reader_get_nodetype(This);
+#ifdef __REACTOS__
+    if (This->state == XmlReadState_Error)
+        return This->error;
+    return This->state == XmlReadState_Closed || This->state == XmlReadState_EndOfFile ? S_FALSE : S_OK;
+#else
     return This->state == XmlReadState_Closed ? S_FALSE : S_OK;
+#endif
 }
 
 static void reader_set_current_attribute(xmlreader *reader, struct attribute *attr)
@@ -3116,8 +3185,30 @@ static HRESULT WINAPI xmlreader_GetQualifiedName(IXmlReader* iface, LPCWSTR *nam
         *name = emptyW;
         *len = 0;
         break;
-    case XmlNodeType_Element:
+#ifdef __REACTOS__
+    case XmlNodeType_XmlDeclaration:
+    case XmlNodeType_DocumentType:
+        *name = This->strvalues[StringValue_LocalName].str;
+        *len = This->strvalues[StringValue_LocalName].len;
+        break;
     case XmlNodeType_EndElement:
+        element = reader_get_element(This);
+        if (element->prefix.len)
+        {
+            *name = This->strvalues[StringValue_QualifiedName].str;
+            *len = This->strvalues[StringValue_QualifiedName].len;
+        }
+        else
+        {
+            *name = element->localname.str;
+            *len = element->localname.len;
+        }
+        break;
+#endif
+    case XmlNodeType_Element:
+#ifndef __REACTOS__
+    case XmlNodeType_EndElement:
+#endif
         element = reader_get_element(This);
         if (element->prefix.len)
         {
