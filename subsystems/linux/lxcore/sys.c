@@ -2515,7 +2515,7 @@ LxWaitChild(
             return 0;
 
         Result = LxWaitHead(&Process->ChildPoll, LxWaitReady, Selector, NULL);
-        if (Result == -LX_EINTR)
+        if ((Result == -LX_EINTR) && !LxWaitReady(Selector))
             return -LX_ERESTARTSYS;
     }
 }
