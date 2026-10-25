@@ -275,7 +275,11 @@ static HRESULT domdoc_load_from_stream(domdoc *doc, ISequentialStream *stream)
     if (!node)
     {
         ERR("Failed to parse xml\n");
+#ifdef __REACTOS__
+        return FAILED(hr) ? hr : E_FAIL;
+#else
         return E_FAIL;
+#endif
     }
 
     attach_doc_node(doc, node);
@@ -1343,7 +1347,7 @@ static HRESULT WINAPI domdoc_load(IXMLDOMDocument3 *iface, VARIANT source, VARIA
             if (hr == S_OK)
                 *result = VARIANT_TRUE;
 #ifdef __REACTOS__
-            else if (hr == E_FAIL)
+            else if (FAILED(hr))
                 hr = S_FALSE;
 #endif
             ISequentialStream_Release(stream);
