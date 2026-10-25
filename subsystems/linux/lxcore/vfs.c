@@ -25,6 +25,7 @@ FAST_MUTEX LxInstanceListLock;
 KEVENT LxInstanceCreateLock;
 static volatile LONG LxTrashCounter;
 static volatile LONG LxInstanceCounter;
+static volatile LONG LxVfsDirRenameGeneration;
 
 PSTR
 LxStrPrintf(
@@ -2606,6 +2607,18 @@ LxLookupFinish(
 }
 
 static
+PSTR
+LxFileBasePath(
+    _In_ PLX_FILE File)
+{
+    PSTR Path = NULL;
+
+    if (File->PathGeneration != LxVfsDirRenameGeneration)
+        Path = LxFileCurrentPath(File);
+    return (Path != NULL) ? Path : LxStrDup(File->Path);
+}
+
+static
 LONG
 LxLookupWalk(
     _In_ PLX_PROCESS Process,
@@ -2666,7 +2679,7 @@ LxLookupWalk(
             LxFree(ProcRoot);
             return -LX_ENOTDIR;
         }
-        Current = LxStrDup(File->Path);
+        Current = LxFileBasePath(File);
         LxFileDereference(File);
     }
     if (Current == NULL)
@@ -3206,7 +3219,7 @@ LxLookupCacheKey(
             if (File == NULL)
                 return NULL;
             Base = ((File->Type == LX_S_IFDIR) && (File->Path != NULL) && (File->Path[0] == '/')) ?
-                   LxStrDup(File->Path) : NULL;
+                   LxFileBasePath(File) : NULL;
             LxFileDereference(File);
         }
         if (Base == NULL)
@@ -3339,6 +3352,7 @@ LxVfsOpenNode(
     _In_ ULONG Mode,
     _Out_ PLX_FILE *Result)
 {
+    LONG Generation = LxVfsDirRenameGeneration;
     ULONG Disposition, Options = 0;
     ACCESS_MASK Access;
     HANDLE Handle;
@@ -3502,6 +3516,7 @@ LxVfsOpenNode(
     }
     File->Path = LxStrDup(Node->Path);
     File->Mount = Node->Mount;
+    File->PathGeneration = Generation;
     if ((Node->Type == LX_S_IFLNK) || (Node->Type == LX_S_IFIFO) || (Node->Type == LX_S_IFCHR) ||
         (Node->Type == 0060000) || (Node->Type == 0140000))
     {
@@ -4109,6 +4124,8 @@ LxVfsRename(
     if (!NT_SUCCESS(Status))
         return -LxStatusToErrno(Status);
 
+    if (From->Type == LX_S_IFDIR)
+        InterlockedIncrement(&LxVfsDirRenameGeneration);
     LxInotifyEvent(Process, From->Path, 0x00000040, TRUE);
     LxInotifyEvent(Process, To->Path, 0x00000080, FALSE);
     return 0;

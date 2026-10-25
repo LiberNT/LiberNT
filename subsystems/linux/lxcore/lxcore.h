@@ -215,6 +215,7 @@ struct _LX_FILE
     LONG64 EventSeen;
     PLX_PROCESS PidProcess;
     struct _LX_FILE_ASYNC *Async;
+    LONG PathGeneration;
 };
 
 typedef enum _LX_FS_KIND
