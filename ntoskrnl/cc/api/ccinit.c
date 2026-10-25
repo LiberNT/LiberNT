@@ -214,6 +214,7 @@ CcRosFlushDirtyPages(
         if (NtMap == NULL)
             break;
 
+        KeEnterCriticalRegion();
         if (NtMap->Callbacks.AcquireForLazyWrite == NULL ||
             NtMap->Callbacks.AcquireForLazyWrite(NtMap->LazyWriteContext, Wait))
         {
@@ -222,6 +223,7 @@ CcRosFlushDirtyPages(
             if (NtMap->Callbacks.ReleaseFromLazyWrite != NULL)
                 NtMap->Callbacks.ReleaseFromLazyWrite(NtMap->LazyWriteContext);
         }
+        KeLeaveCriticalRegion();
 
         if (CalledFromLazy && Flushed != 0)
         {
