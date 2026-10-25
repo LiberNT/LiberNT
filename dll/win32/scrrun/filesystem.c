@@ -34,6 +34,9 @@
 #include "scrrun_private.h"
 
 #include "wine/debug.h"
+#ifdef __REACTOS__
+#include "wine/list.h"
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(scrrun);
 
@@ -47,6 +50,9 @@ struct foldercollection {
     IFolderCollection IFolderCollection_iface;
     LONG ref;
     BSTR path;
+#ifdef __REACTOS__
+    struct list items;
+#endif
 };
 
 struct filecollection {
@@ -54,6 +60,9 @@ struct filecollection {
     IFileCollection IFileCollection_iface;
     LONG ref;
     BSTR path;
+#ifdef __REACTOS__
+    struct list items;
+#endif
 };
 
 struct drivecollection {
@@ -62,7 +71,62 @@ struct drivecollection {
     LONG ref;
     DWORD drives;
     LONG count;
+#ifdef __REACTOS__
+    struct list items;
+#endif
 };
+
+#ifdef __REACTOS__
+struct collection_item {
+    struct list entry;
+    BSTR key;
+    IDispatch *disp;
+};
+
+static IDispatch *collection_item_get(struct list *items, const WCHAR *key)
+{
+    struct collection_item *item;
+
+    LIST_FOR_EACH_ENTRY(item, items, struct collection_item, entry)
+    {
+        if (!wcsicmp(item->key, key))
+        {
+            IDispatch_AddRef(item->disp);
+            return item->disp;
+        }
+    }
+    return NULL;
+}
+
+static void collection_item_add(struct list *items, const WCHAR *key, IDispatch *disp)
+{
+    struct collection_item *item;
+
+    if (!(item = malloc(sizeof(*item))))
+        return;
+    if (!(item->key = SysAllocString(key)))
+    {
+        free(item);
+        return;
+    }
+    item->disp = disp;
+    IDispatch_AddRef(disp);
+    list_add_tail(items, &item->entry);
+}
+
+static void collection_items_free(struct list *items)
+{
+    struct collection_item *item, *next;
+
+    LIST_FOR_EACH_ENTRY_SAFE(item, next, items, struct collection_item, entry)
+    {
+        list_remove(&item->entry);
+        IDispatch_Release(item->disp);
+        SysFreeString(item->key);
+        free(item);
+    }
+}
+#endif
 
 struct enumdata {
     union
@@ -1544,7 +1608,18 @@ static HRESULT WINAPI foldercoll_enumvariant_Next(IEnumVARIANT *iface, ULONG cel
             BSTR str;
 
             str = get_full_path(This->data.u.foldercoll.coll->path, &data);
+#ifdef __REACTOS__
+            if (!(folder = (IFolder *)collection_item_get(&This->data.u.foldercoll.coll->items, str)))
+            {
+                hr = create_folder(str, &folder);
+                if (SUCCEEDED(hr))
+                    collection_item_add(&This->data.u.foldercoll.coll->items, str, (IDispatch *)folder);
+            }
+            else
+                hr = S_OK;
+#else
             hr = create_folder(str, &folder);
+#endif
             SysFreeString(str);
             if (FAILED(hr)) return hr;
 
@@ -1694,7 +1769,18 @@ static HRESULT WINAPI filecoll_enumvariant_Next(IEnumVARIANT *iface, ULONG celt,
             BSTR str;
 
             str = get_full_path(This->data.u.filecoll.coll->path, &data);
+#ifdef __REACTOS__
+            if (!(file = (IFile *)collection_item_get(&This->data.u.filecoll.coll->items, str)))
+            {
+                hr = create_file(str, &file);
+                if (SUCCEEDED(hr))
+                    collection_item_add(&This->data.u.filecoll.coll->items, str, (IDispatch *)file);
+            }
+            else
+                hr = S_OK;
+#else
             hr = create_file(str, &file);
+#endif
             SysFreeString(str);
             if (FAILED(hr)) return hr;
 
@@ -1838,7 +1924,20 @@ static HRESULT WINAPI drivecoll_enumvariant_Next(IEnumVARIANT *iface, ULONG celt
         IDrive *drive;
         HRESULT hr;
 
+#ifdef __REACTOS__
+        WCHAR key[2] = { 'A' + This->data.u.drivecoll.cur, 0 };
+
+        if (!(drive = (IDrive *)collection_item_get(&This->data.u.drivecoll.coll->items, key)))
+        {
+            hr = create_drive('A' + This->data.u.drivecoll.cur, &drive);
+            if (SUCCEEDED(hr))
+                collection_item_add(&This->data.u.drivecoll.coll->items, key, (IDispatch *)drive);
+        }
+        else
+            hr = S_OK;
+#else
         hr = create_drive('A' + This->data.u.drivecoll.cur, &drive);
+#endif
         if (FAILED(hr)) return hr;
 
         V_VT(&var[count]) = VT_DISPATCH;
@@ -1958,6 +2057,9 @@ static ULONG WINAPI foldercoll_Release(IFolderCollection *iface)
 
     if (!ref)
     {
+#ifdef __REACTOS__
+        collection_items_free(&collection->items);
+#endif
         SysFreeString(collection->path);
         free(collection);
     }
@@ -2103,6 +2205,9 @@ static HRESULT create_foldercoll(BSTR path, IFolderCollection **folders)
 
     This->IFolderCollection_iface.lpVtbl = &foldercollvtbl;
     This->ref = 1;
+#ifdef __REACTOS__
+    list_init(&This->items);
+#endif
     This->path = SysAllocString(path);
     if (!This->path)
     {
@@ -2160,6 +2265,9 @@ static ULONG WINAPI filecoll_Release(IFileCollection *iface)
 
     if (!ref)
     {
+#ifdef __REACTOS__
+        collection_items_free(&collection->items);
+#endif
         SysFreeString(collection->path);
         free(collection);
     }
@@ -2297,6 +2405,9 @@ static HRESULT create_filecoll(BSTR path, IFileCollection **files)
 
     This->IFileCollection_iface.lpVtbl = &filecollectionvtbl;
     This->ref = 1;
+#ifdef __REACTOS__
+    list_init(&This->items);
+#endif
     This->path = SysAllocString(path);
     if (!This->path)
     {
@@ -2352,7 +2463,12 @@ static ULONG WINAPI drivecoll_Release(IDriveCollection *iface)
     TRACE("%p, refcount %ld.\n", iface, ref);
 
     if (!ref)
+    {
+#ifdef __REACTOS__
+        collection_items_free(&collection->items);
+#endif
         free(collection);
+    }
 
     return ref;
 }
@@ -2470,6 +2586,9 @@ static HRESULT create_drivecoll(IDriveCollection **drives)
 
     This->IDriveCollection_iface.lpVtbl = &drivecollectionvtbl;
     This->ref = 1;
+#ifdef __REACTOS__
+    list_init(&This->items);
+#endif
     This->drives = mask = GetLogicalDrives();
     /* count set bits */
     for (This->count = 0; mask; This->count++)
