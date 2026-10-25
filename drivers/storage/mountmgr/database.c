@@ -577,6 +577,7 @@ ReconcileThisDatabaseWithMasterWorker(IN PVOID Parameter)
     FILE_REPARSE_POINT_INFORMATION ReparsePointInformation, SavedReparsePointInformation;
     PDEVICE_EXTENSION DeviceExtension = ((PRECONCILE_WORK_ITEM_CONTEXT)Parameter)->DeviceExtension;
     PDEVICE_INFORMATION DeviceInformation = ((PRECONCILE_WORK_ITEM_CONTEXT)Parameter)->DeviceInformation;
+    DEVICE_INFORMATION Snapshot;
 
     /* We're unloading, do nothing */
     if (Unloading)
@@ -661,12 +662,27 @@ ReconcileThisDatabaseWithMasterWorker(IN PVOID Parameter)
         }
     }
 
+    RtlZeroMemory(&Snapshot, sizeof(Snapshot));
+    Snapshot.Migrated = DeviceInformation->Migrated;
+    Snapshot.DeviceName.Length = DeviceInformation->DeviceName.Length;
+    Snapshot.DeviceName.MaximumLength = DeviceInformation->DeviceName.Length;
+    Snapshot.DeviceName.Buffer = AllocatePool(Snapshot.DeviceName.MaximumLength);
+    if (Snapshot.DeviceName.Buffer)
+    {
+        RtlCopyMemory(Snapshot.DeviceName.Buffer, DeviceInformation->DeviceName.Buffer, Snapshot.DeviceName.Length);
+    }
+    MmpReleaseDeviceLock(DeviceExtension);
+    if (!Snapshot.DeviceName.Buffer)
+    {
+        goto ReleaseRDS;
+    }
+
     /* Open the remote database */
-    DatabaseHandle = OpenRemoteDatabase(DeviceInformation, FALSE);
+    DatabaseHandle = OpenRemoteDatabase(&Snapshot, FALSE);
 
     /* Prepare a string with reparse point index */
     ReparseFile.Length = 0;
-    ReparseFile.MaximumLength = DeviceInformation->DeviceName.Length
+    ReparseFile.MaximumLength = Snapshot.DeviceName.Length
                                 + ReparseIndex.Length
                                 + sizeof(UNICODE_NULL);
     ReparseFile.Buffer = AllocatePool(ReparseFile.MaximumLength);
@@ -676,11 +692,11 @@ ReconcileThisDatabaseWithMasterWorker(IN PVOID Parameter)
         {
             CloseRemoteDatabase(DatabaseHandle);
         }
-        MmpReleaseDeviceLock(DeviceExtension);
+        FreePool(Snapshot.DeviceName.Buffer);
         goto ReleaseRDS;
     }
 
-    RtlAppendUnicodeStringToString(&ReparseFile, &DeviceInformation->DeviceName);
+    RtlAppendUnicodeStringToString(&ReparseFile, &Snapshot.DeviceName);
     RtlAppendUnicodeStringToString(&ReparseFile, &ReparseIndex);
     ReparseFile.Buffer[ReparseFile.Length / sizeof(WCHAR)] = UNICODE_NULL;
 
@@ -709,7 +725,7 @@ ReconcileThisDatabaseWithMasterWorker(IN PVOID Parameter)
             TruncateRemoteDatabase(DatabaseHandle, 0);
             CloseRemoteDatabase(DatabaseHandle);
         }
-        MmpReleaseDeviceLock(DeviceExtension);
+        FreePool(Snapshot.DeviceName.Buffer);
         goto ReleaseRDS;
     }
 
@@ -740,7 +756,7 @@ ReconcileThisDatabaseWithMasterWorker(IN PVOID Parameter)
             TruncateRemoteDatabase(DatabaseHandle, 0);
             CloseRemoteDatabase(DatabaseHandle);
         }
-        MmpReleaseDeviceLock(DeviceExtension);
+        FreePool(Snapshot.DeviceName.Buffer);
         goto ReleaseRDS;
     }
 
@@ -749,15 +765,16 @@ ReconcileThisDatabaseWithMasterWorker(IN PVOID Parameter)
      */
     if (DatabaseHandle == 0)
     {
-        DatabaseHandle = OpenRemoteDatabase(DeviceInformation, TRUE);
+        DatabaseHandle = OpenRemoteDatabase(&Snapshot, TRUE);
         if (DatabaseHandle == 0)
         {
-            MmpReleaseDeviceLock(DeviceExtension);
+            ZwClose(Handle);
+            FreePool(Snapshot.DeviceName.Buffer);
             goto ReleaseRDS;
         }
     }
 
-    MmpReleaseDeviceLock(DeviceExtension);
+    FreePool(Snapshot.DeviceName.Buffer);
 
     /* Reset all the references to our DB entries */
     Offset = 0;
