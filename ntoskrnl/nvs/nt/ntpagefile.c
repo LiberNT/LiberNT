@@ -38,6 +38,8 @@ static volatile LONG MiPagingFileExtendQueued;
 static volatile LONG64 MiPagingFileExtendPages;
 static ULONG64 MiPagingFileExtendFailTime;
 static PKTHREAD MiPagingFileExtendThread;
+static WORK_QUEUE_ITEM MiCommitReportItem;
+static volatile LONG MiCommitReportQueued;
 
 static
 NTSTATUS
@@ -163,6 +165,54 @@ MiExtendPagingFileWorker(
 }
 
 static
+VOID
+NTAPI
+MiCommitReportWorker(
+    _In_ PVOID Context)
+{
+    CHAR Names[8][16];
+    HANDLE Ids[8];
+    SIZE_T Pages[8];
+    ULONG Count = 0;
+    SIZE_T Total = 0;
+    PEPROCESS Process;
+    ULONG i;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    for (Process = PsGetNextProcess(NULL); Process != NULL; Process = PsGetNextProcess(Process))
+    {
+        SIZE_T Charge = MmQueryProcessCommitCharge(Process);
+
+        Total += Charge;
+        for (i = Count; i > 0 && Pages[i - 1] < Charge; i--)
+        {
+            if (i < RTL_NUMBER_OF(Pages))
+            {
+                Pages[i] = Pages[i - 1];
+                Ids[i] = Ids[i - 1];
+                RtlCopyMemory(Names[i], Names[i - 1], sizeof(Names[i]));
+            }
+        }
+        if (i < RTL_NUMBER_OF(Pages))
+        {
+            Pages[i] = Charge;
+            Ids[i] = PsGetProcessId(Process);
+            RtlCopyMemory(Names[i], PsGetProcessImageFileName(Process), sizeof(Names[i]) - 1);
+            Names[i][sizeof(Names[i]) - 1] = ANSI_NULL;
+            if (Count < RTL_NUMBER_OF(Pages))
+                Count++;
+        }
+    }
+
+    DbgPrint("Commit limit reached: %I64d of %I64d pages committed, %I64d by the system, %Iu by processes\n",
+             MI_ATOMIC_READ64(&MiSystem.CommittedPages), MI_ATOMIC_READ64(&MiSystem.CommitLimit),
+             MI_ATOMIC_READ64(&MiSystem.SystemSpace.CommittedPages), Total);
+    for (i = 0; i < Count; i++)
+        DbgPrint("    %s (%Iu): %Iu pages\n", Names[i], (ULONG_PTR)Ids[i], Pages[i]);
+}
+
+static
 BOOLEAN
 MiExpandCommit(
     _Inout_ PMI_SYSTEM System,
@@ -180,7 +230,14 @@ MiExpandCommit(
         return TRUE;
 
     if (PagingFile == NULL || PagingFile->Core.SlotCount >= PagingFile->MaximumSlots)
+    {
+        if (PagingFile != NULL && Pages > 0 && InterlockedCompareExchange(&MiCommitReportQueued, 1, 0) == 0)
+        {
+            ExInitializeWorkItem(&MiCommitReportItem, MiCommitReportWorker, NULL);
+            ExQueueWorkItem(&MiCommitReportItem, DelayedWorkQueue);
+        }
         return FALSE;
+    }
 
     if (Pages == 0 && MiPagingFileExtendFailTime != 0 &&
         KeQueryInterruptTime() - MiPagingFileExtendFailTime < MI_PAGEFILE_EXTEND_BACKOFF)
