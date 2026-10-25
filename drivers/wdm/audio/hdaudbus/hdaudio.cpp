@@ -574,7 +574,13 @@ HDA_AllocateDmaBufferWithNotification(
 	UINT32 allocOffset = 0;
 	UINT32 halfSize = 0;
 	if (NotificationCount == 2) {
-		halfSize = (UINT32)min(RequestedBufferSize / 2, (SIZE_T)(HDA_MAX_BDL_ENTRIES / 2) * PAGE_SIZE);
+		UINT32 frameSize = (stream->streamFormat.ContainerSize / 8) * stream->streamFormat.NumberOfChannels;
+		UINT32 align = 128;
+		while (frameSize && align % frameSize)
+			align += 128;
+		UINT32 maxHalf = (HDA_MAX_BDL_ENTRIES / 2) * PAGE_SIZE / align * align;
+		halfSize = (UINT32)min(RequestedBufferSize / 2, (SIZE_T)maxHalf);
+		halfSize = min((halfSize + align - 1) / align * align, maxHalf);
 		bufferSize = halfSize * 2;
 		allocOffset = PAGE_SIZE - (halfSize % PAGE_SIZE);
 	}
