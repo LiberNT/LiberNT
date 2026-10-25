@@ -44,4 +44,7 @@ BEGIN
     STRING_NO_LABEL "无法为卷添加卷标"
     STRING_FREE_SPACE "\n%I64d 字节总磁盘空间。\n%I64d 字节可用。\n"
     STRING_SERIAL_NUMBER "\n卷的序列号是 %04X-%04X\n"
+    STRING_FORCE_DISMOUNT "\nThe volume is in use by another process. It can be formatted once it is\n\
+dismounted, which makes every open handle to it invalid.\n\
+Force a dismount of this volume (Y/N)? "
 END

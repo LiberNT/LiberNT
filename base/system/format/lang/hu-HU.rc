@@ -51,4 +51,7 @@ BEGIN
     STRING_NO_LABEL "Nem sikerült elnevezni a kötetet"
     STRING_FREE_SPACE "\n%I64d bájt teljes lemezterület.\n%I64d bájt elérhető a köteten.\n"
     STRING_SERIAL_NUMBER "\nA kötet sorozatszáma: %04X-%04X\n"
+    STRING_FORCE_DISMOUNT "\nThe volume is in use by another process. It can be formatted once it is\n\
+dismounted, which makes every open handle to it invalid.\n\
+Force a dismount of this volume (Y/N)? "
 END

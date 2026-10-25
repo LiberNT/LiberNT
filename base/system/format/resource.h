@@ -27,3 +27,4 @@
 #define STRING_NO_LABEL         122
 #define STRING_FREE_SPACE       123
 #define STRING_SERIAL_NUMBER    124
+#define STRING_FORCE_DISMOUNT   125

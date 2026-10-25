@@ -9,7 +9,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 STRINGTABLE
 BEGIN
-    STRING_HELP "Usage: %s drive: [-FS:file-system] [-V:label] [-Q] [-A:size] [-C]\n\n\
+    STRING_HELP "Usage: %s drive: [-FS:file-system] [-V:label] [-Q] [-A:size] [-C] [-X] [-Y]\n\n\
   [drive:]         Specifies the drive to format.\n\
   -FS:file-system  Specifies the type of file system (%s).\n\
   -V:label         Specifies volume label.\n\
@@ -21,7 +21,10 @@ BEGIN
                    NTFS compression is not supported for allocation unit sizes\n\
                    above 4096.\n\
   -C               Files created on the new volume will be compressed by\n\
-                   default.\n\n"
+                   default.\n\
+  -X               Forces the volume to dismount first if it is in use.\n\
+  -Y               Does not ask before forcing a dismount, and keeps an empty\n\
+                   label when no label is given.\n\n"
     STRING_COMPLETE "%lu percent completed.\r"
     STRING_FORMAT_FAIL "FormatEx was unable to complete successfully.\n\n"
     STRING_NO_SUPPORT "Operation Not Supported"
@@ -47,4 +50,7 @@ DRIVE %C: WILL BE LOST!\nProceed with Format (Y/N)? "
     STRING_NO_LABEL "Could not label volume"
     STRING_FREE_SPACE "\n%I64d bytes total disk space.\n%I64d bytes available on disk.\n"
     STRING_SERIAL_NUMBER "\nVolume Serial Number is %04X-%04X\n"
+    STRING_FORCE_DISMOUNT "\nThe volume is in use by another process. It can be formatted once it is\n\
+dismounted, which makes every open handle to it invalid.\n\
+Force a dismount of this volume (Y/N)? "
 END

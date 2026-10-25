@@ -47,4 +47,7 @@ UNIDAD %C: SE PERDERÁN!\nProceder con el formato (S/N)? "
     STRING_NO_LABEL "Imposible etiquetar el volumen"
     STRING_FREE_SPACE "\n%I64d bytes espacio total del disco.\n%I64d bytes disponibles en el disco.\n"
     STRING_SERIAL_NUMBER "\nNúmero de Serie del Volumen es %04X-%04X\n"
+    STRING_FORCE_DISMOUNT "\nThe volume is in use by another process. It can be formatted once it is\n\
+dismounted, which makes every open handle to it invalid.\n\
+Force a dismount of this volume (Y/N)? "
 END

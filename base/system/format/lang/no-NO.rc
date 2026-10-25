@@ -47,4 +47,7 @@ STASJON %C: VIL BLI BORTE!\nFortsette med Formateringen (J/N)? "
     STRING_NO_LABEL "Kunne ikke merke volumet"
     STRING_FREE_SPACE "\n%I64d byte total ledig plass.\n%I64d byte tilgjengelig på disken.\n"
     STRING_SERIAL_NUMBER "\nVolumet Serie nummer er %04X-%04X\n"
+    STRING_FORCE_DISMOUNT "\nThe volume is in use by another process. It can be formatted once it is\n\
+dismounted, which makes every open handle to it invalid.\n\
+Force a dismount of this volume (Y/N)? "
 END

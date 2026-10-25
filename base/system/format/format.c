@@ -66,12 +66,17 @@ BOOL    QuickFormat = FALSE;
 DWORD   ClusterSize = 0;
 BOOL    CompressDrive = FALSE;
 BOOL    GotALabel = FALSE;
+BOOL    ForceDismount = FALSE;
+BOOL    NoPrompt = FALSE;
 PWCHAR  Label = L"";
 PWCHAR  Drive = NULL;
 PWCHAR  FileSystem = L"FAT";
 
 WCHAR   RootDirectory[MAX_PATH];
 WCHAR   LabelString[12];
+
+static BOOL ReadInputLine(PWSTR Buffer, INT Count);
+static BOOLEAN ConfirmForceDismount(VOID);
 
 #ifndef FMIFS_IMPORT_DLL
 //
@@ -189,6 +194,14 @@ static int ParseCommandLine(int argc, WCHAR *argv[])
                     CompressDrive = TRUE;
                     gotCompressed = TRUE;
                 }
+                else if (!_wcsicmp(&argv[i][1], L"X"))
+                {
+                    ForceDismount = TRUE;
+                }
+                else if (!_wcsicmp(&argv[i][1], L"Y"))
+                {
+                    NoPrompt = TRUE;
+                }
                 else
                 {
                     return i;
@@ -250,6 +263,9 @@ FormatExCallback(
             }
             break;
 
+        case VOLUMEINUSE:
+            return ConfirmForceDismount();
+
         case DONEWITHSTRUCTURE:
         case UNKNOWN2:
         case UNKNOWN3:
@@ -257,7 +273,6 @@ FormatExCallback(
         case UNKNOWN5:
         case INSUFFICIENTRIGHTS:
         case FSNOTSUPPORTED:
-        case VOLUMEINUSE:
         case UNKNOWN9:
         case UNKNOWNA:
         case UNKNOWNC:
@@ -317,6 +332,28 @@ static BOOLEAN LoadFMIFSEntryPoints(VOID)
 // Tell the user how to use the program
 //
 //----------------------------------------------------------------------
+static BOOLEAN ConfirmForceDismount(VOID)
+{
+    WCHAR input[16];
+    PCWSTR pszMsg;
+    INT Len;
+
+    if (ForceDismount || NoPrompt)
+        return TRUE;
+
+    ConResPuts(StdOut, STRING_FORCE_DISMOUNT);
+    Len = LoadStringW(NULL, STRING_YES_NO_FAQ, (PWSTR)&pszMsg, 0);
+    if (Len < 2) pszMsg = L"YN";
+    while (ReadInputLine(input, ARRAYSIZE(input)))
+    {
+        if (towupper(input[0]) == pszMsg[0])
+            return TRUE;
+        if (towupper(input[0]) == pszMsg[1])
+            return FALSE;
+    }
+    return FALSE;
+}
+
 static BOOL ReadInputLine(PWSTR Buffer, INT Count)
 {
     SIZE_T Length;
@@ -607,7 +644,7 @@ int wmain(int argc, WCHAR *argv[])
     //
     // Get the label if we don't have it
     //
-    if (!GotALabel)
+    if (!GotALabel && !NoPrompt)
     {
         ConResPuts(StdOut, STRING_ENTER_LABEL);
         ReadInputLine(input, ARRAYSIZE(input));

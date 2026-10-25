@@ -47,4 +47,7 @@ DRIVE %C: DO TË HUMBASIN!\nVazhdo ne formatimin (P/J)? "
     STRING_NO_LABEL "Nuk gjindet etiketa e volumit"
     STRING_FREE_SPACE "\n%I64d bytes totale ne hapesiren e diskut.\n%I64d bytes te disponushme ne disk.\n"
     STRING_SERIAL_NUMBER "\nNumri Serial i Volumit është %04X-%04X\n"
+    STRING_FORCE_DISMOUNT "\nThe volume is in use by another process. It can be formatted once it is\n\
+dismounted, which makes every open handle to it invalid.\n\
+Force a dismount of this volume (Y/N)? "
 END

@@ -48,4 +48,7 @@ JEDNOTKE %C: BUDÚ STRATENÉ!\nPokračovať s formátovaním (A/N)? "
     STRING_NO_LABEL "Zväzok sa nedá pomenovať"
     STRING_FREE_SPACE "\nCelkové diskové miesto: %I64d bajtov.\nDostupné miesto na disku: %I64d bajtov.\n"
     STRING_SERIAL_NUMBER "\nSériové číslo zväzku je %04X-%04X\n"
+    STRING_FORCE_DISMOUNT "\nThe volume is in use by another process. It can be formatted once it is\n\
+dismounted, which makes every open handle to it invalid.\n\
+Force a dismount of this volume (Y/N)? "
 END

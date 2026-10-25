@@ -49,4 +49,7 @@ SİLİNECEKTİR!\nBiçimlendirme sürsün mü (E/H)? "
     STRING_NO_LABEL "Birim etiketlenemedi."
     STRING_FREE_SPACE "\n%I64d çoklu tüm disk alanı.\nDiskte %I64d çoklu kullanılabilir.\n"
     STRING_SERIAL_NUMBER "\nBirim Seri Numarası %04X-%04X\n"
+    STRING_FORCE_DISMOUNT "\nThe volume is in use by another process. It can be formatted once it is\n\
+dismounted, which makes every open handle to it invalid.\n\
+Force a dismount of this volume (Y/N)? "
 END

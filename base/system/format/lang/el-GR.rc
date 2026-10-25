@@ -49,4 +49,7 @@ DRIVE %C: ΘΑ ΧΑΘΟΥΝ!\nΣυνέχεια με τη διαμόρφωση (Y
     STRING_NO_LABEL "Δεν ήταν δυνατή η εισαγωγή ετικέτας του τόμου"
     STRING_FREE_SPACE "\n%I64d bytes συνολικός χώρος δίσκου.\n%I64d bytes διαθέσιμα στο δίσκο.\n"
     STRING_SERIAL_NUMBER "\nΟ σειριακός αριθμός του τόμου είναι ο %04X-%04X\n"
+    STRING_FORCE_DISMOUNT "\nThe volume is in use by another process. It can be formatted once it is\n\
+dismounted, which makes every open handle to it invalid.\n\
+Force a dismount of this volume (Y/N)? "
 END

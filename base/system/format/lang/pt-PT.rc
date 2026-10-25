@@ -47,4 +47,7 @@ NA UNIDADE %C: SERÃO PERDIDOS!\nProsseguir com a formatação (S/N)?"
     STRING_NO_LABEL "Não foi possível rotular o volume"
     STRING_FREE_SPACE "\n%I64d bytes de espaço total em disco.\n%I64d bytes disponiveis em disco.\n"
     STRING_SERIAL_NUMBER "\nNumero de série do Volume é %04X-%04X\n"
+    STRING_FORCE_DISMOUNT "\nThe volume is in use by another process. It can be formatted once it is\n\
+dismounted, which makes every open handle to it invalid.\n\
+Force a dismount of this volume (Y/N)? "
 END
