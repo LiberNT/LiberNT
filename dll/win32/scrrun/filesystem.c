@@ -1979,8 +1979,18 @@ static HRESULT WINAPI drivecoll_enumvariant_Reset(IEnumVARIANT *iface)
 static HRESULT WINAPI drivecoll_enumvariant_Clone(IEnumVARIANT *iface, IEnumVARIANT **pclone)
 {
     struct enumvariant *This = impl_from_IEnumVARIANT(iface);
+#ifdef __REACTOS__
+    HRESULT hr;
+
+    TRACE("(%p)->(%p)\n", This, pclone);
+    hr = create_drivecoll_enum(This->data.u.drivecoll.coll, (IUnknown**)pclone);
+    if (SUCCEEDED(hr))
+        impl_from_IEnumVARIANT(*pclone)->data.u.drivecoll.cur = This->data.u.drivecoll.cur;
+    return hr;
+#else
     TRACE("(%p)->(%p)\n", This, pclone);
     return create_drivecoll_enum(This->data.u.drivecoll.coll, (IUnknown**)pclone);
+#endif
 }
 
 static const IEnumVARIANTVtbl drivecollenumvariantvtbl = {
