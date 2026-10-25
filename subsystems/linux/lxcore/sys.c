@@ -1869,9 +1869,9 @@ LxCreateThread(
     if ((Request->Flags & (LX_CLONE_VM | LX_CLONE_SIGHAND)) != (LX_CLONE_VM | LX_CLONE_SIGHAND))
         return -LX_EINVAL;
 
-    Thread = LxThreadCreate(Call->Process);
-    if (Thread == NULL)
-        return -LX_ENOMEM;
+    Error = LxThreadCreateLimited(Call->Process, &Thread);
+    if (Error != 0)
+        return Error;
 
     Error = LxTidAssign(Call->Process, Thread, Request->SetTid, Request->SetTidCount);
     if (Error != 0)
@@ -1978,13 +1978,13 @@ LxForkProcess(
     if (Cgroup != NULL)
         LxCgroupAttach(Child, Cgroup);
 
-    Thread = LxThreadCreate(Child);
-    if (Thread == NULL)
+    Error = LxThreadCreateLimited(Child, &Thread);
+    if (Error != 0)
     {
         LxProcessDereference(Child);
         LxFree(Entry);
         LxProcessDereference(ListParent);
-        return -LX_ENOMEM;
+        return Error;
     }
     Error = LxPidAssign(Child, Thread, Request->SetTid, Request->SetTidCount);
     if (Error != 0)

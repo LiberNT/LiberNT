@@ -22,6 +22,7 @@ static const PCSTR LxKernelConfig[] =
     "CONFIG_IKCONFIG=y",
     "CONFIG_IKCONFIG_PROC=y",
     "CONFIG_CGROUPS=y",
+    "CONFIG_CGROUP_PIDS=y",
     "CONFIG_NAMESPACES=y",
     "CONFIG_UTS_NS=y",
     "CONFIG_IPC_NS=y",

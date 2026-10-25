@@ -12,6 +12,10 @@
 #define NDEBUG
 #include <debug.h>
 
+#define LX_CGROUP_PIDS      0x00000001
+#define LX_CGROUP_ALL       LX_CGROUP_PIDS
+#define LX_PIDS_MAX         4194305
+
 #define LX_PROC_MAX_COMPONENTS  16
 #define LX_PROC_TICKS           100000LL
 #define LX_RLIMIT_RSS           5
@@ -400,6 +404,7 @@ LxCgroupCreateRoot(VOID)
     InitializeListHead(&Root->DeadList);
     InitializeListHead(&Root->BpfDevice);
     LxEventSourceInit(&Root->Events);
+    Root->PidsLimit = LX_PIDS_MAX;
     Root->Root = Root;
     Root->Id = (ULONG64)InterlockedIncrement64(&LxCgroupNextId);
     Root->Created = (LONG64)KeQueryInterruptTime();
@@ -427,6 +432,7 @@ LxCgroupCreateChild(
     InitializeListHead(&Child->DeadList);
     InitializeListHead(&Child->BpfDevice);
     LxEventSourceInit(&Child->Events);
+    Child->PidsLimit = LX_PIDS_MAX;
     Child->Parent = Parent;
     Child->Root = Parent->Root;
     Child->Instance = Parent->Instance;
@@ -570,6 +576,60 @@ LxCgroupNotifyEvents(
     LxFree(Path);
 }
 
+static
+VOID
+LxCgroupChargeLocked(
+    _In_opt_ PLX_CGROUP Cgroup,
+    _In_ LONG64 Count)
+{
+    for (; (Cgroup != NULL) && (Cgroup->Parent != NULL); Cgroup = Cgroup->Parent)
+    {
+        Cgroup->PidsCount += Count;
+        if (Cgroup->PidsCount > Cgroup->PidsPeak)
+            Cgroup->PidsPeak = Cgroup->PidsCount;
+    }
+}
+
+LONG
+LxCgroupTaskAdd(
+    _In_ PLX_PROCESS Process,
+    _In_ BOOLEAN Limited)
+{
+    PLX_CGROUP Walk, Over = NULL;
+
+    ExAcquireFastMutex(&LxCgroupLock);
+    for (Walk = Process->Cgroup; Limited && (Walk != NULL) && (Walk->Parent != NULL); Walk = Walk->Parent)
+    {
+        if (Walk->PidsCount + 1 > Walk->PidsLimit)
+        {
+            Over = Walk;
+            break;
+        }
+    }
+    if (Over != NULL)
+    {
+        Over->PidsEventsLocal++;
+        for (Walk = Over; Walk->Parent != NULL; Walk = Walk->Parent)
+            Walk->PidsEvents++;
+        ExReleaseFastMutex(&LxCgroupLock);
+        return -LX_EAGAIN;
+    }
+    InterlockedIncrement(&Process->ThreadCount);
+    LxCgroupChargeLocked(Process->Cgroup, 1);
+    ExReleaseFastMutex(&LxCgroupLock);
+    return 0;
+}
+
+VOID
+LxCgroupTaskRemove(
+    _In_ PLX_PROCESS Process)
+{
+    ExAcquireFastMutex(&LxCgroupLock);
+    InterlockedDecrement(&Process->ThreadCount);
+    LxCgroupChargeLocked(Process->Cgroup, -1);
+    ExReleaseFastMutex(&LxCgroupLock);
+}
+
 VOID
 LxCgroupAttach(
     _In_ PLX_PROCESS Process,
@@ -586,6 +646,8 @@ LxCgroupAttach(
         ExReleaseFastMutex(&LxCgroupLock);
         return;
     }
+    LxCgroupChargeLocked(Old, -(LONG64)Process->ThreadCount);
+    LxCgroupChargeLocked(Cgroup, Process->ThreadCount);
     if (Old != NULL)
     {
         Old->Members--;
@@ -2963,6 +3025,11 @@ LxResolveSys(
     return 0;
 }
 
+static const PCSTR LxCgroupControllers[] =
+{
+    "pids",
+};
+
 static const PCSTR LxCgroupFiles[] =
 {
     "cgroup.controllers",
@@ -2979,6 +3046,11 @@ static const PCSTR LxCgroupFiles[] =
     "cgroup.type",
     "cpu.stat",
     "cpu.stat.local",
+    "pids.current",
+    "pids.events",
+    "pids.events.local",
+    "pids.max",
+    "pids.peak",
 };
 
 static
@@ -2989,6 +3061,8 @@ LxCgroupFileAllowed(
 {
     PCSTR Name = LxCgroupFiles[Index];
 
+    if (strncmp(Name, "pids.", 5) == 0)
+        return (Cgroup->Parent != NULL) && (Cgroup->Parent->SubtreeMask & LX_CGROUP_PIDS);
     if (Cgroup->Parent != NULL)
         return TRUE;
     return (strcmp(Name, "cgroup.events") != 0) && (strcmp(Name, "cgroup.freeze") != 0) &&
@@ -3029,7 +3103,9 @@ LxResolveCgroup(
             Synth->Mode = ((strcmp(LxCgroupFiles[Index], "cgroup.events") == 0) ||
                            (strcmp(LxCgroupFiles[Index], "cgroup.controllers") == 0) ||
                            (strcmp(LxCgroupFiles[Index], "cgroup.stat") == 0) ||
-                           (strncmp(LxCgroupFiles[Index], "cpu.stat", 8) == 0)) ? 0444 : 0644;
+                           (strncmp(LxCgroupFiles[Index], "cpu.stat", 8) == 0) ||
+                           ((strncmp(LxCgroupFiles[Index], "pids.", 5) == 0) &&
+                            (strcmp(LxCgroupFiles[Index], "pids.max") != 0))) ? 0444 : 0644;
             Synth->Index = Index;
             return 0;
         }
@@ -3670,6 +3746,11 @@ LxCgroupWriteProcs(
         LxProcessDereference(Process);
         return -LX_ESRCH;
     }
+    if ((Cgroup->Parent != NULL) && (Cgroup->SubtreeMask != 0))
+    {
+        LxProcessDereference(Process);
+        return -LX_EBUSY;
+    }
     LxCgroupAttach(Process, Cgroup);
     LxProcessDereference(Process);
     return 0;
@@ -3730,13 +3811,115 @@ LxCgroupWriteSubtree(
     _In_reads_bytes_(Length) PCSTR Data,
     _In_ ULONG Length)
 {
-    UNREFERENCED_PARAMETER(File);
-    while ((Length != 0) && ((*Data == ' ') || (*Data == '\n') || (*Data == '\t')))
+    PLX_CGROUP Cgroup = File->HandlerContext, Child;
+    PCSTR Cursor = Data, Limit = Data + strnlen(Data, Length);
+    ULONG Enable = 0, Disable = 0, Available;
+    PLIST_ENTRY Entry;
+    LONG Error = 0;
+
+    if ((Cgroup == NULL) || Cgroup->Removed)
+        return -LX_ENODEV;
+    while (Cursor < Limit)
     {
-        Data++;
-        Length--;
+        PCSTR Start;
+        SIZE_T Size;
+        ULONG Bit = 0, Index;
+
+        while ((Cursor < Limit) && ((*Cursor == ' ') || (*Cursor == '\n') || (*Cursor == '\t')))
+            Cursor++;
+        if (Cursor >= Limit)
+            break;
+        Start = Cursor;
+        while ((Cursor < Limit) && (*Cursor != ' ') && (*Cursor != '\n') && (*Cursor != '\t'))
+            Cursor++;
+        Size = (SIZE_T)(Cursor - Start);
+        if ((Size < 2) || ((Start[0] != '+') && (Start[0] != '-')))
+            return -LX_EINVAL;
+        for (Index = 0; Index < RTL_NUMBER_OF(LxCgroupControllers); Index++)
+        {
+            if ((strlen(LxCgroupControllers[Index]) == Size - 1) &&
+                (strncmp(LxCgroupControllers[Index], Start + 1, Size - 1) == 0))
+            {
+                Bit = 1UL << Index;
+            }
+        }
+        if (Bit == 0)
+            return -LX_EINVAL;
+        if (Start[0] == '+')
+        {
+            Enable |= Bit;
+            Disable &= ~Bit;
+        }
+        else
+        {
+            Disable |= Bit;
+            Enable &= ~Bit;
+        }
     }
-    return (Length == 0) ? 0 : -LX_ENOENT;
+
+    ExAcquireFastMutex(&LxCgroupLock);
+    Available = (Cgroup->Parent != NULL) ? Cgroup->Parent->SubtreeMask : LX_CGROUP_ALL;
+    Enable &= ~Cgroup->SubtreeMask;
+    Disable &= Cgroup->SubtreeMask;
+    if (Enable & ~Available)
+    {
+        Error = -LX_ENOENT;
+    }
+    else if (Enable && (Cgroup->Parent != NULL) && (Cgroup->Members != 0))
+    {
+        Error = -LX_EBUSY;
+    }
+    else if (Disable)
+    {
+        for (Entry = Cgroup->Children.Flink; Entry != &Cgroup->Children; Entry = Entry->Flink)
+        {
+            Child = CONTAINING_RECORD(Entry, LX_CGROUP, Sibling);
+            if (!Child->Removed && (Child->SubtreeMask & Disable))
+                Error = -LX_EBUSY;
+        }
+    }
+    if (Error == 0)
+        Cgroup->SubtreeMask = (Cgroup->SubtreeMask | Enable) & ~Disable;
+    ExReleaseFastMutex(&LxCgroupLock);
+    return Error;
+}
+
+static
+LONG
+LxCgroupWritePidsMax(
+    _In_ PLX_FILE File,
+    _In_reads_bytes_(Length) PCSTR Data,
+    _In_ ULONG Length)
+{
+    PLX_CGROUP Cgroup = File->HandlerContext;
+    PCSTR End = Data + strnlen(Data, Length);
+    LONG64 Value;
+
+    if ((Cgroup == NULL) || Cgroup->Removed)
+        return -LX_ENODEV;
+    while ((Data < End) && ((*Data == ' ') || (*Data == '\t') || (*Data == '\n')))
+        Data++;
+    while ((End > Data) && ((End[-1] == ' ') || (End[-1] == '\t') || (End[-1] == '\n')))
+        End--;
+    if ((End - Data == 3) && (strncmp(Data, "max", 3) == 0))
+    {
+        Value = LX_PIDS_MAX;
+    }
+    else
+    {
+        CHAR Number[24];
+
+        if ((End == Data) || (End - Data >= (LONG_PTR)sizeof(Number)))
+            return -LX_EINVAL;
+        RtlCopyMemory(Number, Data, End - Data);
+        Number[End - Data] = '\0';
+        if ((LxParseWriteNumber(Number, &Value) != 0) || (Value < 0) || (Value >= LX_PIDS_MAX))
+            return -LX_EINVAL;
+    }
+    ExAcquireFastMutex(&LxCgroupLock);
+    Cgroup->PidsLimit = Value;
+    ExReleaseFastMutex(&LxCgroupLock);
+    return 0;
 }
 
 static
@@ -3793,7 +3976,47 @@ LxGenCgroupFile(
     }
     else if ((strcmp(Name, "cgroup.controllers") == 0) || (strcmp(Name, "cgroup.subtree_control") == 0))
     {
+        ULONG Mask, Index;
+        BOOLEAN First = TRUE;
+
+        ExAcquireFastMutex(&LxCgroupLock);
+        if (strcmp(Name, "cgroup.subtree_control") == 0)
+            Mask = Cgroup->SubtreeMask;
+        else
+            Mask = (Cgroup->Parent != NULL) ? Cgroup->Parent->SubtreeMask : LX_CGROUP_ALL;
+        ExReleaseFastMutex(&LxCgroupLock);
+        for (Index = 0; Index < RTL_NUMBER_OF(LxCgroupControllers); Index++)
+        {
+            if (Mask & (1UL << Index))
+            {
+                LxTextPrintf(Text, "%s%s", First ? "" : " ", LxCgroupControllers[Index]);
+                First = FALSE;
+            }
+        }
         LxTextAppend(Text, "\n", 1);
+    }
+    else if (strncmp(Name, "pids.", 5) == 0)
+    {
+        LONG64 Value;
+
+        ExAcquireFastMutex(&LxCgroupLock);
+        if (strcmp(Name, "pids.max") == 0)
+            Value = Cgroup->PidsLimit;
+        else if (strcmp(Name, "pids.current") == 0)
+            Value = Cgroup->PidsCount;
+        else if (strcmp(Name, "pids.peak") == 0)
+            Value = Cgroup->PidsPeak;
+        else if (strcmp(Name, "pids.events") == 0)
+            Value = Cgroup->PidsEvents;
+        else
+            Value = Cgroup->PidsEventsLocal;
+        ExReleaseFastMutex(&LxCgroupLock);
+        if ((strcmp(Name, "pids.max") == 0) && (Value >= LX_PIDS_MAX))
+            LxTextAppend(Text, "max\n", 4);
+        else if (strncmp(Name, "pids.events", 11) == 0)
+            LxTextPrintf(Text, "max %lld\n", Value);
+        else
+            LxTextPrintf(Text, "%lld\n", Value);
     }
     else if (strcmp(Name, "cgroup.pressure") == 0)
     {
@@ -4143,6 +4366,8 @@ LxSynthOpen(
                     Writer = LxCgroupWriteFreeze;
                 else if (strcmp(Name, "cgroup.subtree_control") == 0)
                     Writer = LxCgroupWriteSubtree;
+                else if (strcmp(Name, "pids.max") == 0)
+                    Writer = LxCgroupWritePidsMax;
                 else if (strcmp(Name, "cgroup.events") == 0)
                     Events = &Synth.Cgroup->Events;
                 else if (Synth.Mode & 0200)

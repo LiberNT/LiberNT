@@ -509,24 +509,53 @@ LxProcessUnregister(
         LxProcessDereference(Process);
 }
 
-PLX_THREAD
-LxThreadCreate(
-    _In_ PLX_PROCESS Process)
+static
+LONG
+LxThreadCreateCommon(
+    _In_ PLX_PROCESS Process,
+    _In_ BOOLEAN Limited,
+    _Out_ PLX_THREAD *Result)
 {
     PLX_THREAD Thread = LxAlloc(sizeof(*Thread));
+    LONG Error;
 
+    *Result = NULL;
     if (Thread == NULL)
-        return NULL;
+        return -LX_ENOMEM;
+    Error = LxCgroupTaskAdd(Process, Limited);
+    if (Error != 0)
+    {
+        LxFree(Thread);
+        return Error;
+    }
 
     LxProcessReference(Process);
-    InterlockedIncrement(&Process->ThreadCount);
     Thread->Process = Process;
     InitializeListHead(&Thread->Link);
     Thread->AltStack.Flags = LX_SS_DISABLE;
     Thread->Sched.UtilMax = 1024;
     Thread->CurrentSyscall = MAXULONG;
     RtlCopyMemory(Thread->Comm, Process->Comm, sizeof(Thread->Comm));
+    *Result = Thread;
+    return 0;
+}
+
+PLX_THREAD
+LxThreadCreate(
+    _In_ PLX_PROCESS Process)
+{
+    PLX_THREAD Thread;
+
+    LxThreadCreateCommon(Process, FALSE, &Thread);
     return Thread;
+}
+
+LONG
+LxThreadCreateLimited(
+    _In_ PLX_PROCESS Process,
+    _Out_ PLX_THREAD *Result)
+{
+    return LxThreadCreateCommon(Process, TRUE, Result);
 }
 
 VOID
@@ -536,7 +565,7 @@ LxThreadFree(
     PLX_PROCESS Process = Thread->Process;
 
     LxNsThreadRelease(Thread);
-    InterlockedDecrement(&Process->ThreadCount);
+    LxCgroupTaskRemove(Process);
     LxProcessDereference(Process);
     LxFree(Thread);
 }

@@ -453,6 +453,12 @@ struct _LX_CGROUP
     LIST_ENTRY DeadList;
     LIST_ENTRY BpfDevice;
     ULONG BpfDeviceFlags;
+    ULONG SubtreeMask;
+    LONG64 PidsLimit;
+    LONG64 PidsCount;
+    LONG64 PidsPeak;
+    LONG64 PidsEvents;
+    LONG64 PidsEventsLocal;
 };
 
 struct _LX_PROCESS
@@ -1064,6 +1070,9 @@ PLX_PROCESS LxProcessFork(_In_ PLX_PROCESS Parent);
 VOID LxProcessReference(_In_ PLX_PROCESS Process);
 VOID LxProcessDereference(_In_ PLX_PROCESS Process);
 PLX_THREAD LxThreadCreate(_In_ PLX_PROCESS Process);
+LONG LxThreadCreateLimited(_In_ PLX_PROCESS Process, _Out_ PLX_THREAD *Result);
+LONG LxCgroupTaskAdd(_In_ PLX_PROCESS Process, _In_ BOOLEAN Limited);
+VOID LxCgroupTaskRemove(_In_ PLX_PROCESS Process);
 VOID LxThreadFree(_In_ PLX_THREAD Thread);
 PLX_PROCESS LxProcessLookup(_In_ PLX_INSTANCE Instance, _In_ ULONG Pid);
 PLX_THREAD LxThreadLookupReferenced(_In_ PLX_INSTANCE Instance, _In_ ULONG Tid, _Out_ PLX_PROCESS *Process);
