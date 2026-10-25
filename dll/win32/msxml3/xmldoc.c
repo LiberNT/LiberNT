@@ -146,6 +146,13 @@ static HRESULT _node_get_tagname(struct node *node, BSTR *p)
 
     if (node->type == XMLELEMTYPE_ELEMENT || node->type == XMLELEMTYPE_PI)
     {
+#ifdef __REACTOS__
+        if (!node->name || !*node->name)
+        {
+            *p = NULL;
+            return S_OK;
+        }
+#endif
         hr = return_bstr(node->name, p);
         /* TODO: misplaced */
         if (SUCCEEDED(hr))
@@ -1369,6 +1376,9 @@ typedef struct _xmldoc
     {
         BSTR name;
     } dtd;
+#ifdef __REACTOS__
+    BSTR charset;
+#endif
 } xmldoc;
 
 static inline xmldoc *impl_from_IXMLDocument2(IXMLDocument2 *iface)
@@ -1430,6 +1440,9 @@ static ULONG WINAPI xmldoc_Release(IXMLDocument2 *iface)
     {
         _node_release(doc->root);
         SysFreeString(doc->dtd.name);
+#ifdef __REACTOS__
+        SysFreeString(doc->charset);
+#endif
         free(doc);
     }
 
@@ -1538,13 +1551,62 @@ static HRESULT WINAPI xmldoc_get_URL(IXMLDocument2 *iface, BSTR *p)
     return E_NOTIMPL;
 }
 
+#ifdef __REACTOS__
+static BSTR xmldoc_sniff_charset(IStream *stream)
+{
+    static const LARGE_INTEGER zero;
+    char buffer[256], *decl, *end, *enc, quote;
+    LARGE_INTEGER move;
+    ULARGE_INTEGER pos;
+    ULONG read = 0;
+    BSTR ret = NULL;
+    int len;
+
+    if (FAILED(IStream_Seek(stream, zero, STREAM_SEEK_CUR, &pos)))
+        return NULL;
+    if (FAILED(IStream_Read(stream, buffer, sizeof(buffer) - 1, &read)))
+        read = 0;
+    move.QuadPart = pos.QuadPart;
+    IStream_Seek(stream, move, STREAM_SEEK_SET, NULL);
+    buffer[read] = 0;
+
+    decl = buffer;
+    if (read >= 3 && (BYTE)decl[0] == 0xef && (BYTE)decl[1] == 0xbb && (BYTE)decl[2] == 0xbf)
+        decl += 3;
+    if (strncmp(decl, "<?xml", 5) || !(end = strstr(decl, "?>")))
+        return NULL;
+    *end = 0;
+    if (!(enc = strstr(decl, "encoding")))
+        return NULL;
+    enc += 8;
+    while (*enc == ' ' || *enc == '\t' || *enc == '\r' || *enc == '\n') enc++;
+    if (*enc++ != '=')
+        return NULL;
+    while (*enc == ' ' || *enc == '\t' || *enc == '\r' || *enc == '\n') enc++;
+    quote = *enc++;
+    if ((quote != '"' && quote != '\'') || !(end = strchr(enc, quote)))
+        return NULL;
+    len = MultiByteToWideChar(CP_ACP, 0, enc, end - enc, NULL, 0);
+    if (len > 0 && (ret = SysAllocStringLen(NULL, len)))
+        MultiByteToWideChar(CP_ACP, 0, enc, end - enc, ret, len);
+    return ret;
+}
+#endif
+
 static HRESULT xmldoc_parse(xmldoc *doc, IStream *stream, const WCHAR *url)
 {
     struct parse_context c;
     HRESULT hr;
     VARIANT v;
+#ifdef __REACTOS__
+    BSTR charset = NULL;
+#endif
 
     if (FAILED(hr = parse_context_init(&c))) return hr;
+#ifdef __REACTOS__
+    if (!url && stream)
+        charset = xmldoc_sniff_charset(stream);
+#endif
 
     if (url)
     {
@@ -1560,9 +1622,16 @@ static HRESULT xmldoc_parse(xmldoc *doc, IStream *stream, const WCHAR *url)
     {
         WARN("Failed to parse %#lx.\n", hr);
         parse_context_cleanup(&c);
+#ifdef __REACTOS__
+        SysFreeString(charset);
+#endif
         return hr;
     }
 
+#ifdef __REACTOS__
+    SysFreeString(doc->charset);
+    doc->charset = charset;
+#endif
     _node_release(doc->root);
     SysFreeString(doc->dtd.name);
     memset(&doc->dtd, 0, sizeof(doc->dtd));
@@ -1600,8 +1669,18 @@ static HRESULT WINAPI xmldoc_get_readyState(IXMLDocument2 *iface, LONG *p)
 
 static HRESULT WINAPI xmldoc_get_charset(IXMLDocument2 *iface, BSTR *p)
 {
+#ifdef __REACTOS__
+    xmldoc *doc = impl_from_IXMLDocument2(iface);
+
+    TRACE("%p, %p.\n", iface, p);
+
+    if (!p) return E_INVALIDARG;
+
+    return return_bstr(doc->charset ? doc->charset : L"UTF-8", p);
+#else
     FIXME("(%p, %p): stub\n", iface, p);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI xmldoc_put_charset(IXMLDocument2 *iface, BSTR p)
@@ -1625,6 +1704,9 @@ static HRESULT WINAPI xmldoc_get_doctype(IXMLDocument2 *iface, BSTR *p)
 
     if (!p) return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    *p = NULL;
+#endif
     if (!doc->dtd.name)
         return S_FALSE;
 
@@ -1743,8 +1825,13 @@ static HRESULT WINAPI xmldoc_IPersistStreamInit_GetClassID(
 static HRESULT WINAPI xmldoc_IPersistStreamInit_IsDirty(
     IPersistStreamInit *iface)
 {
+#ifdef __REACTOS__
+    TRACE("(%p)\n", iface);
+    return S_FALSE;
+#else
     FIXME("(%p): stub!\n", iface);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI xmldoc_IPersistStreamInit_Load(IPersistStreamInit *iface,
@@ -1764,6 +1851,10 @@ static HRESULT WINAPI xmldoc_IPersistStreamInit_Save(
     IPersistStreamInit *iface, LPSTREAM pStm, BOOL fClearDirty)
 {
     FIXME("(%p, %p, %d): stub!\n", iface, pStm, fClearDirty);
+#ifdef __REACTOS__
+    if (!pStm)
+        return E_INVALIDARG;
+#endif
     return E_NOTIMPL;
 }
 
