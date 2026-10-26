@@ -273,7 +273,7 @@ if(_standard_signature)
     string(REGEX REPLACE "(^| )/" "\\1" _standard_options "${_standard_options}")
     set(BCD_LOADER_DEVICE "${BCD_OS_DEVICE}")
     set(BCD_LOADER_PATH "\\Windows\\system32\\${BOOTLOADER_OS_LOADER}")
-    set(BCD_LOAD_OPTIONS "KDWATCHDOG=0 ${_standard_options}${BOOTLOADER_DEBUG_LOAD_OPTIONS}")
+    set(BCD_LOAD_OPTIONS "${BOOTLOADER_LOAD_OPTIONS} ${_standard_options}${BOOTLOADER_DEBUG_LOAD_OPTIONS}")
     string(STRIP "${BCD_LOAD_OPTIONS}" BCD_LOAD_OPTIONS)
     set(BCD_WINPE_ELEMENT "")
 
