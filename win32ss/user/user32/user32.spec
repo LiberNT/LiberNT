@@ -369,7 +369,7 @@
 @ stdcall -version=0x602+ GetPointerFrameTouchInfoHistory(long ptr ptr ptr)
 @ stdcall -version=0x602+ GetPointerPenInfo(long ptr)
 @ stdcall -version=0x602+ GetPointerPenInfoHistory(long ptr ptr)
-@ stdcall -stub -version=0x602+ GetPointerFrameTouchInfo(long ptr ptr)
+@ stdcall -version=0x602+ GetPointerFrameTouchInfo(long ptr ptr)
 @ stdcall -version=0x602+ GetPointerType(long ptr)
 @ stdcall GetPriorityClipboardFormat(ptr long) NtUserGetPriorityClipboardFormat
 @ stdcall GetProcessDefaultLayout(ptr)

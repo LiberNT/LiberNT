@@ -933,6 +933,7 @@ BOOL WINAPI SetGestureConfig( HWND hwnd, DWORD reserved, UINT count,
     return FALSE;
 }
 
+#ifndef __REACTOS__
 BOOL WINAPI GetPointerTouchInfo( UINT32 id, POINTER_TOUCH_INFO *info )
 {
     FIXME( "id %u, info %p stub!\n", id, info );
@@ -946,6 +947,7 @@ BOOL WINAPI GetPointerTouchInfoHistory( UINT32 id, UINT32 *count, POINTER_TOUCH_
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return FALSE;
 }
+#endif
 
 #ifndef __REACTOS__
 /*******************************************************************

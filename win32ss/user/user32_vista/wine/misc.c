@@ -611,6 +611,7 @@ LRESULT WINAPI PackTouchHitTestingProximityEvaluation(const TOUCH_HIT_TESTING_IN
     return 0;
 }
 
+#ifndef __REACTOS__
 /**********************************************************************
  * GetPointerType [USER32.@]
  */
@@ -635,6 +636,7 @@ BOOL WINAPI GetPointerInfo(UINT32 id, POINTER_INFO *info)
     SetLastError(ERROR_INVALID_PARAMETER);
     return FALSE;
 }
+#endif
 
 #ifndef __REACTOS__
 LRESULT WINAPI ImeWndProcA( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam )

@@ -1062,6 +1062,12 @@ User32DefWindowProc(HWND hWnd,
         case WM_APPCOMMAND:
         case WM_SETCURSOR:
         case WM_POPUPSYSTEMMENU:
+        case WM_POINTERDOWN:
+        case WM_POINTERUPDATE:
+        case WM_POINTERUP:
+        case WM_NCPOINTERDOWN:
+        case WM_NCPOINTERUPDATE:
+        case WM_NCPOINTERUP:
 GoSS:
         {
             LRESULT lResult;
