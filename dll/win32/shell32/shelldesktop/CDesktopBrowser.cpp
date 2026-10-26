@@ -461,7 +461,7 @@ HRESULT CDesktopBrowser::Initialize(IShellDesktopTray *ShellDesk)
     RECT rcShellView = {0,0,0,0};
     fs.ViewMode = FVM_ICON;
     fs.fFlags = FWF_DESKTOP | FWF_NOCLIENTEDGE | FWF_NOSCROLL | FWF_TRANSPARENT |
-                FWF_AUTOARRANGE | (fHideIcons ? FWF_NOICONS : 0);
+                FWF_SNAPTOGRID | (fHideIcons ? FWF_NOICONS : 0);
     hRet = m_ShellView->CreateViewWindow(NULL, &fs, (IShellBrowser *)this, &rcShellView, &m_hWndShellView);
     if (FAILED_UNEXPECTEDLY(hRet))
         return hRet;

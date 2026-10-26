@@ -385,6 +385,12 @@ private:
     BOOL  m_Destroyed;
     BOOL  m_FillListIsRefresh;
     ULONG m_FillListGeneration;
+    struct ITEM_POSITION
+    {
+        PITEMID_CHILD pidl;
+        POINT point;
+    };
+    CSimpleArray<ITEM_POSITION> m_RefreshPositions;
     SFVM_CUSTOMVIEWINFO_DATA  m_viewinfo_data;
 
     HICON                     m_hMyComputerIcon;
@@ -813,6 +819,9 @@ CDefView::CDefView() :
 CDefView::~CDefView()
 {
     TRACE(" destroying IShellView(%p)\n", this);
+
+    for (int i = 0; i < m_RefreshPositions.GetSize(); ++i)
+        ILFree(m_RefreshPositions[i].pidl);
 
     _DoFolderViewCB(SFVM_VIEWRELEASE, 0, 0);
 
@@ -1578,10 +1587,6 @@ BOOL CDefView::CreateList()
     dwExStyle = (m_FolderSettings.fFlags & FWF_NOCLIENTEDGE) ? 0 : WS_EX_CLIENTEDGE;
     ListExStyle = LVS_EX_INFOTIP | LVS_EX_LABELTIP;
 
-    // FIXME: Remove LVS_AUTOARRANGE globally when the view is able to save ItemPos.
-    if (!IsComputerTileView())
-        dwStyle |= LVS_AUTOARRANGE;
-
     if (m_FolderSettings.fFlags & FWF_DESKTOP)
     {
         m_FolderSettings.fFlags |= FWF_NOCLIENTEDGE | FWF_NOSCROLL;
@@ -2144,7 +2149,19 @@ int CDefView::LV_AddItem(PCUITEMID_CHILD pidl)
         lvItem.state = GetItemAttributes(pidl, SFGAO_HIDDEN | SFGAO_GHOSTED) ? LVIS_CUT : 0;
     }
 
-    return m_ListView.InsertItem(&lvItem);
+    int index = m_ListView.InsertItem(&lvItem);
+    if (index >= 0 && m_FillListIsRefresh)
+    {
+        for (int i = 0; i < m_RefreshPositions.GetSize(); ++i)
+        {
+            if (ILIsEqual(m_RefreshPositions[i].pidl, pidl))
+            {
+                m_ListView.SetItemPosition(index, &m_RefreshPositions[i].point);
+                break;
+            }
+        }
+    }
+    return index;
 }
 
 BOOLEAN CDefView::LV_DeleteItem(PCUITEMID_CHILD pidl)
@@ -2315,6 +2332,10 @@ void CDefView::FinishFillList()
     UpdateStatusbar();
 
     _DoFolderViewCB(SFVM_LISTREFRESHED, 0, 0);
+
+    for (int i = 0; i < m_RefreshPositions.GetSize(); ++i)
+        ILFree(m_RefreshPositions[i].pidl);
+    m_RefreshPositions.RemoveAll();
 
     ArrangeComputerView();
     FireFolderViewEvent(DISPID_FILELISTENUMDONE);
@@ -4203,6 +4224,25 @@ HRESULT WINAPI CDefView::UIActivate(UINT uState)
 HRESULT WINAPI CDefView::Refresh()
 {
     TRACE("(%p)\n", this);
+
+    for (int i = 0; i < m_RefreshPositions.GetSize(); ++i)
+        ILFree(m_RefreshPositions[i].pidl);
+    m_RefreshPositions.RemoveAll();
+    if (m_FolderSettings.fFlags & FWF_DESKTOP)
+    {
+        for (int i = 0; i < m_ListView.GetItemCount(); ++i)
+        {
+            ITEM_POSITION position;
+            position.pidl = ILClone(_PidlByItem(i));
+            if (position.pidl && m_ListView.GetItemPosition(i, &position.point))
+            {
+                if (!m_RefreshPositions.Add(position))
+                    ILFree(position.pidl);
+            }
+            else if (position.pidl)
+                ILFree(position.pidl);
+        }
+    }
 
     _DoFolderViewCB(SFVM_LISTREFRESHED, TRUE, 0);
 
