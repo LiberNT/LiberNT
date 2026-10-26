@@ -40,12 +40,7 @@ E1000InitializeOffloadCapabilities(
      */
 
     /* IPv4 TX Checksum */
-    OffloadCapabilities->Checksum.IPv4Transmit.Encapsulation = NDIS_ENCAPSULATION_IEEE_802_3;
-    OffloadCapabilities->Checksum.IPv4Transmit.IpOptionsSupported = TRUE;
-    OffloadCapabilities->Checksum.IPv4Transmit.TcpOptionsSupported = TRUE;
-    OffloadCapabilities->Checksum.IPv4Transmit.TcpChecksum = TRUE;
-    OffloadCapabilities->Checksum.IPv4Transmit.UdpChecksum = TRUE;
-    OffloadCapabilities->Checksum.IPv4Transmit.IpChecksum = TRUE;
+    OffloadCapabilities->Checksum.IPv4Transmit.Encapsulation = NDIS_ENCAPSULATION_NOT_SUPPORTED;
 
     /* IPv4 RX Checksum */
     OffloadCapabilities->Checksum.IPv4Receive.Encapsulation = NDIS_ENCAPSULATION_IEEE_802_3;
@@ -58,11 +53,7 @@ E1000InitializeOffloadCapabilities(
     /* IPv6 TX Checksum (82574L PCIe only) */
     if (Adapter->IsPCIe)
     {
-        OffloadCapabilities->Checksum.IPv6Transmit.Encapsulation = NDIS_ENCAPSULATION_IEEE_802_3;
-        OffloadCapabilities->Checksum.IPv6Transmit.IpExtensionHeadersSupported = FALSE;
-        OffloadCapabilities->Checksum.IPv6Transmit.TcpOptionsSupported = TRUE;
-        OffloadCapabilities->Checksum.IPv6Transmit.TcpChecksum = TRUE;
-        OffloadCapabilities->Checksum.IPv6Transmit.UdpChecksum = TRUE;
+        OffloadCapabilities->Checksum.IPv6Transmit.Encapsulation = NDIS_ENCAPSULATION_NOT_SUPPORTED;
 
         OffloadCapabilities->Checksum.IPv6Receive.Encapsulation = NDIS_ENCAPSULATION_IEEE_802_3;
         OffloadCapabilities->Checksum.IPv6Receive.IpExtensionHeadersSupported = FALSE;
@@ -83,14 +74,14 @@ E1000InitializeOffloadCapabilities(
     /* RSC (Receive Segment Coalescing) not supported */
 
     /* Set default enabled state */
-    Adapter->ChecksumOffload.TxIpChecksumEnabled = TRUE;
-    Adapter->ChecksumOffload.TxTcpChecksumEnabled = TRUE;
-    Adapter->ChecksumOffload.TxUdpChecksumEnabled = TRUE;
+    Adapter->ChecksumOffload.TxIpChecksumEnabled = FALSE;
+    Adapter->ChecksumOffload.TxTcpChecksumEnabled = FALSE;
+    Adapter->ChecksumOffload.TxUdpChecksumEnabled = FALSE;
     Adapter->ChecksumOffload.RxIpChecksumEnabled = TRUE;
     Adapter->ChecksumOffload.RxTcpChecksumEnabled = TRUE;
     Adapter->ChecksumOffload.RxUdpChecksumEnabled = TRUE;
 
-    DPRINT1("E1000: Offload capabilities initialized (IPv4 TX/RX checksum enabled)\n");
+    DPRINT1("E1000: Offload capabilities initialized (IPv4 RX checksum enabled)\n");
 
     return NDIS_STATUS_SUCCESS;
 }
