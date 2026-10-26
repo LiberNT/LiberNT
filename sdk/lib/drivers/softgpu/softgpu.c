@@ -882,7 +882,11 @@ SoftGpuDdiQueryInterface(
     }
 #endif
 
+#if defined(SOFTGPU_PLATFORM_ADAPTER_SERVICES)
+    return SoftGpuPlatformQueryInterface(Device, QueryInterface);
+#else
     return STATUS_NOT_SUPPORTED;
+#endif
 }
 
 
@@ -1419,6 +1423,9 @@ SoftGpuDdiStartDevice(
     KeAcquireSpinLock(&Device->ShadowPresentInterfaceLock, &OldIrql);
     Device->ShadowPresentInterfaceQueriesOpen = 1;
     KeReleaseSpinLock(&Device->ShadowPresentInterfaceLock, OldIrql);
+#if defined(SOFTGPU_PLATFORM_ADAPTER_SERVICES)
+    SoftGpuPlatformAdapterStarted(Device);
+#endif
 
     DPRINT("SOFTGPU: StartDevice success: %lu source(s), %lu child(ren)\n",
            Device->NumSources, Device->NumChildren);
@@ -1462,6 +1469,9 @@ SoftGpuDdiStopDevice(
     KeAcquireSpinLock(&Device->ShadowPresentInterfaceLock, &OldIrql);
     Device->ShadowPresentInterfaceQueriesOpen = 0;
     KeReleaseSpinLock(&Device->ShadowPresentInterfaceLock, OldIrql);
+#if defined(SOFTGPU_PLATFORM_ADAPTER_SERVICES)
+    SoftGpuPlatformAdapterStopping(Device);
+#endif
     if (InterlockedCompareExchange(
             &Device->ShadowPresentInterfaceReferences, 0, 0) != 0)
     {
@@ -1558,6 +1568,9 @@ SoftGpuDdiRemoveDevice(
     Status = SoftGpuDdiStopDevice(Device);
     if (!NT_SUCCESS(Status))
         return Status;
+#if defined(SOFTGPU_PLATFORM_ADAPTER_SERVICES)
+    SoftGpuPlatformAdapterRemoved(Device);
+#endif
 
     /* Poison the magic field so dangling-pointer dereferences are detectable. */
     Device->Magic = 0xDEADDEADUL;

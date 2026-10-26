@@ -327,6 +327,7 @@ typedef struct _SOFTGPU_DEVICE
      * platform owns atomic primary and cursor-plane programming.
      */
     PVOID               PlatformContext;
+    PVOID               PlatformServicesContext;
     BOOLEAN             PlatformDirectScanout;
     BOOLEAN             PlatformHardwarePointer;
     /* The platform turns its pointer plane on and off at run time with
@@ -507,6 +508,25 @@ SoftGpuPlatformQueryDescriptor(
 
 MEMORY_CACHING_TYPE
 SoftGpuPlatformSegmentCacheType(VOID);
+
+#if defined(SOFTGPU_PLATFORM_ADAPTER_SERVICES)
+VOID
+SoftGpuPlatformAdapterStarted(
+    _Inout_ PSOFTGPU_DEVICE Device);
+
+VOID
+SoftGpuPlatformAdapterStopping(
+    _Inout_ PSOFTGPU_DEVICE Device);
+
+VOID
+SoftGpuPlatformAdapterRemoved(
+    _Inout_ PSOFTGPU_DEVICE Device);
+
+NTSTATUS
+SoftGpuPlatformQueryInterface(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _Inout_ PQUERY_INTERFACE QueryInterface);
+#endif
 
 #if defined(SOFTGPU_PLATFORM_HARDWARE_OVERLAY)
 NTSTATUS
