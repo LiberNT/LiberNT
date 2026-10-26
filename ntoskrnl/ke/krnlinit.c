@@ -313,10 +313,7 @@ KeInitSystem(VOID)
 {
     /* Check if Threaded DPCs are enabled */
     if (KeThreadDpcEnable)
-    {
-        /* FIXME: TODO */
-        DPRINT1("Threaded DPCs not yet supported\n");
-    }
+        KiStartDpcThreads();
 
     /* Initialize non-portable parts of the kernel */
     KiInitMachineDependent();

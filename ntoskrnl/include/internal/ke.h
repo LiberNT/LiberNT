@@ -213,7 +213,7 @@ extern ULONG KiMaximumDpcQueueDepth;
 extern ULONG KiMinimumDpcRate;
 extern ULONG KiAdjustDpcThreshold;
 extern ULONG KiIdealDpcRate;
-extern BOOLEAN KeThreadDpcEnable;
+extern ULONG KeThreadDpcEnable;
 extern LARGE_INTEGER KiTimeIncrementReciprocal;
 extern UCHAR KiTimeIncrementShiftCount;
 extern ULONG KiTimeLimitIsrMicroseconds;
@@ -1328,6 +1328,10 @@ FASTCALL
 KiRetireDpcList(
     IN PKPRCB Prcb
 );
+
+VOID
+NTAPI
+KiStartDpcThreads(VOID);
 
 VOID
 NTAPI

@@ -32,7 +32,7 @@ ULONG KiMaximumDpcQueueDepth = 4;
 ULONG KiMinimumDpcRate = 3;
 ULONG KiAdjustDpcThreshold = 20;
 ULONG KiIdealDpcRate = 20;
-BOOLEAN KeThreadDpcEnable;
+ULONG KeThreadDpcEnable = TRUE;
 FAST_MUTEX KiGenericCallDpcMutex;
 KDPC KiTimerExpireDpc;
 ULONG KiTimeLimitIsrMicroseconds;
@@ -53,6 +53,145 @@ static __inline VOID KiBeginDpcExecution(_In_ PKPRCB Prcb, _In_ PKDPC Dpc)
 static __inline VOID KiEndDpcExecution(_In_ PKPRCB Prcb, _In_ PKDPC Dpc)
 {
     InterlockedCompareExchangePointer(&KiActiveDpc[Prcb->Number], NULL, Dpc);
+}
+
+static PVOID volatile KiActiveThreadedDpc[MAXIMUM_PROCESSORS];
+static KDPC KiDpcThreadWakeDpc[MAXIMUM_PROCESSORS];
+
+static VOID NTAPI
+KiDpcThreadWakeRoutine(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    PKPRCB Prcb = DeferredContext;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    KeSetEvent(&Prcb->DpcEvent, IO_NO_INCREMENT, FALSE);
+}
+
+static PKDPC
+KiPopThreadedDpc(
+    _Inout_ PKDPC_DATA DpcData)
+{
+#if (NTDDI_VERSION >= NTDDI_LONGHORN)
+    PSINGLE_LIST_ENTRY Entry = PopEntryList(&DpcData->DpcList.ListHead);
+
+    if (!Entry)
+        return NULL;
+    if (!DpcData->DpcList.ListHead.Next)
+        DpcData->DpcList.LastEntry = NULL;
+    return CONTAINING_RECORD(Entry, KDPC, DpcListEntry);
+#else
+    PLIST_ENTRY Entry;
+
+    if (IsListEmpty(&DpcData->DpcListHead))
+        return NULL;
+    Entry = RemoveHeadList(&DpcData->DpcListHead);
+    return CONTAINING_RECORD(Entry, KDPC, DpcListEntry);
+#endif
+}
+
+static VOID NTAPI
+KiExecuteDpc(
+    _In_ PVOID Context)
+{
+    PKPRCB Prcb = Context;
+    PKDPC_DATA DpcData = &Prcb->DpcData[DPC_THREADED];
+    PKDEFERRED_ROUTINE DeferredRoutine;
+    PVOID DeferredContext, SystemArgument1, SystemArgument2;
+    PKDPC Dpc;
+    KIRQL OldIrql;
+
+    KeSetSystemAffinityThread(AFFINITY_MASK(Prcb->Number));
+    KeSetPriorityThread(KeGetCurrentThread(), HIGH_PRIORITY);
+
+    for (;;)
+    {
+        KeWaitForSingleObject(&Prcb->DpcEvent, Executive, KernelMode, FALSE, NULL);
+
+        for (;;)
+        {
+            KeRaiseIrql(HIGH_LEVEL, &OldIrql);
+            KiAcquireSpinLock(&DpcData->DpcLock);
+
+            Dpc = KiPopThreadedDpc(DpcData);
+            if (!Dpc)
+            {
+                Prcb->DpcThreadActive = FALSE;
+                Prcb->DpcThreadRequested = FALSE;
+                KiReleaseSpinLock(&DpcData->DpcLock);
+                KeLowerIrql(OldIrql);
+                break;
+            }
+
+            Prcb->DpcThreadActive = TRUE;
+            InterlockedOrAffinity((volatile LONG_PTR *)&Dpc->ProcessorHistory, (LONG_PTR)AFFINITY_MASK(Prcb->Number));
+            InterlockedExchangePointer(&KiActiveThreadedDpc[Prcb->Number], Dpc);
+            Dpc->DpcData = NULL;
+            DeferredRoutine = Dpc->DeferredRoutine;
+            DeferredContext = Dpc->DeferredContext;
+            SystemArgument1 = Dpc->SystemArgument1;
+            SystemArgument2 = Dpc->SystemArgument2;
+            DpcData->DpcQueueDepth--;
+
+            KiReleaseSpinLock(&DpcData->DpcLock);
+            KeLowerIrql(OldIrql);
+
+            DeferredRoutine(Dpc, DeferredContext, SystemArgument1, SystemArgument2);
+            ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+            InterlockedCompareExchangePointer(&KiActiveThreadedDpc[Prcb->Number], NULL, Dpc);
+        }
+    }
+}
+
+VOID
+NTAPI
+KiStartDpcThreads(VOID)
+{
+    PKPRCB Prcb;
+    PKDPC_DATA DpcData;
+    HANDLE ThreadHandle;
+    NTSTATUS Status;
+    ULONG Processor;
+
+    for (Processor = 0; Processor < (ULONG)KeNumberProcessors; Processor++)
+    {
+        Prcb = KiProcessorBlock[Processor];
+        if (!Prcb)
+            continue;
+
+        DpcData = &Prcb->DpcData[DPC_THREADED];
+#if (NTDDI_VERSION >= NTDDI_LONGHORN)
+        DpcData->DpcList.ListHead.Next = NULL;
+        DpcData->DpcList.LastEntry = NULL;
+#else
+        InitializeListHead(&DpcData->DpcListHead);
+#endif
+        KeInitializeSpinLock(&DpcData->DpcLock);
+        DpcData->DpcQueueDepth = 0;
+        DpcData->DpcCount = 0;
+
+        KeInitializeEvent(&Prcb->DpcEvent, SynchronizationEvent, FALSE);
+        KeInitializeDpc(&KiDpcThreadWakeDpc[Processor], KiDpcThreadWakeRoutine, Prcb);
+        KeSetTargetProcessorDpc(&KiDpcThreadWakeDpc[Processor], (CCHAR)Processor);
+        KeSetImportanceDpc(&KiDpcThreadWakeDpc[Processor], HighImportance);
+
+        Status = PsCreateSystemThread(&ThreadHandle, THREAD_ALL_ACCESS, NULL, NULL, NULL, KiExecuteDpc, Prcb);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("KE: no threaded DPC thread for processor %lu (0x%08lx)\n", Processor, Status);
+            continue;
+        }
+        ZwClose(ThreadHandle);
+
+        KeMemoryBarrier();
+        Prcb->ThreadDpcEnable = TRUE;
+    }
 }
 
 
@@ -849,7 +988,7 @@ KeInsertQueueDpc(IN PKDPC Dpc,
     PKPRCB Prcb, CurrentPrcb;
     ULONG Cpu;
     PKDPC_DATA DpcData;
-    BOOLEAN DpcConfigured = FALSE, DpcInserted = FALSE;
+    BOOLEAN DpcConfigured = FALSE, DpcInserted = FALSE, WakeDpcThread = FALSE;
     ASSERT_DPC(Dpc);
 
     /* Check IRQL and Raise it to HIGH_LEVEL */
@@ -930,8 +1069,8 @@ KeInsertQueueDpc(IN PKDPC Dpc,
             /* Make sure a threaded DPC isn't already active */
             if (!(Prcb->DpcThreadActive) && !(Prcb->DpcThreadRequested))
             {
-                /* FIXME: Setup Threaded DPC */
-                UNIMPLEMENTED_FATAL("Threaded DPC not supported\n");
+                Prcb->DpcThreadRequested = TRUE;
+                WakeDpcThread = TRUE;
             }
         }
         else
@@ -988,6 +1127,9 @@ KeInsertQueueDpc(IN PKDPC Dpc,
 
     /* Release the lock */
     KiReleaseSpinLock(&DpcData->DpcLock);
+
+    if (WakeDpcThread)
+        KeInsertQueueDpc(&KiDpcThreadWakeDpc[Cpu], NULL, NULL);
 
     /* Check if the DPC was inserted */
     if (DpcInserted)
@@ -1105,8 +1247,11 @@ KeRemoveQueueDpcEx(
         if (!(ProcessorHistory & AFFINITY_MASK(Processor)) || (Processor == CurrentProcessor))
             continue;
 
-        while (InterlockedCompareExchangePointer(&KiActiveDpc[Processor], NULL, NULL) == Dpc)
+        while ((InterlockedCompareExchangePointer(&KiActiveDpc[Processor], NULL, NULL) == Dpc) ||
+               (InterlockedCompareExchangePointer(&KiActiveThreadedDpc[Processor], NULL, NULL) == Dpc))
+        {
             YieldProcessor();
+        }
     }
 
     return Removed;
