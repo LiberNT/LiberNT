@@ -20,6 +20,8 @@
 
 static const GUID MonitorGuidBrightness =
     { 0xFDE5BBA4, 0xB3F9, 0x46FB, { 0xBD, 0xAA, 0x07, 0x28, 0xCE, 0x31, 0x00, 0xB4 } };
+static const GUID MonitorGuidBrightness2 =
+    { 0x148A3C98, 0x0ECD, 0x465A, { 0xB6, 0x34, 0xB0, 0x5F, 0x19, 0x5F, 0x77, 0x39 } };
 static const GUID MonitorGuidAcDcPowerSource =
     { 0x5D3E9A59, 0xE9D5, 0x4B00, { 0xA6, 0xBD, 0xFF, 0x34, 0xFF, 0x51, 0x65, 0x48 } };
 static const GUID MonitorGuidAcpiInterfaceStandard2 =
@@ -194,7 +196,7 @@ MonitorNearestLevel(
 
     for (Index = 1; Index < Brightness->LevelCount; Index++)
     {
-        if ((Brightness->Levels[Index] > Value ? Brightness->Levels[Index] - Value : Value - Brightness->Levels[Index]) <
+        if ((Brightness->Levels[Index] > Value ? Brightness->Levels[Index] - Value : Value - Brightness->Levels[Index]) <=
             (Best > Value ? Best - Value : Value - Best))
         {
             Best = Brightness->Levels[Index];
@@ -253,12 +255,18 @@ MonitorQueryBrightnessInterface(
     _In_ PMONITOR_DEVICE_EXTENSION DeviceExtension,
     _Out_ PDXGK_BRIGHTNESS_INTERFACE Interface)
 {
+    DXGK_BRIGHTNESS_INTERFACE_2 Interface2;
     NTSTATUS Status;
 
     PAGED_CODE();
 
-    Status = MonitorQueryInterface(DeviceExtension, &MonitorGuidBrightness, DXGK_BRIGHTNESS_INTERFACE_VERSION_1,
-                                   (PINTERFACE)Interface, sizeof(*Interface));
+    Status = MonitorQueryInterface(DeviceExtension, &MonitorGuidBrightness2, DXGK_BRIGHTNESS_INTERFACE_VERSION_2,
+                                   (PINTERFACE)&Interface2, sizeof(Interface2));
+    if (NT_SUCCESS(Status))
+        RtlCopyMemory(Interface, &Interface2, sizeof(*Interface));
+    else
+        Status = MonitorQueryInterface(DeviceExtension, &MonitorGuidBrightness, DXGK_BRIGHTNESS_INTERFACE_VERSION_1,
+                                       (PINTERFACE)Interface, sizeof(*Interface));
     if (NT_SUCCESS(Status) &&
         (!Interface->GetPossibleBrightness || !Interface->SetBrightness || !Interface->GetBrightness))
     {
@@ -301,7 +309,7 @@ MonitorBrightnessFromMiniport(
     if (!NT_SUCCESS(Brightness->Interface.GetBrightness(Brightness->Interface.Context, &Current)))
         Current = Brightness->Levels[Brightness->LevelCount - 1];
     Brightness->Source = MonitorBrightnessKmd;
-    Brightness->Current = MonitorNearestLevel(Brightness, Current);
+    Brightness->Current = (UCHAR)min(Current, 100);
     Brightness->Ac = Brightness->Current;
     Brightness->Dc = Brightness->Current;
     return TRUE;
@@ -325,18 +333,18 @@ MonitorBrightnessFromAcpi(
         return FALSE;
 
     Brightness->Source = MonitorBrightnessAcpi;
-    Brightness->Ac = MonitorNearestLevel(Brightness, (UCHAR)min(Values[0], 100));
-    Brightness->Dc = MonitorNearestLevel(Brightness, (UCHAR)min(Values[1], 100));
+    Brightness->Ac = (UCHAR)min(Values[0], 100);
+    Brightness->Dc = (UCHAR)min(Values[1], 100);
     if (NT_SUCCESS(MonitorAcpiEvalIntegers(DeviceExtension, "_BQC", &Current, 1, &Count)))
     {
-        Brightness->Current = MonitorNearestLevel(Brightness, (UCHAR)min(Current, 100));
+        Brightness->Current = (UCHAR)min(Current, 100);
         Brightness->Ac = Brightness->Current;
         Brightness->Dc = Brightness->Current;
     }
     else
     {
         Brightness->Current = Brightness->Ac;
-        if (!NT_SUCCESS(MonitorAcpiSetLevel(DeviceExtension, Brightness->Current)))
+        if (!NT_SUCCESS(MonitorAcpiSetLevel(DeviceExtension, MonitorNearestLevel(Brightness, Brightness->Current))))
             return FALSE;
     }
     return TRUE;
@@ -367,14 +375,13 @@ MonitorBrightnessApplyLocked(
     NTSTATUS Status;
 
     *Changed = FALSE;
-    Level = MonitorNearestLevel(Brightness, Level);
     if (Level == Brightness->Current)
         return STATUS_SUCCESS;
 
     if (Brightness->Source == MonitorBrightnessKmd)
-        Status = Brightness->Interface.SetBrightness(Brightness->Interface.Context, Level);
+        Status = Brightness->Interface.SetBrightness(Brightness->Interface.Context, MonitorNearestLevel(Brightness, Level));
     else
-        Status = MonitorAcpiSetLevel(DeviceExtension, Level);
+        Status = MonitorAcpiSetLevel(DeviceExtension, MonitorNearestLevel(Brightness, Level));
     if (NT_SUCCESS(Status))
     {
         Brightness->Current = Level;
@@ -417,9 +424,9 @@ MonitorBrightnessUpdate(
 
     KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
     if (SetAc)
-        Brightness->Ac = MonitorNearestLevel(Brightness, Ac);
+        Brightness->Ac = min(Ac, 100);
     if (SetDc)
-        Brightness->Dc = MonitorNearestLevel(Brightness, Dc);
+        Brightness->Dc = min(Dc, 100);
     if (Apply)
         Status = MonitorBrightnessApplyLocked(DeviceExtension, Brightness, Brightness->OnDc ? Brightness->Dc : Brightness->Ac,
                                               &Changed);
@@ -596,6 +603,7 @@ MonitorBrightnessQuery(
     _Out_ PULONG LevelCount)
 {
     PMONITOR_BRIGHTNESS Brightness = DeviceExtension->Brightness;
+    ULONG Index;
 
     PAGED_CODE();
 
@@ -606,10 +614,10 @@ MonitorBrightnessQuery(
 
     KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
     *Current = Brightness->Current;
-    *LevelCount = Brightness->LevelCount;
-    if (Levels)
-        RtlCopyMemory(Levels, Brightness->Levels, min(MaxLevels, Brightness->LevelCount));
     KeReleaseMutex(&Brightness->Lock, FALSE);
+    *LevelCount = MONITOR_BRIGHTNESS_LEVELS;
+    for (Index = 0; Levels && Index < min(MaxLevels, MONITOR_BRIGHTNESS_LEVELS); Index++)
+        Levels[Index] = (UCHAR)Index;
     return STATUS_SUCCESS;
 }
 
@@ -618,16 +626,10 @@ MonitorBrightnessSetCurrent(
     _In_ PMONITOR_DEVICE_EXTENSION DeviceExtension,
     _In_ UCHAR Level)
 {
-    PMONITOR_BRIGHTNESS Brightness = DeviceExtension->Brightness;
-    BOOLEAN OnDc;
-
-    if (!Brightness)
+    if (!DeviceExtension->Brightness)
         return STATUS_NOT_SUPPORTED;
 
-    KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
-    OnDc = Brightness->OnDc;
-    KeReleaseMutex(&Brightness->Lock, FALSE);
-    return MonitorBrightnessUpdate(DeviceExtension, !OnDc, Level, OnDc, Level, TRUE);
+    return MonitorBrightnessUpdate(DeviceExtension, TRUE, Level, TRUE, Level, TRUE);
 }
 
 NTSTATUS
@@ -647,7 +649,7 @@ MonitorBrightnessDeviceControl(
     PDISPLAY_BRIGHTNESS Display;
     ULONG InputLength = Stack->Parameters.DeviceIoControl.InputBufferLength;
     ULONG OutputLength = Stack->Parameters.DeviceIoControl.OutputBufferLength;
-    NTSTATUS Status;
+    ULONG Index;
 
     PAGED_CODE();
 
@@ -658,28 +660,21 @@ MonitorBrightnessDeviceControl(
     switch (Stack->Parameters.DeviceIoControl.IoControlCode)
     {
         case IOCTL_VIDEO_QUERY_SUPPORTED_BRIGHTNESS:
-            KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
-            if (OutputLength < Brightness->LevelCount)
-            {
-                Status = STATUS_BUFFER_TOO_SMALL;
-            }
-            else
-            {
-                RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, Brightness->Levels, Brightness->LevelCount);
-                Irp->IoStatus.Information = Brightness->LevelCount;
-                Status = STATUS_SUCCESS;
-            }
-            KeReleaseMutex(&Brightness->Lock, FALSE);
-            return Status;
+            if (OutputLength < MONITOR_BRIGHTNESS_LEVELS)
+                return STATUS_BUFFER_TOO_SMALL;
+            for (Index = 0; Index < MONITOR_BRIGHTNESS_LEVELS; Index++)
+                ((PUCHAR)Irp->AssociatedIrp.SystemBuffer)[Index] = (UCHAR)Index;
+            Irp->IoStatus.Information = MONITOR_BRIGHTNESS_LEVELS;
+            return STATUS_SUCCESS;
 
         case IOCTL_VIDEO_QUERY_DISPLAY_BRIGHTNESS:
             if (OutputLength < sizeof(DISPLAY_BRIGHTNESS))
                 return STATUS_BUFFER_TOO_SMALL;
             Display = Irp->AssociatedIrp.SystemBuffer;
             KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
-            Display->ucDisplayPolicy = Brightness->OnDc ? DISPLAYPOLICY_DC : DISPLAYPOLICY_AC;
-            Display->ucACBrightness = Brightness->Ac;
-            Display->ucDCBrightness = Brightness->Dc;
+            Display->ucDisplayPolicy = DISPLAYPOLICY_DC;
+            Display->ucACBrightness = Brightness->Current;
+            Display->ucDCBrightness = Brightness->Current;
             KeReleaseMutex(&Brightness->Lock, FALSE);
             Irp->IoStatus.Information = sizeof(DISPLAY_BRIGHTNESS);
             return STATUS_SUCCESS;
@@ -689,16 +684,11 @@ MonitorBrightnessDeviceControl(
                 return STATUS_BUFFER_TOO_SMALL;
             Display = Irp->AssociatedIrp.SystemBuffer;
             if (!(Display->ucDisplayPolicy & DISPLAYPOLICY_BOTH) || (Display->ucDisplayPolicy & ~DISPLAYPOLICY_BOTH) ||
-                ((Display->ucDisplayPolicy & DISPLAYPOLICY_AC) && Display->ucACBrightness > 100) ||
-                ((Display->ucDisplayPolicy & DISPLAYPOLICY_DC) && Display->ucDCBrightness > 100))
+                Display->ucDCBrightness > 100)
             {
                 return STATUS_INVALID_PARAMETER;
             }
-            return MonitorBrightnessUpdate(DeviceExtension,
-                                           (Display->ucDisplayPolicy & DISPLAYPOLICY_AC) != 0,
-                                           Display->ucACBrightness,
-                                           (Display->ucDisplayPolicy & DISPLAYPOLICY_DC) != 0,
-                                           Display->ucDCBrightness,
+            return MonitorBrightnessUpdate(DeviceExtension, TRUE, Display->ucDCBrightness, TRUE, Display->ucDCBrightness,
                                            TRUE);
     }
     return STATUS_NOT_SUPPORTED;
