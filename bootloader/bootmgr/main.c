@@ -213,6 +213,20 @@ BmMenuIdle(
 
 static
 VOID
+BmStartSelectedApplication(
+    _In_ PBM_ENTRY Entry,
+    _In_ PBM_STARTUP Startup)
+{
+    if (BmStartApplication(Entry, BmStorePath, Startup))
+        return;
+
+    FwPrint(L"\r\nPress any key to return to the boot menu.\r\n");
+    if (FwReadKey() == KEY_EXTENDED)
+        FwReadKey();
+}
+
+static
+VOID
 BmStartEntry(
     _In_ ULONG Index,
     _In_ BOOLEAN AskStartup)
@@ -226,7 +240,7 @@ BmStartEntry(
     FbGuiVtbl.UnInitialize();
     if (!UiKeepFirmwareScreen)
         GuiShowFirmwareLogo();
-    BmStartApplication(&BmEntries[Index], BmStorePath, &Startup);
+    BmStartSelectedApplication(&BmEntries[Index], &Startup);
     GuiInitialize();
 }
 
@@ -411,7 +425,7 @@ BmRunTextMenu(
     if (Timeout >= 0 && !BmUiWaitForKey(Timeout))
     {
         RtlZeroMemory(&Startup, sizeof(Startup));
-        BmStartApplication(&BmEntries[BmSelected], BmStorePath, &Startup);
+        BmStartSelectedApplication(&BmEntries[BmSelected], &Startup);
     }
 
     Timeout = -1;
@@ -445,7 +459,7 @@ BmRunTextMenu(
         Timeout = -1;
         BmUiShutdown();
         GuiShowFirmwareLogo();
-        BmStartApplication(&BmEntries[BmSelected], BmStorePath, &Startup);
+        BmStartSelectedApplication(&BmEntries[BmSelected], &Startup);
     }
 }
 
@@ -526,7 +540,7 @@ BlMain(VOID)
     if (Timeout == 0)
     {
         RtlZeroMemory(&Startup, sizeof(Startup));
-        BmStartApplication(&BmEntries[Default], BmStorePath, &Startup);
+        BmStartSelectedApplication(&BmEntries[Default], &Startup);
         Timeout = -1;
     }
 
