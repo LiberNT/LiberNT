@@ -610,8 +610,6 @@ MmBuildDumpPageBitmap(
     PFN_NUMBER Count = 0;
     ULONG Frame;
 
-    UNREFERENCED_PARAMETER(IncludeUserPages);
-
     RtlClearAllBits(Bitmap);
 
     for (Frame = 0; Frame < MiSystem.Pfn.FrameCount && Frame < Bitmap->SizeOfBitMap; Frame++)
@@ -620,6 +618,9 @@ MmBuildDumpPageBitmap(
 
         if (State == MiPageActive || State == MiPageTransition || State == MiPageModified)
         {
+            if (!IncludeUserPages && MiPtIsUserFrame(&MiSystem, Frame))
+                continue;
+
             RtlSetBit(Bitmap, Frame);
             Count++;
         }

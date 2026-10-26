@@ -232,6 +232,30 @@ MiPtSplitBootBlock(PMI_ADDRESS_SPACE Space, ULONG64 VirtualAddress, PMI_PTE Alia
 }
 
 BOOLEAN
+MiPtIsUserFrame(PMI_SYSTEM System, ULONG Frame)
+{
+    PMI_PFN Entry;
+    PMI_PFN Parent;
+    PMI_ADDRESS_SPACE Owner;
+
+    if (Frame >= System->Pfn.FrameCount)
+        return FALSE;
+
+    Entry = &System->Pfn.Pfn[Frame];
+    if (MI_PFN_FLAGS(Entry) & (MI_PFN_FLAG_PAGE_TABLE | MI_PFN_FLAG_PROTOTYPE))
+        return FALSE;
+    if (Entry->PteFrame == 0 || Entry->PteFrame >= System->Pfn.FrameCount)
+        return FALSE;
+
+    Parent = &System->Pfn.Pfn[Entry->PteFrame];
+    if (!(MI_PFN_FLAGS(Parent) & MI_PFN_FLAG_PAGE_TABLE))
+        return FALSE;
+
+    Owner = Parent->PageTableOwner;
+    return Owner != NULL && !Owner->IsSystem;
+}
+
+BOOLEAN
 MiPtVirtualAddressFromSlot(
     _In_ PMI_ADDRESS_SPACE Space,
     _In_ ULONG64 SlotAddress,
