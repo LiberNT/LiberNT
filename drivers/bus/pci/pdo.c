@@ -2285,9 +2285,9 @@ PdoGetRangeLength(PPDO_DEVICE_EXTENSION DeviceExtension,
            : (NewValue.Bar & PCI_ADDRESS_MEMORY_ADDRESS_MASK_64);
     *Length = Size & ~(Size - 1);
 
-    *Flags = (NewValue.Bar & PCI_ADDRESS_IO_SPACE)
-             ? (NewValue.Bar & ~PCI_ADDRESS_IO_ADDRESS_MASK_64)
-             : (NewValue.Bar & ~PCI_ADDRESS_MEMORY_ADDRESS_MASK_64);
+    *Flags = (OriginalValue.Bar & PCI_ADDRESS_IO_SPACE)
+             ? (OriginalValue.Bar & ~PCI_ADDRESS_IO_ADDRESS_MASK_64)
+             : (OriginalValue.Bar & ~PCI_ADDRESS_MEMORY_ADDRESS_MASK_64);
 
     return TRUE;
 }
