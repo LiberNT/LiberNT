@@ -613,7 +613,7 @@ E1000SetGeneralAttributes(
     /* Link capabilities */
     GenAttrs.MediaType = NdisMedium802_3;
     GenAttrs.PhysicalMediumType = NdisPhysicalMedium802_3;
-    GenAttrs.MtuSize = E1000_MAX_FRAME_SIZE - 14;  /* Subtract Ethernet header */
+    GenAttrs.MtuSize = E1000_MTU;
     GenAttrs.MaxXmitLinkSpeed = E1000_LINK_SPEED_1GBPS;
     GenAttrs.MaxRcvLinkSpeed = E1000_LINK_SPEED_1GBPS;
     GenAttrs.XmitLinkSpeed = NDIS_LINK_SPEED_UNKNOWN;

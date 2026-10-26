@@ -63,6 +63,8 @@
 #define E1000_RX_BUFFER_SIZE       2048
 #define E1000_MAX_FRAME_SIZE       1522    /* ETH_FRAME_LEN + VLAN tag */
 #define E1000_MIN_FRAME_SIZE       60
+#define E1000_MTU                  1500
+#define E1000_MAX_PACKET_SIZE      (E1000_MTU + 14)
 #define E1000_MAX_JUMBO_FRAME_SIZE 9014
 
 /* Multicast list */

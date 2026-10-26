@@ -199,12 +199,17 @@ E1000QueryInformation(
             break;
 
         case OID_GEN_MAXIMUM_FRAME_SIZE:
-            Data.Ulong = E1000_MAX_FRAME_SIZE - 14;
+            Data.Ulong = E1000_MTU;
             CopySource = &Data.Ulong;
             CopyLength = sizeof(ULONG);
             break;
 
         case OID_GEN_MAXIMUM_TOTAL_SIZE:
+            Data.Ulong = E1000_MAX_PACKET_SIZE;
+            CopySource = &Data.Ulong;
+            CopyLength = sizeof(ULONG);
+            break;
+
         case OID_GEN_TRANSMIT_BLOCK_SIZE:
         case OID_GEN_RECEIVE_BLOCK_SIZE:
             Data.Ulong = E1000_MAX_FRAME_SIZE;
