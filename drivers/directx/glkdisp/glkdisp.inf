@@ -1,0 +1,48 @@
+; LiberNT display driver for Intel Gemini Lake graphics
+
+[Version]
+Signature="$Windows NT$"
+LayoutFile=layout.inf
+Class=Display
+ClassGUID={4D36E968-E325-11CE-BFC1-08002BE10318}
+Provider=%LiberNT%
+DriverVer=10/26/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%IntelMfg%=IntelMfg
+
+[IntelMfg]
+%GlkDisp.DeviceDesc%=GlkDisp_Install,PCI\VEN_8086&DEV_3184
+%GlkDisp.DeviceDesc%=GlkDisp_Install,PCI\VEN_8086&DEV_3185
+
+[GlkDisp_Install]
+AddReg=GlkDisp_SoftwareSettings
+
+[GlkDisp_SoftwareSettings]
+HKR,,InstalledDisplayDrivers,%REG_MULTI_SZ%,framebuf
+HKR,,VgaCompatible,%REG_DWORD%,0
+HKR,,UserModeDriverName,%REG_MULTI_SZ%,softgpuum.dll
+HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,softgpuum.dll
+
+[GlkDisp_Install.Services]
+AddService=glkdisp,0x00000002,GlkDisp_Service
+
+[GlkDisp_Service]
+DisplayName=%GlkDisp.ServiceDesc%
+ServiceType=1
+StartType=1
+ErrorControl=0
+ServiceBinary=%12%\glkdisp.sys
+LoadOrderGroup=Video
+
+[Strings]
+LiberNT="LiberNT"
+IntelMfg="Intel Corporation"
+GlkDisp.DeviceDesc="Intel Gemini Lake Graphics"
+GlkDisp.ServiceDesc="LiberNT Gemini Lake Display Driver"
+REG_MULTI_SZ=0x00010000
+REG_DWORD=0x00010001
+REG_SZ=0x00000000

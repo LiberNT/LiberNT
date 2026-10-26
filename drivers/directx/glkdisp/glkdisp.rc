@@ -1,0 +1,5 @@
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION  "Gemini Lake Display Driver"
+#define REACTOS_STR_INTERNAL_NAME     "glkdisp"
+#define REACTOS_STR_ORIGINAL_FILENAME "glkdisp.sys"
+#include <reactos/version.rc>

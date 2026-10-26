@@ -14,6 +14,9 @@ add_registry_inf(softgpu/softgpu_root_reg.inf)
 if(ARCH STREQUAL "amd64")
     add_subdirectory(hypervvid)
 endif()
+if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "i386")
+    add_subdirectory(glkdisp)
+endif()
 if(REACTOS_USE_WDDM AND
    (REACTOS_WDDM_TARGET_LEVEL GREATER_EQUAL 2000) AND
    (ARCH STREQUAL "arm64") AND RPI3_SUPPORT)
