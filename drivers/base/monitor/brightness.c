@@ -33,7 +33,7 @@ typedef enum _MONITOR_BRIGHTNESS_SOURCE
 
 typedef struct _MONITOR_BRIGHTNESS
 {
-    FAST_MUTEX Lock;
+    KMUTEX Lock;
     MONITOR_BRIGHTNESS_SOURCE Source;
     DXGK_BRIGHTNESS_INTERFACE Interface;
     UCHAR Levels[MONITOR_BRIGHTNESS_LEVELS];
@@ -415,7 +415,7 @@ MonitorBrightnessUpdate(
     if (!Brightness)
         return STATUS_NOT_SUPPORTED;
 
-    ExAcquireFastMutex(&Brightness->Lock);
+    KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
     if (SetAc)
         Brightness->Ac = MonitorNearestLevel(Brightness, Ac);
     if (SetDc)
@@ -424,7 +424,7 @@ MonitorBrightnessUpdate(
         Status = MonitorBrightnessApplyLocked(DeviceExtension, Brightness, Brightness->OnDc ? Brightness->Dc : Brightness->Ac,
                                               &Changed);
     Current = Brightness->Current;
-    ExReleaseFastMutex(&Brightness->Lock);
+    KeReleaseMutex(&Brightness->Lock, FALSE);
 
     if (Changed)
         MonitorBrightnessChanged(DeviceExtension, Current);
@@ -448,9 +448,9 @@ MonitorPowerSourceChanged(
     if (!Brightness || ValueLength < sizeof(ULONG))
         return STATUS_SUCCESS;
 
-    ExAcquireFastMutex(&Brightness->Lock);
+    KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
     Brightness->OnDc = (*(PULONG)Value != PoAc);
-    ExReleaseFastMutex(&Brightness->Lock);
+    KeReleaseMutex(&Brightness->Lock, FALSE);
     return MonitorBrightnessUpdate(DeviceExtension, FALSE, 0, FALSE, 0, TRUE);
 }
 
@@ -469,7 +469,7 @@ MonitorBrightnessHotkey(
     if (!Brightness)
         return;
 
-    ExAcquireFastMutex(&Brightness->Lock);
+    KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
     Current = Brightness->Current;
     Next = Brightness->Levels[0];
     if (NotifyCode == ACPI_NOTIFY_INC_BRIGHTNESS_HOTKEY || NotifyCode == ACPI_NOTIFY_CYCLE_BRIGHTNESS_HOTKEY)
@@ -502,7 +502,7 @@ MonitorBrightnessHotkey(
             }
         }
     }
-    ExReleaseFastMutex(&Brightness->Lock);
+    KeReleaseMutex(&Brightness->Lock, FALSE);
 
     if (Next != Current)
         MonitorBrightnessSetCurrent(DeviceExtension, Next);
@@ -604,12 +604,12 @@ MonitorBrightnessQuery(
     if (!Brightness)
         return STATUS_NOT_SUPPORTED;
 
-    ExAcquireFastMutex(&Brightness->Lock);
+    KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
     *Current = Brightness->Current;
     *LevelCount = Brightness->LevelCount;
     if (Levels)
         RtlCopyMemory(Levels, Brightness->Levels, min(MaxLevels, Brightness->LevelCount));
-    ExReleaseFastMutex(&Brightness->Lock);
+    KeReleaseMutex(&Brightness->Lock, FALSE);
     return STATUS_SUCCESS;
 }
 
@@ -624,9 +624,9 @@ MonitorBrightnessSetCurrent(
     if (!Brightness)
         return STATUS_NOT_SUPPORTED;
 
-    ExAcquireFastMutex(&Brightness->Lock);
+    KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
     OnDc = Brightness->OnDc;
-    ExReleaseFastMutex(&Brightness->Lock);
+    KeReleaseMutex(&Brightness->Lock, FALSE);
     return MonitorBrightnessUpdate(DeviceExtension, !OnDc, Level, OnDc, Level, TRUE);
 }
 
@@ -658,7 +658,7 @@ MonitorBrightnessDeviceControl(
     switch (Stack->Parameters.DeviceIoControl.IoControlCode)
     {
         case IOCTL_VIDEO_QUERY_SUPPORTED_BRIGHTNESS:
-            ExAcquireFastMutex(&Brightness->Lock);
+            KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
             if (OutputLength < Brightness->LevelCount)
             {
                 Status = STATUS_BUFFER_TOO_SMALL;
@@ -669,18 +669,18 @@ MonitorBrightnessDeviceControl(
                 Irp->IoStatus.Information = Brightness->LevelCount;
                 Status = STATUS_SUCCESS;
             }
-            ExReleaseFastMutex(&Brightness->Lock);
+            KeReleaseMutex(&Brightness->Lock, FALSE);
             return Status;
 
         case IOCTL_VIDEO_QUERY_DISPLAY_BRIGHTNESS:
             if (OutputLength < sizeof(DISPLAY_BRIGHTNESS))
                 return STATUS_BUFFER_TOO_SMALL;
             Display = Irp->AssociatedIrp.SystemBuffer;
-            ExAcquireFastMutex(&Brightness->Lock);
+            KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
             Display->ucDisplayPolicy = Brightness->OnDc ? DISPLAYPOLICY_DC : DISPLAYPOLICY_AC;
             Display->ucACBrightness = Brightness->Ac;
             Display->ucDCBrightness = Brightness->Dc;
-            ExReleaseFastMutex(&Brightness->Lock);
+            KeReleaseMutex(&Brightness->Lock, FALSE);
             Irp->IoStatus.Information = sizeof(DISPLAY_BRIGHTNESS);
             return STATUS_SUCCESS;
 
@@ -779,7 +779,7 @@ MonitorBrightnessStart(
     Brightness = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Brightness), MONITOR_TAG);
     if (!Brightness)
         return;
-    ExInitializeFastMutex(&Brightness->Lock);
+    KeInitializeMutex(&Brightness->Lock, 0);
 
     if (!MonitorBrightnessFromMiniport(DeviceExtension, Brightness) &&
         !MonitorBrightnessFromAcpi(DeviceExtension, Brightness))
