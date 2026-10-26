@@ -439,7 +439,6 @@ SoftGpuVbeQueryModes(
             VideoMemorySize <= SOFTGPU_MAX_SURFACE_SIZE)
         {
             Config->CurrentMode = Index;
-            Config->ScanoutSize = max(Config->ScanoutSize, VideoMemorySize);
             for (Index = 0; Index < Config->ModeCount; Index++)
             {
                 Config->ScanoutSize = max(Config->ScanoutSize,
