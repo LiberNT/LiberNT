@@ -127,7 +127,11 @@ NTAPI
 HidClassDriverUnload(
     IN PDRIVER_OBJECT DriverObject)
 {
-    UNIMPLEMENTED;
+    PHIDCLASS_DRIVER_EXTENSION DriverExtension;
+
+    DriverExtension = IoGetDriverObjectExtension(DriverObject, ClientIdentificationAddress);
+    if (DriverExtension && DriverExtension->DriverUnload)
+        DriverExtension->DriverUnload(DriverObject);
 }
 
 NTSTATUS
