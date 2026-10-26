@@ -33,6 +33,8 @@ static CONST GUID DxgkpGuidDevinterfaceBrightness =
     { 0xFDE5BBA4, 0xB3F9, 0x46FB, { 0xBD, 0xAA, 0x07, 0x28, 0xCE, 0x31, 0x00, 0xB4 } };
 static CONST GUID DxgkpGuidDevinterfaceBrightness2 =
     { 0x148A3C98, 0x0ECD, 0x465A, { 0xB6, 0x34, 0xB0, 0x5F, 0x19, 0x5F, 0x77, 0x39 } };
+static CONST GUID DxgkpGuidDevinterfaceBrightness3 =
+    { 0x197A4A6E, 0x0391, 0x4322, { 0x96, 0xEA, 0xC2, 0x76, 0x0F, 0x88, 0x1D, 0x3A } };
 static CONST GUID DxgkpGuidChildAcpiInterfaceStandard2 =
     { 0xE8695F63, 0x1831, 0x4870, { 0xA8, 0xCF, 0x9C, 0x2F, 0x03, 0xF9, 0xDC, 0xB5 } };
 
@@ -2445,7 +2447,9 @@ DxgkpChildPdoPnpDispatch(
                                                      (IsEqualGUID(Stack->Parameters.QueryInterface.InterfaceType,
                                                                   &DxgkpGuidDevinterfaceBrightness) ||
                                                       IsEqualGUID(Stack->Parameters.QueryInterface.InterfaceType,
-                                                                  &DxgkpGuidDevinterfaceBrightness2)) ?
+                                                                  &DxgkpGuidDevinterfaceBrightness2) ||
+                                                      IsEqualGUID(Stack->Parameters.QueryInterface.InterfaceType,
+                                                                  &DxgkpGuidDevinterfaceBrightness3)) ?
                                                          DISPLAY_ADAPTER_HW_ID : ChildExt->Descriptor.ChildUid,
                                                      Stack);
             }
