@@ -34,6 +34,7 @@ DefaultDestDir = 12
 %IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INTC1082
 %IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INTC1084
 %IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT34C4
+%IntelGpio.DeviceDesc% = IntelGpio_Inst,ACPI\INT3453
 
 [IntelGpio_Inst.NT]
 CopyFiles = IntelGpio_CopyFiles

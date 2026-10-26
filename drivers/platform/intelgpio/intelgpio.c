@@ -8,6 +8,7 @@
 #include <ntddk.h>
 #include <wdf.h>
 #include <gpioclx.h>
+#include <acpiioct.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -79,6 +80,7 @@ typedef struct _INTELGPIO_ACPI_ID
 {
     PCWSTR HardwareId;
     const INTELGPIO_SOC *Soc;
+    ULONG Uid;
 } INTELGPIO_ACPI_ID;
 
 typedef struct _INTELGPIO_COMMUNITY
@@ -489,6 +491,51 @@ static const INTELGPIO_SOC IntelGpioLkfSoc =
     IntelGpioLkfGroups
 };
 
+static const INTELGPIO_GROUP IntelGpioGlk80Groups[] =
+{
+    {0, 0, 0, 32, 0, 0},
+    {0, 1, 4, 32, 32, 32},
+    {0, 2, 8, 16, 64, 64},
+};
+
+static const INTELGPIO_GROUP IntelGpioGlkAudioGroups[] =
+{
+    {0, 0, 0, 20, 0, 0},
+};
+
+static const INTELGPIO_GROUP IntelGpioGlkSccGroups[] =
+{
+    {0, 0, 0, 32, 0, 0},
+    {0, 1, 4, 3, 32, 32},
+};
+
+static const INTELGPIO_SOC IntelGpioGlk80Soc =
+{
+    0x020, 0x080, 0x0b0, 0x100, 0x110,
+    1, RTL_NUMBER_OF(IntelGpioGlk80Groups),
+    {0},
+    {80},
+    IntelGpioGlk80Groups
+};
+
+static const INTELGPIO_SOC IntelGpioGlkAudioSoc =
+{
+    0x020, 0x080, 0x0b0, 0x100, 0x110,
+    1, RTL_NUMBER_OF(IntelGpioGlkAudioGroups),
+    {0},
+    {20},
+    IntelGpioGlkAudioGroups
+};
+
+static const INTELGPIO_SOC IntelGpioGlkSccSoc =
+{
+    0x020, 0x080, 0x0b0, 0x100, 0x110,
+    1, RTL_NUMBER_OF(IntelGpioGlkSccGroups),
+    {0},
+    {35},
+    IntelGpioGlkSccGroups
+};
+
 static const INTELGPIO_ACPI_ID IntelGpioAcpiIds[] =
 {
     {L"INT344B", &IntelGpioSptLpSoc},
@@ -510,6 +557,10 @@ static const INTELGPIO_ACPI_ID IntelGpioAcpiIds[] =
     {L"INTC1082", &IntelGpioMtlSSoc},
     {L"INTC1084", &IntelGpioMtpSSoc},
     {L"INT34C4", &IntelGpioLkfSoc},
+    {L"INT3453", &IntelGpioGlk80Soc, 1},
+    {L"INT3453", &IntelGpioGlk80Soc, 2},
+    {L"INT3453", &IntelGpioGlkAudioSoc, 3},
+    {L"INT3453", &IntelGpioGlkSccSoc, 4},
 };
 
 C_ASSERT(RTL_NUMBER_OF(IntelGpioMtpSGroups) <= INTELGPIO_MAX_GROUPS);
@@ -748,6 +799,46 @@ IntelGpioQuiesceInterrupts(
 }
 
 static
+BOOLEAN
+IntelGpioQueryUid(
+    _In_ WDFDEVICE Device,
+    _Out_ PULONG Uid)
+{
+    ACPI_EVAL_INPUT_BUFFER Input;
+    UCHAR OutputStorage[sizeof(ACPI_EVAL_OUTPUT_BUFFER) + 32];
+    PACPI_EVAL_OUTPUT_BUFFER Output = (PACPI_EVAL_OUTPUT_BUFFER)OutputStorage;
+    WDF_MEMORY_DESCRIPTOR InputDescriptor, OutputDescriptor;
+    ULONG_PTR Information = 0;
+    NTSTATUS Status;
+
+    *Uid = 0;
+    RtlZeroMemory(&Input, sizeof(Input));
+    RtlZeroMemory(OutputStorage, sizeof(OutputStorage));
+    Input.Signature = ACPI_EVAL_INPUT_BUFFER_SIGNATURE;
+    Input.MethodNameAsUlong = 'DIU_';
+    WDF_MEMORY_DESCRIPTOR_INIT_BUFFER(&InputDescriptor, &Input, sizeof(Input));
+    WDF_MEMORY_DESCRIPTOR_INIT_BUFFER(&OutputDescriptor, Output, sizeof(OutputStorage) - 1);
+    Status = WdfIoTargetSendIoctlSynchronously(WdfDeviceGetIoTarget(Device), NULL, IOCTL_ACPI_EVAL_METHOD,
+                                               &InputDescriptor, &OutputDescriptor, NULL, &Information);
+    if (!NT_SUCCESS(Status) ||
+        Information < FIELD_OFFSET(ACPI_EVAL_OUTPUT_BUFFER, Argument) + ACPI_METHOD_ARGUMENT_LENGTH(0) ||
+        Output->Signature != ACPI_EVAL_OUTPUT_BUFFER_SIGNATURE ||
+        Output->Count != 1)
+    {
+        DPRINT1("INTELGPIO: _UID evaluation failed, status=0x%08lx\n", Status);
+        return FALSE;
+    }
+    if (Output->Argument[0].Type == ACPI_METHOD_ARGUMENT_INTEGER)
+    {
+        *Uid = Output->Argument[0].Argument;
+        return TRUE;
+    }
+    if (Output->Argument[0].Type == ACPI_METHOD_ARGUMENT_STRING)
+        return NT_SUCCESS(RtlCharToInteger((PCSZ)Output->Argument[0].Data, 10, Uid));
+    return FALSE;
+}
+
+static
 const INTELGPIO_SOC *
 IntelGpioIdentify(
     _In_ WDFDEVICE Device)
@@ -756,6 +847,8 @@ IntelGpioIdentify(
     ULONG Length = 0;
     ULONG Index;
     PCWSTR Current;
+    ULONG Uid = 0;
+    BOOLEAN UidQueried = FALSE;
 
     if (!NT_SUCCESS(IoGetDeviceProperty(WdfDeviceWdmGetPhysicalDevice(Device), DevicePropertyHardwareID, sizeof(HardwareIds) - 2 * sizeof(WCHAR), HardwareIds, &Length)))
         return NULL;
@@ -771,8 +864,19 @@ IntelGpioIdentify(
             Name++;
         for (Index = 0; Index < RTL_NUMBER_OF(IntelGpioAcpiIds); Index++)
         {
-            if (!_wcsicmp(Name, IntelGpioAcpiIds[Index].HardwareId))
-                return IntelGpioAcpiIds[Index].Soc;
+            if (_wcsicmp(Name, IntelGpioAcpiIds[Index].HardwareId))
+                continue;
+            if (IntelGpioAcpiIds[Index].Uid)
+            {
+                if (!UidQueried)
+                {
+                    UidQueried = TRUE;
+                    IntelGpioQueryUid(Device, &Uid);
+                }
+                if (Uid != IntelGpioAcpiIds[Index].Uid)
+                    continue;
+            }
+            return IntelGpioAcpiIds[Index].Soc;
         }
     }
     return NULL;
