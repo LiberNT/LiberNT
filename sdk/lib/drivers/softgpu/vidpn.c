@@ -1263,7 +1263,7 @@ SoftGpuDdiSetTimingsFromVidPn(
         PathInfo->TargetState.ConnectionStatus =
             MonitorStatusConnected;
         PathInfo->TargetState.MonitorConnect.LinkTargetType =
-            D3DKMDT_VOT_OTHER;
+            Device->ChildOutputTechnology;
         PathInfo->DiagnosticInfo = 0;
         PathInfo->GlitchCause = DXGK_GLITCH_CAUSE_NONE;
         PathInfo->GlitchEffect = DXGK_GLITCH_EFFECT_SEAMLESS;

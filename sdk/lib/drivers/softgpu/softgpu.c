@@ -956,6 +956,133 @@ SoftGpuDropUnbackedModes(
     Device->PreferredMode = CurrentMode;
 }
 
+static PACPI_METHOD_ARGUMENT
+SoftGpuAcpiFirstArgument(
+    _In_reads_bytes_(OutputSize) PACPI_EVAL_OUTPUT_BUFFER Output,
+    _In_ ULONG OutputSize,
+    _Out_ PUCHAR *End)
+{
+    *End = (PUCHAR)Output + min(Output->Length, OutputSize);
+    if (Output->Signature != ACPI_EVAL_OUTPUT_BUFFER_SIGNATURE ||
+        Output->Count == 0 ||
+        (PUCHAR)Output->Argument + FIELD_OFFSET(ACPI_METHOD_ARGUMENT, Data) > *End)
+    {
+        return NULL;
+    }
+    return Output->Argument;
+}
+
+static VOID
+SoftGpuQueryAcpiPanelEdid(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ PDXGK_INTERFACE DxgkInterface,
+    _Inout_updates_bytes_(SOFTGPU_ACPI_OUTPUT_SIZE) PACPI_EVAL_OUTPUT_BUFFER Output)
+{
+    static const UCHAR Header[8] = { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00 };
+    ULONG InputStorage[(FIELD_OFFSET(ACPI_EVAL_INPUT_BUFFER_COMPLEX, Argument) +
+                        ACPI_METHOD_ARGUMENT_LENGTH(sizeof(ULONG)) + sizeof(ULONG) - 1) / sizeof(ULONG)];
+    PACPI_EVAL_INPUT_BUFFER_COMPLEX Input = (PACPI_EVAL_INPUT_BUFFER_COMPLEX)InputStorage;
+    PACPI_METHOD_ARGUMENT Argument;
+    PUCHAR End;
+    UCHAR Sum = 0;
+    ULONG Index;
+
+    RtlZeroMemory(InputStorage, sizeof(InputStorage));
+    RtlZeroMemory(Output, SOFTGPU_ACPI_OUTPUT_SIZE);
+    Input->Signature = DXGK_ACPI_USE_ACPI_UID;
+    Input->MethodNameAsUlong = ACPI_METHOD_OUTPUT_DDC;
+    Input->Size = sizeof(InputStorage) - FIELD_OFFSET(ACPI_EVAL_INPUT_BUFFER_COMPLEX, Argument);
+    Input->ArgumentCount = 1;
+    ACPI_METHOD_SET_ARGUMENT_INTEGER(Input->Argument, 1);
+
+    if (!NT_SUCCESS(DxgkInterface->DxgkCbEvalAcpiMethod(DxgkInterface->DeviceHandle,
+                                                        Device->ChildAcpiUid,
+                                                        Input,
+                                                        sizeof(InputStorage),
+                                                        Output,
+                                                        SOFTGPU_ACPI_OUTPUT_SIZE)))
+    {
+        return;
+    }
+
+    Argument = SoftGpuAcpiFirstArgument(Output, SOFTGPU_ACPI_OUTPUT_SIZE, &End);
+    if (Argument == NULL ||
+        Argument->Type != ACPI_METHOD_ARGUMENT_BUFFER ||
+        Argument->DataLength < SOFTGPU_EDID_SIZE ||
+        Argument->DataLength > (SIZE_T)(End - Argument->Data) ||
+        !RtlEqualMemory(Argument->Data, Header, sizeof(Header)))
+    {
+        return;
+    }
+
+    for (Index = 0; Index < SOFTGPU_EDID_SIZE; Index++)
+        Sum += Argument->Data[Index];
+    if (Sum != 0)
+        return;
+
+    RtlCopyMemory(Device->Edid, Argument->Data, SOFTGPU_EDID_SIZE);
+    Device->EdidLength = SOFTGPU_EDID_SIZE;
+}
+
+static VOID
+SoftGpuQueryAcpiPanel(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ PDXGK_INTERFACE DxgkInterface)
+{
+    ACPI_EVAL_INPUT_BUFFER_COMPLEX Input;
+    PACPI_EVAL_OUTPUT_BUFFER Output;
+    PACPI_METHOD_ARGUMENT Argument;
+    PUCHAR End;
+    ULONG Index;
+
+    PAGED_CODE();
+
+    Device->ChildAcpiUid = 0;
+    Device->ChildOutputTechnology = D3DKMDT_VOT_OTHER;
+    if (DxgkInterface->DxgkCbEvalAcpiMethod == NULL)
+        return;
+
+    Output = ExAllocatePoolZero(PagedPool, SOFTGPU_ACPI_OUTPUT_SIZE, SOFTGPU_POOL_TAG);
+    if (Output == NULL)
+        return;
+
+    RtlZeroMemory(&Input, sizeof(Input));
+    Input.Signature = ACPI_EVAL_INPUT_BUFFER_COMPLEX_SIGNATURE;
+    Input.MethodNameAsUlong = ACPI_METHOD_DISPLAY_DOD;
+    if (NT_SUCCESS(DxgkInterface->DxgkCbEvalAcpiMethod(DxgkInterface->DeviceHandle,
+                                                       DISPLAY_ADAPTER_HW_ID,
+                                                       &Input,
+                                                       sizeof(Input),
+                                                       Output,
+                                                       SOFTGPU_ACPI_OUTPUT_SIZE)))
+    {
+        Argument = SoftGpuAcpiFirstArgument(Output, SOFTGPU_ACPI_OUTPUT_SIZE, &End);
+        for (Index = 0; Argument != NULL && Index < Output->Count; Index++)
+        {
+            if ((PUCHAR)Argument + FIELD_OFFSET(ACPI_METHOD_ARGUMENT, Data) > End ||
+                (PUCHAR)ACPI_METHOD_NEXT_ARGUMENT(Argument) > End)
+            {
+                break;
+            }
+            if (Argument->Type == ACPI_METHOD_ARGUMENT_INTEGER &&
+                Argument->DataLength >= sizeof(ULONG) &&
+                (Argument->Argument & SOFTGPU_ACPI_DOD_ID_SCHEME) != 0 &&
+                (Argument->Argument & SOFTGPU_ACPI_DOD_TYPE_MASK) == SOFTGPU_ACPI_DOD_TYPE_INTERNAL)
+            {
+                Device->ChildAcpiUid = Argument->Argument & SOFTGPU_ACPI_DOD_ADR_MASK;
+                Device->ChildOutputTechnology = D3DKMDT_VOT_INTERNAL;
+                break;
+            }
+            Argument = ACPI_METHOD_NEXT_ARGUMENT(Argument);
+        }
+    }
+
+    if (Device->ChildOutputTechnology == D3DKMDT_VOT_INTERNAL && Device->EdidLength == 0)
+        SoftGpuQueryAcpiPanelEdid(Device, DxgkInterface, Output);
+
+    ExFreePoolWithTag(Output, SOFTGPU_POOL_TAG);
+}
+
 /* =========================================================================
  * DxgkDdiStartDevice
  * =========================================================================
@@ -1069,6 +1196,7 @@ SoftGpuDdiStartDevice(
     RtlCopyMemory(Device->Modes, PlatformConfig.Modes, sizeof(Device->Modes));
     RtlCopyMemory(Device->Edid, PlatformConfig.Edid, sizeof(Device->Edid));
     Device->EdidLength = min(PlatformConfig.EdidLength, (ULONG)sizeof(Device->Edid));
+    SoftGpuQueryAcpiPanel(Device, DxgkInterface);
     Device->HighestDmaAddress =
         PlatformConfig.HighestFrameBufferAddress;
 
@@ -2833,9 +2961,11 @@ SoftGpuDdiQueryChildRelations(
     _Out_ PDXGK_CHILD_DESCRIPTOR ChildRelations,
     _In_  ULONG                  ChildRelationsSize)
 {
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+
     DPRINT("SOFTGPU: QueryChildRelations size=%lu\n", ChildRelationsSize);
 
-    if (ChildRelations == NULL)
+    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC || ChildRelations == NULL)
         return STATUS_INVALID_PARAMETER;
 
     if (ChildRelationsSize < sizeof(DXGK_CHILD_DESCRIPTOR))
@@ -2854,7 +2984,8 @@ SoftGpuDdiQueryChildRelations(
     RtlZeroMemory(ChildRelations, sizeof(DXGK_CHILD_DESCRIPTOR));
     ChildRelations[0].ChildDeviceType                = TypeVideoOutput;
     ChildRelations[0].ChildCapabilities.HpdAwareness = HpdAwarenessAlwaysConnected;
-    ChildRelations[0].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = D3DKMDT_VOT_OTHER;
+    ChildRelations[0].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = Device->ChildOutputTechnology;
+    ChildRelations[0].AcpiUid                        = Device->ChildAcpiUid;
     ChildRelations[0].ChildUid                       = SOFTGPU_CHILD_UID;
 
     return STATUS_SUCCESS;

@@ -164,6 +164,11 @@ InbvGetGopFrameBufferInfo(
 #define SOFTGPU_PRESENT_CHUNK_ROWS      SOFTGPU_POINTER_MAX_HEIGHT
 #define SOFTGPU_MAX_DISPLAY_MODES       32UL
 #define SOFTGPU_EDID_SIZE               128UL
+#define SOFTGPU_ACPI_OUTPUT_SIZE        512UL
+#define SOFTGPU_ACPI_DOD_ID_SCHEME      0x80000000UL
+#define SOFTGPU_ACPI_DOD_TYPE_MASK      0x00000F00UL
+#define SOFTGPU_ACPI_DOD_TYPE_INTERNAL  0x00000400UL
+#define SOFTGPU_ACPI_DOD_ADR_MASK       0x0000FFFFUL
 
 typedef struct _SOFTGPU_DISPLAY_MODE
 {
@@ -364,6 +369,8 @@ typedef struct _SOFTGPU_DEVICE
     PSOFTGPU_PLATFORM_SET_MODE PlatformSetMode;
     UCHAR               Edid[SOFTGPU_EDID_SIZE];
     ULONG               EdidLength;
+    ULONG               ChildAcpiUid;
+    D3DKMDT_VIDEO_OUTPUT_TECHNOLOGY ChildOutputTechnology;
 
     /*
      * One lock for every node's fence state.  A single execution core serves
