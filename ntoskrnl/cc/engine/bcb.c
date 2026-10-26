@@ -63,8 +63,8 @@ CcBcbAcquire(
     _Out_ PCC_BCB *OutBcb,
     _Out_ PBOOLEAN Created)
 {
-    PCC_CACHE Cache = Map->Cache;
-    ULONG Bytes = (Cache->BcbBytes > sizeof(CC_BCB)) ? Cache->BcbBytes : sizeof(CC_BCB);
+    PCC_CACHE Cache;
+    ULONG Bytes;
     CC_VIEW_RANGE Range;
     PCC_BCB Existing;
     PCC_BCB Bcb;
@@ -74,8 +74,11 @@ CcBcbAcquire(
     *OutBcb = NULL;
     *Created = FALSE;
 
-    if (Length == 0 || FileOffset + Length < FileOffset)
+    if (Map == NULL || Length == 0 || FileOffset + Length < FileOffset)
         return STATUS_INVALID_PARAMETER;
+
+    Cache = Map->Cache;
+    Bytes = (Cache->BcbBytes > sizeof(CC_BCB)) ? Cache->BcbBytes : sizeof(CC_BCB);
 
     CC_LOCK_ACQUIRE(&Map->BcbLock, &OldIrql);
     Existing = CcBcbFind(Map, FileOffset, Length, Pinned);
