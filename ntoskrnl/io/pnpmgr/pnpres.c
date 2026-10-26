@@ -538,6 +538,24 @@ IopFindDmaResource(IN PIO_RESOURCE_DESCRIPTOR IoDesc, IN OPTIONAL PCM_RESOURCE_L
 }
 
 static
+KAFFINITY
+IopInterruptPolicyAffinity(
+    _In_ PIO_RESOURCE_DESCRIPTOR IoDesc,
+    _In_ KAFFINITY Allowed)
+{
+    KAFFINITY Targeted;
+
+    if (!(IoDesc->Flags & CM_RESOURCE_INTERRUPT_POLICY_INCLUDED) ||
+        IoDesc->u.Interrupt.AffinityPolicy != IrqPolicySpecifiedProcessors)
+    {
+        return Allowed;
+    }
+
+    Targeted = IoDesc->u.Interrupt.TargetedProcessors & KeQueryActiveProcessors();
+    return Targeted ? Targeted : Allowed;
+}
+
+static
 BOOLEAN
 IopFindInterruptResource(
     IN PIO_RESOURCE_DESCRIPTOR IoDesc,
@@ -606,7 +624,7 @@ IopFindInterruptResource(
         CmDesc->ShareDisposition = IoDesc->ShareDisposition;
         CmDesc->u.Interrupt.Level = RoutingInfo.Irql;
         CmDesc->u.Interrupt.Vector = RoutingInfo.Vector;
-        CmDesc->u.Interrupt.Affinity = RoutingInfo.TargetProcessors;
+        CmDesc->u.Interrupt.Affinity = IopInterruptPolicyAffinity(IoDesc, RoutingInfo.TargetProcessors);
         if (MessageCountOut)
             *MessageCountOut = MessageCount;
         DPRINT("MSI: allocated vector 0x%lx count %lu at irql %u\n",
@@ -649,7 +667,7 @@ IopFindInterruptResource(
         {
             CmDesc->u.Interrupt.Vector = Vector;
             CmDesc->u.Interrupt.Level = Vector;
-            CmDesc->u.Interrupt.Affinity = (KAFFINITY)-1;
+            CmDesc->u.Interrupt.Affinity = IopInterruptPolicyAffinity(IoDesc, (KAFFINITY)-1);
 
             if (!IopCheckDescriptorForConflict(CmDesc, PendingList, NULL, DeviceNode))
             {
@@ -1436,6 +1454,115 @@ IopUpdateControlKeyWithResources(
     return STATUS_SUCCESS;
 }
 
+static
+BOOLEAN
+IopReadAffinityOverride(
+    _In_ HANDLE PolicyKey,
+    _Out_ PKAFFINITY Affinity)
+{
+    PKEY_VALUE_FULL_INFORMATION Info;
+    PUCHAR Data;
+    ULONG64 Value = 0;
+    BOOLEAN Valid = FALSE;
+
+    if (!NT_SUCCESS(IopGetRegistryValue(PolicyKey, L"AssignmentSetOverride", &Info)))
+        return FALSE;
+
+    Data = (PUCHAR)Info + Info->DataOffset;
+    if (Info->Type == REG_DWORD && Info->DataLength == sizeof(ULONG))
+    {
+        Value = *(PULONG)Data;
+        Valid = TRUE;
+    }
+    else if (Info->Type == REG_QWORD && Info->DataLength == sizeof(ULONG64))
+    {
+        Value = *(PULONG64)Data;
+        Valid = TRUE;
+    }
+    else if (Info->Type == REG_BINARY && Info->DataLength != 0 && Info->DataLength <= sizeof(KAFFINITY))
+    {
+        RtlCopyMemory(&Value, Data, Info->DataLength);
+        Valid = TRUE;
+    }
+
+    ExFreePool(Info);
+    *Affinity = (KAFFINITY)Value;
+    return Valid;
+}
+
+static
+VOID
+IopApplyInterruptAffinityPolicy(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    UNICODE_STRING PolicyKeyName = RTL_CONSTANT_STRING(L"Interrupt Management\\Affinity Policy");
+    PIO_RESOURCE_REQUIREMENTS_LIST Requirements = DeviceNode->ResourceRequirements;
+    PIO_RESOURCE_LIST List;
+    PIO_RESOURCE_DESCRIPTOR Descriptor;
+    PKEY_VALUE_FULL_INFORMATION Info;
+    HANDLE DeviceKey, PolicyKey;
+    KAFFINITY Override = 0;
+    ULONG Policy;
+    ULONG ListIndex, Index;
+    NTSTATUS Status;
+
+    if (Requirements == NULL)
+        return;
+
+    Status = IoOpenDeviceRegistryKey(DeviceNode->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE, KEY_READ, &DeviceKey);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Status = IopOpenRegistryKeyEx(&PolicyKey, DeviceKey, &PolicyKeyName, KEY_READ);
+    ZwClose(DeviceKey);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Status = IopGetRegistryValue(PolicyKey, L"DevicePolicy", &Info);
+    if (!NT_SUCCESS(Status))
+    {
+        ZwClose(PolicyKey);
+        return;
+    }
+
+    if (Info->Type != REG_DWORD || Info->DataLength != sizeof(ULONG))
+    {
+        ExFreePool(Info);
+        ZwClose(PolicyKey);
+        return;
+    }
+
+    Policy = *(PULONG)((PUCHAR)Info + Info->DataOffset);
+    ExFreePool(Info);
+
+    if (Policy > IrqPolicySpreadMessagesAcrossAllProcessors ||
+        (Policy == IrqPolicySpecifiedProcessors && (!IopReadAffinityOverride(PolicyKey, &Override) || Override == 0)))
+    {
+        DPRINT1("PnP: ignoring interrupt affinity policy %lu for %wZ\n", Policy, &DeviceNode->InstancePath);
+        ZwClose(PolicyKey);
+        return;
+    }
+    ZwClose(PolicyKey);
+
+    List = &Requirements->List[0];
+    for (ListIndex = 0; ListIndex < Requirements->AlternativeLists; ListIndex++)
+    {
+        for (Index = 0; Index < List->Count; Index++)
+        {
+            Descriptor = &List->Descriptors[Index];
+            if (Descriptor->Type != CmResourceTypeInterrupt)
+                continue;
+
+            Descriptor->Flags |= CM_RESOURCE_INTERRUPT_POLICY_INCLUDED;
+            Descriptor->u.Interrupt.AffinityPolicy = (IRQ_DEVICE_POLICY)Policy;
+            Descriptor->u.Interrupt.TargetedProcessors = (Policy == IrqPolicySpecifiedProcessors) ? Override : 0;
+        }
+        List = (PIO_RESOURCE_LIST)(List->Descriptors + List->Count);
+    }
+
+    DPRINT1("PnP: interrupt affinity policy %lu, processors 0x%Ix for %wZ\n", Policy, Override, &DeviceNode->InstancePath);
+}
+
 NTSTATUS
 IopFilterResourceRequirements(
     IN PDEVICE_NODE DeviceNode)
@@ -1443,6 +1570,8 @@ IopFilterResourceRequirements(
     IO_STACK_LOCATION Stack;
     IO_STATUS_BLOCK IoStatusBlock;
     NTSTATUS Status;
+
+    IopApplyInterruptAffinityPolicy(DeviceNode);
 
     DPRINT("Sending IRP_MN_FILTER_RESOURCE_REQUIREMENTS to device stack\n");
 
