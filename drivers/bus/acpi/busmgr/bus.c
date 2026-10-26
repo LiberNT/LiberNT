@@ -294,6 +294,7 @@ acpi_bus_set_power (
 	int			result = 0;
 	ACPI_STATUS		status = AE_OK;
 	struct acpi_device	*device = NULL;
+	int			parent_state;
 	char			object_name[5] = {'_','P','S','0'+state,'\0'};
 
 
@@ -303,6 +304,8 @@ acpi_bus_set_power (
 
 	if ((state < ACPI_STATE_D0) || (state > ACPI_STATE_D3_HOT))
 		return_VALUE(AE_BAD_PARAMETER);
+	if (device->parent && device->parent->power.state == ACPI_STATE_UNKNOWN)
+		acpi_bus_get_power(device->parent->handle, &parent_state);
 	ExAcquireFastMutex(&device->power_lock);
 
 	/* Make sure this is a valid target state */
@@ -340,7 +343,9 @@ acpi_bus_set_power (
 		result = AE_NOT_FOUND;
 		goto end;
 	}
-	if (device->parent && (state < device->parent->power.state)) {
+	if (device->parent &&
+	    device->parent->power.state != ACPI_STATE_UNKNOWN &&
+	    (state < device->parent->power.state)) {
 		DPRINT1( "Cannot set device to a higher-powered state than parent\n");
 		result = AE_NOT_FOUND;
 		goto end;
@@ -385,6 +390,8 @@ acpi_bus_set_power (
 	}
 
 end:
+	if (!result)
+		device->power.state = state;
 	ExReleaseFastMutex(&device->power_lock);
 	if (result)
 		DPRINT( "Error transitioning device [%s] to D%d\n",
