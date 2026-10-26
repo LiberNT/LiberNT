@@ -11,12 +11,27 @@
 #include <EdidActive.h>
 #include <SystemResourceTable.h>
 #include <loader_firmware.h>
+#include <loader_framebuffer.h>
 
 #define FW_COLOR_BITS  32
 #define FW_MASK_RED    0x000000FF
 #define FW_MASK_GREEN  0x0000FF00
 #define FW_MASK_BLUE   0x00FF0000
 #define FW_MASK_UNUSED 0xFF000000
+
+#define FW_GOP_TRANSFORM_VERSION        1
+#define FW_GOP_TRANSFORM_FIXED_SCANOUT  0x00000001
+
+typedef struct _FW_GOP_TRANSFORM
+{
+    UINT32 Size;
+    UINT32 Version;
+    UINT32 Flags;
+    UINT32 Rotation;
+    UINT32 LogicalWidth;
+    UINT32 LogicalHeight;
+    EFI_GRAPHICS_OUTPUT_PROTOCOL* LinearGop;
+} FW_GOP_TRANSFORM, *PFW_GOP_TRANSFORM;
 
 const USHORT FwApplicationSubsystem = IMAGE_SUBSYSTEM_EFI_APPLICATION;
 
@@ -29,6 +44,8 @@ static EFI_GUID FwLoadedImageProtocolGuid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
 static EFI_GUID FwDevicePathGuid = EFI_DEVICE_PATH_PROTOCOL_GUID;
 static EFI_GUID FwEdidActiveGuid = EFI_EDID_ACTIVE_PROTOCOL_GUID;
 static EFI_GUID FwSystemResourceTableGuid = EFI_SYSTEM_RESOURCE_TABLE_GUID;
+static EFI_GUID FwGraphicsOutputTransformGuid =
+    {0xac775d0f, 0x1199, 0x42e2, {0x92, 0x00, 0x71, 0xdc, 0x78, 0xaa, 0x65, 0xbb}};
 
 static
 PVOID
@@ -90,6 +107,57 @@ FwGetFirmwareResource(
     return TRUE;
 }
 
+static
+PFW_GOP_TRANSFORM
+FwGetGopTransform(
+    _In_ EFI_GRAPHICS_OUTPUT_PROTOCOL* ConsoleGop)
+{
+    EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
+    EFI_GRAPHICS_OUTPUT_PROTOCOL* HandleGop;
+    PFW_GOP_TRANSFORM Transform = NULL;
+    EFI_HANDLE* Handles = NULL;
+    UINTN HandleCount = 0;
+    UINTN i;
+
+    if (EFI_ERROR(BootServices->LocateHandleBuffer(ByProtocol,
+                                                   &FwGraphicsOutputTransformGuid,
+                                                   NULL,
+                                                   &HandleCount,
+                                                   &Handles)) ||
+        !Handles)
+    {
+        return NULL;
+    }
+
+    for (i = 0; i < HandleCount; i++)
+    {
+        HandleGop = NULL;
+        if (EFI_ERROR(BootServices->HandleProtocol(Handles[i], &FwGraphicsOutputGuid, (VOID**)&HandleGop)) ||
+            HandleGop != ConsoleGop)
+        {
+            continue;
+        }
+
+        if (EFI_ERROR(BootServices->HandleProtocol(Handles[i], &FwGraphicsOutputTransformGuid, (VOID**)&Transform)))
+            Transform = NULL;
+        break;
+    }
+    BootServices->FreePool(Handles);
+
+    if (!Transform ||
+        Transform->Version != FW_GOP_TRANSFORM_VERSION ||
+        Transform->Size < sizeof(*Transform) ||
+        Transform->Rotation > LoaderFramebufferRotation270 ||
+        Transform->LogicalWidth != ConsoleGop->Mode->Info->HorizontalResolution ||
+        Transform->LogicalHeight != ConsoleGop->Mode->Info->VerticalResolution ||
+        !Transform->LinearGop)
+    {
+        return NULL;
+    }
+
+    return Transform;
+}
+
 BOOLEAN
 FwGetFrameBuffer(
     _Out_ PCM_FRAMEBUF_DEVICE_DATA Data,
@@ -98,11 +166,22 @@ FwGetFrameBuffer(
 {
     EFI_GRAPHICS_OUTPUT_PROTOCOL* Gop;
     EFI_GRAPHICS_OUTPUT_MODE_INFORMATION* Info;
+    PFW_GOP_TRANSFORM Transform;
 
     if (EFI_ERROR(GlobalSystemTable->BootServices->LocateProtocol(&FwGraphicsOutputGuid,
                                                                   NULL,
                                                                   (VOID**)&Gop)) ||
         !Gop->Mode ||
+        !Gop->Mode->Info)
+    {
+        return FALSE;
+    }
+
+    Transform = FwGetGopTransform(Gop);
+    if (Transform)
+        Gop = Transform->LinearGop;
+
+    if (!Gop->Mode ||
         !Gop->Mode->Info ||
         Gop->Mode->FrameBufferBase == 0 ||
         Gop->Mode->FrameBufferSize == 0 ||
@@ -147,6 +226,27 @@ FwGetFrameBuffer(
     Data->BitsPerPixel = FW_COLOR_BITS;
     Data->LogicalWidth = Info->HorizontalResolution;
     Data->LogicalHeight = Info->VerticalResolution;
+
+    if (Transform)
+    {
+        if (Transform->Rotation == LoaderFramebufferRotation90 || Transform->Rotation == LoaderFramebufferRotation270)
+        {
+            if (Transform->LogicalWidth != Info->VerticalResolution || Transform->LogicalHeight != Info->HorizontalResolution)
+                return FALSE;
+        }
+        else if (Transform->LogicalWidth != Info->HorizontalResolution || Transform->LogicalHeight != Info->VerticalResolution)
+        {
+            return FALSE;
+        }
+
+        if ((ULONGLONG)Info->VerticalResolution * Info->PixelsPerScanLine * (FW_COLOR_BITS / 8) > Gop->Mode->FrameBufferSize)
+            return FALSE;
+
+        Data->TransformFlags = (Transform->Flags & FW_GOP_TRANSFORM_FIXED_SCANOUT) ? LOADER_PARAMETER_FRAMEBUFFER_FLAG_FIXED_SCANOUT : 0;
+        Data->Rotation = Transform->Rotation;
+        Data->LogicalWidth = Transform->LogicalWidth;
+        Data->LogicalHeight = Transform->LogicalHeight;
+    }
 
     *Base = Gop->Mode->FrameBufferBase;
     *Size = (ULONG)Gop->Mode->FrameBufferSize;
