@@ -6,7 +6,7 @@ LayoutFile=layout.inf
 Class=Display
 ClassGUID={4D36E968-E325-11CE-BFC1-08002BE10318}
 Provider=%LiberNT%
-DriverVer=10/26/2026,1.0.0.0
+DriverVer=06/21/2006,1.0.0.0
 
 [DestinationDirs]
 DefaultDestDir=12
