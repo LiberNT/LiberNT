@@ -151,7 +151,7 @@ RawInputThreadMain(VOID)
     PFILE_OBJECT pKbdDevice = NULL, pMouDevice = NULL;
     LARGE_INTEGER ByteOffset;
     //LARGE_INTEGER WaitTimeout;
-    PVOID WaitObjects[6 + HIDINPUT_MAX_DEVICES + HIDINPUT_MAX_RAW_DEVICES], pSignaledObject = NULL;
+    PVOID WaitObjects[7 + HIDINPUT_MAX_DEVICES + HIDINPUT_MAX_RAW_DEVICES + TOUCHINPUT_MAX_DEVICES], pSignaledObject = NULL;
     KWAIT_BLOCK WaitBlockArray[RTL_NUMBER_OF(WaitObjects)];
     ULONG cWaitObjects = 0, cMaxWaitObjects = 2, cExpectedWaitObjects, MouseInputCount, i;
     MOUSE_INPUT_DATA MouseInput[MOUSE_INPUT_BUFFER_SIZE];
@@ -195,6 +195,7 @@ RawInputThreadMain(VOID)
     UserLeave();
 
     HidInputStart();
+    TouchInputStart();
 
     NT_ASSERT(ghMouseDevice == NULL);
     NT_ASSERT(ghKeyboardDevice == NULL);
@@ -245,6 +246,7 @@ RawInputThreadMain(VOID)
         WaitObjects[cWaitObjects++] = ShutdownEvent;
         WaitObjects[cWaitObjects++] = MasterTimer;
         cExpectedWaitObjects = cMaxWaitObjects + HidInputPrepareWait(WaitObjects, &cWaitObjects);
+        cExpectedWaitObjects += TouchInputPrepareWait(WaitObjects, &cWaitObjects);
 
         if (ghMouseDevice)
         {
@@ -331,7 +333,7 @@ RawInputThreadMain(VOID)
                 {
                     break;
                 }
-                else if (!HidInputSignaled(pSignaledObject))
+                else if (!HidInputSignaled(pSignaledObject) && !TouchInputSignaled(pSignaledObject))
                 {
                     ASSERT(FALSE);
                 }
@@ -398,6 +400,8 @@ RawInputThreadMain(VOID)
 
         if (HidInputProcess())
             IntLastInputTick(TRUE);
+        if (TouchInputProcess())
+            IntLastInputTick(TRUE);
 
         /* A display-only synchronization can copy a whole frame. Do not
          * hold USER across it or delay input already in this batch. */
@@ -422,6 +426,7 @@ RawInputThreadMain(VOID)
     }
 
     HidInputStop();
+    TouchInputStop();
 
     TRACE("Raw Input Thread Exit!\n");
 }

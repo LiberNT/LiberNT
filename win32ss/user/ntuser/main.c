@@ -1253,6 +1253,7 @@ DriverEntry(
     NT_ROF(InitDesktopImpl());
     NT_ROF(InitInputImpl());
     NT_ROF(InitHidInputImpl(DriverObject));
+    NT_ROF(InitTouchInputImpl(DriverObject));
     NT_ROF(InitKeyboardImpl());
     NT_ROF(MsqInitializeImpl());
     NT_ROF(InitTimerImpl());

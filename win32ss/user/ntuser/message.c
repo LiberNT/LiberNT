@@ -1296,6 +1296,7 @@ co_IntPeekMessage( PMSG Msg,
                             0,
                             Msg ))
         {
+            co_PointerRouteMessage(pti, Msg, *ExtraInfo);
             goto GotMessage;
         }
 

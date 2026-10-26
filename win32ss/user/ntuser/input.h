@@ -125,6 +125,32 @@ ULONG NTAPI HidInputPrepareWait(PVOID *WaitObjects, PULONG WaitCount);
 BOOLEAN NTAPI HidInputSignaled(PVOID Object);
 BOOLEAN NTAPI HidInputProcess(VOID);
 
+/* Touch screens */
+#define TOUCHINPUT_MAX_DEVICES 4
+typedef struct _TOUCH_CONTACT
+{
+    ULONG ContactId;
+    ULONG X;
+    ULONG Y;
+    BOOLEAN InContact;
+    BOOLEAN Confidence;
+} TOUCH_CONTACT, *PTOUCH_CONTACT;
+struct _POINTER_TOUCH_SOURCE;
+NTSTATUS NTAPI InitTouchInputImpl(PDRIVER_OBJECT DriverObject);
+VOID NTAPI TouchInputStart(VOID);
+VOID NTAPI TouchInputStop(VOID);
+ULONG NTAPI TouchInputPrepareWait(PVOID *WaitObjects, PULONG WaitCount);
+BOOLEAN NTAPI TouchInputSignaled(PVOID Object);
+BOOLEAN NTAPI TouchInputProcess(VOID);
+struct _POINTER_TOUCH_SOURCE * NTAPI PointerCreateTouchSource(ULONG Capacity);
+VOID NTAPI PointerDestroyTouchSource(struct _POINTER_TOUCH_SOURCE *Source);
+VOID NTAPI PointerProcessTouchFrame(struct _POINTER_TOUCH_SOURCE *Source, const TOUCH_CONTACT *Contacts, ULONG Count);
+VOID FASTCALL co_PointerRouteMessage(PTHREADINFO pti, MSG *Msg, LONG_PTR ExtraInfo);
+VOID FASTCALL PointerDefWindowProc(PWND Wnd, UINT Msg, WPARAM wParam);
+BOOL FASTCALL PointerGetTouchInfoList(UINT32 PointerId, ULONG PointerType, SIZE_T EntrySize, PULONG EntriesCount,
+                                      PULONG PointerCount, PVOID PointerInfo);
+BOOL NTAPI UserSendTouchMouseInput(MOUSEINPUT *pmi);
+
 /* IMM */
 UINT FASTCALL IntImmProcessKey(
     _In_ PUSER_MESSAGE_QUEUE MessageQueue,

@@ -1190,6 +1190,16 @@ NtUserGetPointerInfoList(
         return FALSE;
     }
 
+    if (PointerId != 1)
+    {
+        BOOL Ret;
+
+        UserEnterShared();
+        Ret = PointerGetTouchInfoList(PointerId, PointerType, EntrySize, EntriesCount, PointerCount, PointerInfo);
+        UserLeave();
+        return Ret;
+    }
+
     UserEnterShared();
 
     ppi = PsGetCurrentProcessWin32Process();

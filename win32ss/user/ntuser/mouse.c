@@ -421,6 +421,19 @@ UserSendMouseInput(MOUSEINPUT *pmi, BOOL bInjected)
     return Ret;
 }
 
+BOOL NTAPI
+UserSendTouchMouseInput(MOUSEINPUT *pmi)
+{
+    INPUT_MESSAGE_SOURCE SavedSource = gMouseInputSource;
+    BOOL Ret;
+
+    gMouseInputSource.deviceType = IMDT_TOUCH;
+    gMouseInputSource.originId = IMO_HARDWARE;
+    Ret = UserSendMouseInputWorker(pmi, FALSE);
+    gMouseInputSource = SavedSource;
+    return Ret;
+}
+
 VOID
 FASTCALL
 IntRemoveTrackMouseEvent(

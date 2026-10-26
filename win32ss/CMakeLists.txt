@@ -161,6 +161,7 @@ list(APPEND SOURCE
     user/ntuser/ntstubs.c
     user/ntuser/ntuser.c
     user/ntuser/painting.c
+    user/ntuser/pointer.c
     user/ntuser/power.c
     user/ntuser/prop.c
     user/ntuser/rawinput.c
@@ -172,6 +173,7 @@ list(APPEND SOURCE
     user/ntuser/simplecall.c
     user/ntuser/sysparams.c
     user/ntuser/timer.c
+    user/ntuser/touchinput.c
     user/ntuser/useratom.c
     user/ntuser/usrheap.c
     user/ntuser/vis.c

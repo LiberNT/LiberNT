@@ -695,6 +695,15 @@ IntDefWindowProc(
       case WM_DEVICECHANGE:
             return TRUE;
 
+      case WM_POINTERDOWN:
+      case WM_POINTERUPDATE:
+      case WM_POINTERUP:
+      case WM_NCPOINTERDOWN:
+      case WM_NCPOINTERUPDATE:
+      case WM_NCPOINTERUP:
+            PointerDefWindowProc(Wnd, Msg, wParam);
+            break;
+
       case WM_GETTEXTLENGTH:
       {
             PWSTR buf;
