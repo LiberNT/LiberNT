@@ -1,0 +1,5 @@
+add_library(pvpanic MODULE pvpanic.c pvpanic.rc)
+set_module_type(pvpanic kernelmodedriver)
+add_importlibs(pvpanic ntoskrnl hal)
+add_cd_file(TARGET pvpanic DESTINATION reactos/system32/drivers FOR all)
+add_driver_inf(pvpanic pvpanic.inf)
