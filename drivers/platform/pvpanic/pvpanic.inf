@@ -1,0 +1,42 @@
+[Version]
+Signature = "$Windows NT$"
+Class = System
+ClassGUID = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider = %LiberNT%
+DriverVer = 10/26/2026,1.0.0.0
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%LiberNT% = LiberNT
+
+[LiberNT]
+%PvPanic.DeviceDesc% = PvPanic_Inst,ACPI\QEMU0001
+%PvPanicPci.DeviceDesc% = PvPanic_Inst,PCI\VEN_1B36&DEV_0011
+
+[PvPanic_Inst.NT]
+CopyFiles = PvPanic_CopyFiles
+
+[PvPanic_CopyFiles]
+pvpanic.sys
+
+[PvPanic_Inst.NT.Services]
+AddService = PVPANIC,0x00000002,PvPanic_Service
+
+[PvPanic_Service]
+DisplayName = %PvPanic.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\pvpanic.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+PvPanic.DeviceDesc = "QEMU PVPanic Device"
+PvPanicPci.DeviceDesc = "QEMU PVPanic PCI Device"
+PvPanic.ServiceDesc = "LiberNT QEMU pvpanic Driver"
