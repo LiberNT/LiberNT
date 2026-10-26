@@ -24,6 +24,80 @@ E1000TransmitNetBuffer(
     _In_ PNET_BUFFER NetBuffer
     );
 
+typedef struct _E1000_TX_CURSOR
+{
+    PMDL Mdl;
+    ULONG Offset;
+    ULONG Remaining;
+} E1000_TX_CURSOR, *PE1000_TX_CURSOR;
+
+static VOID
+E1000InitializeTxCursor(
+    _Out_ PE1000_TX_CURSOR Cursor,
+    _In_ PNET_BUFFER NetBuffer
+    )
+{
+    Cursor->Mdl = NET_BUFFER_CURRENT_MDL(NetBuffer);
+    Cursor->Offset = NET_BUFFER_CURRENT_MDL_OFFSET(NetBuffer);
+    Cursor->Remaining = NET_BUFFER_DATA_LENGTH(NetBuffer);
+}
+
+static NDIS_STATUS
+E1000NextTxSegment(
+    _Inout_ PE1000_TX_CURSOR Cursor,
+    _Out_ PNDIS_PHYSICAL_ADDRESS Address,
+    _Out_ PULONG Length
+    )
+{
+    ULONG Position;
+    ULONG PageOffset;
+    ULONG Chunk;
+    ULONGLONG ChunkAddress;
+
+    Address->QuadPart = 0;
+    *Length = 0;
+
+    while (Cursor->Remaining != 0)
+    {
+        if (Cursor->Mdl == NULL)
+        {
+            return NDIS_STATUS_INVALID_LENGTH;
+        }
+
+        if (Cursor->Offset >= MmGetMdlByteCount(Cursor->Mdl))
+        {
+            Cursor->Offset -= MmGetMdlByteCount(Cursor->Mdl);
+            Cursor->Mdl = Cursor->Mdl->Next;
+            continue;
+        }
+
+        Position = MmGetMdlByteOffset(Cursor->Mdl) + Cursor->Offset;
+        PageOffset = Position & (PAGE_SIZE - 1);
+
+        Chunk = MmGetMdlByteCount(Cursor->Mdl) - Cursor->Offset;
+        Chunk = min(Chunk, Cursor->Remaining);
+        Chunk = min(Chunk, PAGE_SIZE - PageOffset);
+
+        ChunkAddress = ((ULONGLONG)MmGetMdlPfnArray(Cursor->Mdl)[Position >> PAGE_SHIFT] << PAGE_SHIFT) + PageOffset;
+
+        if (*Length != 0 && ChunkAddress != (ULONGLONG)Address->QuadPart + *Length)
+        {
+            break;
+        }
+
+        if (*Length == 0)
+        {
+            Address->QuadPart = (LONGLONG)ChunkAddress;
+        }
+
+        *Length += Chunk;
+        Cursor->Offset += Chunk;
+        Cursor->Remaining -= Chunk;
+    }
+
+    return NDIS_STATUS_SUCCESS;
+}
+
 
 /* ============================================================================
  * E1000InitializeTxQueue - Initialize a transmit queue
@@ -379,13 +453,17 @@ E1000TransmitNetBuffer(
     PE1000_ADAPTER Adapter = TxQueue->Adapter;
     PE1000_TX_BUFFER TxBuffer;
     volatile PE1000_TRANSMIT_DESCRIPTOR TxDesc;
-    PMDL Mdl;
     ULONG DataLength;
-    ULONG DataOffset;
-    PVOID VirtualAddress;
     NDIS_PHYSICAL_ADDRESS PhysicalAddress;
+    ULONG SegmentLength;
     ULONG TxIndex;
-    ULONG DescriptorsNeeded = 1;  /* At minimum we need 1 descriptor */
+    ULONG DescriptorsNeeded = 0;
+    ULONG Descriptor;
+    E1000_TX_CURSOR Cursor;
+    NDIS_STATUS Status;
+    UCHAR Command;
+    UCHAR ChecksumOffset = 0;
+    UCHAR ChecksumStart = 0;
     NDIS_TCP_IP_CHECKSUM_NET_BUFFER_LIST_INFO ChecksumInfo;
 
     /* Get data length */
@@ -396,8 +474,20 @@ E1000TransmitNetBuffer(
         return NDIS_STATUS_INVALID_LENGTH;
     }
 
+    E1000InitializeTxCursor(&Cursor, NetBuffer);
+    do
+    {
+        Status = E1000NextTxSegment(&Cursor, &PhysicalAddress, &SegmentLength);
+        if (Status != NDIS_STATUS_SUCCESS)
+        {
+            return Status;
+        }
+
+        DescriptorsNeeded++;
+    } while (Cursor.Remaining != 0);
+
     /* Check if we have enough descriptors */
-    if (TxQueue->Available < (LONG)DescriptorsNeeded)
+    if (TxQueue->Available <= (LONG)DescriptorsNeeded)
     {
         /*
          * TX Queue Flow Control:
@@ -411,47 +501,9 @@ E1000TransmitNetBuffer(
         return NDIS_STATUS_RESOURCES;
     }
 
-    /* Get the MDL and data */
-    Mdl = NET_BUFFER_CURRENT_MDL(NetBuffer);
-    DataOffset = NET_BUFFER_CURRENT_MDL_OFFSET(NetBuffer);
-
-    /* Map the MDL to get virtual address */
-    VirtualAddress = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
-    if (VirtualAddress == NULL)
-    {
-        return NDIS_STATUS_RESOURCES;
-    }
-
-    VirtualAddress = (PUCHAR)VirtualAddress + DataOffset;
-
-    /* Get physical address */
-    PhysicalAddress = MmGetPhysicalAddress(VirtualAddress);
-
-    /* Get descriptor index */
-    TxIndex = TxQueue->Tail;
-
-    /* Setup TX buffer tracking */
-    TxBuffer = &TxQueue->Buffers[TxIndex];
-    TxBuffer->NetBufferList = NetBufferList;
-    TxBuffer->NetBuffer = NetBuffer;
-    TxBuffer->VirtualAddress = VirtualAddress;
-    TxBuffer->PhysicalAddress = PhysicalAddress;
-    TxBuffer->Length = DataLength;
-    TxBuffer->Flags = E1000_TX_BUFFER_IN_USE | E1000_TX_BUFFER_FIRST_SEG | E1000_TX_BUFFER_LAST_SEG;
-
-    /* Setup TX descriptor */
-    TxDesc = &TxQueue->Descriptors[TxIndex];
-    TxDesc->Address = PhysicalAddress.QuadPart;
-    TxDesc->Length = (USHORT)DataLength;
-    TxDesc->ChecksumOffset = 0;
-    TxDesc->ChecksumStartField = 0;
-    TxDesc->Status = 0;
-    TxDesc->Special = 0;
-
     /* Set command bits */
-    TxDesc->Command = E1000_TXDESC_EOP |    /* End of Packet */
-                      E1000_TXDESC_IFCS |   /* Insert FCS */
-                      E1000_TXDESC_RS;      /* Report Status */
+    Command = E1000_TXDESC_IFCS |   /* Insert FCS */
+              E1000_TXDESC_RS;      /* Report Status */
 
     /* Check for checksum offload */
     ChecksumInfo.Value = NET_BUFFER_LIST_INFO(NetBufferList, TcpIpChecksumNetBufferListInfo);
@@ -459,23 +511,23 @@ E1000TransmitNetBuffer(
     if (ChecksumInfo.Transmit.TcpChecksum || ChecksumInfo.Transmit.UdpChecksum)
     {
         /* Enable TCP/UDP checksum offload */
-        TxDesc->Command |= E1000_TXDESC_IDE;  /* Interrupt Delay Enable for better batching */
+        Command |= E1000_TXDESC_IDE;  /* Interrupt Delay Enable for better batching */
 
         /* Set checksum start and offset based on protocol */
         if (ChecksumInfo.Transmit.IsIPv4)
         {
             /* IPv4: Checksum starts at IP header (offset 14 for Ethernet) */
-            TxDesc->ChecksumStartField = 14;  /* After Ethernet header */
+            ChecksumStart = 14;  /* After Ethernet header */
 
             if (ChecksumInfo.Transmit.TcpChecksum)
             {
                 /* TCP checksum offset: IP header (20) + TCP checksum field offset (16) */
-                TxDesc->ChecksumOffset = (UCHAR)(14 + 20 + 16);
+                ChecksumOffset = (UCHAR)(14 + 20 + 16);
             }
             else if (ChecksumInfo.Transmit.UdpChecksum)
             {
                 /* UDP checksum offset: IP header (20) + UDP checksum field offset (6) */
-                TxDesc->ChecksumOffset = (UCHAR)(14 + 20 + 6);
+                ChecksumOffset = (UCHAR)(14 + 20 + 6);
             }
         }
 
@@ -486,12 +538,53 @@ E1000TransmitNetBuffer(
         }
     }
 
+    E1000InitializeTxCursor(&Cursor, NetBuffer);
+
+    for (Descriptor = 0; Descriptor < DescriptorsNeeded; Descriptor++)
+    {
+        E1000NextTxSegment(&Cursor, &PhysicalAddress, &SegmentLength);
+
+        /* Get descriptor index */
+        TxIndex = TxQueue->Tail;
+
+        /* Setup TX buffer tracking */
+        TxBuffer = &TxQueue->Buffers[TxIndex];
+        TxBuffer->NetBufferList = NULL;
+        TxBuffer->NetBuffer = NetBuffer;
+        TxBuffer->VirtualAddress = NULL;
+        TxBuffer->PhysicalAddress = PhysicalAddress;
+        TxBuffer->Length = SegmentLength;
+        TxBuffer->Flags = E1000_TX_BUFFER_IN_USE;
+
+        /* Setup TX descriptor */
+        TxDesc = &TxQueue->Descriptors[TxIndex];
+        TxDesc->Address = PhysicalAddress.QuadPart;
+        TxDesc->Length = (USHORT)SegmentLength;
+        TxDesc->ChecksumOffset = ChecksumOffset;
+        TxDesc->ChecksumStartField = ChecksumStart;
+        TxDesc->Status = 0;
+        TxDesc->Special = 0;
+        TxDesc->Command = Command;
+
+        if (Descriptor == 0)
+        {
+            TxBuffer->Flags |= E1000_TX_BUFFER_FIRST_SEG;
+        }
+
+        if (Descriptor + 1 == DescriptorsNeeded)
+        {
+            TxBuffer->NetBufferList = NetBufferList;
+            TxBuffer->Flags |= E1000_TX_BUFFER_LAST_SEG;
+            TxDesc->Command |= E1000_TXDESC_EOP;    /* End of Packet */
+        }
+
+        TxQueue->Tail = (TxIndex + 1) % TxQueue->Count;
+    }
+
     /* Memory barrier before updating tail */
     KeMemoryBarrier();
 
-    /* Advance tail pointer */
-    TxQueue->Tail = (TxIndex + 1) % TxQueue->Count;
-    InterlockedDecrement(&TxQueue->Available);
+    InterlockedExchangeAdd(&TxQueue->Available, -(LONG)DescriptorsNeeded);
 
     /* Update statistics */
     InterlockedExchangeAdd64((LONG64*)&TxQueue->BytesSent, DataLength);
