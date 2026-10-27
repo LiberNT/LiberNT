@@ -686,6 +686,47 @@ KiClearDpcRequestState(
     Prcb->DpcInterruptRequested = FALSE;
 }
 
+FORCEINLINE
+BOOLEAN
+KiIsDpcThreadActive(
+    _In_ PKPRCB Prcb)
+{
+    return Prcb->DpcThreadActive != FALSE;
+}
+
+FORCEINLINE
+BOOLEAN
+KiIsDpcThreadRequested(
+    _In_ PKPRCB Prcb)
+{
+    return Prcb->DpcThreadRequested != FALSE;
+}
+
+FORCEINLINE
+VOID
+KiSetDpcThreadActive(
+    _Inout_ PKPRCB Prcb)
+{
+    Prcb->DpcThreadActive = TRUE;
+}
+
+FORCEINLINE
+VOID
+KiSetDpcThreadRequested(
+    _Inout_ PKPRCB Prcb)
+{
+    Prcb->DpcThreadRequested = TRUE;
+}
+
+FORCEINLINE
+VOID
+KiClearDpcThreadState(
+    _Inout_ PKPRCB Prcb)
+{
+    Prcb->DpcThreadActive = FALSE;
+    Prcb->DpcThreadRequested = FALSE;
+}
+
 #define KiPrcbDpcTimeCount(Prcb) ((Prcb)->DpcTimeCount)
 #define KiPrcbDpcTimeLimit(Prcb) ((Prcb)->DpcTimeLimit)
 #define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchdogCount)

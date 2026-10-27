@@ -1023,6 +1023,8 @@ VOID KiReportCpuFeatures(IN PKPRCB Prcb);
 
 #define KI_DPC_NORMAL_PROCESSING_REQUESTED 0x00000002L
 #define KI_DPC_NORMAL_DPC_PRESENT          0x00000010L
+#define KI_DPC_THREAD_ACTIVE               0x00010000L
+#define KI_DPC_THREAD_REQUESTED            0x00020000L
 
 FORCEINLINE
 BOOLEAN
@@ -1062,6 +1064,46 @@ KiClearDpcRequestState(
     _Inout_ PKPRCB Prcb)
 {
     InterlockedAnd(&Prcb->DpcRequestSummary, ~(KI_DPC_NORMAL_PROCESSING_REQUESTED | KI_DPC_NORMAL_DPC_PRESENT));
+}
+
+FORCEINLINE
+BOOLEAN
+KiIsDpcThreadActive(
+    _In_ PKPRCB Prcb)
+{
+    return (Prcb->DpcRequestSummary & KI_DPC_THREAD_ACTIVE) != 0;
+}
+
+FORCEINLINE
+BOOLEAN
+KiIsDpcThreadRequested(
+    _In_ PKPRCB Prcb)
+{
+    return (Prcb->DpcRequestSummary & KI_DPC_THREAD_REQUESTED) != 0;
+}
+
+FORCEINLINE
+VOID
+KiSetDpcThreadActive(
+    _Inout_ PKPRCB Prcb)
+{
+    InterlockedOr(&Prcb->DpcRequestSummary, KI_DPC_THREAD_ACTIVE);
+}
+
+FORCEINLINE
+VOID
+KiSetDpcThreadRequested(
+    _Inout_ PKPRCB Prcb)
+{
+    InterlockedOr(&Prcb->DpcRequestSummary, KI_DPC_THREAD_REQUESTED);
+}
+
+FORCEINLINE
+VOID
+KiClearDpcThreadState(
+    _Inout_ PKPRCB Prcb)
+{
+    InterlockedAnd(&Prcb->DpcRequestSummary, ~(KI_DPC_THREAD_ACTIVE | KI_DPC_THREAD_REQUESTED));
 }
 
 #define KiPrcbDpcTimeCount(Prcb) ((Prcb)->DpcTimeCount)

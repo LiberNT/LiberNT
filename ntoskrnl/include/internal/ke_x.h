@@ -900,7 +900,7 @@ KiAcquireDeviceQueueLock(IN PKDEVICE_QUEUE DeviceQueue,
                          IN PKLOCK_QUEUE_HANDLE DeviceLock)
 {
     /* Check if we were called from a threaded DPC */
-    if (KeGetCurrentPrcb()->DpcThreadActive)
+    if (KiIsDpcThreadActive(KeGetCurrentPrcb()))
     {
         /* Lock the Queue, we're not at DPC level */
         KeAcquireInStackQueuedSpinLock(&DeviceQueue->Lock, DeviceLock);
@@ -919,7 +919,7 @@ VOID
 KiReleaseDeviceQueueLock(IN PKLOCK_QUEUE_HANDLE DeviceLock)
 {
     /* Check if we were called from a threaded DPC */
-    if (KeGetCurrentPrcb()->DpcThreadActive)
+    if (KiIsDpcThreadActive(KeGetCurrentPrcb()))
     {
         /* Unlock the Queue, we're not at DPC level */
         KeReleaseInStackQueuedSpinLock(DeviceLock);

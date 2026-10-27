@@ -125,14 +125,13 @@ KiExecuteDpc(
             Dpc = KiPopThreadedDpc(DpcData);
             if (!Dpc)
             {
-                Prcb->DpcThreadActive = FALSE;
-                Prcb->DpcThreadRequested = FALSE;
+                KiClearDpcThreadState(Prcb);
                 KiReleaseSpinLock(&DpcData->DpcLock);
                 KeLowerIrql(OldIrql);
                 break;
             }
 
-            Prcb->DpcThreadActive = TRUE;
+            KiSetDpcThreadActive(Prcb);
             InterlockedOrAffinity((volatile LONG_PTR *)&Dpc->ProcessorHistory, (LONG_PTR)AFFINITY_MASK(Prcb->Number));
             InterlockedExchangePointer(&KiActiveThreadedDpc[Prcb->Number], Dpc);
             Dpc->DpcData = NULL;
@@ -1071,9 +1070,9 @@ KeInsertQueueDpc(IN PKDPC Dpc,
         if (&Prcb->DpcData[DPC_THREADED] == DpcData)
         {
             /* Make sure a threaded DPC isn't already active */
-            if (!(Prcb->DpcThreadActive) && !(Prcb->DpcThreadRequested))
+            if (!KiIsDpcThreadActive(Prcb) && !KiIsDpcThreadRequested(Prcb))
             {
-                Prcb->DpcThreadRequested = TRUE;
+                KiSetDpcThreadRequested(Prcb);
                 WakeDpcThread = TRUE;
             }
         }
