@@ -133,6 +133,29 @@ BEGIN
     LTEXT "To close this wizard, click Finish.", IDC_STATUSTEXT, 114, 166, 193, 8
 END
 
+IDD_SELECTDRIVERPAGE DIALOGEX 0, 0, 317, 143
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Add Hardware Wizard"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    ICON "", IDC_SELDRVICON, 14, 8, 20, 20
+    LTEXT "Select the manufacturer and model of your hardware device and then click Next. If you have a disk that contains the driver you want to install, click Have Disk.", IDC_STATUSTEXT, 44, 8, 266, 26
+    CONTROL "", IDC_MFGLIST, "SysListView32", WS_BORDER | WS_GROUP | WS_TABSTOP | LVS_REPORT | LVS_NOSORTHEADER | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SORTASCENDING, 7, 40, 112, 76
+    CONTROL "", IDC_MODELLIST, "SysListView32", WS_BORDER | WS_TABSTOP | LVS_REPORT | LVS_NOSORTHEADER | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SORTASCENDING | LVS_SHAREIMAGELISTS, 125, 40, 185, 76
+    PUSHBUTTON "&Have Disk...", IDC_HAVEDISK, 240, 122, 70, 14
+END
+
+IDD_READYPAGE DIALOGEX 0, 0, 317, 143
+STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Add Hardware Wizard"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT "Hardware to install:", -1, 21, 8, 275, 8
+    ICON "", IDC_READYICON, 28, 24, 20, 20
+    LTEXT "", IDC_READYDEVICE, 58, 30, 238, 8, SS_NOPREFIX
+    LTEXT "To start installing your new hardware, click Next.", IDC_STATUSTEXT, 21, 60, 275, 8
+END
+
 STRINGTABLE
 BEGIN
     IDS_CPLNAME "Hardware toevoegen"
@@ -143,5 +166,14 @@ BEGIN
     IDS_PROBELISTTITLE "The following hardware is already installed on your computer"
     IDS_ADDNEWDEVICE "Add a new hardware device"
     IDS_SELECTWAYTITLE "The wizard can help you install other hardware"
+    IDS_NOTFOUNDTITLE "The wizard did not find any new hardware on your computer"
+    IDS_NOTFOUNDTEXT "If you know the specific hardware model you want to install, click Next to select it from a list."
+    IDS_FOUNDTITLE "The wizard found the following hardware on your computer"
+    IDS_SELECTDRIVERTITLE "Select the device driver you want to install for this hardware."
+    IDS_READYTITLE "The wizard is ready to install your hardware"
+    IDS_SHOWALLDEVICES "Show All Devices"
+    IDS_MANUFACTURER "Manufacturer"
+    IDS_MODEL "Model"
+    IDS_INFFILTER "Setup Information (*.inf)"
     IDS_HDTYPESTITLE "From the list below, select the type of hardware you are installing"
 END
