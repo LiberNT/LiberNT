@@ -538,21 +538,69 @@ IopFindDmaResource(IN PIO_RESOURCE_DESCRIPTOR IoDesc, IN OPTIONAL PCM_RESOURCE_L
 }
 
 static
-KAFFINITY
+BOOLEAN
 IopInterruptPolicyAffinity(
     _In_ PIO_RESOURCE_DESCRIPTOR IoDesc,
-    _In_ KAFFINITY Allowed)
+    _In_ BOOLEAN Message,
+    _In_ KAFFINITY Allowed,
+    _Out_ PKAFFINITY Affinity)
 {
     KAFFINITY Targeted;
 
-    if (!(IoDesc->Flags & CM_RESOURCE_INTERRUPT_POLICY_INCLUDED) ||
-        IoDesc->u.Interrupt.AffinityPolicy != IrqPolicySpecifiedProcessors)
+    *Affinity = Allowed;
+    if (!(IoDesc->Flags & CM_RESOURCE_INTERRUPT_POLICY_INCLUDED))
+        return TRUE;
+
+    Targeted = IoDesc->u.Interrupt.TargetedProcessors;
+    if (IoDesc->u.Interrupt.AffinityPolicy > IrqPolicyAllProcessorsInMachineWhenSteered)
+        return !Message && Targeted != 0;
+
+    if (IoDesc->u.Interrupt.AffinityPolicy == IrqPolicySpreadMessagesAcrossAllProcessors || Targeted == 0)
+        return TRUE;
+
+    if (Targeted & ~KeQueryActiveProcessors())
+        return !Message;
+
+    *Affinity = Targeted;
+    return TRUE;
+}
+
+static
+KAFFINITY
+IopSpreadMessageAffinity(
+    _In_opt_ PCM_RESOURCE_LIST ResourceList)
+{
+    KAFFINITY Active = KeQueryActiveProcessors();
+    PCM_PARTIAL_RESOURCE_LIST Partial;
+    ULONG Index = 0, Count = 0, i;
+
+    if (ResourceList)
     {
-        return Allowed;
+        Partial = &ResourceList->List[0].PartialResourceList;
+        for (i = 0; i < Partial->Count; i++)
+        {
+            if (Partial->PartialDescriptors[i].Type == CmResourceTypeInterrupt &&
+                (Partial->PartialDescriptors[i].Flags & CM_RESOURCE_INTERRUPT_MESSAGE))
+            {
+                Index++;
+            }
+        }
     }
 
-    Targeted = IoDesc->u.Interrupt.TargetedProcessors & KeQueryActiveProcessors();
-    return Targeted ? Targeted : Allowed;
+    for (i = 0; i < sizeof(KAFFINITY) * 8; i++)
+    {
+        if (Active & ((KAFFINITY)1 << i))
+            Count++;
+    }
+
+    Index %= Count;
+    for (i = 0; i < sizeof(KAFFINITY) * 8; i++)
+    {
+        if ((Active & ((KAFFINITY)1 << i)) && Index-- == 0)
+            break;
+    }
+
+    return (KAFFINITY)1 << i;
 }
 
 static
@@ -582,6 +630,7 @@ IopFindInterruptResource(
         HAL_MESSAGE_ROUTING_INFO RoutingInfo;
         NTSTATUS RoutingStatus;
         ULONG MessageCount;
+        KAFFINITY PolicyAffinity;
 
         /* A token/token pair requests one MSI-X message. For MSI, the
          * distance from MinimumVector to the token encodes the block size. */
@@ -604,6 +653,12 @@ IopFindInterruptResource(
         if (MessageCount == 0 || MessageCount > 32 || (MessageCount & (MessageCount - 1)) != 0)
             return FALSE;
 
+        if (!IopInterruptPolicyAffinity(IoDesc, TRUE, 0, &PolicyAffinity))
+        {
+            DPRINT1("MSI: the interrupt affinity policy cannot be satisfied\n");
+            return FALSE;
+        }
+
         RtlZeroMemory(&RoutingInfo, sizeof(RoutingInfo));
         RoutingInfo.Version = HAL_MESSAGE_ROUTING_INFO_VERSION;
         RoutingInfo.Flags = HAL_MSI_ROUTING_ALLOCATE_VECTOR;
@@ -624,7 +679,7 @@ IopFindInterruptResource(
         CmDesc->ShareDisposition = IoDesc->ShareDisposition;
         CmDesc->u.Interrupt.Level = RoutingInfo.Irql;
         CmDesc->u.Interrupt.Vector = RoutingInfo.Vector;
-        CmDesc->u.Interrupt.Affinity = IopInterruptPolicyAffinity(IoDesc, RoutingInfo.TargetProcessors);
+        CmDesc->u.Interrupt.Affinity = PolicyAffinity ? PolicyAffinity : RoutingInfo.TargetProcessors;
         if (MessageCountOut)
             *MessageCountOut = MessageCount;
         DPRINT("MSI: allocated vector 0x%lx count %lu at irql %u\n",
@@ -636,6 +691,13 @@ IopFindInterruptResource(
     {
         ULONG LegacyMin = IoDesc->u.Interrupt.MinimumVector;
         ULONG LegacyMax = IoDesc->u.Interrupt.MaximumVector;
+        KAFFINITY LineAffinity;
+
+        if (!IopInterruptPolicyAffinity(IoDesc, FALSE, (KAFFINITY)-1, &LineAffinity))
+        {
+            DPRINT1("IopFindInterruptResource: the interrupt affinity policy cannot be satisfied\n");
+            return FALSE;
+        }
 
 #ifdef IOP_LINE_INTERRUPT_LIMIT
         /* Fixed requirements (min == max) are firmware-assigned lines: let
@@ -667,7 +729,7 @@ IopFindInterruptResource(
         {
             CmDesc->u.Interrupt.Vector = Vector;
             CmDesc->u.Interrupt.Level = Vector;
-            CmDesc->u.Interrupt.Affinity = IopInterruptPolicyAffinity(IoDesc, (KAFFINITY)-1);
+            CmDesc->u.Interrupt.Affinity = LineAffinity;
 
             if (!IopCheckDescriptorForConflict(CmDesc, PendingList, NULL, DeviceNode))
             {
@@ -730,6 +792,7 @@ IopFixupResourceListWithRequirements(IN PIO_RESOURCE_REQUIREMENTS_LIST Requireme
     BOOLEAN AlternateRequired = FALSE;
     PBOOLEAN BootUsed = NULL;
     PIO_RESOURCE_LIST ResList;
+    KAFFINITY BootAffinity;
     NTSTATUS Status = STATUS_CONFLICTING_ADDRESSES;
 
     /* Save the initial resource count when we got here so we can restore if an alternate fails */
@@ -833,6 +896,14 @@ IopFixupResourceListWithRequirements(IN PIO_RESOURCE_REQUIREMENTS_LIST Requireme
                 switch (IoDesc->Type)
                 {
                     case CmResourceTypeInterrupt:
+                        if (!IopInterruptPolicyAffinity(IoDesc,
+                                                        (IoDesc->Flags & CM_RESOURCE_INTERRUPT_MESSAGE) != 0,
+                                                        0,
+                                                        &BootAffinity))
+                        {
+                            break;
+                        }
+
                         /* Each MSI-X requirement consumes a distinct boot
                          * message. Never reuse a vector just allocated for
                          * another requirement in this alternative. */
@@ -861,6 +932,9 @@ IopFixupResourceListWithRequirements(IN PIO_RESOURCE_REQUIREMENTS_LIST Requireme
                                    IoDesc->u.Interrupt.MaximumVector,
                                    IoDesc->Flags);
                         }
+
+                        if (Matched && BootAffinity)
+                            CmDesc->u.Interrupt.Affinity = BootAffinity;
                         break;
 
                     case CmResourceTypeMemoryLarge:
@@ -1087,6 +1161,14 @@ IopFixupResourceListWithRequirements(IN PIO_RESOURCE_REQUIREMENTS_LIST Requireme
                     {
                         NewDesc.u.Interrupt.Vector++;
                         PartialList = &(*ResourceList)->List[0].PartialResourceList;
+                    }
+
+                    if (NewDesc.Type == CmResourceTypeInterrupt &&
+                        (NewDesc.Flags & CM_RESOURCE_INTERRUPT_MESSAGE) &&
+                        (IoDesc->Flags & CM_RESOURCE_INTERRUPT_POLICY_INCLUDED) &&
+                        IoDesc->u.Interrupt.AffinityPolicy == IrqPolicySpreadMessagesAcrossAllProcessors)
+                    {
+                        NewDesc.u.Interrupt.Affinity = IopSpreadMessageAffinity(*ResourceList);
                     }
 
                     /* Figure out what we need */
@@ -1502,7 +1584,8 @@ IopApplyInterruptAffinityPolicy(
     PKEY_VALUE_FULL_INFORMATION Info;
     HANDLE DeviceKey, PolicyKey;
     KAFFINITY Override = 0;
-    ULONG Policy;
+    ULONG Policy = IrqPolicyMachineDefault;
+    BOOLEAN HavePolicy = FALSE, HaveOverride;
     ULONG ListIndex, Index;
     NTSTATUS Status;
 
@@ -1518,31 +1601,24 @@ IopApplyInterruptAffinityPolicy(
     if (!NT_SUCCESS(Status))
         return;
 
+    HaveOverride = IopReadAffinityOverride(PolicyKey, &Override) && Override != 0;
+    if (!HaveOverride)
+        Override = 0;
+
     Status = IopGetRegistryValue(PolicyKey, L"DevicePolicy", &Info);
-    if (!NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status))
     {
-        ZwClose(PolicyKey);
-        return;
-    }
-
-    if (Info->Type != REG_DWORD || Info->DataLength != sizeof(ULONG))
-    {
+        if (Info->Type == REG_DWORD && Info->DataLength == sizeof(ULONG))
+        {
+            Policy = *(PULONG)((PUCHAR)Info + Info->DataOffset);
+            HavePolicy = TRUE;
+        }
         ExFreePool(Info);
-        ZwClose(PolicyKey);
-        return;
-    }
-
-    Policy = *(PULONG)((PUCHAR)Info + Info->DataOffset);
-    ExFreePool(Info);
-
-    if (Policy > IrqPolicySpreadMessagesAcrossAllProcessors ||
-        (Policy == IrqPolicySpecifiedProcessors && (!IopReadAffinityOverride(PolicyKey, &Override) || Override == 0)))
-    {
-        DPRINT1("PnP: ignoring interrupt affinity policy %lu for %wZ\n", Policy, &DeviceNode->InstancePath);
-        ZwClose(PolicyKey);
-        return;
     }
     ZwClose(PolicyKey);
+
+    if (!HavePolicy && !HaveOverride)
+        return;
 
     List = &Requirements->List[0];
     for (ListIndex = 0; ListIndex < Requirements->AlternativeLists; ListIndex++)
@@ -1555,7 +1631,7 @@ IopApplyInterruptAffinityPolicy(
 
             Descriptor->Flags |= CM_RESOURCE_INTERRUPT_POLICY_INCLUDED;
             Descriptor->u.Interrupt.AffinityPolicy = (IRQ_DEVICE_POLICY)Policy;
-            Descriptor->u.Interrupt.TargetedProcessors = (Policy == IrqPolicySpecifiedProcessors) ? Override : 0;
+            Descriptor->u.Interrupt.TargetedProcessors = Override;
         }
         List = (PIO_RESOURCE_LIST)(List->Descriptors + List->Count);
     }
