@@ -56,6 +56,7 @@ static __inline VOID KiEndDpcExecution(_In_ PKPRCB Prcb, _In_ PKDPC Dpc)
 }
 
 static PVOID volatile KiActiveThreadedDpc[MAXIMUM_PROCESSORS];
+static PKTHREAD KiDpcThread[MAXIMUM_PROCESSORS];
 static KDPC KiDpcThreadWakeDpc[MAXIMUM_PROCESSORS];
 
 static VOID NTAPI
@@ -108,6 +109,7 @@ KiExecuteDpc(
     KIRQL OldIrql;
 
     KeSetSystemAffinityThread(AFFINITY_MASK(Prcb->Number));
+    KiDpcThread[Prcb->Number] = KeGetCurrentThread();
     KeSetPriorityThread(KeGetCurrentThread(), HIGH_PRIORITY);
     KeEnterGuardedRegion();
 
@@ -659,7 +661,8 @@ KiQuantumEnd(VOID)
     {
         /* Check if we're real-time and with quantums disabled */
         if ((Thread->Priority >= LOW_REALTIME_PRIORITY) &&
-            (Thread->ApcState.Process->DisableQuantum))
+            ((Thread->ApcState.Process->DisableQuantum) ||
+             (Thread == KiDpcThread[Prcb->Number])))
         {
             /* Otherwise, set maximum quantum */
             KiSetThreadQuantum(Thread, MAX_QUANTUM);
