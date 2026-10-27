@@ -20,6 +20,7 @@ EXTERN KiSystemFatalException:PROC
 EXTERN KiNpxNotAvailableFaultHandler:PROC
 EXTERN KiGeneralProtectionFaultHandler:PROC
 EXTERN KiInvalidOpcodeFaultHandler:PROC
+EXTERN KiFloatingErrorHandler:PROC
 EXTERN KiXmmExceptionHandler:PROC
 EXTERN KiMcheckAbortHandler:PROC
 EXTERN KiDeliverApc:PROC
@@ -710,7 +711,15 @@ FUNC KiFloatingErrorFault
     /* Push pseudo error code */
     EnterTrap TF_SAVE_ALL
 
-    int 3
+    mov rcx, rbp
+    call KiFloatingErrorHandler
+
+    test dword ptr [rbp + KTRAP_FRAME_EFlags], EFLAGS_IF_MASK
+    jz KiFloatingErrorDispatch
+    sti
+
+KiFloatingErrorDispatch:
+    DispatchException eax, 1, 0, 0, 0
 
     /* Return */
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)

@@ -867,6 +867,39 @@ KiMcheckAbortHandler(
 
 NTSTATUS
 NTAPI
+KiFloatingErrorHandler(
+    IN PKTRAP_FRAME TrapFrame)
+{
+    XSAVE_FORMAT Area;
+    USHORT Error;
+
+    UNREFERENCED_PARAMETER(TrapFrame);
+
+    _fxsave64(&Area);
+    Error = Area.StatusWord & ~Area.ControlWord &
+            (FSW_INVALID_OPERATION | FSW_DENORMAL | FSW_ZERO_DIVIDE |
+             FSW_OVERFLOW | FSW_UNDERFLOW | FSW_PRECISION);
+
+    if (Error & FSW_INVALID_OPERATION)
+    {
+        return (Area.StatusWord & FSW_STACK_FAULT) ? STATUS_FLOAT_STACK_CHECK :
+                                                     STATUS_FLOAT_INVALID_OPERATION;
+    }
+    if (Error & FSW_ZERO_DIVIDE)
+        return STATUS_FLOAT_DIVIDE_BY_ZERO;
+    if (Error & FSW_DENORMAL)
+        return STATUS_FLOAT_INVALID_OPERATION;
+    if (Error & FSW_OVERFLOW)
+        return STATUS_FLOAT_OVERFLOW;
+    if (Error & FSW_UNDERFLOW)
+        return STATUS_FLOAT_UNDERFLOW;
+    if (Error & FSW_PRECISION)
+        return STATUS_FLOAT_INEXACT_RESULT;
+    return STATUS_FLOAT_INVALID_OPERATION;
+}
+
+NTSTATUS
+NTAPI
 KiXmmExceptionHandler(
     IN PKTRAP_FRAME TrapFrame)
 {
