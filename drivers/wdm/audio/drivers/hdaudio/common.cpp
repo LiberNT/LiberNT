@@ -1083,6 +1083,7 @@ CAdapterCommon::FindPinConverter(
     IN ULONG NodeId,
     IN UCHAR Digital,
     IN ULONG Depth,
+    IN ULONG Required,
     OUT PULONG Converter)
 {
     CFunctionGroupNode *OutNode = (CFunctionGroupNode *)Node;
@@ -1098,7 +1099,15 @@ CAdapterCommon::FindPinConverter(
 
         if (!Connected)
             continue;
-        if (Connected->NodeType == 0x00 && Connected->Digital == Digital)
+        if (Connected->NodeType == 0x00 && Connected->Digital == Digital && Required)
+        {
+            if (Connected->NodeId == Required)
+            {
+                *Converter = Required;
+                Found = TRUE;
+            }
+        }
+        else if (Connected->NodeType == 0x00 && Connected->Digital == Digital)
         {
             ULONG Claimed;
 
@@ -1116,7 +1125,7 @@ CAdapterCommon::FindPinConverter(
         }
         else if (Connected->NodeType == 0x02 || Connected->NodeType == 0x03)
         {
-            Found = FindPinConverter(Node, Connected->NodeId, Digital, Depth + 1, Converter);
+            Found = FindPinConverter(Node, Connected->NodeId, Digital, Depth + 1, Required, Converter);
         }
 
         if (Found)
@@ -1450,8 +1459,13 @@ CAdapterCommon::ProcessOutputNodes(
                                                              AssociatedConfiguration.DefaultDevice == 0x2,
                                                          1, 0, 0, 0);
                         }
-                        if (FindPinConverter((PVOID)OutNode, AssociatedPins[PinIndex], NodeContext->Digital, 0,
-                                             &Converter))
+                        if (AssociatedConfiguration.DefaultDevice == 0x2 && DacNodeCount)
+                        {
+                            FindPinConverter((PVOID)OutNode, AssociatedPins[PinIndex], NodeContext->Digital, 0,
+                                             DacNodes[0], &Converter);
+                        }
+                        else if (FindPinConverter((PVOID)OutNode, AssociatedPins[PinIndex], NodeContext->Digital, 0, 0,
+                                                  &Converter))
                         {
                             DacNodes[DacNodeCount++] = Converter;
                         }

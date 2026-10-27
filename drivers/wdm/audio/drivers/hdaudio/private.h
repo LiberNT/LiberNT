@@ -183,7 +183,7 @@ class CAdapterCommon : public CUnknownImpl<IAdapterPowerManagement>
         IN PULONG AssociatedPins,
         IN UCHAR Digital);
     VOID NTAPI ClearRef(IN ULONG RefValue, IN ULONG NodeCount, IN PULONG Nodes);
-    BOOLEAN NTAPI FindPinConverter(IN PVOID Node, IN ULONG NodeId, IN UCHAR Digital, IN ULONG Depth, OUT PULONG Converter);
+    BOOLEAN NTAPI FindPinConverter(IN PVOID Node, IN ULONG NodeId, IN UCHAR Digital, IN ULONG Depth, IN ULONG Required, OUT PULONG Converter);
     NTSTATUS
     NTAPI
     ProcessDacNodes(
