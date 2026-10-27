@@ -371,6 +371,7 @@ class CFunctionGroupNode
     NTSTATUS NTAPI GetAmplifierDetails(IN ULONG NodeId, IN ULONG Input, OUT PAMPLIFIER_CAPABILITIES Caps);
     NTSTATUS NTAPI GetAmplifierGainMute(IN ULONG NodeId, IN ULONG Input, IN ULONG Right, OUT PUCHAR Mute, OUT PUCHAR Gain);
     NTSTATUS NTAPI SetAmplifierGainMute(IN ULONG NodeId, IN ULONG Input, IN ULONG Right, IN UCHAR Mute, IN UCHAR Gain);
+    NTSTATUS NTAPI ActivateAmplifier(IN ULONG NodeId, IN ULONG Input, IN ULONG Index);
     NTSTATUS NTAPI GetPinCapabilities(IN ULONG NodeId, OUT PPIN_CAPABILITIES PinCaps);
     NTSTATUS NTAPI GetPinSense(IN ULONG NodeId, IN PULONG DevicePresent);
     NTSTATUS NTAPI GetVolumeKnob(IN ULONG NodeId, OUT PUCHAR Direct, OUT PUCHAR Volume);

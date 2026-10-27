@@ -1123,6 +1123,9 @@ CAdapterCommon::FindPinConverter(
         {
             if (NodeContext->ConnectionCount > 1 && NodeContext->NodeType != 0x02)
                 OutNode->SetConnectionSelect(NodeId, (UCHAR)Index);
+            if (NodeContext->NodeType == 0x02 || NodeContext->NodeType == 0x03)
+                OutNode->ActivateAmplifier(NodeId, 1, Index);
+            OutNode->ActivateAmplifier(NodeId, 0, 0);
             return TRUE;
         }
     }
@@ -1743,22 +1746,34 @@ CAdapterCommon::ProcessInputNodes(
                 Found = TRUE;
 
                 PNODE_CONTEXT AdcContext = OutNode->FindNodeId(AdcNode);
-                if (AdcContext && AdcContext->ConnectionCount > 1)
+                for (ULONG CIndex = 0; AdcContext && CIndex < AdcContext->ConnectionCount; CIndex++)
                 {
-                    for (ULONG CIndex = 0; CIndex < AdcContext->ConnectionCount; CIndex++)
+                    ULONG Reached = (AdcContext->Connections[CIndex] == PinId);
+                    if (!Reached &&
+                        !NT_SUCCESS(IsInputNodeConnectedToPin(OutNode, PinContext->Digital, AdcContext->Connections[CIndex],
+                                                              PinId, PinNodeCount, &Reached)))
                     {
-                        ULONG Reached = (AdcContext->Connections[CIndex] == PinId);
-                        if (!Reached &&
-                            !NT_SUCCESS(IsInputNodeConnectedToPin(OutNode, PinContext->Digital, AdcContext->Connections[CIndex],
-                                                                  PinId, PinNodeCount, &Reached)))
-                        {
-                            Reached = 0;
-                        }
-                        if (Reached)
-                        {
+                        Reached = 0;
+                    }
+                    if (Reached)
+                    {
+                        PNODE_CONTEXT Mixer = OutNode->FindNodeId(AdcContext->Connections[CIndex]);
+
+                        if (AdcContext->ConnectionCount > 1)
                             OutNode->SetConnectionSelect(AdcNode, (UCHAR)CIndex);
+                        OutNode->ActivateAmplifier(AdcNode, 1, CIndex);
+                        for (ULONG MIndex = 0; Mixer && (Mixer->NodeType == 0x02 || Mixer->NodeType == 0x03) &&
+                                               MIndex < Mixer->ConnectionCount; MIndex++)
+                        {
+                            if (Mixer->Connections[MIndex] != PinId)
+                                continue;
+                            if (Mixer->ConnectionCount > 1 && Mixer->NodeType == 0x03)
+                                OutNode->SetConnectionSelect(Mixer->NodeId, (UCHAR)MIndex);
+                            OutNode->ActivateAmplifier(Mixer->NodeId, 1, MIndex);
+                            OutNode->ActivateAmplifier(Mixer->NodeId, 0, 0);
                             break;
                         }
+                        break;
                     }
                 }
             }

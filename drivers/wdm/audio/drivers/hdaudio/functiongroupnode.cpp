@@ -725,6 +725,28 @@ CFunctionGroupNode::SetAmplifierGainMute(
 
 NTSTATUS
 NTAPI
+CFunctionGroupNode::ActivateAmplifier(
+    IN ULONG NodeId,
+    IN ULONG Input,
+    IN ULONG Index)
+{
+    AMPLIFIER_CAPABILITIES Caps;
+    ULONG Verb;
+    ULONG Response = 0;
+    NTSTATUS Status;
+
+    Status = GetAmplifierDetails(NodeId, Input, &Caps);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Verb = (m_CodecAddress << 28) | (NodeId << 20) | (AC_VERB_SET_AMP_GAIN_MUTE << 8) |
+    (Input ? AC_AMP_SET_INPUT : AC_AMP_SET_OUTPUT) | AC_AMP_SET_LEFT | AC_AMP_SET_RIGHT |
+    ((Index << AC_AMP_SET_INDEX_SHIFT) & AC_AMP_SET_INDEX) | (Caps.Offset & AC_AMP_GAIN);
+    return m_Adapter->TransferVerb(Verb, &Response);
+}
+
+NTSTATUS
+NTAPI
 CFunctionGroupNode::EnableUnsolicitedResponse(
     IN ULONG NodeId,
     IN UCHAR Enable,
