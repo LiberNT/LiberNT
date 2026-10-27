@@ -20,6 +20,7 @@ list(APPEND SOURCE
     FindExecutable.cpp
     GetDisplayNameOf.cpp
     GUIDFromString.cpp
+    IconPositions.cpp
     LockServer.cpp
     Int64ToString.cpp
     IShellFolderViewCB.cpp
