@@ -200,11 +200,12 @@ if(ARCH STREQUAL "i386")
         i386/NtCreateThread.S
     )
 elseif(ARCH STREQUAL "amd64")
-    list(APPEND SOURCE SyscallStub.c)
+    list(APPEND SOURCE SyscallStub.c x87Exception.c)
     add_asm_files(ntdll_apitest_asm
         ../crt/amd64/setjmp_helper.s
         amd64/NtContinue.S
         amd64/NtCreateThread.S
+        amd64/x87Exception.S
     )
 endif()
 

@@ -52,6 +52,7 @@ extern void func_NtContinue(void);
 #endif
 #ifdef _M_AMD64
 extern void func_SyscallStub(void);
+extern void func_x87Exception(void);
 #endif
 extern void func_NtCreateFile(void);
 extern void func_NtCreateKey(void);
@@ -226,6 +227,7 @@ const struct test winetest_testlist[] =
 #endif
 #ifdef _M_AMD64
     { "SyscallStub",                    func_SyscallStub },
+    { "x87Exception",                   func_x87Exception },
 #endif
     { "NtCreateFile",                   func_NtCreateFile },
     { "NtCreateKey",                    func_NtCreateKey },
