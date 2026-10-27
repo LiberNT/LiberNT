@@ -132,7 +132,7 @@ VidFbGetDisplaySize(
 {
     EFI_GRAPHICS_OUTPUT_PROTOCOL* Gop = FwGetGop();
     EFI_UGA_DRAW_PROTOCOL* Uga;
-    UINT32 ColorDepth, RefreshRate;
+    UINT32 UgaWidth, UgaHeight, ColorDepth, RefreshRate;
 
     if (Gop)
     {
@@ -142,11 +142,16 @@ VidFbGetDisplaySize(
     else
     {
         Uga = FwGetUga();
-        if (!Uga || EFI_ERROR(Uga->GetMode(Uga, Width, Height, &ColorDepth, &RefreshRate)) ||
+        if (!Uga || EFI_ERROR(Uga->GetMode(Uga, &UgaWidth, &UgaHeight, &ColorDepth, &RefreshRate)) ||
             (ColorDepth != FW_COLOR_DEPTH))
         {
             *Width = 0;
             *Height = 0;
+        }
+        else
+        {
+            *Width = UgaWidth;
+            *Height = UgaHeight;
         }
     }
 
@@ -164,6 +169,7 @@ VidFbPresent(
     EFI_GRAPHICS_OUTPUT_PROTOCOL* Gop = FwGetGop();
     EFI_UGA_DRAW_PROTOCOL* Uga;
     ULONG ScreenWidth, ScreenHeight;
+    UINT32 UgaWidth, UgaHeight;
 
     if (Gop)
     {
@@ -175,11 +181,14 @@ VidFbPresent(
         UINT32 ColorDepth, RefreshRate;
 
         Uga = FwGetUga();
-        if (!Uga || EFI_ERROR(Uga->GetMode(Uga, &ScreenWidth, &ScreenHeight, &ColorDepth, &RefreshRate)) ||
+        if (!Uga || EFI_ERROR(Uga->GetMode(Uga, &UgaWidth, &UgaHeight, &ColorDepth, &RefreshRate)) ||
             (ColorDepth != FW_COLOR_DEPTH))
         {
             return;
         }
+
+        ScreenWidth = UgaWidth;
+        ScreenHeight = UgaHeight;
     }
 
     if (Left >= ScreenWidth || Top >= ScreenHeight)
