@@ -703,6 +703,7 @@ DestroyClassInstallParams(struct ClassInstallParams* installParams)
 {
     HeapFree(GetProcessHeap(), 0, installParams->PropChangeParams);
     HeapFree(GetProcessHeap(), 0, installParams->AddPropertyPageData);
+    HeapFree(GetProcessHeap(), 0, installParams->DetectDeviceParams);
     return TRUE;
 }
 
@@ -5696,11 +5697,17 @@ BOOL WINAPI SetupDiCallClassInstaller(
             HKEY hKey;
             DWORD dwRegType, dwLength;
             DWORD rc = NO_ERROR;
+            LPGUID ClassGuid;
 
             InitializeListHead(&ClassCoInstallersListHead);
             InitializeListHead(&DeviceCoInstallersListHead);
 
-            if (CanHandle & DEVICE_COINSTALLER)
+            if (DeviceInfoData)
+                ClassGuid = &DeviceInfoData->ClassGuid;
+            else
+                ClassGuid = &((struct DeviceInfoSet *)DeviceInfoSet)->ClassGuid;
+
+            if ((CanHandle & DEVICE_COINSTALLER) && DeviceInfoData)
             {
                 hKey = SETUPDI_OpenDrvKey(((struct DeviceInfoSet *)DeviceInfoSet)->HKLM, (struct DeviceInfo *)DeviceInfoData->Reserved, KEY_QUERY_VALUE);
                 if (hKey != INVALID_HANDLE_VALUE)
@@ -5747,7 +5754,7 @@ BOOL WINAPI SetupDiCallClassInstaller(
                 if (rc == ERROR_SUCCESS)
                 {
                     WCHAR szGuidString[40];
-                    if (pSetupStringFromGuid(&DeviceInfoData->ClassGuid, szGuidString, ARRAYSIZE(szGuidString)) == ERROR_SUCCESS)
+                    if (pSetupStringFromGuid(ClassGuid, szGuidString, ARRAYSIZE(szGuidString)) == ERROR_SUCCESS)
                     {
                         rc = RegQueryValueExW(hKey, szGuidString, NULL, &dwRegType, NULL, &dwLength);
                         if (rc == ERROR_SUCCESS && dwRegType == REG_MULTI_SZ)
@@ -5783,7 +5790,7 @@ BOOL WINAPI SetupDiCallClassInstaller(
             }
             if ((CanHandle & CLASS_INSTALLER) && !(InstallParams.FlagsEx & DI_FLAGSEX_CI_FAILED))
             {
-                hKey = SetupDiOpenClassRegKey(&DeviceInfoData->ClassGuid, KEY_QUERY_VALUE);
+                hKey = SetupDiOpenClassRegKey(ClassGuid, KEY_QUERY_VALUE);
                 if (hKey != INVALID_HANDLE_VALUE)
                 {
                     rc = RegQueryValueExW(hKey, REGSTR_VAL_INSTALLER_32, NULL, &dwRegType, NULL, &dwLength);
