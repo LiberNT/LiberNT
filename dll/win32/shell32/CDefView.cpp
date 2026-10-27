@@ -3,6 +3,7 @@
  *
  *    Copyright 1998,1999    <juergen.schmied@debitel.net>
  *    Copyright 2022         Russell Johnson <russell.johnson@superdark.net>
+ *    Copyright 2026         Ahmed ARIF <arif.ing@outlook.com>
  *
  * This is the view visualizing the data provided by the shellfolder.
  * No direct access to data from pidls should be done from here.
@@ -390,7 +391,7 @@ private:
         PITEMID_CHILD pidl;
         POINT point;
     };
-    CSimpleArray<ITEM_POSITION> m_RefreshPositions;
+    CSimpleArray<ITEM_POSITION> m_SavedItemPositions;
     SFVM_CUSTOMVIEWINFO_DATA  m_viewinfo_data;
 
     HICON                     m_hMyComputerIcon;
@@ -408,6 +409,11 @@ private:
     void _DoCopyToMoveToFolder(BOOL bCopy);
     HRESULT ContinueFillList(ULONG Generation);
     void FinishFillList();
+    void ClearSavedItemPositions();
+    void CaptureItemPositions();
+    void ApplySavedItemPositions();
+    HRESULT LoadItemPositions(IStream *pStream);
+    HRESULT SaveItemPositions(IStream *pStream);
     void FireFolderViewEvent(DISPID dispid);
     void CancelFillList();
     bool IsComputerTileView() const;
@@ -820,8 +826,7 @@ CDefView::~CDefView()
 {
     TRACE(" destroying IShellView(%p)\n", this);
 
-    for (int i = 0; i < m_RefreshPositions.GetSize(); ++i)
-        ILFree(m_RefreshPositions[i].pidl);
+    ClearSavedItemPositions();
 
     _DoFolderViewCB(SFVM_VIEWRELEASE, 0, 0);
 
@@ -2149,19 +2154,7 @@ int CDefView::LV_AddItem(PCUITEMID_CHILD pidl)
         lvItem.state = GetItemAttributes(pidl, SFGAO_HIDDEN | SFGAO_GHOSTED) ? LVIS_CUT : 0;
     }
 
-    int index = m_ListView.InsertItem(&lvItem);
-    if (index >= 0 && m_FillListIsRefresh)
-    {
-        for (int i = 0; i < m_RefreshPositions.GetSize(); ++i)
-        {
-            if (ILIsEqual(m_RefreshPositions[i].pidl, pidl))
-            {
-                m_ListView.SetItemPosition(index, &m_RefreshPositions[i].point);
-                break;
-            }
-        }
-    }
-    return index;
+    return m_ListView.InsertItem(&lvItem);
 }
 
 BOOLEAN CDefView::LV_DeleteItem(PCUITEMID_CHILD pidl)
@@ -2333,12 +2326,98 @@ void CDefView::FinishFillList()
 
     _DoFolderViewCB(SFVM_LISTREFRESHED, 0, 0);
 
-    for (int i = 0; i < m_RefreshPositions.GetSize(); ++i)
-        ILFree(m_RefreshPositions[i].pidl);
-    m_RefreshPositions.RemoveAll();
-
+    ApplySavedItemPositions();
     ArrangeComputerView();
     FireFolderViewEvent(DISPID_FILELISTENUMDONE);
+}
+
+void CDefView::ClearSavedItemPositions()
+{
+    for (int i = 0; i < m_SavedItemPositions.GetSize(); ++i)
+        ILFree(m_SavedItemPositions[i].pidl);
+    m_SavedItemPositions.RemoveAll();
+}
+
+void CDefView::CaptureItemPositions()
+{
+    ClearSavedItemPositions();
+    if (!m_ListView || GetAutoArrange() == S_OK || IsComputerTileView())
+        return;
+
+    for (int i = 0; i < m_ListView.GetItemCount(); ++i)
+    {
+        ITEM_POSITION position;
+        PCUITEMID_CHILD pidl = _PidlByItem(i);
+        if (!pidl || !m_ListView.GetItemPosition(i, &position.point))
+            continue;
+        position.pidl = ILClone(pidl);
+        if (position.pidl && !m_SavedItemPositions.Add(position))
+            ILFree(position.pidl);
+    }
+}
+
+void CDefView::ApplySavedItemPositions()
+{
+    if (m_ListView && GetAutoArrange() == S_FALSE && !IsComputerTileView())
+    {
+        for (int i = 0; i < m_SavedItemPositions.GetSize(); ++i)
+        {
+            int nItem = LV_FindItemByPidl(m_SavedItemPositions[i].pidl);
+            if (nItem >= 0)
+                m_ListView.SetItemPosition(nItem, &m_SavedItemPositions[i].point);
+        }
+    }
+    ClearSavedItemPositions();
+}
+
+HRESULT CDefView::LoadItemPositions(IStream *pStream)
+{
+    ClearSavedItemPositions();
+    for (;;)
+    {
+        PIDLIST_RELATIVE pidl = NULL;
+        HRESULT hr = ILLoadFromStream(pStream, &pidl);
+        if (FAILED(hr))
+            return hr;
+
+        ITEM_POSITION position;
+        ULONG read = 0;
+        hr = pStream->Read(&position.point, sizeof(position.point), &read);
+        if (!pidl)
+        {
+            if (FAILED(hr) || read != sizeof(position.point))
+                return S_OK;
+            continue;
+        }
+        if (FAILED(hr) || read != sizeof(position.point) || ILIsEmpty(pidl) || !ILIsSingle(pidl))
+        {
+            ILFree(pidl);
+            ClearSavedItemPositions();
+            return FAILED(hr) ? hr : HResultFromWin32(ERROR_INVALID_DATA);
+        }
+        position.pidl = static_cast<PITEMID_CHILD>(pidl);
+        if (!m_SavedItemPositions.Add(position))
+        {
+            ILFree(pidl);
+            return E_OUTOFMEMORY;
+        }
+    }
+}
+
+HRESULT CDefView::SaveItemPositions(IStream *pStream)
+{
+    HRESULT hr = S_OK;
+    for (int i = 0; SUCCEEDED(hr) && i < m_ListView.GetItemCount(); ++i)
+    {
+        POINT point;
+        PCUITEMID_CHILD pidl = _PidlByItem(i);
+        if (!pidl || !m_ListView.GetItemPosition(i, &point))
+            continue;
+        hr = ILSaveToStream(pStream, pidl);
+        if (SUCCEEDED(hr))
+            hr = pStream->Write(&point, sizeof(point), NULL);
+    }
+    return hr;
 }
 
 void CDefView::FireFolderViewEvent(DISPID dispid)
@@ -4225,24 +4304,8 @@ HRESULT WINAPI CDefView::Refresh()
 {
     TRACE("(%p)\n", this);
 
-    for (int i = 0; i < m_RefreshPositions.GetSize(); ++i)
-        ILFree(m_RefreshPositions[i].pidl);
-    m_RefreshPositions.RemoveAll();
-    if (m_FolderSettings.fFlags & FWF_DESKTOP)
-    {
-        for (int i = 0; i < m_ListView.GetItemCount(); ++i)
-        {
-            ITEM_POSITION position;
-            position.pidl = ILClone(_PidlByItem(i));
-            if (position.pidl && m_ListView.GetItemPosition(i, &position.point))
-            {
-                if (!m_RefreshPositions.Add(position))
-                    ILFree(position.pidl);
-            }
-            else if (position.pidl)
-                ILFree(position.pidl);
-        }
-    }
+    if (!m_pEnumIDList)
+        CaptureItemPositions();
 
     _DoFolderViewCB(SFVM_LISTREFRESHED, TRUE, 0);
 
@@ -4342,6 +4405,15 @@ static HRESULT Read(IStream *pS, LPVOID buffer, ULONG cb)
     return FAILED(hr) ? hr : (cb == read ? S_OK : HResultFromWin32(ERROR_MORE_DATA));
 }
 
+static BOOL GetItemPositionsName(LPWSTR pszName, UINT cchName)
+{
+    static const WCHAR szPrefix[] = L"ItemPos";
+    const UINT cchPrefix = _countof(szPrefix) - 1;
+    if (FAILED(StringCchCopyW(pszName, cchName, szPrefix)))
+        return FALSE;
+    return SHGetPerScreenResName(pszName + cchPrefix, cchName - cchPrefix, 0) > 0;
+}
+
 static DWORD ReadDWORD(IPropertyBag *pPB, LPCWSTR name, DWORD def)
 {
     DWORD value;
@@ -4413,6 +4485,16 @@ HRESULT CDefView::LoadViewState()
     m_FolderSettings.ViewMode = cvs.FolderSettings.ViewMode;
     m_FolderSettings.fFlags &= ~cvs.VALIDFWF;
     m_FolderSettings.fFlags |= cvs.FolderSettings.fFlags & cvs.VALIDFWF;
+    if (pPB && !(m_FolderSettings.fFlags & FWF_AUTOARRANGE))
+    {
+        WCHAR name[MAX_PATH];
+        CComPtr<IStream> pItemPos;
+        if (GetItemPositionsName(name, _countof(name)) &&
+            SUCCEEDED(SHPropertyBag_ReadStream(pPB, name, &pItemPos)))
+        {
+            LoadItemPositions(pItemPos);
+        }
+    }
     if (SUCCEEDED(hrColumns))
     {
         BOOL failed = FALSE;
@@ -4480,17 +4562,19 @@ HRESULT CDefView::SaveViewState(IStream *pStream)
         pStream = cols.Count ? SHCreateMemStream((LPBYTE)&cols, cbColumns) : NULL;
         if (!pStream || FAILED(SHPropertyBag_WriteStream(pPB, L"ColInfo", pStream)))
             SHPropertyBag_Delete(pPB, L"ColInfo");
-#if 0 // TODO
         WCHAR name[MAX_PATH];
-        memcpy(name, L"ItemPos", sizeof(L"ItemPos"));
-        if (SHGetPerScreenResName(name + 7, _countof(name) - 7, 0))
+        if (GetItemPositionsName(name, _countof(name)))
         {
-            if (GetAutoArrange() == S_FALSE)
-                // TODO: Save listview item positions
-            else
+            CComPtr<IStream> pItemPos;
+            HRESULT hrItemPos = E_FAIL;
+            if (GetAutoArrange() == S_FALSE && !IsComputerTileView())
+            {
+                pItemPos.Attach(SHCreateMemStream(NULL, 0));
+                hrItemPos = pItemPos ? SaveItemPositions(pItemPos) : E_OUTOFMEMORY;
+            }
+            if (FAILED(hrItemPos) || FAILED(SHPropertyBag_WriteStream(pPB, name, pItemPos)))
                 SHPropertyBag_Delete(pPB, name);
         }
-#endif
         pPB->Release();
     }
     else if (SUCCEEDED(hr = (m_pShellBrowser ? m_pShellBrowser->GetViewStateStream(STGM_WRITE, &pStream) : E_UNEXPECTED)))
@@ -4687,6 +4771,8 @@ HRESULT STDMETHODCALLTYPE CDefView::SetCurrentViewMode(UINT ViewMode)
             break;
     }
 
+    bool wasComputerTileView = IsComputerTileView();
+
     /* This will not necessarily be the actual mode set above.
        This mimics the behavior of Windows XP. */
     m_FolderSettings.ViewMode = ViewMode;
@@ -4699,9 +4785,11 @@ HRESULT STDMETHODCALLTYPE CDefView::SetCurrentViewMode(UINT ViewMode)
     }
     else
     {
-        m_ListView.ModifyStyle(0, LVS_AUTOARRANGE);
+        if (wasComputerTileView && (m_FolderSettings.fFlags & FWF_AUTOARRANGE))
+            m_ListView.ModifyStyle(0, LVS_AUTOARRANGE);
         ListView_SetIconSpacing(m_ListView, -1, -1);
-        m_ListView.Arrange(LVA_DEFAULT);
+        if (GetAutoArrange() == S_OK)
+            m_ListView.Arrange(LVA_DEFAULT);
         m_ListView.InvalidateRect(NULL, TRUE);
     }
     CheckToolbar();
