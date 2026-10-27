@@ -406,7 +406,7 @@ Bus_CreatePdo(
         }
     }
 
-    status = RtlUnicodeStringPrintf(&buffer, L"%02d", Desc->CodecIds.CodecAddress);
+    status = RtlUnicodeStringPrintf(&buffer, L"%02X%02X", Desc->CodecIds.CodecAddress, Desc->CodecIds.FunctionGroupStartNode);
     if (!NT_SUCCESS(status)) {
         return status;
     }
@@ -474,7 +474,9 @@ Bus_CreatePdo(
     pdoData->FdoContext = Desc->FdoContext;
     RtlCopyMemory(&pdoData->CodecIds, &Desc->CodecIds, sizeof(Desc->CodecIds));
 
-    if (!Desc->CodecIds.IsDSP)
+    if (!Desc->CodecIds.IsDSP &&
+        (!Desc->FdoContext->codecs[Desc->CodecIds.CodecAddress] ||
+         Desc->CodecIds.FuncId == AC_GRP_AUDIO_FUNCTION))
         Desc->FdoContext->codecs[Desc->CodecIds.CodecAddress] = pdoData;
 
     //

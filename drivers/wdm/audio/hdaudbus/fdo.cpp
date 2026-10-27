@@ -1151,73 +1151,70 @@ Fdo_EnumerateCodec(
     UINT8 startID = (nodeCount >> 16) & 0xFF;
     nodeCount = (nodeCount & 0x7FFF);
 
-    UINT16 mainFuncGrp = 0;
-    {
-        UINT16 nid = startID;
-        for (UINT32 i = 0; i < nodeCount; i++, nid++) {
-            UINT32 cmd = (addr << 28) | (nid << 20) |
-                (AC_VERB_PARAMETERS << 8) | AC_PAR_FUNCTION_TYPE;
-            if (!NT_SUCCESS(RunSingleHDACmd(fdoCtx, cmd, &funcType))) {
-                continue;
-            }
-            switch (funcType & 0xFF) {
-            case AC_GRP_AUDIO_FUNCTION:
-            case AC_GRP_MODEM_FUNCTION:
-                mainFuncGrp = nid;
-                break;
-            }
+    UINT16 nid = startID;
+    for (UINT32 i = 0; i < nodeCount; i++, nid++) {
+        UINT32 cmd = (addr << 28) | (nid << 20) |
+            (AC_VERB_PARAMETERS << 8) | AC_PAR_FUNCTION_TYPE;
+        if (!NT_SUCCESS(RunSingleHDACmd(fdoCtx, cmd, &funcType))) {
+            continue;
         }
-    }
+        if ((funcType & 0xFF) != AC_GRP_AUDIO_FUNCTION &&
+            (funcType & 0xFF) != AC_GRP_MODEM_FUNCTION) {
+            continue;
+        }
 
-    UINT32 cmd = (addr << 28) | (mainFuncGrp << 20) |
-        (AC_VERB_GET_SUBSYSTEM_ID << 8);
-    RunSingleHDACmd(fdoCtx, cmd, &subsysId);
+        subsysId = 0;
+        cmd = (addr << 28) | (nid << 20) |
+            (AC_VERB_GET_SUBSYSTEM_ID << 8);
+        RunSingleHDACmd(fdoCtx, cmd, &subsysId);
 
-    PDO_IDENTIFICATION_DESCRIPTION description;
-    //
-    // Initialize the description with the information about the detected codec.
-    //
-    WDF_CHILD_IDENTIFICATION_DESCRIPTION_HEADER_INIT(
-        &description.Header,
-        sizeof(description)
-    );
+        PDO_IDENTIFICATION_DESCRIPTION description;
+        RtlZeroMemory(&description, sizeof(description));
+        //
+        // Initialize the description with the information about the detected codec.
+        //
+        WDF_CHILD_IDENTIFICATION_DESCRIPTION_HEADER_INIT(
+            &description.Header,
+            sizeof(description)
+        );
 
-    description.FdoContext = fdoCtx;
+        description.FdoContext = fdoCtx;
 
-    description.CodecIds.CtlrDevId = fdoCtx->devId;
-    description.CodecIds.CtlrVenId = fdoCtx->venId;
+        description.CodecIds.CtlrDevId = fdoCtx->devId;
+        description.CodecIds.CtlrVenId = fdoCtx->venId;
 
-    description.CodecIds.CodecAddress = addr;
-    if (fdoCtx->UseSGPCCodec && addr == fdoCtx->GraphicsCodecAddress)
-        description.CodecIds.IsGraphicsCodec = TRUE;
-    else
-        description.CodecIds.IsGraphicsCodec = FALSE;
+        description.CodecIds.CodecAddress = addr;
+        if (fdoCtx->UseSGPCCodec && addr == fdoCtx->GraphicsCodecAddress)
+            description.CodecIds.IsGraphicsCodec = TRUE;
+        else
+            description.CodecIds.IsGraphicsCodec = FALSE;
 
-    description.CodecIds.FunctionGroupStartNode = startID;
+        description.CodecIds.FunctionGroupStartNode = (UINT8)nid;
 
-    description.CodecIds.IsDSP = FALSE;
+        description.CodecIds.IsDSP = FALSE;
 
-    description.CodecIds.FuncId = funcType & 0xFF;
-    description.CodecIds.VenId = (vendorDevice >> 16) & 0xFFFF;
-    description.CodecIds.DevId = vendorDevice & 0xFFFF;
-    description.CodecIds.SubsysId = subsysId;
-    description.CodecIds.RevId = (revId >> 8) & 0xFFFF;
+        description.CodecIds.FuncId = funcType & 0xFF;
+        description.CodecIds.VenId = (vendorDevice >> 16) & 0xFFFF;
+        description.CodecIds.DevId = vendorDevice & 0xFFFF;
+        description.CodecIds.SubsysId = subsysId;
+        description.CodecIds.RevId = (revId >> 8) & 0xFFFF;
 
-    //
-    // Call the framework to add this child to the childlist. This call
-    // will internaly call our DescriptionCompare callback to check
-    // whether this device is a new device or existing device. If
-    // it's a new device, the framework will call DescriptionDuplicate to create
-    // a copy of this description in nonpaged pool.
-    // The actual creation of the child device will happen when the framework
-    // receives QUERY_DEVICE_RELATION request from the PNP manager in
-    // response to InvalidateDeviceRelations call made as part of adding
-    // a new child.
-    //
-    if (!NT_SUCCESS(WdfChildListAddOrUpdateChildDescriptionAsPresent(
-        WdfFdoGetDefaultChildList(fdoCtx->WdfDevice), &description.Header,
-        NULL))) { // AddressDescription
-        SklHdAudBusPrint(DEBUG_LEVEL_ERROR, DBG_PNP, "WdfChildListAddOrUpdateChildDescriptionAsPresent failed\n");
+        //
+        // Call the framework to add this child to the childlist. This call
+        // will internaly call our DescriptionCompare callback to check
+        // whether this device is a new device or existing device. If
+        // it's a new device, the framework will call DescriptionDuplicate to create
+        // a copy of this description in nonpaged pool.
+        // The actual creation of the child device will happen when the framework
+        // receives QUERY_DEVICE_RELATION request from the PNP manager in
+        // response to InvalidateDeviceRelations call made as part of adding
+        // a new child.
+        //
+        if (!NT_SUCCESS(WdfChildListAddOrUpdateChildDescriptionAsPresent(
+            WdfFdoGetDefaultChildList(fdoCtx->WdfDevice), &description.Header,
+            NULL))) { // AddressDescription
+            SklHdAudBusPrint(DEBUG_LEVEL_ERROR, DBG_PNP, "WdfChildListAddOrUpdateChildDescriptionAsPresent failed\n");
+        }
     }
 }
 
