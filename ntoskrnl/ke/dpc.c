@@ -109,6 +109,7 @@ KiExecuteDpc(
 
     KeSetSystemAffinityThread(AFFINITY_MASK(Prcb->Number));
     KeSetPriorityThread(KeGetCurrentThread(), HIGH_PRIORITY);
+    KeEnterGuardedRegion();
 
     for (;;)
     {
