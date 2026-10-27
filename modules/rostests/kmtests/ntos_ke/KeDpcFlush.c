@@ -6,7 +6,7 @@
 
 #include <kmt_test.h>
 
-VOID Test_KeArm64DpcFlush(VOID);
+VOID Test_KeDpcFlush(VOID);
 
 #define FLUSH_BACKLOG 128
 #define FLUSH_STRESS_ROUNDS 64
@@ -294,7 +294,7 @@ TestConcurrentFlush(VOID)
     }
 }
 
-START_TEST(KeArm64DpcFlush)
+START_TEST(KeDpcFlush)
 {
     KAFFINITY PreviousAffinity;
     ULONG Cpu;

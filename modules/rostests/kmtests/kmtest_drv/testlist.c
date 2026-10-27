@@ -193,7 +193,6 @@ KMT_TESTFUNC Test_KeArm64AffinityEx;
 KMT_TESTFUNC Test_KeArm64Apc;
 KMT_TESTFUNC Test_KeArm64Dispatcher;
 KMT_TESTFUNC Test_KeArm64DpcIpi;
-KMT_TESTFUNC Test_KeArm64DpcFlush;
 KMT_TESTFUNC Test_KeArm64DpcImportance;
 KMT_TESTFUNC Test_KeArm64PmrMigration;
 KMT_TESTFUNC Test_KeArm64WakePlacement;
@@ -218,7 +217,9 @@ KMT_TESTFUNC Test_KeArm64Numa;
 #endif
 KMT_TESTFUNC Test_KeDeviceQueue;
 KMT_TESTFUNC Test_KeDpc;
+KMT_TESTFUNC Test_KeDpcFlush;
 KMT_TESTFUNC Test_KeDpcReadyThread;
+KMT_TESTFUNC Test_KeDpcRemove;
 KMT_TESTFUNC Test_KeEvent;
 KMT_TESTFUNC Test_KeFloatPointState;
 KMT_TESTFUNC Test_KeGuardedMutex;
@@ -507,7 +508,6 @@ const KMT_TEST TestList[] =
     { "KeArm64Apc",                         Test_KeArm64Apc },
     { "KeArm64Dispatcher",                  Test_KeArm64Dispatcher },
     { "KeArm64DpcIpi",                      Test_KeArm64DpcIpi },
-    { "KeArm64DpcFlush",                    Test_KeArm64DpcFlush },
     { "KeArm64DpcImportance",               Test_KeArm64DpcImportance },
     { "KeArm64PmrMigration",                Test_KeArm64PmrMigration },
     { "KeArm64WakePlacement",               Test_KeArm64WakePlacement },
@@ -539,7 +539,9 @@ const KMT_TEST TestList[] =
     { "KeCriticalRegionKM",                 Test_KeCriticalRegionKM },
     { "KeDeviceQueue",                      Test_KeDeviceQueue },
     { "KeDpc",                              Test_KeDpc },
+    { "KeDpcFlush",                         Test_KeDpcFlush },
     { "KeDpcReadyThread",                   Test_KeDpcReadyThread },
+    { "KeDpcRemove",                        Test_KeDpcRemove },
     { "KeEvent",                            Test_KeEvent },
     { "KeFloatPointState",                  Test_KeFloatPointState },
     { "KeGuardedMutex",                     Test_KeGuardedMutex },

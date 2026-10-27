@@ -196,7 +196,9 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeDevQueue.c
     ntos_ke/KeCriticalRegionKM.c
     ntos_ke/KeDpc.c
+    ntos_ke/KeDpcFlush.c
     ntos_ke/KeDpcReadyThread.c
+    ntos_ke/KeDpcRemove.c
     ntos_ke/KeEvent.c
     ntos_ke/KeFloatPointState.c
     ntos_ke/KeGuardedMutex.c
@@ -352,7 +354,6 @@ if(ARCH STREQUAL "arm64")
         kmArm64/KeArm64Dispatcher.c
         kmArm64/KeArm64DpcIpi.c
         kmArm64/KeArm64DpcImportance.c
-        kmArm64/KeArm64DpcFlush.c
         kmArm64/KeArm64PmrMigration.c
         kmArm64/KeArm64WakePlacement.c
         kmArm64/KeArm64Frames.c
