@@ -131,7 +131,7 @@ VidFbGetDisplaySize(
     _Out_ PULONG Depth)
 {
     EFI_GRAPHICS_OUTPUT_PROTOCOL* Gop = FwGetGop();
-    EFI_UGA_DRAW_PROTOCOL* Uga;
+    EFI_UGA_DRAW_PROTOCOL* Uga = NULL;
     UINT32 UgaWidth, UgaHeight, ColorDepth, RefreshRate;
 
     if (Gop)
@@ -167,7 +167,7 @@ VidFbPresent(
     _In_ ULONG Height)
 {
     EFI_GRAPHICS_OUTPUT_PROTOCOL* Gop = FwGetGop();
-    EFI_UGA_DRAW_PROTOCOL* Uga;
+    EFI_UGA_DRAW_PROTOCOL* Uga = NULL;
     ULONG ScreenWidth, ScreenHeight;
     UINT32 UgaWidth, UgaHeight;
 
