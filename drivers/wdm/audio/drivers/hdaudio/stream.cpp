@@ -99,14 +99,17 @@ CMiniportWaveRTStream::GetPosition(
     NTSTATUS Status;
     ULONG Offset;
 
-    if (m_Capture)
-        return STATUS_NOT_IMPLEMENTED;
-
     Status = m_Interface.GetLinkPositionRegister(m_Interface.Context, m_DmaEngine, &Register);
     if (!NT_SUCCESS(Status))
         return Status;
 
     Offset = READ_REGISTER_ULONG(Register);
+    if (m_Capture)
+    {
+        Position->PlayOffset = m_BufferSize ? (Offset % m_BufferSize + m_BufferSize - m_FifoSize % m_BufferSize) % m_BufferSize : 0;
+        Position->WriteOffset = Position->PlayOffset;
+        return STATUS_SUCCESS;
+    }
     Position->PlayOffset = m_BufferSize ? Offset % m_BufferSize : 0;
     /* The controller can have prefetched up to one FIFO beyond the link
      * cursor. Keep that part of the render buffer outside the writable area. */
