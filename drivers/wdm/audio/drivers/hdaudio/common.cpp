@@ -1319,7 +1319,7 @@ CAdapterCommon::ProcessOutputNodes(
             PIN_CAPABILITIES WidgetCaps;
             if (NT_SUCCESS(OutNode->GetPinConfigurationDefault(PinNodes[NodeIndex], &WidgetConfig)) &&
                 NT_SUCCESS(OutNode->GetPinCapabilities(PinNodes[NodeIndex], &WidgetCaps)) &&
-                WidgetCaps.OutputCapable && WidgetConfig.DefaultDevice < 0x8)
+                WidgetCaps.OutputCapable && WidgetConfig.PortConnectivity != 0x1 && WidgetConfig.DefaultDevice < 0x8)
             {
                 Status = OutNode->SetPinWidgetControl(PinNodes[NodeIndex],
                                                       WidgetCaps.HeadphoneDriveCapable && WidgetConfig.DefaultDevice == 0x2,
