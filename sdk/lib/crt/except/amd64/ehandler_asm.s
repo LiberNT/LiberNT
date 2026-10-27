@@ -79,13 +79,22 @@ __C_specific_handler_call_handler PROC FRAME
     movdqa xmm14, [r11 + CxXmm14]
     movdqa xmm15, [r11 + CxXmm15]
     ldmxcsr [r11 + CxMxCsr]
+    mov ax, word ptr [r11 + CxFltSave + LfControlWord]
+    cmp ax, word ptr [rsp + 196]
+    je CshControlWordLoaded
     fldcw word ptr [r11 + CxFltSave + LfControlWord]
+CshControlWordLoaded:
 
     mov rcx, r8
     mov rdx, r9
     call r10
 
+    fnstcw word ptr [rsp + 198]
+    mov cx, word ptr [rsp + 196]
+    cmp cx, word ptr [rsp + 198]
+    je CshControlWordRestored
     fldcw word ptr [rsp + 196]
+CshControlWordRestored:
     ldmxcsr [rsp + 192]
     movdqa xmm6, [rsp + 32]
     movdqa xmm7, [rsp + 48]
