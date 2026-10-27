@@ -427,10 +427,7 @@ HDA_GetLinkPositionRegister(
 		return STATUS_INVALID_HANDLE;
 	}
 
-	if (devData->CodecIds.CtlrVenId != VEN_INTEL) //Experimental Non-Intel support
-		*Position = (ULONG*)(stream->sdAddr + HDA_REG_SD_LPIBA);
-	else
-		*Position = (ULONG *)stream->posbuf; //Use Posbuf for all Intel
+	*Position = (ULONG*)(stream->sdAddr + HDA_REG_SD_LPIBA);
 
 	return STATUS_SUCCESS;
 }
