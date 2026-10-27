@@ -644,6 +644,11 @@ KiCaptureUserLegacyFloatingState(
 
 VOID
 NTAPI
+KiRestoreUserLegacyFloatingState(
+    _In_ PXSAVE_FORMAT FltSave);
+
+VOID
+NTAPI
 KiInitializeMxCsrMask(VOID);
 
 FORCEINLINE
