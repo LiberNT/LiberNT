@@ -392,6 +392,8 @@ BOOL pcheck( LPCITEMIDLIST pidl )
                 case PT_SHARE:
                     break;
                 default:
+                    if (_dbg_ILGetFSType(pidltemp))
+                        break;
                     ERR("unknown IDLIST %p [%p] size=%u type=%x\n",
                         pidl, pidltemp, pidltemp->mkid.cb,type );
                     dump_pidl_hex( pidltemp );
