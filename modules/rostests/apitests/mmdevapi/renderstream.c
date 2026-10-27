@@ -26,11 +26,13 @@ static void test_cyclic_notifications(void)
         { "two coalesced completions", 2048, 2176, 1, FALSE, TRUE },
         { "recovery after coalescing", 0, 128, 0, TRUE, TRUE },
         { "timeout without progress", 0, 128, 0, FALSE, TRUE },
-        { "prefetch into next half", 1856, 1984, 0, FALSE, FALSE },
-        { "completion after prefetch", 1920, 2048, 1, TRUE, TRUE },
-        { "prefetch around buffer end", 3776, 64, 1, FALSE, FALSE },
-        { "write cursor behind play", 2048, 1984, 1, FALSE, FALSE },
-        { "recovery around buffer end", 64, 192, 0, TRUE, TRUE },
+        { "prefetch into next half", 1856, 1984, 1, TRUE, TRUE },
+        { "completion after prefetch", 1920, 2048, 1, FALSE, TRUE },
+        { "prefetch around buffer end", 3776, 64, 0, TRUE, TRUE },
+        { "write cursor behind play", 2048, 1984, 0, FALSE, FALSE },
+        { "recovery around buffer end", 64, 192, 0, FALSE, TRUE },
+        { "completion with the link one FIFO behind", 1756, 1948, 1, TRUE, TRUE },
+        { "buffer end with the link one FIFO behind", 3676, 28, 0, TRUE, TRUE },
     };
     struct reactos_wavert_position position;
     UINT32 previous = 0;

@@ -33,13 +33,11 @@ static BOOL reactos_wavert_cyclic_position(UINT32 period_frames, UINT32 frame_si
         write_offset >= period_bytes * REACTOS_RT_NOTIFICATION_COUNT)
         return FALSE;
 
-    position->playing = play_offset / period_bytes;
+    position->writable = (write_offset + period_bytes * REACTOS_RT_NOTIFICATION_COUNT - play_offset) %
+                             (period_bytes * REACTOS_RT_NOTIFICATION_COUNT) < period_bytes;
+    position->playing = position->writable ? (UINT32)(write_offset / period_bytes) : previous_period;
     position->released = (position->playing + 1) % REACTOS_RT_NOTIFICATION_COUNT;
     position->advanced = position->playing != previous_period;
-    /* The entire released half must be outside the controller's prefetch
-     * interval.  A write cursor behind the play cursor has wrapped around. */
-    position->writable = write_offset >= play_offset &&
-                         write_offset / period_bytes == position->playing;
     return TRUE;
 }
 
