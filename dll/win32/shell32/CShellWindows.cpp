@@ -345,12 +345,15 @@ public:
         }
         else
         {
-            hr = PidlFromVariant(pvarLoc, &pidl);
-            if (FAILED(hr))
-                return hr;
-            hr = PidlFromVariant(pvarLocRoot, &pidlRoot);
-            if (FAILED(hr))
-                return hr;
+            if (swClass != SWC_DESKTOP)
+            {
+                hr = PidlFromVariant(pvarLoc, &pidl);
+                if (FAILED(hr))
+                    return hr;
+                hr = PidlFromVariant(pvarLocRoot, &pidlRoot);
+                if (FAILED(hr))
+                    return hr;
+            }
 
             POSITION pos = m_Windows.GetHeadPosition();
             while (pos)
