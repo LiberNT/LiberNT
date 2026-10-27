@@ -9,5 +9,5 @@ add_library(hdwwiz MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/hdwwiz.def)
 
 set_module_type(hdwwiz cpl UNICODE)
-add_importlibs(hdwwiz setupapi advapi32 comctl32 rpcrt4 user32 gdi32 devmgr msvcrt kernel32 ntdll)
+add_importlibs(hdwwiz setupapi newdev advapi32 comctl32 comdlg32 rpcrt4 user32 gdi32 devmgr msvcrt kernel32 ntdll)
 add_cd_file(TARGET hdwwiz DESTINATION reactos/system32 FOR all)
