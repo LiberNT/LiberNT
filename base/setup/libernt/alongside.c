@@ -192,7 +192,7 @@ FindWindowsInstallation(
     {
         PDISKENTRY DiskEntry = CONTAINING_RECORD(DiskLink, DISKENTRY, ListEntry);
 
-        if (DiskEntry->BootMedium || DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
+        if (DiskEntry->BootMedium || DiskEntry->DiskStyle != PARTITION_STYLE_GPT || !IsUefiFirmware())
             continue;
 
         for (PartLink = DiskEntry->PrimaryPartListHead.Flink;

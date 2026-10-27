@@ -4065,6 +4065,12 @@ FindSupportedSystemPartition(
         goto UseAlternativeDisk;
     }
 
+    if (IsUefiFirmware() ? (DiskEntry->DiskStyle != PARTITION_STYLE_GPT)
+                         : (DiskEntry->DiskStyle == PARTITION_STYLE_GPT))
+    {
+        goto UseAlternativeDisk;
+    }
+
     if (DiskEntry->DiskStyle == PARTITION_STYLE_GPT)
     {
         ActivePartition = GetActiveDiskPartition(DiskEntry);
