@@ -63,8 +63,36 @@ PropertyHandler_JackDescription(IN PPCPROPERTY_REQUEST PropertyRequest)
         return STATUS_INVALID_PARAMETER;
     }
 
+    BOOL IsConnected = (Miniport->GetPinCount() == 0);
+    for (ULONG Index = 0; Index < Miniport->GetPinCount() && !IsConnected; Index++)
+    {
+        PIN_CONFIGURATION_DEFAULT PinConfig;
+        PIN_CAPABILITIES PinCaps;
+        ULONG DevicePresent = 0;
+        ULONG PinId = Miniport->GetPinId(Index);
+
+        if (!NT_SUCCESS(Node->GetPinConfigurationDefault(PinId, &PinConfig)))
+        {
+            IsConnected = TRUE;
+            break;
+        }
+        if (PinConfig.PortConnectivity == 0x1)
+            continue;
+
+        if (!NT_SUCCESS(Node->GetPinCapabilities(PinId, &PinCaps)) ||
+            PinConfig.PortConnectivity == 0x2 ||
+            (PinConfig.Misc & 0x1) ||
+            !PinCaps.PresenceDetectCapable ||
+            !NT_SUCCESS(Node->GetPinSense(PinId, &DevicePresent)) ||
+            DevicePresent)
+        {
+            IsConnected = TRUE;
+        }
+    }
+
     PIN_CONFIGURATION_DEFAULT PinConfiguration;
-    Status = Node->GetPinConfigurationDefault(Node->GetStartNodeId(), &PinConfiguration);
+    Status = Node->GetPinConfigurationDefault(Miniport->GetPinCount() ? Miniport->GetPinId(0) : Node->GetStartNodeId(),
+                                              &PinConfiguration);
     if (NT_SUCCESS(Status))
     {
         PKSMULTIPLE_ITEM MultipleItem = (PKSMULTIPLE_ITEM)PropertyRequest->Value;
@@ -77,7 +105,7 @@ PropertyHandler_JackDescription(IN PPCPROPERTY_REQUEST PropertyRequest)
         JackDescription->GeoLocation = (EPcxGeoLocation)PinConfiguration.Location;
         JackDescription->GenLocation = (EPcxGenLocation)(PinConfiguration.Location << 4);
         JackDescription->PortConnection = (EPxcPortConnection)PinConfiguration.PortConnectivity;
-        JackDescription->IsConnected = TRUE;
+        JackDescription->IsConnected = IsConnected;
         PropertyRequest->ValueSize = JackDescriptionSize;
     }
 

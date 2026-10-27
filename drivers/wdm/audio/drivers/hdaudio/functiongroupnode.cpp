@@ -870,8 +870,6 @@ CFunctionGroupNode::GetPinSense(
         DPRINT1("HDAUDIO: GetPinSense failed with %x\n", Status);
         return Status;
     }
-    if (Response == 0)
-        return STATUS_UNSUCCESSFUL;
     *DevicePresent = (Response >> 31) & 0x1;
     return STATUS_SUCCESS;
 }

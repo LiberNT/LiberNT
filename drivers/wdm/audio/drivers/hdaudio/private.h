@@ -460,8 +460,10 @@ class CMiniportTopology : public CUnknownImpl<IMiniportTopology>
         CFunctionGroupNode *Node,
         CAdapterCommon *Adapter,
         PPCFILTER_DESCRIPTOR Filter)
-        : m_Port(0), m_Node(Node), m_FilterDescription(Filter)
+        : m_Port(0), m_Node(Node), m_FilterDescription(Filter), m_PinCount(0)
     {
+        for (ULONG Index = 0; Index < AssociatedPinCount && Index < ARRAYSIZE(m_PinIds); Index++)
+            m_PinIds[m_PinCount++] = AssociatedPinIds[Index];
     }
     virtual ~CMiniportTopology()
     {
@@ -479,10 +481,24 @@ class CMiniportTopology : public CUnknownImpl<IMiniportTopology>
         return m_Port;
     }
 
+    ULONG
+    GetPinCount()
+    {
+        return m_PinCount;
+    }
+
+    ULONG
+    GetPinId(ULONG Index)
+    {
+        return m_PinIds[Index];
+    }
+
   private:
     PPORTTOPOLOGY m_Port;
     CFunctionGroupNode *m_Node;
     PPCFILTER_DESCRIPTOR m_FilterDescription;
+    ULONG m_PinCount;
+    ULONG m_PinIds[16];
 };
 
 class CMiniportWaveRT : public CUnknownImpl<IMiniportWaveRT>
