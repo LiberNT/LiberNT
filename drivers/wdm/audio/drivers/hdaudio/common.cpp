@@ -1419,7 +1419,7 @@ CAdapterCommon::ProcessOutputNodes(
             ULONG DacNodeCount = 0;
             PULONG DacNodes = (PULONG)ExAllocatePoolZero(NonPagedPool, sizeof(ULONG) * OutputNodeCount, TAG_HDAUDIO);
             if (DacNodes &&
-                NT_SUCCESS(OutNode->GetPinNodesWithDefaultAssociation(PinConfiguration.DefaultAssociation,
+                NT_SUCCESS(OutNode->GetAssociatedPinNodes(PinNodes[NodeIndex], PinConfiguration.DefaultAssociation,
                                                                       NodeContext->Digital, &AssociatedPinCount,
                                                                       &AssociatedPins)))
             {
@@ -1473,7 +1473,7 @@ CAdapterCommon::ProcessOutputNodes(
                 PinNodes[NodeIndex], PinConfiguration.PortConnectivity, PinConfiguration.DefaultDevice,
                 PinConfiguration.DefaultAssociation, PinConfiguration.Sequence);
             Status = AssociatePins(
-                DeviceObject, Irp, ResourceList, PinConfiguration.DefaultAssociation, (PVOID)OutNode, PinNodeCount, PinNodes,
+                DeviceObject, Irp, ResourceList, PinNodes[NodeIndex], PinConfiguration.DefaultAssociation, (PVOID)OutNode, PinNodeCount, PinNodes,
                 NodeContext->Digital);
         }
         else
@@ -1882,6 +1882,7 @@ CAdapterCommon::AssociatePins(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp,
     IN PRESOURCELIST ResourceList,
+    IN ULONG PinId,
     IN UCHAR DefaultAssociation,
     IN PVOID Node,
     IN ULONG PinNodeCount,
@@ -1895,7 +1896,7 @@ CAdapterCommon::AssociatePins(
     PULONG AssociatedPins = NULL;
 
     Status =
-        OutNode->GetPinNodesWithDefaultAssociation(DefaultAssociation, Digital, &AssociatedPinCount, &AssociatedPins);
+        OutNode->GetAssociatedPinNodes(PinId, DefaultAssociation, Digital, &AssociatedPinCount, &AssociatedPins);
     DPRINT("GetPinNodesWithDefaultAssociation Status %x, AssociatedPinCount %u\n", Status, AssociatedPinCount);
     if (NT_SUCCESS(Status))
     {

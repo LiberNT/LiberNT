@@ -329,6 +329,29 @@ CFunctionGroupNode::EnumConnections()
 
 NTSTATUS
 NTAPI
+CFunctionGroupNode::GetAssociatedPinNodes(
+    IN ULONG PinId,
+    IN UCHAR DefaultAssociation,
+    IN UCHAR Digital,
+    OUT PULONG NodeCount,
+    OUT PULONG * Nodes)
+{
+    if (DefaultAssociation != 0xF)
+        return GetPinNodesWithDefaultAssociation(DefaultAssociation, Digital, NodeCount, Nodes);
+
+    *Nodes = (PULONG)ExAllocatePoolZero(NonPagedPool, sizeof(ULONG), TAG_HDAUDIO);
+    if (!*Nodes)
+    {
+        *NodeCount = 0;
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    (*Nodes)[0] = PinId;
+    *NodeCount = 1;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
 CFunctionGroupNode::GetPinNodesWithDefaultAssociation(
     IN UCHAR DefaultAssociation,
     IN UCHAR Digital,

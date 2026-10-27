@@ -233,6 +233,7 @@ class CAdapterCommon : public CUnknownImpl<IAdapterPowerManagement>
         IN PDEVICE_OBJECT DeviceObject,
         IN PIRP Irp,
         IN PRESOURCELIST ResourceList,
+        IN ULONG PinId,
         IN UCHAR DefaultAssociation,
         IN PVOID Node,
         IN ULONG PinNodeCount,
@@ -376,6 +377,7 @@ class CFunctionGroupNode
     NTSTATUS NTAPI SetVolumeKnob(IN ULONG NodeId, IN UCHAR Direct, IN UCHAR Volume);
     NTSTATUS NTAPI GetVolumeCapabilities(IN ULONG NodeId, IN PUCHAR Delta, IN PUCHAR NumSteps);
     NTSTATUS NTAPI GetPinNodesWithDefaultAssociation(IN UCHAR DefaultAssociation, IN UCHAR Digital, OUT PULONG NodeCount, OUT PULONG * Nodes);
+    NTSTATUS NTAPI GetAssociatedPinNodes(IN ULONG PinId, IN UCHAR DefaultAssociation, IN UCHAR Digital, OUT PULONG NodeCount, OUT PULONG * Nodes);
     VOID NTAPI ClearVisitedState();
 
     NTSTATUS
