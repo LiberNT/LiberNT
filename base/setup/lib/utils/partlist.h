@@ -293,6 +293,10 @@ PPARTLIST
 NTAPI
 CreatePartitionList(VOID);
 
+BOOLEAN
+NTAPI
+IsUefiFirmware(VOID);
+
 VOID
 NTAPI
 DestroyPartitionList(

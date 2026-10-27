@@ -660,8 +660,8 @@ InitializeGptPartitionType(
     return TRUE;
 }
 
-static
 BOOLEAN
+NTAPI
 IsUefiFirmware(VOID)
 {
     static LONG Firmware = -1;

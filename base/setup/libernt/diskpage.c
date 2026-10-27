@@ -503,6 +503,9 @@ static UINT
 GetInstallBlocker(
     _In_opt_ PPARTENTRY PartEntry)
 {
+    BOOLEAN UefiMode;
+    BOOLEAN EmptyDisk;
+
     if (!PartEntry)
         return IDS_DISK_SELECT;
 
@@ -511,6 +514,13 @@ GetInstallBlocker(
     {
         return IDS_DISK_TOO_SMALL;
     }
+
+    UefiMode = IsUefiFirmware();
+    EmptyDisk = !DiskHasPartitions(PartEntry->DiskEntry);
+    if ((UefiMode && PartEntry->DiskEntry->DiskStyle != PARTITION_STYLE_GPT) ||
+        (!UefiMode && PartEntry->DiskEntry->DiskStyle != PARTITION_STYLE_MBR &&
+         (PartEntry->DiskEntry->DiskStyle != PARTITION_STYLE_RAW || !EmptyDisk)))
+        return IDS_DISK_MODE_MISMATCH;
 
     if (!PartEntry->IsPartitioned)
         return (PartitionCreateChecks(PartEntry, 0ULL, 0) == NOT_AN_ERROR) ? 0 : IDS_DISK_NO_REGION;

@@ -27,6 +27,7 @@
 
 ;; partlist
 @ stdcall CreatePartitionList()
+@ stdcall IsUefiFirmware()
 @ stdcall CreatePartition(ptr ptr int64 ptr)
 @ stdcall CreateGptSystemPartitions(ptr ptr ptr ptr)
 @ stdcall GptDiskNeedsSystemPartitions(ptr)

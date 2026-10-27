@@ -219,6 +219,7 @@ BEGIN
     IDS_DISK_NO_REGION "هذه المساحة صغيرة جدًا لاستيعاب قسم جديد."
     IDS_DISK_NOT_BASIC "لا يمكن تثبيت LiberNT على هذا القسم. حدد قسمًا أساسيًا أو مساحة غير مخصصة."
     IDS_DISK_TOO_SMALL "هذا القسم صغير جدًا لتثبيت LiberNT."
+    IDS_DISK_MODE_MISMATCH "This partition uses a different boot mode. Select a GPT disk for UEFI or an MBR disk for BIOS."
     IDS_DISK_NOT_FIRMWARE "لا يرى البرنامج الثابت لهذا الكمبيوتر محرك الأقراص المحدد، لذا قد لا يبدأ LiberNT منه.\n\nانقر فوق موافق لاستخدامه على أي حال."
     IDS_DISK_NEW_SYSTEM "للتأكد من عمل جميع ميزات LiberNT بشكل صحيح، ينشئ برنامج الإعداد أيضًا أقسامًا لملفات النظام."
     IDS_DISK_FORMAT_WARN "إذا قمت بتهيئة هذا القسم، فستُفقد كل البيانات المخزنة عليه. انسخ احتياطيًا أولاً أي ملفات تريد الاحتفاظ بها."
