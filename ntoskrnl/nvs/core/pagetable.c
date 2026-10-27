@@ -234,25 +234,31 @@ MiPtSplitBootBlock(PMI_ADDRESS_SPACE Space, ULONG64 VirtualAddress, PMI_PTE Alia
 BOOLEAN
 MiPtIsUserFrame(PMI_SYSTEM System, ULONG Frame)
 {
-    PMI_PFN Entry;
-    PMI_PFN Parent;
-    PMI_ADDRESS_SPACE Owner;
+    PMI_PFN Pfn = System->Pfn.Pfn;
+    ULONG FrameCount = System->Pfn.FrameCount;
+    ULONG Table;
+    ULONG Parent;
+    ULONG Level;
 
-    if (Frame >= System->Pfn.FrameCount)
+    if (Frame >= FrameCount)
+        return FALSE;
+    if (MI_PFN_FLAGS(&Pfn[Frame]) & (MI_PFN_FLAG_PAGE_TABLE | MI_PFN_FLAG_PROTOTYPE))
         return FALSE;
 
-    Entry = &System->Pfn.Pfn[Frame];
-    if (MI_PFN_FLAGS(Entry) & (MI_PFN_FLAG_PAGE_TABLE | MI_PFN_FLAG_PROTOTYPE))
-        return FALSE;
-    if (Entry->PteFrame == 0 || Entry->PteFrame >= System->Pfn.FrameCount)
-        return FALSE;
+    Table = (ULONG)MI_ATOMIC_READ32(&Pfn[Frame].PteFrame);
+    for (Level = 0; Level < System->Arch->PagingLevels; Level++)
+    {
+        if (Table == 0 || Table >= FrameCount || !(MI_PFN_FLAGS(&Pfn[Table]) & MI_PFN_FLAG_PAGE_TABLE))
+            return FALSE;
 
-    Parent = &System->Pfn.Pfn[Entry->PteFrame];
-    if (!(MI_PFN_FLAGS(Parent) & MI_PFN_FLAG_PAGE_TABLE))
-        return FALSE;
+        Parent = (ULONG)MI_ATOMIC_READ32(&Pfn[Table].PteFrame);
+        if (Parent == 0)
+            return Table != System->SystemSpace.RootFrame;
 
-    Owner = Parent->PageTableOwner;
-    return Owner != NULL && !Owner->IsSystem;
+        Table = Parent;
+    }
+
+    return FALSE;
 }
 
 BOOLEAN

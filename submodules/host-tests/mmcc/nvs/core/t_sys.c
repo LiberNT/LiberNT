@@ -1071,7 +1071,8 @@ SysDumpUserFrames(void)
     static TEST_WORLD World;
     MI_ADDRESS_SPACE Space;
     ULONG64 Base = 0, Size = PAGE_SIZE, Physical, Top;
-    ULONG TableFrame;
+    ULONG TableFrame, UserFrame;
+    PMI_MDL Mdl;
 
     SysWorldCreate(&World, 1024, 1);
     ProcessCreate(&World, &Space);
@@ -1083,6 +1084,21 @@ SysDumpUserFrames(void)
     CHECK(MiPtLookup(&Space, Base, &TableFrame) != NULL);
     CHECK(!MiPtIsUserFrame(&World.System, TableFrame));
     CHECK(!MiPtIsUserFrame(&World.System, Space.RootFrame));
+
+    Mdl = MiMdlAllocate(&Space, Base, PAGE_SIZE);
+    CHECK(Mdl != NULL && NT_SUCCESS(MiProbeAndLockPages(Mdl, TRUE, TRUE)));
+    UserFrame = Mdl->Frames[0];
+    CHECK(MiTrimAddressSpace(&Space, 100, TRUE) == 1);
+    CHECK(World.PfnArray[UserFrame].State == MiPageTransition);
+    CHECK(MiPtIsUserFrame(&World.System, UserFrame));
+
+    Size = 0;
+    CHECK(NT_SUCCESS(MiFreeVirtualMemory(&Space, &Base, &Size, MI_MEM_RELEASE)));
+    CHECK(!(World.PfnArray[TableFrame].Flags & MI_PFN_FLAG_PAGE_TABLE));
+    CHECK(!MiPtIsUserFrame(&World.System, UserFrame));
+    CHECK(World.PfnArray[UserFrame].PteFrame == TableFrame);
+    MiUnlockPages(Mdl);
+    MiMdlFree(Mdl);
 
     CHECK(NT_SUCCESS(MiCreateKernelStack(&World.System, 2, 2, &Top)));
     CHECK(NT_SUCCESS(KernelWrite64(&World, 0, Top - 8, 0x66)));
