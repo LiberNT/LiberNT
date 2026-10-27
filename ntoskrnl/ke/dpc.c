@@ -111,11 +111,11 @@ KiExecuteDpc(
     KeSetSystemAffinityThread(AFFINITY_MASK(Prcb->Number));
     KiDpcThread[Prcb->Number] = KeGetCurrentThread();
     KeSetPriorityThread(KeGetCurrentThread(), HIGH_PRIORITY);
-    KeEnterGuardedRegion();
 
     for (;;)
     {
         KeWaitForSingleObject(&Prcb->DpcEvent, Executive, KernelMode, FALSE, NULL);
+        KeEnterGuardedRegion();
 
         for (;;)
         {
@@ -148,6 +148,8 @@ KiExecuteDpc(
             ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
             InterlockedCompareExchangePointer(&KiActiveThreadedDpc[Prcb->Number], NULL, Dpc);
         }
+
+        KeLeaveGuardedRegion();
     }
 }
 
