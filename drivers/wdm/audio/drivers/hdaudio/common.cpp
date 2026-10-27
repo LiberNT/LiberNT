@@ -953,6 +953,10 @@ CAdapterCommon::Initialize(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PRESO
         return Status;
     }
 
+    POWER_STATE PowerState;
+    PowerState.DeviceState = PowerDeviceD0;
+    PowerChangeState(PowerState);
+
     // transfer init verbs
     Status = TransferInitVerbs(DeviceObject);
     if (!NT_SUCCESS(Status))
