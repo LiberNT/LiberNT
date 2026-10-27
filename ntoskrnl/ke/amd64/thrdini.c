@@ -95,7 +95,7 @@ KiInitializeContextThread(IN PKTHREAD Thread,
         Thread->PreviousMode = UserMode;
 
         /* Set the Thread's NPX State */
-        Thread->NpxState = SharedUserData->XState.EnabledFeatures;
+        Thread->NpxState = SharedUserData->XState.EnabledFeatures | XSTATE_MASK_LEGACY;
         /* TODO: NpxIrql was a ReactOS extension to DISPATCHER_HEADER; removed at Win7 */
 #if (NTDDI_VERSION < NTDDI_WIN7)
         Thread->Header.NpxIrql = PASSIVE_LEVEL;

@@ -606,7 +606,7 @@ KeSaveExtendedProcessorState(
 
     if ((XStateSave->Level < DISPATCH_LEVEL) && (Thread->NpxState == 0))
     {
-        Thread->NpxState = SharedUserData->XState.EnabledFeatures;
+        Thread->NpxState = SharedUserData->XState.EnabledFeatures | XSTATE_MASK_LEGACY;
     }
 
     if (KeFeatureBits & KF_XSTATE)
