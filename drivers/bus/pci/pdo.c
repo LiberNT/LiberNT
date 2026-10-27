@@ -1054,8 +1054,7 @@ PciPdoDetermineInterruptPolicy(
     _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
     _Out_ PBOOLEAN AllowMsi,
     _Out_ PBOOLEAN AllowMsix,
-    _Out_opt_ PULONG MessageNumberLimit,
-    _Out_opt_ PBOOLEAN PolicyFromRegistry)
+    _Out_opt_ PULONG MessageNumberLimit)
 {
     PFDO_DEVICE_EXTENSION FdoExtension = NULL;
     BOOLEAN UseMsi = FALSE;
@@ -1063,9 +1062,6 @@ PciPdoDetermineInterruptPolicy(
     ULONG MessageLimit = 0;
     HANDLE KeyHandle;
     BOOLEAN PolicyFound = FALSE;
-
-    if (PolicyFromRegistry)
-        *PolicyFromRegistry = FALSE;
 
     if (!DeviceExtension || !DeviceExtension->PciDevice)
     {
@@ -1207,8 +1203,6 @@ PciPdoDetermineInterruptPolicy(
     *AllowMsix = UseMsix;
     if (MessageNumberLimit)
         *MessageNumberLimit = MessageLimit;
-    if (PolicyFromRegistry)
-        *PolicyFromRegistry = PolicyFound;
 }
 
 #if !defined(_M_AMD64) && !defined(_M_ARM64) && (NTDDI_VERSION < NTDDI_WIN7)
@@ -1254,7 +1248,7 @@ PciPdoNeedsMessageInterruptRequirementsRefresh(
     if (!PciPdoShouldExposeInterruptResources(&DeviceExtension->PciDevice->PciConfig))
         return FALSE;
 
-    PciPdoDetermineInterruptPolicy(DeviceExtension, &AllowMsi, &AllowMsix, NULL, NULL);
+    PciPdoDetermineInterruptPolicy(DeviceExtension, &AllowMsi, &AllowMsix, NULL);
     if (!AllowMsi && !AllowMsix)
         return FALSE;
 
@@ -2621,7 +2615,6 @@ PdoQueryResourceRequirements(
     ULONG MsixMessageCount;
     UCHAR MsiMessageCount;
     ULONG MessageNumberLimit;
-    BOOLEAN PolicyFromRegistry = FALSE;
     BOOLEAN MemDecode = FALSE;
     BOOLEAN IoDecode = FALSE;
     UCHAR ReqBarIndex;
@@ -2681,8 +2674,7 @@ PdoQueryResourceRequirements(
     PciPdoDetermineInterruptPolicy(DeviceExtension,
                                    &AllowMsi,
                                    &AllowMsix,
-                                   &MessageNumberLimit,
-                                   &PolicyFromRegistry);
+                                   &MessageNumberLimit);
     InterruptPin = 0;
     MsixMessageCount = 0;
     MsiMessageCount = 0;
@@ -3084,8 +3076,7 @@ PdoQueryResourceRequirements(
                 ULONG MsgCount = (InterruptOption == PciRequirementMsix) ? 1 : MsiMessageCount;
                 Dest->ShareDisposition = CmResourceShareDeviceExclusive;
                 Dest->Flags = CM_RESOURCE_INTERRUPT_LATCHED |
-                              CM_RESOURCE_INTERRUPT_MESSAGE |
-                              (PolicyFromRegistry ? CM_RESOURCE_INTERRUPT_POLICY_INCLUDED : 0);
+                              CM_RESOURCE_INTERRUPT_MESSAGE;
                 /* MSI uses one descriptor for an aligned vector block. MSI-X
                  * uses one descriptor per independently allocated message. */
                 Dest->u.Interrupt.MinimumVector = CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN - MsgCount + 1;
@@ -4259,7 +4250,6 @@ PdoStartDevice(
     PciPdoDetermineInterruptPolicy(DeviceExtension,
                                    &MsiAllowed,
                                    &MsixAllowed,
-                                   NULL,
                                    NULL);
 
     RawFullDesc = &RawResList->List[0];
