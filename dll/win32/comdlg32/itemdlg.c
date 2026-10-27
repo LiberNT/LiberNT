@@ -2032,7 +2032,12 @@ static HRESULT init_explorerbrowser(FileDialogImpl *This)
         ERR("Advise (ExplorerBrowser) failed.\n");
 
     /* Get previous options? */
+#ifdef __REACTOS__
+    fos.ViewMode = 0;
+    fos.fFlags = FWF_AUTOARRANGE;
+#else
     fos.ViewMode = fos.fFlags = 0;
+#endif
     if(!(This->options & FOS_ALLOWMULTISELECT))
         fos.fFlags |= FWF_SINGLESEL;
 
