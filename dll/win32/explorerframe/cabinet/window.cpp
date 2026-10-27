@@ -1790,7 +1790,7 @@ int
 CCabinetWindow::AddTab(PCIDLIST_ABSOLUTE pidl, BOOL activate)
 {
     CabinetTab *tab;
-    FOLDERSETTINGS settings = { (UINT)FVM_AUTO, FWF_NOWEBVIEW };
+    FOLDERSETTINGS settings = { (UINT)FVM_AUTO, FWF_NOWEBVIEW | FWF_AUTOARRANGE };
     IObjectWithSite *withSite = NULL;
     RECT rc = { 0, 0, 0, 0 };
     int index;
