@@ -23,11 +23,20 @@
 
 EXTERN _DiskStopFloppyMotor:PROC
 EXTERN _Relocator16Boot:PROC
+/* The import table slot, not the thunk: the thunk lives in this image, which the
+   relocation may be about to overwrite. */
+EXTERN __imp__Relocator16Boot:DWORD
 
 .code32
 
 Regs:
     .space REGS_SIZE
+
+/*
+ * Offset, inside the relocation stub's page, of the REGS block the stub hands to
+ * Relocator16Boot.  The stub code itself must stay below it (checked below).
+ */
+#define LINUX_STUB_REGS_OFFSET HEX(100)
 
 /*
  * VOID __cdecl
@@ -51,9 +60,22 @@ _BootLinuxKernel:
 
     /*
      * Relocate the kernel image to its final destination (can be as low as 0x10000).
-     * The reason we can overwrite low memory is because this code executes
-     * between 0000:8000 and 0000:FFFF. That leaves space for 32k of code
-     * before we start interfering with Linux kernel address space.
+     *
+     * The *downward* move cannot be performed from this function: for a LOAD_HIGH
+     * kernel the destination is 0x100000 and this image (the second stage loader) is
+     * loaded at 0x200000, so any kernel larger than 1 MiB has this code, its REGS
+     * block and its import table *inside* the range it is rewriting.  A copy loop
+     * executed from there destroys the instruction it is executing.
+     *
+     * reloc_down therefore moves the loop, and the real-mode hand-off that follows
+     * it, into the spare page that LinuxReadKernel allocates directly above the
+     * staging buffer, and jumps there.  Writes never go above
+     * max(source, target) + KernelSize, and that page starts at source + KernelSize
+     * (which is strictly above the end of the write range because target < source
+     * here), so the stub cannot overwrite itself.
+     *
+     * The upward move (a non-LOAD_HIGH kernel, target 0x10000) still runs in place;
+     * it has no such page and is unchanged from before (see the FIXME below).
      */
 
     /* Get KernelSize in ECX */
@@ -76,30 +98,50 @@ _BootLinuxKernel:
 //  jb reloc_down   // target  < source: relocate down (default)
 
 reloc_down:
-    /* Move the kernel down - Start with low addresses and increment them */
-    cld
-#if 0
-    rep movsb
-#else
-    mov edx, ecx            // Copy the total number of bytes in EDX
-    and edx, HEX(0FFFFFFFC) // Number of bytes we copy using DWORDs
-    xor edx, ecx            // Number of remaining bytes to copy after the DWORDs
-    shr ecx, 2      // Count number of DWORDs
-    rep movsd       // Move DWORDs
-    mov ecx, edx    // Count number of remaining bytes
-    rep movsb       // Move bytes
-#endif
-    jmp after_reloc
-
 reloc_up:
-    /* Move the kernel up - Start with high addresses and decrement them */
-    std
-    add esi, ecx
-    add edi, ecx
-    dec esi
-    dec edi
+    /*
+     * **One path for both directions.**  EDX = a page above the end of *both* ranges, which is the page the
+     * model in contrib/freeldr-f2fs/reloc-model proves is never written by the copy: in place, an upward
+     * move has its loop between the two ranges (inside the destination) and a downward move has it inside
+     * the staging buffer (also inside the destination).  Taking the maximum covers both cases with one page,
+     * which is why the two directions no longer need separate tricks.
+     */
+    mov edx, esi            // Source
+    cmp edi, edx
+    jbe 1f
+    mov edx, edi            // Target, when it is the higher of the two
+1:  add edx, ecx            // + KernelSize
+    add edx, HEX(0FFF)      // Round up ...
+    and edx, HEX(0FFFF000)  // ... to the next page boundary
+
+    cld
+    push esi
+    push edi
+
+    /* Copy the relocation stub itself out of this image */
+    mov edi, edx
+    mov esi, offset LinuxRelocationStub
+    mov ecx, (LinuxRelocationStubEnd - LinuxRelocationStub)
     rep movsb
-    // jmp after_reloc
+
+    /* Copy the REGS block the stub hands to Relocator16Boot */
+    mov edi, edx
+    add edi, LINUX_STUB_REGS_OFFSET
+    mov esi, offset Regs
+    mov ecx, (REGS_SIZE / 4)
+    rep movsd
+
+    /* Restore the copy arguments and enter the stub */
+    pop edi                 // Target address
+    pop esi                 // Source address
+    mov ecx, dword ptr [esp + 4]            // KernelSize
+    mov ebx, edx
+    add ebx, LINUX_STUB_REGS_OFFSET         // REGS* for Relocator16Boot
+    mov ebp, dword ptr [__imp__Relocator16Boot] // Must be read before the copy
+    jmp edx
+
+/* The in-place upward relocation is gone: both directions run from the shared stub page above, which is
+ * the only placement the model in contrib/freeldr-f2fs/reloc-model shows to be safe for either. */
 
 after_reloc:
 
@@ -113,5 +155,71 @@ after_reloc:
 
     /* We must never get there */
     int 3
+
+/*
+ * The downward relocation, executed from the scratch page described above.
+ *
+ * It must be position independent (it is copied to an arbitrary page) and it must
+ * not reference anything in this image: on entry ESI, EDI and ECX hold the source,
+ * the target and the size, EBX is the address of the REGS block (inside the same
+ * page, at LINUX_STUB_REGS_OFFSET) and EBP is Relocator16Boot, whose own code lives
+ * in the first stage loader below 1 MiB and therefore survives the copy.
+ */
+.balign 16
+LinuxRelocationStub:
+    /*
+     * Both directions, from the same page.  ESI/EDI are source/target and ECX the size, as on entry.
+     * Forward (target below source) copies low to high; backward copies high to low.  Getting this wrong is
+     * the bug this stub exists to avoid, and the model checks the choice independently of the asm.
+     */
+    cmp edi, esi
+    ja  .backward
+    cld
+    mov edx, ecx            // Copy the total number of bytes in EDX
+    and edx, HEX(0FFFFFFFC) // Number of bytes we copy using DWORDs
+    xor edx, ecx            // Number of remaining bytes to copy after the DWORDs
+    shr ecx, 2              // Count number of DWORDs
+    rep movsd               // Move DWORDs
+    mov ecx, edx            // Count number of remaining bytes
+    rep movsb               // Move bytes
+    jmp  .handoff
+
+.backward:
+    /* Target above source: copy from the top down, or the copy overwrites what it has not read yet. */
+    std
+    add esi, ecx
+    add edi, ecx
+    dec esi
+    dec edi
+    rep movsb
+    cld                     // the hand-off below expects DF clear
+
+.handoff:
+    /* Enter the setup code at 0x9020:0000 exactly as after_reloc would have */
+    push HEX(0000) // CodePointer
+    push HEX(9020) // CodeSegment
+    push HEX(9000) // StackPointer
+    push HEX(9000) // StackSegment
+    push ebx       // REGS*
+    call ebp       // Relocator16Boot
+
+    /* We must never get there */
+    int 3
+LinuxRelocationStubEnd:
+
+/* NB: ".if" cannot be used here -- asm.inc #defines "if" (the "." and the "if"
+   are separate preprocessor tokens), so the MASM-compatible spelling is required. */
+/*
+ * The stub must fit below LINUX_STUB_REGS_OFFSET (256) inside its page, or it overwrites the REGS block it
+ * hands to Relocator16Boot.
+ *
+ * The assembly-time guard that used to enforce this (`.if (End - Start) > LIMIT` / `.error`) fails with
+ * "non-constant expression" once the stub spans the direction branch, and it fails the same way with a plain
+ * literal bound -- so the cause is the labels, not the `HEX()` macro.  The labels are exported instead, and
+ * `contrib/freeldr-f2fs/loader-fix/check-stub-size.sh` measures them from the built object.  A guard outside
+ * the assembler cannot be defeated by its constant folding, which is the point.
+ */
+.globl LinuxRelocationStub
+.globl LinuxRelocationStubEnd
 
 END
