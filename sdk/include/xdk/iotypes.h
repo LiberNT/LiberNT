@@ -147,7 +147,9 @@ enum _IRQ_DEVICE_POLICY_USHORT {
   IrqPolicyAllProcessorsInMachine = 3,
   IrqPolicyAllProcessorsInGroup = 3,
   IrqPolicySpecifiedProcessors = 4,
-  IrqPolicySpreadMessagesAcrossAllProcessors = 5};
+  IrqPolicySpreadMessagesAcrossAllProcessors = 5,
+  IrqPolicyAllProcessorsInMachineWhenSteered = 6,
+  IrqPolicyAllProcessorsInGroupWhenSteered = 6};
 
 #else /* defined(NT_PROCESSOR_GROUPS) */
 
@@ -157,7 +159,8 @@ typedef enum _IRQ_DEVICE_POLICY {
   IrqPolicyOneCloseProcessor,
   IrqPolicyAllProcessorsInMachine,
   IrqPolicySpecifiedProcessors,
-  IrqPolicySpreadMessagesAcrossAllProcessors
+  IrqPolicySpreadMessagesAcrossAllProcessors,
+  IrqPolicyAllProcessorsInMachineWhenSteered
 } IRQ_DEVICE_POLICY, *PIRQ_DEVICE_POLICY;
 
 #endif
