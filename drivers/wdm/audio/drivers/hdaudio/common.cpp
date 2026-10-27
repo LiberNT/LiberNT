@@ -1302,10 +1302,21 @@ CAdapterCommon::ProcessOutputNodes(
         }
 
         // Enable amplifier and in/out paths (required by some codecs)
-        Status = OutNode->SetPinWidgetControl(PinNodes[NodeIndex], 1, 1, 1, 0, 0);
-        if (!NT_SUCCESS(Status))
         {
-            DPRINT1("HDAUDIO: SetPinWidgetControl failed with %x\n", Status);
+            PIN_CONFIGURATION_DEFAULT WidgetConfig;
+            PIN_CAPABILITIES WidgetCaps;
+            if (NT_SUCCESS(OutNode->GetPinConfigurationDefault(PinNodes[NodeIndex], &WidgetConfig)) &&
+                NT_SUCCESS(OutNode->GetPinCapabilities(PinNodes[NodeIndex], &WidgetCaps)) &&
+                WidgetCaps.OutputCapable && WidgetConfig.DefaultDevice < 0x8)
+            {
+                Status = OutNode->SetPinWidgetControl(PinNodes[NodeIndex],
+                                                      WidgetCaps.HeadphoneDriveCapable && WidgetConfig.DefaultDevice == 0x2,
+                                                      1, 0, 0, 0);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT1("HDAUDIO: SetPinWidgetControl failed with %x\n", Status);
+                }
+            }
         }
 
         // Set GPIO registers (required by some codecs)
@@ -1426,6 +1437,15 @@ CAdapterCommon::ProcessOutputNodes(
                             AssociatedConfiguration.DefaultDevice > 7)
                         {
                             continue;
+                        }
+                        PIN_CAPABILITIES AssociatedCaps;
+                        if (NT_SUCCESS(OutNode->GetPinCapabilities(AssociatedPins[PinIndex], &AssociatedCaps)) &&
+                            AssociatedCaps.OutputCapable)
+                        {
+                            OutNode->SetPinWidgetControl(AssociatedPins[PinIndex],
+                                                         AssociatedCaps.HeadphoneDriveCapable &&
+                                                             AssociatedConfiguration.DefaultDevice == 0x2,
+                                                         1, 0, 0, 0);
                         }
                         if (FindPinConverter((PVOID)OutNode, AssociatedPins[PinIndex], NodeContext->Digital, 0,
                                              &Converter))
@@ -1573,10 +1593,19 @@ CAdapterCommon::ProcessInputNodes(
         }
 
         // Enable amplifier and in/out paths (required by some codecs)
-        Status = OutNode->SetPinWidgetControl(PinNodes[NodeIndex], 1, 1, 1, 0, 0);
-        if (!NT_SUCCESS(Status))
         {
-            DPRINT1("HDAUDIO: SetPinWidgetControl failed with %x\n", Status);
+            PIN_CONFIGURATION_DEFAULT WidgetConfig;
+            PIN_CAPABILITIES WidgetCaps;
+            if (NT_SUCCESS(OutNode->GetPinConfigurationDefault(PinNodes[NodeIndex], &WidgetConfig)) &&
+                NT_SUCCESS(OutNode->GetPinCapabilities(PinNodes[NodeIndex], &WidgetCaps)) &&
+                WidgetCaps.InputCapable && WidgetConfig.DefaultDevice >= 0x8)
+            {
+                Status = OutNode->SetPinWidgetControl(PinNodes[NodeIndex], 0, 0, 1, 0, 0);
+                if (!NT_SUCCESS(Status))
+                {
+                    DPRINT1("HDAUDIO: SetPinWidgetControl failed with %x\n", Status);
+                }
+            }
         }
 
         // Set GPIO registers (required by some codecs)

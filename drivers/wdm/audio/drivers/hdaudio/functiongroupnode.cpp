@@ -53,7 +53,8 @@ CFunctionGroupNode::SetEAPDBTL(
     ULONG Verb;
     ULONG Response = 0;
 
-    Verb = (m_CodecAddress << 28) | (NodeId << 20) | (AC_VERB_SET_EAPD_BTLENABLE << 8) | LRSwap | EAPD | BTL;
+    Verb = (m_CodecAddress << 28) | (NodeId << 20) | (AC_VERB_SET_EAPD_BTLENABLE << 8) |
+        (LRSwap ? AC_EAPDBTL_LR_SWAP : 0) | (EAPD ? AC_EAPDBTL_EAPD : 0) | (BTL ? AC_EAPDBTL_BALANCED : 0);
     Status = m_Adapter->TransferVerb(Verb, &Response);
     if (!NT_SUCCESS(Status))
     {
@@ -735,7 +736,8 @@ CFunctionGroupNode::SetPinWidgetControl(
     NTSTATUS Status;
 
     Verb = (m_CodecAddress << 28) | (NodeId << 20) | (AC_VERB_SET_PIN_WIDGET_CONTROL << 8) |
-    HPhnEnable | OutEnable | InEnable | VRefEn2 | VRefEn1;
+    (HPhnEnable ? AC_PINCTL_HP_EN : 0) | (OutEnable ? AC_PINCTL_OUT_EN : 0) | (InEnable ? AC_PINCTL_IN_EN : 0) |
+    ((VRefEn2 | VRefEn1) & AC_PINCTL_VREFEN);
     Status = m_Adapter->TransferVerb(Verb, &Response);
     if (!NT_SUCCESS(Status))
     {
