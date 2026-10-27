@@ -154,7 +154,7 @@ static LRESULT WAVE_drvOpen(LPCWSTR str, LPMCI_OPEN_DRIVER_PARMSW modp)
 
     if (modp == NULL) return 0xFFFFFFFF;
 
-    wmw = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(WINE_MCIWAVE));
+    wmw = calloc(1, sizeof(WINE_MCIWAVE));
 
     if (!wmw)
 	return 0;
@@ -383,7 +383,7 @@ static DWORD WAVE_mciCreateRIFFSkeleton(WINE_MCIWAVE* wmw)
 	}
    }
    if (wmw->lpWaveFormat == &wmw->wfxRef) {
-	LPWAVEFORMATEX pwfx = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(WAVEFORMATEX));
+	LPWAVEFORMATEX pwfx = calloc(1, sizeof(WAVEFORMATEX));
 	if (!pwfx) return MCIERR_OUT_OF_MEMORY;
 	/* Set wave format accepts PCM only so the size is known. */
 	assert(wmw->wfxRef.wFormatTag == WAVE_FORMAT_PCM);
