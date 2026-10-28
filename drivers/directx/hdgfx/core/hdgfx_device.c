@@ -16,7 +16,9 @@ static const HDGFX_GENERATION HdgfxIronlake =
     5,
     3,
     HDGFX_SET(DE_GSE, 1),
-    HdgfxIlkReadDisplayState
+    HdgfxIlkReadDisplayState,
+    HdgfxIlkComputeLvds,
+    HdgfxIlkCommitLvds
 };
 
 static const struct

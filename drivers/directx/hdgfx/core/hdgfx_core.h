@@ -30,6 +30,7 @@ extern "C" {
 typedef uint32_t (*HDGFX_READ_REGISTER)(void *Context, uint32_t Offset);
 typedef void (*HDGFX_WRITE_REGISTER)(void *Context, uint32_t Offset, uint32_t Value);
 typedef void (*HDGFX_STALL)(void *Context, uint32_t Microseconds);
+typedef void (*HDGFX_SLEEP)(void *Context, uint32_t Milliseconds);
 
 typedef struct _HDGFX_MMIO
 {
@@ -37,6 +38,7 @@ typedef struct _HDGFX_MMIO
     void *Context;
     HDGFX_WRITE_REGISTER Write;
     HDGFX_STALL Stall;
+    HDGFX_SLEEP Sleep;
 } HDGFX_MMIO;
 
 typedef bool (*HDGFX_SET_BACKLIGHT)(void *Context, uint32_t Level);
@@ -97,6 +99,13 @@ typedef struct _HDGFX_PANEL_FITTER
     uint32_t Height;
 } HDGFX_PANEL_FITTER;
 
+typedef struct _HDGFX_FDI_TX
+{
+    bool Enabled;
+    uint32_t Training;
+    uint32_t Lanes;
+} HDGFX_FDI_TX;
+
 typedef struct _HDGFX_PIPE
 {
     bool Enabled;
@@ -108,6 +117,7 @@ typedef struct _HDGFX_PIPE
     uint32_t SourceWidth;
     uint32_t SourceHeight;
     HDGFX_M_N Fdi;
+    HDGFX_FDI_TX FdiTx;
     HDGFX_PANEL_FITTER PanelFitter;
     HDGFX_PLANE Primary;
 } HDGFX_PIPE;
@@ -199,6 +209,8 @@ typedef struct _HDGFX_DISPLAY_STATE
     uint32_t DpllCount;
     uint32_t RawClockKHz;
     uint32_t FdiPllVcoKHz;
+    bool SscReference;
+    bool NonSpreadReference;
     HDGFX_PIPE Pipes[HDGFX_MAX_PIPES];
     HDGFX_TRANSCODER Transcoders[HDGFX_MAX_TRANSCODERS];
     HDGFX_DPLL Dplls[HDGFX_MAX_DPLLS];
@@ -207,6 +219,39 @@ typedef struct _HDGFX_DISPLAY_STATE
     HDGFX_BACKLIGHT Backlight;
 } HDGFX_DISPLAY_STATE;
 
+typedef enum _HDGFX_SCALING
+{
+    HdgfxScalingAspect,
+    HdgfxScalingStretch,
+    HdgfxScalingCenter
+} HDGFX_SCALING;
+
+typedef struct _HDGFX_LVDS_MODE
+{
+    const HDGFX_DTD *Panel;
+    uint32_t SourceWidth;
+    uint32_t SourceHeight;
+    uint32_t Stride;
+    uint32_t Surface;
+    HDGFX_SCALING Scaling;
+    bool Ssc;
+} HDGFX_LVDS_MODE;
+
+typedef enum _HDGFX_MODESET_STATUS
+{
+    HdgfxModesetSuccess,
+    HdgfxModesetInvalidMode,
+    HdgfxModesetNoClock,
+    HdgfxModesetFdiBandwidth,
+    HdgfxModesetPanelOffTimeout,
+    HdgfxModesetPipeOffTimeout,
+    HdgfxModesetTranscoderOffTimeout,
+    HdgfxModesetFdiBitLockFailed,
+    HdgfxModesetFdiSymbolLockFailed,
+    HdgfxModesetTranscoderOnTimeout,
+    HdgfxModesetPanelOnTimeout
+} HDGFX_MODESET_STATUS;
+
 typedef struct _HDGFX_GENERATION
 {
     const char *Name;
@@ -214,6 +259,10 @@ typedef struct _HDGFX_GENERATION
     uint32_t PanelDdcPins;
     uint32_t GseInterrupt;
     void (*ReadDisplayState)(const HDGFX_MMIO *Mmio, HDGFX_DISPLAY_STATE *State);
+    HDGFX_MODESET_STATUS (*ComputeLvds)(const HDGFX_DISPLAY_STATE *Current,
+                                        const HDGFX_LVDS_MODE *Mode,
+                                        HDGFX_DISPLAY_STATE *Target);
+    HDGFX_MODESET_STATUS (*CommitLvds)(const HDGFX_MMIO *Mmio, const HDGFX_DISPLAY_STATE *Target);
 } HDGFX_GENERATION;
 
 typedef struct _HDGFX_VBT_PANEL
@@ -275,6 +324,26 @@ void
 HdgfxIlkReadDisplayState(
     const HDGFX_MMIO *Mmio,
     HDGFX_DISPLAY_STATE *State);
+
+HDGFX_MODESET_STATUS
+HdgfxIlkComputeLvds(
+    const HDGFX_DISPLAY_STATE *Current,
+    const HDGFX_LVDS_MODE *Mode,
+    HDGFX_DISPLAY_STATE *Target);
+
+HDGFX_MODESET_STATUS
+HdgfxIlkCommitLvds(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DISPLAY_STATE *Target);
+
+const char *
+HdgfxCompareLvdsState(
+    const HDGFX_DISPLAY_STATE *Target,
+    const HDGFX_DISPLAY_STATE *Actual);
+
+const char *
+HdgfxModesetStatusName(
+    HDGFX_MODESET_STATUS Status);
 
 uint32_t
 HdgfxRefreshMilliHz(

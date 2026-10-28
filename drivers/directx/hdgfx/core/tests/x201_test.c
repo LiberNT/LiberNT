@@ -140,7 +140,7 @@ TestNativeLvds(
 {
     char Path[1024];
     REGISTER_DUMP *Dump = malloc(sizeof(*Dump));
-    HDGFX_MMIO Mmio = { DumpRead, Dump, NULL, NULL };
+    HDGFX_MMIO Mmio = { DumpRead, Dump, NULL, NULL, NULL };
     HDGFX_DISPLAY_STATE State;
     const HDGFX_GENERATION *Generation;
     const HDGFX_PIPE *Pipe;
@@ -477,7 +477,7 @@ TestGmbusEdid(
     const HDGFX_GENERATION *Generation = HdgfxFindGeneration(0x8086, 0x0046);
     uint8_t Buffer[HDGFX_EDID_SIZE];
     FAKE_GMBUS Bus;
-    HDGFX_MMIO Mmio = { FakeGmbusRead, &Bus, FakeGmbusWrite, FakeGmbusStall };
+    HDGFX_MMIO Mmio = { FakeGmbusRead, &Bus, FakeGmbusWrite, FakeGmbusStall, NULL };
     HDGFX_EDID Parsed;
     char Path[1024];
     uint8_t *Edid;
@@ -601,7 +601,7 @@ static void
 TestOpRegionAsle(void)
 {
     uint8_t *OpRegion = calloc(1, 0x2000);
-    HDGFX_MMIO Io = { MemoryRead, OpRegion, MemoryWrite, NULL };
+    HDGFX_MMIO Io = { MemoryRead, OpRegion, MemoryWrite, NULL, NULL };
     uint32_t Events;
 
     CHECK_EQ(HdgfxFindGeneration(0x8086, 0x0046)->GseInterrupt, 1u << 18);
@@ -684,6 +684,465 @@ TestOpRegionAsle(void)
     free(OpRegion);
 }
 
+typedef struct _FAKE_ILK
+{
+    REGISTER_DUMP Registers;
+    uint64_t NowUs;
+    uint64_t PipeReadyUs[2];
+    uint64_t TranscoderReadyUs[2];
+    uint64_t RxPllUs;
+    uint64_t PanelDoneUs;
+    uint64_t CycleDoneUs;
+    bool PanelOn;
+    bool PanelPoweringUp;
+    bool PanelPoweringDown;
+    bool FdiLocks;
+    bool PanelStuck;
+    unsigned Violations;
+} FAKE_ILK;
+
+static uint32_t *
+FakeSlot(
+    FAKE_ILK *Fake,
+    uint32_t Offset)
+{
+    REGISTER_DUMP *Dump = &Fake->Registers;
+    uint32_t Index;
+
+    for (Index = 0; Index < Dump->Count; Index++)
+    {
+        if (Dump->Offset[Index] == Offset)
+            return &Dump->Value[Index];
+    }
+    if (Dump->Count == MAX_REGISTERS)
+    {
+        fprintf(stderr, "fake register table full\n");
+        exit(2);
+    }
+    Dump->Offset[Dump->Count] = Offset;
+    Dump->Value[Dump->Count] = 0;
+    return &Dump->Value[Dump->Count++];
+}
+
+static uint32_t
+FakeGet(
+    FAKE_ILK *Fake,
+    uint32_t Offset)
+{
+    return *FakeSlot(Fake, Offset);
+}
+
+static void
+FakeViolation(
+    FAKE_ILK *Fake,
+    const char *What)
+{
+    fprintf(stderr, "sequence violation at %llu us: %s\n", (unsigned long long)Fake->NowUs, What);
+    Fake->Violations++;
+}
+
+static uint32_t
+FakeDelayUs(
+    FAKE_ILK *Fake,
+    uint32_t Offset,
+    bool High)
+{
+    uint32_t Value = FakeGet(Fake, Offset);
+
+    return (High ? HDGFX_GET(Value, PP_DELAY_HIGH) : HDGFX_GET(Value, PP_DELAY_LOW)) * 100;
+}
+
+static bool
+FakePanelAssetsReady(
+    FAKE_ILK *Fake)
+{
+    uint32_t Lvds = FakeGet(Fake, HDGFX_REG(PCH_LVDS, 0));
+    uint32_t Index = HDGFX_GET(Lvds, LVDS_TRANSCODER);
+
+    return HDGFX_GET(Lvds, LVDS_ENABLE) &&
+           HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_DPLL, Index)), DPLL_VCO_ENABLE) &&
+           HDGFX_GET(FakeGet(Fake, HDGFX_REG(TRANS_CONF, Index)), TRANS_CONF_STATE);
+}
+
+static void
+FakeUpdatePanel(
+    FAKE_ILK *Fake)
+{
+    bool Target = HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_PP_CONTROL, 0)), PP_CONTROL_TARGET_ON) != 0;
+    uint32_t Status;
+
+    if (Fake->PanelStuck)
+        return;
+    if ((Fake->PanelPoweringUp || Fake->PanelPoweringDown) && Fake->NowUs >= Fake->PanelDoneUs)
+    {
+        Fake->PanelOn = Fake->PanelPoweringUp;
+        if (Fake->PanelPoweringDown)
+            Fake->CycleDoneUs = Fake->NowUs + HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_PP_DIVISOR, 0)),
+                                                        PP_DIVISOR_CYCLE) * 100000;
+        Fake->PanelPoweringUp = Fake->PanelPoweringDown = false;
+    }
+    if (!Fake->PanelPoweringUp && !Fake->PanelPoweringDown)
+    {
+        if (Target && !Fake->PanelOn && FakePanelAssetsReady(Fake))
+        {
+            uint64_t Start = Fake->NowUs > Fake->CycleDoneUs ? Fake->NowUs : Fake->CycleDoneUs;
+
+            Fake->PanelPoweringUp = true;
+            Fake->PanelDoneUs = Start + FakeDelayUs(Fake, HDGFX_REG(PCH_PP_ON_DELAYS, 0), true) +
+                                FakeDelayUs(Fake, HDGFX_REG(PCH_PP_ON_DELAYS, 0), false);
+        }
+        else if (!Target && Fake->PanelOn)
+        {
+            Fake->PanelPoweringDown = true;
+            Fake->PanelDoneUs = Fake->NowUs + FakeDelayUs(Fake, HDGFX_REG(PCH_PP_OFF_DELAYS, 0), true) +
+                                FakeDelayUs(Fake, HDGFX_REG(PCH_PP_OFF_DELAYS, 0), false);
+        }
+    }
+
+    Status = HDGFX_SET(PP_STATUS_ON, Fake->PanelOn || Fake->PanelPoweringDown) |
+             HDGFX_SET(PP_STATUS_READY, FakePanelAssetsReady(Fake)) |
+             HDGFX_SET(PP_STATUS_SEQUENCE, Fake->PanelPoweringUp ? 1 : Fake->PanelPoweringDown ? 2 : 0) |
+             HDGFX_SET(PP_STATUS_CYCLE_ACTIVE, Fake->NowUs < Fake->CycleDoneUs);
+    *FakeSlot(Fake, HDGFX_REG(PCH_PP_STATUS, 0)) = Status;
+}
+
+static bool
+FakePanelLocked(
+    FAKE_ILK *Fake)
+{
+    FakeUpdatePanel(Fake);
+    return HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_PP_STATUS, 0)), PP_STATUS_ON) &&
+           HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_PP_CONTROL, 0)), PP_CONTROL_KEY) != 0xABCD;
+}
+
+static void
+FakeUpdateStates(
+    FAKE_ILK *Fake)
+{
+    uint32_t Index;
+
+    for (Index = 0; Index < 2; Index++)
+    {
+        uint32_t *Pipe = FakeSlot(Fake, HDGFX_REG(PIPE_CONF, Index));
+        uint32_t *Transcoder = FakeSlot(Fake, HDGFX_REG(TRANS_CONF, Index));
+
+        if (Fake->NowUs >= Fake->PipeReadyUs[Index])
+            *Pipe = HDGFX_REPLACE(*Pipe, PIPE_CONF_STATE,
+                                  HDGFX_GET(*Pipe, PIPE_CONF_ENABLE) &&
+                                  HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_DPLL, Index)), DPLL_VCO_ENABLE));
+        if (Fake->NowUs >= Fake->TranscoderReadyUs[Index])
+            *Transcoder = HDGFX_REPLACE(*Transcoder, TRANS_CONF_STATE, HDGFX_GET(*Transcoder, TRANS_CONF_ENABLE));
+    }
+    FakeUpdatePanel(Fake);
+}
+
+static uint32_t
+FakeIlkRead(
+    void *Context,
+    uint32_t Offset)
+{
+    FAKE_ILK *Fake = Context;
+    uint32_t Index;
+
+    FakeUpdateStates(Fake);
+    for (Index = 0; Index < 2; Index++)
+    {
+        if (Offset == HDGFX_REG(FDI_RX_ISR, Index))
+        {
+            uint32_t Tx = FakeGet(Fake, HDGFX_REG(FDI_TX_CTL, Index));
+            uint32_t Rx = FakeGet(Fake, HDGFX_REG(FDI_RX_CTL, Index));
+            bool Linked = Fake->FdiLocks && HDGFX_GET(Tx, FDI_TX_ENABLE) && HDGFX_GET(Rx, FDI_RX_ENABLE) &&
+                          HDGFX_GET(Rx, FDI_RX_PLL_ENABLE) && HDGFX_GET(Rx, FDI_RX_PCDCLK) &&
+                          HDGFX_GET(Tx, FDI_TX_WIDTH) == HDGFX_GET(Rx, FDI_RX_WIDTH) &&
+                          HDGFX_GET(Tx, FDI_TX_TRAINING) == HDGFX_GET(Rx, FDI_RX_TRAINING);
+
+            return HDGFX_SET(FDI_RX_BIT_LOCK, Linked && HDGFX_GET(Rx, FDI_RX_TRAINING) == 0) |
+                   HDGFX_SET(FDI_RX_SYMBOL_LOCK, Linked && HDGFX_GET(Rx, FDI_RX_TRAINING) == 1);
+        }
+    }
+    return FakeGet(Fake, Offset);
+}
+
+static void
+FakeIlkWrite(
+    void *Context,
+    uint32_t Offset,
+    uint32_t Value)
+{
+    FAKE_ILK *Fake = Context;
+    uint32_t *Slot = FakeSlot(Fake, Offset);
+    uint32_t Old = *Slot;
+    uint32_t Index;
+
+    FakeUpdateStates(Fake);
+    if ((Offset == HDGFX_REG(PCH_LVDS, 0) || Offset == HDGFX_REG(PCH_DPLL, 0) ||
+         Offset == HDGFX_REG(PCH_DPLL, 1) || Offset == HDGFX_REG(PCH_PP_ON_DELAYS, 0) ||
+         Offset == HDGFX_REG(PCH_PP_OFF_DELAYS, 0)) && FakePanelLocked(Fake))
+    {
+        FakeViolation(Fake, "protected register written while the panel is on");
+        return;
+    }
+
+    for (Index = 0; Index < 2; Index++)
+    {
+        if (Offset == HDGFX_REG(PIPE_CONF, Index))
+        {
+            Value = HDGFX_REPLACE(Value, PIPE_CONF_STATE, HDGFX_GET(Old, PIPE_CONF_STATE));
+            if (HDGFX_GET(Old, PIPE_CONF_ENABLE) != HDGFX_GET(Value, PIPE_CONF_ENABLE))
+                Fake->PipeReadyUs[Index] = Fake->NowUs + 16000;
+            if (!HDGFX_GET(Value, PIPE_CONF_ENABLE) && HDGFX_GET(FakeGet(Fake, HDGFX_REG(DSP_CNTR, Index)), DSP_ENABLE))
+                FakeViolation(Fake, "pipe disabled under an enabled plane");
+            if (!HDGFX_GET(Value, PIPE_CONF_ENABLE) && Fake->PanelOn)
+                FakeViolation(Fake, "pipe disabled while the panel is on");
+        }
+        if (Offset == HDGFX_REG(DSP_CNTR, Index) && HDGFX_GET(Value, DSP_ENABLE) &&
+            !HDGFX_GET(FakeGet(Fake, HDGFX_REG(PIPE_CONF, Index)), PIPE_CONF_ENABLE))
+        {
+            FakeViolation(Fake, "plane enabled on an inactive pipe");
+        }
+        if (Offset == HDGFX_REG(TRANS_CONF, Index))
+        {
+            uint32_t Rx = FakeGet(Fake, HDGFX_REG(FDI_RX_CTL, Index));
+
+            Value = HDGFX_REPLACE(Value, TRANS_CONF_STATE, HDGFX_GET(Old, TRANS_CONF_STATE));
+            if (HDGFX_GET(Old, TRANS_CONF_ENABLE) != HDGFX_GET(Value, TRANS_CONF_ENABLE))
+                Fake->TranscoderReadyUs[Index] = Fake->NowUs + 16000;
+            if (HDGFX_GET(Value, TRANS_CONF_ENABLE) &&
+                (HDGFX_GET(Rx, FDI_RX_TRAINING) != 3 ||
+                 !HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_DPLL, Index)), DPLL_VCO_ENABLE)))
+            {
+                FakeViolation(Fake, "transcoder enabled before FDI training or its DPLL");
+            }
+        }
+        if (Offset == HDGFX_REG(FDI_RX_CTL, Index))
+        {
+            if (HDGFX_GET(Value, FDI_RX_PLL_ENABLE) && !HDGFX_GET(Old, FDI_RX_PLL_ENABLE))
+                Fake->RxPllUs = Fake->NowUs;
+            if (HDGFX_GET(Value, FDI_RX_ENABLE) && !HDGFX_GET(Old, FDI_RX_ENABLE) && Fake->NowUs < Fake->RxPllUs + 10)
+                FakeViolation(Fake, "FDI link enabled within 10 us of its PLL");
+            if (HDGFX_GET(Value, FDI_RX_PCDCLK) && !HDGFX_GET(Value, FDI_RX_PLL_ENABLE))
+                FakeViolation(Fake, "PCDCLK selected without the FDI PLL");
+        }
+        if (Offset == HDGFX_REG(PCH_DPLL, Index) && HDGFX_GET(Value, DPLL_VCO_ENABLE) &&
+            HDGFX_GET(Value, DPLL_MODE) == 2 && !HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_LVDS, 0)), LVDS_ENABLE))
+        {
+            FakeViolation(Fake, "LVDS DPLL enabled before the LVDS port");
+        }
+    }
+    *Slot = Value;
+    FakeUpdateStates(Fake);
+}
+
+static void
+FakeIlkStall(
+    void *Context,
+    uint32_t Microseconds)
+{
+    ((FAKE_ILK *)Context)->NowUs += Microseconds;
+}
+
+static void
+FakeIlkSleep(
+    void *Context,
+    uint32_t Milliseconds)
+{
+    ((FAKE_ILK *)Context)->NowUs += (uint64_t)Milliseconds * 1000;
+}
+
+static FAKE_ILK *
+FakeIlkCreate(
+    const char *Directory,
+    HDGFX_MMIO *Mmio)
+{
+    char Path[1024];
+    FAKE_ILK *Fake = calloc(1, sizeof(*Fake));
+
+    snprintf(Path, sizeof(Path), "%s/x201-lvds-1280x800/intel_reg-dump.txt", Directory);
+    LoadRegisterDump(Path, &Fake->Registers);
+    Fake->PanelOn = true;
+    Fake->FdiLocks = true;
+    Mmio->Read = FakeIlkRead;
+    Mmio->Context = Fake;
+    Mmio->Write = FakeIlkWrite;
+    Mmio->Stall = FakeIlkStall;
+    Mmio->Sleep = FakeIlkSleep;
+    return Fake;
+}
+
+static HDGFX_MODESET_STATUS
+CommitAndCompare(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_LVDS_MODE *Mode,
+    HDGFX_DISPLAY_STATE *Target)
+{
+    const HDGFX_GENERATION *Generation = HdgfxFindGeneration(0x8086, 0x0046);
+    HDGFX_DISPLAY_STATE Current;
+    HDGFX_DISPLAY_STATE Actual;
+    HDGFX_MODESET_STATUS Status;
+    const char *Mismatch;
+
+    Generation->ReadDisplayState(Mmio, &Current);
+    Status = Generation->ComputeLvds(&Current, Mode, Target);
+    if (Status != HdgfxModesetSuccess)
+        return Status;
+    Status = Generation->CommitLvds(Mmio, Target);
+    if (Status != HdgfxModesetSuccess)
+        return Status;
+    Generation->ReadDisplayState(Mmio, &Actual);
+    Mismatch = HdgfxCompareLvdsState(Target, &Actual);
+    if (Mismatch)
+    {
+        fprintf(stderr, "readback differs from the target in %s\n", Mismatch);
+        Failures++;
+    }
+    return Status;
+}
+
+static void
+TestLvdsModeset(
+    const char *Directory)
+{
+    static const struct
+    {
+        uint32_t Offset;
+        uint32_t Value;
+    } Golden[] =
+    {
+        { 0xC6014, 0x88046004 }, { 0xC6040, 0x00021005 }, { 0xC6044, 0x00021005 },
+        { 0xE1180, 0x80300302 }, { 0xF000C, 0xB0022050 }, { 0x60100, 0xB0044000 },
+        { 0xF0008, 0xC0000040 }, { 0xC7204, 0xABCD0003 }, { 0x60040, 0x00020D8C },
+        { 0x60044, 0x00080000 }, { 0x60034, 0x00800000 }, { 0x6001C, 0x04FF031F },
+        { 0x68080, 0x00000000 }, { 0x70188, 0x00001400 },
+        { 0x60000, 0x057A04FF }, { 0x60004, 0x057A04FF }, { 0x60008, 0x054F052F },
+        { 0x6000C, 0x0334031F }, { 0x60010, 0x0334031F }, { 0x60014, 0x03280322 },
+        { 0xE0000, 0x057A04FF }, { 0xE0004, 0x057A04FF }, { 0xE0008, 0x054F052F },
+        { 0xE000C, 0x0334031F }, { 0xE0010, 0x0334031F }, { 0xE0014, 0x03280322 },
+    };
+    HDGFX_MMIO Mmio;
+    FAKE_ILK *Fake = FakeIlkCreate(Directory, &Mmio);
+    HDGFX_DISPLAY_STATE Current;
+    HDGFX_DISPLAY_STATE Target;
+    HDGFX_LVDS_MODE Mode;
+    HDGFX_EDID Edid;
+    char Path[1024];
+    uint8_t *EdidData;
+    size_t Size;
+    uint64_t Start;
+    unsigned Index;
+
+    snprintf(Path, sizeof(Path), "%s/x201-lvds-1280x800/edid.bin", Directory);
+    EdidData = LoadFile(Path, &Size);
+    if (!EdidData || Size != HDGFX_EDID_SIZE || !HdgfxEdidParse(EdidData, &Edid))
+    {
+        fprintf(stderr, "%s: no usable EDID\n", Path);
+        Failures++;
+        free(EdidData);
+        free(Fake);
+        return;
+    }
+    free(EdidData);
+
+    memset(&Mode, 0, sizeof(Mode));
+    Mode.Panel = &Edid.Dtds[0];
+    Mode.SourceWidth = 1280;
+    Mode.SourceHeight = 800;
+    Mode.Stride = 1280 * 4;
+    Mode.Scaling = HdgfxScalingAspect;
+    Mode.Ssc = true;
+
+    HdgfxIlkReadDisplayState(&Mmio, &Current);
+    CHECK_EQ(Current.SscReference, 1);
+    CHECK_EQ(Current.NonSpreadReference, 1);
+    CHECK_EQ(HdgfxIlkComputeLvds(&Current, &Mode, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(Target.Dplls[0].N, 4);
+    CHECK_EQ(Target.Dplls[0].M1, 18);
+    CHECK_EQ(Target.Dplls[0].M2, 7);
+    CHECK_EQ(Target.Dplls[0].P1, 3);
+    CHECK_EQ(Target.Dplls[0].P2, 14);
+    CHECK_EQ(Target.Dplls[0].Reference, 3);
+    CHECK_EQ(Target.Dplls[0].DotKHz, 69286);
+    CHECK_EQ(Target.Pipes[0].FdiTx.Lanes, 1);
+    CHECK_EQ(Target.Pipes[0].Fdi.LinkM, 134540);
+    CHECK_EQ(Target.Pipes[0].Fdi.DataM, 4843442);
+    CHECK_EQ(Target.Pipes[0].PanelFitter.Enabled, 0);
+    CHECK_EQ(Target.Lvds.HSyncActiveLow, 1);
+    CHECK_EQ(Target.Lvds.VSyncActiveLow, 1);
+
+    Mode.SourceWidth = 1024;
+    Mode.SourceHeight = 768;
+    Mode.Stride = 1024 * 4;
+    CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_CTL_1, 0)), 0x80800000);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_WIN_POS, 0)), 107u << 16);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_WIN_SZ, 0)), (1066u << 16) | 800);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PIPE_SRC, 0)), (1023u << 16) | 767);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(DSP_CNTR, 0)), 0x98004000);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(WM0_PIPE, 0)), 0x00783818);
+    CHECK_EQ(Fake->Violations, 0);
+
+    Mode.SourceWidth = 800;
+    Mode.SourceHeight = 600;
+    Mode.Stride = 800 * 4;
+    Mode.Scaling = HdgfxScalingStretch;
+    CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_WIN_POS, 0)), 0);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_WIN_SZ, 0)), (1280u << 16) | 800);
+
+    Mode.SourceWidth = 1280;
+    Mode.SourceHeight = 720;
+    Mode.Stride = 1280 * 4;
+    Mode.Scaling = HdgfxScalingCenter;
+    CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_WIN_POS, 0)), 40);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_WIN_SZ, 0)), (1280u << 16) | 720);
+
+    Mode.SourceHeight = 800;
+    Mode.Scaling = HdgfxScalingAspect;
+    for (Index = 0; Index < 100; Index++)
+    {
+        Mode.SourceWidth = Index & 1 ? 1280 : 1024;
+        Mode.SourceHeight = Index & 1 ? 800 : 768;
+        Mode.Stride = Mode.SourceWidth * 4;
+        Start = Fake->NowUs;
+        CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
+        CHECK_EQ(Fake->NowUs - Start < 2000000, 1);
+    }
+    CHECK_EQ(Fake->Violations, 0);
+    for (Index = 0; Index < sizeof(Golden) / sizeof(Golden[0]); Index++)
+    {
+        if (FakeGet(Fake, Golden[Index].Offset) != Golden[Index].Value)
+        {
+            fprintf(stderr, "register 0x%05x = 0x%08x, Mint has 0x%08x\n",
+                    Golden[Index].Offset, FakeGet(Fake, Golden[Index].Offset), Golden[Index].Value);
+            Failures++;
+        }
+    }
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PIPE_CONF, 0)), 0xC0000050);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PIPE_DATA_M1, 0)), 0x7E49E7B2);
+
+    HdgfxIlkReadDisplayState(&Mmio, &Current);
+    Mode.SourceWidth = 1281;
+    CHECK_EQ(HdgfxIlkComputeLvds(&Current, &Mode, &Target), HdgfxModesetInvalidMode);
+    Mode.SourceWidth = 1280;
+    Mode.Stride = 1280 * 4 + 32;
+    CHECK_EQ(HdgfxIlkComputeLvds(&Current, &Mode, &Target), HdgfxModesetInvalidMode);
+    Mode.Stride = 1280 * 4;
+    Mode.Surface = 0x800;
+    CHECK_EQ(HdgfxIlkComputeLvds(&Current, &Mode, &Target), HdgfxModesetInvalidMode);
+    Mode.Surface = 0;
+    Current.SscReference = false;
+    CHECK_EQ(HdgfxIlkComputeLvds(&Current, &Mode, &Target), HdgfxModesetNoClock);
+
+    Fake->FdiLocks = false;
+    CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetFdiBitLockFailed);
+    Fake->FdiLocks = true;
+    CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
+    Fake->PanelStuck = true;
+    CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetPanelOffTimeout);
+    CHECK_EQ(Fake->Violations, 0);
+    free(Fake);
+}
+
 int
 main(
     int argc,
@@ -698,6 +1157,7 @@ main(
     TestSyntheticVbt();
     TestGmbusEdid(argv[1]);
     TestOpRegionAsle();
+    TestLvdsModeset(argv[1]);
     if (argc > 2)
         TestFirmwareVbt(argv[2]);
     if (Failures)

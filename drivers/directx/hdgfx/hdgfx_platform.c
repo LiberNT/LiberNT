@@ -1,15 +1,17 @@
 /*
  * PROJECT:     LiberNT Intel HD Graphics Driver
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Display state readout, VBT and panel backlight on the softgpu engine
+ * PURPOSE:     LVDS scan-out, display state readout, VBT and panel backlight on the softgpu engine
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
 #include "softgpu.h"
+#include "softgpu_2d_core.h"
 #include "core/hdgfx_core.h"
 #include "core/hdgfx_regs.h"
 
 #define HDGFX_PCI_BAR0              0x10UL
+#define HDGFX_PCI_BAR2              0x18UL
 #define HDGFX_PCI_ASLS              0xFCUL
 #define HDGFX_MMIO_SIZE             0x100000UL
 #define HDGFX_OPREGION_SIZE         0x2000UL
@@ -19,6 +21,19 @@
 #define HDGFX_VBT_BACKLIGHT_PWM     2UL
 #define HDGFX_ACPI_ID_INTERNAL_PANEL 0x0400UL
 #define HDGFX_TAG                   'xfDH'
+#define HDGFX_WORKING_SURFACE_COUNT 12UL
+#define HDGFX_STRIDE_ALIGNMENT      64UL
+#define HDGFX_VBLANK_POLL_US        20UL
+#define HDGFX_VBLANK_TIMEOUT_US     50000UL
+
+typedef struct _HDGFX_SCANOUT
+{
+    PUCHAR Registers;
+    const HDGFX_GENERATION *Generation;
+    HDGFX_DTD Panel;
+    BOOLEAN Ssc;
+    ULONG Surface;
+} HDGFX_SCANOUT, *PHDGFX_SCANOUT;
 
 typedef struct _HDGFX_ADAPTER
 {
@@ -40,6 +55,11 @@ typedef struct _HDGFX_ADAPTER
 
 static const GUID HdgfxGuidBrightness =
     { 0xFDE5BBA4, 0xB3F9, 0x46FB, { 0xBD, 0xAA, 0x07, 0x28, 0xCE, 0x31, 0x00, 0xB4 } };
+
+static const USHORT HdgfxScaledModes[][2] =
+{
+    { 1280, 720 }, { 1024, 768 }, { 800, 600 }, { 640, 480 },
+};
 
 static uint32_t
 HdgfxReadRegister(
@@ -67,9 +87,33 @@ HdgfxStall(
     KeStallExecutionProcessor(Microseconds);
 }
 
+static void
+HdgfxSleep(
+    _In_ void *Context,
+    _In_ uint32_t Milliseconds)
+{
+    LARGE_INTEGER Interval;
+
+    UNREFERENCED_PARAMETER(Context);
+    Interval.QuadPart = -(LONGLONG)Milliseconds * 10000;
+    KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+}
+
+static VOID
+HdgfxMmioInit(
+    _In_ PVOID Base,
+    _Out_ HDGFX_MMIO *Mmio)
+{
+    Mmio->Read = HdgfxReadRegister;
+    Mmio->Context = Base;
+    Mmio->Write = HdgfxWriteRegister;
+    Mmio->Stall = HdgfxStall;
+    Mmio->Sleep = HdgfxSleep;
+}
+
 static NTSTATUS
 HdgfxReadConfig(
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PDXGK_INTERFACE Interface,
     _Out_writes_bytes_(Size) PVOID Buffer,
     _In_ ULONG Offset,
     _In_ ULONG Size)
@@ -77,14 +121,14 @@ HdgfxReadConfig(
     ULONG BytesRead = 0;
     NTSTATUS Status;
 
-    if (Device->DxgkInterface.DxgkCbReadDeviceSpace == NULL)
+    if (Interface->DxgkCbReadDeviceSpace == NULL)
         return STATUS_NOT_SUPPORTED;
-    Status = Device->DxgkInterface.DxgkCbReadDeviceSpace(Device->DxgkInterface.DeviceHandle,
-                                                         DXGK_WHICHSPACE_CONFIG,
-                                                         Buffer,
-                                                         Offset,
-                                                         Size,
-                                                         &BytesRead);
+    Status = Interface->DxgkCbReadDeviceSpace(Interface->DeviceHandle,
+                                              DXGK_WHICHSPACE_CONFIG,
+                                              Buffer,
+                                              Offset,
+                                              Size,
+                                              &BytesRead);
     if (NT_SUCCESS(Status) && BytesRead != Size)
         Status = STATUS_DEVICE_DATA_ERROR;
     return Status;
@@ -92,7 +136,7 @@ HdgfxReadConfig(
 
 static BOOLEAN
 HdgfxResourceOwned(
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PDXGK_INTERFACE Interface,
     _In_ ULONGLONG Address,
     _In_ ULONG Size)
 {
@@ -102,9 +146,8 @@ HdgfxResourceOwned(
     ULONG FullIndex;
     ULONG Index;
 
-    if (Device->DxgkInterface.DxgkCbGetDeviceInformation == NULL ||
-        !NT_SUCCESS(Device->DxgkInterface.DxgkCbGetDeviceInformation(Device->DxgkInterface.DeviceHandle,
-                                                                     &DeviceInfo)) ||
+    if (Interface->DxgkCbGetDeviceInformation == NULL ||
+        !NT_SUCCESS(Interface->DxgkCbGetDeviceInformation(Interface->DeviceHandle, &DeviceInfo)) ||
         DeviceInfo.TranslatedResourceList == NULL)
     {
         return FALSE;
@@ -128,24 +171,24 @@ HdgfxResourceOwned(
     return FALSE;
 }
 
-static VOID
-HdgfxReadVbt(
-    _In_ PSOFTGPU_DEVICE Device,
-    _Inout_ PHDGFX_ADAPTER Adapter)
+static PUCHAR
+HdgfxMapOpRegion(
+    _In_ PDXGK_INTERFACE Interface,
+    _Out_ HDGFX_VBT *Vbt,
+    _Out_ PBOOLEAN VbtPresent)
 {
     PHYSICAL_ADDRESS Physical;
     MEMORY_CACHING_TYPE CacheType;
-    const uint8_t *Vbt;
-    size_t VbtSize;
+    const uint8_t *Table;
+    size_t TableSize;
     PUCHAR OpRegion;
     ULONG Asls = 0;
 
-    Adapter->VbtPresent = FALSE;
-    Adapter->OpRegion = NULL;
-    if (!NT_SUCCESS(HdgfxReadConfig(Device, &Asls, HDGFX_PCI_ASLS, sizeof(Asls))) || Asls == 0)
+    *VbtPresent = FALSE;
+    if (!NT_SUCCESS(HdgfxReadConfig(Interface, &Asls, HDGFX_PCI_ASLS, sizeof(Asls))) || Asls == 0)
     {
         DPRINT1("No OpRegion (ASLS is 0)\n");
-        return;
+        return NULL;
     }
 
     Physical.QuadPart = Asls;
@@ -153,20 +196,28 @@ HdgfxReadVbt(
         CacheType = MmNonCached;
     OpRegion = MmMapIoSpace(Physical, HDGFX_OPREGION_SIZE, CacheType);
     if (OpRegion == NULL)
-        return;
+        return NULL;
 
-    if (HdgfxOpRegionFindVbt(OpRegion, HDGFX_OPREGION_SIZE, &Vbt, &VbtSize) &&
-        HdgfxVbtParse(Vbt, VbtSize, &Adapter->Vbt))
+    if (HdgfxOpRegionFindVbt(OpRegion, HDGFX_OPREGION_SIZE, &Table, &TableSize) &&
+        HdgfxVbtParse(Table, TableSize, Vbt))
     {
-        Adapter->VbtPresent = TRUE;
+        *VbtPresent = TRUE;
     }
-    Adapter->OpRegion = OpRegion;
-
-    if (!Adapter->VbtPresent)
+    else
     {
         DPRINT1("OpRegion at 0x%lx has no usable VBT\n", Asls);
-        return;
     }
+    return OpRegion;
+}
+
+static VOID
+HdgfxReadVbt(
+    _In_ PSOFTGPU_DEVICE Device,
+    _Inout_ PHDGFX_ADAPTER Adapter)
+{
+    Adapter->OpRegion = HdgfxMapOpRegion(&Device->DxgkInterface, &Adapter->Vbt, &Adapter->VbtPresent);
+    if (!Adapter->VbtPresent)
+        return;
     DPRINT1("VBT '%s' BDB %lu, LVDS SSC %u/%u, panel type %lu\n",
             Adapter->Vbt.Signature,
             Adapter->Vbt.BdbVersion,
@@ -274,26 +325,24 @@ HdgfxLogDisplayState(
             State->Backlight.Period, State->Backlight.FrequencyHz, State->RawClockKHz);
 }
 
-static VOID
+static BOOLEAN
 HdgfxReadPanelEdid(
-    _In_ PSOFTGPU_DEVICE Device,
-    _In_ PHDGFX_ADAPTER Adapter,
-    _In_ const HDGFX_MMIO *Mmio)
+    _In_ const HDGFX_GENERATION *Generation,
+    _In_ const HDGFX_MMIO *Mmio,
+    _Out_writes_bytes_(HDGFX_EDID_SIZE) PUCHAR Edid,
+    _Out_ HDGFX_EDID *Parsed)
 {
-    UCHAR Edid[HDGFX_EDID_SIZE];
     HDGFX_GMBUS_STATUS Status;
-    HDGFX_EDID Parsed;
     ULONG Index;
 
-    Status = HdgfxGmbusRead(Mmio, Adapter->Generation->PanelDdcPins, HDGFX_DDC_ADDRESS, 0, Edid, sizeof(Edid));
+    Status = HdgfxGmbusRead(Mmio, Generation->PanelDdcPins, HDGFX_DDC_ADDRESS, 0, Edid, HDGFX_EDID_SIZE);
     if (Status != HdgfxGmbusSuccess)
     {
-        DPRINT1("Panel EDID: GMBUS pins %lu: %s\n",
-                Adapter->Generation->PanelDdcPins, HdgfxGmbusStatusName(Status));
-        return;
+        DPRINT1("Panel EDID: GMBUS pins %lu: %s\n", Generation->PanelDdcPins, HdgfxGmbusStatusName(Status));
+        return FALSE;
     }
 
-    for (Index = 0; Index < sizeof(Edid); Index += 16)
+    for (Index = 0; Index < HDGFX_EDID_SIZE; Index += 16)
     {
         DPRINT1("EDID %02lx: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
                 Index,
@@ -302,18 +351,18 @@ HdgfxReadPanelEdid(
                 Edid[Index + 8], Edid[Index + 9], Edid[Index + 10], Edid[Index + 11],
                 Edid[Index + 12], Edid[Index + 13], Edid[Index + 14], Edid[Index + 15]);
     }
-    if (!HdgfxEdidParse(Edid, &Parsed))
+    if (!HdgfxEdidParse(Edid, Parsed))
     {
         DPRINT1("Panel EDID: bad header or checksum\n");
-        return;
+        return FALSE;
     }
 
     DPRINT1("Panel EDID %s %04lx serial %08lx, version %lu.%lu, %lux%lu cm, %lu extensions\n",
-            Parsed.Manufacturer, Parsed.ProductCode, Parsed.SerialNumber,
-            Parsed.Version, Parsed.Revision, Parsed.WidthCm, Parsed.HeightCm, Parsed.Extensions);
-    for (Index = 0; Index < Parsed.DtdCount; Index++)
+            Parsed->Manufacturer, Parsed->ProductCode, Parsed->SerialNumber,
+            Parsed->Version, Parsed->Revision, Parsed->WidthCm, Parsed->HeightCm, Parsed->Extensions);
+    for (Index = 0; Index < Parsed->DtdCount; Index++)
     {
-        const HDGFX_DTD *Dtd = &Parsed.Dtds[Index];
+        const HDGFX_DTD *Dtd = &Parsed->Dtds[Index];
 
         DPRINT1("Panel EDID DTD %lu: %lu kHz %lu %lu %lu %lu %lu %lu %lu %lu %chsync %cvsync %lux%lu mm\n",
                 Index, Dtd->DotKHz,
@@ -322,10 +371,7 @@ HdgfxReadPanelEdid(
                 Dtd->HSyncPositive ? '+' : '-', Dtd->VSyncPositive ? '+' : '-',
                 Dtd->WidthMm, Dtd->HeightMm);
     }
-    DPRINT1("Panel EDID %s the firmware copy (%lu bytes)\n",
-            Device->EdidLength == sizeof(Edid) && RtlEqualMemory(Device->Edid, Edid, sizeof(Edid)) ?
-                "matches" : "differs from",
-            Device->EdidLength);
+    return TRUE;
 }
 
 static VOID
@@ -388,10 +434,7 @@ HdgfxOpRegionIo(
     _In_ PHDGFX_ADAPTER Adapter,
     _Out_ HDGFX_MMIO *Io)
 {
-    Io->Read = HdgfxReadRegister;
-    Io->Context = Adapter->OpRegion;
-    Io->Write = HdgfxWriteRegister;
-    Io->Stall = HdgfxStall;
+    HdgfxMmioInit(Adapter->OpRegion, Io);
 }
 
 static PULONG
@@ -528,7 +571,7 @@ SoftGpuPlatformAdapterStarted(
         ExReInitializeRundownProtection(&Adapter->Rundown);
     }
 
-    if (!NT_SUCCESS(HdgfxReadConfig(Device, Ids, 0, sizeof(Ids))))
+    if (!NT_SUCCESS(HdgfxReadConfig(&Device->DxgkInterface, Ids, 0, sizeof(Ids))))
         return;
     Adapter->Generation = HdgfxFindGeneration(Ids[0], Ids[1]);
     if (Adapter->Generation == NULL)
@@ -537,10 +580,10 @@ SoftGpuPlatformAdapterStarted(
         return;
     }
 
-    if (!NT_SUCCESS(HdgfxReadConfig(Device, &Bar, HDGFX_PCI_BAR0, sizeof(Bar))))
+    if (!NT_SUCCESS(HdgfxReadConfig(&Device->DxgkInterface, &Bar, HDGFX_PCI_BAR0, sizeof(Bar))))
         return;
     Address.QuadPart = (LONGLONG)(Bar & ~0xFULL);
-    if (!HdgfxResourceOwned(Device, (ULONGLONG)Address.QuadPart, HDGFX_MMIO_SIZE))
+    if (!HdgfxResourceOwned(&Device->DxgkInterface, (ULONGLONG)Address.QuadPart, HDGFX_MMIO_SIZE))
     {
         DPRINT1("BAR0 0x%I64x is not in the adapter's resources\n", (ULONGLONG)Address.QuadPart);
         return;
@@ -557,14 +600,10 @@ SoftGpuPlatformAdapterStarted(
     State = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*State), HDGFX_TAG);
     if (State == NULL)
         return;
-    Mmio.Read = HdgfxReadRegister;
-    Mmio.Context = Adapter->Registers;
-    Mmio.Write = HdgfxWriteRegister;
-    Mmio.Stall = HdgfxStall;
+    HdgfxMmioInit(Adapter->Registers, &Mmio);
     Adapter->Generation->ReadDisplayState(&Mmio, State);
     HdgfxLogDisplayState(State);
     Adapter->InternalPanel = State->Lvds.Detected;
-    HdgfxReadPanelEdid(Device, Adapter, &Mmio);
     HdgfxStartBacklight(Device, Adapter, State);
     HdgfxStartAsle(Adapter);
     ExFreePoolWithTag(State, HDGFX_TAG);
@@ -830,4 +869,551 @@ SoftGpuPlatformDpcRoutine(
         HdgfxOpRegionServiceAsle(&Io, HdgfxAsleSetBacklight, Adapter);
     }
     ExReleaseRundownProtection(&Adapter->Rundown);
+}
+
+static NTSTATUS
+HdgfxScanoutCommit(
+    _In_ PHDGFX_SCANOUT Scanout,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG Pitch)
+{
+    HDGFX_DISPLAY_STATE *States;
+    HDGFX_MODESET_STATUS Result;
+    HDGFX_LVDS_MODE Mode;
+    HDGFX_MMIO Mmio;
+    const HDGFX_PIPE *Pipe;
+    const HDGFX_DPLL *Dpll;
+    const char *Mismatch;
+    ULONGLONG Start;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    States = ExAllocatePoolZero(NonPagedPoolNx, 2 * sizeof(*States), HDGFX_TAG);
+    if (States == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlZeroMemory(&Mode, sizeof(Mode));
+    Mode.Panel = &Scanout->Panel;
+    Mode.SourceWidth = Width;
+    Mode.SourceHeight = Height;
+    Mode.Stride = Pitch;
+    Mode.Surface = Scanout->Surface;
+    Mode.Scaling = HdgfxScalingAspect;
+    Mode.Ssc = Scanout->Ssc;
+
+    HdgfxMmioInit(Scanout->Registers, &Mmio);
+    Scanout->Generation->ReadDisplayState(&Mmio, &States[0]);
+    Result = Scanout->Generation->ComputeLvds(&States[0], &Mode, &States[1]);
+    if (Result != HdgfxModesetSuccess)
+    {
+        DPRINT1("LVDS %lux%lu pitch %lu: %s\n", Width, Height, Pitch, HdgfxModesetStatusName(Result));
+        ExFreePoolWithTag(States, HDGFX_TAG);
+        return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+    }
+
+    Start = KeQueryInterruptTime();
+    Result = Scanout->Generation->CommitLvds(&Mmio, &States[1]);
+    Pipe = &States[1].Pipes[States[1].Lvds.Transcoder];
+    Dpll = &States[1].Dplls[States[1].Transcoders[States[1].Lvds.Transcoder].Dpll];
+    if (Result != HdgfxModesetSuccess)
+    {
+        DPRINT1("LVDS %lux%lu commit failed after %I64u ms: %s\n",
+                Width, Height, (KeQueryInterruptTime() - Start) / 10000, HdgfxModesetStatusName(Result));
+        Status = STATUS_DEVICE_HARDWARE_ERROR;
+    }
+    else
+    {
+        Scanout->Generation->ReadDisplayState(&Mmio, &States[0]);
+        Mismatch = HdgfxCompareLvdsState(&States[1], &States[0]);
+        DPRINT1("LVDS %lux%lu pitch %lu at 0x%lx, fitter %u %lu,%lu %lux%lu; DPLL N %lu M1 %lu M2 %lu P1 %lu P2 %lu "
+                "ref %lu = %lu kHz, FDI x%lu data %lu link %lu: %I64u ms, readback %s%s\n",
+                Width, Height, Pitch, Pipe->Primary.Surface,
+                Pipe->PanelFitter.Enabled, Pipe->PanelFitter.X, Pipe->PanelFitter.Y,
+                Pipe->PanelFitter.Width, Pipe->PanelFitter.Height,
+                Dpll->N, Dpll->M1, Dpll->M2, Dpll->P1, Dpll->P2, Dpll->Reference, Dpll->DotKHz,
+                Pipe->FdiTx.Lanes, Pipe->Fdi.DataM, Pipe->Fdi.LinkM,
+                (KeQueryInterruptTime() - Start) / 10000,
+                Mismatch ? "differs in " : "matches", Mismatch ? Mismatch : "");
+        if (Mismatch)
+            Status = STATUS_DEVICE_HARDWARE_ERROR;
+    }
+
+    ExFreePoolWithTag(States, HDGFX_TAG);
+    return Status;
+}
+
+static NTSTATUS
+HdgfxSetMode(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ const SOFTGPU_DISPLAY_MODE *Mode)
+{
+    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+
+    if (Scanout == NULL || Mode == NULL)
+        return STATUS_INVALID_PARAMETER;
+    return HdgfxScanoutCommit(Scanout, Mode->Width, Mode->Height, Mode->Pitch);
+}
+
+static VOID
+HdgfxScanoutFree(
+    _In_ PHDGFX_SCANOUT Scanout)
+{
+    if (Scanout->Registers != NULL)
+        MmUnmapIoSpace(Scanout->Registers, HDGFX_MMIO_SIZE);
+    ExFreePoolWithTag(Scanout, HDGFX_TAG);
+}
+
+static VOID
+HdgfxAddMode(
+    _Inout_ PSOFTGPU_PLATFORM_CONFIG Config,
+    _In_ ULONG Width,
+    _In_ ULONG Height)
+{
+    SOFTGPU_DISPLAY_MODE *Mode;
+    ULONG Index;
+
+    for (Index = 0; Index < Config->ModeCount; Index++)
+    {
+        if (Config->Modes[Index].Width == Width && Config->Modes[Index].Height == Height)
+            return;
+    }
+    if (Config->ModeCount >= SOFTGPU_MAX_DISPLAY_MODES)
+        return;
+
+    Mode = &Config->Modes[Config->ModeCount];
+    Mode->Width = Width;
+    Mode->Height = Height;
+    Mode->Pitch = ALIGN_UP_BY(Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL, HDGFX_STRIDE_ALIGNMENT);
+    Mode->PlatformMode = Config->ModeCount;
+    Config->ScanoutSize = max(Config->ScanoutSize, (ULONGLONG)Mode->Pitch * Height);
+    Config->ModeCount++;
+}
+
+static BOOLEAN
+HdgfxGttMapped(
+    _In_ PDXGK_INTERFACE Interface,
+    _In_ ULONGLONG Bar0,
+    _In_ ULONG Surface,
+    _In_ ULONGLONG Size)
+{
+    ULONG Pages = (ULONG)(Size / PAGE_SIZE);
+    PHYSICAL_ADDRESS Address;
+    PULONG Gtt;
+    ULONG Entry;
+    ULONG Index;
+
+    Address.QuadPart = (LONGLONG)(Bar0 + HDGFX_REG(GTT_PTE, Surface / PAGE_SIZE));
+    if (!HdgfxResourceOwned(Interface, (ULONGLONG)Address.QuadPart, Pages * sizeof(ULONG)))
+        return FALSE;
+    Gtt = MmMapIoSpace(Address, Pages * sizeof(ULONG), MmNonCached);
+    if (Gtt == NULL)
+        return FALSE;
+
+    for (Index = 0; Index < Pages; Index++)
+    {
+        Entry = READ_REGISTER_ULONG(&Gtt[Index]);
+        if (!HDGFX_GET(Entry, GTT_PTE_VALID))
+        {
+            DPRINT1("GTT entry for 0x%lx is 0x%08lx; the firmware maps only %lu KB of the surface\n",
+                    Surface + Index * PAGE_SIZE, Entry, Index * (PAGE_SIZE / 1024));
+            break;
+        }
+    }
+    MmUnmapIoSpace(Gtt, Pages * sizeof(ULONG));
+    return Index == Pages;
+}
+
+static NTSTATUS
+HdgfxScanoutStart(
+    _In_ PDXGK_INTERFACE Interface,
+    _Inout_ PHDGFX_SCANOUT Scanout,
+    _Inout_ PSOFTGPU_PLATFORM_CONFIG Config)
+{
+    HDGFX_DISPLAY_STATE *State;
+    PHYSICAL_ADDRESS Address;
+    HDGFX_EDID Edid;
+    HDGFX_VBT Vbt;
+    HDGFX_MMIO Mmio;
+    BOOLEAN VbtPresent;
+    BOOLEAN PanelFound = FALSE;
+    ULONGLONG Bar0 = 0;
+    ULONGLONG Bar2 = 0;
+    USHORT Ids[2] = { 0, 0 };
+    PUCHAR Mapping;
+    ULONG Index;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(HdgfxReadConfig(Interface, Ids, 0, sizeof(Ids))))
+        return STATUS_NOT_SUPPORTED;
+    Scanout->Generation = HdgfxFindGeneration(Ids[0], Ids[1]);
+    if (Scanout->Generation == NULL || Scanout->Generation->ComputeLvds == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    if (!NT_SUCCESS(HdgfxReadConfig(Interface, &Bar0, HDGFX_PCI_BAR0, sizeof(Bar0))) ||
+        !NT_SUCCESS(HdgfxReadConfig(Interface, &Bar2, HDGFX_PCI_BAR2, sizeof(Bar2))))
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    Bar0 &= ~0xFULL;
+    Bar2 &= ~0xFULL;
+    if (!HdgfxResourceOwned(Interface, Bar0, HDGFX_MMIO_SIZE))
+        return STATUS_NOT_SUPPORTED;
+    Address.QuadPart = (LONGLONG)Bar0;
+    Scanout->Registers = MmMapIoSpace(Address, HDGFX_MMIO_SIZE, MmNonCached);
+    if (Scanout->Registers == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    State = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*State), HDGFX_TAG);
+    if (State == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    HdgfxMmioInit(Scanout->Registers, &Mmio);
+    Scanout->Generation->ReadDisplayState(&Mmio, State);
+    DPRINT1("Firmware scan-out: pipe A %u source %lux%lu fitter %u, plane stride %lu surface 0x%lx x-tiled %u\n",
+            State->Pipes[0].Enabled, State->Pipes[0].SourceWidth, State->Pipes[0].SourceHeight,
+            State->Pipes[0].PanelFitter.Enabled, State->Pipes[0].Primary.Stride,
+            State->Pipes[0].Primary.Surface, State->Pipes[0].Primary.XTiled);
+    if (!State->Lvds.Detected)
+    {
+        DPRINT1("No LVDS panel detected\n");
+        ExFreePoolWithTag(State, HDGFX_TAG);
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    if (HdgfxReadPanelEdid(Scanout->Generation, &Mmio, Config->Edid, &Edid) && Edid.DtdCount != 0)
+    {
+        Config->EdidLength = HDGFX_EDID_SIZE;
+        Scanout->Panel = Edid.Dtds[0];
+        PanelFound = TRUE;
+    }
+    Mapping = HdgfxMapOpRegion(Interface, &Vbt, &VbtPresent);
+    if (Mapping != NULL)
+        MmUnmapIoSpace(Mapping, HDGFX_OPREGION_SIZE);
+    if (!PanelFound && VbtPresent && Vbt.Panel.Present)
+    {
+        Scanout->Panel.DotKHz = Vbt.Panel.DotKHz;
+        Scanout->Panel.Timings = Vbt.Panel.Timings;
+        Scanout->Panel.HSyncPositive = Vbt.Panel.HSyncPositive;
+        Scanout->Panel.VSyncPositive = Vbt.Panel.VSyncPositive;
+        Scanout->Panel.WidthMm = Vbt.Panel.WidthMm;
+        Scanout->Panel.HeightMm = Vbt.Panel.HeightMm;
+        PanelFound = TRUE;
+    }
+    Scanout->Ssc = VbtPresent ? Vbt.LvdsSscEnabled :
+                   State->Dplls[0].Enabled && State->Dplls[0].Reference == 3;
+    ExFreePoolWithTag(State, HDGFX_TAG);
+    if (!PanelFound)
+    {
+        DPRINT1("No panel timing in the EDID or the VBT\n");
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    HdgfxAddMode(Config, Scanout->Panel.Timings.HActive, Scanout->Panel.Timings.VActive);
+    for (Index = 0; Index < RTL_NUMBER_OF(HdgfxScaledModes); Index++)
+    {
+        if (HdgfxScaledModes[Index][0] <= Scanout->Panel.Timings.HActive &&
+            HdgfxScaledModes[Index][1] <= Scanout->Panel.Timings.VActive)
+        {
+            HdgfxAddMode(Config, HdgfxScaledModes[Index][0], HdgfxScaledModes[Index][1]);
+        }
+    }
+    Config->ScanoutSize = ALIGN_UP_BY(Config->ScanoutSize, PAGE_SIZE);
+
+    if (!HdgfxResourceOwned(Interface, Bar2 + Scanout->Surface, (ULONG)Config->ScanoutSize) ||
+        !HdgfxGttMapped(Interface, Bar0, Scanout->Surface, Config->ScanoutSize))
+    {
+        DPRINT1("Aperture 0x%I64x cannot hold a %I64u-byte surface\n", Bar2, Config->ScanoutSize);
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    Address.QuadPart = (LONGLONG)(Bar2 + Scanout->Surface);
+    Mapping = MmMapIoSpace(Address, (SIZE_T)Config->ScanoutSize, MmWriteCombined);
+    if (Mapping == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(Mapping, (SIZE_T)Config->ScanoutSize);
+    MmUnmapIoSpace(Mapping, (SIZE_T)Config->ScanoutSize);
+
+    Status = HdgfxScanoutCommit(Scanout, Config->Modes[0].Width, Config->Modes[0].Height, Config->Modes[0].Pitch);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Config->Width = Config->Modes[0].Width;
+    Config->Height = Config->Modes[0].Height;
+    Config->Format = D3DDDIFMT_X8R8G8B8;
+    Config->ScanoutPhysicalAddress = Address;
+    Config->ScanoutPitch = Config->Modes[0].Pitch;
+    Config->CurrentMode = 0;
+    Config->SetMode = HdgfxSetMode;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+HdgfxComputeSlabs(
+    _Inout_ PSOFTGPU_PLATFORM_CONFIG Config)
+{
+    SIZE_T WorkingSetSize;
+    ULONG Index;
+    NTSTATUS Status;
+
+    for (Index = 0; Index < Config->ModeCount; Index++)
+    {
+        Status = SoftGpu2dComputeAllocationSlabSize(Config->Modes[Index].Width, Config->Modes[Index].Height,
+                                                    HDGFX_WORKING_SURFACE_COUNT, MAXULONG_PTR, &WorkingSetSize);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Config->Modes[Index].AllocationSlabSize = min(WorkingSetSize, SOFTGPU_MAX_ALLOCATION_SLAB_SIZE);
+    }
+
+    Status = SoftGpu2dComputeAllocationSlabSize(Config->Width, Config->Height,
+                                                HDGFX_WORKING_SURFACE_COUNT, MAXULONG_PTR, &WorkingSetSize);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Config->MinimumAllocationSlabSize = min(WorkingSetSize, SOFTGPU_MAX_ALLOCATION_SLAB_SIZE);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+SoftGpuPlatformValidatePdo(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject)
+{
+    return PhysicalDeviceObject != NULL ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+}
+
+NTSTATUS
+SoftGpuPlatformQueryStart(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PDXGK_INTERFACE DxgkInterface,
+    _Out_ PSOFTGPU_PLATFORM_CONFIG Config)
+{
+    DXGK_DISPLAY_INFORMATION PostDisplay;
+    ULONGLONG VisibleLength;
+    PHDGFX_SCANOUT Scanout;
+    NTSTATUS Status;
+
+    if (Device == NULL || DxgkInterface == NULL || Config == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    RtlZeroMemory(Config, sizeof(*Config));
+    Status = SoftGpuAcquirePostDisplay(DxgkInterface, &PostDisplay, &VisibleLength);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Scanout = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Scanout), HDGFX_TAG);
+    if (Scanout == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = HdgfxScanoutStart(DxgkInterface, Scanout, Config);
+    if (NT_SUCCESS(Status))
+    {
+        Device->PlatformContext = Scanout;
+    }
+    else
+    {
+        HdgfxScanoutFree(Scanout);
+        if (PostDisplay.Width == 0)
+            return Status;
+
+        DPRINT1("Scan-out setup failed 0x%08lx; keeping the %lux%lu firmware framebuffer\n",
+                Status, PostDisplay.Width, PostDisplay.Height);
+        RtlZeroMemory(Config, sizeof(*Config));
+        Config->Width = PostDisplay.Width;
+        Config->Height = PostDisplay.Height;
+        Config->Format = PostDisplay.ColorFormat;
+        Config->ScanoutPhysicalAddress = PostDisplay.PhysicAddress;
+        Config->ScanoutPitch = PostDisplay.Pitch;
+        Config->ScanoutSize = VisibleLength;
+    }
+    return HdgfxComputeSlabs(Config);
+}
+
+ULONG
+SoftGpuPlatformDmaBufferPrivateDataSize(VOID)
+{
+    return 0;
+}
+
+ULONG
+SoftGpuPlatformDmaBufferSegmentSet(VOID)
+{
+    return 0;
+}
+
+NTSTATUS
+SoftGpuPlatformStartScanout(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    UNREFERENCED_PARAMETER(Device);
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
+SoftGpuPlatformStopScanout(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    PHDGFX_SCANOUT Scanout;
+
+    if (Device == NULL || Device->PlatformContext == NULL)
+        return STATUS_SUCCESS;
+
+    Scanout = Device->PlatformContext;
+    Device->PlatformContext = NULL;
+    HdgfxScanoutFree(Scanout);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+SoftGpuPlatformSetPrimary(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ PHYSICAL_ADDRESS PrimaryAddress,
+    _In_ ULONG Pitch,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ BOOLEAN Visible)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(PrimaryAddress);
+    UNREFERENCED_PARAMETER(Pitch);
+    UNREFERENCED_PARAMETER(Width);
+    UNREFERENCED_PARAMETER(Height);
+    UNREFERENCED_PARAMETER(Visible);
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
+SoftGpuPlatformPresentDisplayOnly(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ const DXGKARG_PRESENT_DISPLAYONLY *PresentDisplayOnly)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(PresentDisplayOnly);
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
+SoftGpuPlatformUpdatePointer(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    UNREFERENCED_PARAMETER(Device);
+    return STATUS_NOT_SUPPORTED;
+}
+
+VOID
+SoftGpuPlatformScanoutWritten(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ const RECT *Rect)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(Rect);
+}
+
+VOID
+SoftGpuPlatformFillNodeMetadata(
+    _In_ ULONG NodeOrdinal,
+    _Out_ DXGKARG_GETNODEMETADATA *GetNodeMetadata)
+{
+    static const WCHAR FriendlyName[] = L"3D";
+
+    UNREFERENCED_PARAMETER(NodeOrdinal);
+    GetNodeMetadata->EngineType = DXGK_ENGINE_TYPE_3D;
+    RtlCopyMemory(GetNodeMetadata->FriendlyName, FriendlyName, sizeof(FriendlyName));
+}
+
+static ULONG
+HdgfxScanLine(
+    _In_ PHDGFX_SCANOUT Scanout)
+{
+    return HDGFX_GET(READ_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(PIPE_DSL, 0))), PIPE_DSL_LINE);
+}
+
+static BOOLEAN
+HdgfxWaitForBlank(
+    _In_ PHDGFX_SCANOUT Scanout,
+    _In_ BOOLEAN InBlank)
+{
+    ULONG Elapsed;
+
+    for (Elapsed = 0; Elapsed < HDGFX_VBLANK_TIMEOUT_US; Elapsed += HDGFX_VBLANK_POLL_US)
+    {
+        if ((HdgfxScanLine(Scanout) >= Scanout->Panel.Timings.VActive) == InBlank)
+            return TRUE;
+        KeStallExecutionProcessor(HDGFX_VBLANK_POLL_US);
+    }
+    return FALSE;
+}
+
+VOID
+SoftGpuPlatformInitializeTiming(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    PHDGFX_SCANOUT Scanout;
+
+    if (Device == NULL)
+        return;
+
+    Scanout = Device->PlatformContext;
+    InterlockedExchange(&Device->ScanoutVBlankAvailable,
+                        Scanout != NULL && HdgfxWaitForBlank(Scanout, FALSE) && HdgfxWaitForBlank(Scanout, TRUE));
+}
+
+BOOLEAN
+SoftGpuPlatformWaitForVerticalBlank(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    PHDGFX_SCANOUT Scanout;
+
+    if (Device == NULL || InterlockedCompareExchange(&Device->ScanoutVBlankAvailable, 0, 0) == 0)
+        return FALSE;
+
+    Scanout = Device->PlatformContext;
+    if (Scanout != NULL && HdgfxWaitForBlank(Scanout, FALSE) && HdgfxWaitForBlank(Scanout, TRUE))
+        return TRUE;
+
+    InterlockedExchange(&Device->ScanoutVBlankAvailable, 0);
+    return FALSE;
+}
+
+NTSTATUS
+SoftGpuPlatformQueryScanLine(
+    _In_ PSOFTGPU_DEVICE Device,
+    _Inout_ PDXGKARG_GETSCANLINE GetScanLine)
+{
+    PHDGFX_SCANOUT Scanout;
+    ULONG Line;
+
+    if (Device == NULL || GetScanLine == NULL || GetScanLine->VidPnTargetId != 0)
+        return STATUS_INVALID_PARAMETER;
+
+    Scanout = Device->PlatformContext;
+    if (Scanout == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    Line = HdgfxScanLine(Scanout);
+    GetScanLine->ScanLine = Line;
+    GetScanLine->InVerticalBlank = Line >= Scanout->Panel.Timings.VActive;
+    return STATUS_SUCCESS;
+}
+
+MEMORY_CACHING_TYPE
+SoftGpuPlatformSegmentCacheType(VOID)
+{
+    return MmCached;
+}
+
+NTSTATUS
+SoftGpuPlatformQueryDescriptor(
+    _In_ PSOFTGPU_DEVICE Device,
+    _Inout_ PDXGK_DEVICE_DESCRIPTOR DeviceDescriptor)
+{
+    ULONG Length;
+
+    if (Device->EdidLength == 0)
+        return STATUS_MONITOR_NO_DESCRIPTOR;
+    if (DeviceDescriptor->DescriptorOffset >= Device->EdidLength)
+        return STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA;
+    if (DeviceDescriptor->DescriptorBuffer == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    Length = min(DeviceDescriptor->DescriptorLength, Device->EdidLength - DeviceDescriptor->DescriptorOffset);
+    RtlCopyMemory(DeviceDescriptor->DescriptorBuffer, Device->Edid + DeviceDescriptor->DescriptorOffset, Length);
+    DeviceDescriptor->DescriptorLength = Length;
+    return STATUS_SUCCESS;
 }
