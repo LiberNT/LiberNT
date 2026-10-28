@@ -351,6 +351,9 @@ DriverEntry(
     InitData.DxgkDdiRemoveDevice                    = SoftGpuDdiRemoveDevice;
     InitData.DxgkDdiResetDevice                     = SoftGpuDdiResetDevice;
     InitData.DxgkDdiSetPowerState                   = SoftGpuDdiSetPowerState;
+#if defined(SOFTGPU_PLATFORM_ACPI_EVENTS)
+    InitData.DxgkDdiNotifyAcpiEvent                 = SoftGpuDdiNotifyAcpiEvent;
+#endif
     InitData.DxgkDdiQueryInterface                  =
         SoftGpuDdiQueryInterface;
 
@@ -3120,6 +3123,34 @@ SoftGpuDdiSetPowerState(
 
     return STATUS_SUCCESS;
 }
+
+#if defined(SOFTGPU_PLATFORM_ACPI_EVENTS)
+NTSTATUS
+APIENTRY
+SoftGpuDdiNotifyAcpiEvent(
+    _In_      PVOID           MiniportDeviceContext,
+    _In_      DXGK_EVENT_TYPE EventType,
+    _In_      ULONG           Event,
+    _In_      PVOID           Argument,
+    _Out_opt_ PULONG          AcpiFlags)
+{
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    ULONG Flags = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (AcpiFlags != NULL)
+        *AcpiFlags = 0;
+    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
+        return STATUS_INVALID_PARAMETER;
+
+    Status = SoftGpuPlatformNotifyAcpiEvent(Device, EventType, Event, Argument, &Flags);
+    if (NT_SUCCESS(Status) && AcpiFlags != NULL)
+        *AcpiFlags = Flags;
+    return Status;
+}
+#endif
 
 
 /* =========================================================================

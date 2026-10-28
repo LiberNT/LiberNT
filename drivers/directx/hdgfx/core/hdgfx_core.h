@@ -23,6 +23,9 @@ extern "C" {
 #define HDGFX_DDC_ADDRESS 0x50
 
 #define HDGFX_ASLE_LEVEL_MAX 255
+#define HDGFX_OPREGION_EVENT_HOTKEY 0x01
+#define HDGFX_OPREGION_EVENT_LID    0x02
+#define HDGFX_OPREGION_EVENT_DOCK   0x04
 
 typedef uint32_t (*HDGFX_READ_REGISTER)(void *Context, uint32_t Offset);
 typedef void (*HDGFX_WRITE_REGISTER)(void *Context, uint32_t Offset, uint32_t Value);
@@ -328,6 +331,16 @@ HdgfxOpRegionServiceAsle(
     const HDGFX_MMIO *OpRegion,
     HDGFX_SET_BACKLIGHT SetBacklight,
     void *Context);
+
+bool
+HdgfxOpRegionBeginNotification(
+    const HDGFX_MMIO *OpRegion,
+    uint32_t *Events);
+
+void
+HdgfxOpRegionEndNotification(
+    const HDGFX_MMIO *OpRegion,
+    bool Success);
 
 bool
 HdgfxVbtParse(

@@ -15,6 +15,8 @@
 #define OPREGION_MBOX_ACPI          0x01
 #define OPREGION_MBOX_ASLE          0x04
 #define OPREGION_DRDY               0x100
+#define OPREGION_CSTS               0x104
+#define OPREGION_CEVT               0x108
 #define OPREGION_DIDL               0x120
 #define OPREGION_CADL               0x160
 #define OPREGION_ARDY               0x300
@@ -28,6 +30,11 @@
 #define OPREGION_ASLC_REQUESTS      9
 #define OPREGION_ASLC_BLC           1
 #define OPREGION_ASLC_FAILED(Index) (1u << (10 + 2 * (Index)))
+#define OPREGION_CSTS_SUCCESS       0
+#define OPREGION_CSTS_FAILURE       1
+#define OPREGION_CSTS_PENDING       2
+#define OPREGION_CSTS_DISPATCHED    3
+#define OPREGION_CEVT_MASK          0x07
 
 static bool
 OpRegionSigned(
@@ -122,4 +129,26 @@ HdgfxOpRegionServiceAsle(
     }
     OpRegion->Write(OpRegion->Context, OPREGION_ASLC, Response);
     return true;
+}
+
+bool
+HdgfxOpRegionBeginNotification(
+    const HDGFX_MMIO *OpRegion,
+    uint32_t *Events)
+{
+    *Events = 0;
+    if (OpRegion->Read(OpRegion->Context, OPREGION_CSTS) != OPREGION_CSTS_DISPATCHED)
+        return false;
+
+    OpRegion->Write(OpRegion->Context, OPREGION_CSTS, OPREGION_CSTS_PENDING);
+    *Events = OpRegion->Read(OpRegion->Context, OPREGION_CEVT) & OPREGION_CEVT_MASK;
+    return true;
+}
+
+void
+HdgfxOpRegionEndNotification(
+    const HDGFX_MMIO *OpRegion,
+    bool Success)
+{
+    OpRegion->Write(OpRegion->Context, OPREGION_CSTS, Success ? OPREGION_CSTS_SUCCESS : OPREGION_CSTS_FAILURE);
 }

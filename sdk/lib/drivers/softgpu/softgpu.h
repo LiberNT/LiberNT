@@ -958,6 +958,25 @@ SoftGpuDdiSetPowerState(
     _In_ DEVICE_POWER_STATE DevicePowerState,
     _In_ POWER_ACTION       ActionType);
 
+#if defined(SOFTGPU_PLATFORM_ACPI_EVENTS)
+NTSTATUS
+APIENTRY
+SoftGpuDdiNotifyAcpiEvent(
+    _In_      PVOID           MiniportDeviceContext,
+    _In_      DXGK_EVENT_TYPE EventType,
+    _In_      ULONG           Event,
+    _In_      PVOID           Argument,
+    _Out_opt_ PULONG          AcpiFlags);
+
+NTSTATUS
+SoftGpuPlatformNotifyAcpiEvent(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ DXGK_EVENT_TYPE EventType,
+    _In_ ULONG Event,
+    _In_opt_ PVOID Argument,
+    _Out_ PULONG AcpiFlags);
+#endif
+
 NTSTATUS
 APIENTRY
 SoftGpuDdiControlInterrupt(
