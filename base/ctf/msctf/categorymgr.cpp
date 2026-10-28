@@ -200,20 +200,196 @@ STDMETHODIMP CCategoryMgr::UnregisterCategory(
     return S_OK;
 }
 
+class CEnumCategoryGuid final : public IEnumGUID
+{
+public:
+    CEnumCategoryGuid() : m_refs(1), m_guids(NULL), m_count(0), m_index(0) { }
+
+    HRESULT Add(REFGUID guid)
+    {
+        for (ULONG i = 0; i < m_count; ++i)
+        {
+            if (m_guids[i] == guid)
+                return S_OK;
+        }
+        GUID *guids = static_cast<GUID *>(cicMemReAlloc(m_guids, (m_count + 1) * sizeof(*guids)));
+        if (!guids)
+            return E_OUTOFMEMORY;
+        m_guids = guids;
+        m_guids[m_count++] = guid;
+        return S_OK;
+    }
+
+    HRESULT AddFromTipSubkeys(LPCWSTR pszFormat, REFGUID rguid)
+    {
+        WCHAR szGuid[39], szClsid[39], szKey[200];
+        HKEY hTips;
+        StringFromGUID2(rguid, szGuid, _countof(szGuid));
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, szwSystemTIPKey, 0, KEY_READ, &hTips) != ERROR_SUCCESS)
+            return S_OK;
+        for (DWORD index = 0;; ++index)
+        {
+            DWORD cch = _countof(szClsid);
+            if (RegEnumKeyExW(hTips, index, szClsid, &cch, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+                break;
+            StringCchPrintfW(szKey, _countof(szKey), pszFormat, szClsid, szGuid);
+            HKEY hKey;
+            if (RegOpenKeyExW(hTips, szKey, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+                continue;
+            for (DWORD item = 0;; ++item)
+            {
+                WCHAR szItem[39];
+                DWORD cchItem = _countof(szItem);
+                GUID guid;
+                if (RegEnumKeyExW(hKey, item, szItem, &cchItem, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+                    break;
+                if (SUCCEEDED(CLSIDFromString(szItem, &guid)) && FAILED(Add(guid)))
+                {
+                    RegCloseKey(hKey);
+                    RegCloseKey(hTips);
+                    return E_OUTOFMEMORY;
+                }
+            }
+            RegCloseKey(hKey);
+        }
+        RegCloseKey(hTips);
+        return S_OK;
+    }
+
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppvObj) override
+    {
+        if (!ppvObj)
+            return E_POINTER;
+        *ppvObj = NULL;
+        if (riid != IID_IUnknown && riid != IID_IEnumGUID)
+            return E_NOINTERFACE;
+        *ppvObj = static_cast<IEnumGUID *>(this);
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_refs); }
+    STDMETHODIMP_(ULONG) Release() override
+    {
+        ULONG refs = InterlockedDecrement(&m_refs);
+        if (!refs)
+            delete this;
+        return refs;
+    }
+    STDMETHODIMP Next(ULONG celt, GUID *rgelt, ULONG *pceltFetched) override
+    {
+        if (!rgelt || (celt > 1 && !pceltFetched))
+            return E_INVALIDARG;
+        ULONG fetched = 0;
+        while (fetched < celt && m_index < m_count)
+            rgelt[fetched++] = m_guids[m_index++];
+        if (pceltFetched)
+            *pceltFetched = fetched;
+        return (fetched == celt) ? S_OK : S_FALSE;
+    }
+    STDMETHODIMP Skip(ULONG celt) override
+    {
+        if (celt > m_count - m_index)
+        {
+            m_index = m_count;
+            return S_FALSE;
+        }
+        m_index += celt;
+        return S_OK;
+    }
+    STDMETHODIMP Reset() override
+    {
+        m_index = 0;
+        return S_OK;
+    }
+    STDMETHODIMP Clone(IEnumGUID **ppenum) override
+    {
+        if (!ppenum)
+            return E_INVALIDARG;
+        *ppenum = NULL;
+        CEnumCategoryGuid *pEnum = new(cicNoThrow) CEnumCategoryGuid();
+        if (!pEnum)
+            return E_OUTOFMEMORY;
+        for (ULONG i = 0; i < m_count; ++i)
+        {
+            if (FAILED(pEnum->Add(m_guids[i])))
+            {
+                pEnum->Release();
+                return E_OUTOFMEMORY;
+            }
+        }
+        pEnum->m_index = m_index;
+        *ppenum = pEnum;
+        return S_OK;
+    }
+
+private:
+    ~CEnumCategoryGuid() { cicMemFree(m_guids); }
+
+    LONG m_refs;
+    GUID *m_guids;
+    ULONG m_count;
+    ULONG m_index;
+};
+
+static HRESULT
+CreateCategoryEnum(LPCWSTR pszFormat, REFGUID rguid, IEnumGUID **ppEnum)
+{
+    if (!ppEnum)
+        return E_INVALIDARG;
+    *ppEnum = NULL;
+    CEnumCategoryGuid *pEnum = new(cicNoThrow) CEnumCategoryGuid();
+    if (!pEnum)
+        return E_OUTOFMEMORY;
+    HRESULT hr = pEnum->AddFromTipSubkeys(pszFormat, rguid);
+    if (FAILED(hr))
+    {
+        pEnum->Release();
+        return hr;
+    }
+    *ppEnum = pEnum;
+    return S_OK;
+}
+
 STDMETHODIMP CCategoryMgr::EnumCategoriesInItem(
     _In_ REFGUID rguid,
     _Out_ IEnumGUID **ppEnum)
 {
-    FIXME("STUB:(%p)\n", this);
-    return E_NOTIMPL;
+    TRACE("(%p) %s %p\n", this, debugstr_guid(&rguid), ppEnum);
+    return CreateCategoryEnum(L"%s\\Category\\Item\\%s", rguid, ppEnum);
 }
 
 STDMETHODIMP CCategoryMgr::EnumItemsInCategory(
     _In_ REFGUID rcatid,
     _Out_ IEnumGUID **ppEnum)
 {
-    FIXME("STUB:(%p)\n", this);
-    return E_NOTIMPL;
+    TRACE("(%p) %s %p\n", this, debugstr_guid(&rcatid), ppEnum);
+    return CreateCategoryEnum(L"%s\\Category\\Category\\%s", rcatid, ppEnum);
+}
+
+static BOOL
+ItemHasCategory(_In_ LPCWSTR pszItem, _In_ REFGUID rcatid)
+{
+    WCHAR szCatid[39], szTip[39], szKey[200];
+    HKEY hTips, hKey;
+    BOOL bFound = FALSE;
+
+    StringFromGUID2(rcatid, szCatid, _countof(szCatid));
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, szwSystemTIPKey, 0, KEY_READ, &hTips) != ERROR_SUCCESS)
+        return FALSE;
+    for (DWORD dwIndex = 0; !bFound; ++dwIndex)
+    {
+        DWORD cchTip = _countof(szTip);
+        if (RegEnumKeyExW(hTips, dwIndex, szTip, &cchTip, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        StringCchPrintfW(szKey, _countof(szKey), L"%s\\Category\\Item\\%s\\%s", szTip, pszItem, szCatid);
+        if (RegOpenKeyExW(hTips, szKey, 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+        {
+            RegCloseKey(hKey);
+            bFound = TRUE;
+        }
+    }
+    RegCloseKey(hTips);
+    return bFound;
 }
 
 STDMETHODIMP CCategoryMgr::FindClosestCategory(
@@ -222,67 +398,57 @@ STDMETHODIMP CCategoryMgr::FindClosestCategory(
     _In_ const GUID **ppcatidList,
     _In_ ULONG ulCount)
 {
-    WCHAR szFullKey[120], szGuid[39];
-    HKEY hKey = NULL;
-    HRESULT hr = S_FALSE;
-    DWORD dwIndex = 0;
-    LSTATUS error;
+    WCHAR szGuid[39], szTip[39], szKey[200];
+    HKEY hTips, hItem;
 
     TRACE("(%p)\n", this);
 
     if (!pcatid || (ulCount && !ppcatidList))
         return E_INVALIDARG;
 
-    StringFromGUID2(rguid, szGuid, _countof(szGuid));
-    StringCchPrintfW(szFullKey, _countof(szFullKey), L"%s\\%s\\Category\\Item\\%s", szwSystemTIPKey, szGuid, szGuid);
     *pcatid = GUID_NULL;
+    StringFromGUID2(rguid, szGuid, _countof(szGuid));
 
-    error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, szFullKey, 0, KEY_READ, &hKey);
-    if (error != ERROR_SUCCESS)
-        return S_FALSE;
-
-    // Enumerate subkeys to find the closest category
-    while (TRUE)
+    if (ulCount)
     {
-        WCHAR szCatidName[39];
-        DWORD cchCatidName = _countof(szCatidName);
-        GUID currentCatid;
-
-        error = RegEnumKeyExW(hKey, dwIndex, szCatidName, &cchCatidName, NULL, NULL, NULL, NULL);
-        if (error != ERROR_SUCCESS || error == ERROR_NO_MORE_ITEMS)
-            break;
-
-        dwIndex++;
-
-        HRESULT hr2 = CLSIDFromString(szCatidName, &currentCatid);
-        if (FAILED(hr2))
-            continue; // Skip invalid GUID strings
-
-        if (ulCount <= 0)
+        for (ULONG i = 0; i < ulCount; ++i)
         {
-            *pcatid = currentCatid;
-            hr = S_OK; // Found a category
-            break;
-        }
-
-        // If a list of categories is provided, check if the current one is in the list
-        BOOL bFound = FALSE;
-        for (ULONG j = 0; j < ulCount; j++)
-        {
-            if (currentCatid == *ppcatidList[j])
+            if (ItemHasCategory(szGuid, *ppcatidList[i]))
             {
-                bFound = TRUE;
-                *pcatid = currentCatid;
-                hr = S_OK; // Found a matching category
+                *pcatid = *ppcatidList[i];
                 break;
             }
         }
-        if (bFound)
-            break; // Found and matched, so stop searching
+        return S_OK;
     }
 
-    RegCloseKey(hKey);
-    return hr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, szwSystemTIPKey, 0, KEY_READ, &hTips) != ERROR_SUCCESS)
+        return S_OK;
+    for (DWORD dwIndex = 0; *pcatid == GUID_NULL; ++dwIndex)
+    {
+        DWORD cchTip = _countof(szTip);
+        if (RegEnumKeyExW(hTips, dwIndex, szTip, &cchTip, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        StringCchPrintfW(szKey, _countof(szKey), L"%s\\Category\\Item\\%s", szTip, szGuid);
+        if (RegOpenKeyExW(hTips, szKey, 0, KEY_READ, &hItem) != ERROR_SUCCESS)
+            continue;
+        WCHAR szCatid[39];
+        DWORD cchCatid = _countof(szCatid);
+        if (RegEnumKeyExW(hItem, 0, szCatid, &cchCatid, NULL, NULL, NULL, NULL) == ERROR_SUCCESS)
+            CLSIDFromString(szCatid, pcatid);
+        RegCloseKey(hItem);
+    }
+    RegCloseKey(hTips);
+    return S_OK;
+}
+
+static void
+FormatItemKey(_In_ REFCLSID rclsid, _In_ REFGUID rguid, _Out_writes_(cch) LPWSTR psz, _In_ SIZE_T cch)
+{
+    WCHAR szClsid[39], szGuid[39];
+    StringFromGUID2(rclsid, szClsid, _countof(szClsid));
+    StringFromGUID2(rguid, szGuid, _countof(szGuid));
+    StringCchPrintfW(psz, cch, L"%s\\%s\\Item\\%s", szwSystemTIPKey, szClsid, szGuid);
 }
 
 STDMETHODIMP CCategoryMgr::RegisterGUIDDescription(
@@ -291,24 +457,80 @@ STDMETHODIMP CCategoryMgr::RegisterGUIDDescription(
     _In_ const WCHAR *pchDesc,
     _In_ ULONG cch)
 {
-    FIXME("STUB:(%p)\n", this);
-    return E_NOTIMPL;
+    WCHAR szKey[200], szDesc[MAX_PATH];
+    HKEY hKey;
+    LSTATUS error;
+
+    TRACE("(%p) %s %s %s\n", this, debugstr_guid(&rclsid), debugstr_guid(&rguid), debugstr_wn(pchDesc, cch));
+
+    if (!pchDesc && cch)
+        return E_INVALIDARG;
+    StringCchCopyNW(szDesc, _countof(szDesc), pchDesc ? pchDesc : L"", cch);
+    FormatItemKey(rclsid, rguid, szKey, _countof(szKey));
+    error = RegCreateKeyExW(HKEY_LOCAL_MACHINE, szKey, 0, NULL, 0, KEY_SET_VALUE, NULL, &hKey, NULL);
+    if (error != ERROR_SUCCESS)
+        return HRESULT_FROM_WIN32(error);
+    error = RegSetValueExW(hKey, L"Description", 0, REG_SZ, (const BYTE *)szDesc,
+                           (DWORD)(wcslen(szDesc) + 1) * sizeof(WCHAR));
+    RegCloseKey(hKey);
+    return HRESULT_FROM_WIN32(error);
 }
 
 STDMETHODIMP CCategoryMgr::UnregisterGUIDDescription(
     _In_ REFCLSID rclsid,
     _In_ REFGUID rguid)
 {
-    FIXME("STUB:(%p)\n", this);
-    return E_NOTIMPL;
+    WCHAR szKey[200];
+    HKEY hKey;
+    LSTATUS error;
+
+    TRACE("(%p) %s %s\n", this, debugstr_guid(&rclsid), debugstr_guid(&rguid));
+
+    FormatItemKey(rclsid, rguid, szKey, _countof(szKey));
+    error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, szKey, 0, KEY_SET_VALUE, &hKey);
+    if (error != ERROR_SUCCESS)
+        return HRESULT_FROM_WIN32(error);
+    error = RegDeleteValueW(hKey, L"Description");
+    RegCloseKey(hKey);
+    return HRESULT_FROM_WIN32(error);
 }
 
 STDMETHODIMP CCategoryMgr::GetGUIDDescription(
     _In_ REFGUID rguid,
     _Out_ BSTR *pbstrDesc)
 {
-    FIXME("STUB:(%p)\n", this);
-    return E_NOTIMPL;
+    WCHAR szGuid[39], szTip[39], szKey[200], szDesc[MAX_PATH];
+    HKEY hTips, hItem;
+    HRESULT hr = E_FAIL;
+
+    TRACE("(%p) %s %p\n", this, debugstr_guid(&rguid), pbstrDesc);
+
+    if (!pbstrDesc)
+        return E_INVALIDARG;
+    *pbstrDesc = NULL;
+
+    StringFromGUID2(rguid, szGuid, _countof(szGuid));
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, szwSystemTIPKey, 0, KEY_READ, &hTips) != ERROR_SUCCESS)
+        return E_FAIL;
+    for (DWORD dwIndex = 0; hr == E_FAIL; ++dwIndex)
+    {
+        DWORD cchTip = _countof(szTip), cbDesc = sizeof(szDesc) - sizeof(WCHAR), dwType;
+        if (RegEnumKeyExW(hTips, dwIndex, szTip, &cchTip, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        StringCchPrintfW(szKey, _countof(szKey), L"%s\\Item\\%s", szTip, szGuid);
+        if (RegOpenKeyExW(hTips, szKey, 0, KEY_QUERY_VALUE, &hItem) != ERROR_SUCCESS)
+            continue;
+        ZeroMemory(szDesc, sizeof(szDesc));
+        if (RegQueryValueExW(hItem, L"Description", NULL, &dwType, (LPBYTE)szDesc, &cbDesc) == ERROR_SUCCESS &&
+            dwType == REG_SZ)
+        {
+            *pbstrDesc = SysAllocString(szDesc);
+            hr = *pbstrDesc ? S_OK : E_OUTOFMEMORY;
+        }
+        RegCloseKey(hItem);
+    }
+    RegCloseKey(hTips);
+    return hr;
 }
 
 STDMETHODIMP CCategoryMgr::RegisterGUIDDWORD(

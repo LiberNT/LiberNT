@@ -260,34 +260,6 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////
 
-static void
-add_userkey(_In_ REFCLSID rclsid, _In_ LANGID langid, _In_ REFGUID guidProfile)
-{
-    HKEY key;
-    WCHAR buf[39], buf2[39], fullkey[168];
-    DWORD disposition = 0;
-    LSTATUS error;
-
-    TRACE("\n");
-
-    StringFromGUID2(rclsid, buf, _countof(buf));
-    StringFromGUID2(guidProfile, buf2, _countof(buf2));
-    StringCchPrintfW(fullkey, _countof(fullkey), L"%s\\%s\\%s\\0x%08x\\%s",
-                     szwSystemTIPKey, buf, L"LanguageProfile", langid, buf2);
-
-    error = RegCreateKeyExW(HKEY_CURRENT_USER, fullkey, 0, NULL, 0,
-                            KEY_READ | KEY_WRITE, NULL, &key, &disposition);
-
-    if (error == ERROR_SUCCESS && disposition == REG_CREATED_NEW_KEY)
-    {
-        DWORD zero = 0;
-        RegSetValueExW(key, L"Enable", 0, REG_DWORD, (PBYTE)&zero, sizeof(DWORD));
-    }
-
-    if (error == ERROR_SUCCESS)
-        RegCloseKey(key);
-}
-
 ////////////////////////////////////////////////////////////////////////////
 
 CInputProcessorProfiles::CInputProcessorProfiles()
@@ -404,14 +376,10 @@ STDMETHODIMP CInputProcessorProfiles::AddLanguageProfile(
                             NULL, &fmtkey, &disposition);
     if (error == ERROR_SUCCESS)
     {
-        DWORD zero = 0x0;
         RegSetValueExW(fmtkey, L"Description", 0, REG_SZ, (PBYTE)pchDesc, cchDesc * sizeof(WCHAR));
         RegSetValueExW(fmtkey, L"IconFile", 0, REG_SZ, (PBYTE)pchIconFile, cchFile * sizeof(WCHAR));
         RegSetValueExW(fmtkey, L"IconIndex", 0, REG_DWORD, (PBYTE)&uIconIndex, sizeof(uIconIndex));
-        if (disposition == REG_CREATED_NEW_KEY)
-            RegSetValueExW(fmtkey, L"Enable", 0, REG_DWORD, (PBYTE)&zero, sizeof(DWORD));
         RegCloseKey(fmtkey);
-        add_userkey(rclsid, langid, guidProfile);
     }
     RegCloseKey(tipkey);
 
@@ -607,20 +575,39 @@ STDMETHODIMP CInputProcessorProfiles::ChangeCurrentLanguage(_In_ LANGID langid)
 {
     ITfLanguageProfileNotifySink *sink;
     struct list *cursor;
-    BOOL accept;
 
-    FIXME("STUB:(%p)\n", this);
+    TF_LANGUAGEPROFILE active;
 
-    SINK_FOR_EACH(cursor, &m_LanguageProfileNotifySink, ITfLanguageProfileNotifySink, sink)
+    TRACE("(%p) %x\n", this, langid);
+
+    if (LOWORD(HandleToUlong(GetKeyboardLayout(0))) != langid)
     {
-        accept = TRUE;
-        sink->OnLanguageChange(langid, &accept);
-        if (!accept)
+        HKL ahkl[64], hkl = NULL;
+        int c = GetKeyboardLayoutList(_countof(ahkl), ahkl);
+        for (int i = 0; i < c && !hkl; ++i)
+        {
+            if (LOWORD(HandleToUlong(ahkl[i])) == langid)
+                hkl = ahkl[i];
+        }
+        if (!hkl)
+            return E_INVALIDARG;
+        if (!ActivateKeyboardLayout(hkl, 0))
             return E_FAIL;
     }
 
-    /* TODO:  On successful language change call OnLanguageChanged sink */
-    return E_NOTIMPL;
+    if (m_currentLanguage == langid)
+        return S_OK;
+
+    m_currentLanguage = langid;
+    if (get_active_textservice_by_category(GUID_TFCAT_TIP_KEYBOARD, &active) && active.langid != langid)
+        deactivate_textservice_by_category(GUID_TFCAT_TIP_KEYBOARD);
+    activate_default_textservice(langid);
+
+    SINK_FOR_EACH(cursor, &m_LanguageProfileNotifySink, ITfLanguageProfileNotifySink, sink)
+    {
+        sink->OnLanguageChanged();
+    }
+    return S_OK;
 }
 
 STDMETHODIMP CInputProcessorProfiles::GetLanguageList(
@@ -666,12 +653,52 @@ STDMETHODIMP CInputProcessorProfiles::EnableLanguageProfile(
     StringCchPrintfW(fullkey, _countof(fullkey), L"%s\\%s\\%s\\0x%08x\\%s", szwSystemTIPKey, buf,
                      L"LanguageProfile", langid, buf2);
 
-    error = RegOpenKeyExW(HKEY_CURRENT_USER, fullkey, 0, KEY_READ | KEY_WRITE, &key);
+    error = RegCreateKeyExW(HKEY_CURRENT_USER, fullkey, 0, NULL, 0, KEY_READ | KEY_WRITE, NULL, &key, NULL);
     if (error != ERROR_SUCCESS)
         return E_FAIL;
 
     RegSetValueExW(key, L"Enable", 0, REG_DWORD, (LPBYTE)&fEnable, sizeof(fEnable));
     RegCloseKey(key);
+    return S_OK;
+}
+
+static HRESULT
+get_language_profile_enabled(
+    _In_ REFCLSID rclsid,
+    _In_ LANGID langid,
+    _In_ REFGUID guidProfile,
+    _Out_ BOOL *pfEnable)
+{
+    HKEY key;
+    WCHAR buf[39], buf2[39], fullkey[168];
+    LSTATUS error;
+    DWORD dwEnable, count;
+
+    StringFromGUID2(rclsid, buf, _countof(buf));
+    StringFromGUID2(guidProfile, buf2, _countof(buf2));
+    StringCchPrintfW(fullkey, _countof(fullkey), L"%s\\%s\\%s\\0x%08x\\%s", szwSystemTIPKey,
+                     buf, L"LanguageProfile", langid, buf2);
+
+    error = RegOpenKeyExW(HKEY_CURRENT_USER, fullkey, 0, KEY_READ, &key);
+    if (error == ERROR_SUCCESS)
+    {
+        count = sizeof(dwEnable);
+        error = RegQueryValueExW(key, L"Enable", 0, NULL, (LPBYTE)&dwEnable, &count);
+        RegCloseKey(key);
+        if (error == ERROR_SUCCESS)
+        {
+            *pfEnable = (dwEnable != 0);
+            return S_OK;
+        }
+    }
+
+    error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, fullkey, 0, KEY_READ, &key);
+    if (error != ERROR_SUCCESS)
+        return E_FAIL;
+    count = sizeof(dwEnable);
+    error = RegQueryValueExW(key, L"Enable", 0, NULL, (LPBYTE)&dwEnable, &count);
+    RegCloseKey(key);
+    *pfEnable = (error != ERROR_SUCCESS) || (dwEnable != 0);
     return S_OK;
 }
 
@@ -681,40 +708,12 @@ STDMETHODIMP CInputProcessorProfiles::IsEnabledLanguageProfile(
     _In_ REFGUID guidProfile,
     _Out_ BOOL *pfEnable)
 {
-    HKEY key;
-    WCHAR buf[39], buf2[39], fullkey[168];
-    LSTATUS error;
-
     TRACE("(%p) %s, %i, %s, %p\n", this, debugstr_guid(&rclsid), langid, debugstr_guid(&guidProfile), pfEnable);
 
     if (!pfEnable)
         return E_INVALIDARG;
 
-    StringFromGUID2(rclsid, buf, _countof(buf));
-    StringFromGUID2(guidProfile, buf2, _countof(buf2));
-    StringCchPrintfW(fullkey, _countof(fullkey), L"%s\\%s\\%s\\0x%08x\\%s", szwSystemTIPKey,
-                     buf, L"LanguageProfile", langid, buf2);
-
-    error = RegOpenKeyExW(HKEY_CURRENT_USER, fullkey, 0, KEY_READ | KEY_WRITE, &key);
-    if (error == ERROR_SUCCESS)
-    {
-        DWORD count = sizeof(DWORD);
-        error = RegQueryValueExW(key, L"Enable", 0, NULL, (LPBYTE)pfEnable, &count);
-        RegCloseKey(key);
-    }
-
-    if (error != ERROR_SUCCESS) /* Try Default */
-    {
-        error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, fullkey, 0, KEY_READ | KEY_WRITE, &key);
-        if (error == ERROR_SUCCESS)
-        {
-            DWORD count = sizeof(DWORD);
-            error = RegQueryValueExW(key, L"Enable", 0, NULL, (LPBYTE)pfEnable, &count);
-            RegCloseKey(key);
-        }
-    }
-
-    return (error == ERROR_SUCCESS) ? S_OK : E_FAIL;
+    return get_language_profile_enabled(rclsid, langid, guidProfile, pfEnable);
 }
 
 STDMETHODIMP CInputProcessorProfiles::EnableLanguageProfileByDefault(
@@ -1359,4 +1358,130 @@ EXTERN_C
 HRESULT InputProcessorProfiles_Constructor(IUnknown *pUnkOuter, IUnknown **ppOut)
 {
     return CInputProcessorProfiles::CreateInstance(pUnkOuter, (CInputProcessorProfiles **)ppOut);
+}
+
+static BOOL
+parse_input_method(_In_ LPCWSTR psz, _Out_ LANGID *plangid, _Out_ CLSID *pclsid, _Out_ GUID *pguidProfile)
+{
+    WCHAR buf[39];
+    LPWSTR end;
+    ULONG langid = wcstoul(psz, &end, 16);
+    if (end == psz || *end != L':' || langid > 0xFFFF)
+        return FALSE;
+    psz = end + 1;
+    if (wcslen(psz) != 76 || psz[0] != L'{' || psz[38] != L'{')
+        return FALSE;
+    StringCchCopyNW(buf, _countof(buf), psz, 38);
+    if (FAILED(CLSIDFromString(buf, pclsid)))
+        return FALSE;
+    StringCchCopyNW(buf, _countof(buf), psz + 38, 38);
+    if (FAILED(CLSIDFromString(buf, pguidProfile)))
+        return FALSE;
+    *plangid = (LANGID)langid;
+    return TRUE;
+}
+
+static BOOL
+find_user_input_method(_In_ LANGID langid, _Out_ CLSID *pclsid, _Out_ GUID *pguidProfile)
+{
+    HKEY hUserProfile;
+    WCHAR name[MAX_PATH], prefix[6];
+    DWORD cb;
+    LANGID found;
+
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\International\\User Profile", 0, KEY_READ,
+                      &hUserProfile) != ERROR_SUCCESS)
+        return FALSE;
+
+    cb = sizeof(name);
+    if (RegQueryValueExW(hUserProfile, L"InputMethodOverride", NULL, NULL, (LPBYTE)name, &cb) == ERROR_SUCCESS &&
+        parse_input_method(name, &found, pclsid, pguidProfile) && found == langid)
+    {
+        RegCloseKey(hUserProfile);
+        return TRUE;
+    }
+
+    StringCchPrintfW(prefix, _countof(prefix), L"%04X:", langid);
+    DWORD bestOrder = MAXDWORD;
+    BOOL bestIsTip = FALSE;
+    WCHAR subkey[LOCALE_NAME_MAX_LENGTH + 1];
+    for (DWORD index = 0;; ++index)
+    {
+        DWORD cchSubkey = _countof(subkey);
+        HKEY hLang;
+        if (RegEnumKeyExW(hUserProfile, index, subkey, &cchSubkey, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        if (RegOpenKeyExW(hUserProfile, subkey, 0, KEY_QUERY_VALUE, &hLang) != ERROR_SUCCESS)
+            continue;
+        for (DWORD value = 0;; ++value)
+        {
+            DWORD cchName = _countof(name), type, order, cbOrder = sizeof(order);
+            LSTATUS error = RegEnumValueW(hLang, value, name, &cchName, NULL, &type, (LPBYTE)&order, &cbOrder);
+            if (error == ERROR_MORE_DATA)
+                continue;
+            if (error != ERROR_SUCCESS)
+                break;
+            if (type != REG_DWORD || _wcsnicmp(name, prefix, 5) || order >= bestOrder)
+                continue;
+            bestOrder = order;
+            bestIsTip = parse_input_method(name, &found, pclsid, pguidProfile);
+        }
+        RegCloseKey(hLang);
+    }
+    RegCloseKey(hUserProfile);
+    return bestIsTip;
+}
+
+static BOOL
+is_secure_desktop(void)
+{
+    WCHAR szName[32];
+    HDESK hDesk = GetThreadDesktop(GetCurrentThreadId());
+    if (!hDesk || !GetUserObjectInformationW(hDesk, UOI_NAME, szName, sizeof(szName), NULL))
+        return FALSE;
+    return !_wcsicmp(szName, L"Winlogon");
+}
+
+static BOOL
+supports_secure_mode(REFCLSID clsid)
+{
+    ITfCategoryMgr *catmgr;
+    const GUID *required = &GUID_TFCAT_TIPCAP_SECUREMODE;
+    GUID category;
+    HRESULT hr;
+
+    if (FAILED(CategoryMgr_Constructor(NULL, (IUnknown **)&catmgr)))
+        return FALSE;
+    hr = catmgr->FindClosestCategory(clsid, &category, &required, 1);
+    catmgr->Release();
+    return hr == S_OK && category == GUID_TFCAT_TIPCAP_SECUREMODE;
+}
+
+EXTERN_C
+HRESULT activate_default_textservice(LANGID langid)
+{
+    TF_LANGUAGEPROFILE profile;
+
+    if (get_active_textservice_by_category(GUID_TFCAT_TIP_KEYBOARD, &profile))
+        return S_OK;
+
+    CLSID clsid;
+    GUID guidProfile;
+    if (!find_user_input_method(langid, &clsid, &guidProfile))
+        return S_FALSE;
+
+    BOOL fEnabled;
+    if (FAILED(get_language_profile_enabled(clsid, langid, guidProfile, &fEnabled)) || !fEnabled)
+        return S_FALSE;
+
+    if (is_secure_desktop() && !supports_secure_mode(clsid))
+        return S_FALSE;
+
+    TRACE("activating %s %s for %04x\n", debugstr_guid(&clsid), debugstr_guid(&guidProfile), langid);
+    ZeroMemory(&profile, sizeof(profile));
+    profile.clsid = clsid;
+    profile.langid = langid;
+    profile.guidProfile = guidProfile;
+    profile.fActive = TRUE;
+    return add_active_textservice(&profile);
 }

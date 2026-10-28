@@ -19,15 +19,31 @@ CRange::CRange(
     _In_ LONG anchorStart,
     _In_ LONG anchorEnd
 )
+    : CRange(context, anchorStart, anchorEnd, TF_GRAVITY_BACKWARD, TF_GRAVITY_FORWARD, FALSE)
+{
+}
+
+CRange::CRange(
+    _In_ ITfContext *context,
+    _In_ LONG anchorStart,
+    _In_ LONG anchorEnd,
+    _In_ TfGravity gravityStart,
+    _In_ TfGravity gravityEnd,
+    _In_ BOOL fWeakContext
+)
     : m_cRefs(1)
     , m_context(context)
     , m_anchorStart(anchorStart)
-    , m_anchorEnd(anchorEnd)
+    , m_anchorEnd(max(anchorStart, anchorEnd))
+    , m_gravityStart(gravityStart)
+    , m_gravityEnd(gravityEnd)
+    , m_fWeakContext(fWeakContext)
 {
     m_link.range = this;
     if (context)
     {
-        context->AddRef();
+        if (!fWeakContext)
+            context->AddRef();
         Context_AddRange(context, &m_link.entry);
     }
     else
@@ -38,33 +54,77 @@ CRange::~CRange()
 {
     TRACE("destroying %p\n", this);
     list_remove(&m_link.entry);
-    if (m_context)
+    if (m_context && !m_fWeakContext)
         m_context->Release();
+}
+
+static LONG AdjustAnchor(LONG pos, TfGravity gravity, const TS_TEXTCHANGE *change)
+{
+    if (pos < change->acpStart)
+        return pos;
+    if (pos > change->acpOldEnd)
+        return pos + (change->acpNewEnd - change->acpOldEnd);
+    if (pos == change->acpOldEnd && change->acpOldEnd > change->acpStart)
+        return change->acpNewEnd;
+    return (gravity == TF_GRAVITY_FORWARD) ? change->acpNewEnd : change->acpStart;
 }
 
 void CRange::OnTextChange(const TS_TEXTCHANGE *change)
 {
-    LONG start = m_anchorStart, end = m_anchorEnd;
-    LONG delta = change->acpNewEnd - change->acpOldEnd;
-    if (start > change->acpOldEnd) start += delta;
-    else if (start > change->acpStart) start = change->acpStart;
-    if (end >= change->acpOldEnd) end += delta;
-    else if (end >= change->acpStart) end = change->acpNewEnd;
+    LONG start = AdjustAnchor(m_anchorStart, m_gravityStart, change);
+    LONG end = AdjustAnchor(m_anchorEnd, m_gravityEnd, change);
     m_anchorStart = start;
     m_anchorEnd = max(start, end);
 }
 
-CRange *CRange::_Clone()
+void CRange::SetAnchors(LONG start, LONG end)
 {
-    CRange *pRange = new(cicNoThrow) CRange(m_context, m_anchorStart, m_anchorEnd);
-    if (!pRange)
+    m_anchorStart = start;
+    m_anchorEnd = max(start, end);
+}
+
+CRange *CRange::FromRange(ITfRange *range)
+{
+    CRange *pRange = NULL;
+    if (!range || FAILED(range->QueryInterface(IID_PRIV_CRANGE, (void **)&pRange)))
         return NULL;
     return pRange;
 }
 
+CRange *CRange::_Clone()
+{
+    return new(cicNoThrow) CRange(m_context, m_anchorStart, m_anchorEnd,
+                                  m_gravityStart, m_gravityEnd, FALSE);
+}
+
+HRESULT CRange::_GetAnchor(TfEditCookie ec, ITfRange *pWith, TfAnchor aPos, LONG *pPos)
+{
+    HRESULT hr = Context_CheckLock(m_context, ec, FALSE);
+    if (FAILED(hr))
+        return hr;
+    CRange *pOther = FromRange(pWith);
+    if (!pOther || pOther->m_context != m_context)
+        return E_INVALIDARG;
+    if (aPos == TF_ANCHOR_START)
+        *pPos = pOther->m_anchorStart;
+    else if (aPos == TF_ANCHOR_END)
+        *pPos = pOther->m_anchorEnd;
+    else
+        return E_INVALIDARG;
+    return S_OK;
+}
+
 HRESULT CRange::_IsEqualX(TfEditCookie ec, BOOL bEnd, ITfRange *pWith, TfAnchor aPos, BOOL *pfEqual)
 {
-    return E_NOTIMPL;
+    if (!pfEqual)
+        return E_INVALIDARG;
+    *pfEqual = FALSE;
+    LONG pos;
+    HRESULT hr = _GetAnchor(ec, pWith, aPos, &pos);
+    if (FAILED(hr))
+        return hr;
+    *pfEqual = ((bEnd ? m_anchorEnd : m_anchorStart) == pos);
+    return S_OK;
 }
 
 HRESULT CRange::_CompareX(
@@ -74,18 +134,83 @@ HRESULT CRange::_CompareX(
     TfAnchor aPos,
     LONG *plResult)
 {
-    return E_NOTIMPL;
+    if (!plResult)
+        return E_INVALIDARG;
+    *plResult = 0;
+    LONG pos;
+    HRESULT hr = _GetAnchor(ec, pWidth, aPos, &pos);
+    if (FAILED(hr))
+        return hr;
+    LONG mine = bEnd ? m_anchorEnd : m_anchorStart;
+    *plResult = (mine < pos) ? -1 : ((mine > pos) ? 1 : 0);
+    return S_OK;
+}
+
+HRESULT CRange::_Shift(TfEditCookie ec, BOOL bEnd, LONG cchReq, LONG *pcch, const TF_HALTCOND *pHalt)
+{
+    if (!pcch)
+        return E_INVALIDARG;
+    *pcch = 0;
+    HRESULT hr = Context_CheckLock(m_context, ec, FALSE);
+    if (FAILED(hr))
+        return hr;
+    ITextStoreACP *store = Context_GetTextStore(m_context);
+    if (!store)
+        return E_FAIL;
+
+    LONG docEnd = 0;
+    hr = store->GetEndACP(&docEnd);
+    if (FAILED(hr))
+        return hr;
+
+    LONG from = bEnd ? m_anchorEnd : m_anchorStart;
+    LONG to;
+    if (cchReq > 0)
+        to = (cchReq > docEnd - from) ? docEnd : from + cchReq;
+    else
+        to = (cchReq < -from) ? 0 : from + cchReq;
+    if (to > docEnd)
+        to = docEnd;
+
+    if (pHalt && pHalt->pHaltRange)
+    {
+        CRange *pHaltRange = FromRange(pHalt->pHaltRange);
+        if (!pHaltRange || pHaltRange->m_context != m_context)
+            return E_INVALIDARG;
+        LONG halt = (pHalt->aHaltPos == TF_ANCHOR_END) ? pHaltRange->m_anchorEnd : pHaltRange->m_anchorStart;
+        if (cchReq > 0 && halt > from && halt < to)
+            to = halt;
+        else if (cchReq < 0 && halt < from && halt > to)
+            to = halt;
+    }
+
+    *pcch = to - from;
+    if (bEnd)
+    {
+        m_anchorEnd = to;
+        if (m_anchorStart > m_anchorEnd)
+            m_anchorStart = m_anchorEnd;
+    }
+    else
+    {
+        m_anchorStart = to;
+        if (m_anchorEnd < m_anchorStart)
+            m_anchorEnd = m_anchorStart;
+    }
+    return S_OK;
 }
 
 HRESULT CRange::TF_SELECTION_to_TS_SELECTION_ACP(const TF_SELECTION *tf, TS_SELECTION_ACP *tsAcp)
 {
     if (!tf || !tsAcp || !tf->range)
     {
-        ERR("E_INVALIDARG: %p, %p, %p\n", tf, tsAcp, tf->range);
+        ERR("E_INVALIDARG: %p, %p\n", tf, tsAcp);
         return E_INVALIDARG;
     }
 
-    CRange *This = static_cast<CRange *>(static_cast<ITfRangeACP *>(tf->range));
+    CRange *This = FromRange(tf->range);
+    if (!This)
+        return E_INVALIDARG;
     tsAcp->acpStart = This->m_anchorStart;
     tsAcp->acpEnd = This->m_anchorEnd;
     tsAcp->style.ase = static_cast<TsActiveSelEnd>(tf->style.ase);
@@ -142,8 +267,40 @@ STDMETHODIMP CRange::GetText(
     _In_ ULONG cchMax,
     _Out_ ULONG *pcch)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    if (!pcch || (!pchText && cchMax))
+        return E_INVALIDARG;
+    *pcch = 0;
+    HRESULT hr = Context_CheckLock(m_context, ec, FALSE);
+    if (FAILED(hr))
+        return hr;
+    ITextStoreACP *store = Context_GetTextStore(m_context);
+    if (!store)
+        return E_FAIL;
+
+    LONG end = (dwFlags & TF_TF_IGNOREEND) ? -1 : m_anchorEnd;
+    LONG pos = m_anchorStart;
+    ULONG copied = 0;
+    while (copied < cchMax && (end < 0 || pos < end))
+    {
+        ULONG got = 0, runs = 0;
+        LONG next = pos;
+        hr = store->GetText(pos, end, pchText + copied, cchMax - copied, &got, NULL, 0, &runs, &next);
+        if (FAILED(hr))
+            return hr;
+        copied += got;
+        if (next <= pos)
+            break;
+        pos = next;
+    }
+
+    if (dwFlags & TF_TF_MOVESTART)
+    {
+        m_anchorStart = pos;
+        if (m_anchorEnd < m_anchorStart)
+            m_anchorEnd = m_anchorStart;
+    }
+    *pcch = copied;
+    return S_OK;
 }
 
 STDMETHODIMP CRange::SetText(
@@ -152,8 +309,22 @@ STDMETHODIMP CRange::SetText(
     _In_ const WCHAR *pchText,
     _In_ LONG cch)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    if (!pchText && cch)
+        return E_INVALIDARG;
+    HRESULT hr = Context_CheckLock(m_context, ec, TRUE);
+    if (FAILED(hr))
+        return hr;
+    if (cch < 0)
+        cch = lstrlenW(pchText);
+
+    TS_TEXTCHANGE change;
+    hr = Context_ReplaceText(m_context, (dwFlags & TF_ST_CORRECTION) ? TS_ST_CORRECTION : 0,
+                             m_anchorStart, m_anchorEnd, pchText, cch, &change);
+    if (FAILED(hr))
+        return hr;
+    m_anchorStart = change.acpStart;
+    m_anchorEnd = change.acpNewEnd;
+    return S_OK;
 }
 
 STDMETHODIMP CRange::GetFormattedText(
@@ -189,8 +360,7 @@ STDMETHODIMP CRange::ShiftStart(
     _Out_ LONG *pcch,
     _In_ const TF_HALTCOND *pHalt)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    return _Shift(ec, FALSE, cchReq, pcch, pHalt);
 }
 
 STDMETHODIMP CRange::ShiftEnd(
@@ -199,8 +369,7 @@ STDMETHODIMP CRange::ShiftEnd(
     _Out_ LONG *pcch,
     _In_ const TF_HALTCOND *pHalt)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    return _Shift(ec, TRUE, cchReq, pcch, pHalt);
 }
 
 STDMETHODIMP CRange::ShiftStartToRange(
@@ -208,8 +377,14 @@ STDMETHODIMP CRange::ShiftStartToRange(
     _In_ ITfRange *pRange,
     _In_ TfAnchor aPos)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    LONG pos;
+    HRESULT hr = _GetAnchor(ec, pRange, aPos, &pos);
+    if (FAILED(hr))
+        return hr;
+    m_anchorStart = pos;
+    if (m_anchorEnd < m_anchorStart)
+        m_anchorEnd = m_anchorStart;
+    return S_OK;
 }
 
 STDMETHODIMP CRange::ShiftEndToRange(
@@ -217,8 +392,14 @@ STDMETHODIMP CRange::ShiftEndToRange(
     _In_ ITfRange *pRange,
     _In_ TfAnchor aPos)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    LONG pos;
+    HRESULT hr = _GetAnchor(ec, pRange, aPos, &pos);
+    if (FAILED(hr))
+        return hr;
+    m_anchorEnd = pos;
+    if (m_anchorStart > m_anchorEnd)
+        m_anchorStart = m_anchorEnd;
+    return S_OK;
 }
 
 STDMETHODIMP CRange::ShiftStartRegion(
@@ -226,8 +407,11 @@ STDMETHODIMP CRange::ShiftStartRegion(
     _In_ TfShiftDir dir,
     _Out_ BOOL *pfNoRegion)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    if (!pfNoRegion)
+        return E_INVALIDARG;
+    *pfNoRegion = TRUE;
+    HRESULT hr = Context_CheckLock(m_context, ec, FALSE);
+    return FAILED(hr) ? hr : S_OK;
 }
 
 STDMETHODIMP CRange::ShiftEndRegion(
@@ -235,24 +419,41 @@ STDMETHODIMP CRange::ShiftEndRegion(
     _In_ TfShiftDir dir,
     _Out_ BOOL *pfNoRegion)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    if (!pfNoRegion)
+        return E_INVALIDARG;
+    *pfNoRegion = TRUE;
+    HRESULT hr = Context_CheckLock(m_context, ec, FALSE);
+    return FAILED(hr) ? hr : S_OK;
 }
 
 STDMETHODIMP CRange::IsEmpty(
     _In_ TfEditCookie ec,
     _Out_ BOOL *pfEmpty)
 {
-    TRACE("(%d, %p)\n", ec, pfEmpty);
-    return IsEqualStart(ec, static_cast<ITfRangeACP *>(this), TF_ANCHOR_END, pfEmpty);
+    if (!pfEmpty)
+        return E_INVALIDARG;
+    *pfEmpty = FALSE;
+    HRESULT hr = Context_CheckLock(m_context, ec, FALSE);
+    if (FAILED(hr))
+        return hr;
+    *pfEmpty = (m_anchorStart == m_anchorEnd);
+    return S_OK;
 }
 
 STDMETHODIMP CRange::Collapse(
     _In_ TfEditCookie ec,
     _In_ TfAnchor aPos)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    HRESULT hr = Context_CheckLock(m_context, ec, FALSE);
+    if (FAILED(hr))
+        return hr;
+    if (aPos == TF_ANCHOR_START)
+        m_anchorEnd = m_anchorStart;
+    else if (aPos == TF_ANCHOR_END)
+        m_anchorStart = m_anchorEnd;
+    else
+        return E_INVALIDARG;
+    return S_OK;
 }
 
 STDMETHODIMP CRange::IsEqualStart(
@@ -261,7 +462,6 @@ STDMETHODIMP CRange::IsEqualStart(
     _In_ TfAnchor aPos,
     _Out_ BOOL *pfEqual)
 {
-    FIXME("\n");
     return _IsEqualX(ec, FALSE, pWith, aPos, pfEqual);
 }
 
@@ -271,7 +471,6 @@ STDMETHODIMP CRange::IsEqualEnd(
     _In_ TfAnchor aPos,
     _Out_ BOOL *pfEqual)
 {
-    FIXME("\n");
     return _IsEqualX(ec, TRUE, pWith, aPos, pfEqual);
 }
 
@@ -281,8 +480,7 @@ STDMETHODIMP CRange::CompareStart(
     _In_ TfAnchor aPos,
     _Out_ LONG *plResult)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    return _CompareX(ec, FALSE, pWith, aPos, plResult);
 }
 
 STDMETHODIMP CRange::CompareEnd(
@@ -291,8 +489,7 @@ STDMETHODIMP CRange::CompareEnd(
     _In_ TfAnchor aPos,
     _Out_ LONG *plResult)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    return _CompareX(ec, TRUE, pWith, aPos, plResult);
 }
 
 STDMETHODIMP CRange::AdjustForInsert(
@@ -300,16 +497,35 @@ STDMETHODIMP CRange::AdjustForInsert(
     _In_ ULONG cchInsert,
     _Out_ BOOL *pfInsertOk)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    if (!pfInsertOk)
+        return E_INVALIDARG;
+    *pfInsertOk = FALSE;
+    HRESULT hr = Context_CheckLock(m_context, ec, FALSE);
+    if (FAILED(hr))
+        return hr;
+    ITextStoreACP *store = Context_GetTextStore(m_context);
+    if (!store)
+        return E_FAIL;
+    LONG start = m_anchorStart, end = m_anchorEnd;
+    hr = store->QueryInsert(m_anchorStart, m_anchorEnd, cchInsert, &start, &end);
+    if (FAILED(hr))
+        return hr;
+    if (start < 0)
+        return S_OK;
+    SetAnchors(start, end);
+    *pfInsertOk = TRUE;
+    return S_OK;
 }
 
 STDMETHODIMP CRange::GetGravity(
     _Out_ TfGravity *pgStart,
     _Out_ TfGravity *pgEnd)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    if (!pgStart || !pgEnd)
+        return E_INVALIDARG;
+    *pgStart = m_gravityStart;
+    *pgEnd = m_gravityEnd;
+    return S_OK;
 }
 
 STDMETHODIMP CRange::SetGravity(
@@ -317,8 +533,15 @@ STDMETHODIMP CRange::SetGravity(
     _In_ TfGravity gStart,
     _In_ TfGravity gEnd)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    HRESULT hr = Context_CheckLock(m_context, ec, FALSE);
+    if (FAILED(hr))
+        return hr;
+    if ((gStart != TF_GRAVITY_BACKWARD && gStart != TF_GRAVITY_FORWARD) ||
+        (gEnd != TF_GRAVITY_BACKWARD && gEnd != TF_GRAVITY_FORWARD))
+        return E_INVALIDARG;
+    m_gravityStart = gStart;
+    m_gravityEnd = gEnd;
+    return S_OK;
 }
 
 STDMETHODIMP CRange::Clone(
@@ -391,6 +614,19 @@ STDMETHODIMP CRange::UnadviseSink(
 }
 
 ////////////////////////////////////////////////////////////////////////////
+
+HRESULT Range_CreateInternal(
+    ITfContext *context,
+    LONG anchorStart,
+    LONG anchorEnd,
+    TfGravity gravityStart,
+    TfGravity gravityEnd,
+    BOOL fWeakContext,
+    CRange **ppOut)
+{
+    *ppOut = new(cicNoThrow) CRange(context, anchorStart, anchorEnd, gravityStart, gravityEnd, fWeakContext);
+    return *ppOut ? S_OK : E_OUTOFMEMORY;
+}
 
 EXTERN_C
 HRESULT

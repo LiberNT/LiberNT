@@ -304,6 +304,30 @@ void free_sinks(struct list *sink_list)
 /*****************************************************************************
  * Active Text Service Management
  *****************************************************************************/
+static TfClientId s_transitionTid;
+static DWORD s_transitionThread;
+
+EXTERN_C
+BOOL is_textservice_in_transition(TfClientId tid)
+{
+    return tid && s_transitionTid == tid && s_transitionThread == GetCurrentThreadId();
+}
+
+static TfClientId begin_textservice_transition(TfClientId tid)
+{
+    TfClientId previous = (s_transitionThread == GetCurrentThreadId()) ? s_transitionTid : 0;
+    s_transitionTid = tid;
+    s_transitionThread = GetCurrentThreadId();
+    return previous;
+}
+
+static void end_textservice_transition(TfClientId previous)
+{
+    s_transitionTid = previous;
+    if (!previous)
+        s_transitionThread = 0;
+}
+
 static HRESULT activate_given_ts(ActivatedTextService *actsvr, ITfThreadMgrEx *tm)
 {
     HRESULT hr;
@@ -354,6 +378,7 @@ static HRESULT activate_given_ts(ActivatedTextService *actsvr, ITfThreadMgrEx *t
                              IID_ITfTextInputProcessor, (void **)&actsvr->pITfTextInputProcessor);
     if (FAILED(hr)) return hr;
 
+    TfClientId previous = begin_textservice_transition(actsvr->tid);
     hr = actsvr->pITfTextInputProcessor->QueryInterface(IID_ITfTextInputProcessorEx, (void **)&processorEx);
     if (SUCCEEDED(hr))
     {
@@ -364,6 +389,7 @@ static HRESULT activate_given_ts(ActivatedTextService *actsvr, ITfThreadMgrEx *t
         hr = E_NOINTERFACE;
     else
         hr = actsvr->pITfTextInputProcessor->Activate((ITfThreadMgr *)tm, actsvr->tid);
+    end_textservice_transition(previous);
     if (FAILED(hr))
     {
         actsvr->pITfTextInputProcessor->Release();
@@ -382,7 +408,9 @@ static HRESULT deactivate_given_ts(ActivatedTextService *actsvr)
 
     if (actsvr->pITfTextInputProcessor)
     {
+        TfClientId previous = begin_textservice_transition(actsvr->tid);
         hr = actsvr->pITfTextInputProcessor->Deactivate();
+        end_textservice_transition(previous);
         actsvr->pITfTextInputProcessor->Release();
         actsvr->pITfThreadMgrEx->Release();
         actsvr->pITfTextInputProcessor = NULL;
@@ -410,6 +438,12 @@ static void deactivate_remove_conflicting_ts(REFCLSID catid)
             break;
         }
     }
+}
+
+EXTERN_C
+void deactivate_textservice_by_category(REFGUID catid)
+{
+    deactivate_remove_conflicting_ts(catid);
 }
 
 EXTERN_C
@@ -521,7 +555,7 @@ HRESULT activate_textservices(ITfThreadMgrEx *tm)
     {
         hr = activate_given_ts(ats->ats, tm);
         if (FAILED(hr))
-            FIXME("Failed to activate text service\n");
+            FIXME("Failed to activate text service %s: 0x%lx\n", debugstr_guid(&ats->ats->LanguageProfile.clsid), hr);
     }
     return hr;
 }
@@ -738,8 +772,6 @@ HRESULT WINAPI TF_CreateLangBarMgr(ITfLangBarMgr **pppbm)
  */
 HRESULT WINAPI TF_CreateLangBarItemMgr(ITfLangBarItemMgr **pplbim)
 {
-    FIXME("stub %p\n", pplbim);
-    *pplbim = NULL;
-
-    return E_NOTIMPL;
+    TRACE("%p\n", pplbim);
+    return LangBarItemMgr_Constructor(pplbim);
 }

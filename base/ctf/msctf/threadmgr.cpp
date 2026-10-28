@@ -264,6 +264,24 @@ protected:
     struct list m_UIElementSink;
     struct list m_InputProcessorProfileActivationSink;
 
+    struct FunctionProviderEntry
+    {
+        TfClientId tid;
+        CLSID clsid;
+        ITfFunctionProvider *provider;
+    };
+    FunctionProviderEntry *m_funcProviders;
+    ULONG m_cFuncProviders;
+
+    struct UIElementEntry
+    {
+        DWORD id;
+        ITfUIElement *element;
+    };
+    UIElementEntry *m_uiElements;
+    ULONG m_cUIElements;
+    DWORD m_nextUIElementId;
+
     static LRESULT CALLBACK ThreadFocusHookProc(INT nCode, WPARAM wParam, LPARAM lParam);
     LRESULT _ThreadFocusHookProc(INT nCode, WPARAM wParam, LPARAM lParam);
 
@@ -373,6 +391,11 @@ CThreadMgr::CThreadMgr()
     , m_activationCount(0)
     , m_activationFlags(0)
     , m_foregroundKeyEventSink(NULL)
+    , m_funcProviders(NULL)
+    , m_cFuncProviders(0)
+    , m_uiElements(NULL)
+    , m_cUIElements(0)
+    , m_nextUIElementId(0)
 {
     m_foregroundTextService = GUID_NULL;
 
@@ -415,6 +438,13 @@ CThreadMgr::~CThreadMgr()
     free_sinks(&m_ThreadMgrEventSink);
     free_sinks(&m_UIElementSink);
     free_sinks(&m_InputProcessorProfileActivationSink);
+
+    for (ULONG i = 0; i < m_cFuncProviders; ++i)
+        m_funcProviders[i].provider->Release();
+    cicMemFree(m_funcProviders);
+    for (ULONG i = 0; i < m_cUIElements; ++i)
+        m_uiElements[i].element->Release();
+    cicMemFree(m_uiElements);
 
     LIST_FOR_EACH_SAFE(cursor, cursor2, &m_CurrentPreservedKeys)
     {
@@ -698,7 +728,7 @@ STDMETHODIMP CThreadMgr::IsThreadFocus(_Out_ BOOL *pfThreadFocus)
         return E_INVALIDARG;
 
     HWND focus = ::GetFocus();
-    *pfThreadFocus = !focus;
+    *pfThreadFocus = (focus != NULL);
     return S_OK;
 }
 
@@ -712,8 +742,16 @@ STDMETHODIMP CThreadMgr::GetFunctionProvider(
     *ppFuncProv = NULL;
     if (clsid != GUID_SYSTEM_FUNCTIONPROVIDER)
     {
-        FIXME("clsid %s not supported\n", debugstr_guid(&clsid));
-        return E_NOTIMPL;
+        for (ULONG i = 0; i < m_cFuncProviders; ++i)
+        {
+            if (m_funcProviders[i].clsid == clsid)
+            {
+                *ppFuncProv = m_funcProviders[i].provider;
+                (*ppFuncProv)->AddRef();
+                return S_OK;
+            }
+        }
+        return TF_E_NOPROVIDER;
     }
     *ppFuncProv = static_cast<ITfFunctionProvider *>(this);
     (*ppFuncProv)->AddRef();
@@ -805,6 +843,8 @@ STDMETHODIMP CThreadMgr::ActivateEx(
 
     m_activationFlags = (flags & ~TF_TMAE_NOACTIVATEKEYBOARDLAYOUT) | TF_TMF_ACTIVATED;
     ++m_activationCount;
+    if (!(m_activationFlags & TF_TMF_NOACTIVATETIP))
+        activate_default_textservice(LOWORD(HandleToUlong(GetKeyboardLayout(0))));
     activate_textservices(this);
     *id = g_processId;
     return S_OK;
@@ -973,13 +1013,82 @@ STDMETHODIMP CThreadMgr::GetForeground(_Out_ CLSID *pclsid)
     return S_OK;
 }
 
+static BOOL
+MatchPreservedKeyModifiers(UINT uModifiers)
+{
+    if (uModifiers & TF_MOD_IGNORE_ALL_MODIFIER)
+        return TRUE;
+
+    static const struct
+    {
+        UINT generic, left, right;
+        int vkGeneric, vkLeft, vkRight;
+    } groups[] = {
+        { TF_MOD_ALT, TF_MOD_LALT, TF_MOD_RALT, VK_MENU, VK_LMENU, VK_RMENU },
+        { TF_MOD_CONTROL, TF_MOD_LCONTROL, TF_MOD_RCONTROL, VK_CONTROL, VK_LCONTROL, VK_RCONTROL },
+        { TF_MOD_SHIFT, TF_MOD_LSHIFT, TF_MOD_RSHIFT, VK_SHIFT, VK_LSHIFT, VK_RSHIFT },
+    };
+
+    for (const auto &group : groups)
+    {
+        BOOL down = (::GetKeyState(group.vkGeneric) & 0x8000) != 0;
+        BOOL wanted = (uModifiers & (group.generic | group.left | group.right)) != 0;
+        if (down != wanted)
+            return FALSE;
+        if ((uModifiers & group.left) && !(::GetKeyState(group.vkLeft) & 0x8000))
+            return FALSE;
+        if ((uModifiers & group.right) && !(::GetKeyState(group.vkRight) & 0x8000))
+            return FALSE;
+    }
+    return TRUE;
+}
+
 HRESULT CThreadMgr::DispatchKey(WPARAM wParam, LPARAM lParam, BOOL *pfEaten, BOOL test, BOOL keyUp)
 {
     if (!pfEaten)
         return E_INVALIDARG;
     *pfEaten = FALSE;
 
-    if (!m_focus || !m_foregroundKeyEventSink)
+    if (!m_focus)
+        return S_OK;
+
+    struct list *cursor;
+    LIST_FOR_EACH(cursor, &m_CurrentPreservedKeys)
+    {
+        PreservedKey *key = LIST_ENTRY(cursor, PreservedKey, entry);
+        if (key->prekey.uVKey != wParam || !keyUp != !(key->prekey.uModifiers & TF_MOD_ON_KEYUP) ||
+            !MatchPreservedKeyModifiers(key->prekey.uModifiers))
+            continue;
+
+        ITfKeyEventSink *owner = NULL;
+        get_textservice_sink(key->tid, IID_ITfKeyEventSink, (IUnknown **)&owner);
+        if (!owner)
+            continue;
+
+        ITfContext *context = NULL;
+        if (FAILED(m_focus->GetTop(&context)) || !context)
+            return S_OK;
+
+        if (test)
+        {
+            context->Release();
+            *pfEaten = TRUE;
+            return S_OK;
+        }
+
+        GUID guid = key->guid;
+        BOOL fEaten = FALSE;
+        AddRef();
+        owner->AddRef();
+        owner->OnPreservedKey(context, guid, &fEaten);
+        *pfEaten = TRUE;
+        context->Release();
+        owner->Release();
+        Release();
+        return S_OK;
+    }
+
+    if (!m_foregroundKeyEventSink)
         return S_OK;
 
     AddRef();
@@ -1054,8 +1163,24 @@ STDMETHODIMP CThreadMgr::GetPreservedKey(
     _In_ const TF_PRESERVEDKEY *pprekey,
     _Out_ GUID *pguid)
 {
-    FIXME("STUB:(%p)\n", this);
-    return E_NOTIMPL;
+    struct list *cursor;
+
+    TRACE("(%p) %p %p %p\n", this, pic, pprekey, pguid);
+
+    if (!pprekey || !pguid)
+        return E_INVALIDARG;
+
+    *pguid = GUID_NULL;
+    LIST_FOR_EACH(cursor, &m_CurrentPreservedKeys)
+    {
+        PreservedKey *key = LIST_ENTRY(cursor, PreservedKey, entry);
+        if (pprekey->uVKey == key->prekey.uVKey && pprekey->uModifiers == key->prekey.uModifiers)
+        {
+            *pguid = key->guid;
+            return S_OK;
+        }
+    }
+    return S_FALSE;
 }
 
 STDMETHODIMP CThreadMgr::IsPreservedKey(
@@ -1096,6 +1221,8 @@ STDMETHODIMP CThreadMgr::PreserveKey(
     TRACE("(%p) %x %s (%x,%x) %s\n", this, tid, debugstr_guid(&rguid), (prekey ? prekey->uVKey : 0), (prekey ? prekey->uModifiers : 0), debugstr_wn(pchDesc, cchDesc));
 
     if (!tid || cicIsNullPtr(&rguid) || !prekey || (cchDesc && !pchDesc))
+        return E_INVALIDARG;
+    if (get_textservice_clsid(tid) == GUID_NULL)
         return E_INVALIDARG;
 
     LIST_FOR_EACH(cursor, &m_CurrentPreservedKeys)
@@ -1180,11 +1307,34 @@ STDMETHODIMP CThreadMgr::SimulatePreservedKey(
     _In_ REFGUID rguid,
     _Out_ BOOL *pfEaten)
 {
-    FIXME("STUB:(%p)\n", this);
+    struct list *cursor;
+
+    TRACE("(%p) %p %s %p\n", this, pic, debugstr_guid(&rguid), pfEaten);
+
     if (!pfEaten)
         return E_INVALIDARG;
     *pfEaten = FALSE;
-    return E_NOTIMPL;
+
+    LIST_FOR_EACH(cursor, &m_CurrentPreservedKeys)
+    {
+        PreservedKey *key = LIST_ENTRY(cursor, PreservedKey, entry);
+        if (rguid != key->guid)
+            continue;
+
+        ITfKeyEventSink *owner = NULL;
+        get_textservice_sink(key->tid, IID_ITfKeyEventSink, (IUnknown **)&owner);
+        if (!owner)
+            return S_OK;
+
+        GUID guid = key->guid;
+        AddRef();
+        owner->AddRef();
+        HRESULT hr = owner->OnPreservedKey(pic, guid, pfEaten);
+        owner->Release();
+        Release();
+        return hr;
+    }
+    return S_OK;
 }
 
 STDMETHODIMP CThreadMgr::PeekMessageA(
@@ -1339,28 +1489,111 @@ STDMETHODIMP CThreadMgr::BeginUIElement(
     _Inout_ BOOL *show,
     _Out_ DWORD *id)
 {
-    FIXME("STUB:(%p)\n", this);
-    return E_NOTIMPL;
+    TRACE("(%p) %p %p %p\n", this, element, show, id);
+
+    if (!element || !show || !id)
+        return E_INVALIDARG;
+
+    UIElementEntry *entries =
+        static_cast<UIElementEntry *>(cicMemReAlloc(m_uiElements, (m_cUIElements + 1) * sizeof(*entries)));
+    if (!entries)
+        return E_OUTOFMEMORY;
+    m_uiElements = entries;
+
+    DWORD newId = ++m_nextUIElementId;
+    m_uiElements[m_cUIElements].id = newId;
+    m_uiElements[m_cUIElements].element = element;
+    element->AddRef();
+    ++m_cUIElements;
+
+    BOOL fShow = TRUE;
+    CSinkSnapshot sinks;
+    if (SUCCEEDED(sinks.Capture(&m_UIElementSink)))
+    {
+        for (ULONG i = 0; i < sinks.Count(); ++i)
+        {
+            BOOL fSinkShow = TRUE;
+            if (SUCCEEDED(static_cast<ITfUIElementSink *>(sinks[i])->BeginUIElement(newId, &fSinkShow)) && !fSinkShow)
+                fShow = FALSE;
+        }
+    }
+
+    *show = fShow;
+    *id = newId;
+    return S_OK;
 }
 
 STDMETHODIMP CThreadMgr::UpdateUIElement(_In_ DWORD id)
 {
-    FIXME("STUB:(%p)\n", this);
-    return E_NOTIMPL;
+    TRACE("(%p) %lu\n", this, id);
+
+    ULONG i;
+    for (i = 0; i < m_cUIElements; ++i)
+    {
+        if (m_uiElements[i].id == id)
+            break;
+    }
+    if (i == m_cUIElements)
+        return E_INVALIDARG;
+
+    CSinkSnapshot sinks;
+    if (SUCCEEDED(sinks.Capture(&m_UIElementSink)))
+    {
+        for (ULONG j = 0; j < sinks.Count(); ++j)
+            static_cast<ITfUIElementSink *>(sinks[j])->UpdateUIElement(id);
+    }
+    return S_OK;
 }
 
 STDMETHODIMP CThreadMgr::EndUIElement(_In_ DWORD id)
 {
-    FIXME("STUB:(%p)\n", this);
-    return E_NOTIMPL;
+    TRACE("(%p) %lu\n", this, id);
+
+    ULONG i;
+    for (i = 0; i < m_cUIElements; ++i)
+    {
+        if (m_uiElements[i].id == id)
+            break;
+    }
+    if (i == m_cUIElements)
+        return E_INVALIDARG;
+
+    CSinkSnapshot sinks;
+    if (SUCCEEDED(sinks.Capture(&m_UIElementSink)))
+    {
+        for (ULONG j = 0; j < sinks.Count(); ++j)
+            static_cast<ITfUIElementSink *>(sinks[j])->EndUIElement(id);
+    }
+
+    for (i = 0; i < m_cUIElements; ++i)
+    {
+        if (m_uiElements[i].id != id)
+            continue;
+        m_uiElements[i].element->Release();
+        MoveMemory(&m_uiElements[i], &m_uiElements[i + 1], (m_cUIElements - i - 1) * sizeof(*m_uiElements));
+        --m_cUIElements;
+        break;
+    }
+    return S_OK;
 }
 
 STDMETHODIMP CThreadMgr::GetUIElement(
     _In_ DWORD id,
     _Out_ ITfUIElement **element)
 {
-    FIXME("STUB:(%p)\n", this);
-    return E_NOTIMPL;
+    if (!element)
+        return E_INVALIDARG;
+    *element = NULL;
+    for (ULONG i = 0; i < m_cUIElements; ++i)
+    {
+        if (m_uiElements[i].id == id)
+        {
+            *element = m_uiElements[i].element;
+            (*element)->AddRef();
+            return S_OK;
+        }
+    }
+    return E_INVALIDARG;
 }
 
 STDMETHODIMP CThreadMgr::EnumUIElements(_Out_ IEnumTfUIElements **enum_elements)
@@ -1374,16 +1607,71 @@ STDMETHODIMP CThreadMgr::AdviseSingleSink(
     _In_ REFIID riid,
     _In_ IUnknown *punk)
 {
-    FIXME("STUB:(%p) %i %s %p\n", this, tid, debugstr_guid(&riid), punk);
-    return E_NOTIMPL;
+    TRACE("(%p) %i %s %p\n", this, tid, debugstr_guid(&riid), punk);
+
+    if (!tid || !punk)
+        return E_INVALIDARG;
+    if (riid != IID_ITfFunctionProvider)
+        return E_INVALIDARG;
+
+    for (ULONG i = 0; i < m_cFuncProviders; ++i)
+    {
+        if (m_funcProviders[i].tid == tid)
+            return CONNECT_E_ADVISELIMIT;
+    }
+
+    if (get_textservice_clsid(tid) != GUID_NULL && !is_textservice_in_transition(tid))
+        return E_INVALIDARG;
+
+    ITfFunctionProvider *provider = NULL;
+    HRESULT hr = punk->QueryInterface(IID_ITfFunctionProvider, (void **)&provider);
+    if (FAILED(hr))
+        return E_INVALIDARG;
+
+    GUID clsid = GUID_NULL;
+    ITfCategoryMgr *catmgr;
+    if (SUCCEEDED(CategoryMgr_Constructor(NULL, (IUnknown **)&catmgr)))
+    {
+        catmgr->GetGUID(tid, &clsid);
+        catmgr->Release();
+    }
+
+    FunctionProviderEntry *entries =
+        static_cast<FunctionProviderEntry *>(cicMemReAlloc(m_funcProviders, (m_cFuncProviders + 1) * sizeof(*entries)));
+    if (!entries)
+    {
+        provider->Release();
+        return E_OUTOFMEMORY;
+    }
+    m_funcProviders = entries;
+    m_funcProviders[m_cFuncProviders].tid = tid;
+    m_funcProviders[m_cFuncProviders].clsid = clsid;
+    m_funcProviders[m_cFuncProviders].provider = provider;
+    ++m_cFuncProviders;
+    return S_OK;
 }
 
 STDMETHODIMP CThreadMgr::UnadviseSingleSink(
     _In_ TfClientId tid,
     _In_ REFIID riid)
 {
-    FIXME("STUB:(%p) %i %s\n", this, tid, debugstr_guid(&riid));
-    return E_NOTIMPL;
+    TRACE("(%p) %i %s\n", this, tid, debugstr_guid(&riid));
+
+    if (riid != IID_ITfFunctionProvider ||
+        (get_textservice_clsid(tid) != GUID_NULL && !is_textservice_in_transition(tid)))
+        return E_INVALIDARG;
+
+    for (ULONG i = 0; i < m_cFuncProviders; ++i)
+    {
+        if (m_funcProviders[i].tid != tid)
+            continue;
+        m_funcProviders[i].provider->Release();
+        MoveMemory(&m_funcProviders[i], &m_funcProviders[i + 1],
+                   (m_cFuncProviders - i - 1) * sizeof(*m_funcProviders));
+        --m_cFuncProviders;
+        return S_OK;
+    }
+    return CONNECT_E_NOCONNECTION;
 }
 
 HRESULT CThreadMgr::CreateInstance(IUnknown *pUnkOuter, CThreadMgr **ppOut)

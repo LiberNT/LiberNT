@@ -27,7 +27,19 @@ public:
     STDMETHODIMP UnknownMethod(_In_ DWORD unused) override; // FIXME
 
 protected:
+    struct Provider
+    {
+        CLSID clsid;
+        ITfDisplayAttributeProvider *provider;
+    };
+
+    HRESULT _LoadProviders();
+    void _ReleaseProviders();
+
     LONG m_cRefs;
+    BOOL m_fProvidersLoaded;
+    Provider *m_providers;
+    ULONG m_cProviders;
     CicArray<IUnknown *> m_array1;
     CicArray<DWORD> m_array2;
 

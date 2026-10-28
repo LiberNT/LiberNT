@@ -4,14 +4,18 @@ list(APPEND SOURCE
     precomp.h
     categorymgr.cpp
     compartmentmgr.cpp
+    composition.cpp
     context.cpp
     displayattributemgr.cpp
     documentmgr.cpp
     inputprocessor.cpp
+    langbaritemmgr.cpp
     langbarmgr.cpp
     mlng.cpp
     msctf.cpp
+    property.cpp
     range.cpp
+    textstore.cpp
     threadmgr.cpp
     utils.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/msctf_stubs.c)

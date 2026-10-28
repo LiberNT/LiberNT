@@ -26,3 +26,15 @@
 #define WINE_PRODUCTVERSION_STR "5.1.2600.3319"
 
 #include "wine/wine_common_ver.rc"
+
+#include <windef.h>
+#include "resource.h"
+
+#pragma code_page(65001)
+
+#ifdef LANGUAGE_EN_US
+    #include "lang/en-US.rc"
+#endif
+#ifdef LANGUAGE_JA_JP
+    #include "lang/ja-JP.rc"
+#endif
