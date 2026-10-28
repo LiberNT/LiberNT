@@ -158,6 +158,17 @@ BmFinishScan(VOID)
         ;
 }
 
+#if DBG
+static
+VOID
+BmPauseAfterScanTrace(VOID)
+{
+    FwPrint(L"Chain scan trace complete. Press any key to continue.\r\n");
+    if (FwReadKey() == KEY_EXTENDED)
+        FwReadKey();
+}
+#endif
+
 static
 VOID
 BmBuildMenu(VOID)
@@ -468,6 +479,11 @@ VOID
 BmRunMenu(
     _In_ LONG Timeout)
 {
+#if DBG
+    BmFinishScan();
+    BmPauseAfterScanTrace();
+#endif
+
     if (GuiInitialize())
     {
         UiKeepFirmwareScreen = (Timeout > 0);
@@ -533,7 +549,12 @@ BlMain(VOID)
         BmFinishScan();
 
     if (BmCount == 0)
+    {
+#if DBG
+        BmPauseAfterScanTrace();
+#endif
         return;
+    }
 
     BmSelected = Default;
     Timeout = BmGetTimeout();
