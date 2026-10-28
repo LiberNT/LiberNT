@@ -306,3 +306,30 @@ HdgfxIlkReadDisplayState(
         IlkReadDpll(Mmio, Index, &State->Dplls[Index]);
     IlkReadPanel(Mmio, State);
 }
+
+uint32_t
+HdgfxIlkCursorControl(
+    bool Visible)
+{
+    return Visible ? HDGFX_SET(CUR_MODE_SELECT, 1) | HDGFX_SET(CUR_MODE, 7) : 0;
+}
+
+uint32_t
+HdgfxIlkCursorPosition(
+    int32_t X,
+    int32_t Y)
+{
+    uint32_t Magnitude;
+    uint32_t Value = 0;
+
+    if (X < -HDGFX_CURSOR_POSITION_LIMIT || X > HDGFX_CURSOR_POSITION_LIMIT ||
+        Y < -HDGFX_CURSOR_POSITION_LIMIT || Y > HDGFX_CURSOR_POSITION_LIMIT)
+    {
+        return 0;
+    }
+    Magnitude = (uint32_t)(X < 0 ? -X : X);
+    Value |= HDGFX_SET(CUR_POS_X_SIGN, X < 0) | HDGFX_SET(CUR_POS_X, Magnitude);
+    Magnitude = (uint32_t)(Y < 0 ? -Y : Y);
+    Value |= HDGFX_SET(CUR_POS_Y_SIGN, Y < 0) | HDGFX_SET(CUR_POS_Y, Magnitude);
+    return Value;
+}

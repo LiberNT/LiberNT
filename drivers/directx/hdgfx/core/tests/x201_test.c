@@ -1533,6 +1533,17 @@ TestRing(void)
 }
 
 static void
+TestCursor(void)
+{
+    CHECK_EQ(HdgfxIlkCursorControl(true), 0x27);
+    CHECK_EQ(HdgfxIlkCursorControl(false), 0);
+    CHECK_EQ(HdgfxIlkCursorPosition(100, 200), 0x00C80064);
+    CHECK_EQ(HdgfxIlkCursorPosition(-5, -7), 0x80078005);
+    CHECK_EQ(HdgfxIlkCursorPosition(4095, -4095), 0x8FFF0FFF);
+    CHECK_EQ(HdgfxIlkCursorPosition(4096, 0), 0);
+}
+
+static void
 TestBlt(void)
 {
     HDGFX_BLT_SURFACE Source = { 0xFFFE000, 128 };
@@ -1585,6 +1596,7 @@ main(
     TestCrtModeset(argv[1]);
     TestRing();
     TestBlt();
+    TestCursor();
     if (argc > 2)
         TestFirmwareVbt(argv[2]);
     if (Failures)
