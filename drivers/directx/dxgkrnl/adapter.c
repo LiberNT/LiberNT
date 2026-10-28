@@ -13980,7 +13980,8 @@ DxgkAdapterStart(
         _SEH2_END;
         DxgkReleaseKmdCall(Adapter);
         Adapter->PhysicalAdapterCapsValid = NT_SUCCESS(CapsStatus);
-        if (!NT_SUCCESS(CapsStatus) && !Adapter->MiniportContext->IsBasicDisplayFallback)
+        if (!NT_SUCCESS(CapsStatus) && CapsStatus != STATUS_NOT_SUPPORTED &&
+            !Adapter->MiniportContext->IsBasicDisplayFallback)
             DXGKRNL_WARN("DxgkAdapterStart: physical adapter caps failed 0x%08lx\n", CapsStatus);
         DXGKRNL_TRACE("DxgkAdapterStart: physical adapter caps status=0x%08lx nodes=%u paging-node=%u handle=%p flags=0x%08x\n",
                     CapsStatus, Adapter->PhysicalAdapterCaps.NumExecutionNodes, Adapter->PhysicalAdapterCaps.PagingNodeIndex,
