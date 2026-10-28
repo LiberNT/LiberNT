@@ -13,6 +13,7 @@ static const HDGFX_GENERATION HdgfxIronlake =
 {
     "Ironlake",
     5,
+    3,
     HdgfxIlkReadDisplayState
 };
 

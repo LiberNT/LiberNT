@@ -6,6 +6,7 @@
  */
 
 #include "hdgfx_core.h"
+#include "hdgfx_regs.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +23,12 @@ typedef struct _REGISTER_DUMP
 } REGISTER_DUMP;
 
 static unsigned Failures;
+
+static const uint8_t X201PanelDtd[18] =
+{
+    0x12, 0x1B, 0x00, 0x7B, 0x50, 0x20, 0x15, 0x30, 0x30,
+    0x20, 0x36, 0x00, 0x05, 0xA3, 0x10, 0x00, 0x00, 0x18
+};
 
 #define CHECK_EQ(Actual, Expected) \
     CheckEqual(#Actual, (unsigned long long)(Actual), (unsigned long long)(Expected), __LINE__)
@@ -133,7 +140,7 @@ TestNativeLvds(
 {
     char Path[1024];
     REGISTER_DUMP *Dump = malloc(sizeof(*Dump));
-    HDGFX_MMIO Mmio = { DumpRead, Dump };
+    HDGFX_MMIO Mmio = { DumpRead, Dump, NULL, NULL };
     HDGFX_DISPLAY_STATE State;
     const HDGFX_GENERATION *Generation;
     const HDGFX_PIPE *Pipe;
@@ -304,11 +311,6 @@ TestSyntheticVbt(void)
 {
     static const uint8_t General[] = { 0x00, 0x02 };
     static const uint8_t Options[] = { 0x01 };
-    static const uint8_t Dtd[18] =
-    {
-        0x12, 0x1B, 0x00, 0x7B, 0x50, 0x20, 0x15, 0x30, 0x30,
-        0x20, 0x36, 0x00, 0x05, 0xA3, 0x10, 0x00, 0x00, 0x18
-    };
     uint8_t *OpRegion = calloc(1, 0x2000);
     uint8_t *Vbt = OpRegion + 0x400;
     uint8_t *Bdb = Vbt + 48;
@@ -333,7 +335,7 @@ TestSyntheticVbt(void)
     Pointers[1 + 9 + 3] = (uint8_t)(DataOffset + 7);
     Pointers[1 + 9 + 4] = (uint8_t)((DataOffset + 7) >> 8);
     Offset = PutBlock(Bdb, Offset, 41, Pointers, sizeof(Pointers));
-    memcpy(Data + 7, Dtd, sizeof(Dtd));
+    memcpy(Data + 7, X201PanelDtd, sizeof(X201PanelDtd));
     Offset = PutBlock(Bdb, Offset, 42, Data, sizeof(Data));
     Backlight[1 + 5] = 0x02;
     Backlight[1 + 5 + 1] = 625 & 0xFF;
@@ -350,6 +352,199 @@ TestSyntheticVbt(void)
     OpRegion[0x58] = 0;
     CHECK_EQ(HdgfxOpRegionFindVbt(OpRegion, 0x2000, (const uint8_t **)&Vbt, &Offset), 0);
     free(OpRegion);
+}
+
+typedef struct _FAKE_GMBUS
+{
+    const uint8_t *Data;
+    uint32_t Size;
+    uint32_t Pins;
+    uint32_t Gmbus0;
+    uint32_t Count;
+    uint32_t Position;
+    uint32_t StalledUs;
+    bool InUse;
+    bool HeldElsewhere;
+    bool HardwareReady;
+    bool Active;
+    bool Nak;
+    bool Cleared;
+} FAKE_GMBUS;
+
+static uint32_t
+FakeGmbusRead(
+    void *Context,
+    uint32_t Offset)
+{
+    FAKE_GMBUS *Bus = Context;
+    uint32_t Value = 0;
+    uint32_t Byte;
+
+    if (Offset == HDGFX_REG(GMBUS2, 0))
+    {
+        Value = HDGFX_SET(GMBUS2_INUSE, Bus->InUse || Bus->HeldElsewhere) |
+                HDGFX_SET(GMBUS2_HW_RDY, Bus->HardwareReady) |
+                HDGFX_SET(GMBUS2_NAK, Bus->Nak) |
+                HDGFX_SET(GMBUS2_ACTIVE, Bus->Active);
+        Bus->InUse = true;
+        return Value;
+    }
+    if (Offset == HDGFX_REG(GMBUS3, 0))
+    {
+        CHECK_EQ(Bus->HardwareReady, 1);
+        for (Byte = 0; Byte < 4 && Bus->Position < Bus->Count; Byte++)
+            Value |= (uint32_t)Bus->Data[Bus->Position++] << (Byte * 8);
+        Bus->Active = Bus->Position < Bus->Count;
+        Bus->HardwareReady = true;
+        return Value;
+    }
+    fprintf(stderr, "unexpected GMBUS read 0x%05x\n", Offset);
+    Failures++;
+    return 0;
+}
+
+static void
+FakeGmbusWrite(
+    void *Context,
+    uint32_t Offset,
+    uint32_t Value)
+{
+    FAKE_GMBUS *Bus = Context;
+
+    if (Offset == HDGFX_REG(GMBUS0, 0))
+    {
+        Bus->Gmbus0 = Value;
+    }
+    else if (Offset == HDGFX_REG(GMBUS1, 0))
+    {
+        if (HDGFX_GET(Value, GMBUS1_SW_CLR_INT))
+        {
+            Bus->Nak = false;
+            Bus->Active = false;
+            Bus->HardwareReady = true;
+            Bus->Cleared = true;
+            return;
+        }
+        if (!HDGFX_GET(Value, GMBUS1_SW_RDY))
+            return;
+        CHECK_EQ(Bus->Cleared, 1);
+        CHECK_EQ(HDGFX_GET(Bus->Gmbus0, GMBUS0_RATE), 0);
+        CHECK_EQ(HDGFX_GET(Value, GMBUS1_ENABLE_TIMEOUT), 1);
+        CHECK_EQ(HDGFX_GET(Value, GMBUS1_CYCLE), 7);
+        CHECK_EQ(HDGFX_GET(Value, GMBUS1_READ), 1);
+        if (HDGFX_GET(Bus->Gmbus0, GMBUS0_PINS) != Bus->Pins ||
+            HDGFX_GET(Value, GMBUS1_ADDRESS) != HDGFX_DDC_ADDRESS)
+        {
+            Bus->Nak = true;
+            Bus->Active = false;
+            return;
+        }
+        Bus->Position = HDGFX_GET(Value, GMBUS1_INDEX);
+        Bus->Count = Bus->Position + HDGFX_GET(Value, GMBUS1_BYTE_COUNT);
+        CHECK_EQ(Bus->Count <= Bus->Size, 1);
+        Bus->Active = true;
+        Bus->HardwareReady = true;
+    }
+    else if (Offset == HDGFX_REG(GMBUS2, 0))
+    {
+        if (HDGFX_GET(Value, GMBUS2_INUSE))
+            Bus->InUse = false;
+    }
+    else if (Offset == HDGFX_REG(GMBUS5, 0))
+    {
+        CHECK_EQ(Value, 0);
+    }
+    else
+    {
+        fprintf(stderr, "unexpected GMBUS write 0x%05x\n", Offset);
+        Failures++;
+    }
+}
+
+static void
+FakeGmbusStall(
+    void *Context,
+    uint32_t Microseconds)
+{
+    ((FAKE_GMBUS *)Context)->StalledUs += Microseconds;
+}
+
+static void
+TestGmbusEdid(
+    const char *FixtureDir)
+{
+    const HDGFX_GENERATION *Generation = HdgfxFindGeneration(0x8086, 0x0046);
+    uint8_t Buffer[HDGFX_EDID_SIZE];
+    FAKE_GMBUS Bus;
+    HDGFX_MMIO Mmio = { FakeGmbusRead, &Bus, FakeGmbusWrite, FakeGmbusStall };
+    HDGFX_EDID Parsed;
+    char Path[1024];
+    uint8_t *Edid;
+    size_t Size;
+
+    snprintf(Path, sizeof(Path), "%s/x201-lvds-1280x800/edid.bin", FixtureDir);
+    Edid = LoadFile(Path, &Size);
+    if (!Edid || Size != HDGFX_EDID_SIZE)
+    {
+        fprintf(stderr, "%s: missing or not %u bytes\n", Path, HDGFX_EDID_SIZE);
+        Failures++;
+        free(Edid);
+        return;
+    }
+    memset(&Bus, 0, sizeof(Bus));
+    Bus.Data = Edid;
+    Bus.Size = HDGFX_EDID_SIZE;
+    Bus.Pins = 3;
+    Bus.HardwareReady = true;
+    CHECK_EQ(Generation->PanelDdcPins, 3);
+    CHECK_EQ(HdgfxGmbusRead(&Mmio, Generation->PanelDdcPins, HDGFX_DDC_ADDRESS, 0, Buffer, sizeof(Buffer)),
+             HdgfxGmbusSuccess);
+    CHECK_EQ(memcmp(Buffer, Edid, HDGFX_EDID_SIZE), 0);
+    CHECK_EQ(Bus.Gmbus0, 0);
+    CHECK_EQ(Bus.InUse, 0);
+
+    CHECK_EQ(HdgfxGmbusRead(&Mmio, Generation->PanelDdcPins, HDGFX_DDC_ADDRESS, 126, Buffer, 2),
+             HdgfxGmbusSuccess);
+    CHECK_EQ(Buffer[0], Edid[126]);
+    CHECK_EQ(Buffer[1], Edid[127]);
+
+    CHECK_EQ(HdgfxGmbusRead(&Mmio, 2, HDGFX_DDC_ADDRESS, 0, Buffer, sizeof(Buffer)),
+             HdgfxGmbusNoAcknowledge);
+    CHECK_EQ(Bus.Nak, 0);
+    CHECK_EQ(Bus.Gmbus0, 0);
+    CHECK_EQ(Bus.InUse, 0);
+
+    Bus.HeldElsewhere = true;
+    Bus.Cleared = false;
+    CHECK_EQ(HdgfxGmbusRead(&Mmio, Generation->PanelDdcPins, HDGFX_DDC_ADDRESS, 0, Buffer, sizeof(Buffer)),
+             HdgfxGmbusBusy);
+    CHECK_EQ(Bus.Cleared, 0);
+    CHECK_EQ(Bus.StalledUs >= 25000 && Bus.StalledUs <= 26000, 1);
+    Bus.HeldElsewhere = false;
+
+    CHECK_EQ(HdgfxGmbusRead(&Mmio, Generation->PanelDdcPins, HDGFX_DDC_ADDRESS, 0, Buffer, 0),
+             HdgfxGmbusInvalidParameter);
+
+    CHECK_EQ(HdgfxEdidParse(Edid, &Parsed), 1);
+    CHECK_EQ(strcmp(Parsed.Manufacturer, "LEN"), 0);
+    CHECK_EQ(Parsed.ProductCode, 0x4011);
+    CHECK_EQ(Parsed.SerialNumber, 0);
+    CHECK_EQ(Parsed.Version, 1);
+    CHECK_EQ(Parsed.Revision, 3);
+    CHECK_EQ(Parsed.WidthCm, 26);
+    CHECK_EQ(Parsed.HeightCm, 16);
+    CHECK_EQ(Parsed.Extensions, 0);
+    CHECK_EQ(Parsed.DtdCount, 2);
+    CHECK_EQ(Parsed.Dtds[0].DotKHz, 69300);
+    CheckTimings(&Parsed.Dtds[0].Timings);
+    CHECK_EQ(Parsed.Dtds[0].HSyncPositive, 0);
+    CHECK_EQ(Parsed.Dtds[0].WidthMm, 261);
+    CHECK_EQ(Parsed.Dtds[1].DotKHz, 57590);
+    CheckTimings(&Parsed.Dtds[1].Timings);
+
+    Edid[20] ^= 1;
+    CHECK_EQ(HdgfxEdidParse(Edid, &Parsed), 0);
+    free(Edid);
 }
 
 static void
@@ -380,6 +575,7 @@ main(
     }
     TestNativeLvds(argv[1]);
     TestSyntheticVbt();
+    TestGmbusEdid(argv[1]);
     if (argc > 2)
         TestFirmwareVbt(argv[2]);
     if (Failures)

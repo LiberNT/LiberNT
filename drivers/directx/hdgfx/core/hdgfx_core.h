@@ -18,13 +18,20 @@ extern "C" {
 #define HDGFX_MAX_PIPES 3
 #define HDGFX_MAX_TRANSCODERS 3
 #define HDGFX_MAX_DPLLS 2
+#define HDGFX_EDID_SIZE 128
+#define HDGFX_EDID_MAX_DTDS 4
+#define HDGFX_DDC_ADDRESS 0x50
 
 typedef uint32_t (*HDGFX_READ_REGISTER)(void *Context, uint32_t Offset);
+typedef void (*HDGFX_WRITE_REGISTER)(void *Context, uint32_t Offset, uint32_t Value);
+typedef void (*HDGFX_STALL)(void *Context, uint32_t Microseconds);
 
 typedef struct _HDGFX_MMIO
 {
     HDGFX_READ_REGISTER Read;
     void *Context;
+    HDGFX_WRITE_REGISTER Write;
+    HDGFX_STALL Stall;
 } HDGFX_MMIO;
 
 typedef struct _HDGFX_TIMINGS
@@ -42,6 +49,16 @@ typedef struct _HDGFX_TIMINGS
     uint32_t VSyncEnd;
     uint32_t VTotal;
 } HDGFX_TIMINGS;
+
+typedef struct _HDGFX_DTD
+{
+    uint32_t DotKHz;
+    HDGFX_TIMINGS Timings;
+    bool HSyncPositive;
+    bool VSyncPositive;
+    uint32_t WidthMm;
+    uint32_t HeightMm;
+} HDGFX_DTD;
 
 typedef struct _HDGFX_M_N
 {
@@ -187,6 +204,7 @@ typedef struct _HDGFX_GENERATION
 {
     const char *Name;
     uint32_t Gen;
+    uint32_t PanelDdcPins;
     void (*ReadDisplayState)(const HDGFX_MMIO *Mmio, HDGFX_DISPLAY_STATE *State);
 } HDGFX_GENERATION;
 
@@ -206,6 +224,30 @@ typedef struct _HDGFX_VBT_PANEL
     uint32_t BacklightPwmHz;
     uint32_t BacklightMinimum;
 } HDGFX_VBT_PANEL;
+
+typedef struct _HDGFX_EDID
+{
+    char Manufacturer[4];
+    uint32_t ProductCode;
+    uint32_t SerialNumber;
+    uint32_t Version;
+    uint32_t Revision;
+    uint32_t WidthCm;
+    uint32_t HeightCm;
+    uint32_t Extensions;
+    uint32_t DtdCount;
+    HDGFX_DTD Dtds[HDGFX_EDID_MAX_DTDS];
+} HDGFX_EDID;
+
+typedef enum _HDGFX_GMBUS_STATUS
+{
+    HdgfxGmbusSuccess,
+    HdgfxGmbusInvalidParameter,
+    HdgfxGmbusBusy,
+    HdgfxGmbusNoAcknowledge,
+    HdgfxGmbusSlaveTimeout,
+    HdgfxGmbusTimeout
+} HDGFX_GMBUS_STATUS;
 
 typedef struct _HDGFX_VBT
 {
@@ -230,6 +272,29 @@ uint32_t
 HdgfxRefreshMilliHz(
     const HDGFX_TIMINGS *Timings,
     uint32_t DotKHz);
+
+void
+HdgfxDecodeDtd(
+    const uint8_t *Dtd,
+    HDGFX_DTD *Result);
+
+bool
+HdgfxEdidParse(
+    const uint8_t *Edid,
+    HDGFX_EDID *Result);
+
+HDGFX_GMBUS_STATUS
+HdgfxGmbusRead(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Pins,
+    uint8_t Address,
+    uint8_t Index,
+    uint8_t *Buffer,
+    uint32_t Size);
+
+const char *
+HdgfxGmbusStatusName(
+    HDGFX_GMBUS_STATUS Status);
 
 bool
 HdgfxOpRegionFindVbt(
