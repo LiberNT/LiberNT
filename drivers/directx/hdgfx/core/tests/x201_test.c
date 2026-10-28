@@ -1532,6 +1532,41 @@ TestRing(void)
     CHECK_EQ(HdgfxIlkStartRing(&Mmio, &Ring), false);
 }
 
+static void
+TestBlt(void)
+{
+    HDGFX_BLT_SURFACE Source = { 0xFFFE000, 128 };
+    HDGFX_BLT_SURFACE Destination = { 0xFFFE800, 128 };
+    HDGFX_BLT_RECT Rect = { 8, 4, 24, 12 };
+    HDGFX_BLT_RECT Empty = { 8, 4, 8, 12 };
+    uint32_t Dwords[8];
+
+    CHECK_EQ(HdgfxMiFlush(Dwords), 1);
+    CHECK_EQ(Dwords[0], 0x02000000);
+
+    CHECK_EQ(HdgfxBltFill(Dwords, &Source, &Rect, 0x55667788), 6);
+    CHECK_EQ(Dwords[0], 0x54300004);
+    CHECK_EQ(Dwords[1], 0x03F00080);
+    CHECK_EQ(Dwords[2], 0x00040008);
+    CHECK_EQ(Dwords[3], 0x000C0018);
+    CHECK_EQ(Dwords[4], 0xFFFE000);
+    CHECK_EQ(Dwords[5], 0x55667788);
+    CHECK_EQ(HdgfxBltFill(Dwords, &Source, &Empty, 0), 0);
+
+    CHECK_EQ(HdgfxBltCopy(Dwords, &Destination, &Rect, &Source, 1, 2), 8);
+    CHECK_EQ(Dwords[0], 0x54F00006);
+    CHECK_EQ(Dwords[1], 0x03CC0080);
+    CHECK_EQ(Dwords[2], 0x00040008);
+    CHECK_EQ(Dwords[3], 0x000C0018);
+    CHECK_EQ(Dwords[4], 0xFFFE800);
+    CHECK_EQ(Dwords[5], 0x00020001);
+    CHECK_EQ(Dwords[6], 0x80);
+    CHECK_EQ(Dwords[7], 0xFFFE000);
+    CHECK_EQ(HdgfxBltCopy(Dwords, &Destination, &Rect, &Source, 0x7FF8, 0), 0);
+    Source.Pitch = 130;
+    CHECK_EQ(HdgfxBltCopy(Dwords, &Destination, &Rect, &Source, 0, 0), 0);
+}
+
 int
 main(
     int argc,
@@ -1549,6 +1584,7 @@ main(
     TestLvdsModeset(argv[1]);
     TestCrtModeset(argv[1]);
     TestRing();
+    TestBlt();
     if (argc > 2)
         TestFirmwareVbt(argv[2]);
     if (Failures)

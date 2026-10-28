@@ -311,6 +311,20 @@ typedef struct _HDGFX_RING
     uint32_t Tail;
 } HDGFX_RING;
 
+typedef struct _HDGFX_BLT_SURFACE
+{
+    uint32_t Address;
+    uint32_t Pitch;
+} HDGFX_BLT_SURFACE;
+
+typedef struct _HDGFX_BLT_RECT
+{
+    uint32_t Left;
+    uint32_t Top;
+    uint32_t Right;
+    uint32_t Bottom;
+} HDGFX_BLT_RECT;
+
 typedef struct _HDGFX_VBT_PANEL
 {
     bool Present;
@@ -531,6 +545,26 @@ HdgfxRingEmitBreadcrumb(
     uint32_t Head,
     uint32_t StatusIndex,
     uint32_t Value);
+
+uint32_t
+HdgfxMiFlush(
+    uint32_t *Dwords);
+
+uint32_t
+HdgfxBltFill(
+    uint32_t *Dwords,
+    const HDGFX_BLT_SURFACE *Destination,
+    const HDGFX_BLT_RECT *Rect,
+    uint32_t Color);
+
+uint32_t
+HdgfxBltCopy(
+    uint32_t *Dwords,
+    const HDGFX_BLT_SURFACE *Destination,
+    const HDGFX_BLT_RECT *Rect,
+    const HDGFX_BLT_SURFACE *Source,
+    uint32_t SourceX,
+    uint32_t SourceY);
 
 bool
 HdgfxVbtParse(

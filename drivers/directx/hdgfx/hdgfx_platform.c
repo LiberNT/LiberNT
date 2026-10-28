@@ -29,7 +29,12 @@
 #define HDGFX_CRT_PIPE              1UL
 #define HDGFX_RING_SIZE             0x4000UL
 #define HDGFX_RING_PAGES            (HDGFX_RING_SIZE / PAGE_SIZE)
-#define HDGFX_RENDER_GTT_PAGES      (HDGFX_RING_PAGES + 1)
+#define HDGFX_STATUS_GTT_INDEX      HDGFX_RING_PAGES
+#define HDGFX_SCRATCH_GTT_INDEX     (HDGFX_RING_PAGES + 1)
+#define HDGFX_RENDER_GTT_PAGES      (HDGFX_RING_PAGES + 2)
+#define HDGFX_BLT_TEST_PITCH        128UL
+#define HDGFX_BLT_TEST_WIDTH        (HDGFX_BLT_TEST_PITCH / 4)
+#define HDGFX_BLT_TEST_HEIGHT       16UL
 #define HDGFX_RING_SEQNO_INDEX      0x20UL
 #define HDGFX_RING_TEST_TIMEOUT_US  100000UL
 
@@ -81,9 +86,12 @@ typedef struct _HDGFX_ADAPTER
     EX_RUNDOWN_REF Rundown;
     PVOID RingMemory;
     PVOID StatusPage;
+    PVOID ScratchPage;
     PULONG GttWindow;
     ULONG SavedGtt[HDGFX_RENDER_GTT_PAGES];
     HDGFX_RING Ring;
+    ULONG ScratchAddress;
+    ULONG Seqno;
     BOOLEAN RingStarted;
     BOOLEAN RingInterrupt;
     ULONG GtInterruptMask;
@@ -735,6 +743,11 @@ HdgfxStopRender(
         MmFreeContiguousMemorySpecifyCache(Adapter->StatusPage, PAGE_SIZE, MmCached);
         Adapter->StatusPage = NULL;
     }
+    if (Adapter->ScratchPage != NULL)
+    {
+        MmFreeContiguousMemorySpecifyCache(Adapter->ScratchPage, PAGE_SIZE, MmNonCached);
+        Adapter->ScratchPage = NULL;
+    }
 }
 
 static VOID
@@ -774,9 +787,10 @@ HdgfxStartRender(
     Adapter->RingMemory = MmAllocateContiguousMemorySpecifyCache(HDGFX_RING_SIZE, Lowest, Highest, Boundary,
                                                                  MmNonCached);
     Adapter->StatusPage = MmAllocateContiguousMemorySpecifyCache(PAGE_SIZE, Lowest, Highest, Boundary, MmCached);
+    Adapter->ScratchPage = MmAllocateContiguousMemorySpecifyCache(PAGE_SIZE, Lowest, Highest, Boundary, MmNonCached);
     GttFirst = Aperture->u.Memory.Length / PAGE_SIZE - HDGFX_RENDER_GTT_PAGES;
     Address.QuadPart = (LONGLONG)(Bar0 + HDGFX_REG(GTT_PTE, GttFirst));
-    if (Adapter->RingMemory == NULL || Adapter->StatusPage == NULL ||
+    if (Adapter->RingMemory == NULL || Adapter->StatusPage == NULL || Adapter->ScratchPage == NULL ||
         !HdgfxResourceOwned(&Device->DxgkInterface, (ULONGLONG)Address.QuadPart,
                             HDGFX_RENDER_GTT_PAGES * sizeof(ULONG)))
     {
@@ -791,10 +805,12 @@ HdgfxStartRender(
     }
     RtlZeroMemory(Adapter->RingMemory, HDGFX_RING_SIZE);
     RtlZeroMemory(Adapter->StatusPage, PAGE_SIZE);
+    RtlZeroMemory(Adapter->ScratchPage, PAGE_SIZE);
 
     for (Index = 0; Index < HDGFX_RENDER_GTT_PAGES; Index++)
     {
-        PVOID Page = Index < HDGFX_RING_PAGES ? (PUCHAR)Adapter->RingMemory + Index * PAGE_SIZE : Adapter->StatusPage;
+        PVOID Page = Index < HDGFX_RING_PAGES ? (PUCHAR)Adapter->RingMemory + Index * PAGE_SIZE :
+                     Index == HDGFX_STATUS_GTT_INDEX ? Adapter->StatusPage : Adapter->ScratchPage;
 
         Adapter->SavedGtt[Index] = READ_REGISTER_ULONG(&Adapter->GttWindow[Index]);
         WRITE_REGISTER_ULONG(&Adapter->GttWindow[Index], HdgfxIlkGttEntry(MmGetPhysicalAddress(Page).LowPart));
@@ -804,7 +820,8 @@ HdgfxStartRender(
     Adapter->Ring.Commands = Adapter->RingMemory;
     Adapter->Ring.Size = HDGFX_RING_SIZE;
     Adapter->Ring.Address = GttFirst * PAGE_SIZE;
-    Adapter->Ring.StatusAddress = (GttFirst + HDGFX_RING_PAGES) * PAGE_SIZE;
+    Adapter->Ring.StatusAddress = (GttFirst + HDGFX_STATUS_GTT_INDEX) * PAGE_SIZE;
+    Adapter->ScratchAddress = (GttFirst + HDGFX_SCRATCH_GTT_INDEX) * PAGE_SIZE;
     HdgfxMmioInit(Adapter->Registers, &Mmio);
     Adapter->RingStarted = HdgfxIlkStartRing(&Mmio, &Adapter->Ring);
     if (!Adapter->RingStarted)
@@ -819,41 +836,101 @@ HdgfxStartRender(
     }
 }
 
-static VOID
-HdgfxTestRing(
-    _Inout_ PHDGFX_ADAPTER Adapter)
+static BOOLEAN
+HdgfxRingRun(
+    _Inout_ PHDGFX_ADAPTER Adapter,
+    _In_reads_(Count) const ULONG *Dwords,
+    _In_ ULONG Count,
+    _Out_ PULONGLONG ElapsedUs)
 {
     volatile ULONG *Status = (volatile ULONG *)Adapter->StatusPage;
     LARGE_INTEGER Frequency;
     LARGE_INTEGER Start;
     LARGE_INTEGER Now;
-    ULONGLONG ElapsedUs = 0;
     HDGFX_MMIO Mmio;
+    LONG Interrupts = Adapter->RingInterrupts;
+    ULONG Seqno = Adapter->Seqno + 1;
     BOOLEAN Done = FALSE;
-    LONG Interrupts;
+
+    *ElapsedUs = 0;
+    HdgfxMmioInit(Adapter->Registers, &Mmio);
+    if ((Count != 0 && !HdgfxRingEmit(&Adapter->Ring, HdgfxIlkRingHead(&Mmio), (const uint32_t *)Dwords, Count)) ||
+        !HdgfxRingEmitBreadcrumb(&Adapter->Ring, HdgfxIlkRingHead(&Mmio), HDGFX_RING_SEQNO_INDEX, Seqno))
+    {
+        return FALSE;
+    }
+    Adapter->Seqno = Seqno;
+    Start = KeQueryPerformanceCounter(&Frequency);
+    HdgfxIlkAdvanceRing(&Mmio, &Adapter->Ring);
+    do
+    {
+        Done = Status[HDGFX_RING_SEQNO_INDEX] == Seqno && Adapter->RingInterrupts != Interrupts;
+        Now = KeQueryPerformanceCounter(NULL);
+        *ElapsedUs = (ULONGLONG)(Now.QuadPart - Start.QuadPart) * 1000000ULL / (ULONGLONG)Frequency.QuadPart;
+        if (!Done)
+            KeStallExecutionProcessor(10);
+    } while (!Done && *ElapsedUs < HDGFX_RING_TEST_TIMEOUT_US);
+    return Done;
+}
+
+static ULONG
+HdgfxBltTestExpected(
+    _In_ ULONG X,
+    _In_ ULONG Y)
+{
+    if (X >= HDGFX_BLT_TEST_WIDTH - 2 || Y >= HDGFX_BLT_TEST_HEIGHT - 1)
+        return 0;
+    return X >= 8 && X < 24 && Y >= 4 && Y < 12 ? 0x55667788UL : 0x11223344UL;
+}
+
+static VOID
+HdgfxTestRing(
+    _Inout_ PHDGFX_ADAPTER Adapter)
+{
+    HDGFX_BLT_SURFACE Source = { Adapter->ScratchAddress, HDGFX_BLT_TEST_PITCH };
+    HDGFX_BLT_SURFACE Destination = { Adapter->ScratchAddress + PAGE_SIZE / 2, HDGFX_BLT_TEST_PITCH };
+    HDGFX_BLT_RECT Full = { 0, 0, HDGFX_BLT_TEST_WIDTH, HDGFX_BLT_TEST_HEIGHT };
+    HDGFX_BLT_RECT Inner = { 8, 4, 24, 12 };
+    HDGFX_BLT_RECT Copy = { 0, 0, HDGFX_BLT_TEST_WIDTH - 2, HDGFX_BLT_TEST_HEIGHT - 1 };
+    volatile ULONG *Pixels = (volatile ULONG *)((PUCHAR)Adapter->ScratchPage + PAGE_SIZE / 2);
+    uint32_t Dwords[24];
+    ULONGLONG BreadcrumbUs;
+    ULONGLONG BlitUs = 0;
+    HDGFX_MMIO Mmio;
+    BOOLEAN Breadcrumb;
+    BOOLEAN Blit = FALSE;
+    ULONG Mismatches = 0;
+    ULONG Count = 0;
+    ULONG Index;
 
     if (!Adapter->RingStarted)
         return;
 
-    HdgfxMmioInit(Adapter->Registers, &Mmio);
-    Interrupts = Adapter->RingInterrupts;
-    if (HdgfxRingEmitBreadcrumb(&Adapter->Ring, HdgfxIlkRingHead(&Mmio), HDGFX_RING_SEQNO_INDEX, 1))
+    Breadcrumb = HdgfxRingRun(Adapter, NULL, 0, &BreadcrumbUs);
+    Count += HdgfxBltFill(Dwords + Count, &Source, &Full, 0x11223344);
+    Count += HdgfxBltFill(Dwords + Count, &Source, &Inner, 0x55667788);
+    Count += HdgfxMiFlush(Dwords + Count);
+    Count += HdgfxBltCopy(Dwords + Count, &Destination, &Copy, &Source, 0, 0);
+    Count += HdgfxMiFlush(Dwords + Count);
+    if (Breadcrumb && Count == 22)
     {
-        Start = KeQueryPerformanceCounter(&Frequency);
-        HdgfxIlkAdvanceRing(&Mmio, &Adapter->Ring);
-        do
+        Blit = HdgfxRingRun(Adapter, (const ULONG *)Dwords, Count, &BlitUs);
+        for (Index = 0; Blit && Index < HDGFX_BLT_TEST_WIDTH * HDGFX_BLT_TEST_HEIGHT; Index++)
         {
-            Done = Status[HDGFX_RING_SEQNO_INDEX] == 1 && Adapter->RingInterrupts != Interrupts;
-            Now = KeQueryPerformanceCounter(NULL);
-            ElapsedUs = (ULONGLONG)(Now.QuadPart - Start.QuadPart) * 1000000ULL / (ULONGLONG)Frequency.QuadPart;
-            if (!Done)
-                KeStallExecutionProcessor(10);
-        } while (!Done && ElapsedUs < HDGFX_RING_TEST_TIMEOUT_US);
+            ULONG Expected = HdgfxBltTestExpected(Index % HDGFX_BLT_TEST_WIDTH, Index / HDGFX_BLT_TEST_WIDTH);
+
+            if (Pixels[Index] != Expected && Mismatches++ == 0)
+            {
+                DPRINT1("Blit test pixel %lu,%lu is 0x%08lx, expected 0x%08lx\n",
+                        Index % HDGFX_BLT_TEST_WIDTH, Index / HDGFX_BLT_TEST_WIDTH, Pixels[Index], Expected);
+            }
+        }
     }
-    DPRINT1("Render ring at 0x%lx, %lu KB, status page 0x%lx: breadcrumb %lu, %ld interrupts after %I64u us, "
-            "head 0x%lx tail 0x%lx, ESR 0x%lx\n",
-            Adapter->Ring.Address, HDGFX_RING_SIZE / 1024, Adapter->Ring.StatusAddress,
-            Status[HDGFX_RING_SEQNO_INDEX], Adapter->RingInterrupts - Interrupts, ElapsedUs,
+    HdgfxMmioInit(Adapter->Registers, &Mmio);
+    DPRINT1("Render ring at 0x%lx, %lu KB: breadcrumb %s after %I64u us, fill and copy %s after %I64u us "
+            "(%lu wrong pixels), %ld interrupts, head 0x%lx tail 0x%lx, ESR 0x%lx\n",
+            Adapter->Ring.Address, HDGFX_RING_SIZE / 1024, Breadcrumb ? "done" : "missing", BreadcrumbUs,
+            Blit ? "done" : "missing", BlitUs, Mismatches, Adapter->RingInterrupts,
             HdgfxIlkRingHead(&Mmio), Adapter->Ring.Tail, HdgfxReadRegister32(Adapter, HDGFX_REG(ESR, 0)));
 }
 
