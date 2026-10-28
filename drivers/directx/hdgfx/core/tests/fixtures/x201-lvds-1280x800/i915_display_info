@@ -1,0 +1,51 @@
+CRTC info
+---------
+[CRTC:47:pipe A]:
+	uapi: enable=yes, active=yes, mode="": 60 69300 1280 1328 1360 1403 800 803 809 821 0x0 0xa
+	hw: enable=yes, active=yes
+	adjusted_mode="1280x800": 60 69300 1280 1328 1360 1403 800 803 809 821 0x48 0xa
+	pipe__mode="1280x800": 60 69286 1280 1328 1360 1403 800 803 809 821 0x40 0xa
+	pipe src=1280x800+0+0, dither=yes, bpp=18
+	No scalers available on this platform
+	[ENCODER:65:LVDS]: connectors:
+		[CONNECTOR:64:LVDS-1]
+	[PLANE:32:primary A]: type=PRI
+		uapi: [FB:85] XR24 little-endian (0x34325258),0x100000000000001,1280x800, visible=visible, src=1280.000000x800.000000+0.000000+0.000000, dst=1280x800+0+0, rotation=0 (0x00000001)
+		hw: [FB:85] XR24 little-endian (0x34325258),0x100000000000001,1280x800, visible=yes, src=1280.000000x800.000000+0.000000+0.000000, dst=1280x800+0+0, rotation=0 (0x00000001)
+	[PLANE:36:sprite A]: type=OVL
+		uapi: [FB:0] n/a,0x0,0x0,, visible=hidden, src=0.000000x0.000000+0.000000+0.000000, dst=0x0+0+0, rotation=0 (0x00000001)
+	[PLANE:42:cursor A]: type=CUR
+		uapi: [FB:0] n/a,0x0,0x0,, visible=hidden, src=0.000000x0.000000+0.000000+0.000000, dst=0x0+0+0, rotation=0 (0x00000001)
+	underrun reporting: cpu=yes pch=yes
+[CRTC:63:pipe B]:
+	uapi: enable=no, active=no, mode="": 0 0 0 0 0 0 0 0 0 0 0x0 0x0
+	hw: enable=no, active=no
+	adjusted_mode="": 0 0 0 0 0 0 0 0 0 0 0x0 0x0
+	pipe__mode="": 0 0 0 0 0 0 0 0 0 0 0x0 0x0
+	pipe src=0x0+0+0, dither=no, bpp=0
+	No scalers available on this platform
+	[PLANE:48:primary B]: type=PRI
+		uapi: [FB:0] n/a,0x0,0x0,, visible=hidden, src=0.000000x0.000000+0.000000+0.000000, dst=0x0+0+0, rotation=0 (0x00000001)
+	[PLANE:52:sprite B]: type=OVL
+		uapi: [FB:0] n/a,0x0,0x0,, visible=hidden, src=0.000000x0.000000+0.000000+0.000000, dst=0x0+0+0, rotation=0 (0x00000001)
+	[PLANE:58:cursor B]: type=CUR
+		uapi: [FB:0] n/a,0x0,0x0,, visible=hidden, src=0.000000x0.000000+0.000000+0.000000, dst=0x0+0+0, rotation=0 (0x00000001)
+	underrun reporting: cpu=yes pch=yes
+
+Connector info
+--------------
+[CONNECTOR:64:LVDS-1]: status: connected
+	physical dimensions: 260x160mm
+	subpixel order: Horizontal RGB
+	CEA rev: 0
+	HDCP version: No Connector Support
+	max bpc: 0
+	fixed modes:
+		"1280x800": 60 69300 1280 1328 1360 1403 800 803 809 821 0x48 0xa
+		"1280x800": 50 57590 1280 1328 1360 1403 800 803 809 821 0x40 0xa
+	modes:
+		"1280x800": 60 69300 1280 1328 1360 1403 800 803 809 821 0x48 0xa
+		"1280x800": 50 57590 1280 1328 1360 1403 800 803 809 821 0x40 0xa
+[CONNECTOR:68:VGA-1]: status: disconnected
+[CONNECTOR:71:HDMI-A-1]: status: disconnected
+[CONNECTOR:79:DP-1]: status: disconnected
