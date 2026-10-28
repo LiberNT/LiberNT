@@ -923,7 +923,10 @@ SoftGpuValidatePlatformModes(
             Mode->Pitch < Mode->Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL ||
             Mode->Pitch > SOFTGPU_MAX_DISPLAY_PITCH ||
             (ULONGLONG)Mode->Pitch * Mode->Height > Config->ScanoutSize ||
-            Mode->AllocationSlabSize > SOFTGPU_MAX_ALLOCATION_SLAB_SIZE)
+            Mode->AllocationSlabSize > SOFTGPU_MAX_ALLOCATION_SLAB_SIZE ||
+            (Mode->PixelRate != 0 &&
+             (Mode->TotalWidth < Mode->Width || Mode->TotalHeight < Mode->Height ||
+              (ULONGLONG)Mode->TotalWidth * Mode->TotalHeight > MAXULONG)))
         {
             return FALSE;
         }
