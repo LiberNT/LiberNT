@@ -1419,6 +1419,119 @@ TestCrtModeset(
     free(Fake);
 }
 
+typedef struct _FAKE_RING
+{
+    uint32_t Tail;
+    uint32_t Head;
+    uint32_t Start;
+    uint32_t Control;
+    uint32_t Status;
+    uint32_t Writes;
+} FAKE_RING;
+
+static uint32_t *
+FakeRingSlot(
+    FAKE_RING *Fake,
+    uint32_t Offset)
+{
+    switch (Offset)
+    {
+    case HDGFX_REG(RING_TAIL, 0): return &Fake->Tail;
+    case HDGFX_REG(RING_HEAD, 0): return &Fake->Head;
+    case HDGFX_REG(RING_START, 0): return &Fake->Start;
+    case HDGFX_REG(RING_CTL, 0): return &Fake->Control;
+    case HDGFX_REG(HWS_PGA, 0): return &Fake->Status;
+    }
+    fprintf(stderr, "unexpected ring register 0x%x\n", Offset);
+    Failures++;
+    return &Fake->Writes;
+}
+
+static uint32_t
+FakeRingRead(
+    void *Context,
+    uint32_t Offset)
+{
+    return *FakeRingSlot(Context, Offset);
+}
+
+static void
+FakeRingWrite(
+    void *Context,
+    uint32_t Offset,
+    uint32_t Value)
+{
+    FAKE_RING *Fake = Context;
+
+    if (Offset == HDGFX_REG(RING_START, 0) && HDGFX_GET(Fake->Control, RING_CTL_ENABLE))
+    {
+        fprintf(stderr, "ring start written while the ring is enabled\n");
+        Failures++;
+    }
+    *FakeRingSlot(Fake, Offset) = Value;
+    Fake->Writes++;
+}
+
+static void
+TestRing(void)
+{
+    static uint32_t Commands[2048];
+    FAKE_RING Fake = { 0x18, 0x1C, 0x1000, 1, 0, 0 };
+    HDGFX_MMIO Mmio = { FakeRingRead, &Fake, FakeRingWrite, NULL, NULL };
+    HDGFX_RING Ring = { Commands, sizeof(Commands), 0xFFF0000, 0xFFF8000, 0 };
+    uint32_t Dwords[4] = { 0, 0, 0, 0 };
+    uint32_t Index;
+
+    CHECK_EQ(HdgfxIlkGttEntry(0x7E4A3000), 0x7E4A3001);
+
+    CHECK_EQ(HdgfxIlkStartRing(&Mmio, &Ring), true);
+    CHECK_EQ(Fake.Start, 0xFFF0000);
+    CHECK_EQ(Fake.Status, 0xFFF8000);
+    CHECK_EQ(Fake.Control, 0x1001);
+    CHECK_EQ(Fake.Head, 0);
+    CHECK_EQ(Fake.Tail, 0);
+
+    CHECK_EQ(HdgfxRingEmitBreadcrumb(&Ring, 0, 0xF, 1), false);
+    CHECK_EQ(HdgfxRingEmitBreadcrumb(&Ring, 0, 0x20, 0x12345678), true);
+    CHECK_EQ(Commands[0], 0x10800001);
+    CHECK_EQ(Commands[1], 0x80);
+    CHECK_EQ(Commands[2], 0x12345678);
+    CHECK_EQ(Commands[3], 0x01000000);
+    CHECK_EQ(Ring.Tail, 16);
+    HdgfxIlkAdvanceRing(&Mmio, &Ring);
+    CHECK_EQ(Fake.Tail, 16);
+    CHECK_EQ(HdgfxIlkStopRing(&Mmio, &Ring), false);
+    CHECK_EQ(Fake.Control, 0x1001);
+    Fake.Head = 16;
+    CHECK_EQ(HdgfxIlkRingHead(&Mmio), 16);
+
+    CHECK_EQ(HdgfxRingEmit(&Ring, 16, Dwords, 3), false);
+    Ring.Tail = sizeof(Commands) - 8;
+    Commands[2046] = 0xDEADBEEF;
+    CHECK_EQ(HdgfxRingEmit(&Ring, 16, Dwords, 4), false);
+    CHECK_EQ(HdgfxRingEmit(&Ring, 24, Dwords, 4), true);
+    CHECK_EQ(Commands[2046], 0);
+    CHECK_EQ(Ring.Tail, 16);
+    CHECK_EQ(HdgfxRingEmit(&Ring, 32, Dwords, 2), true);
+    CHECK_EQ(HdgfxRingEmit(&Ring, 32, Dwords, 2), false);
+    Ring.Tail = 0;
+    for (Index = 0; Index < sizeof(Commands) / 16 - 1; Index++)
+        CHECK_EQ(HdgfxRingEmit(&Ring, 0, Dwords, 4), true);
+    CHECK_EQ(Ring.Tail, sizeof(Commands) - 16);
+    CHECK_EQ(HdgfxRingEmit(&Ring, 0, Dwords, 2), true);
+    CHECK_EQ(HdgfxRingEmit(&Ring, 0, Dwords, 2), false);
+
+    Fake.Head = Fake.Tail = Ring.Tail = 0x40;
+    CHECK_EQ(HdgfxIlkStopRing(&Mmio, &Ring), true);
+    CHECK_EQ(Fake.Control, 0);
+
+    Ring.Address = 0x1FFFF000;
+    CHECK_EQ(HdgfxIlkStartRing(&Mmio, &Ring), false);
+    Ring.Address = 0xFFF0000;
+    Ring.Size = 0x1800;
+    CHECK_EQ(HdgfxIlkStartRing(&Mmio, &Ring), false);
+}
+
 int
 main(
     int argc,
@@ -1435,6 +1548,7 @@ main(
     TestOpRegionAsle();
     TestLvdsModeset(argv[1]);
     TestCrtModeset(argv[1]);
+    TestRing();
     if (argc > 2)
         TestFirmwareVbt(argv[2]);
     if (Failures)
