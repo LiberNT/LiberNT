@@ -752,6 +752,45 @@ SoftGpuPlatformQueryInternalPanel(
     return TRUE;
 }
 
+NTSTATUS
+SoftGpuPlatformNotifyAcpiEvent(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ DXGK_EVENT_TYPE EventType,
+    _In_ ULONG Event,
+    _In_opt_ PVOID Argument,
+    _Out_ PULONG AcpiFlags)
+{
+    PHDGFX_ADAPTER Adapter;
+    uint32_t Events;
+    HDGFX_MMIO Io;
+
+    PAGED_CODE();
+    UNREFERENCED_PARAMETER(Argument);
+
+    *AcpiFlags = 0;
+    if (EventType != DxgkAcpiEvent || Event != ACPI_NOTIFY_PANEL_SWITCH)
+        return STATUS_SUCCESS;
+
+    Adapter = HdgfxBacklightAcquire(Device);
+    if (Adapter == NULL)
+        return STATUS_SUCCESS;
+
+    if (Adapter->AsleReady)
+    {
+        HdgfxOpRegionIo(Adapter, &Io);
+        if (HdgfxOpRegionBeginNotification(&Io, &Events))
+        {
+            if (Events & (HDGFX_OPREGION_EVENT_LID | HDGFX_OPREGION_EVENT_DOCK))
+                *AcpiFlags = DXGK_ACPI_POLL_DISPLAY_CHILDREN;
+            HdgfxOpRegionEndNotification(&Io, (Events & HDGFX_OPREGION_EVENT_HOTKEY) == 0);
+            DPRINT1("OpRegion display event 0x%lx, %s\n", Events,
+                    (Events & HDGFX_OPREGION_EVENT_HOTKEY) ? "no other output to switch to" : "children polled");
+        }
+    }
+    ExReleaseRundownProtection(&Adapter->Rundown);
+    return STATUS_SUCCESS;
+}
+
 BOOLEAN
 SoftGpuPlatformInterruptRoutine(
     _Inout_ PSOFTGPU_DEVICE Device)

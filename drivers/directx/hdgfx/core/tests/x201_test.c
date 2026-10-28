@@ -602,6 +602,7 @@ TestOpRegionAsle(void)
 {
     uint8_t *OpRegion = calloc(1, 0x2000);
     HDGFX_MMIO Io = { MemoryRead, OpRegion, MemoryWrite, NULL };
+    uint32_t Events;
 
     CHECK_EQ(HdgfxFindGeneration(0x8086, 0x0046)->GseInterrupt, 1u << 18);
     memcpy(OpRegion, "IntelGraphicsMem", 16);
@@ -655,6 +656,25 @@ TestOpRegionAsle(void)
     CHECK_EQ(AsleLevel, 0xFF);
     CHECK_EQ(MemoryRead(OpRegion, 0x304), 1u << 12);
     CHECK_EQ(MemoryRead(OpRegion, 0x318), 0x80000028);
+
+    CHECK_EQ(HdgfxOpRegionBeginNotification(&Io, &Events), 0);
+    CHECK_EQ(Events, 0);
+
+    MemoryWrite(OpRegion, 0x108, 0x04);
+    MemoryWrite(OpRegion, 0x104, 0x03);
+    CHECK_EQ(HdgfxOpRegionBeginNotification(&Io, &Events), 1);
+    CHECK_EQ(Events, HDGFX_OPREGION_EVENT_DOCK);
+    CHECK_EQ(MemoryRead(OpRegion, 0x104), 2);
+    HdgfxOpRegionEndNotification(&Io, true);
+    CHECK_EQ(MemoryRead(OpRegion, 0x104), 0);
+    CHECK_EQ(HdgfxOpRegionBeginNotification(&Io, &Events), 0);
+
+    MemoryWrite(OpRegion, 0x108, 0xFFFFFFF9);
+    MemoryWrite(OpRegion, 0x104, 0x03);
+    CHECK_EQ(HdgfxOpRegionBeginNotification(&Io, &Events), 1);
+    CHECK_EQ(Events, HDGFX_OPREGION_EVENT_HOTKEY);
+    HdgfxOpRegionEndNotification(&Io, false);
+    CHECK_EQ(MemoryRead(OpRegion, 0x104), 1);
 
     HdgfxOpRegionSetBrightness(&Io, 100);
     CHECK_EQ(MemoryRead(OpRegion, 0x318), 0x80000064);
