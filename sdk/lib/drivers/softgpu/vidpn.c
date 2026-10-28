@@ -71,6 +71,44 @@ SoftGpuGetDisplayModeSize(
     }
 }
 
+static VOID
+SoftGpuGetDisplayModeSignal(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ ULONG Index,
+    _Out_ D3DKMDT_VIDEO_SIGNAL_INFO *Signal)
+{
+    const SOFTGPU_DISPLAY_MODE *Mode = Device->ModeCount != 0 ? &Device->Modes[Index] : NULL;
+    ULONG Width;
+    ULONG Height;
+
+    SoftGpuGetDisplayModeSize(Device, Index, &Width, &Height);
+    RtlZeroMemory(Signal, sizeof(*Signal));
+    Signal->VideoStandard = D3DKMDT_VSS_OTHER;
+    Signal->ActiveSize.cx = Width;
+    Signal->ActiveSize.cy = Height;
+    Signal->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+    if (Mode != NULL && Mode->PixelRate != 0)
+    {
+        Signal->TotalSize.cx = Mode->TotalWidth;
+        Signal->TotalSize.cy = Mode->TotalHeight;
+        Signal->VSyncFreq.Numerator = Mode->PixelRate;
+        Signal->VSyncFreq.Denominator = Mode->TotalWidth * Mode->TotalHeight;
+        Signal->HSyncFreq.Numerator = Mode->PixelRate;
+        Signal->HSyncFreq.Denominator = Mode->TotalWidth;
+        Signal->PixelRate = Mode->PixelRate;
+    }
+    else
+    {
+        Signal->TotalSize.cx = Width;
+        Signal->TotalSize.cy = Height;
+        Signal->VSyncFreq.Numerator = 60;
+        Signal->VSyncFreq.Denominator = 1;
+        Signal->HSyncFreq.Numerator = 60 * Height;
+        Signal->HSyncFreq.Denominator = 1;
+        Signal->PixelRate = (SIZE_T)Width * Height * 60;
+    }
+}
+
 static BOOLEAN
 SoftGpuFindDisplayMode(
     _In_ PSOFTGPU_DEVICE Device,
@@ -126,12 +164,33 @@ SoftGpuTargetModeMatchesDisplay(
     _In_ const D3DKMDT_VIDPN_TARGET_MODE *Mode,
     _Out_opt_ PULONG ModeIndex)
 {
-    return Mode->VideoSignalInfo.ScanLineOrdering ==
-               D3DDDI_VSSLO_PROGRESSIVE &&
-           SoftGpuFindDisplayMode(Device,
-                                  Mode->VideoSignalInfo.ActiveSize.cx,
-                                  Mode->VideoSignalInfo.ActiveSize.cy,
-                                  ModeIndex);
+    CONST D3DDDI_RATIONAL *VSync = &Mode->VideoSignalInfo.VSyncFreq;
+    D3DKMDT_VIDEO_SIGNAL_INFO Signal;
+    ULONG Index;
+
+    if (Mode->VideoSignalInfo.ScanLineOrdering != D3DDDI_VSSLO_PROGRESSIVE)
+        return FALSE;
+
+    for (Index = 0; Index < SoftGpuDisplayModeCount(Device); Index++)
+    {
+        SoftGpuGetDisplayModeSignal(Device, Index, &Signal);
+        if (Signal.ActiveSize.cx != Mode->VideoSignalInfo.ActiveSize.cx ||
+            Signal.ActiveSize.cy != Mode->VideoSignalInfo.ActiveSize.cy)
+        {
+            continue;
+        }
+        if (VSync->Numerator != 0 && VSync->Denominator != 0 &&
+            (ULONGLONG)VSync->Numerator * Signal.VSyncFreq.Denominator !=
+                (ULONGLONG)Signal.VSyncFreq.Numerator * VSync->Denominator)
+        {
+            continue;
+        }
+        if (ModeIndex != NULL)
+            *ModeIndex = Index;
+        return TRUE;
+    }
+
+    return FALSE;
 }
 
 static NTSTATUS
@@ -532,6 +591,7 @@ SoftGpuUpdateSourceModeSet(
     D3DKMDT_VIDPN_SOURCE_MODE *NewMode = NULL;
     ULONG Width;
     ULONG Height;
+    ULONG FirstIndex;
     ULONG Index;
     NTSTATUS Status;
 
@@ -565,6 +625,8 @@ SoftGpuUpdateSourceModeSet(
     {
         SoftGpuGetDisplayModeSize(Device, Index, &Width, &Height);
         if (RequiredWidth != 0 && (Width != RequiredWidth || Height != RequiredHeight))
+            continue;
+        if (SoftGpuFindDisplayMode(Device, Width, Height, &FirstIndex) && FirstIndex != Index)
             continue;
 
         Status = ModeSetInterface->pfnCreateNewModeInfo(hModeSet, &NewMode);
@@ -652,17 +714,7 @@ SoftGpuUpdateTargetModeSet(
 
         Preference = (Device->ModeCount == 0 || Index == Device->PreferredMode) ?
                          D3DKMDT_MP_PREFERRED : D3DKMDT_MP_NOTPREFERRED;
-        NewMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-        NewMode->VideoSignalInfo.TotalSize.cx = Width;
-        NewMode->VideoSignalInfo.TotalSize.cy = Height;
-        NewMode->VideoSignalInfo.ActiveSize.cx = Width;
-        NewMode->VideoSignalInfo.ActiveSize.cy = Height;
-        NewMode->VideoSignalInfo.VSyncFreq.Numerator = 60;
-        NewMode->VideoSignalInfo.VSyncFreq.Denominator = 1;
-        NewMode->VideoSignalInfo.HSyncFreq.Numerator = 60 * Height;
-        NewMode->VideoSignalInfo.HSyncFreq.Denominator = 1;
-        NewMode->VideoSignalInfo.PixelRate = (SIZE_T)Width * Height * 60;
-        NewMode->VideoSignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+        SoftGpuGetDisplayModeSignal(Device, Index, &NewMode->VideoSignalInfo);
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
         NewMode->WireFormatAndPreference.Value = 0;
         NewMode->WireFormatAndPreference.Preference = Preference;
@@ -954,6 +1006,10 @@ SoftGpuValidateFunctionalVidPn(
     SIZE_T NumPaths;
     ULONG SourceMode;
     ULONG TargetMode;
+    ULONG SourceWidth;
+    ULONG SourceHeight;
+    ULONG TargetWidth;
+    ULONG TargetHeight;
     NTSTATUS Status;
 
     if (ValidatedPathCount != NULL)
@@ -1038,10 +1094,12 @@ SoftGpuValidateFunctionalVidPn(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    if (SourceMode != TargetMode)
+    SoftGpuGetDisplayModeSize(Device, SourceMode, &SourceWidth, &SourceHeight);
+    SoftGpuGetDisplayModeSize(Device, TargetMode, &TargetWidth, &TargetHeight);
+    if (SourceWidth != TargetWidth || SourceHeight != TargetHeight)
         return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
 
-    *ModeIndex = SourceMode;
+    *ModeIndex = TargetMode;
     return STATUS_SUCCESS;
 }
 

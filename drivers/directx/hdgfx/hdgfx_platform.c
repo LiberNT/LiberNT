@@ -31,6 +31,8 @@ typedef struct _HDGFX_SCANOUT
     PUCHAR Registers;
     const HDGFX_GENERATION *Generation;
     HDGFX_DTD Panel;
+    HDGFX_DTD PanelModes[HDGFX_EDID_MAX_DTDS];
+    ULONG PanelModeCount;
     BOOLEAN Ssc;
     ULONG Surface;
     ULONG Width;
@@ -879,6 +881,7 @@ SoftGpuPlatformDpcRoutine(
 static NTSTATUS
 HdgfxScanoutCommit(
     _In_ PHDGFX_SCANOUT Scanout,
+    _In_ const HDGFX_DTD *Panel,
     _In_ ULONG Width,
     _In_ ULONG Height,
     _In_ ULONG Pitch)
@@ -898,7 +901,7 @@ HdgfxScanoutCommit(
         return STATUS_INSUFFICIENT_RESOURCES;
 
     RtlZeroMemory(&Mode, sizeof(Mode));
-    Mode.Panel = &Scanout->Panel;
+    Mode.Panel = Panel;
     Mode.SourceWidth = Width;
     Mode.SourceHeight = Height;
     Mode.Stride = Pitch;
@@ -918,6 +921,8 @@ HdgfxScanoutCommit(
         return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
     }
 
+    Scanout->Panel = *Panel;
+    Mode.Panel = &Scanout->Panel;
     Scanout->Width = Width;
     Scanout->Height = Height;
     Scanout->Pitch = Pitch;
@@ -942,9 +947,9 @@ HdgfxScanoutCommit(
     {
         Scanout->Generation->ReadDisplayState(&Mmio, &States[0]);
         Mismatch = HdgfxCompareLvdsState(&States[1], &States[0]);
-        DPRINT1("LVDS %lux%lu pitch %lu at 0x%lx, fitter %u %lu,%lu %lux%lu; DPLL N %lu M1 %lu M2 %lu P1 %lu P2 %lu "
-                "ref %lu = %lu kHz, FDI x%lu data %lu link %lu: %I64u ms, readback %s%s\n",
-                Width, Height, Pitch, Pipe->Primary.Surface,
+        DPRINT1("LVDS %lux%lu at %lu mHz pitch %lu at 0x%lx, fitter %u %lu,%lu %lux%lu; DPLL N %lu M1 %lu M2 %lu "
+                "P1 %lu P2 %lu ref %lu = %lu kHz, FDI x%lu data %lu link %lu: %I64u ms, readback %s%s\n",
+                Width, Height, HdgfxRefreshMilliHz(&Pipe->Timings, Dpll->DotKHz), Pitch, Pipe->Primary.Surface,
                 Pipe->PanelFitter.Enabled, Pipe->PanelFitter.X, Pipe->PanelFitter.Y,
                 Pipe->PanelFitter.Width, Pipe->PanelFitter.Height,
                 Dpll->N, Dpll->M1, Dpll->M2, Dpll->P1, Dpll->P2, Dpll->Reference, Dpll->DotKHz,
@@ -966,9 +971,10 @@ HdgfxSetMode(
 {
     PHDGFX_SCANOUT Scanout = Device->PlatformContext;
 
-    if (Scanout == NULL || Mode == NULL)
+    if (Scanout == NULL || Mode == NULL || Mode->PlatformMode >= Scanout->PanelModeCount)
         return STATUS_INVALID_PARAMETER;
-    return HdgfxScanoutCommit(Scanout, Mode->Width, Mode->Height, Mode->Pitch);
+    return HdgfxScanoutCommit(Scanout, &Scanout->PanelModes[Mode->PlatformMode], Mode->Width, Mode->Height,
+                              Mode->Pitch);
 }
 
 static NTSTATUS
@@ -1018,7 +1024,7 @@ SoftGpuPlatformSetMonitorPower(
         return HdgfxScanoutDisplayOff(Scanout);
 
     Scanout->DisplayOff = FALSE;
-    return HdgfxScanoutCommit(Scanout, Scanout->Width, Scanout->Height, Scanout->Pitch);
+    return HdgfxScanoutCommit(Scanout, &Scanout->Panel, Scanout->Width, Scanout->Height, Scanout->Pitch);
 }
 
 static VOID
@@ -1033,16 +1039,22 @@ HdgfxScanoutFree(
 static VOID
 HdgfxAddMode(
     _Inout_ PSOFTGPU_PLATFORM_CONFIG Config,
+    _In_ const HDGFX_SCANOUT *Scanout,
     _In_ ULONG Width,
-    _In_ ULONG Height)
+    _In_ ULONG Height,
+    _In_ ULONG PanelMode)
 {
+    const HDGFX_DTD *Panel = &Scanout->PanelModes[PanelMode];
     SOFTGPU_DISPLAY_MODE *Mode;
     ULONG Index;
 
     for (Index = 0; Index < Config->ModeCount; Index++)
     {
-        if (Config->Modes[Index].Width == Width && Config->Modes[Index].Height == Height)
+        if (Config->Modes[Index].Width == Width && Config->Modes[Index].Height == Height &&
+            Config->Modes[Index].PlatformMode == PanelMode)
+        {
             return;
+        }
     }
     if (Config->ModeCount >= SOFTGPU_MAX_DISPLAY_MODES)
         return;
@@ -1051,7 +1063,10 @@ HdgfxAddMode(
     Mode->Width = Width;
     Mode->Height = Height;
     Mode->Pitch = ALIGN_UP_BY(Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL, HDGFX_STRIDE_ALIGNMENT);
-    Mode->PlatformMode = Config->ModeCount;
+    Mode->PlatformMode = PanelMode;
+    Mode->TotalWidth = Panel->Timings.HTotal;
+    Mode->TotalHeight = Panel->Timings.VTotal;
+    Mode->PixelRate = Panel->DotKHz * 1000;
     Config->ScanoutSize = max(Config->ScanoutSize, (ULONGLONG)Mode->Pitch * Height);
     Config->ModeCount++;
 }
@@ -1103,6 +1118,7 @@ HdgfxScanoutStart(
     HDGFX_MMIO Mmio;
     BOOLEAN VbtPresent;
     BOOLEAN PanelFound = FALSE;
+    ULONG PanelMode;
     ULONGLONG Bar0 = 0;
     ULONGLONG Bar2 = 0;
     USHORT Ids[2] = { 0, 0 };
@@ -1149,7 +1165,14 @@ HdgfxScanoutStart(
     if (HdgfxReadPanelEdid(Scanout->Generation, &Mmio, Config->Edid, &Edid) && Edid.DtdCount != 0)
     {
         Config->EdidLength = HDGFX_EDID_SIZE;
-        Scanout->Panel = Edid.Dtds[0];
+        for (Index = 0; Index < Edid.DtdCount; Index++)
+        {
+            if (Edid.Dtds[Index].Timings.HActive == Edid.Dtds[0].Timings.HActive &&
+                Edid.Dtds[Index].Timings.VActive == Edid.Dtds[0].Timings.VActive)
+            {
+                Scanout->PanelModes[Scanout->PanelModeCount++] = Edid.Dtds[Index];
+            }
+        }
         PanelFound = TRUE;
     }
     Mapping = HdgfxMapOpRegion(Interface, &Vbt, &VbtPresent);
@@ -1157,12 +1180,13 @@ HdgfxScanoutStart(
         MmUnmapIoSpace(Mapping, HDGFX_OPREGION_SIZE);
     if (!PanelFound && VbtPresent && Vbt.Panel.Present)
     {
-        Scanout->Panel.DotKHz = Vbt.Panel.DotKHz;
-        Scanout->Panel.Timings = Vbt.Panel.Timings;
-        Scanout->Panel.HSyncPositive = Vbt.Panel.HSyncPositive;
-        Scanout->Panel.VSyncPositive = Vbt.Panel.VSyncPositive;
-        Scanout->Panel.WidthMm = Vbt.Panel.WidthMm;
-        Scanout->Panel.HeightMm = Vbt.Panel.HeightMm;
+        Scanout->PanelModes[0].DotKHz = Vbt.Panel.DotKHz;
+        Scanout->PanelModes[0].Timings = Vbt.Panel.Timings;
+        Scanout->PanelModes[0].HSyncPositive = Vbt.Panel.HSyncPositive;
+        Scanout->PanelModes[0].VSyncPositive = Vbt.Panel.VSyncPositive;
+        Scanout->PanelModes[0].WidthMm = Vbt.Panel.WidthMm;
+        Scanout->PanelModes[0].HeightMm = Vbt.Panel.HeightMm;
+        Scanout->PanelModeCount = 1;
         PanelFound = TRUE;
     }
     Scanout->Ssc = VbtPresent ? Vbt.LvdsSscEnabled :
@@ -1174,14 +1198,18 @@ HdgfxScanoutStart(
         return STATUS_NOT_SUPPORTED;
     }
 
-    HdgfxAddMode(Config, Scanout->Panel.Timings.HActive, Scanout->Panel.Timings.VActive);
+    Scanout->Panel = Scanout->PanelModes[0];
+    for (PanelMode = 0; PanelMode < Scanout->PanelModeCount; PanelMode++)
+        HdgfxAddMode(Config, Scanout, Scanout->Panel.Timings.HActive, Scanout->Panel.Timings.VActive, PanelMode);
     for (Index = 0; Index < RTL_NUMBER_OF(HdgfxScaledModes); Index++)
     {
-        if (HdgfxScaledModes[Index][0] <= Scanout->Panel.Timings.HActive &&
-            HdgfxScaledModes[Index][1] <= Scanout->Panel.Timings.VActive)
+        if (HdgfxScaledModes[Index][0] > Scanout->Panel.Timings.HActive ||
+            HdgfxScaledModes[Index][1] > Scanout->Panel.Timings.VActive)
         {
-            HdgfxAddMode(Config, HdgfxScaledModes[Index][0], HdgfxScaledModes[Index][1]);
+            continue;
         }
+        for (PanelMode = 0; PanelMode < Scanout->PanelModeCount; PanelMode++)
+            HdgfxAddMode(Config, Scanout, HdgfxScaledModes[Index][0], HdgfxScaledModes[Index][1], PanelMode);
     }
     Config->ScanoutSize = ALIGN_UP_BY(Config->ScanoutSize, PAGE_SIZE);
 
@@ -1199,7 +1227,8 @@ HdgfxScanoutStart(
     RtlZeroMemory(Mapping, (SIZE_T)Config->ScanoutSize);
     MmUnmapIoSpace(Mapping, (SIZE_T)Config->ScanoutSize);
 
-    Status = HdgfxScanoutCommit(Scanout, Config->Modes[0].Width, Config->Modes[0].Height, Config->Modes[0].Pitch);
+    Status = HdgfxScanoutCommit(Scanout, &Scanout->PanelModes[0], Config->Modes[0].Width, Config->Modes[0].Height,
+                                Config->Modes[0].Pitch);
     if (!NT_SUCCESS(Status))
         return Status;
 
