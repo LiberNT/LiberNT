@@ -934,7 +934,7 @@ HdgfxScanoutCommit(
     }
 
     Start = KeQueryInterruptTime();
-    Result = Scanout->Generation->CommitLvds(&Mmio, &States[1]);
+    Result = Scanout->Generation->CommitLvds(&Mmio, &States[0], &States[1]);
     Pipe = &States[1].Pipes[States[1].Lvds.Transcoder];
     Dpll = &States[1].Dplls[States[1].Transcoders[States[1].Lvds.Transcoder].Dpll];
     if (Result != HdgfxModesetSuccess)
