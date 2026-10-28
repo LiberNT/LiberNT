@@ -263,6 +263,7 @@ typedef struct _HDGFX_GENERATION
                                         const HDGFX_LVDS_MODE *Mode,
                                         HDGFX_DISPLAY_STATE *Target);
     HDGFX_MODESET_STATUS (*CommitLvds)(const HDGFX_MMIO *Mmio, const HDGFX_DISPLAY_STATE *Target);
+    HDGFX_MODESET_STATUS (*DisableLvds)(const HDGFX_MMIO *Mmio, const HDGFX_DISPLAY_STATE *Current);
 } HDGFX_GENERATION;
 
 typedef struct _HDGFX_VBT_PANEL
@@ -335,6 +336,11 @@ HDGFX_MODESET_STATUS
 HdgfxIlkCommitLvds(
     const HDGFX_MMIO *Mmio,
     const HDGFX_DISPLAY_STATE *Target);
+
+HDGFX_MODESET_STATUS
+HdgfxIlkDisableLvds(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DISPLAY_STATE *Current);
 
 const char *
 HdgfxCompareLvdsState(

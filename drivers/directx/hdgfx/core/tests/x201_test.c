@@ -1120,6 +1120,22 @@ TestLvdsModeset(
     CHECK_EQ(FakeGet(Fake, HDGFX_REG(PIPE_CONF, 0)), 0xC0000050);
     CHECK_EQ(FakeGet(Fake, HDGFX_REG(PIPE_DATA_M1, 0)), 0x7E49E7B2);
 
+    for (Index = 0; Index < 10; Index++)
+    {
+        HdgfxIlkReadDisplayState(&Mmio, &Current);
+        CHECK_EQ(HdgfxIlkDisableLvds(&Mmio, &Current), HdgfxModesetSuccess);
+        HdgfxIlkReadDisplayState(&Mmio, &Current);
+        CHECK_EQ(Current.PanelPower.On, 0);
+        CHECK_EQ(Current.Pipes[0].Enabled, 0);
+        CHECK_EQ(Current.Pipes[0].Primary.Enabled, 0);
+        CHECK_EQ(Current.Transcoders[0].Enabled, 0);
+        CHECK_EQ(Current.Dplls[0].Enabled, 0);
+        CHECK_EQ(Current.Lvds.Enabled, 0);
+        CHECK_EQ(HdgfxIlkDisableLvds(&Mmio, &Current), HdgfxModesetSuccess);
+        CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
+    }
+    CHECK_EQ(Fake->Violations, 0);
+
     HdgfxIlkReadDisplayState(&Mmio, &Current);
     Mode.SourceWidth = 1281;
     CHECK_EQ(HdgfxIlkComputeLvds(&Current, &Mode, &Target), HdgfxModesetInvalidMode);
