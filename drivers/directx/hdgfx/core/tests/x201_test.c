@@ -698,6 +698,8 @@ typedef struct _FAKE_ILK
     bool PanelPoweringDown;
     bool FdiLocks;
     bool PanelStuck;
+    bool CrtAttached;
+    uint64_t CrtDetectDoneUs;
     unsigned Violations;
     unsigned PipeEnables;
 } FAKE_ILK;
@@ -822,6 +824,7 @@ static void
 FakeUpdateStates(
     FAKE_ILK *Fake)
 {
+    uint32_t *Adpa;
     uint32_t Index;
 
     for (Index = 0; Index < 2; Index++)
@@ -835,6 +838,12 @@ FakeUpdateStates(
                                   HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_DPLL, Index)), DPLL_VCO_ENABLE));
         if (Fake->NowUs >= Fake->TranscoderReadyUs[Index])
             *Transcoder = HDGFX_REPLACE(*Transcoder, TRANS_CONF_STATE, HDGFX_GET(*Transcoder, TRANS_CONF_ENABLE));
+    }
+    Adpa = FakeSlot(Fake, HDGFX_REG(PCH_ADPA, 0));
+    if (HDGFX_GET(*Adpa, ADPA_FORCE_TRIGGER) && Fake->NowUs >= Fake->CrtDetectDoneUs)
+    {
+        *Adpa = HDGFX_REPLACE(*Adpa, ADPA_FORCE_TRIGGER, 0);
+        *Adpa = HDGFX_REPLACE(*Adpa, ADPA_HOTPLUG_STATUS, Fake->CrtAttached ? 3 : 0);
     }
     FakeUpdatePanel(Fake);
 }
@@ -931,7 +940,8 @@ FakeIlkWrite(
                 Fake->PipeReadyUs[Index] = Fake->NowUs + 16000;
             if (!HDGFX_GET(Value, PIPE_CONF_ENABLE) && HDGFX_GET(FakeGet(Fake, HDGFX_REG(DSP_CNTR, Index)), DSP_ENABLE))
                 FakeViolation(Fake, "pipe disabled under an enabled plane");
-            if (!HDGFX_GET(Value, PIPE_CONF_ENABLE) && Fake->PanelOn)
+            if (!HDGFX_GET(Value, PIPE_CONF_ENABLE) && Fake->PanelOn &&
+                Index == HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_LVDS, 0)), LVDS_TRANSCODER))
                 FakeViolation(Fake, "pipe disabled while the panel is on");
         }
         if (Offset == HDGFX_REG(DSP_CNTR, Index) && HDGFX_GET(Value, DSP_ENABLE) &&
@@ -963,9 +973,27 @@ FakeIlkWrite(
                 FakeViolation(Fake, "PCDCLK selected without the FDI PLL");
         }
         if (Offset == HDGFX_REG(PCH_DPLL, Index) && HDGFX_GET(Value, DPLL_VCO_ENABLE) &&
+            HDGFX_GET(Value, DPLL_REFERENCE) == 0 &&
+            HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_DREF_CONTROL, 0)), DREF_NONSPREAD_SOURCE) != 2)
+        {
+            FakeViolation(Fake, "DPLL enabled on the non-spread reference while it is off");
+        }
+        if (Offset == HDGFX_REG(PCH_DPLL, Index) && HDGFX_GET(Value, DPLL_VCO_ENABLE) &&
             HDGFX_GET(Value, DPLL_MODE) == 2 && !HDGFX_GET(FakeGet(Fake, HDGFX_REG(PCH_LVDS, 0)), LVDS_ENABLE))
         {
             FakeViolation(Fake, "LVDS DPLL enabled before the LVDS port");
+        }
+    }
+    if (Offset == HDGFX_REG(PCH_ADPA, 0))
+    {
+        Value = HDGFX_REPLACE(Value, ADPA_HOTPLUG_STATUS,
+                              HDGFX_GET(Old, ADPA_HOTPLUG_STATUS) & ~HDGFX_GET(Value, ADPA_HOTPLUG_STATUS));
+        if (HDGFX_GET(Value, ADPA_FORCE_TRIGGER) && !HDGFX_GET(Old, ADPA_FORCE_TRIGGER))
+            Fake->CrtDetectDoneUs = Fake->NowUs + 10000;
+        if (HDGFX_GET(Value, ADPA_ENABLE) && !HDGFX_GET(Old, ADPA_ENABLE) &&
+            !HDGFX_GET(FakeGet(Fake, HDGFX_REG(TRANS_CONF, HDGFX_GET(Value, ADPA_TRANSCODER))), TRANS_CONF_STATE))
+        {
+            FakeViolation(Fake, "CRT port enabled before its transcoder");
         }
     }
     *Slot = Value;
@@ -1235,6 +1263,125 @@ TestLvdsModeset(
     free(Fake);
 }
 
+static void
+TestCrtModeset(
+    const char *Directory)
+{
+    const HDGFX_GENERATION *Generation = HdgfxFindGeneration(0x8086, 0x0046);
+    HDGFX_MMIO Mmio;
+    FAKE_ILK *Fake = FakeIlkCreate(Directory, &Mmio);
+    HDGFX_DISPLAY_STATE Current;
+    HDGFX_DISPLAY_STATE Target;
+    HDGFX_DISPLAY_STATE Actual;
+    HDGFX_CRT_MODE Mode;
+    HDGFX_DTD Dtd;
+    const char *Mismatch;
+    bool Attached;
+    unsigned Enables;
+
+    CHECK_EQ(Generation->CrtDdcPins, 2);
+    CHECK_EQ(Generation->DetectCrt(&Mmio, &Attached), HdgfxModesetSuccess);
+    CHECK_EQ(Attached, 0);
+    Fake->CrtAttached = true;
+    CHECK_EQ(Generation->DetectCrt(&Mmio, &Attached), HdgfxModesetSuccess);
+    CHECK_EQ(Attached, 1);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PCH_ADPA, 0)), 0x00F40000);
+    *FakeSlot(Fake, HDGFX_REG(PCH_DREF_CONTROL, 0)) = 0x00001000;
+
+    memset(&Dtd, 0, sizeof(Dtd));
+    Dtd.DotKHz = 148500;
+    Dtd.Timings.HActive = 1920;
+    Dtd.Timings.HSyncStart = 2008;
+    Dtd.Timings.HSyncEnd = 2052;
+    Dtd.Timings.HTotal = 2200;
+    Dtd.Timings.VActive = 1080;
+    Dtd.Timings.VSyncStart = 1084;
+    Dtd.Timings.VSyncEnd = 1089;
+    Dtd.Timings.VTotal = 1125;
+    Dtd.HSyncPositive = true;
+    Dtd.VSyncPositive = true;
+
+    memset(&Mode, 0, sizeof(Mode));
+    Mode.Timing = &Dtd;
+    Mode.Pipe = 1;
+    Mode.Stride = 1920 * 4;
+    Mode.Surface = 0x1000000;
+
+    HdgfxIlkReadDisplayState(&Mmio, &Current);
+    CHECK_EQ(Current.Crt.Enabled, 0);
+    CHECK_EQ(Current.NonSpreadReference, 0);
+    CHECK_EQ(Generation->DisableCrt(&Mmio, &Current), HdgfxModesetSuccess);
+    HdgfxIlkReadDisplayState(&Mmio, &Actual);
+    CHECK_EQ(Actual.Pipes[0].Active, 1);
+    CHECK_EQ(Actual.Transcoders[0].Active, 1);
+    CHECK_EQ(Generation->ComputeCrt(&Current, &Mode, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(Target.Dplls[1].N, 4);
+    CHECK_EQ(Target.Dplls[1].M1, 18);
+    CHECK_EQ(Target.Dplls[1].M2, 9);
+    CHECK_EQ(Target.Dplls[1].P1, 2);
+    CHECK_EQ(Target.Dplls[1].P2, 10);
+    CHECK_EQ(Target.Dplls[1].DotKHz, 148500);
+    CHECK_EQ(Target.Pipes[1].FdiTx.Lanes, 2);
+    CHECK_EQ(Target.Pipes[1].Fdi.DataM, 6920602);
+    CHECK_EQ(Target.Pipes[1].Fdi.LinkM, 288358);
+    CHECK_EQ(HdgfxRefreshMilliHz(&Target.Pipes[1].Timings, Target.Dplls[1].DotKHz), 60000);
+
+    Enables = Fake->PipeEnables;
+    CHECK_EQ(Generation->CommitCrt(&Mmio, &Current, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(Fake->PipeEnables, Enables + 1);
+    HdgfxIlkReadDisplayState(&Mmio, &Actual);
+    Mismatch = HdgfxCompareCrtState(&Target, &Actual);
+    if (Mismatch)
+    {
+        fprintf(stderr, "CRT readback differs from the target in %s\n", Mismatch);
+        Failures++;
+    }
+    Mismatch = HdgfxCompareLvdsState(&Current, &Actual);
+    if (Mismatch)
+    {
+        fprintf(stderr, "LVDS changed under the CRT commit in %s\n", Mismatch);
+        Failures++;
+    }
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PCH_ADPA, 0)), 0xC0F40018);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PCH_DREF_CONTROL, 0)), 0x00001400);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PCH_DPLL, 1)), 0x84020002);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PCH_FP0, 1)), 0x00021007);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PIPE_HTOTAL, 1)), 0x0897077F);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(TRANS_VSYNC, 1)), 0x0440043B);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PIPE_CONF, 1)), 0xC0000000);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(WM0_PIPE, 1)), 0x00783818);
+    CHECK_EQ(Fake->Violations, 0);
+
+    Current = Actual;
+    Mode.Surface = 0x2000000;
+    CHECK_EQ(Generation->ComputeCrt(&Current, &Mode, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(Generation->CommitCrt(&Mmio, &Current, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(Fake->PipeEnables, Enables + 1);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(DSP_SURF, 1)), 0x2000000);
+
+    HdgfxIlkReadDisplayState(&Mmio, &Current);
+    CHECK_EQ(Generation->DisableCrt(&Mmio, &Current), HdgfxModesetSuccess);
+    HdgfxIlkReadDisplayState(&Mmio, &Actual);
+    CHECK_EQ(Actual.Crt.Enabled, 0);
+    CHECK_EQ(Actual.Pipes[1].Enabled, 0);
+    CHECK_EQ(Actual.Transcoders[1].Enabled, 0);
+    CHECK_EQ(Actual.Dplls[1].Enabled, 0);
+    CHECK_EQ(Actual.Pipes[0].Active, 1);
+    CHECK_EQ(Actual.Transcoders[0].Active, 1);
+    CHECK_EQ(Actual.Transcoders[0].FdiRx.PllEnabled, 1);
+    CHECK_EQ(Fake->Violations, 0);
+
+    Mode.Pipe = 0;
+    CHECK_EQ(Generation->ComputeCrt(&Actual, &Mode, &Target), HdgfxModesetInvalidMode);
+    Mode.Pipe = 1;
+    Mode.Stride = 1919 * 4;
+    CHECK_EQ(Generation->ComputeCrt(&Actual, &Mode, &Target), HdgfxModesetInvalidMode);
+    Mode.Stride = 1920 * 4;
+    Dtd.DotKHz = 241500;
+    CHECK_EQ(Generation->ComputeCrt(&Actual, &Mode, &Target), HdgfxModesetNoClock);
+    free(Fake);
+}
+
 int
 main(
     int argc,
@@ -1250,6 +1397,7 @@ main(
     TestGmbusEdid(argv[1]);
     TestOpRegionAsle();
     TestLvdsModeset(argv[1]);
+    TestCrtModeset(argv[1]);
     if (argc > 2)
         TestFirmwareVbt(argv[2]);
     if (Failures)

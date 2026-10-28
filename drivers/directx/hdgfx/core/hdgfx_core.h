@@ -174,6 +174,14 @@ typedef struct _HDGFX_LVDS
     uint32_t Bpc;
 } HDGFX_LVDS;
 
+typedef struct _HDGFX_CRT
+{
+    bool Enabled;
+    bool HSyncActiveHigh;
+    bool VSyncActiveHigh;
+    uint32_t Transcoder;
+} HDGFX_CRT;
+
 typedef struct _HDGFX_PANEL_POWER
 {
     bool On;
@@ -215,6 +223,7 @@ typedef struct _HDGFX_DISPLAY_STATE
     HDGFX_TRANSCODER Transcoders[HDGFX_MAX_TRANSCODERS];
     HDGFX_DPLL Dplls[HDGFX_MAX_DPLLS];
     HDGFX_LVDS Lvds;
+    HDGFX_CRT Crt;
     HDGFX_PANEL_POWER PanelPower;
     HDGFX_BACKLIGHT Backlight;
 } HDGFX_DISPLAY_STATE;
@@ -237,6 +246,14 @@ typedef struct _HDGFX_LVDS_MODE
     bool Ssc;
 } HDGFX_LVDS_MODE;
 
+typedef struct _HDGFX_CRT_MODE
+{
+    const HDGFX_DTD *Timing;
+    uint32_t Pipe;
+    uint32_t Stride;
+    uint32_t Surface;
+} HDGFX_CRT_MODE;
+
 typedef enum _HDGFX_MODESET_STATUS
 {
     HdgfxModesetSuccess,
@@ -250,7 +267,8 @@ typedef enum _HDGFX_MODESET_STATUS
     HdgfxModesetFdiSymbolLockFailed,
     HdgfxModesetTranscoderOnTimeout,
     HdgfxModesetPanelOnTimeout,
-    HdgfxModesetVblankTimeout
+    HdgfxModesetVblankTimeout,
+    HdgfxModesetDetectTimeout
 } HDGFX_MODESET_STATUS;
 
 typedef struct _HDGFX_GENERATION
@@ -258,6 +276,7 @@ typedef struct _HDGFX_GENERATION
     const char *Name;
     uint32_t Gen;
     uint32_t PanelDdcPins;
+    uint32_t CrtDdcPins;
     uint32_t GseInterrupt;
     void (*ReadDisplayState)(const HDGFX_MMIO *Mmio, HDGFX_DISPLAY_STATE *State);
     HDGFX_MODESET_STATUS (*ComputeLvds)(const HDGFX_DISPLAY_STATE *Current,
@@ -267,6 +286,14 @@ typedef struct _HDGFX_GENERATION
                                        const HDGFX_DISPLAY_STATE *Current,
                                        const HDGFX_DISPLAY_STATE *Target);
     HDGFX_MODESET_STATUS (*DisableLvds)(const HDGFX_MMIO *Mmio, const HDGFX_DISPLAY_STATE *Current);
+    HDGFX_MODESET_STATUS (*DetectCrt)(const HDGFX_MMIO *Mmio, bool *Attached);
+    HDGFX_MODESET_STATUS (*ComputeCrt)(const HDGFX_DISPLAY_STATE *Current,
+                                       const HDGFX_CRT_MODE *Mode,
+                                       HDGFX_DISPLAY_STATE *Target);
+    HDGFX_MODESET_STATUS (*CommitCrt)(const HDGFX_MMIO *Mmio,
+                                      const HDGFX_DISPLAY_STATE *Current,
+                                      const HDGFX_DISPLAY_STATE *Target);
+    HDGFX_MODESET_STATUS (*DisableCrt)(const HDGFX_MMIO *Mmio, const HDGFX_DISPLAY_STATE *Current);
 } HDGFX_GENERATION;
 
 typedef struct _HDGFX_VBT_PANEL
@@ -345,6 +372,33 @@ HDGFX_MODESET_STATUS
 HdgfxIlkDisableLvds(
     const HDGFX_MMIO *Mmio,
     const HDGFX_DISPLAY_STATE *Current);
+
+HDGFX_MODESET_STATUS
+HdgfxIlkDetectCrt(
+    const HDGFX_MMIO *Mmio,
+    bool *Attached);
+
+HDGFX_MODESET_STATUS
+HdgfxIlkComputeCrt(
+    const HDGFX_DISPLAY_STATE *Current,
+    const HDGFX_CRT_MODE *Mode,
+    HDGFX_DISPLAY_STATE *Target);
+
+HDGFX_MODESET_STATUS
+HdgfxIlkCommitCrt(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DISPLAY_STATE *Current,
+    const HDGFX_DISPLAY_STATE *Target);
+
+HDGFX_MODESET_STATUS
+HdgfxIlkDisableCrt(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DISPLAY_STATE *Current);
+
+const char *
+HdgfxCompareCrtState(
+    const HDGFX_DISPLAY_STATE *Target,
+    const HDGFX_DISPLAY_STATE *Actual);
 
 const char *
 HdgfxCompareLvdsState(

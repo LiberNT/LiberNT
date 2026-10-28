@@ -64,6 +64,7 @@
     R(TRANS_VTOTAL,         0xE000C, 0x1000) \
     R(TRANS_VBLANK,         0xE0010, 0x1000) \
     R(TRANS_VSYNC,          0xE0014, 0x1000) \
+    R(PCH_ADPA,             0xE1100, 0) \
     R(PCH_LVDS,             0xE1180, 0) \
     R(TRANS_CONF,           0xF0008, 0x1000) \
     R(FDI_RX_CTL,           0xF000C, 0x1000) \
@@ -163,6 +164,12 @@
     F(FDI_TX_PLL_ENABLE,        14, 14) \
     F(DREF_SSC_SOURCE,          12, 11) \
     F(DREF_NONSPREAD_SOURCE,    10, 9) \
+    F(ADPA_ENABLE,              31, 31) \
+    F(ADPA_TRANSCODER,          30, 30) \
+    F(ADPA_HOTPLUG_STATUS,      25, 24) \
+    F(ADPA_FORCE_TRIGGER,       16, 16) \
+    F(ADPA_VSYNC_HIGH,          4, 4) \
+    F(ADPA_HSYNC_HIGH,          3, 3) \
     F(LVDS_ENABLE,              31, 31) \
     F(LVDS_TRANSCODER,          30, 30) \
     F(LVDS_VSYNC_INVERT,        21, 21) \

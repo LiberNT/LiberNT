@@ -320,6 +320,10 @@ HdgfxLogDisplayState(
             State->Lvds.Enabled, State->Lvds.Detected, 'A' + State->Lvds.Transcoder,
             State->Lvds.DualChannel, State->Lvds.Bpc,
             State->Lvds.HSyncActiveLow ? '-' : '+', State->Lvds.VSyncActiveLow ? '-' : '+');
+    DPRINT1("CRT: enable %u transcoder %c %chsync %cvsync; reference SSC %u non-spread %u\n",
+            State->Crt.Enabled, 'A' + State->Crt.Transcoder,
+            State->Crt.HSyncActiveHigh ? '+' : '-', State->Crt.VSyncActiveHigh ? '+' : '-',
+            State->SscReference, State->NonSpreadReference);
     DPRINT1("Panel power: on %u ready %u sequence %lu target %u backlight %u, T1+T2 %lu T5 %lu T3 %lu Tx %lu T4 %lu us\n",
             State->PanelPower.On, State->PanelPower.Ready, State->PanelPower.Sequence,
             State->PanelPower.TargetOn, State->PanelPower.BacklightEnabled,
@@ -333,8 +337,9 @@ HdgfxLogDisplayState(
 }
 
 static BOOLEAN
-HdgfxReadPanelEdid(
-    _In_ const HDGFX_GENERATION *Generation,
+HdgfxReadEdid(
+    _In_ PCSTR Name,
+    _In_ ULONG Pins,
     _In_ const HDGFX_MMIO *Mmio,
     _Out_writes_bytes_(HDGFX_EDID_SIZE) PUCHAR Edid,
     _Out_ HDGFX_EDID *Parsed)
@@ -342,17 +347,17 @@ HdgfxReadPanelEdid(
     HDGFX_GMBUS_STATUS Status;
     ULONG Index;
 
-    Status = HdgfxGmbusRead(Mmio, Generation->PanelDdcPins, HDGFX_DDC_ADDRESS, 0, Edid, HDGFX_EDID_SIZE);
+    Status = HdgfxGmbusRead(Mmio, Pins, HDGFX_DDC_ADDRESS, 0, Edid, HDGFX_EDID_SIZE);
     if (Status != HdgfxGmbusSuccess)
     {
-        DPRINT1("Panel EDID: GMBUS pins %lu: %s\n", Generation->PanelDdcPins, HdgfxGmbusStatusName(Status));
+        DPRINT1("%s EDID: GMBUS pins %lu: %s\n", Name, Pins, HdgfxGmbusStatusName(Status));
         return FALSE;
     }
 
     for (Index = 0; Index < HDGFX_EDID_SIZE; Index += 16)
     {
-        DPRINT1("EDID %02lx: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
-                Index,
+        DPRINT1("%s EDID %02lx: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                Name, Index,
                 Edid[Index + 0], Edid[Index + 1], Edid[Index + 2], Edid[Index + 3],
                 Edid[Index + 4], Edid[Index + 5], Edid[Index + 6], Edid[Index + 7],
                 Edid[Index + 8], Edid[Index + 9], Edid[Index + 10], Edid[Index + 11],
@@ -360,19 +365,19 @@ HdgfxReadPanelEdid(
     }
     if (!HdgfxEdidParse(Edid, Parsed))
     {
-        DPRINT1("Panel EDID: bad header or checksum\n");
+        DPRINT1("%s EDID: bad header or checksum\n", Name);
         return FALSE;
     }
 
-    DPRINT1("Panel EDID %s %04lx serial %08lx, version %lu.%lu, %lux%lu cm, %lu extensions\n",
-            Parsed->Manufacturer, Parsed->ProductCode, Parsed->SerialNumber,
+    DPRINT1("%s EDID %s %04lx serial %08lx, version %lu.%lu, %lux%lu cm, %lu extensions\n",
+            Name, Parsed->Manufacturer, Parsed->ProductCode, Parsed->SerialNumber,
             Parsed->Version, Parsed->Revision, Parsed->WidthCm, Parsed->HeightCm, Parsed->Extensions);
     for (Index = 0; Index < Parsed->DtdCount; Index++)
     {
         const HDGFX_DTD *Dtd = &Parsed->Dtds[Index];
 
-        DPRINT1("Panel EDID DTD %lu: %lu kHz %lu %lu %lu %lu %lu %lu %lu %lu %chsync %cvsync %lux%lu mm\n",
-                Index, Dtd->DotKHz,
+        DPRINT1("%s EDID DTD %lu: %lu kHz %lu %lu %lu %lu %lu %lu %lu %lu %chsync %cvsync %lux%lu mm\n",
+                Name, Index, Dtd->DotKHz,
                 Dtd->Timings.HActive, Dtd->Timings.HSyncStart, Dtd->Timings.HSyncEnd, Dtd->Timings.HTotal,
                 Dtd->Timings.VActive, Dtd->Timings.VSyncStart, Dtd->Timings.VSyncEnd, Dtd->Timings.VTotal,
                 Dtd->HSyncPositive ? '+' : '-', Dtd->VSyncPositive ? '+' : '-',
@@ -552,6 +557,28 @@ HdgfxStopAsle(
     }
 }
 
+static VOID
+HdgfxDetectCrt(
+    _In_ const HDGFX_GENERATION *Generation,
+    _In_ const HDGFX_MMIO *Mmio)
+{
+    UCHAR Edid[HDGFX_EDID_SIZE];
+    HDGFX_MODESET_STATUS Status;
+    HDGFX_EDID Parsed;
+    BOOLEAN EdidFound;
+    bool Attached;
+
+    Status = Generation->DetectCrt(Mmio, &Attached);
+    if (Status != HdgfxModesetSuccess)
+    {
+        DPRINT1("CRT load detection: %s\n", HdgfxModesetStatusName(Status));
+        return;
+    }
+    EdidFound = HdgfxReadEdid("CRT", Generation->CrtDdcPins, Mmio, Edid, &Parsed);
+    DPRINT1("CRT load detection: %s, EDID %s\n", Attached ? "attached" : "nothing attached",
+            EdidFound ? "read" : "not read");
+}
+
 VOID
 SoftGpuPlatformAdapterStarted(
     _Inout_ PSOFTGPU_DEVICE Device)
@@ -611,6 +638,7 @@ SoftGpuPlatformAdapterStarted(
     Adapter->Generation->ReadDisplayState(&Mmio, State);
     HdgfxLogDisplayState(State);
     Adapter->InternalPanel = State->Lvds.Detected;
+    HdgfxDetectCrt(Adapter->Generation, &Mmio);
     HdgfxStartBacklight(Device, Adapter, State);
     HdgfxStartAsle(Adapter);
     ExFreePoolWithTag(State, HDGFX_TAG);
@@ -1162,7 +1190,7 @@ HdgfxScanoutStart(
         return STATUS_NOT_SUPPORTED;
     }
 
-    if (HdgfxReadPanelEdid(Scanout->Generation, &Mmio, Config->Edid, &Edid) && Edid.DtdCount != 0)
+    if (HdgfxReadEdid("Panel", Scanout->Generation->PanelDdcPins, &Mmio, Config->Edid, &Edid) && Edid.DtdCount != 0)
     {
         Config->EdidLength = HDGFX_EDID_SIZE;
         for (Index = 0; Index < Edid.DtdCount; Index++)
