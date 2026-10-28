@@ -528,6 +528,16 @@ interface ITfContext : IUnknown
 }
 
 const DWORD TF_INVALID_COOKIE = 0xffffffff;
+cpp_quote("#define TF_INVALID_UIELEMENTID ((DWORD)-1)")
+
+const TfClientId TF_CLIENTID_NULL = 0;
+
+const DWORD TF_IPPMF_FORPROCESS = 0x10000000;
+const DWORD TF_IPPMF_FORSESSION = 0x20000000;
+const DWORD TF_IPPMF_FORSYSTEMALL = 0x40000000;
+const DWORD TF_IPPMF_ENABLEPROFILE = 0x00000001;
+const DWORD TF_IPPMF_DISABLEPROFILE = 0x00000002;
+const DWORD TF_IPPMF_DONTCARECURRENTINPUTLANGUAGE = 0x00000004;
 
 [
   object,
@@ -843,6 +853,21 @@ interface ITfDisplayAttributeMgr : IUnknown
             [out] ITfDisplayAttributeInfo **ppInfo,
             [out] CLSID *pclsidOwner);
 
+}
+
+[
+    object,
+    local,
+    uuid(fee47777-163c-4769-996a-6e9c50ad8f54),
+    pointer_default(unique)
+]
+interface ITfDisplayAttributeProvider : IUnknown
+{
+    HRESULT EnumDisplayAttributeInfo([out] IEnumTfDisplayAttributeInfo **ppEnum);
+
+    HRESULT GetDisplayAttributeInfo(
+            [in] REFGUID guid,
+            [out] ITfDisplayAttributeInfo **ppInfo);
 }
 
 [
