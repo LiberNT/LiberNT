@@ -189,6 +189,36 @@ typedef NTSTATUS
     _Inout_ struct _SOFTGPU_DEVICE *Device,
     _In_ const SOFTGPU_DISPLAY_MODE *Mode);
 
+#define SOFTGPU_MAX_EXTRA_OUTPUTS       2UL
+
+typedef struct _SOFTGPU_OUTPUT
+{
+    ULONG ChildUid;
+    D3DKMDT_VIDEO_OUTPUT_TECHNOLOGY OutputTechnology;
+    DXGK_CHILD_DEVICE_HPD_AWARENESS HpdAwareness;
+    BOOLEAN Connected;
+    BOOLEAN Active;
+    ULONG CurrentMode;
+    ULONG ModeCount;
+    ULONG PreferredMode;
+    SOFTGPU_DISPLAY_MODE Modes[SOFTGPU_MAX_DISPLAY_MODES];
+    UCHAR Edid[SOFTGPU_EDID_SIZE];
+    ULONG EdidLength;
+} SOFTGPU_OUTPUT, *PSOFTGPU_OUTPUT;
+
+typedef struct _SOFTGPU_OUTPUT_TIMING
+{
+    ULONG ChildUid;
+    BOOLEAN Active;
+    SOFTGPU_DISPLAY_MODE Mode;
+} SOFTGPU_OUTPUT_TIMING, *PSOFTGPU_OUTPUT_TIMING;
+
+typedef NTSTATUS
+(*PSOFTGPU_PLATFORM_SET_OUTPUTS)(
+    _Inout_ struct _SOFTGPU_DEVICE *Device,
+    _In_reads_(Count) const SOFTGPU_OUTPUT_TIMING *Timings,
+    _In_ ULONG Count);
+
 #ifndef SOFTGPU_MAX_OVERLAYS
 #define SOFTGPU_MAX_OVERLAYS            0UL
 #endif
@@ -375,6 +405,12 @@ typedef struct _SOFTGPU_DEVICE
     ULONG               EdidLength;
     ULONG               ChildAcpiUid;
     D3DKMDT_VIDEO_OUTPUT_TECHNOLOGY ChildOutputTechnology;
+    BOOLEAN             ChildActive;
+    ULONG               VsyncTargetId;
+    ULONG               ExtraOutputCount;
+    SOFTGPU_OUTPUT      ExtraOutputs[SOFTGPU_MAX_EXTRA_OUTPUTS];
+    KMUTEX              OutputMutex;
+    PSOFTGPU_PLATFORM_SET_OUTPUTS PlatformSetOutputs;
 
     /*
      * One lock for every node's fence state.  A single execution core serves
@@ -432,6 +468,8 @@ typedef struct _SOFTGPU_PLATFORM_CONFIG
     PSOFTGPU_PLATFORM_SET_MODE SetMode;
     UCHAR               Edid[SOFTGPU_EDID_SIZE];
     ULONG               EdidLength;
+    ULONG               ExtraOutputCount;
+    PSOFTGPU_PLATFORM_SET_OUTPUTS SetOutputs;
 } SOFTGPU_PLATFORM_CONFIG, *PSOFTGPU_PLATFORM_CONFIG;
 
 /*
@@ -615,6 +653,28 @@ SoftGpuAcquirePostDisplay(
 VOID
 SoftGpuScanoutInitializeDevice(
     _Inout_ PSOFTGPU_DEVICE Device);
+
+BOOLEAN
+SoftGpuValidateExtraOutputs(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ const SOFTGPU_PLATFORM_CONFIG *Config);
+
+PSOFTGPU_OUTPUT
+SoftGpuFindOutput(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ ULONG ChildUid);
+
+NTSTATUS
+SoftGpuUpdateOutput(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ ULONG ChildUid,
+    _In_ BOOLEAN Connected,
+    _In_reads_opt_(ModeCount) const SOFTGPU_DISPLAY_MODE *Modes,
+    _In_ ULONG ModeCount,
+    _In_ ULONG PreferredMode,
+    _In_reads_bytes_opt_(EdidLength) const UCHAR *Edid,
+    _In_ ULONG EdidLength,
+    _In_ BOOLEAN Indicate);
 
 NTSTATUS
 SoftGpuScanoutStart(
@@ -965,6 +1025,7 @@ SoftGpuDdiSetPowerState(
 NTSTATUS
 SoftGpuPlatformSetMonitorPower(
     _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ ULONG ChildUid,
     _In_ DEVICE_POWER_STATE DevicePowerState);
 #endif
 

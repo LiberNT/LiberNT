@@ -1286,6 +1286,10 @@ TestCrtModeset(
     CHECK_EQ(Generation->DetectCrt(&Mmio, &Attached), HdgfxModesetSuccess);
     CHECK_EQ(Attached, 1);
     CHECK_EQ(FakeGet(Fake, HDGFX_REG(PCH_ADPA, 0)), 0x00F40000);
+    Generation->EnableCrtHotplug(&Mmio, false);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PCH_ADPA, 0)), 0x00740000);
+    Generation->EnableCrtHotplug(&Mmio, true);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PCH_ADPA, 0)), 0x00F40000);
     *FakeSlot(Fake, HDGFX_REG(PCH_DREF_CONTROL, 0)) = 0x00001000;
 
     memset(&Dtd, 0, sizeof(Dtd));
@@ -1358,6 +1362,39 @@ TestCrtModeset(
     CHECK_EQ(Generation->CommitCrt(&Mmio, &Current, &Target), HdgfxModesetSuccess);
     CHECK_EQ(Fake->PipeEnables, Enables + 1);
     CHECK_EQ(FakeGet(Fake, HDGFX_REG(DSP_SURF, 1)), 0x2000000);
+
+    HdgfxIlkReadDisplayState(&Mmio, &Current);
+    Mode.SourceWidth = 1280;
+    Mode.SourceHeight = 800;
+    Mode.Stride = 1280 * 4;
+    Mode.Surface = 0;
+    Mode.Scaling = HdgfxScalingAspect;
+    CHECK_EQ(Generation->ComputeCrt(&Current, &Mode, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(Target.Pipes[1].SourceWidth, 1280);
+    CHECK_EQ(Target.Pipes[1].PanelFitter.Enabled, 1);
+    CHECK_EQ(Target.Pipes[1].PanelFitter.X, 96);
+    CHECK_EQ(Target.Pipes[1].PanelFitter.Y, 0);
+    CHECK_EQ(Target.Pipes[1].PanelFitter.Width, 1728);
+    CHECK_EQ(Target.Pipes[1].PanelFitter.Height, 1080);
+    CHECK_EQ(Generation->CommitCrt(&Mmio, &Current, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(Fake->PipeEnables, Enables + 1);
+    HdgfxIlkReadDisplayState(&Mmio, &Actual);
+    Mismatch = HdgfxCompareCrtState(&Target, &Actual);
+    if (Mismatch)
+    {
+        fprintf(stderr, "Scaled CRT readback differs from the target in %s\n", Mismatch);
+        Failures++;
+    }
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PIPE_SRC, 1)), 0x04FF031F);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_WIN_POS, 1)), 0x00600000);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_WIN_SZ, 1)), 0x06C00438);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_CTL_1, 1)) & HDGFX_MASK(PF_ENABLE), HDGFX_MASK(PF_ENABLE));
+    CHECK_EQ(Fake->Violations, 0);
+
+    Current = Actual;
+    Mode.SourceWidth = 2560;
+    CHECK_EQ(Generation->ComputeCrt(&Current, &Mode, &Target), HdgfxModesetInvalidMode);
+    Mode.SourceWidth = 1280;
 
     HdgfxIlkReadDisplayState(&Mmio, &Current);
     CHECK_EQ(Generation->DisableCrt(&Mmio, &Current), HdgfxModesetSuccess);
