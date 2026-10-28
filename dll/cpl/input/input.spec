@@ -1,1 +1,5 @@
 @ stdcall CPlApplet(ptr long ptr ptr)
+@ stdcall EnumEnabledLayoutOrTip(wstr wstr wstr ptr long)
+@ stdcall InstallLayoutOrTip(wstr long)
+@ stdcall InstallLayoutOrTipUserReg(wstr wstr wstr wstr long)
+@ stdcall SetDefaultLayoutOrTip(wstr long)

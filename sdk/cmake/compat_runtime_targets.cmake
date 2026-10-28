@@ -114,6 +114,7 @@ set(COMPAT_RUNTIME_MODULES
     imm32
     inetcomm
     inetmib1
+    input
     inseng
     iologmsg
     iphlpapi
