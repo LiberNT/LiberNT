@@ -1,0 +1,754 @@
+/*
+ * PROJECT:     LiberNT Intel HD Graphics Driver
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Ironlake LVDS mode computation, commit and readback comparison
+ * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
+ */
+
+#include "hdgfx_core.h"
+#include "hdgfx_regs.h"
+
+#include <string.h>
+
+#define ILK_LVDS_PIPE               0
+#define ILK_DPLL_REFERENCE_KHZ      120000
+#define ILK_DPLL_N_MIN              1
+#define ILK_DPLL_N_MAX              6
+#define ILK_DPLL_M_MIN              79
+#define ILK_DPLL_M_MAX              127
+#define ILK_DPLL_M1_MIN             12
+#define ILK_DPLL_M1_MAX             22
+#define ILK_DPLL_M2_MIN             5
+#define ILK_DPLL_M2_MAX             9
+#define ILK_DPLL_P1_MAX             8
+#define ILK_DPLL_P_MIN              28
+#define ILK_DPLL_P_MAX              112
+#define ILK_DPLL_VCO_MIN_KHZ        1760000
+#define ILK_DPLL_VCO_MAX_KHZ        3510000
+#define ILK_LVDS_SINGLE_MIN_KHZ     25000
+#define ILK_LVDS_SINGLE_MAX_KHZ     112000
+#define ILK_LVDS_DUAL_MIN_KHZ       80000
+#define ILK_LVDS_DUAL_MAX_KHZ       224000
+#define ILK_CB_TUNE_SINGLE_RATIO    21
+#define ILK_CB_TUNE_DUAL_RATIO      25
+#define ILK_CB_TUNE_ON              3
+#define ILK_DPLL_MODE_LVDS          2
+#define ILK_DPLL_REFERENCE_DREF     0
+#define ILK_DPLL_REFERENCE_SSC      3
+#define ILK_FDI_MAX_LANES           4
+#define ILK_FDI_TU_SIZE             64
+#define ILK_FDI_DATA_N              0x800000
+#define ILK_FDI_LINK_N              0x80000
+#define ILK_FDI_PATTERN_1           0
+#define ILK_FDI_PATTERN_2           1
+#define ILK_FDI_NORMAL              3
+#define ILK_PLANE_FORMAT_XRGB8888   6
+#define ILK_PF_FILTER_MEDIUM        1
+#define ILK_PP_UNLOCK_KEY           0xABCD
+#define ILK_WM0_DEFAULT             0x00783818
+#define ILK_WM_LP_COUNT             3
+#define ILK_LVDS_PAIRS_ACTIVE       3
+#define ILK_MAX_ACTIVE              4096
+#define ILK_MAX_TIMING              8192
+#define ILK_MAX_STRIDE              32768
+#define ILK_STRIDE_ALIGNMENT        64
+#define ILK_SURFACE_ALIGNMENT       4096
+#define ILK_BYTES_PER_PIXEL         4
+
+#define ILK_FDI_RX_PLL_WARMUP_US    25
+#define ILK_DMI_LATENCY_US          20
+#define ILK_FDI_IDLE_PATTERN_US     31
+#define ILK_DPLL_WARMUP_US          50
+#define ILK_FDI_LOCK_TIMEOUT_US     1000
+#define ILK_FDI_LOCK_POLL_US        10
+#define ILK_PIPE_TIMEOUT_US         100000
+#define ILK_PANEL_TIMEOUT_MARGIN_US 100000
+#define ILK_POLL_US                 1000
+
+static uint32_t
+IlkRead(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Offset)
+{
+    return Mmio->Read(Mmio->Context, Offset);
+}
+
+static void
+IlkWrite(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Offset,
+    uint32_t Value)
+{
+    Mmio->Write(Mmio->Context, Offset, Value);
+}
+
+static void
+IlkDelay(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Microseconds)
+{
+    if (Microseconds >= 1000 && Mmio->Sleep)
+        Mmio->Sleep(Mmio->Context, Microseconds / 1000);
+    else
+        Mmio->Stall(Mmio->Context, Microseconds);
+}
+
+static bool
+IlkWaitFor(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Offset,
+    uint32_t Mask,
+    uint32_t Value,
+    uint32_t TimeoutUs,
+    uint32_t PollUs)
+{
+    uint32_t Elapsed;
+
+    for (Elapsed = 0;; Elapsed += PollUs)
+    {
+        if ((IlkRead(Mmio, Offset) & Mask) == Value)
+            return true;
+        if (Elapsed >= TimeoutUs)
+            return false;
+        IlkDelay(Mmio, PollUs);
+    }
+}
+
+static uint32_t
+IlkBpcEncoding(
+    uint32_t Bpc)
+{
+    switch (Bpc)
+    {
+        case 10: return 1;
+        case 6: return 2;
+        case 12: return 3;
+        default: return 0;
+    }
+}
+
+static uint32_t
+IlkFdiWidthEncoding(
+    uint32_t Lanes)
+{
+    return Lanes - 1;
+}
+
+static uint32_t
+IlkDivide(
+    uint64_t Numerator,
+    uint64_t Denominator)
+{
+    return (uint32_t)((Numerator + Denominator / 2) / Denominator);
+}
+
+static bool
+IlkFindDpll(
+    uint32_t TargetKHz,
+    bool DualChannel,
+    HDGFX_DPLL *Dpll)
+{
+    uint32_t P2 = DualChannel ? 7 : 14;
+    uint64_t BestError = UINT64_MAX;
+    uint32_t N;
+    uint32_t M1;
+    uint32_t M2;
+    uint32_t P1;
+
+    for (N = ILK_DPLL_N_MIN; N <= ILK_DPLL_N_MAX; N++)
+    {
+        for (M1 = ILK_DPLL_M1_MIN; M1 <= ILK_DPLL_M1_MAX; M1++)
+        {
+            for (M2 = ILK_DPLL_M2_MIN; M2 <= ILK_DPLL_M2_MAX && M2 < M1; M2++)
+            {
+                uint32_t M = 5 * (M1 + 2) + (M2 + 2);
+                uint64_t Vco = (uint64_t)ILK_DPLL_REFERENCE_KHZ * M;
+
+                if (M < ILK_DPLL_M_MIN || M > ILK_DPLL_M_MAX ||
+                    Vco < (uint64_t)ILK_DPLL_VCO_MIN_KHZ * (N + 2) ||
+                    Vco > (uint64_t)ILK_DPLL_VCO_MAX_KHZ * (N + 2))
+                {
+                    continue;
+                }
+
+                for (P1 = 1; P1 <= ILK_DPLL_P1_MAX; P1++)
+                {
+                    uint64_t Divisor = (uint64_t)(N + 2) * P1 * P2;
+                    uint64_t Scaled = (uint64_t)TargetKHz * Divisor;
+                    uint64_t Error = Scaled > Vco ? Scaled - Vco : Vco - Scaled;
+
+                    if (P1 * P2 < ILK_DPLL_P_MIN || P1 * P2 > ILK_DPLL_P_MAX)
+                        continue;
+                    Error = Error * 1000000 / Divisor;
+                    if (Error >= BestError)
+                        continue;
+
+                    BestError = Error;
+                    Dpll->N = N + 2;
+                    Dpll->M1 = M1 + 2;
+                    Dpll->M2 = M2 + 2;
+                    Dpll->P1 = P1;
+                    Dpll->P2 = P2;
+                }
+            }
+        }
+    }
+
+    if (BestError == UINT64_MAX)
+        return false;
+
+    Dpll->ReferenceKHz = ILK_DPLL_REFERENCE_KHZ;
+    Dpll->VcoKHz = IlkDivide((uint64_t)ILK_DPLL_REFERENCE_KHZ * (5 * Dpll->M1 + Dpll->M2), Dpll->N);
+    Dpll->DotKHz = IlkDivide((uint64_t)ILK_DPLL_REFERENCE_KHZ * (5 * Dpll->M1 + Dpll->M2),
+                             (uint64_t)Dpll->N * Dpll->P1 * Dpll->P2);
+    return true;
+}
+
+static bool
+IlkTimingsFit(
+    const HDGFX_TIMINGS *Timings)
+{
+    return Timings->HActive != 0 && Timings->VActive != 0 &&
+           Timings->HActive <= ILK_MAX_ACTIVE && Timings->VActive <= ILK_MAX_ACTIVE &&
+           Timings->HActive < Timings->HSyncStart && Timings->HSyncStart < Timings->HSyncEnd &&
+           Timings->HSyncEnd <= Timings->HTotal && Timings->HTotal <= ILK_MAX_TIMING &&
+           Timings->VActive < Timings->VSyncStart && Timings->VSyncStart < Timings->VSyncEnd &&
+           Timings->VSyncEnd <= Timings->VTotal && Timings->VTotal <= ILK_MAX_TIMING;
+}
+
+static void
+IlkComputeFitter(
+    const HDGFX_TIMINGS *Panel,
+    const HDGFX_LVDS_MODE *Mode,
+    HDGFX_PANEL_FITTER *Fitter)
+{
+    uint64_t SourceAspect = (uint64_t)Mode->SourceWidth * Panel->VActive;
+    uint64_t PanelAspect = (uint64_t)Panel->HActive * Mode->SourceHeight;
+
+    memset(Fitter, 0, sizeof(*Fitter));
+    if (Mode->SourceWidth == Panel->HActive && Mode->SourceHeight == Panel->VActive)
+        return;
+
+    Fitter->Enabled = true;
+    Fitter->Width = Panel->HActive;
+    Fitter->Height = Panel->VActive;
+    if (Mode->Scaling == HdgfxScalingCenter)
+    {
+        Fitter->Width = Mode->SourceWidth;
+        Fitter->Height = Mode->SourceHeight;
+    }
+    else if (Mode->Scaling == HdgfxScalingAspect && SourceAspect > PanelAspect)
+    {
+        Fitter->Height = IlkDivide((uint64_t)Mode->SourceHeight * Panel->HActive, Mode->SourceWidth) & ~1u;
+    }
+    else if (Mode->Scaling == HdgfxScalingAspect && SourceAspect < PanelAspect)
+    {
+        Fitter->Width = IlkDivide((uint64_t)Mode->SourceWidth * Panel->VActive, Mode->SourceHeight) & ~1u;
+    }
+    Fitter->X = (Panel->HActive - Fitter->Width) / 2;
+    Fitter->Y = (Panel->VActive - Fitter->Height) / 2;
+}
+
+HDGFX_MODESET_STATUS
+HdgfxIlkComputeLvds(
+    const HDGFX_DISPLAY_STATE *Current,
+    const HDGFX_LVDS_MODE *Mode,
+    HDGFX_DISPLAY_STATE *Target)
+{
+    HDGFX_PIPE *Pipe = &Target->Pipes[ILK_LVDS_PIPE];
+    HDGFX_TRANSCODER *Transcoder = &Target->Transcoders[ILK_LVDS_PIPE];
+    HDGFX_DPLL *Dpll = &Target->Dplls[ILK_LVDS_PIPE];
+    const HDGFX_TIMINGS *Panel;
+    uint32_t LinkKHz = Current->FdiPllVcoKHz / 10;
+    uint32_t Bpc = Current->Lvds.Bpc;
+    bool Dual = Current->Lvds.DualChannel;
+    uint32_t Lanes;
+
+    *Target = *Current;
+    if (Mode->Panel == NULL || !Current->Lvds.Detected || !IlkTimingsFit(&Mode->Panel->Timings))
+        return HdgfxModesetInvalidMode;
+
+    Panel = &Mode->Panel->Timings;
+    if (Mode->SourceWidth == 0 || Mode->SourceHeight == 0 ||
+        Mode->SourceWidth > Panel->HActive || Mode->SourceHeight > Panel->VActive ||
+        Mode->Stride < Mode->SourceWidth * ILK_BYTES_PER_PIXEL || Mode->Stride > ILK_MAX_STRIDE ||
+        Mode->Stride % ILK_STRIDE_ALIGNMENT != 0 || Mode->Surface % ILK_SURFACE_ALIGNMENT != 0)
+    {
+        return HdgfxModesetInvalidMode;
+    }
+
+    if ((Dual && (Mode->Panel->DotKHz < ILK_LVDS_DUAL_MIN_KHZ || Mode->Panel->DotKHz > ILK_LVDS_DUAL_MAX_KHZ)) ||
+        (!Dual && (Mode->Panel->DotKHz < ILK_LVDS_SINGLE_MIN_KHZ || Mode->Panel->DotKHz > ILK_LVDS_SINGLE_MAX_KHZ)) ||
+        !(Mode->Ssc ? Current->SscReference : Current->NonSpreadReference))
+    {
+        return HdgfxModesetNoClock;
+    }
+
+    memset(Dpll, 0, sizeof(*Dpll));
+    if (!IlkFindDpll(Mode->Panel->DotKHz, Dual, Dpll))
+        return HdgfxModesetNoClock;
+    Dpll->Enabled = true;
+    Dpll->Mode = HdgfxDpllModeLvds;
+    Dpll->Reference = Mode->Ssc ? ILK_DPLL_REFERENCE_SSC : ILK_DPLL_REFERENCE_DREF;
+
+    if (LinkKHz == 0)
+        return HdgfxModesetFdiBandwidth;
+    for (Lanes = 1; Lanes <= ILK_FDI_MAX_LANES; Lanes++)
+    {
+        if ((uint64_t)Dpll->DotKHz * Bpc * 3 <= (uint64_t)LinkKHz * 8 * Lanes)
+            break;
+    }
+    if (Lanes > ILK_FDI_MAX_LANES)
+        return HdgfxModesetFdiBandwidth;
+
+    memset(Pipe, 0, sizeof(*Pipe));
+    Pipe->Enabled = true;
+    Pipe->Active = true;
+    Pipe->Bpc = Bpc;
+    Pipe->Dither = Bpc != 8;
+    Pipe->Timings = *Panel;
+    Pipe->Timings.HBlankStart = Panel->HActive;
+    Pipe->Timings.HBlankEnd = Panel->HTotal;
+    Pipe->Timings.VBlankStart = Panel->VActive;
+    Pipe->Timings.VBlankEnd = Panel->VTotal;
+    Pipe->SourceWidth = Mode->SourceWidth;
+    Pipe->SourceHeight = Mode->SourceHeight;
+    Pipe->Fdi.TuSize = ILK_FDI_TU_SIZE;
+    Pipe->Fdi.DataN = ILK_FDI_DATA_N;
+    Pipe->Fdi.DataM = IlkDivide((uint64_t)Dpll->DotKHz * Bpc * 3 * ILK_FDI_DATA_N, (uint64_t)LinkKHz * 8 * Lanes);
+    Pipe->Fdi.LinkN = ILK_FDI_LINK_N;
+    Pipe->Fdi.LinkM = IlkDivide((uint64_t)Dpll->DotKHz * ILK_FDI_LINK_N, LinkKHz);
+    Pipe->FdiTx.Enabled = true;
+    Pipe->FdiTx.Training = ILK_FDI_NORMAL;
+    Pipe->FdiTx.Lanes = Lanes;
+    IlkComputeFitter(&Pipe->Timings, Mode, &Pipe->PanelFitter);
+    Pipe->Primary.Enabled = true;
+    Pipe->Primary.Format = ILK_PLANE_FORMAT_XRGB8888;
+    Pipe->Primary.Stride = Mode->Stride;
+    Pipe->Primary.Surface = Mode->Surface;
+
+    Transcoder->Enabled = true;
+    Transcoder->Active = true;
+    Transcoder->InterlaceMode = 0;
+    Transcoder->Dpll = ILK_LVDS_PIPE;
+    Transcoder->Timings = Pipe->Timings;
+    Transcoder->FdiRx.Enabled = true;
+    Transcoder->FdiRx.PllEnabled = true;
+    Transcoder->FdiRx.Training = ILK_FDI_NORMAL;
+    Transcoder->FdiRx.Lanes = Lanes;
+    Transcoder->FdiRx.Bpc = Bpc;
+
+    Target->Lvds.Enabled = true;
+    Target->Lvds.Transcoder = ILK_LVDS_PIPE;
+    Target->Lvds.HSyncActiveLow = !Mode->Panel->HSyncPositive;
+    Target->Lvds.VSyncActiveLow = !Mode->Panel->VSyncPositive;
+
+    Target->PanelPower.TargetOn = true;
+    Target->PanelPower.On = true;
+    return HdgfxModesetSuccess;
+}
+
+static void
+IlkWriteTimings(
+    const HDGFX_MMIO *Mmio,
+    uint32_t HTotal,
+    uint32_t HBlank,
+    uint32_t HSync,
+    uint32_t VTotal,
+    uint32_t VBlank,
+    uint32_t VSync,
+    const HDGFX_TIMINGS *Timings)
+{
+    IlkWrite(Mmio, HTotal, HDGFX_SET(TIMING_ACTIVE, Timings->HActive - 1) | HDGFX_SET(TIMING_HIGH, Timings->HTotal - 1));
+    IlkWrite(Mmio, HBlank, HDGFX_SET(TIMING_LOW, Timings->HBlankStart - 1) |
+                           HDGFX_SET(TIMING_HIGH, Timings->HBlankEnd - 1));
+    IlkWrite(Mmio, HSync, HDGFX_SET(TIMING_LOW, Timings->HSyncStart - 1) | HDGFX_SET(TIMING_HIGH, Timings->HSyncEnd - 1));
+    IlkWrite(Mmio, VTotal, HDGFX_SET(TIMING_ACTIVE, Timings->VActive - 1) | HDGFX_SET(TIMING_HIGH, Timings->VTotal - 1));
+    IlkWrite(Mmio, VBlank, HDGFX_SET(TIMING_LOW, Timings->VBlankStart - 1) |
+                           HDGFX_SET(TIMING_HIGH, Timings->VBlankEnd - 1));
+    IlkWrite(Mmio, VSync, HDGFX_SET(TIMING_LOW, Timings->VSyncStart - 1) | HDGFX_SET(TIMING_HIGH, Timings->VSyncEnd - 1));
+}
+
+static void
+IlkWritePanelControl(
+    const HDGFX_MMIO *Mmio,
+    bool TargetOn,
+    bool Backlight)
+{
+    uint32_t Value = IlkRead(Mmio, HDGFX_REG(PCH_PP_CONTROL, 0));
+
+    Value = HDGFX_REPLACE(Value, PP_CONTROL_KEY, ILK_PP_UNLOCK_KEY);
+    Value = HDGFX_REPLACE(Value, PP_CONTROL_TARGET_ON, TargetOn);
+    Value = HDGFX_REPLACE(Value, PP_CONTROL_BACKLIGHT, Backlight);
+    IlkWrite(Mmio, HDGFX_REG(PCH_PP_CONTROL, 0), Value);
+}
+
+static void
+IlkClearBit(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Offset,
+    uint32_t Mask)
+{
+    IlkWrite(Mmio, Offset, IlkRead(Mmio, Offset) & ~Mask);
+}
+
+static HDGFX_MODESET_STATUS
+IlkDisableLvds(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DISPLAY_STATE *Target)
+{
+    const HDGFX_PANEL_POWER *Power = &Target->PanelPower;
+    uint32_t Index = Target->Lvds.Transcoder;
+    uint32_t Other = Index ^ 1;
+
+    IlkWritePanelControl(Mmio, HDGFX_GET(IlkRead(Mmio, HDGFX_REG(PCH_PP_CONTROL, 0)), PP_CONTROL_TARGET_ON), false);
+    IlkWritePanelControl(Mmio, false, false);
+    if (!IlkWaitFor(Mmio, HDGFX_REG(PCH_PP_STATUS, 0),
+                    HDGFX_MASK(PP_STATUS_ON) | HDGFX_MASK(PP_STATUS_SEQUENCE), 0,
+                    2 * (Power->BacklightOffUs + Power->PowerDownUs) + ILK_PANEL_TIMEOUT_MARGIN_US, ILK_POLL_US))
+    {
+        return HdgfxModesetPanelOffTimeout;
+    }
+
+    IlkClearBit(Mmio, HDGFX_REG(DSP_CNTR, Index), HDGFX_MASK(DSP_ENABLE));
+    IlkWrite(Mmio, HDGFX_REG(DSP_SURF, Index), IlkRead(Mmio, HDGFX_REG(DSP_SURF, Index)));
+    IlkWrite(Mmio, HDGFX_REG(PF_CTL_1, Index), 0);
+    IlkWrite(Mmio, HDGFX_REG(PF_WIN_POS, Index), 0);
+    IlkWrite(Mmio, HDGFX_REG(PF_WIN_SZ, Index), 0);
+    IlkClearBit(Mmio, HDGFX_REG(PIPE_CONF, Index), HDGFX_MASK(PIPE_CONF_ENABLE));
+    if (!IlkWaitFor(Mmio, HDGFX_REG(PIPE_CONF, Index), HDGFX_MASK(PIPE_CONF_STATE), 0, ILK_PIPE_TIMEOUT_US, ILK_POLL_US))
+        return HdgfxModesetPipeOffTimeout;
+
+    IlkClearBit(Mmio, HDGFX_REG(FDI_TX_CTL, Index), HDGFX_MASK(FDI_TX_ENABLE));
+    IlkClearBit(Mmio, HDGFX_REG(FDI_RX_CTL, Index), HDGFX_MASK(FDI_RX_ENABLE));
+    IlkClearBit(Mmio, HDGFX_REG(PCH_LVDS, 0), HDGFX_MASK(LVDS_ENABLE));
+    IlkClearBit(Mmio, HDGFX_REG(TRANS_CONF, Index), HDGFX_MASK(TRANS_CONF_ENABLE));
+    if (!IlkWaitFor(Mmio, HDGFX_REG(TRANS_CONF, Index), HDGFX_MASK(TRANS_CONF_STATE), 0,
+                    ILK_PIPE_TIMEOUT_US, ILK_POLL_US))
+    {
+        return HdgfxModesetTranscoderOffTimeout;
+    }
+    IlkClearBit(Mmio, HDGFX_REG(PCH_DPLL, Target->Transcoders[Index].Dpll), HDGFX_MASK(DPLL_VCO_ENABLE));
+
+    if (HDGFX_GET(IlkRead(Mmio, HDGFX_REG(TRANS_CONF, Other)), TRANS_CONF_ENABLE) == 0)
+    {
+        IlkClearBit(Mmio, HDGFX_REG(FDI_RX_CTL, Index), HDGFX_MASK(FDI_RX_PCDCLK));
+        IlkClearBit(Mmio, HDGFX_REG(FDI_RX_CTL, Index), HDGFX_MASK(FDI_RX_PLL_ENABLE));
+    }
+    return HdgfxModesetSuccess;
+}
+
+static uint32_t
+IlkFdiTxControl(
+    uint32_t Value,
+    uint32_t Pattern,
+    uint32_t Lanes)
+{
+    Value = HDGFX_REPLACE(Value, FDI_TX_ENABLE, 1);
+    Value = HDGFX_REPLACE(Value, FDI_TX_TRAINING, Pattern);
+    Value = HDGFX_REPLACE(Value, FDI_TX_WIDTH, IlkFdiWidthEncoding(Lanes));
+    Value = HDGFX_REPLACE(Value, FDI_TX_ENHANCED_FRAMING, 1);
+    return HDGFX_REPLACE(Value, FDI_TX_PLL_ENABLE, 1);
+}
+
+static void
+IlkSetFdiPattern(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Index,
+    uint32_t Pattern,
+    uint32_t Lanes)
+{
+    uint32_t Rx = IlkRead(Mmio, HDGFX_REG(FDI_RX_CTL, Index));
+
+    IlkWrite(Mmio, HDGFX_REG(FDI_TX_CTL, Index),
+             IlkFdiTxControl(IlkRead(Mmio, HDGFX_REG(FDI_TX_CTL, Index)), Pattern, Lanes));
+    Rx = HDGFX_REPLACE(Rx, FDI_RX_ENABLE, 1);
+    IlkWrite(Mmio, HDGFX_REG(FDI_RX_CTL, Index), HDGFX_REPLACE(Rx, FDI_RX_TRAINING, Pattern));
+}
+
+static HDGFX_MODESET_STATUS
+IlkTrainFdi(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Index,
+    uint32_t Lanes)
+{
+    IlkSetFdiPattern(Mmio, Index, ILK_FDI_PATTERN_1, Lanes);
+    if (!IlkWaitFor(Mmio, HDGFX_REG(FDI_RX_ISR, Index), HDGFX_MASK(FDI_RX_BIT_LOCK), HDGFX_MASK(FDI_RX_BIT_LOCK),
+                    ILK_FDI_LOCK_TIMEOUT_US, ILK_FDI_LOCK_POLL_US))
+    {
+        return HdgfxModesetFdiBitLockFailed;
+    }
+
+    IlkSetFdiPattern(Mmio, Index, ILK_FDI_PATTERN_2, Lanes);
+    if (!IlkWaitFor(Mmio, HDGFX_REG(FDI_RX_ISR, Index), HDGFX_MASK(FDI_RX_SYMBOL_LOCK),
+                    HDGFX_MASK(FDI_RX_SYMBOL_LOCK), ILK_FDI_LOCK_TIMEOUT_US, ILK_FDI_LOCK_POLL_US))
+    {
+        return HdgfxModesetFdiSymbolLockFailed;
+    }
+
+    IlkSetFdiPattern(Mmio, Index, ILK_FDI_NORMAL, Lanes);
+    IlkDelay(Mmio, ILK_FDI_IDLE_PATTERN_US);
+    return HdgfxModesetSuccess;
+}
+
+static uint32_t
+IlkLvdsControl(
+    uint32_t Value,
+    const HDGFX_DISPLAY_STATE *Target)
+{
+    const HDGFX_LVDS *Lvds = &Target->Lvds;
+    uint32_t Pairs = Lvds->DualChannel ? ILK_LVDS_PAIRS_ACTIVE : 0;
+
+    Value = HDGFX_REPLACE(Value, LVDS_ENABLE, 1);
+    Value = HDGFX_REPLACE(Value, LVDS_TRANSCODER, Lvds->Transcoder);
+    Value = HDGFX_REPLACE(Value, LVDS_HSYNC_INVERT, Lvds->HSyncActiveLow);
+    Value = HDGFX_REPLACE(Value, LVDS_VSYNC_INVERT, Lvds->VSyncActiveLow);
+    Value = HDGFX_REPLACE(Value, LVDS_A_CONTROL, ILK_LVDS_PAIRS_ACTIVE);
+    Value = HDGFX_REPLACE(Value, LVDS_A3_CONTROL, Lvds->Bpc == 8 ? ILK_LVDS_PAIRS_ACTIVE : 0);
+    Value = HDGFX_REPLACE(Value, LVDS_B_CONTROL, Pairs);
+    return HDGFX_REPLACE(Value, LVDS_CLKB_CONTROL, Pairs);
+}
+
+static void
+IlkEnableDpll(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Index,
+    const HDGFX_DPLL *Dpll)
+{
+    uint32_t Ratio = Dpll->P2 == 7 ? ILK_CB_TUNE_DUAL_RATIO : ILK_CB_TUNE_SINGLE_RATIO;
+    uint32_t M = 5 * Dpll->M1 + Dpll->M2;
+    uint32_t P1 = 1u << (Dpll->P1 - 1);
+    uint32_t Divisors;
+
+    Divisors = HDGFX_SET(FP_N, Dpll->N - 2) | HDGFX_SET(FP_M1, Dpll->M1 - 2) | HDGFX_SET(FP_M2, Dpll->M2 - 2) |
+               HDGFX_SET(FP_CB_TUNE, M < Ratio * Dpll->N ? ILK_CB_TUNE_ON : 0);
+    IlkWrite(Mmio, HDGFX_REG(PCH_FP0, Index), Divisors);
+    IlkWrite(Mmio, HDGFX_REG(PCH_FP1, Index), Divisors);
+    IlkWrite(Mmio, HDGFX_REG(PCH_DPLL, Index),
+             HDGFX_SET(DPLL_VCO_ENABLE, 1) | HDGFX_SET(DPLL_MODE, ILK_DPLL_MODE_LVDS) |
+             HDGFX_SET(DPLL_P2, Dpll->P2 == 7 ? 1 : 0) | HDGFX_SET(DPLL_P1_FP0, P1) | HDGFX_SET(DPLL_P1_FP1, P1) |
+             HDGFX_SET(DPLL_REFERENCE, Dpll->Reference));
+    IlkDelay(Mmio, ILK_DPLL_WARMUP_US);
+}
+
+static HDGFX_MODESET_STATUS
+IlkEnableLvds(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DISPLAY_STATE *Target)
+{
+    uint32_t Index = Target->Lvds.Transcoder;
+    const HDGFX_PIPE *Pipe = &Target->Pipes[Index];
+    const HDGFX_TRANSCODER *Transcoder = &Target->Transcoders[Index];
+    const HDGFX_PANEL_POWER *Power = &Target->PanelPower;
+    HDGFX_MODESET_STATUS Status;
+    uint32_t Value;
+    uint32_t Wm;
+
+    Value = IlkRead(Mmio, HDGFX_REG(FDI_RX_CTL, Index));
+    Value = HDGFX_REPLACE(Value, FDI_RX_WIDTH, IlkFdiWidthEncoding(Transcoder->FdiRx.Lanes));
+    Value = HDGFX_REPLACE(Value, FDI_RX_BPC, IlkBpcEncoding(Transcoder->FdiRx.Bpc));
+    Value = HDGFX_REPLACE(Value, FDI_RX_PLL_ENABLE, 1);
+    IlkWrite(Mmio, HDGFX_REG(FDI_RX_CTL, Index), Value);
+    IlkDelay(Mmio, ILK_FDI_RX_PLL_WARMUP_US + ILK_DMI_LATENCY_US);
+    IlkWrite(Mmio, HDGFX_REG(FDI_RX_CTL, Index), HDGFX_REPLACE(Value, FDI_RX_PCDCLK, 1));
+
+    if (Pipe->PanelFitter.Enabled)
+    {
+        IlkWrite(Mmio, HDGFX_REG(PF_CTL_1, Index), HDGFX_SET(PF_ENABLE, 1) | HDGFX_SET(PF_FILTER, ILK_PF_FILTER_MEDIUM));
+        IlkWrite(Mmio, HDGFX_REG(PF_WIN_POS, Index),
+                 HDGFX_SET(PF_X, Pipe->PanelFitter.X) | HDGFX_SET(PF_Y, Pipe->PanelFitter.Y));
+        IlkWrite(Mmio, HDGFX_REG(PF_WIN_SZ, Index),
+                 HDGFX_SET(PF_X, Pipe->PanelFitter.Width) | HDGFX_SET(PF_Y, Pipe->PanelFitter.Height));
+    }
+
+    IlkWriteTimings(Mmio,
+                    HDGFX_REG(PIPE_HTOTAL, Index), HDGFX_REG(PIPE_HBLANK, Index), HDGFX_REG(PIPE_HSYNC, Index),
+                    HDGFX_REG(PIPE_VTOTAL, Index), HDGFX_REG(PIPE_VBLANK, Index), HDGFX_REG(PIPE_VSYNC, Index),
+                    &Pipe->Timings);
+    IlkWrite(Mmio, HDGFX_REG(PIPE_SRC, Index),
+             HDGFX_SET(PIPE_SRC_WIDTH, Pipe->SourceWidth - 1) | HDGFX_SET(PIPE_SRC_HEIGHT, Pipe->SourceHeight - 1));
+    IlkWrite(Mmio, HDGFX_REG(PIPE_DATA_M1, Index),
+             HDGFX_SET(M_N_TU_SIZE, Pipe->Fdi.TuSize - 1) | HDGFX_SET(M_N_VALUE, Pipe->Fdi.DataM));
+    IlkWrite(Mmio, HDGFX_REG(PIPE_DATA_N1, Index), HDGFX_SET(M_N_VALUE, Pipe->Fdi.DataN));
+    IlkWrite(Mmio, HDGFX_REG(PIPE_LINK_M1, Index), HDGFX_SET(M_N_VALUE, Pipe->Fdi.LinkM));
+    IlkWrite(Mmio, HDGFX_REG(PIPE_LINK_N1, Index), HDGFX_SET(M_N_VALUE, Pipe->Fdi.LinkN));
+
+    IlkWrite(Mmio, HDGFX_REG(PIPE_CONF, Index),
+             HDGFX_SET(PIPE_CONF_ENABLE, 1) | HDGFX_SET(PIPE_CONF_BPC, IlkBpcEncoding(Pipe->Bpc)) |
+             HDGFX_SET(PIPE_CONF_DITHER, Pipe->Dither));
+
+    for (Wm = ILK_WM_LP_COUNT; Wm-- > 0;)
+        IlkClearBit(Mmio, HDGFX_REG(WM_LP, Wm), HDGFX_MASK(WM_LP_ENABLE));
+    IlkWrite(Mmio, HDGFX_REG(WM0_PIPE, Index), ILK_WM0_DEFAULT);
+    IlkWrite(Mmio, HDGFX_REG(DSP_CNTR, Index),
+             HDGFX_SET(DSP_ENABLE, 1) | HDGFX_SET(DSP_FORMAT, Pipe->Primary.Format) |
+             HDGFX_SET(DSP_TRICKLE_FEED_DISABLE, 1));
+    IlkWrite(Mmio, HDGFX_REG(DSP_STRIDE, Index), Pipe->Primary.Stride);
+    IlkWrite(Mmio, HDGFX_REG(DSP_LINOFF, Index), 0);
+    IlkWrite(Mmio, HDGFX_REG(DSP_TILEOFF, Index), 0);
+    IlkWrite(Mmio, HDGFX_REG(DSP_SURF, Index), Pipe->Primary.Surface);
+
+    Status = IlkTrainFdi(Mmio, Index, Pipe->FdiTx.Lanes);
+    if (Status != HdgfxModesetSuccess)
+        return Status;
+
+    IlkWrite(Mmio, HDGFX_REG(PCH_LVDS, 0), IlkLvdsControl(IlkRead(Mmio, HDGFX_REG(PCH_LVDS, 0)), Target));
+    IlkEnableDpll(Mmio, Transcoder->Dpll, &Target->Dplls[Transcoder->Dpll]);
+
+    IlkWriteTimings(Mmio,
+                    HDGFX_REG(TRANS_HTOTAL, Index), HDGFX_REG(TRANS_HBLANK, Index), HDGFX_REG(TRANS_HSYNC, Index),
+                    HDGFX_REG(TRANS_VTOTAL, Index), HDGFX_REG(TRANS_VBLANK, Index), HDGFX_REG(TRANS_VSYNC, Index),
+                    &Transcoder->Timings);
+    IlkWrite(Mmio, HDGFX_REG(TRANS_CONF, Index),
+             HDGFX_SET(TRANS_CONF_ENABLE, 1) | HDGFX_SET(TRANS_CONF_BPC, IlkBpcEncoding(Transcoder->FdiRx.Bpc)));
+    if (!IlkWaitFor(Mmio, HDGFX_REG(TRANS_CONF, Index), HDGFX_MASK(TRANS_CONF_STATE), HDGFX_MASK(TRANS_CONF_STATE),
+                    ILK_PIPE_TIMEOUT_US, ILK_POLL_US))
+    {
+        return HdgfxModesetTranscoderOnTimeout;
+    }
+
+    IlkWritePanelControl(Mmio, true, false);
+    if (!IlkWaitFor(Mmio, HDGFX_REG(PCH_PP_STATUS, 0),
+                    HDGFX_MASK(PP_STATUS_ON) | HDGFX_MASK(PP_STATUS_SEQUENCE), HDGFX_MASK(PP_STATUS_ON),
+                    2 * (Power->PowerCycleUs + Power->PowerUpUs + Power->BacklightOnUs) + ILK_PANEL_TIMEOUT_MARGIN_US,
+                    ILK_POLL_US))
+    {
+        return HdgfxModesetPanelOnTimeout;
+    }
+    if (Power->BacklightEnabled)
+        IlkWritePanelControl(Mmio, true, true);
+    return HdgfxModesetSuccess;
+}
+
+HDGFX_MODESET_STATUS
+HdgfxIlkCommitLvds(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DISPLAY_STATE *Target)
+{
+    HDGFX_MODESET_STATUS Status;
+
+    Status = IlkDisableLvds(Mmio, Target);
+    if (Status != HdgfxModesetSuccess)
+        return Status;
+    return IlkEnableLvds(Mmio, Target);
+}
+
+#define HDGFX_COMPARE(Field) \
+    do { if (Target->Field != Actual->Field) return #Field; } while (0)
+
+static const char *
+CompareTimings(
+    const HDGFX_TIMINGS *Target,
+    const HDGFX_TIMINGS *Actual)
+{
+    HDGFX_COMPARE(HActive);
+    HDGFX_COMPARE(HBlankStart);
+    HDGFX_COMPARE(HBlankEnd);
+    HDGFX_COMPARE(HSyncStart);
+    HDGFX_COMPARE(HSyncEnd);
+    HDGFX_COMPARE(HTotal);
+    HDGFX_COMPARE(VActive);
+    HDGFX_COMPARE(VBlankStart);
+    HDGFX_COMPARE(VBlankEnd);
+    HDGFX_COMPARE(VSyncStart);
+    HDGFX_COMPARE(VSyncEnd);
+    HDGFX_COMPARE(VTotal);
+    return NULL;
+}
+
+const char *
+HdgfxCompareLvdsState(
+    const HDGFX_DISPLAY_STATE *Target,
+    const HDGFX_DISPLAY_STATE *Actual)
+{
+    uint32_t Index = Target->Lvds.Transcoder;
+    uint32_t Dpll = Target->Transcoders[Index].Dpll;
+    const char *Mismatch;
+
+    HDGFX_COMPARE(Lvds.Enabled);
+    HDGFX_COMPARE(Lvds.Transcoder);
+    HDGFX_COMPARE(Lvds.HSyncActiveLow);
+    HDGFX_COMPARE(Lvds.VSyncActiveLow);
+    HDGFX_COMPARE(Lvds.DualChannel);
+    HDGFX_COMPARE(Lvds.Bpc);
+    HDGFX_COMPARE(PanelPower.On);
+    HDGFX_COMPARE(PanelPower.TargetOn);
+    HDGFX_COMPARE(PanelPower.BacklightEnabled);
+
+    HDGFX_COMPARE(Pipes[Index].Enabled);
+    HDGFX_COMPARE(Pipes[Index].Active);
+    HDGFX_COMPARE(Pipes[Index].Bpc);
+    HDGFX_COMPARE(Pipes[Index].Dither);
+    HDGFX_COMPARE(Pipes[Index].InterlaceMode);
+    Mismatch = CompareTimings(&Target->Pipes[Index].Timings, &Actual->Pipes[Index].Timings);
+    if (Mismatch)
+        return "Pipes[Index].Timings";
+    HDGFX_COMPARE(Pipes[Index].SourceWidth);
+    HDGFX_COMPARE(Pipes[Index].SourceHeight);
+    HDGFX_COMPARE(Pipes[Index].Fdi.TuSize);
+    HDGFX_COMPARE(Pipes[Index].Fdi.DataM);
+    HDGFX_COMPARE(Pipes[Index].Fdi.DataN);
+    HDGFX_COMPARE(Pipes[Index].Fdi.LinkM);
+    HDGFX_COMPARE(Pipes[Index].Fdi.LinkN);
+    HDGFX_COMPARE(Pipes[Index].FdiTx.Enabled);
+    HDGFX_COMPARE(Pipes[Index].FdiTx.Training);
+    HDGFX_COMPARE(Pipes[Index].FdiTx.Lanes);
+    HDGFX_COMPARE(Pipes[Index].PanelFitter.Enabled);
+    if (Target->Pipes[Index].PanelFitter.Enabled)
+    {
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.X);
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.Y);
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.Width);
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.Height);
+    }
+    HDGFX_COMPARE(Pipes[Index].Primary.Enabled);
+    HDGFX_COMPARE(Pipes[Index].Primary.XTiled);
+    HDGFX_COMPARE(Pipes[Index].Primary.Format);
+    HDGFX_COMPARE(Pipes[Index].Primary.Stride);
+    HDGFX_COMPARE(Pipes[Index].Primary.Surface);
+    HDGFX_COMPARE(Pipes[Index].Primary.LinearOffset);
+
+    HDGFX_COMPARE(Transcoders[Index].Enabled);
+    HDGFX_COMPARE(Transcoders[Index].Active);
+    HDGFX_COMPARE(Transcoders[Index].InterlaceMode);
+    Mismatch = CompareTimings(&Target->Transcoders[Index].Timings, &Actual->Transcoders[Index].Timings);
+    if (Mismatch)
+        return "Transcoders[Index].Timings";
+    HDGFX_COMPARE(Transcoders[Index].FdiRx.Enabled);
+    HDGFX_COMPARE(Transcoders[Index].FdiRx.PllEnabled);
+    HDGFX_COMPARE(Transcoders[Index].FdiRx.Training);
+    HDGFX_COMPARE(Transcoders[Index].FdiRx.Lanes);
+    HDGFX_COMPARE(Transcoders[Index].FdiRx.Bpc);
+
+    HDGFX_COMPARE(Dplls[Dpll].Enabled);
+    HDGFX_COMPARE(Dplls[Dpll].Mode);
+    HDGFX_COMPARE(Dplls[Dpll].Reference);
+    HDGFX_COMPARE(Dplls[Dpll].N);
+    HDGFX_COMPARE(Dplls[Dpll].M1);
+    HDGFX_COMPARE(Dplls[Dpll].M2);
+    HDGFX_COMPARE(Dplls[Dpll].P1);
+    HDGFX_COMPARE(Dplls[Dpll].P2);
+    return NULL;
+}
+
+const char *
+HdgfxModesetStatusName(
+    HDGFX_MODESET_STATUS Status)
+{
+    static const char *const Names[] =
+    {
+        "success",
+        "invalid mode",
+        "no usable clock",
+        "FDI bandwidth exceeded",
+        "panel power-off timeout",
+        "pipe-off timeout",
+        "transcoder-off timeout",
+        "FDI bit lock failed",
+        "FDI symbol lock failed",
+        "transcoder-on timeout",
+        "panel power-on timeout",
+    };
+
+    return (uint32_t)Status < sizeof(Names) / sizeof(Names[0]) ? Names[Status] : "unknown";
+}

@@ -15,6 +15,7 @@
 #define ILK_DPLLS 2
 #define ILK_DPLL_REFERENCE_KHZ 120000
 #define ILK_FDI_PLL_REFERENCE_KHZ 100000
+#define ILK_DREF_INTEGRATED 2
 
 static uint32_t
 IlkRead(
@@ -122,6 +123,11 @@ IlkReadPipe(
     Pipe->Fdi.DataN = HDGFX_GET(IlkRead(Mmio, HDGFX_REG(PIPE_DATA_N1, Index)), M_N_VALUE);
     Pipe->Fdi.LinkM = HDGFX_GET(IlkRead(Mmio, HDGFX_REG(PIPE_LINK_M1, Index)), M_N_VALUE);
     Pipe->Fdi.LinkN = HDGFX_GET(IlkRead(Mmio, HDGFX_REG(PIPE_LINK_N1, Index)), M_N_VALUE);
+
+    Value = IlkRead(Mmio, HDGFX_REG(FDI_TX_CTL, Index));
+    Pipe->FdiTx.Enabled = HDGFX_GET(Value, FDI_TX_ENABLE) != 0;
+    Pipe->FdiTx.Training = HDGFX_GET(Value, FDI_TX_TRAINING);
+    Pipe->FdiTx.Lanes = IlkFdiLanes(HDGFX_GET(Value, FDI_TX_WIDTH));
 
     Pipe->PanelFitter.Enabled = HDGFX_GET(IlkRead(Mmio, HDGFX_REG(PF_CTL_1, Index)), PF_ENABLE) != 0;
     Value = IlkRead(Mmio, HDGFX_REG(PF_WIN_POS, Index));
@@ -273,6 +279,7 @@ HdgfxIlkReadDisplayState(
     HDGFX_DISPLAY_STATE *State)
 {
     uint32_t Index;
+    uint32_t Value;
 
     memset(State, 0, sizeof(*State));
     State->PipeCount = ILK_PIPES;
@@ -281,6 +288,9 @@ HdgfxIlkReadDisplayState(
     State->RawClockKHz = HDGFX_GET(IlkRead(Mmio, HDGFX_REG(PCH_RAWCLK_FREQ, 0)), RAWCLK_MHZ) * 1000;
     State->FdiPllVcoKHz = (HDGFX_GET(IlkRead(Mmio, HDGFX_REG(FDI_PLL_BIOS_0, 0)), FDI_PLL_FB_DIVIDER) + 2) *
                           ILK_FDI_PLL_REFERENCE_KHZ;
+    Value = IlkRead(Mmio, HDGFX_REG(PCH_DREF_CONTROL, 0));
+    State->SscReference = HDGFX_GET(Value, DREF_SSC_SOURCE) == ILK_DREF_INTEGRATED;
+    State->NonSpreadReference = HDGFX_GET(Value, DREF_NONSPREAD_SOURCE) == ILK_DREF_INTEGRATED;
 
     for (Index = 0; Index < ILK_PIPES; Index++)
         IlkReadPipe(Mmio, Index, &State->Pipes[Index]);

@@ -13,6 +13,9 @@
     R(DEIMR,                0x44004, 0) \
     R(DEIIR,                0x44008, 0) \
     R(DEIER,                0x4400C, 0) \
+    R(WM0_PIPE,             0x45100, 4) \
+    R(WM_LP,                0x45108, 4) \
+    R(GTT_PTE,              0x200000, 4) \
     R(FDI_PLL_BIOS_0,       0x46000, 0) \
     R(BLC_PWM_CPU_CTL2,     0x48250, 0) \
     R(BLC_PWM_CPU_CTL,      0x48254, 0) \
@@ -27,9 +30,11 @@
     R(PIPE_DATA_N1,         0x60034, 0x1000) \
     R(PIPE_LINK_M1,         0x60040, 0x1000) \
     R(PIPE_LINK_N1,         0x60044, 0x1000) \
+    R(FDI_TX_CTL,           0x60100, 0x1000) \
     R(PF_WIN_POS,           0x68070, 0x800) \
     R(PF_WIN_SZ,            0x68074, 0x800) \
     R(PF_CTL_1,             0x68080, 0x800) \
+    R(PIPE_DSL,             0x70000, 0x1000) \
     R(PIPE_CONF,            0x70008, 0x1000) \
     R(DSP_CNTR,             0x70180, 0x1000) \
     R(DSP_LINOFF,           0x70184, 0x1000) \
@@ -61,7 +66,8 @@
     R(TRANS_VSYNC,          0xE0014, 0x1000) \
     R(PCH_LVDS,             0xE1180, 0) \
     R(TRANS_CONF,           0xF0008, 0x1000) \
-    R(FDI_RX_CTL,           0xF000C, 0x1000)
+    R(FDI_RX_CTL,           0xF000C, 0x1000) \
+    R(FDI_RX_ISR,           0xF0014, 0x1000)
 
 #define HDGFX_ILK_FIELDS(F) \
     F(DE_MASTER,                31, 31) \
@@ -78,11 +84,16 @@
     F(PIPE_CONF_INTERLACE,      23, 21) \
     F(PIPE_CONF_BPC,            7, 5) \
     F(PIPE_CONF_DITHER,         4, 4) \
+    F(PIPE_DSL_LINE,            12, 0) \
+    F(WM_LP_ENABLE,             31, 31) \
+    F(GTT_PTE_VALID,            0, 0) \
     F(PF_ENABLE,                31, 31) \
+    F(PF_FILTER,                24, 23) \
     F(PF_X,                     28, 16) \
     F(PF_Y,                     11, 0) \
     F(DSP_ENABLE,               31, 31) \
     F(DSP_FORMAT,               29, 26) \
+    F(DSP_TRICKLE_FEED_DISABLE, 14, 14) \
     F(DSP_TILED,                10, 10) \
     F(DSP_STRIDE,               15, 6) \
     F(DSP_SURFACE,              31, 12) \
@@ -93,6 +104,8 @@
     F(DPLL_P2,                  25, 24) \
     F(DPLL_P1_FP0,              23, 16) \
     F(DPLL_REFERENCE,           15, 13) \
+    F(DPLL_P1_FP1,              7, 0) \
+    F(FP_CB_TUNE,               24, 22) \
     F(FP_N,                     21, 16) \
     F(FP_M1,                    13, 8) \
     F(FP_M2,                    5, 0) \
@@ -102,6 +115,7 @@
     F(PP_STATUS_READY,          30, 30) \
     F(PP_STATUS_SEQUENCE,       29, 28) \
     F(PP_STATUS_CYCLE_ACTIVE,   27, 27) \
+    F(PP_CONTROL_KEY,           31, 16) \
     F(PP_CONTROL_BACKLIGHT,     2, 2) \
     F(PP_CONTROL_RESET,         1, 1) \
     F(PP_CONTROL_TARGET_ON,     0, 0) \
@@ -133,16 +147,29 @@
     F(TRANS_CONF_ENABLE,        31, 31) \
     F(TRANS_CONF_STATE,         30, 30) \
     F(TRANS_CONF_INTERLACE,     23, 21) \
+    F(TRANS_CONF_BPC,           7, 5) \
     F(FDI_RX_ENABLE,            31, 31) \
     F(FDI_RX_TRAINING,          29, 28) \
     F(FDI_RX_WIDTH,             21, 19) \
     F(FDI_RX_BPC,               18, 16) \
     F(FDI_RX_PLL_ENABLE,        13, 13) \
+    F(FDI_RX_PCDCLK,            4, 4) \
+    F(FDI_RX_SYMBOL_LOCK,       9, 9) \
+    F(FDI_RX_BIT_LOCK,          8, 8) \
+    F(FDI_TX_ENABLE,            31, 31) \
+    F(FDI_TX_TRAINING,          29, 28) \
+    F(FDI_TX_WIDTH,             21, 19) \
+    F(FDI_TX_ENHANCED_FRAMING,  18, 18) \
+    F(FDI_TX_PLL_ENABLE,        14, 14) \
+    F(DREF_SSC_SOURCE,          12, 11) \
+    F(DREF_NONSPREAD_SOURCE,    10, 9) \
     F(LVDS_ENABLE,              31, 31) \
     F(LVDS_TRANSCODER,          30, 30) \
     F(LVDS_VSYNC_INVERT,        21, 21) \
     F(LVDS_HSYNC_INVERT,        20, 20) \
+    F(LVDS_A_CONTROL,           9, 8) \
     F(LVDS_A3_CONTROL,          7, 6) \
+    F(LVDS_CLKB_CONTROL,        5, 4) \
     F(LVDS_B_CONTROL,           3, 2) \
     F(LVDS_DETECTED,            1, 1)
 
@@ -165,3 +192,9 @@ enum { HDGFX_ILK_FIELDS(HDGFX_DEFINE_FIELD) };
 
 #define HDGFX_SET(Name, Value) \
     (HDGFX_BITS(Value, HDGFX_FIELD_##Name##_HIGH - HDGFX_FIELD_##Name##_LOW, 0) << HDGFX_FIELD_##Name##_LOW)
+
+#define HDGFX_MASK(Name) \
+    HDGFX_SET(Name, 0xFFFFFFFFu)
+
+#define HDGFX_REPLACE(Value, Name, Field) \
+    (((uint32_t)(Value) & ~HDGFX_MASK(Name)) | HDGFX_SET(Name, Field))
