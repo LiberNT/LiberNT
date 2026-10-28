@@ -17,6 +17,7 @@ add_softgpu_engine(hdgfx_softgpu DEFINITIONS
     SOFTGPU_PLATFORM_PHYSICAL_ADDRESSING=1)
 
 add_library(hdgfx MODULE
+    core/hdgfx_blt.c
     core/hdgfx_device.c
     core/hdgfx_edid.c
     core/hdgfx_gmbus.c

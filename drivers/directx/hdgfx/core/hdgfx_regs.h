@@ -110,6 +110,15 @@
     F(RING_CTL_LENGTH,          20, 12) \
     F(RING_CTL_ENABLE,          0, 0) \
     F(MI_OPCODE,                28, 23) \
+    F(BLT_CLIENT,               31, 29) \
+    F(BLT_OPCODE,               28, 22) \
+    F(BLT_WRITE_ALPHA,          21, 21) \
+    F(BLT_WRITE_RGB,            20, 20) \
+    F(BLT_COLOR_DEPTH,          25, 24) \
+    F(BLT_ROP,                  23, 16) \
+    F(BLT_PITCH,                15, 0) \
+    F(BLT_Y,                    31, 16) \
+    F(BLT_X,                    15, 0) \
     F(MI_LENGTH,                7, 0) \
     F(MI_STORE_INDEX_OFFSET,    11, 2) \
     F(PF_ENABLE,                31, 31) \
