@@ -6,7 +6,7 @@ enable_testing()
 
 set(HDGFX_X201_OPREGION "" CACHE FILEPATH "X201 OpRegion dump (i915_opregion) for the VBT test")
 
-add_executable(hdgfx_x201_test x201_test.c ../hdgfx_device.c ../hdgfx_edid.c ../hdgfx_gmbus.c ../hdgfx_ilk.c ../hdgfx_ilk_modeset.c ../hdgfx_opregion.c ../hdgfx_vbt.c)
+add_executable(hdgfx_x201_test x201_test.c ../hdgfx_device.c ../hdgfx_edid.c ../hdgfx_gmbus.c ../hdgfx_ilk.c ../hdgfx_ilk_modeset.c ../hdgfx_opregion.c ../hdgfx_ring.c ../hdgfx_vbt.c)
 target_include_directories(hdgfx_x201_test PRIVATE ..)
 set_target_properties(hdgfx_x201_test PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES)
 if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
