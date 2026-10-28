@@ -1511,92 +1511,92 @@ IntLoadSystemFonts(VOID)
         NULL,
         NULL);
 
-    Status = ZwOpenFile(
-                 &hDirectory,
-                 SYNCHRONIZE | FILE_LIST_DIRECTORY,
-                 &ObjectAttributes,
-                 &Iosb,
-                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                 FILE_SYNCHRONOUS_IO_NONALERT | FILE_DIRECTORY_FILE);
-
-    if (NT_SUCCESS(Status))
+    for (i = 0; i < _countof(SearchPatterns); ++i)
     {
-        for (i = 0; i < _countof(SearchPatterns); ++i)
+        Status = ZwOpenFile(
+                     &hDirectory,
+                     SYNCHRONIZE | FILE_LIST_DIRECTORY,
+                     &ObjectAttributes,
+                     &Iosb,
+                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                     FILE_SYNCHRONOUS_IO_NONALERT | FILE_DIRECTORY_FILE);
+        if (!NT_SUCCESS(Status))
+            return;
+
+        bRestartScan = TRUE;
+        DirInfoBuffer = ExAllocatePoolWithTag(PagedPool, 0x4000, TAG_FONT);
+        if (DirInfoBuffer == NULL)
         {
-            DirInfoBuffer = ExAllocatePoolWithTag(PagedPool, 0x4000, TAG_FONT);
-            if (DirInfoBuffer == NULL)
+            ZwClose(hDirectory);
+            return;
+        }
+
+        FileName.Buffer = ExAllocatePoolWithTag(PagedPool, MAX_PATH * sizeof(WCHAR), TAG_FONT);
+        if (FileName.Buffer == NULL)
+        {
+            ExFreePoolWithTag(DirInfoBuffer, TAG_FONT);
+            ZwClose(hDirectory);
+            return;
+        }
+        FileName.Length = 0;
+        FileName.MaximumLength = MAX_PATH * sizeof(WCHAR);
+
+        while (1)
+        {
+            Status = ZwQueryDirectoryFile(
+                         hDirectory,
+                         NULL,
+                         NULL,
+                         NULL,
+                         &Iosb,
+                         DirInfoBuffer,
+                         0x4000,
+                         FileDirectoryInformation,
+                         FALSE,
+                         &SearchPatterns[i],
+                         bRestartScan);
+
+            if (!NT_SUCCESS(Status) || Status == STATUS_NO_MORE_FILES)
             {
-                ZwClose(hDirectory);
-                return;
+                break;
             }
 
-            FileName.Buffer = ExAllocatePoolWithTag(PagedPool, MAX_PATH * sizeof(WCHAR), TAG_FONT);
-            if (FileName.Buffer == NULL)
-            {
-                ExFreePoolWithTag(DirInfoBuffer, TAG_FONT);
-                ZwClose(hDirectory);
-                return;
-            }
-            FileName.Length = 0;
-            FileName.MaximumLength = MAX_PATH * sizeof(WCHAR);
-
+            DirInfo = (PFILE_DIRECTORY_INFORMATION)DirInfoBuffer;
             while (1)
             {
-                Status = ZwQueryDirectoryFile(
-                             hDirectory,
-                             NULL,
-                             NULL,
-                             NULL,
-                             &Iosb,
-                             DirInfoBuffer,
-                             0x4000,
-                             FileDirectoryInformation,
-                             FALSE,
-                             &SearchPatterns[i],
-                             bRestartScan);
+                SIZE_T ign;
 
-                if (!NT_SUCCESS(Status) || Status == STATUS_NO_MORE_FILES)
+                TempString.Buffer = DirInfo->FileName;
+                TempString.Length = TempString.MaximumLength = DirInfo->FileNameLength;
+
+                /* Should we ignore this file? */
+                for (ign = 0; ign < _countof(IgnoreFiles); ++ign)
                 {
-                    break;
-                }
-
-                DirInfo = (PFILE_DIRECTORY_INFORMATION)DirInfoBuffer;
-                while (1)
-                {
-                    SIZE_T ign;
-
-                    TempString.Buffer = DirInfo->FileName;
-                    TempString.Length = TempString.MaximumLength = DirInfo->FileNameLength;
-
-                    /* Should we ignore this file? */
-                    for (ign = 0; ign < _countof(IgnoreFiles); ++ign)
-                    {
-                        /* Yes.. */
-                        if (RtlEqualUnicodeString(IgnoreFiles + ign, &TempString, FALSE))
-                            break;
-                    }
-
-                    /* If we tried all Ignore patterns and there was no match, try to create a font */
-                    if (ign == _countof(IgnoreFiles))
-                    {
-                        RtlCopyUnicodeString(&FileName, &Directory);
-                        RtlAppendUnicodeStringToString(&FileName, &TempString);
-                        if (!IntGdiAddFontResourceEx(&FileName, 1, 0, AFRX_WRITE_REGISTRY))
-                            DPRINT1("ERR: Failed to load %wZ\n", &FileName);
-                    }
-
-                    if (DirInfo->NextEntryOffset == 0)
+                    /* Yes.. */
+                    if (RtlEqualUnicodeString(IgnoreFiles + ign, &TempString, FALSE))
                         break;
-
-                    DirInfo = (PFILE_DIRECTORY_INFORMATION)((ULONG_PTR)DirInfo + DirInfo->NextEntryOffset);
                 }
 
-                bRestartScan = FALSE;
+                /* If we tried all Ignore patterns and there was no match, try to create a font */
+                if (ign == _countof(IgnoreFiles))
+                {
+                    RtlCopyUnicodeString(&FileName, &Directory);
+                    RtlAppendUnicodeStringToString(&FileName, &TempString);
+                    if (!IntGdiAddFontResourceEx(&FileName, 1, 0, AFRX_WRITE_REGISTRY))
+                        DPRINT1("ERR: Failed to load %wZ\n", &FileName);
+                }
+
+                if (DirInfo->NextEntryOffset == 0)
+                    break;
+
+                DirInfo = (PFILE_DIRECTORY_INFORMATION)((ULONG_PTR)DirInfo + DirInfo->NextEntryOffset);
             }
 
-            ExFreePoolWithTag(FileName.Buffer, TAG_FONT);
-            ExFreePoolWithTag(DirInfoBuffer, TAG_FONT);
+            bRestartScan = FALSE;
         }
+
+        ExFreePoolWithTag(FileName.Buffer, TAG_FONT);
+        ExFreePoolWithTag(DirInfoBuffer, TAG_FONT);
         ZwClose(hDirectory);
     }
 }
