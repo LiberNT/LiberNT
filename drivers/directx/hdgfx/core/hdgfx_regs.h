@@ -10,6 +10,9 @@
 #include <stdint.h>
 
 #define HDGFX_ILK_REGISTERS(R) \
+    R(DEIMR,                0x44004, 0) \
+    R(DEIIR,                0x44008, 0) \
+    R(DEIER,                0x4400C, 0) \
     R(FDI_PLL_BIOS_0,       0x46000, 0) \
     R(BLC_PWM_CPU_CTL2,     0x48250, 0) \
     R(BLC_PWM_CPU_CTL,      0x48254, 0) \
@@ -61,6 +64,8 @@
     R(FDI_RX_CTL,           0xF000C, 0x1000)
 
 #define HDGFX_ILK_FIELDS(F) \
+    F(DE_MASTER,                31, 31) \
+    F(DE_GSE,                   18, 18) \
     F(TIMING_LOW,               12, 0) \
     F(TIMING_HIGH,              28, 16) \
     F(TIMING_ACTIVE,            11, 0) \
