@@ -33,6 +33,8 @@
 #define HDGFX_SCRATCH_GTT_INDEX     (HDGFX_RING_PAGES + 1)
 #define HDGFX_RENDER_GTT_PAGES      (HDGFX_RING_PAGES + 2)
 #define HDGFX_BLT_TEST_PITCH        128UL
+#define HDGFX_CURSOR_PAGES          (HDGFX_CURSOR_SIZE * HDGFX_CURSOR_SIZE * 4 / PAGE_SIZE)
+#define HDGFX_DISPLAY_PIPES         2UL
 #define HDGFX_BLT_TEST_WIDTH        (HDGFX_BLT_TEST_PITCH / 4)
 #define HDGFX_BLT_TEST_HEIGHT       16UL
 #define HDGFX_RING_SEQNO_INDEX      0x20UL
@@ -57,6 +59,18 @@ typedef struct _HDGFX_SCANOUT
     BOOLEAN CrtTimingValid;
     BOOLEAN CrtActive;
     BOOLEAN CrtDisplayOff;
+    ULONGLONG Bar0;
+    ULONG ApertureSize;
+    PULONG SlabGtt;
+    ULONG SlabGttPages;
+    ULONG SlabAddress;
+    ULONGLONG SlabPhysical;
+    ULONGLONG SlabSize;
+    PULONG Cursor;
+    ULONG CursorAddress;
+    ULONG CursorGeneration;
+    ULONG CursorControl;
+    ULONG CursorPosition;
     KMUTEX Lock;
 } HDGFX_SCANOUT, *PHDGFX_SCANOUT;
 
@@ -1303,6 +1317,10 @@ HdgfxUnlock(
     KeReleaseMutex(&Scanout->Lock, FALSE);
 }
 
+static VOID
+HdgfxCursorCommit(
+    _In_ PHDGFX_SCANOUT Scanout);
+
 static NTSTATUS
 HdgfxScanoutCommit(
     _In_ PHDGFX_SCANOUT Scanout,
@@ -1402,6 +1420,8 @@ HdgfxSetMode(
     HdgfxLock(Scanout);
     Status = HdgfxScanoutCommit(Scanout, &Scanout->PanelModes[Mode->PlatformMode], Mode->Width, Mode->Height,
                                 Mode->Pitch);
+    if (NT_SUCCESS(Status) && Scanout->SlabGtt != NULL)
+        HdgfxCursorCommit(Scanout);
     HdgfxUnlock(Scanout);
     return Status;
 }
@@ -1573,6 +1593,8 @@ HdgfxSetOutputs(
         Scanout->CrtActive = TRUE;
         Status = HdgfxCrtCommit(Scanout);
     }
+    if (NT_SUCCESS(Status) && Scanout->SlabGtt != NULL)
+        HdgfxCursorCommit(Scanout);
     HdgfxUnlock(Scanout);
     DPRINT1("Outputs: panel %s, CRT %s, source %lux%lu: 0x%08lx\n",
             Timings[0].Active ? "on" : "off", Timings[1].Active ? "on" : "off",
@@ -1823,6 +1845,7 @@ HdgfxScanoutStart(
     _Inout_ PHDGFX_SCANOUT Scanout,
     _Inout_ PSOFTGPU_PLATFORM_CONFIG Config)
 {
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Aperture;
     HDGFX_DISPLAY_STATE *State;
     PHYSICAL_ADDRESS Address;
     HDGFX_EDID Edid;
@@ -1853,6 +1876,14 @@ HdgfxScanoutStart(
     Bar2 &= ~0xFULL;
     if (!HdgfxResourceOwned(Interface, Bar0, HDGFX_MMIO_SIZE))
         return STATUS_NOT_SUPPORTED;
+    Aperture = HdgfxFindMemoryResource(Interface, Bar2, PAGE_SIZE);
+    if (Aperture != NULL && (ULONGLONG)Aperture->u.Memory.Start.QuadPart == Bar2 &&
+        HdgfxResourceOwned(Interface, Bar0 + HDGFX_REG(GTT_PTE, 0),
+                           Aperture->u.Memory.Length / PAGE_SIZE * sizeof(ULONG)))
+    {
+        Scanout->Bar0 = Bar0;
+        Scanout->ApertureSize = Aperture->u.Memory.Length;
+    }
     Address.QuadPart = (LONGLONG)Bar0;
     Scanout->Registers = MmMapIoSpace(Address, HDGFX_MMIO_SIZE, MmNonCached);
     if (Scanout->Registers == NULL)
@@ -2015,6 +2046,7 @@ SoftGpuPlatformQueryStart(
     if (NT_SUCCESS(Status))
     {
         Device->PlatformContext = Scanout;
+        Config->HighestFrameBufferAddress.QuadPart = MAXULONG;
         HdgfxCrtStart(Device, Scanout, Config);
     }
     else
@@ -2048,12 +2080,151 @@ SoftGpuPlatformDmaBufferSegmentSet(VOID)
     return 0;
 }
 
+static VOID
+HdgfxCursorCommit(
+    _In_ PHDGFX_SCANOUT Scanout)
+{
+    BOOLEAN Active[HDGFX_DISPLAY_PIPES];
+    ULONG Pipe;
+
+    Active[0] = Scanout->LvdsActive && !Scanout->DisplayOff;
+    Active[1] = Scanout->CrtActive && !Scanout->CrtDisplayOff;
+    for (Pipe = 0; Pipe < HDGFX_DISPLAY_PIPES; Pipe++)
+    {
+        if (!Active[Pipe])
+            continue;
+        WRITE_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(CUR_CNTR, Pipe)), Scanout->CursorControl);
+        WRITE_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(CUR_POS, Pipe)), Scanout->CursorPosition);
+        WRITE_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(CUR_BASE, Pipe)), Scanout->CursorAddress);
+    }
+}
+
+static VOID
+HdgfxPlaneCommit(
+    _In_ PHDGFX_SCANOUT Scanout)
+{
+    BOOLEAN Active[HDGFX_DISPLAY_PIPES];
+    ULONG Pipe;
+
+    Active[0] = Scanout->LvdsActive && !Scanout->DisplayOff;
+    Active[1] = Scanout->CrtActive && !Scanout->CrtDisplayOff;
+    for (Pipe = 0; Pipe < HDGFX_DISPLAY_PIPES; Pipe++)
+    {
+        if (!Active[Pipe])
+            continue;
+        WRITE_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(DSP_STRIDE, Pipe)), Scanout->Pitch);
+        WRITE_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(DSP_SURF, Pipe)), Scanout->Surface);
+    }
+}
+
+static VOID
+HdgfxDirectScanoutStop(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _Inout_ PHDGFX_SCANOUT Scanout)
+{
+    LARGE_INTEGER Frame;
+    ULONG Index;
+
+    Device->PlatformDirectScanout = FALSE;
+    Device->PlatformHardwarePointer = FALSE;
+    if (Scanout->SlabGtt == NULL)
+        return;
+
+    HdgfxLock(Scanout);
+    Scanout->Surface = 0;
+    Scanout->CursorControl = HdgfxIlkCursorControl(false);
+    HdgfxPlaneCommit(Scanout);
+    HdgfxCursorCommit(Scanout);
+    HdgfxUnlock(Scanout);
+    Frame.QuadPart = -50LL * 10000;
+    KeDelayExecutionThread(KernelMode, FALSE, &Frame);
+
+    for (Index = 0; Index < Scanout->SlabGttPages + HDGFX_CURSOR_PAGES; Index++)
+        WRITE_REGISTER_ULONG(&Scanout->SlabGtt[Index], 0);
+    READ_REGISTER_ULONG(&Scanout->SlabGtt[0]);
+    MmUnmapIoSpace(Scanout->SlabGtt, (Scanout->SlabGttPages + HDGFX_CURSOR_PAGES) * sizeof(ULONG));
+    Scanout->SlabGtt = NULL;
+    if (Scanout->Cursor != NULL)
+    {
+        MmFreeContiguousMemorySpecifyCache(Scanout->Cursor, HDGFX_CURSOR_PAGES * PAGE_SIZE, MmWriteCombined);
+        Scanout->Cursor = NULL;
+    }
+}
+
 NTSTATUS
 SoftGpuPlatformStartScanout(
     _Inout_ PSOFTGPU_DEVICE Device)
 {
-    UNREFERENCED_PARAMETER(Device);
-    return STATUS_NOT_SUPPORTED;
+    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+    PHYSICAL_ADDRESS Lowest;
+    PHYSICAL_ADDRESS Highest;
+    PHYSICAL_ADDRESS Boundary;
+    PHYSICAL_ADDRESS Address;
+    ULONGLONG Physical;
+    ULONG Pages;
+    ULONG First;
+    ULONG Index;
+
+    if (Scanout == NULL || Scanout->ApertureSize == 0 || Device->FrameBuffer == NULL ||
+        Device->FrameBufferSize % PAGE_SIZE != 0 ||
+        (ULONGLONG)Device->FrameBufferPhys.QuadPart + Device->FrameBufferSize - 1 > MAXULONG)
+    {
+        DPRINT1("Direct scan-out unavailable; copying frames to the firmware surface\n");
+        return STATUS_NOT_SUPPORTED;
+    }
+    Pages = (ULONG)(Device->FrameBufferSize / PAGE_SIZE);
+    if (Scanout->ApertureSize / PAGE_SIZE < HDGFX_RENDER_GTT_PAGES + HDGFX_CURSOR_PAGES + Pages ||
+        (Scanout->ApertureSize / PAGE_SIZE - HDGFX_RENDER_GTT_PAGES - HDGFX_CURSOR_PAGES - Pages) * PAGE_SIZE <
+            Device->ScanoutSize)
+    {
+        DPRINT1("Aperture of %lu MB cannot hold the %Iu-byte allocation slab\n",
+                Scanout->ApertureSize >> 20, Device->FrameBufferSize);
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    Lowest.QuadPart = 0;
+    Highest.QuadPart = MAXULONG;
+    Boundary.QuadPart = 0;
+    Scanout->Cursor = MmAllocateContiguousMemorySpecifyCache(HDGFX_CURSOR_PAGES * PAGE_SIZE, Lowest, Highest, Boundary,
+                                                             MmWriteCombined);
+    First = Scanout->ApertureSize / PAGE_SIZE - HDGFX_RENDER_GTT_PAGES - HDGFX_CURSOR_PAGES - Pages;
+    Address.QuadPart = (LONGLONG)(Scanout->Bar0 + HDGFX_REG(GTT_PTE, First));
+    Scanout->SlabGtt = Scanout->Cursor == NULL ? NULL :
+                       MmMapIoSpace(Address, (Pages + HDGFX_CURSOR_PAGES) * sizeof(ULONG), MmNonCached);
+    if (Scanout->SlabGtt == NULL)
+    {
+        if (Scanout->Cursor != NULL)
+            MmFreeContiguousMemorySpecifyCache(Scanout->Cursor, HDGFX_CURSOR_PAGES * PAGE_SIZE, MmWriteCombined);
+        Scanout->Cursor = NULL;
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    RtlZeroMemory(Scanout->Cursor, HDGFX_CURSOR_PAGES * PAGE_SIZE);
+
+    Scanout->SlabGttPages = Pages;
+    Scanout->SlabPhysical = (ULONGLONG)Device->FrameBufferPhys.QuadPart;
+    Scanout->SlabSize = Device->FrameBufferSize;
+    Scanout->SlabAddress = First * PAGE_SIZE;
+    Scanout->CursorAddress = (First + Pages) * PAGE_SIZE;
+    Scanout->CursorGeneration = 0;
+    Scanout->CursorControl = HdgfxIlkCursorControl(false);
+    Scanout->CursorPosition = 0;
+    for (Index = 0; Index < Pages; Index++)
+    {
+        Physical = Scanout->SlabPhysical + (ULONGLONG)Index * PAGE_SIZE;
+        WRITE_REGISTER_ULONG(&Scanout->SlabGtt[Index], HdgfxIlkGttEntry((ULONG)Physical));
+    }
+    for (Index = 0; Index < HDGFX_CURSOR_PAGES; Index++)
+    {
+        Physical = (ULONGLONG)MmGetPhysicalAddress((PUCHAR)Scanout->Cursor + Index * PAGE_SIZE).QuadPart;
+        WRITE_REGISTER_ULONG(&Scanout->SlabGtt[Pages + Index], HdgfxIlkGttEntry((ULONG)Physical));
+    }
+    READ_REGISTER_ULONG(&Scanout->SlabGtt[Pages + HDGFX_CURSOR_PAGES - 1]);
+
+    Device->PlatformDirectScanout = TRUE;
+    Device->PlatformHardwarePointer = TRUE;
+    DPRINT1("Direct scan-out: %Iu-byte slab at 0x%I64x mapped to 0x%lx, cursor at 0x%lx\n",
+            Device->FrameBufferSize, Scanout->SlabPhysical, Scanout->SlabAddress, Scanout->CursorAddress);
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS
@@ -2066,6 +2237,7 @@ SoftGpuPlatformStopScanout(
         return STATUS_SUCCESS;
 
     Scanout = Device->PlatformContext;
+    HdgfxDirectScanoutStop(Device, Scanout);
     Device->PlatformContext = NULL;
     HdgfxScanoutFree(Scanout);
     return STATUS_SUCCESS;
@@ -2080,13 +2252,30 @@ SoftGpuPlatformSetPrimary(
     _In_ ULONG Height,
     _In_ BOOLEAN Visible)
 {
-    UNREFERENCED_PARAMETER(Device);
-    UNREFERENCED_PARAMETER(PrimaryAddress);
-    UNREFERENCED_PARAMETER(Pitch);
-    UNREFERENCED_PARAMETER(Width);
-    UNREFERENCED_PARAMETER(Height);
+    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+    ULONGLONG Offset;
+
     UNREFERENCED_PARAMETER(Visible);
-    return STATUS_NOT_SUPPORTED;
+
+    if (Scanout == NULL || Scanout->SlabGtt == NULL)
+        return STATUS_NOT_SUPPORTED;
+    Offset = (ULONGLONG)PrimaryAddress.QuadPart - Scanout->SlabPhysical;
+    if ((ULONGLONG)PrimaryAddress.QuadPart < Scanout->SlabPhysical || Offset % PAGE_SIZE != 0 ||
+        Pitch == 0 || Pitch % HDGFX_STRIDE_ALIGNMENT != 0 || Height == 0 ||
+        Offset + (ULONGLONG)Pitch * Height > Scanout->SlabSize)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    HdgfxLock(Scanout);
+    Scanout->Surface = Scanout->SlabAddress + (ULONG)Offset;
+    if (Width == Scanout->Width && Height == Scanout->Height)
+    {
+        Scanout->Pitch = Pitch;
+        HdgfxPlaneCommit(Scanout);
+    }
+    HdgfxUnlock(Scanout);
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS
@@ -2103,8 +2292,27 @@ NTSTATUS
 SoftGpuPlatformUpdatePointer(
     _Inout_ PSOFTGPU_DEVICE Device)
 {
-    UNREFERENCED_PARAMETER(Device);
-    return STATUS_NOT_SUPPORTED;
+    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+    LONG X;
+    LONG Y;
+
+    if (Scanout == NULL || Scanout->Cursor == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    HdgfxLock(Scanout);
+    if (Device->PointerShapeValid && Scanout->CursorGeneration != Device->PointerShapeGeneration)
+    {
+        RtlCopyMemory(Scanout->Cursor, Device->PointerPixels, HDGFX_CURSOR_SIZE * HDGFX_CURSOR_SIZE * sizeof(ULONG));
+        KeMemoryBarrier();
+        Scanout->CursorGeneration = Device->PointerShapeGeneration;
+    }
+    X = Device->PointerX - (LONG)Device->PointerHotX;
+    Y = Device->PointerY - (LONG)Device->PointerHotY;
+    Scanout->CursorControl = HdgfxIlkCursorControl(Device->PointerVisible && Device->PointerShapeValid);
+    Scanout->CursorPosition = HdgfxIlkCursorPosition(X, Y);
+    HdgfxCursorCommit(Scanout);
+    HdgfxUnlock(Scanout);
+    return STATUS_SUCCESS;
 }
 
 VOID
@@ -2231,7 +2439,7 @@ SoftGpuPlatformQueryScanLine(
 MEMORY_CACHING_TYPE
 SoftGpuPlatformSegmentCacheType(VOID)
 {
-    return MmCached;
+    return MmWriteCombined;
 }
 
 NTSTATUS

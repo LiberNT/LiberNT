@@ -44,6 +44,9 @@
     R(PF_WIN_SZ,            0x68074, 0x800) \
     R(PF_CTL_1,             0x68080, 0x800) \
     R(PIPE_DSL,             0x70000, 0x1000) \
+    R(CUR_CNTR,             0x70080, 0x40) \
+    R(CUR_BASE,             0x70084, 0x40) \
+    R(CUR_POS,              0x70088, 0x40) \
     R(PIPE_CONF,            0x70008, 0x1000) \
     R(DSP_CNTR,             0x70180, 0x1000) \
     R(DSP_LINOFF,           0x70184, 0x1000) \
@@ -125,6 +128,12 @@
     F(PF_FILTER,                24, 23) \
     F(PF_X,                     28, 16) \
     F(PF_Y,                     11, 0) \
+    F(CUR_MODE_SELECT,          5, 5) \
+    F(CUR_MODE,                 2, 0) \
+    F(CUR_POS_Y_SIGN,           31, 31) \
+    F(CUR_POS_Y,                27, 16) \
+    F(CUR_POS_X_SIGN,           15, 15) \
+    F(CUR_POS_X,                11, 0) \
     F(DSP_ENABLE,               31, 31) \
     F(DSP_FORMAT,               29, 26) \
     F(DSP_TRICKLE_FEED_DISABLE, 14, 14) \

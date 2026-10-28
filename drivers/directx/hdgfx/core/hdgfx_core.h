@@ -21,6 +21,8 @@ extern "C" {
 #define HDGFX_EDID_SIZE 128
 #define HDGFX_EDID_MAX_DTDS 4
 #define HDGFX_DDC_ADDRESS 0x50
+#define HDGFX_CURSOR_SIZE 64
+#define HDGFX_CURSOR_POSITION_LIMIT 4095
 
 #define HDGFX_ASLE_LEVEL_MAX 255
 #define HDGFX_OPREGION_EVENT_HOTKEY 0x01
@@ -428,6 +430,15 @@ void
 HdgfxIlkEnableCrtHotplug(
     const HDGFX_MMIO *Mmio,
     bool Enable);
+
+uint32_t
+HdgfxIlkCursorControl(
+    bool Visible);
+
+uint32_t
+HdgfxIlkCursorPosition(
+    int32_t X,
+    int32_t Y);
 
 const char *
 HdgfxCompareCrtState(
