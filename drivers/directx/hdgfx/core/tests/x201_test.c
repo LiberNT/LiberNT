@@ -320,6 +320,7 @@ TestSyntheticVbt(void)
     size_t Offset = 22;
     size_t DataOffset;
 
+    CHECK_EQ(HdgfxFindGeneration(0x8086, 0x0046)->GseInterrupt, 1u << 18);
     memcpy(OpRegion, "IntelGraphicsMem", 16);
     OpRegion[0x10] = 8;
     OpRegion[0x58] = 0x08;
@@ -563,6 +564,106 @@ TestFirmwareVbt(
     free(OpRegion);
 }
 
+static uint32_t
+MemoryRead(
+    void *Context,
+    uint32_t Offset)
+{
+    uint32_t Value;
+
+    memcpy(&Value, (uint8_t *)Context + Offset, sizeof(Value));
+    return Value;
+}
+
+static void
+MemoryWrite(
+    void *Context,
+    uint32_t Offset,
+    uint32_t Value)
+{
+    memcpy((uint8_t *)Context + Offset, &Value, sizeof(Value));
+}
+
+static uint32_t AsleLevel;
+static bool AsleResult;
+
+static bool
+RecordBacklight(
+    void *Context,
+    uint32_t Level)
+{
+    (void)Context;
+    AsleLevel = Level;
+    return AsleResult;
+}
+
+static void
+TestOpRegionAsle(void)
+{
+    uint8_t *OpRegion = calloc(1, 0x2000);
+    HDGFX_MMIO Io = { MemoryRead, OpRegion, MemoryWrite, NULL };
+
+    CHECK_EQ(HdgfxFindGeneration(0x8086, 0x0046)->GseInterrupt, 1u << 18);
+    memcpy(OpRegion, "IntelGraphicsMem", 16);
+    MemoryWrite(OpRegion, 0x58, 0x1B);
+    CHECK_EQ(HdgfxOpRegionDriverReady(&Io, 0x400, 91), 0);
+    CHECK_EQ(MemoryRead(OpRegion, 0x100), 0);
+    CHECK_EQ(MemoryRead(OpRegion, 0x120), 0);
+
+    MemoryWrite(OpRegion, 0x58, 0x1F);
+    MemoryWrite(OpRegion, 0x124, 0x100);
+    MemoryWrite(OpRegion, 0x164, 0x100);
+    CHECK_EQ(HdgfxOpRegionDriverReady(&Io, 0x400, 91), 1);
+    CHECK_EQ(MemoryRead(OpRegion, 0x120), 0x400);
+    CHECK_EQ(MemoryRead(OpRegion, 0x124), 0);
+    CHECK_EQ(MemoryRead(OpRegion, 0x160), 0x400);
+    CHECK_EQ(MemoryRead(OpRegion, 0x164), 0);
+    CHECK_EQ(MemoryRead(OpRegion, 0x318), 0x8000005B);
+    CHECK_EQ(MemoryRead(OpRegion, 0x308), 0x2);
+    CHECK_EQ(MemoryRead(OpRegion, 0x300), 1);
+    CHECK_EQ(MemoryRead(OpRegion, 0x100), 1);
+
+    AsleResult = true;
+    CHECK_EQ(HdgfxOpRegionServiceAsle(&Io, RecordBacklight, NULL), 0);
+
+    AsleLevel = 0;
+    MemoryWrite(OpRegion, 0x310, 0x80000065);
+    MemoryWrite(OpRegion, 0x304, 0x0A);
+    CHECK_EQ(HdgfxOpRegionServiceAsle(&Io, RecordBacklight, NULL), 1);
+    CHECK_EQ(AsleLevel, 0x65);
+    CHECK_EQ(MemoryRead(OpRegion, 0x304), 1u << 16);
+    CHECK_EQ(MemoryRead(OpRegion, 0x318), 0x80000028);
+
+    AsleLevel = 0;
+    MemoryWrite(OpRegion, 0x310, 0xE8);
+    MemoryWrite(OpRegion, 0x304, 0x02);
+    CHECK_EQ(HdgfxOpRegionServiceAsle(&Io, RecordBacklight, NULL), 1);
+    CHECK_EQ(AsleLevel, 0);
+    CHECK_EQ(MemoryRead(OpRegion, 0x304), 1u << 12);
+    CHECK_EQ(MemoryRead(OpRegion, 0x318), 0x80000028);
+
+    MemoryWrite(OpRegion, 0x310, 0x80000100);
+    MemoryWrite(OpRegion, 0x304, 0x02);
+    CHECK_EQ(HdgfxOpRegionServiceAsle(&Io, RecordBacklight, NULL), 1);
+    CHECK_EQ(AsleLevel, 0);
+    CHECK_EQ(MemoryRead(OpRegion, 0x304), 1u << 12);
+
+    AsleResult = false;
+    MemoryWrite(OpRegion, 0x310, 0x800000FF);
+    MemoryWrite(OpRegion, 0x304, 0x02);
+    CHECK_EQ(HdgfxOpRegionServiceAsle(&Io, RecordBacklight, NULL), 1);
+    CHECK_EQ(AsleLevel, 0xFF);
+    CHECK_EQ(MemoryRead(OpRegion, 0x304), 1u << 12);
+    CHECK_EQ(MemoryRead(OpRegion, 0x318), 0x80000028);
+
+    HdgfxOpRegionSetBrightness(&Io, 100);
+    CHECK_EQ(MemoryRead(OpRegion, 0x318), 0x80000064);
+    HdgfxOpRegionDriverNotReady(&Io);
+    CHECK_EQ(MemoryRead(OpRegion, 0x100), 0);
+    CHECK_EQ(MemoryRead(OpRegion, 0x300), 0);
+    free(OpRegion);
+}
+
 int
 main(
     int argc,
@@ -576,6 +677,7 @@ main(
     TestNativeLvds(argv[1]);
     TestSyntheticVbt();
     TestGmbusEdid(argv[1]);
+    TestOpRegionAsle();
     if (argc > 2)
         TestFirmwareVbt(argv[2]);
     if (Failures)
