@@ -166,6 +166,10 @@ VOID APIENTRY
 RcddDisableSurface(
    IN DHPDEV dhpdev);
 
+VOID
+RcddRemapSurface(
+   IN PRCDD_PDEV ppdev);
+
 HBITMAP APIENTRY
 RcddCreateDeviceBitmapEx(
    IN DHPDEV dhpdev,

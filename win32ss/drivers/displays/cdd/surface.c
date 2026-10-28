@@ -25,6 +25,13 @@
 
 #include "cdd.h"
 
+#define RCDD_SURFACE_HOOKS (HOOK_BITBLT | HOOK_COPYBITS | HOOK_SYNCHRONIZE | \
+                            HOOK_TEXTOUT | HOOK_LINETO | HOOK_PAINT | HOOK_PLGBLT | \
+                            HOOK_STROKEPATH | \
+                            HOOK_FILLPATH | HOOK_STROKEANDFILLPATH | HOOK_STRETCHBLT | \
+                            HOOK_STRETCHBLTROP | HOOK_ALPHABLEND | HOOK_TRANSPARENTBLT | \
+                            HOOK_GRADIENTFILL)
+
 /*
  * RcddEnableSurface
  *
@@ -153,12 +160,7 @@ RcddEnableSurface(
     * seam is escape.c.
     */
    SurfaceBits = ppdev->ScreenPtr;
-   flHooks = HOOK_BITBLT | HOOK_COPYBITS | HOOK_SYNCHRONIZE |
-             HOOK_TEXTOUT | HOOK_LINETO | HOOK_PAINT | HOOK_PLGBLT |
-             HOOK_STROKEPATH |
-             HOOK_FILLPATH | HOOK_STROKEANDFILLPATH | HOOK_STRETCHBLT |
-             HOOK_STRETCHBLTROP | HOOK_ALPHABLEND | HOOK_TRANSPARENTBLT |
-             HOOK_GRADIENTFILL;
+   flHooks = RCDD_SURFACE_HOOKS;
 
    /*
     * Hand GDI a plain DIB over the draw buffer. No raster ops are implemented
@@ -234,4 +236,53 @@ RcddDisableSurface(
                          &VideoMemory, sizeof(VIDEO_MEMORY), NULL, 0, &ulTemp);
       ppdev->ScreenPtr = NULL;
    }
+}
+
+VOID
+RcddRemapSurface(
+   IN PRCDD_PDEV ppdev)
+{
+   VIDEO_MEMORY VideoMemory;
+   VIDEO_MEMORY_INFORMATION VideoMemoryInfo;
+   ULONGLONG RequiredBytes;
+   PVOID OldPtr = ppdev->ScreenPtr;
+   ULONG ulTemp;
+
+   if (ppdev->hSurfEng == NULL || OldPtr == NULL || ppdev->ScreenDelta == 0)
+      return;
+
+   RtlZeroMemory(&VideoMemoryInfo, sizeof(VideoMemoryInfo));
+   VideoMemory.RequestedVirtualAddress = NULL;
+   if (EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_MAP_VIDEO_MEMORY,
+                          &VideoMemory, sizeof(VIDEO_MEMORY),
+                          &VideoMemoryInfo, sizeof(VIDEO_MEMORY_INFORMATION),
+                          &ulTemp) ||
+       ulTemp < sizeof(VIDEO_MEMORY_INFORMATION) ||
+       VideoMemoryInfo.FrameBufferBase == NULL)
+   {
+      return;
+   }
+
+   RequiredBytes = (ULONGLONG)ppdev->ScreenDelta * ppdev->ScreenHeight;
+   if (VideoMemoryInfo.FrameBufferBase != OldPtr &&
+       RequiredBytes <= VideoMemoryInfo.FrameBufferLength)
+   {
+      RtlCopyMemory(VideoMemoryInfo.FrameBufferBase, OldPtr, (SIZE_T)RequiredBytes);
+   }
+   if (VideoMemoryInfo.FrameBufferBase == OldPtr ||
+       RequiredBytes > VideoMemoryInfo.FrameBufferLength ||
+       !EngModifySurface(ppdev->hSurfEng, ppdev->hDevEng, RCDD_SURFACE_HOOKS, 0,
+                         NULL, VideoMemoryInfo.FrameBufferBase,
+                         (LONG)ppdev->ScreenDelta, NULL))
+   {
+      VideoMemory.RequestedVirtualAddress = VideoMemoryInfo.FrameBufferBase;
+      EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_UNMAP_VIDEO_MEMORY,
+                         &VideoMemory, sizeof(VIDEO_MEMORY), NULL, 0, &ulTemp);
+      return;
+   }
+
+   ppdev->ScreenPtr = VideoMemoryInfo.FrameBufferBase;
+   VideoMemory.RequestedVirtualAddress = OldPtr;
+   EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_UNMAP_VIDEO_MEMORY,
+                      &VideoMemory, sizeof(VIDEO_MEMORY), NULL, 0, &ulTemp);
 }
