@@ -1223,7 +1223,11 @@ BOOL WINAPI SetFileSecurityW( LPCWSTR name, SECURITY_INFORMATION info, PSECURITY
 
     TRACE( "(%s, 0x%lx, %p)\n", debugstr_w(name), info, descr );
 
+#ifdef __REACTOS__
+    if (info & (OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION)) access |= WRITE_OWNER;
+#else
     if (info & (OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION)) access |= WRITE_OWNER;
+#endif
     if (info & SACL_SECURITY_INFORMATION) access |= ACCESS_SYSTEM_SECURITY;
     if (info & DACL_SECURITY_INFORMATION) access |= WRITE_DAC;
 
