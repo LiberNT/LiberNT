@@ -818,6 +818,144 @@ KdIoPrintf(
 extern const CSTRING KdbPromptStr;
 #endif
 
+#define KDP_FILE_IO_TIMEOUT_POLLS 100000
+
+static BOOLEAN KdpFileIoHostAbsent = FALSE;
+static ULONG KdpFileIoPacketId = INITIAL_PACKET_ID;
+static ULONG KdpFileIoApiNumber;
+
+static
+ULONG
+KdpFileIoChecksum(
+    _In_reads_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length)
+{
+    PUCHAR Byte = Buffer;
+    ULONG Checksum = 0;
+
+    while (Length-- > 0)
+        Checksum += *Byte++;
+
+    return Checksum;
+}
+
+static
+BOOLEAN
+KdpFileIoReceive(
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length)
+{
+    PUCHAR Byte = Buffer;
+    ULONG Polls;
+
+    while (Length-- > 0)
+    {
+        for (Polls = 0; !KdPortGetByteEx(&SerialPortInfo, Byte); Polls++)
+        {
+            if (Polls == KDP_FILE_IO_TIMEOUT_POLLS)
+                return FALSE;
+            KeStallExecutionProcessor(10);
+        }
+        Byte++;
+    }
+
+    return TRUE;
+}
+
+static
+VOID
+KdpSendFileIoPacket(
+    _In_ PSTRING MessageHeader,
+    _In_opt_ PSTRING MessageData)
+{
+    KD_PACKET Packet;
+    UCHAR Trailer = PACKET_TRAILING_BYTE;
+
+    if (!KdpDebugMode.Serial || KdpFileIoHostAbsent)
+        return;
+
+    KdpFileIoApiNumber = ((PDBGKD_FILE_IO)MessageHeader->Buffer)->ApiNumber;
+
+    Packet.PacketLeader = PACKET_LEADER;
+    Packet.PacketType = PACKET_TYPE_KD_FILE_IO;
+    Packet.ByteCount = MessageHeader->Length;
+    Packet.PacketId = ++KdpFileIoPacketId;
+    Packet.Checksum = KdpFileIoChecksum(MessageHeader->Buffer, MessageHeader->Length);
+    if (MessageData)
+    {
+        Packet.ByteCount += MessageData->Length;
+        Packet.Checksum += KdpFileIoChecksum(MessageData->Buffer, MessageData->Length);
+    }
+
+    KdPortPutBufferEx(&SerialPortInfo, (PCCH)&Packet, sizeof(Packet));
+    KdPortPutBufferEx(&SerialPortInfo, MessageHeader->Buffer, MessageHeader->Length);
+    if (MessageData)
+        KdPortPutBufferEx(&SerialPortInfo, MessageData->Buffer, MessageData->Length);
+    KdPortPutBufferEx(&SerialPortInfo, (PCCH)&Trailer, sizeof(Trailer));
+}
+
+static
+KDSTATUS
+KdpReceiveFileIoPacket(
+    _Out_ PSTRING MessageHeader,
+    _Out_ PSTRING MessageData,
+    _Out_ PULONG DataLength)
+{
+    KD_PACKET Packet;
+    ULONG Matched = 0, Checksum;
+    UCHAR Byte;
+
+    if (!KdpDebugMode.Serial || KdpFileIoHostAbsent)
+        return KdPacketTimedOut;
+
+    do
+    {
+        Matched = 0;
+        while (Matched < sizeof(Packet.PacketLeader))
+        {
+            if (!KdpFileIoReceive(&Byte, sizeof(Byte)))
+            {
+                if (KdpFileIoApiNumber != DbgKdCreateFileApi)
+                    return KdPacketNeedsResend;
+
+                KdpFileIoHostAbsent = TRUE;
+                return KdPacketTimedOut;
+            }
+            Matched = (Byte == PACKET_LEADER_BYTE) ? Matched + 1 : 0;
+        }
+
+        if (!KdpFileIoReceive(&Packet.PacketType,
+                              sizeof(Packet) - FIELD_OFFSET(KD_PACKET, PacketType)))
+        {
+            return KdPacketNeedsResend;
+        }
+    } while (Packet.PacketId != KdpFileIoPacketId);
+
+    if ((Packet.PacketType != PACKET_TYPE_KD_FILE_IO) ||
+        (Packet.ByteCount < MessageHeader->MaximumLength) ||
+        (Packet.ByteCount - MessageHeader->MaximumLength > MessageData->MaximumLength))
+    {
+        return KdPacketNeedsResend;
+    }
+
+    MessageHeader->Length = MessageHeader->MaximumLength;
+    MessageData->Length = Packet.ByteCount - MessageHeader->MaximumLength;
+    if (!KdpFileIoReceive(MessageHeader->Buffer, MessageHeader->Length) ||
+        !KdpFileIoReceive(MessageData->Buffer, MessageData->Length) ||
+        !KdpFileIoReceive(&Byte, sizeof(Byte)))
+    {
+        return KdPacketNeedsResend;
+    }
+
+    Checksum = KdpFileIoChecksum(MessageHeader->Buffer, MessageHeader->Length) +
+               KdpFileIoChecksum(MessageData->Buffer, MessageData->Length);
+    if ((Byte != PACKET_TRAILING_BYTE) || (Checksum != Packet.Checksum))
+        return KdPacketNeedsResend;
+
+    *DataLength = MessageData->Length;
+    return KdPacketReceived;
+}
+
 VOID
 NTAPI
 KdSendPacket(
@@ -893,6 +1031,12 @@ KdSendPacket(
         PDBGKD_MANIPULATE_STATE64 ManipulateState = (PDBGKD_MANIPULATE_STATE64)MessageHeader->Buffer;
         KdIoPrintf("%s: PACKET_TYPE_KD_STATE_MANIPULATE for ApiNumber %lu\n",
                    __FUNCTION__, ManipulateState->ApiNumber);
+        return;
+    }
+
+    if (PacketType == PACKET_TYPE_KD_FILE_IO)
+    {
+        KdpSendFileIoPacket(MessageHeader, MessageData);
         return;
     }
 
@@ -976,6 +1120,9 @@ KdReceivePacket(
         ManipulateState->u.Continue.ContinueStatus = DBG_EXCEPTION_NOT_HANDLED;
         return KdPacketReceived;
     }
+
+    if (PacketType == PACKET_TYPE_KD_FILE_IO)
+        return KdpReceiveFileIoPacket(MessageHeader, MessageData, DataLength);
 
     if (PacketType != PACKET_TYPE_KD_DEBUG_IO)
     {

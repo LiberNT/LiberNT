@@ -75,7 +75,8 @@ KdSendPacket(
 #undef KdSendPacket
 #define pKdSendPacket KdSendPacket
 {
-    if (PacketType == PACKET_TYPE_KD_DEBUG_IO)
+    if ((PacketType == PACKET_TYPE_KD_DEBUG_IO) ||
+        (PacketType == PACKET_TYPE_KD_FILE_IO))
     {
         /* Call KdTerm */
         pKdSendPacket(PacketType, MessageHeader, MessageData, Context);
@@ -163,7 +164,8 @@ KdReceivePacket(
         return pKdReceivePacket(PacketType, MessageHeader, MessageData, DataLength, Context);
     }
 
-    if (PacketType == PACKET_TYPE_KD_DEBUG_IO)
+    if ((PacketType == PACKET_TYPE_KD_DEBUG_IO) ||
+        (PacketType == PACKET_TYPE_KD_FILE_IO))
     {
         /* Call KdTerm */
         return pKdReceivePacket(PacketType,

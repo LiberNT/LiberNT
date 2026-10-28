@@ -451,7 +451,16 @@ NtSystemDebugControl(
                 }
                 else
                 {
-                    Status = STATUS_NOT_IMPLEMENTED;
+                    UNICODE_STRING FileName;
+
+                    Status = ProbeAndCaptureUnicodeString(&FileName,
+                                                          PreviousMode,
+                                                          (PUNICODE_STRING)InputBuffer);
+                    if (NT_SUCCESS(Status))
+                    {
+                        Status = KdPullRemoteFile(&FileName);
+                        ReleaseCapturedUnicodeString(&FileName, PreviousMode);
+                    }
                 }
                 break;
 

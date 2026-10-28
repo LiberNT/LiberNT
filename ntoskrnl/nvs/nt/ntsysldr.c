@@ -2155,6 +2155,11 @@ MmPrepareSystemImage(
     PAGED_CODE();
     RtlZeroMemory(PreparedImage, sizeof(*PreparedImage));
 
+    if ((KdDebuggerEnabled) && !(KdDebuggerNotPresent))
+    {
+        KdPullRemoteFile(FileName);
+    }
+
     InitializeObjectAttributes(&ObjectAttributes,
                                FileName,
                                OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
@@ -2375,10 +2380,6 @@ LoaderScan:
         KeReleaseMutant(&MmSystemLoadLock, MUTANT_INCREMENT, FALSE, FALSE);
         KeLeaveCriticalRegion();
         LockOwned = FALSE;
-
-        if ((KdDebuggerEnabled) && !(KdDebuggerNotPresent))
-        {
-        }
 
         LdrEntry = NULL;
 

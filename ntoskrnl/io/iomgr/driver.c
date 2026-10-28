@@ -1823,6 +1823,8 @@ IopPrepareSystemDriver(
     _Inout_ PVOID Context)
 {
     PIOP_SYSTEM_DRIVER_PREPARATION Preparation = Context;
+    UNICODE_STRING DriverName;
+    PDRIVER_OBJECT DriverObject;
     HANDLE ServiceHandle;
     NTSTATUS Status;
 
@@ -1831,6 +1833,20 @@ IopPrepareSystemDriver(
     if (NT_SUCCESS(Status))
     {
         Status = IopCheckSafeBootDriver(ServiceHandle);
+        if (NT_SUCCESS(Status))
+            Status = IopGetDriverNames(ServiceHandle, &DriverName, NULL);
+        if (NT_SUCCESS(Status))
+        {
+            if (NT_SUCCESS(ObReferenceObjectByName(&DriverName,
+                                                   OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
+                                                   NULL, 0, IoDriverObjectType, KernelMode,
+                                                   NULL, (PVOID *)&DriverObject)))
+            {
+                ObDereferenceObject(DriverObject);
+                Status = STATUS_IMAGE_ALREADY_LOADED;
+            }
+            RtlFreeUnicodeString(&DriverName);
+        }
         if (NT_SUCCESS(Status))
             Status = IopGetDriverImagePath(ServiceHandle, &Preparation->ImagePath);
         ZwClose(ServiceHandle);
