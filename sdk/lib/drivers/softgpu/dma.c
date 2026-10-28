@@ -1246,7 +1246,7 @@ SoftGpuVsyncTimerCallback(
 
     RtlZeroMemory(&NotifyData, sizeof(NotifyData));
     NotifyData.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
-    NotifyData.CrtcVsync.VidPnTargetId = 0;
+    NotifyData.CrtcVsync.VidPnTargetId = Device->VsyncTargetId;
     NotifyData.CrtcVsync.PhysicalAddress = Device->FrameBufferPhys;
     NotifyData.CrtcVsync.PhysicalAdapterMask = 0;
     Device->DxgkInterface.DxgkCbNotifyInterrupt(
