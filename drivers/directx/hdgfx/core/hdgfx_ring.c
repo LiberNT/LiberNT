@@ -13,6 +13,7 @@
 #define HDGFX_RING_ADDRESS_LIMIT    0x20000000u
 #define HDGFX_MI_NOOP               0x00u
 #define HDGFX_MI_USER_INTERRUPT     0x02u
+#define HDGFX_MI_FLUSH              0x04u
 #define HDGFX_MI_STORE_DATA_INDEX   0x21u
 #define HDGFX_HWS_FIRST_FREE        0x10u
 #define HDGFX_HWS_DWORDS            1024u
@@ -30,6 +31,14 @@ HdgfxMiCommand(
     uint32_t Length)
 {
     return HDGFX_SET(MI_OPCODE, Opcode) | HDGFX_SET(MI_LENGTH, Length);
+}
+
+uint32_t
+HdgfxMiFlush(
+    uint32_t *Dwords)
+{
+    Dwords[0] = HdgfxMiCommand(HDGFX_MI_FLUSH, 0);
+    return 1;
 }
 
 uint32_t
