@@ -699,7 +699,10 @@ typedef struct _FAKE_ILK
     bool FdiLocks;
     bool PanelStuck;
     unsigned Violations;
+    unsigned PipeEnables;
 } FAKE_ILK;
+
+#define FAKE_LINE_US 20
 
 static uint32_t *
 FakeSlot(
@@ -837,6 +840,26 @@ FakeUpdateStates(
 }
 
 static uint32_t
+FakeScanLine(
+    FAKE_ILK *Fake,
+    uint32_t Index)
+{
+    uint32_t VTotal = HDGFX_GET(FakeGet(Fake, HDGFX_REG(PIPE_VTOTAL, Index)), TIMING_HIGH) + 1;
+
+    if (!HDGFX_GET(FakeGet(Fake, HDGFX_REG(PIPE_CONF, Index)), PIPE_CONF_STATE))
+        return 0;
+    return (uint32_t)((Fake->NowUs / FAKE_LINE_US) % VTotal);
+}
+
+static bool
+FakePipeRunning(
+    FAKE_ILK *Fake,
+    uint32_t Index)
+{
+    return HDGFX_GET(FakeGet(Fake, HDGFX_REG(PIPE_CONF, Index)), PIPE_CONF_STATE) != 0;
+}
+
+static uint32_t
 FakeIlkRead(
     void *Context,
     uint32_t Offset)
@@ -847,6 +870,8 @@ FakeIlkRead(
     FakeUpdateStates(Fake);
     for (Index = 0; Index < 2; Index++)
     {
+        if (Offset == HDGFX_REG(PIPE_DSL, Index))
+            return FakeScanLine(Fake, Index);
         if (Offset == HDGFX_REG(FDI_RX_ISR, Index))
         {
             uint32_t Tx = FakeGet(Fake, HDGFX_REG(FDI_TX_CTL, Index));
@@ -885,9 +910,23 @@ FakeIlkWrite(
 
     for (Index = 0; Index < 2; Index++)
     {
+        if (FakePipeRunning(Fake, Index) &&
+            ((Offset >= HDGFX_REG(PIPE_HTOTAL, Index) && Offset < HDGFX_REG(PIPE_SRC, Index)) ||
+             (Offset >= HDGFX_REG(PIPE_DATA_M1, Index) && Offset <= HDGFX_REG(PIPE_LINK_N1, Index))))
+        {
+            FakeViolation(Fake, "timing register written on a running pipe");
+        }
+        if ((Offset == HDGFX_REG(PIPE_SRC, Index) || Offset == HDGFX_REG(DSP_STRIDE, Index)) &&
+            FakePipeRunning(Fake, Index) &&
+            FakeScanLine(Fake, Index) >= HDGFX_GET(FakeGet(Fake, HDGFX_REG(PIPE_VTOTAL, Index)), TIMING_ACTIVE) + 1)
+        {
+            FakeViolation(Fake, "live source update inside vertical blank");
+        }
         if (Offset == HDGFX_REG(PIPE_CONF, Index))
         {
             Value = HDGFX_REPLACE(Value, PIPE_CONF_STATE, HDGFX_GET(Old, PIPE_CONF_STATE));
+            if (!HDGFX_GET(Old, PIPE_CONF_ENABLE) && HDGFX_GET(Value, PIPE_CONF_ENABLE))
+                Fake->PipeEnables++;
             if (HDGFX_GET(Old, PIPE_CONF_ENABLE) != HDGFX_GET(Value, PIPE_CONF_ENABLE))
                 Fake->PipeReadyUs[Index] = Fake->NowUs + 16000;
             if (!HDGFX_GET(Value, PIPE_CONF_ENABLE) && HDGFX_GET(FakeGet(Fake, HDGFX_REG(DSP_CNTR, Index)), DSP_ENABLE))
@@ -985,7 +1024,7 @@ CommitAndCompare(
     Status = Generation->ComputeLvds(&Current, Mode, Target);
     if (Status != HdgfxModesetSuccess)
         return Status;
-    Status = Generation->CommitLvds(Mmio, Target);
+    Status = Generation->CommitLvds(Mmio, &Current, Target);
     if (Status != HdgfxModesetSuccess)
         return Status;
     Generation->ReadDisplayState(Mmio, &Actual);
@@ -1028,11 +1067,12 @@ TestLvdsModeset(
     uint8_t *EdidData;
     size_t Size;
     uint64_t Start;
+    unsigned Enables;
     unsigned Index;
 
     snprintf(Path, sizeof(Path), "%s/x201-lvds-1280x800/edid.bin", Directory);
     EdidData = LoadFile(Path, &Size);
-    if (!EdidData || Size != HDGFX_EDID_SIZE || !HdgfxEdidParse(EdidData, &Edid))
+    if (!EdidData || Size != HDGFX_EDID_SIZE || !HdgfxEdidParse(EdidData, &Edid) || Edid.DtdCount < 2)
     {
         fprintf(stderr, "%s: no usable EDID\n", Path);
         Failures++;
@@ -1098,6 +1138,7 @@ TestLvdsModeset(
 
     Mode.SourceHeight = 800;
     Mode.Scaling = HdgfxScalingAspect;
+    Enables = Fake->PipeEnables;
     for (Index = 0; Index < 100; Index++)
     {
         Mode.SourceWidth = Index & 1 ? 1280 : 1024;
@@ -1105,8 +1146,9 @@ TestLvdsModeset(
         Mode.Stride = Mode.SourceWidth * 4;
         Start = Fake->NowUs;
         CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
-        CHECK_EQ(Fake->NowUs - Start < 2000000, 1);
+        CHECK_EQ(Fake->NowUs - Start < 2 * 821 * FAKE_LINE_US, 1);
     }
+    CHECK_EQ(Fake->PipeEnables, Enables);
     CHECK_EQ(Fake->Violations, 0);
     for (Index = 0; Index < sizeof(Golden) / sizeof(Golden[0]); Index++)
     {
@@ -1149,10 +1191,44 @@ TestLvdsModeset(
     Current.SscReference = false;
     CHECK_EQ(HdgfxIlkComputeLvds(&Current, &Mode, &Target), HdgfxModesetNoClock);
 
+    Enables = Fake->PipeEnables;
+    Mode.Panel = &Edid.Dtds[1];
+    CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(Fake->PipeEnables, Enables + 1);
+    CHECK_EQ(Target.Dplls[0].N, 6);
+    CHECK_EQ(Target.Dplls[0].M1, 22);
+    CHECK_EQ(Target.Dplls[0].M2, 11);
+    CHECK_EQ(Target.Dplls[0].P1, 3);
+    CHECK_EQ(Target.Dplls[0].P2, 14);
+    CHECK_EQ(Target.Dplls[0].DotKHz, 57619);
+    CHECK_EQ(HdgfxRefreshMilliHz(&Target.Pipes[0].Timings, Target.Dplls[0].DotKHz), 50022);
+    CHECK_EQ(Target.Pipes[0].FdiTx.Lanes, 1);
+    Mode.SourceWidth = 1024;
+    Mode.SourceHeight = 768;
+    Mode.Stride = 1024 * 4;
+    CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_CTL_1, 0)), 0x80800000);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_WIN_SZ, 0)), (1066u << 16) | 800);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(DSP_STRIDE, 0)), 1024 * 4);
+    CHECK_EQ(Fake->PipeEnables, Enables + 1);
+    Mode.Panel = &Edid.Dtds[0];
+    CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(Fake->PipeEnables, Enables + 2);
+    Mode.SourceWidth = 1280;
+    Mode.SourceHeight = 800;
+    Mode.Stride = 1280 * 4;
+    CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_CTL_1, 0)), 0);
+    CHECK_EQ(FakeGet(Fake, HDGFX_REG(PF_WIN_SZ, 0)), 0);
+    CHECK_EQ(Fake->PipeEnables, Enables + 2);
+    CHECK_EQ(Fake->Violations, 0);
+
     Fake->FdiLocks = false;
+    Mode.Panel = &Edid.Dtds[1];
     CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetFdiBitLockFailed);
     Fake->FdiLocks = true;
     CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetSuccess);
+    Mode.Panel = &Edid.Dtds[0];
     Fake->PanelStuck = true;
     CHECK_EQ(CommitAndCompare(&Mmio, &Mode, &Target), HdgfxModesetPanelOffTimeout);
     CHECK_EQ(Fake->Violations, 0);
