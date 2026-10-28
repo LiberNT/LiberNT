@@ -33,6 +33,11 @@ typedef struct _HDGFX_SCANOUT
     HDGFX_DTD Panel;
     BOOLEAN Ssc;
     ULONG Surface;
+    ULONG Width;
+    ULONG Height;
+    ULONG Pitch;
+    BOOLEAN DisplayOff;
+    BOOLEAN PanelBacklight;
 } HDGFX_SCANOUT, *PHDGFX_SCANOUT;
 
 typedef struct _HDGFX_ADAPTER
@@ -903,12 +908,24 @@ HdgfxScanoutCommit(
 
     HdgfxMmioInit(Scanout->Registers, &Mmio);
     Scanout->Generation->ReadDisplayState(&Mmio, &States[0]);
+    if (!States[0].PanelPower.TargetOn)
+        States[0].PanelPower.BacklightEnabled = Scanout->PanelBacklight;
     Result = Scanout->Generation->ComputeLvds(&States[0], &Mode, &States[1]);
     if (Result != HdgfxModesetSuccess)
     {
         DPRINT1("LVDS %lux%lu pitch %lu: %s\n", Width, Height, Pitch, HdgfxModesetStatusName(Result));
         ExFreePoolWithTag(States, HDGFX_TAG);
         return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+    }
+
+    Scanout->Width = Width;
+    Scanout->Height = Height;
+    Scanout->Pitch = Pitch;
+    if (Scanout->DisplayOff)
+    {
+        DPRINT1("LVDS %lux%lu pitch %lu deferred until the display is on\n", Width, Height, Pitch);
+        ExFreePoolWithTag(States, HDGFX_TAG);
+        return STATUS_SUCCESS;
     }
 
     Start = KeQueryInterruptTime();
@@ -952,6 +969,56 @@ HdgfxSetMode(
     if (Scanout == NULL || Mode == NULL)
         return STATUS_INVALID_PARAMETER;
     return HdgfxScanoutCommit(Scanout, Mode->Width, Mode->Height, Mode->Pitch);
+}
+
+static NTSTATUS
+HdgfxScanoutDisplayOff(
+    _Inout_ PHDGFX_SCANOUT Scanout)
+{
+    HDGFX_DISPLAY_STATE *State;
+    HDGFX_MODESET_STATUS Result;
+    HDGFX_MMIO Mmio;
+    ULONGLONG Start;
+
+    State = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*State), HDGFX_TAG);
+    if (State == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    HdgfxMmioInit(Scanout->Registers, &Mmio);
+    Scanout->Generation->ReadDisplayState(&Mmio, State);
+    Scanout->PanelBacklight = State->PanelPower.BacklightEnabled;
+    Start = KeQueryInterruptTime();
+    Result = Scanout->Generation->DisableLvds(&Mmio, State);
+    Scanout->Generation->ReadDisplayState(&Mmio, State);
+    DPRINT1("Display off in %I64u ms: %s; panel %u, pipe %u, transcoder %u, DPLL %u, LVDS %u\n",
+            (KeQueryInterruptTime() - Start) / 10000, HdgfxModesetStatusName(Result),
+            State->PanelPower.On, State->Pipes[State->Lvds.Transcoder].Enabled,
+            State->Transcoders[State->Lvds.Transcoder].Enabled,
+            State->Dplls[State->Transcoders[State->Lvds.Transcoder].Dpll].Enabled, State->Lvds.Enabled);
+    ExFreePoolWithTag(State, HDGFX_TAG);
+    if (Result != HdgfxModesetSuccess)
+        return STATUS_DEVICE_HARDWARE_ERROR;
+
+    Scanout->DisplayOff = TRUE;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+SoftGpuPlatformSetMonitorPower(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ DEVICE_POWER_STATE DevicePowerState)
+{
+    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+
+    PAGED_CODE();
+
+    if (Scanout == NULL || (DevicePowerState != PowerDeviceD0) == Scanout->DisplayOff)
+        return STATUS_SUCCESS;
+    if (DevicePowerState != PowerDeviceD0)
+        return HdgfxScanoutDisplayOff(Scanout);
+
+    Scanout->DisplayOff = FALSE;
+    return HdgfxScanoutCommit(Scanout, Scanout->Width, Scanout->Height, Scanout->Pitch);
 }
 
 static VOID

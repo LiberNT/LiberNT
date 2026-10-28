@@ -3121,6 +3121,17 @@ SoftGpuDdiSetPowerState(
     if (DevicePowerState > PowerDeviceD3)
         return STATUS_INVALID_PARAMETER;
 
+#if defined(SOFTGPU_PLATFORM_MONITOR_POWER)
+    if (DeviceUid == SOFTGPU_CHILD_UID)
+    {
+        PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+
+        if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
+            return STATUS_INVALID_PARAMETER;
+        return SoftGpuPlatformSetMonitorPower(Device, DevicePowerState);
+    }
+#endif
+
     return STATUS_SUCCESS;
 }
 
