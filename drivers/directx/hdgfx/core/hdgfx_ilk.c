@@ -242,6 +242,12 @@ IlkReadPanel(
     Lvds->DualChannel = HDGFX_GET(Value, LVDS_B_CONTROL) == 3;
     Lvds->Bpc = HDGFX_GET(Value, LVDS_A3_CONTROL) == 3 ? 8 : 6;
 
+    Value = IlkRead(Mmio, HDGFX_REG(PCH_ADPA, 0));
+    State->Crt.Enabled = HDGFX_GET(Value, ADPA_ENABLE) != 0;
+    State->Crt.Transcoder = HDGFX_GET(Value, ADPA_TRANSCODER);
+    State->Crt.HSyncActiveHigh = HDGFX_GET(Value, ADPA_HSYNC_HIGH) != 0;
+    State->Crt.VSyncActiveHigh = HDGFX_GET(Value, ADPA_VSYNC_HIGH) != 0;
+
     Value = IlkRead(Mmio, HDGFX_REG(PCH_PP_STATUS, 0));
     Power->On = HDGFX_GET(Value, PP_STATUS_ON) != 0;
     Power->Ready = HDGFX_GET(Value, PP_STATUS_READY) != 0;
