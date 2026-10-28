@@ -10,6 +10,7 @@
 #include "precomp.h"
 
 #include <sddl.h>
+#include <aclapi.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -2125,6 +2126,38 @@ GetProfileListImagePath(
 }
 
 
+static
+VOID
+CreateLocalLowDirectory(
+    _In_ LPCWSTR lpProfileDir)
+{
+    WCHAR szPath[MAX_PATH];
+    PSECURITY_DESCRIPTOR pSecurityDescriptor = NULL;
+    PACL pSacl = NULL;
+    BOOL bPresent = FALSE, bDefaulted = FALSE;
+    DWORD dwError;
+
+    if (FAILED(StringCbCopyW(szPath, sizeof(szPath), lpProfileDir)) ||
+        FAILED(StringCbCatW(szPath, sizeof(szPath), L"\\AppData\\LocalLow")))
+        return;
+
+    if (!CreateDirectoryW(szPath, NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
+        return;
+
+    if (ConvertStringSecurityDescriptorToSecurityDescriptorW(L"S:(ML;OICI;NW;;;LW)", SDDL_REVISION_1,
+                                                             &pSecurityDescriptor, NULL))
+    {
+        if (GetSecurityDescriptorSacl(pSecurityDescriptor, &bPresent, &pSacl, &bDefaulted))
+        {
+            dwError = SetNamedSecurityInfoW(szPath, SE_FILE_OBJECT, LABEL_SECURITY_INFORMATION, NULL, NULL, NULL, pSacl);
+            if (dwError != ERROR_SUCCESS)
+                DPRINT1("SetNamedSecurityInfoW(%S) failed (Error %lu)\n", szPath, dwError);
+        }
+        LocalFree(pSecurityDescriptor);
+    }
+}
+
+
 BOOL
 WINAPI
 LoadUserProfileW(
@@ -2308,6 +2341,9 @@ LoadUserProfileW(
             DPRINT1("RegLoadKeyW() failed (Error %ld)\n", dwError);
             goto cleanup;
         }
+
+        if (GetProfileListImagePath(SidString.Buffer, szProfileListPath, ARRAYSIZE(szProfileListPath)))
+            CreateLocalLowDirectory(szProfileListPath);
 
         if (bNewProfile)
         {
