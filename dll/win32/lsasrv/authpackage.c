@@ -1317,7 +1317,8 @@ LsapAddTokenDefaultDacl(
 {
     PLSA_TOKEN_INFORMATION_V1 TokenInfo1;
     PACL Dacl = NULL;
-    ULONG Length;
+    PSID LogonSid = NULL;
+    ULONG Length, i;
 
     if (TokenInformationType == LsaTokenInformationV1)
     {
@@ -1326,10 +1327,23 @@ LsapAddTokenDefaultDacl(
         if (TokenInfo1->DefaultDacl.DefaultDacl != NULL)
             return STATUS_SUCCESS;
 
+        if (TokenInfo1->Groups != NULL)
+        {
+            for (i = 0; i < TokenInfo1->Groups->GroupCount; i++)
+            {
+                if ((TokenInfo1->Groups->Groups[i].Attributes & SE_GROUP_LOGON_ID) == SE_GROUP_LOGON_ID)
+                {
+                    LogonSid = TokenInfo1->Groups->Groups[i].Sid;
+                    break;
+                }
+            }
+        }
+
         Length = sizeof(ACL) +
-                 (2 * sizeof(ACCESS_ALLOWED_ACE)) +
+                 (3 * sizeof(ACCESS_ALLOWED_ACE)) +
                  RtlLengthSid(TokenInfo1->Owner.Owner) +
-                 RtlLengthSid(LsapLocalSystemSid);
+                 RtlLengthSid(LsapLocalSystemSid) +
+                 (LogonSid ? RtlLengthSid(LogonSid) : 0);
 
         Dacl = DispatchTable.AllocateLsaHeap(Length);
         if (Dacl == NULL)
@@ -1347,6 +1361,14 @@ LsapAddTokenDefaultDacl(
                                ACL_REVISION,
                                GENERIC_ALL,
                                LsapLocalSystemSid);
+
+        if (LogonSid != NULL)
+        {
+            RtlAddAccessAllowedAce(Dacl,
+                                   ACL_REVISION,
+                                   GENERIC_READ | GENERIC_EXECUTE,
+                                   LogonSid);
+        }
 
         TokenInfo1->DefaultDacl.DefaultDacl = Dacl;
     }
