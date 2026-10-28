@@ -18,6 +18,69 @@ static EFI_GUID FwFileSystemGuid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
 static EFI_GUID FwFileInfoGuid = EFI_FILE_INFO_ID;
 static EFI_GUID FwBlockIoGuid = EFI_BLOCK_IO_PROTOCOL_GUID;
 static EFI_GUID FwDevicePathGuid = EFI_DEVICE_PATH_PROTOCOL_GUID;
+static BOOLEAN FwChainScanTraceStarted;
+
+static
+BOOLEAN
+FwIsUsbDevicePath(
+    _In_ EFI_HANDLE Handle)
+{
+    EFI_DEVICE_PATH_PROTOCOL* Path;
+    EFI_DEVICE_PATH_PROTOCOL* Node;
+
+    if (EFI_ERROR(GlobalSystemTable->BootServices->HandleProtocol(Handle,
+                                                                  &FwDevicePathGuid,
+                                                                  (VOID**)&Path)))
+    {
+        return FALSE;
+    }
+
+    for (Node = Path; !IsDevicePathEnd(Node); Node = NextDevicePathNode(Node))
+    {
+        if (DevicePathType(Node) == MESSAGING_DEVICE_PATH &&
+            (DevicePathSubType(Node) == MSG_USB_DP ||
+             DevicePathSubType(Node) == MSG_USB_CLASS_DP ||
+             DevicePathSubType(Node) == MSG_USB_WWID_DP))
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static
+VOID
+FwTraceUsbHandles(VOID)
+{
+    EFI_HANDLE* Handles;
+    UINTN Count, i;
+    ULONG UsbCount = 0;
+
+    if (EFI_ERROR(GlobalSystemTable->BootServices->LocateHandleBuffer(AllHandles,
+                                                                      NULL,
+                                                                      NULL,
+                                                                      &Count,
+                                                                      &Handles)))
+    {
+        FwPrint(L"Chain scan: cannot enumerate firmware handles.\r\n");
+        return;
+    }
+
+    for (i = 0; i < Count; i++)
+    {
+        if (FwIsUsbDevicePath(Handles[i]))
+        {
+            UsbCount++;
+            FwPrint(L"Chain scan: USB device-path handle %p\r\n", Handles[i]);
+        }
+    }
+
+    FwPrint(L"Chain scan: firmware handles %llu, USB device-path handles %lu\r\n",
+            (ULONGLONG)Count,
+            UsbCount);
+    GlobalSystemTable->BootServices->FreePool(Handles);
+}
 
 PVOID
 FwAllocate(
@@ -464,23 +527,38 @@ FwScanFileVolumes(
     EFI_HANDLE* Handles;
     EFI_HANDLE Handle;
     UINTN HandleCount;
+    EFI_STATUS Status;
 
     *Device = NULL;
 
+    if (!FwChainScanTraceStarted)
+    {
+        FwChainScanTraceStarted = TRUE;
+        FwPrint(L"Chain scan: looking for %s\r\n", Path);
+        FwTraceUsbHandles();
+    }
+
     if (Scan->State == FwVolumeScanConnect && FwDisksConnected && !Scan->Handles)
+    {
+        FwPrint(L"Chain scan: controllers already connected; skipping Block I/O connect phase\r\n");
         Scan->State = FwVolumeScanVolumes;
+    }
 
     if (Scan->State == FwVolumeScanDone)
         return FALSE;
 
     if (!Scan->Handles)
     {
-        if (EFI_ERROR(BootServices->LocateHandleBuffer(ByProtocol,
-                                                       Scan->State == FwVolumeScanConnect ? &FwBlockIoGuid : &FwFileSystemGuid,
-                                                       NULL,
-                                                       &HandleCount,
-                                                       &Handles)))
+        Status = BootServices->LocateHandleBuffer(ByProtocol,
+                                                  Scan->State == FwVolumeScanConnect ? &FwBlockIoGuid : &FwFileSystemGuid,
+                                                  NULL,
+                                                  &HandleCount,
+                                                  &Handles);
+        if (EFI_ERROR(Status))
         {
+            FwPrint(L"Chain scan: locate %s failed, status %llx\r\n",
+                    Scan->State == FwVolumeScanConnect ? L"Block I/O" : L"Simple File System",
+                    (ULONGLONG)Status);
             Scan->State = (Scan->State == FwVolumeScanConnect) ? FwVolumeScanVolumes : FwVolumeScanDone;
             return Scan->State != FwVolumeScanDone;
         }
@@ -488,6 +566,9 @@ FwScanFileVolumes(
         Scan->Handles = Handles;
         Scan->HandleCount = (ULONG)HandleCount;
         Scan->Index = 0;
+        FwPrint(L"Chain scan: found %llu %s handles\r\n",
+                (ULONGLONG)HandleCount,
+                Scan->State == FwVolumeScanConnect ? L"Block I/O" : L"Simple File System");
         return TRUE;
     }
 
@@ -498,18 +579,43 @@ FwScanFileVolumes(
         if (Scan->State == FwVolumeScanConnect)
         {
             if (!FwDisksConnected)
-                BootServices->ConnectController(Handle, NULL, NULL, TRUE);
-        }
-        else if (!EFI_ERROR(BootServices->HandleProtocol(Handle, &FwFileSystemGuid, (VOID**)&FileSystem)) &&
-                 !EFI_ERROR(FileSystem->OpenVolume(FileSystem, &Root)))
-        {
-            if (!EFI_ERROR(Root->Open(Root, &File, (CHAR16*)Path, EFI_FILE_MODE_READ, 0)))
             {
-                File->Close(File);
-                *Device = Handle;
+                Status = BootServices->ConnectController(Handle, NULL, NULL, TRUE);
+                FwPrint(L"Chain scan: connect Block I/O %lu/%lu handle %p %s status %llx\r\n",
+                        Scan->Index,
+                        Scan->HandleCount,
+                        Handle,
+                        FwIsUsbDevicePath(Handle) ? L"USB" : L"other",
+                        (ULONGLONG)Status);
             }
+        }
+        else
+        {
+            Status = BootServices->HandleProtocol(Handle, &FwFileSystemGuid, (VOID**)&FileSystem);
+            FwPrint(L"Chain scan: Simple File System %lu/%lu handle %p %s status %llx\r\n",
+                    Scan->Index,
+                    Scan->HandleCount,
+                    Handle,
+                    FwIsUsbDevicePath(Handle) ? L"USB" : L"other",
+                    (ULONGLONG)Status);
+            if (!EFI_ERROR(Status))
+            {
+                Status = FileSystem->OpenVolume(FileSystem, &Root);
+                FwPrint(L"Chain scan: open volume status %llx\r\n", (ULONGLONG)Status);
+                if (!EFI_ERROR(Status))
+                {
+                    Status = Root->Open(Root, &File, (CHAR16*)Path, EFI_FILE_MODE_READ, 0);
+                    FwPrint(L"Chain scan: open requested file status %llx\r\n", (ULONGLONG)Status);
+                    if (!EFI_ERROR(Status))
+                    {
+                        File->Close(File);
+                        *Device = Handle;
+                        FwPrint(L"Chain scan: found chainload file on handle %p\r\n", Handle);
+                    }
 
-            Root->Close(Root);
+                    Root->Close(Root);
+                }
+            }
         }
 
         return TRUE;
