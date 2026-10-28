@@ -17,6 +17,9 @@
 #define HDGFX_MI_STORE_DATA_INDEX   0x21u
 #define HDGFX_HWS_FIRST_FREE        0x10u
 #define HDGFX_HWS_DWORDS            1024u
+#define HDGFX_GDSR_RENDER           1u
+#define HDGFX_GDSR_TIMEOUT_US       5000u
+#define HDGFX_GDSR_POLL_US          10u
 
 uint32_t
 HdgfxIlkGttEntry(
@@ -102,6 +105,14 @@ HdgfxRingSpace(
     return Head > Ring->Tail ? Head - Ring->Tail - 8 : Ring->Size - (Ring->Tail - Head) - 8;
 }
 
+uint32_t
+HdgfxRingFree(
+    const HDGFX_RING *Ring,
+    uint32_t Head)
+{
+    return HdgfxRingSpace(Ring, Head);
+}
+
 bool
 HdgfxRingEmit(
     HDGFX_RING *Ring,
@@ -155,4 +166,24 @@ HdgfxIlkAdvanceRing(
     const HDGFX_RING *Ring)
 {
     Mmio->Write(Mmio->Context, HDGFX_REG(RING_TAIL, 0), HDGFX_SET(RING_TAIL_OFFSET, Ring->Tail / 8));
+}
+
+bool
+HdgfxIlkResetRender(
+    const HDGFX_MMIO *Mmio)
+{
+    uint32_t Waited = 0;
+    bool Done;
+
+    Mmio->Write(Mmio->Context, HDGFX_REG(GDSR, 0),
+                HDGFX_SET(GDSR_DOMAIN, HDGFX_GDSR_RENDER) | HDGFX_SET(GDSR_RESET, 1));
+    while (!(Done = !HDGFX_GET(Mmio->Read(Mmio->Context, HDGFX_REG(GDSR, 0)), GDSR_RESET)) &&
+           Waited < HDGFX_GDSR_TIMEOUT_US)
+    {
+        Mmio->Stall(Mmio->Context, HDGFX_GDSR_POLL_US);
+        Waited += HDGFX_GDSR_POLL_US;
+    }
+    Mmio->Write(Mmio->Context, HDGFX_REG(GDSR, 0), 0);
+    Mmio->Read(Mmio->Context, HDGFX_REG(GDSR, 0));
+    return Done;
 }

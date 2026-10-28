@@ -550,6 +550,15 @@ HdgfxRingEmit(
     const uint32_t *Dwords,
     uint32_t Count);
 
+uint32_t
+HdgfxRingFree(
+    const HDGFX_RING *Ring,
+    uint32_t Head);
+
+bool
+HdgfxIlkResetRender(
+    const HDGFX_MMIO *Mmio);
+
 bool
 HdgfxRingEmitBreadcrumb(
     HDGFX_RING *Ring,
