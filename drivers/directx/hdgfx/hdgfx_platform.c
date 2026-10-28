@@ -25,6 +25,8 @@
 #define HDGFX_STRIDE_ALIGNMENT      64UL
 #define HDGFX_VBLANK_POLL_US        20UL
 #define HDGFX_VBLANK_TIMEOUT_US     50000UL
+#define HDGFX_CRT_CHILD_UID         1UL
+#define HDGFX_CRT_PIPE              1UL
 
 typedef struct _HDGFX_SCANOUT
 {
@@ -40,10 +42,17 @@ typedef struct _HDGFX_SCANOUT
     ULONG Pitch;
     BOOLEAN DisplayOff;
     BOOLEAN PanelBacklight;
+    BOOLEAN LvdsActive;
+    HDGFX_DTD CrtTiming;
+    BOOLEAN CrtTimingValid;
+    BOOLEAN CrtActive;
+    BOOLEAN CrtDisplayOff;
+    KMUTEX Lock;
 } HDGFX_SCANOUT, *PHDGFX_SCANOUT;
 
 typedef struct _HDGFX_ADAPTER
 {
+    PSOFTGPU_DEVICE Device;
     PUCHAR Registers;
     const HDGFX_GENERATION *Generation;
     HDGFX_VBT Vbt;
@@ -54,7 +63,14 @@ typedef struct _HDGFX_ADAPTER
     PUCHAR OpRegion;
     ULONG SavedDeimr;
     ULONG SavedDeier;
+    ULONG SavedSdeimr;
+    ULONG SavedSdeier;
+    ULONG InterruptMask;
+    BOOLEAN HotplugInterrupt;
     volatile LONG AslePending;
+    volatile LONG HotplugPending;
+    volatile LONG HotplugQueued;
+    WORK_QUEUE_ITEM HotplugWork;
     ULONG BacklightMaximum;
     ULONG BacklightMinimum;
     EX_RUNDOWN_REF Rundown;
@@ -495,29 +511,70 @@ HdgfxAsleSetBacklight(
 
 static BOOLEAN
 NTAPI
-HdgfxAsleDisconnect(
+HdgfxInterruptDisconnect(
     _In_opt_ PVOID Context)
 {
     ((PHDGFX_ADAPTER)Context)->AsleInterrupt = FALSE;
+    ((PHDGFX_ADAPTER)Context)->HotplugInterrupt = FALSE;
     return TRUE;
 }
 
 static VOID
-HdgfxStartAsle(
+HdgfxWriteRegister32(
+    _In_ PHDGFX_ADAPTER Adapter,
+    _In_ ULONG Offset,
+    _In_ ULONG Value)
+{
+    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + Offset), Value);
+}
+
+static ULONG
+HdgfxReadRegister32(
+    _In_ PHDGFX_ADAPTER Adapter,
+    _In_ ULONG Offset)
+{
+    return READ_REGISTER_ULONG((PULONG)(Adapter->Registers + Offset));
+}
+
+static VOID
+HdgfxStartInterrupts(
+    _In_ PSOFTGPU_DEVICE Device,
     _In_ PHDGFX_ADAPTER Adapter)
 {
-    ULONG Gse = Adapter->Generation->GseInterrupt;
+    const HDGFX_GENERATION *Generation = Adapter->Generation;
+    BOOLEAN Asle = Adapter->OpRegion != NULL && Adapter->InternalPanel && Adapter->BacklightMaximum != 0;
+    BOOLEAN Hotplug = Generation->CrtHotplugInterrupt != 0 && Device->ExtraOutputCount != 0;
+    ULONG Crt = Generation->CrtHotplugInterrupt;
+    HDGFX_MMIO Mmio;
     HDGFX_MMIO Io;
+    ULONG Mask;
 
-    if (Adapter->OpRegion == NULL || !Adapter->InternalPanel || Adapter->BacklightMaximum == 0)
+    Mask = (Asle ? Generation->GseInterrupt : 0) | (Hotplug ? Generation->PchInterrupt : 0);
+    if (Mask == 0)
         return;
 
-    Adapter->SavedDeimr = READ_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIMR, 0)));
-    Adapter->SavedDeier = READ_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIER, 0)));
-    Adapter->AsleInterrupt = TRUE;
-    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIIR, 0)), Gse);
-    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIMR, 0)), ~Gse);
-    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIER, 0)), HDGFX_SET(DE_MASTER, 1) | Gse);
+    Adapter->SavedDeimr = HdgfxReadRegister32(Adapter, HDGFX_REG(DEIMR, 0));
+    Adapter->SavedDeier = HdgfxReadRegister32(Adapter, HDGFX_REG(DEIER, 0));
+    Adapter->InterruptMask = Mask;
+    Adapter->AsleInterrupt = Asle;
+    if (Hotplug)
+    {
+        HdgfxMmioInit(Adapter->Registers, &Mmio);
+        Adapter->SavedSdeimr = HdgfxReadRegister32(Adapter, HDGFX_REG(SDEIMR, 0));
+        Adapter->SavedSdeier = HdgfxReadRegister32(Adapter, HDGFX_REG(SDEIER, 0));
+        Adapter->HotplugInterrupt = TRUE;
+        Generation->EnableCrtHotplug(&Mmio, true);
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(SDEIIR, 0), Crt);
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(SDEIMR, 0), ~Crt);
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(SDEIER, 0), Crt);
+        DPRINT1("CRT hot plug interrupt enabled, SDEIMR 0x%08lx SDEIER 0x%08lx before\n",
+                Adapter->SavedSdeimr, Adapter->SavedSdeier);
+    }
+    HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIIR, 0), Mask);
+    HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIMR, 0), ~Mask);
+    HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIER, 0), HDGFX_SET(DE_MASTER, 1) | Mask);
+    if (!Asle)
+        return;
 
     HdgfxOpRegionIo(Adapter, &Io);
     Adapter->AsleReady = HdgfxOpRegionDriverReady(&Io, HDGFX_ACPI_ID_INTERNAL_PANEL, HdgfxBacklightRead(Adapter));
@@ -527,7 +584,7 @@ HdgfxStartAsle(
 }
 
 static VOID
-HdgfxStopAsle(
+HdgfxStopInterrupts(
     _In_ PSOFTGPU_DEVICE Device,
     _Inout_ PHDGFX_ADAPTER Adapter)
 {
@@ -540,43 +597,60 @@ HdgfxStopAsle(
         HdgfxOpRegionDriverNotReady(&Io);
         Adapter->AsleReady = FALSE;
     }
-    if (!Adapter->AsleInterrupt)
+    if (Adapter->InterruptMask == 0)
         return;
 
-    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIER, 0)), Adapter->SavedDeier);
-    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIMR, 0)), Adapter->SavedDeimr);
-    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIIR, 0)), Adapter->Generation->GseInterrupt);
+    HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIER, 0), Adapter->SavedDeier);
+    HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIMR, 0), Adapter->SavedDeimr);
+    HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIIR, 0), Adapter->InterruptMask);
+    if (Adapter->HotplugInterrupt)
+    {
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(SDEIER, 0), Adapter->SavedSdeier);
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(SDEIMR, 0), Adapter->SavedSdeimr);
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(SDEIIR, 0), Adapter->Generation->CrtHotplugInterrupt);
+    }
+    Adapter->InterruptMask = 0;
     if (Device->DxgkInterface.DxgkCbSynchronizeExecution == NULL ||
         !NT_SUCCESS(Device->DxgkInterface.DxgkCbSynchronizeExecution(Device->DxgkInterface.DeviceHandle,
-                                                                     HdgfxAsleDisconnect,
+                                                                     HdgfxInterruptDisconnect,
                                                                      Adapter,
                                                                      0,
                                                                      &Ignored)))
     {
         Adapter->AsleInterrupt = FALSE;
+        Adapter->HotplugInterrupt = FALSE;
     }
 }
 
 static VOID
-HdgfxDetectCrt(
-    _In_ const HDGFX_GENERATION *Generation,
-    _In_ const HDGFX_MMIO *Mmio)
-{
-    UCHAR Edid[HDGFX_EDID_SIZE];
-    HDGFX_MODESET_STATUS Status;
-    HDGFX_EDID Parsed;
-    BOOLEAN EdidFound;
-    bool Attached;
+HdgfxCrtRefresh(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ BOOLEAN Indicate);
 
-    Status = Generation->DetectCrt(Mmio, &Attached);
-    if (Status != HdgfxModesetSuccess)
+static VOID
+NTAPI
+HdgfxHotplugWorker(
+    _In_ PVOID Context)
+{
+    PHDGFX_ADAPTER Adapter = Context;
+
+    InterlockedExchange(&Adapter->HotplugQueued, 0);
+    HdgfxCrtRefresh(Adapter->Device, TRUE);
+    ExReleaseRundownProtection(&Adapter->Rundown);
+}
+
+static VOID
+HdgfxQueueHotplug(
+    _In_ PHDGFX_ADAPTER Adapter)
+{
+    if (InterlockedCompareExchange(&Adapter->HotplugQueued, 1, 0) != 0)
+        return;
+    if (!ExAcquireRundownProtection(&Adapter->Rundown))
     {
-        DPRINT1("CRT load detection: %s\n", HdgfxModesetStatusName(Status));
+        InterlockedExchange(&Adapter->HotplugQueued, 0);
         return;
     }
-    EdidFound = HdgfxReadEdid("CRT", Generation->CrtDdcPins, Mmio, Edid, &Parsed);
-    DPRINT1("CRT load detection: %s, EDID %s\n", Attached ? "attached" : "nothing attached",
-            EdidFound ? "read" : "not read");
+    ExQueueWorkItem(&Adapter->HotplugWork, DelayedWorkQueue);
 }
 
 VOID
@@ -598,6 +672,8 @@ SoftGpuPlatformAdapterStarted(
         if (Adapter == NULL)
             return;
         ExInitializeRundownProtection(&Adapter->Rundown);
+        ExInitializeWorkItem(&Adapter->HotplugWork, HdgfxHotplugWorker, Adapter);
+        Adapter->Device = Device;
         Device->PlatformServicesContext = Adapter;
     }
     else
@@ -638,9 +714,8 @@ SoftGpuPlatformAdapterStarted(
     Adapter->Generation->ReadDisplayState(&Mmio, State);
     HdgfxLogDisplayState(State);
     Adapter->InternalPanel = State->Lvds.Detected;
-    HdgfxDetectCrt(Adapter->Generation, &Mmio);
     HdgfxStartBacklight(Device, Adapter, State);
-    HdgfxStartAsle(Adapter);
+    HdgfxStartInterrupts(Device, Adapter);
     ExFreePoolWithTag(State, HDGFX_TAG);
 }
 
@@ -659,7 +734,7 @@ SoftGpuPlatformAdapterStopping(
     if (Adapter->Registers == NULL)
         return;
 
-    HdgfxStopAsle(Device, Adapter);
+    HdgfxStopInterrupts(Device, Adapter);
     if (Adapter->OpRegion != NULL)
     {
         MmUnmapIoSpace(Adapter->OpRegion, HDGFX_OPREGION_SIZE);
@@ -870,17 +945,28 @@ SoftGpuPlatformInterruptRoutine(
     _Inout_ PSOFTGPU_DEVICE Device)
 {
     PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
-    ULONG Gse;
+    ULONG Pending;
+    ULONG Sde;
 
-    if (Adapter == NULL || !Adapter->AsleInterrupt)
+    if (Adapter == NULL || (!Adapter->AsleInterrupt && !Adapter->HotplugInterrupt))
         return FALSE;
 
-    Gse = Adapter->Generation->GseInterrupt;
-    if ((READ_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIIR, 0))) & Gse) == 0)
+    Pending = HdgfxReadRegister32(Adapter, HDGFX_REG(DEIIR, 0)) &
+              ((Adapter->AsleInterrupt ? Adapter->Generation->GseInterrupt : 0) |
+               (Adapter->HotplugInterrupt ? Adapter->Generation->PchInterrupt : 0));
+    if (Pending == 0)
         return FALSE;
 
-    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIIR, 0)), Gse);
-    InterlockedExchange(&Adapter->AslePending, 1);
+    if (Pending & Adapter->Generation->PchInterrupt)
+    {
+        Sde = HdgfxReadRegister32(Adapter, HDGFX_REG(SDEIIR, 0));
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(SDEIIR, 0), Sde);
+        if (Sde & Adapter->Generation->CrtHotplugInterrupt)
+            InterlockedExchange(&Adapter->HotplugPending, 1);
+    }
+    HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIIR, 0), Pending);
+    if (Pending & Adapter->Generation->GseInterrupt)
+        InterlockedExchange(&Adapter->AslePending, 1);
     Device->DxgkInterface.DxgkCbQueueDpc(Device->DxgkInterface.DeviceHandle);
     return TRUE;
 }
@@ -892,7 +978,11 @@ SoftGpuPlatformDpcRoutine(
     PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
     HDGFX_MMIO Io;
 
-    if (Adapter == NULL || InterlockedExchange(&Adapter->AslePending, 0) == 0)
+    if (Adapter == NULL)
+        return;
+    if (InterlockedExchange(&Adapter->HotplugPending, 0) != 0)
+        HdgfxQueueHotplug(Adapter);
+    if (InterlockedExchange(&Adapter->AslePending, 0) == 0)
         return;
     Adapter = HdgfxBacklightAcquire(Device);
     if (Adapter == NULL)
@@ -904,6 +994,20 @@ SoftGpuPlatformDpcRoutine(
         HdgfxOpRegionServiceAsle(&Io, HdgfxAsleSetBacklight, Adapter);
     }
     ExReleaseRundownProtection(&Adapter->Rundown);
+}
+
+static VOID
+HdgfxLock(
+    _In_ PHDGFX_SCANOUT Scanout)
+{
+    KeWaitForSingleObject(&Scanout->Lock, Executive, KernelMode, FALSE, NULL);
+}
+
+static VOID
+HdgfxUnlock(
+    _In_ PHDGFX_SCANOUT Scanout)
+{
+    KeReleaseMutex(&Scanout->Lock, FALSE);
 }
 
 static NTSTATUS
@@ -954,9 +1058,9 @@ HdgfxScanoutCommit(
     Scanout->Width = Width;
     Scanout->Height = Height;
     Scanout->Pitch = Pitch;
-    if (Scanout->DisplayOff)
+    if (Scanout->DisplayOff || !Scanout->LvdsActive)
     {
-        DPRINT1("LVDS %lux%lu pitch %lu deferred until the display is on\n", Width, Height, Pitch);
+        DPRINT1("LVDS %lux%lu pitch %lu deferred until the panel is on\n", Width, Height, Pitch);
         ExFreePoolWithTag(States, HDGFX_TAG);
         return STATUS_SUCCESS;
     }
@@ -998,15 +1102,19 @@ HdgfxSetMode(
     _In_ const SOFTGPU_DISPLAY_MODE *Mode)
 {
     PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+    NTSTATUS Status;
 
     if (Scanout == NULL || Mode == NULL || Mode->PlatformMode >= Scanout->PanelModeCount)
         return STATUS_INVALID_PARAMETER;
-    return HdgfxScanoutCommit(Scanout, &Scanout->PanelModes[Mode->PlatformMode], Mode->Width, Mode->Height,
-                              Mode->Pitch);
+    HdgfxLock(Scanout);
+    Status = HdgfxScanoutCommit(Scanout, &Scanout->PanelModes[Mode->PlatformMode], Mode->Width, Mode->Height,
+                                Mode->Pitch);
+    HdgfxUnlock(Scanout);
+    return Status;
 }
 
 static NTSTATUS
-HdgfxScanoutDisplayOff(
+HdgfxLvdsOff(
     _Inout_ PHDGFX_SCANOUT Scanout)
 {
     HDGFX_DISPLAY_STATE *State;
@@ -1030,29 +1138,191 @@ HdgfxScanoutDisplayOff(
             State->Transcoders[State->Lvds.Transcoder].Enabled,
             State->Dplls[State->Transcoders[State->Lvds.Transcoder].Dpll].Enabled, State->Lvds.Enabled);
     ExFreePoolWithTag(State, HDGFX_TAG);
-    if (Result != HdgfxModesetSuccess)
-        return STATUS_DEVICE_HARDWARE_ERROR;
+    return Result == HdgfxModesetSuccess ? STATUS_SUCCESS : STATUS_DEVICE_HARDWARE_ERROR;
+}
 
-    Scanout->DisplayOff = TRUE;
-    return STATUS_SUCCESS;
+static NTSTATUS
+HdgfxCrtCommit(
+    _Inout_ PHDGFX_SCANOUT Scanout)
+{
+    HDGFX_DISPLAY_STATE *States;
+    HDGFX_MODESET_STATUS Result;
+    HDGFX_CRT_MODE Mode;
+    HDGFX_MMIO Mmio;
+    const HDGFX_PIPE *Pipe;
+    const HDGFX_DPLL *Dpll;
+    const char *Mismatch;
+    ULONGLONG Start;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (!Scanout->CrtActive || Scanout->CrtDisplayOff)
+        return STATUS_SUCCESS;
+    if (!Scanout->CrtTimingValid)
+        return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET_MODE;
+
+    States = ExAllocatePoolZero(NonPagedPoolNx, 2 * sizeof(*States), HDGFX_TAG);
+    if (States == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlZeroMemory(&Mode, sizeof(Mode));
+    Mode.Timing = &Scanout->CrtTiming;
+    Mode.Pipe = HDGFX_CRT_PIPE;
+    Mode.SourceWidth = Scanout->Width;
+    Mode.SourceHeight = Scanout->Height;
+    Mode.Stride = Scanout->Pitch;
+    Mode.Surface = Scanout->Surface;
+    Mode.Scaling = HdgfxScalingAspect;
+
+    HdgfxMmioInit(Scanout->Registers, &Mmio);
+    Scanout->Generation->ReadDisplayState(&Mmio, &States[0]);
+    Result = Scanout->Generation->ComputeCrt(&States[0], &Mode, &States[1]);
+    if (Result != HdgfxModesetSuccess)
+    {
+        DPRINT1("CRT %lux%lu on %lux%lu: %s\n", Scanout->Width, Scanout->Height,
+                Scanout->CrtTiming.Timings.HActive, Scanout->CrtTiming.Timings.VActive,
+                HdgfxModesetStatusName(Result));
+        ExFreePoolWithTag(States, HDGFX_TAG);
+        return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET_MODE;
+    }
+
+    Start = KeQueryInterruptTime();
+    Result = Scanout->Generation->CommitCrt(&Mmio, &States[0], &States[1]);
+    Pipe = &States[1].Pipes[HDGFX_CRT_PIPE];
+    Dpll = &States[1].Dplls[States[1].Transcoders[HDGFX_CRT_PIPE].Dpll];
+    if (Result != HdgfxModesetSuccess)
+    {
+        DPRINT1("CRT %lux%lu commit failed after %I64u ms: %s\n", Scanout->Width, Scanout->Height,
+                (KeQueryInterruptTime() - Start) / 10000, HdgfxModesetStatusName(Result));
+        Status = STATUS_DEVICE_HARDWARE_ERROR;
+    }
+    else
+    {
+        Scanout->Generation->ReadDisplayState(&Mmio, &States[0]);
+        Mismatch = HdgfxCompareCrtState(&States[1], &States[0]);
+        DPRINT1("CRT %lux%lu on %lux%lu at %lu mHz pitch %lu at 0x%lx, fitter %u %lu,%lu %lux%lu; DPLL N %lu M1 %lu "
+                "M2 %lu P1 %lu P2 %lu = %lu kHz, FDI x%lu: %I64u ms, readback %s%s\n",
+                Scanout->Width, Scanout->Height, Pipe->Timings.HActive, Pipe->Timings.VActive,
+                HdgfxRefreshMilliHz(&Pipe->Timings, Dpll->DotKHz), Pipe->Primary.Stride, Pipe->Primary.Surface,
+                Pipe->PanelFitter.Enabled, Pipe->PanelFitter.X, Pipe->PanelFitter.Y,
+                Pipe->PanelFitter.Width, Pipe->PanelFitter.Height,
+                Dpll->N, Dpll->M1, Dpll->M2, Dpll->P1, Dpll->P2, Dpll->DotKHz, Pipe->FdiTx.Lanes,
+                (KeQueryInterruptTime() - Start) / 10000,
+                Mismatch ? "differs in " : "matches", Mismatch ? Mismatch : "");
+        if (Mismatch)
+            Status = STATUS_DEVICE_HARDWARE_ERROR;
+    }
+
+    ExFreePoolWithTag(States, HDGFX_TAG);
+    return Status;
+}
+
+static NTSTATUS
+HdgfxCrtOff(
+    _Inout_ PHDGFX_SCANOUT Scanout)
+{
+    HDGFX_DISPLAY_STATE *State;
+    HDGFX_MODESET_STATUS Result;
+    HDGFX_MMIO Mmio;
+
+    State = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*State), HDGFX_TAG);
+    if (State == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    HdgfxMmioInit(Scanout->Registers, &Mmio);
+    Scanout->Generation->ReadDisplayState(&Mmio, State);
+    Result = Scanout->Generation->DisableCrt(&Mmio, State);
+    DPRINT1("CRT off: %s\n", HdgfxModesetStatusName(Result));
+    ExFreePoolWithTag(State, HDGFX_TAG);
+    return Result == HdgfxModesetSuccess ? STATUS_SUCCESS : STATUS_DEVICE_HARDWARE_ERROR;
+}
+
+static NTSTATUS
+HdgfxSetOutputs(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_reads_(Count) const SOFTGPU_OUTPUT_TIMING *Timings,
+    _In_ ULONG Count)
+{
+    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+    const SOFTGPU_DISPLAY_MODE *Source = &Timings[0].Mode;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+
+    if (Scanout == NULL || Count != 2 || Timings[1].ChildUid != HDGFX_CRT_CHILD_UID ||
+        Source->PlatformMode >= Scanout->PanelModeCount)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    HdgfxLock(Scanout);
+    if (!Timings[1].Active && Scanout->CrtActive)
+    {
+        if (!Scanout->CrtDisplayOff)
+            Status = HdgfxCrtOff(Scanout);
+        if (NT_SUCCESS(Status))
+            Scanout->CrtActive = FALSE;
+    }
+    if (NT_SUCCESS(Status) && !Timings[0].Active && Scanout->LvdsActive)
+    {
+        if (!Scanout->DisplayOff)
+            Status = HdgfxLvdsOff(Scanout);
+        if (NT_SUCCESS(Status))
+            Scanout->LvdsActive = FALSE;
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Scanout->LvdsActive = Timings[0].Active;
+        Status = HdgfxScanoutCommit(Scanout, &Scanout->PanelModes[Source->PlatformMode],
+                                    Source->Width, Source->Height, Source->Pitch);
+    }
+    if (NT_SUCCESS(Status) && Timings[1].Active)
+    {
+        Scanout->CrtActive = TRUE;
+        Status = HdgfxCrtCommit(Scanout);
+    }
+    HdgfxUnlock(Scanout);
+    DPRINT1("Outputs: panel %s, CRT %s, source %lux%lu: 0x%08lx\n",
+            Timings[0].Active ? "on" : "off", Timings[1].Active ? "on" : "off",
+            Source->Width, Source->Height, Status);
+    return Status;
 }
 
 NTSTATUS
 SoftGpuPlatformSetMonitorPower(
     _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ ULONG ChildUid,
     _In_ DEVICE_POWER_STATE DevicePowerState)
 {
     PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+    BOOLEAN Off = DevicePowerState != PowerDeviceD0;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
-    if (Scanout == NULL || (DevicePowerState != PowerDeviceD0) == Scanout->DisplayOff)
+    if (Scanout == NULL)
         return STATUS_SUCCESS;
-    if (DevicePowerState != PowerDeviceD0)
-        return HdgfxScanoutDisplayOff(Scanout);
 
-    Scanout->DisplayOff = FALSE;
-    return HdgfxScanoutCommit(Scanout, &Scanout->Panel, Scanout->Width, Scanout->Height, Scanout->Pitch);
+    HdgfxLock(Scanout);
+    if (ChildUid == HDGFX_CRT_CHILD_UID && Off != Scanout->CrtDisplayOff)
+    {
+        if (Off && Scanout->CrtActive)
+            Status = HdgfxCrtOff(Scanout);
+        if (NT_SUCCESS(Status))
+            Scanout->CrtDisplayOff = Off;
+        if (NT_SUCCESS(Status) && !Off)
+            Status = HdgfxCrtCommit(Scanout);
+    }
+    else if (ChildUid == SOFTGPU_CHILD_UID && Off != Scanout->DisplayOff)
+    {
+        if (Off && Scanout->LvdsActive)
+            Status = HdgfxLvdsOff(Scanout);
+        if (NT_SUCCESS(Status))
+            Scanout->DisplayOff = Off;
+        if (NT_SUCCESS(Status) && !Off)
+            Status = HdgfxScanoutCommit(Scanout, &Scanout->Panel, Scanout->Width, Scanout->Height, Scanout->Pitch);
+    }
+    HdgfxUnlock(Scanout);
+    return Status;
 }
 
 static VOID
@@ -1097,6 +1367,127 @@ HdgfxAddMode(
     Mode->PixelRate = Panel->DotKHz * 1000;
     Config->ScanoutSize = max(Config->ScanoutSize, (ULONGLONG)Mode->Pitch * Height);
     Config->ModeCount++;
+}
+
+static ULONG
+HdgfxCrtModes(
+    _In_ const HDGFX_DTD *Timing,
+    _In_reads_(SourceCount) const SOFTGPU_DISPLAY_MODE *Sources,
+    _In_ ULONG SourceCount,
+    _Out_writes_(SOFTGPU_MAX_DISPLAY_MODES) SOFTGPU_DISPLAY_MODE *Modes)
+{
+    ULONG Count = 0;
+    ULONG Index;
+    ULONG Other;
+
+    for (Index = 0; Index < SourceCount && Count < SOFTGPU_MAX_DISPLAY_MODES; Index++)
+    {
+        if (Sources[Index].Width > Timing->Timings.HActive || Sources[Index].Height > Timing->Timings.VActive)
+            continue;
+        for (Other = 0; Other < Count; Other++)
+        {
+            if (Modes[Other].Width == Sources[Index].Width && Modes[Other].Height == Sources[Index].Height)
+                break;
+        }
+        if (Other != Count)
+            continue;
+
+        Modes[Count] = Sources[Index];
+        Modes[Count].PlatformMode = 0;
+        Modes[Count].AllocationSlabSize = 0;
+        Modes[Count].TotalWidth = Timing->Timings.HTotal;
+        Modes[Count].TotalHeight = Timing->Timings.VTotal;
+        Modes[Count].PixelRate = Timing->DotKHz * 1000;
+        Count++;
+    }
+    return Count;
+}
+
+static BOOLEAN
+HdgfxCrtDetect(
+    _Inout_ PHDGFX_SCANOUT Scanout,
+    _Out_writes_bytes_(HDGFX_EDID_SIZE) PUCHAR Edid,
+    _Out_ PULONG EdidLength)
+{
+    HDGFX_MODESET_STATUS Status;
+    HDGFX_EDID Parsed;
+    HDGFX_MMIO Mmio;
+    BOOLEAN EdidFound;
+    bool Attached = false;
+
+    *EdidLength = 0;
+    HdgfxMmioInit(Scanout->Registers, &Mmio);
+    Status = Scanout->Generation->DetectCrt(&Mmio, &Attached);
+    if (Status != HdgfxModesetSuccess)
+        DPRINT1("CRT load detection: %s\n", HdgfxModesetStatusName(Status));
+    EdidFound = HdgfxReadEdid("CRT", Scanout->Generation->CrtDdcPins, &Mmio, Edid, &Parsed);
+    if (EdidFound)
+        *EdidLength = HDGFX_EDID_SIZE;
+    if (EdidFound && Parsed.DtdCount != 0)
+    {
+        Scanout->CrtTiming = Parsed.Dtds[0];
+        Scanout->CrtTimingValid = TRUE;
+    }
+    else if (!Attached)
+    {
+        Scanout->CrtTimingValid = FALSE;
+    }
+    DPRINT1("CRT load detection: %s, EDID %s\n", Attached ? "attached" : "nothing attached",
+            EdidFound ? "read" : "not read");
+    return Attached || EdidFound;
+}
+
+static VOID
+HdgfxCrtStart(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _Inout_ PHDGFX_SCANOUT Scanout,
+    _Inout_ PSOFTGPU_PLATFORM_CONFIG Config)
+{
+    PSOFTGPU_OUTPUT Output = &Device->ExtraOutputs[0];
+
+    if (Scanout->Generation->DetectCrt == NULL)
+        return;
+
+    Output->ChildUid = HDGFX_CRT_CHILD_UID;
+    Output->OutputTechnology = D3DKMDT_VOT_HD15;
+    Output->HpdAwareness = HpdAwarenessInterruptible;
+    Output->Connected = HdgfxCrtDetect(Scanout, Output->Edid, &Output->EdidLength);
+    if (Output->Connected && Scanout->CrtTimingValid)
+        Output->ModeCount = HdgfxCrtModes(&Scanout->CrtTiming, Config->Modes, Config->ModeCount, Output->Modes);
+    Config->ExtraOutputCount = 1;
+    Config->SetOutputs = HdgfxSetOutputs;
+}
+
+static VOID
+HdgfxCrtRefresh(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ BOOLEAN Indicate)
+{
+    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+    SOFTGPU_DISPLAY_MODE *Modes;
+    UCHAR Edid[HDGFX_EDID_SIZE];
+    ULONG EdidLength;
+    ULONG Count = 0;
+    BOOLEAN Connected;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Scanout == NULL || Device->ExtraOutputCount == 0)
+        return;
+    Modes = ExAllocatePoolZero(PagedPool, SOFTGPU_MAX_DISPLAY_MODES * sizeof(*Modes), HDGFX_TAG);
+    if (Modes == NULL)
+        return;
+
+    HdgfxLock(Scanout);
+    Connected = HdgfxCrtDetect(Scanout, Edid, &EdidLength);
+    if (Connected && Scanout->CrtTimingValid)
+        Count = HdgfxCrtModes(&Scanout->CrtTiming, Device->Modes, Device->ModeCount, Modes);
+    HdgfxUnlock(Scanout);
+
+    Status = SoftGpuUpdateOutput(Device, HDGFX_CRT_CHILD_UID, Connected, Modes, Count, 0, Edid, EdidLength, Indicate);
+    DPRINT1("CRT hot plug: %s, %lu mode(s): 0x%08lx\n", Connected ? "connected" : "disconnected", Count, Status);
+    ExFreePoolWithTag(Modes, HDGFX_TAG);
 }
 
 static BOOLEAN
@@ -1324,11 +1715,14 @@ SoftGpuPlatformQueryStart(
     Scanout = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Scanout), HDGFX_TAG);
     if (Scanout == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
+    KeInitializeMutex(&Scanout->Lock, 0);
+    Scanout->LvdsActive = TRUE;
 
     Status = HdgfxScanoutStart(DxgkInterface, Scanout, Config);
     if (NT_SUCCESS(Status))
     {
         Device->PlatformContext = Scanout;
+        HdgfxCrtStart(Device, Scanout, Config);
     }
     else
     {
@@ -1443,9 +1837,25 @@ SoftGpuPlatformFillNodeMetadata(
 
 static ULONG
 HdgfxScanLine(
-    _In_ PHDGFX_SCANOUT Scanout)
+    _In_ PHDGFX_SCANOUT Scanout,
+    _In_ ULONG Pipe)
 {
-    return HDGFX_GET(READ_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(PIPE_DSL, 0))), PIPE_DSL_LINE);
+    return HDGFX_GET(READ_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(PIPE_DSL, Pipe))), PIPE_DSL_LINE);
+}
+
+static ULONG
+HdgfxScanPipe(
+    _In_ PHDGFX_SCANOUT Scanout,
+    _Out_ PULONG VActive)
+{
+    if ((!Scanout->LvdsActive || Scanout->DisplayOff) &&
+        Scanout->CrtActive && !Scanout->CrtDisplayOff && Scanout->CrtTimingValid)
+    {
+        *VActive = Scanout->CrtTiming.Timings.VActive;
+        return HDGFX_CRT_PIPE;
+    }
+    *VActive = Scanout->Panel.Timings.VActive;
+    return 0;
 }
 
 static BOOLEAN
@@ -1454,10 +1864,12 @@ HdgfxWaitForBlank(
     _In_ BOOLEAN InBlank)
 {
     ULONG Elapsed;
+    ULONG VActive;
+    ULONG Pipe = HdgfxScanPipe(Scanout, &VActive);
 
     for (Elapsed = 0; Elapsed < HDGFX_VBLANK_TIMEOUT_US; Elapsed += HDGFX_VBLANK_POLL_US)
     {
-        if ((HdgfxScanLine(Scanout) >= Scanout->Panel.Timings.VActive) == InBlank)
+        if ((HdgfxScanLine(Scanout, Pipe) >= VActive) == InBlank)
             return TRUE;
         KeStallExecutionProcessor(HDGFX_VBLANK_POLL_US);
     }
@@ -1501,18 +1913,25 @@ SoftGpuPlatformQueryScanLine(
     _Inout_ PDXGKARG_GETSCANLINE GetScanLine)
 {
     PHDGFX_SCANOUT Scanout;
+    ULONG VActive;
+    ULONG Pipe;
     ULONG Line;
 
-    if (Device == NULL || GetScanLine == NULL || GetScanLine->VidPnTargetId != 0)
+    if (Device == NULL || GetScanLine == NULL ||
+        (GetScanLine->VidPnTargetId != 0 && GetScanLine->VidPnTargetId != HDGFX_CRT_CHILD_UID))
+    {
         return STATUS_INVALID_PARAMETER;
+    }
 
     Scanout = Device->PlatformContext;
-    if (Scanout == NULL)
+    if (Scanout == NULL || (GetScanLine->VidPnTargetId == HDGFX_CRT_CHILD_UID && !Scanout->CrtTimingValid))
         return STATUS_NOT_SUPPORTED;
 
-    Line = HdgfxScanLine(Scanout);
+    Pipe = GetScanLine->VidPnTargetId == HDGFX_CRT_CHILD_UID ? HDGFX_CRT_PIPE : 0;
+    VActive = Pipe == HDGFX_CRT_PIPE ? Scanout->CrtTiming.Timings.VActive : Scanout->Panel.Timings.VActive;
+    Line = HdgfxScanLine(Scanout, Pipe);
     GetScanLine->ScanLine = Line;
-    GetScanLine->InVerticalBlank = Line >= Scanout->Panel.Timings.VActive;
+    GetScanLine->InVerticalBlank = Line >= VActive;
     return STATUS_SUCCESS;
 }
 

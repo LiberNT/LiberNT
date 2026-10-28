@@ -64,6 +64,9 @@
     R(TRANS_VTOTAL,         0xE000C, 0x1000) \
     R(TRANS_VBLANK,         0xE0010, 0x1000) \
     R(TRANS_VSYNC,          0xE0014, 0x1000) \
+    R(SDEIMR,               0xC4004, 0) \
+    R(SDEIIR,               0xC4008, 0) \
+    R(SDEIER,               0xC400C, 0) \
     R(PCH_ADPA,             0xE1100, 0) \
     R(PCH_LVDS,             0xE1180, 0) \
     R(TRANS_CONF,           0xF0008, 0x1000) \
@@ -72,7 +75,9 @@
 
 #define HDGFX_ILK_FIELDS(F) \
     F(DE_MASTER,                31, 31) \
+    F(DE_PCH_EVENT,             21, 21) \
     F(DE_GSE,                   18, 18) \
+    F(SDE_CRT_HOTPLUG,          11, 11) \
     F(TIMING_LOW,               12, 0) \
     F(TIMING_HIGH,              28, 16) \
     F(TIMING_ACTIVE,            11, 0) \
@@ -167,6 +172,7 @@
     F(ADPA_ENABLE,              31, 31) \
     F(ADPA_TRANSCODER,          30, 30) \
     F(ADPA_HOTPLUG_STATUS,      25, 24) \
+    F(ADPA_HOTPLUG_ENABLE,      23, 23) \
     F(ADPA_FORCE_TRIGGER,       16, 16) \
     F(ADPA_VSYNC_HIGH,          4, 4) \
     F(ADPA_HSYNC_HIGH,          3, 3) \

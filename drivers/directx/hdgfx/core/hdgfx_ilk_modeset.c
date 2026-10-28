@@ -232,31 +232,33 @@ IlkTimingsFit(
 static void
 IlkComputeFitter(
     const HDGFX_TIMINGS *Panel,
-    const HDGFX_LVDS_MODE *Mode,
+    uint32_t SourceWidth,
+    uint32_t SourceHeight,
+    HDGFX_SCALING Scaling,
     HDGFX_PANEL_FITTER *Fitter)
 {
-    uint64_t SourceAspect = (uint64_t)Mode->SourceWidth * Panel->VActive;
-    uint64_t PanelAspect = (uint64_t)Panel->HActive * Mode->SourceHeight;
+    uint64_t SourceAspect = (uint64_t)SourceWidth * Panel->VActive;
+    uint64_t PanelAspect = (uint64_t)Panel->HActive * SourceHeight;
 
     memset(Fitter, 0, sizeof(*Fitter));
-    if (Mode->SourceWidth == Panel->HActive && Mode->SourceHeight == Panel->VActive)
+    if (SourceWidth == Panel->HActive && SourceHeight == Panel->VActive)
         return;
 
     Fitter->Enabled = true;
     Fitter->Width = Panel->HActive;
     Fitter->Height = Panel->VActive;
-    if (Mode->Scaling == HdgfxScalingCenter)
+    if (Scaling == HdgfxScalingCenter)
     {
-        Fitter->Width = Mode->SourceWidth;
-        Fitter->Height = Mode->SourceHeight;
+        Fitter->Width = SourceWidth;
+        Fitter->Height = SourceHeight;
     }
-    else if (Mode->Scaling == HdgfxScalingAspect && SourceAspect > PanelAspect)
+    else if (Scaling == HdgfxScalingAspect && SourceAspect > PanelAspect)
     {
-        Fitter->Height = IlkDivide((uint64_t)Mode->SourceHeight * Panel->HActive, Mode->SourceWidth) & ~1u;
+        Fitter->Height = IlkDivide((uint64_t)SourceHeight * Panel->HActive, SourceWidth) & ~1u;
     }
-    else if (Mode->Scaling == HdgfxScalingAspect && SourceAspect < PanelAspect)
+    else if (Scaling == HdgfxScalingAspect && SourceAspect < PanelAspect)
     {
-        Fitter->Width = IlkDivide((uint64_t)Mode->SourceWidth * Panel->VActive, Mode->SourceHeight) & ~1u;
+        Fitter->Width = IlkDivide((uint64_t)SourceWidth * Panel->VActive, SourceHeight) & ~1u;
     }
     Fitter->X = (Panel->HActive - Fitter->Width) / 2;
     Fitter->Y = (Panel->VActive - Fitter->Height) / 2;
@@ -379,7 +381,8 @@ HdgfxIlkComputeLvds(
                             Mode->SourceWidth, Mode->SourceHeight, Mode->Stride, Mode->Surface, Target);
     if (Status != HdgfxModesetSuccess)
         return Status;
-    IlkComputeFitter(&Target->Pipes[ILK_LVDS_PIPE].Timings, Mode, &Target->Pipes[ILK_LVDS_PIPE].PanelFitter);
+    IlkComputeFitter(&Target->Pipes[ILK_LVDS_PIPE].Timings, Mode->SourceWidth, Mode->SourceHeight, Mode->Scaling,
+                     &Target->Pipes[ILK_LVDS_PIPE].PanelFitter);
 
     Target->Lvds.Enabled = true;
     Target->Lvds.Transcoder = ILK_LVDS_PIPE;
@@ -948,6 +951,8 @@ HdgfxIlkComputeCrt(
     uint32_t Index = Mode->Pipe;
     HDGFX_DPLL *Dpll = &Target->Dplls[Index];
     const HDGFX_TIMINGS *Timings;
+    uint32_t SourceWidth;
+    uint32_t SourceHeight;
     HDGFX_MODESET_STATUS Status;
 
     *Target = *Current;
@@ -958,8 +963,13 @@ HdgfxIlkComputeCrt(
     }
 
     Timings = &Mode->Timing->Timings;
-    if (!IlkSurfaceFits(Timings->HActive, Mode->Stride, Mode->Surface))
+    SourceWidth = Mode->SourceWidth != 0 ? Mode->SourceWidth : Timings->HActive;
+    SourceHeight = Mode->SourceHeight != 0 ? Mode->SourceHeight : Timings->VActive;
+    if (SourceWidth > Timings->HActive || SourceHeight > Timings->VActive ||
+        !IlkSurfaceFits(SourceWidth, Mode->Stride, Mode->Surface))
+    {
         return HdgfxModesetInvalidMode;
+    }
     if (Mode->Timing->DotKHz < ILK_DAC_MIN_KHZ || Mode->Timing->DotKHz > ILK_DAC_MAX_KHZ)
         return HdgfxModesetNoClock;
     Target->NonSpreadReference = true;
@@ -971,10 +981,12 @@ HdgfxIlkComputeCrt(
     Dpll->Mode = HdgfxDpllModeNonLvds;
     Dpll->Reference = ILK_DPLL_REFERENCE_DREF;
 
-    Status = IlkComputePipe(Current, Index, Timings, ILK_DAC_BPC, Timings->HActive, Timings->VActive,
+    Status = IlkComputePipe(Current, Index, Timings, ILK_DAC_BPC, SourceWidth, SourceHeight,
                             Mode->Stride, Mode->Surface, Target);
     if (Status != HdgfxModesetSuccess)
         return Status;
+    IlkComputeFitter(&Target->Pipes[Index].Timings, SourceWidth, SourceHeight, Mode->Scaling,
+                     &Target->Pipes[Index].PanelFitter);
 
     Target->Crt.Enabled = true;
     Target->Crt.Transcoder = Index;
@@ -1008,6 +1020,16 @@ HdgfxIlkDisableCrt(
                           HDGFX_MASK(ADPA_ENABLE) | HDGFX_MASK(ADPA_HOTPLUG_STATUS));
 }
 
+void
+HdgfxIlkEnableCrtHotplug(
+    const HDGFX_MMIO *Mmio,
+    bool Enable)
+{
+    uint32_t Value = IlkRead(Mmio, HDGFX_REG(PCH_ADPA, 0)) & ~HDGFX_MASK(ADPA_HOTPLUG_STATUS);
+
+    IlkWrite(Mmio, HDGFX_REG(PCH_ADPA, 0), HDGFX_REPLACE(Value, ADPA_HOTPLUG_ENABLE, Enable));
+}
+
 const char *
 HdgfxCompareCrtState(
     const HDGFX_DISPLAY_STATE *Target,
@@ -1022,6 +1044,13 @@ HdgfxCompareCrtState(
     HDGFX_COMPARE(Pipes[Index].SourceWidth);
     HDGFX_COMPARE(Pipes[Index].SourceHeight);
     HDGFX_COMPARE(Pipes[Index].PanelFitter.Enabled);
+    if (Target->Pipes[Index].PanelFitter.Enabled)
+    {
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.X);
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.Y);
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.Width);
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.Height);
+    }
     HDGFX_COMPARE(Pipes[Index].Primary.Stride);
     HDGFX_COMPARE(Pipes[Index].Primary.Surface);
     return NULL;

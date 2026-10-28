@@ -17,6 +17,8 @@ static const HDGFX_GENERATION HdgfxIronlake =
     3,
     2,
     HDGFX_SET(DE_GSE, 1),
+    HDGFX_SET(DE_PCH_EVENT, 1),
+    HDGFX_SET(SDE_CRT_HOTPLUG, 1),
     HdgfxIlkReadDisplayState,
     HdgfxIlkComputeLvds,
     HdgfxIlkCommitLvds,
@@ -24,7 +26,8 @@ static const HDGFX_GENERATION HdgfxIronlake =
     HdgfxIlkDetectCrt,
     HdgfxIlkComputeCrt,
     HdgfxIlkCommitCrt,
-    HdgfxIlkDisableCrt
+    HdgfxIlkDisableCrt,
+    HdgfxIlkEnableCrtHotplug
 };
 
 static const struct

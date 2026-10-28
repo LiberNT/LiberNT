@@ -1150,6 +1150,9 @@ SoftGpuDdiStartDevice(
     }
 
     RtlZeroMemory(&PlatformConfig, sizeof(PlatformConfig));
+    RtlZeroMemory(Device->ExtraOutputs, sizeof(Device->ExtraOutputs));
+    Device->ExtraOutputCount = 0;
+    Device->PlatformSetOutputs = NULL;
     Status = SoftGpuPlatformQueryStart(Device,
                                        DxgkInterface,
                                        &PlatformConfig);
@@ -1168,7 +1171,8 @@ SoftGpuDdiStartDevice(
             MAXULONG / SOFTGPU_DISPLAY_BYTES_PER_PIXEL ||
         (PlatformConfig.Format != D3DDDIFMT_X8R8G8B8 &&
          PlatformConfig.Format != D3DDDIFMT_A8R8G8B8) ||
-        !SoftGpuValidatePlatformModes(&PlatformConfig))
+        !SoftGpuValidatePlatformModes(&PlatformConfig) ||
+        !SoftGpuValidateExtraOutputs(Device, &PlatformConfig))
     {
         Status = STATUS_DEVICE_CONFIGURATION_ERROR;
         goto CleanupStart;
@@ -1206,6 +1210,10 @@ SoftGpuDdiStartDevice(
     Device->CurrentMode = PlatformConfig.CurrentMode;
     Device->PreferredMode = PlatformConfig.CurrentMode;
     Device->PlatformSetMode = PlatformConfig.SetMode;
+    Device->PlatformSetOutputs = PlatformConfig.SetOutputs;
+    Device->ExtraOutputCount = PlatformConfig.ExtraOutputCount;
+    Device->ChildActive = TRUE;
+    Device->VsyncTargetId = SOFTGPU_CHILD_UID;
     RtlCopyMemory(Device->Modes, PlatformConfig.Modes, sizeof(Device->Modes));
     RtlCopyMemory(Device->Edid, PlatformConfig.Edid, sizeof(Device->Edid));
     Device->EdidLength = min(PlatformConfig.EdidLength, (ULONG)sizeof(Device->Edid));
@@ -1398,7 +1406,7 @@ SoftGpuDdiStartDevice(
 
     /* One display output source, one child device (the monitor). */
     Device->NumSources   = 1;
-    Device->NumChildren  = 1;
+    Device->NumChildren  = 1 + Device->ExtraOutputCount;
 
     *NumberOfVideoPresentSources = Device->NumSources;
     *NumberOfChildren            = Device->NumChildren;
@@ -3015,13 +3023,14 @@ SoftGpuDdiQueryChildRelations(
     _In_  ULONG                  ChildRelationsSize)
 {
     PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    ULONG Index;
 
     DPRINT("SOFTGPU: QueryChildRelations size=%lu\n", ChildRelationsSize);
 
     if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC || ChildRelations == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    if (ChildRelationsSize < sizeof(DXGK_CHILD_DESCRIPTOR))
+    if (ChildRelationsSize < sizeof(DXGK_CHILD_DESCRIPTOR) * Device->NumChildren)
     {
         return STATUS_BUFFER_TOO_SMALL;
     }
@@ -3041,6 +3050,18 @@ SoftGpuDdiQueryChildRelations(
     ChildRelations[0].AcpiUid                        = Device->ChildAcpiUid;
     ChildRelations[0].ChildUid                       = SOFTGPU_CHILD_UID;
 
+    for (Index = 0; Index < Device->ExtraOutputCount; Index++)
+    {
+        const SOFTGPU_OUTPUT *Output = &Device->ExtraOutputs[Index];
+        PDXGK_CHILD_DESCRIPTOR Child = &ChildRelations[1 + Index];
+
+        RtlZeroMemory(Child, sizeof(*Child));
+        Child->ChildDeviceType = TypeVideoOutput;
+        Child->ChildCapabilities.HpdAwareness = Output->HpdAwareness;
+        Child->ChildCapabilities.Type.VideoOutput.InterfaceTechnology = Output->OutputTechnology;
+        Child->ChildUid = Output->ChildUid;
+    }
+
     return STATUS_SUCCESS;
 }
 
@@ -3051,6 +3072,9 @@ SoftGpuDdiQueryChildStatus(
     _Inout_ PDXGK_CHILD_STATUS ChildStatus,
     _In_    BOOLEAN            NonDestructiveOnly)
 {
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    PSOFTGPU_OUTPUT Output = NULL;
+
     if (ChildStatus == NULL)
         return STATUS_INVALID_PARAMETER;
 
@@ -3058,12 +3082,27 @@ SoftGpuDdiQueryChildStatus(
            ChildStatus->ChildUid, (int)ChildStatus->Type);
 
     if (ChildStatus->ChildUid != SOFTGPU_CHILD_UID)
-        return STATUS_INVALID_PARAMETER;
+    {
+        if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
+            return STATUS_INVALID_PARAMETER;
+        Output = SoftGpuFindOutput(Device, ChildStatus->ChildUid);
+        if (Output == NULL)
+            return STATUS_INVALID_PARAMETER;
+    }
 
     if (ChildStatus->Type == StatusConnection)
     {
-        /* The virtual monitor is always connected. */
-        ChildStatus->HotPlug.Connected = TRUE;
+        if (Output == NULL)
+        {
+            /* The virtual monitor is always connected. */
+            ChildStatus->HotPlug.Connected = TRUE;
+        }
+        else
+        {
+            KeWaitForSingleObject(&Device->OutputMutex, Executive, KernelMode, FALSE, NULL);
+            ChildStatus->HotPlug.Connected = Output->Connected;
+            KeReleaseMutex(&Device->OutputMutex, FALSE);
+        }
     }
 
     return STATUS_SUCCESS;
@@ -3118,20 +3157,25 @@ SoftGpuDdiSetPowerState(
     UNREFERENCED_PARAMETER(MiniportDeviceContext);
     UNREFERENCED_PARAMETER(ActionType);
 
-    if (DeviceUid != 0 && DeviceUid != 1)
+    if (DeviceUid != 0 && DeviceUid != 1 &&
+        (MiniportDeviceContext == NULL ||
+         ((PSOFTGPU_DEVICE)MiniportDeviceContext)->Magic != SOFTGPU_DEVICE_MAGIC ||
+         SoftGpuFindOutput(MiniportDeviceContext, DeviceUid) == NULL))
+    {
         return STATUS_INVALID_PARAMETER;
+    }
 
     if (DevicePowerState > PowerDeviceD3)
         return STATUS_INVALID_PARAMETER;
 
 #if defined(SOFTGPU_PLATFORM_MONITOR_POWER)
-    if (DeviceUid == SOFTGPU_CHILD_UID)
     {
         PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
 
         if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
             return STATUS_INVALID_PARAMETER;
-        return SoftGpuPlatformSetMonitorPower(Device, DevicePowerState);
+        if (DeviceUid == SOFTGPU_CHILD_UID || SoftGpuFindOutput(Device, DeviceUid) != NULL)
+            return SoftGpuPlatformSetMonitorPower(Device, DeviceUid, DevicePowerState);
     }
 #endif
 

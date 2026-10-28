@@ -250,8 +250,11 @@ typedef struct _HDGFX_CRT_MODE
 {
     const HDGFX_DTD *Timing;
     uint32_t Pipe;
+    uint32_t SourceWidth;
+    uint32_t SourceHeight;
     uint32_t Stride;
     uint32_t Surface;
+    HDGFX_SCALING Scaling;
 } HDGFX_CRT_MODE;
 
 typedef enum _HDGFX_MODESET_STATUS
@@ -278,6 +281,8 @@ typedef struct _HDGFX_GENERATION
     uint32_t PanelDdcPins;
     uint32_t CrtDdcPins;
     uint32_t GseInterrupt;
+    uint32_t PchInterrupt;
+    uint32_t CrtHotplugInterrupt;
     void (*ReadDisplayState)(const HDGFX_MMIO *Mmio, HDGFX_DISPLAY_STATE *State);
     HDGFX_MODESET_STATUS (*ComputeLvds)(const HDGFX_DISPLAY_STATE *Current,
                                         const HDGFX_LVDS_MODE *Mode,
@@ -294,6 +299,7 @@ typedef struct _HDGFX_GENERATION
                                       const HDGFX_DISPLAY_STATE *Current,
                                       const HDGFX_DISPLAY_STATE *Target);
     HDGFX_MODESET_STATUS (*DisableCrt)(const HDGFX_MMIO *Mmio, const HDGFX_DISPLAY_STATE *Current);
+    void (*EnableCrtHotplug)(const HDGFX_MMIO *Mmio, bool Enable);
 } HDGFX_GENERATION;
 
 typedef struct _HDGFX_VBT_PANEL
@@ -394,6 +400,11 @@ HDGFX_MODESET_STATUS
 HdgfxIlkDisableCrt(
     const HDGFX_MMIO *Mmio,
     const HDGFX_DISPLAY_STATE *Current);
+
+void
+HdgfxIlkEnableCrtHotplug(
+    const HDGFX_MMIO *Mmio,
+    bool Enable);
 
 const char *
 HdgfxCompareCrtState(
