@@ -287,6 +287,7 @@ typedef struct _SOFTGPU_ENGINE
     ULONG               SubmitRingHead;
     ULONG               SubmitRingTail;
     LONG                EngineActive;
+    LONG                EngineRetry;
 
     /* Completion DPC, queued by a submission to this node. */
     KDPC                DpcObject;
@@ -622,6 +623,25 @@ NTSTATUS
 SoftGpuPlatformSubmitCommand(
     _Inout_ PSOFTGPU_DEVICE Device,
     _In_ const DXGKARG_SUBMITCOMMAND *SubmitCommand);
+#endif
+
+#if defined(SOFTGPU_PLATFORM_HARDWARE_2D)
+NTSTATUS
+SoftGpuPlatformExecute2d(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ const SOFTGPU_CMD *Command);
+
+BOOLEAN
+SoftGpuPlatformEngineIdle(
+    _Inout_ PSOFTGPU_DEVICE Device);
+
+NTSTATUS
+SoftGpuPlatformResetEngine(
+    _Inout_ PSOFTGPU_DEVICE Device);
+
+NTSTATUS
+SoftGpuPlatformRestartEngine(
+    _Inout_ PSOFTGPU_DEVICE Device);
 #endif
 
 #if defined(SOFTGPU_PLATFORM_HARDWARE_3D) || defined(SOFTGPU_PLATFORM_INTERRUPTS)
