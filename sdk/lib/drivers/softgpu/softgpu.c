@@ -1116,6 +1116,9 @@ SoftGpuDdiStartDevice(
     SIZE_T RequiredFrameBufferSize;
     SIZE_T PreferredFrameBufferSize;
     ULONG Index;
+#if defined(SOFTGPU_PLATFORM_ADAPTER_SERVICES)
+    ULONG AcpiUid;
+#endif
 
     UNREFERENCED_PARAMETER(DxgkStartInfo);
 
@@ -1425,6 +1428,12 @@ SoftGpuDdiStartDevice(
     KeReleaseSpinLock(&Device->ShadowPresentInterfaceLock, OldIrql);
 #if defined(SOFTGPU_PLATFORM_ADAPTER_SERVICES)
     SoftGpuPlatformAdapterStarted(Device);
+    if (Device->ChildOutputTechnology != D3DKMDT_VOT_INTERNAL &&
+        SoftGpuPlatformQueryInternalPanel(Device, &AcpiUid))
+    {
+        Device->ChildAcpiUid = AcpiUid;
+        Device->ChildOutputTechnology = D3DKMDT_VOT_INTERNAL;
+    }
 #endif
 
     DPRINT("SOFTGPU: StartDevice success: %lu source(s), %lu child(ren)\n",

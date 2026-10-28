@@ -584,3 +584,14 @@ SoftGpuPlatformQueryInterface(
     Interface->GetBrightness = GlkBacklightGet;
     return STATUS_SUCCESS;
 }
+
+BOOLEAN
+SoftGpuPlatformQueryInternalPanel(
+    _In_ PSOFTGPU_DEVICE Device,
+    _Out_ PULONG AcpiUid)
+{
+    UNREFERENCED_PARAMETER(Device);
+
+    *AcpiUid = 0;
+    return FALSE;
+}

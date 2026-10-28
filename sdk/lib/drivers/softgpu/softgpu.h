@@ -526,6 +526,11 @@ NTSTATUS
 SoftGpuPlatformQueryInterface(
     _Inout_ PSOFTGPU_DEVICE Device,
     _Inout_ PQUERY_INTERFACE QueryInterface);
+
+BOOLEAN
+SoftGpuPlatformQueryInternalPanel(
+    _In_ PSOFTGPU_DEVICE Device,
+    _Out_ PULONG AcpiUid);
 #endif
 
 #if defined(SOFTGPU_PLATFORM_HARDWARE_OVERLAY)

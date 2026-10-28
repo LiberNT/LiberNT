@@ -17,6 +17,7 @@
 #define HDGFX_VBT_MINIMUM_LIMIT     64UL
 #define HDGFX_VBT_MINIMUM_SCALE     255UL
 #define HDGFX_VBT_BACKLIGHT_PWM     2UL
+#define HDGFX_ACPI_ID_INTERNAL_PANEL 0x0400UL
 #define HDGFX_TAG                   'xfDH'
 
 typedef struct _HDGFX_ADAPTER
@@ -25,6 +26,7 @@ typedef struct _HDGFX_ADAPTER
     const HDGFX_GENERATION *Generation;
     HDGFX_VBT Vbt;
     BOOLEAN VbtPresent;
+    BOOLEAN InternalPanel;
     ULONG BacklightMaximum;
     ULONG BacklightMinimum;
     EX_RUNDOWN_REF Rundown;
@@ -435,6 +437,7 @@ SoftGpuPlatformAdapterStarted(
     Mmio.Stall = HdgfxStall;
     Adapter->Generation->ReadDisplayState(&Mmio, State);
     HdgfxLogDisplayState(State);
+    Adapter->InternalPanel = State->Lvds.Detected;
     HdgfxReadPanelEdid(Device, Adapter, &Mmio);
     HdgfxStartBacklight(Device, Adapter, State);
     ExFreePoolWithTag(State, HDGFX_TAG);
@@ -458,6 +461,7 @@ SoftGpuPlatformAdapterStopping(
     MmUnmapIoSpace(Adapter->Registers, HDGFX_MMIO_SIZE);
     Adapter->Registers = NULL;
     Adapter->BacklightMaximum = 0;
+    Adapter->InternalPanel = FALSE;
 }
 
 VOID
@@ -607,4 +611,21 @@ SoftGpuPlatformQueryInterface(
     Interface->SetBrightness = HdgfxBacklightSet;
     Interface->GetBrightness = HdgfxBacklightGet;
     return STATUS_SUCCESS;
+}
+
+BOOLEAN
+SoftGpuPlatformQueryInternalPanel(
+    _In_ PSOFTGPU_DEVICE Device,
+    _Out_ PULONG AcpiUid)
+{
+    PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
+
+    PAGED_CODE();
+
+    *AcpiUid = 0;
+    if (Adapter == NULL || !Adapter->InternalPanel)
+        return FALSE;
+
+    *AcpiUid = HDGFX_ACPI_ID_INTERNAL_PANEL;
+    return TRUE;
 }
