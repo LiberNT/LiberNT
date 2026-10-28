@@ -9,4 +9,10 @@ add_definitions(-DNTDDI_VERSION=0x06030000)
 remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
 add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
 
-add_softgpu_engine(softgpu_engine)
+option(SOFTGPU_PHYSICAL_ADDRESSING "Run the BasicDisplay engine nodes in WDDM 2.0 physical mode" OFF)
+
+if(SOFTGPU_PHYSICAL_ADDRESSING)
+    add_softgpu_engine(softgpu_engine DEFINITIONS SOFTGPU_PLATFORM_PHYSICAL_ADDRESSING=1)
+else()
+    add_softgpu_engine(softgpu_engine)
+endif()
