@@ -958,6 +958,13 @@ SoftGpuDdiSetPowerState(
     _In_ DEVICE_POWER_STATE DevicePowerState,
     _In_ POWER_ACTION       ActionType);
 
+#if defined(SOFTGPU_PLATFORM_MONITOR_POWER)
+NTSTATUS
+SoftGpuPlatformSetMonitorPower(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ DEVICE_POWER_STATE DevicePowerState);
+#endif
+
 #if defined(SOFTGPU_PLATFORM_ACPI_EVENTS)
 NTSTATUS
 APIENTRY

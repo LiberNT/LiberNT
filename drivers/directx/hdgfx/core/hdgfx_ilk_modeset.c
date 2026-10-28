@@ -621,6 +621,14 @@ IlkEnableLvds(
 }
 
 HDGFX_MODESET_STATUS
+HdgfxIlkDisableLvds(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DISPLAY_STATE *Current)
+{
+    return IlkDisableLvds(Mmio, Current);
+}
+
+HDGFX_MODESET_STATUS
 HdgfxIlkCommitLvds(
     const HDGFX_MMIO *Mmio,
     const HDGFX_DISPLAY_STATE *Target)
