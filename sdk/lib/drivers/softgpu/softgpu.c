@@ -3145,11 +3145,16 @@ SoftGpuDdiResetFromTimeout(
         Engine->CompletedFence = Engine->CurrentFence;
         Engine->NotifiedFence = Engine->CurrentFence;
         Engine->EngineActive = 0;
+        Engine->EngineRetry = 0;
     }
     KeReleaseSpinLock(&Device->FenceLock, OldIrql);
 
     DPRINT1("SOFTGPU: ResetFromTimeout dropped queued work on adapter %p\n", Device);
+#if defined(SOFTGPU_PLATFORM_HARDWARE_2D)
+    return SoftGpuPlatformResetEngine(Device);
+#else
     return STATUS_SUCCESS;
+#endif
 }
 
 NTSTATUS
@@ -3159,12 +3164,20 @@ SoftGpuDdiRestartFromTimeout(
 {
     PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
     KIRQL OldIrql;
+#if defined(SOFTGPU_PLATFORM_HARDWARE_2D)
+    NTSTATUS Status;
+#endif
 
     PAGED_CODE();
 
     if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
         return STATUS_INVALID_PARAMETER;
 
+#if defined(SOFTGPU_PLATFORM_HARDWARE_2D)
+    Status = SoftGpuPlatformRestartEngine(Device);
+    if (!NT_SUCCESS(Status))
+        return Status;
+#endif
     KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
     Device->Resetting = 0;
     KeReleaseSpinLock(&Device->FenceLock, OldIrql);
