@@ -2366,6 +2366,11 @@ static HRESULT WINAPI domdoc_ObjectWithSite_SetSite(IObjectWithSite *iface, IUnk
 
     if (doc->site)
         IUnknown_Release(doc->site);
+    if (doc->base_uri)
+    {
+        IUri_Release(doc->base_uri);
+        doc->base_uri = NULL;
+    }
 
     doc->site = punk;
     doc->base_uri = get_base_uri(doc->site);

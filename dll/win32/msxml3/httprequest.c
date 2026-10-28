@@ -1663,7 +1663,10 @@ static HRESULT WINAPI httprequest_ObjectWithSite_SetSite( IObjectWithSite *iface
     if(This->site)
         IUnknown_Release( This->site );
     if(This->base_uri)
+    {
         IUri_Release(This->base_uri);
+        This->base_uri = NULL;
+    }
 
     This->site = punk;
 
