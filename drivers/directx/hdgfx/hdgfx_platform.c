@@ -85,6 +85,11 @@ typedef struct _HDGFX_ADAPTER
     ULONG SavedGtt[HDGFX_RENDER_GTT_PAGES];
     HDGFX_RING Ring;
     BOOLEAN RingStarted;
+    BOOLEAN RingInterrupt;
+    ULONG GtInterruptMask;
+    ULONG SavedGtimr;
+    ULONG SavedGtier;
+    volatile LONG RingInterrupts;
 } HDGFX_ADAPTER, *PHDGFX_ADAPTER;
 
 static const GUID HdgfxGuidBrightness =
@@ -536,6 +541,7 @@ HdgfxInterruptDisconnect(
 {
     ((PHDGFX_ADAPTER)Context)->AsleInterrupt = FALSE;
     ((PHDGFX_ADAPTER)Context)->HotplugInterrupt = FALSE;
+    ((PHDGFX_ADAPTER)Context)->RingInterrupt = FALSE;
     return TRUE;
 }
 
@@ -569,14 +575,26 @@ HdgfxStartInterrupts(
     HDGFX_MMIO Io;
     ULONG Mask;
 
+    ULONG Gt = Adapter->RingStarted ? HDGFX_SET(GT_RENDER_USER, 1) : 0;
+
     Mask = (Asle ? Generation->GseInterrupt : 0) | (Hotplug ? Generation->PchInterrupt : 0);
-    if (Mask == 0)
+    if (Mask == 0 && Gt == 0)
         return;
 
     Adapter->SavedDeimr = HdgfxReadRegister32(Adapter, HDGFX_REG(DEIMR, 0));
     Adapter->SavedDeier = HdgfxReadRegister32(Adapter, HDGFX_REG(DEIER, 0));
     Adapter->InterruptMask = Mask;
     Adapter->AsleInterrupt = Asle;
+    if (Gt != 0)
+    {
+        Adapter->SavedGtimr = HdgfxReadRegister32(Adapter, HDGFX_REG(GTIMR, 0));
+        Adapter->SavedGtier = HdgfxReadRegister32(Adapter, HDGFX_REG(GTIER, 0));
+        Adapter->GtInterruptMask = Gt;
+        Adapter->RingInterrupt = TRUE;
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(GTIIR, 0), Gt);
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(GTIMR, 0), ~Gt);
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(GTIER, 0), Gt);
+    }
     if (Hotplug)
     {
         HdgfxMmioInit(Adapter->Registers, &Mmio);
@@ -617,12 +635,19 @@ HdgfxStopInterrupts(
         HdgfxOpRegionDriverNotReady(&Io);
         Adapter->AsleReady = FALSE;
     }
-    if (Adapter->InterruptMask == 0)
+    if (Adapter->InterruptMask == 0 && Adapter->GtInterruptMask == 0)
         return;
 
     HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIER, 0), Adapter->SavedDeier);
     HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIMR, 0), Adapter->SavedDeimr);
     HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIIR, 0), Adapter->InterruptMask);
+    if (Adapter->GtInterruptMask != 0)
+    {
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(GTIER, 0), Adapter->SavedGtier);
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(GTIMR, 0), Adapter->SavedGtimr);
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(GTIIR, 0), Adapter->GtInterruptMask);
+        Adapter->GtInterruptMask = 0;
+    }
     if (Adapter->HotplugInterrupt)
     {
         HdgfxWriteRegister32(Adapter, HDGFX_REG(SDEIER, 0), Adapter->SavedSdeier);
@@ -639,6 +664,7 @@ HdgfxStopInterrupts(
     {
         Adapter->AsleInterrupt = FALSE;
         Adapter->HotplugInterrupt = FALSE;
+        Adapter->RingInterrupt = FALSE;
     }
 }
 
@@ -721,17 +747,11 @@ HdgfxStartRender(
     PHYSICAL_ADDRESS Highest;
     PHYSICAL_ADDRESS Boundary;
     PHYSICAL_ADDRESS Address;
-    LARGE_INTEGER Frequency;
-    LARGE_INTEGER Start;
-    LARGE_INTEGER Now;
     ULONGLONG Bar0 = 0;
     ULONGLONG Bar2 = 0;
-    ULONGLONG ElapsedUs = 0;
-    volatile ULONG *Status;
     HDGFX_MMIO Mmio;
     ULONG GttFirst;
     ULONG Index;
-    BOOLEAN Done = FALSE;
 
     if (!NT_SUCCESS(HdgfxReadConfig(&Device->DxgkInterface, &Bar0, HDGFX_PCI_BAR0, sizeof(Bar0))) ||
         !NT_SUCCESS(HdgfxReadConfig(&Device->DxgkInterface, &Bar2, HDGFX_PCI_BAR2, sizeof(Bar2))))
@@ -797,25 +817,44 @@ HdgfxStartRender(
         HdgfxStopRender(Adapter);
         return;
     }
+}
 
-    Status = (volatile ULONG *)Adapter->StatusPage;
+static VOID
+HdgfxTestRing(
+    _Inout_ PHDGFX_ADAPTER Adapter)
+{
+    volatile ULONG *Status = (volatile ULONG *)Adapter->StatusPage;
+    LARGE_INTEGER Frequency;
+    LARGE_INTEGER Start;
+    LARGE_INTEGER Now;
+    ULONGLONG ElapsedUs = 0;
+    HDGFX_MMIO Mmio;
+    BOOLEAN Done = FALSE;
+    LONG Interrupts;
+
+    if (!Adapter->RingStarted)
+        return;
+
+    HdgfxMmioInit(Adapter->Registers, &Mmio);
+    Interrupts = Adapter->RingInterrupts;
     if (HdgfxRingEmitBreadcrumb(&Adapter->Ring, HdgfxIlkRingHead(&Mmio), HDGFX_RING_SEQNO_INDEX, 1))
     {
         Start = KeQueryPerformanceCounter(&Frequency);
         HdgfxIlkAdvanceRing(&Mmio, &Adapter->Ring);
         do
         {
-            Done = Status[HDGFX_RING_SEQNO_INDEX] == 1;
+            Done = Status[HDGFX_RING_SEQNO_INDEX] == 1 && Adapter->RingInterrupts != Interrupts;
             Now = KeQueryPerformanceCounter(NULL);
             ElapsedUs = (ULONGLONG)(Now.QuadPart - Start.QuadPart) * 1000000ULL / (ULONGLONG)Frequency.QuadPart;
             if (!Done)
                 KeStallExecutionProcessor(10);
         } while (!Done && ElapsedUs < HDGFX_RING_TEST_TIMEOUT_US);
     }
-    DPRINT1("Render ring at 0x%lx, %lu KB, status page 0x%lx: breadcrumb %s after %I64u us, head 0x%lx tail 0x%lx, ESR 0x%lx\n",
+    DPRINT1("Render ring at 0x%lx, %lu KB, status page 0x%lx: breadcrumb %lu, %ld interrupts after %I64u us, "
+            "head 0x%lx tail 0x%lx, ESR 0x%lx\n",
             Adapter->Ring.Address, HDGFX_RING_SIZE / 1024, Adapter->Ring.StatusAddress,
-            Done ? "written" : "missing", ElapsedUs, HdgfxIlkRingHead(&Mmio), Adapter->Ring.Tail,
-            HdgfxReadRegister32(Adapter, HDGFX_REG(ESR, 0)));
+            Status[HDGFX_RING_SEQNO_INDEX], Adapter->RingInterrupts - Interrupts, ElapsedUs,
+            HdgfxIlkRingHead(&Mmio), Adapter->Ring.Tail, HdgfxReadRegister32(Adapter, HDGFX_REG(ESR, 0)));
 }
 
 VOID
@@ -880,8 +919,9 @@ SoftGpuPlatformAdapterStarted(
     HdgfxLogDisplayState(State);
     Adapter->InternalPanel = State->Lvds.Detected;
     HdgfxStartBacklight(Device, Adapter, State);
-    HdgfxStartInterrupts(Device, Adapter);
     HdgfxStartRender(Device, Adapter);
+    HdgfxStartInterrupts(Device, Adapter);
+    HdgfxTestRing(Adapter);
     ExFreePoolWithTag(State, HDGFX_TAG);
 }
 
@@ -900,8 +940,8 @@ SoftGpuPlatformAdapterStopping(
     if (Adapter->Registers == NULL)
         return;
 
-    HdgfxStopRender(Adapter);
     HdgfxStopInterrupts(Device, Adapter);
+    HdgfxStopRender(Adapter);
     if (Adapter->OpRegion != NULL)
     {
         MmUnmapIoSpace(Adapter->OpRegion, HDGFX_OPREGION_SIZE);
@@ -1113,16 +1153,24 @@ SoftGpuPlatformInterruptRoutine(
 {
     PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
     ULONG Pending;
+    ULONG Gt;
     ULONG Sde;
 
-    if (Adapter == NULL || (!Adapter->AsleInterrupt && !Adapter->HotplugInterrupt))
+    if (Adapter == NULL || (!Adapter->AsleInterrupt && !Adapter->HotplugInterrupt && !Adapter->RingInterrupt))
         return FALSE;
 
     Pending = HdgfxReadRegister32(Adapter, HDGFX_REG(DEIIR, 0)) &
               ((Adapter->AsleInterrupt ? Adapter->Generation->GseInterrupt : 0) |
                (Adapter->HotplugInterrupt ? Adapter->Generation->PchInterrupt : 0));
-    if (Pending == 0)
+    Gt = Adapter->RingInterrupt ? HdgfxReadRegister32(Adapter, HDGFX_REG(GTIIR, 0)) & Adapter->GtInterruptMask : 0;
+    if (Pending == 0 && Gt == 0)
         return FALSE;
+
+    if (Gt != 0)
+    {
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(GTIIR, 0), Gt);
+        InterlockedIncrement(&Adapter->RingInterrupts);
+    }
 
     if (Pending & Adapter->Generation->PchInterrupt)
     {
@@ -1131,7 +1179,8 @@ SoftGpuPlatformInterruptRoutine(
         if (Sde & Adapter->Generation->CrtHotplugInterrupt)
             InterlockedExchange(&Adapter->HotplugPending, 1);
     }
-    HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIIR, 0), Pending);
+    if (Pending != 0)
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(DEIIR, 0), Pending);
     if (Pending & Adapter->Generation->GseInterrupt)
         InterlockedExchange(&Adapter->AslePending, 1);
     Device->DxgkInterface.DxgkCbQueueDpc(Device->DxgkInterface.DeviceHandle);

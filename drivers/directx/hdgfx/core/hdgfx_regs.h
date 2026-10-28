@@ -16,6 +16,9 @@
     R(RING_CTL,             0x203C, 0) \
     R(HWS_PGA,              0x2080, 0) \
     R(ESR,                  0x20B8, 0) \
+    R(GTIMR,                0x44014, 0) \
+    R(GTIIR,                0x44018, 0) \
+    R(GTIER,                0x4401C, 0) \
     R(DEIMR,                0x44004, 0) \
     R(DEIIR,                0x44008, 0) \
     R(DEIER,                0x4400C, 0) \
@@ -83,6 +86,7 @@
     F(DE_MASTER,                31, 31) \
     F(DE_PCH_EVENT,             21, 21) \
     F(DE_GSE,                   18, 18) \
+    F(GT_RENDER_USER,           0, 0) \
     F(SDE_CRT_HOTPLUG,          11, 11) \
     F(TIMING_LOW,               12, 0) \
     F(TIMING_HIGH,              28, 16) \
