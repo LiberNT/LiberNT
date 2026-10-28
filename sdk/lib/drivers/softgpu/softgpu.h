@@ -177,6 +177,9 @@ typedef struct _SOFTGPU_DISPLAY_MODE
     ULONG Pitch;
     ULONG PlatformMode;
     SIZE_T AllocationSlabSize;
+    ULONG TotalWidth;
+    ULONG TotalHeight;
+    ULONG PixelRate;
 } SOFTGPU_DISPLAY_MODE, *PSOFTGPU_DISPLAY_MODE;
 
 struct _SOFTGPU_DEVICE;
