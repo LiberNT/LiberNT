@@ -16,6 +16,7 @@
     R(RING_CTL,             0x203C, 0) \
     R(HWS_PGA,              0x2080, 0) \
     R(ESR,                  0x20B8, 0) \
+    R(GDSR,                 0x12CA4, 0) \
     R(GTIMR,                0x44014, 0) \
     R(GTIIR,                0x44018, 0) \
     R(GTIER,                0x4401C, 0) \
@@ -112,6 +113,8 @@
     F(RING_START_ADDRESS,       31, 12) \
     F(RING_CTL_LENGTH,          20, 12) \
     F(RING_CTL_ENABLE,          0, 0) \
+    F(GDSR_DOMAIN,              2, 1) \
+    F(GDSR_RESET,               0, 0) \
     F(MI_OPCODE,                28, 23) \
     F(BLT_CLIENT,               31, 29) \
     F(BLT_OPCODE,               28, 22) \

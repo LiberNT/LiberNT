@@ -1518,8 +1518,11 @@ TestRing(void)
     for (Index = 0; Index < sizeof(Commands) / 16 - 1; Index++)
         CHECK_EQ(HdgfxRingEmit(&Ring, 0, Dwords, 4), true);
     CHECK_EQ(Ring.Tail, sizeof(Commands) - 16);
+    CHECK_EQ(HdgfxRingFree(&Ring, 0), 8);
     CHECK_EQ(HdgfxRingEmit(&Ring, 0, Dwords, 2), true);
     CHECK_EQ(HdgfxRingEmit(&Ring, 0, Dwords, 2), false);
+    CHECK_EQ(HdgfxRingFree(&Ring, 0), 0);
+    CHECK_EQ(HdgfxRingFree(&Ring, 0x40), 0x40);
 
     Fake.Head = Fake.Tail = Ring.Tail = 0x40;
     CHECK_EQ(HdgfxIlkStopRing(&Mmio, &Ring), true);
@@ -1530,6 +1533,69 @@ TestRing(void)
     Ring.Address = 0xFFF0000;
     Ring.Size = 0x1800;
     CHECK_EQ(HdgfxIlkStartRing(&Mmio, &Ring), false);
+}
+
+typedef struct _FAKE_GDSR
+{
+    uint32_t Value;
+    uint32_t ReadsUntilDone;
+    uint32_t StalledUs;
+    uint32_t Writes[4];
+    uint32_t WriteCount;
+} FAKE_GDSR;
+
+static uint32_t
+FakeGdsrRead(
+    void *Context,
+    uint32_t Offset)
+{
+    FAKE_GDSR *Fake = Context;
+
+    CHECK_EQ(Offset, 0x12CA4);
+    if (Fake->ReadsUntilDone != 0 && --Fake->ReadsUntilDone == 0)
+        Fake->Value &= ~1u;
+    return Fake->Value;
+}
+
+static void
+FakeGdsrWrite(
+    void *Context,
+    uint32_t Offset,
+    uint32_t Value)
+{
+    FAKE_GDSR *Fake = Context;
+
+    CHECK_EQ(Offset, 0x12CA4);
+    if (Fake->WriteCount < 4)
+        Fake->Writes[Fake->WriteCount++] = Value;
+    Fake->Value = Value;
+}
+
+static void
+FakeGdsrStall(
+    void *Context,
+    uint32_t Microseconds)
+{
+    ((FAKE_GDSR *)Context)->StalledUs += Microseconds;
+}
+
+static void
+TestRenderReset(void)
+{
+    FAKE_GDSR Fake = { 0, 3, 0, { 0 }, 0 };
+    HDGFX_MMIO Mmio = { FakeGdsrRead, &Fake, FakeGdsrWrite, FakeGdsrStall, NULL };
+
+    CHECK_EQ(HdgfxIlkResetRender(&Mmio), true);
+    CHECK_EQ(Fake.WriteCount, 2);
+    CHECK_EQ(Fake.Writes[0], 0x3);
+    CHECK_EQ(Fake.Writes[1], 0);
+    CHECK_EQ(Fake.StalledUs, 20);
+
+    memset(&Fake, 0, sizeof(Fake));
+    CHECK_EQ(HdgfxIlkResetRender(&Mmio), false);
+    CHECK_EQ(Fake.WriteCount, 2);
+    CHECK_EQ(Fake.Writes[1], 0);
+    CHECK_EQ(Fake.StalledUs, 5000);
 }
 
 static void
@@ -1597,6 +1663,7 @@ main(
     TestRing();
     TestBlt();
     TestCursor();
+    TestRenderReset();
     if (argc > 2)
         TestFirmwareVbt(argv[2]);
     if (Failures)
