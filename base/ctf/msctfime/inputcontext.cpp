@@ -118,7 +118,6 @@ CInputContextOwner::GetACPFromPoint(
     return E_NOTIMPL;
 }
 
-/// @unimplemented
 STDMETHODIMP
 CInputContextOwner::GetTextExt(
     LONG acpStart,
@@ -126,7 +125,10 @@ CInputContextOwner::GetTextExt(
     RECT *prc,
     BOOL *pfClipped)
 {
-    return E_NOTIMPL;
+    if (!prc || !pfClipped)
+        return E_INVALIDARG;
+    TEXT_EXT_ARGS args = { acpStart, acpEnd, prc, pfClipped };
+    return m_fnCallback(1, &args, m_pCallbackPV);
 }
 
 /// @implemented
@@ -206,6 +208,16 @@ CicInputContext::CicInputContext(
     , m_dwUnknown8(0)
     , m_clientId(cliendId)
     , m_dwUnknown9(0)
+    , m_pEditSink(NULL)
+    , m_pCategoryMgr(NULL)
+    , m_pDisplayAttributeMgr(NULL)
+    , m_fInComposition(FALSE)
+    , m_fCancelComposition(FALSE)
+    , m_pszLastComp(NULL)
+    , m_pLastAttr(NULL)
+    , m_cchLastComp(0)
+    , m_dwLastCursor(0)
+    , m_lCommitted(0)
 {
     UNREFERENCED_PARAMETER(pLibThread);
 
@@ -282,6 +294,7 @@ CicInputContext::OnEndComposition(
     ITfCompositionView *pComposition)
 {
     --m_cCompLocks;
+    SyncComposition();
     return S_OK;
 }
 
@@ -328,7 +341,13 @@ CicInputContext::CreateInputContext(
     if (FAILED(hr))
         goto Failure;
 
+    SetCompartmentDWORD(m_clientId, m_pDocumentMgr, GUID_COMPARTMENT_CTFIME_DIMFLAGS, TRUE, FALSE);
+
     hr = m_pDocumentMgr->CreateContext(m_clientId, 0, static_cast<ITfContextOwnerCompositionSink*>(this), &m_pContext, &ecTextStore);
+    if (FAILED(hr))
+        goto Failure;
+
+    hr = AttachSinks();
     if (FAILED(hr))
         goto Failure;
 
@@ -359,6 +378,7 @@ CicInputContext::CreateInputContext(
     return S_OK;
 
 Failure:
+    DetachSinks();
     if (fPushed)
         m_pDocumentMgr->Pop(TF_POPF_ALL);
     if (fCleanupSinkAdvised)
@@ -395,6 +415,8 @@ CicInputContext::DestroyInputContext()
         pSource->UnadviseSingleSink(m_clientId, IID_ITfCleanupContextSink);
 
     //FIXME: m_dwUnknown5
+
+    DetachSinks();
 
     if (m_pTextEventSink)
     {
@@ -524,16 +546,14 @@ HRESULT CicInputContext::EscbClearDocFeedBuffer(CicIMCLock& imcLock, BOOL bFlag)
     return E_NOTIMPL;
 }
 
-/// @unimplemented
 HRESULT CicInputContext::EscbCompComplete(CicIMCLock& imcLock)
 {
-    return E_NOTIMPL;
+    return TerminateComposition(FALSE);
 }
 
-/// @unimplemented
 HRESULT CicInputContext::EscbCompCancel(CicIMCLock& imcLock)
 {
-    return E_NOTIMPL;
+    return TerminateComposition(TRUE);
 }
 
 /// @unimplemented
@@ -563,7 +583,7 @@ CicInputContext::MsImeMouseHandler(
 HRESULT
 CicInputContext::SetupReconvertString(
     CicIMCLock& imcLock,
-    ITfThreadMgr_P *pThreadMgr,
+    ITfThreadMgrEx *pThreadMgr,
     UINT uCodePage,
     UINT uMsg,
     BOOL bUndo)
@@ -589,7 +609,7 @@ HRESULT CicInputContext::EndReconvertString(CicIMCLock& imcLock)
 /// @unimplemented
 BOOL CicInputContext::SetCompositionString(
     CicIMCLock& imcLock,
-    ITfThreadMgr_P *pThreadMgr,
+    ITfThreadMgrEx *pThreadMgr,
     DWORD dwIndex,
     LPCVOID lpComp,
     DWORD dwCompLen,

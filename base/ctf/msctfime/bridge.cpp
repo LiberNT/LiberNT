@@ -202,7 +202,7 @@ CicBridge::GetInputContext(CicIMCCLock<CTFIMECONTEXT>& imeContext)
 /// @implemented
 HRESULT CicBridge::OnSetOpenStatus(
     TLS *pTLS,
-    ITfThreadMgr_P *pThreadMgr,
+    ITfThreadMgrEx *pThreadMgr,
     CicIMCLock& imcLock,
     CicInputContext *pCicIC)
 {
@@ -222,7 +222,7 @@ HRESULT CicBridge::OnSetOpenStatus(
 HRESULT
 CicBridge::SelectEx(
     _Inout_ TLS *pTLS,
-    _Inout_ ITfThreadMgr_P *pThreadMgr,
+    _Inout_ ITfThreadMgrEx *pThreadMgr,
     _In_ HIMC hIMC,
     _In_ BOOL fSelect,
     _In_ HKL hKL)
@@ -241,6 +241,8 @@ CicBridge::SelectEx(
 
     if (fSelect)
     {
+        if (pTLS->m_pProfile)
+            pTLS->m_pProfile->ChangeCurrentLanguage(LOWORD(hKL));
         if (pCicIC)
             pCicIC->m_bCandidateOpen = FALSE;
         if (imcLock.get().fOpen)
@@ -248,12 +250,8 @@ CicBridge::SelectEx(
     }
     else
     {
-        ITfContext *pContext = GetInputContext(imeContext);
-        pThreadMgr->RequestPostponedLock(pContext);
         if (pCicIC)
             pCicIC->m_bSelecting = FALSE;
-        if (pContext)
-            pContext->Release();
     }
 
     return imeContext.m_hr;
@@ -289,11 +287,13 @@ BOOL CALLBACK CicBridge::EnumDestroyInputContextCallback(HIMC hIMC, LPARAM lPara
 HRESULT
 CicBridge::ActivateIMMX(
     _Inout_ TLS *pTLS,
-    _Inout_ ITfThreadMgr_P *pThreadMgr)
+    _Inout_ ITfThreadMgrEx *pThreadMgr)
 {
-    HRESULT hr = pThreadMgr->ActivateEx(&m_cliendId, 1);
+    HRESULT hr = pThreadMgr->ActivateEx(&m_cliendId, 0);
     if (hr != S_OK)
     {
+        if (SUCCEEDED(hr))
+            pThreadMgr->Deactivate();
         m_cliendId = 0;
         return E_FAIL;
     }
@@ -331,8 +331,6 @@ CicBridge::ActivateIMMX(
         SetCompartmentDWORD(m_cliendId, m_pDocMgr, GUID_COMPARTMENT_CTFIME_DIMFLAGS, TRUE, FALSE);
     }
 
-    pThreadMgr->SetSysHookSink(this);
-
     hr = S_OK;
     if (pTLS->m_bDestroyed)
     {
@@ -352,7 +350,7 @@ Finish:
 HRESULT
 CicBridge::DeactivateIMMX(
     _Inout_ TLS *pTLS,
-    _Inout_ ITfThreadMgr_P *pThreadMgr)
+    _Inout_ ITfThreadMgrEx *pThreadMgr)
 {
     if (m_bDeactivating)
         return TRUE;
@@ -387,8 +385,6 @@ CicBridge::DeactivateIMMX(
         m_pDocMgr = NULL;
     }
 
-    pThreadMgr->SetSysHookSink(NULL);
-
     m_bDeactivating = FALSE;
 
     return S_OK;
@@ -409,7 +405,7 @@ CicBridge::InitIMMX(_Inout_ TLS *pTLS)
         if (FAILED(hr))
             return E_FAIL;
 
-        hr = pThreadMgr->QueryInterface(IID_ITfThreadMgr_P, (void **)&pTLS->m_pThreadMgr);
+        hr = pThreadMgr->QueryInterface(IID_ITfThreadMgrEx, (void **)&pTLS->m_pThreadMgr);
         if (pThreadMgr)
             pThreadMgr->Release();
         if (FAILED(hr))
@@ -444,7 +440,7 @@ CicBridge::InitIMMX(_Inout_ TLS *pTLS)
         }
     }
 
-    hr = pTLS->m_pThreadMgr->QueryInterface(IID_ITfKeystrokeMgr_P, (void **)&m_pKeystrokeMgr);
+    hr = pTLS->m_pThreadMgr->QueryInterface(IID_ITfKeystrokeMgr, (void **)&m_pKeystrokeMgr);
     if (FAILED(hr))
     {
         UnInitIMMX(pTLS);
@@ -620,15 +616,19 @@ CicBridge::ConfigureRegisterWord(
     return hr;
 }
 
-/// @unimplemented
 void CicBridge::SetAssociate(
     TLS *pTLS,
     HWND hWnd,
     HIMC hIMC,
-    ITfThreadMgr_P *pThreadMgr,
+    ITfThreadMgrEx *pThreadMgr,
     ITfDocumentMgr *pDocMgr)
 {
-    //FIXME
+    if (!hWnd || !pThreadMgr || !::IsWindow(hWnd))
+        return;
+
+    ITfDocumentMgr *pPrev = NULL;
+    if (SUCCEEDED(pThreadMgr->AssociateFocus(hWnd, pDocMgr, &pPrev)) && pPrev)
+        pPrev->Release();
 }
 
 HRESULT
@@ -691,7 +691,7 @@ CicBridge::SetActiveContextAlways(TLS *pTLS, HIMC hIMC, BOOL fActive, HWND hWnd,
 /// @unimplemented
 BOOL
 CicBridge::DoOpenCandidateHanja(
-    ITfThreadMgr_P *pThreadMgr,
+    ITfThreadMgrEx *pThreadMgr,
     CicIMCLock& imcLock,
     CicInputContext *pCicIC)
 {
@@ -701,7 +701,7 @@ CicBridge::DoOpenCandidateHanja(
 /// @unimplemented
 HRESULT
 CicBridge::OnSetConversionSentenceMode(
-    ITfThreadMgr_P *pThreadMgr,
+    ITfThreadMgrEx *pThreadMgr,
     CicIMCLock& imcLock,
     CicInputContext *pCicIC,
     DWORD dwValue,
@@ -713,7 +713,7 @@ CicBridge::OnSetConversionSentenceMode(
 /// @implemented
 HRESULT CicBridge::Notify(
     TLS *pTLS,
-    ITfThreadMgr_P *pThreadMgr,
+    ITfThreadMgrEx *pThreadMgr,
     HIMC hIMC,
     DWORD dwAction,
     DWORD dwIndex,
@@ -796,24 +796,31 @@ HRESULT CicBridge::Notify(
     }
 }
 
-/// @unimplemented
 BOOL CicBridge::ProcessKey(
     TLS *pTLS,
-    ITfThreadMgr_P *pThreadMgr,
+    ITfThreadMgrEx *pThreadMgr,
     HIMC hIMC,
     WPARAM wParam,
     LPARAM lParam,
     CONST LPBYTE lpbKeyState,
     INT *pnUnknown60)
 {
-    return FALSE; // FIXME
+    if (!m_pKeystrokeMgr)
+        return FALSE;
+
+    BOOL fEaten = FALSE;
+    HRESULT hr;
+    if (lParam & 0x80000000)
+        hr = m_pKeystrokeMgr->TestKeyUp(wParam, lParam, &fEaten);
+    else
+        hr = m_pKeystrokeMgr->TestKeyDown(wParam, lParam, &fEaten);
+    return SUCCEEDED(hr) && fEaten;
 }
 
-/// @unimplemented
 HRESULT
 CicBridge::ToAsciiEx(
     TLS *pTLS,
-    ITfThreadMgr_P *pThreadMgr,
+    ITfThreadMgrEx *pThreadMgr,
     UINT uVirtKey,
     UINT uScanCode,
     CONST LPBYTE lpbKeyState,
@@ -822,14 +829,23 @@ CicBridge::ToAsciiEx(
     HIMC hIMC,
     UINT *pResult)
 {
-    return E_NOTIMPL; // FIXME
+    *pResult = 0;
+    if (!m_pKeystrokeMgr)
+        return E_FAIL;
+
+    WPARAM wParam = LOWORD(uVirtKey) & 0xFF;
+    LPARAM lParam = ((LPARAM)(uScanCode & 0xFFFF) << 16) | 1;
+    BOOL fEaten = FALSE;
+    if (uScanCode & KF_UP)
+        return m_pKeystrokeMgr->KeyUp(wParam, lParam | 0xC0000000, &fEaten);
+    return m_pKeystrokeMgr->KeyDown(wParam, lParam, &fEaten);
 }
 
 /// @implemented
 BOOL
 CicBridge::SetCompositionString(
     TLS *pTLS,
-    ITfThreadMgr_P *pThreadMgr,
+    ITfThreadMgrEx *pThreadMgr,
     HIMC hIMC,
     DWORD dwIndex,
     LPCVOID lpComp,

@@ -238,6 +238,15 @@ CicProfile::GetActiveLanguageProfile(
     return S_OK;
 }
 
+HRESULT CicProfile::ChangeCurrentLanguage(_In_ LANGID LangID)
+{
+    if (!m_pIPProfiles)
+        return E_FAIL;
+
+    m_dwFlags &= ~4;
+    return m_pIPProfiles->ChangeCurrentLanguage(LangID);
+}
+
 /// @implemented
 HRESULT CicProfile::IsIME(HKL hKL)
 {

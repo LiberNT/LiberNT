@@ -46,8 +46,8 @@ public:
 
     HRESULT InitIMMX(_Inout_ TLS *pTLS);
     BOOL UnInitIMMX(_Inout_ TLS *pTLS);
-    HRESULT ActivateIMMX(_Inout_ TLS *pTLS, _Inout_ ITfThreadMgr_P *pThreadMgr);
-    HRESULT DeactivateIMMX(_Inout_ TLS *pTLS, _Inout_ ITfThreadMgr_P *pThreadMgr);
+    HRESULT ActivateIMMX(_Inout_ TLS *pTLS, _Inout_ ITfThreadMgrEx *pThreadMgr);
+    HRESULT DeactivateIMMX(_Inout_ TLS *pTLS, _Inout_ ITfThreadMgrEx *pThreadMgr);
 
     HRESULT CreateInputContext(TLS *pTLS, HIMC hIMC);
     HRESULT DestroyInputContext(TLS *pTLS, HIMC hIMC);
@@ -55,13 +55,13 @@ public:
 
     HRESULT SelectEx(
         _Inout_ TLS *pTLS,
-        _Inout_ ITfThreadMgr_P *pThreadMgr,
+        _Inout_ ITfThreadMgrEx *pThreadMgr,
         _In_ HIMC hIMC,
         _In_ BOOL fSelect,
         _In_ HKL hKL);
     HRESULT OnSetOpenStatus(
         TLS *pTLS,
-        ITfThreadMgr_P *pThreadMgr,
+        ITfThreadMgrEx *pThreadMgr,
         CicIMCLock& imcLock,
         CicInputContext *pCicIC);
 
@@ -86,12 +86,12 @@ public:
         TLS *pTLS,
         HWND hWnd,
         HIMC hIMC,
-        ITfThreadMgr_P *pThreadMgr,
+        ITfThreadMgrEx *pThreadMgr,
         ITfDocumentMgr *pDocMgr);
 
     HRESULT Notify(
         TLS *pTLS,
-        ITfThreadMgr_P *pThreadMgr,
+        ITfThreadMgrEx *pThreadMgr,
         HIMC hIMC,
         DWORD dwAction,
         DWORD dwIndex,
@@ -99,7 +99,7 @@ public:
 
     BOOL ProcessKey(
         TLS *pTLS,
-        ITfThreadMgr_P *pThreadMgr,
+        ITfThreadMgrEx *pThreadMgr,
         HIMC hIMC,
         WPARAM wParam,
         LPARAM lParam,
@@ -108,7 +108,7 @@ public:
 
     HRESULT ToAsciiEx(
         TLS *pTLS,
-        ITfThreadMgr_P *pThreadMgr,
+        ITfThreadMgrEx *pThreadMgr,
         UINT uVirtKey,
         UINT uScanCode,
         CONST LPBYTE lpbKeyState,
@@ -119,7 +119,7 @@ public:
 
     BOOL SetCompositionString(
         TLS *pTLS,
-        ITfThreadMgr_P *pThreadMgr,
+        ITfThreadMgrEx *pThreadMgr,
         HIMC hIMC,
         DWORD dwIndex,
         LPCVOID lpComp,
@@ -137,13 +137,13 @@ public:
 
     BOOL
     DoOpenCandidateHanja(
-        ITfThreadMgr_P *pThreadMgr,
+        ITfThreadMgrEx *pThreadMgr,
         CicIMCLock& imcLock,
         CicInputContext *pCicIC);
 
     HRESULT
     OnSetConversionSentenceMode(
-        ITfThreadMgr_P *pThreadMgr,
+        ITfThreadMgrEx *pThreadMgr,
         CicIMCLock& imcLock,
         CicInputContext *pCicIC,
         DWORD dwValue,

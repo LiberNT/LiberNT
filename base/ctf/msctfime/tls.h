@@ -18,7 +18,7 @@ public:
     DWORD m_dwSystemInfoFlags;
     CicBridge *m_pBridge;
     CicProfile *m_pProfile;
-    ITfThreadMgr_P *m_pThreadMgr;
+    ITfThreadMgrEx *m_pThreadMgr;
     DWORD m_dwFlags1;
     DWORD m_dwFlags2;
     DWORD m_dwUnknown2;

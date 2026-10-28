@@ -872,13 +872,14 @@ HRESULT UIComposition::OnImeSetContextAfter(CicIMCLock& imcLock)
 #define UI_GWLP_SIZE (UI_GWLP_UI + sizeof(UI*))
 
 /// @implemented
-UI::UI(HWND hWnd) : m_hWnd(hWnd)
+UI::UI(HWND hWnd) : m_hWnd(hWnd), m_pComp(NULL), m_pCompWnd(NULL)
 {
 }
 
 /// @implemented
 UI::~UI()
 {
+    delete m_pCompWnd;
     delete m_pComp;
 }
 
@@ -887,6 +888,10 @@ HRESULT UI::_Create()
 {
     m_pComp = new(cicNoThrow) UIComposition(m_hWnd);
     if (!m_pComp)
+        return E_OUTOFMEMORY;
+
+    m_pCompWnd = new(cicNoThrow) CCompositionWindow(m_hWnd);
+    if (!m_pCompWnd)
         return E_OUTOFMEMORY;
 
     ::SetWindowLongPtrW(m_hWnd, UI_GWLP_UI, (LONG_PTR)this);
@@ -1272,6 +1277,9 @@ CIMEUIWindowHandler::ImeUIWndProcWorker(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                         pUI->m_pComp->OnImeCompositionUpdate(imcLock);
                         ::SetTimer(hWnd, 0, 10, NULL);
                         pUI->m_pComp->m_bInComposition = TRUE;
+                        imcLock.unlock();
+                        if (pUI->m_pCompWnd)
+                            pUI->m_pCompWnd->Update(hIMC);
                     }
                     break;
                 }
@@ -1279,10 +1287,19 @@ CIMEUIWindowHandler::ImeUIWndProcWorker(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 {
                     ::KillTimer(hWnd, 0);
                     pUI->m_pComp->OnImeEndComposition();
+                    if (pUI->m_pCompWnd)
+                        pUI->m_pCompWnd->Hide();
                     break;
                 }
                 case WM_IME_SETCONTEXT:
                 {
+                    if (pUI->m_pCompWnd)
+                    {
+                        if (wParam)
+                            pUI->m_pCompWnd->SetAllowed(!!(lParam & ISC_SHOWUICOMPOSITIONWINDOW));
+                        else
+                            pUI->m_pCompWnd->Hide();
+                    }
                     pUI->OnImeSetContext(imcLock, wParam, lParam);
                     ::KillTimer(hWnd, 1);
                     ::SetTimer(hWnd, 1, 300, NULL);
@@ -1406,4 +1423,5 @@ VOID UnregisterImeClass(VOID)
     DestroyIcon(wcx.hIcon);
     DestroyIcon(wcx.hIconSm);
 #endif
+    CCompositionWindow::UnregisterWndClass();
 }

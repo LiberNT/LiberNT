@@ -105,7 +105,7 @@ Inquire(
     {
         case LANGID_JAPANESE: // Japanese
         {
-            lpIMEInfo->fdwProperty = IME_PROP_COMPLETE_ON_UNSELECT | IME_PROP_SPECIAL_UI |
+            lpIMEInfo->fdwProperty = IME_PROP_COMPLETE_ON_UNSELECT | IME_PROP_CANDLIST_START_FROM_1 |
                                      IME_PROP_AT_CARET | IME_PROP_NEED_ALTKEY |
                                      IME_PROP_KBD_CHAR_FIRST;
             lpIMEInfo->fdwConversionCaps = IME_CMODE_FULLSHAPE | IME_CMODE_KATAKANA |
@@ -154,6 +154,7 @@ Inquire(
         }
     }
 
+    lpIMEInfo->fdwProperty |= IME_PROP_UNICODE;
     return S_OK;
 }
 
@@ -1131,7 +1132,8 @@ DllMain(
         }
         case DLL_PROCESS_DETACH:
         {
-            ProcessDetach(hinstDLL);
+            if (!lpvReserved)
+                ProcessDetach(hinstDLL);
             break;
         }
         case DLL_THREAD_DETACH:

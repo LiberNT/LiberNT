@@ -51,6 +51,7 @@ public:
         _In_ REFGUID catid,
         _Out_ TF_LANGUAGEPROFILE* pProfile);
     HRESULT GetLangId(_Out_ LANGID *pLangID);
+    HRESULT ChangeCurrentLanguage(_In_ LANGID LangID);
     HRESULT GetCodePageA(_Out_ UINT *puCodePage);
 
     HRESULT InitProfileInstance(_Inout_ TLS *pTLS);

@@ -178,8 +178,9 @@ HRESULT InitDisplayAttrbuteLib(PCIC_LIBTHREAD pLibThread)
         return E_FAIL;
     }
 
-    IEnumGUID *pEnumGuid;
-    LibEnumItemsInCategory(pLibThread, GUID_TFCAT_DISPLAYATTRIBUTEPROPERTY, &pEnumGuid);
+    IEnumGUID *pEnumGuid = NULL;
+    if (FAILED(LibEnumItemsInCategory(pLibThread, GUID_TFCAT_DISPLAYATTRIBUTEPROPERTY, &pEnumGuid)))
+        pEnumGuid = NULL;
 
     HRESULT hr = E_OUTOFMEMORY;
 
@@ -200,6 +201,9 @@ HRESULT InitDisplayAttrbuteLib(PCIC_LIBTHREAD pLibThread)
         }
     }
     ::LeaveCriticalSection(&g_csLock);
+
+    if (pEnumGuid)
+        pEnumGuid->Release();
 
     return hr;
 }

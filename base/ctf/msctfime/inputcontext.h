@@ -13,9 +13,18 @@
 class CInputContextOwnerCallBack;
 class CInputContextOwner;
 class CicInputContext;
+class CicEditSink;
 
 
 typedef HRESULT (CALLBACK *FN_IC_OWNER_CALLBACK)(UINT uType, LPVOID args, LPVOID param);
+
+typedef struct TEXT_EXT_ARGS
+{
+    LONG acpStart;
+    LONG acpEnd;
+    RECT *prc;
+    BOOL *pfClipped;
+} TEXT_EXT_ARGS;
 
 /***********************************************************************
  *      CInputContextOwner
@@ -108,13 +117,23 @@ public:
     RECT m_rcCandidate2;
     TfClientId m_clientId;
     DWORD m_dwUnknown9;
+    CicEditSink *m_pEditSink;
+    ITfCategoryMgr *m_pCategoryMgr;
+    ITfDisplayAttributeMgr *m_pDisplayAttributeMgr;
+    BOOL m_fInComposition;
+    BOOL m_fCancelComposition;
+    LPWSTR m_pszLastComp;
+    LPBYTE m_pLastAttr;
+    DWORD m_cchLastComp;
+    DWORD m_dwLastCursor;
+    LONG m_lCommitted;
 
 public:
     CicInputContext(
         _In_ TfClientId cliendId,
         _Inout_ PCIC_LIBTHREAD pLibThread,
         _In_ HIMC hIMC);
-    virtual ~CicInputContext() { }
+    virtual ~CicInputContext();
 
     // IUnknown interface
     STDMETHODIMP QueryInterface(REFIID riid, LPVOID* ppvObj) override;
@@ -141,7 +160,18 @@ public:
     HRESULT CreateInputContext(_Inout_ ITfThreadMgr *pThreadMgr, _Inout_ CicIMCLock& imcLock);
     HRESULT DestroyInputContext();
 
-    BOOL SetCompositionString(CicIMCLock& imcLock, ITfThreadMgr_P *pThreadMgr, DWORD dwIndex,
+    HRESULT AttachSinks();
+    void DetachSinks();
+    HRESULT OnEndEdit(_In_ TfEditCookie ec);
+    HRESULT OnOwnerCallback(_In_ UINT uType, _Inout_ LPVOID args);
+    static HRESULT CALLBACK OwnerCallback(UINT uType, LPVOID args, LPVOID param);
+    HRESULT GetTextExt(_Out_ RECT *prc, _Out_ BOOL *pfClipped);
+    HRESULT TerminateComposition(_In_ BOOL bCancel);
+    HRESULT RemoveCommittedText();
+    HRESULT DoRemoveCommitted(_In_ TfEditCookie ec);
+    HRESULT SyncComposition();
+
+    BOOL SetCompositionString(CicIMCLock& imcLock, ITfThreadMgrEx *pThreadMgr, DWORD dwIndex,
                               LPCVOID lpComp, DWORD dwCompLen, LPCVOID lpRead, DWORD dwReadLen,
                               UINT uCodePage);
 
@@ -151,7 +181,7 @@ public:
     HRESULT EscbCompCancel(CicIMCLock& imcLock);
     HRESULT SetupReconvertString(
         CicIMCLock& imcLock,
-        ITfThreadMgr_P *pThreadMgr,
+        ITfThreadMgrEx *pThreadMgr,
         UINT uCodePage,
         UINT uMsg,
         BOOL bUndo);

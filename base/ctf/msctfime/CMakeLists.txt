@@ -3,6 +3,8 @@ spec2def(msctfime.ime msctfime.spec)
 
 list(APPEND SOURCE
     bridge.cpp
+    composition.cpp
+    compwnd.cpp
     inputcontext.cpp
     misc.cpp
     msctfime.cpp
