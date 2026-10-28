@@ -110,40 +110,6 @@ BdbFindBlock(
 }
 
 static void
-DecodeDtd(
-    HDGFX_BLOB Dtd,
-    HDGFX_VBT_PANEL *Panel)
-{
-    uint32_t HActive = Read8(Dtd, 2) | ((Read8(Dtd, 4) >> 4) << 8);
-    uint32_t HBlank = Read8(Dtd, 3) | ((Read8(Dtd, 4) & 0xF) << 8);
-    uint32_t VActive = Read8(Dtd, 5) | ((Read8(Dtd, 7) >> 4) << 8);
-    uint32_t VBlank = Read8(Dtd, 6) | ((Read8(Dtd, 7) & 0xF) << 8);
-    uint32_t HSyncOffset = Read8(Dtd, 8) | (((Read8(Dtd, 11) >> 6) & 3) << 8);
-    uint32_t HSyncWidth = Read8(Dtd, 9) | (((Read8(Dtd, 11) >> 4) & 3) << 8);
-    uint32_t VSyncOffset = (Read8(Dtd, 10) >> 4) | (((Read8(Dtd, 11) >> 2) & 3) << 4);
-    uint32_t VSyncWidth = (Read8(Dtd, 10) & 0xF) | ((Read8(Dtd, 11) & 3) << 4);
-    uint32_t Flags = Read8(Dtd, 17);
-
-    Panel->DotKHz = Read16(Dtd, 0) * 10;
-    Panel->Timings.HActive = HActive;
-    Panel->Timings.HBlankStart = HActive;
-    Panel->Timings.HBlankEnd = HActive + HBlank;
-    Panel->Timings.HSyncStart = HActive + HSyncOffset;
-    Panel->Timings.HSyncEnd = HActive + HSyncOffset + HSyncWidth;
-    Panel->Timings.HTotal = HActive + HBlank;
-    Panel->Timings.VActive = VActive;
-    Panel->Timings.VBlankStart = VActive;
-    Panel->Timings.VBlankEnd = VActive + VBlank;
-    Panel->Timings.VSyncStart = VActive + VSyncOffset;
-    Panel->Timings.VSyncEnd = VActive + VSyncOffset + VSyncWidth;
-    Panel->Timings.VTotal = VActive + VBlank;
-    Panel->WidthMm = Read8(Dtd, 12) | ((Read8(Dtd, 14) >> 4) << 8);
-    Panel->HeightMm = Read8(Dtd, 13) | ((Read8(Dtd, 14) & 0xF) << 8);
-    Panel->HSyncPositive = (Flags & 0x02) != 0;
-    Panel->VSyncPositive = (Flags & 0x04) != 0;
-}
-
-static void
 ParsePanel(
     HDGFX_BLOB Bdb,
     HDGFX_VBT *Result)
@@ -169,9 +135,15 @@ ParsePanel(
         DtdOffset = Read16(Block, 1 + (size_t)Panel->PanelType * LFP_PTR_ENTRY_SIZE + LFP_PTR_DVO_TIMING);
         if (DtdOffset >= DataOffset && BlobRange(Data, DtdOffset - DataOffset, DTD_SIZE))
         {
-            HDGFX_BLOB Dtd = { Data.Data + (DtdOffset - DataOffset), DTD_SIZE };
+            HDGFX_DTD Dtd;
 
-            DecodeDtd(Dtd, Panel);
+            HdgfxDecodeDtd(Data.Data + (DtdOffset - DataOffset), &Dtd);
+            Panel->DotKHz = Dtd.DotKHz;
+            Panel->Timings = Dtd.Timings;
+            Panel->HSyncPositive = Dtd.HSyncPositive;
+            Panel->VSyncPositive = Dtd.VSyncPositive;
+            Panel->WidthMm = Dtd.WidthMm;
+            Panel->HeightMm = Dtd.HeightMm;
             Panel->Present = true;
         }
     }

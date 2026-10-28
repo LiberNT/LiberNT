@@ -41,6 +41,24 @@ HdgfxReadRegister(
     return READ_REGISTER_ULONG((PULONG)((PUCHAR)Context + Offset));
 }
 
+static void
+HdgfxWriteRegister(
+    _In_ void *Context,
+    _In_ uint32_t Offset,
+    _In_ uint32_t Value)
+{
+    WRITE_REGISTER_ULONG((PULONG)((PUCHAR)Context + Offset), Value);
+}
+
+static void
+HdgfxStall(
+    _In_ void *Context,
+    _In_ uint32_t Microseconds)
+{
+    UNREFERENCED_PARAMETER(Context);
+    KeStallExecutionProcessor(Microseconds);
+}
+
 static NTSTATUS
 HdgfxReadConfig(
     _In_ PSOFTGPU_DEVICE Device,
@@ -248,6 +266,60 @@ HdgfxLogDisplayState(
 }
 
 static VOID
+HdgfxReadPanelEdid(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PHDGFX_ADAPTER Adapter,
+    _In_ const HDGFX_MMIO *Mmio)
+{
+    UCHAR Edid[HDGFX_EDID_SIZE];
+    HDGFX_GMBUS_STATUS Status;
+    HDGFX_EDID Parsed;
+    ULONG Index;
+
+    Status = HdgfxGmbusRead(Mmio, Adapter->Generation->PanelDdcPins, HDGFX_DDC_ADDRESS, 0, Edid, sizeof(Edid));
+    if (Status != HdgfxGmbusSuccess)
+    {
+        DPRINT1("Panel EDID: GMBUS pins %lu: %s\n",
+                Adapter->Generation->PanelDdcPins, HdgfxGmbusStatusName(Status));
+        return;
+    }
+
+    for (Index = 0; Index < sizeof(Edid); Index += 16)
+    {
+        DPRINT1("EDID %02lx: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                Index,
+                Edid[Index + 0], Edid[Index + 1], Edid[Index + 2], Edid[Index + 3],
+                Edid[Index + 4], Edid[Index + 5], Edid[Index + 6], Edid[Index + 7],
+                Edid[Index + 8], Edid[Index + 9], Edid[Index + 10], Edid[Index + 11],
+                Edid[Index + 12], Edid[Index + 13], Edid[Index + 14], Edid[Index + 15]);
+    }
+    if (!HdgfxEdidParse(Edid, &Parsed))
+    {
+        DPRINT1("Panel EDID: bad header or checksum\n");
+        return;
+    }
+
+    DPRINT1("Panel EDID %s %04lx serial %08lx, version %lu.%lu, %lux%lu cm, %lu extensions\n",
+            Parsed.Manufacturer, Parsed.ProductCode, Parsed.SerialNumber,
+            Parsed.Version, Parsed.Revision, Parsed.WidthCm, Parsed.HeightCm, Parsed.Extensions);
+    for (Index = 0; Index < Parsed.DtdCount; Index++)
+    {
+        const HDGFX_DTD *Dtd = &Parsed.Dtds[Index];
+
+        DPRINT1("Panel EDID DTD %lu: %lu kHz %lu %lu %lu %lu %lu %lu %lu %lu %chsync %cvsync %lux%lu mm\n",
+                Index, Dtd->DotKHz,
+                Dtd->Timings.HActive, Dtd->Timings.HSyncStart, Dtd->Timings.HSyncEnd, Dtd->Timings.HTotal,
+                Dtd->Timings.VActive, Dtd->Timings.VSyncStart, Dtd->Timings.VSyncEnd, Dtd->Timings.VTotal,
+                Dtd->HSyncPositive ? '+' : '-', Dtd->VSyncPositive ? '+' : '-',
+                Dtd->WidthMm, Dtd->HeightMm);
+    }
+    DPRINT1("Panel EDID %s the firmware copy (%lu bytes)\n",
+            Device->EdidLength == sizeof(Edid) && RtlEqualMemory(Device->Edid, Edid, sizeof(Edid)) ?
+                "matches" : "differs from",
+            Device->EdidLength);
+}
+
+static VOID
 HdgfxDisableFirmwareBrightness(
     _In_ PSOFTGPU_DEVICE Device)
 {
@@ -359,8 +431,11 @@ SoftGpuPlatformAdapterStarted(
         return;
     Mmio.Read = HdgfxReadRegister;
     Mmio.Context = Adapter->Registers;
+    Mmio.Write = HdgfxWriteRegister;
+    Mmio.Stall = HdgfxStall;
     Adapter->Generation->ReadDisplayState(&Mmio, State);
     HdgfxLogDisplayState(State);
+    HdgfxReadPanelEdid(Device, Adapter, &Mmio);
     HdgfxStartBacklight(Device, Adapter, State);
     ExFreePoolWithTag(State, HDGFX_TAG);
 }

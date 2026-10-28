@@ -15,6 +15,8 @@ add_softgpu_engine(hdgfx_softgpu DEFINITIONS
 add_library(hdgfx MODULE
     ${REACTOS_SOURCE_DIR}/drivers/directx/softgpu/platform_root.c
     core/hdgfx_device.c
+    core/hdgfx_edid.c
+    core/hdgfx_gmbus.c
     core/hdgfx_ilk.c
     core/hdgfx_vbt.c
     hdgfx_platform.c

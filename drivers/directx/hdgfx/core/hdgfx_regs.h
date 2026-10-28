@@ -43,6 +43,11 @@
     R(PCH_PP_ON_DELAYS,     0xC7208, 0) \
     R(PCH_PP_OFF_DELAYS,    0xC720C, 0) \
     R(PCH_PP_DIVISOR,       0xC7210, 0) \
+    R(GMBUS0,               0xC5100, 0) \
+    R(GMBUS1,               0xC5104, 0) \
+    R(GMBUS2,               0xC5108, 0) \
+    R(GMBUS3,               0xC510C, 0) \
+    R(GMBUS5,               0xC5120, 0) \
     R(BLC_PWM_PCH_CTL1,     0xC8250, 0) \
     R(BLC_PWM_PCH_CTL2,     0xC8254, 0) \
     R(TRANS_HTOTAL,         0xE0000, 0x1000) \
@@ -99,6 +104,21 @@
     F(PP_DELAY_LOW,             12, 0) \
     F(PP_DIVISOR_REFERENCE,     31, 8) \
     F(PP_DIVISOR_CYCLE,         4, 0) \
+    F(GMBUS0_RATE,              10, 8) \
+    F(GMBUS0_PINS,              2, 0) \
+    F(GMBUS1_SW_CLR_INT,        31, 31) \
+    F(GMBUS1_SW_RDY,            30, 30) \
+    F(GMBUS1_ENABLE_TIMEOUT,    29, 29) \
+    F(GMBUS1_CYCLE,             27, 25) \
+    F(GMBUS1_BYTE_COUNT,        24, 16) \
+    F(GMBUS1_INDEX,             15, 8) \
+    F(GMBUS1_ADDRESS,           7, 1) \
+    F(GMBUS1_READ,              0, 0) \
+    F(GMBUS2_INUSE,             15, 15) \
+    F(GMBUS2_STALL_TIMEOUT,     13, 13) \
+    F(GMBUS2_HW_RDY,            11, 11) \
+    F(GMBUS2_NAK,               10, 10) \
+    F(GMBUS2_ACTIVE,            9, 9) \
     F(BLC_CPU_ENABLE,           31, 31) \
     F(BLC_CPU_PIPE,             29, 29) \
     F(BLC_CPU_DUTY,             15, 0) \
@@ -137,3 +157,6 @@ enum { HDGFX_ILK_FIELDS(HDGFX_DEFINE_FIELD) };
 
 #define HDGFX_GET(Value, Name) \
     HDGFX_BITS(Value, HDGFX_FIELD_##Name##_HIGH, HDGFX_FIELD_##Name##_LOW)
+
+#define HDGFX_SET(Name, Value) \
+    (HDGFX_BITS(Value, HDGFX_FIELD_##Name##_HIGH - HDGFX_FIELD_##Name##_LOW, 0) << HDGFX_FIELD_##Name##_LOW)
