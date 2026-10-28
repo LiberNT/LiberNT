@@ -249,7 +249,8 @@ typedef enum _HDGFX_MODESET_STATUS
     HdgfxModesetFdiBitLockFailed,
     HdgfxModesetFdiSymbolLockFailed,
     HdgfxModesetTranscoderOnTimeout,
-    HdgfxModesetPanelOnTimeout
+    HdgfxModesetPanelOnTimeout,
+    HdgfxModesetVblankTimeout
 } HDGFX_MODESET_STATUS;
 
 typedef struct _HDGFX_GENERATION
@@ -262,7 +263,9 @@ typedef struct _HDGFX_GENERATION
     HDGFX_MODESET_STATUS (*ComputeLvds)(const HDGFX_DISPLAY_STATE *Current,
                                         const HDGFX_LVDS_MODE *Mode,
                                         HDGFX_DISPLAY_STATE *Target);
-    HDGFX_MODESET_STATUS (*CommitLvds)(const HDGFX_MMIO *Mmio, const HDGFX_DISPLAY_STATE *Target);
+    HDGFX_MODESET_STATUS (*CommitLvds)(const HDGFX_MMIO *Mmio,
+                                       const HDGFX_DISPLAY_STATE *Current,
+                                       const HDGFX_DISPLAY_STATE *Target);
     HDGFX_MODESET_STATUS (*DisableLvds)(const HDGFX_MMIO *Mmio, const HDGFX_DISPLAY_STATE *Current);
 } HDGFX_GENERATION;
 
@@ -335,6 +338,7 @@ HdgfxIlkComputeLvds(
 HDGFX_MODESET_STATUS
 HdgfxIlkCommitLvds(
     const HDGFX_MMIO *Mmio,
+    const HDGFX_DISPLAY_STATE *Current,
     const HDGFX_DISPLAY_STATE *Target);
 
 HDGFX_MODESET_STATUS

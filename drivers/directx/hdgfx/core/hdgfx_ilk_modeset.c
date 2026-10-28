@@ -64,6 +64,8 @@
 #define ILK_PIPE_TIMEOUT_US         100000
 #define ILK_PANEL_TIMEOUT_MARGIN_US 100000
 #define ILK_POLL_US                 1000
+#define ILK_VBLANK_EVASION_US       250
+#define ILK_SCANLINE_POLL_US        10
 
 static uint32_t
 IlkRead(
@@ -628,17 +630,68 @@ HdgfxIlkDisableLvds(
     return IlkDisableLvds(Mmio, Current);
 }
 
-HDGFX_MODESET_STATUS
-HdgfxIlkCommitLvds(
+static uint32_t
+IlkScanLine(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Index)
+{
+    return HDGFX_GET(IlkRead(Mmio, HDGFX_REG(PIPE_DSL, Index)), PIPE_DSL_LINE);
+}
+
+static HDGFX_MODESET_STATUS
+IlkUpdateSource(
     const HDGFX_MMIO *Mmio,
     const HDGFX_DISPLAY_STATE *Target)
 {
-    HDGFX_MODESET_STATUS Status;
+    uint32_t Index = Target->Lvds.Transcoder;
+    const HDGFX_PIPE *Pipe = &Target->Pipes[Index];
+    const HDGFX_DPLL *Dpll = &Target->Dplls[Target->Transcoders[Index].Dpll];
+    uint32_t VActive = Pipe->Timings.VActive;
+    uint32_t Evasion = IlkDivide((uint64_t)ILK_VBLANK_EVASION_US * Dpll->DotKHz, (uint64_t)Pipe->Timings.HTotal * 1000) + 1;
+    uint32_t Elapsed;
+    uint32_t Line;
 
-    Status = IlkDisableLvds(Mmio, Target);
-    if (Status != HdgfxModesetSuccess)
-        return Status;
-    return IlkEnableLvds(Mmio, Target);
+    if (Evasion >= VActive)
+        return HdgfxModesetInvalidMode;
+    for (Elapsed = 0;; Elapsed += ILK_SCANLINE_POLL_US)
+    {
+        Line = IlkScanLine(Mmio, Index);
+        if (Line + Evasion < VActive)
+            break;
+        if (Elapsed >= ILK_PIPE_TIMEOUT_US)
+            return HdgfxModesetVblankTimeout;
+        IlkDelay(Mmio, ILK_SCANLINE_POLL_US);
+    }
+
+    IlkWrite(Mmio, HDGFX_REG(PIPE_SRC, Index),
+             HDGFX_SET(PIPE_SRC_WIDTH, Pipe->SourceWidth - 1) | HDGFX_SET(PIPE_SRC_HEIGHT, Pipe->SourceHeight - 1));
+    if (Pipe->PanelFitter.Enabled)
+    {
+        IlkWrite(Mmio, HDGFX_REG(PF_CTL_1, Index), HDGFX_SET(PF_ENABLE, 1) | HDGFX_SET(PF_FILTER, ILK_PF_FILTER_MEDIUM));
+        IlkWrite(Mmio, HDGFX_REG(PF_WIN_POS, Index),
+                 HDGFX_SET(PF_X, Pipe->PanelFitter.X) | HDGFX_SET(PF_Y, Pipe->PanelFitter.Y));
+        IlkWrite(Mmio, HDGFX_REG(PF_WIN_SZ, Index),
+                 HDGFX_SET(PF_X, Pipe->PanelFitter.Width) | HDGFX_SET(PF_Y, Pipe->PanelFitter.Height));
+    }
+    else
+    {
+        IlkWrite(Mmio, HDGFX_REG(PF_CTL_1, Index), 0);
+        IlkWrite(Mmio, HDGFX_REG(PF_WIN_POS, Index), 0);
+        IlkWrite(Mmio, HDGFX_REG(PF_WIN_SZ, Index), 0);
+    }
+    IlkWrite(Mmio, HDGFX_REG(DSP_STRIDE, Index), Pipe->Primary.Stride);
+    IlkWrite(Mmio, HDGFX_REG(DSP_SURF, Index), Pipe->Primary.Surface);
+
+    for (Elapsed = 0;; Elapsed += ILK_SCANLINE_POLL_US)
+    {
+        uint32_t Now = IlkScanLine(Mmio, Index);
+
+        if (Now >= VActive || Now < Line)
+            return HdgfxModesetSuccess;
+        if (Elapsed >= ILK_PIPE_TIMEOUT_US)
+            return HdgfxModesetVblankTimeout;
+        IlkDelay(Mmio, ILK_SCANLINE_POLL_US);
+    }
 }
 
 #define HDGFX_COMPARE(Field) \
@@ -664,8 +717,8 @@ CompareTimings(
     return NULL;
 }
 
-const char *
-HdgfxCompareLvdsState(
+static const char *
+IlkCompareLink(
     const HDGFX_DISPLAY_STATE *Target,
     const HDGFX_DISPLAY_STATE *Actual)
 {
@@ -691,8 +744,6 @@ HdgfxCompareLvdsState(
     Mismatch = CompareTimings(&Target->Pipes[Index].Timings, &Actual->Pipes[Index].Timings);
     if (Mismatch)
         return "Pipes[Index].Timings";
-    HDGFX_COMPARE(Pipes[Index].SourceWidth);
-    HDGFX_COMPARE(Pipes[Index].SourceHeight);
     HDGFX_COMPARE(Pipes[Index].Fdi.TuSize);
     HDGFX_COMPARE(Pipes[Index].Fdi.DataM);
     HDGFX_COMPARE(Pipes[Index].Fdi.DataN);
@@ -701,18 +752,9 @@ HdgfxCompareLvdsState(
     HDGFX_COMPARE(Pipes[Index].FdiTx.Enabled);
     HDGFX_COMPARE(Pipes[Index].FdiTx.Training);
     HDGFX_COMPARE(Pipes[Index].FdiTx.Lanes);
-    HDGFX_COMPARE(Pipes[Index].PanelFitter.Enabled);
-    if (Target->Pipes[Index].PanelFitter.Enabled)
-    {
-        HDGFX_COMPARE(Pipes[Index].PanelFitter.X);
-        HDGFX_COMPARE(Pipes[Index].PanelFitter.Y);
-        HDGFX_COMPARE(Pipes[Index].PanelFitter.Width);
-        HDGFX_COMPARE(Pipes[Index].PanelFitter.Height);
-    }
     HDGFX_COMPARE(Pipes[Index].Primary.Enabled);
     HDGFX_COMPARE(Pipes[Index].Primary.XTiled);
     HDGFX_COMPARE(Pipes[Index].Primary.Format);
-    HDGFX_COMPARE(Pipes[Index].Primary.Stride);
     HDGFX_COMPARE(Pipes[Index].Primary.Surface);
     HDGFX_COMPARE(Pipes[Index].Primary.LinearOffset);
 
@@ -740,6 +782,48 @@ HdgfxCompareLvdsState(
 }
 
 const char *
+HdgfxCompareLvdsState(
+    const HDGFX_DISPLAY_STATE *Target,
+    const HDGFX_DISPLAY_STATE *Actual)
+{
+    uint32_t Index = Target->Lvds.Transcoder;
+    const char *Mismatch;
+
+    Mismatch = IlkCompareLink(Target, Actual);
+    if (Mismatch)
+        return Mismatch;
+    HDGFX_COMPARE(Pipes[Index].SourceWidth);
+    HDGFX_COMPARE(Pipes[Index].SourceHeight);
+    HDGFX_COMPARE(Pipes[Index].PanelFitter.Enabled);
+    if (Target->Pipes[Index].PanelFitter.Enabled)
+    {
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.X);
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.Y);
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.Width);
+        HDGFX_COMPARE(Pipes[Index].PanelFitter.Height);
+    }
+    HDGFX_COMPARE(Pipes[Index].Primary.Stride);
+    return NULL;
+}
+
+HDGFX_MODESET_STATUS
+HdgfxIlkCommitLvds(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DISPLAY_STATE *Current,
+    const HDGFX_DISPLAY_STATE *Target)
+{
+    HDGFX_MODESET_STATUS Status;
+
+    if (IlkCompareLink(Target, Current) == NULL)
+        return IlkUpdateSource(Mmio, Target);
+
+    Status = IlkDisableLvds(Mmio, Target);
+    if (Status != HdgfxModesetSuccess)
+        return Status;
+    return IlkEnableLvds(Mmio, Target);
+}
+
+const char *
 HdgfxModesetStatusName(
     HDGFX_MODESET_STATUS Status)
 {
@@ -756,6 +840,7 @@ HdgfxModesetStatusName(
         "FDI symbol lock failed",
         "transcoder-on timeout",
         "panel power-on timeout",
+        "vertical blank timeout",
     };
 
     return (uint32_t)Status < sizeof(Names) / sizeof(Names[0]) ? Names[Status] : "unknown";
