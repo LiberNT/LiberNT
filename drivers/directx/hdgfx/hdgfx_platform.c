@@ -27,6 +27,11 @@
 #define HDGFX_VBLANK_TIMEOUT_US     50000UL
 #define HDGFX_CRT_CHILD_UID         1UL
 #define HDGFX_CRT_PIPE              1UL
+#define HDGFX_RING_SIZE             0x4000UL
+#define HDGFX_RING_PAGES            (HDGFX_RING_SIZE / PAGE_SIZE)
+#define HDGFX_RENDER_GTT_PAGES      (HDGFX_RING_PAGES + 1)
+#define HDGFX_RING_SEQNO_INDEX      0x20UL
+#define HDGFX_RING_TEST_TIMEOUT_US  100000UL
 
 typedef struct _HDGFX_SCANOUT
 {
@@ -74,6 +79,12 @@ typedef struct _HDGFX_ADAPTER
     ULONG BacklightMaximum;
     ULONG BacklightMinimum;
     EX_RUNDOWN_REF Rundown;
+    PVOID RingMemory;
+    PVOID StatusPage;
+    PULONG GttWindow;
+    ULONG SavedGtt[HDGFX_RENDER_GTT_PAGES];
+    HDGFX_RING Ring;
+    BOOLEAN RingStarted;
 } HDGFX_ADAPTER, *PHDGFX_ADAPTER;
 
 static const GUID HdgfxGuidBrightness =
@@ -157,8 +168,8 @@ HdgfxReadConfig(
     return Status;
 }
 
-static BOOLEAN
-HdgfxResourceOwned(
+static PCM_PARTIAL_RESOURCE_DESCRIPTOR
+HdgfxFindMemoryResource(
     _In_ PDXGK_INTERFACE Interface,
     _In_ ULONGLONG Address,
     _In_ ULONG Size)
@@ -173,7 +184,7 @@ HdgfxResourceOwned(
         !NT_SUCCESS(Interface->DxgkCbGetDeviceInformation(Interface->DeviceHandle, &DeviceInfo)) ||
         DeviceInfo.TranslatedResourceList == NULL)
     {
-        return FALSE;
+        return NULL;
     }
 
     Full = DeviceInfo.TranslatedResourceList->List;
@@ -186,12 +197,21 @@ HdgfxResourceOwned(
                 (ULONGLONG)Descriptor->u.Memory.Start.QuadPart <= Address &&
                 Address + Size <= (ULONGLONG)Descriptor->u.Memory.Start.QuadPart + Descriptor->u.Memory.Length)
             {
-                return TRUE;
+                return Descriptor;
             }
         }
         Full = (PCM_FULL_RESOURCE_DESCRIPTOR)&Full->PartialResourceList.PartialDescriptors[Index];
     }
-    return FALSE;
+    return NULL;
+}
+
+static BOOLEAN
+HdgfxResourceOwned(
+    _In_ PDXGK_INTERFACE Interface,
+    _In_ ULONGLONG Address,
+    _In_ ULONG Size)
+{
+    return HdgfxFindMemoryResource(Interface, Address, Size) != NULL;
 }
 
 static PUCHAR
@@ -653,6 +673,151 @@ HdgfxQueueHotplug(
     ExQueueWorkItem(&Adapter->HotplugWork, DelayedWorkQueue);
 }
 
+static VOID
+HdgfxStopRender(
+    _Inout_ PHDGFX_ADAPTER Adapter)
+{
+    HDGFX_MMIO Mmio;
+    ULONG Index;
+
+    if (Adapter->RingStarted)
+    {
+        HdgfxMmioInit(Adapter->Registers, &Mmio);
+        if (!HdgfxIlkStopRing(&Mmio, &Adapter->Ring))
+        {
+            DPRINT1("Render ring busy at stop, head 0x%lx tail 0x%lx; keeping its memory\n",
+                    HdgfxIlkRingHead(&Mmio), Adapter->Ring.Tail);
+            return;
+        }
+        Adapter->RingStarted = FALSE;
+    }
+    if (Adapter->GttWindow != NULL)
+    {
+        for (Index = 0; Index < HDGFX_RENDER_GTT_PAGES; Index++)
+            WRITE_REGISTER_ULONG(&Adapter->GttWindow[Index], Adapter->SavedGtt[Index]);
+        READ_REGISTER_ULONG(&Adapter->GttWindow[HDGFX_RENDER_GTT_PAGES - 1]);
+        MmUnmapIoSpace(Adapter->GttWindow, HDGFX_RENDER_GTT_PAGES * sizeof(ULONG));
+        Adapter->GttWindow = NULL;
+    }
+    if (Adapter->RingMemory != NULL)
+    {
+        MmFreeContiguousMemorySpecifyCache(Adapter->RingMemory, HDGFX_RING_SIZE, MmNonCached);
+        Adapter->RingMemory = NULL;
+    }
+    if (Adapter->StatusPage != NULL)
+    {
+        MmFreeContiguousMemorySpecifyCache(Adapter->StatusPage, PAGE_SIZE, MmCached);
+        Adapter->StatusPage = NULL;
+    }
+}
+
+static VOID
+HdgfxStartRender(
+    _In_ PSOFTGPU_DEVICE Device,
+    _Inout_ PHDGFX_ADAPTER Adapter)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Aperture;
+    PHYSICAL_ADDRESS Lowest;
+    PHYSICAL_ADDRESS Highest;
+    PHYSICAL_ADDRESS Boundary;
+    PHYSICAL_ADDRESS Address;
+    LARGE_INTEGER Frequency;
+    LARGE_INTEGER Start;
+    LARGE_INTEGER Now;
+    ULONGLONG Bar0 = 0;
+    ULONGLONG Bar2 = 0;
+    ULONGLONG ElapsedUs = 0;
+    volatile ULONG *Status;
+    HDGFX_MMIO Mmio;
+    ULONG GttFirst;
+    ULONG Index;
+    BOOLEAN Done = FALSE;
+
+    if (!NT_SUCCESS(HdgfxReadConfig(&Device->DxgkInterface, &Bar0, HDGFX_PCI_BAR0, sizeof(Bar0))) ||
+        !NT_SUCCESS(HdgfxReadConfig(&Device->DxgkInterface, &Bar2, HDGFX_PCI_BAR2, sizeof(Bar2))))
+    {
+        return;
+    }
+    Bar0 &= ~0xFULL;
+    Bar2 &= ~0xFULL;
+    Aperture = HdgfxFindMemoryResource(&Device->DxgkInterface, Bar2, PAGE_SIZE);
+    if (Aperture == NULL || (ULONGLONG)Aperture->u.Memory.Start.QuadPart != Bar2 ||
+        Aperture->u.Memory.Length < HDGFX_RENDER_GTT_PAGES * PAGE_SIZE)
+    {
+        DPRINT1("No aperture at 0x%I64x for the render ring\n", Bar2);
+        return;
+    }
+
+    Lowest.QuadPart = 0;
+    Highest.QuadPart = MAXULONG;
+    Boundary.QuadPart = 0;
+    Adapter->RingMemory = MmAllocateContiguousMemorySpecifyCache(HDGFX_RING_SIZE, Lowest, Highest, Boundary,
+                                                                 MmNonCached);
+    Adapter->StatusPage = MmAllocateContiguousMemorySpecifyCache(PAGE_SIZE, Lowest, Highest, Boundary, MmCached);
+    GttFirst = Aperture->u.Memory.Length / PAGE_SIZE - HDGFX_RENDER_GTT_PAGES;
+    Address.QuadPart = (LONGLONG)(Bar0 + HDGFX_REG(GTT_PTE, GttFirst));
+    if (Adapter->RingMemory == NULL || Adapter->StatusPage == NULL ||
+        !HdgfxResourceOwned(&Device->DxgkInterface, (ULONGLONG)Address.QuadPart,
+                            HDGFX_RENDER_GTT_PAGES * sizeof(ULONG)))
+    {
+        HdgfxStopRender(Adapter);
+        return;
+    }
+    Adapter->GttWindow = MmMapIoSpace(Address, HDGFX_RENDER_GTT_PAGES * sizeof(ULONG), MmNonCached);
+    if (Adapter->GttWindow == NULL)
+    {
+        HdgfxStopRender(Adapter);
+        return;
+    }
+    RtlZeroMemory(Adapter->RingMemory, HDGFX_RING_SIZE);
+    RtlZeroMemory(Adapter->StatusPage, PAGE_SIZE);
+
+    for (Index = 0; Index < HDGFX_RENDER_GTT_PAGES; Index++)
+    {
+        PVOID Page = Index < HDGFX_RING_PAGES ? (PUCHAR)Adapter->RingMemory + Index * PAGE_SIZE : Adapter->StatusPage;
+
+        Adapter->SavedGtt[Index] = READ_REGISTER_ULONG(&Adapter->GttWindow[Index]);
+        WRITE_REGISTER_ULONG(&Adapter->GttWindow[Index], HdgfxIlkGttEntry(MmGetPhysicalAddress(Page).LowPart));
+    }
+    READ_REGISTER_ULONG(&Adapter->GttWindow[HDGFX_RENDER_GTT_PAGES - 1]);
+
+    Adapter->Ring.Commands = Adapter->RingMemory;
+    Adapter->Ring.Size = HDGFX_RING_SIZE;
+    Adapter->Ring.Address = GttFirst * PAGE_SIZE;
+    Adapter->Ring.StatusAddress = (GttFirst + HDGFX_RING_PAGES) * PAGE_SIZE;
+    HdgfxMmioInit(Adapter->Registers, &Mmio);
+    Adapter->RingStarted = HdgfxIlkStartRing(&Mmio, &Adapter->Ring);
+    if (!Adapter->RingStarted)
+    {
+        DPRINT1("Render ring did not start: start 0x%08lx ctl 0x%08lx head 0x%08lx\n",
+                HdgfxReadRegister32(Adapter, HDGFX_REG(RING_START, 0)),
+                HdgfxReadRegister32(Adapter, HDGFX_REG(RING_CTL, 0)),
+                HdgfxReadRegister32(Adapter, HDGFX_REG(RING_HEAD, 0)));
+        HdgfxWriteRegister32(Adapter, HDGFX_REG(RING_CTL, 0), 0);
+        HdgfxStopRender(Adapter);
+        return;
+    }
+
+    Status = (volatile ULONG *)Adapter->StatusPage;
+    if (HdgfxRingEmitBreadcrumb(&Adapter->Ring, HdgfxIlkRingHead(&Mmio), HDGFX_RING_SEQNO_INDEX, 1))
+    {
+        Start = KeQueryPerformanceCounter(&Frequency);
+        HdgfxIlkAdvanceRing(&Mmio, &Adapter->Ring);
+        do
+        {
+            Done = Status[HDGFX_RING_SEQNO_INDEX] == 1;
+            Now = KeQueryPerformanceCounter(NULL);
+            ElapsedUs = (ULONGLONG)(Now.QuadPart - Start.QuadPart) * 1000000ULL / (ULONGLONG)Frequency.QuadPart;
+            if (!Done)
+                KeStallExecutionProcessor(10);
+        } while (!Done && ElapsedUs < HDGFX_RING_TEST_TIMEOUT_US);
+    }
+    DPRINT1("Render ring at 0x%lx, %lu KB, status page 0x%lx: breadcrumb %s after %I64u us, head 0x%lx tail 0x%lx, ESR 0x%lx\n",
+            Adapter->Ring.Address, HDGFX_RING_SIZE / 1024, Adapter->Ring.StatusAddress,
+            Done ? "written" : "missing", ElapsedUs, HdgfxIlkRingHead(&Mmio), Adapter->Ring.Tail,
+            HdgfxReadRegister32(Adapter, HDGFX_REG(ESR, 0)));
+}
+
 VOID
 SoftGpuPlatformAdapterStarted(
     _Inout_ PSOFTGPU_DEVICE Device)
@@ -716,6 +881,7 @@ SoftGpuPlatformAdapterStarted(
     Adapter->InternalPanel = State->Lvds.Detected;
     HdgfxStartBacklight(Device, Adapter, State);
     HdgfxStartInterrupts(Device, Adapter);
+    HdgfxStartRender(Device, Adapter);
     ExFreePoolWithTag(State, HDGFX_TAG);
 }
 
@@ -734,6 +900,7 @@ SoftGpuPlatformAdapterStopping(
     if (Adapter->Registers == NULL)
         return;
 
+    HdgfxStopRender(Adapter);
     HdgfxStopInterrupts(Device, Adapter);
     if (Adapter->OpRegion != NULL)
     {

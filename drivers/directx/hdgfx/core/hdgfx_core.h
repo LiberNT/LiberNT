@@ -302,6 +302,15 @@ typedef struct _HDGFX_GENERATION
     void (*EnableCrtHotplug)(const HDGFX_MMIO *Mmio, bool Enable);
 } HDGFX_GENERATION;
 
+typedef struct _HDGFX_RING
+{
+    uint32_t *Commands;
+    uint32_t Size;
+    uint32_t Address;
+    uint32_t StatusAddress;
+    uint32_t Tail;
+} HDGFX_RING;
+
 typedef struct _HDGFX_VBT_PANEL
 {
     bool Present;
@@ -485,6 +494,43 @@ void
 HdgfxOpRegionEndNotification(
     const HDGFX_MMIO *OpRegion,
     bool Success);
+
+uint32_t
+HdgfxIlkGttEntry(
+    uint32_t Physical);
+
+bool
+HdgfxIlkStartRing(
+    const HDGFX_MMIO *Mmio,
+    HDGFX_RING *Ring);
+
+bool
+HdgfxIlkStopRing(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_RING *Ring);
+
+uint32_t
+HdgfxIlkRingHead(
+    const HDGFX_MMIO *Mmio);
+
+void
+HdgfxIlkAdvanceRing(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_RING *Ring);
+
+bool
+HdgfxRingEmit(
+    HDGFX_RING *Ring,
+    uint32_t Head,
+    const uint32_t *Dwords,
+    uint32_t Count);
+
+bool
+HdgfxRingEmitBreadcrumb(
+    HDGFX_RING *Ring,
+    uint32_t Head,
+    uint32_t StatusIndex,
+    uint32_t Value);
 
 bool
 HdgfxVbtParse(

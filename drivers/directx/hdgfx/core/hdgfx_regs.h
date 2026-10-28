@@ -10,6 +10,12 @@
 #include <stdint.h>
 
 #define HDGFX_ILK_REGISTERS(R) \
+    R(RING_TAIL,            0x2030, 0) \
+    R(RING_HEAD,            0x2034, 0) \
+    R(RING_START,           0x2038, 0) \
+    R(RING_CTL,             0x203C, 0) \
+    R(HWS_PGA,              0x2080, 0) \
+    R(ESR,                  0x20B8, 0) \
     R(DEIMR,                0x44004, 0) \
     R(DEIIR,                0x44008, 0) \
     R(DEIER,                0x4400C, 0) \
@@ -92,7 +98,16 @@
     F(PIPE_CONF_DITHER,         4, 4) \
     F(PIPE_DSL_LINE,            12, 0) \
     F(WM_LP_ENABLE,             31, 31) \
+    F(GTT_PTE_ADDRESS,          31, 12) \
     F(GTT_PTE_VALID,            0, 0) \
+    F(RING_TAIL_OFFSET,         20, 3) \
+    F(RING_HEAD_OFFSET,         20, 2) \
+    F(RING_START_ADDRESS,       31, 12) \
+    F(RING_CTL_LENGTH,          20, 12) \
+    F(RING_CTL_ENABLE,          0, 0) \
+    F(MI_OPCODE,                28, 23) \
+    F(MI_LENGTH,                7, 0) \
+    F(MI_STORE_INDEX_OFFSET,    11, 2) \
     F(PF_ENABLE,                31, 31) \
     F(PF_FILTER,                24, 23) \
     F(PF_X,                     28, 16) \
