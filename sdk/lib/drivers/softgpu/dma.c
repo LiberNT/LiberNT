@@ -1273,7 +1273,7 @@ APIENTRY
 SoftGpuDdiDpcRoutine(
     _In_ PVOID MiniportDeviceContext)
 {
-#if defined(SOFTGPU_PLATFORM_HARDWARE_3D)
+#if defined(SOFTGPU_PLATFORM_HARDWARE_3D) || defined(SOFTGPU_PLATFORM_INTERRUPTS)
     PSOFTGPU_DEVICE Device = MiniportDeviceContext;
 
     if (Device != NULL && Device->Magic == SOFTGPU_DEVICE_MAGIC)
@@ -1304,7 +1304,7 @@ SoftGpuDdiInterruptRoutine(
     _In_ PVOID MiniportDeviceContext,
     _In_ ULONG MessageNumber)
 {
-#if defined(SOFTGPU_PLATFORM_HARDWARE_3D)
+#if defined(SOFTGPU_PLATFORM_HARDWARE_3D) || defined(SOFTGPU_PLATFORM_INTERRUPTS)
     PSOFTGPU_DEVICE Device = MiniportDeviceContext;
 
     UNREFERENCED_PARAMETER(MessageNumber);

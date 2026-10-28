@@ -580,7 +580,9 @@ NTSTATUS
 SoftGpuPlatformSubmitCommand(
     _Inout_ PSOFTGPU_DEVICE Device,
     _In_ const DXGKARG_SUBMITCOMMAND *SubmitCommand);
+#endif
 
+#if defined(SOFTGPU_PLATFORM_HARDWARE_3D) || defined(SOFTGPU_PLATFORM_INTERRUPTS)
 BOOLEAN
 SoftGpuPlatformInterruptRoutine(
     _Inout_ PSOFTGPU_DEVICE Device);

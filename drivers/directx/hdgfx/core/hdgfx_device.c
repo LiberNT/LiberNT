@@ -6,6 +6,7 @@
  */
 
 #include "hdgfx_core.h"
+#include "hdgfx_regs.h"
 
 #define HDGFX_VENDOR_INTEL 0x8086
 
@@ -14,6 +15,7 @@ static const HDGFX_GENERATION HdgfxIronlake =
     "Ironlake",
     5,
     3,
+    HDGFX_SET(DE_GSE, 1),
     HdgfxIlkReadDisplayState
 };
 

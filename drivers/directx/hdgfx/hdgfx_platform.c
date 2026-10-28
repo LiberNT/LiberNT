@@ -27,6 +27,12 @@ typedef struct _HDGFX_ADAPTER
     HDGFX_VBT Vbt;
     BOOLEAN VbtPresent;
     BOOLEAN InternalPanel;
+    BOOLEAN AsleReady;
+    BOOLEAN AsleInterrupt;
+    PUCHAR OpRegion;
+    ULONG SavedDeimr;
+    ULONG SavedDeier;
+    volatile LONG AslePending;
     ULONG BacklightMaximum;
     ULONG BacklightMinimum;
     EX_RUNDOWN_REF Rundown;
@@ -135,6 +141,7 @@ HdgfxReadVbt(
     ULONG Asls = 0;
 
     Adapter->VbtPresent = FALSE;
+    Adapter->OpRegion = NULL;
     if (!NT_SUCCESS(HdgfxReadConfig(Device, &Asls, HDGFX_PCI_ASLS, sizeof(Asls))) || Asls == 0)
     {
         DPRINT1("No OpRegion (ASLS is 0)\n");
@@ -153,7 +160,7 @@ HdgfxReadVbt(
     {
         Adapter->VbtPresent = TRUE;
     }
-    MmUnmapIoSpace(OpRegion, HDGFX_OPREGION_SIZE);
+    Adapter->OpRegion = OpRegion;
 
     if (!Adapter->VbtPresent)
     {
@@ -376,6 +383,125 @@ HdgfxStartBacklight(
     HdgfxDisableFirmwareBrightness(Device);
 }
 
+static VOID
+HdgfxOpRegionIo(
+    _In_ PHDGFX_ADAPTER Adapter,
+    _Out_ HDGFX_MMIO *Io)
+{
+    Io->Read = HdgfxReadRegister;
+    Io->Context = Adapter->OpRegion;
+    Io->Write = HdgfxWriteRegister;
+    Io->Stall = HdgfxStall;
+}
+
+static PULONG
+HdgfxBacklightDutyRegister(
+    _In_ PHDGFX_ADAPTER Adapter)
+{
+    return (PULONG)(Adapter->Registers + HDGFX_REG(BLC_PWM_CPU_CTL, 0));
+}
+
+static VOID
+HdgfxBacklightWrite(
+    _In_ PHDGFX_ADAPTER Adapter,
+    _In_ ULONG Level,
+    _In_ ULONG Scale)
+{
+    ULONG Duty;
+
+    Duty = Adapter->BacklightMinimum +
+           (ULONG)(((ULONGLONG)(Adapter->BacklightMaximum - Adapter->BacklightMinimum) * Level +
+                    Scale / 2) / Scale);
+    WRITE_REGISTER_ULONG(HdgfxBacklightDutyRegister(Adapter), Duty);
+}
+
+static UCHAR
+HdgfxBacklightRead(
+    _In_ PHDGFX_ADAPTER Adapter)
+{
+    ULONGLONG Level;
+    ULONG Range;
+
+    Level = HDGFX_GET(READ_REGISTER_ULONG(HdgfxBacklightDutyRegister(Adapter)), BLC_CPU_DUTY);
+    Range = Adapter->BacklightMaximum - Adapter->BacklightMinimum;
+    Level = Level > Adapter->BacklightMinimum ? Level - Adapter->BacklightMinimum : 0;
+    Level = Range ? (Level * HDGFX_BLC_LEVEL_COUNT + Range / 2) / Range : HDGFX_BLC_LEVEL_COUNT;
+    return (UCHAR)min(max(Level, 1), HDGFX_BLC_LEVEL_COUNT);
+}
+
+static bool
+HdgfxAsleSetBacklight(
+    _In_ void *Context,
+    _In_ uint32_t Level)
+{
+    HdgfxBacklightWrite(Context, Level, HDGFX_ASLE_LEVEL_MAX);
+    return true;
+}
+
+static BOOLEAN
+NTAPI
+HdgfxAsleDisconnect(
+    _In_opt_ PVOID Context)
+{
+    ((PHDGFX_ADAPTER)Context)->AsleInterrupt = FALSE;
+    return TRUE;
+}
+
+static VOID
+HdgfxStartAsle(
+    _In_ PHDGFX_ADAPTER Adapter)
+{
+    ULONG Gse = Adapter->Generation->GseInterrupt;
+    HDGFX_MMIO Io;
+
+    if (Adapter->OpRegion == NULL || !Adapter->InternalPanel || Adapter->BacklightMaximum == 0)
+        return;
+
+    Adapter->SavedDeimr = READ_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIMR, 0)));
+    Adapter->SavedDeier = READ_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIER, 0)));
+    Adapter->AsleInterrupt = TRUE;
+    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIIR, 0)), Gse);
+    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIMR, 0)), ~Gse);
+    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIER, 0)), HDGFX_SET(DE_MASTER, 1) | Gse);
+
+    HdgfxOpRegionIo(Adapter, &Io);
+    Adapter->AsleReady = HdgfxOpRegionDriverReady(&Io, HDGFX_ACPI_ID_INTERNAL_PANEL, HdgfxBacklightRead(Adapter));
+    DPRINT1("OpRegion ASLE %s, display ID 0x%lx, DEIMR 0x%08lx DEIER 0x%08lx before\n",
+            Adapter->AsleReady ? "ready" : "unsupported", HDGFX_ACPI_ID_INTERNAL_PANEL,
+            Adapter->SavedDeimr, Adapter->SavedDeier);
+}
+
+static VOID
+HdgfxStopAsle(
+    _In_ PSOFTGPU_DEVICE Device,
+    _Inout_ PHDGFX_ADAPTER Adapter)
+{
+    BOOLEAN Ignored;
+    HDGFX_MMIO Io;
+
+    if (Adapter->AsleReady)
+    {
+        HdgfxOpRegionIo(Adapter, &Io);
+        HdgfxOpRegionDriverNotReady(&Io);
+        Adapter->AsleReady = FALSE;
+    }
+    if (!Adapter->AsleInterrupt)
+        return;
+
+    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIER, 0)), Adapter->SavedDeier);
+    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIMR, 0)), Adapter->SavedDeimr);
+    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIIR, 0)), Adapter->Generation->GseInterrupt);
+    if (Device->DxgkInterface.DxgkCbSynchronizeExecution == NULL ||
+        !NT_SUCCESS(Device->DxgkInterface.DxgkCbSynchronizeExecution(Device->DxgkInterface.DeviceHandle,
+                                                                     HdgfxAsleDisconnect,
+                                                                     Adapter,
+                                                                     0,
+                                                                     &Ignored)))
+    {
+        Adapter->AsleInterrupt = FALSE;
+    }
+}
+
 VOID
 SoftGpuPlatformAdapterStarted(
     _Inout_ PSOFTGPU_DEVICE Device)
@@ -440,6 +566,7 @@ SoftGpuPlatformAdapterStarted(
     Adapter->InternalPanel = State->Lvds.Detected;
     HdgfxReadPanelEdid(Device, Adapter, &Mmio);
     HdgfxStartBacklight(Device, Adapter, State);
+    HdgfxStartAsle(Adapter);
     ExFreePoolWithTag(State, HDGFX_TAG);
 }
 
@@ -458,6 +585,12 @@ SoftGpuPlatformAdapterStopping(
     if (Adapter->Registers == NULL)
         return;
 
+    HdgfxStopAsle(Device, Adapter);
+    if (Adapter->OpRegion != NULL)
+    {
+        MmUnmapIoSpace(Adapter->OpRegion, HDGFX_OPREGION_SIZE);
+        Adapter->OpRegion = NULL;
+    }
     MmUnmapIoSpace(Adapter->Registers, HDGFX_MMIO_SIZE);
     Adapter->Registers = NULL;
     Adapter->BacklightMaximum = 0;
@@ -491,13 +624,6 @@ HdgfxBacklightAcquire(
         return NULL;
     }
     return Adapter;
-}
-
-static PULONG
-HdgfxBacklightDutyRegister(
-    _In_ PHDGFX_ADAPTER Adapter)
-{
-    return (PULONG)(Adapter->Registers + HDGFX_REG(BLC_PWM_CPU_CTL, 0));
 }
 
 static VOID
@@ -536,7 +662,7 @@ HdgfxBacklightSet(
     _In_ UCHAR Brightness)
 {
     PHDGFX_ADAPTER Adapter;
-    ULONG Duty;
+    HDGFX_MMIO Io;
 
     PAGED_CODE();
 
@@ -547,10 +673,12 @@ HdgfxBacklightSet(
     if (Adapter == NULL)
         return STATUS_DEVICE_NOT_READY;
 
-    Duty = Adapter->BacklightMinimum +
-           (ULONG)(((ULONGLONG)(Adapter->BacklightMaximum - Adapter->BacklightMinimum) * Brightness +
-                    HDGFX_BLC_LEVEL_COUNT / 2) / HDGFX_BLC_LEVEL_COUNT);
-    WRITE_REGISTER_ULONG(HdgfxBacklightDutyRegister(Adapter), Duty);
+    HdgfxBacklightWrite(Adapter, Brightness, HDGFX_BLC_LEVEL_COUNT);
+    if (Adapter->AsleReady)
+    {
+        HdgfxOpRegionIo(Adapter, &Io);
+        HdgfxOpRegionSetBrightness(&Io, Brightness);
+    }
     ExReleaseRundownProtection(&Adapter->Rundown);
     return STATUS_SUCCESS;
 }
@@ -561,8 +689,6 @@ HdgfxBacklightGet(
     _Out_ PUCHAR Brightness)
 {
     PHDGFX_ADAPTER Adapter;
-    ULONGLONG Level;
-    ULONG Range;
 
     PAGED_CODE();
 
@@ -571,11 +697,7 @@ HdgfxBacklightGet(
     if (Adapter == NULL)
         return STATUS_DEVICE_NOT_READY;
 
-    Level = HDGFX_GET(READ_REGISTER_ULONG(HdgfxBacklightDutyRegister(Adapter)), BLC_CPU_DUTY);
-    Range = Adapter->BacklightMaximum - Adapter->BacklightMinimum;
-    Level = Level > Adapter->BacklightMinimum ? Level - Adapter->BacklightMinimum : 0;
-    Level = Range ? (Level * HDGFX_BLC_LEVEL_COUNT + Range / 2) / Range : HDGFX_BLC_LEVEL_COUNT;
-    *Brightness = (UCHAR)min(max(Level, 1), HDGFX_BLC_LEVEL_COUNT);
+    *Brightness = HdgfxBacklightRead(Adapter);
     ExReleaseRundownProtection(&Adapter->Rundown);
     return STATUS_SUCCESS;
 }
@@ -628,4 +750,45 @@ SoftGpuPlatformQueryInternalPanel(
 
     *AcpiUid = HDGFX_ACPI_ID_INTERNAL_PANEL;
     return TRUE;
+}
+
+BOOLEAN
+SoftGpuPlatformInterruptRoutine(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
+    ULONG Gse;
+
+    if (Adapter == NULL || !Adapter->AsleInterrupt)
+        return FALSE;
+
+    Gse = Adapter->Generation->GseInterrupt;
+    if ((READ_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIIR, 0))) & Gse) == 0)
+        return FALSE;
+
+    WRITE_REGISTER_ULONG((PULONG)(Adapter->Registers + HDGFX_REG(DEIIR, 0)), Gse);
+    InterlockedExchange(&Adapter->AslePending, 1);
+    Device->DxgkInterface.DxgkCbQueueDpc(Device->DxgkInterface.DeviceHandle);
+    return TRUE;
+}
+
+VOID
+SoftGpuPlatformDpcRoutine(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
+    HDGFX_MMIO Io;
+
+    if (Adapter == NULL || InterlockedExchange(&Adapter->AslePending, 0) == 0)
+        return;
+    Adapter = HdgfxBacklightAcquire(Device);
+    if (Adapter == NULL)
+        return;
+
+    if (Adapter->AsleReady)
+    {
+        HdgfxOpRegionIo(Adapter, &Io);
+        HdgfxOpRegionServiceAsle(&Io, HdgfxAsleSetBacklight, Adapter);
+    }
+    ExReleaseRundownProtection(&Adapter->Rundown);
 }

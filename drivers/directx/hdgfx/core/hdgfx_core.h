@@ -22,6 +22,8 @@ extern "C" {
 #define HDGFX_EDID_MAX_DTDS 4
 #define HDGFX_DDC_ADDRESS 0x50
 
+#define HDGFX_ASLE_LEVEL_MAX 255
+
 typedef uint32_t (*HDGFX_READ_REGISTER)(void *Context, uint32_t Offset);
 typedef void (*HDGFX_WRITE_REGISTER)(void *Context, uint32_t Offset, uint32_t Value);
 typedef void (*HDGFX_STALL)(void *Context, uint32_t Microseconds);
@@ -33,6 +35,8 @@ typedef struct _HDGFX_MMIO
     HDGFX_WRITE_REGISTER Write;
     HDGFX_STALL Stall;
 } HDGFX_MMIO;
+
+typedef bool (*HDGFX_SET_BACKLIGHT)(void *Context, uint32_t Level);
 
 typedef struct _HDGFX_TIMINGS
 {
@@ -205,6 +209,7 @@ typedef struct _HDGFX_GENERATION
     const char *Name;
     uint32_t Gen;
     uint32_t PanelDdcPins;
+    uint32_t GseInterrupt;
     void (*ReadDisplayState)(const HDGFX_MMIO *Mmio, HDGFX_DISPLAY_STATE *State);
 } HDGFX_GENERATION;
 
@@ -302,6 +307,27 @@ HdgfxOpRegionFindVbt(
     size_t Size,
     const uint8_t **Vbt,
     size_t *VbtSize);
+
+bool
+HdgfxOpRegionDriverReady(
+    const HDGFX_MMIO *OpRegion,
+    uint32_t DisplayId,
+    uint32_t Percent);
+
+void
+HdgfxOpRegionDriverNotReady(
+    const HDGFX_MMIO *OpRegion);
+
+void
+HdgfxOpRegionSetBrightness(
+    const HDGFX_MMIO *OpRegion,
+    uint32_t Percent);
+
+bool
+HdgfxOpRegionServiceAsle(
+    const HDGFX_MMIO *OpRegion,
+    HDGFX_SET_BACKLIGHT SetBacklight,
+    void *Context);
 
 bool
 HdgfxVbtParse(

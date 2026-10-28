@@ -10,7 +10,8 @@ remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
 add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
 
 add_softgpu_engine(hdgfx_softgpu DEFINITIONS
-    SOFTGPU_PLATFORM_ADAPTER_SERVICES=1)
+    SOFTGPU_PLATFORM_ADAPTER_SERVICES=1
+    SOFTGPU_PLATFORM_INTERRUPTS=1)
 
 add_library(hdgfx MODULE
     ${REACTOS_SOURCE_DIR}/drivers/directx/softgpu/platform_root.c
@@ -18,6 +19,7 @@ add_library(hdgfx MODULE
     core/hdgfx_edid.c
     core/hdgfx_gmbus.c
     core/hdgfx_ilk.c
+    core/hdgfx_opregion.c
     core/hdgfx_vbt.c
     hdgfx_platform.c
     hdgfx.rc
