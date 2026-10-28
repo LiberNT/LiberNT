@@ -37,6 +37,14 @@ typedef struct _SAVE_POWER_SCHEME_DATA
     POWER_POLICY PowerPolicy;
 } SAVE_POWER_SCHEME_DATA, *PSAVE_POWER_SCHEME_DATA;
 
+static const GUID VideoSubgroupGuid =
+    { 0x7516b95f, 0xf776, 0x4464, { 0x8c, 0x53, 0x06, 0x16, 0x7f, 0x40, 0xcc, 0x99 } };
+static const GUID VideoPowerdownTimeoutGuid =
+    { 0x3c0bc021, 0xc8a8, 0x4e07, { 0xa9, 0x73, 0x6b, 0x14, 0xcb, 0xcb, 0x2b, 0x7e } };
+static const GUID SleepSubgroupGuid =
+    { 0x238c9fa8, 0x0aad, 0x41ed, { 0x83, 0xf4, 0x97, 0xbe, 0x24, 0x2c, 0x8f, 0x20 } };
+static const GUID StandbyTimeoutGuid =
+    { 0x29f6c1db, 0x86da, 0x48c5, { 0x9f, 0xdb, 0xf2, 0xb6, 0x7b, 0x1f, 0x44, 0xda } };
 
 UINT Sec[]=
 {
@@ -463,6 +471,32 @@ Pos_ReadData(
 
 
 static BOOL
+Pos_ApplyActiveScheme(
+    PPOWER_POLICY pp)
+{
+    GUID *pScheme;
+    DWORD dwError;
+
+    dwError = PowerGetActiveScheme(NULL, &pScheme);
+    if (dwError != ERROR_SUCCESS)
+        return FALSE;
+
+    dwError = PowerWriteACValueIndex(NULL, pScheme, &VideoSubgroupGuid, &VideoPowerdownTimeoutGuid, pp->user.VideoTimeoutAc);
+    if (dwError == ERROR_SUCCESS)
+        dwError = PowerWriteDCValueIndex(NULL, pScheme, &VideoSubgroupGuid, &VideoPowerdownTimeoutGuid, pp->user.VideoTimeoutDc);
+    if (dwError == ERROR_SUCCESS)
+        dwError = PowerWriteACValueIndex(NULL, pScheme, &SleepSubgroupGuid, &StandbyTimeoutGuid, pp->user.IdleTimeoutAc);
+    if (dwError == ERROR_SUCCESS)
+        dwError = PowerWriteDCValueIndex(NULL, pScheme, &SleepSubgroupGuid, &StandbyTimeoutGuid, pp->user.IdleTimeoutDc);
+    if (dwError == ERROR_SUCCESS)
+        dwError = PowerSetActiveScheme(NULL, pScheme);
+
+    LocalFree(pScheme);
+    return (dwError == ERROR_SUCCESS);
+}
+
+
+static BOOL
 Pos_SaveData(
     HWND hwndDlg,
     PPOWER_SCHEMES_PAGE_DATA pPageData)
@@ -478,6 +512,9 @@ Pos_SaveData(
     Pos_ReadData(hwndDlg, &PowerPolicy);
 
     if (!SetActivePwrScheme(pScheme->uId, NULL, &PowerPolicy))
+        return FALSE;
+
+    if (!Pos_ApplyActiveScheme(&PowerPolicy))
         return FALSE;
 
     pScheme->PowerPolicy = PowerPolicy;
