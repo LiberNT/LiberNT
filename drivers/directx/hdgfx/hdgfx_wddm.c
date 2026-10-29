@@ -9,6 +9,17 @@
 
 DRIVER_INITIALIZE HdgfxDriverEntry;
 
+static const GUID HdgfxGuidShadowPresent = RXGK_SHADOW_PRESENT_INTERFACE_GUID_INIT;
+
+static DXGK_DEVICEINFO HdgfxDeviceInfo =
+{
+    64 * 1024,
+    1UL << (HDGFX_DMA_SEGMENT_ID - 1),
+    0,
+    256,
+    256,
+};
+
 static VOID
 HdgfxSegmentDescriptor(
     _In_ PSOFTGPU_DEVICE Device,
@@ -129,6 +140,36 @@ HdgfxDdiQueryAdapterInfo(
 }
 
 NTSTATUS
+APIENTRY
+HdgfxDdiQueryInterface(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ PQUERY_INTERFACE QueryInterface)
+{
+    PAGED_CODE();
+
+    if (QueryInterface != NULL && QueryInterface->InterfaceType != NULL &&
+        IsEqualGUID(QueryInterface->InterfaceType, &HdgfxGuidShadowPresent))
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    return SoftGpuDdiQueryInterface(MiniportDeviceContext, QueryInterface);
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiCreateDevice(
+    _In_ PVOID MiniportDeviceContext,
+    _Inout_ DXGKARG_CREATEDEVICE *CreateDevice)
+{
+    NTSTATUS Status;
+
+    Status = SoftGpuDdiCreateDevice(MiniportDeviceContext, CreateDevice);
+    if (NT_SUCCESS(Status))
+        CreateDevice->pInfo = &HdgfxDeviceInfo;
+    return Status;
+}
+
+NTSTATUS
 NTAPI
 HdgfxDriverEntry(
     _In_ PDRIVER_OBJECT DriverObject,
@@ -147,7 +188,7 @@ HdgfxDriverEntry(
     InitData.DxgkDdiResetDevice = SoftGpuDdiResetDevice;
     InitData.DxgkDdiSetPowerState = SoftGpuDdiSetPowerState;
     InitData.DxgkDdiNotifyAcpiEvent = SoftGpuDdiNotifyAcpiEvent;
-    InitData.DxgkDdiQueryInterface = SoftGpuDdiQueryInterface;
+    InitData.DxgkDdiQueryInterface = HdgfxDdiQueryInterface;
 
     InitData.DxgkDdiQueryAdapterInfo = HdgfxDdiQueryAdapterInfo;
     InitData.DxgkDdiQueryChildRelations = SoftGpuDdiQueryChildRelations;
@@ -188,7 +229,7 @@ HdgfxDriverEntry(
     InitData.DxgkDdiSetPalette = SoftGpuDdiSetPalette;
     InitData.DxgkDdiGetScanLine = SoftGpuDdiGetScanLine;
 
-    InitData.DxgkDdiCreateDevice = SoftGpuDdiCreateDevice;
+    InitData.DxgkDdiCreateDevice = HdgfxDdiCreateDevice;
     InitData.DxgkDdiDestroyDevice = SoftGpuDdiDestroyDevice;
     InitData.DxgkDdiCreateContext = SoftGpuDdiCreateContext;
     InitData.DxgkDdiDestroyContext = SoftGpuDdiDestroyContext;
