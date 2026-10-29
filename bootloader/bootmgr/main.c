@@ -54,21 +54,34 @@ BmReadStore(
     if (FwGetImageDirectory(Path, Chars) &&
         NT_SUCCESS(RtlStringCchCatW(Path, Chars, BM_STORE_NAME)))
     {
+        FwTraceChainScan(L"BCD: trying image-adjacent store %s", Path);
         Store = BcdReadStoreFile(NULL, Path, Size);
         if (Store)
+        {
+            FwTraceChainScan(L"BCD: loaded store %s, size %lu", Path, *Size);
             return Store;
+        }
+
+        FwTraceChainScan(L"BCD: store %s was not readable", Path);
+    }
+    else
+    {
+        FwTraceChainScan(L"BCD: could not derive image directory");
     }
 
     for (i = 0; i < RTL_NUMBER_OF(BmStorePaths); i++)
     {
+        FwTraceChainScan(L"BCD: trying fallback store %s", BmStorePaths[i]);
         Store = BcdReadStoreFile(NULL, BmStorePaths[i], Size);
         if (Store)
         {
             RtlStringCchCopyW(Path, Chars, BmStorePaths[i]);
+            FwTraceChainScan(L"BCD: loaded store %s, size %lu", Path, *Size);
             return Store;
         }
     }
 
+    FwTraceChainScan(L"BCD: no store found");
     return NULL;
 }
 
@@ -165,8 +178,7 @@ BmPauseAfterScanTrace(
     _In_ BOOLEAN Graphical)
 {
     PCSTR Lines[FW_CHAIN_SCAN_TRACE_MAX];
-    PCSTR Items[GUI_MAX_ENTRIES];
-    ULONG Count, Offset = 0, PageCount, Selected, i;
+    ULONG Count;
 
     if (Graphical)
     {
@@ -177,34 +189,7 @@ BmPauseAfterScanTrace(
             Count = 1;
         }
 
-        for (;;)
-        {
-            PageCount = min(Count - Offset, GUI_MAX_ENTRIES - 1);
-            for (i = 0; i < PageCount; i++)
-                Items[i] = Lines[Offset + i];
-
-            Items[PageCount] = (Offset + PageCount < Count) ? "Next page" : "Continue";
-            if (!UiDisplayMenu("Chain scan trace",
-                               NULL,
-                               Items,
-                               PageCount + 1,
-                               PageCount,
-                               -1,
-                               &Selected,
-                               TRUE,
-                               NULL,
-                               NULL))
-            {
-                break;
-            }
-
-            if (Selected == PageCount)
-            {
-                Offset += PageCount;
-                if (Offset >= Count)
-                    break;
-            }
-        }
+        FbGuiVtbl.DisplayTraceScreen("Chain scan trace", Lines, Count);
     }
     else
     {
@@ -577,12 +562,19 @@ BlMain(VOID)
     PVOID Store;
     ULONG Size, Default = 0;
     LONG Timeout;
+    ULONG i;
+    BOOLEAN StoreOpened;
 
     Store = BmReadStore(BmStorePath, RTL_NUMBER_OF(BmStorePath), &Size);
 
     RtlStringCchCopyW(BmTitle, RTL_NUMBER_OF(BmTitle), BM_DEFAULT_TITLE);
 
-    if (!Store || !BcdOpenStore(Store, Size))
+    StoreOpened = Store && BcdOpenStore(Store, Size);
+    FwTraceChainScan(L"BCD: store path %s, open status %s",
+                     Store ? BmStorePath : L"(none)",
+                     StoreOpened ? L"success" : L"failure");
+
+    if (!StoreOpened)
     {
         FwPrint(L"The Boot Configuration Data store is missing or corrupt.\r\n");
     }
@@ -592,6 +584,28 @@ BlMain(VOID)
         BmStoreSize = Size;
         BmGetDescription(BmTitle, RTL_NUMBER_OF(BmTitle));
         BmCount = BmEnumerateEntries(BmEntries, RTL_NUMBER_OF(BmEntries), &Default);
+        FwTraceChainScan(L"BCD: enumerated %lu OS entries, default index %lu", BmCount, Default);
+        for (i = 0; i < BmCount; i++)
+        {
+            WCHAR ApplicationPath[BM_PATH_CHARS];
+
+            if (BcdGetString(&BmEntries[i].Object,
+                             BcdLibraryString_ApplicationPath,
+                             ApplicationPath,
+                             RTL_NUMBER_OF(ApplicationPath)))
+            {
+                FwTraceChainScan(L"BCD: entry %lu %s, application %s",
+                                 i,
+                                 BmEntries[i].Description,
+                                 ApplicationPath);
+            }
+            else
+            {
+                FwTraceChainScan(L"BCD: entry %lu %s has no application path",
+                                 i,
+                                 BmEntries[i].Description);
+            }
+        }
         if (BmCount == 0)
             FwPrint(L"The Boot Configuration Data store has no operating system entry.\r\n");
     }

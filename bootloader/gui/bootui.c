@@ -1044,6 +1044,53 @@ BootUiDrawMenu(PUI_MENU_INFO Menu)
 }
 
 static VOID
+BootUiDisplayTraceScreen(
+    PCSTR Header,
+    PCSTR Lines[],
+    ULONG Count)
+{
+    ULONG Left = 32, Top = 118, Size, LineHeight, AvailableHeight, Rows, Visible, Drawn, I;
+    BOOLEAN Extended;
+
+    AvailableHeight = (BootUiHeight > Top + 76) ? BootUiHeight - Top - 76 : 0;
+    Size = AvailableHeight / max(1, Count);
+    Size = max(8, min(14, Size > 5 ? Size - 5 : 8));
+    LineHeight = Size + 5;
+    Rows = AvailableHeight / LineHeight;
+    Visible = min(Count, Rows);
+    if (Visible < Count && Rows != 0)
+        Visible = Rows - 1;
+    Drawn = Visible + (Visible < Count);
+
+    BootUiBackground(BootUiHeight);
+    BootUiBrand();
+    BootUiInputLabel();
+    BootUiCentered(Top - 34, Header, max(14, BootUiFontSize / 2), BOOTUI_ACCENT);
+    BootUiRect(24, Top - 10, BootUiWidth - 48, Drawn * LineHeight + 20,
+               12, BOOTUI_PANEL, 255);
+
+    for (I = 0; I < Visible; I++)
+    {
+        ULONG Y = Top + 2 + I * LineHeight;
+        BootUiText(40, Y, Lines[I], Size, BOOTUI_TEXT, BootUiWidth - 80, MAXULONG);
+    }
+
+    if (Visible < Count)
+    {
+        CHAR Omitted[80];
+
+        RtlStringCbPrintfA(Omitted, sizeof(Omitted), "%lu trace lines omitted", Count - Visible);
+        BootUiText(40, Top + 2 + Visible * LineHeight, Omitted, Size, BOOTUI_MUTED,
+                   BootUiWidth - 80, MAXULONG);
+    }
+
+    BootUiCentered(BootUiHeight - 40, "Press any key to continue",
+                   max(12, BootUiFontSize / 3), BOOTUI_MUTED);
+    BootUiPresent();
+    (void)BootUiReadKey(&Extended);
+}
+
+static VOID
 BootUiCountdownClip(ULONG Size)
 {
     BootUiSetClip(0, BootUiHeight - 100 - Size / 4, BootUiWidth, BootUiHeight - 56 + 2 * Size);
@@ -1297,5 +1344,6 @@ const UIVTBL FbGuiVtbl =
     BootUiFadeInBackdrop,
     BootUiNoOperation,
     BootUiDisplayMenu,
+    BootUiDisplayTraceScreen,
     BootUiDrawMenu,
 };

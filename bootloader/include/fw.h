@@ -39,6 +39,11 @@ FwPrint(
     _In_ PCWSTR Format,
     ...);
 
+VOID
+FwTraceChainScan(
+    _In_ PCWSTR Format,
+    ...);
+
 PVOID
 FwReadBootFile(
     _In_ PCWSTR Path,

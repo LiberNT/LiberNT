@@ -814,6 +814,14 @@ FwGetChainScanTrace(
     return 0;
 }
 
+VOID
+FwTraceChainScan(
+    _In_ PCWSTR Format,
+    ...)
+{
+    UNREFERENCED_PARAMETER(Format);
+}
+
 BOOLEAN
 FwStartFirmwareApplication(
     _In_ PVOID Device,
