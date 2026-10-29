@@ -27,6 +27,7 @@ add_library(hdgfx MODULE
     core/hdgfx_ring.c
     core/hdgfx_vbt.c
     hdgfx_alloc.c
+    hdgfx_display.c
     hdgfx_dma.c
     hdgfx_platform.c
     hdgfx_wddm.c

@@ -20,11 +20,6 @@
 #define HDGFX_VBT_BACKLIGHT_PWM     2UL
 #define HDGFX_ACPI_ID_INTERNAL_PANEL 0x0400UL
 #define HDGFX_WORKING_SURFACE_COUNT 12UL
-#define HDGFX_STRIDE_ALIGNMENT      64UL
-#define HDGFX_VBLANK_POLL_US        20UL
-#define HDGFX_VBLANK_TIMEOUT_US     50000UL
-#define HDGFX_CRT_CHILD_UID         1UL
-#define HDGFX_CRT_PIPE              1UL
 #define HDGFX_BLT_TEST_PITCH        128UL
 #define HDGFX_CURSOR_PAGES          (HDGFX_CURSOR_SIZE * HDGFX_CURSOR_SIZE * 4 / PAGE_SIZE)
 #define HDGFX_DISPLAY_PIPES         2UL
@@ -510,7 +505,8 @@ HdgfxStartInterrupts(
 {
     const HDGFX_GENERATION *Generation = Adapter->Generation;
     BOOLEAN Asle = Adapter->OpRegion != NULL && Adapter->InternalPanel && Adapter->BacklightMaximum != 0;
-    BOOLEAN Hotplug = Generation->CrtHotplugInterrupt != 0 && Device->ExtraOutputCount != 0;
+    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+    BOOLEAN Hotplug = Generation->CrtHotplugInterrupt != 0 && Scanout != NULL && Scanout->CrtSupported;
     ULONG Crt = Generation->CrtHotplugInterrupt;
     HDGFX_MMIO Mmio;
     HDGFX_MMIO Io;
@@ -1365,23 +1361,19 @@ SoftGpuPlatformDpcRoutine(
     ExReleaseRundownProtection(&Adapter->Rundown);
 }
 
-static VOID
+VOID
 HdgfxLock(
     _In_ PHDGFX_SCANOUT Scanout)
 {
     KeWaitForSingleObject(&Scanout->Lock, Executive, KernelMode, FALSE, NULL);
 }
 
-static VOID
+VOID
 HdgfxUnlock(
     _In_ PHDGFX_SCANOUT Scanout)
 {
     KeReleaseMutex(&Scanout->Lock, FALSE);
 }
-
-static VOID
-HdgfxCursorCommit(
-    _In_ PHDGFX_SCANOUT Scanout);
 
 static NTSTATUS
 HdgfxScanoutCommit(
@@ -1466,25 +1458,6 @@ HdgfxScanoutCommit(
     }
 
     ExFreePoolWithTag(States, HDGFX_TAG);
-    return Status;
-}
-
-static NTSTATUS
-HdgfxSetMode(
-    _Inout_ PSOFTGPU_DEVICE Device,
-    _In_ const SOFTGPU_DISPLAY_MODE *Mode)
-{
-    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
-    NTSTATUS Status;
-
-    if (Scanout == NULL || Mode == NULL || Mode->PlatformMode >= Scanout->PanelModeCount)
-        return STATUS_INVALID_PARAMETER;
-    HdgfxLock(Scanout);
-    Status = HdgfxScanoutCommit(Scanout, &Scanout->PanelModes[Mode->PlatformMode], Mode->Width, Mode->Height,
-                                Mode->Pitch);
-    if (NT_SUCCESS(Status) && Scanout->SlabGtt != NULL)
-        HdgfxCursorCommit(Scanout);
-    HdgfxUnlock(Scanout);
     return Status;
 }
 
@@ -1611,33 +1584,29 @@ HdgfxCrtOff(
     return Result == HdgfxModesetSuccess ? STATUS_SUCCESS : STATUS_DEVICE_HARDWARE_ERROR;
 }
 
-static NTSTATUS
+NTSTATUS
 HdgfxSetOutputs(
-    _Inout_ PSOFTGPU_DEVICE Device,
-    _In_reads_(Count) const SOFTGPU_OUTPUT_TIMING *Timings,
-    _In_ ULONG Count)
+    _Inout_ PHDGFX_SCANOUT Scanout,
+    _In_ const HDGFX_MODE *Source,
+    _In_ BOOLEAN Panel,
+    _In_ BOOLEAN Crt)
 {
-    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
-    const SOFTGPU_DISPLAY_MODE *Source = &Timings[0].Mode;
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
-    if (Scanout == NULL || Count != 2 || Timings[1].ChildUid != HDGFX_CRT_CHILD_UID ||
-        Source->PlatformMode >= Scanout->PanelModeCount)
-    {
+    if (Source->Timing >= Scanout->PanelModeCount || (Crt && !Scanout->CrtSupported))
         return STATUS_INVALID_PARAMETER;
-    }
 
     HdgfxLock(Scanout);
-    if (!Timings[1].Active && Scanout->CrtActive)
+    if (!Crt && Scanout->CrtActive)
     {
         if (!Scanout->CrtDisplayOff)
             Status = HdgfxCrtOff(Scanout);
         if (NT_SUCCESS(Status))
             Scanout->CrtActive = FALSE;
     }
-    if (NT_SUCCESS(Status) && !Timings[0].Active && Scanout->LvdsActive)
+    if (NT_SUCCESS(Status) && !Panel && Scanout->LvdsActive)
     {
         if (!Scanout->DisplayOff)
             Status = HdgfxLvdsOff(Scanout);
@@ -1646,11 +1615,11 @@ HdgfxSetOutputs(
     }
     if (NT_SUCCESS(Status))
     {
-        Scanout->LvdsActive = Timings[0].Active;
-        Status = HdgfxScanoutCommit(Scanout, &Scanout->PanelModes[Source->PlatformMode],
+        Scanout->LvdsActive = Panel;
+        Status = HdgfxScanoutCommit(Scanout, &Scanout->PanelModes[Source->Timing],
                                     Source->Width, Source->Height, Source->Pitch);
     }
-    if (NT_SUCCESS(Status) && Timings[1].Active)
+    if (NT_SUCCESS(Status) && Crt)
     {
         Scanout->CrtActive = TRUE;
         Status = HdgfxCrtCommit(Scanout);
@@ -1659,25 +1628,19 @@ HdgfxSetOutputs(
         HdgfxCursorCommit(Scanout);
     HdgfxUnlock(Scanout);
     DPRINT1("Outputs: panel %s, CRT %s, source %lux%lu: 0x%08lx\n",
-            Timings[0].Active ? "on" : "off", Timings[1].Active ? "on" : "off",
-            Source->Width, Source->Height, Status);
+            Panel ? "on" : "off", Crt ? "on" : "off", Source->Width, Source->Height, Status);
     return Status;
 }
 
 NTSTATUS
-SoftGpuPlatformSetMonitorPower(
-    _Inout_ PSOFTGPU_DEVICE Device,
+HdgfxSetMonitorPower(
+    _Inout_ PHDGFX_SCANOUT Scanout,
     _In_ ULONG ChildUid,
-    _In_ DEVICE_POWER_STATE DevicePowerState)
+    _In_ BOOLEAN Off)
 {
-    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
-    BOOLEAN Off = DevicePowerState != PowerDeviceD0;
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
-
-    if (Scanout == NULL)
-        return STATUS_SUCCESS;
 
     HdgfxLock(Scanout);
     if (ChildUid == HDGFX_CRT_CHILD_UID && Off != Scanout->CrtDisplayOff)
@@ -1689,7 +1652,7 @@ SoftGpuPlatformSetMonitorPower(
         if (NT_SUCCESS(Status) && !Off)
             Status = HdgfxCrtCommit(Scanout);
     }
-    else if (ChildUid == SOFTGPU_CHILD_UID && Off != Scanout->DisplayOff)
+    else if (ChildUid == HDGFX_PANEL_CHILD_UID && Off != Scanout->DisplayOff)
     {
         if (Off && Scanout->LvdsActive)
             Status = HdgfxLvdsOff(Scanout);
@@ -1700,6 +1663,19 @@ SoftGpuPlatformSetMonitorPower(
     }
     HdgfxUnlock(Scanout);
     return Status;
+}
+
+NTSTATUS
+SoftGpuPlatformSetMonitorPower(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ ULONG ChildUid,
+    _In_ DEVICE_POWER_STATE DevicePowerState)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(ChildUid);
+    UNREFERENCED_PARAMETER(DevicePowerState);
+
+    return STATUS_NOT_SUPPORTED;
 }
 
 static VOID
@@ -1713,65 +1689,64 @@ HdgfxScanoutFree(
 
 static VOID
 HdgfxAddMode(
-    _Inout_ PSOFTGPU_PLATFORM_CONFIG Config,
-    _In_ const HDGFX_SCANOUT *Scanout,
+    _Inout_ PHDGFX_SCANOUT Scanout,
     _In_ ULONG Width,
     _In_ ULONG Height,
     _In_ ULONG PanelMode)
 {
     const HDGFX_DTD *Panel = &Scanout->PanelModes[PanelMode];
-    SOFTGPU_DISPLAY_MODE *Mode;
+    PHDGFX_MODE Mode;
     ULONG Index;
 
-    for (Index = 0; Index < Config->ModeCount; Index++)
+    for (Index = 0; Index < Scanout->ModeCount; Index++)
     {
-        if (Config->Modes[Index].Width == Width && Config->Modes[Index].Height == Height &&
-            Config->Modes[Index].PlatformMode == PanelMode)
+        if (Scanout->Modes[Index].Width == Width && Scanout->Modes[Index].Height == Height &&
+            Scanout->Modes[Index].Timing == PanelMode)
         {
             return;
         }
     }
-    if (Config->ModeCount >= SOFTGPU_MAX_DISPLAY_MODES)
+    if (Scanout->ModeCount >= HDGFX_MAX_MODES)
         return;
 
-    Mode = &Config->Modes[Config->ModeCount];
+    Mode = &Scanout->Modes[Scanout->ModeCount];
     Mode->Width = Width;
     Mode->Height = Height;
-    Mode->Pitch = ALIGN_UP_BY(Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL, HDGFX_STRIDE_ALIGNMENT);
-    Mode->PlatformMode = PanelMode;
+    Mode->Pitch = ALIGN_UP_BY(Width * HDGFX_BYTES_PER_PIXEL, HDGFX_STRIDE_ALIGNMENT);
+    Mode->Timing = PanelMode;
     Mode->TotalWidth = Panel->Timings.HTotal;
     Mode->TotalHeight = Panel->Timings.VTotal;
     Mode->PixelRate = Panel->DotKHz * 1000;
-    Config->ScanoutSize = max(Config->ScanoutSize, (ULONGLONG)Mode->Pitch * Height);
-    Config->ModeCount++;
+    Scanout->FirmwareSize = max(Scanout->FirmwareSize, Mode->Pitch * Height);
+    Scanout->ModeCount++;
 }
 
 static ULONG
 HdgfxCrtModes(
-    _In_ const HDGFX_DTD *Timing,
-    _In_reads_(SourceCount) const SOFTGPU_DISPLAY_MODE *Sources,
-    _In_ ULONG SourceCount,
-    _Out_writes_(SOFTGPU_MAX_DISPLAY_MODES) SOFTGPU_DISPLAY_MODE *Modes)
+    _In_ const HDGFX_SCANOUT *Scanout,
+    _Out_writes_(HDGFX_MAX_MODES) PHDGFX_MODE Modes)
 {
+    const HDGFX_DTD *Timing = &Scanout->CrtTiming;
     ULONG Count = 0;
     ULONG Index;
     ULONG Other;
 
-    for (Index = 0; Index < SourceCount && Count < SOFTGPU_MAX_DISPLAY_MODES; Index++)
+    for (Index = 0; Index < Scanout->ModeCount && Count < HDGFX_MAX_MODES; Index++)
     {
-        if (Sources[Index].Width > Timing->Timings.HActive || Sources[Index].Height > Timing->Timings.VActive)
+        const HDGFX_MODE *Source = &Scanout->Modes[Index];
+
+        if (Source->Width > Timing->Timings.HActive || Source->Height > Timing->Timings.VActive)
             continue;
         for (Other = 0; Other < Count; Other++)
         {
-            if (Modes[Other].Width == Sources[Index].Width && Modes[Other].Height == Sources[Index].Height)
+            if (Modes[Other].Width == Source->Width && Modes[Other].Height == Source->Height)
                 break;
         }
         if (Other != Count)
             continue;
 
-        Modes[Count] = Sources[Index];
-        Modes[Count].PlatformMode = 0;
-        Modes[Count].AllocationSlabSize = 0;
+        Modes[Count] = *Source;
+        Modes[Count].Timing = 0;
         Modes[Count].TotalWidth = Timing->Timings.HTotal;
         Modes[Count].TotalHeight = Timing->Timings.VTotal;
         Modes[Count].PixelRate = Timing->DotKHz * 1000;
@@ -1816,23 +1791,15 @@ HdgfxCrtDetect(
 
 static VOID
 HdgfxCrtStart(
-    _Inout_ PSOFTGPU_DEVICE Device,
-    _Inout_ PHDGFX_SCANOUT Scanout,
-    _Inout_ PSOFTGPU_PLATFORM_CONFIG Config)
+    _Inout_ PHDGFX_SCANOUT Scanout)
 {
-    PSOFTGPU_OUTPUT Output = &Device->ExtraOutputs[0];
-
     if (Scanout->Generation->DetectCrt == NULL)
         return;
 
-    Output->ChildUid = HDGFX_CRT_CHILD_UID;
-    Output->OutputTechnology = D3DKMDT_VOT_HD15;
-    Output->HpdAwareness = HpdAwarenessInterruptible;
-    Output->Connected = HdgfxCrtDetect(Scanout, Output->Edid, &Output->EdidLength);
-    if (Output->Connected && Scanout->CrtTimingValid)
-        Output->ModeCount = HdgfxCrtModes(&Scanout->CrtTiming, Config->Modes, Config->ModeCount, Output->Modes);
-    Config->ExtraOutputCount = 1;
-    Config->SetOutputs = HdgfxSetOutputs;
+    Scanout->CrtSupported = TRUE;
+    Scanout->CrtConnected = HdgfxCrtDetect(Scanout, Scanout->CrtEdid, &Scanout->CrtEdidLength);
+    if (Scanout->CrtConnected && Scanout->CrtTimingValid)
+        Scanout->CrtModeCount = HdgfxCrtModes(Scanout, Scanout->CrtModes);
 }
 
 static VOID
@@ -1841,30 +1808,41 @@ HdgfxCrtRefresh(
     _In_ BOOLEAN Indicate)
 {
     PHDGFX_SCANOUT Scanout = Device->PlatformContext;
-    SOFTGPU_DISPLAY_MODE *Modes;
+    DXGK_CHILD_STATUS ChildStatus;
     UCHAR Edid[HDGFX_EDID_SIZE];
     ULONG EdidLength;
-    ULONG Count = 0;
+    ULONG Count;
     BOOLEAN Connected;
-    NTSTATUS Status;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
-    if (Scanout == NULL || Device->ExtraOutputCount == 0)
-        return;
-    Modes = ExAllocatePoolZero(PagedPool, SOFTGPU_MAX_DISPLAY_MODES * sizeof(*Modes), HDGFX_TAG);
-    if (Modes == NULL)
+    if (Scanout == NULL || !Scanout->CrtSupported)
         return;
 
+    KeWaitForSingleObject(&Scanout->OutputLock, Executive, KernelMode, FALSE, NULL);
     HdgfxLock(Scanout);
     Connected = HdgfxCrtDetect(Scanout, Edid, &EdidLength);
-    if (Connected && Scanout->CrtTimingValid)
-        Count = HdgfxCrtModes(&Scanout->CrtTiming, Device->Modes, Device->ModeCount, Modes);
     HdgfxUnlock(Scanout);
+    Scanout->CrtConnected = Connected;
+    Scanout->CrtModeCount = Connected && Scanout->CrtTimingValid ? HdgfxCrtModes(Scanout, Scanout->CrtModes) : 0;
+    Scanout->CrtStale = TRUE;
+    RtlZeroMemory(Scanout->CrtEdid, sizeof(Scanout->CrtEdid));
+    RtlCopyMemory(Scanout->CrtEdid, Edid, EdidLength);
+    Scanout->CrtEdidLength = EdidLength;
+    Count = Scanout->CrtModeCount;
+    KeReleaseMutex(&Scanout->OutputLock, FALSE);
 
-    Status = SoftGpuUpdateOutput(Device, HDGFX_CRT_CHILD_UID, Connected, Modes, Count, 0, Edid, EdidLength, Indicate);
-    DPRINT1("CRT hot plug: %s, %lu mode(s): 0x%08lx\n", Connected ? "connected" : "disconnected", Count, Status);
-    ExFreePoolWithTag(Modes, HDGFX_TAG);
+    if (Indicate && Device->DxgkInterface.DxgkCbIndicateChildStatus != NULL)
+    {
+        RtlZeroMemory(&ChildStatus, sizeof(ChildStatus));
+        ChildStatus.Type = StatusConnection;
+        ChildStatus.ChildUid = HDGFX_CRT_CHILD_UID;
+        ChildStatus.HotPlug.Connected = Connected;
+        Status = Device->DxgkInterface.DxgkCbIndicateChildStatus(Device->DxgkInterface.DeviceHandle, &ChildStatus);
+    }
+    DPRINT1("CRT hot plug: %s, %lu mode(s), %lu-byte EDID: 0x%08lx\n", Connected ? "connected" : "disconnected",
+            Count, EdidLength, Status);
 }
 
 static BOOLEAN
@@ -1967,8 +1945,11 @@ HdgfxScanoutStart(
         return STATUS_NOT_SUPPORTED;
     }
 
-    if (HdgfxReadEdid("Panel", Scanout->Generation->PanelDdcPins, &Mmio, Config->Edid, &Edid) && Edid.DtdCount != 0)
+    if (HdgfxReadEdid("Panel", Scanout->Generation->PanelDdcPins, &Mmio, Scanout->PanelEdid, &Edid) &&
+        Edid.DtdCount != 0)
     {
+        Scanout->PanelEdidLength = HDGFX_EDID_SIZE;
+        RtlCopyMemory(Config->Edid, Scanout->PanelEdid, HDGFX_EDID_SIZE);
         Config->EdidLength = HDGFX_EDID_SIZE;
         for (Index = 0; Index < Edid.DtdCount; Index++)
         {
@@ -2005,7 +1986,7 @@ HdgfxScanoutStart(
 
     Scanout->Panel = Scanout->PanelModes[0];
     for (PanelMode = 0; PanelMode < Scanout->PanelModeCount; PanelMode++)
-        HdgfxAddMode(Config, Scanout, Scanout->Panel.Timings.HActive, Scanout->Panel.Timings.VActive, PanelMode);
+        HdgfxAddMode(Scanout, Scanout->Panel.Timings.HActive, Scanout->Panel.Timings.VActive, PanelMode);
     for (Index = 0; Index < RTL_NUMBER_OF(HdgfxScaledModes); Index++)
     {
         if (HdgfxScaledModes[Index][0] > Scanout->Panel.Timings.HActive ||
@@ -2014,37 +1995,34 @@ HdgfxScanoutStart(
             continue;
         }
         for (PanelMode = 0; PanelMode < Scanout->PanelModeCount; PanelMode++)
-            HdgfxAddMode(Config, Scanout, HdgfxScaledModes[Index][0], HdgfxScaledModes[Index][1], PanelMode);
+            HdgfxAddMode(Scanout, HdgfxScaledModes[Index][0], HdgfxScaledModes[Index][1], PanelMode);
     }
-    Config->ScanoutSize = ALIGN_UP_BY(Config->ScanoutSize, PAGE_SIZE);
+    Scanout->FirmwareSize = ALIGN_UP_BY(Scanout->FirmwareSize, PAGE_SIZE);
 
-    if (!HdgfxResourceOwned(Interface, Bar2 + Scanout->Surface, (ULONG)Config->ScanoutSize) ||
-        !HdgfxGttMapped(Interface, Bar0, Scanout->Surface, Config->ScanoutSize))
+    if (!HdgfxResourceOwned(Interface, Bar2 + Scanout->Surface, Scanout->FirmwareSize) ||
+        !HdgfxGttMapped(Interface, Bar0, Scanout->Surface, Scanout->FirmwareSize))
     {
-        DPRINT1("Aperture 0x%I64x cannot hold a %I64u-byte surface\n", Bar2, Config->ScanoutSize);
+        DPRINT1("Aperture 0x%I64x cannot hold a %lu-byte surface\n", Bar2, Scanout->FirmwareSize);
         return STATUS_NOT_SUPPORTED;
     }
 
     Address.QuadPart = (LONGLONG)(Bar2 + Scanout->Surface);
-    Mapping = MmMapIoSpace(Address, (SIZE_T)Config->ScanoutSize, MmWriteCombined);
+    Mapping = MmMapIoSpace(Address, Scanout->FirmwareSize, MmWriteCombined);
     if (Mapping == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
-    RtlZeroMemory(Mapping, (SIZE_T)Config->ScanoutSize);
-    MmUnmapIoSpace(Mapping, (SIZE_T)Config->ScanoutSize);
+    RtlZeroMemory(Mapping, Scanout->FirmwareSize);
+    MmUnmapIoSpace(Mapping, Scanout->FirmwareSize);
 
-    Status = HdgfxScanoutCommit(Scanout, &Scanout->PanelModes[0], Config->Modes[0].Width, Config->Modes[0].Height,
-                                Config->Modes[0].Pitch);
+    Status = HdgfxScanoutCommit(Scanout, &Scanout->PanelModes[0], Scanout->Modes[0].Width, Scanout->Modes[0].Height,
+                                Scanout->Modes[0].Pitch);
     if (!NT_SUCCESS(Status))
         return Status;
 
-    Config->Width = Config->Modes[0].Width;
-    Config->Height = Config->Modes[0].Height;
+    Config->Width = Scanout->Modes[0].Width;
+    Config->Height = Scanout->Modes[0].Height;
     Config->Format = D3DDDIFMT_X8R8G8B8;
-    Config->ScanoutPhysicalAddress = Address;
-    Config->ScanoutPitch = Config->Modes[0].Pitch;
     Scanout->FirmwareSurface = Scanout->Surface;
-    Config->CurrentMode = 0;
-    Config->SetMode = HdgfxSetMode;
+    Scanout->Mode = 0;
     return STATUS_SUCCESS;
 }
 
@@ -2053,17 +2031,7 @@ HdgfxComputeSlabs(
     _Inout_ PSOFTGPU_PLATFORM_CONFIG Config)
 {
     SIZE_T WorkingSetSize;
-    ULONG Index;
     NTSTATUS Status;
-
-    for (Index = 0; Index < Config->ModeCount; Index++)
-    {
-        Status = SoftGpu2dComputeAllocationSlabSize(Config->Modes[Index].Width, Config->Modes[Index].Height,
-                                                    HDGFX_WORKING_SURFACE_COUNT, MAXULONG_PTR, &WorkingSetSize);
-        if (!NT_SUCCESS(Status))
-            return Status;
-        Config->Modes[Index].AllocationSlabSize = min(WorkingSetSize, SOFTGPU_MAX_ALLOCATION_SLAB_SIZE);
-    }
 
     Status = SoftGpu2dComputeAllocationSlabSize(Config->Width, Config->Height,
                                                 HDGFX_WORKING_SURFACE_COUNT, MAXULONG_PTR, &WorkingSetSize);
@@ -2102,32 +2070,20 @@ SoftGpuPlatformQueryStart(
     Scanout = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Scanout), HDGFX_TAG);
     if (Scanout == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
+    KeInitializeMutex(&Scanout->OutputLock, 0);
     KeInitializeMutex(&Scanout->Lock, 0);
     Scanout->LvdsActive = TRUE;
 
     Status = HdgfxScanoutStart(DxgkInterface, Scanout, Config);
-    if (NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status))
     {
-        Device->PlatformContext = Scanout;
-        Config->HighestFrameBufferAddress.QuadPart = MAXULONG;
-        HdgfxCrtStart(Device, Scanout, Config);
-    }
-    else
-    {
+        DPRINT1("Scan-out setup failed 0x%08lx\n", Status);
         HdgfxScanoutFree(Scanout);
-        if (PostDisplay.Width == 0)
-            return Status;
-
-        DPRINT1("Scan-out setup failed 0x%08lx; keeping the %lux%lu firmware framebuffer\n",
-                Status, PostDisplay.Width, PostDisplay.Height);
-        RtlZeroMemory(Config, sizeof(*Config));
-        Config->Width = PostDisplay.Width;
-        Config->Height = PostDisplay.Height;
-        Config->Format = PostDisplay.ColorFormat;
-        Config->ScanoutPhysicalAddress = PostDisplay.PhysicAddress;
-        Config->ScanoutPitch = PostDisplay.Pitch;
-        Config->ScanoutSize = VisibleLength;
+        return Status;
     }
+    Device->PlatformContext = Scanout;
+    Config->HighestFrameBufferAddress.QuadPart = MAXULONG;
+    HdgfxCrtStart(Scanout);
     return HdgfxComputeSlabs(Config);
 }
 
@@ -2143,7 +2099,7 @@ SoftGpuPlatformDmaBufferSegmentSet(VOID)
     return 1UL << (HDGFX_DMA_SEGMENT_ID - 1);
 }
 
-static VOID
+VOID
 HdgfxCursorCommit(
     _In_ PHDGFX_SCANOUT Scanout)
 {
@@ -2162,7 +2118,7 @@ HdgfxCursorCommit(
     }
 }
 
-static VOID
+VOID
 HdgfxPlaneCommit(
     _In_ PHDGFX_SCANOUT Scanout)
 {
@@ -2232,17 +2188,17 @@ SoftGpuPlatformStartScanout(
         Device->FrameBufferSize % PAGE_SIZE != 0 ||
         (ULONGLONG)Device->FrameBufferPhys.QuadPart + Device->FrameBufferSize - 1 > MAXULONG)
     {
-        DPRINT1("Direct scan-out unavailable; copying frames to the firmware surface\n");
-        return STATUS_NOT_SUPPORTED;
+        DPRINT1("Direct scan-out unavailable\n");
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
     Pages = (ULONG)(Device->FrameBufferSize / PAGE_SIZE);
     if (Scanout->ApertureSize / PAGE_SIZE < HDGFX_RENDER_GTT_PAGES + HDGFX_CURSOR_PAGES + Pages ||
         (Scanout->ApertureSize / PAGE_SIZE - HDGFX_RENDER_GTT_PAGES - HDGFX_CURSOR_PAGES - Pages) * PAGE_SIZE <
-            Device->ScanoutSize)
+            Scanout->FirmwareSize)
     {
         DPRINT1("Aperture of %lu MB cannot hold the %Iu-byte allocation slab\n",
                 Scanout->ApertureSize >> 20, Device->FrameBufferSize);
-        return STATUS_NOT_SUPPORTED;
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
 
     Lowest.QuadPart = 0;
@@ -2315,30 +2271,14 @@ SoftGpuPlatformSetPrimary(
     _In_ ULONG Height,
     _In_ BOOLEAN Visible)
 {
-    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
-    ULONGLONG Offset;
-
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(PrimaryAddress);
+    UNREFERENCED_PARAMETER(Pitch);
+    UNREFERENCED_PARAMETER(Width);
+    UNREFERENCED_PARAMETER(Height);
     UNREFERENCED_PARAMETER(Visible);
 
-    if (Scanout == NULL || Scanout->SlabGtt == NULL)
-        return STATUS_NOT_SUPPORTED;
-    Offset = (ULONGLONG)PrimaryAddress.QuadPart - Scanout->SlabPhysical;
-    if ((ULONGLONG)PrimaryAddress.QuadPart < Scanout->SlabPhysical || Offset % PAGE_SIZE != 0 ||
-        Pitch == 0 || Pitch % HDGFX_STRIDE_ALIGNMENT != 0 || Height == 0 ||
-        Offset + (ULONGLONG)Pitch * Height > Scanout->SlabSize)
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    HdgfxLock(Scanout);
-    Scanout->Surface = Scanout->SlabAddress + (ULONG)Offset;
-    if (Width == Scanout->Width && Height == Scanout->Height)
-    {
-        Scanout->Pitch = Pitch;
-        HdgfxPlaneCommit(Scanout);
-    }
-    HdgfxUnlock(Scanout);
-    return STATUS_SUCCESS;
+    return STATUS_NOT_SUPPORTED;
 }
 
 NTSTATUS
@@ -2356,27 +2296,9 @@ NTSTATUS
 SoftGpuPlatformUpdatePointer(
     _Inout_ PSOFTGPU_DEVICE Device)
 {
-    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
-    LONG X;
-    LONG Y;
+    UNREFERENCED_PARAMETER(Device);
 
-    if (Scanout == NULL || Scanout->Cursor == NULL)
-        return STATUS_NOT_SUPPORTED;
-
-    HdgfxLock(Scanout);
-    if (Device->PointerShapeValid && Scanout->CursorGeneration != Device->PointerShapeGeneration)
-    {
-        RtlCopyMemory(Scanout->Cursor, Device->PointerPixels, HDGFX_CURSOR_SIZE * HDGFX_CURSOR_SIZE * sizeof(ULONG));
-        KeMemoryBarrier();
-        Scanout->CursorGeneration = Device->PointerShapeGeneration;
-    }
-    X = Device->PointerX - (LONG)Device->PointerHotX;
-    Y = Device->PointerY - (LONG)Device->PointerHotY;
-    Scanout->CursorControl = HdgfxIlkCursorControl(Device->PointerVisible && Device->PointerShapeValid);
-    Scanout->CursorPosition = HdgfxIlkCursorPosition(X, Y);
-    HdgfxCursorCommit(Scanout);
-    HdgfxUnlock(Scanout);
-    return STATUS_SUCCESS;
+    return STATUS_NOT_SUPPORTED;
 }
 
 VOID
@@ -2400,7 +2322,7 @@ SoftGpuPlatformFillNodeMetadata(
     RtlCopyMemory(GetNodeMetadata->FriendlyName, FriendlyName, sizeof(FriendlyName));
 }
 
-static ULONG
+ULONG
 HdgfxScanLine(
     _In_ PHDGFX_SCANOUT Scanout,
     _In_ ULONG Pipe)
@@ -2408,67 +2330,19 @@ HdgfxScanLine(
     return HDGFX_GET(READ_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(PIPE_DSL, Pipe))), PIPE_DSL_LINE);
 }
 
-static ULONG
-HdgfxScanPipe(
-    _In_ PHDGFX_SCANOUT Scanout,
-    _Out_ PULONG VActive)
-{
-    if ((!Scanout->LvdsActive || Scanout->DisplayOff) &&
-        Scanout->CrtActive && !Scanout->CrtDisplayOff && Scanout->CrtTimingValid)
-    {
-        *VActive = Scanout->CrtTiming.Timings.VActive;
-        return HDGFX_CRT_PIPE;
-    }
-    *VActive = Scanout->Panel.Timings.VActive;
-    return 0;
-}
-
-static BOOLEAN
-HdgfxWaitForBlank(
-    _In_ PHDGFX_SCANOUT Scanout,
-    _In_ BOOLEAN InBlank)
-{
-    ULONG Elapsed;
-    ULONG VActive;
-    ULONG Pipe = HdgfxScanPipe(Scanout, &VActive);
-
-    for (Elapsed = 0; Elapsed < HDGFX_VBLANK_TIMEOUT_US; Elapsed += HDGFX_VBLANK_POLL_US)
-    {
-        if ((HdgfxScanLine(Scanout, Pipe) >= VActive) == InBlank)
-            return TRUE;
-        KeStallExecutionProcessor(HDGFX_VBLANK_POLL_US);
-    }
-    return FALSE;
-}
-
 VOID
 SoftGpuPlatformInitializeTiming(
     _Inout_ PSOFTGPU_DEVICE Device)
 {
-    PHDGFX_SCANOUT Scanout;
-
-    if (Device == NULL)
-        return;
-
-    Scanout = Device->PlatformContext;
-    InterlockedExchange(&Device->ScanoutVBlankAvailable,
-                        Scanout != NULL && HdgfxWaitForBlank(Scanout, FALSE) && HdgfxWaitForBlank(Scanout, TRUE));
+    UNREFERENCED_PARAMETER(Device);
 }
 
 BOOLEAN
 SoftGpuPlatformWaitForVerticalBlank(
     _Inout_ PSOFTGPU_DEVICE Device)
 {
-    PHDGFX_SCANOUT Scanout;
+    UNREFERENCED_PARAMETER(Device);
 
-    if (Device == NULL || InterlockedCompareExchange(&Device->ScanoutVBlankAvailable, 0, 0) == 0)
-        return FALSE;
-
-    Scanout = Device->PlatformContext;
-    if (Scanout != NULL && HdgfxWaitForBlank(Scanout, FALSE) && HdgfxWaitForBlank(Scanout, TRUE))
-        return TRUE;
-
-    InterlockedExchange(&Device->ScanoutVBlankAvailable, 0);
     return FALSE;
 }
 
@@ -2477,27 +2351,10 @@ SoftGpuPlatformQueryScanLine(
     _In_ PSOFTGPU_DEVICE Device,
     _Inout_ PDXGKARG_GETSCANLINE GetScanLine)
 {
-    PHDGFX_SCANOUT Scanout;
-    ULONG VActive;
-    ULONG Pipe;
-    ULONG Line;
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(GetScanLine);
 
-    if (Device == NULL || GetScanLine == NULL ||
-        (GetScanLine->VidPnTargetId != 0 && GetScanLine->VidPnTargetId != HDGFX_CRT_CHILD_UID))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    Scanout = Device->PlatformContext;
-    if (Scanout == NULL || (GetScanLine->VidPnTargetId == HDGFX_CRT_CHILD_UID && !Scanout->CrtTimingValid))
-        return STATUS_NOT_SUPPORTED;
-
-    Pipe = GetScanLine->VidPnTargetId == HDGFX_CRT_CHILD_UID ? HDGFX_CRT_PIPE : 0;
-    VActive = Pipe == HDGFX_CRT_PIPE ? Scanout->CrtTiming.Timings.VActive : Scanout->Panel.Timings.VActive;
-    Line = HdgfxScanLine(Scanout, Pipe);
-    GetScanLine->ScanLine = Line;
-    GetScanLine->InVerticalBlank = Line >= VActive;
-    return STATUS_SUCCESS;
+    return STATUS_NOT_SUPPORTED;
 }
 
 MEMORY_CACHING_TYPE
@@ -2511,17 +2368,8 @@ SoftGpuPlatformQueryDescriptor(
     _In_ PSOFTGPU_DEVICE Device,
     _Inout_ PDXGK_DEVICE_DESCRIPTOR DeviceDescriptor)
 {
-    ULONG Length;
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(DeviceDescriptor);
 
-    if (Device->EdidLength == 0)
-        return STATUS_MONITOR_NO_DESCRIPTOR;
-    if (DeviceDescriptor->DescriptorOffset >= Device->EdidLength)
-        return STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA;
-    if (DeviceDescriptor->DescriptorBuffer == NULL)
-        return STATUS_INVALID_PARAMETER;
-
-    Length = min(DeviceDescriptor->DescriptorLength, Device->EdidLength - DeviceDescriptor->DescriptorOffset);
-    RtlCopyMemory(DeviceDescriptor->DescriptorBuffer, Device->Edid + DeviceDescriptor->DescriptorOffset, Length);
-    DeviceDescriptor->DescriptorLength = Length;
-    return STATUS_SUCCESS;
+    return STATUS_MONITOR_NO_DESCRIPTOR;
 }
