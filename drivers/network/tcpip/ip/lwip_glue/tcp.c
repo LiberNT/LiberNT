@@ -1,5 +1,6 @@
 #include <debug.h>
 #include <lwip/tcpip.h>
+#include <lwip/prot/tcp.h>
 #include <tags.h>
 
 #include "lwip_glue.h"
@@ -282,6 +283,35 @@ LibTCPWfpEstablish(PCONNECTION_ENDPOINT Connection, PTCP_PCB pcb, BOOLEAN Outbou
         Flow.ProcessId = Connection->AddressFile->ProcessId;
 
     WfpShimEstablishFlow(&Flow);
+}
+
+err_t
+LibTCPWfpInPacket(PTCP_PCB pcb, struct tcp_hdr *hdr)
+{
+    PCONNECTION_ENDPOINT Connection = pcb->callback_arg;
+    struct netif *netif = ip_current_input_netif();
+    PIP_INTERFACE Interface;
+    WFP_SHIM_FLOW Flow;
+
+    if (pcb->state != LISTEN || (TCPH_FLAGS(hdr) & (TCP_SYN | TCP_ACK)) != TCP_SYN ||
+        ip_current_is_v6() || !Connection)
+        return ERR_OK;
+
+    RtlZeroMemory(&Flow, sizeof(Flow));
+    Flow.EndpointId = Connection->WfpEndpointId;
+    Flow.Protocol = IPPROTO_TCP;
+    Flow.LocalAddress = lwip_ntohl(ip4_addr_get_u32(ip4_current_dest_addr()));
+    Flow.RemoteAddress = lwip_ntohl(ip4_addr_get_u32(ip4_current_src_addr()));
+    Flow.LocalPort = hdr->dest;
+    Flow.RemotePort = hdr->src;
+    Flow.Loopback = (Flow.RemoteAddress >> 24) == IP_LOOPBACKNET || Flow.RemoteAddress == Flow.LocalAddress;
+    Flow.InterfaceType = Flow.Loopback ? IF_TYPE_SOFTWARE_LOOPBACK : IF_TYPE_ETHERNET_CSMACD;
+    if (netif && (Interface = netif->state))
+        Flow.InterfaceIndex = Interface->Index;
+    if (Connection->AddressFile)
+        Flow.ProcessId = Connection->AddressFile->ProcessId;
+
+    return WfpShimAuthorizeConnection(&Flow) ? ERR_OK : ERR_ABRT;
 }
 
 static

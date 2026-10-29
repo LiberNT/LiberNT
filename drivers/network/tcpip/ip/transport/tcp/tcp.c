@@ -320,6 +320,29 @@ NTSTATUS TCPTranslateError(const err_t err)
     return Status;
 }
 
+static BOOLEAN TCPAuthorizeConnect
+( PCONNECTION_ENDPOINT Connection,
+  PIP_ADDRESS LocalAddress,
+  PIP_ADDRESS RemoteAddress,
+  USHORT RemotePort )
+{
+    WFP_SHIM_FLOW Flow;
+
+    RtlZeroMemory(&Flow, sizeof(Flow));
+    Flow.EndpointId = Connection->WfpEndpointId;
+    Flow.Outbound = TRUE;
+    Flow.Protocol = IPPROTO_TCP;
+    Flow.LocalAddress = DN2H(LocalAddress->Address.IPv4Address);
+    Flow.RemoteAddress = DN2H(RemoteAddress->Address.IPv4Address);
+    Flow.LocalPort = WN2H(Connection->AddressFile->Port);
+    Flow.RemotePort = WN2H(RemotePort);
+    Flow.Loopback = (Flow.RemoteAddress >> 24) == 127 || Flow.RemoteAddress == Flow.LocalAddress;
+    Flow.InterfaceType = Flow.Loopback ? IF_TYPE_SOFTWARE_LOOPBACK : IF_TYPE_ETHERNET_CSMACD;
+    Flow.ProcessId = Connection->AddressFile->ProcessId;
+
+    return WfpShimAuthorizeConnection(&Flow);
+}
+
 NTSTATUS TCPConnect
 ( PCONNECTION_ENDPOINT Connection,
   PTDI_CONNECTION_INFORMATION ConnInfo,
@@ -442,6 +465,13 @@ NTSTATUS TCPConnect
             return STATUS_TOO_MANY_ADDRESSES;
         }
         Connection->AddressFile->Port = AllocatedPort;
+    }
+
+    if (RemoteAddress.Type == IP_ADDRESS_V4 &&
+        !TCPAuthorizeConnect(Connection, &BindAddress, &RemoteAddress, RemotePort))
+    {
+        UnlockObject(Connection);
+        return STATUS_ACCESS_DENIED;
     }
 
     LibIPAddressToLwip(&RemoteAddress, &connaddr);
