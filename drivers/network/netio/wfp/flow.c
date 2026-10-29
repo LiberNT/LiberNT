@@ -593,11 +593,15 @@ WfpShimAuthorizeBind(
     }
 
     RtlZeroMemory(Values, sizeof(Values));
-    if (Endpoint->WildcardAddress)
+    if (Endpoint->WildcardPort)
     {
         Flags |= FWP_CONDITION_FLAG_IS_WILDCARD_BIND;
     }
-    else
+    if (Endpoint->WildcardAddress && Endpoint->WildcardPort)
+    {
+        WfpSetValue32(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_IP_LOCAL_ADDRESS], 0);
+    }
+    else if (!Endpoint->WildcardAddress)
     {
         WfpSetValue32(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_IP_LOCAL_ADDRESS], Endpoint->LocalAddress);
         WfpSetValue8(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_IP_LOCAL_ADDRESS_TYPE], WFP_ADDRESS_TYPE_UNICAST);

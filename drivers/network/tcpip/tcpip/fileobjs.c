@@ -644,6 +644,7 @@ VOID ControlChannelFree(
 static BOOLEAN AddrAuthorizeBind(
   PIP_ADDRESS Address,
   USHORT Port,
+  BOOLEAN WildcardPort,
   USHORT Protocol,
   ULONG64 EndpointId)
 {
@@ -655,6 +656,7 @@ static BOOLEAN AddrAuthorizeBind(
   RtlZeroMemory(&Endpoint, sizeof(Endpoint));
   Endpoint.EndpointId = EndpointId;
   Endpoint.WildcardAddress = AddrIsUnspecified(Address);
+  Endpoint.WildcardPort = WildcardPort;
   Endpoint.Raw = (Protocol != IPPROTO_TCP && Protocol != IPPROTO_UDP);
   Endpoint.Protocol = (UCHAR)Protocol;
   Endpoint.LocalAddress = DN2H(Address->Address.IPv4Address);
@@ -708,7 +710,7 @@ NTSTATUS FileOpenAddress(
         return Status;
     if (SharedFile != NULL && Protocol != IPPROTO_UDP)
     {
-        if (!AddrAuthorizeBind(&BindAddress, BindPort, Protocol, SharedFile->WfpEndpointId))
+        if (!AddrAuthorizeBind(&BindAddress, BindPort, FALSE, Protocol, SharedFile->WfpEndpointId))
         {
             DereferenceObject(SharedFile);
             return STATUS_ACCESS_DENIED;
@@ -947,7 +949,7 @@ NTSTATUS FileOpenAddress(
   if (SharedFile != NULL)
       DereferenceObject(SharedFile);
 
-  if (!AddrAuthorizeBind(&AddrFile->Address, AddrFile->Port, Protocol, AddrFile->WfpEndpointId))
+  if (!AddrAuthorizeBind(&AddrFile->Address, AddrFile->Port, BindPort == 0, Protocol, AddrFile->WfpEndpointId))
   {
       Request->Handle.AddressHandle = NULL;
       DereferenceObject(AddrFile);
