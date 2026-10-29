@@ -1,5 +1,7 @@
 # Coding Style
 
+> **English** | [中文](CODING_STYLE.zh-CN.md) (AI-assisted translation)
+
 This article describes general coding style guidelines, which should be used for new LiberNT code. These guidelines apply exclusively to C and C++ source files. They come from the ReactOS coding style, which the members of ReactOS agreed on in their October 2013 meeting.
 
 Existing code is not converted to this style as part of an unrelated change. See [Notes on reformatting existing code](#notes-on-reformatting-existing-code) for more details.

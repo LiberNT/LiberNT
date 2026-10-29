@@ -1,5 +1,7 @@
 # Code of conduct
 
+> **English** | [中文](CODE_OF_CONDUCT.zh-CN.md) (AI-assisted translation)
+
 **Be respectful towards other members of the community.**
 - Don't initiate or engage in discussions that are designed to insult, inflame, attack, or incite hate, discrimination, or bullying against others.
 - Don't make unsubstantiated claims about another contributor, especially claims about undermining the project or our mission.

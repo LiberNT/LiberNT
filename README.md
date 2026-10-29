@@ -1,3 +1,5 @@
+> **English** | [中文](README.zh-CN.md) (AI-assisted translation)
+
 <p align="center">
   <img src="media/graphics/branding/libernt-banner.png" width="480" alt="LiberNT">
 </p>

@@ -1,5 +1,7 @@
 # How To Contribute
 
+> **English** | [中文](CONTRIBUTING.zh-CN.md) (AI-assisted translation)
+
 LiberNT welcomes bug reports, tests, fixes, new features and documentation. This page explains how to send your work. The engineering rules every change follows are in [AGENTS.md](AGENTS.md), and they apply to human contributors and AI tools alike.
 
 - [What To Do?](#what-to-do)
@@ -46,6 +48,8 @@ Guides and design notes go in the [Wiki](https://github.com/LiberNT/LiberNT/wiki
 Components synchronised with Wine are listed in [media/doc/WINESYNC.txt](media/doc/WINESYNC.txt), and other third-party code in [media/doc/3rd Party Files.txt](media/doc/3rd%20Party%20Files.txt). Keep LiberNT changes to that code under `#ifdef __REACTOS__`, with the original code in the `#else` branch, so the next synchronisation keeps them.
 
 ## How To Contribute?
+
+We recommend using English in issue reports and community discussions, to keep communication efficient. 建议在 Issue 报告和社区讨论中使用英语，以提高沟通效率。
 
 ### Pull Requests
 
