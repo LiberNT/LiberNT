@@ -641,6 +641,30 @@ VOID ControlChannelFree(
 }
 
 
+static BOOLEAN AddrAuthorizeBind(
+  PIP_ADDRESS Address,
+  USHORT Port,
+  USHORT Protocol,
+  ULONG64 EndpointId)
+{
+  WFP_SHIM_ENDPOINT Endpoint;
+
+  if (Address->Type == IP_ADDRESS_V6)
+    return TRUE;
+
+  RtlZeroMemory(&Endpoint, sizeof(Endpoint));
+  Endpoint.EndpointId = EndpointId;
+  Endpoint.WildcardAddress = AddrIsUnspecified(Address);
+  Endpoint.Raw = (Protocol != IPPROTO_TCP && Protocol != IPPROTO_UDP);
+  Endpoint.Protocol = (UCHAR)Protocol;
+  Endpoint.LocalAddress = DN2H(Address->Address.IPv4Address);
+  Endpoint.LocalPort = WN2H(Port);
+  Endpoint.InterfaceType = (Endpoint.LocalAddress >> 24) == 127 ? IF_TYPE_SOFTWARE_LOOPBACK : IF_TYPE_ETHERNET_CSMACD;
+  Endpoint.ProcessId = PsGetCurrentProcessId();
+
+  return WfpShimAuthorizeBind(&Endpoint);
+}
+
 /*
  * FUNCTION: Open an address file object
  * ARGUMENTS:
@@ -684,6 +708,11 @@ NTSTATUS FileOpenAddress(
         return Status;
     if (SharedFile != NULL && Protocol != IPPROTO_UDP)
     {
+        if (!AddrAuthorizeBind(&BindAddress, BindPort, Protocol, SharedFile->WfpEndpointId))
+        {
+            DereferenceObject(SharedFile);
+            return STATUS_ACCESS_DENIED;
+        }
         Request->Handle.AddressHandle = SharedFile;
         return STATUS_SUCCESS;
     }
@@ -917,6 +946,13 @@ NTSTATUS FileOpenAddress(
 
   if (SharedFile != NULL)
       DereferenceObject(SharedFile);
+
+  if (!AddrAuthorizeBind(&AddrFile->Address, AddrFile->Port, Protocol, AddrFile->WfpEndpointId))
+  {
+      Request->Handle.AddressHandle = NULL;
+      DereferenceObject(AddrFile);
+      return STATUS_ACCESS_DENIED;
+  }
 
   TI_DbgPrint(MAX_TRACE, ("Leaving.\n"));
 

@@ -65,6 +65,8 @@
 
 #define LWIP_HOOK_IP6_WEAK_SEND(src) LibIP6WeakSend(src)
 
+#define LWIP_HOOK_TCP_INPACKET_PCB(pcb, hdr, optlen, opt1len, opt2, p) LibTCPWfpInPacket(pcb, hdr)
+
 #define LWIP_IPV6_FORWARD               1
 
 #define LWIP_HOOK_IP6_NO_DEFAULT_NETIF  1

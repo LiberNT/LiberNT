@@ -41,6 +41,26 @@ NTSTATUS TCPCheckPeerForAccept(PVOID Context,
                                      WhoIsConnecting->RemoteAddressLength);
 }
 
+static BOOLEAN TCPAuthorizeListen(PCONNECTION_ENDPOINT Connection)
+{
+    PADDRESS_FILE AddrFile = Connection->AddressFile;
+    WFP_SHIM_ENDPOINT Endpoint;
+
+    if (AddrFile->Address.Type == IP_ADDRESS_V6)
+        return TRUE;
+
+    RtlZeroMemory(&Endpoint, sizeof(Endpoint));
+    Endpoint.EndpointId = Connection->WfpEndpointId;
+    Endpoint.WildcardAddress = AddrIsUnspecified(&AddrFile->Address);
+    Endpoint.Protocol = IPPROTO_TCP;
+    Endpoint.LocalAddress = DN2H(AddrFile->Address.Address.IPv4Address);
+    Endpoint.LocalPort = WN2H(AddrFile->Port);
+    Endpoint.InterfaceType = (Endpoint.LocalAddress >> 24) == 127 ? IF_TYPE_SOFTWARE_LOOPBACK : IF_TYPE_ETHERNET_CSMACD;
+    Endpoint.ProcessId = AddrFile->ProcessId;
+
+    return WfpShimAuthorizeListen(&Endpoint);
+}
+
 /* This listen is on a socket we keep as internal.  That socket has the same
  * lifetime as the address file */
 NTSTATUS TCPListen(PCONNECTION_ENDPOINT Connection, UINT Backlog)
@@ -90,6 +110,9 @@ NTSTATUS TCPListen(PCONNECTION_ENDPOINT Connection, UINT Backlog)
             }
         }
     }
+
+    if (NT_SUCCESS(Status) && !TCPAuthorizeListen(Connection))
+        Status = STATUS_ACCESS_DENIED;
 
     if (NT_SUCCESS(Status))
     {

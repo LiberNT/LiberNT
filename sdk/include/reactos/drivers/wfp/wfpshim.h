@@ -53,7 +53,20 @@ typedef struct _WFP_SHIM_FLOW
     USHORT RemotePort;
     ULONG InterfaceType;
     HANDLE ProcessId;
+    ULONG InterfaceIndex;
 } WFP_SHIM_FLOW, *PWFP_SHIM_FLOW;
+
+typedef struct _WFP_SHIM_ENDPOINT
+{
+    ULONG64 EndpointId;
+    BOOLEAN WildcardAddress;
+    BOOLEAN Raw;
+    UCHAR Protocol;
+    ULONG LocalAddress;
+    USHORT LocalPort;
+    ULONG InterfaceType;
+    HANDLE ProcessId;
+} WFP_SHIM_ENDPOINT, *PWFP_SHIM_ENDPOINT;
 
 typedef
 VOID
@@ -121,6 +134,21 @@ WfpShimClassifyStream(
     _In_ ULONG StreamFlags,
     _In_reads_bytes_opt_(Length) const VOID *Data,
     _In_ ULONG Length);
+
+BOOLEAN
+NTAPI
+WfpShimAuthorizeBind(
+    _In_ const WFP_SHIM_ENDPOINT *Endpoint);
+
+BOOLEAN
+NTAPI
+WfpShimAuthorizeListen(
+    _In_ const WFP_SHIM_ENDPOINT *Endpoint);
+
+BOOLEAN
+NTAPI
+WfpShimAuthorizeConnection(
+    _In_ const WFP_SHIM_FLOW *Flow);
 
 VOID
 NTAPI

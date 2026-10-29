@@ -269,24 +269,19 @@ NTAPI
 WfpShimDatagramActive(VOID)
 {
     return WfpLayerFilters[FWPS_LAYER_ALE_FLOW_ESTABLISHED_V4] != 0 ||
+           WfpLayerFilters[FWPS_LAYER_ALE_AUTH_CONNECT_V4] != 0 ||
+           WfpLayerFilters[FWPS_LAYER_ALE_AUTH_RECV_ACCEPT_V4] != 0 ||
            WfpLayerFilters[FWPS_LAYER_DATAGRAM_DATA_V4] != 0;
 }
 
 static
 UINT64
-WfpGetFlow(
-    _In_ const WFP_SHIM_FLOW *Datagram,
-    _Out_ PBOOLEAN Created)
+WfpFindFlowLocked(
+    _In_ const WFP_SHIM_FLOW *Datagram)
 {
-    PWFP_FLOW Flow, New;
+    PWFP_FLOW Flow;
     PLIST_ENTRY Entry;
-    UINT64 FlowId = 0;
-    KIRQL OldIrql;
 
-    *Created = FALSE;
-    New = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*New), WFP_TAG);
-
-    KeAcquireSpinLock(&WfpLock, &OldIrql);
     for (Entry = WfpFlows.Flink; Entry != &WfpFlows; Entry = Entry->Flink)
     {
         Flow = CONTAINING_RECORD(Entry, WFP_FLOW, Link);
@@ -297,10 +292,41 @@ WfpGetFlow(
             Flow->LocalPort == Datagram->LocalPort &&
             Flow->Protocol == Datagram->Protocol)
         {
-            FlowId = Flow->Id;
-            break;
+            return Flow->Id;
         }
     }
+    return 0;
+}
+
+static
+BOOLEAN
+WfpFlowExists(
+    _In_ const WFP_SHIM_FLOW *Datagram)
+{
+    UINT64 FlowId;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&WfpLock, &OldIrql);
+    FlowId = WfpFindFlowLocked(Datagram);
+    KeReleaseSpinLock(&WfpLock, OldIrql);
+    return FlowId != 0;
+}
+
+static
+UINT64
+WfpGetFlow(
+    _In_ const WFP_SHIM_FLOW *Datagram,
+    _Out_ PBOOLEAN Created)
+{
+    PWFP_FLOW New;
+    UINT64 FlowId;
+    KIRQL OldIrql;
+
+    *Created = FALSE;
+    New = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*New), WFP_TAG);
+
+    KeAcquireSpinLock(&WfpLock, &OldIrql);
+    FlowId = WfpFindFlowLocked(Datagram);
 
     if (FlowId == 0 && New != NULL)
     {
@@ -512,6 +538,212 @@ WfpClassifyFlowEstablished(
     return ClassifyOut.actionType != FWP_ACTION_BLOCK;
 }
 
+static
+BOOLEAN
+WfpAuthorize(
+    _In_ UINT16 LayerId,
+    _Inout_updates_(ValueCount) FWPS_INCOMING_VALUE0 *Values,
+    _In_ ULONG ValueCount,
+    _In_ ULONG AppIdField,
+    _In_ ULONG64 EndpointId,
+    _In_opt_ HANDLE ProcessId)
+{
+    FWPS_INCOMING_METADATA_VALUES0 Metadata;
+    FWPS_CLASSIFY_OUT0 ClassifyOut;
+    FWP_BYTE_BLOB ProcessPath;
+
+    RtlZeroMemory(&Metadata, sizeof(Metadata));
+    Metadata.currentMetadataValues = FWPS_METADATA_FIELD_COMPARTMENT_ID |
+                                     FWPS_METADATA_FIELD_TRANSPORT_ENDPOINT_HANDLE;
+    Metadata.compartmentId = WFP_COMPARTMENT_ID;
+    Metadata.transportEndpointHandle = EndpointId;
+    if (ProcessId != NULL)
+    {
+        Metadata.currentMetadataValues |= FWPS_METADATA_FIELD_PROCESS_ID;
+        Metadata.processId = (UINT64)(ULONG_PTR)ProcessId;
+    }
+    if (WfpGetProcessPath(ProcessId, &ProcessPath))
+    {
+        Metadata.currentMetadataValues |= FWPS_METADATA_FIELD_PROCESS_PATH;
+        Metadata.processPath = &ProcessPath;
+        Values[AppIdField].value.type = FWP_BYTE_BLOB_TYPE;
+        Values[AppIdField].value.byteBlob = &ProcessPath;
+    }
+
+    WfpClassify(LayerId, Values, ValueCount, &Metadata, 0, NULL, NULL, &ClassifyOut);
+    if (ProcessPath.data != NULL)
+    {
+        ExFreePoolWithTag(ProcessPath.data, WFP_TAG);
+    }
+    return ClassifyOut.actionType != FWP_ACTION_BLOCK;
+}
+
+BOOLEAN
+NTAPI
+WfpShimAuthorizeBind(
+    _In_ const WFP_SHIM_ENDPOINT *Endpoint)
+{
+    FWPS_INCOMING_VALUE0 Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_MAX];
+    UINT64 Interface = (UINT64)Endpoint->InterfaceType << 48;
+    UINT32 Flags = 0;
+
+    if (WfpLayerFilters[FWPS_LAYER_ALE_RESOURCE_ASSIGNMENT_V4] == 0)
+    {
+        return TRUE;
+    }
+
+    RtlZeroMemory(Values, sizeof(Values));
+    if (Endpoint->WildcardAddress)
+    {
+        Flags |= FWP_CONDITION_FLAG_IS_WILDCARD_BIND;
+    }
+    else
+    {
+        WfpSetValue32(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_IP_LOCAL_ADDRESS], Endpoint->LocalAddress);
+        WfpSetValue8(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_IP_LOCAL_ADDRESS_TYPE], WFP_ADDRESS_TYPE_UNICAST);
+        Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_IP_LOCAL_INTERFACE].value.type = FWP_UINT64;
+        Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_IP_LOCAL_INTERFACE].value.uint64 = &Interface;
+    }
+    if (Endpoint->Raw)
+    {
+        Flags |= FWP_CONDITION_FLAG_IS_RAW_ENDPOINT;
+    }
+    WfpSetValue16(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_IP_LOCAL_PORT], Endpoint->LocalPort);
+    WfpSetValue8(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_IP_PROTOCOL], Endpoint->Protocol);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_ALE_PROMISCUOUS_MODE], 0);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_FLAGS], Flags);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_INTERFACE_TYPE], Endpoint->InterfaceType);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_TUNNEL_TYPE], 0);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_COMPARTMENT_ID], WFP_COMPARTMENT_ID);
+
+    return WfpAuthorize(FWPS_LAYER_ALE_RESOURCE_ASSIGNMENT_V4,
+                        Values,
+                        FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_MAX,
+                        FWPS_FIELD_ALE_RESOURCE_ASSIGNMENT_V4_ALE_APP_ID,
+                        Endpoint->EndpointId,
+                        Endpoint->ProcessId);
+}
+
+BOOLEAN
+NTAPI
+WfpShimAuthorizeListen(
+    _In_ const WFP_SHIM_ENDPOINT *Endpoint)
+{
+    FWPS_INCOMING_VALUE0 Values[FWPS_FIELD_ALE_AUTH_LISTEN_V4_MAX];
+    UINT64 Interface = (UINT64)Endpoint->InterfaceType << 48;
+
+    if (WfpLayerFilters[FWPS_LAYER_ALE_AUTH_LISTEN_V4] == 0)
+    {
+        return TRUE;
+    }
+
+    RtlZeroMemory(Values, sizeof(Values));
+    if (!Endpoint->WildcardAddress)
+    {
+        WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_LISTEN_V4_IP_LOCAL_ADDRESS], Endpoint->LocalAddress);
+        WfpSetValue8(&Values[FWPS_FIELD_ALE_AUTH_LISTEN_V4_IP_LOCAL_ADDRESS_TYPE], WFP_ADDRESS_TYPE_UNICAST);
+        Values[FWPS_FIELD_ALE_AUTH_LISTEN_V4_IP_LOCAL_INTERFACE].value.type = FWP_UINT64;
+        Values[FWPS_FIELD_ALE_AUTH_LISTEN_V4_IP_LOCAL_INTERFACE].value.uint64 = &Interface;
+    }
+    WfpSetValue16(&Values[FWPS_FIELD_ALE_AUTH_LISTEN_V4_IP_LOCAL_PORT], Endpoint->LocalPort);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_LISTEN_V4_FLAGS], 0);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_LISTEN_V4_INTERFACE_TYPE], Endpoint->InterfaceType);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_LISTEN_V4_TUNNEL_TYPE], 0);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_LISTEN_V4_COMPARTMENT_ID], WFP_COMPARTMENT_ID);
+
+    return WfpAuthorize(FWPS_LAYER_ALE_AUTH_LISTEN_V4,
+                        Values,
+                        FWPS_FIELD_ALE_AUTH_LISTEN_V4_MAX,
+                        FWPS_FIELD_ALE_AUTH_LISTEN_V4_ALE_APP_ID,
+                        Endpoint->EndpointId,
+                        Endpoint->ProcessId);
+}
+
+static
+BOOLEAN
+WfpAuthorizeConnect(
+    _In_ const WFP_SHIM_FLOW *Flow)
+{
+    FWPS_INCOMING_VALUE0 Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_MAX];
+    UINT64 Interface = (UINT64)Flow->InterfaceType << 48;
+
+    RtlZeroMemory(Values, sizeof(Values));
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_ADDRESS], Flow->LocalAddress);
+    WfpSetValue8(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_ADDRESS_TYPE], WFP_ADDRESS_TYPE_UNICAST);
+    WfpSetValue16(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_PORT], Flow->LocalPort);
+    WfpSetValue8(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_PROTOCOL], Flow->Protocol);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_ADDRESS], Flow->RemoteAddress);
+    WfpSetValue16(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_PORT], Flow->RemotePort);
+    WfpSetValue8(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_DESTINATION_ADDRESS_TYPE], WFP_ADDRESS_TYPE_UNICAST);
+    Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_INTERFACE].value.type = FWP_UINT64;
+    Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_INTERFACE].value.uint64 = &Interface;
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_FLAGS], Flow->Loopback ? FWP_CONDITION_FLAG_IS_LOOPBACK : 0);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_INTERFACE_TYPE], Flow->InterfaceType);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_TUNNEL_TYPE], 0);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_INTERFACE_INDEX], Flow->InterfaceIndex);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_SUB_INTERFACE_INDEX], 0);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_CONNECT_V4_COMPARTMENT_ID], WFP_COMPARTMENT_ID);
+
+    return WfpAuthorize(FWPS_LAYER_ALE_AUTH_CONNECT_V4,
+                        Values,
+                        FWPS_FIELD_ALE_AUTH_CONNECT_V4_MAX,
+                        FWPS_FIELD_ALE_AUTH_CONNECT_V4_ALE_APP_ID,
+                        Flow->EndpointId,
+                        Flow->ProcessId);
+}
+
+static
+BOOLEAN
+WfpAuthorizeRecvAccept(
+    _In_ const WFP_SHIM_FLOW *Flow)
+{
+    FWPS_INCOMING_VALUE0 Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_MAX];
+    UINT64 Interface = (UINT64)Flow->InterfaceType << 48;
+
+    RtlZeroMemory(Values, sizeof(Values));
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_LOCAL_ADDRESS], Flow->LocalAddress);
+    WfpSetValue8(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_LOCAL_ADDRESS_TYPE], WFP_ADDRESS_TYPE_UNICAST);
+    WfpSetValue16(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_LOCAL_PORT], Flow->LocalPort);
+    WfpSetValue8(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_PROTOCOL], Flow->Protocol);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_REMOTE_ADDRESS], Flow->RemoteAddress);
+    WfpSetValue16(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_REMOTE_PORT], Flow->RemotePort);
+    Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_LOCAL_INTERFACE].value.type = FWP_UINT64;
+    Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_IP_LOCAL_INTERFACE].value.uint64 = &Interface;
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_FLAGS], Flow->Loopback ? FWP_CONDITION_FLAG_IS_LOOPBACK : 0);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_INTERFACE_TYPE], Flow->InterfaceType);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_TUNNEL_TYPE], 0);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_INTERFACE_INDEX], Flow->InterfaceIndex);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_SUB_INTERFACE_INDEX], 0);
+    WfpSetValue32(&Values[FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_COMPARTMENT_ID], WFP_COMPARTMENT_ID);
+
+    return WfpAuthorize(FWPS_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
+                        Values,
+                        FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_MAX,
+                        FWPS_FIELD_ALE_AUTH_RECV_ACCEPT_V4_ALE_APP_ID,
+                        Flow->EndpointId,
+                        Flow->ProcessId);
+}
+
+static
+BOOLEAN
+WfpAuthorizeActive(
+    _In_ BOOLEAN Outbound)
+{
+    return WfpLayerFilters[Outbound ? FWPS_LAYER_ALE_AUTH_CONNECT_V4 : FWPS_LAYER_ALE_AUTH_RECV_ACCEPT_V4] != 0;
+}
+
+BOOLEAN
+NTAPI
+WfpShimAuthorizeConnection(
+    _In_ const WFP_SHIM_FLOW *Flow)
+{
+    if (!WfpAuthorizeActive(Flow->Outbound))
+    {
+        return TRUE;
+    }
+    return Flow->Outbound ? WfpAuthorizeConnect(Flow) : WfpAuthorizeRecvAccept(Flow);
+}
+
 BOOLEAN
 NTAPI
 WfpShimStreamActive(VOID)
@@ -678,6 +910,13 @@ WfpShimClassifyDatagram(
     Flow.RemotePort = Datagram->RemotePort;
     Flow.InterfaceType = Datagram->InterfaceType;
     Flow.ProcessId = Datagram->ProcessId;
+    Flow.InterfaceIndex = Datagram->InterfaceIndex;
+
+    if (WfpAuthorizeActive(Datagram->Outbound) && !WfpFlowExists(&Flow) &&
+        !WfpShimAuthorizeConnection(&Flow))
+    {
+        return FALSE;
+    }
 
     FlowId = WfpGetFlow(&Flow, &Created);
     Direction = Datagram->Outbound ? FWP_DIRECTION_OUTBOUND : FWP_DIRECTION_INBOUND;
