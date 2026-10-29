@@ -14,7 +14,6 @@ add_softgpu_engine(hdgfx_softgpu DEFINITIONS
     SOFTGPU_PLATFORM_ACPI_EVENTS=1
     SOFTGPU_PLATFORM_MONITOR_POWER=1
     SOFTGPU_PLATFORM_INTERRUPTS=1
-    SOFTGPU_PLATFORM_HARDWARE_2D=1
     SOFTGPU_PLATFORM_PHYSICAL_ADDRESSING=1)
 
 add_library(hdgfx MODULE
@@ -27,6 +26,7 @@ add_library(hdgfx MODULE
     core/hdgfx_opregion.c
     core/hdgfx_ring.c
     core/hdgfx_vbt.c
+    hdgfx_dma.c
     hdgfx_platform.c
     hdgfx_wddm.c
     hdgfx.rc

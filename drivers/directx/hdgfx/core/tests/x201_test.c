@@ -1493,13 +1493,21 @@ TestRing(void)
 
     CHECK_EQ(HdgfxRingEmitBreadcrumb(&Ring, 0, 0xF, 1), false);
     CHECK_EQ(HdgfxRingEmitBreadcrumb(&Ring, 0, 0x20, 0x12345678), true);
-    CHECK_EQ(Commands[0], 0x10800001);
-    CHECK_EQ(Commands[1], 0x80);
-    CHECK_EQ(Commands[2], 0x12345678);
-    CHECK_EQ(Commands[3], 0x01000000);
-    CHECK_EQ(Ring.Tail, 16);
+    CHECK_EQ(HdgfxRingEmitBreadcrumb(&Ring, 0, 0x3F, 1), false);
+    CHECK_EQ(Commands[0], 0x02000000);
+    CHECK_EQ(Commands[1], 0x10800001);
+    CHECK_EQ(Commands[2], 0xFC);
+    CHECK_EQ(Commands[3], 0x12345678);
+    CHECK_EQ(Commands[23], 0xFC);
+    CHECK_EQ(Commands[25], 0x10800001);
+    CHECK_EQ(Commands[26], 0x80);
+    CHECK_EQ(Commands[27], 0x12345678);
+    CHECK_EQ(Commands[47], 0x80);
+    CHECK_EQ(Commands[48], 0x12345678);
+    CHECK_EQ(Commands[49], 0x01000000);
+    CHECK_EQ(Ring.Tail, 200);
     HdgfxIlkAdvanceRing(&Mmio, &Ring);
-    CHECK_EQ(Fake.Tail, 16);
+    CHECK_EQ(Fake.Tail, 200);
     CHECK_EQ(HdgfxIlkStopRing(&Mmio, &Ring), false);
     CHECK_EQ(Fake.Control, 0x1001);
     Fake.Head = 16;
