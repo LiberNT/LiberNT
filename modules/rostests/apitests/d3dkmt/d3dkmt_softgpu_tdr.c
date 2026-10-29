@@ -11,6 +11,7 @@
 #define TDR_WAIT_MS 15000
 
 static PFND3DKMT_QUERYADAPTERINFO QueryAdapter;
+static PFND3DKMT_CREATEDEVICE CreateDevice;
 static PFND3DKMT_CREATECONTEXT CreateContext;
 static PFND3DKMT_DESTROYCONTEXT DestroyContext;
 static PFND3DKMT_RENDER Render;
@@ -78,6 +79,7 @@ static void TdrTeardown(TDR_CONTEXT *Ctx)
 
 static BOOL TdrSetup(D3DKMT_HANDLE hAdapter, TDR_CONTEXT *Ctx)
 {
+    D3DKMT_CREATEDEVICE cd = {0};
     D3DKMT_CREATECONTEXT cc = {0};
     D3DKMT_CREATEALLOCATION ca = {0};
     D3DDDI_ALLOCATIONINFO ai = {0};
@@ -86,10 +88,12 @@ static BOOL TdrSetup(D3DKMT_HANDLE hAdapter, TDR_CONTEXT *Ctx)
     NTSTATUS status;
 
     memset(Ctx, 0, sizeof(*Ctx));
-    Ctx->hDevice = CreateTestDevice(hAdapter);
-    ok(Ctx->hDevice != 0, "CreateDevice failed\n");
-    if (!Ctx->hDevice)
+    cd.hAdapter = hAdapter;
+    status = CreateDevice(&cd);
+    ok_succeeded(status, "CreateDevice: 0x%08lx\n", status);
+    if (!NT_SUCCESS(status))
         return FALSE;
+    Ctx->hDevice = cd.hDevice;
 
     cc.hDevice = Ctx->hDevice;
     status = CreateContext(&cc);
@@ -229,6 +233,7 @@ START_TEST(softgpu_tdr)
     NTSTATUS status;
 
     QueryAdapter = (PFND3DKMT_QUERYADAPTERINFO)LoadD3DKMTProc("D3DKMTQueryAdapterInfo");
+    CreateDevice = (PFND3DKMT_CREATEDEVICE)LoadD3DKMTProc("D3DKMTCreateDevice");
     CreateContext = (PFND3DKMT_CREATECONTEXT)LoadD3DKMTProc("D3DKMTCreateContext");
     DestroyContext = (PFND3DKMT_DESTROYCONTEXT)LoadD3DKMTProc("D3DKMTDestroyContext");
     Render = (PFND3DKMT_RENDER)LoadD3DKMTProc("D3DKMTRender");
@@ -239,7 +244,7 @@ START_TEST(softgpu_tdr)
     WaitLock = (PFND3DKMT_LOCK)LoadD3DKMTProc("D3DKMTLock");
     WaitUnlock = (PFND3DKMT_UNLOCK)LoadD3DKMTProc("D3DKMTUnlock");
     GetState = (PFND3DKMT_GETDEVICESTATE)LoadD3DKMTProc("D3DKMTGetDeviceState");
-    if (!QueryAdapter || !CreateContext || !DestroyContext || !Render || !CreateAlloc ||
+    if (!QueryAdapter || !CreateDevice || !CreateContext || !DestroyContext || !Render || !CreateAlloc ||
         !DestroyAlloc || !Lock || !Unlock || !WaitLock || !WaitUnlock || !GetState)
     {
         skip("render-path entry points not exported\n");
