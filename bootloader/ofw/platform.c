@@ -804,6 +804,16 @@ FwScanFileVolumes(
     return FALSE;
 }
 
+ULONG
+FwGetChainScanTrace(
+    _Out_writes_to_(Capacity, return) PCSTR* Lines,
+    _In_ ULONG Capacity)
+{
+    UNREFERENCED_PARAMETER(Lines);
+    UNREFERENCED_PARAMETER(Capacity);
+    return 0;
+}
+
 BOOLEAN
 FwStartFirmwareApplication(
     _In_ PVOID Device,

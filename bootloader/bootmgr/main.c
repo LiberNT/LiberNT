@@ -161,11 +161,57 @@ BmFinishScan(VOID)
 #if DBG
 static
 VOID
-BmPauseAfterScanTrace(VOID)
+BmPauseAfterScanTrace(
+    _In_ BOOLEAN Graphical)
 {
-    FwPrint(L"Chain scan trace complete. Press any key to continue.\r\n");
-    if (FwReadKey() == KEY_EXTENDED)
-        FwReadKey();
+    PCSTR Lines[FW_CHAIN_SCAN_TRACE_MAX];
+    PCSTR Items[GUI_MAX_ENTRIES];
+    ULONG Count, Offset = 0, PageCount, Selected, i;
+
+    if (Graphical)
+    {
+        Count = FwGetChainScanTrace(Lines, RTL_NUMBER_OF(Lines));
+        if (Count == 0)
+        {
+            Lines[0] = "No chain scan trace was recorded.";
+            Count = 1;
+        }
+
+        for (;;)
+        {
+            PageCount = min(Count - Offset, GUI_MAX_ENTRIES - 1);
+            for (i = 0; i < PageCount; i++)
+                Items[i] = Lines[Offset + i];
+
+            Items[PageCount] = (Offset + PageCount < Count) ? "Next page" : "Continue";
+            if (!UiDisplayMenu("Chain scan trace",
+                               NULL,
+                               Items,
+                               PageCount + 1,
+                               PageCount,
+                               -1,
+                               &Selected,
+                               TRUE,
+                               NULL,
+                               NULL))
+            {
+                break;
+            }
+
+            if (Selected == PageCount)
+            {
+                Offset += PageCount;
+                if (Offset >= Count)
+                    break;
+            }
+        }
+    }
+    else
+    {
+        FwPrint(L"Chain scan trace complete. Press any key to continue.\r\n");
+        if (FwReadKey() == KEY_EXTENDED)
+            FwReadKey();
+    }
 }
 #endif
 
@@ -481,11 +527,13 @@ BmRunMenu(
 {
 #if DBG
     BmFinishScan();
-    BmPauseAfterScanTrace();
 #endif
 
     if (GuiInitialize())
     {
+#if DBG
+        BmPauseAfterScanTrace(TRUE);
+#endif
         UiKeepFirmwareScreen = (Timeout > 0);
         UiMenuIdle = BmMenuIdle;
         UiMenuImages = BmMenuImages;
@@ -496,6 +544,9 @@ BmRunMenu(
         return;
     }
 
+#if DBG
+    BmPauseAfterScanTrace(FALSE);
+#endif
     BmFinishScan();
     BmRunTextMenu(Timeout);
 }
@@ -551,7 +602,10 @@ BlMain(VOID)
     if (BmCount == 0)
     {
 #if DBG
-        BmPauseAfterScanTrace();
+        if (GuiInitialize())
+            BmPauseAfterScanTrace(TRUE);
+        else
+            BmPauseAfterScanTrace(FALSE);
 #endif
         return;
     }
