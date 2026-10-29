@@ -546,11 +546,16 @@ static BOOL print_sacl(PSECURITY_DESCRIPTOR sd, WCHAR **pwptr, ULONG *plen)
 #ifdef __REACTOS__
 static BOOL print_label(PSECURITY_DESCRIPTOR sd, WCHAR **pwptr, ULONG *plen)
 {
+    SECURITY_DESCRIPTOR_CONTROL control;
     BOOL present, defaulted;
+    DWORD revision;
     ACL *pacl;
     UINT i;
 
     if (!GetSecurityDescriptorSacl(sd, &present, &pacl, &defaulted))
+        return FALSE;
+
+    if (!GetSecurityDescriptorControl(sd, &control, &revision))
         return FALSE;
 
     if (!present || pacl == NULL)
@@ -560,6 +565,12 @@ static BOOL print_label(PSECURITY_DESCRIPTOR sd, WCHAR **pwptr, ULONG *plen)
         return FALSE;
 
     print_string(L"S:", -1, pwptr, plen);
+    if (control & SE_SACL_PROTECTED)
+        print_string(L"P", -1, pwptr, plen);
+    if (control & SE_SACL_AUTO_INHERIT_REQ)
+        print_string(L"AR", -1, pwptr, plen);
+    if (control & SE_SACL_AUTO_INHERITED)
+        print_string(L"AI", -1, pwptr, plen);
     for (i = 0; i < pacl->AceCount; i++)
     {
         SYSTEM_MANDATORY_LABEL_ACE *ace;
