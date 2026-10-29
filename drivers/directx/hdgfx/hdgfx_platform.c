@@ -667,6 +667,7 @@ HdgfxStopRender(
         READ_REGISTER_ULONG(&Adapter->GttWindow[HDGFX_RENDER_GTT_PAGES - 1]);
         MmUnmapIoSpace(Adapter->GttWindow, HDGFX_RENDER_GTT_PAGES * sizeof(ULONG));
         Adapter->GttWindow = NULL;
+        Adapter->DmaBase = Adapter->DmaPhysical;
     }
     if (Adapter->RingMemory != NULL)
     {
@@ -683,6 +684,44 @@ HdgfxStopRender(
         MmFreeContiguousMemorySpecifyCache(Adapter->ScratchPage, PAGE_SIZE, MmNonCached);
         Adapter->ScratchPage = NULL;
     }
+}
+
+static VOID
+HdgfxStartDma(
+    _Inout_ PHDGFX_ADAPTER Adapter)
+{
+    PHYSICAL_ADDRESS Lowest;
+    PHYSICAL_ADDRESS Highest;
+    PHYSICAL_ADDRESS Boundary;
+
+    if (Adapter->DmaMemory == NULL)
+    {
+        Lowest.QuadPart = 0;
+        Highest.QuadPart = MAXULONG;
+        Boundary.QuadPart = 0;
+        Adapter->DmaMemory = MmAllocateContiguousMemorySpecifyCache(HDGFX_DMA_SIZE, Lowest, Highest, Boundary,
+                                                                    MmWriteCombined);
+        if (Adapter->DmaMemory == NULL)
+        {
+            DPRINT1("No memory for the %lu-byte DMA segment\n", HDGFX_DMA_SIZE);
+            return;
+        }
+        Adapter->DmaPhysical = (ULONGLONG)MmGetPhysicalAddress(Adapter->DmaMemory).QuadPart;
+    }
+    RtlZeroMemory(Adapter->DmaMemory, HDGFX_DMA_SIZE);
+    Adapter->DmaBase = Adapter->DmaPhysical;
+}
+
+static VOID
+HdgfxStopDma(
+    _Inout_ PHDGFX_ADAPTER Adapter)
+{
+    if (Adapter->DmaMemory == NULL || Adapter->RingStarted)
+        return;
+    MmFreeContiguousMemorySpecifyCache(Adapter->DmaMemory, HDGFX_DMA_SIZE, MmWriteCombined);
+    Adapter->DmaMemory = NULL;
+    Adapter->DmaPhysical = 0;
+    Adapter->DmaBase = 0;
 }
 
 static VOID
@@ -745,17 +784,22 @@ HdgfxStartRender(
 
     for (Index = 0; Index < HDGFX_RENDER_GTT_PAGES; Index++)
     {
-        PVOID Page = Index < HDGFX_RING_PAGES ? (PUCHAR)Adapter->RingMemory + Index * PAGE_SIZE :
+        PVOID Page = Index < HDGFX_DMA_PAGES ?
+                         (Adapter->DmaMemory != NULL ? Adapter->DmaMemory + Index * PAGE_SIZE : Adapter->ScratchPage) :
+                     Index < HDGFX_STATUS_GTT_INDEX ?
+                         (PUCHAR)Adapter->RingMemory + (Index - HDGFX_RING_GTT_INDEX) * PAGE_SIZE :
                      Index == HDGFX_STATUS_GTT_INDEX ? Adapter->StatusPage : Adapter->ScratchPage;
 
         Adapter->SavedGtt[Index] = READ_REGISTER_ULONG(&Adapter->GttWindow[Index]);
         WRITE_REGISTER_ULONG(&Adapter->GttWindow[Index], HdgfxIlkGttEntry(MmGetPhysicalAddress(Page).LowPart));
     }
     READ_REGISTER_ULONG(&Adapter->GttWindow[HDGFX_RENDER_GTT_PAGES - 1]);
+    if (Adapter->DmaMemory != NULL)
+        Adapter->DmaBase = GttFirst * PAGE_SIZE;
 
     Adapter->Ring.Commands = Adapter->RingMemory;
     Adapter->Ring.Size = HDGFX_RING_SIZE;
-    Adapter->Ring.Address = GttFirst * PAGE_SIZE;
+    Adapter->Ring.Address = (GttFirst + HDGFX_RING_GTT_INDEX) * PAGE_SIZE;
     Adapter->Ring.StatusAddress = (GttFirst + HDGFX_STATUS_GTT_INDEX) * PAGE_SIZE;
     Adapter->ScratchAddress = (GttFirst + HDGFX_SCRATCH_GTT_INDEX) * PAGE_SIZE;
     HdgfxMmioInit(Adapter->Registers, &Mmio);
@@ -985,6 +1029,7 @@ SoftGpuPlatformAdapterStarted(
         ExReInitializeRundownProtection(&Adapter->Rundown);
     }
     HdgfxQueueStart(Adapter);
+    HdgfxStartDma(Adapter);
 
     if (!NT_SUCCESS(HdgfxReadConfig(&Device->DxgkInterface, Ids, 0, sizeof(Ids))))
         return;
@@ -1040,10 +1085,14 @@ SoftGpuPlatformAdapterStopping(
     ExWaitForRundownProtectionRelease(&Adapter->Rundown);
     HdgfxQueueStop(Adapter);
     if (Adapter->Registers == NULL)
+    {
+        HdgfxStopDma(Adapter);
         return;
+    }
 
     HdgfxStopInterrupts(Device, Adapter);
     HdgfxStopRender(Adapter);
+    HdgfxStopDma(Adapter);
     if (Adapter->OpRegion != NULL)
     {
         MmUnmapIoSpace(Adapter->OpRegion, HDGFX_OPREGION_SIZE);
@@ -2093,7 +2142,7 @@ SoftGpuPlatformDmaBufferPrivateDataSize(VOID)
 ULONG
 SoftGpuPlatformDmaBufferSegmentSet(VOID)
 {
-    return 0;
+    return 1UL << (HDGFX_DMA_SEGMENT_ID - 1);
 }
 
 static VOID
