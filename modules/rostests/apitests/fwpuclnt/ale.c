@@ -282,13 +282,26 @@ static
 VOID
 TestDatagram(
     _In_ BOOL Outbound,
-    _In_ USHORT Port)
+    _In_ USHORT Port,
+    _In_ BOOL ByApp)
 {
     struct sockaddr_in Remote = Loopback(Port);
+    FWP_BYTE_BLOB *AppId = NULL;
+    WCHAR Own[MAX_PATH];
     SOCKET Receiver, Sender;
     char Buffer[16];
     UINT64 Id;
     int Result;
+
+    if (ByApp)
+    {
+        GetModuleFileNameW(NULL, Own, ARRAYSIZE(Own));
+        ok(FwpmGetAppIdFromFileName0(Own, &AppId) == ERROR_SUCCESS, "No app id for %ls\n", Own);
+        if (AppId == NULL)
+        {
+            return;
+        }
+    }
 
     Receiver = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     Sender = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -296,9 +309,9 @@ TestDatagram(
     ok(Bind(Sender, INADDR_LOOPBACK, 0) == 0, "bind failed: %d\n", WSAGetLastError());
 
     if (Outbound)
-        Id = AddBlock(&FWPM_LAYER_ALE_AUTH_CONNECT_V4, &FWPM_CONDITION_IP_REMOTE_PORT, Port, NULL);
+        Id = AddBlock(&FWPM_LAYER_ALE_AUTH_CONNECT_V4, &FWPM_CONDITION_IP_REMOTE_PORT, Port, AppId);
     else
-        Id = AddBlock(&FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4, &FWPM_CONDITION_IP_LOCAL_PORT, Port, NULL);
+        Id = AddBlock(&FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4, &FWPM_CONDITION_IP_LOCAL_PORT, Port, AppId);
 
     Result = sendto(Sender, "first", 5, 0, (struct sockaddr *)&Remote, sizeof(Remote));
     trace("%s: blocked sendto returned %d, error %d\n", Outbound ? "connect" : "recv-accept", Result, WSAGetLastError());
@@ -313,6 +326,8 @@ TestDatagram(
 
     closesocket(Sender);
     closesocket(Receiver);
+    if (AppId != NULL)
+        FwpmFreeMemory0((void **)&AppId);
 }
 
 START_TEST(ale)
@@ -338,8 +353,10 @@ START_TEST(ale)
     TestListen();
     TestConnect();
     TestRecvAccept();
-    TestDatagram(FALSE, 47151);
-    TestDatagram(TRUE, 47152);
+    TestDatagram(FALSE, 47151, FALSE);
+    TestDatagram(TRUE, 47152, FALSE);
+    TestDatagram(FALSE, 47153, TRUE);
+    TestDatagram(TRUE, 47154, TRUE);
 
     FwpmEngineClose0(Engine);
     WSACleanup();
