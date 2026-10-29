@@ -1114,24 +1114,29 @@ AccpSetFileSecurity(HANDLE Handle,
     ULONG Length, Revision, Attempt;
     NTSTATUS Status;
 
-    if (Information & SACL_SECURITY_INFORMATION)
+    if (Information & (SACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION))
     {
-        Status = AccpQueryFileSecurity(Handle, OWNER_SECURITY_INFORMATION |
-                                      GROUP_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION |
-                                      (Information & DACL_SECURITY_INFORMATION),
-                                      &Current);
-        if (!NT_SUCCESS(Status)) goto Cleanup;
+        if (Information & SACL_SECURITY_INFORMATION)
+        {
+            Status = AccpQueryFileSecurity(Handle, OWNER_SECURITY_INFORMATION |
+                                          GROUP_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION |
+                                          (Information & DACL_SECURITY_INFORMATION),
+                                          &Current);
+            if (!NT_SUCCESS(Status)) goto Cleanup;
+        }
         Status = RtlCreateSecurityDescriptor(&Published, SECURITY_DESCRIPTOR_REVISION);
         if (!NT_SUCCESS(Status)) goto Cleanup;
         Status = RtlGetControlSecurityDescriptor(Descriptor, &Control, &Revision);
         if (!NT_SUCCESS(Status)) goto Cleanup;
         Published.Control = (Control & ~(SE_SELF_RELATIVE | SE_SACL_AUTO_INHERIT_REQ)) |
                             SE_SACL_AUTO_INHERITED;
+        if (!(Information & SACL_SECURITY_INFORMATION))
+            Published.Control |= SE_SACL_AUTO_INHERIT_REQ;
         Published.Sbz1 = ((PISECURITY_DESCRIPTOR)Descriptor)->Sbz1;
-        Status = RtlGetOwnerSecurityDescriptor((Information & OWNER_SECURITY_INFORMATION) ?
+        Status = RtlGetOwnerSecurityDescriptor((Information & OWNER_SECURITY_INFORMATION) || !Current ?
                                                Descriptor : Current, &Published.Owner, &Defaulted);
         if (!NT_SUCCESS(Status)) goto Cleanup;
-        Status = RtlGetGroupSecurityDescriptor((Information & GROUP_SECURITY_INFORMATION) ?
+        Status = RtlGetGroupSecurityDescriptor((Information & GROUP_SECURITY_INFORMATION) || !Current ?
                                                Descriptor : Current, &Published.Group, &Defaulted);
         if (!NT_SUCCESS(Status)) goto Cleanup;
         Status = RtlGetDaclSecurityDescriptor(Descriptor, &Present, &Published.Dacl, &Defaulted);
