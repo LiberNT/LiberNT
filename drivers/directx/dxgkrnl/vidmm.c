@@ -14759,6 +14759,8 @@ DxgkpVidMmRecoverAllocationOwned(
             Allocation->PhysicalAddress = MmGetPhysicalAddress(Allocation->SystemMemory);
         return Status;
     }
+    if (Allocation->PersistentCpuMapping)
+        return STATUS_SUCCESS;
 
     CleanupStatus = DxgkpVidMmUnmapUserMappings(Allocation, TRUE);
     if (NT_SUCCESS(Status) && !NT_SUCCESS(CleanupStatus))
