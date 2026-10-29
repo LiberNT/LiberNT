@@ -28,10 +28,11 @@ add_library(hdgfx MODULE
     core/hdgfx_ring.c
     core/hdgfx_vbt.c
     hdgfx_platform.c
+    hdgfx_wddm.c
     hdgfx.rc
     ${CMAKE_CURRENT_BINARY_DIR}/hdgfx.def)
 
-set_module_type(hdgfx kernelmodedriver)
+set_module_type(hdgfx kernelmodedriver ENTRYPOINT HdgfxDriverEntry 8)
 target_link_libraries(hdgfx hdgfx_softgpu displib ${PSEH_LIB})
 add_importlibs(hdgfx ntoskrnl hal)
 add_cd_file(TARGET hdgfx DESTINATION reactos/system32/drivers FOR all)
