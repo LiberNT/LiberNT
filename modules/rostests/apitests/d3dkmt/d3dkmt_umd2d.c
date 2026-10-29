@@ -5,10 +5,12 @@
  */
 
 #include "precomp.h"
+#include <winuser.h>
 #include <d3dumddi.h>
 
 #define UMD2D_WIDTH  64u
 #define UMD2D_HEIGHT 64u
+#define UMDFLIP_HOLD_MS 4000u
 
 typedef HRESULT (WINAPI *PFN_D3DUmdRtCreateDeviceCallbacks)(
     D3DKMT_HANDLE,
@@ -70,6 +72,8 @@ Umd2DCreateResource(
     HANDLE hDevice,
     HANDLE hRuntimeResource,
     D3DDDI_RESOURCEFLAGS Flags,
+    UINT Width,
+    UINT Height,
     HANDLE *hResource)
 {
     D3DDDI_SURFACEINFO Surface;
@@ -84,8 +88,8 @@ Umd2DCreateResource(
 
     *hResource = NULL;
     memset(&Surface, 0, sizeof(Surface));
-    Surface.Width = UMD2D_WIDTH;
-    Surface.Height = UMD2D_HEIGHT;
+    Surface.Width = Width;
+    Surface.Height = Height;
     Surface.Depth = 1;
 
     memset(&Create, 0, sizeof(Create));
@@ -189,140 +193,130 @@ Umd2DWaitForIdle(
     return pWaitForIdle(&Wait);
 }
 
-static void
-Test_SoftGpu2DEndToEnd(void)
+typedef struct _UMD2D_SESSION
 {
-    PFND3DKMT_QUERYADAPTERINFO pQueryAdapterInfo;
     PFND3DKMT_WAITFORIDLE pWaitForIdle;
-    PFN_D3DUmdRtCreateDeviceCallbacks pCreateCallbacks;
-    PFN_D3DUmdRtDestroyDeviceCallbacks pDestroyCallbacks = NULL;
-    PFND3DDDI_OPENADAPTER pOpenAdapter;
-    D3DKMT_HANDLE hAdapter = 0;
-    D3DKMT_HANDLE hKmtDevice = 0;
-    HMODULE Runtime = NULL;
-    HMODULE Umd = NULL;
-    WCHAR UmdName[MAX_PATH];
+    PFN_D3DUmdRtDestroyDeviceCallbacks pDestroyCallbacks;
+    D3DKMT_HANDLE hAdapter;
+    D3DKMT_HANDLE hKmtDevice;
+    HMODULE Runtime;
+    HMODULE Umd;
     D3DDDI_DEVICECALLBACKS Callbacks;
     D3DDDI_ADAPTERCALLBACKS AdapterCallbacks;
     D3DDDI_ADAPTERFUNCS AdapterFuncs;
     D3DDDI_DEVICEFUNCS DeviceFuncs;
+    HANDLE hRuntimeDevice;
+    HANDLE hUmdAdapter;
+    HANDLE hUmdDevice;
+} UMD2D_SESSION, *PUMD2D_SESSION;
+
+static BOOL
+Umd2DOpenSession(
+    PUMD2D_SESSION Session)
+{
+    PFND3DKMT_QUERYADAPTERINFO pQueryAdapterInfo;
+    PFN_D3DUmdRtCreateDeviceCallbacks pCreateCallbacks;
+    PFND3DDDI_OPENADAPTER pOpenAdapter;
+    WCHAR UmdName[MAX_PATH];
     D3DDDIARG_OPENADAPTER Open;
     D3DDDIARG_CREATEDEVICE CreateDevice;
-    HANDLE hRuntimeDevice = NULL;
-    HANDLE hUmdAdapter = NULL;
-    HANDLE hUmdDevice = NULL;
-    HANDLE hSource = NULL;
-    HANDLE hDestination = NULL;
-    ULONG_PTR SourceRuntimeCookie = 0x534F5552;
-    ULONG_PTR DestinationRuntimeCookie = 0x44455354;
-    D3DDDI_RESOURCEFLAGS ResourceFlags;
-    D3DDDIARG_LOCK Lock;
-    D3DDDIARG_COLORFILL Fill;
-    D3DDDIARG_BLT Blt;
     FORMATOP Formats[2];
     D3DDDIARG_GETCAPS Caps;
     UINT FormatCount = 0;
-    UINT SourceColor = 0xFF1248A0;
-    UINT FillColor = 0xFF70B030;
-    BOOL SourceLocked = FALSE;
-    BOOL DestinationLocked = FALSE;
     HRESULT Result;
-    NTSTATUS Status;
     UINT Index;
 
+    memset(Session, 0, sizeof(*Session));
     pQueryAdapterInfo = (PFND3DKMT_QUERYADAPTERINFO)
         LoadD3DKMTProc("D3DKMTQueryAdapterInfo");
-    pWaitForIdle = (PFND3DKMT_WAITFORIDLE)
+    Session->pWaitForIdle = (PFND3DKMT_WAITFORIDLE)
         LoadD3DKMTProc("D3DKMTWaitForIdle");
-    if (pQueryAdapterInfo == NULL || pWaitForIdle == NULL)
+    if (pQueryAdapterInfo == NULL || Session->pWaitForIdle == NULL)
     {
         skip("required D3DKMT query/idle exports are absent\n");
-        return;
+        return FALSE;
     }
 
-    hAdapter = OpenAdapterFromDisplay1();
-    if (hAdapter == 0)
+    Session->hAdapter = OpenAdapterFromDisplay1();
+    if (Session->hAdapter == 0)
     {
         skip("No adapter on \\\\.\\DISPLAY1\n");
-        return;
+        return FALSE;
     }
     if (!Umd2DQueryDriverName(pQueryAdapterInfo,
-                              hAdapter,
+                              Session->hAdapter,
                               UmdName,
                               ARRAYSIZE(UmdName)))
     {
         skip("adapter reports no DX9 user-mode driver\n");
-        goto Cleanup;
+        return FALSE;
     }
     if (!Umd2DIsSoftGpu(UmdName))
     {
         skip("adapter uses %S, not softgpuum.dll\n", UmdName);
-        goto Cleanup;
+        return FALSE;
     }
 
-    hKmtDevice = CreateTestDevice(hAdapter);
-    if (hKmtDevice == 0)
+    Session->hKmtDevice = CreateTestDevice(Session->hAdapter);
+    if (Session->hKmtDevice == 0)
     {
         skip("could not create the KMT device\n");
-        goto Cleanup;
+        return FALSE;
     }
 
-    Runtime = LoadLibraryW(L"d3dumdrt.dll");
-    if (Runtime == NULL)
+    Session->Runtime = LoadLibraryW(L"d3dumdrt.dll");
+    if (Session->Runtime == NULL)
     {
         skip("d3dumdrt.dll is unavailable\n");
-        goto Cleanup;
+        return FALSE;
     }
     pCreateCallbacks = (PFN_D3DUmdRtCreateDeviceCallbacks)
-        GetProcAddress(Runtime, "D3DUmdRtCreateDeviceCallbacks");
-    pDestroyCallbacks = (PFN_D3DUmdRtDestroyDeviceCallbacks)
-        GetProcAddress(Runtime, "D3DUmdRtDestroyDeviceCallbacks");
-    if (pCreateCallbacks == NULL || pDestroyCallbacks == NULL)
+        GetProcAddress(Session->Runtime, "D3DUmdRtCreateDeviceCallbacks");
+    Session->pDestroyCallbacks = (PFN_D3DUmdRtDestroyDeviceCallbacks)
+        GetProcAddress(Session->Runtime, "D3DUmdRtDestroyDeviceCallbacks");
+    if (pCreateCallbacks == NULL || Session->pDestroyCallbacks == NULL)
     {
         skip("d3dumdrt.dll lacks its device callback exports\n");
-        goto Cleanup;
+        return FALSE;
     }
 
-    memset(&Callbacks, 0, sizeof(Callbacks));
-    Result = pCreateCallbacks(hAdapter,
-                              hKmtDevice,
-                              &Callbacks,
-                              &hRuntimeDevice);
+    Result = pCreateCallbacks(Session->hAdapter,
+                              Session->hKmtDevice,
+                              &Session->Callbacks,
+                              &Session->hRuntimeDevice);
     ok(Result == S_OK,
        "runtime callback device creation failed 0x%08lX\n",
        (long)Result);
     if (FAILED(Result))
-        goto Cleanup;
+        return FALSE;
 
-    Umd = LoadLibraryW(UmdName);
-    ok(Umd != NULL,
+    Session->Umd = LoadLibraryW(UmdName);
+    ok(Session->Umd != NULL,
        "LoadLibrary(%S) failed, error %lu\n",
        UmdName,
        GetLastError());
-    if (Umd == NULL)
-        goto Cleanup;
+    if (Session->Umd == NULL)
+        return FALSE;
     pOpenAdapter = (PFND3DDDI_OPENADAPTER)
-        GetProcAddress(Umd, "OpenAdapter");
+        GetProcAddress(Session->Umd, "OpenAdapter");
     ok(pOpenAdapter != NULL,
        "softgpuum.dll exports no OpenAdapter\n");
     if (pOpenAdapter == NULL)
-        goto Cleanup;
+        return FALSE;
 
-    memset(&AdapterCallbacks, 0, sizeof(AdapterCallbacks));
-    memset(&AdapterFuncs, 0, sizeof(AdapterFuncs));
     memset(&Open, 0, sizeof(Open));
-    Open.hAdapter = (HANDLE)(ULONG_PTR)hAdapter;
+    Open.hAdapter = (HANDLE)(ULONG_PTR)Session->hAdapter;
     Open.Interface = REACTOS_EXPECTED_UMD_INTERFACE_VERSION;
     Open.Version = REACTOS_EXPECTED_UMD_INTERFACE_VERSION;
-    Open.pAdapterCallbacks = &AdapterCallbacks;
-    Open.pAdapterFuncs = &AdapterFuncs;
+    Open.pAdapterCallbacks = &Session->AdapterCallbacks;
+    Open.pAdapterFuncs = &Session->AdapterFuncs;
     Result = pOpenAdapter(&Open);
     ok(Result == S_OK,
        "OpenAdapter failed 0x%08lX\n",
        (long)Result);
     if (FAILED(Result))
-        goto Cleanup;
-    hUmdAdapter = Open.hAdapter;
+        return FALSE;
+    Session->hUmdAdapter = Open.hAdapter;
 
     if (Open.DriverVersion !=
         REACTOS_EXPECTED_UMD_INTERFACE_VERSION)
@@ -331,14 +325,14 @@ Test_SoftGpu2DEndToEnd(void)
              "0x%04X\n",
              (unsigned)Open.DriverVersion,
              (unsigned)REACTOS_EXPECTED_UMD_INTERFACE_VERSION);
-        goto Cleanup;
+        return FALSE;
     }
 
     memset(&Caps, 0, sizeof(Caps));
     Caps.Type = D3DDDICAPS_GETFORMATCOUNT;
     Caps.pData = &FormatCount;
     Caps.DataSize = sizeof(FormatCount);
-    Result = AdapterFuncs.pfnGetCaps(hUmdAdapter, &Caps);
+    Result = Session->AdapterFuncs.pfnGetCaps(Session->hUmdAdapter, &Caps);
     ok(Result == S_OK && FormatCount == ARRAYSIZE(Formats),
        "format count returned hr 0x%08lX, count %u\n",
        (long)Result,
@@ -348,7 +342,7 @@ Test_SoftGpu2DEndToEnd(void)
     Caps.Type = D3DDDICAPS_GETFORMATDATA;
     Caps.pData = Formats;
     Caps.DataSize = sizeof(Formats);
-    Result = AdapterFuncs.pfnGetCaps(hUmdAdapter, &Caps);
+    Result = Session->AdapterFuncs.pfnGetCaps(Session->hUmdAdapter, &Caps);
     ok(Result == S_OK,
        "format enumeration failed 0x%08lX\n",
        (long)Result);
@@ -367,55 +361,142 @@ Test_SoftGpu2DEndToEnd(void)
            Index);
     }
 
-    memset(&DeviceFuncs, 0, sizeof(DeviceFuncs));
     memset(&CreateDevice, 0, sizeof(CreateDevice));
-    CreateDevice.hDevice = hRuntimeDevice;
+    CreateDevice.hDevice = Session->hRuntimeDevice;
     CreateDevice.Interface =
         REACTOS_EXPECTED_UMD_INTERFACE_VERSION;
     CreateDevice.Version =
         REACTOS_EXPECTED_UMD_INTERFACE_VERSION;
-    CreateDevice.pCallbacks = &Callbacks;
-    CreateDevice.pDeviceFuncs = &DeviceFuncs;
-    Result = AdapterFuncs.pfnCreateDevice(
-                 hUmdAdapter,
+    CreateDevice.pCallbacks = &Session->Callbacks;
+    CreateDevice.pDeviceFuncs = &Session->DeviceFuncs;
+    Result = Session->AdapterFuncs.pfnCreateDevice(
+                 Session->hUmdAdapter,
                  &CreateDevice);
     ok(Result == S_OK,
        "UMD device creation failed 0x%08lX\n",
        (long)Result);
     if (FAILED(Result))
-        goto Cleanup;
-    hUmdDevice = CreateDevice.hDevice;
+        return FALSE;
+    Session->hUmdDevice = CreateDevice.hDevice;
 
-    ok(DeviceFuncs.pfnCreateResource != NULL,
+    ok(Session->DeviceFuncs.pfnCreateResource != NULL,
        "no pfnCreateResource\n");
-    ok(DeviceFuncs.pfnDestroyResource != NULL,
+    ok(Session->DeviceFuncs.pfnDestroyResource != NULL,
        "no pfnDestroyResource\n");
-    ok(DeviceFuncs.pfnLock != NULL && DeviceFuncs.pfnUnlock != NULL,
+    ok(Session->DeviceFuncs.pfnLock != NULL && Session->DeviceFuncs.pfnUnlock != NULL,
        "no lock/unlock pair\n");
-    ok(DeviceFuncs.pfnColorFill != NULL,
+    ok(Session->DeviceFuncs.pfnColorFill != NULL,
        "no pfnColorFill\n");
-    ok(DeviceFuncs.pfnBlt != NULL,
+    ok(Session->DeviceFuncs.pfnBlt != NULL,
        "no pfnBlt\n");
-    ok(DeviceFuncs.pfnSetDisplayMode != NULL,
+    ok(Session->DeviceFuncs.pfnSetDisplayMode != NULL,
        "no pfnSetDisplayMode\n");
-    ok(DeviceFuncs.pfnPresent != NULL,
+    ok(Session->DeviceFuncs.pfnPresent != NULL,
        "no pfnPresent\n");
-    if (DeviceFuncs.pfnCreateResource == NULL ||
-        DeviceFuncs.pfnDestroyResource == NULL ||
-        DeviceFuncs.pfnLock == NULL ||
-        DeviceFuncs.pfnUnlock == NULL ||
-        DeviceFuncs.pfnColorFill == NULL ||
-        DeviceFuncs.pfnBlt == NULL)
+    return Session->DeviceFuncs.pfnCreateResource != NULL &&
+           Session->DeviceFuncs.pfnDestroyResource != NULL &&
+           Session->DeviceFuncs.pfnLock != NULL &&
+           Session->DeviceFuncs.pfnUnlock != NULL &&
+           Session->DeviceFuncs.pfnColorFill != NULL &&
+           Session->DeviceFuncs.pfnBlt != NULL;
+}
+
+static void
+Umd2DDestroyResource(
+    PUMD2D_SESSION Session,
+    HANDLE *hResource,
+    CONST CHAR *Name)
+{
+    HRESULT Result;
+
+    if (*hResource == NULL || Session->hUmdDevice == NULL ||
+        Session->DeviceFuncs.pfnDestroyResource == NULL)
     {
-        goto Cleanup;
+        return;
     }
+    Result = Session->DeviceFuncs.pfnDestroyResource(Session->hUmdDevice,
+                                                     *hResource);
+    ok(Result == S_OK,
+       "%s destruction failed 0x%08lX\n",
+       Name,
+       (long)Result);
+    *hResource = NULL;
+}
+
+static void
+Umd2DCloseSession(
+    PUMD2D_SESSION Session)
+{
+    HRESULT Result;
+
+    if (Session->hUmdDevice != NULL &&
+        Session->DeviceFuncs.pfnDestroyDevice != NULL)
+    {
+        Result = Session->DeviceFuncs.pfnDestroyDevice(Session->hUmdDevice);
+        ok(Result == S_OK,
+           "UMD device destruction failed 0x%08lX\n",
+           (long)Result);
+    }
+    Session->hUmdDevice = NULL;
+    if (Session->hUmdAdapter != NULL &&
+        Session->AdapterFuncs.pfnCloseAdapter != NULL)
+    {
+        Result = Session->AdapterFuncs.pfnCloseAdapter(Session->hUmdAdapter);
+        ok(Result == S_OK,
+           "UMD adapter close failed 0x%08lX\n",
+           (long)Result);
+        Session->hUmdAdapter = NULL;
+    }
+    if (Session->hRuntimeDevice != NULL && Session->pDestroyCallbacks != NULL)
+    {
+        Result = Session->pDestroyCallbacks(Session->hRuntimeDevice);
+        ok(Result == S_OK,
+           "runtime callback device destruction failed 0x%08lX\n",
+           (long)Result);
+        Session->hRuntimeDevice = NULL;
+    }
+    if (Session->Umd != NULL)
+        FreeLibrary(Session->Umd);
+    if (Session->Runtime != NULL)
+        FreeLibrary(Session->Runtime);
+    if (Session->hKmtDevice != 0)
+        DestroyTestDevice(Session->hKmtDevice);
+    if (Session->hAdapter != 0)
+        CloseAdapter(Session->hAdapter);
+    memset(Session, 0, sizeof(*Session));
+}
+
+static void
+Test_SoftGpu2DEndToEnd(void)
+{
+    UMD2D_SESSION Session;
+    CONST D3DDDI_DEVICEFUNCS *Funcs = &Session.DeviceFuncs;
+    HANDLE hSource = NULL;
+    HANDLE hDestination = NULL;
+    ULONG_PTR SourceRuntimeCookie = 0x534F5552;
+    ULONG_PTR DestinationRuntimeCookie = 0x44455354;
+    D3DDDI_RESOURCEFLAGS ResourceFlags;
+    D3DDDIARG_LOCK Lock;
+    D3DDDIARG_COLORFILL Fill;
+    D3DDDIARG_BLT Blt;
+    UINT SourceColor = 0xFF1248A0;
+    UINT FillColor = 0xFF70B030;
+    BOOL SourceLocked = FALSE;
+    BOOL DestinationLocked = FALSE;
+    HRESULT Result;
+    NTSTATUS Status;
+
+    if (!Umd2DOpenSession(&Session))
+        goto Cleanup;
 
     memset(&ResourceFlags, 0, sizeof(ResourceFlags));
     Result = Umd2DCreateResource(
-                 &DeviceFuncs,
-                 hUmdDevice,
+                 Funcs,
+                 Session.hUmdDevice,
                  (HANDLE)&SourceRuntimeCookie,
                  ResourceFlags,
+                 UMD2D_WIDTH,
+                 UMD2D_HEIGHT,
                  &hSource);
     ok(Result == S_OK && hSource != NULL,
        "source resource creation failed 0x%08lX\n",
@@ -424,10 +505,12 @@ Test_SoftGpu2DEndToEnd(void)
         goto Cleanup;
 
     Result = Umd2DCreateResource(
-                 &DeviceFuncs,
-                 hUmdDevice,
+                 Funcs,
+                 Session.hUmdDevice,
                  (HANDLE)&DestinationRuntimeCookie,
                  ResourceFlags,
+                 UMD2D_WIDTH,
+                 UMD2D_HEIGHT,
                  &hDestination);
     ok(Result == S_OK && hDestination != NULL,
        "destination resource creation failed 0x%08lX\n",
@@ -435,8 +518,8 @@ Test_SoftGpu2DEndToEnd(void)
     if (FAILED(Result) || hDestination == NULL)
         goto Cleanup;
 
-    Result = Umd2DLockResource(&DeviceFuncs,
-                               hUmdDevice,
+    Result = Umd2DLockResource(Funcs,
+                               Session.hUmdDevice,
                                hSource,
                                FALSE,
                                &Lock);
@@ -447,8 +530,8 @@ Test_SoftGpu2DEndToEnd(void)
         goto Cleanup;
     SourceLocked = TRUE;
     Umd2DWritePixels(&Lock, SourceColor);
-    Result = Umd2DUnlockResource(&DeviceFuncs,
-                                 hUmdDevice,
+    Result = Umd2DUnlockResource(Funcs,
+                                 Session.hUmdDevice,
                                  hSource);
     ok(Result == S_OK,
        "source unlock failed 0x%08lX\n",
@@ -462,21 +545,21 @@ Test_SoftGpu2DEndToEnd(void)
     Fill.DstRect.right = UMD2D_WIDTH;
     Fill.DstRect.bottom = UMD2D_HEIGHT;
     Fill.Color = FillColor;
-    Result = DeviceFuncs.pfnColorFill(hUmdDevice, &Fill);
+    Result = Funcs->pfnColorFill(Session.hUmdDevice, &Fill);
     ok(Result == S_OK,
        "GPU color fill failed 0x%08lX\n",
        (long)Result);
     if (FAILED(Result))
         goto Cleanup;
-    Status = Umd2DWaitForIdle(pWaitForIdle, hKmtDevice);
+    Status = Umd2DWaitForIdle(Session.pWaitForIdle, Session.hKmtDevice);
     ok(NT_SUCCESS(Status),
        "wait after color fill failed 0x%08lX\n",
        (long)Status);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 
-    Result = Umd2DLockResource(&DeviceFuncs,
-                               hUmdDevice,
+    Result = Umd2DLockResource(Funcs,
+                               Session.hUmdDevice,
                                hDestination,
                                TRUE,
                                &Lock);
@@ -488,8 +571,8 @@ Test_SoftGpu2DEndToEnd(void)
     DestinationLocked = TRUE;
     ok(Umd2DCheckPixels(&Lock, FillColor),
        "GPU color fill did not reach allocation memory\n");
-    Result = Umd2DUnlockResource(&DeviceFuncs,
-                                 hUmdDevice,
+    Result = Umd2DUnlockResource(Funcs,
+                                 Session.hUmdDevice,
                                  hDestination);
     ok(Result == S_OK,
        "destination readback unlock failed 0x%08lX\n",
@@ -505,21 +588,21 @@ Test_SoftGpu2DEndToEnd(void)
     Blt.hDstResource = hDestination;
     Blt.DstRect.right = UMD2D_WIDTH;
     Blt.DstRect.bottom = UMD2D_HEIGHT;
-    Result = DeviceFuncs.pfnBlt(hUmdDevice, &Blt);
+    Result = Funcs->pfnBlt(Session.hUmdDevice, &Blt);
     ok(Result == S_OK,
        "GPU blit failed 0x%08lX\n",
        (long)Result);
     if (FAILED(Result))
         goto Cleanup;
-    Status = Umd2DWaitForIdle(pWaitForIdle, hKmtDevice);
+    Status = Umd2DWaitForIdle(Session.pWaitForIdle, Session.hKmtDevice);
     ok(NT_SUCCESS(Status),
        "wait after blit failed 0x%08lX\n",
        (long)Status);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 
-    Result = Umd2DLockResource(&DeviceFuncs,
-                               hUmdDevice,
+    Result = Umd2DLockResource(Funcs,
+                               Session.hUmdDevice,
                                hDestination,
                                TRUE,
                                &Lock);
@@ -531,8 +614,8 @@ Test_SoftGpu2DEndToEnd(void)
     DestinationLocked = TRUE;
     ok(Umd2DCheckPixels(&Lock, SourceColor),
        "GPU blit did not copy source pixels to destination\n");
-    Result = Umd2DUnlockResource(&DeviceFuncs,
-                                 hUmdDevice,
+    Result = Umd2DUnlockResource(Funcs,
+                                 Session.hUmdDevice,
                                  hDestination);
     ok(Result == S_OK,
        "blit readback unlock failed 0x%08lX\n",
@@ -541,85 +624,245 @@ Test_SoftGpu2DEndToEnd(void)
         DestinationLocked = FALSE;
 
 Cleanup:
-    if (hUmdDevice != NULL)
+    if (Session.hUmdDevice != NULL && Funcs->pfnUnlock != NULL)
     {
-        if (DestinationLocked && hDestination != NULL &&
-            DeviceFuncs.pfnUnlock != NULL)
-        {
-            (VOID)Umd2DUnlockResource(&DeviceFuncs,
-                                      hUmdDevice,
-                                      hDestination);
-            DestinationLocked = FALSE;
-        }
-        if (SourceLocked && hSource != NULL &&
-            DeviceFuncs.pfnUnlock != NULL)
-        {
-            (VOID)Umd2DUnlockResource(&DeviceFuncs,
-                                      hUmdDevice,
-                                      hSource);
-            SourceLocked = FALSE;
-        }
-        if (hDestination != NULL &&
-            DeviceFuncs.pfnDestroyResource != NULL)
-        {
-            Result = DeviceFuncs.pfnDestroyResource(
-                         hUmdDevice,
-                         hDestination);
-            ok(Result == S_OK,
-               "destination destruction failed 0x%08lX\n",
-               (long)Result);
-            hDestination = NULL;
-        }
-        if (hSource != NULL &&
-            DeviceFuncs.pfnDestroyResource != NULL)
-        {
-            Result = DeviceFuncs.pfnDestroyResource(
-                         hUmdDevice,
-                         hSource);
-            ok(Result == S_OK,
-               "source destruction failed 0x%08lX\n",
-               (long)Result);
-            hSource = NULL;
-        }
-        if (DeviceFuncs.pfnDestroyDevice != NULL)
-        {
-            Result = DeviceFuncs.pfnDestroyDevice(hUmdDevice);
-            ok(Result == S_OK,
-               "UMD device destruction failed 0x%08lX\n",
-               (long)Result);
-        }
-        hUmdDevice = NULL;
+        if (DestinationLocked && hDestination != NULL)
+            (VOID)Umd2DUnlockResource(Funcs, Session.hUmdDevice, hDestination);
+        if (SourceLocked && hSource != NULL)
+            (VOID)Umd2DUnlockResource(Funcs, Session.hUmdDevice, hSource);
     }
-    if (hUmdAdapter != NULL &&
-        AdapterFuncs.pfnCloseAdapter != NULL)
+    Umd2DDestroyResource(&Session, &hDestination, "destination");
+    Umd2DDestroyResource(&Session, &hSource, "source");
+    Umd2DCloseSession(&Session);
+}
+
+static BOOL
+Umd2DCreateFilledPrimary(
+    PUMD2D_SESSION Session,
+    ULONG_PTR *RuntimeCookie,
+    UINT Width,
+    UINT Height,
+    UINT Color,
+    HANDLE *hResource)
+{
+    D3DDDI_RESOURCEFLAGS Flags;
+    D3DDDIARG_COLORFILL Fill;
+    HRESULT Result;
+    NTSTATUS Status;
+
+    memset(&Flags, 0, sizeof(Flags));
+    Flags.Primary = 1;
+    Result = Umd2DCreateResource(&Session->DeviceFuncs,
+                                 Session->hUmdDevice,
+                                 (HANDLE)RuntimeCookie,
+                                 Flags,
+                                 Width,
+                                 Height,
+                                 hResource);
+    ok(Result == S_OK && *hResource != NULL,
+       "%ux%u primary creation failed 0x%08lX\n",
+       Width,
+       Height,
+       (long)Result);
+    if (FAILED(Result) || *hResource == NULL)
+        return FALSE;
+
+    memset(&Fill, 0, sizeof(Fill));
+    Fill.hResource = *hResource;
+    Fill.DstRect.right = (LONG)Width;
+    Fill.DstRect.bottom = (LONG)Height;
+    Fill.Color = Color;
+    Result = Session->DeviceFuncs.pfnColorFill(Session->hUmdDevice, &Fill);
+    ok(Result == S_OK,
+       "primary color fill failed 0x%08lX\n",
+       (long)Result);
+    if (FAILED(Result))
+        return FALSE;
+    Status = Umd2DWaitForIdle(Session->pWaitForIdle, Session->hKmtDevice);
+    ok(NT_SUCCESS(Status),
+       "wait after primary fill failed 0x%08lX\n",
+       (long)Status);
+    return NT_SUCCESS(Status);
+}
+
+static BOOL
+Umd2DPrimaryHolds(
+    PUMD2D_SESSION Session,
+    HANDLE hResource,
+    UINT Color)
+{
+    D3DDDIARG_LOCK Lock;
+    HRESULT Result;
+    BOOL Holds;
+
+    Result = Umd2DLockResource(&Session->DeviceFuncs,
+                               Session->hUmdDevice,
+                               hResource,
+                               TRUE,
+                               &Lock);
+    ok(Result == S_OK,
+       "primary readback lock failed 0x%08lX\n",
+       (long)Result);
+    if (FAILED(Result))
+        return FALSE;
+    Holds = Umd2DCheckPixels(&Lock, Color);
+    (VOID)Umd2DUnlockResource(&Session->DeviceFuncs,
+                              Session->hUmdDevice,
+                              hResource);
+    return Holds;
+}
+
+static HRESULT
+Umd2DFlip(
+    PUMD2D_SESSION Session,
+    HANDLE hResource)
+{
+    D3DDDIARG_PRESENT Present;
+    HRESULT Result;
+
+    memset(&Present, 0, sizeof(Present));
+    Present.hSrcResource = hResource;
+    Present.Flags.Flip = 1;
+    Present.FlipInterval = D3DDDI_FLIPINTERVAL_IMMEDIATE;
+    Result = Session->DeviceFuncs.pfnPresent(Session->hUmdDevice, &Present);
+    if (SUCCEEDED(Result))
+        (VOID)Umd2DWaitForIdle(Session->pWaitForIdle, Session->hKmtDevice);
+    return Result;
+}
+
+static NTSTATUS
+Umd2DSetSourceOwner(
+    PFND3DKMT_SETVIDPNSOURCEOWNER pSetOwner,
+    D3DKMT_HANDLE hDevice,
+    BOOL Exclusive)
+{
+    D3DKMT_SETVIDPNSOURCEOWNER Owner;
+    D3DKMT_VIDPNSOURCEOWNER_TYPE Type = D3DKMT_VIDPNSOURCEOWNER_EXCLUSIVE;
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId = 0;
+
+    memset(&Owner, 0, sizeof(Owner));
+    Owner.hDevice = hDevice;
+    if (Exclusive)
     {
-        Result = AdapterFuncs.pfnCloseAdapter(hUmdAdapter);
-        ok(Result == S_OK,
-           "UMD adapter close failed 0x%08lX\n",
-           (long)Result);
-        hUmdAdapter = NULL;
+        Owner.pType = &Type;
+        Owner.pVidPnSourceId = &SourceId;
+        Owner.VidPnSourceCount = 1;
     }
-    if (hRuntimeDevice != NULL && pDestroyCallbacks != NULL)
+    return pSetOwner(&Owner);
+}
+
+static void
+Test_SoftGpuFlip(void)
+{
+    UMD2D_SESSION Session;
+    PFND3DKMT_SETVIDPNSOURCEOWNER pSetOwner;
+    D3DDDIARG_SETDISPLAYMODE SetMode;
+    DEVMODEW Mode;
+    HANDLE hRed = NULL;
+    HANDLE hGreen = NULL;
+    ULONG_PTR RedRuntimeCookie = 0x52454430;
+    ULONG_PTR GreenRuntimeCookie = 0x47524E30;
+    UINT Red = 0xFFC00000;
+    UINT Green = 0xFF00A000;
+    BOOL Owned = FALSE;
+    HRESULT Result;
+    NTSTATUS Status;
+
+    pSetOwner = (PFND3DKMT_SETVIDPNSOURCEOWNER)
+        LoadD3DKMTProc("D3DKMTSetVidPnSourceOwner");
+    if (pSetOwner == NULL)
     {
-        Result = pDestroyCallbacks(hRuntimeDevice);
-        ok(Result == S_OK,
-           "runtime callback device destruction failed 0x%08lX\n",
-           (long)Result);
-        hRuntimeDevice = NULL;
+        skip("D3DKMTSetVidPnSourceOwner is absent\n");
+        return;
     }
-    if (Umd != NULL)
-        FreeLibrary(Umd);
-    if (Runtime != NULL)
-        FreeLibrary(Runtime);
-    if (hKmtDevice != 0)
-        DestroyTestDevice(hKmtDevice);
-    if (hAdapter != 0)
-        CloseAdapter(hAdapter);
+    if (!Umd2DOpenSession(&Session))
+        goto Cleanup;
+    if (Session.DeviceFuncs.pfnSetDisplayMode == NULL ||
+        Session.DeviceFuncs.pfnPresent == NULL)
+    {
+        goto Cleanup;
+    }
+
+    memset(&Mode, 0, sizeof(Mode));
+    Mode.dmSize = sizeof(Mode);
+    if (!EnumDisplaySettingsW(NULL, ENUM_CURRENT_SETTINGS, &Mode) ||
+        Mode.dmPelsWidth == 0 || Mode.dmPelsHeight == 0)
+    {
+        skip("current display mode is unknown\n");
+        goto Cleanup;
+    }
+
+    if (!Umd2DCreateFilledPrimary(&Session, &RedRuntimeCookie, Mode.dmPelsWidth, Mode.dmPelsHeight, Red, &hRed) ||
+        !Umd2DCreateFilledPrimary(&Session, &GreenRuntimeCookie, Mode.dmPelsWidth, Mode.dmPelsHeight, Green, &hGreen))
+    {
+        goto Cleanup;
+    }
+
+    Status = Umd2DSetSourceOwner(pSetOwner, Session.hKmtDevice, TRUE);
+    ok(NT_SUCCESS(Status),
+       "exclusive source ownership failed 0x%08lX\n",
+       (long)Status);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+    Owned = TRUE;
+
+    memset(&SetMode, 0, sizeof(SetMode));
+    SetMode.hResource = hRed;
+    Result = Session.DeviceFuncs.pfnSetDisplayMode(Session.hUmdDevice, &SetMode);
+    ok(Result == S_OK,
+       "SetDisplayMode to the red primary failed 0x%08lX\n",
+       (long)Result);
+    if (FAILED(Result))
+        goto Cleanup;
+    trace("scanning out red %lux%lu\n", Mode.dmPelsWidth, Mode.dmPelsHeight);
+    Sleep(UMDFLIP_HOLD_MS);
+
+    Result = Umd2DFlip(&Session, hGreen);
+    ok(Result == S_OK,
+       "flip to the green primary failed 0x%08lX\n",
+       (long)Result);
+    if (FAILED(Result))
+        goto Cleanup;
+    trace("flipped to green\n");
+    Sleep(UMDFLIP_HOLD_MS);
+
+    Result = Umd2DFlip(&Session, hRed);
+    ok(Result == S_OK,
+       "flip back to the red primary failed 0x%08lX\n",
+       (long)Result);
+    if (FAILED(Result))
+        goto Cleanup;
+    trace("flipped to red\n");
+    Sleep(UMDFLIP_HOLD_MS);
+
+    ok(Umd2DPrimaryHolds(&Session, hRed, Red),
+       "red primary changed while it was scanned out\n");
+    ok(Umd2DPrimaryHolds(&Session, hGreen, Green),
+       "green primary changed after it was flipped away\n");
+
+Cleanup:
+    if (Owned)
+    {
+        Status = Umd2DSetSourceOwner(pSetOwner, Session.hKmtDevice, FALSE);
+        ok(NT_SUCCESS(Status),
+           "releasing source ownership failed 0x%08lX\n",
+           (long)Status);
+        trace("released source ownership\n");
+        Sleep(UMDFLIP_HOLD_MS);
+    }
+    Umd2DDestroyResource(&Session, &hGreen, "green primary");
+    Umd2DDestroyResource(&Session, &hRed, "red primary");
+    Umd2DCloseSession(&Session);
 }
 
 START_TEST(umd2d)
 {
     Test_SoftGpu2DEndToEnd();
+}
+
+START_TEST(umdflip)
+{
+    Test_SoftGpuFlip();
 }
 
 /* EOF */
