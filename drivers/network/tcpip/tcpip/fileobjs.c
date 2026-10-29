@@ -645,12 +645,13 @@ static BOOLEAN AddrAuthorizeBind(
   PIP_ADDRESS Address,
   USHORT Port,
   BOOLEAN WildcardPort,
+  BOOLEAN DualStack,
   USHORT Protocol,
   ULONG64 EndpointId)
 {
   WFP_SHIM_ENDPOINT Endpoint;
 
-  if (Address->Type == IP_ADDRESS_V6)
+  if (Address->Type == IP_ADDRESS_V6 && !(DualStack && AddrIsUnspecified(Address)))
     return TRUE;
 
   RtlZeroMemory(&Endpoint, sizeof(Endpoint));
@@ -659,7 +660,8 @@ static BOOLEAN AddrAuthorizeBind(
   Endpoint.WildcardPort = WildcardPort;
   Endpoint.Raw = (Protocol != IPPROTO_TCP && Protocol != IPPROTO_UDP);
   Endpoint.Protocol = (UCHAR)Protocol;
-  Endpoint.LocalAddress = DN2H(Address->Address.IPv4Address);
+  if (Address->Type == IP_ADDRESS_V4)
+    Endpoint.LocalAddress = DN2H(Address->Address.IPv4Address);
   Endpoint.LocalPort = WN2H(Port);
   Endpoint.InterfaceType = (Endpoint.LocalAddress >> 24) == 127 ? IF_TYPE_SOFTWARE_LOOPBACK : IF_TYPE_ETHERNET_CSMACD;
   Endpoint.ProcessId = PsGetCurrentProcessId();
@@ -710,7 +712,7 @@ NTSTATUS FileOpenAddress(
         return Status;
     if (SharedFile != NULL && Protocol != IPPROTO_UDP)
     {
-        if (!AddrAuthorizeBind(&BindAddress, BindPort, FALSE, Protocol, SharedFile->WfpEndpointId))
+        if (!AddrAuthorizeBind(&BindAddress, BindPort, FALSE, DualStack, Protocol, SharedFile->WfpEndpointId))
         {
             DereferenceObject(SharedFile);
             return STATUS_ACCESS_DENIED;
@@ -949,7 +951,7 @@ NTSTATUS FileOpenAddress(
   if (SharedFile != NULL)
       DereferenceObject(SharedFile);
 
-  if (!AddrAuthorizeBind(&AddrFile->Address, AddrFile->Port, BindPort == 0, Protocol, AddrFile->WfpEndpointId))
+  if (!AddrAuthorizeBind(&AddrFile->Address, AddrFile->Port, BindPort == 0, DualStack, Protocol, AddrFile->WfpEndpointId))
   {
       Request->Handle.AddressHandle = NULL;
       DereferenceObject(AddrFile);
