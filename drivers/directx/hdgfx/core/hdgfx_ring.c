@@ -17,6 +17,8 @@
 #define HDGFX_MI_STORE_DATA_INDEX   0x21u
 #define HDGFX_HWS_FIRST_FREE        0x10u
 #define HDGFX_HWS_DWORDS            1024u
+#define HDGFX_HWS_SCRATCH           0x3Fu
+#define HDGFX_BREADCRUMB_STORES     8u
 #define HDGFX_GDSR_RENDER           1u
 #define HDGFX_GDSR_TIMEOUT_US       5000u
 #define HDGFX_GDSR_POLL_US          10u
@@ -148,16 +150,23 @@ HdgfxRingEmitBreadcrumb(
     uint32_t StatusIndex,
     uint32_t Value)
 {
-    uint32_t Dwords[4];
+    uint32_t Dwords[2 + HDGFX_BREADCRUMB_STORES * 6];
+    uint32_t Count = 0;
+    uint32_t Index;
 
-    if (StatusIndex < HDGFX_HWS_FIRST_FREE || StatusIndex >= HDGFX_HWS_DWORDS)
+    if (StatusIndex < HDGFX_HWS_FIRST_FREE || StatusIndex >= HDGFX_HWS_DWORDS || StatusIndex == HDGFX_HWS_SCRATCH)
         return false;
 
-    Dwords[0] = HdgfxMiCommand(HDGFX_MI_STORE_DATA_INDEX, 1);
-    Dwords[1] = HDGFX_SET(MI_STORE_INDEX_OFFSET, StatusIndex);
-    Dwords[2] = Value;
-    Dwords[3] = HdgfxMiCommand(HDGFX_MI_USER_INTERRUPT, 0);
-    return HdgfxRingEmit(Ring, Head, Dwords, 4);
+    Dwords[Count++] = HdgfxMiCommand(HDGFX_MI_FLUSH, 0);
+    for (Index = 0; Index < HDGFX_BREADCRUMB_STORES * 2; Index++)
+    {
+        Dwords[Count++] = HdgfxMiCommand(HDGFX_MI_STORE_DATA_INDEX, 1);
+        Dwords[Count++] = HDGFX_SET(MI_STORE_INDEX_OFFSET,
+                                    Index < HDGFX_BREADCRUMB_STORES ? HDGFX_HWS_SCRATCH : StatusIndex);
+        Dwords[Count++] = Value;
+    }
+    Dwords[Count++] = HdgfxMiCommand(HDGFX_MI_USER_INTERRUPT, 0);
+    return HdgfxRingEmit(Ring, Head, Dwords, Count);
 }
 
 void
