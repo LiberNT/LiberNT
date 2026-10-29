@@ -2502,7 +2502,7 @@ typedef void (NTAPI *FWPS_NET_BUFFER_LIST_NOTIFY_FN0)(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 UINT64
 NTAPI
-FwpsNetBufferListGetTagForContext0();
+FwpsNetBufferListGetTagForContext0(VOID);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
