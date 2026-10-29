@@ -54,10 +54,6 @@ typedef struct _HDGFX_SCANOUT
     ULONG SlabAddress;
     ULONGLONG SlabPhysical;
     ULONGLONG SlabSize;
-    PULONG WindowGtt;
-    PULONG WindowPfns;
-    ULONG WindowPages;
-    ULONG WindowAddress;
     PULONG Cursor;
     ULONG CursorAddress;
     ULONG CursorGeneration;
