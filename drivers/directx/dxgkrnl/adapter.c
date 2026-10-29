@@ -1233,6 +1233,11 @@ DxgkpTdrWorker(
     DxgkPresentCompleteReset(Adapter);
     PresentResetStarted = FALSE;
     KeReleaseMutex(&Adapter->AdapterMutex, FALSE);
+    if (TimedOutDevice != NULL)
+    {
+        DxgkDereferenceDevice(TimedOutDevice);
+        TimedOutDevice = NULL;
+    }
 
     /* Recommitting the unchanged mode does not recreate allocations.
      * Replace a lost adapter-owned primary explicitly, preserving CDD's
