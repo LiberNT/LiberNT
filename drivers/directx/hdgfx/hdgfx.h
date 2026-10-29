@@ -171,6 +171,8 @@ HdgfxQueueDpc(
     _Inout_ PHDGFX_ADAPTER Adapter);
 
 DXGKDDI_QUERYADAPTERINFO HdgfxDdiQueryAdapterInfo;
+DXGKDDI_QUERY_INTERFACE HdgfxDdiQueryInterface;
+DXGKDDI_CREATEDEVICE HdgfxDdiCreateDevice;
 DXGKDDI_CREATEALLOCATION HdgfxDdiCreateAllocation;
 DXGKDDI_DESTROYALLOCATION HdgfxDdiDestroyAllocation;
 DXGKDDI_OPENALLOCATIONINFO HdgfxDdiOpenAllocation;
