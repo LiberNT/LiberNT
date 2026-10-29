@@ -9,6 +9,7 @@
 #include "softgpu_2d_core.h"
 #include "core/hdgfx_core.h"
 #include "core/hdgfx_regs.h"
+#include <pseh/pseh2.h>
 
 #define HDGFX_PCI_BAR0              0x10UL
 #define HDGFX_PCI_BAR2              0x18UL
@@ -72,6 +73,10 @@ typedef struct _HDGFX_SCANOUT
     ULONG SlabAddress;
     ULONGLONG SlabPhysical;
     ULONGLONG SlabSize;
+    PULONG WindowGtt;
+    PULONG WindowPfns;
+    ULONG WindowPages;
+    ULONG WindowAddress;
     PULONG Cursor;
     ULONG CursorAddress;
     ULONG CursorGeneration;
@@ -2381,6 +2386,19 @@ HdgfxDirectScanoutStop(
     Frame.QuadPart = -50LL * 10000;
     KeDelayExecutionThread(KernelMode, FALSE, &Frame);
 
+    if (Scanout->WindowGtt != NULL)
+    {
+        for (Index = 0; Index < Scanout->WindowPages; Index++)
+            WRITE_REGISTER_ULONG(&Scanout->WindowGtt[Index], 0);
+        READ_REGISTER_ULONG(&Scanout->WindowGtt[0]);
+        MmUnmapIoSpace(Scanout->WindowGtt, Scanout->WindowPages * sizeof(ULONG));
+        Scanout->WindowGtt = NULL;
+    }
+    if (Scanout->WindowPfns != NULL)
+    {
+        ExFreePoolWithTag(Scanout->WindowPfns, HDGFX_TAG);
+        Scanout->WindowPfns = NULL;
+    }
     for (Index = 0; Index < Scanout->SlabGttPages + HDGFX_CURSOR_PAGES; Index++)
         WRITE_REGISTER_ULONG(&Scanout->SlabGtt[Index], 0);
     READ_REGISTER_ULONG(&Scanout->SlabGtt[0]);
@@ -2391,6 +2409,43 @@ HdgfxDirectScanoutStop(
         MmFreeContiguousMemorySpecifyCache(Scanout->Cursor, HDGFX_CURSOR_PAGES * PAGE_SIZE, MmWriteCombined);
         Scanout->Cursor = NULL;
     }
+}
+
+static VOID
+HdgfxWindowStart(
+    _In_ PSOFTGPU_DEVICE Device,
+    _Inout_ PHDGFX_SCANOUT Scanout,
+    _In_ ULONG SlabFirst)
+{
+    PHYSICAL_ADDRESS Address;
+    ULONG Pages = (ULONG)(Device->ScanoutSize / PAGE_SIZE) + 1;
+    ULONG First;
+    ULONG Index;
+
+    if (SlabFirst < Pages)
+        return;
+    First = SlabFirst - Pages;
+    if ((ULONGLONG)First * PAGE_SIZE < (ULONGLONG)Scanout->FirmwareSurface + Device->ScanoutSize)
+    {
+        DPRINT1("No aperture room for a %lu-page present window\n", Pages);
+        return;
+    }
+    Scanout->WindowPfns = ExAllocatePoolZero(NonPagedPoolNx, Pages * sizeof(ULONG), HDGFX_TAG);
+    Address.QuadPart = (LONGLONG)(Scanout->Bar0 + HDGFX_REG(GTT_PTE, First));
+    Scanout->WindowGtt = Scanout->WindowPfns == NULL ? NULL :
+                         MmMapIoSpace(Address, Pages * sizeof(ULONG), MmNonCached);
+    if (Scanout->WindowGtt == NULL)
+    {
+        if (Scanout->WindowPfns != NULL)
+            ExFreePoolWithTag(Scanout->WindowPfns, HDGFX_TAG);
+        Scanout->WindowPfns = NULL;
+        return;
+    }
+    for (Index = 0; Index < Pages; Index++)
+        WRITE_REGISTER_ULONG(&Scanout->WindowGtt[Index], 0);
+    READ_REGISTER_ULONG(&Scanout->WindowGtt[0]);
+    Scanout->WindowPages = Pages;
+    Scanout->WindowAddress = First * PAGE_SIZE;
 }
 
 NTSTATUS
@@ -2461,11 +2516,13 @@ SoftGpuPlatformStartScanout(
         WRITE_REGISTER_ULONG(&Scanout->SlabGtt[Pages + Index], HdgfxIlkGttEntry((ULONG)Physical));
     }
     READ_REGISTER_ULONG(&Scanout->SlabGtt[Pages + HDGFX_CURSOR_PAGES - 1]);
+    HdgfxWindowStart(Device, Scanout, First);
 
     Device->PlatformDirectScanout = TRUE;
     Device->PlatformHardwarePointer = TRUE;
-    DPRINT1("Direct scan-out: %Iu-byte slab at 0x%I64x mapped to 0x%lx, cursor at 0x%lx\n",
-            Device->FrameBufferSize, Scanout->SlabPhysical, Scanout->SlabAddress, Scanout->CursorAddress);
+    DPRINT1("Direct scan-out: %Iu-byte slab at 0x%I64x mapped to 0x%lx, cursor at 0x%lx, present window at 0x%lx\n",
+            Device->FrameBufferSize, Scanout->SlabPhysical, Scanout->SlabAddress, Scanout->CursorAddress,
+            Scanout->WindowAddress);
     return STATUS_SUCCESS;
 }
 
@@ -2604,6 +2661,82 @@ HdgfxPresentWait(
     }
 }
 
+static PMDL
+HdgfxWindowMap(
+    _Inout_ PHDGFX_SCANOUT Scanout,
+    _In_ const UCHAR *Source,
+    _In_ SIZE_T Size)
+{
+    PPFN_NUMBER Pfns;
+    PMDL Mdl;
+    ULONG Pages;
+    ULONG Index;
+    BOOLEAN Locked = FALSE;
+    BOOLEAN Changed = FALSE;
+
+    if (Scanout->WindowGtt == NULL || Size > MAXULONG ||
+        ADDRESS_AND_SIZE_TO_SPAN_PAGES(Source, Size) > Scanout->WindowPages)
+    {
+        return NULL;
+    }
+    Mdl = IoAllocateMdl((PVOID)Source, (ULONG)Size, FALSE, FALSE, NULL);
+    if (Mdl == NULL)
+        return NULL;
+    _SEH2_TRY
+    {
+        MmProbeAndLockPages(Mdl, KernelMode, IoReadAccess);
+        Locked = TRUE;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+    }
+    _SEH2_END;
+    if (!Locked)
+    {
+        IoFreeMdl(Mdl);
+        return NULL;
+    }
+
+    Pages = ADDRESS_AND_SIZE_TO_SPAN_PAGES(Source, Size);
+    Pfns = MmGetMdlPfnArray(Mdl);
+    for (Index = 0; Index < Pages; Index++)
+    {
+        if (Pfns[Index] > (MAXULONG >> PAGE_SHIFT))
+        {
+            MmUnlockPages(Mdl);
+            IoFreeMdl(Mdl);
+            return NULL;
+        }
+    }
+    for (Index = 0; Index < Pages; Index++)
+    {
+        if (Scanout->WindowPfns[Index] != (ULONG)Pfns[Index])
+        {
+            Scanout->WindowPfns[Index] = (ULONG)Pfns[Index];
+            WRITE_REGISTER_ULONG(&Scanout->WindowGtt[Index], HdgfxIlkGttEntry((ULONG)Pfns[Index] << PAGE_SHIFT));
+            Changed = TRUE;
+        }
+    }
+    if (Changed)
+        READ_REGISTER_ULONG(&Scanout->WindowGtt[Pages - 1]);
+    return Mdl;
+}
+
+static VOID
+HdgfxFlushRect(
+    _In_ const UCHAR *Source,
+    _In_ ULONG Pitch,
+    _In_ const HDGFX_BLT_RECT *Rect)
+{
+    ULONG Row;
+
+    for (Row = Rect->Top; Row < Rect->Bottom; Row++)
+    {
+        KeInvalidateRangeAllCaches((PVOID)(Source + (SIZE_T)Row * Pitch + (SIZE_T)Rect->Left * sizeof(ULONG)),
+                                   (Rect->Right - Rect->Left) * sizeof(ULONG));
+    }
+}
+
 static BOOLEAN
 HdgfxPresentRect(
     _In_ PSOFTGPU_DEVICE Device,
@@ -2653,6 +2786,7 @@ SoftGpuPlatformPresentDisplayOnly(
     ULONG Index;
     ULONG Seqno = 0;
     LONG Resets;
+    PMDL Mdl = NULL;
     BOOLEAN Submitted = TRUE;
     NTSTATUS Status = STATUS_NOT_SUPPORTED;
 
@@ -2672,11 +2806,20 @@ SoftGpuPlatformPresentDisplayOnly(
 
     SourceSize = (SIZE_T)(ULONG)PresentDisplayOnly->Pitch * Device->Height;
     SourcePhysical = (ULONGLONG)MmGetPhysicalAddress((PVOID)Source).QuadPart;
-    if (!NT_SUCCESS(SoftGpu2dResolveSlabRange(Scanout->SlabPhysical, (SIZE_T)Scanout->SlabSize, SourcePhysical,
-                                              SourceSize, &SourceOffset)) ||
-        (ULONGLONG)MmGetPhysicalAddress((PVOID)(Source + SourceSize - 1)).QuadPart != SourcePhysical + SourceSize - 1)
+    if (NT_SUCCESS(SoftGpu2dResolveSlabRange(Scanout->SlabPhysical, (SIZE_T)Scanout->SlabSize, SourcePhysical,
+                                             SourceSize, &SourceOffset)) &&
+        (ULONGLONG)MmGetPhysicalAddress((PVOID)(Source + SourceSize - 1)).QuadPart == SourcePhysical + SourceSize - 1)
     {
-        goto Cleanup;
+        SourceSurface.Address = Scanout->SlabAddress + (ULONG)SourceOffset;
+    }
+    else
+    {
+        Mdl = HdgfxWindowMap(Scanout, Source, SourceSize);
+        if (Mdl == NULL)
+            goto Cleanup;
+        SourceSurface.Address = Scanout->WindowAddress + MmGetMdlByteOffset(Mdl);
+        Count = HdgfxMiFlush(Dwords);
+        Dwords[Count++] = 0;
     }
 
     KeAcquireSpinLock(&Device->ScanoutLock, &OldIrql);
@@ -2703,7 +2846,6 @@ SoftGpuPlatformPresentDisplayOnly(
         goto Cleanup;
     }
 
-    SourceSurface.Address = Scanout->SlabAddress + (ULONG)SourceOffset;
     SourceSurface.Pitch = (uint32_t)PresentDisplayOnly->Pitch;
     Destination.Address = DestinationBase + (ULONG)DestinationOffset;
     Destination.Pitch = DestinationPitch;
@@ -2715,13 +2857,17 @@ SoftGpuPlatformPresentDisplayOnly(
 
         if (!HdgfxPresentRect(Device, Input, &Rect))
             continue;
+        if (Mdl != NULL)
+            HdgfxFlushRect(Source, SourceSurface.Pitch, &Rect);
         Count += HdgfxBltCopy(Dwords + Count, &Destination, &Rect, &SourceSurface, Rect.Left, Rect.Top);
         if (Count + 8 > RTL_NUMBER_OF(Dwords))
         {
+            KeMemoryBarrier();
             Submitted = HdgfxPresentSubmit(Adapter, Dwords, Count, Resets, NULL);
             Count = 0;
         }
     }
+    KeMemoryBarrier();
     if (Submitted && HdgfxPresentSubmit(Adapter, Dwords, Count, Resets, &Seqno) &&
         HdgfxPresentWait(Adapter, Seqno, Resets))
     {
@@ -2734,6 +2880,11 @@ SoftGpuPlatformPresentDisplayOnly(
     }
 
 Cleanup:
+    if (Mdl != NULL)
+    {
+        MmUnlockPages(Mdl);
+        IoFreeMdl(Mdl);
+    }
     ExReleaseRundownProtection(&Adapter->Rundown);
     return Status;
 }
