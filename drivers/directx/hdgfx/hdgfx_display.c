@@ -32,11 +32,11 @@ static PHDGFX_SCANOUT
 HdgfxScanoutOf(
     _In_opt_ PVOID MiniportDeviceContext)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
 
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC)
         return NULL;
-    return Device->PlatformContext;
+    return Adapter->Scanout;
 }
 
 static PHDGFX_SCANOUT
@@ -44,20 +44,18 @@ HdgfxScanoutAcquire(
     _In_opt_ PVOID MiniportDeviceContext,
     _Out_ PHDGFX_ADAPTER *Adapter)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
+    PHDGFX_ADAPTER Context = MiniportDeviceContext;
 
     *Adapter = NULL;
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC || Device->PlatformServicesContext == NULL)
+    if (Context == NULL || Context->Magic != HDGFX_ADAPTER_MAGIC || !ExAcquireRundownProtection(&Context->Rundown))
         return NULL;
-    if (!ExAcquireRundownProtection(&((PHDGFX_ADAPTER)Device->PlatformServicesContext)->Rundown))
-        return NULL;
-    *Adapter = Device->PlatformServicesContext;
-    if (Device->PlatformContext == NULL)
+    if (Context->Scanout == NULL)
     {
-        ExReleaseRundownProtection(&(*Adapter)->Rundown);
-        *Adapter = NULL;
+        ExReleaseRundownProtection(&Context->Rundown);
+        return NULL;
     }
-    return Device->PlatformContext;
+    *Adapter = Context;
+    return Context->Scanout;
 }
 
 static VOID
@@ -436,7 +434,7 @@ ReleaseModeSet:
 
 static NTSTATUS
 HdgfxQueryVidPn(
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PHDGFX_ADAPTER Adapter,
     _In_ D3DKMDT_HVIDPN hVidPn,
     _Out_ CONST DXGK_VIDPN_INTERFACE **VidPn,
     _Out_ D3DKMDT_HVIDPNTOPOLOGY *hTopology,
@@ -446,10 +444,10 @@ HdgfxQueryVidPn(
 
     *VidPn = NULL;
     *Topology = NULL;
-    if (hVidPn == 0 || Device->DxgkInterface.DxgkCbQueryVidPnInterface == NULL)
+    if (hVidPn == 0 || Adapter->DxgkInterface.DxgkCbQueryVidPnInterface == NULL)
         return STATUS_GRAPHICS_INVALID_VIDPN;
 
-    Status = Device->DxgkInterface.DxgkCbQueryVidPnInterface(hVidPn, DXGK_VIDPN_INTERFACE_VERSION_V1, VidPn);
+    Status = Adapter->DxgkInterface.DxgkCbQueryVidPnInterface(hVidPn, DXGK_VIDPN_INTERFACE_VERSION_V1, VidPn);
     if (!NT_SUCCESS(Status))
         return Status;
     if (*VidPn == NULL)
@@ -885,7 +883,7 @@ Unlock:
 
 static NTSTATUS
 HdgfxValidateFunctionalVidPn(
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PHDGFX_ADAPTER Adapter,
     _In_ PHDGFX_SCANOUT Scanout,
     _In_ D3DKMDT_HVIDPN hVidPn,
     _Out_ PHDGFX_PATH_SET Paths,
@@ -901,7 +899,7 @@ HdgfxValidateFunctionalVidPn(
 
     RtlZeroMemory(Paths, sizeof(*Paths));
     *SourceMode = Scanout->Mode;
-    Status = HdgfxQueryVidPn(Device, hVidPn, &VidPn, &hTopology, &Topology);
+    Status = HdgfxQueryVidPn(Adapter, hVidPn, &VidPn, &hTopology, &Topology);
     if (!NT_SUCCESS(Status))
         return Status;
     Status = HdgfxCollectPaths(Topology, hTopology, Paths);
@@ -944,7 +942,7 @@ HdgfxValidateFunctionalVidPn(
 
 static NTSTATUS
 HdgfxApplyPaths(
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PHDGFX_ADAPTER Adapter,
     _In_ PHDGFX_SCANOUT Scanout,
     _In_ const HDGFX_PATH_SET *Paths,
     _In_ ULONG SourceMode)
@@ -980,7 +978,7 @@ HdgfxApplyPaths(
         Scanout->Mode = Mode;
         if (Crt)
             Scanout->CrtStale = FALSE;
-        Device->VsyncTargetId = !Panel && Crt ? HDGFX_CRT_CHILD_UID : HDGFX_PANEL_CHILD_UID;
+        Adapter->VsyncTargetId = !Panel && Crt ? HDGFX_CRT_CHILD_UID : HDGFX_PANEL_CHILD_UID;
     }
     return Status;
 }
@@ -1139,13 +1137,12 @@ HdgfxDdiSetVidPnSourceAddress(
     _In_ PVOID MiniportDeviceContext,
     _In_ CONST DXGKARG_SETVIDPNSOURCEADDRESS *SetVidPnSourceAddress)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
     PHDGFX_ADAPTER Adapter;
     PHDGFX_SCANOUT Scanout;
     ULONGLONG Address;
     ULONGLONG Offset;
     ULONGLONG Span;
-    PSOFTGPU_ALLOC Allocation;
+    PHDGFX_ALLOCATION Allocation;
     ULONG Width;
     ULONG Height;
     ULONG Pitch;
@@ -1155,7 +1152,7 @@ HdgfxDdiSetVidPnSourceAddress(
         return STATUS_INVALID_PARAMETER;
     if (SetVidPnSourceAddress->VidPnSourceId != 0)
         return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE;
-    if (SetVidPnSourceAddress->PrimarySegment != 0 && SetVidPnSourceAddress->PrimarySegment != SOFTGPU_SEGMENT_ID)
+    if (SetVidPnSourceAddress->PrimarySegment != 0 && SetVidPnSourceAddress->PrimarySegment != HDGFX_SLAB_SEGMENT_ID)
         return STATUS_GRAPHICS_INVALID_ALLOCATION_USAGE;
     if (KeGetCurrentIrql() > APC_LEVEL)
     {
@@ -1167,8 +1164,8 @@ HdgfxDdiSetVidPnSourceAddress(
     if (Address == 0)
         return STATUS_SUCCESS;
 
-    Allocation = (PSOFTGPU_ALLOC)SetVidPnSourceAddress->hAllocation;
-    if (Allocation == NULL || Allocation->Magic != SOFTGPU_ALLOC_MAGIC)
+    Allocation = (PHDGFX_ALLOCATION)SetVidPnSourceAddress->hAllocation;
+    if (Allocation == NULL || Allocation->Magic != HDGFX_ALLOCATION_MAGIC)
         return STATUS_INVALID_HANDLE;
 
     Scanout = HdgfxScanoutAcquire(MiniportDeviceContext, &Adapter);
@@ -1181,7 +1178,7 @@ HdgfxDdiSetVidPnSourceAddress(
     Offset = Address - Scanout->SlabPhysical;
     Span = (ULONGLONG)Pitch * (Height - 1) + (ULONGLONG)Width * HDGFX_BYTES_PER_PIXEL;
     if (Width != Scanout->Width || Height != Scanout->Height || Scanout->SlabGtt == NULL ||
-        Scanout->SlabPhysical != (ULONGLONG)Device->FrameBufferPhys.QuadPart ||
+        Scanout->SlabPhysical != (ULONGLONG)Adapter->SlabPhysical.QuadPart ||
         Pitch < Width * HDGFX_BYTES_PER_PIXEL || Pitch % HDGFX_STRIDE_ALIGNMENT != 0 ||
         Address < Scanout->SlabPhysical || Offset % PAGE_SIZE != 0 ||
         Offset >= Scanout->SlabSize || Span > Scanout->SlabSize - Offset || Span > Allocation->Size)
@@ -1195,6 +1192,7 @@ HdgfxDdiSetVidPnSourceAddress(
         Scanout->Surface = Scanout->SlabAddress + (ULONG)Offset;
         Scanout->Pitch = Pitch;
         HdgfxPlaneCommit(Scanout);
+        InterlockedExchange64(&Adapter->PrimaryAddress, (LONG64)Address);
     }
     HdgfxUnlock(Scanout);
     ExReleaseRundownProtection(&Adapter->Rundown);
@@ -1269,35 +1267,12 @@ HdgfxDdiRecommendVidPnTopology(
 
 NTSTATUS
 APIENTRY
-HdgfxDdiStartDevice(
-    _In_ PVOID MiniportDeviceContext,
-    _In_ PDXGK_START_INFO DxgkStartInfo,
-    _In_ PDXGK_INTERFACE DxgkInterface,
-    _Out_ PULONG NumberOfVideoPresentSources,
-    _Out_ PULONG NumberOfChildren)
-{
-    PHDGFX_SCANOUT Scanout;
-    NTSTATUS Status;
-
-    PAGED_CODE();
-
-    Status = SoftGpuDdiStartDevice(MiniportDeviceContext, DxgkStartInfo, DxgkInterface, NumberOfVideoPresentSources,
-                                   NumberOfChildren);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    Scanout = HdgfxScanoutOf(MiniportDeviceContext);
-    *NumberOfChildren = Scanout != NULL && Scanout->CrtSupported ? 2 : 1;
-    return STATUS_SUCCESS;
-}
-
-NTSTATUS
-APIENTRY
 HdgfxDdiQueryChildRelations(
     _In_ PVOID MiniportDeviceContext,
     _Out_ PDXGK_CHILD_DESCRIPTOR ChildRelations,
     _In_ ULONG ChildRelationsSize)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
     PHDGFX_SCANOUT Scanout = HdgfxScanoutOf(MiniportDeviceContext);
     ULONG Count;
 
@@ -1312,8 +1287,8 @@ HdgfxDdiQueryChildRelations(
     RtlZeroMemory(ChildRelations, sizeof(DXGK_CHILD_DESCRIPTOR) * Count);
     ChildRelations[0].ChildDeviceType = TypeVideoOutput;
     ChildRelations[0].ChildCapabilities.HpdAwareness = HpdAwarenessAlwaysConnected;
-    ChildRelations[0].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = Device->ChildOutputTechnology;
-    ChildRelations[0].AcpiUid = Device->ChildAcpiUid;
+    ChildRelations[0].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = Adapter->ChildOutputTechnology;
+    ChildRelations[0].AcpiUid = Adapter->ChildAcpiUid;
     ChildRelations[0].ChildUid = HDGFX_PANEL_CHILD_UID;
     if (Scanout->CrtSupported)
     {
@@ -1412,9 +1387,10 @@ HdgfxDdiSetPowerState(
     PHDGFX_SCANOUT Scanout;
 
     PAGED_CODE();
+    UNREFERENCED_PARAMETER(ActionType);
 
     if (DeviceUid == DISPLAY_ADAPTER_HW_ID)
-        return SoftGpuDdiSetPowerState(MiniportDeviceContext, DeviceUid, DevicePowerState, ActionType);
+        return DevicePowerState == PowerDeviceD0 ? STATUS_SUCCESS : STATUS_NOT_SUPPORTED;
 
     Scanout = HdgfxScanoutOf(MiniportDeviceContext);
     if (Scanout == NULL || !HdgfxTargetKnown(Scanout, DeviceUid) || DevicePowerState > PowerDeviceD3)

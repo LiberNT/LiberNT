@@ -7,9 +7,10 @@
 
 #include "hdgfx.h"
 
-DRIVER_INITIALIZE HdgfxDriverEntry;
+#define HDGFX_DEAD_DEVICE_MAGIC     0xDEAD4446UL
+#define HDGFX_DEAD_PROCESS_MAGIC    0xDEAD5046UL
 
-static const GUID HdgfxGuidShadowPresent = RXGK_SHADOW_PRESENT_INTERFACE_GUID_INIT;
+DRIVER_INITIALIZE HdgfxDriverEntry;
 
 static DXGK_DEVICEINFO HdgfxDeviceInfo =
 {
@@ -22,7 +23,6 @@ static DXGK_DEVICEINFO HdgfxDeviceInfo =
 
 static VOID
 HdgfxSegmentDescriptor(
-    _In_ PSOFTGPU_DEVICE Device,
     _In_ PHDGFX_ADAPTER Adapter,
     _In_ ULONG SegmentId,
     _Out_ PDXGK_SEGMENTDESCRIPTOR4 Descriptor)
@@ -31,12 +31,11 @@ HdgfxSegmentDescriptor(
     Descriptor->Flags.CpuVisible = 1;
     Descriptor->Flags.PopulatedFromSystemMemory = 1;
     Descriptor->Flags.LocalBudgetGroup = 1;
-    if (SegmentId == SOFTGPU_SEGMENT_ID)
+    if (SegmentId == HDGFX_SLAB_SEGMENT_ID)
     {
-        Descriptor->Flags.CacheCoherent = Device->FrameBufferCacheType == MmCached;
-        Descriptor->BaseAddress = Device->FrameBufferPhys;
-        Descriptor->CpuTranslatedAddress = Device->FrameBufferPhys;
-        Descriptor->Size = Device->FrameBufferSize;
+        Descriptor->BaseAddress = Adapter->SlabPhysical;
+        Descriptor->CpuTranslatedAddress = Adapter->SlabPhysical;
+        Descriptor->Size = Adapter->SlabSize;
     }
     else
     {
@@ -49,10 +48,9 @@ HdgfxSegmentDescriptor(
 
 static NTSTATUS
 HdgfxQuerySegments(
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PHDGFX_ADAPTER Adapter,
     _In_ CONST DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo)
 {
-    PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
     PDXGK_QUERYSEGMENTOUT4 Out;
     ULONG SegmentId;
 
@@ -60,7 +58,7 @@ HdgfxQuerySegments(
         return STATUS_INVALID_PARAMETER;
     if (QueryAdapterInfo->OutputDataSize < sizeof(DXGK_QUERYSEGMENTOUT4))
         return STATUS_BUFFER_TOO_SMALL;
-    if (Adapter == NULL || Adapter->DmaMemory == NULL)
+    if (Adapter->DmaMemory == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
 
     Out = QueryAdapterInfo->pOutputData;
@@ -76,7 +74,7 @@ HdgfxQuerySegments(
         return STATUS_INVALID_PARAMETER;
     for (SegmentId = 1; SegmentId <= HDGFX_DMA_SEGMENT_ID; SegmentId++)
     {
-        HdgfxSegmentDescriptor(Device, Adapter, SegmentId,
+        HdgfxSegmentDescriptor(Adapter, SegmentId,
                                (PDXGK_SEGMENTDESCRIPTOR4)(Out->pSegmentDescriptor +
                                                           (SIZE_T)(SegmentId - 1) * Out->SegmentDescriptorStride));
     }
@@ -85,7 +83,7 @@ HdgfxQuerySegments(
 
 static NTSTATUS
 HdgfxQueryDriverCaps(
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PHDGFX_ADAPTER Adapter,
     _In_ CONST DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo)
 {
     PDXGK_DRIVERCAPS Caps = QueryAdapterInfo->pOutputData;
@@ -96,12 +94,11 @@ HdgfxQueryDriverCaps(
         return STATUS_BUFFER_TOO_SMALL;
 
     RtlZeroMemory(Caps, sizeof(*Caps));
-    Caps->HighestAcceptableAddress.QuadPart = Device->HighestDmaAddress.QuadPart != 0 ?
-                                              Device->HighestDmaAddress.QuadPart : -1LL;
-    if (Device->PlatformHardwarePointer)
+    Caps->HighestAcceptableAddress.QuadPart = MAXULONG;
+    if (Adapter->HardwarePointer)
     {
-        Caps->MaxPointerWidth = SOFTGPU_POINTER_MAX_WIDTH;
-        Caps->MaxPointerHeight = SOFTGPU_POINTER_MAX_HEIGHT;
+        Caps->MaxPointerWidth = HDGFX_CURSOR_SIZE;
+        Caps->MaxPointerHeight = HDGFX_CURSOR_SIZE;
         Caps->PointerCaps.Color = 1;
     }
     Caps->MaxAllocationListSlotId = 255;
@@ -116,9 +113,9 @@ HdgfxDdiQueryAdapterInfo(
     _In_ PVOID MiniportDeviceContext,
     _In_ CONST DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
 
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC || QueryAdapterInfo == NULL)
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC || QueryAdapterInfo == NULL)
         return STATUS_INVALID_PARAMETER;
 
     switch (QueryAdapterInfo->Type)
@@ -129,10 +126,10 @@ HdgfxDdiQueryAdapterInfo(
             return STATUS_SUCCESS;
 
         case DXGKQAITYPE_DRIVERCAPS:
-            return HdgfxQueryDriverCaps(Device, QueryAdapterInfo);
+            return HdgfxQueryDriverCaps(Adapter, QueryAdapterInfo);
 
         case DXGKQAITYPE_QUERYSEGMENT4:
-            return HdgfxQuerySegments(Device, QueryAdapterInfo);
+            return HdgfxQuerySegments(Adapter, QueryAdapterInfo);
 
         default:
             return STATUS_NOT_SUPPORTED;
@@ -141,32 +138,220 @@ HdgfxDdiQueryAdapterInfo(
 
 NTSTATUS
 APIENTRY
-HdgfxDdiQueryInterface(
-    _In_ PVOID MiniportDeviceContext,
-    _In_ PQUERY_INTERFACE QueryInterface)
-{
-    PAGED_CODE();
-
-    if (QueryInterface != NULL && QueryInterface->InterfaceType != NULL &&
-        IsEqualGUID(QueryInterface->InterfaceType, &HdgfxGuidShadowPresent))
-    {
-        return STATUS_NOT_SUPPORTED;
-    }
-    return SoftGpuDdiQueryInterface(MiniportDeviceContext, QueryInterface);
-}
-
-NTSTATUS
-APIENTRY
 HdgfxDdiCreateDevice(
     _In_ PVOID MiniportDeviceContext,
     _Inout_ DXGKARG_CREATEDEVICE *CreateDevice)
 {
-    NTSTATUS Status;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
+    PHDGFX_PROCESS Process;
+    PHDGFX_DEVICE Device;
 
-    Status = SoftGpuDdiCreateDevice(MiniportDeviceContext, CreateDevice);
-    if (NT_SUCCESS(Status))
-        CreateDevice->pInfo = &HdgfxDeviceInfo;
-    return Status;
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC || CreateDevice == NULL)
+        return STATUS_INVALID_PARAMETER;
+    Process = CreateDevice->hKmdProcess;
+    if ((!CreateDevice->Flags.SystemDevice && Process == NULL) ||
+        (Process != NULL && (Process->Magic != HDGFX_PROCESS_MAGIC || Process->Adapter != Adapter)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Device = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Device), HDGFX_TAG);
+    if (Device == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Device->Magic = HDGFX_DEVICE_MAGIC;
+    Device->Adapter = Adapter;
+    Device->Process = Process;
+    CreateDevice->hDevice = Device;
+    CreateDevice->pInfo = &HdgfxDeviceInfo;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiDestroyDevice(
+    _In_ PVOID hDevice)
+{
+    PHDGFX_DEVICE Device = hDevice;
+
+    if (Device == NULL)
+        return STATUS_SUCCESS;
+    if (Device->Magic != HDGFX_DEVICE_MAGIC)
+        return STATUS_INVALID_PARAMETER;
+    Device->Magic = HDGFX_DEAD_DEVICE_MAGIC;
+    ExFreePoolWithTag(Device, HDGFX_TAG);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiCreateProcess(
+    _In_ CONST HANDLE hAdapter,
+    _Inout_ DXGKARG_CREATEPROCESS *CreateProcess)
+{
+    PHDGFX_ADAPTER Adapter = hAdapter;
+    PHDGFX_PROCESS Process;
+
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC || CreateProcess == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    Process = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Process), HDGFX_TAG);
+    if (Process == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Process->Magic = HDGFX_PROCESS_MAGIC;
+    Process->hDxgkProcess = CreateProcess->hDxgkProcess;
+    Process->Adapter = Adapter;
+    CreateProcess->hKmdProcess = Process;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiDestroyProcess(
+    _In_ CONST HANDLE hAdapter,
+    _In_ CONST HANDLE hKmdProcess)
+{
+    PHDGFX_ADAPTER Adapter = hAdapter;
+    PHDGFX_PROCESS Process = hKmdProcess;
+
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC)
+        return STATUS_INVALID_PARAMETER;
+    if (Process == NULL)
+        return STATUS_SUCCESS;
+    if (Process->Magic != HDGFX_PROCESS_MAGIC || Process->Adapter != Adapter)
+        return STATUS_INVALID_PARAMETER;
+    Process->Magic = HDGFX_DEAD_PROCESS_MAGIC;
+    Process->Adapter = NULL;
+    ExFreePoolWithTag(Process, HDGFX_TAG);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiGetNodeMetadata(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ UINT NodeOrdinalAndAdapterIndex,
+    _Out_ DXGKARG_GETNODEMETADATA *GetNodeMetadata)
+{
+    static const WCHAR FriendlyName[] = L"3D";
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
+
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC || GetNodeMetadata == NULL ||
+        NodeOrdinalAndAdapterIndex != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    RtlZeroMemory(GetNodeMetadata, sizeof(*GetNodeMetadata));
+    GetNodeMetadata->EngineType = DXGK_ENGINE_TYPE_3D;
+    RtlCopyMemory(GetNodeMetadata->FriendlyName, FriendlyName, sizeof(FriendlyName));
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+HdgfxControlInterrupt(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ DXGK_INTERRUPT_TYPE InterruptType,
+    _In_ DXGK_INTERRUPT_STATE InterruptState,
+    _In_ DXGK_CRTC_VSYNC_STATE VsyncState)
+{
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
+
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC)
+        return STATUS_INVALID_PARAMETER;
+    if (InterruptType == DXGK_INTERRUPT_CRTC_VSYNC)
+        return HdgfxSetVsync(Adapter, VsyncState);
+    if (InterruptState != DXGK_INTERRUPT_ENABLE && InterruptState != DXGK_INTERRUPT_DISABLE)
+        return STATUS_INVALID_PARAMETER;
+    if (InterruptType != DXGK_INTERRUPT_TYPE_DMA_COMPLETED && InterruptType != DXGK_INTERRUPT_TYPE_DMA_PREEMPTED)
+        return STATUS_NOT_IMPLEMENTED;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiControlInterrupt(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ CONST DXGK_INTERRUPT_TYPE InterruptType,
+    _In_ BOOLEAN EnableInterrupt)
+{
+    return HdgfxControlInterrupt(MiniportDeviceContext, InterruptType,
+                                 EnableInterrupt ? DXGK_INTERRUPT_ENABLE : DXGK_INTERRUPT_DISABLE,
+                                 EnableInterrupt ? DXGK_VSYNC_ENABLE : DXGK_VSYNC_DISABLE_NO_PHASE);
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiControlInterrupt2(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ CONST DXGKARG_CONTROLINTERRUPT2 InterruptControl)
+{
+    return HdgfxControlInterrupt(MiniportDeviceContext, InterruptControl.InterruptType,
+                                 InterruptControl.InterruptState, InterruptControl.CrtcVsyncState);
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiControlInterrupt3(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ CONST DXGKARG_CONTROLINTERRUPT3 *InterruptControl)
+{
+    if (InterruptControl == NULL)
+        return STATUS_INVALID_PARAMETER;
+    if (InterruptControl->InterruptType == DXGK_INTERRUPT_CRTC_VSYNC && InterruptControl->VidPnSourceId != 0)
+        return STATUS_INVALID_PARAMETER;
+    return HdgfxControlInterrupt(MiniportDeviceContext, InterruptControl->InterruptType,
+                                 InterruptControl->InterruptState, InterruptControl->CrtcVsyncState);
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiCollectDiagnosticInfo(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    INOUT_PDXGKARG_COLLECTDIAGNOSTICINFO CollectDiagnosticInfo)
+{
+    PHDGFX_ADAPTER Adapter;
+    PCSTR Bucket;
+
+    if (PhysicalDeviceObject == NULL || CollectDiagnosticInfo == NULL)
+        return STATUS_INVALID_PARAMETER;
+    Adapter = CollectDiagnosticInfo->hAdapter;
+    if (Adapter != NULL &&
+        (Adapter->Magic != HDGFX_ADAPTER_MAGIC || Adapter->PhysicalDeviceObject != PhysicalDeviceObject))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    switch (CollectDiagnosticInfo->Type)
+    {
+        case DXGK_DI_ADDDEVICE:
+            Bucket = "hdgfx_adddevice";
+            break;
+        case DXGK_DI_STARTDEVICE:
+            Bucket = "hdgfx_startdevice";
+            break;
+        case DXGK_DI_BLACKSCREEN:
+            Bucket = "hdgfx_blackscreen";
+            break;
+        default:
+            return STATUS_NOT_SUPPORTED;
+    }
+
+    RtlZeroMemory(CollectDiagnosticInfo->BucketingString, sizeof(CollectDiagnosticInfo->BucketingString));
+    RtlZeroMemory(CollectDiagnosticInfo->DescriptionString, sizeof(CollectDiagnosticInfo->DescriptionString));
+    RtlCopyMemory(CollectDiagnosticInfo->BucketingString, Bucket,
+                  min(strlen(Bucket), sizeof(CollectDiagnosticInfo->BucketingString) - 1));
+    RtlCopyMemory(CollectDiagnosticInfo->DescriptionString, Bucket,
+                  min(strlen(Bucket), sizeof(CollectDiagnosticInfo->DescriptionString) - 1));
+    CollectDiagnosticInfo->BufferSizeOut = 0;
+    return STATUS_SUCCESS;
+}
+
+VOID
+APIENTRY
+HdgfxDdiResetDevice(
+    _In_ PVOID MiniportDeviceContext)
+{
+    UNREFERENCED_PARAMETER(MiniportDeviceContext);
 }
 
 NTSTATUS
@@ -179,25 +364,25 @@ HdgfxDriverEntry(
     NTSTATUS Status;
 
     RtlZeroMemory(&InitData, sizeof(InitData));
-    InitData.Version = REACTOS_WDDM_TARGET_INTERFACE_VERSION;
+    InitData.Version = DXGKDDI_INTERFACE_VERSION;
 
-    InitData.DxgkDdiAddDevice = SoftGpuDdiAddDevice;
+    InitData.DxgkDdiAddDevice = HdgfxDdiAddDevice;
     InitData.DxgkDdiStartDevice = HdgfxDdiStartDevice;
-    InitData.DxgkDdiStopDevice = SoftGpuDdiStopDevice;
-    InitData.DxgkDdiRemoveDevice = SoftGpuDdiRemoveDevice;
-    InitData.DxgkDdiResetDevice = SoftGpuDdiResetDevice;
+    InitData.DxgkDdiStopDevice = HdgfxDdiStopDevice;
+    InitData.DxgkDdiRemoveDevice = HdgfxDdiRemoveDevice;
+    InitData.DxgkDdiResetDevice = HdgfxDdiResetDevice;
     InitData.DxgkDdiSetPowerState = HdgfxDdiSetPowerState;
-    InitData.DxgkDdiNotifyAcpiEvent = SoftGpuDdiNotifyAcpiEvent;
+    InitData.DxgkDdiNotifyAcpiEvent = HdgfxDdiNotifyAcpiEvent;
     InitData.DxgkDdiQueryInterface = HdgfxDdiQueryInterface;
 
     InitData.DxgkDdiQueryAdapterInfo = HdgfxDdiQueryAdapterInfo;
     InitData.DxgkDdiQueryChildRelations = HdgfxDdiQueryChildRelations;
     InitData.DxgkDdiQueryChildStatus = HdgfxDdiQueryChildStatus;
     InitData.DxgkDdiQueryDeviceDescriptor = HdgfxDdiQueryDeviceDescriptor;
-    InitData.DxgkDdiGetNodeMetadata = SoftGpuDdiGetNodeMetadata;
+    InitData.DxgkDdiGetNodeMetadata = HdgfxDdiGetNodeMetadata;
 
-    InitData.DxgkDdiInterruptRoutine = SoftGpuDdiInterruptRoutine;
-    InitData.DxgkDdiDpcRoutine = SoftGpuDdiDpcRoutine;
+    InitData.DxgkDdiInterruptRoutine = HdgfxDdiInterruptRoutine;
+    InitData.DxgkDdiDpcRoutine = HdgfxDdiDpcRoutine;
 
     InitData.DxgkDdiCreateAllocation = HdgfxDdiCreateAllocation;
     InitData.DxgkDdiDestroyAllocation = HdgfxDdiDestroyAllocation;
@@ -230,27 +415,19 @@ HdgfxDriverEntry(
     InitData.DxgkDdiGetScanLine = HdgfxDdiGetScanLine;
 
     InitData.DxgkDdiCreateDevice = HdgfxDdiCreateDevice;
-    InitData.DxgkDdiDestroyDevice = SoftGpuDdiDestroyDevice;
-    InitData.DxgkDdiCreateContext = SoftGpuDdiCreateContext;
-    InitData.DxgkDdiDestroyContext = SoftGpuDdiDestroyContext;
+    InitData.DxgkDdiDestroyDevice = HdgfxDdiDestroyDevice;
+    InitData.DxgkDdiCreateContext = HdgfxDdiCreateContext;
+    InitData.DxgkDdiDestroyContext = HdgfxDdiDestroyContext;
 
-    InitData.DxgkDdiControlInterrupt = SoftGpuDdiControlInterrupt;
-    InitData.DxgkDdiControlInterrupt2 = SoftGpuDdiControlInterrupt2;
-    InitData.DxgkDdiCollectDiagnosticInfo = SoftGpuDdiCollectDiagnosticInfo;
-    InitData.DxgkDdiControlInterrupt3 = SoftGpuDdiControlInterrupt3;
+    InitData.DxgkDdiControlInterrupt = HdgfxDdiControlInterrupt;
+    InitData.DxgkDdiControlInterrupt2 = HdgfxDdiControlInterrupt2;
+    InitData.DxgkDdiCollectDiagnosticInfo = HdgfxDdiCollectDiagnosticInfo;
+    InitData.DxgkDdiControlInterrupt3 = HdgfxDdiControlInterrupt3;
 
-    InitData.DxgkDdiCreateProcess = SoftGpuDdiCreateProcess;
-    InitData.DxgkDdiDestroyProcess = SoftGpuDdiDestroyProcess;
-    InitData.DxgkDdiGetRootPageTableSize = SoftGpuDdiGetRootPageTableSize;
-    InitData.DxgkDdiSetRootPageTable = SoftGpuDdiSetRootPageTable;
-    InitData.DxgkDdiMapCpuHostAperture = SoftGpuDdiMapCpuHostAperture;
-    InitData.DxgkDdiUnmapCpuHostAperture = SoftGpuDdiUnmapCpuHostAperture;
-    InitData.DxgkDdiSubmitCommandVirtual = SoftGpuDdiSubmitCommandVirtual;
+    InitData.DxgkDdiCreateProcess = HdgfxDdiCreateProcess;
+    InitData.DxgkDdiDestroyProcess = HdgfxDdiDestroyProcess;
     InitData.DxgkDdiValidateUpdateAllocationProperty = HdgfxDdiValidateUpdateAllocationProperty;
     InitData.DxgkDdiSetTimingsFromVidPn = HdgfxDdiSetTimingsFromVidPn;
-    InitData.DxgkDdiEscape = SoftGpuDdiEscape;
-    InitData.DxgkDdiCreateCpuEvent = SoftGpuDdiCreateCpuEvent;
-    InitData.DxgkDdiDestroyCpuEvent = SoftGpuDdiDestroyCpuEvent;
 
     Status = DxgkInitialize(DriverObject, RegistryPath, &InitData);
     if (!NT_SUCCESS(Status))
