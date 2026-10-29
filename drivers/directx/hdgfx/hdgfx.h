@@ -7,11 +7,25 @@
 
 #pragma once
 
-#include "softgpu.h"
+#include <ntddk.h>
+#include <windef.h>
+#include <dispmprt.h>
+#include <reactos/drivers/directx/softgpu_2d_shared.h>
+
+#define NDEBUG
+#include <debug.h>
+
 #include "core/hdgfx_core.h"
 #include "core/hdgfx_regs.h"
 
 #define HDGFX_TAG                   'xfDH'
+#define HDGFX_ADAPTER_MAGIC         0x41584648UL
+#define HDGFX_DEVICE_MAGIC          0x44584648UL
+#define HDGFX_PROCESS_MAGIC         0x50584648UL
+#define HDGFX_CONTEXT_MAGIC         0x43584648UL
+#define HDGFX_ALLOCATION_MAGIC      0x4C584648UL
+#define HDGFX_OPEN_MAGIC            0x4F584648UL
+#define HDGFX_SLAB_SEGMENT_ID       1UL
 #define HDGFX_RING_SIZE             0x10000UL
 #define HDGFX_RING_PAGES            (HDGFX_RING_SIZE / PAGE_SIZE)
 #define HDGFX_DMA_SEGMENT_ID        2UL
@@ -111,7 +125,23 @@ typedef struct _HDGFX_SUBMIT
 
 typedef struct _HDGFX_ADAPTER
 {
-    PSOFTGPU_DEVICE Device;
+    ULONG Magic;
+    PDEVICE_OBJECT PhysicalDeviceObject;
+    DXGK_INTERFACE DxgkInterface;
+    volatile LONG Stopped;
+    BOOLEAN Started;
+    PUCHAR Slab;
+    PHYSICAL_ADDRESS SlabPhysical;
+    SIZE_T SlabSize;
+    PHDGFX_SCANOUT Scanout;
+    BOOLEAN HardwarePointer;
+    ULONG ChildAcpiUid;
+    D3DKMDT_VIDEO_OUTPUT_TECHNOLOGY ChildOutputTechnology;
+    PEX_TIMER VsyncTimer;
+    volatile LONG VsyncEnabled;
+    volatile LONG VsyncPhaseEnabled;
+    ULONG VsyncTargetId;
+    volatile LONG64 PrimaryAddress;
     PUCHAR Registers;
     const HDGFX_GENERATION *Generation;
     HDGFX_VBT Vbt;
@@ -168,6 +198,58 @@ typedef struct _HDGFX_ADAPTER
     ULONG SoftwareFence;
     volatile LONG FenceNotified;
 } HDGFX_ADAPTER, *PHDGFX_ADAPTER;
+
+typedef struct _HDGFX_PROCESS
+{
+    ULONG Magic;
+    HANDLE hDxgkProcess;
+    PHDGFX_ADAPTER Adapter;
+} HDGFX_PROCESS, *PHDGFX_PROCESS;
+
+typedef struct _HDGFX_DEVICE
+{
+    ULONG Magic;
+    PHDGFX_ADAPTER Adapter;
+    PHDGFX_PROCESS Process;
+} HDGFX_DEVICE, *PHDGFX_DEVICE;
+
+typedef struct _HDGFX_CONTEXT
+{
+    ULONG Magic;
+    ULONG NodeOrdinal;
+    PHDGFX_DEVICE Device;
+    PHDGFX_PROCESS Process;
+} HDGFX_CONTEXT, *PHDGFX_CONTEXT;
+
+typedef struct _HDGFX_ALLOCATION
+{
+    ULONG Magic;
+    SIZE_T Size;
+    ULONG Width;
+    ULONG Height;
+    ULONG Pitch;
+    ULONG StorageHeight;
+    D3DDDIFORMAT Format;
+    ULONG PlaneCount;
+    ULONG PlaneOffsets[SOFTGPU_ALLOCATION_MAX_PLANES];
+    ULONG PlanePitches[SOFTGPU_ALLOCATION_MAX_PLANES];
+} HDGFX_ALLOCATION, *PHDGFX_ALLOCATION;
+
+typedef struct _HDGFX_OPEN
+{
+    ULONG Magic;
+    PHDGFX_DEVICE Device;
+    D3DKMT_HANDLE hAllocation;
+    SIZE_T Size;
+    ULONG Width;
+    ULONG Height;
+    ULONG Pitch;
+    ULONG StorageHeight;
+    D3DDDIFORMAT Format;
+    ULONG PlaneCount;
+    ULONG PlaneOffsets[SOFTGPU_ALLOCATION_MAX_PLANES];
+    ULONG PlanePitches[SOFTGPU_ALLOCATION_MAX_PLANES];
+} HDGFX_OPEN, *PHDGFX_OPEN;
 
 BOOLEAN
 HdgfxRingFence(
@@ -238,6 +320,29 @@ HdgfxScanLine(
     _In_ PHDGFX_SCANOUT Scanout,
     _In_ ULONG Pipe);
 
+NTSTATUS
+HdgfxSetVsync(
+    _Inout_ PHDGFX_ADAPTER Adapter,
+    _In_ DXGK_CRTC_VSYNC_STATE VsyncState);
+
+DXGKDDI_ADD_DEVICE HdgfxDdiAddDevice;
+DXGKDDI_START_DEVICE HdgfxDdiStartDevice;
+DXGKDDI_STOP_DEVICE HdgfxDdiStopDevice;
+DXGKDDI_REMOVE_DEVICE HdgfxDdiRemoveDevice;
+DXGKDDI_NOTIFY_ACPI_EVENT HdgfxDdiNotifyAcpiEvent;
+DXGKDDI_INTERRUPT_ROUTINE HdgfxDdiInterruptRoutine;
+DXGKDDI_DPC_ROUTINE HdgfxDdiDpcRoutine;
+DXGKDDI_CREATECONTEXT HdgfxDdiCreateContext;
+DXGKDDI_DESTROYCONTEXT HdgfxDdiDestroyContext;
+DXGKDDI_RESET_DEVICE HdgfxDdiResetDevice;
+DXGKDDI_COLLECTDIAGNOSTICINFO HdgfxDdiCollectDiagnosticInfo;
+DXGKDDI_GETNODEMETADATA HdgfxDdiGetNodeMetadata;
+DXGKDDI_CONTROLINTERRUPT HdgfxDdiControlInterrupt;
+DXGKDDI_CONTROLINTERRUPT2 HdgfxDdiControlInterrupt2;
+DXGKDDI_CONTROLINTERRUPT3 HdgfxDdiControlInterrupt3;
+DXGKDDI_CREATEPROCESS HdgfxDdiCreateProcess;
+DXGKDDI_DESTROYPROCESS HdgfxDdiDestroyProcess;
+DXGKDDI_DESTROYDEVICE HdgfxDdiDestroyDevice;
 DXGKDDI_QUERYADAPTERINFO HdgfxDdiQueryAdapterInfo;
 DXGKDDI_QUERY_INTERFACE HdgfxDdiQueryInterface;
 DXGKDDI_CREATEDEVICE HdgfxDdiCreateDevice;
@@ -255,7 +360,6 @@ DXGKDDI_SUBMITCOMMAND HdgfxDdiSubmitCommand;
 DXGKDDI_QUERYCURRENTFENCE HdgfxDdiQueryCurrentFence;
 DXGKDDI_RESETFROMTIMEOUT HdgfxDdiResetFromTimeout;
 DXGKDDI_RESTARTFROMTIMEOUT HdgfxDdiRestartFromTimeout;
-DXGKDDI_START_DEVICE HdgfxDdiStartDevice;
 DXGKDDI_SET_POWER_STATE HdgfxDdiSetPowerState;
 DXGKDDI_QUERY_CHILD_RELATIONS HdgfxDdiQueryChildRelations;
 DXGKDDI_QUERY_CHILD_STATUS HdgfxDdiQueryChildStatus;
