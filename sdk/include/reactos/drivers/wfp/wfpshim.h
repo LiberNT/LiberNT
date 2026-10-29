@@ -60,6 +60,7 @@ typedef struct _WFP_SHIM_ENDPOINT
 {
     ULONG64 EndpointId;
     BOOLEAN WildcardAddress;
+    BOOLEAN WildcardPort;
     BOOLEAN Raw;
     UCHAR Protocol;
     ULONG LocalAddress;
