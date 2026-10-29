@@ -7,6 +7,7 @@
 
 #include <apitest.h>
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <rpc.h>
 #include <initguid.h>
 #include <fwpmu.h>
@@ -642,6 +643,115 @@ TestImplicitBind(VOID)
     FwpmFreeMemory0((void **)&OwnId);
 }
 
+static
+SOCKET
+DualStack(
+    _In_ int Type,
+    _In_ USHORT Port,
+    _Out_ int *BindResult)
+{
+    SOCKET Socket = socket(AF_INET6, Type, Type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP);
+    struct sockaddr_in6 Local;
+    DWORD Off = 0;
+
+    ok(setsockopt(Socket, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&Off, sizeof(Off)) == 0,
+       "IPV6_V6ONLY failed: %d\n", WSAGetLastError());
+    ZeroMemory(&Local, sizeof(Local));
+    Local.sin6_family = AF_INET6;
+    Local.sin6_port = htons(Port);
+    *BindResult = bind(Socket, (struct sockaddr *)&Local, sizeof(Local));
+    return Socket;
+}
+
+static
+struct sockaddr_in6
+MappedLoopback(
+    _In_ USHORT Port)
+{
+    struct sockaddr_in6 Address;
+
+    ZeroMemory(&Address, sizeof(Address));
+    Address.sin6_family = AF_INET6;
+    Address.sin6_port = htons(Port);
+    Address.sin6_addr.s6_addr[10] = 0xff;
+    Address.sin6_addr.s6_addr[11] = 0xff;
+    Address.sin6_addr.s6_addr[12] = 127;
+    Address.sin6_addr.s6_addr[15] = 1;
+    return Address;
+}
+
+static
+VOID
+TestDualStack(VOID)
+{
+    FWPM_FILTER_CONDITION0 Condition;
+    struct sockaddr_in6 Mapped;
+    struct sockaddr_in Remote;
+    SOCKET Listener, Socket, Receiver;
+    u_long NonBlocking = 1;
+    char Buffer[8];
+    UINT64 Id;
+    int Result;
+
+    Listener = Listen(47271);
+    Cond16(&Condition, &FWPM_CONDITION_IP_REMOTE_PORT, 47271);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_CONNECT_V4, &Condition, 1);
+    Socket = DualStack(SOCK_STREAM, 0, &Result);
+    ok(Result == 0, "bind failed: %d\n", WSAGetLastError());
+    Mapped = MappedLoopback(47271);
+    ok(connect(Socket, (struct sockaddr *)&Mapped, sizeof(Mapped)) == SOCKET_ERROR && WSAGetLastError() == WSAEACCES,
+       "Dual-stack connect error %d\n", WSAGetLastError());
+    closesocket(Socket);
+    DeleteFilter(Id);
+    closesocket(Listener);
+
+    Receiver = DualStack(SOCK_DGRAM, 47273, &Result);
+    ok(Result == 0, "bind failed: %d\n", WSAGetLastError());
+    Cond16(&Condition, &FWPM_CONDITION_IP_LOCAL_PORT, 47273);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4, &Condition, 1);
+    Socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    Remote = Loopback(47273);
+    ok(sendto(Socket, "dual", 4, 0, (struct sockaddr *)&Remote, sizeof(Remote)) == 4, "sendto failed: %d\n", WSAGetLastError());
+    ok(!Ready(Receiver, FALSE, 1000), "Blocked datagram reached the dual-stack socket\n");
+    DeleteFilter(Id);
+    ok(sendto(Socket, "dual", 4, 0, (struct sockaddr *)&Remote, sizeof(Remote)) == 4, "sendto failed: %d\n", WSAGetLastError());
+    ok(Ready(Receiver, FALSE, 2000) && recv(Receiver, Buffer, sizeof(Buffer), 0) == 4,
+       "No datagram after the filter was deleted\n");
+    closesocket(Socket);
+    closesocket(Receiver);
+
+    Cond16(&Condition, &FWPM_CONDITION_IP_LOCAL_PORT, 47274);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_LISTEN_V4, &Condition, 1);
+    Socket = DualStack(SOCK_STREAM, 47274, &Result);
+    ok(Result == 0, "bind failed: %d\n", WSAGetLastError());
+    ok(listen(Socket, 4) == 0, "Dual-stack listen failed: %d\n", WSAGetLastError());
+    closesocket(Socket);
+    DeleteFilter(Id);
+
+    Cond16(&Condition, &FWPM_CONDITION_IP_LOCAL_PORT, 47275);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_RESOURCE_ASSIGNMENT_V4, &Condition, 1);
+    Socket = DualStack(SOCK_STREAM, 47275, &Result);
+    ok(Result == SOCKET_ERROR && WSAGetLastError() == WSAEACCES, "Dual-stack TCP bind error %d\n", WSAGetLastError());
+    closesocket(Socket);
+    Socket = DualStack(SOCK_DGRAM, 47275, &Result);
+    ok(Result == SOCKET_ERROR && WSAGetLastError() == WSAEACCES, "Dual-stack UDP bind error %d\n", WSAGetLastError());
+    closesocket(Socket);
+    DeleteFilter(Id);
+
+    Listener = DualStack(SOCK_STREAM, 47276, &Result);
+    ok(Result == 0, "bind failed: %d\n", WSAGetLastError());
+    ok(listen(Listener, 4) == 0, "listen failed: %d\n", WSAGetLastError());
+    Cond16(&Condition, &FWPM_CONDITION_IP_LOCAL_PORT, 47276);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4, &Condition, 1);
+    Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ioctlsocket(Socket, FIONBIO, &NonBlocking);
+    Connect(Socket, 47276);
+    ok(!Ready(Socket, TRUE, 1500), "IPv4 connection to a dual-stack listener completed\n");
+    closesocket(Socket);
+    DeleteFilter(Id);
+    closesocket(Listener);
+}
+
 START_TEST(ale)
 {
     FWPM_SESSION0 Session;
@@ -674,6 +784,7 @@ START_TEST(ale)
     TestConditions();
     TestBindFields();
     TestImplicitBind();
+    TestDualStack();
 
     FwpmEngineClose0(Engine);
     WSACleanup();
