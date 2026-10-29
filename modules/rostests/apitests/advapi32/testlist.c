@@ -11,8 +11,12 @@ extern void func_eventlog_supp(void);
 extern void func_Hash(void);
 extern void func_HKEY_CLASSES_ROOT(void);
 extern void func_InitiateShutdown(void);
+extern void func_ImpersonateRestricted(void);
+extern void func_IntegrityLabels(void);
+extern void func_LogonSession(void);
 extern void func_IsTextUnicode(void);
 extern void func_LockServiceDatabase(void);
+extern void func_TokenDefaultDacl(void);
 extern void func_LookupAccountName(void);
 extern void func_LookupAccountSid(void);
 extern void func_QueryServiceConfig2(void);
@@ -43,7 +47,11 @@ const struct test winetest_testlist[] =
     { "Hash", func_Hash },
     { "HKEY_CLASSES_ROOT", func_HKEY_CLASSES_ROOT },
     { "InitiateShutdown", func_InitiateShutdown },
+    { "ImpersonateRestricted", func_ImpersonateRestricted },
+    { "IntegrityLabels", func_IntegrityLabels },
+    { "LogonSession", func_LogonSession },
     { "IsTextUnicode" , func_IsTextUnicode },
+    { "TokenDefaultDacl", func_TokenDefaultDacl },
     { "LockServiceDatabase" , func_LockServiceDatabase },
     { "LookupAccountName", func_LookupAccountName },
     { "LookupAccountSid", func_LookupAccountSid },
