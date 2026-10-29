@@ -41,6 +41,9 @@
 #define HDGFX_RING_TEST_TIMEOUT_US  100000UL
 #define HDGFX_RING_RESERVE          128UL
 #define HDGFX_BLT_OVERLAP_PITCH     64UL
+#define HDGFX_BLT_MAX_COORDINATE    0x7FFFUL
+#define HDGFX_PRESENT_BATCH         16UL
+#define HDGFX_PRESENT_TIMEOUT_US    100000UL
 
 typedef struct _HDGFX_SCANOUT
 {
@@ -51,6 +54,7 @@ typedef struct _HDGFX_SCANOUT
     ULONG PanelModeCount;
     BOOLEAN Ssc;
     ULONG Surface;
+    ULONG FirmwareSurface;
     ULONG Width;
     ULONG Height;
     ULONG Pitch;
@@ -105,12 +109,15 @@ typedef struct _HDGFX_ADAPTER
     PVOID ScratchPage;
     PULONG GttWindow;
     ULONG SavedGtt[HDGFX_RENDER_GTT_PAGES];
+    KSPIN_LOCK RingLock;
     HDGFX_RING Ring;
     ULONG ScratchAddress;
     ULONG Seqno;
     BOOLEAN RingStarted;
     BOOLEAN RingInterrupt;
     BOOLEAN RingUnfenced;
+    BOOLEAN RingResetting;
+    volatile LONG RingResets;
     volatile LONG RingPending;
     ULONG GtInterruptMask;
     ULONG SavedGtimr;
@@ -1054,6 +1061,7 @@ SoftGpuPlatformExecute2d(
     uint32_t Dwords[8];
     HDGFX_MMIO Mmio;
     NTSTATUS Status = STATUS_NOT_SUPPORTED;
+    KIRQL OldIrql;
     ULONG Count;
     ULONG Head;
 
@@ -1063,6 +1071,7 @@ SoftGpuPlatformExecute2d(
             HdgfxTranslate2d(Scanout, Command, Dwords) : 0;
     if (Count != 0)
     {
+        KeAcquireSpinLock(&Adapter->RingLock, &OldIrql);
         HdgfxMmioInit(Adapter->Registers, &Mmio);
         Head = HdgfxIlkRingHead(&Mmio);
         if (HdgfxRingFree(&Adapter->Ring, Head) < HDGFX_RING_RESERVE)
@@ -1077,6 +1086,7 @@ SoftGpuPlatformExecute2d(
             HdgfxIlkAdvanceRing(&Mmio, &Adapter->Ring);
             Status = STATUS_SUCCESS;
         }
+        KeReleaseSpinLock(&Adapter->RingLock, OldIrql);
     }
     ExReleaseRundownProtection(&Adapter->Rundown);
     return Status;
@@ -1090,9 +1100,11 @@ SoftGpuPlatformEngineIdle(
     volatile ULONG *Status;
     HDGFX_MMIO Mmio;
     BOOLEAN Idle;
+    KIRQL OldIrql;
 
     if (Adapter == NULL || !ExAcquireRundownProtection(&Adapter->Rundown))
         return TRUE;
+    KeAcquireSpinLock(&Adapter->RingLock, &OldIrql);
     if (Adapter->RingUnfenced)
     {
         HdgfxMmioInit(Adapter->Registers, &Mmio);
@@ -1100,6 +1112,7 @@ SoftGpuPlatformEngineIdle(
     }
     Status = (volatile ULONG *)Adapter->StatusPage;
     Idle = !Adapter->RingUnfenced && (!Adapter->RingStarted || Status[HDGFX_RING_SEQNO_INDEX] == Adapter->Seqno);
+    KeReleaseSpinLock(&Adapter->RingLock, OldIrql);
     ExReleaseRundownProtection(&Adapter->Rundown);
     return Idle;
 }
@@ -1111,11 +1124,16 @@ SoftGpuPlatformResetEngine(
     PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
     HDGFX_MMIO Mmio;
     NTSTATUS Status = STATUS_SUCCESS;
+    KIRQL OldIrql;
 
     PAGED_CODE();
 
     if (Adapter == NULL || !ExAcquireRundownProtection(&Adapter->Rundown))
         return STATUS_SUCCESS;
+    KeAcquireSpinLock(&Adapter->RingLock, &OldIrql);
+    Adapter->RingResetting = TRUE;
+    Adapter->RingResets++;
+    KeReleaseSpinLock(&Adapter->RingLock, OldIrql);
     if (Adapter->RingStarted)
     {
         HdgfxMmioInit(Adapter->Registers, &Mmio);
@@ -1139,6 +1157,7 @@ SoftGpuPlatformRestartEngine(
 {
     PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
     HDGFX_MMIO Mmio;
+    KIRQL OldIrql;
 
     PAGED_CODE();
 
@@ -1159,6 +1178,9 @@ SoftGpuPlatformRestartEngine(
         }
         DPRINT1("Render ring %s after reset\n", Adapter->RingStarted ? "restarted" : "did not restart");
     }
+    KeAcquireSpinLock(&Adapter->RingLock, &OldIrql);
+    Adapter->RingResetting = FALSE;
+    KeReleaseSpinLock(&Adapter->RingLock, OldIrql);
     ExReleaseRundownProtection(&Adapter->Rundown);
     return STATUS_SUCCESS;
 }
@@ -1182,6 +1204,7 @@ SoftGpuPlatformAdapterStarted(
         if (Adapter == NULL)
             return;
         ExInitializeRundownProtection(&Adapter->Rundown);
+        KeInitializeSpinLock(&Adapter->RingLock);
         ExInitializeWorkItem(&Adapter->HotplugWork, HdgfxHotplugWorker, Adapter);
         Adapter->Device = Device;
         Device->PlatformServicesContext = Adapter;
@@ -2198,6 +2221,7 @@ HdgfxScanoutStart(
     Config->Format = D3DDDIFMT_X8R8G8B8;
     Config->ScanoutPhysicalAddress = Address;
     Config->ScanoutPitch = Config->Modes[0].Pitch;
+    Scanout->FirmwareSurface = Scanout->Surface;
     Config->CurrentMode = 0;
     Config->SetMode = HdgfxSetMode;
     return STATUS_SUCCESS;
@@ -2496,14 +2520,222 @@ SoftGpuPlatformSetPrimary(
     return STATUS_SUCCESS;
 }
 
+static ULONGLONG
+HdgfxElapsedUs(
+    _In_ LARGE_INTEGER Start,
+    _In_ LARGE_INTEGER Frequency)
+{
+    LARGE_INTEGER Now = KeQueryPerformanceCounter(NULL);
+
+    return (ULONGLONG)(Now.QuadPart - Start.QuadPart) * 1000000ULL / (ULONGLONG)Frequency.QuadPart;
+}
+
+static BOOLEAN
+HdgfxPresentSubmit(
+    _Inout_ PHDGFX_ADAPTER Adapter,
+    _In_reads_(Count) const uint32_t *Dwords,
+    _In_ ULONG Count,
+    _In_ LONG Resets,
+    _Out_opt_ PULONG Seqno)
+{
+    LARGE_INTEGER Frequency;
+    LARGE_INTEGER Start;
+    HDGFX_MMIO Mmio;
+    KIRQL OldIrql;
+    ULONG Head;
+    BOOLEAN Done = FALSE;
+
+    Start = KeQueryPerformanceCounter(&Frequency);
+    HdgfxMmioInit(Adapter->Registers, &Mmio);
+    for (;;)
+    {
+        KeAcquireSpinLock(&Adapter->RingLock, &OldIrql);
+        if (!Adapter->RingStarted || Adapter->RingResetting || Adapter->RingResets != Resets)
+        {
+            KeReleaseSpinLock(&Adapter->RingLock, OldIrql);
+            return FALSE;
+        }
+        Head = HdgfxIlkRingHead(&Mmio);
+        if (HdgfxRingFree(&Adapter->Ring, Head) >= HDGFX_RING_RESERVE + Count * sizeof(uint32_t))
+        {
+            Done = Count == 0 || HdgfxRingEmit(&Adapter->Ring, Head, Dwords, Count);
+            if (Done && Seqno != NULL)
+            {
+                Done = HdgfxRingFence(Adapter, &Mmio, Head);
+                *Seqno = Adapter->Seqno;
+            }
+            else if (Done)
+            {
+                Adapter->RingUnfenced = TRUE;
+                HdgfxIlkAdvanceRing(&Mmio, &Adapter->Ring);
+            }
+            KeReleaseSpinLock(&Adapter->RingLock, OldIrql);
+            return Done;
+        }
+        if (Adapter->RingUnfenced)
+            HdgfxRingFence(Adapter, &Mmio, Head);
+        KeReleaseSpinLock(&Adapter->RingLock, OldIrql);
+        if (HdgfxElapsedUs(Start, Frequency) >= HDGFX_PRESENT_TIMEOUT_US)
+            return FALSE;
+        KeStallExecutionProcessor(10);
+    }
+}
+
+static BOOLEAN
+HdgfxPresentWait(
+    _In_ PHDGFX_ADAPTER Adapter,
+    _In_ ULONG Seqno,
+    _In_ LONG Resets)
+{
+    volatile ULONG *Status = (volatile ULONG *)Adapter->StatusPage;
+    LARGE_INTEGER Frequency;
+    LARGE_INTEGER Start;
+
+    Start = KeQueryPerformanceCounter(&Frequency);
+    for (;;)
+    {
+        if (Adapter->RingResets != Resets)
+            return FALSE;
+        if ((LONG)(Status[HDGFX_RING_SEQNO_INDEX] - Seqno) >= 0)
+            return TRUE;
+        if (HdgfxElapsedUs(Start, Frequency) >= HDGFX_PRESENT_TIMEOUT_US)
+            return FALSE;
+        KeStallExecutionProcessor(10);
+    }
+}
+
+static BOOLEAN
+HdgfxPresentRect(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ const RECT *Input,
+    _Out_ HDGFX_BLT_RECT *Rect)
+{
+    RECT Clipped = *Input;
+
+    if (Clipped.left < 0)
+        Clipped.left = 0;
+    if (Clipped.top < 0)
+        Clipped.top = 0;
+    if (Clipped.right > (LONG)Device->Width)
+        Clipped.right = (LONG)Device->Width;
+    if (Clipped.bottom > (LONG)Device->Height)
+        Clipped.bottom = (LONG)Device->Height;
+    if (Clipped.left >= Clipped.right || Clipped.top >= Clipped.bottom)
+        return FALSE;
+    Rect->Left = (uint32_t)Clipped.left;
+    Rect->Top = (uint32_t)Clipped.top;
+    Rect->Right = (uint32_t)Clipped.right;
+    Rect->Bottom = (uint32_t)Clipped.bottom;
+    return TRUE;
+}
+
 NTSTATUS
 SoftGpuPlatformPresentDisplayOnly(
     _Inout_ PSOFTGPU_DEVICE Device,
     _In_ const DXGKARG_PRESENT_DISPLAYONLY *PresentDisplayOnly)
 {
-    UNREFERENCED_PARAMETER(Device);
-    UNREFERENCED_PARAMETER(PresentDisplayOnly);
-    return STATUS_NOT_SUPPORTED;
+    PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
+    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+    const UCHAR *Source = PresentDisplayOnly->pSource;
+    uint32_t Dwords[HDGFX_PRESENT_BATCH * 8];
+    HDGFX_BLT_SURFACE SourceSurface;
+    HDGFX_BLT_SURFACE Destination;
+    HDGFX_BLT_RECT Rect;
+    ULONGLONG SourcePhysical;
+    ULONGLONG DestinationOffset;
+    ULONGLONG DestinationSize;
+    SIZE_T SourceOffset;
+    SIZE_T SourceSize;
+    KIRQL OldIrql;
+    ULONG DestinationBase;
+    ULONG DestinationPitch;
+    ULONG Count = 0;
+    ULONG Index;
+    ULONG Seqno = 0;
+    LONG Resets;
+    BOOLEAN Submitted = TRUE;
+    NTSTATUS Status = STATUS_NOT_SUPPORTED;
+
+    PAGED_CODE();
+
+    if (Adapter == NULL || Scanout == NULL || Scanout->SlabGtt == NULL ||
+        Device->Width > HDGFX_BLT_MAX_COORDINATE || Device->Height > HDGFX_BLT_MAX_COORDINATE ||
+        (ULONG)PresentDisplayOnly->Pitch > HDGFX_BLT_MAX_COORDINATE ||
+        (ULONG)PresentDisplayOnly->Pitch % sizeof(ULONG) != 0 ||
+        !ExAcquireRundownProtection(&Adapter->Rundown))
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    Resets = Adapter->RingResets;
+    if (!Adapter->RingStarted)
+        goto Cleanup;
+
+    SourceSize = (SIZE_T)(ULONG)PresentDisplayOnly->Pitch * Device->Height;
+    SourcePhysical = (ULONGLONG)MmGetPhysicalAddress((PVOID)Source).QuadPart;
+    if (!NT_SUCCESS(SoftGpu2dResolveSlabRange(Scanout->SlabPhysical, (SIZE_T)Scanout->SlabSize, SourcePhysical,
+                                              SourceSize, &SourceOffset)) ||
+        (ULONGLONG)MmGetPhysicalAddress((PVOID)(Source + SourceSize - 1)).QuadPart != SourcePhysical + SourceSize - 1)
+    {
+        goto Cleanup;
+    }
+
+    KeAcquireSpinLock(&Device->ScanoutLock, &OldIrql);
+    if (Device->CurrentPrimaryValid)
+    {
+        DestinationBase = Scanout->SlabAddress;
+        DestinationOffset = Device->CurrentPrimaryOffset;
+        DestinationPitch = Device->CurrentPrimaryPitch;
+        DestinationSize = Scanout->SlabSize;
+    }
+    else
+    {
+        DestinationBase = Scanout->FirmwareSurface;
+        DestinationOffset = 0;
+        DestinationPitch = Device->ScanoutPitch;
+        DestinationSize = Device->Scanout != NULL ? Device->ScanoutSize : 0;
+    }
+    KeReleaseSpinLock(&Device->ScanoutLock, OldIrql);
+    if (DestinationPitch < Device->Width * sizeof(ULONG) || DestinationPitch > HDGFX_BLT_MAX_COORDINATE ||
+        DestinationPitch % sizeof(ULONG) != 0 ||
+        DestinationOffset > DestinationSize ||
+        (DestinationSize - DestinationOffset) / DestinationPitch < Device->Height)
+    {
+        goto Cleanup;
+    }
+
+    SourceSurface.Address = Scanout->SlabAddress + (ULONG)SourceOffset;
+    SourceSurface.Pitch = (uint32_t)PresentDisplayOnly->Pitch;
+    Destination.Address = DestinationBase + (ULONG)DestinationOffset;
+    Destination.Pitch = DestinationPitch;
+    for (Index = 0; Submitted && Index < PresentDisplayOnly->NumMoves + PresentDisplayOnly->NumDirtyRects; Index++)
+    {
+        const RECT *Input = Index < PresentDisplayOnly->NumMoves ?
+                            &PresentDisplayOnly->pMoves[Index].DestRect :
+                            &PresentDisplayOnly->pDirtyRect[Index - PresentDisplayOnly->NumMoves];
+
+        if (!HdgfxPresentRect(Device, Input, &Rect))
+            continue;
+        Count += HdgfxBltCopy(Dwords + Count, &Destination, &Rect, &SourceSurface, Rect.Left, Rect.Top);
+        if (Count + 8 > RTL_NUMBER_OF(Dwords))
+        {
+            Submitted = HdgfxPresentSubmit(Adapter, Dwords, Count, Resets, NULL);
+            Count = 0;
+        }
+    }
+    if (Submitted && HdgfxPresentSubmit(Adapter, Dwords, Count, Resets, &Seqno) &&
+        HdgfxPresentWait(Adapter, Seqno, Resets))
+    {
+        Status = STATUS_SUCCESS;
+    }
+    else if (Adapter->RingResets == Resets)
+    {
+        DPRINT1("Present blit did not complete: seqno %lu of %lu, copying on the CPU\n",
+                ((volatile ULONG *)Adapter->StatusPage)[HDGFX_RING_SEQNO_INDEX], Seqno);
+    }
+
+Cleanup:
+    ExReleaseRundownProtection(&Adapter->Rundown);
+    return Status;
 }
 
 NTSTATUS
