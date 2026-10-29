@@ -571,6 +571,15 @@ HdgfxMiFlush(
     uint32_t *Dwords);
 
 uint32_t
+HdgfxMiBatchStart(
+    uint32_t *Dwords,
+    uint32_t Address);
+
+uint32_t
+HdgfxMiBatchEnd(
+    uint32_t *Dwords);
+
+uint32_t
 HdgfxBltFill(
     uint32_t *Dwords,
     const HDGFX_BLT_SURFACE *Destination,

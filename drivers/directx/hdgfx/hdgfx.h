@@ -14,9 +14,13 @@
 #define HDGFX_TAG                   'xfDH'
 #define HDGFX_RING_SIZE             0x10000UL
 #define HDGFX_RING_PAGES            (HDGFX_RING_SIZE / PAGE_SIZE)
-#define HDGFX_STATUS_GTT_INDEX      HDGFX_RING_PAGES
-#define HDGFX_SCRATCH_GTT_INDEX     (HDGFX_RING_PAGES + 1)
-#define HDGFX_RENDER_GTT_PAGES      (HDGFX_RING_PAGES + 2)
+#define HDGFX_DMA_SEGMENT_ID        2UL
+#define HDGFX_DMA_SIZE              0x800000UL
+#define HDGFX_DMA_PAGES             (HDGFX_DMA_SIZE / PAGE_SIZE)
+#define HDGFX_RING_GTT_INDEX        HDGFX_DMA_PAGES
+#define HDGFX_STATUS_GTT_INDEX      (HDGFX_RING_GTT_INDEX + HDGFX_RING_PAGES)
+#define HDGFX_SCRATCH_GTT_INDEX     (HDGFX_STATUS_GTT_INDEX + 1)
+#define HDGFX_RENDER_GTT_PAGES      (HDGFX_SCRATCH_GTT_INDEX + 1)
 #define HDGFX_RING_SEQNO_INDEX      0x20UL
 #define HDGFX_RING_FENCE_INDEX      0x21UL
 #define HDGFX_RING_RESERVE          512UL
@@ -65,6 +69,7 @@ typedef struct _HDGFX_SCANOUT
 typedef struct _HDGFX_SUBMIT
 {
     PHYSICAL_ADDRESS DmaPhysical;
+    ULONG SegmentId;
     ULONG Offset;
     ULONG EndOffset;
     ULONG Fence;
@@ -97,6 +102,9 @@ typedef struct _HDGFX_ADAPTER
     PVOID RingMemory;
     PVOID StatusPage;
     PVOID ScratchPage;
+    PUCHAR DmaMemory;
+    ULONGLONG DmaPhysical;
+    ULONGLONG DmaBase;
     PULONG GttWindow;
     ULONG SavedGtt[HDGFX_RENDER_GTT_PAGES];
     KSPIN_LOCK RingLock;
@@ -162,6 +170,7 @@ VOID
 HdgfxQueueDpc(
     _Inout_ PHDGFX_ADAPTER Adapter);
 
+DXGKDDI_QUERYADAPTERINFO HdgfxDdiQueryAdapterInfo;
 DXGKDDI_RENDER HdgfxDdiRender;
 DXGKDDI_PRESENT HdgfxDdiPresent;
 DXGKDDI_BUILDPAGINGBUFFER HdgfxDdiBuildPagingBuffer;

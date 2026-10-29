@@ -194,6 +194,7 @@ HdgfxWriterClose(
 {
     if (Writer->Batch == NULL)
         return;
+    Writer->Cursor += HdgfxMiBatchEnd((uint32_t *)Writer->Cursor) * sizeof(ULONG);
     if ((Writer->Cursor - (PUCHAR)Writer->Batch) % 8 != 0)
     {
         *(PULONG)Writer->Cursor = 0;
@@ -209,7 +210,7 @@ HdgfxWriterFits(
     _In_ SIZE_T Bytes,
     _In_ UINT Patches)
 {
-    return (SIZE_T)(Writer->End - Writer->Cursor) >= sizeof(HDGFX_DMA_RECORD) + Bytes + sizeof(ULONG) &&
+    return (SIZE_T)(Writer->End - Writer->Cursor) >= sizeof(HDGFX_DMA_RECORD) + Bytes + 2 * sizeof(ULONG) &&
            (Patches == 0 || (Writer->Patch != NULL && (SIZE_T)(Writer->PatchEnd - Writer->Patch) >= Patches));
 }
 
@@ -1047,22 +1048,26 @@ HdgfxRunCpu(
 static HDGFX_QUEUE_STATE
 HdgfxRunBatch(
     _Inout_ PHDGFX_ADAPTER Adapter,
-    _In_reads_(Count) CONST ULONG *Dwords,
-    _In_ ULONG Count)
+    _In_ ULONG Address)
 {
     HDGFX_QUEUE_STATE State = HdgfxQueueDone;
     HDGFX_MMIO Mmio;
+    uint32_t Dwords[4];
+    ULONG Count = HdgfxMiBatchStart(Dwords, Address);
     ULONG Bytes = Count * sizeof(ULONG);
     ULONG Padding;
     ULONG Head;
 
     if (Count == 0)
+    {
+        DPRINT1("Batch at 0x%lx is not qword aligned, dropping it\n", Address);
         return HdgfxQueueDone;
+    }
     KeAcquireSpinLockAtDpcLevel(&Adapter->RingLock);
     if (!Adapter->RingStarted || Adapter->RingResetting)
     {
         KeReleaseSpinLockFromDpcLevel(&Adapter->RingLock);
-        DPRINT1("Render ring stopped, dropping a %lu-dword batch\n", Count);
+        DPRINT1("Render ring stopped, dropping the batch at 0x%lx\n", Address);
         return HdgfxQueueDone;
     }
     HdgfxMmioInit(Adapter->Registers, &Mmio);
@@ -1074,14 +1079,14 @@ HdgfxRunBatch(
             HdgfxRingFence(Adapter, &Mmio, Head);
         State = HdgfxQueueRing;
     }
-    else if (HdgfxRingEmit(&Adapter->Ring, Head, (const uint32_t *)Dwords, Count))
+    else if (HdgfxRingEmit(&Adapter->Ring, Head, Dwords, Count))
     {
         Adapter->RingUnfenced = TRUE;
         HdgfxIlkAdvanceRing(&Mmio, &Adapter->Ring);
     }
     else
     {
-        DPRINT1("Render ring refused a %lu-dword batch, dropping it\n", Count);
+        DPRINT1("Render ring refused the batch at 0x%lx, dropping it\n", Address);
     }
     KeReleaseSpinLockFromDpcLevel(&Adapter->RingLock);
     return State;
@@ -1140,11 +1145,18 @@ HdgfxRunSubmit(
     HDGFX_QUEUE_STATE State = HdgfxQueueDone;
     PHDGFX_DMA_RECORD Record;
     PUCHAR Map = NULL;
+    PUCHAR Mapped = NULL;
+    ULONG Segment = 0;
 
     *Software = FALSE;
-    if (Submit->Offset < Submit->EndOffset)
+    if (Submit->Offset < Submit->EndOffset && Submit->SegmentId == HDGFX_DMA_SEGMENT_ID)
     {
-        Map = MmMapIoSpace(Submit->DmaPhysical, Submit->EndOffset, MmCached);
+        Segment = (ULONG)((ULONGLONG)Submit->DmaPhysical.QuadPart - Adapter->DmaBase);
+        Map = Adapter->DmaMemory + Segment;
+    }
+    else if (Submit->Offset < Submit->EndOffset)
+    {
+        Map = Mapped = MmMapIoSpace(Submit->DmaPhysical, Submit->EndOffset, MmCached);
         if (Map == NULL)
             return HdgfxQueueWait;
     }
@@ -1159,16 +1171,18 @@ HdgfxRunSubmit(
             Submit->Offset = Submit->EndOffset;
             break;
         }
-        if (Record->Type == HDGFX_DMA_BATCH)
-            State = HdgfxRunBatch(Adapter, (PULONG)(Record + 1), (Record->Size - sizeof(*Record)) / sizeof(ULONG));
+        if (Record->Type == HDGFX_DMA_BATCH && Mapped != NULL)
+            DPRINT1("Batch at 0x%lx of fence %lu is outside the DMA segment, skipped\n", Submit->Offset, Submit->Fence);
+        else if (Record->Type == HDGFX_DMA_BATCH)
+            State = HdgfxRunBatch(Adapter, (ULONG)Adapter->DmaBase + Segment + Submit->Offset + sizeof(*Record));
         else if (Record->Type == HDGFX_DMA_CPU)
             State = HdgfxRunCpu(Adapter, (PSOFTGPU_CMD)(Record + 1));
         if (State != HdgfxQueueDone)
             break;
         Submit->Offset += Record->Size;
     }
-    if (Map != NULL)
-        MmUnmapIoSpace(Map, Submit->EndOffset);
+    if (Mapped != NULL)
+        MmUnmapIoSpace(Mapped, Submit->EndOffset);
     if (State != HdgfxQueueDone)
         return State;
     return HdgfxRunFence(Adapter, Submit->Fence, Software);
@@ -1329,7 +1343,13 @@ HdgfxDdiSubmitCommand(
     }
     if (!SubmitCommand->Flags.NullRendering &&
         (SubmitCommand->DmaBufferPhysicalAddress.QuadPart == 0 ||
-         SubmitCommand->DmaBufferSubmissionEndOffset <= SubmitCommand->DmaBufferSubmissionStartOffset))
+         SubmitCommand->DmaBufferSubmissionEndOffset <= SubmitCommand->DmaBufferSubmissionStartOffset ||
+         (SubmitCommand->DmaBufferSegmentId != 0 &&
+          (SubmitCommand->DmaBufferSegmentId != HDGFX_DMA_SEGMENT_ID || Adapter->DmaMemory == NULL ||
+           (ULONGLONG)SubmitCommand->DmaBufferPhysicalAddress.QuadPart < Adapter->DmaBase ||
+           (ULONGLONG)SubmitCommand->DmaBufferPhysicalAddress.QuadPart - Adapter->DmaBase >= HDGFX_DMA_SIZE ||
+           SubmitCommand->DmaBufferSubmissionEndOffset >
+               HDGFX_DMA_SIZE - ((ULONGLONG)SubmitCommand->DmaBufferPhysicalAddress.QuadPart - Adapter->DmaBase)))))
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -1347,6 +1367,7 @@ HdgfxDdiSubmitCommand(
     {
         Submit = &Adapter->Queue[Adapter->QueueTail % HDGFX_QUEUE_SIZE];
         Submit->DmaPhysical = SubmitCommand->DmaBufferPhysicalAddress;
+        Submit->SegmentId = SubmitCommand->DmaBufferSegmentId;
         Submit->EndOffset = SubmitCommand->DmaBufferSubmissionEndOffset;
         Submit->Offset = SubmitCommand->Flags.NullRendering ? Submit->EndOffset :
                          SubmitCommand->DmaBufferSubmissionStartOffset;

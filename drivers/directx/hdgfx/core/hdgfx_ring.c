@@ -14,7 +14,10 @@
 #define HDGFX_MI_NOOP               0x00u
 #define HDGFX_MI_USER_INTERRUPT     0x02u
 #define HDGFX_MI_FLUSH              0x04u
+#define HDGFX_MI_BATCH_BUFFER_END   0x0Au
 #define HDGFX_MI_STORE_DATA_INDEX   0x21u
+#define HDGFX_MI_BATCH_BUFFER_START 0x31u
+#define HDGFX_MI_BATCH_GTT          0x80u
 #define HDGFX_HWS_FIRST_FREE        0x10u
 #define HDGFX_HWS_DWORDS            1024u
 #define HDGFX_HWS_SCRATCH           0x3Fu
@@ -43,6 +46,28 @@ HdgfxMiFlush(
     uint32_t *Dwords)
 {
     Dwords[0] = HdgfxMiCommand(HDGFX_MI_FLUSH, 0);
+    return 1;
+}
+
+uint32_t
+HdgfxMiBatchStart(
+    uint32_t *Dwords,
+    uint32_t Address)
+{
+    if (Address % 8 != 0)
+        return 0;
+    Dwords[0] = HdgfxMiCommand(HDGFX_MI_BATCH_BUFFER_START, 0) | HDGFX_MI_BATCH_GTT;
+    Dwords[1] = Address;
+    Dwords[2] = HdgfxMiCommand(HDGFX_MI_NOOP, 0);
+    Dwords[3] = HdgfxMiCommand(HDGFX_MI_NOOP, 0);
+    return 4;
+}
+
+uint32_t
+HdgfxMiBatchEnd(
+    uint32_t *Dwords)
+{
+    Dwords[0] = HdgfxMiCommand(HDGFX_MI_BATCH_BUFFER_END, 0);
     return 1;
 }
 

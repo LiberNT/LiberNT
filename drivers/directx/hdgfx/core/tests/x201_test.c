@@ -1628,6 +1628,14 @@ TestBlt(void)
 
     CHECK_EQ(HdgfxMiFlush(Dwords), 1);
     CHECK_EQ(Dwords[0], 0x02000000);
+    CHECK_EQ(HdgfxMiBatchEnd(Dwords), 1);
+    CHECK_EQ(Dwords[0], 0x05000000);
+    CHECK_EQ(HdgfxMiBatchStart(Dwords, 0xFF7C004), 0);
+    CHECK_EQ(HdgfxMiBatchStart(Dwords, 0xFF7C008), 4);
+    CHECK_EQ(Dwords[0], 0x18800080);
+    CHECK_EQ(Dwords[1], 0xFF7C008);
+    CHECK_EQ(Dwords[2], 0);
+    CHECK_EQ(Dwords[3], 0);
 
     CHECK_EQ(HdgfxBltFill(Dwords, &Source, &Rect, 0x55667788), 6);
     CHECK_EQ(Dwords[0], 0x54300004);
