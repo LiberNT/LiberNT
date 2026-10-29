@@ -1639,6 +1639,12 @@ SeCopyClientToken(
                                Level,
                                PreviousMode,
                                (PTOKEN*)NewToken);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ObInsertObject(*NewToken, NULL, 0, 0, NULL, NULL);
+    if (!NT_SUCCESS(Status))
+        *NewToken = NULL;
 
     return Status;
 }
