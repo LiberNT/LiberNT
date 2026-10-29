@@ -1049,6 +1049,22 @@ const char * U_EXPORT2 u_errorName(UErrorCode Code)
     return "[BOGUS UErrorCode]";
 }
 
+void U_EXPORT2 u_charsToUChars(const char *Source, UChar *Target, int32_t Length)
+{
+    int32_t i;
+
+    for (i = 0; i < Length; i++)
+        Target[i] = (BYTE)Source[i];
+}
+
+void U_EXPORT2 u_UCharsToChars(const UChar *Source, char *Target, int32_t Length)
+{
+    int32_t i;
+
+    for (i = 0; i < Length; i++)
+        Target[i] = (char)Source[i];
+}
+
 BOOL WINAPI DllMain(HINSTANCE Instance, DWORD Reason, LPVOID Reserved)
 {
     int32_t i;

@@ -5,6 +5,8 @@
 @ cdecl UCNV_TO_U_CALLBACK_STOP(ptr ptr ptr long long ptr)
 @ cdecl UCNV_TO_U_CALLBACK_SUBSTITUTE(ptr ptr ptr long long ptr)
 @ cdecl u_errorName(long)
+@ cdecl u_charsToUChars(ptr ptr long)
+@ cdecl u_UCharsToChars(ptr ptr long)
 @ cdecl ucnv_cbFromUWriteUChars(ptr ptr ptr long ptr)
 @ cdecl ucnv_cbToUWriteUChars(ptr ptr long long ptr)
 @ cdecl ucnv_close(ptr)
