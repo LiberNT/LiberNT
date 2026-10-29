@@ -1024,7 +1024,11 @@ WSPSendTo(SOCKET Handle,
         BindError = WSPBind(Handle, BindAddress, BindAddressLength, lpErrno);
         HeapFree(GlobalHeap, 0, BindAddress);
         if (BindError == SOCKET_ERROR)
+        {
+            if (*lpErrno == WSAEACCES)
+                *lpErrno = WSAEINVAL;
             return SOCKET_ERROR;
+        }
     }
 
     Status = MsafdAcquireEvent(&SockEvent, &SockEventShared);
