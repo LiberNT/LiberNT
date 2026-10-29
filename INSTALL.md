@@ -1,6 +1,6 @@
 # Installing LiberNT
 
-> **English** | [中文](INSTALL.zh-CN.md) (AI-assisted translation)
+> **English** | [中文](translations/zh-CN/INSTALL.md) (AI-assisted translation)
 
 ## Building the images
 

@@ -1,12 +1,12 @@
 # 安装 LiberNT
 
-> [English](INSTALL.md) | **中文**
+> [English](../../INSTALL.md) | **中文**
 >
 > 翻译说明：本译文由 AI 初译并排版；术语、代码块、链接与锚点已与英文原版核对，中文术语已经人工核对。如有纰漏，请提交 issue 指出；表述以英文版为准。
 
 ## 构建镜像
 
-先按[构建](README.zh-CN.md#自行构建-libernt)一节搭好构建环境并完成配置，再在输出目录(例如 `output-Clang-amd64-debug`)里构建所需镜像：
+先按[构建](README.md#自行构建-libernt)一节搭好构建环境并完成配置，再在输出目录(例如 `output-Clang-amd64-debug`)里构建所需镜像：
 
 | 命令 | 生成 | 用途 |
 |---|---|---|

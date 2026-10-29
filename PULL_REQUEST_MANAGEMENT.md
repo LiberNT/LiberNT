@@ -1,6 +1,6 @@
 # Rules for managing Pull Requests
 
-> **English** | [中文](PULL_REQUEST_MANAGEMENT.zh-CN.md) (AI-assisted translation)
+> **English** | [中文](translations/zh-CN/PULL_REQUEST_MANAGEMENT.md) (AI-assisted translation)
 
 For the sake of trying to maintain an acceptable number of open but idle PRs, the following rules should be considered:
 - If a PR has at least one approval, it can be merged after 1 week of waiting for additional comments.

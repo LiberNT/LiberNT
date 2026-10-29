@@ -1,6 +1,6 @@
 # 代码风格
 
-> [English](CODING_STYLE.md) | **中文**
+> [English](../../CODING_STYLE.md) | **中文**
 >
 > 翻译说明：本译文由 AI 初译并排版；术语、代码块、链接与锚点已与英文原版核对，中文术语已经人工核对。如有纰漏，请提交 issue 指出；表述以英文版为准。
 
@@ -8,7 +8,7 @@
 
 无关的改动不必顺手把既有代码转成这套风格。细节见[改写既有代码的注意事项](#改写既有代码的注意事项)。
 
-与其他来源(例如 Wine)同步的代码不要重写。[3rd Party Files.txt](media/doc/3rd%20Party%20Files.txt) 和 [WINESYNC.txt](media/doc/WINESYNC.txt) 可以用来追踪同步文件。
+与其他来源(例如 Wine)同步的代码不要重写。[3rd Party Files.txt](../../media/doc/3rd%20Party%20Files.txt) 和 [WINESYNC.txt](../../media/doc/WINESYNC.txt) 可以用来追踪同步文件。
 
 ## 文件结构
 

@@ -1,6 +1,6 @@
 # Pull Request 管理规则
 
-> [English](PULL_REQUEST_MANAGEMENT.md) | **中文**
+> [English](../../PULL_REQUEST_MANAGEMENT.md) | **中文**
 >
 > 翻译说明：本译文由 AI 初译并排版；术语、代码块、链接与锚点已与英文原版核对，中文术语已经人工核对。如有纰漏，请提交 issue 指出；表述以英文版为准。
 
@@ -21,7 +21,7 @@
 - 不说明理由就关闭
 - 刚合并就打算重写那段代码
 
-合并 PR 之前，确认它符合[贡献规则](CONTRIBUTING.zh-CN.md#规则与建议)，更重要的是：
+合并 PR 之前，确认它符合[贡献规则](CONTRIBUTING.md#规则与建议)，更重要的是：
 
 - 确认作者在所有 PR 提交里都填了真实邮箱
 - PR 含代码或翻译时，确认作者在所有提交里用的是完整法定姓名，而不是昵称或别名
@@ -31,6 +31,6 @@
   - 确认 GitHub 资料里的姓名与提交中的一致。不一致就请作者改。
   - 如果作者不愿改 GitHub 资料里的姓名：
     - 给 PR 加上 "no squash merge" 标签。
-    - 确认每条提交信息都按 [.gitmessage](.gitmessage) 的格式书写。
+    - 确认每条提交信息都按 [.gitmessage](../../.gitmessage) 的格式书写。
     - 这种情况下，PR 需要用 "Rebase and merge" 或手工合并。
   - 在 PR 里点 "Squash and merge" 时，可以确认作者没有使用 no-reply 邮箱 —— 提交信息下方会显示：`This commit will be authored by <address@email.com>`

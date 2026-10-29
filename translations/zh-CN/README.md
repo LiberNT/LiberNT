@@ -1,9 +1,9 @@
-> [English](README.md) | **中文**
+> [English](../../README.md) | **中文**
 >
 > 翻译说明：本译文由 AI 初译并排版；术语、代码块、链接与锚点已与英文原版核对，中文术语已经人工核对。如有纰漏，请提交 issue 指出；表述以英文版为准。
 
 <p align="center">
-  <img src="media/graphics/branding/libernt-banner.png" width="480" alt="LiberNT">
+  <img src="../../media/graphics/branding/libernt-banner.png" width="480" alt="LiberNT">
 </p>
 
 > [!IMPORTANT]
@@ -44,7 +44,7 @@
 ---
 
 <p align="center">
-  <img width="1000" alt="arm64 上的 LiberNT 桌面" src="media/graphics/screenshots/libernt-desktop-arm64.png">
+  <img width="1000" alt="arm64 上的 LiberNT 桌面" src="../../media/graphics/screenshots/libernt-desktop-arm64.png">
 </p>
 
 <p align="center"><sub>arm64 上的 LiberNT 桌面，运行于 QEMU，构建版本 nt10.0-043-2555</sub></p>
@@ -149,7 +149,7 @@ LiberNT 将现代硬件与平台引入 NT 架构。
 > [!CAUTION]
 > 安装程序会删除并格式化分区。安装前请备份目标磁盘上的重要数据。
 
-完整安装步骤见 [INSTALL.zh-CN.md](INSTALL.zh-CN.md)。
+完整安装步骤见 [INSTALL.md](INSTALL.md)。
 
 ---
 
@@ -271,7 +271,7 @@ LiberNT/
 
 问题反馈和功能建议请提交到 [Issues](https://github.com/LiberNT/LiberNT/issues)，指南与笔记见 [Wiki](https://github.com/LiberNT/LiberNT/wiki)。
 
-动手前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [PULL_REQUEST_MANAGEMENT.md](PULL_REQUEST_MANAGEMENT.md)。如果打算做较大的改动，建议先在 [Issues](https://github.com/LiberNT/LiberNT/issues) 或 [Discord](https://discord.gg/BpcKg7FZ2) 上讨论。
+动手前请阅读 [CONTRIBUTING.md](../../CONTRIBUTING.md) 和 [PULL_REQUEST_MANAGEMENT.md](../../PULL_REQUEST_MANAGEMENT.md)。如果打算做较大的改动，建议先在 [Issues](https://github.com/LiberNT/LiberNT/issues) 或 [Discord](https://discord.gg/BpcKg7FZ2) 上讨论。
 
 > [!WARNING]
 > **法律声明：** 如果你接触过微软 Windows 的专有源码(包括但不限于泄露的 Windows NT 3.5、NT 4、2000 源码以及 Windows Research Kernel)，由于存在版权风险，你的贡献将无法被接受。
@@ -284,7 +284,7 @@ LiberNT/
 
 AI 还帮我们读文档、提取定义、修复缺陷。遇到具体缺陷时，它会拿 Microsoft Learn 官方文档与函数的实际行为对照，把差异定位到具体位置。
 
-和别的工具一样，AI 用来帮我们达成目标，并遵守 [AGENTS.md](AGENTS.md) 里写明的同一套规则：
+和别的工具一样，AI 用来帮我们达成目标，并遵守 [AGENTS.md](../../AGENTS.md) 里写明的同一套规则：
 
 - 我们基于 Windows SDK 和 WDK 头文件、Windows 11 公开符号、微软文档，以及在 Windows 11 上的黑盒运行来开发。
 - 坚持净室方式：反汇编、反编译得到的 Windows 代码一律不照抄，Linux 的 GPL 代码也不复制。
@@ -298,9 +298,9 @@ AI 还帮我们读文档、提取定义、修复缺陷。遇到具体缺陷时�
 
 ## 许可证
 
-LiberNT 以 [GNU GPL 3.0](COPYING) 授权。沿用自其他项目的代码保留其文件头声明的许可证，大多为 GPL 2.0 或更高版本。这些文件引用的 GPL 2.0、LGPL 2.1 和 BSD 文本见 [COPYING2](COPYING2)、[COPYING.LIB](COPYING.LIB) 和 [COPYING.ARM](COPYING.ARM)。
+LiberNT 以 [GNU GPL 3.0](../../COPYING) 授权。沿用自其他项目的代码保留其文件头声明的许可证，大多为 GPL 2.0 或更高版本。这些文件引用的 GPL 2.0、LGPL 2.1 和 BSD 文本见 [COPYING2](../../COPYING2)、[COPYING.LIB](../../COPYING.LIB) 和 [COPYING.ARM](../../COPYING.ARM)。
 
-LiberNT 中的改动版权归 LiberNT 贡献者所有，© 2026。沿用代码与第三方代码保留原作者的版权声明。详见 [CREDITS.md](CREDITS.md)。
+LiberNT 中的改动版权归 LiberNT 贡献者所有，© 2026。沿用代码与第三方代码保留原作者的版权声明。详见 [CREDITS.md](../../CREDITS.md)。
 
 LiberNT 是独立项目，与 Microsoft 没有隶属、认可或赞助关系。Windows® 是 Microsoft Corporation 的注册商标。
 

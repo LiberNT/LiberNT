@@ -1,6 +1,6 @@
 # How To Contribute
 
-> **English** | [中文](CONTRIBUTING.zh-CN.md) (AI-assisted translation)
+> **English** | [中文](translations/zh-CN/CONTRIBUTING.md) (AI-assisted translation)
 
 LiberNT welcomes bug reports, tests, fixes, new features and documentation. This page explains how to send your work. The engineering rules every change follows are in [AGENTS.md](AGENTS.md), and they apply to human contributors and AI tools alike.
 

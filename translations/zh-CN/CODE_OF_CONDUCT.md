@@ -1,6 +1,6 @@
 # 行为准则
 
-> [English](CODE_OF_CONDUCT.md) | **中文**
+> [English](../../CODE_OF_CONDUCT.md) | **中文**
 >
 > 翻译说明：本译文由 AI 初译并排版；术语、代码块、链接与锚点已与英文原版核对，中文术语已经人工核对。如有纰漏，请提交 issue 指出；表述以英文版为准。
 
@@ -13,4 +13,4 @@
 
 # 另见
 
-- [Pull Request 管理规则](PULL_REQUEST_MANAGEMENT.zh-CN.md)
+- [Pull Request 管理规则](PULL_REQUEST_MANAGEMENT.md)

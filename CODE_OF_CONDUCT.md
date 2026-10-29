@@ -1,6 +1,6 @@
 # Code of conduct
 
-> **English** | [中文](CODE_OF_CONDUCT.zh-CN.md) (AI-assisted translation)
+> **English** | [中文](translations/zh-CN/CODE_OF_CONDUCT.md) (AI-assisted translation)
 
 **Be respectful towards other members of the community.**
 - Don't initiate or engage in discussions that are designed to insult, inflame, attack, or incite hate, discrimination, or bullying against others.
