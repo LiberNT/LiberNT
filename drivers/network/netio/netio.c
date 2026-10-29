@@ -611,14 +611,15 @@ StartListening(_In_ PWSK_SOCKET_INTERNAL ListenSocket)
     /* pass the ConnectionFile from accept socket, not from ListenSocket ... */
     status = TdiListen(&tdiIrp, AcceptSocket->ConnectionFile, &lc->RequestConnectionInfo, &lc->ReturnConnectionInfo, ListenComplete, lc);
 
-    if (!NT_SUCCESS(status))
+    if (tdiIrp == NULL)
     {
         ExFreePoolWithTag(lc->ReturnConnectionInfo, TAG_NETIO);
         DereferenceSocket(ListenSocket);
         DereferenceSocket(AcceptSocket);
         goto err_out_free_lc_and_req_conn_info;
     }
-    ListenSocket->ListenIrp = tdiIrp;
+    if (status == STATUS_PENDING)
+        ListenSocket->ListenIrp = tdiIrp;
 
     return STATUS_PENDING;
 

@@ -624,12 +624,11 @@ NTSTATUS DispTdiListen(
   PIO_STACK_LOCATION IrpSp;
   NTSTATUS Status = STATUS_SUCCESS;
   BOOLEAN NewListener = FALSE;
+  BOOLEAN CloseListener = FALSE;
 
   TI_DbgPrint(DEBUG_IRP, ("Called.\n"));
 
   IrpSp = IoGetCurrentIrpStackLocation(Irp);
-
-  IoMarkIrpPending(Irp);
 
   /* Get associated connection endpoint file object. Quit if none exists */
 
@@ -651,11 +650,6 @@ NTSTATUS DispTdiListen(
 
   Parameters = (PTDI_REQUEST_KERNEL)&IrpSp->Parameters;
 
-  Status = DispPrepareIrpForCancel
-      (TranContext->Handle.ConnectionContext,
-       Irp,
-       (PDRIVER_CANCEL)DispCancelListenRequest);
-
   LockObject(Connection);
 
   if (Connection->AddressFile == NULL)
@@ -673,7 +667,7 @@ NTSTATUS DispTdiListen(
    * when a new connection arrives. */
   /* The important thing to note here is that the irp we'll complete belongs
    * to the socket to be accepted onto, not the listener */
-  if( NT_SUCCESS(Status) && !Connection->AddressFile->Listener ) {
+  if( !Connection->AddressFile->Listener ) {
       Connection->AddressFile->Listener =
 	  TCPAllocateConnectionEndpoint( NULL );
 
@@ -705,8 +699,25 @@ NTSTATUS DispTdiListen(
 	  ReferenceObject(Listener);
 	  Status = TCPListen( Listener, 1024 );
 	  /* BACKLOG */
+	  CloseListener = !NT_SUCCESS(Status);
       }
   }
+
+  if( !NT_SUCCESS(Status) ) {
+      UnlockObject(Connection);
+      if( CloseListener )
+	  TCPClose( Listener );
+      if( Listener )
+	  DereferenceObject(Listener);
+      goto done;
+  }
+
+  IoMarkIrpPending(Irp);
+
+  Status = DispPrepareIrpForCancel
+      (TranContext->Handle.ConnectionContext,
+       Irp,
+       (PDRIVER_CANCEL)DispCancelListenRequest);
 
   if( NT_SUCCESS(Status) ) {
       Status = TCPAccept
@@ -726,7 +737,6 @@ NTSTATUS DispTdiListen(
   if (DrainListener)
       TCPDrainPendingAccept(DrainListener);
 
-done:
   if (Status != STATUS_PENDING) {
       DispDataRequestComplete(Irp, Status, 0);
   }
@@ -734,6 +744,13 @@ done:
   TI_DbgPrint(MID_TRACE,("Leaving %x\n", Status));
 
   return STATUS_PENDING;
+
+done:
+  DispDataRequestComplete(Irp, Status, 0);
+
+  TI_DbgPrint(MID_TRACE,("Leaving %x\n", Status));
+
+  return Status;
 }
 
 

@@ -437,6 +437,24 @@ NTSTATUS AfdListenSocket( PDEVICE_OBJECT DeviceObject, PIRP Irp,
     if( Status == STATUS_PENDING )
         Status = STATUS_SUCCESS;
 
+    if (!NT_SUCCESS(Status))
+    {
+        FCB->SharedData.State = SOCKET_STATE_BOUND;
+
+        ExFreePoolWithTag(FCB->ListenIrp.ConnectionCallInfo,
+                          TAG_AFD_TDI_CONNECTION_INFORMATION);
+        FCB->ListenIrp.ConnectionCallInfo = NULL;
+        ExFreePoolWithTag(FCB->ListenIrp.ConnectionReturnInfo,
+                          TAG_AFD_TDI_CONNECTION_INFORMATION);
+        FCB->ListenIrp.ConnectionReturnInfo = NULL;
+
+        TdiDisassociateAddressFile(FCB->Connection.Object);
+        ObDereferenceObject(FCB->Connection.Object);
+        FCB->Connection.Object = NULL;
+        ZwClose(FCB->Connection.Handle);
+        FCB->Connection.Handle = INVALID_HANDLE_VALUE;
+    }
+
     AFD_DbgPrint(MID_TRACE,("Returning %x\n", Status));
     return UnlockAndMaybeComplete( FCB, Status, Irp, 0 );
 }

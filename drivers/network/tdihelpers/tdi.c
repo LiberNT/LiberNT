@@ -578,9 +578,7 @@ NTSTATUS TdiListen(
                    *RequestConnectionInfo,
                    *ReturnConnectionInfo);
 
-    TdiCall(*Irp, DeviceObject, NULL /* Don't wait for completion */, NULL);
-
-    return STATUS_PENDING;
+    return TdiCall(*Irp, DeviceObject, NULL /* Don't wait for completion */, NULL);
 }
 
 NTSTATUS TdiAccept(
