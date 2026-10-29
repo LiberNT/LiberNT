@@ -16,6 +16,7 @@
 #define HDGFX_BATCH_LIMIT           0x2000UL
 #define HDGFX_BLT_DWORDS            8UL
 #define HDGFX_QUEUE_POLL            (-10000LL)
+#define HDGFX_DEAD_CONTEXT_MAGIC    0xDEAD4346UL
 
 typedef struct _HDGFX_DMA_RECORD
 {
@@ -36,7 +37,7 @@ typedef struct _HDGFX_DMA_WRITER
 typedef struct _HDGFX_DMA_SURFACE
 {
     CONST DXGK_ALLOCATIONLIST *Allocation;
-    PSOFTGPU_OPENALLOC Open;
+    PHDGFX_OPEN Open;
     UINT AllocationIndex;
 } HDGFX_DMA_SURFACE, *PHDGFX_DMA_SURFACE;
 
@@ -50,21 +51,21 @@ typedef enum _HDGFX_QUEUE_STATE
 static NTSTATUS
 HdgfxResolveOwner(
     _In_ PVOID Handle,
-    _Out_ PSOFTGPU_KMD_DEVICE *KmdDeviceOut,
-    _Out_ PSOFTGPU_DEVICE *DeviceOut)
+    _Out_ PHDGFX_DEVICE *KmdDeviceOut,
+    _Out_ PHDGFX_ADAPTER *AdapterOut)
 {
-    PSOFTGPU_CONTEXT Context = Handle;
-    PSOFTGPU_KMD_DEVICE KmdDevice;
-    PSOFTGPU_DEVICE Device;
+    PHDGFX_CONTEXT Context = Handle;
+    PHDGFX_DEVICE KmdDevice;
+    PHDGFX_ADAPTER Adapter;
 
     *KmdDeviceOut = NULL;
-    *DeviceOut = NULL;
+    *AdapterOut = NULL;
     if (Handle == NULL)
         return STATUS_INVALID_HANDLE;
-    if (Context->Magic == SOFTGPU_CONTEXT_MAGIC)
+    if (Context->Magic == HDGFX_CONTEXT_MAGIC)
     {
         KmdDevice = Context->Device;
-        if (KmdDevice == NULL || KmdDevice->Magic != SOFTGPU_KMD_DEVICE_MAGIC ||
+        if (KmdDevice == NULL || KmdDevice->Magic != HDGFX_DEVICE_MAGIC ||
             Context->Process == NULL || Context->Process != KmdDevice->Process)
         {
             return STATUS_INVALID_HANDLE;
@@ -73,38 +74,38 @@ HdgfxResolveOwner(
     else
     {
         KmdDevice = Handle;
-        if (KmdDevice->Magic != SOFTGPU_KMD_DEVICE_MAGIC)
+        if (KmdDevice->Magic != HDGFX_DEVICE_MAGIC)
             return STATUS_INVALID_HANDLE;
     }
 
-    Device = KmdDevice->Adapter;
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC ||
-        KmdDevice->Process == NULL || KmdDevice->Process->Magic != SOFTGPU_PROCESS_MAGIC ||
-        KmdDevice->Process->Adapter != Device)
+    Adapter = KmdDevice->Adapter;
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC ||
+        KmdDevice->Process == NULL || KmdDevice->Process->Magic != HDGFX_PROCESS_MAGIC ||
+        KmdDevice->Process->Adapter != Adapter)
     {
         return STATUS_INVALID_HANDLE;
     }
     *KmdDeviceOut = KmdDevice;
-    *DeviceOut = Device;
+    *AdapterOut = Adapter;
     return STATUS_SUCCESS;
 }
 
 static NTSTATUS
 HdgfxValidateOpen(
-    _In_ PSOFTGPU_KMD_DEVICE KmdDevice,
-    _In_ PSOFTGPU_OPENALLOC Open)
+    _In_ PHDGFX_DEVICE KmdDevice,
+    _In_ PHDGFX_OPEN Open)
 {
-    if (Open == NULL || Open->Magic != SOFTGPU_OPENALLOC_MAGIC || Open->Device != KmdDevice)
+    if (Open == NULL || Open->Magic != HDGFX_OPEN_MAGIC || Open->Device != KmdDevice)
         return STATUS_INVALID_HANDLE;
-    if (Open->Size == 0 || Open->Size > KmdDevice->Adapter->FrameBufferSize)
+    if (Open->Size == 0 || Open->Size > KmdDevice->Adapter->SlabSize)
         return STATUS_INVALID_BUFFER_SIZE;
     return STATUS_SUCCESS;
 }
 
 static NTSTATUS
 HdgfxValidateSurface(
-    _In_ PSOFTGPU_KMD_DEVICE KmdDevice,
-    _In_ PSOFTGPU_OPENALLOC Open)
+    _In_ PHDGFX_DEVICE KmdDevice,
+    _In_ PHDGFX_OPEN Open)
 {
     NTSTATUS Status = HdgfxValidateOpen(KmdDevice, Open);
 
@@ -125,14 +126,14 @@ HdgfxValidateSurface(
 
 static NTSTATUS
 HdgfxPlacement(
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PHDGFX_ADAPTER Adapter,
     _In_ CONST DXGK_ALLOCATIONLIST *Allocation,
-    _In_ PSOFTGPU_OPENALLOC Open,
+    _In_ PHDGFX_OPEN Open,
     _In_ UINT AllocationOffset,
     _In_ UINT DriverId,
     _Out_ PULONGLONG Value)
 {
-    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+    PHDGFX_SCANOUT Scanout = Adapter->Scanout;
     ULONGLONG Address;
     SIZE_T Offset;
     NTSTATUS Status;
@@ -142,11 +143,11 @@ HdgfxPlacement(
         return STATUS_INVALID_PARAMETER;
     if (Allocation->SegmentId == 0)
         return STATUS_SUCCESS;
-    if (Allocation->SegmentId != SOFTGPU_SEGMENT_ID || Allocation->PhysicalAddress.QuadPart <= 0)
+    if (Allocation->SegmentId != HDGFX_SLAB_SEGMENT_ID || Allocation->PhysicalAddress.QuadPart <= 0)
         return STATUS_INVALID_ADDRESS;
 
     Address = (ULONGLONG)Allocation->PhysicalAddress.QuadPart + AllocationOffset;
-    Status = SoftGpu2dResolveSlabRange((ULONGLONG)Device->FrameBufferPhys.QuadPart, Device->FrameBufferSize, Address,
+    Status = SoftGpu2dResolveSlabRange((ULONGLONG)Adapter->SlabPhysical.QuadPart, Adapter->SlabSize, Address,
                                        Open->Size - AllocationOffset, &Offset);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -155,7 +156,7 @@ HdgfxPlacement(
         *Value = Address;
         return STATUS_SUCCESS;
     }
-    if (Scanout == NULL || Scanout->SlabGtt == NULL || Scanout->SlabPhysical != (ULONGLONG)Device->FrameBufferPhys.QuadPart)
+    if (Scanout == NULL || Scanout->SlabGtt == NULL || Scanout->SlabPhysical != (ULONGLONG)Adapter->SlabPhysical.QuadPart)
         return STATUS_INVALID_ADDRESS;
     *Value = Scanout->SlabAddress + (ULONGLONG)Offset;
     return STATUS_SUCCESS;
@@ -163,12 +164,11 @@ HdgfxPlacement(
 
 static BOOLEAN
 HdgfxBlitterUsable(
-    _In_ PSOFTGPU_DEVICE Device)
+    _In_ PHDGFX_ADAPTER Adapter)
 {
-    PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
-    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
+    PHDGFX_SCANOUT Scanout = Adapter->Scanout;
 
-    return Adapter != NULL && Scanout != NULL && Adapter->RingStarted && Adapter->RingInterrupt &&
+    return Scanout != NULL && Adapter->RingStarted && Adapter->RingInterrupt &&
            Scanout->SlabGtt != NULL;
 }
 
@@ -272,7 +272,7 @@ HdgfxWriterPatch(
 static BOOLEAN
 HdgfxRectsOverlap(
     _In_ CONST SOFTGPU_CMD *Command,
-    _In_ PSOFTGPU_OPENALLOC Open)
+    _In_ PHDGFX_OPEN Open)
 {
     SIZE_T SourceOffset;
     SIZE_T DestinationOffset;
@@ -293,7 +293,7 @@ HdgfxRectsOverlap(
 static NTSTATUS
 HdgfxEmitCommand(
     _Inout_ PHDGFX_DMA_WRITER Writer,
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PHDGFX_ADAPTER Adapter,
     _In_ CONST SOFTGPU_CMD *Command,
     _In_opt_ CONST HDGFX_DMA_SURFACE *Source,
     _In_ CONST HDGFX_DMA_SURFACE *Destination)
@@ -309,7 +309,7 @@ HdgfxEmitCommand(
     UINT Patches = Source != NULL ? 2 : 1;
     NTSTATUS Status;
 
-    if ((Command->Op == SOFTGPU_CMD_OP_FILL || Command->Op == SOFTGPU_CMD_OP_BLT) && HdgfxBlitterUsable(Device) &&
+    if ((Command->Op == SOFTGPU_CMD_OP_FILL || Command->Op == SOFTGPU_CMD_OP_BLT) && HdgfxBlitterUsable(Adapter) &&
         !(Source != NULL && Source->Open == Destination->Open && HdgfxRectsOverlap(Command, Source->Open) &&
           Source->Open->Pitch % HDGFX_BLT_OVERLAP_PITCH != 0))
     {
@@ -317,7 +317,7 @@ HdgfxEmitCommand(
         Rect.Top = (uint32_t)Command->DstRect.top;
         Rect.Right = (uint32_t)Command->DstRect.right;
         Rect.Bottom = (uint32_t)Command->DstRect.bottom;
-        Status = HdgfxPlacement(Device, Destination->Allocation, Destination->Open, 0, HDGFX_PATCH_GTT, &Value);
+        Status = HdgfxPlacement(Adapter, Destination->Allocation, Destination->Open, 0, HDGFX_PATCH_GTT, &Value);
         if (!NT_SUCCESS(Status))
             return Status;
         DestinationSurface.Address = (uint32_t)Value;
@@ -328,7 +328,7 @@ HdgfxEmitCommand(
         }
         else
         {
-            Status = HdgfxPlacement(Device, Source->Allocation, Source->Open, 0, HDGFX_PATCH_GTT, &Value);
+            Status = HdgfxPlacement(Adapter, Source->Allocation, Source->Open, 0, HDGFX_PATCH_GTT, &Value);
             if (!NT_SUCCESS(Status))
                 return Status;
             SourceSurface.Address = (uint32_t)Value;
@@ -356,12 +356,12 @@ HdgfxEmitCommand(
     *Cpu = *Command;
     if (Source != NULL)
     {
-        Status = HdgfxPlacement(Device, Source->Allocation, Source->Open, 0, HDGFX_PATCH_PHYSICAL, &Cpu->SrcAddress);
+        Status = HdgfxPlacement(Adapter, Source->Allocation, Source->Open, 0, HDGFX_PATCH_PHYSICAL, &Cpu->SrcAddress);
         if (!NT_SUCCESS(Status))
             return Status;
         HdgfxWriterPatch(Writer, &Cpu->SrcAddress, Source, HDGFX_PATCH_PHYSICAL);
     }
-    Status = HdgfxPlacement(Device, Destination->Allocation, Destination->Open, 0, HDGFX_PATCH_PHYSICAL,
+    Status = HdgfxPlacement(Adapter, Destination->Allocation, Destination->Open, 0, HDGFX_PATCH_PHYSICAL,
                             &Cpu->DstAddress);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -371,7 +371,7 @@ HdgfxEmitCommand(
 
 static NTSTATUS
 HdgfxRenderSurface(
-    _In_ PSOFTGPU_KMD_DEVICE KmdDevice,
+    _In_ PHDGFX_DEVICE KmdDevice,
     _In_ CONST DXGKARG_RENDER *Render,
     _In_ UINT PatchOffset,
     _Out_ PHDGFX_DMA_SURFACE Surface)
@@ -391,13 +391,13 @@ HdgfxRenderSurface(
         return STATUS_INVALID_PARAMETER;
     Surface->AllocationIndex = Patch->AllocationIndex;
     Surface->Allocation = &Render->pAllocationList[Patch->AllocationIndex];
-    Surface->Open = (PSOFTGPU_OPENALLOC)Surface->Allocation->hDeviceSpecificAllocation;
+    Surface->Open = (PHDGFX_OPEN)Surface->Allocation->hDeviceSpecificAllocation;
     return HdgfxValidateOpen(KmdDevice, Surface->Open);
 }
 
 static NTSTATUS
 HdgfxRenderRect(
-    _In_ PSOFTGPU_KMD_DEVICE KmdDevice,
+    _In_ PHDGFX_DEVICE KmdDevice,
     _In_ CONST HDGFX_DMA_SURFACE *Surface,
     _In_ CONST RECT *Rect,
     _In_ ULONG Pitch,
@@ -422,7 +422,7 @@ HdgfxRenderRect(
 
 static NTSTATUS
 HdgfxRenderCommand(
-    _In_ PSOFTGPU_KMD_DEVICE KmdDevice,
+    _In_ PHDGFX_DEVICE KmdDevice,
     _In_ CONST DXGKARG_RENDER *Render,
     _In_ UINT Offset,
     _Inout_opt_ PHDGFX_DMA_WRITER Writer,
@@ -516,15 +516,15 @@ HdgfxDdiRender(
     _In_ PVOID hContext,
     _Inout_ DXGKARG_RENDER *pRender)
 {
-    PSOFTGPU_KMD_DEVICE KmdDevice;
-    PSOFTGPU_DEVICE Device;
+    PHDGFX_DEVICE KmdDevice;
+    PHDGFX_ADAPTER Adapter;
     HDGFX_DMA_WRITER Writer;
     UINT Patches = 0;
     UINT Offset;
     UINT Index;
     NTSTATUS Status;
 
-    Status = HdgfxResolveOwner(hContext, &KmdDevice, &Device);
+    Status = HdgfxResolveOwner(hContext, &KmdDevice, &Adapter);
     if (!NT_SUCCESS(Status))
         return Status;
     if (pRender == NULL || pRender->pCommand == NULL || pRender->pDmaBuffer == NULL)
@@ -563,10 +563,10 @@ HdgfxDdiRender(
             return STATUS_INVALID_PARAMETER;
         }
         Allocation = &pRender->pAllocationList[Patch->AllocationIndex];
-        Status = HdgfxValidateOpen(KmdDevice, (PSOFTGPU_OPENALLOC)Allocation->hDeviceSpecificAllocation);
+        Status = HdgfxValidateOpen(KmdDevice, (PHDGFX_OPEN)Allocation->hDeviceSpecificAllocation);
         if (NT_SUCCESS(Status))
         {
-            Status = HdgfxPlacement(Device, Allocation, (PSOFTGPU_OPENALLOC)Allocation->hDeviceSpecificAllocation, 0,
+            Status = HdgfxPlacement(Adapter, Allocation, (PHDGFX_OPEN)Allocation->hDeviceSpecificAllocation, 0,
                                     HDGFX_PATCH_PHYSICAL, &Value);
         }
         if (!NT_SUCCESS(Status))
@@ -608,7 +608,7 @@ HdgfxDdiRender(
 
 static NTSTATUS
 HdgfxPresentSurface(
-    _In_ PSOFTGPU_KMD_DEVICE KmdDevice,
+    _In_ PHDGFX_DEVICE KmdDevice,
     _In_ CONST DXGKARG_PRESENT *Present,
     _In_ UINT AllocationIndex,
     _In_ CONST RECT *Rect,
@@ -618,7 +618,7 @@ HdgfxPresentSurface(
 
     Surface->AllocationIndex = AllocationIndex;
     Surface->Allocation = &Present->pAllocationList[AllocationIndex];
-    Surface->Open = (PSOFTGPU_OPENALLOC)Surface->Allocation->hDeviceSpecificAllocation;
+    Surface->Open = (PHDGFX_OPEN)Surface->Allocation->hDeviceSpecificAllocation;
     Status = HdgfxValidateSurface(KmdDevice, Surface->Open);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -636,8 +636,8 @@ HdgfxDdiPresent(
     _In_ PVOID hContext,
     _Inout_ DXGKARG_PRESENT *pPresent)
 {
-    PSOFTGPU_KMD_DEVICE KmdDevice;
-    PSOFTGPU_DEVICE Device;
+    PHDGFX_DEVICE KmdDevice;
+    PHDGFX_ADAPTER Adapter;
     SOFTGPU_2D_PRESENT_POLICY Policy;
     HDGFX_DMA_SURFACE Source;
     HDGFX_DMA_SURFACE Destination;
@@ -646,10 +646,10 @@ HdgfxDdiPresent(
     UINT Index;
     NTSTATUS Status;
 
-    Status = HdgfxResolveOwner(hContext, &KmdDevice, &Device);
+    Status = HdgfxResolveOwner(hContext, &KmdDevice, &Adapter);
     if (!NT_SUCCESS(Status))
         return Status;
-    if (Device->Stopped)
+    if (Adapter->Stopped)
         return STATUS_DELETE_PENDING;
     if (pPresent == NULL || pPresent->pDmaBuffer == NULL)
         return STATUS_INVALID_PARAMETER;
@@ -669,7 +669,7 @@ HdgfxDdiPresent(
     {
         if (pPresent->NumSrcAllocations == 1)
         {
-            Status = HdgfxValidateSurface(KmdDevice, (PSOFTGPU_OPENALLOC)
+            Status = HdgfxValidateSurface(KmdDevice, (PHDGFX_OPEN)
                          pPresent->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation);
             if (!NT_SUCCESS(Status))
                 return Status;
@@ -727,12 +727,12 @@ HdgfxDdiPresent(
             if (!NT_SUCCESS(Status))
                 return Status;
             Command.SrcPitch = Source.Open->Pitch;
-            Status = HdgfxEmitCommand(&Writer, Device, &Command, &Source, &Destination);
+            Status = HdgfxEmitCommand(&Writer, Adapter, &Command, &Source, &Destination);
         }
         else
         {
             Command.Op = SOFTGPU_CMD_OP_FILL;
-            Status = HdgfxEmitCommand(&Writer, Device, &Command, NULL, &Destination);
+            Status = HdgfxEmitCommand(&Writer, Adapter, &Command, NULL, &Destination);
         }
         if (!NT_SUCCESS(Status))
             return Status;
@@ -749,7 +749,7 @@ HdgfxDdiBuildPagingBuffer(
     _In_ PVOID MiniportDeviceContext,
     _Inout_ PDXGKARG_BUILDPAGINGBUFFER BuildPagingBuffer)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
     ULONGLONG SlabBase;
     ULONGLONG SlabOffset;
     HDGFX_DMA_WRITER Writer;
@@ -758,12 +758,12 @@ HdgfxDdiBuildPagingBuffer(
     PMDL Mdl;
     BOOLEAN ToSlab;
 
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC || BuildPagingBuffer == NULL ||
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC || BuildPagingBuffer == NULL ||
         BuildPagingBuffer->pDmaBuffer == NULL)
     {
         return STATUS_INVALID_PARAMETER;
     }
-    SlabBase = (ULONGLONG)Device->FrameBufferPhys.QuadPart;
+    SlabBase = (ULONGLONG)Adapter->SlabPhysical.QuadPart;
     HdgfxWriterInit(&Writer, BuildPagingBuffer->pDmaBuffer, BuildPagingBuffer->DmaSize, NULL, 0);
     if (!HdgfxWriterFits(&Writer, sizeof(SOFTGPU_CMD), 0))
         return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
@@ -776,13 +776,13 @@ HdgfxDdiBuildPagingBuffer(
 
             if (Transfer->TransferSize == 0)
                 return STATUS_INVALID_PARAMETER;
-            if (Transfer->Source.SegmentId == 0 && Transfer->Destination.SegmentId == SOFTGPU_SEGMENT_ID)
+            if (Transfer->Source.SegmentId == 0 && Transfer->Destination.SegmentId == HDGFX_SLAB_SEGMENT_ID)
             {
                 ToSlab = TRUE;
                 Mdl = Transfer->Source.pMdl;
                 SlabOffset = (ULONGLONG)Transfer->Destination.SegmentAddress.QuadPart;
             }
-            else if (Transfer->Source.SegmentId == SOFTGPU_SEGMENT_ID && Transfer->Destination.SegmentId == 0)
+            else if (Transfer->Source.SegmentId == HDGFX_SLAB_SEGMENT_ID && Transfer->Destination.SegmentId == 0)
             {
                 ToSlab = FALSE;
                 Mdl = Transfer->Destination.pMdl;
@@ -792,8 +792,8 @@ HdgfxDdiBuildPagingBuffer(
             {
                 return STATUS_NOT_SUPPORTED;
             }
-            if (Mdl == NULL || SlabOffset > Device->FrameBufferSize ||
-                Transfer->TransferSize > Device->FrameBufferSize - SlabOffset)
+            if (Mdl == NULL || SlabOffset > Adapter->SlabSize ||
+                Transfer->TransferSize > Adapter->SlabSize - SlabOffset)
             {
                 return STATUS_INVALID_PARAMETER;
             }
@@ -813,10 +813,10 @@ HdgfxDdiBuildPagingBuffer(
         {
             CONST DXGK_BUILDPAGINGBUFFER_FILL *Fill = &BuildPagingBuffer->Fill;
 
-            if (Fill->Destination.SegmentId != SOFTGPU_SEGMENT_ID || Fill->FillSize == 0)
+            if (Fill->Destination.SegmentId != HDGFX_SLAB_SEGMENT_ID || Fill->FillSize == 0)
                 return STATUS_NOT_SUPPORTED;
             SlabOffset = (ULONGLONG)Fill->Destination.SegmentAddress.QuadPart;
-            if (SlabOffset > Device->FrameBufferSize || Fill->FillSize > Device->FrameBufferSize - SlabOffset)
+            if (SlabOffset > Adapter->SlabSize || Fill->FillSize > Adapter->SlabSize - SlabOffset)
                 return STATUS_INVALID_PARAMETER;
             Command = HdgfxWriterRecord(&Writer, HDGFX_DMA_CPU, sizeof(SOFTGPU_CMD));
             Command->Op = SOFTGPU_CMD_OP_FILL_LINEAR;
@@ -845,16 +845,16 @@ HdgfxDdiPatch(
     _In_ PVOID MiniportDeviceContext,
     _In_ CONST DXGKARG_PATCH *Patch)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
-    PSOFTGPU_KMD_DEVICE KmdDevice;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
+    PHDGFX_DEVICE KmdDevice;
     UINT Index;
 
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC || Patch == NULL)
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC || Patch == NULL)
         return STATUS_INVALID_PARAMETER;
-    KmdDevice = (PSOFTGPU_KMD_DEVICE)Patch->hDevice;
-    if (KmdDevice == NULL || KmdDevice->Magic != SOFTGPU_KMD_DEVICE_MAGIC || KmdDevice->Adapter != Device ||
-        KmdDevice->Process == NULL || KmdDevice->Process->Magic != SOFTGPU_PROCESS_MAGIC ||
-        KmdDevice->Process->Adapter != Device)
+    KmdDevice = (PHDGFX_DEVICE)Patch->hDevice;
+    if (KmdDevice == NULL || KmdDevice->Magic != HDGFX_DEVICE_MAGIC || KmdDevice->Adapter != Adapter ||
+        KmdDevice->Process == NULL || KmdDevice->Process->Magic != HDGFX_PROCESS_MAGIC ||
+        KmdDevice->Process->Adapter != Adapter)
     {
         return STATUS_INVALID_HANDLE;
     }
@@ -876,7 +876,7 @@ HdgfxDdiPatch(
     {
         CONST D3DDDI_PATCHLOCATIONLIST *Entry = &Patch->pPatchLocationList[Index];
         CONST DXGK_ALLOCATIONLIST *Allocation;
-        PSOFTGPU_OPENALLOC Open;
+        PHDGFX_OPEN Open;
         PUCHAR Location;
         ULONG Width = Entry->DriverId == HDGFX_PATCH_PHYSICAL ? sizeof(ULONGLONG) : sizeof(ULONG);
         ULONGLONG Value;
@@ -891,13 +891,13 @@ HdgfxDdiPatch(
             return STATUS_INVALID_PARAMETER;
         }
         Allocation = &Patch->pAllocationList[Entry->AllocationIndex];
-        Open = (PSOFTGPU_OPENALLOC)Allocation->hDeviceSpecificAllocation;
+        Open = (PHDGFX_OPEN)Allocation->hDeviceSpecificAllocation;
         Status = HdgfxValidateOpen(KmdDevice, Open);
         if (!NT_SUCCESS(Status))
             return Status;
         if (Allocation->SegmentId == 0)
             return STATUS_GRAPHICS_ALLOCATION_BUSY;
-        Status = HdgfxPlacement(Device, Allocation, Open, Entry->AllocationOffset, Entry->DriverId, &Value);
+        Status = HdgfxPlacement(Adapter, Allocation, Open, Entry->AllocationOffset, Entry->DriverId, &Value);
         if (!NT_SUCCESS(Status))
             return Status;
         Location = (PUCHAR)Patch->pDmaBuffer + Entry->PatchOffset;
@@ -911,23 +911,23 @@ HdgfxDdiPatch(
 
 static volatile LONG64 *
 HdgfxSlabFence(
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PHDGFX_ADAPTER Adapter,
     _In_ ULONGLONG Address)
 {
     SIZE_T Offset;
 
     if (Address % sizeof(UINT64) != 0 ||
-        !NT_SUCCESS(SoftGpu2dResolveSlabRange((ULONGLONG)Device->FrameBufferPhys.QuadPart, Device->FrameBufferSize,
+        !NT_SUCCESS(SoftGpu2dResolveSlabRange((ULONGLONG)Adapter->SlabPhysical.QuadPart, Adapter->SlabSize,
                                               Address, sizeof(UINT64), &Offset)))
     {
         return NULL;
     }
-    return (volatile LONG64 *)((PUCHAR)Device->FrameBuffer + Offset);
+    return (volatile LONG64 *)((PUCHAR)Adapter->Slab + Offset);
 }
 
 static PUCHAR
 HdgfxSlabRange(
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PHDGFX_ADAPTER Adapter,
     _In_ ULONGLONG Address,
     _In_ ULONGLONG Length,
     _Out_ PSIZE_T Remaining)
@@ -935,13 +935,13 @@ HdgfxSlabRange(
     SIZE_T Offset;
 
     *Remaining = 0;
-    if (!NT_SUCCESS(SoftGpu2dResolveSlabRange((ULONGLONG)Device->FrameBufferPhys.QuadPart, Device->FrameBufferSize,
+    if (!NT_SUCCESS(SoftGpu2dResolveSlabRange((ULONGLONG)Adapter->SlabPhysical.QuadPart, Adapter->SlabSize,
                                               Address, Length, &Offset)))
     {
         return NULL;
     }
-    *Remaining = Device->FrameBufferSize - Offset;
-    return (PUCHAR)Device->FrameBuffer + Offset;
+    *Remaining = Adapter->SlabSize - Offset;
+    return (PUCHAR)Adapter->Slab + Offset;
 }
 
 static BOOLEAN
@@ -969,7 +969,6 @@ HdgfxRunCpu(
     _Inout_ PHDGFX_ADAPTER Adapter,
     _In_ CONST SOFTGPU_CMD *Command)
 {
-    PSOFTGPU_DEVICE Device = Adapter->Device;
     volatile LONG64 *Fence;
     PUCHAR Source;
     PUCHAR Destination;
@@ -984,7 +983,7 @@ HdgfxRunCpu(
     switch (Command->Op)
     {
         case SOFTGPU_CMD_OP_WAIT_FENCE:
-            Fence = HdgfxSlabFence(Device, Command->DstAddress);
+            Fence = HdgfxSlabFence(Adapter, Command->DstAddress);
             if (Fence == NULL)
                 Status = STATUS_INVALID_ADDRESS;
             else if ((ULONGLONG)ReadAcquire64(Fence) < Command->FenceValue)
@@ -992,7 +991,7 @@ HdgfxRunCpu(
             break;
 
         case SOFTGPU_CMD_OP_SIGNAL_FENCE:
-            Fence = HdgfxSlabFence(Device, Command->DstAddress);
+            Fence = HdgfxSlabFence(Adapter, Command->DstAddress);
             if (Fence == NULL)
                 Status = STATUS_INVALID_ADDRESS;
             else
@@ -1000,22 +999,22 @@ HdgfxRunCpu(
             break;
 
         case SOFTGPU_CMD_OP_BLT:
-            Source = HdgfxSlabRange(Device, Command->SrcAddress, 1, &SourceSize);
-            Destination = HdgfxSlabRange(Device, Command->DstAddress, 1, &DestinationSize);
+            Source = HdgfxSlabRange(Adapter, Command->SrcAddress, 1, &SourceSize);
+            Destination = HdgfxSlabRange(Adapter, Command->DstAddress, 1, &DestinationSize);
             Status = Source == NULL || Destination == NULL ? STATUS_INVALID_ADDRESS :
                      SoftGpu2dCopyRect(Source, SourceSize, Command->SrcPitch, &Command->SrcRect, Destination,
                                        DestinationSize, Command->DstPitch, &Command->DstRect);
             break;
 
         case SOFTGPU_CMD_OP_FILL:
-            Destination = HdgfxSlabRange(Device, Command->DstAddress, 1, &DestinationSize);
+            Destination = HdgfxSlabRange(Adapter, Command->DstAddress, 1, &DestinationSize);
             Status = Destination == NULL ? STATUS_INVALID_ADDRESS :
                      SoftGpu2dFillRect(Destination, DestinationSize, Command->DstPitch, &Command->DstRect,
                                        Command->Color);
             break;
 
         case SOFTGPU_CMD_OP_PAGE:
-            Destination = HdgfxSlabRange(Device, Command->SlabAddress, Command->ByteCount, &DestinationSize);
+            Destination = HdgfxSlabRange(Adapter, Command->SlabAddress, Command->ByteCount, &DestinationSize);
             if (Destination == NULL || Command->SystemAddress == 0)
                 Status = STATUS_INVALID_ADDRESS;
             else if (Command->Flags & SOFTGPU_CMD_FLAG_TO_SLAB)
@@ -1025,7 +1024,7 @@ HdgfxRunCpu(
             break;
 
         case SOFTGPU_CMD_OP_FILL_LINEAR:
-            Destination = HdgfxSlabRange(Device, Command->SlabAddress, Command->ByteCount, &DestinationSize);
+            Destination = HdgfxSlabRange(Adapter, Command->SlabAddress, Command->ByteCount, &DestinationSize);
             if (Destination == NULL || Command->ByteCount % sizeof(ULONG) != 0)
             {
                 Status = STATUS_INVALID_ADDRESS;
@@ -1194,7 +1193,6 @@ HdgfxCompleteSoftware(
     _In_opt_ PVOID Context)
 {
     PHDGFX_ADAPTER Adapter = Context;
-    PSOFTGPU_DEVICE Device = Adapter->Device;
     DXGKARGCB_NOTIFY_INTERRUPT_DATA Notify;
 
     if (Adapter->QueueResetting || (LONG)(Adapter->SoftwareFence - Adapter->CompletedFence) <= 0)
@@ -1203,7 +1201,7 @@ HdgfxCompleteSoftware(
     RtlZeroMemory(&Notify, sizeof(Notify));
     Notify.InterruptType = DXGK_INTERRUPT_TYPE_DMA_COMPLETED;
     Notify.DmaCompleted.SubmissionFenceId = Adapter->SoftwareFence;
-    Device->DxgkInterface.DxgkCbNotifyInterrupt(Device->DxgkInterface.DeviceHandle, &Notify);
+    Adapter->DxgkInterface.DxgkCbNotifyInterrupt(Adapter->DxgkInterface.DeviceHandle, &Notify);
     return TRUE;
 }
 
@@ -1216,7 +1214,6 @@ HdgfxQueueRoutine(
     _In_opt_ PVOID SystemArgument2)
 {
     PHDGFX_ADAPTER Adapter = DeferredContext;
-    PSOFTGPU_DEVICE Device = Adapter->Device;
     HDGFX_QUEUE_STATE State = HdgfxQueueDone;
     LARGE_INTEGER Due;
     BOOLEAN Software = FALSE;
@@ -1246,12 +1243,12 @@ HdgfxQueueRoutine(
     }
     KeReleaseSpinLockFromDpcLevel(&Adapter->QueueLock);
 
-    if (Software && Device->DxgkInterface.DxgkCbSynchronizeExecution != NULL)
+    if (Software && Adapter->DxgkInterface.DxgkCbSynchronizeExecution != NULL)
     {
-        Device->DxgkInterface.DxgkCbSynchronizeExecution(Device->DxgkInterface.DeviceHandle, HdgfxCompleteSoftware,
-                                                         Adapter, 0, &Notified);
+        Adapter->DxgkInterface.DxgkCbSynchronizeExecution(Adapter->DxgkInterface.DeviceHandle, HdgfxCompleteSoftware,
+                                                          Adapter, 0, &Notified);
         if (Notified)
-            Device->DxgkInterface.DxgkCbNotifyDpc(Device->DxgkInterface.DeviceHandle);
+            Adapter->DxgkInterface.DxgkCbNotifyDpc(Adapter->DxgkInterface.DeviceHandle);
     }
     ExReleaseRundownProtection(&Adapter->Rundown);
 }
@@ -1288,7 +1285,6 @@ VOID
 HdgfxQueueInterrupt(
     _Inout_ PHDGFX_ADAPTER Adapter)
 {
-    PSOFTGPU_DEVICE Device = Adapter->Device;
     DXGKARGCB_NOTIFY_INTERRUPT_DATA Notify;
     ULONG Fence = ((volatile ULONG *)Adapter->StatusPage)[HDGFX_RING_FENCE_INDEX];
 
@@ -1298,7 +1294,7 @@ HdgfxQueueInterrupt(
     RtlZeroMemory(&Notify, sizeof(Notify));
     Notify.InterruptType = DXGK_INTERRUPT_TYPE_DMA_COMPLETED;
     Notify.DmaCompleted.SubmissionFenceId = Fence;
-    Device->DxgkInterface.DxgkCbNotifyInterrupt(Device->DxgkInterface.DeviceHandle, &Notify);
+    Adapter->DxgkInterface.DxgkCbNotifyInterrupt(Adapter->DxgkInterface.DeviceHandle, &Notify);
     InterlockedExchange(&Adapter->FenceNotified, 1);
 }
 
@@ -1306,11 +1302,10 @@ VOID
 HdgfxQueueDpc(
     _Inout_ PHDGFX_ADAPTER Adapter)
 {
-    PSOFTGPU_DEVICE Device = Adapter->Device;
 
     KeInsertQueueDpc(&Adapter->QueueDpc, NULL, NULL);
     if (InterlockedExchange(&Adapter->FenceNotified, 0) != 0)
-        Device->DxgkInterface.DxgkCbNotifyDpc(Device->DxgkInterface.DeviceHandle);
+        Adapter->DxgkInterface.DxgkCbNotifyDpc(Adapter->DxgkInterface.DeviceHandle);
 }
 
 NTSTATUS
@@ -1319,25 +1314,21 @@ HdgfxDdiSubmitCommand(
     _In_ PVOID MiniportDeviceContext,
     _In_ CONST DXGKARG_SUBMITCOMMAND *SubmitCommand)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
-    PHDGFX_ADAPTER Adapter;
-    PSOFTGPU_KMD_DEVICE KmdDevice;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
+    PHDGFX_DEVICE KmdDevice;
     PHDGFX_SUBMIT Submit;
     NTSTATUS Status = STATUS_SUCCESS;
     KIRQL OldIrql;
 
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC || SubmitCommand == NULL ||
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC || SubmitCommand == NULL ||
         SubmitCommand->NodeOrdinal != 0 || SubmitCommand->EngineOrdinal != 0)
     {
         return STATUS_INVALID_PARAMETER;
     }
-    Adapter = Device->PlatformServicesContext;
-    if (Adapter == NULL)
-        return STATUS_DEVICE_NOT_READY;
-    KmdDevice = (PSOFTGPU_KMD_DEVICE)SubmitCommand->hDevice;
-    if (KmdDevice == NULL || KmdDevice->Magic != SOFTGPU_KMD_DEVICE_MAGIC || KmdDevice->Adapter != Device ||
-        KmdDevice->Process == NULL || KmdDevice->Process->Magic != SOFTGPU_PROCESS_MAGIC ||
-        KmdDevice->Process->Adapter != Device)
+    KmdDevice = (PHDGFX_DEVICE)SubmitCommand->hDevice;
+    if (KmdDevice == NULL || KmdDevice->Magic != HDGFX_DEVICE_MAGIC || KmdDevice->Adapter != Adapter ||
+        KmdDevice->Process == NULL || KmdDevice->Process->Magic != HDGFX_PROCESS_MAGIC ||
+        KmdDevice->Process->Adapter != Adapter)
     {
         return STATUS_INVALID_HANDLE;
     }
@@ -1355,7 +1346,7 @@ HdgfxDdiSubmitCommand(
     }
 
     KeAcquireSpinLock(&Adapter->QueueLock, &OldIrql);
-    if (Device->Stopped || Adapter->QueueStopped)
+    if (Adapter->Stopped || Adapter->QueueStopped)
     {
         Status = STATUS_DELETE_PENDING;
     }
@@ -1386,16 +1377,14 @@ HdgfxDdiQueryCurrentFence(
     _In_ PVOID MiniportDeviceContext,
     _Inout_ PDXGKARG_QUERYCURRENTFENCE pCurrentFence)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
-    PHDGFX_ADAPTER Adapter;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
 
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC || pCurrentFence == NULL ||
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC || pCurrentFence == NULL ||
         pCurrentFence->NodeOrdinal != 0 || pCurrentFence->EngineOrdinal != 0)
     {
         return STATUS_INVALID_PARAMETER;
     }
-    Adapter = Device->PlatformServicesContext;
-    pCurrentFence->CurrentFence = Adapter != NULL ? Adapter->CompletedFence : 0;
+    pCurrentFence->CurrentFence = Adapter->CompletedFence;
     return STATUS_SUCCESS;
 }
 
@@ -1428,18 +1417,14 @@ APIENTRY
 HdgfxDdiResetFromTimeout(
     _In_ PVOID MiniportDeviceContext)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
-    PHDGFX_ADAPTER Adapter;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
     BOOLEAN Ignored;
     KIRQL OldIrql;
 
     PAGED_CODE();
 
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC)
         return STATUS_INVALID_PARAMETER;
-    Adapter = Device->PlatformServicesContext;
-    if (Adapter == NULL)
-        return STATUS_SUCCESS;
 
     KeAcquireSpinLock(&Adapter->QueueLock, &OldIrql);
     Adapter->QueueResetting = TRUE;
@@ -1448,8 +1433,8 @@ HdgfxDdiResetFromTimeout(
     KeCancelTimer(&Adapter->QueueTimer);
     KeRemoveQueueDpc(&Adapter->QueueDpc);
     KeFlushQueuedDpcs();
-    Device->DxgkInterface.DxgkCbSynchronizeExecution(Device->DxgkInterface.DeviceHandle, HdgfxResetFences, Adapter, 0,
-                                                     &Ignored);
+    Adapter->DxgkInterface.DxgkCbSynchronizeExecution(Adapter->DxgkInterface.DeviceHandle, HdgfxResetFences, Adapter, 0,
+                                                      &Ignored);
     DPRINT1("Timeout reset dropped the queue at fence %lu\n", Adapter->CompletedFence);
     return HdgfxResetRender(Adapter);
 }
@@ -1459,21 +1444,76 @@ APIENTRY
 HdgfxDdiRestartFromTimeout(
     _In_ PVOID MiniportDeviceContext)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
-    PHDGFX_ADAPTER Adapter;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
     BOOLEAN Ignored;
 
     PAGED_CODE();
 
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
+    if (Adapter == NULL || Adapter->Magic != HDGFX_ADAPTER_MAGIC)
         return STATUS_INVALID_PARAMETER;
-    Adapter = Device->PlatformServicesContext;
-    if (Adapter == NULL)
-        return STATUS_SUCCESS;
 
     HdgfxRestartRender(Adapter);
-    Device->DxgkInterface.DxgkCbSynchronizeExecution(Device->DxgkInterface.DeviceHandle, HdgfxRestartFences, Adapter,
-                                                     0, &Ignored);
+    Adapter->DxgkInterface.DxgkCbSynchronizeExecution(Adapter->DxgkInterface.DeviceHandle, HdgfxRestartFences, Adapter,
+                                                      0, &Ignored);
     KeInsertQueueDpc(&Adapter->QueueDpc, NULL, NULL);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiCreateContext(
+    _In_ PVOID hDevice,
+    _Inout_ PDXGKARG_CREATECONTEXT CreateContext)
+{
+    PHDGFX_DEVICE KmdDevice = hDevice;
+    PHDGFX_PROCESS Process;
+    PHDGFX_CONTEXT Context;
+
+    if (CreateContext == NULL || KmdDevice == NULL || KmdDevice->Magic != HDGFX_DEVICE_MAGIC ||
+        KmdDevice->Adapter == NULL || KmdDevice->Adapter->Magic != HDGFX_ADAPTER_MAGIC)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Process = KmdDevice->Process;
+    if ((!CreateContext->Flags.SystemContext && Process == NULL) ||
+        (Process != NULL && (Process->Magic != HDGFX_PROCESS_MAGIC || Process->Adapter != KmdDevice->Adapter)) ||
+        CreateContext->NodeOrdinal != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Context = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Context), HDGFX_TAG);
+    if (Context == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Context->Magic = HDGFX_CONTEXT_MAGIC;
+    Context->NodeOrdinal = CreateContext->NodeOrdinal;
+    Context->Device = KmdDevice;
+    Context->Process = Process;
+
+    CreateContext->ContextInfo.DmaBufferSize = 64 * 1024;
+    CreateContext->ContextInfo.DmaBufferSegmentSet = 1UL << (HDGFX_DMA_SEGMENT_ID - 1);
+    CreateContext->ContextInfo.DmaBufferPrivateDataSize = 0;
+    CreateContext->ContextInfo.AllocationListSize = 256;
+    CreateContext->ContextInfo.PatchLocationListSize = 256;
+    CreateContext->ContextInfo.Caps.Value = 0;
+    CreateContext->hContext = Context;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiDestroyContext(
+    _In_ PVOID hContext)
+{
+    PHDGFX_CONTEXT Context = hContext;
+
+    if (Context == NULL)
+        return STATUS_SUCCESS;
+    if (Context->Magic != HDGFX_CONTEXT_MAGIC)
+        return STATUS_INVALID_PARAMETER;
+    Context->Magic = HDGFX_DEAD_CONTEXT_MAGIC;
+    Context->Device = NULL;
+    Context->Process = NULL;
+    ExFreePoolWithTag(Context, HDGFX_TAG);
     return STATUS_SUCCESS;
 }

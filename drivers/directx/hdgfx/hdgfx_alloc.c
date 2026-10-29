@@ -8,31 +8,31 @@
 #include "hdgfx.h"
 #include "softgpu_2d_core.h"
 
-#define HDGFX_ALLOCATION_SEGMENT_SET    (1UL << (SOFTGPU_SEGMENT_ID - 1))
+#define HDGFX_ALLOCATION_SEGMENT_SET    (1UL << (HDGFX_SLAB_SEGMENT_ID - 1))
 
 static BOOLEAN
-HdgfxDeviceValid(
-    _In_opt_ PSOFTGPU_DEVICE Device)
+HdgfxAdapterValid(
+    _In_opt_ PHDGFX_ADAPTER Adapter)
 {
-    return Device != NULL && Device->Magic == SOFTGPU_DEVICE_MAGIC;
+    return Adapter != NULL && Adapter->Magic == HDGFX_ADAPTER_MAGIC;
 }
 
 static BOOLEAN
 HdgfxKmdDeviceValid(
-    _In_opt_ PSOFTGPU_KMD_DEVICE KmdDevice)
+    _In_opt_ PHDGFX_DEVICE KmdDevice)
 {
-    PSOFTGPU_DEVICE Device;
+    PHDGFX_ADAPTER Adapter;
 
-    if (KmdDevice == NULL || KmdDevice->Magic != SOFTGPU_KMD_DEVICE_MAGIC)
+    if (KmdDevice == NULL || KmdDevice->Magic != HDGFX_DEVICE_MAGIC)
         return FALSE;
-    Device = KmdDevice->Adapter;
-    return HdgfxDeviceValid(Device) && KmdDevice->Process != NULL &&
-           KmdDevice->Process->Magic == SOFTGPU_PROCESS_MAGIC && KmdDevice->Process->Adapter == Device;
+    Adapter = KmdDevice->Adapter;
+    return HdgfxAdapterValid(Adapter) && KmdDevice->Process != NULL &&
+           KmdDevice->Process->Magic == HDGFX_PROCESS_MAGIC && KmdDevice->Process->Adapter == Adapter;
 }
 
 static VOID
 HdgfxFreeAllocation(
-    _In_ PSOFTGPU_ALLOC Alloc)
+    _In_ PHDGFX_ALLOCATION Alloc)
 {
     Alloc->Magic = 0xDEADA110UL;
     ExFreePoolWithTag(Alloc, HDGFX_TAG);
@@ -40,7 +40,7 @@ HdgfxFreeAllocation(
 
 static VOID
 HdgfxFreeOpen(
-    _In_ PSOFTGPU_OPENALLOC Open)
+    _In_ PHDGFX_OPEN Open)
 {
     Open->Magic = 0xDEAD0A11UL;
     Open->Device = NULL;
@@ -75,7 +75,7 @@ HdgfxDdiGetStandardAllocationDriverData(
     _In_ PVOID MiniportDeviceContext,
     _Inout_ PDXGKARG_GETSTANDARDALLOCATIONDRIVERDATA Data)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
     SOFTGPU_ALLOCATION_PRIVATE_DATA PrivateData;
     UINT SuppliedSize;
     ULONG Width;
@@ -84,7 +84,7 @@ HdgfxDdiGetStandardAllocationDriverData(
     D3DDDIFORMAT Format = D3DDDIFMT_X8R8G8B8;
     UINT *PitchOut = NULL;
 
-    if (!HdgfxDeviceValid(Device) || Data == NULL)
+    if (!HdgfxAdapterValid(Adapter) || Data == NULL)
         return STATUS_INVALID_PARAMETER;
 
     switch (Data->StandardAllocationType)
@@ -156,7 +156,7 @@ HdgfxDdiGetStandardAllocationDriverData(
     PrivateData.StorageHeight = Height;
     PrivateData.PlaneCount = 1;
     PrivateData.PlanePitches[0] = Pitch;
-    if (!SoftGpuAllocationPrivateDataValid(&PrivateData) || (ULONGLONG)Pitch * Height > Device->FrameBufferSize)
+    if (!SoftGpuAllocationPrivateDataValid(&PrivateData) || (ULONGLONG)Pitch * Height > Adapter->SlabSize)
         return STATUS_GRAPHICS_NO_VIDEO_MEMORY;
 
     SuppliedSize = Data->AllocationPrivateDriverDataSize;
@@ -172,23 +172,23 @@ HdgfxDdiGetStandardAllocationDriverData(
 
 static NTSTATUS
 HdgfxCreateOneAllocation(
-    _In_ PSOFTGPU_DEVICE Device,
+    _In_ PHDGFX_ADAPTER Adapter,
     _Inout_ DXGK_ALLOCATIONINFO *Info)
 {
     SOFTGPU_ALLOCATION_PRIVATE_DATA PrivateData;
     ULONGLONG RequiredSize = 0;
     ULONGLONG Size;
-    PSOFTGPU_ALLOC Alloc;
+    PHDGFX_ALLOCATION Alloc;
 
     if (Info->PrivateDriverDataSize != 0 && Info->pPrivateDriverData == NULL)
         return STATUS_INVALID_PARAMETER;
-    if (Info->Size > Device->FrameBufferSize)
+    if (Info->Size > Adapter->SlabSize)
         return STATUS_GRAPHICS_NO_VIDEO_MEMORY;
 
     Alloc = ExAllocatePoolZero(NonPagedPool, sizeof(*Alloc), HDGFX_TAG);
     if (Alloc == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
-    Alloc->Magic = SOFTGPU_ALLOC_MAGIC;
+    Alloc->Magic = HDGFX_ALLOCATION_MAGIC;
     Alloc->Format = D3DDDIFMT_A8R8G8B8;
 
     if (Info->PrivateDriverDataSize >= SOFTGPU_ALLOCATION_PRIVATE_VERSION_1_SIZE &&
@@ -209,7 +209,7 @@ HdgfxCreateOneAllocation(
     if (RequiredSize > Size)
         Size = RequiredSize;
     Size = ROUND_TO_PAGES(Size);
-    if (Size > Device->FrameBufferSize)
+    if (Size > Adapter->SlabSize)
     {
         HdgfxFreeAllocation(Alloc);
         return STATUS_GRAPHICS_NO_VIDEO_MEMORY;
@@ -233,23 +233,23 @@ HdgfxDdiCreateAllocation(
     _In_ PVOID MiniportDeviceContext,
     _Inout_ PDXGKARG_CREATEALLOCATION CreateAllocation)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
+    PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
     NTSTATUS Status = STATUS_SUCCESS;
     ULONG Index;
 
-    if (!HdgfxDeviceValid(Device) || CreateAllocation == NULL ||
+    if (!HdgfxAdapterValid(Adapter) || CreateAllocation == NULL ||
         (CreateAllocation->NumAllocations != 0 && CreateAllocation->pAllocationInfo == NULL))
     {
         return STATUS_INVALID_PARAMETER;
     }
-    if (Device->FrameBuffer == NULL || Device->FrameBufferSize == 0)
+    if (Adapter->Slab == NULL || Adapter->SlabSize == 0)
         return STATUS_DEVICE_NOT_READY;
 
     for (Index = 0; Index < CreateAllocation->NumAllocations; Index++)
         CreateAllocation->pAllocationInfo[Index].hAllocation = NULL;
     for (Index = 0; Index < CreateAllocation->NumAllocations; Index++)
     {
-        Status = HdgfxCreateOneAllocation(Device, &CreateAllocation->pAllocationInfo[Index]);
+        Status = HdgfxCreateOneAllocation(Adapter, &CreateAllocation->pAllocationInfo[Index]);
         if (!NT_SUCCESS(Status))
             break;
     }
@@ -270,10 +270,10 @@ HdgfxDdiDestroyAllocation(
     _In_ PVOID MiniportDeviceContext,
     _In_ CONST DXGKARG_DESTROYALLOCATION *DestroyAllocation)
 {
-    PSOFTGPU_ALLOC Alloc;
+    PHDGFX_ALLOCATION Alloc;
     ULONG Index;
 
-    if (!HdgfxDeviceValid(MiniportDeviceContext) || DestroyAllocation == NULL ||
+    if (!HdgfxAdapterValid(MiniportDeviceContext) || DestroyAllocation == NULL ||
         (DestroyAllocation->NumAllocations != 0 && DestroyAllocation->phAllocation == NULL))
     {
         return STATUS_INVALID_PARAMETER;
@@ -281,7 +281,7 @@ HdgfxDdiDestroyAllocation(
     for (Index = 0; Index < DestroyAllocation->NumAllocations; Index++)
     {
         Alloc = DestroyAllocation->phAllocation[Index];
-        if (Alloc != NULL && Alloc->Magic != SOFTGPU_ALLOC_MAGIC)
+        if (Alloc != NULL && Alloc->Magic != HDGFX_ALLOCATION_MAGIC)
         {
             DPRINT1("DestroyAllocation %lu: bad allocation %p\n", Index, Alloc);
             return STATUS_INVALID_PARAMETER;
@@ -302,18 +302,18 @@ HdgfxDdiValidateUpdateAllocationProperty(
     _In_ CONST HANDLE hAdapter,
     _In_ CONST DXGKARG_VALIDATEUPDATEALLOCPROPERTY *Validate)
 {
-    PSOFTGPU_DEVICE Device = hAdapter;
-    PSOFTGPU_OPENALLOC Open;
+    PHDGFX_ADAPTER Adapter = hAdapter;
+    PHDGFX_OPEN Open;
     ULONG Preferred;
 
-    if (!HdgfxDeviceValid(Device) || Validate == NULL || Validate->hAllocation == NULL ||
+    if (!HdgfxAdapterValid(Adapter) || Validate == NULL || Validate->hAllocation == NULL ||
         (Validate->PropertyMaskValue & ~0x7UL) != 0 || (Validate->Flags.Value & ~0x1UL) != 0)
     {
         return STATUS_INVALID_PARAMETER;
     }
     Open = Validate->hAllocation;
-    if (Open->Magic != SOFTGPU_OPENALLOC_MAGIC || Open->Device == NULL ||
-        Open->Device->Magic != SOFTGPU_KMD_DEVICE_MAGIC || Open->Device->Adapter != Device)
+    if (Open->Magic != HDGFX_OPEN_MAGIC || Open->Device == NULL ||
+        Open->Device->Magic != HDGFX_DEVICE_MAGIC || Open->Device->Adapter != Adapter)
     {
         return STATUS_INVALID_HANDLE;
     }
@@ -325,7 +325,7 @@ HdgfxDdiValidateUpdateAllocationProperty(
     {
         for (Preferred = Validate->PreferredSegment.Value; Preferred != 0; Preferred >>= 6)
         {
-            if ((Preferred & 0x1F) != 0 && (Preferred & 0x1F) != SOFTGPU_SEGMENT_ID)
+            if ((Preferred & 0x1F) != 0 && (Preferred & 0x1F) != HDGFX_SLAB_SEGMENT_ID)
                 return STATUS_NOT_SUPPORTED;
         }
     }
@@ -334,12 +334,12 @@ HdgfxDdiValidateUpdateAllocationProperty(
 
 static NTSTATUS
 HdgfxOpenOneAllocation(
-    _In_ PSOFTGPU_KMD_DEVICE KmdDevice,
+    _In_ PHDGFX_DEVICE KmdDevice,
     _Inout_ DXGK_OPENALLOCATIONINFO *Info)
 {
     SOFTGPU_ALLOCATION_PRIVATE_DATA PrivateData;
     ULONGLONG RequiredSize;
-    PSOFTGPU_OPENALLOC Open;
+    PHDGFX_OPEN Open;
     UINT LinearSize;
 
     if (Info->hAllocation == 0 || (Info->PrivateDriverDataSize != 0 && Info->pPrivateDriverData == NULL))
@@ -348,7 +348,7 @@ HdgfxOpenOneAllocation(
     Open = ExAllocatePoolZero(NonPagedPool, sizeof(*Open), HDGFX_TAG);
     if (Open == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
-    Open->Magic = SOFTGPU_OPENALLOC_MAGIC;
+    Open->Magic = HDGFX_OPEN_MAGIC;
     Open->Device = KmdDevice;
     Open->hAllocation = Info->hAllocation;
 
@@ -371,7 +371,7 @@ HdgfxOpenOneAllocation(
     else if (Info->PrivateDriverDataSize == sizeof(LinearSize))
     {
         RtlCopyMemory(&LinearSize, Info->pPrivateDriverData, sizeof(LinearSize));
-        if (LinearSize == 0 || LinearSize > KmdDevice->Adapter->FrameBufferSize)
+        if (LinearSize == 0 || LinearSize > KmdDevice->Adapter->SlabSize)
         {
             HdgfxFreeOpen(Open);
             return STATUS_INVALID_PARAMETER;
@@ -393,11 +393,11 @@ HdgfxDdiOpenAllocation(
     _In_ PVOID hDevice,
     _In_ CONST DXGKARG_OPENALLOCATION *OpenAllocation)
 {
-    PSOFTGPU_KMD_DEVICE KmdDevice = hDevice;
+    PHDGFX_DEVICE KmdDevice = hDevice;
     NTSTATUS Status = STATUS_SUCCESS;
     ULONG Index;
 
-    if (KmdDevice == NULL || KmdDevice->Magic != SOFTGPU_KMD_DEVICE_MAGIC || OpenAllocation == NULL ||
+    if (KmdDevice == NULL || KmdDevice->Magic != HDGFX_DEVICE_MAGIC || OpenAllocation == NULL ||
         OpenAllocation->NumAllocations == 0 || OpenAllocation->pOpenAllocation == NULL)
     {
         return STATUS_INVALID_PARAMETER;
@@ -430,11 +430,11 @@ HdgfxDdiCloseAllocation(
     _In_ PVOID hDevice,
     _In_ CONST DXGKARG_CLOSEALLOCATION *CloseAllocation)
 {
-    PSOFTGPU_KMD_DEVICE KmdDevice = hDevice;
-    PSOFTGPU_OPENALLOC Open;
+    PHDGFX_DEVICE KmdDevice = hDevice;
+    PHDGFX_OPEN Open;
     ULONG Index;
 
-    if (KmdDevice == NULL || KmdDevice->Magic != SOFTGPU_KMD_DEVICE_MAGIC || CloseAllocation == NULL ||
+    if (KmdDevice == NULL || KmdDevice->Magic != HDGFX_DEVICE_MAGIC || CloseAllocation == NULL ||
         CloseAllocation->NumAllocations == 0 || CloseAllocation->pOpenHandleList == NULL)
     {
         return STATUS_INVALID_PARAMETER;
@@ -445,7 +445,7 @@ HdgfxDdiCloseAllocation(
     for (Index = 0; Index < CloseAllocation->NumAllocations; Index++)
     {
         Open = CloseAllocation->pOpenHandleList[Index];
-        if (Open == NULL || Open->Magic != SOFTGPU_OPENALLOC_MAGIC || Open->Device != KmdDevice)
+        if (Open == NULL || Open->Magic != HDGFX_OPEN_MAGIC || Open->Device != KmdDevice)
         {
             DPRINT1("CloseAllocation %lu: bad binding %p\n", Index, Open);
             return STATUS_INVALID_PARAMETER;
