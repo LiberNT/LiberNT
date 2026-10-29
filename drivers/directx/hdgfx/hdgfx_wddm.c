@@ -5,7 +5,7 @@
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
-#include "softgpu.h"
+#include "hdgfx.h"
 
 DRIVER_INITIALIZE HdgfxDriverEntry;
 
@@ -44,15 +44,15 @@ HdgfxDriverEntry(
     InitData.DxgkDdiOpenAllocation = SoftGpuDdiOpenAllocation;
     InitData.DxgkDdiCloseAllocation = SoftGpuDdiCloseAllocation;
     InitData.DxgkDdiGetStandardAllocationDriverData = SoftGpuDdiGetStandardAllocationDriverData;
-    InitData.DxgkDdiBuildPagingBuffer = SoftGpuDdiBuildPagingBuffer;
-    InitData.DxgkDdiPatch = SoftGpuDdiPatch;
-    InitData.DxgkDdiRender = SoftGpuDdiRender;
-    InitData.DxgkDdiPresent = SoftGpuDdiPresent;
+    InitData.DxgkDdiBuildPagingBuffer = HdgfxDdiBuildPagingBuffer;
+    InitData.DxgkDdiPatch = HdgfxDdiPatch;
+    InitData.DxgkDdiRender = HdgfxDdiRender;
+    InitData.DxgkDdiPresent = HdgfxDdiPresent;
 
-    InitData.DxgkDdiSubmitCommand = SoftGpuDdiSubmitCommand;
-    InitData.DxgkDdiQueryCurrentFence = SoftGpuDdiQueryCurrentFence;
-    InitData.DxgkDdiResetFromTimeout = SoftGpuDdiResetFromTimeout;
-    InitData.DxgkDdiRestartFromTimeout = SoftGpuDdiRestartFromTimeout;
+    InitData.DxgkDdiSubmitCommand = HdgfxDdiSubmitCommand;
+    InitData.DxgkDdiQueryCurrentFence = HdgfxDdiQueryCurrentFence;
+    InitData.DxgkDdiResetFromTimeout = HdgfxDdiResetFromTimeout;
+    InitData.DxgkDdiRestartFromTimeout = HdgfxDdiRestartFromTimeout;
 
     InitData.DxgkDdiIsSupportedVidPn = SoftGpuDdiIsSupportedVidPn;
     InitData.DxgkDdiRecommendFunctionalVidPn = SoftGpuDdiRecommendFunctionalVidPn;

@@ -5,10 +5,8 @@
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
-#include "softgpu.h"
+#include "hdgfx.h"
 #include "softgpu_2d_core.h"
-#include "core/hdgfx_core.h"
-#include "core/hdgfx_regs.h"
 #include <pseh/pseh2.h>
 
 #define HDGFX_PCI_BAR0              0x10UL
@@ -21,114 +19,21 @@
 #define HDGFX_VBT_MINIMUM_SCALE     255UL
 #define HDGFX_VBT_BACKLIGHT_PWM     2UL
 #define HDGFX_ACPI_ID_INTERNAL_PANEL 0x0400UL
-#define HDGFX_TAG                   'xfDH'
 #define HDGFX_WORKING_SURFACE_COUNT 12UL
 #define HDGFX_STRIDE_ALIGNMENT      64UL
 #define HDGFX_VBLANK_POLL_US        20UL
 #define HDGFX_VBLANK_TIMEOUT_US     50000UL
 #define HDGFX_CRT_CHILD_UID         1UL
 #define HDGFX_CRT_PIPE              1UL
-#define HDGFX_RING_SIZE             0x4000UL
-#define HDGFX_RING_PAGES            (HDGFX_RING_SIZE / PAGE_SIZE)
-#define HDGFX_STATUS_GTT_INDEX      HDGFX_RING_PAGES
-#define HDGFX_SCRATCH_GTT_INDEX     (HDGFX_RING_PAGES + 1)
-#define HDGFX_RENDER_GTT_PAGES      (HDGFX_RING_PAGES + 2)
 #define HDGFX_BLT_TEST_PITCH        128UL
 #define HDGFX_CURSOR_PAGES          (HDGFX_CURSOR_SIZE * HDGFX_CURSOR_SIZE * 4 / PAGE_SIZE)
 #define HDGFX_DISPLAY_PIPES         2UL
 #define HDGFX_BLT_TEST_WIDTH        (HDGFX_BLT_TEST_PITCH / 4)
 #define HDGFX_BLT_TEST_HEIGHT       16UL
-#define HDGFX_RING_SEQNO_INDEX      0x20UL
 #define HDGFX_RING_TEST_TIMEOUT_US  100000UL
-#define HDGFX_RING_RESERVE          128UL
-#define HDGFX_BLT_OVERLAP_PITCH     64UL
 #define HDGFX_BLT_MAX_COORDINATE    0x7FFFUL
 #define HDGFX_PRESENT_BATCH         16UL
 #define HDGFX_PRESENT_TIMEOUT_US    100000UL
-
-typedef struct _HDGFX_SCANOUT
-{
-    PUCHAR Registers;
-    const HDGFX_GENERATION *Generation;
-    HDGFX_DTD Panel;
-    HDGFX_DTD PanelModes[HDGFX_EDID_MAX_DTDS];
-    ULONG PanelModeCount;
-    BOOLEAN Ssc;
-    ULONG Surface;
-    ULONG FirmwareSurface;
-    ULONG Width;
-    ULONG Height;
-    ULONG Pitch;
-    BOOLEAN DisplayOff;
-    BOOLEAN PanelBacklight;
-    BOOLEAN LvdsActive;
-    HDGFX_DTD CrtTiming;
-    BOOLEAN CrtTimingValid;
-    BOOLEAN CrtActive;
-    BOOLEAN CrtDisplayOff;
-    ULONGLONG Bar0;
-    ULONG ApertureSize;
-    PULONG SlabGtt;
-    ULONG SlabGttPages;
-    ULONG SlabAddress;
-    ULONGLONG SlabPhysical;
-    ULONGLONG SlabSize;
-    PULONG WindowGtt;
-    PULONG WindowPfns;
-    ULONG WindowPages;
-    ULONG WindowAddress;
-    PULONG Cursor;
-    ULONG CursorAddress;
-    ULONG CursorGeneration;
-    ULONG CursorControl;
-    ULONG CursorPosition;
-    KMUTEX Lock;
-} HDGFX_SCANOUT, *PHDGFX_SCANOUT;
-
-typedef struct _HDGFX_ADAPTER
-{
-    PSOFTGPU_DEVICE Device;
-    PUCHAR Registers;
-    const HDGFX_GENERATION *Generation;
-    HDGFX_VBT Vbt;
-    BOOLEAN VbtPresent;
-    BOOLEAN InternalPanel;
-    BOOLEAN AsleReady;
-    BOOLEAN AsleInterrupt;
-    PUCHAR OpRegion;
-    ULONG SavedDeimr;
-    ULONG SavedDeier;
-    ULONG SavedSdeimr;
-    ULONG SavedSdeier;
-    ULONG InterruptMask;
-    BOOLEAN HotplugInterrupt;
-    volatile LONG AslePending;
-    volatile LONG HotplugPending;
-    volatile LONG HotplugQueued;
-    WORK_QUEUE_ITEM HotplugWork;
-    ULONG BacklightMaximum;
-    ULONG BacklightMinimum;
-    EX_RUNDOWN_REF Rundown;
-    PVOID RingMemory;
-    PVOID StatusPage;
-    PVOID ScratchPage;
-    PULONG GttWindow;
-    ULONG SavedGtt[HDGFX_RENDER_GTT_PAGES];
-    KSPIN_LOCK RingLock;
-    HDGFX_RING Ring;
-    ULONG ScratchAddress;
-    ULONG Seqno;
-    BOOLEAN RingStarted;
-    BOOLEAN RingInterrupt;
-    BOOLEAN RingUnfenced;
-    BOOLEAN RingResetting;
-    volatile LONG RingResets;
-    volatile LONG RingPending;
-    ULONG GtInterruptMask;
-    ULONG SavedGtimr;
-    ULONG SavedGtier;
-    volatile LONG RingInterrupts;
-} HDGFX_ADAPTER, *PHDGFX_ADAPTER;
 
 static const GUID HdgfxGuidBrightness =
     { 0xFDE5BBA4, 0xB3F9, 0x46FB, { 0xBD, 0xAA, 0x07, 0x28, 0xCE, 0x31, 0x00, 0xB4 } };
@@ -176,7 +81,7 @@ HdgfxSleep(
     KeDelayExecutionThread(KernelMode, FALSE, &Interval);
 }
 
-static VOID
+VOID
 HdgfxMmioInit(
     _In_ PVOID Base,
     _Out_ HDGFX_MMIO *Mmio)
@@ -836,6 +741,7 @@ HdgfxStartRender(
     RtlZeroMemory(Adapter->RingMemory, HDGFX_RING_SIZE);
     RtlZeroMemory(Adapter->StatusPage, PAGE_SIZE);
     RtlZeroMemory(Adapter->ScratchPage, PAGE_SIZE);
+    ((volatile ULONG *)Adapter->StatusPage)[HDGFX_RING_FENCE_INDEX] = Adapter->CompletedFence;
 
     for (Index = 0; Index < HDGFX_RENDER_GTT_PAGES; Index++)
     {
@@ -964,7 +870,7 @@ HdgfxTestRing(
             HdgfxIlkRingHead(&Mmio), Adapter->Ring.Tail, HdgfxReadRegister32(Adapter, HDGFX_REG(ESR, 0)));
 }
 
-static BOOLEAN
+BOOLEAN
 HdgfxRingFence(
     _Inout_ PHDGFX_ADAPTER Adapter,
     _In_ const HDGFX_MMIO *Mmio,
@@ -984,156 +890,17 @@ HdgfxRingFence(
     return TRUE;
 }
 
-static BOOLEAN
-HdgfxSlabSurface(
-    _In_ PHDGFX_SCANOUT Scanout,
-    _In_ ULONGLONG Address,
-    _In_ ULONG Pitch,
-    _In_ const RECT *Rect,
-    _Out_ HDGFX_BLT_SURFACE *Surface,
-    _Out_ PSIZE_T Start,
-    _Out_ PSIZE_T End)
-{
-    SIZE_T Offset;
-    SIZE_T RectOffset;
-    SIZE_T RowBytes;
-    SIZE_T Span;
-
-    if (!NT_SUCCESS(SoftGpu2dResolveSlabRange(Scanout->SlabPhysical, (SIZE_T)Scanout->SlabSize, Address, 1,
-                                              &Offset)) ||
-        !NT_SUCCESS(SoftGpu2dRectRange((SIZE_T)Scanout->SlabSize - Offset, Pitch, Rect, &RectOffset, &RowBytes,
-                                       &Span)))
-    {
-        return FALSE;
-    }
-    Surface->Address = Scanout->SlabAddress + (ULONG)Offset;
-    Surface->Pitch = Pitch;
-    *Start = Offset + RectOffset;
-    *End = *Start + Span;
-    return TRUE;
-}
-
-static ULONG
-HdgfxTranslate2d(
-    _In_ PHDGFX_SCANOUT Scanout,
-    _In_ const SOFTGPU_CMD *Command,
-    _Out_writes_(8) uint32_t *Dwords)
-{
-    HDGFX_BLT_SURFACE Destination;
-    HDGFX_BLT_SURFACE Source;
-    HDGFX_BLT_RECT Rect;
-    SIZE_T DestinationStart;
-    SIZE_T DestinationEnd;
-    SIZE_T SourceStart;
-    SIZE_T SourceEnd;
-
-    if (!HdgfxSlabSurface(Scanout, Command->DstAddress, Command->DstPitch, &Command->DstRect, &Destination,
-                          &DestinationStart, &DestinationEnd))
-    {
-        return 0;
-    }
-    Rect.Left = (uint32_t)Command->DstRect.left;
-    Rect.Top = (uint32_t)Command->DstRect.top;
-    Rect.Right = (uint32_t)Command->DstRect.right;
-    Rect.Bottom = (uint32_t)Command->DstRect.bottom;
-    if (Command->Op == SOFTGPU_CMD_OP_FILL)
-        return HdgfxBltFill(Dwords, &Destination, &Rect, Command->Color);
-
-    if (Command->SrcRect.right - Command->SrcRect.left != Command->DstRect.right - Command->DstRect.left ||
-        Command->SrcRect.bottom - Command->SrcRect.top != Command->DstRect.bottom - Command->DstRect.top ||
-        !HdgfxSlabSurface(Scanout, Command->SrcAddress, Command->SrcPitch, &Command->SrcRect, &Source,
-                          &SourceStart, &SourceEnd))
-    {
-        return 0;
-    }
-    if (SourceStart < DestinationEnd && DestinationStart < SourceEnd &&
-        (Source.Address != Destination.Address || Source.Pitch != Destination.Pitch ||
-         Source.Pitch % HDGFX_BLT_OVERLAP_PITCH != 0))
-    {
-        return 0;
-    }
-    return HdgfxBltCopy(Dwords, &Destination, &Rect, &Source, (uint32_t)Command->SrcRect.left,
-                        (uint32_t)Command->SrcRect.top);
-}
-
 NTSTATUS
-SoftGpuPlatformExecute2d(
-    _Inout_ PSOFTGPU_DEVICE Device,
-    _In_ const SOFTGPU_CMD *Command)
+HdgfxResetRender(
+    _Inout_ PHDGFX_ADAPTER Adapter)
 {
-    PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
-    PHDGFX_SCANOUT Scanout = Device->PlatformContext;
-    uint32_t Dwords[8];
-    HDGFX_MMIO Mmio;
-    NTSTATUS Status = STATUS_NOT_SUPPORTED;
-    KIRQL OldIrql;
-    ULONG Count;
-    ULONG Head;
-
-    if (Adapter == NULL || Scanout == NULL || !ExAcquireRundownProtection(&Adapter->Rundown))
-        return STATUS_NOT_SUPPORTED;
-    Count = Adapter->RingStarted && Adapter->RingInterrupt && Scanout->SlabGtt != NULL ?
-            HdgfxTranslate2d(Scanout, Command, Dwords) : 0;
-    if (Count != 0)
-    {
-        KeAcquireSpinLock(&Adapter->RingLock, &OldIrql);
-        HdgfxMmioInit(Adapter->Registers, &Mmio);
-        Head = HdgfxIlkRingHead(&Mmio);
-        if (HdgfxRingFree(&Adapter->Ring, Head) < HDGFX_RING_RESERVE)
-        {
-            if (Adapter->RingUnfenced)
-                HdgfxRingFence(Adapter, &Mmio, Head);
-            Status = STATUS_DEVICE_BUSY;
-        }
-        else if (HdgfxRingEmit(&Adapter->Ring, Head, Dwords, Count))
-        {
-            Adapter->RingUnfenced = TRUE;
-            HdgfxIlkAdvanceRing(&Mmio, &Adapter->Ring);
-            Status = STATUS_SUCCESS;
-        }
-        KeReleaseSpinLock(&Adapter->RingLock, OldIrql);
-    }
-    ExReleaseRundownProtection(&Adapter->Rundown);
-    return Status;
-}
-
-BOOLEAN
-SoftGpuPlatformEngineIdle(
-    _Inout_ PSOFTGPU_DEVICE Device)
-{
-    PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
-    volatile ULONG *Status;
-    HDGFX_MMIO Mmio;
-    BOOLEAN Idle;
-    KIRQL OldIrql;
-
-    if (Adapter == NULL || !ExAcquireRundownProtection(&Adapter->Rundown))
-        return TRUE;
-    KeAcquireSpinLock(&Adapter->RingLock, &OldIrql);
-    if (Adapter->RingUnfenced)
-    {
-        HdgfxMmioInit(Adapter->Registers, &Mmio);
-        HdgfxRingFence(Adapter, &Mmio, HdgfxIlkRingHead(&Mmio));
-    }
-    Status = (volatile ULONG *)Adapter->StatusPage;
-    Idle = !Adapter->RingUnfenced && (!Adapter->RingStarted || Status[HDGFX_RING_SEQNO_INDEX] == Adapter->Seqno);
-    KeReleaseSpinLock(&Adapter->RingLock, OldIrql);
-    ExReleaseRundownProtection(&Adapter->Rundown);
-    return Idle;
-}
-
-NTSTATUS
-SoftGpuPlatformResetEngine(
-    _Inout_ PSOFTGPU_DEVICE Device)
-{
-    PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
     HDGFX_MMIO Mmio;
     NTSTATUS Status = STATUS_SUCCESS;
     KIRQL OldIrql;
 
     PAGED_CODE();
 
-    if (Adapter == NULL || !ExAcquireRundownProtection(&Adapter->Rundown))
+    if (!ExAcquireRundownProtection(&Adapter->Rundown))
         return STATUS_SUCCESS;
     KeAcquireSpinLock(&Adapter->RingLock, &OldIrql);
     Adapter->RingResetting = TRUE;
@@ -1156,18 +923,17 @@ SoftGpuPlatformResetEngine(
     return Status;
 }
 
-NTSTATUS
-SoftGpuPlatformRestartEngine(
-    _Inout_ PSOFTGPU_DEVICE Device)
+VOID
+HdgfxRestartRender(
+    _Inout_ PHDGFX_ADAPTER Adapter)
 {
-    PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
     HDGFX_MMIO Mmio;
     KIRQL OldIrql;
 
     PAGED_CODE();
 
-    if (Adapter == NULL || !ExAcquireRundownProtection(&Adapter->Rundown))
-        return STATUS_SUCCESS;
+    if (!ExAcquireRundownProtection(&Adapter->Rundown))
+        return;
     if (Adapter->RingStarted)
     {
         HdgfxMmioInit(Adapter->Registers, &Mmio);
@@ -1187,7 +953,6 @@ SoftGpuPlatformRestartEngine(
     Adapter->RingResetting = FALSE;
     KeReleaseSpinLock(&Adapter->RingLock, OldIrql);
     ExReleaseRundownProtection(&Adapter->Rundown);
-    return STATUS_SUCCESS;
 }
 
 VOID
@@ -1210,6 +975,7 @@ SoftGpuPlatformAdapterStarted(
             return;
         ExInitializeRundownProtection(&Adapter->Rundown);
         KeInitializeSpinLock(&Adapter->RingLock);
+        KeInitializeSpinLock(&Adapter->QueueLock);
         ExInitializeWorkItem(&Adapter->HotplugWork, HdgfxHotplugWorker, Adapter);
         Adapter->Device = Device;
         Device->PlatformServicesContext = Adapter;
@@ -1218,6 +984,7 @@ SoftGpuPlatformAdapterStarted(
     {
         ExReInitializeRundownProtection(&Adapter->Rundown);
     }
+    HdgfxQueueStart(Adapter);
 
     if (!NT_SUCCESS(HdgfxReadConfig(&Device->DxgkInterface, Ids, 0, sizeof(Ids))))
         return;
@@ -1271,6 +1038,7 @@ SoftGpuPlatformAdapterStopping(
         return;
 
     ExWaitForRundownProtectionRelease(&Adapter->Rundown);
+    HdgfxQueueStop(Adapter);
     if (Adapter->Registers == NULL)
         return;
 
@@ -1505,6 +1273,7 @@ SoftGpuPlatformInterruptRoutine(
         HdgfxWriteRegister32(Adapter, HDGFX_REG(GTIIR, 0), Gt);
         InterlockedIncrement(&Adapter->RingInterrupts);
         InterlockedExchange(&Adapter->RingPending, 1);
+        HdgfxQueueInterrupt(Adapter);
     }
 
     if (Pending & Adapter->Generation->PchInterrupt)
@@ -1531,8 +1300,8 @@ SoftGpuPlatformDpcRoutine(
 
     if (Adapter == NULL)
         return;
-    if (InterlockedExchange(&Adapter->RingPending, 0) != 0 && Device->Engines[SOFTGPU_NODE_3D].DpcInitialized)
-        KeInsertQueueDpc(&Device->Engines[SOFTGPU_NODE_3D].DpcObject, NULL, NULL);
+    if (InterlockedExchange(&Adapter->RingPending, 0) != 0)
+        HdgfxQueueDpc(Adapter);
     if (InterlockedExchange(&Adapter->HotplugPending, 0) != 0)
         HdgfxQueueHotplug(Adapter);
     if (InterlockedExchange(&Adapter->AslePending, 0) == 0)
