@@ -182,18 +182,18 @@ HdgfxDriverEntry(
     InitData.Version = REACTOS_WDDM_TARGET_INTERFACE_VERSION;
 
     InitData.DxgkDdiAddDevice = SoftGpuDdiAddDevice;
-    InitData.DxgkDdiStartDevice = SoftGpuDdiStartDevice;
+    InitData.DxgkDdiStartDevice = HdgfxDdiStartDevice;
     InitData.DxgkDdiStopDevice = SoftGpuDdiStopDevice;
     InitData.DxgkDdiRemoveDevice = SoftGpuDdiRemoveDevice;
     InitData.DxgkDdiResetDevice = SoftGpuDdiResetDevice;
-    InitData.DxgkDdiSetPowerState = SoftGpuDdiSetPowerState;
+    InitData.DxgkDdiSetPowerState = HdgfxDdiSetPowerState;
     InitData.DxgkDdiNotifyAcpiEvent = SoftGpuDdiNotifyAcpiEvent;
     InitData.DxgkDdiQueryInterface = HdgfxDdiQueryInterface;
 
     InitData.DxgkDdiQueryAdapterInfo = HdgfxDdiQueryAdapterInfo;
-    InitData.DxgkDdiQueryChildRelations = SoftGpuDdiQueryChildRelations;
-    InitData.DxgkDdiQueryChildStatus = SoftGpuDdiQueryChildStatus;
-    InitData.DxgkDdiQueryDeviceDescriptor = SoftGpuDdiQueryDeviceDescriptor;
+    InitData.DxgkDdiQueryChildRelations = HdgfxDdiQueryChildRelations;
+    InitData.DxgkDdiQueryChildStatus = HdgfxDdiQueryChildStatus;
+    InitData.DxgkDdiQueryDeviceDescriptor = HdgfxDdiQueryDeviceDescriptor;
     InitData.DxgkDdiGetNodeMetadata = SoftGpuDdiGetNodeMetadata;
 
     InitData.DxgkDdiInterruptRoutine = SoftGpuDdiInterruptRoutine;
@@ -214,20 +214,20 @@ HdgfxDriverEntry(
     InitData.DxgkDdiResetFromTimeout = HdgfxDdiResetFromTimeout;
     InitData.DxgkDdiRestartFromTimeout = HdgfxDdiRestartFromTimeout;
 
-    InitData.DxgkDdiIsSupportedVidPn = SoftGpuDdiIsSupportedVidPn;
-    InitData.DxgkDdiRecommendFunctionalVidPn = SoftGpuDdiRecommendFunctionalVidPn;
-    InitData.DxgkDdiEnumVidPnCofuncModality = SoftGpuDdiEnumVidPnCofuncModality;
-    InitData.DxgkDdiSetVidPnSourceAddress = SoftGpuDdiSetVidPnSourceAddress;
-    InitData.DxgkDdiSetVidPnSourceVisibility = SoftGpuDdiSetVidPnSourceVisibility;
-    InitData.DxgkDdiCommitVidPn = SoftGpuDdiCommitVidPn;
-    InitData.DxgkDdiUpdateActiveVidPnPresentPath = SoftGpuDdiUpdateActiveVidPnPresentPath;
-    InitData.DxgkDdiRecommendMonitorModes = SoftGpuDdiRecommendMonitorModes;
-    InitData.DxgkDdiRecommendVidPnTopology = SoftGpuDdiRecommendVidPnTopology;
+    InitData.DxgkDdiIsSupportedVidPn = HdgfxDdiIsSupportedVidPn;
+    InitData.DxgkDdiRecommendFunctionalVidPn = HdgfxDdiRecommendFunctionalVidPn;
+    InitData.DxgkDdiEnumVidPnCofuncModality = HdgfxDdiEnumVidPnCofuncModality;
+    InitData.DxgkDdiSetVidPnSourceAddress = HdgfxDdiSetVidPnSourceAddress;
+    InitData.DxgkDdiSetVidPnSourceVisibility = HdgfxDdiSetVidPnSourceVisibility;
+    InitData.DxgkDdiCommitVidPn = HdgfxDdiCommitVidPn;
+    InitData.DxgkDdiUpdateActiveVidPnPresentPath = HdgfxDdiUpdateActiveVidPnPresentPath;
+    InitData.DxgkDdiRecommendMonitorModes = HdgfxDdiRecommendMonitorModes;
+    InitData.DxgkDdiRecommendVidPnTopology = HdgfxDdiRecommendVidPnTopology;
 
-    InitData.DxgkDdiSetPointerPosition = SoftGpuDdiSetPointerPosition;
-    InitData.DxgkDdiSetPointerShape = SoftGpuDdiSetPointerShape;
-    InitData.DxgkDdiSetPalette = SoftGpuDdiSetPalette;
-    InitData.DxgkDdiGetScanLine = SoftGpuDdiGetScanLine;
+    InitData.DxgkDdiSetPointerPosition = HdgfxDdiSetPointerPosition;
+    InitData.DxgkDdiSetPointerShape = HdgfxDdiSetPointerShape;
+    InitData.DxgkDdiSetPalette = HdgfxDdiSetPalette;
+    InitData.DxgkDdiGetScanLine = HdgfxDdiGetScanLine;
 
     InitData.DxgkDdiCreateDevice = HdgfxDdiCreateDevice;
     InitData.DxgkDdiDestroyDevice = SoftGpuDdiDestroyDevice;
@@ -247,7 +247,7 @@ HdgfxDriverEntry(
     InitData.DxgkDdiUnmapCpuHostAperture = SoftGpuDdiUnmapCpuHostAperture;
     InitData.DxgkDdiSubmitCommandVirtual = SoftGpuDdiSubmitCommandVirtual;
     InitData.DxgkDdiValidateUpdateAllocationProperty = HdgfxDdiValidateUpdateAllocationProperty;
-    InitData.DxgkDdiSetTimingsFromVidPn = SoftGpuDdiSetTimingsFromVidPn;
+    InitData.DxgkDdiSetTimingsFromVidPn = HdgfxDdiSetTimingsFromVidPn;
     InitData.DxgkDdiEscape = SoftGpuDdiEscape;
     InitData.DxgkDdiCreateCpuEvent = SoftGpuDdiCreateCpuEvent;
     InitData.DxgkDdiDestroyCpuEvent = SoftGpuDdiDestroyCpuEvent;
