@@ -36,24 +36,19 @@ HdgfxSegmentDescriptor(
     Descriptor->CommitLimit = Descriptor->Size;
 }
 
-NTSTATUS
-APIENTRY
-HdgfxDdiQueryAdapterInfo(
-    _In_ PVOID MiniportDeviceContext,
+static NTSTATUS
+HdgfxQuerySegments(
+    _In_ PSOFTGPU_DEVICE Device,
     _In_ CONST DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo)
 {
-    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
-    PHDGFX_ADAPTER Adapter;
+    PHDGFX_ADAPTER Adapter = Device->PlatformServicesContext;
     PDXGK_QUERYSEGMENTOUT4 Out;
     ULONG SegmentId;
 
-    if (QueryAdapterInfo == NULL || QueryAdapterInfo->Type != DXGKQAITYPE_QUERYSEGMENT4)
-        return SoftGpuDdiQueryAdapterInfo(MiniportDeviceContext, QueryAdapterInfo);
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC || QueryAdapterInfo->pOutputData == NULL)
+    if (QueryAdapterInfo->pOutputData == NULL)
         return STATUS_INVALID_PARAMETER;
     if (QueryAdapterInfo->OutputDataSize < sizeof(DXGK_QUERYSEGMENTOUT4))
         return STATUS_BUFFER_TOO_SMALL;
-    Adapter = Device->PlatformServicesContext;
     if (Adapter == NULL || Adapter->DmaMemory == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
 
@@ -75,6 +70,62 @@ HdgfxDdiQueryAdapterInfo(
                                                           (SIZE_T)(SegmentId - 1) * Out->SegmentDescriptorStride));
     }
     return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+HdgfxQueryDriverCaps(
+    _In_ PSOFTGPU_DEVICE Device,
+    _In_ CONST DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo)
+{
+    PDXGK_DRIVERCAPS Caps = QueryAdapterInfo->pOutputData;
+
+    if (Caps == NULL)
+        return STATUS_INVALID_PARAMETER;
+    if (QueryAdapterInfo->OutputDataSize < sizeof(*Caps))
+        return STATUS_BUFFER_TOO_SMALL;
+
+    RtlZeroMemory(Caps, sizeof(*Caps));
+    Caps->HighestAcceptableAddress.QuadPart = Device->HighestDmaAddress.QuadPart != 0 ?
+                                              Device->HighestDmaAddress.QuadPart : -1LL;
+    if (Device->PlatformHardwarePointer)
+    {
+        Caps->MaxPointerWidth = SOFTGPU_POINTER_MAX_WIDTH;
+        Caps->MaxPointerHeight = SOFTGPU_POINTER_MAX_HEIGHT;
+        Caps->PointerCaps.Color = 1;
+    }
+    Caps->MaxAllocationListSlotId = 255;
+    Caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1;
+    Caps->WDDMVersion = DXGKDDI_WDDMv3_2_ENUM;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+APIENTRY
+HdgfxDdiQueryAdapterInfo(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ CONST DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo)
+{
+    PSOFTGPU_DEVICE Device = MiniportDeviceContext;
+
+    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC || QueryAdapterInfo == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    switch (QueryAdapterInfo->Type)
+    {
+        case DXGKQAITYPE_UMDRIVERPRIVATE:
+            if (QueryAdapterInfo->pOutputData != NULL && QueryAdapterInfo->OutputDataSize != 0)
+                RtlZeroMemory(QueryAdapterInfo->pOutputData, QueryAdapterInfo->OutputDataSize);
+            return STATUS_SUCCESS;
+
+        case DXGKQAITYPE_DRIVERCAPS:
+            return HdgfxQueryDriverCaps(Device, QueryAdapterInfo);
+
+        case DXGKQAITYPE_QUERYSEGMENT4:
+            return HdgfxQuerySegments(Device, QueryAdapterInfo);
+
+        default:
+            return STATUS_NOT_SUPPORTED;
+    }
 }
 
 NTSTATUS
@@ -107,11 +158,11 @@ HdgfxDriverEntry(
     InitData.DxgkDdiInterruptRoutine = SoftGpuDdiInterruptRoutine;
     InitData.DxgkDdiDpcRoutine = SoftGpuDdiDpcRoutine;
 
-    InitData.DxgkDdiCreateAllocation = SoftGpuDdiCreateAllocation;
-    InitData.DxgkDdiDestroyAllocation = SoftGpuDdiDestroyAllocation;
-    InitData.DxgkDdiOpenAllocation = SoftGpuDdiOpenAllocation;
-    InitData.DxgkDdiCloseAllocation = SoftGpuDdiCloseAllocation;
-    InitData.DxgkDdiGetStandardAllocationDriverData = SoftGpuDdiGetStandardAllocationDriverData;
+    InitData.DxgkDdiCreateAllocation = HdgfxDdiCreateAllocation;
+    InitData.DxgkDdiDestroyAllocation = HdgfxDdiDestroyAllocation;
+    InitData.DxgkDdiOpenAllocation = HdgfxDdiOpenAllocation;
+    InitData.DxgkDdiCloseAllocation = HdgfxDdiCloseAllocation;
+    InitData.DxgkDdiGetStandardAllocationDriverData = HdgfxDdiGetStandardAllocationDriverData;
     InitData.DxgkDdiBuildPagingBuffer = HdgfxDdiBuildPagingBuffer;
     InitData.DxgkDdiPatch = HdgfxDdiPatch;
     InitData.DxgkDdiRender = HdgfxDdiRender;
@@ -154,7 +205,7 @@ HdgfxDriverEntry(
     InitData.DxgkDdiMapCpuHostAperture = SoftGpuDdiMapCpuHostAperture;
     InitData.DxgkDdiUnmapCpuHostAperture = SoftGpuDdiUnmapCpuHostAperture;
     InitData.DxgkDdiSubmitCommandVirtual = SoftGpuDdiSubmitCommandVirtual;
-    InitData.DxgkDdiValidateUpdateAllocationProperty = SoftGpuDdiValidateUpdateAllocationProperty;
+    InitData.DxgkDdiValidateUpdateAllocationProperty = HdgfxDdiValidateUpdateAllocationProperty;
     InitData.DxgkDdiSetTimingsFromVidPn = SoftGpuDdiSetTimingsFromVidPn;
     InitData.DxgkDdiEscape = SoftGpuDdiEscape;
     InitData.DxgkDdiCreateCpuEvent = SoftGpuDdiCreateCpuEvent;
