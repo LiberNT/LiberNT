@@ -49,6 +49,7 @@ KMT_TESTFUNC Test_RtlUnicodeString;
 KMT_TESTFUNC Test_TcpIpIoctl;
 KMT_TESTFUNC Test_TcpIpTdi;
 KMT_TESTFUNC Test_TcpIpConnect;
+KMT_TESTFUNC Test_WfpListen;
 KMT_TESTFUNC Test_WfpTcp;
 KMT_TESTFUNC Test_WfpUdp;
 KMT_TESTFUNC Test_WfpUser;
@@ -97,6 +98,7 @@ const KMT_TEST TestList[] =
     { "RtlUnicodeString",             Test_RtlUnicodeString },
     { "TcpIpTdi",                     Test_TcpIpTdi },
     { "TcpIpConnect",                 Test_TcpIpConnect },
+    { "WfpListen",                    Test_WfpListen },
     { "WfpTcp",                       Test_WfpTcp },
     { "WfpUdp",                       Test_WfpUdp },
     { "WfpUser",                      Test_WfpUser },
