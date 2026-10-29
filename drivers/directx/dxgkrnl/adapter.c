@@ -1251,7 +1251,12 @@ DxgkpTdrWorker(
         if (!NT_SUCCESS(RecommitStatus))
             DXGKRNL_ERR("DxgkpTdrWorker: display restoration after reset failed 0x%08lX\n", RecommitStatus);
         else
+        {
             DXGKRNL_WARN("DxgkpTdrWorker: VidPN and shared surfaces restored after reset\n");
+            RecommitStatus = DxgkDisplayPresentRect(Adapter, NULL);
+            if (!NT_SUCCESS(RecommitStatus))
+                DXGKRNL_WARN("DxgkpTdrWorker: desktop repaint after reset failed 0x%08lX\n", RecommitStatus);
+        }
     }
 
 Exit:
