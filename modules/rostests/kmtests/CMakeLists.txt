@@ -515,6 +515,7 @@ list(APPEND KMTEST_SOURCE
     ntos_po/PoIrp_user.c
     ntos_po/PoFxState_user.c
     tcpip/TcpIp_user.c
+    wfp/wfp_listen/wfp_listen_user.c
     wfp/wfp_tcp/wfp_tcp_user.c
     wfp/wfp_udp/wfp_udp_user.c
     wfp/wfp_user/wfp_user_user.c

@@ -493,6 +493,7 @@ ListenComplete(_In_ PDEVICE_OBJECT DeviceObject, _In_ PIRP Irp, _In_ PVOID Conte
         (PSOCKADDR)(&((PTRANSPORT_ADDRESS)ListenContext->ReturnConnectionInfo->RemoteAddress)->Address[0].AddressType);
     PVOID AcceptSocketContext;
     const WSK_CLIENT_CONNECTION_DISPATCH *AcceptSocketDispatch;
+    BOOLEAN Requeue = Irp->PendingReturned || NT_SUCCESS(Irp->IoStatus.Status);
     NTSTATUS Status;
 
     FUNCTION_TRACE;
@@ -539,7 +540,8 @@ ListenComplete(_In_ PDEVICE_OBJECT DeviceObject, _In_ PIRP Irp, _In_ PVOID Conte
      * This is done in a separate thread at IRQL = PASSIVE_LEVEL
      */
 
-    QueueListening(ListenSocket);
+    if (Requeue)
+        QueueListening(ListenSocket);
 
     return STATUS_SUCCESS;
 }
