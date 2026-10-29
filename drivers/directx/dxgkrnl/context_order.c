@@ -1455,7 +1455,6 @@ VOID DxgkContextOrderAbortPacket(_Inout_ PVIDSCH_DMA_PACKET Packet, _In_ NTSTATU
 {
     LONG State;
 
-    PAGED_CODE();
     if (Packet == NULL || AbortStatus == STATUS_PENDING || NT_SUCCESS(AbortStatus) || InterlockedCompareExchangePointer(&Packet->ContextOrderOperation, NULL, NULL) == NULL)
         return;
     (VOID)InterlockedCompareExchange((volatile LONG *)&Packet->ContextOrderAbortStatus, (LONG)AbortStatus, (LONG)STATUS_PENDING);
@@ -1470,6 +1469,11 @@ VOID DxgkContextOrderAbortPacket(_Inout_ PVIDSCH_DMA_PACKET Packet, _In_ NTSTATU
         }
         if (State == VIDSCH_CONTEXT_ORDER_CLAIMED || State == VIDSCH_CONTEXT_ORDER_DISPATCHING)
         {
+            if (KeGetCurrentIrql() > APC_LEVEL)
+            {
+                DxgkContextOrderScheduleReferenced((PDXGKRNL_CONTEXT)Packet->Context);
+                return;
+            }
             if (InterlockedCompareExchange(&Packet->ContextOrderState, VIDSCH_CONTEXT_ORDER_COMPLETING, State) != State)
                 continue;
             DxgkpContextOrderCommitClaimedPacket(Packet, AbortStatus);

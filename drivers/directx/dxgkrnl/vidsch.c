@@ -2573,6 +2573,27 @@ VidSchpSubmitVirtualPacket(
         VidSchpDereferencePacket(Packet);
 }
 
+static VOID
+VidSchpReturnClaim(
+    _In_ PVIDSCH_ENGINE Engine,
+    _In_ PVIDSCH_DMA_PACKET Packet,
+    _In_ ULONGLONG ClaimToken)
+{
+    PDXGKRNL_ADAPTER Adapter = Engine->Adapter;
+    PDXGMMS2_SCHEDULER_INTERFACE_V1 Sched = VidSchpScheduler(Adapter);
+    PDXGKRNL_CONTEXT Context = (PDXGKRNL_CONTEXT)Packet->Context;
+    NTSTATUS CancelStatus;
+
+    if (Sched == NULL)
+        return;
+    (VOID)Sched->CompleteDispatch(Sched->SchedulerHandle, Engine->SchedulerOrdinal, ClaimToken, STATUS_SUCCESS);
+    if (Context == NULL || InterlockedCompareExchange(&Context->StreamStopping, 0, 0) == 0)
+        return;
+    CancelStatus = InterlockedCompareExchange(&Context->Device->ExecutionState, 0, 0) == D3DKMT_DEVICEEXECUTION_ACTIVE ? STATUS_CANCELLED : STATUS_DEVICE_REMOVED;
+    (VOID)Sched->CancelOwnerPackets(Sched->SchedulerHandle, (ULONGLONG)(ULONG_PTR)Context, CancelStatus);
+    (VOID)VidSchpDrainRetirements(Adapter);
+}
+
 /* ========================================================================
  * VidSchpKickEngine — submit the next queued packet to the miniport
  *
@@ -2655,14 +2676,16 @@ VidSchpKickEngine(
         if (Packet->ContextOrderOperation != NULL && (AuthorizedPacket != Packet || (InterlockedCompareExchange(&Packet->ContextOrderState, 0, 0) != VIDSCH_CONTEXT_ORDER_DISPATCHING && (InterlockedCompareExchange(&Packet->ContextOrderState, 0, 0) != VIDSCH_CONTEXT_ORDER_SUBMITTED || InterlockedCompareExchange(&Packet->ContextOrderResubmissionPending, 0, 0) == 0)) || KeGetCurrentIrql() != PASSIVE_LEVEL))
         {
             VidSchReferenceContextOrderPacket(Packet);
-            (VOID)Sched->CompleteDispatch(Sched->SchedulerHandle, Engine->SchedulerOrdinal, ClaimToken, STATUS_SUCCESS);
+            VidSchpReturnClaim(Engine, Packet, ClaimToken);
             DxgkContextOrderScheduleReferenced((PDXGKRNL_CONTEXT)Packet->Context);
             VidSchDereferenceContextOrderPacket(Packet);
             return DispatchedAny;
         }
         if (Packet->ContextOrderOperation == NULL && AuthorizedPacket != NULL)
         {
-            (VOID)Sched->CompleteDispatch(Sched->SchedulerHandle, Engine->SchedulerOrdinal, ClaimToken, STATUS_SUCCESS);
+            InterlockedIncrement(&Packet->ReferenceCount);
+            VidSchpReturnClaim(Engine, Packet, ClaimToken);
+            VidSchpDereferencePacket(Packet);
             return DispatchedAny;
         }
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2000)
@@ -2747,7 +2770,7 @@ VidSchpKickEngine(
             else if (!DxgkTryEnterSchedulerClassAtDpc(Adapter))
             {
                 DxgkReleaseKmdCall(Adapter);
-                (VOID)Sched->CompleteDispatch(Sched->SchedulerHandle, Engine->SchedulerOrdinal, ClaimToken, STATUS_SUCCESS);
+                VidSchpReturnClaim(Engine, Packet, ClaimToken);
                 VidSchpDereferencePacket(Packet);
                 if (DxgkDeferSchedulerClassKick(Adapter))
                     return DispatchedAny;
