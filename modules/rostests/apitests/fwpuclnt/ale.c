@@ -330,6 +330,318 @@ TestDatagram(
         FwpmFreeMemory0((void **)&AppId);
 }
 
+static
+UINT64
+AddBlockOn(
+    _In_ const GUID *Layer,
+    _In_ FWPM_FILTER_CONDITION0 *Conditions,
+    _In_ UINT32 Count)
+{
+    FWPM_FILTER0 Filter;
+    UINT64 Id = 0;
+    DWORD Error;
+
+    ZeroMemory(&Filter, sizeof(Filter));
+    Filter.layerKey = *Layer;
+    Filter.displayData.name = L"LiberNT ALE apitest probe filter";
+    Filter.action.type = FWP_ACTION_BLOCK;
+    Filter.weight.type = FWP_EMPTY;
+    Filter.filterCondition = Conditions;
+    Filter.numFilterConditions = Count;
+    Error = FwpmFilterAdd0(Engine, &Filter, NULL, &Id);
+    ok(Error == ERROR_SUCCESS, "FwpmFilterAdd0 returned 0x%lx\n", Error);
+    return Id;
+}
+
+static
+VOID
+Cond16(
+    _Out_ FWPM_FILTER_CONDITION0 *Condition,
+    _In_ const GUID *Field,
+    _In_ UINT16 Value)
+{
+    ZeroMemory(Condition, sizeof(*Condition));
+    Condition->fieldKey = *Field;
+    Condition->matchType = FWP_MATCH_EQUAL;
+    Condition->conditionValue.type = FWP_UINT16;
+    Condition->conditionValue.uint16 = Value;
+}
+
+static
+VOID
+Cond32(
+    _Out_ FWPM_FILTER_CONDITION0 *Condition,
+    _In_ const GUID *Field,
+    _In_ FWP_MATCH_TYPE Match,
+    _In_ UINT32 Value)
+{
+    ZeroMemory(Condition, sizeof(*Condition));
+    Condition->fieldKey = *Field;
+    Condition->matchType = Match;
+    Condition->conditionValue.type = FWP_UINT32;
+    Condition->conditionValue.uint32 = Value;
+}
+
+static
+int
+SoError(
+    _In_ SOCKET Socket)
+{
+    int Error = -1, Length = sizeof(Error);
+
+    getsockopt(Socket, SOL_SOCKET, SO_ERROR, (char *)&Error, &Length);
+    return Error;
+}
+
+static
+VOID
+TestReuse(VOID)
+{
+    FWPM_FILTER_CONDITION0 Condition;
+    SOCKET Listener, Client, Server;
+    UINT64 Id;
+
+    Cond16(&Condition, &FWPM_CONDITION_IP_LOCAL_PORT, 47201);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_RESOURCE_ASSIGNMENT_V4, &Condition, 1);
+    Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Bind(Client, INADDR_LOOPBACK, 47201) == SOCKET_ERROR && WSAGetLastError() == WSAEACCES,
+       "bind error %d\n", WSAGetLastError());
+    DeleteFilter(Id);
+    ok(Bind(Client, INADDR_LOOPBACK, 47201) == 0, "bind retry failed: %d\n", WSAGetLastError());
+    closesocket(Client);
+
+    Cond16(&Condition, &FWPM_CONDITION_IP_LOCAL_PORT, 47211);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_LISTEN_V4, &Condition, 1);
+    Listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Bind(Listener, INADDR_LOOPBACK, 47211) == 0, "bind failed: %d\n", WSAGetLastError());
+    ok(listen(Listener, 4) == SOCKET_ERROR && WSAGetLastError() == WSAEACCES,
+       "listen error %d\n", WSAGetLastError());
+    DeleteFilter(Id);
+    ok(listen(Listener, 4) == 0, "listen retry failed: %d\n", WSAGetLastError());
+    ExpectAccepted(Listener, 47211);
+    closesocket(Listener);
+
+    Listener = Listen(47221);
+    Cond16(&Condition, &FWPM_CONDITION_IP_REMOTE_PORT, 47221);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_CONNECT_V4, &Condition, 1);
+    Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Connect(Client, 47221) == SOCKET_ERROR && WSAGetLastError() == WSAEACCES,
+       "connect error %d\n", WSAGetLastError());
+    DeleteFilter(Id);
+    ok(Connect(Client, 47221) == 0, "connect retry failed: %d\n", WSAGetLastError());
+    Server = Ready(Listener, FALSE, 3000) ? accept(Listener, NULL, NULL) : INVALID_SOCKET;
+    ok(Server != INVALID_SOCKET, "No connection accepted\n");
+    if (Server != INVALID_SOCKET)
+        closesocket(Server);
+    closesocket(Client);
+    closesocket(Listener);
+}
+
+static
+VOID
+TestNonBlockingConnect(VOID)
+{
+    FWPM_FILTER_CONDITION0 Condition;
+    struct timeval Timeout = { 2, 0 };
+    u_long NonBlocking = 1;
+    SOCKET Listener, Client;
+    fd_set Write, Except;
+    UINT64 Id;
+    int Result;
+
+    Listener = Listen(47222);
+    Cond16(&Condition, &FWPM_CONDITION_IP_REMOTE_PORT, 47222);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_CONNECT_V4, &Condition, 1);
+
+    Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ioctlsocket(Client, FIONBIO, &NonBlocking);
+    Result = Connect(Client, 47222);
+    ok(Result == SOCKET_ERROR && WSAGetLastError() == WSAEWOULDBLOCK,
+       "connect returned %d, error %d\n", Result, WSAGetLastError());
+    FD_ZERO(&Write);
+    FD_SET(Client, &Write);
+    FD_ZERO(&Except);
+    FD_SET(Client, &Except);
+    Result = select(0, NULL, &Write, &Except, &Timeout);
+    ok(Result == 1 && !FD_ISSET(Client, &Write) && FD_ISSET(Client, &Except),
+       "select returned %d, write %d, except %d\n", Result, FD_ISSET(Client, &Write) != 0, FD_ISSET(Client, &Except) != 0);
+    ok_int(SoError(Client), WSAEACCES);
+
+    closesocket(Client);
+    DeleteFilter(Id);
+    closesocket(Listener);
+}
+
+static
+VOID
+TestConditions(VOID)
+{
+    FWPM_FILTER_CONDITION0 C[2];
+    SOCKET Listener, Socket;
+    UINT64 Id;
+
+    Listener = Listen(47231);
+
+    Cond32(&C[0], &FWPM_CONDITION_IP_REMOTE_ADDRESS, FWP_MATCH_EQUAL, INADDR_LOOPBACK);
+    Cond16(&C[1], &FWPM_CONDITION_IP_REMOTE_PORT, 47231);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_CONNECT_V4, C, 2);
+    Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Connect(Socket, 47231) == SOCKET_ERROR && WSAGetLastError() == WSAEACCES,
+       "connect with a remote address block: error %d\n", WSAGetLastError());
+    closesocket(Socket);
+    DeleteFilter(Id);
+
+    Cond32(&C[0], &FWPM_CONDITION_FLAGS, FWP_MATCH_FLAGS_ALL_SET, FWP_CONDITION_FLAG_IS_LOOPBACK);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_CONNECT_V4, C, 2);
+    Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Connect(Socket, 47231) == SOCKET_ERROR && WSAGetLastError() == WSAEACCES,
+       "connect with a loopback flag block: error %d\n", WSAGetLastError());
+    closesocket(Socket);
+    DeleteFilter(Id);
+
+    Cond32(&C[0], &FWPM_CONDITION_IP_REMOTE_ADDRESS, FWP_MATCH_EQUAL, INADDR_LOOPBACK);
+    Cond16(&C[1], &FWPM_CONDITION_IP_LOCAL_PORT, 47231);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4, C, 2);
+    ExpectSynDropped(Listener, 47231);
+    DeleteFilter(Id);
+
+    Cond32(&C[0], &FWPM_CONDITION_FLAGS, FWP_MATCH_FLAGS_ALL_SET, FWP_CONDITION_FLAG_IS_LOOPBACK);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4, C, 2);
+    ExpectSynDropped(Listener, 47231);
+    DeleteFilter(Id);
+    closesocket(Listener);
+
+    Cond32(&C[0], &FWPM_CONDITION_IP_LOCAL_ADDRESS, FWP_MATCH_EQUAL, INADDR_LOOPBACK);
+    Cond16(&C[1], &FWPM_CONDITION_IP_LOCAL_PORT, 47241);
+    Id = AddBlockOn(&FWPM_LAYER_ALE_AUTH_LISTEN_V4, C, 2);
+    Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Bind(Socket, INADDR_LOOPBACK, 47241) == 0, "bind failed: %d\n", WSAGetLastError());
+    ok(listen(Socket, 4) == SOCKET_ERROR && WSAGetLastError() == WSAEACCES,
+       "listen with a local address block: error %d\n", WSAGetLastError());
+    closesocket(Socket);
+    Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Bind(Socket, INADDR_ANY, 47241) == 0, "bind failed: %d\n", WSAGetLastError());
+    ok(listen(Socket, 4) == 0, "wildcard listen with a local address block failed: %d\n", WSAGetLastError());
+    closesocket(Socket);
+    DeleteFilter(Id);
+}
+
+static
+VOID
+TestBindFields(VOID)
+{
+    static const struct
+    {
+        UCHAR Protocol;
+        ULONG Address;
+        USHORT Port;
+        BOOL WildcardFlag;
+        BOOL ZeroAddress;
+    } Binds[] =
+    {
+        { IPPROTO_UDP, INADDR_ANY, 47253, FALSE, FALSE },
+        { IPPROTO_UDP, INADDR_ANY, 0, TRUE, TRUE },
+        { IPPROTO_UDP, INADDR_LOOPBACK, 0, TRUE, FALSE },
+        { IPPROTO_TCP, INADDR_ANY, 47254, FALSE, FALSE },
+        { IPPROTO_TCP, INADDR_ANY, 0, TRUE, TRUE },
+        { IPPROTO_TCP, INADDR_LOOPBACK, 0, TRUE, FALSE },
+    };
+    FWPM_FILTER_CONDITION0 C[2];
+    FWP_BYTE_BLOB *OwnId = NULL;
+    WCHAR Own[MAX_PATH];
+    SOCKET Socket;
+    UINT64 Id;
+    UINT i, Field;
+    int Result;
+
+    GetModuleFileNameW(NULL, Own, ARRAYSIZE(Own));
+    ok(FwpmGetAppIdFromFileName0(Own, &OwnId) == ERROR_SUCCESS, "No app id for %ls\n", Own);
+    if (OwnId == NULL)
+    {
+        return;
+    }
+
+    ZeroMemory(&C[1], sizeof(C[1]));
+    C[1].fieldKey = FWPM_CONDITION_ALE_APP_ID;
+    C[1].matchType = FWP_MATCH_EQUAL;
+    C[1].conditionValue.type = FWP_BYTE_BLOB_TYPE;
+    C[1].conditionValue.byteBlob = OwnId;
+
+    for (i = 0; i < ARRAYSIZE(Binds); i++)
+    {
+        for (Field = 0; Field < 3; Field++)
+        {
+            BOOL Blocked = Field == 0 ? Binds[i].WildcardFlag : Field == 1 ? Binds[i].ZeroAddress : FALSE;
+
+            if (Field == 0)
+                Cond32(&C[0], &FWPM_CONDITION_FLAGS, FWP_MATCH_FLAGS_ALL_SET, FWP_CONDITION_FLAG_IS_WILDCARD_BIND);
+            else if (Field == 1)
+                Cond32(&C[0], &FWPM_CONDITION_IP_LOCAL_ADDRESS, FWP_MATCH_EQUAL, 0);
+            else
+                Cond16(&C[0], &FWPM_CONDITION_IP_LOCAL_PORT, 0);
+            Id = AddBlockOn(&FWPM_LAYER_ALE_RESOURCE_ASSIGNMENT_V4, C, 2);
+            Socket = socket(AF_INET, Binds[i].Protocol == IPPROTO_TCP ? SOCK_STREAM : SOCK_DGRAM, Binds[i].Protocol);
+            Result = Bind(Socket, Binds[i].Address, Binds[i].Port);
+            ok(Blocked ? (Result == SOCKET_ERROR && WSAGetLastError() == WSAEACCES) : Result == 0,
+               "Field %u, protocol %u, address %lx, port %u: bind returned %d, error %d\n",
+               Field, Binds[i].Protocol, Binds[i].Address, Binds[i].Port, Result, WSAGetLastError());
+            closesocket(Socket);
+            DeleteFilter(Id);
+        }
+    }
+
+    FwpmFreeMemory0((void **)&OwnId);
+}
+
+static
+VOID
+TestImplicitBind(VOID)
+{
+    struct sockaddr_in Remote = Loopback(47262);
+    FWPM_FILTER_CONDITION0 C[2];
+    FWP_BYTE_BLOB *OwnId = NULL;
+    WCHAR Own[MAX_PATH];
+    SOCKET Listener, Socket;
+    UINT64 Id;
+    int Result;
+
+    GetModuleFileNameW(NULL, Own, ARRAYSIZE(Own));
+    ok(FwpmGetAppIdFromFileName0(Own, &OwnId) == ERROR_SUCCESS, "No app id for %ls\n", Own);
+    if (OwnId == NULL)
+    {
+        return;
+    }
+
+    Listener = Listen(47261);
+    ZeroMemory(C, sizeof(C));
+    C[0].fieldKey = FWPM_CONDITION_ALE_APP_ID;
+    C[0].matchType = FWP_MATCH_EQUAL;
+    C[0].conditionValue.type = FWP_BYTE_BLOB_TYPE;
+    C[0].conditionValue.byteBlob = OwnId;
+    C[1].fieldKey = FWPM_CONDITION_IP_PROTOCOL;
+    C[1].matchType = FWP_MATCH_EQUAL;
+    C[1].conditionValue.type = FWP_UINT8;
+    C[1].conditionValue.uint8 = IPPROTO_TCP;
+    Id = AddBlockOn(&FWPM_LAYER_ALE_RESOURCE_ASSIGNMENT_V4, C, 2);
+    Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Connect(Socket, 47261) == SOCKET_ERROR && WSAGetLastError() == WSAEACCES,
+       "connect with a blocked implicit bind: error %d\n", WSAGetLastError());
+    closesocket(Socket);
+    DeleteFilter(Id);
+    closesocket(Listener);
+
+    C[1].conditionValue.uint8 = IPPROTO_UDP;
+    Id = AddBlockOn(&FWPM_LAYER_ALE_RESOURCE_ASSIGNMENT_V4, C, 2);
+    Socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    Result = sendto(Socket, "x", 1, 0, (struct sockaddr *)&Remote, sizeof(Remote));
+    ok(Result == SOCKET_ERROR && WSAGetLastError() == WSAEINVAL,
+       "sendto with a blocked implicit bind returned %d, error %d\n", Result, WSAGetLastError());
+    closesocket(Socket);
+    DeleteFilter(Id);
+
+    FwpmFreeMemory0((void **)&OwnId);
+}
+
 START_TEST(ale)
 {
     FWPM_SESSION0 Session;
@@ -357,6 +669,11 @@ START_TEST(ale)
     TestDatagram(TRUE, 47152, FALSE);
     TestDatagram(FALSE, 47153, TRUE);
     TestDatagram(TRUE, 47154, TRUE);
+    TestReuse();
+    TestNonBlockingConnect();
+    TestConditions();
+    TestBindFields();
+    TestImplicitBind();
 
     FwpmEngineClose0(Engine);
     WSACleanup();
