@@ -1296,7 +1296,12 @@ SeSetSecurityDescriptorInfoEx(
             Control |= SecurityDescriptor->Control & (SE_SACL_DEFAULTED | SE_SACL_PRESENT |
                         SE_SACL_AUTO_INHERITED | SE_SACL_AUTO_INHERIT_REQ | SE_SACL_PROTECTED);
         else
+        {
             Control |= ObjectSd->Control & (SE_SACL_DEFAULTED | SE_SACL_PROTECTED);
+            if ((SecurityDescriptor->Control & (SE_SACL_AUTO_INHERITED | SE_SACL_AUTO_INHERIT_REQ)) ==
+                (SE_SACL_AUTO_INHERITED | SE_SACL_AUTO_INHERIT_REQ))
+                Control |= SE_SACL_AUTO_INHERITED;
+        }
     }
     if (SecurityInformation & PROTECTED_SACL_SECURITY_INFORMATION) Control |= SE_SACL_PROTECTED;
     if (SecurityInformation & UNPROTECTED_SACL_SECURITY_INFORMATION) Control &= ~SE_SACL_PROTECTED;
