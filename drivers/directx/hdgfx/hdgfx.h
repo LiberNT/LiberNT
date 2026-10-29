@@ -26,6 +26,24 @@
 #define HDGFX_RING_RESERVE          512UL
 #define HDGFX_BLT_OVERLAP_PITCH     64UL
 #define HDGFX_QUEUE_SIZE            1024UL
+#define HDGFX_PANEL_CHILD_UID       0UL
+#define HDGFX_CRT_CHILD_UID         1UL
+#define HDGFX_CRT_PIPE              1UL
+#define HDGFX_CHILD_COUNT           2UL
+#define HDGFX_MAX_MODES             32UL
+#define HDGFX_BYTES_PER_PIXEL       4UL
+#define HDGFX_STRIDE_ALIGNMENT      64UL
+
+typedef struct _HDGFX_MODE
+{
+    ULONG Width;
+    ULONG Height;
+    ULONG Pitch;
+    ULONG Timing;
+    ULONG TotalWidth;
+    ULONG TotalHeight;
+    ULONG PixelRate;
+} HDGFX_MODE, *PHDGFX_MODE;
 
 typedef struct _HDGFX_SCANOUT
 {
@@ -59,6 +77,26 @@ typedef struct _HDGFX_SCANOUT
     ULONG CursorGeneration;
     ULONG CursorControl;
     ULONG CursorPosition;
+    LONG PointerX;
+    LONG PointerY;
+    ULONG PointerHotX;
+    ULONG PointerHotY;
+    BOOLEAN PointerVisible;
+    BOOLEAN PointerShapeValid;
+    ULONG FirmwareSize;
+    HDGFX_MODE Modes[HDGFX_MAX_MODES];
+    ULONG ModeCount;
+    ULONG Mode;
+    UCHAR PanelEdid[HDGFX_EDID_SIZE];
+    ULONG PanelEdidLength;
+    BOOLEAN CrtSupported;
+    BOOLEAN CrtConnected;
+    UCHAR CrtEdid[HDGFX_EDID_SIZE];
+    ULONG CrtEdidLength;
+    HDGFX_MODE CrtModes[HDGFX_MAX_MODES];
+    ULONG CrtModeCount;
+    BOOLEAN CrtStale;
+    KMUTEX OutputLock;
     KMUTEX Lock;
 } HDGFX_SCANOUT, *PHDGFX_SCANOUT;
 
@@ -166,6 +204,40 @@ VOID
 HdgfxQueueDpc(
     _Inout_ PHDGFX_ADAPTER Adapter);
 
+VOID
+HdgfxLock(
+    _In_ PHDGFX_SCANOUT Scanout);
+
+VOID
+HdgfxUnlock(
+    _In_ PHDGFX_SCANOUT Scanout);
+
+VOID
+HdgfxCursorCommit(
+    _In_ PHDGFX_SCANOUT Scanout);
+
+VOID
+HdgfxPlaneCommit(
+    _In_ PHDGFX_SCANOUT Scanout);
+
+NTSTATUS
+HdgfxSetOutputs(
+    _Inout_ PHDGFX_SCANOUT Scanout,
+    _In_ const HDGFX_MODE *Source,
+    _In_ BOOLEAN Panel,
+    _In_ BOOLEAN Crt);
+
+NTSTATUS
+HdgfxSetMonitorPower(
+    _Inout_ PHDGFX_SCANOUT Scanout,
+    _In_ ULONG ChildUid,
+    _In_ BOOLEAN Off);
+
+ULONG
+HdgfxScanLine(
+    _In_ PHDGFX_SCANOUT Scanout,
+    _In_ ULONG Pipe);
+
 DXGKDDI_QUERYADAPTERINFO HdgfxDdiQueryAdapterInfo;
 DXGKDDI_QUERY_INTERFACE HdgfxDdiQueryInterface;
 DXGKDDI_CREATEDEVICE HdgfxDdiCreateDevice;
@@ -183,3 +255,22 @@ DXGKDDI_SUBMITCOMMAND HdgfxDdiSubmitCommand;
 DXGKDDI_QUERYCURRENTFENCE HdgfxDdiQueryCurrentFence;
 DXGKDDI_RESETFROMTIMEOUT HdgfxDdiResetFromTimeout;
 DXGKDDI_RESTARTFROMTIMEOUT HdgfxDdiRestartFromTimeout;
+DXGKDDI_START_DEVICE HdgfxDdiStartDevice;
+DXGKDDI_SET_POWER_STATE HdgfxDdiSetPowerState;
+DXGKDDI_QUERY_CHILD_RELATIONS HdgfxDdiQueryChildRelations;
+DXGKDDI_QUERY_CHILD_STATUS HdgfxDdiQueryChildStatus;
+DXGKDDI_QUERY_DEVICE_DESCRIPTOR HdgfxDdiQueryDeviceDescriptor;
+DXGKDDI_ISSUPPORTEDVIDPN HdgfxDdiIsSupportedVidPn;
+DXGKDDI_RECOMMENDFUNCTIONALVIDPN HdgfxDdiRecommendFunctionalVidPn;
+DXGKDDI_ENUMVIDPNCOFUNCMODALITY HdgfxDdiEnumVidPnCofuncModality;
+DXGKDDI_SETVIDPNSOURCEADDRESS HdgfxDdiSetVidPnSourceAddress;
+DXGKDDI_SETVIDPNSOURCEVISIBILITY HdgfxDdiSetVidPnSourceVisibility;
+DXGKDDI_COMMITVIDPN HdgfxDdiCommitVidPn;
+DXGKDDI_SETTIMINGSFROMVIDPN HdgfxDdiSetTimingsFromVidPn;
+DXGKDDI_UPDATEACTIVEVIDPNPRESENTPATH HdgfxDdiUpdateActiveVidPnPresentPath;
+DXGKDDI_RECOMMENDMONITORMODES HdgfxDdiRecommendMonitorModes;
+DXGKDDI_RECOMMENDVIDPNTOPOLOGY HdgfxDdiRecommendVidPnTopology;
+DXGKDDI_SETPOINTERPOSITION HdgfxDdiSetPointerPosition;
+DXGKDDI_SETPOINTERSHAPE HdgfxDdiSetPointerShape;
+DXGKDDI_SETPALETTE HdgfxDdiSetPalette;
+DXGKDDI_GETSCANLINE HdgfxDdiGetScanLine;
