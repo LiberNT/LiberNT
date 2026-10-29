@@ -6660,6 +6660,7 @@ DxgkpEnsureSharedShadowSurfaceLocked(
             Status = STATUS_UNSUCCESSFUL;
             goto Cleanup;
         }
+        Allocation->PersistentCpuMapping = TRUE;
     }
 
     DxgkpBeginSharedSurfaceMutationLocked(Adapter);

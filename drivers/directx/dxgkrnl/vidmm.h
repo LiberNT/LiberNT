@@ -398,6 +398,7 @@ typedef struct _DXGKVMM_ALLOCATION
     /* TRUE if the allocation can be mapped into CPU virtual address space. */
     BOOLEAN             CpuVisible;
     BOOLEAN             Cached;
+    BOOLEAN             PersistentCpuMapping;
     BOOLEAN             ExplicitResidencyNotification;
 
     /* Miniport-declared capture buffer; required by GetCaptureAddress. */
