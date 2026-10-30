@@ -706,6 +706,7 @@ endif()
 # Disk image size configuration (in MiB). The 1.5-GiB default provides a
 # 1471-MiB NTFS partition after the 1-MiB alignment gap and 64-MiB FAT boot
 # partition.
+# TODO: grow the NTFS system partition to the whole medium at first boot; a fixed image size only defers running out of space
 set(PREINSTALL_IMAGE_SIZE_MB 1536 CACHE STRING "Disk image size in MB, including the alignment gap, boot partition, and system partition")
 set(_rosprofiler_package_pdbs_default OFF)
 if(MSVC AND (CMAKE_BUILD_TYPE MATCHES "^[Dd]ebug$" OR
