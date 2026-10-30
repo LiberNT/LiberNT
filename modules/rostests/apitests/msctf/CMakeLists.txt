@@ -6,6 +6,7 @@ list(APPEND SOURCE
     composition.cpp
     editsession.cpp
     langbar.cpp
+    langbarmgr.cpp
     layouttip.cpp
     owner.cpp
     profiles.cpp
