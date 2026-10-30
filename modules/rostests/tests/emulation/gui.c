@@ -611,6 +611,17 @@ TestOpenGlCoreProfile(
         return;
     }
     Core = CreateContextAttribs(Dc, NULL, Attributes);
+    if (!Core)
+    {
+        int Major = 0, Minor = 0;
+        const char *Version = (const char *)glGetString(GL_VERSION);
+
+        if (Version && sscanf(Version, "%d.%d", &Major, &Minor) == 2 && (Major < 3 || (Major == 3 && Minor < 2)))
+        {
+            printf("EMUGUI: the OpenGL implementation has no 3.2 core profile (version %s)\n", Version);
+            return;
+        }
+    }
     CHECK(Core != NULL);
     if (!Core) return;
     CHECK(wglMakeCurrent(Dc, Core));
@@ -1005,6 +1016,7 @@ TestDirect3D9(VOID)
 int
 main(VOID)
 {
+    setvbuf(stdout, NULL, _IONBF, 0);
     TestWindow();
     TestGdi();
     TestOpenGl();
