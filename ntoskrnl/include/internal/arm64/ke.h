@@ -7,6 +7,7 @@
 #pragma once
 
 #define KI_EMULATED_USER_MACHINE IMAGE_FILE_MACHINE_AMD64
+#define KI_EMULATED_USER_SYSTEM_DLL NULL
 
 /* This port initializes scheduler sub-nodes and their non-parked CPU sets. */
 #define KI_CORE_PARKING

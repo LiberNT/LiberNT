@@ -104,6 +104,27 @@ EmuRelocateImage(
 }
 
 NTSTATUS
+EmuAdoptGuestImage(
+    _In_ PVOID ImageBase)
+{
+    PIMAGE_NT_HEADERS Headers;
+    NTSTATUS Status;
+
+    _SEH2_TRY
+    {
+        Headers = RtlImageNtHeader(ImageBase);
+        Status = Headers ? EmuRelocateImage(ImageBase, Headers->OptionalHeader.SizeOfImage) : STATUS_INVALID_IMAGE_FORMAT;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = STATUS_INVALID_IMAGE_FORMAT;
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
+NTSTATUS
 EmuMapGuestImage(
     _In_ PCUNICODE_STRING Name,
     _Out_ PVOID *ImageBase)

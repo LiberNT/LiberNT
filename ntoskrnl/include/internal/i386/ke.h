@@ -1,6 +1,7 @@
 #pragma once
 
 #define KI_EMULATED_USER_MACHINE 0
+#define KI_EMULATED_USER_SYSTEM_DLL NULL
 
 #ifndef __ASM__
 

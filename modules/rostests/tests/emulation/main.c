@@ -7,6 +7,8 @@
 
 #define WIN32_NO_STATUS
 #include <windows.h>
+#include <sddl.h>
+#include <aclapi.h>
 #undef WIN32_NO_STATUS
 #include <ntstatus.h>
 #include <ndk/rtlfuncs.h>
@@ -744,6 +746,161 @@ TestMachines(VOID)
     printf("EMUTEST: a riscv64 machine runs riscv64, AMD64 and x86 user mode\n");
 }
 
+#define SANDBOX_CHILD_EXIT_CODE 23
+
+static
+VOID
+TestSandboxedChild(VOID)
+{
+    DWORD64 Mitigations = PROCESS_CREATION_MITIGATION_POLICY_DEP_ENABLE |
+                          PROCESS_CREATION_MITIGATION_POLICY_SEHOP_ENABLE |
+                          PROCESS_CREATION_MITIGATION_POLICY_HEAP_TERMINATE_ALWAYS_ON |
+                          PROCESS_CREATION_MITIGATION_POLICY_BOTTOM_UP_ASLR_ALWAYS_ON;
+    SID_IDENTIFIER_AUTHORITY LabelAuthority = SECURITY_MANDATORY_LABEL_AUTHORITY;
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION Limits;
+    JOBOBJECT_BASIC_UI_RESTRICTIONS Ui;
+    SID_AND_ATTRIBUTES Restricting[64];
+    WCHAR Path[MAX_PATH], CommandLine[MAX_PATH + 32];
+    WCHAR DesktopName[] = L"WinSta0\\emutest_sandbox";
+    STARTUPINFOEXW Si;
+    PROCESS_INFORMATION Pi;
+    TOKEN_MANDATORY_LABEL *Label;
+    BYTE UserBuffer[256], LabelBuffer[64];
+    PTOKEN_GROUPS Groups = NULL;
+    PTOKEN_USER User = (PTOKEN_USER)UserBuffer;
+    HANDLE Token = NULL, Restricted = NULL, Job = NULL, StdOut = NULL;
+    SECURITY_INFORMATION DesktopInfo = DACL_SECURITY_INFORMATION;
+    SECURITY_ATTRIBUTES DesktopSecurity = { sizeof(DesktopSecurity), NULL, FALSE };
+    PSECURITY_DESCRIPTOR LowLabel = NULL;
+    BOOL SaclPresent = FALSE, SaclDefaulted = FALSE, HaveUser;
+    PACL Sacl = NULL;
+    HDESK Desktop = NULL;
+    PSID LowSid = NULL;
+    SIZE_T AttributeSize = 0;
+    DWORD Length = 0, Count = 0, ExitCode = 0, Index;
+
+    CHECK(OpenProcessToken(GetCurrentProcess(), TOKEN_ALL_ACCESS, &Token));
+    HaveUser = GetTokenInformation(Token, TokenUser, UserBuffer, sizeof(UserBuffer), &Length);
+    CHECK(HaveUser);
+    if (!HaveUser)
+    {
+        if (Token)
+            CloseHandle(Token);
+        return;
+    }
+    Restricting[Count].Sid = User->User.Sid;
+    Restricting[Count++].Attributes = 0;
+    GetTokenInformation(Token, TokenGroups, NULL, 0, &Length);
+    Groups = HeapAlloc(GetProcessHeap(), 0, Length);
+    CHECK(Groups && GetTokenInformation(Token, TokenGroups, Groups, Length, &Length));
+    for (Index = 0; Groups && Index < Groups->GroupCount && Count < ARRAYSIZE(Restricting); Index++)
+    {
+        if (Groups->Groups[Index].Attributes & SE_GROUP_INTEGRITY)
+            continue;
+        Restricting[Count].Sid = Groups->Groups[Index].Sid;
+        Restricting[Count++].Attributes = 0;
+    }
+    CHECK(CreateRestrictedToken(Token, DISABLE_MAX_PRIVILEGE, 0, NULL, 0, NULL, Count, Restricting, &Restricted));
+
+    CHECK(AllocateAndInitializeSid(&LabelAuthority, 1, SECURITY_MANDATORY_LOW_RID, 0, 0, 0, 0, 0, 0, 0, &LowSid));
+    Label = (TOKEN_MANDATORY_LABEL *)LabelBuffer;
+    Label->Label.Sid = LowSid;
+    Label->Label.Attributes = SE_GROUP_INTEGRITY;
+    CHECK(Restricted && LowSid &&
+          SetTokenInformation(Restricted, TokenIntegrityLevel, Label, sizeof(*Label) + GetLengthSid(LowSid)));
+
+    Job = CreateJobObjectW(NULL, NULL);
+    CHECK(Job != NULL);
+    ZeroMemory(&Limits, sizeof(Limits));
+    Limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
+                                              JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION |
+                                              JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+    Limits.BasicLimitInformation.ActiveProcessLimit = 1;
+    CHECK(SetInformationJobObject(Job, JobObjectExtendedLimitInformation, &Limits, sizeof(Limits)));
+    Ui.UIRestrictionsClass = JOB_OBJECT_UILIMIT_ALL;
+    CHECK(SetInformationJobObject(Job, JobObjectBasicUIRestrictions, &Ui, sizeof(Ui)));
+
+    GetUserObjectSecurity(GetThreadDesktop(GetCurrentThreadId()), &DesktopInfo, NULL, 0, &Length);
+    DesktopSecurity.lpSecurityDescriptor = HeapAlloc(GetProcessHeap(), 0, Length);
+    CHECK(DesktopSecurity.lpSecurityDescriptor &&
+          GetUserObjectSecurity(GetThreadDesktop(GetCurrentThreadId()), &DesktopInfo,
+                                DesktopSecurity.lpSecurityDescriptor, Length, &Length));
+    Desktop = CreateDesktopW(L"emutest_sandbox", NULL, NULL, 0, GENERIC_ALL, &DesktopSecurity);
+    CHECK(Desktop != NULL);
+    CHECK(ConvertStringSecurityDescriptorToSecurityDescriptorW(L"S:(ML;;NW;;;LW)", SDDL_REVISION_1,
+                                                               &LowLabel, NULL));
+    CHECK(LowLabel && GetSecurityDescriptorSacl(LowLabel, &SaclPresent, &Sacl, &SaclDefaulted));
+    CHECK(Desktop && Sacl &&
+          SetSecurityInfo(Desktop, SE_WINDOW_OBJECT, LABEL_SECURITY_INFORMATION, NULL, NULL, NULL, Sacl) ==
+              ERROR_SUCCESS);
+
+    CHECK(DuplicateHandle(GetCurrentProcess(), GetStdHandle(STD_OUTPUT_HANDLE), GetCurrentProcess(), &StdOut,
+                          0, TRUE, DUPLICATE_SAME_ACCESS));
+    InitializeProcThreadAttributeList(NULL, 2, 0, &AttributeSize);
+    ZeroMemory(&Si, sizeof(Si));
+    Si.StartupInfo.cb = sizeof(Si);
+    Si.StartupInfo.lpDesktop = DesktopName;
+    Si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    Si.StartupInfo.hStdOutput = StdOut;
+    Si.StartupInfo.hStdError = StdOut;
+    Si.lpAttributeList = HeapAlloc(GetProcessHeap(), 0, AttributeSize);
+    CHECK(Si.lpAttributeList && InitializeProcThreadAttributeList(Si.lpAttributeList, 2, 0, &AttributeSize));
+    CHECK(UpdateProcThreadAttribute(Si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY,
+                                    &Mitigations, sizeof(Mitigations), NULL, NULL));
+    CHECK(UpdateProcThreadAttribute(Si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                                    &StdOut, sizeof(StdOut), NULL, NULL));
+
+    GetModuleFileNameW(NULL, Path, ARRAYSIZE(Path));
+    swprintf(CommandLine, ARRAYSIZE(CommandLine), L"\"%ls\" sandboxchild", Path);
+    ZeroMemory(&Pi, sizeof(Pi));
+    CHECK(CreateProcessAsUserW(Restricted, Path, CommandLine, NULL, NULL, TRUE,
+                               CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT, NULL, NULL,
+                               &Si.StartupInfo, &Pi));
+    if (Pi.hProcess)
+    {
+        PVOID NtCreateFileAddress = GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtCreateFile");
+        BYTE Remote[16];
+        SIZE_T Read = 0;
+
+        CHECK(NtCreateFileAddress &&
+              ReadProcessMemory(Pi.hProcess, NtCreateFileAddress, Remote, sizeof(Remote), &Read) &&
+              Read == sizeof(Remote) && !memcmp(Remote, NtCreateFileAddress, sizeof(Remote)));
+        CHECK(AssignProcessToJobObject(Job, Pi.hProcess));
+        CHECK(ResumeThread(Pi.hThread) != (DWORD)-1);
+        CHECK(WaitForSingleObject(Pi.hProcess, 120000) == WAIT_OBJECT_0);
+        CHECK(GetExitCodeProcess(Pi.hProcess, &ExitCode) && ExitCode == SANDBOX_CHILD_EXIT_CODE);
+        if (ExitCode != SANDBOX_CHILD_EXIT_CODE)
+            printf("EMUTEST: sandboxed child exit code 0x%08lx\n", ExitCode);
+        CloseHandle(Pi.hThread);
+        CloseHandle(Pi.hProcess);
+    }
+
+    if (Si.lpAttributeList)
+    {
+        DeleteProcThreadAttributeList(Si.lpAttributeList);
+        HeapFree(GetProcessHeap(), 0, Si.lpAttributeList);
+    }
+    if (StdOut)
+        CloseHandle(StdOut);
+    if (Desktop)
+        CloseDesktop(Desktop);
+    if (LowLabel)
+        LocalFree(LowLabel);
+    if (DesktopSecurity.lpSecurityDescriptor)
+        HeapFree(GetProcessHeap(), 0, DesktopSecurity.lpSecurityDescriptor);
+    if (Job)
+        CloseHandle(Job);
+    if (LowSid)
+        FreeSid(LowSid);
+    if (Restricted)
+        CloseHandle(Restricted);
+    if (Groups)
+        HeapFree(GetProcessHeap(), 0, Groups);
+    if (Token)
+        CloseHandle(Token);
+    printf("EMUTEST: a restricted, low-integrity child in a job on another desktop starts\n");
+}
+
 int
 main(
     int ArgumentCount,
@@ -751,6 +908,9 @@ main(
 {
     PIMAGE_NT_HEADERS Headers = RtlImageNtHeader(GetModuleHandleW(NULL));
     SYSTEM_INFO System;
+
+    if (ArgumentCount == 2 && !strcmp(Arguments[1], "sandboxchild"))
+        return SANDBOX_CHILD_EXIT_CODE;
 
     setvbuf(stdout, NULL, _IONBF, 0);
     GetSystemInfo(&System);
@@ -774,6 +934,7 @@ main(
     TestMisalignedVectors();
     TestIndirectCalls();
     TestRv64X();
+    TestSandboxedChild();
 
     printf("EMUTEST: END checks=%ld failures=%ld\n", EmuTestChecks, EmuTestFailures);
     DbgPrint("EMUTEST: END checks=%ld failures=%ld\n", EmuTestChecks, EmuTestFailures);

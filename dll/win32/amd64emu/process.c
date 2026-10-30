@@ -6,6 +6,7 @@
  */
 
 #include "amd64emu.h"
+#include <reactos/wow64shared.h>
 
 #define EMU_PROCESS_UNINITIALIZED 0
 #define EMU_PROCESS_INITIALIZING  1
@@ -63,6 +64,7 @@ EmuInitializeProcess(
     static const UNICODE_STRING NativeName = RTL_CONSTANT_STRING(L"ntdll.dll");
     WCHAR NtdllBuffer[MAX_PATH];
     UNICODE_STRING NtdllPath;
+    PSYSTEM_DLL_INIT_BLOCK InitBlock;
     PVOID NativeNtdll;
     NTSTATUS Status;
 
@@ -90,12 +92,19 @@ EmuInitializeProcess(
     Status = EmuCoreInitialize();
     if (!NT_SUCCESS(Status)) return Status;
 
-    RtlInitEmptyUnicodeString(&NtdllPath, NtdllBuffer, sizeof(NtdllBuffer));
-    Status = RtlAppendUnicodeStringToString(&NtdllPath, &EmuProcess.GuestDirectory);
-    if (NT_SUCCESS(Status)) Status = RtlAppendUnicodeToString(&NtdllPath, L"ntdll.dll");
-    if (!NT_SUCCESS(Status)) return Status;
-
-    Status = EmuMapGuestImage(&NtdllPath, &EmuProcess.GuestNtdll);
+    InitBlock = RtlFindExportedRoutineByName(NativeNtdll, "LdrSystemDllInitBlock");
+    if (InitBlock && InitBlock->ntdll_handle)
+    {
+        EmuProcess.GuestNtdll = (PVOID)(ULONG_PTR)InitBlock->ntdll_handle;
+        Status = EmuAdoptGuestImage(EmuProcess.GuestNtdll);
+    }
+    else
+    {
+        RtlInitEmptyUnicodeString(&NtdllPath, NtdllBuffer, sizeof(NtdllBuffer));
+        Status = RtlAppendUnicodeStringToString(&NtdllPath, &EmuProcess.GuestDirectory);
+        if (NT_SUCCESS(Status)) Status = RtlAppendUnicodeToString(&NtdllPath, L"ntdll.dll");
+        if (NT_SUCCESS(Status)) Status = EmuMapGuestImage(&NtdllPath, &EmuProcess.GuestNtdll);
+    }
     if (!NT_SUCCESS(Status)) return Status;
 
     Status = EmuGetGuestExport("LdrInitializeThunk", &EmuProcess.LdrInitializeThunk);

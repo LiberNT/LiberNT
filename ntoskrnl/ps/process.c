@@ -29,6 +29,7 @@ ULONG PsRawPrioritySeparation;
 ULONG PsPrioritySeparation;
 CHAR PspForegroundQuantum[3];
 volatile LONG64 PspProcessSequenceNumber;
+static const PCWSTR PspEmulatedSystemDll = KI_EMULATED_USER_SYSTEM_DLL;
 
 /* Fixed quantum table */
 CHAR PspFixedQuantums[6] =
@@ -1807,7 +1808,6 @@ PspAllocateUserStack(IN HANDLE ProcessHandle,
     return STATUS_SUCCESS;
 }
 
-#ifdef WOW64_SUPPORTED
 static NTSTATUS
 PspFindWow64SystemDllExport(IN HANDLE ProcessHandle,
                             IN PVOID ImageBase,
@@ -1841,10 +1841,12 @@ PspFindWow64SystemDllExport(IN HANDLE ProcessHandle,
 }
 
 static NTSTATUS
-PspMapWow64SystemDll(IN HANDLE ProcessHandle,
-                     OUT PULONG RtlUserThreadStart)
+PspMapGuestSystemDll(IN HANDLE ProcessHandle,
+                     IN PCWSTR DllPath,
+                     IN ULONG_PTR ZeroBits,
+                     OUT PULONG RtlUserThreadStart OPTIONAL)
 {
-    UNICODE_STRING Path = RTL_CONSTANT_STRING(L"\\SystemRoot\\SysWOW64\\ntdll.dll");
+    UNICODE_STRING Path;
     OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;
     HANDLE FileHandle, SectionHandle;
@@ -1855,6 +1857,7 @@ PspMapWow64SystemDll(IN HANDLE ProcessHandle,
 
     if (!PspSystemDllInitBlock) return STATUS_NOT_SUPPORTED;
 
+    RtlInitUnicodeString(&Path, DllPath);
     InitializeObjectAttributes(&ObjectAttributes, &Path, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
     Status = ZwOpenFile(&FileHandle, FILE_READ_ACCESS, &ObjectAttributes, &IoStatusBlock, FILE_SHARE_READ | FILE_SHARE_DELETE, 0);
     if (!NT_SUCCESS(Status)) return Status;
@@ -1863,7 +1866,7 @@ PspMapWow64SystemDll(IN HANDLE ProcessHandle,
     ZwClose(FileHandle);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = ZwMapViewOfSection(SectionHandle, ProcessHandle, &ViewBase, MAXLONG, 0, NULL, &ViewSize, ViewShare, 0, PAGE_READWRITE);
+    Status = ZwMapViewOfSection(SectionHandle, ProcessHandle, &ViewBase, ZeroBits, 0, NULL, &ViewSize, ViewShare, 0, PAGE_READWRITE);
     ZwClose(SectionHandle);
     if (!NT_SUCCESS(Status)) return Status;
 
@@ -1879,9 +1882,13 @@ PspMapWow64SystemDll(IN HANDLE ProcessHandle,
         return Status;
     }
 
+    if (!RtlUserThreadStart)
+        return STATUS_SUCCESS;
+
     return PspFindWow64SystemDllExport(ProcessHandle, ViewBase, "RtlUserThreadStart", RtlUserThreadStart);
 }
 
+#ifdef WOW64_SUPPORTED
 static NTSTATUS
 PspAppendWow64String(IN PUNICODE_STRING Source,
                      OUT PWOW64_UNICODE_STRING Destination,
@@ -3520,6 +3527,11 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
         if (!NT_SUCCESS(Status)) goto Cleanup;
     }
 #endif
+    if (PspEmulatedSystemDll && ImageInformation.Machine == KI_EMULATED_USER_MACHINE &&
+        !ImageInformation.ComPlusNativeReady)
+    {
+        PspMapGuestSystemDll(hProcess, PspEmulatedSystemDll, 0, NULL);
+    }
 
     /*
      * Step 7: Create the initial thread.
@@ -3541,7 +3553,7 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
         ULONG_PTR CpuAddress;
         ULONG ThreadStart = 0;
 
-        Status = PspMapWow64SystemDll(hProcess, &ThreadStart);
+        Status = PspMapGuestSystemDll(hProcess, L"\\SystemRoot\\SysWOW64\\ntdll.dll", MAXLONG, &ThreadStart);
         if (NT_SUCCESS(Status))
             Status = PspAllocateUserStack(hProcess, MM_SYSTEM_RANGE_START_WOW64 - 1, ImageInformation.MaximumStackSize, ImageInformation.CommittedStackSize, PAGE_SIZE, &Wow64InitialTeb);
         if (!NT_SUCCESS(Status)) goto Cleanup;

@@ -212,6 +212,10 @@ EmuFatal(
     _In_ PCSTR Message);
 
 NTSTATUS
+EmuAdoptGuestImage(
+    _In_ PVOID ImageBase);
+
+NTSTATUS
 EmuMapGuestImage(
     _In_ PCUNICODE_STRING Name,
     _Out_ PVOID *ImageBase);
