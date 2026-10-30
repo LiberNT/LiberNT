@@ -180,6 +180,20 @@ VidSchpReleaseCall(
     ASSERT(ActiveCalls >= 0);
 }
 
+static VOID
+VidSchpAcquireSubmissionOrder(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    (VOID)KeWaitForSingleObject(&Adapter->SubmissionOrderMutex, Executive, KernelMode, FALSE, NULL);
+}
+
+static VOID
+VidSchpReleaseSubmissionOrder(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    KeReleaseMutex(&Adapter->SubmissionOrderMutex, FALSE);
+}
+
 static VOID VidSchpAssertOutstandingWorkersInvariantLocked(_In_ PVIDSCH_ENGINE Engine)
 {
     ASSERT(Engine->OutstandingWorkers >= 0);
@@ -3322,12 +3336,14 @@ VidSchSubmitCommand(
      * and the DMA tracker depend on.  A second counter (or minting at
      * kick) aliases fence numbers across paths and signals UMD waits for
      * work that never executed. */
+    VidSchpAcquireSubmissionOrder(Adapter);
     if (SubmissionFenceId != 0)
         Packet->SubmissionFenceId = SubmissionFenceId;
     else
         Packet->SubmissionFenceId = DxgkAllocateSubmissionFenceId(Adapter);
     if (Packet->SubmissionFenceId == 0 || !DxgkReserveSubmissionFenceIdentity(Adapter, NodeOrdinal, Packet->SubmissionFenceId, &Packet->FenceIdentityEpoch))
     {
+        VidSchpReleaseSubmissionOrder(Adapter);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
         return STATUS_DEVICE_BUSY;
@@ -3346,6 +3362,7 @@ VidSchSubmitCommand(
     if (VidSchpReadSchedulerState(Ctx) != VidSchSchedulerRunning)
     {
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
         return STATUS_DEVICE_BUSY;
@@ -3354,11 +3371,13 @@ VidSchSubmitCommand(
     if (!NT_SUCCESS(Status))
     {
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
         return Status;
     }
     ExReleaseFastMutex(&Ctx->LifecycleMutex);
+    VidSchpReleaseSubmissionOrder(Adapter);
 
     (VOID)VidSchpKickEngine(Engine, NULL);
     *OutFenceId = FenceId;
@@ -3542,10 +3561,12 @@ VidSchSubmitCommandVirtual(
         return Status;
     }
     Ctx = (PVIDSCH_CONTEXT)Adapter->VidSchContext;
+    VidSchpAcquireSubmissionOrder(Adapter);
     ExAcquireFastMutex(&Ctx->LifecycleMutex);
     if (VidSchpReadSchedulerState(Ctx) != VidSchSchedulerRunning)
     {
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
         return STATUS_DEVICE_BUSY;
@@ -3554,6 +3575,7 @@ VidSchSubmitCommandVirtual(
     if (Sched == NULL)
     {
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
         return STATUS_DEVICE_NOT_READY;
@@ -3564,6 +3586,7 @@ VidSchSubmitCommandVirtual(
     if (!NT_SUCCESS(Status))
     {
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
         return Status;
@@ -3573,6 +3596,7 @@ VidSchSubmitCommandVirtual(
     {
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
         return Status;
@@ -3583,6 +3607,7 @@ VidSchSubmitCommandVirtual(
     {
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
         return STATUS_DELETE_PENDING;
@@ -3593,6 +3618,7 @@ VidSchSubmitCommandVirtual(
         ExReleaseRundownProtection(&Context->StreamAdmissionRundown);
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
         return Status;
@@ -3609,6 +3635,7 @@ VidSchSubmitCommandVirtual(
     {
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         DxgkContextOrderAbortPacket(Packet, STATUS_DEVICE_BUSY);
         VidSchpDereferencePacket(Packet);
         ExReleaseRundownProtection(&Context->StreamAdmissionRundown);
@@ -3627,6 +3654,7 @@ VidSchSubmitCommandVirtual(
         Packet->HoldsContextReference = FALSE;
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         DxgkContextOrderAbortPacket(Packet, Status);
         VidSchpDereferencePacket(Packet);
         if (KickContext != NULL)
@@ -3636,6 +3664,7 @@ VidSchSubmitCommandVirtual(
         return Status;
     }
     ExReleaseFastMutex(&Ctx->LifecycleMutex);
+    VidSchpReleaseSubmissionOrder(Adapter);
     ExReleaseRundownProtection(&Context->StreamAdmissionRundown);
     if (KickContext != NULL)
     {
@@ -3732,23 +3761,6 @@ VidSchSubmitCommandTrackedMeasured(
         return Status;
     }
 
-    Packet->SubmissionFenceId = DxgkAllocateSubmissionFenceId(Adapter);
-    if (Packet->SubmissionFenceId == 0)
-    {
-        VidSchpDereferencePacket(Packet);
-        VidSchpReleaseCall(Adapter);
-        return STATUS_INTEGER_OVERFLOW;
-    }
-    Trace = DptBegin(&g_DxgPresentTrace, DPT_KERNEL_FENCE_RESERVE);
-    FenceReserved = DxgkReserveSubmissionFenceIdentity(Adapter, NodeOrdinal, Packet->SubmissionFenceId, &Packet->FenceIdentityEpoch);
-    DptEnd(&g_DxgPresentTrace, Trace, FenceReserved, 0);
-    if (!FenceReserved)
-    {
-        VidSchpDereferencePacket(Packet);
-        VidSchpReleaseCall(Adapter);
-        return STATUS_DEVICE_BUSY;
-    }
-    Packet->FenceIdentityReserved = TRUE;
     Packet->MiniportDeviceHandle = MiniportDeviceHandle;
     Packet->MiniportContextHandle = MiniportContextHandle;
     Packet->Priority = Priority;
@@ -3783,7 +3795,6 @@ VidSchSubmitCommandTrackedMeasured(
     }
 
     LocalTrackArgs = *TrackArgs;
-    LocalTrackArgs.SubmissionFenceId = Packet->SubmissionFenceId;
     LocalTrackArgs.NodeOrdinal = NodeOrdinal;
     LocalTrackArgs.EngineOrdinal = EngineOrdinal;
     LocalTrackArgs.DmaBuffer = DmaBuffer;
@@ -3841,6 +3852,31 @@ VidSchSubmitCommandTrackedMeasured(
         Packet->HoldsContextReference = TRUE;
     }
 
+    /* Paging submits outside the KMD transaction, so mint through admission is the only order. */
+    VidSchpAcquireSubmissionOrder(Adapter);
+    Packet->SubmissionFenceId = DxgkAllocateSubmissionFenceId(Adapter);
+    if (Packet->SubmissionFenceId == 0)
+    {
+        VidSchpReleaseSubmissionOrder(Adapter);
+        DxgkCancelTrackedDmaBuffer(Reservation);
+        VidSchpDereferencePacket(Packet);
+        VidSchpReleaseCall(Adapter);
+        return STATUS_INTEGER_OVERFLOW;
+    }
+    Trace = DptBegin(&g_DxgPresentTrace, DPT_KERNEL_FENCE_RESERVE);
+    FenceReserved = DxgkReserveSubmissionFenceIdentity(Adapter, NodeOrdinal, Packet->SubmissionFenceId, &Packet->FenceIdentityEpoch);
+    DptEnd(&g_DxgPresentTrace, Trace, FenceReserved, 0);
+    if (!FenceReserved)
+    {
+        VidSchpReleaseSubmissionOrder(Adapter);
+        DxgkCancelTrackedDmaBuffer(Reservation);
+        VidSchpDereferencePacket(Packet);
+        VidSchpReleaseCall(Adapter);
+        return STATUS_DEVICE_BUSY;
+    }
+    Packet->FenceIdentityReserved = TRUE;
+    Reservation->SubmissionFenceId = Packet->SubmissionFenceId;
+
     if (!Packet->VirtualAddressing && DXGK_CB_FULL(Adapter, DxgkDdiPatch) != NULL)
     {
         RtlZeroMemory(&PatchArgs, sizeof(PatchArgs));
@@ -3873,6 +3909,7 @@ VidSchSubmitCommandTrackedMeasured(
 
         if (!DxgkAcquireKmdCall(Adapter))
         {
+            VidSchpReleaseSubmissionOrder(Adapter);
             DxgkCancelTrackedDmaBuffer(Reservation);
             VidSchpDereferencePacket(Packet);
             VidSchpReleaseCall(Adapter);
@@ -3896,6 +3933,7 @@ VidSchSubmitCommandTrackedMeasured(
 
         if (!NT_SUCCESS(Status))
         {
+            VidSchpReleaseSubmissionOrder(Adapter);
             DxgkCancelTrackedDmaBuffer(Reservation);
             VidSchpDereferencePacket(Packet);
             VidSchpReleaseCall(Adapter);
@@ -3912,6 +3950,7 @@ VidSchSubmitCommandTrackedMeasured(
     DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Status), 0);
     if (!NT_SUCCESS(Status))
     {
+        VidSchpReleaseSubmissionOrder(Adapter);
         DxgkCancelTrackedDmaBuffer(Reservation);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
@@ -3925,6 +3964,7 @@ VidSchSubmitCommandTrackedMeasured(
     if (VidSchpReadSchedulerState(Ctx) != VidSchSchedulerRunning)
     {
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         DxgkCancelTrackedDmaBuffer(Reservation);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
@@ -3935,6 +3975,7 @@ VidSchSubmitCommandTrackedMeasured(
     if (Sched == NULL)
     {
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         DxgkCancelTrackedDmaBuffer(Reservation);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
@@ -3944,6 +3985,7 @@ VidSchSubmitCommandTrackedMeasured(
     if (!NT_SUCCESS(Status))
     {
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         DxgkCancelTrackedDmaBuffer(Reservation);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
@@ -3956,6 +3998,7 @@ VidSchSubmitCommandTrackedMeasured(
     {
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         DxgkCancelTrackedDmaBuffer(Reservation);
         VidSchpDereferencePacket(Packet);
         VidSchpReleaseCall(Adapter);
@@ -3969,6 +4012,7 @@ VidSchSubmitCommandTrackedMeasured(
         {
             Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
             ExReleaseFastMutex(&Ctx->LifecycleMutex);
+            VidSchpReleaseSubmissionOrder(Adapter);
             DxgkCancelTrackedDmaBuffer(Reservation);
             VidSchpDereferencePacket(Packet);
             VidSchpReleaseCall(Adapter);
@@ -3982,6 +4026,7 @@ VidSchSubmitCommandTrackedMeasured(
             ExReleaseRundownProtection(&OrderedContext->StreamAdmissionRundown);
             Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
             ExReleaseFastMutex(&Ctx->LifecycleMutex);
+            VidSchpReleaseSubmissionOrder(Adapter);
             DxgkCancelTrackedDmaBuffer(Reservation);
             VidSchpDereferencePacket(Packet);
             VidSchpReleaseCall(Adapter);
@@ -4004,6 +4049,7 @@ VidSchSubmitCommandTrackedMeasured(
     {
         Sched->ReleaseSlot(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
         ExReleaseFastMutex(&Ctx->LifecycleMutex);
+        VidSchpReleaseSubmissionOrder(Adapter);
         if (OrderedPacket)
             DxgkContextOrderAbortPacket(Packet, Status);
         if (OrderedContext != NULL)
@@ -4016,6 +4062,7 @@ VidSchSubmitCommandTrackedMeasured(
         return Status;
     }
     ExReleaseFastMutex(&Ctx->LifecycleMutex);
+    VidSchpReleaseSubmissionOrder(Adapter);
     if (OrderedContext != NULL)
         ExReleaseRundownProtection(&OrderedContext->StreamAdmissionRundown);
 
