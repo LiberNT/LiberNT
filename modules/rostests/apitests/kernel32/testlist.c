@@ -8,6 +8,7 @@ extern void func_BaseSetLastNTError(void);
 extern void func_Arm64ThreadContext(void);
 extern void func_ConsoleAlias(void);
 extern void func_ConsoleCP(void);
+extern void func_ConsoleDbcsCells(void);
 extern void func_ConsoleProcessInheritance(void);
 extern void func_ConsoleVirtualTerminal(void);
 extern void func_CreateProcess(void);
@@ -98,6 +99,7 @@ const struct test winetest_testlist[] =
     { "Arm64ThreadContext",          func_Arm64ThreadContext },
     { "ConsoleAlias", func_ConsoleAlias },
     { "ConsoleCP",                   func_ConsoleCP },
+    { "ConsoleDbcsCells",            func_ConsoleDbcsCells },
     { "ConsoleProcessInheritance",   func_ConsoleProcessInheritance },
     { "ConsoleVirtualTerminal",      func_ConsoleVirtualTerminal },
     { "CreateProcess",               func_CreateProcess },

@@ -10,6 +10,7 @@ list(APPEND SOURCE
     BaseSetLastNTError.c
     Arm64ThreadContext.c
     ConsoleCP.c
+    ConsoleDbcsCells.c
     ConsoleProcessInheritance.c
     ConsoleVirtualTerminal.c
     CreateProcess.c
