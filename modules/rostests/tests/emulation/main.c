@@ -446,11 +446,11 @@ TestThreadContext(VOID)
     for (Index = 0; Index < 16; Index++)
     {
         CHECK(SuspendThread(Thread) == 0);
+        Context.ContextFlags = CONTEXT_FULL;
+        CHECK(GetThreadContext(Thread, &Context));
         Before = SpinRounds;
         Sleep(5);
         CHECK(SpinRounds == Before);
-        Context.ContextFlags = CONTEXT_FULL;
-        CHECK(GetThreadContext(Thread, &Context));
         CHECK(InModule(CONTEXT_PC(&Context), GetModuleHandleW(NULL)));
         CHECK(CONTEXT_SP(&Context) <= SpinMarker && SpinMarker - CONTEXT_SP(&Context) < 0x1000);
         CHECK(ResumeThread(Thread) == 1);
