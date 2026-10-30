@@ -7,7 +7,7 @@
 
 #pragma once
 
-#define POWERVR_K1_CORE_CLOCK_HZ    614400000ULL
+#define POWERVR_K1_CORE_CLOCK_HZ    819200000ULL
 #define POWERVR_K1_COMPATIBLE_COUNT 3
 
 extern const char *const PowerVrK1Compatible[POWERVR_K1_COMPATIBLE_COUNT];

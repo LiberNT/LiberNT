@@ -30,7 +30,12 @@
 #define K1_GPU_CLK_FC               (1UL << 15)
 #define K1_GPU_CLK_MUX_SHIFT        18
 #define K1_GPU_CLK_MUX_MASK         (7UL << K1_GPU_CLK_MUX_SHIFT)
-#define K1_GPU_CLK_MUX_PLL1_D4      0
+#define K1_GPU_CLK_MUX_PLL1_D3      2
+
+#define K1_APBS_PLL1_SWCR2          0xD4090104ULL
+#define K1_APBS_PLL1_D3             (1UL << 2)
+#define K1_MPMU_ACGR                0xD4051024ULL
+#define K1_MPMU_ACGR_PLL1_D3_819P2  (1UL << 14)
 
 static ULONG
 K1Read(_In_ PVOID Registers, _In_ ULONG Offset)
@@ -42,6 +47,24 @@ static VOID
 K1Write(_In_ PVOID Registers, _In_ ULONG Offset, _In_ ULONG Value)
 {
     WRITE_REGISTER_ULONG((volatile ULONG *)((PUCHAR)Registers + Offset), Value);
+}
+
+static NTSTATUS
+K1EnableClockGate(_In_ ULONG64 Address, _In_ ULONG Gate)
+{
+    PHYSICAL_ADDRESS Base;
+    PVOID Register;
+    ULONG Value;
+
+    Base.QuadPart = Address;
+    Register = MmMapIoSpace(Base, sizeof(ULONG), MmNonCached);
+    if (!Register)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Value = K1Read(Register, 0);
+    if (!(Value & Gate))
+        K1Write(Register, 0, Value | Gate);
+    MmUnmapIoSpace(Register, sizeof(ULONG));
+    return STATUS_SUCCESS;
 }
 
 static BOOLEAN
@@ -64,6 +87,7 @@ PowerVrK1PowerUp(_Inout_ PVOID *PlatformRegisters)
     PHYSICAL_ADDRESS Base;
     PVOID Registers;
     ULONG Value, Loop;
+    NTSTATUS Status;
 
     if (!*PlatformRegisters)
     {
@@ -100,8 +124,14 @@ PowerVrK1PowerUp(_Inout_ PVOID *PlatformRegisters)
     K1Write(Registers, K1_APMU_GPU_CLK_RES_CTRL, Value);
     KeStallExecutionProcessor(10);
 
+    Status = K1EnableClockGate(K1_APBS_PLL1_SWCR2, K1_APBS_PLL1_D3);
+    if (NT_SUCCESS(Status))
+        Status = K1EnableClockGate(K1_MPMU_ACGR, K1_MPMU_ACGR_PLL1_D3_819P2);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
     Value &= ~(K1_GPU_CLK_MUX_MASK | K1_GPU_CLK_DIV_MASK);
-    Value |= K1_GPU_CLK_MUX_PLL1_D4 << K1_GPU_CLK_MUX_SHIFT;
+    Value |= K1_GPU_CLK_MUX_PLL1_D3 << K1_GPU_CLK_MUX_SHIFT;
     K1Write(Registers, K1_APMU_GPU_CLK_RES_CTRL, Value);
     K1Write(Registers, K1_APMU_GPU_CLK_RES_CTRL, Value | K1_GPU_CLK_FC);
     for (Loop = 0; Loop < 5000; ++Loop)
