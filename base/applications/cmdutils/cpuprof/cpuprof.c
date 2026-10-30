@@ -11,9 +11,9 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <reactos/arm64/sysreg.h>
 #include <wchar.h>
 #include <reactos/cpuaudit.h>
+#include "clock.h"
 
 typedef LONG (NTAPI *QUERY_SYSTEM)(ULONG, PVOID, ULONG, PULONG);
 typedef struct
@@ -271,21 +271,6 @@ static void ReportSamples(void)
     printf("SAMPLE_COMPLETE profiles=%lu\n", ProfileCount);
 }
 
-static ULONGLONG ReadClockTicks(void)
-{
-    ULONGLONG Value;
-    Value = ARM64_READ_SYSREG(CNTVCT_EL0);
-    return Value;
-}
-
-static ULONGLONG ReadClockCycles(void)
-{
-    ULONGLONG Value;
-    ARM64_ISB();
-    Value = ARM64_READ_SYSREG(PMCCNTR_EL0);
-    return Value;
-}
-
 static DWORD WINAPI ClockWorker(void *Parameter)
 {
     CLOCK_SAMPLE *Sample = Parameter;
@@ -295,7 +280,7 @@ static DWORD WINAPI ClockWorker(void *Parameter)
         Sample->Error = GetLastError();
         return 1;
     }
-    Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
+    Frequency = ReadClockFrequency();
     WaitForSingleObject(Sample->Start, INFINITE);
     Start = ReadClockTicks();
     do { Now = ReadClockTicks(); } while (Now - Start < Frequency * 3);
@@ -321,7 +306,7 @@ static DWORD WINAPI ClockProbeWorker(PVOID Parameter)
     ULONGLONG Frequency;
     if (!SetThreadAffinityMask(GetCurrentThread(), (DWORD_PTR)1 << Cpu))
     { ProbeErrors[Cpu] = GetLastError(); return 1; }
-    Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
+    Frequency = ReadClockFrequency();
     while (WaitForSingleObject(ProbeStop, 167 + (ProbeCounts[Cpu] * 37 + Cpu * 29) % 71) == WAIT_TIMEOUT)
     {
         ULONG Index = ProbeCounts[Cpu];
@@ -367,7 +352,7 @@ static BOOL FinishClockProbe(const WCHAR *Path)
     CloseHandle(ProbeStop); ProbeStop = NULL;
     File = _wfopen(Path, L"wb");
     if (!File) return FALSE;
-    Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
+    Frequency = ReadClockFrequency();
     fprintf(File, "cpu,start_tick,end_tick,cycles\n");
     for (ULONG Cpu = 0; Cpu < 4; Cpu++)
     {
@@ -562,7 +547,7 @@ static int ProfileClocks(void)
     if (System.dwNumberOfProcessors != 4) return 2;
     ReportSensors("before");
     ReportThermals("before");
-    Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
+    Frequency = ReadClockFrequency();
     Start = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!Start) return 2;
     for (unsigned i = 0; i < 4; ++i)
