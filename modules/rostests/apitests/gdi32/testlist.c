@@ -7,6 +7,7 @@ extern void func_AddFontResource(void);
 extern void func_AddFontResourceEx(void);
 extern void func_AlphaBlend(void);
 extern void func_BeginPath(void);
+extern void func_CjkFaceNames(void);
 extern void func_CombineRgn(void);
 extern void func_CombineTransform(void);
 extern void func_CreateBitmap(void);
@@ -88,6 +89,7 @@ const struct test winetest_testlist[] =
     { "AddFontResourceEx", func_AddFontResourceEx },
     { "AlphaBlend", func_AlphaBlend },
     { "BeginPath", func_BeginPath },
+    { "CjkFaceNames", func_CjkFaceNames },
     { "CombineRgn", func_CombineRgn },
     { "CombineTransform", func_CombineTransform },
     { "CreateBitmap", func_CreateBitmap },
