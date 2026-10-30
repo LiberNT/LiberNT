@@ -34,3 +34,5 @@ target_link_libraries(wow64felix
 add_importlibs(wow64felix wow64 ntdll)
 add_dependencies(wow64felix wow64)
 add_cd_file(TARGET wow64felix DESTINATION reactos/system32 FOR all)
+
+set_target_properties(wow64felix PROPERTIES RV64X_EXCLUDE ON)

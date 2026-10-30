@@ -521,6 +521,7 @@ function(set_module_type MODULE TYPE)
 
     if(TYPE IN_LIST KERNEL_MODULE_TYPES)
         target_compile_definitions(${MODULE} PRIVATE _GCC_SAL_CHECK_RETURN)
+        set_target_properties(${MODULE} PROPERTIES RV64X_EXCLUDE ON)
     endif()
 
     # Set entry point

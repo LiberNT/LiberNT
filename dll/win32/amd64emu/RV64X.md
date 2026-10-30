@@ -84,6 +84,10 @@ callbacks with ten arguments, a negative `int` result, a `float` result and a
 variadic `_snprintf`. `emulation_test_rv64x` checks that RV64X code runs
 unchanged in a native process.
 
+With `-DRV64X_SYSTEM=ON` every user-mode module of the riscv64 build is RV64X.
+Kernel-mode modules, `amd64emu` with felix86 and `wow64felix` keep the plain
+code generation (`RV64X_EXCLUDE`).
+
 ## Stages
 
 1. Compiler pass, runtime exit path and entry descriptors in the current
@@ -97,7 +101,8 @@ unchanged in a native process.
    CHPE runtime behind an EC-host switch instead of `_M_ARM64` and x64 imports
    bind to RV64X system DLLs. Done so far: felix86 leaves translated code when a
    target is native.
-4. Build the system DLLs as RV64X and retire the x64 userland in `SystemAMD64`.
+4. Build the system DLLs as RV64X (done with `RV64X_SYSTEM`; the suite passes)
+   and retire the x64 userland in `SystemAMD64`, which needs stage 3.
 
 Open: variadic RV64X functions called from x64 (the stack window is unknown),
 16-byte aggregates by value and struct results, C++ `invoke` sites (left

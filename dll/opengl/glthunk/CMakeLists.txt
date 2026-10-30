@@ -27,7 +27,7 @@ add_library(glthunk_host STATIC
     host/glhost.c
     "${_glthunk_signatures}")
 target_include_directories(glthunk_host PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-if(RV64X_COMPILER_LAUNCHER)
+if(RV64X_COMPILER_LAUNCHER AND NOT RV64X_SYSTEM)
     set_target_properties(glthunk_host PROPERTIES C_COMPILER_LAUNCHER ${RV64X_COMPILER_LAUNCHER})
     target_compile_options(glthunk_host PRIVATE -mllvm -riscv-rv64x)
 endif()
