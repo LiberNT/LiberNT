@@ -463,8 +463,6 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
 
     include(sdk/cmake/ci.cmake)
 
-    rv64x_exclude_kernel_libraries()
-
     # Create the registry hives
     create_registry_hives()
 
