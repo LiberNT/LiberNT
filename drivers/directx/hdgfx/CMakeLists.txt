@@ -15,6 +15,7 @@ add_library(hdgfx MODULE
     core/hdgfx_gmbus.c
     core/hdgfx_ilk.c
     core/hdgfx_ilk_modeset.c
+    core/hdgfx_ivb_ring.c
     core/hdgfx_opregion.c
     core/hdgfx_ring.c
     core/hdgfx_vbt.c

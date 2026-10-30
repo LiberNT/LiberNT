@@ -17,6 +17,29 @@
     R(HWS_PGA,              0x2080, 0) \
     R(ESR,                  0x20B8, 0) \
     R(GDSR,                 0x12CA4, 0) \
+    R(CHICKEN_3D3,          0x2090, 0) \
+    R(RING_HWSTAM,          0x2098, 0) \
+    R(RING_MI_MODE,         0x209C, 0) \
+    R(FF_THREAD_MODE,       0x20A0, 0) \
+    R(RING_IMR,             0x20A8, 0) \
+    R(RING_INSTPM,          0x20C0, 0) \
+    R(RENDER_RING_MODE,     0x229C, 0) \
+    R(RENDER_HWS_PGA,       0x4080, 0) \
+    R(BLT_HWS_PGA,          0x4280, 0) \
+    R(CACHE_MODE_0,         0x7000, 0) \
+    R(CACHE_MODE_1,         0x7004, 0) \
+    R(GT_MODE,              0x7008, 0) \
+    R(COMMON_SLICE_CHICKEN1, 0x7010, 0) \
+    R(GDRST,                0x941C, 0) \
+    R(ECOBUS,               0xA180, 0) \
+    R(FORCEWAKE_MT,         0xA188, 0) \
+    R(FORCEWAKE,            0xA18C, 0) \
+    R(L3_CONTROL,           0xB01C, 0) \
+    R(L3_CHICKEN_MODE,      0xB030, 0) \
+    R(L3SQ_CONTROL4,        0xB034, 0) \
+    R(FORCEWAKE_MT_ACK,     0x130040, 0) \
+    R(FORCEWAKE_ACK,        0x130090, 0) \
+    R(GT_THREAD_STATUS,     0x13805C, 0) \
     R(SOUTH_CHICKEN1,       0xC2000, 0) \
     R(GTIMR,                0x44014, 0) \
     R(GTIIR,                0x44018, 0) \
@@ -100,6 +123,7 @@
     F(DE_PCH_EVENT,             21, 21) \
     F(DE_GSE,                   18, 18) \
     F(GT_RENDER_USER,           0, 0) \
+    F(GT_BLT_USER,              22, 22) \
     F(SDE_CRT_HOTPLUG,          11, 11) \
     F(SDE_CRT_HOTPLUG_CPT,      19, 19) \
     F(TIMING_LOW,               12, 0) \
