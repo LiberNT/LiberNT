@@ -418,6 +418,8 @@ TestBatchCheck(void)
         0x12000001, 0x2400, 0x1000,                   /* MI_STORE_REGISTER_MEM predicate */
         0x10400002, 0, 0x1000, 7,                     /* MI_STORE_DATA_IMM */
         0x78000000 | (0x10 << 16) | 3, 0, 0, 0, 0,    /* a 3D packet */
+        0x70020002, 0, 0x40, 0,                       /* MEDIA_INTERFACE_DESCRIPTOR_LOAD */
+        0x71050509, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,     /* GPGPU_WALKER with flags in the length's high byte */
         0x05000000, 0,
     };
     static const struct
@@ -447,6 +449,7 @@ TestBatchCheck(void)
         { "PIPE_CONTROL register write", { 0x7A000002, 0x00800000, 0, 0 }, 4, false },
         { "XY blit on the render ring", { 0x54300004, 0, 0, 0 }, 4, false },
         { "command past the batch", { 0x78100005, 0, 0, 0 }, 4, false },
+        { "GPGPU_WALKER past the batch", { 0x71050009, 0, 0, 0 }, 4, false },
         { "LRI past the batch", { 0x11000003, 0x5280, 0, 0 }, 3, false },
         { "unknown client", { 0x20000000, 0, 0, 0 }, 1, false },
         { "3D packet on the blitter ring", { 0x7A000002, 0, 0, 0 }, 4, true },
