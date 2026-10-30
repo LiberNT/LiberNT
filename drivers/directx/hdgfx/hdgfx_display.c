@@ -1143,6 +1143,8 @@ HdgfxDdiSetVidPnSourceAddress(
     ULONGLONG Offset;
     ULONGLONG Span;
     PHDGFX_ALLOCATION Allocation;
+    BOOLEAN Valid;
+    ULONG Surface;
     ULONG Width;
     ULONG Height;
     ULONG Pitch;
@@ -1152,8 +1154,11 @@ HdgfxDdiSetVidPnSourceAddress(
         return STATUS_INVALID_PARAMETER;
     if (SetVidPnSourceAddress->VidPnSourceId != 0)
         return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE;
-    if (SetVidPnSourceAddress->PrimarySegment != 0 && SetVidPnSourceAddress->PrimarySegment != HDGFX_SLAB_SEGMENT_ID)
+    if (SetVidPnSourceAddress->PrimarySegment != 0 && SetVidPnSourceAddress->PrimarySegment != HDGFX_SLAB_SEGMENT_ID &&
+        SetVidPnSourceAddress->PrimarySegment != HDGFX_APERTURE_SEGMENT_ID)
+    {
         return STATUS_GRAPHICS_INVALID_ALLOCATION_USAGE;
+    }
     if (KeGetCurrentIrql() > APC_LEVEL)
     {
         DPRINT1("SetVidPnSourceAddress at IRQL %u\n", KeGetCurrentIrql());
@@ -1175,13 +1180,24 @@ HdgfxDdiSetVidPnSourceAddress(
     Width = Allocation->Width != 0 ? Allocation->Width : Scanout->Width;
     Height = Allocation->Height != 0 ? Allocation->Height : Scanout->Height;
     Pitch = Allocation->Pitch != 0 ? Allocation->Pitch : Width * HDGFX_BYTES_PER_PIXEL;
-    Offset = Address - Scanout->SlabPhysical;
     Span = (ULONGLONG)Pitch * (Height - 1) + (ULONGLONG)Width * HDGFX_BYTES_PER_PIXEL;
-    if (Width != Scanout->Width || Height != Scanout->Height || Scanout->SlabGtt == NULL ||
-        Scanout->SlabPhysical != (ULONGLONG)Adapter->SlabPhysical.QuadPart ||
+    if (SetVidPnSourceAddress->PrimarySegment == HDGFX_APERTURE_SEGMENT_ID)
+    {
+        Offset = Address - Adapter->ApertureBase;
+        Valid = Adapter->ApertureSize != 0 && Address >= Adapter->ApertureBase && Offset < Adapter->ApertureSize &&
+                Span <= Adapter->ApertureSize - Offset;
+        Surface = (ULONG)Address;
+    }
+    else
+    {
+        Offset = Address - Scanout->SlabPhysical;
+        Valid = Scanout->SlabPhysical == (ULONGLONG)Adapter->SlabPhysical.QuadPart &&
+                Address >= Scanout->SlabPhysical && Offset < Scanout->SlabSize && Span <= Scanout->SlabSize - Offset;
+        Surface = Scanout->SlabAddress + (ULONG)Offset;
+    }
+    if (!Valid || Width != Scanout->Width || Height != Scanout->Height || Scanout->SlabGtt == NULL ||
         Pitch < Width * HDGFX_BYTES_PER_PIXEL || Pitch % HDGFX_STRIDE_ALIGNMENT != 0 ||
-        Address < Scanout->SlabPhysical || Offset % PAGE_SIZE != 0 ||
-        Offset >= Scanout->SlabSize || Span > Scanout->SlabSize - Offset || Span > Allocation->Size)
+        Offset % PAGE_SIZE != 0 || Span > Allocation->Size)
     {
         DPRINT1("SetVidPnSourceAddress: %lux%lu pitch %lu at 0x%I64x does not fit the %lux%lu source\n",
                 Width, Height, Pitch, Address, Scanout->Width, Scanout->Height);
@@ -1189,7 +1205,7 @@ HdgfxDdiSetVidPnSourceAddress(
     }
     else
     {
-        Scanout->Surface = Scanout->SlabAddress + (ULONG)Offset;
+        Scanout->Surface = Surface;
         Scanout->Pitch = Pitch;
         HdgfxPlaneCommit(Scanout);
         InterlockedExchange64(&Adapter->PrimaryAddress, (LONG64)Address);
