@@ -41,6 +41,7 @@ list(APPEND SOURCE
     GetTempFileName.c
     GetTempPath2.c
     GetVolumeInformation.c
+    HeapLowFragmentation.c
     InitOnce.c
     interlck.c
     IoCompletion.c

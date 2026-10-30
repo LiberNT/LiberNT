@@ -39,6 +39,7 @@ extern void func_GetSystemWow64Directory(void);
 extern void func_GetTempFileName(void);
 extern void func_GetTempPath2(void);
 extern void func_GetVolumeInformation(void);
+extern void func_HeapLowFragmentation(void);
 extern void func_InitOnce(void);
 extern void func_interlck(void);
 extern void func_IoCompletion(void);
@@ -130,6 +131,7 @@ const struct test winetest_testlist[] =
     { "GetTempFileName",             func_GetTempFileName },
     { "GetTempPath2",                func_GetTempPath2 },
     { "GetVolumeInformation",        func_GetVolumeInformation },
+    { "HeapLowFragmentation",        func_HeapLowFragmentation },
     { "InitOnce",                    func_InitOnce },
     { "interlck",                    func_interlck },
     { "IoCompletion",                func_IoCompletion },
