@@ -1837,6 +1837,17 @@ static DWORD table_hash(const NPI_MODULEID *module, UINT table_id, ULONG *result
             row->preferred_lifetime = row->valid_lifetime = 0;
         }
     }
+    if (rw && table_id == NSI_IP_FORWARD_TABLE)
+    {
+        UINT_PTR i;
+
+        for (i = 0; i < count; i++)
+        {
+            struct nsi_ip_forward_rw *row = (struct nsi_ip_forward_rw *)(rw + i * table->sizes[1]);
+
+            row->preferred_lifetime = row->valid_lifetime = 0;
+        }
+    }
     hash = hash_data(hash, &count, sizeof(count));
     if (key) hash = hash_data(hash, key, count * table->sizes[0]);
     if (rw) hash = hash_data(hash, rw, count * table->sizes[1]);
