@@ -3628,7 +3628,7 @@ VidSchSubmitCommandVirtual(
      * SubmitCommand retries a full context stream internally; assigning a
      * fence before that check consumed IDs for packets the miniport never
      * received, stranding its completion window behind those missing IDs.
-     * LifecycleMutex keeps assignment ordered with scheduler admission.
+     * SubmissionOrderMutex keeps assignment ordered with scheduler admission.
      */
     Packet->SubmissionFenceId = DxgkAllocateSubmissionFenceId(Adapter);
     if (Packet->SubmissionFenceId == 0 || !DxgkReserveSubmissionFenceIdentity(Adapter, Context->NodeOrdinal, Packet->SubmissionFenceId, &Packet->FenceIdentityEpoch))

@@ -4054,7 +4054,7 @@ DxgkpWaitForFlagClear(
 }
 
 /* Tracker reservation arguments: zero-init, then set what applies.
- * SubmissionFenceId and DmaBuffer are mandatory. */
+ * DmaBuffer is mandatory; tracked submits stamp the fence after this. */
 typedef struct _DXGKRNL_TRACK_DMA_ARGS
 {
     ULONG                           SubmissionFenceId;
