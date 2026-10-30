@@ -376,6 +376,20 @@ void Felix86NtProcessor(uint16_t* level, uint16_t* revision) {
     *revision = (model << 8) | (cpuid.eax & 0xF);
 }
 
+void Felix86NtLockForTermination(void) {
+    g_process_globals.states_lock.lock_before_fork();
+    for (ThreadState* state : g_process_globals.states) {
+        state->recompiler->lockPageMap();
+    }
+}
+
+void Felix86NtUnlockAfterTermination(void) {
+    for (ThreadState* state : g_process_globals.states) {
+        state->recompiler->unlockPageMap();
+    }
+    g_process_globals.states_lock.unlock_after_fork();
+}
+
 void Felix86NtSetMode32(FELIX86_NT_CPU* handle, uint64_t fsbase) {
     ThreadState* state = &((NtCpu*)handle)->state;
     state->ctx.cs = 0x23;

@@ -119,6 +119,13 @@ EmuCoreCancelPark(
     _In_ PEMU_CPU Cpu);
 
 VOID
+EmuCoreBeginTermination(VOID);
+
+VOID
+EmuCoreEndTermination(
+    _In_ BOOLEAN Terminated);
+
+VOID
 EmuCoreGetProcessor(
     _Out_ PUSHORT Level,
     _Out_ PUSHORT Revision);

@@ -232,6 +232,19 @@ EmuCoreCancelPark(
 }
 
 VOID
+EmuCoreBeginTermination(VOID)
+{
+    Felix86NtBeginTermination();
+}
+
+VOID
+EmuCoreEndTermination(
+    _In_ BOOLEAN Terminated)
+{
+    Felix86NtEndTermination(Terminated);
+}
+
+VOID
 Felix86NtSystemService(
     _In_ PVOID Owner,
     _Inout_ PULONG64 Registers)

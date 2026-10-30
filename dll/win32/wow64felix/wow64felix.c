@@ -381,6 +381,9 @@ BTCpuProcessTerm(
     _In_ BOOL After,
     _In_ NTSTATUS Status)
 {
+    if (Process) return;
+    if (!After) Felix86NtBeginTermination();
+    else Felix86NtEndTermination(NT_SUCCESS(Status));
 }
 
 VOID

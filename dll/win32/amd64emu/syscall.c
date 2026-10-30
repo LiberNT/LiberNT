@@ -263,9 +263,14 @@ EmuNtService(
         case EmuNtUnmapViewOfSectionEx:
             if (EmuIsCurrentProcess((HANDLE)Arguments[0])) EmuQueryView((PVOID)Arguments[1], &Base, &Size);
             break;
+
+        case EmuNtTerminateProcess:
+            if (!Arguments[0]) EmuCoreBeginTermination();
+            break;
     }
 
     Status = (NTSTATUS)EmuInvokeSystemService(Service, Arguments);
+    if (Service == EmuNtTerminateProcess && !Arguments[0]) EmuCoreEndTermination(NT_SUCCESS(Status));
     EmuCompleteApcWrap(ApcRecord, Status);
     if (!NT_SUCCESS(Status)) return Status;
 
@@ -300,11 +305,6 @@ EmuNtService(
 
         case EmuNtQuerySystemInformation:
             EmuReportProcessor((ULONG)Arguments[0], (PVOID)Arguments[1], (ULONG)Arguments[2]);
-            break;
-
-        case EmuNtTerminateProcess:
-            /* The guest killed its other threads to exit: host locks they held follow the shutdown rules. */
-            if (!Arguments[0]) LdrShutdownProcess();
             break;
     }
 

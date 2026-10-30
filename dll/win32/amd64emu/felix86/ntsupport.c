@@ -64,6 +64,9 @@ static const struct
 
 static ULONG Felix86NtExtensions;
 static int Felix86NtErrno;
+static PHANDLE Felix86NtTerminationThreads;
+static ULONG Felix86NtTerminationThreadCount;
+static BOOLEAN Felix86NtTerminationHeapLocked;
 
 uint32_t
 Felix86NtProbeExtensions(void)
@@ -111,6 +114,65 @@ void
 Felix86NtYield(void)
 {
     NtYieldExecution();
+}
+
+void
+Felix86NtBeginTermination(void)
+{
+    HANDLE Thread = NULL;
+    PHANDLE Threads = NULL, Grown;
+    ULONG Count = 0, Capacity = 0;
+
+    while (NT_SUCCESS(NtGetNextThread(NtCurrentProcess(), Thread, SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION, 0, 0, &Thread)))
+    {
+        if (Count == Capacity)
+        {
+            Capacity = Capacity ? Capacity * 2 : 64;
+            Grown = Threads ? RtlReAllocateHeap(RtlGetProcessHeap(), 0, Threads, Capacity * sizeof(HANDLE))
+                            : RtlAllocateHeap(RtlGetProcessHeap(), 0, Capacity * sizeof(HANDLE));
+            if (!Grown)
+            {
+                NtClose(Thread);
+                break;
+            }
+            Threads = Grown;
+        }
+        Threads[Count++] = Thread;
+    }
+
+    Felix86NtTerminationThreads = Threads;
+    Felix86NtTerminationThreadCount = Count;
+    Felix86NtLockForTermination();
+    Felix86NtTerminationHeapLocked = RtlLockHeap(RtlGetProcessHeap());
+}
+
+void
+Felix86NtEndTermination(int Terminated)
+{
+    THREAD_BASIC_INFORMATION Current, Information;
+    ULONG Index;
+
+    if (!NT_SUCCESS(NtQueryInformationThread(NtCurrentThread(), ThreadBasicInformation, &Current, sizeof(Current), NULL)))
+        Terminated = FALSE;
+
+    for (Index = 0; Index < Felix86NtTerminationThreadCount; Index++)
+    {
+        if (Terminated &&
+            NT_SUCCESS(NtQueryInformationThread(Felix86NtTerminationThreads[Index], ThreadBasicInformation,
+                                                &Information, sizeof(Information), NULL)) &&
+            Information.ClientId.UniqueThread != Current.ClientId.UniqueThread)
+        {
+            NtWaitForSingleObject(Felix86NtTerminationThreads[Index], FALSE, NULL);
+        }
+        NtClose(Felix86NtTerminationThreads[Index]);
+    }
+
+    if (Felix86NtTerminationHeapLocked) RtlUnlockHeap(RtlGetProcessHeap());
+    Felix86NtUnlockAfterTermination();
+    if (Felix86NtTerminationThreads) RtlFreeHeap(RtlGetProcessHeap(), 0, Felix86NtTerminationThreads);
+    Felix86NtTerminationThreads = NULL;
+    Felix86NtTerminationThreadCount = 0;
+    Felix86NtTerminationHeapLocked = FALSE;
 }
 
 int

@@ -81,6 +81,10 @@ void Felix86NtSetMode32(FELIX86_NT_CPU *Cpu, uint64_t FsBase);
 void Felix86NtCpuid(uint32_t Leaf, uint32_t Subleaf, uint32_t *Registers);
 void Felix86NtRequestPark(FELIX86_NT_CPU *Cpu);
 int Felix86NtCancelPark(FELIX86_NT_CPU *Cpu);
+void Felix86NtLockForTermination(void);
+void Felix86NtUnlockAfterTermination(void);
+void Felix86NtBeginTermination(void);
+void Felix86NtEndTermination(int Terminated);
 
 void Felix86NtSystemService(void *Owner, uint64_t *Registers);
 void Felix86NtSystemService32(void *Owner, uint64_t *Registers);

@@ -114,15 +114,23 @@ index 04754f8..7b43a60 100644
      }
  
 diff --git a/src/felix86/v2/recompiler.hpp b/src/felix86/v2/recompiler.hpp
-index e438ab2..158adf9 100644
+index e438ab2..e082ee1 100644
 --- a/src/felix86/v2/recompiler.hpp
 +++ b/src/felix86/v2/recompiler.hpp
-@@ -530,6 +530,10 @@ struct Recompiler {
+@@ -530,6 +530,18 @@ struct Recompiler {
          return restore_state_handler;
      }
  
 +    u64 getEnterDispatcher() {
 +        return (u64)enter_dispatcher;
++    }
++
++    void lockPageMap() {
++        page_map_lock.lock_before_fork();
++    }
++
++    void unlockPageMap() {
++        page_map_lock.unlock_after_fork();
 +    }
 +
      u64 getCompileNext() {
