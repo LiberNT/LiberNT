@@ -26,6 +26,9 @@ HKR,,InstalledDisplayDrivers,%REG_MULTI_SZ%,framebuf
 HKR,,VgaCompatible,%REG_DWORD%,0
 HKR,,UserModeDriverName,%REG_MULTI_SZ%,softgpuum.dll
 HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,softgpuum.dll
+HKR,,OpenGLDriverName,%REG_SZ%,mesa_gallium.dll
+HKR,,OpenGLVersion,%REG_DWORD%,1
+HKR,,OpenGLFlags,%REG_DWORD%,0
 
 [HdGfx_Install.Services]
 AddService=hdgfx,0x00000002,HdGfx_Service
