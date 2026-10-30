@@ -1478,7 +1478,7 @@ TestRing(void)
     static uint32_t Commands[2048];
     FAKE_RING Fake = { 0x18, 0x1C, 0x1000, 1, 0, 0 };
     HDGFX_MMIO Mmio = { FakeRingRead, &Fake, FakeRingWrite, NULL, NULL };
-    HDGFX_RING Ring = { Commands, sizeof(Commands), 0xFFF0000, 0xFFF8000, 0 };
+    HDGFX_RING Ring = { Commands, sizeof(Commands), 0xFFF0000, 0xFFF8000, 0, 0, 0, 0, 0, false };
     uint32_t Dwords[4] = { 0, 0, 0, 0 };
     uint32_t Index;
 
@@ -1511,7 +1511,7 @@ TestRing(void)
     CHECK_EQ(HdgfxIlkStopRing(&Mmio, &Ring), false);
     CHECK_EQ(Fake.Control, 0x1001);
     Fake.Head = 16;
-    CHECK_EQ(HdgfxIlkRingHead(&Mmio), 16);
+    CHECK_EQ(HdgfxIlkRingHead(&Mmio, &Ring), 16);
 
     CHECK_EQ(HdgfxRingEmit(&Ring, 16, Dwords, 3), false);
     Ring.Tail = sizeof(Commands) - 8;
