@@ -1049,6 +1049,16 @@ const char * U_EXPORT2 u_errorName(UErrorCode Code)
     return "[BOGUS UErrorCode]";
 }
 
+static BOOL IcuIsInvariant(UChar Char)
+{
+    /* ICU leaves LF out of the invariant set although platform.h lists it. */
+    if (Char < 0x20)
+        return Char != L'\n';
+    if (Char == 0x7f)
+        return TRUE;
+    return Char < 0x7f && strchr("!#$@[\\]^`{|}~", (char)Char) == NULL;
+}
+
 void U_EXPORT2 u_charsToUChars(const char *Source, UChar *Target, int32_t Length)
 {
     int32_t i;
@@ -1062,7 +1072,7 @@ void U_EXPORT2 u_UCharsToChars(const UChar *Source, char *Target, int32_t Length
     int32_t i;
 
     for (i = 0; i < Length; i++)
-        Target[i] = (char)Source[i];
+        Target[i] = IcuIsInvariant(Source[i]) ? (char)Source[i] : 0;
 }
 
 BOOL WINAPI DllMain(HINSTANCE Instance, DWORD Reason, LPVOID Reserved)
