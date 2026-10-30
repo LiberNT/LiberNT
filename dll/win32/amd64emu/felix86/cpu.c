@@ -259,3 +259,10 @@ Felix86NtSystemService32(
 {
     EmuFatal(STATUS_ILLEGAL_INSTRUCTION, "32-bit system call in an AMD64 process");
 }
+
+ULONG64
+Felix86NtNativeEntry(
+    _In_ ULONG64 Rip)
+{
+    return EmuNativeEntry(Rip);
+}

@@ -79,6 +79,8 @@ EmuHostInitialize(VOID)
     Rv64xTable.CallInt = Interface->GuestThunk((PVOID)Rv64xCallInt, NULL);
     Rv64xTable.CallFloat = Interface->GuestThunk((PVOID)Rv64xCallFloat, NULL);
     Rv64xTable.CallFormat = Interface->GuestThunk((PVOID)Rv64xCallFormat, NULL);
+    Rv64xTable.NativeAdd = (ULONG64)(ULONG_PTR)Rv64xAdd;
+    Rv64xTable.NativeMix = (ULONG64)(ULONG_PTR)Rv64xMix;
     if (!Rv64xTable.Add || !Rv64xTable.Mix || !Rv64xTable.CallInt || !Rv64xTable.CallFloat || !Rv64xTable.CallFormat)
         return 0;
     return (ULONG64)&Rv64xTable;

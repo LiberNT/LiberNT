@@ -344,3 +344,7 @@ EmuHostService(
     _In_ PEMU_THREAD Thread,
     _In_ ULONG Service,
     _Inout_ PEMU_REGISTERS Registers);
+
+ULONG64
+EmuNativeEntry(
+    _In_ ULONG64 Rip);

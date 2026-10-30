@@ -113,6 +113,33 @@ index 04754f8..7b43a60 100644
          return;
      }
  
+diff --git a/src/felix86/v2/recompiler.cpp b/src/felix86/v2/recompiler.cpp
+index f3c0aaf..33cd7a5 100644
+--- a/src/felix86/v2/recompiler.cpp
++++ b/src/felix86/v2/recompiler.cpp
+@@ -18,6 +18,9 @@
+ #include "felix86/common/state.hpp"
+ #include "felix86/common/types.hpp"
+ #include "felix86/common/utility.hpp"
++#ifndef __linux__
++#include "bridge.h"
++#endif
+ #include "felix86/emulator.hpp"
+ #include "felix86/hle/mmap.hpp"
+ #include "felix86/hle/ptrace.hpp"
+@@ -520,6 +523,12 @@ void Recompiler::clearCodeCache(ThreadState* state) {
+ 
+ u64 Recompiler::compile(ThreadState* state, u64 rip) {
+     FELIX86_PROFILE_INSTANT_INCREMENT(state->thread_stats, AccumulatedJITCount, 1);
++#ifndef __linux__
++    if (const u64 native = Felix86NtNativeEntry(rip)) {
++        state->SetRip(native);
++        return getCompiledBlock(state, native);
++    }
++#endif
+     if (g_config.guest_memory_tracking_enabled) {
+         // If memory region isn't mapped or doesn't have the correct protections
+         // return a thunk that is in JIT code that will fault and get handled as
 diff --git a/src/felix86/v2/recompiler.hpp b/src/felix86/v2/recompiler.hpp
 index e438ab2..e082ee1 100644
 --- a/src/felix86/v2/recompiler.hpp

@@ -298,6 +298,13 @@ Felix86NtSystemService32(
     FelixLoadCpuArea(Thread, &Status, Bop);
 }
 
+ULONG64
+Felix86NtNativeEntry(
+    _In_ ULONG64 Rip)
+{
+    return 0;
+}
+
 static
 VOID
 FelixInvalidate(

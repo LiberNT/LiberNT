@@ -33,6 +33,7 @@ static ULONG EmuStubUsed;
 static ULONG64 EmuGuestReturnStub;
 static PUCHAR EmuCodeMap;
 static ULONG_PTR EmuCodeMapLimit;
+static PVOID EmuDllNotificationCookie;
 
 static const EMU_REGISTER EmuServiceArguments[4] = { EmuR10, EmuRdx, EmuR8, EmuR9 };
 static const EMU_REGISTER EmuCallArguments[4] = { EmuRcx, EmuRdx, EmuR8, EmuR9 };
@@ -127,7 +128,8 @@ EmuDescriptorSignature(
 static
 VOID
 EmuMarkNativeImage(
-    _In_ PVOID Base)
+    _In_ PVOID Base,
+    _In_ BOOLEAN Native)
 {
     PIMAGE_NT_HEADERS Headers = RtlImageNtHeader(Base);
     PIMAGE_SECTION_HEADER Section;
@@ -142,7 +144,10 @@ EmuMarkNativeImage(
         Page = ((ULONG_PTR)Base + Section->VirtualAddress) >> PAGE_SHIFT;
         Last = ((ULONG_PTR)Base + Section->VirtualAddress + Section->Misc.VirtualSize - 1) >> PAGE_SHIFT;
         for (; Page <= Last && Page <= (EmuCodeMapLimit >> PAGE_SHIFT); Page++)
-            InterlockedOr8((PCHAR)&EmuCodeMap[Page >> 3], (CHAR)(1 << (Page & 7)));
+        {
+            if (Native) InterlockedOr8((PCHAR)&EmuCodeMap[Page >> 3], (CHAR)(1 << (Page & 7)));
+            else InterlockedAnd8((PCHAR)&EmuCodeMap[Page >> 3], (CHAR)~(1 << (Page & 7)));
+        }
     }
 }
 
@@ -154,8 +159,19 @@ EmuMarkNativeImages(VOID)
 
     RtlEnterCriticalSection(NtCurrentPeb()->LoaderLock);
     for (Entry = Head->Flink; Entry != Head; Entry = Entry->Flink)
-        EmuMarkNativeImage(CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks)->DllBase);
+        EmuMarkNativeImage(CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks)->DllBase, TRUE);
     RtlLeaveCriticalSection(NtCurrentPeb()->LoaderLock);
+}
+
+static
+VOID
+NTAPI
+EmuDllNotification(
+    _In_ ULONG Reason,
+    _In_ PCLDR_DLL_NOTIFICATION_DATA Data,
+    _In_opt_ PVOID Context)
+{
+    EmuMarkNativeImage(Data->Loaded.DllBase, Reason == LDR_DLL_NOTIFICATION_REASON_LOADED);
 }
 
 static
@@ -176,6 +192,8 @@ EmuInitializeCodeMap(VOID)
 
     EmuCodeMapLimit = Information.MaximumUserModeAddress;
     EmuCodeMap = Base;
+    Status = LdrRegisterDllNotification(0, EmuDllNotification, NULL, &EmuDllNotificationCookie);
+    if (!NT_SUCCESS(Status)) return Status;
     EmuMarkNativeImages();
     NtCurrentPeb()->EcCodeBitMap = Base;
     return STATUS_SUCCESS;
@@ -518,7 +536,6 @@ EmuHostLoad(
     if (!NT_SUCCESS(Status) || wcschr(Buffer, L'\\') || wcschr(Buffer, L'/')) return 0;
 
     Status = LdrLoadDll(NULL, NULL, &Library, &Base);
-    if (NT_SUCCESS(Status)) EmuMarkNativeImages();
     if (NT_SUCCESS(Status)) Status = LdrGetProcedureAddress(Base, &Export, 0, (PVOID *)&Initialize);
     if (!NT_SUCCESS(Status))
     {
@@ -573,11 +590,32 @@ EmuCallDescribed(
 
     if (RtlPcToFileHeader((PVOID)(ULONG_PTR)Function, &Base))
     {
-        EmuMarkNativeImage(Base);
+        EmuMarkNativeImage(Base, TRUE);
         Count = Descriptor[2];
         return EmuInvokeNative((PVOID)(ULONG_PTR)Function, Arguments, Arguments + 8, Count > 8 ? Count - 8 : 0);
     }
     return EmuCallGuest(Function, Signature, Arguments);
+}
+
+ULONG64
+EmuNativeEntry(
+    _In_ ULONG64 Rip)
+{
+    ULONG64 Stub;
+
+    if (!EmuCodeMap || Rip > EmuCodeMapLimit) return 0;
+    if (!(EmuCodeMap[Rip >> (PAGE_SHIFT + 3)] & (1 << ((Rip >> PAGE_SHIFT) & 7)))) return 0;
+    Stub = EmuGuestThunk((PVOID)(ULONG_PTR)Rip, NULL);
+    if (!Stub)
+    {
+        PLDR_DATA_TABLE_ENTRY Entry;
+
+        if (NT_SUCCESS(LdrFindEntryForAddress((PVOID)(ULONG_PTR)Rip, &Entry)))
+            DbgPrint("AMD64EMU: AMD64 code entered %wZ+%Ix, which has no RV64X entry descriptor\n",
+                     &Entry->BaseDllName, (SIZE_T)(Rip - (ULONG_PTR)Entry->DllBase));
+        EmuFatal(STATUS_NOT_SUPPORTED, "AMD64 code entered native code that has no RV64X entry descriptor");
+    }
+    return Stub;
 }
 
 static const EMU_HOST_INTERFACE EmuHostInterface =

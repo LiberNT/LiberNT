@@ -22,4 +22,6 @@ typedef struct _RV64X_TEST_TABLE
     ULONG64 CallInt;
     ULONG64 CallFloat;
     ULONG64 CallFormat;
+    ULONG64 NativeAdd;
+    ULONG64 NativeMix;
 } RV64X_TEST_TABLE, *PRV64X_TEST_TABLE;

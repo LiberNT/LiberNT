@@ -697,7 +697,11 @@ TestRv64X(VOID)
     CHECK(((int (*)(PRV64X_FORMAT_CALLBACK, char *, size_t))(ULONG_PTR)Table->CallFormat)(
               (PRV64X_FORMAT_CALLBACK)_snprintf, Buffer, sizeof(Buffer)) == 13);
     CHECK(!strcmp(Buffer, "42 3.25 x 0.5"));
-    printf("EMUTEST: RV64X entry descriptors and exit thunks verified\n");
+    CHECK(((int (*)(int, short, unsigned char, long long))(ULONG_PTR)Table->NativeAdd)(7, -2, 255, -1LL) == 259);
+    CHECK(((double (*)(float, double, int, float, double, int, float, double, signed char, unsigned short))
+           (ULONG_PTR)Table->NativeMix)(0.5f, 1.0, 2, 0.25f, -1.0, 1, 2.0f, 0.5, 1, 2) ==
+          0.5f + 1.0 * 2 + 2 * 4 + 0.25f * 8 + -1.0 * 16 + 1 * 32 + 2.0f * 64 + 0.5 * 128 + 1 * 256 + 2 * 512.0);
+    printf("EMUTEST: RV64X entry descriptors, exit thunks and direct native entry verified\n");
 }
 #else
 static

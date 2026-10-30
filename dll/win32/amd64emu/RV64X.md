@@ -51,12 +51,18 @@ result type (`int` results are sign-extended as the LP64 ABI requires).
   `EMU_HOST_INTERFACE::CallDescribed`; native processes never reach it because
   their bitmap is NULL.
 - `amd64emu` points the host PEB's `EcCodeBitMap` at a bitmap sized from
-  `SystemBasicInformation.MaximumUserModeAddress` and marks the executable
-  sections of every host image. `CallDescribed` calls native targets that are
-  not marked yet (a DLL's own `DllMain`, for example) natively and marks their
-  image; everything else runs as x64 through `CallGuest`.
+  `SystemBasicInformation.MaximumUserModeAddress`, marks the executable
+  sections of every host image and keeps the bitmap current with a loader DLL
+  notification, which marks images as they load and clears them as they
+  unload. `CallDescribed` calls native targets that are not marked yet (a DLL's
+  own `DllMain`, for example) natively and marks their image; everything else
+  runs as x64 through `CallGuest`.
 - `EMU_HOST_INTERFACE::GuestThunk` with a NULL signature reads the target's entry
   descriptor, so x64 code can call any RV64X function given its address.
+- When x64 code branches to an address the bitmap marks native, felix86 does not
+  translate it: it continues at the guest thunk built from the target's entry
+  descriptor, so a raw native function pointer works as a call target. A
+  marked target without a descriptor ends the process with a message naming it.
 
 ## Building and testing
 
@@ -80,8 +86,9 @@ unchanged in a native process.
    them through exit thunks; the generated signature table only covers code
    without descriptors.
 3. One loader for x64 processes: native `ntdll` loads x64 images through the
-   CHPE runtime behind an EC-host switch instead of `_M_ARM64`, x64 imports bind
-   to RV64X system DLLs, felix86 leaves translated code when a target is native.
+   CHPE runtime behind an EC-host switch instead of `_M_ARM64` and x64 imports
+   bind to RV64X system DLLs. Done so far: felix86 leaves translated code when a
+   target is native.
 4. Build the system DLLs as RV64X and retire the x64 userland in `SystemAMD64`.
 
 Open: variadic RV64X functions called from x64 (the stack window is unknown),
