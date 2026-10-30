@@ -19,6 +19,7 @@ typedef struct _EMU_HOST_THUNK
     PVOID Native;
     ULONG64 Stub;
     ULONG Count;
+    ULONG Named;
     CHAR Signature[EMU_HOST_MAX_ARGUMENTS + 2];
 } EMU_HOST_THUNK, *PEMU_HOST_THUNK;
 
@@ -127,7 +128,6 @@ EmuDescriptorSignature(
 
     if ((Descriptor[0] | (Descriptor[1] << 8)) != EMU_HOST_DESCRIPTOR_MAGIC) return FALSE;
     if ((Descriptor[3] & EMU_HOST_DESCRIPTOR_UNSUPPORTED) || Count > EMU_HOST_MAX_ARGUMENTS) return FALSE;
-    if (Entry && (Descriptor[3] & EMU_HOST_DESCRIPTOR_VARIADIC)) return FALSE;
 
     Kind = Descriptor[3] & 0xF;
     if (Kind >= sizeof(Types) - 1) return FALSE;
@@ -137,6 +137,10 @@ EmuDescriptorSignature(
         Kind = (Descriptor[4 + Index / 2] >> ((Index & 1) * 4)) & 0xF;
         if (!Kind || Kind >= sizeof(Types) - 1) return FALSE;
         Signature[Index + 1] = Types[Kind];
+    }
+    if (Entry && (Descriptor[3] & EMU_HOST_DESCRIPTOR_VARIADIC))
+    {
+        for (; Count < EMU_HOST_MAX_ARGUMENTS; Count++) Signature[Count + 1] = EMU_HOST_TYPE_INT64;
     }
     Signature[Count + 1] = ANSI_NULL;
     return TRUE;
@@ -268,7 +272,7 @@ EmuGuestThunk(
     CHAR Described[EMU_HOST_MAX_ARGUMENTS + 2];
     UCHAR Code[] = { 0x4C, 0x8B, 0xD1, 0xB8, 0, 0, 0, 0, 0x0F, 0x05, 0xC3 };
     PEMU_HOST_THUNK Thunk;
-    ULONG Index, Count, Service;
+    ULONG Index, Count, Service, Named = MAXULONG;
     ULONG64 Stub = 0;
 
     if (Native && !Signature)
@@ -276,7 +280,11 @@ EmuGuestThunk(
         _SEH2_TRY
         {
             if (EmuDescriptorSignature((PUCHAR)Native - EMU_HOST_DESCRIPTOR_SIZE, TRUE, Described))
+            {
                 Signature = Described;
+                if (((PUCHAR)Native - EMU_HOST_DESCRIPTOR_SIZE)[3] & EMU_HOST_DESCRIPTOR_VARIADIC)
+                    Named = ((PUCHAR)Native - EMU_HOST_DESCRIPTOR_SIZE)[2];
+            }
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -316,6 +324,7 @@ EmuGuestThunk(
                 Thunk->Native = Native;
                 Thunk->Stub = Stub;
                 Thunk->Count = (ULONG)strlen(Signature) - 1;
+                Thunk->Named = min(Named, Thunk->Count);
                 strcpy(Thunk->Signature, Signature);
                 InterlockedExchange(&EmuHostThunkCount, (LONG)Count + 1);
             }
@@ -330,6 +339,7 @@ NTSTATUS
 EmuCollectArguments(
     _In_ PEMU_THREAD Thread,
     _In_ PCSTR Type,
+    _In_ ULONG Count,
     _In_ PEMU_REGISTERS Registers,
     _Out_writes_(EMU_HOST_MAX_ARGUMENTS) PULONG64 Arguments)
 {
@@ -342,7 +352,7 @@ EmuCollectArguments(
     Vectors = EmuCoreGetVectors(Thread->Cpu, &Stride);
     _SEH2_TRY
     {
-        for (Index = 0; Type[Index]; Index++)
+        for (Index = 0; Index < Count; Index++)
         {
             if (Index < 4)
                 Value = EmuIsFloatType(Type[Index]) ? Vectors[Index * Stride] : Registers->Gpr[EmuServiceArguments[Index]];
@@ -371,10 +381,19 @@ EmuHostCall(
     ULONG Count = Thunk->Count;
     ULONG64 Result;
     PULONG64 Vectors;
+    ULONG_PTR Base, Rsp;
     ULONG Stride;
     NTSTATUS Status;
 
-    Status = EmuCollectArguments(Thread, Thunk->Signature + 1, Registers, Arguments);
+    if (Thunk->Named < Count)
+    {
+        Base = (ULONG_PTR)Thread->GuestTeb->NtTib.StackBase;
+        Rsp = (ULONG_PTR)Registers->Gpr[EmuRsp];
+        if (Rsp < Base && Rsp >= (ULONG_PTR)Thread->GuestTeb->DeallocationStack)
+            Count = max(Thunk->Named, (ULONG)min((ULONG_PTR)Count, max((Base - Rsp) / sizeof(ULONG64), 1) - 1));
+    }
+
+    Status = EmuCollectArguments(Thread, Thunk->Signature + 1, Count, Registers, Arguments);
     if (!NT_SUCCESS(Status))
     {
         Registers->Gpr[EmuRax] = (ULONG)Status;

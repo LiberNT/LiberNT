@@ -5,6 +5,8 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <windef.h>
 #include <reactos/emuhost.h>
 #include "rv64xtest.h"
@@ -67,6 +69,23 @@ Rv64xCallFormat(
     return Format(Buffer, Size, "%d %.2f %s %.1f", 42, 3.25, "x", 0.5f);
 }
 
+static
+int
+Rv64xFormat(
+    _Out_writes_(Size) char *Buffer,
+    _In_ size_t Size,
+    _In_ const char *Format,
+    ...)
+{
+    va_list Arguments;
+    int Length;
+
+    va_start(Arguments, Format);
+    Length = _vsnprintf(Buffer, Size, Format, Arguments);
+    va_end(Arguments);
+    return Length;
+}
+
 ULONG64
 NTAPI
 EmuHostInitialize(VOID)
@@ -81,6 +100,7 @@ EmuHostInitialize(VOID)
     Rv64xTable.CallFormat = Interface->GuestThunk((PVOID)Rv64xCallFormat, NULL);
     Rv64xTable.NativeAdd = (ULONG64)(ULONG_PTR)Rv64xAdd;
     Rv64xTable.NativeMix = (ULONG64)(ULONG_PTR)Rv64xMix;
+    Rv64xTable.NativeFormat = (ULONG64)(ULONG_PTR)Rv64xFormat;
     if (!Rv64xTable.Add || !Rv64xTable.Mix || !Rv64xTable.CallInt || !Rv64xTable.CallFloat || !Rv64xTable.CallFormat)
         return 0;
     return (ULONG64)&Rv64xTable;

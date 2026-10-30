@@ -701,6 +701,9 @@ TestRv64X(VOID)
     CHECK(((double (*)(float, double, int, float, double, int, float, double, signed char, unsigned short))
            (ULONG_PTR)Table->NativeMix)(0.5f, 1.0, 2, 0.25f, -1.0, 1, 2.0f, 0.5, 1, 2) ==
           0.5f + 1.0 * 2 + 2 * 4 + 0.25f * 8 + -1.0 * 16 + 1 * 32 + 2.0f * 64 + 0.5 * 128 + 1 * 256 + 2 * 512.0);
+    CHECK(((int (*)(char *, size_t, const char *, ...))(ULONG_PTR)Table->NativeFormat)(
+              Buffer, sizeof(Buffer), "%.2f %d %s %lld %d %d %d %.1f", 3.25, 42, "x", 5000000000LL, 1, 2, 3, 0.5) == 30);
+    CHECK(!strcmp(Buffer, "3.25 42 x 5000000000 1 2 3 0.5"));
     printf("EMUTEST: RV64X entry descriptors, exit thunks and direct native entry verified\n");
 }
 #else

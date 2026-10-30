@@ -67,6 +67,10 @@ result type (`int` results are sign-extended as the LP64 ABI requires).
   runs as x64 through `CallGuest`.
 - `EMU_HOST_INTERFACE::GuestThunk` with a NULL signature reads the target's entry
   descriptor, so x64 code can call any RV64X function given its address.
+- A variadic RV64X function called from x64 gets its named arguments by type,
+  then integer slots up to `EMU_HOST_MAX_ARGUMENTS` in all, taken from the x64
+  argument registers and stack and bounded by the guest stack base. x64 passes
+  variadic floating-point values in the integer registers too.
 - When x64 code branches to an address the bitmap marks native, felix86 does not
   translate it: it continues at the guest thunk built from the target's entry
   descriptor, so a raw native function pointer works as a call target. A
@@ -81,7 +85,8 @@ Configure the riscv64 tree with `-DRV64X_CLANG=<clang built with the patch>`
 as x64 loads `rv64xhost.dll` and checks both directions: narrow integers, mixed
 float, double and stack arguments into native code; native code calling x64
 callbacks with ten arguments, a negative `int` result, a `float` result and a
-variadic `_snprintf`. `emulation_test_rv64x` checks that RV64X code runs
+variadic `_snprintf`; and a variadic native function given a `double` in a
+register slot and 64-bit values on the stack. `emulation_test_rv64x` checks that RV64X code runs
 unchanged in a native process.
 
 With `-DRV64X_SYSTEM=ON` every user-mode module of the riscv64 build is RV64X.
@@ -104,6 +109,5 @@ code generation (`RV64X_EXCLUDE`).
 4. Build the system DLLs as RV64X (done with `RV64X_SYSTEM`; the suite passes)
    and retire the x64 userland in `SystemAMD64`, which needs stage 3.
 
-Open: variadic RV64X functions called from x64 (the stack window is unknown),
-16-byte aggregates by value and struct results, C++ `invoke` sites (left
+Open: 16-byte aggregates by value and struct results, C++ `invoke` sites (left
 unchecked), and native code generated at run time (treated as x64).
