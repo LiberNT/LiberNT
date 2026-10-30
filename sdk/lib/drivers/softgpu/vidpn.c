@@ -71,143 +71,6 @@ SoftGpuGetDisplayModeSize(
     }
 }
 
-static VOID
-SoftGpuFillModeSignal(
-    _In_opt_ const SOFTGPU_DISPLAY_MODE *Mode,
-    _In_ ULONG Width,
-    _In_ ULONG Height,
-    _Out_ D3DKMDT_VIDEO_SIGNAL_INFO *Signal)
-{
-    RtlZeroMemory(Signal, sizeof(*Signal));
-    Signal->VideoStandard = D3DKMDT_VSS_OTHER;
-    Signal->ActiveSize.cx = Width;
-    Signal->ActiveSize.cy = Height;
-    Signal->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
-    if (Mode != NULL && Mode->PixelRate != 0)
-    {
-        Signal->TotalSize.cx = Mode->TotalWidth;
-        Signal->TotalSize.cy = Mode->TotalHeight;
-        Signal->VSyncFreq.Numerator = Mode->PixelRate;
-        Signal->VSyncFreq.Denominator = Mode->TotalWidth * Mode->TotalHeight;
-        Signal->HSyncFreq.Numerator = Mode->PixelRate;
-        Signal->HSyncFreq.Denominator = Mode->TotalWidth;
-        Signal->PixelRate = Mode->PixelRate;
-    }
-    else
-    {
-        Signal->TotalSize.cx = Width;
-        Signal->TotalSize.cy = Height;
-        Signal->VSyncFreq.Numerator = 60;
-        Signal->VSyncFreq.Denominator = 1;
-        Signal->HSyncFreq.Numerator = 60 * Height;
-        Signal->HSyncFreq.Denominator = 1;
-        Signal->PixelRate = (SIZE_T)Width * Height * 60;
-    }
-}
-
-static VOID
-SoftGpuGetDisplayModeSignal(
-    _In_ PSOFTGPU_DEVICE Device,
-    _In_ ULONG Index,
-    _Out_ D3DKMDT_VIDEO_SIGNAL_INFO *Signal)
-{
-    ULONG Width;
-    ULONG Height;
-
-    SoftGpuGetDisplayModeSize(Device, Index, &Width, &Height);
-    SoftGpuFillModeSignal(Device->ModeCount != 0 ? &Device->Modes[Index] : NULL, Width, Height, Signal);
-}
-
-PSOFTGPU_OUTPUT
-SoftGpuFindOutput(
-    _In_ PSOFTGPU_DEVICE Device,
-    _In_ ULONG ChildUid)
-{
-    ULONG Index;
-
-    if (ChildUid == SOFTGPU_CHILD_UID)
-        return NULL;
-    for (Index = 0; Index < Device->ExtraOutputCount; Index++)
-    {
-        if (Device->ExtraOutputs[Index].ChildUid == ChildUid)
-            return &Device->ExtraOutputs[Index];
-    }
-    return NULL;
-}
-
-static BOOLEAN
-SoftGpuTargetKnown(
-    _In_ PSOFTGPU_DEVICE Device,
-    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
-{
-    return TargetId == SOFTGPU_CHILD_UID || SoftGpuFindOutput(Device, TargetId) != NULL;
-}
-
-static ULONG
-SoftGpuTargetModeCount(
-    _In_ PSOFTGPU_DEVICE Device,
-    _In_opt_ const SOFTGPU_OUTPUT *Output)
-{
-    return Output != NULL ? Output->ModeCount : SoftGpuDisplayModeCount(Device);
-}
-
-static VOID
-SoftGpuGetTargetModeSignal(
-    _In_ PSOFTGPU_DEVICE Device,
-    _In_opt_ const SOFTGPU_OUTPUT *Output,
-    _In_ ULONG Index,
-    _Out_ D3DKMDT_VIDEO_SIGNAL_INFO *Signal)
-{
-    if (Output != NULL)
-        SoftGpuFillModeSignal(&Output->Modes[Index], Output->Modes[Index].Width, Output->Modes[Index].Height, Signal);
-    else
-        SoftGpuGetDisplayModeSignal(Device, Index, Signal);
-}
-
-static BOOLEAN
-SoftGpuTargetModePreferred(
-    _In_ PSOFTGPU_DEVICE Device,
-    _In_opt_ const SOFTGPU_OUTPUT *Output,
-    _In_ ULONG Index)
-{
-    if (Output != NULL)
-        return Index == Output->PreferredMode;
-    return Device->ModeCount == 0 || Index == Device->PreferredMode;
-}
-
-static BOOLEAN
-SoftGpuTargetOffersSize(
-    _In_ PSOFTGPU_DEVICE Device,
-    _In_opt_ const SOFTGPU_OUTPUT *Output,
-    _In_ ULONG Width,
-    _In_ ULONG Height)
-{
-    D3DKMDT_VIDEO_SIGNAL_INFO Signal;
-    ULONG Index;
-
-    for (Index = 0; Index < SoftGpuTargetModeCount(Device, Output); Index++)
-    {
-        SoftGpuGetTargetModeSignal(Device, Output, Index, &Signal);
-        if (Signal.ActiveSize.cx == (LONG)Width && Signal.ActiveSize.cy == (LONG)Height)
-            return TRUE;
-    }
-    return FALSE;
-}
-
-static VOID
-SoftGpuLockOutputs(
-    _In_ PSOFTGPU_DEVICE Device)
-{
-    KeWaitForSingleObject(&Device->OutputMutex, Executive, KernelMode, FALSE, NULL);
-}
-
-static VOID
-SoftGpuUnlockOutputs(
-    _In_ PSOFTGPU_DEVICE Device)
-{
-    KeReleaseMutex(&Device->OutputMutex, FALSE);
-}
-
 static BOOLEAN
 SoftGpuFindDisplayMode(
     _In_ PSOFTGPU_DEVICE Device,
@@ -260,37 +123,15 @@ SoftGpuSourceModeMatchesDisplay(
 static BOOLEAN
 SoftGpuTargetModeMatchesDisplay(
     _In_ PSOFTGPU_DEVICE Device,
-    _In_opt_ const SOFTGPU_OUTPUT *Output,
     _In_ const D3DKMDT_VIDPN_TARGET_MODE *Mode,
     _Out_opt_ PULONG ModeIndex)
 {
-    CONST D3DDDI_RATIONAL *VSync = &Mode->VideoSignalInfo.VSyncFreq;
-    D3DKMDT_VIDEO_SIGNAL_INFO Signal;
-    ULONG Index;
-
-    if (Mode->VideoSignalInfo.ScanLineOrdering != D3DDDI_VSSLO_PROGRESSIVE)
-        return FALSE;
-
-    for (Index = 0; Index < SoftGpuTargetModeCount(Device, Output); Index++)
-    {
-        SoftGpuGetTargetModeSignal(Device, Output, Index, &Signal);
-        if (Signal.ActiveSize.cx != Mode->VideoSignalInfo.ActiveSize.cx ||
-            Signal.ActiveSize.cy != Mode->VideoSignalInfo.ActiveSize.cy)
-        {
-            continue;
-        }
-        if (VSync->Numerator != 0 && VSync->Denominator != 0 &&
-            (ULONGLONG)VSync->Numerator * Signal.VSyncFreq.Denominator !=
-                (ULONGLONG)Signal.VSyncFreq.Numerator * VSync->Denominator)
-        {
-            continue;
-        }
-        if (ModeIndex != NULL)
-            *ModeIndex = Index;
-        return TRUE;
-    }
-
-    return FALSE;
+    return Mode->VideoSignalInfo.ScanLineOrdering ==
+               D3DDDI_VSSLO_PROGRESSIVE &&
+           SoftGpuFindDisplayMode(Device,
+                                  Mode->VideoSignalInfo.ActiveSize.cx,
+                                  Mode->VideoSignalInfo.ActiveSize.cy,
+                                  ModeIndex);
 }
 
 static NTSTATUS
@@ -363,7 +204,6 @@ static NTSTATUS
 SoftGpuCheckPinnedTargetMode(
     _In_ PSOFTGPU_DEVICE Device,
     _In_ D3DKMDT_HVIDPN hVidPn,
-    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
     _In_ const DXGK_VIDPN_INTERFACE *VidPnInterface,
     _Out_ PBOOLEAN Supported)
 {
@@ -375,7 +215,7 @@ SoftGpuCheckPinnedTargetMode(
 
     *Supported = FALSE;
     Status = VidPnInterface->pfnAcquireTargetModeSet(hVidPn,
-                                                     TargetId,
+                                                     SOFTGPU_CHILD_UID,
                                                      &hModeSet,
                                                      &ModeSetInterface);
     if (!NT_SUCCESS(Status))
@@ -391,7 +231,7 @@ SoftGpuCheckPinnedTargetMode(
     if (NT_SUCCESS(Status))
     {
         *Supported = PinnedMode == NULL ||
-                     SoftGpuTargetModeMatchesDisplay(Device, SoftGpuFindOutput(Device, TargetId), PinnedMode, NULL);
+                     SoftGpuTargetModeMatchesDisplay(Device, PinnedMode, NULL);
     }
 
     if (PinnedMode != NULL)
@@ -466,7 +306,6 @@ static NTSTATUS
 SoftGpuValidateCommittedTargetMode(
     _In_ PSOFTGPU_DEVICE Device,
     _In_ D3DKMDT_HVIDPN hVidPn,
-    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
     _In_ CONST DXGK_VIDPN_INTERFACE *VidPnInterface,
     _Out_ PULONG ModeIndex)
 {
@@ -477,7 +316,7 @@ SoftGpuValidateCommittedTargetMode(
     NTSTATUS ReleaseStatus;
 
     Status = VidPnInterface->pfnAcquireTargetModeSet(hVidPn,
-                                                     TargetId,
+                                                     SOFTGPU_CHILD_UID,
                                                      &hModeSet,
                                                      &ModeSetInterface);
     if (!NT_SUCCESS(Status))
@@ -497,7 +336,7 @@ SoftGpuValidateCommittedTargetMode(
         Status = STATUS_GRAPHICS_MODE_NOT_PINNED;
         goto ReleaseModeInfo;
     }
-    if (!SoftGpuTargetModeMatchesDisplay(Device, SoftGpuFindOutput(Device, TargetId), PinnedMode, ModeIndex))
+    if (!SoftGpuTargetModeMatchesDisplay(Device, PinnedMode, ModeIndex))
         Status = STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET_MODE;
 
 ReleaseModeInfo:
@@ -514,118 +353,6 @@ ReleaseModeSet:
     if (NT_SUCCESS(Status) && !NT_SUCCESS(ReleaseStatus))
         Status = ReleaseStatus;
     return Status;
-}
-
-#define SOFTGPU_MAX_PATHS (1 + SOFTGPU_MAX_EXTRA_OUTPUTS)
-
-typedef struct _SOFTGPU_PATH
-{
-    D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId;
-    D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId;
-    D3DKMDT_VIDPN_PRESENT_PATH_SCALING Scaling;
-    D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation;
-    D3DDDI_GAMMARAMP_TYPE GammaRampType;
-    ULONG PinnedWidth;
-    ULONG PinnedHeight;
-    ULONG ModeIndex;
-} SOFTGPU_PATH, *PSOFTGPU_PATH;
-
-typedef struct _SOFTGPU_PATH_SET
-{
-    ULONG Count;
-    BOOLEAN Overflow;
-    SOFTGPU_PATH Paths[SOFTGPU_MAX_PATHS];
-} SOFTGPU_PATH_SET, *PSOFTGPU_PATH_SET;
-
-static NTSTATUS
-SoftGpuCollectPaths(
-    _In_ CONST DXGK_VIDPNTOPOLOGY_INTERFACE *TopologyInterface,
-    _In_ D3DKMDT_HVIDPNTOPOLOGY hTopology,
-    _Out_ PSOFTGPU_PATH_SET Paths)
-{
-    CONST D3DKMDT_VIDPN_PRESENT_PATH *Path = NULL;
-    CONST D3DKMDT_VIDPN_PRESENT_PATH *NextPath;
-    NTSTATUS Status;
-
-    RtlZeroMemory(Paths, sizeof(*Paths));
-    Status = TopologyInterface->pfnAcquireFirstPathInfo(hTopology, &Path);
-    if (Status == STATUS_GRAPHICS_DATASET_IS_EMPTY)
-        return STATUS_SUCCESS;
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    while (Path != NULL)
-    {
-        if (Paths->Count == SOFTGPU_MAX_PATHS)
-        {
-            Paths->Overflow = TRUE;
-            return SoftGpuReleasePathInfo(TopologyInterface, hTopology, Path, STATUS_SUCCESS);
-        }
-        Paths->Paths[Paths->Count].SourceId = Path->VidPnSourceId;
-        Paths->Paths[Paths->Count].TargetId = Path->VidPnTargetId;
-        Paths->Paths[Paths->Count].Scaling = Path->ContentTransformation.Scaling;
-        Paths->Paths[Paths->Count].Rotation = Path->ContentTransformation.Rotation;
-        Paths->Paths[Paths->Count].GammaRampType = Path->GammaRamp.Type;
-        Paths->Count++;
-
-        NextPath = NULL;
-        Status = TopologyInterface->pfnAcquireNextPathInfo(hTopology, Path, &NextPath);
-        if (Status == STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET)
-            return SoftGpuReleasePathInfo(TopologyInterface, hTopology, Path, STATUS_SUCCESS);
-        if (!NT_SUCCESS(Status))
-            return SoftGpuReleasePathInfo(TopologyInterface, hTopology, Path, Status);
-        Status = TopologyInterface->pfnReleasePathInfo(hTopology, Path);
-        if (!NT_SUCCESS(Status))
-        {
-            if (NextPath != NULL)
-                TopologyInterface->pfnReleasePathInfo(hTopology, NextPath);
-            return Status;
-        }
-        Path = NextPath;
-    }
-
-    return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-}
-
-static BOOLEAN
-SoftGpuPathTargetsValid(
-    _In_ PSOFTGPU_DEVICE Device,
-    _In_ const SOFTGPU_PATH_SET *Paths)
-{
-    ULONG Index;
-    ULONG Other;
-
-    if (Paths->Overflow)
-        return FALSE;
-    for (Index = 0; Index < Paths->Count; Index++)
-    {
-        if (Paths->Paths[Index].SourceId != 0 ||
-            !SoftGpuTargetKnown(Device, Paths->Paths[Index].TargetId))
-        {
-            return FALSE;
-        }
-        for (Other = 0; Other < Index; Other++)
-        {
-            if (Paths->Paths[Other].TargetId == Paths->Paths[Index].TargetId)
-                return FALSE;
-        }
-    }
-    return TRUE;
-}
-
-static const SOFTGPU_PATH *
-SoftGpuFindPath(
-    _In_ const SOFTGPU_PATH_SET *Paths,
-    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
-{
-    ULONG Index;
-
-    for (Index = 0; Index < Paths->Count; Index++)
-    {
-        if (Paths->Paths[Index].TargetId == TargetId)
-            return &Paths->Paths[Index];
-    }
-    return NULL;
 }
 
 /*
@@ -645,11 +372,13 @@ SoftGpuDdiIsSupportedVidPn(
     const DXGK_VIDPN_INTERFACE *VidPnInterface = NULL;
     D3DKMDT_HVIDPNTOPOLOGY hTopology = 0;
     const DXGK_VIDPNTOPOLOGY_INTERFACE *TopologyInterface = NULL;
-    SOFTGPU_PATH_SET Paths;
+    const D3DKMDT_VIDPN_PRESENT_PATH *Path = NULL;
+    SIZE_T NumPaths;
     BOOLEAN SourceModeSupported;
     BOOLEAN TargetModeSupported;
-    ULONG Index;
+    BOOLEAN PathSupported;
     NTSTATUS Status;
+    NTSTATUS ReleaseStatus;
 
     if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC ||
         IsSupportedVidPn == NULL)
@@ -688,51 +417,59 @@ SoftGpuDdiIsSupportedVidPn(
     if (TopologyInterface == NULL)
         return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
 
-    SoftGpuLockOutputs(Device);
-    Status = SoftGpuCollectPaths(TopologyInterface, hTopology, &Paths);
-    if (!NT_SUCCESS(Status) || Paths.Count == 0)
+    Status = TopologyInterface->pfnGetNumPaths(hTopology, &NumPaths);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (NumPaths == 0)
     {
-        IsSupportedVidPn->IsVidPnSupported = NT_SUCCESS(Status);
-        goto Unlock;
+        IsSupportedVidPn->IsVidPnSupported = TRUE;
+        return STATUS_SUCCESS;
     }
-    if (!SoftGpuPathTargetsValid(Device, &Paths))
-        goto Unlock;
-    for (Index = 0; Index < Paths.Count; Index++)
-    {
-        if ((Paths.Paths[Index].Scaling != D3DKMDT_VPPS_IDENTITY &&
-             Paths.Paths[Index].Scaling != D3DKMDT_VPPS_UNPINNED &&
-             Paths.Paths[Index].Scaling != D3DKMDT_VPPS_NOTSPECIFIED) ||
-            (Paths.Paths[Index].Rotation != D3DKMDT_VPPR_IDENTITY &&
-             Paths.Paths[Index].Rotation != D3DKMDT_VPPR_UNPINNED &&
-             Paths.Paths[Index].Rotation != D3DKMDT_VPPR_NOTSPECIFIED))
-        {
-            goto Unlock;
-        }
-    }
+    if (NumPaths != 1)
+        return STATUS_SUCCESS;
+
+    Status = TopologyInterface->pfnAcquireFirstPathInfo(hTopology, &Path);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Path == NULL)
+        return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
+
+    PathSupported =
+        Path->VidPnSourceId == 0 &&
+        Path->VidPnTargetId == SOFTGPU_CHILD_UID &&
+        (Path->ContentTransformation.Scaling == D3DKMDT_VPPS_IDENTITY ||
+         Path->ContentTransformation.Scaling == D3DKMDT_VPPS_UNPINNED ||
+         Path->ContentTransformation.Scaling == D3DKMDT_VPPS_NOTSPECIFIED) &&
+        (Path->ContentTransformation.Rotation == D3DKMDT_VPPR_IDENTITY ||
+         Path->ContentTransformation.Rotation == D3DKMDT_VPPR_UNPINNED ||
+         Path->ContentTransformation.Rotation == D3DKMDT_VPPR_NOTSPECIFIED);
+
+    ReleaseStatus = TopologyInterface->pfnReleasePathInfo(hTopology, Path);
+    if (!NT_SUCCESS(ReleaseStatus))
+        return ReleaseStatus;
+    if (!PathSupported)
+        return STATUS_SUCCESS;
 
     Status = SoftGpuCheckPinnedSourceMode(Device,
                                           IsSupportedVidPn->hDesiredVidPn,
                                           VidPnInterface,
                                           &SourceModeSupported);
-    if (!NT_SUCCESS(Status) || !SourceModeSupported)
-        goto Unlock;
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!SourceModeSupported)
+        return STATUS_SUCCESS;
 
-    for (Index = 0; Index < Paths.Count; Index++)
-    {
-        Status = SoftGpuCheckPinnedTargetMode(Device,
-                                              IsSupportedVidPn->hDesiredVidPn,
-                                              Paths.Paths[Index].TargetId,
-                                              VidPnInterface,
-                                              &TargetModeSupported);
-        if (!NT_SUCCESS(Status) || !TargetModeSupported)
-            goto Unlock;
-    }
+    Status = SoftGpuCheckPinnedTargetMode(Device,
+                                          IsSupportedVidPn->hDesiredVidPn,
+                                          VidPnInterface,
+                                          &TargetModeSupported);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!TargetModeSupported)
+        return STATUS_SUCCESS;
 
     IsSupportedVidPn->IsVidPnSupported = TRUE;
-
-Unlock:
-    SoftGpuUnlockOutputs(Device);
-    return Status;
+    return STATUS_SUCCESS;
 }
 
 
@@ -786,7 +523,8 @@ SoftGpuUpdateSourceModeSet(
     _In_ D3DKMDT_HVIDPN hVidPn,
     _In_ CONST DXGK_VIDPN_INTERFACE *VidPnInterface,
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId,
-    _In_ const SOFTGPU_PATH_SET *Paths)
+    _In_ ULONG RequiredWidth,
+    _In_ ULONG RequiredHeight)
 {
     D3DKMDT_HVIDPNSOURCEMODESET hModeSet = 0;
     CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *ModeSetInterface = NULL;
@@ -794,9 +532,7 @@ SoftGpuUpdateSourceModeSet(
     D3DKMDT_VIDPN_SOURCE_MODE *NewMode = NULL;
     ULONG Width;
     ULONG Height;
-    ULONG FirstIndex;
     ULONG Index;
-    ULONG PathIndex;
     NTSTATUS Status;
 
     Status = VidPnInterface->pfnAcquireSourceModeSet(hVidPn, SourceId,
@@ -828,22 +564,7 @@ SoftGpuUpdateSourceModeSet(
     for (Index = 0; Index < SoftGpuDisplayModeCount(Device) && NT_SUCCESS(Status); Index++)
     {
         SoftGpuGetDisplayModeSize(Device, Index, &Width, &Height);
-        if (SoftGpuFindDisplayMode(Device, Width, Height, &FirstIndex) && FirstIndex != Index)
-            continue;
-        for (PathIndex = 0; PathIndex < Paths->Count; PathIndex++)
-        {
-            const SOFTGPU_PATH *Path = &Paths->Paths[PathIndex];
-
-            if (Path->SourceId != SourceId || !SoftGpuTargetKnown(Device, Path->TargetId))
-                continue;
-            if (Path->PinnedWidth != 0 ?
-                    Path->PinnedWidth != Width || Path->PinnedHeight != Height :
-                    !SoftGpuTargetOffersSize(Device, SoftGpuFindOutput(Device, Path->TargetId), Width, Height))
-            {
-                break;
-            }
-        }
-        if (PathIndex != Paths->Count)
+        if (RequiredWidth != 0 && (Width != RequiredWidth || Height != RequiredHeight))
             continue;
 
         Status = ModeSetInterface->pfnCreateNewModeInfo(hModeSet, &NewMode);
@@ -888,8 +609,8 @@ SoftGpuUpdateTargetModeSet(
     CONST D3DKMDT_VIDPN_TARGET_MODE *PinnedMode = NULL;
     D3DKMDT_VIDPN_TARGET_MODE *NewMode = NULL;
     D3DKMDT_MODE_PREFERENCE Preference;
-    D3DKMDT_VIDEO_SIGNAL_INFO Signal;
-    const SOFTGPU_OUTPUT *Output = SoftGpuFindOutput(Device, TargetId);
+    ULONG Width;
+    ULONG Height;
     ULONG Index;
     NTSTATUS Status;
 
@@ -919,22 +640,29 @@ SoftGpuUpdateTargetModeSet(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    for (Index = 0; Index < SoftGpuTargetModeCount(Device, Output) && NT_SUCCESS(Status); Index++)
+    for (Index = 0; Index < SoftGpuDisplayModeCount(Device) && NT_SUCCESS(Status); Index++)
     {
-        SoftGpuGetTargetModeSignal(Device, Output, Index, &Signal);
-        if (RequiredWidth != 0 &&
-            (Signal.ActiveSize.cx != (LONG)RequiredWidth || Signal.ActiveSize.cy != (LONG)RequiredHeight))
-        {
+        SoftGpuGetDisplayModeSize(Device, Index, &Width, &Height);
+        if (RequiredWidth != 0 && (Width != RequiredWidth || Height != RequiredHeight))
             continue;
-        }
 
         Status = ModeSetInterface->pfnCreateNewModeInfo(hModeSet, &NewMode);
         if (!NT_SUCCESS(Status))
             break;
 
-        Preference = SoftGpuTargetModePreferred(Device, Output, Index) ?
+        Preference = (Device->ModeCount == 0 || Index == Device->PreferredMode) ?
                          D3DKMDT_MP_PREFERRED : D3DKMDT_MP_NOTPREFERRED;
-        NewMode->VideoSignalInfo = Signal;
+        NewMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
+        NewMode->VideoSignalInfo.TotalSize.cx = Width;
+        NewMode->VideoSignalInfo.TotalSize.cy = Height;
+        NewMode->VideoSignalInfo.ActiveSize.cx = Width;
+        NewMode->VideoSignalInfo.ActiveSize.cy = Height;
+        NewMode->VideoSignalInfo.VSyncFreq.Numerator = 60;
+        NewMode->VideoSignalInfo.VSyncFreq.Denominator = 1;
+        NewMode->VideoSignalInfo.HSyncFreq.Numerator = 60 * Height;
+        NewMode->VideoSignalInfo.HSyncFreq.Denominator = 1;
+        NewMode->VideoSignalInfo.PixelRate = (SIZE_T)Width * Height * 60;
+        NewMode->VideoSignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
         NewMode->WireFormatAndPreference.Value = 0;
         NewMode->WireFormatAndPreference.Preference = Preference;
@@ -1039,10 +767,10 @@ SoftGpuDdiEnumVidPnCofuncModality(
     CONST D3DKMDT_VIDPN_PRESENT_PATH *NextPath = NULL;
     D3DKMDT_VIDPN_PRESENT_PATH UpdatedPath;
     SOFTGPU_VIDPN_TRANSFORM_POLICY TransformPolicy;
-    SOFTGPU_PATH_SET Paths;
     ULONG SourceWidth;
     ULONG SourceHeight;
-    ULONG Index;
+    ULONG TargetWidth;
+    ULONG TargetHeight;
     NTSTATUS Status;
     NTSTATUS ReleaseStatus;
 
@@ -1071,32 +799,13 @@ SoftGpuDdiEnumVidPnCofuncModality(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    SoftGpuLockOutputs(Device);
-    Status = SoftGpuCollectPaths(TopologyInterface, hTopology, &Paths);
-    if (!NT_SUCCESS(Status) || Paths.Count == 0)
-        goto Unlock;
-    if (Paths.Overflow)
-    {
-        Status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-        goto Unlock;
-    }
-    for (Index = 0; Index < Paths.Count; Index++)
-    {
-        SoftGpuQueryPinnedTargetSize(EnumCofuncModality->hConstrainingVidPn,
-                                     VidPnInterface,
-                                     Paths.Paths[Index].TargetId,
-                                     &Paths.Paths[Index].PinnedWidth,
-                                     &Paths.Paths[Index].PinnedHeight);
-    }
-
     Status = TopologyInterface->pfnAcquireFirstPathInfo(hTopology, &Path);
+    if (Status == STATUS_GRAPHICS_DATASET_IS_EMPTY)
+        return STATUS_SUCCESS;
     if (!NT_SUCCESS(Status))
-        goto Unlock;
+        return Status;
     if (Path == NULL)
-    {
-        Status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-        goto Unlock;
-    }
+        return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
 
     while (Path != NULL)
     {
@@ -1105,15 +814,11 @@ SoftGpuDdiEnumVidPnCofuncModality(
                                      Path->VidPnSourceId,
                                      &SourceWidth,
                                      &SourceHeight);
-
-        if (!SoftGpuTargetKnown(Device, Path->VidPnTargetId))
-        {
-            Status = SoftGpuReleasePathInfo(TopologyInterface,
-                                            hTopology,
-                                            Path,
-                                            STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET);
-            goto Unlock;
-        }
+        SoftGpuQueryPinnedTargetSize(EnumCofuncModality->hConstrainingVidPn,
+                                     VidPnInterface,
+                                     Path->VidPnTargetId,
+                                     &TargetWidth,
+                                     &TargetHeight);
 
         if (!(EnumCofuncModality->EnumPivotType == D3DKMDT_EPT_VIDPNSOURCE &&
               EnumCofuncModality->EnumPivot.VidPnSourceId == Path->VidPnSourceId))
@@ -1122,14 +827,14 @@ SoftGpuDdiEnumVidPnCofuncModality(
                                                 EnumCofuncModality->hConstrainingVidPn,
                                                 VidPnInterface,
                                                 Path->VidPnSourceId,
-                                                &Paths);
+                                                TargetWidth,
+                                                TargetHeight);
             if (!NT_SUCCESS(Status))
             {
-                Status = SoftGpuReleasePathInfo(TopologyInterface,
-                                                hTopology,
-                                                Path,
-                                                Status);
-                goto Unlock;
+                return SoftGpuReleasePathInfo(TopologyInterface,
+                                              hTopology,
+                                              Path,
+                                              Status);
             }
         }
 
@@ -1144,11 +849,10 @@ SoftGpuDdiEnumVidPnCofuncModality(
                                                 SourceHeight);
             if (!NT_SUCCESS(Status))
             {
-                Status = SoftGpuReleasePathInfo(TopologyInterface,
-                                                hTopology,
-                                                Path,
-                                                Status);
-                goto Unlock;
+                return SoftGpuReleasePathInfo(TopologyInterface,
+                                              hTopology,
+                                              Path,
+                                              Status);
             }
         }
 
@@ -1190,11 +894,10 @@ SoftGpuDdiEnumVidPnCofuncModality(
                          &UpdatedPath);
             if (!NT_SUCCESS(Status))
             {
-                Status = SoftGpuReleasePathInfo(TopologyInterface,
-                                                hTopology,
-                                                Path,
-                                                Status);
-                goto Unlock;
+                return SoftGpuReleasePathInfo(TopologyInterface,
+                                              hTopology,
+                                              Path,
+                                              Status);
             }
         }
 
@@ -1202,28 +905,25 @@ SoftGpuDdiEnumVidPnCofuncModality(
         Status = TopologyInterface->pfnAcquireNextPathInfo(hTopology, Path, &NextPath);
         if (Status == STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET)
         {
-            Status = SoftGpuReleasePathInfo(TopologyInterface,
-                                            hTopology,
-                                            Path,
-                                            STATUS_SUCCESS);
-            goto Unlock;
+            return SoftGpuReleasePathInfo(TopologyInterface,
+                                          hTopology,
+                                          Path,
+                                          STATUS_SUCCESS);
         }
         if (!NT_SUCCESS(Status))
         {
-            Status = SoftGpuReleasePathInfo(TopologyInterface,
-                                            hTopology,
-                                            Path,
-                                            Status);
-            goto Unlock;
+            return SoftGpuReleasePathInfo(TopologyInterface,
+                                          hTopology,
+                                          Path,
+                                          Status);
         }
         if (NextPath == NULL)
         {
-            Status = SoftGpuReleasePathInfo(
-                                            TopologyInterface,
-                                            hTopology,
-                                            Path,
-                                            STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY);
-            goto Unlock;
+            return SoftGpuReleasePathInfo(
+                       TopologyInterface,
+                       hTopology,
+                       Path,
+                       STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY);
         }
 
         ReleaseStatus =
@@ -1231,17 +931,12 @@ SoftGpuDdiEnumVidPnCofuncModality(
         if (!NT_SUCCESS(ReleaseStatus))
         {
             TopologyInterface->pfnReleasePathInfo(hTopology, NextPath);
-            Status = ReleaseStatus;
-            goto Unlock;
+            return ReleaseStatus;
         }
         Path = NextPath;
     }
 
-    Status = STATUS_SUCCESS;
-
-Unlock:
-    SoftGpuUnlockOutputs(Device);
-    return Status;
+    return STATUS_SUCCESS;
 }
 
 
@@ -1249,23 +944,25 @@ static NTSTATUS
 SoftGpuValidateFunctionalVidPn(
     _In_ PSOFTGPU_DEVICE Device,
     _In_ D3DKMDT_HVIDPN hFunctionalVidPn,
-    _Out_ PSOFTGPU_PATH_SET Paths,
-    _Out_ PULONG SourceMode)
+    _Out_opt_ PSIZE_T ValidatedPathCount,
+    _Out_ PULONG ModeIndex)
 {
     CONST DXGK_VIDPN_INTERFACE *VidPnInterface = NULL;
     D3DKMDT_HVIDPNTOPOLOGY hTopology = 0;
     CONST DXGK_VIDPNTOPOLOGY_INTERFACE *TopologyInterface = NULL;
-    D3DKMDT_VIDEO_SIGNAL_INFO Signal;
-    ULONG SourceWidth;
-    ULONG SourceHeight;
-    ULONG Index;
+    CONST D3DKMDT_VIDPN_PRESENT_PATH *Path = NULL;
+    SIZE_T NumPaths;
+    ULONG SourceMode;
+    ULONG TargetMode;
     NTSTATUS Status;
 
-    RtlZeroMemory(Paths, sizeof(*Paths));
+    if (ValidatedPathCount != NULL)
+        *ValidatedPathCount = 0;
+
     if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
         return STATUS_INVALID_PARAMETER;
 
-    *SourceMode = Device->CurrentMode;
+    *ModeIndex = Device->CurrentMode;
     if (hFunctionalVidPn == 0 ||
         Device->DxgkInterface.DxgkCbQueryVidPnInterface == NULL)
     {
@@ -1289,49 +986,62 @@ SoftGpuValidateFunctionalVidPn(
     if (TopologyInterface == NULL)
         return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
 
-    Status = SoftGpuCollectPaths(TopologyInterface, hTopology, Paths);
+    Status = TopologyInterface->pfnGetNumPaths(hTopology, &NumPaths);
     if (!NT_SUCCESS(Status))
         return Status;
-    if (Paths->Count == 0)
+    if (ValidatedPathCount != NULL)
+        *ValidatedPathCount = NumPaths;
+    if (NumPaths == 0)
         return STATUS_SUCCESS;
-    if (!SoftGpuPathTargetsValid(Device, Paths))
+    if (NumPaths != 1)
         return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-    for (Index = 0; Index < Paths->Count; Index++)
-    {
-        if (!SoftGpuVidPnActiveTransformSupported(Paths->Paths[Index].Scaling,
-                                                  Paths->Paths[Index].Rotation))
-            return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
-        if (Paths->Paths[Index].GammaRampType != D3DDDI_GAMMARAMP_DEFAULT)
-            return STATUS_GRAPHICS_GAMMA_RAMP_NOT_SUPPORTED;
-    }
+
+    Status = TopologyInterface->pfnAcquireFirstPathInfo(hTopology, &Path);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Path == NULL)
+        return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
+
+    if (Path->VidPnSourceId != 0)
+        Status = STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE;
+    else if (Path->VidPnTargetId != SOFTGPU_CHILD_UID)
+        Status = STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET;
+    else if (!SoftGpuVidPnActiveTransformSupported(
+                 Path->ContentTransformation.Scaling,
+                 Path->ContentTransformation.Rotation))
+        Status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
+    else if (Path->GammaRamp.Type != D3DDDI_GAMMARAMP_DEFAULT)
+        Status = STATUS_GRAPHICS_GAMMA_RAMP_NOT_SUPPORTED;
+    else
+        Status = STATUS_SUCCESS;
+
+    Status = SoftGpuReleasePathInfo(TopologyInterface,
+                                    hTopology,
+                                    Path,
+                                    Status);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     Status = SoftGpuValidateCommittedSourceMode(
                  Device,
                  hFunctionalVidPn,
                  VidPnInterface,
-                 SourceMode);
+                 &SourceMode);
     if (!NT_SUCCESS(Status))
         return Status;
-    SoftGpuGetDisplayModeSize(Device, *SourceMode, &SourceWidth, &SourceHeight);
 
-    for (Index = 0; Index < Paths->Count; Index++)
-    {
-        PSOFTGPU_PATH Path = &Paths->Paths[Index];
+    Status = SoftGpuValidateCommittedTargetMode(
+                 Device,
+                 hFunctionalVidPn,
+                 VidPnInterface,
+                 &TargetMode);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
-        Status = SoftGpuValidateCommittedTargetMode(
-                     Device,
-                     hFunctionalVidPn,
-                     Path->TargetId,
-                     VidPnInterface,
-                     &Path->ModeIndex);
-        if (!NT_SUCCESS(Status))
-            return Status;
+    if (SourceMode != TargetMode)
+        return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
 
-        SoftGpuGetTargetModeSignal(Device, SoftGpuFindOutput(Device, Path->TargetId), Path->ModeIndex, &Signal);
-        if (Signal.ActiveSize.cx != (LONG)SourceWidth || Signal.ActiveSize.cy != (LONG)SourceHeight)
-            return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
-    }
-
+    *ModeIndex = SourceMode;
     return STATUS_SUCCESS;
 }
 
@@ -1381,119 +1091,6 @@ SoftGpuSetDisplayMode(
     return Status;
 }
 
-static NTSTATUS
-SoftGpuSetOutputs(
-    _Inout_ PSOFTGPU_DEVICE Device,
-    _In_ const SOFTGPU_PATH_SET *Paths,
-    _In_ ULONG ChildMode,
-    _In_ BOOLEAN ChildActive)
-{
-    SOFTGPU_OUTPUT_TIMING Timings[SOFTGPU_MAX_PATHS];
-    const SOFTGPU_DISPLAY_MODE *Mode;
-    const SOFTGPU_PATH *Path;
-    PSOFTGPU_OUTPUT Output;
-    BOOLEAN ModeChanged;
-    BOOLEAN Changed;
-    KIRQL OldIrql;
-    ULONG Index;
-    NTSTATUS Status;
-
-    if (ChildMode >= Device->ModeCount)
-        return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
-
-    RtlZeroMemory(Timings, sizeof(Timings));
-    Mode = &Device->Modes[ChildMode];
-    Timings[0].ChildUid = SOFTGPU_CHILD_UID;
-    Timings[0].Active = ChildActive;
-    Timings[0].Mode = *Mode;
-    ModeChanged = ChildMode != Device->CurrentMode;
-    Changed = ModeChanged || ChildActive != Device->ChildActive;
-    for (Index = 0; Index < Device->ExtraOutputCount; Index++)
-    {
-        Output = &Device->ExtraOutputs[Index];
-        Path = SoftGpuFindPath(Paths, Output->ChildUid);
-        Timings[1 + Index].ChildUid = Output->ChildUid;
-        Timings[1 + Index].Active = Path != NULL;
-        if (Path != NULL)
-        {
-            if (Path->ModeIndex >= Output->ModeCount)
-                return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET_MODE;
-            Timings[1 + Index].Mode = Output->Modes[Path->ModeIndex];
-            Changed |= !Output->Active || Path->ModeIndex != Output->CurrentMode;
-        }
-        else
-        {
-            Changed |= Output->Active;
-        }
-    }
-    if (!Changed)
-        return STATUS_SUCCESS;
-
-    Status = KeWaitForSingleObject(&Device->ScanoutMutex,
-                                   Executive,
-                                   KernelMode,
-                                   FALSE,
-                                   NULL);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    Status = Device->PlatformSetOutputs(Device, Timings, 1 + Device->ExtraOutputCount);
-    if (NT_SUCCESS(Status))
-    {
-        KeAcquireSpinLock(&Device->ScanoutLock, &OldIrql);
-        if (ModeChanged)
-        {
-            Device->Width = Mode->Width;
-            Device->Height = Mode->Height;
-            Device->ScanoutPitch = Mode->Pitch;
-            Device->CurrentMode = ChildMode;
-            Device->CurrentPrimaryValid = FALSE;
-        }
-        Device->ChildActive = ChildActive;
-        Device->VsyncTargetId = SOFTGPU_CHILD_UID;
-        for (Index = Device->ExtraOutputCount; Index-- > 0;)
-        {
-            Output = &Device->ExtraOutputs[Index];
-            Path = SoftGpuFindPath(Paths, Output->ChildUid);
-            Output->Active = Path != NULL;
-            Output->CurrentMode = Path != NULL ? Path->ModeIndex : MAXULONG;
-            if (Output->Active && !ChildActive)
-                Device->VsyncTargetId = Output->ChildUid;
-        }
-        if (++Device->ScanoutGeneration == 0)
-            ++Device->ScanoutGeneration;
-        KeReleaseSpinLock(&Device->ScanoutLock, OldIrql);
-
-        if (ModeChanged && Device->Scanout != NULL)
-            RtlZeroMemory(Device->Scanout, (SIZE_T)Mode->Pitch * Mode->Height);
-    }
-
-    KeReleaseMutex(&Device->ScanoutMutex, FALSE);
-    DPRINT("SOFTGPU: %lu path(s), source %lux%lu, child 0 %s: 0x%08lx\n",
-           Paths->Count, Mode->Width, Mode->Height, ChildActive ? "on" : "off", Status);
-    return Status;
-}
-
-static NTSTATUS
-SoftGpuApplyPaths(
-    _Inout_ PSOFTGPU_DEVICE Device,
-    _In_ const SOFTGPU_PATH_SET *Paths,
-    _In_ ULONG SourceMode)
-{
-    const SOFTGPU_PATH *Child = SoftGpuFindPath(Paths, SOFTGPU_CHILD_UID);
-
-    if (Device->PlatformSetOutputs == NULL)
-    {
-        if (Child == NULL)
-            return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-        return SoftGpuSetDisplayMode(Device, Child->ModeIndex);
-    }
-    return SoftGpuSetOutputs(Device,
-                             Paths,
-                             Child != NULL ? Child->ModeIndex : SourceMode,
-                             Child != NULL);
-}
-
 
 /* =========================================================================
  * DxgkDdiCommitVidPn
@@ -1515,8 +1112,8 @@ SoftGpuDdiCommitVidPn(
     _In_ CONST DXGKARG_COMMITVIDPN *CommitVidPn)
 {
     PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
-    SOFTGPU_PATH_SET Paths;
-    ULONG SourceMode;
+    SIZE_T PathCount;
+    ULONG ModeIndex;
     NTSTATUS Status;
 
     if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC ||
@@ -1540,27 +1137,24 @@ SoftGpuDdiCommitVidPn(
         return STATUS_INVALID_PARAMETER;
     }
 
-    SoftGpuLockOutputs(Device);
     Status = SoftGpuValidateFunctionalVidPn(
                  Device,
                  CommitVidPn->hFunctionalVidPn,
-                 &Paths,
-                 &SourceMode);
+                 &PathCount,
+                 &ModeIndex);
     if (!NT_SUCCESS(Status))
     {
-        SoftGpuUnlockOutputs(Device);
         DPRINT1("SOFTGPU: CommitVidPn rejected functional VidPN 0x%08lx\n",
                 Status);
         return Status;
     }
 
-    if (Paths.Count != 0)
-        Status = SoftGpuApplyPaths(Device, &Paths, SourceMode);
-    else if (Device->PlatformSetOutputs != NULL)
-        Status = SoftGpuSetOutputs(Device, &Paths, Device->CurrentMode, Device->ChildActive);
-    SoftGpuUnlockOutputs(Device);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    if (PathCount != 0)
+    {
+        Status = SoftGpuSetDisplayMode(Device, ModeIndex);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
 
     DPRINT("SOFTGPU: CommitVidPn: committed %lux%lu format=%d\n",
            Device->Width, Device->Height, (int)Device->Format);
@@ -1582,14 +1176,10 @@ SoftGpuDdiSetTimingsFromVidPn(
     IN_OUT_PDXGKARG_SETTIMINGSFROMVIDPN SetTimings)
 {
     PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
-    DXGK_SET_TIMING_PATH_INFO *PathInfo;
-    const SOFTGPU_OUTPUT *Output;
-    SOFTGPU_PATH_SET Paths;
-    ULONG SourceMode;
-    ULONG Timed = 0;
-    ULONG Index;
-    ULONG Other;
-    BOOLEAN Active = FALSE;
+    DXGK_SET_TIMING_PATH_INFO *PathInfo = NULL;
+    SIZE_T VidPnPathCount;
+    ULONG ModeIndex;
+    BOOLEAN Active;
     KIRQL OldIrql;
     NTSTATUS Status;
 
@@ -1597,7 +1187,7 @@ SoftGpuDdiSetTimingsFromVidPn(
         SetTimings == NULL ||
         SetTimings->pResultsFlags == NULL ||
         SetTimings->SetFlags.Value != 0 ||
-        SetTimings->PathCount > 1 + Device->ExtraOutputCount ||
+        SetTimings->PathCount > 1 ||
         (SetTimings->PathCount != 0 &&
          SetTimings->pSetTimingPathInfo == NULL))
     {
@@ -1605,49 +1195,43 @@ SoftGpuDdiSetTimingsFromVidPn(
     }
 
     SetTimings->pResultsFlags->Value = 0;
-    SoftGpuLockOutputs(Device);
     Status = SoftGpuValidateFunctionalVidPn(
                  Device,
                  SetTimings->hFunctionalVidPn,
-                 &Paths,
-                 &SourceMode);
+                 &VidPnPathCount,
+                 &ModeIndex);
     if (!NT_SUCCESS(Status))
-        goto Unlock;
+        return Status;
 
-    for (Index = 0; Index < SetTimings->PathCount; Index++)
+    if (SetTimings->PathCount != 0)
     {
-        BOOLEAN InTopology;
-
-        PathInfo = &SetTimings->pSetTimingPathInfo[Index];
-        if (!SoftGpuTargetKnown(Device, PathInfo->VidPnTargetId) ||
+        PathInfo = &SetTimings->pSetTimingPathInfo[0];
+        if (PathInfo->VidPnTargetId != SOFTGPU_CHILD_UID ||
             (PathInfo->InputFlags & ~0x1FUL) != 0)
         {
-            Status = STATUS_INVALID_PARAMETER;
-            goto Unlock;
+            return STATUS_INVALID_PARAMETER;
         }
-        for (Other = 0; Other < Index; Other++)
-        {
-            if (SetTimings->pSetTimingPathInfo[Other].VidPnTargetId == PathInfo->VidPnTargetId)
-            {
-                Status = STATUS_INVALID_PARAMETER;
-                goto Unlock;
-            }
-        }
+    }
 
-        InTopology = SoftGpuFindPath(&Paths, PathInfo->VidPnTargetId) != NULL;
-        if (PathInfo->Input.VidPnPathUpdates == DXGK_PATH_UPDATE_REMOVED)
+    if (VidPnPathCount == 0)
+    {
+        if (PathInfo != NULL &&
+            (PathInfo->Input.VidPnPathUpdates !=
+                 DXGK_PATH_UPDATE_REMOVED ||
+             PathInfo->Input.Active != 0))
         {
-            if (InTopology || PathInfo->Input.Active != 0)
-            {
-                Status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-                goto Unlock;
-            }
-            continue;
+            return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
         }
-        if (!InTopology)
+        Active = FALSE;
+    }
+    else
+    {
+        if (VidPnPathCount != 1 ||
+            PathInfo == NULL ||
+            PathInfo->Input.VidPnPathUpdates ==
+                DXGK_PATH_UPDATE_REMOVED)
         {
-            Status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-            goto Unlock;
+            return STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
         }
 
         if (PathInfo->OutputWireColorSpace !=
@@ -1660,45 +1244,31 @@ SoftGpuDdiSetTimingsFromVidPn(
             PathInfo->SelectedWireFormat.YCbCr420 != 0 ||
             PathInfo->SelectedWireFormat.Intensity != 0)
         {
-            Status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
-            goto Unlock;
+            return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
         }
-        if (PathInfo->Input.Active)
-            Active = TRUE;
-        Timed++;
-    }
-    if (Timed != Paths.Count)
-    {
-        Status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-        goto Unlock;
+        Active = PathInfo->Input.Active ? TRUE : FALSE;
+
+        Status = SoftGpuSetDisplayMode(Device, ModeIndex);
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
 
-    if (Paths.Count != 0)
-        Status = SoftGpuApplyPaths(Device, &Paths, SourceMode);
-    else if (Device->PlatformSetOutputs != NULL)
-        Status = SoftGpuSetOutputs(Device, &Paths, Device->CurrentMode, Device->ChildActive);
-    if (!NT_SUCCESS(Status))
-        goto Unlock;
-
-    for (Index = 0; Index < SetTimings->PathCount; Index++)
+    if (PathInfo != NULL)
     {
-        PathInfo = &SetTimings->pSetTimingPathInfo[Index];
-        Output = SoftGpuFindOutput(Device, PathInfo->VidPnTargetId);
         PathInfo->OutputFlags = 0;
         RtlZeroMemory(&PathInfo->TargetState,
                       sizeof(PathInfo->TargetState));
         PathInfo->TargetState.ConnectionChangeId = 1;
-        PathInfo->TargetState.TargetId = PathInfo->VidPnTargetId;
+        PathInfo->TargetState.TargetId = SOFTGPU_CHILD_UID;
         PathInfo->TargetState.ConnectionStatus =
-            Output == NULL || Output->Connected ? MonitorStatusConnected : MonitorStatusDisconnected;
+            MonitorStatusConnected;
         PathInfo->TargetState.MonitorConnect.LinkTargetType =
-            Output != NULL ? Output->OutputTechnology : Device->ChildOutputTechnology;
+            Device->ChildOutputTechnology;
         PathInfo->DiagnosticInfo = 0;
         PathInfo->GlitchCause = DXGK_GLITCH_CAUSE_NONE;
         PathInfo->GlitchEffect = DXGK_GLITCH_EFFECT_SEAMLESS;
         PathInfo->GlitchDuration = DXGK_GLITCH_DURATION_NONE;
     }
-    SoftGpuUnlockOutputs(Device);
 
     KeAcquireSpinLock(&Device->ScanoutLock, &OldIrql);
     Device->TimingActive = Active;
@@ -1710,14 +1280,10 @@ SoftGpuDdiSetTimingsFromVidPn(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    DPRINT("SOFTGPU: SetTimingsFromVidPn path=%lu active=%u\n",
-           Paths.Count,
+    DPRINT("SOFTGPU: SetTimingsFromVidPn path=%Iu active=%u\n",
+           VidPnPathCount,
            Active);
     return STATUS_SUCCESS;
-
-Unlock:
-    SoftGpuUnlockOutputs(Device);
-    return Status;
 }
 #endif
 
@@ -1938,136 +1504,12 @@ SoftGpuScanoutInitializeDevice(
     KeInitializeMutex(&Device->ScanoutMutex, 0);
     KeInitializeMutex(&Device->PointerMutex, 0);
     KeInitializeSpinLock(&Device->PointerLock);
-    KeInitializeMutex(&Device->OutputMutex, 0);
     ExInitializeRundownProtection(&Device->ScanoutRundown);
     ExInitializeWorkItem(&Device->ScanoutWorkItem,
                          SoftGpuScanoutWorker,
                          Device);
     Device->ScanoutRundownCompleted = FALSE;
     Device->ScanoutWorkQueued = 0;
-}
-
-static BOOLEAN
-SoftGpuValidateOutputModes(
-    _In_reads_opt_(ModeCount) const SOFTGPU_DISPLAY_MODE *Modes,
-    _In_ ULONG ModeCount,
-    _In_ ULONG PreferredMode)
-{
-    ULONG Index;
-
-    if (ModeCount > SOFTGPU_MAX_DISPLAY_MODES ||
-        (ModeCount != 0 && (Modes == NULL || PreferredMode >= ModeCount)))
-    {
-        return FALSE;
-    }
-    for (Index = 0; Index < ModeCount; Index++)
-    {
-        if (Modes[Index].Width == 0 ||
-            Modes[Index].Height == 0 ||
-            Modes[Index].Width > SOFTGPU_MAX_DISPLAY_WIDTH ||
-            Modes[Index].Height > SOFTGPU_MAX_DISPLAY_HEIGHT ||
-            (Modes[Index].PixelRate != 0 &&
-             (Modes[Index].TotalWidth < Modes[Index].Width ||
-              Modes[Index].TotalHeight < Modes[Index].Height ||
-              (ULONGLONG)Modes[Index].TotalWidth * Modes[Index].TotalHeight > MAXULONG)))
-        {
-            return FALSE;
-        }
-    }
-    return TRUE;
-}
-
-BOOLEAN
-SoftGpuValidateExtraOutputs(
-    _Inout_ PSOFTGPU_DEVICE Device,
-    _In_ const SOFTGPU_PLATFORM_CONFIG *Config)
-{
-    PSOFTGPU_OUTPUT Output;
-    ULONG Index;
-    ULONG Other;
-
-    if (Config->ExtraOutputCount == 0)
-        return TRUE;
-    if (Config->ExtraOutputCount > SOFTGPU_MAX_EXTRA_OUTPUTS ||
-        Config->SetOutputs == NULL ||
-        Config->ModeCount == 0)
-    {
-        return FALSE;
-    }
-
-    for (Index = 0; Index < Config->ExtraOutputCount; Index++)
-    {
-        Output = &Device->ExtraOutputs[Index];
-        if (Output->ChildUid == SOFTGPU_CHILD_UID ||
-            Output->ChildUid == DISPLAY_ADAPTER_HW_ID ||
-            Output->EdidLength > SOFTGPU_EDID_SIZE ||
-            !SoftGpuValidateOutputModes(Output->Modes, Output->ModeCount, Output->PreferredMode))
-        {
-            return FALSE;
-        }
-        for (Other = 0; Other < Index; Other++)
-        {
-            if (Device->ExtraOutputs[Other].ChildUid == Output->ChildUid)
-                return FALSE;
-        }
-        Output->Active = FALSE;
-        Output->CurrentMode = MAXULONG;
-    }
-    return TRUE;
-}
-
-NTSTATUS
-SoftGpuUpdateOutput(
-    _Inout_ PSOFTGPU_DEVICE Device,
-    _In_ ULONG ChildUid,
-    _In_ BOOLEAN Connected,
-    _In_reads_opt_(ModeCount) const SOFTGPU_DISPLAY_MODE *Modes,
-    _In_ ULONG ModeCount,
-    _In_ ULONG PreferredMode,
-    _In_reads_bytes_opt_(EdidLength) const UCHAR *Edid,
-    _In_ ULONG EdidLength,
-    _In_ BOOLEAN Indicate)
-{
-    PSOFTGPU_OUTPUT Output;
-    DXGK_CHILD_STATUS ChildStatus;
-
-    PAGED_CODE();
-
-    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
-        return STATUS_INVALID_PARAMETER;
-    Output = SoftGpuFindOutput(Device, ChildUid);
-    if (Output == NULL ||
-        !SoftGpuValidateOutputModes(Modes, ModeCount, PreferredMode) ||
-        EdidLength > SOFTGPU_EDID_SIZE ||
-        (EdidLength != 0 && Edid == NULL))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    SoftGpuLockOutputs(Device);
-    Output->Connected = Connected;
-    Output->ModeCount = ModeCount;
-    Output->PreferredMode = ModeCount != 0 ? PreferredMode : 0;
-    Output->CurrentMode = MAXULONG;
-    RtlZeroMemory(Output->Modes, sizeof(Output->Modes));
-    if (ModeCount != 0)
-        RtlCopyMemory(Output->Modes, Modes, ModeCount * sizeof(*Modes));
-    RtlZeroMemory(Output->Edid, sizeof(Output->Edid));
-    if (EdidLength != 0)
-        RtlCopyMemory(Output->Edid, Edid, EdidLength);
-    Output->EdidLength = EdidLength;
-    SoftGpuUnlockOutputs(Device);
-
-    DPRINT1("SOFTGPU: output %lu %s, %lu mode(s), %lu-byte EDID\n",
-            ChildUid, Connected ? "connected" : "disconnected", ModeCount, EdidLength);
-    if (!Indicate || Device->DxgkInterface.DxgkCbIndicateChildStatus == NULL)
-        return STATUS_SUCCESS;
-
-    RtlZeroMemory(&ChildStatus, sizeof(ChildStatus));
-    ChildStatus.Type = StatusConnection;
-    ChildStatus.ChildUid = ChildUid;
-    ChildStatus.HotPlug.Connected = Connected;
-    return Device->DxgkInterface.DxgkCbIndicateChildStatus(Device->DxgkInterface.DeviceHandle, &ChildStatus);
 }
 
 NTSTATUS
@@ -2723,7 +2165,7 @@ SoftGpuDdiUpdateActiveVidPnPresentPath(
     if (UpdateActiveVidPnPresentPath->VidPnPresentPathInfo.VidPnSourceId != 0)
         return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE;
 
-    if (!SoftGpuTargetKnown(Device, UpdateActiveVidPnPresentPath->VidPnPresentPathInfo.VidPnTargetId))
+    if (UpdateActiveVidPnPresentPath->VidPnPresentPathInfo.VidPnTargetId != SOFTGPU_CHILD_UID)
         return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET;
 
     if (!SoftGpuVidPnActiveTransformSupported(
@@ -2761,7 +2203,7 @@ SoftGpuDdiRecommendMonitorModes(
     DPRINT("SOFTGPU: RecommendMonitorModes TargetId=%u\n",
            RecommendMonitorModes->VideoPresentTargetId);
 
-    if (!SoftGpuTargetKnown(Device, RecommendMonitorModes->VideoPresentTargetId))
+    if (RecommendMonitorModes->VideoPresentTargetId != SOFTGPU_CHILD_UID)
         return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET;
 
     return STATUS_GRAPHICS_NO_PREFERRED_MODE;
@@ -2819,9 +2261,6 @@ SoftGpuDdiQueryDeviceDescriptor(
     _Inout_ PDXGK_DEVICE_DESCRIPTOR DeviceDescriptor)
 {
     PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
-    const SOFTGPU_OUTPUT *Output;
-    ULONG Length;
-    NTSTATUS Status;
 
     if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC ||
         DeviceDescriptor == NULL)
@@ -2829,30 +2268,11 @@ SoftGpuDdiQueryDeviceDescriptor(
         return STATUS_INVALID_PARAMETER;
     }
 
-    DPRINT("SOFTGPU: QueryDeviceDescriptor ChildUid=%lu\n", ChildUid);
-    if (ChildUid == SOFTGPU_CHILD_UID)
-        return SoftGpuPlatformQueryDescriptor(Device, DeviceDescriptor);
-
-    Output = SoftGpuFindOutput(Device, ChildUid);
-    if (Output == NULL)
+    if (ChildUid != SOFTGPU_CHILD_UID)
         return STATUS_INVALID_PARAMETER;
 
-    SoftGpuLockOutputs(Device);
-    if (!Output->Connected || Output->EdidLength == 0)
-        Status = STATUS_MONITOR_NO_DESCRIPTOR;
-    else if (DeviceDescriptor->DescriptorOffset >= Output->EdidLength)
-        Status = STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA;
-    else if (DeviceDescriptor->DescriptorBuffer == NULL)
-        Status = STATUS_INVALID_PARAMETER;
-    else
-    {
-        Length = min(DeviceDescriptor->DescriptorLength, Output->EdidLength - DeviceDescriptor->DescriptorOffset);
-        RtlCopyMemory(DeviceDescriptor->DescriptorBuffer, Output->Edid + DeviceDescriptor->DescriptorOffset, Length);
-        DeviceDescriptor->DescriptorLength = Length;
-        Status = STATUS_SUCCESS;
-    }
-    SoftGpuUnlockOutputs(Device);
-    return Status;
+    DPRINT("SOFTGPU: QueryDeviceDescriptor ChildUid=%lu\n", ChildUid);
+    return SoftGpuPlatformQueryDescriptor(Device, DeviceDescriptor);
 }
 
 /* EOF */
