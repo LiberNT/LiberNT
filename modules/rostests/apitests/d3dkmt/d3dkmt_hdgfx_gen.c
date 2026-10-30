@@ -19,6 +19,9 @@
 #define GEN_BLT_COPY_32         0x03CC0000UL
 #define GEN_PIPE_CONTROL_WRITE  0x7A004002UL
 #define GEN_PIPE_CONTROL_GGTT   0x4UL
+#define GEN_OVERCOMMIT_COUNT    33
+#define GEN_OVERCOMMIT_SIZE     0x800000UL
+#define GEN_OVERCOMMIT_LAST     0x4000000UL
 
 static PFND3DKMT_CREATEDEVICE CreateDevice;
 static PFND3DKMT_DESTROYDEVICE DestroyDevice;
@@ -335,6 +338,93 @@ static void Test_PipeControlWrite(GEN_CONTEXT *Ctx, ULONG *Copy)
        "PIPE_CONTROL immediate write: 0x%08lx 0x%08lx\n", Copy[0x8000 / 4], Copy[0x8000 / 4 + 1]);
 }
 
+static void Test_ApertureOvercommit(GEN_CONTEXT *Ctx, ULONG *Copy)
+{
+    D3DKMT_HANDLE original = Ctx->hAlloc;
+    D3DKMT_HANDLE handles[GEN_OVERCOMMIT_COUNT] = {0};
+    volatile ULONG *mapped[GEN_OVERCOMMIT_COUNT] = {0};
+    HDGFX_GEN_SUBMIT header;
+    GEN_PATCH patch;
+    ULONG batch[8];
+    NTSTATUS status;
+    UINT count;
+    UINT i;
+
+    patch.Offset = GEN_BATCH_OFFSET + 4 * sizeof(ULONG);
+    patch.AllocationOffset = 0;
+    patch.DriverId = HDGFX_GEN_PATCH_ALLOCATION;
+    for (count = 0; count < GEN_OVERCOMMIT_COUNT; count++)
+    {
+        UINT size = count == GEN_OVERCOMMIT_COUNT - 1 ? GEN_OVERCOMMIT_LAST : GEN_OVERCOMMIT_SIZE;
+        D3DKMT_CREATEALLOCATION ca = {0};
+        D3DDDI_ALLOCATIONINFO ai = {0};
+        D3DKMT_LOCK2 lock = {0};
+
+        ai.pPrivateDriverData = &size;
+        ai.PrivateDriverDataSize = sizeof(size);
+        ca.hDevice = Ctx->hDevice;
+        ca.NumAllocations = 1;
+        ca.pAllocationInfo = &ai;
+        status = CreateAlloc(&ca);
+        ok_succeeded(status, "CreateAllocation %u: 0x%08lx\n", count, status);
+        if (!NT_SUCCESS(status))
+            break;
+        handles[count] = ai.hAllocation;
+
+        lock.hDevice = Ctx->hDevice;
+        lock.hAllocation = ai.hAllocation;
+        status = Lock(&lock);
+        ok_succeeded(status, "Lock %u: 0x%08lx\n", count, status);
+        if (!NT_SUCCESS(status))
+            break;
+        mapped[count] = lock.pData;
+
+        batch[0] = GEN_XY_COLOR_BLT;
+        batch[1] = GEN_BLT_FILL_32 | GEN_PITCH;
+        batch[2] = 0;
+        batch[3] = (16 << 16) | 64;
+        batch[4] = 0;
+        batch[5] = 0xA5000000 | count;
+        batch[6] = GEN_MI_BATCH_END;
+        batch[7] = 0;
+        GenHeader(&header, 8, 0);
+        Ctx->hAlloc = ai.hAllocation;
+        status = GenSubmit(Ctx, &header, batch, NULL, &patch, 1);
+        ok_succeeded(status, "Render into allocation %u: 0x%08lx\n", count, status);
+        if (!NT_SUCCESS(status))
+            break;
+    }
+
+    for (i = 0; i < count; i++)
+    {
+        Ctx->hAlloc = handles[i];
+        if (!GenRead(Ctx, Copy))
+            break;
+        ok(Copy[0] == (0xA5000000 | i), "allocation %u reads 0x%08lx\n", i, Copy[0]);
+        ok(mapped[i][0] == (0xA5000000 | i), "allocation %u mapping reads 0x%08lx\n", i, mapped[i][0]);
+    }
+
+    Ctx->hAlloc = original;
+    for (i = 0; i < GEN_OVERCOMMIT_COUNT; i++)
+    {
+        D3DKMT_UNLOCK2 unlock = {0};
+        D3DKMT_DESTROYALLOCATION da = {0};
+
+        if (handles[i] == 0)
+            continue;
+        if (mapped[i] != NULL)
+        {
+            unlock.hDevice = Ctx->hDevice;
+            unlock.hAllocation = handles[i];
+            Unlock(&unlock);
+        }
+        da.hDevice = Ctx->hDevice;
+        da.phAllocationList = &handles[i];
+        da.AllocationCount = 1;
+        DestroyAlloc(&da);
+    }
+}
+
 static void Test_MalformedSubmits(GEN_CONTEXT *Ctx)
 {
     static const ULONG batch[2] = { GEN_MI_BATCH_END, 0 };
@@ -425,6 +515,7 @@ START_TEST(hdgfx_gen)
         Test_ColorFill(&Ctx, Copy);
         Test_StateCopy(&Ctx, Copy);
         Test_PipeControlWrite(&Ctx, Copy);
+        Test_ApertureOvercommit(&Ctx, Copy);
         Test_MalformedSubmits(&Ctx);
         GenTeardown(&Ctx);
     }
