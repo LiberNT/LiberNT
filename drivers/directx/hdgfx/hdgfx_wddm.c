@@ -28,6 +28,15 @@ HdgfxSegmentDescriptor(
     _Out_ PDXGK_SEGMENTDESCRIPTOR4 Descriptor)
 {
     RtlZeroMemory(Descriptor, sizeof(*Descriptor));
+    if (SegmentId == HDGFX_APERTURE_SEGMENT_ID)
+    {
+        Descriptor->BaseAddress.QuadPart = Adapter->ApertureBase;
+        Descriptor->Size = Adapter->ApertureSize;
+        Descriptor->CommitLimit = Descriptor->Size;
+        Descriptor->Flags.Aperture = 1;
+        Descriptor->Flags.NonLocalBudgetGroup = 1;
+        return;
+    }
     Descriptor->Flags.CpuVisible = 1;
     Descriptor->Flags.PopulatedFromSystemMemory = 1;
     Descriptor->Flags.LocalBudgetGroup = 1;
@@ -52,6 +61,7 @@ HdgfxQuerySegments(
     _In_ CONST DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo)
 {
     PDXGK_QUERYSEGMENTOUT4 Out;
+    ULONG SegmentCount;
     ULONG SegmentId;
 
     if (QueryAdapterInfo->pOutputData == NULL)
@@ -62,17 +72,18 @@ HdgfxQuerySegments(
         return STATUS_INSUFFICIENT_RESOURCES;
 
     Out = QueryAdapterInfo->pOutputData;
+    SegmentCount = Adapter->ApertureSize != 0 ? HDGFX_APERTURE_SEGMENT_ID : HDGFX_DMA_SEGMENT_ID;
     if (Out->pSegmentDescriptor == NULL)
     {
-        Out->NbSegment = HDGFX_DMA_SEGMENT_ID;
+        Out->NbSegment = SegmentCount;
         Out->PagingBufferSegmentId = 0;
         Out->PagingBufferSize = 64 * 1024;
         Out->PagingBufferPrivateDataSize = 0;
         return STATUS_SUCCESS;
     }
-    if (Out->NbSegment < HDGFX_DMA_SEGMENT_ID || Out->SegmentDescriptorStride < sizeof(DXGK_SEGMENTDESCRIPTOR4))
+    if (Out->NbSegment < SegmentCount || Out->SegmentDescriptorStride < sizeof(DXGK_SEGMENTDESCRIPTOR4))
         return STATUS_INVALID_PARAMETER;
-    for (SegmentId = 1; SegmentId <= HDGFX_DMA_SEGMENT_ID; SegmentId++)
+    for (SegmentId = 1; SegmentId <= SegmentCount; SegmentId++)
     {
         HdgfxSegmentDescriptor(Adapter, SegmentId,
                                (PDXGK_SEGMENTDESCRIPTOR4)(Out->pSegmentDescriptor +
@@ -102,6 +113,7 @@ HdgfxQueryDriverCaps(
         Caps->PointerCaps.Color = 1;
     }
     Caps->MaxAllocationListSlotId = 255;
+    Caps->ApertureSegmentCommitLimit = Adapter->ApertureSize;
     Caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1;
     Caps->WDDMVersion = DXGKDDI_WDDMv3_2_ENUM;
     return STATUS_SUCCESS;

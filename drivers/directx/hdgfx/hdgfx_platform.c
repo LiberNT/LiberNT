@@ -812,6 +812,88 @@ HdgfxStartRender(
     }
 }
 
+VOID
+HdgfxApertureClear(
+    _Inout_ PHDGFX_ADAPTER Adapter)
+{
+    ULONG Entry;
+    ULONG Index;
+
+    if (Adapter->ApertureGtt == NULL || Adapter->ScratchPage == NULL)
+        return;
+    Entry = HdgfxIlkGttEntry(MmGetPhysicalAddress(Adapter->ScratchPage).LowPart);
+    for (Index = 0; Index < Adapter->ApertureSize / PAGE_SIZE; Index++)
+        WRITE_REGISTER_ULONG(&Adapter->ApertureGtt[Index], Entry);
+    READ_REGISTER_ULONG(&Adapter->ApertureGtt[Adapter->ApertureSize / PAGE_SIZE - 1]);
+}
+
+static VOID
+HdgfxStopAperture(
+    _Inout_ PHDGFX_ADAPTER Adapter)
+{
+    ULONG Pages = Adapter->ApertureSize / PAGE_SIZE;
+    ULONG Index;
+
+    if (Adapter->ApertureGtt != NULL)
+    {
+        for (Index = 0; Index < Pages; Index++)
+            WRITE_REGISTER_ULONG(&Adapter->ApertureGtt[Index], 0);
+        READ_REGISTER_ULONG(&Adapter->ApertureGtt[Pages - 1]);
+        MmUnmapIoSpace(Adapter->ApertureGtt, Pages * sizeof(ULONG));
+    }
+    if (Adapter->ApertureCpu != NULL)
+        MmUnmapIoSpace(Adapter->ApertureCpu, Adapter->ApertureSize);
+    Adapter->ApertureGtt = NULL;
+    Adapter->ApertureCpu = NULL;
+    Adapter->ApertureBase = 0;
+    Adapter->ApertureSize = 0;
+}
+
+static VOID
+HdgfxStartAperture(
+    _Inout_ PHDGFX_ADAPTER Adapter)
+{
+    PHDGFX_SCANOUT Scanout = Adapter->Scanout;
+    PHYSICAL_ADDRESS Address;
+    ULONGLONG Bar2 = 0;
+    ULONG First;
+    ULONG Pages;
+
+    if (Scanout == NULL || Scanout->SlabGtt == NULL || Adapter->ScratchPage == NULL ||
+        !NT_SUCCESS(HdgfxReadConfig(&Adapter->DxgkInterface, &Bar2, HDGFX_PCI_BAR2, sizeof(Bar2))))
+    {
+        return;
+    }
+    Bar2 &= ~0xFULL;
+    First = (ULONG)(ALIGN_UP_BY((ULONGLONG)Scanout->FirmwareSurface + Scanout->FirmwareSize, PAGE_SIZE) / PAGE_SIZE);
+    if (First == 0)
+        First = 1;
+    if (First >= Scanout->SlabAddress / PAGE_SIZE)
+        return;
+    Pages = Scanout->SlabAddress / PAGE_SIZE - First;
+    Address.QuadPart = (LONGLONG)(Scanout->Bar0 + HDGFX_REG(GTT_PTE, First));
+    if (!HdgfxResourceOwned(&Adapter->DxgkInterface, (ULONGLONG)Address.QuadPart, Pages * sizeof(ULONG)) ||
+        !HdgfxResourceOwned(&Adapter->DxgkInterface, Bar2 + (ULONGLONG)First * PAGE_SIZE, Pages * PAGE_SIZE))
+    {
+        DPRINT1("GTT pages %lu-%lu are not in the adapter's resources\n", First, First + Pages - 1);
+        return;
+    }
+    Adapter->ApertureGtt = MmMapIoSpace(Address, Pages * sizeof(ULONG), MmNonCached);
+    Address.QuadPart = (LONGLONG)(Bar2 + (ULONGLONG)First * PAGE_SIZE);
+    if (Adapter->ApertureGtt != NULL)
+        Adapter->ApertureCpu = MmMapIoSpace(Address, Pages * PAGE_SIZE, MmWriteCombined);
+    Adapter->ApertureBase = First * PAGE_SIZE;
+    Adapter->ApertureSize = Pages * PAGE_SIZE;
+    if (Adapter->ApertureCpu == NULL)
+    {
+        DPRINT1("Cannot map the %lu-page aperture segment\n", Pages);
+        HdgfxStopAperture(Adapter);
+        return;
+    }
+    HdgfxApertureClear(Adapter);
+    DPRINT1("Aperture segment: %lu MB at 0x%lx\n", Adapter->ApertureSize >> 20, Adapter->ApertureBase);
+}
+
 static BOOLEAN
 HdgfxRingRun(
     _Inout_ PHDGFX_ADAPTER Adapter,
@@ -1047,6 +1129,7 @@ HdgfxHardwareStart(
     Adapter->InternalPanel = State->Lvds.Detected;
     HdgfxStartBacklight(Adapter, State);
     HdgfxStartRender(Adapter);
+    HdgfxStartAperture(Adapter);
     HdgfxStartInterrupts(Adapter);
     HdgfxTestRing(Adapter);
     ExFreePoolWithTag(State, HDGFX_TAG);
@@ -1071,6 +1154,7 @@ HdgfxHardwareStop(
     }
 
     HdgfxStopInterrupts(Adapter);
+    HdgfxStopAperture(Adapter);
     HdgfxStopRender(Adapter);
     HdgfxStopDma(Adapter);
     if (Adapter->OpRegion != NULL)
