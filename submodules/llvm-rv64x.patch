@@ -26,10 +26,10 @@ index 9d443c06..c4084d3b 100644
  
 diff --git a/llvm/lib/Target/RISCV/RISCVRv64X.cpp b/llvm/lib/Target/RISCV/RISCVRv64X.cpp
 new file mode 100644
-index 00000000..dc034299
+index 00000000..dec13b77
 --- /dev/null
 +++ b/llvm/lib/Target/RISCV/RISCVRv64X.cpp
-@@ -0,0 +1,442 @@
+@@ -0,0 +1,453 @@
 +//===-- RISCVRv64X.cpp - Hybrid x64 interoperability for RISC-V ----------===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -44,11 +44,13 @@ index 00000000..dc034299
 +//  * Every externally visible or address-taken function gets a 16-byte entry
 +//    descriptor as prefix data, recording how each argument and the result
 +//    travel, so x64 code can call it through the emulator.
-+//  * Every indirect call first tests the target against the process code
-+//    bitmap (TEB->ProcessEnvironmentBlock->EcCodeBitMap). Targets that are not
++//  * Every indirect call first tests the target against the code bitmap that
++//    __rv64x_code_bitmap points to: one variable per image, in the .rv64x
++//    section, that stays NULL until an emulator sets it. Targets that are not
 +//    native code are reached through an exit thunk that hands the arguments
-+//    and the descriptor to __rv64x_call_x64. Processes without a bitmap only
-+//    pay one load and a branch.
++//    and the descriptor to __rv64x_call_x64. Images whose variable is NULL,
++//    such as every image of a native process and the kernel, only pay one
++//    load and a branch.
 +//
 +//===----------------------------------------------------------------------===//
 +
@@ -104,8 +106,6 @@ index 00000000..dc034299
 +
 +constexpr unsigned MaxArguments = 24;
 +constexpr uint16_t DescriptorMagic = 0x5852;
-+constexpr uint64_t TebPebOffset = 0x60;
-+constexpr uint64_t PebCodeBitmapOffset = 0x368;
 +
 +struct Descriptor {
 +  uint8_t Bytes[16] = {};
@@ -131,6 +131,7 @@ index 00000000..dc034299
 +  Constant *descriptorConstant(const Descriptor &D) const;
 +  Function *getExitThunk(const Descriptor &D, FunctionType *CallTy,
 +                         AttributeList Attrs);
++  GlobalVariable *getBitmapVariable();
 +  Value *widen(IRBuilder<> &B, Value *V, uint8_t Kind) const;
 +  Value *narrow(IRBuilder<> &B, Value *V, Type *Ty, uint8_t Kind) const;
 +  bool checkCall(CallInst *CI);
@@ -292,6 +293,22 @@ index 00000000..dc034299
 +  }
 +}
 +
++GlobalVariable *RISCVRv64X::getBitmapVariable() {
++  if (GlobalVariable *GV = Mod->getGlobalVariable("__rv64x_code_bitmap"))
++    return GV;
++
++  auto *GV = new GlobalVariable(*Mod, PtrTy, /*isConstant=*/false,
++                                GlobalValue::LinkOnceODRLinkage,
++                                ConstantPointerNull::get(PtrTy),
++                                "__rv64x_code_bitmap");
++  GV->setSection(".rv64x");
++  GV->setAlignment(Align(8));
++  GV->setVisibility(GlobalValue::HiddenVisibility);
++  if (Mod->getTargetTriple().supportsCOMDAT())
++    GV->setComdat(Mod->getOrInsertComdat(GV->getName()));
++  return GV;
++}
++
 +Function *RISCVRv64X::getExitThunk(const Descriptor &D, FunctionType *CallTy,
 +                                   AttributeList Attrs) {
 +  SmallString<64> Name("__rv64x_exit_");
@@ -376,13 +393,7 @@ index 00000000..dc034299
 +
 +  IRBuilder<> B(CI);
 +  Value *Callee = CI->getCalledOperand();
-+  Value *Teb = B.CreateCall(Intrinsic::getOrInsertDeclaration(
-+      Mod, Intrinsic::thread_pointer, {PtrTy}));
-+  Value *Peb = B.CreateLoad(
-+      PtrTy, B.CreateConstInBoundsGEP1_64(B.getInt8Ty(), Teb, TebPebOffset));
-+  Value *Bitmap = B.CreateLoad(
-+      PtrTy,
-+      B.CreateConstInBoundsGEP1_64(B.getInt8Ty(), Peb, PebCodeBitmapOffset));
++  Value *Bitmap = B.CreateLoad(PtrTy, getBitmapVariable());
 +  Value *Address = B.CreatePtrToInt(Callee, I64Ty);
 +  Value *ByteAddress = B.CreateGEP(B.getInt8Ty(), Bitmap,
 +                                   B.CreateLShr(Address, 15));

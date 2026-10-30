@@ -28,10 +28,14 @@ Kinds: 0 void, 1 64-bit integer or pointer, 2 32-bit integer, 3 signed 16-bit,
 8 `double`, 9 16-byte aggregate in two registers, 15 unsupported.
 
 **Checked indirect call.** Before an indirect call the pass loads
-`TEB->ProcessEnvironmentBlock->EcCodeBitMap` (TEB `+0x60`, PEB `+0x368`). A NULL
-bitmap, the native-process case, calls the target directly. Otherwise a target
-whose page bit is set (`bitmap[address >> 15] >> ((address >> 12) & 7)`) is native
-code and is called directly; any other target goes through the exit thunk.
+`__rv64x_code_bitmap`, a pointer that each image holds once, in its `.rv64x`
+section, and that starts out NULL. A NULL pointer, the case of every image in a
+native process and of code linked into the kernel, calls the target directly.
+Otherwise a target whose page bit is set
+(`bitmap[address >> 15] >> ((address >> 12) & 7)`) is native code and is called
+directly; any other target goes through the exit thunk. Keeping the pointer in
+the image rather than in the TEB lets libraries shared with the kernel, such as
+`rtl`, be built as RV64X.
 
 **Exit thunk.** One `linkonce_odr` thunk per call shape stores the arguments as
 64-bit slots (floats as their bit pattern) and calls
@@ -52,9 +56,9 @@ result type (`int` results are sign-extended as the LP64 ABI requires).
   their bitmap is NULL.
 - `amd64emu` points the host PEB's `EcCodeBitMap` at a bitmap sized from
   `SystemBasicInformation.MaximumUserModeAddress`, marks the executable
-  sections of every host image and keeps the bitmap current with a loader DLL
-  notification, which marks images as they load and clears them as they
-  unload. `CallDescribed` calls native targets that are not marked yet (a DLL's
+  sections of every host image and points the image's `__rv64x_code_bitmap` at
+  it, and keeps both current with a loader DLL notification, which marks
+  images as they load and clears them as they unload. `CallDescribed` calls native targets that are not marked yet (a DLL's
   own `DllMain`, for example) natively and marks their image; everything else
   runs as x64 through `CallGuest`.
 - `EMU_HOST_INTERFACE::GuestThunk` with a NULL signature reads the target's entry

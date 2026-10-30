@@ -31,6 +31,8 @@ static volatile LONG EmuHostThunkCount;
 static PUCHAR EmuStubBlock;
 static ULONG EmuStubUsed;
 static ULONG64 EmuGuestReturnStub;
+#define EMU_RV64X_SECTION ".rv64x"
+
 static PUCHAR EmuCodeMap;
 static ULONG_PTR EmuCodeMapLimit;
 static PVOID EmuDllNotificationCookie;
@@ -147,6 +149,17 @@ EmuMarkNativeImage(
         {
             if (Native) InterlockedOr8((PCHAR)&EmuCodeMap[Page >> 3], (CHAR)(1 << (Page & 7)));
             else InterlockedAnd8((PCHAR)&EmuCodeMap[Page >> 3], (CHAR)~(1 << (Page & 7)));
+        }
+    }
+
+    if (!Native) return;
+    Section = IMAGE_FIRST_SECTION(Headers);
+    for (Index = 0; Index < Headers->FileHeader.NumberOfSections; Index++, Section++)
+    {
+        if (!memcmp(Section->Name, EMU_RV64X_SECTION, sizeof(EMU_RV64X_SECTION)) &&
+            (Section->Characteristics & IMAGE_SCN_MEM_WRITE) && Section->Misc.VirtualSize >= sizeof(PVOID))
+        {
+            InterlockedExchangePointer((PVOID *)((PUCHAR)Base + Section->VirtualAddress), EmuCodeMap);
         }
     }
 }
