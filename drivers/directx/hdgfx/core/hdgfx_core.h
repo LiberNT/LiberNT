@@ -214,6 +214,7 @@ typedef struct _HDGFX_BACKLIGHT
 
 typedef struct _HDGFX_DISPLAY_STATE
 {
+    uint32_t Gen;
     uint32_t PipeCount;
     uint32_t TranscoderCount;
     uint32_t DpllCount;
@@ -285,6 +286,7 @@ typedef struct _HDGFX_GENERATION
     uint32_t GseInterrupt;
     uint32_t PchInterrupt;
     uint32_t CrtHotplugInterrupt;
+    uint32_t CursorStride;
     void (*ReadDisplayState)(const HDGFX_MMIO *Mmio, HDGFX_DISPLAY_STATE *State);
     HDGFX_MODESET_STATUS (*ComputeLvds)(const HDGFX_DISPLAY_STATE *Current,
                                         const HDGFX_LVDS_MODE *Mode,
@@ -384,6 +386,11 @@ HdgfxFindGeneration(
 
 void
 HdgfxIlkReadDisplayState(
+    const HDGFX_MMIO *Mmio,
+    HDGFX_DISPLAY_STATE *State);
+
+void
+HdgfxIvbReadDisplayState(
     const HDGFX_MMIO *Mmio,
     HDGFX_DISPLAY_STATE *State);
 

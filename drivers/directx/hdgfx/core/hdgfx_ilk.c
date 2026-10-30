@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Intel HD Graphics Driver
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Ironlake display state readout
+ * PURPOSE:     Ironlake and Ivy Bridge display state readout
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
@@ -16,6 +16,10 @@
 #define ILK_DPLL_REFERENCE_KHZ 120000
 #define ILK_FDI_PLL_REFERENCE_KHZ 100000
 #define ILK_DREF_INTEGRATED 2
+#define IVB_FDI_PLL_VCO_KHZ 2700000
+#define CPT_DPLL_SEL_STRIDE 4
+#define CPT_DPLL_SEL_B 0
+#define CPT_DPLL_SEL_ENABLE 3
 
 static uint32_t
 IlkRead(
@@ -92,6 +96,7 @@ IlkReadTimings(
 static void
 IlkReadPipe(
     const HDGFX_MMIO *Mmio,
+    uint32_t Gen,
     uint32_t Index,
     HDGFX_PIPE *Pipe)
 {
@@ -126,7 +131,7 @@ IlkReadPipe(
 
     Value = IlkRead(Mmio, HDGFX_REG(FDI_TX_CTL, Index));
     Pipe->FdiTx.Enabled = HDGFX_GET(Value, FDI_TX_ENABLE) != 0;
-    Pipe->FdiTx.Training = HDGFX_GET(Value, FDI_TX_TRAINING);
+    Pipe->FdiTx.Training = Gen >= 7 ? HDGFX_GET(Value, FDI_TX_TRAINING_IVB) : HDGFX_GET(Value, FDI_TX_TRAINING);
     Pipe->FdiTx.Lanes = IlkFdiLanes(HDGFX_GET(Value, FDI_TX_WIDTH));
 
     Pipe->PanelFitter.Enabled = HDGFX_GET(IlkRead(Mmio, HDGFX_REG(PF_CTL_1, Index)), PF_ENABLE) != 0;
@@ -152,6 +157,7 @@ IlkReadPipe(
 static void
 IlkReadTranscoder(
     const HDGFX_MMIO *Mmio,
+    uint32_t Gen,
     uint32_t Index,
     HDGFX_TRANSCODER *Transcoder)
 {
@@ -162,6 +168,12 @@ IlkReadTranscoder(
     Transcoder->Active = HDGFX_GET(Value, TRANS_CONF_STATE) != 0;
     Transcoder->InterlaceMode = HDGFX_GET(Value, TRANS_CONF_INTERLACE);
     Transcoder->Dpll = Index;
+    if (Gen >= 6)
+    {
+        Value = IlkRead(Mmio, HDGFX_REG(PCH_DPLL_SEL, 0)) >> (Index * CPT_DPLL_SEL_STRIDE);
+        if (Value & (1u << CPT_DPLL_SEL_ENABLE))
+            Transcoder->Dpll = (Value >> CPT_DPLL_SEL_B) & 1;
+    }
 
     IlkReadTimings(Mmio,
                    HDGFX_REG(TRANS_HTOTAL, Index),
@@ -175,7 +187,7 @@ IlkReadTranscoder(
     Value = IlkRead(Mmio, HDGFX_REG(FDI_RX_CTL, Index));
     Transcoder->FdiRx.Enabled = HDGFX_GET(Value, FDI_RX_ENABLE) != 0;
     Transcoder->FdiRx.PllEnabled = HDGFX_GET(Value, FDI_RX_PLL_ENABLE) != 0;
-    Transcoder->FdiRx.Training = HDGFX_GET(Value, FDI_RX_TRAINING);
+    Transcoder->FdiRx.Training = Gen >= 6 ? HDGFX_GET(Value, FDI_RX_TRAINING_CPT) : HDGFX_GET(Value, FDI_RX_TRAINING);
     Transcoder->FdiRx.Lanes = IlkFdiLanes(HDGFX_GET(Value, FDI_RX_WIDTH));
     Transcoder->FdiRx.Bpc = IlkBpc(HDGFX_GET(Value, FDI_RX_BPC));
 }
@@ -236,7 +248,7 @@ IlkReadPanel(
     Value = IlkRead(Mmio, HDGFX_REG(PCH_LVDS, 0));
     Lvds->Enabled = HDGFX_GET(Value, LVDS_ENABLE) != 0;
     Lvds->Detected = HDGFX_GET(Value, LVDS_DETECTED) != 0;
-    Lvds->Transcoder = HDGFX_GET(Value, LVDS_TRANSCODER);
+    Lvds->Transcoder = State->Gen >= 6 ? HDGFX_GET(Value, LVDS_TRANSCODER_CPT) : HDGFX_GET(Value, LVDS_TRANSCODER);
     Lvds->HSyncActiveLow = HDGFX_GET(Value, LVDS_HSYNC_INVERT) != 0;
     Lvds->VSyncActiveLow = HDGFX_GET(Value, LVDS_VSYNC_INVERT) != 0;
     Lvds->DualChannel = HDGFX_GET(Value, LVDS_B_CONTROL) == 3;
@@ -244,7 +256,7 @@ IlkReadPanel(
 
     Value = IlkRead(Mmio, HDGFX_REG(PCH_ADPA, 0));
     State->Crt.Enabled = HDGFX_GET(Value, ADPA_ENABLE) != 0;
-    State->Crt.Transcoder = HDGFX_GET(Value, ADPA_TRANSCODER);
+    State->Crt.Transcoder = State->Gen >= 6 ? HDGFX_GET(Value, ADPA_TRANSCODER_CPT) : HDGFX_GET(Value, ADPA_TRANSCODER);
     State->Crt.HSyncActiveHigh = HDGFX_GET(Value, ADPA_HSYNC_HIGH) != 0;
     State->Crt.VSyncActiveHigh = HDGFX_GET(Value, ADPA_VSYNC_HIGH) != 0;
 
@@ -269,7 +281,7 @@ IlkReadPanel(
 
     Value = IlkRead(Mmio, HDGFX_REG(BLC_PWM_CPU_CTL2, 0));
     Backlight->CpuEnabled = HDGFX_GET(Value, BLC_CPU_ENABLE) != 0;
-    Backlight->CpuPipe = HDGFX_GET(Value, BLC_CPU_PIPE);
+    Backlight->CpuPipe = State->Gen >= 7 ? HDGFX_GET(Value, BLC_CPU_PIPE_IVB) : HDGFX_GET(Value, BLC_CPU_PIPE);
     Backlight->Duty = HDGFX_GET(IlkRead(Mmio, HDGFX_REG(BLC_PWM_CPU_CTL, 0)), BLC_CPU_DUTY);
     Value = IlkRead(Mmio, HDGFX_REG(BLC_PWM_PCH_CTL1, 0));
     Backlight->PchEnabled = HDGFX_GET(Value, BLC_PCH_ENABLE) != 0;
@@ -279,32 +291,51 @@ IlkReadPanel(
         (uint32_t)(((uint64_t)State->RawClockKHz * 1000 + Backlight->Period * 64) / ((uint64_t)Backlight->Period * 128)) : 0;
 }
 
-void
-HdgfxIlkReadDisplayState(
+static void
+IlkReadDisplayState(
     const HDGFX_MMIO *Mmio,
+    uint32_t Gen,
     HDGFX_DISPLAY_STATE *State)
 {
     uint32_t Index;
     uint32_t Value;
 
     memset(State, 0, sizeof(*State));
+    State->Gen = Gen;
     State->PipeCount = ILK_PIPES;
     State->TranscoderCount = ILK_TRANSCODERS;
     State->DpllCount = ILK_DPLLS;
     State->RawClockKHz = HDGFX_GET(IlkRead(Mmio, HDGFX_REG(PCH_RAWCLK_FREQ, 0)), RAWCLK_MHZ) * 1000;
-    State->FdiPllVcoKHz = (HDGFX_GET(IlkRead(Mmio, HDGFX_REG(FDI_PLL_BIOS_0, 0)), FDI_PLL_FB_DIVIDER) + 2) *
+    State->FdiPllVcoKHz = Gen >= 6 ? IVB_FDI_PLL_VCO_KHZ :
+                          (HDGFX_GET(IlkRead(Mmio, HDGFX_REG(FDI_PLL_BIOS_0, 0)), FDI_PLL_FB_DIVIDER) + 2) *
                           ILK_FDI_PLL_REFERENCE_KHZ;
     Value = IlkRead(Mmio, HDGFX_REG(PCH_DREF_CONTROL, 0));
     State->SscReference = HDGFX_GET(Value, DREF_SSC_SOURCE) == ILK_DREF_INTEGRATED;
     State->NonSpreadReference = HDGFX_GET(Value, DREF_NONSPREAD_SOURCE) == ILK_DREF_INTEGRATED;
 
     for (Index = 0; Index < ILK_PIPES; Index++)
-        IlkReadPipe(Mmio, Index, &State->Pipes[Index]);
+        IlkReadPipe(Mmio, Gen, Index, &State->Pipes[Index]);
     for (Index = 0; Index < ILK_TRANSCODERS; Index++)
-        IlkReadTranscoder(Mmio, Index, &State->Transcoders[Index]);
+        IlkReadTranscoder(Mmio, Gen, Index, &State->Transcoders[Index]);
     for (Index = 0; Index < ILK_DPLLS; Index++)
         IlkReadDpll(Mmio, Index, &State->Dplls[Index]);
     IlkReadPanel(Mmio, State);
+}
+
+void
+HdgfxIlkReadDisplayState(
+    const HDGFX_MMIO *Mmio,
+    HDGFX_DISPLAY_STATE *State)
+{
+    IlkReadDisplayState(Mmio, 5, State);
+}
+
+void
+HdgfxIvbReadDisplayState(
+    const HDGFX_MMIO *Mmio,
+    HDGFX_DISPLAY_STATE *State)
+{
+    IlkReadDisplayState(Mmio, 7, State);
 }
 
 uint32_t

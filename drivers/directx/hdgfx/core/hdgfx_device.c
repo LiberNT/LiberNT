@@ -9,6 +9,7 @@
 #include "hdgfx_regs.h"
 
 #define HDGFX_VENDOR_INTEL 0x8086
+#define HDGFX_IVB_CURSOR_STRIDE 0x1000
 
 static const HDGFX_GENERATION HdgfxIronlake =
 {
@@ -19,7 +20,29 @@ static const HDGFX_GENERATION HdgfxIronlake =
     HDGFX_SET(DE_GSE, 1),
     HDGFX_SET(DE_PCH_EVENT, 1),
     HDGFX_SET(SDE_CRT_HOTPLUG, 1),
+    HDGFX_STRIDE_CUR_CNTR,
     HdgfxIlkReadDisplayState,
+    HdgfxIlkComputeLvds,
+    HdgfxIlkCommitLvds,
+    HdgfxIlkDisableLvds,
+    HdgfxIlkDetectCrt,
+    HdgfxIlkComputeCrt,
+    HdgfxIlkCommitCrt,
+    HdgfxIlkDisableCrt,
+    HdgfxIlkEnableCrtHotplug
+};
+
+static const HDGFX_GENERATION HdgfxIvyBridge =
+{
+    "Ivy Bridge",
+    7,
+    3,
+    2,
+    HDGFX_SET(DE_GSE_IVB, 1),
+    HDGFX_SET(DE_PCH_EVENT_IVB, 1),
+    HDGFX_SET(SDE_CRT_HOTPLUG_CPT, 1),
+    HDGFX_IVB_CURSOR_STRIDE,
+    HdgfxIvbReadDisplayState,
     HdgfxIlkComputeLvds,
     HdgfxIlkCommitLvds,
     HdgfxIlkDisableLvds,
@@ -38,6 +61,7 @@ static const struct
 {
     { 0x0042, &HdgfxIronlake },
     { 0x0046, &HdgfxIronlake },
+    { 0x0166, &HdgfxIvyBridge },
 };
 
 const HDGFX_GENERATION *
