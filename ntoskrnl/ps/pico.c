@@ -262,7 +262,28 @@ PspPicoSystemCallDispatch(
     _Inout_ PKTRAP_FRAME TrapFrame,
     _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame)
 {
+    PKTHREAD Thread = KeGetCurrentThread();
+    KIRQL Irql;
+
     PspPicoRoutines.SystemCallDispatch(TrapFrame, ExceptionFrame);
+
+    Irql = KeGetCurrentIrql();
+    if (Irql != PASSIVE_LEVEL)
+    {
+        KeBugCheckEx(IRQL_GT_ZERO_AT_SYSTEM_SERVICE,
+                     (ULONG_PTR)PspPicoRoutines.SystemCallDispatch,
+                     Irql,
+                     0,
+                     0);
+    }
+    if ((Thread->ApcStateIndex != OriginalApcEnvironment) || (Thread->CombinedApcDisable != 0))
+    {
+        KeBugCheckEx(APC_INDEX_MISMATCH,
+                     (ULONG_PTR)PspPicoRoutines.SystemCallDispatch,
+                     Thread->ApcStateIndex,
+                     Thread->CombinedApcDisable,
+                     0);
+    }
 }
 
 BOOLEAN
