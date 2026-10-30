@@ -1326,6 +1326,15 @@ RetryAdmission:
     Status = Interface.AdmitWork(Interface.AdapterHandle, Context->Mms2ContextStream, &Info, &Sequence);
     if (Status == STATUS_DEVICE_BUSY)
     {
+        /* LifecycleMutex is held here: retirement can submit, so the yielded wait drains instead. */
+        if (Context->Device != NULL &&
+            Context->Device->Adapter != NULL &&
+            Context->Device->Adapter->KmdTransactionOwnerThread ==
+                PsGetCurrentThread())
+        {
+            Status = STATUS_RETRY;
+            goto Failure;
+        }
         if (Deadline == 0)
         {
             Deadline = KeQueryInterruptTime() +
@@ -1343,14 +1352,6 @@ RetryAdmission:
                                      &Sequence);
         if (Status != STATUS_DEVICE_BUSY)
             goto AdmissionComplete;
-        if (Context->Device != NULL &&
-            Context->Device->Adapter != NULL &&
-            Context->Device->Adapter->KmdTransactionOwnerThread ==
-                PsGetCurrentThread())
-        {
-            Status = STATUS_RETRY;
-            goto Failure;
-        }
         if (KeQueryInterruptTime() >= Deadline)
             goto Failure;
 
