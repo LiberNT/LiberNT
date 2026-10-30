@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     AddMandatoryAce.c
     CopySid.c
+    CreateProcessWithToken.c
     CreateService.c
     DuplicateTokenEx.c
     EnumerateTraceGuidsEx.c
