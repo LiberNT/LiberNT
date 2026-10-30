@@ -304,7 +304,8 @@ IntGetNCUpdateRgn(PWND Window, BOOL Validate)
 
       if (Validate)
       {
-         if (NtGdiCombineRgn(Window->hrgnUpdate, Window->hrgnUpdate, hRgnWindow, RGN_AND) == NULLREGION)
+         if (NtGdiCombineRgn(Window->hrgnUpdate, Window->hrgnUpdate, hRgnWindow, RGN_AND) == NULLREGION &&
+             !FullWindowUpdate)
          {
             IntGdiSetRegionOwner(Window->hrgnUpdate, GDI_OBJ_HMGR_POWNED);
             GreDeleteObject(Window->hrgnUpdate);
@@ -644,22 +645,6 @@ IntInvalidateWindows(PWND Wnd, PREGION Rgn, ULONG Flags)
          RgnParentDC = IntSysCreateRectpRgn(0, 0, 0, 0);
          if (RgnParentDC)
             IntGdiCombineRgn(RgnParentDC, Rgn, NULL, RGN_COPY);
-      }
-
-      /*
-       * If the nonclient is not to be redrawn, clip the region to the client
-       * rect
-       */
-      if ((Flags & RDW_INVALIDATE) != 0 && (Flags & RDW_FRAME) == 0)
-      {
-         PREGION RgnClient;
-
-         RgnClient = IntSysCreateRectpRgnIndirect(&Wnd->rcClient);
-         if (RgnClient)
-         {
-             RgnType = IntGdiCombineRgn(Rgn, Rgn, RgnClient, RGN_AND);
-             REGION_Delete(RgnClient);
-         }
       }
 
       /*

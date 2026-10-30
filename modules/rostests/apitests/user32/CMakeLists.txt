@@ -75,6 +75,7 @@ list(APPEND SOURCE
     NcPaintRgn.c
     NextDlgItem.c
     NonClientPaint.c
+    NonClientUpdate.c
     OwnerDestroy.c
     PersianLayout.c
     PhysicalPoint.c
