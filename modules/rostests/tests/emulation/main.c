@@ -714,6 +714,36 @@ TestRv64X(VOID)
 }
 #endif
 
+static
+VOID
+TestMachines(VOID)
+{
+    typedef BOOL (WINAPI *PIS_WOW64_PROCESS2)(HANDLE, PUSHORT, PUSHORT);
+    typedef HRESULT (WINAPI *PGET_MACHINE_TYPE_ATTRIBUTES)(USHORT, MACHINE_ATTRIBUTES *);
+    HMODULE Kernel32 = GetModuleHandleW(L"kernel32.dll");
+    PIS_WOW64_PROCESS2 pIsWow64Process2 = (PIS_WOW64_PROCESS2)GetProcAddress(Kernel32, "IsWow64Process2");
+    PGET_MACHINE_TYPE_ATTRIBUTES pGetMachineTypeAttributes =
+        (PGET_MACHINE_TYPE_ATTRIBUTES)GetProcAddress(Kernel32, "GetMachineTypeAttributes");
+    MACHINE_ATTRIBUTES Attributes;
+    USHORT ProcessMachine, NativeMachine;
+
+    if (!pIsWow64Process2 || !pGetMachineTypeAttributes ||
+        !pIsWow64Process2(GetCurrentProcess(), &ProcessMachine, &NativeMachine) ||
+        NativeMachine != IMAGE_FILE_MACHINE_RISCV64)
+    {
+        return;
+    }
+
+    CHECK(SUCCEEDED(pGetMachineTypeAttributes(IMAGE_FILE_MACHINE_RISCV64, &Attributes)) &&
+          (Attributes & UserEnabled) && (Attributes & KernelEnabled));
+    CHECK(SUCCEEDED(pGetMachineTypeAttributes(IMAGE_FILE_MACHINE_AMD64, &Attributes)) &&
+          (Attributes & UserEnabled) && !(Attributes & KernelEnabled) && !(Attributes & Wow64Container));
+    CHECK(SUCCEEDED(pGetMachineTypeAttributes(IMAGE_FILE_MACHINE_I386, &Attributes)) &&
+          (Attributes & UserEnabled) && (Attributes & Wow64Container));
+    CHECK(SUCCEEDED(pGetMachineTypeAttributes(IMAGE_FILE_MACHINE_ARM64, &Attributes)) && !Attributes);
+    printf("EMUTEST: a riscv64 machine runs riscv64, AMD64 and x86 user mode\n");
+}
+
 int
 main(
     int ArgumentCount,
@@ -733,6 +763,7 @@ main(
           System.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64);
     CHECK(ProbeStack(16) == 459);
 
+    TestMachines();
     TestThreads();
     TestFiles();
     TestApcs();

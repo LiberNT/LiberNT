@@ -1,5 +1,7 @@
 #pragma once
 
+#define KI_EMULATED_USER_MACHINE 0
+
 #include "intrin_i.h"
 
 #define KiServiceExit2 KiExceptionExit

@@ -1,5 +1,7 @@
 #pragma once
 
+#define KI_EMULATED_USER_MACHINE 0
+
 #ifndef __ASM__
 
 #include "intrin_i.h"

@@ -6,6 +6,8 @@
 /* ReactOS RV64 kernel-private interfaces. */
 #pragma once
 
+#define KI_EMULATED_USER_MACHINE IMAGE_FILE_MACHINE_AMD64
+
 /* Native assembly entry used by KD to recognize user callback transitions. */
 #define KI_USER_MODE_CALLBACK_ENTRY KiRiscvCallUserMode
 

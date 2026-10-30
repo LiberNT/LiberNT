@@ -6,6 +6,8 @@
 
 #pragma once
 
+#define KI_EMULATED_USER_MACHINE 0
+
 /* The switch backend completes the outgoing-thread handoff on the new stack. */
 #define KI_ARCH_THREAD_HANDOFF_USES_RUNNING 1
 

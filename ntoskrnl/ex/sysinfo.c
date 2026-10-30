@@ -4323,16 +4323,14 @@ NtQuerySystemInformationEx(
                 PEPROCESS Process = NULL;
                 HANDLE ProcessHandle;
                 USHORT ProcessMachine = 0;
-#if defined(_M_ARM64)
-                const ULONG MachineCount = SystemInformationClass == SystemSupportedProcessorArchitectures2 ? 4 : 3;
-#elif defined(_WIN64)
-                const ULONG MachineCount = 3;
-#else
-                const ULONG MachineCount = 2;
-#endif
+                const BOOLEAN ReportEmulated = KI_EMULATED_USER_MACHINE != 0 &&
+                                               SystemInformationClass == SystemSupportedProcessorArchitectures2;
 #ifdef _WIN64
-                ULONG MachineIndex = 1;
+                const ULONG MachineCount = 3 + ReportEmulated;
+#else
+                const ULONG MachineCount = 2 + ReportEmulated;
 #endif
+                ULONG MachineIndex = 1;
 
                 if (InputBufferLength < sizeof(HANDLE)) _SEH2_YIELD(return STATUS_INVALID_PARAMETER);
                 ProcessHandle = *(volatile HANDLE *)InputBuffer;
@@ -4367,20 +4365,17 @@ NtQuerySystemInformationEx(
                 Machines[0].UserMode = TRUE;
                 Machines[0].Native = TRUE;
                 Machines[0].Process = ProcessMachine == IMAGE_FILE_MACHINE_NATIVE;
-#if defined(_M_ARM64)
-                if (SystemInformationClass == SystemSupportedProcessorArchitectures &&
-                    ProcessMachine == IMAGE_FILE_MACHINE_AMD64)
+                if (KI_EMULATED_USER_MACHINE != 0 && ProcessMachine == KI_EMULATED_USER_MACHINE && !ReportEmulated)
                 {
                     Machines[0].Process = TRUE;
                 }
-                else if (SystemInformationClass == SystemSupportedProcessorArchitectures2)
+                else if (ReportEmulated)
                 {
-                    Machines[MachineIndex].Machine = IMAGE_FILE_MACHINE_AMD64;
+                    Machines[MachineIndex].Machine = KI_EMULATED_USER_MACHINE;
                     Machines[MachineIndex].UserMode = TRUE;
-                    Machines[MachineIndex].Process = ProcessMachine == IMAGE_FILE_MACHINE_AMD64;
+                    Machines[MachineIndex].Process = ProcessMachine == KI_EMULATED_USER_MACHINE;
                     ++MachineIndex;
                 }
-#endif
 #ifdef _WIN64
                 Machines[MachineIndex].Machine = IMAGE_FILE_MACHINE_I386;
                 Machines[MachineIndex].UserMode = TRUE;
