@@ -1636,4 +1636,158 @@ done:
     return TRUE;
 }
 
+static
+SIZE_T
+GetEnvironmentBlockSize(
+    _In_ PVOID pEnvironment,
+    _In_ DWORD dwCreationFlags)
+{
+    SIZE_T cb;
+
+    if (dwCreationFlags & CREATE_UNICODE_ENVIRONMENT)
+    {
+        PCWSTR p = pEnvironment;
+        while (*p)
+            p += wcslen(p) + 1;
+        cb = (SIZE_T)((const BYTE *)(p + 1) - (const BYTE *)pEnvironment);
+    }
+    else
+    {
+        PCSTR p = pEnvironment;
+        while (*p)
+            p += strlen(p) + 1;
+        cb = (SIZE_T)((const BYTE *)(p + 1) - (const BYTE *)pEnvironment);
+    }
+
+    return cb;
+}
+
+
+BOOL
+WINAPI
+CreateProcessWithTokenW(
+    _In_ HANDLE hToken,
+    _In_ DWORD dwLogonFlags,
+    _In_opt_ LPCWSTR lpApplicationName,
+    _Inout_opt_ LPWSTR lpCommandLine,
+    _In_ DWORD dwCreationFlags,
+    _In_opt_ LPVOID lpEnvironment,
+    _In_opt_ LPCWSTR lpCurrentDirectory,
+    _In_ LPSTARTUPINFOW lpStartupInfo,
+    _Out_ LPPROCESS_INFORMATION lpProcessInformation)
+{
+    PRTL_USER_PROCESS_PARAMETERS ProcessParameters = NtCurrentPeb()->ProcessParameters;
+    SECL_STARTUPINFO StartupInfo;
+    SECL_RESPONSE Response;
+    SECL_REQUEST Request;
+    RPC_BINDING_HANDLE hBinding = NULL;
+    RPC_WSTR pszBinding = NULL;
+    PWSTR pszDesktop = NULL;
+    SIZE_T cbEnvironment = 0;
+    DWORD dwError;
+
+    TRACE("%p 0x%lx %s %s 0x%lx %p %s %p %p\n", hToken, dwLogonFlags, debugstr_w(lpApplicationName),
+          debugstr_w(lpCommandLine), dwCreationFlags, lpEnvironment, debugstr_w(lpCurrentDirectory),
+          lpStartupInfo, lpProcessInformation);
+
+    if (hToken == NULL)
+    {
+        SetLastError(ERROR_LOGON_FAILURE);
+        return FALSE;
+    }
+
+    if (lpEnvironment)
+    {
+        cbEnvironment = GetEnvironmentBlockSize(lpEnvironment, dwCreationFlags);
+        if (cbEnvironment > MAXDWORD)
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+    }
+
+    if (lpStartupInfo->lpDesktop && lpStartupInfo->lpDesktop[0])
+    {
+        pszDesktop = lpStartupInfo->lpDesktop;
+    }
+    else if (ProcessParameters->DesktopInfo.Length)
+    {
+        pszDesktop = RtlAllocateHeap(RtlGetProcessHeap(), 0,
+                                     ProcessParameters->DesktopInfo.Length + sizeof(WCHAR));
+        if (pszDesktop == NULL)
+        {
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return FALSE;
+        }
+        RtlCopyMemory(pszDesktop, ProcessParameters->DesktopInfo.Buffer, ProcessParameters->DesktopInfo.Length);
+        pszDesktop[ProcessParameters->DesktopInfo.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    }
+
+    ZeroMemory(&Request, sizeof(Request));
+    Request.ApplicationName = (PWSTR)lpApplicationName;
+    Request.CommandLine = lpCommandLine;
+    Request.CurrentDirectory = (PWSTR)lpCurrentDirectory;
+    Request.Environment = lpEnvironment;
+    Request.dwEnvironmentSize = (DWORD)cbEnvironment;
+    Request.dwLogonFlags = dwLogonFlags;
+    Request.dwCreationFlags = dwCreationFlags;
+    Request.dwProcessId = GetCurrentProcessId();
+
+    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+    StartupInfo.Desktop = pszDesktop;
+    StartupInfo.Title = lpStartupInfo->lpTitle;
+    StartupInfo.dwX = lpStartupInfo->dwX;
+    StartupInfo.dwY = lpStartupInfo->dwY;
+    StartupInfo.dwXSize = lpStartupInfo->dwXSize;
+    StartupInfo.dwYSize = lpStartupInfo->dwYSize;
+    StartupInfo.dwXCountChars = lpStartupInfo->dwXCountChars;
+    StartupInfo.dwYCountChars = lpStartupInfo->dwYCountChars;
+    StartupInfo.dwFillAttribute = lpStartupInfo->dwFillAttribute;
+    StartupInfo.dwFlags = lpStartupInfo->dwFlags;
+    StartupInfo.wShowWindow = lpStartupInfo->wShowWindow;
+    StartupInfo.hStdInput = HandleToUlong(lpStartupInfo->hStdInput);
+    StartupInfo.hStdOutput = HandleToUlong(lpStartupInfo->hStdOutput);
+    StartupInfo.hStdError = HandleToUlong(lpStartupInfo->hStdError);
+
+    ZeroMemory(&Response, sizeof(Response));
+
+    dwError = RpcStringBindingComposeW(NULL, (RPC_WSTR)L"ncalrpc", NULL, (RPC_WSTR)L"seclogon", NULL, &pszBinding);
+    if (dwError == RPC_S_OK)
+    {
+        dwError = RpcBindingFromStringBindingW(pszBinding, &hBinding);
+        RpcStringFreeW(&pszBinding);
+    }
+
+    if (dwError == RPC_S_OK)
+    {
+        RpcTryExcept
+        {
+            SeclCreateProcessWithTokenW(hBinding, HandleToUlong(hToken), &Request, &StartupInfo, &Response);
+            dwError = Response.dwError;
+        }
+        RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+        {
+            dwError = RpcExceptionCode();
+        }
+        RpcEndExcept;
+
+        RpcBindingFree(&hBinding);
+    }
+
+    if (pszDesktop != lpStartupInfo->lpDesktop)
+        RtlFreeHeap(RtlGetProcessHeap(), 0, pszDesktop);
+
+    if (dwError != ERROR_SUCCESS)
+    {
+        SetLastError(dwError);
+        return FALSE;
+    }
+
+    lpProcessInformation->hProcess = LongToHandle(Response.hProcess);
+    lpProcessInformation->hThread = LongToHandle(Response.hThread);
+    lpProcessInformation->dwProcessId = Response.dwProcessId;
+    lpProcessInformation->dwThreadId = Response.dwThreadId;
+    return TRUE;
+}
+
 /* EOF */

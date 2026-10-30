@@ -21,8 +21,10 @@
 #include <winsvc.h>
 #include <svc.h>
 #include <userenv.h>
+#include <lmcons.h>
 
 #define NTOS_MODE_USER
+#include <ndk/obfuncs.h>
 #include <ndk/rtlfuncs.h>
 
 #include <wine/debug.h>
