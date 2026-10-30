@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Intel HD Graphics Driver
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Ironlake render ring buffer and global GTT entries
+ * PURPOSE:     Ring buffers and global GTT entries
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
@@ -27,6 +27,10 @@
 #define HDGFX_GDSR_TIMEOUT_US       5000u
 #define HDGFX_GDSR_POLL_US          10u
 #define HDGFX_GTT_UNCACHED          1u
+#define HDGFX_INSTPM_SYNC_FLUSH     0x20u
+#define HDGFX_INSTPM_SYNC_TLB       0x220u
+#define HDGFX_INSTPM_POLLS          200u
+#define HDGFX_MI_MODE_STOP_RING     0x100u
 
 uint32_t
 HdgfxIlkGttEntry(
@@ -96,9 +100,10 @@ HdgfxMiBatchEnd(
 
 uint32_t
 HdgfxIlkRingHead(
-    const HDGFX_MMIO *Mmio)
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_RING *Ring)
 {
-    return HDGFX_GET(Mmio->Read(Mmio->Context, HDGFX_REG(RING_HEAD, 0)), RING_HEAD_OFFSET) * 4;
+    return HDGFX_GET(Mmio->Read(Mmio->Context, HDGFX_REG(RING_HEAD, 0) + Ring->Base), RING_HEAD_OFFSET) * 4;
 }
 
 bool
@@ -108,6 +113,7 @@ HdgfxIlkStartRing(
 {
     uint32_t Control;
     uint32_t Mask = HDGFX_MASK(RING_CTL_LENGTH) | HDGFX_MASK(RING_CTL_ENABLE);
+    uint32_t Poll;
 
     if (Ring->Commands == NULL ||
         Ring->Size < HDGFX_PAGE_SIZE || Ring->Size > HDGFX_RING_MAX_SIZE || Ring->Size % HDGFX_PAGE_SIZE != 0 ||
@@ -118,18 +124,35 @@ HdgfxIlkStartRing(
         return false;
     }
 
-    Mmio->Write(Mmio->Context, HDGFX_REG(RING_CTL, 0), 0);
-    Mmio->Write(Mmio->Context, HDGFX_REG(RING_TAIL, 0), 0);
-    Mmio->Write(Mmio->Context, HDGFX_REG(RING_HEAD, 0), 0);
-    Mmio->Write(Mmio->Context, HDGFX_REG(RING_START, 0), Ring->Address);
-    Mmio->Write(Mmio->Context, HDGFX_REG(HWS_PGA, 0), Ring->StatusAddress);
+    Mmio->Write(Mmio->Context, HDGFX_REG(RING_CTL, 0) + Ring->Base, 0);
+    Mmio->Write(Mmio->Context, HDGFX_REG(RING_TAIL, 0) + Ring->Base, 0);
+    Mmio->Write(Mmio->Context, HDGFX_REG(RING_HEAD, 0) + Ring->Base, 0);
+    Mmio->Write(Mmio->Context, HDGFX_REG(RING_START, 0) + Ring->Base, Ring->Address);
+    Mmio->Write(Mmio->Context, Ring->StatusRegister ? Ring->StatusRegister : HDGFX_REG(HWS_PGA, 0), Ring->StatusAddress);
+    if (Ring->Gen >= 6)
+    {
+        Mmio->Read(Mmio->Context, Ring->StatusRegister);
+        Mmio->Write(Mmio->Context, HDGFX_REG(RING_HWSTAM, 0) + Ring->Base, 0xFFFFFFFFu);
+        Mmio->Write(Mmio->Context, HDGFX_REG(RING_INSTPM, 0) + Ring->Base,
+                    (HDGFX_INSTPM_SYNC_TLB << 16) | HDGFX_INSTPM_SYNC_TLB);
+        for (Poll = 0; Poll < HDGFX_INSTPM_POLLS &&
+             (Mmio->Read(Mmio->Context, HDGFX_REG(RING_INSTPM, 0) + Ring->Base) & HDGFX_INSTPM_SYNC_FLUSH) != 0; Poll++)
+        {
+            Mmio->Stall(Mmio->Context, HDGFX_GDSR_POLL_US);
+        }
+    }
     Control = HDGFX_SET(RING_CTL_LENGTH, Ring->Size / HDGFX_PAGE_SIZE - 1) | HDGFX_SET(RING_CTL_ENABLE, 1);
-    Mmio->Write(Mmio->Context, HDGFX_REG(RING_CTL, 0), Control);
+    Mmio->Write(Mmio->Context, HDGFX_REG(RING_CTL, 0) + Ring->Base, Control);
     Ring->Tail = 0;
+    if (Ring->Gen >= 6)
+    {
+        Mmio->Write(Mmio->Context, HDGFX_REG(RING_IMR, 0) + Ring->Base, ~Ring->UserInterrupt);
+        Mmio->Write(Mmio->Context, HDGFX_REG(RING_MI_MODE, 0) + Ring->Base, HDGFX_MI_MODE_STOP_RING << 16);
+    }
 
-    return Mmio->Read(Mmio->Context, HDGFX_REG(RING_START, 0)) == Ring->Address &&
-           (Mmio->Read(Mmio->Context, HDGFX_REG(RING_CTL, 0)) & Mask) == Control &&
-           HdgfxIlkRingHead(Mmio) == 0;
+    return Mmio->Read(Mmio->Context, HDGFX_REG(RING_START, 0) + Ring->Base) == Ring->Address &&
+           (Mmio->Read(Mmio->Context, HDGFX_REG(RING_CTL, 0) + Ring->Base) & Mask) == Control &&
+           HdgfxIlkRingHead(Mmio, Ring) == 0;
 }
 
 bool
@@ -137,12 +160,12 @@ HdgfxIlkStopRing(
     const HDGFX_MMIO *Mmio,
     const HDGFX_RING *Ring)
 {
-    if (HdgfxIlkRingHead(Mmio) != Ring->Tail)
+    if (HdgfxIlkRingHead(Mmio, Ring) != Ring->Tail)
         return false;
 
-    Mmio->Write(Mmio->Context, HDGFX_REG(RING_CTL, 0), 0);
-    Mmio->Write(Mmio->Context, HDGFX_REG(RING_HEAD, 0), 0);
-    Mmio->Write(Mmio->Context, HDGFX_REG(RING_TAIL, 0), 0);
+    Mmio->Write(Mmio->Context, HDGFX_REG(RING_CTL, 0) + Ring->Base, 0);
+    Mmio->Write(Mmio->Context, HDGFX_REG(RING_HEAD, 0) + Ring->Base, 0);
+    Mmio->Write(Mmio->Context, HDGFX_REG(RING_TAIL, 0) + Ring->Base, 0);
     return true;
 }
 
@@ -202,6 +225,8 @@ HdgfxRingEmitBreadcrumb(
     uint32_t Count = 0;
     uint32_t Index;
 
+    if (Ring->Gen >= 7)
+        return HdgfxIvbEmitBreadcrumb(Ring, Head, StatusIndex, Value);
     if (StatusIndex < HDGFX_HWS_FIRST_FREE || StatusIndex >= HDGFX_HWS_DWORDS || StatusIndex == HDGFX_HWS_SCRATCH)
         return false;
 
@@ -222,7 +247,7 @@ HdgfxIlkAdvanceRing(
     const HDGFX_MMIO *Mmio,
     const HDGFX_RING *Ring)
 {
-    Mmio->Write(Mmio->Context, HDGFX_REG(RING_TAIL, 0), HDGFX_SET(RING_TAIL_OFFSET, Ring->Tail / 8));
+    Mmio->Write(Mmio->Context, HDGFX_REG(RING_TAIL, 0) + Ring->Base, HDGFX_SET(RING_TAIL_OFFSET, Ring->Tail / 8));
 }
 
 bool

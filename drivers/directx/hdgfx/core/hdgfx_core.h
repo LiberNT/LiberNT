@@ -289,7 +289,9 @@ typedef struct _HDGFX_GENERATION
     uint32_t CursorStride;
     bool Render;
     uint64_t GttPhysicalLimit;
+    uint32_t GtInterrupts;
     uint32_t (*GttEntry)(uint64_t Physical);
+    bool (*ResetGpu)(const HDGFX_MMIO *Mmio);
     void (*ReadDisplayState)(const HDGFX_MMIO *Mmio, HDGFX_DISPLAY_STATE *State);
     HDGFX_MODESET_STATUS (*ComputeLvds)(const HDGFX_DISPLAY_STATE *Current,
                                         const HDGFX_LVDS_MODE *Mode,
@@ -316,7 +318,12 @@ typedef struct _HDGFX_RING
     uint32_t Address;
     uint32_t StatusAddress;
     uint32_t Tail;
-} HDGFX_RING;
+    uint32_t Gen;
+    uint32_t Base;
+    uint32_t StatusRegister;
+    uint32_t UserInterrupt;
+    bool Blitter;
+} HDGFX_RING, *PHDGFX_RING;
 
 typedef struct _HDGFX_BLT_SURFACE
 {
@@ -550,7 +557,8 @@ HdgfxIlkStopRing(
 
 uint32_t
 HdgfxIlkRingHead(
-    const HDGFX_MMIO *Mmio);
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_RING *Ring);
 
 void
 HdgfxIlkAdvanceRing(
@@ -575,6 +583,39 @@ HdgfxIlkResetRender(
 
 bool
 HdgfxRingEmitBreadcrumb(
+    HDGFX_RING *Ring,
+    uint32_t Head,
+    uint32_t StatusIndex,
+    uint32_t Value);
+
+bool
+HdgfxIvbForceWake(
+    const HDGFX_MMIO *Mmio);
+
+void
+HdgfxIvbForceWakeRelease(
+    const HDGFX_MMIO *Mmio);
+
+void
+HdgfxIvbInitEngine(
+    const HDGFX_MMIO *Mmio);
+
+bool
+HdgfxIvbResetGpu(
+    const HDGFX_MMIO *Mmio);
+
+uint32_t
+HdgfxIvbMiBatchStart(
+    uint32_t *Dwords,
+    uint32_t Address);
+
+bool
+HdgfxIvbEmitInvalidate(
+    HDGFX_RING *Ring,
+    uint32_t Head);
+
+bool
+HdgfxIvbEmitBreadcrumb(
     HDGFX_RING *Ring,
     uint32_t Head,
     uint32_t StatusIndex,

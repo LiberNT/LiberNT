@@ -13,6 +13,7 @@
 #define HDGFX_PCI_BAR2              0x18UL
 #define HDGFX_PCI_ASLS              0xFCUL
 #define HDGFX_MMIO_SIZE             0x200000UL
+#define HDGFX_BLT_RING_BASE         0x20000UL
 #define HDGFX_OPREGION_SIZE         0x2000UL
 #define HDGFX_BLC_LEVEL_COUNT       100UL
 #define HDGFX_VBT_MINIMUM_LIMIT     64UL
@@ -525,7 +526,7 @@ HdgfxStartInterrupts(
     HDGFX_MMIO Io;
     ULONG Mask;
 
-    ULONG Gt = Adapter->RingStarted ? HDGFX_SET(GT_RENDER_USER, 1) : 0;
+    ULONG Gt = Adapter->RingStarted ? Generation->GtInterrupts : 0;
 
     Mask = (Asle ? Generation->GseInterrupt : 0) | (Hotplug ? Generation->PchInterrupt : 0);
     if (Mask == 0 && Gt == 0)
@@ -658,13 +659,16 @@ HdgfxStopRender(
     if (Adapter->RingStarted)
     {
         HdgfxMmioInit(Adapter->Registers, &Mmio);
-        if (!HdgfxIlkStopRing(&Mmio, &Adapter->Ring))
+        if (!HdgfxIlkStopRing(&Mmio, &Adapter->Ring) ||
+            (Adapter->Generation->Gen >= 7 && !HdgfxIlkStopRing(&Mmio, &Adapter->BltRing)))
         {
             DPRINT1("Render ring busy at stop, head 0x%lx tail 0x%lx; keeping its memory\n",
-                    HdgfxIlkRingHead(&Mmio), Adapter->Ring.Tail);
+                    HdgfxIlkRingHead(&Mmio, Adapter->ActiveRing), Adapter->ActiveRing->Tail);
             return;
         }
         Adapter->RingStarted = FALSE;
+        if (Adapter->Generation->Gen >= 7)
+            HdgfxIvbForceWakeRelease(&Mmio);
     }
     if (Adapter->GttWindow != NULL)
     {
@@ -677,12 +681,13 @@ HdgfxStopRender(
     }
     if (Adapter->RingMemory != NULL)
     {
-        MmFreeContiguousMemorySpecifyCache(Adapter->RingMemory, HDGFX_RING_SIZE, MmNonCached);
+        MmFreeContiguousMemorySpecifyCache(Adapter->RingMemory, HDGFX_RING_COUNT * HDGFX_RING_SIZE, MmNonCached);
         Adapter->RingMemory = NULL;
     }
     if (Adapter->StatusPage != NULL)
     {
-        MmFreeContiguousMemorySpecifyCache(Adapter->StatusPage, PAGE_SIZE, MmCached);
+        MmFreeContiguousMemorySpecifyCache(Adapter->StatusPage, PAGE_SIZE,
+                                           Adapter->Generation->Gen >= 6 ? MmNonCached : MmCached);
         Adapter->StatusPage = NULL;
     }
     if (Adapter->ScratchPage != NULL)
@@ -763,9 +768,11 @@ HdgfxStartRender(
     Lowest.QuadPart = 0;
     Highest.QuadPart = MAXULONG;
     Boundary.QuadPart = 0;
-    Adapter->RingMemory = MmAllocateContiguousMemorySpecifyCache(HDGFX_RING_SIZE, Lowest, Highest, Boundary,
-                                                                 MmNonCached);
-    Adapter->StatusPage = MmAllocateContiguousMemorySpecifyCache(PAGE_SIZE, Lowest, Highest, Boundary, MmCached);
+    Adapter->ActiveRing = &Adapter->Ring;
+    Adapter->RingMemory = MmAllocateContiguousMemorySpecifyCache(HDGFX_RING_COUNT * HDGFX_RING_SIZE, Lowest, Highest,
+                                                                 Boundary, MmNonCached);
+    Adapter->StatusPage = MmAllocateContiguousMemorySpecifyCache(PAGE_SIZE, Lowest, Highest, Boundary,
+                                                                 Adapter->Generation->Gen >= 6 ? MmNonCached : MmCached);
     Adapter->ScratchPage = MmAllocateContiguousMemorySpecifyCache(PAGE_SIZE, Lowest, Highest, Boundary, MmNonCached);
     GttFirst = Aperture->u.Memory.Length / PAGE_SIZE - HDGFX_RENDER_GTT_PAGES;
     Address.QuadPart = (LONGLONG)(Bar0 + HDGFX_REG(GTT_PTE, GttFirst));
@@ -782,7 +789,7 @@ HdgfxStartRender(
         HdgfxStopRender(Adapter);
         return;
     }
-    RtlZeroMemory(Adapter->RingMemory, HDGFX_RING_SIZE);
+    RtlZeroMemory(Adapter->RingMemory, HDGFX_RING_COUNT * HDGFX_RING_SIZE);
     RtlZeroMemory(Adapter->StatusPage, PAGE_SIZE);
     RtlZeroMemory(Adapter->ScratchPage, PAGE_SIZE);
     ((volatile ULONG *)Adapter->StatusPage)[HDGFX_RING_FENCE_INDEX] = Adapter->CompletedFence;
@@ -808,11 +815,34 @@ HdgfxStartRender(
     Adapter->Ring.Size = HDGFX_RING_SIZE;
     Adapter->Ring.Address = (GttFirst + HDGFX_RING_GTT_INDEX) * PAGE_SIZE;
     Adapter->Ring.StatusAddress = (GttFirst + HDGFX_STATUS_GTT_INDEX) * PAGE_SIZE;
+    Adapter->Ring.Gen = Adapter->Generation->Gen;
+    Adapter->Ring.UserInterrupt = HDGFX_SET(GT_RENDER_USER, 1);
     Adapter->ScratchAddress = (GttFirst + HDGFX_SCRATCH_GTT_INDEX) * PAGE_SIZE;
     if (!Adapter->Generation->Render)
         return;
     HdgfxMmioInit(Adapter->Registers, &Mmio);
-    Adapter->RingStarted = HdgfxIlkStartRing(&Mmio, &Adapter->Ring);
+    if (Adapter->Generation->Gen >= 7)
+    {
+        Adapter->BltRing = Adapter->Ring;
+        Adapter->BltRing.Commands = (uint32_t *)((PUCHAR)Adapter->RingMemory + HDGFX_RING_SIZE);
+        Adapter->BltRing.Address = Adapter->Ring.Address + HDGFX_RING_SIZE;
+        Adapter->BltRing.Base = HDGFX_BLT_RING_BASE;
+        Adapter->BltRing.StatusRegister = HDGFX_REG(BLT_HWS_PGA, 0);
+        Adapter->BltRing.UserInterrupt = HDGFX_SET(GT_BLT_USER, 1);
+        Adapter->BltRing.Blitter = TRUE;
+        Adapter->Ring.StatusRegister = HDGFX_REG(RENDER_HWS_PGA, 0);
+        if (!HdgfxIvbForceWake(&Mmio))
+        {
+            DPRINT1("Forcewake failed, ack 0x%lx thread status 0x%lx\n",
+                    HdgfxReadRegister32(Adapter, HDGFX_REG(FORCEWAKE_MT_ACK, 0)),
+                    HdgfxReadRegister32(Adapter, HDGFX_REG(GT_THREAD_STATUS, 0)));
+            HdgfxStopRender(Adapter);
+            return;
+        }
+        HdgfxIvbInitEngine(&Mmio);
+    }
+    Adapter->RingStarted = HdgfxIlkStartRing(&Mmio, &Adapter->Ring) &&
+                           (Adapter->Generation->Gen < 7 || HdgfxIlkStartRing(&Mmio, &Adapter->BltRing));
     if (!Adapter->RingStarted)
     {
         DPRINT1("Render ring did not start: start 0x%08lx ctl 0x%08lx head 0x%08lx\n",
@@ -926,14 +956,16 @@ HdgfxRingRun(
 
     *ElapsedUs = 0;
     HdgfxMmioInit(Adapter->Registers, &Mmio);
-    if ((Count != 0 && !HdgfxRingEmit(&Adapter->Ring, HdgfxIlkRingHead(&Mmio), (const uint32_t *)Dwords, Count)) ||
-        !HdgfxRingEmitBreadcrumb(&Adapter->Ring, HdgfxIlkRingHead(&Mmio), HDGFX_RING_SEQNO_INDEX, Seqno))
+    if ((Count != 0 && !HdgfxRingEmit(Adapter->ActiveRing, HdgfxIlkRingHead(&Mmio, Adapter->ActiveRing),
+                                      (const uint32_t *)Dwords, Count)) ||
+        !HdgfxRingEmitBreadcrumb(Adapter->ActiveRing, HdgfxIlkRingHead(&Mmio, Adapter->ActiveRing),
+                                 HDGFX_RING_SEQNO_INDEX, Seqno))
     {
         return FALSE;
     }
     Adapter->Seqno = Seqno;
     Start = KeQueryPerformanceCounter(&Frequency);
-    HdgfxIlkAdvanceRing(&Mmio, &Adapter->Ring);
+    HdgfxIlkAdvanceRing(&Mmio, Adapter->ActiveRing);
     do
     {
         Done = Status[HDGFX_RING_SEQNO_INDEX] == Seqno && Adapter->RingInterrupts != Interrupts;
@@ -974,6 +1006,7 @@ HdgfxTestRing(
     ULONG Mismatches = 0;
     ULONG Count = 0;
     ULONG Index;
+    BOOLEAN Gen7 = Adapter->Generation->Gen >= 7;
 
     if (!Adapter->RingStarted)
         return;
@@ -981,10 +1014,14 @@ HdgfxTestRing(
     Breadcrumb = HdgfxRingRun(Adapter, NULL, 0, &BreadcrumbUs);
     Count += HdgfxBltFill(Dwords + Count, &Source, &Full, 0x11223344);
     Count += HdgfxBltFill(Dwords + Count, &Source, &Inner, 0x55667788);
-    Count += HdgfxMiFlush(Dwords + Count);
+    if (Gen7)
+        Adapter->ActiveRing = &Adapter->BltRing;
+    else
+        Count += HdgfxMiFlush(Dwords + Count);
     Count += HdgfxBltCopy(Dwords + Count, &Destination, &Copy, &Source, 0, 0);
-    Count += HdgfxMiFlush(Dwords + Count);
-    if (Breadcrumb && Count == 22)
+    if (!Gen7)
+        Count += HdgfxMiFlush(Dwords + Count);
+    if (Breadcrumb && Count == (Gen7 ? 20UL : 22UL))
     {
         Blit = HdgfxRingRun(Adapter, (const ULONG *)Dwords, Count, &BlitUs);
         for (Index = 0; Blit && Index < HDGFX_BLT_TEST_WIDTH * HDGFX_BLT_TEST_HEIGHT; Index++)
@@ -1001,9 +1038,10 @@ HdgfxTestRing(
     HdgfxMmioInit(Adapter->Registers, &Mmio);
     DPRINT1("Render ring at 0x%lx, %lu KB: breadcrumb %s after %I64u us, fill and copy %s after %I64u us "
             "(%lu wrong pixels), %ld interrupts, head 0x%lx tail 0x%lx, ESR 0x%lx\n",
-            Adapter->Ring.Address, HDGFX_RING_SIZE / 1024, Breadcrumb ? "done" : "missing", BreadcrumbUs,
+            Adapter->ActiveRing->Address, HDGFX_RING_SIZE / 1024, Breadcrumb ? "done" : "missing", BreadcrumbUs,
             Blit ? "done" : "missing", BlitUs, Mismatches, Adapter->RingInterrupts,
-            HdgfxIlkRingHead(&Mmio), Adapter->Ring.Tail, HdgfxReadRegister32(Adapter, HDGFX_REG(ESR, 0)));
+            HdgfxIlkRingHead(&Mmio, Adapter->ActiveRing), Adapter->ActiveRing->Tail,
+            HdgfxReadRegister32(Adapter, HDGFX_REG(ESR, 0)));
 }
 
 BOOLEAN
@@ -1015,14 +1053,14 @@ HdgfxRingFence(
     uint32_t Flush[2] = { 0, 0 };
 
     HdgfxMiFlush(Flush);
-    if (!HdgfxRingEmit(&Adapter->Ring, Head, Flush, RTL_NUMBER_OF(Flush)) ||
-        !HdgfxRingEmitBreadcrumb(&Adapter->Ring, Head, HDGFX_RING_SEQNO_INDEX, Adapter->Seqno + 1))
+    if ((Adapter->Generation->Gen < 6 && !HdgfxRingEmit(Adapter->ActiveRing, Head, Flush, RTL_NUMBER_OF(Flush))) ||
+        !HdgfxRingEmitBreadcrumb(Adapter->ActiveRing, Head, HDGFX_RING_SEQNO_INDEX, Adapter->Seqno + 1))
     {
         return FALSE;
     }
     Adapter->Seqno++;
     Adapter->RingUnfenced = FALSE;
-    HdgfxIlkAdvanceRing(Mmio, &Adapter->Ring);
+    HdgfxIlkAdvanceRing(Mmio, Adapter->ActiveRing);
     return TRUE;
 }
 
@@ -1046,10 +1084,10 @@ HdgfxResetRender(
     {
         HdgfxMmioInit(Adapter->Registers, &Mmio);
         DPRINT1("Render reset: head 0x%lx tail 0x%lx seqno %lu of %lu, ESR 0x%lx\n",
-                HdgfxIlkRingHead(&Mmio), Adapter->Ring.Tail,
+                HdgfxIlkRingHead(&Mmio, Adapter->ActiveRing), Adapter->ActiveRing->Tail,
                 ((volatile ULONG *)Adapter->StatusPage)[HDGFX_RING_SEQNO_INDEX], Adapter->Seqno,
                 HdgfxReadRegister32(Adapter, HDGFX_REG(ESR, 0)));
-        if (!HdgfxIlkResetRender(&Mmio))
+        if (!Adapter->Generation->ResetGpu(&Mmio))
         {
             DPRINT1("Render domain reset did not complete\n");
             Status = STATUS_TIMEOUT;
@@ -1076,7 +1114,15 @@ HdgfxRestartRender(
         ((volatile ULONG *)Adapter->StatusPage)[HDGFX_RING_SEQNO_INDEX] = 0;
         Adapter->Seqno = 0;
         Adapter->RingUnfenced = FALSE;
-        Adapter->RingStarted = HdgfxIlkStartRing(&Mmio, &Adapter->Ring);
+        Adapter->ActiveRing = &Adapter->Ring;
+        if (Adapter->Generation->Gen >= 7)
+        {
+            if (!HdgfxIvbForceWake(&Mmio))
+                DPRINT1("Forcewake failed after reset\n");
+            HdgfxIvbInitEngine(&Mmio);
+        }
+        Adapter->RingStarted = HdgfxIlkStartRing(&Mmio, &Adapter->Ring) &&
+                               (Adapter->Generation->Gen < 7 || HdgfxIlkStartRing(&Mmio, &Adapter->BltRing));
         if (Adapter->GtInterruptMask != 0)
         {
             HdgfxWriteRegister32(Adapter, HDGFX_REG(GTIIR, 0), Adapter->GtInterruptMask);
