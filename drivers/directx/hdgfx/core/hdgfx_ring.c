@@ -26,12 +26,22 @@
 #define HDGFX_GDSR_RENDER           1u
 #define HDGFX_GDSR_TIMEOUT_US       5000u
 #define HDGFX_GDSR_POLL_US          10u
+#define HDGFX_GTT_UNCACHED          1u
 
 uint32_t
 HdgfxIlkGttEntry(
-    uint32_t Physical)
+    uint64_t Physical)
 {
-    return HDGFX_SET(GTT_PTE_ADDRESS, Physical / HDGFX_PAGE_SIZE) | HDGFX_SET(GTT_PTE_VALID, 1);
+    return HDGFX_SET(GTT_PTE_ADDRESS, (uint32_t)Physical / HDGFX_PAGE_SIZE) | HDGFX_SET(GTT_PTE_VALID, 1);
+}
+
+uint32_t
+HdgfxIvbGttEntry(
+    uint64_t Physical)
+{
+    return HDGFX_SET(GTT_PTE_ADDRESS, (uint32_t)Physical / HDGFX_PAGE_SIZE) |
+           HDGFX_SET(GTT_PTE_ADDRESS_HIGH, (uint32_t)(Physical >> 32)) |
+           HDGFX_SET(GTT_PTE_CACHE, HDGFX_GTT_UNCACHED) | HDGFX_SET(GTT_PTE_VALID, 1);
 }
 
 static uint32_t

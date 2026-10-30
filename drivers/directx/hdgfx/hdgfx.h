@@ -272,6 +272,11 @@ HdgfxRingFence(
     _In_ ULONG Head);
 
 VOID
+HdgfxGttFlush(
+    _In_ PUCHAR Registers,
+    _In_ const HDGFX_GENERATION *Generation);
+
+VOID
 HdgfxMmioInit(
     _In_ PVOID Base,
     _Out_ HDGFX_MMIO *Mmio);

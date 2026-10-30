@@ -287,6 +287,9 @@ typedef struct _HDGFX_GENERATION
     uint32_t PchInterrupt;
     uint32_t CrtHotplugInterrupt;
     uint32_t CursorStride;
+    bool Render;
+    uint64_t GttPhysicalLimit;
+    uint32_t (*GttEntry)(uint64_t Physical);
     void (*ReadDisplayState)(const HDGFX_MMIO *Mmio, HDGFX_DISPLAY_STATE *State);
     HDGFX_MODESET_STATUS (*ComputeLvds)(const HDGFX_DISPLAY_STATE *Current,
                                         const HDGFX_LVDS_MODE *Mode,
@@ -529,7 +532,11 @@ HdgfxOpRegionEndNotification(
 
 uint32_t
 HdgfxIlkGttEntry(
-    uint32_t Physical);
+    uint64_t Physical);
+
+uint32_t
+HdgfxIvbGttEntry(
+    uint64_t Physical);
 
 bool
 HdgfxIlkStartRing(

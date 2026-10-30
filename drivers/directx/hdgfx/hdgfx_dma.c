@@ -1036,9 +1036,9 @@ HdgfxDdiBuildPagingBuffer(
             Pfns = MmGetMdlPfnArray(Map->pMdl) + Map->MdlOffset + Done;
             for (Index = 0; Index < Count; Index++)
             {
-                if (Pfns[Index] > (MAXULONG >> PAGE_SHIFT))
+                if (Pfns[Index] > (Adapter->Generation->GttPhysicalLimit >> PAGE_SHIFT))
                     return STATUS_INVALID_PARAMETER;
-                ((PULONG)(Update + 1))[Index] = HdgfxIlkGttEntry((ULONG)(Pfns[Index] << PAGE_SHIFT));
+                ((PULONG)(Update + 1))[Index] = Adapter->Generation->GttEntry((ULONGLONG)Pfns[Index] << PAGE_SHIFT);
             }
             Done += Count;
             if (Done < Map->NumberOfPages)
@@ -1061,12 +1061,12 @@ HdgfxDdiBuildPagingBuffer(
                 return STATUS_INVALID_PARAMETER;
             }
             Dummy = (ULONGLONG)Unmap->DummyPage.QuadPart;
-            if (Dummy == 0 || Dummy % PAGE_SIZE != 0 || Dummy > MAXULONG)
+            if (Dummy == 0 || Dummy % PAGE_SIZE != 0 || Dummy > Adapter->Generation->GttPhysicalLimit)
                 Dummy = (ULONGLONG)MmGetPhysicalAddress(Adapter->ScratchPage).QuadPart;
             Update = HdgfxWriterRecord(&Writer, HDGFX_DMA_GTT, sizeof(*Update));
             Update->First = (ULONG)(Adapter->ApertureBase / PAGE_SIZE + Unmap->OffsetInPages);
             Update->Count = (ULONG)Unmap->NumberOfPages;
-            Update->Fill = HdgfxIlkGttEntry((ULONG)Dummy);
+            Update->Fill = Adapter->Generation->GttEntry(Dummy);
             break;
         }
 
@@ -1315,6 +1315,7 @@ HdgfxRunGtt(
                              Update->Fill != 0 ? Update->Fill : ((CONST ULONG *)(Update + 1))[Index]);
     }
     READ_REGISTER_ULONG(&Adapter->ApertureGtt[Update->First - First + Update->Count - 1]);
+    HdgfxGttFlush(Adapter->Registers, Adapter->Generation);
     return HdgfxQueueDone;
 }
 

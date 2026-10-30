@@ -12,7 +12,7 @@
 #define HDGFX_PCI_BAR0              0x10UL
 #define HDGFX_PCI_BAR2              0x18UL
 #define HDGFX_PCI_ASLS              0xFCUL
-#define HDGFX_MMIO_SIZE             0x100000UL
+#define HDGFX_MMIO_SIZE             0x200000UL
 #define HDGFX_OPREGION_SIZE         0x2000UL
 #define HDGFX_BLC_LEVEL_COUNT       100UL
 #define HDGFX_VBT_MINIMUM_LIMIT     64UL
@@ -79,6 +79,15 @@ HdgfxSleep(
     UNREFERENCED_PARAMETER(Context);
     Interval.QuadPart = -(LONGLONG)Milliseconds * 10000;
     KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+}
+
+VOID
+HdgfxGttFlush(
+    _In_ PUCHAR Registers,
+    _In_ const HDGFX_GENERATION *Generation)
+{
+    if (Registers != NULL && Generation->Gen >= 6)
+        WRITE_REGISTER_ULONG((PULONG)(Registers + HDGFX_REG(GFX_FLUSH_CONTROL, 0)), 1);
 }
 
 VOID
@@ -787,9 +796,11 @@ HdgfxStartRender(
                      Index == HDGFX_STATUS_GTT_INDEX ? Adapter->StatusPage : Adapter->ScratchPage;
 
         Adapter->SavedGtt[Index] = READ_REGISTER_ULONG(&Adapter->GttWindow[Index]);
-        WRITE_REGISTER_ULONG(&Adapter->GttWindow[Index], HdgfxIlkGttEntry(MmGetPhysicalAddress(Page).LowPart));
+        WRITE_REGISTER_ULONG(&Adapter->GttWindow[Index],
+                             Adapter->Generation->GttEntry((ULONGLONG)MmGetPhysicalAddress(Page).QuadPart));
     }
     READ_REGISTER_ULONG(&Adapter->GttWindow[HDGFX_RENDER_GTT_PAGES - 1]);
+    HdgfxGttFlush(Adapter->Registers, Adapter->Generation);
     if (Adapter->DmaMemory != NULL)
         Adapter->DmaBase = GttFirst * PAGE_SIZE;
 
@@ -798,6 +809,8 @@ HdgfxStartRender(
     Adapter->Ring.Address = (GttFirst + HDGFX_RING_GTT_INDEX) * PAGE_SIZE;
     Adapter->Ring.StatusAddress = (GttFirst + HDGFX_STATUS_GTT_INDEX) * PAGE_SIZE;
     Adapter->ScratchAddress = (GttFirst + HDGFX_SCRATCH_GTT_INDEX) * PAGE_SIZE;
+    if (!Adapter->Generation->Render)
+        return;
     HdgfxMmioInit(Adapter->Registers, &Mmio);
     Adapter->RingStarted = HdgfxIlkStartRing(&Mmio, &Adapter->Ring);
     if (!Adapter->RingStarted)
@@ -821,10 +834,11 @@ HdgfxApertureClear(
 
     if (Adapter->ApertureGtt == NULL || Adapter->ScratchPage == NULL)
         return;
-    Entry = HdgfxIlkGttEntry(MmGetPhysicalAddress(Adapter->ScratchPage).LowPart);
+    Entry = Adapter->Generation->GttEntry((ULONGLONG)MmGetPhysicalAddress(Adapter->ScratchPage).QuadPart);
     for (Index = 0; Index < Adapter->ApertureSize / PAGE_SIZE; Index++)
         WRITE_REGISTER_ULONG(&Adapter->ApertureGtt[Index], Entry);
     READ_REGISTER_ULONG(&Adapter->ApertureGtt[Adapter->ApertureSize / PAGE_SIZE - 1]);
+    HdgfxGttFlush(Adapter->Registers, Adapter->Generation);
 }
 
 static VOID
@@ -2195,14 +2209,15 @@ HdgfxDirectScanoutStart(
     for (Index = 0; Index < Pages; Index++)
     {
         Physical = Scanout->SlabPhysical + (ULONGLONG)Index * PAGE_SIZE;
-        WRITE_REGISTER_ULONG(&Scanout->SlabGtt[Index], HdgfxIlkGttEntry((ULONG)Physical));
+        WRITE_REGISTER_ULONG(&Scanout->SlabGtt[Index], Scanout->Generation->GttEntry(Physical));
     }
     for (Index = 0; Index < HDGFX_CURSOR_PAGES; Index++)
     {
         Physical = (ULONGLONG)MmGetPhysicalAddress((PUCHAR)Scanout->Cursor + Index * PAGE_SIZE).QuadPart;
-        WRITE_REGISTER_ULONG(&Scanout->SlabGtt[Pages + Index], HdgfxIlkGttEntry((ULONG)Physical));
+        WRITE_REGISTER_ULONG(&Scanout->SlabGtt[Pages + Index], Scanout->Generation->GttEntry(Physical));
     }
     READ_REGISTER_ULONG(&Scanout->SlabGtt[Pages + HDGFX_CURSOR_PAGES - 1]);
+    HdgfxGttFlush(Scanout->Registers, Scanout->Generation);
 
     Adapter->HardwarePointer = TRUE;
     DPRINT1("Direct scan-out: %Iu-byte slab at 0x%I64x mapped to 0x%lx, cursor at 0x%lx\n",

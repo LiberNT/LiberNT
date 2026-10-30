@@ -27,6 +27,7 @@
     R(WM0_PIPE,             0x45100, 4) \
     R(WM_LP,                0x45108, 4) \
     R(GTT_PTE,              0x200000, 4) \
+    R(GFX_FLUSH_CONTROL,    0x101008, 0) \
     R(FDI_PLL_BIOS_0,       0x46000, 0) \
     R(BLC_PWM_CPU_CTL2,     0x48250, 0) \
     R(BLC_PWM_CPU_CTL,      0x48254, 0) \
@@ -117,6 +118,8 @@
     F(WM_LP_ENABLE,             31, 31) \
     F(GTT_PTE_ADDRESS,          31, 12) \
     F(GTT_PTE_VALID,            0, 0) \
+    F(GTT_PTE_ADDRESS_HIGH,     11, 4) \
+    F(GTT_PTE_CACHE,            2, 1) \
     F(RING_TAIL_OFFSET,         20, 3) \
     F(RING_HEAD_OFFSET,         20, 2) \
     F(RING_START_ADDRESS,       31, 12) \
