@@ -17,6 +17,7 @@ typedef struct _HAL_RISCV_CLOCK
     ULONG64 Deadline;
     ULONG64 Period;
     ULONG Increment;
+    ULONG RunTimeElapsed;
     ULONG64 ProfileElapsed;
     BOOLEAN Suspended;
 } HAL_RISCV_CLOCK;
@@ -178,7 +179,16 @@ HalpRiscvClockInterrupt(
         }
     }
     if (Number == 0)
+    {
         KeUpdateSystemTime(TrapFrame, Increment, TrapFrame->PreviousIrql);
+    }
     else
-        KeUpdateRunTime(TrapFrame, TrapFrame->PreviousIrql);
+    {
+        Clock->RunTimeElapsed += Increment;
+        if (Clock->RunTimeElapsed >= RISCV_HAL_MAXIMUM_INCREMENT)
+        {
+            Clock->RunTimeElapsed -= RISCV_HAL_MAXIMUM_INCREMENT;
+            KeUpdateRunTime(TrapFrame, TrapFrame->PreviousIrql);
+        }
+    }
 }
