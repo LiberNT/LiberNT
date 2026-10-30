@@ -32,6 +32,7 @@ typedef struct _DWM_DX_DEVICE
     LUID Luid;
     D3DKMT_HANDLE hAdapter;
     D3DKMT_HANDLE hDevice;
+    BOOL Removed;
 } DWM_DX_DEVICE;
 
 typedef struct _DWM_D3DKMT_INVALIDATECACHE
@@ -179,6 +180,13 @@ DwmDxGetDevice(const LUID *Luid, ULONG *DeviceIndex)
     g_Devices[FreeIndex].hDevice = CreateDevice.hDevice;
     *DeviceIndex = FreeIndex;
     return STATUS_SUCCESS;
+}
+
+static void
+DwmDxNoteStatus(ULONG DeviceIndex, NTSTATUS Status)
+{
+    if (Status == STATUS_DEVICE_REMOVED)
+        g_Devices[DeviceIndex].Removed = TRUE;
 }
 
 static void
@@ -334,6 +342,7 @@ DwmDxOpenView(const DWM_DX_SOURCE *Source, DWM_DX_VIEW *View)
     if (!NT_SUCCESS(Status) || Open.hResource == 0 ||
         Allocations[0].hAllocation == 0)
     {
+        DwmDxNoteStatus(DeviceIndex, Status);
         goto Failure;
     }
 
@@ -418,7 +427,10 @@ DwmDxMapRedirection(const DWM_DX_SOURCE *Source, DWM_DX_VIEW *View)
         Lock.Flags.LockEntire = 1;
         Status = D3DKMTLock(&Lock);
         if (!NT_SUCCESS(Status) || Lock.pData == NULL)
+        {
+            DwmDxNoteStatus(View->DeviceIndex, Status);
             return NULL;
+        }
         View->Mapped = Lock.pData;
     }
 
@@ -503,7 +515,10 @@ DwmDxGetSnapshot(const DWM_DX_SOURCE *Source)
         Lock.Flags.LockEntire = 1;
         Status = D3DKMTLock(&Lock);
         if (!NT_SUCCESS(Status) || Lock.pData == NULL)
+        {
+            DwmDxNoteStatus(View->DeviceIndex, Status);
             return View->LastUpdateId != 0 ? View->Snapshot : NULL;
+        }
 
         if (!g_InvalidateCacheResolved)
         {
@@ -755,6 +770,49 @@ DwmDxSetScanoutSurfaces(const ULONG *SurfaceIds, ULONG Count)
     }
 }
 
+static void
+DwmDxCloseDevice(DWM_DX_DEVICE *Device)
+{
+    if (Device->hDevice != 0)
+    {
+        D3DKMT_DESTROYDEVICE DestroyDevice;
+
+        RtlZeroMemory(&DestroyDevice, sizeof(DestroyDevice));
+        DestroyDevice.hDevice = Device->hDevice;
+        (void)D3DKMTDestroyDevice(&DestroyDevice);
+    }
+    if (Device->hAdapter != 0)
+    {
+        D3DKMT_CLOSEADAPTER CloseAdapter;
+
+        RtlZeroMemory(&CloseAdapter, sizeof(CloseAdapter));
+        CloseAdapter.hAdapter = Device->hAdapter;
+        (void)D3DKMTCloseAdapter(&CloseAdapter);
+    }
+    RtlZeroMemory(Device, sizeof(*Device));
+}
+
+static void
+DwmDxRecoverRemovedDevices(void)
+{
+    ULONG DeviceIndex, Index;
+
+    for (DeviceIndex = 0; DeviceIndex < DWM_DX_MAX_DEVICES; ++DeviceIndex)
+    {
+        if (!g_Devices[DeviceIndex].Removed)
+            continue;
+        for (Index = 0; Index < DWM_DX_MAX_VIEWS; ++Index)
+        {
+            if (g_Views[Index].GlobalShare != 0 &&
+                g_Views[Index].DeviceIndex == DeviceIndex)
+            {
+                DwmDxDropView(&g_Views[Index]);
+            }
+        }
+        DwmDxCloseDevice(&g_Devices[DeviceIndex]);
+    }
+}
+
 void
 DwmDxSweepSurfaces(const DWM_WIN *Windows, ULONG Count)
 {
@@ -764,6 +822,7 @@ DwmDxSweepSurfaces(const DWM_WIN *Windows, ULONG Count)
         return;
 
     ++g_CurrentFrame;
+    DwmDxRecoverRemovedDevices();
     for (Index = 0; Index < DWM_DX_MAX_VIEWS; ++Index)
     {
         DWM_DX_VIEW *View = &g_Views[Index];
@@ -884,27 +943,7 @@ DwmDxCleanupSurfaces(void)
     RtlZeroMemory(g_RetiringFrames, sizeof(g_RetiringFrames));
 
     for (Index = 0; Index < DWM_DX_MAX_DEVICES; ++Index)
-    {
-        DWM_DX_DEVICE *Device = &g_Devices[Index];
-
-        if (Device->hDevice != 0)
-        {
-            D3DKMT_DESTROYDEVICE DestroyDevice;
-
-            RtlZeroMemory(&DestroyDevice, sizeof(DestroyDevice));
-            DestroyDevice.hDevice = Device->hDevice;
-            (void)D3DKMTDestroyDevice(&DestroyDevice);
-        }
-        if (Device->hAdapter != 0)
-        {
-            D3DKMT_CLOSEADAPTER CloseAdapter;
-
-            RtlZeroMemory(&CloseAdapter, sizeof(CloseAdapter));
-            CloseAdapter.hAdapter = Device->hAdapter;
-            (void)D3DKMTCloseAdapter(&CloseAdapter);
-        }
-        RtlZeroMemory(Device, sizeof(*Device));
-    }
+        DwmDxCloseDevice(&g_Devices[Index]);
     g_CurrentFrame = 0;
     DwmDxCloseVBlankAdapter();
 }
