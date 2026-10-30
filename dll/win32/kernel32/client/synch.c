@@ -348,6 +348,7 @@ CreateWaitableTimerExW(IN LPSECURITY_ATTRIBUTES lpTimerAttributes OPTIONAL,
         return NULL;
     }
 
+    /* TODO: CREATE_WAITABLE_TIMER_HIGH_RESOLUTION creates a normal timer that expires on clock ticks; high-resolution timers need NtCreateTimer2 */
     TimerType = (dwFlags & CREATE_WAITABLE_TIMER_MANUAL_RESET) ? NotificationTimer
                                                                : SynchronizationTimer;
 
