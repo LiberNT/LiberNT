@@ -17,6 +17,7 @@ extern void func_wgl_front_facing(void);
 extern void func_wgl_scaled_attrib(void);
 extern void func_wgl_depth_blit(void);
 extern void func_wgl_render(void);
+extern void func_wgl_gears(void);
 
 const struct test winetest_testlist[] =
 {
@@ -35,6 +36,7 @@ const struct test winetest_testlist[] =
     { "wgl_scaled_attrib", func_wgl_scaled_attrib },
     { "wgl_depth_blit", func_wgl_depth_blit },
     { "wgl_render", func_wgl_render },
+    { "wgl_gears", func_wgl_gears },
 
     { 0, 0 }
 };
