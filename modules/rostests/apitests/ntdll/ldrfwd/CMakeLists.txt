@@ -1,0 +1,7 @@
+foreach(_dll ldrfwd_a ldrfwd_b ldrfwd_c)
+    spec2def(${_dll}.dll ${_dll}.spec)
+    add_library(${_dll} MODULE ${_dll}.c ${CMAKE_CURRENT_BINARY_DIR}/${_dll}.def)
+    set_module_type(${_dll} win32dll ENTRYPOINT DllMain 12)
+    add_importlibs(${_dll} kernel32 ntdll)
+    add_dependencies(${_dll} psdk)
+endforeach()
