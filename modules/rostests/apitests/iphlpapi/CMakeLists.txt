@@ -13,6 +13,7 @@ list(APPEND SOURCE
     InitializeIpInterfaceEntry.c
     NotifyIpInterfaceChange.c
     SendARP.c
+    UnicastIpAddressChange.c
     testlist.c)
 
 add_executable(iphlpapi_apitest ${SOURCE})

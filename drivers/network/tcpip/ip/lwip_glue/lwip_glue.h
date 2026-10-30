@@ -177,5 +177,6 @@ VOID LibIP6CreateLinkLocal(struct netif *Netif);
 NTSTATUS LibIP6SetNeighbor(struct _IP6_NEIGHBOR_SET *Request);
 NTSTATUS LibIP6GetBestRoute(struct _IP6_BEST_ROUTE *Request);
 void LibIPShutdown(void);
+LONGLONG LibSysNowToSystemTime(u32_t Tick);
 
 #endif

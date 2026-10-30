@@ -31,6 +31,17 @@ u32_t sys_now(void)
     return (CurrentTime.QuadPart - StartTime.QuadPart) / 10000;
 }
 
+LONGLONG
+LibSysNowToSystemTime(u32_t Tick)
+{
+    LARGE_INTEGER CurrentTime;
+    ULONGLONG Now;
+
+    KeQuerySystemTime(&CurrentTime);
+    Now = (CurrentTime.QuadPart - StartTime.QuadPart) / 10000;
+    return StartTime.QuadPart + (LONGLONG)(Now - (u32_t)((u32_t)Now - Tick)) * 10000;
+}
+
 void
 sys_arch_protect(sys_prot_t *lev)
 {

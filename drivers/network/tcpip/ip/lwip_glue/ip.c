@@ -781,8 +781,7 @@ LibIP6QueryCallback(void *arg)
                 RtlZeroMemory(&Row, sizeof(Row));
                 Row.Index = IF->Index;
                 RtlCopyMemory(Row.Address, Address->addr, sizeof(Row.Address));
-                KeQuerySystemTime(&Row.CreationTime);
-                Row.CreationTime.QuadPart -= (LONGLONG)(u32_t)(sys_now() - netif->ip6_addr_created[i]) * 10000;
+                Row.CreationTime.QuadPart = LibSysNowToSystemTime(netif->ip6_addr_created[i]);
                 Row.PrefixLength = ip6_addr_isloopback(Address) ? 128 : 64;
 
                 if (ip6_addr_istentative(State))
