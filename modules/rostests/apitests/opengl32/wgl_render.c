@@ -177,6 +177,50 @@ static void Test_Frames(HDC dc)
     ok(glGetError() == GL_NO_ERROR, "GL error after the frame loop\n");
 }
 
+static void DrawTriangle(void)
+{
+    glBegin(GL_TRIANGLES);
+    glVertex2f(0.0f, 0.0f);
+    glVertex2f(1.0f, 0.0f);
+    glVertex2f(0.0f, 1.0f);
+    glEnd();
+}
+
+static void Test_TwoContexts(HDC dc, HGLRC context)
+{
+    HGLRC other = wglCreateContext(dc);
+
+    ok(other != NULL, "wglCreateContext failed: %lu\n", GetLastError());
+    if (!other)
+        return;
+
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_TEXTURE_2D);
+    glColor3f(1.0f, 0.0f, 0.0f);
+    DrawTriangle();
+    glFinish();
+
+    ok(wglMakeCurrent(dc, other), "wglMakeCurrent failed: %lu\n", GetLastError());
+    glViewport(0, 0, SIZE, SIZE);
+    glMatrixMode(GL_PROJECTION);
+    glOrtho(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
+    glDrawBuffer(GL_BACK);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
+    glColor3f(0.0f, 1.0f, 0.0f);
+    DrawTriangle();
+    glFinish();
+
+    ok(wglMakeCurrent(dc, context), "wglMakeCurrent failed: %lu\n", GetLastError());
+    glColor3f(0.0f, 0.0f, 1.0f);
+    DrawTriangle();
+    glFinish();
+    ok(ColorNear(ReadPixel(SIZE / 4, SIZE / 4), 0x0000FF, 2), "Pixel after the other context culled: 0x%06lx\n",
+       ReadPixel(SIZE / 4, SIZE / 4));
+
+    wglDeleteContext(other);
+}
+
 START_TEST(wgl_render)
 {
     PIXELFORMATDESCRIPTOR pfd = {sizeof(pfd), 1};
@@ -218,6 +262,7 @@ START_TEST(wgl_render)
     Test_Texture();
     Test_Depth();
     Test_Frames(dc);
+    Test_TwoContexts(dc, context);
     ok(glGetError() == GL_NO_ERROR, "GL error at the end\n");
 
 cleanup:
