@@ -20,9 +20,12 @@ struct CLocaleSections
 
 struct CSectionNames
 {
-    CLocaleSections ArchSpecific;
+    CLocaleSections ArchSpecific[3];
     CLocaleSections ArchNeutral;
-    CStringW Architecture;
+    LPCWSTR Architectures[3];
+    UINT Count;
+    BOOL NeutralDownload;
+    CStringW Key;
 };
 static CSectionNames g_Names;
 
@@ -46,7 +49,7 @@ CConfigParser::CConfigParser(const CStringW &FilePath) : szConfigPath(FilePath)
 }
 
 void
-CConfigParser::ReadSection(CStringW &Buffer, const CStringW &Section, BOOL isArch)
+CConfigParser::ReadSection(CStringW &Buffer, const CStringW &Section, BOOL isArch, LPCWSTR Architecture)
 {
     DWORD len = 512;
     DWORD result;
@@ -73,18 +76,20 @@ CConfigParser::ReadSection(CStringW &Buffer, const CStringW &Section, BOOL isArc
             {
                 CString key = tmp.Left(idx);
 
-#ifndef _M_IX86
-                // On non-x86 architecture we need the architecture specific URL
+                // The base section downloads the x86 build
                 if (!isArch && key == "URLDownload")
                 {
                     continue;
                 }
-#endif
 
                 // Is this key already present from a more specific translation?
                 if (m_Keys.FindKey(key) >= 0)
                 {
                     continue;
+                }
+                if (key == "URLDownload")
+                {
+                    m_Architecture = Architecture;
                 }
 
                 CString value = tmp.Mid(idx + 1);
@@ -105,15 +110,30 @@ CConfigParser::ReadSection(CStringW &Buffer, const CStringW &Section, BOOL isArc
 VOID
 CConfigParser::CacheINI()
 {
-    LPCWSTR Architecture = GetPackageArchitecture();
-    if (g_Names.Architecture != Architecture)
+    LPCWSTR Architectures[_countof(g_Names.Architectures)];
+    UINT Count = GetPackageArchitectures(Architectures, _countof(Architectures));
+    CStringW Key;
+
+    for (UINT i = 0; i < Count; i++)
+    {
+        Key += Architectures[i];
+        Key += L";";
+    }
+    if (g_Names.Key != Key)
     {
         g_Names = CSectionNames();
-        g_Names.Architecture = Architecture;
+        g_Names.Key = Key;
+        g_Names.Count = Count;
+        for (UINT i = 0; i < Count; i++)
+        {
+            g_Names.Architectures[i] = Architectures[i];
+            if (!StrCmpIW(Architectures[i], L"x86"))
+                g_Names.NeutralDownload = TRUE;
+        }
     }
 
     // Cache section names
-    if (g_Names.ArchSpecific.Locale.IsEmpty())
+    if (g_Names.ArchNeutral.Section.IsEmpty())
     {
         CString szLocaleID;
         const INT cchLocaleSize = 5;
@@ -122,36 +142,58 @@ CConfigParser::CacheINI()
         szLocaleID.ReleaseBuffer();
         CString INISectionLocale = L"Section." + szLocaleID;
 
-        g_Names.ArchSpecific.Locale = INISectionLocale + L"." + g_Names.Architecture;
         g_Names.ArchNeutral.Locale = INISectionLocale;
+        for (UINT i = 0; i < g_Names.Count; i++)
+            g_Names.ArchSpecific[i].Locale = INISectionLocale + L"." + g_Names.Architectures[i];
 
         // turn "Section.0c0a" into "Section.0a", keeping just the neutral lang part
         if (szLocaleID.GetLength() >= 2)
         {
-            g_Names.ArchSpecific.LocaleNeutral = L"Section." + szLocaleID.Right(2) + L"." + g_Names.Architecture;
             g_Names.ArchNeutral.LocaleNeutral = L"Section." + szLocaleID.Right(2);
+            for (UINT i = 0; i < g_Names.Count; i++)
+                g_Names.ArchSpecific[i].LocaleNeutral = g_Names.ArchNeutral.LocaleNeutral + L"." + g_Names.Architectures[i];
         }
 
-        g_Names.ArchSpecific.Section = L"Section." + g_Names.Architecture;
         g_Names.ArchNeutral.Section = L"Section";
+        for (UINT i = 0; i < g_Names.Count; i++)
+            g_Names.ArchSpecific[i].Section = L"Section." + CStringW(g_Names.Architectures[i]);
     }
 
     // Use a shared buffer so that we don't have to re-allocate it every time
     CStringW Buffer;
 
-    ReadSection(Buffer, g_Names.ArchSpecific.Locale, TRUE);
-    if (!g_Names.ArchSpecific.LocaleNeutral.IsEmpty())
+    UINT Selected = 0;
+    for (UINT i = 0; i < g_Names.Count; i++)
     {
-        ReadSection(Buffer, g_Names.ArchSpecific.LocaleNeutral, TRUE);
-    }
-    ReadSection(Buffer, g_Names.ArchSpecific.Section, TRUE);
+        const CLocaleSections &Names = g_Names.ArchSpecific[i];
 
-    ReadSection(Buffer, g_Names.ArchNeutral.Locale, FALSE);
+        if (ReadIniValue(szConfigPath, Names.Locale, L"URLDownload", Buffer) > 0 ||
+            (!Names.LocaleNeutral.IsEmpty() && ReadIniValue(szConfigPath, Names.LocaleNeutral, L"URLDownload", Buffer) > 0) ||
+            ReadIniValue(szConfigPath, Names.Section, L"URLDownload", Buffer) > 0)
+        {
+            Selected = i;
+            break;
+        }
+    }
+
+    if (g_Names.Count)
+    {
+        const CLocaleSections &Names = g_Names.ArchSpecific[Selected];
+
+        ReadSection(Buffer, Names.Locale, TRUE, g_Names.Architectures[Selected]);
+        if (!Names.LocaleNeutral.IsEmpty())
+        {
+            ReadSection(Buffer, Names.LocaleNeutral, TRUE, g_Names.Architectures[Selected]);
+        }
+        ReadSection(Buffer, Names.Section, TRUE, g_Names.Architectures[Selected]);
+    }
+
+    ReadSection(Buffer, g_Names.ArchNeutral.Locale, g_Names.NeutralDownload, L"x86");
     if (!g_Names.ArchNeutral.LocaleNeutral.IsEmpty())
     {
-        ReadSection(Buffer, g_Names.ArchNeutral.LocaleNeutral, FALSE);
+        ReadSection(Buffer, g_Names.ArchNeutral.LocaleNeutral, g_Names.NeutralDownload, L"x86");
     }
-    ReadSection(Buffer, g_Names.ArchNeutral.Section, FALSE);
+    ReadSection(Buffer, g_Names.ArchNeutral.Section, g_Names.NeutralDownload, L"x86");
 }
 
 BOOL
@@ -194,7 +236,7 @@ CConfigParser::GetSectionString(LPCWSTR Section, LPCWSTR Name, CStringW &Result)
 {
     HRESULT hr; // Return value; length of ini string or 0 on failure.
     CStringW SecBuf;
-    LPCWSTR Architecture = GetPackageArchitecture();
+    LPCWSTR Architecture = m_Architecture.IsEmpty() ? GetPackageArchitecture() : m_Architecture.GetString();
     WCHAR FullLoc[5], *NeutralLoc = FullLoc + 2;
     GetLocaleInfoW(GetUserDefaultLCID(), LOCALE_ILANGUAGE, FullLoc, _countof(FullLoc));
 

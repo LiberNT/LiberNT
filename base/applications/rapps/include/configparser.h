@@ -6,11 +6,12 @@ class CConfigParser
 {
     const CStringW szConfigPath;
     CSimpleMap<CStringW, CStringW> m_Keys;
+    CStringW m_Architecture;
 
     void
     CacheINI();
     void
-    ReadSection(CStringW &Buffer, const CStringW &Section, BOOL isArch);
+    ReadSection(CStringW &Buffer, const CStringW &Section, BOOL isArch, LPCWSTR Architecture);
 
   public:
     CConfigParser(const CStringW &FilePath);

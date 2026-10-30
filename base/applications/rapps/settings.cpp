@@ -233,6 +233,46 @@ GetPackageArchitecture()
     return SettingsInfo.szPackageArch[0] ? SettingsInfo.szPackageArch : CurrentArchitecture;
 }
 
+static BOOL
+IsUserMachineEnabled(USHORT Machine)
+{
+    typedef HRESULT (WINAPI *PFN_GET_MACHINE_TYPE_ATTRIBUTES)(USHORT, MACHINE_ATTRIBUTES *);
+    PFN_GET_MACHINE_TYPE_ATTRIBUTES pGetMachineTypeAttributes;
+    MACHINE_ATTRIBUTES Attributes;
+
+    pGetMachineTypeAttributes = (PFN_GET_MACHINE_TYPE_ATTRIBUTES)GetProcAddress(GetModuleHandleW(L"kernel32.dll"),
+                                                                               "GetMachineTypeAttributes");
+    return pGetMachineTypeAttributes && SUCCEEDED(pGetMachineTypeAttributes(Machine, &Attributes)) &&
+           (Attributes & UserEnabled);
+}
+
+UINT
+GetPackageArchitectures(LPCWSTR *Architectures, UINT Count)
+{
+    static const struct
+    {
+        USHORT Machine;
+        LPCWSTR Package;
+    } Fallbacks[] = {
+        { IMAGE_FILE_MACHINE_AMD64, L"amd64" },
+        { IMAGE_FILE_MACHINE_I386, L"x86" },
+    };
+    UINT Used = 0;
+
+    if (!Count)
+        return 0;
+    Architectures[Used++] = GetPackageArchitecture();
+    if (SettingsInfo.szPackageArch[0])
+        return Used;
+
+    for (SIZE_T i = 0; i < _countof(Fallbacks) && Used < Count; i++)
+    {
+        if (StrCmpIW(Fallbacks[i].Package, CurrentArchitecture) && IsUserMachineEnabled(Fallbacks[i].Machine))
+            Architectures[Used++] = Fallbacks[i].Package;
+    }
+    return Used;
+}
+
 BOOL
 LoadSettings(PSETTINGS_INFO pSettingsInfo)
 {

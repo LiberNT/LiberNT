@@ -32,5 +32,6 @@ BOOL LoadSettings(PSETTINGS_INFO pSettingsInfo);
 BOOL SaveSettings(HWND hwnd, PSETTINGS_INFO pSettingsInfo);
 VOID FillDefaultSettings(PSETTINGS_INFO pSettingsInfo);
 LPCWSTR GetPackageArchitecture();
+UINT GetPackageArchitectures(LPCWSTR *Architectures, UINT Count);
 
 extern SETTINGS_INFO SettingsInfo;
