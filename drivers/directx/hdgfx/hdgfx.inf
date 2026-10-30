@@ -17,7 +17,7 @@ DefaultDestDir=12
 [IntelMfg]
 %HdGfx.DeviceDesc%=HdGfx_Install,PCI\VEN_8086&DEV_0042
 %HdGfx.DeviceDesc%=HdGfx_Install,PCI\VEN_8086&DEV_0046
-%HdGfx.DeviceDesc%=HdGfx_Install,PCI\VEN_8086&DEV_0166
+%HdGfx.Ivb.DeviceDesc%=HdGfx_Install,PCI\VEN_8086&DEV_0166
 
 [HdGfx_Install]
 AddReg=HdGfx_SoftwareSettings
@@ -46,6 +46,7 @@ LoadOrderGroup=Video
 LiberNT="LiberNT"
 IntelMfg="Intel Corporation"
 HdGfx.DeviceDesc="Intel HD Graphics (Ironlake)"
+HdGfx.Ivb.DeviceDesc="Intel HD Graphics 4000"
 HdGfx.ServiceDesc="LiberNT Intel HD Graphics Display Driver"
 REG_MULTI_SZ=0x00010000
 REG_DWORD=0x00010001
