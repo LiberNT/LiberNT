@@ -12,6 +12,7 @@
 #define HDGFX_DMA_CPU               2UL
 #define HDGFX_DMA_NOP               3UL
 #define HDGFX_DMA_GTT               4UL
+#define HDGFX_DMA_USER              5UL
 #define HDGFX_PATCH_GTT             0UL
 #define HDGFX_PATCH_PHYSICAL        1UL
 #define HDGFX_BATCH_LIMIT           0x2000UL
@@ -25,6 +26,12 @@ typedef struct _HDGFX_DMA_RECORD
     ULONG Type;
     ULONG Size;
 } HDGFX_DMA_RECORD, *PHDGFX_DMA_RECORD;
+
+typedef struct _HDGFX_USER_BATCH
+{
+    ULONG BatchOffset;
+    ULONG StateOffset;
+} HDGFX_USER_BATCH, *PHDGFX_USER_BATCH;
 
 typedef struct _HDGFX_GTT_UPDATE
 {
@@ -531,6 +538,142 @@ HdgfxRenderCommand(
     }
 }
 
+static BOOLEAN
+HdgfxGenSection(
+    _In_ ULONG Offset,
+    _In_ ULONG Length,
+    _In_ ULONG Alignment,
+    _In_ ULONG Limit,
+    _In_ UINT CommandLength)
+{
+    if (Length == 0)
+        return TRUE;
+    return Length <= Limit && Length % Alignment == 0 && Offset % Alignment == 0 &&
+           Offset >= sizeof(HDGFX_GEN_SUBMIT) && Offset <= CommandLength && Length <= CommandLength - Offset;
+}
+
+static NTSTATUS
+HdgfxRenderGen(
+    _In_ PHDGFX_DEVICE KmdDevice,
+    _In_ PHDGFX_ADAPTER Adapter,
+    _Inout_ DXGKARG_RENDER *pRender)
+{
+    HDGFX_GEN_SUBMIT Submit;
+    ULONGLONG DmaAddress = (ULONGLONG)pRender->DmaBufferPhysicalAddress.QuadPart;
+    PUCHAR Base = pRender->pDmaBuffer;
+    D3DDDI_PATCHLOCATIONLIST *Out = pRender->pPatchLocationListOut;
+    PHDGFX_DMA_RECORD Record;
+    PHDGFX_USER_BATCH User;
+    PULONG End;
+    ULONG StateOffset;
+    ULONG BatchOffset;
+    ULONG Size;
+    UINT Index;
+    NTSTATUS Status;
+
+    if (pRender->CommandLength < sizeof(Submit))
+        return STATUS_INVALID_PARAMETER;
+    RtlCopyMemory(&Submit, pRender->pCommand, sizeof(Submit));
+    if (Submit.Magic != HDGFX_GEN_SUBMIT_MAGIC ||
+        Submit.Version != HDGFX_GEN_SUBMIT_VERSION || Submit.Flags != 0 || Submit.Reserved != 0 ||
+        pRender->MultipassOffset != 0 || Submit.BatchLength == 0 ||
+        !HdgfxGenSection(Submit.BatchOffset, Submit.BatchLength, 8, HDGFX_GEN_MAX_BATCH_SIZE,
+                         pRender->CommandLength) ||
+        !HdgfxGenSection(Submit.StateOffset, Submit.StateLength, 4, HDGFX_GEN_MAX_STATE_SIZE,
+                         pRender->CommandLength) ||
+        (Submit.StateLength != 0 && Submit.StateOffset < Submit.BatchOffset + Submit.BatchLength &&
+         Submit.BatchOffset < Submit.StateOffset + Submit.StateLength))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (pRender->DmaBufferSegmentId != HDGFX_DMA_SEGMENT_ID || DmaAddress < Adapter->DmaBase ||
+        DmaAddress - Adapter->DmaBase >= HDGFX_DMA_SIZE)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    StateOffset = (ULONG)(ROUND_TO_PAGES(DmaAddress + sizeof(*Record) + sizeof(*User)) - DmaAddress);
+    BatchOffset = ALIGN_UP_BY(StateOffset + Submit.StateLength, 64);
+    Size = BatchOffset + Submit.BatchLength + 2 * sizeof(ULONG);
+    if (Size > pRender->DmaSize)
+        return STATUS_INVALID_PARAMETER;
+
+    for (Index = 0; Index < pRender->PatchLocationListInSize; Index++)
+    {
+        CONST D3DDDI_PATCHLOCATIONLIST *Patch = &pRender->pPatchLocationListIn[Index];
+        CONST DXGK_ALLOCATIONLIST *Allocation;
+        ULONGLONG Value;
+
+        if (Patch->PatchOffset % sizeof(ULONG) != 0 || Patch->AllocationIndex >= pRender->AllocationListSize)
+            return STATUS_INVALID_PARAMETER;
+        if (!(Patch->PatchOffset >= Submit.BatchOffset &&
+              Patch->PatchOffset - Submit.BatchOffset < Submit.BatchLength) &&
+            !(Submit.StateLength != 0 && Patch->PatchOffset >= Submit.StateOffset &&
+              Patch->PatchOffset - Submit.StateOffset < Submit.StateLength))
+        {
+            return STATUS_INVALID_USER_BUFFER;
+        }
+        if (Patch->DriverId == HDGFX_GEN_PATCH_STATE)
+        {
+            if (Patch->AllocationOffset >= Submit.StateLength)
+                return STATUS_INVALID_PARAMETER;
+            continue;
+        }
+        if (Patch->DriverId != HDGFX_GEN_PATCH_ALLOCATION)
+            return STATUS_INVALID_PARAMETER;
+        Allocation = &pRender->pAllocationList[Patch->AllocationIndex];
+        Status = HdgfxValidateOpen(KmdDevice, (PHDGFX_OPEN)Allocation->hDeviceSpecificAllocation);
+        if (NT_SUCCESS(Status))
+        {
+            Status = HdgfxPlacement(Adapter, Allocation, (PHDGFX_OPEN)Allocation->hDeviceSpecificAllocation,
+                                    Patch->AllocationOffset, HDGFX_PATCH_GTT, &Value);
+        }
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+
+    RtlZeroMemory(Base, BatchOffset);
+    Record = (PHDGFX_DMA_RECORD)Base;
+    Record->Type = HDGFX_DMA_USER;
+    Record->Size = Size;
+    User = (PHDGFX_USER_BATCH)(Record + 1);
+    User->BatchOffset = BatchOffset;
+    User->StateOffset = StateOffset;
+    if (Submit.StateLength != 0)
+        RtlCopyMemory(Base + StateOffset, (CONST UCHAR *)pRender->pCommand + Submit.StateOffset, Submit.StateLength);
+    RtlCopyMemory(Base + BatchOffset, (CONST UCHAR *)pRender->pCommand + Submit.BatchOffset, Submit.BatchLength);
+    End = (PULONG)(Base + BatchOffset + Submit.BatchLength);
+    HdgfxMiBatchEnd((uint32_t *)End);
+    End[1] = 0;
+
+    for (Index = 0; Index < pRender->PatchLocationListInSize; Index++)
+    {
+        CONST D3DDDI_PATCHLOCATIONLIST *Patch = &pRender->pPatchLocationListIn[Index];
+        ULONG Location;
+
+        if (Patch->PatchOffset - Submit.BatchOffset < Submit.BatchLength)
+            Location = BatchOffset + (Patch->PatchOffset - Submit.BatchOffset);
+        else
+            Location = StateOffset + (Patch->PatchOffset - Submit.StateOffset);
+        if (Patch->DriverId == HDGFX_GEN_PATCH_STATE)
+        {
+            *(PULONG)(Base + Location) = (ULONG)(DmaAddress + StateOffset + Patch->AllocationOffset);
+            continue;
+        }
+        RtlZeroMemory(Out, sizeof(*Out));
+        Out->AllocationIndex = Patch->AllocationIndex;
+        Out->AllocationOffset = Patch->AllocationOffset;
+        Out->DriverId = HDGFX_PATCH_GTT;
+        Out->PatchOffset = Location;
+        Out++;
+    }
+
+    pRender->pDmaBuffer = Base + Size;
+    pRender->pPatchLocationListOut = Out;
+    pRender->MultipassOffset = 0;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 APIENTRY
 HdgfxDdiRender(
@@ -550,6 +693,18 @@ HdgfxDdiRender(
         return Status;
     if (pRender == NULL || pRender->pCommand == NULL || pRender->pDmaBuffer == NULL)
         return STATUS_INVALID_PARAMETER;
+    if (pRender->PatchLocationListInSize != 0 &&
+        (pRender->pPatchLocationListIn == NULL || pRender->pPatchLocationListOut == NULL ||
+         pRender->pAllocationList == NULL || pRender->AllocationListSize == 0))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (((PHDGFX_CONTEXT)hContext)->Magic == HDGFX_CONTEXT_MAGIC && ((PHDGFX_CONTEXT)hContext)->Gen)
+    {
+        if (pRender->PatchLocationListInSize > pRender->PatchLocationListOutSize)
+            return STATUS_INVALID_PARAMETER;
+        return HdgfxRenderGen(KmdDevice, Adapter, pRender);
+    }
     if (pRender->CommandLength == 0 || pRender->CommandLength % sizeof(SOFTGPU_CMD) != 0 ||
         pRender->MultipassOffset >= pRender->CommandLength || pRender->MultipassOffset % sizeof(SOFTGPU_CMD) != 0)
     {
@@ -557,12 +712,6 @@ HdgfxDdiRender(
     }
     if (pRender->PatchLocationListInSize > pRender->PatchLocationListOutSize)
         return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
-    if (pRender->PatchLocationListInSize != 0 &&
-        (pRender->pPatchLocationListIn == NULL || pRender->pPatchLocationListOut == NULL ||
-         pRender->pAllocationList == NULL || pRender->AllocationListSize == 0))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
 
     for (Index = 0; Index < pRender->PatchLocationListInSize; Index++)
     {
@@ -1172,12 +1321,13 @@ HdgfxRunGtt(
 static HDGFX_QUEUE_STATE
 HdgfxRunBatch(
     _Inout_ PHDGFX_ADAPTER Adapter,
-    _In_ ULONG Address)
+    _In_ ULONG Address,
+    _In_ BOOLEAN Secure)
 {
     HDGFX_QUEUE_STATE State = HdgfxQueueDone;
     HDGFX_MMIO Mmio;
     uint32_t Dwords[4];
-    ULONG Count = HdgfxMiBatchStart(Dwords, Address);
+    ULONG Count = Secure ? HdgfxMiBatchStart(Dwords, Address) : HdgfxMiUserBatchStart(Dwords, Address);
     ULONG Bytes = Count * sizeof(ULONG);
     ULONG Padding;
     ULONG Head;
@@ -1294,16 +1444,25 @@ HdgfxRunSubmit(
              (Record->Size < sizeof(*Record) + sizeof(HDGFX_GTT_UPDATE) ||
               (((PHDGFX_GTT_UPDATE)(Record + 1))->Fill == 0 &&
                ((PHDGFX_GTT_UPDATE)(Record + 1))->Count >
-                   (Record->Size - sizeof(*Record) - sizeof(HDGFX_GTT_UPDATE)) / sizeof(ULONG)))))
+                   (Record->Size - sizeof(*Record) - sizeof(HDGFX_GTT_UPDATE)) / sizeof(ULONG)))) ||
+            (Record->Type == HDGFX_DMA_USER &&
+             (Record->Size < sizeof(*Record) + sizeof(HDGFX_USER_BATCH) ||
+              ((PHDGFX_USER_BATCH)(Record + 1))->BatchOffset % 8 != 0 ||
+              ((PHDGFX_USER_BATCH)(Record + 1))->BatchOffset >= Record->Size)))
         {
             DPRINT1("Malformed DMA record at 0x%lx of fence %lu, skipping the rest\n", Submit->Offset, Submit->Fence);
             Submit->Offset = Submit->EndOffset;
             break;
         }
-        if (Record->Type == HDGFX_DMA_BATCH && Mapped != NULL)
+        if ((Record->Type == HDGFX_DMA_BATCH || Record->Type == HDGFX_DMA_USER) && Mapped != NULL)
             DPRINT1("Batch at 0x%lx of fence %lu is outside the DMA segment, skipped\n", Submit->Offset, Submit->Fence);
         else if (Record->Type == HDGFX_DMA_BATCH)
-            State = HdgfxRunBatch(Adapter, (ULONG)Adapter->DmaBase + Segment + Submit->Offset + sizeof(*Record));
+            State = HdgfxRunBatch(Adapter, (ULONG)Adapter->DmaBase + Segment + Submit->Offset + sizeof(*Record), TRUE);
+        else if (Record->Type == HDGFX_DMA_USER)
+            State = HdgfxRunBatch(Adapter,
+                                  (ULONG)Adapter->DmaBase + Segment + Submit->Offset +
+                                      ((PHDGFX_USER_BATCH)(Record + 1))->BatchOffset,
+                                  FALSE);
         else if (Record->Type == HDGFX_DMA_CPU)
             State = HdgfxRunCpu(Adapter, (PSOFTGPU_CMD)(Record + 1));
         else if (Record->Type == HDGFX_DMA_GTT)
@@ -1603,6 +1762,8 @@ HdgfxDdiCreateContext(
     PHDGFX_DEVICE KmdDevice = hDevice;
     PHDGFX_PROCESS Process;
     PHDGFX_CONTEXT Context;
+    HDGFX_GEN_CONTEXT_DATA GenData;
+    BOOLEAN Gen = FALSE;
 
     if (CreateContext == NULL || KmdDevice == NULL || KmdDevice->Magic != HDGFX_DEVICE_MAGIC ||
         KmdDevice->Adapter == NULL || KmdDevice->Adapter->Magic != HDGFX_ADAPTER_MAGIC)
@@ -1616,20 +1777,31 @@ HdgfxDdiCreateContext(
     {
         return STATUS_INVALID_PARAMETER;
     }
+    if (CreateContext->PrivateDriverDataSize == sizeof(GenData) && CreateContext->pPrivateDriverData != NULL)
+    {
+        RtlCopyMemory(&GenData, CreateContext->pPrivateDriverData, sizeof(GenData));
+        if (GenData.Magic != HDGFX_GEN_CONTEXT_MAGIC || GenData.Version != HDGFX_GEN_CONTEXT_VERSION ||
+            CreateContext->Flags.SystemContext)
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+        Gen = TRUE;
+    }
 
     Context = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Context), HDGFX_TAG);
     if (Context == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
     Context->Magic = HDGFX_CONTEXT_MAGIC;
     Context->NodeOrdinal = CreateContext->NodeOrdinal;
+    Context->Gen = Gen;
     Context->Device = KmdDevice;
     Context->Process = Process;
 
-    CreateContext->ContextInfo.DmaBufferSize = 64 * 1024;
+    CreateContext->ContextInfo.DmaBufferSize = Gen ? HDGFX_GEN_COMMAND_BUFFER_SIZE : 64 * 1024;
     CreateContext->ContextInfo.DmaBufferSegmentSet = 1UL << (HDGFX_DMA_SEGMENT_ID - 1);
     CreateContext->ContextInfo.DmaBufferPrivateDataSize = 0;
-    CreateContext->ContextInfo.AllocationListSize = 256;
-    CreateContext->ContextInfo.PatchLocationListSize = 256;
+    CreateContext->ContextInfo.AllocationListSize = Gen ? HDGFX_GEN_ALLOCATION_LIST_SIZE : 256;
+    CreateContext->ContextInfo.PatchLocationListSize = Gen ? HDGFX_GEN_PATCH_LIST_SIZE : 256;
     CreateContext->ContextInfo.Caps.Value = 0;
     CreateContext->hContext = Context;
     return STATUS_SUCCESS;

@@ -18,6 +18,7 @@
 #define HDGFX_MI_STORE_DATA_INDEX   0x21u
 #define HDGFX_MI_BATCH_BUFFER_START 0x31u
 #define HDGFX_MI_BATCH_GTT          0x80u
+#define HDGFX_MI_BATCH_NON_SECURE   0x100u
 #define HDGFX_HWS_FIRST_FREE        0x10u
 #define HDGFX_HWS_DWORDS            1024u
 #define HDGFX_HWS_SCRATCH           0x3Fu
@@ -61,6 +62,18 @@ HdgfxMiBatchStart(
     Dwords[2] = HdgfxMiCommand(HDGFX_MI_NOOP, 0);
     Dwords[3] = HdgfxMiCommand(HDGFX_MI_NOOP, 0);
     return 4;
+}
+
+uint32_t
+HdgfxMiUserBatchStart(
+    uint32_t *Dwords,
+    uint32_t Address)
+{
+    uint32_t Count = HdgfxMiBatchStart(Dwords, Address);
+
+    if (Count != 0)
+        Dwords[0] |= HDGFX_MI_BATCH_NON_SECURE;
+    return Count;
 }
 
 uint32_t
