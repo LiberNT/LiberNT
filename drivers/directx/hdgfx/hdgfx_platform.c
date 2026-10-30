@@ -2079,9 +2079,9 @@ HdgfxCursorCommit(
     {
         if (!Active[Pipe])
             continue;
-        WRITE_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(CUR_CNTR, Pipe)), Scanout->CursorControl);
-        WRITE_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(CUR_POS, Pipe)), Scanout->CursorPosition);
-        WRITE_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(CUR_BASE, Pipe)), Scanout->CursorAddress);
+        WRITE_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(CUR_CNTR, 0) + Pipe * Scanout->Generation->CursorStride), Scanout->CursorControl);
+        WRITE_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(CUR_POS, 0) + Pipe * Scanout->Generation->CursorStride), Scanout->CursorPosition);
+        WRITE_REGISTER_ULONG((PULONG)(Scanout->Registers + HDGFX_REG(CUR_BASE, 0) + Pipe * Scanout->Generation->CursorStride), Scanout->CursorAddress);
     }
 }
 

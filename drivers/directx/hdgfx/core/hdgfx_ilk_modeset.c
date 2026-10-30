@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Intel HD Graphics Driver
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Ironlake LVDS mode computation, commit and readback comparison
+ * PURPOSE:     Ironlake and Ivy Bridge mode computation, commit and readback comparison
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
@@ -76,6 +76,20 @@
 #define ILK_CRT_DETECT_TIMEOUT_US   1000000
 #define ILK_DREF_WARMUP_US          1
 #define ILK_DREF_INTEGRATED         2
+
+#define IVB_FDI_TX_PLL_WARMUP_US    100
+#define IVB_FDI_RX_PCDCLK_US        200
+#define IVB_FDI_IMR_SETTLE_US       150
+#define IVB_FDI_TP1_POLL_US         1
+#define IVB_FDI_TP2_POLL_US         2
+#define IVB_FDI_POLLS               4
+#define IVB_FDI_ATTEMPTS            2
+#define IVB_FDI_RX_TP1_TO_TP2_48    2
+#define IVB_FDI_RX_DELAY_90         0x90
+#define IVB_FDI_BC_LANES            2
+#define CPT_DPLL_SEL_STRIDE         4
+#define CPT_DPLL_SEL_B              0
+#define CPT_DPLL_SEL_ENABLE         3
 
 static uint32_t
 IlkRead(
@@ -466,11 +480,22 @@ IlkDisablePipe(
     {
         return HdgfxModesetTranscoderOffTimeout;
     }
+    if (Target->Gen >= 6)
+    {
+        IlkClearBit(Mmio, HDGFX_REG(TRANS_CHICKEN2, Index), HDGFX_MASK(TRANS_CHICKEN2_OVERRIDE));
+        IlkClearBit(Mmio, HDGFX_REG(PCH_DPLL_SEL, 0),
+                    ((1u << CPT_DPLL_SEL_ENABLE) | (1u << CPT_DPLL_SEL_B)) << (Index * CPT_DPLL_SEL_STRIDE));
+    }
     IlkClearBit(Mmio, HDGFX_REG(PCH_DPLL, Target->Transcoders[Index].Dpll), HDGFX_MASK(DPLL_VCO_ENABLE));
 
     if (HDGFX_GET(IlkRead(Mmio, HDGFX_REG(TRANS_CONF, Other)), TRANS_CONF_ENABLE) == 0)
     {
         IlkClearBit(Mmio, HDGFX_REG(FDI_RX_CTL, Index), HDGFX_MASK(FDI_RX_PCDCLK));
+        if (Target->Gen >= 6)
+        {
+            IlkClearBit(Mmio, HDGFX_REG(FDI_TX_CTL, Index), HDGFX_MASK(FDI_TX_PLL_ENABLE));
+            IlkDelay(Mmio, IVB_FDI_TX_PLL_WARMUP_US);
+        }
         IlkClearBit(Mmio, HDGFX_REG(FDI_RX_CTL, Index), HDGFX_MASK(FDI_RX_PLL_ENABLE));
     }
     return HdgfxModesetSuccess;
@@ -547,6 +572,119 @@ IlkTrainFdi(
     return HdgfxModesetSuccess;
 }
 
+static bool
+IvbFdiLock(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Index,
+    uint32_t Mask,
+    uint32_t PollUs)
+{
+    uint32_t Poll;
+    uint32_t Value;
+
+    for (Poll = 0; Poll < IVB_FDI_POLLS; Poll++)
+    {
+        Value = IlkRead(Mmio, HDGFX_REG(FDI_RX_ISR, Index));
+        if ((Value & Mask) != 0 || (IlkRead(Mmio, HDGFX_REG(FDI_RX_ISR, Index)) & Mask) != 0)
+        {
+            IlkWrite(Mmio, HDGFX_REG(FDI_RX_ISR, Index), Value | Mask);
+            return true;
+        }
+        IlkDelay(Mmio, PollUs);
+    }
+    return false;
+}
+
+static HDGFX_MODESET_STATUS
+IvbTrainFdi(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Index,
+    uint32_t Lanes)
+{
+    static const uint8_t SwingEmphasis[] = { 0x00, 0x3A, 0x39, 0x38 };
+    uint32_t LockMask = HDGFX_MASK(FDI_RX_BIT_LOCK) | HDGFX_MASK(FDI_RX_SYMBOL_LOCK);
+    HDGFX_MODESET_STATUS Status = HdgfxModesetFdiBitLockFailed;
+    uint32_t Attempt;
+    uint32_t Tx;
+    uint32_t Rx;
+
+    if (Index == 1)
+    {
+        IlkWrite(Mmio, HDGFX_REG(SOUTH_CHICKEN1, 0),
+                 HDGFX_REPLACE(IlkRead(Mmio, HDGFX_REG(SOUTH_CHICKEN1, 0)), SOUTH_CHICKEN1_FDI_BC,
+                               Lanes <= IVB_FDI_BC_LANES));
+    }
+    IlkWrite(Mmio, HDGFX_REG(FDI_RX_TUSIZE1, Index),
+             IlkRead(Mmio, HDGFX_REG(PIPE_DATA_M1, Index)) & HDGFX_MASK(M_N_TU_SIZE));
+    IlkClearBit(Mmio, HDGFX_REG(FDI_RX_IMR, Index), LockMask);
+    IlkDelay(Mmio, IVB_FDI_IMR_SETTLE_US);
+
+    for (Attempt = 0; Attempt < IVB_FDI_ATTEMPTS * sizeof(SwingEmphasis); Attempt++)
+    {
+        Tx = IlkRead(Mmio, HDGFX_REG(FDI_TX_CTL, Index));
+        Tx &= ~(HDGFX_MASK(FDI_TX_ENABLE) | HDGFX_MASK(FDI_TX_AUTO_TRAINING) | HDGFX_MASK(FDI_TX_TRAINING_IVB));
+        IlkWrite(Mmio, HDGFX_REG(FDI_TX_CTL, Index), Tx);
+        Rx = IlkRead(Mmio, HDGFX_REG(FDI_RX_CTL, Index));
+        Rx &= ~(HDGFX_MASK(FDI_RX_ENABLE) | HDGFX_MASK(FDI_RX_AUTO_TRAINING) | HDGFX_MASK(FDI_RX_TRAINING_CPT));
+        IlkWrite(Mmio, HDGFX_REG(FDI_RX_CTL, Index), Rx);
+
+        Tx = HDGFX_REPLACE(Tx, FDI_TX_WIDTH, IlkFdiWidthEncoding(Lanes));
+        Tx = HDGFX_REPLACE(Tx, FDI_TX_SWING_EMPHASIS, SwingEmphasis[Attempt / IVB_FDI_ATTEMPTS]);
+        Tx = HDGFX_REPLACE(Tx, FDI_TX_COMPOSITE_SYNC, 1);
+        IlkWrite(Mmio, HDGFX_REG(FDI_TX_CTL, Index), HDGFX_REPLACE(Tx, FDI_TX_ENABLE, 1));
+        IlkWrite(Mmio, HDGFX_REG(FDI_RX_MISC, Index),
+                 HDGFX_SET(FDI_RX_TP1_TO_TP2, IVB_FDI_RX_TP1_TO_TP2_48) | HDGFX_SET(FDI_RX_DELAY, IVB_FDI_RX_DELAY_90));
+        Rx = HDGFX_REPLACE(Rx, FDI_RX_COMPOSITE_SYNC, 1);
+        IlkWrite(Mmio, HDGFX_REG(FDI_RX_CTL, Index), HDGFX_REPLACE(Rx, FDI_RX_ENABLE, 1));
+        IlkDelay(Mmio, IVB_FDI_TP1_POLL_US);
+
+        if (!IvbFdiLock(Mmio, Index, HDGFX_MASK(FDI_RX_BIT_LOCK), IVB_FDI_TP1_POLL_US))
+        {
+            Status = HdgfxModesetFdiBitLockFailed;
+            continue;
+        }
+
+        IlkWrite(Mmio, HDGFX_REG(FDI_TX_CTL, Index),
+                 HDGFX_REPLACE(IlkRead(Mmio, HDGFX_REG(FDI_TX_CTL, Index)), FDI_TX_TRAINING_IVB, ILK_FDI_PATTERN_2));
+        IlkWrite(Mmio, HDGFX_REG(FDI_RX_CTL, Index),
+                 HDGFX_REPLACE(IlkRead(Mmio, HDGFX_REG(FDI_RX_CTL, Index)), FDI_RX_TRAINING_CPT, ILK_FDI_PATTERN_2));
+        IlkDelay(Mmio, IVB_FDI_TP2_POLL_US);
+
+        if (IvbFdiLock(Mmio, Index, HDGFX_MASK(FDI_RX_SYMBOL_LOCK), IVB_FDI_TP2_POLL_US))
+            return HdgfxModesetSuccess;
+        Status = HdgfxModesetFdiSymbolLockFailed;
+    }
+    return Status;
+}
+
+static void
+IvbFinishFdi(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Index)
+{
+    uint32_t Tx = IlkRead(Mmio, HDGFX_REG(FDI_TX_CTL, Index));
+    uint32_t Rx = IlkRead(Mmio, HDGFX_REG(FDI_RX_CTL, Index));
+
+    Tx = HDGFX_REPLACE(Tx, FDI_TX_TRAINING_IVB, ILK_FDI_NORMAL);
+    IlkWrite(Mmio, HDGFX_REG(FDI_TX_CTL, Index), HDGFX_REPLACE(Tx, FDI_TX_ENHANCED_FRAMING, 1));
+    Rx = HDGFX_REPLACE(Rx, FDI_RX_TRAINING_CPT, ILK_FDI_NORMAL);
+    Rx = HDGFX_REPLACE(Rx, FDI_RX_ENHANCED_FRAMING, 1);
+    IlkWrite(Mmio, HDGFX_REG(FDI_RX_CTL, Index), Rx);
+    IlkDelay(Mmio, ILK_FDI_IDLE_PATTERN_US);
+    IlkWrite(Mmio, HDGFX_REG(FDI_RX_CTL, Index),
+             Rx | HDGFX_MASK(FDI_RX_FS_ERROR_CORRECT) | HDGFX_MASK(FDI_RX_FE_ERROR_CORRECT));
+}
+
+static uint32_t
+IlkFitterControl(
+    const HDGFX_DISPLAY_STATE *Target,
+    uint32_t Index)
+{
+    uint32_t Value = HDGFX_SET(PF_ENABLE, 1) | HDGFX_SET(PF_FILTER, ILK_PF_FILTER_MEDIUM);
+
+    return Target->Gen >= 7 ? Value | HDGFX_SET(PF_PIPE_IVB, Index) : Value;
+}
+
 static uint32_t
 IlkLvdsControl(
     uint32_t Value,
@@ -556,7 +694,8 @@ IlkLvdsControl(
     uint32_t Pairs = Lvds->DualChannel ? ILK_LVDS_PAIRS_ACTIVE : 0;
 
     Value = HDGFX_REPLACE(Value, LVDS_ENABLE, 1);
-    Value = HDGFX_REPLACE(Value, LVDS_TRANSCODER, Lvds->Transcoder);
+    Value = Target->Gen >= 6 ? HDGFX_REPLACE(Value, LVDS_TRANSCODER_CPT, Lvds->Transcoder) :
+                               HDGFX_REPLACE(Value, LVDS_TRANSCODER, Lvds->Transcoder);
     Value = HDGFX_REPLACE(Value, LVDS_HSYNC_INVERT, Lvds->HSyncActiveLow);
     Value = HDGFX_REPLACE(Value, LVDS_VSYNC_INVERT, Lvds->VSyncActiveLow);
     Value = HDGFX_REPLACE(Value, LVDS_A_CONTROL, ILK_LVDS_PAIRS_ACTIVE);
@@ -606,10 +745,17 @@ IlkEnablePipe(
     IlkWrite(Mmio, HDGFX_REG(FDI_RX_CTL, Index), Value);
     IlkDelay(Mmio, ILK_FDI_RX_PLL_WARMUP_US + ILK_DMI_LATENCY_US);
     IlkWrite(Mmio, HDGFX_REG(FDI_RX_CTL, Index), HDGFX_REPLACE(Value, FDI_RX_PCDCLK, 1));
+    if (Target->Gen >= 6)
+    {
+        IlkDelay(Mmio, IVB_FDI_RX_PCDCLK_US);
+        IlkWrite(Mmio, HDGFX_REG(FDI_TX_CTL, Index),
+                 HDGFX_REPLACE(IlkRead(Mmio, HDGFX_REG(FDI_TX_CTL, Index)), FDI_TX_PLL_ENABLE, 1));
+        IlkDelay(Mmio, IVB_FDI_TX_PLL_WARMUP_US);
+    }
 
     if (Pipe->PanelFitter.Enabled)
     {
-        IlkWrite(Mmio, HDGFX_REG(PF_CTL_1, Index), HDGFX_SET(PF_ENABLE, 1) | HDGFX_SET(PF_FILTER, ILK_PF_FILTER_MEDIUM));
+        IlkWrite(Mmio, HDGFX_REG(PF_CTL_1, Index), IlkFitterControl(Target, Index));
         IlkWrite(Mmio, HDGFX_REG(PF_WIN_POS, Index),
                  HDGFX_SET(PF_X, Pipe->PanelFitter.X) | HDGFX_SET(PF_Y, Pipe->PanelFitter.Y));
         IlkWrite(Mmio, HDGFX_REG(PF_WIN_SZ, Index),
@@ -643,6 +789,8 @@ IlkEnablePipe(
     IlkWrite(Mmio, HDGFX_REG(DSP_TILEOFF, Index), 0);
     IlkWrite(Mmio, HDGFX_REG(DSP_SURF, Index), Pipe->Primary.Surface);
 
+    if (Target->Gen >= 7)
+        return IvbTrainFdi(Mmio, Index, Pipe->FdiTx.Lanes);
     return IlkTrainFdi(Mmio, Index, Pipe->FdiTx.Lanes);
 }
 
@@ -653,15 +801,34 @@ IlkEnableTranscoder(
     uint32_t Index)
 {
     const HDGFX_TRANSCODER *Transcoder = &Target->Transcoders[Index];
+    uint32_t Sel;
 
+    if (Target->Gen >= 6)
+    {
+        Sel = IlkRead(Mmio, HDGFX_REG(PCH_DPLL_SEL, 0));
+        Sel &= ~(((1u << CPT_DPLL_SEL_ENABLE) | (1u << CPT_DPLL_SEL_B)) << (Index * CPT_DPLL_SEL_STRIDE));
+        Sel |= ((1u << CPT_DPLL_SEL_ENABLE) | (Transcoder->Dpll << CPT_DPLL_SEL_B)) << (Index * CPT_DPLL_SEL_STRIDE);
+        IlkWrite(Mmio, HDGFX_REG(PCH_DPLL_SEL, 0), Sel);
+    }
     IlkEnableDpll(Mmio, Transcoder->Dpll, &Target->Dplls[Transcoder->Dpll]);
 
     IlkWriteTimings(Mmio,
                     HDGFX_REG(TRANS_HTOTAL, Index), HDGFX_REG(TRANS_HBLANK, Index), HDGFX_REG(TRANS_HSYNC, Index),
                     HDGFX_REG(TRANS_VTOTAL, Index), HDGFX_REG(TRANS_VBLANK, Index), HDGFX_REG(TRANS_VSYNC, Index),
                     &Transcoder->Timings);
-    IlkWrite(Mmio, HDGFX_REG(TRANS_CONF, Index),
-             HDGFX_SET(TRANS_CONF_ENABLE, 1) | HDGFX_SET(TRANS_CONF_BPC, IlkBpcEncoding(Transcoder->FdiRx.Bpc)));
+    if (Target->Gen >= 7)
+        IvbFinishFdi(Mmio, Index);
+    if (Target->Gen >= 6)
+    {
+        IlkWrite(Mmio, HDGFX_REG(TRANS_CHICKEN2, Index),
+                 IlkRead(Mmio, HDGFX_REG(TRANS_CHICKEN2, Index)) | HDGFX_MASK(TRANS_CHICKEN2_OVERRIDE));
+        IlkWrite(Mmio, HDGFX_REG(TRANS_CONF, Index), HDGFX_SET(TRANS_CONF_ENABLE, 1));
+    }
+    else
+    {
+        IlkWrite(Mmio, HDGFX_REG(TRANS_CONF, Index),
+                 HDGFX_SET(TRANS_CONF_ENABLE, 1) | HDGFX_SET(TRANS_CONF_BPC, IlkBpcEncoding(Transcoder->FdiRx.Bpc)));
+    }
     if (!IlkWaitFor(Mmio, HDGFX_REG(TRANS_CONF, Index), HDGFX_MASK(TRANS_CONF_STATE), HDGFX_MASK(TRANS_CONF_STATE),
                     ILK_PIPE_TIMEOUT_US, ILK_POLL_US))
     {
@@ -745,7 +912,7 @@ IlkUpdateSource(
              HDGFX_SET(PIPE_SRC_WIDTH, Pipe->SourceWidth - 1) | HDGFX_SET(PIPE_SRC_HEIGHT, Pipe->SourceHeight - 1));
     if (Pipe->PanelFitter.Enabled)
     {
-        IlkWrite(Mmio, HDGFX_REG(PF_CTL_1, Index), HDGFX_SET(PF_ENABLE, 1) | HDGFX_SET(PF_FILTER, ILK_PF_FILTER_MEDIUM));
+        IlkWrite(Mmio, HDGFX_REG(PF_CTL_1, Index), IlkFitterControl(Target, Index));
         IlkWrite(Mmio, HDGFX_REG(PF_WIN_POS, Index),
                  HDGFX_SET(PF_X, Pipe->PanelFitter.X) | HDGFX_SET(PF_Y, Pipe->PanelFitter.Y));
         IlkWrite(Mmio, HDGFX_REG(PF_WIN_SZ, Index),
@@ -998,11 +1165,14 @@ HdgfxIlkComputeCrt(
 static uint32_t
 IlkAdpaControl(
     uint32_t Value,
-    const HDGFX_CRT *Crt)
+    const HDGFX_DISPLAY_STATE *Target)
 {
+    const HDGFX_CRT *Crt = &Target->Crt;
+
     Value &= ~HDGFX_MASK(ADPA_HOTPLUG_STATUS);
     Value = HDGFX_REPLACE(Value, ADPA_ENABLE, 1);
-    Value = HDGFX_REPLACE(Value, ADPA_TRANSCODER, Crt->Transcoder);
+    Value = Target->Gen >= 6 ? HDGFX_REPLACE(Value, ADPA_TRANSCODER_CPT, Crt->Transcoder) :
+                               HDGFX_REPLACE(Value, ADPA_TRANSCODER, Crt->Transcoder);
     Value = HDGFX_REPLACE(Value, ADPA_HSYNC_HIGH, Crt->HSyncActiveHigh);
     return HDGFX_REPLACE(Value, ADPA_VSYNC_HIGH, Crt->VSyncActiveHigh);
 }
@@ -1091,7 +1261,7 @@ HdgfxIlkCommitCrt(
     Status = IlkEnableTranscoder(Mmio, Target, Index);
     if (Status != HdgfxModesetSuccess)
         return Status;
-    IlkWrite(Mmio, HDGFX_REG(PCH_ADPA, 0), IlkAdpaControl(IlkRead(Mmio, HDGFX_REG(PCH_ADPA, 0)), &Target->Crt));
+    IlkWrite(Mmio, HDGFX_REG(PCH_ADPA, 0), IlkAdpaControl(IlkRead(Mmio, HDGFX_REG(PCH_ADPA, 0)), Target));
     return HdgfxModesetSuccess;
 }
 

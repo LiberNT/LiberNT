@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Intel HD Graphics Driver
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Ironlake display register and field table
+ * PURPOSE:     Ironlake and Ivy Bridge register and field table
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
@@ -17,6 +17,7 @@
     R(HWS_PGA,              0x2080, 0) \
     R(ESR,                  0x20B8, 0) \
     R(GDSR,                 0x12CA4, 0) \
+    R(SOUTH_CHICKEN1,       0xC2000, 0) \
     R(GTIMR,                0x44014, 0) \
     R(GTIIR,                0x44018, 0) \
     R(GTIER,                0x4401C, 0) \
@@ -59,6 +60,7 @@
     R(PCH_FP1,              0xC6044, 8) \
     R(PCH_DREF_CONTROL,     0xC6200, 0) \
     R(PCH_RAWCLK_FREQ,      0xC6204, 0) \
+    R(PCH_DPLL_SEL,         0xC7000, 0) \
     R(PCH_PP_STATUS,        0xC7200, 0) \
     R(PCH_PP_CONTROL,       0xC7204, 0) \
     R(PCH_PP_ON_DELAYS,     0xC7208, 0) \
@@ -84,14 +86,21 @@
     R(PCH_LVDS,             0xE1180, 0) \
     R(TRANS_CONF,           0xF0008, 0x1000) \
     R(FDI_RX_CTL,           0xF000C, 0x1000) \
-    R(FDI_RX_ISR,           0xF0014, 0x1000)
+    R(FDI_RX_MISC,          0xF0010, 0x1000) \
+    R(FDI_RX_ISR,           0xF0014, 0x1000) \
+    R(FDI_RX_IMR,           0xF0018, 0x1000) \
+    R(FDI_RX_TUSIZE1,       0xF0030, 0x1000) \
+    R(TRANS_CHICKEN2,       0xF0064, 0x1000)
 
 #define HDGFX_ILK_FIELDS(F) \
     F(DE_MASTER,                31, 31) \
+    F(DE_GSE_IVB,               29, 29) \
+    F(DE_PCH_EVENT_IVB,         28, 28) \
     F(DE_PCH_EVENT,             21, 21) \
     F(DE_GSE,                   18, 18) \
     F(GT_RENDER_USER,           0, 0) \
     F(SDE_CRT_HOTPLUG,          11, 11) \
+    F(SDE_CRT_HOTPLUG_CPT,      19, 19) \
     F(TIMING_LOW,               12, 0) \
     F(TIMING_HIGH,              28, 16) \
     F(TIMING_ACTIVE,            11, 0) \
@@ -128,6 +137,7 @@
     F(MI_LENGTH,                7, 0) \
     F(MI_STORE_INDEX_OFFSET,    11, 2) \
     F(PF_ENABLE,                31, 31) \
+    F(PF_PIPE_IVB,              30, 29) \
     F(PF_FILTER,                24, 23) \
     F(PF_X,                     28, 16) \
     F(PF_Y,                     11, 0) \
@@ -186,6 +196,7 @@
     F(GMBUS2_ACTIVE,            9, 9) \
     F(BLC_CPU_ENABLE,           31, 31) \
     F(BLC_CPU_PIPE,             29, 29) \
+    F(BLC_CPU_PIPE_IVB,         30, 29) \
     F(BLC_CPU_DUTY,             15, 0) \
     F(BLC_PCH_ENABLE,           31, 31) \
     F(BLC_PCH_ACTIVE_LOW,       29, 29) \
@@ -196,14 +207,28 @@
     F(TRANS_CONF_BPC,           7, 5) \
     F(FDI_RX_ENABLE,            31, 31) \
     F(FDI_RX_TRAINING,          29, 28) \
+    F(FDI_RX_TRAINING_CPT,      9, 8) \
+    F(FDI_RX_AUTO_TRAINING,     10, 10) \
+    F(FDI_RX_COMPOSITE_SYNC,    11, 11) \
+    F(FDI_RX_FS_ERROR_CORRECT,  27, 27) \
+    F(FDI_RX_FE_ERROR_CORRECT,  26, 26) \
+    F(FDI_RX_ENHANCED_FRAMING,  6, 6) \
     F(FDI_RX_WIDTH,             21, 19) \
     F(FDI_RX_BPC,               18, 16) \
     F(FDI_RX_PLL_ENABLE,        13, 13) \
     F(FDI_RX_PCDCLK,            4, 4) \
     F(FDI_RX_SYMBOL_LOCK,       9, 9) \
     F(FDI_RX_BIT_LOCK,          8, 8) \
+    F(FDI_RX_TP1_TO_TP2,        21, 20) \
+    F(FDI_RX_DELAY,             7, 0) \
+    F(SOUTH_CHICKEN1_FDI_BC,    12, 12) \
+    F(TRANS_CHICKEN2_OVERRIDE,  31, 31) \
     F(FDI_TX_ENABLE,            31, 31) \
     F(FDI_TX_TRAINING,          29, 28) \
+    F(FDI_TX_TRAINING_IVB,      9, 8) \
+    F(FDI_TX_AUTO_TRAINING,     10, 10) \
+    F(FDI_TX_COMPOSITE_SYNC,    11, 11) \
+    F(FDI_TX_SWING_EMPHASIS,    27, 22) \
     F(FDI_TX_WIDTH,             21, 19) \
     F(FDI_TX_ENHANCED_FRAMING,  18, 18) \
     F(FDI_TX_PLL_ENABLE,        14, 14) \
@@ -211,6 +236,7 @@
     F(DREF_NONSPREAD_SOURCE,    10, 9) \
     F(ADPA_ENABLE,              31, 31) \
     F(ADPA_TRANSCODER,          30, 30) \
+    F(ADPA_TRANSCODER_CPT,      30, 29) \
     F(ADPA_HOTPLUG_STATUS,      25, 24) \
     F(ADPA_HOTPLUG_ENABLE,      23, 23) \
     F(ADPA_FORCE_TRIGGER,       16, 16) \
@@ -218,6 +244,7 @@
     F(ADPA_HSYNC_HIGH,          3, 3) \
     F(LVDS_ENABLE,              31, 31) \
     F(LVDS_TRANSCODER,          30, 30) \
+    F(LVDS_TRANSCODER_CPT,      30, 29) \
     F(LVDS_VSYNC_INVERT,        21, 21) \
     F(LVDS_HSYNC_INVERT,        20, 20) \
     F(LVDS_A_CONTROL,           9, 8) \
