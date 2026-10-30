@@ -1413,6 +1413,7 @@ struct _DXGKRNL_ADAPTER
     volatile LONG               SubmitDmaActiveReservations;
     KEVENT                      SubmitDmaReservationsDrainedEvent;
     volatile LONG               NextSubmissionFenceId;
+    KMUTEX                      SubmissionOrderMutex;
     volatile ULONG              LastCompletedSubmissionFenceId;
     volatile ULONG              NodeLastSubmittedFenceId[DXGK_MAX_TRACKED_NODES];
     volatile ULONG              NodeLastCompletedFenceId[DXGK_MAX_TRACKED_NODES];
