@@ -211,6 +211,16 @@ Felix86NtProbeZicclsm:
     la t1, Felix86NtProbeScratch
     ld t0, 1(t1)
     sd t0, 3(t1)
+    addi t1, t1, 3
+    .option push
+    .option arch, +v
+    vsetivli zero, 2, e64, m1, ta, ma
+    vle64.v v8, (t1)
+    vse64.v v8, (t1)
+    vsetivli zero, 4, e32, m1, ta, ma
+    vle32.v v8, (t1)
+    vse32.v v8, (t1)
+    .option pop
     li a0, 1
     ret
 

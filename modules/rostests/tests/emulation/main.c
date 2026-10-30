@@ -586,6 +586,39 @@ TestIndirectCalls(VOID)
 }
 
 #if defined(_M_AMD64) || defined(__x86_64__)
+#include <emmintrin.h>
+#endif
+
+static
+VOID
+TestMisalignedVectors(VOID)
+{
+    DECLSPEC_ALIGN(16) UCHAR Source[64];
+    DECLSPEC_ALIGN(16) UCHAR Target[64];
+    ULONG Offset, Index;
+    LONG Mismatches = 0;
+
+    for (Index = 0; Index < sizeof(Source); Index++) Source[Index] = (UCHAR)(Index * 7 + 1);
+    for (Offset = 1; Offset < 16; Offset++)
+    {
+        RtlZeroMemory(Target, sizeof(Target));
+#if defined(_M_AMD64) || defined(__x86_64__)
+        _mm_storeu_si128((__m128i *)(Target + Offset), _mm_loadu_si128((const __m128i *)(Source + Offset)));
+        _mm_storel_epi64((__m128i *)(Target + Offset + 16), _mm_loadl_epi64((const __m128i *)(Source + Offset + 16)));
+        _mm_store_ss((float *)(Target + Offset + 24), _mm_load_ss((const float *)(Source + Offset + 24)));
+#else
+        memcpy(Target + Offset, Source + Offset, 28);
+#endif
+        for (Index = 0; Index < sizeof(Target); Index++)
+        {
+            if (Target[Index] != ((Index >= Offset && Index < Offset + 28) ? Source[Index] : 0)) Mismatches++;
+        }
+    }
+    CHECK(Mismatches == 0);
+    printf("EMUTEST: misaligned 128-bit, 64-bit and 32-bit vector moves verified\n");
+}
+
+#if defined(_M_AMD64) || defined(__x86_64__)
 #include <reactos/emuhost.h>
 #include "rv64xtest.h"
 
@@ -700,6 +733,7 @@ main(
     TestStructuredExceptions();
     TestFloatingStateAcrossFault();
     EmuTestCxxExceptions();
+    TestMisalignedVectors();
     TestIndirectCalls();
     TestRv64X();
 

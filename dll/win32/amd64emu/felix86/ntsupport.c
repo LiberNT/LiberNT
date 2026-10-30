@@ -59,7 +59,7 @@ static const struct
     { FELIX86_NT_EXT_ZVFHMIN, FELIX86_NT_EXT_V, Felix86NtProbeZvfhmin },
     { FELIX86_NT_EXT_ZKND, 0, Felix86NtProbeZknd },
     { FELIX86_NT_EXT_ZICBOM, 0, Felix86NtProbeZicbom },
-    { FELIX86_NT_EXT_ZICCLSM, 0, Felix86NtProbeZicclsm },
+    { FELIX86_NT_EXT_ZICCLSM, FELIX86_NT_EXT_V, Felix86NtProbeZicclsm },
 };
 
 static ULONG Felix86NtExtensions;
