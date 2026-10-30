@@ -2207,7 +2207,7 @@ NtSetInformationToken(
                 /* Lock the token */
                 SepAcquireTokenLockExclusive(Token);
 
-                if (Token->TokenInUse && Token->SessionId != SessionId)
+                if (Token->TokenInUse)
                 {
                     Status = STATUS_TOKEN_ALREADY_IN_USE;
                 }
