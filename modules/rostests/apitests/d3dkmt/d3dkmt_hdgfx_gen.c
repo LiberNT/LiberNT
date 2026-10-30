@@ -22,6 +22,11 @@
 #define GEN_OVERCOMMIT_COUNT    33
 #define GEN_OVERCOMMIT_SIZE     0x800000UL
 #define GEN_OVERCOMMIT_LAST     0x4000000UL
+#define GEN_ORDER_THREADS       2
+#define GEN_ORDER_ALLOCATIONS   3
+#define GEN_ORDER_SIZE          0x3000000UL
+#define GEN_ORDER_ROUNDS        600
+#define GEN_ORDER_RETRIES       2000
 
 static PFND3DKMT_CREATEDEVICE CreateDevice;
 static PFND3DKMT_DESTROYDEVICE DestroyDevice;
@@ -425,6 +430,157 @@ static void Test_ApertureOvercommit(GEN_CONTEXT *Ctx, ULONG *Copy)
     }
 }
 
+typedef struct _GEN_ORDER_WORKER
+{
+    ULONG Id;
+    BOOL Ran;
+    UINT Rendered;
+    UINT Failures;
+    NTSTATUS FirstFailure;
+    UINT Corrupt;
+} GEN_ORDER_WORKER;
+
+static NTSTATUS GenOrderFill(GEN_CONTEXT *Ctx, ULONG Color)
+{
+    HDGFX_GEN_SUBMIT header;
+    GEN_PATCH patch;
+    ULONG batch[8];
+    NTSTATUS status;
+    UINT retry;
+
+    patch.Offset = GEN_BATCH_OFFSET + 4 * sizeof(ULONG);
+    patch.AllocationOffset = 0;
+    patch.DriverId = HDGFX_GEN_PATCH_ALLOCATION;
+    batch[0] = GEN_XY_COLOR_BLT;
+    batch[1] = GEN_BLT_FILL_32 | GEN_PITCH;
+    batch[2] = 0;
+    batch[3] = (16 << 16) | 64;
+    batch[4] = 0;
+    batch[5] = Color;
+    batch[6] = GEN_MI_BATCH_END;
+    batch[7] = 0;
+    GenHeader(&header, 8, 0);
+    for (retry = 0; retry < GEN_ORDER_RETRIES; retry++)
+    {
+        status = GenSubmit(Ctx, &header, batch, NULL, &patch, 1);
+        if (status != STATUS_DEVICE_BUSY)
+            break;
+        Sleep(1);
+    }
+    return status;
+}
+
+static DWORD WINAPI GenOrderThread(LPVOID Param)
+{
+    GEN_ORDER_WORKER *Worker = Param;
+    D3DKMT_HANDLE handles[GEN_ORDER_ALLOCATIONS] = {0};
+    ULONG colors[GEN_ORDER_ALLOCATIONS] = {0};
+    D3DKMT_HANDLE original;
+    GEN_CONTEXT Ctx;
+    ULONG *copy;
+    UINT i;
+
+    copy = HeapAlloc(GetProcessHeap(), 0, GEN_ALLOCATION_SIZE);
+    if (copy == NULL || !GenSetup(&Ctx))
+    {
+        HeapFree(GetProcessHeap(), 0, copy);
+        return 0;
+    }
+    Worker->Ran = TRUE;
+    original = Ctx.hAlloc;
+
+    for (i = 0; i < GEN_ORDER_ALLOCATIONS; i++)
+    {
+        UINT size = GEN_ORDER_SIZE;
+        D3DKMT_CREATEALLOCATION ca = {0};
+        D3DDDI_ALLOCATIONINFO ai = {0};
+        NTSTATUS status;
+
+        ai.pPrivateDriverData = &size;
+        ai.PrivateDriverDataSize = sizeof(size);
+        ca.hDevice = Ctx.hDevice;
+        ca.NumAllocations = 1;
+        ca.pAllocationInfo = &ai;
+        status = CreateAlloc(&ca);
+        if (!NT_SUCCESS(status))
+        {
+            Worker->Failures++;
+            Worker->FirstFailure = status;
+            break;
+        }
+        handles[i] = ai.hAllocation;
+    }
+
+    for (i = 0; Worker->Failures == 0 && i < GEN_ORDER_ROUNDS; i++)
+    {
+        UINT index = i % GEN_ORDER_ALLOCATIONS;
+        ULONG color = (Worker->Id << 28) | (i + 1);
+        NTSTATUS status;
+
+        Ctx.hAlloc = handles[index];
+        status = GenOrderFill(&Ctx, color);
+        if (NT_SUCCESS(status))
+        {
+            colors[index] = color;
+            Worker->Rendered++;
+        }
+        else
+        {
+            Worker->Failures++;
+            Worker->FirstFailure = status;
+        }
+    }
+
+    for (i = 0; Worker->Failures == 0 && i < GEN_ORDER_ALLOCATIONS; i++)
+    {
+        Ctx.hAlloc = handles[i];
+        if (!GenRead(&Ctx, copy) || copy[0] != colors[i])
+            Worker->Corrupt++;
+    }
+
+    for (i = 0; i < GEN_ORDER_ALLOCATIONS; i++)
+    {
+        D3DKMT_DESTROYALLOCATION da = {0};
+
+        if (handles[i] == 0)
+            continue;
+        da.hDevice = Ctx.hDevice;
+        da.phAllocationList = &handles[i];
+        da.AllocationCount = 1;
+        DestroyAlloc(&da);
+    }
+    Ctx.hAlloc = original;
+    GenTeardown(&Ctx);
+    HeapFree(GetProcessHeap(), 0, copy);
+    return 0;
+}
+
+static void Test_ConcurrentPagingOrder(void)
+{
+    GEN_ORDER_WORKER workers[GEN_ORDER_THREADS] = {{0}};
+    HANDLE threads[GEN_ORDER_THREADS];
+    UINT i;
+
+    for (i = 0; i < GEN_ORDER_THREADS; i++)
+    {
+        workers[i].Id = i + 1;
+        threads[i] = CreateThread(NULL, 0, GenOrderThread, &workers[i], 0, NULL);
+        ok(threads[i] != NULL, "CreateThread %u: %lu\n", i, GetLastError());
+    }
+    for (i = 0; i < GEN_ORDER_THREADS; i++)
+    {
+        if (threads[i] == NULL)
+            continue;
+        ok(WaitForSingleObject(threads[i], 300000) == WAIT_OBJECT_0, "worker %u timed out\n", i);
+        CloseHandle(threads[i]);
+        ok(workers[i].Ran, "worker %u did not start\n", i);
+        ok(workers[i].Failures == 0, "worker %u: %u failures, first 0x%08lx\n",
+           i, workers[i].Failures, workers[i].FirstFailure);
+        ok(workers[i].Rendered == GEN_ORDER_ROUNDS, "worker %u rendered %u\n", i, workers[i].Rendered);
+        ok(workers[i].Corrupt == 0, "worker %u: %u allocations read back wrong\n", i, workers[i].Corrupt);
+    }
+}
+
 static void Test_MalformedSubmits(GEN_CONTEXT *Ctx)
 {
     static const ULONG batch[2] = { GEN_MI_BATCH_END, 0 };
@@ -516,6 +672,7 @@ START_TEST(hdgfx_gen)
         Test_StateCopy(&Ctx, Copy);
         Test_PipeControlWrite(&Ctx, Copy);
         Test_ApertureOvercommit(&Ctx, Copy);
+        Test_ConcurrentPagingOrder();
         Test_MalformedSubmits(&Ctx);
         GenTeardown(&Ctx);
     }
