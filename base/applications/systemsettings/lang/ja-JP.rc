@@ -153,6 +153,7 @@ BEGIN
     IDS_ARCH_X64 "x64 ベース プロセッサ"
     IDS_ARCH_X86 "x86 ベース プロセッサ"
     IDS_ARCH_OTHER "その他のプロセッサ"
+    IDS_ARCH_RISCV64 "RISC-V64 ベース プロセッサ"
     IDS_MODEL "モデル"
     IDS_PRODUCT_ID "プロダクト ID"
     IDS_EDITION "エディション"

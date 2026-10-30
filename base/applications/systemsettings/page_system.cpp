@@ -740,6 +740,7 @@ SystemType()
         case PROCESSOR_ARCHITECTURE_ARM64: arch = IDS_ARCH_ARM64; break;
         case PROCESSOR_ARCHITECTURE_AMD64: arch = IDS_ARCH_X64; break;
         case PROCESSOR_ARCHITECTURE_INTEL: arch = IDS_ARCH_X86; break;
+        case PROCESSOR_ARCHITECTURE_RISCV64: arch = IDS_ARCH_RISCV64; break;
         default: arch = IDS_ARCH_OTHER; break;
     }
     return Format(IDS_SYSTEM_TYPE_FORMAT, (UINT)(sizeof(void *) * 8), Str(arch).c_str());

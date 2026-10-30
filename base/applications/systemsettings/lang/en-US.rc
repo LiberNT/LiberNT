@@ -153,6 +153,7 @@ BEGIN
     IDS_ARCH_X64 "x64 processor"
     IDS_ARCH_X86 "x86 processor"
     IDS_ARCH_OTHER "Other processor"
+    IDS_ARCH_RISCV64 "RISC-V64 processor"
     IDS_MODEL "Model"
     IDS_PRODUCT_ID "Product ID"
     IDS_EDITION "Edition"

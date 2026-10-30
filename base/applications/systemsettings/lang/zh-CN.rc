@@ -153,6 +153,7 @@ BEGIN
     IDS_ARCH_X64 "基于 x64 的处理器"
     IDS_ARCH_X86 "基于 x86 的处理器"
     IDS_ARCH_OTHER "其他处理器"
+    IDS_ARCH_RISCV64 "基于 RISC-V64 的处理器"
     IDS_MODEL "型号"
     IDS_PRODUCT_ID "产品 ID"
     IDS_EDITION "版本"

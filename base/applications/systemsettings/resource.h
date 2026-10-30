@@ -150,6 +150,7 @@
 #define IDS_ARCH_X64                   241
 #define IDS_ARCH_X86                   242
 #define IDS_ARCH_OTHER                 243
+#define IDS_ARCH_RISCV64               1000
 #define IDS_MODEL                      244
 #define IDS_PRODUCT_ID                 245
 #define IDS_EDITION                    246
