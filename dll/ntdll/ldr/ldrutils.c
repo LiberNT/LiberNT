@@ -1200,6 +1200,83 @@ LdrpCreateDllSectionRedirected(IN PUNICODE_STRING FullName,
     return Status;
 }
 
+typedef struct _LDRP_MODULE_LOAD_PATH
+{
+    LIST_ENTRY Links;
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    WCHAR DllPath[ANYSIZE_ARRAY];
+} LDRP_MODULE_LOAD_PATH, *PLDRP_MODULE_LOAD_PATH;
+
+static LIST_ENTRY LdrpModuleLoadPathList = { &LdrpModuleLoadPathList, &LdrpModuleLoadPathList };
+
+static
+PLDRP_MODULE_LOAD_PATH
+LdrpFindModuleLoadPath(
+    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
+{
+    PLDRP_MODULE_LOAD_PATH LoadPath;
+    PLIST_ENTRY Entry;
+
+    for (Entry = LdrpModuleLoadPathList.Flink; Entry != &LdrpModuleLoadPathList; Entry = Entry->Flink)
+    {
+        LoadPath = CONTAINING_RECORD(Entry, LDRP_MODULE_LOAD_PATH, Links);
+        if (LoadPath->LdrEntry == LdrEntry)
+            return LoadPath;
+    }
+
+    return NULL;
+}
+
+static
+VOID
+LdrpFreeModuleLoadPath(
+    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
+{
+    PLDRP_MODULE_LOAD_PATH LoadPath;
+
+    LoadPath = LdrpFindModuleLoadPath(LdrEntry);
+    if (!LoadPath)
+        return;
+
+    RemoveEntryList(&LoadPath->Links);
+    RtlFreeHeap(LdrpHeap, 0, LoadPath);
+}
+
+static
+VOID
+LdrpSaveModuleLoadPath(
+    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PCWSTR DllPath)
+{
+    PLDRP_MODULE_LOAD_PATH LoadPath;
+    SIZE_T Size;
+
+    LdrpFreeModuleLoadPath(LdrEntry);
+
+    Size = (wcslen(DllPath) + 1) * sizeof(WCHAR);
+    LoadPath = RtlAllocateHeap(LdrpHeap, 0, FIELD_OFFSET(LDRP_MODULE_LOAD_PATH, DllPath) + Size);
+    if (!LoadPath)
+        return;
+
+    LoadPath->LdrEntry = LdrEntry;
+    RtlCopyMemory(LoadPath->DllPath, DllPath, Size);
+    InsertTailList(&LdrpModuleLoadPathList, &LoadPath->Links);
+}
+
+PWSTR
+NTAPI
+LdrpGetModuleLoadPath(IN PVOID DllBase)
+{
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PLDRP_MODULE_LOAD_PATH LoadPath;
+
+    if (!LdrpCheckForLoadedDllHandle(DllBase, &LdrEntry))
+        return NULL;
+
+    LoadPath = LdrpFindModuleLoadPath(LdrEntry);
+    return LoadPath ? LoadPath->DllPath : NULL;
+}
+
 NTSTATUS
 NTAPI
 LdrpMapDll(IN PWSTR SearchPath OPTIONAL,
@@ -1827,6 +1904,9 @@ RelocDone:;
     }
 #endif
 
+    if (NT_SUCCESS(Status) && LdrEntry && SearchPath)
+        LdrpSaveModuleLoadPath(LdrEntry, SearchPath);
+
     /* Check if this is an SMP Machine and a DLL */
     if ((LdrpNumberOfProcessors > 1) &&
         (LdrEntry && (LdrEntry->Flags & LDRP_IMAGE_DLL)))
@@ -1910,6 +1990,8 @@ LdrpFinalizeAndDeallocateDataTableEntry(IN PLDR_DATA_TABLE_ENTRY Entry)
         RtlReleaseActivationContext(Entry->EntryPointActivationContext);
         Entry->EntryPointActivationContext = INVALID_HANDLE_VALUE;
     }
+
+    LdrpFreeModuleLoadPath(Entry);
 
     /* Release the full dll name string */
     if (Entry->FullDllName.Buffer) LdrpFreeUnicodeString(&Entry->FullDllName);

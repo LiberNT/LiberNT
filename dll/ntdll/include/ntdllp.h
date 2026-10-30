@@ -130,6 +130,10 @@ VOID
 NTAPI
 LdrpReleaseForwarderReferences(IN PVOID OwnerBase);
 
+PWSTR
+NTAPI
+LdrpGetModuleLoadPath(IN PVOID DllBase);
+
 NTSTATUS
 NTAPI
 LdrpSnapThunk(IN PVOID ExportBase,
