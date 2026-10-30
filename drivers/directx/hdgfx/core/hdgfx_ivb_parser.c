@@ -13,6 +13,8 @@
 #define IVB_CLIENT_GFX              3u
 #define IVB_SUBCLIENT_SINGLE        1u
 #define IVB_SUBCLIENT_MEDIA         2u
+#define IVB_MEDIA_GPGPU_OBJECT      0x7104u
+#define IVB_MEDIA_GPGPU_WALKER      0x7105u
 #define IVB_MI_FIRST_VARIABLE       0x10u
 #define IVB_MI_NOOP                 0x00u
 #define IVB_MI_FLUSH                0x04u
@@ -136,7 +138,8 @@ IvbCheckGfx(
 
     if (Subclient == IVB_SUBCLIENT_SINGLE)
         *Length = 1;
-    else if (Subclient == IVB_SUBCLIENT_MEDIA)
+    else if (Subclient == IVB_SUBCLIENT_MEDIA && (Header >> 16) != IVB_MEDIA_GPGPU_OBJECT &&
+             (Header >> 16) != IVB_MEDIA_GPGPU_WALKER)
         *Length = (Header & 0xFFFF) + 2;
     else
         *Length = (Header & 0xFF) + 2;
