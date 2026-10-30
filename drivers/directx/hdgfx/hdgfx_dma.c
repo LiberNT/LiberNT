@@ -11,18 +11,28 @@
 #define HDGFX_DMA_BATCH             1UL
 #define HDGFX_DMA_CPU               2UL
 #define HDGFX_DMA_NOP               3UL
+#define HDGFX_DMA_GTT               4UL
 #define HDGFX_PATCH_GTT             0UL
 #define HDGFX_PATCH_PHYSICAL        1UL
 #define HDGFX_BATCH_LIMIT           0x2000UL
 #define HDGFX_BLT_DWORDS            8UL
 #define HDGFX_QUEUE_POLL            (-10000LL)
 #define HDGFX_DEAD_CONTEXT_MAGIC    0xDEAD4346UL
+#define HDGFX_APERTURE_CPU          (1ULL << 63)
 
 typedef struct _HDGFX_DMA_RECORD
 {
     ULONG Type;
     ULONG Size;
 } HDGFX_DMA_RECORD, *PHDGFX_DMA_RECORD;
+
+typedef struct _HDGFX_GTT_UPDATE
+{
+    ULONG First;
+    ULONG Count;
+    ULONG Fill;
+    ULONG Reserved;
+} HDGFX_GTT_UPDATE, *PHDGFX_GTT_UPDATE;
 
 typedef struct _HDGFX_DMA_WRITER
 {
@@ -143,6 +153,17 @@ HdgfxPlacement(
         return STATUS_INVALID_PARAMETER;
     if (Allocation->SegmentId == 0)
         return STATUS_SUCCESS;
+    if (Allocation->SegmentId == HDGFX_APERTURE_SEGMENT_ID && Adapter->ApertureSize != 0)
+    {
+        Address = (ULONGLONG)Allocation->PhysicalAddress.QuadPart + AllocationOffset;
+        if (Address < Adapter->ApertureBase || Address - Adapter->ApertureBase >= Adapter->ApertureSize ||
+            Open->Size - AllocationOffset > Adapter->ApertureSize - (Address - Adapter->ApertureBase))
+        {
+            return STATUS_INVALID_ADDRESS;
+        }
+        *Value = DriverId == HDGFX_PATCH_PHYSICAL ? Address | HDGFX_APERTURE_CPU : Address;
+        return STATUS_SUCCESS;
+    }
     if (Allocation->SegmentId != HDGFX_SLAB_SEGMENT_ID || Allocation->PhysicalAddress.QuadPart <= 0)
         return STATUS_INVALID_ADDRESS;
 
@@ -753,8 +774,14 @@ HdgfxDdiBuildPagingBuffer(
     ULONGLONG SlabBase;
     ULONGLONG SlabOffset;
     HDGFX_DMA_WRITER Writer;
+    PHDGFX_GTT_UPDATE Update;
     PSOFTGPU_CMD Command;
+    PPFN_NUMBER Pfns;
     PVOID SystemVa;
+    SIZE_T Done;
+    SIZE_T Count;
+    SIZE_T Index;
+    ULONGLONG Dummy;
     PMDL Mdl;
     BOOLEAN ToSlab;
 
@@ -830,6 +857,69 @@ HdgfxDdiBuildPagingBuffer(
         case DXGK_OPERATION_NOTIFY_RESIDENCY:
             HdgfxWriterRecord(&Writer, HDGFX_DMA_NOP, 0);
             break;
+
+        case DXGK_OPERATION_MAP_APERTURE_SEGMENT:
+        {
+            CONST DXGK_BUILDPAGINGBUFFER_MAP_APERTURE *Map = &BuildPagingBuffer->MapApertureSegment;
+
+            Done = BuildPagingBuffer->MultipassOffset;
+            if (Map->SegmentId != HDGFX_APERTURE_SEGMENT_ID || Adapter->ApertureSize == 0 || Map->pMdl == NULL ||
+                Map->NumberOfPages == 0 || Done >= Map->NumberOfPages ||
+                Map->OffsetInPages > Adapter->ApertureSize / PAGE_SIZE ||
+                Map->NumberOfPages > Adapter->ApertureSize / PAGE_SIZE - Map->OffsetInPages ||
+                Map->MdlOffset > ADDRESS_AND_SIZE_TO_SPAN_PAGES(MmGetMdlVirtualAddress(Map->pMdl),
+                                                                MmGetMdlByteCount(Map->pMdl)) ||
+                Map->NumberOfPages > ADDRESS_AND_SIZE_TO_SPAN_PAGES(MmGetMdlVirtualAddress(Map->pMdl),
+                                                                    MmGetMdlByteCount(Map->pMdl)) - Map->MdlOffset)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+            Count = ((SIZE_T)(Writer.End - Writer.Cursor) - sizeof(HDGFX_DMA_RECORD) - sizeof(*Update) -
+                     2 * sizeof(ULONG)) / sizeof(ULONG);
+            if (Count == 0)
+                return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+            if (Count > Map->NumberOfPages - Done)
+                Count = Map->NumberOfPages - Done;
+            Update = HdgfxWriterRecord(&Writer, HDGFX_DMA_GTT,
+                                       (ULONG)ALIGN_UP_BY(sizeof(*Update) + Count * sizeof(ULONG), 8));
+            Update->First = (ULONG)(Adapter->ApertureBase / PAGE_SIZE + Map->OffsetInPages + Done);
+            Update->Count = (ULONG)Count;
+            Pfns = MmGetMdlPfnArray(Map->pMdl) + Map->MdlOffset + Done;
+            for (Index = 0; Index < Count; Index++)
+            {
+                if (Pfns[Index] > (MAXULONG >> PAGE_SHIFT))
+                    return STATUS_INVALID_PARAMETER;
+                ((PULONG)(Update + 1))[Index] = HdgfxIlkGttEntry((ULONG)(Pfns[Index] << PAGE_SHIFT));
+            }
+            Done += Count;
+            if (Done < Map->NumberOfPages)
+            {
+                BuildPagingBuffer->pDmaBuffer = Writer.Cursor;
+                BuildPagingBuffer->MultipassOffset = (UINT)Done;
+                return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+            }
+            break;
+        }
+
+        case DXGK_OPERATION_UNMAP_APERTURE_SEGMENT:
+        {
+            CONST DXGK_BUILDPAGINGBUFFER_UNMAP_APERTURE *Unmap = &BuildPagingBuffer->UnmapApertureSegment;
+
+            if (Unmap->SegmentId != HDGFX_APERTURE_SEGMENT_ID || Adapter->ApertureSize == 0 ||
+                Unmap->NumberOfPages == 0 || Unmap->OffsetInPages > Adapter->ApertureSize / PAGE_SIZE ||
+                Unmap->NumberOfPages > Adapter->ApertureSize / PAGE_SIZE - Unmap->OffsetInPages)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+            Dummy = (ULONGLONG)Unmap->DummyPage.QuadPart;
+            if (Dummy == 0 || Dummy % PAGE_SIZE != 0 || Dummy > MAXULONG)
+                Dummy = (ULONGLONG)MmGetPhysicalAddress(Adapter->ScratchPage).QuadPart;
+            Update = HdgfxWriterRecord(&Writer, HDGFX_DMA_GTT, sizeof(*Update));
+            Update->First = (ULONG)(Adapter->ApertureBase / PAGE_SIZE + Unmap->OffsetInPages);
+            Update->Count = (ULONG)Unmap->NumberOfPages;
+            Update->Fill = HdgfxIlkGttEntry((ULONG)Dummy);
+            break;
+        }
 
         default:
             return STATUS_NOT_SUPPORTED;
@@ -909,24 +999,8 @@ HdgfxDdiPatch(
     return STATUS_SUCCESS;
 }
 
-static volatile LONG64 *
-HdgfxSlabFence(
-    _In_ PHDGFX_ADAPTER Adapter,
-    _In_ ULONGLONG Address)
-{
-    SIZE_T Offset;
-
-    if (Address % sizeof(UINT64) != 0 ||
-        !NT_SUCCESS(SoftGpu2dResolveSlabRange((ULONGLONG)Adapter->SlabPhysical.QuadPart, Adapter->SlabSize,
-                                              Address, sizeof(UINT64), &Offset)))
-    {
-        return NULL;
-    }
-    return (volatile LONG64 *)((PUCHAR)Adapter->Slab + Offset);
-}
-
 static PUCHAR
-HdgfxSlabRange(
+HdgfxCpuRange(
     _In_ PHDGFX_ADAPTER Adapter,
     _In_ ULONGLONG Address,
     _In_ ULONGLONG Length,
@@ -935,6 +1009,19 @@ HdgfxSlabRange(
     SIZE_T Offset;
 
     *Remaining = 0;
+    if ((Address & HDGFX_APERTURE_CPU) != 0)
+    {
+        Address &= ~HDGFX_APERTURE_CPU;
+        if (Adapter->ApertureCpu == NULL || Address < Adapter->ApertureBase ||
+            Address - Adapter->ApertureBase >= Adapter->ApertureSize ||
+            Length > Adapter->ApertureSize - (Address - Adapter->ApertureBase))
+        {
+            return NULL;
+        }
+        Offset = (SIZE_T)(Address - Adapter->ApertureBase);
+        *Remaining = Adapter->ApertureSize - Offset;
+        return Adapter->ApertureCpu + Offset;
+    }
     if (!NT_SUCCESS(SoftGpu2dResolveSlabRange((ULONGLONG)Adapter->SlabPhysical.QuadPart, Adapter->SlabSize,
                                               Address, Length, &Offset)))
     {
@@ -942,6 +1029,18 @@ HdgfxSlabRange(
     }
     *Remaining = Adapter->SlabSize - Offset;
     return (PUCHAR)Adapter->Slab + Offset;
+}
+
+static volatile LONG64 *
+HdgfxCpuFence(
+    _In_ PHDGFX_ADAPTER Adapter,
+    _In_ ULONGLONG Address)
+{
+    SIZE_T Remaining;
+
+    if (Address % sizeof(UINT64) != 0)
+        return NULL;
+    return (volatile LONG64 *)HdgfxCpuRange(Adapter, Address, sizeof(UINT64), &Remaining);
 }
 
 static BOOLEAN
@@ -983,7 +1082,7 @@ HdgfxRunCpu(
     switch (Command->Op)
     {
         case SOFTGPU_CMD_OP_WAIT_FENCE:
-            Fence = HdgfxSlabFence(Adapter, Command->DstAddress);
+            Fence = HdgfxCpuFence(Adapter, Command->DstAddress);
             if (Fence == NULL)
                 Status = STATUS_INVALID_ADDRESS;
             else if ((ULONGLONG)ReadAcquire64(Fence) < Command->FenceValue)
@@ -991,7 +1090,7 @@ HdgfxRunCpu(
             break;
 
         case SOFTGPU_CMD_OP_SIGNAL_FENCE:
-            Fence = HdgfxSlabFence(Adapter, Command->DstAddress);
+            Fence = HdgfxCpuFence(Adapter, Command->DstAddress);
             if (Fence == NULL)
                 Status = STATUS_INVALID_ADDRESS;
             else
@@ -999,22 +1098,22 @@ HdgfxRunCpu(
             break;
 
         case SOFTGPU_CMD_OP_BLT:
-            Source = HdgfxSlabRange(Adapter, Command->SrcAddress, 1, &SourceSize);
-            Destination = HdgfxSlabRange(Adapter, Command->DstAddress, 1, &DestinationSize);
+            Source = HdgfxCpuRange(Adapter, Command->SrcAddress, 1, &SourceSize);
+            Destination = HdgfxCpuRange(Adapter, Command->DstAddress, 1, &DestinationSize);
             Status = Source == NULL || Destination == NULL ? STATUS_INVALID_ADDRESS :
                      SoftGpu2dCopyRect(Source, SourceSize, Command->SrcPitch, &Command->SrcRect, Destination,
                                        DestinationSize, Command->DstPitch, &Command->DstRect);
             break;
 
         case SOFTGPU_CMD_OP_FILL:
-            Destination = HdgfxSlabRange(Adapter, Command->DstAddress, 1, &DestinationSize);
+            Destination = HdgfxCpuRange(Adapter, Command->DstAddress, 1, &DestinationSize);
             Status = Destination == NULL ? STATUS_INVALID_ADDRESS :
                      SoftGpu2dFillRect(Destination, DestinationSize, Command->DstPitch, &Command->DstRect,
                                        Command->Color);
             break;
 
         case SOFTGPU_CMD_OP_PAGE:
-            Destination = HdgfxSlabRange(Adapter, Command->SlabAddress, Command->ByteCount, &DestinationSize);
+            Destination = HdgfxCpuRange(Adapter, Command->SlabAddress, Command->ByteCount, &DestinationSize);
             if (Destination == NULL || Command->SystemAddress == 0)
                 Status = STATUS_INVALID_ADDRESS;
             else if (Command->Flags & SOFTGPU_CMD_FLAG_TO_SLAB)
@@ -1024,7 +1123,7 @@ HdgfxRunCpu(
             break;
 
         case SOFTGPU_CMD_OP_FILL_LINEAR:
-            Destination = HdgfxSlabRange(Adapter, Command->SlabAddress, Command->ByteCount, &DestinationSize);
+            Destination = HdgfxCpuRange(Adapter, Command->SlabAddress, Command->ByteCount, &DestinationSize);
             if (Destination == NULL || Command->ByteCount % sizeof(ULONG) != 0)
             {
                 Status = STATUS_INVALID_ADDRESS;
@@ -1041,6 +1140,32 @@ HdgfxRunCpu(
     if (!NT_SUCCESS(Status))
         DPRINT1("CPU operation %lu failed 0x%08lx, skipped\n", Command->Op, Status);
     KeMemoryBarrier();
+    return HdgfxQueueDone;
+}
+
+static HDGFX_QUEUE_STATE
+HdgfxRunGtt(
+    _Inout_ PHDGFX_ADAPTER Adapter,
+    _In_ CONST HDGFX_GTT_UPDATE *Update)
+{
+    ULONG First = Adapter->ApertureBase / PAGE_SIZE;
+    ULONG Index;
+
+    if (!HdgfxRingIdle(Adapter))
+        return HdgfxQueueRing;
+    if (Adapter->ApertureGtt == NULL || Update->Count == 0 || Update->First < First ||
+        Update->First - First >= Adapter->ApertureSize / PAGE_SIZE ||
+        Update->Count > Adapter->ApertureSize / PAGE_SIZE - (Update->First - First))
+    {
+        DPRINT1("GTT update of %lu pages at %lu is outside the aperture, skipped\n", Update->Count, Update->First);
+        return HdgfxQueueDone;
+    }
+    for (Index = 0; Index < Update->Count; Index++)
+    {
+        WRITE_REGISTER_ULONG(&Adapter->ApertureGtt[Update->First - First + Index],
+                             Update->Fill != 0 ? Update->Fill : ((CONST ULONG *)(Update + 1))[Index]);
+    }
+    READ_REGISTER_ULONG(&Adapter->ApertureGtt[Update->First - First + Update->Count - 1]);
     return HdgfxQueueDone;
 }
 
@@ -1164,7 +1289,12 @@ HdgfxRunSubmit(
         Record = (PHDGFX_DMA_RECORD)(Map + Submit->Offset);
         if (Submit->EndOffset - Submit->Offset < sizeof(*Record) || Record->Size < sizeof(*Record) ||
             Record->Size > Submit->EndOffset - Submit->Offset || Record->Size % 8 != 0 ||
-            (Record->Type == HDGFX_DMA_CPU && Record->Size != sizeof(*Record) + sizeof(SOFTGPU_CMD)))
+            (Record->Type == HDGFX_DMA_CPU && Record->Size != sizeof(*Record) + sizeof(SOFTGPU_CMD)) ||
+            (Record->Type == HDGFX_DMA_GTT &&
+             (Record->Size < sizeof(*Record) + sizeof(HDGFX_GTT_UPDATE) ||
+              (((PHDGFX_GTT_UPDATE)(Record + 1))->Fill == 0 &&
+               ((PHDGFX_GTT_UPDATE)(Record + 1))->Count >
+                   (Record->Size - sizeof(*Record) - sizeof(HDGFX_GTT_UPDATE)) / sizeof(ULONG)))))
         {
             DPRINT1("Malformed DMA record at 0x%lx of fence %lu, skipping the rest\n", Submit->Offset, Submit->Fence);
             Submit->Offset = Submit->EndOffset;
@@ -1176,6 +1306,8 @@ HdgfxRunSubmit(
             State = HdgfxRunBatch(Adapter, (ULONG)Adapter->DmaBase + Segment + Submit->Offset + sizeof(*Record));
         else if (Record->Type == HDGFX_DMA_CPU)
             State = HdgfxRunCpu(Adapter, (PSOFTGPU_CMD)(Record + 1));
+        else if (Record->Type == HDGFX_DMA_GTT)
+            State = HdgfxRunGtt(Adapter, (PHDGFX_GTT_UPDATE)(Record + 1));
         if (State != HdgfxQueueDone)
             break;
         Submit->Offset += Record->Size;
@@ -1419,6 +1551,7 @@ HdgfxDdiResetFromTimeout(
 {
     PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
     BOOLEAN Ignored;
+    NTSTATUS Status;
     KIRQL OldIrql;
 
     PAGED_CODE();
@@ -1436,7 +1569,9 @@ HdgfxDdiResetFromTimeout(
     Adapter->DxgkInterface.DxgkCbSynchronizeExecution(Adapter->DxgkInterface.DeviceHandle, HdgfxResetFences, Adapter, 0,
                                                       &Ignored);
     DPRINT1("Timeout reset dropped the queue at fence %lu\n", Adapter->CompletedFence);
-    return HdgfxResetRender(Adapter);
+    Status = HdgfxResetRender(Adapter);
+    HdgfxApertureClear(Adapter);
+    return Status;
 }
 
 NTSTATUS
