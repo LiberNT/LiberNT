@@ -6987,11 +6987,11 @@ DxgkpVidMmDestroyBatchWorker(
             if (!NT_SUCCESS(DxgkpVidMmFillAperturePagingOperation(Allocation, FALSE, &UnmapOp)))
                 continue;
             if (NT_SUCCESS(DxgkPagingExecuteBatch(Adapter,
-                                                  Allocation->Device,
+                                                  NULL,
                                                   &UnmapOp,
                                                   1,
-                                                  &Allocation,
-                                                  1,
+                                                  NULL,
+                                                  0,
                                                   0,
                                                   0,
                                                   &PagingFenceId,
