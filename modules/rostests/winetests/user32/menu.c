@@ -359,7 +359,11 @@ static void test_GetMenuItemRect(void)
     client_top_left.x = 0;
     client_top_left.y = 0;
     MapWindowPoints(hwnd, 0, &client_top_left, 1);
+#ifdef __REACTOS__
+    caption_height = GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER) + GetSystemMetrics(SM_CYCAPTION);
+#else
     caption_height = GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CYCAPTION);
+#endif
 
     ok(item_rect.left == client_top_left.x, "Expect item_rect.left %ld == %ld\n", item_rect.left, client_top_left.x);
     ok(item_rect.right <= window_rect.right, "Expect item_rect.right %ld <= %ld\n", item_rect.right, window_rect.right);
