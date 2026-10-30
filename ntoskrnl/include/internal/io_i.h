@@ -235,7 +235,8 @@ ACCESS_MASK IopSetOperationAccess[FileMaximumInformation] =
 //
 // Volume Information Classes
 //
-UCHAR IopQueryFsOperationLength[] =
+/* TODO: FileFsSectorSizeInformation, FileFsDataCopyInformation and FileFsMetadataSizeInformation are rejected as invalid classes */
+UCHAR IopQueryFsOperationLength[FileFsMaximumInformation] =
 {
     0,
     sizeof(FILE_FS_VOLUME_INFORMATION),
@@ -253,7 +254,7 @@ UCHAR IopQueryFsOperationLength[] =
     0xFF
 };
 
-UCHAR IopSetFsOperationLength[] =
+UCHAR IopSetFsOperationLength[FileFsMaximumInformation] =
 {
     0,
     0,
@@ -271,7 +272,7 @@ UCHAR IopSetFsOperationLength[] =
     0xFF
 };
 
-ULONG IopQueryFsOperationAccess[] =
+ULONG IopQueryFsOperationAccess[FileFsMaximumInformation] =
 {
     0,
     0,
@@ -289,7 +290,7 @@ ULONG IopQueryFsOperationAccess[] =
     0xFFFFFFFF
 };
 
-ULONG IopSetFsOperationAccess[] =
+ULONG IopSetFsOperationAccess[FileFsMaximumInformation] =
 {
     0,
     0,
