@@ -2395,6 +2395,32 @@ ObInitProcess(IN PEPROCESS Parent OPTIONAL,
         ParentTable = ObReferenceProcessHandleTable(Parent);
         if (!ParentTable) return STATUS_PROCESS_IS_TERMINATING;
 
+        if (HandleList)
+        {
+            SIZE_T Index;
+            BOOLEAN Inheritable = TRUE;
+
+            KeEnterCriticalRegion();
+            for (Index = 0; Inheritable && Index < HandleCount; Index++)
+            {
+                PHANDLE_TABLE_ENTRY HandleEntry = ExMapHandleToPointer(ParentTable, HandleList[Index]);
+
+                Inheritable = FALSE;
+                if (HandleEntry)
+                {
+                    Inheritable = (HandleEntry->ObAttributes & OBJ_INHERIT) != 0;
+                    ExUnlockHandleTableEntry(ParentTable, HandleEntry);
+                }
+            }
+            KeLeaveCriticalRegion();
+
+            if (!Inheritable)
+            {
+                ObDereferenceProcessHandleTable(Parent);
+                return STATUS_INVALID_PARAMETER;
+            }
+        }
+
         /* Duplicate it */
         ObjectTable = ExDupHandleTable(Process,
                                        ParentTable,
