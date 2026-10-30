@@ -31,6 +31,8 @@ typedef struct _HDGFX_USER_BATCH
 {
     ULONG BatchOffset;
     ULONG StateOffset;
+    ULONG Flags;
+    ULONG Reserved;
 } HDGFX_USER_BATCH, *PHDGFX_USER_BATCH;
 
 typedef struct _HDGFX_GTT_UPDATE
@@ -568,6 +570,7 @@ HdgfxRenderGen(
     ULONG StateOffset;
     ULONG BatchOffset;
     ULONG Size;
+    uint32_t Offending;
     UINT Index;
     NTSTATUS Status;
 
@@ -575,7 +578,8 @@ HdgfxRenderGen(
         return STATUS_INVALID_PARAMETER;
     RtlCopyMemory(&Submit, pRender->pCommand, sizeof(Submit));
     if (Submit.Magic != HDGFX_GEN_SUBMIT_MAGIC ||
-        Submit.Version != HDGFX_GEN_SUBMIT_VERSION || Submit.Flags != 0 || Submit.Reserved != 0 ||
+        Submit.Version != HDGFX_GEN_SUBMIT_VERSION || (Submit.Flags & ~HDGFX_GEN_SUBMIT_BLITTER) != 0 ||
+        Submit.Reserved != 0 ||
         pRender->MultipassOffset != 0 || Submit.BatchLength == 0 ||
         !HdgfxGenSection(Submit.BatchOffset, Submit.BatchLength, 8, HDGFX_GEN_MAX_BATCH_SIZE,
                          pRender->CommandLength) ||
@@ -639,12 +643,21 @@ HdgfxRenderGen(
     User = (PHDGFX_USER_BATCH)(Record + 1);
     User->BatchOffset = BatchOffset;
     User->StateOffset = StateOffset;
+    User->Flags = Submit.Flags;
     if (Submit.StateLength != 0)
         RtlCopyMemory(Base + StateOffset, (CONST UCHAR *)pRender->pCommand + Submit.StateOffset, Submit.StateLength);
     RtlCopyMemory(Base + BatchOffset, (CONST UCHAR *)pRender->pCommand + Submit.BatchOffset, Submit.BatchLength);
     End = (PULONG)(Base + BatchOffset + Submit.BatchLength);
     HdgfxMiBatchEnd((uint32_t *)End);
     End[1] = 0;
+    if (Adapter->Generation->Gen >= 7 &&
+        !HdgfxIvbCheckBatch((const uint32_t *)(Base + BatchOffset), Submit.BatchLength / sizeof(ULONG),
+                            (Submit.Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0, &Offending))
+    {
+        DPRINT1("User batch refused at dword %lu: 0x%08lx 0x%08lx\n", Offending,
+                ((PULONG)(Base + BatchOffset))[Offending], ((PULONG)(Base + BatchOffset))[Offending + 1]);
+        return STATUS_ILLEGAL_INSTRUCTION;
+    }
 
     for (Index = 0; Index < pRender->PatchLocationListInSize; Index++)
     {
@@ -1078,6 +1091,34 @@ HdgfxDdiBuildPagingBuffer(
     return STATUS_SUCCESS;
 }
 
+static VOID
+HdgfxRecheckUserBatch(
+    _In_ PHDGFX_ADAPTER Adapter,
+    _In_ CONST DXGKARG_PATCH *Patch)
+{
+    PHDGFX_DMA_RECORD Record;
+    PHDGFX_USER_BATCH User;
+    PULONG Batch;
+    uint32_t Offending;
+
+    if (Adapter->Generation->Gen < 7 ||
+        Patch->DmaBufferSubmissionEndOffset - Patch->DmaBufferSubmissionStartOffset < sizeof(*Record) + sizeof(*User))
+    {
+        return;
+    }
+    Record = (PHDGFX_DMA_RECORD)((PUCHAR)Patch->pDmaBuffer + Patch->DmaBufferSubmissionStartOffset);
+    User = (PHDGFX_USER_BATCH)(Record + 1);
+    if (Record->Type != HDGFX_DMA_USER || User->BatchOffset >= Record->Size)
+        return;
+    Batch = (PULONG)((PUCHAR)Record + User->BatchOffset);
+    if (!HdgfxIvbCheckBatch((const uint32_t *)Batch, (Record->Size - User->BatchOffset) / sizeof(ULONG),
+                            (User->Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0, &Offending))
+    {
+        DPRINT1("Patched user batch refused at dword %lu: 0x%08lx\n", Offending, Batch[Offending]);
+        HdgfxMiBatchEnd((uint32_t *)Batch);
+    }
+}
+
 NTSTATUS
 APIENTRY
 HdgfxDdiPatch(
@@ -1145,6 +1186,7 @@ HdgfxDdiPatch(
         else
             *(ULONG UNALIGNED *)Location = (ULONG)Value;
     }
+    HdgfxRecheckUserBatch(Adapter, Patch);
     return STATUS_SUCCESS;
 }
 
@@ -1323,13 +1365,14 @@ static HDGFX_QUEUE_STATE
 HdgfxRunBatch(
     _Inout_ PHDGFX_ADAPTER Adapter,
     _In_ ULONG Address,
-    _In_ BOOLEAN Secure)
+    _In_ BOOLEAN Secure,
+    _In_ BOOLEAN Blitter)
 {
     HDGFX_QUEUE_STATE State = HdgfxQueueDone;
     HDGFX_MMIO Mmio;
     uint32_t Dwords[4];
     BOOLEAN Gen7 = Adapter->Generation->Gen >= 7;
-    PHDGFX_RING Ring = Gen7 && Secure ? &Adapter->BltRing : &Adapter->Ring;
+    PHDGFX_RING Ring = Gen7 && Blitter ? &Adapter->BltRing : &Adapter->Ring;
     ULONG Count = Gen7 ? HdgfxIvbMiBatchStart(Dwords, Address) :
                   Secure ? HdgfxMiBatchStart(Dwords, Address) : HdgfxMiUserBatchStart(Dwords, Address);
     ULONG Bytes = Count * sizeof(ULONG);
@@ -1468,12 +1511,13 @@ HdgfxRunSubmit(
         if ((Record->Type == HDGFX_DMA_BATCH || Record->Type == HDGFX_DMA_USER) && Mapped != NULL)
             DPRINT1("Batch at 0x%lx of fence %lu is outside the DMA segment, skipped\n", Submit->Offset, Submit->Fence);
         else if (Record->Type == HDGFX_DMA_BATCH)
-            State = HdgfxRunBatch(Adapter, (ULONG)Adapter->DmaBase + Segment + Submit->Offset + sizeof(*Record), TRUE);
+            State = HdgfxRunBatch(Adapter, (ULONG)Adapter->DmaBase + Segment + Submit->Offset + sizeof(*Record), TRUE,
+                                  TRUE);
         else if (Record->Type == HDGFX_DMA_USER)
             State = HdgfxRunBatch(Adapter,
                                   (ULONG)Adapter->DmaBase + Segment + Submit->Offset +
                                       ((PHDGFX_USER_BATCH)(Record + 1))->BatchOffset,
-                                  FALSE);
+                                  FALSE, (((PHDGFX_USER_BATCH)(Record + 1))->Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0);
         else if (Record->Type == HDGFX_DMA_CPU)
             State = HdgfxRunCpu(Adapter, (PSOFTGPU_CMD)(Record + 1));
         else if (Record->Type == HDGFX_DMA_GTT)

@@ -403,6 +403,80 @@ TestTrainingRetry(
     free(Current);
 }
 
+static void
+TestBatchCheck(void)
+{
+    static const uint32_t Allowed[] =
+    {
+        0x7A000002, 0x00100002, 0, 0,
+        0x69040000,
+        0x6101000A, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0x680B0000,
+        0x11000001, 0xB020, 0x00C00000,
+        0x11000001, 0x20C0, 0x00400040,               /* LRI INSTPM constant offset */
+        0x14800001, 0x5280, 0x1000,                   /* MI_LOAD_REGISTER_MEM SO offset */
+        0x12000001, 0x2400, 0x1000,                   /* MI_STORE_REGISTER_MEM predicate */
+        0x10400002, 0, 0x1000, 7,                     /* MI_STORE_DATA_IMM */
+        0x78000000 | (0x10 << 16) | 3, 0, 0, 0, 0,    /* a 3D packet */
+        0x05000000, 0,
+    };
+    static const struct
+    {
+        const char *Name;
+        uint32_t Dwords[4];
+        uint32_t Count;
+        bool Blitter;
+    } Refused[] =
+    {
+        { "MI_BATCH_BUFFER_START", { 0x18800000, 0x1000, 0, 0 }, 2, false },
+        { "MI_UPDATE_GTT", { 0x11800001, 0, 0, 0 }, 3, false },
+        { "MI_DISPLAY_FLIP", { 0x0A000002, 0, 0, 0 }, 4, false },
+        { "MI_SET_CONTEXT", { 0x0C000000, 0, 0, 0 }, 2, false },
+        { "MI_STORE_DATA_INDEX", { 0x10800001, 0x100, 1, 0 }, 3, false },
+        { "LRI to the GTT flush", { 0x11000001, 0x101008, 1, 0 }, 3, false },
+        { "LRI to a display register", { 0x11000001, 0x7019C, 0, 0 }, 3, false },
+        { "LRI to the ring tail", { 0x11000001, 0x2030, 0, 0 }, 3, false },
+        { "LRI to INSTPM sync flush", { 0x11000001, 0x20C0, 0x00200020, 0 }, 3, false },
+        { "SRM from INSTPM", { 0x12000001, 0x20C0, 0x1000, 0 }, 3, false },
+        { "LRI to a blitter ring register", { 0x11000001, 0x22034, 0, 0 }, 3, false },
+        { "misaligned LRI register", { 0x11000001, 0x5281, 0, 0 }, 3, false },
+        { "second LRI pair", { 0x11000003, 0x5280, 0, 0x2030 }, 4, false },
+        { "LRM to the ring head", { 0x14800001, 0x2034, 0x1000, 0 }, 3, false },
+        { "SRM from the GDRST", { 0x12000001, 0x941C, 0x1000, 0 }, 3, false },
+        { "PIPE_CONTROL store index", { 0x7A000002, 0x00200000, 0, 0 }, 4, false },
+        { "PIPE_CONTROL register write", { 0x7A000002, 0x00800000, 0, 0 }, 4, false },
+        { "XY blit on the render ring", { 0x54300004, 0, 0, 0 }, 4, false },
+        { "command past the batch", { 0x78100005, 0, 0, 0 }, 4, false },
+        { "LRI past the batch", { 0x11000003, 0x5280, 0, 0 }, 3, false },
+        { "unknown client", { 0x20000000, 0, 0, 0 }, 1, false },
+        { "3D packet on the blitter ring", { 0x7A000002, 0, 0, 0 }, 4, true },
+        { "LRI on the blitter ring", { 0x11000001, 0x5280, 0, 0 }, 3, true },
+        { "MI_FLUSH_DW store index", { 0x13200001, 0x100, 0, 0 }, 3, true },
+    };
+    static const uint32_t Blits[] =
+    {
+        0x54300004, 0x03F00100, 0, 0x00100040, 0, 0x11223344,
+        0x54F00006, 0x03CC0100, 0, 0x00040040, 0, 0, 0x100, 0,
+        0x13000001, 0, 0,
+        0x05000000, 0,
+    };
+    uint32_t Offending = 0;
+    size_t Index;
+
+    CHECK_EQ(HdgfxIvbCheckBatch(Allowed, sizeof(Allowed) / 4, false, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(Blits, sizeof(Blits) / 4, true, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(Blits, sizeof(Blits) / 4, false, &Offending), 0);
+    CHECK_EQ(Offending, 0);
+    for (Index = 0; Index < sizeof(Refused) / sizeof(Refused[0]); Index++)
+    {
+        if (HdgfxIvbCheckBatch(Refused[Index].Dwords, Refused[Index].Count, Refused[Index].Blitter, &Offending))
+        {
+            fprintf(stderr, "%s was allowed\n", Refused[Index].Name);
+            Failures++;
+        }
+    }
+}
+
 int
 main(
     int argc,
@@ -417,6 +491,7 @@ main(
     TestReadout(argv[1]);
     TestModeset(argv[1]);
     TestTrainingRetry(argv[1]);
+    TestBatchCheck();
     if (Failures)
     {
         fprintf(stderr, "%u checks failed\n", Failures);

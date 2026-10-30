@@ -589,6 +589,13 @@ HdgfxRingEmitBreadcrumb(
     uint32_t Value);
 
 bool
+HdgfxIvbCheckBatch(
+    const uint32_t *Dwords,
+    uint32_t Count,
+    bool Blitter,
+    uint32_t *Offending);
+
+bool
 HdgfxIvbForceWake(
     const HDGFX_MMIO *Mmio);
 
