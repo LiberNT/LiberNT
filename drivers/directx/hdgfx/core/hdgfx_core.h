@@ -576,6 +576,11 @@ HdgfxMiBatchStart(
     uint32_t Address);
 
 uint32_t
+HdgfxMiUserBatchStart(
+    uint32_t *Dwords,
+    uint32_t Address);
+
+uint32_t
 HdgfxMiBatchEnd(
     uint32_t *Dwords);
 

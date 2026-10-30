@@ -41,6 +41,7 @@ extern void func_presentext(void);
 extern void func_misc(void);
 extern void func_teardown(void);
 extern void func_renderpath(void);
+extern void func_hdgfx_gen(void);
 extern void func_capsaudit(void);
 extern void func_umdabi(void);
 extern void func_adapterid(void);
@@ -129,6 +130,7 @@ const struct test winetest_testlist[] =
     { "misc",          func_misc },
     { "teardown",      func_teardown },
     { "renderpath",    func_renderpath },
+    { "hdgfx_gen",     func_hdgfx_gen },
     { "capsaudit",     func_capsaudit },
     { "umdabi",        func_umdabi },
     { "adapterid",     func_adapterid },

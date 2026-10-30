@@ -11,6 +11,7 @@
 #include <windef.h>
 #include <dispmprt.h>
 #include <reactos/drivers/directx/softgpu_2d_shared.h>
+#include <reactos/drivers/directx/hdgfx_umd.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -223,6 +224,7 @@ typedef struct _HDGFX_CONTEXT
 {
     ULONG Magic;
     ULONG NodeOrdinal;
+    BOOLEAN Gen;
     PHDGFX_DEVICE Device;
     PHDGFX_PROCESS Process;
 } HDGFX_CONTEXT, *PHDGFX_CONTEXT;

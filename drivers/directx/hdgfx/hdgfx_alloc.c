@@ -193,6 +193,7 @@ HdgfxCreateOneAllocation(
     ULONGLONG RequiredSize = 0;
     ULONGLONG Size;
     PHDGFX_ALLOCATION Alloc;
+    UINT LinearSize;
 
     if (Info->PrivateDriverDataSize != 0 && Info->pPrivateDriverData == NULL)
         return STATUS_INVALID_PARAMETER;
@@ -217,6 +218,16 @@ HdgfxCreateOneAllocation(
         }
         HdgfxCopyGeometry(&PrivateData, &Alloc->Width, &Alloc->Height, &Alloc->Pitch, &Alloc->StorageHeight,
                           &Alloc->Format, &Alloc->PlaneCount, Alloc->PlaneOffsets, Alloc->PlanePitches);
+    }
+    else if (Info->PrivateDriverDataSize == sizeof(UINT))
+    {
+        RtlCopyMemory(&LinearSize, Info->pPrivateDriverData, sizeof(LinearSize));
+        if (LinearSize == 0)
+        {
+            HdgfxFreeAllocation(Alloc);
+            return STATUS_INVALID_PARAMETER;
+        }
+        RequiredSize = LinearSize;
     }
 
     Size = Info->Size != 0 ? Info->Size : PAGE_SIZE;

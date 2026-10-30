@@ -1636,6 +1636,12 @@ TestBlt(void)
     CHECK_EQ(Dwords[1], 0xFF7C008);
     CHECK_EQ(Dwords[2], 0);
     CHECK_EQ(Dwords[3], 0);
+    CHECK_EQ(HdgfxMiUserBatchStart(Dwords, 0x3E8004), 0);
+    CHECK_EQ(HdgfxMiUserBatchStart(Dwords, 0x3E8040), 4);
+    CHECK_EQ(Dwords[0], 0x18800180);
+    CHECK_EQ(Dwords[1], 0x3E8040);
+    CHECK_EQ(Dwords[2], 0);
+    CHECK_EQ(Dwords[3], 0);
 
     CHECK_EQ(HdgfxBltFill(Dwords, &Source, &Rect, 0x55667788), 6);
     CHECK_EQ(Dwords[0], 0x54300004);
