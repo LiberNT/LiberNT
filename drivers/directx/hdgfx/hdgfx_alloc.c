@@ -183,6 +183,16 @@ HdgfxDdiGetStandardAllocationDriverData(
     return STATUS_SUCCESS;
 }
 
+ULONGLONG
+HdgfxMaxAllocationSize(
+    _In_ PHDGFX_ADAPTER Adapter,
+    _In_ BOOLEAN Standard)
+{
+    if (Standard)
+        return Adapter->SlabSize;
+    return max((ULONGLONG)Adapter->SlabSize, (ULONGLONG)Adapter->ApertureSize);
+}
+
 static NTSTATUS
 HdgfxCreateOneAllocation(
     _In_ PHDGFX_ADAPTER Adapter,
@@ -197,7 +207,7 @@ HdgfxCreateOneAllocation(
 
     if (Info->PrivateDriverDataSize != 0 && Info->pPrivateDriverData == NULL)
         return STATUS_INVALID_PARAMETER;
-    if (Info->Size > Adapter->SlabSize)
+    if (Info->Size > HdgfxMaxAllocationSize(Adapter, Standard))
         return STATUS_GRAPHICS_NO_VIDEO_MEMORY;
 
     Alloc = ExAllocatePoolZero(NonPagedPool, sizeof(*Alloc), HDGFX_TAG);
@@ -234,7 +244,7 @@ HdgfxCreateOneAllocation(
     if (RequiredSize > Size)
         Size = RequiredSize;
     Size = ROUND_TO_PAGES(Size);
-    if (Size > Adapter->SlabSize)
+    if (Size > HdgfxMaxAllocationSize(Adapter, Standard))
     {
         HdgfxFreeAllocation(Alloc);
         return STATUS_GRAPHICS_NO_VIDEO_MEMORY;
@@ -414,7 +424,7 @@ HdgfxOpenOneAllocation(
     else if (Info->PrivateDriverDataSize == sizeof(LinearSize))
     {
         RtlCopyMemory(&LinearSize, Info->pPrivateDriverData, sizeof(LinearSize));
-        if (LinearSize == 0 || LinearSize > KmdDevice->Adapter->SlabSize)
+        if (LinearSize == 0 || LinearSize > HdgfxMaxAllocationSize(KmdDevice->Adapter, FALSE))
         {
             HdgfxFreeOpen(Open);
             return STATUS_INVALID_PARAMETER;
