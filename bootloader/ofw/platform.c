@@ -1223,7 +1223,8 @@ BOOLEAN
 FwStartImage(
     _In_reads_bytes_(Size) PVOID Image,
     _In_ ULONG Size,
-    _In_ PCWSTR LoadOptions)
+    _In_ PCWSTR LoadOptions,
+    _Out_ PBOOLEAN Cancelled)
 {
     OFW_APPLICATION_PARAMETERS Parameters;
     PIMAGE_NT_HEADERS NtHeaders;
@@ -1231,6 +1232,8 @@ FwStartImage(
     POFW_APPLICATION_ENTRY Entry;
     PUCHAR Base;
     ULONG ImageSize, Copy, i;
+
+    *Cancelled = FALSE;
 
     if (!NT_SUCCESS(RtlImageNtHeaderEx(0, Image, Size, &NtHeaders)))
         return FALSE;

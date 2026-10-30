@@ -232,7 +232,9 @@ BmStartSelectedApplication(
     _In_ PBM_ENTRY Entry,
     _In_ PBM_STARTUP Startup)
 {
-    if (BmStartApplication(Entry, BmStorePath, Startup))
+    BOOLEAN Cancelled;
+
+    if (BmStartApplication(Entry, BmStorePath, Startup, &Cancelled) || Cancelled)
         return;
 
     FwPrint(L"\r\nPress any key to return to the boot menu.\r\n");

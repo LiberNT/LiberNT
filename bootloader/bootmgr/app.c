@@ -56,7 +56,8 @@ BOOLEAN
 BmStartApplication(
     _In_ PBM_ENTRY Entry,
     _In_ PCWSTR StorePath,
-    _In_ PBM_STARTUP Startup)
+    _In_ PBM_STARTUP Startup,
+    _Out_ PBOOLEAN Cancelled)
 {
     WCHAR Options[BM_PATH_CHARS + BCD_ID_CHARS + BM_STARTUP_CHARS];
     WCHAR Path[BM_PATH_CHARS];
@@ -66,6 +67,8 @@ BmStartApplication(
     PVOID Image;
     ULONG Size;
     BOOLEAN Started = FALSE;
+
+    *Cancelled = FALSE;
 
     if (Entry->FirmwareDevice)
     {
@@ -121,8 +124,8 @@ BmStartApplication(
                             StorePath,
                             BM_STARTUP_OPTION,
                             Startup->Profile);
-        Started = FwStartImage(Image, Size, Options);
-        if (!Started)
+        Started = FwStartImage(Image, Size, Options, Cancelled);
+        if (!Started && !*Cancelled)
             FwPrint(L"%s did not start the operating system.\r\n", Path);
     }
     else if (NtHeaders->OptionalHeader.Subsystem == IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION)

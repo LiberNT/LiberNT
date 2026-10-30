@@ -183,7 +183,8 @@ BOOLEAN
 FwStartImage(
     _In_reads_bytes_(Size) PVOID Image,
     _In_ ULONG Size,
-    _In_ PCWSTR LoadOptions);
+    _In_ PCWSTR LoadOptions,
+    _Out_ PBOOLEAN Cancelled);
 
 BOOLEAN
 FwGetLoaderImage(

@@ -187,7 +187,8 @@ BOOLEAN
 BmStartApplication(
     _In_ PBM_ENTRY Entry,
     _In_ PCWSTR StorePath,
-    _In_ PBM_STARTUP Startup);
+    _In_ PBM_STARTUP Startup,
+    _Out_ PBOOLEAN Cancelled);
 
 BOOLEAN
 BmGetDescription(

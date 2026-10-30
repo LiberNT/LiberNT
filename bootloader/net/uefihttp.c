@@ -834,7 +834,6 @@ UefiHttpBootDownload(
         Features |= UEFI_NET_FEATURE_DNS;
 
     TRACE("UEFI HttpBoot: starting download from %s\n", Url);
-    FwPrint(L"Waiting for the network. Press any key to start from the local medium.\r\n");
     if (!UefiNetPrepare(&Context, Features, Cancelled))
     {
         return FALSE;
@@ -1022,15 +1021,38 @@ FwDownloadFile(
     _Out_ PULONG Size)
 {
     PVOID Image = NULL;
-    BOOLEAN Cancelled;
+    BOOLEAN Cancelled = FALSE;
+    BOOLEAN Reported = FALSE;
     EFI_STATUS Status;
 
     *Size = 0;
-    Status = SnpHttpDownload(Url, Address, &Image, Size);
-    if (Status == EFI_NOT_FOUND && UefiNetLoadNicDrivers())
-        Status = SnpHttpDownload(Url, Address, &Image, Size);
-    if (Status != EFI_NOT_FOUND && Status != EFI_UNSUPPORTED)
-        return EFI_ERROR(Status) ? NULL : Image;
+    FwPrint(L"Waiting for the network. Press any key to return to the boot menu.\r\n");
 
-    return UefiHttpBootDownload(Url, Address, &Cancelled, &Image, Size) ? Image : NULL;
+    for (;;)
+    {
+        Status = SnpHttpDownload(Url, Address, &Image, Size);
+        if (Status == EFI_NOT_FOUND && UefiNetLoadNicDrivers())
+            Status = SnpHttpDownload(Url, Address, &Image, Size);
+        if (!EFI_ERROR(Status))
+            return Image;
+        if (Status == EFI_INVALID_PARAMETER)
+            return NULL;
+
+        if (Status == EFI_NOT_FOUND || Status == EFI_UNSUPPORTED)
+        {
+            if (UefiHttpBootDownload(Url, Address, &Cancelled, &Image, Size))
+                return Image;
+            if (Status == EFI_NOT_FOUND && !Reported)
+            {
+                FwPrint(L"No network adapter was found.\r\n");
+                Reported = TRUE;
+            }
+        }
+
+        if (Cancelled || !UefiNetWaitForRetry())
+        {
+            GlobalSystemTable->BootServices->Exit(GlobalImageHandle, EFI_ABORTED, 0, NULL);
+            return NULL;
+        }
+    }
 }

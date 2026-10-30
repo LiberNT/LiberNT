@@ -337,11 +337,15 @@ BOOLEAN
 FwStartImage(
     _In_reads_bytes_(Size) PVOID Image,
     _In_ ULONG Size,
-    _In_ PCWSTR LoadOptions)
+    _In_ PCWSTR LoadOptions,
+    _Out_ PBOOLEAN Cancelled)
 {
     EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
     EFI_LOADED_IMAGE_PROTOCOL* LoadedImage;
     EFI_HANDLE Handle;
+    EFI_STATUS Status;
+
+    *Cancelled = FALSE;
 
     if (EFI_ERROR(BootServices->LoadImage(FALSE, GlobalImageHandle, NULL, Image, Size, &Handle)))
         return FALSE;
@@ -357,7 +361,9 @@ FwStartImage(
     LoadedImage->LoadOptions = (VOID*)LoadOptions;
     LoadedImage->LoadOptionsSize = (UINT32)((wcslen(LoadOptions) + 1) * sizeof(WCHAR));
 
-    return !EFI_ERROR(BootServices->StartImage(Handle, NULL, NULL));
+    Status = BootServices->StartImage(Handle, NULL, NULL);
+    *Cancelled = (Status == EFI_ABORTED);
+    return !EFI_ERROR(Status);
 }
 
 BOOLEAN
