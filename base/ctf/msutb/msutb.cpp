@@ -1236,7 +1236,6 @@ public:
 
 class CLBarItemButtonBase
     : public CLBarItemBase
-    , public ITfLangBarItem
     , public ITfLangBarItemButton
     , public ITfSource
 {
@@ -3661,7 +3660,7 @@ STDMETHODIMP CLBarItemButtonBase::QueryInterface(REFIID riid, void **ppvObject)
 {
     static const QITAB c_tab[] =
     {
-        QITABENT(CLBarItemButtonBase, ITfLangBarItem),
+        QITABENTMULTI(CLBarItemButtonBase, ITfLangBarItem, ITfLangBarItemButton),
         QITABENT(CLBarItemButtonBase, ITfLangBarItemButton),
         QITABENT(CLBarItemButtonBase, ITfSource),
         { NULL }
