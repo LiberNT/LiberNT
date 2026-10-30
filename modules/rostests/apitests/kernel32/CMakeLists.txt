@@ -66,6 +66,7 @@ list(APPEND SOURCE
     MultiByteToWideChar.c
     Pipes.c
     PackageNames.c
+    ParentHandleList.c
     PixeloramaCompat.c
     ProcessPreferredUILanguages.c
     PssSnapshot.c
