@@ -71,6 +71,16 @@ UINT      g_uShellHookMessage = 0;
 HWND      g_hTrayWnd = NULL;
 HWND      g_hTrayNotifyWnd = NULL;
 
+typedef struct tagTIP_INPUT_MODE
+{
+    DWORD dwThreadId;
+    HWND hwndTip;
+    HICON hIcon;
+    WCHAR szTooltip[128];
+} TIP_INPUT_MODE;
+
+TIP_INPUT_MODE g_TipInputMode = { 0 };
+
 // Flags for g_anFlags
 #define LAYOUTF_FAR_EAST 0x1
 #define LAYOUTF_IME_ICON 0x2
@@ -548,6 +558,41 @@ LoadDefaultPenIcon(PCWSTR szImeFile, HKL hKL)
     return LoadIcon(g_hHookDLL, MAKEINTRESOURCE(nIconID));
 }
 
+static DWORD
+GetLastActiveThreadId(VOID)
+{
+    return GetWindowThreadProcessId(GetTargetWindow(g_hwndLastActive), NULL);
+}
+
+static BOOL
+HasTipInputMode(VOID)
+{
+    return g_TipInputMode.hIcon && g_TipInputMode.dwThreadId == GetLastActiveThreadId() &&
+           GetWindowThreadProcessId(g_TipInputMode.hwndTip, NULL) == g_TipInputMode.dwThreadId;
+}
+
+static VOID
+ClearTipInputMode(VOID)
+{
+    if (g_TipInputMode.hIcon)
+        DestroyIcon(g_TipInputMode.hIcon);
+    ZeroMemory(&g_TipInputMode, sizeof(g_TipInputMode));
+}
+
+static VOID
+RequestTipInputMode(DWORD dwThreadId)
+{
+    HWND hwndTip = NULL;
+    while ((hwndTip = FindWindowExW(HWND_MESSAGE, hwndTip, INPUTINDICATOR_TIP_WNDCLASS, NULL)) != NULL)
+    {
+        if (GetWindowThreadProcessId(hwndTip, NULL) == dwThreadId)
+        {
+            PostMessageW(hwndTip, WM_INPUTINDICATOR_REFRESH, 0, 0);
+            break;
+        }
+    }
+}
+
 static VOID
 DeletePenNotifyIcon(HWND hwnd)
 {
@@ -565,6 +610,21 @@ static VOID
 UpdatePenIcon(HWND hwnd, UINT iKL)
 {
     DeletePenIcon(hwnd, iKL);
+
+    if (HasTipInputMode())
+    {
+        NOTIFYICONDATA nid = { sizeof(nid), hwnd, NOTIFY_ICON_ID_SYSTEM_PEN };
+        g_ahSysPenIcons[iKL] = CopyIcon(g_TipInputMode.hIcon);
+        nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+        nid.uCallbackMessage = WM_PENICONMSG;
+        nid.hIcon = g_ahSysPenIcons[iKL];
+        StringCchCopy(nid.szTip, _countof(nid.szTip), g_TipInputMode.szTooltip);
+        if (!Shell_NotifyIcon((g_bSysPenNotifyAdded ? NIM_MODIFY : NIM_ADD), &nid))
+            ERR("Shell_NotifyIcon failed\n");
+        else
+            g_bSysPenNotifyAdded = TRUE;
+        return;
+    }
 
     // Not Far-East?
     if (!(g_anFlags[iKL] & LAYOUTF_FAR_EAST))
@@ -1000,6 +1060,7 @@ KbSwitch_OnDestroy(HWND hwnd)
     DeleteTrayIcon(hwnd);
     DestroyPenIcons();
     DeletePenNotifyIcon(hwnd);
+    ClearTipInputMode();
     PostQuitMessage(0);
 }
 
@@ -1112,11 +1173,19 @@ KbSwitch_OnPenIconMsg(HWND hwnd, UINT uMouseMsg)
     if (uMouseMsg != WM_LBUTTONUP && uMouseMsg != WM_RBUTTONUP)
         return;
 
-    if (!(g_anFlags[g_iKL] & LAYOUTF_FAR_EAST))
-        return;
-
     POINT pt;
     GetCursorPos(&pt);
+
+    if (HasTipInputMode())
+    {
+        WPARAM wClick = (uMouseMsg == WM_RBUTTONUP) ? INPUTINDICATOR_CLICK_RIGHT : INPUTINDICATOR_CLICK_LEFT;
+        SetForegroundWindow(GetTargetWindow(g_hwndLastActive));
+        PostMessageW(g_TipInputMode.hwndTip, WM_INPUTINDICATOR_CLICK, wClick, MAKELPARAM(pt.x, pt.y));
+        return;
+    }
+
+    if (!(g_anFlags[g_iKL] & LAYOUTF_FAR_EAST))
+        return;
 
     // Get target window
     TRACE("g_hwndLastActive: %p\n", g_hwndLastActive);
@@ -1329,8 +1398,44 @@ KbSwitch_OnWindowActivate(HWND hwnd, HWND hwndTarget OPTIONAL, LPARAM lParam OPT
     TRACE("WM_WINDOW_ACTIVATE: hwndTarget:%p, lParam:%p\n", hwndTarget, lParam);
     HWND hwndFore = hwndTarget ? hwndTarget : GetForegroundWindow();
     if (RememberLastActive(hwnd, hwndFore))
+    {
+        DWORD dwThreadId = GetLastActiveThreadId();
+        if (g_TipInputMode.dwThreadId != dwThreadId)
+        {
+            ClearTipInputMode();
+            RequestTipInputMode(dwThreadId);
+        }
         return UpdateLanguageDisplayCurrent(hwnd, hwndFore);
+    }
     return 0;
+}
+
+static BOOL
+KbSwitch_OnCopyData(HWND hwnd, PCOPYDATASTRUCT pcds)
+{
+    if (pcds->dwData != INPUTINDICATOR_COPYDATA_ID || pcds->cbData < sizeof(INPUTINDICATOR_TIPSTATE))
+        return FALSE;
+
+    PINPUTINDICATOR_TIPSTATE pState = (PINPUTINDICATOR_TIPSTATE)pcds->lpData;
+    if (pState->dwThreadId != GetLastActiveThreadId())
+    {
+        if (pState->dwThreadId == g_TipInputMode.dwThreadId && !pState->hIcon)
+            ClearTipInputMode();
+        return TRUE;
+    }
+
+    ClearTipInputMode();
+    HWND hwndTip = (HWND)(ULONG_PTR)pState->hwndTip;
+    if (pState->hIcon && GetWindowThreadProcessId(hwndTip, NULL) == pState->dwThreadId &&
+        IsWndClassName(hwndTip, INPUTINDICATOR_TIP_WNDCLASS))
+    {
+        g_TipInputMode.hIcon = CopyIcon((HICON)(ULONG_PTR)pState->hIcon);
+        g_TipInputMode.dwThreadId = pState->dwThreadId;
+        g_TipInputMode.hwndTip = hwndTip;
+        StringCchCopyW(g_TipInputMode.szTooltip, _countof(g_TipInputMode.szTooltip), pState->szTooltip);
+    }
+    UpdatePenIcon(hwnd, g_iKL);
+    return TRUE;
 }
 
 // WM_SETTINGCHANGE
@@ -1460,6 +1565,9 @@ WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         case WM_SETTINGCHANGE:
             KbSwitch_OnSettingChange(hwnd, wParam, lParam);
             break;
+
+        case WM_COPYDATA:
+            return KbSwitch_OnCopyData(hwnd, (PCOPYDATASTRUCT)lParam);
 
         case WM_DESTROY:
             KbSwitch_OnDestroy(hwnd);

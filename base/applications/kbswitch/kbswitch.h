@@ -11,6 +11,7 @@
 #include <tchar.h>
 #include <strsafe.h>
 #include <ime/indicml.h> /* INDICATOR_CLASS, INDICM_... */
+#include <inputindicator.h>
 #include <cjkcode.h> /* LANGID_... */
 
 #include "resource.h"

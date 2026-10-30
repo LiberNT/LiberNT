@@ -841,6 +841,7 @@ VOID ProcessDetach(HINSTANCE hinstDLL)
     }
 
     UninitINAT();
+    TipInputModeIndicator_Uninit();
 
     //FIXME
 
