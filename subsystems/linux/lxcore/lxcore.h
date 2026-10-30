@@ -1016,6 +1016,7 @@ LONG LxFileZeroRange(_In_ PLX_FILE File, _In_ ULONG64 Start, _In_ ULONG64 End);
 VOID LxMemfdDereference(_In_opt_ PLX_MEMFD Memfd);
 LONG LxFileStat(_In_ PLX_FILE File, _Out_ PLX_STAT Stat);
 PLX_FILE LxFileFromNtHandle(_In_ HANDLE Handle, _In_ ULONG Flags);
+LONG LxNtStatHandle(_In_ HANDLE Handle, _In_opt_ PLX_MOUNT Mount, _Out_ PLX_STAT Stat);
 PLX_FILE LxDataFileCreate(_In_ PCSTR Path, _In_ PVOID Data, _In_ ULONG Length, _In_ ULONG Mode);
 LONG64 LxWriteFailed(_In_ LONG Error);
 LONG64 LxSocketGatherIov(_In_ PLX_MSGHDR Header, _In_ BOOLEAN KernelIov, _Out_ PLX_IOVEC *Vectors, _Out_ PULONG64 Total);

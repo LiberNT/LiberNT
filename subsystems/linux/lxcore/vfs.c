@@ -4111,7 +4111,6 @@ LxVfsStatNode(
     _In_ PLX_NODE Node,
     _Out_ PLX_STAT Stat)
 {
-    PLX_FILE File;
     HANDLE Handle;
     LONG Error;
 
@@ -4147,16 +4146,8 @@ LxVfsStatNode(
     Error = LxNtOpenHandle(&Node->NtPath, FILE_READ_ATTRIBUTES | FILE_READ_EA, FILE_OPEN, 0, 0, &Handle);
     if (Error != 0)
         return Error;
-
-    File = LxFileFromNtHandle(Handle, LX_O_PATH);
-    if (File == NULL)
-    {
-        ZwClose(Handle);
-        return -LX_ENOMEM;
-    }
-    File->Mount = Node->Mount;
-    Error = LxFileStat(File, Stat);
-    LxFileDereference(File);
+    Error = LxNtStatHandle(Handle, Node->Mount, Stat);
+    ZwClose(Handle);
 
     if (Error == 0)
     {

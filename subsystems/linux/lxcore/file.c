@@ -1012,10 +1012,67 @@ LxNtWrite(
 }
 
 static
-LONG
-LxNtStat(
-    _In_ PLX_FILE File,
+VOID
+LxNtStatFromInformation(
+    _In_ const FILE_STAT_LX_INFORMATION *Info,
+    _In_ ULONG Dev,
+    _In_ ULONG64 FallbackIno,
     _Out_ PLX_STAT Stat)
+{
+    RtlZeroMemory(Stat, sizeof(*Stat));
+    Stat->Nlink = (Info->NumberOfLinks != 0) ? Info->NumberOfLinks : 1;
+    Stat->BlkSize = 4096;
+    Stat->Ino = (Info->FileId.QuadPart != 0) ? (ULONG64)Info->FileId.QuadPart : FallbackIno;
+    Stat->Dev = Dev;
+
+    if (Info->FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+    {
+        Stat->Mode = LX_S_IFDIR | 0755;
+        Stat->Size = 4096;
+    }
+    else
+    {
+        Stat->Mode = LX_S_IFREG | 0755;
+        Stat->Size = Info->EndOfFile.QuadPart;
+    }
+
+    if ((Info->LxFlags & LX_FILE_METADATA_HAS_MODE) && (Info->LxMode != MAXULONG))
+    {
+        ULONG Mode = Info->LxMode;
+
+        if ((Mode & LX_S_IFMT) == 0)
+            Mode |= Stat->Mode & LX_S_IFMT;
+        Stat->Mode = Mode;
+    }
+    if ((Info->LxFlags & LX_FILE_METADATA_HAS_UID) && (Info->LxUid != MAXULONG))
+        Stat->Uid = Info->LxUid;
+    if ((Info->LxFlags & LX_FILE_METADATA_HAS_GID) && (Info->LxGid != MAXULONG))
+        Stat->Gid = Info->LxGid;
+    if ((Info->LxFlags & LX_FILE_METADATA_HAS_DEVICE_ID) &&
+        ((Info->LxDeviceIdMajor != MAXULONG) || (Info->LxDeviceIdMinor != MAXULONG)))
+    {
+        Stat->Rdev = ((ULONG64)Info->LxDeviceIdMajor << 8) | (Info->LxDeviceIdMinor & 0xFF) |
+                     ((ULONG64)(Info->LxDeviceIdMinor & 0xFFF00) << 12);
+    }
+
+    if ((Stat->Mode & LX_S_IFMT) != LX_S_IFREG && (Stat->Mode & LX_S_IFMT) != LX_S_IFDIR &&
+        (Stat->Mode & LX_S_IFMT) != LX_S_IFLNK)
+    {
+        Stat->Size = 0;
+    }
+
+    Stat->Blocks = (Info->AllocationSize.QuadPart + 511) / 512;
+    LxNtTimeToTimespec(Info->LastAccessTime.QuadPart, &Stat->Atime);
+    LxNtTimeToTimespec(Info->LastWriteTime.QuadPart, &Stat->Mtime);
+    LxNtTimeToTimespec(Info->ChangeTime.QuadPart ? Info->ChangeTime.QuadPart : Info->LastWriteTime.QuadPart,
+                       &Stat->Ctime);
+}
+
+static
+NTSTATUS
+LxNtQueryStatLegacy(
+    _In_ HANDLE Handle,
+    _Out_ PFILE_STAT_LX_INFORMATION Info)
 {
     IO_STATUS_BLOCK Iosb;
     FILE_BASIC_INFORMATION Basic;
@@ -1025,71 +1082,116 @@ LxNtStat(
     ULONG64 Device;
     NTSTATUS Status;
 
-    RtlZeroMemory(Stat, sizeof(*Stat));
-    Stat->Nlink = 1;
-    Stat->BlkSize = 4096;
+    RtlZeroMemory(Info, sizeof(*Info));
+    Status = ZwQueryInformationFile(Handle, &Iosb, &Basic, sizeof(Basic), FileBasicInformation);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = ZwQueryInformationFile(Handle, &Iosb, &Standard, sizeof(Standard), FileStandardInformation);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (NT_SUCCESS(ZwQueryInformationFile(Handle, &Iosb, &Internal, sizeof(Internal), FileInternalInformation)))
+        Info->FileId = Internal.IndexNumber;
 
+    Info->CreationTime = Basic.CreationTime;
+    Info->LastAccessTime = Basic.LastAccessTime;
+    Info->LastWriteTime = Basic.LastWriteTime;
+    Info->ChangeTime = Basic.ChangeTime;
+    Info->AllocationSize = Standard.AllocationSize;
+    Info->EndOfFile = Standard.EndOfFile;
+    Info->FileAttributes = Basic.FileAttributes | (Standard.Directory ? FILE_ATTRIBUTE_DIRECTORY : 0);
+    Info->NumberOfLinks = Standard.NumberOfLinks;
+
+    if (LxNtReadLxAttributes(Handle, &Mode, &Uid, &Gid, &Device) == 0)
+    {
+        if (Mode != MAXULONG)
+        {
+            Info->LxFlags |= LX_FILE_METADATA_HAS_MODE;
+            Info->LxMode = Mode;
+        }
+        if (Uid != MAXULONG)
+        {
+            Info->LxFlags |= LX_FILE_METADATA_HAS_UID;
+            Info->LxUid = Uid;
+        }
+        if (Gid != MAXULONG)
+        {
+            Info->LxFlags |= LX_FILE_METADATA_HAS_GID;
+            Info->LxGid = Gid;
+        }
+        if (Device != MAXULONG64)
+        {
+            Info->LxFlags |= LX_FILE_METADATA_HAS_DEVICE_ID;
+            Info->LxDeviceIdMajor = (ULONG)(Device >> 32);
+            Info->LxDeviceIdMinor = (ULONG)Device;
+        }
+    }
+    return STATUS_SUCCESS;
+}
+
+static
+LONG
+LxNtStatQuery(
+    _In_ HANDLE Handle,
+    _In_ ULONG Dev,
+    _In_ ULONG64 FallbackIno,
+    _Out_ PLX_STAT Stat)
+{
+    FILE_STAT_LX_INFORMATION Info;
+    IO_STATUS_BLOCK Iosb;
+    NTSTATUS Status;
+
+    Status = ZwQueryInformationFile(Handle, &Iosb, &Info, sizeof(Info), FileStatLxInformation);
+    if (!NT_SUCCESS(Status))
+        Status = LxNtQueryStatLegacy(Handle, &Info);
+    if (!NT_SUCCESS(Status))
+        return -LxStatusToErrno(Status);
+    LxNtStatFromInformation(&Info, Dev, FallbackIno, Stat);
+    return 0;
+}
+
+static
+LONG
+LxNtStat(
+    _In_ PLX_FILE File,
+    _Out_ PLX_STAT Stat)
+{
     if (File->NtPipe)
     {
+        RtlZeroMemory(Stat, sizeof(*Stat));
+        Stat->Nlink = 1;
+        Stat->BlkSize = 4096;
         Stat->Mode = LX_S_IFIFO | 0600;
         Stat->Ino = File->Ino;
         return 0;
     }
+    return LxNtStatQuery(File->Handle, (File->Mount != NULL) ? File->Mount->Dev : 0x801, File->Ino, Stat);
+}
 
-    Status = ZwQueryInformationFile(File->Handle, &Iosb, &Basic, sizeof(Basic), FileBasicInformation);
-    if (!NT_SUCCESS(Status))
-        return -LxStatusToErrno(Status);
-    Status = ZwQueryInformationFile(File->Handle, &Iosb, &Standard, sizeof(Standard), FileStandardInformation);
-    if (!NT_SUCCESS(Status))
-        return -LxStatusToErrno(Status);
-    if (NT_SUCCESS(ZwQueryInformationFile(File->Handle, &Iosb, &Internal, sizeof(Internal), FileInternalInformation)))
-        Stat->Ino = (ULONG64)Internal.IndexNumber.QuadPart;
-    if (Stat->Ino == 0)
-        Stat->Ino = File->Ino;
+LONG
+LxNtStatHandle(
+    _In_ HANDLE Handle,
+    _In_opt_ PLX_MOUNT Mount,
+    _Out_ PLX_STAT Stat)
+{
+    FILE_STAT_LX_INFORMATION Info;
+    FILE_FS_DEVICE_INFORMATION Device;
+    IO_STATUS_BLOCK Iosb;
 
-    Stat->Dev = (File->Mount != NULL) ? File->Mount->Dev : 0x801;
-
-    if (Standard.Directory)
+    if (NT_SUCCESS(ZwQueryInformationFile(Handle, &Iosb, &Info, sizeof(Info), FileStatLxInformation)))
     {
-        Stat->Mode = LX_S_IFDIR | 0755;
-        Stat->Size = 4096;
+        LxNtStatFromInformation(&Info, (Mount != NULL) ? Mount->Dev : 0x801, 0, Stat);
+        return 0;
     }
-    else
+    if (NT_SUCCESS(ZwQueryVolumeInformationFile(Handle, &Iosb, &Device, sizeof(Device), FileFsDeviceInformation)) &&
+        (Device.DeviceType == FILE_DEVICE_NAMED_PIPE))
     {
-        Stat->Mode = LX_S_IFREG | 0755;
-        Stat->Size = Standard.EndOfFile.QuadPart;
+        RtlZeroMemory(Stat, sizeof(*Stat));
+        Stat->Nlink = 1;
+        Stat->BlkSize = 4096;
+        Stat->Mode = LX_S_IFIFO | 0600;
+        return 0;
     }
-
-    if (LxNtReadLxAttributes(File->Handle, &Mode, &Uid, &Gid, &Device) == 0)
-    {
-        if (Mode != MAXULONG)
-        {
-            if ((Mode & LX_S_IFMT) == 0)
-                Mode |= Stat->Mode & LX_S_IFMT;
-            Stat->Mode = Mode;
-        }
-        if (Uid != MAXULONG)
-            Stat->Uid = Uid;
-        if (Gid != MAXULONG)
-            Stat->Gid = Gid;
-        if (Device != MAXULONG64)
-            Stat->Rdev = ((Device >> 32) << 8) | (Device & 0xFF) | ((Device & 0xFFF00) << 12);
-    }
-
-    if ((Stat->Mode & LX_S_IFMT) != LX_S_IFREG && (Stat->Mode & LX_S_IFMT) != LX_S_IFDIR &&
-        (Stat->Mode & LX_S_IFMT) != LX_S_IFLNK)
-    {
-        Stat->Size = 0;
-    }
-
-    if (Standard.NumberOfLinks != 0)
-        Stat->Nlink = Standard.NumberOfLinks;
-    Stat->Blocks = (Standard.AllocationSize.QuadPart + 511) / 512;
-    LxNtTimeToTimespec(Basic.LastAccessTime.QuadPart, &Stat->Atime);
-    LxNtTimeToTimespec(Basic.LastWriteTime.QuadPart, &Stat->Mtime);
-    LxNtTimeToTimespec(Basic.ChangeTime.QuadPart ? Basic.ChangeTime.QuadPart : Basic.LastWriteTime.QuadPart,
-                       &Stat->Ctime);
-    return 0;
+    return LxNtStatQuery(Handle, (Mount != NULL) ? Mount->Dev : 0x801, 0, Stat);
 }
 
 static
