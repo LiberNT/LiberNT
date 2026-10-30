@@ -85,7 +85,7 @@ KeTrapFrameToContext(
     Flags = Context->ContextFlags;
     if (!(TrapFrame->Context.ContextFlags & (CONTEXT_FLOATING_POINT & ~CONTEXT_RISCV64)))
         Flags &= ~(CONTEXT_FLOATING_POINT & ~CONTEXT_RISCV64);
-    KiRiscvCopyContext(Context, &TrapFrame->Context, Flags);
+    KiRiscvCopyContext(Context, &TrapFrame->Context, Flags & (CONTEXT_ALL | CONTEXT_UNWOUND_TO_CALL));
     Context->ContextFlags = Flags;
     KeRestoreInterrupts(Interrupts);
 }
