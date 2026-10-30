@@ -40,6 +40,7 @@ list(APPEND SOURCE
     GetSystemWow64Directory.c
     GetTempFileName.c
     GetTempPath2.c
+    GetThreadTimes.c
     GetVolumeInformation.c
     HeapLowFragmentation.c
     InitOnce.c
