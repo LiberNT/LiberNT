@@ -181,6 +181,8 @@ TestDevice(void)
     CHECK_EQ(Generation->CursorStride, 0x1000);
     CHECK_EQ(Generation->PanelDdcPins, 3);
     CHECK_EQ(Generation->CrtDdcPins, 2);
+    CHECK_EQ(Generation->GttEntry(0x13EDFF000ull), 0x3EDFF013);
+    CHECK_EQ(Generation->GttEntry(0x00400000ull), 0x00400003);
 }
 
 static void
