@@ -137,24 +137,6 @@ SoftGpuExecuteFill(
         Cmd->Color);
 }
 
-#if defined(SOFTGPU_PLATFORM_HARDWARE_2D)
-static NTSTATUS
-SoftGpuExecute2dOnPlatform(
-    _In_ PSOFTGPU_DEVICE Device,
-    _In_ CONST SOFTGPU_CMD *Cmd)
-{
-    NTSTATUS Status = SoftGpuPlatformExecute2d(Device, Cmd);
-
-    if (Status == STATUS_DEVICE_BUSY)
-        return STATUS_PENDING;
-    if (Status != STATUS_NOT_SUPPORTED)
-        return Status;
-    if (!SoftGpuPlatformEngineIdle(Device))
-        return STATUS_PENDING;
-    return Cmd->Op == SOFTGPU_CMD_OP_BLT ? SoftGpuExecuteBlt(Device, Cmd) : SoftGpuExecuteFill(Device, Cmd);
-}
-#endif
-
 static BOOLEAN
 SoftGpuReadStablePte(
     _In_ volatile DXGK_PTE *Source,
@@ -713,9 +695,8 @@ SoftGpuExecuteDmaBuffer(
     if (Submit->NullRendering)
         return;
 
-    if (Submit->EndOffset < Submit->StartOffset ||
-        (Submit->EndOffset != Submit->StartOffset &&
-         Submit->EndOffset - Submit->StartOffset < sizeof(SOFTGPU_CMD)))
+    if (Submit->EndOffset <= Submit->StartOffset ||
+        Submit->EndOffset - Submit->StartOffset < sizeof(SOFTGPU_CMD))
     {
         SoftGpuSetExecutionFault(Result,
                                  0,
@@ -811,18 +792,6 @@ SoftGpuExecuteDmaBuffer(
                                      DXGK_GENERAL_ERROR_INVALID_INSTRUCTION);
             break;
         }
-#if defined(SOFTGPU_PLATFORM_HARDWARE_2D)
-        if (Cmd->Op != SOFTGPU_CMD_OP_NOP &&
-            Cmd->Op != SOFTGPU_CMD_OP_WAIT_FENCE &&
-            Cmd->Op != SOFTGPU_CMD_OP_BLT &&
-            Cmd->Op != SOFTGPU_CMD_OP_FILL &&
-            !SoftGpuPlatformEngineIdle(Device))
-        {
-            Result->ResumeOffset = Offset;
-            Result->Outcome = SoftGpuExecutionPending;
-            break;
-        }
-#endif
         if (Cmd->Op == SOFTGPU_CMD_OP_WAIT_FENCE &&
             !Submit->VirtualAddressing && Cmd->FenceGpuVa == 0)
         {
@@ -964,11 +933,7 @@ SoftGpuExecuteDmaBuffer(
                     ExecuteStatus = STATUS_NOT_SUPPORTED;
                     break;
                 }
-#if defined(SOFTGPU_PLATFORM_HARDWARE_2D)
-                ExecuteStatus = SoftGpuExecute2dOnPlatform(Device, Cmd);
-#else
                 ExecuteStatus = SoftGpuExecuteBlt(Device, Cmd);
-#endif
                 break;
             case SOFTGPU_CMD_OP_FILL:
                 if (!SoftGpuDmaCommandAddressClassAllowed(
@@ -978,11 +943,7 @@ SoftGpuExecuteDmaBuffer(
                     ExecuteStatus = STATUS_NOT_SUPPORTED;
                     break;
                 }
-#if defined(SOFTGPU_PLATFORM_HARDWARE_2D)
-                ExecuteStatus = SoftGpuExecute2dOnPlatform(Device, Cmd);
-#else
                 ExecuteStatus = SoftGpuExecuteFill(Device, Cmd);
-#endif
                 break;
             case SOFTGPU_CMD_OP_PAGE:
                 if (!SoftGpuDmaCommandAddressClassAllowed(
@@ -1017,14 +978,6 @@ SoftGpuExecuteDmaBuffer(
                                          DXGK_GENERAL_ERROR_INVALID_INSTRUCTION);
                 break;
         }
-#if defined(SOFTGPU_PLATFORM_HARDWARE_2D)
-        if (ExecuteStatus == STATUS_PENDING)
-        {
-            Result->ResumeOffset = Offset;
-            Result->Outcome = SoftGpuExecutionPending;
-            break;
-        }
-#endif
         if (!NT_SUCCESS(ExecuteStatus))
         {
             Result->ResumeOffset = Offset;
@@ -1040,15 +993,6 @@ SoftGpuExecuteDmaBuffer(
         Offset += Cmd->Size;
     }
 
-#if defined(SOFTGPU_PLATFORM_HARDWARE_2D)
-    if (Result->Outcome == SoftGpuExecutionCompleted &&
-        Offset == Submit->EndOffset &&
-        !SoftGpuPlatformEngineIdle(Device))
-    {
-        Result->ResumeOffset = Offset;
-        Result->Outcome = SoftGpuExecutionPending;
-    }
-#endif
     if (Result->Outcome == SoftGpuExecutionCompleted &&
         Offset != Submit->EndOffset)
     {
@@ -1115,8 +1059,6 @@ SoftGpuDpcRoutine(
     HaveSubmit = Engine->EngineActive == 0;
     if (HaveSubmit)
         Engine->EngineActive = 1;
-    else
-        Engine->EngineRetry = 1;
     KeReleaseSpinLock(&Device->FenceLock, OldIrql);
 
     if (HaveSubmit)
@@ -1128,7 +1070,6 @@ SoftGpuDpcRoutine(
                 Engine->SubmitRingHead == Engine->SubmitRingTail)
             {
                 Engine->EngineActive = 0;
-                Engine->EngineRetry = 0;
                 KeReleaseSpinLock(&Device->FenceLock, OldIrql);
                 break;
             }
@@ -1161,12 +1102,6 @@ SoftGpuDpcRoutine(
                      * timer re-kicks the engine. */
                     Engine->SubmitRing[HeadIndex % SOFTGPU_SUBMIT_RING_SIZE].StartOffset =
                         ExecuteResult.ResumeOffset;
-                    if (Engine->EngineRetry != 0)
-                    {
-                        Engine->EngineRetry = 0;
-                        KeReleaseSpinLock(&Device->FenceLock, OldIrql);
-                        continue;
-                    }
                     Engine->EngineActive = 0;
                     KeReleaseSpinLock(&Device->FenceLock, OldIrql);
                     break;
@@ -1372,7 +1307,7 @@ SoftGpuVsyncTimerCallback(
 
     RtlZeroMemory(&NotifyData, sizeof(NotifyData));
     NotifyData.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
-    NotifyData.CrtcVsync.VidPnTargetId = Device->VsyncTargetId;
+    NotifyData.CrtcVsync.VidPnTargetId = 0;
     NotifyData.CrtcVsync.PhysicalAddress = Device->FrameBufferPhys;
     NotifyData.CrtcVsync.PhysicalAdapterMask = 0;
     Device->DxgkInterface.DxgkCbNotifyInterrupt(
@@ -1399,7 +1334,7 @@ APIENTRY
 SoftGpuDdiDpcRoutine(
     _In_ PVOID MiniportDeviceContext)
 {
-#if defined(SOFTGPU_PLATFORM_HARDWARE_3D) || defined(SOFTGPU_PLATFORM_INTERRUPTS)
+#if defined(SOFTGPU_PLATFORM_HARDWARE_3D)
     PSOFTGPU_DEVICE Device = MiniportDeviceContext;
 
     if (Device != NULL && Device->Magic == SOFTGPU_DEVICE_MAGIC)
@@ -1430,7 +1365,7 @@ SoftGpuDdiInterruptRoutine(
     _In_ PVOID MiniportDeviceContext,
     _In_ ULONG MessageNumber)
 {
-#if defined(SOFTGPU_PLATFORM_HARDWARE_3D) || defined(SOFTGPU_PLATFORM_INTERRUPTS)
+#if defined(SOFTGPU_PLATFORM_HARDWARE_3D)
     PSOFTGPU_DEVICE Device = MiniportDeviceContext;
 
     UNREFERENCED_PARAMETER(MessageNumber);
