@@ -211,6 +211,11 @@ EmuFatal(
     _In_ NTSTATUS Status,
     _In_ PCSTR Message);
 
+VOID
+EmuBuildNativeStartContext(
+    _In_ const CONTEXT *Native,
+    _Out_ AMD64_CONTEXT *Start);
+
 NTSTATUS
 EmuAdoptGuestImage(
     _In_ PVOID ImageBase);

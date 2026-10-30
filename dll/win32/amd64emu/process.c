@@ -146,6 +146,29 @@ EmuEnsureProcess(
     return Status;
 }
 
+VOID
+EmuBuildNativeStartContext(
+    _In_ const CONTEXT *Native,
+    _Out_ AMD64_CONTEXT *Start)
+{
+    RtlZeroMemory(Start, sizeof(*Start));
+    Start->Rcx = Native->A0;
+    Start->Rdx = Native->A1;
+    Start->Rsp = (Native->Sp & ~(ULONG64)15) - 5 * sizeof(ULONG64);
+    Start->Rip = Native->Pc == EmuProcess.NativeRtlUserThreadStart ? EmuProcess.RtlUserThreadStart : Native->Pc;
+    Start->MxCsr = 0x1F80;
+    Start->FltSave.ControlWord = 0x27F;
+    Start->FltSave.MxCsr = 0x1F80;
+    Start->EFlags = 0x202;
+    Start->ContextFlags = CONTEXT_AMD64_FULL | CONTEXT_AMD64_SEGMENTS;
+    Start->SegCs = EMU_SEG_CODE;
+    Start->SegDs = EMU_SEG_DATA;
+    Start->SegEs = EMU_SEG_DATA;
+    Start->SegSs = EMU_SEG_DATA;
+    Start->SegGs = EMU_SEG_DATA;
+    Start->SegFs = EMU_SEG_TEB;
+}
+
 static
 VOID
 EmuBuildStartContext(
@@ -155,24 +178,15 @@ EmuBuildStartContext(
     PCONTEXT Native = &Host->StartContext;
     PEMU_THREAD_START Record;
 
-    if (Native->Pc == (ULONG_PTR)EmuGuestThreadEntry)
+    if (Native->Pc != (ULONG_PTR)EmuGuestThreadEntry)
     {
-        Record = (PEMU_THREAD_START)Native->A0;
-        *Start = Record->Context;
-        RtlFreeHeap(RtlGetProcessHeap(), 0, Record);
+        EmuBuildNativeStartContext(Native, Start);
+        return;
     }
-    else
-    {
-        RtlZeroMemory(Start, sizeof(*Start));
-        Start->Rcx = Native->A0;
-        Start->Rdx = Native->A1;
-        Start->Rsp = (Native->Sp & ~(ULONG64)15) - 5 * sizeof(ULONG64);
-        Start->Rip = Native->Pc == EmuProcess.NativeRtlUserThreadStart ? EmuProcess.RtlUserThreadStart : Native->Pc;
-        Start->MxCsr = 0x1F80;
-        Start->FltSave.ControlWord = 0x27F;
-        Start->FltSave.MxCsr = 0x1F80;
-        Start->EFlags = 0x202;
-    }
+
+    Record = (PEMU_THREAD_START)Native->A0;
+    *Start = Record->Context;
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Record);
 
     Start->ContextFlags = CONTEXT_AMD64_FULL | CONTEXT_AMD64_SEGMENTS;
     Start->SegCs = EMU_SEG_CODE;

@@ -859,12 +859,16 @@ TestSandboxedChild(VOID)
     if (Pi.hProcess)
     {
         PVOID NtCreateFileAddress = GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtCreateFile");
+        CONTEXT ChildContext;
         BYTE Remote[16];
         SIZE_T Read = 0;
 
         CHECK(NtCreateFileAddress &&
               ReadProcessMemory(Pi.hProcess, NtCreateFileAddress, Remote, sizeof(Remote), &Read) &&
               Read == sizeof(Remote) && !memcmp(Remote, NtCreateFileAddress, sizeof(Remote)));
+        ZeroMemory(&ChildContext, sizeof(ChildContext));
+        ChildContext.ContextFlags = CONTEXT_FULL;
+        CHECK(GetThreadContext(Pi.hThread, &ChildContext));
         CHECK(AssignProcessToJobObject(Job, Pi.hProcess));
         CHECK(ResumeThread(Pi.hThread) != (DWORD)-1);
         CHECK(WaitForSingleObject(Pi.hProcess, 120000) == WAIT_OBJECT_0);

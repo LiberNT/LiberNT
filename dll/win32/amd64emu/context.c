@@ -155,6 +155,46 @@ EmuSuspendThread(
     return Status;
 }
 
+static
+NTSTATUS
+EmuGetStartContextThread(
+    _In_ HANDLE ThreadHandle,
+    _Inout_ AMD64_CONTEXT *Context)
+{
+    THREAD_BASIC_INFORMATION Thread;
+    PROCESS_BASIC_INFORMATION Process;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    ULONG Flags = Context->ContextFlags;
+    HANDLE ProcessHandle;
+    PVOID Ldr = NULL;
+    CONTEXT Native;
+    NTSTATUS Status;
+
+    Native.ContextFlags = CONTEXT_FULL;
+    Status = NtGetContextThread(ThreadHandle, &Native);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Native.Pc != EmuProcess.NativeRtlUserThreadStart)
+    {
+        Status = NtQueryInformationThread(ThreadHandle, ThreadBasicInformation, &Thread, sizeof(Thread), NULL);
+        if (!NT_SUCCESS(Status)) return Status;
+        InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
+        Status = NtOpenProcess(&ProcessHandle, PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
+                               &ObjectAttributes, &Thread.ClientId);
+        if (!NT_SUCCESS(Status)) return STATUS_NOT_SUPPORTED;
+        Status = NtQueryInformationProcess(ProcessHandle, ProcessBasicInformation, &Process, sizeof(Process), NULL);
+        if (NT_SUCCESS(Status))
+            Status = NtReadVirtualMemory(ProcessHandle, &Process.PebBaseAddress->Ldr, &Ldr, sizeof(Ldr), NULL);
+        NtClose(ProcessHandle);
+        /* TODO: AMD64 contexts of threads that already run in other processes */
+        if (!NT_SUCCESS(Status) || Ldr) return STATUS_NOT_SUPPORTED;
+    }
+
+    EmuBuildNativeStartContext(&Native, Context);
+    Context->ContextFlags = Flags;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 EmuGetContextThread(
     _In_ HANDLE ThreadHandle,
@@ -172,6 +212,7 @@ EmuGetContextThread(
     Status = EmuFindThread(ThreadHandle, &Target);
     if (NT_SUCCESS(Status)) EmuCoreGetContext(Target->Cpu, &Captured);
     RtlLeaveCriticalSection(&EmuProcess.ThreadLock);
+    if (Status == STATUS_NOT_SUPPORTED) Status = EmuGetStartContextThread(ThreadHandle, &Captured);
 
     if (NT_SUCCESS(Status)) *Context = Captured;
     return Status;
