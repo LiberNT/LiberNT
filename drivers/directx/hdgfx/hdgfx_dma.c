@@ -1203,7 +1203,7 @@ HdgfxRingIdle(
     if (Adapter->RingUnfenced && !Adapter->RingResetting)
     {
         HdgfxMmioInit(Adapter->Registers, &Mmio);
-        HdgfxRingFence(Adapter, &Mmio, HdgfxIlkRingHead(&Mmio));
+        HdgfxRingFence(Adapter, &Mmio, HdgfxIlkRingHead(&Mmio, Adapter->ActiveRing));
     }
     Idle = !Adapter->RingStarted ||
            (!Adapter->RingUnfenced &&
@@ -1328,7 +1328,10 @@ HdgfxRunBatch(
     HDGFX_QUEUE_STATE State = HdgfxQueueDone;
     HDGFX_MMIO Mmio;
     uint32_t Dwords[4];
-    ULONG Count = Secure ? HdgfxMiBatchStart(Dwords, Address) : HdgfxMiUserBatchStart(Dwords, Address);
+    BOOLEAN Gen7 = Adapter->Generation->Gen >= 7;
+    PHDGFX_RING Ring = Gen7 && Secure ? &Adapter->BltRing : &Adapter->Ring;
+    ULONG Count = Gen7 ? HdgfxIvbMiBatchStart(Dwords, Address) :
+                  Secure ? HdgfxMiBatchStart(Dwords, Address) : HdgfxMiUserBatchStart(Dwords, Address);
     ULONG Bytes = Count * sizeof(ULONG);
     ULONG Padding;
     ULONG Head;
@@ -1338,6 +1341,12 @@ HdgfxRunBatch(
         DPRINT1("Batch at 0x%lx is not qword aligned, dropping it\n", Address);
         return HdgfxQueueDone;
     }
+    if (Ring != Adapter->ActiveRing)
+    {
+        if (!HdgfxRingIdle(Adapter))
+            return HdgfxQueueRing;
+        Adapter->ActiveRing = Ring;
+    }
     KeAcquireSpinLockAtDpcLevel(&Adapter->RingLock);
     if (!Adapter->RingStarted || Adapter->RingResetting)
     {
@@ -1346,18 +1355,19 @@ HdgfxRunBatch(
         return HdgfxQueueDone;
     }
     HdgfxMmioInit(Adapter->Registers, &Mmio);
-    Head = HdgfxIlkRingHead(&Mmio);
-    Padding = Adapter->Ring.Size - Adapter->Ring.Tail < Bytes ? Adapter->Ring.Size - Adapter->Ring.Tail : 0;
-    if (HdgfxRingFree(&Adapter->Ring, Head) < HDGFX_RING_RESERVE + Padding + Bytes)
+    Head = HdgfxIlkRingHead(&Mmio, Adapter->ActiveRing);
+    Padding = Adapter->ActiveRing->Size - Adapter->ActiveRing->Tail < Bytes ? Adapter->ActiveRing->Size - Adapter->ActiveRing->Tail : 0;
+    if (HdgfxRingFree(Adapter->ActiveRing, Head) < HDGFX_RING_RESERVE + Padding + Bytes)
     {
         if (Adapter->RingUnfenced)
             HdgfxRingFence(Adapter, &Mmio, Head);
         State = HdgfxQueueRing;
     }
-    else if (HdgfxRingEmit(&Adapter->Ring, Head, Dwords, Count))
+    else if ((!Gen7 || HdgfxIvbEmitInvalidate(Adapter->ActiveRing, Head)) &&
+             HdgfxRingEmit(Adapter->ActiveRing, Head, Dwords, Count))
     {
         Adapter->RingUnfenced = TRUE;
-        HdgfxIlkAdvanceRing(&Mmio, &Adapter->Ring);
+        HdgfxIlkAdvanceRing(&Mmio, Adapter->ActiveRing);
     }
     else
     {
@@ -1393,15 +1403,15 @@ HdgfxRunFence(
         return HdgfxQueueRing;
     }
     HdgfxMmioInit(Adapter->Registers, &Mmio);
-    Head = HdgfxIlkRingHead(&Mmio);
-    if (HdgfxRingFree(&Adapter->Ring, Head) < HDGFX_RING_RESERVE)
+    Head = HdgfxIlkRingHead(&Mmio, Adapter->ActiveRing);
+    if (HdgfxRingFree(Adapter->ActiveRing, Head) < HDGFX_RING_RESERVE)
     {
         KeReleaseSpinLockFromDpcLevel(&Adapter->RingLock);
         return HdgfxQueueRing;
     }
     HdgfxMiFlush(Flush);
-    if (!HdgfxRingEmit(&Adapter->Ring, Head, Flush, RTL_NUMBER_OF(Flush)) ||
-        !HdgfxRingEmitBreadcrumb(&Adapter->Ring, Head, HDGFX_RING_FENCE_INDEX, Fence) ||
+    if ((Adapter->Generation->Gen < 6 && !HdgfxRingEmit(Adapter->ActiveRing, Head, Flush, RTL_NUMBER_OF(Flush))) ||
+        !HdgfxRingEmitBreadcrumb(Adapter->ActiveRing, Head, HDGFX_RING_FENCE_INDEX, Fence) ||
         !HdgfxRingFence(Adapter, &Mmio, Head))
     {
         KeReleaseSpinLockFromDpcLevel(&Adapter->RingLock);
