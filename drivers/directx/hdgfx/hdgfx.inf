@@ -17,6 +17,7 @@ DefaultDestDir=12
 [IntelMfg]
 %HdGfx.DeviceDesc%=HdGfx_Install,PCI\VEN_8086&DEV_0042
 %HdGfx.DeviceDesc%=HdGfx_Install,PCI\VEN_8086&DEV_0046
+%HdGfx.DeviceDesc%=HdGfx_Install,PCI\VEN_8086&DEV_0166
 
 [HdGfx_Install]
 AddReg=HdGfx_SoftwareSettings
