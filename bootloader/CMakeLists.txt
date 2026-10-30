@@ -19,7 +19,7 @@ include_directories(
 add_definitions(-D_NTHAL_ -D_BLDR_ -D_NTSYSTEM_ -DNTDDI_VERSION=${REACTOS_TARGET_NTDDI})
 
 function(bootloader_ofw_application _target _base)
-    set_target_properties(${_target} PROPERTIES SUFFIX ".exe")
+    set_target_properties(${_target} PROPERTIES SUFFIX ".exe" RV64X_EXCLUDE ON)
     set_image_base(${_target} ${_base})
     target_link_options(${_target} PRIVATE -Wl,--exclude-all-symbols,--file-alignment,0x200,--section-alignment,0x1000)
     set_subsystem(${_target} native)
@@ -29,7 +29,7 @@ function(bootloader_ofw_application _target _base)
 endfunction()
 
 function(bootloader_efi_application _target _entry)
-    set_target_properties(${_target} PROPERTIES SUFFIX ".efi")
+    set_target_properties(${_target} PROPERTIES SUFFIX ".efi" RV64X_EXCLUDE ON)
 
     if(NOT MSVC)
         target_link_options(${_target} PRIVATE -Wl,--exclude-all-symbols,--file-alignment,0x200,--section-alignment,0x1000)
