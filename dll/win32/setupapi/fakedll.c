@@ -296,6 +296,8 @@ static BOOL build_fake_dll( HANDLE file, const WCHAR *name )
     nt->FileHeader.Machine = IMAGE_FILE_MACHINE_ARM64;
 #elif defined __arm__
     nt->FileHeader.Machine = IMAGE_FILE_MACHINE_ARMNT;
+#elif defined(__REACTOS__) && defined(__riscv)
+    nt->FileHeader.Machine = IMAGE_FILE_MACHINE_RISCV64;
 #else
     nt->FileHeader.Machine = IMAGE_FILE_MACHINE_I386;
 #endif

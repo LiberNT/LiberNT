@@ -2969,6 +2969,10 @@ static void ResolveExtra(ProcRow& p)
                 case IMAGE_FILE_MACHINE_ARM64:
                     StringCchCopyW(x->arch, _countof(x->arch), L"ARM64");
                     break;
+
+                case IMAGE_FILE_MACHINE_RISCV64:
+                    StringCchCopyW(x->arch, _countof(x->arch), L"RISCV64");
+                    break;
             }
         }
         else if (pIsWow64Process)

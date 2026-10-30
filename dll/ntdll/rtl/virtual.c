@@ -109,6 +109,7 @@ RtlpIs64BitMachine(USHORT Machine)
     return Machine == IMAGE_FILE_MACHINE_AMD64 ||
            Machine == IMAGE_FILE_MACHINE_ARM64EC ||
            Machine == IMAGE_FILE_MACHINE_ARM64 ||
+           Machine == IMAGE_FILE_MACHINE_RISCV64 ||
            Machine == IMAGE_FILE_MACHINE_IA64;
 }
 

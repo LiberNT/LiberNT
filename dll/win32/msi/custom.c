@@ -1028,6 +1028,9 @@ static BOOL get_binary_type( const WCHAR *name, DWORD *type )
                 return TRUE;
             case IMAGE_FILE_MACHINE_AMD64:
             case IMAGE_FILE_MACHINE_ARM64:
+#ifdef __REACTOS__
+            case IMAGE_FILE_MACHINE_RISCV64:
+#endif
                 *type = SCS_64BIT_BINARY;
                 return TRUE;
             default:

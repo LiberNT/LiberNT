@@ -3047,6 +3047,9 @@ static HRESULT STDMETHODCALLTYPE debugcontrol_IsPointer64Bit(IDebugControl4 *ifa
         case IMAGE_FILE_MACHINE_IA64:
         case IMAGE_FILE_MACHINE_AMD64:
         case IMAGE_FILE_MACHINE_ARM64:
+#ifdef __REACTOS__
+        case IMAGE_FILE_MACHINE_RISCV64:
+#endif
             hr = S_OK;
             break;
         default:

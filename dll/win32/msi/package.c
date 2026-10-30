@@ -826,7 +826,11 @@ static VOID set_installer_properties(MSIPACKAGE *package)
         USHORT process_machine, native_machine;
 
         if (IsWow64Process2( GetCurrentProcess(), &process_machine, &native_machine ) &&
+#ifdef __REACTOS__
+            (native_machine == IMAGE_FILE_MACHINE_ARM64 || native_machine == IMAGE_FILE_MACHINE_RISCV64))
+#else
             native_machine == IMAGE_FILE_MACHINE_ARM64)
+#endif
             msi_set_property( package->db, L"Intel", L"0", 1 );
         else
             msi_set_property( package->db, L"Intel", bufstr, len );
@@ -851,6 +855,9 @@ static VOID set_installer_properties(MSIPACKAGE *package)
         msi_set_property( package->db, L"CommonFilesFolder", pth, -1 );
     }
     else if (sys_info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ||
+#ifdef __REACTOS__
+             sys_info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_RISCV64 ||
+#endif
              sys_info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64)
     {
         msi_set_property( package->db, L"MsiAMD64", bufstr, -1 );
@@ -1233,9 +1240,15 @@ static BOOL validate_package_platform( enum platform platform )
     case PLATFORM_INTEL:
         return native_machine == IMAGE_FILE_MACHINE_I386 ||
                native_machine == IMAGE_FILE_MACHINE_AMD64 ||
+#ifdef __REACTOS__
+               native_machine == IMAGE_FILE_MACHINE_RISCV64 ||
+#endif
                native_machine == IMAGE_FILE_MACHINE_ARM64;
     case PLATFORM_X64:
         return native_machine == IMAGE_FILE_MACHINE_AMD64 ||
+#ifdef __REACTOS__
+               native_machine == IMAGE_FILE_MACHINE_RISCV64 ||
+#endif
                native_machine == IMAGE_FILE_MACHINE_ARM64;
     case PLATFORM_ARM:
         return native_machine == IMAGE_FILE_MACHINE_ARM;

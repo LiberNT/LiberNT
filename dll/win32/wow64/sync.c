@@ -389,7 +389,12 @@ static void put_job_basic_limit_info( JOBOBJECT_BASIC_LIMIT_INFORMATION32 *info3
 
 void put_section_image_info( SECTION_IMAGE_INFORMATION32 *info32, const SECTION_IMAGE_INFORMATION *info )
 {
+#ifdef __REACTOS__
+    if (info->Machine == IMAGE_FILE_MACHINE_AMD64 || info->Machine == IMAGE_FILE_MACHINE_ARM64 ||
+        info->Machine == IMAGE_FILE_MACHINE_RISCV64)
+#else
     if (info->Machine == IMAGE_FILE_MACHINE_AMD64 || info->Machine == IMAGE_FILE_MACHINE_ARM64)
+#endif
     {
         info32->TransferAddress    = 0x81231234;  /* sic */
         info32->MaximumStackSize   = 0x100000;
