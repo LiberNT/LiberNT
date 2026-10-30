@@ -155,6 +155,7 @@ WinLdrSetupMemoryLayout(
         return FALSE;
 
     OslReserveFrameBuffer();
+    OslArchPlaceRamdisk();
 
     Table = MmGetMemoryMap(&Count);
     if (!Table || Count == 0 || !MempSetupPaging(0, 1, FALSE))

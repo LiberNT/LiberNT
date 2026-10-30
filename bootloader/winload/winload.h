@@ -158,6 +158,16 @@ OslGetRamdisk(
     _Out_ PUCHAR* Base,
     _Out_ PULONGLONG Size);
 
+BOOLEAN
+OslPlanRamdiskMove(
+    _In_ ULONGLONG LowestAddress);
+
+VOID
+OslFinishRamdiskMove(VOID);
+
+VOID
+OslArchPlaceRamdisk(VOID);
+
 VOID
 OslArchInitialize(VOID);
 

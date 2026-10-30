@@ -75,6 +75,11 @@ OslArchInitialize(VOID)
 }
 
 VOID
+OslArchPlaceRamdisk(VOID)
+{
+}
+
+VOID
 FwExitBootServices(VOID)
 {
     _exituefi();

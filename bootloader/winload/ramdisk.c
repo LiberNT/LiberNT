@@ -47,6 +47,7 @@ typedef struct _RD_SOURCE
 
 static FAT32_WRITER RdWriter;
 static PUCHAR RdBase;
+static PUCHAR RdMoveSource;
 static ULONGLONG RdSize;
 static ULONGLONG RdTotalBytes;
 static ULONGLONG RdCopiedBytes;
@@ -658,4 +659,52 @@ OslGetRamdisk(
     *Base = RdBase;
     *Size = RdSize;
     return RdBase != NULL;
+}
+
+BOOLEAN
+OslPlanRamdiskMove(
+    _In_ ULONGLONG LowestAddress)
+{
+    PPAGE_LOOKUP_TABLE_ITEM Table;
+    PFN_NUMBER Count, Pages, Page, Lowest, Limit, Run = 0;
+    PUCHAR Target;
+
+    if (!RdBase || (ULONGLONG)(ULONG_PTR)RdBase >= LowestAddress)
+        return FALSE;
+
+    Table = MmGetMemoryMap(&Count);
+    if (!Table || Count == 0)
+        return FALSE;
+
+    Pages = (PFN_NUMBER)(RdSize >> MM_PAGE_SHIFT);
+    Lowest = max((PFN_NUMBER)(LowestAddress >> MM_PAGE_SHIFT), MmLowestPhysicalPage);
+    Limit = min(MmLowestPhysicalPage + Count, MmArchMaxRamdiskPage);
+    for (Page = Limit; Page > Lowest; Page--)
+    {
+        if (Table[Page - 1 - MmLowestPhysicalPage].PageAllocated != LoaderFirmwareTemporary)
+        {
+            Run = 0;
+            continue;
+        }
+        if (++Run < Pages)
+            continue;
+
+        Target = (PUCHAR)(ULONG_PTR)((ULONGLONG)(Page - 1) << MM_PAGE_SHIFT);
+        MmSetMemoryType(RdBase, (SIZE_T)RdSize, LoaderFree);
+        MmSetMemoryType(Target, (SIZE_T)RdSize, LoaderXIPRom);
+        RdMoveSource = RdBase;
+        RdBase = Target;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+VOID
+OslFinishRamdiskMove(VOID)
+{
+    if (!RdMoveSource)
+        return;
+
+    RtlCopyMemory(RdBase, RdMoveSource, (SIZE_T)RdSize);
+    RdMoveSource = NULL;
 }

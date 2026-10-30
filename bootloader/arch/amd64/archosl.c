@@ -341,6 +341,11 @@ OslArchInitialize(VOID)
 }
 
 VOID
+OslArchPlaceRamdisk(VOID)
+{
+}
+
+VOID
 OslArchSwitchStack(VOID)
 {
     _changestack();

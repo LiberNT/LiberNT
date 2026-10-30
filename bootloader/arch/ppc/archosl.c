@@ -490,6 +490,11 @@ OslArchInitialize(VOID)
 }
 
 VOID
+OslArchPlaceRamdisk(VOID)
+{
+}
+
+VOID
 OslArchSwitchStack(VOID)
 {
     ExecuteLoaderCleanly(NULL);

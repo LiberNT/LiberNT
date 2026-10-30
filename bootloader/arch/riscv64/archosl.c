@@ -9,6 +9,8 @@
 #include <riscv64.h>
 #include "../../winload/winload.h"
 
+#define RISCV_DMA32_LIMIT 0x100000000ULL
+
 void _changestack(VOID);
 void _exituefi(VOID);
 
@@ -68,6 +70,12 @@ OslArchInitialize(VOID)
 }
 
 VOID
+OslArchPlaceRamdisk(VOID)
+{
+    OslPlanRamdiskMove(RISCV_DMA32_LIMIT);
+}
+
+VOID
 OslArchSwitchStack(VOID)
 {
     _changestack();
@@ -93,6 +101,7 @@ OslArchPrepareHandoff(
     }
 
     FwExitBootServices();
+    OslFinishRamdiskMove();
     WinLdrSetProcessorContext(OSL_NT_VERSION);
     RtlZeroMemory((PVOID)KI_USER_SHARED_DATA, MM_PAGE_SIZE);
     return TRUE;
