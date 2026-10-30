@@ -2680,6 +2680,10 @@ BOOLEAN
 DxgkBeginKmdTransaction(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+BOOLEAN
+DxgkBeginKmdTransactionAfterReset(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 VOID
 DxgkEndKmdTransaction(
     _In_ PDXGKRNL_ADAPTER Adapter);
