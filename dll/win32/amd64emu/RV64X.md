@@ -27,10 +27,16 @@ Kinds: 0 void, 1 64-bit integer or pointer, 2 32-bit integer, 3 signed 16-bit,
 4 unsigned 16-bit, 5 signed 8-bit, 6 unsigned 8-bit or `bool`, 7 `float`,
 8 `double`, 9 16-byte aggregate in two registers, 15 unsupported.
 
+**Image state.** Each image holds one `__rv64x_image` object in its `.rv64x`
+section, and both of its pointers start out NULL:
+
+```c
+struct { PVOID CodeBitmap; PVOID CallX64; } __rv64x_image;
+```
+
 **Checked indirect call.** Before an indirect call the pass loads
-`__rv64x_code_bitmap`, a pointer that each image holds once, in its `.rv64x`
-section, and that starts out NULL. A NULL pointer, the case of every image in a
-native process and of code linked into the kernel, calls the target directly.
+`__rv64x_image.CodeBitmap`. A NULL pointer, the case of every image in a native
+process and of code linked into the kernel, calls the target directly.
 Otherwise a target whose page bit is set
 (`bitmap[address >> 15] >> ((address >> 12) & 7)`) is native code and is called
 directly; any other target goes through the exit thunk. Keeping the pointer in
@@ -38,11 +44,11 @@ the image rather than in the TEB lets libraries shared with the kernel, such as
 `rtl`, be built as RV64X.
 
 **Exit thunk.** One `linkonce_odr` thunk per call shape stores the arguments as
-64-bit slots (floats as their bit pattern) and calls
+64-bit slots (floats as their bit pattern) and calls `__rv64x_image.CallX64`
 
 ```c
-ULONG64 __rv64x_call_x64(PVOID Target, ULONG64 DescriptorLow, ULONG64 DescriptorHigh,
-                         const ULONG64 *Arguments);
+ULONG64 CallX64(PVOID Target, ULONG64 DescriptorLow, ULONG64 DescriptorHigh,
+                const ULONG64 *Arguments);
 ```
 
 with the call site's descriptor, then narrows the returned bits to the call's
@@ -50,14 +56,12 @@ result type (`int` results are sign-extended as the LP64 ABI requires).
 
 ## Runtime
 
-- The riscv64 `ntdll` exports `__rv64x_call_x64`, so every RV64X module links
-  it through its `ntdll` import. It forwards to the emulator's
-  `EMU_HOST_INTERFACE::CallDescribed`; native processes never reach it because
-  their bitmap is NULL.
+- An RV64X module imports nothing for RV64X, so drivers, boot applications and
+  modules that do not import `ntdll` link as they are.
 - `amd64emu` points the host PEB's `EcCodeBitMap` at a bitmap sized from
   `SystemBasicInformation.MaximumUserModeAddress`, marks the executable
-  sections of every host image and points the image's `__rv64x_code_bitmap` at
-  it, and keeps both current with a loader DLL notification, which marks
+  sections of every host image, points the image's `__rv64x_image.CallX64` at
+  `EMU_HOST_INTERFACE::CallDescribed` and then its `CodeBitmap` at the bitmap, and keeps both current with a loader DLL notification, which marks
   images as they load and clears them as they unload. `CallDescribed` calls native targets that are not marked yet (a DLL's
   own `DllMain`, for example) natively and marks their image; everything else
   runs as x64 through `CallGuest`.

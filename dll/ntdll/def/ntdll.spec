@@ -1406,7 +1406,6 @@
 @ stdcall RtlWow64EnableFsRedirectionEx(long ptr)
 @ stdcall -version=0x600+ -arch=win64 RtlOpenCrossProcessEmulatorWorkConnection(ptr ptr ptr)
 @ stdcall -version=0x600+ -arch=x86_64,arm64,riscv64 RtlWow64GetCpuAreaInfo(ptr long ptr)
-@ cdecl -arch=riscv64 __rv64x_call_x64(ptr int64 int64 ptr)
 @ stdcall -version=0x600+ RtlWow64GetCurrentMachine()
 @ stdcall -version=0x600+ RtlWow64GetProcessMachines(ptr ptr ptr)
 @ stdcall -version=0x600+ -arch=win64 RtlWow64GetSharedInfoProcess(ptr ptr ptr)

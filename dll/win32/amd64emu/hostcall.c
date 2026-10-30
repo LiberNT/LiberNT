@@ -33,6 +33,21 @@ static ULONG EmuStubUsed;
 static ULONG64 EmuGuestReturnStub;
 #define EMU_RV64X_SECTION ".rv64x"
 
+typedef struct _EMU_RV64X_IMAGE
+{
+    PVOID CodeBitmap;
+    PVOID CallX64;
+} EMU_RV64X_IMAGE, *PEMU_RV64X_IMAGE;
+
+static
+ULONG64
+NTAPI
+EmuCallDescribed(
+    _In_ ULONG64 Function,
+    _In_ ULONG64 DescriptorLow,
+    _In_ ULONG64 DescriptorHigh,
+    _In_opt_ const ULONG64 *Arguments);
+
 static PUCHAR EmuCodeMap;
 static ULONG_PTR EmuCodeMapLimit;
 static PVOID EmuDllNotificationCookie;
@@ -135,6 +150,7 @@ EmuMarkNativeImage(
 {
     PIMAGE_NT_HEADERS Headers = RtlImageNtHeader(Base);
     PIMAGE_SECTION_HEADER Section;
+    PEMU_RV64X_IMAGE Image;
     ULONG_PTR Page, Last;
     ULONG Index;
 
@@ -157,9 +173,11 @@ EmuMarkNativeImage(
     for (Index = 0; Index < Headers->FileHeader.NumberOfSections; Index++, Section++)
     {
         if (!memcmp(Section->Name, EMU_RV64X_SECTION, sizeof(EMU_RV64X_SECTION)) &&
-            (Section->Characteristics & IMAGE_SCN_MEM_WRITE) && Section->Misc.VirtualSize >= sizeof(PVOID))
+            (Section->Characteristics & IMAGE_SCN_MEM_WRITE) && Section->Misc.VirtualSize >= sizeof(EMU_RV64X_IMAGE))
         {
-            InterlockedExchangePointer((PVOID *)((PUCHAR)Base + Section->VirtualAddress), EmuCodeMap);
+            Image = (PEMU_RV64X_IMAGE)((PUCHAR)Base + Section->VirtualAddress);
+            InterlockedExchangePointer(&Image->CallX64, (PVOID)EmuCallDescribed);
+            InterlockedExchangePointer(&Image->CodeBitmap, EmuCodeMap);
         }
     }
 }

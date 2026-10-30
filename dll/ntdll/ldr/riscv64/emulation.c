@@ -7,7 +7,6 @@
 
 #include <ntdll.h>
 #include <reactos/emulation.h>
-#include <reactos/emuhost.h>
 
 PCWSTR
 LdrpArchGetEmulationHost(
@@ -29,29 +28,4 @@ LdrpArchEnterEmulationHost(
     Context->Sp = (ULONG_PTR)Stack;
     Context->Tp = (ULONG_PTR)HostTeb;
     Context->A0 = (ULONG_PTR)Argument;
-}
-
-ULONG64
-__rv64x_call_x64(
-    _In_ PVOID Target,
-    _In_ ULONG64 DescriptorLow,
-    _In_ ULONG64 DescriptorHigh,
-    _In_ const ULONG64 *Arguments)
-{
-    static const EMU_HOST_INTERFACE *Interface;
-    UNICODE_STRING Library = RTL_CONSTANT_STRING(EMU_HOST_LIBRARY);
-    ANSI_STRING Export = RTL_CONSTANT_STRING(EMU_HOST_INTERFACE_EXPORT);
-    const EMU_HOST_INTERFACE *(NTAPI *GetInterface)(VOID);
-    PVOID Base;
-
-    if (!Interface)
-    {
-        if (!NT_SUCCESS(LdrGetDllHandle(NULL, NULL, &Library, &Base)) ||
-            !NT_SUCCESS(LdrGetProcedureAddress(Base, &Export, 0, (PVOID *)&GetInterface)))
-        {
-            RtlRaiseStatus(STATUS_ACCESS_VIOLATION);
-        }
-        Interface = GetInterface();
-    }
-    return Interface->CallDescribed((ULONG64)(ULONG_PTR)Target, DescriptorLow, DescriptorHigh, Arguments);
 }

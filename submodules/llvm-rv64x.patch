@@ -26,10 +26,10 @@ index 9d443c06..c4084d3b 100644
  
 diff --git a/llvm/lib/Target/RISCV/RISCVRv64X.cpp b/llvm/lib/Target/RISCV/RISCVRv64X.cpp
 new file mode 100644
-index 00000000..dec13b77
+index 00000000..b3018727
 --- /dev/null
 +++ b/llvm/lib/Target/RISCV/RISCVRv64X.cpp
-@@ -0,0 +1,453 @@
+@@ -0,0 +1,457 @@
 +//===-- RISCVRv64X.cpp - Hybrid x64 interoperability for RISC-V ----------===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -44,13 +44,14 @@ index 00000000..dec13b77
 +//  * Every externally visible or address-taken function gets a 16-byte entry
 +//    descriptor as prefix data, recording how each argument and the result
 +//    travel, so x64 code can call it through the emulator.
-+//  * Every indirect call first tests the target against the code bitmap that
-+//    __rv64x_code_bitmap points to: one variable per image, in the .rv64x
-+//    section, that stays NULL until an emulator sets it. Targets that are not
-+//    native code are reached through an exit thunk that hands the arguments
-+//    and the descriptor to __rv64x_call_x64. Images whose variable is NULL,
-+//    such as every image of a native process and the kernel, only pay one
-+//    load and a branch.
++//  * Every image holds one __rv64x_image object in its .rv64x section: a
++//    pointer to the code bitmap and a pointer to the routine that calls x64
++//    code, both NULL until an emulator sets them.
++//  * Every indirect call first tests the target against that code bitmap.
++//    Targets that are not native code are reached through an exit thunk that
++//    hands the arguments and the descriptor to the image's x64 call routine.
++//    Images whose bitmap is NULL, such as every image of a native process and
++//    the kernel, only pay one load and a branch.
 +//
 +//===----------------------------------------------------------------------===//
 +
@@ -123,7 +124,8 @@ index 00000000..dec13b77
 +  Module *Mod = nullptr;
 +  Type *I64Ty = nullptr;
 +  PointerType *PtrTy = nullptr;
-+  FunctionCallee CallX64;
++  StructType *ImageTy = nullptr;
++  FunctionType *CallX64Ty = nullptr;
 +
 +  uint8_t classify(Type *Ty, AttributeSet Attrs) const;
 +  Descriptor describe(FunctionType *FnTy, AttributeList Attrs,
@@ -131,7 +133,7 @@ index 00000000..dec13b77
 +  Constant *descriptorConstant(const Descriptor &D) const;
 +  Function *getExitThunk(const Descriptor &D, FunctionType *CallTy,
 +                         AttributeList Attrs);
-+  GlobalVariable *getBitmapVariable();
++  GlobalVariable *getImageVariable();
 +  Value *widen(IRBuilder<> &B, Value *V, uint8_t Kind) const;
 +  Value *narrow(IRBuilder<> &B, Value *V, Type *Ty, uint8_t Kind) const;
 +  bool checkCall(CallInst *CI);
@@ -293,14 +295,14 @@ index 00000000..dec13b77
 +  }
 +}
 +
-+GlobalVariable *RISCVRv64X::getBitmapVariable() {
-+  if (GlobalVariable *GV = Mod->getGlobalVariable("__rv64x_code_bitmap"))
++GlobalVariable *RISCVRv64X::getImageVariable() {
++  if (GlobalVariable *GV = Mod->getGlobalVariable("__rv64x_image"))
 +    return GV;
 +
-+  auto *GV = new GlobalVariable(*Mod, PtrTy, /*isConstant=*/false,
++  auto *GV = new GlobalVariable(*Mod, ImageTy, /*isConstant=*/false,
 +                                GlobalValue::LinkOnceODRLinkage,
-+                                ConstantPointerNull::get(PtrTy),
-+                                "__rv64x_code_bitmap");
++                                ConstantAggregateZero::get(ImageTy),
++                                "__rv64x_image");
 +  GV->setSection(".rv64x");
 +  GV->setAlignment(Align(8));
 +  GV->setVisibility(GlobalValue::HiddenVisibility);
@@ -360,9 +362,11 @@ index 00000000..dec13b77
 +  }
 +
 +  Constant *Desc = descriptorConstant(D);
++  Value *CallX64 = B.CreateLoad(
++      PtrTy, B.CreateConstInBoundsGEP2_32(ImageTy, getImageVariable(), 0, 1));
 +  Value *Result = B.CreateCall(
-+      CallX64, {Thunk->getArg(0), Desc->getAggregateElement(0u),
-+                Desc->getAggregateElement(1u), Slots});
++      CallX64Ty, CallX64, {Thunk->getArg(0), Desc->getAggregateElement(0u),
++                           Desc->getAggregateElement(1u), Slots});
 +  Type *RetTy = CallTy->getReturnType();
 +  if (RetTy->isVoidTy()) {
 +    B.CreateRetVoid();
@@ -393,7 +397,8 @@ index 00000000..dec13b77
 +
 +  IRBuilder<> B(CI);
 +  Value *Callee = CI->getCalledOperand();
-+  Value *Bitmap = B.CreateLoad(PtrTy, getBitmapVariable());
++  Value *Bitmap = B.CreateLoad(
++      PtrTy, B.CreateConstInBoundsGEP2_32(ImageTy, getImageVariable(), 0, 0));
 +  Value *Address = B.CreatePtrToInt(Callee, I64Ty);
 +  Value *ByteAddress = B.CreateGEP(B.getInt8Ty(), Bitmap,
 +                                   B.CreateLShr(Address, 15));
@@ -448,9 +453,8 @@ index 00000000..dec13b77
 +  LLVMContext &Context = M.getContext();
 +  I64Ty = Type::getInt64Ty(Context);
 +  PtrTy = PointerType::getUnqual(Context);
-+  CallX64 = M.getOrInsertFunction(
-+      "__rv64x_call_x64",
-+      FunctionType::get(I64Ty, {PtrTy, I64Ty, I64Ty, PtrTy}, false));
++  ImageTy = StructType::get(Context, {PtrTy, PtrTy});
++  CallX64Ty = FunctionType::get(I64Ty, {PtrTy, I64Ty, I64Ty, PtrTy}, false);
 +
 +  SmallVector<CallInst *, 32> Calls;
 +  bool Changed = false;
