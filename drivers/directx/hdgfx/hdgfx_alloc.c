@@ -137,7 +137,7 @@ HdgfxDdiGetStandardAllocationDriverData(
     {
         if (Width > MAXULONG / SOFTGPU_DISPLAY_BYTES_PER_PIXEL)
             return STATUS_INTEGER_OVERFLOW;
-        *PitchOut = Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL;
+        *PitchOut = ALIGN_UP_BY(Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL, HDGFX_STRIDE_ALIGNMENT);
         Pitch = *PitchOut;
     }
     if (Width == 0 || Height == 0 || Width > SOFTGPU_MAX_DISPLAY_WIDTH || Height > SOFTGPU_MAX_DISPLAY_HEIGHT ||
@@ -146,7 +146,7 @@ HdgfxDdiGetStandardAllocationDriverData(
         return STATUS_INVALID_PARAMETER;
     }
     if (Pitch == 0)
-        Pitch = Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL;
+        Pitch = ALIGN_UP_BY(Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL, HDGFX_STRIDE_ALIGNMENT);
 
     RtlZeroMemory(&PrivateData, sizeof(PrivateData));
     PrivateData.Width = Width;
