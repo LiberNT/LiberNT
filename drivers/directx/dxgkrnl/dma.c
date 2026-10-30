@@ -420,19 +420,6 @@ DxgkRender(
         }
     }
 
-    if (!DxgkBeginKmdTransaction(Adapter))
-    {
-        Status = STATUS_DELETE_PENDING;
-        goto Cleanup;
-    }
-    KmdTransaction = TRUE;
-    if (InterlockedCompareExchange(&Device->ExecutionState, 0, 0) != D3DKMT_DEVICEEXECUTION_ACTIVE ||
-        InterlockedCompareExchange(&Context->Destroying, 0, 0) != 0)
-    {
-        Status = STATUS_DEVICE_REMOVED;
-        goto Cleanup;
-    }
-
     for (Index = 0; Index < pRender->AllocationCount; ++Index)
     {
         PDXGKVMM_ALLOCATION Reference = NULL;
@@ -474,6 +461,19 @@ DxgkRender(
         TrackBindings[TrackCount] = Binding;
         TrackCount++;
         ReferencedCount = Index + 1;
+    }
+
+    if (!DxgkBeginKmdTransaction(Adapter))
+    {
+        Status = STATUS_DELETE_PENDING;
+        goto Cleanup;
+    }
+    KmdTransaction = TRUE;
+    if (InterlockedCompareExchange(&Device->ExecutionState, 0, 0) != D3DKMT_DEVICEEXECUTION_ACTIVE ||
+        InterlockedCompareExchange(&Context->Destroying, 0, 0) != 0)
+    {
+        Status = STATUS_DEVICE_REMOVED;
+        goto Cleanup;
     }
 
     Status = DxgkAllocateDmaBufferInSegmentSet(Adapter, max(Context->ContextInfo.DmaBufferSize, pRender->CommandLength), Context->ContextInfo.DmaBufferSegmentSet, &DmaBuffer);
