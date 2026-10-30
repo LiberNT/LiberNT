@@ -1,6 +1,9 @@
 
 101 10 "load_notifications.dll"
 102 10 "empty_dll.dll"
+103 10 "ldrfwd_a.dll"
+104 10 "ldrfwd_b.dll"
+105 10 "ldrfwd_c.dll"
 
 NORMAL_FRAMECAPTIONMIN BITMAP "bmp1.bmp"
 NORMAL_FRAMECAPTIONMIN_BMP BITMAP "bmp1.bmp"
