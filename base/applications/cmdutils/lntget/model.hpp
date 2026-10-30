@@ -141,6 +141,7 @@ enum class MachineArchitecture
     X64,
     Arm,
     Arm64,
+    Riscv64,
     Unknown,
 };
 

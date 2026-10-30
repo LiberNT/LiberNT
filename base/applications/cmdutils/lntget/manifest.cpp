@@ -252,6 +252,11 @@ int ArchitectureRank(const std::string &installerArchitecture, MachineArchitectu
         case MachineArchitecture::Arm:
             if (architecture == "arm") return 0;
             break;
+        case MachineArchitecture::Riscv64:
+            if (architecture == "riscv64") return 0;
+            if (architecture == "x64") return 1;
+            if (architecture == "x86") return 2;
+            break;
         case MachineArchitecture::Unknown:
             break;
     }
@@ -932,6 +937,7 @@ MachineArchitecture CurrentMachineArchitecture()
         case PROCESSOR_ARCHITECTURE_AMD64: return MachineArchitecture::X64;
         case PROCESSOR_ARCHITECTURE_ARM: return MachineArchitecture::Arm;
         case PROCESSOR_ARCHITECTURE_ARM64: return MachineArchitecture::Arm64;
+        case PROCESSOR_ARCHITECTURE_RISCV64: return MachineArchitecture::Riscv64;
         default: return MachineArchitecture::Unknown;
     }
 }
@@ -944,6 +950,7 @@ std::string ArchitectureName(MachineArchitecture architecture)
         case MachineArchitecture::X64: return "x64";
         case MachineArchitecture::Arm: return "arm";
         case MachineArchitecture::Arm64: return "arm64";
+        case MachineArchitecture::Riscv64: return "riscv64";
         default: return "unknown";
     }
 }
@@ -1030,6 +1037,13 @@ Status RunManifestSelfTests()
     if (status)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "unspecified installer locale self-test failed");
     options.hasLocale = false;
+    SelectionOptions riscv64Options;
+    status = SelectInstallerForMachine(nestedTail, riscv64Options, MachineArchitecture::Riscv64, installer);
+    if (!status || installer.architecture != "x64")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "riscv64 installer preference self-test failed");
+    status = SelectInstallerForMachine(manifest, riscv64Options, MachineArchitecture::Riscv64, installer);
+    if (!status || installer.architecture != "x86")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "riscv64 x86 fallback self-test failed");
     static constexpr char AgreementFixture[] =
         "PackageIdentifier: Example.Agreement\n"
         "PackageVersion: 1.0\n"
