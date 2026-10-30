@@ -9,6 +9,7 @@
 #include "softgpu_2d_core.h"
 
 #define HDGFX_ALLOCATION_SEGMENT_SET    (1UL << (HDGFX_SLAB_SEGMENT_ID - 1))
+#define HDGFX_APERTURE_SEGMENT_SET      (1UL << (HDGFX_APERTURE_SEGMENT_ID - 1))
 
 static BOOLEAN
 HdgfxAdapterValid(
@@ -77,7 +78,9 @@ HdgfxDdiGetStandardAllocationDriverData(
 {
     PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
     SOFTGPU_ALLOCATION_PRIVATE_DATA PrivateData;
+    HDGFX_STANDARD_RESOURCE Resource;
     UINT SuppliedSize;
+    UINT SuppliedResourceSize;
     ULONG Width;
     ULONG Height;
     ULONG Pitch = 0;
@@ -160,19 +163,30 @@ HdgfxDdiGetStandardAllocationDriverData(
         return STATUS_GRAPHICS_NO_VIDEO_MEMORY;
 
     SuppliedSize = Data->AllocationPrivateDriverDataSize;
+    SuppliedResourceSize = Data->ResourcePrivateDriverDataSize;
     Data->AllocationPrivateDriverDataSize = sizeof(PrivateData);
-    Data->ResourcePrivateDriverDataSize = 0;
+    Data->ResourcePrivateDriverDataSize = sizeof(Resource);
     if (Data->pAllocationPrivateDriverData == NULL)
         return STATUS_SUCCESS;
-    if (SuppliedSize < sizeof(PrivateData))
+    if (SuppliedSize < sizeof(PrivateData) ||
+        (Data->pResourcePrivateDriverData != NULL && SuppliedResourceSize < sizeof(Resource)))
+    {
         return STATUS_BUFFER_TOO_SMALL;
+    }
     RtlCopyMemory(Data->pAllocationPrivateDriverData, &PrivateData, sizeof(PrivateData));
+    if (Data->pResourcePrivateDriverData != NULL)
+    {
+        Resource.Magic = HDGFX_STANDARD_MAGIC;
+        Resource.Type = Data->StandardAllocationType;
+        RtlCopyMemory(Data->pResourcePrivateDriverData, &Resource, sizeof(Resource));
+    }
     return STATUS_SUCCESS;
 }
 
 static NTSTATUS
 HdgfxCreateOneAllocation(
     _In_ PHDGFX_ADAPTER Adapter,
+    _In_ BOOLEAN Standard,
     _Inout_ DXGK_ALLOCATIONINFO *Info)
 {
     SOFTGPU_ALLOCATION_PRIVATE_DATA PrivateData;
@@ -220,6 +234,14 @@ HdgfxCreateOneAllocation(
     Info->Alignment = PAGE_SIZE;
     Info->SupportedReadSegmentSet = HDGFX_ALLOCATION_SEGMENT_SET;
     Info->SupportedWriteSegmentSet = HDGFX_ALLOCATION_SEGMENT_SET;
+    if (!Standard && Adapter->ApertureSize != 0)
+    {
+        Info->SupportedReadSegmentSet |= HDGFX_APERTURE_SEGMENT_SET;
+        Info->SupportedWriteSegmentSet |= HDGFX_APERTURE_SEGMENT_SET;
+        Info->PreferredSegment.Value = 0;
+        Info->PreferredSegment.SegmentId0 = HDGFX_APERTURE_SEGMENT_ID;
+        Info->PreferredSegment.SegmentId1 = HDGFX_SLAB_SEGMENT_ID;
+    }
     Info->EvictionSegmentSet = 0;
     Info->Flags.CpuVisible = 1;
     Info->Flags.AccessedPhysically = 1;
@@ -235,6 +257,7 @@ HdgfxDdiCreateAllocation(
 {
     PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
     NTSTATUS Status = STATUS_SUCCESS;
+    BOOLEAN Standard;
     ULONG Index;
 
     if (!HdgfxAdapterValid(Adapter) || CreateAllocation == NULL ||
@@ -245,11 +268,14 @@ HdgfxDdiCreateAllocation(
     if (Adapter->Slab == NULL || Adapter->SlabSize == 0)
         return STATUS_DEVICE_NOT_READY;
 
+    Standard = CreateAllocation->Flags.Resource && CreateAllocation->pPrivateDriverData != NULL &&
+               CreateAllocation->PrivateDriverDataSize == sizeof(HDGFX_STANDARD_RESOURCE) &&
+               ((PHDGFX_STANDARD_RESOURCE)CreateAllocation->pPrivateDriverData)->Magic == HDGFX_STANDARD_MAGIC;
     for (Index = 0; Index < CreateAllocation->NumAllocations; Index++)
         CreateAllocation->pAllocationInfo[Index].hAllocation = NULL;
     for (Index = 0; Index < CreateAllocation->NumAllocations; Index++)
     {
-        Status = HdgfxCreateOneAllocation(Adapter, &CreateAllocation->pAllocationInfo[Index]);
+        Status = HdgfxCreateOneAllocation(Adapter, Standard, &CreateAllocation->pAllocationInfo[Index]);
         if (!NT_SUCCESS(Status))
             break;
     }
@@ -319,13 +345,19 @@ HdgfxDdiValidateUpdateAllocationProperty(
     }
     if (Validate->SetAccessedPhysically && !Validate->Flags.AccessedPhysically)
         return STATUS_NOT_SUPPORTED;
-    if (Validate->SetSupportedSegmentSet && Validate->SupportedSegmentSet != HDGFX_ALLOCATION_SEGMENT_SET)
+    if (Validate->SetSupportedSegmentSet &&
+        Validate->SupportedSegmentSet != HDGFX_ALLOCATION_SEGMENT_SET &&
+        (Adapter->ApertureSize == 0 ||
+         Validate->SupportedSegmentSet != (HDGFX_ALLOCATION_SEGMENT_SET | HDGFX_APERTURE_SEGMENT_SET)))
+    {
         return STATUS_NOT_SUPPORTED;
+    }
     if (Validate->SetPreferredSegment)
     {
         for (Preferred = Validate->PreferredSegment.Value; Preferred != 0; Preferred >>= 6)
         {
-            if ((Preferred & 0x1F) != 0 && (Preferred & 0x1F) != HDGFX_SLAB_SEGMENT_ID)
+            if ((Preferred & 0x1F) != 0 && (Preferred & 0x1F) != HDGFX_SLAB_SEGMENT_ID &&
+                ((Preferred & 0x1F) != HDGFX_APERTURE_SEGMENT_ID || Adapter->ApertureSize == 0))
                 return STATUS_NOT_SUPPORTED;
         }
     }

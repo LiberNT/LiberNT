@@ -31,6 +31,8 @@
 #define HDGFX_DMA_SEGMENT_ID        2UL
 #define HDGFX_DMA_SIZE              0x800000UL
 #define HDGFX_DMA_PAGES             (HDGFX_DMA_SIZE / PAGE_SIZE)
+#define HDGFX_APERTURE_SEGMENT_ID   3UL
+#define HDGFX_STANDARD_MAGIC        0x53584648UL
 #define HDGFX_RING_GTT_INDEX        HDGFX_DMA_PAGES
 #define HDGFX_STATUS_GTT_INDEX      (HDGFX_RING_GTT_INDEX + HDGFX_RING_PAGES)
 #define HDGFX_SCRATCH_GTT_INDEX     (HDGFX_STATUS_GTT_INDEX + 1)
@@ -171,6 +173,10 @@ typedef struct _HDGFX_ADAPTER
     ULONGLONG DmaBase;
     PULONG GttWindow;
     ULONG SavedGtt[HDGFX_RENDER_GTT_PAGES];
+    ULONG ApertureBase;
+    ULONG ApertureSize;
+    PULONG ApertureGtt;
+    PUCHAR ApertureCpu;
     KSPIN_LOCK RingLock;
     HDGFX_RING Ring;
     ULONG ScratchAddress;
@@ -235,6 +241,12 @@ typedef struct _HDGFX_ALLOCATION
     ULONG PlanePitches[SOFTGPU_ALLOCATION_MAX_PLANES];
 } HDGFX_ALLOCATION, *PHDGFX_ALLOCATION;
 
+typedef struct _HDGFX_STANDARD_RESOURCE
+{
+    ULONG Magic;
+    D3DKMDT_STANDARDALLOCATION_TYPE Type;
+} HDGFX_STANDARD_RESOURCE, *PHDGFX_STANDARD_RESOURCE;
+
 typedef struct _HDGFX_OPEN
 {
     ULONG Magic;
@@ -264,6 +276,10 @@ HdgfxMmioInit(
 
 NTSTATUS
 HdgfxResetRender(
+    _Inout_ PHDGFX_ADAPTER Adapter);
+
+VOID
+HdgfxApertureClear(
     _Inout_ PHDGFX_ADAPTER Adapter);
 
 VOID
