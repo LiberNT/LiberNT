@@ -7,6 +7,7 @@
 
 #include <blefi.h>
 #include <gui.h>
+#include <UgaDraw.h>
 
 #define FW_COLOR_DEPTH     32
 #define FW_BACKGROUND_MASK 0x7
@@ -15,7 +16,9 @@
 #define FW_IDLE_STALL_US   1000
 
 static EFI_GUID FwGopGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
+static EFI_GUID FwUgaGuid = EFI_UGA_DRAW_PROTOCOL_GUID;
 static EFI_GRAPHICS_OUTPUT_PROTOCOL* FwGop;
+static EFI_UGA_DRAW_PROTOCOL* FwUga;
 static EFI_INPUT_KEY FwPendingKey;
 static BOOLEAN FwHasPendingKey;
 static int FwPendingExtended;
@@ -31,6 +34,19 @@ FwGetGop(VOID)
     }
 
     return (FwGop && FwGop->Mode && FwGop->Mode->Info) ? FwGop : NULL;
+}
+
+static
+EFI_UGA_DRAW_PROTOCOL*
+FwGetUga(VOID)
+{
+    if (!FwUga && !BootServicesExitedFlag &&
+        EFI_ERROR(GlobalSystemTable->BootServices->LocateProtocol(&FwUgaGuid, NULL, (VOID**)&FwUga)))
+    {
+        FwUga = NULL;
+    }
+
+    return (FwUga && FwUga->GetMode && FwUga->Blt) ? FwUga : NULL;
 }
 
 BOOLEAN
@@ -115,9 +131,30 @@ VidFbGetDisplaySize(
     _Out_ PULONG Depth)
 {
     EFI_GRAPHICS_OUTPUT_PROTOCOL* Gop = FwGetGop();
+    EFI_UGA_DRAW_PROTOCOL* Uga = NULL;
+    UINT32 UgaWidth, UgaHeight, ColorDepth, RefreshRate;
 
-    *Width = Gop ? Gop->Mode->Info->HorizontalResolution : 0;
-    *Height = Gop ? Gop->Mode->Info->VerticalResolution : 0;
+    if (Gop)
+    {
+        *Width = Gop->Mode->Info->HorizontalResolution;
+        *Height = Gop->Mode->Info->VerticalResolution;
+    }
+    else
+    {
+        Uga = FwGetUga();
+        if (!Uga || EFI_ERROR(Uga->GetMode(Uga, &UgaWidth, &UgaHeight, &ColorDepth, &RefreshRate)) ||
+            (ColorDepth != FW_COLOR_DEPTH))
+        {
+            *Width = 0;
+            *Height = 0;
+        }
+        else
+        {
+            *Width = UgaWidth;
+            *Height = UgaHeight;
+        }
+    }
+
     *Depth = FW_COLOR_DEPTH;
 }
 
@@ -130,13 +167,30 @@ VidFbPresent(
     _In_ ULONG Height)
 {
     EFI_GRAPHICS_OUTPUT_PROTOCOL* Gop = FwGetGop();
+    EFI_UGA_DRAW_PROTOCOL* Uga = NULL;
     ULONG ScreenWidth, ScreenHeight;
+    UINT32 UgaWidth, UgaHeight;
 
-    if (!Gop)
-        return;
+    if (Gop)
+    {
+        ScreenWidth = Gop->Mode->Info->HorizontalResolution;
+        ScreenHeight = Gop->Mode->Info->VerticalResolution;
+    }
+    else
+    {
+        UINT32 ColorDepth, RefreshRate;
 
-    ScreenWidth = Gop->Mode->Info->HorizontalResolution;
-    ScreenHeight = Gop->Mode->Info->VerticalResolution;
+        Uga = FwGetUga();
+        if (!Uga || EFI_ERROR(Uga->GetMode(Uga, &UgaWidth, &UgaHeight, &ColorDepth, &RefreshRate)) ||
+            (ColorDepth != FW_COLOR_DEPTH))
+        {
+            return;
+        }
+
+        ScreenWidth = UgaWidth;
+        ScreenHeight = UgaHeight;
+    }
+
     if (Left >= ScreenWidth || Top >= ScreenHeight)
         return;
 
@@ -145,16 +199,32 @@ VidFbPresent(
     if (Width == 0 || Height == 0)
         return;
 
-    Gop->Blt(Gop,
-             (EFI_GRAPHICS_OUTPUT_BLT_PIXEL*)Pixels,
-             EfiBltBufferToVideo,
-             Left,
-             Top,
-             Left,
-             Top,
-             Width,
-             Height,
-             ScreenWidth * sizeof(ULONG));
+    if (Gop)
+    {
+        Gop->Blt(Gop,
+                 (EFI_GRAPHICS_OUTPUT_BLT_PIXEL*)Pixels,
+                 EfiBltBufferToVideo,
+                 Left,
+                 Top,
+                 Left,
+                 Top,
+                 Width,
+                 Height,
+                 ScreenWidth * sizeof(ULONG));
+    }
+    else
+    {
+        Uga->Blt(Uga,
+                 (EFI_UGA_PIXEL*)Pixels,
+                 EfiUgaBltBufferToVideo,
+                 Left,
+                 Top,
+                 Left,
+                 Top,
+                 Width,
+                 Height,
+                 ScreenWidth * sizeof(ULONG));
+    }
 }
 
 static

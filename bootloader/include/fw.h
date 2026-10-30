@@ -9,6 +9,8 @@
 
 extern const USHORT FwApplicationSubsystem;
 
+#define FW_CHAIN_SCAN_TRACE_MAX 128
+
 typedef enum _FW_VOLUME_SCAN_STATE
 {
     FwVolumeScanConnect,
@@ -37,6 +39,11 @@ FwPrint(
     _In_ PCWSTR Format,
     ...);
 
+VOID
+FwTraceChainScan(
+    _In_ PCWSTR Format,
+    ...);
+
 PVOID
 FwReadBootFile(
     _In_ PCWSTR Path,
@@ -53,6 +60,11 @@ FwScanFileVolumes(
     _In_ PCWSTR Path,
     _Inout_ PFW_VOLUME_SCAN Scan,
     _Out_ PVOID* Device);
+
+ULONG
+FwGetChainScanTrace(
+    _Out_writes_to_(Capacity, return) PCSTR* Lines,
+    _In_ ULONG Capacity);
 
 BOOLEAN
 FwStartFirmwareApplication(

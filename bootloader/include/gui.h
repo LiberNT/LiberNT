@@ -144,6 +144,7 @@ typedef struct tagUIVTBL
         IN const UI_MENU_ICON* MenuItemIcons OPTIONAL,
         IN UiMenuKeyPressFilterCallback KeyPressFilter OPTIONAL,
         IN PVOID Context OPTIONAL);
+    VOID (*DisplayTraceScreen)(PCSTR Header, PCSTR Lines[], ULONG Count);
     VOID (*DrawMenu)(PUI_MENU_INFO MenuInfo);
 } UIVTBL, *PUIVTBL;
 
