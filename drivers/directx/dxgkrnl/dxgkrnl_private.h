@@ -490,6 +490,7 @@ typedef struct _DXGKRNL_SUBMIT_DMA_BUFFER
 #endif
     PDXGKRNL_DEVICE_WORK        DeviceWork;
     BOOLEAN                     DeviceWorkSupplied;
+    BOOLEAN                     DeviceWorkAdopted;
     DXGK_SUBMISSION_ACCOUNTING  SubmissionAccounting;
 
     /* Optional monitored-fence signal fired when this submission's
@@ -4549,6 +4550,11 @@ VOID
 NTAPI
 DxgkAdoptTrackedDmaBuffer(
     _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry);
+
+VOID
+NTAPI
+DxgkReturnTrackedDeviceWork(
+    _In_opt_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry);
 
 NTSTATUS
 NTAPI

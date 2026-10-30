@@ -3504,7 +3504,19 @@ DxgkAdoptTrackedDmaBuffer(
     _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry)
 {
     if (Entry != NULL)
+    {
         (VOID)DxgkTrackedWorkCoreClaimExternalCleanup(&Entry->TrackedWork);
+        Entry->DeviceWorkAdopted = TRUE;
+    }
+}
+
+VOID
+NTAPI
+DxgkReturnTrackedDeviceWork(
+    _In_opt_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry)
+{
+    if (Entry != NULL && Entry->DeviceWorkSupplied)
+        (VOID)DxgkTrackedWorkCoreReleaseDeviceWork(&Entry->TrackedWork);
 }
 
 NTSTATUS
@@ -3538,7 +3550,7 @@ DxgkCancelTrackedDmaBuffer(
     if (Entry == NULL)
         return;
 
-    if (Entry->DeviceWorkSupplied)
+    if (Entry->DeviceWorkSupplied && !Entry->DeviceWorkAdopted)
         (VOID)DxgkTrackedWorkCoreReleaseDeviceWork(&Entry->TrackedWork);
     Adapter = Entry->Adapter;
     if (Adapter != NULL)

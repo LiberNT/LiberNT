@@ -4055,6 +4055,7 @@ VidSchSubmitCommandTrackedMeasured(
         if (OrderedContext != NULL)
             ExReleaseRundownProtection(&OrderedContext->StreamAdmissionRundown);
         Packet->DmaBuffer = NULL;
+        DxgkReturnTrackedDeviceWork(Reservation);
         VidSchpDereferencePacket(Packet);
         if (KickContext != NULL)
             DxgkDereferenceContext(KickContext);
