@@ -15,6 +15,17 @@ LdrpArchGetEmulationHost(
     return NULL;
 }
 
+NTSTATUS
+LdrpArchStartEmulation(VOID)
+{
+    return STATUS_SUCCESS;
+}
+
+VOID
+LdrpArchDetachThread(VOID)
+{
+}
+
 VOID
 LdrpArchEnterEmulationHost(
     _Inout_ PCONTEXT Context,

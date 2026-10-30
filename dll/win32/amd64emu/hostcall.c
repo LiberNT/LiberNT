@@ -158,7 +158,7 @@ EmuMarkNativeImage(
     ULONG_PTR Page, Last;
     ULONG Index;
 
-    if (!EmuCodeMap || !Headers) return;
+    if (!EmuCodeMap || !Headers || Headers->FileHeader.Machine != IMAGE_FILE_MACHINE_NATIVE) return;
     Section = IMAGE_FIRST_SECTION(Headers);
     for (Index = 0; Index < Headers->FileHeader.NumberOfSections; Index++, Section++)
     {
@@ -449,7 +449,7 @@ EmuCallGuest(
     _In_ PCSTR Signature,
     _In_opt_ const ULONG64 *Arguments)
 {
-    PEMU_THREAD Thread = EmuCurrentThread();
+    PEMU_THREAD Thread = EmuProcess.Attached ? EmuEnterAttachedThread() : EmuCurrentThread();
     PEMU_REGISTERS Registers;
     EMU_GUEST_CALL Call;
     PULONG64 Stack, Vectors;
@@ -638,7 +638,8 @@ EmuCallDescribed(
     if (!Function) RtlRaiseStatus(STATUS_ACCESS_VIOLATION);
     if (!EmuDescriptorSignature(Descriptor, FALSE, Signature)) EmuFatal(STATUS_NOT_SUPPORTED, "unsupported RV64X exit");
 
-    if (RtlPcToFileHeader((PVOID)(ULONG_PTR)Function, &Base))
+    if (RtlPcToFileHeader((PVOID)(ULONG_PTR)Function, &Base) &&
+        RtlImageNtHeader(Base)->FileHeader.Machine == IMAGE_FILE_MACHINE_NATIVE)
     {
         EmuMarkNativeImage(Base, TRUE);
         Count = Descriptor[2];

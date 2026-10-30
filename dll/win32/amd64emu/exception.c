@@ -21,6 +21,9 @@ EmuDispatchException(
     AMD64_CONTEXT Context;
     NTSTATUS Status = STATUS_SUCCESS;
 
+    /* TODO: dispatch AMD64 exceptions to AMD64 frames when the native loader owns the process */
+    if (!EmuProcess.KiUserExceptionDispatcher) return STATUS_NOT_SUPPORTED;
+
     Context.ContextFlags = CONTEXT_AMD64_FULL | CONTEXT_AMD64_SEGMENTS;
     EmuCoreGetContext(Thread->Cpu, &Context);
     Stack = (PVOID)((Context.Rsp - sizeof(*Stack)) & ~(ULONG64)63);

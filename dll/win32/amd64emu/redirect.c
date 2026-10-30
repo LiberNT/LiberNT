@@ -19,7 +19,7 @@ EmuRedirectObject(
     UNICODE_STRING Original, Rest;
     USHORT Prefix;
 
-    if (!Source || Source->RootDirectory || !Source->ObjectName) return FALSE;
+    if (EmuProcess.Attached || !Source || Source->RootDirectory || !Source->ObjectName) return FALSE;
 
     Original = *Source->ObjectName;
     if (RtlPrefixUnicodeString(&EmuProcess.SystemDirectory, &Original, TRUE))

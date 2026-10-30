@@ -1477,6 +1477,8 @@ LdrShutdownThread(VOID)
     }
 #endif
 
+    LdrpArchDetachThread();
+
     DPRINT("LdrShutdownThread() done\n");
 
     return STATUS_SUCCESS;
@@ -3376,6 +3378,13 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     }
 
     NtCurrentTeb()->FlsData = RtlpAllocateFlsData();
+
+    Status = LdrpArchStartEmulation();
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("LDR: LdrpProcessInitialization failed to start the emulator; status %x\n", Status);
+        return Status;
+    }
 
     /* FIXME Mark the DLL Ranges for Stack Traces later */
 

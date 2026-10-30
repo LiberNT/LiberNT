@@ -19,6 +19,7 @@
 #include <pseh/pseh2.h>
 #include <reactos/emulation.h>
 #include <reactos/emuhost.h>
+#include <reactos/chpe.h>
 #include "cpu.h"
 
 #define EMU_MAX_SERVICE_ARGUMENTS 32
@@ -125,6 +126,12 @@ typedef struct _EMU_GUEST_CALL
     ULONG64 FloatResult;
 } EMU_GUEST_CALL, *PEMU_GUEST_CALL;
 
+typedef struct _EMU_STACK
+{
+    PVOID Base;
+    PVOID Limit;
+} EMU_STACK, *PEMU_STACK;
+
 typedef struct _EMU_THREAD
 {
     PEMULATION_THREAD Host;
@@ -137,6 +144,8 @@ typedef struct _EMU_THREAD
     HANDLE ParkEvent;
     HANDLE ReleaseEvent;
     PEMU_GUEST_CALL GuestCall;
+    EMU_STACK GuestStack;
+    CHPE_V2_CPU_AREA_INFO CpuArea;
 } EMU_THREAD, *PEMU_THREAD;
 
 typedef struct _EMU_THREAD_START
@@ -146,6 +155,7 @@ typedef struct _EMU_THREAD_START
 
 typedef struct _EMU_PROCESS
 {
+    BOOLEAN Attached;
     PPEB GuestPeb;
     PVOID GuestNtdll;
     ULONG64 LdrInitializeThunk;
@@ -172,11 +182,17 @@ RtlFindExportedRoutineByName(
     _In_ PVOID ImageBase,
     _In_ PCSTR Name);
 
+PEMU_THREAD
+EmuAttachedThread(VOID);
+
+PEMU_THREAD
+EmuEnterAttachedThread(VOID);
+
 FORCEINLINE
 PEMU_THREAD
 EmuCurrentThread(VOID)
 {
-    return EmulationCurrentThread()->HostData;
+    return EmuProcess.Attached ? EmuAttachedThread() : EmulationCurrentThread()->HostData;
 }
 
 VOID
