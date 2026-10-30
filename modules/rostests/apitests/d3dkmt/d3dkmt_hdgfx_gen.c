@@ -6,8 +6,6 @@
  */
 
 #include "precomp.h"
-#include <wingdi.h>
-#include <winuser.h>
 #include <drivers/directx/hdgfx_umd.h>
 
 #define GEN_ALLOCATION_SIZE     0x10000UL
@@ -21,6 +19,8 @@
 #define GEN_BLT_COPY_32         0x03CC0000UL
 #define GEN_PIPE_CONTROL_WRITE  0x7A004002UL
 #define GEN_PIPE_CONTROL_GGTT   0x4UL
+#define GEN7_PIPE_CONTROL_QWORD 0x7A000003UL
+#define GEN7_PIPE_CONTROL_WRITE 0x01004000UL
 #define GEN_OVERCOMMIT_COUNT    33
 #define GEN_OVERCOMMIT_SIZE     0x800000UL
 #define GEN_OVERCOMMIT_LAST     0x4000000UL
@@ -322,6 +322,15 @@ static void Test_StateCopy(GEN_CONTEXT *Ctx, ULONG *Copy)
        Copy[0x4000 / 4]);
 }
 
+static BOOL GenBatchesScanned(GEN_CONTEXT *Ctx)
+{
+    static const ULONG probe[4] = { 0x11000001, 0x7019C, 0, GEN_MI_BATCH_END };
+    HDGFX_GEN_SUBMIT header;
+
+    GenHeader(&header, 4, 0);
+    return GenSubmit(Ctx, &header, probe, NULL, NULL, 0) == STATUS_ILLEGAL_INSTRUCTION;
+}
+
 static void Test_PipeControlWrite(GEN_CONTEXT *Ctx, ULONG *Copy)
 {
     HDGFX_GEN_SUBMIT header;
@@ -329,15 +338,29 @@ static void Test_PipeControlWrite(GEN_CONTEXT *Ctx, ULONG *Copy)
     GEN_PATCH patch;
     NTSTATUS status;
 
-    batch[0] = GEN_PIPE_CONTROL_WRITE;
-    batch[1] = 0;
-    batch[2] = 0xC0FFEE01;
-    batch[3] = 0xC0FFEE02;
-    batch[4] = GEN_MI_BATCH_END;
-    batch[5] = 0;
-    patch.Offset = GEN_BATCH_OFFSET + sizeof(ULONG);
-    patch.AllocationOffset = 0x8000 | GEN_PIPE_CONTROL_GGTT;
+    patch.AllocationOffset = 0x8000;
     patch.DriverId = HDGFX_GEN_PATCH_ALLOCATION;
+    if (GenBatchesScanned(Ctx))
+    {
+        batch[0] = GEN7_PIPE_CONTROL_QWORD;
+        batch[1] = GEN7_PIPE_CONTROL_WRITE;
+        batch[2] = 0;
+        batch[3] = 0xC0FFEE01;
+        batch[4] = 0xC0FFEE02;
+        batch[5] = GEN_MI_BATCH_END;
+        patch.Offset = GEN_BATCH_OFFSET + 2 * sizeof(ULONG);
+    }
+    else
+    {
+        batch[0] = GEN_PIPE_CONTROL_WRITE;
+        batch[1] = 0;
+        batch[2] = 0xC0FFEE01;
+        batch[3] = 0xC0FFEE02;
+        batch[4] = GEN_MI_BATCH_END;
+        batch[5] = 0;
+        patch.Offset = GEN_BATCH_OFFSET + sizeof(ULONG);
+        patch.AllocationOffset |= GEN_PIPE_CONTROL_GGTT;
+    }
     GenHeader(&header, 6, 0);
     status = GenSubmit(Ctx, &header, batch, NULL, &patch, 1);
     ok_succeeded(status, "Render of the PIPE_CONTROL write: 0x%08lx\n", status);
@@ -644,13 +667,6 @@ static void Test_MalformedSubmits(GEN_CONTEXT *Ctx)
     ok_succeeded(status, "Render of a well-formed empty batch: 0x%08lx\n", status);
 }
 
-static BOOL GenIsIvyBridge(void)
-{
-    DISPLAY_DEVICEA Device = { sizeof(Device) };
-
-    return EnumDisplayDevicesA(NULL, 0, &Device, 0) && strstr(Device.DeviceID, "DEV_0166") != NULL;
-}
-
 static void Test_PrivilegedBatches(GEN_CONTEXT *Ctx)
 {
     static const ULONG Refused[][4] =
@@ -665,7 +681,7 @@ static void Test_PrivilegedBatches(GEN_CONTEXT *Ctx)
     NTSTATUS status;
     UINT i;
 
-    if (!GenIsIvyBridge())
+    if (!GenBatchesScanned(Ctx))
     {
         skip("user batch scan runs on Ivy Bridge\n");
         return;
