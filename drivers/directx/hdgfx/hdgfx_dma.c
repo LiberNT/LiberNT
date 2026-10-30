@@ -114,7 +114,7 @@ HdgfxValidateOpen(
 {
     if (Open == NULL || Open->Magic != HDGFX_OPEN_MAGIC || Open->Device != KmdDevice)
         return STATUS_INVALID_HANDLE;
-    if (Open->Size == 0 || Open->Size > KmdDevice->Adapter->SlabSize)
+    if (Open->Size == 0 || Open->Size > HdgfxMaxAllocationSize(KmdDevice->Adapter, FALSE))
         return STATUS_INVALID_BUFFER_SIZE;
     return STATUS_SUCCESS;
 }
