@@ -6,6 +6,8 @@
  */
 
 #include "precomp.h"
+#include <wingdi.h>
+#include <winuser.h>
 #include <drivers/directx/hdgfx_umd.h>
 
 #define GEN_ALLOCATION_SIZE     0x10000UL
@@ -267,6 +269,7 @@ static void Test_ColorFill(GEN_CONTEXT *Ctx, ULONG *Copy)
     patches[1].AllocationOffset = 0x2000;
     patches[1].DriverId = HDGFX_GEN_PATCH_ALLOCATION;
     GenHeader(&header, 14, 0);
+    header.Flags = HDGFX_GEN_SUBMIT_BLITTER;
     status = GenSubmit(Ctx, &header, batch, NULL, patches, 2);
     ok_succeeded(status, "Render of the fills: 0x%08lx\n", status);
     if (!NT_SUCCESS(status) || !GenRead(Ctx, Copy))
@@ -308,6 +311,7 @@ static void Test_StateCopy(GEN_CONTEXT *Ctx, ULONG *Copy)
     patches[1].AllocationOffset = 0;
     patches[1].DriverId = HDGFX_GEN_PATCH_STATE;
     GenHeader(&header, 10, ARRAY_SIZE(state));
+    header.Flags = HDGFX_GEN_SUBMIT_BLITTER;
     status = GenSubmit(Ctx, &header, batch, state, patches, 2);
     ok_succeeded(status, "Render of the copy from the state section: 0x%08lx\n", status);
     if (!NT_SUCCESS(status) || !GenRead(Ctx, Copy))
@@ -393,6 +397,7 @@ static void Test_ApertureOvercommit(GEN_CONTEXT *Ctx, ULONG *Copy)
         batch[6] = GEN_MI_BATCH_END;
         batch[7] = 0;
         GenHeader(&header, 8, 0);
+        header.Flags = HDGFX_GEN_SUBMIT_BLITTER;
         Ctx->hAlloc = ai.hAllocation;
         status = GenSubmit(Ctx, &header, batch, NULL, &patch, 1);
         ok_succeeded(status, "Render into allocation %u: 0x%08lx\n", count, status);
@@ -460,6 +465,7 @@ static NTSTATUS GenOrderFill(GEN_CONTEXT *Ctx, ULONG Color)
     batch[6] = GEN_MI_BATCH_END;
     batch[7] = 0;
     GenHeader(&header, 8, 0);
+    header.Flags = HDGFX_GEN_SUBMIT_BLITTER;
     for (retry = 0; retry < GEN_ORDER_RETRIES; retry++)
     {
         status = GenSubmit(Ctx, &header, batch, NULL, &patch, 1);
@@ -638,6 +644,43 @@ static void Test_MalformedSubmits(GEN_CONTEXT *Ctx)
     ok_succeeded(status, "Render of a well-formed empty batch: 0x%08lx\n", status);
 }
 
+static BOOL GenIsIvyBridge(void)
+{
+    DISPLAY_DEVICEA Device = { sizeof(Device) };
+
+    return EnumDisplayDevicesA(NULL, 0, &Device, 0) && strstr(Device.DeviceID, "DEV_0166") != NULL;
+}
+
+static void Test_PrivilegedBatches(GEN_CONTEXT *Ctx)
+{
+    static const ULONG Refused[][4] =
+    {
+        { 0x18800000, 0x1000, GEN_MI_BATCH_END, 0 },
+        { 0x11000001, 0x101008, 1, GEN_MI_BATCH_END },
+        { 0x11000001, 0x7019C, 0, GEN_MI_BATCH_END },
+        { 0x54300004, 0, GEN_MI_BATCH_END, 0 },
+    };
+    static const ULONG Allowed[4] = { 0x11000001, 0xB020, 0x00800000, GEN_MI_BATCH_END };
+    HDGFX_GEN_SUBMIT header;
+    NTSTATUS status;
+    UINT i;
+
+    if (!GenIsIvyBridge())
+    {
+        skip("user batch scan runs on Ivy Bridge\n");
+        return;
+    }
+    for (i = 0; i < ARRAY_SIZE(Refused); i++)
+    {
+        GenHeader(&header, 4, 0);
+        status = GenSubmit(Ctx, &header, Refused[i], NULL, NULL, 0);
+        ok_hex(status, STATUS_ILLEGAL_INSTRUCTION);
+    }
+    GenHeader(&header, 4, 0);
+    status = GenSubmit(Ctx, &header, Allowed, NULL, NULL, 0);
+    ok_succeeded(status, "Render of an allowed register write: 0x%08lx\n", status);
+}
+
 START_TEST(hdgfx_gen)
 {
     GEN_CONTEXT Ctx;
@@ -674,6 +717,7 @@ START_TEST(hdgfx_gen)
         Test_ApertureOvercommit(&Ctx, Copy);
         Test_ConcurrentPagingOrder();
         Test_MalformedSubmits(&Ctx);
+        Test_PrivilegedBatches(&Ctx);
         GenTeardown(&Ctx);
     }
     HeapFree(GetProcessHeap(), 0, Copy);
