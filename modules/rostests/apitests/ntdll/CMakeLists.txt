@@ -53,6 +53,7 @@ set(ALPC_SOURCE
 list(APPEND SOURCE
     DllLoadNotification.c
     DebugRegisters.c
+    FileStatInformation.c
     arm64_chpe.c
     wow64_startup.c
     wow64_native_process.c

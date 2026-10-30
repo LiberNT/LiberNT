@@ -543,6 +543,10 @@ NtfsReportFileChange(_In_ PVolumeContextBlock VolCB,
                      _In_ ULONG FilterMatch,
                      _In_ ULONG Action);
 
+NTSTATUS
+NtfsQueryLxMetadata(_In_ PFileContextBlock FileCB,
+                    _Inout_ PFILE_STAT_LX_INFORMATION Stat);
+
 static inline
 VOID
 NtfsAcquireMetadata(_In_ PVolumeContextBlock VolCB)

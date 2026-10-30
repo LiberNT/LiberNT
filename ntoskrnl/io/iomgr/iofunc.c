@@ -3349,7 +3349,7 @@ NtQueryInformationByName(IN POBJECT_ATTRIBUTES ObjectAttributes,
                                 IoFileObjectType,
                                 PreviousMode,
                                 NULL,
-                                FILE_READ_ATTRIBUTES,
+                                FILE_READ_ATTRIBUTES | IopQueryOperationAccess[FileInformationClass],
                                 &OpenPacket,
                                 &Handle);
     if (OpenPacket.DriverCreateContext.ExtraCreateParameter != NULL)

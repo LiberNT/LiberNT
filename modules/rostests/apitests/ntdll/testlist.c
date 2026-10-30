@@ -27,6 +27,7 @@ extern void func_wcstombs(void);
 
 extern void func_DebugRegisters(void);
 extern void func_DllLoadNotification(void);
+extern void func_FileStatInformation(void);
 extern void func_arm64_chpe(void);
 extern void func_wow64_startup(void);
 extern void func_wow64_native_process(void);
@@ -206,6 +207,7 @@ const struct test winetest_testlist[] =
 
     { "DebugRegisters",                 func_DebugRegisters },
     { "DllLoadNotification",            func_DllLoadNotification },
+    { "FileStatInformation",            func_FileStatInformation },
     { "arm64_chpe",                     func_arm64_chpe },
     { "LdrEnumResources",               func_LdrEnumResources },
     { "LdrFindResource_U",              func_LdrFindResource_U },

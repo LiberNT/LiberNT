@@ -458,6 +458,75 @@ Done:
     return Status;
 }
 
+static
+NTSTATUS
+NtfsReadLxValues(_In_reads_bytes_(RawLength) const UCHAR* RawData,
+                 _In_ ULONG RawLength,
+                 _Inout_ PFILE_STAT_LX_INFORMATION Stat)
+{
+    static const struct
+    {
+        PCSTR Name;
+        ULONG Flag;
+        USHORT Length;
+    } Values[] =
+    {
+        { LX_FILE_METADATA_UID_EA_NAME, LX_FILE_METADATA_HAS_UID, sizeof(ULONG) },
+        { LX_FILE_METADATA_GID_EA_NAME, LX_FILE_METADATA_HAS_GID, sizeof(ULONG) },
+        { LX_FILE_METADATA_MODE_EA_NAME, LX_FILE_METADATA_HAS_MODE, sizeof(ULONG) },
+        { LX_FILE_METADATA_DEVICE_ID_EA_NAME, LX_FILE_METADATA_HAS_DEVICE_ID, 2 * sizeof(ULONG) },
+    };
+    PULONG Targets[] = { &Stat->LxUid, &Stat->LxGid, &Stat->LxMode, &Stat->LxDeviceIdMajor };
+    NtfsExtendedAttributeView View;
+    BOOLEAN Found;
+    NTSTATUS Status;
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Values); Index++)
+    {
+        Status = NtfsFindEaByName(RawData, RawLength, (const UCHAR*)Values[Index].Name,
+                                  (UCHAR)strlen(Values[Index].Name), &Found, &View);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (!Found || (View.ValueLength != Values[Index].Length))
+            continue;
+        RtlCopyMemory(Targets[Index], View.Value, Values[Index].Length);
+        Stat->LxFlags |= Values[Index].Flag;
+    }
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NtfsQueryLxMetadata(_In_ PFileContextBlock FileCB,
+                    _Inout_ PFILE_STAT_LX_INFORMATION Stat)
+{
+    PUCHAR RawData;
+    ULONG RawLength = 0;
+    NTSTATUS Status;
+
+    Stat->LxFlags = NtfsFileRecordIsCaseSensitiveDirectory(FileCB->FileRec) ? LX_FILE_CASE_SENSITIVE_DIR : 0;
+    Stat->LxUid = 0;
+    Stat->LxGid = 0;
+    Stat->LxMode = 0;
+    Stat->LxDeviceIdMajor = 0;
+    Stat->LxDeviceIdMinor = 0;
+
+    Status = NtfsFileRecordReadExtendedAttributes(FileCB->FileRec, NULL, &RawLength, NULL);
+    if ((Status == STATUS_NO_EAS_ON_FILE) || (NT_SUCCESS(Status) && (RawLength == 0)))
+        return STATUS_SUCCESS;
+    if (Status != STATUS_BUFFER_TOO_SMALL)
+        return Status;
+
+    RawData = ExAllocatePoolWithTag(PagedPool, RawLength, TAG_NTFS);
+    if (!RawData)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Status = NtfsFileRecordReadExtendedAttributes(FileCB->FileRec, RawData, &RawLength, NULL);
+    if (NT_SUCCESS(Status))
+        Status = NtfsReadLxValues(RawData, RawLength, Stat);
+    ExFreePoolWithTag(RawData, TAG_NTFS);
+    return Status;
+}
+
 _Function_class_(IRP_MJ_QUERY_EA)
 _Function_class_(DRIVER_DISPATCH)
 NTSTATUS

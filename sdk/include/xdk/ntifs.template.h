@@ -1815,6 +1815,51 @@ typedef struct _FILE_CASE_SENSITIVE_INFORMATION {
     ULONG Flags;
 } FILE_CASE_SENSITIVE_INFORMATION, *PFILE_CASE_SENSITIVE_INFORMATION;
 
+typedef struct _FILE_STAT_INFORMATION {
+    LARGE_INTEGER FileId;
+    LARGE_INTEGER CreationTime;
+    LARGE_INTEGER LastAccessTime;
+    LARGE_INTEGER LastWriteTime;
+    LARGE_INTEGER ChangeTime;
+    LARGE_INTEGER AllocationSize;
+    LARGE_INTEGER EndOfFile;
+    ULONG FileAttributes;
+    ULONG ReparseTag;
+    ULONG NumberOfLinks;
+    ACCESS_MASK EffectiveAccess;
+} FILE_STAT_INFORMATION, *PFILE_STAT_INFORMATION;
+
+#define LX_FILE_METADATA_HAS_UID 0x1
+#define LX_FILE_METADATA_HAS_GID 0x2
+#define LX_FILE_METADATA_HAS_MODE 0x4
+#define LX_FILE_METADATA_HAS_DEVICE_ID 0x8
+#define LX_FILE_CASE_SENSITIVE_DIR 0x10
+
+typedef struct _FILE_STAT_LX_INFORMATION {
+    LARGE_INTEGER FileId;
+    LARGE_INTEGER CreationTime;
+    LARGE_INTEGER LastAccessTime;
+    LARGE_INTEGER LastWriteTime;
+    LARGE_INTEGER ChangeTime;
+    LARGE_INTEGER AllocationSize;
+    LARGE_INTEGER EndOfFile;
+    ULONG FileAttributes;
+    ULONG ReparseTag;
+    ULONG NumberOfLinks;
+    ACCESS_MASK EffectiveAccess;
+    ULONG LxFlags;
+    ULONG LxUid;
+    ULONG LxGid;
+    ULONG LxMode;
+    ULONG LxDeviceIdMajor;
+    ULONG LxDeviceIdMinor;
+} FILE_STAT_LX_INFORMATION, *PFILE_STAT_LX_INFORMATION;
+
+#define LX_FILE_METADATA_UID_EA_NAME "$LXUID"
+#define LX_FILE_METADATA_GID_EA_NAME "$LXGID"
+#define LX_FILE_METADATA_MODE_EA_NAME "$LXMOD"
+#define LX_FILE_METADATA_DEVICE_ID_EA_NAME "$LXDEV"
+
 #if ((NTDDI_VERSION >= NTDDI_WIN10_RS1))
 
 #define FILE_RENAME_REPLACE_IF_EXISTS                     0x00000001

@@ -299,6 +299,76 @@ GetFileInternalInformation(_In_ PFileContextBlock FileCB,
 
 static
 NTSTATUS
+GetFileReparseTag(_In_ PFileContextBlock FileCB,
+                  _In_ ULONG FileAttributes,
+                  _Out_ PULONG ReparseTag)
+{
+    PReparsePointEx ReparseData;
+    ULONG ReparseLength = 0;
+    NTSTATUS Status;
+
+    *ReparseTag = 0;
+    if (!(FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+        return STATUS_SUCCESS;
+
+    Status = NtfsFileRecordReadReparsePoint(FileCB->FileRec, NULL, &ReparseLength);
+    if (Status != STATUS_BUFFER_TOO_SMALL)
+        return NT_SUCCESS(Status) ? STATUS_FILE_CORRUPT_ERROR : Status;
+    ReparseData = ExAllocatePoolWithTag(PagedPool, ReparseLength, TAG_NTFS);
+    if (!ReparseData)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Status = NtfsFileRecordReadReparsePoint(FileCB->FileRec, (PUCHAR)ReparseData, &ReparseLength);
+    if (NT_SUCCESS(Status))
+        *ReparseTag = ReparseData->ReparseType;
+    ExFreePoolWithTag(ReparseData, TAG_NTFS);
+    return Status;
+}
+
+static
+NTSTATUS
+GetFileStatInformation(_In_ PVolumeContextBlock VolCB,
+                       _In_ PFileContextBlock FileCB,
+                       _In_ BOOLEAN Lx,
+                       _Out_ PFILE_STAT_LX_INFORMATION Buffer,
+                       _Inout_ PULONG Length)
+{
+    ULONG Size = Lx ? sizeof(FILE_STAT_LX_INFORMATION) : sizeof(FILE_STAT_INFORMATION);
+    FILE_BASIC_INFORMATION Basic;
+    FILE_STANDARD_INFORMATION Standard;
+    ULONG BasicLength = sizeof(Basic), StandardLength = sizeof(Standard);
+    NTSTATUS Status;
+
+    if (*Length < Size)
+        return STATUS_BUFFER_TOO_SMALL;
+
+    Status = GetFileBasicInformation(FileCB, &Basic, &BasicLength);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = GetFileStandardInformation(VolCB, FileCB, &Standard, &StandardLength);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Buffer->FileId.QuadPart = NtfsFileRecordGetReference(FileCB->FileRec);
+    Buffer->CreationTime = Basic.CreationTime;
+    Buffer->LastAccessTime = Basic.LastAccessTime;
+    Buffer->LastWriteTime = Basic.LastWriteTime;
+    Buffer->ChangeTime = Basic.ChangeTime;
+    Buffer->AllocationSize = Standard.AllocationSize;
+    Buffer->EndOfFile = Standard.EndOfFile;
+    Buffer->FileAttributes = Basic.FileAttributes;
+    Buffer->NumberOfLinks = Standard.NumberOfLinks;
+    /* FIXME: Windows reports the caller's maximum access to the file here, not the access granted to this open */
+    Buffer->EffectiveAccess = FileCB->DesiredAccess;
+    Status = GetFileReparseTag(FileCB, Basic.FileAttributes, &Buffer->ReparseTag);
+    if (NT_SUCCESS(Status) && Lx)
+        Status = NtfsQueryLxMetadata(FileCB, Buffer);
+    if (NT_SUCCESS(Status))
+        *Length -= Size;
+    return Status;
+}
+
+static
+NTSTATUS
 GetFileIdInformation(_In_ PVolumeContextBlock VolCB,
                      _In_ PFileContextBlock FileCB,
                      _Out_ PFILE_ID_INFORMATION Buffer,
@@ -2133,6 +2203,8 @@ NtfsFsdQueryInformation(_In_    PDEVICE_OBJECT VolumeDeviceObject,
         case FileNormalizedNameInformation:
         case FileIdInformation:
         case FileCaseSensitiveInformation:
+        case FileStatInformation:
+        case FileStatLxInformation:
             if (!FileCB->FileRec || !VolCB || !VolCB->DiskVolume)
             {
                 Status = STATUS_INVALID_PARAMETER;
@@ -2186,6 +2258,11 @@ NtfsFsdQueryInformation(_In_    PDEVICE_OBJECT VolumeDeviceObject,
             Status = GetFileIdInformation(VolumeDeviceObject->DeviceExtension, FileCB,
                                           (PFILE_ID_INFORMATION)SystemBuffer,
                                           &BufferLength);
+            break;
+        case FileStatInformation:
+        case FileStatLxInformation:
+            Status = GetFileStatInformation(VolCB, FileCB, FileInfoRequest == FileStatLxInformation,
+                                            (PFILE_STAT_LX_INFORMATION)SystemBuffer, &BufferLength);
             break;
         case FileNetworkOpenInformation:
             Status = GetFileNetworkOpenInformation(FileCB,
@@ -2282,34 +2359,9 @@ NtfsFsdQueryInformation(_In_    PDEVICE_OBJECT VolumeDeviceObject,
 
             Tag->FileAttributes = Basic.FileAttributes ? Basic.FileAttributes
                                                        : FILE_ATTRIBUTE_NORMAL;
-            Tag->ReparseTag = 0;
-            if (Basic.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
-            {
-                PReparsePointEx ReparseData;
-                ULONG ReparseLength = 0;
-
-                Status = NtfsFileRecordReadReparsePoint(FileCB->FileRec, NULL, &ReparseLength);
-                if (Status != STATUS_BUFFER_TOO_SMALL)
-                {
-                    if (NT_SUCCESS(Status))
-                        Status = STATUS_FILE_CORRUPT_ERROR;
-                    break;
-                }
-                ReparseData = ExAllocatePoolWithTag(PagedPool, ReparseLength, TAG_NTFS);
-                if (!ReparseData)
-                {
-                    Status = STATUS_INSUFFICIENT_RESOURCES;
-                    break;
-                }
-                Status = NtfsFileRecordReadReparsePoint(FileCB->FileRec,
-                                                        (PUCHAR)ReparseData,
-                                                        &ReparseLength);
-                if (NT_SUCCESS(Status))
-                    Tag->ReparseTag = ReparseData->ReparseType;
-                ExFreePoolWithTag(ReparseData, TAG_NTFS);
-                if (!NT_SUCCESS(Status))
-                    break;
-            }
+            Status = GetFileReparseTag(FileCB, Basic.FileAttributes, &Tag->ReparseTag);
+            if (!NT_SUCCESS(Status))
+                break;
             BufferLength -= sizeof(FILE_ATTRIBUTE_TAG_INFORMATION);
             break;
         }

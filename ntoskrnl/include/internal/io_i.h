@@ -82,6 +82,8 @@ UCHAR IopQueryOperationLength[FileMaximumInformation] =
     0,
     0,
     sizeof(FILE_ID_INFORMATION),
+    [FileStatInformation] = sizeof(FILE_STAT_INFORMATION),
+    [FileStatLxInformation] = sizeof(FILE_STAT_LX_INFORMATION),
     [FileCaseSensitiveInformation] = sizeof(FILE_CASE_SENSITIVE_INFORMATION)
 };
 
@@ -178,6 +180,8 @@ ACCESS_MASK IopQueryOperationAccess[FileMaximumInformation] =
     0,
     0,
     0,
+    [FileStatInformation] = FILE_READ_ATTRIBUTES,
+    [FileStatLxInformation] = FILE_READ_ATTRIBUTES | FILE_READ_EA,
     [FileCaseSensitiveInformation] = FILE_READ_ATTRIBUTES
 };
 
