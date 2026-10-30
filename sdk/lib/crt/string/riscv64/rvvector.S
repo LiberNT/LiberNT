@@ -5,6 +5,15 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
+#define RV64X_PTR_PTR_SIZE_TO_PTR 0x0000011101035852
+#define RV64X_PTR_INT_SIZE_TO_PTR 0x0000012101035852
+#define RV64X_PTR_PTR_SIZE_TO_INT 0x0000011102035852
+
+.macro RV64X_ENTRY descriptor
+    .quad \descriptor
+    .quad 0
+.endm
+
     .text
     .option push
     .option arch, +v
@@ -72,6 +81,7 @@ RvStrcpyVector:
     .p2align 4
     .global memcpy
     .global memmove
+    RV64X_ENTRY RV64X_PTR_PTR_SIZE_TO_PTR
 memcpy:
 memmove:
     li t1, 64
@@ -100,6 +110,7 @@ memmove:
 
     .p2align 4
     .global memset
+    RV64X_ENTRY RV64X_PTR_INT_SIZE_TO_PTR
 memset:
     li t1, 256
     bleu a2, t1, RvMemsetRva23
@@ -152,6 +163,7 @@ RvMemcpyRva23:
 
     .p2align 2
     .global RvMemmoveRva23
+    RV64X_ENTRY RV64X_PTR_PTR_SIZE_TO_PTR
 #if defined(RV_CRT_RVA23) && !defined(RV_CRT_FAST_UNALIGNED)
     .global memcpy
 memcpy:
@@ -179,6 +191,7 @@ RvMemmoveRva23:
 
     .p2align 2
     .global RvMemsetRva23
+    RV64X_ENTRY RV64X_PTR_INT_SIZE_TO_PTR
 #if defined(RV_CRT_RVA23) && !defined(RV_CRT_FAST_UNALIGNED)
     .global memset
 memset:
@@ -216,6 +229,7 @@ RvMemsetRva23:
 
     .p2align 2
     .global RvMemcmpRva23
+    RV64X_ENTRY RV64X_PTR_PTR_SIZE_TO_INT
 #ifdef RV_CRT_RVA23
     .global memcmp
 memcmp:
