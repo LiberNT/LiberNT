@@ -2686,6 +2686,40 @@ SdBusSetSdioInterruptEnable(
         STATUS_DEVICE_DATA_ERROR;
 }
 
+#define SD_STOP_RECOVERY_TIMEOUT_MS 100
+
+static
+VOID
+SdBusRecoverDataState(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ PPDO_EXTENSION PdoExtension)
+{
+    ULONG Response = 0;
+    ULONG State;
+    NTSTATUS Status;
+
+    Status = SdBusSendCommand(FdoExtension,
+                              SDCMD_SEND_STATUS,
+                              PdoExtension->RelativeAddress << 16,
+                              SDHCI_CMD_RESP_48 | SDHCI_CMD_CRC_CHECK | SDHCI_CMD_INDEX_CHECK,
+                              &Response);
+    State = (Response & EMMC_STATUS_CURRENT_STATE_MASK) >> EMMC_STATUS_CURRENT_STATE_SHIFT;
+    if (NT_SUCCESS(Status) && State != EMMC_STATE_DATA && State != EMMC_STATE_RCV)
+    {
+        return;
+    }
+
+    DPRINT1("SdBusRecoverDataState: stopping the transfer (CMD13 0x%08lx, state %lu)\n", Status, State);
+    (void)SdBusSendCommand(FdoExtension,
+                           SDCMD_STOP_TRANSMISSION,
+                           0,
+                           SDHCI_CMD_RESP_48_BUSY | SDHCI_CMD_CRC_CHECK | SDHCI_CMD_INDEX_CHECK |
+                               SDHCI_CMD_TYPE_ABORT,
+                           NULL);
+    (void)SdBusResetHost(FdoExtension, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
+    (void)SdBusEmmcWaitReadyByRca(FdoExtension, PdoExtension->RelativeAddress, SD_STOP_RECOVERY_TIMEOUT_MS);
+}
+
 static NTSTATUS
 SdBusPrepareSdioDeviceCommand(
     _In_ PPDO_EXTENSION PdoExtension,
@@ -3010,6 +3044,10 @@ SdBusHandleDeviceCommand(
 
         if (Retry >= MaxRetries || !SdBusIsRetryableError(Status))
         {
+            if (HasData)
+            {
+                SdBusRecoverDataState(FdoExtension, PdoExtension);
+            }
             return Status;
         }
 
@@ -3017,6 +3055,10 @@ SdBusHandleDeviceCommand(
                 CmdDesc->Cmd, Retry + 1, MaxRetries, Status);
 
         (void)SdBusResetHost(FdoExtension, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
+        if (HasData)
+        {
+            SdBusRecoverDataState(FdoExtension, PdoExtension);
+        }
     }
 
     /* Copy response data back into the request packet */

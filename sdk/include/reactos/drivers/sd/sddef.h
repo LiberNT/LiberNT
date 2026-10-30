@@ -288,6 +288,8 @@ typedef struct _SD_SCR {
 #define EMMC_STATUS_CURRENT_STATE_MASK     0x00001E00
 #define EMMC_STATUS_CURRENT_STATE_SHIFT    9
 #define EMMC_STATE_TRAN                    4
+#define EMMC_STATE_DATA                    5
+#define EMMC_STATE_RCV                     6
 #define EMMC_STATUS_SWITCH_ERROR           0x00000080
 
 #endif /* _REACTOS_SD_SDDEF_H_ */
