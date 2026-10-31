@@ -226,6 +226,20 @@ MiArchTlbInvalidate(ULONG64 VirtualAddress, ULONG64 PageCount, BOOLEAN AllProces
 }
 
 VOID
+MiArchTlbInvalidateProcessors(ULONG64 VirtualAddress, ULONG64 PageCount, ULONG64 Processors)
+{
+    KIRQL Previous;
+
+    if (PageCount == 0)
+        return;
+    if (PageCount > ((SIZE_T)-1 >> PAGE_SHIFT))
+        PageCount = 0;
+    Previous = MiAmd64TlbRaiseIrql();
+    MiAmd64FlushTargets(Processors | (1ULL << MiAmd64TlbCpu()), VirtualAddress, PageCount);
+    MiAmd64TlbLowerIrql(Previous);
+}
+
+VOID
 MiArchTlbInvalidateAll(BOOLEAN AllProcessors)
 {
     MiArchInvalidateTlbAll(AllProcessors ? MiTlbAllProcessors : MiTlbLocal);

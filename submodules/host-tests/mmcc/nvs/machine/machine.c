@@ -327,8 +327,9 @@ MiArchTlbInvalidateAll(_In_ BOOLEAN AllProcessors)
     __sync_fetch_and_add(&Machine->TlbInvalidations, 1);
 }
 
+static
 VOID
-MiArchTlbInvalidate(_In_ ULONG64 VirtualAddress, _In_ ULONG64 PageCount, _In_ BOOLEAN AllProcessors)
+MachineTlbInvalidateCpus(_In_ ULONG64 VirtualAddress, _In_ ULONG64 PageCount, _In_ ULONG64 Processors)
 {
     PMACHINE Machine = MachineCurrent;
     ULONG64 First = VirtualAddress >> PAGE_SHIFT;
@@ -341,7 +342,7 @@ MiArchTlbInvalidate(_In_ ULONG64 VirtualAddress, _In_ ULONG64 PageCount, _In_ BO
     {
         ULONG i;
 
-        if (!AllProcessors && Cpu != MachineCpu)
+        if (Cpu != MachineCpu && (Cpu >= 64 || !(Processors & (1ULL << Cpu))))
             continue;
 
         MachineCpuAcquire(Machine, Cpu);
@@ -356,6 +357,18 @@ MiArchTlbInvalidate(_In_ ULONG64 VirtualAddress, _In_ ULONG64 PageCount, _In_ BO
     }
 
     __sync_fetch_and_add(&Machine->TlbInvalidations, 1);
+}
+
+VOID
+MiArchTlbInvalidate(_In_ ULONG64 VirtualAddress, _In_ ULONG64 PageCount, _In_ BOOLEAN AllProcessors)
+{
+    MachineTlbInvalidateCpus(VirtualAddress, PageCount, AllProcessors ? ~0ULL : 0);
+}
+
+VOID
+MiArchTlbInvalidateProcessors(_In_ ULONG64 VirtualAddress, _In_ ULONG64 PageCount, _In_ ULONG64 Processors)
+{
+    MachineTlbInvalidateCpus(VirtualAddress, PageCount, Processors);
 }
 
 VOID

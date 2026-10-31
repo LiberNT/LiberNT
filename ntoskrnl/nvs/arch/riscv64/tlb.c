@@ -71,6 +71,14 @@ MiArchTlbInvalidate(ULONG64 VirtualAddress, ULONG64 PageCount, BOOLEAN AllProces
 }
 
 VOID
+MiArchTlbInvalidateProcessors(ULONG64 VirtualAddress, ULONG64 PageCount, ULONG64 Processors)
+{
+    UNREFERENCED_PARAMETER(Processors);
+    /* TODO: send the remote fences only to Processors, as amd64 does; every active hart is fenced */
+    MiArchTlbInvalidate(VirtualAddress, PageCount, TRUE);
+}
+
+VOID
 MiArchTlbInvalidateAll(BOOLEAN AllProcessors)
 {
     MiArchInvalidateTlbAll(AllProcessors ? MiTlbAllProcessors : MiTlbLocal);

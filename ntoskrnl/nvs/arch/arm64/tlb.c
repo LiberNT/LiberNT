@@ -68,6 +68,13 @@ MiArchTlbInvalidate(ULONG64 VirtualAddress, ULONG64 PageCount, BOOLEAN AllProces
 }
 
 VOID
+MiArchTlbInvalidateProcessors(ULONG64 VirtualAddress, ULONG64 PageCount, ULONG64 Processors)
+{
+    UNREFERENCED_PARAMETER(Processors);
+    MiArchTlbInvalidate(VirtualAddress, PageCount, TRUE);
+}
+
+VOID
 MiArchTlbInvalidateAll(BOOLEAN AllProcessors)
 {
     MiArchInvalidateTlbAll(AllProcessors ? MiTlbAllProcessors : MiTlbLocal);

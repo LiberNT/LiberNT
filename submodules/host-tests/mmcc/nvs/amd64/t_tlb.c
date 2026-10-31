@@ -292,6 +292,52 @@ static VOID SmpCase(ULONG Count)
     }
 }
 
+static VOID *TargetPoller(PVOID Argument)
+{
+    CurrentCpu = (ULONG)(ULONG_PTR)Argument;
+    while (__atomic_load_n(&Finished, __ATOMIC_ACQUIRE) == 0)
+    {
+        MiAmd64TlbPoll();
+        sched_yield();
+    }
+    MiAmd64TlbPoll();
+    return NULL;
+}
+
+static VOID TargetCase(VOID)
+{
+    pthread_t Thread;
+    ULONG64 Pages[4], Full[4], Before = Ipis;
+    ULONG Cpu;
+
+    ActiveCpus = 0xf;
+    Finished = 0;
+    for (Cpu = 0; Cpu < 4; Cpu++)
+    {
+        SeedCpu(Cpu);
+        Cpus[Cpu].Pending = 0;
+        Pages[Cpu] = Cpus[Cpu].PageFlushes;
+        Full[Cpu] = Cpus[Cpu].FullFlushes;
+    }
+    CHECK(pthread_create(&Thread, NULL, TargetPoller, (PVOID)(ULONG_PTR)2) == 0);
+    CurrentCpu = 0;
+    MiArchTlbInvalidateProcessors(0x7ff00000ULL, 2, 1ULL << 2);
+    CHECK(Ipis == Before + 1);
+    CHECK(Cpus[0].PageFlushes == Pages[0] + 2);
+    CHECK(Cpus[1].Pending == 0 && Cpus[3].Pending == 0);
+    MiArchTlbInvalidateProcessors(0x7ff00000ULL, 0, 1ULL << 2);
+    CHECK(Ipis == Before + 1);
+    MiArchTlbInvalidateProcessors(0x7ff00000ULL, 1, 1ULL << 0);
+    CHECK(Ipis == Before + 1 && Cpus[0].PageFlushes == Pages[0] + 3);
+    MiArchTlbInvalidateProcessors(0x7ff00000ULL, 1, 1ULL << 6);
+    CHECK(Ipis == Before + 1 && Cpus[0].PageFlushes == Pages[0] + 4);
+    __atomic_store_n(&Finished, 1, __ATOMIC_RELEASE);
+    CHECK(pthread_join(Thread, NULL) == 0);
+    CHECK(Cpus[2].PageFlushes == Pages[2] + 2 && Cpus[2].FullFlushes == Full[2]);
+    CHECK(Cpus[1].PageFlushes == Pages[1] && Cpus[1].FullFlushes == Full[1]);
+    CHECK(Cpus[3].PageFlushes == Pages[3] && Cpus[3].FullFlushes == Full[3]);
+}
+
 int main(void)
 {
     CHECK(MiAmd64SelfMapSlotAddress(0, 0) == 0xfffff68000000000ULL);
@@ -299,6 +345,7 @@ int main(void)
     CHECK(MiAmd64SelfMapSlotAddress(0, 2) == 0xfffff6fb7da00000ULL);
     CHECK(MiAmd64SelfMapSlotAddress(0, 3) == 0xfffff6fb7dbed000ULL);
     LocalCases();
+    TargetCase();
     SmpCase(2);
     SmpCase(4);
     SmpCase(8);

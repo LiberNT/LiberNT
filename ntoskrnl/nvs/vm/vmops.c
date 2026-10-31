@@ -306,14 +306,14 @@ MiSetPrivatePageProtectionAt(
             MI_PTE Transition = MiSoftMake(MiSoftTransition, Protection, Frame);
 
             MiPtWrite(Space, VirtualAddress, Slot, TableFrame, Transition);
-            MiArchTlbInvalidate(VirtualAddress, 1, TRUE);
+            MiTlbInvalidateSpace(Space, VirtualAddress, 1);
             MiPfnShareDecrement(&System->Pfn, Frame, FALSE);
             MI_ATOMIC_ADD64(&Space->ResidentPages, -1);
             return STATUS_SUCCESS;
         }
 
         MiPtWrite(Space, VirtualAddress, Slot, TableFrame, MiArchPteMakeLeaf(Frame, Protection, Flags));
-        MiArchTlbInvalidate(VirtualAddress, 1, TRUE);
+        MiTlbInvalidateSpace(Space, VirtualAddress, 1);
         return STATUS_SUCCESS;
     }
 
@@ -1662,7 +1662,7 @@ MiUnmapFramesUserLocked(
             MiPtWrite(Space, Va, Slot, TableFrame, 0);
     }
 
-    MiArchTlbInvalidate(MI_VAD_START(Vad), (MI_VAD_END(Vad) - MI_VAD_START(Vad)) >> PAGE_SHIFT, TRUE);
+    MiTlbInvalidateSpace(Space, MI_VAD_START(Vad), (MI_VAD_END(Vad) - MI_VAD_START(Vad)) >> PAGE_SHIFT);
     MiVadRemove(&Space->VadRoot, &Vad->Node);
     MI_FREE(Vad);
 }

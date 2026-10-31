@@ -72,6 +72,24 @@ MiReturnCommit(
         Space->System->ReturnOwnerCommit(Space->CommitOwner, Pages);
 }
 
+VOID
+MiTlbInvalidateSpace(
+    _In_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 VirtualAddress,
+    _In_ ULONG64 PageCount)
+{
+    PMI_SYSTEM System = Space->System;
+
+    if (Space->IsSystem || Space->CommitOwner == NULL || System->OwnerProcessors == NULL || PageCount == 0 ||
+        VirtualAddress < Space->LowestVa || VirtualAddress > Space->HighestVa ||
+        PageCount - 1 > ((Space->HighestVa - VirtualAddress) >> PAGE_SHIFT))
+    {
+        MiArchTlbInvalidate(VirtualAddress, PageCount, TRUE);
+        return;
+    }
+    MiArchTlbInvalidateProcessors(VirtualAddress, PageCount, System->OwnerProcessors(Space->CommitOwner));
+}
+
 static
 NTSTATUS
 MiSpaceInitialize(

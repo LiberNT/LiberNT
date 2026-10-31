@@ -120,6 +120,7 @@ typedef struct _MI_SYSTEM
     PVOID Context;
     BOOLEAN (*ChargeOwnerCommit)(_In_ PVOID Owner, _In_ LONG64 Pages);
     VOID (*ReturnOwnerCommit)(_In_ PVOID Owner, _In_ LONG64 Pages);
+    ULONG64 (*OwnerProcessors)(_In_ PVOID Owner);
     BOOLEAN (*ExpandCommit)(_Inout_ struct _MI_SYSTEM *System, _In_ LONG64 Pages, _In_ LONG64 Limit,
                             _In_ BOOLEAN Wait);
     VOID (*UnusedSegmentsExceeded)(_Inout_ struct _MI_SYSTEM *System);
@@ -642,3 +643,4 @@ NTSTATUS MiPageFileExtend(_Inout_ PMI_PAGEFILE PageFile, _In_ ULONG64 SlotCount)
 BOOLEAN MiChargeSystemCommit(_Inout_ PMI_SYSTEM System, _In_ LONG64 Pages, _In_ BOOLEAN Wait);
 BOOLEAN MiChargeCommit(_Inout_ PMI_ADDRESS_SPACE Space, _In_ LONG64 Pages);
 VOID MiReturnCommit(_Inout_ PMI_ADDRESS_SPACE Space, _In_ LONG64 Pages);
+VOID MiTlbInvalidateSpace(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress, _In_ ULONG64 PageCount);

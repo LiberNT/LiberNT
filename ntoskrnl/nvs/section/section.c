@@ -1525,7 +1525,7 @@ MiReleaseViewPageEx(
     }
     else
     {
-        MiArchTlbInvalidate(VirtualAddress, 1, TRUE);
+        MiTlbInvalidateSpace(Space, VirtualAddress, 1);
         MiSegmentReleasePage(Segment, MiSegmentProto(Segment, Page), Frame);
     }
 
@@ -1562,8 +1562,8 @@ MiTlbBatchFlush(
         while (Last < Batch->Count && Batch->Entry[Last].Va - Batch->Entry[Last - 1].Va <= PAGE_SIZE)
             Last++;
 
-        MiArchTlbInvalidate(Batch->Entry[First].Va,
-                            ((Batch->Entry[Last - 1].Va - Batch->Entry[First].Va) >> PAGE_SHIFT) + 1, TRUE);
+        MiTlbInvalidateSpace(Space, Batch->Entry[First].Va,
+                             ((Batch->Entry[Last - 1].Va - Batch->Entry[First].Va) >> PAGE_SHIFT) + 1);
         First = Last;
     }
 
@@ -2387,7 +2387,7 @@ MiSetRangeModified(
             if (MiArchPteIsDirty(Pte))
             {
                 MiArchPteWrite(Slot, MiArchPteSetDirty(Pte, FALSE));
-                MiArchTlbInvalidate(Va, 1, TRUE);
+                MiTlbInvalidateSpace(Space, Va, 1);
             }
         }
 

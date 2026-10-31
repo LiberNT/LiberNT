@@ -363,6 +363,17 @@ MiPrepareDirectMap(VOID)
 }
 
 static
+ULONG64
+MiProcessTlbProcessors(
+    _In_ PVOID Owner)
+{
+    PEPROCESS Process = Owner;
+
+    KeMemoryBarrier();
+    return (ULONG64)*(volatile KAFFINITY *)&Process->Pcb.ActiveProcessors;
+}
+
+static
 VOID
 MiInitializePhase0(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
@@ -582,6 +593,7 @@ MiInitializePhase0(
     MiSystem.UnusedSegmentLimit = MI_NT_UNUSED_SEGMENT_LIMIT;
     MiSystem.ChargeOwnerCommit = MiChargeProcessCommit;
     MiSystem.ReturnOwnerCommit = MiReturnProcessCommit;
+    MiSystem.OwnerProcessors = MiProcessTlbProcessors;
     MmTotalCommitLimit = (SIZE_T)MiSystem.CommitLimit;
     MmTotalCommitLimitMaximum = MmTotalCommitLimit;
     MmtotalCommitLimitMaximum = MmTotalCommitLimit;
