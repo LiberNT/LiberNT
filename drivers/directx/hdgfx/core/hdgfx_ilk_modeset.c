@@ -1265,6 +1265,15 @@ HdgfxIlkCommitCrt(
     return HdgfxModesetSuccess;
 }
 
+void
+HdgfxIlkDisableVgaPlane(
+    const HDGFX_MMIO *Mmio)
+{
+    IlkWrite(Mmio, HDGFX_REG(CPU_VGACNTRL, 0),
+             IlkRead(Mmio, HDGFX_REG(CPU_VGACNTRL, 0)) | HDGFX_MASK(VGA_DISPLAY_DISABLE));
+    IlkRead(Mmio, HDGFX_REG(CPU_VGACNTRL, 0));
+}
+
 const char *
 HdgfxModesetStatusName(
     HDGFX_MODESET_STATUS Status)

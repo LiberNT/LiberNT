@@ -452,6 +452,10 @@ uint32_t
 HdgfxIlkCursorControl(
     bool Visible);
 
+void
+HdgfxIlkDisableVgaPlane(
+    const HDGFX_MMIO *Mmio);
+
 uint32_t
 HdgfxIlkCursorPosition(
     int32_t X,
