@@ -26,6 +26,7 @@
 #define EMU_HOST_TYPE_UINT8  'B'
 #define EMU_HOST_TYPE_FLOAT  'f'
 #define EMU_HOST_TYPE_DOUBLE 'd'
+#define EMU_HOST_TYPE_PAIR   'P'
 
 #define EMU_HOST_MAX_ARGUMENTS 24
 

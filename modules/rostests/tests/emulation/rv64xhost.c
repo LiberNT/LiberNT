@@ -86,6 +86,22 @@ Rv64xFormat(
     return Length;
 }
 
+static
+LONG64
+Rv64xPair(
+    _In_ int A,
+    _In_ RV64X_PAIR B,
+    _In_ LONG64 C,
+    _In_ LONG64 D,
+    _In_ LONG64 E,
+    _In_ LONG64 F,
+    _In_ RV64X_PAIR G,
+    _In_ int H)
+{
+    return A + (LONG64)B.Low * 2 + (LONG64)B.High * 3 + C * 5 + D * 7 + E * 11 + F * 13 + (LONG64)G.Low * 17 +
+           (LONG64)G.High * 19 + H * 23;
+}
+
 ULONG64
 NTAPI
 EmuHostInitialize(VOID)
@@ -98,10 +114,13 @@ EmuHostInitialize(VOID)
     Rv64xTable.CallInt = Interface->GuestThunk((PVOID)Rv64xCallInt, NULL);
     Rv64xTable.CallFloat = Interface->GuestThunk((PVOID)Rv64xCallFloat, NULL);
     Rv64xTable.CallFormat = Interface->GuestThunk((PVOID)Rv64xCallFormat, NULL);
+    Rv64xTable.Pair = Interface->GuestThunk((PVOID)Rv64xPair, NULL);
     Rv64xTable.NativeAdd = (ULONG64)(ULONG_PTR)Rv64xAdd;
     Rv64xTable.NativeMix = (ULONG64)(ULONG_PTR)Rv64xMix;
     Rv64xTable.NativeFormat = (ULONG64)(ULONG_PTR)Rv64xFormat;
-    if (!Rv64xTable.Add || !Rv64xTable.Mix || !Rv64xTable.CallInt || !Rv64xTable.CallFloat || !Rv64xTable.CallFormat)
+    Rv64xTable.NativePair = (ULONG64)(ULONG_PTR)Rv64xPair;
+    if (!Rv64xTable.Add || !Rv64xTable.Mix || !Rv64xTable.CallInt || !Rv64xTable.CallFloat || !Rv64xTable.CallFormat ||
+        !Rv64xTable.Pair)
         return 0;
     return (ULONG64)&Rv64xTable;
 }

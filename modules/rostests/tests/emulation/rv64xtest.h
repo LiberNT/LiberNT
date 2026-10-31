@@ -13,6 +13,14 @@ typedef int (*PRV64X_INT_CALLBACK)(int, short, unsigned char, float, double, int
 typedef float (*PRV64X_FLOAT_CALLBACK)(float, double);
 typedef int (*PRV64X_FORMAT_CALLBACK)(char *, size_t, const char *, ...);
 
+typedef struct _RV64X_PAIR
+{
+    ULONG64 Low;
+    ULONG64 High;
+} RV64X_PAIR;
+
+typedef LONG64 (*PRV64X_PAIR_FUNCTION)(int, RV64X_PAIR, LONG64, LONG64, LONG64, LONG64, RV64X_PAIR, int);
+
 typedef struct _RV64X_TEST_TABLE
 {
     ULONG Size;
@@ -25,4 +33,6 @@ typedef struct _RV64X_TEST_TABLE
     ULONG64 NativeAdd;
     ULONG64 NativeMix;
     ULONG64 NativeFormat;
+    ULONG64 Pair;
+    ULONG64 NativePair;
 } RV64X_TEST_TABLE, *PRV64X_TEST_TABLE;

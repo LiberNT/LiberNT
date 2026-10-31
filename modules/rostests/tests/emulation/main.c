@@ -948,6 +948,9 @@ TestRv64X(VOID)
     WCHAR Directory[MAX_PATH];
     PRV64X_TEST_TABLE Table;
     char Buffer[64] = { 0 };
+    RV64X_PAIR First = { 0x1111, 0x2222 }, Second = { 0x300000000ULL, (ULONG64)-9 };
+    const LONG64 PairExpected = -3 + 0x1111 * 2 + 0x2222 * 3 + 5 * 5 + -7 * 7 + 11 * 11 + 13 * 13 +
+                                0x300000000LL * 17 + -9 * 19 + -17 * 23;
     UINT Length;
 
     Length = GetWindowsDirectoryW(Directory, MAX_PATH - 16);
@@ -980,6 +983,8 @@ TestRv64X(VOID)
     CHECK(((int (*)(char *, size_t, const char *, ...))(ULONG_PTR)Table->NativeFormat)(
               Buffer, sizeof(Buffer), "%.2f %d %s %lld %d %d %d %.1f", 3.25, 42, "x", 5000000000LL, 1, 2, 3, 0.5) == 30);
     CHECK(!strcmp(Buffer, "3.25 42 x 5000000000 1 2 3 0.5"));
+    CHECK(((PRV64X_PAIR_FUNCTION)(ULONG_PTR)Table->Pair)(-3, First, 5, -7, 11, 13, Second, -17) == PairExpected);
+    CHECK(((PRV64X_PAIR_FUNCTION)(ULONG_PTR)Table->NativePair)(-3, First, 5, -7, 11, 13, Second, -17) == PairExpected);
     printf("EMUTEST: RV64X entry descriptors, exit thunks and direct native entry verified\n");
 }
 #else

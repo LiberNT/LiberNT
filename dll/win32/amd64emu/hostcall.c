@@ -83,7 +83,8 @@ static const EMU_REGISTER EmuCallArguments[4] = { EmuRcx, EmuRdx, EmuR8, EmuR9 }
 static
 BOOLEAN
 EmuIsValidSignature(
-    _In_ PCSTR Signature)
+    _In_ PCSTR Signature,
+    _In_ BOOLEAN Entry)
 {
     SIZE_T Length = strlen(Signature);
     SIZE_T Index;
@@ -95,6 +96,10 @@ EmuIsValidSignature(
         {
             case EMU_HOST_TYPE_VOID:
                 if (Index) return FALSE;
+                break;
+
+            case EMU_HOST_TYPE_PAIR:
+                if (!Index || !Entry) return FALSE;
                 break;
 
             case EMU_HOST_TYPE_INT64:
@@ -147,19 +152,21 @@ EmuDescriptorSignature(
     _In_ BOOLEAN Entry,
     _Out_writes_(EMU_HOST_MAX_ARGUMENTS + 2) PCHAR Signature)
 {
-    static const CHAR Types[] = "vqwhHbBfd";
+    static const CHAR Types[] = "vqwhHbBfdP";
     ULONG Count = Descriptor[2], Index, Kind;
 
     if ((Descriptor[0] | (Descriptor[1] << 8)) != EMU_HOST_DESCRIPTOR_MAGIC) return FALSE;
     if ((Descriptor[3] & EMU_HOST_DESCRIPTOR_UNSUPPORTED) || Count > EMU_HOST_MAX_ARGUMENTS) return FALSE;
 
     Kind = Descriptor[3] & 0xF;
-    if (Kind >= sizeof(Types) - 1) return FALSE;
+    if (Kind >= sizeof(Types) - 1 || Types[Kind] == EMU_HOST_TYPE_PAIR) return FALSE;
     Signature[0] = Types[Kind];
     for (Index = 0; Index < Count; Index++)
     {
         Kind = (Descriptor[4 + Index / 2] >> ((Index & 1) * 4)) & 0xF;
         if (!Kind || Kind >= sizeof(Types) - 1) return FALSE;
+        /* TODO: native calls into x64 pass no data for 16-byte aggregates: the RV64X exit thunk stores 0 in their slot */
+        if (Types[Kind] == EMU_HOST_TYPE_PAIR && !Entry) return FALSE;
         Signature[Index + 1] = Types[Kind];
     }
     if (Entry && (Descriptor[3] & EMU_HOST_DESCRIPTOR_VARIADIC))
@@ -328,7 +335,7 @@ EmuGuestThunk(
         }
         _SEH2_END;
     }
-    if (!Native || !Signature || !EmuIsValidSignature(Signature)) return 0;
+    if (!Native || !Signature || !EmuIsValidSignature(Signature, TRUE)) return 0;
 
     RtlEnterCriticalSection(&EmuHostLock);
     Count = (ULONG)EmuHostThunkCount;
@@ -415,7 +422,8 @@ EmuHostCall(
     _Inout_ PEMU_REGISTERS Registers)
 {
     ULONG64 Arguments[EMU_HOST_MAX_ARGUMENTS] = { 0 };
-    ULONG Count = Thunk->Count;
+    ULONG64 Slots[EMU_HOST_MAX_ARGUMENTS * 2] = { 0 };
+    ULONG Count = Thunk->Count, Index, Used = 0;
     ULONG64 Result;
     PULONG64 Vectors;
     ULONG_PTR Base, Limit, Rsp;
@@ -432,13 +440,36 @@ EmuHostCall(
     }
 
     Status = EmuCollectArguments(Thread, Thunk->Signature + 1, Count, Registers, Arguments);
+    if (NT_SUCCESS(Status))
+    {
+        _SEH2_TRY
+        {
+            for (Index = 0; Index < Count; Index++)
+            {
+                if (Thunk->Signature[Index + 1] == EMU_HOST_TYPE_PAIR)
+                {
+                    Slots[Used++] = ((PULONG64)(ULONG_PTR)Arguments[Index])[0];
+                    Slots[Used++] = ((PULONG64)(ULONG_PTR)Arguments[Index])[1];
+                }
+                else
+                {
+                    Slots[Used++] = Arguments[Index];
+                }
+            }
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
     if (!NT_SUCCESS(Status))
     {
         Registers->Gpr[EmuRax] = (ULONG)Status;
         return;
     }
 
-    Result = EmuInvokeNative(Thunk->Native, Arguments, Arguments + 8, Count > 8 ? Count - 8 : 0);
+    Result = EmuInvokeNative(Thunk->Native, Slots, Slots + 8, Used > 8 ? Used - 8 : 0);
     switch (Thunk->Signature[0])
     {
         case EMU_HOST_TYPE_VOID:
@@ -493,7 +524,7 @@ EmuCallGuest(
     ULONG Count, Index, Stride;
     ULONG64 Value, EmulatorSp = 0;
 
-    if (!EmuIsValidSignature(Signature)) EmuFatal(STATUS_INVALID_PARAMETER, "invalid guest call signature");
+    if (!EmuIsValidSignature(Signature, FALSE)) EmuFatal(STATUS_INVALID_PARAMETER, "invalid guest call signature");
     if (!Thread || !Thread->Cpu || !Thread->HostDepth || !Function) return 0;
 
     if (Felix86NtSetJump(Call.Jump))
