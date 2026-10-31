@@ -86,26 +86,14 @@ StuffStdHandle(IN HANDLE ProcessHandle,
 
 static
 VOID
-BasepStuffChildHandle(IN HANDLE ProcessHandle,
-                      IN HANDLE SourceHandle,
+BasepWriteChildHandle(IN HANDLE ProcessHandle,
+                      IN HANDLE TargetHandle,
                       IN PRTL_USER_PROCESS_PARAMETERS RemoteParameters,
                       IN ULONG_PTR RemoteParameters32,
                       IN ULONG Offset,
                       IN ULONG Offset32)
 {
-    HANDLE TargetHandle = NULL;
     ULONG TargetHandle32;
-
-    if (!NT_SUCCESS(NtDuplicateObject(NtCurrentProcess(),
-                                      SourceHandle,
-                                      ProcessHandle,
-                                      &TargetHandle,
-                                      0,
-                                      0,
-                                      DUPLICATE_SAME_ACCESS | DUPLICATE_SAME_ATTRIBUTES)))
-    {
-        TargetHandle = NULL;
-    }
 
     NtWriteVirtualMemory(ProcessHandle,
                          (PUCHAR)RemoteParameters + Offset,
@@ -125,11 +113,37 @@ BasepStuffChildHandle(IN HANDLE ProcessHandle,
 
 static
 VOID
+BasepStuffChildHandle(IN HANDLE ProcessHandle,
+                      IN HANDLE SourceHandle,
+                      IN PRTL_USER_PROCESS_PARAMETERS RemoteParameters,
+                      IN ULONG_PTR RemoteParameters32,
+                      IN ULONG Offset,
+                      IN ULONG Offset32)
+{
+    HANDLE TargetHandle = NULL;
+
+    if (!NT_SUCCESS(NtDuplicateObject(NtCurrentProcess(),
+                                      SourceHandle,
+                                      ProcessHandle,
+                                      &TargetHandle,
+                                      0,
+                                      0,
+                                      DUPLICATE_SAME_ACCESS | DUPLICATE_SAME_ATTRIBUTES)))
+    {
+        TargetHandle = NULL;
+    }
+
+    BasepWriteChildHandle(ProcessHandle, TargetHandle, RemoteParameters, RemoteParameters32, Offset, Offset32);
+}
+
+static
+VOID
 BasepInheritConsole(IN HANDLE ProcessHandle,
                     IN PPEB RemotePeb,
                     IN ULONG_PTR RemotePeb32,
                     IN HANDLE ConsoleHandle,
-                    IN BOOLEAN DuplicateStdHandles)
+                    IN BOOLEAN DuplicateStdHandles,
+                    IN ULONG SubSystemType)
 {
     PRTL_USER_PROCESS_PARAMETERS Parent = NtCurrentPeb()->ProcessParameters;
     PRTL_USER_PROCESS_PARAMETERS RemoteParameters;
@@ -162,6 +176,19 @@ BasepInheritConsole(IN HANDLE ProcessHandle,
                               FIELD_OFFSET(WOW64_USER_PROCESS_PARAMETERS, ConsoleHandle));
     }
     if (!DuplicateStdHandles) return;
+    if (SubSystemType != IMAGE_SUBSYSTEM_WINDOWS_CUI)
+    {
+        BasepWriteChildHandle(ProcessHandle, NULL, RemoteParameters, RemoteParameters32,
+                              FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS, StandardInput),
+                              FIELD_OFFSET(WOW64_USER_PROCESS_PARAMETERS, StandardInput));
+        BasepWriteChildHandle(ProcessHandle, NULL, RemoteParameters, RemoteParameters32,
+                              FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS, StandardOutput),
+                              FIELD_OFFSET(WOW64_USER_PROCESS_PARAMETERS, StandardOutput));
+        BasepWriteChildHandle(ProcessHandle, NULL, RemoteParameters, RemoteParameters32,
+                              FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS, StandardError),
+                              FIELD_OFFSET(WOW64_USER_PROCESS_PARAMETERS, StandardError));
+        return;
+    }
     if (Parent->StandardInput)
     {
         BasepStuffChildHandle(ProcessHandle, Parent->StandardInput, RemoteParameters, RemoteParameters32,
@@ -3144,7 +3171,8 @@ BasepCreateUserProcess(IN HANDLE UserToken,
                         (PPEB)(ULONG_PTR)CreateInfo.SuccessState.PebAddressNative,
                         (ULONG_PTR)CreateInfo.SuccessState.PebAddressWow64,
                         ChildConsoleHandle,
-                        DuplicateStdHandles);
+                        DuplicateStdHandles,
+                        ImageInformation.SubSystemType);
 
     LocalPriorityClass = *PriorityClass;
     if (LocalPriorityClass.PriorityClass)
@@ -5177,7 +5205,8 @@ StartScan:
     if (Result &&
         !((dwCreationFlags | NoWindow) & (DETACHED_PROCESS | CREATE_NEW_CONSOLE | CREATE_NO_WINDOW)))
     {
-        BasepInheritConsole(ProcessHandle, RemotePeb, 0, Peb->ProcessParameters->ConsoleHandle, FALSE);
+        BasepInheritConsole(ProcessHandle, RemotePeb, 0, Peb->ProcessParameters->ConsoleHandle, FALSE,
+                            ImageInformation.SubSystemType);
     }
     if (!Result)
     {
