@@ -94,6 +94,7 @@ void Felix86NtTerminate(uint32_t Status) __attribute__((noreturn));
 void Felix86NtYield(void);
 uint32_t Felix86NtProbeExtensions(void);
 uint32_t Felix86NtVectorBytes(void);
+int Felix86NtHostFault(void *Pointers);
 void Felix86NtStoreVectors(void *Buffer, uint32_t VectorBytes);
 void Felix86NtRunConstructors(void);
 

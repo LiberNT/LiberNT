@@ -569,6 +569,7 @@ BTCpuResetToConsistentState(
     int Result;
 
     if (!Thread || !Thread->Cpu || !Thread->EntryContext) return STATUS_SUCCESS;
+    if (Felix86NtHostFault(Pointers)) NtContinue(NativeContext, FALSE);
 
     RtlZeroMemory(&Native, sizeof(Native));
     Native.Pc = &NativeContext->Pc;

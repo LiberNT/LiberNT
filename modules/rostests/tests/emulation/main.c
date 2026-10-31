@@ -9,6 +9,7 @@
 #include <windows.h>
 #include <sddl.h>
 #include <aclapi.h>
+#include <psapi.h>
 #undef WIN32_NO_STATUS
 #include <ntstatus.h>
 #include <ndk/rtlfuncs.h>
@@ -147,6 +148,70 @@ TestThreads(VOID)
     CloseHandle(Gate);
     DeleteCriticalSection(&Lock);
     printf("EMUTEST: %d threads finished, counter=%ld, TLS intact\n", WORKER_COUNT, Counter);
+}
+
+#define COMMIT_THREADS 16
+
+static HANDLE CommitGate;
+static volatile LONG CommitStarted;
+
+static
+DWORD
+WINAPI
+CommitWorker(
+    _In_ PVOID Parameter)
+{
+    volatile ULONG64 Sum = 0;
+    ULONG Index;
+
+    for (Index = 0; Index < 4096; Index++)
+        Sum += Index ^ (ULONG_PTR)Parameter;
+    InterlockedIncrement(&CommitStarted);
+    WaitForSingleObject(CommitGate, 30000);
+    return Sum != 0;
+}
+
+static
+VOID
+TestThreadCommit(VOID)
+{
+    BOOL (WINAPI *GetMemoryInfo)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
+    PROCESS_MEMORY_COUNTERS_EX Before, After;
+    HANDLE Threads[COMMIT_THREADS];
+    LONG64 Growth;
+    DWORD Index, Spins;
+
+    GetMemoryInfo = (PVOID)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "K32GetProcessMemoryInfo");
+    CHECK(GetMemoryInfo != NULL);
+    CommitGate = CreateEventW(NULL, TRUE, FALSE, NULL);
+    CHECK(CommitGate != NULL);
+    if (!GetMemoryInfo || !CommitGate)
+        return;
+
+    CommitStarted = 0;
+    CHECK(GetMemoryInfo(GetCurrentProcess(), (PPROCESS_MEMORY_COUNTERS)&Before, sizeof(Before)));
+    for (Index = 0; Index < COMMIT_THREADS; Index++)
+    {
+        Threads[Index] = CreateThread(NULL, 0, CommitWorker, (PVOID)(ULONG_PTR)(Index + 1), 0, NULL);
+        CHECK(Threads[Index] != NULL);
+    }
+    for (Spins = 0; CommitStarted < COMMIT_THREADS && Spins < 3000; Spins++)
+        Sleep(10);
+    CHECK(CommitStarted == COMMIT_THREADS);
+    CHECK(GetMemoryInfo(GetCurrentProcess(), (PPROCESS_MEMORY_COUNTERS)&After, sizeof(After)));
+    Growth = (LONG64)After.PrivateUsage - (LONG64)Before.PrivateUsage;
+    CHECK(Growth < COMMIT_THREADS * 2 * 1024 * 1024);
+
+    SetEvent(CommitGate);
+    for (Index = 0; Index < COMMIT_THREADS; Index++)
+    {
+        if (!Threads[Index])
+            continue;
+        CHECK(WaitForSingleObject(Threads[Index], 30000) == WAIT_OBJECT_0);
+        CloseHandle(Threads[Index]);
+    }
+    CloseHandle(CommitGate);
+    printf("EMUTEST: %d running threads added %lld KB of private commit\n", COMMIT_THREADS, Growth / 1024);
 }
 
 static
@@ -1214,6 +1279,7 @@ main(
 
     TestMachines();
     TestThreads();
+    TestThreadCommit();
     TestFiles();
     TestApcs();
     TestThreadContext();

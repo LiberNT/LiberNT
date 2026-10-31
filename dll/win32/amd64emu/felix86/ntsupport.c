@@ -201,6 +201,124 @@ Felix86NtProtection(int Protection)
     return Protections[Protection & 7];
 }
 
+#define F86_LAZY_MINIMUM (256 * 1024)
+#define F86_LAZY_GRANULE (64 * 1024)
+#define F86_LAZY_REGIONS 4096
+
+typedef struct _F86_LAZY_REGION
+{
+    ULONG_PTR Start;
+    ULONG_PTR End;
+    ULONG Protect;
+} F86_LAZY_REGION;
+
+static F86_LAZY_REGION F86LazyRegions[F86_LAZY_REGIONS];
+static ULONG F86LazyCount;
+static RTL_SRWLOCK F86LazyLock = RTL_SRWLOCK_INIT;
+static volatile LONG F86LazyHandler;
+
+static
+LONG
+NTAPI
+F86LazyFault(
+    _In_ PEXCEPTION_POINTERS Pointers)
+{
+    PEXCEPTION_RECORD Record = Pointers->ExceptionRecord;
+    MEMORY_BASIC_INFORMATION Information;
+    ULONG_PTR Address, Start = 0, End = 0, Granule;
+    ULONG Protect = 0, Index;
+    PVOID Base;
+    SIZE_T Size;
+
+    if (Record->ExceptionCode != STATUS_ACCESS_VIOLATION || Record->NumberParameters < 2)
+        return EXCEPTION_CONTINUE_SEARCH;
+    Address = Record->ExceptionInformation[1];
+
+    RtlAcquireSRWLockShared(&F86LazyLock);
+    for (Index = 0; Index < F86LazyCount; Index++)
+    {
+        if (Address >= F86LazyRegions[Index].Start && Address < F86LazyRegions[Index].End)
+        {
+            Start = F86LazyRegions[Index].Start;
+            End = F86LazyRegions[Index].End;
+            Protect = F86LazyRegions[Index].Protect;
+            break;
+        }
+    }
+    RtlReleaseSRWLockShared(&F86LazyLock);
+    if (!End)
+        return EXCEPTION_CONTINUE_SEARCH;
+
+    if (!NT_SUCCESS(ZwQueryVirtualMemory(NtCurrentProcess(), (PVOID)Address, MemoryBasicInformation, &Information,
+                                         sizeof(Information), NULL)) ||
+        Information.State != MEM_RESERVE)
+    {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
+    Granule = (Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))
+                  ? F86_LAZY_GRANULE : PAGE_SIZE;
+    Base = (PVOID)max(Start, Address & ~(ULONG_PTR)(Granule - 1));
+    Size = min(End, (Address & ~(ULONG_PTR)(Granule - 1)) + Granule) - (ULONG_PTR)Base;
+    if (!NT_SUCCESS(ZwAllocateVirtualMemory(NtCurrentProcess(), &Base, 0, &Size, MEM_COMMIT, Protect)))
+        return EXCEPTION_CONTINUE_SEARCH;
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
+
+int
+Felix86NtHostFault(
+    void *Pointers)
+{
+    return F86LazyFault(Pointers) == EXCEPTION_CONTINUE_EXECUTION;
+}
+
+static
+BOOLEAN
+F86LazyRemember(
+    _In_ PVOID Base,
+    _In_ SIZE_T Size,
+    _In_ ULONG Protect)
+{
+    BOOLEAN Remembered = FALSE;
+
+    if (!InterlockedCompareExchange(&F86LazyHandler, 1, 0) && !RtlAddVectoredExceptionHandler(1, F86LazyFault))
+        InterlockedExchange(&F86LazyHandler, 0);
+    if (!F86LazyHandler)
+        return FALSE;
+
+    RtlAcquireSRWLockExclusive(&F86LazyLock);
+    if (F86LazyCount < F86_LAZY_REGIONS)
+    {
+        F86LazyRegions[F86LazyCount].Start = (ULONG_PTR)Base;
+        F86LazyRegions[F86LazyCount].End = (ULONG_PTR)Base + Size;
+        F86LazyRegions[F86LazyCount].Protect = Protect;
+        F86LazyCount++;
+        Remembered = TRUE;
+    }
+    RtlReleaseSRWLockExclusive(&F86LazyLock);
+    return Remembered;
+}
+
+static
+VOID
+F86LazyForget(
+    _In_ PVOID Address,
+    _In_ SIZE_T Length)
+{
+    ULONG_PTR Start = (ULONG_PTR)Address, End = Start + Length;
+    ULONG Index;
+
+    RtlAcquireSRWLockExclusive(&F86LazyLock);
+    for (Index = 0; Index < F86LazyCount;)
+    {
+        if (F86LazyRegions[Index].Start >= Start && F86LazyRegions[Index].Start < End)
+            F86LazyRegions[Index] = F86LazyRegions[--F86LazyCount];
+        else
+            Index++;
+    }
+    RtlReleaseSRWLockExclusive(&F86LazyLock);
+}
+
 void *
 mmap(void *Address, size_t Length, int Protection, int Flags, int File, int64_t Offset)
 {
@@ -210,6 +328,23 @@ mmap(void *Address, size_t Length, int Protection, int Flags, int File, int64_t 
     NTSTATUS Status;
 
     if (!Length || File != -1 || Offset || !(Flags & MAP_ANONYMOUS)) return MAP_FAILED;
+
+    if (Protection != PROT_NONE && Length >= F86_LAZY_MINIMUM)
+    {
+        if (!(Flags & MAP_FIXED))
+        {
+            Status = ZwAllocateVirtualMemory(NtCurrentProcess(), &Base, 0, &Size, MEM_RESERVE,
+                                             Felix86NtProtection(Protection));
+            if (!NT_SUCCESS(Status)) return MAP_FAILED;
+        }
+        if (F86LazyRemember(Base, Size, Felix86NtProtection(Protection))) return Base;
+        if (!(Flags & MAP_FIXED))
+        {
+            Status = ZwAllocateVirtualMemory(NtCurrentProcess(), &Base, 0, &Size, MEM_COMMIT,
+                                             Felix86NtProtection(Protection));
+            return NT_SUCCESS(Status) ? Base : MAP_FAILED;
+        }
+    }
 
     if (Protection == PROT_NONE)
         Type = MEM_RESERVE;
@@ -227,6 +362,8 @@ int
 munmap(void *Address, size_t Length)
 {
     SIZE_T Size = 0;
+
+    F86LazyForget(Address, Length);
 
     UNREFERENCED_PARAMETER(Length);
     return NT_SUCCESS(ZwFreeVirtualMemory(NtCurrentProcess(), &Address, &Size, MEM_RELEASE)) ? 0 : -1;
