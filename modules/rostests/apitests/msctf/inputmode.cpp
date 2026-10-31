@@ -7,6 +7,8 @@
 
 #include "precomp.h"
 #include <olectl.h>
+#include <ime/indicml.h>
+#include <inputindicator.h>
 
 static const GUID GUID_TEST_SERVICE = {0x6b3a3f82, 0x51d2, 0x4c1e, {0x9a, 0x37, 0x1f, 0x52, 0x8c, 0x0e, 0x4d, 0x71}};
 
@@ -141,6 +143,54 @@ static void PumpFor(DWORD dwMs)
     }
 }
 
+static HWND
+FindTipWindow(VOID)
+{
+    HWND hwndTip = NULL;
+    while ((hwndTip = FindWindowExW(HWND_MESSAGE, hwndTip, INPUTINDICATOR_TIP_WNDCLASS, NULL)) != NULL)
+    {
+        if (GetWindowThreadProcessId(hwndTip, NULL) == GetCurrentThreadId())
+            return hwndTip;
+    }
+    return NULL;
+}
+
+static void
+TestPrivateChannel(CModeButton *pButton)
+{
+    HWND hwndTip = FindTipWindow();
+    ok(hwndTip != NULL, "no input mode window in this thread\n");
+    if (!hwndTip)
+        return;
+
+    LONG cClick = pButton->m_cClick;
+    ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICK, INPUTINDICATOR_CLICK_LEFT, 0), "PostMessage failed\n");
+    PumpFor(1000);
+    ok_long(pButton->m_cClick, cClick + 1);
+    ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICK, INPUTINDICATOR_CLICK_RIGHT + 1, 0), "PostMessage failed\n");
+    PumpFor(1000);
+    ok_long(pButton->m_cClick, cClick + 1);
+
+    HWND hwndIndicator = FindWindowW(INDICATOR_CLASSW, NULL);
+    if (!hwndIndicator)
+    {
+        skip("No input indicator\n");
+        return;
+    }
+    INPUTINDICATOR_TIPSTATE state = { sizeof(state), GetCurrentThreadId(), (ULONG64)(LONG_PTR)hwndTip };
+    COPYDATASTRUCT cdsNull = { INPUTINDICATOR_COPYDATA_ID, sizeof(state), NULL };
+    COPYDATASTRUCT cdsShort = { INPUTINDICATOR_COPYDATA_ID, sizeof(state) - 1, &state };
+    DWORD_PTR dwResult = 1;
+    ok(SendMessageTimeoutW(hwndIndicator, WM_COPYDATA, (WPARAM)hwndTip, (LPARAM)&cdsNull, SMTO_ABORTIFHUNG, 5000,
+                           &dwResult), "SendMessageTimeout failed with %lu\n", GetLastError());
+    ok(dwResult == FALSE, "NULL data was accepted\n");
+    dwResult = 1;
+    ok(SendMessageTimeoutW(hwndIndicator, WM_COPYDATA, (WPARAM)hwndTip, (LPARAM)&cdsShort, SMTO_ABORTIFHUNG, 5000,
+                           &dwResult), "SendMessageTimeout failed with %lu\n", GetLastError());
+    ok(dwResult == FALSE, "short data was accepted\n");
+    ok(IsWindow(hwndIndicator), "the input indicator is gone\n");
+}
+
 START_TEST(inputmode)
 {
     FN_TF_CreateLangBarItemMgr fn;
@@ -192,7 +242,7 @@ START_TEST(inputmode)
     pButton = new CModeButton();
     if (pMgr)
     {
-        BOOL fShell = (FindWindowW(L"Shell_TrayWnd", NULL) != NULL);
+        BOOL fShell = FindWindowW(L"Shell_TrayWnd", NULL) && (!is_reactos() || FindWindowW(INDICATOR_CLASSW, NULL));
         LONG cIcon, cTooltip;
 
         ok_hr(pMgr->AddItem(static_cast<ITfLangBarItem *>(pButton)), S_OK);
@@ -220,6 +270,9 @@ START_TEST(inputmode)
             }
         }
         ok_long(pButton->m_cAdvise, 1);
+
+        if (is_reactos())
+            TestPrivateChannel(pButton);
 
         hr = pMgr->GetItem(GUID_LBI_INPUTMODE, &pItem);
         ok_hr(hr, S_OK);
