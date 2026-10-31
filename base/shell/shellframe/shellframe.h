@@ -68,6 +68,7 @@ public:
     void Update(HWND hwnd);
     void SetDpi(UINT dpi);
     void SetFollowSystemColors(BOOL follow) { m_FollowSystem = follow; }
+    void SetDarkPreference(int preference) { m_DarkPreference = preference; }
     BOOL UpdateMaterial(HWND hwnd);
 
     BOOL IsDark() const { return m_HighContrast ? m_HighContrastDark : m_Material ? m_MaterialDark : m_Dark; }
@@ -86,6 +87,7 @@ private:
 
     BOOL m_Dark;
     BOOL m_FollowSystem;
+    int m_DarkPreference;
     BOOL m_HighContrast;
     BOOL m_HighContrastDark;
     BOOL m_Material;
@@ -159,6 +161,17 @@ private:
     float m_Radius;
 };
 
+enum class GlassTone
+{
+    Text,
+    TextSecondary,
+    TextDisabled,
+    Hover,
+    Selected,
+    Stroke,
+    Clear,
+};
+
 enum class CaptionButton
 {
     None,
@@ -188,6 +201,7 @@ protected:
     virtual int GlassWidth() const { return 0; }
     virtual int GlassTop() const { return CaptionHeight(); }
     virtual int CaptionButtonHeight() const { return m_Theme.Scale(32); }
+    virtual BOOL UsesClientCaption() const { return TRUE; }
 
     LRESULT DefaultProc(UINT msg, WPARAM wParam, LPARAM lParam);
     void Invalidate(const RECT *rc = NULL);
@@ -196,6 +210,10 @@ protected:
     int CaptionButtonsWidth() const;
     BOOL ClientCaption() const;
     BOOL IsActive() const { return m_Active; }
+    COLORREF Glass(GlassTone tone) const;
+    COLORREF GlassTint(BYTE opacity) const;
+    HFONT GlassFont(TextStyle style) const;
+    void UpdateGlassFonts();
 
     HWND m_hwnd;
     Theme m_Theme;
@@ -216,6 +234,105 @@ private:
     BOOL m_TrackingLeave;
     int m_GlassWidth;
     int m_GlassTop;
+    HFONT m_GlassFonts[(int)TextStyle::Count];
+};
+
+struct BandPalette
+{
+    COLORREF Band;
+    COLORREF BandShade;
+    COLORREF BandLine;
+    COLORREF BandBottom;
+    COLORREF Box;
+    COLORREF BoxLine;
+    COLORREF Command;
+    COLORREF CommandBottom;
+    COLORREF TabBorder;
+    COLORREF Text;
+    COLORREF Glyph;
+    COLORREF GlyphDisabled;
+    COLORREF Window;
+    COLORREF Body;
+    COLORREF PanelLine;
+};
+
+void GetBandPalette(BandPalette *palette);
+
+struct TabBandItem
+{
+    LPCWSTR Title;
+    int IconIndex;
+    BOOL Attention;
+};
+
+class TabBandHost
+{
+public:
+    virtual ~TabBandHost() {}
+    virtual void OnTabSelect(int index) = 0;
+    virtual void OnTabClose(int index) = 0;
+    virtual void OnTabMove(int from, int to) = 0;
+    virtual void OnTabMenu(int index, POINT screen) = 0;
+    virtual void OnNewTab() = 0;
+    virtual void OnNewTabMenu(POINT screen) { UNREFERENCED_PARAMETER(screen); }
+};
+
+class TabBand
+{
+public:
+    TabBand();
+    ~TabBand();
+
+    BOOL Create(HWND parent, TabBandHost *host, HFONT font, LPCWSTR className);
+    HWND Window() const { return m_hwnd; }
+    void SetTabs(const TabBandItem *tabs, int count, int active);
+    void SetShadeBottom(int bottom);
+    void SetOpaque(COLORREF background, COLORREF activeFill);
+    void SetMenuButton(BOOL show);
+    void SetFont(HFONT font);
+
+private:
+    struct Tab
+    {
+        WCHAR Title[MAX_PATH];
+        int IconIndex;
+        BOOL Attention;
+    };
+
+    static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam);
+    int Scale(int value) const;
+    int TabWidth() const;
+    BOOL InTab(int index, POINT pt) const;
+    BOOL ShowsClose(int index) const;
+    RECT TabRect(int index) const;
+    RECT CloseRect(int index) const;
+    RECT NewRect() const;
+    RECT MenuRect() const;
+    int HitTab(POINT pt, BOOL *close) const;
+    void Paint(HDC dc);
+    void SetHot(int tab, BOOL close, BOOL add, BOOL menu);
+
+    HWND m_hwnd;
+    TabBandHost *m_Host;
+    Tab m_Tabs[32];
+    int m_Count;
+    int m_Active;
+    int m_HotTab;
+    BOOL m_HotClose;
+    BOOL m_HotNew;
+    BOOL m_HotMenu;
+    BOOL m_Tracking;
+    int m_DragTab;
+    int m_PressedTab;
+    BOOL m_PressedClose;
+    BOOL m_PressedNew;
+    BOOL m_PressedMenu;
+    BOOL m_ShowMenu;
+    HFONT m_Font;
+    int m_ShadeBottom;
+    COLORREF m_Background;
+    COLORREF m_ActiveFill;
 };
 
 }

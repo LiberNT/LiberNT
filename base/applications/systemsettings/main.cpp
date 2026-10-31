@@ -35,42 +35,6 @@ using namespace ShellFrame;
 #define WM_SETTINGS_CONTROL (WM_APP + 16)
 #define WM_SETTINGS_NAVIGATE (WM_APP + 17)
 
-enum class GlassTone
-{
-    Text,
-    TextSecondary,
-    TextDisabled,
-    Hover,
-    Selected,
-    Stroke,
-    Clear,
-};
-
-static COLORREF
-GlassColor(const Theme &theme, GlassTone tone)
-{
-    static const COLORREF Tones[] =
-    {
-        RGB(255, 255, 255), RGB(0xC8, 0xC8, 0xC8), RGB(0x80, 0x80, 0x80), RGB(0x1C, 0x1C, 0x1C),
-        RGB(0x30, 0x30, 0x30), RGB(0x60, 0x60, 0x60), RGB(0, 0, 0),
-    };
-    const Palette &c = theme.Colors();
-
-    if (!theme.IsHighContrast() && IsAppThemed())
-        return Tones[(int)tone];
-    switch (tone)
-    {
-        case GlassTone::Text:
-        case GlassTone::TextSecondary:
-        case GlassTone::Stroke:
-            return c.Text;
-        case GlassTone::TextDisabled:
-            return c.TextDisabled;
-        default:
-            return c.Window;
-    }
-}
-
 HINSTANCE Instance;
 
 struct RowPlace
@@ -342,60 +306,6 @@ protected:
             SendMessageW(m_NavTree, TVM_SETTEXTCOLOR, 0, Glass(GlassTone::Text));
             SendMessageW(m_NavTree, WM_SETFONT, (WPARAM)m_Theme.Font(TextStyle::Body), TRUE);
         }
-    }
-
-    void UpdateGlassFonts()
-    {
-        for (int i = 0; i < (int)TextStyle::Count; i++)
-        {
-            LOGFONTW lf;
-
-            if (m_GlassFonts[i])
-                DeleteObject(m_GlassFonts[i]);
-            m_GlassFonts[i] = NULL;
-            if (GetObjectW(m_Theme.Font((TextStyle)i), sizeof(lf), &lf))
-            {
-                lf.lfQuality = ANTIALIASED_QUALITY;
-                m_GlassFonts[i] = CreateFontIndirectW(&lf);
-            }
-        }
-    }
-
-    COLORREF Glass(GlassTone tone) const
-    {
-        ULONG_PTR key = (ULONG_PTR)GetPropW(m_hwnd, DWM_PROP_BACKDROP_COLOR);
-        COLORREF clear;
-
-        if (!key || m_Theme.IsHighContrast() || !IsAppThemed())
-            return GlassColor(m_Theme, tone);
-        clear = (COLORREF)(key - 1);
-        if (tone == GlassTone::Clear)
-            return clear;
-        if (GetRValue(clear) * 299 + GetGValue(clear) * 587 + GetBValue(clear) * 114 < 128000)
-            return GlassColor(m_Theme, tone);
-        switch (tone)
-        {
-            case GlassTone::TextSecondary:
-                return RGB(0x5D, 0x5D, 0x5D);
-            case GlassTone::TextDisabled:
-                return RGB(0xA0, 0xA0, 0xA0);
-            default:
-                return RGB(0x1B, 0x1B, 0x1B);
-        }
-    }
-
-    COLORREF GlassTint(BYTE opacity) const
-    {
-        COLORREF back = Glass(GlassTone::Clear), ink = Glass(GlassTone::Text);
-
-        return RGB((GetRValue(ink) * opacity + GetRValue(back) * (255 - opacity)) / 255,
-                   (GetGValue(ink) * opacity + GetGValue(back) * (255 - opacity)) / 255,
-                   (GetBValue(ink) * opacity + GetBValue(back) * (255 - opacity)) / 255);
-    }
-
-    HFONT GlassFont(TextStyle style) const
-    {
-        return m_GlassFonts[(int)style] ? m_GlassFonts[(int)style] : m_Theme.Font(style);
     }
 
     bool LightControls() const
@@ -746,12 +656,6 @@ protected:
                 if (m_NavImages)
                     ImageList_Destroy(m_NavImages);
                 m_NavImages = NULL;
-                for (int i = 0; i < (int)TextStyle::Count; i++)
-                {
-                    if (m_GlassFonts[i])
-                        DeleteObject(m_GlassFonts[i]);
-                    m_GlassFonts[i] = NULL;
-                }
                 if (m_SmallIcon)
                     DestroyIcon(m_SmallIcon);
                 if (m_BigIcon)
@@ -2252,7 +2156,6 @@ private:
     HICON m_BigIcon;
     WCHAR m_User[UNLEN + 1];
     bool m_IndexReady;
-    HFONT m_GlassFonts[(int)TextStyle::Count] = { };
 };
 
 static void

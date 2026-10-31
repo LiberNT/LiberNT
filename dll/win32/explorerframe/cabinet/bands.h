@@ -7,26 +7,11 @@
 
 #pragma once
 
+#include <shellframe.h>
+
 #define CABINET_MAX_CRUMBS 32
 
-struct CabinetPalette
-{
-    COLORREF Band;
-    COLORREF BandShade;
-    COLORREF BandLine;
-    COLORREF BandBottom;
-    COLORREF Box;
-    COLORREF BoxLine;
-    COLORREF Command;
-    COLORREF CommandBottom;
-    COLORREF TabBorder;
-    COLORREF Text;
-    COLORREF Glyph;
-    COLORREF GlyphDisabled;
-    COLORREF Window;
-    COLORREF Body;
-    COLORREF PanelLine;
-};
+typedef ShellFrame::BandPalette CabinetPalette;
 
 void CabinetGetPalette(CabinetPalette *palette);
 BOOL CabinetComposedFrame(VOID);
@@ -34,15 +19,9 @@ HIMAGELIST CabinetGlyphImages(const LPCWSTR *names, UINT count, int size, COLORR
 void CabinetFillRound(HDC dc, const RECT &rc, int radius, COLORREF color);
 LRESULT CabinetToolbarCustomDraw(NMTBCUSTOMDRAW *draw, COLORREF base);
 
-class ICabinetBandHost
+class ICabinetBandHost : public ShellFrame::TabBandHost
 {
 public:
-    virtual ~ICabinetBandHost() {}
-    virtual void OnTabSelect(int index) = 0;
-    virtual void OnTabClose(int index) = 0;
-    virtual void OnTabMove(int from, int to) = 0;
-    virtual void OnTabMenu(int index, POINT screen) = 0;
-    virtual void OnNewTab() = 0;
     virtual void OnAddressNavigate(PCIDLIST_ABSOLUTE pidl) = 0;
     virtual void OnAddressText(LPCWSTR text) = 0;
     virtual void OnAddressCancel() = 0;
@@ -82,45 +61,17 @@ protected:
 class CCabinetTabBand : public CCabinetBand
 {
 public:
-    CCabinetTabBand();
-
     BOOL Create(HWND parent, ICabinetBandHost *host, HFONT font);
     void SetTabs(const CabinetTabItem *tabs, int count, int active);
-    void SetShadeBottom(int bottom);
+    void SetShadeBottom(int bottom) { m_Band.SetShadeBottom(bottom); }
+    HWND Window() const { return m_Band.Window(); }
+    STDMETHODIMP GetWindow(HWND *window) override;
 
 protected:
     LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
 
 private:
-    struct Tab
-    {
-        WCHAR Title[MAX_PATH];
-        int IconIndex;
-    };
-
-    int TabWidth() const;
-    BOOL InTab(int index, POINT pt) const;
-    BOOL ShowsClose(int index) const;
-    RECT TabRect(int index) const;
-    RECT CloseRect(int index) const;
-    RECT NewRect() const;
-    int HitTab(POINT pt, BOOL *close) const;
-    void Paint(HDC dc);
-    void SetHot(int tab, BOOL close, BOOL add);
-
-    Tab m_Tabs[32];
-    int m_Count;
-    int m_Active;
-    int m_HotTab;
-    BOOL m_HotClose;
-    BOOL m_HotNew;
-    BOOL m_Tracking;
-    int m_DragTab;
-    int m_PressedTab;
-    BOOL m_PressedClose;
-    BOOL m_PressedNew;
-    HFONT m_Font;
-    int m_ShadeBottom;
+    ShellFrame::TabBand m_Band;
 };
 
 class CCabinetAddressBand : public CCabinetBand

@@ -7,6 +7,7 @@
 
 #include "shellframe.h"
 #include <uxtheme.h>
+#include <reactos/dwmframe.h>
 
 namespace ShellFrame
 {
@@ -18,12 +19,102 @@ FrameWindow::FrameWindow() :
     m_Active(TRUE),
     m_TrackingLeave(FALSE),
     m_GlassWidth(-1),
-    m_GlassTop(-1)
+    m_GlassTop(-1),
+    m_GlassFonts()
 {
 }
 
 FrameWindow::~FrameWindow()
 {
+    for (HFONT &font : m_GlassFonts)
+    {
+        if (font)
+            DeleteObject(font);
+        font = NULL;
+    }
+}
+
+static COLORREF
+GlassColor(const Theme &theme, GlassTone tone)
+{
+    static const COLORREF Tones[] =
+    {
+        RGB(255, 255, 255), RGB(0xC8, 0xC8, 0xC8), RGB(0x80, 0x80, 0x80), RGB(0x1C, 0x1C, 0x1C),
+        RGB(0x30, 0x30, 0x30), RGB(0x60, 0x60, 0x60), RGB(0, 0, 0),
+    };
+    const Palette &c = theme.Colors();
+
+    if (!theme.IsHighContrast() && IsAppThemed())
+        return Tones[(int)tone];
+    switch (tone)
+    {
+        case GlassTone::Text:
+        case GlassTone::TextSecondary:
+        case GlassTone::Stroke:
+            return c.Text;
+        case GlassTone::TextDisabled:
+            return c.TextDisabled;
+        default:
+            return c.Window;
+    }
+}
+
+COLORREF
+FrameWindow::Glass(GlassTone tone) const
+{
+    ULONG_PTR key = (ULONG_PTR)GetPropW(m_hwnd, DWM_PROP_BACKDROP_COLOR);
+    COLORREF clear;
+
+    if (!key || m_Theme.IsHighContrast() || !IsAppThemed())
+        return GlassColor(m_Theme, tone);
+    clear = (COLORREF)(key - 1);
+    if (tone == GlassTone::Clear)
+        return clear;
+    if (GetRValue(clear) * 299 + GetGValue(clear) * 587 + GetBValue(clear) * 114 < 128000)
+        return GlassColor(m_Theme, tone);
+    switch (tone)
+    {
+        case GlassTone::TextSecondary:
+            return RGB(0x5D, 0x5D, 0x5D);
+        case GlassTone::TextDisabled:
+            return RGB(0xA0, 0xA0, 0xA0);
+        default:
+            return RGB(0x1B, 0x1B, 0x1B);
+    }
+}
+
+COLORREF
+FrameWindow::GlassTint(BYTE opacity) const
+{
+    COLORREF back = Glass(GlassTone::Clear), ink = Glass(GlassTone::Text);
+
+    return RGB((GetRValue(ink) * opacity + GetRValue(back) * (255 - opacity)) / 255,
+               (GetGValue(ink) * opacity + GetGValue(back) * (255 - opacity)) / 255,
+               (GetBValue(ink) * opacity + GetBValue(back) * (255 - opacity)) / 255);
+}
+
+HFONT
+FrameWindow::GlassFont(TextStyle style) const
+{
+    return m_GlassFonts[(int)style] ? m_GlassFonts[(int)style] : m_Theme.Font(style);
+}
+
+void
+FrameWindow::UpdateGlassFonts()
+{
+    for (int i = 0; i < (int)TextStyle::Count; i++)
+    {
+        LOGFONTW lf;
+
+        if (m_GlassFonts[i])
+            DeleteObject(m_GlassFonts[i]);
+        m_GlassFonts[i] = NULL;
+        if (GetObjectW(m_Theme.Font((TextStyle)i), sizeof(lf), &lf))
+        {
+            lf.lfQuality = ANTIALIASED_QUALITY;
+            m_GlassFonts[i] = CreateFontIndirectW(&lf);
+        }
+    }
 }
 
 HWND
@@ -115,7 +206,7 @@ FrameWindow::ClientCaption() const
 {
     BOOL composed = FALSE;
 
-    return IsAppThemed() && SUCCEEDED(DwmIsCompositionEnabled(&composed)) && composed;
+    return UsesClientCaption() && IsAppThemed() && SUCCEEDED(DwmIsCompositionEnabled(&composed)) && composed;
 }
 
 int

@@ -39,6 +39,7 @@ AccentFromPalette(BOOL dark)
 Theme::Theme() :
     m_Dark(FALSE),
     m_FollowSystem(FALSE),
+    m_DarkPreference(-1),
     m_HighContrast(FALSE),
     m_HighContrastDark(FALSE),
     m_Material(FALSE),
@@ -91,7 +92,7 @@ Theme::Update(HWND hwnd)
         LocalFree(contrast.lpszDefaultScheme);
     window = GetSysColor(COLOR_WINDOW);
     m_HighContrastDark = GetRValue(window) * 299 + GetGValue(window) * 587 + GetBValue(window) * 114 < 128000;
-    m_Dark = m_FollowSystem ? m_HighContrastDark : !light;
+    m_Dark = m_DarkPreference >= 0 ? m_DarkPreference != 0 : m_FollowSystem ? m_HighContrastDark : !light;
     BuildPalette();
 
     if (hwnd)
