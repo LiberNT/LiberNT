@@ -334,6 +334,7 @@ ReactOS shares the following programs with Winehq.
 base/applications/cmdutils/cscript  # Synced to Wine-11.14
 base/applications/cmdutils/reg      # Synced to Wine-11.14
 base/applications/cmdutils/schtasks # Synced to Wine-11.14
+base/applications/cmdutils/start    # Synced to Wine-11.14
 base/applications/cmdutils/taskkill # Synced to Wine-11.14
 base/applications/cmdutils/wmic     # Synced to Wine-11.14
 base/applications/cmdutils/wscript  # Synced to Wine-11.14
