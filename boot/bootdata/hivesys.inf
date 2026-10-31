@@ -1834,6 +1834,15 @@ HKLM,"SYSTEM\CurrentControlSet\Services\BFE","ObjectName",0x00000000,"LocalSyste
 HKLM,"SYSTEM\CurrentControlSet\Services\BFE","Start",0x00010001,0x00000003
 HKLM,"SYSTEM\CurrentControlSet\Services\BFE","Type",0x00010001,0x00000010
 
+HKLM,"SYSTEM\CurrentControlSet\Services\MpsSvc","DisplayName",0x00000000,"Windows Defender Firewall"
+HKLM,"SYSTEM\CurrentControlSet\Services\MpsSvc","Description",0x00000000,"Applies Windows Firewall policy rules through the Windows Filtering Platform."
+HKLM,"SYSTEM\CurrentControlSet\Services\MpsSvc","DependOnService",0x00010000,"BFE"
+HKLM,"SYSTEM\CurrentControlSet\Services\MpsSvc","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\MpsSvc","ImagePath",0x00020000,"%SystemRoot%\system32\mpssvc.exe"
+HKLM,"SYSTEM\CurrentControlSet\Services\MpsSvc","ObjectName",0x00000000,"LocalSystem"
+HKLM,"SYSTEM\CurrentControlSet\Services\MpsSvc","Start",0x00010001,0x00000002
+HKLM,"SYSTEM\CurrentControlSet\Services\MpsSvc","Type",0x00010001,0x00000010
+
 ; Audio Service
 HKLM,"SYSTEM\CurrentControlSet\Services\AudioSrv","DisplayName",0x00000000,%AUDIO_SERVICE%
 HKLM,"SYSTEM\CurrentControlSet\Services\AudioSrv","Description",0x00000000,%AUDIO_SERVICE_DESCRIPTION%
