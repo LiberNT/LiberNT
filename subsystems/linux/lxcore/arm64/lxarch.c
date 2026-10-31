@@ -1351,7 +1351,8 @@ LxArchDeliverAsync(
                                    CONTEXT_EXCEPTION_REQUEST;
     if (NT_SUCCESS(PsGetContextThread(PsGetCurrentThread(), &Frames->Context, KernelMode)) &&
         (Frames->Context.ContextFlags & CONTEXT_EXCEPTION_REPORTING) &&
-        !(Frames->Context.ContextFlags & (CONTEXT_SERVICE_ACTIVE | CONTEXT_EXCEPTION_ACTIVE)))
+        !(Frames->Context.ContextFlags & (CONTEXT_SERVICE_ACTIVE | CONTEXT_EXCEPTION_ACTIVE)) &&
+        ((Frames->Context.Cpsr & LX_A64_PSTATE_MODE) == 0))
     {
         Frames->Context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT;
         Frames->TrapFrame.VfpState = &Frames->VfpState;

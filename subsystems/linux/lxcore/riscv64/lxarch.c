@@ -545,7 +545,8 @@ LxArchDeliverAsync(
     Frames->Context.ContextFlags = CONTEXT_FULL | CONTEXT_EXCEPTION_REQUEST;
     if (NT_SUCCESS(PsGetContextThread(PsGetCurrentThread(), &Frames->Context, KernelMode)) &&
         (Frames->Context.ContextFlags & CONTEXT_EXCEPTION_REPORTING) &&
-        !(Frames->Context.ContextFlags & (CONTEXT_SERVICE_ACTIVE | CONTEXT_EXCEPTION_ACTIVE)))
+        !(Frames->Context.ContextFlags & (CONTEXT_SERVICE_ACTIVE | CONTEXT_EXCEPTION_ACTIVE)) &&
+        (Frames->Context.Pc <= (ULONG64)(ULONG_PTR)MmHighestUserAddress))
     {
         Frames->Context.ContextFlags = CONTEXT_FULL;
         LxArchRestoreContext(&Frames->TrapFrame, NULL, &Frames->Context);
