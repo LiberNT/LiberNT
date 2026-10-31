@@ -1100,9 +1100,14 @@ PUBLIC KiSystemCallEntry64
     mov word ptr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_SegSs], (KGDT64_R3_DATA OR RPL_MASK)
 
     /* Set sane segments */
-    mov ax, (KGDT64_R3_DATA OR RPL_MASK)
-    mov ds, ax
-    mov es, ax
+    mov ax, ds
+    cmp ax, (KGDT64_R3_DATA OR RPL_MASK)
+    jne SystemServiceLoadSegments
+    mov ax, es
+    cmp ax, (KGDT64_R3_DATA OR RPL_MASK)
+    jne SystemServiceLoadSegments
+
+SystemServiceSegmentsLoaded:
 
     /* Save MCXSR and set kernel value */
     stmxcsr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_MxCsr]
@@ -1252,6 +1257,13 @@ SystemServiceInstrumented:
     mov r10, rcx
     mov rcx, rdx
     jmp SystemServiceInstrumentationDone
+
+SystemServiceLoadSegments:
+    /* FIXME: Windows 8.1 keeps user DS and ES across a system call; this resets them to the flat data selector */
+    mov ax, (KGDT64_R3_DATA OR RPL_MASK)
+    mov ds, ax
+    mov es, ax
+    jmp SystemServiceSegmentsLoaded
 
 SystemServiceIrqlMismatch:
     /* Preserve the leaked IRQL as bugcheck parameter 2. */
