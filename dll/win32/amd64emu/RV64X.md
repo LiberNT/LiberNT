@@ -41,7 +41,9 @@ Otherwise a target whose page bit is set
 (`bitmap[address >> 15] >> ((address >> 12) & 7)`) is native code and is called
 directly; any other target goes through the exit thunk. Keeping the pointer in
 the image rather than in the TEB lets libraries shared with the kernel, such as
-`rtl`, be built as RV64X.
+`rtl`, be built as RV64X. An indirect `invoke` (a call inside `__try` or a C++
+`try`) invokes the exit thunk with the same normal and unwind edges, and a call
+inside a funclet passes its `funclet` bundle on to the thunk call.
 
 **Exit thunk.** One `linkonce_odr` thunk per call shape stores the arguments as
 64-bit slots (floats as their bit pattern) and calls `__rv64x_image.CallX64`
@@ -109,5 +111,5 @@ code generation (`RV64X_EXCLUDE`).
 4. Build the system DLLs as RV64X (done with `RV64X_SYSTEM`; the suite passes)
    and retire the x64 userland in `SystemAMD64`, which needs stage 3.
 
-Open: 16-byte aggregates by value and struct results, C++ `invoke` sites (left
-unchecked), and native code generated at run time (treated as x64).
+Open: 16-byte aggregates by value and struct results, and native code generated
+at run time (treated as x64).

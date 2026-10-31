@@ -26,10 +26,10 @@ index 9d443c06..c4084d3b 100644
  
 diff --git a/llvm/lib/Target/RISCV/RISCVRv64X.cpp b/llvm/lib/Target/RISCV/RISCVRv64X.cpp
 new file mode 100644
-index 00000000..b3018727
+index 00000000..88dfa73f
 --- /dev/null
 +++ b/llvm/lib/Target/RISCV/RISCVRv64X.cpp
-@@ -0,0 +1,457 @@
+@@ -0,0 +1,483 @@
 +//===-- RISCVRv64X.cpp - Hybrid x64 interoperability for RISC-V ----------===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -136,7 +136,7 @@ index 00000000..b3018727
 +  GlobalVariable *getImageVariable();
 +  Value *widen(IRBuilder<> &B, Value *V, uint8_t Kind) const;
 +  Value *narrow(IRBuilder<> &B, Value *V, Type *Ty, uint8_t Kind) const;
-+  bool checkCall(CallInst *CI);
++  bool checkCall(CallBase *CI);
 +};
 +
 +} // end anonymous namespace
@@ -380,8 +380,8 @@ index 00000000..b3018727
 +  return Thunk;
 +}
 +
-+bool RISCVRv64X::checkCall(CallInst *CI) {
-+  if (CI->isMustTailCall() || CI->isInlineAsm()) {
++bool RISCVRv64X::checkCall(CallBase *CI) {
++  if (CI->isMustTailCall() || CI->isInlineAsm() || isa<CallBrInst>(CI)) {
 +    ++NumUncheckedCalls;
 +    return false;
 +  }
@@ -422,19 +422,49 @@ index 00000000..b3018727
 +  Foreign->addIncoming(B.getFalse(), CheckBlock->getSinglePredecessor());
 +  Foreign->addIncoming(IsForeign, CheckBlock);
 +
-+  Instruction *ThenTerm, *ElseTerm;
-+  SplitBlockAndInsertIfThenElse(Foreign, CI->getIterator(), &ThenTerm,
-+                                &ElseTerm, MDB.createUnlikelyBranchWeights());
-+
-+  B.SetInsertPoint(ThenTerm);
 +  SmallVector<Value *, 8> ThunkArgs{Callee};
 +  append_range(ThunkArgs, CI->args());
-+  CallInst *ThunkCall = B.CreateCall(Thunk, ThunkArgs);
++  SmallVector<OperandBundleDef, 1> Bundles;
++  if (auto Funclet = CI->getOperandBundle(LLVMContext::OB_funclet))
++    Bundles.emplace_back(*Funclet);
 +
-+  CI->moveBefore(ElseTerm->getIterator());
++  Instruction *ThunkCall;
++  BasicBlock *ResultBlock;
++  if (auto *II = dyn_cast<InvokeInst>(CI)) {
++    Function *F = CallBlock->getParent();
++    BasicBlock *NativeBlock = CallBlock->splitBasicBlock(II->getIterator());
++    BasicBlock *ThunkBlock =
++        BasicBlock::Create(F->getContext(), "", F, NativeBlock);
++    BasicBlock *NormalDest = II->getNormalDest();
++    BasicBlock *UnwindDest = II->getUnwindDest();
++    ResultBlock = BasicBlock::Create(F->getContext(), "", F, NormalDest);
++    IRBuilder<>(ResultBlock).CreateBr(NormalDest);
++    NormalDest->replacePhiUsesWith(NativeBlock, ResultBlock);
++    II->setNormalDest(ResultBlock);
++
++    CallBlock->getTerminator()->eraseFromParent();
++    IRBuilder<>(CallBlock).CreateCondBr(Foreign, ThunkBlock, NativeBlock,
++                                        MDB.createUnlikelyBranchWeights());
++
++    B.SetInsertPoint(ThunkBlock);
++    ThunkCall = B.CreateInvoke(Thunk, ResultBlock, UnwindDest, ThunkArgs,
++                               Bundles);
++    for (PHINode &Phi : UnwindDest->phis())
++      Phi.addIncoming(Phi.getIncomingValueForBlock(NativeBlock), ThunkBlock);
++  } else {
++    Instruction *ThenTerm, *ElseTerm;
++    SplitBlockAndInsertIfThenElse(Foreign, CI->getIterator(), &ThenTerm,
++                                  &ElseTerm, MDB.createUnlikelyBranchWeights());
++
++    B.SetInsertPoint(ThenTerm);
++    ThunkCall = B.CreateCall(Thunk, ThunkArgs, Bundles);
++    CI->moveBefore(ElseTerm->getIterator());
++    ResultBlock = ElseTerm->getSuccessor(0);
++  }
++
 +  if (!CI->getType()->isVoidTy()) {
-+    BasicBlock *Tail = ElseTerm->getSuccessor(0);
-+    PHINode *Result = PHINode::Create(CI->getType(), 2, "", Tail->begin());
++    PHINode *Result =
++        PHINode::Create(CI->getType(), 2, "", ResultBlock->begin());
 +    CI->replaceUsesWithIf(Result, [&](Use &U) {
 +      return U.getUser() != Result;
 +    });
@@ -456,7 +486,7 @@ index 00000000..b3018727
 +  ImageTy = StructType::get(Context, {PtrTy, PtrTy});
 +  CallX64Ty = FunctionType::get(I64Ty, {PtrTy, I64Ty, I64Ty, PtrTy}, false);
 +
-+  SmallVector<CallInst *, 32> Calls;
++  SmallVector<CallBase *, 32> Calls;
 +  bool Changed = false;
 +
 +  for (Function &F : M) {
@@ -475,16 +505,12 @@ index 00000000..b3018727
 +
 +    for (BasicBlock &BB : F)
 +      for (Instruction &I : BB)
-+        if (auto *CB = dyn_cast<CallBase>(&I); CB && CB->isIndirectCall()) {
-+          if (auto *CI = dyn_cast<CallInst>(CB))
-+            Calls.push_back(CI);
-+          else
-+            ++NumUncheckedCalls;
-+        }
++        if (auto *CB = dyn_cast<CallBase>(&I); CB && CB->isIndirectCall())
++          Calls.push_back(CB);
 +  }
 +
-+  for (CallInst *CI : Calls)
-+    Changed |= checkCall(CI);
++  for (CallBase *CB : Calls)
++    Changed |= checkCall(CB);
 +  return Changed;
 +}
 diff --git a/llvm/lib/Target/RISCV/RISCVTargetMachine.cpp b/llvm/lib/Target/RISCV/RISCVTargetMachine.cpp
