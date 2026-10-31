@@ -82,33 +82,6 @@ ShellScaleForDpi(INT Value)
     return MulDiv(Value, dpi, 96);
 }
 
-#define SHELL_TMT_COMPOSITED 2204
-#define SHELL_TMT_FILLCOLOR  3802
-
-static inline HTHEME
-ShellOpenTaskbarMaterial(VOID)
-{
-    HTHEME hTheme;
-    BOOL bComposited;
-
-    if (DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT)
-    {
-        hTheme = OpenThemeData(NULL, DWM_SHELL_MATERIAL(DWM_COLOR_SCHEME_LIGHT));
-        bComposited = FALSE;
-        if (hTheme && SUCCEEDED(GetThemeBool(hTheme, 0, 0, SHELL_TMT_COMPOSITED, &bComposited)) && bComposited)
-            return hTheme;
-        if (hTheme)
-            CloseThemeData(hTheme);
-    }
-    return OpenThemeData(NULL, DWM_SHELL_MATERIAL(DWM_COLOR_SCHEME_DARK));
-}
-
-static inline BOOL
-ShellColorIsLight(COLORREF cr)
-{
-    return (GetRValue(cr) * 299 + GetGValue(cr) * 587 + GetBValue(cr) * 114) / 1000 >= 128;
-}
-
 static inline BOOL
 ShellGetTaskbarMaterial(COLORREF *pcr, INT *pcyTaskRow = NULL)
 {

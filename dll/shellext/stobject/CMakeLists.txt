@@ -34,6 +34,7 @@ add_importlibs(stobject
     shlwapi
     shell32
     comctl32
+    uxtheme
     msvcrt
     gdi32
     user32

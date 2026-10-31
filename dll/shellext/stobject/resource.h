@@ -33,6 +33,12 @@
 #define IDI_VOLUME1               233
 #define IDI_VOLUME3               234
 #define IDI_BLUETOOTH             235
+#define IDI_VOLUME_LIGHT          1230
+#define IDI_VOLMUTE_LIGHT         1231
+#define IDI_VOLUME0_LIGHT         1232
+#define IDI_VOLUME1_LIGHT         1233
+#define IDI_VOLUME3_LIGHT         1234
+#define IDI_BLUETOOTH_LIGHT       1235
 
 #define IDS_VOL_VOLUME            252
 #define IDS_VOL_ADJUST            255

@@ -91,6 +91,20 @@ HRESULT STDMETHODCALLTYPE Bluetooth_Shutdown(_In_ CSysTray * pSysTray)
 
 HRESULT STDMETHODCALLTYPE Bluetooth_Message(_In_ CSysTray * pSysTray, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT &lResult)
 {
+    if (ShellTrayColorsChanged(uMsg, lParam))
+    {
+        if (pSysTray->IsServiceEnabled(BLUETOOTH_SERVICE_FLAG) && g_hIconBluetooth)
+        {
+            HICON hOld = g_hIconBluetooth;
+
+            g_hIconBluetooth = StoLoadTrayIcon(g_hInstance, IDI_BLUETOOTH);
+            pSysTray->NotifyIcon(NIM_MODIFY, ID_ICON_BLUETOOTH, g_hIconBluetooth, g_szBluetoothTip,
+                                 Bluetooth_RadioPresent() ? 0 : NIS_HIDDEN);
+            DestroyIcon(hOld);
+        }
+        return S_FALSE;
+    }
+
     switch (uMsg)
     {
         case WM_DEVICECHANGE:
