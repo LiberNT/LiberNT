@@ -428,12 +428,18 @@ static BOOLEAN LinuxReadKernel(ULONG LinuxKernelFile)
     RtlStringCbPrintfA(StatusText, sizeof(StatusText), "Loading %s", LinuxKernelName);
     UiDrawStatusText(StatusText);
 
+    /*
+     * Allocate one page more than the kernel itself: BootLinuxKernel relocates the
+     * image into place from a stub that it copies into the page directly above this
+     * buffer (see arch/i386/linux.S).  The image is still LinuxKernelSize bytes; the
+     * extra page belongs to the loader, not to the kernel.
+     */
     /* Try to allocate memory for the Linux kernel; if it fails, allocate somewhere else */
-    LinuxKernelLoadAddress = MmAllocateMemoryAtAddress(LinuxKernelSize, (PVOID)LINUX_KERNEL_LOAD_ADDRESS, LoaderSystemCode);
+    LinuxKernelLoadAddress = MmAllocateMemoryAtAddress(LinuxKernelSize + PAGE_SIZE, (PVOID)LINUX_KERNEL_LOAD_ADDRESS, LoaderSystemCode);
     if (LinuxKernelLoadAddress != (PVOID)LINUX_KERNEL_LOAD_ADDRESS)
     {
         /* It's OK, let's allocate again somewhere else */
-        LinuxKernelLoadAddress = MmAllocateMemoryWithType(LinuxKernelSize, LoaderSystemCode);
+        LinuxKernelLoadAddress = MmAllocateMemoryWithType(LinuxKernelSize + PAGE_SIZE, LoaderSystemCode);
         if (LinuxKernelLoadAddress == NULL)
         {
             TRACE("Failed to allocate 0x%lx bytes for the kernel image.\n", LinuxKernelSize);
