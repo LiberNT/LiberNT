@@ -3060,7 +3060,7 @@ static void TREEVIEW_FillThemeBackground(TREEVIEW_INFO *infoPtr, HDC hdc, const 
     if (infoPtr->dwStyle & TVS_HASBUTTONS && (theme = GetWindowTheme(infoPtr->hwnd)))
     {
         if (IsThemeBackgroundPartiallyTransparent(theme, TVP_GLYPH, 0))
-            FillRect(hdc, rect, (HBRUSH)(COLOR_WINDOW + 1));
+            TREEVIEW_FillBkgnd(infoPtr, hdc, rect);
     }
 }
 #endif

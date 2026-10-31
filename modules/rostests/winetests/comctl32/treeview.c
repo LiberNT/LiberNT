@@ -41,6 +41,7 @@
 
 static HTHEME (WINAPI *pGetWindowTheme)(HWND);
 static BOOL (WINAPI *pIsThemeBackgroundPartiallyTransparent)(HTHEME, int, int);
+static HRESULT (WINAPI *pSetWindowTheme)(HWND, LPCWSTR, LPCWSTR);
 
 static BOOL (WINAPI *pInitCommonControlsEx)(const INITCOMMONCONTROLSEX*);
 
@@ -2484,6 +2485,46 @@ static void test_WM_PRINTCLIENT(void)
     DestroyWindow(hTree);
 }
 
+static void test_themed_bkcolor(void)
+{
+    static const COLORREF color = RGB(0x20, 0x80, 0x40);
+    HBITMAP bitmap;
+    HTHEME theme;
+    COLORREF clr;
+    HWND hTree;
+    HDC hdc, mem;
+    RECT rc;
+
+    hTree = create_treeview_control(0);
+    pSetWindowTheme(hTree, L"Explorer", NULL);
+    theme = pGetWindowTheme(hTree);
+    if (!theme)
+    {
+        skip("Tree view is not themed.\n");
+        DestroyWindow(hTree);
+        return;
+    }
+    fill_tree(hTree);
+    SendMessageA(hTree, TVM_SETBKCOLOR, 0, color);
+
+    GetClientRect(hTree, &rc);
+    hdc = GetDC(hTree);
+    mem = CreateCompatibleDC(hdc);
+    bitmap = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
+    SelectObject(mem, bitmap);
+    FillRect(mem, &rc, GetStockObject(BLACK_BRUSH));
+    SendMessageA(hTree, WM_PRINTCLIENT, (WPARAM)mem, PRF_CLIENT | PRF_ERASEBKGND);
+    clr = GetPixel(mem, rc.right / 2, rc.bottom - 2);
+    ok(clr == color, "empty area: got 0x%lx\n", clr);
+    clr = GetPixel(mem, rc.right - 2, 1);
+    ok(clr == color, "item row: got 0x%lx\n", clr);
+
+    DeleteDC(mem);
+    DeleteObject(bitmap);
+    ReleaseDC(hTree, hdc);
+    DestroyWindow(hTree);
+}
+
 static void test_delete_items(void)
 {
     const struct message *msg;
@@ -3463,6 +3504,7 @@ static void init_functions(void)
 
     X(hUxtheme, GetWindowTheme);
     X(hUxtheme, IsThemeBackgroundPartiallyTransparent);
+    X(hUxtheme, SetWindowTheme);
 #undef X
 }
 
@@ -3563,6 +3605,7 @@ START_TEST(treeview)
     test_expand();
     test_itemedit();
     test_treeview_classinfo();
+    test_themed_bkcolor();
     test_delete_items();
     test_cchildren();
     test_htreeitem_layout(TRUE);
