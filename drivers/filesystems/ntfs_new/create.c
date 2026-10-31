@@ -689,7 +689,8 @@ NtfsOpenNamedDataStream(
             Status = STATUS_USER_MAPPED_FILE;
             goto Done;
         }
-        if (FileObject->SectionObjectPointer->SharedCacheMap)
+        if (FileObject->SectionObjectPointer->SharedCacheMap != NULL ||
+            FileObject->SectionObjectPointer->DataSectionObject != NULL)
         {
             CcFlushCache(FileObject->SectionObjectPointer, NULL, 0, &FlushStatus);
             Status = FlushStatus.Status;

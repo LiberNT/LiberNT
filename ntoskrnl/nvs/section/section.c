@@ -2612,7 +2612,8 @@ MiSegmentFlush(
             if (Kind != MiSoftResident && Kind != MiSoftTransition)
                 break;
 
-            if (!(MI_PFN_FLAGS(&System->Pfn.Pfn[MiSoftValue(Pte)]) & MI_PFN_FLAG_MODIFIED) &&
+            if (!(MI_PFN_FLAGS(&System->Pfn.Pfn[MiSoftValue(Pte)]) &
+                  (MI_PFN_FLAG_MODIFIED | MI_PFN_FLAG_IN_FLIGHT)) &&
                 Page >= BridgeEnd)
             {
                 ULONG64 Next;
@@ -2627,7 +2628,8 @@ MiSegmentFlush(
 
                     if (NextKind != MiSoftResident && NextKind != MiSoftTransition)
                         break;
-                    if (MI_PFN_FLAGS(&System->Pfn.Pfn[MiSoftValue(NextPte)]) & MI_PFN_FLAG_MODIFIED)
+                    if (MI_PFN_FLAGS(&System->Pfn.Pfn[MiSoftValue(NextPte)]) &
+                        (MI_PFN_FLAG_MODIFIED | MI_PFN_FLAG_IN_FLIGHT))
                     {
                         BridgeEnd = Next;
                         break;
@@ -2650,7 +2652,8 @@ MiSegmentFlush(
                 MiSegmentReleasePage(Segment, Proto, Frame);
                 break;
             }
-            if (!MiPfnClearModified(&System->Pfn, Frame) && Count == 0)
+            if (!MiPfnClearModified(&System->Pfn, Frame) &&
+                !(MI_PFN_FLAGS(&System->Pfn.Pfn[Frame]) & MI_PFN_FLAG_IN_FLIGHT) && Count == 0)
             {
                 MiSegmentReleasePage(Segment, Proto, Frame);
                 break;

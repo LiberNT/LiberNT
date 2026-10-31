@@ -105,6 +105,41 @@ WritebackSizeReentry(void)
     WorldDestroy(&World);
 }
 
+static void
+WritebackInFlightFlush(void)
+{
+    TEST_WORLD World;
+    WRITEBACK_FILE File = { .World = &World };
+    MI_FILE_OPS Ops = { .Read = TestFileOps.Read, .WriteFrames = WriteFrames };
+    PMI_PFN_DATABASE Db = &World.System.Pfn;
+    PMI_SEGMENT Segment;
+    ULONG Frame;
+
+    WorldCreate(&World, 256, 1, 10000);
+    FileCreate(&File.File, PAGE_SIZE);
+    CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentDataFile, PAGE_SIZE, MI_PROT_READWRITE,
+                                     &Ops, &File, NULL, 0, &Segment)));
+    CHECK(NT_SUCCESS(MiSegmentMarkDirty(Segment, 0, PAGE_SIZE)));
+    memset(File.File.Data, 0xCC, PAGE_SIZE);
+
+    Frame = MiPfnTakeModified(Db);
+    CHECK(Frame != MI_FRAME_INVALID);
+    CHECK((Db->Pfn[Frame].Flags & MI_PFN_FLAG_IN_FLIGHT) != 0);
+    CHECK(NT_SUCCESS(MiSegmentFlush(Segment, 0, PAGE_SIZE)));
+    CHECK(File.Calls == 1 && File.Pages[0] == 1);
+    CHECK(File.File.Data[0] == 0);
+    CHECK(File.File.Data[PAGE_SIZE - 1] == (UCHAR)(PAGE_SIZE - 1));
+
+    CHECK(!MiPfnWriteComplete(Db, Frame, Db->Pfn[Frame].OriginalPte, TRUE));
+    CHECK((Db->Pfn[Frame].Flags & MI_PFN_FLAG_IN_FLIGHT) == 0);
+    CHECK(MiPfnListCount(Db, MiPageModified) == 0);
+
+    CHECK(MiSegmentDereferenceAndClose(Segment));
+    WorldExpectClean(&World, 256);
+    FileDestroy(&File.File);
+    WorldDestroy(&World);
+}
+
 static NTSTATUS
 WritebackAttempt(PVOID Context, ULONG64 Offset, ULONG Length, PVOID Buffer)
 {
@@ -315,6 +350,7 @@ TestWriteback(void)
     ULONG Calls;
 
     WritebackSizeReentry();
+    WritebackInFlightFlush();
     WritebackFailureProgress();
     WritebackPastUnwritablePages();
     WritebackConcurrentRedirty(FALSE);

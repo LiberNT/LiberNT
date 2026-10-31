@@ -574,7 +574,10 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
 
     if (NT_SUCCESS(Status))
     {
-        if (!PagingIo)
+        if (!PagingIo ||
+            (Length != 0 && RequestedType == TypeData &&
+             (ULONGLONG)ByteOffset.QuadPart + Length >
+                 (ULONGLONG)NtfsGetCommonFcbHeader(FileCB)->ValidDataLength.QuadPart))
             NtfsRefreshFileSizes(VolCB, FileCB, FileObj);
         if (!PagingIo && Length != 0 && RequestedType == TypeData)
             NtfsPurgeStreamCache(FileCB, FileObj, &ByteOffset, Length);

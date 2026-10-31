@@ -2524,7 +2524,8 @@ NtfsFsdSetInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         if (IrpSp->Parameters.SetFile.FileInformationClass != FileRenameInformation &&
             IrpSp->Parameters.SetFile.FileInformationClass != FileLinkInformation &&
             FileObject->SectionObjectPointer != NULL &&
-            FileObject->SectionObjectPointer->SharedCacheMap != NULL)
+            (FileObject->SectionObjectPointer->SharedCacheMap != NULL ||
+             FileObject->SectionObjectPointer->DataSectionObject != NULL))
         {
             IO_STATUS_BLOCK FlushStatus;
 

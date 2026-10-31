@@ -942,7 +942,10 @@ CcmmTruncation(void)
     CHECK(Data == 42);
     CHECK(NT_SUCCESS(CcViewAcquire(&NtMap.Map, 0, 1, &Range)));
     CHECK(File.Segment->MappedViews == 1 && File.Segment->TruncationViews == 0);
+    CHECK(NT_SUCCESS(MiSegmentMarkDirty(File.Segment, PAGE_SIZE, PAGE_SIZE)));
+    CHECK(MiSegmentIsResident(File.Segment, PAGE_SIZE, PAGE_SIZE));
     CHECK(MmCanFileBeTruncated(&Pointers, &Size));
+    CHECK(MiSegmentIsResident(File.Segment, PAGE_SIZE, PAGE_SIZE));
     CcViewRelease(&Range);
     CHECK(File.Segment->MappedViews == 1);
     CHECK(MmCanFileBeTruncated(&Pointers, &Size));
