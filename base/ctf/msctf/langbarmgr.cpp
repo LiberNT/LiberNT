@@ -178,12 +178,12 @@ CLangBarMgr::GetThreadLangBarItemMgr(
     _Out_ ITfLangBarItemMgr **pplbie,
     _Out_ DWORD *pdwThreadid)
 {
-    if (!pplbie || !pdwThreadid)
-        return E_INVALIDARG;
     if (dwThreadId != GetCurrentThreadId())
         return E_FAIL;
+    if (!pplbie)
+        return E_UNEXPECTED;
     HRESULT hr = LangBarItemMgr_Constructor(pplbie);
-    if (SUCCEEDED(hr))
+    if (SUCCEEDED(hr) && pdwThreadid)
         *pdwThreadid = dwThreadId;
     return hr;
 }
