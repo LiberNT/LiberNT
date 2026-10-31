@@ -676,7 +676,7 @@ static void Test_PrivilegedBatches(GEN_CONTEXT *Ctx)
         { 0x11000001, 0x7019C, 0, GEN_MI_BATCH_END },
         { 0x54300004, 0, GEN_MI_BATCH_END, 0 },
     };
-    static const ULONG Allowed[4] = { 0x11000001, 0xB020, 0x00800000, GEN_MI_BATCH_END };
+    static const ULONG Allowed[4] = { 0x11000001, 0x20C0, 0x00400040, GEN_MI_BATCH_END };
     HDGFX_GEN_SUBMIT header;
     NTSTATUS status;
     UINT i;
