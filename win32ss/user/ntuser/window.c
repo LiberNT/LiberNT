@@ -2658,7 +2658,19 @@ co_UserCreateWindowEx(CREATESTRUCTW* Cs,
       if ((Cs->style & WS_CHILD) && !UserIsDesktopWindow(ParentWindow))
           IntLinkHwnd(Window, HWND_BOTTOM);
       else
-          IntLinkHwnd(Window, hwndInsertAfter);
+      {
+          PWND ImeOwner = IS_WND_IMELIKE(Window) ? Window->spwndOwner : NULL;
+
+          while (ImeOwner && IS_WND_IMELIKE(ImeOwner))
+              ImeOwner = ImeOwner->spwndOwner;
+
+          /* A hidden IME window starts below the window it serves */
+          if (ImeOwner && ImeOwner->spwndParent == ParentWindow && !(Window->style & WS_VISIBLE) &&
+              !(Window->ExStyle & WS_EX_TOPMOST))
+              IntLinkHwnd(Window, UserHMGetHandle(ImeOwner));
+          else
+              IntLinkHwnd(Window, hwndInsertAfter);
+      }
    }
 
    /* Create the IME window for pWnd */

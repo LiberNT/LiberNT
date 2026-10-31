@@ -1493,6 +1493,8 @@ WinPosBatchAddOwnerGroup(PWINPOS_BATCH Batch, HWND *List, PWND Window, PWND Skip
             continue;
          if (bSkipTopmost && (Child->ExStyle & WS_EX_TOPMOST))
             continue;
+         if (IS_WND_IMELIKE(Child) && !(Child->style & WS_VISIBLE))
+            continue;
          WinPosBatchAddOwnerGroup(Batch, List, Child, Skip, bSkipTopmost, Depth + 1);
       }
    }
@@ -1511,6 +1513,8 @@ WinPosBatchAddOwnedGroups(PWINPOS_BATCH Batch, HWND *List, PWND Owner, PWND Skip
    {
       Child = ValidateHwndNoErr(List[i]);
       if (!Child || Child == Skip || Child == Owner || Child->spwndOwner != Owner)
+         continue;
+      if (IS_WND_IMELIKE(Child) && !(Child->style & WS_VISIBLE))
          continue;
       WinPosBatchAddOwnerGroup(Batch, List, Child, NULL, FALSE, 1);
    }
@@ -3482,6 +3486,18 @@ co_WinPosShowWindow(PWND Wnd, INT Cmd)
        TRACE("Child is Vis %s or State changed %s. ShowFlag %s Swp %04x\n",
              (IsChildVisible(Wnd) ? "TRUE" : "FALSE"), (Swp & SWP_STATECHANGED ? "TRUE" : "FALSE"),
              (ShowFlag ? "TRUE" : "FALSE"),LOWORD(Swp));
+   /* A hidden IME window sits below its owner, so it has to come up to be seen */
+   if (IS_WND_IMELIKE(Wnd) && (Swp & SWP_SHOWWINDOW))
+   {
+      PWND ImeOwner = Wnd->spwndOwner;
+
+      while (ImeOwner && IS_WND_IMELIKE(ImeOwner))
+         ImeOwner = ImeOwner->spwndOwner;
+      if (ImeOwner && (ImeOwner->ExStyle & WS_EX_TOPMOST))
+         Wnd->ExStyle |= WS_EX_TOPMOST;
+      Swp &= ~SWP_NOZORDER;
+   }
+
    co_WinPosSetWindowPos( Wnd,
                           ((Swp & SWP_STATECHANGED) && Cmd != SW_SHOWMINIMIZED &&
                            (Wnd->style & (WS_CHILD | WS_MINIMIZE)) == (WS_CHILD | WS_MINIMIZE)) ? HWND_BOTTOM :
