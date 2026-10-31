@@ -860,7 +860,8 @@ TestSandboxedChild(VOID)
                                     &StdOut, sizeof(StdOut), NULL, NULL));
 
     GetModuleFileNameW(NULL, Path, ARRAYSIZE(Path));
-    swprintf(CommandLine, ARRAYSIZE(CommandLine), L"\"%ls\" sandboxchild", Path);
+    ZeroMemory(CommandLine, sizeof(CommandLine));
+    _snwprintf(CommandLine, ARRAYSIZE(CommandLine) - 1, L"\"%ls\" sandboxchild", Path);
     ZeroMemory(&Pi, sizeof(Pi));
     CHECK(CreateProcessAsUserW(Restricted, Path, CommandLine, NULL, NULL, TRUE,
                                CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT, NULL, NULL,
@@ -930,7 +931,7 @@ main(
     PIMAGE_NT_HEADERS Headers = RtlImageNtHeader(GetModuleHandleW(NULL));
     SYSTEM_INFO System;
 
-    if (ArgumentCount == 2 && !strcmp(Arguments[1], "sandboxchild"))
+    if (wcsrchr(GetCommandLineW(), L' ') && !wcscmp(wcsrchr(GetCommandLineW(), L' ') + 1, L"sandboxchild"))
         return SANDBOX_CHILD_EXIT_CODE;
 
     setvbuf(stdout, NULL, _IONBF, 0);
