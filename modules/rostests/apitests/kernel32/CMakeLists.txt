@@ -13,6 +13,7 @@ list(APPEND SOURCE
     ConsoleDbcsCells.c
     ConsoleProcessInheritance.c
     ConsoleVirtualTerminal.c
+    CreateAfterMissingName.c
     CreateDirectoryRoot.c
     CreateProcess.c
     DefaultActCtx.c

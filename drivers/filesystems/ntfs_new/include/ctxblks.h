@@ -120,7 +120,9 @@ typedef struct _NtfsMissingName
     LIST_ENTRY Link;
     LIST_ENTRY HashLink;
     ULONG Hash;
+    ULONG LeafHash;
     USHORT Length;
+    USHORT LeafStart;
     WCHAR Name[1];
 } NtfsMissingName, *PNtfsMissingName;
 

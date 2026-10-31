@@ -579,6 +579,18 @@ NtfsMissingNameLength(_In_reads_(Length) PCWSTR Name,
     return Length;
 }
 
+static
+USHORT
+NtfsMissingNameLeafStart(_In_reads_(Length) PCWSTR Name,
+                         _In_ USHORT Length)
+{
+    USHORT Index = Length;
+
+    while (Index > 0 && Name[Index - 1] != L'\\')
+        Index--;
+    return Index;
+}
+
 /*
  * Repeated lookups of a name that is not there would otherwise walk the
  * directory index every time, so remember the misses.
@@ -643,6 +655,8 @@ NtfsRecordNameMissing(_In_ PVolumeContextBlock VolCB,
     Hash = NtfsHashName(Name, Length);
     Missing->Hash = Hash;
     Missing->Length = Length;
+    Missing->LeafStart = NtfsMissingNameLeafStart(Name, Length);
+    Missing->LeafHash = NtfsHashName(Name + Missing->LeafStart, Length - Missing->LeafStart);
     RtlCopyMemory(Missing->Name, Name, Length * sizeof(WCHAR));
 
     ExAcquireFastMutex(&VolCB->MissingNameMutex);
@@ -682,27 +696,16 @@ NtfsRecordNameMissing(_In_ PVolumeContextBlock VolCB,
 }
 
 static
-USHORT
-NtfsMissingNameLeafStart(_In_reads_(Length) PCWSTR Name,
-                         _In_ USHORT Length)
-{
-    USHORT Index = Length;
-
-    while (Index > 0 && Name[Index - 1] != L'\\')
-        Index--;
-    return Index;
-}
-
-static
 BOOLEAN
 NtfsMissingNameLeafMatches(_In_ PNtfsMissingName Entry,
+                           _In_ ULONG LeafHash,
                            _In_reads_(LeafLength) PCWSTR Leaf,
                            _In_ USHORT LeafLength)
 {
-    USHORT Start = NtfsMissingNameLeafStart(Entry->Name, Entry->Length);
+    USHORT Start = Entry->LeafStart;
     USHORT Index;
 
-    if (Entry->Length - Start != LeafLength)
+    if (Entry->LeafHash != LeafHash || Entry->Length - Start != LeafLength)
         return FALSE;
 
     for (Index = 0; Index < LeafLength; Index++)
@@ -725,12 +728,14 @@ NtfsForgetMissingName(_In_ PVolumeContextBlock VolCB,
     PLIST_ENTRY Next;
     LIST_ENTRY Stale;
     USHORT LeafStart;
+    ULONG LeafHash;
 
     if (!VolCB || !Name || !Length)
         return;
 
     Length = NtfsMissingNameLength(Name, Length);
     LeafStart = NtfsMissingNameLeafStart(Name, Length);
+    LeafHash = NtfsHashName(Name + LeafStart, Length - LeafStart);
     InitializeListHead(&Stale);
     ExAcquireFastMutex(&VolCB->MissingNameMutex);
     for (Entry = VolCB->MissingNameList.Flink;
@@ -742,6 +747,7 @@ NtfsForgetMissingName(_In_ PVolumeContextBlock VolCB,
 
         Next = Entry->Flink;
         if (NtfsMissingNameLeafMatches(Missing,
+                                       LeafHash,
                                        Name + LeafStart,
                                        Length - LeafStart))
         {
