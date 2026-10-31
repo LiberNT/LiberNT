@@ -10797,7 +10797,7 @@ static void set_glsl_shader_program(const struct wined3d_context_gl *context_gl,
                 || entry->vs.material_shininess_location != -1)
             entry->constant_update_mask |= WINED3D_SHADER_CONST_FFP_MATERIAL;
     }
-    if (entry->vs.clip_planes_location != -1)
+    if (entry->vs.clip_planes_location != -1 || !gl_info->supported[WINED3D_GLSL_130])
         entry->constant_update_mask |= WINED3D_SHADER_CONST_VS_CLIP_PLANES;
     if (entry->vs.pointsize_min_location != -1)
         entry->constant_update_mask |= WINED3D_SHADER_CONST_VS_POINTSIZE;
