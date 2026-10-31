@@ -1104,6 +1104,63 @@ VmAllocationGranularity(void)
     WorldDestroy(&World);
 }
 
+static void
+VmQueryRuns(void)
+{
+    TEST_WORLD World;
+    MI_ADDRESS_SPACE Space;
+    MI_MEMORY_INFORMATION Info;
+    ULONG64 Base = 0, Size = 0x400000, Other, Table;
+
+    WorldCreate(&World, 256, 1, 256);
+    ProcessCreate(&World, &Space);
+    CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Base, &Size, MI_MEM_RESERVE, MI_PROT_READWRITE)));
+    Table = (Base + 0x30000 + 0x1FFFFF) & ~0x1FFFFFULL;
+    Other = Base;
+    CHECK(NT_SUCCESS(Alloc(&Space, &Other, 0x8000, MI_MEM_COMMIT, MI_PROT_READWRITE)));
+    Other = Base + 0x8000;
+    CHECK(NT_SUCCESS(Alloc(&Space, &Other, 0x4000, MI_MEM_COMMIT, MI_PROT_READONLY)));
+    Other = Base + 0xC000;
+    CHECK(NT_SUCCESS(Alloc(&Space, &Other, 0x2000, MI_MEM_COMMIT, MI_PROT_READWRITE | MI_PROT_GUARD)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + 0x1000, 1)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + 0x6000, 2)));
+    Other = Base + 0x20000;
+    CHECK(NT_SUCCESS(Alloc(&Space, &Other, 0x4000, MI_MEM_COMMIT, MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(Free(&Space, Base + 0x21000, 0x2000, MI_MEM_DECOMMIT)));
+    Other = Table - 0x2000;
+    CHECK(NT_SUCCESS(Alloc(&Space, &Other, 0x4000, MI_MEM_COMMIT, MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Table, 3)));
+
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base, &Info)));
+    CHECK(Info.State == MI_MEM_COMMIT && Info.RegionSize == 0x8000 && Info.Protect == MI_PROT_READWRITE);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base + 0x2000, &Info)));
+    CHECK(Info.State == MI_MEM_COMMIT && Info.RegionSize == 0x6000 && Info.Protect == MI_PROT_READWRITE);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base + 0x8000, &Info)));
+    CHECK(Info.State == MI_MEM_COMMIT && Info.RegionSize == 0x4000 && Info.Protect == MI_PROT_READONLY);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base + 0xC000, &Info)));
+    CHECK(Info.State == MI_MEM_COMMIT && Info.RegionSize == 0x2000 &&
+          Info.Protect == (MI_PROT_READWRITE | MI_PROT_GUARD));
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base + 0xE000, &Info)));
+    CHECK(Info.State == MI_MEM_RESERVE && Info.RegionSize == 0x12000 && Info.Protect == 0);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base + 0x20000, &Info)));
+    CHECK(Info.State == MI_MEM_COMMIT && Info.RegionSize == 0x1000);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base + 0x21000, &Info)));
+    CHECK(Info.State == MI_MEM_RESERVE && Info.RegionSize == 0x2000);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base + 0x23000, &Info)));
+    CHECK(Info.State == MI_MEM_COMMIT && Info.RegionSize == 0x1000);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Base + 0x24000, &Info)));
+    CHECK(Info.State == MI_MEM_RESERVE && Info.BaseAddress + Info.RegionSize == Table - 0x2000);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Table - 0x2000, &Info)));
+    CHECK(Info.State == MI_MEM_COMMIT && Info.RegionSize == 0x4000 && Info.Protect == MI_PROT_READWRITE);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, Table + 0x2000, &Info)));
+    CHECK(Info.State == MI_MEM_RESERVE && Info.BaseAddress + Info.RegionSize == Base + 0x400000);
+
+    CHECK(NT_SUCCESS(Free(&Space, Base, 0, MI_MEM_RELEASE)));
+    ProcessDestroy(&World, &Space);
+    WorldExpectClean(&World, 256);
+    WorldDestroy(&World);
+}
+
 void
 TestVm(void)
 {
@@ -1121,6 +1178,7 @@ TestVm(void)
     VmWorkingSetList();
     VmLockRanges();
     VmAllocationGranularity();
+    VmQueryRuns();
 }
 
 static

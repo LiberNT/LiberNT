@@ -1358,7 +1358,12 @@ MiQueryVirtualMemory(
     ULONG64 Start = MI_PAGE_ALIGN_DOWN(Address);
     BOOLEAN Committed;
     BOOLEAN Uniform;
+    BOOLEAN HaveRun = FALSE;
+    BOOLEAN Locked = FALSE;
+    KIRQL OldIrql = 0;
+    ULONG LockedFrame = 0;
     ULONG Protection;
+    MI_PTE Run = 0;
     PMI_VAD Vad;
     ULONG64 Va;
 
@@ -1413,16 +1418,46 @@ MiQueryVirtualMemory(
         ULONG TableFrame = 0;
         PMI_PTE Slot = MiPtLookup(Space, Va, &TableFrame);
         BOOLEAN Clones;
+        BOOLEAN Memo;
 
         if (TableEnd > MI_VAD_END(Vad))
             TableEnd = MI_VAD_END(Vad);
         Clones = MiCloneIntersects(Space, Va, TableEnd);
+        Memo = (BOOLEAN)(Vad->Type == MiVadPrivate && !Clones && Slot != NULL);
+        Locked = (BOOLEAN)(Memo && !MI_VAD_IS_DIRECT(Vad));
+        if (Locked)
+        {
+            LockedFrame = TableFrame;
+            OldIrql = MiPfnLock(&Space->System->Pfn, LockedFrame);
+        }
         for (; Va < TableEnd; Va += PAGE_SIZE)
         {
             BOOLEAN NextCommitted;
             ULONG NextProtection;
+            MI_PTE Pte = Memo ? MiArchPteRead(Slot) : 0;
 
-            MiPageStatusAt(Space, Vad, Va, Slot, TableFrame, TRUE, Clones, &NextCommitted, &NextProtection);
+            if (Memo && !MiArchPteIsValid(Pte))
+            {
+                if (HaveRun && Pte == Run)
+                {
+                    NextCommitted = Committed;
+                    NextProtection = Protection;
+                }
+                else
+                {
+                    MiPageStatusLocked(Space, Vad, Va, Pte, FALSE, &NextCommitted, &NextProtection);
+                    Run = Pte;
+                    HaveRun = TRUE;
+                }
+            }
+            else if (Locked)
+            {
+                MiPageStatusLocked(Space, Vad, Va, Pte, FALSE, &NextCommitted, &NextProtection);
+            }
+            else
+            {
+                MiPageStatusAt(Space, Vad, Va, Slot, TableFrame, TRUE, Clones, &NextCommitted, &NextProtection);
+            }
             if (NextCommitted != Committed || NextProtection != Protection)
                 goto Done;
             if (Slot != NULL)
@@ -1435,9 +1470,16 @@ MiQueryVirtualMemory(
                 break;
             }
         }
+        if (Locked)
+        {
+            MiPfnUnlock(&Space->System->Pfn, LockedFrame, OldIrql);
+            Locked = FALSE;
+        }
     }
 
 Done:
+    if (Locked)
+        MiPfnUnlock(&Space->System->Pfn, LockedFrame, OldIrql);
     Information->RegionSize = Va - Start;
     MI_RW_RELEASE_SHARED(&Space->Lock);
     return STATUS_SUCCESS;
