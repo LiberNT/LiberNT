@@ -28,10 +28,28 @@
 #include <reactos/version.rc>
 
 IDI_ICON1 ICON "res/terminal.ico"
+
+#pragma code_page(65001)
+
+#include "lang/en-US.rc"
+#ifdef LANGUAGE_AR_MA
+    #include "lang/ar-MA.rc"
+#endif
+#ifdef LANGUAGE_ES_ES
+    #include "lang/es-ES.rc"
+#endif
+#ifdef LANGUAGE_FR_FR
+    #include "lang/fr-FR.rc"
+#endif
+#ifdef LANGUAGE_JA_JP
+    #include "lang/ja-JP.rc"
+#endif
+#ifdef LANGUAGE_ZH_CN
+    #include "lang/zh-CN.rc"
+#endif
 #else
 /* @makedep: wcmd.ico */
 IDI_ICON1 ICON wcmd.ico
-#endif
 
 #pragma makedep po
 
@@ -188,37 +206,6 @@ and can therefore be used as a comment in a batch file.\n"
 
   WCMD_RMDIR,  "RMDIR <directory> deletes a directory.\n"
 
-#ifdef __REACTOS__
-  WCMD_START,
-"Start a program, or open a document in the program normally used for files\n\
-with that suffix.\n\
-Usage:\n\
-start [options] program_filename [...]\n\
-start [options] document_filename\n\
-\n\
-Options:\n\
-""title""        Specifies the title of the child windows.\n\
-/d directory   Start the program in the specified directory.\n\
-/b             Don't create a new console for the program.\n\
-/i             Start the program with fresh environment variables.\n\
-/min           Start the program minimized.\n\
-/max           Start the program maximized.\n\
-/low           Start the program in the idle priority class.\n\
-/normal        Start the program in the normal priority class.\n\
-/high          Start the program in the high priority class.\n\
-/realtime      Start the program in the realtime priority class.\n\
-/abovenormal   Start the program in the abovenormal priority class.\n\
-/belownormal   Start the program in the belownormal priority class.\n\
-/node n        Start the program on the specified NUMA node.\n\
-/affinity mask Start the program with the specified affinity mask.\n\
-/wait          Wait for the started program to finish, then exit with its\n\
-               exit code.\n\
-/unix          Use a Unix filename and start the file like Windows\n\
-               Explorer.\n\
-/ProgIDOpen    Open a document using the specified progID.\n\
-/?             Display this help and exit.\n"
-
-#else
   WCMD_START,
 "Start a program, or open a document in the program normally used for files\n\
 with that suffix.\n\
@@ -248,7 +235,6 @@ Options:\n\
 /ProgIDOpen    Open a document using the specified progID.\n\
 /?             Display this help and exit.\n"
 
-#endif
   WCMD_SET,
 "SET displays or changes the cmd environment variables.\n\
 \n\
@@ -431,12 +417,7 @@ Enter HELP <command> for further information on any of the above commands.\n"
   WCMD_VOLUMEPROMPT, "Volume label (11 characters, <Enter> for none)?"
   WCMD_ANYKEY,"Press any key to continue... "
   WCMD_CONSTITLE,"Wine Command Prompt"
-#ifdef __REACTOS__
-  WCMD_VERSION,"Microsoft Windows [Version %1!S!]\n"
-  WCMD_BANNER,"LiberNT [Version %1!S! %2!S!]\n(C) Copyright %3!S! LiberNT Team.\n"
-#else
   WCMD_VERSION,"Microsoft Windows %1!S!\n"
-#endif
   WCMD_MOREPROMPT, "More? "
   WCMD_LINETOOLONG, "The input line is too long.\n"
   WCMD_VOLUMELABEL, "Volume in drive %1!c! is %2\n"
@@ -456,3 +437,4 @@ Enter HELP <command> for further information on any of the above commands.\n"
   WCMD_NUMCOPIED, "%t%1!u! file(s) copied\n"
   WCMD_NOCOPYTOSELF, "File cannot be copied onto itself.\n"
 }
+#endif

@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     cmd.c
+    confirm.c
     fc.c
     testlist.c)
 

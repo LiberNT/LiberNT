@@ -1,0 +1,335 @@
+/*
+ * PROJECT:     LiberNT Command Processor
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Spanish resources
+ * COPYRIGHT:   Copyright the Wine translators (po/es.po)
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_SPANISH, SUBLANG_NEUTRAL
+
+STRINGTABLE
+{
+    WCMD_CALL, "CALL <nombre de archivo de lotes> se utiliza dentro de un archivo de lotes\n\
+para ejecutar comandos existentes dentro de otro archivo de lotes. Cuando\n\
+el archivo de lotes existe, el control regresa al archivo desde el que fue\n\
+llamado. Con el comando CALL se pueden pasar parámetros al procedimiento\n\
+llamado.\n\
+\n\
+Cualquier cambio sobre el directorio por defecto, las variables de entorno\n\
+u otro cambio realizado desde una llamada a procedimiento son heredados por\n\
+el procedimiento que realizo la llamada.\n"
+    WCMD_CD, "CD <directorio> es la versión corta del comando CHDIR. Este comando cambia\n\
+el directorio actual.\n"
+    WCMD_CHDIR, "CHDIR <directorio> cambia el directorio actual.\n"
+    WCMD_CLS, "CLS limpia la consola actual.\n"
+    WCMD_COPY, "COPY <archivo> copia un archivo.\n"
+    WCMD_DATE, "DATE muestra o cambia la fecha del sistema.\n"
+    WCMD_DEL, "DEL <archivo> borra un archivo o grupo de archivos.\n"
+    WCMD_DIR, "DIR muestra el contenido de un directorio.\n"
+    WCMD_ECHO, "ECHO <cadena> muestra la <cadena> suministrada en el terminal actual.\n\
+\n\
+ECHO ON muestra en pantalla los comandos de un archivo de lotes previamente\n\
+a su ejecución.\n\
+\n\
+ECHO OFF invierte el efecto de un ECHO ON previamente activado (ECHO por\n\
+defecto es OFF). Es posible ocultar el comando ECHO OFF añadiendo un\n\
+signo @ delante de él.\n"
+    WCMD_ERASE, "ERASE <archivo> borra un archivo o grupo de archivos.\n"
+    WCMD_FOR, "El comando FOR se utiliza para ejecutar un comando para cada archivo de un\n\
+conjunto de archivos.\n\
+\n\
+Sintaxis: FOR %variable IN (lista) DO comando\n\
+\n\
+El signo % debe duplicarse cuando se usa FOR en un archivo de lotes.\n"
+    WCMD_GOTO, "El comando GOTO mueve la ejecución a otro mandato dentro de un archivo de\n\
+lotes.\n\
+\n\
+La etiqueta que es el objetivo de un comando GOTO puede ser de hasta 255\n\
+caracteres de longitud pero no puede incluir espacios (esto es diferente a\n\
+otros sistemas operativos). Si dos o más etiquetas idénticas existen en un\n\
+archivo de lotes, siempre se ejecutará la primera de ellas. Una llamada\n\
+GOTO a una etiqueta inexistente terminara la ejecución del archivo de\n\
+lotes.\n\
+\n\
+El comando GOTO no tiene ningún efecto cuando se usa interactivamente.\n"
+    WCMD_HELP, "HELP <comando> muestra una breve ayuda sobre un comando.\n\
+HELP sin ningún otro argumento muestra los comandos CMD por defecto.\n"
+    WCMD_IF, "IF se utiliza para ejecutar condicionalmente un comando.\n\
+\n\
+Sintaxis: IF [NOT] EXIST archivo comando\n\
+          IF [NOT] cadena1==cadena2 comando\n\
+          IF [NOT] ERRORLEVEL número comando\n\
+\n\
+En la segunda forma del comando, cadena1 y cadena2 deben estar entre\n\
+comillas dobles. La comparación no distingue mayúsculas de minúsculas.\n"
+    WCMD_LABEL, "LABEL se utiliza para establecer la etiqueta de volumen de disco.\n\
+\n\
+Sintaxis: LABEL [unidad:]\n\
+El comando le solicitará una nueva etiqueta de volumen para la unidad.\n\
+Puede ver la etiqueta actual del disco con el comando VOL.\n"
+    WCMD_MD, "MD <nombre> es la versión corta de MKDIR. Este comando crea un subdirectorio.\n"
+    WCMD_MKDIR, "Ayuda <nombre> crea un subdirectorio.\n"
+    WCMD_MOVE, "MOVE mueve un archivo o directorio a un nuevo lugar dentro del sistema de\n\
+archivos.\n\
+\n\
+Si el elemento movido es un directorio, todos los archivos y subdirectorios\n\
+por debajo de él son movidos también.\n\
+\n\
+MOVE fallara si la antigua localización y la nueva están en diferentes\n\
+unidades de DOS.\n"
+    WCMD_PATH, "PATH cambia o muestra la ruta de búsqueda cmd.\n\
+\n\
+Ejecutar PATH sin argumentos mostrará la configuración actual de PATH\n\
+(inicialmente este valor se obtiene del registro). Para cambiar la\n\
+configuración ejecute PATH seguido del nuevo valor.\n\
+\n\
+También es posible modificar el PATH usando la variable de entorno PATH,\n\
+por ejemplo:\n\
+PATH %PATH%;c:\\temp\n"
+    WCMD_PAUSE, "PAUSE muestra un mensaje en pantalla pidiendo al usuario que pulse\n\
+cualquier tecla para continuar.\n\
+\n\
+Este comando es útil en archivos de lotes para permitir al usuario leer la\n\
+salida de un comando antes de que este desaparezca de la pantalla.\n"
+    WCMD_PROMPT, "PROMPT ajusta el prompt de la línea de comandos.\n\
+\n\
+La cadena que sigue al comando PROMPT (y el espacio inmediatamente después)\n\
+aparece al principio de la línea cuando cmd está esperando la entrada de\n\
+comandos.\n\
+\n\
+Las siguientes cadenas de caracteres tienen el significado que se muestra:\n\
+\n\
+$$    Signo dólar         $_    Nueva línea         $b    Signo tubería (|)\n\
+$d    Fecha actual        $e    Escape              $g    Signo >\n\
+$l    Signo <             $n    Unidad actual       $p    Ruta actual\n\
+$q    Signo igual         $t    Hora actual         $v    Versión de cmd\n\
+\n\
+Nótese que si se introduce el comando PROMPT sin una cadena de prompt\n\
+reinicializará el prompt al valor por defecto, que es el directorio actual\n\
+(que incluye la letra de la unidad actual) seguido por un signo mayor\n\
+que (>).\n\
+(como un comando PROMPT $p$g).\n\
+\n\
+El prompt puede también ser cambiado alterando la variable de entorno\n\
+PROMPT, por lo que el comando 'SET PROMPT=texto' tiene el mismo efecto que\n\
+'PROMPT texto'.\n"
+    WCMD_REM, "Un comando que empieza por REM (seguido de un espacio) no ejecuta ninguna\n\
+acción, y por tanto puede ser utilizada como un comentario en un archivo de\n\
+lotes.\n"
+    WCMD_REN, "REN <archivo> es la versión corta de RENAME. Este comando renombra un archivo.\n"
+    WCMD_RENAME, "RENAME <archivo> renombra un archivo.\n"
+    WCMD_RD, "RD <directorio> es la versión corta de RMDIR. Este comando borra una carpeta.\n"
+    WCMD_RMDIR, "RMDIR <directorio> borra una carpeta.\n\
+\n"
+    WCMD_START, "Inicia un programa, o abre un documento con el programa que se usa\n\
+normalmente para los archivos con esa extensión.\n\
+Uso:\n\
+start [opciones] archivo_de_programa [...]\n\
+start [opciones] archivo_de_documento\n\
+\n\
+Opciones:\n\
+""título""        Especifica el título de las ventanas secundarias.\n\
+/d directorio   Inicia el programa en el directorio especificado.\n\
+/b              No crea una consola nueva para el programa.\n\
+/i              Inicia el programa con variables de entorno nuevas.\n\
+/min            Inicia el programa minimizado.\n\
+/max            Inicia el programa maximizado.\n\
+/low            Inicia el programa con la clase de prioridad inactiva.\n\
+/normal         Inicia el programa con la clase de prioridad normal.\n\
+/high           Inicia el programa con la clase de prioridad alta.\n\
+/realtime       Inicia el programa con la clase de prioridad en tiempo\n\
+                real.\n\
+/abovenormal    Inicia el programa con la clase de prioridad superior a\n\
+                la normal.\n\
+/belownormal    Inicia el programa con la clase de prioridad inferior a\n\
+                la normal.\n\
+/node n         Inicia el programa en el nodo NUMA especificado.\n\
+/affinity máscara\n\
+                Inicia el programa con la máscara de afinidad\n\
+                especificada.\n\
+/wait           Espera a que termine el programa iniciado y sale con su\n\
+                código de salida.\n\
+/unix           Usa un nombre de archivo Unix y abre el archivo como lo\n\
+                hace el Explorador de Windows.\n\
+/ProgIDOpen     Abre un documento con el progID especificado.\n\
+/?              Muestra esta ayuda y sale.\n"
+    WCMD_SET, "SET cambia o muestra las variables de entorno de cmd.\n\
+\n\
+SET sin parámetros muestra todas las variables de entorno actuales.\n\
+\n\
+Para crear o modificar una variable de entorno la sintaxis es:\n\
+\n\
+SET <variable>=<valor>\n\
+\n\
+donde <variable> y <valor> son cadenas de caracteres. No debe haber\n\
+espacios antes del signo igual, ni la variable puede contener espacios\n\
+intermedios.\n\
+\n\
+Bajo Wine, el entorno del sistema operativo subyacente se incluye en el\n\
+entorno de Win32 por lo que, por lo general, habrá muchos más valores que\n\
+en una implementación Win32 nativa. Nótese que no es posible afectar al\n\
+entorno del sistema operativo desde cmd.\n"
+    WCMD_SHIFT, "SHIFT se utiliza en un archivo de lotes para eliminar un parámetro de la\n\
+cabeza de la lista, por lo que el parámetro 2 se convierte en el\n\
+parámetro 1 y demás. No tiene efecto si se llama desde la línea de comando.\n"
+    WCMD_TIME, "TIME muestra o cambia la hora actual del sistema.\n"
+    WCMD_TITLE, "TITLE <cadena> ajusta el título de la ventana de cmd.\n"
+    WCMD_TYPE, "TYPE <archivo> copia el <archivo> al dispositivo de consola (o a donde sea\n\
+si se redirecciona). No se realiza ninguna comprobación de si el archivo es\n\
+texto legible.\n"
+    WCMD_VERIFY, "VERIFY se usa para poner, quitar o probar la etiqueta de verificación.\n\
+Las formas válidas son:\n\
+\n\
+VERIFY ON\tPone la bandera.\n\
+VERIFY OFF\tQuita la bandera.\n\
+VERIFY\t\tMuestra ON u OFF como corresponda.\n\
+\n\
+La bandera de verificación no tiene funcionalidad en Wine.\n"
+    WCMD_VER, "VER muestra la versión de cmd que se está ejecutando.\n"
+    WCMD_VOL, "VOL muestra la etiqueta de un volumen de disco.\n"
+    WCMD_ENDLOCAL, "ENDLOCAL finaliza la localización del entorno en un archivo de lotes que se\n\
+introdujo por una llamada a SETLOCAL.\n"
+    WCMD_SETLOCAL, "SETLOCAL inicia la localización de cambios de entorno en un archivo de\n\
+lotes.\n\
+\n\
+Los cambios en el entorno realizados tras una llamada a SETLOCAL son\n\
+locales al archivo de lotes, y son mantenidos hasta que se encuentra un\n\
+ENDLOCAL (o al final del archivo, lo que primero suceda), en este punto\n\
+los parámetros de entorno anteriores son restaurados.\n"
+    WCMD_PUSHD, "PUSHD <directorio> almacena el directorio actual en una pila, y después\n\
+accede al directorio pasado como argumento.\n"
+    WCMD_POPD, "POPD cambia el directorio actual al que se almacenó con PUSHD.\n"
+    WCMD_ASSOC, "ASSOC modifica o muestra las asociaciones de las extensiones de archivo.\n\
+\n\
+Sintaxis: ASSOC [.ext[=[fileType]]]\n\
+\n\
+ASSOC sin argumentos muestra las asociaciones de archivo actuales.\n\
+Si se usa con con una extensión de archivo, muestra la asociación actual.\n\
+Si no se especifica un tipo de archivo después del igual, se borra la\n\
+asociación actual, si existe alguna.\n"
+    WCMD_FTYPE, "FTYPE modifica o muestra las asociaciones de las comandos de apertura\n\
+asociadas con extensiones de archivos.\n\
+\n\
+sintaxis: FTYPE [fileType[=[openCommand]]]\n\
+\n\
+Sin argumentos, muestra los tipos de archivo que están definidos para los\n\
+comandos de apertura.\n\
+Si solo se uso un tipo de archivo, muestra las cadenas de comando asociadas\n\
+si existe alguna.\n\
+Si no se especifica un comando después del igual, se borra la cadena\n\
+asociada al tipo de archivo.\n"
+    WCMD_MORE, "MORE muestra la salida de archivos o entrada de tubería por páginas.\n"
+    WCMD_CHOICE, "CHOICE muestra un texto y espera, hasta que el usuario presiona una tecla\n\
+válida de la opciones mostradas.\n\
+CHOICE se usa principalmente para crear menús de selección en archivos de\n\
+lotes.\n"
+    WCMD_EXIT, "EXIT termina la sesión de comandos actual y regresa al sistema operativo o\n\
+intérprete de comandos desde el que invocó cmd.\n"
+    WCMD_MKLINK, "Crea un vínculo simbólico.\n\
+\n\
+Sintaxis: MKLINK [opciones] nombre_vínculo destino\n\
+\n\
+Opciones:\n\
+/d             Crea un vínculo simbólico de directorio.\n\
+/h             Crea un vínculo físico.\n\
+/j             Crea una unión de directorio.\n\
+nombre_vínculo es el nombre del nuevo vínculo simbólico.\n\
+destino es la ruta a la que apunta nombre_vínculo.\n"
+    WCMD_ALLHELP, "Los comandos internos de CMD son:\n\
+ASSOC\t\tMuestra o cambia asociaciones de una extensión de archivo\n\
+ATTRIB\t\tMuestra o cambia los atributos de archivo de DOS\n\
+CALL\t\tLlama un archivo de lotes desde otro\n\
+CD (CHDIR)\tCambia el directorio actual\n\
+CHOICE\t\tEspera hasta que se selecciona una opción de una lista\n\
+CLS\t\tLimpia la pantalla de la consola\n\
+COPY\t\tCopia un archivo\n\
+CTTY\t\tCambia el dispositivo de entrada/salida\n\
+DATE\t\tMuestra o cambia la fecha del sistema\n\
+DEL (ERASE)\tElimina un archivo o conjunto de archivos\n\
+DIR\t\tLista el contenido de un directorio\n\
+ECHO\t\tManda una cadena de texto a la salida de consola\n\
+ENDLOCAL\tFinaliza los cambios de entorno en un archivo de lotes\n\
+FTYPE\t\tMuestra o cambia los comandos de apertura por extensión\n\
+HELP\t\tMuestra una ayuda breve sobre un comando\n\
+MD (MKDIR)\tCrea un subdirectorio\n\
+MKLINK\tCrea un vínculo simbólico\n\
+MORE\t\tMuestra la salida del terminal por páginas\n\
+MOVE\t\tMueve un archivo, conjunto de archivos o árbol de directorio\n\
+PATH\t\tAjusta o cambia la ruta de búsqueda\n\
+PAUSE\t\tPausa la ejecución de un archivo de lotes\n\
+POPD\t\tRestaura el directorio al último almacenado con PUSHD\n\
+PROMPT\t\tCambia el prompt de comandos\n\
+PUSHD\t\tCambia a un nuevo directorio, almacenando el actual\n\
+REN (RENAME)\tRenombra un archivo\n\
+RD (RMDIR)\tElimina un subdirectorio\n\
+SET\t\tAjusta o muestra variables de entorno\n\
+SETLOCAL\tComienza los cambios de entorno en un archivo de lotes\n\
+START\t\tEjecuta un programa, o abre un documento asociado con un\n\
+\t\tprograma\n\
+TIME\t\tAjusta o muestra la hora actual del sistema\n\
+TITLE\t\tAjusta el título de la ventana para la sesión de CMD\n\
+TYPE\t\tLista el contenido de un archivo de texto\n\
+VER\t\tMuestra la versión actual de CMD\n\
+VOL\t\tMuestra la etiqueta de volumen de un dispositivo de disco\n\
+XCOPY\t\tCopia los archivos de origen o directorios a un destino\n\
+EXIT\t\tSale de CMD\n\
+\n\
+Escriba HELP <comando> para más información sobre cualquiera de los\n\
+comandos superiores.\n"
+    WCMD_CONFIRM, "¿Está seguro?"
+    WCMD_YES, "S"
+    WCMD_NO, "N"
+    WCMD_NOASSOC, "Falta una asociación de archivo para la extensión %1\n"
+    WCMD_NOFTYPE, "Ningún comando de apertura asociado con el tipo de archivo '%1'\n"
+    WCMD_OVERWRITE, "¿Sobrescribir %1?"
+    WCMD_MORESTR, "Más..."
+    WCMD_TRUNCATEDLINE, "Línea en procesamiento por lotes posiblemente truncada. Usando:\n"
+    WCMD_NYI, "Aún no implementado\n\
+\n"
+    WCMD_NOARG, "Falta un argumento\n"
+    WCMD_SYNTAXERR, "Error de sintaxis\n"
+    WCMD_FILENOTFOUND, "%1: Archivo no encontrado\n"
+    WCMD_NOCMDHELP, "No hay ayuda disponible para %1\n"
+    WCMD_NOTARGET, "El destino de la instrucción GOTO no se ha encontrado\n"
+    WCMD_CURRENTDATE, "La fecha actual es %1\n"
+    WCMD_CURRENTTIME, "La hora actual es %1\n"
+    WCMD_NEWDATE, "Ingrese la nueva fecha: "
+    WCMD_NEWTIME, "Ingrese la nueva hora: "
+    WCMD_MISSINGENV, "Variable de entorno %1 no definida\n"
+    WCMD_READFAIL, "No se pudo abrir '%1'\n"
+    WCMD_CALLINSCRIPT, "No se puede llamar a una etiqueta fuera de un archivo de lotes\n"
+    WCMD_ALL, "T"
+    WCMD_DELPROMPT, "¿Eliminar %1?"
+    WCMD_ECHOPROMPT, "Echo es %1\n"
+    WCMD_VERIFYPROMPT, "Verificar es %1\n"
+    WCMD_VERIFYERR, "Verificar debe ser ON o OFF\n"
+    WCMD_ARGERR, "Error de parámetro\n"
+    WCMD_VOLUMESERIALNO, "El número de serie del volumen es %1!04x!-%2!04x!\n\
+\n"
+    WCMD_VOLUMEPROMPT, "¿Etiqueta del volumen (11 caracteres, <Return> para ninguno)?"
+    WCMD_ANYKEY, "Pulse cualquier tecla para continuar... "
+    WCMD_CONSTITLE, "Símbolo del sistema de Wine"
+    WCMD_VERSION, "Microsoft Windows [Versión %1!S!]\n"
+    WCMD_BANNER, "LiberNT [Versión %1!S! %2!S!]\n\
+(C) Copyright %3!S! El equipo de LiberNT.\n"
+    WCMD_MOREPROMPT, "¿Más? "
+    WCMD_LINETOOLONG, "La línea de entrada es demasiado larga.\n"
+    WCMD_VOLUMELABEL, "El volumen en la unidad %1!c! es %2\n"
+    WCMD_VOLUMENOLABEL, "El volumen en la unidad %1!c! no tiene etiqueta.\n"
+    WCMD_YESNO, " (Sí|No)"
+    WCMD_YESNOALL, " (Sí|No|Todo)"
+    WCMD_NO_COMMAND_FOUND, "No se puede reconocer '%1' como un comando interno o externo, o una secuencia de comandos por lotes.\n"
+    WCMD_DIVIDEBYZERO, "Error división por cero.\n"
+    WCMD_NOOPERAND, "Se esperaba un operando.\n"
+    WCMD_NOOPERATOR, "Se esperaba un operador.\n"
+    WCMD_BADPAREN, "Discrepancia entre paréntesis.\n"
+    WCMD_BADHEXOCT, "Número mal formado: debe ser decimal (12),\n\
+ hexadecimal (0x34) u octal (056).\n"
+    WCMD_FILENAMETOOLONG, "El nombre de archivo es demasiado largo.\n"
+    WCMD_BADTOKEN, "Error de sintaxis: %1 inesperado\n"
+    WCMD_ENDOFLINE, "fin de línea"
+    WCMD_ENDOFFILE, "fin de archivo"
+    WCMD_NUMCOPIED, "%t%1!u! archivo(s) copiado(s)\n"
+    WCMD_NOCOPYTOSELF, "No se puede copiar un archivo sobre sí mismo.\n"
+}

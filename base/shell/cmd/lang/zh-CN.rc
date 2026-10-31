@@ -1,0 +1,283 @@
+/*
+ * PROJECT:     LiberNT Command Processor
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Chinese (Simplified) resources
+ * COPYRIGHT:   Copyright the Wine translators (po/zh_CN.po)
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+
+STRINGTABLE
+{
+    WCMD_CALL, "CALL <批处理文件名> 用于在批处理文件中执行来自另一个批处理文件的命令。\n\
+当批处理文件存在时，控制器将返回到调用它的文件。CALL 可为要调用的程序\n\
+提供参数。\n\
+\n\
+对默认目录的修改，调用的程序中创建的环境变量等将由调用者继承。\n"
+    WCMD_CD, "CD <目录> 是 CHDIR 的缩写版本。它可以切换当前的默认目录。\n"
+    WCMD_CHDIR, "CHDIR <目录> 可切换当前默认目录。\n"
+    WCMD_CLS, "CLS 可清空控制台屏幕。\n"
+    WCMD_COPY, "COPY <文件名> 可复制一个文件。\n"
+    WCMD_DATE, "DATE 可显示或更改系统日期。\n"
+    WCMD_DEL, "DEL <filename> 可删除一个或一组文件。\n"
+    WCMD_DIR, "DIR 可列出目录的内容。\n"
+    WCMD_ECHO, "ECHO <字符串> 可在当前终端设备上显示 <字符串>。\n\
+\n\
+ECHO ON 可将所有批处理文件中调用的命令在执行前显示在终端设备上。\n\
+\n\
+ECHO OFF 的效果与 ECHO ON 相反（ECHO 默认为 OFF）。可在命令前添加 @\n\
+来避免 ECHO OFF 的效果。\n"
+    WCMD_ERASE, "ERASE <filename> 可删除一个或一组文件。\n"
+    WCMD_FOR, "FOR 用于逐一执行用于一组文件的命令。\n\
+\n\
+用法: FOR %变量 IN (命令组) DO 命令\n\
+\n\
+在批处理文件中使用 FOR 时必须将 % 符号写两次。\n"
+    WCMD_GOTO, "GOTO 命令可将批处理文件中的指令执行转移到另一个声明。\n\
+\n\
+GOTO 目标标签不可长于 255 字符，且不可包含空格（和其他操作系统不同）。\n\
+如果批处理文件中包含多个标签则执行第一个。将 GOTO 指向不存在的标签则会\n\
+终止批处理文件执行。\n\
+\n\
+GOTO 在交互模式下使用时没有效果。\n"
+    WCMD_HELP, "HELP <命令> 显示某个主题的简短帮助信息。\n\
+不使用参数时调用 HELP 将显示所有 CMD 内置命令。\n"
+    WCMD_IF, "IF 用于根据条件执行命令。\n\
+\n\
+语法: IF [NOT] EXIST 文件名 命令\n\
+     IF [NOT] 字符串1==字符串2 命令\n\
+     IF [NOT] ERRORLEVEL 序号 命令\n\
+\n\
+在命令的第二种用法中，字符串 1 和字符串 2 必须用双引号包住。比较条件\n\
+非大小写敏感。\n"
+    WCMD_LABEL, "LABEL 用于设置磁盘卷标。\n\
+\n\
+语法: LABEL [drive:]\n\
+该命令将询问指定驱动器的新卷标。\n\
+您可以使用 VOL 命令显示磁盘卷标。\n"
+    WCMD_MD, "MD <名称> 是 MKDIR 的缩写版本。该命令用于创建子目录。\n"
+    WCMD_MKDIR, "MKDIR <名称> 用于创建子目录。\n"
+    WCMD_MOVE, "MOVE 可将文件或目录移动至文件系统内的新位置。\n\
+\n\
+移动目录时，将一同移动目录所包含的所有文件和子目录。\n\
+\n\
+MOVE 不支持在不同的 DOS 盘符间移动对象。\n"
+    WCMD_PATH, "PATH 可显示或更改命令搜索路径。\n\
+\n\
+输入 PATH 将显示当前的 PATH 设置（默认从注册表读取）。在 PATH 后附加\n\
+新值以改变设置。\n\
+\n\
+也可以使用 PATH 环境变量来编辑 PATH 值，例如:\n\
+PATH %PATH%;c:\\temp\n"
+    WCMD_PAUSE, "PAUSE 可在屏幕上显示一条消息并提示用户按某个按键。\n\
+\n\
+该命令主要用于在批处理文件中让用户读取上一个命令的输出，\n\
+以免其输出上滚到屏幕外。\n"
+    WCMD_PROMPT, "PROMPT 可设置命令行提示符。\n\
+\n\
+PROMPT 命令后跟随的字符串（包括紧随其后的空格）将在 cmd 等待输入时\n\
+在行头显示。\n\
+\n\
+如下字符串带有特殊含义，如下:\n\
+\n\
+$$    美金符号           $_    换行                $b    管道符号 (|)\n\
+$d    当前日期           $e    转义                $g    > 符号\n\
+$l    < 符号             $n    当前盘符            $p    当前路径\n\
+$q    等号               $t    当前时间            $v    cmd 版本\n\
+\n\
+注意，输入 PROMPT 命令而不附带提示符字串将重置提示符为默认值，也就是\n\
+当前目录（包含当前盘符）后带一个大于号（>）。\n\
+（等效于 PROMPT $p$g）。\n\
+\n\
+您也可以使用 PROMPT 环境变量更改提示符，因而命令“SET PROMPT=text”和\n\
+“PROMPT text”等效。\n"
+    WCMD_REM, "由 REM（由空格紧随）开头的命令行不生效，因而可用作批处理文件中的注释。\n\
+\n"
+    WCMD_REN, "REN <文件名> 是 RENAME 的缩写版本。用于重命名文件。\n"
+    WCMD_RENAME, "RENAME <文件名> 用于重命名文件。\n"
+    WCMD_RD, "RD <目录> 是 RMDIR 的缩写版本。用于删除目录。\n"
+    WCMD_RMDIR, "RMDIR <目录> 用于删除目录。\n"
+    WCMD_START, "启动程序，或用一般用于带有某个后缀的程序打开文档。\n\
+用法:\n\
+start [选项] 程序文件名 [...]\n\
+start [选项] 文档文件名\n\
+\n\
+选项:\n\
+“标题”\t设置子窗口的标题。\n\
+/d 目录\t在指定目录启动程序。\n\
+/b\t\t不要为程序创建新控制台。\n\
+/i\t\t使用新环境启动程序。\n\
+/min\t\t最小化启动程序。\n\
+/max\t\t最大化启动程序。\n\
+/low\t\t使用 idle 优先级类启动程序。\n\
+/normal\t\t使用 normal 优先级类启动程序。\n\
+/high\t\t使用 high 优先级类启动程序。\n\
+/realtime\t使用 realtime 优先级类启动程序。\n\
+/abovenormal\t使用 abovenormal 优先级类启动程序。\n\
+/belownormal\t使用 belownormal 优先级类启动程序。\n\
+/n\t\t在指定 NUMA 节点启动程序。\n\
+/affinity 掩码\t使用指定关联性掩码启动程序。\n\
+/wait\t\t等待启动了的程序完成操作后使用其退出代码退出。\n\
+/unix\t\t使用 Unix 文件名并像 Windows 资源管理器一样启动文件。\n\
+/ProgIDOpen\t使用指定 progID 打开文档。\n\
+/?\t\t显示此帮助并退出。\n"
+    WCMD_SET, "SET 可显示或更改 cmd 环境变量。\n\
+\n\
+SET 不带参数使用可用于显示当前所有的环境变量。\n\
+\n\
+传教或修改环境变量的语法如下:\n\
+\n\
+SET <变量>=<值>\n\
+\n\
+<变量> 和 <值> 均为字符串。等号前和变量名均不能带有空格。\n\
+\n\
+在 Wine 环境中，运行 Wine 的操作系统中的环境变量将传递到 Win32 环境中，\n\
+因此环境中可能包含 Win32 原生实现之外的值。注意，您不能在 cmd 内影响\n\
+操作系统的环境。\n"
+    WCMD_SHIFT, "SHIFT 用于在列表头删除一个参数，因而第 2 个参数将变成第 1 个参数，\n\
+以此类推。从命令行调用该命令时没有任何效果。\n"
+    WCMD_TIME, "TIME 设置或显示当前系统时间。\n"
+    WCMD_TITLE, "TITLE <字符串> 可设置 cmd 窗口的标题。\n"
+    WCMD_TYPE, "TYPE <文件名> 将 <文件名> 复制到控制台设备（在重定向后复制到别处）。\n\
+此程序不会检查文件是否是可读文本。\n\
+\n"
+    WCMD_VERIFY, "VERIFY 用于设置、清除或测试校验旗标。有效形式如下:\n\
+\n\
+VERIFY ON\t设置此旗标。\n\
+VERIFY OFF\t清除此旗标。\n\
+VERIFY\t\t根据实际情况显示 ON 或 OFF。\n\
+\n\
+Verify 旗标对 Wine 不生效。\n"
+    WCMD_VER, "VER 显示您正在运行的 cmd 的版本。\n"
+    WCMD_VOL, "VOL 显示磁盘设备的卷标。\n"
+    WCMD_ENDLOCAL, "ENDLOCAL 结束批处理文件中从 SETLOCAL 开始的对环境更改的本地化。\n"
+    WCMD_SETLOCAL, "SETLOCAL 开始批处理文件中对环境更改的本地化。\n\
+\n\
+在 SETLOCAL 后进行的环境更改将仅限于批处理文件内，并将在遇到 ENDLOCAL\n\
+指令后（或文件结尾）取消这些更改，并恢复所有的环境更改。\n"
+    WCMD_PUSHD, "PUSHD <目录> 将当前目录保存到栈，然后切换到所提供的目录。\n"
+    WCMD_POPD, "POPD 将当前目录更改为 PUSHD 保存的最后一个目录。\n"
+    WCMD_ASSOC, "ASSOC 显示或更改文件扩展名所关联的文件类型。\n\
+\n\
+语法: ASSOC [.扩展名[=[文件类型]]]\n\
+\n\
+不带参数运行 ASSOC 将显示当前的文件类型关联。\n\
+如使用文件扩展名作为参数，将显示当前扩展名的关联信息。\n\
+如指定扩展名而不在等号后追加文件类型，将移除目前的关联（如果存在）。\n"
+    WCMD_FTYPE, "FTYPE 显示或更改与文件类型关联的打开命令。\n\
+\n\
+语法: FTYPE [文件类型[=[打开命令]]]\n\
+\n\
+如不带任何参数运行，该命令将显示已定义启动命令字符串的文件类型。\n\
+如使用文件类型作为参数，该命令将显示关联于此文件类型的启动命令（如果存在）。\n\
+如指定文件类型而不在等号后追加打开命令将移除此文件类型所关联的启动命令。\n"
+    WCMD_MORE, "MORE 分页显示文件输出或管道输入。\n"
+    WCMD_CHOICE, "CHOICE 显示文本并等待用户输入选单中对应某个选项的键。\n\
+CHOICE 常用于在批处理文件中创建选项菜单。\n"
+    WCMD_EXIT, "EXIT 结束当前命令会话并返回操作系统或者调用 CMD 的命令壳。\n"
+    WCMD_MKLINK, "创建符号链接。\n\
+\n\
+语法: MKLINK [options] link_name target\n\
+\n\
+选项:\n\
+/d             创建目录符号链接。\n\
+/h             创建硬链接。\n\
+/j             创建目录结。\n\
+link_name 为符号链接的名称。\n\
+target 为 link_name 指向的路径。\n"
+    WCMD_ALLHELP, "CMD 的内建命令如下:\n\
+ASSOC\t\t显示或更改文件扩展名关联\n\
+ATTRIB\t\t显示或更改 DOS 文件属性\n\
+CALL\t\t在批处理文件中调用另一个批处理文件\n\
+CD (CHDIR)\t更改当前的默认目录\n\
+CHOICE\t\t在选单中等待按键输入\n\
+CLS\t\t清空控制台\n\
+COPY\t\t复制文件\n\
+CTTY\t\t更换输入输出设备\n\
+DATE\t\t显示或更改系统日期\n\
+DEL (ERASE)\t删除一个或一组文件\n\
+DIR\t\t列出目录中的内容\n\
+ECHO\t\t将文本直接复制到控制台输出\n\
+ENDLOCAL\t终止批处理文件中对环境更改的本地化\n\
+FTYPE\t\t显示或更改文件类型关联的打开命令\n\
+HELP\t\t显示某个主题的帮助信息概览\n\
+MD (MKDIR)\t创建子目录\n\
+MKLINK\t\t创建符号链接\n\
+MORE\t\t分页显示输出\n\
+MOVE\t\t移动一个或多个文件，或整个目录树\n\
+PATH\t\t设置或显示命令搜索路径\n\
+PAUSE\t\t暂停批处理文件的执行\n\
+POPD\t\t恢复到 PUSHD 保存的最后一个目录\n\
+PROMPT\t\t更改命令提示符\n\
+PUSHD\t\t切换到新目录并保存当前的目录\n\
+REN (RENAME)\t重命名文件\n\
+RD (RMDIR)\t删除子目录\n\
+SET\t\t设置或显示环境变量\n\
+SETLOCAL\t开始批处理文件中对环境更改的本地化\n\
+START\t\t启动程序或使用关联的程序打开文档\n\
+TIME\t\t设置或显示当前的系统时间\n\
+TITLE\t\t设置 CMD 会话的窗口标题\n\
+TYPE\t\t输出文本文件的内容\n\
+VER\t\t显示 CMD 版本号\n\
+VOL\t\t显示磁盘设备的卷标\n\
+XCOPY\t\t将源文件或目录树复制到目标位置\n\
+EXIT\t\t退出 CMD\n\
+\n\
+输入 HELP <命令> 以获取关于上述命令的详细信息。\n"
+    WCMD_CONFIRM, "您确定吗?"
+    WCMD_YES, "Y"
+    WCMD_NO, "N"
+    WCMD_NOASSOC, "缺少扩展名 %1 的文件关联\n"
+    WCMD_NOFTYPE, "没有与文件类型 ""%1"" 相关联的打开命令\n"
+    WCMD_OVERWRITE, "覆盖 %1?"
+    WCMD_MORESTR, "更多..."
+    WCMD_TRUNCATEDLINE, "批处理中的行可能被截断。正在使用:\n"
+    WCMD_NYI, "尚未实现\n\
+\n"
+    WCMD_NOARG, "缺少参数\n"
+    WCMD_SYNTAXERR, "语法错误\n"
+    WCMD_FILENOTFOUND, "%1: 找不到文件\n"
+    WCMD_NOCMDHELP, "%1 的帮助不可用\n"
+    WCMD_NOTARGET, "未找到目标 GOTO\n"
+    WCMD_CURRENTDATE, "当前日期是 %1\n"
+    WCMD_CURRENTTIME, "当前时间是 %1\n"
+    WCMD_NEWDATE, "输入新的日期: "
+    WCMD_NEWTIME, "输入新的时间: "
+    WCMD_MISSINGENV, "环境变量 %1 未被定义\n"
+    WCMD_READFAIL, "无法打开 ""%1""\n"
+    WCMD_CALLINSCRIPT, "无法调用批处理脚本外的批处理标签\n"
+    WCMD_ALL, "A"
+    WCMD_DELPROMPT, "删除 %1?"
+    WCMD_ECHOPROMPT, "Echo 处于 %1 状态\n"
+    WCMD_VERIFYPROMPT, "Verify 处于 %1 状态\n"
+    WCMD_VERIFYERR, "Verify 只能是开启 (ON) 或关闭 (OFF) 状态\n"
+    WCMD_ARGERR, "参数错误\n"
+    WCMD_VOLUMESERIALNO, "卷的序列号是 %1!04x!-%2!04x!\n\
+\n"
+    WCMD_VOLUMEPROMPT, "卷标 (11 个字符，直接按 <回车> 以留空)?"
+    WCMD_ANYKEY, "请按任意键继续..."
+    WCMD_CONSTITLE, "Wine 命令提示符"
+    WCMD_VERSION, "Microsoft Windows [版本 %1!S!]\n"
+    WCMD_BANNER, "LiberNT [版本 %1!S! %2!S!]\n\
+(C) 版权所有 %3!S! LiberNT 团队。\n"
+    WCMD_MOREPROMPT, "更多?"
+    WCMD_LINETOOLONG, "输入过长。\n"
+    WCMD_VOLUMELABEL, "驱动器 %1!c! 的卷标为 %2\n"
+    WCMD_VOLUMENOLABEL, "驱动器 %1!c! 没有卷标。\n"
+    WCMD_YESNO, " (是(Y)|否(N))"
+    WCMD_YESNOALL, " (是(Y)|否(N)|全部(A))"
+    WCMD_NO_COMMAND_FOUND, "无法将 ""%1"" 识别为内部或外部命令，或者批处理脚本。\n"
+    WCMD_DIVIDEBYZERO, "被零除错误。\n"
+    WCMD_NOOPERAND, "期望一个操作数。\n"
+    WCMD_NOOPERATOR, "期望一个操作符。\n"
+    WCMD_BADPAREN, "括号不匹配。\n"
+    WCMD_BADHEXOCT, "数字的格式错误 - 必须是十进制 (12),\n\
+ 十六进制 (0x34) 或者八进制 (056)。\n"
+    WCMD_FILENAMETOOLONG, "文件名过长。\n"
+    WCMD_BADTOKEN, "语法错误: 非预期 %1\n"
+    WCMD_ENDOFLINE, "行尾"
+    WCMD_ENDOFFILE, "文件尾"
+    WCMD_NUMCOPIED, "已复制 %t%1!u! 个文件\n"
+    WCMD_NOCOPYTOSELF, "文件无法被复制到自身。\n"
+}
