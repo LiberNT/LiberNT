@@ -675,6 +675,35 @@ static int acpi_power_resume(struct acpi_device *device, int state)
 	return result;
 }
 
+static ACPI_STATUS
+acpi_power_reference_current_state (
+	ACPI_HANDLE		handle,
+	UINT32			level,
+	void			*context,
+	void			**return_value)
+{
+	struct acpi_device	*device = NULL;
+	struct acpi_handle_list	*list;
+	int			list_state = ACPI_POWER_RESOURCE_STATE_OFF;
+	int			state;
+	unsigned int		i;
+
+	if (acpi_bus_get_device(handle, &device) || !device ||
+	    !device->flags.power_manageable || !device->power.flags.power_resources)
+		return AE_OK;
+	if (acpi_bus_get_power(handle, &state) || state < ACPI_STATE_D0 || state > ACPI_STATE_D3_HOT)
+		return AE_OK;
+
+	list = &device->power.states[state].resources;
+	if (!list->count || acpi_power_get_list_state(list, &list_state) ||
+	    list_state != ACPI_POWER_RESOURCE_STATE_ON)
+		return AE_OK;
+
+	for (i = 0; i < list->count; i++)
+		acpi_power_on(list->handles[i], device);
+	return AE_OK;
+}
+
 int
 acpi_power_init (void)
 {
@@ -690,5 +719,7 @@ acpi_power_init (void)
 		return_VALUE(-15);
 	}
 
+	AcpiWalkNamespace(ACPI_TYPE_DEVICE, ACPI_ROOT_OBJECT, ACPI_UINT32_MAX,
+			  acpi_power_reference_current_state, NULL, NULL, NULL);
 	return_VALUE(0);
 }
