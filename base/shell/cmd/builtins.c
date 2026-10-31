@@ -3945,20 +3945,35 @@ RETURN_CODE WCMD_assoc(const WCHAR *args, BOOL assoc)
       if (newValue == NULL) {
         WCHAR *space;
         WCHAR subkey[MAXSTRING];
+#ifdef __REACTOS__
+        WCHAR name[MAXSTRING];
+#endif
 
         /* Query terminates the parameter at the first space */
         lstrcpyW(keyValue, args);
+#ifdef __REACTOS__
+        /* FIXME: Windows also drops the quotes from the name; they are kept */
+        space = wcsrchr(keyValue, ' ');
+#else
         space = wcschr(keyValue, ' ');
+#endif
         if (space) *space=0x00;
 
         /* Set up key name */
         lstrcpyW(subkey, keyValue);
+#ifdef __REACTOS__
+        lstrcpyW(name, keyValue);
+#endif
         if (!assoc) lstrcatW(subkey, L"\\Shell\\Open\\Command");
 
         valueLen = sizeof(keyValue);
         if (RegOpenKeyExW(key, subkey, 0, accessOptions, &readKey) == ERROR_SUCCESS &&
             RegQueryValueExW(readKey, NULL, NULL, NULL, (LPBYTE)keyValue, &valueLen) == ERROR_SUCCESS) {
+#ifdef __REACTOS__
+          WCMD_output_asis(name);
+#else
           WCMD_output_asis(args);
+#endif
           WCMD_output_asis(L"=");
           WCMD_output_asis(keyValue);
           WCMD_output_asis(L"\r\n");
