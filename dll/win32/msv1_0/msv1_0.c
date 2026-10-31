@@ -1514,6 +1514,7 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
     PUNICODE_STRING ErasePassword = NULL;
     PLOGON_LIST_ENTRY LogonEntry = NULL;
     BOOLEAN WellKnownLogon = FALSE, ExistingLogon = FALSE;
+    BOOLEAN PlainNetwork;
 
     TRACE("LsaApLogonUserEx2()\n");
 
@@ -1536,11 +1537,16 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
     }
     RtlInitUnicodeString(&ComputerName, ComputerNameData);
 
+    PlainNetwork = LogonType == Network &&
+                   SubmitBufferSize >= sizeof(MSV1_0_INTERACTIVE_LOGON) &&
+                   ((PMSV1_0_INTERACTIVE_LOGON)ProtocolSubmitBuffer)->MessageType == MsV1_0InteractiveLogon;
+
     /* Parameters validation */
     if (LogonType == Interactive ||
         LogonType == Batch ||
         LogonType == Service ||
-        LogonType == Unlock)
+        LogonType == Unlock ||
+        PlainNetwork)
     {
         PMSV1_0_INTERACTIVE_LOGON LogonInfo;
         ULONG_PTR PtrOffset;
@@ -1644,7 +1650,8 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
         LogonPwdData.PlainPwd = &LogonInfo->Password;
         LogonPwdData.ComputerName = &ComputerName;
 
-        if ((LsaGetClientInfo != NULL) &&
+        if (!PlainNetwork &&
+            (LsaGetClientInfo != NULL) &&
             NT_SUCCESS(LsaGetClientInfo(&ClientInfo)))
             LogonPwdData.TrustedClient = ClientInfo.HasTcbPrivilege;
 
@@ -1680,7 +1687,7 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
     }
     // TODO: Add other LogonType validity checks.
 
-    if (LogonType != Network)
+    if (LogonType != Network || PlainNetwork)
     {
         Status = SamValidateUser(LogonType,
                                  LogonUserName,
