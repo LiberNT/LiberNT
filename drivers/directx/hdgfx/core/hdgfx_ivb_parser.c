@@ -55,6 +55,16 @@ static const struct
     { 0xB020, 0xB027 },
 };
 
+static const struct
+{
+    uint32_t First;
+    uint32_t Last;
+} SnbReadableRegisters[] =
+{
+    { 0x2280, 0x228F },
+    { 0x2310, 0x235F },
+};
+
 static bool
 IvbUserRegister(
     uint32_t Offset)
@@ -72,7 +82,24 @@ IvbUserRegister(
 }
 
 static bool
+SnbReadableRegister(
+    uint32_t Offset)
+{
+    size_t Index;
+
+    if (Offset % 4 != 0)
+        return false;
+    for (Index = 0; Index < sizeof(SnbReadableRegisters) / sizeof(SnbReadableRegisters[0]); Index++)
+    {
+        if (Offset >= SnbReadableRegisters[Index].First && Offset <= SnbReadableRegisters[Index].Last)
+            return true;
+    }
+    return false;
+}
+
+static bool
 IvbCheckMi(
+    uint32_t Gen,
     const uint32_t *Dwords,
     uint32_t Left,
     bool Blitter,
@@ -112,7 +139,7 @@ IvbCheckMi(
                 return false;
             for (Index = 1; Index < *Length; Index += 2)
             {
-                if (!IvbUserRegister(Dwords[Index]) &&
+                if (!(Gen >= 7 && IvbUserRegister(Dwords[Index])) &&
                     !(Dwords[Index] == HDGFX_REG(RING_INSTPM, 0) && (Dwords[Index + 1] & ~IVB_INSTPM_CONSTANT_OFFSET) == 0))
                 {
                     return false;
@@ -120,8 +147,10 @@ IvbCheckMi(
             }
             return true;
         case IVB_MI_STORE_REGISTER_MEM:
+            return !Blitter && *Length == IVB_MI_REGISTER_MEM_DWORDS &&
+                   (Gen >= 7 ? IvbUserRegister(Dwords[1]) : SnbReadableRegister(Dwords[1]));
         case IVB_MI_LOAD_REGISTER_MEM:
-            return !Blitter && *Length == IVB_MI_REGISTER_MEM_DWORDS && IvbUserRegister(Dwords[1]);
+            return !Blitter && Gen >= 7 && *Length == IVB_MI_REGISTER_MEM_DWORDS && IvbUserRegister(Dwords[1]);
         default:
             return false;
     }
@@ -152,6 +181,7 @@ IvbCheckGfx(
 
 bool
 HdgfxIvbCheckBatch(
+    uint32_t Gen,
     const uint32_t *Dwords,
     uint32_t Count,
     bool Blitter,
@@ -167,7 +197,7 @@ HdgfxIvbCheckBatch(
         bool Allowed;
 
         if (Client == IVB_CLIENT_MI)
-            Allowed = IvbCheckMi(Dwords + Position, Count - Position, Blitter, &Length, &End);
+            Allowed = IvbCheckMi(Gen, Dwords + Position, Count - Position, Blitter, &Length, &End);
         else if (Client == IVB_CLIENT_GFX && !Blitter)
             Allowed = IvbCheckGfx(Dwords + Position, Count - Position, &Length);
         else if (Client == IVB_CLIENT_BLT && Blitter)

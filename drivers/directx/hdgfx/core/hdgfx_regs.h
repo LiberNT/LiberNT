@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Intel HD Graphics Driver
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Ironlake and Ivy Bridge register and field table
+ * PURPOSE:     Ironlake, Sandy Bridge and Ivy Bridge register and field table
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
@@ -17,19 +17,25 @@
     R(HWS_PGA,              0x2080, 0) \
     R(ESR,                  0x20B8, 0) \
     R(GDSR,                 0x12CA4, 0) \
+    R(SNB_3D_CHICKEN,       0x2084, 0) \
     R(CHICKEN_3D3,          0x2090, 0) \
     R(RING_HWSTAM,          0x2098, 0) \
     R(RING_MI_MODE,         0x209C, 0) \
     R(FF_THREAD_MODE,       0x20A0, 0) \
     R(RING_IMR,             0x20A8, 0) \
     R(RING_INSTPM,          0x20C0, 0) \
+    R(SNB_GT_MODE,          0x20D0, 0) \
+    R(SNB_CACHE_MODE_0,     0x2120, 0) \
     R(RENDER_RING_MODE,     0x229C, 0) \
+    R(SNB_GFX_MODE,         0x2520, 0) \
     R(RENDER_HWS_PGA,       0x4080, 0) \
     R(BLT_HWS_PGA,          0x4280, 0) \
     R(CACHE_MODE_0,         0x7000, 0) \
     R(CACHE_MODE_1,         0x7004, 0) \
     R(GT_MODE,              0x7008, 0) \
     R(COMMON_SLICE_CHICKEN1, 0x7010, 0) \
+    R(SNB_UCGCTL1,          0x9400, 0) \
+    R(SNB_UCGCTL2,          0x9404, 0) \
     R(GDRST,                0x941C, 0) \
     R(ECOBUS,               0xA180, 0) \
     R(FORCEWAKE_MT,         0xA188, 0) \
@@ -108,8 +114,16 @@
     R(SDEIMR,               0xC4004, 0) \
     R(SDEIIR,               0xC4008, 0) \
     R(SDEIER,               0xC400C, 0) \
+    R(TRANS_DATA_M1,        0xE0030, 0x1000) \
+    R(TRANS_DATA_N1,        0xE0034, 0x1000) \
+    R(TRANS_LINK_M1,        0xE0040, 0x1000) \
+    R(TRANS_LINK_N1,        0xE0044, 0x1000) \
+    R(TRANS_DP_CTL,         0xE0300, 0x1000) \
     R(PCH_ADPA,             0xE1100, 0) \
     R(PCH_LVDS,             0xE1180, 0) \
+    R(DP_CTL,               0xE4100, 0x100) \
+    R(DP_AUX_CTL,           0xE4110, 0x100) \
+    R(DP_AUX_DATA,          0xE4114, 0x100) \
     R(TRANS_CONF,           0xF0008, 0x1000) \
     R(FDI_RX_CTL,           0xF000C, 0x1000) \
     R(FDI_RX_MISC,          0xF0010, 0x1000) \
@@ -186,6 +200,7 @@
     F(DSP_TILE_Y,               27, 16) \
     F(DSP_TILE_X,               11, 0) \
     F(DPLL_VCO_ENABLE,          31, 31) \
+    F(DPLL_HIGH_SPEED,          30, 30) \
     F(DPLL_MODE,                27, 26) \
     F(DPLL_P2,                  25, 24) \
     F(DPLL_P1_FP0,              23, 16) \
@@ -231,6 +246,25 @@
     F(BLC_PCH_ENABLE,           31, 31) \
     F(BLC_PCH_ACTIVE_LOW,       29, 29) \
     F(BLC_PCH_PERIOD,           31, 16) \
+    F(TRANS_DP_ENABLE,          31, 31) \
+    F(TRANS_DP_PORT,            30, 29) \
+    F(TRANS_DP_ENHANCED,        18, 18) \
+    F(TRANS_DP_BPC,             11, 9) \
+    F(TRANS_DP_VSYNC_HIGH,      4, 4) \
+    F(TRANS_DP_HSYNC_HIGH,      3, 3) \
+    F(DP_ENABLE,                31, 31) \
+    F(DP_SWING,                 27, 25) \
+    F(DP_EMPHASIS,              24, 22) \
+    F(DP_WIDTH,                 21, 19) \
+    F(DP_TRAINING,              10, 8) \
+    F(DP_DETECTED,              2, 2) \
+    F(DP_AUX_BUSY,              31, 31) \
+    F(DP_AUX_DONE,              30, 30) \
+    F(DP_AUX_TIMEOUT,           28, 28) \
+    F(DP_AUX_RECEIVE_ERROR,     25, 25) \
+    F(DP_AUX_SIZE,              24, 20) \
+    F(DP_AUX_PRECHARGE,         19, 16) \
+    F(DP_AUX_CLOCK,             10, 0) \
     F(TRANS_CONF_ENABLE,        31, 31) \
     F(TRANS_CONF_STATE,         30, 30) \
     F(TRANS_CONF_INTERLACE,     23, 21) \

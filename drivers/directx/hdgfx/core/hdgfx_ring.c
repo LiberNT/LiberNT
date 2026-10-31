@@ -225,7 +225,7 @@ HdgfxRingEmitBreadcrumb(
     uint32_t Count = 0;
     uint32_t Index;
 
-    if (Ring->Gen >= 7)
+    if (Ring->Gen >= 6)
         return HdgfxIvbEmitBreadcrumb(Ring, Head, StatusIndex, Value);
     if (StatusIndex < HDGFX_HWS_FIRST_FREE || StatusIndex >= HDGFX_HWS_DWORDS || StatusIndex == HDGFX_HWS_SCRATCH)
         return false;
