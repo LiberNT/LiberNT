@@ -6,6 +6,7 @@
  */
 
 #include "k32_vista.h"
+#include <ndk/exfuncs.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -34,7 +35,9 @@ GetProcessInformation(
         {
             PROCESS_MACHINE_INFORMATION *MachineInformation = ProcessInformation;
             SECTION_IMAGE_INFORMATION ImageInformation;
+            SYSTEM_SUPPORTED_PROCESSOR_ARCHITECTURES_INFORMATION Machines[8];
             USHORT Machine;
+            ULONG Index;
 
             if (ProcessInformationSize != sizeof(*MachineInformation))
             {
@@ -50,13 +53,27 @@ GetProcessInformation(
             if (Machine == IMAGE_FILE_MACHINE_ARM64EC)
                 Machine = IMAGE_FILE_MACHINE_AMD64;
 
+            RtlZeroMemory(Machines, sizeof(Machines));
+            Status = NtQuerySystemInformationEx(SystemSupportedProcessorArchitectures, &hProcess, sizeof(hProcess),
+                                                Machines, sizeof(Machines) - sizeof(Machines[0]), NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             MachineInformation->ProcessMachine = Machine;
             MachineInformation->Res0 = 0;
-            MachineInformation->MachineAttributes = UserEnabled;
-            if (Machine == IMAGE_FILE_MACHINE_NATIVE)
-                MachineInformation->MachineAttributes |= KernelEnabled;
-            else if (Machine == IMAGE_FILE_MACHINE_I386)
-                MachineInformation->MachineAttributes |= Wow64Container;
+            MachineInformation->MachineAttributes = 0;
+            for (Index = 0; Machines[Index].Machine; Index++)
+            {
+                if (Machines[Index].Machine != Machine)
+                    continue;
+                if (Machines[Index].UserMode)
+                    MachineInformation->MachineAttributes |= UserEnabled;
+                if (Machines[Index].KernelMode)
+                    MachineInformation->MachineAttributes |= KernelEnabled;
+                if (Machines[Index].WoW64Container)
+                    MachineInformation->MachineAttributes |= Wow64Container;
+                break;
+            }
             break;
         }
 
