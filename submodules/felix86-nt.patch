@@ -1,3 +1,22 @@
+diff --git a/src/felix86/common/frame.hpp b/src/felix86/common/frame.hpp
+index d2e6e50..f8ebee2 100644
+--- a/src/felix86/common/frame.hpp
++++ b/src/felix86/common/frame.hpp
+@@ -12,11 +12,12 @@ constexpr static std::array saved_gprs = {biscuit::ra, biscuit::sp, biscuit::tp,
+ // A frame in the host stack that contains saved host registers
+ // This is used to restore the context before entering the dispatcher and to also store multiple contexts
+ // (for example when entering the dispatcher, then entering it again from a signal handler etc.)
+-struct felix86_frame {
++struct alignas(16) felix86_frame {
+     constexpr static u64 expected_magic = 0x6814'8664'0000'FE86;
+     u64 magic; // to make sure this is indeed a frame
+     ThreadState* state;
+     u64 invalidate_caller_thunk_ptr;
+     u64 gprs[saved_gprs.size()];
++    u64 syscall_rip;
+     // We don't modify the saved FPRs so we don't need to save them
+ };
+\ No newline at end of file
 diff --git a/src/felix86/common/utility.cpp b/src/felix86/common/utility.cpp
 index fcf5a42..d58c6f7 100644
 --- a/src/felix86/common/utility.cpp
@@ -88,7 +107,7 @@ index fcf5a42..d58c6f7 100644
  extern "C" u8 softfloat_getRoundPrecision() {
      ThreadState* state = ThreadState::Get();
 diff --git a/src/felix86/v2/handlers.cpp b/src/felix86/v2/handlers.cpp
-index 04754f8..7b43a60 100644
+index 04754f8..7ee56ec 100644
 --- a/src/felix86/v2/handlers.cpp
 +++ b/src/felix86/v2/handlers.cpp
 @@ -1174,6 +1174,11 @@ FAST_HANDLE(CMP) {
@@ -113,8 +132,72 @@ index 04754f8..7b43a60 100644
          return;
      }
  
+@@ -4733,6 +4741,9 @@ FAST_HANDLE(SYSCALL) {
+     rec.setGPR(X86_REF_RCX, X86_SIZE_QWORD, rcx);
+ 
+     // Normally the syscall instruction also writes the flags to R11 but we don't need them in our syscall handler
++    if (rec.isRelocatable()) {
++        as.SD(ripreg, offsetof(felix86_frame, syscall_rip), sp);
++    }
+     rec.writebackState();
+     as.MV(a0, sp);
+     rec.callPointer(offsetof(ThreadState, felix86_syscall));
+@@ -4741,7 +4752,11 @@ FAST_HANDLE(SYSCALL) {
+     biscuit::Label after;
+     // TODO: we can get this faster by returning
+     biscuit::GPR temp = rec.scratch();
+-    as.LI(temp, rip);
++    if (rec.isRelocatable()) {
++        as.LD(temp, offsetof(felix86_frame, syscall_rip), sp);
++    } else {
++        as.LI(temp, rip);
++    }
+     as.BEQ(ripreg, temp, &after);
+     // RIP changed during syscall. This happens on sigreturn. Go back to dispatcher
+     rec.backToDispatcher();
+@@ -9639,7 +9654,7 @@ FAST_HANDLE(XGETBV) {
+     biscuit::GPR ecx = rec.getGPR(X86_REF_RCX, X86_SIZE_DWORD);
+     as.BEQZ(ecx, &is_zero);
+     as.MV(a0, ecx);
+-    as.LI(scratch, (u64)bad_getbv);
++    rec.loadHostAddress(scratch, (u64)bad_getbv);
+     as.JALR(scratch);
+     as.C_UNDEF();
+     as.C_UNDEF();
+@@ -12174,7 +12189,7 @@ FAST_HANDLE(CMPXCHG16B) {
+         biscuit::Label spinloop, writeloop;
+         biscuit::GPR lock_address = rec.scratch();
+         biscuit::GPR lock = rec.scratch();
+-        as.LI(lock_address, (u64)&g_process_globals.cas128_locks);
++        rec.loadHostAddress(lock_address, (u64)&g_process_globals.cas128_locks);
+         // We will pick one of 256 different spinlocks based on a hash created by our address
+         // This means that if two cmpxchg16b target the same address they will spin on the same lock
+         // but if they target a different address they will likely get a different lock, which should decrease
+@@ -13668,6 +13683,9 @@ FAST_HANDLE(INT) {
+             rec.addi(ripreg, ripreg, offset);
+         }
+         rec.insertSafepoint();
++        if (rec.isRelocatable()) {
++            as.SD(ripreg, offsetof(felix86_frame, syscall_rip), sp);
++        }
+         rec.writebackState();
+         as.MV(a0, sp);
+         as.ADDI(a1, ripreg, instruction.length);
+@@ -13677,7 +13695,11 @@ FAST_HANDLE(INT) {
+         biscuit::Label after;
+         // TODO: we can get this faster by returning
+         biscuit::GPR temp = rec.scratch();
+-        as.LI(temp, rip);
++        if (rec.isRelocatable()) {
++            as.LD(temp, offsetof(felix86_frame, syscall_rip), sp);
++        } else {
++            as.LI(temp, rip);
++        }
+         as.BEQ(ripreg, temp, &after);
+         // RIP changed during syscall. This happens on sigreturn. Go back to dispatcher
+         rec.backToDispatcher();
 diff --git a/src/felix86/v2/recompiler.cpp b/src/felix86/v2/recompiler.cpp
-index f3c0aaf..3582a5a 100644
+index f3c0aaf..50a93db 100644
 --- a/src/felix86/v2/recompiler.cpp
 +++ b/src/felix86/v2/recompiler.cpp
 @@ -18,6 +18,9 @@
@@ -127,8 +210,11 @@ index f3c0aaf..3582a5a 100644
  #include "felix86/emulator.hpp"
  #include "felix86/hle/mmap.hpp"
  #include "felix86/hle/ptrace.hpp"
-@@ -520,6 +523,12 @@ void Recompiler::clearCodeCache(ThreadState* state) {
+@@ -518,8 +521,15 @@ void Recompiler::clearCodeCache(ThreadState* state) {
+     emitNecessaryStuff();
+ }
  
++
  u64 Recompiler::compile(ThreadState* state, u64 rip) {
      FELIX86_PROFILE_INSTANT_INCREMENT(state->thread_stats, AccumulatedJITCount, 1);
 +#ifndef __linux__
@@ -140,7 +226,65 @@ index f3c0aaf..3582a5a 100644
      if (g_config.guest_memory_tracking_enabled) {
          // If memory region isn't mapped or doesn't have the correct protections
          // return a thunk that is in JIT code that will fault and get handled as
-@@ -670,6 +679,10 @@ void Recompiler::insertSafepoint() {
+@@ -561,6 +571,13 @@ u64 Recompiler::compile(ThreadState* state, u64 rip) {
+         }
+     }
+ 
++    emitting_block = false;
++    if (relocatable) {
++        const u64 cached = installCachedBlock(state, rip);
++        if (cached) {
++            return cached;
++        }
++    }
+     u64 size = code_cache_sizes[code_cache_size_index];
+     size_t remaining_size = size - as.GetCodeBuffer().GetCursorOffset();
+     // TODO: restrict max x86 instruction count per block
+@@ -601,6 +618,13 @@ u64 Recompiler::compile(ThreadState* state, u64 rip) {
+         entry.guest = start_rip;
+     }
+ 
++    if (relocatable) {
++        if (block_cacheable && !g_config.calltrace) {
++            recordCachedBlock(block_meta, start_rip, end_rip, host_address_end);
++        }
++        linkRelocatableSites(block_meta);
++    }
++
+     // If other blocks were waiting for this block to be linked, link them now
+     expirePendingLinks(rip);
+ 
+@@ -663,6 +687,29 @@ u64 Recompiler::compile(ThreadState* state, u64 rip) {
+     return block_meta.host_address;
+ }
+ 
++void Recompiler::loadHostAddress(biscuit::GPR reg, u64 value) {
++    if (!relocatable) {
++        as.LI(reg, value);
++        return;
++    }
++
++    OptimizationGuard guard(as, optimization_guard_counter);
++    if ((u64)as.GetCursorPointer() & 0x2) {
++        as.C_NOP();
++    }
++
++    u64 start = (u64)as.GetCursorPointer();
++    i32 literal_offset = ((start + 12) & 0x7) ? 16 : 12;
++    as.AUIPC(reg, 0);
++    as.LD(reg, literal_offset, reg);
++    as.J(literal_offset);
++    if (literal_offset == 16) {
++        as.GetCodeBuffer().Emit32(0);
++    }
++    as.GetCodeBuffer().Emit<u64>(value);
++    current_host_literals.push_back(start + literal_offset);
++}
++
+ void Recompiler::insertSafepoint() {
+     // This instruction must be 4 bytes, see invalidateBlock for reason
+     OptimizationGuard guard(as, optimization_guard_counter);
+@@ -670,6 +717,10 @@ void Recompiler::insertSafepoint() {
  }
  
  void Recompiler::markPagesAsReadOnly(u64 start, u64 end) {
@@ -151,11 +295,262 @@ index f3c0aaf..3582a5a 100644
      if (!g_config.protect_pages) {
          return;
      }
+@@ -694,6 +745,8 @@ u64 Recompiler::compileSequence(bool mode32, u64 rip) {
+     const u64 start_rip = rip;
+     const bool is_single_step = g_config.single_step || single_step != SingleStepMode::None;
+     compiling = true;
++    emitting_block = true;
++    block_cacheable = !is_single_step;
+ 
+     // When invalidating from other threads we need to do it in a single atomic instruction, thus block starts
+     // need to be aligned to 4 bytes
+@@ -716,6 +769,9 @@ u64 Recompiler::compileSequence(bool mode32, u64 rip) {
+     block_meta.host_address = (u64)as.GetCursorPointer();
+     block_meta.guest_address = start_rip;
+     block_meta.translation_sizes.resize(instructions.size());
++    block_meta.host_literals.clear();
++    current_host_literals.clear();
++    current_link_sites.clear();
+     current_block_metadata = &block_meta;
+ 
+     resetBlockState(rip);
+@@ -876,7 +932,13 @@ u64 Recompiler::compileSequence(bool mode32, u64 rip) {
+ 
+     flush_icache(block_meta.host_address, (u64)as.GetCursorPointer());
+ 
++    for (u64 literal : current_host_literals) {
++        block_meta.host_literals.push_back((u32)(literal - block_meta.host_address));
++    }
++    current_host_literals.clear();
++
+     current_block_metadata = nullptr;
++    emitting_block = false;
+     local_x87_state = x87State::Unknown; // we don't know what ThreadState::x87_state is at runtime
+     if (single_step == SingleStepMode::PtraceSinglestep) {
+         single_step = SingleStepMode::None;
+@@ -1574,6 +1636,7 @@ void Recompiler::clearBreakpoints() {
+ bool Recompiler::checkIfBreakpoint(u64 rip) {
+     for (size_t i = 0; i < breakpoints.size(); i++) {
+         if (rip == breakpoints[i].second) {
++            block_cacheable = false;
+             writebackState();
+             as.MV(a0, Recompiler::threadStatePointer());
+             as.LI(a1, rip);
+@@ -2235,7 +2298,7 @@ void Recompiler::restoreState() {
+     scratch_index = saved_scratch_index;
+ }
+ 
+-void Recompiler::backToDispatcher(bool return_hint, bool skip_lookup) {
++void Recompiler::backToDispatcher(bool return_hint, bool skip_lookup, bool direct) {
+     OptimizationGuard guard(as, optimization_guard_counter);
+     const bool is_single_step = single_step != SingleStepMode::None;
+     const u64 handler = skip_lookup ? compile_next_skip_address_cache : compile_next_handler;
+@@ -2245,7 +2308,7 @@ void Recompiler::backToDispatcher(bool return_hint, bool skip_lookup) {
+         // Unreachable
+         as.C_UNDEF();
+         as.C_UNDEF();
+-    } else if (!relocatable) {
++    } else if (!relocatable || direct) {
+         const u64 offset = handler - (u64)as.GetCursorPointer();
+         ASSERT(IsValid2GBImm(offset));
+         const auto hi20 = static_cast<int32_t>(((static_cast<uint32_t>(offset) + 0x800) >> 12) & 0xFFFFF);
+@@ -2853,16 +2916,28 @@ void Recompiler::updateSign(biscuit::GPR result, x86_size_e size) {
+ void Recompiler::jumpAndLink(u64 rip, bool return_link, bool skip_lookup) {
+     OptimizationGuard guard(as, optimization_guard_counter);
+     const bool is_single_step = g_config.single_step || single_step != SingleStepMode::None;
+-    if (is_single_step || relocatable) {
++    if (is_single_step) {
+         // Just emit jump to dispatcher
+         backToDispatcher(return_link, skip_lookup);
+         return;
+     }
+ 
++    if (relocatable && emitting_block) {
++        u64 site = (u64)as.GetCursorPointer();
++        backToDispatcher(return_link, skip_lookup);
++        current_link_sites.push_back({site, rip, return_link, skip_lookup});
++        return;
++    }
++
++    emitLinkSite(rip, return_link, skip_lookup);
++}
++
++void Recompiler::emitLinkSite(u64 rip, bool return_link, bool skip_lookup) {
++    OptimizationGuard guard(as, optimization_guard_counter);
+     u8* start = as.GetCursorPointer();
+     if (!blockExists(rip)) {
+         uintptr_t link_me = (uintptr_t)as.GetCursorPointer();
+-        backToDispatcher(return_link, skip_lookup);
++        backToDispatcher(return_link, skip_lookup, true);
+ 
+         // The top 7 bits are used as flags.
+         link_me &= ((u64)1 << 57) - 1;
+@@ -2965,11 +3040,125 @@ void Recompiler::jumpAndLinkConditional(biscuit::GPR condition, u64 rip_true, u6
+     jumpAndLink(rip_true);
+ }
+ 
+-void Recompiler::expirePendingLinks(u64 rip) {
+-    if (relocatable) {
++u64 Recompiler::installCachedBlock(ThreadState* state, u64 rip) {
++#ifdef __linux__
++    return 0;
++#else
++    FELIX86_NT_CACHED_BLOCK cached;
++    if (!Felix86NtCacheLookup(rip, &cached)) {
++        return 0;
++    }
++
++    u64 size = code_cache_sizes[code_cache_size_index];
++    size_t remaining_size = size - as.GetCodeBuffer().GetCursorOffset();
++    if (remaining_size < 400'000 + cached.HostSize) {
++        resizeOrClearCodeCache(state);
++    }
++    while (((u64)as.GetCursorPointer() & 0x7) != cached.HostAlign) {
++        as.C_NOP();
++    }
++
++    u8* start = as.GetCursorPointer();
++    memcpy(start, cached.Host, cached.HostSize);
++    for (u32 i = 0; i < cached.Literals; i++) {
++        memcpy(start + cached.LiteralOffsets[i], &cached.LiteralValues[i], sizeof(u64));
++    }
++    as.SetCursorPointer(start + cached.HostSize);
++
++    BlockMetadata& block_meta = getBlockMetadata(rip);
++    block_meta.host_address = (u64)start;
++    block_meta.guest_address = rip;
++    block_meta.ret_stub = 0;
++    block_meta.translation_sizes.resize(cached.Instructions);
++    memcpy(block_meta.translation_sizes.data(), cached.Sizes, cached.Instructions * sizeof(TranslationSize));
++    block_meta.host_literals.assign(cached.LiteralOffsets, cached.LiteralOffsets + cached.Literals);
++    host_pc_map[(u64)start + cached.HostSize - 1] = {&block_meta};
++
++    {
++        auto guard = page_map_lock.lock();
++        u64 start_masked = rip & ~0xFFFull;
++        u64 end_masked = (rip + cached.GuestSize - 1) & ~0xFFFull;
++        for (u64 page = start_masked; page <= end_masked; page += 0x1000) {
++            page_map[page].push_back(&block_meta);
++        }
++    }
++
++    if (g_config.address_cache) {
++        AddressCacheEntry& entry = getAddressCacheEntry(rip);
++        entry.host = block_meta.host_address;
++        entry.guest = rip;
++    }
++
++    flush_icache((u64)start, (u64)start + cached.HostSize);
++
++    current_link_sites.clear();
++    for (u32 i = 0; i < cached.Links; i++) {
++        current_link_sites.push_back({(u64)start + cached.LinkOffsets[i], cached.LinkTargets[i], (cached.LinkFlags[i] & 1) != 0,
++                                      (cached.LinkFlags[i] & 2) != 0});
++    }
++    linkRelocatableSites(block_meta);
++    expirePendingLinks(rip);
++    markPagesAsReadOnly(rip, rip + cached.GuestSize);
++    return block_meta.host_address;
++#endif
++}
++
++void Recompiler::recordCachedBlock(BlockMetadata& block_meta, u64 start_rip, u64 end_rip, u64 host_end) {
++#ifndef __linux__
++    if (!Felix86NtCacheEnabled() || block_meta.host_literals.size() > FELIX86_NT_CACHE_MAX_LITERALS ||
++        current_link_sites.size() > FELIX86_NT_CACHE_MAX_LINKS) {
+         return;
+     }
+ 
++    FELIX86_NT_CACHED_BLOCK cached{};
++    u32 link_offsets[FELIX86_NT_CACHE_MAX_LINKS];
++    u8 link_flags[FELIX86_NT_CACHE_MAX_LINKS];
++
++    cached.Host = (const u8*)block_meta.host_address;
++    cached.HostSize = (u32)(host_end - block_meta.host_address);
++    cached.HostAlign = (u32)(block_meta.host_address & 0x7);
++    cached.GuestSize = (u32)(end_rip - start_rip);
++    cached.Sizes = (const u16*)block_meta.translation_sizes.data();
++    cached.Instructions = (u32)block_meta.translation_sizes.size();
++    cached.LiteralOffsets = block_meta.host_literals.data();
++    cached.Literals = (u32)block_meta.host_literals.size();
++    for (u32 i = 0; i < cached.Literals; i++) {
++        memcpy(&cached.LiteralValues[i], (const u8*)block_meta.host_address + block_meta.host_literals[i], sizeof(u64));
++    }
++    for (size_t i = 0; i < current_link_sites.size(); i++) {
++        link_offsets[i] = (u32)(current_link_sites[i].site - block_meta.host_address);
++        link_flags[i] = (current_link_sites[i].return_hint ? 1 : 0) | (current_link_sites[i].skip_lookup ? 2 : 0);
++        cached.LinkTargets[i] = current_link_sites[i].rip;
++    }
++    cached.LinkOffsets = link_offsets;
++    cached.LinkFlags = link_flags;
++    cached.Links = (u32)current_link_sites.size();
++    Felix86NtCacheRecord(start_rip, &cached);
++#endif
++}
++
++void Recompiler::linkRelocatableSites(BlockMetadata& block_meta) {
++    u64 min = -1ull;
++    u64 max = 0;
++
++    block_meta.link_sites.clear();
++    for (const RelocatableLinkSite& link : current_link_sites) {
++        block_meta.link_sites.push_back(link.site - block_meta.host_address);
++        u8* cursor = as.GetCursorPointer();
++        as.SetCursorPointer((u8*)link.site);
++        emitLinkSite(link.rip, link.return_hint, link.skip_lookup);
++        as.SetCursorPointer(cursor);
++        min = std::min(min, link.site);
++        max = std::max(max, link.site);
++    }
++    current_link_sites.clear();
++
++    if (max != 0) {
++        flush_icache(min, max + 8);
++    }
++}
++
++void Recompiler::expirePendingLinks(u64 rip) {
+     if (!blockExists(rip)) {
+         return;
+     }
 diff --git a/src/felix86/v2/recompiler.hpp b/src/felix86/v2/recompiler.hpp
-index e438ab2..e082ee1 100644
+index e438ab2..743e83e 100644
 --- a/src/felix86/v2/recompiler.hpp
 +++ b/src/felix86/v2/recompiler.hpp
-@@ -530,6 +530,18 @@ struct Recompiler {
+@@ -95,6 +95,8 @@ struct BlockMetadata {
+     // When the block would get recompiled the address cache entry would point to the new block and RSB prediction
+     // would fail. We want RSB to succeed and to not compile past the CALL, so this is our compromise.
+     u64 ret_stub{};
++    std::vector<u32> host_literals{};
++    std::vector<u64> link_sites{};
+ };
+ 
+ using InterruptibleSyscallFunc = u64 (*)(u64* effective_deferred_signals, u64 nr, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 arg5, u64 arg6);
+@@ -202,7 +204,7 @@ struct Recompiler {
+ 
+     void stopCompiling();
+ 
+-    void backToDispatcher(bool return_hint = false, bool skip_lookup = false);
++    void backToDispatcher(bool return_hint = false, bool skip_lookup = false, bool direct = false);
+ 
+     void writebackState();
+ 
+@@ -240,6 +242,14 @@ struct Recompiler {
+ 
+     void jumpAndLink(u64 rip, bool return_hint = false, bool skip_lookup = false);
+ 
++    void emitLinkSite(u64 rip, bool return_hint, bool skip_lookup);
++
++    u64 installCachedBlock(ThreadState* state, u64 rip);
++
++    void recordCachedBlock(BlockMetadata& block_meta, u64 start_rip, u64 end_rip, u64 host_end);
++
++    void linkRelocatableSites(BlockMetadata& block_meta);
++
+     void jumpAndLinkConditional(biscuit::GPR condition, u64 rip_true, u64 rip_false);
+ 
+     void invalidateBlock(BlockMetadata* block);
+@@ -530,6 +540,18 @@ struct Recompiler {
          return restore_state_handler;
      }
  
@@ -174,3 +569,44 @@ index e438ab2..e082ee1 100644
      u64 getCompileNext() {
          return compile_next_handler;
      }
+@@ -621,9 +643,16 @@ struct Recompiler {
+         current_grouping = LMUL::M1;
+     }
+ 
++    void loadHostAddress(biscuit::GPR reg, u64 value);
++
+     void call(u64 target) {
+         resetVectorState(); // set state to garbage as a call may overwrite it
+         ASSERT(isScratch(t4));
++        if (relocatable) {
++            loadHostAddress(t4, target);
++            as.JALR(t4);
++            return;
++        }
+         i64 offset = target - (u64)as.GetCursorPointer();
+         if (IsValidJTypeImm(offset)) {
+             as.JAL(offset);
+@@ -955,6 +984,8 @@ private:
+     std::map<u64, BlockMetadata*> host_pc_map{};
+ 
+     bool compiling{};
++    bool emitting_block{};
++    bool block_cacheable{};
+ 
+     // Whether we already set ThreadState::x87_state to a value or not
+     x87State local_x87_state = x87State::Unknown;
+@@ -1013,6 +1044,14 @@ private:
+     int pushed_this_block = 0;
+ 
+     bool relocatable = false;
++    std::vector<u64> current_host_literals{};
++    struct RelocatableLinkSite {
++        u64 site;
++        u64 rip;
++        bool return_hint;
++        bool skip_lookup;
++    };
++    std::vector<RelocatableLinkSite> current_link_sites{};
+ 
+     bool v0_has_mask = false;
+ 

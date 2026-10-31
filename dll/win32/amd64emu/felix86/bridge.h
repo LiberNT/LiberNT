@@ -94,8 +94,34 @@ void Felix86NtTerminate(uint32_t Status) __attribute__((noreturn));
 void Felix86NtYield(void);
 uint32_t Felix86NtProbeExtensions(void);
 uint32_t Felix86NtVectorBytes(void);
+int Felix86NtRelocatableCode(void);
 void Felix86NtProtectCode(uint64_t Start, uint64_t End);
 uint32_t Felix86NtForgetCode(uint64_t Base, uint64_t Size);
+
+#define FELIX86_NT_CACHE_MAX_LITERALS 16
+#define FELIX86_NT_CACHE_MAX_LINKS 16
+
+typedef struct _FELIX86_NT_CACHED_BLOCK {
+    const uint8_t *Host;
+    const uint16_t *Sizes;
+    const uint32_t *LiteralOffsets;
+    const uint32_t *LinkOffsets;
+    const uint8_t *LinkFlags;
+    uint64_t LiteralValues[FELIX86_NT_CACHE_MAX_LITERALS];
+    uint64_t LinkTargets[FELIX86_NT_CACHE_MAX_LINKS];
+    uint32_t GuestSize;
+    uint32_t HostSize;
+    uint32_t HostAlign;
+    uint32_t Instructions;
+    uint32_t Literals;
+    uint32_t Links;
+} FELIX86_NT_CACHED_BLOCK;
+
+int Felix86NtCacheEnabled(void);
+int Felix86NtCacheLookup(uint64_t Rip, FELIX86_NT_CACHED_BLOCK *Block);
+void Felix86NtCacheRecord(uint64_t Rip, const FELIX86_NT_CACHED_BLOCK *Block);
+void Felix86NtCacheFlush(void);
+void Felix86NtCacheProtect(uint64_t Base, uint64_t Size, uint32_t NewProtect);
 void Felix86NtExcludeCode(uint64_t Base, uint64_t Size);
 int Felix86NtCodeWatchFault(void *Pointers);
 int Felix86NtHostFault(void *Pointers);

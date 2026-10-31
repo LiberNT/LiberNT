@@ -285,7 +285,7 @@ FELIX86_NT_CPU* Felix86NtCreateCpu(void* owner, uint64_t teb) {
     state->ctx.gsbase = teb;
     sigemptyset(&state->signal_mask);
     ThreadState::Set(state);
-    state->recompiler = new Recompiler;
+    state->recompiler = new Recompiler(Felix86NtRelocatableCode() != 0);
 
     auto lock = g_process_globals.states_lock.lock();
     g_process_globals.states.push_back(state);

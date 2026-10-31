@@ -732,6 +732,7 @@ BTCpuNotifyMemoryProtect(
     Felix86NtForgetCode((ULONG_PTR)Address, Size);
     if (After && NT_SUCCESS(Status))
     {
+        Felix86NtCacheProtect((ULONG_PTR)Address, Size, NewProtection);
         FelixInvalidate(Address, Size);
     }
 }

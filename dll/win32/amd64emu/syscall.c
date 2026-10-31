@@ -182,6 +182,7 @@ NotifyMemoryProtect(
     EmuCoreForgetCode(Address, Size);
     if (After && NT_SUCCESS(Status))
     {
+        EmuCoreProtectCode(Address, Size, NewProtect);
         EmuCoreInvalidate(Address, Size);
     }
 }
@@ -390,6 +391,8 @@ EmuNtService(
             if (EmuIsCurrentProcess((HANDLE)Arguments[0]))
             {
                 EmuCoreForgetCode(*(PVOID *)Arguments[1], *(PSIZE_T)Arguments[2]);
+                if (Service == EmuNtProtectVirtualMemory)
+                    EmuCoreProtectCode(*(PVOID *)Arguments[1], *(PSIZE_T)Arguments[2], (ULONG)Arguments[3]);
                 if (OriginalProtect != 0)
                     *(PULONG)Arguments[4] = OriginalProtect;
                 EmuCoreInvalidate(*(PVOID *)Arguments[1], *(PSIZE_T)Arguments[2]);

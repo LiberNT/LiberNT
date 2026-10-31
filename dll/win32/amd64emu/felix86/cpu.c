@@ -176,6 +176,15 @@ EmuCoreForgetCode(
 }
 
 VOID
+EmuCoreProtectCode(
+    _In_ PVOID Base,
+    _In_ SIZE_T Size,
+    _In_ ULONG NewProtect)
+{
+    Felix86NtCacheProtect((ULONG64)Base, Size, NewProtect);
+}
+
+VOID
 EmuCoreExcludeCode(
     _In_ PVOID Base,
     _In_ SIZE_T Size)

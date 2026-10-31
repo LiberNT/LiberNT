@@ -100,6 +100,7 @@ list(APPEND SOURCE
     seh.c
     syscall.c
     thread.c
+    felix86/codecache.c
     felix86/codewatch.c
     felix86/cpu.c
     felix86/ntsupport.c

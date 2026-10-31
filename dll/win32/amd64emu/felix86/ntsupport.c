@@ -97,6 +97,17 @@ Felix86NtVectorBytes(void)
     return (Felix86NtExtensions & FELIX86_NT_EXT_V) ? Felix86NtReadVectorBytes() : 0;
 }
 
+int
+Felix86NtRelocatableCode(void)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"FELIX86_RELOCATABLE");
+    WCHAR Buffer[4];
+    UNICODE_STRING Value = { 0, sizeof(Buffer), Buffer };
+
+    return NT_SUCCESS(RtlQueryEnvironmentVariable_U(NULL, &Name, &Value)) && Value.Length == sizeof(WCHAR) &&
+           Buffer[0] == L'1';
+}
+
 void
 Felix86NtPrint(const char *Text)
 {
@@ -123,6 +134,8 @@ Felix86NtBeginTermination(void)
     HANDLE Thread = NULL;
     PHANDLE Threads = NULL, Grown;
     ULONG Count = 0, Capacity = 0;
+
+    Felix86NtCacheFlush();
 
     while (NT_SUCCESS(NtGetNextThread(NtCurrentProcess(), Thread, SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION, 0, 0, &Thread)))
     {
