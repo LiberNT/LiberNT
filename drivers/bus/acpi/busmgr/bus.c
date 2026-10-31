@@ -230,6 +230,11 @@ acpi_bus_get_power_locked(
 	ACPI_STATUS             status = 0;
 	unsigned long long		psc = 0;
 
+	if (device->power.state == ACPI_STATE_D3_COLD) {
+		*state = ACPI_STATE_D3_COLD;
+		return_VALUE(0);
+	}
+
 	*state = ACPI_STATE_UNKNOWN;
 
 	if (!device->flags.power_manageable) {
@@ -295,14 +300,14 @@ acpi_bus_set_power (
 	ACPI_STATUS		status = AE_OK;
 	struct acpi_device	*device = NULL;
 	int			parent_state;
-	char			object_name[5] = {'_','P','S','0'+state,'\0'};
+	char			object_name[5] = {'_','P','S','0'+min(state, ACPI_STATE_D3_HOT),'\0'};
 
 
 	result = acpi_bus_get_device(handle, &device);
 	if (result)
 		return_VALUE(result);
 
-	if ((state < ACPI_STATE_D0) || (state > ACPI_STATE_D3_HOT))
+	if ((state < ACPI_STATE_D0) || (state > ACPI_STATE_D3_COLD))
 		return_VALUE(AE_BAD_PARAMETER);
 	if (device->parent && device->parent->power.state == ACPI_STATE_UNKNOWN)
 		acpi_bus_get_power(device->parent->handle, &parent_state);
@@ -481,6 +486,12 @@ acpi_bus_get_power_flags (
 	device->power.states[ACPI_STATE_D0].power = 100;
 	device->power.states[ACPI_STATE_D3_HOT].flags.valid = 1;
 	device->power.states[ACPI_STATE_D3_HOT].power = 0;
+
+	device->power.states[ACPI_STATE_D3_COLD].flags.valid =
+		device->power.states[ACPI_STATE_D3_HOT].resources.count != 0;
+	device->power.states[ACPI_STATE_D3_COLD].flags.explicit_set =
+		device->power.states[ACPI_STATE_D3_HOT].flags.explicit_set;
+	device->power.states[ACPI_STATE_D3_COLD].power = 0;
 
 	device->power.state = ACPI_STATE_UNKNOWN;
 

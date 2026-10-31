@@ -504,10 +504,10 @@ acpi_power_transition (
 	struct acpi_handle_list	*tl = NULL;	/* Target Resources */
 	unsigned int	i = 0;
 
-	if (!device || (state < ACPI_STATE_D0) || (state > ACPI_STATE_D3_HOT))
+	if (!device || (state < ACPI_STATE_D0) || (state > ACPI_STATE_D3_COLD))
 		return_VALUE(-1);
 
-	if ((device->power.state < ACPI_STATE_D0) || (device->power.state > ACPI_STATE_D3_HOT))
+	if ((device->power.state < ACPI_STATE_D0) || (device->power.state > ACPI_STATE_D3_COLD))
 		return_VALUE(-15);
 
 	cl = &device->power.states[device->power.state].resources;

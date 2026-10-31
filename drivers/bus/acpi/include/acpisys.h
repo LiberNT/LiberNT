@@ -280,6 +280,7 @@ VOID AcpiWakeCheckSources(VOID);
 VOID AcpiWakePrepareSleep(SYSTEM_POWER_STATE SystemState);
 VOID AcpiWakeFinishSleep(VOID);
 NTSTATUS AcpiQueryWakeForPciDeviceIoctl(PIRP Irp);
+NTSTATUS AcpiQueryD3ColdForPciDeviceIoctl(PIRP Irp);
 NTSTATUS AcpiWaitWakeForPciDeviceIoctl(PIRP Irp);
 VOID AcpiThermalInitialize(PPDO_DEVICE_DATA DeviceData);
 NTSTATUS AcpiThermalStart(PPDO_DEVICE_DATA DeviceData);

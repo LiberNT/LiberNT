@@ -611,9 +611,10 @@ PciAcpiQueryChildNotifyInterface(
 }
 
 NTSTATUS
-PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State, _In_ BOOLEAN Force)
+PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State, _In_ ULONG Flags, _Out_opt_ PULONG ReachedState)
 {
     ACPI_PCI_SET_POWER_INPUT_BUFFER InputBuffer;
+    ULONG Reached = State;
     KEVENT Event;
     IO_STATUS_BLOCK IoStatusBlock;
     PIRP Irp;
@@ -630,9 +631,9 @@ PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULON
     InputBuffer.Device = Device;
     InputBuffer.Function = Function;
     InputBuffer.State = State;
-    InputBuffer.Flags = Force ? ACPI_PCI_SET_POWER_FLAG_FORCE : 0;
+    InputBuffer.Flags = Flags;
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
-    Irp = IoBuildDeviceIoControlRequest(IOCTL_ACPI_SET_POWER_FOR_PCI, AcpiInterfaceDeviceObject, &InputBuffer, sizeof(InputBuffer), NULL, 0, FALSE, &Event, &IoStatusBlock);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_ACPI_SET_POWER_FOR_PCI, AcpiInterfaceDeviceObject, &InputBuffer, sizeof(InputBuffer), &Reached, sizeof(Reached), FALSE, &Event, &IoStatusBlock);
     if (!Irp)
         return STATUS_INSUFFICIENT_RESOURCES;
 
@@ -642,6 +643,57 @@ PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULON
         KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
         Status = IoStatusBlock.Status;
     }
+    if (ReachedState)
+        *ReachedState = (NT_SUCCESS(Status) && IoStatusBlock.Information >= sizeof(Reached)) ? Reached : State;
+    return Status;
+}
+
+NTSTATUS
+PciAcpiQueryD3Cold(
+    _In_ ULONG Segment,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _In_ SYSTEM_POWER_STATE SystemState,
+    _Out_ PACPI_PCI_D3COLD_INFORMATION Information)
+{
+    ACPI_PCI_WAKE_INPUT_BUFFER InputBuffer;
+    KEVENT Event;
+    IO_STATUS_BLOCK IoStatusBlock;
+    PIRP Irp;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(Information, sizeof(*Information));
+    Status = PciOpenAcpiInterface();
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&InputBuffer, sizeof(InputBuffer));
+    InputBuffer.Signature = ACPI_PCI_WAKE_INPUT_BUFFER_SIGNATURE;
+    InputBuffer.Segment = Segment;
+    InputBuffer.Bus = Bus;
+    InputBuffer.Device = Device;
+    InputBuffer.Function = Function;
+    InputBuffer.SystemState = SystemState;
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_ACPI_QUERY_D3COLD_FOR_PCI,
+                                        AcpiInterfaceDeviceObject,
+                                        &InputBuffer, sizeof(InputBuffer),
+                                        Information, sizeof(*Information),
+                                        FALSE, &Event, &IoStatusBlock);
+    if (!Irp)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = IoCallDriver(AcpiInterfaceDeviceObject, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatusBlock.Status;
+    }
+    if (NT_SUCCESS(Status) && IoStatusBlock.Information < sizeof(*Information))
+        Status = STATUS_INVALID_BUFFER_SIZE;
     return Status;
 }
 

@@ -1891,6 +1891,7 @@ AcpiSetPowerForPciDeviceIoctl(_In_ PFDO_DEVICE_DATA FdoData, _Inout_ PIRP Irp)
     ACPI_HANDLE AcpiHandle = NULL;
     struct acpi_device *Device;
     int PreviousState;
+    int TargetState;
     int Result;
 
     UNREFERENCED_PARAMETER(FdoData);
@@ -1914,14 +1915,27 @@ AcpiSetPowerForPciDeviceIoctl(_In_ PFDO_DEVICE_DATA FdoData, _Inout_ PIRP Irp)
     Device->flags.force_power_state = (InputBuffer->Flags & ACPI_PCI_SET_POWER_FLAG_FORCE) ? 1 : 0;
     if (acpi_bus_get_power(AcpiHandle, &PreviousState))
         PreviousState = ACPI_STATE_UNKNOWN;
-    Result = acpi_bus_set_power(AcpiHandle, InputBuffer->State);
+    TargetState = (int)InputBuffer->State;
+    if ((InputBuffer->Flags & ACPI_PCI_SET_POWER_FLAG_D3COLD) && TargetState == ACPI_STATE_D3_HOT &&
+        Device->power.states[ACPI_STATE_D3_COLD].flags.valid)
+    {
+        TargetState = ACPI_STATE_D3_COLD;
+    }
+
+    Result = acpi_bus_set_power(AcpiHandle, TargetState);
     if (Result)
     {
-        DPRINT1("ACPI: PCI %lu:%lu:%lu.%lu failed platform transition D%d -> D%lu (0x%x)\n", InputBuffer->Segment, InputBuffer->Bus, InputBuffer->Device, InputBuffer->Function, PreviousState, InputBuffer->State, Result);
+        DPRINT1("ACPI: PCI %lu:%lu:%lu.%lu failed platform transition D%d -> D%d (0x%x)\n", InputBuffer->Segment, InputBuffer->Bus, InputBuffer->Device, InputBuffer->Function, PreviousState, TargetState, Result);
         return STATUS_DEVICE_POWER_FAILURE;
     }
 
-    if (PreviousState != (int)InputBuffer->State || Device->flags.force_power_state)
-        DPRINT1("ACPI: PCI %lu:%lu:%lu.%lu platform power D%d -> D%lu\n", InputBuffer->Segment, InputBuffer->Bus, InputBuffer->Device, InputBuffer->Function, PreviousState, InputBuffer->State);
+    if (PreviousState != TargetState || Device->flags.force_power_state)
+        DPRINT1("ACPI: PCI %lu:%lu:%lu.%lu platform power D%d -> D%d\n", InputBuffer->Segment, InputBuffer->Bus, InputBuffer->Device, InputBuffer->Function, PreviousState, TargetState);
+
+    if (IoStack->Parameters.DeviceIoControl.OutputBufferLength >= sizeof(ULONG))
+    {
+        *(PULONG)Irp->AssociatedIrp.SystemBuffer = (ULONG)TargetState;
+        Irp->IoStatus.Information = sizeof(ULONG);
+    }
     return STATUS_SUCCESS;
 }

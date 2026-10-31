@@ -140,6 +140,11 @@ typedef struct _PDO_DEVICE_EXTENSION
     BOOLEAN LinkQuiescent;
     PDEVICE_OBJECT *QuiescentPeers;
     ULONG QuiescentPeerCount;
+    BOOLEAN D3ColdEnabled;
+    BOOLEAN D3ColdAcpiDevice;
+    BOOLEAN PlatformPoweredDown;
+    D3COLD_LAST_TRANSITION_STATUS D3ColdLastTransition;
+    PIO_WORKITEM D3ColdWorkItem;
 } PDO_DEVICE_EXTENSION, *PPDO_DEVICE_EXTENSION;
 
 typedef struct _PCI_ROOT_BUS_INTERFACE
@@ -376,7 +381,16 @@ PciAcpiEvalMethodForChild(
     _Out_opt_ PULONG BytesReturned);
 
 NTSTATUS
-PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State, _In_ BOOLEAN Force);
+PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State, _In_ ULONG Flags, _Out_opt_ PULONG ReachedState);
+
+NTSTATUS
+PciAcpiQueryD3Cold(
+    _In_ ULONG Segment,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _In_ SYSTEM_POWER_STATE SystemState,
+    _Out_ PACPI_PCI_D3COLD_INFORMATION Information);
 
 NTSTATUS
 PciAcpiQueryWake(

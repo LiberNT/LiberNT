@@ -571,6 +571,73 @@ AcpiWakeFindPciDevice(
     return STATUS_SUCCESS;
 }
 
+static
+NTSTATUS
+AcpiD3ColdIdleWake(
+    _In_ struct acpi_device *Device,
+    _In_ ULONG SystemState,
+    _Out_ PULONG Depth)
+{
+    char Name[5] = { '_', 'S', '0', 'W', '\0' };
+    unsigned long long Value;
+    ACPI_STATUS Status;
+
+    *Depth = DeviceWakeDepthNotWakeable;
+    if (SystemState < PowerSystemWorking || SystemState > PowerSystemHibernate)
+        return STATUS_INVALID_PARAMETER_2;
+
+    Name[2] = (char)('0' + SystemState - PowerSystemWorking);
+    Status = acpi_evaluate_integer(Device->handle, Name, NULL, &Value);
+    /* FIXME: Windows 11 reports D3hot without _SxW for devices carrying an extension flag of unknown meaning */
+    if (Status == AE_NOT_FOUND)
+        return STATUS_NOT_FOUND;
+    if (Status == AE_TYPE || Status == AE_BAD_DATA)
+        return STATUS_INVALID_DEVICE_STATE;
+    if (ACPI_FAILURE(Status))
+        return STATUS_UNSUCCESSFUL;
+
+    if (Value >= DeviceWakeDepthD3cold)
+        return STATUS_SUCCESS;
+
+    *Depth = (ULONG)Value + 1;
+    /* FIXME: Windows 11 keys this on an ACPI extension flag; power-manageable is the nearest LiberNT state */
+    if (*Depth == DeviceWakeDepthD3cold && !Device->flags.power_manageable)
+        *Depth = DeviceWakeDepthD3hot;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+AcpiQueryD3ColdForPciDeviceIoctl(
+    PIRP Irp)
+{
+    PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
+    ACPI_PCI_D3COLD_INFORMATION Information;
+    PACPI_PCI_WAKE_INPUT_BUFFER Input;
+    struct acpi_device *Device;
+    ULONG WorkingDepth;
+    NTSTATUS Status;
+
+    if (IoStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(Information))
+        return STATUS_BUFFER_TOO_SMALL;
+
+    Status = AcpiWakeFindPciDevice(Irp, &Input, &Device);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&Information, sizeof(Information));
+    Information.IdleWakeStatus = AcpiD3ColdIdleWake(Device, Input->SystemState, &Information.IdleWakeDepth);
+    if (Device->flags.power_manageable)
+    {
+        Information.D3ColdCapable = Device->power.states[ACPI_STATE_D3_HOT].resources.count != 0 ||
+                                    (NT_SUCCESS(AcpiD3ColdIdleWake(Device, PowerSystemWorking, &WorkingDepth)) &&
+                                     WorkingDepth == DeviceWakeDepthD3cold);
+    }
+
+    RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &Information, sizeof(Information));
+    Irp->IoStatus.Information = sizeof(Information);
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 AcpiQueryWakeForPciDeviceIoctl(
     _Inout_ PIRP Irp)

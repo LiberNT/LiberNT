@@ -651,6 +651,10 @@ ACPIDispatchDeviceControl(
                 status = AcpiQueryWakeForPciDeviceIoctl(Irp);
                 break;
 
+            case IOCTL_ACPI_QUERY_D3COLD_FOR_PCI:
+                status = AcpiQueryD3ColdForPciDeviceIoctl(Irp);
+                break;
+
             case IOCTL_ACPI_WAIT_WAKE_FOR_PCI:
                 status = AcpiWaitWakeForPciDeviceIoctl(Irp);
                 break;

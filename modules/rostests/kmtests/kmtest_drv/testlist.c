@@ -318,6 +318,7 @@ KMT_TESTFUNC Test_IoActivityId;
 KMT_TESTFUNC Test_IoAcpiCmosRegion;
 KMT_TESTFUNC Test_IoAcpiIoctl;
 KMT_TESTFUNC Test_IoPciPdoPnp;
+KMT_TESTFUNC Test_IoPciD3Cold;
 KMT_TESTFUNC Test_IoPciExpressInterfaces;
 KMT_TESTFUNC Test_IoPciRom;
 KMT_TESTFUNC Test_IoStackLimits;
@@ -496,6 +497,7 @@ const KMT_TEST TestList[] =
     { "IoAcpiCmosRegion",                   Test_IoAcpiCmosRegion },
     { "IoAcpiIoctl",                        Test_IoAcpiIoctl },
     { "IoPciPdoPnp",                        Test_IoPciPdoPnp },
+    { "IoPciD3Cold",                        Test_IoPciD3Cold },
     { "IoPciExpressInterfaces",             Test_IoPciExpressInterfaces },
     { "IoPciRom",                           Test_IoPciRom },
     { "IoStackLimits",                      Test_IoStackLimits },
