@@ -1251,8 +1251,6 @@ LdrpSaveModuleLoadPath(
     PLDRP_MODULE_LOAD_PATH LoadPath;
     SIZE_T Size;
 
-    LdrpFreeModuleLoadPath(LdrEntry);
-
     Size = (wcslen(DllPath) + 1) * sizeof(WCHAR);
     LoadPath = RtlAllocateHeap(LdrpHeap, 0, FIELD_OFFSET(LDRP_MODULE_LOAD_PATH, DllPath) + Size);
     if (!LoadPath)
@@ -1904,7 +1902,7 @@ RelocDone:;
     }
 #endif
 
-    if (NT_SUCCESS(Status) && LdrEntry && SearchPath)
+    if (NT_SUCCESS(Status) && LdrEntry && SearchPath && SearchPath != LdrpDefaultPath.Buffer)
         LdrpSaveModuleLoadPath(LdrEntry, SearchPath);
 
     /* Check if this is an SMP Machine and a DLL */
