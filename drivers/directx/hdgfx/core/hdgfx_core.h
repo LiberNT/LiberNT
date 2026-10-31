@@ -34,6 +34,8 @@ typedef void (*HDGFX_WRITE_REGISTER)(void *Context, uint32_t Offset, uint32_t Va
 typedef void (*HDGFX_STALL)(void *Context, uint32_t Microseconds);
 typedef void (*HDGFX_SLEEP)(void *Context, uint32_t Milliseconds);
 
+#define HDGFX_DP_TRAINING_NORMAL 3
+
 typedef struct _HDGFX_MMIO
 {
     HDGFX_READ_REGISTER Read;
@@ -144,6 +146,7 @@ typedef struct _HDGFX_DPLL
     uint32_t ReferenceKHz;
     uint32_t VcoKHz;
     uint32_t DotKHz;
+    bool HighSpeed;
 } HDGFX_DPLL;
 
 typedef struct _HDGFX_FDI_RX
@@ -183,6 +186,34 @@ typedef struct _HDGFX_CRT
     bool VSyncActiveHigh;
     uint32_t Transcoder;
 } HDGFX_CRT;
+
+typedef struct _HDGFX_DP
+{
+    bool Enabled;
+    bool PortEnabled;
+    bool EnhancedFraming;
+    bool HSyncActiveHigh;
+    bool VSyncActiveHigh;
+    uint32_t Port;
+    uint32_t Transcoder;
+    uint32_t Lanes;
+    uint32_t LinkKHz;
+    uint32_t Training;
+    uint32_t Swing;
+    uint32_t Emphasis;
+    HDGFX_M_N Link;
+} HDGFX_DP;
+
+typedef struct _HDGFX_DP_SINK
+{
+    uint32_t Port;
+    uint32_t Precharge;
+    uint32_t Revision;
+    uint32_t MaxLanes;
+    uint32_t MaxLinkKHz;
+    uint32_t ReadIntervalUs;
+    bool EnhancedFraming;
+} HDGFX_DP_SINK;
 
 typedef struct _HDGFX_PANEL_POWER
 {
@@ -227,6 +258,7 @@ typedef struct _HDGFX_DISPLAY_STATE
     HDGFX_DPLL Dplls[HDGFX_MAX_DPLLS];
     HDGFX_LVDS Lvds;
     HDGFX_CRT Crt;
+    HDGFX_DP Dp;
     HDGFX_PANEL_POWER PanelPower;
     HDGFX_BACKLIGHT Backlight;
 } HDGFX_DISPLAY_STATE;
@@ -274,7 +306,11 @@ typedef enum _HDGFX_MODESET_STATUS
     HdgfxModesetTranscoderOnTimeout,
     HdgfxModesetPanelOnTimeout,
     HdgfxModesetVblankTimeout,
-    HdgfxModesetDetectTimeout
+    HdgfxModesetDetectTimeout,
+    HdgfxModesetDpBandwidth,
+    HdgfxModesetDpAuxFailed,
+    HdgfxModesetDpClockRecoveryFailed,
+    HdgfxModesetDpEqualizationFailed
 } HDGFX_MODESET_STATUS;
 
 typedef struct _HDGFX_GENERATION
@@ -287,11 +323,16 @@ typedef struct _HDGFX_GENERATION
     uint32_t PchInterrupt;
     uint32_t CrtHotplugInterrupt;
     uint32_t CursorStride;
+    uint32_t DpPrecharge;
     bool Render;
     uint64_t GttPhysicalLimit;
     uint32_t GtInterrupts;
     uint32_t (*GttEntry)(uint64_t Physical);
+    uint32_t BltStatusRegister;
     bool (*ResetGpu)(const HDGFX_MMIO *Mmio);
+    bool (*ForceWake)(const HDGFX_MMIO *Mmio);
+    void (*ForceWakeRelease)(const HDGFX_MMIO *Mmio);
+    void (*InitEngine)(const HDGFX_MMIO *Mmio);
     void (*ReadDisplayState)(const HDGFX_MMIO *Mmio, HDGFX_DISPLAY_STATE *State);
     HDGFX_MODESET_STATUS (*ComputeLvds)(const HDGFX_DISPLAY_STATE *Current,
                                         const HDGFX_LVDS_MODE *Mode,
@@ -400,6 +441,11 @@ HdgfxIlkReadDisplayState(
     HDGFX_DISPLAY_STATE *State);
 
 void
+HdgfxSnbReadDisplayState(
+    const HDGFX_MMIO *Mmio,
+    HDGFX_DISPLAY_STATE *State);
+
+void
 HdgfxIvbReadDisplayState(
     const HDGFX_MMIO *Mmio,
     HDGFX_DISPLAY_STATE *State);
@@ -448,13 +494,37 @@ HdgfxIlkEnableCrtHotplug(
     const HDGFX_MMIO *Mmio,
     bool Enable);
 
-uint32_t
-HdgfxIlkCursorControl(
-    bool Visible);
+HDGFX_MODESET_STATUS
+HdgfxIlkComputeDp(
+    const HDGFX_DISPLAY_STATE *Current,
+    const HDGFX_CRT_MODE *Mode,
+    const HDGFX_DP_SINK *Sink,
+    HDGFX_DISPLAY_STATE *Target);
+
+HDGFX_MODESET_STATUS
+HdgfxIlkCommitDp(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DP_SINK *Sink,
+    const HDGFX_DISPLAY_STATE *Current,
+    const HDGFX_DISPLAY_STATE *Target);
+
+HDGFX_MODESET_STATUS
+HdgfxIlkDisableDp(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DISPLAY_STATE *Current);
+
+const char *
+HdgfxCompareDpState(
+    const HDGFX_DISPLAY_STATE *Target,
+    const HDGFX_DISPLAY_STATE *Actual);
 
 void
 HdgfxIlkDisableVgaPlane(
     const HDGFX_MMIO *Mmio);
+
+uint32_t
+HdgfxIlkCursorControl(
+    bool Visible);
 
 uint32_t
 HdgfxIlkCursorPosition(
@@ -489,6 +559,26 @@ bool
 HdgfxEdidParse(
     const uint8_t *Edid,
     HDGFX_EDID *Result);
+
+bool
+HdgfxDpFindSink(
+    const HDGFX_MMIO *Mmio,
+    uint32_t Precharge,
+    HDGFX_DP_SINK *Sink);
+
+bool
+HdgfxDpReadI2c(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DP_SINK *Sink,
+    uint8_t Address,
+    uint8_t *Buffer,
+    uint32_t Size);
+
+HDGFX_MODESET_STATUS
+HdgfxDpTrain(
+    const HDGFX_MMIO *Mmio,
+    const HDGFX_DP_SINK *Sink,
+    const HDGFX_DP *Dp);
 
 HDGFX_GMBUS_STATUS
 HdgfxGmbusRead(
@@ -594,10 +684,23 @@ HdgfxRingEmitBreadcrumb(
 
 bool
 HdgfxIvbCheckBatch(
+    uint32_t Gen,
     const uint32_t *Dwords,
     uint32_t Count,
     bool Blitter,
     uint32_t *Offending);
+
+bool
+HdgfxSnbForceWake(
+    const HDGFX_MMIO *Mmio);
+
+void
+HdgfxSnbForceWakeRelease(
+    const HDGFX_MMIO *Mmio);
+
+void
+HdgfxSnbInitEngine(
+    const HDGFX_MMIO *Mmio);
 
 bool
 HdgfxIvbForceWake(

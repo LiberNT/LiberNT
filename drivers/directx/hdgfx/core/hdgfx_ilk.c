@@ -221,6 +221,7 @@ IlkReadDpll(
     else
         Dpll->P2 = P2 == 0 ? 10 : 0;
 
+    Dpll->HighSpeed = HDGFX_GET(Control, DPLL_HIGH_SPEED) != 0;
     Dpll->P1 = IlkP1(HDGFX_GET(Control, DPLL_P1_FP0));
     Dpll->Reference = HDGFX_GET(Control, DPLL_REFERENCE);
     Dpll->ReferenceKHz = (Dpll->Reference == 0 || Dpll->Reference == 1 || Dpll->Reference == 3) ?
@@ -292,6 +293,45 @@ IlkReadPanel(
 }
 
 static void
+IlkReadDp(
+    const HDGFX_MMIO *Mmio,
+    HDGFX_DISPLAY_STATE *State)
+{
+    HDGFX_DP *Dp = &State->Dp;
+    uint32_t Index;
+    uint32_t Value;
+
+    for (Index = 0; Index < ILK_TRANSCODERS; Index++)
+    {
+        Value = IlkRead(Mmio, HDGFX_REG(TRANS_DP_CTL, Index));
+        if (!HDGFX_GET(Value, TRANS_DP_ENABLE))
+            continue;
+
+        Dp->Enabled = true;
+        Dp->Transcoder = Index;
+        Dp->Port = HDGFX_GET(Value, TRANS_DP_PORT);
+        Dp->EnhancedFraming = HDGFX_GET(Value, TRANS_DP_ENHANCED) != 0;
+        Dp->HSyncActiveHigh = HDGFX_GET(Value, TRANS_DP_HSYNC_HIGH) != 0;
+        Dp->VSyncActiveHigh = HDGFX_GET(Value, TRANS_DP_VSYNC_HIGH) != 0;
+
+        Value = IlkRead(Mmio, HDGFX_REG(DP_CTL, Dp->Port));
+        Dp->PortEnabled = HDGFX_GET(Value, DP_ENABLE) != 0;
+        Dp->Lanes = HDGFX_GET(Value, DP_WIDTH) + 1;
+        Dp->Training = HDGFX_GET(Value, DP_TRAINING);
+        Dp->Swing = HDGFX_GET(Value, DP_SWING);
+        Dp->Emphasis = HDGFX_GET(Value, DP_EMPHASIS);
+
+        Value = IlkRead(Mmio, HDGFX_REG(TRANS_DATA_M1, Index));
+        Dp->Link.TuSize = HDGFX_GET(Value, M_N_TU_SIZE) + 1;
+        Dp->Link.DataM = HDGFX_GET(Value, M_N_VALUE);
+        Dp->Link.DataN = HDGFX_GET(IlkRead(Mmio, HDGFX_REG(TRANS_DATA_N1, Index)), M_N_VALUE);
+        Dp->Link.LinkM = HDGFX_GET(IlkRead(Mmio, HDGFX_REG(TRANS_LINK_M1, Index)), M_N_VALUE);
+        Dp->Link.LinkN = HDGFX_GET(IlkRead(Mmio, HDGFX_REG(TRANS_LINK_N1, Index)), M_N_VALUE);
+        return;
+    }
+}
+
+static void
 IlkReadDisplayState(
     const HDGFX_MMIO *Mmio,
     uint32_t Gen,
@@ -320,6 +360,8 @@ IlkReadDisplayState(
     for (Index = 0; Index < ILK_DPLLS; Index++)
         IlkReadDpll(Mmio, Index, &State->Dplls[Index]);
     IlkReadPanel(Mmio, State);
+    if (Gen >= 6)
+        IlkReadDp(Mmio, State);
 }
 
 void
@@ -328,6 +370,14 @@ HdgfxIlkReadDisplayState(
     HDGFX_DISPLAY_STATE *State)
 {
     IlkReadDisplayState(Mmio, 5, State);
+}
+
+void
+HdgfxSnbReadDisplayState(
+    const HDGFX_MMIO *Mmio,
+    HDGFX_DISPLAY_STATE *State)
+{
+    IlkReadDisplayState(Mmio, 6, State);
 }
 
 void
