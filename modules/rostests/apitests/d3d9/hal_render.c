@@ -64,6 +64,44 @@ static const DWORD ModulatePixelShader[] =
     0x0000FFFF,
 };
 
+/* ps_2_0: dcl t0; dcl_2d s0; texld r0, t0, s0; mov oC0, r0.wwww */
+static const DWORD SampledAlphaPixelShader[] =
+{
+    0xFFFF0200,
+    0x0200001F, 0x80000000, 0xB00F0000,
+    0x0200001F, 0x90000000, 0xA00F0800,
+    0x03000042, 0x800F0000, 0xB0E40000, 0xA0E40800,
+    0x02000001, 0x800F0800, 0x80FF0000,
+    0x0000FFFF,
+};
+
+/* vs_2_0: dcl_position v0; def c0, 1, 1, 1, 1; mov oPos, v0; add oD0, c0, c0; add oD1, c0, c0 */
+static const DWORD TwoColorVertexShader[] =
+{
+    0xFFFE0200,
+    0x0200001F, 0x80000000, 0x900F0000,
+    0x05000051, 0xA00F0000, 0x3F800000, 0x3F800000, 0x3F800000, 0x3F800000,
+    0x02000001, 0xC00F0000, 0x90E40000,
+    0x03000002, 0xD00F0000, 0xA0E40000, 0xA0E40000,
+    0x03000002, 0xD00F0001, 0xA0E40000, 0xA0E40000,
+    0x0000FFFF,
+};
+
+/* ps_2_0: dcl v0; dcl v1; def c0, 0.25, 0.25, 0.25, 0.25; mov r0, v0; add r0, r0, v1; mul r0, r0, c0;
+ * mov oC0, r0 */
+static const DWORD TwoColorPixelShader[] =
+{
+    0xFFFF0200,
+    0x0200001F, 0x80000000, 0x900F0000,
+    0x0200001F, 0x80000000, 0x900F0001,
+    0x05000051, 0xA00F0000, 0x3E800000, 0x3E800000, 0x3E800000, 0x3E800000,
+    0x02000001, 0x800F0000, 0x90E40000,
+    0x03000002, 0x800F0000, 0x80E40000, 0x90E40001,
+    0x03000005, 0x800F0000, 0x80E40000, 0xA0E40000,
+    0x02000001, 0x800F0800, 0x80E40000,
+    0x0000FFFF,
+};
+
 static IDirect3DDevice9 *Device;
 static IDirect3DSurface9 *RenderTarget;
 static IDirect3DSurface9 *Readback;
@@ -356,6 +394,299 @@ cleanup:
         IDirect3DVertexShader9_Release(vertexShader);
 }
 
+static void Test_AlphaTest(const D3DCAPS9 *caps)
+{
+    static const struct
+    {
+        D3DCMPFUNC func;
+        BOOL less, equal, greater;
+    } tests[] =
+    {
+        {D3DCMP_NEVER, FALSE, FALSE, FALSE},
+        {D3DCMP_LESS, TRUE, FALSE, FALSE},
+        {D3DCMP_EQUAL, FALSE, TRUE, FALSE},
+        {D3DCMP_LESSEQUAL, TRUE, TRUE, FALSE},
+        {D3DCMP_GREATER, FALSE, FALSE, TRUE},
+        {D3DCMP_NOTEQUAL, TRUE, FALSE, TRUE},
+        {D3DCMP_GREATEREQUAL, FALSE, TRUE, TRUE},
+        {D3DCMP_ALWAYS, TRUE, TRUE, TRUE},
+    };
+    static const float constant[4] = {0.0f, 1.0f, 0.0f, 128.0f / 255.0f};
+    IDirect3DPixelShader9 *shader = NULL;
+    HRESULT hr;
+    unsigned int pass, i, ref;
+
+    if (caps->PixelShaderVersion >= D3DPS_VERSION(2, 0))
+    {
+        hr = IDirect3DDevice9_CreatePixelShader(Device, ConstantPixelShader, &shader);
+        ok(hr == D3D_OK, "CreatePixelShader failed: 0x%08lx\n", hr);
+    }
+
+    IDirect3DDevice9_SetRenderState(Device, D3DRS_ALPHATESTENABLE, TRUE);
+    for (pass = 0; pass < (shader ? 2u : 1u); pass++)
+    {
+        IDirect3DDevice9_SetPixelShader(Device, pass ? shader : NULL);
+        IDirect3DDevice9_SetPixelShaderConstantF(Device, 0, constant, 1);
+        for (i = 0; i < ARRAYSIZE(tests); i++)
+        {
+            for (ref = 0; ref < 3; ref++)
+            {
+                static const DWORD refs[] = {0x90, 0x80, 0x70};
+                BOOL passes = ref == 0 ? tests[i].less : ref == 1 ? tests[i].equal : tests[i].greater;
+
+                IDirect3DDevice9_SetRenderState(Device, D3DRS_ALPHAFUNC, tests[i].func);
+                IDirect3DDevice9_SetRenderState(Device, D3DRS_ALPHAREF, refs[ref]);
+                Clear(0xFFFF0000);
+                DrawColorQuad(0.0f, 0.0f, SIZE, SIZE, 0.5f, 0x8000FF00);
+                if (ReadPixels())
+                    ok(Pixel(SIZE / 2, SIZE / 2) == (passes ? 0x00FF00u : 0xFF0000u),
+                       "alpha test pass %u func %d ref 0x%lx: 0x%06lx\n", pass, tests[i].func, refs[ref],
+                       Pixel(SIZE / 2, SIZE / 2));
+            }
+        }
+    }
+    IDirect3DDevice9_SetRenderState(Device, D3DRS_ALPHATESTENABLE, FALSE);
+    Clear(0xFFFF0000);
+    DrawColorQuad(0.0f, 0.0f, SIZE, SIZE, 0.5f, 0x0000FF00);
+    if (ReadPixels())
+        ok(Pixel(SIZE / 2, SIZE / 2) == 0x00FF00, "disabled alpha test: 0x%06lx\n", Pixel(SIZE / 2, SIZE / 2));
+    IDirect3DDevice9_SetRenderState(Device, D3DRS_ALPHAFUNC, D3DCMP_ALWAYS);
+    IDirect3DDevice9_SetRenderState(Device, D3DRS_ALPHAREF, 0);
+    IDirect3DDevice9_SetPixelShader(Device, NULL);
+    if (shader)
+        IDirect3DPixelShader9_Release(shader);
+}
+
+static void Test_ClipPlane(const D3DCAPS9 *caps)
+{
+    static const struct
+    {
+        float x, y, z;
+        DWORD color;
+    } colorQuad[] =
+    {
+        {-1.0f, 1.0f, 0.5f, 0xFF00FF00},
+        {1.0f, 1.0f, 0.5f, 0xFF00FF00},
+        {-1.0f, -1.0f, 0.5f, 0xFF00FF00},
+        {1.0f, -1.0f, 0.5f, 0xFF00FF00},
+    };
+    static const SHADER_VERTEX shaderQuad[] =
+    {
+        {-1.0f, 1.0f, 0.5f, 0.0f, 0.0f},
+        {1.0f, 1.0f, 0.5f, 1.0f, 0.0f},
+        {-1.0f, -1.0f, 0.5f, 0.0f, 1.0f},
+        {1.0f, -1.0f, 0.5f, 1.0f, 1.0f},
+    };
+    static const float plane[4] = {0.0f, 1.0f, 0.0f, 0.0f};
+    static const float green[4] = {0.0f, 1.0f, 0.0f, 1.0f};
+    IDirect3DVertexShader9 *vertexShader = NULL;
+    IDirect3DPixelShader9 *pixelShader = NULL;
+    HRESULT hr;
+
+    if (caps->MaxUserClipPlanes < 1)
+    {
+        skip("No user clip planes\n");
+        return;
+    }
+
+    hr = IDirect3DDevice9_SetClipPlane(Device, 0, plane);
+    ok(hr == D3D_OK, "SetClipPlane failed: 0x%08lx\n", hr);
+    IDirect3DDevice9_SetRenderState(Device, D3DRS_CLIPPLANEENABLE, D3DCLIPPLANE0);
+
+    IDirect3DDevice9_SetFVF(Device, D3DFVF_XYZ | D3DFVF_DIFFUSE);
+    Clear(0xFFFF0000);
+    IDirect3DDevice9_BeginScene(Device);
+    hr = IDirect3DDevice9_DrawPrimitiveUP(Device, D3DPT_TRIANGLESTRIP, 2, colorQuad, sizeof(colorQuad[0]));
+    ok(hr == D3D_OK, "fixed-function clip draw failed: 0x%08lx\n", hr);
+    IDirect3DDevice9_EndScene(Device);
+    if (ReadPixels())
+    {
+        ok(Pixel(SIZE / 2, SIZE / 4) == 0x00FF00, "fixed-function kept half: 0x%06lx\n", Pixel(SIZE / 2, SIZE / 4));
+        ok(Pixel(SIZE / 2, SIZE * 3 / 4) == 0xFF0000, "fixed-function clipped half: 0x%06lx\n",
+           Pixel(SIZE / 2, SIZE * 3 / 4));
+    }
+
+    if (caps->VertexShaderVersion >= D3DVS_VERSION(2, 0) && caps->PixelShaderVersion >= D3DPS_VERSION(2, 0))
+    {
+        hr = IDirect3DDevice9_CreateVertexShader(Device, ClipVertexShader, &vertexShader);
+        ok(hr == D3D_OK, "CreateVertexShader failed: 0x%08lx\n", hr);
+        hr = IDirect3DDevice9_CreatePixelShader(Device, ConstantPixelShader, &pixelShader);
+        ok(hr == D3D_OK, "CreatePixelShader failed: 0x%08lx\n", hr);
+    }
+    if (vertexShader && pixelShader)
+    {
+        IDirect3DDevice9_SetFVF(Device, D3DFVF_XYZ | D3DFVF_TEX1);
+        IDirect3DDevice9_SetVertexShader(Device, vertexShader);
+        IDirect3DDevice9_SetPixelShader(Device, pixelShader);
+        IDirect3DDevice9_SetPixelShaderConstantF(Device, 0, green, 1);
+        Clear(0xFFFF0000);
+        IDirect3DDevice9_BeginScene(Device);
+        hr = IDirect3DDevice9_DrawPrimitiveUP(Device, D3DPT_TRIANGLESTRIP, 2, shaderQuad, sizeof(shaderQuad[0]));
+        ok(hr == D3D_OK, "shader clip draw failed: 0x%08lx\n", hr);
+        IDirect3DDevice9_EndScene(Device);
+        if (ReadPixels())
+        {
+            ok(Pixel(SIZE / 2, SIZE / 4) == 0x00FF00, "shader kept half: 0x%06lx\n", Pixel(SIZE / 2, SIZE / 4));
+            ok(Pixel(SIZE / 2, SIZE * 3 / 4) == 0xFF0000, "shader clipped half: 0x%06lx\n",
+               Pixel(SIZE / 2, SIZE * 3 / 4));
+        }
+    }
+
+    IDirect3DDevice9_SetRenderState(Device, D3DRS_CLIPPLANEENABLE, 0);
+    IDirect3DDevice9_SetVertexShader(Device, NULL);
+    IDirect3DDevice9_SetPixelShader(Device, NULL);
+    if (pixelShader)
+        IDirect3DPixelShader9_Release(pixelShader);
+    if (vertexShader)
+        IDirect3DVertexShader9_Release(vertexShader);
+}
+
+static void Test_IntzSampling(IDirect3D9 *d3d, const D3DCAPS9 *caps)
+{
+    static const SHADER_VERTEX quad[] =
+    {
+        {-1.0f, 1.0f, 0.5f, 0.0f, 0.0f},
+        {1.0f, 1.0f, 0.5f, 1.0f, 0.0f},
+        {-1.0f, -1.0f, 0.5f, 0.0f, 1.0f},
+        {1.0f, -1.0f, 0.5f, 1.0f, 1.0f},
+    };
+    static const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    IDirect3DSurface9 *originalDepth = NULL, *depth = NULL;
+    IDirect3DVertexShader9 *vertexShader = NULL;
+    IDirect3DPixelShader9 *colorShader = NULL, *alphaShader = NULL;
+    IDirect3DTexture9 *texture = NULL;
+    const D3DFORMAT intz = (D3DFORMAT)MAKEFOURCC('I', 'N', 'T', 'Z');
+    HRESULT hr;
+
+    if (caps->VertexShaderVersion < D3DVS_VERSION(2, 0) || caps->PixelShaderVersion < D3DPS_VERSION(2, 0))
+    {
+        skip("Shader model 2 is not available\n");
+        return;
+    }
+    hr = IDirect3D9_CheckDeviceFormat(d3d, D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
+                                      D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_TEXTURE, intz);
+    if (FAILED(hr))
+    {
+        skip("INTZ is not available: 0x%08lx\n", hr);
+        return;
+    }
+
+    hr = IDirect3DDevice9_CreateTexture(Device, SIZE, SIZE, 1, D3DUSAGE_DEPTHSTENCIL, intz, D3DPOOL_DEFAULT, &texture,
+                                        NULL);
+    ok(hr == D3D_OK, "CreateTexture failed: 0x%08lx\n", hr);
+    hr = IDirect3DDevice9_CreateVertexShader(Device, ClipVertexShader, &vertexShader);
+    ok(hr == D3D_OK, "CreateVertexShader failed: 0x%08lx\n", hr);
+    hr = IDirect3DDevice9_CreatePixelShader(Device, ModulatePixelShader, &colorShader);
+    ok(hr == D3D_OK, "CreatePixelShader failed: 0x%08lx\n", hr);
+    hr = IDirect3DDevice9_CreatePixelShader(Device, SampledAlphaPixelShader, &alphaShader);
+    ok(hr == D3D_OK, "CreatePixelShader failed: 0x%08lx\n", hr);
+    if (!texture || !vertexShader || !colorShader || !alphaShader)
+        goto cleanup;
+
+    IDirect3DTexture9_GetSurfaceLevel(texture, 0, &depth);
+    IDirect3DDevice9_GetDepthStencilSurface(Device, &originalDepth);
+    IDirect3DDevice9_SetDepthStencilSurface(Device, depth);
+    IDirect3DDevice9_SetRenderState(Device, D3DRS_ZENABLE, D3DZB_TRUE);
+    IDirect3DDevice9_SetRenderState(Device, D3DRS_ZWRITEENABLE, TRUE);
+    IDirect3DDevice9_SetRenderState(Device, D3DRS_ZFUNC, D3DCMP_ALWAYS);
+    IDirect3DDevice9_SetFVF(Device, D3DFVF_XYZ | D3DFVF_TEX1);
+    IDirect3DDevice9_SetVertexShader(Device, vertexShader);
+    IDirect3DDevice9_SetPixelShader(Device, colorShader);
+    IDirect3DDevice9_SetPixelShaderConstantF(Device, 0, white, 1);
+    IDirect3DDevice9_BeginScene(Device);
+    hr = IDirect3DDevice9_DrawPrimitiveUP(Device, D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0]));
+    ok(hr == D3D_OK, "depth draw failed: 0x%08lx\n", hr);
+    IDirect3DDevice9_EndScene(Device);
+    IDirect3DDevice9_SetDepthStencilSurface(Device, originalDepth);
+    IDirect3DDevice9_SetRenderState(Device, D3DRS_ZENABLE, D3DZB_FALSE);
+
+    IDirect3DDevice9_SetTexture(Device, 0, (IDirect3DBaseTexture9 *)texture);
+    IDirect3DDevice9_SetSamplerState(Device, 0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+    IDirect3DDevice9_SetSamplerState(Device, 0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+    Clear(0xFF000000);
+    IDirect3DDevice9_BeginScene(Device);
+    IDirect3DDevice9_DrawPrimitiveUP(Device, D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0]));
+    IDirect3DDevice9_EndScene(Device);
+    if (ReadPixels())
+        ok(ColorNear(Pixel(SIZE / 2, SIZE / 2), 0x808080, 2), "INTZ rgb: 0x%06lx\n", Pixel(SIZE / 2, SIZE / 2));
+
+    IDirect3DDevice9_SetPixelShader(Device, alphaShader);
+    Clear(0xFF000000);
+    IDirect3DDevice9_BeginScene(Device);
+    IDirect3DDevice9_DrawPrimitiveUP(Device, D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0]));
+    IDirect3DDevice9_EndScene(Device);
+    if (ReadPixels())
+        ok(ColorNear(Pixel(SIZE / 2, SIZE / 2), 0x808080, 2), "INTZ alpha: 0x%06lx\n", Pixel(SIZE / 2, SIZE / 2));
+
+    IDirect3DDevice9_SetTexture(Device, 0, NULL);
+
+cleanup:
+    IDirect3DDevice9_SetRenderState(Device, D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+    IDirect3DDevice9_SetVertexShader(Device, NULL);
+    IDirect3DDevice9_SetPixelShader(Device, NULL);
+    if (originalDepth)
+        IDirect3DSurface9_Release(originalDepth);
+    if (depth)
+        IDirect3DSurface9_Release(depth);
+    if (alphaShader)
+        IDirect3DPixelShader9_Release(alphaShader);
+    if (colorShader)
+        IDirect3DPixelShader9_Release(colorShader);
+    if (vertexShader)
+        IDirect3DVertexShader9_Release(vertexShader);
+    if (texture)
+        IDirect3DTexture9_Release(texture);
+}
+
+static void Test_ClampedColors(const D3DCAPS9 *caps)
+{
+    static const struct
+    {
+        float x, y, z;
+    } quad[] =
+    {
+        {-1.0f, 1.0f, 0.5f},
+        {1.0f, 1.0f, 0.5f},
+        {-1.0f, -1.0f, 0.5f},
+        {1.0f, -1.0f, 0.5f},
+    };
+    IDirect3DVertexShader9 *vertexShader = NULL;
+    IDirect3DPixelShader9 *pixelShader = NULL;
+    HRESULT hr;
+
+    if (caps->VertexShaderVersion < D3DVS_VERSION(2, 0) || caps->PixelShaderVersion < D3DPS_VERSION(2, 0))
+    {
+        skip("Shader model 2 is not available\n");
+        return;
+    }
+
+    hr = IDirect3DDevice9_CreateVertexShader(Device, TwoColorVertexShader, &vertexShader);
+    ok(hr == D3D_OK, "CreateVertexShader failed: 0x%08lx\n", hr);
+    hr = IDirect3DDevice9_CreatePixelShader(Device, TwoColorPixelShader, &pixelShader);
+    ok(hr == D3D_OK, "CreatePixelShader failed: 0x%08lx\n", hr);
+    if (vertexShader && pixelShader)
+    {
+        IDirect3DDevice9_SetFVF(Device, D3DFVF_XYZ);
+        IDirect3DDevice9_SetVertexShader(Device, vertexShader);
+        IDirect3DDevice9_SetPixelShader(Device, pixelShader);
+        Clear(0xFF000000);
+        IDirect3DDevice9_BeginScene(Device);
+        hr = IDirect3DDevice9_DrawPrimitiveUP(Device, D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0]));
+        ok(hr == D3D_OK, "two color draw failed: 0x%08lx\n", hr);
+        IDirect3DDevice9_EndScene(Device);
+        if (ReadPixels())
+            ok(ColorNear(Pixel(SIZE / 2, SIZE / 2), 0x808080, 2), "clamped colors: 0x%06lx\n",
+               Pixel(SIZE / 2, SIZE / 2));
+    }
+
+    IDirect3DDevice9_SetVertexShader(Device, NULL);
+    IDirect3DDevice9_SetPixelShader(Device, NULL);
+    if (pixelShader)
+        IDirect3DPixelShader9_Release(pixelShader);
+    if (vertexShader)
+        IDirect3DVertexShader9_Release(vertexShader);
+}
+
 static void Test_Frames(void)
 {
     IDirect3DSurface9 *backBuffer = NULL;
@@ -481,6 +812,10 @@ START_TEST(hal_render)
     Test_Texture();
     Test_Depth();
     Test_Shaders(&caps);
+    Test_AlphaTest(&caps);
+    Test_ClipPlane(&caps);
+    Test_IntzSampling(d3d, &caps);
+    Test_ClampedColors(&caps);
     Test_Frames();
     Test_ScreenPresent(window);
 
