@@ -616,7 +616,8 @@ HalppDumpExtendedCapabilities(
             case 0x0003: /* Device Serial Number */
                 if (Offset > 0x1000 - 12)
                     break;
-                SerialNumber = *(volatile ULONGLONG *)(DeviceBase + Offset + 4);
+                SerialNumber = *(volatile ULONG *)(DeviceBase + Offset + 4);
+                SerialNumber |= (ULONGLONG)*(volatile ULONG *)(DeviceBase + Offset + 8) << 32;
                 Sn = (PUCHAR)&SerialNumber;
                 DbgPrint("    Capabilities: [%03x] Device Serial Number"
                          " %02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x\n",
