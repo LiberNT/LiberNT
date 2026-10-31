@@ -85,11 +85,7 @@ EtwWrite(
     UNREFERENCED_PARAMETER(ActivityId);
     UNREFERENCED_PARAMETER(UserDataCount);
     UNREFERENCED_PARAMETER(UserData);
-    /* Diagnostic: surface modern-ETW writes (WPP DoTraceMessage on Vista+). */
-    if (EventDescriptor != NULL)
-        DbgPrint("WPPTRACE: EtwWrite id=%u ver=%u level=%u keyword=0x%I64X\n",
-                 EventDescriptor->Id, EventDescriptor->Version,
-                 EventDescriptor->Level, EventDescriptor->Keyword);
+    UNREFERENCED_PARAMETER(EventDescriptor);
     return STATUS_SUCCESS;
 }
 
