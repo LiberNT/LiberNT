@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    NextDriveLetter.c
     QueryDosVolumePaths.c
     QueryPoints.c
     utils.c)
