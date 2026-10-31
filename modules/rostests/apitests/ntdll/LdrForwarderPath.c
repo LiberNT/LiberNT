@@ -44,7 +44,11 @@ static DWORD RunChild(PCSTR pszExport, PCSTR pszFlags)
     StringCchPrintfW(szCmd, _countof(szCmd), L"\"%s\" LdrForwarderPath %S \"%s\" %S", szExe, pszExport, s_szDir, pszFlags);
     if (!CreateProcessW(NULL, szCmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
         return MAXDWORD;
-    WaitForSingleObject(pi.hProcess, 30000);
+    if (WaitForSingleObject(pi.hProcess, 30000) != WAIT_OBJECT_0)
+    {
+        TerminateProcess(pi.hProcess, MAXDWORD);
+        WaitForSingleObject(pi.hProcess, 5000);
+    }
     GetExitCodeProcess(pi.hProcess, &dwExit);
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
