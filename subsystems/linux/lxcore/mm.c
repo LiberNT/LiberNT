@@ -871,11 +871,11 @@ LxMmLockAllowed(
 
 static
 ULONG64
-LxVmAllocationEnd(
-    _In_ ULONG64 AllocationBase)
+LxVmAllocationEndFrom(
+    _In_ ULONG64 AllocationBase,
+    _In_ ULONG64 Cursor)
 {
     MEMORY_BASIC_INFORMATION Information;
-    ULONG64 Cursor = AllocationBase;
 
     while (NT_SUCCESS(LxVmQuery(Cursor, &Information)) &&
            ((ULONG64)(ULONG_PTR)Information.AllocationBase == AllocationBase) &&
@@ -884,6 +884,14 @@ LxVmAllocationEnd(
         Cursor = (ULONG64)(ULONG_PTR)Information.BaseAddress + Information.RegionSize;
     }
     return Cursor;
+}
+
+static
+ULONG64
+LxVmAllocationEnd(
+    _In_ ULONG64 AllocationBase)
+{
+    return LxVmAllocationEndFrom(AllocationBase, AllocationBase);
 }
 
 static
@@ -897,6 +905,9 @@ LxVmCommitRange(
     ULONG64 Cursor = Start;
     NTSTATUS Status = STATUS_SUCCESS;
 
+    if (NT_SUCCESS(LxVmAllocate(&Cursor, End - Start, MEM_COMMIT, Protect)))
+        return STATUS_SUCCESS;
+    Cursor = Start;
     while (Cursor < End)
     {
         ULONG64 Stop = End, Commit = Cursor;
@@ -994,7 +1005,9 @@ LxVmReleaseRange(
             ((Information.Type == MEM_PRIVATE) || (Information.Type == MEM_MAPPED)))
         {
             Last = AllocationBase;
-            if (!LxVmaOverlaps(Process, AllocationBase, LxVmAllocationEnd(AllocationBase)))
+            if (!LxVmaOverlaps(Process, AllocationBase,
+                               LxVmAllocationEndFrom(AllocationBase, (ULONG64)(ULONG_PTR)Information.BaseAddress +
+                                                                         Information.RegionSize)))
             {
                 if (Information.Type == MEM_MAPPED)
                 {
@@ -2525,8 +2538,8 @@ LxMmUnmapRange(
 
     if (Error == 0)
     {
-        LxVmDecommitRange(Start, End);
         LxVmReleaseRange(Process, Start, End);
+        LxVmDecommitRange(Start, End);
     }
     return Error;
 }
