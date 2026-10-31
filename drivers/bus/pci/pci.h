@@ -335,6 +335,7 @@ extern BOOLEAN PciMsixEnabledByPolicy;
 /* Global driver state (pci.c) */
 extern UNICODE_STRING PciRegistryPath;
 extern KEVENT PciGlobalLock;
+extern KEVENT PciRomLock;
 extern BOOLEAN PciLockDeviceResources;
 extern LIST_ENTRY PciFdoExtensionListHead;
 extern KSPIN_LOCK PciGlobalSpinLock;

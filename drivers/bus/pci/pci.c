@@ -51,6 +51,7 @@ BOOLEAN PciMsiEnabledByPolicy = TRUE;
 BOOLEAN PciMsixEnabledByPolicy = TRUE;
 UNICODE_STRING PciRegistryPath = {0, 0, NULL};
 KEVENT PciGlobalLock;
+KEVENT PciRomLock;
 BOOLEAN PciLockDeviceResources = FALSE;
 LIST_ENTRY PciFdoExtensionListHead;
 KSPIN_LOCK PciGlobalSpinLock;
@@ -1305,6 +1306,7 @@ DriverEntry(
 
     /* Initialize global synchronization */
     KeInitializeEvent(&PciGlobalLock, SynchronizationEvent, TRUE);
+    KeInitializeEvent(&PciRomLock, SynchronizationEvent, TRUE);
     InitializeListHead(&PciFdoExtensionListHead);
     KeInitializeSpinLock(&PciGlobalSpinLock);
 

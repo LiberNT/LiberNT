@@ -3610,6 +3610,141 @@ InterfaceBusSetBusData(
     return Size;
 }
 
+static
+BOOLEAN
+PciPdoFindRomWindow(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ UCHAR BarCount,
+    _In_ ULONG RomSize,
+    _Out_ PULONG RomBase)
+{
+    ULONG AllOnes = MAXULONG;
+    UCHAR Bar;
+
+    for (Bar = 0; Bar < BarCount; Bar++)
+    {
+        ULONG Offset = FIELD_OFFSET(PCI_COMMON_CONFIG, u.type0.BaseAddresses) + Bar * sizeof(ULONG);
+        ULONG Value;
+        ULONG Probe = 0;
+        ULONG High = 0;
+        ULONG Size;
+
+        if (PciPdoGetBusDataByOffset(DeviceExtension, &Value, Offset, sizeof(Value)) != sizeof(Value) ||
+            (Value & PCI_ADDRESS_IO_SPACE))
+        {
+            continue;
+        }
+
+        if ((Value & PCI_ADDRESS_MEMORY_TYPE_MASK) == PCI_TYPE_64BIT)
+        {
+            if (Bar + 1 >= BarCount ||
+                PciPdoGetBusDataByOffset(DeviceExtension, &High, Offset + sizeof(ULONG), sizeof(High)) != sizeof(High))
+            {
+                return FALSE;
+            }
+            Bar++;
+        }
+
+        PciPdoSetBusDataByOffset(DeviceExtension, &AllOnes, Offset, sizeof(AllOnes));
+        PciPdoGetBusDataByOffset(DeviceExtension, &Probe, Offset, sizeof(Probe));
+        PciPdoSetBusDataByOffset(DeviceExtension, &Value, Offset, sizeof(Value));
+
+        Probe &= PCI_ADDRESS_MEMORY_ADDRESS_MASK;
+        Size = Probe ? ~Probe + 1 : 0;
+        if (High == 0 && (Value & PCI_ADDRESS_MEMORY_ADDRESS_MASK) != 0 && Size >= RomSize)
+        {
+            *RomBase = Value & PCI_ADDRESS_MEMORY_ADDRESS_MASK;
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static
+ULONG
+PciPdoReadRom(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Offset,
+    _In_ ULONG Length)
+{
+    PCI_COMMON_CONFIG Header;
+    PHYSICAL_ADDRESS Physical;
+    ULONG RomOffset;
+    ULONG RomBar;
+    ULONG RomMask = PCI_ADDRESS_ROM_ADDRESS_MASK;
+    ULONG Probe = 0;
+    ULONG RomSize;
+    ULONG RomBase;
+    ULONG RomEnable;
+    ULONG Copied = 0;
+    USHORT Disabled;
+    USHORT Decode;
+    UCHAR BarCount;
+    PUCHAR Rom;
+
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL || Length == 0 ||
+        PciPdoGetBusDataByOffset(DeviceExtension, &Header, 0, PCI_COMMON_HDR_LENGTH) != PCI_COMMON_HDR_LENGTH)
+    {
+        return 0;
+    }
+
+    switch (PCI_CONFIGURATION_TYPE(&Header))
+    {
+        case PCI_DEVICE_TYPE:
+            RomOffset = FIELD_OFFSET(PCI_COMMON_CONFIG, u.type0.ROMBaseAddress);
+            RomBar = Header.u.type0.ROMBaseAddress;
+            BarCount = PCI_TYPE0_ADDRESSES;
+            break;
+
+        case PCI_BRIDGE_TYPE:
+            RomOffset = FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.ROMBaseAddress);
+            RomBar = Header.u.type1.ROMBaseAddress;
+            BarCount = PCI_TYPE1_ADDRESSES;
+            break;
+
+        default:
+            return 0;
+    }
+
+    KeWaitForSingleObject(&PciRomLock, Executive, KernelMode, FALSE, NULL);
+
+    Disabled = Header.Command & ~(PCI_ENABLE_IO_SPACE | PCI_ENABLE_MEMORY_SPACE);
+    PciPdoSetBusDataByOffset(DeviceExtension, &Disabled, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(Disabled));
+
+    PciPdoSetBusDataByOffset(DeviceExtension, &RomMask, RomOffset, sizeof(RomMask));
+    PciPdoGetBusDataByOffset(DeviceExtension, &Probe, RomOffset, sizeof(Probe));
+    Probe &= PCI_ADDRESS_ROM_ADDRESS_MASK;
+    RomSize = Probe ? ~Probe + 1 : 0;
+
+    /* TODO: read a ROM whose device has no 32-bit memory BAR at least as large as the ROM */
+    if (RomSize != 0 && Offset < RomSize && PciPdoFindRomWindow(DeviceExtension, BarCount, RomSize, &RomBase))
+    {
+        RomEnable = RomBase | PCI_ROMADDRESS_ENABLED;
+        Decode = Disabled | PCI_ENABLE_MEMORY_SPACE;
+        PciPdoSetBusDataByOffset(DeviceExtension, &RomEnable, RomOffset, sizeof(RomEnable));
+        PciPdoSetBusDataByOffset(DeviceExtension, &Decode, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(Decode));
+
+        Physical.QuadPart = RomBase;
+        Rom = MmMapIoSpace(Physical, RomSize, MmNonCached);
+        if (Rom != NULL)
+        {
+            Copied = min(Length, RomSize - Offset);
+            READ_REGISTER_BUFFER_UCHAR(Rom + Offset, Buffer, Copied);
+            MmUnmapIoSpace(Rom, RomSize);
+        }
+
+        PciPdoSetBusDataByOffset(DeviceExtension, &Disabled, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(Disabled));
+    }
+
+    PciPdoSetBusDataByOffset(DeviceExtension, &RomBar, RomOffset, sizeof(RomBar));
+    PciPdoSetBusDataByOffset(DeviceExtension, &Header.Command, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(Header.Command));
+
+    KeSetEvent(&PciRomLock, IO_NO_INCREMENT, FALSE);
+    return Copied;
+}
+
 static GET_SET_DEVICE_DATA InterfaceBusGetBusData;
 
 static
@@ -3627,6 +3762,12 @@ InterfaceBusGetBusData(
 
     DPRINT("InterfaceBusGetBusData(%p 0x%lx %p 0x%lx 0x%lx) called\n",
            Context, DataType, Buffer, Offset, Length);
+
+    if (DataType == PCI_WHICHSPACE_ROM)
+    {
+        DeviceExtension = (PPDO_DEVICE_EXTENSION)((PDEVICE_OBJECT)Context)->DeviceExtension;
+        return PciPdoReadRom(DeviceExtension, Buffer, Offset, Length);
+    }
 
     if (DataType != PCI_WHICHSPACE_CONFIG && DataType != PCIConfiguration)
     {
