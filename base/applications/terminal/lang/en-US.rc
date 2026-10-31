@@ -1,0 +1,124 @@
+/*
+ * PROJECT:     LiberNT Terminal
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     English (United States) resources
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+STRINGTABLE
+BEGIN
+    IDS_APP_TITLE               "Terminal"
+    IDS_NEW_TAB                 "New tab"
+    IDS_SETTINGS                "Settings"
+    IDS_ABOUT                   "About"
+    IDS_CLOSE_ALL_TABS          "This window has several tabs. Close all of them?"
+    IDS_CLOSE_ALL_TABS_TITLE    "Close all tabs"
+    IDS_PROCESS_EXITED          "[The process exited with code %lu. Press Enter to close this tab.]"
+    IDS_START_FAILED            "This profile could not be started.\r\n\r\n%s"
+    IDS_SETTINGS_ERROR          "Terminal settings"
+    IDS_FIND_HINT               "Find"
+    IDS_FIND_COUNT              "%d of %d"
+    IDS_FIND_NONE               "No results"
+    IDS_RENAME_TAB              "Rename tab"
+    IDS_OPEN_SETTINGS_FILE      "Open settings file"
+    IDS_DUPLICATE_TAB           "Duplicate tab"
+    IDS_CLOSE_TAB               "Close tab"
+    IDS_CLOSE_OTHER_TABS        "Close other tabs"
+    IDS_CLOSE_TABS_RIGHT        "Close tabs to the right"
+    IDS_COPYRIGHT               "(C) Copyright 2026 LiberNT Team."
+    IDS_VERSION_LINE            "Version 1.0"
+    IDS_DESCRIPTION             "A tabbed terminal for the command prompt, PowerShell and Linux shells."
+    IDS_COPY                    "Copy"
+    IDS_PASTE                   "Paste"
+    IDS_SELECT_ALL              "Select all"
+    IDS_FIND                    "Find"
+    IDS_CLEAR_BUFFER            "Clear buffer"
+    IDS_PROFILE_NEW             "New profile"
+    IDS_SCHEME_NEW              "New scheme"
+    IDS_SETTINGS_SAVED          "The settings were saved."
+    IDS_SETTINGS_SAVE_FAILED    "Settings not saved"
+
+    IDS_THEME_SYSTEM            "Use the system setting"
+    IDS_THEME_LIGHT             "Light"
+    IDS_THEME_DARK              "Dark"
+    IDS_CURSOR_BAR              "Bar"
+    IDS_CURSOR_BLOCK            "Filled box"
+    IDS_CURSOR_UNDERLINE        "Underscore"
+    IDS_EXIT_GRACEFUL           "Close if it exits successfully"
+    IDS_EXIT_ALWAYS             "Always close"
+    IDS_EXIT_NEVER              "Keep the tab open"
+    IDS_COLUMN_ACTION           "Action"
+    IDS_COLUMN_KEYS             "Keys"
+    IDS_COLOR_FOREGROUND        "Foreground"
+    IDS_COLOR_BACKGROUND        "Background"
+    IDS_COLOR_CURSOR            "Cursor"
+    IDS_COLOR_SELECTION         "Selection"
+
+    IDS_SETTINGS_WINDOW         "Terminal settings"
+    IDS_SET_SECTION_PROFILES    "Profiles"
+    IDS_SET_SECTION_COLORS      "Colors"
+    IDS_SET_SECTION_WINDOW      "Window"
+    IDS_SET_SECTION_KEYS        "Keys"
+    IDS_SET_ADD                 "New"
+    IDS_SET_NAME                "Name"
+    IDS_SET_COMMAND             "Command line"
+    IDS_SET_DIRECTORY           "Starting directory"
+    IDS_SET_TAB_TITLE           "Tab title"
+    IDS_SET_FONT                "Font and size"
+    IDS_SET_BOLD                "Bold"
+    IDS_SET_CURSOR              "Cursor"
+    IDS_SET_BLINK               "Blink"
+    IDS_SET_HISTORY             "Lines of history"
+    IDS_SET_PADDING             "Padding"
+    IDS_SET_ON_EXIT             "When the process exits"
+    IDS_SET_KEEP_TITLE          "Keep the tab title given here"
+    IDS_SET_BELL_SOUND          "Play a sound for the bell"
+    IDS_SET_HIDDEN              "Hide from the new tab menu"
+    IDS_SET_SCHEME_NAME         "Scheme name"
+    IDS_SET_SCHEME_COLORS       "Text and cursor"
+    IDS_SET_PALETTE             "Palette"
+    IDS_SET_DEFAULT_PROFILE     "Default profile"
+    IDS_SET_THEME               "Theme"
+    IDS_SET_WINDOW_SIZE         "New window size"
+    IDS_SET_COLUMNS             "columns"
+    IDS_SET_ROWS                "rows"
+    IDS_SET_WORD_DELIMITERS     "Word delimiters"
+    IDS_SET_COPY_ON_SELECT      "Copy text as soon as it is selected"
+    IDS_SET_CONFIRM_CLOSE       "Ask before closing a window with several tabs"
+    IDS_SET_BELL_MARK           "Mark background tabs that ring the bell"
+    IDS_SET_DUPLICATE           "Duplicate"
+    IDS_SET_DELETE              "Delete"
+    IDS_SET_BROWSE              "Browse..."
+    IDS_SET_ASSIGN              "Assign"
+    IDS_SET_REMOVE              "Remove"
+    IDS_SET_RESET               "Reset all"
+    IDS_SET_SAVE                "Save"
+    IDS_SET_CANCEL              "Cancel"
+    IDS_SET_OPEN_JSON           "Edit settings.json"
+END
+
+IDD_ABOUT DIALOGEX 0, 0, 250, 104
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About Terminal"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    ICON            "", IDC_ABOUT_ICON, 12, 12, 32, 32
+    LTEXT           "", IDC_ABOUT_NAME, 54, 12, 186, 10
+    LTEXT           "", IDC_ABOUT_VERSION, 54, 25, 186, 10
+    LTEXT           "", IDC_ABOUT_COPYRIGHT, 54, 38, 186, 10
+    LTEXT           "", IDC_ABOUT_DESCRIPTION, 54, 54, 186, 22
+    DEFPUSHBUTTON   "OK", IDOK, 190, 82, 50, 14
+END
+
+IDD_RENAME DIALOGEX 0, 0, 220, 58
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Rename tab"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    EDITTEXT        IDC_RENAME_EDIT, 7, 9, 206, 14, ES_AUTOHSCROLL
+    DEFPUSHBUTTON   "OK", IDOK, 108, 36, 50, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 163, 36, 50, 14
+END
+

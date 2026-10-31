@@ -131,6 +131,7 @@ Files used, copied unmodified and drawn from their path data at run time:
 - assets/WiFi 1/SVG/ic_fluent_wifi_1_20_regular.svg
 - assets/WiFi Off/SVG/ic_fluent_wifi_off_20_regular.svg
 - assets/Window Apps/SVG/ic_fluent_window_apps_20_regular.svg
+- assets/Window Console/SVG/ic_fluent_window_console_20_regular.svg
 - assets/Window Multiple/SVG/ic_fluent_window_multiple_20_regular.svg
 - assets/Wrench/SVG/ic_fluent_wrench_20_regular.svg
 - assets/Zoom In/SVG/ic_fluent_zoom_in_20_regular.svg
