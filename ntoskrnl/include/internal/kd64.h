@@ -321,6 +321,27 @@ KdPullRemoteFile(
     _In_ PUNICODE_STRING FileName
 );
 
+#define KD_FILE_REQUEST_PULL    1
+#define KD_FILE_REQUEST_RELOAD  2
+
+NTSTATUS
+NTAPI
+KdQueueFileRequest(
+    _In_ ULONG Kind,
+    _In_z_ PCSTR Name
+);
+
+VOID
+NTAPI
+KdInitializeFileService(
+    VOID
+);
+
+VOID
+KdpResetFileIoHost(
+    VOID
+);
+
 VOID
 NTAPI
 KdpSymbol(

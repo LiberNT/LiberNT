@@ -565,6 +565,7 @@ extern const CSTRING KdbPromptStr;
 #endif
 
 #define KDP_FILE_IO_TIMEOUT_POLLS 100000
+#define KDP_FILE_IO_NET_TIMEOUT_POLLS 400000
 
 static BOOLEAN KdpFileIoHostAbsent = FALSE;
 static ULONG KdpFileIoPacketId = INITIAL_PACKET_ID;
@@ -596,9 +597,9 @@ KdpFileIoReceive(
 
     while (Length-- > 0)
     {
-        for (Polls = 0; !KdPortGetByteEx(&SerialPortInfo, Byte); Polls++)
+        for (Polls = 0; !(KdpDebugMode.Net ? KdpNetGetByte(Byte) : KdPortGetByteEx(&SerialPortInfo, Byte)); Polls++)
         {
-            if (Polls == KDP_FILE_IO_TIMEOUT_POLLS)
+            if (Polls == (KdpDebugMode.Net ? KDP_FILE_IO_NET_TIMEOUT_POLLS : KDP_FILE_IO_TIMEOUT_POLLS))
                 return FALSE;
             KeStallExecutionProcessor(10);
         }
@@ -606,6 +607,31 @@ KdpFileIoReceive(
     }
 
     return TRUE;
+}
+
+static
+BOOLEAN
+KdpFileIoTransportReady(VOID)
+{
+    if (!KdpDebugMode.Net)
+        return KdpDebugMode.Serial;
+
+    /* A network host that attaches later gets a new chance to answer */
+    if (!KdpNetQueryAttached(NULL, NULL))
+    {
+        KdpFileIoHostAbsent = FALSE;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static UCHAR KdpFileIoNetPacket[sizeof(KD_PACKET) + PACKET_MAX_SIZE + sizeof(UCHAR)];
+
+VOID
+KdpResetFileIoHost(VOID)
+{
+    KdpFileIoHostAbsent = FALSE;
 }
 
 static
@@ -617,7 +643,7 @@ KdpSendFileIoPacket(
     KD_PACKET Packet;
     UCHAR Trailer = PACKET_TRAILING_BYTE;
 
-    if (!KdpDebugMode.Serial || KdpFileIoHostAbsent)
+    if (!KdpFileIoTransportReady() || KdpFileIoHostAbsent)
         return;
 
     KdpFileIoApiNumber = ((PDBGKD_FILE_IO)MessageHeader->Buffer)->ApiNumber;
@@ -631,6 +657,26 @@ KdpSendFileIoPacket(
     {
         Packet.ByteCount += MessageData->Length;
         Packet.Checksum += KdpFileIoChecksum(MessageData->Buffer, MessageData->Length);
+    }
+
+    if (KdpDebugMode.Net)
+    {
+        ULONG Length = 0;
+
+        if (sizeof(Packet) + Packet.ByteCount + sizeof(Trailer) > sizeof(KdpFileIoNetPacket))
+            return;
+        RtlCopyMemory(KdpFileIoNetPacket, &Packet, sizeof(Packet));
+        Length += sizeof(Packet);
+        RtlCopyMemory(KdpFileIoNetPacket + Length, MessageHeader->Buffer, MessageHeader->Length);
+        Length += MessageHeader->Length;
+        if (MessageData)
+        {
+            RtlCopyMemory(KdpFileIoNetPacket + Length, MessageData->Buffer, MessageData->Length);
+            Length += MessageData->Length;
+        }
+        KdpFileIoNetPacket[Length++] = Trailer;
+        KdpNetSendBytes((PCCH)KdpFileIoNetPacket, Length);
+        return;
     }
 
     KdPortPutBufferEx(&SerialPortInfo, (PCCH)&Packet, sizeof(Packet));
@@ -651,7 +697,7 @@ KdpReceiveFileIoPacket(
     ULONG Matched = 0, Checksum;
     UCHAR Byte;
 
-    if (!KdpDebugMode.Serial || KdpFileIoHostAbsent)
+    if (!KdpFileIoTransportReady() || KdpFileIoHostAbsent)
         return KdPacketTimedOut;
 
     do

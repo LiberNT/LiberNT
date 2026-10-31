@@ -717,6 +717,7 @@ IoInitSystem(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     PnPBootDriversInitialized = TRUE;
 
     KdInitializeBootLog(LoaderBlock);
+    KdInitializeFileService();
 
     /* Load system start drivers */
     IopInitializeSystemDrivers();

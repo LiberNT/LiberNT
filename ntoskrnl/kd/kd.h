@@ -82,6 +82,11 @@ VOID
 KdpNetSendCommand(
     _In_ PCSTR Command);
 
+VOID
+KdpNetSendBytes(
+    _In_reads_bytes_(Length) PCCH Buffer,
+    _In_ ULONG Length);
+
 BOOLEAN
 KdpNetPollBreakIn(VOID);
 

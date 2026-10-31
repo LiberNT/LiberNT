@@ -30,6 +30,7 @@ HELLO_SIZE = 72
 TAG_SIZE = 16
 STREAM_HEADER = 24
 SEGMENT = 1100
+INPUT_WINDOW = 0x8000
 PROTOCOL_NAME = b'Noise_NNpsk0_25519_ChaChaPoly_SHA256'
 PROLOGUE_LABEL = b'LiberNT KDNET 1'
 NO_OFFSET = 0xFFFFFFFFFFFFFFFF
@@ -163,15 +164,19 @@ class Target:
         self.info['head'] = head
         return True
 
-    def make_data(self, columns, rows):
+    def make_data(self, columns, rows, offset=0):
         header = self.header(TYPE_DATA, self.session) + struct.pack('<Q', self.send_counter)
-        payload = bytes(self.input[:SEGMENT])
+        payload = bytes(self.input[offset:offset + SEGMENT])
         control = CONTROL_SIZE | (CONTROL_MISSING if self.missing else 0)
-        plain = struct.pack('<QQHHHH', self.input_base, self.expected, control,
+        plain = struct.pack('<QQHHHH', self.input_base + offset, self.expected, control,
                             columns, rows, 0) + payload
         cipher = ChaCha20Poly1305(self.send_key).encrypt(nonce(self.send_counter), plain, header)
         self.send_counter += 1
         return header + cipher
+
+    def make_burst(self, columns, rows):
+        count = max(1, (min(len(self.input), INPUT_WINDOW) + SEGMENT - 1) // SEGMENT)
+        return [self.make_data(columns, rows, index * SEGMENT) for index in range(count)]
 
     def request(self, kind):
         self.answers.pop(kind, None)
@@ -246,7 +251,31 @@ def parse_args():
                         help='print the description of the machine (system, PCI, ACPI, modules) and detach')
     parser.add_argument('--send', action='append', default=[], metavar='SECONDS:TEXT',
                         help='type TEXT this many seconds after the attach (\\n, \\x03 are decoded)')
+    parser.add_argument('--kdfiles', metavar='MAP', help='answer driver file requests from this .kdfiles map')
+    parser.add_argument('-m', nargs=2, action='append', default=[], metavar=('OLD', 'NEW'),
+                        help='answer requests for OLD with the host file NEW, as .kdfiles -m')
     return parser.parse_args()
+
+
+def file_server(args, target, emit, report):
+    '''Return a feed for target output that answers .kdfiles requests made after the attach.'''
+    if not args.kdfiles and not args.m:
+        return emit
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'kdfiles'))
+    import kdfiles
+    entries = (kdfiles.read_map(args.kdfiles) if args.kdfiles else []) + [tuple(m) for m in args.m]
+    live = {'answer': False}
+
+    def reply(data):
+        if live['answer']:
+            target.input += data
+
+    demux = kdfiles.Demux(kdfiles.Server(entries, report, False), reply, emit)
+
+    def feed(payload):
+        live['answer'] = target.expected > target.info.get('head', 0)
+        demux.feed(payload)
+    return feed
 
 
 def main():
@@ -280,6 +309,16 @@ def main():
     def status(text):
         sys.stderr.write(text + ('\r\n' if interactive else '\n'))
         sys.stderr.flush()
+
+    def emit(payload):
+        if log:
+            log.write(payload)
+            log.flush()
+        text = payload.replace(b'\n', b'\r\n') if interactive else payload
+        sys.stdout.buffer.write(text)
+        sys.stdout.buffer.flush()
+
+    feed = file_server(args, target, emit, status)
 
     def terminal_size():
         if args.size:
@@ -365,12 +404,7 @@ def main():
                         peer = address
                         acknowledge = True
                         if payload and not args.info:
-                            if log:
-                                log.write(payload)
-                                log.flush()
-                            text = payload.replace(b'\n', b'\r\n') if interactive else payload
-                            sys.stdout.buffer.write(text)
-                            sys.stdout.buffer.flush()
+                            feed(payload)
 
             if interactive and sys.stdin in ready:
                 typed = os.read(sys.stdin.fileno(), 256)
@@ -399,7 +433,8 @@ def main():
                 interval = 0.05 if target.missing else 0.2 if target.input else 5.0
                 if acknowledge or now - last_send >= interval:
                     size = terminal_size()
-                    sock.sendto(target.make_data(size.columns, size.lines), peer)
+                    for packet in target.make_burst(size.columns, size.lines):
+                        sock.sendto(packet, peer)
                     last_send = now
                     acknowledge = False
     except KeyboardInterrupt:

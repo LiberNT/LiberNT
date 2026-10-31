@@ -53,6 +53,14 @@ KdpNetSendCommand(
     KdpNetPrint(Command, (ULONG)strlen(Command));
 }
 
+VOID
+KdpNetSendBytes(
+    _In_reads_bytes_(Length) PCCH Buffer,
+    _In_ ULONG Length)
+{
+    KdpNetPrint(Buffer, Length);
+}
+
 BOOLEAN
 KdpNetGetByte(
     _Out_ PUCHAR Byte)

@@ -99,6 +99,7 @@ static BOOLEAN KdbpCmdTimer(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdInterrupt(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdInterrupts(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdPci(ULONG Argc, PCHAR Argv[]);
+static BOOLEAN KdbpCmdKdFiles(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdDeviceTree(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdDeviceNode(ULONG Argc, PCHAR Argv[]);
 static BOOLEAN KdbpCmdLocks(ULONG Argc, PCHAR Argv[]);
@@ -615,6 +616,8 @@ static const struct
     { "!interrupt", "!interrupt address", "Display a kernel interrupt object.", KdbpCmdInterrupt },
     { "!irqs", "!irqs [vector]", "List connected interrupt vectors or inspect one vector.", KdbpCmdInterrupts },
     { "!pci", "!pci bus:device.function", "Display live PCI BAR, interrupt and MSI/MSI-X configuration.", KdbpCmdPci },
+    { "!kdpull", "!kdpull file", "After cont, overwrite an NT path with the debugger's .kdfiles copy.", KdbpCmdKdFiles },
+    { "!kdreload", "!kdreload service", "After cont, restart a driver; its image is pulled from the debugger's .kdfiles map.", KdbpCmdKdFiles },
     { "!devtree", "!devtree", "List the PnP device tree and DEVICE_NODE addresses.", KdbpCmdDeviceTree },
     { "!devnode", "!devnode address", "Display a PnP device node and its assigned resources.", KdbpCmdDeviceNode },
     { "!locks", "!locks [-v|address]", "List held or waited-on executive resources (-v: all), or display one resource.", KdbpCmdLocks },
@@ -6085,6 +6088,26 @@ static VOID KdbpPrintPciAer(_In_ ULONG Bus, _In_ ULONG SlotNumber)
     }
 }
 #endif
+
+static BOOLEAN KdbpCmdKdFiles(ULONG Argc, PCHAR Argv[])
+{
+    ULONG Kind = (strcmp(Argv[0], "!kdpull") == 0) ? KD_FILE_REQUEST_PULL : KD_FILE_REQUEST_RELOAD;
+    NTSTATUS Status;
+
+    if (Argc != 2)
+    {
+        KdbpPrint("Usage: %s %s\n", Argv[0], (Kind == KD_FILE_REQUEST_PULL) ? "file" : "service");
+        return TRUE;
+    }
+
+    Status = KdQueueFileRequest(Kind, Argv[1]);
+    if (NT_SUCCESS(Status))
+        KdbpPrint("%s %s queued; it runs after cont.\n", Argv[0], Argv[1]);
+    else
+        KdbpPrint("%s: request refused (0x%08lx)\n", Argv[0], Status);
+
+    return TRUE;
+}
 
 static BOOLEAN KdbpCmdPci(ULONG Argc, PCHAR Argv[])
 {
