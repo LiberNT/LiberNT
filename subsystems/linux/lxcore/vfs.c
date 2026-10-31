@@ -2650,7 +2650,8 @@ LxNodeQuery(
     _Out_ PLX_MOUNT *MountOut,
     _Out_ PCSTR *RelativeOut,
     _Out_ PULONG Type,
-    _Out_opt_ PSTR *LinkTarget)
+    _Out_opt_ PSTR *LinkTarget,
+    _Out_opt_ PBOOLEAN LeafMissing)
 {
     FILE_NETWORK_OPEN_INFORMATION Information;
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -2662,6 +2663,8 @@ LxNodeQuery(
 
     if (LinkTarget != NULL)
         *LinkTarget = NULL;
+    if (LeafMissing != NULL)
+        *LeafMissing = FALSE;
     *Type = 0;
 
     Mount = LxMountFind(LxProcessNs(Process, LxNsMnt), Path, &Relative);
@@ -2684,6 +2687,8 @@ LxNodeQuery(
     if (!NT_SUCCESS(Status))
     {
         LxFreePaged(NtPath.Buffer);
+        if (LeafMissing != NULL)
+            *LeafMissing = (BOOLEAN)(Status == STATUS_OBJECT_NAME_NOT_FOUND);
         if (Status == STATUS_NOT_A_DIRECTORY)
             return -LX_ENOTDIR;
         Error = -LxStatusToErrno(Status);
@@ -2848,6 +2853,7 @@ LxLookupWalk(
     ULONG Links = 0, Type = 0;
     PSTR LinkTarget = NULL;
     PLX_MOUNT Mount = NULL, StartMount = NULL;
+    BOOLEAN LeafMissing;
     PCSTR Relative;
     LONG Error = 0;
 
@@ -2929,9 +2935,22 @@ LxLookupWalk(
 
         if ((Joined != NULL) && (LxPathNormalize(Joined, Normalized) == 0))
         {
-            Error = LxNodeQuery(Process, Normalized, &Mount, &Relative, &Type, &LinkTarget);
+            Error = LxNodeQuery(Process, Normalized, &Mount, &Relative, &Type, &LinkTarget, &LeafMissing);
             if ((Mount != NULL) && (Mount->Kind != LxFsNt))
                 *Synthetic = TRUE;
+            if ((Error == -LX_ENOENT) && LeafMissing)
+            {
+                LxFree(Joined);
+                LxFree(Current);
+                LxFree(Root);
+                LxFree(ProcRoot);
+                if (!(Flags & LX_LOOKUP_CREATE))
+                {
+                    LxFree(Normalized);
+                    return -LX_ENOENT;
+                }
+                return LxLookupFinish(Process, Node, Normalized, FALSE, 0, NULL);
+            }
             if ((Error == 0) &&
                 ((Type != LX_S_IFLNK) || !(Flags & LX_LOOKUP_FOLLOW) ||
                  ((LinkTarget == NULL) && LxMountIsSynthetic(Mount))))
@@ -2978,7 +2997,7 @@ LxLookupWalk(
             Cursor++;
         if (*Cursor == '\0')
         {
-            Error = LxNodeQuery(Process, Current, &Mount, &Relative, &Type, NULL);
+            Error = LxNodeQuery(Process, Current, &Mount, &Relative, &Type, NULL, NULL);
             if ((Mount != NULL) && (Mount->Kind != LxFsNt))
                 *Synthetic = TRUE;
             if (Error == 0)
@@ -3052,7 +3071,7 @@ LxLookupWalk(
             break;
         }
 
-        Error = LxNodeQuery(Process, Candidate, &Mount, &Relative, &Type, &LinkTarget);
+        Error = LxNodeQuery(Process, Candidate, &Mount, &Relative, &Type, &LinkTarget, NULL);
         if ((Mount != NULL) && (Mount->Kind != LxFsNt))
             *Synthetic = TRUE;
         if (Error == -LX_ENOENT)
