@@ -2418,6 +2418,7 @@
 @ stdcall InbvSetVirtualFrameBuffer(ptr)
 @ stdcall InbvQueryBootScreen(ptr long ptr ptr)
 @ stdcall InbvDiscardBootScreen()
+@ stdcall InbvCopyBootScreen(ptr long long long)
 @ stub -arch=win64 InterlockedPushListSList
 @ stub -arch=win64 IoAcquireKsrPersistentMemory
 @ stub -arch=win64 IoAcquireKsrPersistentMemoryEx
