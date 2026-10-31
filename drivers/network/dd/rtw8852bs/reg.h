@@ -68,6 +68,8 @@
 #define R_AX_GPIO_MUXCFG                    0x0040
 #define B_AX_BOOT_MODE                      RTW_BIT(19)
 
+#define R_AX_SYS_SDIO_CTRL                  0x0070
+#define B_AX_LTE_MUX_CTRL_PATH              RTW_BIT(26)
 #define R_AX_HCI_OPT_CTRL                   0x0074
 #define B_AX_SDIO_DATA_PAD_SMT              RTW_BIT(19)
 

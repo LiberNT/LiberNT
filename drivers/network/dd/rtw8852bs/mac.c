@@ -528,6 +528,8 @@ RtwPowerOff(
     };
     ULONG i;
 
+    RtwWrite8(Adapter, R_AX_SYS_SDIO_CTRL + 3,
+              RtwRead8(Adapter, R_AX_SYS_SDIO_CTRL + 3) & ~(UCHAR)(B_AX_LTE_MUX_CTRL_PATH >> 24));
     Adapter->PowerOn = FALSE;
 
     for (i = 0; i < RTL_NUMBER_OF(XtalSteps); i++)

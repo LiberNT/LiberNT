@@ -778,6 +778,8 @@ RtwInitCoex(
                 B_AX_GNT_BT_RFC_S1_SW_CTRL | B_AX_GNT_BT_BB_S1_SW_CTRL |
                 B_AX_GNT_WL_RFC_S1_SW_VAL | B_AX_GNT_WL_BB_S1_SW_VAL |
                 B_AX_GNT_WL_RFC_S1_SW_CTRL | B_AX_GNT_WL_BB_S1_SW_CTRL);
+    RtwWrite8(Adapter, R_AX_SYS_SDIO_CTRL + 3,
+              RtwRead8(Adapter, R_AX_SYS_SDIO_CTRL + 3) | (UCHAR)(B_AX_LTE_MUX_CTRL_PATH >> 24));
 }
 
 static
