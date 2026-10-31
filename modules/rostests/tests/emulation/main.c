@@ -12,6 +12,7 @@
 #undef WIN32_NO_STATUS
 #include <ntstatus.h>
 #include <ndk/rtlfuncs.h>
+#include <ndk/psfuncs.h>
 #include <pseh/pseh2.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -346,14 +347,22 @@ TestApcs(VOID)
 #if defined(_M_AMD64) || defined(__x86_64__)
 #define CONTEXT_PC(Context) ((Context)->Rip)
 #define CONTEXT_SP(Context) ((Context)->Rsp)
+#define CONTEXT_ARG0(Context) ((Context)->Rcx)
 #define CALL_RETURN_SLOT    sizeof(PVOID)
 #elif defined(_M_IX86) || defined(__i386__)
 #define CONTEXT_PC(Context) ((Context)->Eip)
 #define CONTEXT_SP(Context) ((Context)->Esp)
+#define CONTEXT_ARG0(Context) ((Context)->Eax)
 #define CALL_RETURN_SLOT    sizeof(PVOID)
+#elif defined(__riscv)
+#define CONTEXT_PC(Context) ((Context)->Pc)
+#define CONTEXT_SP(Context) ((Context)->Sp)
+#define CONTEXT_ARG0(Context) ((Context)->A0)
+#define CALL_RETURN_SLOT    0
 #else
 #define CONTEXT_PC(Context) ((Context)->Pc)
 #define CONTEXT_SP(Context) ((Context)->Sp)
+#define CONTEXT_ARG0(Context) ((Context)->X0)
 #define CALL_RETURN_SLOT    0
 #endif
 
@@ -859,6 +868,8 @@ TestSandboxedChild(VOID)
     if (Pi.hProcess)
     {
         PVOID NtCreateFileAddress = GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtCreateFile");
+        PROCESS_BASIC_INFORMATION ChildBasic;
+        PVOID ChildImage = NULL;
         CONTEXT ChildContext;
         BYTE Remote[16];
         SIZE_T Read = 0;
@@ -869,6 +880,12 @@ TestSandboxedChild(VOID)
         ZeroMemory(&ChildContext, sizeof(ChildContext));
         ChildContext.ContextFlags = CONTEXT_FULL;
         CHECK(GetThreadContext(Pi.hThread, &ChildContext));
+        CHECK(NT_SUCCESS(NtQueryInformationProcess(Pi.hProcess, ProcessBasicInformation, &ChildBasic,
+                                                   sizeof(ChildBasic), NULL)) &&
+              ReadProcessMemory(Pi.hProcess, &ChildBasic.PebBaseAddress->ImageBaseAddress, &ChildImage,
+                                sizeof(ChildImage), &Read));
+        CHECK(CONTEXT_ARG0(&ChildContext) ==
+              (ULONG_PTR)ChildImage + RtlImageNtHeader(GetModuleHandleW(NULL))->OptionalHeader.AddressOfEntryPoint);
         CHECK(AssignProcessToJobObject(Job, Pi.hProcess));
         CHECK(ResumeThread(Pi.hThread) != (DWORD)-1);
         CHECK(WaitForSingleObject(Pi.hProcess, 120000) == WAIT_OBJECT_0);

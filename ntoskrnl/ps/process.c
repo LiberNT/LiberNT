@@ -3644,9 +3644,11 @@ NtCreateUserProcess(OUT PHANDLE ProcessHandle,
 #elif defined(_M_RISCV64)
     /* Native NT startup state; the thread initializer installs tp from the
      * allocated TEB and supplies supervisor-owned user-return status bits. */
-    ThreadContext.Pc = (ULONG64)ImageInformation.TransferAddress;
-    ThreadContext.Sp = (ULONG64)InitialTeb.StackBase & ~15ULL;
-    ThreadContext.A0 = (ULONG64)ProcessBasicInfo.PebBaseAddress;
+    PsArchInitializeUserThreadContext(&ThreadContext,
+                                      PspRtlUserThreadStart,
+                                      ImageInformation.TransferAddress,
+                                      ProcessBasicInfo.PebBaseAddress,
+                                      InitialTeb.StackBase);
 #elif defined(_M_PPC)
     /* The image entry is a function descriptor {code, TOC} in the new
      * process. Leave a 64-byte frame header below the stack base. */
