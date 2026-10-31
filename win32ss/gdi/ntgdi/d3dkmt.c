@@ -259,6 +259,8 @@ NTSTATUS APIENTRY D3DKMTDestroyHwContext(_In_ CONST struct _D3DKMT_DESTROYHWCONT
 NTSTATUS APIENTRY D3DKMTSetMonitorColorSpaceTransform(_In_ struct _D3DKMT_SET_COLORSPACE_TRANSFORM *pData);
 NTSTATUS APIENTRY D3DKMTAdjustFullscreenGamma(_In_ D3DKMT_ADJUSTFULLSCREENGAMMA *pData);
 NTSTATUS APIENTRY D3DKMTConfigureSharedResource(_In_ const D3DKMT_CONFIGURESHAREDRESOURCE *pData);
+NTSTATUS APIENTRY D3DKMTGetOverlayState(_Inout_ D3DKMT_GETOVERLAYSTATE *pData);
+NTSTATUS APIENTRY D3DKMTCheckSharedResourceAccess(_In_ const D3DKMT_CHECKSHAREDRESOURCEACCESS *pData);
 NTSTATUS APIENTRY D3DKMTCreateProtectedSession(_Inout_ D3DKMT_CREATEPROTECTEDSESSION *pData);
 NTSTATUS APIENTRY D3DKMTDestroyProtectedSession(_Inout_ D3DKMT_DESTROYPROTECTEDSESSION *pData);
 NTSTATUS APIENTRY D3DKMTFlushHeapTransitions(_In_ D3DKMT_FLUSHHEAPTRANSITIONS *pData);
@@ -876,6 +878,7 @@ NTSTATUS
 APIENTRY
 NtGdiDdDDIGetPresentHistory(_Inout_ D3DKMT_GETPRESENTHISTORY* unnamedParam1)
 {
+    /* FIXME: Windows 11 refuses a non-DWM caller with STATUS_ACCESS_DENIED before looking at a NULL argument */
     RETURN_STATUS_IF_NULL(unnamedParam1);
     D3DKMT_CALL_CALLBACK(RxgkIntPfnGetPresentHistory, unnamedParam1);
 }
@@ -884,8 +887,9 @@ NTSTATUS
 APIENTRY
 NtGdiDdDDIGetRuntimeData(_In_ const D3DKMT_GETRUNTIMEDATA* unnamedParam1)
 {
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnGetRuntimeData, unnamedParam1);
+    UNREFERENCED_PARAMETER(unnamedParam1);
+    /* Windows 11 retired this service: it returns STATUS_NOT_IMPLEMENTED without reading the argument. */
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 NTSTATUS
@@ -1292,7 +1296,7 @@ APIENTRY
 NtGdiDdDDIGetOverlayState(_Inout_ D3DKMT_GETOVERLAYSTATE* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTGetOverlayState(unnamedParam1);
 }
 
 NTSTATUS
@@ -1300,7 +1304,7 @@ APIENTRY
 NtGdiDdDDICheckSharedResourceAccess(_In_ const D3DKMT_CHECKSHAREDRESOURCEACCESS* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    return STATUS_NOT_IMPLEMENTED;
+    return D3DKMTCheckSharedResourceAccess(unnamedParam1);
 }
 
 NTSTATUS

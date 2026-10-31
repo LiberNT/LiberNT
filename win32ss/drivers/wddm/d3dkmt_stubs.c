@@ -2606,6 +2606,10 @@ D3DKMTGetDeviceState(
     CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x1A2, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_D3DKMT_UPDATEOVERLAY \
     CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x1A3, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_D3DKMT_GETOVERLAYSTATE \
+    CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x1A4, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_D3DKMT_CHECKSHAREDRESOURCEACCESS \
+    CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x164, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_D3DKMT_GETCONTEXTSCHEDULINGPRIORITY \
     CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x126, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_D3DKMT_SETCONTEXTSCHEDULINGPRIORITY \
@@ -2689,6 +2693,22 @@ D3DKMTUpdateOverlay(
     _In_ CONST D3DKMT_UPDATEOVERLAY *pData)
 {
     return WddmBridgeCaptureFixedIoctl(IOCTL_D3DKMT_UPDATEOVERLAY, (PVOID)pData, sizeof(*pData), FALSE);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTCheckSharedResourceAccess(
+    _In_ CONST D3DKMT_CHECKSHAREDRESOURCEACCESS *pData)
+{
+    return WddmBridgeCaptureFixedIoctl(IOCTL_D3DKMT_CHECKSHAREDRESOURCEACCESS, (PVOID)pData, sizeof(*pData), FALSE);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTGetOverlayState(
+    _Inout_ D3DKMT_GETOVERLAYSTATE *pData)
+{
+    return WddmBridgeCaptureFixedIoctl(IOCTL_D3DKMT_GETOVERLAYSTATE, pData, sizeof(*pData), TRUE);
 }
 
 NTSTATUS
@@ -4835,7 +4855,7 @@ D3DKMTWaitForSynchronizationObjectFromCpu(
     if (Captured.ObjectCount == 0 || Captured.ObjectCount > D3DDDI_MAX_OBJECT_WAITED_ON || Captured.ObjectHandleArray == NULL || Captured.FenceValueArray == NULL)
         return STATUS_INVALID_PARAMETER;
     if ((Captured.Flags.Value & ~1UL) != 0)
-        return STATUS_NOT_SUPPORTED;
+        return STATUS_INVALID_PARAMETER;
 
     Status = WddmBridgeSizeForCount(Captured.ObjectCount, sizeof(ObjectHandles[0]), &HandleArraySize);
     if (!NT_SUCCESS(Status))
@@ -4967,6 +4987,11 @@ D3DKMTSubmitCommand(
 
     RtlCopyMemory(&FlagsValue, &Captured.Flags, sizeof(FlagsValue));
 
+    /* TODO: NoKmdAccess submissions once a test-signing mode exists; without it Windows refuses them */
+    if (Captured.Flags.NoKmdAccess)
+        return STATUS_INVALID_PARAMETER;
+    FlagsValue &= RXGK_SUBMITCOMMAND_SUPPORTED_FLAGS;
+
     if (Captured.BroadcastContextCount == 0 ||
         Captured.BroadcastContextCount > D3DDDI_MAX_BROADCAST_CONTEXT ||
         Captured.NumPrimaries > D3DDDI_MAX_WRITTEN_PRIMARIES)
@@ -4977,13 +5002,12 @@ D3DKMTSubmitCommand(
     /*
      * As with CreateContextVirtual, NullRendering is not required here.  The
      * bridge polices what it can see -- one context, captured primaries, no present
-     * history, a known flag set -- and leaves "may this context actually
+     * history -- and leaves "may this context actually
      * execute?" to dxgkrnl, which answers it from the context's own creation
      * flags and the process's page tables.
      */
     if (Captured.BroadcastContextCount != 1 ||
-        Captured.NumHistoryBuffers != 0 ||
-        (FlagsValue & ~RXGK_SUBMITCOMMAND_SUPPORTED_FLAGS) != 0)
+        Captured.NumHistoryBuffers != 0)
     {
         return STATUS_NOT_SUPPORTED;
     }

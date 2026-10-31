@@ -84,6 +84,25 @@ DxgkGpuVaCoreNextMapPiece(
     _Out_ PULONGLONG PieceEnd,
     _Out_ PULONG CoveringSpan);
 
+#define DXGK_GPUVA_CORE_UPDATE_CPU_VIRTUAL   0
+#define DXGK_GPUVA_CORE_UPDATE_GPU_VIRTUAL   1
+#define DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL  2
+
+ULONG
+DxgkGpuVaCoreTableUpdateMode(
+    _In_ ULONG AdapterUpdateMode,
+    _In_ BOOLEAN HasPagingVa,
+    _In_ BOOLEAN PagingProcessInit);
+
+BOOLEAN
+DxgkGpuVaCoreTableNeedsCpuMapping(
+    _In_ ULONG AdapterUpdateMode,
+    _In_ BOOLEAN PagingProcessTable);
+
+BOOLEAN
+DxgkGpuVaCoreUsesPagingProcessVa(
+    _In_ ULONG AdapterUpdateMode);
+
 /* --- page-table geometry --------------------------------------------- */
 
 NTSTATUS DxgkGpuVaCoreValidateGeometry(_In_ const DXGK_GPUVA_GEOMETRY *Geometry);

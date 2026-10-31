@@ -3175,6 +3175,159 @@ DxgkVidMmDereferenceResource(
     }
 }
 
+static PDXGKVMM_SHARED_ACCESS
+DxgkpVidMmFindSharedAccessLocked(
+    _In_ PDXGKVMM_RESOURCE Resource,
+    _In_ BOOLEAN IsDwm,
+    _In_opt_ PEPROCESS Process)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = Resource->SharedAccessList.Flink; Entry != &Resource->SharedAccessList; Entry = Entry->Flink)
+    {
+        PDXGKVMM_SHARED_ACCESS Access = CONTAINING_RECORD(Entry, DXGKVMM_SHARED_ACCESS, Link);
+
+        if (IsDwm ? Access->IsDwm : (!Access->IsDwm && Access->Process == Process))
+            return Access;
+    }
+    return NULL;
+}
+
+NTSTATUS
+DxgkVidMmAddSharedAccess(
+    _In_ PDXGKVMM_RESOURCE Resource,
+    _In_ BOOLEAN IsDwm,
+    _In_opt_ PEPROCESS Process)
+{
+    PDXGKVMM_SHARED_ACCESS Access;
+
+    PAGED_CODE();
+    DxgkpVidMmEnsureGlobalsInitialized();
+    ExAcquireFastMutex(&DxgkVidMmResourceListLock);
+    Resource->SharedAccessRestricted = TRUE;
+    if (DxgkpVidMmFindSharedAccessLocked(Resource, IsDwm, Process) != NULL)
+    {
+        ExReleaseFastMutex(&DxgkVidMmResourceListLock);
+        return STATUS_SUCCESS;
+    }
+    Access = ExAllocatePoolZero(PagedPool, sizeof(*Access), TAG_VIDMM_RESOURCE);
+    if (Access == NULL)
+    {
+        ExReleaseFastMutex(&DxgkVidMmResourceListLock);
+        return STATUS_NO_MEMORY;
+    }
+    Access->IsDwm = IsDwm;
+    Access->Process = IsDwm ? NULL : Process;
+    if (Access->Process != NULL)
+        ObReferenceObject(Access->Process);
+    InsertTailList(&Resource->SharedAccessList, &Access->Link);
+    ExReleaseFastMutex(&DxgkVidMmResourceListLock);
+    return STATUS_SUCCESS;
+}
+
+BOOLEAN
+DxgkVidMmSharedAccessAllowed(
+    _In_ PDXGKVMM_RESOURCE Resource,
+    _In_ PEPROCESS Process)
+{
+    BOOLEAN Allowed;
+
+    PAGED_CODE();
+    DxgkpVidMmEnsureGlobalsInitialized();
+    ExAcquireFastMutex(&DxgkVidMmResourceListLock);
+    Allowed = !Resource->SharedAccessRestricted ||
+              DxgkpVidMmFindSharedAccessLocked(Resource, FALSE, Process) != NULL;
+    ExReleaseFastMutex(&DxgkVidMmResourceListLock);
+    return Allowed;
+}
+
+NTSTATUS
+DxgkVidMmConfigureSharedResource(
+    _In_ PDXGKRNL_DEVICE Device,
+    _In_ D3DKMT_HANDLE hResource,
+    _In_ BOOLEAN IsDwm,
+    _In_opt_ HANDLE hProcess,
+    _In_ BOOLEAN AllowAccess)
+{
+    PDXGKVMM_SHARED_ACCESS Access;
+    PDXGKVMM_RESOURCE Resource;
+    PEPROCESS Process = NULL;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    if (hResource == 0 || !NT_SUCCESS(DxgkVidMmReferenceResource(hResource, FALSE, NULL, &Resource)))
+        return STATUS_INVALID_PARAMETER;
+    if (Resource->Device != Device || !Resource->Shareable || !Resource->SharedAccessRestricted)
+    {
+        DxgkVidMmDereferenceResource(Resource);
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (!IsDwm)
+    {
+        Status = ObReferenceObjectByHandle(hProcess, PROCESS_QUERY_LIMITED_INFORMATION, *PsProcessType, UserMode,
+                                           (PVOID *)&Process, NULL);
+        if (!NT_SUCCESS(Status))
+        {
+            DxgkVidMmDereferenceResource(Resource);
+            return Status;
+        }
+    }
+
+    if (AllowAccess)
+    {
+        Status = DxgkVidMmAddSharedAccess(Resource, IsDwm, Process);
+    }
+    else
+    {
+        ExAcquireFastMutex(&DxgkVidMmResourceListLock);
+        Access = DxgkpVidMmFindSharedAccessLocked(Resource, IsDwm, Process);
+        if (Access != NULL)
+            RemoveEntryList(&Access->Link);
+        ExReleaseFastMutex(&DxgkVidMmResourceListLock);
+        if (Access != NULL)
+        {
+            if (Access->Process != NULL)
+                ObDereferenceObject(Access->Process);
+            ExFreePoolWithTag(Access, TAG_VIDMM_RESOURCE);
+        }
+        Status = STATUS_SUCCESS;
+    }
+    if (Process != NULL)
+        ObDereferenceObject(Process);
+    DxgkVidMmDereferenceResource(Resource);
+    return Status;
+}
+
+NTSTATUS
+DxgkVidMmCheckSharedResourceAccess(
+    _In_ D3DKMT_HANDLE hGlobalShare,
+    _In_ UINT ClientPid)
+{
+    PDXGKVMM_RESOURCE Resource;
+    PLIST_ENTRY Entry;
+    NTSTATUS Status = STATUS_ACCESS_DENIED;
+
+    PAGED_CODE();
+    if (!NT_SUCCESS(DxgkVidMmReferenceResource(hGlobalShare, TRUE, NULL, &Resource)))
+        return STATUS_INVALID_PARAMETER;
+    ExAcquireFastMutex(&DxgkVidMmResourceListLock);
+    if (!Resource->SharedAccessRestricted)
+        Status = STATUS_SUCCESS;
+    for (Entry = Resource->SharedAccessList.Flink;
+         Status != STATUS_SUCCESS && Entry != &Resource->SharedAccessList;
+         Entry = Entry->Flink)
+    {
+        PDXGKVMM_SHARED_ACCESS Access = CONTAINING_RECORD(Entry, DXGKVMM_SHARED_ACCESS, Link);
+        HANDLE ProcessId = Access->IsDwm ? PsGetCurrentProcessId() : PsGetProcessId(Access->Process);
+
+        if ((ULONG_PTR)ProcessId == (ULONG_PTR)ClientPid)
+            Status = STATUS_SUCCESS;
+    }
+    ExReleaseFastMutex(&DxgkVidMmResourceListLock);
+    DxgkVidMmDereferenceResource(Resource);
+    return Status;
+}
+
 NTSTATUS
 DxgkVidMmValidateSharedResourceOwner(
     _In_ ULONG GlobalShare,
@@ -3478,7 +3631,7 @@ DxgkVidMmCreateOpenResource(
     Adapter = Device->Adapter;
     if (BackingResource->Adapter != Adapter || BackingResource->BackingResource != NULL || DXGK_CB_FULL(Adapter, DxgkDdiOpenAllocation) == NULL || DXGK_CB_FULL(Adapter, DxgkDdiCloseAllocation) == NULL)
         return STATUS_NOT_SUPPORTED;
-    if (BackingResource->SharedAccessProcess != NULL && BackingResource->SharedAccessProcess != Device->OwnerProcess)
+    if (!DxgkVidMmSharedAccessAllowed(BackingResource, Device->OwnerProcess))
         return STATUS_ACCESS_DENIED;
     if ((SIZE_T)AllocationCount > MAXULONG_PTR / sizeof(*OpenInfo) || (SIZE_T)AllocationCount > MAXULONG_PTR / sizeof(*Resource->OpenAllocations) || (SIZE_T)AllocationCount > MAXULONG_PTR / sizeof(*Resource->OpenBindingScratch))
         return STATUS_INTEGER_OVERFLOW;
@@ -3522,6 +3675,7 @@ DxgkVidMmCreateOpenResource(
     RtlZeroMemory(Resource->OpenAllocations, (SIZE_T)AllocationCount * sizeof(*Resource->OpenAllocations));
     RtlZeroMemory(Resource->OpenBindingScratch, (SIZE_T)AllocationCount * sizeof(*Resource->OpenBindingScratch));
     InitializeListHead(&Resource->AllocationList);
+    InitializeListHead(&Resource->SharedAccessList);
     InitializeListHead(&Resource->GlobalResourceEntry);
     InitializeListHead(&Resource->HandleHashEntry);
     InitializeListHead(&Resource->ShareHashEntry);
@@ -4138,6 +4292,7 @@ DxgkVidMmCreateResourceWrapper(
         Resource->ResourcePrivateDriverDataSize = ResourcePrivateDriverDataSize;
     }
     InitializeListHead(&Resource->AllocationList);
+    InitializeListHead(&Resource->SharedAccessList);
     InitializeListHead(&Resource->GlobalResourceEntry);
     InitializeListHead(&Resource->HandleHashEntry);
     InitializeListHead(&Resource->ShareHashEntry);
@@ -4443,8 +4598,15 @@ DxgkpVidMmFinalizeResource(
         ExFreePoolWithTag(Resource->ResourcePrivateDriverData, TAG_VIDMM_RESOURCE);
     if (Resource->PrivateRuntimeData != NULL)
         ExFreePoolWithTag(Resource->PrivateRuntimeData, TAG_VIDMM_RESOURCE);
-    if (Resource->SharedAccessProcess != NULL)
-        ObDereferenceObject(Resource->SharedAccessProcess);
+    while (!IsListEmpty(&Resource->SharedAccessList))
+    {
+        PDXGKVMM_SHARED_ACCESS Access =
+            CONTAINING_RECORD(RemoveHeadList(&Resource->SharedAccessList), DXGKVMM_SHARED_ACCESS, Link);
+
+        if (Access->Process != NULL)
+            ObDereferenceObject(Access->Process);
+        ExFreePoolWithTag(Access, TAG_VIDMM_RESOURCE);
+    }
     DxgkpVidMmReleaseBacking(Adapter);
     ExFreePoolWithTag(Resource, TAG_VIDMM_RESOURCE);
 }
@@ -4822,12 +4984,130 @@ DxgkpVidMmHostApertureAddress(
 }
 
 /*
+ * DxgkpVidMmMapHostApertureRun
+ *
+ * Shows Size bytes at SegmentOffset of a host-aperture segment to the CPU: a
+ * run of window pages, the miniport told which segment pages they show, and
+ * a kernel mapping of the run.  hAllocation is NULL for an implicit
+ * allocation such as a page table.  Caller holds HostApertureLock.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+static NTSTATUS
+DxgkpVidMmMapHostApertureRun(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_SEGMENT Segment,
+    _In_opt_ HANDLE hAllocation,
+    _In_ ULONGLONG SegmentOffset,
+    _In_ ULONGLONG Size,
+    _Out_ PDXGKVMM_HOST_APERTURE_RUN Run)
+{
+    ULONG PageSize = Segment->HostAperturePageSize;
+    ULONGLONG FirstSegmentPage = SegmentOffset / PageSize;
+    ULONGLONG Count64 = (SegmentOffset % PageSize + Size + PageSize - 1) / PageSize;
+    UINT64 *SegmentPages;
+    UINT32 *AperturePages;
+    PHYSICAL_ADDRESS Physical;
+    PVOID Va = NULL;
+    ULONG First, Count, Index;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    RtlZeroMemory(Run, sizeof(*Run));
+    if (Count64 == 0 || Count64 > Segment->HostAperturePages)
+        return STATUS_GRAPHICS_NO_VIDEO_MEMORY;
+    Count = (ULONG)Count64;
+    First = RtlFindClearBitsAndSet(&Segment->HostApertureMap, Count, 0);
+    if (First == MAXULONG)
+    {
+        DPRINT1("DxgkpVidMmMapHostApertureRun: segment %lu window has no run of %lu pages\n",
+                Segment->SegmentId, Count);
+        return STATUS_GRAPHICS_NO_VIDEO_MEMORY;
+    }
+    SegmentPages = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)Count * sizeof(UINT64), TAG_VIDMM_SEGMENT);
+    AperturePages = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)Count * sizeof(UINT32), TAG_VIDMM_SEGMENT);
+    if (SegmentPages == NULL || AperturePages == NULL)
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+    if (NT_SUCCESS(Status))
+    {
+        for (Index = 0; Index < Count; ++Index)
+        {
+            AperturePages[Index] = First + Index;
+            SegmentPages[Index] = FirstSegmentPage + Index;
+        }
+        Status = DxgkGpuVaMapCpuHostAperture(Adapter, hAllocation, (WORD)Segment->SegmentId, Count,
+                                             AperturePages, SegmentPages);
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Physical.QuadPart = Segment->HostApertureBase.QuadPart + (LONGLONG)First * PageSize;
+        Va = MmMapIoSpace(Physical, (SIZE_T)Count * PageSize,
+                          Segment->Flags.SupportsCachedCpuHostAperture ? MmCached : MmWriteCombined);
+        if (Va == NULL)
+        {
+            (VOID)DxgkGpuVaUnmapCpuHostAperture(Adapter, Count, AperturePages, (WORD)Segment->SegmentId);
+            Status = STATUS_NO_MEMORY;
+        }
+    }
+    if (SegmentPages != NULL)
+        ExFreePoolWithTag(SegmentPages, TAG_VIDMM_SEGMENT);
+    if (AperturePages != NULL)
+        ExFreePoolWithTag(AperturePages, TAG_VIDMM_SEGMENT);
+    if (!NT_SUCCESS(Status))
+    {
+        RtlClearBits(&Segment->HostApertureMap, First, Count);
+        return Status;
+    }
+    Run->FirstPage = First;
+    Run->PageCount = Count;
+    Run->Va = Va;
+    return STATUS_SUCCESS;
+}
+
+/*
+ * DxgkpVidMmUnmapHostApertureRun
+ *
+ * Takes a run out of the window.  Unmapped in fixed chunks so teardown needs
+ * no allocation.  A miniport that cannot be called now (removal) leaves
+ * window pages showing old segment pages; the next map of those pages
+ * reprograms them.  Caller holds HostApertureLock.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+static VOID
+DxgkpVidMmUnmapHostApertureRun(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_SEGMENT Segment,
+    _Inout_ PDXGKVMM_HOST_APERTURE_RUN Run)
+{
+    UINT32 AperturePages[DXGKP_HOST_APERTURE_UNMAP_CHUNK];
+    ULONG Done, Chunk, Index;
+    NTSTATUS Status;
+
+    if (Run->PageCount == 0)
+        return;
+    MmUnmapIoSpace(Run->Va, (SIZE_T)Run->PageCount * Segment->HostAperturePageSize);
+    for (Done = 0; Done < Run->PageCount; Done += Chunk)
+    {
+        Chunk = min(Run->PageCount - Done, (ULONG)DXGKP_HOST_APERTURE_UNMAP_CHUNK);
+        for (Index = 0; Index < Chunk; ++Index)
+            AperturePages[Index] = Run->FirstPage + Done + Index;
+        Status = DxgkGpuVaUnmapCpuHostAperture(Adapter, Chunk, AperturePages, (WORD)Segment->SegmentId);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("DxgkpVidMmUnmapHostApertureRun: segment %lu failed 0x%08lx\n",
+                    Segment->SegmentId, Status);
+        }
+    }
+    RtlClearBits(&Segment->HostApertureMap, Run->FirstPage, Run->PageCount);
+    RtlZeroMemory(Run, sizeof(*Run));
+}
+
+/*
  * DxgkpVidMmMapHostAperture
  *
- * Gives the CPU an allocation resident in a host-aperture segment: a run of
- * window pages, the miniport told which segment pages they show, and a
- * kernel mapping of the run.  The run lasts until the placement is released
- * (DxgkpVidMmUnmapHostAperture).  The caller keeps the placement.
+ * Gives the CPU an allocation resident in a host-aperture segment.  The run
+ * lasts until the placement is released (DxgkpVidMmUnmapHostAperture).  The
+ * caller keeps the placement.
  *
  * IRQL: PASSIVE_LEVEL
  */
@@ -4836,23 +5116,12 @@ DxgkpVidMmMapHostAperture(
     _Inout_ PDXGKVMM_ALLOCATION Allocation,
     _In_ PDXGKRNL_SEGMENT Segment)
 {
-    ULONG PageSize = Segment->HostAperturePageSize;
-    ULONG Lead = (ULONG)(Allocation->SegmentOffset % PageSize);
-    ULONGLONG FirstSegmentPage = Allocation->SegmentOffset / PageSize;
-    ULONGLONG Count64 = ((ULONGLONG)Lead + Allocation->Size + PageSize - 1) / PageSize;
-    UINT64 *SegmentPages = NULL;
-    UINT32 *AperturePages = NULL;
-    PHYSICAL_ADDRESS Physical;
-    PVOID Va;
-    ULONG First, Count, Index;
+    DXGKVMM_HOST_APERTURE_RUN Run;
     NTSTATUS Status;
 
     PAGED_CODE();
     if (!Segment->HostAperture || !Allocation->Resident)
         return STATUS_INVALID_PARAMETER;
-    if (Count64 == 0 || Count64 > Segment->HostAperturePages)
-        return STATUS_GRAPHICS_NO_VIDEO_MEMORY;
-    Count = (ULONG)Count64;
 
     (VOID)KeWaitForSingleObject(&Segment->HostApertureLock, Executive, KernelMode, FALSE, NULL);
     if (Allocation->HostAperturePageCount != 0)
@@ -4860,58 +5129,20 @@ DxgkpVidMmMapHostAperture(
         KeReleaseMutex(&Segment->HostApertureLock, FALSE);
         return STATUS_SUCCESS;
     }
-    First = RtlFindClearBitsAndSet(&Segment->HostApertureMap, Count, 0);
-    if (First == MAXULONG)
+    Status = DxgkpVidMmMapHostApertureRun(Allocation->Adapter, Segment, Allocation->MiniportHandle,
+                                          Allocation->SegmentOffset, Allocation->Size, &Run);
+    if (NT_SUCCESS(Status))
     {
-        KeReleaseMutex(&Segment->HostApertureLock, FALSE);
-        DPRINT1("DxgkpVidMmMapHostAperture: segment %lu window has no run of %lu pages\n",
-                Segment->SegmentId, Count);
-        return STATUS_GRAPHICS_NO_VIDEO_MEMORY;
+        Allocation->HostApertureFirstPage = Run.FirstPage;
+        Allocation->HostAperturePageCount = Run.PageCount;
+        Allocation->HostApertureVa = Run.Va;
     }
-    SegmentPages = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)Count * sizeof(UINT64), TAG_VIDMM_SEGMENT);
-    AperturePages = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)Count * sizeof(UINT32), TAG_VIDMM_SEGMENT);
-    if (SegmentPages == NULL || AperturePages == NULL)
-    {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
-        goto Fail;
-    }
-    for (Index = 0; Index < Count; ++Index)
-    {
-        AperturePages[Index] = First + Index;
-        SegmentPages[Index] = FirstSegmentPage + Index;
-    }
-    Status = DxgkGpuVaMapCpuHostAperture(Allocation->Adapter, Allocation->MiniportHandle,
-                                         (WORD)Segment->SegmentId, Count,
-                                         AperturePages, SegmentPages);
+    KeReleaseMutex(&Segment->HostApertureLock, FALSE);
     if (!NT_SUCCESS(Status))
-        goto Fail;
-    Physical.QuadPart = Segment->HostApertureBase.QuadPart + (LONGLONG)First * PageSize;
-    Va = MmMapIoSpace(Physical, (SIZE_T)Count * PageSize,
-                      Segment->Flags.SupportsCachedCpuHostAperture ? MmCached : MmWriteCombined);
-    if (Va == NULL)
     {
-        (VOID)DxgkGpuVaUnmapCpuHostAperture(Allocation->Adapter, Count, AperturePages,
-                                            (WORD)Segment->SegmentId);
-        Status = STATUS_NO_MEMORY;
-        goto Fail;
+        DPRINT1("DxgkpVidMmMapHostAperture: alloc %p segment %lu failed 0x%08lx\n",
+                Allocation, Segment->SegmentId, Status);
     }
-    Allocation->HostApertureFirstPage = First;
-    Allocation->HostAperturePageCount = Count;
-    Allocation->HostApertureVa = Va;
-    KeReleaseMutex(&Segment->HostApertureLock, FALSE);
-    ExFreePoolWithTag(SegmentPages, TAG_VIDMM_SEGMENT);
-    ExFreePoolWithTag(AperturePages, TAG_VIDMM_SEGMENT);
-    return STATUS_SUCCESS;
-
-Fail:
-    RtlClearBits(&Segment->HostApertureMap, First, Count);
-    KeReleaseMutex(&Segment->HostApertureLock, FALSE);
-    if (SegmentPages != NULL)
-        ExFreePoolWithTag(SegmentPages, TAG_VIDMM_SEGMENT);
-    if (AperturePages != NULL)
-        ExFreePoolWithTag(AperturePages, TAG_VIDMM_SEGMENT);
-    DPRINT1("DxgkpVidMmMapHostAperture: alloc %p segment %lu failed 0x%08lx\n",
-            Allocation, Segment->SegmentId, Status);
     return Status;
 }
 
@@ -4920,10 +5151,7 @@ Fail:
  *
  * Takes the placement's run out of the window before the placement goes
  * away.  Process mappings through it are revoked first by the caller; a
- * kernel address into it is dropped here.  Unmapped in fixed chunks so
- * teardown needs no allocation.  A miniport that cannot be called now
- * (removal) leaves window pages showing old segment pages; the next map of
- * those pages reprograms them.
+ * kernel address into it is dropped here.
  *
  * IRQL: PASSIVE_LEVEL
  */
@@ -4932,9 +5160,7 @@ DxgkpVidMmUnmapHostAperture(
     _Inout_ PDXGKVMM_ALLOCATION Allocation,
     _In_ PDXGKRNL_SEGMENT Segment)
 {
-    UINT32 AperturePages[DXGKP_HOST_APERTURE_UNMAP_CHUNK];
-    ULONG Done, Chunk, Index;
-    NTSTATUS Status;
+    DXGKVMM_HOST_APERTURE_RUN Run;
 
     PAGED_CODE();
     if (!Segment->HostAperture)
@@ -4952,23 +5178,10 @@ DxgkpVidMmUnmapHostAperture(
     {
         Allocation->CpuAddress = NULL;
     }
-    MmUnmapIoSpace(Allocation->HostApertureVa,
-                   (SIZE_T)Allocation->HostAperturePageCount * Segment->HostAperturePageSize);
-    for (Done = 0; Done < Allocation->HostAperturePageCount; Done += Chunk)
-    {
-        Chunk = min(Allocation->HostAperturePageCount - Done, (ULONG)DXGKP_HOST_APERTURE_UNMAP_CHUNK);
-        for (Index = 0; Index < Chunk; ++Index)
-            AperturePages[Index] = Allocation->HostApertureFirstPage + Done + Index;
-        Status = DxgkGpuVaUnmapCpuHostAperture(Allocation->Adapter, Chunk, AperturePages,
-                                               (WORD)Segment->SegmentId);
-        if (!NT_SUCCESS(Status))
-        {
-            DPRINT1("DxgkpVidMmUnmapHostAperture: alloc %p segment %lu failed 0x%08lx\n",
-                    Allocation, Segment->SegmentId, Status);
-        }
-    }
-    RtlClearBits(&Segment->HostApertureMap, Allocation->HostApertureFirstPage,
-                 Allocation->HostAperturePageCount);
+    Run.FirstPage = Allocation->HostApertureFirstPage;
+    Run.PageCount = Allocation->HostAperturePageCount;
+    Run.Va = Allocation->HostApertureVa;
+    DxgkpVidMmUnmapHostApertureRun(Allocation->Adapter, Segment, &Run);
     Allocation->HostApertureFirstPage = 0;
     Allocation->HostAperturePageCount = 0;
     Allocation->HostApertureVa = NULL;
@@ -9299,11 +9512,6 @@ DxgkpCreateAllocationCaptured(
             }
             Resource->NtSecuritySharing =
                 pCreateAllocation->Flags.NtSecuritySharing != 0;
-            if (pCreateAllocation->Flags.RestrictSharedAccess)
-            {
-                Resource->SharedAccessProcess = Device != NULL ? Device->OwnerProcess : PsGetCurrentProcess();
-                ObReferenceObject(Resource->SharedAccessProcess);
-            }
             TrackedAlloc->DestroyMiniportResource = FALSE;
 
             CreatedResource = TRUE;
@@ -9316,6 +9524,17 @@ DxgkpCreateAllocationCaptured(
             {
                 pCreateAllocation->hGlobalShare = Resource->GlobalShareHandle;
                 ASSERT(pCreateAllocation->hGlobalShare != 0);
+            }
+            if (pCreateAllocation->Flags.RestrictSharedAccess)
+            {
+                /* TODO: Windows enters a display broker creator as the process-less (IsDwm) entry; LiberNT has no display broker */
+                Status = DxgkVidMmAddSharedAccess(Resource, FALSE,
+                                                  Device != NULL ? Device->OwnerProcess : PsGetCurrentProcess());
+                if (!NT_SUCCESS(Status))
+                {
+                    DxgkVidMmDereferenceAllocation(TrackedAlloc);
+                    break;
+                }
             }
         }
 
@@ -14093,7 +14312,8 @@ DxgkVidMmMapPageTableSegment(
 BOOLEAN
 DxgkVidMmPageTableSegmentCpuReachable(
     _In_ PDXGKRNL_ADAPTER Adapter,
-    _In_ ULONG SegmentId)
+    _In_ ULONG SegmentId,
+    _In_ BOOLEAN HostApertureAllowed)
 {
     PDXGKRNL_SEGMENT Segment;
 
@@ -14104,9 +14324,21 @@ DxgkVidMmPageTableSegmentCpuReachable(
     Segment = &ADAPTER_SEGMENTS(Adapter)[SegmentId - 1];
     if (VidMmSegmentIsAperture(Segment))
         return TRUE;
+    if (HostApertureAllowed && Segment->HostAperture)
+        return TRUE;
     return VidMmSegmentIsCpuVisible(Segment) && Segment->CpuTranslatedAddress.QuadPart != 0;
 }
 
+/*
+ * DxgkVidMmPlaceLocalPageTable
+ *
+ * Places a page table in a local segment.  A CPU-visible segment gives the
+ * table a kernel mapping; otherwise CpuAccess asks for one through the CPU
+ * host aperture (*OutRun), and without CpuAccess the table is placed only:
+ * the miniport writes it through GPU_PHYSICAL page-table updates.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
 NTSTATUS
 DxgkVidMmPlaceLocalPageTable(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -14114,23 +14346,27 @@ DxgkVidMmPlaceLocalPageTable(
     _In_ ULONG Size,
     _In_ ULONG Alignment,
     _In_ ULONGLONG OwnerCookie,
+    _In_ BOOLEAN CpuAccess,
     _Out_ PULONGLONG OutSegmentOffset,
-    _Out_ PVOID *OutCpuVa)
+    _Out_ PVOID *OutCpuVa,
+    _Out_ PDXGKVMM_HOST_APERTURE_RUN OutRun)
 {
     PDXGMMS2_VIDMM_INTERFACE_V1 VidMm;
     PDXGKRNL_SEGMENT Segment;
     DXGMMS2_VIDMM_RESERVE_INFO_V1 Info;
     PHYSICAL_ADDRESS Physical;
     ULONGLONG Offset = 0;
-    PVOID CpuVa;
+    PVOID CpuVa = NULL;
+    BOOLEAN CpuVisible;
     NTSTATUS Status;
 
     PAGED_CODE();
 
-    if (OutSegmentOffset == NULL || OutCpuVa == NULL)
+    if (OutSegmentOffset == NULL || OutCpuVa == NULL || OutRun == NULL)
         return STATUS_INVALID_PARAMETER;
     *OutSegmentOffset = 0;
     *OutCpuVa = NULL;
+    RtlZeroMemory(OutRun, sizeof(*OutRun));
     if (Adapter == NULL || Size == 0 || (Size & (PAGE_SIZE - 1)) != 0 ||
         SegmentId == 0 || SegmentId > Adapter->SegmentCount ||
         Adapter->Segments == NULL || OwnerCookie == 0)
@@ -14139,11 +14375,9 @@ DxgkVidMmPlaceLocalPageTable(
     }
 
     Segment = &ADAPTER_SEGMENTS(Adapter)[SegmentId - 1];
-    if (VidMmSegmentIsAperture(Segment) || !VidMmSegmentIsCpuVisible(Segment) ||
-        Segment->CpuTranslatedAddress.QuadPart == 0)
-    {
+    CpuVisible = VidMmSegmentIsCpuVisible(Segment) && Segment->CpuTranslatedAddress.QuadPart != 0;
+    if (VidMmSegmentIsAperture(Segment) || (CpuAccess && !CpuVisible && !Segment->HostAperture))
         return STATUS_NOT_SUPPORTED;
-    }
     VidMm = DxgkpVidMmOwner(Adapter);
     if (VidMm == NULL)
         return STATUS_DEVICE_NOT_READY;
@@ -14163,24 +14397,60 @@ DxgkVidMmPlaceLocalPageTable(
         Offset > Segment->Size || Size > Segment->Size - Offset)
     {
         Status = STATUS_DEVICE_CONFIGURATION_ERROR;
-        goto ReleasePlacement;
     }
-
-    Physical.QuadPart = Segment->CpuTranslatedAddress.QuadPart + (LONGLONG)Offset;
-    CpuVa = MmMapIoSpace(Physical, Size, MmNonCached);
-    if (CpuVa == NULL)
+    else if (CpuVisible)
     {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
-        goto ReleasePlacement;
+        Physical.QuadPart = Segment->CpuTranslatedAddress.QuadPart + (LONGLONG)Offset;
+        CpuVa = MmMapIoSpace(Physical, Size, MmNonCached);
+        if (CpuVa == NULL)
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    else if (CpuAccess)
+    {
+        (VOID)KeWaitForSingleObject(&Segment->HostApertureLock, Executive, KernelMode, FALSE, NULL);
+        Status = DxgkpVidMmMapHostApertureRun(Adapter, Segment, NULL, Offset, Size, OutRun);
+        KeReleaseMutex(&Segment->HostApertureLock, FALSE);
+        if (NT_SUCCESS(Status))
+            CpuVa = (PUCHAR)OutRun->Va + (SIZE_T)(Offset % Segment->HostAperturePageSize);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        (VOID)VidMm->ReleasePlacement(VidMm->VidMmHandle, SegmentId - 1, OwnerCookie);
+        return Status;
     }
 
     *OutSegmentOffset = Offset;
     *OutCpuVa = CpuVa;
     return STATUS_SUCCESS;
+}
 
-ReleasePlacement:
-    (VOID)VidMm->ReleasePlacement(VidMm->VidMmHandle, SegmentId - 1, OwnerCookie);
-    return Status;
+/*
+ * DxgkVidMmUnmapPageTableHostAperture
+ *
+ * Takes a page table's host-aperture run out of the window before its
+ * placement is released.
+ *
+ * IRQL: PASSIVE_LEVEL
+ */
+VOID
+DxgkVidMmUnmapPageTableHostAperture(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _Inout_ PDXGKVMM_HOST_APERTURE_RUN Run)
+{
+    PDXGKRNL_SEGMENT Segment;
+
+    PAGED_CODE();
+
+    if (Run->PageCount == 0 || Adapter == NULL || Adapter->Segments == NULL ||
+        SegmentId == 0 || SegmentId > Adapter->SegmentCount)
+    {
+        return;
+    }
+    Segment = &ADAPTER_SEGMENTS(Adapter)[SegmentId - 1];
+    (VOID)KeWaitForSingleObject(&Segment->HostApertureLock, Executive, KernelMode, FALSE, NULL);
+    DxgkpVidMmUnmapHostApertureRun(Adapter, Segment, Run);
+    KeReleaseMutex(&Segment->HostApertureLock, FALSE);
 }
 
 NTSTATUS
@@ -14881,6 +15151,13 @@ DxgkVidMmPrepareForStop(
     {
         return STATUS_INVALID_DEVICE_STATE;
     }
+    return DxgkpVidMmPrepareForIdle(Adapter, TRUE);
+}
+
+NTSTATUS
+DxgkVidMmPrepareForExclusion(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
     return DxgkpVidMmPrepareForIdle(Adapter, TRUE);
 }
 
@@ -15829,15 +16106,7 @@ DxgkpVidMmAcquireSwizzleRange(
             Status = STATUS_DELETE_PENDING;
             break;
         }
-        _SEH2_TRY
-        {
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiAcquireSwizzlingRange)(Adapter->MiniportDeviceContext, &Args);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiAcquireSwizzlingRange)(Adapter->MiniportDeviceContext, &Args);
         DxgkReleaseKmdCall(Adapter);
         if (NT_SUCCESS(Status))
         {

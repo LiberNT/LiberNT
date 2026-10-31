@@ -1107,11 +1107,11 @@ typedef struct _DXGK_SPB_INTERFACE
     PVOID Context;
     PINTERFACE_REFERENCE InterfaceReference;
     PINTERFACE_DEREFERENCE InterfaceDereference;
-    NTSTATUS (*OpenSpbResource)(HANDLE DeviceHandle, LARGE_INTEGER SpbResourceId, UNICODE_STRING *SpbResourceSubName, ACCESS_MASK DesiredAccess, ULONG ShareAccess, ULONG OpenOptions, VOID **SpbResource);
-    NTSTATUS (*CloseSpbResource)(HANDLE DeviceHandle, VOID *SpbResource);
-    NTSTATUS (*ReadSpbResource)(HANDLE DeviceHandle, VOID *SpbResource, ULONG Length, VOID *Buffer, LARGE_INTEGER *ByteOffset, HANDLE EventHandle, IO_STATUS_BLOCK *IoStatusBlock);
-    NTSTATUS (*WriteSpbResource)(HANDLE DeviceHandle, VOID *SpbResource, ULONG Length, VOID *Buffer, LARGE_INTEGER *ByteOffset, HANDLE EventHandle, IO_STATUS_BLOCK *IoStatusBlock);
-    NTSTATUS (*SpbResourceIoControl)(HANDLE DeviceHandle, VOID *SpbResource, ULONG IoControlCode, ULONG InBufferSize, VOID *InputBuffer, ULONG OutBufferSize, VOID *OutputBuffer, HANDLE EventHandle, IO_STATUS_BLOCK *IoStatusBlock);
+    NTSTATUS (APIENTRY *OpenSpbResource)(HANDLE DeviceHandle, LARGE_INTEGER SpbResourceId, UNICODE_STRING *SpbResourceSubName, ACCESS_MASK DesiredAccess, ULONG ShareAccess, ULONG OpenOptions, VOID **SpbResource);
+    NTSTATUS (APIENTRY *CloseSpbResource)(HANDLE DeviceHandle, VOID *SpbResource);
+    NTSTATUS (APIENTRY *ReadSpbResource)(HANDLE DeviceHandle, VOID *SpbResource, ULONG Length, VOID *Buffer, LARGE_INTEGER *ByteOffset, HANDLE EventHandle, IO_STATUS_BLOCK *IoStatusBlock);
+    NTSTATUS (APIENTRY *WriteSpbResource)(HANDLE DeviceHandle, VOID *SpbResource, ULONG Length, VOID *Buffer, LARGE_INTEGER *ByteOffset, HANDLE EventHandle, IO_STATUS_BLOCK *IoStatusBlock);
+    NTSTATUS (APIENTRY *SpbResourceIoControl)(HANDLE DeviceHandle, VOID *SpbResource, ULONG IoControlCode, ULONG InBufferSize, VOID *InputBuffer, ULONG OutBufferSize, VOID *OutputBuffer, HANDLE EventHandle, IO_STATUS_BLOCK *IoStatusBlock);
 } DXGK_SPB_INTERFACE, *PDXGK_SPB_INTERFACE;
 
 #define DXGK_FIRMWARE_TABLE_INTERFACE_VERSION_1 0x01

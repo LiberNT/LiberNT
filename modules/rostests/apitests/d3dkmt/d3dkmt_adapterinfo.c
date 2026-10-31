@@ -837,7 +837,132 @@ static void Test_KmdDriverVersion(PFND3DKMT_QUERYADAPTERINFO pfn, D3DKMT_HANDLE 
     ExpectRefuseBadBuffers(pfn, h, KMTQAITYPE_KMD_DRIVER_VERSION,
                            "KMD_DRIVER_VERSION", sizeof(kv));
 }
+
+static void Test_BlockList(PFND3DKMT_QUERYADAPTERINFO pfn, D3DKMT_HANDLE h,
+                           KMTQUERYADAPTERINFOTYPE Type, const char *Name)
+{
+    UINT Header[2];
+    UINT Small = 0;
+    UINT Listed;
+    UINT *Full;
+    NTSTATUS st;
+
+    st = QueryAI(pfn, h, Type, &Small, sizeof(Small));
+    ok_ntstatus(st, STATUS_INVALID_PARAMETER);
+
+    Header[0] = 0x100;
+    Header[1] = 0xCCCCCCCC;
+    st = QueryAI(pfn, h, Type, Header, sizeof(Header));
+    ok_ntstatus(st, STATUS_BUFFER_TOO_SMALL);
+
+    Header[0] = 0;
+    Header[1] = 0xCCCCCCCC;
+    st = QueryAI(pfn, h, Type, Header, sizeof(Header));
+    ok_ntstatus(st, STATUS_SUCCESS);
+    if (!NT_SUCCESS(st))
+        return;
+    Listed = Header[0];
+    ok(Listed % sizeof(WCHAR) == 0, "%s: odd byte count %u\n", Name, Listed);
+    trace("%s: %u bytes\n", Name, Listed);
+    if (Listed == 0)
+        return;
+
+    Full = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(UINT) + Listed);
+    if (!Full)
+        return;
+    Full[0] = Listed;
+    st = QueryAI(pfn, h, Type, Full, sizeof(UINT) + Listed);
+    ok_ntstatus(st, STATUS_SUCCESS);
+    if (NT_SUCCESS(st))
+    {
+        const WCHAR *Strings = (const WCHAR *)(Full + 1);
+
+        ok(Full[0] == Listed, "%s: size changed from %u to %u\n", Name, Listed, Full[0]);
+        ok(Strings[Listed / sizeof(WCHAR) - 1] == 0, "%s: list is not terminated\n", Name);
+        TraceWide(Name, Strings);
+    }
+    if (Listed > sizeof(WCHAR))
+    {
+        Full[0] = Listed - sizeof(WCHAR);
+        st = QueryAI(pfn, h, Type, Full, sizeof(UINT) + Listed);
+        ok_ntstatus(st, STATUS_BUFFER_TOO_SMALL);
+    }
+    HeapFree(GetProcessHeap(), 0, Full);
+}
+
+static void Test_AdapterUniqueGuid(PFND3DKMT_QUERYADAPTERINFO pfn, D3DKMT_HANDLE h)
+{
+    D3DKMT_QUERY_ADAPTER_UNIQUE_GUID first, second;
+    NTSTATUS st;
+    size_t len;
+
+    memset(&first, 0xCC, sizeof(first));
+    st = QueryAI(pfn, h, KMTQAITYPE_QUERY_ADAPTER_UNIQUE_GUID, &first, sizeof(first) - sizeof(WCHAR));
+    ok_ntstatus(st, STATUS_INVALID_PARAMETER);
+
+    st = QueryAI(pfn, h, KMTQAITYPE_QUERY_ADAPTER_UNIQUE_GUID, &first, sizeof(first));
+    ok_ntstatus(st, STATUS_SUCCESS);
+    if (!NT_SUCCESS(st))
+        return;
+    len = wcsnlen(first.AdapterUniqueGUID, RTL_NUMBER_OF(first.AdapterUniqueGUID));
+    ok(len == 38, "QUERY_ADAPTER_UNIQUE_GUID: length %u\n", (unsigned)len);
+    ok(first.AdapterUniqueGUID[0] == L'{' && first.AdapterUniqueGUID[37] == L'}',
+       "QUERY_ADAPTER_UNIQUE_GUID: not a braced GUID\n");
+    TraceWide("QUERY_ADAPTER_UNIQUE_GUID", first.AdapterUniqueGUID);
+
+    memset(&second, 0, sizeof(second));
+    st = QueryAI(pfn, h, KMTQAITYPE_QUERY_ADAPTER_UNIQUE_GUID, &second, sizeof(second));
+    ok_ntstatus(st, STATUS_SUCCESS);
+    ok(wcscmp(first.AdapterUniqueGUID, second.AdapterUniqueGUID) == 0,
+       "QUERY_ADAPTER_UNIQUE_GUID: changed between queries\n");
+}
 #endif /* WDDM2_4 */
+
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM3_0)
+static void Test_DisplayNamesAndCaps(PFND3DKMT_QUERYADAPTERINFO pfn, D3DKMT_HANDLE h)
+{
+    D3DKMT_DISPLAY_UMD_FILENAMEINFO umd;
+    D3DKMT_DISPLAY_CAPS caps;
+    D3DKMT_WSAUMDIMAGENAME wsa;
+    D3DKMT_VGPUINTERFACEID vgpu;
+    NTSTATUS st;
+
+    memset(&umd, 0, sizeof(umd));
+    st = QueryAI(pfn, h, KMTQAITYPE_DISPLAY_UMDRIVERNAME, &umd, sizeof(umd) - sizeof(WCHAR));
+    ok_ntstatus(st, STATUS_INVALID_PARAMETER);
+    umd.Version = NUM_KMT_DISPLAY_UMDVERSIONS;
+    st = QueryAI(pfn, h, KMTQAITYPE_DISPLAY_UMDRIVERNAME, &umd, sizeof(umd));
+    ok_ntstatus(st, STATUS_INVALID_PARAMETER);
+    umd.Version = KMT_DISPLAY_UMDVERSION_1;
+    st = QueryAI(pfn, h, KMTQAITYPE_DISPLAY_UMDRIVERNAME, &umd, sizeof(umd));
+    ok(st == STATUS_SUCCESS || st == STATUS_INVALID_PARAMETER, "DISPLAY_UMDRIVERNAME: 0x%08lX\n", (long)st);
+    if (NT_SUCCESS(st))
+        TraceWide("DISPLAY_UMDRIVERNAME", umd.UmdFileName);
+
+    caps.Value = ~(UINT64)0;
+    st = QueryAI(pfn, h, KMTQAITYPE_DISPLAY_CAPS, &caps, sizeof(UINT));
+    ok_ntstatus(st, STATUS_INVALID_PARAMETER);
+    st = QueryAI(pfn, h, KMTQAITYPE_DISPLAY_CAPS, &caps, sizeof(caps));
+    ok_ntstatus(st, STATUS_SUCCESS);
+    if (NT_SUCCESS(st))
+        ok(caps.Reserved == 0, "DISPLAY_CAPS: reserved bits 0x%I64x\n", caps.Value);
+
+    st = QueryAI(pfn, h, KMTQAITYPE_WSAUMDIMAGENAME, &wsa, sizeof(wsa) - sizeof(WCHAR));
+    ok_ntstatus(st, STATUS_INVALID_PARAMETER);
+
+    st = QueryAI(pfn, h, KMTQAITYPE_VGPUINTERFACEID, &vgpu, sizeof(vgpu) - sizeof(WCHAR));
+    ok_ntstatus(st, STATUS_INVALID_PARAMETER);
+    memset(&vgpu, 0xCC, sizeof(vgpu));
+    st = QueryAI(pfn, h, KMTQAITYPE_VGPUINTERFACEID, &vgpu, sizeof(vgpu));
+    ok_ntstatus(st, STATUS_SUCCESS);
+    if (NT_SUCCESS(st))
+    {
+        ok(vgpu.VirtualGpuIntefaceId[1] == L'\\', "VGPUINTERFACEID: second character 0x%04x\n",
+           vgpu.VirtualGpuIntefaceId[1]);
+        TraceWide("VGPUINTERFACEID", vgpu.VirtualGpuIntefaceId);
+    }
+}
+#endif
 
 /* --------------------------------------------------------------------------
  * START_TEST: exhaustive selector sweep
@@ -928,6 +1053,12 @@ START_TEST(D3dkmtAdapterInfo)
 #endif
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_4)
     Test_KmdDriverVersion(pfn, hAdapter);
+    Test_BlockList(pfn, hAdapter, KMTQAITYPE_BLOCKLIST_KERNEL, "BLOCKLIST_KERNEL");
+    Test_BlockList(pfn, hAdapter, KMTQAITYPE_BLOCKLIST_RUNTIME, "BLOCKLIST_RUNTIME");
+    Test_AdapterUniqueGuid(pfn, hAdapter);
+#endif
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM3_0)
+    Test_DisplayNamesAndCaps(pfn, hAdapter);
 #endif
 
     CloseAdapter(hAdapter);

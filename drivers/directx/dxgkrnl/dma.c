@@ -546,15 +546,7 @@ DxgkRender(
             Status = STATUS_DELETE_PENDING;
             goto Cleanup;
         }
-        _SEH2_TRY
-        {
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiRender)(Context->hMiniportContext != NULL ? Context->hMiniportContext : Device->hMiniportDevice, &RenderArgs);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiRender)(Context->hMiniportContext != NULL ? Context->hMiniportContext : Device->hMiniportDevice, &RenderArgs);
         DxgkReleaseKmdCall(Adapter);
         Partial = (Status == STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER);
         if (!NT_SUCCESS(Status) && !Partial)

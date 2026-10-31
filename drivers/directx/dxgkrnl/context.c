@@ -56,6 +56,7 @@
 #include "context.h"
 #include "handles.h"
 #include "vidmm.h"
+#include "gpuva_core.h"
 #include "vidpn.h"
 #include "vidsch.h"
 #include <ndk/psfuncs.h>
@@ -1667,7 +1668,7 @@ DxgkCreatePagingSystemContext(
     if (ContextSchedulingSupported)
         CreateContextArg.Flags.HwQueueSupported = 1;
     if (Adapter->GpuMmuCapsValid &&
-        Adapter->GpuMmuCaps.PageTableUpdateMode == DXGK_PAGETABLEUPDATE_GPU_VIRTUAL)
+        DxgkGpuVaCoreUsesPagingProcessVa(Adapter->GpuMmuCaps.PageTableUpdateMode))
     {
         BOOLEAN PagingNodeGpuMmu = FALSE;
 
@@ -2832,15 +2833,7 @@ DxgkCreateCddContext(
     if (!DxgkAcquireKmdCall(Adapter))
         return STATUS_DELETE_PENDING;
     RtlZeroMemory(&Metadata, sizeof(Metadata));
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiGetNodeMetadata)(Adapter->MiniportDeviceContext, CreateContext->NodeOrdinal, &Metadata);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiGetNodeMetadata)(Adapter->MiniportDeviceContext, CreateContext->NodeOrdinal, &Metadata);
     DxgkReleaseKmdCall(Adapter);
     if (!NT_SUCCESS(Status))
         return Status;

@@ -463,10 +463,9 @@ static void Test_Overlay_Lifecycle_SkipGuarded(void)
             gos.hDevice = hDevice;
             gos.hOverlay = hOverlay;
             SEH_CALL(st, f, pfnGet(&gos));
+            ok(!f && st == STATUS_SUCCESS, "GetOverlayState returned 0x%08lX%s\n", (long)st, f ? " (fault)" : "");
             if (!f && NT_SUCCESS(st))
-                trace("GetOverlayState: OverlayEnabled=%d\n", gos.OverlayEnabled);
-            else
-                trace("GetOverlayState returned 0x%08lX%s\n", (long)st, f ? " (fault)" : "");
+                ok(gos.OverlayEnabled, "GetOverlayState: overlay created on a source is not enabled\n");
         }
     }
 
@@ -566,7 +565,7 @@ static void Test_GetOverlayState_Null_BadHandle(void)
     memset(&gos, 0, sizeof(gos));
     gos.hDevice = (D3DKMT_HANDLE)0xBAD0CAFE;
     gos.hOverlay = (D3DKMT_HANDLE)0xBAD0CAFE;
-    EXPECT_REFUSED("GetOverlayState(bad handle)", pfn(&gos));
+    ok_ntstatus(pfn(&gos), STATUS_INVALID_PARAMETER);
 }
 
 /* =====================================================================

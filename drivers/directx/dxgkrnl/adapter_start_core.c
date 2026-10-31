@@ -47,3 +47,19 @@ DxgkAdapterStartRoleHasValidCounts(
         return NumberOfVideoPresentSources == 0 && NodeCount != 0;
     return FALSE;
 }
+
+DXGK_VSYNC_CONTROL_DDI
+DxgkAdapterStartVsyncControlDdi(
+    _In_ BOOLEAN IndependentVidPnVSyncControl,
+    _In_ BOOLEAN HasControlInterrupt3,
+    _In_ BOOLEAN HasControlInterrupt2,
+    _In_ BOOLEAN HasControlInterrupt)
+{
+    if (IndependentVidPnVSyncControl && HasControlInterrupt3)
+        return DxgkVsyncControlInterrupt3;
+    if (HasControlInterrupt2)
+        return DxgkVsyncControlInterrupt2;
+    if (HasControlInterrupt)
+        return DxgkVsyncControlInterrupt;
+    return DxgkVsyncControlNone;
+}

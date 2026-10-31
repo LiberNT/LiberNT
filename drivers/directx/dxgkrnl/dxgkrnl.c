@@ -908,15 +908,7 @@ TdrResetFromTimeout(
     }
     DxgkpDisarmTdrDdiDeadline(Adapter);
     DdiDeadlineArmed = FALSE;
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiResetFromTimeout)(Adapter->MiniportDeviceContext);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiResetFromTimeout)(Adapter->MiniportDeviceContext);
 
     /*
      * A miniport that cannot reset itself from a timeout has left the engine in
@@ -976,15 +968,7 @@ TdrResetFromTimeout(
         Status = STATUS_DEVICE_REMOVED;
         goto Cleanup;
     }
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiRestartFromTimeout)(Adapter->MiniportDeviceContext);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiRestartFromTimeout)(Adapter->MiniportDeviceContext);
     DxgkReleaseMiniportCallback(Adapter);
 
     if (Adapter->State != DxgkAdapterStateStarted || InterlockedCompareExchange(&Adapter->RundownStarted, 0, 0) != 0 || InterlockedCompareExchange(&Adapter->RemoveRundownStarted, 0, 0) != 0)

@@ -493,6 +493,58 @@ DxgkPresentAccountFrame(
     DxgkpReleasePresentQueues(Adapter);
 }
 
+LONG
+DxgkPresentGetFrameCount(
+    _In_ PDXGKRNL_ADAPTER               Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId)
+{
+    PDXGKRNL_PRESENT_QUEUE Queues;
+    LONG Count = 0;
+
+    if (Adapter == NULL || !DxgkpAcquirePresentQueues(Adapter))
+        return 0;
+
+    Queues = (PDXGKRNL_PRESENT_QUEUE)Adapter->PresentQueues;
+    if (Queues != NULL && VidPnSourceId < Adapter->PresentQueueCount)
+        Count = InterlockedCompareExchange(&Queues[VidPnSourceId].PresentedFrameCount, 0, 0);
+
+    DxgkpReleasePresentQueues(Adapter);
+    return Count;
+}
+
+VOID
+DxgkPresentSetVisibilityIfDeferred(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId)
+{
+    DXGKARG_SETVIDPNSOURCEVISIBILITY Visibility;
+    LONG SourceBit;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Adapter == NULL || VidPnSourceId >= 32)
+        return;
+    SourceBit = (LONG)(1UL << VidPnSourceId);
+    if ((InterlockedCompareExchange(&Adapter->DeferredVisibleSourceMask, 0, 0) & SourceBit) == 0)
+        return;
+    if (!DxgkBeginKmdTransaction(Adapter))
+        return;
+    if ((InterlockedAnd(&Adapter->DeferredVisibleSourceMask, ~SourceBit) & SourceBit) != 0 &&
+        DXGK_CB(Adapter, DxgkDdiSetVidPnSourceVisibility) != NULL &&
+        DxgkAcquireKmdCall(Adapter))
+    {
+        RtlZeroMemory(&Visibility, sizeof(Visibility));
+        Visibility.VidPnSourceId = VidPnSourceId;
+        Visibility.Visible = TRUE;
+        Status = DXGK_CB(Adapter, DxgkDdiSetVidPnSourceVisibility)(Adapter->MiniportDeviceContext, &Visibility);
+        DxgkReleaseKmdCall(Adapter);
+        DXGKRNL_TRACE("DxgkPresentSetVisibilityIfDeferred: source %u visible after its first flip -> 0x%08lX\n",
+                      VidPnSourceId, Status);
+    }
+    DxgkEndKmdTransaction(Adapter);
+}
+
 BOOLEAN
 DxgkPresentTryBeginStop(
     _In_ PDXGKRNL_ADAPTER Adapter)
@@ -1014,6 +1066,51 @@ NTSTATUS DxgkPresentGetPendingFlipLimit(_In_ PDXGKRNL_DEVICE Device, _In_ D3DDDI
     return Status;
 }
 
+NTSTATUS
+DxgkPresentGetDeviceStats(
+    _In_ PDXGKRNL_DEVICE Device,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _Out_ D3DKMT_PRESENT_STATS *Stats,
+    _Out_opt_ D3DKMT_PRESENT_STATS_DWM *StatsDwm)
+{
+    PDXGKRNL_ADAPTER Adapter = Device->Adapter;
+    PDXGKRNL_PRESENT_QUEUE Queue;
+
+    RtlZeroMemory(Stats, sizeof(*Stats));
+    if (StatsDwm != NULL)
+        RtlZeroMemory(StatsDwm, sizeof(*StatsDwm));
+    if (Adapter->State != DxgkAdapterStateStarted)
+        return STATUS_DEVICE_REMOVED;
+    if (VidPnSourceId >= Adapter->NumberOfVideoPresentSources)
+        return STATUS_INVALID_PARAMETER;
+    if (!DxgkpAcquirePresentQueues(Adapter))
+        return STATUS_DEVICE_REMOVED;
+    if (Adapter->PresentQueues != NULL && VidPnSourceId < Adapter->PresentQueueCount)
+    {
+        Queue = &((PDXGKRNL_PRESENT_QUEUE)Adapter->PresentQueues)[VidPnSourceId];
+        Stats->SyncRefreshCount = (UINT)InterlockedCompareExchange64(&Queue->VBlankCount, 0, 0);
+        Stats->SyncQPCTime.QuadPart = InterlockedCompareExchange64(&Queue->LastVBlankQpc, 0, 0);
+    }
+    DxgkpReleasePresentQueues(Adapter);
+    if (VidPnSourceId < DXGKP_PRESENT_STATS_SOURCES)
+    {
+        Stats->PresentCount = (UINT)InterlockedCompareExchange(&Device->PresentStatsCount[VidPnSourceId], 0, 0);
+        Stats->PresentRefreshCount =
+            (UINT)InterlockedCompareExchange64(&Device->PresentStatsRefresh[VidPnSourceId], 0, 0);
+        if (StatsDwm != NULL)
+            StatsDwm->PresentQPCTime.QuadPart =
+                InterlockedCompareExchange64(&Device->PresentStatsQpc[VidPnSourceId], 0, 0);
+    }
+    if (StatsDwm != NULL)
+    {
+        StatsDwm->PresentCount = Stats->PresentCount;
+        StatsDwm->PresentRefreshCount = Stats->PresentRefreshCount;
+        StatsDwm->SyncRefreshCount = Stats->SyncRefreshCount;
+        StatsDwm->SyncQPCTime = Stats->SyncQPCTime;
+    }
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS DxgkPresentGetQueueLimitState(_In_ PDXGKRNL_DEVICE Device, _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId, _Out_ PBOOLEAN LimitReached)
 {
     PDXGKRNL_ADAPTER Adapter;
@@ -1332,21 +1429,13 @@ DxgkpProgramScanoutViaMpo(
 
         if (!DxgkAcquireKmdCall(Adapter))
             return STATUS_DELETE_PENDING;
-        _SEH2_TRY
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3)(Adapter->MiniportDeviceContext, &Args3);
+        if (Status == STATUS_RETRY && Args3.OutputFlags.PrePresentNeeded && KeGetCurrentIrql() == PASSIVE_LEVEL)
         {
+            Args3.InputFlags.RetryAtLowerIrql = 1;
+            Args3.OutputFlags.Value = 0;
             Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3)(Adapter->MiniportDeviceContext, &Args3);
-            if (Status == STATUS_RETRY && Args3.OutputFlags.PrePresentNeeded && KeGetCurrentIrql() == PASSIVE_LEVEL)
-            {
-                Args3.InputFlags.RetryAtLowerIrql = 1;
-                Args3.OutputFlags.Value = 0;
-                Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3)(Adapter->MiniportDeviceContext, &Args3);
-            }
         }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
         DxgkReleaseKmdCall(Adapter);
         return Status;
     }
@@ -1455,15 +1544,7 @@ DxgkpApplyPendingScanoutModeChange(
         ExFreePoolWithTag(ModeChange, TAG_DXGK_PRESENT);
         return STATUS_DELETE_PENDING;
     }
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress)(Adapter->MiniportDeviceContext, ModeChange);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress)(Adapter->MiniportDeviceContext, ModeChange);
     DxgkReleaseKmdCall(Adapter);
     ExFreePoolWithTag(ModeChange, TAG_DXGK_PRESENT);
     if (!NT_SUCCESS(Status))
@@ -1578,6 +1659,8 @@ DxgkpProgramSharedPrimaryScanout(
             }
             Status = DXGK_CB(Adapter, DxgkDdiSetVidPnSourceVisibility)(Adapter->MiniportDeviceContext, &MpoVisibility);
             DxgkReleaseKmdCall(Adapter);
+            if (NT_SUCCESS(Status) && VidPnSourceId < 32)
+                InterlockedAnd(&Adapter->DeferredVisibleSourceMask, ~(LONG)(1UL << VidPnSourceId));
         }
         goto Cleanup;
     }
@@ -1623,36 +1706,25 @@ DxgkpProgramSharedPrimaryScanout(
         Status = STATUS_DELETE_PENDING;
         goto Cleanup;
     }
-    _SEH2_TRY
+    DPT_SCOPE Trace = DptBegin(&g_DxgPresentTrace, DPT_BLIT);
+    if (SetSourceAddress->Flags.FlipImmediate ? Adapter->FlipCaps.FlipImmediateMmIo
+                                              : Adapter->FlipCaps.FlipOnVSyncMmIo)
     {
-        DPT_SCOPE Trace = DptBegin(&g_DxgPresentTrace, DPT_BLIT);
-        if (SetSourceAddress->Flags.FlipImmediate ? Adapter->FlipCaps.FlipImmediateMmIo
-                                                  : Adapter->FlipCaps.FlipOnVSyncMmIo)
-        {
-            DXGKP_MMIO_FLIP_CALL MmioCall;
-            BOOLEAN Synchronized;
+        DXGKP_MMIO_FLIP_CALL MmioCall;
+        BOOLEAN Synchronized;
 
-            RtlZeroMemory(&MmioCall, sizeof(MmioCall));
-            MmioCall.Adapter = Adapter;
-            MmioCall.Args = *SetSourceAddress;
-            Status = DxgkSynchronizeScanoutExecution(Adapter, DxgkpSetMmioSourceAddress, &MmioCall, &Synchronized);
-            if (NT_SUCCESS(Status))
-                Status = MmioCall.Status;
-        }
-        else
-        {
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress)(Adapter->MiniportDeviceContext, SetSourceAddress);
-        }
-        DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Status), 0);
+        RtlZeroMemory(&MmioCall, sizeof(MmioCall));
+        MmioCall.Adapter = Adapter;
+        MmioCall.Args = *SetSourceAddress;
+        Status = DxgkSynchronizeScanoutExecution(Adapter, DxgkpSetMmioSourceAddress, &MmioCall, &Synchronized);
+        if (NT_SUCCESS(Status))
+            Status = MmioCall.Status;
     }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    else
     {
-        Status = _SEH2_GetExceptionCode();
-        DXGKRNL_ERR("DxgkpProgramSharedPrimaryScanout: "
-                    "DxgkDdiSetVidPnSourceAddress FAULTED 0x%08lX\n",
-                        Status);
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress)(Adapter->MiniportDeviceContext, SetSourceAddress);
     }
-    _SEH2_END;
+    DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Status), 0);
     DxgkReleaseKmdCall(Adapter);
 
     if (NT_SUCCESS(Status) &&
@@ -1670,6 +1742,8 @@ DxgkpProgramSharedPrimaryScanout(
         {
             Status = DXGK_CB(Adapter, DxgkDdiSetVidPnSourceVisibility)(Adapter->MiniportDeviceContext, &Visibility);
             DxgkReleaseKmdCall(Adapter);
+            if (NT_SUCCESS(Status) && VidPnSourceId < 32)
+                InterlockedAnd(&Adapter->DeferredVisibleSourceMask, ~(LONG)(1UL << VidPnSourceId));
         }
     }
 
@@ -3262,15 +3336,7 @@ DxgkpPresentSubmitDirect(
             goto Failed;
         }
         DxgkEnterSchedulerClass(Adapter);
-        _SEH2_TRY
-        {
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiPatch)(Adapter->MiniportDeviceContext, &PatchArgs);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiPatch)(Adapter->MiniportDeviceContext, &PatchArgs);
         DxgkLeaveSchedulerClass(Adapter);
         DxgkReleaseKmdCall(Adapter);
         if (!NT_SUCCESS(Status))
@@ -3905,17 +3971,7 @@ DxgkpExecuteFullPresentMeasured(
             Status = STATUS_DELETE_PENDING;
             goto PresentCleanup;
         }
-        _SEH2_TRY
-        {
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiPresent)(MiniportPresentContext, &PresentArgs);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-            DXGKRNL_ERR("DxgkpExecuteFullPresent: DxgkDdiPresent FAULTED "
-                        "0x%08lX\n", Status);
-        }
-        _SEH2_END;
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiPresent)(MiniportPresentContext, &PresentArgs);
         DxgkReleaseKmdCall(Adapter);
         if (Status != STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER)
             break;
@@ -4547,6 +4603,7 @@ DxgkMpo3Supported(
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_1)
     return Adapter->MiniportContext != NULL &&
            !Adapter->MiniportContext->IsDisplayOnlyDriver &&
+           (Adapter->BlockListFlags & DXGKP_BLOCKLIST_DISABLE_MPO) == 0 &&
            DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version,
                                                DXGK_CAPS_CORE_LEVEL_WDDM_2_1) &&
            DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport3) != NULL &&
@@ -4564,6 +4621,7 @@ DxgkpMpo1Supported(
     return REACTOS_WDDM_TARGET_LEVEL >= 1300 &&
            Adapter->MiniportContext != NULL &&
            !Adapter->MiniportContext->IsDisplayOnlyDriver &&
+           (Adapter->BlockListFlags & DXGKP_BLOCKLIST_DISABLE_MPO) == 0 &&
            DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport) != NULL &&
            DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay) != NULL;
 }
@@ -4753,16 +4811,8 @@ DxgkCheckMultiPlaneOverlay(
             ExFreePoolWithTag(Check3, TAG_DXGK_PRESENT);
             return STATUS_DELETE_PENDING;
         }
-        _SEH2_TRY
-        {
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport3)(
-                         Adapter->MiniportDeviceContext, &Check3->Args);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport3)(
+                     Adapter->MiniportDeviceContext, &Check3->Args);
         DxgkReleaseKmdCall(Adapter);
         if (NT_SUCCESS(Status))
         {
@@ -4817,16 +4867,8 @@ DxgkCheckMultiPlaneOverlay(
         ExFreePoolWithTag(Planes1, TAG_DXGK_PRESENT);
         return STATUS_DELETE_PENDING;
     }
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport)(
-                     Adapter->MiniportDeviceContext, &Check1);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiCheckMultiPlaneOverlaySupport)(
+                 Adapter->MiniportDeviceContext, &Check1);
     DxgkReleaseKmdCall(Adapter);
     if (NT_SUCCESS(Status))
     {
@@ -5067,16 +5109,8 @@ DxgkpDeliverMpoPostPresent(
                 InterlockedCompareExchange64(&Adapter->MpoPostPresentId[SourceId][Layer], 0, 0);
             if (!DxgkAcquireKmdCall(Adapter))
                 break;
-            _SEH2_TRY
-            {
-                Status = DXGK_CB_FULL(Adapter, DxgkDdiPostMultiPlaneOverlayPresent)(
-                             Adapter->MiniportDeviceContext, &Args);
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                Status = _SEH2_GetExceptionCode();
-            }
-            _SEH2_END;
+            Status = DXGK_CB_FULL(Adapter, DxgkDdiPostMultiPlaneOverlayPresent)(
+                         Adapter->MiniportDeviceContext, &Args);
             DxgkReleaseKmdCall(Adapter);
             /* Windows bugchecks here; the contract is to always succeed. */
             if (!NT_SUCCESS(Status))
@@ -5278,16 +5312,8 @@ DxgkpExecuteMmioFlip(
         OverlayPinned[OverlayIndex] = FALSE;
     }
     DriverCalled = TRUE;
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiPresent)(PresentContext, &PresentArgs);
-        PresentRefused = !NT_SUCCESS(Status);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiPresent)(PresentContext, &PresentArgs);
+    PresentRefused = !NT_SUCCESS(Status);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     if (PresentArgs.pDmaBuffer != NULL)
@@ -5365,16 +5391,8 @@ DxgkpExecuteMmioFlip(
             Mpo3Call.Args.InputFlags.RetryAtLowerIrql = 1;
             Mpo3Call.Args.OutputFlags.Value = 0;
             Mpo3Call.ArmSequence = InterlockedCompareExchange64(&Adapter->VsyncScanoutSequence[Entry->VidPnSourceId], 0, 0);
-            _SEH2_TRY
-            {
-                Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3)(
-                             Adapter->MiniportDeviceContext, &Mpo3Call.Args);
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                Status = _SEH2_GetExceptionCode();
-            }
-            _SEH2_END;
+            Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3)(
+                         Adapter->MiniportDeviceContext, &Mpo3Call.Args);
         }
         /*
          * STATUS_RETRY without PrePresentNeeded means the driver could not
@@ -5396,16 +5414,8 @@ DxgkpExecuteMmioFlip(
             if (Mpo3Call.Args.InputFlags.RetryAtLowerIrql)
             {
                 Mpo3Call.ArmSequence = InterlockedCompareExchange64(&Adapter->VsyncScanoutSequence[Entry->VidPnSourceId], 0, 0);
-                _SEH2_TRY
-                {
-                    Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3)(
-                                 Adapter->MiniportDeviceContext, &Mpo3Call.Args);
-                }
-                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-                {
-                    Status = _SEH2_GetExceptionCode();
-                }
-                _SEH2_END;
+                Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3)(
+                             Adapter->MiniportDeviceContext, &Mpo3Call.Args);
             }
             else
             {
@@ -5530,6 +5540,7 @@ DxgkpExecuteMmioFlip(
         for (OverlayIndex = 0; OverlayIndex < RXGK_PRESENT_MAX_OVERLAYS; ++OverlayIndex)
             DxgkpReleaseScanoutAllocation(DisplacedOverlays[OverlayIndex].Allocation);
         InterlockedIncrement(&Queue->PresentedFrameCount);
+        DxgkPresentSetVisibilityIfDeferred(Adapter, Queue->VidPnSourceId);
         /* A composed frame is on screen: overlays withdrawn by the miniport
          * may be offered again, subject to its check. */
         if (Entry->OverlayCount == 0 && Queue->VidPnSourceId < 32)
@@ -6194,7 +6205,18 @@ DxgkpProcessPresentQueueLocked(_In_ PVOID Context)
     DxgkDeviceCompletePresent(Entry.Device, Entry.DeviceWork, Status);
 
     if (NT_SUCCESS(Status))
+    {
         InterlockedIncrement(&Queue->PresentedFrameCount);
+        /* FIXME: a flip is counted when it is submitted, not when the flip reaches the screen */
+        if (Entry.Device != NULL && Queue->VidPnSourceId < DXGKP_PRESENT_STATS_SOURCES)
+        {
+            InterlockedExchange64(&Entry.Device->PresentStatsRefresh[Queue->VidPnSourceId],
+                                  InterlockedCompareExchange64(&Queue->VBlankCount, 0, 0));
+            InterlockedExchange64(&Entry.Device->PresentStatsQpc[Queue->VidPnSourceId],
+                                  KeQueryPerformanceCounter(NULL).QuadPart);
+            InterlockedIncrement(&Entry.Device->PresentStatsCount[Queue->VidPnSourceId]);
+        }
+    }
 
     if (!NT_SUCCESS(Status) && Status != STATUS_NOT_SUPPORTED)
     {
@@ -6293,6 +6315,7 @@ DxgkpNotifyVSync(
 
     Queue = &((PDXGKRNL_PRESENT_QUEUE)Adapter->PresentQueues)[VidPnSourceId];
     InterlockedIncrement64(&Queue->VBlankCount);
+    InterlockedExchange64(&Queue->LastVBlankQpc, KeQueryPerformanceCounter(NULL).QuadPart);
     KeSetEvent(&Queue->MmioVSyncEvent, IO_NO_INCREMENT, FALSE);
     DxgkpSignalQueueVBlankWaiters(Queue, FALSE);
 

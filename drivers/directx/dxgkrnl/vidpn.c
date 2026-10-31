@@ -3390,15 +3390,7 @@ DxgkpRecommendHotPlugCandidate(
         MonitorArgs.pMonitorSourceModeSetInterface = &g_MonitorSourceModeSetInterface;
         if (!DxgkAcquireKmdCall(Adapter))
             break;
-        _SEH2_TRY
-        {
-            MonitorStatus = DXGK_CB(Adapter, DxgkDdiRecommendMonitorModes)(Adapter->MiniportDeviceContext, &MonitorArgs);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            MonitorStatus = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        MonitorStatus = DXGK_CB(Adapter, DxgkDdiRecommendMonitorModes)(Adapter->MiniportDeviceContext, &MonitorArgs);
         DxgkReleaseKmdCall(Adapter);
         if (!NT_SUCCESS(MonitorStatus))
             DXGKRNL_TRACE("RecommendMonitorModes declined 0x%08lX for target %u\n",
@@ -3786,6 +3778,8 @@ Cleanup:
         DxgkVidPnDestroy(Candidate);
     if (NotifyMonitorEvent && NT_SUCCESS(Status))
         DxgkDisplayNotifyMonitorEvent(Adapter);
+    if (NT_SUCCESS(Status))
+        DxgkDisplayPresentBootScreen(Adapter);
     ExFreePoolWithTag(OldPaths, TAG_DXGK_VIDPN);
     ExFreePoolWithTag(Snapshot, TAG_DXGK_VIDPN);
     return Status;
@@ -3819,9 +3813,6 @@ DxgkCbQueryVidPnInterface(
     DEREF_OUT_CONST_PPDXGK_VIDPN_INTERFACE ppVidPnInterface)
 {
     PDXGKP_VIDPN VidPn;
-
-    DXGKRNL_TRACE("DxgkCbQueryVidPnInterface: hVidPn=%p version=%d\n",
-                  hVidPn, VidPnInterfaceVersion);
 
     if (ppVidPnInterface == NULL)
         return STATUS_INVALID_PARAMETER;
@@ -3861,9 +3852,6 @@ DxgkCbQueryMonitorInterface(
     IN_CONST_DXGK_MONITOR_INTERFACE_VERSION MonitorInterfaceVersion,
     DEREF_OUT_CONST_PPDXGK_MONITOR_INTERFACE ppMonitorInterface)
 {
-    DXGKRNL_TRACE("DxgkCbQueryMonitorInterface: hAdapter=%p version=%u\n",
-                  hAdapter, MonitorInterfaceVersion);
-
     if (ppMonitorInterface == NULL)
         return STATUS_INVALID_PARAMETER;
 
@@ -7886,15 +7874,7 @@ DxgkpEnumerateDisplayModeCandidate(
     Args.EnumPivot.VidPnTargetId = Candidate->Paths[0].VidPnTargetId;
     if (!DxgkAcquireKmdCall(Adapter))
         return STATUS_DELETE_PENDING;
-    _SEH2_TRY
-    {
-        Status = DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality)(Adapter->MiniportDeviceContext, &Args);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality)(Adapter->MiniportDeviceContext, &Args);
     DxgkReleaseKmdCall(Adapter);
     return Status;
 }
@@ -8535,6 +8515,25 @@ Cleanup:
     return Status;
 }
 
+static NTSTATUS
+DxgkpDisableDwmVirtualMode(
+    _In_ CONST D3DKMT_SETVIDPNSOURCEOWNER *pSetVidPnSourceOwner)
+{
+    PDXGKRNL_ADAPTER Adapter = NULL;
+    PDXGKRNL_DEVICE Device;
+    NTSTATUS Status;
+
+    if (pSetVidPnSourceOwner->VidPnSourceCount != 1)
+        return STATUS_INVALID_PARAMETER;
+
+    Device = DxgkLookupDeviceByHandle(pSetVidPnSourceOwner->hDevice, &Adapter);
+    if (Device == NULL)
+        return STATUS_INVALID_PARAMETER;
+    Status = (Adapter == NULL || Adapter->NumberOfVideoPresentSources == 0) ? STATUS_NOT_SUPPORTED : STATUS_SUCCESS;
+    DxgkDereferenceDevice(Device);
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 DxgkpSetVidPnSourceOwnerWithFlagsAndAccessMode(
@@ -8569,12 +8568,8 @@ DxgkpSetVidPnSourceOwnerWithFlagsAndAccessMode(
      * policed.  Windows 11 accepts it with non-NULL pointers still supplied. */
     if ((OwnerFlags & ~DXGKP_SOURCE_OWNER_FLAG_VALID_MASK) != 0)
         return STATUS_INVALID_PARAMETER;
-    if ((OwnerFlags & DXGKP_SOURCE_OWNER_FLAG_ALLOW_OUTPUT_DUPLICATION) != 0)
-        return STATUS_NOT_SUPPORTED;
     if ((OwnerFlags & DXGKP_SOURCE_OWNER_FLAG_DISABLE_DWM_VIRTUAL_MODE) != 0)
-        return STATUS_NOT_SUPPORTED;
-    if ((OwnerFlags & DXGKP_SOURCE_OWNER_FLAG_USE_NT_HANDLES) != 0)
-        return STATUS_NOT_SUPPORTED;
+        return DxgkpDisableDwmVirtualMode(pSetVidPnSourceOwner);
 
     Device = DxgkLookupDeviceByHandle(pSetVidPnSourceOwner->hDevice, &Adapter);
     if (Device == NULL)

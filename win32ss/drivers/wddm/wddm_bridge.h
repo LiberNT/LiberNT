@@ -67,6 +67,9 @@ WddmBridgeSetCompositorSourceOwner(
     _In_ ULONG Height,
     _In_ BOOLEAN Claim);
 
+NTSTATUS
+WddmBridgeRegisterDwmProcess(VOID);
+
 /* Cached device object pointer (set by WddmBridgeInit) */
 extern PFILE_OBJECT   g_DxgkrnlFileObject;
 extern PDEVICE_OBJECT g_DxgkrnlDeviceObject;

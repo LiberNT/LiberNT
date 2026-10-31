@@ -60,6 +60,9 @@
 #include "submit_reservation_core.h"
 #include "hotplug_work_core.h"
 #include "adapter_map_core.h"
+#include <ntstrsafe.h>
+#include <ndk/exfuncs.h>
+#include <ndk/mmfuncs.h>
 #include "adapter_start_core.h"
 
 #include <ndk/inbvfuncs.h>
@@ -683,15 +686,7 @@ DxgkpRemoveMiniportDevice(
 
     if (Adapter == NULL || Adapter->MiniportContext == NULL || Adapter->MiniportContext->InitData.s.DxgkDdiRemoveDevice == NULL || MiniportDeviceContext == NULL)
         return STATUS_NOT_SUPPORTED;
-    _SEH2_TRY
-    {
-        Status = Adapter->MiniportContext->InitData.s.DxgkDdiRemoveDevice(MiniportDeviceContext);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = Adapter->MiniportContext->InitData.s.DxgkDdiRemoveDevice(MiniportDeviceContext);
     return Status;
 }
 
@@ -1130,28 +1125,13 @@ DxgkpTdrWorker(
         CollectArgs.pBuffer = DbgBuffer;
         CollectArgs.BufferSize = sizeof(DbgBuffer);
 
-        _SEH2_TRY
-        {
-            (VOID)DXGK_CB(Adapter, DxgkDdiCollectDbgInfo)(Adapter->MiniportDeviceContext, &CollectArgs);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-        }
-        _SEH2_END;
+        (VOID)DXGK_CB(Adapter, DxgkDdiCollectDbgInfo)(Adapter->MiniportDeviceContext, &CollectArgs);
     }
 
     Status = STATUS_NOT_SUPPORTED;
     if (DXGK_CB_FULL(Adapter, DxgkDdiResetFromTimeout) != NULL)
     {
-        _SEH2_TRY
-        {
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiResetFromTimeout)(Adapter->MiniportDeviceContext);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiResetFromTimeout)(Adapter->MiniportDeviceContext);
 
     }
     DxgkReleaseMiniportCallback(Adapter);
@@ -1186,15 +1166,7 @@ DxgkpTdrWorker(
     {
         if (Adapter->State == DxgkAdapterStateStarted && DXGK_CB_FULL(Adapter, DxgkDdiRestartFromTimeout) != NULL)
         {
-            _SEH2_TRY
-            {
-                Status = DXGK_CB_FULL(Adapter, DxgkDdiRestartFromTimeout)(Adapter->MiniportDeviceContext);
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                Status = _SEH2_GetExceptionCode();
-            }
-            _SEH2_END;
+            Status = DXGK_CB_FULL(Adapter, DxgkDdiRestartFromTimeout)(Adapter->MiniportDeviceContext);
         }
         DxgkReleaseMiniportCallback(Adapter);
     }
@@ -1561,8 +1533,7 @@ typedef struct _DXGK_MAPMEM_ENTRY
 typedef enum _DXGKP_CALLBACK_MEMORY_KIND
 {
     DxgkpCallbackMemoryContiguous,
-    DxgkpCallbackMemoryMdl,
-    DxgkpCallbackMemoryContiguousMdl
+    DxgkpCallbackMemoryMdl
 } DXGKP_CALLBACK_MEMORY_KIND;
 
 typedef struct _DXGKP_CALLBACK_MEMORY_ENTRY
@@ -1574,11 +1545,6 @@ typedef struct _DXGKP_CALLBACK_MEMORY_ENTRY
     {
         PVOID ContiguousMemory;
         PMDL Mdl;
-        struct
-        {
-            PVOID BaseAddress;
-            PMDL Mdl;
-        } ContiguousMdl;
     } Memory;
 } DXGKP_CALLBACK_MEMORY_ENTRY, *PDXGKP_CALLBACK_MEMORY_ENTRY;
 #endif
@@ -1587,16 +1553,17 @@ typedef struct _DXGKP_CALLBACK_MEMORY_ENTRY
 typedef enum _DXGKP_PHYSICAL_MEMORY_BACKING
 {
     DxgkpPhysicalBackingMdl,
-    DxgkpPhysicalBackingContiguousMdl,
     DxgkpPhysicalBackingContiguous,
-    DxgkpPhysicalBackingIoSpace
+    DxgkpPhysicalBackingIoSpace,
+    DxgkpPhysicalBackingSection
 } DXGKP_PHYSICAL_MEMORY_BACKING;
 
 typedef enum _DXGKP_PHYSICAL_MAPPING_KIND
 {
     DxgkpPhysicalMappingDirect,
     DxgkpPhysicalMappingMdl,
-    DxgkpPhysicalMappingIoSpace
+    DxgkpPhysicalMappingIoSpace,
+    DxgkpPhysicalMappingSection
 } DXGKP_PHYSICAL_MAPPING_KIND;
 
 typedef struct _DXGKP_PHYSICAL_MEMORY_OBJECT
@@ -1614,6 +1581,9 @@ typedef struct _DXGKP_PHYSICAL_MEMORY_OBJECT
     PMDL Mdl;
     PVOID VirtualAddress;
     PHYSICAL_ADDRESS IoBaseAddress;
+    PVOID Section;
+    PMDL LockedMdl;
+    ULONG LockCount;
 } DXGKP_PHYSICAL_MEMORY_OBJECT, *PDXGKP_PHYSICAL_MEMORY_OBJECT;
 
 typedef struct _DXGKP_ADAPTER_MEMORY_OBJECT
@@ -1637,6 +1607,7 @@ typedef struct _DXGKP_ADL_ENTRY
 {
     LIST_ENTRY ListEntry;
     PDXGKP_ADAPTER_MEMORY_OBJECT AdapterMemoryObject;
+    BOOLEAN SectionLocked;
     DXGK_ADL Adl;
 } DXGKP_ADL_ENTRY, *PDXGKP_ADL_ENTRY;
 #endif
@@ -4799,6 +4770,10 @@ DxgkpNotifyDpcRoutine(
 static PDXGKRNL_ADAPTER
 DxgkpHandleToAdapter(
     _In_ HANDLE DeviceHandle);
+static NTSTATUS
+DxgkpWaitForTrackedDmaIdle(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG TimeoutMs);
 
 NTSTATUS APIENTRY DxgkCbQueryServices(HANDLE, DXGK_SERVICES, PINTERFACE);
 NTSTATUS APIENTRY DxgkCbMapMemory(HANDLE, PHYSICAL_ADDRESS, ULONG, BOOLEAN, BOOLEAN, MEMORY_CACHING_TYPE, PVOID*);
@@ -4930,6 +4905,91 @@ DxgkpCapturePciBusInterface(
     return STATUS_SUCCESS;
 }
 
+/* GUID_PCI_EXPRESS_LINK_QUIESCENT_INTERFACE, WDK wdmguid.h. */
+static const GUID DxgkpLinkQuiescentInterfaceGuid =
+{
+    0x146cd41c, 0xdae3, 0x4437,
+    {0x8a, 0xff, 0x2a, 0xf3, 0xf0, 0x38, 0x09, 0x9b}
+};
+
+static VOID
+DxgkpCaptureLinkQuiescentInterface(
+    _Inout_ PDXGKRNL_ADAPTER Adapter)
+{
+    PCI_EXPRESS_LINK_QUIESCENT_INTERFACE Interface;
+
+    RtlZeroMemory(&Interface, sizeof(Interface));
+    if (!NT_SUCCESS(DxgkpQueryPdoInterface(Adapter->PhysicalDeviceObject, &DxgkpLinkQuiescentInterfaceGuid,
+                                           sizeof(Interface), PCI_EXPRESS_LINK_QUIESCENT_INTERFACE_VERSION,
+                                           (PINTERFACE)&Interface)))
+    {
+        return;
+    }
+    if (Interface.Size < sizeof(Interface) || Interface.PciExpressEnterLinkQuiescentMode == NULL ||
+        Interface.PciExpressExitLinkQuiescentMode == NULL)
+    {
+        if (Interface.InterfaceDereference != NULL)
+            Interface.InterfaceDereference(Interface.Context);
+        return;
+    }
+    Adapter->LinkQuiescentInterface = Interface;
+    Adapter->LinkQuiescentInterfaceValid = TRUE;
+}
+
+static VOID
+DxgkpReleaseLinkQuiescentInterface(
+    _Inout_ PDXGKRNL_ADAPTER Adapter)
+{
+    if (!Adapter->LinkQuiescentInterfaceValid)
+        return;
+    Adapter->LinkQuiescentInterfaceValid = FALSE;
+    if (Adapter->LinkQuiescentInterface.InterfaceDereference != NULL)
+        Adapter->LinkQuiescentInterface.InterfaceDereference(Adapter->LinkQuiescentInterface.Context);
+    RtlZeroMemory(&Adapter->LinkQuiescentInterface, sizeof(Adapter->LinkQuiescentInterface));
+}
+
+/* GUID_PCI_EXPRESS_ROOT_PORT_INTERFACE, WDK wdmguid.h. */
+static const GUID DxgkpRootPortInterfaceGuid =
+{
+    0x83a7734a, 0x84c7, 0x4161,
+    {0x9a, 0x98, 0x60, 0x00, 0xed, 0x0c, 0x4a, 0x33}
+};
+
+static VOID
+DxgkpCaptureRootPortInterface(
+    _Inout_ PDXGKRNL_ADAPTER Adapter)
+{
+    PCI_EXPRESS_ROOT_PORT_INTERFACE Interface;
+
+    RtlZeroMemory(&Interface, sizeof(Interface));
+    if (!NT_SUCCESS(DxgkpQueryPdoInterface(Adapter->PhysicalDeviceObject, &DxgkpRootPortInterfaceGuid,
+                                           sizeof(Interface), PCI_EXPRESS_ROOT_PORT_INTERFACE_VERSION,
+                                           (PINTERFACE)&Interface)))
+    {
+        return;
+    }
+    if (Interface.Size < sizeof(Interface) || Interface.ReadConfigSpace == NULL || Interface.WriteConfigSpace == NULL)
+    {
+        if (Interface.InterfaceDereference != NULL)
+            Interface.InterfaceDereference(Interface.Context);
+        return;
+    }
+    Adapter->RootPortInterface = Interface;
+    Adapter->RootPortInterfaceValid = TRUE;
+}
+
+static VOID
+DxgkpReleaseRootPortInterface(
+    _Inout_ PDXGKRNL_ADAPTER Adapter)
+{
+    if (!Adapter->RootPortInterfaceValid)
+        return;
+    Adapter->RootPortInterfaceValid = FALSE;
+    if (Adapter->RootPortInterface.InterfaceDereference != NULL)
+        Adapter->RootPortInterface.InterfaceDereference(Adapter->RootPortInterface.Context);
+    RtlZeroMemory(&Adapter->RootPortInterface, sizeof(Adapter->RootPortInterface));
+}
+
 /*
  * DxgkCbIsDevicePresent — offset 0x60
  * The callback reports presence through its output parameter; the return
@@ -4987,7 +5047,7 @@ DxgkCbIsDevicePresent(
         PresentInterface.Version < PCI_DEVICE_PRESENT_INTERFACE_VERSION ||
         PresentInterface.IsDevicePresentEx == NULL)
     {
-        Status = STATUS_NOT_SUPPORTED;
+        Status = STATUS_UNSUCCESSFUL;
     }
     else
     {
@@ -5099,46 +5159,212 @@ DxgkCbLogEtwEventDisabled(
     UNREFERENCED_PARAMETER(EventBuffer);
 }
 
-/*
- * Adapter exclusion needs a real scheduler/VidMm access gate and protected
- * callback transaction.  Returning failure is safer than invoking the
- * callback while other adapter access remains possible.
- */
+typedef struct _DXGKP_EXCLUDE_ACCESS_WORK
+{
+    PIO_WORKITEM WorkItem;
+    PDXGKRNL_ADAPTER Adapter;
+    DXGKDDI_PROTECTED_CALLBACK Callback;
+    PVOID Context;
+    ULONG Attributes;
+} DXGKP_EXCLUDE_ACCESS_WORK, *PDXGKP_EXCLUDE_ACCESS_WORK;
+
+static NTSTATUS
+DxgkpBeginAdapterExclusion(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG Attributes,
+    _Out_ PBOOLEAN SchedulerSuspended,
+    _Out_ PBOOLEAN ExclusiveTaken)
+{
+    NTSTATUS Status;
+
+    *SchedulerSuspended = FALSE;
+    *ExclusiveTaken = FALSE;
+    if (Adapter->State != DxgkAdapterStateStarted || Adapter->DevicePowerState != PowerDeviceD0 ||
+        Adapter->MiniportDeviceStopped)
+    {
+        return STATUS_DEVICE_NOT_READY;
+    }
+
+    if ((Attributes & DXGK_EXCLUDE_CALL_SYNCHRONOUS) == 0)
+    {
+        Status = VidSchSuspendScheduler(Adapter);
+        if (!NT_SUCCESS(Status) && Status != STATUS_NOT_SUPPORTED)
+            return Status;
+        *SchedulerSuspended = NT_SUCCESS(Status);
+        Status = DxgkpWaitForTrackedDmaIdle(Adapter, 1000);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        DxgkBeginKmdExclusive(Adapter);
+        *ExclusiveTaken = TRUE;
+    }
+
+    if ((Attributes & DXGK_EXCLUDE_BRIDGE_ACCESS) != 0)
+    {
+        Status = Adapter->LinkQuiescentInterface.PciExpressEnterLinkQuiescentMode(
+            Adapter->LinkQuiescentInterface.Context);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+
+    DxgkVidMmQuiesceAdapter(Adapter);
+    /* FIXME: segments are emptied with the D3 idle preparation; a CPU-mapped local allocation fails the exclusion */
+    Status = DxgkVidMmPrepareForExclusion(Adapter);
+    if (!NT_SUCCESS(Status))
+    {
+        DxgkVidMmResumeAdapter(Adapter);
+        if ((Attributes & DXGK_EXCLUDE_BRIDGE_ACCESS) != 0 &&
+            !NT_SUCCESS(Adapter->LinkQuiescentInterface.PciExpressExitLinkQuiescentMode(
+                Adapter->LinkQuiescentInterface.Context)))
+        {
+            DXGKRNL_ERR("DxgkCbExcludeAdapterAccess: leaving link quiescent mode failed\n");
+        }
+    }
+    else if ((Attributes & DXGK_EXCLUDE_BRIDGE_ACCESS) != 0)
+    {
+        InterlockedExchange(&Adapter->BridgeAccessExcluded, 1);
+    }
+    return Status;
+}
+
+static VOID
+DxgkpEndAdapterExclusion(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG Attributes,
+    _In_ BOOLEAN Excluded,
+    _In_ BOOLEAN SchedulerSuspended,
+    _In_ BOOLEAN ExclusiveTaken)
+{
+    NTSTATUS Status;
+
+    if (Excluded)
+    {
+        if ((Attributes & DXGK_EXCLUDE_BRIDGE_ACCESS) != 0)
+        {
+            InterlockedExchange(&Adapter->BridgeAccessExcluded, 0);
+            Status = Adapter->LinkQuiescentInterface.PciExpressExitLinkQuiescentMode(
+                Adapter->LinkQuiescentInterface.Context);
+            if (!NT_SUCCESS(Status))
+                DXGKRNL_ERR("DxgkCbExcludeAdapterAccess: leaving link quiescent mode failed 0x%08lx\n", Status);
+        }
+        DxgkVidMmResumeAdapter(Adapter);
+    }
+    if (ExclusiveTaken)
+        DxgkEndKmdExclusive(Adapter, TRUE);
+    if (SchedulerSuspended)
+    {
+        Status = VidSchResumeScheduler(Adapter);
+        if (!NT_SUCCESS(Status))
+            DXGKRNL_ERR("DxgkCbExcludeAdapterAccess: scheduler resume failed 0x%08lx\n", Status);
+    }
+}
+
+static VOID
+DxgkpRunAdapterExclusion(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG Attributes,
+    _In_ DXGKDDI_PROTECTED_CALLBACK Callback,
+    _In_ PVOID Context)
+{
+    BOOLEAN SchedulerSuspended = FALSE;
+    BOOLEAN ExclusiveTaken = FALSE;
+    BOOLEAN Level3Held = FALSE;
+    BOOLEAN Claimed;
+    NTSTATUS Status = STATUS_DEVICE_NOT_READY;
+
+    if ((Attributes & DXGK_EXCLUDE_CALL_SYNCHRONOUS) == 0)
+    {
+        DxgkAcquireLevel3Transition(Adapter);
+        Level3Held = TRUE;
+    }
+    Claimed = InterlockedCompareExchange(&Adapter->ExcludeAccessActive, 1, 0) == 0;
+    if (Claimed)
+        Status = DxgkpBeginAdapterExclusion(Adapter, Attributes, &SchedulerSuspended, &ExclusiveTaken);
+    DXGKRNL_TRACE("DxgkCbExcludeAdapterAccess: attributes 0x%lx begin 0x%08lx\n", Attributes, Status);
+
+    Callback(Adapter->MiniportDeviceContext, Context, Status);
+
+    if (Claimed)
+    {
+        DxgkpEndAdapterExclusion(Adapter, Attributes, NT_SUCCESS(Status), SchedulerSuspended, ExclusiveTaken);
+        InterlockedExchange(&Adapter->ExcludeAccessActive, 0);
+    }
+    if (Level3Held)
+        DxgkReleaseLevel3Transition(Adapter);
+}
+
+static VOID
+NTAPI
+DxgkpExcludeAdapterAccessWorker(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PVOID Context)
+{
+    PDXGKP_EXCLUDE_ACCESS_WORK Work = Context;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    DxgkpRunAdapterExclusion(Work->Adapter, Work->Attributes, Work->Callback, Work->Context);
+    ExReleaseRundownProtection(&Work->Adapter->ReverseCallbackRundownRef);
+    IoFreeWorkItem(Work->WorkItem);
+    ExFreePoolWithTag(Work, TAG_DXGK_ADAPTER);
+}
+
 static NTSTATUS
 APIENTRY
-DxgkCbExcludeAdapterAccessNotSupported(
+DxgkCbExcludeAdapterAccess(
     _In_ HANDLE DeviceHandle,
     _In_ ULONG  Attributes,
     _In_ DXGKDDI_PROTECTED_CALLBACK DxgkProtectedCallback,
     _In_ PVOID ProtectedCallbackContext)
 {
+    PDXGKP_EXCLUDE_ACCESS_WORK Work;
     PDXGKRNL_ADAPTER Adapter;
 
-    PAGED_CODE();
-    UNREFERENCED_PARAMETER(ProtectedCallbackContext);
-
-    if (DxgkProtectedCallback == NULL ||
-        (Attributes & ~(DXGK_EXCLUDE_EVICT_ALL |
-                        DXGK_EXCLUDE_CALL_SYNCHRONOUS |
-                        DXGK_EXCLUDE_BRIDGE_ACCESS |
-                        DXGK_EXCLUDE_EVICT_STANDBY |
-                        DXGK_EXCLUDE_EVICT_HIBERNATE |
-                        DXGK_EXCLUDE_EVICT_SHUTDOWN |
-                        DXGK_EXCLUDE_D3_STATE_TRANSITION |
-                        DXGK_EXCLUDE_EVICT_DFX_STANDBY)) != 0 ||
-        (Attributes & (DXGK_EXCLUDE_EVICT_ALL |
-                       DXGK_EXCLUDE_CALL_SYNCHRONOUS)) ==
-            (DXGK_EXCLUDE_EVICT_ALL |
-             DXGK_EXCLUDE_CALL_SYNCHRONOUS))
-    {
+    if (DxgkProtectedCallback == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
         return STATUS_INVALID_PARAMETER;
-    }
-
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
-    ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-    return STATUS_NOT_SUPPORTED;
+        return STATUS_INVALID_PARAMETER;
+
+    if (Adapter->State != DxgkAdapterStateStarted ||
+        InterlockedCompareExchange(&Adapter->ExcludeAccessActive, 0, 0) != 0)
+    {
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_DEVICE_NOT_READY;
+    }
+    if (((Attributes & DXGK_EXCLUDE_CALL_SYNCHRONOUS) != 0 &&
+         ((Attributes & DXGK_EXCLUDE_EVICT_ALL) != 0 || Adapter->KmdExclusiveOwnerThread != PsGetCurrentThread())) ||
+        ((Attributes & DXGK_EXCLUDE_BRIDGE_ACCESS) != 0 && !Adapter->LinkQuiescentInterfaceValid))
+    {
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    /* A synchronous caller already owns the adapter's exclusive gate, so the bracket runs on its thread. */
+    if ((Attributes & DXGK_EXCLUDE_CALL_SYNCHRONOUS) != 0)
+    {
+        DxgkpRunAdapterExclusion(Adapter, Attributes, DxgkProtectedCallback, ProtectedCallbackContext);
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_SUCCESS;
+    }
+
+    Work = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Work), TAG_DXGK_ADAPTER);
+    if (Work == NULL)
+    {
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_NO_MEMORY;
+    }
+    Work->WorkItem = IoAllocateWorkItem(Adapter->FunctionalDeviceObject);
+    if (Work->WorkItem == NULL)
+    {
+        ExFreePoolWithTag(Work, TAG_DXGK_ADAPTER);
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    Work->Adapter = Adapter;
+    Work->Callback = DxgkProtectedCallback;
+    Work->Context = ProtectedCallbackContext;
+    Work->Attributes = Attributes;
+    IoQueueWorkItem(Work->WorkItem, DxgkpExcludeAdapterAccessWorker, DelayedWorkQueue, Work);
+    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -5333,16 +5559,8 @@ DxgkpQueryPowerComponentCount(
     Query.Type = DXGKQAITYPE_NUMPOWERCOMPONENTS;
     Query.pOutputData = &Count;
     Query.OutputDataSize = sizeof(Count);
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiQueryAdapterInfo)(
-                     Adapter->MiniportDeviceContext, &Query);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiQueryAdapterInfo)(
+                 Adapter->MiniportDeviceContext, &Query);
     DxgkReleaseKmdCall(Adapter);
 
     if (NT_SUCCESS(Status))
@@ -5372,16 +5590,8 @@ DxgkpQueryPowerComponentInfo(
     Query.InputDataSize = sizeof(ComponentIndex);
     Query.pOutputData = Info;
     Query.OutputDataSize = sizeof(*Info);
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiQueryAdapterInfo)(
-                     Adapter->MiniportDeviceContext, &Query);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiQueryAdapterInfo)(
+                 Adapter->MiniportDeviceContext, &Query);
     DxgkReleaseKmdCall(Adapter);
     return Status;
 }
@@ -5404,16 +5614,8 @@ DxgkpSetPowerComponentFState(
     if (!DxgkAcquireKmdCall(Adapter))
         return STATUS_DEVICE_NOT_READY;
 
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiSetPowerComponentFState)(
-                     Adapter->MiniportDeviceContext, (UINT)Component, (UINT)FState);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiSetPowerComponentFState)(
+                 Adapter->MiniportDeviceContext, (UINT)Component, (UINT)FState);
     DxgkReleaseKmdCall(Adapter);
 
     if (NT_SUCCESS(Status))
@@ -5634,18 +5836,10 @@ DxgkpPowerRuntimeControlCallback(
     if (!DxgkAcquireKmdCall(Adapter))
         return STATUS_DEVICE_NOT_READY;
 
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiPowerRuntimeControlRequest)(
-                     Adapter->MiniportDeviceContext, PowerControlCode,
-                     InBuffer, InBufferSize, OutBuffer, OutBufferSize,
-                     BytesReturned);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiPowerRuntimeControlRequest)(
+                 Adapter->MiniportDeviceContext, PowerControlCode,
+                 InBuffer, InBufferSize, OutBuffer, OutBufferSize,
+                 BytesReturned);
     DxgkReleaseKmdCall(Adapter);
     return Status;
 }
@@ -6033,7 +6227,7 @@ DxgkCbPowerRuntimeControlRequest(
 
         InterlockedIncrement(&Adapter->PowerControlRequestCalls);
         if (Adapter->PoFxHandle == NULL)
-            Status = STATUS_NOT_SUPPORTED;
+            Status = STATUS_UNSUCCESSFUL;
         else
         {
             Status = PoFxPowerControl(Adapter->PoFxHandle, PowerControlCode,
@@ -6121,6 +6315,7 @@ DxgkCbCompletePStateTransitionSuppressed(
     _In_ UINT CompletedPState)
 {
     PDXGKRNL_ADAPTER Adapter;
+    DXGKRNL_TRACE("DxgkCbCompletePStateTransition: refused miniport call\n");
 
     UNREFERENCED_PARAMETER(ComponentIndex);
     UNREFERENCED_PARAMETER(CompletedPState);
@@ -6275,6 +6470,7 @@ DxgkCbHardwareContentProtectionTeardownSuppressed(
     _In_ UINT Flags)
 {
     PDXGKRNL_ADAPTER Adapter;
+    DXGKRNL_TRACE("DxgkCbHardwareContentProtectionTeardown: refused miniport call\n");
 
     UNREFERENCED_PARAMETER(Flags);
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
@@ -6323,6 +6519,7 @@ DxgkCbMitigatedRangeUpdateSuppressed(
     PDXGKRNL_ADAPTER Adapter;
 
     PAGED_CODE();
+    DXGKRNL_TRACE("DxgkCbMitigatedRangeUpdate: refused miniport call\n");
     UNREFERENCED_PARAMETER(VirtualFunctionIndex);
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter != NULL)
@@ -6343,6 +6540,7 @@ DxgkCbInvalidateHwContextNotSupported(
     PDXGKRNL_ADAPTER Adapter;
 
     PAGED_CODE();
+    DXGKRNL_TRACE("DxgkCbInvalidateHwContext: refused miniport call\n");
     if (Args == NULL || Args->hAdapter == NULL || Args->hHwContext == NULL ||
         (Args->Flags.Value & ~1U) != 0)
     {
@@ -6366,11 +6564,11 @@ DxgkCbIndicateConnectorChange(
 
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
+        return STATUS_INVALID_PARAMETER;
     if (DXGK_CB_FULL(Adapter, DxgkDdiQueryConnectionChange) == NULL)
     {
         ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-        return STATUS_NOT_SUPPORTED;
+        return STATUS_SUCCESS;
     }
     InterlockedExchange(&Adapter->ConnectorChangePending, 1);
     Status = DxgkVidPnQueueHotPlugRebuild(Adapter);
@@ -6577,6 +6775,7 @@ DxgkCbSetProtectedSessionStatusNotSupported(
     IN_CONST_PDXGKARGCB_PROTECTEDSESSIONSTATUS ProtectedSessionStatus)
 {
     PAGED_CODE();
+    DXGKRNL_TRACE("DxgkCbSetProtectedSessionStatus: refused miniport call\n");
     if (ProtectedSessionStatus == NULL ||
         ProtectedSessionStatus->hProtectedSession == NULL ||
         ProtectedSessionStatus->Status >
@@ -6587,106 +6786,263 @@ DxgkCbSetProtectedSessionStatusNotSupported(
     return STATUS_NOT_SUPPORTED;
 }
 
-/* No framebuffer-save section or commit accounting is advertised. */
+static VOID
+DxgkpReleaseFrameBufferSavePin(
+    _Inout_ PDXGKRNL_ADAPTER Adapter)
+{
+    if (Adapter->FrameBufferSaveAdl != NULL)
+        ExFreePoolWithTag(Adapter->FrameBufferSaveAdl, TAG_DXGK_RESOURCES);
+    if (Adapter->FrameBufferSaveMdl != NULL)
+    {
+        MmUnlockPages(Adapter->FrameBufferSaveMdl);
+        IoFreeMdl(Adapter->FrameBufferSaveMdl);
+    }
+    if (Adapter->FrameBufferSaveView != NULL)
+        MmUnmapViewInSystemSpace(Adapter->FrameBufferSaveView);
+    Adapter->FrameBufferSaveAdl = NULL;
+    Adapter->FrameBufferSaveMdl = NULL;
+    Adapter->FrameBufferSaveView = NULL;
+}
+
+static NTSTATUS
+DxgkpCreateFrameBufferSaveArea(
+    _Inout_ PDXGKRNL_ADAPTER Adapter)
+{
+    DXGKARG_QUERYADAPTERINFO QueryArgs;
+    LARGE_INTEGER MaximumSize;
+    UINT PhysicalAdapterIndex = 0;
+    ULONGLONG Size = 0;
+    NTSTATUS Status;
+
+    if (Adapter->FrameBufferSaveSection != NULL || DXGK_CB_FULL(Adapter, DxgkDdiQueryAdapterInfo) == NULL)
+        return STATUS_SUCCESS;
+    if (!DxgkAcquireKmdCall(Adapter))
+        return STATUS_DEVICE_REMOVED;
+    RtlZeroMemory(&QueryArgs, sizeof(QueryArgs));
+    QueryArgs.Type = DXGKQAITYPE_FRAMEBUFFERSAVESIZE;
+    QueryArgs.pInputData = &PhysicalAdapterIndex;
+    QueryArgs.InputDataSize = sizeof(PhysicalAdapterIndex);
+    QueryArgs.pOutputData = &Size;
+    QueryArgs.OutputDataSize = sizeof(Size);
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiQueryAdapterInfo)(Adapter->MiniportDeviceContext, &QueryArgs);
+    DxgkReleaseKmdCall(Adapter);
+    DXGKRNL_TRACE("DxgkAdapterStart: frame buffer save size status 0x%08lx size 0x%I64x\n", Status, Size);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if ((Size & (PAGE_SIZE - 1)) != 0)
+        return STATUS_INVALID_PARAMETER;
+    Adapter->FrameBufferSaveSize = Size;
+    if (Size == 0)
+        return STATUS_SUCCESS;
+
+    MaximumSize.QuadPart = (LONGLONG)Size;
+    return MmCreateSection(&Adapter->FrameBufferSaveSection, 0, NULL, &MaximumSize, PAGE_READWRITE, SEC_COMMIT, NULL,
+                           NULL);
+}
+
+static VOID
+DxgkpDestroyFrameBufferSaveArea(
+    _Inout_ PDXGKRNL_ADAPTER Adapter)
+{
+    DxgkpReleaseFrameBufferSavePin(Adapter);
+    if (Adapter->FrameBufferSaveSection != NULL)
+        ObDereferenceObject(Adapter->FrameBufferSaveSection);
+    Adapter->FrameBufferSaveSection = NULL;
+    Adapter->FrameBufferSaveSize = 0;
+}
+
+static NTSTATUS
+DxgkpPinFrameBufferForSave(
+    _In_ HANDLE DeviceHandle,
+    _In_ UINT PhysicalAdapterIndex,
+    _In_ SIZE_T CommitSize,
+    _In_ BOOLEAN PreferContiguous,
+    _Out_opt_ PMDL *Mdl,
+    _Out_opt_ DXGK_ADL **Adl)
+{
+    PDXGKRNL_ADAPTER Adapter;
+    SIZE_T ViewSize = CommitSize;
+    PPFN_NUMBER MdlPages;
+    DXGK_ADL *NewAdl;
+    ULONG PageCount;
+    ULONG Index;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    Adapter = DxgkpHandleToAdapter(DeviceHandle);
+    if (Adapter == NULL)
+        return STATUS_INVALID_PARAMETER;
+    if (PhysicalAdapterIndex != 0 || (CommitSize & (PAGE_SIZE - 1)) != 0 || Adapter->FrameBufferSaveMdl != NULL ||
+        Adapter->FrameBufferSaveSection == NULL)
+    {
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Status = MmMapViewInSystemSpace(Adapter->FrameBufferSaveSection, &Adapter->FrameBufferSaveView, &ViewSize);
+    if (NT_SUCCESS(Status))
+    {
+        Adapter->FrameBufferSaveMdl = IoAllocateMdl(Adapter->FrameBufferSaveView, (ULONG)ViewSize, FALSE, FALSE, NULL);
+        if (Adapter->FrameBufferSaveMdl == NULL)
+            Status = STATUS_NO_MEMORY;
+    }
+    if (NT_SUCCESS(Status))
+    {
+        _SEH2_TRY
+        {
+            MmProbeAndLockPages(Adapter->FrameBufferSaveMdl, KernelMode, IoModifyAccess);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+        if (!NT_SUCCESS(Status))
+        {
+            IoFreeMdl(Adapter->FrameBufferSaveMdl);
+            Adapter->FrameBufferSaveMdl = NULL;
+        }
+    }
+    if (NT_SUCCESS(Status) && Adl != NULL)
+    {
+        PageCount = (ULONG)(ViewSize >> PAGE_SHIFT);
+        MdlPages = MmGetMdlPfnArray(Adapter->FrameBufferSaveMdl);
+        NewAdl = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*NewAdl) + PageCount * sizeof(DXGK_PAGE_NUMBER),
+                                    TAG_DXGK_RESOURCES);
+        if (NewAdl == NULL)
+        {
+            Status = STATUS_NO_MEMORY;
+        }
+        else
+        {
+            BOOLEAN Contiguous = TRUE;
+
+            for (Index = 1; Index < PageCount && Contiguous; Index++)
+                Contiguous = (MdlPages[Index] == MdlPages[0] + Index);
+            NewAdl->PageCount = PageCount;
+            if (PreferContiguous && Contiguous)
+            {
+                NewAdl->Flags.Contiguous = 1;
+                NewAdl->BasePageNumber = MdlPages[0];
+            }
+            else
+            {
+                DXGK_PAGE_NUMBER *Pages = (DXGK_PAGE_NUMBER *)(NewAdl + 1);
+
+                for (Index = 0; Index < PageCount; Index++)
+                    Pages[Index] = (DXGK_PAGE_NUMBER)MdlPages[Index];
+                NewAdl->Pages = Pages;
+            }
+            Adapter->FrameBufferSaveAdl = NewAdl;
+            *Adl = NewAdl;
+        }
+    }
+    if (!NT_SUCCESS(Status))
+        DxgkpReleaseFrameBufferSavePin(Adapter);
+    else if (Mdl != NULL)
+        *Mdl = Adapter->FrameBufferSaveMdl;
+    DXGKRNL_TRACE("DxgkCbPinFrameBufferForSave: commit 0x%Ix status 0x%08lx\n", CommitSize, Status);
+    ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+    return Status;
+}
+
 static NTSTATUS
 APIENTRY
-DxgkCbPinFrameBufferForSaveNotSupported(
+DxgkCbPinFrameBufferForSave(
     IN_CONST_HANDLE DeviceHandle,
     INOUT_PDXGKARGCB_PINFRAMEBUFFERFORSAVE PinFrameBufferForSave)
 {
-    PDXGKRNL_ADAPTER Adapter;
-
     PAGED_CODE();
     if (PinFrameBufferForSave == NULL)
         return STATUS_INVALID_PARAMETER;
     PinFrameBufferForSave->pMdl = NULL;
-    if (PinFrameBufferForSave->PhysicalAdapterIndex != 0 ||
-        PinFrameBufferForSave->CommitSize == 0 ||
-        (PinFrameBufferForSave->CommitSize & (PAGE_SIZE - 1)) != 0)
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    Adapter = DxgkpHandleToAdapter(DeviceHandle);
-    if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
-    ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-    return STATUS_NOT_SUPPORTED;
+    return DxgkpPinFrameBufferForSave(DeviceHandle, PinFrameBufferForSave->PhysicalAdapterIndex,
+                                      PinFrameBufferForSave->CommitSize, FALSE, &PinFrameBufferForSave->pMdl, NULL);
 }
 
-/* The matching unpin cannot succeed while pin never publishes an MDL. */
 static NTSTATUS
 APIENTRY
-DxgkCbUnpinFrameBufferForSaveNotSupported(
+DxgkCbUnpinFrameBufferForSave(
     IN_CONST_HANDLE DeviceHandle,
     IN_CONST_PDXGKARGCB_UNPINFRAMEBUFFERFORSAVE UnpinFrameBufferForSave)
 {
     PDXGKRNL_ADAPTER Adapter;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
-    if (UnpinFrameBufferForSave == NULL ||
-        UnpinFrameBufferForSave->PhysicalAdapterIndex != 0)
-    {
+    if (UnpinFrameBufferForSave == NULL)
         return STATUS_INVALID_PARAMETER;
-    }
-
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
+        return STATUS_INVALID_PARAMETER;
+    if (UnpinFrameBufferForSave->PhysicalAdapterIndex != 0 || Adapter->FrameBufferSaveMdl == NULL)
+        Status = STATUS_INVALID_PARAMETER;
+    else
+        DxgkpReleaseFrameBufferSavePin(Adapter);
     ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-    return STATUS_NOT_SUPPORTED;
+    return Status;
 }
 
-/* No per-physical-adapter framebuffer section exists to map. */
 static NTSTATUS
 APIENTRY
-DxgkCbMapFrameBufferPointerNotSupported(
+DxgkCbMapFrameBufferPointer(
     IN_CONST_HANDLE DeviceHandle,
     INOUT_PDXGKARGCB_MAPFRAMEBUFFERPOINTER MapFrameBufferPointer)
 {
     PDXGKRNL_ADAPTER Adapter;
+    LARGE_INTEGER Offset;
+    SIZE_T ViewSize;
+    PVOID View = NULL;
+    NTSTATUS Status;
 
     PAGED_CODE();
     if (MapFrameBufferPointer == NULL)
         return STATUS_INVALID_PARAMETER;
-    MapFrameBufferPointer->pBaseAddress = NULL;
+    Adapter = DxgkpHandleToAdapter(DeviceHandle);
+    if (Adapter == NULL)
+        return STATUS_INVALID_PARAMETER;
     if (MapFrameBufferPointer->PhysicalAdapterIndex != 0 ||
-        MapFrameBufferPointer->Size == 0 ||
-        MapFrameBufferPointer->Offset >
-            MAXULONG_PTR - MapFrameBufferPointer->Size)
+        (MapFrameBufferPointer->Size & (PAGE_SIZE - 1)) != 0 ||
+        MapFrameBufferPointer->Offset + MapFrameBufferPointer->Size < MapFrameBufferPointer->Offset ||
+        MapFrameBufferPointer->Offset + MapFrameBufferPointer->Size > Adapter->FrameBufferSaveSize ||
+        Adapter->FrameBufferSaveSection == NULL)
     {
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
         return STATUS_INVALID_PARAMETER;
     }
 
-    Adapter = DxgkpHandleToAdapter(DeviceHandle);
-    if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
+    ViewSize = MapFrameBufferPointer->Size;
+    Offset.QuadPart = (LONGLONG)MapFrameBufferPointer->Offset;
+    Status = MmMapViewInSystemSpaceEx(Adapter->FrameBufferSaveSection, &View, &ViewSize, &Offset, 0);
+    if (NT_SUCCESS(Status))
+    {
+        MapFrameBufferPointer->pBaseAddress = View;
+        MapFrameBufferPointer->Offset -= (SIZE_T)Offset.QuadPart;
+    }
     ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-    return STATUS_NOT_SUPPORTED;
+    return Status;
 }
 
-/* The matching unmap rejects pointers that this port never published. */
 static NTSTATUS
 APIENTRY
-DxgkCbUnmapFrameBufferPointerNotSupported(
+DxgkCbUnmapFrameBufferPointer(
     IN_CONST_HANDLE DeviceHandle,
     IN_CONST_PDXGKARGCB_UNMAPFRAMEBUFFERPOINTER UnmapFrameBufferPointer)
 {
     PDXGKRNL_ADAPTER Adapter;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
-    if (UnmapFrameBufferPointer == NULL ||
-        UnmapFrameBufferPointer->PhysicalAdapterIndex != 0 ||
-        UnmapFrameBufferPointer->pBaseAddress == NULL)
-    {
+    if (UnmapFrameBufferPointer == NULL)
         return STATUS_INVALID_PARAMETER;
-    }
-
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
+        return STATUS_INVALID_PARAMETER;
+    if (UnmapFrameBufferPointer->PhysicalAdapterIndex != 0)
+        Status = STATUS_INVALID_PARAMETER;
+    else
+        Status = MmUnmapViewInSystemSpace(UnmapFrameBufferPointer->pBaseAddress);
     ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-    return STATUS_NOT_SUPPORTED;
+    return Status;
 }
 
 /* Graphics IOMMU domains remain unadvertised; never return an identity map. */
@@ -6699,6 +7055,7 @@ DxgkCbMapMdlToIoMmuNotSupported(
     PDXGKRNL_ADAPTER Adapter;
 
     PAGED_CODE();
+    DXGKRNL_TRACE("DxgkCbMapMdlToIoMmu: refused miniport call\n");
     if (MapMdlToIoMmu == NULL)
         return STATUS_INVALID_PARAMETER;
     MapMdlToIoMmu->hMemoryHandle = NULL;
@@ -6722,6 +7079,7 @@ DxgkCbUnmapMdlFromIoMmuSuppressed(
     PDXGKRNL_ADAPTER Adapter;
 
     PAGED_CODE();
+    DXGKRNL_TRACE("DxgkCbUnmapMdlFromIoMmu: refused miniport call\n");
     UNREFERENCED_PARAMETER(UnmapMdlFromIoMmu);
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter != NULL)
@@ -6741,6 +7099,7 @@ DxgkCbReportDiagnosticNotSupported(
 {
     PDXGKRNL_ADAPTER Adapter;
     ULONG RequiredSize;
+    DXGKRNL_TRACE("DxgkCbReportDiagnostic: refused miniport call\n");
 
     if (Diagnostic == NULL || Diagnostic->Reserved != 0)
         return STATUS_INVALID_PARAMETER;
@@ -6779,7 +7138,8 @@ DxgkCbReportDiagnosticNotSupported(
     if (Adapter == NULL)
         return STATUS_INVALID_PARAMETER;
     ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-    return STATUS_NOT_SUPPORTED;
+    /* TODO: per-adapter diagnostic enabling (Windows UpdateDiagnosticReporting); every type starts disabled */
+    return STATUS_INVALID_PARAMETER;
 }
 
 /*
@@ -6795,6 +7155,7 @@ DxgkCbSaveMemoryForHotUpdateNotSupported(
     PDXGKRNL_ADAPTER Adapter;
 
     PAGED_CODE();
+    DXGKRNL_TRACE("DxgkCbSaveMemoryForHotUpdate: refused miniport call\n");
     if (Args == NULL ||
         (Args->NumDataMemoryRanges != 0 &&
          Args->pDataMemoryRanges == NULL) ||
@@ -6815,12 +7176,13 @@ DxgkCbSaveMemoryForHotUpdateNotSupported(
 /* No cursor capability-change transaction is owned by the present path. */
 static NTSTATUS
 APIENTRY
-DxgkCbNotifyCursorSupportChangeNotSupported(
+DxgkCbNotifyCursorSupportChange(
     IN_CONST_PDXGKARGCB_NOTIFYCURSORSUPPORTCHANGE Args)
 {
     PDXGKRNL_ADAPTER Adapter;
 
     PAGED_CODE();
+    DXGKRNL_TRACE("DxgkCbNotifyCursorSupportChange: pointer capabilities invalidated\n");
     if (Args == NULL || Args->DeviceHandle == NULL)
         return STATUS_INVALID_PARAMETER;
 
@@ -6833,35 +7195,24 @@ DxgkCbNotifyCursorSupportChangeNotSupported(
         return STATUS_INVALID_PARAMETER;
     }
 
+    Adapter->PointerCapsQueried = FALSE;
     ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-    return STATUS_NOT_SUPPORTED;
+    /* FIXME: win32k is not told to re-query pointer capabilities; the next pointer request re-reads them */
+    return STATUS_SUCCESS;
 }
 
-/* No framebuffer-save section exists from which a WDDM 2.9 ADL can be made. */
 static NTSTATUS
 APIENTRY
-DxgkCbPinFrameBufferForSave2NotSupported(
+DxgkCbPinFrameBufferForSave2(
     IN_CONST_HANDLE DeviceHandle,
     INOUT_PDXGKARGCB_PINFRAMEBUFFERFORSAVE2 Args)
 {
-    PDXGKRNL_ADAPTER Adapter;
-
     PAGED_CODE();
     if (Args == NULL)
         return STATUS_INVALID_PARAMETER;
     Args->pAdl = NULL;
-    if (Args->PhysicalAdapterIndex != 0 || Args->CommitSize == 0 ||
-        (Args->CommitSize & (PAGE_SIZE - 1)) != 0 ||
-        (Args->Flags.Value & ~1U) != 0)
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    Adapter = DxgkpHandleToAdapter(DeviceHandle);
-    if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
-    ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-    return STATUS_NOT_SUPPORTED;
+    return DxgkpPinFrameBufferForSave(DeviceHandle, Args->PhysicalAdapterIndex, Args->CommitSize,
+                                      Args->Flags.PreferContiguous != 0, NULL, &Args->pAdl);
 }
 
 /*
@@ -6874,6 +7225,7 @@ DxgkCbDisconnectDoorbellNotSupported(
     INOUT_PDXGKARGCB_DISCONNECTDOORBELL Args)
 {
     PAGED_CODE();
+    DXGKRNL_TRACE("DxgkCbDisconnectDoorbell: refused miniport call\n");
     if (Args == NULL || Args->hHwQueue == NULL || Args->hDoorbell == NULL ||
         Args->Flags.Value != 0 ||
         (Args->DisconnectReason !=
@@ -7182,7 +7534,12 @@ DxgkCbIsFeatureEnabled(
 
     Adapter = DxgkpHandleToAdapter(Args->DeviceHandle);
     if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
+        return STATUS_INVALID_PARAMETER;
+    if (Args->FeatureId > DXGK_FEATURE_SHARE_BACKING_STORE_WITH_KMD)
+    {
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_INVALID_PARAMETER;
+    }
 
     if (Args->FeatureId == DXGK_FEATURE_KMD_SIGNAL_CPU_EVENT)
         Args->Enabled = DxgkpKmdCpuEventFeatureAvailable(Adapter);
@@ -7201,16 +7558,19 @@ DxgkCbQueryFeatureSupport(
     PDXGKRNL_ADAPTER Adapter;
 
     PAGED_CODE();
-    if (Args == NULL ||
-        Args->DriverSupportState > DXGK_FEATURE_SUPPORT_ALWAYS_ON)
-    {
+    if (Args == NULL)
         return STATUS_INVALID_PARAMETER;
-    }
     Args->Enabled = FALSE;
 
     Adapter = DxgkpHandleToAdapter(Args->DeviceHandle);
     if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
+        return STATUS_INVALID_PARAMETER;
+    if (Args->DriverSupportState == DXGK_FEATURE_SUPPORT_ALWAYS_OFF ||
+        Args->FeatureId > DXGK_FEATURE_SHARE_BACKING_STORE_WITH_KMD)
+    {
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_INVALID_PARAMETER;
+    }
 
     if (Args->FeatureId == DXGK_FEATURE_KMD_SIGNAL_CPU_EVENT &&
         Args->DriverSupportState >= DXGK_FEATURE_SUPPORT_STABLE)
@@ -7267,10 +7627,20 @@ DxgkpSelectInterfaceAdvertisement(
     _Out_ PULONG AdvertisedSize,
     _Out_ PULONG AdvertisedVersion)
 {
-    if (RequestedVersion < DXGKDDI_INTERFACE_VERSION_WDDM2_0)
+    if (RequestedVersion <= DXGKDDI_INTERFACE_VERSION_WIN7)
     {
-        *AdvertisedSize = 0;
-        *AdvertisedVersion = 0;
+        *AdvertisedSize = DXGKP_FIELD_END(DXGKRNL_INTERFACE, DxgkCbExcludeAdapterAccess);
+        *AdvertisedVersion = DXGKDDI_INTERFACE_VERSION_WIN7;
+    }
+    else if (RequestedVersion <= DXGKDDI_INTERFACE_VERSION_WIN8)
+    {
+        *AdvertisedSize = DXGKP_FIELD_END(DXGKRNL_INTERFACE, DxgkCbCompleteFStateTransition);
+        *AdvertisedVersion = DXGKDDI_INTERFACE_VERSION_WIN8;
+    }
+    else if (RequestedVersion <= DXGKDDI_INTERFACE_VERSION_WDDM1_3_PATH_INDEPENDENT_ROTATION)
+    {
+        *AdvertisedSize = DXGKP_FIELD_END(DXGKRNL_INTERFACE, DxgkCbCompletePStateTransition);
+        *AdvertisedVersion = DXGKDDI_INTERFACE_VERSION_WDDM1_3_PATH_INDEPENDENT_ROTATION;
     }
     else if (RequestedVersion <= DXGKDDI_INTERFACE_VERSION_WDDM2_0)
     {
@@ -7315,13 +7685,13 @@ DxgkpSelectInterfaceAdvertisement(
     {
         *AdvertisedSize =
             DXGKP_FIELD_END(DXGKRNL_INTERFACE, DxgkCbSaveMemoryForHotUpdate);
-        *AdvertisedVersion = RequestedVersion;
+        *AdvertisedVersion = DXGKDDI_INTERFACE_VERSION;
     }
     else
     {
         *AdvertisedSize =
             DXGKP_FIELD_END(DXGKRNL_INTERFACE, DxgkCbDisconnectDoorbell);
-        *AdvertisedVersion = RequestedVersion;
+        *AdvertisedVersion = DXGKDDI_INTERFACE_VERSION;
     }
 }
 
@@ -7381,7 +7751,7 @@ DxgkpFillInterface(
     Interface->DxgkCbGetCaptureAddress             = DxgkCbGetCaptureAddress; /* 0xa0 */
 
     Interface->DxgkCbLogEtwEvent = DxgkCbLogEtwEventDisabled; /* 0xa8 */
-    Interface->DxgkCbExcludeAdapterAccess = DxgkCbExcludeAdapterAccessNotSupported; /* 0xb0 */
+    Interface->DxgkCbExcludeAdapterAccess = DxgkCbExcludeAdapterAccess; /* 0xb0 */
     Interface->DxgkCbCreateContextAllocation = DxgkCbCreateContextAllocation; /* 0xb8 */
     Interface->DxgkCbDestroyContextAllocation = DxgkCbDestroyContextAllocation; /* 0xc0 */
     Interface->DxgkCbSetPowerComponentActive = DxgkCbSetPowerComponentActive; /* 0xc8 */
@@ -7450,13 +7820,13 @@ DxgkpFillInterface(
         Interface->DxgkCbFreePagesFromMdl =
             DxgkCbFreePagesFromMdl; /* 0x188 */
         Interface->DxgkCbPinFrameBufferForSave =
-            DxgkCbPinFrameBufferForSaveNotSupported; /* 0x190 */
+            DxgkCbPinFrameBufferForSave; /* 0x190 */
         Interface->DxgkCbUnpinFrameBufferForSave =
-            DxgkCbUnpinFrameBufferForSaveNotSupported; /* 0x198 */
+            DxgkCbUnpinFrameBufferForSave; /* 0x198 */
         Interface->DxgkCbMapFrameBufferPointer =
-            DxgkCbMapFrameBufferPointerNotSupported; /* 0x1a0 */
+            DxgkCbMapFrameBufferPointer; /* 0x1a0 */
         Interface->DxgkCbUnmapFrameBufferPointer =
-            DxgkCbUnmapFrameBufferPointerNotSupported; /* 0x1a8 */
+            DxgkCbUnmapFrameBufferPointer; /* 0x1a8 */
         Interface->DxgkCbMapMdlToIoMmu =
             DxgkCbMapMdlToIoMmuNotSupported; /* 0x1b0 */
         Interface->DxgkCbUnmapMdlFromIoMmu =
@@ -7492,7 +7862,7 @@ DxgkpFillInterface(
             Interface->Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_8))
     {
         Interface->DxgkCbNotifyCursorSupportChange =
-            DxgkCbNotifyCursorSupportChangeNotSupported;
+            DxgkCbNotifyCursorSupportChange;
     }
 #endif
 
@@ -7515,7 +7885,7 @@ DxgkpFillInterface(
         Interface->DxgkCbClosePhysicalMemoryObject =
             DxgkCbClosePhysicalMemoryObject;
         Interface->DxgkCbPinFrameBufferForSave2 =
-            DxgkCbPinFrameBufferForSave2NotSupported;
+            DxgkCbPinFrameBufferForSave2;
     }
 #endif
 
@@ -7529,6 +7899,19 @@ DxgkpFillInterface(
     }
 #endif
 
+#if DXGKRNL_DEBUG_TRACE
+    {
+        ULONG Offset;
+
+        for (Offset = FIELD_OFFSET(DXGKRNL_INTERFACE, DxgkCbEvalAcpiMethod);
+             Offset + sizeof(PVOID) <= Interface->Size;
+             Offset += sizeof(PVOID))
+        {
+            if (*(PVOID *)((PUCHAR)Interface + Offset) == NULL)
+                DXGKRNL_TRACE("DxgkpFillInterface: NULL callback at offset 0x%lX of 0x%lX\n", Offset, Interface->Size);
+        }
+    }
+#endif
 }
 
 /*
@@ -8209,29 +8592,6 @@ DxgkpFreeCallbackMemoryEntry(
             MmFreePagesFromMdl(Mdl);
             break;
 
-        case DxgkpCallbackMemoryContiguousMdl:
-        {
-            PPFN_NUMBER Pages;
-            ULONG PageCount;
-
-            Mdl = Entry->Memory.ContiguousMdl.Mdl;
-            if (Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA)
-                MmUnmapLockedPages(Mdl->MappedSystemVa, Mdl);
-
-            PageCount = ADDRESS_AND_SIZE_TO_SPAN_PAGES(
-                            (PVOID)((ULONG_PTR)Mdl->StartVa +
-                                    Mdl->ByteOffset),
-                            Mdl->ByteCount);
-            Pages = MmGetMdlPfnArray(Mdl);
-            while (PageCount-- != 0)
-                *Pages++ = (PFN_NUMBER)-1;
-            Mdl->MdlFlags &= ~MDL_PAGES_LOCKED;
-
-            MmFreeContiguousMemory(
-                Entry->Memory.ContiguousMdl.BaseAddress);
-            break;
-        }
-
         default:
             ASSERT(FALSE);
             break;
@@ -8349,31 +8709,6 @@ DxgkCbAllocateContiguousMemory(
     pAllocateContiguousMemory->hMemoryHandle = NULL;
     pAllocateContiguousMemory->pMemory = NULL;
 
-    if (pAllocateContiguousMemory->NumberOfBytes == 0 ||
-        pAllocateContiguousMemory->LowestAcceptableAddress.QuadPart < 0 ||
-        pAllocateContiguousMemory->HighestAcceptableAddress.QuadPart < 0 ||
-        pAllocateContiguousMemory->BoundaryAddressMultiple.QuadPart < 0 ||
-        (ULONGLONG)
-            pAllocateContiguousMemory->LowestAcceptableAddress.QuadPart >
-        (ULONGLONG)
-            pAllocateContiguousMemory->HighestAcceptableAddress.QuadPart)
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    if (pAllocateContiguousMemory->BoundaryAddressMultiple.QuadPart != 0)
-    {
-        ULONGLONG Boundary =
-            (ULONGLONG)
-                pAllocateContiguousMemory->BoundaryAddressMultiple.QuadPart;
-
-        if (Boundary < PAGE_SIZE ||
-            (Boundary & (Boundary - 1)) != 0)
-        {
-            return STATUS_INVALID_PARAMETER;
-        }
-    }
-
     switch (pAllocateContiguousMemory->CacheType)
     {
         case DXGK_MEMORY_CACHING_TYPE_NON_CACHED:
@@ -8403,7 +8738,7 @@ DxgkCbAllocateContiguousMemory(
     }
 
     Va = MmAllocateContiguousMemorySpecifyCache(
-             pAllocateContiguousMemory->NumberOfBytes,
+             ROUND_TO_PAGES(pAllocateContiguousMemory->NumberOfBytes),
              pAllocateContiguousMemory->LowestAcceptableAddress,
              pAllocateContiguousMemory->HighestAcceptableAddress,
              pAllocateContiguousMemory->BoundaryAddressMultiple,
@@ -8416,7 +8751,7 @@ DxgkCbAllocateContiguousMemory(
                     pAllocateContiguousMemory->NumberOfBytes);
         ExFreePoolWithTag(Entry, TAG_DXGK_RESOURCES);
         ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-        return STATUS_INSUFFICIENT_RESOURCES;
+        return STATUS_NO_MEMORY;
     }
 
     Entry->Adapter = Adapter;
@@ -8507,15 +8842,7 @@ DxgkCbAllocatePagesForMdl(
 {
     PDXGKRNL_ADAPTER Adapter;
     PDXGKP_CALLBACK_MEMORY_ENTRY Entry;
-    PHYSICAL_ADDRESS HighAddress;
-    MEMORY_CACHING_TYPE CacheType;
-    PHYSICAL_ADDRESS BoundaryAddress;
-    SIZE_T RequiredBytes;
-    ULONG MmFlags;
-    BOOLEAN UseContiguousMdl;
-    PVOID ContiguousVa;
-    PVOID ZeroVa;
-    BOOLEAN UnmapZeroVa;
+    SIZE_T TotalBytes;
     PMDL Mdl;
 
     PAGED_CODE();
@@ -8526,90 +8853,8 @@ DxgkCbAllocatePagesForMdl(
     pAllocatePagesForMdl->hMemoryHandle = NULL;
     pAllocatePagesForMdl->pMdl = NULL;
 
-    if (pAllocatePagesForMdl->TotalBytes == 0 ||
-        pAllocatePagesForMdl->TotalBytes >
-            ((SIZE_T)MAXULONG - (PAGE_SIZE - 1)) ||
-        pAllocatePagesForMdl->LowAddress.QuadPart < 0 ||
-        pAllocatePagesForMdl->HighAddress.QuadPart < 0 ||
-        pAllocatePagesForMdl->SkipBytes.QuadPart < 0)
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    if (pAllocatePagesForMdl->Flags &
-        ~(MM_DONT_ZERO_ALLOCATION |
-          MM_ALLOCATE_FROM_LOCAL_NODE_ONLY |
-          MM_ALLOCATE_FULLY_REQUIRED |
-          MM_ALLOCATE_NO_WAIT |
-          MM_ALLOCATE_PREFER_CONTIGUOUS |
-          MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS |
-          MM_ALLOCATE_FAST_LARGE_PAGES |
-          MM_ALLOCATE_TRIM_IF_NECESSARY |
-          MM_ALLOCATE_AND_HOT_REMOVE))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    UseContiguousMdl =
-        (pAllocatePagesForMdl->Flags &
-         MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS) != 0;
-
-    if (pAllocatePagesForMdl->SkipBytes.QuadPart != 0)
-    {
-        ULONGLONG SkipBytes =
-            (ULONGLONG)pAllocatePagesForMdl->SkipBytes.QuadPart;
-
-        if (SkipBytes < PAGE_SIZE ||
-            (SkipBytes & (PAGE_SIZE - 1)) != 0 ||
-            (UseContiguousMdl && (SkipBytes & (SkipBytes - 1)) != 0))
-        {
-            return STATUS_INVALID_PARAMETER;
-        }
-
-        /*
-         * The current contiguous allocator can provide one aligned chunk.
-         * A multi-chunk MDL needs separate backing-allocation tracking and is
-         * not advertised until that ownership model exists.
-         */
-        if (!UseContiguousMdl)
-            return STATUS_NOT_SUPPORTED;
-        if ((pAllocatePagesForMdl->TotalBytes % SkipBytes) != 0)
-            return STATUS_INVALID_PARAMETER;
-        if (pAllocatePagesForMdl->TotalBytes != SkipBytes)
-            return STATUS_NOT_SUPPORTED;
-    }
-
-    /*
-     * Large-page-cache and hot-remove allocations are hard requirements that
-     * ReactOS Mm cannot yet honor.  PREFER_CONTIGUOUS and TRIM_IF_NECESSARY
-     * remain best-effort preferences, while NO_WAIT is already satisfied by
-     * the nonblocking allocator.
-     */
-    if (pAllocatePagesForMdl->Flags &
-        (MM_ALLOCATE_FAST_LARGE_PAGES |
-         MM_ALLOCATE_AND_HOT_REMOVE))
-    {
-        return STATUS_NOT_SUPPORTED;
-    }
-
-    switch (pAllocatePagesForMdl->CacheType)
-    {
-        case DXGK_MEMORY_CACHING_TYPE_NON_CACHED:
-            CacheType = MmNonCached;
-            break;
-        case DXGK_MEMORY_CACHING_TYPE_CACHED:
-            CacheType = MmCached;
-            break;
-        case DXGK_MEMORY_CACHING_TYPE_WRITE_COMBINED:
-            CacheType = MmWriteCombined;
-            break;
-        default:
-            return STATUS_INVALID_PARAMETER;
-    }
-
-    HighAddress = pAllocatePagesForMdl->HighAddress;
-    if ((ULONGLONG)pAllocatePagesForMdl->LowAddress.QuadPart >
-        (ULONGLONG)HighAddress.QuadPart)
+    if ((ULONG)pAllocatePagesForMdl->CacheType > DXGK_MEMORY_CACHING_TYPE_WRITE_COMBINED ||
+        pAllocatePagesForMdl->TotalBytes > 0xFFFFF000)
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -8627,138 +8872,29 @@ DxgkCbAllocatePagesForMdl(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    /*
-     * ReactOS Mm accepts only the two material flags below.  Enforce the
-     * WDDM callback's always-fully-required rule explicitly after allocation.
-     */
-    ContiguousVa = NULL;
-    if (UseContiguousMdl)
-    {
-        BoundaryAddress = pAllocatePagesForMdl->SkipBytes;
-        ContiguousVa = MmAllocateContiguousMemorySpecifyCache(
-                           pAllocatePagesForMdl->TotalBytes,
-                           pAllocatePagesForMdl->LowAddress,
-                           HighAddress,
-                           BoundaryAddress,
-                           CacheType);
-        if (ContiguousVa != NULL)
-        {
-            if (!NT_SUCCESS(DxgkpBuildMdlForContiguousAllocation(
-                                ContiguousVa,
-                                pAllocatePagesForMdl->TotalBytes,
-                                &Mdl)))
-            {
-                MmFreeContiguousMemory(ContiguousVa);
-                ContiguousVa = NULL;
-                Mdl = NULL;
-            }
-        }
-        else
-        {
-            Mdl = NULL;
-        }
-    }
-    else
-    {
-        MmFlags = pAllocatePagesForMdl->Flags &
-                  (MM_DONT_ZERO_ALLOCATION |
-                   MM_ALLOCATE_FROM_LOCAL_NODE_ONLY);
-        Mdl = MmAllocatePagesForMdlEx(
-                  pAllocatePagesForMdl->LowAddress,
-                  HighAddress,
-                  pAllocatePagesForMdl->SkipBytes,
-                  pAllocatePagesForMdl->TotalBytes,
-                  CacheType,
-                  MmFlags);
-    }
+    TotalBytes = ROUND_TO_PAGES(pAllocatePagesForMdl->TotalBytes);
+    Mdl = MmAllocatePagesForMdlEx(pAllocatePagesForMdl->LowAddress,
+                                  pAllocatePagesForMdl->HighAddress,
+                                  pAllocatePagesForMdl->SkipBytes,
+                                  TotalBytes,
+                                  (MEMORY_CACHING_TYPE)pAllocatePagesForMdl->CacheType,
+                                  pAllocatePagesForMdl->Flags | MM_ALLOCATE_FULLY_REQUIRED);
     if (Mdl == NULL)
     {
+        DXGKRNL_ERR("DxgkCbAllocatePagesForMdl: MmAllocatePagesForMdlEx failed Size=%Iu CacheType=%u "
+                    "Flags=0x%lx Skip=0x%I64x\n",
+                    TotalBytes,
+                    pAllocatePagesForMdl->CacheType,
+                    pAllocatePagesForMdl->Flags,
+                    pAllocatePagesForMdl->SkipBytes.QuadPart);
         ExFreePoolWithTag(Entry, TAG_DXGK_RESOURCES);
         ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-
-    RequiredBytes =
-        (pAllocatePagesForMdl->TotalBytes + PAGE_SIZE - 1) &
-        ~((SIZE_T)PAGE_SIZE - 1);
-    if ((SIZE_T)Mdl->ByteCount < RequiredBytes)
-    {
-        if (UseContiguousMdl)
-        {
-            IoFreeMdl(Mdl);
-            MmFreeContiguousMemory(ContiguousVa);
-        }
-        else
-        {
-            MmFreePagesFromMdl(Mdl);
-            ExFreePool(Mdl);
-        }
-        ExFreePoolWithTag(Entry, TAG_DXGK_RESOURCES);
-        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-
-    /*
-     * MmAllocatePagesForMdlEx guarantees zero-filled pages unless the caller
-     * explicitly supplies MM_DONT_ZERO_ALLOCATION.  Enforce that public
-     * contract at the Dxgkrnl boundary as well: display miniports commonly
-     * build firmware descriptors in place and may only OR flag fields into
-     * the fresh allocation.  Returning stale contents therefore changes the
-     * GPU ABI, in addition to leaking data across allocations.
-     */
-    if (!(pAllocatePagesForMdl->Flags & MM_DONT_ZERO_ALLOCATION))
-    {
-        UnmapZeroVa = FALSE;
-        if (UseContiguousMdl)
-        {
-            ZeroVa = ContiguousVa;
-        }
-        else
-        {
-            ZeroVa = MmMapLockedPagesSpecifyCache(
-                         Mdl,
-                         KernelMode,
-                         CacheType,
-                         NULL,
-                         FALSE,
-                         NormalPagePriority | MdlMappingNoExecute);
-            UnmapZeroVa = (ZeroVa != NULL);
-        }
-
-        if (ZeroVa == NULL)
-        {
-            if (UseContiguousMdl)
-            {
-                IoFreeMdl(Mdl);
-                MmFreeContiguousMemory(ContiguousVa);
-            }
-            else
-            {
-                MmFreePagesFromMdl(Mdl);
-                ExFreePool(Mdl);
-            }
-            ExFreePoolWithTag(Entry, TAG_DXGK_RESOURCES);
-            ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-            return STATUS_INSUFFICIENT_RESOURCES;
-        }
-
-        RtlZeroMemory(ZeroVa, RequiredBytes);
-        if (UnmapZeroVa)
-            MmUnmapLockedPages(ZeroVa, Mdl);
+        return STATUS_NO_MEMORY;
     }
 
     Entry->Adapter = Adapter;
-    if (UseContiguousMdl)
-    {
-        Entry->Kind = DxgkpCallbackMemoryContiguousMdl;
-        Entry->Memory.ContiguousMdl.BaseAddress = ContiguousVa;
-        Entry->Memory.ContiguousMdl.Mdl = Mdl;
-    }
-    else
-    {
-        Entry->Kind = DxgkpCallbackMemoryMdl;
-        Entry->Memory.Mdl = Mdl;
-    }
+    Entry->Kind = DxgkpCallbackMemoryMdl;
+    Entry->Memory.Mdl = Mdl;
 
     ExAcquireFastMutex(&DxgkpCallbackMemoryMutex);
     InsertTailList(&DxgkpCallbackMemoryList, &Entry->ListEntry);
@@ -8805,13 +8941,6 @@ DxgkCbFreePagesFromMdl(
                 Adapter,
                 pFreePagesFromMdl->hMemoryHandle,
                 DxgkpCallbackMemoryMdl);
-    if (Entry == NULL)
-    {
-        Entry = DxgkpDetachCallbackMemoryEntry(
-                    Adapter,
-                    pFreePagesFromMdl->hMemoryHandle,
-                    DxgkpCallbackMemoryContiguousMdl);
-    }
     if (Entry == NULL)
     {
         ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
@@ -8957,6 +9086,69 @@ DxgkpFreeDetachedAdls(
     }
 }
 
+#define DXGKP_SEC_NOCACHE 0x10000000
+#define DXGKP_SEC_WRITECOMBINE 0x40000000
+
+static NTSTATUS
+DxgkpLockSectionPages(
+    _Inout_ PDXGKP_PHYSICAL_MEMORY_OBJECT Object)
+{
+    SIZE_T ViewSize = 0;
+    PVOID View = NULL;
+    NTSTATUS Status;
+    PMDL Mdl;
+
+    if (Object->LockCount != 0)
+    {
+        Object->LockCount++;
+        return STATUS_SUCCESS;
+    }
+
+    Status = MmMapViewInSystemSpace(Object->Section, &View, &ViewSize);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Mdl = IoAllocateMdl(View, (ULONG)ViewSize, FALSE, FALSE, NULL);
+    if (Mdl == NULL)
+    {
+        MmUnmapViewInSystemSpace(View);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    _SEH2_TRY
+    {
+        MmProbeAndLockPages(Mdl, KernelMode, IoModifyAccess);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    MmUnmapViewInSystemSpace(View);
+    if (!NT_SUCCESS(Status))
+    {
+        IoFreeMdl(Mdl);
+        return Status;
+    }
+
+    Object->LockedMdl = Mdl;
+    Object->LockCount = 1;
+    return STATUS_SUCCESS;
+}
+
+static VOID
+DxgkpUnlockSectionPages(
+    _Inout_ PDXGKP_PHYSICAL_MEMORY_OBJECT Object)
+{
+    if (Object->LockCount == 0 || --Object->LockCount != 0)
+        return;
+
+    MmUnlockPages(Object->LockedMdl);
+    IoFreeMdl(Object->LockedMdl);
+    Object->LockedMdl = NULL;
+}
+
 static VOID
 DxgkpFreePhysicalMapping(
     _In_ PDXGKP_PHYSICAL_MAPPING Mapping)
@@ -8980,6 +9172,13 @@ DxgkpFreePhysicalMapping(
     else if (Mapping->Kind == DxgkpPhysicalMappingIoSpace)
     {
         MmUnmapIoSpace(Mapping->BaseAddress, Mapping->Size);
+    }
+    else if (Mapping->Kind == DxgkpPhysicalMappingSection)
+    {
+        if (Mapping->Process != NULL)
+            MmUnmapViewOfSection(Mapping->Process, Mapping->BaseAddress);
+        else
+            MmUnmapViewInSystemSpace(Mapping->BaseAddress);
     }
 
     if (Mapping->Process != NULL)
@@ -9032,12 +9231,20 @@ DxgkpFreePhysicalMemoryObject(
         MmFreePagesFromMdl(Object->Mdl);
         ExFreePool(Object->Mdl);
     }
-    else if (Object->Backing == DxgkpPhysicalBackingContiguousMdl ||
-             Object->Backing == DxgkpPhysicalBackingContiguous)
+    else if (Object->Backing == DxgkpPhysicalBackingContiguous)
     {
         if (Object->Mdl != NULL)
             IoFreeMdl(Object->Mdl);
         MmFreeContiguousMemory(Object->VirtualAddress);
+    }
+    else if (Object->Backing == DxgkpPhysicalBackingSection)
+    {
+        if (Object->LockedMdl != NULL)
+        {
+            MmUnlockPages(Object->LockedMdl);
+            IoFreeMdl(Object->LockedMdl);
+        }
+        ObDereferenceObject(Object->Section);
     }
 
     ExFreePoolWithTag(Object, TAG_DXGK_RESOURCES);
@@ -9187,140 +9394,38 @@ DxgkCbCreatePhysicalMemoryObject(
     switch (pArgs->Type)
     {
         case DXGK_PHYSICAL_MEMORY_TYPE_MDL:
-        {
-            ULONG AllowedFlags =
-                MM_DONT_ZERO_ALLOCATION |
-                MM_ALLOCATE_FROM_LOCAL_NODE_ONLY |
-                MM_ALLOCATE_FULLY_REQUIRED |
-                MM_ALLOCATE_NO_WAIT |
-                MM_ALLOCATE_PREFER_CONTIGUOUS |
-                MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS |
-                MM_ALLOCATE_FAST_LARGE_PAGES |
-                MM_ALLOCATE_TRIM_IF_NECESSARY |
-                MM_ALLOCATE_AND_HOT_REMOVE;
-
-            if (pArgs->Mdl.LowAddress.QuadPart < 0 ||
-                pArgs->Mdl.HighAddress.QuadPart < 0 ||
-                pArgs->Mdl.SkipBytes.QuadPart < 0 ||
-                (ULONGLONG)pArgs->Mdl.LowAddress.QuadPart >
-                    (ULONGLONG)pArgs->Mdl.HighAddress.QuadPart ||
-                (pArgs->Mdl.Flags & ~AllowedFlags) != 0)
+            if ((pArgs->Size & (PAGE_SIZE - 1)) != 0)
             {
                 Status = STATUS_INVALID_PARAMETER;
                 goto Failure;
             }
 
-            if (pArgs->Mdl.Flags &
-                (MM_ALLOCATE_FAST_LARGE_PAGES |
-                 MM_ALLOCATE_AND_HOT_REMOVE))
+            Object->Mdl = MmAllocatePagesForMdlEx(pArgs->Mdl.LowAddress,
+                                                  pArgs->Mdl.HighAddress,
+                                                  pArgs->Mdl.SkipBytes,
+                                                  pArgs->Size,
+                                                  CacheType,
+                                                  pArgs->Mdl.Flags | MM_ALLOCATE_FULLY_REQUIRED);
+            if (Object->Mdl == NULL)
             {
-                Status = STATUS_NOT_SUPPORTED;
+                DXGKRNL_ERR("DxgkCbCreatePhysicalMemoryObject: MmAllocatePagesForMdlEx failed Size=%Iu "
+                            "CacheType=%u Flags=0x%lx Skip=0x%I64x\n",
+                            pArgs->Size,
+                            pArgs->CacheType,
+                            pArgs->Mdl.Flags,
+                            pArgs->Mdl.SkipBytes.QuadPart);
+                Status = STATUS_NO_MEMORY;
                 goto Failure;
             }
-
-            if (pArgs->Mdl.Flags & MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS)
-            {
-                ULONGLONG ChunkSize =
-                    (ULONGLONG)pArgs->Mdl.SkipBytes.QuadPart;
-                PHYSICAL_ADDRESS Boundary;
-
-                if (ChunkSize != 0 &&
-                    (ChunkSize < PAGE_SIZE ||
-                     (ChunkSize & (ChunkSize - 1)) != 0 ||
-                     (pArgs->Size % (SIZE_T)ChunkSize) != 0))
-                {
-                    Status = STATUS_INVALID_PARAMETER;
-                    goto Failure;
-                }
-
-                /*
-                 * Mm currently has no scatter/gather chunk allocator.  A
-                 * single requested chunk has exact equivalent semantics when
-                 * backed by its contiguous allocator.  Multi-chunk requests
-                 * remain unsupported rather than returning a false contract.
-                 */
-                if (ChunkSize != 0 && pArgs->Size != (SIZE_T)ChunkSize)
-                {
-                    Status = STATUS_NOT_SUPPORTED;
-                    goto Failure;
-                }
-
-                Boundary.QuadPart = (LONGLONG)ChunkSize;
-                Object->VirtualAddress =
-                    MmAllocateContiguousMemorySpecifyCache(
-                        pArgs->Size,
-                        pArgs->Mdl.LowAddress,
-                        pArgs->Mdl.HighAddress,
-                        Boundary,
-                        CacheType);
-                if (Object->VirtualAddress == NULL)
-                {
-                    Status = STATUS_INSUFFICIENT_RESOURCES;
-                    goto Failure;
-                }
-
-                Status = DxgkpBuildMdlForContiguousAllocation(
-                             Object->VirtualAddress,
-                             Object->Size,
-                             &Object->Mdl);
-                if (!NT_SUCCESS(Status))
-                    goto Failure;
-
-                Object->Backing = DxgkpPhysicalBackingContiguousMdl;
-            }
-            else
-            {
-                ULONG MmFlags = pArgs->Mdl.Flags &
-                    (MM_DONT_ZERO_ALLOCATION |
-                     MM_ALLOCATE_FROM_LOCAL_NODE_ONLY);
-                SIZE_T RequiredBytes =
-                    (pArgs->Size + PAGE_SIZE - 1) &
-                    ~((SIZE_T)PAGE_SIZE - 1);
-
-                Object->Mdl = MmAllocatePagesForMdlEx(
-                                  pArgs->Mdl.LowAddress,
-                                  pArgs->Mdl.HighAddress,
-                                  pArgs->Mdl.SkipBytes,
-                                  pArgs->Size,
-                                  CacheType,
-                                  MmFlags);
-                if (Object->Mdl == NULL ||
-                    (SIZE_T)Object->Mdl->ByteCount < RequiredBytes)
-                {
-                    Status = STATUS_INSUFFICIENT_RESOURCES;
-                    goto Failure;
-                }
-
-                Object->Backing = DxgkpPhysicalBackingMdl;
-            }
+            Object->Backing = DxgkpPhysicalBackingMdl;
             break;
-        }
 
         case DXGK_PHYSICAL_MEMORY_TYPE_CONTIGUOUS_MEMORY:
-            if (pArgs->ContiguousMemory.LowestAcceptableAddress.QuadPart < 0 ||
-                pArgs->ContiguousMemory.HighestAcceptableAddress.QuadPart < 0 ||
-                pArgs->ContiguousMemory.BoundaryAddressMultiple.QuadPart < 0 ||
-                (ULONGLONG)pArgs->ContiguousMemory.LowestAcceptableAddress.QuadPart >
-                    (ULONGLONG)pArgs->ContiguousMemory.HighestAcceptableAddress.QuadPart)
+            if ((pArgs->Size & (PAGE_SIZE - 1)) != 0)
             {
                 Status = STATUS_INVALID_PARAMETER;
                 goto Failure;
             }
-
-            if (pArgs->ContiguousMemory.BoundaryAddressMultiple.QuadPart != 0)
-            {
-                ULONGLONG Boundary =
-                    (ULONGLONG)pArgs->ContiguousMemory.
-                        BoundaryAddressMultiple.QuadPart;
-
-                if (Boundary < PAGE_SIZE ||
-                    (Boundary & (Boundary - 1)) != 0)
-                {
-                    Status = STATUS_INVALID_PARAMETER;
-                    goto Failure;
-                }
-            }
-
             Object->VirtualAddress =
                 MmAllocateContiguousMemorySpecifyCache(
                     pArgs->Size,
@@ -9330,7 +9435,11 @@ DxgkCbCreatePhysicalMemoryObject(
                     CacheType);
             if (Object->VirtualAddress == NULL)
             {
-                Status = STATUS_INSUFFICIENT_RESOURCES;
+                DXGKRNL_ERR("DxgkCbCreatePhysicalMemoryObject: contiguous allocation failed Size=%Iu "
+                            "CacheType=%u\n",
+                            pArgs->Size,
+                            pArgs->CacheType);
+                Status = STATUS_NO_MEMORY;
                 goto Failure;
             }
 
@@ -9359,8 +9468,43 @@ DxgkCbCreatePhysicalMemoryObject(
             break;
 
         case DXGK_PHYSICAL_MEMORY_TYPE_SECTION:
-            Status = STATUS_NOT_SUPPORTED;
-            goto Failure;
+        {
+            ULONG PageProtection = pArgs->Section.PageProtection;
+            ULONG AllocationAttributes = SEC_COMMIT;
+            LARGE_INTEGER MaximumSize;
+
+            if (pArgs->Size >= 0xFFFFF001 || (pArgs->Size & (PAGE_SIZE - 1)) != 0 ||
+                (PageProtection & ~0x1EUL) != 0)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                goto Failure;
+            }
+
+            if (pArgs->CacheType == DXGK_MEMORY_CACHING_TYPE_NON_CACHED)
+            {
+                AllocationAttributes |= DXGKP_SEC_NOCACHE;
+                PageProtection |= PAGE_NOCACHE;
+            }
+            else if (pArgs->CacheType == DXGK_MEMORY_CACHING_TYPE_WRITE_COMBINED)
+            {
+                AllocationAttributes |= DXGKP_SEC_WRITECOMBINE;
+                PageProtection |= PAGE_WRITECOMBINE;
+            }
+
+            MaximumSize.QuadPart = (LONGLONG)pArgs->Size;
+            Status = MmCreateSection(&Object->Section, pArgs->Section.DesiredAccess, pArgs->Section.ObjectAttributes,
+                                     &MaximumSize, PageProtection, AllocationAttributes, NULL, NULL);
+            if (!NT_SUCCESS(Status))
+            {
+                DXGKRNL_ERR("DxgkCbCreatePhysicalMemoryObject: MmCreateSection failed 0x%08lx Size=%Iu "
+                            "Attributes=0x%lx PageProtection=0x%lx\n",
+                            Status, pArgs->Size, AllocationAttributes, PageProtection);
+                Object->Section = NULL;
+                goto Failure;
+            }
+            Object->Backing = DxgkpPhysicalBackingSection;
+            break;
+        }
 
         default:
             Status = STATUS_INVALID_PARAMETER;
@@ -9397,6 +9541,10 @@ Failure:
             if (Object->Mdl != NULL)
                 IoFreeMdl(Object->Mdl);
             MmFreeContiguousMemory(Object->VirtualAddress);
+        }
+        else if (Object->Section != NULL)
+        {
+            ObDereferenceObject(Object->Section);
         }
         ExFreePoolWithTag(Object, TAG_DXGK_RESOURCES);
     }
@@ -9551,8 +9699,7 @@ DxgkCbMapPhysicalMemory(
         goto Failure;
 
     Mapping->Size = ViewSize;
-    if ((Object->Backing == DxgkpPhysicalBackingContiguousMdl ||
-         Object->Backing == DxgkpPhysicalBackingContiguous) &&
+    if (Object->Backing == DxgkpPhysicalBackingContiguous &&
         pArgs->AccessMode == DXGK_ACCESS_MODE_KERNEL_MODE)
     {
         Mapping->Kind = DxgkpPhysicalMappingDirect;
@@ -9573,6 +9720,43 @@ DxgkCbMapPhysicalMemory(
             Status = STATUS_INSUFFICIENT_RESOURCES;
             goto Failure;
         }
+    }
+    else if (Object->Backing == DxgkpPhysicalBackingSection)
+    {
+        SIZE_T SectionViewSize = 0;
+
+        Mapping->Kind = DxgkpPhysicalMappingSection;
+        if (pArgs->AccessMode == DXGK_ACCESS_MODE_USER_MODE)
+        {
+            LARGE_INTEGER SectionOffset;
+            ULONG Protect = PAGE_READWRITE;
+
+            if (Object->CacheType == DXGK_MEMORY_CACHING_TYPE_NON_CACHED)
+                Protect |= PAGE_NOCACHE;
+            else if (Object->CacheType == DXGK_MEMORY_CACHING_TYPE_WRITE_COMBINED)
+                Protect |= PAGE_WRITECOMBINE;
+
+            SectionOffset.QuadPart = (LONGLONG)RequestedOffset;
+            Mapping->Process = PsGetCurrentProcess();
+            ObReferenceObject(Mapping->Process);
+            Status = MmMapViewOfSection(Object->Section, Mapping->Process, &Mapping->BaseAddress, 0, RequestedSize,
+                                        &SectionOffset, &SectionViewSize, ViewUnmap, 0, Protect);
+            OffsetInView = RequestedOffset - (SIZE_T)SectionOffset.QuadPart;
+        }
+        else
+        {
+            Status = MmMapViewInSystemSpace(Object->Section, &Mapping->BaseAddress, &SectionViewSize);
+            OffsetInView = RequestedOffset;
+        }
+
+        if (!NT_SUCCESS(Status))
+        {
+            if (Mapping->Process != NULL)
+                ObDereferenceObject(Mapping->Process);
+            goto Failure;
+        }
+        Mapping->Size = SectionViewSize;
+        ViewSize = SectionViewSize;
     }
     else
     {
@@ -9758,6 +9942,17 @@ DxgkCbAllocateAdl(
     }
 
     PageCount = (ULONG)(pArgs->Size >> PAGE_SHIFT);
+    if (Object->Backing == DxgkpPhysicalBackingSection)
+    {
+        NTSTATUS Status = DxgkpLockSectionPages(Object);
+
+        if (!NT_SUCCESS(Status))
+        {
+            ExReleaseFastMutex(&DxgkpPhysicalMemoryMutex);
+            return Status;
+        }
+    }
+
     if (Object->Backing == DxgkpPhysicalBackingIoSpace)
     {
         BasePage = (DXGK_PAGE_NUMBER)
@@ -9765,7 +9960,7 @@ DxgkCbAllocateAdl(
     }
     else
     {
-        MdlPages = MmGetMdlPfnArray(Object->Mdl) +
+        MdlPages = MmGetMdlPfnArray(Object->Backing == DxgkpPhysicalBackingSection ? Object->LockedMdl : Object->Mdl) +
                    (pArgs->Offset >> PAGE_SHIFT);
         BasePage = (DXGK_PAGE_NUMBER)MdlPages[0];
         for (Index = 1; Index < PageCount; Index++)
@@ -9798,12 +9993,15 @@ DxgkCbAllocateAdl(
                                   TAG_DXGK_RESOURCES);
     if (Entry == NULL)
     {
+        if (Object->Backing == DxgkpPhysicalBackingSection)
+            DxgkpUnlockSectionPages(Object);
         ExReleaseFastMutex(&DxgkpPhysicalMemoryMutex);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     RtlZeroMemory(Entry, sizeof(*Entry));
     Entry->AdapterMemoryObject = AdapterObject;
+    Entry->SectionLocked = (Object->Backing == DxgkpPhysicalBackingSection);
     Entry->Adl.PageCount = PageCount;
     if (IsContiguous &&
         (pArgs->Flags.RequireContiguous || pArgs->Flags.PreferContiguous))
@@ -9865,6 +10063,8 @@ DxgkCbFreeAdl(
                 &Entry->Adl == pArgs->pAdl)
             {
                 RemoveEntryList(Link);
+                if (Entry->SectionLocked)
+                    DxgkpUnlockSectionPages(AdapterObject->PhysicalObject);
                 ExFreePoolWithTag(Entry, TAG_DXGK_RESOURCES);
                 break;
             }
@@ -10449,6 +10649,53 @@ C_ASSERT(DXGK_WHICHSPACE_ROM == PCI_WHICHSPACE_ROM);
 C_ASSERT(DXGK_WHICHSPACE_MCH == 0x80000000);
 C_ASSERT(DXGK_WHICHSPACE_BRIDGE == 0x80000001);
 
+static NTSTATUS
+DxgkpAccessDeviceSpace(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG DataType,
+    _In_ PVOID Buffer,
+    _In_ ULONG Offset,
+    _In_ ULONG Length,
+    _In_ BOOLEAN Write,
+    _Out_ PULONG Bytes)
+{
+    switch (DataType)
+    {
+        case DXGK_WHICHSPACE_CONFIG:
+        case DXGK_WHICHSPACE_ROM:
+            if (!Adapter->PciBusInterfaceValid ||
+                (Write ? Adapter->PciBusInterface.SetBusData == NULL : Adapter->PciBusInterface.GetBusData == NULL))
+            {
+                return STATUS_UNSUCCESSFUL;
+            }
+            *Bytes = Write ? Adapter->PciBusInterface.SetBusData(Adapter->PciBusInterface.Context, DataType,
+                                                                  Buffer, Offset, Length)
+                           : Adapter->PciBusInterface.GetBusData(Adapter->PciBusInterface.Context, DataType,
+                                                                  Buffer, Offset, Length);
+            return STATUS_SUCCESS;
+
+        case DXGK_WHICHSPACE_MCH:
+            *Bytes = Write ? HalSetBusDataByOffset(PCIConfiguration, 0, 0, Buffer, Offset, Length)
+                           : HalGetBusDataByOffset(PCIConfiguration, 0, 0, Buffer, Offset, Length);
+            return STATUS_SUCCESS;
+
+        case DXGK_WHICHSPACE_BRIDGE:
+            if (InterlockedCompareExchange(&Adapter->BridgeAccessExcluded, 0, 0) == 0)
+                return STATUS_GRAPHICS_ADAPTER_ACCESS_NOT_EXCLUDED;
+            if (!Adapter->RootPortInterfaceValid)
+                return STATUS_UNSUCCESSFUL;
+            *Bytes = Write ? Adapter->RootPortInterface.WriteConfigSpace(Adapter->RootPortInterface.Context,
+                                                                          Buffer, Offset, Length)
+                           : Adapter->RootPortInterface.ReadConfigSpace(Adapter->RootPortInterface.Context,
+                                                                         Buffer, Offset, Length);
+            return STATUS_SUCCESS;
+
+        default:
+            DXGKRNL_WARN("DxgkCb%sDeviceSpace: unsupported DataType 0x%08lX\n", Write ? "Write" : "Read", DataType);
+            return STATUS_INVALID_PARAMETER;
+    }
+}
+
 NTSTATUS
 APIENTRY
 DxgkCbReadDeviceSpace(
@@ -10460,82 +10707,43 @@ DxgkCbReadDeviceSpace(
     _Out_ PULONG  BytesRead)
 {
     PDXGKRNL_ADAPTER Adapter;
-    ULONG            BytesTransferred;
     ULONGLONG        TotalStart100ns;
     ULONGLONG        ElapsedUs;
+    NTSTATUS         Status;
 
     PAGED_CODE();
 
     TotalStart100ns = DxgkpTraceNow100ns();
 
-    if (BytesRead == NULL)
+    if (BytesRead == NULL || Buffer == NULL)
         return STATUS_INVALID_PARAMETER;
 
     *BytesRead = 0;
-
-    if (Buffer == NULL || Length == 0)
-        return STATUS_INVALID_PARAMETER;
 
     /* Resolve and pin the adapter while it remains on the global list. */
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter == NULL)
     {
         DXGKRNL_ERR("DxgkCbReadDeviceSpace: invalid handle %p\n", DeviceHandle);
-        return STATUS_INVALID_HANDLE;
+        return STATUS_INVALID_PARAMETER;
     }
 
-    if (DataType == DXGK_WHICHSPACE_CONFIG)
+    Status = DxgkpAccessDeviceSpace(Adapter, DataType, Buffer, Offset, Length, FALSE, BytesRead);
+    ElapsedUs = DxgkpTraceElapsedUs(TotalStart100ns);
+    if (NT_SUCCESS(Status) && ElapsedUs >= DXGK_TRACE_SLOW_CONFIG_ACCESS_US)
     {
-        if (!Adapter->PciBusInterfaceValid ||
-            Adapter->PciBusInterface.GetBusData == NULL)
-        {
-            ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-            return STATUS_UNSUCCESSFUL;
-        }
-
-        BytesTransferred = Adapter->PciBusInterface.GetBusData(
-            Adapter->PciBusInterface.Context,
-            PCI_WHICHSPACE_CONFIG,
-            Buffer,
-            Offset,
-            Length);
-
-        if (BytesTransferred == 0 || BytesTransferred > Length)
-        {
-            ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-            return STATUS_UNSUCCESSFUL;
-        }
-
-        *BytesRead = BytesTransferred;
-        ElapsedUs = DxgkpTraceElapsedUs(TotalStart100ns);
-        if (ElapsedUs >= DXGK_TRACE_SLOW_CONFIG_ACCESS_US)
-        {
-            DXGKRNL_WARN("DxgkCbReadDeviceSpace: slow config read Off=0x%lX Len=0x%lX Bytes=%lu took %I64u us\n",
-                         Offset, Length, BytesTransferred, ElapsedUs);
-        }
-        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-        return STATUS_SUCCESS;
+        DXGKRNL_WARN("DxgkCbReadDeviceSpace: slow read DataType=0x%lX Off=0x%lX Len=0x%lX Bytes=%lu took %I64u us\n",
+                     DataType, Offset, Length, *BytesRead, ElapsedUs);
     }
-
-    if (DataType == DXGK_WHICHSPACE_ROM ||
-        DataType == DXGK_WHICHSPACE_MCH ||
-        DataType == DXGK_WHICHSPACE_BRIDGE)
-    {
-        DXGKRNL_WARN("DxgkCbReadDeviceSpace: unavailable DataType 0x%08lX\n",
-                     DataType);
-        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-        return STATUS_UNSUCCESSFUL;
-    }
-    else
-        DXGKRNL_WARN("DxgkCbReadDeviceSpace: unsupported DataType 0x%08lX\n", DataType);
     ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-    return STATUS_INVALID_PARAMETER;
+    return Status;
 }
 
 /*
  * DxgkCbWriteDeviceSpace
  *
- * Writes to the PCI configuration space of the display adapter.
+ * Writes device space owned by the display adapter; DataType values as for
+ * DxgkCbReadDeviceSpace.
  *
  * IRQL: PASSIVE_LEVEL
  */
@@ -10550,77 +10758,36 @@ DxgkCbWriteDeviceSpace(
     _Out_ PULONG  BytesWritten)
 {
     PDXGKRNL_ADAPTER Adapter;
-    ULONG            BytesTransferred;
     ULONGLONG        TotalStart100ns;
     ULONGLONG        ElapsedUs;
+    NTSTATUS         Status;
 
     PAGED_CODE();
 
     TotalStart100ns = DxgkpTraceNow100ns();
 
-    if (BytesWritten == NULL)
+    if (BytesWritten == NULL || Buffer == NULL)
         return STATUS_INVALID_PARAMETER;
 
     *BytesWritten = 0;
-
-    if (Buffer == NULL || Length == 0)
-        return STATUS_INVALID_PARAMETER;
 
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter == NULL)
     {
         DXGKRNL_ERR("DxgkCbWriteDeviceSpace: invalid handle %p\n", DeviceHandle);
-        return STATUS_INVALID_HANDLE;
+        return STATUS_INVALID_PARAMETER;
     }
 
     /* No per-write trace to avoid stack overflow from serial output. */
-
-    if (DataType == DXGK_WHICHSPACE_CONFIG)
+    Status = DxgkpAccessDeviceSpace(Adapter, DataType, Buffer, Offset, Length, TRUE, BytesWritten);
+    ElapsedUs = DxgkpTraceElapsedUs(TotalStart100ns);
+    if (NT_SUCCESS(Status) && ElapsedUs >= DXGK_TRACE_SLOW_CONFIG_ACCESS_US)
     {
-        if (!Adapter->PciBusInterfaceValid ||
-            Adapter->PciBusInterface.SetBusData == NULL)
-        {
-            ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-            return STATUS_UNSUCCESSFUL;
-        }
-
-        BytesTransferred = Adapter->PciBusInterface.SetBusData(
-            Adapter->PciBusInterface.Context,
-            PCI_WHICHSPACE_CONFIG,
-            Buffer,
-            Offset,
-            Length);
-
-        if (BytesTransferred == 0 || BytesTransferred > Length)
-        {
-            ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-            return STATUS_UNSUCCESSFUL;
-        }
-
-        *BytesWritten = BytesTransferred;
-        ElapsedUs = DxgkpTraceElapsedUs(TotalStart100ns);
-        if (ElapsedUs >= DXGK_TRACE_SLOW_CONFIG_ACCESS_US)
-        {
-            DXGKRNL_WARN("DxgkCbWriteDeviceSpace: slow config write Off=0x%lX Len=0x%lX Bytes=%lu took %I64u us\n",
-                         Offset, Length, BytesTransferred, ElapsedUs);
-        }
-        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-        return STATUS_SUCCESS;
+        DXGKRNL_WARN("DxgkCbWriteDeviceSpace: slow write DataType=0x%lX Off=0x%lX Len=0x%lX Bytes=%lu took %I64u us\n",
+                     DataType, Offset, Length, *BytesWritten, ElapsedUs);
     }
-
-    if (DataType == DXGK_WHICHSPACE_ROM ||
-        DataType == DXGK_WHICHSPACE_MCH ||
-        DataType == DXGK_WHICHSPACE_BRIDGE)
-    {
-        DXGKRNL_WARN("DxgkCbWriteDeviceSpace: unavailable DataType 0x%08lX\n",
-                     DataType);
-        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-        return STATUS_UNSUCCESSFUL;
-    }
-    else
-        DXGKRNL_WARN("DxgkCbWriteDeviceSpace: unsupported DataType 0x%08lX\n", DataType);
     ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-    return STATUS_INVALID_PARAMETER;
+    return Status;
 }
 
 /*
@@ -10646,22 +10813,21 @@ DxgkCbIndicateChildStatus(
     if (ChildStatus == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    if (ChildStatus->Type != StatusConnection)
-    {
-        if (ChildStatus->Type == StatusRotation ||
-            ChildStatus->Type == StatusMiracastConnection)
-        {
-            return STATUS_NOT_SUPPORTED;
-        }
-        return STATUS_INVALID_PARAMETER;
-    }
-
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter == NULL)
     {
         DXGKRNL_ERR("DxgkCbIndicateChildStatus: invalid handle %p\n",
                     DeviceHandle);
-        return STATUS_INVALID_HANDLE;
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (ChildStatus->Type != StatusConnection)
+    {
+        DXGKRNL_TRACE("DxgkCbIndicateChildStatus: adapter %p type %d uid %lu\n",
+                      Adapter, ChildStatus->Type, ChildStatus->ChildUid);
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        /* TODO: Miracast display children; without one Windows also refuses Miracast status */
+        return ChildStatus->Type == StatusMiracastConnection ? STATUS_NOT_SUPPORTED : STATUS_SUCCESS;
     }
 
     DXGKRNL_TRACE("DxgkCbIndicateChildStatus: adapter %p type %d uid %lu "
@@ -10711,20 +10877,15 @@ DxgkCbIndicateChildStatus(
  *
  * A display miniport reads firmware description tables to find data the
  * firmware left for it: the AMD miniport, for one, reads the ACPI VFCT table
- * to recover the adapter's video BIOS image.  The tables live in the ACPI
- * driver, which publishes them on GUID_ACPI_SYSTEM_INTERFACE, so both entry
- * points below are thin forwarders to that device.
+ * to recover the adapter's video BIOS image.  Both entry points below go
+ * through the kernel's SystemFirmwareTableInformation providers, so every
+ * registered provider (ACPI, RSMB, FIRM) is reachable.
  *
  * A miniport that asks for this interface and gets a failure may still call
  * through the structure it passed in, so every published entry has to be a
  * real routine; leaving one null turns an unsupported provider into a jump to
  * address zero.
  */
-
-/* 'ACPI', as the provider signature is spelled on the wire */
-#define DXGKP_FIRMWARE_PROVIDER_ACPI 0x41435049
-
-#define DXGKP_FIRMWARE_TABLE_LIMIT (16 * 1024 * 1024)
 
 static VOID
 NTAPI
@@ -10736,89 +10897,66 @@ DxgkpFirmwareTableInterfaceReferenceNop(
 }
 
 static NTSTATUS
-DxgkpFirmwareTableSendIoctl(
-    _In_ ULONG IoControlCode,
-    _In_reads_bytes_opt_(InputSize) PVOID InputBuffer,
-    _In_ ULONG InputSize,
-    _Out_writes_bytes_opt_(OutputSize) PVOID OutputBuffer,
-    _In_ ULONG OutputSize,
-    _Out_ PULONG_PTR Information)
+DxgkpQuerySystemFirmwareTables(
+    _In_ HANDLE DeviceHandle,
+    _In_ SYSTEM_FIRMWARE_TABLE_ACTION Action,
+    _In_ ULONG ProviderSignature,
+    _In_ ULONG TableId,
+    _In_ ULONG BufferSize,
+    _Out_writes_bytes_opt_(BufferSize) PVOID Buffer,
+    _Out_ PULONG RequiredSize)
 {
-    PWSTR InterfaceList = NULL;
-    PFILE_OBJECT FileObject = NULL;
-    PDEVICE_OBJECT DeviceObject = NULL;
-    UNICODE_STRING InterfaceName;
-    IO_STATUS_BLOCK IoStatus;
-    KEVENT Event;
-    PIRP Irp;
+    UCHAR StackInformation[0x80];
+    PSYSTEM_FIRMWARE_TABLE_INFORMATION Information = (PSYSTEM_FIRMWARE_TABLE_INFORMATION)StackInformation;
+    PDXGKRNL_ADAPTER Adapter;
+    ULONG InformationSize;
+    ULONG ReturnLength = 0;
     NTSTATUS Status;
 
-    *Information = 0;
+    Adapter = DxgkpHandleToAdapter(DeviceHandle);
+    if (Adapter == NULL)
+        return STATUS_INVALID_PARAMETER_1;
+    ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
 
-    /*
-     * Opening the ACPI device interface takes the passive level.  A miniport
-     * that asks for a firmware table from a raised IRQL gets a clean refusal
-     * rather than an assertion, because the table contents never change and
-     * the caller can read them during start-up instead.
-     */
-    if (KeGetCurrentIrql() > PASSIVE_LEVEL)
-        return STATUS_INVALID_DEVICE_STATE;
-
-    Status = IoGetDeviceInterfaces(&GUID_ACPI_SYSTEM_INTERFACE,
-                                   NULL,
-                                   0,
-                                   &InterfaceList);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    if (InterfaceList == NULL || InterfaceList[0] == UNICODE_NULL)
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL || (Buffer == NULL && BufferSize != 0) || RequiredSize == NULL ||
+        BufferSize > MAXULONG - FIELD_OFFSET(SYSTEM_FIRMWARE_TABLE_INFORMATION, TableBuffer))
     {
-        if (InterfaceList != NULL)
-            ExFreePool(InterfaceList);
-        return STATUS_NOT_FOUND;
+        return STATUS_INVALID_PARAMETER;
     }
 
-    RtlInitUnicodeString(&InterfaceName, InterfaceList);
-    Status = IoGetDeviceObjectPointer(&InterfaceName,
-                                      FILE_READ_DATA | SYNCHRONIZE,
-                                      &FileObject,
-                                      &DeviceObject);
-    if (!NT_SUCCESS(Status))
+    InformationSize = FIELD_OFFSET(SYSTEM_FIRMWARE_TABLE_INFORMATION, TableBuffer) + BufferSize;
+    if (InformationSize > sizeof(StackInformation))
     {
-        ExFreePool(InterfaceList);
-        return Status;
+        Information = ExAllocatePoolWithTag(PagedPool, InformationSize, TAG_DXGK_RESOURCES);
+        if (Information == NULL)
+            return STATUS_NO_MEMORY;
     }
 
-    KeInitializeEvent(&Event, NotificationEvent, FALSE);
-    RtlZeroMemory(&IoStatus, sizeof(IoStatus));
-
-    Irp = IoBuildDeviceIoControlRequest(IoControlCode,
-                                        DeviceObject,
-                                        InputBuffer,
-                                        InputSize,
-                                        OutputBuffer,
-                                        OutputSize,
-                                        FALSE,
-                                        &Event,
-                                        &IoStatus);
-    if (Irp == NULL)
+    Information->ProviderSignature = ProviderSignature;
+    Information->Action = Action;
+    Information->TableID = TableId;
+    Information->TableBufferLength = BufferSize;
+    Status = ZwQuerySystemInformation(SystemFirmwareTableInformation, Information, InformationSize, &ReturnLength);
+    if (NT_SUCCESS(Status))
     {
-        ObDereferenceObject(FileObject);
-        ExFreePool(InterfaceList);
-        return STATUS_INSUFFICIENT_RESOURCES;
+        *RequiredSize = Information->TableBufferLength;
+        if (Buffer != NULL)
+            RtlCopyMemory(Buffer, Information->TableBuffer, min(BufferSize, Information->TableBufferLength));
+    }
+    else if (Status == STATUS_BUFFER_TOO_SMALL &&
+             ReturnLength >= FIELD_OFFSET(SYSTEM_FIRMWARE_TABLE_INFORMATION, TableBuffer))
+    {
+        *RequiredSize = Information->TableBufferLength;
+    }
+    else
+    {
+        *RequiredSize = 0;
+        DXGKRNL_WARN("firmware table provider '%.4s' action %u table 0x%08lx failed 0x%08lx\n",
+                     (PCHAR)&ProviderSignature, Action, TableId, Status);
     }
 
-    Status = IoCallDriver(DeviceObject, Irp);
-    if (Status == STATUS_PENDING)
-    {
-        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
-        Status = IoStatus.Status;
-    }
-
-    *Information = IoStatus.Information;
-
-    ObDereferenceObject(FileObject);
-    ExFreePool(InterfaceList);
+    if (Information != (PSYSTEM_FIRMWARE_TABLE_INFORMATION)StackInformation)
+        ExFreePoolWithTag(Information, TAG_DXGK_RESOURCES);
     return Status;
 }
 
@@ -10830,81 +10968,8 @@ DxgkpFirmwareTableEnumTables(
     _Out_writes_bytes_opt_(BufferSize) PVOID Buffer,
     _Out_ PULONG RequiredSize)
 {
-    PACPI_ENUM_SYSTEM_TABLES_ENTRY Entries = NULL;
-    ULONG_PTR Information = 0;
-    ULONG EntrySize = sizeof(*Entries);
-    ULONG Capacity = 64;
-    ULONG Count;
-    ULONG Index;
-    NTSTATUS Status;
-
-
-    UNREFERENCED_PARAMETER(Context);
-
-    if (RequiredSize == NULL)
-        return STATUS_INVALID_PARAMETER;
-
-    *RequiredSize = 0;
-
-    if (Buffer == NULL && BufferSize != 0)
-        return STATUS_INVALID_PARAMETER;
-
-    /* Only the ACPI provider is described by the ACPI driver. */
-    if (ProviderSignature != DXGKP_FIRMWARE_PROVIDER_ACPI)
-        return STATUS_NOT_SUPPORTED;
-
-    for (;;)
-    {
-        Entries = ExAllocatePoolWithTag(PagedPool,
-                                        Capacity * EntrySize,
-                                        TAG_DXGK_RESOURCES);
-        if (Entries == NULL)
-            return STATUS_INSUFFICIENT_RESOURCES;
-
-        Status = DxgkpFirmwareTableSendIoctl(IOCTL_ACPI_ENUM_SYSTEM_TABLES,
-                                             NULL,
-                                             0,
-                                             Entries,
-                                             Capacity * EntrySize,
-                                             &Information);
-        if (Status != STATUS_BUFFER_OVERFLOW)
-            break;
-
-        ExFreePoolWithTag(Entries, TAG_DXGK_RESOURCES);
-        Entries = NULL;
-
-        if (Capacity * EntrySize >= DXGKP_FIRMWARE_TABLE_LIMIT)
-            return STATUS_ACPI_INVALID_DATA;
-        Capacity *= 2;
-    }
-
-    if (!NT_SUCCESS(Status))
-    {
-        if (Entries != NULL)
-            ExFreePoolWithTag(Entries, TAG_DXGK_RESOURCES);
-        return Status;
-    }
-
-    Count = (ULONG)(Information / EntrySize);
-
-    /* The caller wants the table identifiers, which for ACPI are signatures. */
-    *RequiredSize = Count * sizeof(ULONG);
-    if (BufferSize < *RequiredSize)
-    {
-        ExFreePoolWithTag(Entries, TAG_DXGK_RESOURCES);
-        return STATUS_BUFFER_TOO_SMALL;
-    }
-
-    for (Index = 0; Index < Count; Index++)
-    {
-        ULONG TableId;
-
-        RtlCopyMemory(&TableId, Entries[Index].Signature, sizeof(TableId));
-        ((PULONG)Buffer)[Index] = TableId;
-    }
-
-    ExFreePoolWithTag(Entries, TAG_DXGK_RESOURCES);
-    return STATUS_SUCCESS;
+    return DxgkpQuerySystemFirmwareTables((HANDLE)Context, SystemFirmwareTable_Enumerate, ProviderSignature, 0,
+                                          BufferSize, Buffer, RequiredSize);
 }
 
 static NTSTATUS
@@ -10916,82 +10981,8 @@ DxgkpFirmwareTableReadTable(
     _Out_writes_bytes_opt_(BufferSize) PVOID Buffer,
     _Out_ PULONG RequiredSize)
 {
-    ACPI_GET_SYSTEM_TABLE_INPUT Input;
-    DESCRIPTION_HEADER Header;
-    ULONG_PTR Information = 0;
-    NTSTATUS Status;
-
-
-    UNREFERENCED_PARAMETER(Context);
-
-    if (RequiredSize == NULL)
-        return STATUS_INVALID_PARAMETER;
-
-    *RequiredSize = 0;
-
-    if (Buffer == NULL && BufferSize != 0)
-        return STATUS_INVALID_PARAMETER;
-
-    if (ProviderSignature != DXGKP_FIRMWARE_PROVIDER_ACPI)
-        return STATUS_NOT_SUPPORTED;
-
-    RtlZeroMemory(&Input, sizeof(Input));
-    RtlCopyMemory(Input.Signature, &TableId, sizeof(Input.Signature));
-    Input.Instance = 1;
-
-    Status = DxgkpFirmwareTableSendIoctl(IOCTL_ACPI_GET_SYSTEM_TABLE,
-                                         &Input,
-                                         sizeof(Input),
-                                         &Header,
-                                         sizeof(Header),
-                                         &Information);
-    if (Status == STATUS_BUFFER_OVERFLOW)
-    {
-        if (Information != sizeof(Header) || Header.Length <= sizeof(Header))
-            return STATUS_ACPI_INVALID_DATA;
-
-        Information = Header.Length;
-        Status = STATUS_BUFFER_TOO_SMALL;
-        if (BufferSize >= Header.Length)
-        {
-            Status = DxgkpFirmwareTableSendIoctl(IOCTL_ACPI_GET_SYSTEM_TABLE,
-                                                 &Input,
-                                                 sizeof(Input),
-                                                 Buffer,
-                                                 BufferSize,
-                                                 &Information);
-            if (NT_SUCCESS(Status) && Information != Header.Length)
-                return STATUS_ACPI_INVALID_DATA;
-        }
-    }
-    else if (NT_SUCCESS(Status))
-    {
-        if (BufferSize < Information)
-            Status = STATUS_BUFFER_TOO_SMALL;
-        else
-            RtlCopyMemory(Buffer, &Header, Information);
-    }
-
-    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_TOO_SMALL)
-        DXGKRNL_WARN("firmware table '%.4s' provider '%.4s' failed 0x%08lx\n",
-                     (PCHAR)&TableId, (PCHAR)&ProviderSignature, Status);
-
-    DXGKRNL_TRACE("firmware table '%.4s' provider '%.4s' -> 0x%08lx, %lu byte(s)\n",
-                (PCHAR)&TableId, (PCHAR)&ProviderSignature,
-                Status, (ULONG)Information);
-
-    /*
-     * The size query is the ordinary first call: the caller passes no buffer
-     * and reads the length out of RequiredSize, so the length has to survive
-     * the buffer-too-small answer.
-     */
-    if (Information > DXGKP_FIRMWARE_TABLE_LIMIT)
-        return STATUS_ACPI_INVALID_DATA;
-
-    if (Status == STATUS_BUFFER_TOO_SMALL || NT_SUCCESS(Status))
-        *RequiredSize = (ULONG)Information;
-
-    return Status;
+    return DxgkpQuerySystemFirmwareTables((HANDLE)Context, SystemFirmwareTable_Get, ProviderSignature, TableId,
+                                          BufferSize, Buffer, RequiredSize);
 }
 #endif /* REACTOS_WDDM_TARGET_LEVEL >= 3200 */
 
@@ -11028,7 +11019,7 @@ DxgkpFeatureIsEnabled(
 
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
+        return STATUS_INVALID_PARAMETER;
 
     Status = DxgkQueryFeatureState(Adapter,
                                    Args->FeatureId,
@@ -11044,21 +11035,18 @@ DxgkpFeatureQueryInterface(
     INOUT_PDXGKARGCB_QUERYFEATUREINTERFACE Args)
 {
     PDXGKRNL_ADAPTER Adapter;
+    NTSTATUS Status;
 
     if (Args == NULL)
         return STATUS_INVALID_PARAMETER;
+    Args->InterfaceSize = 0;
 
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
+        return STATUS_INVALID_PARAMETER;
+    Status = DxgkQueryFeatureInterfaceAvailability(Adapter, Args->FeatureId, Args->Version);
     ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
-
-    /*
-     * None of the OS-side features ReactOS currently enables has a
-     * feature-specific callback table. In particular, KMD-signaled CPU
-     * events use the main DXGK_INTERFACE callback.
-     */
-    return STATUS_NOT_SUPPORTED;
+    return Status;
 }
 #endif
 
@@ -11460,6 +11448,350 @@ DxgkpDbgReportComplete(
     ExFreePoolWithTag(Report, TAG_DXGK_ADAPTER);
 }
 
+typedef struct _DXGKP_SPB_RESOURCE
+{
+    LIST_ENTRY ListEntry;
+    EX_RUNDOWN_REF Rundown;
+    PDXGKRNL_ADAPTER Adapter;
+    HANDLE FileHandle;
+    LONG References;
+    HANDLE EventHandle;
+    PKEVENT Event;
+} DXGKP_SPB_RESOURCE, *PDXGKP_SPB_RESOURCE;
+
+static BOOLEAN
+DxgkpSpbConnectionAssigned(
+    _In_opt_ PCM_RESOURCE_LIST Resources,
+    _In_ LARGE_INTEGER ConnectionId)
+{
+    PCM_FULL_RESOURCE_DESCRIPTOR FullDescriptor;
+    ULONG FullIndex;
+
+    if (Resources == NULL)
+        return FALSE;
+
+    FullDescriptor = &Resources->List[0];
+    for (FullIndex = 0; FullIndex < Resources->Count; ++FullIndex)
+    {
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR PartialDescriptor;
+        ULONG PartialIndex;
+
+        PartialDescriptor = &FullDescriptor->PartialResourceList.PartialDescriptors[0];
+        for (PartialIndex = 0; PartialIndex < FullDescriptor->PartialResourceList.Count; ++PartialIndex)
+        {
+            if (PartialDescriptor->Type == CmResourceTypeConnection &&
+                PartialDescriptor->u.Connection.IdLowPart == ConnectionId.LowPart &&
+                PartialDescriptor->u.Connection.IdHighPart == (ULONG)ConnectionId.HighPart)
+            {
+                return TRUE;
+            }
+            PartialDescriptor = CmiGetNextPartialDescriptor(PartialDescriptor);
+        }
+        FullDescriptor = CmiGetNextResourceDescriptor(FullDescriptor);
+    }
+
+    return FALSE;
+}
+
+static VOID
+DxgkpDeleteSpbResource(
+    _In_ PDXGKP_SPB_RESOURCE Resource)
+{
+    ZwClose(Resource->EventHandle);
+    ZwClose(Resource->FileHandle);
+    ExFreePoolWithTag(Resource, TAG_DXGK_RESOURCES);
+}
+
+static NTSTATUS
+DxgkpReferenceSpbResource(
+    _In_ HANDLE DeviceHandle,
+    _In_ PVOID SpbResource,
+    _In_ BOOLEAN ForClose,
+    _Out_ PDXGKP_SPB_RESOURCE *Resource)
+{
+    PDXGKRNL_ADAPTER Adapter;
+    PDXGKP_SPB_RESOURCE Found = NULL;
+    PLIST_ENTRY Link;
+
+    *Resource = NULL;
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return STATUS_INVALID_PARAMETER;
+
+    Adapter = DxgkpHandleToAdapter(DeviceHandle);
+    if (Adapter == NULL)
+        return STATUS_INVALID_PARAMETER_1;
+
+    ExAcquireFastMutex(&Adapter->SpbResourceLock);
+    for (Link = Adapter->SpbResourceList.Flink; Link != &Adapter->SpbResourceList; Link = Link->Flink)
+    {
+        PDXGKP_SPB_RESOURCE Entry = CONTAINING_RECORD(Link, DXGKP_SPB_RESOURCE, ListEntry);
+
+        if (Entry == (PDXGKP_SPB_RESOURCE)SpbResource && Entry->References != 0)
+        {
+            Found = Entry;
+            break;
+        }
+    }
+    if (Found != NULL && !ForClose && !ExAcquireRundownProtection(&Found->Rundown))
+        Found = NULL;
+    if (Found != NULL && ForClose)
+    {
+        Found->References--;
+        if (Found->References == 0)
+            RemoveEntryList(&Found->ListEntry);
+    }
+    ExReleaseFastMutex(&Adapter->SpbResourceLock);
+    ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+
+    if (Found == NULL)
+        return STATUS_INVALID_PARAMETER_2;
+
+    *Resource = Found;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+DxgkpCompleteSpbIo(
+    _In_ PDXGKP_SPB_RESOURCE Resource,
+    _In_ NTSTATUS Status,
+    _In_opt_ HANDLE EventHandle,
+    _In_ PIO_STATUS_BLOCK IoStatusBlock)
+{
+    if (Status == STATUS_PENDING && EventHandle == NULL)
+    {
+        Status = KeWaitForSingleObject(Resource->Event, Executive, KernelMode, FALSE, NULL);
+        if (Status == STATUS_SUCCESS)
+            Status = IoStatusBlock->Status;
+    }
+    ExReleaseRundownProtection(&Resource->Rundown);
+    return Status;
+}
+
+static NTSTATUS
+APIENTRY
+DxgkpOpenSpbResource(
+    _In_ HANDLE DeviceHandle,
+    _In_ LARGE_INTEGER SpbResourceId,
+    _In_opt_ UNICODE_STRING *SpbResourceSubName,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ ULONG ShareAccess,
+    _In_ ULONG OpenOptions,
+    _Outptr_ VOID **SpbResource)
+{
+    PDXGKRNL_ADAPTER Adapter;
+    PDXGKP_SPB_RESOURCE Resource;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    UNICODE_STRING Path;
+    HANDLE FileHandle;
+    NTSTATUS Status;
+
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return STATUS_INVALID_PARAMETER;
+
+    Adapter = DxgkpHandleToAdapter(DeviceHandle);
+    if (Adapter == NULL)
+        return STATUS_INVALID_PARAMETER_1;
+
+    if (!DxgkpSpbConnectionAssigned(Adapter->AllocatedResources, SpbResourceId))
+    {
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_INVALID_PARAMETER_2;
+    }
+
+    Path.Length = 0;
+    Path.MaximumLength = (USHORT)((SpbResourceSubName != NULL ? SpbResourceSubName->Length : 0) + 0x50);
+    Path.Buffer = ExAllocatePoolWithTag(PagedPool, Path.MaximumLength, TAG_DXGK_RESOURCES);
+    if (Path.Buffer == NULL)
+    {
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_NO_MEMORY;
+    }
+
+    Status = RtlUnicodeStringPrintf(&Path, L"\\Device\\RESOURCE_HUB\\%016I64x", SpbResourceId.QuadPart);
+    if (NT_SUCCESS(Status) && SpbResourceSubName != NULL && SpbResourceSubName->Length != 0)
+    {
+        if (SpbResourceSubName->Buffer[0] != L'\\')
+            Status = RtlAppendUnicodeToString(&Path, L"\\");
+        if (NT_SUCCESS(Status))
+            Status = RtlAppendUnicodeStringToString(&Path, SpbResourceSubName);
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        InitializeObjectAttributes(&ObjectAttributes, &Path, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+        Status = ZwOpenFile(&FileHandle, DesiredAccess, &ObjectAttributes, &IoStatusBlock, ShareAccess,
+                            OpenOptions);
+    }
+    ExFreePoolWithTag(Path.Buffer, TAG_DXGK_RESOURCES);
+
+    if (!NT_SUCCESS(Status))
+    {
+        DXGKRNL_WARN("DxgkpOpenSpbResource: adapter %p connection 0x%I64x open failed 0x%08lx\n",
+                     Adapter, SpbResourceId.QuadPart, Status);
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return Status;
+    }
+
+    Resource = ExAllocatePoolZero(NonPagedPool, sizeof(*Resource), TAG_DXGK_RESOURCES);
+    if (Resource == NULL)
+    {
+        ZwClose(FileHandle);
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_NO_MEMORY;
+    }
+
+    Resource->Event = IoCreateNotificationEvent(NULL, &Resource->EventHandle);
+    if (Resource->Event == NULL)
+    {
+        ExFreePoolWithTag(Resource, TAG_DXGK_RESOURCES);
+        ZwClose(FileHandle);
+        ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    ExInitializeRundownProtection(&Resource->Rundown);
+    Resource->Adapter = Adapter;
+    Resource->FileHandle = FileHandle;
+    Resource->References = 1;
+
+    ExAcquireFastMutex(&Adapter->SpbResourceLock);
+    InsertTailList(&Adapter->SpbResourceList, &Resource->ListEntry);
+    ExReleaseFastMutex(&Adapter->SpbResourceLock);
+
+    *SpbResource = Resource;
+    ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+APIENTRY
+DxgkpCloseSpbResource(
+    _In_ HANDLE DeviceHandle,
+    _In_ VOID *SpbResource)
+{
+    PDXGKP_SPB_RESOURCE Resource;
+    NTSTATUS Status;
+
+    Status = DxgkpReferenceSpbResource(DeviceHandle, SpbResource, TRUE, &Resource);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    ExWaitForRundownProtectionRelease(&Resource->Rundown);
+    if (Resource->References == 0)
+        DxgkpDeleteSpbResource(Resource);
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+APIENTRY
+DxgkpReadSpbResource(
+    _In_ HANDLE DeviceHandle,
+    _In_ VOID *SpbResource,
+    _In_ ULONG Length,
+    _Out_writes_bytes_(Length) VOID *Buffer,
+    _In_opt_ LARGE_INTEGER *ByteOffset,
+    _In_opt_ HANDLE EventHandle,
+    _Out_ IO_STATUS_BLOCK *IoStatusBlock)
+{
+    PDXGKP_SPB_RESOURCE Resource;
+    NTSTATUS Status;
+
+    if (Buffer == NULL && Length != 0)
+        return STATUS_INVALID_PARAMETER;
+    if (IoStatusBlock == NULL)
+        return STATUS_INVALID_PARAMETER_6;
+
+    Status = DxgkpReferenceSpbResource(DeviceHandle, SpbResource, FALSE, &Resource);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ZwReadFile(Resource->FileHandle, EventHandle != NULL ? EventHandle : Resource->EventHandle, NULL, NULL,
+                        IoStatusBlock, Buffer, Length, ByteOffset, NULL);
+    return DxgkpCompleteSpbIo(Resource, Status, EventHandle, IoStatusBlock);
+}
+
+static NTSTATUS
+APIENTRY
+DxgkpWriteSpbResource(
+    _In_ HANDLE DeviceHandle,
+    _In_ VOID *SpbResource,
+    _In_ ULONG Length,
+    _In_reads_bytes_(Length) VOID *Buffer,
+    _In_opt_ LARGE_INTEGER *ByteOffset,
+    _In_opt_ HANDLE EventHandle,
+    _Out_ IO_STATUS_BLOCK *IoStatusBlock)
+{
+    PDXGKP_SPB_RESOURCE Resource;
+    NTSTATUS Status;
+
+    if (Buffer == NULL && Length != 0)
+        return STATUS_INVALID_PARAMETER;
+    if (IoStatusBlock == NULL)
+        return STATUS_INVALID_PARAMETER_6;
+
+    Status = DxgkpReferenceSpbResource(DeviceHandle, SpbResource, FALSE, &Resource);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ZwWriteFile(Resource->FileHandle, EventHandle != NULL ? EventHandle : Resource->EventHandle, NULL, NULL,
+                         IoStatusBlock, Buffer, Length, ByteOffset, NULL);
+    return DxgkpCompleteSpbIo(Resource, Status, EventHandle, IoStatusBlock);
+}
+
+static NTSTATUS
+APIENTRY
+DxgkpSpbResourceIoControl(
+    _In_ HANDLE DeviceHandle,
+    _In_ VOID *SpbResource,
+    _In_ ULONG IoControlCode,
+    _In_ ULONG InBufferSize,
+    _In_reads_bytes_(InBufferSize) VOID *InputBuffer,
+    _In_ ULONG OutBufferSize,
+    _Out_writes_bytes_(OutBufferSize) VOID *OutputBuffer,
+    _In_opt_ HANDLE EventHandle,
+    _Out_ IO_STATUS_BLOCK *IoStatusBlock)
+{
+    PDXGKP_SPB_RESOURCE Resource;
+    NTSTATUS Status;
+
+    if ((InputBuffer == NULL && InBufferSize != 0) || (OutputBuffer == NULL && OutBufferSize != 0))
+        return STATUS_INVALID_PARAMETER;
+    if (IoStatusBlock == NULL)
+        return STATUS_INVALID_PARAMETER_6;
+
+    Status = DxgkpReferenceSpbResource(DeviceHandle, SpbResource, FALSE, &Resource);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ZwDeviceIoControlFile(Resource->FileHandle, EventHandle != NULL ? EventHandle : Resource->EventHandle,
+                                   NULL, NULL, IoStatusBlock, IoControlCode, InputBuffer, InBufferSize, OutputBuffer,
+                                   OutBufferSize);
+    return DxgkpCompleteSpbIo(Resource, Status, EventHandle, IoStatusBlock);
+}
+
+static VOID
+DxgkpReleaseSpbResources(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    LIST_ENTRY FreeList;
+
+    InitializeListHead(&FreeList);
+    ExAcquireFastMutex(&Adapter->SpbResourceLock);
+    while (!IsListEmpty(&Adapter->SpbResourceList))
+        InsertTailList(&FreeList, RemoveHeadList(&Adapter->SpbResourceList));
+    ExReleaseFastMutex(&Adapter->SpbResourceLock);
+
+    while (!IsListEmpty(&FreeList))
+    {
+        PDXGKP_SPB_RESOURCE Resource =
+            CONTAINING_RECORD(RemoveHeadList(&FreeList), DXGKP_SPB_RESOURCE, ListEntry);
+
+        ExWaitForRundownProtectionRelease(&Resource->Rundown);
+        DxgkpDeleteSpbResource(Resource);
+    }
+}
+
 NTSTATUS
 APIENTRY
 DxgkCbQueryServices(
@@ -11471,24 +11803,50 @@ DxgkCbQueryServices(
     NTSTATUS Status;
     LONG Count;
 
-    PAGED_CODE();
-
     DXGKRNL_TRACE("DxgkCbQueryServices: handle=%p type=%lu iface=%p\n",
                   DeviceHandle, (ULONG)ServicesType, Interface);
 
-    if (Interface == NULL)
+    if (Interface == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
         return STATUS_INVALID_PARAMETER;
-    if (ServicesType < DxgkServicesAgp ||
-        ServicesType > DxgkServicesFeature)
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
 
     Adapter = DxgkpHandleToAdapter(DeviceHandle);
     if (Adapter == NULL)
-        return STATUS_INVALID_HANDLE;
+        return STATUS_INVALID_PARAMETER;
 
-    Status = STATUS_NOT_SUPPORTED;
+    Status = STATUS_INVALID_PARAMETER;
+
+    if (ServicesType == DxgkServicesAgp)
+    {
+        if (Interface->Version == 1 && Interface->Size == sizeof(DXGK_AGP_INTERFACE))
+            Status = STATUS_UNSUCCESSFUL;
+        goto Done;
+    }
+
+    if (ServicesType == DxgkServicesBDD || ServicesType == DxgkServicesIDD)
+    {
+        /* TODO: Basic Display and indirect display adapter kinds, the only ones granted these interfaces */
+        Status = STATUS_INVALID_HANDLE;
+        goto Done;
+    }
+
+    if (ServicesType == DxgkServicesSPB)
+    {
+        PDXGK_SPB_INTERFACE SpbInterface = (PDXGK_SPB_INTERFACE)Interface;
+
+        if (SpbInterface->Version != DXGK_SPB_INTERFACE_VERSION_1 || SpbInterface->Size != sizeof(*SpbInterface))
+            goto Done;
+
+        SpbInterface->Context = DeviceHandle;
+        SpbInterface->InterfaceReference = DxgkpServicesInterfaceReferenceNop;
+        SpbInterface->InterfaceDereference = DxgkpServicesInterfaceReferenceNop;
+        SpbInterface->OpenSpbResource = DxgkpOpenSpbResource;
+        SpbInterface->CloseSpbResource = DxgkpCloseSpbResource;
+        SpbInterface->ReadSpbResource = DxgkpReadSpbResource;
+        SpbInterface->WriteSpbResource = DxgkpWriteSpbResource;
+        SpbInterface->SpbResourceIoControl = DxgkpSpbResourceIoControl;
+        Status = STATUS_SUCCESS;
+        goto Done;
+    }
 
     if (ServicesType == DxgkServicesTimedOperation)
     {
@@ -11496,13 +11854,11 @@ DxgkCbQueryServices(
             (PDXGK_TIMED_OPERATION_INTERFACE)Interface;
         DXGK_TIMED_OPERATION_INTERFACE ReturnedInterface;
 
-        if (TimedInterface->Size < sizeof(ReturnedInterface))
+        if (TimedInterface->Version != DXGK_TIMED_OPERATION_INTERFACE_VERSION_1 ||
+            TimedInterface->Size != sizeof(ReturnedInterface))
         {
-            Status = STATUS_BUFFER_TOO_SMALL;
             goto Done;
         }
-        if (TimedInterface->Version != DXGK_TIMED_OPERATION_INTERFACE_VERSION_1)
-            goto Done;
 
         RtlZeroMemory(&ReturnedInterface, sizeof(ReturnedInterface));
         ReturnedInterface.Size = sizeof(ReturnedInterface);
@@ -11533,13 +11889,11 @@ DxgkCbQueryServices(
             (PDXGK_DEBUG_REPORT_INTERFACE)Interface;
         DXGK_DEBUG_REPORT_INTERFACE ReturnedInterface;
 
-        if (ReportInterface->Size < sizeof(ReturnedInterface))
+        if (ReportInterface->Version != DXGK_DEBUG_REPORT_INTERFACE_VERSION_1 ||
+            ReportInterface->Size != sizeof(ReturnedInterface))
         {
-            Status = STATUS_BUFFER_TOO_SMALL;
             goto Done;
         }
-        if (ReportInterface->Version != DXGK_DEBUG_REPORT_INTERFACE_VERSION_1)
-            goto Done;
 
         RtlZeroMemory(&ReturnedInterface, sizeof(ReturnedInterface));
         ReturnedInterface.Size = sizeof(ReturnedInterface);
@@ -11564,16 +11918,8 @@ DxgkCbQueryServices(
             (PDXGK_FEATURE_INTERFACE)Interface;
         DXGK_FEATURE_INTERFACE ReturnedInterface;
 
-        if (FeatureInterface->Size < sizeof(ReturnedInterface))
-        {
-            Status = STATUS_BUFFER_TOO_SMALL;
+        if (FeatureInterface->Size != sizeof(ReturnedInterface))
             goto Done;
-        }
-        if (FeatureInterface->Version !=
-            DXGK_FEATURE_INTERFACE_VERSION_1)
-        {
-            goto Done;
-        }
 
         RtlZeroMemory(&ReturnedInterface, sizeof(ReturnedInterface));
         ReturnedInterface.Size = sizeof(ReturnedInterface);
@@ -11601,13 +11947,8 @@ DxgkCbQueryServices(
             (PDXGK_FIRMWARE_TABLE_INTERFACE)Interface;
         DXGK_FIRMWARE_TABLE_INTERFACE ReturnedInterface;
 
-        if (FirmwareInterface->Size < sizeof(ReturnedInterface))
-        {
-            Status = STATUS_BUFFER_TOO_SMALL;
-            goto Done;
-        }
-        if (FirmwareInterface->Version !=
-            DXGK_FIRMWARE_TABLE_INTERFACE_VERSION_1)
+        if (FirmwareInterface->Version != DXGK_FIRMWARE_TABLE_INTERFACE_VERSION_1 ||
+            FirmwareInterface->Size != sizeof(ReturnedInterface))
         {
             goto Done;
         }
@@ -11616,7 +11957,7 @@ DxgkCbQueryServices(
         ReturnedInterface.Size = sizeof(ReturnedInterface);
         ReturnedInterface.Version =
             DXGK_FIRMWARE_TABLE_INTERFACE_VERSION_1;
-        ReturnedInterface.Context = Adapter;
+        ReturnedInterface.Context = DeviceHandle;
         ReturnedInterface.InterfaceReference =
             DxgkpFirmwareTableInterfaceReferenceNop;
         ReturnedInterface.InterfaceDereference =
@@ -11817,7 +12158,22 @@ DxgkpIsPostDisplayDevice(
                                                     &BusType,
                                                     &ResultLength)) &&
                      IsEqualGUID(&BusType, &GUID_BUS_TYPE_ACPI);
-    /* TODO: honour GraphicsDrivers\DisableAutoAcpiPostDeivce for ACPI-enumerated adapters */
+    if (AcpiEnumerated)
+    {
+        RTL_QUERY_REGISTRY_TABLE QueryTable[2];
+        ULONG DisableAutoAcpiPost = 0;
+        ULONG DefaultDisable = 0;
+
+        RtlZeroMemory(QueryTable, sizeof(QueryTable));
+        QueryTable[0].Flags = RTL_QUERY_REGISTRY_DIRECT | RTL_QUERY_REGISTRY_TYPECHECK;
+        QueryTable[0].Name = L"DisableAutoAcpiPostDeivce";
+        QueryTable[0].EntryContext = &DisableAutoAcpiPost;
+        QueryTable[0].DefaultType = (REG_DWORD << RTL_QUERY_REGISTRY_TYPECHECK_SHIFT) | REG_DWORD;
+        QueryTable[0].DefaultData = &DefaultDisable;
+        QueryTable[0].DefaultLength = sizeof(DefaultDisable);
+        (VOID)RtlQueryRegistryValues(RTL_REGISTRY_CONTROL, L"GraphicsDrivers", QueryTable, NULL, NULL);
+        AcpiEnumerated = (DisableAutoAcpiPost == 0);
+    }
     return DxgkAdapterIsPostDevice(Adapter->TranslatedResources,
                                    Fb.FrameBufferBase,
                                    (ULONGLONG)Fb.PixelsPerScanLine * BytesPerPixel * Fb.VerticalResolution,
@@ -12935,6 +13291,7 @@ DxgkpCloseAndRetireReverseCallbacks(
         return STATUS_DELETE_PENDING;
     ExWaitForRundownProtectionRelease(&Adapter->ReverseCallbackRundownRef);
     DxgkpReleaseMapMemory(Adapter);
+    DxgkpReleaseSpbResources(Adapter);
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_4)
     DxgkpReleaseCallbackMemory(Adapter);
 #endif
@@ -13200,6 +13557,7 @@ DxgkpSetVsyncInterruptState(
     PDXGKDDI_CONTROL_INTERRUPT ControlInterrupt;
     DXGKARG_CONTROLINTERRUPT3 Args3;
     DXGKARG_CONTROLINTERRUPT2 Args2;
+    DXGK_VSYNC_CONTROL_DDI Ddi;
     ULONG Version;
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
 
@@ -13220,8 +13578,7 @@ DxgkpSetVsyncInterruptState(
         ControlInterrupt3 =
             DXGK_CB_FULL(Adapter, DxgkDdiControlInterrupt3);
     }
-    if (ControlInterrupt3 == NULL &&
-        !Adapter->MiniportContext->UseDodLayout &&
+    if (!Adapter->MiniportContext->UseDodLayout &&
         DxgkCapsCoreInterfaceVersionAtLeast(
             Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
     {
@@ -13229,18 +13586,18 @@ DxgkpSetVsyncInterruptState(
             DXGK_CB_FULL(Adapter, DxgkDdiControlInterrupt2);
     }
 
-    if (ControlInterrupt3 == NULL &&
-        ControlInterrupt2 == NULL &&
-        ControlInterrupt == NULL)
-    {
+    Ddi = DxgkAdapterStartVsyncControlDdi(Adapter->IndependentVidPnVSyncControl,
+                                          ControlInterrupt3 != NULL,
+                                          ControlInterrupt2 != NULL,
+                                          ControlInterrupt != NULL);
+    if (Ddi == DxgkVsyncControlNone)
         return STATUS_NOT_SUPPORTED;
-    }
     if (!DxgkAcquireMiniportCallback(Adapter))
         return STATUS_DELETE_PENDING;
 
     _SEH2_TRY
     {
-        if (ControlInterrupt3 != NULL)
+        if (Ddi == DxgkVsyncControlInterrupt3)
         {
             RtlZeroMemory(&Args3, sizeof(Args3));
             Args3.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
@@ -13250,7 +13607,7 @@ DxgkpSetVsyncInterruptState(
                          Adapter->MiniportDeviceContext,
                          &Args3);
         }
-        else if (ControlInterrupt2 != NULL)
+        else if (Ddi == DxgkVsyncControlInterrupt2)
         {
             RtlZeroMemory(&Args2, sizeof(Args2));
             Args2.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
@@ -13350,6 +13707,37 @@ DxgkpReleaseSleepDisable(
         DxgkpSleepDisableToken = NULL;
     }
     ExReleaseFastMutex(&DxgkpSleepDisableMutex);
+}
+
+static NTSTATUS
+DxgkpQueryStartNodeMetadata(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG NodeOrdinal;
+
+    if (DXGK_CB_FULL(Adapter, DxgkDdiGetNodeMetadata) == NULL)
+        return STATUS_SUCCESS;
+    if (!DxgkAcquireKmdCall(Adapter))
+        return STATUS_DELETE_PENDING;
+
+    for (NodeOrdinal = 0;
+         NodeOrdinal < Adapter->NodeCount && NodeOrdinal < DXGK_MAX_TRACKED_NODES && NT_SUCCESS(Status);
+         NodeOrdinal++)
+    {
+        DXGK_NODEMETADATA Metadata;
+
+        RtlZeroMemory(&Metadata, sizeof(Metadata));
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiGetNodeMetadata)(Adapter->MiniportDeviceContext, NodeOrdinal, &Metadata);
+        DXGKRNL_TRACE("DxgkAdapterStart: node %lu metadata status=0x%08lx engine-type=%u gpummu=%u iommu=%u\n",
+                      NodeOrdinal, Status, (UINT)Metadata.EngineType, (UINT)Metadata.GpuMmuSupported,
+                      (UINT)Metadata.IoMmuSupported);
+        if (!NT_SUCCESS(Status))
+            DXGKRNL_ERR("DxgkAdapterStart: DxgkDdiGetNodeMetadata failed 0x%08lX for node %lu\n", Status, NodeOrdinal);
+    }
+
+    DxgkReleaseKmdCall(Adapter);
+    return Status;
 }
 
 /*
@@ -13548,6 +13936,9 @@ DxgkAdapterStart(
      * Unsupported published slots are explicit failure/suppression callbacks;
      * their dependent capabilities remain disabled. */
     DxgkpFillInterface(Adapter, &Interface);
+#if (REACTOS_WDDM_TARGET_LEVEL >= 3200)
+    DxgkAcquireKmdFeatureInterface(Adapter);
+#endif
 
     /* Build the start-info block. */
     RtlZeroMemory(&StartInfo, sizeof(StartInfo));
@@ -13669,6 +14060,13 @@ DxgkAdapterStart(
             DxgkpCompleteAdapterStart(Adapter, StartGeneration, Status, Restartable);
             return Status;
         }
+    }
+
+    if (!Adapter->IsBasicDisplayFallback && DxgkpIsPostDisplayDevice(Adapter))
+    {
+        /* TODO: keep boot output in a virtual frame buffer for the boot image relay instead of dropping it */
+        DXGKRNL_TRACE("DxgkAdapterStart: POST display adapter %p takes the display from the boot screen\n", Adapter);
+        InbvNotifyDisplayOwnershipLost(NULL);
     }
 
     /* Call miniport start. */
@@ -13805,6 +14203,12 @@ DxgkAdapterStart(
             CapsStatus = DxgkpQueryDriverCaps(Adapter, Caps);
             if (NT_SUCCESS(CapsStatus))
             {
+                (VOID)DxgkpInitializeBlockList(Adapter, Caps->WDDMVersion);
+                if (Caps->MemoryManagementCaps.IoMmuSecureModeSupported)
+                    CapsStatus = DxgkpCreateFrameBufferSaveArea(Adapter);
+            }
+            if (NT_SUCCESS(CapsStatus))
+            {
                 Adapter->ApertureSegmentCommitLimit = Caps->ApertureSegmentCommitLimit;
                 if (DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_0))
                     Adapter->SupportSurpriseRemoval = Caps->SupportSurpriseRemoval;
@@ -13835,7 +14239,11 @@ DxgkAdapterStart(
                         Adapter->SupportMultiPlaneOverlay = Caps->SupportMultiPlaneOverlay;
                         Adapter->MaxOverlayPlanes = Caps->MaxOverlayPlanes;
                     }
+                    Adapter->IndependentVidPnVSyncControl =
+                        DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_7) &&
+                        Caps->MiscCaps.IndependentVidPnVSyncControl;
                     DXGKRNL_TRACE("DxgkAdapterStart: %lu GPU node(s) reported\n", Adapter->NodeCount);
+                    CapsStatus = DxgkpQueryStartNodeMetadata(Adapter);
                 }
             }
 
@@ -13969,15 +14377,7 @@ DxgkAdapterStart(
         QueryArgs.InputDataSize = sizeof(CapsIn);
         QueryArgs.pOutputData = &Adapter->PhysicalAdapterCaps;
         QueryArgs.OutputDataSize = sizeof(Adapter->PhysicalAdapterCaps);
-        _SEH2_TRY
-        {
-            CapsStatus = DXGK_CB_FULL(Adapter, DxgkDdiQueryAdapterInfo)(Adapter->MiniportDeviceContext, &QueryArgs);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            CapsStatus = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        CapsStatus = DXGK_CB_FULL(Adapter, DxgkDdiQueryAdapterInfo)(Adapter->MiniportDeviceContext, &QueryArgs);
         DxgkReleaseKmdCall(Adapter);
         Adapter->PhysicalAdapterCapsValid = NT_SUCCESS(CapsStatus);
         if (!NT_SUCCESS(CapsStatus) && !Adapter->MiniportContext->IsBasicDisplayFallback)
@@ -13986,24 +14386,7 @@ DxgkAdapterStart(
                     CapsStatus, Adapter->PhysicalAdapterCaps.NumExecutionNodes, Adapter->PhysicalAdapterCaps.PagingNodeIndex,
                     Adapter->PhysicalAdapterCaps.DxgkPhysicalAdapterHandle, Adapter->PhysicalAdapterCaps.Flags.Value);
     }
-    /* This extra enumeration exists only for the verbose boot dump. */
 #if DXGKRNL_DEBUG_TRACE
-    if (DXGK_CB_FULL(Adapter, DxgkDdiGetNodeMetadata) != NULL && DxgkAcquireKmdCall(Adapter))
-    {
-        ULONG NodeOrdinal;
-
-        for (NodeOrdinal = 0; NodeOrdinal < Adapter->NodeCount && NodeOrdinal < 16; NodeOrdinal++)
-        {
-            DXGK_NODEMETADATA Metadata;
-            NTSTATUS MetaStatus;
-
-            RtlZeroMemory(&Metadata, sizeof(Metadata));
-            MetaStatus = DXGK_CB_FULL(Adapter, DxgkDdiGetNodeMetadata)(Adapter->MiniportDeviceContext, NodeOrdinal, &Metadata);
-            DXGKRNL_TRACE("DxgkAdapterStart: node %lu metadata status=0x%08lx engine-type=%u gpummu=%u iommu=%u\n",
-                         NodeOrdinal, MetaStatus, (UINT)Metadata.EngineType, (UINT)Metadata.GpuMmuSupported, (UINT)Metadata.IoMmuSupported);
-        }
-        DxgkReleaseKmdCall(Adapter);
-    }
     DxgkVidMmDumpSegments(Adapter);
 #endif
     {
@@ -14134,18 +14517,21 @@ DxgkAdapterStart(
     }
 
     /*
-     * Ask the miniport to deliver vsync notifications. WDDM 2.7 uses the
-     * per-source ControlInterrupt3 contract when supplied; WDDM 2.0-2.6 full
-     * miniports use ControlInterrupt2, while DOD can use ControlInterrupt.
+     * Ask the miniport to deliver vsync notifications. A driver reporting
+     * IndependentVidPnVSyncControl gets the per-source ControlInterrupt3
+     * contract; other full miniports use ControlInterrupt2, while DOD can use
+     * ControlInterrupt.
      */
     if (DxgkAdapterStartRoleRequiresDisplayPipeline(Role))
     {
-        Status = DxgkpSetVsyncInterruptState(Adapter, DXGK_VSYNC_ENABLE);
-        DXGKRNL_TRACE("DxgkAdapterStart: CRTC_VSYNC enable -> 0x%08lX\n", Status);
-        if (NT_SUCCESS(Status))
+        /* TODO: enable the vsync interrupt on the first vsync request instead of at adapter start */
+        NTSTATUS VsyncStatus = DxgkpSetVsyncInterruptState(Adapter, DXGK_VSYNC_ENABLE);
+
+        DXGKRNL_TRACE("DxgkAdapterStart: CRTC_VSYNC enable -> 0x%08lX\n", VsyncStatus);
+        if (NT_SUCCESS(VsyncStatus))
             Progress.VsyncEnabled = TRUE;
-        else if (Status != STATUS_NOT_SUPPORTED)
-            goto StartRollback;
+        else if (VsyncStatus != STATUS_NOT_SUPPORTED)
+            DXGKRNL_ERR("DxgkAdapterStart: miniport refused the vsync interrupt 0x%08lX\n", VsyncStatus);
     }
 
     /* Enable the GUID_DISPLAY_DEVICE_ARRIVAL device interface.
@@ -14312,15 +14698,7 @@ DxgkpStopMiniportForTeardown(
         return STATUS_DELETE_PENDING;
     }
 
-    _SEH2_TRY
-    {
-        Status = Adapter->MiniportContext->InitData.s.DxgkDdiStopDevice(Adapter->MiniportDeviceContext);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = Adapter->MiniportContext->InitData.s.DxgkDdiStopDevice(Adapter->MiniportDeviceContext);
     if (NT_SUCCESS(Status))
     {
         Adapter->MiniportDeviceStopped = TRUE;
@@ -14395,15 +14773,7 @@ DxgkpResetMiniportForTeardown(
         return STATUS_DELETE_PENDING;
     }
 
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiResetFromTimeout)(Adapter->MiniportDeviceContext);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiResetFromTimeout)(Adapter->MiniportDeviceContext);
     DxgkReleaseMiniportCallback(Adapter);
     if (!NT_SUCCESS(Status))
         goto ResetFailed;
@@ -15300,6 +15670,10 @@ DxgkAdapterRemove(
     DxgkDisplayUnregister(Adapter);
     DxgkpClearPostDisplayOwner(Adapter);
 
+#if (REACTOS_WDDM_TARGET_LEVEL >= 3200)
+    DxgkReleaseKmdFeatureInterface(Adapter);
+#endif
+
     /* Close the callback gate and detach the opaque context before invoking
      * the final DDI. All subsequent cleanup is OS bookkeeping only. */
     (VOID)KeWaitForSingleObject(&Adapter->MiniportCallbackMutex, Executive, KernelMode, FALSE, NULL);
@@ -15316,6 +15690,9 @@ DxgkAdapterRemove(
         ExWaitForRundownProtectionRelease(&Adapter->ReverseCallbackRundownRef);
     KeReleaseMutex(&Adapter->MiniportCallbackMutex, FALSE);
     DxgkpReleaseMapMemory(Adapter);
+    DxgkpReleaseSpbResources(Adapter);
+    DxgkpReleaseLinkQuiescentInterface(Adapter);
+    DxgkpReleaseRootPortInterface(Adapter);
     DxgkpReleasePciBusInterface(Adapter);
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_4)
     DxgkpReleaseCallbackMemory(Adapter);
@@ -15324,6 +15701,8 @@ DxgkAdapterRemove(
     DxgkpReleasePhysicalMemoryObjects(Adapter);
 #endif
     DxgkpFreeAdapterRegistryPath(Adapter);
+    DxgkpDestroyBlockList(Adapter);
+    DxgkpDestroyFrameBufferSaveArea(Adapter);
     DxgkEndKmdExclusive(Adapter, FALSE);
 
     /* RemoveDevice is the final hardware-ownership boundary when StopDevice
@@ -15962,15 +16341,7 @@ DxgkpCallMiniportSetPowerState(
     Status = STATUS_DELETE_PENDING;
     if (Adapter->State == DxgkAdapterStateStarted && Adapter->MiniportDeviceContext != NULL)
     {
-        _SEH2_TRY
-        {
-            Status = Adapter->MiniportContext->InitData.s.DxgkDdiSetPowerState(Adapter->MiniportDeviceContext, DeviceUid, NewState, ShutdownType);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        Status = Adapter->MiniportContext->InitData.s.DxgkDdiSetPowerState(Adapter->MiniportDeviceContext, DeviceUid, NewState, ShutdownType);
     }
     DxgkReleaseMiniportCallback(Adapter);
     return Status;
@@ -16645,6 +17016,51 @@ DxgkpIsRootEnumeratedDevice(
  * IRQL: PASSIVE_LEVEL
  */
 static NTSTATUS
+DxgkpLoadAdapterVideoId(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Out_ GUID *AdapterGuid,
+    _Out_writes_(VideoIdLength) PWCHAR VideoId,
+    _In_ ULONG VideoIdLength)
+{
+    UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + 64 * sizeof(WCHAR)];
+    PKEY_VALUE_PARTIAL_INFORMATION Value = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"VideoID");
+    UNICODE_STRING GuidString;
+    ULONG Length;
+    HANDLE Key;
+    NTSTATUS Status;
+
+    RtlZeroMemory(VideoId, VideoIdLength * sizeof(WCHAR));
+    Status = IoOpenDeviceRegistryKey(PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE, KEY_READ | KEY_WRITE, &Key);
+    if (!NT_SUCCESS(Status))
+        return ExUuidCreate(AdapterGuid);
+
+    Status = ZwQueryValueKey(Key, &ValueName, KeyValuePartialInformation, Value, sizeof(Buffer) - sizeof(WCHAR),
+                             &Length);
+    if (NT_SUCCESS(Status) && Value->Type == REG_SZ && Value->DataLength >= sizeof(WCHAR))
+    {
+        ((PWCHAR)Value->Data)[Value->DataLength / sizeof(WCHAR)] = UNICODE_NULL;
+        RtlInitUnicodeString(&GuidString, (PCWSTR)Value->Data);
+        Status = RtlGUIDFromString(&GuidString, AdapterGuid);
+        if (NT_SUCCESS(Status))
+            RtlStringCchCopyW(VideoId, VideoIdLength, GuidString.Buffer);
+        ZwClose(Key);
+        return Status;
+    }
+
+    Status = ExUuidCreate(AdapterGuid);
+    if (NT_SUCCESS(Status) && NT_SUCCESS(RtlStringFromGUID(AdapterGuid, &GuidString)))
+    {
+        RtlUpcaseUnicodeString(&GuidString, &GuidString, FALSE);
+        RtlStringCchCopyNW(VideoId, VideoIdLength, GuidString.Buffer, GuidString.Length / sizeof(WCHAR));
+        (VOID)ZwSetValueKey(Key, &ValueName, 0, REG_SZ, GuidString.Buffer, GuidString.MaximumLength);
+        RtlFreeUnicodeString(&GuidString);
+    }
+    ZwClose(Key);
+    return Status;
+}
+
+static NTSTATUS
 DxgkpAddDeviceRegistered(
     _In_ PDRIVER_OBJECT DriverObject,
     _In_ PDEVICE_OBJECT PhysicalDeviceObject)
@@ -16714,10 +17130,11 @@ DxgkpAddDeviceRegistered(
     Adapter->SchedulingCaps.Value = 0;
     Adapter->TdrConfig = g_TdrConfig;
 
-    Status = ExUuidCreate(&Adapter->AdapterGuid);
+    Status = DxgkpLoadAdapterVideoId(PhysicalDeviceObject, &Adapter->AdapterGuid, Adapter->VideoId,
+                                     RTL_NUMBER_OF(Adapter->VideoId));
     if (!NT_SUCCESS(Status))
     {
-        DXGKRNL_ERR("DxgkpAddDevice: ExUuidCreate failed 0x%08lX\n", Status);
+        DXGKRNL_ERR("DxgkpAddDevice: adapter VideoID failed 0x%08lX\n", Status);
         IoDeleteDevice(Fdo);
         return Status;
     }
@@ -16803,6 +17220,9 @@ DxgkpAddDeviceRegistered(
     Adapter->RemoveRundownStarted = 0;
     ExInitializeRundownProtection(&Adapter->ReverseCallbackRundownRef);
     Adapter->ReverseCallbackRundownStarted = 0;
+    InitializeListHead(&Adapter->SpbResourceList);
+    ExInitializeFastMutex(&Adapter->SpbResourceLock);
+    ExInitializeFastMutex(&Adapter->KmdFeatureCacheLock);
     Adapter->MiniportRemoveDeviceComplete = FALSE;
     KeInitializeDpc(&Adapter->DpcObject, DxgkpAdapterDpcRoutine, Adapter);
     KeInitializeDpc(&Adapter->NotifyDpcObject, DxgkpNotifyDpcRoutine, Adapter);
@@ -16961,6 +17381,10 @@ DxgkpAddDeviceRegistered(
                       "0x%08lX (non-fatal)\n", Status);
         RtlInitUnicodeString(&Adapter->DisplayAdapterInterfaceName, NULL);
     }
+
+    DxgkpCaptureLinkQuiescentInterface(Adapter);
+    DxgkpCaptureRootPortInterface(Adapter);
+    DxgkpQueryDriverWddmDeviceCaps(Adapter);
 
     /* Link into per-miniport adapter list. */
     KeAcquireSpinLock(&MpCtx->AdapterListLock, &OldIrql);

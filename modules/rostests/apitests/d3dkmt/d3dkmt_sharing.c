@@ -393,13 +393,125 @@ static void Test_CheckSharedResourceAccess_BadHandle(void)
     memset(&Data, 0, sizeof(Data));
     Data.hResource = BAD_D3DKMT_HANDLE;
     Data.ClientPid = GetCurrentProcessId();
-    EXPECT_CALL_REFUSED("D3DKMTCheckSharedResourceAccess(bogus resource)", pCheck(&Data));
+    ok_ntstatus(pCheck(&Data), STATUS_INVALID_PARAMETER);
 
     /* Zero resource handle is equally invalid. */
     memset(&Data, 0, sizeof(Data));
     Data.hResource = 0;
     Data.ClientPid = GetCurrentProcessId();
-    EXPECT_CALL_REFUSED("D3DKMTCheckSharedResourceAccess(zero resource)", pCheck(&Data));
+    ok_ntstatus(pCheck(&Data), STATUS_INVALID_PARAMETER);
+}
+
+/* Windows 11 retired D3DKMTGetRuntimeData; it fails without reading its argument. */
+static void Test_GetRuntimeData_Retired(void)
+{
+    D3DKMT_GETRUNTIMEDATA Data;
+
+    LOADFN(PFND3DKMT_GETRUNTIMEDATA, pGet, "D3DKMTGetRuntimeData");
+    memset(&Data, 0, sizeof(Data));
+    Data.hAdapter = BAD_D3DKMT_HANDLE;
+    Data.hGlobalShare = BAD_D3DKMT_HANDLE;
+    ok_ntstatus(pGet(&Data), STATUS_NOT_IMPLEMENTED);
+}
+
+/* A RestrictSharedAccess resource starts with its creator alone on the access
+ * list; ConfigureSharedResource grants and revokes other processes. */
+static void Test_RestrictedSharedAccess(void)
+{
+    PFN_D3DKMTCreateAllocation pCreate = (PFN_D3DKMTCreateAllocation)LoadD3DKMTProc("D3DKMTCreateAllocation");
+    PFN_D3DKMTDestroyAllocation pDestroy = (PFN_D3DKMTDestroyAllocation)LoadD3DKMTProc("D3DKMTDestroyAllocation");
+    PFND3DKMT_CHECKSHAREDRESOURCEACCESS pCheck =
+        (PFND3DKMT_CHECKSHAREDRESOURCEACCESS)LoadD3DKMTProc("D3DKMTCheckSharedResourceAccess");
+    PFND3DKMT_CONFIGURESHAREDRESOURCE pConfigure =
+        (PFND3DKMT_CONFIGURESHAREDRESOURCE)LoadD3DKMTProc("D3DKMTConfigureSharedResource");
+    const UINT ResourcePrivate = 0x52535243;
+    UINT AllocationPrivate = 4096;
+    D3DDDI_ALLOCATIONINFO AllocationInfo;
+    D3DKMT_CREATEALLOCATION Create;
+    D3DKMT_CHECKSHAREDRESOURCEACCESS Check;
+    D3DKMT_CONFIGURESHAREDRESOURCE Configure;
+    D3DKMT_HANDLE hAdapter;
+    D3DKMT_HANDLE hDevice;
+    HANDLE hSystem;
+    NTSTATUS Status;
+
+    if (pCreate == NULL || pDestroy == NULL || pCheck == NULL || pConfigure == NULL)
+    {
+        skip("Restricted sharing entry points are not all exported\n");
+        return;
+    }
+    hAdapter = OpenAdapterFromDisplay1();
+    if (hAdapter == 0)
+    {
+        skip("No display adapter for restricted sharing\n");
+        return;
+    }
+    hDevice = CreateTestDevice(hAdapter);
+    if (hDevice == 0)
+    {
+        skip("No device for restricted sharing\n");
+        CloseAdapter(hAdapter);
+        return;
+    }
+
+    memset(&Configure, 0, sizeof(Configure));
+    Configure.hDevice = BAD_D3DKMT_HANDLE;
+    Configure.hResource = BAD_D3DKMT_HANDLE;
+    Configure.IsDwm = TRUE;
+    Configure.AllowAccess = TRUE;
+    ok_ntstatus(pConfigure(&Configure), STATUS_INVALID_PARAMETER);
+
+    memset(&AllocationInfo, 0, sizeof(AllocationInfo));
+    AllocationInfo.pPrivateDriverData = &AllocationPrivate;
+    AllocationInfo.PrivateDriverDataSize = sizeof(AllocationPrivate);
+    memset(&Create, 0, sizeof(Create));
+    Create.hDevice = hDevice;
+    Create.pPrivateDriverData = (PVOID)&ResourcePrivate;
+    Create.PrivateDriverDataSize = sizeof(ResourcePrivate);
+    Create.NumAllocations = 1;
+    Create.pAllocationInfo = &AllocationInfo;
+    Create.Flags.CreateResource = 1;
+    Create.Flags.CreateShared = 1;
+    Create.Flags.RestrictSharedAccess = 1;
+    Status = pCreate(&Create);
+    if (!NT_SUCCESS(Status) || Create.hGlobalShare == 0)
+    {
+        skip("Restricted shared resource was refused 0x%08lX\n", (long)Status);
+        DestroyTestDevice(hDevice);
+        CloseAdapter(hAdapter);
+        return;
+    }
+
+    memset(&Check, 0, sizeof(Check));
+    Check.hResource = Create.hGlobalShare;
+    Check.ClientPid = GetCurrentProcessId();
+    ok_ntstatus(pCheck(&Check), STATUS_SUCCESS);
+    Check.ClientPid = 4;
+    ok_ntstatus(pCheck(&Check), STATUS_ACCESS_DENIED);
+
+    hSystem = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, 4);
+    if (hSystem == NULL)
+    {
+        skip("Cannot open the System process (%lu)\n", GetLastError());
+    }
+    else
+    {
+        memset(&Configure, 0, sizeof(Configure));
+        Configure.hDevice = hDevice;
+        Configure.hResource = Create.hResource;
+        Configure.hProcess = hSystem;
+        Configure.AllowAccess = TRUE;
+        ok_ntstatus(pConfigure(&Configure), STATUS_SUCCESS);
+        ok_ntstatus(pCheck(&Check), STATUS_SUCCESS);
+        Configure.AllowAccess = FALSE;
+        ok_ntstatus(pConfigure(&Configure), STATUS_SUCCESS);
+        ok_ntstatus(pCheck(&Check), STATUS_ACCESS_DENIED);
+        CloseHandle(hSystem);
+    }
+
+    DestroyOpenedResource(pDestroy, hDevice, Create.hResource);
+    DestroyTestDevice(hDevice);
+    CloseAdapter(hAdapter);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1044,6 +1156,8 @@ START_TEST(sharing)
     Test_GetSharedResourceAdapterLuid_BadHandles();
 #endif
     Test_CheckSharedResourceAccess_BadHandle();
+    Test_RestrictedSharedAccess();
+    Test_GetRuntimeData_Retired();
     Test_OpenQuery_RealDevice_BadHandles();
     Test_SharedPrimary_OpenRoundTrip();
     Test_SharedResource_MultiAllocationRoundTrip();

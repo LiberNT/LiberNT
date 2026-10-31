@@ -68,6 +68,7 @@ list(APPEND SOURCE
     vidsch.c
     vidpn.c
     d3dkmt.c
+    blocklist.c
     display.c
     debug.c)
 

@@ -306,6 +306,50 @@ static void Test_SetVidPnSourceOwner1(void)
     CloseAdapter(hAdapter);
 }
 
+/* ---- SetVidPnSourceOwner1: DisableDWMVirtualMode is a one-source topology request ---- */
+static void Test_SetVidPnSourceOwner1_DisableDwmVirtualMode(void)
+{
+    D3DKMT_SETVIDPNSOURCEOWNER1 Owner1;
+    D3DKMT_HANDLE hAdapter = 0, hDevice = 0;
+    D3DKMT_VIDPNSOURCEOWNER_TYPE ownerTypes[2] = { D3DKMT_VIDPNSOURCEOWNER_SHARED, D3DKMT_VIDPNSOURCEOWNER_SHARED };
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID srcIds[2] = { 0, 1 };
+    NTSTATUS Status;
+
+    LOADFN(PFND3DKMT_SETVIDPNSOURCEOWNER1, pfn, "D3DKMTSetVidPnSourceOwner1");
+
+    if (!OpenAdapterAndDevice(&hAdapter, &hDevice))
+    {
+        skip("Cannot open adapter/device for DisableDWMVirtualMode\n");
+        return;
+    }
+
+    memset(&Owner1, 0, sizeof(Owner1));
+    Owner1.Version0.hDevice = hDevice;
+    Owner1.Version0.pType = ownerTypes;
+    Owner1.Version0.pVidPnSourceId = srcIds;
+    Owner1.Flags.DisableDWMVirtualMode = 1;
+
+    Owner1.Version0.VidPnSourceCount = 0;
+    Status = pfn(&Owner1);
+    ok(Status == STATUS_INVALID_PARAMETER, "DisableDWMVirtualMode with no source returned 0x%08lx\n", (unsigned long)Status);
+
+    Owner1.Version0.VidPnSourceCount = 2;
+    Status = pfn(&Owner1);
+    ok(Status == STATUS_INVALID_PARAMETER, "DisableDWMVirtualMode with two sources returned 0x%08lx\n", (unsigned long)Status);
+
+    Owner1.Version0.VidPnSourceCount = 1;
+    Owner1.Version0.hDevice = 0xBAD0CAFE;
+    Status = pfn(&Owner1);
+    ok(Status == STATUS_INVALID_PARAMETER, "DisableDWMVirtualMode with a bad device returned 0x%08lx\n", (unsigned long)Status);
+
+    Owner1.Version0.hDevice = hDevice;
+    Status = pfn(&Owner1);
+    ok(Status == STATUS_SUCCESS, "DisableDWMVirtualMode on source 0 returned 0x%08lx\n", (unsigned long)Status);
+
+    DestroyTestDevice(hDevice);
+    CloseAdapter(hAdapter);
+}
+
 /* ---- SetVidPnSourceOwner2: NULL contract (struct gated out at 0x5023) ---- */
 static void Test_SetVidPnSourceOwner2(void)
 {
@@ -1208,13 +1252,9 @@ static void Test_InvalidateActiveVidPn(void)
     _SEH2_TRY { Status = pfn(&Inv); }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) { faulted = TRUE; }
     _SEH2_END;
-    ok(faulted || !NT_SUCCESS(Status),
-       "InvalidateActiveVidPn (obsolete) must not succeed, got 0x%08lx%s\n",
+    ok(!faulted && Status == STATUS_INVALID_PARAMETER,
+       "InvalidateActiveVidPn on a driver newer than WDDM 1.0 returned 0x%08lx%s\n",
        (unsigned long)Status, faulted ? " (faulted)" : "");
-    if (Status == STATUS_NOT_SUPPORTED)
-        trace("InvalidateActiveVidPn returned STATUS_NOT_SUPPORTED (expected; obsolete)\n");
-    else
-        trace("InvalidateActiveVidPn returned 0x%08lx\n", (unsigned long)Status);
 
     CloseAdapter(hAdapter);
 }
@@ -1281,6 +1321,7 @@ START_TEST(displayext)
     Test_SetVidPnSourceOwner_Null();
     Test_SetVidPnSourceOwner_AllTypes();
     Test_SetVidPnSourceOwner1();
+    Test_SetVidPnSourceOwner1_DisableDwmVirtualMode();
     Test_SetVidPnSourceOwner2();
     Test_ReleaseProcessVidPnSourceOwners();
     Test_CheckVidPnExclusiveOwnership();

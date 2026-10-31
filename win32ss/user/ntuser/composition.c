@@ -3680,6 +3680,7 @@ IntCompositionDwmAttach(_In_ PVOID pUser)
     PKEVENT WakeEvent = NULL;
     PEPROCESS CurrentProcess = PsGetCurrentProcess();
     NTSTATUS Status = STATUS_SUCCESS;
+    NTSTATUS RegisterStatus;
 
     _SEH2_TRY
     {
@@ -3731,6 +3732,10 @@ IntCompositionDwmAttach(_In_ PVOID pUser)
             ZwClose(hWake);
             return Status;
         }
+
+        RegisterStatus = WddmBridgeRegisterDwmProcess();
+        if (!NT_SUCCESS(RegisterStatus))
+            ERR("DWM registration with dxgkrnl failed 0x%08lx\n", RegisterStatus);
 
         /* The compositor now owns the frame: turn redirection on, retarget
          * every live DC (held GL DCs included) into window backings, and

@@ -403,51 +403,6 @@ DxgkpPagingAllocateDmaBuffer(
                                                 OutDmaBuffer);
 }
 
-static BOOLEAN
-DxgkpPagingOperationIsImmediate(
-    _In_ PDXGKRNL_ADAPTER Adapter,
-    _In_ CONST DXGKRNL_PAGING_OP *Op)
-{
-#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_0)
-    return Op->Type == DxgkPagingOpUpdatePageTable &&
-           Op->UpdateMode == DXGK_PAGETABLEUPDATE_CPU_VIRTUAL &&
-           Adapter->GpuMmuCapsValid &&
-           Adapter->GpuMmuCaps.PageTableUpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
-#else
-    UNREFERENCED_PARAMETER(Adapter);
-    UNREFERENCED_PARAMETER(Op);
-    return FALSE;
-#endif
-}
-
-static NTSTATUS
-DxgkpPagingBuildImmediate(
-    _In_ PDXGKRNL_ADAPTER Adapter,
-    _In_ CONST DXGKRNL_PAGING_OP *Op)
-{
-    DXGKARG_BUILDPAGINGBUFFER BuildArgs;
-    NTSTATUS Status;
-
-    RtlZeroMemory(&BuildArgs, sizeof(BuildArgs));
-    BuildArgs.hSystemContext = Adapter->PagingSystemContext->hMiniportContext;
-    DxgkpPagingFillBuildArgs(Adapter, Op, FALSE, &BuildArgs);
-    if (!DxgkAcquireKmdCall(Adapter))
-        return STATUS_DELETE_PENDING;
-    DxgkEnterSchedulerClass(Adapter);
-    _SEH2_TRY
-    {
-        Status = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
-    DxgkLeaveSchedulerClass(Adapter);
-    DxgkReleaseKmdCall(Adapter);
-    return Status;
-}
-
 BOOLEAN
 DxgkPagingOperationSupported(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -687,14 +642,6 @@ DxgkPagingExecuteBatch(
             BOOLEAN Complete = FALSE;
             BOOLEAN Idle;
 
-            if (DxgkpPagingOperationIsImmediate(Adapter, &Operations[OperationIndex]))
-            {
-                Status = DxgkpPagingBuildImmediate(Adapter, &Operations[OperationIndex]);
-                if (!NT_SUCCESS(Status))
-                    goto Cleanup;
-                continue;
-            }
-
             for (Pass = 0; Pass < DXGKP_PAGING_MAX_PASSES; ++Pass)
             {
                 DXGKARG_BUILDPAGINGBUFFER BuildArgs;
@@ -720,18 +667,10 @@ DxgkPagingExecuteBatch(
                         goto Cleanup;
                     }
                     DxgkEnterSchedulerClass(Adapter);
-                    _SEH2_TRY
-                    {
-                        BuildStatus =
-                            DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(
-                                Adapter->MiniportDeviceContext,
-                                &BuildArgs);
-                    }
-                    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-                    {
-                        BuildStatus = _SEH2_GetExceptionCode();
-                    }
-                    _SEH2_END;
+                    BuildStatus =
+                        DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(
+                            Adapter->MiniportDeviceContext,
+                            &BuildArgs);
                     DxgkLeaveSchedulerClass(Adapter);
                     DxgkReleaseKmdCall(Adapter);
                     Status = DxgkpPagingFinishPrivateData(DmaBuffer, &BuildArgs);
@@ -824,18 +763,10 @@ DxgkPagingExecuteBatch(
                     goto Cleanup;
                 }
                 DxgkEnterSchedulerClass(Adapter);
-                _SEH2_TRY
-                {
-                    BuildStatus =
-                        DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(
-                            Adapter->MiniportDeviceContext,
-                            &BuildArgs);
-                }
-                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-                {
-                    BuildStatus = _SEH2_GetExceptionCode();
-                }
-                _SEH2_END;
+                BuildStatus =
+                    DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(
+                        Adapter->MiniportDeviceContext,
+                        &BuildArgs);
                 DxgkLeaveSchedulerClass(Adapter);
                 DxgkReleaseKmdCall(Adapter);
                 Status = DxgkpPagingFinishPrivateData(DmaBuffer, &BuildArgs);
@@ -1117,8 +1048,6 @@ DxgkPagingExecute(
     {
         return STATUS_DEVICE_NOT_READY;
     }
-    if (hSignalSyncObject == 0 && DxgkpPagingOperationIsImmediate(Adapter, Op))
-        return DxgkpPagingBuildImmediate(Adapter, Op);
 
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
     if (hSignalSyncObject != 0 &&
@@ -1167,15 +1096,7 @@ DxgkPagingExecute(
                 goto Cleanup;
             }
             DxgkEnterSchedulerClass(Adapter);
-            _SEH2_TRY
-            {
-                BuildStatus = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                BuildStatus = _SEH2_GetExceptionCode();
-            }
-            _SEH2_END;
+            BuildStatus = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
             DxgkLeaveSchedulerClass(Adapter);
             DxgkReleaseKmdCall(Adapter);
             Status = DxgkpPagingFinishPrivateData(DmaBuffer, &BuildArgs);
@@ -1492,14 +1413,7 @@ DxgkpPagingUnmapApertureBuffer(
         return;
     }
     DxgkEnterSchedulerClass(Adapter);
-    _SEH2_TRY
-    {
-        (VOID)DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-    }
-    _SEH2_END;
+    (VOID)DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
     DxgkLeaveSchedulerClass(Adapter);
     DxgkReleaseMiniportCallback(Adapter);
 }
@@ -1641,15 +1555,7 @@ DxgkpPagingAddApertureBuffer(
         return STATUS_DELETE_PENDING;
     }
     DxgkEnterSchedulerClass(Adapter);
-    _SEH2_TRY
-    {
-        BuildStatus = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        BuildStatus = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    BuildStatus = DXGK_CB_FULL(Adapter, DxgkDdiBuildPagingBuffer)(Adapter->MiniportDeviceContext, &BuildArgs);
     DxgkLeaveSchedulerClass(Adapter);
     DxgkReleaseKmdCall(Adapter);
     if (!NT_SUCCESS(BuildStatus))

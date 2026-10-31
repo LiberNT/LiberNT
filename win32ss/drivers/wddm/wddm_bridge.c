@@ -679,6 +679,12 @@ WddmBridgeSetCompositorSourceOwner(
 }
 
 NTSTATUS
+WddmBridgeRegisterDwmProcess(VOID)
+{
+    return WddmBridgeSendIoctl(IOCTL_RXGK_REGISTERDWMPROCESS, NULL, 0, NULL, 0);
+}
+
+NTSTATUS
 WddmBridgeSendIoctlWithInformation(
     _In_ ULONG IoControlCode,
     _In_opt_ PVOID InputBuffer,

@@ -192,17 +192,9 @@ DxgkpInvokeCreateOverlay(
     }
     else
     {
-        _SEH2_TRY
-        {
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiCreateOverlay)(
-                         Adapter->MiniportDeviceContext,
-                         Args);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiCreateOverlay)(
+                     Adapter->MiniportDeviceContext,
+                     Args);
         DxgkReleaseMiniportCallback(Adapter);
     }
     KeReleaseMutex(&Adapter->OverlayMutex, FALSE);
@@ -234,17 +226,9 @@ DxgkpInvokeUpdateOverlay(
     }
     else
     {
-        _SEH2_TRY
-        {
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiUpdateOverlay)(
-                         Overlay->hMiniportOverlay,
-                         Args);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiUpdateOverlay)(
+                     Overlay->hMiniportOverlay,
+                     Args);
         DxgkReleaseMiniportCallback(Adapter);
     }
     KeReleaseMutex(&Adapter->OverlayMutex, FALSE);
@@ -276,17 +260,9 @@ DxgkpInvokeFlipOverlay(
     }
     else
     {
-        _SEH2_TRY
-        {
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiFlipOverlay)(
-                         Overlay->hMiniportOverlay,
-                         Args);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiFlipOverlay)(
+                     Overlay->hMiniportOverlay,
+                     Args);
         DxgkReleaseMiniportCallback(Adapter);
     }
     KeReleaseMutex(&Adapter->OverlayMutex, FALSE);
@@ -322,16 +298,8 @@ DxgkpInvokeDestroyOverlay(
     }
     else
     {
-        _SEH2_TRY
-        {
-            Status = DXGK_CB_FULL(Adapter, DxgkDdiDestroyOverlay)(
-                         Overlay->hMiniportOverlay);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiDestroyOverlay)(
+                     Overlay->hMiniportOverlay);
         DxgkReleaseMiniportCallback(Adapter);
     }
     KeReleaseMutex(&Adapter->OverlayMutex, FALSE);
@@ -427,6 +395,7 @@ DxgkCreateOverlayWithAccessMode(
     Overlay->Device = Device;
     Overlay->OwnerProcess = PsGetCurrentProcess();
     Overlay->Allocation = Allocation;
+    Overlay->VidPnSourceId = Data->VidPnSourceId;
     Overlay->ReferenceCount = 1;
     KeInitializeMutex(&Overlay->OperationMutex, 0);
     InitializeListHead(&Overlay->DeviceOverlayListEntry);
@@ -619,6 +588,44 @@ CleanupOverlay:
         ExFreePoolWithTag(CapturedPrivateData, TAG_DXGK_CAPTURE);
     DxgkpDereferenceOverlay(Overlay);
 CleanupDevice:
+    DxgkDereferenceDevice(Device);
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+DxgkGetOverlayState(
+    _Inout_ D3DKMT_GETOVERLAYSTATE *Data)
+{
+    PDXGKRNL_ADAPTER Adapter;
+    PDXGKRNL_DEVICE Device;
+    PDXGKRNL_OVERLAY Overlay;
+    PVOID Object;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    if (Data == NULL)
+        return STATUS_INVALID_PARAMETER;
+    if (!NT_SUCCESS(DxgkReferenceOwnedDeviceByHandle(Data->hDevice, PsGetCurrentProcess(), &Adapter, &Device)))
+        return STATUS_INVALID_PARAMETER;
+    Status = DxgkReferenceOwnedHandle(Data->hOverlay, DxgkHandleTypeOverlay, PsGetCurrentProcess(),
+                                      DxgkpReferenceOverlay, &Object);
+    if (!NT_SUCCESS(Status))
+    {
+        DxgkDereferenceDevice(Device);
+        return STATUS_INVALID_PARAMETER;
+    }
+    Overlay = Object;
+    if (Overlay->Device != Device)
+    {
+        Status = STATUS_INVALID_PARAMETER;
+    }
+    else
+    {
+        Data->OverlayEnabled = Overlay->VidPnSourceId != D3DDDI_ID_UNINITIALIZED;
+        Status = STATUS_SUCCESS;
+    }
+    DxgkpDereferenceOverlay(Overlay);
     DxgkDereferenceDevice(Device);
     return Status;
 }

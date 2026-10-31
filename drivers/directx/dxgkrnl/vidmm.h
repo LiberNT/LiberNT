@@ -180,6 +180,13 @@ typedef struct _DXGKRNL_SEGMENT
 
 } DXGKRNL_SEGMENT, *PDXGKRNL_SEGMENT;
 
+typedef struct _DXGKVMM_SHARED_ACCESS
+{
+    LIST_ENTRY Link;
+    BOOLEAN IsDwm;
+    PEPROCESS Process;
+} DXGKVMM_SHARED_ACCESS, *PDXGKVMM_SHARED_ACCESS;
+
 typedef struct _DXGKVMM_RESOURCE
 {
     /* Handle-table ownership plus transient users. */
@@ -220,7 +227,8 @@ typedef struct _DXGKVMM_RESOURCE
 
     /* TRUE when sharing uses a secured NT object instead of hGlobalShare. */
     BOOLEAN            NtSecuritySharing;
-    PEPROCESS          SharedAccessProcess;
+    BOOLEAN            SharedAccessRestricted;
+    LIST_ENTRY         SharedAccessList;
 
     /* Runtime-private data copied from D3DKMT_CREATEALLOCATION. */
     PVOID              PrivateRuntimeData;
@@ -631,6 +639,10 @@ DxgkVidMmPrepareForIdle(
 
 NTSTATUS
 DxgkVidMmPrepareForStop(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+NTSTATUS
+DxgkVidMmPrepareForExclusion(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
 NTSTATUS
@@ -1063,6 +1075,30 @@ DxgkVidMmReferenceResource(
     _In_opt_ PDXGKRNL_DEVICE ExpectedDevice,
     _Out_ PDXGKVMM_RESOURCE *OutResource);
 
+BOOLEAN
+DxgkVidMmSharedAccessAllowed(
+    _In_ PDXGKVMM_RESOURCE Resource,
+    _In_ PEPROCESS Process);
+
+NTSTATUS
+DxgkVidMmAddSharedAccess(
+    _In_ PDXGKVMM_RESOURCE Resource,
+    _In_ BOOLEAN IsDwm,
+    _In_opt_ PEPROCESS Process);
+
+NTSTATUS
+DxgkVidMmConfigureSharedResource(
+    _In_ PDXGKRNL_DEVICE Device,
+    _In_ D3DKMT_HANDLE hResource,
+    _In_ BOOLEAN IsDwm,
+    _In_opt_ HANDLE hProcess,
+    _In_ BOOLEAN AllowAccess);
+
+NTSTATUS
+DxgkVidMmCheckSharedResourceAccess(
+    _In_ D3DKMT_HANDLE hGlobalShare,
+    _In_ UINT ClientPid);
+
 NTSTATUS
 DxgkVidMmValidateSharedResourceOwner(
     _In_ ULONG GlobalShare,
@@ -1255,13 +1291,22 @@ DxgkVidMmPlaceLocalPageTable(
     _In_ ULONG Size,
     _In_ ULONG Alignment,
     _In_ ULONGLONG OwnerCookie,
+    _In_ BOOLEAN CpuAccess,
     _Out_ PULONGLONG OutSegmentOffset,
-    _Out_ PVOID *OutCpuVa);
+    _Out_ PVOID *OutCpuVa,
+    _Out_ PDXGKVMM_HOST_APERTURE_RUN OutRun);
+
+VOID
+DxgkVidMmUnmapPageTableHostAperture(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG SegmentId,
+    _Inout_ PDXGKVMM_HOST_APERTURE_RUN Run);
 
 BOOLEAN
 DxgkVidMmPageTableSegmentCpuReachable(
     _In_ PDXGKRNL_ADAPTER Adapter,
-    _In_ ULONG SegmentId);
+    _In_ ULONG SegmentId,
+    _In_ BOOLEAN HostApertureAllowed);
 
 NTSTATUS
 DxgkVidMmReserveSegmentRange(

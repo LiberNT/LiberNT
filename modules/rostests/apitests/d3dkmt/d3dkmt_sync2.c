@@ -63,6 +63,40 @@ static void Test_SignalSyncObjectFromGpu_NullArg(void)
 }
 
 /* ---- Monitored fence create on a real device (skip on display-only) ---- */
+static void Test_CreateSyncObject2_ReservedFlags(void)
+{
+    D3DKMT_HANDLE hAdapter, hDevice;
+    D3DKMT_CREATESYNCHRONIZATIONOBJECT2 cso;
+    NTSTATUS Status;
+
+    LOADFN(PFND3DKMT_CREATESYNCHRONIZATIONOBJECT2, pCreate,
+           "D3DKMTCreateSynchronizationObject2");
+
+    hAdapter = OpenAdapterFromDisplay1();
+    if (!hAdapter) { skip("No adapter on \\\\.\\DISPLAY1\n"); return; }
+    hDevice = CreateTestDevice(hAdapter);
+    if (!hDevice) { skip("CreateDevice failed\n"); CloseAdapter(hAdapter); return; }
+
+    memset(&cso, 0, sizeof(cso));
+    cso.hDevice = hDevice;
+    cso.Info.Type = D3DDDI_MONITORED_FENCE;
+    cso.Info.Flags.Value = 0x800;
+    Status = pCreate(&cso);
+    ok(Status == STATUS_INVALID_PARAMETER, "Reserved flag 0x800 returned 0x%08lX\n", (long)Status);
+
+    cso.Info.Flags.Value = 0x40000000;
+    Status = pCreate(&cso);
+    ok(Status == STATUS_INVALID_PARAMETER, "Reserved flag 0x40000000 returned 0x%08lX\n", (long)Status);
+
+    cso.Info.Type = (D3DDDI_SYNCHRONIZATIONOBJECT_TYPE)0x7F;
+    cso.Info.Flags.Value = 0x800;
+    Status = pCreate(&cso);
+    ok(Status == STATUS_INVALID_PARAMETER, "Reserved flag with an unknown type returned 0x%08lX\n", (long)Status);
+
+    DestroyTestDevice(hDevice);
+    CloseAdapter(hAdapter);
+}
+
 static void Test_MonitoredFence_Lifecycle(void)
 {
     D3DKMT_HANDLE hAdapter, hDevice;
@@ -204,6 +238,12 @@ static void Test_MonitoredFence_CpuValuePage(void)
                 ok_succeeded(Status,
                    "WaitForSynchronizationObjectFromCpu(42) failed "
                    "0x%08lX\n", (long)Status);
+
+                /* Only WaitAny is defined; the other flag bits are reserved. */
+                wait.Flags.Value = 2;
+                Status = pWait(&wait);
+                ok(Status == STATUS_INVALID_PARAMETER,
+                   "WaitForSynchronizationObjectFromCpu with a reserved flag returned 0x%08lX\n", (long)Status);
             }
         }
     }
@@ -1225,6 +1265,7 @@ START_TEST(sync2)
     Test_SignalSyncObjectFromCpu_NullArg();
     Test_SignalSyncObjectFromGpu_NullArg();
     Test_CreateSyncObject2_NormalizedState();
+    Test_CreateSyncObject2_ReservedFlags();
     Test_MonitoredFence_Lifecycle();
     Test_MonitoredFence_CpuValuePage();
     Test_MonitoredFence_AccessFlags();

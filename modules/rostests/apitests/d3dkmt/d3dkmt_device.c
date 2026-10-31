@@ -221,6 +221,22 @@ static void Test_GetDeviceState(void)
            "Unexpected execution state %d\n", StateData.ExecutionState);
     }
 
+    memset(&StateData, 0, sizeof(StateData));
+    StateData.hDevice = hDevice;
+    StateData.StateType = D3DKMT_DEVICESTATE_PRESENT;
+    StateData.PresentState.VidPnSourceId = 0;
+    ok_ntstatus(pfnD3DKMTGetDeviceState(&StateData), STATUS_SUCCESS);
+    StateData.PresentState.VidPnSourceId = 0x40;
+    ok_ntstatus(pfnD3DKMTGetDeviceState(&StateData), STATUS_INVALID_PARAMETER);
+
+    memset(&StateData, 0, sizeof(StateData));
+    StateData.hDevice = hDevice;
+    StateData.StateType = D3DKMT_DEVICESTATE_PRESENT_DWM;
+    StateData.PresentStateDWM.VidPnSourceId = 0;
+    ok_ntstatus(pfnD3DKMTGetDeviceState(&StateData), STATUS_SUCCESS);
+    StateData.PresentStateDWM.VidPnSourceId = 0x40;
+    ok_ntstatus(pfnD3DKMTGetDeviceState(&StateData), STATUS_INVALID_PARAMETER);
+
     /* Invalid device handle */
     memset(&StateData, 0, sizeof(StateData));
     StateData.hDevice = 0xBAD0CAFE;

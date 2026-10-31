@@ -353,6 +353,25 @@ Cleanup:
     DestroyTestDevice(hDevice);
 }
 
+static VOID
+Test_SubmitNoKmdAccess(
+    _In_ CONST CTXFLAGS_API *Api)
+{
+    D3DKMT_SUBMITCOMMAND Submit;
+    NTSTATUS Status;
+
+    /* NoKmdAccess is refused before the context is looked up unless the
+     * system runs with test signing. */
+    memset(&Submit, 0, sizeof(Submit));
+    Submit.Commands = 0x10000;
+    Submit.CommandLength = 16;
+    Submit.Flags.NoKmdAccess = 1;
+    Submit.BroadcastContextCount = 1;
+    Submit.BroadcastContext[0] = 0xBAD0CAFE;
+    Status = Api->Submit(&Submit);
+    ok(Status == STATUS_INVALID_PARAMETER, "SubmitCommand(NoKmdAccess) returned 0x%08lx\n", (ULONG)Status);
+}
+
 START_TEST(ctxflags)
 {
     CTXFLAGS_API Api;
@@ -366,6 +385,7 @@ START_TEST(ctxflags)
         skip("WDDM 2.0 virtual context entry points are not exported\n");
         return;
     }
+    Test_SubmitNoKmdAccess(&Api);
 
     memset(&Enum, 0, sizeof(Enum));
     if (!NT_SUCCESS(Api.EnumAdapters(&Enum)))

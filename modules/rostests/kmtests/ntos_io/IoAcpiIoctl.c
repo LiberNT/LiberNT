@@ -244,6 +244,51 @@ FindPciDevice(
     return Found;
 }
 
+static
+PDEVICE_OBJECT
+FindDisplayStackTop(
+    _Out_ PULONG Address)
+{
+    UNICODE_STRING PciName = RTL_CONSTANT_STRING(L"\\Driver\\PCI");
+    PDEVICE_OBJECT *List, Top, Found = NULL;
+    PDRIVER_OBJECT PciDriver;
+    ULONG Count = 0, Index, Length;
+    WCHAR ClassName[32];
+    NTSTATUS Status;
+
+    *Address = 0;
+    Status = ObReferenceObjectByName(&PciName, OBJ_CASE_INSENSITIVE, NULL, 0, IoDriverObjectType, KernelMode, NULL,
+                                     (PVOID *)&PciDriver);
+    if (!NT_SUCCESS(Status))
+        return NULL;
+
+    IoEnumerateDeviceObjectList(PciDriver, NULL, 0, &Count);
+    List = ExAllocatePoolWithTag(NonPagedPool, (Count + 16) * sizeof(PDEVICE_OBJECT), 'tpcA');
+    if (List != NULL)
+    {
+        Status = IoEnumerateDeviceObjectList(PciDriver, List, (Count + 16) * sizeof(PDEVICE_OBJECT), &Count);
+        for (Index = 0; NT_SUCCESS(Status) && Index < Count; Index++)
+        {
+            if (Found == NULL && (List[Index]->Flags & DO_BUS_ENUMERATED_DEVICE) != 0 &&
+                NT_SUCCESS(IoGetDeviceProperty(List[Index], DevicePropertyClassName, sizeof(ClassName), ClassName, &Length)) &&
+                _wcsicmp(ClassName, L"Display") == 0 &&
+                NT_SUCCESS(IoGetDeviceProperty(List[Index], DevicePropertyAddress, sizeof(*Address), Address, &Length)))
+            {
+                Top = IoGetAttachedDeviceReference(List[Index]);
+                if (Top->DriverObject != PciDriver && Top->DriverObject != List[Index]->DriverObject)
+                    Found = Top;
+                else
+                    ObDereferenceObject(Top);
+            }
+            ObDereferenceObject(List[Index]);
+        }
+        ExFreePoolWithTag(List, 'tpcA');
+    }
+
+    ObDereferenceObject(PciDriver);
+    return Found;
+}
+
 START_TEST(IoAcpiIoctl)
 {
     UCHAR Buffer[1024], Second[1024];
@@ -303,6 +348,22 @@ START_TEST(IoAcpiIoctl)
             }
         }
 
+        ObDereferenceObject(Target);
+    }
+
+    Target = FindDisplayStackTop(&Address);
+    if (!skip(Target != NULL, "no display adapter stack on a PCI function\n"))
+    {
+        RtlZeroMemory(Buffer, sizeof(Buffer));
+        Status = Evaluate('RDA_', Buffer, sizeof(Buffer), &Information);
+        ok(Status == STATUS_SUCCESS, "display stack top _ADR: status=%lx address=%lx\n", Status, Address);
+        if (NT_SUCCESS(Status))
+        {
+            ok(Result->Count == 1 && Result->Argument[0].Type == ACPI_METHOD_ARGUMENT_INTEGER &&
+               Result->Argument[0].Argument == Address,
+               "display stack top _ADR: count=%lu value=%lx address=%lx\n",
+               Result->Count, Result->Argument[0].Argument, Address);
+        }
         ObDereferenceObject(Target);
     }
 

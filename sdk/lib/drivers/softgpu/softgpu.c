@@ -550,6 +550,7 @@ SoftGpuDdiAddDevice(
     KeInitializeEvent(&Device->FeatureInterfaceZeroEvent,
                       NotificationEvent,
                       TRUE);
+    Device->FeatureInterfaceQueriesOpen = 1;
 #endif
     SoftGpuScanoutInitializeDevice(Device);
 
@@ -1242,17 +1243,6 @@ SoftGpuDdiStartDevice(
                   min((SIZE_T)DxgkInterface->Size,
                       sizeof(Device->DxgkInterface)));
 
-#if (REACTOS_WDDM_TARGET_LEVEL >= 3200)
-    /*
-     * Feature negotiation can reenter DxgkDdiQueryInterface while this
-     * StartDevice call is still active. Open only that provider gate here;
-     * ordinary submit/DPC admission remains stopped until initialization
-     * below is complete.
-     */
-    KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
-    Device->FeatureInterfaceQueriesOpen = 1;
-    KeReleaseSpinLock(&Device->FenceLock, OldIrql);
-#endif
 
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3000)
     {
@@ -1462,7 +1452,6 @@ SoftGpuDdiStopDevice(
     KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
     Device->Stopped = 1;
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3200)
-    Device->FeatureInterfaceQueriesOpen = 0;
     Device->FeatureNegotiationActive = 0;
 #endif
     KeReleaseSpinLock(&Device->FenceLock, OldIrql);
@@ -1482,18 +1471,6 @@ SoftGpuDdiStopDevice(
                   FALSE,
                   NULL);
     }
-#if (REACTOS_WDDM_TARGET_LEVEL >= 3200)
-    if (InterlockedCompareExchange(
-            &Device->FeatureInterfaceReferences, 0, 0) != 0)
-    {
-        (VOID)KeWaitForSingleObject(
-                  &Device->FeatureInterfaceZeroEvent,
-                  Executive,
-                  KernelMode,
-                  FALSE,
-                  NULL);
-    }
-#endif
     InterlockedExchange(&Device->VsyncEnabled, 0);
     InterlockedExchange(&Device->VsyncPhaseEnabled, 0);
     if (Device->VsyncTimerInitialized)
@@ -1568,6 +1545,23 @@ SoftGpuDdiRemoveDevice(
     Status = SoftGpuDdiStopDevice(Device);
     if (!NT_SUCCESS(Status))
         return Status;
+#if (REACTOS_WDDM_TARGET_LEVEL >= 3200)
+    {
+        KIRQL OldIrql;
+
+        KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
+        Device->FeatureInterfaceQueriesOpen = 0;
+        KeReleaseSpinLock(&Device->FenceLock, OldIrql);
+        if (InterlockedCompareExchange(&Device->FeatureInterfaceReferences, 0, 0) != 0)
+        {
+            (VOID)KeWaitForSingleObject(&Device->FeatureInterfaceZeroEvent,
+                                        Executive,
+                                        KernelMode,
+                                        FALSE,
+                                        NULL);
+        }
+    }
+#endif
 #if defined(SOFTGPU_PLATFORM_ADAPTER_SERVICES)
     SoftGpuPlatformAdapterRemoved(Device);
 #endif

@@ -34,3 +34,18 @@ DxgkAdapterStartRoleHasValidCounts(
     _In_ ULONG NumberOfVideoPresentSources,
     _In_ ULONG NodeCount,
     _In_ ULONG MaximumNodeCount);
+
+typedef enum _DXGK_VSYNC_CONTROL_DDI
+{
+    DxgkVsyncControlNone = 0,
+    DxgkVsyncControlInterrupt,
+    DxgkVsyncControlInterrupt2,
+    DxgkVsyncControlInterrupt3
+} DXGK_VSYNC_CONTROL_DDI;
+
+DXGK_VSYNC_CONTROL_DDI
+DxgkAdapterStartVsyncControlDdi(
+    _In_ BOOLEAN IndependentVidPnVSyncControl,
+    _In_ BOOLEAN HasControlInterrupt3,
+    _In_ BOOLEAN HasControlInterrupt2,
+    _In_ BOOLEAN HasControlInterrupt);

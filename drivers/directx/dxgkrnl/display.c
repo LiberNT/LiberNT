@@ -40,6 +40,7 @@
 #include "pnp.h"
 #include "d3dkmt.h"
 #include <ntddvdeo.h>
+#include <ndk/inbvfuncs.h>
 #include <ntstrsafe.h>
 /* IOCTL_VIDEO_DXGK_* present-path contract, shared with cdd/win32k. */
 #include <reactos/dwmframe.h>
@@ -561,15 +562,7 @@ DxgkpPinPathScalingForPinnedModes(
     EnumArgs.EnumPivotType = D3DKMDT_EPT_NOPIVOT;
     if (!DxgkAcquireKmdCall(Adapter))
         return STATUS_DELETE_PENDING;
-    _SEH2_TRY
-    {
-        Status = DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality)(Adapter->MiniportDeviceContext, &EnumArgs);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
+    Status = DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality)(Adapter->MiniportDeviceContext, &EnumArgs);
     DxgkReleaseKmdCall(Adapter);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -735,17 +728,7 @@ DxgkpAskMiniportIsVidPnSupported(
     if (!DxgkAcquireKmdCall(Adapter))
         return STATUS_DELETE_PENDING;
     DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: calling DxgkDdiIsSupportedVidPn\n");
-    _SEH2_TRY
-    {
-        Status = DXGK_CB(Adapter, DxgkDdiIsSupportedVidPn)(Adapter->MiniportDeviceContext, &IsSupportedArgs);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-        DXGKRNL_ERR("DxgkpCommitVidPnToMiniport: IsSupportedVidPn FAULTED 0x%08lX\n",
-                    Status);
-    }
-    _SEH2_END;
+    Status = DXGK_CB(Adapter, DxgkDdiIsSupportedVidPn)(Adapter->MiniportDeviceContext, &IsSupportedArgs);
     DxgkReleaseKmdCall(Adapter);
     DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: IsSupportedVidPn returned 0x%08lX, "
                   "supported=%d\n", Status, IsSupportedArgs.IsVidPnSupported);
@@ -2004,17 +1987,7 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
         else
         {
             DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: calling DxgkDdiEnumVidPnCofuncModality\n");
-            _SEH2_TRY
-            {
-                Status = DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality)(Adapter->MiniportDeviceContext, &EnumArgs);
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                Status = _SEH2_GetExceptionCode();
-                DXGKRNL_ERR("DxgkpCommitVidPnToMiniport: EnumCofuncModality FAULTED 0x%08lX\n",
-                            Status);
-            }
-            _SEH2_END;
+            Status = DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality)(Adapter->MiniportDeviceContext, &EnumArgs);
             DxgkReleaseKmdCall(Adapter);
             DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: EnumCofuncModality returned 0x%08lX\n",
                           Status);
@@ -2501,15 +2474,7 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
                 Status = STATUS_DELETE_PENDING;
                 goto Cleanup;
             }
-            _SEH2_TRY
-            {
-                Status = DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality)(Adapter->MiniportDeviceContext, &EnumArgs);
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                Status = _SEH2_GetExceptionCode();
-            }
-            _SEH2_END;
+            Status = DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality)(Adapter->MiniportDeviceContext, &EnumArgs);
             DxgkReleaseKmdCall(Adapter);
             if (!NT_SUCCESS(Status))
             {
@@ -2898,6 +2863,22 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
         }
     }
 
+    /* The new mode's primary is programmed before the source becomes visible. */
+    if (!ForceDodPresentOnlyPath && !TopologyEmpty)
+    {
+        for (i = 0; i < VidPn->NumPaths; i++)
+        {
+            D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId = VidPn->Paths[i].VidPnSourceId;
+
+            if (SourceId < 32 &&
+                (InterlockedCompareExchange(&Adapter->ScanoutModeChangePending, 0, 0) & (LONG)(1UL << SourceId)) &&
+                DxgkVidPnGetCompositorGeneration(Adapter, SourceId) == 0)
+            {
+                (VOID)DxgkPresentApplyPendingModeChange(Adapter, SourceId);
+            }
+        }
+    }
+
     /*
      * Step 5: Call SetVidPnSourceVisibility to make the display visible.
      * Only call after a full timing/commit transaction; DOD drivers do not
@@ -2928,6 +2909,17 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
             RtlZeroMemory(&VisArgs, sizeof(VisArgs));
             VisArgs.VidPnSourceId = TopologyEmpty ? ActiveSourceId : VidPn->Paths[PathIndex].VidPnSourceId;
             VisArgs.Visible = TopologyEmpty ? FALSE : TRUE;
+            if (VisArgs.VidPnSourceId < 32 && !VisArgs.Visible)
+                InterlockedAnd(&Adapter->DeferredVisibleSourceMask, ~(LONG)(1UL << VisArgs.VidPnSourceId));
+            /* TODO: defer every SetTimingsFromVidPn activation and present the CDD primary of unowned sources (Win11 SetVidPnSourceActive) */
+            if (VisArgs.Visible && UseSetTimings && VisArgs.VidPnSourceId < 32 &&
+                DxgkPresentGetFrameCount(Adapter, VisArgs.VidPnSourceId) == 0)
+            {
+                InterlockedOr(&Adapter->DeferredVisibleSourceMask, (LONG)(1UL << VisArgs.VidPnSourceId));
+                DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: source %u becomes visible with its first frame\n",
+                              VisArgs.VidPnSourceId);
+                continue;
+            }
             if (!DxgkAcquireKmdCall(Adapter))
                 break;
             DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: calling SetVidPnSourceVisibility(%u)\n",
@@ -3469,6 +3461,50 @@ DxgkpPresentSourceRects(
 Cleanup:
     DxgkpReleaseSharedSurfaceSnapshot(&SharedSurface);
     return Status;
+}
+
+VOID
+DxgkDisplayPresentBootScreen(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    ULONG Width = 0;
+    ULONG Height = 0;
+    ULONG Pitch;
+    SIZE_T Size;
+    PVOID Pixels;
+    RECTL Rect;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Adapter == NULL || !Adapter->VidPnCommitted || DxgkpBootLogHoldsDisplay() ||
+        Adapter->CommittedWidth == 0 || Adapter->CommittedHeight == 0 ||
+        Adapter->CommittedWidth > MAXULONG / sizeof(ULONG) / Adapter->CommittedHeight ||
+        DxgkPresentGetFrameCount(Adapter, 0) != 0)
+    {
+        return;
+    }
+
+    Pitch = Adapter->CommittedWidth * sizeof(ULONG);
+    Size = (SIZE_T)Pitch * Adapter->CommittedHeight;
+    Pixels = ExAllocatePoolZero(PagedPool, Size, TAG_DXGK_PRESENT);
+    if (Pixels == NULL)
+        return;
+
+    if (InbvQueryBootScreen(NULL, 0, &Width, &Height) == STATUS_BUFFER_TOO_SMALL &&
+        Width == Adapter->CommittedWidth && Height == Adapter->CommittedHeight)
+    {
+        (VOID)InbvCopyBootScreen(Pixels, (LONG)Pitch, Width, Height);
+    }
+
+    Rect.left = 0;
+    Rect.top = 0;
+    Rect.right = (LONG)Adapter->CommittedWidth;
+    Rect.bottom = (LONG)Adapter->CommittedHeight;
+    Status = DxgkpPresentSourceRects(Adapter, Pixels, Pitch, Size, &Rect, 1, "boot");
+    DXGKRNL_TRACE("DxgkDisplayPresentBootScreen: adapter %p %lux%lu status 0x%08lX\n",
+                  Adapter, Adapter->CommittedWidth, Adapter->CommittedHeight, Status);
+    ExFreePoolWithTag(Pixels, TAG_DXGK_PRESENT);
 }
 
 static NTSTATUS
@@ -4585,15 +4621,7 @@ DxgkpDisplayDispatch(
                 Status = STATUS_DELETE_PENDING;
                 break;
             }
-            _SEH2_TRY
-            {
-                Status = DXGK_CB(EscapeAdapter, DxgkDdiEscape)(EscapeAdapter->MiniportDeviceContext, &EscapeArgs);
-            }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-            {
-                Status = _SEH2_GetExceptionCode();
-            }
-            _SEH2_END;
+            Status = DXGK_CB(EscapeAdapter, DxgkDdiEscape)(EscapeAdapter->MiniportDeviceContext, &EscapeArgs);
             DxgkReleaseMiniportCallback(EscapeAdapter);
 
             if (NT_SUCCESS(Status))

@@ -263,6 +263,7 @@ typedef struct _DXGKRNL_PRESENT_ENTRY
 NTSTATUS DxgkPresentSetQueuedLimit(_In_ struct _DXGKRNL_DEVICE *Device, _In_ ULONG RequestedLimit);
 NTSTATUS DxgkPresentGetQueuedLimit(_In_ struct _DXGKRNL_DEVICE *Device, _Out_ PUINT QueuedPresentLimit);
 NTSTATUS DxgkPresentGetPendingFlipLimit(_In_ struct _DXGKRNL_DEVICE *Device, _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId, _Out_ PUINT QueuedPendingFlipLimit);
+NTSTATUS DxgkPresentGetDeviceStats(_In_ struct _DXGKRNL_DEVICE *Device, _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId, _Out_ D3DKMT_PRESENT_STATS *Stats, _Out_opt_ D3DKMT_PRESENT_STATS_DWM *StatsDwm);
 NTSTATUS DxgkPresentGetQueueLimitState(_In_ struct _DXGKRNL_DEVICE *Device, _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId, _Out_ PBOOLEAN LimitReached);
 
 /* ========================================================================
@@ -315,6 +316,7 @@ typedef struct _DXGKRNL_PRESENT_QUEUE
      *   LastPresentVBlank — VBlankCount at which the last present executed.
      */
     volatile LONG64                 VBlankCount;
+    volatile LONG64                 LastVBlankQpc;
     LONG64                          LastPresentVBlank;
     /* One MMIO flip is armed at a time. Both slots own an allocation
      * reference and one residency pin; a matching CRTC address releases

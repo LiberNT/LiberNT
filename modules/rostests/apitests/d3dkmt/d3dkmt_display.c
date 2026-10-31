@@ -292,8 +292,94 @@ static void Test_Escape(void)
     EscapeData.pPrivateDriverData = NULL;
     EscapeData.PrivateDriverDataSize = 0;
     Status = pfnD3DKMTEscape(&EscapeData);
-    /* May succeed (driver-specific) or fail */
-    trace("Escape(DRIVERPRIVATE, NULL, 0) returned 0x%lx\n", Status);
+    ok(Status == STATUS_INVALID_PARAMETER || Status == STATUS_NOT_SUPPORTED,
+       "Escape(DRIVERPRIVATE, NULL, 0) returned 0x%lx\n", Status);
+
+    /* Internal escapes are refused before the adapter is looked at */
+    {
+        UCHAR Data[0x900];
+
+        memset(Data, 0, sizeof(Data));
+        memset(&EscapeData, 0, sizeof(EscapeData));
+        EscapeData.hAdapter = hAdapter;
+        EscapeData.Type = D3DKMT_ESCAPE_VIDMM;
+        EscapeData.pPrivateDriverData = Data;
+        EscapeData.PrivateDriverDataSize = sizeof(Data);
+        Status = pfnD3DKMTEscape(&EscapeData);
+        ok(Status == STATUS_ACCESS_DENIED, "Escape(VIDMM) returned 0x%lx\n", Status);
+
+        EscapeData.Type = D3DKMT_ESCAPE_VIDSCH;
+        Status = pfnD3DKMTEscape(&EscapeData);
+        ok(Status == STATUS_ACCESS_DENIED, "Escape(VIDSCH) returned 0x%lx\n", Status);
+
+        EscapeData.hAdapter = 0xBAD0CAFE;
+        EscapeData.Type = D3DKMT_ESCAPE_VIDMM;
+        Status = pfnD3DKMTEscape(&EscapeData);
+        ok(Status == STATUS_ACCESS_DENIED, "Escape(VIDMM) on a bad adapter returned 0x%lx\n", Status);
+    }
+
+    /* Status queries answered by dxgkrnl itself */
+    {
+        D3DKMT_HISTORY_BUFFER_STATUS History;
+        D3DKMT_QUERYADAPTERINFO QueryInfo;
+        D3DKMT_ADAPTERTYPE AdapterType;
+        UCHAR State;
+
+        LOAD_D3DKMT(D3DKMTQueryAdapterInfo);
+
+        memset(&EscapeData, 0, sizeof(EscapeData));
+        EscapeData.hAdapter = hAdapter;
+        EscapeData.Type = D3DKMT_ESCAPE_QUERY_IOMMU_STATUS;
+        EscapeData.pPrivateDriverData = &State;
+        EscapeData.PrivateDriverDataSize = 0;
+        Status = pfnD3DKMTEscape(&EscapeData);
+        ok(Status == STATUS_INVALID_PARAMETER, "Escape(QUERY_IOMMU_STATUS, 0 bytes) returned 0x%lx\n", Status);
+        EscapeData.Type = D3DKMT_ESCAPE_QUERY_DMA_REMAPPING_STATUS;
+        Status = pfnD3DKMTEscape(&EscapeData);
+        ok(Status == STATUS_INVALID_PARAMETER, "Escape(QUERY_DMA_REMAPPING_STATUS, 0 bytes) returned 0x%lx\n", Status);
+
+        memset(&AdapterType, 0, sizeof(AdapterType));
+        memset(&QueryInfo, 0, sizeof(QueryInfo));
+        QueryInfo.hAdapter = hAdapter;
+        QueryInfo.Type = KMTQAITYPE_ADAPTERTYPE;
+        QueryInfo.pPrivateDriverData = &AdapterType;
+        QueryInfo.PrivateDriverDataSize = sizeof(AdapterType);
+        if (pfnD3DKMTQueryAdapterInfo(&QueryInfo) == STATUS_SUCCESS && AdapterType.RenderSupported)
+        {
+            State = 0x5A;
+            EscapeData.Type = D3DKMT_ESCAPE_QUERY_IOMMU_STATUS;
+            EscapeData.PrivateDriverDataSize = sizeof(State);
+            Status = pfnD3DKMTEscape(&EscapeData);
+            ok(Status == STATUS_SUCCESS, "Escape(QUERY_IOMMU_STATUS) returned 0x%lx\n", Status);
+            ok(State <= 1, "IOMMU status byte %u\n", State);
+            State = 0x5A;
+            EscapeData.Type = D3DKMT_ESCAPE_QUERY_DMA_REMAPPING_STATUS;
+            Status = pfnD3DKMTEscape(&EscapeData);
+            ok(Status == STATUS_SUCCESS, "Escape(QUERY_DMA_REMAPPING_STATUS) returned 0x%lx\n", Status);
+            ok(State <= 1, "DMA remapping status byte %u\n", State);
+        }
+        else
+        {
+            skip("display adapter without render support\n");
+        }
+
+        memset(&History, 0, sizeof(History));
+        EscapeData.Type = D3DKMT_ESCAPE_HISTORY_BUFFER_STATUS;
+        EscapeData.pPrivateDriverData = &History;
+        EscapeData.PrivateDriverDataSize = sizeof(UINT);
+        Status = pfnD3DKMTEscape(&EscapeData);
+        ok(Status == STATUS_INVALID_PARAMETER, "Escape(HISTORY_BUFFER_STATUS, 4 bytes) returned 0x%lx\n", Status);
+        EscapeData.PrivateDriverDataSize = sizeof(History);
+        Status = pfnD3DKMTEscape(&EscapeData);
+        ok(Status == STATUS_INVALID_PARAMETER, "Escape(HISTORY_BUFFER_STATUS) without a device returned 0x%lx\n", Status);
+
+        EscapeData.Type = (D3DKMT_ESCAPETYPE)7;
+        Status = pfnD3DKMTEscape(&EscapeData);
+        ok(Status == STATUS_INVALID_PARAMETER, "Escape(type 7) returned 0x%lx\n", Status);
+        EscapeData.Type = (D3DKMT_ESCAPETYPE)(D3DKMT_ESCAPE_QUERY_DMA_REMAPPING_STATUS + 1);
+        Status = pfnD3DKMTEscape(&EscapeData);
+        ok(Status == STATUS_INVALID_PARAMETER, "Escape(type 40) returned 0x%lx\n", Status);
+    }
 
     /* Invalid adapter */
     memset(&EscapeData, 0, sizeof(EscapeData));

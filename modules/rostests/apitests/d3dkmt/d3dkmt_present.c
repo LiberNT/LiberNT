@@ -117,6 +117,25 @@ static void Test_GetPresentHistory_InvalidDevice(void)
        Status);
 }
 
+static void Test_GetPresentHistory_NotDwm(void)
+{
+    D3DKMT_GETPRESENTHISTORY HistData;
+    NTSTATUS Status;
+
+    LOAD_D3DKMT(D3DKMTGetPresentHistory);
+
+    memset(&HistData, 0, sizeof(HistData));
+    Status = pfnD3DKMTGetPresentHistory(&HistData);
+    ok(Status == STATUS_ACCESS_DENIED, "GetPresentHistory from a non-DWM process returned 0x%lx\n", Status);
+
+    HistData.hAdapter = (D3DKMT_HANDLE)0xBAD0CAFE;
+    HistData.ProvidedSize = 64;
+    HistData.pTokens = NULL;
+    Status = pfnD3DKMTGetPresentHistory(&HistData);
+    ok(Status == STATUS_ACCESS_DENIED, "GetPresentHistory with bad arguments from a non-DWM process returned 0x%lx\n",
+       Status);
+}
+
 START_TEST(D3dkmtPresent)
 {
     Test_Present_NullParam();
@@ -126,4 +145,5 @@ START_TEST(D3dkmtPresent)
     Test_Render_InvalidContext();
     Test_GetPresentHistory_NullParam();
     Test_GetPresentHistory_InvalidDevice();
+    Test_GetPresentHistory_NotDwm();
 }
