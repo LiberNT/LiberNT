@@ -51,6 +51,19 @@ MACRO(HANDLE_USER_APCS, ThreadReg, TrapFrame)
 NoUserApcPending:
 ENDM
 
+// Pico threads keep their user FS base in ETHREAD. Clobbers rax, rcx and rdx.
+MACRO(RESTORE_PICO_FS_BASE)
+    LOCAL NotPicoThread
+    mov rcx, gs:[PcCurrentThread]
+    test byte ptr [rcx + ThDebugActive], DEBUG_ACTIVE_MINIMAL_THREAD
+    jz NotPicoThread
+    mov eax, [rcx + ETHREAD_UserFsBase]
+    mov edx, [rcx + ETHREAD_UserFsBase + 4]
+    mov ecx, MSR_FS_BASE
+    wrmsr
+NotPicoThread:
+ENDM
+
 #else /* GAS / Clang */
 
 MACRO(ASSERT_TRAP_FRAME_INTS_ENABLED, Register)
@@ -90,6 +103,18 @@ MACRO(HANDLE_USER_APCS, ThreadReg, TrapFrame)
     jz 1f
     lea rcx, [TrapFrame]
     call KiInitiateUserApc
+1:
+ENDM
+
+// Pico threads keep their user FS base in ETHREAD. Clobbers rax, rcx and rdx.
+MACRO(RESTORE_PICO_FS_BASE)
+    mov rcx, gs:[PcCurrentThread]
+    test byte ptr [rcx + ThDebugActive], DEBUG_ACTIVE_MINIMAL_THREAD
+    jz 1f
+    mov eax, [rcx + ETHREAD_UserFsBase]
+    mov edx, [rcx + ETHREAD_UserFsBase + 4]
+    mov ecx, MSR_FS_BASE
+    wrmsr
 1:
 ENDM
 
@@ -384,6 +409,7 @@ MACRO(ExitTrap, Flags)
     ASSERT_IRQL_PASSIVE
 
     cli
+    RESTORE_PICO_FS_BASE
     RESTORE_USER_DEBUG_REGISTERS rbp
 
     /* Swap gs to user mode */

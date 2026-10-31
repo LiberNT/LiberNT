@@ -201,6 +201,31 @@ KiInstrumentTrapFrame(
     InterlockedAnd8((PCHAR)&Thread->Header.DebugActive, (CHAR)~DEBUG_ACTIVE_INSTRUMENTED);
 }
 
+VOID
+KiPicoSystemCallHandler(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _Inout_ PKEXCEPTION_FRAME ExceptionFrame)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+
+    __addgsdword(FIELD_OFFSET(KIPCR, Prcb.KeSystemCalls), 1);
+    Thread->PreviousMode = TrapFrame->PreviousMode = UserMode;
+    TrapFrame->PreviousIrql = PASSIVE_LEVEL;
+    TrapFrame->ExceptionFrame = 0;
+    TrapFrame->ExceptionActive = KEXCEPTION_ACTIVE_SERVICE_FRAME;
+    _enable();
+    PspPicoSystemCallDispatch(TrapFrame, ExceptionFrame);
+    if (Thread->ApcState.UserApcPending)
+    {
+        KIRQL OldIrql;
+
+        KeRaiseIrql(APC_LEVEL, &OldIrql);
+        KiDeliverApc(UserMode, ExceptionFrame, TrapFrame);
+        KeLowerIrql(OldIrql);
+    }
+    _disable();
+}
+
 PVOID
 KiSystemCallHandler(
     PKTRAP_FRAME TrapFrame)

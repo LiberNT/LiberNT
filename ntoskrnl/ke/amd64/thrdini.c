@@ -234,7 +234,11 @@ KiSwapContextResume(
 
     /* Set TEB pointer and GS base */
     Pcr->NtTib.Self = (PVOID)NewThread->Teb;
-    if (NewThread->Teb)
+    if (NewThread->Header.Minimal)
+    {
+        __writemsr(MSR_GS_SWAP, ((PETHREAD)NewThread)->UserGsBase);
+    }
+    else if (NewThread->Teb)
     {
        /* This will switch the usermode gs */
        __writemsr(MSR_GS_SWAP, (ULONG64)NewThread->Teb);
@@ -248,6 +252,8 @@ KiSwapContextResume(
         __writefs(KGDT64_R3_CMTEB | RPL_MASK);
 #endif
     }
+    if (NewThread->Header.Minimal)
+        __writemsr(MSR_FS_BASE, ((PETHREAD)NewThread)->UserFsBase);
 
     /* Increase context switch count */
     Pcr->Prcb.KeContextSwitches++;

@@ -1813,8 +1813,13 @@ typedef struct _ETHREAD
     PVOID WorkOnBehalfThread;
     PS_PROPERTY_SET PropertySet;
     PVOID PicoContext;
+#if defined(_M_AMD64)
+    ULONG64 UserFsBase;
+    ULONG64 UserGsBase;
+#else
     ULONG_PTR UserRoBase;
     ULONG_PTR UserRwBase;
+#endif
     struct _THREAD_ENERGY_VALUES *EnergyValues;
     union
     {
@@ -1858,6 +1863,15 @@ C_ASSERT(FIELD_OFFSET(ETHREAD, PropertySet) == 0x638);
 C_ASSERT(FIELD_OFFSET(ETHREAD, SelectedCpuSets) == 0x670);
 C_ASSERT(FIELD_OFFSET(ETHREAD, Silo) == 0x678);
 C_ASSERT(FIELD_OFFSET(ETHREAD, ThreadName) == 0x680);
+#endif
+
+#if defined(_M_AMD64) && (NTDDI_VERSION >= NTDDI_WIN10)
+C_ASSERT(FIELD_OFFSET(ETHREAD, CrossThreadFlags) == 0x5A0);
+C_ASSERT(FIELD_OFFSET(ETHREAD, PicoContext) == 0x670);
+C_ASSERT(FIELD_OFFSET(ETHREAD, UserFsBase) == 0x678);
+C_ASSERT(FIELD_OFFSET(ETHREAD, UserGsBase) == 0x680);
+C_ASSERT(FIELD_OFFSET(ETHREAD, Silo) == 0x698);
+C_ASSERT(FIELD_OFFSET(ETHREAD, ThreadName) == 0x6A0);
 #endif
 
 typedef enum _PS_PROTECTED_TYPE
