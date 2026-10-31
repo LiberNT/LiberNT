@@ -11,6 +11,7 @@ include_directories(${REACTOS_SOURCE_DIR}/sdk/lib/drivers/softgpu)
 add_library(hdgfx MODULE
     core/hdgfx_blt.c
     core/hdgfx_device.c
+    core/hdgfx_dp.c
     core/hdgfx_edid.c
     core/hdgfx_gmbus.c
     core/hdgfx_ilk.c

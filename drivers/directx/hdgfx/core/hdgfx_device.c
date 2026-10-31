@@ -10,6 +10,8 @@
 
 #define HDGFX_VENDOR_INTEL 0x8086
 #define HDGFX_IVB_CURSOR_STRIDE 0x1000
+#define HDGFX_SNB_DP_PRECHARGE 3
+#define HDGFX_IVB_DP_PRECHARGE 5
 
 static const HDGFX_GENERATION HdgfxIronlake =
 {
@@ -21,12 +23,48 @@ static const HDGFX_GENERATION HdgfxIronlake =
     HDGFX_SET(DE_PCH_EVENT, 1),
     HDGFX_SET(SDE_CRT_HOTPLUG, 1),
     HDGFX_STRIDE_CUR_CNTR,
+    0,
     true,
     0xFFFFFFFFull,
     HDGFX_SET(GT_RENDER_USER, 1),
     HdgfxIlkGttEntry,
+    0,
     HdgfxIlkResetRender,
+    NULL,
+    NULL,
+    NULL,
     HdgfxIlkReadDisplayState,
+    HdgfxIlkComputeLvds,
+    HdgfxIlkCommitLvds,
+    HdgfxIlkDisableLvds,
+    HdgfxIlkDetectCrt,
+    HdgfxIlkComputeCrt,
+    HdgfxIlkCommitCrt,
+    HdgfxIlkDisableCrt,
+    HdgfxIlkEnableCrtHotplug
+};
+
+static const HDGFX_GENERATION HdgfxSandyBridge =
+{
+    "Sandy Bridge",
+    6,
+    3,
+    2,
+    HDGFX_SET(DE_GSE, 1),
+    HDGFX_SET(DE_PCH_EVENT, 1),
+    HDGFX_SET(SDE_CRT_HOTPLUG_CPT, 1),
+    HDGFX_STRIDE_CUR_CNTR,
+    HDGFX_SNB_DP_PRECHARGE,
+    true,
+    0xFFFFFFFFFFull,
+    HDGFX_SET(GT_RENDER_USER, 1) | HDGFX_SET(GT_BLT_USER, 1),
+    HdgfxIvbGttEntry,
+    HDGFX_REG(SNB_BLT_HWS_PGA, 0),
+    HdgfxIvbResetGpu,
+    HdgfxSnbForceWake,
+    HdgfxSnbForceWakeRelease,
+    HdgfxSnbInitEngine,
+    HdgfxSnbReadDisplayState,
     HdgfxIlkComputeLvds,
     HdgfxIlkCommitLvds,
     HdgfxIlkDisableLvds,
@@ -47,11 +85,16 @@ static const HDGFX_GENERATION HdgfxIvyBridge =
     HDGFX_SET(DE_PCH_EVENT_IVB, 1),
     HDGFX_SET(SDE_CRT_HOTPLUG_CPT, 1),
     HDGFX_IVB_CURSOR_STRIDE,
+    HDGFX_IVB_DP_PRECHARGE,
     true,
     0xFFFFFFFFFFull,
     HDGFX_SET(GT_RENDER_USER, 1) | HDGFX_SET(GT_BLT_USER, 1),
     HdgfxIvbGttEntry,
+    HDGFX_REG(BLT_HWS_PGA, 0),
     HdgfxIvbResetGpu,
+    HdgfxIvbForceWake,
+    HdgfxIvbForceWakeRelease,
+    HdgfxIvbInitEngine,
     HdgfxIvbReadDisplayState,
     HdgfxIlkComputeLvds,
     HdgfxIlkCommitLvds,
@@ -71,6 +114,7 @@ static const struct
 {
     { 0x0042, &HdgfxIronlake },
     { 0x0046, &HdgfxIronlake },
+    { 0x0122, &HdgfxSandyBridge },
     { 0x0166, &HdgfxIvyBridge },
 };
 

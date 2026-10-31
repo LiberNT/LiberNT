@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Intel HD Graphics Driver
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Ivy Bridge forcewake, engine setup, reset and ring command sequences
+ * PURPOSE:     Sandy Bridge and Ivy Bridge forcewake, engine setup, reset and ring command sequences
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
@@ -15,7 +15,7 @@
 #define IVB_FORCEWAKE_KERNEL        0x1u
 #define IVB_FORCEWAKE_TIMEOUT_US    50000u
 #define IVB_THREAD_STATUS_MASK      0x7u
-#define IVB_THREAD_STATUS_TIMEOUT_US 500u
+#define IVB_THREAD_STATUS_TIMEOUT_US 5000u
 #define IVB_POLL_US                 10u
 #define IVB_ECOBUS_MT_ENABLE        0x20u
 #define IVB_GDRST_FULL              0x1u
@@ -37,6 +37,14 @@
 #define IVB_INSTPM_FORCE_ORDERING   0x80u
 #define IVB_RC_OP_FLUSH_ENABLE      0x1u
 #define IVB_PIXEL_SUBSPAN_COLLECT_OPT_DISABLE 0x40u
+
+#define SNB_VS_TIMER_DISPATCH       0x40u
+#define SNB_HIZ_PLANE_DISABLE_MSAA_4X 0x400u
+#define SNB_SF_DISABLE_FASTCLIP_CULL 0x20u
+#define SNB_SF_DISABLE_PIPELINED_ATTR_FETCH 0x2u
+#define SNB_STC_EVICT_DISABLE_LRA   0x20u
+#define SNB_UCGCTL1_DISABLE         0xA0u
+#define SNB_UCGCTL2_DISABLE         0x1800u
 
 #define IVB_MI_NOOP                 0x00000000u
 #define IVB_MI_USER_INTERRUPT       0x01000000u
@@ -62,6 +70,8 @@
 #define IVB_PC_STATE_INVALIDATE     0x00000004u
 #define IVB_PC_STALL_AT_SCOREBOARD  0x00000002u
 #define IVB_PC_DEPTH_FLUSH          0x00000001u
+#define SNB_PC_GLOBAL_GTT           0x00000004u
+#define SNB_PC_WORKAROUND_DWORDS    8u
 #define IVB_XCS_STORES              32u
 #define IVB_HWS_FLUSH_INDEX         0x30u
 #define IVB_HWS_DWORDS              1024u
@@ -118,12 +128,49 @@ HdgfxIvbForceWake(
     return IvbForceWakeAcquire(Mmio, HDGFX_REG(FORCEWAKE, 0), HDGFX_REG(FORCEWAKE_ACK, 0));
 }
 
+bool
+HdgfxSnbForceWake(
+    const HDGFX_MMIO *Mmio)
+{
+    Mmio->Write(Mmio->Context, HDGFX_REG(FORCEWAKE, 0), IVB_MASKED_CLEAR_ALL);
+    Mmio->Read(Mmio->Context, HDGFX_REG(ECOBUS, 0));
+    return IvbForceWakeAcquire(Mmio, HDGFX_REG(FORCEWAKE, 0), HDGFX_REG(FORCEWAKE_ACK, 0));
+}
+
+void
+HdgfxSnbForceWakeRelease(
+    const HDGFX_MMIO *Mmio)
+{
+    Mmio->Write(Mmio->Context, HDGFX_REG(FORCEWAKE, 0), IVB_MASKED_CLEAR_ALL);
+}
+
 void
 HdgfxIvbForceWakeRelease(
     const HDGFX_MMIO *Mmio)
 {
     Mmio->Write(Mmio->Context, HDGFX_REG(FORCEWAKE_MT, 0), IVB_MASKED_CLEAR_ALL);
     Mmio->Write(Mmio->Context, HDGFX_REG(FORCEWAKE, 0), IVB_MASKED_CLEAR_ALL);
+}
+
+void
+HdgfxSnbInitEngine(
+    const HDGFX_MMIO *Mmio)
+{
+    Mmio->Write(Mmio->Context, HDGFX_REG(SNB_UCGCTL1, 0),
+                Mmio->Read(Mmio->Context, HDGFX_REG(SNB_UCGCTL1, 0)) | SNB_UCGCTL1_DISABLE);
+    Mmio->Write(Mmio->Context, HDGFX_REG(SNB_UCGCTL2, 0), SNB_UCGCTL2_DISABLE);
+
+    Mmio->Write(Mmio->Context, HDGFX_REG(RING_MI_MODE, 0),
+                IVB_MASKED_ENABLE(IVB_ASYNC_FLIP_PERF_DISABLE | SNB_VS_TIMER_DISPATCH));
+    Mmio->Write(Mmio->Context, HDGFX_REG(SNB_GFX_MODE, 0), IVB_MASKED_ENABLE(IVB_TLB_INVALIDATE_EXPLICIT));
+    Mmio->Write(Mmio->Context, HDGFX_REG(SNB_3D_CHICKEN, 0), IVB_MASKED_ENABLE(SNB_HIZ_PLANE_DISABLE_MSAA_4X));
+    Mmio->Write(Mmio->Context, HDGFX_REG(CHICKEN_3D3, 0),
+                IVB_MASKED_ENABLE(SNB_SF_DISABLE_FASTCLIP_CULL | SNB_SF_DISABLE_PIPELINED_ATTR_FETCH));
+    Mmio->Write(Mmio->Context, HDGFX_REG(SNB_GT_MODE, 0),
+                IVB_MASKED_DISABLE(IVB_WIZ_HASHING_MASK) | IVB_WIZ_HASHING_16X4);
+    Mmio->Write(Mmio->Context, HDGFX_REG(SNB_CACHE_MODE_0, 0),
+                IVB_MASKED_DISABLE(IVB_RC_OP_FLUSH_ENABLE | SNB_STC_EVICT_DISABLE_LRA));
+    Mmio->Write(Mmio->Context, HDGFX_REG(RING_INSTPM, 0), IVB_MASKED_ENABLE(IVB_INSTPM_FORCE_ORDERING));
 }
 
 void
@@ -179,12 +226,28 @@ HdgfxIvbMiBatchStart(
     return 2;
 }
 
+static uint32_t
+SnbPostSyncWorkaround(
+    uint32_t *Dwords,
+    uint32_t Scratch)
+{
+    Dwords[0] = IVB_PIPE_CONTROL;
+    Dwords[1] = IVB_PC_CS_STALL | IVB_PC_STALL_AT_SCOREBOARD;
+    Dwords[2] = 0;
+    Dwords[3] = 0;
+    Dwords[4] = IVB_PIPE_CONTROL;
+    Dwords[5] = IVB_PC_QW_WRITE;
+    Dwords[6] = Scratch | SNB_PC_GLOBAL_GTT;
+    Dwords[7] = 0;
+    return SNB_PC_WORKAROUND_DWORDS;
+}
+
 bool
 HdgfxIvbEmitInvalidate(
     HDGFX_RING *Ring,
     uint32_t Head)
 {
-    uint32_t Dwords[8];
+    uint32_t Dwords[SNB_PC_WORKAROUND_DWORDS + 4];
     uint32_t Scratch = Ring->StatusAddress + IVB_HWS_FLUSH_INDEX * 4;
 
     if (Ring->Blitter)
@@ -195,6 +258,19 @@ HdgfxIvbEmitInvalidate(
         Dwords[2] = 0;
         Dwords[3] = IVB_MI_NOOP;
         return HdgfxRingEmit(Ring, Head, Dwords, 4);
+    }
+
+    if (Ring->Gen == 6)
+    {
+        uint32_t Count = SnbPostSyncWorkaround(Dwords, Scratch);
+
+        Dwords[Count++] = IVB_PIPE_CONTROL;
+        Dwords[Count++] = IVB_PC_CS_STALL | IVB_PC_QW_WRITE | IVB_PC_TLB_INVALIDATE |
+                          IVB_PC_INSTRUCTION_INVALIDATE | IVB_PC_TEXTURE_INVALIDATE | IVB_PC_VF_INVALIDATE |
+                          IVB_PC_CONST_INVALIDATE | IVB_PC_STATE_INVALIDATE;
+        Dwords[Count++] = Scratch | SNB_PC_GLOBAL_GTT;
+        Dwords[Count++] = 0;
+        return HdgfxRingEmit(Ring, Head, Dwords, Count);
     }
 
     Dwords[0] = IVB_PIPE_CONTROL;
@@ -217,14 +293,29 @@ HdgfxIvbEmitBreadcrumb(
     uint32_t StatusIndex,
     uint32_t Value)
 {
-    uint32_t Dwords[8 + IVB_XCS_STORES * 3];
+    uint32_t Dwords[SNB_PC_WORKAROUND_DWORDS + 8 + IVB_XCS_STORES * 3];
     uint32_t Count = 0;
     uint32_t Index;
 
     if (StatusIndex < IVB_HWS_FIRST_FREE || StatusIndex >= IVB_HWS_DWORDS || StatusIndex % 2 != 0)
         return false;
 
-    if (!Ring->Blitter)
+    if (Ring->Gen == 6 && !Ring->Blitter)
+    {
+        Count = SnbPostSyncWorkaround(Dwords, Ring->StatusAddress + IVB_HWS_FLUSH_INDEX * 4);
+        Dwords[Count++] = IVB_PIPE_CONTROL;
+        Dwords[Count++] = IVB_PC_RENDER_TARGET_FLUSH | IVB_PC_DEPTH_FLUSH | IVB_PC_DC_FLUSH |
+                          IVB_PC_QW_WRITE | IVB_PC_CS_STALL;
+        Dwords[Count++] = (Ring->StatusAddress + StatusIndex * 4) | SNB_PC_GLOBAL_GTT;
+        Dwords[Count++] = Value;
+    }
+    else if (Ring->Gen == 6)
+    {
+        Dwords[Count++] = IVB_MI_FLUSH_DW | IVB_MI_FLUSH_DW_POST_STORE | IVB_MI_FLUSH_DW_STORE_INDEX;
+        Dwords[Count++] = (StatusIndex * 4) | IVB_MI_FLUSH_DW_USE_GTT;
+        Dwords[Count++] = Value;
+    }
+    else if (!Ring->Blitter)
     {
         Dwords[Count++] = IVB_PIPE_CONTROL;
         Dwords[Count++] = IVB_PC_RENDER_TARGET_FLUSH | IVB_PC_DEPTH_FLUSH | IVB_PC_DC_FLUSH | IVB_PC_FLUSH_ENABLE |

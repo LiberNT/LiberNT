@@ -466,13 +466,13 @@ TestBatchCheck(void)
     uint32_t Offending = 0;
     size_t Index;
 
-    CHECK_EQ(HdgfxIvbCheckBatch(Allowed, sizeof(Allowed) / 4, false, &Offending), 1);
-    CHECK_EQ(HdgfxIvbCheckBatch(Blits, sizeof(Blits) / 4, true, &Offending), 1);
-    CHECK_EQ(HdgfxIvbCheckBatch(Blits, sizeof(Blits) / 4, false, &Offending), 0);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Allowed, sizeof(Allowed) / 4, false, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Blits, sizeof(Blits) / 4, true, &Offending), 1);
+    CHECK_EQ(HdgfxIvbCheckBatch(7, Blits, sizeof(Blits) / 4, false, &Offending), 0);
     CHECK_EQ(Offending, 0);
     for (Index = 0; Index < sizeof(Refused) / sizeof(Refused[0]); Index++)
     {
-        if (HdgfxIvbCheckBatch(Refused[Index].Dwords, Refused[Index].Count, Refused[Index].Blitter, &Offending))
+        if (HdgfxIvbCheckBatch(7, Refused[Index].Dwords, Refused[Index].Count, Refused[Index].Blitter, &Offending))
         {
             fprintf(stderr, "%s was allowed\n", Refused[Index].Name);
             Failures++;

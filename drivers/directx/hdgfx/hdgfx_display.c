@@ -1317,7 +1317,8 @@ HdgfxDdiQueryChildRelations(
     {
         ChildRelations[Index].ChildDeviceType = TypeVideoOutput;
         ChildRelations[Index].ChildCapabilities.HpdAwareness = HpdAwarenessInterruptible;
-        ChildRelations[Index].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = D3DKMDT_VOT_HD15;
+        ChildRelations[Index].ChildCapabilities.Type.VideoOutput.InterfaceTechnology =
+            Scanout->DpPresent ? D3DKMDT_VOT_DISPLAYPORT_EXTERNAL : D3DKMDT_VOT_HD15;
         ChildRelations[Index].ChildUid = HDGFX_CRT_CHILD_UID;
     }
     return STATUS_SUCCESS;
