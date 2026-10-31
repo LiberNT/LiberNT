@@ -30,6 +30,10 @@ CACHE_KEYS = (
     "MESA_REACTOS_BUILD_DIR",
     "MESA_ARCH",
 )
+OPTIONAL_CACHE_KEYS = (
+    "CMAKE_C_COMPILER_LAUNCHER",
+    "CMAKE_CXX_COMPILER_LAUNCHER",
+)
 WGL_NAME = "mesa_llvmpipe"
 WGL_TARGET = "src/gallium/targets/wgl/%s.dll" % WGL_NAME
 LVP_DLL = "src/gallium/targets/lavapipe/vulkan_lvp.dll"
@@ -50,7 +54,7 @@ def read_cache(path):
                 continue
             key, value = line.split("=", 1)
             name, kind = key.split(":", 1)
-            if name in CACHE_KEYS:
+            if name in CACHE_KEYS or (name in OPTIONAL_CACHE_KEYS and value):
                 values[name] = (kind, value)
     missing = [key for key in CACHE_KEYS if key not in values]
     if missing:
@@ -94,7 +98,7 @@ def sha256(path):
 
 def main():
     parser = argparse.ArgumentParser(description="Build the LiberNT LLVMpipe/Lavapipe release payload")
-    parser.add_argument("--arch", required=True, choices=("amd64", "arm64"))
+    parser.add_argument("--arch", required=True, choices=("amd64", "arm64", "riscv64"))
     parser.add_argument("--source-dir", required=True, help="LiberNT source tree")
     parser.add_argument("--build-dir", required=True, help="LiberNT build directory that already built mesa_gallium")
     parser.add_argument("--llvm-root", required=True, help="Static Windows LLVM 22 install for the native architecture")

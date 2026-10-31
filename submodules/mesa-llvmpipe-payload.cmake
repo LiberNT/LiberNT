@@ -3,8 +3,8 @@
 # Prebuilt LLVMpipe OpenGL and Lavapipe Vulkan ICDs from the LiberNT release payload.
 # The second stage installs them from the release MSI; the build only catalogs them.
 
-if(NOT ARCH MATCHES "^(amd64|arm64)$")
-    message(FATAL_ERROR "The LLVMpipe payload exists for amd64 and arm64 only.")
+if(NOT ARCH MATCHES "^(amd64|arm64|riscv64)$")
+    message(FATAL_ERROR "The LLVMpipe payload exists for amd64, arm64 and riscv64 only.")
 endif()
 if(ARM64EC_RUNTIME)
     return()
@@ -13,6 +13,7 @@ endif()
 set(MESA_LLVMPIPE_PAYLOAD_RELEASE "26.2.2-1")
 set(MESA_LLVMPIPE_PAYLOAD_SHA256_amd64 "17f354520ebbe3c67ea62432e9c456964a915e1571f09b250f300f82ace60f4b")
 set(MESA_LLVMPIPE_PAYLOAD_SHA256_arm64 "552b71226dc9fbe21ccc4f8eb1e3ff36b3af554e35c09a68af61d3de003f90c0")
+set(MESA_LLVMPIPE_PAYLOAD_SHA256_riscv64 "c2a1c78c76e0cc5fb40093b7bf2a84ebd5a05ed0992ea28cd383f692329a418b")
 set(MESA_LLVMPIPE_PAYLOAD "" CACHE FILEPATH "Local LLVMpipe payload .zip used instead of downloading the release asset")
 
 set(_payload_name "libernt-mesa-llvmpipe-${MESA_LLVMPIPE_PAYLOAD_RELEASE}-${ARCH}.zip")

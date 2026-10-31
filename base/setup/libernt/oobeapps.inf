@@ -24,6 +24,9 @@ WineGecko.x86
 Chrome.arm64
 Firefox.arm64
 
+[Apps.riscv64]
+LLVMpipe.riscv64
+
 [Apps.x86]
 VCRedist.x86
 WineMono.x86
@@ -84,6 +87,16 @@ File = "libernt-mesa-llvmpipe-26.2.2-1-arm64.msi"
 Type = "msi"
 Space = 200
 Sha256 = "a29ec7b37d9ed534251285951c56f2ccbfcfea11a61629840a6a364b931e5229"
+Detect = "%11%\mesa_llvmpipe.dll"
+Unattended = yes
+
+[LLVMpipe.riscv64]
+Name = "LLVMpipe and Lavapipe software OpenGL and Vulkan (RISC-V64)"
+Url = "https://github.com/LiberNT/LiberNT/releases/download/mesa-llvmpipe-26.2.2-1/libernt-mesa-llvmpipe-26.2.2-1-riscv64.msi"
+File = "libernt-mesa-llvmpipe-26.2.2-1-riscv64.msi"
+Type = "msi"
+Space = 150
+Sha256 = "c1ade2e09945a70ab7a5421c7cf829a668fd630f922e3cefa6688181f2ba9406"
 Detect = "%11%\mesa_llvmpipe.dll"
 Unattended = yes
 

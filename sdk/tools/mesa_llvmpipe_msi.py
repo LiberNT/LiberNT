@@ -21,6 +21,7 @@ from xml.sax.saxutils import quoteattr
 MSI_ARCH = {
     "amd64": ("x64", "System64Folder", "yes", "x64;1033"),
     "arm64": ("x64", "System64Folder", "yes", "Arm64;1033"),
+    "riscv64": ("x64", "System64Folder", "yes", "x64;1033"),
 }
 UPGRADE_NAMESPACE = uuid.UUID("9a4c2f7e-51d3-4b8a-8e16-7c0d3f5b2a91")
 MSOGL = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\MSOGL"

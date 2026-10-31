@@ -81,7 +81,7 @@ jobs:
         [ "${{matrix.compiler}}" = "clang" ] && FLAGS="$FLAGS --clang"
         [ "${{matrix.compiler}}" = "gcc" ] && FLAGS="$FLAGS --gcc"
         [ -n "${{matrix.profile}}" ] && FLAGS="$FLAGS -DROSCONFIG_PROFILE=${{matrix.profile}}"
-        [ "${{matrix.compiler}}" = "clang" ] && case "${{matrix.arch}}" in amd64|arm64) FLAGS="$FLAGS -DENABLE_MESA_LLVMPIPE=ON" ;; esac
+        [ "${{matrix.compiler}}" = "clang" ] && case "${{matrix.arch}}" in amd64|arm64|riscv64) FLAGS="$FLAGS -DENABLE_MESA_LLVMPIPE=ON" ;; esac
         ./configure.sh $FLAGS -a ${{matrix.arch}} \
           -DREACTOS_TARGET_NT=0xA00 \
           -DDIAGDATA_CHANNEL= \
