@@ -2770,7 +2770,7 @@ LxMmDetachSection(
             PLX_VMA Next = CONTAINING_RECORD(Entry, LX_VMA, Link);
 
             if ((Next->Start != End) || (Next->Section != Vma->Section) || (Next->File != Vma->File) ||
-                !(Next->Flags & LX_VMA_SHM))
+                !(Next->Flags & LX_VMA_SHM) || (Next->Offset != Next->Start - Address))
                 break;
             End = Next->End;
         }
