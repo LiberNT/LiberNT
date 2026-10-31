@@ -11,6 +11,7 @@
 
 #include <ntdll.h>
 #include <apisets.h>
+#include <reactos/chpe.h>
 
 #ifdef WOW64_I386_RUNTIME
 #include <reactos/wow64shared.h>
@@ -385,8 +386,21 @@ RtlpGetStackLimits(
     OUT PULONG_PTR LowLimit,
     OUT PULONG_PTR HighLimit)
 {
-    *LowLimit = (ULONG_PTR)NtCurrentTeb()->NtTib.StackLimit;
-    *HighLimit = (ULONG_PTR)NtCurrentTeb()->NtTib.StackBase;
+    PTEB Teb = NtCurrentTeb();
+    ULONG_PTR Current = (ULONG_PTR)&Teb;
+    PCHPE_V2_CPU_AREA_INFO CpuArea;
+
+    *LowLimit = (ULONG_PTR)Teb->NtTib.StackLimit;
+    *HighLimit = (ULONG_PTR)Teb->NtTib.StackBase;
+    if (sizeof(PVOID) != sizeof(ULONG64) || (Current >= *LowLimit && Current < *HighLimit))
+        return;
+
+    CpuArea = *(PCHPE_V2_CPU_AREA_INFO *)((PUCHAR)Teb + CHPE_TEB_CPU_AREA_OFFSET);
+    if (CpuArea && Current >= CpuArea->EmulatorStackLimit && Current < CpuArea->EmulatorStackBase)
+    {
+        *LowLimit = (ULONG_PTR)CpuArea->EmulatorStackLimit;
+        *HighLimit = (ULONG_PTR)CpuArea->EmulatorStackBase;
+    }
 }
 
 BOOLEAN
