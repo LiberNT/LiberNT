@@ -1,5 +1,8 @@
 
-if(ARCH STREQUAL "arm64")
+if(ARCH STREQUAL "amd64")
+    set(_lxwayland_target x86_64-linux-gnu)
+    set(_lxwayland_flags "")
+elseif(ARCH STREQUAL "arm64")
     set(_lxwayland_target aarch64-linux-gnu)
     set(_lxwayland_flags "")
 elseif(ARCH STREQUAL "riscv64")
