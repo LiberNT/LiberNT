@@ -1659,10 +1659,11 @@ static HRESULT shellex_run_context_menu_default(IShellExtInit *obj,
     CComPtr<IContextMenu> cm = NULL;
     CMINVOKECOMMANDINFOEX ici;
     MENUITEMINFOW info;
-    WCHAR string[0x80];
+    WCHAR string[0x80], verb[0x80];
     INT i, n, def = -1;
     HMENU hmenu = 0;
     HRESULT r;
+    const UINT idFirst = 0x20;
 
     TRACE("%p %p\n", obj, sei);
 
@@ -1675,7 +1676,7 @@ static HRESULT shellex_run_context_menu_default(IShellExtInit *obj,
         goto end;
 
     /* the number of the last menu added is returned in r */
-    r = cm->QueryContextMenu(hmenu, 0, 0x20, 0x7fff, CMF_DEFAULTONLY);
+    r = cm->QueryContextMenu(hmenu, 0, idFirst, 0x7fff, CMF_DEFAULTONLY);
     if (FAILED(r))
         goto end;
 
@@ -1686,16 +1687,23 @@ static HRESULT shellex_run_context_menu_default(IShellExtInit *obj,
         info.cbSize = sizeof info;
         info.fMask = MIIM_FTYPE | MIIM_STRING | MIIM_STATE | MIIM_DATA | MIIM_ID;
         info.dwTypeData = string;
-        info.cch = sizeof string;
+        info.cch = _countof(string);
         string[0] = 0;
         GetMenuItemInfoW(hmenu, i, TRUE, &info);
 
         TRACE("menu %d %s %08x %08lx %08x %08x\n", i, debugstr_w(string),
               info.fState, info.dwItemData, info.fType, info.wID);
-        if ((!sei->lpVerb && (info.fState & MFS_DEFAULT)) ||
-            (sei->lpVerb && !lstrcmpiW(sei->lpVerb, string)))
+        if (info.wID < idFirst)
+            continue;
+        if (!sei->lpVerb ||
+            FAILED(cm->GetCommandString(info.wID - idFirst, GCS_VERBW, NULL, (LPSTR)verb, _countof(verb))))
         {
-            def = i;
+            verb[0] = 0;
+        }
+        if ((!sei->lpVerb && (info.fState & MFS_DEFAULT)) ||
+            (sei->lpVerb && ((verb[0] && !lstrcmpiW(sei->lpVerb, verb)) || !lstrcmpiW(sei->lpVerb, string))))
+        {
+            def = info.wID - idFirst;
             break;
         }
     }
@@ -2793,7 +2801,11 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
     TRACE("retval %lu\n", retval);
 
     if (retval <= 32)
+    {
+        if (retval == SE_ERR_NOASSOC)
+            SetLastError(ERROR_NO_ASSOCIATION);
         retval = ExecuteFailed(retval, *sei, lpFile);
+    }
     else
         sei->hInstApp = (HINSTANCE)retval;
     return retval > 32;
