@@ -7,6 +7,9 @@
 
 #include "precomp.h"
 #include "resource.h"
+#include <windowsx.h>
+#include <ime/indicml.h>
+#include <inputindicator.h>
 
 extern HINSTANCE g_hInst;
 
@@ -305,6 +308,258 @@ private:
     DWORD m_nextCookie;
 };
 
+class CTipInputModeIndicator final : public ITfLangBarItemSink
+{
+public:
+    static CTipInputModeIndicator *Create(ITfLangBarItem *pItem)
+    {
+        CTipInputModeIndicator *pThis = new(cicNoThrow) CTipInputModeIndicator();
+        if (!pThis)
+            return NULL;
+        if (FAILED(pItem->QueryInterface(IID_ITfLangBarItemButton, (void **)&pThis->m_pButton)) ||
+            !RegisterWndClass())
+        {
+            pThis->Release();
+            return NULL;
+        }
+        pThis->m_hwnd = CreateWindowExW(0, INPUTINDICATOR_TIP_WNDCLASS, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE,
+                                        NULL, g_hInst, pThis);
+        if (!pThis->m_hwnd)
+        {
+            pThis->Release();
+            return NULL;
+        }
+        pThis->m_dwThreadId = GetWindowThreadProcessId(pThis->m_hwnd, NULL);
+        if (SUCCEEDED(pItem->QueryInterface(IID_ITfSource, (void **)&pThis->m_pSource)) &&
+            FAILED(pThis->m_pSource->AdviseSink(IID_ITfLangBarItemSink, static_cast<ITfLangBarItemSink *>(pThis),
+                                                &pThis->m_dwCookie)))
+        {
+            pThis->m_pSource->Release();
+            pThis->m_pSource = NULL;
+        }
+        pThis->Publish();
+        return pThis;
+    }
+
+    BOOL IsFor(ITfLangBarItem *pItem) const
+    {
+        ITfLangBarItemButton *pButton = NULL;
+        BOOL fSame = FALSE;
+        if (SUCCEEDED(pItem->QueryInterface(IID_ITfLangBarItemButton, (void **)&pButton)))
+        {
+            fSame = (pButton == m_pButton);
+            pButton->Release();
+        }
+        return fSame;
+    }
+
+    void Close()
+    {
+        if (m_pSource)
+        {
+            m_pSource->UnadviseSink(m_dwCookie);
+            m_pSource->Release();
+            m_pSource = NULL;
+        }
+        if (m_pButton)
+        {
+            m_pButton->Release();
+            m_pButton = NULL;
+        }
+        Publish();
+        if (m_hwnd)
+        {
+            SetWindowLongPtrW(m_hwnd, GWLP_USERDATA, 0);
+            if (m_dwThreadId == GetCurrentThreadId())
+                DestroyWindow(m_hwnd);
+            else
+                PostMessageW(m_hwnd, WM_CLOSE, 0, 0);
+            m_hwnd = NULL;
+        }
+    }
+
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppvObj) override
+    {
+        if (!ppvObj)
+            return E_POINTER;
+        *ppvObj = NULL;
+        if (riid != IID_IUnknown && riid != IID_ITfLangBarItemSink)
+            return E_NOINTERFACE;
+        *ppvObj = static_cast<ITfLangBarItemSink *>(this);
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_refs); }
+    STDMETHODIMP_(ULONG) Release() override
+    {
+        ULONG refs = InterlockedDecrement(&m_refs);
+        if (!refs)
+            delete this;
+        return refs;
+    }
+
+    STDMETHODIMP OnUpdate(DWORD dwFlags) override
+    {
+        Publish();
+        return S_OK;
+    }
+
+    static void UnregisterWndClass()
+    {
+        if (s_fRegistered)
+            UnregisterClassW(INPUTINDICATOR_TIP_WNDCLASS, g_hInst);
+    }
+
+private:
+    CTipInputModeIndicator() : m_refs(1), m_hwnd(NULL), m_dwThreadId(0), m_hIconSent(NULL), m_pButton(NULL)
+        , m_pSource(NULL), m_dwCookie(0), m_click(TF_LBI_CLK_LEFT), m_ptClick(), m_cClickWaits(0) { }
+    ~CTipInputModeIndicator()
+    {
+        Close();
+    }
+
+    static BOOL RegisterWndClass()
+    {
+        if (s_fRegistered)
+            return TRUE;
+        WNDCLASSW wc = { 0 };
+        wc.lpfnWndProc = WndProc;
+        wc.hInstance = g_hInst;
+        wc.lpszClassName = INPUTINDICATOR_TIP_WNDCLASS;
+        if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+            return FALSE;
+        s_fRegistered = TRUE;
+        return TRUE;
+    }
+
+    void Publish()
+    {
+        HWND hwndIndicator = FindWindowW(INDICATOR_CLASSW, NULL);
+        HICON hIcon = NULL;
+        if (hwndIndicator && m_hwnd)
+        {
+            INPUTINDICATOR_TIPSTATE state = { sizeof(state), m_dwThreadId, (ULONG64)(LONG_PTR)m_hwnd };
+            DWORD dwStatus = 0;
+            if (m_pButton && SUCCEEDED(m_pButton->GetStatus(&dwStatus)) && !(dwStatus & TF_LBI_STATUS_HIDDEN) &&
+                SUCCEEDED(m_pButton->GetIcon(&hIcon)) && hIcon)
+            {
+                BSTR bstrTooltip = NULL;
+                state.hIcon = (ULONG64)(LONG_PTR)hIcon;
+                if (SUCCEEDED(m_pButton->GetTooltipString(&bstrTooltip)) && bstrTooltip)
+                {
+                    StringCchCopyW(state.szTooltip, _countof(state.szTooltip), bstrTooltip);
+                    SysFreeString(bstrTooltip);
+                }
+            }
+
+            COPYDATASTRUCT cds = { INPUTINDICATOR_COPYDATA_ID, sizeof(state), &state };
+            SendMessageTimeoutW(hwndIndicator, WM_COPYDATA, (WPARAM)m_hwnd, (LPARAM)&cds, SMTO_ABORTIFHUNG, 1000,
+                                NULL);
+        }
+        if (m_hIconSent)
+            DestroyIcon(m_hIconSent);
+        m_hIconSent = hIcon;
+    }
+
+    void QueueClick(TfLBIClick click, POINT pt)
+    {
+        m_click = click;
+        m_ptClick = pt;
+        m_cClickWaits = 0;
+        if (GetFocus())
+        {
+            Click(click, pt);
+            return;
+        }
+        SetTimer(m_hwnd, CLICK_TIMER_ID, CLICK_TIMER_MS, NULL);
+    }
+
+    void OnClickTimer()
+    {
+        if (!GetFocus() && ++m_cClickWaits < CLICK_TIMER_MAX)
+            return;
+        KillTimer(m_hwnd, CLICK_TIMER_ID);
+        Click(m_click, m_ptClick);
+    }
+
+    void Click(TfLBIClick click, POINT pt)
+    {
+        if (!m_pButton)
+            return;
+        RECT rc = { pt.x, pt.y, pt.x + 1, pt.y + 1 };
+        ITfLangBarItemButton *pButton = m_pButton;
+        AddRef();
+        pButton->AddRef();
+        pButton->OnClick(click, pt, &rc);
+        pButton->Release();
+        Release();
+    }
+
+    static LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+    {
+        if (uMsg == WM_NCCREATE)
+        {
+            LPCREATESTRUCTW pcs = (LPCREATESTRUCTW)lParam;
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)pcs->lpCreateParams);
+        }
+        CTipInputModeIndicator *pThis = (CTipInputModeIndicator *)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+        switch (uMsg)
+        {
+            case WM_INPUTINDICATOR_REFRESH:
+                if (pThis)
+                {
+                    pThis->AddRef();
+                    pThis->Publish();
+                    pThis->Release();
+                }
+                return 0;
+            case WM_INPUTINDICATOR_CLICK:
+                if (pThis && (wParam == INPUTINDICATOR_CLICK_LEFT || wParam == INPUTINDICATOR_CLICK_RIGHT))
+                {
+                    POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                    pThis->AddRef();
+                    pThis->QueueClick((wParam == INPUTINDICATOR_CLICK_RIGHT) ? TF_LBI_CLK_RIGHT : TF_LBI_CLK_LEFT, pt);
+                    pThis->Release();
+                }
+                return 0;
+            case WM_TIMER:
+                if (pThis && wParam == CLICK_TIMER_ID)
+                {
+                    pThis->AddRef();
+                    pThis->OnClickTimer();
+                    pThis->Release();
+                }
+                return 0;
+            case WM_NCDESTROY:
+                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+                break;
+        }
+        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+    }
+
+    enum { CLICK_TIMER_ID = 1, CLICK_TIMER_MS = 20, CLICK_TIMER_MAX = 25 };
+
+    static BOOL s_fRegistered;
+
+    LONG m_refs;
+    HWND m_hwnd;
+    DWORD m_dwThreadId;
+    HICON m_hIconSent;
+    ITfLangBarItemButton *m_pButton;
+    ITfSource *m_pSource;
+    DWORD m_dwCookie;
+    TfLBIClick m_click;
+    POINT m_ptClick;
+    UINT m_cClickWaits;
+};
+
+BOOL CTipInputModeIndicator::s_fRegistered = FALSE;
+
+EXTERN_C VOID TipInputModeIndicator_Uninit(VOID)
+{
+    CTipInputModeIndicator::UnregisterWndClass();
+}
+
 class CLangBarItemMgr;
 
 static SRWLOCK s_LangBarItemMgrLock = SRWLOCK_INIT;
@@ -315,7 +570,7 @@ class CLangBarItemMgr final : public ITfLangBarItemMgr
 public:
     CLangBarItemMgr()
         : m_refs(1), m_items(NULL), m_cItems(0), m_sinks(NULL), m_cSinks(0), m_nextCookie(1)
-        , m_dwThreadId(GetCurrentThreadId()), m_pNext(NULL)
+        , m_dwThreadId(GetCurrentThreadId()), m_pNext(NULL), m_pIndicator(NULL)
     {
     }
 
@@ -426,6 +681,8 @@ public:
         m_items[m_cItems].info = info;
         punk->AddRef();
         ++m_cItems;
+        if (info.guidItem == GUID_LBI_INPUTMODE && !m_pIndicator)
+            m_pIndicator = CTipInputModeIndicator::Create(punk);
         return S_OK;
     }
 
@@ -437,6 +694,12 @@ public:
         {
             if (m_items[i].item != punk)
                 continue;
+            if (m_pIndicator && m_pIndicator->IsFor(punk))
+            {
+                m_pIndicator->Close();
+                m_pIndicator->Release();
+                m_pIndicator = NULL;
+            }
             ReleaseItemSinks(punk);
             m_items[i].item->Release();
             MoveMemory(&m_items[i], &m_items[i + 1], (m_cItems - i - 1) * sizeof(*m_items));
@@ -600,6 +863,11 @@ public:
 private:
     ~CLangBarItemMgr()
     {
+        if (m_pIndicator)
+        {
+            m_pIndicator->Close();
+            m_pIndicator->Release();
+        }
         while (m_cSinks)
             ReleaseSinkAt(m_cSinks - 1);
         cicMemFree(m_sinks);
@@ -626,6 +894,7 @@ private:
     DWORD m_nextCookie;
     DWORD m_dwThreadId;
     CLangBarItemMgr *m_pNext;
+    CTipInputModeIndicator *m_pIndicator;
 };
 
 EXTERN_C

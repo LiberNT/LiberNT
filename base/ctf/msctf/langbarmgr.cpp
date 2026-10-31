@@ -178,8 +178,14 @@ CLangBarMgr::GetThreadLangBarItemMgr(
     _Out_ ITfLangBarItemMgr **pplbie,
     _Out_ DWORD *pdwThreadid)
 {
-    FIXME("(%lu, %p, %p)\n", dwThreadId, pplbie, pdwThreadid);
-    return E_NOTIMPL;
+    if (dwThreadId != GetCurrentThreadId())
+        return E_FAIL;
+    if (!pplbie)
+        return E_UNEXPECTED;
+    HRESULT hr = LangBarItemMgr_Constructor(pplbie);
+    if (SUCCEEDED(hr) && pdwThreadid)
+        *pdwThreadid = dwThreadId;
+    return hr;
 }
 
 STDMETHODIMP

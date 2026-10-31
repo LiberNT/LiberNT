@@ -60,6 +60,7 @@ HRESULT CompartmentMgr_Destructor(ITfCompartmentMgr *This);
 HRESULT LangBarMgr_Constructor(IUnknown *pUnkOuter, IUnknown **ppOut);
 HRESULT DisplayAttributeMgr_Constructor(IUnknown *pUnkOuter, IUnknown **ppOut);
 HRESULT LangBarItemMgr_Constructor(ITfLangBarItemMgr **ppOut);
+VOID TipInputModeIndicator_Uninit(VOID);
 
 HRESULT Context_Initialize(ITfContext *cxt, ITfDocumentMgr *manager);
 HRESULT Context_Cleanup(ITfContext *cxt, TfClientId tid);

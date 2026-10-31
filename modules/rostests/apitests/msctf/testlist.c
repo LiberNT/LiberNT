@@ -4,7 +4,9 @@
 extern void func_category(void);
 extern void func_composition(void);
 extern void func_editsession(void);
+extern void func_inputmode(void);
 extern void func_langbar(void);
+extern void func_langbarmgr(void);
 extern void func_layouttip(void);
 extern void func_owner(void);
 extern void func_profiles(void);
@@ -18,7 +20,9 @@ const struct test winetest_testlist[] =
     { "category", func_category },
     { "composition", func_composition },
     { "editsession", func_editsession },
+    { "inputmode", func_inputmode },
     { "langbar", func_langbar },
+    { "langbarmgr", func_langbarmgr },
     { "layouttip", func_layouttip },
     { "owner", func_owner },
     { "profiles", func_profiles },
