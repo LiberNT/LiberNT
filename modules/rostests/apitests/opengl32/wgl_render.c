@@ -8,11 +8,27 @@
 #include <windows.h>
 #include <GL/gl.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wine/test.h>
 
 #ifndef GL_BGRA_EXT
 #define GL_BGRA_EXT 0x80E1
 #endif
+
+#ifndef GL_VERTEX_SHADER
+#define GL_VERTEX_SHADER 0x8B31
+#endif
+
+typedef char GLSLCHAR;
+typedef GLuint (APIENTRY *GLCREATESHADER)(GLenum);
+typedef void (APIENTRY *GLSHADERSOURCE)(GLuint, GLsizei, const GLSLCHAR *const *, const GLint *);
+typedef void (APIENTRY *GLCOMPILESHADER)(GLuint);
+typedef GLuint (APIENTRY *GLCREATEPROGRAM)(void);
+typedef void (APIENTRY *GLATTACHSHADER)(GLuint, GLuint);
+typedef void (APIENTRY *GLLINKPROGRAM)(GLuint);
+typedef void (APIENTRY *GLUSEPROGRAM)(GLuint);
+typedef void (APIENTRY *GLDELETEPROGRAM)(GLuint);
+typedef void (APIENTRY *GLDELETESHADER)(GLuint);
 
 #define SIZE 128
 #define TEX_SIZE 64
@@ -155,6 +171,111 @@ static void Test_Depth(void)
     ok(ReadPixel(8, SIZE - 8) == 0x000000, "uncovered corner: 0x%06lx\n", ReadPixel(8, SIZE - 8));
 }
 
+static void DrawFullQuad(void)
+{
+    glBegin(GL_QUADS);
+    glVertex2f(0.0f, 0.0f);
+    glVertex2f(1.0f, 0.0f);
+    glVertex2f(1.0f, 1.0f);
+    glVertex2f(0.0f, 1.0f);
+    glEnd();
+}
+
+static void Test_AlphaTest(void)
+{
+    static const struct
+    {
+        GLenum func;
+        float ref;
+        BOOL passes;
+    } tests[] =
+    {
+        {GL_NEVER, 0.0f, FALSE},
+        {GL_LESS, 0.25f, FALSE},
+        {GL_LESS, 0.75f, TRUE},
+        {GL_GREATER, 0.25f, TRUE},
+        {GL_GREATER, 0.75f, FALSE},
+        {GL_ALWAYS, 0.0f, TRUE},
+    };
+    unsigned int i;
+
+    glEnable(GL_ALPHA_TEST);
+    glColor4f(0.0f, 1.0f, 0.0f, 0.5f);
+    for (i = 0; i < ARRAYSIZE(tests); i++)
+    {
+        glAlphaFunc(tests[i].func, tests[i].ref);
+        glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        DrawFullQuad();
+        ok(ReadPixel(SIZE / 2, SIZE / 2) == (tests[i].passes ? 0x00FF00u : 0xFF0000u),
+           "alpha test %u: 0x%06lx\n", i, ReadPixel(SIZE / 2, SIZE / 2));
+    }
+    glDisable(GL_ALPHA_TEST);
+    glAlphaFunc(GL_ALWAYS, 0.0f);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+}
+
+static void CheckClippedQuad(const char *name)
+{
+    glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    DrawFullQuad();
+    ok(ReadPixel(SIZE / 2, SIZE * 3 / 4) == 0x00FF00, "%s kept half: 0x%06lx\n", name,
+       ReadPixel(SIZE / 2, SIZE * 3 / 4));
+    ok(ReadPixel(SIZE / 2, SIZE / 4) == 0xFF0000, "%s clipped half: 0x%06lx\n", name, ReadPixel(SIZE / 2, SIZE / 4));
+}
+
+static void Test_ClipPlane(void)
+{
+    static const GLdouble plane[4] = {0.0, 1.0, 0.0, -0.5};
+    static const GLSLCHAR *source =
+        "#version 120\n"
+        "void main()\n"
+        "{\n"
+        "    gl_Position = ftransform();\n"
+        "    gl_ClipVertex = gl_ModelViewMatrix * gl_Vertex;\n"
+        "    gl_FrontColor = gl_Color;\n"
+        "}\n";
+    GLCREATESHADER createShader = (GLCREATESHADER)wglGetProcAddress("glCreateShader");
+    GLSHADERSOURCE shaderSource = (GLSHADERSOURCE)wglGetProcAddress("glShaderSource");
+    GLCOMPILESHADER compileShader = (GLCOMPILESHADER)wglGetProcAddress("glCompileShader");
+    GLCREATEPROGRAM createProgram = (GLCREATEPROGRAM)wglGetProcAddress("glCreateProgram");
+    GLATTACHSHADER attachShader = (GLATTACHSHADER)wglGetProcAddress("glAttachShader");
+    GLLINKPROGRAM linkProgram = (GLLINKPROGRAM)wglGetProcAddress("glLinkProgram");
+    GLUSEPROGRAM useProgram = (GLUSEPROGRAM)wglGetProcAddress("glUseProgram");
+    GLDELETEPROGRAM deleteProgram = (GLDELETEPROGRAM)wglGetProcAddress("glDeleteProgram");
+    GLDELETESHADER deleteShader = (GLDELETESHADER)wglGetProcAddress("glDeleteShader");
+
+    glClipPlane(GL_CLIP_PLANE0, plane);
+    glEnable(GL_CLIP_PLANE0);
+    glColor3f(0.0f, 1.0f, 0.0f);
+    CheckClippedQuad("fixed-function");
+
+    if (createShader && shaderSource && compileShader && createProgram && attachShader && linkProgram && useProgram &&
+        deleteProgram && deleteShader)
+    {
+        GLuint shader = createShader(GL_VERTEX_SHADER);
+        GLuint program = createProgram();
+
+        shaderSource(shader, 1, &source, NULL);
+        compileShader(shader);
+        attachShader(program, shader);
+        linkProgram(program);
+        useProgram(program);
+        CheckClippedQuad("gl_ClipVertex");
+        useProgram(0);
+        deleteProgram(program);
+        deleteShader(shader);
+    }
+    else
+    {
+        skip("GLSL is not available\n");
+    }
+
+    glDisable(GL_CLIP_PLANE0);
+    glColor3f(1.0f, 1.0f, 1.0f);
+}
+
 static void Test_Frames(HDC dc)
 {
     unsigned int frame;
@@ -247,6 +368,7 @@ START_TEST(wgl_render)
     if (!context || !wglMakeCurrent(dc, context))
         goto cleanup;
     trace("Renderer: %s; version: %s\n", glGetString(GL_RENDERER), glGetString(GL_VERSION));
+    trace("ARB_color_buffer_float: %d\n", strstr((const char *)glGetString(GL_EXTENSIONS), "GL_ARB_color_buffer_float") != NULL);
 
     glViewport(0, 0, SIZE, SIZE);
     glMatrixMode(GL_PROJECTION);
@@ -261,6 +383,8 @@ START_TEST(wgl_render)
     Test_Triangle();
     Test_Texture();
     Test_Depth();
+    Test_AlphaTest();
+    Test_ClipPlane();
     Test_Frames(dc);
     Test_TwoContexts(dc, context);
     ok(glGetError() == GL_NO_ERROR, "GL error at the end\n");
