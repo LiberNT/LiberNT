@@ -209,16 +209,15 @@ TerminalWindow::LayoutTabs()
     InvalidateTabs();
 }
 
-static int
-ProgramIconIndex(const std::wstring &commandLine)
+static bool
+ProgramFileInfo(const std::wstring &commandLine, UINT flags, SHFILEINFOW *info)
 {
     std::wstring program;
     wchar_t expanded[MAX_PATH * 2], found[MAX_PATH];
-    SHFILEINFOW info = {};
     size_t start = commandLine.find_first_not_of(L" \t"), end;
 
     if (start == std::wstring::npos)
-        return -1;
+        return false;
     if (commandLine[start] == L'"')
     {
         end = commandLine.find(L'"', start + 1);
@@ -230,12 +229,52 @@ ProgramIconIndex(const std::wstring &commandLine)
         program = commandLine.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
     }
     if (!ExpandEnvironmentStringsW(program.c_str(), expanded, ARRAYSIZE(expanded)))
-        return -1;
+        return false;
     if (SearchPathW(NULL, expanded, L".exe", ARRAYSIZE(found), found, NULL))
         StringCchCopyW(expanded, ARRAYSIZE(expanded), found);
-    if (!SHGetFileInfoW(expanded, 0, &info, sizeof(info), SHGFI_SYSICONINDEX | SHGFI_SMALLICON))
+    return SHGetFileInfoW(expanded, 0, info, sizeof(*info), flags) != 0;
+}
+
+static int
+ProgramIconIndex(const std::wstring &commandLine)
+{
+    SHFILEINFOW info = {};
+
+    if (!ProgramFileInfo(commandLine, SHGFI_SYSICONINDEX | SHGFI_SMALLICON, &info))
         return -1;
     return info.iIcon;
+}
+
+static HBITMAP
+ProgramMenuBitmap(const std::wstring &commandLine, int size)
+{
+    SHFILEINFOW info = {};
+    BITMAPINFO format = {};
+    HBITMAP bitmap;
+    void *bits;
+    HDC dc;
+
+    if (!ProgramFileInfo(commandLine, SHGFI_ICON | SHGFI_SMALLICON, &info) || !info.hIcon)
+        return NULL;
+    format.bmiHeader.biSize = sizeof(format.bmiHeader);
+    format.bmiHeader.biWidth = size;
+    format.bmiHeader.biHeight = -size;
+    format.bmiHeader.biPlanes = 1;
+    format.bmiHeader.biBitCount = 32;
+    format.bmiHeader.biCompression = BI_RGB;
+    dc = CreateCompatibleDC(NULL);
+    bitmap = dc ? CreateDIBSection(dc, &format, DIB_RGB_COLORS, &bits, NULL, 0) : NULL;
+    if (bitmap)
+    {
+        HGDIOBJ old = SelectObject(dc, bitmap);
+
+        DrawIconEx(dc, 0, 0, info.hIcon, size, size, 0, NULL, DI_NORMAL);
+        SelectObject(dc, old);
+    }
+    if (dc)
+        DeleteDC(dc);
+    DestroyIcon(info.hIcon);
+    return bitmap;
 }
 
 void
@@ -507,6 +546,7 @@ void
 TerminalWindow::ShowProfileMenu(POINT pt)
 {
     HMENU menu = CreatePopupMenu();
+    std::vector<HBITMAP> bitmaps;
     UINT command;
     int visible = 0;
 
@@ -515,6 +555,7 @@ TerminalWindow::ShowProfileMenu(POINT pt)
         const Profile &profile = g_Settings.Profiles[i];
         std::wstring label = profile.Name;
         std::wstring keys;
+        MENUITEMINFOW item = { sizeof(item) };
 
         if (profile.Hidden)
             continue;
@@ -523,6 +564,13 @@ TerminalWindow::ShowProfileMenu(POINT pt)
         if (!keys.empty())
             label += L"\t" + keys;
         AppendMenuW(menu, MF_STRING, IDM_PROFILE_FIRST + i, label.c_str());
+        item.fMask = MIIM_BITMAP;
+        item.hbmpItem = ProgramMenuBitmap(profile.CommandLine, m_Theme.Scale(16));
+        if (item.hbmpItem)
+        {
+            SetMenuItemInfoW(menu, IDM_PROFILE_FIRST + (UINT)i, FALSE, &item);
+            bitmaps.push_back(item.hbmpItem);
+        }
     }
     AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(menu, MF_STRING, IDM_SETTINGS, (LoadStr(IDS_SETTINGS) + L"\t" + g_Settings.KeysFor(Action::OpenSettings, 0)).c_str());
@@ -530,6 +578,8 @@ TerminalWindow::ShowProfileMenu(POINT pt)
     AppendMenuW(menu, MF_STRING, IDM_ABOUT, LoadStr(IDS_ABOUT).c_str());
     command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, NULL);
     DestroyMenu(menu);
+    for (HBITMAP bitmap : bitmaps)
+        DeleteObject(bitmap);
     if (command >= IDM_PROFILE_FIRST && command < IDM_PROFILE_FIRST + g_Settings.Profiles.size())
         NewTab(g_Settings.Profiles[command - IDM_PROFILE_FIRST], L"", L"");
     else if (command == IDM_SETTINGS)

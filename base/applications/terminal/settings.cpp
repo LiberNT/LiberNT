@@ -381,11 +381,11 @@ Defaults()
     }
     if (FileExistsInSystem(L"lxterm.exe"))
     {
-        Profile linux = cmd;
-        linux.Name = L"Linux";
-        linux.CommandLine = L"%SystemRoot%\\System32\\lxterm.exe";
-        linux.StartingDirectory = L"";
-        settings.Profiles.push_back(linux);
+        Profile ubuntu = cmd;
+        ubuntu.Name = L"Ubuntu";
+        ubuntu.CommandLine = L"%SystemRoot%\\System32\\lxterm.exe";
+        ubuntu.StartingDirectory = L"";
+        settings.Profiles.push_back(ubuntu);
     }
 
     for (const SchemeSource &source : BuiltInSchemes)

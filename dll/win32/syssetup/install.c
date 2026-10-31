@@ -116,7 +116,8 @@ CreateShortcut(
     LPCWSTR pszDescription,
     INT iIconNr,
     LPCWSTR pszWorkingDir,
-    LPCWSTR pszArgs)
+    LPCWSTR pszArgs,
+    LPCWSTR pszIconPath)
 {
     DWORD dwLen;
     LPWSTR Ptr;
@@ -168,7 +169,7 @@ CreateShortcut(
                                      pszArgs,
                                      pszWorkingDir,
                                      /* Special value to indicate no icon */
-                                     (iIconNr != -1 ? pszCommand : NULL),
+                                     (iIconNr != -1 ? pszIconPath : NULL),
                                      iIconNr,
                                      pszDescription));
 }
@@ -191,6 +192,7 @@ CreateShortcutsFromSection(
     WCHAR szDescription[MAX_PATH];
     WCHAR szDirectory[MAX_PATH];
     WCHAR szArgs[MAX_PATH];
+    WCHAR szIcon[MAX_PATH];
 
     if (!SetupFindFirstLine(hinf, pszSection, NULL, &Context))
         return FALSE;
@@ -229,9 +231,19 @@ CreateShortcutsFromSection(
         if (dwFieldCount < 6 || !SetupGetStringFieldW(&Context, 6, szArgs, ARRAYSIZE(szArgs), NULL))
             szArgs[0] = L'\0';
 
+        if (dwFieldCount < 7 || !SetupGetStringFieldW(&Context, 7, szIcon, ARRAYSIZE(szIcon), NULL))
+        {
+            wcscpy(szIcon, szCommand);
+        }
+        else if (ExpandEnvironmentStringsW(szIcon, szTarget, ARRAYSIZE(szTarget)) == 0 ||
+                 GetFileAttributesW(szTarget) == INVALID_FILE_ATTRIBUTES)
+        {
+            continue;
+        }
+
         wcscat(szName, L".lnk");
 
-        CreateShortcut(pszFolder, szName, szCommand, szDescription, iIconNr, szDirectory, szArgs);
+        CreateShortcut(pszFolder, szName, szCommand, szDescription, iIconNr, szDirectory, szArgs, szIcon);
 
         SendMessage(pItemsData->hwndDlg, PM_STEP_END, 0, (LPARAM)pNotify);
 

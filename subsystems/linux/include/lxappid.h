@@ -9,7 +9,6 @@
 
 #define LX_APP_ID_MAX       128
 #define LX_APP_ID_FORMAT    L"LiberNT.Linux.%08lX.App.%s"
-#define LX_TERMINAL_ID_FORMAT L"LiberNT.Linux.%08lX.Terminal"
 
 static __inline
 BOOL
