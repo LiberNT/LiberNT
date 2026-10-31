@@ -16,6 +16,12 @@ LdrpArchGetEmulationHost(
 }
 
 NTSTATUS
+LdrpArchLoadEmulation(VOID)
+{
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 LdrpArchStartEmulation(VOID)
 {
     return STATUS_SUCCESS;

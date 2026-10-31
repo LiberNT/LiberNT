@@ -623,6 +623,9 @@ LdrpArchApplyImageView(
     _In_ PVOID ImageBase);
 
 NTSTATUS
+LdrpArchLoadEmulation(VOID);
+
+NTSTATUS
 LdrpArchStartEmulation(VOID);
 
 VOID

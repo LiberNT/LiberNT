@@ -11,6 +11,8 @@
 extern IMAGE_DOS_HEADER __ImageBase;
 
 static BOOLEAN LdrpRv64xLoader;
+static PEMULATION_ATTACH_PROCESS LdrpEmulationAttach;
+static PEMULATION_DETACH_THREAD LdrpEmulationDetach;
 static PEMULATION_DETACH_THREAD LdrpEmulationDetachThread;
 
 static
@@ -62,22 +64,41 @@ LdrpArchGetEmulationHost(
 }
 
 NTSTATUS
-LdrpArchStartEmulation(VOID)
+LdrpArchLoadEmulation(VOID)
 {
+    static const struct
+    {
+        PCSTR Name;
+        PVOID *Routine;
+    } Exports[] =
+    {
+        { EMULATION_ATTACH_EXPORT, (PVOID *)&LdrpEmulationAttach },
+        { EMULATION_DETACH_THREAD_EXPORT, (PVOID *)&LdrpEmulationDetach },
+    };
     UNICODE_STRING Library = RTL_CONSTANT_STRING(EMULATION_LIBRARY_AMD64);
-    ANSI_STRING Export = RTL_CONSTANT_STRING(EMULATION_ATTACH_EXPORT);
-    ANSI_STRING DetachExport = RTL_CONSTANT_STRING(EMULATION_DETACH_THREAD_EXPORT);
-    PEMULATION_ATTACH_PROCESS Attach;
-    PEMULATION_DETACH_THREAD Detach;
+    ANSI_STRING Export;
     PVOID Base;
+    ULONG Index;
     NTSTATUS Status;
 
     if (!LdrpRv64xLoader) return STATUS_SUCCESS;
     Status = LdrLoadDll(NULL, NULL, &Library, &Base);
-    if (NT_SUCCESS(Status)) Status = LdrGetProcedureAddress(Base, &Export, 0, (PVOID *)&Attach);
-    if (NT_SUCCESS(Status)) Status = LdrGetProcedureAddress(Base, &DetachExport, 0, (PVOID *)&Detach);
-    if (NT_SUCCESS(Status)) Status = Attach();
-    if (NT_SUCCESS(Status)) LdrpEmulationDetachThread = Detach;
+    for (Index = 0; NT_SUCCESS(Status) && Index < RTL_NUMBER_OF(Exports); Index++)
+    {
+        RtlInitAnsiString(&Export, Exports[Index].Name);
+        Status = LdrGetProcedureAddress(Base, &Export, 0, Exports[Index].Routine);
+    }
+    return Status;
+}
+
+NTSTATUS
+LdrpArchStartEmulation(VOID)
+{
+    NTSTATUS Status;
+
+    if (!LdrpEmulationAttach) return STATUS_SUCCESS;
+    Status = LdrpEmulationAttach();
+    if (NT_SUCCESS(Status)) LdrpEmulationDetachThread = LdrpEmulationDetach;
     return Status;
 }
 
