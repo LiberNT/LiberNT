@@ -1951,7 +1951,11 @@ static BOOL search_in_pathext(WCHAR *path)
                     !last[cached_pathext[i].length])
                     efound = i;
         } while (FindNextFileW(h, &find));
+#ifdef __REACTOS__
+        FindClose(h);
+#else
         CloseHandle(h);
+#endif
     }
     if (efound == cached_count) return FALSE;
 
