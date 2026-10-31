@@ -14705,6 +14705,30 @@ DxgkAcquireKmdCall(
     return TRUE;
 }
 
+/* Callers inside the KMD may be waiting on this dispatch's fence, so it stays admitted until they have drained. */
+BOOLEAN
+DxgkAcquireKmdCallForDispatch(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    if (DxgkAcquireKmdCall(Adapter))
+        return TRUE;
+    if (Adapter == NULL ||
+        InterlockedCompareExchange(&Adapter->KmdMonitorPowerWindow, 0, 0) == 0 ||
+        Adapter->KmdExclusiveOwnerThread != NULL)
+    {
+        return FALSE;
+    }
+    InterlockedIncrement(&Adapter->KmdActiveCalls);
+    KeMemoryBarrier();
+    if (InterlockedCompareExchange(&Adapter->KmdMonitorPowerWindow, 0, 0) != 0 &&
+        Adapter->KmdExclusiveOwnerThread == NULL)
+    {
+        return TRUE;
+    }
+    DxgkReleaseKmdCall(Adapter);
+    return DxgkAcquireKmdCall(Adapter);
+}
+
 VOID
 DxgkReleaseKmdCall(
     _In_ PDXGKRNL_ADAPTER Adapter)
@@ -14787,6 +14811,8 @@ DxgkpBeginKmdExclusiveCapture(
         KeDelayExecutionThread(KernelMode, FALSE, &Delay);
     Adapter->KmdExclusiveOwnerThread = PsGetCurrentThread();
     KeMemoryBarrier();
+    while (InterlockedCompareExchange(&Adapter->KmdActiveCalls, 0, 0) != 0)
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
 }
 
 VOID
@@ -16034,7 +16060,13 @@ DxgkpChildApplyDevicePower(
         InterlockedCompareExchange(&Adapter->RemoveRundownStarted, 0, 0) == 0 &&
         ExAcquireRundownProtection(&Adapter->RemoveRundownRef))
     {
+        (VOID)KeWaitForSingleObject(&Adapter->KmdExclusiveMutex, Executive, KernelMode, FALSE, NULL);
+        if (InterlockedCompareExchange(&Adapter->KmdCallsBlocked, 0, 0) == 0)
+            InterlockedExchange(&Adapter->KmdMonitorPowerWindow, 1);
         DxgkpBeginKmdExclusiveCapture(Adapter, &WasBlocked);
+        if (WasBlocked)
+            InterlockedExchange(&Adapter->KmdMonitorPowerWindow, 0);
+        /* FIXME: Level Three also guarantees idle hardware and no DMA in the scheduler; GPU work keeps running. */
         if (!WasBlocked && Adapter->DevicePowerState == PowerDeviceD0)
         {
             Status = DxgkpCallMiniportSetPowerState(
@@ -16051,6 +16083,9 @@ DxgkpChildApplyDevicePower(
                           WasBlocked ? "closed" : "open");
         }
         DxgkEndKmdExclusive(Adapter, WasBlocked == 0);
+        InterlockedExchange(&Adapter->KmdMonitorPowerWindow, 0);
+        KeReleaseMutex(&Adapter->KmdExclusiveMutex, FALSE);
+        DxgkQueueEngineKick(Adapter);
         ExReleaseRundownProtection(&Adapter->RemoveRundownRef);
     }
 

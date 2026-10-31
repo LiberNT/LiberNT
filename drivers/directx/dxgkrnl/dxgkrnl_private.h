@@ -704,6 +704,7 @@ struct _DXGKRNL_ADAPTER
     KMUTEX                      Level3TransitionMutex;
     volatile LONG               KmdCallsBlocked;
     volatile LONG               KmdActiveCalls;
+    volatile LONG               KmdMonitorPowerWindow;
     volatile PVOID              KmdExclusiveOwnerThread;
     volatile PVOID              KmdTransactionOwnerThread;
     volatile LONG               KmdTransactionDepth;
@@ -2561,6 +2562,10 @@ BOOLEAN
 DxgkAcquireKmdCall(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+BOOLEAN
+DxgkAcquireKmdCallForDispatch(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 VOID
 DxgkReleaseKmdCall(
     _In_ PDXGKRNL_ADAPTER Adapter);
@@ -2580,6 +2585,10 @@ DxgkBeginKmdTransaction(
 
 BOOLEAN
 DxgkBeginKmdTransactionAfterReset(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+BOOLEAN
+DxgkBeginKmdTransactionPastMonitorPower(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
 VOID

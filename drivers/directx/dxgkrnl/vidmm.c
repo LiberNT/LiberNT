@@ -9057,7 +9057,7 @@ DxgkpCreateAllocationCaptured(
         goto Cleanup;
     }
     RtlZeroMemory(CreateRollbackAllocations, (SIZE_T)pCreateAllocation->NumAllocations * sizeof(*CreateRollbackAllocations));
-    if (!DxgkBeginKmdTransaction(Adapter))
+    if (!DxgkBeginKmdTransactionPastMonitorPower(Adapter))
     {
         Status = STATUS_DEVICE_NOT_READY;
         goto Cleanup;
@@ -10002,7 +10002,7 @@ DxgkDestroyAllocation(
         goto Cleanup;
     }
 
-    if (!DxgkBeginKmdTransaction(Adapter))
+    if (!DxgkBeginKmdTransactionPastMonitorPower(Adapter))
     {
         Status = STATUS_DEVICE_NOT_READY;
         goto Cleanup;

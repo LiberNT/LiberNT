@@ -5300,7 +5300,7 @@ DxgkpBeginSynchronizedLock(
                 return Status;
         }
 
-        if (!DxgkBeginKmdTransaction(Adapter))
+        if (!DxgkBeginKmdTransactionPastMonitorPower(Adapter))
             return STATUS_DELETE_PENDING;
         if (!DxgkpDeviceExecutionActive(Device))
         {
@@ -10215,7 +10215,7 @@ DxgkSubmitCommand(
      * through VidMm. The scheduler pins an existing command mapping when
      * present, but an absent mapping must not reject that driver contract. */
 
-    if (!DxgkBeginKmdTransaction(Adapter))
+    if (!DxgkBeginKmdTransactionPastMonitorPower(Adapter))
     {
         DxgkDereferenceContext(Context);
         return STATUS_DELETE_PENDING;

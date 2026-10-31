@@ -1009,6 +1009,7 @@ VOID VidSchDispatchClaimedContextOrderPacket(_Inout_ PVIDSCH_DMA_PACKET Packet)
 }
 
 static VOID VidSchpSubmitVirtualPacket(_In_ PVIDSCH_ENGINE Engine, _Inout_ PVIDSCH_DMA_PACKET Packet);
+static BOOLEAN VidSchpAcquireKmdCallPastMonitorPower(_In_ PDXGKRNL_ADAPTER Adapter);
 static VOID NTAPI VidSchpDestroyPacketWorker(_In_ PVOID Parameter);
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2000)
 static VOID NTAPI VidSchpFaultCleanupWorker(_In_ PVOID Parameter);
@@ -2433,10 +2434,10 @@ VidSchpSubmitVirtualPacket(
     KeReleaseSpinLock(&Engine->QueueLock, OldIrql);
 
     if (SubmissionOwned && DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommandVirtual) != NULL)
-        KmdCallAcquired = DxgkAcquireKmdCall(Adapter);
+        KmdCallAcquired = VidSchpAcquireKmdCallPastMonitorPower(Adapter);
 
-    if (KmdCallAcquired &&
-        !(Packet->SubmitFlags & VIDSCH_SUBMITFLAG_NULLRENDERING))
+    while (KmdCallAcquired &&
+           !(Packet->SubmitFlags & VIDSCH_SUBMITFLAG_NULLRENDERING))
     {
         ULONGLONG RootStart = Packet->PresentationQueueTrace.Epoch ? DptNow() : 0;
         /* Keep reset rundown across both DDIs so a reset cannot invalidate
@@ -2446,11 +2447,12 @@ VidSchpSubmitVirtualPacket(
                                           (PDXGKRNL_CONTEXT)Packet->Context);
         if (RootStart)
             Packet->PresentationRootTicks += DptNow() - RootStart;
-        if (!NT_SUCCESS(Status))
-        {
-            DxgkReleaseKmdCall(Adapter);
-            KmdCallAcquired = FALSE;
-        }
+        if (NT_SUCCESS(Status))
+            break;
+        DxgkReleaseKmdCall(Adapter);
+        KmdCallAcquired = Status == STATUS_DELETE_PENDING &&
+                          InterlockedCompareExchange(&Adapter->KmdMonitorPowerWindow, 0, 0) != 0 &&
+                          VidSchpAcquireKmdCallPastMonitorPower(Adapter);
     }
 
     if (KmdCallAcquired)
@@ -2606,6 +2608,23 @@ VidSchpReturnClaim(
     CancelStatus = InterlockedCompareExchange(&Context->Device->ExecutionState, 0, 0) == D3DKMT_DEVICEEXECUTION_ACTIVE ? STATUS_CANCELLED : STATUS_DEVICE_REMOVED;
     (VOID)Sched->CancelOwnerPackets(Sched->SchedulerHandle, (ULONGLONG)(ULONG_PTR)Context, CancelStatus);
     (VOID)VidSchpDrainRetirements(Adapter);
+}
+
+static BOOLEAN
+VidSchpAcquireKmdCallPastMonitorPower(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    LARGE_INTEGER Delay;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    Delay.QuadPart = -(LONGLONG)(1000 * 10);
+    while (!DxgkAcquireKmdCallForDispatch(Adapter))
+    {
+        if (InterlockedCompareExchange(&Adapter->KmdMonitorPowerWindow, 0, 0) == 0)
+            return DxgkAcquireKmdCall(Adapter);
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
+    return TRUE;
 }
 
 /* ========================================================================
@@ -2774,7 +2793,21 @@ VidSchpKickEngine(
         }
         InterlockedIncrement(&Packet->ReferenceCount);
         if (DXGK_CB_FULL(Adapter, DxgkDdiSubmitCommand) != NULL || PagingVirtual)
-            KmdCallAcquired = DxgkAcquireKmdCall(Adapter);
+        {
+            KmdCallAcquired = AuthorizedPacket != NULL ?
+                                  VidSchpAcquireKmdCallPastMonitorPower(Adapter) :
+                                  DxgkAcquireKmdCallForDispatch(Adapter);
+            if (!KmdCallAcquired && InterlockedCompareExchange(&Adapter->KmdMonitorPowerWindow, 0, 0) != 0)
+            {
+                VidSchpReturnClaim(Engine, Packet, ClaimToken);
+                VidSchpDereferencePacket(Packet);
+                if (InterlockedCompareExchange(&Adapter->KmdMonitorPowerWindow, 0, 0) != 0)
+                    return DispatchedAny;
+                continue;
+            }
+            if (!KmdCallAcquired)
+                KmdCallAcquired = DxgkAcquireKmdCall(Adapter);
+        }
         if (KmdCallAcquired)
         {
             if (KeGetCurrentIrql() < DISPATCH_LEVEL)

@@ -119,6 +119,25 @@ DxgkBeginKmdTransactionAfterReset(
     return TRUE;
 }
 
+BOOLEAN
+DxgkBeginKmdTransactionPastMonitorPower(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    LARGE_INTEGER Delay;
+
+    PAGED_CODE();
+    if (Adapter == NULL)
+        return FALSE;
+    Delay.QuadPart = -(LONGLONG)(1000 * 10);
+    while (!DxgkBeginKmdTransaction(Adapter))
+    {
+        if (InterlockedCompareExchange(&Adapter->KmdMonitorPowerWindow, 0, 0) == 0)
+            return DxgkBeginKmdTransaction(Adapter);
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
+    return TRUE;
+}
+
 VOID
 DxgkEndKmdTransaction(
     _In_ PDXGKRNL_ADAPTER Adapter)
@@ -165,7 +184,7 @@ DxgkYieldKmdTransactionForContextRoom(
     if (!NT_SUCCESS(Status))
         return Status;
     Trace = DxgPresentTraceProducerBegin(Context, DxgTraceTransactionReacquire);
-    Status = DxgkBeginKmdTransaction(Adapter) ? STATUS_SUCCESS : STATUS_DELETE_PENDING;
+    Status = DxgkBeginKmdTransactionPastMonitorPower(Adapter) ? STATUS_SUCCESS : STATUS_DELETE_PENDING;
     DxgPresentTraceProducerEnd(Trace, Status);
     if (!NT_SUCCESS(Status))
         return Status;
