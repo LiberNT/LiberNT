@@ -1,9 +1,11 @@
 
 add_subdirectory(load_notifications)
 add_subdirectory(empty_dll)
+add_subdirectory(ldrfwd)
 
 include_directories($<TARGET_FILE_DIR:load_notifications>)
 include_directories($<TARGET_FILE_DIR:empty_dll>)
+include_directories($<TARGET_FILE_DIR:ldrfwd_a>)
 include_directories(${REACTOS_SOURCE_DIR}/ntoskrnl/include)
 spec2def(ntdll_apitest.exe ntdll_apitest.spec)
 
@@ -58,6 +60,7 @@ list(APPEND SOURCE
     wow64_native_process.c
     LdrEnumResources.c
     LdrFindResource_U.c
+    LdrForwarderPath.c
     LdrGetDllHandleByName.c
     LdrLoadDll.c
     LdrQueryProcessModuleInformation.c
@@ -218,6 +221,7 @@ list(APPEND PCH_SKIP_SOURCE
 
 add_rc_deps(testdata.rc ${CMAKE_CURRENT_BINARY_DIR}/load_notifications/load_notifications.dll)
 add_rc_deps(testdata.rc ${CMAKE_CURRENT_BINARY_DIR}/empty_dll/empty_dll.dll)
+add_rc_deps(testdata.rc ${CMAKE_CURRENT_BINARY_DIR}/ldrfwd/ldrfwd_a.dll ${CMAKE_CURRENT_BINARY_DIR}/ldrfwd/ldrfwd_b.dll ${CMAKE_CURRENT_BINARY_DIR}/ldrfwd/ldrfwd_c.dll)
 
 add_executable(ntdll_apitest
     ${SOURCE}
@@ -235,7 +239,7 @@ target_link_libraries(ntdll_apitest ntdll_crt_test_lib rtl_test_lib wine uuid ${
 set_module_type(ntdll_apitest win32cui)
 add_importlibs(ntdll_apitest msvcrt advapi32 kernel32 ntdll)
 add_pch(ntdll_apitest precomp.h "${PCH_SKIP_SOURCE}")
-add_dependencies(ntdll_apitest load_notifications empty_dll)
+add_dependencies(ntdll_apitest load_notifications empty_dll ldrfwd_a ldrfwd_b ldrfwd_c)
 
 add_rostests_file(TARGET ntdll_apitest)
 add_rostests_file(TARGET ntdll_apitest SUBDIR testdata)
