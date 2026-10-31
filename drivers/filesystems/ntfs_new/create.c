@@ -200,8 +200,9 @@ NtfsResolveFileIdName(
     ULONGLONG Reference;
     PWCHAR Scratch;
     PWCHAR NewBuffer;
-    ULONG ScratchLength = (MAXUSHORT - sizeof(WCHAR)) / sizeof(WCHAR);
+    ULONG ScratchLength = 1024;
     ULONG PathLength = 0;
+    USHORT CachedLength;
     NTSTATUS Status;
 
     if ((FileObject->FileName.Length != sizeof(ULONGLONG) &&
@@ -222,23 +223,39 @@ NtfsResolveFileIdName(
     if ((Reference >> 48) == 0)
         return STATUS_INVALID_PARAMETER;
 
-    Scratch = ExAllocatePoolWithTag(PagedPool, ScratchLength * sizeof(WCHAR), TAG_NTFS);
-    if (!Scratch)
-        return STATUS_INSUFFICIENT_RESOURCES;
-
-    KeEnterCriticalRegion();
-    NtfsAcquireMetadata(VolCB);
-    Status = NtfsMasterFileTableGetPathFromFileReference(NtfsVolumeGetMft(VolCB->DiskVolume),
-                                                         Reference,
-                                                         Scratch,
-                                                         ScratchLength,
-                                                         &PathLength);
-    NtfsReleaseMetadata(VolCB);
-    KeLeaveCriticalRegion();
-    if (!NT_SUCCESS(Status))
+    NewBuffer = NtfsCopyCachedRecordName(VolCB, Reference, &CachedLength);
+    if (NewBuffer)
     {
+        ExFreePoolWithTag(FileObject->FileName.Buffer, 0);
+        FileObject->FileName.Buffer = NewBuffer;
+        FileObject->FileName.Length = CachedLength * sizeof(WCHAR);
+        FileObject->FileName.MaximumLength = (CachedLength + 1) * sizeof(WCHAR);
+        return STATUS_SUCCESS;
+    }
+
+    for (;;)
+    {
+        Scratch = ExAllocatePoolWithTag(PagedPool, ScratchLength * sizeof(WCHAR), TAG_NTFS);
+        if (!Scratch)
+            return STATUS_INSUFFICIENT_RESOURCES;
+
+        KeEnterCriticalRegion();
+        NtfsAcquireMetadata(VolCB);
+        Status = NtfsMasterFileTableGetPathFromFileReference(NtfsVolumeGetMft(VolCB->DiskVolume),
+                                                             Reference,
+                                                             Scratch,
+                                                             ScratchLength,
+                                                             &PathLength);
+        NtfsReleaseMetadata(VolCB);
+        KeLeaveCriticalRegion();
+        if (NT_SUCCESS(Status))
+            break;
         ExFreePoolWithTag(Scratch, TAG_NTFS);
-        return Status == STATUS_BUFFER_TOO_SMALL ? STATUS_NAME_TOO_LONG : Status;
+        if (Status != STATUS_BUFFER_TOO_SMALL)
+            return Status;
+        if (ScratchLength == (MAXUSHORT - sizeof(WCHAR)) / sizeof(WCHAR))
+            return STATUS_NAME_TOO_LONG;
+        ScratchLength = (MAXUSHORT - sizeof(WCHAR)) / sizeof(WCHAR);
     }
 
     NewBuffer = ExAllocatePoolWithTag(PagedPool, (PathLength + 1) * sizeof(WCHAR), TAG_NTFS);

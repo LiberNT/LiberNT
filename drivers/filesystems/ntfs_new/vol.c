@@ -1054,6 +1054,36 @@ NtfsEvictCachedRecord(_In_ PVolumeContextBlock VolCB,
     }
 }
 
+PWCHAR
+NtfsCopyCachedRecordName(_In_ PVolumeContextBlock VolCB,
+                         _In_ ULONGLONG FileReference,
+                         _Out_ PUSHORT Length)
+{
+    PLIST_ENTRY Bucket = &VolCB->RecordIdentityHash[(FileReference & 0xFFFFFFFFFFFFULL) & (NTFS_RECORD_CACHE_BUCKETS - 1)];
+    PLIST_ENTRY Entry;
+    PWCHAR Name = NULL;
+
+    *Length = 0;
+    ExAcquireFastMutex(&VolCB->RecordCacheMutex);
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
+    {
+        PNtfsCachedRecord Found = CONTAINING_RECORD(Entry, NtfsCachedRecord, IdentityLink);
+
+        if (Found->FileReference != FileReference || Found->Evicted)
+            continue;
+        Name = ExAllocatePoolWithTag(PagedPool, (Found->Length + 1) * sizeof(WCHAR), TAG_NTFS);
+        if (Name)
+        {
+            RtlCopyMemory(Name, Found->Name, Found->Length * sizeof(WCHAR));
+            Name[Found->Length] = UNICODE_NULL;
+            *Length = Found->Length;
+        }
+        break;
+    }
+    ExReleaseFastMutex(&VolCB->RecordCacheMutex);
+    return Name;
+}
+
 static
 BOOLEAN
 NtfsCachedRecordIsUnder(_In_ PNtfsCachedRecord Entry,

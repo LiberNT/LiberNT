@@ -54,6 +54,7 @@ list(APPEND SOURCE
     LCMapString.c
     LoadLibraryExW.c
     LockFileEx.c
+    OpenFileByIdRename.c
     SandboxLaunch.c
     SystemImageCatalog.c
     SharedMemorySecurity.c
