@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <wchar.h>
 #include <math.h>
+#include <sys/cachectl.h>
 #include <sys/mman.h>
 #include <semaphore.h>
 #include "bridge.h"
@@ -256,7 +257,11 @@ madvise(void *Address, size_t Length, int Advice)
 void
 __riscv_flush_icache(void *Start, void *End, unsigned long Flags)
 {
-    UNREFERENCED_PARAMETER(Flags);
+    if (Flags & SYS_RISCV_FLUSH_ICACHE_LOCAL)
+    {
+        __asm__ __volatile__("fence.i" ::: "memory");
+        return;
+    }
     ZwFlushInstructionCache(NtCurrentProcess(), Start, (ULONG_PTR)End - (ULONG_PTR)Start);
 }
 

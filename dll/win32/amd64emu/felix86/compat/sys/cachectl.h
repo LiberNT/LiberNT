@@ -7,3 +7,5 @@
 
 #pragma once
 
+
+#define SYS_RISCV_FLUSH_ICACHE_LOCAL 1UL
