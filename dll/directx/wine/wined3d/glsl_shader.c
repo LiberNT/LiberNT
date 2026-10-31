@@ -5855,6 +5855,7 @@ static void shader_glsl_store_uav(const struct wined3d_shader_instruction *ins)
     struct glsl_src_param image_coord_param, image_data_param;
     enum wined3d_shader_resource_type resource_type;
     enum wined3d_data_type data_type;
+    const char *data_constructor = "";
     unsigned int uav_idx;
     DWORD coord_mask;
 
@@ -5875,9 +5876,12 @@ static void shader_glsl_store_uav(const struct wined3d_shader_instruction *ins)
 
     shader_glsl_add_src_param(ins, &ins->src[0], coord_mask, &image_coord_param);
     shader_glsl_add_src_param_ext(ins->ctx, &ins->src[1], WINED3DSP_WRITEMASK_ALL, &image_data_param, data_type);
-    shader_addline(ins->ctx->buffer, "imageStore(%s_image%u, %s, %s);\n",
+    /* imageStore() has no scalar overload, and vkd3d's HLSL compiler emits scalar immediates here. */
+    if (ins->src[1].reg.type == WINED3DSPR_IMMCONST && ins->src[1].reg.immconst_type == WINED3D_IMMCONST_SCALAR)
+        data_constructor = data_type == WINED3D_DATA_UINT ? "uvec4" : data_type == WINED3D_DATA_INT ? "ivec4" : "vec4";
+    shader_addline(ins->ctx->buffer, "imageStore(%s_image%u, %s, %s(%s));\n",
             shader_glsl_get_prefix(version->type), uav_idx,
-            image_coord_param.param_str, image_data_param.param_str);
+            image_coord_param.param_str, data_constructor, image_data_param.param_str);
 }
 
 static void shader_glsl_store_raw_structured(const struct wined3d_shader_instruction *ins)
