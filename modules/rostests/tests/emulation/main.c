@@ -1277,6 +1277,7 @@ main(
            Headers->FileHeader.Machine,
            (unsigned)(8 * sizeof(PVOID)),
            System.wProcessorArchitecture);
+    CHECK(ArgumentCount >= 1 && Arguments[0] != NULL && Arguments[ArgumentCount] == NULL);
     CHECK(System.dwNumberOfProcessors > 0 && System.dwPageSize == 4096);
     CHECK(Headers->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 ||
           System.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64);
