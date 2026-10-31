@@ -6,6 +6,7 @@
  */
 
 #pragma once
+#define _PROCESSTHREADSAPI_H_
 
 #ifdef __cplusplus
 extern "C" {

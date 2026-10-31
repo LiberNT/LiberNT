@@ -6,6 +6,7 @@
  */
 
 #pragma once
+#define _SYNCHAPI_H_
 
 #ifdef __cplusplus
 extern "C" {

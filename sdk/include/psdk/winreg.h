@@ -1,5 +1,6 @@
 #ifndef _WINREG_H
 #define _WINREG_H
+#define _WINREG_
 
 #ifdef __cplusplus
 extern "C" {

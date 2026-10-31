@@ -20,6 +20,7 @@
 
 #ifndef __WINE_OLE2_H
 #define __WINE_OLE2_H
+#define _OLE2_H_
 
 #include <winerror.h>
 #include <objbase.h>

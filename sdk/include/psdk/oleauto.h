@@ -18,6 +18,7 @@
 
 #ifndef __WINE_OLEAUTO_H
 #define __WINE_OLEAUTO_H
+#define _OLEAUTO_H_
 
 #include <oaidl.h>
 

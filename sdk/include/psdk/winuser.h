@@ -1,5 +1,6 @@
 #ifndef _WINUSER_H
 #define _WINUSER_H
+#define _WINUSER_
 
 #ifdef __cplusplus
 extern "C" {
