@@ -211,6 +211,23 @@ EmuFatal(
     _In_ NTSTATUS Status,
     _In_ PCSTR Message);
 
+#define EMU_BRIDGE_SERVICE (EMU_HOST_SERVICE_BASE + 0x20000)
+
+ULONG64
+EmuCreateStub(
+    _In_reads_(Length) const UCHAR *Code,
+    _In_ ULONG Length);
+
+ULONG64
+EmuBridgeEntry(
+    _In_ ULONG64 Rip);
+
+BOOLEAN
+EmuBridgeService(
+    _In_ PEMU_THREAD Thread,
+    _In_ ULONG Service,
+    _Inout_ PEMU_REGISTERS Registers);
+
 VOID
 NTAPI
 UpdateProcessorInformation(

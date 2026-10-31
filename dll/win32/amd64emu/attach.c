@@ -104,10 +104,16 @@ NTSTATUS
 NTAPI
 EmuAttachProcess(VOID)
 {
+    static const UNICODE_STRING NativeName = RTL_CONSTANT_STRING(L"ntdll.dll");
+    PVOID NativeNtdll;
     NTSTATUS Status;
 
     EmuProcess.Attached = TRUE;
     EmuProcess.GuestPeb = NtCurrentPeb();
+    Status = LdrGetDllHandle(NULL, NULL, (PUNICODE_STRING)&NativeName, &NativeNtdll);
+    if (!NT_SUCCESS(Status)) return Status;
+    EmuProcess.NativeRtlUserThreadStart = (ULONG_PTR)RtlFindExportedRoutineByName(NativeNtdll, "RtlUserThreadStart");
+    if (!EmuProcess.NativeRtlUserThreadStart) return STATUS_PROCEDURE_NOT_FOUND;
     InitializeListHead(&EmuProcess.Threads);
     Status = RtlInitializeCriticalSection(&EmuProcess.ThreadLock);
     if (!NT_SUCCESS(Status)) return Status;

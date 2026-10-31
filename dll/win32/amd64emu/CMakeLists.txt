@@ -81,6 +81,7 @@ set_source_files_properties(w32ksignature.cpp PROPERTIES COMPILE_OPTIONS -Wno-mi
 list(APPEND SOURCE
     apc.c
     attach.c
+    bridge.c
     callback.c
     context.c
     exception.c

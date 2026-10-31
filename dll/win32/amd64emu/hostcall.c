@@ -262,6 +262,19 @@ EmuAllocateStub(
     return (ULONG64)Stub;
 }
 
+ULONG64
+EmuCreateStub(
+    _In_reads_(Length) const UCHAR *Code,
+    _In_ ULONG Length)
+{
+    ULONG64 Stub;
+
+    RtlEnterCriticalSection(&EmuHostLock);
+    Stub = EmuAllocateStub(Code, Length);
+    RtlLeaveCriticalSection(&EmuHostLock);
+    return Stub;
+}
+
 static
 ULONG64
 NTAPI
@@ -613,7 +626,7 @@ EmuHostService(
         Registers->Gpr[EmuRax] = EmuHostLoad((PCWSTR)Registers->Gpr[EmuR10]);
     else if (Service >= EMU_HOST_SERVICE_THUNK && Index < (ULONG)EmuHostThunkCount)
         EmuHostCall(Thread, &EmuHostThunks[Index / EMU_THUNK_CHUNK_SIZE][Index % EMU_THUNK_CHUNK_SIZE], Registers);
-    else
+    else if (!EmuBridgeService(Thread, Service, Registers))
         Registers->Gpr[EmuRax] = (ULONG)STATUS_INVALID_SYSTEM_SERVICE;
     Thread->HostDepth--;
     if (Registers->Rip == ReturnRip) Registers->Rip = ServiceRip;
@@ -656,6 +669,8 @@ EmuNativeEntry(
 
     if (!EmuCodeMap || Rip > EmuCodeMapLimit) return 0;
     if (!(EmuCodeMap[Rip >> (PAGE_SHIFT + 3)] & (1 << ((Rip >> PAGE_SHIFT) & 7)))) return 0;
+    Stub = EmuBridgeEntry(Rip);
+    if (Stub) return Stub;
     Stub = EmuGuestThunk((PVOID)(ULONG_PTR)Rip, NULL);
     if (!Stub)
     {

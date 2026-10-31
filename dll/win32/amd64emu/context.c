@@ -195,6 +195,39 @@ EmuGetStartContextThread(
     return STATUS_SUCCESS;
 }
 
+static
+NTSTATUS
+EmuGetNativeViewContextThread(
+    _In_ HANDLE ThreadHandle,
+    _Inout_ AMD64_CONTEXT *Context)
+{
+    THREAD_BASIC_INFORMATION Information;
+    ULONG Flags = Context->ContextFlags;
+    CONTEXT Native;
+    NTSTATUS Status;
+
+    Status = NtQueryInformationThread(ThreadHandle, ThreadBasicInformation, &Information, sizeof(Information), NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+    if (Information.ClientId.UniqueProcess != NtCurrentTeb()->ClientId.UniqueProcess)
+        return EmuGetStartContextThread(ThreadHandle, Context);
+
+    Native.ContextFlags = CONTEXT_FULL;
+    Status = NtGetContextThread(ThreadHandle, &Native);
+    if (!NT_SUCCESS(Status)) return Status;
+    if (Native.Pc == EmuProcess.NativeRtlUserThreadStart)
+    {
+        EmuBuildNativeStartContext(&Native, Context);
+        Context->ContextFlags = Flags;
+        return STATUS_SUCCESS;
+    }
+    if ((Flags & CONTEXT_AMD64_CONTROL) == CONTEXT_AMD64_CONTROL)
+    {
+        Context->Rip = Native.Pc;
+        Context->Rsp = Native.Sp;
+    }
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 EmuGetContextThread(
     _In_ HANDLE ThreadHandle,
@@ -202,6 +235,7 @@ EmuGetContextThread(
 {
     AMD64_CONTEXT Captured = *Context;
     PEMU_THREAD Target;
+    BOOLEAN InHost = FALSE;
     NTSTATUS Status;
 
     if ((Captured.ContextFlags & CONTEXT_AMD64) != CONTEXT_AMD64) return STATUS_INVALID_PARAMETER;
@@ -210,9 +244,16 @@ EmuGetContextThread(
 
     RtlEnterCriticalSection(&EmuProcess.ThreadLock);
     Status = EmuFindThread(ThreadHandle, &Target);
-    if (NT_SUCCESS(Status)) EmuCoreGetContext(Target->Cpu, &Captured);
+    if (NT_SUCCESS(Status))
+    {
+        EmuCoreGetContext(Target->Cpu, &Captured);
+        InHost = Target->HostDepth != 0;
+    }
     RtlLeaveCriticalSection(&EmuProcess.ThreadLock);
-    if (Status == STATUS_NOT_SUPPORTED) Status = EmuGetStartContextThread(ThreadHandle, &Captured);
+    if (EmuProcess.Attached && (Status == STATUS_NOT_SUPPORTED || InHost) && !EmuIsCurrentThread(ThreadHandle))
+        Status = EmuGetNativeViewContextThread(ThreadHandle, &Captured);
+    else if (Status == STATUS_NOT_SUPPORTED)
+        Status = EmuGetStartContextThread(ThreadHandle, &Captured);
 
     if (NT_SUCCESS(Status)) *Context = Captured;
     return Status;
