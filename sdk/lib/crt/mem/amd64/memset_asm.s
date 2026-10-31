@@ -68,29 +68,40 @@ FUNC memset
     ret
 
 .Large:
-    test edi, 15
-    mov r9, rdi
-    mov [rdi + r8 - 8], rax
-    mov rcx, r8
-    jnz .Align
+    cmp r8, 2048
+    jae .Stosb
 
-.Fill:
-    shr rcx, 3
-    cld
-    rep stosq
-    mov rax, r9
+    movq xmm0, rax
+    punpcklqdq xmm0, xmm0
+    movdqu [rdi], xmm0
+    movdqu [rdi + r8 - 64], xmm0
+    movdqu [rdi + r8 - 48], xmm0
+    movdqu [rdi + r8 - 32], xmm0
+    movdqu [rdi + r8 - 16], xmm0
+    lea rcx, [rdi + 16]
+    and rcx, -16
+    lea rdx, [rdi + r8 - 64]
+
+.Sse64Loop:
+    movdqa [rcx], xmm0
+    movdqa [rcx + 16], xmm0
+    movdqa [rcx + 32], xmm0
+    movdqa [rcx + 48], xmm0
+    add rcx, 64
+    cmp rcx, rdx
+    jb .Sse64Loop
+    mov rax, rdi
     pop rdi
     ret
 
-.Align:
-    xor edx, edx
-    sub edx, edi
-    and edx, 15
-    mov [rdi], rax
-    mov [rdi + 8], rax
-    sub rcx, rdx
-    add rdi, rdx
-    jmp .Fill
+.Stosb:
+    mov r9, rdi
+    mov rcx, r8
+    cld
+    rep stosb
+    mov rax, r9
+    pop rdi
+    ret
 ENDFUNC
 
 END

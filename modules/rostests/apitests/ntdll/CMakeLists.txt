@@ -65,6 +65,7 @@ list(APPEND SOURCE
     load_notifications.c
     locale.c
     memmove.c
+    memset.c
     MemoryAccounting.c
     NtAcceptConnectPort.c
     NtAccessCheck.c

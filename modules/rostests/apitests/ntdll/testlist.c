@@ -38,6 +38,7 @@ extern void func_LdrLoadDll(void);
 extern void func_LdrQueryProcessModuleInformation(void);
 extern void func_load_notifications(void);
 extern void func_memmove(void);
+extern void func_memset(void);
 extern void func_MemoryAccounting(void);
 extern void func_NtAcceptConnectPort(void);
 extern void func_NtAccessCheck(void);
@@ -218,6 +219,7 @@ const struct test winetest_testlist[] =
     { "LdrQueryProcessModuleInformation", func_LdrQueryProcessModuleInformation },
     { "load_notifications",             func_load_notifications },
     { "memmove",                        func_memmove },
+    { "memset",                         func_memset },
     { "MemoryAccounting",               func_MemoryAccounting },
     { "NtAcceptConnectPort",            func_NtAcceptConnectPort },
     { "NtAccessCheck",                  func_NtAccessCheck },

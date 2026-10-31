@@ -201,6 +201,11 @@ elseif(ARCH STREQUAL "riscv64")
     set_source_files_properties(${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/riscv64/rvdispatch.c
         PROPERTIES COMPILE_OPTIONS "-fno-builtin")
     set(MSVCRT_ARCH_ROUTINES MSVCRT_ARCH_STRLEN MSVCRT_ARCH_STRCPY MSVCRT_ARCH_STRCMP MSVCRT_ARCH_MEMCPY MSVCRT_ARCH_MEMSET MSVCRT_ARCH_MEMCMP)
+elseif(ARCH STREQUAL "amd64")
+    list(APPEND MSVCRT_ASM_SOURCE
+        ${REACTOS_SOURCE_DIR}/sdk/lib/crt/mem/amd64/memset_asm.s
+    )
+    set(MSVCRT_ARCH_ROUTINES MSVCRT_ARCH_MEMSET)
 endif()
 
 add_asm_files(msvcrt_asm ${MSVCRT_ASM_SOURCE})
