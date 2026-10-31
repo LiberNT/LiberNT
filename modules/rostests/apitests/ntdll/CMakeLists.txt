@@ -217,6 +217,8 @@ elseif(ARCH STREQUAL "amd64")
         amd64/NullGsSelector.S
         amd64/x87Exception.S
     )
+elseif(ARCH STREQUAL "riscv64")
+    list(APPEND SOURCE InstructionCacheMigration.c)
 endif()
 
 list(APPEND PCH_SKIP_SOURCE

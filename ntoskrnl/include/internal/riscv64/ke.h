@@ -258,6 +258,7 @@ PVOID NTAPI KiRiscvInitializeVectorArea(_Inout_ PKTHREAD Thread, _In_ PVOID Stac
 ULONG64 NTAPI KiRiscvReadVectorStatus(VOID);
 VOID NTAPI KiRiscvSaveVectorState(_In_ PKTHREAD Thread);
 VOID NTAPI KiRiscvRestoreVectorState(_In_ PKTHREAD Thread);
+VOID NTAPI KiRiscvSynchronizeInstructionStream(_In_ PKTHREAD Thread);
 BOOLEAN NTAPI KiRiscvHandleVectorFirstUse(_Inout_ PKTRAP_FRAME TrapFrame);
 VOID NTAPI KiRiscvRundownVectorState(_In_ PKTHREAD Thread);
 struct _RISCV_FDT;

@@ -91,6 +91,8 @@ KiSwapContext:
     mv s1, a2
     mv s2, t0
     mv a0, a2
+    call KiRiscvSynchronizeInstructionStream
+    mv a0, s1
     call KiRiscvRestoreVectorState
     mv a1, s0
     mv a2, s1

@@ -58,6 +58,9 @@ extern void func_NullGsSelector(void);
 extern void func_SyscallStub(void);
 extern void func_x87Exception(void);
 #endif
+#ifdef _M_RISCV64
+extern void func_InstructionCacheMigration(void);
+#endif
 extern void func_NtCreateFile(void);
 extern void func_NtCreateKey(void);
 extern void func_NtCreateKeyCached(void);
@@ -241,6 +244,9 @@ const struct test winetest_testlist[] =
     { "NullGsSelector",                 func_NullGsSelector },
     { "SyscallStub",                    func_SyscallStub },
     { "x87Exception",                   func_x87Exception },
+#endif
+#ifdef _M_RISCV64
+    { "InstructionCacheMigration",      func_InstructionCacheMigration },
 #endif
     { "NtCreateFile",                   func_NtCreateFile },
     { "NtCreateKey",                    func_NtCreateKey },

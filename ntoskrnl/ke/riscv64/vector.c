@@ -24,7 +24,7 @@ typedef struct _KI_RISCV_VECTOR_AREA
     ULONG64 Vl;
     ULONG64 Vcsr;
     ULONG64 Active;
-    ULONG64 Reserved;
+    ULONG64 LastProcessor;
     UCHAR Registers[ANYSIZE_ARRAY];
 } KI_RISCV_VECTOR_AREA, *PKI_RISCV_VECTOR_AREA;
 
@@ -74,10 +74,6 @@ KiRiscvInitializeVectorArea(
     SIZE_T Size;
     PKI_RISCV_VECTOR_AREA Area;
 
-    Thread->StateSaveArea = NULL;
-    if (KiRiscvVectorLength == 0)
-        return StackTop;
-
     Size = ALIGN_UP_BY(FIELD_OFFSET(KI_RISCV_VECTOR_AREA, Registers) +
                        KI_RISCV_VECTOR_REGISTERS * KiRiscvVectorLength, 16);
     Area = (PKI_RISCV_VECTOR_AREA)((ULONG_PTR)StackTop - Size);
@@ -97,6 +93,24 @@ KiRiscvSaveVectorState(_In_ PKTHREAD Thread)
     if ((Area != NULL) && (KiRiscvReadVectorStatus() == RISCV_SSTATUS_VS_DIRTY))
         KiRiscvSaveVectorRegisters(Area, KiRiscvVectorLength);
     KiRiscvSetVectorStatus(RISCV_SSTATUS_VS_OFF);
+}
+
+/* A thread's own fence.i covers only the hart it ran on, so a migrated thread fences again. */
+VOID
+NTAPI
+KiRiscvSynchronizeInstructionStream(_In_ PKTHREAD Thread)
+{
+    PKI_RISCV_VECTOR_AREA Area = Thread->StateSaveArea;
+    ULONG64 Processor;
+
+    if (Area == NULL)
+        return;
+    Processor = (ULONG64)KeGetCurrentPrcb()->Number + 1;
+    if (Area->LastProcessor == Processor)
+        return;
+    if (Area->LastProcessor != 0)
+        __asm__ __volatile__("fence.i" ::: "memory");
+    Area->LastProcessor = Processor;
 }
 
 VOID
