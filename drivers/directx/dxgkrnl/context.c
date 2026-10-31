@@ -2154,7 +2154,7 @@ DxgkpCreateDevice(
             DxgkDereferenceAdapter(Adapter);
             return STATUS_DELETE_PENDING;
         }
-        if (!DxgkBeginKmdTransaction(Adapter))
+        if (!DxgkBeginKmdTransactionAfterReset(Adapter))
         {
             DxgkDereferenceAdapter(Adapter);
             DxgkDereferenceProcessRecord(Device->ProcessRecord);

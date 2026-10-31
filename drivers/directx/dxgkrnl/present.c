@@ -1693,10 +1693,11 @@ DxgkpPresentDisplayOnlyToSharedPrimary(
     PDXGKRNL_DEVICE_WORK PresentWork = NULL;
     D3DKMT_DESTROYDEVICE DestroyDevice;
     KAPC_STATE ApcState;
-    BOOLEAN Attached;
+    BOOLEAN Attached = FALSE;
     BOOLEAN DestroyCdd;
     PBYTE DestinationVa;
     PBYTE SourceVa;
+    PMDL SourceMdl = NULL;
     ULONG Width;
     ULONG Height;
     ULONG SourcePitch;
@@ -1760,11 +1761,52 @@ DxgkpPresentDisplayOnlyToSharedPrimary(
     if (!DxgkpAcquirePresentQueues(Adapter))
         return STATUS_DELETE_PENDING;
     KeWaitForSingleObject(&Adapter->CddPresentMutex, Executive, KernelMode, FALSE, NULL);
+    RtlZeroMemory(&Entry, sizeof(Entry));
+    DestroyCdd = FALSE;
+
+    SourceVa = (PBYTE)PresentDisplayOnly->pSource;
+    if ((ULONG_PTR)SourceVa < (ULONG_PTR)MmSystemRangeStart)
+    {
+        SourceMdl = IoAllocateMdl(SourceVa,
+                                  (ULONG)(((SIZE_T)(Height - 1) * SourcePitch) +
+                                          ((SIZE_T)Width * sizeof(ULONG))),
+                                  FALSE,
+                                  FALSE,
+                                  NULL);
+        if (SourceMdl == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto CleanupCdd;
+        }
+        Status = STATUS_SUCCESS;
+        _SEH2_TRY
+        {
+            MmProbeAndLockPages(SourceMdl, KernelMode, IoReadAccess);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+        if (!NT_SUCCESS(Status))
+        {
+            IoFreeMdl(SourceMdl);
+            SourceMdl = NULL;
+            goto CleanupCdd;
+        }
+        SourceVa = MmGetSystemAddressForMdlSafe(SourceMdl,
+                                                NormalPagePriority |
+                                                MdlMappingNoExecute);
+        if (SourceVa == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto CleanupCdd;
+        }
+    }
+
     Attached = PsGetCurrentProcess() != PsInitialSystemProcess;
     if (Attached)
         KeStackAttachProcess((PKPROCESS)PsInitialSystemProcess, &ApcState);
-    RtlZeroMemory(&Entry, sizeof(Entry));
-    DestroyCdd = FALSE;
 
     /* A compositor claim takes CddPresentMutex too, draining the previous
      * background copy before it gains desktop publication ownership. */
@@ -1775,6 +1817,20 @@ DxgkpPresentDisplayOnlyToSharedPrimary(
     }
 
     Status = DxgkpReferenceCddContext(Adapter, &Entry);
+    if (NT_SUCCESS(Status) &&
+        InterlockedCompareExchange(&Entry.Device->ExecutionState, 0, 0) != D3DKMT_DEVICEEXECUTION_ACTIVE &&
+        InterlockedCompareExchange(&Adapter->VBlankResetActive, 0, 0) == 0)
+    {
+        (VOID)DxgkpDestroyCddPresentBindings(Adapter, Entry.Device);
+        DxgkDereferenceContext(Entry.Context);
+        Entry.Context = NULL;
+        Entry.Device = NULL;
+        DestroyDevice.hDevice = Adapter->CddDeviceHandle;
+        Adapter->CddContextHandle = 0;
+        Adapter->CddDeviceHandle = 0;
+        DxgkDestroyDevice(&DestroyDevice);
+        Status = DxgkpReferenceCddContext(Adapter, &Entry);
+    }
     if (!NT_SUCCESS(Status))
         goto CleanupCdd;
     Status = DxgkDeviceWaitForIdle(Entry.Device);
@@ -1828,8 +1884,8 @@ DxgkpPresentDisplayOnlyToSharedPrimary(
         goto CleanupCdd;
     }
 
-    SourceVa = (PBYTE)PresentDisplayOnly->pSource;
     for (Index = 0;
+         (SourceVa != DestinationVa || SourcePitch != DestinationPitch) &&
          Index < PresentDisplayOnly->NumDirtyRects;
          ++Index)
     {
@@ -1931,6 +1987,12 @@ CleanupCdd:
     }
     if (Attached)
         KeUnstackDetachProcess(&ApcState);
+    if (SourceMdl != NULL)
+    {
+        if (SourceMdl->MdlFlags & MDL_PAGES_LOCKED)
+            MmUnlockPages(SourceMdl);
+        IoFreeMdl(SourceMdl);
+    }
     KeReleaseMutex(&Adapter->CddPresentMutex, FALSE);
     DxgkpReleasePresentQueues(Adapter);
     return Status;

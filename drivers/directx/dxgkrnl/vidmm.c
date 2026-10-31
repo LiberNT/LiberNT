@@ -6987,11 +6987,11 @@ DxgkpVidMmDestroyBatchWorker(
             if (!NT_SUCCESS(DxgkpVidMmFillAperturePagingOperation(Allocation, FALSE, &UnmapOp)))
                 continue;
             if (NT_SUCCESS(DxgkPagingExecuteBatch(Adapter,
-                                                  Allocation->Device,
+                                                  NULL,
                                                   &UnmapOp,
                                                   1,
-                                                  &Allocation,
-                                                  1,
+                                                  NULL,
+                                                  0,
                                                   0,
                                                   0,
                                                   &PagingFenceId,
@@ -9057,7 +9057,7 @@ DxgkpCreateAllocationCaptured(
         goto Cleanup;
     }
     RtlZeroMemory(CreateRollbackAllocations, (SIZE_T)pCreateAllocation->NumAllocations * sizeof(*CreateRollbackAllocations));
-    if (!DxgkBeginKmdTransaction(Adapter))
+    if (!DxgkBeginKmdTransactionPastMonitorPower(Adapter))
     {
         Status = STATUS_DEVICE_NOT_READY;
         goto Cleanup;
@@ -10002,7 +10002,7 @@ DxgkDestroyAllocation(
         goto Cleanup;
     }
 
-    if (!DxgkBeginKmdTransaction(Adapter))
+    if (!DxgkBeginKmdTransactionPastMonitorPower(Adapter))
     {
         Status = STATUS_DEVICE_NOT_READY;
         goto Cleanup;
@@ -12350,6 +12350,68 @@ DxgkpVidMmPlaceWithApertureCompaction(
 }
 
 static NTSTATUS
+DxgkpVidMmPlaceWithApertureEviction(
+    _In_ PDXGKRNL_SEGMENT Segment,
+    _In_ PDXGKVMM_ALLOCATION Allocation)
+{
+    if (!Allocation->AccessedPhysically ||
+        Allocation->Adapter->KmdTransactionOwnerThread == PsGetCurrentThread() ||
+        VidMmAllocationSizeForSegment(Allocation, Segment) > Segment->CommitLimit)
+    {
+        return STATUS_NO_MEMORY;
+    }
+
+    for (;;)
+    {
+        PDXGKVMM_ALLOCATION Victim;
+        ULONG VictimOwnerToken;
+        BOOLEAN VictimOffered;
+        ULONG VictimPriority;
+        ULONG AllocationPriority;
+        NTSTATUS Status;
+
+        ExAcquireFastMutex(&Segment->Lock);
+        Victim = VidMmFindLowestPriorityResident(Segment);
+        if (Victim != NULL && !DxgkpVidMmTryReferencePhysicalAllocation(Victim))
+            Victim = NULL;
+        ExReleaseFastMutex(&Segment->Lock);
+        if (Victim == NULL)
+            return STATUS_NO_MEMORY;
+
+        ExAcquireFastMutex(&DxgkVidMmPolicyLock);
+        VictimOffered = Victim->Offered;
+        VictimPriority = Victim->AllocationPriority;
+        AllocationPriority = Allocation->AllocationPriority;
+        ExReleaseFastMutex(&DxgkVidMmPolicyLock);
+        if (!Victim->AccessedPhysically ||
+            (!VictimOffered && VictimPriority > AllocationPriority))
+        {
+            DxgkVidMmDereferenceAllocation(Victim);
+            return STATUS_NO_MEMORY;
+        }
+
+        Status = DxgkpVidMmTryBeginResidencyTransaction(Victim, &VictimOwnerToken);
+        if (NT_SUCCESS(Status))
+        {
+            Status = DxgkpVidMmEvictOwned(Victim);
+            if (NT_SUCCESS(Status))
+                DxgkpVidMmCompleteOfferedEvictionOwned(Victim);
+            DxgkpVidMmEndResidencyTransaction(Victim, &VictimOwnerToken);
+        }
+        DxgkVidMmDereferenceAllocation(Victim);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("DxgkVidMmMakeResident: aperture eviction of %p failed 0x%08lx\n", Victim, Status);
+            return STATUS_NO_MEMORY;
+        }
+
+        Status = DxgkVidMmTryPlaceInSegment(Segment, Allocation);
+        if (NT_SUCCESS(Status))
+            return Status;
+    }
+}
+
+static NTSTATUS
 DxgkpVidMmMakeResidentOwned(
     _In_ PDXGKVMM_ALLOCATION Allocation,
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -12508,13 +12570,15 @@ DxgkpVidMmMakeResidentOwned(
             Allocation->SystemMemory == NULL)
             continue;
         Status = DxgkpVidMmPlaceWithApertureCompaction(Seg, Allocation);
+        if (!NT_SUCCESS(Status))
+            Status = DxgkpVidMmPlaceWithApertureEviction(Seg, Allocation);
         if (NT_SUCCESS(Status))
             Placed = TRUE;
     }
 
     if (!Placed)
     {
-        if (UserMapped)
+        if (UserMapped || Allocation->AccessedPhysically)
         {
             Status = STATUS_DEVICE_BUSY;
             goto Cleanup;
@@ -14759,6 +14823,8 @@ DxgkpVidMmRecoverAllocationOwned(
             Allocation->PhysicalAddress = MmGetPhysicalAddress(Allocation->SystemMemory);
         return Status;
     }
+    if (Allocation->PersistentCpuMapping)
+        return STATUS_SUCCESS;
 
     CleanupStatus = DxgkpVidMmUnmapUserMappings(Allocation, TRUE);
     if (NT_SUCCESS(Status) && !NT_SUCCESS(CleanupStatus))
@@ -15072,6 +15138,8 @@ DxgkpVidMmTryAddHeldSubmissionPin(
     }
 }
 
+#define DXGKP_VIDMM_PIN_PAGE_IN_ATTEMPTS 3
+
 static NTSTATUS
 DxgkVidMmAcquireSubmissionResidencyPinExImpl(
     _In_ PDXGKVMM_ALLOCATION Allocation,
@@ -15160,7 +15228,26 @@ DxgkVidMmAcquireSubmissionResidencyPinEx(
     _In_ BOOLEAN CpuDirty)
 {
     DPT_SCOPE Trace = DptBegin(&g_DxgPresentTrace, DPT_KERNEL_RESIDENCY_PIN);
-    NTSTATUS Status = DxgkVidMmAcquireSubmissionResidencyPinExImpl(Allocation, ExpectedAdapter, ListEntry, CpuDirty);
+    BOOLEAN PageIn = Allocation != NULL && Allocation->AccessedPhysically &&
+                     KeGetCurrentIrql() == PASSIVE_LEVEL;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Attempt;
+
+    for (Attempt = 0; Attempt < DXGKP_VIDMM_PIN_PAGE_IN_ATTEMPTS; ++Attempt)
+    {
+        if (PageIn && !Allocation->Resident)
+        {
+            Status = DxgkVidMmMakeResident(Allocation, ExpectedAdapter);
+            if (!NT_SUCCESS(Status) && !Allocation->Resident)
+                break;
+        }
+        Status = DxgkVidMmAcquireSubmissionResidencyPinExImpl(Allocation, ExpectedAdapter, ListEntry, CpuDirty);
+        if (!PageIn ||
+            (Status != STATUS_GRAPHICS_INVALID_ALLOCATION_USAGE && Status != STATUS_GRAPHICS_ALLOCATION_BUSY))
+        {
+            break;
+        }
+    }
     DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Status), 0);
     return Status;
 }

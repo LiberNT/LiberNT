@@ -5855,6 +5855,7 @@ static void shader_glsl_store_uav(const struct wined3d_shader_instruction *ins)
     struct glsl_src_param image_coord_param, image_data_param;
     enum wined3d_shader_resource_type resource_type;
     enum wined3d_data_type data_type;
+    const char *data_constructor = "";
     unsigned int uav_idx;
     DWORD coord_mask;
 
@@ -5875,9 +5876,12 @@ static void shader_glsl_store_uav(const struct wined3d_shader_instruction *ins)
 
     shader_glsl_add_src_param(ins, &ins->src[0], coord_mask, &image_coord_param);
     shader_glsl_add_src_param_ext(ins->ctx, &ins->src[1], WINED3DSP_WRITEMASK_ALL, &image_data_param, data_type);
-    shader_addline(ins->ctx->buffer, "imageStore(%s_image%u, %s, %s);\n",
+    /* imageStore() has no scalar overload, and vkd3d's HLSL compiler emits scalar immediates here. */
+    if (ins->src[1].reg.type == WINED3DSPR_IMMCONST && ins->src[1].reg.immconst_type == WINED3D_IMMCONST_SCALAR)
+        data_constructor = data_type == WINED3D_DATA_UINT ? "uvec4" : data_type == WINED3D_DATA_INT ? "ivec4" : "vec4";
+    shader_addline(ins->ctx->buffer, "imageStore(%s_image%u, %s, %s(%s));\n",
             shader_glsl_get_prefix(version->type), uav_idx,
-            image_coord_param.param_str, image_data_param.param_str);
+            image_coord_param.param_str, data_constructor, image_data_param.param_str);
 }
 
 static void shader_glsl_store_raw_structured(const struct wined3d_shader_instruction *ins)
@@ -8163,8 +8167,8 @@ static void shader_glsl_generate_vs_epilogue(const struct wined3d_gl_info *gl_in
         else if (!reg_maps->fog)
         {
             if (reg_maps->output_registers & (1u << (8 + 1)))
-                shader_addline(buffer, "%s = ffp_varying_specular.w;\n",
-                        legacy_syntax ? "gl_FogFragCoord" : "ffp_varying_fogcoord");
+                shader_addline(buffer, legacy_syntax ? "gl_FogFragCoord = gl_FrontSecondaryColor.w;\n"
+                        : "ffp_varying_fogcoord = ffp_varying_specular.w;\n");
             else
                 shader_addline(buffer, "%s = 0.0;\n",
                         legacy_syntax ? "gl_FogFragCoord" : "ffp_varying_fogcoord");
@@ -10793,7 +10797,7 @@ static void set_glsl_shader_program(const struct wined3d_context_gl *context_gl,
                 || entry->vs.material_shininess_location != -1)
             entry->constant_update_mask |= WINED3D_SHADER_CONST_FFP_MATERIAL;
     }
-    if (entry->vs.clip_planes_location != -1)
+    if (entry->vs.clip_planes_location != -1 || !gl_info->supported[WINED3D_GLSL_130])
         entry->constant_update_mask |= WINED3D_SHADER_CONST_VS_CLIP_PLANES;
     if (entry->vs.pointsize_min_location != -1)
         entry->constant_update_mask |= WINED3D_SHADER_CONST_VS_POINTSIZE;
@@ -12121,6 +12125,11 @@ static void glsl_fragment_pipe_alpha_test_func(struct wined3d_context_gl *contex
             ref = 0.0f;
         gl_info->gl_ops.gl.p_glAlphaFunc(func, ref);
         checkGLcall("glAlphaFunc");
+        if (func == GL_ALWAYS)
+            gl_info->gl_ops.gl.p_glDisable(GL_ALPHA_TEST);
+        else
+            gl_info->gl_ops.gl.p_glEnable(GL_ALPHA_TEST);
+        checkGLcall("toggle GL_ALPHA_TEST");
     }
 }
 

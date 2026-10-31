@@ -1340,6 +1340,26 @@ IntGetLastTopMostWindowNoIME(_In_ PWND pImeWnd)
 }
 
 // Adjust the ordering of the windows around the IME window.
+// Is pImeWnd or an IME-like window it owns visible?
+static BOOL FASTCALL
+IntImeHasVisibleWindow(_In_ PWND pImeWnd)
+{
+    PWND pwndChild, pwndNode;
+
+    for (pwndChild = pImeWnd->spwndParent->spwndChild; pwndChild; pwndChild = pwndChild->spwndNext)
+    {
+        if (!IS_WND_IMELIKE(pwndChild) || !(pwndChild->style & WS_VISIBLE))
+            continue;
+
+        for (pwndNode = pwndChild; pwndNode; pwndNode = pwndNode->spwndOwner)
+        {
+            if (pwndNode == pImeWnd)
+                return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 static VOID FASTCALL
 IntImeSetTopMost(_In_ PWND pImeWnd, _In_ BOOL bTopMost, _In_ PWND pwndInsertBefore)
 {
@@ -1439,10 +1459,15 @@ IntImeCheckTopmost(_In_ PWND pImeWnd)
     if (!pwndOwner)
         return;
 
+    bTopMost = !!(pwndOwner->ExStyle & WS_EX_TOPMOST);
+
+    // Hidden IME windows do not follow their owner, as on Windows
+    if (!(pImeWnd->ExStyle & WS_EX_TOPMOST) && !IntImeHasVisibleWindow(pImeWnd))
+        return;
+
     if (pImeWnd->head.pti != gptiForeground)
         pwndInsertBefore = pwndOwner;
 
-    bTopMost = !!(pwndOwner->ExStyle & WS_EX_TOPMOST);
     IntImeSetTopMost(pImeWnd, bTopMost, pwndInsertBefore);
 }
 
@@ -1552,12 +1577,14 @@ VOID
 UserFreeInputContext(_In_opt_ PVOID Object)
 {
     PTHRDESKHEAD ObjHead = Object;
-    PDESKTOP pDesk = ObjHead->rpdesk;
+    PDESKTOP pDesk;
     PIMC pNode, pIMC = Object;
     PTHREADINFO pti;
 
     if (!pIMC)
         return;
+
+    pDesk = ObjHead->rpdesk;
 
     // Remove pIMC from the list except spDefaultImc
     pti = pIMC->head.pti;

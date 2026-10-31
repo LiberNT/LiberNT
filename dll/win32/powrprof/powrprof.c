@@ -584,21 +584,16 @@ POWRPROF_ApplyScheme(
     BOOL UpdateLegacy)
 {
     const POWRPROF_SCHEME_DEFAULTS *Defaults;
-    SYSTEM_BATTERY_STATE BatteryState;
     POWRPROF_PROCESSOR_POLICY_VALUES Values[2];
     POWRPROF_PROCESSOR_POLICY_VALUES OldValues[2];
     GUID OldScheme;
     UINT OldLegacyId;
     SYSTEM_POWER_CONDITION PowerCondition;
     DWORD Error;
-    NTSTATUS Status;
 
     Defaults = POWRPROF_FindScheme(Scheme);
     if (!Defaults)
         return ERROR_INVALID_PARAMETER;
-    Status = CallNtPowerInformation(SystemBatteryState, NULL, 0, &BatteryState, sizeof(BatteryState));
-    if (!NT_SUCCESS(Status))
-        return RtlNtStatusToDosError(Status);
     Error = POWRPROF_ReadProcessorPolicyValues(Scheme, TRUE, &Values[PoAc]);
     if (Error != ERROR_SUCCESS)
         return Error;

@@ -747,9 +747,11 @@ MonitorBrightnessStart(
     UNICODE_STRING DeviceName = RTL_CONSTANT_STRING(L"\\Device\\LCD");
     UNICODE_STRING LinkName = RTL_CONSTANT_STRING(L"\\DosDevices\\LCD");
     PRXGK_MONITOR_DESCRIPTOR Descriptor;
+    ULONG Values[MONITOR_BRIGHTNESS_LEVELS + 2];
     PMONITOR_BRIGHTNESS Brightness;
     ULONG Technology;
     NTSTATUS Status;
+    ULONG Count;
 
     PAGED_CODE();
 
@@ -783,6 +785,8 @@ MonitorBrightnessStart(
             Brightness->Source == MonitorBrightnessKmd ? "the display miniport" : "ACPI", Brightness->LevelCount);
     DeviceExtension->Brightness = Brightness;
 
+    if (Brightness->Source == MonitorBrightnessKmd)
+        (VOID)MonitorAcpiEvalIntegers(DeviceExtension, "_BCL", Values, RTL_NUMBER_OF(Values), &Count);
     MonitorAcpiHotkeysStart(DeviceExtension, Brightness);
 
     Status = PoRegisterPowerSettingCallback(DeviceExtension->DeviceObject, &MonitorGuidAcDcPowerSource,

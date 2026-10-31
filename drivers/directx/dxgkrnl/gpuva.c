@@ -5630,7 +5630,7 @@ DxgkGpuVaSetRootPageTable(
         SetArgs.Address = Process->RootPageTableAddress;
         SetArgs.NumEntries = Process->RootPageTableEntries;
         ExReleaseFastMutex(&Process->GpuVaLock);
-        if (!DxgkAcquireKmdCall(Adapter))
+        if (!DxgkAcquireKmdCallForDispatch(Adapter))
             return STATUS_DELETE_PENDING;
         if (InterlockedCompareExchange(&Context->Device->ExecutionState, 0, 0) != D3DKMT_DEVICEEXECUTION_ACTIVE)
         {

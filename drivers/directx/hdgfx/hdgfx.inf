@@ -1,0 +1,55 @@
+; LiberNT display driver for Intel HD Graphics (Gen 5-7)
+
+[Version]
+Signature="$Windows NT$"
+LayoutFile=layout.inf
+Class=Display
+ClassGUID={4D36E968-E325-11CE-BFC1-08002BE10318}
+Provider=%LiberNT%
+DriverVer=06/21/2006,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%IntelMfg%=IntelMfg
+
+[IntelMfg]
+%HdGfx.DeviceDesc%=HdGfx_Install,PCI\VEN_8086&DEV_0042
+%HdGfx.DeviceDesc%=HdGfx_Install,PCI\VEN_8086&DEV_0046
+%HdGfx.Snb.DeviceDesc%=HdGfx_Install,PCI\VEN_8086&DEV_0122
+%HdGfx.Ivb.DeviceDesc%=HdGfx_Install,PCI\VEN_8086&DEV_0166
+
+[HdGfx_Install]
+AddReg=HdGfx_SoftwareSettings
+
+[HdGfx_SoftwareSettings]
+HKR,,InstalledDisplayDrivers,%REG_MULTI_SZ%,framebuf
+HKR,,VgaCompatible,%REG_DWORD%,0
+HKR,,UserModeDriverName,%REG_MULTI_SZ%,softgpuum.dll
+HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,softgpuum.dll
+HKR,,OpenGLDriverName,%REG_SZ%,mesa_gallium.dll
+HKR,,OpenGLVersion,%REG_DWORD%,1
+HKR,,OpenGLFlags,%REG_DWORD%,0
+
+[HdGfx_Install.Services]
+AddService=hdgfx,0x00000002,HdGfx_Service
+
+[HdGfx_Service]
+DisplayName=%HdGfx.ServiceDesc%
+ServiceType=1
+StartType=1
+ErrorControl=0
+ServiceBinary=%12%\hdgfx.sys
+LoadOrderGroup=Video
+
+[Strings]
+LiberNT="LiberNT"
+IntelMfg="Intel Corporation"
+HdGfx.DeviceDesc="Intel HD Graphics (Ironlake)"
+HdGfx.Snb.DeviceDesc="Intel HD Graphics 3000"
+HdGfx.Ivb.DeviceDesc="Intel HD Graphics 4000"
+HdGfx.ServiceDesc="LiberNT Intel HD Graphics Display Driver"
+REG_MULTI_SZ=0x00010000
+REG_DWORD=0x00010001
+REG_SZ=0x00000000

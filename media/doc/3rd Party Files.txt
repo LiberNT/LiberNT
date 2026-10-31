@@ -98,6 +98,13 @@ Used Version: 20260930
 License: GPL-2.0 (https://spdx.org/licenses/GPL-2.0.html)
 URL: https://acpica.org/
 
+Title: Linux i915 VBT, PCI ID and register definitions (data only)
+Path: drivers/directx/hdgfx/core
+Used Version: Linux mainline 21a7f44fd (intel_vbt_defs.h, include/drm/intel/pciids.h, i915_cmd_parser.c)
+License: MIT (https://spdx.org/licenses/MIT.html)
+URL: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+Modifications: no code copied; VBT block IDs, field offsets, the supported PCI IDs and the Gen 7 render register allow-list restated in LiberNT's own code
+
 Title: Imagination PowerVR Rogue firmware
 Path: drivers/directx/powervr/fw
 Used Version: rogue_36.29.52.182_v1.fw (linux-firmware 8a58f81)

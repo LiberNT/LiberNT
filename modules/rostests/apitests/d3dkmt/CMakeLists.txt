@@ -35,6 +35,7 @@ list(APPEND SOURCE
     d3dkmt_gpuva.c
     d3dkmt_softgpu_lifetime.c
     d3dkmt_softgpu_occlusion.c
+    d3dkmt_softgpu_tdr.c
     d3dkmt_hwqueue.c
     d3dkmt_sync2.c
     d3dkmt_videomem.c
@@ -53,6 +54,7 @@ list(APPEND SOURCE
     d3dkmt_misc.c
     d3dkmt_teardown.c
     d3dkmt_renderpath.c
+    d3dkmt_hdgfx_gen.c
     d3dkmt_capsaudit.c
     d3dkmt_umdabi.c
     d3dkmt_abifreeze.c

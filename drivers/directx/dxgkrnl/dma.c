@@ -202,6 +202,28 @@ DxgkpRenderPublishRing(
     pRender->NewCommandBuffer = 0;
 }
 
+static VOID
+DxgkpRenderReleaseAllocations(
+    _Inout_updates_(Count) PDXGKVMM_ALLOCATION *References,
+    _Inout_updates_(Count) PDXGKVMM_ALLOCATION *OpenBindings,
+    _In_ UINT Count)
+{
+    UINT Index;
+
+    for (Index = 0; Index < Count; ++Index)
+    {
+        if (OpenBindings[Index] != NULL)
+            DxgkVidMmDereferenceLogicalAllocation(OpenBindings[Index]);
+        if (References[Index] != NULL)
+        {
+            DxgkVidMmReleaseSubmissionResidencyPin(References[Index]);
+            DxgkVidMmDereferenceAllocation(References[Index]);
+        }
+        OpenBindings[Index] = NULL;
+        References[Index] = NULL;
+    }
+}
+
 /* ========================================================================
  * DxgkRender
  *
@@ -250,6 +272,7 @@ DxgkRender(
     PDXGKVMM_ALLOCATION *TrackReferences = InlineTrackReferences;
     PDXGKVMM_ALLOCATION *TrackBindings = InlineTrackBindings;
     UINT TrackCount = 0;
+    UINT PlacementRestarts = 0;
     UINT AllocationCapacity = VIDSCH_INLINE_ALLOCATIONS;
     UINT PatchCapacity = VIDSCH_INLINE_PATCHES;
     PVOID ListStorage = NULL;
@@ -420,19 +443,6 @@ DxgkRender(
         }
     }
 
-    if (!DxgkBeginKmdTransaction(Adapter))
-    {
-        Status = STATUS_DELETE_PENDING;
-        goto Cleanup;
-    }
-    KmdTransaction = TRUE;
-    if (InterlockedCompareExchange(&Device->ExecutionState, 0, 0) != D3DKMT_DEVICEEXECUTION_ACTIVE ||
-        InterlockedCompareExchange(&Context->Destroying, 0, 0) != 0)
-    {
-        Status = STATUS_DEVICE_REMOVED;
-        goto Cleanup;
-    }
-
     for (Index = 0; Index < pRender->AllocationCount; ++Index)
     {
         PDXGKVMM_ALLOCATION Reference = NULL;
@@ -455,6 +465,20 @@ DxgkRender(
                                                           Adapter,
                                                           &KernelAllocations[Index],
                                                           FALSE);
+        if (Status == STATUS_DEVICE_BUSY && TrackCount != 0 && PlacementRestarts < pRender->AllocationCount)
+        {
+            /* The pins taken so far can fence off the only hole this allocation fits. */
+            PlacementRestarts++;
+            DxgkpRenderReleaseAllocations(AllocationReferences, OpenBindings, ReferencedCount);
+            ReferencedCount = 0;
+            TrackCount = 0;
+            Status = DxgkVidMmMakeResident(Reference, Adapter);
+            DxgkVidMmDereferenceAllocation(Reference);
+            if (!NT_SUCCESS(Status))
+                goto Cleanup;
+            Index = (UINT)-1;
+            continue;
+        }
         if (!NT_SUCCESS(Status))
         {
             DxgkVidMmDereferenceAllocation(Reference);
@@ -474,6 +498,19 @@ DxgkRender(
         TrackBindings[TrackCount] = Binding;
         TrackCount++;
         ReferencedCount = Index + 1;
+    }
+
+    if (!DxgkBeginKmdTransactionPastMonitorPower(Adapter))
+    {
+        Status = STATUS_DELETE_PENDING;
+        goto Cleanup;
+    }
+    KmdTransaction = TRUE;
+    if (InterlockedCompareExchange(&Device->ExecutionState, 0, 0) != D3DKMT_DEVICEEXECUTION_ACTIVE ||
+        InterlockedCompareExchange(&Context->Destroying, 0, 0) != 0)
+    {
+        Status = STATUS_DEVICE_REMOVED;
+        goto Cleanup;
     }
 
     Status = DxgkAllocateDmaBufferInSegmentSet(Adapter, max(Context->ContextInfo.DmaBufferSize, pRender->CommandLength), Context->ContextInfo.DmaBufferSegmentSet, &DmaBuffer);
@@ -696,16 +733,7 @@ RetryTrackedSubmit:
     Status = STATUS_SUCCESS;
 
 Cleanup:
-    for (Index = 0; Index < ReferencedCount; ++Index)
-    {
-        if (OpenBindings[Index] != NULL)
-            DxgkVidMmDereferenceLogicalAllocation(OpenBindings[Index]);
-        if (AllocationReferences[Index] != NULL)
-        {
-            DxgkVidMmReleaseSubmissionResidencyPin(AllocationReferences[Index]);
-            DxgkVidMmDereferenceAllocation(AllocationReferences[Index]);
-        }
-    }
+    DxgkpRenderReleaseAllocations(AllocationReferences, OpenBindings, ReferencedCount);
     if (DmaBufferPrivateData != NULL)
         ExFreePoolWithTag(DmaBufferPrivateData, TAG_DXGK_SUBMITDMA);
     if (DmaBuffer != NULL)

@@ -6633,6 +6633,7 @@ DxgkpEnsureSharedShadowSurfaceLocked(
             Status = STATUS_UNSUCCESSFUL;
             goto Cleanup;
         }
+        Allocation->PersistentCpuMapping = TRUE;
     }
 
     DxgkpBeginSharedSurfaceMutationLocked(Adapter);
@@ -7899,6 +7900,28 @@ DxgkpEnumerateDisplayModeCandidate(
     return Status;
 }
 
+static VOID
+DxgkpResetCloneTargetModeSets(
+    _Inout_ PDXGKP_VIDPN VidPn,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId)
+{
+    PDXGKP_VIDPN_TARGET_MODESET Targets;
+    ULONG TargetIndex;
+    SIZE_T Path;
+
+    for (Path = 1; Path < VidPn->NumPaths; Path++)
+    {
+        if (VidPn->Paths[Path].VidPnSourceId != SourceId)
+            continue;
+        TargetIndex = DxgkVidPnTargetIndexFromId(VidPn, VidPn->Paths[Path].VidPnTargetId);
+        if (TargetIndex == MAXULONG || (Targets = VidPn->TargetModeSets[TargetIndex]) == NULL)
+            continue;
+        Targets->NumModes = 0;
+        Targets->PinnedModeId = (UINT)-1;
+        Targets->NextModeId = 0;
+    }
+}
+
 /* SharedPrimaryMutex keeps the published mode indices stable across a normal
  * switch. A monitor change invalidates them rather than reusing an old index
  * for a different resolution. Enumeration never mutates the live VidPN. */
@@ -8003,7 +8026,7 @@ DxgkpEnsureDisplayModeCacheLocked(
         if (!NT_SUCCESS(Status))
             goto Cleanup;
     }
-    Cache->CanSetMode = Current->NumPaths == 1 && Adapter->MiniportContext != NULL &&
+    Cache->CanSetMode = Adapter->MiniportContext != NULL &&
                         (!Adapter->MiniportContext->IsBasicDisplayFallback ||
                          Adapter->MiniportContext->BasicDisplayNegotiatesModes) &&
                         DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality) != NULL;
@@ -8017,6 +8040,7 @@ DxgkpEnsureDisplayModeCacheLocked(
         Sources->NumModes = Targets->NumModes = 0;
         Sources->PinnedModeId = Targets->PinnedModeId = (UINT)-1;
         Sources->NextModeId = Targets->NextModeId = 0;
+        DxgkpResetCloneTargetModeSets(Candidate, SourceId);
         Status = DxgkpEnumerateDisplayModeCandidate(Adapter, Candidate, FALSE);
         if (!NT_SUCCESS(Status))
             goto Cleanup;
@@ -8045,6 +8069,7 @@ DxgkpEnsureDisplayModeCacheLocked(
             Targets->NumModes = 0;
             Targets->PinnedModeId = (UINT)-1;
             Targets->NextModeId = 0;
+            DxgkpResetCloneTargetModeSets(Candidate, SourceId);
             Status = DxgkpEnumerateDisplayModeCandidate(Adapter, Candidate, TRUE);
             if (!NT_SUCCESS(Status))
                 goto Cleanup;
@@ -8427,6 +8452,7 @@ DxgkVidPnSetVideoMode(
     Targets->NumModes = 0;
     Targets->PinnedModeId = (UINT)-1;
     Targets->NextModeId = 0;
+    DxgkpResetCloneTargetModeSets(Candidate, Cache->SourceId);
     if (Cache->HotPlugGeneration != InterlockedCompareExchange64(&Adapter->HotPlugGeneration, 0, 0))
     {
         Status = STATUS_RETRY;

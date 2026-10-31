@@ -490,6 +490,7 @@ typedef struct _DXGKRNL_SUBMIT_DMA_BUFFER
 #endif
     PDXGKRNL_DEVICE_WORK        DeviceWork;
     BOOLEAN                     DeviceWorkSupplied;
+    BOOLEAN                     DeviceWorkAdopted;
     DXGK_SUBMISSION_ACCOUNTING  SubmissionAccounting;
 
     /* Optional monitored-fence signal fired when this submission's
@@ -703,6 +704,7 @@ struct _DXGKRNL_ADAPTER
     KMUTEX                      Level3TransitionMutex;
     volatile LONG               KmdCallsBlocked;
     volatile LONG               KmdActiveCalls;
+    volatile LONG               KmdMonitorPowerWindow;
     volatile PVOID              KmdExclusiveOwnerThread;
     volatile PVOID              KmdTransactionOwnerThread;
     volatile LONG               KmdTransactionDepth;
@@ -1375,6 +1377,7 @@ struct _DXGKRNL_ADAPTER
     volatile LONG               SubmitDmaActiveReservations;
     KEVENT                      SubmitDmaReservationsDrainedEvent;
     volatile LONG               NextSubmissionFenceId;
+    KMUTEX                      SubmissionOrderMutex;
     volatile ULONG              LastCompletedSubmissionFenceId;
     volatile ULONG              NodeLastSubmittedFenceId[DXGK_MAX_TRACKED_NODES];
     volatile ULONG              NodeLastCompletedFenceId[DXGK_MAX_TRACKED_NODES];
@@ -2559,6 +2562,10 @@ BOOLEAN
 DxgkAcquireKmdCall(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+BOOLEAN
+DxgkAcquireKmdCallForDispatch(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 VOID
 DxgkReleaseKmdCall(
     _In_ PDXGKRNL_ADAPTER Adapter);
@@ -2574,6 +2581,14 @@ DxgkEndKmdExclusive(
 
 BOOLEAN
 DxgkBeginKmdTransaction(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+BOOLEAN
+DxgkBeginKmdTransactionAfterReset(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+BOOLEAN
+DxgkBeginKmdTransactionPastMonitorPower(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
 VOID
@@ -3624,6 +3639,18 @@ BOOLEAN
 DxgkIsDisplayAdapter(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+BOOLEAN
+DxgkDisplayMapsDesktop(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+NTSTATUS
+DxgkDisplayDetachDesktop(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkDisplayAbortDetach(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 NTSTATUS
 DxgkCreateRedirectionSurface(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -4037,7 +4064,7 @@ DxgkpWaitForFlagClear(
 }
 
 /* Tracker reservation arguments: zero-init, then set what applies.
- * SubmissionFenceId and DmaBuffer are mandatory. */
+ * DmaBuffer is mandatory; tracked submits stamp the fence after this. */
 typedef struct _DXGKRNL_TRACK_DMA_ARGS
 {
     ULONG                           SubmissionFenceId;
@@ -4532,6 +4559,11 @@ VOID
 NTAPI
 DxgkAdoptTrackedDmaBuffer(
     _In_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry);
+
+VOID
+NTAPI
+DxgkReturnTrackedDeviceWork(
+    _In_opt_ PDXGKRNL_SUBMIT_DMA_BUFFER Entry);
 
 NTSTATUS
 NTAPI

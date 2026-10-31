@@ -78,6 +78,12 @@ PDEVICE_OBJECT g_DisplayDeviceObject = NULL;
  */
 static PDXGKRNL_ADAPTER g_DisplayAdapter = NULL;
 
+static KSPIN_LOCK g_DisplayDetachLock;
+static PVOID g_DisplayDetachedFb;
+static ULONG g_DisplayDetachedFbSize;
+static LONG g_DisplayDetachedFbMapCount;
+static BOOLEAN g_DisplayDetachPending;
+
 static
 PCWSTR
 DxgkpSelectDisplayDriver(
@@ -228,17 +234,14 @@ DxgkpDisplayPublishInitialMode(
         g_DisplayInitialModePending = FALSE;
 }
 
-VOID
-DxgkDisplayNotifyMonitorEvent(
-    _In_ PDXGKRNL_ADAPTER Adapter)
+static VOID
+DxgkpDisplayRefreshWin32k(VOID)
 {
     VIDEO_WIN32K_CALLBACKS_PARAMS Params;
     PVIDEO_WIN32K_CALLOUT Callout;
 
     PAGED_CODE();
 
-    if (Adapter == NULL || g_DisplayAdapter != Adapter || !Adapter->VidPnCommitted)
-        return;
     Callout = (PVIDEO_WIN32K_CALLOUT)InterlockedCompareExchangePointer((PVOID *)&g_DisplayWin32kCallout, NULL, NULL);
     if (Callout == NULL)
         return;
@@ -248,11 +251,199 @@ DxgkDisplayNotifyMonitorEvent(
     Callout(&Params);
 }
 
+VOID
+DxgkDisplayNotifyMonitorEvent(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PAGED_CODE();
+
+    if (Adapter == NULL || g_DisplayAdapter != Adapter || !Adapter->VidPnCommitted)
+        return;
+    DxgkpDisplayRefreshWin32k();
+}
+
 BOOLEAN
 DxgkIsDisplayAdapter(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
     return Adapter != NULL && g_DisplayAdapter == Adapter;
+}
+
+BOOLEAN
+DxgkDisplayMapsDesktop(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    BOOLEAN Mapped;
+
+    PAGED_CODE();
+
+    if (!DxgkIsDisplayAdapter(Adapter))
+        return FALSE;
+    (VOID)KeWaitForSingleObject(&Adapter->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
+    Mapped = InterlockedCompareExchange(&Adapter->ShadowFbMapCount, 0, 0) > 0 ||
+             Adapter->RetiredShadowFb != NULL ||
+             Adapter->RetiredShadowAllocationFb != NULL;
+    KeReleaseMutex(&Adapter->SharedPrimaryMutex, FALSE);
+    return Mapped;
+}
+
+static BOOLEAN
+DxgkpDisplayMapDetachedFb(
+    _Out_ PVOID *Fb,
+    _Out_ PULONG Size)
+{
+    BOOLEAN Mapped = FALSE;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&g_DisplayDetachLock, &OldIrql);
+    if (g_DisplayDetachPending && g_DisplayDetachedFb != NULL)
+    {
+        g_DisplayDetachedFbMapCount++;
+        *Fb = g_DisplayDetachedFb;
+        *Size = g_DisplayDetachedFbSize;
+        Mapped = TRUE;
+    }
+    KeReleaseSpinLock(&g_DisplayDetachLock, OldIrql);
+    return Mapped;
+}
+
+static BOOLEAN
+DxgkpDisplayUnmapDetachedFb(
+    _In_opt_ PVOID Fb)
+{
+    PVOID FreeFb = NULL;
+    BOOLEAN Unmapped = FALSE;
+    KIRQL OldIrql;
+
+    if (Fb == NULL)
+        return FALSE;
+    KeAcquireSpinLock(&g_DisplayDetachLock, &OldIrql);
+    if (Fb == g_DisplayDetachedFb && g_DisplayDetachedFbMapCount > 0)
+    {
+        Unmapped = TRUE;
+        if (--g_DisplayDetachedFbMapCount == 0 && !g_DisplayDetachPending)
+        {
+            FreeFb = g_DisplayDetachedFb;
+            g_DisplayDetachedFb = NULL;
+            g_DisplayDetachedFbSize = 0;
+        }
+    }
+    KeReleaseSpinLock(&g_DisplayDetachLock, OldIrql);
+    if (FreeFb != NULL)
+    {
+        ExFreePoolWithTag(FreeFb, TAG_DXGK_DISPLAY);
+        DXGKRNL_INFO("DISPLAY_BRIDGE: win32k left the detached desktop copy\n");
+    }
+    return Unmapped;
+}
+
+static BOOLEAN
+DxgkpDisplayDesktopDetached(VOID)
+{
+    BOOLEAN Detached;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&g_DisplayDetachLock, &OldIrql);
+    Detached = g_DisplayDetachedFb != NULL;
+    KeReleaseSpinLock(&g_DisplayDetachLock, OldIrql);
+    return Detached;
+}
+
+static VOID
+DxgkpDisplayEndDetach(VOID)
+{
+    PVOID FreeFb = NULL;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&g_DisplayDetachLock, &OldIrql);
+    g_DisplayDetachPending = FALSE;
+    if (g_DisplayDetachedFbMapCount == 0)
+    {
+        FreeFb = g_DisplayDetachedFb;
+        g_DisplayDetachedFb = NULL;
+        g_DisplayDetachedFbSize = 0;
+    }
+    KeReleaseSpinLock(&g_DisplayDetachLock, OldIrql);
+    if (FreeFb != NULL)
+        ExFreePoolWithTag(FreeFb, TAG_DXGK_DISPLAY);
+}
+
+NTSTATUS
+DxgkDisplayDetachDesktop(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    LARGE_INTEGER Interval;
+    PVOID Fb = NULL;
+    ULONG Size;
+    ULONG Attempt;
+    BOOLEAN Busy;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    if (!DxgkIsDisplayAdapter(Adapter) ||
+        InterlockedCompareExchangePointer((PVOID *)&g_DisplayWin32kCallout, NULL, NULL) == NULL)
+    {
+        return STATUS_DEVICE_BUSY;
+    }
+
+    (VOID)KeWaitForSingleObject(&Adapter->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
+    Size = Adapter->ShadowFbSize;
+    if (Size != 0 && Adapter->ShadowFb != NULL)
+    {
+        Fb = ExAllocatePoolZero(NonPagedPool, Size, TAG_DXGK_DISPLAY);
+        if (Fb != NULL)
+            RtlCopyMemory(Fb, Adapter->ShadowFb, Size);
+    }
+    KeReleaseMutex(&Adapter->SharedPrimaryMutex, FALSE);
+    if (Fb == NULL)
+        return Size != 0 ? STATUS_INSUFFICIENT_RESOURCES : STATUS_DEVICE_BUSY;
+
+    KeAcquireSpinLock(&g_DisplayDetachLock, &OldIrql);
+    Busy = g_DisplayDetachedFb != NULL;
+    if (!Busy)
+    {
+        g_DisplayDetachedFb = Fb;
+        g_DisplayDetachedFbSize = Size;
+        g_DisplayDetachedFbMapCount = 0;
+        g_DisplayDetachPending = TRUE;
+    }
+    KeReleaseSpinLock(&g_DisplayDetachLock, OldIrql);
+    if (Busy)
+    {
+        ExFreePoolWithTag(Fb, TAG_DXGK_DISPLAY);
+        return STATUS_DEVICE_BUSY;
+    }
+
+    DxgkpDisplayRefreshWin32k();
+    Interval.QuadPart = -(100LL * 10000LL);
+    for (Attempt = 0; Attempt < 100; Attempt++)
+    {
+        if (!DxgkDisplayMapsDesktop(Adapter))
+        {
+            DXGKRNL_INFO("DISPLAY_BRIDGE: adapter %p desktop detached to a %lu-byte copy after %lu ms\n",
+                         Adapter, Size, Attempt * 100);
+            return STATUS_SUCCESS;
+        }
+        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+    }
+
+    DXGKRNL_WARN("DISPLAY_BRIDGE: win32k did not leave the desktop of adapter %p\n", Adapter);
+    DxgkpDisplayEndDetach();
+    DxgkpDisplayRefreshWin32k();
+    return STATUS_IO_TIMEOUT;
+}
+
+VOID
+DxgkDisplayAbortDetach(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PAGED_CODE();
+
+    if (!DxgkIsDisplayAdapter(Adapter))
+        return;
+    DxgkpDisplayEndDetach();
+    DxgkpDisplayRefreshWin32k();
 }
 
 /* ========================================================================
@@ -4060,6 +4251,17 @@ DxgkpDisplayDispatch(
                 BOOLEAN StartTimer;
                 BOOLEAN SnapshotHeld = TRUE;
 
+                if (DxgkpDisplayMapDetachedFb(&FbVa, &FbSize))
+                {
+                    MemoryInfo->VideoRamBase = FbVa;
+                    MemoryInfo->VideoRamLength = FbSize;
+                    MemoryInfo->FrameBufferBase = FbVa;
+                    MemoryInfo->FrameBufferLength = FbSize;
+                    BytesReturned = sizeof(VIDEO_MEMORY_INFORMATION);
+                    Status = STATUS_SUCCESS;
+                    break;
+                }
+
                 if (g_DisplayAdapter == NULL)
                 {
                     Status = STATUS_DEVICE_NOT_READY;
@@ -4186,6 +4388,11 @@ DxgkpDisplayDispatch(
                 Stack->Parameters.DeviceIoControl.InputBufferLength >= sizeof(VIDEO_MEMORY))
             {
                 RequestedVa = VideoMemory->RequestedVirtualAddress;
+            }
+            if (DxgkpDisplayUnmapDetachedFb(RequestedVa))
+            {
+                Status = STATUS_SUCCESS;
+                break;
             }
             if (g_DisplayAdapter != NULL)
             {
@@ -4945,6 +5152,7 @@ DxgkDisplayRegister(
     HANDLE          hDriverKey = NULL;
     ULONG           DeviceNumber;
     ULONG           ExistingMax;
+    BOOLEAN         Adopted = FALSE;
     BOOLEAN         DeviceMapEntryWritten = FALSE;
     WCHAR           DeviceBuffer[24];     /* L"\\Device\\Video%lu" */
     WCHAR           DeviceValueName[24];  /* L"\\Device\\Video%lu" */
@@ -4960,6 +5168,8 @@ DxgkDisplayRegister(
      * a miniport that deliberately runs headless leaves these fields zero.
      */
 
+    ExistingMax = DxgkpReadMaxObjectNumber();
+
     /* Already registered? */
     if (g_DisplayDeviceObject != NULL)
     {
@@ -4968,8 +5178,19 @@ DxgkDisplayRegister(
             DXGKRNL_TRACE("DxgkDisplayRegister: already registered for this adapter\n");
             return STATUS_SUCCESS;
         }
-        DXGKRNL_ERR("DxgkDisplayRegister: the ReactOS display bridge already belongs to adapter %p\n", g_DisplayAdapter);
-        return STATUS_NOT_SUPPORTED;
+        if (g_DisplayAdapter != NULL || !DxgkpDisplayDesktopDetached())
+        {
+            DXGKRNL_ERR("DxgkDisplayRegister: the ReactOS display bridge already belongs to adapter %p\n", g_DisplayAdapter);
+            return STATUS_NOT_SUPPORTED;
+        }
+        Adopted = TRUE;
+        DeviceNumber = g_DisplayDeviceNumber;
+        RtlStringCchPrintfW(DeviceBuffer,
+                            RTL_NUMBER_OF(DeviceBuffer),
+                            L"\\Device\\Video%lu", DeviceNumber);
+        DXGKRNL_INFO("DISPLAY_BRIDGE: adapter %p takes over the detached desktop on %ls\n",
+                     Adapter, DeviceBuffer);
+        goto PublishDevice;
     }
 
     /* ---- Step 1: Find a free \Device\VideoN name ---- */
@@ -4980,7 +5201,6 @@ DxgkDisplayRegister(
      * that are still live.  A stopped basic-display adapter may have been
      * Video0 even though its former MaxObjectNumber was observed earlier.
      */
-    ExistingMax = DxgkpReadMaxObjectNumber();
     DeviceNumber = 0;
 
     /*
@@ -5035,6 +5255,7 @@ DxgkDisplayRegister(
         return Status;
     }
 
+PublishDevice:
     /* Store the device number we actually got. */
     g_DisplayDeviceNumber = DeviceNumber;
     g_DisplayInitialModePending = TRUE;
@@ -5249,7 +5470,18 @@ Cleanup:
     if (hVideoMap)
         ZwClose(hVideoMap);
 
-    if (!NT_SUCCESS(Status) && g_DisplayDeviceObject != NULL)
+    if (NT_SUCCESS(Status) && Adopted)
+    {
+        DxgkpDisplayEndDetach();
+        DxgkpDisplayRefreshWin32k();
+    }
+    else if (!NT_SUCCESS(Status) && Adopted)
+    {
+        *(PDXGKRNL_ADAPTER *)g_DisplayDeviceObject->DeviceExtension = NULL;
+        g_DisplayAdapter = NULL;
+        Adapter->DisplayDeviceName[0] = L'\0';
+    }
+    else if (!NT_SUCCESS(Status) && g_DisplayDeviceObject != NULL)
     {
         if (DeviceMapEntryWritten)
             DxgkpRemoveDeviceMapEntry(g_DisplayDeviceNumber);
@@ -5305,7 +5537,14 @@ DxgkDisplayUnregister(
             ExFreePoolWithTag(OldFb, TAG_DXGK_DISPLAY);
     }
 
-    if (g_DisplayDeviceObject != NULL)
+    if (g_DisplayDeviceObject != NULL && DxgkpDisplayDesktopDetached())
+    {
+        DXGKRNL_INFO("DISPLAY_BRIDGE: \\Device\\Video%lu stays open for the detached desktop\n",
+                     g_DisplayDeviceNumber);
+        *(PDXGKRNL_ADAPTER *)g_DisplayDeviceObject->DeviceExtension = NULL;
+        g_DisplayAdapter = NULL;
+    }
+    else if (g_DisplayDeviceObject != NULL)
     {
         DXGKRNL_TRACE("DxgkDisplayUnregister: deleting \\Device\\Video%lu\n", g_DisplayDeviceNumber);
         DxgkpRemoveDeviceMapEntry(g_DisplayDeviceNumber);

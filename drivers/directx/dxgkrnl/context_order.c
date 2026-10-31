@@ -1289,6 +1289,15 @@ RetryAdmission:
     Status = Interface.AdmitWork(Interface.AdapterHandle, Context->Mms2ContextStream, &Info, &Sequence);
     if (Status == STATUS_DEVICE_BUSY)
     {
+        /* LifecycleMutex is held here: retirement can submit, so the yielded wait drains instead. */
+        if (Context->Device != NULL &&
+            Context->Device->Adapter != NULL &&
+            Context->Device->Adapter->KmdTransactionOwnerThread ==
+                PsGetCurrentThread())
+        {
+            Status = STATUS_RETRY;
+            goto Failure;
+        }
         if (Deadline == 0)
         {
             Deadline = KeQueryInterruptTime() +
@@ -1306,14 +1315,6 @@ RetryAdmission:
                                      &Sequence);
         if (Status != STATUS_DEVICE_BUSY)
             goto AdmissionComplete;
-        if (Context->Device != NULL &&
-            Context->Device->Adapter != NULL &&
-            Context->Device->Adapter->KmdTransactionOwnerThread ==
-                PsGetCurrentThread())
-        {
-            Status = STATUS_RETRY;
-            goto Failure;
-        }
         if (KeQueryInterruptTime() >= Deadline)
             goto Failure;
 
@@ -1455,7 +1456,6 @@ VOID DxgkContextOrderAbortPacket(_Inout_ PVIDSCH_DMA_PACKET Packet, _In_ NTSTATU
 {
     LONG State;
 
-    PAGED_CODE();
     if (Packet == NULL || AbortStatus == STATUS_PENDING || NT_SUCCESS(AbortStatus) || InterlockedCompareExchangePointer(&Packet->ContextOrderOperation, NULL, NULL) == NULL)
         return;
     (VOID)InterlockedCompareExchange((volatile LONG *)&Packet->ContextOrderAbortStatus, (LONG)AbortStatus, (LONG)STATUS_PENDING);
@@ -1470,6 +1470,11 @@ VOID DxgkContextOrderAbortPacket(_Inout_ PVIDSCH_DMA_PACKET Packet, _In_ NTSTATU
         }
         if (State == VIDSCH_CONTEXT_ORDER_CLAIMED || State == VIDSCH_CONTEXT_ORDER_DISPATCHING)
         {
+            if (KeGetCurrentIrql() > APC_LEVEL)
+            {
+                DxgkContextOrderScheduleReferenced((PDXGKRNL_CONTEXT)Packet->Context);
+                return;
+            }
             if (InterlockedCompareExchange(&Packet->ContextOrderState, VIDSCH_CONTEXT_ORDER_COMPLETING, State) != State)
                 continue;
             DxgkpContextOrderCommitClaimedPacket(Packet, AbortStatus);

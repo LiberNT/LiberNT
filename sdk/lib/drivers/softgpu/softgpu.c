@@ -153,7 +153,11 @@
 #define SOFTGPU_DECLARED_WDDM_VERSION DXGKDDI_WDDMv3_2_ENUM
 #endif
 
+#if defined(SOFTGPU_PLATFORM_PHYSICAL_ADDRESSING)
+#define SOFTGPU_GPUMMU_END_TO_END 0
+#else
 #define SOFTGPU_GPUMMU_END_TO_END 1
+#endif
 #define SOFTGPU_DIAGNOSTIC_PAYLOAD_VERSION 1
 
 static const GUID g_RxgkShadowPresentInterfaceGuid =
@@ -3056,7 +3060,7 @@ SoftGpuDdiQueryChildStatus(
 
 
 /* =========================================================================
- * Timeout recovery stubs
+ * Timeout recovery
  * =========================================================================
  */
 
@@ -3065,7 +3069,38 @@ APIENTRY
 SoftGpuDdiResetFromTimeout(
     _In_ PVOID MiniportDeviceContext)
 {
-    UNREFERENCED_PARAMETER(MiniportDeviceContext);
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    KIRQL OldIrql;
+    ULONG NodeOrdinal;
+
+    PAGED_CODE();
+
+    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
+        return STATUS_INVALID_PARAMETER;
+
+    KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
+    Device->Resetting = 1;
+    for (NodeOrdinal = 0; NodeOrdinal < SOFTGPU_ENGINE_COUNT; NodeOrdinal++)
+    {
+        if (Device->Engines[NodeOrdinal].DpcInitialized)
+            KeRemoveQueueDpc(&Device->Engines[NodeOrdinal].DpcObject);
+    }
+    KeReleaseSpinLock(&Device->FenceLock, OldIrql);
+    KeFlushQueuedDpcs();
+
+    KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
+    for (NodeOrdinal = 0; NodeOrdinal < SOFTGPU_ENGINE_COUNT; NodeOrdinal++)
+    {
+        PSOFTGPU_ENGINE Engine = &Device->Engines[NodeOrdinal];
+
+        Engine->SubmitRingHead = Engine->SubmitRingTail;
+        Engine->CompletedFence = Engine->CurrentFence;
+        Engine->NotifiedFence = Engine->CurrentFence;
+        Engine->EngineActive = 0;
+    }
+    KeReleaseSpinLock(&Device->FenceLock, OldIrql);
+
+    DPRINT1("SOFTGPU: ResetFromTimeout dropped queued work on adapter %p\n", Device);
     return STATUS_SUCCESS;
 }
 
@@ -3074,7 +3109,17 @@ APIENTRY
 SoftGpuDdiRestartFromTimeout(
     _In_ PVOID MiniportDeviceContext)
 {
-    UNREFERENCED_PARAMETER(MiniportDeviceContext);
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
+        return STATUS_INVALID_PARAMETER;
+
+    KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
+    Device->Resetting = 0;
+    KeReleaseSpinLock(&Device->FenceLock, OldIrql);
     return STATUS_SUCCESS;
 }
 
