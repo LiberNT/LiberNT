@@ -8167,8 +8167,8 @@ static void shader_glsl_generate_vs_epilogue(const struct wined3d_gl_info *gl_in
         else if (!reg_maps->fog)
         {
             if (reg_maps->output_registers & (1u << (8 + 1)))
-                shader_addline(buffer, "%s = ffp_varying_specular.w;\n",
-                        legacy_syntax ? "gl_FogFragCoord" : "ffp_varying_fogcoord");
+                shader_addline(buffer, legacy_syntax ? "gl_FogFragCoord = gl_FrontSecondaryColor.w;\n"
+                        : "ffp_varying_fogcoord = ffp_varying_specular.w;\n");
             else
                 shader_addline(buffer, "%s = 0.0;\n",
                         legacy_syntax ? "gl_FogFragCoord" : "ffp_varying_fogcoord");
