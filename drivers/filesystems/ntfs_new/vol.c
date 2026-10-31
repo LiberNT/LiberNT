@@ -1053,3 +1053,67 @@ NtfsEvictCachedRecord(_In_ PVolumeContextBlock VolCB,
         ExFreePoolWithTag(Doomed, TAG_NTFS);
     }
 }
+
+static
+BOOLEAN
+NtfsCachedRecordIsUnder(_In_ PNtfsCachedRecord Entry,
+                        _In_reads_(Length) PCWSTR Directory,
+                        _In_ USHORT Length)
+{
+    USHORT Index;
+
+    if (Entry->Length <= Length || Entry->Name[Length] != L'\\')
+        return FALSE;
+    for (Index = 0; Index < Length; Index++)
+    {
+        if (RtlUpcaseUnicodeChar(Entry->Name[Index]) != RtlUpcaseUnicodeChar(Directory[Index]))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+VOID
+NtfsEvictCachedRecordsUnder(_In_ PVolumeContextBlock VolCB,
+                            _In_reads_(Length) PCWSTR Directory,
+                            _In_ USHORT Length)
+{
+    PLIST_ENTRY Entry;
+    PLIST_ENTRY Next;
+    LIST_ENTRY DoomedList;
+
+    if (!VolCB || !Directory || !Length)
+        return;
+    while (Length > 1 && Directory[Length - 1] == L'\\')
+        Length--;
+
+    InitializeListHead(&DoomedList);
+    ExAcquireFastMutex(&VolCB->RecordCacheMutex);
+    for (Entry = VolCB->RecordCacheList.Flink; Entry != &VolCB->RecordCacheList; Entry = Next)
+    {
+        PNtfsCachedRecord Candidate = CONTAINING_RECORD(Entry, NtfsCachedRecord, Link);
+
+        Next = Entry->Flink;
+        if (!NtfsCachedRecordIsUnder(Candidate, Directory, Length))
+            continue;
+        RemoveEntryList(&Candidate->Link);
+        RemoveEntryList(&Candidate->HashLink);
+        VolCB->RecordCacheCount--;
+        Candidate->Evicted = TRUE;
+        if (Candidate->InUse == 0)
+        {
+            if (!IsListEmpty(&Candidate->IdentityLink))
+                RemoveEntryList(&Candidate->IdentityLink);
+            InsertTailList(&DoomedList, &Candidate->Link);
+        }
+    }
+    ExReleaseFastMutex(&VolCB->RecordCacheMutex);
+
+    while (!IsListEmpty(&DoomedList))
+    {
+        PNtfsCachedRecord Doomed = CONTAINING_RECORD(RemoveHeadList(&DoomedList), NtfsCachedRecord, Link);
+
+        if (Doomed->Record)
+            NtfsFileRecordDestroy(Doomed->Record);
+        ExFreePoolWithTag(Doomed, TAG_NTFS);
+    }
+}

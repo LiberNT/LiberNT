@@ -70,6 +70,7 @@ extern void func_ProcessPreferredUILanguages(void);
 extern void func_PseudoConsoleCtrlC(void);
 extern void func_PssSnapshot(void);
 extern void func_PrivMoveFileIdentityW(void);
+extern void func_RenameDirectoryOldPath(void);
 extern void func_QueueUserAPC(void);
 extern void func_QueryProcessCycleTime(void);
 extern void func_ResizePseudoConsole(void);
@@ -166,6 +167,7 @@ const struct test winetest_testlist[] =
     { "PseudoConsoleCtrlC",          func_PseudoConsoleCtrlC },
     { "PssSnapshot",                 func_PssSnapshot },
     { "PrivMoveFileIdentityW",       func_PrivMoveFileIdentityW },
+    { "RenameDirectoryOldPath",      func_RenameDirectoryOldPath },
     { "QueueUserAPC",                func_QueueUserAPC },
     { "QueryProcessCycleTime",       func_QueryProcessCycleTime },
     { "ResizePseudoConsole",         func_ResizePseudoConsole },

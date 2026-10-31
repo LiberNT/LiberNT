@@ -2044,6 +2044,8 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
                              SameParent ? FILE_ACTION_RENAMED_OLD_NAME : FILE_ACTION_REMOVED);
     }
 
+    if (IsDirectory)
+        NtfsEvictCachedRecordsUnder(VolCB, FileCB->FileName.Buffer, FileCB->FileName.Length / sizeof(WCHAR));
     for (NameIndex = 0; NameIndex < RenamedCount; NameIndex++)
     {
         PFileContextBlock Other = RenamedFiles[NameIndex];

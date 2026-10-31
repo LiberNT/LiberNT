@@ -186,6 +186,11 @@ NtfsEvictCachedRecord(_In_ PVolumeContextBlock VolCB,
                       _In_ USHORT Length,
                       _In_ BOOLEAN RecordAlreadyFreed);
 
+VOID
+NtfsEvictCachedRecordsUnder(_In_ PVolumeContextBlock VolCB,
+                            _In_reads_(Length) PCWSTR Directory,
+                            _In_ USHORT Length);
+
 /*
  * The library keeps the disk it reads through in one process-global slot, so
  * every mount probe overwrites it. Re-point it at this volume before touching

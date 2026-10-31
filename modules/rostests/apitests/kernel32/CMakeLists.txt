@@ -75,6 +75,7 @@ list(APPEND SOURCE
     QueueUserAPC.c
     QueryProcessCycleTime.c
     ReadFile.c
+    RenameDirectoryOldPath.c
     ResizePseudoConsole.c
     SetComputerNameExW.c
     SetConsoleWindowInfo.c
