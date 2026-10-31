@@ -251,6 +251,11 @@ DuQueryLayout(
         return;
     }
 
+    if (Layout->PartitionStyle == PARTITION_STYLE_MBR && Layout->PartitionCount == 0)
+    {
+        HeapFree(GetProcessHeap(), 0, Layout);
+        return;
+    }
     Disk->Style = Layout->PartitionStyle;
     if (Layout->PartitionStyle == PARTITION_STYLE_GPT)
     {

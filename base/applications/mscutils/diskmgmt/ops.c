@@ -531,6 +531,37 @@ WorkFormat(
 }
 
 static BOOL
+AssignLetter(
+    _In_ PCWSTR DeviceName,
+    _Out_ PWCHAR Letter)
+{
+    DWORD Used;
+    WCHAR Next;
+
+    if (!StorageUtilAssignNextDriveLetter(DeviceName, Letter))
+        return FALSE;
+    if (*Letter)
+        return TRUE;
+    if (StorageUtilGetDriveLetter(DeviceName, Letter) && *Letter)
+        return TRUE;
+    Used = GetLogicalDrives();
+    for (Next = L'C'; Next <= L'Z'; Next++)
+    {
+        if (Used & (1u << (Next - L'A')))
+            continue;
+        if (StorageUtilAssignDriveLetter(DeviceName, Next))
+        {
+            *Letter = Next;
+            return TRUE;
+        }
+        if (GetLastError() != ERROR_ALREADY_EXISTS)
+            return FALSE;
+    }
+    SetLastError(ERROR_NO_MORE_ITEMS);
+    return FALSE;
+}
+
+static BOOL
 WorkAcquireRoot(
     _In_ PDU_WORK Work,
     _In_ PCWSTR DeviceName,
@@ -547,7 +578,7 @@ WorkAcquireRoot(
     }
     if (!Letter)
     {
-        if (!StorageUtilAssignNextDriveLetter(DeviceName, &Letter))
+        if (!AssignLetter(DeviceName, &Letter))
         {
             Work->Error = GetLastError();
             Work->ErrorText = IDS_ERR_LETTER;
@@ -1470,7 +1501,7 @@ DuMount(
         }
         return TRUE;
     }
-    if (!StorageUtilAssignNextDriveLetter(Volume->DeviceName, &Letter))
+    if (!AssignLetter(Volume->DeviceName, &Letter))
     {
         DuError(hwnd, IDS_ERR_LETTER, GetLastError());
         return FALSE;

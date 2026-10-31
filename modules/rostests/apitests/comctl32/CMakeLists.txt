@@ -6,6 +6,7 @@ list(APPEND SOURCE
     ListViewGroups.c
     LoadIconWithScaleDown.c
     propsheet.c
+    TaskDialogTitle.c
     testlist.c
     themestate.c
     toolbar.c
