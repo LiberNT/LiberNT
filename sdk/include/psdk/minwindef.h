@@ -116,8 +116,12 @@ typedef _Null_terminated_ char *PSZ;
 #define APIPRIVATE WINAPI
 #define PASCAL WINAPI
 #else
+#ifndef CALLBACK
 #define CALLBACK
+#endif
+#ifndef WINAPI
 #define WINAPI
+#endif
 #define WINAPIV
 #define APIENTRY WINAPI
 #define APIPRIVATE
