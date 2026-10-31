@@ -31,11 +31,38 @@ static DWORD path_len;
 static char shortpath[MAX_PATH];
 static DWORD shortpath_len;
 
+static BOOL parse_hexadecimal(const char *p, char *dest)
+{
+    unsigned char c;
+    if (*p++ != '@')  return FALSE;
+    if (*p++ != '\\') return FALSE;
+    if (*p++ != 'x')  return FALSE;
+
+    if (*p >= '0' && *p <= '9') c = *p - '0';
+    else if (*p >= 'a' && *p <= 'f') c = *p - 'a' + 10;
+    else if (*p >= 'A' && *p <= 'F') c = *p - 'A' + 10;
+    else return FALSE;
+    p++;
+
+    c <<= 4;
+
+    if (*p >= '0' && *p <= '9') c += *p - '0';
+    else if (*p >= 'a' && *p <= 'f') c += *p - 'a' + 10;
+    else if (*p >= 'A' && *p <= 'F') c += *p - 'A' + 10;
+    else return FALSE;
+    p++;
+
+    if (*p != '@') return FALSE;
+    *dest = (char)c;
+    return TRUE;
+}
+
 /* Convert to DOS line endings, and substitute escaped whitespace chars with real ones */
 static const char* convert_input_data(const char *data, DWORD size, DWORD *new_size)
 {
     static const char escaped_space[] = {'@','s','p','a','c','e','@'};
     static const char escaped_tab[]   = {'@','t','a','b','@'};
+    static const char escaped_hexadecimal[] = {'@','\\','x','.','.','@'};
     DWORD i, eol_count = 0;
     char *ptr, *new_data;
 
@@ -60,6 +87,10 @@ static const char* convert_input_data(const char *data, DWORD size, DWORD *new_s
                         && !memcmp(data + i, escaped_tab, sizeof(escaped_tab))) {
                     *ptr++ = '\t';
                     i += sizeof(escaped_tab) - 1;
+                } else if (data + i + sizeof(escaped_hexadecimal) - 1 < data + size
+                        && parse_hexadecimal(data + i, ptr)) {
+                    ptr++;
+                    i += sizeof(escaped_hexadecimal) - 1;
                 } else {
                     *ptr++ = data[i];
                 }
@@ -74,17 +105,21 @@ static const char* convert_input_data(const char *data, DWORD size, DWORD *new_s
     return new_data;
 }
 
-static BOOL run_cmd(const char *cmd_data, DWORD cmd_size)
+static BOOL run_cmd(const char *res_name, const char *cmd_data, DWORD cmd_size)
 {
     SECURITY_ATTRIBUTES sa = {sizeof(sa), 0, TRUE};
-    char command[] = "test.cmd";
+    char command_cmd[] = "test.cmd", command_bat[] = "test.bat";
+    char *command;
     STARTUPINFOA si = {sizeof(si)};
     PROCESS_INFORMATION pi;
     HANDLE file,fileerr;
     DWORD size;
     BOOL bres;
 
-    file = CreateFileA("test.cmd", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+    command = (strlen(res_name) >= 4 && !stricmp(res_name + strlen(res_name) - 4, ".cmd")) ?
+        command_cmd : command_bat;
+
+    file = CreateFileA(command, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
             FILE_ATTRIBUTE_NORMAL, NULL);
     ok(file != INVALID_HANDLE_VALUE, "CreateFile failed\n");
     if(file == INVALID_HANDLE_VALUE)
@@ -123,7 +158,7 @@ static BOOL run_cmd(const char *cmd_data, DWORD cmd_size)
     CloseHandle(pi.hProcess);
     CloseHandle(file);
     CloseHandle(fileerr);
-    DeleteFileA("test.cmd");
+    DeleteFileA(command);
     return TRUE;
 }
 
@@ -131,8 +166,21 @@ static DWORD map_file(const char *file_name, const char **ret)
 {
     HANDLE file, map;
     DWORD size;
+    unsigned retries;
 
-    file = CreateFileA(file_name, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_READONLY, NULL);
+    /* Even if .cmd/.bat wait on child process succeeded, there are cases where the
+     * output file is not closed yet (on Windows) (seems to only happen with .bat input files).
+     * So retry a couple of times before failing.
+     * Note: using file share option works at once, but we cannot be sure all
+     * output has been flushed.
+     */
+    for (retries = 0; retries < 50; retries++)
+    {
+        file = CreateFileA(file_name, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_READONLY, NULL);
+        if (file != INVALID_HANDLE_VALUE || GetLastError() != ERROR_SHARING_VIOLATION)
+            break;
+        Sleep(1);
+    }
     ok(file != INVALID_HANDLE_VALUE, "CreateFile failed: %08lx\n", GetLastError());
     if(file == INVALID_HANDLE_VALUE)
         return 0;
@@ -159,6 +207,7 @@ static const char *compare_line(const char *out_line, const char *out_end, const
 {
     const char *out_ptr = out_line, *exp_ptr = exp_line;
     const char *err = NULL;
+    char ch;
 
     static const char pwd_cmd[] = {'@','p','w','d','@'};
     static const char drive_cmd[] = {'@','d','r','i','v','e','@'};
@@ -167,6 +216,8 @@ static const char *compare_line(const char *out_line, const char *out_end, const
     static const char space_cmd[] = {'@','s','p','a','c','e','@'};
     static const char spaces_cmd[] = {'@','s','p','a','c','e','s','@'};
     static const char tab_cmd[]   = {'@','t','a','b','@'};
+    static const char formfeed_cmd[]   = {'@','f','o','r','m', 'f', 'e', 'e', 'd', '@'};
+    static const char hexadecimal_cmd[] = {'@','\\','x','0','0', '@'};
     static const char or_broken_cmd[] = {'@','o','r','_','b','r','o','k','e','n','@'};
 
     while(exp_ptr < exp_end) {
@@ -242,6 +293,24 @@ static const char *compare_line(const char *out_line, const char *out_end, const
                 } else {
                     err = out_end;
                 }
+            }else if(exp_ptr+sizeof(formfeed_cmd) <= exp_end
+                    && !memcmp(exp_ptr, formfeed_cmd, sizeof(formfeed_cmd))) {
+                exp_ptr += sizeof(formfeed_cmd);
+                if(out_ptr < out_end && *out_ptr == '\f') {
+                    out_ptr++;
+                    continue;
+                } else {
+                    err = out_end;
+                }
+            }else if(exp_ptr+sizeof(hexadecimal_cmd) <= exp_end &&
+                     parse_hexadecimal(exp_ptr, &ch)) {
+                exp_ptr += sizeof(hexadecimal_cmd);
+                if(out_ptr < out_end && *out_ptr == ch) {
+                    out_ptr++;
+                    continue;
+                } else {
+                    err = out_end;
+                }
             }else if(exp_ptr+sizeof(or_broken_cmd) <= exp_end
                      && !memcmp(exp_ptr, or_broken_cmd, sizeof(or_broken_cmd))) {
                 if(out_ptr == out_end)
@@ -307,10 +376,10 @@ static void test_output(const char *out_data, DWORD out_size, const char *exp_da
 
             err = compare_line(out_ptr, out_nl, exp_ptr, exp_nl);
             if(err == out_nl)
-                ok(0, "unexpected end of line %lu (got '%.*s', wanted '%.*s')\n",
+                ok(0, "unexpected end of line %ld (got '%.*s', wanted '%.*s')\n",
                    line, (int)(out_nl-out_ptr), out_ptr, (int)(exp_nl-exp_ptr), exp_ptr);
             else if(err == exp_nl)
-                ok(0, "excess characters on line %lu (got '%.*s', wanted '%.*s')\n",
+                ok(0, "excess characters on line %ld (got '%.*s', wanted '%.*s')\n",
                    line, (int)(out_nl-out_ptr), out_ptr, (int)(exp_nl-exp_ptr), exp_ptr);
             else if (!err && is_todo_wine && is_out_resync && is_exp_resync)
                 /* Consider that the todo_wine was to deal with extra lines,
@@ -318,7 +387,7 @@ static void test_output(const char *out_data, DWORD out_size, const char *exp_da
                  */
                 err = NULL;
             else
-                ok(!err, "unexpected char 0x%x position %d in line %lu (got '%.*s', wanted '%.*s')\n",
+                ok(!err, "unexpected char 0x%x position %d in line %ld (got '%.*s', wanted '%.*s')\n",
                    (err ? *err : 0), (err ? (int)(err-out_ptr) : -1), line, (int)(out_nl-out_ptr), out_ptr, (int)(exp_nl-exp_ptr), exp_ptr);
         }
 
@@ -344,11 +413,11 @@ static void test_output(const char *out_data, DWORD out_size, const char *exp_da
         }
     }
 
-    ok(exp_ptr >= exp_data+exp_size, "unexpected end of output in line %lu, missing %s\n", line, exp_ptr);
+    ok(exp_ptr >= exp_data+exp_size, "unexpected end of output in line %ld, missing %s\n", line, exp_ptr);
     ok(out_ptr >= out_data+out_size, "too long output, got additional %s\n", out_ptr);
 }
 
-static void run_test(const char *cmd_data, DWORD cmd_size, const char *exp_data, DWORD exp_size)
+static void run_test(const char *res_name, const char *cmd_data, DWORD cmd_size, const char *exp_data, DWORD exp_size)
 {
     const char *out_data, *actual_cmd_data;
     DWORD out_size, actual_cmd_size;
@@ -357,7 +426,7 @@ static void run_test(const char *cmd_data, DWORD cmd_size, const char *exp_data,
     if(!actual_cmd_size || !actual_cmd_data)
         goto cleanup;
 
-    if(!run_cmd(actual_cmd_data, actual_cmd_size))
+    if(!run_cmd(res_name, actual_cmd_data, actual_cmd_size))
         goto cleanup;
 
     out_size = map_file("test.out", &out_data);
@@ -392,7 +461,7 @@ static void run_from_file(const char *file_name)
         return;
     }
 
-    run_test(test_data, test_size, out_data, out_size);
+    run_test(file_name, test_data, test_size, out_data, out_size);
 
     UnmapViewOfFile(test_data);
     UnmapViewOfFile(out_data);
@@ -435,7 +504,7 @@ static BOOL WINAPI test_enum_proc(HMODULE module, LPCSTR type, LPSTR name, LONG_
     if(!out_size)
         return TRUE;
 
-    run_test(cmd_data, cmd_size, out_data, out_size);
+    run_test(name, cmd_data, cmd_size, out_data, out_size);
     return TRUE;
 }
 

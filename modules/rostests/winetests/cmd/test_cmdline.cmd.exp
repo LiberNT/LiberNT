@@ -32,6 +32,8 @@ No whitespace
 --- Test 18
 No prompts or I would not get here1
 No prompts or I would not get here2
+alabaster
+chrome
 %hello1%
 %hello2
 %hello3:h=t%
@@ -42,7 +44,7 @@ one = %1
 3
 4
 5
-@todo_wine@var contents: 11
+var contents: 11
 var=33@space@
 99
 ------ Testing invocation of batch files ----------
@@ -69,8 +71,10 @@ var=33@space@
 2@space@
 0@space@
 3@space@
+3@space@
 4@space@
 Passed
+6@space@
 ---------- Testing CMD /C quoting -----------------
 "hi"
 1@space@
@@ -80,13 +84,16 @@ Passed
 1@space@
 0@space@
 0@space@
-0@space@@or_broken@3@space@
+3@space@
 3@space@
 2@space@
 2@space@
 2@space@
 0@space@
 5@space@
+hi
+hi
+hi
 ------- Testing CMD /C qualifier treatment ------------
 0@space@
 1@space@
@@ -112,7 +119,7 @@ bar@space@
 0@space@
 !@space@
 0@space@@or_broken@!@space@
-@todo_wine@0@space@
+0@space@
 '@space@
 +@space@
 0@space@
