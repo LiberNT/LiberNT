@@ -282,6 +282,7 @@ EmuAllocateStub(
         {
             return 0;
         }
+        EmuCoreExcludeCode(Base, Size);
         EmuStubBlock = Base;
         EmuStubUsed = 0;
     }

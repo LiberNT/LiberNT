@@ -707,9 +707,15 @@ BTCpuNotifyMemoryFree(
     if (NT_SUCCESS(Status))
     {
         if ((FreeType & MEM_RELEASE) && !Size && Thread)
+        {
+            Felix86NtForgetCode((ULONG_PTR)Thread->UnmapBase, Thread->UnmapSize);
             FelixInvalidate(Thread->UnmapBase, Thread->UnmapSize);
+        }
         else
+        {
+            Felix86NtForgetCode((ULONG_PTR)Address, Size);
             FelixInvalidate(Address, Size);
+        }
     }
     if (Thread) Thread->UnmapSize = 0;
 }
@@ -723,7 +729,11 @@ BTCpuNotifyMemoryProtect(
     _In_ BOOL After,
     _In_ NTSTATUS Status)
 {
-    if (After && NT_SUCCESS(Status)) FelixInvalidate(Address, Size);
+    Felix86NtForgetCode((ULONG_PTR)Address, Size);
+    if (After && NT_SUCCESS(Status))
+    {
+        FelixInvalidate(Address, Size);
+    }
 }
 
 VOID
@@ -736,6 +746,7 @@ BTCpuNotifyMemoryAlloc(
     _In_ BOOL After,
     _In_ NTSTATUS Status)
 {
+    if (After && NT_SUCCESS(Status)) Felix86NtForgetCode((ULONG_PTR)Address, Size);
 }
 
 NTSTATUS
@@ -748,6 +759,7 @@ BTCpuNotifyMapViewOfSection(
     _In_ ULONG AllocationType,
     _In_ ULONG Protection)
 {
+    Felix86NtForgetCode((ULONG_PTR)Address, Size);
     FelixInvalidate(Address, Size);
     return STATUS_SUCCESS;
 }
@@ -767,7 +779,11 @@ BTCpuNotifyUnmapViewOfSection(
         FelixQueryAllocation(Address, &Thread->UnmapBase, &Thread->UnmapSize);
         return;
     }
-    if (NT_SUCCESS(Status)) FelixInvalidate(Thread->UnmapBase, Thread->UnmapSize);
+    if (NT_SUCCESS(Status))
+    {
+        Felix86NtForgetCode((ULONG_PTR)Thread->UnmapBase, Thread->UnmapSize);
+        FelixInvalidate(Thread->UnmapBase, Thread->UnmapSize);
+    }
     Thread->UnmapSize = 0;
 }
 

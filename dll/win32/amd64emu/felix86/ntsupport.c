@@ -269,7 +269,7 @@ int
 Felix86NtHostFault(
     void *Pointers)
 {
-    return F86LazyFault(Pointers) == EXCEPTION_CONTINUE_EXECUTION;
+    return F86LazyFault(Pointers) == EXCEPTION_CONTINUE_EXECUTION || Felix86NtCodeWatchFault(Pointers);
 }
 
 static

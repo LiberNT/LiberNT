@@ -163,7 +163,11 @@ NotifyMemoryFree(
     _In_ BOOLEAN After,
     _In_ NTSTATUS Status)
 {
-    if (After && NT_SUCCESS(Status)) EmuCoreInvalidate(Address, Size);
+    if (After && NT_SUCCESS(Status))
+    {
+        EmuCoreForgetCode(Address, Size);
+        EmuCoreInvalidate(Address, Size);
+    }
 }
 
 VOID
@@ -175,7 +179,11 @@ NotifyMemoryProtect(
     _In_ BOOLEAN After,
     _In_ NTSTATUS Status)
 {
-    if (After && NT_SUCCESS(Status)) EmuCoreInvalidate(Address, Size);
+    EmuCoreForgetCode(Address, Size);
+    if (After && NT_SUCCESS(Status))
+    {
+        EmuCoreInvalidate(Address, Size);
+    }
 }
 
 VOID
@@ -190,6 +198,7 @@ NotifyUnmapViewOfSection(
 
     if (After) return;
     EmuQueryView(Address, &Base, &Size);
+    EmuCoreForgetCode(Base, Size);
     EmuCoreInvalidate(Base, Size);
 }
 
@@ -233,6 +242,7 @@ EmuNtService(
     PVOID Base = NULL;
     SIZE_T Size = 0;
     PVOID ApcRecord = NULL;
+    ULONG OriginalProtect = 0;
     NTSTATUS Status;
 
     switch (Service)
@@ -339,6 +349,11 @@ EmuNtService(
             if (EmuIsCurrentProcess((HANDLE)Arguments[0])) EmuQueryView((PVOID)Arguments[1], &Base, &Size);
             break;
 
+        case EmuNtProtectVirtualMemory:
+            if (EmuIsCurrentProcess((HANDLE)Arguments[0]))
+                OriginalProtect = EmuCoreForgetCode(*(PVOID *)Arguments[1], *(PSIZE_T)Arguments[2]);
+            break;
+
         case EmuNtTerminateProcess:
             if (!Arguments[0]) EmuCoreBeginTermination();
             break;
@@ -353,7 +368,16 @@ EmuNtService(
     {
         case EmuNtUnmapViewOfSection:
         case EmuNtUnmapViewOfSectionEx:
-            if (Size) EmuCoreInvalidate(Base, Size);
+            if (Size)
+            {
+                EmuCoreForgetCode(Base, Size);
+                EmuCoreInvalidate(Base, Size);
+            }
+            break;
+
+        case EmuNtAllocateVirtualMemory:
+            if (EmuIsCurrentProcess((HANDLE)Arguments[0]))
+                EmuCoreForgetCode(*(PVOID *)Arguments[1], *(PSIZE_T)Arguments[3]);
             break;
 
         case EmuNtMapViewOfSection:
@@ -364,7 +388,12 @@ EmuNtService(
         case EmuNtFreeVirtualMemory:
         case EmuNtProtectVirtualMemory:
             if (EmuIsCurrentProcess((HANDLE)Arguments[0]))
+            {
+                EmuCoreForgetCode(*(PVOID *)Arguments[1], *(PSIZE_T)Arguments[2]);
+                if (OriginalProtect != 0)
+                    *(PULONG)Arguments[4] = OriginalProtect;
                 EmuCoreInvalidate(*(PVOID *)Arguments[1], *(PSIZE_T)Arguments[2]);
+            }
             break;
 
         case EmuNtFlushInstructionCache:

@@ -482,6 +482,64 @@ TestServiceStubs(VOID)
 }
 #endif
 
+#if defined(_M_IX86) || defined(_M_AMD64) || defined(__i386__) || defined(__x86_64__)
+static
+DWORD
+WINAPI
+RewriteCodeThread(
+    _In_ PVOID Parameter)
+{
+    static const UCHAR Code[] = { 0xB8, 0x78, 0x56, 0x34, 0x12, 0xC3 };
+
+    memcpy(Parameter, Code, sizeof(Code));
+    return 0;
+}
+
+static
+VOID
+TestSelfModifyingCode(VOID)
+{
+    static const UCHAR Code[] = { 0xB8, 0x00, 0x00, 0x00, 0x00, 0xC3 };
+    ULONG (*Function)(VOID);
+    PUCHAR Base;
+    HANDLE Thread;
+    ULONG Round, Stale = 0;
+
+    Base = VirtualAlloc(NULL, 4096, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    CHECK(Base != NULL);
+    if (!Base) return;
+
+    memcpy(Base, Code, sizeof(Code));
+    Function = (ULONG (*)(VOID))Base;
+    CHECK(Function() == 0);
+    for (Round = 1; Round <= 64; Round++)
+    {
+        *(volatile ULONG *)(Base + 1) = Round;
+        if (Function() != Round)
+            Stale++;
+    }
+    CHECK(Stale == 0);
+
+    Thread = CreateThread(NULL, 0, RewriteCodeThread, Base, 0, NULL);
+    CHECK(Thread != NULL);
+    if (Thread)
+    {
+        CHECK(WaitForSingleObject(Thread, INFINITE) == WAIT_OBJECT_0);
+        CloseHandle(Thread);
+        CHECK(Function() == 0x12345678);
+    }
+
+    CHECK(VirtualFree(Base, 0, MEM_RELEASE));
+    printf("EMUTEST: code rewritten without FlushInstructionCache ran %lu stale times of 64\n", Stale);
+}
+#else
+static
+VOID
+TestSelfModifyingCode(VOID)
+{
+}
+#endif
+
 static
 LONG
 NTAPI
@@ -1291,6 +1349,7 @@ main(
     TestThreadContext();
     TestStructuredExceptions();
     TestDynamicFunctionTables();
+    TestSelfModifyingCode();
     TestServiceStubs();
     TestFloatingStateAcrossFault();
     EmuTestCxxExceptions();

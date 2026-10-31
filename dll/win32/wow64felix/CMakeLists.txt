@@ -5,6 +5,7 @@ set(_felix86_adapter ${REACTOS_SOURCE_DIR}/dll/win32/amd64emu/felix86)
 add_library(wow64felix MODULE
     wow64felix.c
     simulate.S
+    ${_felix86_adapter}/codewatch.c
     ${_felix86_adapter}/ntsupport.c
     ${_felix86_adapter}/support.S
     ${REACTOS_SOURCE_DIR}/sdk/lib/crt/math/expm1.c
