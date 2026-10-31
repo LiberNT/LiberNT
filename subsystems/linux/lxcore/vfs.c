@@ -238,32 +238,67 @@ LxNtOpenHandle(
 }
 
 static
-VOID
+NTSTATUS
+LxNtCreateById(
+    _In_ HANDLE Root,
+    _In_ ULONG64 FileId,
+    _In_ ACCESS_MASK Access,
+    _In_ ULONG Options,
+    _Out_ PHANDLE Handle)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING Id;
+    IO_STATUS_BLOCK Iosb;
+
+    Id.Buffer = (PWCH)&FileId;
+    Id.Length = Id.MaximumLength = sizeof(FileId);
+    InitializeObjectAttributes(&ObjectAttributes, &Id, OBJ_KERNEL_HANDLE, Root, NULL);
+    return ZwCreateFile(Handle, Access | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, 0,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN,
+                        Options | FILE_OPEN_BY_FILE_ID | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
+                        NULL, 0);
+}
+
+static
+ULONG64
 LxNtReopenById(
     _Inout_ PHANDLE Handle,
     _In_ ACCESS_MASK Access,
     _In_ ULONG Options)
 {
     FILE_INTERNAL_INFORMATION Internal;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    UNICODE_STRING Id;
     IO_STATUS_BLOCK Iosb;
     HANDLE ById;
 
     if (!NT_SUCCESS(ZwQueryInformationFile(*Handle, &Iosb, &Internal, sizeof(Internal), FileInternalInformation)))
-        return;
-    Id.Buffer = (PWCH)&Internal.IndexNumber;
-    Id.Length = Id.MaximumLength = sizeof(Internal.IndexNumber);
-    InitializeObjectAttributes(&ObjectAttributes, &Id, OBJ_KERNEL_HANDLE, *Handle, NULL);
-    if (!NT_SUCCESS(ZwCreateFile(&ById, Access | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, 0,
-                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN,
-                                 Options | FILE_OPEN_BY_FILE_ID | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
-                                 NULL, 0)))
-    {
-        return;
-    }
+        return 0;
+    if (!NT_SUCCESS(LxNtCreateById(*Handle, (ULONG64)Internal.IndexNumber.QuadPart, Access, Options, &ById)))
+        return 0;
     ZwClose(*Handle);
     *Handle = ById;
+    return (ULONG64)Internal.IndexNumber.QuadPart;
+}
+
+static
+HANDLE
+LxMountNtRootHandle(
+    _In_ PLX_MOUNT Mount)
+{
+    UNICODE_STRING Root;
+    HANDLE Handle;
+    LONG Error;
+
+    if (Mount->NtRootHandle != NULL)
+        return Mount->NtRootHandle;
+    if (LxNtPath(Mount, "", &Root) != 0)
+        return NULL;
+    Error = LxNtOpenHandle(&Root, FILE_READ_ATTRIBUTES, FILE_OPEN, FILE_DIRECTORY_FILE, 0, &Handle);
+    LxFreePaged(Root.Buffer);
+    if (Error != 0)
+        return NULL;
+    if (InterlockedCompareExchangePointer(&Mount->NtRootHandle, Handle, NULL) != NULL)
+        ZwClose(Handle);
+    return Mount->NtRootHandle;
 }
 
 LONG
@@ -979,6 +1014,8 @@ LxInstanceDereference(
         }
         if (Mount->Tmpfs != NULL)
             LxTmpfsMountDereference(Mount->Tmpfs);
+        if (Mount->NtRootHandle != NULL)
+            ZwClose(Mount->NtRootHandle);
         LxFree(Mount->Target);
         LxFree(Mount->Source);
         LxFree(Mount->FsType);
@@ -3192,6 +3229,7 @@ LxLookupWalk(
 #define LX_VCACHE_STAT_TTL  10000000LL
 #define LX_VCACHE_LOOKUP    1
 #define LX_VCACHE_STAT      2
+#define LX_VCACHE_FILEID    3
 
 typedef struct _LX_VCACHE_ENTRY
 {
@@ -3211,6 +3249,7 @@ typedef struct _LX_VCACHE_ENTRY
     PSTR Resolved;
     PSTR LinkTarget;
     LX_STAT Stat;
+    ULONG64 FileId;
 } LX_VCACHE_ENTRY, *PLX_VCACHE_ENTRY;
 
 static LIST_ENTRY LxVcacheBuckets[LX_VCACHE_BUCKETS];
@@ -3362,6 +3401,53 @@ LxVcacheInvalidatePath(
     if (Entry != NULL)
         LxVcacheFreeEntry(Entry);
     ExReleaseFastMutex(&LxVcacheLock);
+}
+
+static
+ULONG64
+LxVcacheGetFileId(
+    _In_ PLX_PROCESS Process,
+    _In_ PCSTR Path)
+{
+    PLX_NS Owner = LxProcessNs(Process, LxNsMnt);
+    ULONG Hash = LxVcacheHash(Owner, LX_VCACHE_FILEID, Path);
+    LONG64 Generation = LxVcacheGeneration;
+    PLX_VCACHE_ENTRY Entry;
+    ULONG64 FileId = 0;
+
+    ExAcquireFastMutex(&LxVcacheLock);
+    Entry = LxVcacheFind(Owner, LX_VCACHE_FILEID, 0, Path, Hash);
+    if ((Entry != NULL) && (Entry->Generation == Generation))
+        FileId = Entry->FileId;
+    ExReleaseFastMutex(&LxVcacheLock);
+    return FileId;
+}
+
+static
+VOID
+LxVcachePutFileId(
+    _In_ PLX_PROCESS Process,
+    _In_ PCSTR Path,
+    _In_ LONG64 Generation,
+    _In_ ULONG64 FileId)
+{
+    PLX_VCACHE_ENTRY Entry = LxAlloc(sizeof(*Entry));
+
+    if (Entry == NULL)
+        return;
+    Entry->Instance = Process->Instance;
+    Entry->Owner = LxProcessNs(Process, LxNsMnt);
+    Entry->Kind = LX_VCACHE_FILEID;
+    Entry->Hash = LxVcacheHash(Entry->Owner, LX_VCACHE_FILEID, Path);
+    Entry->Generation = Generation;
+    Entry->FileId = FileId;
+    Entry->Key = LxStrDup(Path);
+    if (Entry->Key == NULL)
+    {
+        LxFree(Entry);
+        return;
+    }
+    LxVcachePut(Entry);
 }
 
 static
@@ -3712,9 +3798,12 @@ LxVfsOpenNode(
     _Out_ PLX_FILE *Result)
 {
     LONG Generation = LxVfsDirRenameGeneration;
+    LONG64 CacheGeneration = LxVcacheGeneration;
     ULONG Disposition, Options = 0;
     ACCESS_MASK Access;
-    HANDLE Handle;
+    HANDLE Handle, Root;
+    NTSTATUS Status;
+    ULONG64 FileId;
     PLX_FILE File;
     LONG Error;
 
@@ -3849,27 +3938,47 @@ LxVfsOpenNode(
     if (Flags & LX_O_DIRECTORY)
         Options |= FILE_DIRECTORY_FILE;
 
-    Error = LxNtOpenHandle(&Node->NtPath, Access, Disposition, Options, FILE_ATTRIBUTE_NORMAL, &Handle);
-    if ((Error == -LX_EACCES) && !(Flags & LX_O_PATH) && Node->Exists)
+    FileId = (Disposition == FILE_OPEN) ? LxVcacheGetFileId(Process, Node->Path) : 0;
+    Root = (FileId != 0) ? LxMountNtRootHandle(Node->Mount) : NULL;
+    Status = STATUS_UNSUCCESSFUL;
+    if (Root != NULL)
     {
-        Access &= ~(FILE_WRITE_EA | FILE_WRITE_ATTRIBUTES);
+        Status = LxNtCreateById(Root, FileId, Access, Options, &Handle);
+        if ((Status == STATUS_ACCESS_DENIED) && !(Flags & LX_O_PATH))
+            Status = LxNtCreateById(Root, FileId, Access & ~(FILE_WRITE_EA | FILE_WRITE_ATTRIBUTES), Options, &Handle);
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        File = LxFileFromNtHandleOfType(Handle, Flags & (LX_O_ACCMODE | LX_O_APPEND | LX_O_NONBLOCK | LX_O_PATH),
+                                        Node->Type == LX_S_IFDIR);
+    }
+    else
+    {
         Error = LxNtOpenHandle(&Node->NtPath, Access, Disposition, Options, FILE_ATTRIBUTE_NORMAL, &Handle);
+        if ((Error == -LX_EACCES) && !(Flags & LX_O_PATH) && Node->Exists)
+        {
+            Access &= ~(FILE_WRITE_EA | FILE_WRITE_ATTRIBUTES);
+            Error = LxNtOpenHandle(&Node->NtPath, Access, Disposition, Options, FILE_ATTRIBUTE_NORMAL, &Handle);
+        }
+        if (Error != 0)
+            return Error;
+
+        if (!Node->Exists)
+        {
+            ULONG NewMode = LX_S_IFREG | (Mode & ~Process->Umask & 07777), Uid, Gid;
+
+            LxVfsNewOwner(Process, Node->Path, &NewMode, &Uid, &Gid);
+            LxNtWriteLxAttributes(Handle, NewMode, Uid, Gid, 0, FALSE);
+            LxVcacheInvalidate();
+            LxInotifyEvent(Process, Node->Path, 0x00000100, FALSE);
+        }
+        FileId = LxNtReopenById(&Handle, Access, Options);
+        if ((FileId != 0) && Node->Exists)
+            LxVcachePutFileId(Process, Node->Path, CacheGeneration, FileId);
+
+        File = LxFileFromNtHandle(Handle, Flags & (LX_O_ACCMODE | LX_O_APPEND | LX_O_NONBLOCK | LX_O_PATH));
     }
-    if (Error != 0)
-        return Error;
-
-    if (!Node->Exists)
-    {
-        ULONG NewMode = LX_S_IFREG | (Mode & ~Process->Umask & 07777), Uid, Gid;
-
-        LxVfsNewOwner(Process, Node->Path, &NewMode, &Uid, &Gid);
-        LxNtWriteLxAttributes(Handle, NewMode, Uid, Gid, 0, FALSE);
-        LxVcacheInvalidate();
-        LxInotifyEvent(Process, Node->Path, 0x00000100, FALSE);
-    }
-    LxNtReopenById(&Handle, Access, Options);
-
-    File = LxFileFromNtHandle(Handle, Flags & (LX_O_ACCMODE | LX_O_APPEND | LX_O_NONBLOCK | LX_O_PATH));
     if (File == NULL)
     {
         ZwClose(Handle);

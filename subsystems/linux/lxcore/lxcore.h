@@ -319,6 +319,7 @@ struct _LX_MOUNT
     ULONG64 Magic;
     ULONG Dev;
     UNICODE_STRING NtRoot;
+    HANDLE NtRootHandle;
     PLX_TMPFS Tmpfs;
     PSTR Root;
     PSTR Alias;
@@ -1017,6 +1018,7 @@ LONG LxFileZeroRange(_In_ PLX_FILE File, _In_ ULONG64 Start, _In_ ULONG64 End);
 VOID LxMemfdDereference(_In_opt_ PLX_MEMFD Memfd);
 LONG LxFileStat(_In_ PLX_FILE File, _Out_ PLX_STAT Stat);
 PLX_FILE LxFileFromNtHandle(_In_ HANDLE Handle, _In_ ULONG Flags);
+PLX_FILE LxFileFromNtHandleOfType(_In_ HANDLE Handle, _In_ ULONG Flags, _In_ BOOLEAN Directory);
 LONG LxNtStatHandle(_In_ HANDLE Handle, _In_opt_ PLX_MOUNT Mount, _Out_ PLX_STAT Stat);
 PLX_FILE LxDataFileCreate(_In_ PCSTR Path, _In_ PVOID Data, _In_ ULONG Length, _In_ ULONG Mode);
 LONG64 LxWriteFailed(_In_ LONG Error);

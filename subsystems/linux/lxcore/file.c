@@ -1543,6 +1543,21 @@ LxFileFromNtHandle(
     return File;
 }
 
+PLX_FILE
+LxFileFromNtHandleOfType(
+    _In_ HANDLE Handle,
+    _In_ ULONG Flags,
+    _In_ BOOLEAN Directory)
+{
+    PLX_FILE File = LxFileAlloc(&LxNtFileOps, Flags, Directory ? LX_S_IFDIR : LX_S_IFREG);
+
+    if (File == NULL)
+        return NULL;
+    File->Handle = Handle;
+    File->Directory = Directory;
+    return File;
+}
+
 static
 LONG64
 LxDataRead(
