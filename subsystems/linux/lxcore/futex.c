@@ -733,7 +733,7 @@ LxFutexUnlockPi(
             Next = LxFutexFirstPiWaiter(&Key, NULL);
             New = 0;
             if (Next != NULL)
-                New = Next->Tid | ((LxFutexFirstPiWaiter(&Key, Next) != NULL) ? LX_FUTEX_WAITERS : 0);
+                New = Next->Tid | LX_FUTEX_WAITERS;
             Write = TRUE;
             Result = LxFutexCmpxchgLocked(Address, Value, New, &Previous);
         }
