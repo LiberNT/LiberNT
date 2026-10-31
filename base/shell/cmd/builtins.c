@@ -1248,9 +1248,21 @@ static BOOL create_full_path(WCHAR* path)
         /* Truncate path, create intermediate directory, and restore path */
         *p = 0;
         rv = CreateDirectoryW(path, NULL);
+#ifdef __REACTOS__
+        if (!rv && GetLastError() != ERROR_ALREADY_EXISTS)
+        {
+            DWORD attributes = GetFileAttributesW(path);
+
+            *p = '\\';
+            if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY))
+                return FALSE;
+        }
+        *p = '\\';
+#else
         *p = '\\';
         if (!rv && GetLastError() != ERROR_ALREADY_EXISTS)
             return FALSE;
+#endif
     }
     /* notreached */
     return FALSE;
