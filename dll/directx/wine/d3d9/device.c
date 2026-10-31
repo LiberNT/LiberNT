@@ -2003,6 +2003,7 @@ static HRESULT WINAPI d3d9_device_GetFrontBufferData(IDirect3DDevice9Ex *iface,
 #ifdef __REACTOS__
     if (FAILED(hr = d3d9_surface_prepare_dxva_fallback(dst_impl, 0)))
         return hr;
+    hr = D3DERR_INVALIDCALL;
 #endif
 
     wined3d_mutex_lock();
@@ -2192,6 +2193,7 @@ static HRESULT WINAPI d3d9_device_StretchRect(IDirect3DDevice9Ex *iface, IDirect
 #ifdef __REACTOS__
     if (FAILED(hr = d3d9_surface_prepare_dxva_fallback(dst, 0)))
         return hr;
+    hr = D3DERR_INVALIDCALL;
 #endif
 
     wined3d_mutex_lock();
