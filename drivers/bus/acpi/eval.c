@@ -309,6 +309,22 @@ EvalGetPackageCount(
     return STATUS_SUCCESS;
 }
 
+static
+BOOLEAN
+EvalPackageHoldsArgumentList(
+    _In_ PACPI_METHOD_ARGUMENT Package)
+{
+    PACPI_METHOD_ARGUMENT First = (PACPI_METHOD_ARGUMENT)Package->Data;
+
+    if (Package->DataLength == 0)
+        return TRUE;
+    if (Package->DataLength < ACPI_METHOD_ARGUMENT_LENGTH(0))
+        return FALSE;
+    if (Package->Argument == 0)
+        return TRUE;
+    return ACPI_METHOD_ARGUMENT_LENGTH(First->DataLength) <= Package->DataLength;
+}
+
 /**
  * @brief Performs translation from the supplied method argument into an ACPI_OBJECT structure.
  */
@@ -380,6 +396,15 @@ EvalConvertParameterObjects(
             ULONG i, PackageCount, PackageSize;
             NTSTATUS Status;
             PACPI_METHOD_ARGUMENT PackageArgument;
+
+            if (Depth == 0 && !EvalPackageHoldsArgumentList(Argument))
+            {
+                /* TODO: confirm on Windows 11 that a package payload too short for its first argument reaches AML as a buffer */
+                Arg->Type = ACPI_TYPE_BUFFER;
+                Arg->Buffer.Pointer = &Argument->Data[0];
+                Arg->Buffer.Length = Argument->DataLength;
+                break;
+            }
 
             Arg->Type = ACPI_TYPE_PACKAGE;
 

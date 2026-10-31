@@ -80,6 +80,9 @@ typedef struct _EVAL_TEST_ENTRY
 
 #define DSM_TEST_FLAG_EMPTY_PACKAGE                (1 << 0)
 #define DSM_TEST_FLAG_LARGE_SUB_PACKAGE_BUFFER     (1 << 1)
+#define DSM_TEST_FLAG_RAW_PAYLOAD_4                (1 << 2)
+#define DSM_TEST_FLAG_RAW_PAYLOAD_8                (1 << 3)
+#define DSM_TEST_RAW_PAYLOAD                       0x80000001UL
 
     NTSTATUS Status;
     ULONG Value;
@@ -201,6 +204,26 @@ struct acpi_device
         char *hardware_id;
         unsigned int processor_id;
     } pnp;
+    struct
+    {
+        struct
+        {
+            unsigned int explicit_get:1;
+            unsigned int power_resources:1;
+        } flags;
+        struct
+        {
+            struct
+            {
+                unsigned int explicit_set:1;
+            } flags;
+            struct
+            {
+                UINT32 count;
+                ACPI_HANDLE handles[10];
+            } resources;
+        } states[4];
+    } power;
 };
 
 typedef struct _GTM_OBJECT_BUFFER
@@ -291,6 +314,15 @@ AcpiPutTable(ACPI_TABLE_HEADER *Table)
 {
     UNREFERENCED_PARAMETER(Table);
     ok(0, "Unexpected call to AcpiPutTable\n");
+}
+
+int
+acpi_bus_get_power(ACPI_HANDLE Handle, int *State)
+{
+    UNREFERENCED_PARAMETER(Handle);
+    UNREFERENCED_PARAMETER(State);
+    ok(0, "Unexpected call to acpi_bus_get_power\n");
+    return -1;
 }
 
 int
@@ -651,6 +683,17 @@ AcpiEvaluateObject (
             {
                 ++Arg;
 
+                if (DrvpEvalTestEntry->Flags & (DSM_TEST_FLAG_RAW_PAYLOAD_4 | DSM_TEST_FLAG_RAW_PAYLOAD_8))
+                {
+                    /* A package payload too short for one argument reaches the method as raw bytes. */
+                    ok_eq_uint_ex(DrvpEvalTestEntry, Arg->Type, ACPI_TYPE_BUFFER);
+                    ok_eq_uint_ex(DrvpEvalTestEntry, Arg->Buffer.Length,
+                                  (DrvpEvalTestEntry->Flags & DSM_TEST_FLAG_RAW_PAYLOAD_4) ? 4 : 8);
+                    if (Arg->Type == ACPI_TYPE_BUFFER && Arg->Buffer.Length >= sizeof(ULONG))
+                        ok_eq_hex_ex(DrvpEvalTestEntry, *(PULONG)Arg->Buffer.Pointer, DSM_TEST_RAW_PAYLOAD);
+                    return AE_OK;
+                }
+
                 ok_eq_uint_ex(DrvpEvalTestEntry, Arg->Type, ACPI_TYPE_PACKAGE);
 
                 if (DrvpEvalTestEntry->Flags & DSM_TEST_FLAG_EMPTY_PACKAGE)
@@ -879,6 +922,8 @@ static const EVAL_TEST_ENTRY DrvpDsmTests[] =
     { __LINE__, 0, STATUS_SUCCESS },
     { __LINE__, DSM_TEST_FLAG_EMPTY_PACKAGE, STATUS_SUCCESS },
     { __LINE__, DSM_TEST_FLAG_LARGE_SUB_PACKAGE_BUFFER, STATUS_ACPI_INVALID_ARGTYPE },
+    { __LINE__, DSM_TEST_FLAG_RAW_PAYLOAD_4, STATUS_SUCCESS },
+    { __LINE__, DSM_TEST_FLAG_RAW_PAYLOAD_8, STATUS_SUCCESS },
 };
 
 /* FUNCTIONS ******************************************************************/
@@ -1402,6 +1447,11 @@ DrvEvaluateDsmObject(
         InputSize -= ACPI_METHOD_ARGUMENT_LENGTH(MY_DSM_PACKAGE_ENTRY_SIZE);
         InputSize += ACPI_METHOD_ARGUMENT_LENGTH(ACPI_METHOD_ARGUMENT_LENGTH(0));
     }
+    else if (TestEntry->Flags & (DSM_TEST_FLAG_RAW_PAYLOAD_4 | DSM_TEST_FLAG_RAW_PAYLOAD_8))
+    {
+        InputSize -= ACPI_METHOD_ARGUMENT_LENGTH(MY_DSM_PACKAGE_ENTRY_SIZE);
+        InputSize += ACPI_METHOD_ARGUMENT_LENGTH((TestEntry->Flags & DSM_TEST_FLAG_RAW_PAYLOAD_4) ? 4 : 8);
+    }
 
     InputBuffer->MethodNameAsUlong = 'MSD_'; // _DSM
     InputBuffer->Signature = ACPI_EVAL_INPUT_BUFFER_COMPLEX_SIGNATURE;
@@ -1428,6 +1478,12 @@ DrvEvaluateDsmObject(
         /* Empty package */
         Argument->DataLength = ACPI_METHOD_ARGUMENT_LENGTH(0);
         Argument->Argument = 0;
+    }
+    else if (TestEntry->Flags & (DSM_TEST_FLAG_RAW_PAYLOAD_4 | DSM_TEST_FLAG_RAW_PAYLOAD_8))
+    {
+        /* The layout a display driver sends: raw bytes under the package type */
+        Argument->DataLength = (TestEntry->Flags & DSM_TEST_FLAG_RAW_PAYLOAD_4) ? 4 : 8;
+        Argument->Argument = DSM_TEST_RAW_PAYLOAD;
     }
     else
     {
