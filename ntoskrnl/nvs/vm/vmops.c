@@ -24,10 +24,10 @@ MiProtectionIsValid(
     if (Protection & ~MI_PROT_MASK)
         return FALSE;
 
-    if ((Protection & MI_PROT_NOACCESS) == MI_PROT_NOACCESS)
-        return (Access == MI_PROT_NONE);
+    if (Access == MI_PROT_NONE)
+        return MI_PROT_IS_NOACCESS(Protection);
 
-    return (Access != MI_PROT_NONE);
+    return TRUE;
 }
 
 static
@@ -301,7 +301,7 @@ MiSetPrivatePageProtectionAt(
         if (!(MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PROTOTYPE))
             Entry->OriginalPte = MiSoftWithProtection(Entry->OriginalPte, Protection);
 
-        if (!MI_PROT_IS_ACCESSIBLE(Protection) || (Protection & MI_PROT_GUARD))
+        if (!MI_PROT_IS_ACCESSIBLE(Protection) || MI_PROT_IS_GUARD(Protection))
         {
             MI_PTE Transition = MiSoftMake(MiSoftTransition, Protection, Frame);
 
@@ -849,10 +849,8 @@ MiAllocateVirtualMemoryBounded(
 
     if (Protection != MI_PROT_NOACCESS)
     {
-        Protection &= ~MI_PROT_NOCACHE;
-        if (MI_PROT_IS_ACCESSIBLE(Vad->Protection))
-            Protection |= Vad->Protection & MI_PROT_NOCACHE;
-        if (!MiProtectionIsValid(Protection))
+        if (!MiProtApplyCache(&Protection, MI_PROT_IS_ACCESSIBLE(Vad->Protection) ? MI_PROT_CACHE(Vad->Protection) : 0) ||
+            !MiProtectionIsValid(Protection))
         {
             MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
             return STATUS_INVALID_PAGE_PROTECTION;
@@ -1313,10 +1311,9 @@ MiProtectVirtualMemoryEx(
     {
         if (NewProtection != MI_PROT_NOACCESS)
         {
-            NewProtection &= ~MI_PROT_NOCACHE;
-            if (MI_PROT_IS_ACCESSIBLE(Vad->Protection))
-                NewProtection |= Vad->Protection & MI_PROT_NOCACHE;
-            if (!MiProtectionIsValid(NewProtection))
+            if (!MiProtApplyCache(&NewProtection,
+                                  MI_PROT_IS_ACCESSIBLE(Vad->Protection) ? MI_PROT_CACHE(Vad->Protection) : 0) ||
+                !MiProtectionIsValid(NewProtection))
             {
                 MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
                 return STATUS_INVALID_PAGE_PROTECTION;

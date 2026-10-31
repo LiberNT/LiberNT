@@ -29,6 +29,7 @@ MiMapIoSpace(
     _In_ ULONG64 PhysicalAddress,
     _In_ ULONG64 Bytes,
     _In_ MI_CACHE_TYPE CacheType,
+    _In_ ULONG Protection,
     _Out_ PULONG64 VirtualAddress)
 {
     ULONG64 Offset = PhysicalAddress & (PAGE_SIZE - 1);
@@ -39,7 +40,8 @@ MiMapIoSpace(
 
     *VirtualAddress = 0;
 
-    if (Bytes == 0 || Pages > 0xFFFFFFFFULL || PhysicalAddress + Bytes < PhysicalAddress)
+    if (Bytes == 0 || Pages > 0xFFFFFFFFULL ||
+        (PhysicalAddress + Bytes < PhysicalAddress && PhysicalAddress + Bytes != 0))
         return STATUS_INVALID_PARAMETER;
 
     Base = MiReserveSystemPtes(System, (ULONG)Pages);
@@ -49,7 +51,7 @@ MiMapIoSpace(
     for (i = 0; i < Pages; i++)
     {
         MI_FRAME_NUMBER Frame = (MI_FRAME_NUMBER)((PhysicalAddress >> PAGE_SHIFT) + i);
-        NTSTATUS Status = MiSystemMapFrames(System, Base + i * PAGE_SIZE, &Frame, 1, MI_PROT_READWRITE, Flags, FALSE);
+        NTSTATUS Status = MiSystemMapFrames(System, Base + i * PAGE_SIZE, &Frame, 1, Protection, Flags, FALSE);
 
         if (!NT_SUCCESS(Status))
         {
@@ -85,6 +87,7 @@ MiAllocateContiguousMemory(
     _In_ ULONG64 HighestAddress,
     _In_ ULONG64 BoundaryBytes,
     _In_ MI_CACHE_TYPE CacheType,
+    _In_ ULONG Protection,
     _Out_ PULONG64 VirtualAddress)
 {
     PMI_ADDRESS_SPACE Space = &System->SystemSpace;
@@ -124,7 +127,7 @@ MiAllocateContiguousMemory(
     {
         MI_FRAME_NUMBER Frame = First + (ULONG)i;
 
-        if (!NT_SUCCESS(MiSystemMapFrames(System, Base + i * PAGE_SIZE, &Frame, 1, MI_PROT_READWRITE,
+        if (!NT_SUCCESS(MiSystemMapFrames(System, Base + i * PAGE_SIZE, &Frame, 1, Protection,
                                           MiCacheTypeLeafFlags(CacheType) & ~MI_LEAF_DEVICE, TRUE)))
         {
             MiSystemUnmap(System, Base, (ULONG)i, FALSE);
@@ -141,6 +144,68 @@ MiAllocateContiguousMemory(
 
         MiReturnCommit(Space, (LONG64)Pages);
         return NT_SUCCESS(Status) ? STATUS_INSUFFICIENT_RESOURCES : Status;
+    }
+
+    *VirtualAddress = Base;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+MiAllocateNonCachedMemory(
+    _Inout_ PMI_SYSTEM System,
+    _In_ ULONG64 Bytes,
+    _Out_ PULONG64 VirtualAddress)
+{
+    PMI_ADDRESS_SPACE Space = &System->SystemSpace;
+    ULONG64 Pages = (Bytes + PAGE_SIZE - 1) >> PAGE_SHIFT;
+    ULONG Flags = MiCacheTypeLeafFlags(MiCacheNone) & ~MI_LEAF_DEVICE;
+    NTSTATUS Status;
+    ULONG64 Base;
+    ULONG64 i;
+
+    *VirtualAddress = 0;
+
+    if (Bytes == 0 || Bytes >= 0x100000000ULL)
+        return STATUS_INVALID_PARAMETER;
+
+    if (!MiChargeCommit(Space, (LONG64)Pages))
+        return STATUS_COMMITMENT_LIMIT;
+
+    Status = MiReserveSystemPtesEx(System, (ULONG)Pages + 1, &Base);
+    if (!NT_SUCCESS(Status))
+    {
+        MiReturnCommit(Space, (LONG64)Pages);
+        return Status;
+    }
+
+    MiArchPteWrite(MiPtLookup(Space, Base, NULL), (MI_PTE)Pages << 1);
+    Base += PAGE_SIZE;
+
+    for (i = 0; i < Pages; i++)
+    {
+        MI_FRAME_NUMBER Frame = MiPfnAllocatePage(&System->Pfn, MI_ALLOCATE_ZEROED);
+
+        if (Frame == MI_FRAME_INVALID)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+
+        Status = MiSystemMapFrames(System, Base + i * PAGE_SIZE, &Frame, 1, MI_PROT_READWRITE, Flags, TRUE);
+        if (!NT_SUCCESS(Status))
+        {
+            MiPfnShareDecrement(&System->Pfn, (ULONG)Frame, TRUE);
+            break;
+        }
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        MiSystemUnmap(System, Base, (ULONG)i, TRUE);
+        MiArchPteWrite(MiPtLookup(Space, Base - PAGE_SIZE, NULL), 0);
+        MiReleaseSystemPtes(System, Base - PAGE_SIZE, (ULONG)Pages + 1);
+        MiReturnCommit(Space, (LONG64)Pages);
+        return Status;
     }
 
     *VirtualAddress = Base;

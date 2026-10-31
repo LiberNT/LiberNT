@@ -19,8 +19,9 @@ MiArchPteMakeLeaf(ULONG64 Frame, ULONG Protection, ULONG Flags)
     };
     MI_PTE Attributes;
 
-    if (!MI_PROT_IS_ACCESSIBLE(Protection) || (Protection & MI_PROT_GUARD) || Frame > 0xFFFFF)
+    if (!MI_PROT_IS_ACCESSIBLE(Protection) || MI_PROT_IS_GUARD(Protection) || Frame > 0xFFFFF)
         return 0;
+    Flags |= MI_PROT_LEAF_CACHE(Protection);
 
     Attributes = Access[Protection & MI_PROT_ACCESS_MASK];
     Attributes |= MI_I386_PTE_PRESENT | MI_I386_PTE_ACCESSED;
@@ -28,7 +29,7 @@ MiArchPteMakeLeaf(ULONG64 Frame, ULONG Protection, ULONG Flags)
         Attributes |= MI_I386_PTE_USER;
     else if (Flags & MI_LEAF_GLOBAL)
         Attributes |= MI_I386_PTE_GLOBAL;
-    if ((Flags & (MI_LEAF_DEVICE | MI_LEAF_NOCACHE)) || (Protection & MI_PROT_NOCACHE))
+    if (Flags & (MI_LEAF_DEVICE | MI_LEAF_NOCACHE))
         Attributes |= MI_I386_PTE_PCD | MI_I386_PTE_PWT;
     else if (Flags & MI_LEAF_WRITECOMBINE)
         Attributes |= MI_I386_PTE_PWT;

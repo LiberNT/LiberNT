@@ -15,6 +15,31 @@ PFN_COUNT MmNumberOfPhysicalPages;
 PPHYSICAL_MEMORY_DESCRIPTOR MmPhysicalMemoryBlock;
 BOOLEAN Mm64BitPhysicalAddress = TRUE;
 
+static
+BOOLEAN
+MiIoSpaceProtection(
+    _In_ ULONG Protect,
+    _Out_ PULONG Protection,
+    _Out_ MI_CACHE_TYPE *CacheType)
+{
+    if ((Protect & (PAGE_NOCACHE | PAGE_WRITECOMBINE)) == (PAGE_NOCACHE | PAGE_WRITECOMBINE) ||
+        !MiProtectionFromWin32(Protect, Protection))
+    {
+        return FALSE;
+    }
+
+    if (MI_PROT_IS_NOACCESS(*Protection) || MI_PROT_IS_GUARD(*Protection) || MI_PROT_IS_COPY(*Protection) ||
+        ((Protect & PAGE_WRITECOMBINE) && MI_PROT_IS_EXECUTE(*Protection)))
+    {
+        return FALSE;
+    }
+
+    *Protection &= MI_PROT_ACCESS_MASK;
+    *CacheType = (Protect & PAGE_NOCACHE) ? MiCacheNone
+                                          : ((Protect & PAGE_WRITECOMBINE) ? MiCacheWriteCombined : MiCacheFull);
+    return TRUE;
+}
+
 PVOID
 NTAPI
 MmMapIoSpaceEx(
@@ -22,12 +47,15 @@ MmMapIoSpaceEx(
     _In_ SIZE_T NumberOfBytes,
     _In_ ULONG Protect)
 {
-    MI_CACHE_TYPE CacheType = (Protect & PAGE_NOCACHE) ? MiCacheNone
-                                                        : ((Protect & PAGE_WRITECOMBINE) ? MiCacheWriteCombined
-                                                                                         : MiCacheFull);
+    MI_CACHE_TYPE CacheType;
+    ULONG Protection;
     ULONG64 Va;
 
-    if (!NT_SUCCESS(MiMapIoSpace(&MiSystem, (ULONG64)PhysicalAddress.QuadPart, NumberOfBytes, CacheType, &Va)))
+    if (!MiIoSpaceProtection(Protect, &Protection, &CacheType))
+        return NULL;
+
+    if (!NT_SUCCESS(MiMapIoSpace(&MiSystem, (ULONG64)PhysicalAddress.QuadPart, NumberOfBytes, CacheType,
+                                 Protection, &Va)))
         return NULL;
 
     return (PVOID)(ULONG_PTR)Va;
@@ -40,15 +68,15 @@ MmMapIoSpace(
     _In_ SIZE_T NumberOfBytes,
     _In_ MEMORY_CACHING_TYPE CacheType)
 {
-    ULONG64 Va;
+    ULONG Type = (ULONG)CacheType & 0xFF;
 
-    if (!NT_SUCCESS(MiMapIoSpace(&MiSystem, (ULONG64)PhysicalAddress.QuadPart, NumberOfBytes,
-                                 MiCacheTypeFromNt(CacheType), &Va)))
-    {
+    if (Type >= MmMaximumCacheType)
         return NULL;
-    }
 
-    return (PVOID)(ULONG_PTR)Va;
+    return MmMapIoSpaceEx(PhysicalAddress, NumberOfBytes,
+                          (Type == MmCached) ? PAGE_READWRITE
+                                             : ((Type == MmWriteCombined) ? (PAGE_READWRITE | PAGE_WRITECOMBINE)
+                                                                          : (PAGE_READWRITE | PAGE_NOCACHE)));
 }
 
 VOID
@@ -94,16 +122,31 @@ MmAllocateContiguousNodeMemory(
                                                                                          : MiCacheFull);
     ULONG Attempts = 0;
     ULONG WaitAttempts = 0;
+    ULONG Protection;
     NTSTATUS Status;
     ULONG64 Va;
 
-    UNREFERENCED_PARAMETER(PreferredNode);
+    if ((Protect & (PAGE_NOCACHE | PAGE_WRITECOMBINE)) == (PAGE_NOCACHE | PAGE_WRITECOMBINE) ||
+        !MiProtectionFromWin32(Protect, &Protection) || MI_PROT_IS_GUARD(Protection))
+    {
+        return NULL;
+    }
 
+    Protection &= MI_PROT_ACCESS_MASK;
+    if ((Protection != MI_PROT_READWRITE && Protection != MI_PROT_EXECUTE_READWRITE) ||
+        (Protection == MI_PROT_EXECUTE_READWRITE && CacheType != MiCacheFull) ||
+        (BoundaryAddressMultiple.QuadPart & (PAGE_SIZE - 1)) != 0 ||
+        (PreferredNode != MM_ANY_NODE_OK && PreferredNode >= KeNumberNodes))
+    {
+        return NULL;
+    }
+
+    /* TODO: PreferredNode does not steer the frame choice; any node is used */
     do
     {
         Status = MiAllocateContiguousMemory(&MiSystem, NumberOfBytes, (ULONG64)LowestAcceptableAddress.QuadPart,
                                             (ULONG64)HighestAcceptableAddress.QuadPart,
-                                            (ULONG64)BoundaryAddressMultiple.QuadPart, CacheType, &Va);
+                                            (ULONG64)BoundaryAddressMultiple.QuadPart, CacheType, Protection, &Va);
     } while ((Status == STATUS_NO_MEMORY && NT_SUCCESS(MiWaitForMemory(Status, &WaitAttempts))) ||
              (Status == STATUS_INSUFFICIENT_RESOURCES && Attempts++ < 2 &&
               MiBalanceMemory(&MiSystem, &MiProcessManager) != 0));
@@ -121,12 +164,14 @@ MmAllocateContiguousMemorySpecifyCacheNode(
     _In_ MEMORY_CACHING_TYPE CacheType,
     _In_ NODE_REQUIREMENT PreferredNode)
 {
-    ULONG Protect = PAGE_READWRITE;
+    ULONG Protect;
 
-    if ((CacheType & 0xFF) == MmNonCached)
-        Protect |= PAGE_NOCACHE;
-    else if ((CacheType & 0xFF) == MmWriteCombined)
-        Protect |= PAGE_WRITECOMBINE;
+    if (CacheType == MmCached)
+        Protect = PAGE_EXECUTE_READWRITE;
+    else if (CacheType == MmWriteCombined)
+        Protect = PAGE_READWRITE | PAGE_WRITECOMBINE;
+    else
+        Protect = PAGE_READWRITE | PAGE_NOCACHE;
 
     return MmAllocateContiguousNodeMemory(NumberOfBytes, LowestAcceptableAddress, HighestAcceptableAddress,
                                           BoundaryAddressMultiple, Protect, PreferredNode);
@@ -155,7 +200,8 @@ MmAllocateContiguousMemory(
     PHYSICAL_ADDRESS Zero;
 
     Zero.QuadPart = 0;
-    return MmAllocateContiguousMemorySpecifyCache(NumberOfBytes, Zero, HighestAcceptableAddress, Zero, MmCached);
+    return MmAllocateContiguousNodeMemory(NumberOfBytes, Zero, HighestAcceptableAddress, Zero,
+                                          PAGE_EXECUTE_READWRITE, MM_ANY_NODE_OK);
 }
 
 VOID
@@ -183,11 +229,17 @@ NTAPI
 MmAllocateNonCachedMemory(
     _In_ SIZE_T NumberOfBytes)
 {
-    PHYSICAL_ADDRESS Zero, Highest;
+    ULONG Attempts = 0;
+    NTSTATUS Status;
+    ULONG64 Va;
 
-    Zero.QuadPart = 0;
-    Highest.QuadPart = -1;
-    return MmAllocateContiguousMemorySpecifyCache(NumberOfBytes, Zero, Highest, Zero, MmNonCached);
+    do
+    {
+        Status = MiAllocateNonCachedMemory(&MiSystem, NumberOfBytes, &Va);
+    } while (Status == STATUS_INSUFFICIENT_RESOURCES && Attempts++ < 2 &&
+             MiBalanceMemory(&MiSystem, &MiProcessManager) != 0);
+
+    return NT_SUCCESS(Status) ? (PVOID)(ULONG_PTR)Va : NULL;
 }
 
 VOID

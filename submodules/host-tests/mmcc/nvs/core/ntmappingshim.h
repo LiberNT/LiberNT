@@ -24,7 +24,16 @@ extern ULONG_PTR MiMappingTestBugCheckCode;
 #define MmGetMdlVirtualAddress(Mdl) ((PVOID)((ULONG_PTR)(Mdl)->StartVa + (Mdl)->ByteOffset))
 #define MDL_PARTIAL_HAS_BEEN_MAPPED 0x20
 #define SYSTEM_PTE_MISUSE 0xDA
-typedef enum { MmNonCached, MmCached, MmWriteCombined } MEMORY_CACHING_TYPE;
+typedef enum
+{
+    MmNonCached,
+    MmCached,
+    MmWriteCombined,
+    MmHardwareCoherentCached,
+    MmNonCachedUnordered,
+    MmUSWCCached,
+    MmMaximumCacheType
+} MEMORY_CACHING_TYPE;
 
 static inline void KeBugCheckEx(ULONG Code, ULONG_PTR Reason, ULONG_PTR Address, ULONG_PTR Tag, ULONG_PTR Actual)
 {

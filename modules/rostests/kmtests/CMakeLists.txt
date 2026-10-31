@@ -221,6 +221,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeTimer2KM.c
     ntos_ke/KeWaitMultiple.c
     ntos_mm/MmAllocateContiguousNode.c
+    ntos_mm/MmDriverMemory.c
     ntos_mm/MmMdl.c
     ntos_mm/MmMdlDispatch.c
     ntos_mm/MmLargePages.c

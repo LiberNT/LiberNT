@@ -36,8 +36,11 @@ MiProtectionFromWin32(
             return FALSE;
     }
 
-    if (Win32Protect & ~(0xFFUL | PAGE_GUARD | PAGE_NOCACHE | PAGE_WRITECOMBINE))
+    if ((Win32Protect & ~(0xFFUL | PAGE_GUARD | PAGE_NOCACHE | PAGE_WRITECOMBINE)) ||
+        (Win32Protect & (PAGE_NOCACHE | PAGE_WRITECOMBINE)) == (PAGE_NOCACHE | PAGE_WRITECOMBINE))
+    {
         return FALSE;
+    }
 
     if (Win32Protect & (PAGE_GUARD | PAGE_NOCACHE | PAGE_WRITECOMBINE))
     {
@@ -52,6 +55,9 @@ MiProtectionFromWin32(
 
         if (Win32Protect & PAGE_NOCACHE)
             Base |= MI_PROT_NOCACHE;
+
+        if (Win32Protect & PAGE_WRITECOMBINE)
+            Base |= MI_PROT_WRITECOMBINE;
     }
 
     *Protection = Base;
@@ -69,16 +75,17 @@ MiProtectionToWin32(
     };
     ULONG Win32;
 
-    if ((Protection & MI_PROT_NOACCESS) == MI_PROT_NOACCESS || (Protection & MI_PROT_ACCESS_MASK) == 0)
+    if (!MI_PROT_IS_ACCESSIBLE(Protection))
         return PAGE_NOACCESS;
 
     Win32 = Access[Protection & MI_PROT_ACCESS_MASK];
 
-    if (Protection & MI_PROT_GUARD)
+    if (MI_PROT_IS_GUARD(Protection))
         Win32 |= PAGE_GUARD;
-
-    if (Protection & MI_PROT_NOCACHE)
+    else if (MI_PROT_IS_NOCACHE(Protection))
         Win32 |= PAGE_NOCACHE;
+    else if (MI_PROT_IS_WRITECOMBINE(Protection))
+        Win32 |= PAGE_WRITECOMBINE;
 
     return Win32;
 }

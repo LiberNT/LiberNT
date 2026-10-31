@@ -47,6 +47,20 @@ VmWindowsProtection(void)
     CHECK(MiAllocationProtectionFromWin32(PAGE_EXECUTE_READWRITE | PAGE_GUARD | PAGE_TARGETS_INVALID,
                                         &Protection));
     CHECK(Protection == (MI_PROT_EXECUTE_READWRITE | MI_PROT_GUARD));
+
+    CHECK(MiProtectionFromWin32(PAGE_READWRITE | PAGE_WRITECOMBINE, &Protection));
+    CHECK(Protection == (MI_PROT_READWRITE | MI_PROT_WRITECOMBINE));
+    CHECK(MI_PROT_IS_ACCESSIBLE(Protection) && MI_PROT_IS_WRITECOMBINE(Protection) &&
+          !MI_PROT_IS_GUARD(Protection) && !MI_PROT_IS_NOCACHE(Protection) && !MI_PROT_IS_NOACCESS(Protection));
+    CHECK(MiProtectionToWin32(Protection) == (PAGE_READWRITE | PAGE_WRITECOMBINE));
+    CHECK(MiProtectionFromWin32(PAGE_READONLY | PAGE_NOCACHE, &Protection));
+    CHECK(MiProtectionToWin32(Protection) == (PAGE_READONLY | PAGE_NOCACHE));
+    CHECK(MiProtectionFromWin32(PAGE_NOACCESS, &Protection) && MI_PROT_IS_NOACCESS(Protection) &&
+          !MI_PROT_IS_WRITECOMBINE(Protection));
+    CHECK(MiProtectionToWin32(Protection) == PAGE_NOACCESS);
+    CHECK(!MiProtectionFromWin32(PAGE_READWRITE | PAGE_NOCACHE | PAGE_WRITECOMBINE, &Protection));
+    CHECK(!MiProtectionFromWin32(PAGE_READWRITE | PAGE_GUARD | PAGE_WRITECOMBINE, &Protection));
+    CHECK(!MiProtectionFromWin32(PAGE_NOACCESS | PAGE_WRITECOMBINE, &Protection));
 }
 
 void

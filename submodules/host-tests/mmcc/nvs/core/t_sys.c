@@ -256,7 +256,7 @@ SysGraphicsMappingCapacity(void)
         Slab = MiReserveSystemPtes(&World.System, SlabPages + 1);
         CHECK(Basic != 0 && Slab != 0);
         Status = MiMapIoSpace(&World.System, Physical, (ULONG64)SlabPages << PAGE_SHIFT,
-                              MiCacheWriteCombined, &Mapping);
+                              MiCacheWriteCombined, MI_PROT_READWRITE, &Mapping);
         if (Case == 0)
         {
             CHECK(Status == STATUS_INSUFFICIENT_RESOURCES);
@@ -403,7 +403,8 @@ SysIoAndContiguous(void)
     WorldAttachPageFile(&World, 2048);
 
     Device = MiPfnAllocatePage(&World.System.Pfn, MI_ALLOCATE_ZEROED);
-    CHECK(NT_SUCCESS(MiMapIoSpace(&World.System, ((ULONG64)Device << PAGE_SHIFT) + 0x123, 0x1000, MiCacheNone, &Va)));
+    CHECK(NT_SUCCESS(MiMapIoSpace(&World.System, ((ULONG64)Device << PAGE_SHIFT) + 0x123, 0x1000, MiCacheNone, MI_PROT_READWRITE,
+                                  &Va)));
     CHECK((Va & 0xFFF) == 0x123);
     CHECK(NT_SUCCESS(KernelWrite64(&World, 0, Va, 0xD371CE)));
     memcpy(&Frame, MachineFrame(&World.Machine, Device) + 0x123, sizeof(Frame));
@@ -414,7 +415,15 @@ SysIoAndContiguous(void)
     MiUnmapIoSpace(&World.System, Va, 0x1000);
     KernelRead64(&World, 0, Va, &Status);
     CHECK(Status == STATUS_ACCESS_VIOLATION);
-    CHECK(MiMapIoSpace(&World.System, 0x1000, 0, MiCacheNone, &Va) == STATUS_INVALID_PARAMETER);
+    CHECK(MiMapIoSpace(&World.System, 0x1000, 0, MiCacheNone, MI_PROT_READWRITE, &Va) == STATUS_INVALID_PARAMETER);
+    CHECK(MiMapIoSpace(&World.System, 0x2000, ~0ULL - 0x1000, MiCacheNone, MI_PROT_READWRITE, &Va) ==
+          STATUS_INVALID_PARAMETER);
+    CHECK(NT_SUCCESS(MiMapIoSpace(&World.System, (ULONG64)Device << PAGE_SHIFT, 0x1000, MiCacheNone,
+                                  MI_PROT_READONLY, &Va)));
+    KernelRead64(&World, 0, Va, &Status);
+    CHECK(Status == STATUS_SUCCESS);
+    CHECK(KernelWrite64(&World, 0, Va, 0x5EAD) == STATUS_ACCESS_VIOLATION);
+    MiUnmapIoSpace(&World.System, Va, 0x1000);
     MiPfnShareDecrement(&World.System.Pfn, Device, TRUE);
 
     {
@@ -451,7 +460,7 @@ SysIoAndContiguous(void)
     }
 
     CHECK(NT_SUCCESS(MiAllocateContiguousMemory(&World.System, 64 * 4096, 0, 0x3FFFFF, 64 * 4096, MiCacheFull,
-                                                &Big)));
+                                                MI_PROT_READWRITE, &Big)));
     for (i = 0; i < 64; i++)
     {
         ULONG64 Physical = MiGetPhysicalAddress(&World.System.SystemSpace, Big + i * 4096ULL);
@@ -461,7 +470,7 @@ SysIoAndContiguous(void)
         CHECK(NT_SUCCESS(KernelWrite64(&World, 0, Big + i * 4096ULL, i)));
     }
     CHECK((MiGetPhysicalAddress(&World.System.SystemSpace, Big) & (64 * 4096 - 1)) == 0);
-    CHECK(MiAllocateContiguousMemory(&World.System, 4096ULL * 4096, 0, ~0ULL, 0, MiCacheFull, &Va) ==
+    CHECK(MiAllocateContiguousMemory(&World.System, 4096ULL * 4096, 0, ~0ULL, 0, MiCacheFull, MI_PROT_READWRITE, &Va) ==
           STATUS_INSUFFICIENT_RESOURCES);
     MiFreeContiguousMemory(&World.System, Big);
 
@@ -472,10 +481,34 @@ SysIoAndContiguous(void)
         if ((Held[i] & 7) != 3)
             MiPfnShareDecrement(&World.System.Pfn, Held[i], TRUE);
     }
-    CHECK(MiAllocateContiguousMemory(&World.System, 8 * 4096, 0, ~0ULL, 0, MiCacheFull, &Va) ==
+    CHECK(MiAllocateContiguousMemory(&World.System, 8 * 4096, 0, ~0ULL, 0, MiCacheFull, MI_PROT_READWRITE, &Va) ==
           STATUS_INSUFFICIENT_RESOURCES);
-    CHECK(NT_SUCCESS(MiAllocateContiguousMemory(&World.System, 7 * 4096, 0, ~0ULL, 0, MiCacheFull, &Va)));
+    CHECK(NT_SUCCESS(MiAllocateContiguousMemory(&World.System, 7 * 4096, 0, ~0ULL, 0, MiCacheFull, MI_PROT_READWRITE,
+                                                &Va)));
     MiFreeContiguousMemory(&World.System, Va);
+    CHECK(NT_SUCCESS(MiAllocateNonCachedMemory(&World.System, 64 * 4096 - 1, &Va)));
+    {
+        ULONG Discontiguous = 0;
+        ULONG64 Previous = 0;
+
+        for (i = 0; i < 64; i++)
+        {
+            ULONG64 Physical;
+            MI_PTE Pte;
+
+            CHECK(MiPtTranslate(&World.System.SystemSpace, Va + i * 4096ULL, &Physical, &Pte));
+            CHECK(MiArchPteLeafFlags(Pte) & MI_LEAF_NOCACHE);
+            CHECK(*(ULONG64 *)MachineFrame(&World.Machine, (ULONG)(Physical >> PAGE_SHIFT)) == 0);
+            if (i != 0 && Physical != Previous + 4096)
+                Discontiguous++;
+            Previous = Physical;
+            CHECK(NT_SUCCESS(KernelWrite64(&World, 0, Va + i * 4096ULL, i)));
+        }
+        CHECK(Discontiguous != 0);
+    }
+    MiFreeContiguousMemory(&World.System, Va);
+    CHECK(MiAllocateNonCachedMemory(&World.System, 0, &Va) == STATUS_INVALID_PARAMETER);
+    CHECK(MiAllocateNonCachedMemory(&World.System, 0x100000000ULL, &Va) == STATUS_INVALID_PARAMETER);
     for (i = 0; i < HeldCount; i++)
     {
         if ((Held[i] & 7) == 3)
@@ -491,7 +524,8 @@ SysIoAndContiguous(void)
         CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + i * 4096ULL, i ^ 0xABCD)));
     CHECK(MiTrimAddressSpace(&Process, 4000, TRUE) == 1800);
     CHECK(MiWriteModifiedPages(&World.System, 4000) == 1800);
-    CHECK(NT_SUCCESS(MiAllocateContiguousMemory(&World.System, 512 * 4096, 0, ~0ULL, 0, MiCacheFull, &Big)));
+    CHECK(NT_SUCCESS(MiAllocateContiguousMemory(&World.System, 512 * 4096, 0, ~0ULL, 0, MiCacheFull, MI_PROT_READWRITE,
+                                                &Big)));
     CHECK(MI_ATOMIC_READ64(&World.System.Pfn.Repurposed) != 0);
     for (i = 0; i < 1800; i += 7)
         CHECK(UserRead64(&World, 0, Base + i * 4096ULL, &Status) == (i ^ 0xABCD));
@@ -993,7 +1027,7 @@ SysMdlCacheAttributes(void)
     for (i = 0; i < RTL_NUMBER_OF(Frames); i++)
     {
         CHECK(NT_SUCCESS(MiAllocateContiguousMemory(&World.System, PAGE_SIZE, 0, ~0ULL, 0,
-                                                    Types[i], &Allocations[i])));
+                                                    Types[i], MI_PROT_READWRITE, &Allocations[i])));
         CHECK(MiPtTranslate(&World.System.SystemSpace, Allocations[i], &Physical, &Pte));
         CHECK(MiArchPteLeafFlags(Pte) == Flags[i]);
         Frames[i] = Physical >> PAGE_SHIFT;

@@ -31,7 +31,7 @@ int main(void)
         for (Flags = 0; Flags < 128; Flags++)
         {
             Pte = MiArchPteMakeLeaf(Frame, Protection, Flags);
-            if (!MI_PROT_IS_ACCESSIBLE(Protection) || (Protection & MI_PROT_GUARD))
+            if (!MI_PROT_IS_ACCESSIBLE(Protection) || MI_PROT_IS_GUARD(Protection))
             {
                 CHECK(Pte == 0);
                 continue;
@@ -46,9 +46,9 @@ int main(void)
             CHECK(!!(Pte & 2) == !!(MI_PROT_IS_WRITABLE(Protection) &&
                                      (Flags & (MI_LEAF_DIRTY | MI_LEAF_HARDWARE_DIRTY))));
             CHECK(MiArchPteIsDirty(Pte) == !!(MI_PROT_IS_WRITABLE(Protection) && (Flags & MI_LEAF_DIRTY)));
-            if ((Flags & (MI_LEAF_DEVICE | MI_LEAF_NOCACHE)) || (Protection & MI_PROT_NOCACHE))
+            if ((Flags & (MI_LEAF_DEVICE | MI_LEAF_NOCACHE)) || MI_PROT_IS_NOCACHE(Protection))
                 CHECK((Pte & 0x18) == 0x18);
-            else if (Flags & MI_LEAF_WRITECOMBINE)
+            else if ((Flags & MI_LEAF_WRITECOMBINE) || MI_PROT_IS_WRITECOMBINE(Protection))
                 CHECK((Pte & 0x18) == 0x08);
             else
                 CHECK((Pte & 0x18) == 0);

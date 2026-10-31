@@ -33,15 +33,16 @@ MiArchPteMakeLeaf(
     };
     MI_PTE Attributes;
 
-    if (!MI_PROT_IS_ACCESSIBLE(Protection) || (Protection & MI_PROT_GUARD))
+    if (!MI_PROT_IS_ACCESSIBLE(Protection) || MI_PROT_IS_GUARD(Protection))
         return 0;
+    Flags |= MI_PROT_LEAF_CACHE(Protection);
     Attributes = Access[Protection & MI_PROT_ACCESS_MASK];
     Attributes |= MI_AMD64_PTE_PRESENT | MI_AMD64_PTE_ACCESSED;
     if (Flags & MI_LEAF_USER)
         Attributes |= MI_AMD64_PTE_USER;
     else if (Flags & MI_LEAF_GLOBAL)
         Attributes |= MI_AMD64_PTE_GLOBAL;
-    if ((Flags & (MI_LEAF_DEVICE | MI_LEAF_NOCACHE)) || (Protection & MI_PROT_NOCACHE))
+    if (Flags & (MI_LEAF_DEVICE | MI_LEAF_NOCACHE))
         Attributes |= MI_AMD64_PTE_PCD | MI_AMD64_PTE_PWT;
     else if (Flags & MI_LEAF_WRITECOMBINE)
         Attributes |= MI_AMD64_PTE_PWT;

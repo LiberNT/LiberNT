@@ -21,6 +21,8 @@
 #define MI_PROT_NOCACHE           0x08
 #define MI_PROT_GUARD             0x10
 #define MI_PROT_NOACCESS          0x18
+#define MI_PROT_WRITECOMBINE      0x18
+#define MI_PROT_CACHE_MASK        0x18
 #define MI_PROT_MASK              0x1F
 
 #define MI_PROT_IS_WRITABLE(p)    (((p) & MI_PROT_ACCESS_MASK) == MI_PROT_READWRITE || \
@@ -31,8 +33,19 @@
                                    ((p) & MI_PROT_ACCESS_MASK) == MI_PROT_EXECUTE_READ || \
                                    ((p) & MI_PROT_ACCESS_MASK) == MI_PROT_EXECUTE_READWRITE || \
                                    ((p) & MI_PROT_ACCESS_MASK) == MI_PROT_EXECUTE_WRITECOPY)
-#define MI_PROT_IS_ACCESSIBLE(p)  (((p) & MI_PROT_ACCESS_MASK) != MI_PROT_NONE && \
-                                   ((p) & MI_PROT_NOACCESS) != MI_PROT_NOACCESS)
+#define MI_PROT_IS_ACCESSIBLE(p)  (((p) & MI_PROT_ACCESS_MASK) != MI_PROT_NONE)
+#define MI_PROT_IS_NOACCESS(p)    (((p) & MI_PROT_MASK) == MI_PROT_NOACCESS)
+#define MI_PROT_IS_GUARD(p)       (((p) & MI_PROT_CACHE_MASK) == MI_PROT_GUARD)
+#define MI_PROT_IS_NOCACHE(p)     (((p) & MI_PROT_CACHE_MASK) == MI_PROT_NOCACHE)
+#define MI_PROT_IS_WRITECOMBINE(p) (MI_PROT_IS_ACCESSIBLE(p) && \
+                                    ((p) & MI_PROT_CACHE_MASK) == MI_PROT_WRITECOMBINE)
+#define MI_PROT_CACHE(p)          ((MI_PROT_IS_NOCACHE(p) || MI_PROT_IS_WRITECOMBINE(p)) ? \
+                                   ((p) & MI_PROT_CACHE_MASK) : 0)
+#define MI_PROT_WITHOUT_CACHE(p)  ((p) & ~(ULONG)MI_PROT_CACHE(p))
+#define MI_PROT_LEAF_CACHE(p)     (MI_PROT_IS_NOCACHE(p) ? MI_LEAF_NOCACHE : \
+                                   (MI_PROT_IS_WRITECOMBINE(p) ? MI_LEAF_WRITECOMBINE : 0))
+#define MI_PROT_FROM_LEAF_CACHE(f) (((f) & MI_LEAF_NOCACHE) ? MI_PROT_NOCACHE : \
+                                    (((f) & MI_LEAF_WRITECOMBINE) ? MI_PROT_WRITECOMBINE : 0))
 #define MI_PROT_IS_READABLE(p)    (MI_PROT_IS_ACCESSIBLE(p) && \
                                    ((p) & MI_PROT_ACCESS_MASK) != MI_PROT_EXECUTE)
 
@@ -127,6 +140,18 @@ MiSoftWithProtection(_In_ MI_PTE Pte, _In_ ULONG Protection)
 {
     return (Pte & ~(MI_SOFT_PROT_MASK << MI_SOFT_PROT_SHIFT)) |
            (((ULONG64)Protection & MI_SOFT_PROT_MASK) << MI_SOFT_PROT_SHIFT);
+}
+
+FORCEINLINE
+BOOLEAN
+MiProtApplyCache(
+    _Inout_ PULONG Protection,
+    _In_ ULONG Cache)
+{
+    if (Cache != 0 && MI_PROT_IS_GUARD(*Protection))
+        return FALSE;
+    *Protection = MI_PROT_WITHOUT_CACHE(*Protection) | Cache;
+    return TRUE;
 }
 
 MI_PTE MiArchPteMakeLeaf(_In_ ULONG64 Frame, _In_ ULONG Protection, _In_ ULONG Flags);

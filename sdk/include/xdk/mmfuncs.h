@@ -584,6 +584,22 @@ MmMapViewInSystemSpace(
   _Outptr_result_bytebuffer_(*ViewSize) PVOID *MappedBase,
   _Inout_ PSIZE_T ViewSize);
 
+#if (NTDDI_VERSION >= NTDDI_WIN8)
+#define MM_SYSTEM_VIEW_EXCEPTIONS_FOR_INPAGE_ERRORS 0x1
+
+_Must_inspect_result_
+_IRQL_requires_max_(APC_LEVEL)
+NTKERNELAPI
+NTSTATUS
+NTAPI
+MmMapViewInSystemSpaceEx(
+  _In_ PVOID Section,
+  _Outptr_result_bytebuffer_(*ViewSize) PVOID *MappedBase,
+  _Inout_ PSIZE_T ViewSize,
+  _Inout_ PLARGE_INTEGER SectionOffset,
+  _In_ ULONG_PTR Flags);
+#endif
+
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTKERNELAPI
 BOOLEAN

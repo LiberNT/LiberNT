@@ -133,8 +133,7 @@ MiSystemMapFrames(
 
         if (OwnFrames)
         {
-            ULONG CacheFlags = (LeafFlags & MI_LEAF_CACHE_MASK) |
-                               ((Protection & MI_PROT_NOCACHE) ? MI_LEAF_NOCACHE : 0);
+            ULONG CacheFlags = (LeafFlags & MI_LEAF_CACHE_MASK) | MI_PROT_LEAF_CACHE(Protection);
 
             MiPfnInitializePage(&System->Pfn, (ULONG)Frames[i], MiPtSlotAddress(Slot, TableFrame, Va), TableFrame,
                                 MiSoftMake(MiSoftDemandZero, Protection, 0), 0);
@@ -326,7 +325,7 @@ MiSystemProtect(
     PMI_ADDRESS_SPACE Space = &System->SystemSpace;
     ULONG i;
 
-    if (!MI_PROT_IS_ACCESSIBLE(Protection) && (Protection & MI_PROT_NOACCESS) != MI_PROT_NOACCESS)
+    if (!MI_PROT_IS_ACCESSIBLE(Protection) && !MI_PROT_IS_NOACCESS(Protection))
         return STATUS_INVALID_PAGE_PROTECTION;
 
     for (i = 0; i < Count; i++)
@@ -353,7 +352,7 @@ MiSystemProtect(
             return STATUS_NOT_COMMITTED;
         }
 
-        if ((Protection & MI_PROT_NOACCESS) == MI_PROT_NOACCESS)
+        if (MI_PROT_IS_NOACCESS(Protection))
         {
             MiPtWrite(Space, Va, Slot, TableFrame,
                       MiSoftMake(MiSoftResident, MI_PROT_NOACCESS, Frame) |

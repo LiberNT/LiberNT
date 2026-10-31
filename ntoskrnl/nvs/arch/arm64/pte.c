@@ -42,9 +42,10 @@ MiArchPteMakeLeaf(
 {
     MI_PTE Pte = A64_VALID | A64_TYPE_PAGE | A64_AF | ((Frame << 12) & A64_FRAME_MASK);
 
+    Flags |= MI_PROT_LEAF_CACHE(Protection);
     if (Flags & MI_LEAF_DEVICE)
         Pte |= A64_ATTR_DEVICE;
-    else if ((Flags & MI_LEAF_NOCACHE) || (Protection & MI_PROT_NOCACHE))
+    else if (Flags & MI_LEAF_NOCACHE)
         Pte |= A64_ATTR_NOCACHE | A64_SH_INNER;
     else if (Flags & MI_LEAF_WRITECOMBINE)
         Pte |= A64_ATTR_WC | A64_SH_INNER;

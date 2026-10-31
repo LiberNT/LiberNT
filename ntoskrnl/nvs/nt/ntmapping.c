@@ -19,15 +19,18 @@ MmAllocateMappingAddress(
     _In_ SIZE_T NumberOfBytes,
     _In_ ULONG PoolTag)
 {
-    ULONG Pages = (ULONG)BYTES_TO_PAGES(NumberOfBytes);
+    ULONG64 Pages = BYTES_TO_PAGES((ULONG64)NumberOfBytes);
     ULONG64 Base;
     PMI_PTE Slot;
     PMI_PTE TagSlot;
 
-    if (Pages == 0 || PoolTag == 0)
+    if (Pages == 0)
+        KeBugCheckEx(SYSTEM_PTE_MISUSE, 0x100, 0, PoolTag, 0);
+
+    if (PoolTag == 0 || Pages >= 0xFFFFFFFEULL)
         return NULL;
 
-    Base = MiReserveSystemPtes(&MiSystem, Pages + 2);
+    Base = MiReserveSystemPtes(&MiSystem, (ULONG)Pages + 2);
     if (Base == 0)
         return NULL;
 
@@ -70,7 +73,12 @@ MmMapLockedPagesWithReservedMapping(
     PMI_PTE Slot = MiPtLookup(&MiSystem.SystemSpace, Base - 2 * PAGE_SIZE, NULL);
     PMI_PTE TagSlot = MiPtLookup(&MiSystem.SystemSpace, Base - PAGE_SIZE, NULL);
     ULONG Count = ADDRESS_AND_SIZE_TO_SPAN_PAGES(MmGetMdlVirtualAddress(Mdl), Mdl->ByteCount);
+    ULONG Type = (ULONG)CacheType;
 
+    if (Type >= MmMaximumCacheType)
+        return NULL;
+
+    /* FIXME: MappingAddress must be the reservation start; Windows also takes an address inside it */
     if ((ULONG)(MiArchPteRead(TagSlot) >> 1) != PoolTag)
         KeBugCheckEx(SYSTEM_PTE_MISUSE, 0x104, (ULONG_PTR)MappingAddress, PoolTag, MiArchPteRead(TagSlot) >> 1);
 
@@ -80,8 +88,9 @@ MmMapLockedPagesWithReservedMapping(
     if (!NT_SUCCESS(MiSystemMapFrames(&MiSystem, Base, (const MI_FRAME_NUMBER *)MmGetMdlPfnArray(Mdl), Count,
                                       MI_PROT_READWRITE,
                                       MI_LEAF_PFN_CACHE |
-                                      (((CacheType & 0xFF) == MmNonCached) ? MI_LEAF_NOCACHE :
-                                       ((CacheType & 0xFF) == MmWriteCombined) ? MI_LEAF_WRITECOMBINE : 0), FALSE)))
+                                      ((Type == MmNonCached || Type == MmNonCachedUnordered) ? MI_LEAF_NOCACHE :
+                                       (Type == MmWriteCombined || Type == MmUSWCCached) ? MI_LEAF_WRITECOMBINE : 0),
+                                      FALSE)))
     {
         return NULL;
     }

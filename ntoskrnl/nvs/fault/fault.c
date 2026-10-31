@@ -270,7 +270,7 @@ MiMakePageValid(
     }
 
     MiPtWrite(Space, VirtualAddress, Slot, TableFrame,
-              MiArchPteMakeLeaf(Frame, Protection & ~MI_PROT_GUARD, Flags));
+              MiArchPteMakeLeaf(Frame, MI_PROT_IS_GUARD(Protection) ? Protection & ~MI_PROT_GUARD : Protection, Flags));
     MI_ATOMIC_ADD64(&Space->ResidentPages, 1);
     return STATUS_SUCCESS;
 }
@@ -491,9 +491,9 @@ RetryPage:
                 break;
             }
 
-            if (Protection & MI_PROT_NOCACHE)
+            if (MI_PROT_LEAF_CACHE(Protection) != 0)
             {
-                Status = MiPfnSetCache(&System->Pfn, Frame, MI_LEAF_NOCACHE);
+                Status = MiPfnSetCache(&System->Pfn, Frame, MI_PROT_LEAF_CACHE(Protection));
                 if (!NT_SUCCESS(Status))
                 {
                     MiPfnShareDecrement(&System->Pfn, Frame, TRUE);
@@ -568,9 +568,9 @@ RetryPage:
                 return STATUS_IN_PAGE_ERROR;
             }
 
-            if (Protection & MI_PROT_NOCACHE)
+            if (MI_PROT_LEAF_CACHE(Protection) != 0)
             {
-                Status = MiPfnSetCache(&System->Pfn, Frame, MI_LEAF_NOCACHE);
+                Status = MiPfnSetCache(&System->Pfn, Frame, MI_PROT_LEAF_CACHE(Protection));
                 if (!NT_SUCCESS(Status))
                 {
                     MiPfnShareDecrement(&System->Pfn, Frame, TRUE);

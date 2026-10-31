@@ -106,12 +106,14 @@ NTSTATUS MiGrowKernelStack(_Inout_ PMI_SYSTEM System, _In_ ULONG64 StackTop, _In
                            _In_ ULONG64 NewLimit);
 
 NTSTATUS MiMapIoSpace(_Inout_ PMI_SYSTEM System, _In_ ULONG64 PhysicalAddress, _In_ ULONG64 Bytes,
-                      _In_ MI_CACHE_TYPE CacheType, _Out_ PULONG64 VirtualAddress);
+                      _In_ MI_CACHE_TYPE CacheType, _In_ ULONG Protection, _Out_ PULONG64 VirtualAddress);
 VOID MiUnmapIoSpace(_Inout_ PMI_SYSTEM System, _In_ ULONG64 VirtualAddress, _In_ ULONG64 Bytes);
 
 NTSTATUS MiAllocateContiguousMemory(_Inout_ PMI_SYSTEM System, _In_ ULONG64 Bytes, _In_ ULONG64 LowestAddress,
                                     _In_ ULONG64 HighestAddress, _In_ ULONG64 BoundaryBytes,
-                                    _In_ MI_CACHE_TYPE CacheType, _Out_ PULONG64 VirtualAddress);
+                                    _In_ MI_CACHE_TYPE CacheType, _In_ ULONG Protection,
+                                    _Out_ PULONG64 VirtualAddress);
+NTSTATUS MiAllocateNonCachedMemory(_Inout_ PMI_SYSTEM System, _In_ ULONG64 Bytes, _Out_ PULONG64 VirtualAddress);
 VOID MiFreeContiguousMemory(_Inout_ PMI_SYSTEM System, _In_ ULONG64 VirtualAddress);
 
 NTSTATUS MiLockPages(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 StartVa, _In_ ULONG PageCount,

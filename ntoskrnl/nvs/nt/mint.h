@@ -139,7 +139,7 @@ MiCacheTypeFromNt(
     if (CacheType == MmCached || CacheType == MmHardwareCoherentCached)
         return MiCacheFull;
 
-    if (CacheType == MmWriteCombined)
+    if (CacheType == MmWriteCombined || CacheType == MmUSWCCached)
         return MiCacheWriteCombined;
 
     return MiCacheNone;

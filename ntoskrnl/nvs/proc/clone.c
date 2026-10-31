@@ -324,9 +324,9 @@ MiCloneMakeResident(PMI_CLONE_PAGE Page)
         }
         MI_ATOMIC_ADD64(&System->PageFile->PagesRead, 1);
     }
-    if (MiSoftProtection(Pte) & MI_PROT_NOCACHE)
+    if (MI_PROT_LEAF_CACHE(MiSoftProtection(Pte)) != 0)
     {
-        Status = MiPfnSetCache(&System->Pfn, Frame, MI_LEAF_NOCACHE);
+        Status = MiPfnSetCache(&System->Pfn, Frame, MI_PROT_LEAF_CACHE(MiSoftProtection(Pte)));
         if (!NT_SUCCESS(Status))
         {
             MiPfnShareDecrement(&System->Pfn, Frame, TRUE);
@@ -460,9 +460,9 @@ MiCloneFault(PMI_ADDRESS_SPACE Space, ULONG64 Va, ULONG Access, BOOLEAN ConsumeG
             RtlCopyMemory(Target, Source, PAGE_SIZE);
             MiPfnUnmapFrame(&System->Pfn, Target);
             MiPfnUnmapFrame(&System->Pfn, Source);
-            if (Protection & MI_PROT_NOCACHE)
+            if (MI_PROT_LEAF_CACHE(Protection) != 0)
             {
-                Status = MiPfnSetCache(&System->Pfn, NewFrame, MI_LEAF_NOCACHE);
+                Status = MiPfnSetCache(&System->Pfn, NewFrame, MI_PROT_LEAF_CACHE(Protection));
                 if (!NT_SUCCESS(Status))
                 {
                     MiPfnShareDecrement(&System->Pfn, NewFrame, TRUE);
@@ -713,7 +713,7 @@ MiClonePublishPage(PMI_ADDRESS_SPACE Source, PMI_ADDRESS_SPACE Target, PMI_CLONE
     AllocationProtection = Vad->Segment != NULL ? Vad->Segment->Protection : Vad->Protection;
     PrototypeProtection = MI_PROT_READWRITE;
     if (MI_PROT_IS_ACCESSIBLE(AllocationProtection))
-        PrototypeProtection |= AllocationProtection & MI_PROT_NOCACHE;
+        PrototypeProtection |= MI_PROT_CACHE(AllocationProtection);
     Protection = Valid ? MiViewPteProtection(Source, Vad, Va, Pte) : MiSoftProtection(Pte);
     Work->Target->Protection = Protection;
     Work->Target->Page = Page;

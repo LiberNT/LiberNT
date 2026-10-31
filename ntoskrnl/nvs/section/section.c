@@ -537,7 +537,7 @@ MiSegmentCreateEx(
     if (!MI_PROT_IS_ACCESSIBLE(Protection))
         return STATUS_INVALID_PAGE_PROTECTION;
 
-    if ((Protection & MI_PROT_NOCACHE) && Kind != MiSegmentPageFileBacked)
+    if (MI_PROT_CACHE(Protection) != 0 && Kind != MiSegmentPageFileBacked)
         return STATUS_NOT_SUPPORTED;
 
     if (Kind != MiSegmentPageFileBacked && (FileOps == NULL || FileOps->Read == NULL))
@@ -554,7 +554,7 @@ MiSegmentCreateEx(
     Segment->System = System;
     Segment->Kind = Kind;
     Segment->Reserved = Reserved;
-    Segment->Protection = Protection & (MI_PROT_ACCESS_MASK | MI_PROT_NOCACHE);
+    Segment->Protection = (Protection & MI_PROT_ACCESS_MASK) | MI_PROT_CACHE(Protection);
     MI_ATOMIC_WRITE64(&Segment->SizeInBytes, (LONG64)SizeInBytes);
     Segment->ReferenceCount = 1;
     Segment->FileContext = FileContext;
@@ -717,7 +717,7 @@ MiSegmentCreateLarge(PMI_SYSTEM System, ULONG64 SizeInBytes, ULONG Protection,
         return STATUS_NOT_SUPPORTED;
     if (SizeInBytes == 0 || (SizeInBytes & (Large - 1)) != 0)
         return STATUS_INVALID_PARAMETER;
-    if (!MI_PROT_IS_ACCESSIBLE(Protection) || MI_PROT_IS_COPY(Protection) || (Protection & MI_PROT_GUARD))
+    if (!MI_PROT_IS_ACCESSIBLE(Protection) || MI_PROT_IS_COPY(Protection) || MI_PROT_IS_GUARD(Protection))
         return STATUS_INVALID_PAGE_PROTECTION;
     Count = SizeInBytes / Large;
     if (Count > (~(SIZE_T)0) / sizeof(ULONG))
@@ -751,9 +751,9 @@ MiSegmentCreateLarge(PMI_SYSTEM System, ULONG64 SizeInBytes, ULONG Protection,
 
             RtlZeroMemory(Mapping, PAGE_SIZE);
             MiArchUnmapFrame(Mapping);
-            if (Protection & MI_PROT_NOCACHE)
+            if (MI_PROT_LEAF_CACHE(Protection) != 0)
             {
-                Status = MiPfnSetCache(&System->Pfn, Frame + i, MI_LEAF_NOCACHE);
+                Status = MiPfnSetCache(&System->Pfn, Frame + i, MI_PROT_LEAF_CACHE(Protection));
                 if (!NT_SUCCESS(Status))
                 {
                     ULONG Remaining;
@@ -1130,9 +1130,9 @@ MiSegmentMaterialize(
     if (Frame == MI_FRAME_INVALID)
         return STATUS_NO_MEMORY;
 
-    if (Segment->Protection & MI_PROT_NOCACHE)
+    if (MI_PROT_LEAF_CACHE(Segment->Protection) != 0)
     {
-        Status = MiPfnSetCache(&System->Pfn, Frame, MI_LEAF_NOCACHE);
+        Status = MiPfnSetCache(&System->Pfn, Frame, MI_PROT_LEAF_CACHE(Segment->Protection));
         if (!NT_SUCCESS(Status))
         {
             MiPfnShareDecrement(&System->Pfn, Frame, TRUE);
@@ -1387,7 +1387,7 @@ MiPteProtection(
     _In_ MI_PTE Pte)
 {
     BOOLEAN Execute = MiArchPteIsExecutable(Pte, (BOOLEAN)!Space->IsSystem);
-    ULONG Cache = (MiArchPteLeafFlags(Pte) & MI_LEAF_NOCACHE) ? MI_PROT_NOCACHE : 0;
+    ULONG Cache = MI_PROT_FROM_LEAF_CACHE(MiArchPteLeafFlags(Pte));
 
     if (MiArchPteIsWritable(Pte))
         return (Execute ? MI_PROT_EXECUTE_READWRITE : MI_PROT_READWRITE) | Cache;
@@ -1838,9 +1838,10 @@ MiCopyOnWrite(
     MiPfnUnmapFrame(&System->Pfn, Target);
     MiPfnUnmapFrame(&System->Pfn, Source);
 
-    if (MiArchPteLeafFlags(Pte) & MI_LEAF_NOCACHE)
+    if (MI_PROT_FROM_LEAF_CACHE(MiArchPteLeafFlags(Pte)) != 0)
     {
-        NTSTATUS Status = MiPfnSetCache(&System->Pfn, Frame, MI_LEAF_NOCACHE);
+        ULONG Cache = MI_PROT_FROM_LEAF_CACHE(MiArchPteLeafFlags(Pte));
+        NTSTATUS Status = MiPfnSetCache(&System->Pfn, Frame, MI_PROT_LEAF_CACHE(Cache | MI_PROT_READWRITE));
 
         if (!NT_SUCCESS(Status))
         {
@@ -1848,7 +1849,7 @@ MiCopyOnWrite(
             MiReturnCommit(Space, 1);
             return Status;
         }
-        Protection |= MI_PROT_NOCACHE;
+        Protection |= Cache;
     }
 
     MiPfnInitializePage(&System->Pfn, Frame, MiPtSlotAddress(Slot, TableFrame, VirtualAddress), TableFrame,
@@ -1964,8 +1965,8 @@ MiSetMappedViewProtection(
     PMI_SYSTEM System = Space->System;
     ULONG64 Va;
 
-    if (Protection != MI_PROT_NOACCESS)
-        Protection = (Protection & ~MI_PROT_NOCACHE) | (Vad->Segment->Protection & MI_PROT_NOCACHE);
+    if (Protection != MI_PROT_NOACCESS && !MiProtApplyCache(&Protection, MI_PROT_CACHE(Vad->Segment->Protection)))
+        return STATUS_INVALID_PAGE_PROTECTION;
 
     if (Vad->Type == MiVadImage && MI_PROT_IS_WRITABLE(Protection))
         Protection = (Protection & ~MI_PROT_ACCESS_MASK) |
@@ -2137,8 +2138,8 @@ MiMapViewInternal(
         (Replace && (Start == 0 || (AllocationType & MI_MEM_LARGE_PAGES))))
         return STATUS_INVALID_PARAMETER;
 
-    if (Protection != MI_PROT_NOACCESS)
-        Protection = (Protection & ~MI_PROT_NOCACHE) | (Segment->Protection & MI_PROT_NOCACHE);
+    if (Protection != MI_PROT_NOACCESS && !MiProtApplyCache(&Protection, MI_PROT_CACHE(Segment->Protection)))
+        return STATUS_INVALID_PAGE_PROTECTION;
 
     if ((Protection & ~MI_PROT_MASK) ||
         (Protection != MI_PROT_NOACCESS &&

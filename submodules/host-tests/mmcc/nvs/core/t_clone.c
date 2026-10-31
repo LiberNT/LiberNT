@@ -120,15 +120,16 @@ CloneCheckCache(TEST_WORLD *World, MI_ADDRESS_SPACE *Space, ULONG64 Va, ULONG Ca
     ULONG64 Physical;
     MI_PTE Leaf;
     MI_MEMORY_INFORMATION Info;
+    ULONG LeafCache = MI_PROT_LEAF_CACHE(MI_PROT_READWRITE | Cache);
     ULONG Frame;
 
     CHECK(MiPtTranslate(Space, Va, &Physical, &Leaf));
-    CHECK((MiArchPteLeafFlags(Leaf) & MI_LEAF_CACHE_MASK) == Cache);
+    CHECK((MiArchPteLeafFlags(Leaf) & MI_LEAF_CACHE_MASK) == LeafCache);
     Frame = (ULONG)(Physical >> PAGE_SHIFT);
-    CHECK((ULONG)MI_ATOMIC_READ32(&World->System.Pfn.Pfn[Frame].CacheFlags) == Cache);
-    CHECK(World->Machine.FrameCache[Frame] == (Frame < World->System.Pfn.DirectFrames ? Cache : 0));
+    CHECK((ULONG)MI_ATOMIC_READ32(&World->System.Pfn.Pfn[Frame].CacheFlags) == LeafCache);
+    CHECK(World->Machine.FrameCache[Frame] == (Frame < World->System.Pfn.DirectFrames ? LeafCache : 0));
     CHECK(NT_SUCCESS(MiQueryVirtualMemory(Space, Va, &Info)));
-    CHECK(Info.Protect != MI_PROT_NOACCESS && (Info.Protect & MI_PROT_NOCACHE) == Cache);
+    CHECK(Info.Protect != MI_PROT_NOACCESS && MI_PROT_CACHE(Info.Protect) == Cache);
 }
 
 static void
@@ -160,6 +161,9 @@ ClonePagingAndMdl(ULONG Cache)
                                             MI_PROT_READONLY | MI_PROT_NOCACHE, &Old)));
     CHECK(Old == (MI_PROT_READWRITE | Cache));
     CloneCheckCache(&World, &Parent, Base, Cache);
+    if (Cache != 0)
+        CHECK(MiProtectVirtualMemory(&Parent, &Va, &Length, MI_PROT_READWRITE | MI_PROT_GUARD, &Old) ==
+              STATUS_INVALID_PAGE_PROTECTION);
     CHECK(UserWrite64(&World, 0, Base, 0x5000) == STATUS_ACCESS_VIOLATION);
     CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Parent, &Va, &Length, MI_MEM_COMMIT, MI_PROT_READWRITE)));
     CloneCheckCache(&World, &Parent, Base, Cache);
@@ -412,6 +416,7 @@ TestClone(void)
     CloneGenerations();
     ClonePagingAndMdl(0);
     ClonePagingAndMdl(MI_PROT_NOCACHE);
+    ClonePagingAndMdl(MI_PROT_WRITECOMBINE);
     CloneSectionsAndRollback();
     CloneSmp();
 }

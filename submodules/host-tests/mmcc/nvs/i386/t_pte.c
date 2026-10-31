@@ -23,7 +23,7 @@ int main(void)
         for (Flags = 0; Flags < 128; Flags++)
         {
             Pte = MiArchPteMakeLeaf(Frame, Protection, Flags);
-            if (!MI_PROT_IS_ACCESSIBLE(Protection) || (Protection & MI_PROT_GUARD))
+            if (!MI_PROT_IS_ACCESSIBLE(Protection) || MI_PROT_IS_GUARD(Protection))
             {
                 CHECK(Pte == 0);
                 continue;

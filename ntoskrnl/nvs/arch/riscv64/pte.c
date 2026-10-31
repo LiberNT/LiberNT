@@ -51,8 +51,9 @@ MiArchPteMakeLeaf(
 {
     MI_PTE Pte;
 
-    if (!MI_PROT_IS_ACCESSIBLE(Protection) || (Protection & MI_PROT_GUARD))
+    if (!MI_PROT_IS_ACCESSIBLE(Protection) || MI_PROT_IS_GUARD(Protection))
         return 0;
+    Flags |= MI_PROT_LEAF_CACHE(Protection);
 
     /* A is always set: with Svade a clear bit would fault on every access. */
     Pte = MI_RISCV_PTE_VALID | MI_RISCV_PTE_ACCESSED | MiRiscvAccess[Protection & MI_PROT_ACCESS_MASK] |

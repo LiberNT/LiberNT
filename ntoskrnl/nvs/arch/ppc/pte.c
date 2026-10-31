@@ -32,8 +32,9 @@ MiArchPteMakeLeaf(
 {
     MI_PTE Pte;
 
-    if (!MI_PROT_IS_ACCESSIBLE(Protection) || (Protection & MI_PROT_GUARD))
+    if (!MI_PROT_IS_ACCESSIBLE(Protection) || MI_PROT_IS_GUARD(Protection))
         return 0;
+    Flags |= MI_PROT_LEAF_CACHE(Protection);
 
     Pte = MI_PPC_PTE_VALID | MI_PPC_PTE_ACCESSED | MiPpcAccess[Protection & MI_PROT_ACCESS_MASK] | ((Frame << MI_PPC_PTE_FRAME_SHIFT) & MI_PPC_PTE_FRAME_MASK);
     if (Flags & MI_LEAF_USER)

@@ -357,10 +357,16 @@ MmMapLockedPagesSpecifyCache(
     ULONG Count = MiMdlPages(Mdl);
     ULONG Protection = (Priority & MdlMappingNoWrite) ? MI_PROT_READONLY : MI_PROT_READWRITE;
     ULONG Attempts = 0;
+    MI_CACHE_TYPE Cache;
     NTSTATUS Status;
     ULONG64 Base;
 
     ASSERT(Mdl->ByteCount != 0);
+
+    if ((ULONG)CacheType >= MmMaximumCacheType)
+        return NULL;
+
+    Cache = MiCacheTypeFromNt(CacheType);
 
     if (AccessMode == KernelMode)
     {
@@ -369,12 +375,11 @@ MmMapLockedPagesSpecifyCache(
 
         do
         {
-            Status = MiMapFrames(&MiSystem, (const MI_FRAME_NUMBER *)Pages, Count,
-                                 MiCacheTypeFromNt(CacheType), Protection, &Base);
+            Status = MiMapFrames(&MiSystem, (const MI_FRAME_NUMBER *)Pages, Count, Cache, Protection, &Base);
         } while (Status == STATUS_NO_MEMORY && NT_SUCCESS(MiWaitForMemory(Status, &Attempts)));
         if (!NT_SUCCESS(Status))
         {
-            if (BugCheckOnFailure)
+            if (BugCheckOnFailure && !(Mdl->MdlFlags & MDL_MAPPING_CAN_FAIL))
                 KeBugCheckEx(NO_MORE_SYSTEM_PTES, 0, Count, 0, 0);
 
             return NULL;
@@ -395,8 +400,8 @@ MmMapLockedPagesSpecifyCache(
     Base = (ULONG64)(ULONG_PTR)BaseAddress;
     Status = MiMapFramesUser(MiSpaceOfProcess(PsGetCurrentProcess()), (const MI_FRAME_NUMBER *)Pages, Count,
                              Protection,
-                             ((CacheType & 0xFF) == MmNonCached) ? MI_LEAF_NOCACHE
-                                 : (((CacheType & 0xFF) == MmWriteCombined) ? MI_LEAF_WRITECOMBINE : 0),
+                             (Cache == MiCacheNone) ? MI_LEAF_NOCACHE
+                                 : ((Cache == MiCacheWriteCombined) ? MI_LEAF_WRITECOMBINE : 0),
                              TRUE, &Base);
     if (!NT_SUCCESS(Status))
         ExRaiseStatus(Status);
@@ -505,29 +510,53 @@ MmAllocatePagesForMdlEx(
     _In_ ULONG Flags)
 {
     static ULONG Cursor;
-    ULONG64 Wanted = BYTES_TO_PAGES(TotalBytes);
-    ULONG64 LowFrame = (ULONG64)(LowAddress.QuadPart + PAGE_SIZE - 1) >> PAGE_SHIFT;
+    ULONG64 Skip = (ULONG64)SkipBytes.QuadPart;
+    ULONG64 LowFrame = (ULONG64)LowAddress.QuadPart >> PAGE_SHIFT;
     ULONG64 HighFrame = (ULONG64)HighAddress.QuadPart >> PAGE_SHIFT;
-    ULONG CacheFlags = ((CacheType & 0xFF) == MmNonCached) ? MI_LEAF_NOCACHE
-        : (((CacheType & 0xFF) == MmWriteCombined) ? MI_LEAF_WRITECOMBINE : 0);
+    MI_CACHE_TYPE Cache = MiCacheTypeFromNt(CacheType);
+    ULONG CacheFlags = (Cache == MiCacheNone) ? MI_LEAF_NOCACHE
+        : ((Cache == MiCacheWriteCombined) ? MI_LEAF_WRITECOMBINE : 0);
+    ULONG64 Wanted;
     PPFN_NUMBER Pages;
     ULONG64 Got = 0;
     ULONG64 Chunk = 0;
     PMDL Mdl;
 
-    if (Wanted == 0 || Wanted > 0xFFFFFFFFULL / PAGE_SIZE || LowFrame > HighFrame)
+    if ((Flags & 0xFFFFFC00) != 0 || (Skip & (PAGE_SIZE - 1)) != 0 || LowFrame > HighFrame)
         return NULL;
-    if (Flags & MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS)
-    {
-        ULONG64 Skip = (ULONG64)SkipBytes.QuadPart;
 
-        if (Skip != 0 &&
-            ((Skip & (Skip - 1)) != 0 || Skip < PAGE_SIZE || (TotalBytes & (Skip - 1)) != 0))
-        {
-            return NULL;
-        }
-        Chunk = (Skip != 0) ? (Skip >> PAGE_SHIFT) : Wanted;
+    /* TODO: MM_ALLOCATE_AND_HOT_REMOVE pages are not removed from the system */
+    if ((Flags & MM_ALLOCATE_AND_HOT_REMOVE) &&
+        ((Flags & MM_ALLOCATE_FULLY_REQUIRED) || KeGetCurrentIrql() != PASSIVE_LEVEL))
+    {
+        return NULL;
     }
+
+    if ((Flags & MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS) && Skip != 0 &&
+        ((Skip & (Skip - 1)) != 0 || (TotalBytes & (Skip - 1)) != 0))
+    {
+        return NULL;
+    }
+
+    if (TotalBytes > 0xFFFFF000)
+    {
+        if (Flags & MM_ALLOCATE_FULLY_REQUIRED)
+            return NULL;
+
+        TotalBytes = 0xFFFFF000;
+        if ((Flags & (MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FAST_LARGE_PAGES)) &&
+            Skip != 0 && (Skip & (Skip - 1)) == 0)
+        {
+            TotalBytes &= ~(SIZE_T)(Skip - 1);
+        }
+    }
+
+    Wanted = BYTES_TO_PAGES(TotalBytes);
+    if (Wanted == 0)
+        return NULL;
+
+    if (Flags & MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS)
+        Chunk = (Skip != 0) ? (Skip >> PAGE_SHIFT) : Wanted;
 
     if (HighFrame >= MiSystem.Pfn.FrameCount)
         HighFrame = MiSystem.Pfn.FrameCount - 1;
@@ -789,7 +818,7 @@ MiSecureRangeConflict(
         if (Range->Process != Process || End <= Range->Start || Start >= Range->End)
             continue;
 
-        if (Release || (NewProtection & MI_PROT_GUARD))
+        if (Release || MI_PROT_IS_GUARD(NewProtection))
             Conflict = TRUE;
         else if (Range->Mode == PAGE_READWRITE)
             Conflict = (BOOLEAN)(!MI_PROT_IS_WRITABLE(NewProtection) && !MI_PROT_IS_COPY(NewProtection));

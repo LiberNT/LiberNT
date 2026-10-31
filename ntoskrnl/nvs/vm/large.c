@@ -84,7 +84,7 @@ MiCreateLargeView(PMI_ADDRESS_SPACE Space, PULONG64 BaseAddress, PULONG64 Region
         return STATUS_INVALID_PARAMETER;
     }
     if ((!MI_PROT_IS_ACCESSIBLE(Protection) && (Segment == NULL || Protection != MI_PROT_NOACCESS)) ||
-        MI_PROT_IS_COPY(Protection) || ((Protection & MI_PROT_GUARD) && Protection != MI_PROT_NOACCESS))
+        MI_PROT_IS_COPY(Protection) || MI_PROT_IS_GUARD(Protection))
         return STATUS_INVALID_PAGE_PROTECTION;
     if (HighestAddress > Space->HighestVa)
         HighestAddress = Space->HighestVa;
@@ -263,13 +263,15 @@ MiProtectLargePagesLocked(PMI_ADDRESS_SPACE Space, ULONG64 Start, ULONG64 End,
     ULONG64 Large = Arch->LargePageSize, Va;
     PMI_VAD Vad = MiVadLocate(Space, Start);
 
-    if (Vad->Segment != NULL && Protection != MI_PROT_NOACCESS)
-        Protection = (Protection & ~MI_PROT_NOCACHE) | (Vad->Segment->Protection & MI_PROT_NOCACHE);
+    if (Vad->Segment != NULL && Protection != MI_PROT_NOACCESS &&
+        !MiProtApplyCache(&Protection, MI_PROT_CACHE(Vad->Segment->Protection)))
+    {
+        return STATUS_INVALID_PAGE_PROTECTION;
+    }
 
     if (((Start | End) & (Large - 1)) != 0)
         return STATUS_CONFLICTING_ADDRESSES;
-    if (MI_PROT_IS_COPY(Protection) ||
-        ((Protection & MI_PROT_GUARD) && Protection != MI_PROT_NOACCESS))
+    if (MI_PROT_IS_COPY(Protection) || MI_PROT_IS_GUARD(Protection))
     {
         return STATUS_INVALID_PAGE_PROTECTION;
     }

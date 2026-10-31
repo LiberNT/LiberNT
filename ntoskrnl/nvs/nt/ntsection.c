@@ -1530,6 +1530,11 @@ MiCreateSectionWithMode(
             Protection |= MI_PROT_NOCACHE;
             SegmentProtection |= MI_PROT_NOCACHE;
         }
+        else if (AllocationAttributes & SEC_WRITECOMBINE)
+        {
+            Protection |= MI_PROT_WRITECOMBINE;
+            SegmentProtection |= MI_PROT_WRITECOMBINE;
+        }
 
         if (Size == 0)
             return STATUS_INVALID_PARAMETER_4;
@@ -1736,7 +1741,7 @@ MiMapPhysicalView(
     for (i = 0; i < Count; i++)
         Frames[i] = (MI_FRAME_NUMBER)(FirstFrame + i);
 
-    Status = MiMapFramesUser(Space, Frames, Count, Protection & ~MI_PROT_NOCACHE, LeafFlags, FALSE, &Base);
+    Status = MiMapFramesUser(Space, Frames, Count, MI_PROT_WITHOUT_CACHE(Protection), LeafFlags, FALSE, &Base);
     ExFreePoolWithTag(Frames, 'hPmM');
 
     if (!NT_SUCCESS(Status))
@@ -1789,8 +1794,8 @@ MiMapSectionView(
             return STATUS_MAPPED_ALIGNMENT;
     }
 
-    if (Protection != MI_PROT_NOACCESS)
-        Protection = (Protection & ~MI_PROT_NOCACHE) | (Control->Segment->Protection & MI_PROT_NOCACHE);
+    if (Protection != MI_PROT_NOACCESS && !MiProtApplyCache(&Protection, MI_PROT_CACHE(Control->Segment->Protection)))
+        return STATUS_INVALID_PAGE_PROTECTION;
 
     if (!Space->IsSystem)
     {

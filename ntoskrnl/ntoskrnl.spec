@@ -1913,7 +1913,7 @@
 @ stdcall -arch=arm64 KiDispatchInterrupt()
 @ stdcall -arch=win64 MmCopyVirtualMemory()
 @ stdcall -arch=arm64 MmLoadSystemImage()
-@ stdcall -arch=win64 MmMapViewInSystemSpaceEx()
+@ stdcall MmMapViewInSystemSpaceEx(ptr ptr ptr ptr long)
 @ stdcall -arch=arm64 MmUnloadSystemImage()
 @ stdcall -arch=win64 NtEnumerateSystemEnvironmentValuesEx()
 @ stdcall -arch=win64 NtReadFileScatter()
