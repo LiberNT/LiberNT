@@ -2059,7 +2059,7 @@ PspPrepareWow64Thread(IN HANDLE ProcessHandle,
     CpuInit.Context = *Wow64Context;
     CpuInit.Context.ContextFlags = WOW64_CONTEXT_FULL;
     PspInitializeWow64FloatState(&CpuInit.Context);
-    CpuInit.Context.EFlags = (Wow64Context->EFlags & 0x3000) | EFLAGS_INTERRUPT_MASK;
+    CpuInit.Context.EFlags = EFLAGS_INTERRUPT_MASK;
     CpuInit.Context.SegCs = KGDT64_R3_CMCODE | RPL_MASK;
     CpuInit.Context.SegDs = KGDT64_R3_DATA | RPL_MASK;
     CpuInit.Context.SegEs = KGDT64_R3_DATA | RPL_MASK;
