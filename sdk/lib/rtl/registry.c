@@ -1380,4 +1380,47 @@ RtlQueryRegistryValuesEx(IN ULONG RelativeTo,
                                   Environment);
 }
 
+NTSTATUS
+NTAPI
+RtlCheckPortableOperatingSystem(
+    _Out_ PBOOLEAN IsPortable)
+{
+    RTL_QUERY_REGISTRY_TABLE QueryTable[2];
+    ULONG Portable = 0;
+    NTSTATUS Status;
+
+    if (NT_SUCCESS(RtlCheckRegistryKey(RTL_REGISTRY_CONTROL, L"MiniNT")))
+    {
+        *IsPortable = FALSE;
+        return STATUS_SUCCESS;
+    }
+
+    RtlZeroMemory(QueryTable, sizeof(QueryTable));
+    QueryTable[0].Flags = RTL_QUERY_REGISTRY_DIRECT | RTL_QUERY_REGISTRY_REQUIRED | RTL_QUERY_REGISTRY_TYPECHECK;
+    QueryTable[0].Name = L"PortableOperatingSystem";
+    QueryTable[0].EntryContext = &Portable;
+    QueryTable[0].DefaultType = REG_DWORD << RTL_QUERY_REGISTRY_TYPECHECK_SHIFT;
+    Status = RtlQueryRegistryValuesEx(RTL_REGISTRY_CONTROL, NULL, QueryTable, NULL, NULL);
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+        return STATUS_NOT_FOUND;
+    if (NT_SUCCESS(Status))
+        *IsPortable = Portable != 0;
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+RtlSetPortableOperatingSystem(
+    _In_ BOOLEAN IsPortable)
+{
+    ULONG Portable = IsPortable ? 1 : 0;
+
+    return RtlWriteRegistryValue(RTL_REGISTRY_CONTROL,
+                                 NULL,
+                                 L"PortableOperatingSystem",
+                                 REG_DWORD,
+                                 &Portable,
+                                 sizeof(Portable));
+}
+
 /* EOF */

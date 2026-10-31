@@ -3185,7 +3185,7 @@
 @ stub -arch=win64 RtlSetBitsEx
 @ stdcall RtlSetConsoleSessionForegroundProcessId(int64)
 @ stub -arch=win64 RtlSetDynamicTimeZoneInformation
-@ stub -arch=win64 RtlSetPortableOperatingSystem
+@ stdcall RtlSetPortableOperatingSystem(long)
 @ stub -arch=win64 RtlSetProcessPlaceholderCompatibilityMode
 @ stub -arch=win64 RtlSetSystemBootStatus
 @ stub -arch=win64 RtlSetSystemBootStatusEx

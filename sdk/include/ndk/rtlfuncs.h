@@ -4595,6 +4595,18 @@ RtlCheckRegistryKey(
 NTSYSAPI
 NTSTATUS
 NTAPI
+RtlCheckPortableOperatingSystem(
+    _Out_ PBOOLEAN IsPortable);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlSetPortableOperatingSystem(
+    _In_ BOOLEAN IsPortable);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
 RtlCreateRegistryKey(
     _In_ ULONG RelativeTo,
     _In_ PWSTR Path

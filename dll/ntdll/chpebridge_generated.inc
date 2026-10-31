@@ -3587,15 +3587,11 @@ VOID NTAPI ChpeAutoRtlCheckForOrphanedCriticalSections(PVOID a0)
     RtlCheckForOrphanedCriticalSections(a0);
 }
 
-/* Native definition: dll/ntdll/rtl/wnf.c */
-#ifdef RtlCheckPortableOperatingSystem
-#undef RtlCheckPortableOperatingSystem
-#endif
-NTSTATUS NTAPI RtlCheckPortableOperatingSystem(PVOID a0);
-NTSTATUS NTAPI ChpeAutoRtlCheckPortableOperatingSystem(PVOID a0)
+NTSTATUS NTAPI ChpeAutoRtlCheckPortableOperatingSystem(PBOOLEAN a0)
 {
     return RtlCheckPortableOperatingSystem(a0);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlCheckPortableOperatingSystem), __typeof__(&RtlCheckPortableOperatingSystem)), "RtlCheckPortableOperatingSystem bridge signature mismatch");
 
 NTSTATUS NTAPI ChpeAutoRtlCheckRegistryKey(ULONG a0, PWSTR a1)
 {
@@ -6512,6 +6508,12 @@ NTSTATUS NTAPI ChpeAutoRtlSetOwnerSecurityDescriptor(PSECURITY_DESCRIPTOR a0, PS
     return RtlSetOwnerSecurityDescriptor(a0, a1, a2);
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlSetOwnerSecurityDescriptor), __typeof__(&RtlSetOwnerSecurityDescriptor)), "RtlSetOwnerSecurityDescriptor bridge signature mismatch");
+
+NTSTATUS NTAPI ChpeAutoRtlSetPortableOperatingSystem(BOOLEAN a0)
+{
+    return RtlSetPortableOperatingSystem(a0);
+}
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlSetPortableOperatingSystem), __typeof__(&RtlSetPortableOperatingSystem)), "RtlSetPortableOperatingSystem bridge signature mismatch");
 
 ULONG_PTR NTAPI ChpeStubRtlSetProcessDebugInformation(PVOID a0, ULONG a1, PVOID a2)
 {

@@ -1287,6 +1287,7 @@
 @ stdcall RtlSetLastWin32ErrorAndNtStatusFromNtStatus(long)
 @ stdcall RtlSetMemoryStreamSize(ptr int64)
 @ stdcall RtlSetOwnerSecurityDescriptor(ptr ptr long)
+@ stdcall -version=0x602+ RtlSetPortableOperatingSystem(long)
 @ stdcall -stub -version=0x600+ RtlSetProcessDebugInformation(ptr long ptr)
 @ stdcall -version=0x600+ RtlSetProcessPreferredUILanguages(long ptr ptr)
 @ cdecl RtlSetProcessIsCritical(long ptr long)

@@ -166,6 +166,7 @@ list(APPEND SOURCE
     RtlMemoryStream.c
     RtlMultipleAllocateHeap.c
     RtlNtPathNameToDosPathName.c
+    RtlPortableOperatingSystem.c
     RtlpApplyLengthFunction.c
     RtlpEnsureBufferSize.c
     RtlQueryEnvironmentVariable.c

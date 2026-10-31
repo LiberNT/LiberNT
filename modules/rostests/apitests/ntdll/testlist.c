@@ -146,6 +146,8 @@ extern void func_RtlLocale(void);
 extern void func_RtlMemoryStream(void);
 extern void func_RtlMultipleAllocateHeap(void);
 extern void func_RtlNtPathNameToDosPathName(void);
+extern void func_RtlPortableOperatingSystem(void);
+extern void func_PortableWorkspaceHibernate(void);
 extern void func_RtlpApplyLengthFunction(void);
 extern void func_RtlpEnsureBufferSize(void);
 extern void func_RtlQueryEnvironmentVariable(void);
@@ -325,6 +327,8 @@ const struct test winetest_testlist[] =
     { "RtlMemoryStream",                func_RtlMemoryStream },
     { "RtlMultipleAllocateHeap",        func_RtlMultipleAllocateHeap },
     { "RtlNtPathNameToDosPathName",     func_RtlNtPathNameToDosPathName },
+    { "RtlPortableOperatingSystem",     func_RtlPortableOperatingSystem },
+    { "PortableWorkspaceHibernate",     func_PortableWorkspaceHibernate },
     { "RtlpApplyLengthFunction",        func_RtlpApplyLengthFunction },
     { "RtlpEnsureBufferSize",           func_RtlpEnsureBufferSize },
     { "RtlQueryEnvironmentVariable",    func_RtlQueryEnvironmentVariable },

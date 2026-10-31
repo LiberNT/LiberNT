@@ -666,6 +666,30 @@ PopHiberBuildPath(
 }
 
 static
+BOOLEAN
+PopHiberAllowedOnThisWorkspace(VOID)
+{
+    RTL_QUERY_REGISTRY_TABLE Table[2];
+    BOOLEAN Portable = FALSE;
+    ULONG Allow = 0;
+
+    if (!NT_SUCCESS(RtlCheckPortableOperatingSystem(&Portable)) || !Portable)
+        return TRUE;
+
+    RtlZeroMemory(Table, sizeof(Table));
+    Table[0].Flags = RTL_QUERY_REGISTRY_DIRECT | RTL_QUERY_REGISTRY_TYPECHECK;
+    Table[0].Name = L"Hibernate";
+    Table[0].EntryContext = &Allow;
+    Table[0].DefaultType = (REG_DWORD << RTL_QUERY_REGISTRY_TYPECHECK_SHIFT) | REG_NONE;
+    RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE,
+                           L"\\Registry\\Machine\\System\\CurrentControlSet\\Policies\\Microsoft\\PortableOperatingSystem",
+                           Table,
+                           NULL,
+                           NULL);
+    return Allow == 1;
+}
+
+static
 VOID
 PopHiberReadPolicy(
     _Out_ PULONG Enabled,
@@ -690,6 +714,9 @@ PopHiberReadPolicy(
 
     if (*Percent == 0 || *Percent > 100)
         *Percent = POP_HIBER_DEFAULT_PERCENT;
+    /* TODO: an explicit hiberfile reserve request on a portable workspace still creates the file */
+    if (!PopHiberAllowedOnThisWorkspace())
+        *Enabled = 0;
 }
 
 static
