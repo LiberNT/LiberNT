@@ -1577,12 +1577,14 @@ VOID
 UserFreeInputContext(_In_opt_ PVOID Object)
 {
     PTHRDESKHEAD ObjHead = Object;
-    PDESKTOP pDesk = ObjHead->rpdesk;
+    PDESKTOP pDesk;
     PIMC pNode, pIMC = Object;
     PTHREADINFO pti;
 
     if (!pIMC)
         return;
+
+    pDesk = ObjHead->rpdesk;
 
     // Remove pIMC from the list except spDefaultImc
     pti = pIMC->head.pti;
