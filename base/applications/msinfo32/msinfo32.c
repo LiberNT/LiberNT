@@ -118,6 +118,8 @@ FillSummary(VOID)
         AddString(IDS_SYSTEM_TYPE, IDS_TYPE_ARM64);
     else if (Info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL)
         AddString(IDS_SYSTEM_TYPE, IDS_TYPE_X86);
+    else if (Info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_RISCV64)
+        AddString(IDS_SYSTEM_TYPE, IDS_TYPE_RISCV64);
 
     if (ReadMachineString(g_ProcessorKey, L"ProcessorNameString", Part, ARRAYSIZE(Part)) &&
         LoadStringW(g_Instance, IDS_PROCESSOR_FORMAT, Format, ARRAYSIZE(Format)) &&

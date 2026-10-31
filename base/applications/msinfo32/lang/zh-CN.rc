@@ -38,6 +38,7 @@ BEGIN
     IDS_TYPE_X86 "基于 x86 的电脑"
     IDS_TYPE_X64 "基于 x64 的电脑"
     IDS_TYPE_ARM64 "基于 ARM64 的电脑"
+    IDS_TYPE_RISCV64 "基于 RISC-V64 的电脑"
     IDS_PROCESSOR "处理器"
     IDS_PROCESSOR_FORMAT "%s，%lu 个逻辑处理器"
     IDS_BIOS "BIOS 版本/日期"

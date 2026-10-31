@@ -38,6 +38,7 @@ BEGIN
     IDS_TYPE_X86 "x86-based PC"
     IDS_TYPE_X64 "x64-based PC"
     IDS_TYPE_ARM64 "ARM64-based PC"
+    IDS_TYPE_RISCV64 "RISC-V64-based PC"
     IDS_PROCESSOR "Processor"
     IDS_PROCESSOR_FORMAT "%s, %lu Logical Processor(s)"
     IDS_BIOS "BIOS Version/Date"

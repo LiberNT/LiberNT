@@ -27,6 +27,7 @@
 #define IDS_TYPE_X86            317
 #define IDS_TYPE_X64            318
 #define IDS_TYPE_ARM64          319
+#define IDS_TYPE_RISCV64        333
 #define IDS_PROCESSOR           320
 #define IDS_PROCESSOR_FORMAT    321
 #define IDS_BIOS                322
