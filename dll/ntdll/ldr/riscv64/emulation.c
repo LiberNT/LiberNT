@@ -19,6 +19,7 @@ static PEMULATION_NOTIFY_MEMORY_PROTECT LdrpEmulationNotifyProtect;
 static PEMULATION_NOTIFY_UNMAP_VIEW LdrpEmulationNotifyUnmap;
 static PEMULATION_FLUSH_INSTRUCTION_CACHE LdrpEmulationFlush;
 static PEMULATION_UPDATE_PROCESSOR_INFORMATION LdrpEmulationUpdateProcessor;
+static PEMULATION_PROCESS_TERM LdrpEmulationProcessTerm;
 
 typedef struct _LDRP_X64_SERVICE
 {
@@ -227,6 +228,23 @@ LdrpEmulatedUnmapViewOfSection(
 static
 NTSTATUS
 NTAPI
+LdrpEmulatedTerminateProcess(
+    _In_opt_ HANDLE ProcessHandle,
+    _In_ NTSTATUS ExitStatus)
+{
+    NTSTATUS Status;
+
+    if (ProcessHandle) return ZwTerminateProcess(ProcessHandle, ExitStatus);
+
+    LdrpEmulationProcessTerm(ProcessHandle, FALSE, STATUS_SUCCESS);
+    Status = ZwTerminateProcess(ProcessHandle, ExitStatus);
+    LdrpEmulationProcessTerm(ProcessHandle, TRUE, Status);
+    return Status;
+}
+
+static
+NTSTATUS
+NTAPI
 LdrpEmulatedFlushInstructionCache(
     _In_ HANDLE ProcessHandle,
     _In_opt_ PVOID BaseAddress,
@@ -297,6 +315,7 @@ LdrpInstallServiceWrappers(VOID)
         { (PVOID)NtUnmapViewOfSection, (PVOID)LdrpEmulatedUnmapViewOfSection },
         { (PVOID)NtFlushInstructionCache, (PVOID)LdrpEmulatedFlushInstructionCache },
         { (PVOID)NtQuerySystemInformation, (PVOID)LdrpEmulatedQuerySystemInformation },
+        { (PVOID)NtTerminateProcess, (PVOID)LdrpEmulatedTerminateProcess },
     };
     ULONG Index;
     NTSTATUS Status;
@@ -325,6 +344,7 @@ LdrpArchLoadEmulation(VOID)
         { EMULATION_NOTIFY_UNMAP_VIEW_EXPORT, (PVOID *)&LdrpEmulationNotifyUnmap },
         { EMULATION_FLUSH_INSTRUCTION_CACHE_EXPORT, (PVOID *)&LdrpEmulationFlush },
         { EMULATION_UPDATE_PROCESSOR_INFORMATION_EXPORT, (PVOID *)&LdrpEmulationUpdateProcessor },
+        { EMULATION_PROCESS_TERM_EXPORT, (PVOID *)&LdrpEmulationProcessTerm },
     };
     UNICODE_STRING Library = RTL_CONSTANT_STRING(EMULATION_LIBRARY_AMD64);
     ANSI_STRING Export;

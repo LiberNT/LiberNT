@@ -7,3 +7,4 @@
 @ stdcall NotifyUnmapViewOfSection(ptr long long)
 @ stdcall BTCpu64FlushInstructionCache(ptr long)
 @ stdcall UpdateProcessorInformation(ptr)
+@ stdcall ProcessTerm(ptr long long)

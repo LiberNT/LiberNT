@@ -195,6 +195,20 @@ NotifyUnmapViewOfSection(
 
 VOID
 NTAPI
+ProcessTerm(
+    _In_opt_ HANDLE ProcessHandle,
+    _In_ BOOLEAN After,
+    _In_ NTSTATUS Status)
+{
+    if (ProcessHandle) return;
+    if (After)
+        EmuCoreEndTermination(NT_SUCCESS(Status));
+    else
+        EmuCoreBeginTermination();
+}
+
+VOID
+NTAPI
 BTCpu64FlushInstructionCache(
     _In_opt_ const VOID *Address,
     _In_ SIZE_T Size)
