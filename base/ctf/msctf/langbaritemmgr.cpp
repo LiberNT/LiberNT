@@ -329,6 +329,7 @@ public:
             pThis->Release();
             return NULL;
         }
+        pThis->m_dwThreadId = GetWindowThreadProcessId(pThis->m_hwnd, NULL);
         if (SUCCEEDED(pItem->QueryInterface(IID_ITfSource, (void **)&pThis->m_pSource)) &&
             FAILED(pThis->m_pSource->AdviseSink(IID_ITfLangBarItemSink, static_cast<ITfLangBarItemSink *>(pThis),
                                                 &pThis->m_dwCookie)))
@@ -369,7 +370,10 @@ public:
         if (m_hwnd)
         {
             SetWindowLongPtrW(m_hwnd, GWLP_USERDATA, 0);
-            DestroyWindow(m_hwnd);
+            if (m_dwThreadId == GetCurrentThreadId())
+                DestroyWindow(m_hwnd);
+            else
+                PostMessageW(m_hwnd, WM_CLOSE, 0, 0);
             m_hwnd = NULL;
         }
     }
@@ -407,8 +411,8 @@ public:
     }
 
 private:
-    CTipInputModeIndicator() : m_refs(1), m_hwnd(NULL), m_pButton(NULL), m_pSource(NULL), m_dwCookie(0)
-        , m_click(TF_LBI_CLK_LEFT), m_ptClick(), m_cClickWaits(0) { }
+    CTipInputModeIndicator() : m_refs(1), m_hwnd(NULL), m_dwThreadId(0), m_hIconSent(NULL), m_pButton(NULL)
+        , m_pSource(NULL), m_dwCookie(0), m_click(TF_LBI_CLK_LEFT), m_ptClick(), m_cClickWaits(0) { }
     ~CTipInputModeIndicator()
     {
         Close();
@@ -431,29 +435,30 @@ private:
     void Publish()
     {
         HWND hwndIndicator = FindWindowW(INDICATOR_CLASSW, NULL);
-        if (!hwndIndicator || !m_hwnd)
-            return;
-
-        INPUTINDICATOR_TIPSTATE state = { sizeof(state), GetCurrentThreadId(), (ULONG64)(ULONG_PTR)m_hwnd };
         HICON hIcon = NULL;
-        DWORD dwStatus = 0;
-        if (m_pButton && SUCCEEDED(m_pButton->GetStatus(&dwStatus)) && !(dwStatus & TF_LBI_STATUS_HIDDEN) &&
-            SUCCEEDED(m_pButton->GetIcon(&hIcon)) && hIcon)
+        if (hwndIndicator && m_hwnd)
         {
-            BSTR bstrTooltip = NULL;
-            state.hIcon = (ULONG64)(ULONG_PTR)hIcon;
-            if (SUCCEEDED(m_pButton->GetTooltipString(&bstrTooltip)) && bstrTooltip)
+            INPUTINDICATOR_TIPSTATE state = { sizeof(state), m_dwThreadId, (ULONG64)(LONG_PTR)m_hwnd };
+            DWORD dwStatus = 0;
+            if (m_pButton && SUCCEEDED(m_pButton->GetStatus(&dwStatus)) && !(dwStatus & TF_LBI_STATUS_HIDDEN) &&
+                SUCCEEDED(m_pButton->GetIcon(&hIcon)) && hIcon)
             {
-                StringCchCopyW(state.szTooltip, _countof(state.szTooltip), bstrTooltip);
-                SysFreeString(bstrTooltip);
+                BSTR bstrTooltip = NULL;
+                state.hIcon = (ULONG64)(LONG_PTR)hIcon;
+                if (SUCCEEDED(m_pButton->GetTooltipString(&bstrTooltip)) && bstrTooltip)
+                {
+                    StringCchCopyW(state.szTooltip, _countof(state.szTooltip), bstrTooltip);
+                    SysFreeString(bstrTooltip);
+                }
             }
-        }
 
-        COPYDATASTRUCT cds = { INPUTINDICATOR_COPYDATA_ID, sizeof(state), &state };
-        SendMessageTimeoutW(hwndIndicator, WM_COPYDATA, (WPARAM)m_hwnd, (LPARAM)&cds, SMTO_ABORTIFHUNG, 1000,
-                            NULL);
-        if (hIcon)
-            DestroyIcon(hIcon);
+            COPYDATASTRUCT cds = { INPUTINDICATOR_COPYDATA_ID, sizeof(state), &state };
+            SendMessageTimeoutW(hwndIndicator, WM_COPYDATA, (WPARAM)m_hwnd, (LPARAM)&cds, SMTO_ABORTIFHUNG, 1000,
+                                NULL);
+        }
+        if (m_hIconSent)
+            DestroyIcon(m_hIconSent);
+        m_hIconSent = hIcon;
     }
 
     void QueueClick(TfLBIClick click, POINT pt)
@@ -528,6 +533,8 @@ private:
 
     LONG m_refs;
     HWND m_hwnd;
+    DWORD m_dwThreadId;
+    HICON m_hIconSent;
     ITfLangBarItemButton *m_pButton;
     ITfSource *m_pSource;
     DWORD m_dwCookie;
