@@ -70,3 +70,16 @@ RtlpRiscv64PrepareContextRestore(
     /* User mode has no trap frames to retire. */
     UNREFERENCED_PARAMETER(Context);
 }
+
+VOID
+NTAPI
+KiUserApcDispatcherWorker(
+    _In_opt_ PVOID NormalContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2,
+    _In_ PCONTEXT Context,
+    _In_ PVOID NormalRoutine)
+{
+    ((VOID (NTAPI *)(PVOID, PVOID, PVOID, PCONTEXT))NormalRoutine)(NormalContext, SystemArgument1, SystemArgument2,
+                                                                   Context);
+}

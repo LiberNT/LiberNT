@@ -35,9 +35,9 @@ LdrInitializeThunk:
 KiUserApcDispatcher:
     /* sp points at the saved CONTEXT; keep it across the normal routine. */
     mv s1, sp
-    mv t0, a3
+    mv a4, a3
     mv a3, s1
-    jalr t0
+    call KiUserApcDispatcherWorker
     mv a0, s1
     li a1, 1
     call NtContinue
