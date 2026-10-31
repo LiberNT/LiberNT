@@ -2511,6 +2511,132 @@ NtfsCheckDirectoryEmpty(_In_ PVolumeContextBlock VolCB,
     return Status;
 }
 
+static
+NTSTATUS
+NtfsSetDisposition(_In_ PVolumeContextBlock VolCB,
+                   _In_ PFileContextBlock FileCB,
+                   _In_ PFILE_OBJECT FileObject,
+                   _In_ ULONG Flags)
+{
+    BOOLEAN Delete = !!(Flags & FILE_DISPOSITION_DELETE);
+    NTSTATUS Status;
+
+    if (Flags & ~(FILE_DISPOSITION_DELETE | FILE_DISPOSITION_POSIX_SEMANTICS |
+                  FILE_DISPOSITION_FORCE_IMAGE_SECTION_CHECK | FILE_DISPOSITION_ON_CLOSE |
+                  FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (!(FileCB->DesiredAccess & DELETE))
+        return STATUS_ACCESS_DENIED;
+    if (NtfsVolumeIsReadOnly(VolCB->DiskVolume))
+        return STATUS_MEDIA_WRITE_PROTECTED;
+    if (FileCB->NativeCcb.Lcb && NtfsIsLinkDetached(FileCB->NativeCcb.Lcb))
+        return STATUS_DELETE_PENDING;
+
+    if (Flags & FILE_DISPOSITION_ON_CLOSE)
+    {
+        if (Delete)
+            FileCB->CreateOptions |= FILE_DELETE_ON_CLOSE;
+        else
+            FileCB->CreateOptions &= ~FILE_DELETE_ON_CLOSE;
+        return STATUS_SUCCESS;
+    }
+
+    if (Delete)
+    {
+        NtfsFileBasicInformation DispositionBasic;
+
+        Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Status = NtfsFileRecordGetBasicInformation(FileCB->FileRec, &DispositionBasic);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if ((DispositionBasic.FileAttributes & FILE_ATTRIBUTE_READONLY) &&
+            !(Flags & FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE))
+        {
+            return STATUS_CANNOT_DELETE;
+        }
+        Status = NtfsCheckDirectoryEmpty(VolCB, FileCB);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (FileCB->StreamCB &&
+            (!MmFlushImageSection(&FileCB->StreamCB->SectionObjectPointers, MmFlushForDelete) ||
+             !MmCanFileBeTruncated(&FileCB->StreamCB->SectionObjectPointers, NULL)))
+        {
+            return STATUS_CANNOT_DELETE;
+        }
+    }
+
+    if (FileCB->NativeCcb.Lcb &&
+        !(FileCB->RequestedType == TypeData &&
+          FileCB->RequestedStream && FileCB->RequestedStream[0]))
+    {
+        NtfsSetLinkDeletePending(FileCB, Delete);
+        FileCB->PosixDelete = Delete && (Flags & FILE_DISPOSITION_POSIX_SEMANTICS);
+    }
+    else
+    {
+        if (!FileCB->NativeCcb.Lcb)
+            FileCB->DeletePending = Delete;
+        if (FileCB->StreamCB)
+            FileCB->StreamCB->DeletePending = Delete;
+        FileObject->DeletePending = FileCB->DeletePending || Delete;
+    }
+    if (Delete && FileCB->FileDir && VolCB->NotifySync)
+    {
+        FsRtlNotifyFullChangeDirectory(VolCB->NotifySync,
+                                       &VolCB->NotifyList,
+                                       FileObject->FsContext,
+                                       NULL,
+                                       FALSE,
+                                       FALSE,
+                                       0,
+                                       NULL,
+                                       NULL,
+                                       NULL);
+    }
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NtfsSetDispositionInformation(_In_ PVolumeContextBlock VolCB,
+                              _In_ PFileContextBlock FileCB,
+                              _In_ PFILE_OBJECT FileObject,
+                              _In_ FILE_INFORMATION_CLASS InformationClass,
+                              _In_ PVOID Buffer,
+                              _In_ ULONG BufferLength)
+{
+    ULONG Flags;
+    NTSTATUS Status;
+
+    if (InformationClass == FileDispositionInformation)
+    {
+        if (BufferLength < sizeof(FILE_DISPOSITION_INFORMATION))
+            return STATUS_INFO_LENGTH_MISMATCH;
+        Flags = ((PFILE_DISPOSITION_INFORMATION)Buffer)->DeleteFile ? FILE_DISPOSITION_DELETE : 0;
+    }
+    else
+    {
+        if (BufferLength < sizeof(FILE_DISPOSITION_INFORMATION_EX))
+            return STATUS_INFO_LENGTH_MISMATCH;
+        Flags = ((PFILE_DISPOSITION_INFORMATION_EX)Buffer)->Flags;
+    }
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
+    ExAcquireResourceExclusiveLite(NtfsGetPagingIoResource(FileCB), TRUE);
+    NtfsAcquireMetadata(VolCB);
+    Status = NtfsSetDisposition(VolCB, FileCB, FileObject, Flags);
+    NtfsReleaseMetadata(VolCB);
+    ExReleaseResourceLite(NtfsGetPagingIoResource(FileCB));
+    ExReleaseResourceLite(NtfsGetMainResource(FileCB));
+    KeLeaveCriticalRegion();
+    return Status;
+}
+
 _Function_class_(IRP_MJ_SET_INFORMATION)
 _Function_class_(DRIVER_DISPATCH)
 NTSTATUS
@@ -2564,6 +2690,17 @@ NtfsFsdSetInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     {
         Status = STATUS_INVALID_USER_BUFFER;
         goto Complete;
+    }
+    if (IrpSp->Parameters.SetFile.FileInformationClass == FileDispositionInformation ||
+        IrpSp->Parameters.SetFile.FileInformationClass == FileDispositionInformationEx)
+    {
+        Status = NtfsSetDispositionInformation(VolCB, FileCB, FileObject,
+                                               IrpSp->Parameters.SetFile.FileInformationClass,
+                                               SystemBuffer, BufferLength);
+        Irp->IoStatus.Status = Status;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_DISK_INCREMENT);
+        return Status;
     }
 
     KeEnterCriticalRegion();
@@ -2737,91 +2874,6 @@ NtfsFsdSetInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                 (CaseSensitive->Flags & FILE_CS_FLAG_CASE_SENSITIVE_DIR) != 0);
             if (NT_SUCCESS(Status))
                 InterlockedIncrement(&VolCB->DirGeneration);
-            goto Complete;
-        }
-
-        case FileDispositionInformation:
-        {
-            PFILE_DISPOSITION_INFORMATION Disposition =
-                (PFILE_DISPOSITION_INFORMATION)SystemBuffer;
-
-            if (BufferLength < sizeof(FILE_DISPOSITION_INFORMATION))
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-                goto Complete;
-            }
-            if (!(FileCB->DesiredAccess & DELETE))
-            {
-                Status = STATUS_ACCESS_DENIED;
-                goto Complete;
-            }
-            if (NtfsVolumeIsReadOnly(VolCB->DiskVolume))
-            {
-                Status = STATUS_MEDIA_WRITE_PROTECTED;
-                goto Complete;
-            }
-
-            /* A read-only file is not deletable until the attribute goes. */
-            if (Disposition->DeleteFile)
-            {
-                NtfsFileBasicInformation DispositionBasic;
-
-                Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
-                if (!NT_SUCCESS(Status))
-                    goto Complete;
-
-                Status = NtfsFileRecordGetBasicInformation(FileCB->FileRec, &DispositionBasic);
-                if (!NT_SUCCESS(Status))
-                    goto Complete;
-                if (DispositionBasic.FileAttributes & FILE_ATTRIBUTE_READONLY)
-                {
-                    Status = STATUS_CANNOT_DELETE;
-                    goto Complete;
-                }
-
-                Status = NtfsCheckDirectoryEmpty(VolCB, FileCB);
-                if (!NT_SUCCESS(Status))
-                    goto Complete;
-
-                if (FileCB->StreamCB &&
-                    (!MmFlushImageSection(&FileCB->StreamCB->SectionObjectPointers, MmFlushForDelete) ||
-                     !MmCanFileBeTruncated(&FileCB->StreamCB->SectionObjectPointers, NULL)))
-                {
-                    Status = STATUS_CANNOT_DELETE;
-                    goto Complete;
-                }
-            }
-
-            /* The name is only removed once the last handle is gone. */
-            if (FileCB->NativeCcb.Lcb &&
-                !(FileCB->RequestedType == TypeData &&
-                  FileCB->RequestedStream && FileCB->RequestedStream[0]))
-            {
-                NtfsSetLinkDeletePending(FileCB, !!Disposition->DeleteFile);
-            }
-            else
-            {
-                if (!FileCB->NativeCcb.Lcb)
-                    FileCB->DeletePending = !!Disposition->DeleteFile;
-                if (FileCB->StreamCB)
-                    FileCB->StreamCB->DeletePending = !!Disposition->DeleteFile;
-                FileObject->DeletePending = FileCB->DeletePending ||
-                                           !!Disposition->DeleteFile;
-            }
-            if (Disposition->DeleteFile && FileCB->FileDir && VolCB->NotifySync)
-            {
-                FsRtlNotifyFullChangeDirectory(VolCB->NotifySync,
-                                               &VolCB->NotifyList,
-                                               FileObject->FsContext,
-                                               NULL,
-                                               FALSE,
-                                               FALSE,
-                                               0,
-                                               NULL,
-                                               NULL,
-                                               NULL);
-            }
-            Status = STATUS_SUCCESS;
             goto Complete;
         }
 

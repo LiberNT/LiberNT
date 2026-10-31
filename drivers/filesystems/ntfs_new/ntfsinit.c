@@ -306,6 +306,71 @@ NtfsPrepareFileDeletion(_In_ PVolumeContextBlock VolCB,
 
 static
 VOID
+NtfsDetachDeletedLink(_In_ PNTFS_NATIVE_LCB Lcb)
+{
+    PNTFS_LCB_ENTRY LinkEntry = CONTAINING_RECORD(Lcb, NTFS_LCB_ENTRY, Lcb);
+
+    RemoveEntryList(&Lcb->ParentEntry);
+    InitializeListHead(&Lcb->ParentEntry);
+    RemoveEntryList(&LinkEntry->HashEntry);
+    InitializeListHead(&LinkEntry->HashEntry);
+}
+
+static
+VOID
+NtfsUnlinkOpenFile(_In_ PVolumeContextBlock VolCB,
+                   _In_ PFileContextBlock FileCB,
+                   _In_ PStreamContextBlock BaseStream,
+                   _In_reads_(DeletePathLength) PWCHAR DeletePath,
+                   _In_ ULONG DeletePathLength,
+                   _In_ BOOLEAN IsDirectory)
+{
+    PNTFS_NATIVE_LCB Lcb = FileCB->NativeCcb.Lcb;
+    PLIST_ENTRY Bucket = NtfsStreamHashBucket(VolCB, BaseStream->FileReference);
+    PLIST_ENTRY Entry;
+    NTFS_TUNNEL_NAME Tunnel;
+    UNICODE_STRING DeleteName;
+    NTSTATUS Status;
+
+    /* TODO: handles left open on an unlinked file keep their old path for rename, link and name queries */
+    DeleteName.Buffer = DeletePath;
+    DeleteName.Length = DeleteName.MaximumLength = (USHORT)(DeletePathLength * sizeof(WCHAR));
+    NtfsCaptureTunnelName(VolCB, FileCB->FileRec, &DeleteName, &Tunnel);
+    Status = NtfsMasterFileTableUnlinkFile(NtfsVolumeGetMft(VolCB->DiskVolume),
+                                           DeletePath,
+                                           DeletePathLength,
+                                           IsDirectory,
+                                           FileCB->FileRec);
+    InterlockedIncrement(&VolCB->DirGeneration);
+    NtfsEvictCachedRecord(VolCB, DeletePath, (USHORT)DeletePathLength, FALSE);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("NtfsFsdCleanup: unlink failed 0x%08lx\n", Status);
+        return;
+    }
+    NtfsAddTunnelName(VolCB, &Tunnel);
+    NtfsRecordNameMissing(VolCB, DeletePath, (USHORT)DeletePathLength);
+    NtfsReportFileChange(VolCB,
+                         FileCB,
+                         IsDirectory ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME,
+                         FILE_ACTION_REMOVED);
+
+    ExAcquireFastMutex(&VolCB->StreamListMutex);
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
+    {
+        PStreamContextBlock Stream = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
+
+        if (Stream->FileReference == BaseStream->FileReference)
+            Stream->Unlinked = TRUE;
+    }
+    ExReleaseFastMutex(&VolCB->StreamListMutex);
+
+    if (Lcb)
+        NtfsDetachDeletedLink(Lcb);
+}
+
+static
+VOID
 NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
                           _In_ PFileContextBlock FileCB,
                           _In_ PFILE_OBJECT FileObject,
@@ -328,6 +393,7 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
     PStreamContextBlock BaseStream;
     BOOLEAN FileDeletion;
     BOOLEAN StreamOnly;
+    BOOLEAN Unlinked;
 
     KeEnterCriticalRegion();
     NtfsAcquireMetadata(VolCB);
@@ -348,7 +414,10 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
         KeLeaveCriticalRegion();
         return;
     }
-    FileDeletion = BaseStream->DeletePending;
+    Unlinked = BaseStream->Unlinked || (FileCB->StreamCB && FileCB->StreamCB->Unlinked);
+    if (Unlinked)
+        DeleteLink = FALSE;
+    FileDeletion = BaseStream->DeletePending || Unlinked;
     StreamOnly = !DeleteLink && !FileDeletion && FileCB->RequestedType == TypeData &&
                  FileCB->RequestedStream && FileCB->RequestedStream[0];
     if (FileCB->StreamCB != BaseStream)
@@ -412,6 +481,11 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
                                                    &DeleteStreams, &DeleteStreamCount);
             if (DeleteStatus == STATUS_PENDING)
             {
+                if (DeleteLink && FileCB->PosixDelete)
+                {
+                    NtfsUnlinkOpenFile(VolCB, FileCB, BaseStream,
+                                       DeletePath, DeletePathLength, IsDirectory);
+                }
                 NtfsReleaseMetadata(VolCB);
                 ExReleaseResourceLite(&BaseStream->MainResource);
                 NtfsDereferenceStreamContext(VolCB, BaseStream);
@@ -454,7 +528,7 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
         MetadataAcquired = TRUE;
     }
     DeleteStatus = STATUS_SUCCESS;
-    if (FileCB->StreamCB && LastLink)
+    if (FileCB->StreamCB && LastLink && !Unlinked)
     {
         PNtfsFileRecord NamedRecord = NULL;
         ULONG RemainingNameLength = 0;
@@ -532,6 +606,13 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
         Deleted = NT_SUCCESS(DeleteStatus);
         StreamDeleted = Deleted;
     }
+    else if (NT_SUCCESS(DeleteStatus) && Unlinked)
+    {
+        DeleteStatus = NtfsMasterFileTableDeleteUnlinkedFile(NtfsVolumeGetMft(VolCB->DiskVolume),
+                                                             BaseStream->FileReference,
+                                                             &RecordDeleted);
+        Deleted = NT_SUCCESS(DeleteStatus);
+    }
     else if (NT_SUCCESS(DeleteStatus))
     {
         NTFS_TUNNEL_NAME Tunnel;
@@ -554,16 +635,18 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
             NtfsAddTunnelName(VolCB, &Tunnel);
     }
     InterlockedIncrement(&VolCB->DirGeneration);
-    if (!StreamOnly)
+    if (!StreamOnly && !Unlinked)
     {
         NtfsEvictCachedRecord(VolCB,
                               DeletePath,
                               (USHORT)DeletePathLength,
                               RecordDeleted);
     }
-    if (Deleted)
+    if (Deleted && !Unlinked)
         NtfsRecordNameMissing(VolCB, DeletePath, (USHORT)DeletePathLength);
-    if (Deleted && !StreamOnly)
+    if (Deleted && DeleteLink && FileCB->PosixDelete && FileCB->NativeCcb.Lcb)
+        NtfsDetachDeletedLink(FileCB->NativeCcb.Lcb);
+    if (Deleted && !StreamOnly && !Unlinked)
     {
         NtfsReportFileChange(VolCB,
                              FileCB,
@@ -610,7 +693,7 @@ DeleteDone:
         }
         ExReleaseFastMutex(&VolCB->StreamListMutex);
     }
-    if (DeleteLink)
+    if (DeleteLink && !(FileCB->NativeCcb.Lcb && NtfsIsLinkDetached(FileCB->NativeCcb.Lcb)))
         NtfsSetLinkDeletePending(FileCB, FALSE);
     NtfsReleaseMetadata(VolCB);
     if (ResolvedPath)
@@ -835,7 +918,8 @@ NtfsFsdCleanup(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                 ASSERT(FileCB->NativeCcb.Lcb->CleanupCount != 0);
                 FileCB->NativeCcb.Lcb->CleanupCount--;
                 DeleteLink = FileCB->DeletePending &&
-                             FileCB->NativeCcb.Lcb->CleanupCount == 0;
+                             !NtfsIsLinkDetached(FileCB->NativeCcb.Lcb) &&
+                             (FileCB->NativeCcb.Lcb->CleanupCount == 0 || FileCB->PosixDelete);
             }
             NtfsReleaseMetadata(VolCB);
             KeLeaveCriticalRegion();

@@ -271,6 +271,14 @@ typedef struct _NTFS_LCB_ENTRY
     LIST_ENTRY HashEntry;
 } NTFS_LCB_ENTRY, *PNTFS_LCB_ENTRY;
 
+/* A link whose name was removed while handles stay open is in no parent or hash list. */
+FORCEINLINE
+BOOLEAN
+NtfsIsLinkDetached(_In_ PNTFS_NATIVE_LCB Lcb)
+{
+    return IsListEmpty(&Lcb->ParentEntry);
+}
+
 FORCEINLINE
 PLIST_ENTRY
 NtfsLinkHashBucket(_In_ PVolumeContextBlock VolCB,
@@ -312,6 +320,7 @@ typedef struct _SCB
     BOOLEAN SizePending;
     BOOLEAN Deleted;
     BOOLEAN DeletePending;
+    BOOLEAN Unlinked;
     LONG UncleanCount;
     NTFS_NATIVE_SCB NativeScb;
 } StreamContextBlock, *PStreamContextBlock;
@@ -364,6 +373,7 @@ typedef struct _FCB
     /* Set through FileDispositionInformation or FILE_DELETE_ON_CLOSE;
      * the name is removed when the handle goes away. */
     BOOLEAN DeletePending;
+    BOOLEAN PosixDelete;
     BOOLEAN WriteTimesStamped;
     BOOLEAN ShareAccessSet;
 

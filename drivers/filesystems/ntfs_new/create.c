@@ -1641,8 +1641,11 @@ NtfsRemoveOpenLink(_In_ PVolumeContextBlock VolCB,
                     CONTAINING_RECORD(Lcb->ParentScb, StreamContextBlock, NativeScb);
 
                 ASSERT(Lcb->CleanupCount == 0);
-                RemoveEntryList(&Lcb->ParentEntry);
-                RemoveEntryList(&CONTAINING_RECORD(Lcb, NTFS_LCB_ENTRY, Lcb)->HashEntry);
+                if (!NtfsIsLinkDetached(Lcb))
+                {
+                    RemoveEntryList(&Lcb->ParentEntry);
+                    RemoveEntryList(&CONTAINING_RECORD(Lcb, NTFS_LCB_ENTRY, Lcb)->HashEntry);
+                }
                 ExFreePoolWithTag(Lcb->FileName.Buffer, TAG_NTFS);
                 ExFreePoolWithTag(CONTAINING_RECORD(Lcb, NTFS_LCB_ENTRY, Lcb), TAG_NTFS);
                 NtfsDereferenceStreamContext(VolCB, ParentStream);
