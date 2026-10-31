@@ -121,11 +121,11 @@ TestMitigationOptionsMask(void)
                                  First + MITIGATION_GUARD_BYTES,
                                  InvalidLengths[Index]);
         Error = GetLastError();
-        ok(!FirstSuccess, "length %Iu unexpectedly succeeded\n", InvalidLengths[Index]);
+        ok(!FirstSuccess, "length %Iu unexpectedly succeeded\n", (size_t)InvalidLengths[Index]);
         ok(Error == ERROR_INVALID_PARAMETER,
-           "length %Iu returned error %lu\n", InvalidLengths[Index], Error);
+           "length %Iu returned error %lu\n", (size_t)InvalidLengths[Index], Error);
         ok(AllBytesEqual(First, sizeof(First), 0xCC),
-           "length %Iu modified the guarded buffer\n", InvalidLengths[Index]);
+           "length %Iu modified the guarded buffer\n", (size_t)InvalidLengths[Index]);
     }
 
     for (Index = 0; Index < ARRAYSIZE(ValidCases); ++Index)
@@ -146,20 +146,20 @@ TestMitigationOptionsMask(void)
                                   SecondOutput,
                                   Length);
         ok(FirstSuccess && SecondSuccess,
-           "length %Iu offset %Iu failed with %lu\n", Length, Offset, GetLastError());
+           "length %Iu offset %Iu failed with %lu\n", (size_t)Length, (size_t)Offset, GetLastError());
         if (!FirstSuccess || !SecondSuccess)
             continue;
 
         ok(AllBytesEqual(First, Offset, 0xCC) &&
            AllBytesEqual(Second, Offset, 0x55),
-           "length %Iu offset %Iu wrote before the output\n", Length, Offset);
+           "length %Iu offset %Iu wrote before the output\n", (size_t)Length, (size_t)Offset);
         ok(AllBytesEqual(FirstOutput + Length, sizeof(First) - Offset - Length, 0xCC) &&
            AllBytesEqual(SecondOutput + Length, sizeof(Second) - Offset - Length, 0x55),
-           "length %Iu offset %Iu wrote beyond the output\n", Length, Offset);
+           "length %Iu offset %Iu wrote beyond the output\n", (size_t)Length, (size_t)Offset);
         ok(!memcmp(FirstOutput, SecondOutput, Length),
-           "length %Iu offset %Iu left input-dependent output\n", Length, Offset);
+           "length %Iu offset %Iu left input-dependent output\n", (size_t)Length, (size_t)Offset);
         ok(MitigationMaskIsWellFormed(FirstOutput, Length),
-           "length %Iu offset %Iu returned reserved mask bits\n", Length, Offset);
+           "length %Iu offset %Iu returned reserved mask bits\n", (size_t)Length, (size_t)Offset);
 
         if (Length == sizeof(Mask8) && Offset == MITIGATION_GUARD_BYTES)
             memcpy(Mask8, FirstOutput, sizeof(Mask8));

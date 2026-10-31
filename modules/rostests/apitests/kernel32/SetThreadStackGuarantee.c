@@ -29,12 +29,12 @@ static BOOL check_guard(ULONG size)
     SIZE_T ret;
 
     ret = VirtualQuery((BYTE *)tib->StackLimit - size - PAGE_BYTES, &info, sizeof(info));
-    ok(ret == sizeof(info), "VirtualQuery returned %Iu, error %lu\n", ret, GetLastError());
+    ok(ret == sizeof(info), "VirtualQuery returned %Iu, error %lu\n", (size_t)ret, GetLastError());
     if (ret != sizeof(info)) return FALSE;
     ok(info.State == MEM_COMMIT, "Guard state %#lx\n", info.State);
     ok(info.Protect == (PAGE_READWRITE | PAGE_GUARD), "Guard protection %#lx\n", info.Protect);
     ok(info.RegionSize == size + PAGE_BYTES, "Guard size %#Ix, expected %#lx\n",
-       info.RegionSize, size + PAGE_BYTES);
+       (size_t)info.RegionSize, size + PAGE_BYTES);
     ok((BYTE *)info.BaseAddress + info.RegionSize == tib->StackLimit,
        "Guard ends at %p, stack limit %p\n", (BYTE *)info.BaseAddress + info.RegionSize, tib->StackLimit);
     return info.State == MEM_COMMIT && info.Protect == (PAGE_READWRITE | PAGE_GUARD) &&
@@ -140,7 +140,7 @@ static DWORD WINAPI test_stack(void *arg)
     VirtualQuery(allocation + PAGE_BYTES, &info, sizeof(info));
     ok(info.State == MEM_COMMIT && info.Protect == PAGE_READWRITE,
        "Overflow reserve state/protection %#lx/%#lx\n", info.State, info.Protect);
-    ok(info.RegionSize >= old_size, "Overflow reserve only %#Ix bytes\n", info.RegionSize);
+    ok(info.RegionSize >= old_size, "Overflow reserve only %#Ix bytes\n", (size_t)info.RegionSize);
     VirtualQuery(allocation, &info, sizeof(info));
     ok(info.State == MEM_RESERVE || info.Protect == PAGE_NOACCESS,
        "Bottom page state/protection %#lx/%#lx\n", info.State, info.Protect);

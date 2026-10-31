@@ -96,13 +96,13 @@ TestAppCompatData(VOID)
     if (Error == ERROR_SUCCESS && Data)
     {
         Size = HeapSize(GetProcessHeap(), 0, Data);
-        ok(Size == 4544, "self: heap size %Iu\n", Size);
+        ok(Size == 4544, "self: heap size %Iu\n", (size_t)Size);
         for (Index = 0; Index < 64; Index++)
         {
             if (((PUCHAR)Data)[Index])
                 break;
         }
-        ok(Index == 64, "self: nonzero byte at %Iu\n", Index);
+        ok(Index == 64, "self: nonzero byte at %Iu\n", (size_t)Index);
         pBaseFreeAppCompatDataForProcess(Data);
     }
 

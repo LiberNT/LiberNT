@@ -37,14 +37,14 @@ Test_MatchesLegacyMask(ULONG HighestNode, KAFFINITY *UnionMask)
         if (Result)
         {
             ok(Affinity.Mask == (KAFFINITY)LegacyMask,
-               "Node %u: Mask = %Ix, legacy = %I64x\n", Node, Affinity.Mask, LegacyMask);
+               "Node %u: Mask = %Ix, legacy = %I64x\n", Node, (size_t)Affinity.Mask, LegacyMask);
         }
 
         if (Node == 0)
             ok(Affinity.Mask != 0, "Node 0 has an empty processor mask\n");
 
         ok((*UnionMask & Affinity.Mask) == 0,
-           "Node %u: Mask %Ix overlaps earlier nodes %Ix\n", Node, Affinity.Mask, *UnionMask);
+           "Node %u: Mask %Ix overlaps earlier nodes %Ix\n", Node, (size_t)Affinity.Mask, (size_t)*UnionMask);
         *UnionMask |= Affinity.Mask;
     }
 }
@@ -74,7 +74,7 @@ Test_MatchesNtQuery(ULONG HighestNode)
             continue;
         ok(Affinity.Mask == (KAFFINITY)NumaInfo.ActiveProcessorsAffinityMask[Node],
            "Node %u: Mask = %Ix, kernel map = %I64x\n",
-           Node, Affinity.Mask, NumaInfo.ActiveProcessorsAffinityMask[Node]);
+           Node, (size_t)Affinity.Mask, NumaInfo.ActiveProcessorsAffinityMask[Node]);
     }
 }
 
@@ -91,7 +91,7 @@ Test_UnionCoversSystemAffinity(KAFFINITY UnionMask)
         return;
 
     ok(UnionMask == (KAFFINITY)SystemMask,
-       "Union of node masks %Ix != system affinity %Ix\n", UnionMask, (KAFFINITY)SystemMask);
+       "Union of node masks %Ix != system affinity %Ix\n", (size_t)UnionMask, (size_t)SystemMask);
 }
 
 static

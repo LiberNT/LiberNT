@@ -626,7 +626,7 @@ START_TEST(IoCompletion)
         ok(!DequeueContext.Success, "GetQueuedCompletionStatus succeeded after the port closed\n");
         ok(DequeueContext.Error == ERROR_ABANDONED_WAIT_0, "Expected ERROR_ABANDONED_WAIT_0, got %lu\n", DequeueContext.Error);
         ok(DequeueContext.Bytes == 0x55555555, "Bytes changed to %#lx\n", DequeueContext.Bytes);
-        ok(DequeueContext.Key == 0x55555555, "Key changed to %#Ix\n", DequeueContext.Key);
+        ok(DequeueContext.Key == 0x55555555, "Key changed to %#Ix\n", (size_t)DequeueContext.Key);
         ok(DequeueContext.Overlapped == NULL, "Overlapped changed to %p\n", DequeueContext.Overlapped);
     }
     if (Threads[0]) CloseHandle(Threads[0]);

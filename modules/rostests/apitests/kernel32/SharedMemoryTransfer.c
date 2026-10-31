@@ -157,7 +157,7 @@ START_TEST(SharedMemoryTransfer)
         DWORD Written;
 
         Mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, (DWORD)Size, NULL);
-        ok(Mapping != NULL, "round %lu: CreateFileMappingW(%Iu) failed with %lu\n", Round, Size, GetLastError());
+        ok(Mapping != NULL, "round %lu: CreateFileMappingW(%Iu) failed with %lu\n", Round, (size_t)Size, GetLastError());
         if (!Mapping) break;
 
         View = MapViewOfFileEx(Mapping, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, Size, NULL);
