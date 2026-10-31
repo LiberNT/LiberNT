@@ -85,6 +85,7 @@ extern void func_ThreadPowerThrottling(void);
 extern void func_ProcessPowerThrottling(void);
 extern void func_TunnelCache(void);
 extern void func_UEFIFirmware(void);
+extern void func_WaitFileHandle(void);
 extern void func_WaitForMultipleObjects(void);
 extern void func_WerRegisterFile(void);
 extern void func_WideCharToMultiByte(void);
@@ -177,6 +178,7 @@ const struct test winetest_testlist[] =
     { "ProcessPowerThrottling",      func_ProcessPowerThrottling },
     { "TunnelCache",                 func_TunnelCache },
     { "UEFIFirmware",                func_UEFIFirmware },
+    { "WaitFileHandle",              func_WaitFileHandle },
     { "WaitForMultipleObjects",      func_WaitForMultipleObjects },
     { "WerRegisterFile",             func_WerRegisterFile },
     { "WideCharToMultiByte",         func_WideCharToMultiByte },

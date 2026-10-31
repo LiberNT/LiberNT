@@ -88,6 +88,7 @@ list(APPEND SOURCE
     ProcessPowerThrottling.c
     TunnelCache.c
     UEFIFirmware.c
+    WaitFileHandle.c
     WaitForMultipleObjects.c
     WerRegisterFile.c
     WideCharToMultiByte.c

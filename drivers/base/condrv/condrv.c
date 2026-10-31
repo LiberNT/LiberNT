@@ -2297,17 +2297,20 @@ CdFastIoClientRequest(
     }
 
     File = Target->FsContext;
-    if (IoGetRelatedDeviceObject(Target) != DeviceObject ||
-        !File || File->Type == CdFileConnection || File->Type == CdFileServer ||
-        !CdFastIoDeviceControl(Target,
-                               TRUE,
-                               (PUCHAR)InputBuffer + sizeof(Header),
-                               InputBufferLength - sizeof(Header),
-                               OutputBuffer,
-                               OutputBufferLength,
-                               Header.Code,
-                               IoStatus,
-                               DeviceObject))
+    if (IoGetRelatedDeviceObject(Target) != DeviceObject || !File)
+    {
+        IoStatus->Status = STATUS_INVALID_HANDLE;
+    }
+    else if (File->Type == CdFileConnection || File->Type == CdFileServer ||
+             !CdFastIoDeviceControl(Target,
+                                    TRUE,
+                                    (PUCHAR)InputBuffer + sizeof(Header),
+                                    InputBufferLength - sizeof(Header),
+                                    OutputBuffer,
+                                    OutputBufferLength,
+                                    Header.Code,
+                                    IoStatus,
+                                    DeviceObject))
     {
         IoStatus->Status = STATUS_NOT_SUPPORTED;
         IoStatus->Information = 0;
