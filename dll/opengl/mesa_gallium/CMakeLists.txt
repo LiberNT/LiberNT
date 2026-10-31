@@ -18,10 +18,6 @@ else()
 endif()
 set(MESA_GALLIUM_ASSERTIONS ${_mesa_assertions_default} CACHE BOOL "Build Mesa with its assertions enabled")
 
-if(ARCH STREQUAL "riscv64" AND NOT SPACEMIT_K1_SUPPORT)
-    return()
-endif()
-
 set(_mesa_arch ${ARCH})
 set(_mesa_arch_flags)
 set(_mesa_features)

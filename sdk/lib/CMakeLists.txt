@@ -74,7 +74,7 @@ if((REACTOS_USE_WDDM AND (REACTOS_WDDM_TARGET_LEVEL GREATER_EQUAL 2000)) OR MESA
     add_subdirectory(vc4kmt)
 endif()
 if(((REACTOS_USE_WDDM AND (REACTOS_WDDM_TARGET_LEVEL GREATER_EQUAL 2000)) OR MESA_GALLIUM_FROM_SOURCE) AND
-   (ARCH STREQUAL "riscv64") AND SPACEMIT_K1_SUPPORT)
+   (ARCH STREQUAL "riscv64"))
     add_subdirectory(pvrkmt)
 endif()
 add_subdirectory(vcruntime)
