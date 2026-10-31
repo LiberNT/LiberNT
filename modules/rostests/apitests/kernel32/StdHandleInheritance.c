@@ -110,6 +110,77 @@ Cleanup:
     CloseHandle(Read);
 }
 
+static
+VOID
+TestUnlistedStdHandle(
+    _In_ PCWSTR Application)
+{
+    SECURITY_ATTRIBUTES Security = { sizeof(Security), NULL, TRUE };
+    LPPROC_THREAD_ATTRIBUTE_LIST Attributes;
+    PROCESS_INFORMATION ProcessInfo;
+    STARTUPINFOEXW Startup;
+    WCHAR CommandLine[MAX_PATH + 64];
+    HANDLE Read, Write, Listed;
+    CHAR Buffer[128];
+    DWORD Received = 0, ExitCode = MAXULONG;
+    SIZE_T Size = 0;
+    BOOL Success;
+
+    if (!CreatePipe(&Read, &Write, &Security, 0))
+    {
+        ok(0, "CreatePipe failed with %lu\n", GetLastError());
+        return;
+    }
+    SetHandleInformation(Read, HANDLE_FLAG_INHERIT, 0);
+    Listed = CreateEventW(&Security, TRUE, FALSE, NULL);
+
+    InitializeProcThreadAttributeList(NULL, 1, 0, &Size);
+    Attributes = HeapAlloc(GetProcessHeap(), 0, Size);
+    Success = Listed && Attributes && InitializeProcThreadAttributeList(Attributes, 1, 0, &Size);
+    ok(Success, "InitializeProcThreadAttributeList failed with %lu\n", GetLastError());
+    if (Success)
+    {
+        Success = UpdateProcThreadAttribute(Attributes, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, &Listed,
+                                            sizeof(Listed), NULL, NULL);
+        ok(Success, "UpdateProcThreadAttribute failed with %lu\n", GetLastError());
+    }
+    if (Success)
+    {
+        ZeroMemory(&Startup, sizeof(Startup));
+        Startup.StartupInfo.cb = sizeof(Startup);
+        Startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+        Startup.StartupInfo.hStdOutput = Write;
+        Startup.lpAttributeList = Attributes;
+        StringCchPrintfW(CommandLine, ARRAYSIZE(CommandLine), L"\"%s\" StdHandleInheritance child", Application);
+        Success = CreateProcessW(Application, CommandLine, NULL, NULL, TRUE, EXTENDED_STARTUPINFO_PRESENT, NULL,
+                                 NULL, &Startup.StartupInfo, &ProcessInfo);
+        ok(Success, "CreateProcessW failed with %lu\n", GetLastError());
+    }
+    CloseHandle(Write);
+
+    if (Success)
+    {
+        ok_eq_ulong(WaitForSingleObject(ProcessInfo.hProcess, 5000), WAIT_OBJECT_0);
+        GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode);
+        ok_eq_ulong(ExitCode, 3UL);
+        CloseHandle(ProcessInfo.hThread);
+        CloseHandle(ProcessInfo.hProcess);
+
+        Success = ReadFile(Read, Buffer, sizeof(Buffer) - 1, &Received, NULL);
+        ok(!Success && GetLastError() == ERROR_BROKEN_PIPE, "ReadFile returned %d with %lu, %lu bytes\n", Success,
+           GetLastError(), Received);
+    }
+
+    if (Attributes)
+    {
+        DeleteProcThreadAttributeList(Attributes);
+        HeapFree(GetProcessHeap(), 0, Attributes);
+    }
+    if (Listed)
+        CloseHandle(Listed);
+    CloseHandle(Read);
+}
+
 START_TEST(StdHandleInheritance)
 {
     WCHAR Application[MAX_PATH];
@@ -128,4 +199,5 @@ START_TEST(StdHandleInheritance)
 
     TestInheritance(Application, FALSE);
     TestInheritance(Application, TRUE);
+    TestUnlistedStdHandle(Application);
 }

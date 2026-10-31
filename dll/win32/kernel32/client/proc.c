@@ -2962,9 +2962,11 @@ BasepCreateUserProcess(IN HANDLE UserToken,
         ProcessParameters->StandardError = Parent->StandardError;
         DuplicateStdHandles = !InheritHandles;
     }
+    /* TODO: give a pseudo console child the parent's standard handles that are not console handles */
 
     if (!(CreationFlags & CREATE_NEW_PROCESS_GROUP) || (CreationFlags & CREATE_NEW_CONSOLE)) ProcessParameters->ConsoleFlags = NtCurrentPeb()->ProcessParameters->ConsoleFlags;
     else ProcessParameters->ConsoleFlags = 1;
+    if (Extended->PseudoConsole && !(CreationFlags & DETACHED_PROCESS)) ProcessParameters->ConsoleFlags |= 2;
     ProcessParameters->ProcessGroupId = (CreationFlags & CREATE_NEW_PROCESS_GROUP) ? 0 : NtCurrentPeb()->ProcessParameters->ProcessGroupId;
     if (ParameterFlags & 1) ProcessParameters->Flags |= RTL_USER_PROCESS_PARAMETERS_LOCAL_DLL_PATH;
     if (ParameterFlags & 2) ProcessParameters->Flags |= RTL_USER_PROCESS_PARAMETERS_IMAGE_KEY_MISSING;

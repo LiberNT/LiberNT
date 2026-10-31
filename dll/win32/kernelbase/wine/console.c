@@ -2733,7 +2733,11 @@ static HANDLE create_pseudo_console( COORD size, HANDLE input, HANDLE output, HA
     unsigned int inherit_count;
     PROCESS_INFORMATION pi;
     HANDLE server, console;
+#ifdef __REACTOS__
+    HANDLE inherit[4];
+#else
     HANDLE inherit[2];
+#endif
     STARTUPINFOEXW si;
     SIZE_T attr_size;
     void *redir;
@@ -2761,6 +2765,10 @@ static HANDLE create_pseudo_console( COORD size, HANDLE input, HANDLE output, HA
     inherit[0] = server;
     inherit[1] = signal;
     inherit_count = signal ? 2 : 1;
+#ifdef __REACTOS__
+    if (input) inherit[inherit_count++] = input;
+    if (output) inherit[inherit_count++] = output;
+#endif
     InitializeProcThreadAttributeList( NULL, inherit_count, 0, &attr_size );
     if (!(si.lpAttributeList = HeapAlloc( GetProcessHeap(), 0, attr_size )))
     {

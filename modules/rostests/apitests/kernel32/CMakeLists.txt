@@ -69,6 +69,7 @@ list(APPEND SOURCE
     PackageNames.c
     PixeloramaCompat.c
     ProcessPreferredUILanguages.c
+    PseudoConsoleCtrlC.c
     PssSnapshot.c
     PrivMoveFileIdentityW.c
     QueueUserAPC.c

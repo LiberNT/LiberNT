@@ -67,6 +67,7 @@ extern void func_Pipes(void);
 extern void func_PackageNames(void);
 extern void func_PixeloramaCompat(void);
 extern void func_ProcessPreferredUILanguages(void);
+extern void func_PseudoConsoleCtrlC(void);
 extern void func_PssSnapshot(void);
 extern void func_PrivMoveFileIdentityW(void);
 extern void func_QueueUserAPC(void);
@@ -162,6 +163,7 @@ const struct test winetest_testlist[] =
     { "PackageNames",                func_PackageNames },
     { "PixeloramaCompat",            func_PixeloramaCompat },
     { "ProcessPreferredUILanguages", func_ProcessPreferredUILanguages },
+    { "PseudoConsoleCtrlC",          func_PseudoConsoleCtrlC },
     { "PssSnapshot",                 func_PssSnapshot },
     { "PrivMoveFileIdentityW",       func_PrivMoveFileIdentityW },
     { "QueueUserAPC",                func_QueueUserAPC },
