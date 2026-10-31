@@ -135,6 +135,8 @@ typedef struct _QUOTA_LIMITS
 #define MEM_COMMIT 0x00001000
 #define MAXULONG64 (~(ULONG64)0)
 #define InterlockedExchangeAdd(p, v) __atomic_fetch_add((p), (v), __ATOMIC_SEQ_CST)
+#define InterlockedExchange(p, v) __atomic_exchange_n((p), (v), __ATOMIC_SEQ_CST)
+#define ReadNoFence(p) __atomic_load_n((p), __ATOMIC_RELAXED)
 #define HandleToUlong(h) ((ULONG)(ULONG_PTR)(h))
 #define ULongToHandle(u) ((HANDLE)(ULONG_PTR)(u))
 typedef struct _FAST_MUTEX { LONG Unused; } FAST_MUTEX, *PFAST_MUTEX;
@@ -161,6 +163,7 @@ typedef struct _FAST_MUTEX { LONG Unused; } FAST_MUTEX, *PFAST_MUTEX;
 
 #define _In_reads_bytes_(x)
 #define _Out_writes_bytes_(x)
+#define _Inout_updates_bytes_(x)
 #define _Inout_opt_
 #define NTAPI
 
@@ -207,6 +210,8 @@ void LxHostCopy(void *Destination, const void *Source, SIZE_T Length);
 #define LX_BRK_RESERVE      (1024ULL * 1024 * 1024)
 #define LX_MMAP_MIN_ADDR    0x10000ULL
 #define LX_MMAP_GAP         (128ULL * 1024 * 1024)
+#define LX_STACK_SIZE       (8 * 1024 * 1024)
+#define LX_MS_NOEXEC        0x00000008
 #define LX_VMA_HUGETLB      0x00020000
 #define LX_VMA_DONTDUMP     0x00040000
 #define LX_VMA_TOUCHED      0x00080000
@@ -229,6 +234,7 @@ void LxHostCopy(void *Destination, const void *Source, SIZE_T Length);
 #include "../rtl/include/rtltree.h"
 
 typedef struct _LX_FILE LX_FILE, *PLX_FILE;
+typedef struct _LX_MOUNT { ULONG Flags; } LX_MOUNT, *PLX_MOUNT;
 typedef struct _LX_PROCESS LX_PROCESS, *PLX_PROCESS;
 typedef struct _LX_THREAD LX_THREAD, *PLX_THREAD;
 typedef struct _LX_TMPFS_INODE LX_TMPFS_INODE, *PLX_TMPFS_INODE;
@@ -323,6 +329,7 @@ struct _LX_FILE
     BOOLEAN NtPipe;
     ULONG64 Rdev;
     PLX_MEMFD Memfd;
+    PLX_MOUNT Mount;
 };
 
 struct _LX_PROCESS
@@ -347,6 +354,9 @@ struct _LX_PROCESS
     ULONG MmLockDefault;
     ULONG64 CapEffective;
     LX_RLIMIT Limits[16];
+    ULONG Personality;
+    ULONG64 MmapTop;
+    ULONG64 StackTop;
 };
 
 struct _LX_THREAD
@@ -494,6 +504,9 @@ ULONG LxMmReleaseKeyedViews(_In_ PVOID Key, _In_opt_ VOID (*Visit)(_In_ PVOID Co
 ULONG64 LxTmpfsInodeSize(_In_ PLX_TMPFS_INODE Inode);
 LONG LxTmpfsInodeRemoveRange(_In_ PLX_TMPFS_INODE Inode, _In_ ULONG64 Start, _In_ ULONG64 End);
 PLX_TMPFS_INODE LxTmpfsFileInode(_In_opt_ PLX_FILE File);
+NTSTATUS LxFillRandom(_Out_writes_bytes_(Length) PUCHAR Buffer, _In_ ULONG Length);
+VOID LxArchMmapRndBits(_Out_ PULONG Minimum, _Out_ PULONG Maximum);
+ULONG64 LxArchStackRndMask(VOID);
 NTSTATUS LxTmpfsMapSection(_In_ PLX_TMPFS_INODE Inode, _In_ BOOLEAN Shared, _Out_ PHANDLE Section, _Out_opt_ PULONG64 Size);
 BOOLEAN LxMmHandleFault(_In_ PLX_PROCESS Process, _In_ ULONG64 Address, _In_ ULONG Access);
 BOOLEAN LxMmFaultIn(_In_ ULONG64 Address, _In_ SIZE_T Length, _In_ BOOLEAN Write);

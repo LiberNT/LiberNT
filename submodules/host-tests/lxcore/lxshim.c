@@ -829,6 +829,26 @@ LxCapable(PLX_PROCESS Process, ULONG Capability)
     return (Process->CapEffective & (1ULL << Capability)) != 0;
 }
 
+NTSTATUS
+LxFillRandom(PUCHAR Buffer, ULONG Length)
+{
+    memset(Buffer, 0, Length);
+    return STATUS_SUCCESS;
+}
+
+VOID
+LxArchMmapRndBits(PULONG Minimum, PULONG Maximum)
+{
+    *Minimum = 18;
+    *Maximum = 30;
+}
+
+ULONG64
+LxArchStackRndMask(VOID)
+{
+    return 0x3FFFF;
+}
+
 PLX_THREAD
 LxCurrentThread(VOID)
 {
