@@ -53,7 +53,7 @@ basic=$("$driver" --basic "$image" /file.bin)
 set -- $basic
 test "$#" -eq 5
 test "$4" -gt "$timestamp"
-test "$5" = 0x00000021
+test "$5" = 0x00000001
 
 # Fill the base record with independently written NTFS-3G streams. Stop as
 # soon as the native attribute list appears so the EA case stays compact.

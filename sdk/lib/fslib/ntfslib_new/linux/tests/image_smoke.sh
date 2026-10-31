@@ -94,7 +94,8 @@ test "$(volume_field sectors)" = "$boot_sectors"
 test "$(volume_field clusters)" -eq \
     $((boot_sectors / boot_sectors_per_cluster))
 test "$(volume_field free-clusters)" = "$ntfs_free_clusters"
-test "$(volume_field reserved-clusters)" -eq 0
+test "$(volume_field reserved-clusters)" -eq \
+    $((4194304 / (boot_sector_size * boot_sectors_per_cluster)))
 test "$(volume_field bytes-per-sector)" = "$boot_sector_size"
 test "$(volume_field bytes-per-cluster)" -eq \
     $((boot_sector_size * boot_sectors_per_cluster))

@@ -48,10 +48,15 @@ mft_bitmap_bit()
     echo $(((_byte >> (_record % 8)) & 1))
 }
 
-mft_allocation()
+record_allocation()
 {
-    "$ntfsinfo" -i 0 "$image" |
+    "$ntfsinfo" -i "$1" "$image" |
         awk '/^[[:space:]]+Allocated size:/ { total += $3 } END { print total + 0 }'
+}
+
+metadata_allocation()
+{
+    echo $(($(record_allocation 0) + $(record_allocation 9)))
 }
 
 truncate -s 64M "$image"
@@ -59,7 +64,7 @@ truncate -s 64M "$image"
 
 free_before=$("$driver" --probe "$image" |
     awk '/^free clusters:/ { print $3 }')
-mft_before=$(mft_allocation)
+metadata_before=$(metadata_allocation)
 cluster_size=$("$ntfsinfo" -m "$image" | awk '/Cluster Size:/ { print $3; exit }')
 
 # Empty file creation publishes an ordinary base record.
@@ -160,11 +165,11 @@ test "$3" -gt "$old_time"
 test "$4" -gt "$old_time"
 
 # Every record so far is resident-only: all allocated clusters must be
-# accounted for by $MFT growth, measured with the independent reader.
+# accounted for by $MFT and $Secure growth, measured with the independent reader.
 free_after=$("$driver" --probe "$image" |
     awk '/^free clusters:/ { print $3 }')
 test "$free_after" -le "$free_before"
-test $(((free_before - free_after) * cluster_size)) -eq $(($(mft_allocation) - mft_before))
+test $(((free_before - free_after) * cluster_size)) -eq $(($(metadata_allocation) - metadata_before))
 
 # Grow one directory far past its resident root using only the shared
 # core: the first insertion overflow promotes the root into an index

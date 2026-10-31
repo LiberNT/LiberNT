@@ -101,7 +101,7 @@ test "$1" = 0x00000104
 test "$2" -eq 2
 test "$3" = "$link_record"
 test "$("$driver" --basic "$image" /link.bin |
-    awk '{ print $5 }')" = 0x00000420
+    awk '{ print $5 }')" = 0x00000400
 test "$("$driver" --basic "$image" /link.bin |
     awk '{ print $4 }')" -gt 100
 test "$("$driver" --list-info "$image" / |
@@ -134,20 +134,16 @@ then
     exit 1
 fi
 test "$("$driver" --basic "$image" /link.bin |
-    awk '{ print $5 }')" = 0x00000020
+    awk '{ print $5 }')" = 0x00000080
 test "$("$driver" --list-info "$image" / |
     awk '$4 == "link.bin" { print $5 " " $6 }')" = \
     '0 0x00000000'
 
-# Native NTFS rejects adding the first reparse point to a file that already
-# owns EAs. Existing reparse points may retain and mutate EAs separately.
+# Windows 11 accepts a first reparse point on a file that already owns EAs,
+# and the EAs stay.
 "$driver" --set-ea "$image" /ea.bin 0 Author "$ea_value"
-if "$driver" --set-reparse \
-    "$image" /ea.bin "$symlink_one" >/dev/null 2>&1
-then
-    echo "accepted a first reparse point on an EA-bearing file" >&2
-    exit 1
-fi
+"$driver" --set-reparse "$image" /ea.bin "$symlink_one"
+"$driver" --reparse "$image" /ea.bin | cmp - "$symlink_one"
 test "$("$driver" --ea "$image" /ea.bin |
     awk '{ print $2 " " $3 " " $4 }')" = 'Author 3 416461'
 
@@ -184,5 +180,5 @@ free_final=$("$driver" --probe "$image" |
     awk '/^free clusters:/ { print $3 }')
 test "$free_final" -eq "$free_before"
 test "$("$driver" --basic "$image" /third.bin |
-    awk '{ print $5 }')" = 0x00000020
+    awk '{ print $5 }')" = 0x00000080
 "$ntfsfix" -n "$image" >/dev/null

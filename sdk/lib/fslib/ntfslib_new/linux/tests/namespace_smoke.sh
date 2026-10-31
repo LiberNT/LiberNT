@@ -25,10 +25,15 @@ link_count()
         awk '/Number of Hard Links/ { print $5 }'
 }
 
-mft_allocation()
+record_allocation()
 {
-    "$ntfsinfo" -i 0 "$image" |
+    "$ntfsinfo" -i "$1" "$image" |
         awk '/^[[:space:]]+Allocated size:/ { total += $3 } END { print total + 0 }'
+}
+
+metadata_allocation()
+{
+    echo $(($(record_allocation 0) + $(record_allocation 9)))
 }
 
 no_empty_index_buffer()
@@ -61,7 +66,7 @@ name_spaces()
 truncate -s 256M "$image"
 "$mkntfs" -F -Q -q -L NAMESPACE "$image"
 baseline=$(free_clusters)
-mft_before=$(mft_allocation)
+metadata_before=$(metadata_allocation)
 cluster_size=$("$ntfsinfo" -m "$image" | awk '/Cluster Size:/ { print $3; exit }')
 
 # Deletion reclaims a file's name, record, and clusters.
@@ -266,9 +271,9 @@ done <"$workdir/sparse.ours"
 no_empty_index_buffer /sparse
 "$driver" --remove-dir "$image" /sparse
 
-# Every cluster except permanent chunked $MFT growth must be free again.
+# Every cluster except permanent $MFT and $Secure growth must be free again.
 final=$(free_clusters)
 test "$final" -le "$baseline"
-test $(((baseline - final) * cluster_size)) -eq $(($(mft_allocation) - mft_before))
+test $(((baseline - final) * cluster_size)) -eq $(($(metadata_allocation) - metadata_before))
 
 "$ntfsfix" -n "$image" >/dev/null
