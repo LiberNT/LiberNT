@@ -284,6 +284,16 @@ HalpPCIConfig(IN PBUS_HANDLER BusHandler,
     PCIConfigHandler.ReleaseSynchronzation(BusHandler, OldIrql);
 }
 
+static
+ULONG
+HalpPciExtendedConfig(
+    _In_ ULONG BusNumber,
+    _In_ PCI_SLOT_NUMBER Slot,
+    _Inout_updates_bytes_(Length) PUCHAR Buffer,
+    _In_ ULONG Offset,
+    _In_ ULONG Length,
+    _In_ BOOLEAN Write);
+
 VOID
 NTAPI
 HalpReadPCIConfig(IN PBUS_HANDLER BusHandler,
@@ -298,7 +308,7 @@ HalpReadPCIConfig(IN PBUS_HANDLER BusHandler,
         /* Fill the buffer with invalid data */
         RtlFillMemory(Buffer, Length, -1);
     }
-    else
+    else if (HalpPciExtendedConfig(BusHandler->BusNumber, Slot, Buffer, Offset, Length, FALSE) != Length)
     {
         /* Send the request */
         HalpPCIConfig(BusHandler,
@@ -319,7 +329,8 @@ HalpWritePCIConfig(IN PBUS_HANDLER BusHandler,
                    IN ULONG Length)
 {
     /* Validate the PCI Slot */
-    if (HalpValidPCISlot(BusHandler, Slot))
+    if (HalpValidPCISlot(BusHandler, Slot) &&
+        HalpPciExtendedConfig(BusHandler->BusNumber, Slot, Buffer, Offset, Length, TRUE) != Length)
     {
         /* Send the request */
         HalpPCIConfig(BusHandler,

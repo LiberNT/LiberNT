@@ -201,11 +201,6 @@ HalGetBusDataByOffset(IN BUS_DATA_TYPE BusDataType,
         /* Call CMOS Function */
         return HalpGetCmosData(0, SlotNumber, Buffer, Length);
     }
-    else if (BusDataType == EisaConfiguration)
-    {
-        /* FIXME: TODO */
-        ASSERT(FALSE);
-    }
     else if ((BusDataType == PCIConfiguration) &&
              (HalpPCIConfigInitialized) &&
              ((BusNumber >= HalpMinPciBus) && (BusNumber <= HalpMaxPciBus)))

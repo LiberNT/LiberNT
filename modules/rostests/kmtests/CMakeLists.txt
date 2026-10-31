@@ -113,6 +113,7 @@ list(APPEND KMTEST_DRV_SOURCE
     directx/Dxgmms2VidMm.c
     example/Example.c
     example/KernelType.c
+    hal/HalBusData.c
     hal/HalSystemInfo.c
     ndis/NdisIfProvider.c
     ndis/NdisRwLock.c
