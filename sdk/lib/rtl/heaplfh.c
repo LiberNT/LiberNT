@@ -28,7 +28,6 @@ typedef struct _RTLP_LFH_USER_BLOCK
     USHORT Bucket;
     USHORT SlotSize;
     ULONG SlotCount;
-    volatile LONG FreeCount;
     PHEAP Heap;
     LIST_ENTRY Link;
     DECLSPEC_ALIGN(8) volatile LONGLONG FreeState;
@@ -132,7 +131,7 @@ static
 LONGLONG
 RtlpLfhReadFreeState(PRTLP_LFH_USER_BLOCK Block)
 {
-    return InterlockedCompareExchange64(&Block->FreeState, 0, 0);
+    return ReadAcquire64(&Block->FreeState);
 }
 
 static
@@ -158,7 +157,7 @@ RtlpLfhReleaseEntry(PHEAP_ENTRY Entry)
 
     do
     {
-        Old.Word = InterlockedCompareExchange64(Word, 0, 0);
+        Old.Word = ReadNoFence64(Word);
         if (!(Old.Bytes[RTLP_LFH_HEADER_FLAGS] & HEAP_ENTRY_BUSY))
             return FALSE;
         New = Old;
@@ -376,7 +375,6 @@ RtlpLfhCreateUserBlock(PHEAP Heap, ULONG Bucket, SIZE_T SlotSize)
     Block->Bucket = (USHORT)Bucket;
     Block->SlotSize = (USHORT)SlotSize;
     Block->SlotCount = (ULONG)Count;
-    Block->FreeCount = (LONG)Count;
     Block->Heap = Heap;
     Block->FirstSlot = (PUCHAR)Block + Header;
     Block->FreeState = 0;
@@ -411,7 +409,6 @@ RtlpLfhPopSlot(PRTLP_LFH_USER_BLOCK Block, SIZE_T Size, ULONG Flags)
             return NULL;
         New = RtlpLfhNextFreeState(Old, *(volatile ULONG *)(RtlpLfhSlotEntry(Block, Head) + 1));
     } while (InterlockedCompareExchange64(&Block->FreeState, New, Old) != Old);
-    InterlockedDecrement(&Block->FreeCount);
 
     Entry = RtlpLfhSlotEntry(Block, Head);
     Entry->Flags = HEAP_ENTRY_BUSY | (UCHAR)((Flags & HEAP_SETTABLE_USER_FLAGS) >> 4);
@@ -544,7 +541,7 @@ RtlpLfhFree(PHEAP Heap, PVOID Ptr)
         return FALSE;
     }
 
-    Index = (ULONG)(((PUCHAR)Entry - Block->FirstSlot) / Block->SlotSize);
+    Index = (ULONG)((PUCHAR)Entry - Block->FirstSlot) / (ULONG)Block->SlotSize;
     do
     {
         Old = RtlpLfhReadFreeState(Block);
@@ -553,7 +550,7 @@ RtlpLfhFree(PHEAP Heap, PVOID Ptr)
     } while (InterlockedCompareExchange64(&Block->FreeState, New, Old) != Old);
 
     /* FIXME: emptied user blocks are kept until the heap is destroyed; releasing them needs safe reclamation */
-    if (InterlockedIncrement(&Block->FreeCount) == 1)
+    if ((ULONG)Old == RTLP_LFH_NO_SLOT)
         Lfh->Buckets[Block->Bucket].Partial = Block;
 
     return TRUE;
