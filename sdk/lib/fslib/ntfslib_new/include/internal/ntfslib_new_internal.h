@@ -1763,6 +1763,12 @@ public:
         _In_ BOOLEAN RemoveDirectory,
         _In_opt_ PFileRecord CanonicalRecord = NULL,
         _In_ BOOLEAN CanDeleteRecord = TRUE,
+        _Out_opt_ PBOOLEAN RecordDeleted = NULL,
+        _In_ BOOLEAN KeepUnlinkedRecord = FALSE);
+
+    NTSTATUS
+    DeleteUnlinkedFile(
+        _In_ ULONGLONG FileReference,
         _Out_opt_ PBOOLEAN RecordDeleted = NULL);
 
     NTSTATUS
@@ -1931,6 +1937,12 @@ private:
     NTSTATUS
     DeallocateBaseFileRecord(
         _Inout_ PFileRecord File);
+
+    NTSTATUS
+    ReleaseFileRecordSet(
+        _Inout_ PFileRecord File,
+        _In_ ULONGLONG FileReference,
+        _Out_opt_ PBOOLEAN RecordDeleted);
 
     PVolume DiskVolume;
     UINT64 MFTLCN;

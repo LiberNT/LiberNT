@@ -836,6 +836,21 @@ NtfsMasterFileTableDeleteFileEx(
     _In_ BOOLEAN CanDeleteRecord,
     _Out_opt_ PBOOLEAN RecordDeleted);
 
+/* The last name leaves the record set allocated with a zero link count. */
+NTSTATUS
+NtfsMasterFileTableUnlinkFile(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_reads_(QueryLength) PWCHAR Query,
+    _In_ ULONG QueryLength,
+    _In_ BOOLEAN RemoveDirectory,
+    _In_opt_ PNtfsFileRecord CanonicalRecord);
+
+NTSTATUS
+NtfsMasterFileTableDeleteUnlinkedFile(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_ ULONGLONG FileReference,
+    _Out_opt_ PBOOLEAN RecordDeleted);
+
 /*
  * Renames or moves one file or directory between counted UTF-16 paths.
  * The destination parent must exist; the destination name must be free

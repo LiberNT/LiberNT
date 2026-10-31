@@ -1323,6 +1323,74 @@ RemoveNode(NtfsFuseState* State,
 }
 
 static int
+UnlinkNode(NtfsFuseState* State,
+           const char* Path,
+           bool IsDirectory)
+{
+    std::vector<WCHAR> NtfsPath;
+    PNtfsFileRecord File = NULL;
+    ULONGLONG FileReference = 0;
+    NTSTATUS Status;
+
+    Status = Lookup(State->Volume, Path, &File);
+    if (NT_SUCCESS(Status))
+    {
+        FileReference = NtfsFileRecordGetReference(File);
+        if (!Utf8ToNtfsPath(Path, NtfsPath) ||
+            NtfsPath.size() < 2 ||
+            NtfsPath.size() - 1 > MAXULONG)
+        {
+            Status = STATUS_OBJECT_NAME_INVALID;
+        }
+        else
+        {
+            Status = NtfsMasterFileTableUnlinkFile(
+                NtfsVolumeGetMft(State->Volume),
+                NtfsPath.data(),
+                (ULONG)(NtfsPath.size() - 1),
+                IsDirectory,
+                File);
+        }
+        NtfsFileRecordDestroy(File);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        fprintf(stderr,
+                "%s: ntfslib status 0x%08" PRIx32
+                " (%s)\n",
+                Path,
+                (uint32_t)Status,
+                strerror(NtStatusToErrno(Status)));
+        return 1;
+    }
+    printf("0x%016" PRIx64 "\n", (uint64_t)FileReference);
+    return 0;
+}
+
+static int
+DeleteUnlinkedNode(NtfsFuseState* State,
+                   ULONGLONG FileReference)
+{
+    NTSTATUS Status;
+
+    Status = NtfsMasterFileTableDeleteUnlinkedFile(
+        NtfsVolumeGetMft(State->Volume),
+        FileReference,
+        NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        fprintf(stderr,
+                "0x%016" PRIx64 ": ntfslib status 0x%08" PRIx32
+                " (%s)\n",
+                (uint64_t)FileReference,
+                (uint32_t)Status,
+                strerror(NtStatusToErrno(Status)));
+        return 1;
+    }
+    return 0;
+}
+
+static int
 RenameNode(NtfsFuseState* State,
            const char* OldPath,
            const char* NewPath,
@@ -4975,6 +5043,9 @@ PrintUsage(const char* Program)
             "  %s [--short-names] --create-dir IMAGE PATH [ATTRS]\n"
             "  %s --remove IMAGE PATH\n"
             "  %s --remove-dir IMAGE PATH\n"
+            "  %s --unlink IMAGE PATH\n"
+            "  %s --unlink-dir IMAGE PATH\n"
+            "  %s --delete-unlinked IMAGE REFERENCE\n"
             "  %s [--short-names] --rename IMAGE OLD NEW\n"
             "  %s --link IMAGE EXISTING NEW\n"
             "  %s --write IMAGE PATH OFFSET SOURCE\n"
@@ -4994,6 +5065,9 @@ PrintUsage(const char* Program)
             "  %s [--show-metadata] --streams IMAGE PATH\n"
             "  %s [--show-metadata] [--writable] IMAGE MOUNTPOINT"
             " [FUSE options]\n",
+            Program,
+            Program,
+            Program,
             Program,
             Program,
             Program,
@@ -5868,6 +5942,69 @@ main(int Argc, char** Argv)
             &State,
             Argv[First + 2],
             IsDirectory);
+        CloseImage(&State);
+        return Result;
+    }
+
+    if (strcmp(Argv[First], "--unlink") == 0 ||
+        strcmp(Argv[First], "--unlink-dir") == 0)
+    {
+        bool IsDirectory =
+            strcmp(Argv[First],
+                   "--unlink-dir") == 0;
+
+        if (First + 3 != Argc || ShowMetadata)
+        {
+            PrintUsage(Argv[0]);
+            return 2;
+        }
+        Status = OpenImageWritable(
+            Argv[First + 1],
+            &State);
+        if (!NT_SUCCESS(Status))
+        {
+            fprintf(stderr,
+                    "%s: ntfslib status 0x%08" PRIx32
+                    " (%s)\n",
+                    Argv[First + 1],
+                    (uint32_t)Status,
+                    strerror(NtStatusToErrno(Status)));
+            return 1;
+        }
+        Result = UnlinkNode(
+            &State,
+            Argv[First + 2],
+            IsDirectory);
+        CloseImage(&State);
+        return Result;
+    }
+
+    if (strcmp(Argv[First], "--delete-unlinked") == 0)
+    {
+        ULONGLONG FileReference;
+
+        if (First + 3 != Argc || ShowMetadata ||
+            !ParseUnsigned(Argv[First + 2],
+                           ~(ULONGLONG)0,
+                           &FileReference))
+        {
+            PrintUsage(Argv[0]);
+            return 2;
+        }
+        Status = OpenImageWritable(
+            Argv[First + 1],
+            &State);
+        if (!NT_SUCCESS(Status))
+        {
+            fprintf(stderr,
+                    "%s: ntfslib status 0x%08" PRIx32
+                    " (%s)\n",
+                    Argv[First + 1],
+                    (uint32_t)Status,
+                    strerror(NtStatusToErrno(Status)));
+            return 1;
+        }
+        Result = DeleteUnlinkedNode(&State, FileReference);
         CloseImage(&State);
         return Result;
     }

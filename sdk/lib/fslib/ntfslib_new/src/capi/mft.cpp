@@ -272,6 +272,53 @@ NtfsMasterFileTableDeleteFileEx(
 }
 
 NTSTATUS
+NtfsMasterFileTableUnlinkFile(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_reads_(QueryLength) PWCHAR Query,
+    _In_ ULONG QueryLength,
+    _In_ BOOLEAN RemoveDirectory,
+    _In_opt_ PNtfsFileRecord CanonicalRecord)
+{
+    PWCHAR TerminatedQuery;
+    NTSTATUS Status;
+
+    if (!Mft)
+        return STATUS_INVALID_PARAMETER;
+    Status = NtfsCopyTerminatedQuery(
+        Query,
+        QueryLength,
+        &TerminatedQuery);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status =
+        reinterpret_cast<PMasterFileTable>(Mft)->
+            DeleteFile(
+                TerminatedQuery,
+                RemoveDirectory,
+                reinterpret_cast<PFileRecord>(CanonicalRecord),
+                FALSE,
+                NULL,
+                TRUE);
+    delete[] TerminatedQuery;
+    return Status;
+}
+
+NTSTATUS
+NtfsMasterFileTableDeleteUnlinkedFile(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_ ULONGLONG FileReference,
+    _Out_opt_ PBOOLEAN RecordDeleted)
+{
+    if (RecordDeleted)
+        *RecordDeleted = FALSE;
+    if (!Mft)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PMasterFileTable>(Mft)->
+        DeleteUnlinkedFile(FileReference, RecordDeleted);
+}
+
+NTSTATUS
 NtfsMasterFileTableRenameFile(
     _In_ PNtfsMasterFileTable Mft,
     _In_reads_(OldQueryLength) PWCHAR OldQuery,

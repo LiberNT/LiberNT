@@ -944,7 +944,8 @@ MasterFileTable::DeleteFile(
     _In_ BOOLEAN RemoveDirectory,
     _In_opt_ PFileRecord CanonicalRecord,
     _In_ BOOLEAN CanDeleteRecord,
-    _Out_opt_ PBOOLEAN RecordDeleted)
+    _Out_opt_ PBOOLEAN RecordDeleted,
+    _In_ BOOLEAN KeepUnlinkedRecord)
 {
     PFileRecord Parent = NULL;
     PFileRecord Child = NULL;
@@ -952,12 +953,9 @@ MasterFileTable::DeleteFile(
     PAttribute AliasAttribute;
     PFileNameEx NameValue;
     PFileNameEx AliasValue;
-    PDataRun ReleaseRuns = NULL;
     PWCHAR Name;
     ULONGLONG ChildReference;
     ULONGLONG ParentReference;
-    ULONGLONG ExtentReferences[64];
-    ULONG ExtentCount = 0;
     ULONG NameLength;
     ULONG RemovedLinks;
     UNICODE_STRING NameString;
@@ -965,9 +963,6 @@ MasterFileTable::DeleteFile(
         NTFS_MAX_FILE_NAME_LENGTH + 1];
     UNICODE_STRING AliasString = {};
     BOOLEAN IsDirectory;
-    BOOLEAN HasReparseTag = FALSE;
-    ULONG ReparseTag = 0;
-    PAttribute ReparseAttribute;
     NTSTATUS Status;
 
     if (RecordDeleted)
@@ -1053,7 +1048,8 @@ MasterFileTable::DeleteFile(
         RemovedLinks = 2;
     }
 
-    if (Child->Header->HardLinkCount <= RemovedLinks && !CanDeleteRecord)
+    if (Child->Header->HardLinkCount <= RemovedLinks && !CanDeleteRecord &&
+        !KeepUnlinkedRecord)
     {
         Status = STATUS_INVALID_DEVICE_STATE;
         goto Done;
@@ -1083,7 +1079,7 @@ MasterFileTable::DeleteFile(
     }
 
     if (Child->Header->HardLinkCount >
-        RemovedLinks)
+        RemovedLinks || KeepUnlinkedRecord)
     {
         /* Other links survive: drop only these names. */
         Status = RemoveFileNameFromRecord(
@@ -1093,9 +1089,11 @@ MasterFileTable::DeleteFile(
         if (!NT_SUCCESS(Status))
             goto Done;
         Child->Header->HardLinkCount =
-            (USHORT)(
-                Child->Header->HardLinkCount -
-                RemovedLinks);
+            Child->Header->HardLinkCount > RemovedLinks
+                ? (USHORT)(
+                      Child->Header->HardLinkCount -
+                      RemovedLinks)
+                : 0;
         Status = Child->StampChangeTime();
         if (!NT_SUCCESS(Status))
             goto Done;
@@ -1110,68 +1108,83 @@ MasterFileTable::DeleteFile(
      * captured while the records are still alive, records are blanked
      * next, and only then do the clusters return to $Bitmap.
      */
-    ReparseAttribute = Child->GetAttribute(TypeReparsePoint, NULL);
+    Status = ReleaseFileRecordSet(
+        Child,
+        ChildReference,
+        RecordDeleted);
+
+Done:
+    delete Child;
+    delete Parent;
+    return Status;
+}
+
+NTSTATUS
+MasterFileTable::ReleaseFileRecordSet(
+    _Inout_ PFileRecord File,
+    _In_ ULONGLONG FileReference,
+    _Out_opt_ PBOOLEAN RecordDeleted)
+{
+    PDataRun ReleaseRuns = NULL;
+    ULONGLONG ExtentReferences[64];
+    ULONG ExtentCount = 0;
+    BOOLEAN HasReparseTag = FALSE;
+    ULONG ReparseTag = 0;
+    PAttribute ReparseAttribute;
+    NTSTATUS Status;
+
+    ReparseAttribute = File->GetAttribute(TypeReparsePoint, NULL);
     if (ReparseAttribute)
     {
         ULONG TagLength = sizeof(ReparseTag);
 
-        Status = Child->CopyData(ReparseAttribute,
-                                 reinterpret_cast<PUCHAR>(&ReparseTag),
-                                 &TagLength,
-                                 0);
+        Status = File->CopyData(ReparseAttribute,
+                                reinterpret_cast<PUCHAR>(&ReparseTag),
+                                &TagLength,
+                                0);
         if (!NT_SUCCESS(Status))
-            goto Done;
+            return Status;
         HasReparseTag = TagLength == 0;
     }
 
     Status = CollectReleasableRuns(
-        Child,
+        File,
         &ReleaseRuns);
-    if (!NT_SUCCESS(Status))
-        goto Done;
-
-    Status = CollectDistinctExtentReferences(
-        Child,
-        ExtentReferences,
-        RTL_NUMBER_OF(ExtentReferences),
-        &ExtentCount);
-    if (!NT_SUCCESS(Status))
-        goto Done;
+    if (NT_SUCCESS(Status))
+    {
+        Status = CollectDistinctExtentReferences(
+            File,
+            ExtentReferences,
+            RTL_NUMBER_OF(ExtentReferences),
+            &ExtentCount);
+    }
     for (ULONG Index = 0;
-         Index < ExtentCount;
+         NT_SUCCESS(Status) && Index < ExtentCount;
          Index++)
     {
         PFileRecord Extent =
-            Child->GetExtentRecord(
+            File->GetExtentRecord(
                 ExtentReferences[Index]);
 
-        if (!Extent)
-        {
-            Status = STATUS_FILE_CORRUPT_ERROR;
-            goto Done;
-        }
-        Status = DeallocateExtensionFileRecord(
-            Extent);
-        if (!NT_SUCCESS(Status))
-            goto Done;
+        Status = Extent
+            ? DeallocateExtensionFileRecord(Extent)
+            : STATUS_FILE_CORRUPT_ERROR;
     }
-
-    Status = DeallocateBaseFileRecord(Child);
-    if (!NT_SUCCESS(Status))
-        goto Done;
-    if (RecordDeleted)
-        *RecordDeleted = TRUE;
-    if (HasReparseTag)
+    if (NT_SUCCESS(Status))
+        Status = DeallocateBaseFileRecord(File);
+    if (NT_SUCCESS(Status))
     {
-        Status = NtfsUpdateReparseIndex(DiskVolume,
-                                        ReparseTag,
-                                        ChildReference,
-                                        TRUE);
-        if (!NT_SUCCESS(Status))
-            goto Done;
+        if (RecordDeleted)
+            *RecordDeleted = TRUE;
+        if (HasReparseTag)
+        {
+            Status = NtfsUpdateReparseIndex(DiskVolume,
+                                            ReparseTag,
+                                            FileReference,
+                                            TRUE);
+        }
     }
-
-    if (ReleaseRuns)
+    if (NT_SUCCESS(Status) && ReleaseRuns)
     {
         NTSTATUS ReleaseStatus =
             DiskVolume->ReleaseClusters(
@@ -1184,11 +1197,58 @@ MasterFileTable::DeleteFile(
                 ReleaseStatus);
         }
     }
-
-Done:
     FreeDataRun(ReleaseRuns);
-    delete Child;
-    delete Parent;
+    return Status;
+}
+
+NTSTATUS
+MasterFileTable::DeleteUnlinkedFile(
+    _In_ ULONGLONG FileReference,
+    _Out_opt_ PBOOLEAN RecordDeleted)
+{
+    PFileRecord File = NULL;
+    NTSTATUS Status;
+
+    if (RecordDeleted)
+        *RecordDeleted = FALSE;
+    if (!DiskVolume || GetFRNFromFileRef(FileReference) > MAXULONG)
+        return STATUS_INVALID_PARAMETER;
+    if (DiskVolume->IsReadOnly)
+        return STATUS_ACCESS_DENIED;
+
+    Status = GetFileRecord(
+        (ULONG)GetFRNFromFileRef(FileReference),
+        &File);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!(File->Header->Flags & FR_IN_USE) ||
+        File->Header->BaseFileRecord != 0 ||
+        File->Header->SequenceNumber !=
+            GetSequenceFromFileRef(FileReference))
+    {
+        Status = STATUS_FILE_DELETED;
+    }
+    else if (File->Header->HardLinkCount != 0 ||
+             File->GetAttribute(TypeFileName, NULL))
+    {
+        Status = STATUS_INVALID_DEVICE_STATE;
+    }
+    else if (File->Header->Flags & FR_IS_DIRECTORY)
+    {
+        Directory Enumerator(DiskVolume);
+        NtfsDirectoryEntry Entry;
+
+        Status = Enumerator.LoadDirectory(File);
+        if (NT_SUCCESS(Status))
+            Status = Enumerator.GetNextEntry(TRUE, &Entry);
+        if (NT_SUCCESS(Status))
+            Status = STATUS_DIRECTORY_NOT_EMPTY;
+        else if (Status == STATUS_NO_MORE_FILES)
+            Status = STATUS_SUCCESS;
+    }
+    if (NT_SUCCESS(Status))
+        Status = ReleaseFileRecordSet(File, FileReference, RecordDeleted);
+    delete File;
     return Status;
 }
 

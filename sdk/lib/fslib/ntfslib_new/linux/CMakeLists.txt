@@ -356,6 +356,16 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
             ntfslib_linux_namespace
             PROPERTIES TIMEOUT 600
         )
+        add_test(
+            NAME ntfslib_linux_unlink
+            COMMAND /bin/sh
+                "${CMAKE_CURRENT_LIST_DIR}/tests/unlink_smoke.sh"
+                "$<TARGET_FILE:ntfslib_fuse>"
+                "${MKNTFS_EXECUTABLE}"
+                "${NTFSLS_EXECUTABLE}"
+                "${NTFSINFO_EXECUTABLE}"
+                "${NTFSFIX_EXECUTABLE}"
+        )
     endif()
     if(MKNTFS_EXECUTABLE AND
        NTFS3G_EXECUTABLE AND
