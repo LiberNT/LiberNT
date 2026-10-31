@@ -533,7 +533,12 @@ static void Test_FirstThreadWindow(void)
     desc.Windowed = TRUE;
     hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, NULL, 0, D3D11_SDK_VERSION,
                                        &desc, NULL, &device, NULL, NULL);
-    ok(hr == S_OK, "D3D11CreateDeviceAndSwapChain: 0x%08lx\n", hr);
+    if (FAILED(hr))
+    {
+        skip("no hardware device with a swap chain: 0x%08lx\n", hr);
+        DestroyWindow(window);
+        return;
+    }
     first = NULL;
     EnumWindows(FirstThreadWindow, (LPARAM)&first);
     ok(first == window, "first window after the device is %p, expected %p\n", first, window);
@@ -547,6 +552,8 @@ START_TEST(hal_resource)
     static const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_0};
     ID3D11VertexShader *vertex;
     HRESULT hr;
+
+    Test_FirstThreadWindow();
 
     hr = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, levels, ARRAYSIZE(levels), D3D11_SDK_VERSION,
                            &Device, NULL, &Context);
@@ -567,5 +574,4 @@ START_TEST(hal_resource)
     }
     ID3D11DeviceContext_Release(Context);
     ID3D11Device_Release(Device);
-    Test_FirstThreadWindow();
 }
