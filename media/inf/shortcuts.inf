@@ -32,7 +32,7 @@ QuickLaunchShortcuts=26, Microsoft\Internet Explorer\Quick Launch
 
 [AccessoriesShortcuts]
 %SystemRoot%\system32\calc.exe, %CALC_TITLE%, %CALC_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
-%SystemRoot%\system32\cmd.exe, %CMD_TITLE%, %CMD_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
+%SystemRoot%\system32\terminal.exe, %TERMINAL_TITLE%, %TERMINAL_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
 %SystemRoot%\system32\notepad.exe, %NOTEPAD_TITLE%, %NOTEPAD_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
 %SystemRoot%\system32\wordpad.exe, %WORDPAD_TITLE%, %WORDPAD_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
 %SystemRoot%\system32\mspaint.exe, %MSPAINT_TITLE%, %MSPAINT_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
@@ -65,7 +65,7 @@ QuickLaunchShortcuts=26, Microsoft\Internet Explorer\Quick Launch
 
 [QuickLaunchShortcuts]
 %SystemRoot%\explorer.exe, %EXPLORER_TITLE%, %EXPLORER_DESC%, 1, %HOMEDRIVE%%HOMEPATH%
-%SystemRoot%\system32\cmd.exe, %CMD_TITLE%, %CMD_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
+%SystemRoot%\system32\terminal.exe, %TERMINAL_TITLE%, %TERMINAL_DESC%, 0, %HOMEDRIVE%%HOMEPATH%
 %SystemRoot%\system32\rapps.exe, %RAPPS_TITLE_SHORT%, %RAPPS_DESC%, 0
 
 ;-------------------------------- STRINGS -------------------------------
@@ -83,6 +83,8 @@ README_DESC=LiberNT Read-Me file
 
 CMD_TITLE=Command Prompt
 CMD_DESC=Open command prompt
+TERMINAL_TITLE=Terminal
+TERMINAL_DESC=Open the command prompt and other shells in tabs
 LXTERM_TITLE=Linux Terminal
 LXTERM_DESC=Open a Linux shell
 EXPLORER_TITLE=LiberNT Explorer

@@ -46,7 +46,7 @@ ICONS = (
     ("folder-blue-code", ("dll/shellext/ntobjshex/resources/1.ico",)),
     ("folder-blue-private", ("dll/shellext/ntobjshex/resources/7.ico",)),
     ("system-software-install", ("base/applications/rapps/res/main.ico", "base/applications/cmdutils/lntget/res/lntget.ico")),
-    ("utilities-terminal", ("base/shell/cmd/res/terminal.ico",)),
+    ("utilities-terminal", ("base/shell/cmd/res/terminal.ico", "base/applications/terminal/res/terminal.ico")),
     ("preferences-system-windows", ("base/applications/dwmsettings/res/dwm-settings.ico",)),
     ("yast-vm-install", ("base/setup/libernt/res/libernt.ico",)),
     ("tux", ("subsystems/linux/lxwinhost/res/linux.ico",)),

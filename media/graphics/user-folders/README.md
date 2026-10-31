@@ -30,7 +30,7 @@ records the icon name, design size, file and SHA-256 of each one.
 | System Registry | `places/folder-blue-private` | ntobjshex.dll, -7 |
 | Applications Manager, LntGet | `apps/system-software-install` | rapps.exe, lntget.exe |
 | DWM Settings | `apps/preferences-system-windows` | dwmsettings.exe |
-| Command Prompt | `apps/utilities-terminal` | cmd.exe |
+| Command Prompt, Terminal | `apps/utilities-terminal` | cmd.exe, terminal.exe |
 | Task Manager | `devices/computer` with `apps/com.github.stsdc.monitor` centered on its screen | taskmgr.exe, taskmgr11.exe |
 | Device Manager | `devices/computer` with `emblems/emblem-system` over its bottom-right quarter | devmgmt.exe |
 | LiberNT Setup | `apps/yast-vm-install` | libernt.exe, oobe.exe |
