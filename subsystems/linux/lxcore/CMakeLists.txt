@@ -36,8 +36,12 @@ list(APPEND SOURCE
     vfs.c)
 
 list(APPEND SOURCE ${ARCH}/lxarch.c)
+if(ARCH STREQUAL "amd64")
+    list(APPEND SOURCE amd64/lxsyscall.c)
+    add_asm_files(lxcore_asm amd64/lxfpu.S)
+endif()
 
-add_library(lxcore MODULE ${SOURCE} lxcore.rc)
+add_library(lxcore MODULE ${SOURCE} ${lxcore_asm} lxcore.rc)
 target_include_directories(lxcore PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${ARCH})
 target_link_libraries(lxcore ${PSEH_LIB})
 set_module_type(lxcore kernelmodedriver)

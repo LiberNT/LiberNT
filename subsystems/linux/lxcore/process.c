@@ -597,6 +597,8 @@ LxThreadFree(
     LxKeyThreadRelease(Thread);
     LxCgroupTaskRemove(Process);
     LxProcessDereference(Process);
+    if (Thread->StartContext != NULL)
+        LxFree(Thread->StartContext);
     LxFree(Thread);
 }
 

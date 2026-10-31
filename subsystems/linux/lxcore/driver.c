@@ -238,6 +238,12 @@ LxPicoThreadStart(
     }
 
     LxThreadAttach(Thread);
+    if (Thread->StartContext != NULL)
+    {
+        LxArchRestoreContext(TrapFrame, ExceptionFrame, Thread->StartContext);
+        LxFree(Thread->StartContext);
+        Thread->StartContext = NULL;
+    }
     LxArchSetThreadPointer(TrapFrame, Thread->Tls);
     if (Thread->SetChildTid != 0)
         LxCopyToUser(Thread->SetChildTid, &Thread->Tid, sizeof(Thread->Tid));

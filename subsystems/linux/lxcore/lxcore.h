@@ -746,6 +746,7 @@ struct _LX_THREAD
     struct _LX_THREAD *Vfork;
     struct _LX_THREAD *VforkParent;
     PCONTEXT VforkContext;
+    PCONTEXT StartContext;
     ULONG64 VforkTls;
     LONG64 VforkPid;
     BOOLEAN VforkExited;

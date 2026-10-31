@@ -2231,6 +2231,22 @@ typedef struct _LX_CLONE_REQUEST
 } LX_CLONE_REQUEST, *PLX_CLONE_REQUEST;
 
 static
+NTSTATUS
+LxCreateClonedThread(
+    _In_ HANDLE ProcessHandle,
+    _In_ PCONTEXT Context,
+    _Inout_ PLX_THREAD Thread,
+    _Out_ PHANDLE ThreadHandle,
+    _Out_opt_ PCLIENT_ID ClientId)
+{
+    Thread->StartContext = LxAlloc(sizeof(CONTEXT));
+    if (Thread->StartContext == NULL)
+        return STATUS_NO_MEMORY;
+    *Thread->StartContext = *Context;
+    return PsPicoCreateThread(ProcessHandle, Context, Thread, ThreadHandle, ClientId);
+}
+
+static
 LONG64
 LxCreateThread(
     _In_ PLX_CALL Call,
@@ -2279,7 +2295,7 @@ LxCreateThread(
 
     GlobalTid = Thread->Tid;
     Event = LxPtraceCloneChild(Call->Thread, Thread, Request->Flags, Request->ExitSignal);
-    Status = PsPicoCreateThread(NtCurrentProcess(), Context, Thread, &Handle, &ClientId);
+    Status = LxCreateClonedThread(NtCurrentProcess(), Context, Thread, &Handle, &ClientId);
     if (!NT_SUCCESS(Status))
     {
         LxThreadFree(Thread);
@@ -2504,7 +2520,7 @@ LxForkProcess(
         return 0;
     }
 
-    Status = PsPicoCreateThread(Shared ? NtCurrentProcess() : ProcessHandle, Context, Thread, &ThreadHandle, NULL);
+    Status = LxCreateClonedThread(Shared ? NtCurrentProcess() : ProcessHandle, Context, Thread, &ThreadHandle, NULL);
     if (!NT_SUCCESS(Status) && Shared)
     {
         LxProcessExitStatus(Child, LX_SIGKILL);
