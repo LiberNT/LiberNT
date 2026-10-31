@@ -32,6 +32,8 @@ typedef struct _RTLP_LFH_USER_BLOCK
     LIST_ENTRY Link;
     DECLSPEC_ALIGN(8) volatile LONGLONG FreeState;
     PUCHAR FirstSlot;
+    struct _RTLP_LFH_USER_BLOCK *NextPartial;
+    volatile LONG Listed;
 } RTLP_LFH_USER_BLOCK, *PRTLP_LFH_USER_BLOCK;
 
 typedef union _RTLP_LFH_ENTRY_HEADER
@@ -50,7 +52,8 @@ typedef struct _RTLP_LFH_BUCKET
     LIST_ENTRY UserBlocks;
     ULONG BlockCount;
     PRTLP_LFH_USER_BLOCK volatile Active;
-    PRTLP_LFH_USER_BLOCK volatile Partial;
+    PRTLP_LFH_USER_BLOCK volatile PartialList;
+    PRTLP_LFH_USER_BLOCK Spare;
 } RTLP_LFH_BUCKET, *PRTLP_LFH_BUCKET;
 
 typedef struct _RTLP_LFH_HEAP
@@ -390,6 +393,8 @@ RtlpLfhCreateUserBlock(PHEAP Heap, ULONG Bucket, SIZE_T SlotSize)
     Block->Heap = Heap;
     Block->FirstSlot = (PUCHAR)Block + Header;
     Block->FreeState = 0;
+    Block->NextPartial = NULL;
+    Block->Listed = 0;
 
     for (Index = 0; Index < Count; ++Index)
     {
@@ -430,29 +435,51 @@ RtlpLfhPopSlot(PRTLP_LFH_USER_BLOCK Block, SIZE_T Size, ULONG Flags)
 }
 
 static
+VOID
+RtlpLfhListPartial(PRTLP_LFH_BUCKET BucketData, PRTLP_LFH_USER_BLOCK Block)
+{
+    PRTLP_LFH_USER_BLOCK Head;
+
+    if (InterlockedCompareExchange(&Block->Listed, 1, 0))
+        return;
+    do
+    {
+        Head = ReadPointerAcquire((PVOID const volatile *)&BucketData->PartialList);
+        Block->NextPartial = Head;
+    } while (InterlockedCompareExchangePointer((PVOID volatile *)&BucketData->PartialList, Block, Head) != Head);
+}
+
+static
+PRTLP_LFH_USER_BLOCK
+RtlpLfhTakePartial(PRTLP_LFH_BUCKET BucketData)
+{
+    PRTLP_LFH_USER_BLOCK Block;
+
+    for (;;)
+    {
+        Block = BucketData->Spare;
+        if (!Block)
+            Block = InterlockedExchangePointer((PVOID volatile *)&BucketData->PartialList, NULL);
+        if (!Block)
+            return NULL;
+        BucketData->Spare = Block->NextPartial;
+        InterlockedExchange(&Block->Listed, 0);
+        if (RtlpLfhHasFreeSlot(Block))
+            return Block;
+    }
+}
+
+static
 BOOLEAN
 RtlpLfhRefill(PHEAP Heap, PRTLP_LFH_BUCKET BucketData, ULONG Bucket, SIZE_T SlotSize, PRTLP_LFH_USER_BLOCK Empty)
 {
     PRTLP_LFH_USER_BLOCK Block;
-    PLIST_ENTRY Link;
 
     RtlEnterHeapLock(Heap->LockVariable, TRUE);
     Block = BucketData->Active;
     if (Block == Empty)
     {
-        Block = BucketData->Partial;
-        if (!Block || !RtlpLfhHasFreeSlot(Block))
-        {
-            Block = NULL;
-            for (Link = BucketData->UserBlocks.Flink; Link != &BucketData->UserBlocks; Link = Link->Flink)
-            {
-                if (RtlpLfhHasFreeSlot(CONTAINING_RECORD(Link, RTLP_LFH_USER_BLOCK, Link)))
-                {
-                    Block = CONTAINING_RECORD(Link, RTLP_LFH_USER_BLOCK, Link);
-                    break;
-                }
-            }
-        }
+        Block = RtlpLfhTakePartial(BucketData);
 
         if (!Block)
         {
@@ -575,7 +602,7 @@ RtlpLfhFree(PVOID Ptr, PRTLP_LFH_SLOT Slot)
 
     /* FIXME: emptied user blocks are kept until the heap is destroyed; releasing them needs safe reclamation */
     if ((ULONG)Old == RTLP_LFH_NO_SLOT)
-        Lfh->Buckets[Block->Bucket].Partial = Block;
+        RtlpLfhListPartial(&Lfh->Buckets[Block->Bucket], Block);
 
     return TRUE;
 }

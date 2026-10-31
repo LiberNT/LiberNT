@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Stress the low-fragmentation heap from several threads and check what HeapLock holds back
+ * PURPOSE:     Stress the low-fragmentation heap, check what HeapLock holds back and how refills scale
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -173,6 +173,139 @@ TestReAllocate(VOID)
     ok(HeapFree(TestHeap, 0, Moved), "HeapFree failed: %lu\n", GetLastError());
 }
 
+static
+double
+ReallocateScattered(
+    _In_ ULONG Count)
+{
+    ULONG Compatibility = 2, Index;
+    LARGE_INTEGER Frequency, Start, End;
+    double Elapsed = -1.0;
+    PVOID *Blocks;
+    HANDLE Heap;
+
+    Heap = HeapCreate(0, 0, 0);
+    if (!Heap)
+        return Elapsed;
+    HeapSetInformation(Heap, HeapCompatibilityInformation, &Compatibility, sizeof(Compatibility));
+    Blocks = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Count * sizeof(PVOID));
+    if (Blocks)
+    {
+        for (Index = 0; Index < Count; Index++)
+            Blocks[Index] = HeapAlloc(Heap, 0, 32);
+        for (Index = 0; Index < Count; Index += 8)
+            HeapFree(Heap, 0, Blocks[Index]);
+
+        QueryPerformanceFrequency(&Frequency);
+        QueryPerformanceCounter(&Start);
+        for (Index = 0; Index < Count; Index += 8)
+            Blocks[Index] = HeapAlloc(Heap, 0, 32);
+        QueryPerformanceCounter(&End);
+        Elapsed = (double)(End.QuadPart - Start.QuadPart) / Frequency.QuadPart / (Count / 8);
+        HeapFree(GetProcessHeap(), 0, Blocks);
+    }
+    HeapDestroy(Heap);
+    return Elapsed;
+}
+
+static
+double
+BestReallocationCost(
+    _In_ ULONG Count)
+{
+    double Best = -1.0, Cost;
+    ULONG Round;
+
+    for (Round = 0; Round < 3; Round++)
+    {
+        Cost = ReallocateScattered(Count);
+        if (Cost > 0 && (Best < 0 || Cost < Best))
+            Best = Cost;
+    }
+    return Best;
+}
+
+#define LFH_CHURN_LIVE 256
+#define LFH_CHURN_ROUNDS 200000
+
+static HANDLE ChurnHeap;
+
+static
+DWORD
+WINAPI
+ChurnThread(
+    _In_ PVOID Parameter)
+{
+    PVOID Live[LFH_CHURN_LIVE] = { 0 };
+    ULONG Seed = (ULONG)(ULONG_PTR)Parameter * 2654435761u + 7, Round, Slot;
+
+    for (Round = 0; Round < LFH_CHURN_ROUNDS; Round++)
+    {
+        Seed = Seed * 1103515245 + 12345;
+        Slot = (Seed >> 8) % LFH_CHURN_LIVE;
+        if (Live[Slot])
+        {
+            if (!HeapFree(ChurnHeap, 0, Live[Slot]))
+                InterlockedIncrement(&Failed);
+            Live[Slot] = NULL;
+        }
+        else if (!(Live[Slot] = HeapAlloc(ChurnHeap, 0, 32)))
+        {
+            InterlockedIncrement(&Failed);
+        }
+    }
+    for (Slot = 0; Slot < LFH_CHURN_LIVE; Slot++)
+        if (Live[Slot]) HeapFree(ChurnHeap, 0, Live[Slot]);
+    return 0;
+}
+
+static
+VOID
+TestChurnCommit(VOID)
+{
+    ULONG Compatibility = 2, Index;
+    HANDLE Threads[LFH_TEST_THREADS];
+    PROCESS_HEAP_ENTRY Entry;
+    SIZE_T Committed = 0;
+
+    ChurnHeap = HeapCreate(0, 0, 0);
+    ok(ChurnHeap != NULL, "HeapCreate failed: %lu\n", GetLastError());
+    if (!ChurnHeap) return;
+    HeapSetInformation(ChurnHeap, HeapCompatibilityInformation, &Compatibility, sizeof(Compatibility));
+
+    Failed = 0;
+    for (Index = 0; Index < LFH_TEST_THREADS; Index++)
+        Threads[Index] = CreateThread(NULL, 0, ChurnThread, (PVOID)(ULONG_PTR)(Index + 1), 0, NULL);
+    ok(WaitForMultipleObjects(LFH_TEST_THREADS, Threads, TRUE, 120000) == WAIT_OBJECT_0,
+       "the churn threads did not finish\n");
+    for (Index = 0; Index < LFH_TEST_THREADS; Index++)
+        CloseHandle(Threads[Index]);
+    ok(Failed == 0, "%ld churn allocations or frees failed\n", Failed);
+
+    Entry.lpData = NULL;
+    while (HeapWalk(ChurnHeap, &Entry))
+    {
+        if (Entry.wFlags & PROCESS_HEAP_REGION)
+            Committed += Entry.Region.dwCommittedSize;
+    }
+    trace("Committed %Iu bytes after %u rounds on %u threads\n", Committed, LFH_CHURN_ROUNDS, LFH_TEST_THREADS);
+    ok(Committed < 4 * 1024 * 1024, "the heap committed %Iu bytes for a live set of %u small blocks\n",
+       Committed, LFH_CHURN_LIVE * LFH_TEST_THREADS);
+    ok(HeapDestroy(ChurnHeap), "HeapDestroy failed: %lu\n", GetLastError());
+}
+
+static
+VOID
+TestRefillCost(VOID)
+{
+    double Small = BestReallocationCost(16384), Large = BestReallocationCost(262144);
+
+    trace("Reallocation cost %.3f us with 16384 blocks, %.3f us with 262144 blocks\n", Small * 1e6, Large * 1e6);
+    ok(Small > 0 && Large > 0, "the reallocation measurement failed\n");
+    if (Small > 0 && Large > 0)
+        ok(Large < Small * 4, "reallocation cost grows with the heap: %.3f us vs %.3f us\n", Large * 1e6, Small * 1e6);
+}
+
 START_TEST(HeapLowFragmentation)
 {
     ULONG Compatibility = 2, Information = 0, Index;
@@ -219,4 +352,7 @@ START_TEST(HeapLowFragmentation)
     for (Index = 0; Index < RTL_NUMBER_OF(Warm); Index++)
         HeapFree(TestHeap, 0, Warm[Index]);
     ok(HeapDestroy(TestHeap), "HeapDestroy failed: %lu\n", GetLastError());
+
+    TestRefillCost();
+    TestChurnCommit();
 }
