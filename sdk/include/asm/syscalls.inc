@@ -342,10 +342,19 @@ Zw\Name:
     .endm
 
     .macro STUB_WRAP Name, ArgCount
-    .p2align 2
+    .p2align 3
     .globl Nt\Name
-    .globl Zw\Name
 Nt\Name:
+    /* Emulation hosts patch this 24-byte slot; Zw stays the raw service. */
+    .option push
+    .option norvc
+    li t0, SyscallId
+    ecall
+    ret
+    nop
+    .option pop
+    .quad 0
+    .globl Zw\Name
 Zw\Name:
     li t0, SyscallId
     ecall

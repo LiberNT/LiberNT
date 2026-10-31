@@ -2,3 +2,8 @@
 @ stdcall EmuHostGetInterface()
 @ stdcall EmuAttachProcess()
 @ stdcall EmuDetachThread()
+@ stdcall NotifyMemoryFree(ptr long long long long)
+@ stdcall NotifyMemoryProtect(ptr long long long long)
+@ stdcall NotifyUnmapViewOfSection(ptr long long)
+@ stdcall BTCpu64FlushInstructionCache(ptr long)
+@ stdcall UpdateProcessorInformation(ptr)

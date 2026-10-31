@@ -212,6 +212,11 @@ EmuFatal(
     _In_ PCSTR Message);
 
 VOID
+NTAPI
+UpdateProcessorInformation(
+    _Inout_ PVOID ProcessorInformation);
+
+VOID
 EmuBuildNativeStartContext(
     _In_ const CONTEXT *Native,
     _Out_ AMD64_CONTEXT *Start);

@@ -140,8 +140,69 @@ EmuReportProcessor(
         return;
     }
 
+    UpdateProcessorInformation(Information);
+}
+
+VOID
+NTAPI
+UpdateProcessorInformation(
+    _Inout_ PVOID ProcessorInformation)
+{
+    PSYSTEM_PROCESSOR_INFORMATION Information = ProcessorInformation;
+
     Information->ProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64;
     EmuCoreGetProcessor(&Information->ProcessorLevel, &Information->ProcessorRevision);
+}
+
+VOID
+NTAPI
+NotifyMemoryFree(
+    _In_ PVOID Address,
+    _In_ SIZE_T Size,
+    _In_ ULONG FreeType,
+    _In_ BOOLEAN After,
+    _In_ NTSTATUS Status)
+{
+    if (After && NT_SUCCESS(Status)) EmuCoreInvalidate(Address, Size);
+}
+
+VOID
+NTAPI
+NotifyMemoryProtect(
+    _In_ PVOID Address,
+    _In_ SIZE_T Size,
+    _In_ ULONG NewProtect,
+    _In_ BOOLEAN After,
+    _In_ NTSTATUS Status)
+{
+    if (After && NT_SUCCESS(Status)) EmuCoreInvalidate(Address, Size);
+}
+
+VOID
+NTAPI
+NotifyUnmapViewOfSection(
+    _In_ PVOID Address,
+    _In_ BOOLEAN After,
+    _In_ NTSTATUS Status)
+{
+    PVOID Base;
+    SIZE_T Size;
+
+    if (After) return;
+    EmuQueryView(Address, &Base, &Size);
+    EmuCoreInvalidate(Base, Size);
+}
+
+VOID
+NTAPI
+BTCpu64FlushInstructionCache(
+    _In_opt_ const VOID *Address,
+    _In_ SIZE_T Size)
+{
+    if (!Address)
+        EmuCoreInvalidate(NULL, EMU_ADDRESS_SPACE_SIZE);
+    else
+        EmuCoreInvalidate((PVOID)Address, Size);
 }
 
 static

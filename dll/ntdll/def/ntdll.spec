@@ -998,8 +998,8 @@
 @ stdcall RtlGetLengthWithoutTrailingPathSeperators(long ptr ptr) RtlGetLengthWithoutTrailingPathSeparators
 @ stdcall RtlGetLongestNtPathLength()
 @ stdcall -arch=i386 RtlGetNativeSystemInformation(long ptr long ptr) NtWow64GetNativeSystemInformation
-@ stdcall -arch=x86_64,arm,riscv64,ppc RtlGetNativeSystemInformation(long long long long) NtQuerySystemInformation
-@ stdcall -arch=arm64 RtlGetNativeSystemInformation(long ptr long ptr) ZwQuerySystemInformation
+@ stdcall -arch=x86_64,arm,ppc RtlGetNativeSystemInformation(long long long long) NtQuerySystemInformation
+@ stdcall -arch=arm64,riscv64 RtlGetNativeSystemInformation(long ptr long ptr) ZwQuerySystemInformation
 @ stdcall RtlGetNtGlobalFlags()
 @ stdcall RtlGetNtProductType(ptr)
 @ stdcall RtlGetNtVersionNumbers(ptr ptr ptr)
