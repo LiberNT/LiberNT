@@ -500,7 +500,7 @@ DxgkRender(
         ReferencedCount = Index + 1;
     }
 
-    if (!DxgkBeginKmdTransaction(Adapter))
+    if (!DxgkBeginKmdTransactionPastMonitorPower(Adapter))
     {
         Status = STATUS_DELETE_PENDING;
         goto Cleanup;
