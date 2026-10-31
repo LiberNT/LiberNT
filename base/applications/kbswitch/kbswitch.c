@@ -42,6 +42,8 @@ WINE_DEFAULT_DEBUG_CHANNEL(internat);
 
 #define TIMER_ID_LANG_CHANGED_DELAYED 0x10000
 #define TIMER_LANG_CHANGED_DELAY 200
+#define TIMER_ID_TIP_REFRESH 0x10001
+#define TIMER_TIP_REFRESH_DELAY 500
 
 #define IME_HKL_MASK 0xF000FFFF
 #define IS_KOREAN_IME_HKL(hKL) ((HandleToUlong(hKL) & IME_HKL_MASK) == 0xE0000412)
@@ -80,6 +82,7 @@ typedef struct tagTIP_INPUT_MODE
 } TIP_INPUT_MODE;
 
 TIP_INPUT_MODE g_TipInputMode = { 0 };
+DWORD g_dwTipRefreshThreadId = 0;
 
 // Flags for g_anFlags
 #define LAYOUTF_FAR_EAST 0x1
@@ -580,14 +583,24 @@ ClearTipInputMode(VOID)
 }
 
 static VOID
-RequestTipInputMode(DWORD dwThreadId)
+EndTipRefresh(HWND hwnd)
+{
+    KillTimer(hwnd, TIMER_ID_TIP_REFRESH);
+    g_dwTipRefreshThreadId = 0;
+}
+
+static VOID
+RequestTipInputMode(HWND hwnd, DWORD dwThreadId)
 {
     HWND hwndTip = NULL;
+    EndTipRefresh(hwnd);
     while ((hwndTip = FindWindowExW(HWND_MESSAGE, hwndTip, INPUTINDICATOR_TIP_WNDCLASS, NULL)) != NULL)
     {
-        if (GetWindowThreadProcessId(hwndTip, NULL) == dwThreadId)
+        if (GetWindowThreadProcessId(hwndTip, NULL) == dwThreadId &&
+            PostMessageW(hwndTip, WM_INPUTINDICATOR_REFRESH, 0, 0))
         {
-            PostMessageW(hwndTip, WM_INPUTINDICATOR_REFRESH, 0, 0);
+            g_dwTipRefreshThreadId = dwThreadId;
+            SetTimer(hwnd, TIMER_ID_TIP_REFRESH, TIMER_TIP_REFRESH_DELAY, NULL);
             break;
         }
     }
@@ -609,6 +622,9 @@ DeletePenNotifyIcon(HWND hwnd)
 static VOID
 UpdatePenIcon(HWND hwnd, UINT iKL)
 {
+    if (!HasTipInputMode() && g_dwTipRefreshThreadId && g_dwTipRefreshThreadId == GetLastActiveThreadId())
+        return;
+
     DeletePenIcon(hwnd, iKL);
 
     if (HasTipInputMode())
@@ -1056,6 +1072,7 @@ static void
 KbSwitch_OnDestroy(HWND hwnd)
 {
     KillTimer(hwnd, TIMER_ID_LANG_CHANGED_DELAYED);
+    EndTipRefresh(hwnd);
     DeleteHooks();
     DeleteTrayIcon(hwnd);
     DestroyPenIcons();
@@ -1074,6 +1091,11 @@ KbSwitch_OnTimer(HWND hwnd, UINT_PTR nTimerID)
         HKL hKL = GetActiveKL();
         UpdateLayoutList(hKL);
         UpdateLanguageDisplay(hwnd, hKL);
+        UpdatePenIcon(hwnd, g_iKL);
+    }
+    else if (nTimerID == TIMER_ID_TIP_REFRESH)
+    {
+        EndTipRefresh(hwnd);
         UpdatePenIcon(hwnd, g_iKL);
     }
 }
@@ -1403,7 +1425,7 @@ KbSwitch_OnWindowActivate(HWND hwnd, HWND hwndTarget OPTIONAL, LPARAM lParam OPT
         if (g_TipInputMode.dwThreadId != dwThreadId)
         {
             ClearTipInputMode();
-            RequestTipInputMode(dwThreadId);
+            RequestTipInputMode(hwnd, dwThreadId);
         }
         return UpdateLanguageDisplayCurrent(hwnd, hwndFore);
     }
@@ -1411,12 +1433,18 @@ KbSwitch_OnWindowActivate(HWND hwnd, HWND hwndTarget OPTIONAL, LPARAM lParam OPT
 }
 
 static BOOL
-KbSwitch_OnCopyData(HWND hwnd, PCOPYDATASTRUCT pcds)
+KbSwitch_OnCopyData(HWND hwnd, HWND hwndSender, PCOPYDATASTRUCT pcds)
 {
     if (pcds->dwData != INPUTINDICATOR_COPYDATA_ID || pcds->cbData < sizeof(INPUTINDICATOR_TIPSTATE))
         return FALSE;
 
     PINPUTINDICATOR_TIPSTATE pState = (PINPUTINDICATOR_TIPSTATE)pcds->lpData;
+    HWND hwndTip = (HWND)(ULONG_PTR)pState->hwndTip;
+    if (pState->cbSize < sizeof(INPUTINDICATOR_TIPSTATE) || hwndTip != hwndSender)
+        return FALSE;
+
+    if (pState->dwThreadId == g_dwTipRefreshThreadId)
+        EndTipRefresh(hwnd);
     if (pState->dwThreadId != GetLastActiveThreadId())
     {
         if (pState->dwThreadId == g_TipInputMode.dwThreadId && !pState->hIcon)
@@ -1425,7 +1453,6 @@ KbSwitch_OnCopyData(HWND hwnd, PCOPYDATASTRUCT pcds)
     }
 
     ClearTipInputMode();
-    HWND hwndTip = (HWND)(ULONG_PTR)pState->hwndTip;
     if (pState->hIcon && GetWindowThreadProcessId(hwndTip, NULL) == pState->dwThreadId &&
         IsWndClassName(hwndTip, INPUTINDICATOR_TIP_WNDCLASS))
     {
@@ -1567,7 +1594,7 @@ WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             break;
 
         case WM_COPYDATA:
-            return KbSwitch_OnCopyData(hwnd, (PCOPYDATASTRUCT)lParam);
+            return KbSwitch_OnCopyData(hwnd, (HWND)wParam, (PCOPYDATASTRUCT)lParam);
 
         case WM_DESTROY:
             KbSwitch_OnDestroy(hwnd);
