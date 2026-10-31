@@ -507,18 +507,28 @@ private:
         {
             case WM_INPUTINDICATOR_REFRESH:
                 if (pThis)
+                {
+                    pThis->AddRef();
                     pThis->Publish();
+                    pThis->Release();
+                }
                 return 0;
             case WM_INPUTINDICATOR_CLICK:
                 if (pThis && (wParam == INPUTINDICATOR_CLICK_LEFT || wParam == INPUTINDICATOR_CLICK_RIGHT))
                 {
                     POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                    pThis->AddRef();
                     pThis->QueueClick((wParam == INPUTINDICATOR_CLICK_RIGHT) ? TF_LBI_CLK_RIGHT : TF_LBI_CLK_LEFT, pt);
+                    pThis->Release();
                 }
                 return 0;
             case WM_TIMER:
                 if (pThis && wParam == CLICK_TIMER_ID)
+                {
+                    pThis->AddRef();
                     pThis->OnClickTimer();
+                    pThis->Release();
+                }
                 return 0;
             case WM_NCDESTROY:
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);

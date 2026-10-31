@@ -1435,7 +1435,8 @@ KbSwitch_OnWindowActivate(HWND hwnd, HWND hwndTarget OPTIONAL, LPARAM lParam OPT
 static BOOL
 KbSwitch_OnCopyData(HWND hwnd, HWND hwndSender, PCOPYDATASTRUCT pcds)
 {
-    if (pcds->dwData != INPUTINDICATOR_COPYDATA_ID || pcds->cbData < sizeof(INPUTINDICATOR_TIPSTATE))
+    if (!pcds || pcds->dwData != INPUTINDICATOR_COPYDATA_ID || !pcds->lpData ||
+        pcds->cbData < sizeof(INPUTINDICATOR_TIPSTATE))
         return FALSE;
 
     PINPUTINDICATOR_TIPSTATE pState = (PINPUTINDICATOR_TIPSTATE)pcds->lpData;
