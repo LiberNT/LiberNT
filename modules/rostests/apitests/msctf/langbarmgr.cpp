@@ -81,6 +81,17 @@ START_TEST(langbarmgr)
     if (pItemMgr)
         pItemMgr->Release();
 
+    dwThread = 0xdeadbeef;
+    ok_hr(pLangBarMgr->GetThreadLangBarItemMgr(GetCurrentThreadId(), NULL, &dwThread), E_UNEXPECTED);
+    ok(dwThread == 0xdeadbeef, "thread %lu\n", dwThread);
+    ok_hr(pLangBarMgr->GetThreadLangBarItemMgr(GetCurrentThreadId(), NULL, NULL), E_UNEXPECTED);
+    ok_hr(pLangBarMgr->GetThreadLangBarItemMgr(0x7ffffff0, NULL, NULL), E_FAIL);
+    pItemMgr = NULL;
+    ok_hr(pLangBarMgr->GetThreadLangBarItemMgr(GetCurrentThreadId(), &pItemMgr, NULL), S_OK);
+    ok(pItemMgr != NULL, "no item manager\n");
+    if (pItemMgr)
+        pItemMgr->Release();
+
     g_hReady = CreateEventW(NULL, TRUE, FALSE, NULL);
     g_hDone = CreateEventW(NULL, TRUE, FALSE, NULL);
     hThread = CreateThread(NULL, 0, ItemThread, NULL, 0, &dwOther);
