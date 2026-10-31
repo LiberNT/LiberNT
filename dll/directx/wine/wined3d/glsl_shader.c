@@ -12125,6 +12125,11 @@ static void glsl_fragment_pipe_alpha_test_func(struct wined3d_context_gl *contex
             ref = 0.0f;
         gl_info->gl_ops.gl.p_glAlphaFunc(func, ref);
         checkGLcall("glAlphaFunc");
+        if (func == GL_ALWAYS)
+            gl_info->gl_ops.gl.p_glDisable(GL_ALPHA_TEST);
+        else
+            gl_info->gl_ops.gl.p_glEnable(GL_ALPHA_TEST);
+        checkGLcall("toggle GL_ALPHA_TEST");
     }
 }
 
