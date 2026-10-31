@@ -4027,6 +4027,7 @@ LxVfsOpenResolve(
 {
     LX_NODE Node;
     ULONG LookupFlags = Resolve & LX_LOOKUP_RESOLVE;
+    SIZE_T Length = strlen(Path);
     LONG Error;
 
     if (!(Flags & LX_O_NOFOLLOW))
@@ -4035,6 +4036,22 @@ LxVfsOpenResolve(
         LookupFlags |= LX_LOOKUP_CREATE;
     if (Flags & LX_O_DIRECTORY)
         LookupFlags |= LX_LOOKUP_DIRECTORY;
+
+    if ((Flags & LX_O_CREAT) && (Length > 1) && (Path[Length - 1] == '/'))
+    {
+        PSTR Parent = LxStrDup(Path);
+
+        if (Parent == NULL)
+            return -LX_ENOMEM;
+        while ((Length > 1) && (Parent[Length - 1] == '/'))
+            Parent[--Length] = '\0';
+        Error = LxLookup(Process, DirFd, Parent, LookupFlags & ~(LX_LOOKUP_FOLLOW | LX_LOOKUP_DIRECTORY), &Node);
+        LxFree(Parent);
+        if (Error != 0)
+            return Error;
+        LxNodeFree(&Node);
+        return -LX_EISDIR;
+    }
 
     Error = LxLookup(Process, DirFd, Path, LookupFlags, &Node);
     if (Error != 0)
