@@ -184,6 +184,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoAcpiIoctl.c
     ntos_io/IoPciPdoPnp.c
     ntos_io/IoAcpiCmosRegion.c
+    ntos_io/IoPciExpressInterfaces.c
     ntos_io/IoPciRom.c
     ntos_io/IoStackLimits.c
     ntos_io/IoMdl.c

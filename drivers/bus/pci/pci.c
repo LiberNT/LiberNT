@@ -1100,6 +1100,7 @@ PciAddDevice(
     RtlZeroMemory(DeviceExtension, sizeof(FDO_DEVICE_EXTENSION));
 
     IoInitializeRemoveLock(&DeviceExtension->RemoveLock, TAG_PCI, 0, 0);
+    KeInitializeEvent(&DeviceExtension->LinkQuiescentLock, SynchronizationEvent, TRUE);
 
     DeviceExtension->Common.IsFDO = TRUE;
     DeviceExtension->Common.DeviceObject = Fdo;

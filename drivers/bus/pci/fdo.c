@@ -297,6 +297,7 @@ FdoQueryBusRelations(
 
     /* Acquire the global PCI lock to serialize bus enumeration */
     KeEnterCriticalRegion();
+    KeWaitForSingleObject(&((PFDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension)->LinkQuiescentLock, Executive, KernelMode, FALSE, NULL);
     KeWaitForSingleObject(&PciGlobalLock, Executive, KernelMode, FALSE, NULL);
 
     FdoEnumerateDevices(DeviceObject);
@@ -316,7 +317,12 @@ FdoQueryBusRelations(
            sizeof(Relations->Objects) * (DeviceExtension->DeviceListCount - 1);
     Relations = ExAllocatePoolWithTag(PagedPool, Size, TAG_PCI);
     if (!Relations)
+    {
+        KeSetEvent(&PciGlobalLock, IO_NO_INCREMENT, FALSE);
+        KeSetEvent(&DeviceExtension->LinkQuiescentLock, IO_NO_INCREMENT, FALSE);
+        KeLeaveCriticalRegion();
         return STATUS_INSUFFICIENT_RESOURCES;
+    }
 
     Relations->Count = DeviceExtension->DeviceListCount;
 
@@ -462,6 +468,7 @@ FdoQueryBusRelations(
 
     /* Release the global PCI lock */
     KeSetEvent(&PciGlobalLock, IO_NO_INCREMENT, FALSE);
+    KeSetEvent(&((PFDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension)->LinkQuiescentLock, IO_NO_INCREMENT, FALSE);
     KeLeaveCriticalRegion();
 
     if (ErrorOccurred)

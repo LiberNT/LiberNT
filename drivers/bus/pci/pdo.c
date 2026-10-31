@@ -3958,6 +3958,203 @@ InterfacePciDevicePresentEx(
 }
 
 
+static VOID PciSaveMsiState(_In_ PPDO_DEVICE_EXTENSION DeviceExtension);
+static VOID PciRestoreMsiState(_In_ PPDO_DEVICE_EXTENSION DeviceExtension);
+
+static
+UCHAR
+PciPdoExpressPortType(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension)
+{
+    USHORT Capabilities;
+    UCHAR Offset;
+
+    if (!PciPdoFindCapability(DeviceExtension, PCI_CAPABILITY_ID_PCI_EXPRESS, &Offset) ||
+        PciPdoGetBusDataByOffset(DeviceExtension, &Capabilities, Offset + 2, sizeof(Capabilities)) != sizeof(Capabilities))
+    {
+        return MAXUCHAR;
+    }
+    return (UCHAR)((Capabilities >> 4) & 0xF);
+}
+
+static
+PPDO_DEVICE_EXTENSION
+PciPdoRootPortAbove(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension)
+{
+    PPDO_DEVICE_EXTENSION Bridge;
+    UCHAR PortType;
+
+    if (DeviceExtension->Fdo == NULL)
+        return NULL;
+    PortType = PciPdoExpressPortType(DeviceExtension);
+    if (PortType != PciExpressEndpoint && PortType != PciExpressLegacyEndpoint)
+        return NULL;
+    Bridge = ((PFDO_DEVICE_EXTENSION)DeviceExtension->Fdo->DeviceExtension)->ParentPdo;
+    if (Bridge == NULL || PciPdoExpressPortType(Bridge) != PciExpressRootPort)
+        return NULL;
+    return Bridge;
+}
+
+static
+BOOLEAN
+PciPdoIsDisplayController(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension)
+{
+    PPCI_COMMON_CONFIG Config = &DeviceExtension->PciDevice->PciConfig;
+
+    return (Config->BaseClass == PCI_CLASS_DISPLAY_CTLR && Config->SubClass == PCI_SUBCLASS_VID_VGA_CTLR) ||
+           (Config->BaseClass == PCI_CLASS_PRE_20 && Config->SubClass == PCI_SUBCLASS_PRE_20_VGA);
+}
+
+static
+ULONG
+NTAPI
+PciRootPortReadConfigSpace(
+    _In_ PVOID Context,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Offset,
+    _In_ ULONG Length)
+{
+    PPDO_DEVICE_EXTENSION RootPort = PciPdoRootPortAbove(((PDEVICE_OBJECT)Context)->DeviceExtension);
+
+    if (RootPort == NULL || Length > PCI_EXTENDED_CONFIG_LENGTH || Offset > PCI_EXTENDED_CONFIG_LENGTH - Length)
+    {
+        RtlFillMemory(Buffer, Length, 0xFF);
+        return 0;
+    }
+    return PciPdoGetBusDataByOffset(RootPort, Buffer, Offset, Length);
+}
+
+static
+ULONG
+NTAPI
+PciRootPortWriteConfigSpace(
+    _In_ PVOID Context,
+    _In_reads_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Offset,
+    _In_ ULONG Length)
+{
+    PPDO_DEVICE_EXTENSION RootPort = PciPdoRootPortAbove(((PDEVICE_OBJECT)Context)->DeviceExtension);
+
+    if (RootPort == NULL || Length > PCI_EXTENDED_CONFIG_LENGTH || Offset > PCI_EXTENDED_CONFIG_LENGTH - Length)
+        return 0;
+    return PciPdoSetBusDataByOffset(RootPort, Buffer, Offset, Length);
+}
+
+static
+VOID
+PciReleaseQuiescentPeers(
+    _In_ PVOID Tag,
+    _In_reads_(Count) PDEVICE_OBJECT *Peers,
+    _In_ ULONG Count)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Count; Index++)
+        IoReleaseRemoveLock(&((PPDO_DEVICE_EXTENSION)Peers[Index]->DeviceExtension)->RemoveLock, Tag);
+    ExFreePoolWithTag(Peers, TAG_PCI);
+}
+
+static
+NTSTATUS
+NTAPI
+PciEnterLinkQuiescentMode(
+    _Inout_ PVOID Context)
+{
+    PPDO_DEVICE_EXTENSION DeviceExtension = ((PDEVICE_OBJECT)Context)->DeviceExtension;
+    PFDO_DEVICE_EXTENSION FdoExtension = DeviceExtension->Fdo->DeviceExtension;
+    PDEVICE_OBJECT *Peers;
+    PLIST_ENTRY Entry;
+    ULONG Capacity = 0;
+    ULONG Count = 0;
+    ULONG Index;
+    KIRQL OldIrql;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL || DeviceExtension->LinkQuiescent)
+        return STATUS_UNSUCCESSFUL;
+    if (DeviceExtension->Common.DevicePowerState != PowerDeviceD0)
+        return STATUS_INVALID_DEVICE_STATE;
+
+    KeWaitForSingleObject(&FdoExtension->LinkQuiescentLock, Executive, KernelMode, FALSE, NULL);
+
+    KeAcquireSpinLock(&FdoExtension->DeviceListLock, &OldIrql);
+    for (Entry = FdoExtension->DeviceListHead.Flink; Entry != &FdoExtension->DeviceListHead; Entry = Entry->Flink)
+        Capacity++;
+    KeReleaseSpinLock(&FdoExtension->DeviceListLock, OldIrql);
+
+    Peers = ExAllocatePoolWithTag(NonPagedPool, max(Capacity, 1) * sizeof(*Peers), TAG_PCI);
+    if (Peers == NULL)
+    {
+        KeSetEvent(&FdoExtension->LinkQuiescentLock, IO_NO_INCREMENT, FALSE);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    KeAcquireSpinLock(&FdoExtension->DeviceListLock, &OldIrql);
+    for (Entry = FdoExtension->DeviceListHead.Flink;
+         Entry != &FdoExtension->DeviceListHead && Count < Capacity;
+         Entry = Entry->Flink)
+    {
+        PPCI_DEVICE Device = CONTAINING_RECORD(Entry, PCI_DEVICE, ListEntry);
+
+        if (Device->Pdo == NULL)
+            continue;
+        Status = IoAcquireRemoveLock(&((PPDO_DEVICE_EXTENSION)Device->Pdo->DeviceExtension)->RemoveLock, Context);
+        if (!NT_SUCCESS(Status))
+            break;
+        Peers[Count++] = Device->Pdo;
+    }
+    KeReleaseSpinLock(&FdoExtension->DeviceListLock, OldIrql);
+
+    if (!NT_SUCCESS(Status))
+    {
+        PciReleaseQuiescentPeers(Context, Peers, Count);
+        KeSetEvent(&FdoExtension->LinkQuiescentLock, IO_NO_INCREMENT, FALSE);
+        return Status;
+    }
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        PPDO_DEVICE_EXTENSION Peer = Peers[Index]->DeviceExtension;
+
+        PciSaveDeviceConfig(Peer->PciDevice);
+        PciSaveMsiState(Peer);
+    }
+    DeviceExtension->QuiescentPeers = Peers;
+    DeviceExtension->QuiescentPeerCount = Count;
+    DeviceExtension->LinkQuiescent = TRUE;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+PciExitLinkQuiescentMode(
+    _Inout_ PVOID Context)
+{
+    PPDO_DEVICE_EXTENSION DeviceExtension = ((PDEVICE_OBJECT)Context)->DeviceExtension;
+    PFDO_DEVICE_EXTENSION FdoExtension = DeviceExtension->Fdo->DeviceExtension;
+    ULONG Index;
+
+    if (!DeviceExtension->LinkQuiescent)
+        return STATUS_INVALID_DEVICE_STATE;
+
+    for (Index = 0; Index < DeviceExtension->QuiescentPeerCount; Index++)
+    {
+        PPDO_DEVICE_EXTENSION Peer = DeviceExtension->QuiescentPeers[Index]->DeviceExtension;
+
+        PciRestoreDeviceConfig(Peer->PciDevice);
+        PciRestoreMsiState(Peer);
+    }
+    PciReleaseQuiescentPeers(Context, DeviceExtension->QuiescentPeers, DeviceExtension->QuiescentPeerCount);
+    DeviceExtension->QuiescentPeers = NULL;
+    DeviceExtension->QuiescentPeerCount = 0;
+    DeviceExtension->LinkQuiescent = FALSE;
+    KeSetEvent(&FdoExtension->LinkQuiescentLock, IO_NO_INCREMENT, FALSE);
+    return STATUS_SUCCESS;
+}
+
 static NTSTATUS
 PdoQueryInterface(
     IN PDEVICE_OBJECT DeviceObject,
@@ -4055,14 +4252,52 @@ PdoQueryInterface(
     else if (RtlCompareMemory(IrpSp->Parameters.QueryInterface.InterfaceType,
                               &GUID_PCI_EXPRESS_LINK_QUIESCENT_INTERFACE, sizeof(GUID)) == sizeof(GUID))
     {
-        DPRINT("GUID_PCI_EXPRESS_LINK_QUIESCENT_INTERFACE requested\n");
-        Status = STATUS_NOT_SUPPORTED;
+        PPDO_DEVICE_EXTENSION PdoExtension = (PPDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
+
+        if (IrpSp->Parameters.QueryInterface.Version != PCI_EXPRESS_LINK_QUIESCENT_INTERFACE_VERSION ||
+            !PciPdoIsDisplayController(PdoExtension) || PciPdoRootPortAbove(PdoExtension) == NULL)
+        {
+            Status = STATUS_NOT_SUPPORTED;
+        }
+        else if (IrpSp->Parameters.QueryInterface.Size < sizeof(PCI_EXPRESS_LINK_QUIESCENT_INTERFACE))
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            PPCI_EXPRESS_LINK_QUIESCENT_INTERFACE Quiescent;
+
+            Quiescent = (PPCI_EXPRESS_LINK_QUIESCENT_INTERFACE)IrpSp->Parameters.QueryInterface.Interface;
+            Quiescent->Size = sizeof(PCI_EXPRESS_LINK_QUIESCENT_INTERFACE);
+            Quiescent->Version = PCI_EXPRESS_LINK_QUIESCENT_INTERFACE_VERSION;
+            Quiescent->PciExpressEnterLinkQuiescentMode = PciEnterLinkQuiescentMode;
+            Quiescent->PciExpressExitLinkQuiescentMode = PciExitLinkQuiescentMode;
+            Status = STATUS_SUCCESS;
+        }
     }
     else if (RtlCompareMemory(IrpSp->Parameters.QueryInterface.InterfaceType,
                               &GUID_PCI_EXPRESS_ROOT_PORT_INTERFACE, sizeof(GUID)) == sizeof(GUID))
     {
-        DPRINT("GUID_PCI_EXPRESS_ROOT_PORT_INTERFACE requested\n");
-        Status = STATUS_NOT_SUPPORTED;
+        if (IrpSp->Parameters.QueryInterface.Version != PCI_EXPRESS_ROOT_PORT_INTERFACE_VERSION ||
+            PciPdoRootPortAbove((PPDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension) == NULL)
+        {
+            Status = STATUS_NOT_SUPPORTED;
+        }
+        else if (IrpSp->Parameters.QueryInterface.Size < sizeof(PCI_EXPRESS_ROOT_PORT_INTERFACE))
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            PPCI_EXPRESS_ROOT_PORT_INTERFACE RootPortInterface;
+
+            RootPortInterface = (PPCI_EXPRESS_ROOT_PORT_INTERFACE)IrpSp->Parameters.QueryInterface.Interface;
+            RootPortInterface->Size = sizeof(PCI_EXPRESS_ROOT_PORT_INTERFACE);
+            RootPortInterface->Version = PCI_EXPRESS_ROOT_PORT_INTERFACE_VERSION;
+            RootPortInterface->ReadConfigSpace = PciRootPortReadConfigSpace;
+            RootPortInterface->WriteConfigSpace = PciRootPortWriteConfigSpace;
+            Status = STATUS_SUCCESS;
+        }
     }
     else if (RtlCompareMemory(IrpSp->Parameters.QueryInterface.InterfaceType,
                               &GUID_PCI_VIRTUALIZATION_INTERFACE, sizeof(GUID)) == sizeof(GUID))

@@ -137,6 +137,9 @@ typedef struct _PDO_DEVICE_EXTENSION
     BOOLEAN AcpiWakeActive;
     SYSTEM_POWER_STATE SystemWake;
     ACPI_PCI_WAKE_INPUT_BUFFER AcpiWakeInput;
+    BOOLEAN LinkQuiescent;
+    PDEVICE_OBJECT *QuiescentPeers;
+    ULONG QuiescentPeerCount;
 } PDO_DEVICE_EXTENSION, *PPDO_DEVICE_EXTENSION;
 
 typedef struct _PCI_ROOT_BUS_INTERFACE
@@ -212,6 +215,7 @@ typedef struct _FDO_DEVICE_EXTENSION
     PIRP WaitWakeIrp;
     KSPIN_LOCK WaitWakeSpinLock;
     LONG WaitWakeChildCount;
+    KEVENT LinkQuiescentLock;
 } FDO_DEVICE_EXTENSION, *PFDO_DEVICE_EXTENSION;
 
 #define PCI_ACPI_NOTIFY_BUS_CHECK 0x00
