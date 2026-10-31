@@ -6038,9 +6038,50 @@ static VOID KdbpPrintPciCapabilities(_In_ const PCI_COMMON_CONFIG *Config, _In_ 
         {
             USHORT Express = KdbpReadPciUshort(Raw, Offset + 2);
             KdbpPrint(" PCIe version=%u type=%u slot=%u", Express & 0xF, (Express >> 4) & 0xF, !!(Express & 0x100));
+            if ((ULONG)Offset + 0x14 <= BytesRead)
+            {
+                USHORT LinkStatus = KdbpReadPciUshort(Raw, Offset + 0x12);
+
+                KdbpPrint(" next=0x%02x\n      devctl 0x%04x devsta 0x%04x lnkcap 0x%08lx lnkctl 0x%04x lnksta 0x%04x (gen%u x%u)",
+                          Next, KdbpReadPciUshort(Raw, Offset + 8), KdbpReadPciUshort(Raw, Offset + 0xA),
+                          KdbpReadPciUlong(Raw, Offset + 0xC), KdbpReadPciUshort(Raw, Offset + 0x10), LinkStatus,
+                          LinkStatus & 0xF, (LinkStatus >> 4) & 0x3F);
+                KdbpPrint("\n");
+                Offset = Next;
+                continue;
+            }
         }
         KdbpPrint(" next=0x%02x\n", Next);
         Offset = Next;
+    }
+}
+
+static VOID KdbpPrintPciAer(_In_ ULONG Bus, _In_ ULONG SlotNumber)
+{
+    ULONG NTAPI HalpKdReadPciConfig(ULONG BusNumber, ULONG SlotNumber, PVOID Buffer, ULONG Offset, ULONG Length);
+    ULONG Offset = sizeof(PCI_COMMON_CONFIG);
+    ULONG Header;
+    ULONG Count;
+
+    for (Count = 0; Count < 64 && Offset >= 0x100 && Offset < 0x1000; Count++)
+    {
+        if (HalpKdReadPciConfig(Bus, SlotNumber, &Header, Offset, sizeof(Header)) != sizeof(Header) ||
+            Header == 0 || Header == MAXULONG)
+        {
+            return;
+        }
+        if ((Header & 0xFFFF) == 0x0001)
+        {
+            ULONG Aer[6];
+
+            if (HalpKdReadPciConfig(Bus, SlotNumber, Aer, Offset, sizeof(Aer)) == sizeof(Aer))
+            {
+                KdbpPrint("  AER [0x%03lx] uncor-sts 0x%08lx mask 0x%08lx sev 0x%08lx cor-sts 0x%08lx mask 0x%08lx\n",
+                          Offset, Aer[1], Aer[2], Aer[3], Aer[4], Aer[5]);
+            }
+            return;
+        }
+        Offset = Header >> 20;
     }
 }
 #endif
@@ -6129,6 +6170,7 @@ static BOOLEAN KdbpCmdPci(ULONG Argc, PCHAR Argv[])
     else if (HeaderType == PCI_BRIDGE_TYPE)
         KdbpPrint("  Interrupt line/pin %u/%u buses %u-%u-%u\n", Config.u.type1.InterruptLine, Config.u.type1.InterruptPin, Config.u.type1.PrimaryBus, Config.u.type1.SecondaryBus, Config.u.type1.SubordinateBus);
     KdbpPrintPciCapabilities(&Config, BytesRead);
+    KdbpPrintPciAer(Bus, Slot.u.AsULONG);
     return TRUE;
 #endif
 }
