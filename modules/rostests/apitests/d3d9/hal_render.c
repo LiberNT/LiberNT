@@ -687,6 +687,45 @@ static void Test_ClampedColors(const D3DCAPS9 *caps)
         IDirect3DVertexShader9_Release(vertexShader);
 }
 
+static void Test_InvalidCalls(void)
+{
+    static const RECT partial = {0, 0, SIZE / 2, SIZE / 2};
+    IDirect3DTexture9 *texture = NULL;
+    IDirect3DSurface9 *surface = NULL, *depth = NULL, *depth2 = NULL;
+    HRESULT hr;
+
+    hr = IDirect3DDevice9_CreateTexture(Device, SIZE, SIZE, 1, 0, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &texture, NULL);
+    ok(hr == D3D_OK, "CreateTexture failed: 0x%08lx\n", hr);
+    if (texture)
+    {
+        IDirect3DTexture9_GetSurfaceLevel(texture, 0, &surface);
+        hr = IDirect3DDevice9_StretchRect(Device, RenderTarget, NULL, surface, NULL, D3DTEXF_NONE);
+        ok(hr == D3DERR_INVALIDCALL, "StretchRect to a plain texture: 0x%08lx\n", hr);
+    }
+
+    IDirect3DDevice9_GetDepthStencilSurface(Device, &depth);
+    hr = IDirect3DDevice9_CreateDepthStencilSurface(Device, SIZE, SIZE, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, FALSE,
+                                                    &depth2, NULL);
+    ok(hr == D3D_OK, "CreateDepthStencilSurface failed: 0x%08lx\n", hr);
+    if (depth && depth2)
+    {
+        hr = IDirect3DDevice9_StretchRect(Device, depth, &partial, depth2, &partial, D3DTEXF_NONE);
+        ok(hr == D3DERR_INVALIDCALL, "partial depth StretchRect: 0x%08lx\n", hr);
+    }
+
+    hr = IDirect3DDevice9_GetFrontBufferData(Device, 99, Readback);
+    ok(hr == D3DERR_INVALIDCALL, "GetFrontBufferData with a bad swap chain: 0x%08lx\n", hr);
+
+    if (depth2)
+        IDirect3DSurface9_Release(depth2);
+    if (depth)
+        IDirect3DSurface9_Release(depth);
+    if (surface)
+        IDirect3DSurface9_Release(surface);
+    if (texture)
+        IDirect3DTexture9_Release(texture);
+}
+
 static void Test_Frames(void)
 {
     IDirect3DSurface9 *backBuffer = NULL;
@@ -816,6 +855,7 @@ START_TEST(hal_render)
     Test_ClipPlane(&caps);
     Test_IntzSampling(d3d, &caps);
     Test_ClampedColors(&caps);
+    Test_InvalidCalls();
     Test_Frames();
     Test_ScreenPresent(window);
 
