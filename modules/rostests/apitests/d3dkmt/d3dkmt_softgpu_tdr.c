@@ -2,7 +2,7 @@
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Software GPU timeout detection and recovery on the render path
- * COPYRIGHT:   Copyright 2026 Ostap Brehin <hi@ostapbrehin.com>
+ * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
 #include "precomp.h"
