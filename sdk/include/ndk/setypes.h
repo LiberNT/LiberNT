@@ -72,27 +72,6 @@ Author:
 #define SE_DELEGATE_SESSION_USER_IMPERSONATE_PRIVILEGE (36L)
 #define SE_MAX_WELL_KNOWN_PRIVILEGE       (SE_DELEGATE_SESSION_USER_IMPERSONATE_PRIVILEGE)
 
-typedef struct _TOKEN_MANDATORY_POLICY {
-  ULONG Policy;
-} TOKEN_MANDATORY_POLICY, *PTOKEN_MANDATORY_POLICY;
-
-typedef struct _TOKEN_ACCESS_INFORMATION
-{
-    struct _SID_AND_ATTRIBUTES_HASH *SidHash;
-    struct _SID_AND_ATTRIBUTES_HASH *RestrictedSidHash;
-    struct _TOKEN_PRIVILEGES *Privileges;
-    LUID AuthenticationId;
-    TOKEN_TYPE TokenType;
-    SECURITY_IMPERSONATION_LEVEL ImpersonationLevel;
-    TOKEN_MANDATORY_POLICY MandatoryPolicy;
-    ULONG Flags;
-    ULONG AppContainerNumber;
-    PSID PackageSid;
-    struct _SID_AND_ATTRIBUTES_HASH *CapabilitiesHash;
-    PSID TrustLevelSid;
-    PVOID SecurityAttributes;
-} TOKEN_ACCESS_INFORMATION, *PTOKEN_ACCESS_INFORMATION;
-
 #else
 
 //

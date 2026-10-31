@@ -4347,12 +4347,6 @@ typedef struct tagPOINTER_INFO
 #define PA_ACTIVATE                     MA_ACTIVATE
 #define PA_NOACTIVATE                   MA_NOACTIVATE
 
-#if !defined(_HPOWERNOTIFY_DEF_)
-#define _HPOWERNOTIFY_DEF_
-typedef PVOID HPOWERNOTIFY;
-typedef HPOWERNOTIFY *PHPOWERNOTIFY;
-#endif
-
 typedef struct tagTOUCH_HIT_TESTING_PROXIMITY_EVALUATION
 {
     UINT16 score;
@@ -5729,6 +5723,15 @@ UINT WINAPI RegisterClipboardFormatW(_In_ LPCWSTR);
 #if (WINVER >= 0x0500)
 HDEVNOTIFY WINAPI RegisterDeviceNotificationA(_In_ HANDLE, _In_ LPVOID, _In_ DWORD);
 HDEVNOTIFY WINAPI RegisterDeviceNotificationW(_In_ HANDLE, _In_ LPVOID, _In_ DWORD);
+#if (_WIN32_WINNT >= 0x0502)
+#if !defined(_HPOWERNOTIFY_DEF_)
+#define _HPOWERNOTIFY_DEF_
+typedef PVOID HPOWERNOTIFY;
+typedef HPOWERNOTIFY *PHPOWERNOTIFY;
+#endif
+HPOWERNOTIFY WINAPI RegisterPowerSettingNotification(_In_ HANDLE hRecipient, _In_ LPCGUID PowerSettingGuid, _In_ DWORD Flags);
+BOOL WINAPI UnregisterPowerSettingNotification(_In_ HPOWERNOTIFY Handle);
+#endif
 #endif
 BOOL WINAPI RegisterHotKey(_In_opt_ HWND, _In_ int, _In_ UINT, _In_ UINT);
 BOOL WINAPI RegisterLogonProcess(DWORD,BOOL);

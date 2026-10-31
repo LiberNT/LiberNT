@@ -552,6 +552,14 @@ BOOL WINAPI CoIsHandlerConnected(_In_ LPUNKNOWN pUnk);
 _Check_return_
 HRESULT
 WINAPI
+CoCancelCall(
+  _In_ DWORD dwThreadId,
+  _In_ ULONG ulTimeout
+);
+
+_Check_return_
+HRESULT
+WINAPI
 CoDisableCallCancellation(
   _In_opt_ void *reserved
 );

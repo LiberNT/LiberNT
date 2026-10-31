@@ -70,12 +70,15 @@ typedef STRING OEM_STRING;
 typedef PSTRING POEM_STRING;
 typedef const STRING *PCOEM_STRING;
 
+#ifndef __UNICODE_STRING_DEFINED__
+#define __UNICODE_STRING_DEFINED__
 typedef struct _UNICODE_STRING
 {
     USHORT Length;
     USHORT MaximumLength;
     PWSTR Buffer;
 } UNICODE_STRING, *PUNICODE_STRING;
+#endif
 typedef const UNICODE_STRING *PCUNICODE_STRING;
 
 typedef LONG KPRIORITY;

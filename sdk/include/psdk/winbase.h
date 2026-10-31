@@ -697,6 +697,14 @@ typedef struct _STARTUPINFOEXW
     LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList;
 } STARTUPINFOEXW, *LPSTARTUPINFOEXW;
 
+#ifdef UNICODE
+typedef STARTUPINFOEXW STARTUPINFOEX;
+typedef LPSTARTUPINFOEXW LPSTARTUPINFOEX;
+#else
+typedef STARTUPINFOEXA STARTUPINFOEX;
+typedef LPSTARTUPINFOEXA LPSTARTUPINFOEX;
+#endif
+
 #if (_WIN32_WINNT >= 0x0500)
 typedef WAITORTIMERCALLBACKFUNC WAITORTIMERCALLBACK ;
 #endif
@@ -2821,6 +2829,12 @@ QueryIdleProcessorCycleTimeEx(
   _In_ USHORT Group,
   _Inout_ PULONG BufferLength,
   _Out_writes_bytes_opt_(*BufferLength) PULONG64 ProcessorIdleCycleTime);
+
+WINBASEAPI
+BOOL
+WINAPI
+QueryUnbiasedInterruptTime(
+  _Out_ PULONGLONG UnbiasedTime);
 #endif
 
 DWORD

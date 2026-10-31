@@ -652,6 +652,13 @@ extern "C" {
 
   __DEFINE_CPP_OVERLOAD_SECURE_FUNC_0_1_ARGLIST(
     _Success_(return >= 0)
+    int, sprintf_s, vsprintf_s,
+    _Always_(_Post_z_)            char,        _Buffer,
+    _In_z_ _Printf_format_string_ char const*, _Format
+    )
+
+  __DEFINE_CPP_OVERLOAD_SECURE_FUNC_0_1_ARGLIST(
+    _Success_(return >= 0)
     int, swprintf_s, vswprintf_s,
     _Always_(_Post_z_)            wchar_t,        _Buffer,
     _In_z_ _Printf_format_string_ wchar_t const*, _Format
