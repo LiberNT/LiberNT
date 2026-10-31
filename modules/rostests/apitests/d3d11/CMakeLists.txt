@@ -1,5 +1,5 @@
 
-add_executable(d3d11_apitest hal_render.c testlist.c)
+add_executable(d3d11_apitest hal_render.c hal_resource.c testlist.c)
 target_link_libraries(d3d11_apitest wine dxguid uuid)
 set_module_type(d3d11_apitest win32cui)
 add_dependencies(d3d11_apitest d3d_idl_headers)
