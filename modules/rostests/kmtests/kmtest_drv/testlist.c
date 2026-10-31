@@ -315,6 +315,7 @@ KMT_TESTFUNC Test_MmPrefetchPages;
 KMT_TESTFUNC Test_MmPrivatePages;
 KMT_TESTFUNC Test_IoStackKM;
 KMT_TESTFUNC Test_IoActivityId;
+KMT_TESTFUNC Test_IoAcpiCmosRegion;
 KMT_TESTFUNC Test_IoAcpiIoctl;
 KMT_TESTFUNC Test_IoStackLimits;
 KMT_TESTFUNC Test_SmcLib;
@@ -489,6 +490,7 @@ const KMT_TEST TestList[] =
     { "IoMdl",                              Test_IoMdl },
     { "IoModern",                           Test_IoModern },
     { "IoActivityId",                       Test_IoActivityId },
+    { "IoAcpiCmosRegion",                   Test_IoAcpiCmosRegion },
     { "IoAcpiIoctl",                        Test_IoAcpiIoctl },
     { "IoStackLimits",                      Test_IoStackLimits },
     { "SmcLib",                             Test_SmcLib },

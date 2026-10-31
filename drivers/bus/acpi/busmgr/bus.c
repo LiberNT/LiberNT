@@ -2072,6 +2072,7 @@ acpi_init (void)
 	acpi_power_init();	/* ACPI Bus Power Management */
 	acpi_button_init();
 	acpi_ged_init();
+	acpi_cmos_init();
 	acpi_ec_init();		/* ACPI Embedded Controller */
 	acpi_fan_init();		/* ACPI Fan */
 	acpi_thermal_init();	/* ACPI Thermal Zone */

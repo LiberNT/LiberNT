@@ -182,6 +182,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoStackKM.c
     ntos_io/IoActivityId.c
     ntos_io/IoAcpiIoctl.c
+    ntos_io/IoAcpiCmosRegion.c
     ntos_io/IoStackLimits.c
     ntos_io/IoMdl.c
     ntos_io/IoModern.c
@@ -294,6 +295,7 @@ list(APPEND KMTEST_DRV_SOURCE
     win32ss/CddDisplay.c
     ${COMMON_SOURCE}
 
+    ${REACTOS_SOURCE_DIR}/drivers/bus/acpi/cmos_core.c
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl/gpuva_core.c
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl/adapter_map_core.c
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl/adapter_start_core.c
@@ -400,6 +402,7 @@ endif()
 
 add_library(kmtest_drv MODULE ${KMTEST_DRV_SOURCE})
 target_include_directories(kmtest_drv PRIVATE
+    ${REACTOS_SOURCE_DIR}/drivers/bus/acpi
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgmms2
     ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/softgpu

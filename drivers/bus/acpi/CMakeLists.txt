@@ -209,6 +209,8 @@ list(APPEND ACPI_SOURCE
     ged.c
     interface.c
     opregion.c
+    cmos.c
+    cmos_core.c
     pnp.c
     power.c
     thermal.c

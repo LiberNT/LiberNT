@@ -120,6 +120,7 @@ int acpi_button_init (void);
 void acpi_button_exit (void);
 
 int acpi_ged_init(void);
+int acpi_cmos_init(void);
 
 /* --------------------------------------------------------------------------
                                 Embedded Controller
