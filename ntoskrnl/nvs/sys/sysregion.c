@@ -153,12 +153,14 @@ MiSystemMapFrames(
     return STATUS_SUCCESS;
 }
 
+static
 VOID
-MiSystemUnmap(
+MiSystemUnmapScope(
     _Inout_ PMI_SYSTEM System,
     _In_ ULONG64 VirtualAddress,
     _In_ ULONG Count,
-    _In_ BOOLEAN FreeFrames)
+    _In_ BOOLEAN FreeFrames,
+    _In_ BOOLEAN AllProcessors)
 {
     PMI_ADDRESS_SPACE Space = &System->SystemSpace;
     ULONG i;
@@ -191,7 +193,26 @@ MiSystemUnmap(
     }
 
     if (Count != 0)
-        MiArchTlbInvalidate(VirtualAddress, Count, TRUE);
+        MiArchTlbInvalidate(VirtualAddress, Count, AllProcessors);
+}
+
+VOID
+MiSystemUnmap(
+    _Inout_ PMI_SYSTEM System,
+    _In_ ULONG64 VirtualAddress,
+    _In_ ULONG Count,
+    _In_ BOOLEAN FreeFrames)
+{
+    MiSystemUnmapScope(System, VirtualAddress, Count, FreeFrames, TRUE);
+}
+
+VOID
+MiSystemUnmapLocal(
+    _Inout_ PMI_SYSTEM System,
+    _In_ ULONG64 VirtualAddress,
+    _In_ ULONG Count)
+{
+    MiSystemUnmapScope(System, VirtualAddress, Count, FALSE, FALSE);
 }
 
 static

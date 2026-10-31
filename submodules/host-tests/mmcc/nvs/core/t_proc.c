@@ -695,12 +695,71 @@ ProcFragmentationRelief(void)
     WorldDestroy(&World);
 }
 
+static
+void
+ProcCopyLocalUnmap(void)
+{
+    static TEST_WORLD World;
+    MI_ADDRESS_SPACE Space;
+    ULONG64 Base = 0, Size = 4 * PAGE_SIZE, FirstVa, Value;
+    LONG StaleBefore;
+    PMI_MDL Mdl;
+    NTSTATUS Status;
+    ULONG Round;
+
+    WorldCreate(&World, 512, 2, 10000);
+    World.Machine.StrictTlb = TRUE;
+    CHECK(NT_SUCCESS(MiSystemPtesInitialize(&World.System, 1024, 1)));
+    ProcessCreate(&World, &Space);
+    WorldAttach(&World, 0, &Space);
+    CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Base, &Size, MI_MEM_RESERVE | MI_MEM_COMMIT, MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base, 0x1111111111111111ULL)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + 2 * PAGE_SIZE, 0x2222222222222222ULL)));
+    StaleBefore = World.Machine.StaleTlbUses;
+
+    FirstVa = 0;
+    for (Round = 0; Round < 2; Round++)
+    {
+        ULONG64 Source = Base + (ULONG64)Round * 2 * PAGE_SIZE;
+
+        Mdl = MiMdlAllocate(&Space, Source, sizeof(Value));
+        CHECK(Mdl != NULL);
+        if (Mdl == NULL)
+            break;
+        CHECK(NT_SUCCESS(MiMapPagesForCopy(Mdl, TRUE, FALSE)));
+        if (Round == 0)
+            FirstVa = Mdl->MappedSystemVa;
+        else
+            CHECK(Mdl->MappedSystemVa == FirstVa);
+        Value = 0;
+        Status = MachineAccessMemory(&World.Machine, 0, Mdl->MappedSystemVa + Mdl->ByteOffset, &Value, sizeof(Value),
+                                     MachineRead, FALSE);
+        CHECK(NT_SUCCESS(Status));
+        CHECK(Value == (Round == 0 ? 0x1111111111111111ULL : 0x2222222222222222ULL));
+        MiUnmapLockedPagesLocal(Mdl);
+        CHECK(Mdl->MappedSystemVa == 0);
+        CHECK(!MachineProbe(&World.Machine, 0, FirstVa, NULL, NULL));
+        MiUnlockPages(Mdl);
+        MiMdlFree(Mdl);
+    }
+    CHECK(World.Machine.StaleTlbUses == StaleBefore);
+
+    Size = 0;
+    CHECK(NT_SUCCESS(MiFreeVirtualMemory(&Space, &Base, &Size, MI_MEM_RELEASE)));
+    WorldAttach(&World, 0, NULL);
+    ProcessDestroy(&World, &Space);
+    MiSystemPtesUninitialize(&World.System);
+    WorldExpectClean(&World, 512);
+    WorldDestroy(&World);
+}
+
 void
 TestProcess(void)
 {
     ProcCopyGuard();
     ProcCopyGuardRange();
     ProcCopyPhysical();
+    ProcCopyLocalUnmap();
     ProcAdoptedSharedPage();
     ProcLifecycle();
     ProcBalanceAndCopy();

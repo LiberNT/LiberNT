@@ -381,3 +381,15 @@ MiUnmapLockedPages(
     MiUnmapFrames(Mdl->Space->System, Mdl->MappedSystemVa, Mdl->PageCount);
     Mdl->MappedSystemVa = 0;
 }
+
+VOID
+MiUnmapLockedPagesLocal(
+    _Inout_ PMI_MDL Mdl)
+{
+    if (Mdl->MappedSystemVa == 0)
+        return;
+
+    MiSystemUnmapLocal(Mdl->Space->System, Mdl->MappedSystemVa, Mdl->PageCount);
+    MiReleaseSystemPtes(Mdl->Space->System, Mdl->MappedSystemVa, Mdl->PageCount);
+    Mdl->MappedSystemVa = 0;
+}

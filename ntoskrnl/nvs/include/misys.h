@@ -81,6 +81,7 @@ NTSTATUS MiSystemMapFrames(_Inout_ PMI_SYSTEM System, _In_ ULONG64 VirtualAddres
                            _In_ ULONG Count, _In_ ULONG Protection, _In_ ULONG LeafFlags, _In_ BOOLEAN OwnFrames);
 VOID MiSystemUnmap(_Inout_ PMI_SYSTEM System, _In_ ULONG64 VirtualAddress, _In_ ULONG Count,
                    _In_ BOOLEAN FreeFrames);
+VOID MiSystemUnmapLocal(_Inout_ PMI_SYSTEM System, _In_ ULONG64 VirtualAddress, _In_ ULONG Count);
 NTSTATUS MiSystemCommitPages(_Inout_ PMI_SYSTEM System, _In_ ULONG64 VirtualAddress, _In_ ULONG Count,
                              _In_ ULONG Protection);
 VOID MiSystemDecommitPages(_Inout_ PMI_SYSTEM System, _In_ ULONG64 VirtualAddress, _In_ ULONG Count);
@@ -135,4 +136,5 @@ VOID MiUnlockPages(_Inout_ PMI_MDL Mdl);
 NTSTATUS MiBuildMdlForSystemRange(_Inout_ PMI_MDL Mdl);
 NTSTATUS MiMapLockedPages(_Inout_ PMI_MDL Mdl, _In_ MI_CACHE_TYPE CacheType, _Out_ PULONG64 SystemVa);
 VOID MiUnmapLockedPages(_Inout_ PMI_MDL Mdl);
+VOID MiUnmapLockedPagesLocal(_Inout_ PMI_MDL Mdl);
 ULONG64 MiGetPhysicalAddress(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress);
