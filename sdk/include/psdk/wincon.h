@@ -31,6 +31,8 @@ extern "C" {
 #include "wingdi.h"
 #endif
 
+#include "wincontypes.h"
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4820)
@@ -150,28 +152,6 @@ extern "C" {
 #endif
 
 
-/*
- * Event types
- */
-#define KEY_EVENT                       0x0001
-#define MOUSE_EVENT                     0x0002
-#define WINDOW_BUFFER_SIZE_EVENT        0x0004
-#define MENU_EVENT                      0x0008
-#define FOCUS_EVENT                     0x0010
-
-/*
- * ControlKeyState flags
- */
-#define RIGHT_ALT_PRESSED               0x0001
-#define LEFT_ALT_PRESSED                0x0002
-#define RIGHT_CTRL_PRESSED              0x0004
-#define LEFT_CTRL_PRESSED               0x0008
-#define SHIFT_PRESSED                   0x0010
-#define NUMLOCK_ON                      0x0020
-#define SCROLLLOCK_ON                   0x0040
-#define CAPSLOCK_ON                     0x0080
-#define ENHANCED_KEY                    0x0100
-
 // NLS Japanese flags
 #define NLS_DBCSCHAR                    0x00010000  /* SBCS/DBCS mode     */
 #define NLS_ALPHANUMERIC                0x00000000  /* Alphanumeric mode  */
@@ -183,25 +163,6 @@ extern "C" {
 #define ALTNUMPAD_BIT                   0x04000000  /* AltNumpad OEM char */
 #define NLS_IME_DISABLE                 0x20000000  /* IME enable/disable */
 
-/*
- * ButtonState flags
- */
-#define FROM_LEFT_1ST_BUTTON_PRESSED    0x0001
-#define RIGHTMOST_BUTTON_PRESSED        0x0002
-#define FROM_LEFT_2ND_BUTTON_PRESSED    0x0004
-#define FROM_LEFT_3RD_BUTTON_PRESSED    0x0008
-#define FROM_LEFT_4TH_BUTTON_PRESSED    0x0010
-
-/*
- * Mouse event flags
- */
-#define MOUSE_MOVED                     0x0001
-#define DOUBLE_CLICK                    0x0002
-#define MOUSE_WHEELED                   0x0004
-#if (_WIN32_WINNT >= _WIN32_WINNT_VISTA)
-#define MOUSE_HWHEELED                  0x0008
-#endif
-
 typedef struct _CONSOLE_READCONSOLE_CONTROL {
     ULONG nLength;
     ULONG nInitialChars;
@@ -209,41 +170,16 @@ typedef struct _CONSOLE_READCONSOLE_CONTROL {
     ULONG dwControlKeyState;
 } CONSOLE_READCONSOLE_CONTROL, *PCONSOLE_READCONSOLE_CONTROL;
 
-typedef struct _CHAR_INFO {
-    union {
-        WCHAR UnicodeChar;
-        CHAR AsciiChar;
-    } Char;
-    WORD Attributes;
-} CHAR_INFO,*PCHAR_INFO;
-
-typedef struct _SMALL_RECT {
-    SHORT Left;
-    SHORT Top;
-    SHORT Right;
-    SHORT Bottom;
-} SMALL_RECT,*PSMALL_RECT;
-
 typedef struct _CONSOLE_CURSOR_INFO {
     DWORD dwSize;
     BOOL  bVisible;
 } CONSOLE_CURSOR_INFO,*PCONSOLE_CURSOR_INFO;
-
-typedef struct _COORD {
-    SHORT X;
-    SHORT Y;
-} COORD, *PCOORD;
 
 typedef struct _CONSOLE_SELECTION_INFO {
     DWORD dwFlags;
     COORD dwSelectionAnchor;
     SMALL_RECT srSelection;
 } CONSOLE_SELECTION_INFO, *PCONSOLE_SELECTION_INFO;
-
-typedef struct _CONSOLE_FONT_INFO {
-    DWORD nFont;
-    COORD dwFontSize;
-} CONSOLE_FONT_INFO, *PCONSOLE_FONT_INFO;
 
 typedef struct _CONSOLE_SCREEN_BUFFER_INFO {
     COORD      dwSize;
@@ -256,50 +192,6 @@ typedef struct _CONSOLE_SCREEN_BUFFER_INFO {
 typedef BOOL
 (WINAPI *PHANDLER_ROUTINE)(
     _In_ DWORD CtrlType);
-
-typedef struct _KEY_EVENT_RECORD {
-    BOOL bKeyDown;
-    WORD wRepeatCount;
-    WORD wVirtualKeyCode;
-    WORD wVirtualScanCode;
-    union {
-        WCHAR UnicodeChar;
-        CHAR  AsciiChar;
-    } uChar;
-    DWORD dwControlKeyState;
-} KEY_EVENT_RECORD, *PKEY_EVENT_RECORD;
-
-C_ASSERT(FIELD_OFFSET(KEY_EVENT_RECORD, uChar) == 0xA);
-
-typedef struct _MOUSE_EVENT_RECORD {
-    COORD dwMousePosition;
-    DWORD dwButtonState;
-    DWORD dwControlKeyState;
-    DWORD dwEventFlags;
-} MOUSE_EVENT_RECORD, *PMOUSE_EVENT_RECORD;
-
-typedef struct _WINDOW_BUFFER_SIZE_RECORD {
-    COORD dwSize;
-} WINDOW_BUFFER_SIZE_RECORD, *PWINDOW_BUFFER_SIZE_RECORD;
-
-typedef struct _MENU_EVENT_RECORD {
-    UINT dwCommandId;
-} MENU_EVENT_RECORD, *PMENU_EVENT_RECORD;
-
-typedef struct _FOCUS_EVENT_RECORD {
-    BOOL bSetFocus;
-} FOCUS_EVENT_RECORD, *PFOCUS_EVENT_RECORD;
-
-typedef struct _INPUT_RECORD {
-    WORD EventType;
-    union {
-        KEY_EVENT_RECORD KeyEvent;
-        MOUSE_EVENT_RECORD MouseEvent;
-        WINDOW_BUFFER_SIZE_RECORD WindowBufferSizeEvent;
-        MENU_EVENT_RECORD MenuEvent;
-        FOCUS_EVENT_RECORD FocusEvent;
-    } Event;
-} INPUT_RECORD, *PINPUT_RECORD;
 
 #if (_WIN32_WINNT >= _WIN32_WINNT_VISTA)
 typedef struct _CONSOLE_HISTORY_INFO {
@@ -974,8 +866,6 @@ WriteConsoleOutputCharacterW(
 
 
 #if (NTDDI_VERSION >= NTDDI_WIN10_RS5) || defined(_KERNELBASE_)
-
-typedef VOID *HPCON;
 
 #define PSEUDOCONSOLE_INHERIT_CURSOR 0x00000001
 
