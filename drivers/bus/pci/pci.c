@@ -611,7 +611,7 @@ PciAcpiQueryChildNotifyInterface(
 }
 
 NTSTATUS
-PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State)
+PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State, _In_ BOOLEAN Force)
 {
     ACPI_PCI_SET_POWER_INPUT_BUFFER InputBuffer;
     KEVENT Event;
@@ -630,6 +630,7 @@ PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULON
     InputBuffer.Device = Device;
     InputBuffer.Function = Function;
     InputBuffer.State = State;
+    InputBuffer.Flags = Force ? ACPI_PCI_SET_POWER_FLAG_FORCE : 0;
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
     Irp = IoBuildDeviceIoControlRequest(IOCTL_ACPI_SET_POWER_FOR_PCI, AcpiInterfaceDeviceObject, &InputBuffer, sizeof(InputBuffer), NULL, 0, FALSE, &Event, &IoStatusBlock);
     if (!Irp)

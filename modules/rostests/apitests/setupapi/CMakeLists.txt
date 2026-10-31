@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     devclass.c
+    DevicePowerOnDisable.c
     InterruptAffinityPolicy.c
     InvalidDeviceInfoSet.c
     SetupCommitFileQueue.c

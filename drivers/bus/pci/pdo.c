@@ -4379,18 +4379,29 @@ PdoStartDevice(
     }
 
     PciPdoCacheMsiInfo(DeviceExtension);
-    if (PciGetPowerLevel(DeviceExtension->PciDevice) != PowerDeviceD0)
     {
         DEVICE_POWER_STATE PreviousPowerState = PciGetPowerLevel(DeviceExtension->PciDevice);
         NTSTATUS AcpiPowerStatus;
 
-        DPRINT1("PCI PDO: waking %u:%02x:%02x.%u from D%u before BAR programming\n", Segment, (UCHAR)DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber, PreviousPowerState - PowerDeviceD0);
-        AcpiPowerStatus = PciAcpiSetPower(Segment, DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber, 0);
+        /* The platform D0 (power resources, _PS0) is not implied by PMCSR D0. */
+        AcpiPowerStatus = PciAcpiSetPower(Segment, DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber, 0,
+                                          PreviousPowerState != PowerDeviceD0);
         if (!NT_SUCCESS(AcpiPowerStatus) && AcpiPowerStatus != STATUS_NOT_FOUND && AcpiPowerStatus != STATUS_NOT_SUPPORTED)
             DPRINT1("PCI PDO: ACPI D0 transition failed for %u:%02x:%02x.%u (0x%08lx)\n", Segment, (UCHAR)DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber, AcpiPowerStatus);
+    }
+    if (PciGetPowerLevel(DeviceExtension->PciDevice) != PowerDeviceD0)
+    {
+        DPRINT1("PCI PDO: waking %u:%02x:%02x.%u from D%u before BAR programming\n", Segment, (UCHAR)DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber, PciGetPowerLevel(DeviceExtension->PciDevice) - PowerDeviceD0);
         PciSetPowerLevel(DeviceExtension->PciDevice, PowerDeviceD0);
-        DeviceExtension->Common.DevicePowerState = PowerDeviceD0;
         PciPdoGetBusData(DeviceExtension, &DeviceExtension->PciDevice->PciConfig, PCI_COMMON_HDR_LENGTH);
+    }
+    if (DeviceExtension->Common.DevicePowerState != PowerDeviceD0)
+    {
+        POWER_STATE D0State;
+
+        DeviceExtension->Common.DevicePowerState = PowerDeviceD0;
+        D0State.DeviceState = PowerDeviceD0;
+        PoSetPowerState(DeviceObject, DevicePowerState, D0State);
     }
     Status = PciPdoProgramType0Bars(DeviceExtension, RawResList);
     if (!NT_SUCCESS(Status))
@@ -4815,6 +4826,35 @@ PdoEject(
 }
 
 static
+VOID
+PdoPowerDownForRemove(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PPDO_DEVICE_EXTENSION DeviceExtension)
+{
+    PPCI_DEVICE Device = DeviceExtension->PciDevice;
+    POWER_STATE State;
+    NTSTATUS Status;
+
+    if (!Device->Reported || Device->IsDebuggingDevice ||
+        DeviceExtension->Common.DevicePowerState == PowerDeviceD3)
+    {
+        return;
+    }
+    /* TODO: power down a removed bridge once the debugger path below it is tracked */
+    if (PCI_CONFIGURATION_TYPE(&Device->PciConfig) != PCI_DEVICE_TYPE)
+        return;
+
+    PciSetPowerLevel(Device, PowerDeviceD3);
+    Status = PciAcpiSetPower(PciPdoGetSegment(DeviceExtension), Device->BusNumber, Device->SlotNumber.u.bits.DeviceNumber, Device->SlotNumber.u.bits.FunctionNumber, PowerDeviceD3 - PowerDeviceD0, FALSE);
+    if (!NT_SUCCESS(Status) && Status != STATUS_NOT_FOUND && Status != STATUS_NOT_SUPPORTED)
+        DPRINT1("PCI PDO: ACPI D3 transition failed for %u:%02x:%02x.%u (0x%08lx)\n", PciPdoGetSegment(DeviceExtension), (UCHAR)Device->BusNumber, Device->SlotNumber.u.bits.DeviceNumber, Device->SlotNumber.u.bits.FunctionNumber, Status);
+
+    DeviceExtension->Common.DevicePowerState = PowerDeviceD3;
+    State.DeviceState = PowerDeviceD3;
+    PoSetPowerState(DeviceObject, DevicePowerState, State);
+}
+
+static
 BOOLEAN
 PdoUnlinkIfNotReported(
     _In_ PPDO_DEVICE_EXTENSION DeviceExtension)
@@ -4988,6 +5028,7 @@ PdoPnpControl(
             PciPdoDisableDecodes(DeviceExtension);
             PciPdoReleaseMessageRoutes(DeviceExtension);
             IoReleaseRemoveLockAndWait(&DeviceExtension->RemoveLock, Irp);
+            PdoPowerDownForRemove(DeviceObject, DeviceExtension);
             Gone = PdoUnlinkIfNotReported(DeviceExtension);
             if (!Gone)
                 IoInitializeRemoveLock(&DeviceExtension->RemoveLock, TAG_PCI, 0, 0);
@@ -5016,11 +5057,12 @@ PdoPnpControl(
         case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
             DPRINT("IRP_MN_FILTER_RESOURCE_REQUIREMENTS received\n");
             /* Nothing to do */
-            Irp->IoStatus.Status = Status;
+            Status = Irp->IoStatus.Status;
             break;
 
         default:
             DPRINT1("Unknown IOCTL 0x%lx\n", IrpSp->MinorFunction);
+            Status = Irp->IoStatus.Status;
             break;
     }
 

@@ -732,6 +732,20 @@ IopGetDeviceLocationPaths(
     return Status;
 }
 
+static DEVICE_POWER_STATE
+IopGetMostRecentDevicePowerState(PDEVICE_OBJECT DeviceObject)
+{
+    DEVICE_POWER_STATE State;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&PopDopeGlobalLock, &OldIrql);
+    State = (DEVICE_POWER_STATE)((IoGetDevObjExtension(DeviceObject)->PowerFlags >> 4) & 0xF);
+    KeReleaseSpinLock(&PopDopeGlobalLock, OldIrql);
+
+    /* FIXME: a device whose bus driver never called PoSetPowerState is reported in D0 */
+    return State != PowerDeviceUnspecified ? State : PowerDeviceD0;
+}
+
 static NTSTATUS
 IopGetDeviceProperty(PPLUGPLAY_CONTROL_PROPERTY_DATA PropertyData)
 {
@@ -827,7 +841,7 @@ IopGetDeviceProperty(PPLUGPLAY_CONTROL_PROPERTY_DATA PropertyData)
             {
                 DPRINT("Got device capabiliities\n");
 
-                PowerData->PD_MostRecentPowerState = PowerDeviceD0; // FIXME
+                PowerData->PD_MostRecentPowerState = IopGetMostRecentDevicePowerState(DeviceObject);
                 if (DeviceCapabilities.DeviceD1)
                     PowerData->PD_Capabilities |= PDCAP_D1_SUPPORTED;
                 if (DeviceCapabilities.DeviceD2)
@@ -855,7 +869,7 @@ IopGetDeviceProperty(PPLUGPLAY_CONTROL_PROPERTY_DATA PropertyData)
                 DPRINT("IRP_MN_QUERY_CAPABILITIES failed (Status 0x%08lx)\n", Status);
 
                 PowerData->PD_Capabilities = PDCAP_D0_SUPPORTED | PDCAP_D3_SUPPORTED;
-                PowerData->PD_MostRecentPowerState = PowerDeviceD0;
+                PowerData->PD_MostRecentPowerState = IopGetMostRecentDevicePowerState(DeviceObject);
             }
         }
     }

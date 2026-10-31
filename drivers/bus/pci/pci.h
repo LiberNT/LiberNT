@@ -372,7 +372,7 @@ PciAcpiEvalMethodForChild(
     _Out_opt_ PULONG BytesReturned);
 
 NTSTATUS
-PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State);
+PciAcpiSetPower(_In_ ULONG Segment, _In_ ULONG Bus, _In_ ULONG Device, _In_ ULONG Function, _In_ ULONG State, _In_ BOOLEAN Force);
 
 NTSTATUS
 PciAcpiQueryWake(

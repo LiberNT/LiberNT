@@ -1890,6 +1890,7 @@ AcpiSetPowerForPciDeviceIoctl(_In_ PFDO_DEVICE_DATA FdoData, _Inout_ PIRP Irp)
     PACPI_PCI_SET_POWER_INPUT_BUFFER InputBuffer;
     ACPI_HANDLE AcpiHandle = NULL;
     struct acpi_device *Device;
+    int PreviousState;
     int Result;
 
     UNREFERENCED_PARAMETER(FdoData);
@@ -1910,14 +1911,17 @@ AcpiSetPowerForPciDeviceIoctl(_In_ PFDO_DEVICE_DATA FdoData, _Inout_ PIRP Irp)
         return STATUS_NOT_SUPPORTED;
 
     /* PMCSR D3 proves that a cached/inferred ACPI D0 cannot be trusted here. */
-    Device->flags.force_power_state = 1;
+    Device->flags.force_power_state = (InputBuffer->Flags & ACPI_PCI_SET_POWER_FLAG_FORCE) ? 1 : 0;
+    if (acpi_bus_get_power(AcpiHandle, &PreviousState))
+        PreviousState = ACPI_STATE_UNKNOWN;
     Result = acpi_bus_set_power(AcpiHandle, InputBuffer->State);
     if (Result)
     {
-        DPRINT1("ACPI: PCI %lu:%lu:%lu.%lu failed platform transition to D%lu (0x%x)\n", InputBuffer->Segment, InputBuffer->Bus, InputBuffer->Device, InputBuffer->Function, InputBuffer->State, Result);
+        DPRINT1("ACPI: PCI %lu:%lu:%lu.%lu failed platform transition D%d -> D%lu (0x%x)\n", InputBuffer->Segment, InputBuffer->Bus, InputBuffer->Device, InputBuffer->Function, PreviousState, InputBuffer->State, Result);
         return STATUS_DEVICE_POWER_FAILURE;
     }
 
-    DPRINT1("ACPI: PCI %lu:%lu:%lu.%lu platform power is D%lu\n", InputBuffer->Segment, InputBuffer->Bus, InputBuffer->Device, InputBuffer->Function, InputBuffer->State);
+    if (PreviousState != (int)InputBuffer->State || Device->flags.force_power_state)
+        DPRINT1("ACPI: PCI %lu:%lu:%lu.%lu platform power D%d -> D%lu\n", InputBuffer->Segment, InputBuffer->Bus, InputBuffer->Device, InputBuffer->Function, PreviousState, InputBuffer->State);
     return STATUS_SUCCESS;
 }
