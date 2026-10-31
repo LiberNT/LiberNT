@@ -24,6 +24,8 @@ struct CabinetPalette
     COLORREF Glyph;
     COLORREF GlyphDisabled;
     COLORREF Window;
+    COLORREF Body;
+    COLORREF PanelLine;
 };
 
 void CabinetGetPalette(CabinetPalette *palette);

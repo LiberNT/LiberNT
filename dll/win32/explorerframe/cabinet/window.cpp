@@ -137,6 +137,7 @@ CCabinetWindow::CCabinetWindow() :
     ZeroMemory(m_Images, sizeof(m_Images));
     ZeroMemory(m_NavigationRoots, sizeof(m_NavigationRoots));
     ZeroMemory(m_Tabs, sizeof(m_Tabs));
+    SetRectEmpty(&m_PanelRect);
     SetRectEmpty(&m_ViewRect);
     SetRectEmpty(&m_PaneRect);
 }
@@ -265,6 +266,7 @@ CCabinetWindow::RefreshGlyphs()
         ListView_SetBkColor(m_DetailsList, GetSysColor(COLOR_WINDOW));
         ListView_SetTextBkColor(m_DetailsList, GetSysColor(COLOR_WINDOW));
         ListView_SetTextColor(m_DetailsList, GetSysColor(COLOR_WINDOWTEXT));
+        SetNavigationBackground(palette.Body);
         if (m_AddressBand)
             m_AddressBand->RefreshGlyphs();
         if (m_SearchBox)
@@ -482,13 +484,26 @@ CCabinetWindow::PaintBackground(HDC dc)
     bands[1] = { AddressBottom() - 1, AddressBottom(), palette.BandBottom };
     bands[2] = { AddressBottom(), CommandBottom() - 1, palette.Command };
     bands[3] = { CommandBottom() - 1, CommandBottom(), palette.CommandBottom };
-    bands[4] = { CommandBottom(), (int)client.bottom, palette.Window };
+    bands[4] = { CommandBottom(), (int)client.bottom, palette.Body };
     for (UINT i = 0; i < _countof(bands); i++)
     {
         RECT rc = { 0, bands[i].Top, client.right, bands[i].Bottom };
         HBRUSH brush = CreateSolidBrush(bands[i].Color);
         FillRect(dc, &rc, brush);
         DeleteObject(brush);
+    }
+    if (!IsRectEmpty(&m_PanelRect))
+    {
+        RECT outer = m_PanelRect;
+        int radius = Scale(8), saved = SaveDC(dc);
+
+        IntersectClipRect(dc, m_PanelRect.left, m_PanelRect.top, m_PanelRect.right, m_PanelRect.bottom);
+        outer.right += radius;
+        outer.bottom += radius;
+        CabinetFillRound(dc, outer, radius, palette.PanelLine);
+        InflateRect(&outer, -1, -1);
+        CabinetFillRound(dc, outer, radius - 1, palette.Window);
+        RestoreDC(dc, saved);
     }
     if (IsAppThemed())
     {
@@ -584,7 +599,8 @@ CCabinetWindow::OnSize()
     GetWindowRect(m_Status, &status);
     statusHeight = IsWindowVisible(m_Status) ? status.bottom - status.top : 0;
     {
-        int parts[2] = { Scale(180), -1 };
+        /* The last pane ends past the window so the theme's pane separator is not drawn before the frame */
+        int parts[2] = { Scale(180), (int)client.right + Scale(8) };
         SendMessageW(m_Status, SB_SETPARTS, _countof(parts), (LPARAM)parts);
     }
     size = ToolbarSize(m_ViewBar);
@@ -602,6 +618,10 @@ CCabinetWindow::OnSize()
             MoveWindow(m_NavigationWindow, Scale(2), top, Scale(154), max(0, bottom - top), TRUE);
         }
     }
+    SetRect(&m_PanelRect, left ? left : -Scale(8), top, client.right, bottom);
+    if (left)
+        left += Scale(4);
+    top += Scale(4);
     pane = m_DetailsPane || m_PreviewPane ? Scale(300) : 0;
     right = client.right - pane;
     SetRect(&m_ViewRect, left, top, max(left, right), bottom);
@@ -613,6 +633,7 @@ CCabinetWindow::OnSize()
         RECT footer = { 0, bottom, client.right, client.bottom };
         RedrawWindow(m_hwnd, &chrome, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
         RedrawWindow(m_hwnd, &footer, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+        RedrawWindow(m_hwnd, &m_PanelRect, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_NOCHILDREN);
         if (!IsRectEmpty(&m_PaneRect))
             RedrawWindow(m_hwnd, &m_PaneRect, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_NOCHILDREN);
     }
@@ -1781,9 +1802,22 @@ CCabinetWindow::CreateNavigationPane()
     if (m_NavigationWindow)
     {
         HWND tree = FindWindowExW(m_NavigationWindow, NULL, WC_TREEVIEWW, NULL);
+        CabinetPalette palette;
+
         if (tree)
             TreeView_SetItemHeight(tree, Scale(26));
+        CabinetGetPalette(&palette);
+        SetNavigationBackground(palette.Body);
     }
+}
+
+void
+CCabinetWindow::SetNavigationBackground(COLORREF color)
+{
+    HWND tree = m_NavigationWindow ? FindWindowExW(m_NavigationWindow, NULL, WC_TREEVIEWW, NULL) : NULL;
+
+    if (tree)
+        TreeView_SetBkColor(tree, color);
 }
 
 int

@@ -137,6 +137,7 @@ private:
     void LoadText(UINT id, LPWSTR buffer, int length);
     void CreateBands();
     void CreateNavigationPane();
+    void SetNavigationBackground(COLORREF color);
     void SyncNavigationPane();
     void WatchFolder();
     void UpdateDetails();
@@ -203,6 +204,7 @@ private:
     UINT m_PinnedCount;
     HICON m_PinIcon;
     HWND m_FocusSave;
+    RECT m_PanelRect;
     RECT m_ViewRect;
     RECT m_PaneRect;
     BOOL m_DetailsPane;

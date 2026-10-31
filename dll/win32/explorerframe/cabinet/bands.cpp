@@ -36,6 +36,8 @@ void
 CabinetGetPalette(CabinetPalette *palette)
 {
     COLORREF window = GetSysColor(COLOR_WINDOW), text = GetSysColor(COLOR_WINDOWTEXT);
+    COLORREF base = RGB(0xF3, 0xF3, 0xF3), black = RGB(0, 0, 0);
+    HIGHCONTRASTW contrast = { sizeof(contrast) };
 
     palette->Window = window;
     palette->Band = BlendColor(window, text, 7);
@@ -50,6 +52,16 @@ CabinetGetPalette(CabinetPalette *palette)
     palette->Text = text;
     palette->Glyph = BlendColor(window, text, 229);
     palette->GlyphDisabled = BlendColor(window, text, 84);
+    palette->Body = window;
+    palette->PanelLine = window;
+    if (GetRValue(window) * 299 + GetGValue(window) * 587 + GetBValue(window) * 114 < 128000 ||
+        (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
+         (contrast.dwFlags & HCF_HIGHCONTRASTON)))
+        return;
+    palette->Band = palette->BandShade = palette->Command = palette->CommandBottom = palette->Body = base;
+    palette->BandLine = palette->BandBottom = BlendColor(base, black, 0x14);
+    palette->Box = BlendColor(base, RGB(255, 255, 255), 0xB3);
+    palette->PanelLine = BlendColor(base, black, 0x0F);
 }
 
 HIMAGELIST
