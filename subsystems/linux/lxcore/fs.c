@@ -709,6 +709,65 @@ LX_SYSCALL(LxSysLseek)
     return Result;
 }
 
+LX_SYSCALL(LxSysGetdents)
+{
+    PLX_FILE File = LxCallFile(Call, 0);
+    ULONG Length = (ULONG)min(Call->Args[2], MAXLONG);
+    ULONG Offset = 0;
+    PUCHAR Buffer;
+    LONG64 Result;
+
+    if (File == NULL)
+        return -LX_EBADF;
+    if (File->Ops->Getdents == NULL)
+    {
+        LxFileDereference(File);
+        return -LX_ENOTDIR;
+    }
+    Buffer = LxAllocPaged(max(Length, 1));
+    if (Buffer == NULL)
+    {
+        LxFileDereference(File);
+        return -LX_ENOMEM;
+    }
+    Result = File->Ops->Getdents(File, Call->Args[1], Length);
+    LxFileDereference(File);
+    if (Result > 0)
+    {
+        Length = (ULONG)Result;
+        Result = LxCopyFromUser(Buffer, Call->Args[1], Length);
+        while ((Result == 0) && (Offset < Length))
+        {
+            PLX_DIRENT64 Entry = (PLX_DIRENT64)(Buffer + Offset);
+            ULONG Record = Entry->RecLen;
+            UCHAR Type = Entry->Type;
+            SIZE_T Name;
+
+            if ((Record <= FIELD_OFFSET(LX_DIRENT64, Name)) || (Record > Length - Offset))
+            {
+                Result = -LX_EIO;
+                break;
+            }
+            Name = strnlen(Entry->Name, Record - FIELD_OFFSET(LX_DIRENT64, Name));
+            if (FIELD_OFFSET(LX_DIRENT64, Type) + Name + 2 > Record)
+            {
+                Result = -LX_EIO;
+                break;
+            }
+            RtlMoveMemory(Buffer + Offset + FIELD_OFFSET(LX_DIRENT64, Type), Entry->Name, Name);
+            Buffer[Offset + FIELD_OFFSET(LX_DIRENT64, Type) + Name] = 0;
+            Buffer[Offset + Record - 1] = Type;
+            Offset += Record;
+        }
+        if (Result == 0)
+            Result = LxCopyToUser(Call->Args[1], Buffer, Length);
+        if (Result == 0)
+            Result = Length;
+    }
+    LxFreePaged(Buffer);
+    return Result;
+}
+
 LX_SYSCALL(LxSysGetdents64)
 {
     PLX_FILE File = LxCallFile(Call, 0);
@@ -1742,26 +1801,19 @@ LxUtimePermission(
     return 0;
 }
 
-LX_SYSCALL(LxSysUtimensat)
+static
+LONG64
+LxUtimesCore(
+    _Inout_ PLX_CALL Call,
+    _In_reads_(2) PLX_TIMESPEC Times,
+    _In_ ULONG Flags)
 {
-    LX_TIMESPEC Times[2];
-    ULONG Flags = (ULONG)Call->Args[3];
     LX_NODE Node;
     PLX_FILE File;
     PSTR Path = NULL;
     LONG64 Result;
     LONG Error;
 
-    if (Call->Args[2] != 0)
-    {
-        Result = LxCopyFromUser(Times, Call->Args[2], sizeof(Times));
-        if (Result != 0)
-            return Result;
-    }
-    else
-    {
-        Times[0].Nanoseconds = Times[1].Nanoseconds = LX_UTIME_NOW;
-    }
     if ((Times[0].Nanoseconds == LX_UTIME_OMIT) && (Times[1].Nanoseconds == LX_UTIME_OMIT))
         return 0;
 
@@ -1808,6 +1860,78 @@ LX_SYSCALL(LxSysUtimensat)
         Error = LxVfsSetTimes(&Node, NULL, Times);
     LxNodeFree(&Node);
     return Error;
+}
+
+LX_SYSCALL(LxSysUtimensat)
+{
+    LX_TIMESPEC Times[2];
+    LONG64 Result;
+
+    if (Call->Args[2] != 0)
+    {
+        Result = LxCopyFromUser(Times, Call->Args[2], sizeof(Times));
+        if (Result != 0)
+            return Result;
+    }
+    else
+    {
+        Times[0].Nanoseconds = Times[1].Nanoseconds = LX_UTIME_NOW;
+    }
+    return LxUtimesCore(Call, Times, (ULONG)Call->Args[3]);
+}
+
+LX_SYSCALL(LxSysFutimesat)
+{
+    LX_TIMEVAL Values[2];
+    LX_TIMESPEC Times[2];
+    ULONG Index;
+    LONG64 Result;
+
+    if (Call->Args[2] == 0)
+    {
+        Times[0].Nanoseconds = Times[1].Nanoseconds = LX_UTIME_NOW;
+        return LxUtimesCore(Call, Times, 0);
+    }
+    Result = LxCopyFromUser(Values, Call->Args[2], sizeof(Values));
+    if (Result != 0)
+        return Result;
+    for (Index = 0; Index < 2; Index++)
+    {
+        if ((Values[Index].Microseconds < 0) || (Values[Index].Microseconds >= 1000000))
+            return -LX_EINVAL;
+        Times[Index].Seconds = Values[Index].Seconds;
+        Times[Index].Nanoseconds = Values[Index].Microseconds * 1000;
+    }
+    return LxUtimesCore(Call, Times, 0);
+}
+
+LX_SYSCALL(LxSysUtimes)
+{
+    Call->Args[2] = Call->Args[1];
+    Call->Args[1] = Call->Args[0];
+    Call->Args[0] = (ULONG64)(LONG64)LX_AT_FDCWD;
+    return LxSysFutimesat(Call);
+}
+
+LX_SYSCALL(LxSysUtime)
+{
+    LONG64 Values[2];
+    LX_TIMESPEC Times[2];
+    LONG64 Result;
+
+    Times[0].Nanoseconds = Times[1].Nanoseconds = LX_UTIME_NOW;
+    if (Call->Args[1] != 0)
+    {
+        Result = LxCopyFromUser(Values, Call->Args[1], sizeof(Values));
+        if (Result != 0)
+            return Result;
+        Times[0].Seconds = Values[0];
+        Times[1].Seconds = Values[1];
+        Times[0].Nanoseconds = Times[1].Nanoseconds = 0;
+    }
+    Call->Args[1] = Call->Args[0];
+    Call->Args[0] = (ULONG64)(LONG64)LX_AT_FDCWD;
+    return LxUtimesCore(Call, Times, 0);
 }
 
 LX_SYSCALL(LxSysUmask)

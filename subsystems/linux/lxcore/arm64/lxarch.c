@@ -299,11 +299,13 @@ LxArchKernelConfig(VOID)
 VOID
 LxArchGetSyscall(
     _In_ PKTRAP_FRAME TrapFrame,
+    _In_opt_ PKEXCEPTION_FRAME ExceptionFrame,
     _Out_ PULONG Number,
     _Out_writes_(6) PULONG64 Args)
 {
     ULONG Index;
 
+    UNREFERENCED_PARAMETER(ExceptionFrame);
     *Number = (ULONG)TrapFrame->X8;
     for (Index = 0; Index < 6; Index++)
         Args[Index] = TrapFrame->X[Index];
@@ -1070,6 +1072,20 @@ LxArchGetUserPc(
     _In_ PKTRAP_FRAME TrapFrame)
 {
     return TrapFrame->Pc;
+}
+
+ULONG64
+LxArchContextPc(
+    _In_ PCONTEXT Context)
+{
+    return Context->Pc;
+}
+
+ULONG64
+LxArchContextSp(
+    _In_ PCONTEXT Context)
+{
+    return Context->Sp;
 }
 
 ULONG64

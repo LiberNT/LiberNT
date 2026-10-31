@@ -61,7 +61,7 @@ LxPicoSystemCall(
     Call.Process = Call.Thread->Process;
     Call.TrapFrame = TrapFrame;
     Call.ExceptionFrame = ExceptionFrame;
-    LxArchGetSyscall(TrapFrame, &Call.Number, Call.Args);
+    LxArchGetSyscall(TrapFrame, ExceptionFrame, &Call.Number, Call.Args);
 
     Caller = Call.Thread;
     Result = LxSysCall(&Call);

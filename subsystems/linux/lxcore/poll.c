@@ -511,36 +511,33 @@ LxPollCore(
     return Result;
 }
 
-LX_SYSCALL(LxSysPpoll)
+static
+LONG64
+LxPollUserItems(
+    _Inout_ PLX_CALL Call,
+    _In_ ULONG64 UserItems,
+    _In_ ULONG64 Count,
+    _In_opt_ PLX_TIMESPEC Timeout,
+    _In_ ULONG64 SigMask,
+    _In_ ULONG64 SigSize)
 {
     PLX_POLL_ITEM Items;
-    ULONG64 Count = Call->Args[1];
-    LX_TIMESPEC Timeout;
     LONG64 Result;
 
     if (Count > LX_POLL_MAX_FDS)
         return -LX_EINVAL;
-    if (Call->Args[2] != 0)
-    {
-        Result = LxCopyFromUser(&Timeout, Call->Args[2], sizeof(Timeout));
-        if (Result != 0)
-            return Result;
-        if ((Timeout.Seconds < 0) || (Timeout.Nanoseconds < 0) || (Timeout.Nanoseconds >= 1000000000))
-            return -LX_EINVAL;
-    }
-
     Items = LxAllocPaged(sizeof(LX_POLL_ITEM) * max(Count, 1));
     if (Items == NULL)
         return -LX_ENOMEM;
-    Result = LxCopyFromUser(Items, Call->Args[0], (SIZE_T)Count * sizeof(LX_POLL_ITEM));
+    Result = LxCopyFromUser(Items, UserItems, (SIZE_T)Count * sizeof(LX_POLL_ITEM));
     if (Result == 0)
-        LxSetWaitMask(Call->Thread, Call->Args[3], Call->Args[4], &Result);
+        LxSetWaitMask(Call->Thread, SigMask, SigSize, &Result);
     if (Result == 0)
     {
-        Result = LxPollCore(Call->Process, Items, (ULONG)Count, (Call->Args[2] != 0) ? &Timeout : NULL);
+        Result = LxPollCore(Call->Process, Items, (ULONG)Count, Timeout);
         if (Result >= 0)
         {
-            LONG64 Copy = LxCopyToUser(Call->Args[0], Items, (SIZE_T)Count * sizeof(LX_POLL_ITEM));
+            LONG64 Copy = LxCopyToUser(UserItems, Items, (SIZE_T)Count * sizeof(LX_POLL_ITEM));
 
             if (Copy != 0)
                 Result = Copy;
@@ -550,15 +547,53 @@ LX_SYSCALL(LxSysPpoll)
     return Result;
 }
 
-LX_SYSCALL(LxSysPselect6)
+LX_SYSCALL(LxSysPpoll)
 {
-    LONG Nfds = (LONG)Call->Args[0];
-    ULONG64 Sets[3] = { Call->Args[1], Call->Args[2], Call->Args[3] };
+    LX_TIMESPEC Timeout;
+    LONG64 Result;
+
+    if (Call->Args[1] > LX_POLL_MAX_FDS)
+        return -LX_EINVAL;
+    if (Call->Args[2] != 0)
+    {
+        Result = LxCopyFromUser(&Timeout, Call->Args[2], sizeof(Timeout));
+        if (Result != 0)
+            return Result;
+        if ((Timeout.Seconds < 0) || (Timeout.Nanoseconds < 0) || (Timeout.Nanoseconds >= 1000000000))
+            return -LX_EINVAL;
+    }
+    return LxPollUserItems(Call, Call->Args[0], Call->Args[1], (Call->Args[2] != 0) ? &Timeout : NULL,
+                           Call->Args[3], Call->Args[4]);
+}
+
+LX_SYSCALL(LxSysPoll)
+{
+    LONG Milliseconds = (LONG)Call->Args[2];
+    LX_TIMESPEC Timeout;
+
+    Timeout.Seconds = Milliseconds / 1000;
+    Timeout.Nanoseconds = (LONG64)(Milliseconds % 1000) * 1000000;
+    return LxPollUserItems(Call, Call->Args[0], Call->Args[1], (Milliseconds >= 0) ? &Timeout : NULL, 0, 0);
+}
+
+LX_SYSCALL(LxSysPause)
+{
+    return LxPollCore(Call->Process, NULL, 0, NULL);
+}
+
+static
+LONG64
+LxSelectCore(
+    _Inout_ PLX_CALL Call,
+    _In_ LONG Nfds,
+    _In_reads_(3) PULONG64 Sets,
+    _In_opt_ PLX_TIMESPEC Timeout,
+    _In_ ULONG64 SigMask,
+    _In_ ULONG64 SigSize)
+{
     ULONG64 Bits[3][LX_MAX_FDS / 64];
     static const SHORT Masks[3] = { LX_POLLIN | LX_POLLHUP | LX_POLLERR, LX_POLLOUT | LX_POLLERR, LX_POLLPRI };
     PLX_POLL_ITEM Items;
-    LX_TIMESPEC Timeout;
-    ULONG64 SigArgs[2] = { 0, 0 };
     ULONG Count = 0, Index;
     LONG64 Result = 0;
     LONG Fd, Set;
@@ -575,18 +610,6 @@ LX_SYSCALL(LxSysPselect6)
             if (Result != 0)
                 return Result;
         }
-    }
-    if (Call->Args[4] != 0)
-    {
-        Result = LxCopyFromUser(&Timeout, Call->Args[4], sizeof(Timeout));
-        if (Result != 0)
-            return Result;
-    }
-    if (Call->Args[5] != 0)
-    {
-        Result = LxCopyFromUser(SigArgs, Call->Args[5], sizeof(SigArgs));
-        if (Result != 0)
-            return Result;
     }
 
     Items = LxAllocPaged(sizeof(LX_POLL_ITEM) * max(Nfds, 1));
@@ -610,9 +633,9 @@ LX_SYSCALL(LxSysPselect6)
         }
     }
 
-    LxSetWaitMask(Call->Thread, SigArgs[0], SigArgs[1], &Result);
+    LxSetWaitMask(Call->Thread, SigMask, SigSize, &Result);
     if (Result == 0)
-        Result = LxPollCore(Call->Process, Items, Count, (Call->Args[4] != 0) ? &Timeout : NULL);
+        Result = LxPollCore(Call->Process, Items, Count, Timeout);
     if (Result >= 0)
     {
         LONG64 Total = 0;
@@ -654,6 +677,50 @@ LX_SYSCALL(LxSysPselect6)
 
     LxFreePaged(Items);
     return Result;
+}
+
+LX_SYSCALL(LxSysPselect6)
+{
+    ULONG64 Sets[3] = { Call->Args[1], Call->Args[2], Call->Args[3] };
+    ULONG64 SigArgs[2] = { 0, 0 };
+    LX_TIMESPEC Timeout;
+    LONG64 Result;
+
+    if (Call->Args[4] != 0)
+    {
+        Result = LxCopyFromUser(&Timeout, Call->Args[4], sizeof(Timeout));
+        if (Result != 0)
+            return Result;
+    }
+    if (Call->Args[5] != 0)
+    {
+        Result = LxCopyFromUser(SigArgs, Call->Args[5], sizeof(SigArgs));
+        if (Result != 0)
+            return Result;
+    }
+    return LxSelectCore(Call, (LONG)Call->Args[0], Sets, (Call->Args[4] != 0) ? &Timeout : NULL, SigArgs[0],
+                        SigArgs[1]);
+}
+
+LX_SYSCALL(LxSysSelect)
+{
+    ULONG64 Sets[3] = { Call->Args[1], Call->Args[2], Call->Args[3] };
+    LX_TIMEVAL Timeval;
+    LX_TIMESPEC Timeout;
+    LONG64 Result;
+
+    if (Call->Args[4] != 0)
+    {
+        Result = LxCopyFromUser(&Timeval, Call->Args[4], sizeof(Timeval));
+        if (Result != 0)
+            return Result;
+        if ((Timeval.Seconds < 0) || (Timeval.Microseconds < 0))
+            return -LX_EINVAL;
+        Timeout.Seconds = Timeval.Seconds + Timeval.Microseconds / 1000000;
+        Timeout.Nanoseconds = (Timeval.Microseconds % 1000000) * 1000;
+    }
+    /* FIXME: Linux writes the time left back to the timeval; it is left unchanged */
+    return LxSelectCore(Call, (LONG)Call->Args[0], Sets, (Call->Args[4] != 0) ? &Timeout : NULL, 0, 0);
 }
 
 static
@@ -1094,8 +1161,8 @@ LxEpollWait(
                 Mask = LxFilePoll(Item->File, NULL) & Item->Events;
                 if (Mask != 0)
                 {
+                    RtlZeroMemory(&Output[Count], sizeof(Output[Count]));
                     Output[Count].Events = Mask;
-                    Output[Count].Pad = 0;
                     Output[Count].Data = Item->Data;
                     Count++;
 

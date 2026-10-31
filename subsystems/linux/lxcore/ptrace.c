@@ -327,7 +327,7 @@ LxPtraceSyscallEntry(
     Number = LxArchPtraceSyscallNumber(Call->TrapFrame, Number);
     if (Number == -1)
         return FALSE;
-    LxArchGetSyscall(Call->TrapFrame, &Ignored, Call->Args);
+    LxArchGetSyscall(Call->TrapFrame, Call->ExceptionFrame, &Ignored, Call->Args);
     Call->Number = (ULONG)Number;
     return TRUE;
 }
@@ -383,7 +383,7 @@ LxPtraceSeccomp(
     LxPtraceStopCommon(Thread, Call->TrapFrame, Call->ExceptionFrame, LX_SIGTRAP | (LX_PTRACE_EVENT_SECCOMP << 8),
                        LX_CLD_TRAPPED, NULL, TRUE, &Number);
     Number = LxArchPtraceSyscallNumber(Call->TrapFrame, Number);
-    LxArchGetSyscall(Call->TrapFrame, &Ignored, Call->Args);
+    LxArchGetSyscall(Call->TrapFrame, Call->ExceptionFrame, &Ignored, Call->Args);
     Call->Number = (ULONG)Number;
     return TRUE;
 }
@@ -1227,8 +1227,8 @@ LxPtraceSyscallInfo(
         return -LX_ESRCH;
     }
     Info.Arch = LxSeccompAuditArch();
-    Info.InstructionPointer = Ptrace->Context->Pc;
-    Info.StackPointer = Ptrace->Context->Sp;
+    Info.InstructionPointer = LxArchContextPc(Ptrace->Context);
+    Info.StackPointer = LxArchContextSp(Ptrace->Context);
     if (Ptrace->HasSiginfo && (Ptrace->Siginfo.Code == (LX_SIGTRAP | 0x80)))
     {
         if (Ptrace->Message == LX_PTRACE_EVENTMSG_SYSCALL_ENTRY)

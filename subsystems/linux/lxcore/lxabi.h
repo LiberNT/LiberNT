@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <lxarchabi.h>
-
 #define LX_EPERM            1
 #define LX_ENOENT           2
 #define LX_ESRCH            3
@@ -689,18 +687,6 @@ typedef struct _LX_SHM_USAGE
 
 C_ASSERT(sizeof(LX_SHM_USAGE) == 48);
 
-typedef struct _LX_SEMID64_DS
-{
-    LX_IPC64_PERM Perm;
-    LONG64 Otime;
-    LONG64 Ctime;
-    ULONG64 Nsems;
-    ULONG64 Unused3;
-    ULONG64 Unused4;
-} LX_SEMID64_DS, *PLX_SEMID64_DS;
-
-C_ASSERT(sizeof(LX_SEMID64_DS) == 88);
-
 typedef struct _LX_SEMINFO
 {
     LONG Semmap;
@@ -1008,6 +994,8 @@ typedef struct _LX_TIMESPEC
     LONG64 Nanoseconds;
 } LX_TIMESPEC, *PLX_TIMESPEC;
 
+#include <lxarchabi.h>
+
 typedef struct _LX_TIMEVAL
 {
     LONG64 Seconds;
@@ -1019,28 +1007,6 @@ typedef struct _LX_IOVEC
     ULONG64 Base;
     ULONG64 Length;
 } LX_IOVEC, *PLX_IOVEC;
-
-typedef struct _LX_STAT
-{
-    ULONG64 Dev;
-    ULONG64 Ino;
-    ULONG Mode;
-    ULONG Nlink;
-    ULONG Uid;
-    ULONG Gid;
-    ULONG64 Rdev;
-    ULONG64 Pad;
-    LONG64 Size;
-    LONG BlkSize;
-    LONG Pad2;
-    LONG64 Blocks;
-    LX_TIMESPEC Atime;
-    LX_TIMESPEC Mtime;
-    LX_TIMESPEC Ctime;
-    ULONG Unused[2];
-} LX_STAT, *PLX_STAT;
-
-C_ASSERT(sizeof(LX_STAT) == 128);
 
 typedef struct _LX_UTSNAME
 {
@@ -1089,14 +1055,6 @@ typedef struct _LX_SIGACTION
 #define LX_EPOLLONESHOT     (1U << 30)
 #define LX_EPOLLET          (1U << 31)
 
-typedef struct _LX_EPOLL_EVENT
-{
-    ULONG Events;
-    ULONG Pad;
-    ULONG64 Data;
-} LX_EPOLL_EVENT, *PLX_EPOLL_EVENT;
-
-C_ASSERT(sizeof(LX_EPOLL_EVENT) == 16);
 
 typedef struct _LX_SIGINFO
 {

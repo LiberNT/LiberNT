@@ -717,6 +717,22 @@ LX_SYSCALL(LxSysGettimeofday)
     return Result;
 }
 
+LX_SYSCALL(LxSysTime)
+{
+    LX_TIMESPEC Now;
+    LONG64 Seconds, Result;
+
+    LxQueryRealtime(&Now);
+    Seconds = Now.Seconds;
+    if (Call->Args[0] != 0)
+    {
+        Result = LxCopyToUser(Call->Args[0], &Seconds, sizeof(Seconds));
+        if (Result != 0)
+            return Result;
+    }
+    return Seconds;
+}
+
 LX_SYSCALL(LxSysNanosleep)
 {
     LX_TIMESPEC Request;
@@ -4297,34 +4313,16 @@ LX_SYSCALL(LxSysGetitimer)
     return LxCopyToUser(Call->Args[1], Value, sizeof(Value));
 }
 
-LX_SYSCALL(LxSysSetitimer)
+static
+LONG64
+LxSetRealItimer(
+    _In_ PLX_PROCESS Process,
+    _In_reads_(2) PLX_TIMEVAL New,
+    _Out_writes_(2) PLX_TIMEVAL Old)
 {
-    PLX_PROCESS Process = Call->Process;
-    PLX_ITIMER Timer;
-    LX_TIMEVAL New[2], Old[2];
-    LONG64 Value, Interval, Result, Now;
+    PLX_ITIMER Timer = Process->RealTimer;
+    LONG64 Value, Interval, Now;
 
-    if (Call->Args[0] > 2)
-        return -LX_EINVAL;
-    RtlZeroMemory(New, sizeof(New));
-    if (Call->Args[1] != 0)
-    {
-        Result = LxCopyFromUser(New, Call->Args[1], sizeof(New));
-        if (Result != 0)
-            return Result;
-        if ((New[0].Microseconds < 0) || (New[0].Microseconds >= 1000000) ||
-            (New[1].Microseconds < 0) || (New[1].Microseconds >= 1000000))
-        {
-            return -LX_EINVAL;
-        }
-    }
-    if (Call->Args[0] != 0)
-    {
-        RtlZeroMemory(Old, sizeof(Old));
-        return (Call->Args[2] != 0) ? LxCopyToUser(Call->Args[2], Old, sizeof(Old)) : 0;
-    }
-
-    Timer = Process->RealTimer;
     if (Timer == NULL)
     {
         Timer = LxAlloc(sizeof(*Timer));
@@ -4358,10 +4356,55 @@ LX_SYSCALL(LxSysSetitimer)
     Timer->Due = (Value != 0) ? Now + Value : 0;
     if (Value != 0)
         ExSetTimer(Timer->Timer, -Value, Interval, NULL);
+    return 0;
+}
 
+LX_SYSCALL(LxSysSetitimer)
+{
+    LX_TIMEVAL New[2], Old[2];
+    LONG64 Result;
+
+    if (Call->Args[0] > 2)
+        return -LX_EINVAL;
+    RtlZeroMemory(New, sizeof(New));
+    if (Call->Args[1] != 0)
+    {
+        Result = LxCopyFromUser(New, Call->Args[1], sizeof(New));
+        if (Result != 0)
+            return Result;
+        if ((New[0].Microseconds < 0) || (New[0].Microseconds >= 1000000) ||
+            (New[1].Microseconds < 0) || (New[1].Microseconds >= 1000000))
+        {
+            return -LX_EINVAL;
+        }
+    }
+    if (Call->Args[0] != 0)
+    {
+        RtlZeroMemory(Old, sizeof(Old));
+        return (Call->Args[2] != 0) ? LxCopyToUser(Call->Args[2], Old, sizeof(Old)) : 0;
+    }
+
+    Result = LxSetRealItimer(Call->Process, New, Old);
+    if (Result != 0)
+        return Result;
     if (Call->Args[2] != 0)
         return LxCopyToUser(Call->Args[2], Old, sizeof(Old));
     return 0;
+}
+
+LX_SYSCALL(LxSysAlarm)
+{
+    LX_TIMEVAL New[2], Old[2];
+    LONG64 Result;
+
+    RtlZeroMemory(New, sizeof(New));
+    New[1].Seconds = (ULONG)Call->Args[0];
+    Result = LxSetRealItimer(Call->Process, New, Old);
+    if (Result != 0)
+        return Result;
+    if (((Old[1].Seconds == 0) && (Old[1].Microseconds != 0)) || (Old[1].Microseconds >= 500000))
+        Old[1].Seconds++;
+    return Old[1].Seconds;
 }
 
 #define LX_SIGEV_SIGNAL     0

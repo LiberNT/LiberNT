@@ -11,3 +11,5 @@
 #define LX_O_NOFOLLOW       0400000
 #define LX_O_DIRECT         040000
 #define LX_O_LARGEFILE      0100000
+
+#include "../lxgenabi.h"

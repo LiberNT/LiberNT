@@ -1572,7 +1572,8 @@ LONG64 LxSpecCtrlGet(_In_ PLX_THREAD Thread, _In_ ULONG64 Which);
 LONG64 LxSpecCtrlSet(_Inout_ PLX_THREAD Thread, _In_ ULONG64 Which, _In_ ULONG64 Control);
 VOID LxSpecExec(_Inout_ PLX_THREAD Thread);
 PCSTR LxArchPlatform(VOID);
-VOID LxArchGetSyscall(_In_ PKTRAP_FRAME TrapFrame, _Out_ PULONG Number, _Out_writes_(6) PULONG64 Args);
+VOID LxArchGetSyscall(_In_ PKTRAP_FRAME TrapFrame, _In_opt_ PKEXCEPTION_FRAME ExceptionFrame, _Out_ PULONG Number,
+                      _Out_writes_(6) PULONG64 Args);
 VOID LxArchSetSyscallResult(_Inout_ PKTRAP_FRAME TrapFrame, _In_ LONG64 Result);
 VOID LxArchRestartSyscall(_Inout_ PKTRAP_FRAME TrapFrame, _In_ ULONG64 Argument);
 BOOLEAN LxArchEmulateInstruction(_In_ PEXCEPTION_RECORD ExceptionRecord, _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame, _Inout_ PKTRAP_FRAME TrapFrame);
@@ -1590,6 +1591,8 @@ ULONG64 LxArchImageBase(_In_ BOOLEAN Interpreter);
 LONG64 LxArchReadSigaction(_In_ ULONG64 Address, _Out_ PLX_SIGACTION Action);
 LONG64 LxArchWriteSigaction(_In_ ULONG64 Address, _In_ PLX_SIGACTION Action);
 ULONG64 LxArchGetUserPc(_In_ PKTRAP_FRAME TrapFrame);
+ULONG64 LxArchContextPc(_In_ PCONTEXT Context);
+ULONG64 LxArchContextSp(_In_ PCONTEXT Context);
 PLX_SYSCALL_ENTRY LxArchSyscallEntry(_In_ ULONG Number);
 PLX_SYSCALL_ENTRY LxGenericSyscallEntry(_In_ ULONG Number);
 ULONG64 LxArchGetUserSp(_In_ PKTRAP_FRAME TrapFrame);
