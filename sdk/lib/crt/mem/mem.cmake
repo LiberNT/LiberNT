@@ -18,6 +18,7 @@ if(ARCH STREQUAL "i386")
 elseif(ARCH STREQUAL "amd64")
     list(APPEND LIBCNTPR_MEM_SOURCE
         mem/memchr.c
+        mem/amd64/memmove_nt.c
     )
     list(APPEND LIBCNTPR_MEM_ASM_SOURCE
         mem/amd64/memmove_asm.s

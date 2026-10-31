@@ -8,6 +8,9 @@
 
 #include <asm.inc>
 
+EXTERN MemmoveNonTemporal:PROC
+EXTERN MemmoveNtThreshold:QWORD
+
 .code64
 
 PUBLIC memcpy
@@ -127,6 +130,8 @@ FUNC memmove
     sub r8, rdi
     cmp r8, rcx
     jb .Fwd32Loop
+    cmp rcx, qword ptr MemmoveNtThreshold[rip]
+    jae .FwdNonTemporal
     test dil, 15
     jnz .FwdBigUnaligned
     shr rcx, 3
@@ -138,6 +143,14 @@ FUNC memmove
     pop rsi
     pop rdi
     ret
+
+.FwdNonTemporal:
+    mov rdx, rsi
+    mov r8, rcx
+    mov rcx, rdi
+    pop rsi
+    pop rdi
+    jmp MemmoveNonTemporal
 
 .FwdBigUnaligned:
     mov r8, [rsi]
