@@ -1020,7 +1020,7 @@ LxNtStatFromInformation(
     _Out_ PLX_STAT Stat)
 {
     RtlZeroMemory(Stat, sizeof(*Stat));
-    Stat->Nlink = (Info->NumberOfLinks != 0) ? Info->NumberOfLinks : 1;
+    Stat->Nlink = Info->NumberOfLinks;
     Stat->BlkSize = 4096;
     Stat->Ino = (Info->FileId.QuadPart != 0) ? (ULONG64)Info->FileId.QuadPart : FallbackIno;
     Stat->Dev = Dev;
@@ -1099,7 +1099,7 @@ LxNtQueryStatLegacy(
     Info->AllocationSize = Standard.AllocationSize;
     Info->EndOfFile = Standard.EndOfFile;
     Info->FileAttributes = Basic.FileAttributes | (Standard.Directory ? FILE_ATTRIBUTE_DIRECTORY : 0);
-    Info->NumberOfLinks = Standard.NumberOfLinks;
+    Info->NumberOfLinks = ((Standard.NumberOfLinks != 0) || Standard.DeletePending) ? Standard.NumberOfLinks : 1;
 
     if (LxNtReadLxAttributes(Handle, &Mode, &Uid, &Gid, &Device) == 0)
     {

@@ -4619,6 +4619,7 @@ LxVfsUnlink(
     _In_ BOOLEAN Directory)
 {
     FILE_DISPOSITION_INFORMATION Disposition = { TRUE };
+    FILE_DISPOSITION_INFORMATION_EX PosixDisposition;
     FILE_BASIC_INFORMATION Basic;
     IO_STATUS_BLOCK Iosb;
     HANDLE Handle;
@@ -4662,20 +4663,29 @@ LxVfsUnlink(
         return -LX_ENOTEMPTY;
     }
 
-    RtlZeroMemory(&Basic, sizeof(Basic));
-    if (NT_SUCCESS(ZwQueryInformationFile(Handle, &Iosb, &Basic, sizeof(Basic), FileBasicInformation)) &&
-        (Basic.FileAttributes & FILE_ATTRIBUTE_READONLY))
+    PosixDisposition.Flags = FILE_DISPOSITION_DELETE | FILE_DISPOSITION_POSIX_SEMANTICS |
+                             FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE;
+    Status = ZwSetInformationFile(Handle, &Iosb, &PosixDisposition, sizeof(PosixDisposition),
+                                  FileDispositionInformationEx);
+    if ((Status == STATUS_INVALID_INFO_CLASS) || (Status == STATUS_INVALID_PARAMETER) ||
+        (Status == STATUS_NOT_SUPPORTED) || (Status == STATUS_NOT_IMPLEMENTED) ||
+        (Status == STATUS_CANNOT_DELETE))
     {
-        Basic.FileAttributes &= ~FILE_ATTRIBUTE_READONLY;
-        ZwSetInformationFile(Handle, &Iosb, &Basic, sizeof(Basic), FileBasicInformation);
-    }
+        RtlZeroMemory(&Basic, sizeof(Basic));
+        if (NT_SUCCESS(ZwQueryInformationFile(Handle, &Iosb, &Basic, sizeof(Basic), FileBasicInformation)) &&
+            (Basic.FileAttributes & FILE_ATTRIBUTE_READONLY))
+        {
+            Basic.FileAttributes &= ~FILE_ATTRIBUTE_READONLY;
+            ZwSetInformationFile(Handle, &Iosb, &Basic, sizeof(Basic), FileBasicInformation);
+        }
 
-    Moved = (LxNtMoveToTrash(Process, Handle) == 0);
-    Status = ZwSetInformationFile(Handle, &Iosb, &Disposition, sizeof(Disposition), FileDispositionInformation);
+        Moved = (LxNtMoveToTrash(Process, Handle) == 0);
+        Status = ZwSetInformationFile(Handle, &Iosb, &Disposition, sizeof(Disposition), FileDispositionInformation);
+        if (Moved && (Status == STATUS_CANNOT_DELETE))
+            Status = STATUS_SUCCESS;
+    }
     ZwClose(Handle);
     LxVcacheInvalidate();
-    if (Moved && (Status == STATUS_CANNOT_DELETE))
-        Status = STATUS_SUCCESS;
     if (!NT_SUCCESS(Status))
         return -LxStatusToErrno(Status);
     LxInotifyEvent(Process, Node->Path, 0x00000200 | (Directory ? 0x40000000 : 0), TRUE);
