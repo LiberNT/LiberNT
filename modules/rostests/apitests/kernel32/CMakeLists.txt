@@ -57,6 +57,7 @@ list(APPEND SOURCE
     OpenFileByIdRename.c
     SandboxLaunch.c
     SystemImageCatalog.c
+    TebSegmentAfterWait.c
     SharedMemorySecurity.c
     SharedMemoryTransfer.c
     StdHandleInheritance.c

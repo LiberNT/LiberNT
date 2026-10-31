@@ -1209,10 +1209,6 @@ NoUserApcPending:
     mov rdx, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_TrapFrame]
     mov [rcx + KTHREAD_TrapFrame], rdx
 
-    /* Refresh the hidden FS base after a context switch changed the WoW64 TEB descriptor. */
-    mov dx, fs
-    mov fs, dx
-
     RESTORE_USER_DEBUG_REGISTERS rsp + MAX_SYSCALL_PARAM_SIZE
 
     /* Prepare user mode return address (rcx) and eflags (r11) for sysret */

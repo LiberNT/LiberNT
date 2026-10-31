@@ -54,6 +54,7 @@ extern void func_LoadLibraryExW(void);
 extern void func_LockFileEx(void);
 extern void func_SandboxLaunch(void);
 extern void func_SystemImageCatalog(void);
+extern void func_TebSegmentAfterWait(void);
 extern void func_SharedMemorySecurity(void);
 extern void func_SharedMemoryTransfer(void);
 extern void func_StdHandleInheritance(void);
@@ -151,6 +152,7 @@ const struct test winetest_testlist[] =
     { "LoadLibraryExW",              func_LoadLibraryExW },
     { "LockFileEx",                  func_LockFileEx },
     { "SystemImageCatalog",            func_SystemImageCatalog },
+    { "TebSegmentAfterWait",           func_TebSegmentAfterWait },
     { "SandboxLaunch",               func_SandboxLaunch },
     { "SharedMemorySecurity",        func_SharedMemorySecurity },
     { "SharedMemoryTransfer",        func_SharedMemoryTransfer },
