@@ -15242,8 +15242,11 @@ DxgkVidMmAcquireSubmissionResidencyPinEx(
                 break;
         }
         Status = DxgkVidMmAcquireSubmissionResidencyPinExImpl(Allocation, ExpectedAdapter, ListEntry, CpuDirty);
-        if (!PageIn || Status != STATUS_GRAPHICS_INVALID_ALLOCATION_USAGE)
+        if (!PageIn ||
+            (Status != STATUS_GRAPHICS_INVALID_ALLOCATION_USAGE && Status != STATUS_GRAPHICS_ALLOCATION_BUSY))
+        {
             break;
+        }
     }
     DptEnd(&g_DxgPresentTrace, Trace, NT_SUCCESS(Status), 0);
     return Status;
