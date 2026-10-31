@@ -8,7 +8,7 @@
 
 /* INCLUDES *****************************************************************/
 
-#include <ntdll.h>
+#include <chpeamd64.h>
 
 #define RVA(m, b) ((PVOID)((ULONG_PTR)(b) + (ULONG_PTR)(m)))
 
@@ -80,7 +80,7 @@ typedef struct _UNWIND_INFO
  *            Pointer to an ULONG that receives the number of table entries
  *            present in the table.
  */
-PRUNTIME_FUNCTION
+PCHPE_AMD64_RUNTIME_FUNCTION
 NTAPI
 ChpepAmd64LookupFunctionTable(
     IN DWORD64 ControlPc,
@@ -104,32 +104,32 @@ ChpepAmd64LookupFunctionTable(
                                          &Size);
 
     /* Return the number of entries */
-    *Length = Size / sizeof(RUNTIME_FUNCTION);
+    *Length = Size / sizeof(CHPE_AMD64_RUNTIME_FUNCTION);
 
     /* Return the address of the table */
     return Table;
 }
 
-PRUNTIME_FUNCTION
+PCHPE_AMD64_RUNTIME_FUNCTION
 NTAPI
 ChpepAmd64LookupDynamicFunctionEntry(
     _In_ DWORD64 ControlPc,
     _Out_ PDWORD64 ImageBase,
-    _In_ PUNWIND_HISTORY_TABLE HistoryTable);
+    _In_ PCHPE_AMD64_HISTORY_TABLE HistoryTable);
 
 /*! ChpepAmd64LookupFunctionEntry
  * \brief Locates the RUNTIME_FUNCTION entry corresponding to a code address.
  * \ref https://learn.microsoft.com/en-us/windows/win32/api/winnt/nf-winnt-rtllookupfunctionentry
  * \todo Implement HistoryTable
  */
-PRUNTIME_FUNCTION
+PCHPE_AMD64_RUNTIME_FUNCTION
 NTAPI
 ChpepAmd64LookupFunctionEntry(
     IN DWORD64 ControlPc,
     OUT PDWORD64 ImageBase,
-    OUT PUNWIND_HISTORY_TABLE HistoryTable)
+    OUT PCHPE_AMD64_HISTORY_TABLE HistoryTable)
 {
-    PRUNTIME_FUNCTION FunctionTable, FunctionEntry;
+    PCHPE_AMD64_RUNTIME_FUNCTION FunctionTable, FunctionEntry;
     ULONG TableLength;
     ULONG IndexLo, IndexHi, IndexMid;
 
@@ -211,7 +211,7 @@ static
 __inline
 void
 SetReg(
-    _Inout_ PCONTEXT Context,
+    _Inout_ PCHPE_AMD64_CONTEXT Context,
     _In_ BYTE Reg,
     _In_ DWORD64 Value)
 {
@@ -222,8 +222,8 @@ static
 __inline
 void
 SetRegFromStackValue(
-    _Inout_ PCONTEXT Context,
-    _Inout_opt_ PKNONVOLATILE_CONTEXT_POINTERS ContextPointers,
+    _Inout_ PCHPE_AMD64_CONTEXT Context,
+    _Inout_opt_ PCHPE_AMD64_CONTEXT_POINTERS ContextPointers,
     _In_ BYTE Reg,
     _In_ PDWORD64 ValuePointer)
 {
@@ -238,7 +238,7 @@ static
 __inline
 DWORD64
 GetReg(
-    _In_ PCONTEXT Context,
+    _In_ PCHPE_AMD64_CONTEXT Context,
     _In_ BYTE Reg)
 {
     return ((DWORD64*)(&Context->Rax))[Reg];
@@ -248,8 +248,8 @@ static
 __inline
 void
 PopReg(
-    _Inout_ PCONTEXT Context,
-    _Inout_opt_ PKNONVOLATILE_CONTEXT_POINTERS ContextPointers,
+    _Inout_ PCHPE_AMD64_CONTEXT Context,
+    _Inout_opt_ PCHPE_AMD64_CONTEXT_POINTERS ContextPointers,
     _In_ BYTE Reg)
 {
     SetRegFromStackValue(Context, ContextPointers, Reg, (PDWORD64)Context->Rsp);
@@ -260,7 +260,7 @@ static
 __inline
 void
 SetXmmReg(
-    _Inout_ PCONTEXT Context,
+    _Inout_ PCHPE_AMD64_CONTEXT Context,
     _In_ BYTE Reg,
     _In_ M128A Value)
 {
@@ -271,8 +271,8 @@ static
 __inline
 void
 SetXmmRegFromStackValue(
-    _Out_ PCONTEXT Context,
-    _Inout_opt_ PKNONVOLATILE_CONTEXT_POINTERS ContextPointers,
+    _Out_ PCHPE_AMD64_CONTEXT Context,
+    _Inout_opt_ PCHPE_AMD64_CONTEXT_POINTERS ContextPointers,
     _In_ BYTE Reg,
     _In_ M128A *ValuePointer)
 {
@@ -297,13 +297,13 @@ static
 __inline
 BOOLEAN
 RtlpTryToUnwindEpilog(
-    _Inout_ PCONTEXT Context,
+    _Inout_ PCHPE_AMD64_CONTEXT Context,
     _In_ ULONG64 ControlPc,
-    _Inout_opt_ PKNONVOLATILE_CONTEXT_POINTERS ContextPointers,
+    _Inout_opt_ PCHPE_AMD64_CONTEXT_POINTERS ContextPointers,
     _In_ ULONG64 ImageBase,
-    _In_ PRUNTIME_FUNCTION FunctionEntry)
+    _In_ PCHPE_AMD64_RUNTIME_FUNCTION FunctionEntry)
 {
-    CONTEXT LocalContext;
+    CHPE_AMD64_CONTEXT LocalContext;
     BYTE *InstrPtr;
     DWORD Instr;
     BYTE Reg, Mod;
@@ -426,7 +426,7 @@ RtlpTryToUnwindEpilog(
 static
 ULONG64
 GetEstablisherFrame(
-    _In_ PCONTEXT Context,
+    _In_ PCHPE_AMD64_CONTEXT Context,
     _In_ PUNWIND_INFO UnwindInfo,
     _In_ ULONG_PTR CodeOffset)
 {
@@ -474,11 +474,11 @@ ChpepAmd64VirtualUnwind(
     _In_ ULONG HandlerType,
     _In_ ULONG64 ImageBase,
     _In_ ULONG64 ControlPc,
-    _In_ PRUNTIME_FUNCTION FunctionEntry,
-    _Inout_ PCONTEXT Context,
+    _In_ PCHPE_AMD64_RUNTIME_FUNCTION FunctionEntry,
+    _Inout_ PCHPE_AMD64_CONTEXT Context,
     _Outptr_ PVOID *HandlerData,
     _Out_ PULONG64 EstablisherFrame,
-    _Inout_opt_ PKNONVOLATILE_CONTEXT_POINTERS ContextPointers)
+    _Inout_opt_ PCHPE_AMD64_CONTEXT_POINTERS ContextPointers)
 {
     PUNWIND_INFO UnwindInfo;
     ULONG_PTR ControlRva, CodeOffset;
@@ -632,7 +632,7 @@ RepeatChainedInfo:
     if (UnwindInfo->Flags & UNW_FLAG_CHAININFO)
     {
         /* See https://docs.microsoft.com/en-us/cpp/build/exception-handling-x64?view=msvc-160#chained-unwind-info-structures */
-        FunctionEntry = (PRUNTIME_FUNCTION)&(UnwindInfo->UnwindCode[(UnwindInfo->CountOfCodes + 1) & ~1]);
+        FunctionEntry = (PCHPE_AMD64_RUNTIME_FUNCTION)&(UnwindInfo->UnwindCode[(UnwindInfo->CountOfCodes + 1) & ~1]);
         UnwindInfo = RVA(ImageBase, FunctionEntry->UnwindData);
         i = 0;
         goto RepeatChainedInfo;

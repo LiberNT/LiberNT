@@ -93,6 +93,65 @@ C_ASSERT(FIELD_OFFSET(AMD64_UCALLOUT_FRAME, Buffer) == 0x20);
 C_ASSERT(FIELD_OFFSET(AMD64_UCALLOUT_FRAME, MachineFrame) == 0x30);
 C_ASSERT(sizeof(AMD64_UCALLOUT_FRAME) == 0x58);
 
+typedef IMAGE_AMD64_RUNTIME_FUNCTION_ENTRY EMU_AMD64_RUNTIME_FUNCTION, *PEMU_AMD64_RUNTIME_FUNCTION;
+
+typedef struct _EMU_AMD64_CONTEXT_POINTERS
+{
+    PM128A FloatingContext[16];
+    PULONG64 IntegerContext[16];
+} EMU_AMD64_CONTEXT_POINTERS, *PEMU_AMD64_CONTEXT_POINTERS;
+
+typedef struct _EMU_AMD64_DISPATCHER_CONTEXT
+{
+    ULONG64 ControlPc;
+    ULONG64 ImageBase;
+    PEMU_AMD64_RUNTIME_FUNCTION FunctionEntry;
+    ULONG64 EstablisherFrame;
+    ULONG64 TargetIp;
+    AMD64_CONTEXT *ContextRecord;
+    ULONG64 LanguageHandler;
+    PVOID HandlerData;
+    PVOID HistoryTable;
+    ULONG ScopeIndex;
+    ULONG Fill0;
+} EMU_AMD64_DISPATCHER_CONTEXT, *PEMU_AMD64_DISPATCHER_CONTEXT;
+
+typedef struct _EMU_AMD64_SCOPE_TABLE
+{
+    ULONG Count;
+    struct
+    {
+        ULONG BeginAddress;
+        ULONG EndAddress;
+        ULONG HandlerAddress;
+        ULONG JumpTarget;
+    } ScopeRecord[1];
+} EMU_AMD64_SCOPE_TABLE, *PEMU_AMD64_SCOPE_TABLE;
+
+typedef struct _EMU_AMD64_JUMP_BUFFER
+{
+    ULONG64 Frame;
+    ULONG64 Rbx;
+    ULONG64 Rsp;
+    ULONG64 Rbp;
+    ULONG64 Rsi;
+    ULONG64 Rdi;
+    ULONG64 R12;
+    ULONG64 R13;
+    ULONG64 R14;
+    ULONG64 R15;
+    ULONG64 Rip;
+    ULONG MxCsr;
+    USHORT FpCsr;
+    USHORT Spare;
+    M128A Xmm[10];
+} EMU_AMD64_JUMP_BUFFER, *PEMU_AMD64_JUMP_BUFFER;
+
+C_ASSERT(FIELD_OFFSET(EMU_AMD64_JUMP_BUFFER, Xmm) == 0x60);
+C_ASSERT(sizeof(EMU_AMD64_CONTEXT_POINTERS) == 0x100);
+C_ASSERT(FIELD_OFFSET(EMU_AMD64_DISPATCHER_CONTEXT, ContextRecord) == 0x28);
+C_ASSERT(sizeof(EMU_AMD64_DISPATCHER_CONTEXT) == 0x50);
+
 #define EMU_QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC 0x00000001
 
 typedef struct _EMU_APC_RETURN
@@ -114,6 +173,43 @@ typedef struct _EMU_CALLBACK
 
 #define EMU_JUMP_BUFFER_SIZE 26
 
+typedef struct _EMU_X64_UNWIND
+{
+    ULONG64 TargetFrame;
+    ULONG64 TargetIp;
+    ULONG64 ReturnValue;
+    PEXCEPTION_RECORD Record;
+    BOOLEAN Active;
+    BOOLEAN Consolidating;
+    EXCEPTION_RECORD RecordCopy;
+    EMU_AMD64_DISPATCHER_CONTEXT Dispatcher;
+    AMD64_CONTEXT Context;
+    AMD64_CONTEXT Unwound;
+} EMU_X64_UNWIND, *PEMU_X64_UNWIND;
+
+typedef struct _EMU_BOUNDARY
+{
+    struct _EMU_BOUNDARY *Previous;
+    struct _EMU_THREAD *Thread;
+    ULONG64 RunFrame;
+    struct _EMU_GUEST_CALL *GuestCall;
+    ULONG Service;
+    PEMU_REGISTERS Registers;
+    AMD64_CONTEXT *Context;
+    PEMU_X64_UNWIND Unwind;
+    ULONG64 EmulatorSp;
+} EMU_BOUNDARY, *PEMU_BOUNDARY;
+
+C_ASSERT(FIELD_OFFSET(EMU_BOUNDARY, RunFrame) == 16);
+C_ASSERT(FIELD_OFFSET(EMU_BOUNDARY, EmulatorSp) == 64);
+
+typedef struct _EMU_TEB_STACK
+{
+    PVOID Base;
+    PVOID Limit;
+    PVOID Deallocation;
+} EMU_TEB_STACK, *PEMU_TEB_STACK;
+
 typedef struct _EMU_GUEST_CALL
 {
     struct _EMU_GUEST_CALL *Previous;
@@ -124,6 +220,10 @@ typedef struct _EMU_GUEST_CALL
     ULONG HostDepth;
     ULONG64 Result;
     ULONG64 FloatResult;
+    ULONG64 RunFrame;
+    PEMU_BOUNDARY Boundary;
+    EMU_TEB_STACK NativeStack;
+    AMD64_CONTEXT Entry;
 } EMU_GUEST_CALL, *PEMU_GUEST_CALL;
 
 typedef struct _EMU_STACK
@@ -146,6 +246,9 @@ typedef struct _EMU_THREAD
     PEMU_GUEST_CALL GuestCall;
     EMU_STACK GuestStack;
     CHPE_V2_CPU_AREA_INFO CpuArea;
+    PEMU_BOUNDARY Boundary;
+    EMU_STACK EmulatorStack;
+    EMU_TEB_STACK GuestTebStack;
 } EMU_THREAD, *PEMU_THREAD;
 
 typedef struct _EMU_THREAD_START
@@ -174,6 +277,23 @@ typedef struct _EMU_PROCESS
 } EMU_PROCESS, *PEMU_PROCESS;
 
 extern EMU_PROCESS EmuProcess;
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlCreateUserStack(
+    _In_opt_ SIZE_T CommittedStackSize,
+    _In_opt_ SIZE_T MaximumStackSize,
+    _In_opt_ ULONG ZeroBits,
+    _In_ SIZE_T CommitAlignment,
+    _In_ SIZE_T ReserveAlignment,
+    _Out_ PINITIAL_TEB InitialTeb);
+
+NTSYSAPI
+VOID
+NTAPI
+RtlFreeUserStack(
+    _In_ PVOID AllocationBase);
 
 NTSYSAPI
 PVOID
@@ -395,3 +515,118 @@ EmuHostService(
 ULONG64
 EmuNativeEntry(
     _In_ ULONG64 Rip);
+
+#define EMU_DISPATCH_SERVICE (EMU_HOST_SERVICE_BASE + 2)
+
+extern ULONG64 EmuGuestReturnStub;
+
+ULONG64
+NTAPI
+EmuCallGuest(
+    _In_ ULONG64 Function,
+    _In_ PCSTR Signature,
+    _In_opt_ const ULONG64 *Arguments);
+
+DECLSPEC_NORETURN
+VOID
+EmuRunGuest(
+    _In_ PEMU_CPU Cpu,
+    _Out_ PULONG64 RunFrame,
+    _In_ ULONG64 EmulatorSp);
+
+VOID
+EmuEnterBoundary(
+    _In_ PEMU_BOUNDARY Boundary);
+
+VOID
+EmuX64SystemService(
+    _In_ ULONG Service,
+    _Inout_ PEMU_REGISTERS Registers);
+
+VOID
+EmuBoundaryRoutine(
+    _In_ PEMU_BOUNDARY Boundary);
+
+VOID
+EmuBoundaryContinue(
+    _In_ PEMU_BOUNDARY Boundary);
+
+EXCEPTION_DISPOSITION
+NTAPI
+EmuBoundaryHandler(
+    _Inout_ PEXCEPTION_RECORD Record,
+    _In_ PVOID EstablisherFrame,
+    _Inout_ PCONTEXT NativeContext,
+    _Inout_ PVOID NativeDispatcherContext);
+
+NTSTATUS
+EmuX64InitializeDispatch(VOID);
+
+NTSTATUS
+EmuInitializeServiceEntries(VOID);
+
+VOID
+EmuX64DispatchService(
+    _In_ PEMU_THREAD Thread,
+    _Inout_ PEMU_REGISTERS Registers);
+
+LONG
+EmuX64CallVectoredHandlers(
+    _In_ PEMU_THREAD Thread,
+    _In_ PEXCEPTION_RECORD Record,
+    _In_ BOOLEAN ContinueHandlers);
+
+PVOID
+EmuX64AddVectoredHandler(
+    _In_ BOOLEAN ContinueHandler,
+    _In_ ULONG First,
+    _In_ ULONG64 Handler);
+
+ULONG
+EmuX64RemoveVectoredHandler(
+    _In_ BOOLEAN ContinueHandler,
+    _In_ PVOID Handle);
+
+PEMU_AMD64_RUNTIME_FUNCTION
+EmuX64LookupFunctionEntry(
+    _In_ ULONG64 ControlPc,
+    _Out_ PULONG64 ImageBase);
+
+PEMU_AMD64_RUNTIME_FUNCTION
+EmuX64LookupFunctionTable(
+    _In_ ULONG64 ControlPc,
+    _Out_ PULONG64 ImageBase,
+    _Out_ PULONG Length);
+
+ULONG64
+EmuX64VirtualUnwind(
+    _In_ ULONG HandlerType,
+    _In_ ULONG64 ImageBase,
+    _In_ ULONG64 ControlPc,
+    _In_opt_ PEMU_AMD64_RUNTIME_FUNCTION FunctionEntry,
+    _Inout_ AMD64_CONTEXT *Context,
+    _Out_opt_ PVOID *HandlerData,
+    _Out_opt_ PULONG64 EstablisherFrame,
+    _Inout_opt_ PEMU_AMD64_CONTEXT_POINTERS ContextPointers);
+
+DECLSPEC_NORETURN
+VOID
+EmuX64UnwindEx(
+    _In_ PEMU_THREAD Thread,
+    _In_opt_ ULONG64 TargetFrame,
+    _In_opt_ ULONG64 TargetIp,
+    _In_opt_ PEXCEPTION_RECORD Record,
+    _In_ ULONG64 ReturnValue);
+
+VOID
+EmuX64RestoreContext(
+    _In_ PEMU_THREAD Thread,
+    _Inout_ AMD64_CONTEXT *Context,
+    _In_opt_ PEXCEPTION_RECORD Record);
+
+EXCEPTION_DISPOSITION
+EmuX64CSpecificHandler(
+    _Inout_ PEXCEPTION_RECORD Record,
+    _In_ ULONG64 EstablisherFrame,
+    _Inout_ AMD64_CONTEXT *Context,
+    _Inout_ PEMU_AMD64_DISPATCHER_CONTEXT DispatcherContext);

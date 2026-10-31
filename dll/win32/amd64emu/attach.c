@@ -8,6 +8,7 @@
 #include "amd64emu.h"
 
 #define EMU_ATTACHED_STACK_SIZE 0x100000
+#define EMU_STACK_RESERVE_ALIGNMENT 0x10000
 
 #define EmuTebCpuArea(Teb) (*(PCHPE_V2_CPU_AREA_INFO *)((PUCHAR)(Teb) + CHPE_TEB_CPU_AREA_OFFSET))
 
@@ -25,8 +26,9 @@ EmuEnterAttachedThread(VOID)
     PEMU_THREAD Thread = EmuAttachedThread();
     PTEB Teb = NtCurrentTeb();
     AMD64_CONTEXT Context;
-    SIZE_T Size = EMU_ATTACHED_STACK_SIZE;
-    PVOID Stack = NULL;
+    INITIAL_TEB Stack = { 0 };
+    SIZE_T EmulatorSize = EMU_ATTACHED_STACK_SIZE;
+    PVOID EmulatorStack = NULL;
     NTSTATUS Status;
 
     if (Thread) return Thread;
@@ -34,15 +36,12 @@ EmuEnterAttachedThread(VOID)
     Thread = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*Thread));
     if (!Thread) return NULL;
 
-    /* FIXME: x64 frames live on a stack of their own above the thread stack, so AMD64 __chkstk never probes across; the TEB keeps describing the native stack */
-    Status = NtAllocateVirtualMemory(NtCurrentProcess(), &Stack, 0, &Size, MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN,
+    Status = RtlCreateUserStack(0, (ULONG_PTR)Teb->NtTib.StackBase - (ULONG_PTR)Teb->DeallocationStack, 0, PAGE_SIZE,
+                                EMU_STACK_RESERVE_ALIGNMENT, &Stack);
+    if (!NT_SUCCESS(Status)) goto Failure;
+    Status = NtAllocateVirtualMemory(NtCurrentProcess(), &EmulatorStack, 0, &EmulatorSize, MEM_RESERVE | MEM_COMMIT,
                                      PAGE_READWRITE);
     if (!NT_SUCCESS(Status)) goto Failure;
-    if ((ULONG_PTR)Stack < (ULONG_PTR)Teb->NtTib.StackBase)
-    {
-        Status = STATUS_CONFLICTING_ADDRESSES;
-        goto Failure;
-    }
     Status = EmuCoreCreateCpu(Thread, Teb, &Thread->Cpu);
     if (!NT_SUCCESS(Status)) goto Failure;
     Status = EmuRegisterThread(Thread);
@@ -50,8 +49,15 @@ EmuEnterAttachedThread(VOID)
 
     Thread->GuestTeb = Teb;
     Thread->HostDepth = 1;
-    Thread->GuestStack.Base = (PUCHAR)Stack + Size;
-    Thread->GuestStack.Limit = Stack;
+    Thread->GuestStack.Base = Stack.StackBase;
+    Thread->GuestStack.Limit = Stack.AllocatedStackBase;
+    Thread->GuestTebStack.Base = Stack.StackBase;
+    Thread->GuestTebStack.Limit = Stack.StackLimit;
+    Thread->GuestTebStack.Deallocation = Stack.AllocatedStackBase;
+    Thread->EmulatorStack.Base = (PUCHAR)EmulatorStack + EmulatorSize;
+    Thread->EmulatorStack.Limit = EmulatorStack;
+    Thread->CpuArea.EmulatorStackBase = (ULONG64)(ULONG_PTR)Thread->EmulatorStack.Base;
+    Thread->CpuArea.EmulatorStackLimit = (ULONG64)(ULONG_PTR)Thread->EmulatorStack.Limit;
     Thread->CpuArea.EmulatorData[0] = Thread;
 
     RtlZeroMemory(&Context, sizeof(Context));
@@ -74,10 +80,11 @@ EmuEnterAttachedThread(VOID)
 
 Failure:
     if (Thread->Cpu) EmuCoreDestroyCpu(Thread->Cpu);
-    if (Stack)
+    if (Stack.AllocatedStackBase) RtlFreeUserStack(Stack.AllocatedStackBase);
+    if (EmulatorStack)
     {
-        Size = 0;
-        NtFreeVirtualMemory(NtCurrentProcess(), &Stack, &Size, MEM_RELEASE);
+        EmulatorSize = 0;
+        NtFreeVirtualMemory(NtCurrentProcess(), &EmulatorStack, &EmulatorSize, MEM_RELEASE);
     }
     RtlFreeHeap(RtlGetProcessHeap(), 0, Thread);
     return NULL;
@@ -95,7 +102,8 @@ EmuDetachThread(VOID)
     EmuTebCpuArea(NtCurrentTeb()) = NULL;
     EmuUnregisterThread(Thread);
     EmuCoreDestroyCpu(Thread->Cpu);
-    Stack = Thread->GuestStack.Limit;
+    RtlFreeUserStack(Thread->GuestStack.Limit);
+    Stack = Thread->EmulatorStack.Limit;
     NtFreeVirtualMemory(NtCurrentProcess(), &Stack, &Size, MEM_RELEASE);
     RtlFreeHeap(RtlGetProcessHeap(), 0, Thread);
 }
@@ -120,5 +128,9 @@ EmuAttachProcess(VOID)
     Status = EmuCoreInitialize();
     if (!NT_SUCCESS(Status)) return Status;
     if (!RtlAddVectoredExceptionHandler(1, EmuVectoredHandler)) return STATUS_NO_MEMORY;
-    return EmuInitializeHostCalls();
+    Status = EmuInitializeHostCalls();
+    if (!NT_SUCCESS(Status)) return Status;
+    Status = EmuInitializeServiceEntries();
+    if (!NT_SUCCESS(Status)) return Status;
+    return EmuX64InitializeDispatch();
 }

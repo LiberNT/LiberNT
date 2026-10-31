@@ -51,6 +51,29 @@ ProbeStack(
 }
 
 static
+VOID
+CheckStackLimits(VOID)
+{
+    MEMORY_BASIC_INFORMATION Information = { NULL };
+    PNT_TIB Tib = (PNT_TIB)NtCurrentTeb();
+
+    CHECK(VirtualQuery(&Information, &Information, sizeof(Information)) == sizeof(Information));
+    CHECK((ULONG_PTR)&Information >= (ULONG_PTR)Tib->StackLimit && (ULONG_PTR)&Information < (ULONG_PTR)Tib->StackBase);
+    CHECK((ULONG_PTR)Information.AllocationBase < (ULONG_PTR)Tib->StackBase);
+}
+
+static
+int
+__cdecl
+CompareWithStackLimits(
+    _In_ const void *Left,
+    _In_ const void *Right)
+{
+    CheckStackLimits();
+    return *(const int *)Left - *(const int *)Right;
+}
+
+static
 DWORD
 WINAPI
 Worker(
@@ -59,6 +82,7 @@ Worker(
     ULONG_PTR Index = (ULONG_PTR)Parameter;
     ULONG Iteration;
 
+    CheckStackLimits();
     CHECK(StaticTls == 7);
     CHECK(ProbeStack(16) == 459);
     StaticTls = 100 + (LONG)Index;
@@ -86,6 +110,12 @@ TestThreads(VOID)
 {
     HANDLE Threads[WORKER_COUNT];
     DWORD Index, ExitCode;
+    int Values[2] = { 2, 1 };
+
+    CheckStackLimits();
+    qsort(Values, RTL_NUMBER_OF(Values), sizeof(Values[0]), CompareWithStackLimits);
+    CHECK(Values[0] == 1 && Values[1] == 2);
+    CheckStackLimits();
 
     InitializeCriticalSection(&Lock);
     Gate = CreateEventW(NULL, TRUE, FALSE, NULL);
@@ -217,6 +247,175 @@ TestStructuredExceptions(VOID)
     CHECK(Caught == 1 && Unwound == 1 && Parameter == 0x5EC0DE);
     printf("EMUTEST: SEH caught an access violation and exception %08lx\n", (ULONG)TEST_EXCEPTION);
 }
+
+#if defined(_M_AMD64) || defined(__x86_64__)
+NTSYSAPI
+DWORD
+NTAPI
+RtlAddGrowableFunctionTable(
+    _Out_ PVOID *DynamicTable,
+    _In_reads_(MaximumEntryCount) PRUNTIME_FUNCTION FunctionTable,
+    _In_ DWORD EntryCount,
+    _In_ DWORD MaximumEntryCount,
+    _In_ ULONG_PTR RangeBase,
+    _In_ ULONG_PTR RangeEnd);
+
+NTSYSAPI
+VOID
+NTAPI
+RtlDeleteGrowableFunctionTable(
+    _In_ PVOID DynamicTable);
+
+static
+VOID
+WINAPI
+RaiseThroughDynamicCode(VOID)
+{
+    RaiseException(TEST_EXCEPTION, 0, 0, NULL);
+}
+
+static
+PRUNTIME_FUNCTION
+CALLBACK
+LookupDynamicCode(
+    _In_ DWORD64 ControlPc,
+    _In_opt_ PVOID Context)
+{
+    return Context;
+}
+
+static
+BOOLEAN
+CallDynamicCode(
+    _In_ PVOID Code)
+{
+    volatile BOOLEAN Caught = FALSE;
+
+    _SEH2_TRY
+    {
+        ((VOID (WINAPI *)(VOID))Code)();
+    }
+    _SEH2_EXCEPT(_SEH2_GetExceptionCode() == TEST_EXCEPTION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+    {
+        Caught = TRUE;
+    }
+    _SEH2_END;
+    return Caught;
+}
+
+static
+VOID
+TestDynamicFunctionTables(VOID)
+{
+    static const UCHAR Function[] =
+    {
+        0x48, 0x83, 0xEC, 0x28,
+        0xFF, 0x15, 0x26, 0x00, 0x00, 0x00,
+        0x48, 0x83, 0xC4, 0x28,
+        0xC3
+    };
+    static const UCHAR UnwindInfo[] = { 0x01, 0x04, 0x01, 0x00, 0x04, 0x42, 0x00, 0x00 };
+    RUNTIME_FUNCTION Entry;
+    PRUNTIME_FUNCTION Found;
+    DWORD64 ImageBase, Identifier;
+    PVOID Growable = NULL;
+    PUCHAR Base;
+
+    Base = VirtualAlloc(NULL, 4096, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    CHECK(Base != NULL);
+    if (!Base) return;
+
+    memcpy(Base + 0x10, Function, sizeof(Function));
+    *(PVOID *)(Base + 0x40) = (PVOID)RaiseThroughDynamicCode;
+    memcpy(Base + 0x80, UnwindInfo, sizeof(UnwindInfo));
+    CHECK(FlushInstructionCache(GetCurrentProcess(), Base, 4096));
+    Entry.BeginAddress = 0x10;
+    Entry.EndAddress = 0x10 + sizeof(Function);
+    Entry.UnwindData = 0x80;
+
+    CHECK(RtlAddFunctionTable(&Entry, 1, (DWORD64)Base));
+    ImageBase = 0;
+    CHECK(RtlLookupFunctionEntry((DWORD64)Base + 0x1A, &ImageBase, NULL) == &Entry && ImageBase == (DWORD64)Base);
+    CHECK(CallDynamicCode(Base + 0x10));
+    CHECK(RtlDeleteFunctionTable(&Entry));
+    CHECK(RtlLookupFunctionEntry((DWORD64)Base + 0x1A, &ImageBase, NULL) == NULL);
+
+    Identifier = (DWORD64)Base | 3;
+    CHECK(RtlInstallFunctionTableCallback(Identifier, (DWORD64)Base, 4096, LookupDynamicCode, &Entry, NULL));
+    ImageBase = 0;
+    Found = RtlLookupFunctionEntry((DWORD64)Base + 0x1A, &ImageBase, NULL);
+    CHECK(Found == &Entry && ImageBase == (DWORD64)Base);
+    CHECK(CallDynamicCode(Base + 0x10));
+    CHECK(RtlDeleteFunctionTable((PRUNTIME_FUNCTION)Identifier));
+
+    CHECK(RtlAddGrowableFunctionTable(&Growable, &Entry, 1, 1, (ULONG_PTR)Base, (ULONG_PTR)Base + 4096) == 0);
+    CHECK(Growable != NULL);
+    ImageBase = 0;
+    CHECK(RtlLookupFunctionEntry((DWORD64)Base + 0x1A, &ImageBase, NULL) == &Entry && ImageBase == (DWORD64)Base);
+    CHECK(CallDynamicCode(Base + 0x10));
+    if (Growable) RtlDeleteGrowableFunctionTable(Growable);
+    CHECK(RtlLookupFunctionEntry((DWORD64)Base + 0x1A, &ImageBase, NULL) == NULL);
+
+    CHECK(VirtualFree(Base, 0, MEM_RELEASE));
+    printf("EMUTEST: exceptions crossed code described by dynamic function tables\n");
+}
+
+static
+PVOID
+FindExportInDirectory(
+    _In_ HMODULE Module,
+    _In_ PCSTR Name)
+{
+    PUCHAR Base = (PUCHAR)Module;
+    PIMAGE_NT_HEADERS Headers = (PIMAGE_NT_HEADERS)(Base + ((PIMAGE_DOS_HEADER)Base)->e_lfanew);
+    PIMAGE_EXPORT_DIRECTORY Exports =
+        (PIMAGE_EXPORT_DIRECTORY)(Base + Headers->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+    PULONG Functions = (PULONG)(Base + Exports->AddressOfFunctions);
+    PULONG ExportNames = (PULONG)(Base + Exports->AddressOfNames);
+    PUSHORT Ordinals = (PUSHORT)(Base + Exports->AddressOfNameOrdinals);
+    ULONG Index;
+
+    for (Index = 0; Index < Exports->NumberOfNames; Index++)
+    {
+        if (!strcmp((PCSTR)(Base + ExportNames[Index]), Name)) return Base + Functions[Ordinals[Index]];
+    }
+    return NULL;
+}
+
+static
+VOID
+TestServiceStubs(VOID)
+{
+    static const PCSTR Names[] = { "NtClose", "ZwClose" };
+    HMODULE Ntdll = GetModuleHandleW(L"ntdll.dll");
+    NTSTATUS (NTAPI *Close)(HANDLE);
+    const UCHAR *Code;
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Names); Index++)
+    {
+        Code = (const UCHAR *)GetProcAddress(Ntdll, Names[Index]);
+        CHECK(Code && Code[0] == 0x4C && Code[1] == 0x8B && Code[2] == 0xD1 && Code[3] == 0xB8);
+        if (!Code) continue;
+        Close = (NTSTATUS (NTAPI *)(HANDLE))Code;
+        CHECK(Close((HANDLE)(ULONG_PTR)0x7FFFFFF0) == STATUS_INVALID_HANDLE);
+    }
+    CHECK(FindExportInDirectory(Ntdll, "NtCreateFile") == (PVOID)GetProcAddress(Ntdll, "NtCreateFile"));
+}
+#else
+static
+VOID
+TestDynamicFunctionTables(VOID)
+{
+}
+
+
+static
+VOID
+TestServiceStubs(VOID)
+{
+}
+#endif
 
 static
 LONG
@@ -698,6 +897,7 @@ TestRv64X(VOID)
         return;
     }
     CHECK(Table->Size >= sizeof(*Table));
+    CHECK(GetModuleHandleW(RV64X_TEST_LIBRARY) != NULL);
     CHECK(((int (*)(int, short, unsigned char, long long))(ULONG_PTR)Table->Add)(-5, -300, 200, 10000000000LL) ==
           (int)(-5 - 300 + 200 + 10000000000LL));
     CHECK(((double (*)(float, double, int, float, double, int, float, double, signed char, unsigned short))
@@ -756,6 +956,61 @@ TestMachines(VOID)
 }
 
 #define SANDBOX_CHILD_EXIT_CODE 23
+
+static
+VOID
+TestUnhandledException(VOID)
+{
+    WCHAR Path[MAX_PATH], CommandLine[MAX_PATH + 32];
+    STARTUPINFOW Si = { sizeof(Si) };
+    PROCESS_INFORMATION Pi = { NULL };
+    DWORD ExitCode = 0;
+
+    CHECK(GetModuleFileNameW(NULL, Path, ARRAYSIZE(Path)) != 0);
+    _snwprintf(CommandLine, ARRAYSIZE(CommandLine) - 1, L"\"%ls\" unhandled", Path);
+    CommandLine[ARRAYSIZE(CommandLine) - 1] = UNICODE_NULL;
+    CHECK(CreateProcessW(Path, CommandLine, NULL, NULL, FALSE, 0, NULL, NULL, &Si, &Pi));
+    if (!Pi.hProcess) return;
+    CHECK(WaitForSingleObject(Pi.hProcess, 30000) == WAIT_OBJECT_0);
+    CHECK(GetExitCodeProcess(Pi.hProcess, &ExitCode) && ExitCode == (DWORD)STATUS_ACCESS_VIOLATION);
+    CloseHandle(Pi.hThread);
+    CloseHandle(Pi.hProcess);
+    printf("EMUTEST: an unhandled access violation ended the child with %08lx\n", ExitCode);
+}
+
+#define LOCKDOWN_CHILD_EXIT_CODE 24
+
+static
+VOID
+TestWin32kLockdownChild(VOID)
+{
+    WCHAR Path[MAX_PATH], CommandLine[MAX_PATH + 32];
+    STARTUPINFOEXW Si = { { sizeof(Si) } };
+    PROCESS_INFORMATION Pi = { NULL };
+    DWORD64 Policy = PROCESS_CREATION_MITIGATION_POLICY_WIN32K_SYSTEM_CALL_DISABLE_ALWAYS_ON;
+    SIZE_T Size = 0;
+    DWORD ExitCode = 0;
+
+    CHECK(GetModuleFileNameW(NULL, Path, ARRAYSIZE(Path)) != 0);
+    _snwprintf(CommandLine, ARRAYSIZE(CommandLine) - 1, L"\"%ls\" lockdownchild", Path);
+    CommandLine[ARRAYSIZE(CommandLine) - 1] = UNICODE_NULL;
+    InitializeProcThreadAttributeList(NULL, 1, 0, &Size);
+    Si.lpAttributeList = HeapAlloc(GetProcessHeap(), 0, Size);
+    CHECK(Si.lpAttributeList && InitializeProcThreadAttributeList(Si.lpAttributeList, 1, 0, &Size));
+    if (!Si.lpAttributeList) return;
+    CHECK(UpdateProcThreadAttribute(Si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, &Policy,
+                                    sizeof(Policy), NULL, NULL));
+    CHECK(CreateProcessW(Path, CommandLine, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL,
+                         &Si.StartupInfo, &Pi));
+    DeleteProcThreadAttributeList(Si.lpAttributeList);
+    HeapFree(GetProcessHeap(), 0, Si.lpAttributeList);
+    if (!Pi.hProcess) return;
+    CHECK(WaitForSingleObject(Pi.hProcess, 30000) == WAIT_OBJECT_0);
+    CHECK(GetExitCodeProcess(Pi.hProcess, &ExitCode) && ExitCode == (DWORD)STATUS_DLL_INIT_FAILED);
+    CloseHandle(Pi.hThread);
+    CloseHandle(Pi.hProcess);
+    printf("EMUTEST: user32 failed to initialize in a child without win32k system calls (exit %08lx)\n", ExitCode);
+}
 
 static
 VOID
@@ -934,6 +1189,18 @@ main(
     if (wcsrchr(GetCommandLineW(), L' ') && !wcscmp(wcsrchr(GetCommandLineW(), L' ') + 1, L"sandboxchild"))
         return SANDBOX_CHILD_EXIT_CODE;
 
+    if (wcsrchr(GetCommandLineW(), L' ') && !wcscmp(wcsrchr(GetCommandLineW(), L' ') + 1, L"lockdownchild"))
+        return LOCKDOWN_CHILD_EXIT_CODE;
+
+    if (wcsrchr(GetCommandLineW(), L' ') && !wcscmp(wcsrchr(GetCommandLineW(), L' ') + 1, L"unhandled"))
+    {
+        static LONG *volatile Target = NULL;
+
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+        *Target = 1;
+        return 0;
+    }
+
     setvbuf(stdout, NULL, _IONBF, 0);
     GetSystemInfo(&System);
     printf("EMUTEST: hello from a machine %04x image, %u-bit pointers, processor architecture %u\n",
@@ -951,11 +1218,15 @@ main(
     TestApcs();
     TestThreadContext();
     TestStructuredExceptions();
+    TestDynamicFunctionTables();
+    TestServiceStubs();
     TestFloatingStateAcrossFault();
     EmuTestCxxExceptions();
     TestMisalignedVectors();
     TestIndirectCalls();
     TestRv64X();
+    TestUnhandledException();
+    TestWin32kLockdownChild();
     TestSandboxedChild();
 
     printf("EMUTEST: END checks=%ld failures=%ld\n", EmuTestChecks, EmuTestFailures);

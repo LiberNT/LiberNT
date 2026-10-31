@@ -395,6 +395,12 @@ EmuSystemService(
         return;
     }
 
+    if (EmuProcess.Attached)
+    {
+        EmuX64SystemService(Service, Registers);
+        return;
+    }
+
     if (Table == 0 && Index < EmuNtServiceCount)
     {
         Count = EmuNtArguments[Index];

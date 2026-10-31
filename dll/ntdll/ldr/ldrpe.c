@@ -1533,6 +1533,7 @@ FailurePath:
         {
             /* It's not within the exports, let's hope it's valid */
             if (!AddressOfFunctions[Ordinal]) goto FailurePath;
+            LdrpArchSnapExport(ExportBase, Static ? ImportBase : NULL, &Thunk->u1.Function);
         }
 
 #if LDRP_CHPE_IMPORT_REDIRECTION

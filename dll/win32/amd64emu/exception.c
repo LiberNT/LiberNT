@@ -21,7 +21,6 @@ EmuDispatchException(
     AMD64_CONTEXT Context;
     NTSTATUS Status = STATUS_SUCCESS;
 
-    /* TODO: dispatch AMD64 exceptions to AMD64 frames when the native loader owns the process */
     if (!EmuProcess.KiUserExceptionDispatcher) return STATUS_NOT_SUPPORTED;
 
     Context.ContextFlags = CONTEXT_AMD64_FULL | CONTEXT_AMD64_SEGMENTS;
@@ -162,7 +161,9 @@ EmuVectoredHandler(
                          ExceptionInfo->ContextRecord,
                          &GuestRecord,
                          &Interrupt);
-    if (Fault == EmuFaultUnrelated) return EXCEPTION_CONTINUE_SEARCH;
+    if (Fault == EmuFaultUnrelated)
+        return EmuProcess.Attached ? EmuX64CallVectoredHandlers(Thread, ExceptionInfo->ExceptionRecord, FALSE)
+                                   : EXCEPTION_CONTINUE_SEARCH;
     if (Fault == EmuFaultResume) return EXCEPTION_CONTINUE_EXECUTION;
     if (Fault == EmuFaultPark)
     {

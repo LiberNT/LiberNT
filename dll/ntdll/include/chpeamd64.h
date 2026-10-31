@@ -1,0 +1,17 @@
+/*
+ * PROJECT:     LiberNT NT Library
+ * LICENSE:     MIT (https://spdx.org/licenses/MIT)
+ * PURPOSE:     AMD64 unwind types of the ARM64EC ntdll bridge
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma once
+
+#include <ntdll.h>
+
+typedef CONTEXT CHPE_AMD64_CONTEXT, *PCHPE_AMD64_CONTEXT;
+typedef RUNTIME_FUNCTION CHPE_AMD64_RUNTIME_FUNCTION, *PCHPE_AMD64_RUNTIME_FUNCTION;
+typedef KNONVOLATILE_CONTEXT_POINTERS CHPE_AMD64_CONTEXT_POINTERS, *PCHPE_AMD64_CONTEXT_POINTERS;
+typedef UNWIND_HISTORY_TABLE CHPE_AMD64_HISTORY_TABLE, *PCHPE_AMD64_HISTORY_TABLE;
+
+ULONG CDECL ChpeDbgPrint(PCCH Format, ...);

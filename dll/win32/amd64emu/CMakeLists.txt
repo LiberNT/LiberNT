@@ -78,7 +78,15 @@ spec2def(amd64emu.dll amd64emu.spec ADD_IMPORTLIB)
 
 set_source_files_properties(w32ksignature.cpp PROPERTIES COMPILE_OPTIONS -Wno-missing-declarations)
 
+set(_amd64emu_chpe_sources
+    ${REACTOS_SOURCE_DIR}/dll/ntdll/chpedynfntbl.c
+    ${REACTOS_SOURCE_DIR}/dll/ntdll/chpeunwind.c)
+if(RV64X_COMPILER_LAUNCHER AND RV64X_SYSTEM)
+    set_source_files_properties(${_amd64emu_chpe_sources} PROPERTIES COMPILE_OPTIONS "-mllvm;-riscv-rv64x")
+endif()
+
 list(APPEND SOURCE
+    ${_amd64emu_chpe_sources}
     apc.c
     attach.c
     bridge.c
@@ -89,6 +97,7 @@ list(APPEND SOURCE
     image.c
     process.c
     redirect.c
+    seh.c
     syscall.c
     thread.c
     felix86/cpu.c
@@ -113,6 +122,7 @@ add_library(amd64emu MODULE
 set_module_type(amd64emu win32dll ENTRYPOINT 0 IMAGEBASE 0x3d00000000)
 target_include_directories(amd64emu BEFORE PRIVATE ${_felix86_adapter}/compat)
 target_include_directories(amd64emu PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
     ${REACTOS_SOURCE_DIR}/ntoskrnl/include
     ${REACTOS_SOURCE_DIR}/win32ss
     ${REACTOS_SOURCE_DIR}/win32ss/include

@@ -20,52 +20,120 @@ static PEMULATION_NOTIFY_UNMAP_VIEW LdrpEmulationNotifyUnmap;
 static PEMULATION_FLUSH_INSTRUCTION_CACHE LdrpEmulationFlush;
 static PEMULATION_UPDATE_PROCESSOR_INFORMATION LdrpEmulationUpdateProcessor;
 
+typedef struct _LDRP_X64_SERVICE
+{
+    ULONG Native;
+    ULONG Raw;
+    ULONG Stub;
+} LDRP_X64_SERVICE, *PLDRP_X64_SERVICE;
+
+static PLDRP_X64_SERVICE LdrpX64Services;
+static ULONG LdrpX64ServiceCount;
+
 static
-BOOLEAN
-LdrpIsRv64xImage(
-    _In_ PVOID ImageBase)
+PIMAGE_SECTION_HEADER
+LdrpFindSection(
+    _In_ PVOID ImageBase,
+    _In_ PCSTR Name)
 {
     PIMAGE_NT_HEADERS Headers = RtlImageNtHeader(ImageBase);
     PIMAGE_SECTION_HEADER Section;
     ULONG Index;
 
-    if (!Headers) return FALSE;
+    if (!Headers) return NULL;
     Section = IMAGE_FIRST_SECTION(Headers);
     for (Index = 0; Index < Headers->FileHeader.NumberOfSections; Index++, Section++)
     {
-        if (!memcmp(Section->Name, ".rv64x", sizeof(".rv64x"))) return TRUE;
+        if (!strncmp((PCSTR)Section->Name, Name, IMAGE_SIZEOF_SHORT_NAME)) return Section;
     }
-    return FALSE;
-}
-
-static
-BOOLEAN
-LdrpRv64xLoaderRequested(VOID)
-{
-    static const WCHAR Switch[] = L"RV64X_SINGLE_LOADER=1";
-    PRTL_USER_PROCESS_PARAMETERS Parameters = NtCurrentPeb()->ProcessParameters;
-    PCWSTR Entry;
-
-    if (!Parameters || !(Entry = Parameters->Environment)) return FALSE;
-    for (; *Entry; Entry += wcslen(Entry) + 1)
-    {
-        if (!_wcsicmp(Entry, Switch)) return TRUE;
-    }
-    return FALSE;
+    return NULL;
 }
 
 PCWSTR
 LdrpArchGetEmulationHost(
     _In_ USHORT Machine)
 {
+    PIMAGE_SECTION_HEADER Section;
+
     if (Machine != IMAGE_FILE_MACHINE_AMD64) return NULL;
-    /* TODO: drop the opt-in once x64 exceptions cross native frames in the single loader */
-    if (LdrpIsRv64xImage(&__ImageBase) && LdrpRv64xLoaderRequested())
+    if (LdrpFindSection(&__ImageBase, ".rv64x"))
     {
+        Section = LdrpFindSection(&__ImageBase, ".x64svm");
+        if (Section)
+        {
+            LdrpX64Services = (PLDRP_X64_SERVICE)((PUCHAR)&__ImageBase + Section->VirtualAddress);
+            LdrpX64ServiceCount = Section->Misc.VirtualSize / sizeof(LDRP_X64_SERVICE);
+        }
         LdrpRv64xLoader = TRUE;
         return NULL;
     }
     return EMULATION_HOST_IMAGE_AMD64;
+}
+
+VOID
+LdrpArchSnapExport(
+    _In_ PVOID ExportBase,
+    _In_opt_ PVOID ImportBase,
+    _Inout_ PULONG_PTR Function)
+{
+    PIMAGE_NT_HEADERS Headers;
+    BOOLEAN X64;
+    ULONG_PTR Rva;
+    ULONG Index;
+
+    /* TODO: native callers keep the native service, so a patched x64 stub only intercepts x64 callers */
+    if (!LdrpX64ServiceCount || ExportBase != &__ImageBase) return;
+    Headers = ImportBase ? RtlImageNtHeader(ImportBase) : NULL;
+    X64 = Headers && Headers->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64;
+
+    Rva = *Function - (ULONG_PTR)&__ImageBase;
+    for (Index = 0; Index < LdrpX64ServiceCount; Index++)
+    {
+        if (X64 && (LdrpX64Services[Index].Native == Rva || LdrpX64Services[Index].Raw == Rva))
+            *Function = (ULONG_PTR)&__ImageBase + LdrpX64Services[Index].Stub;
+        else if (!X64 && LdrpX64Services[Index].Stub == Rva)
+            *Function = (ULONG_PTR)&__ImageBase + LdrpX64Services[Index].Native;
+        else
+            continue;
+        return;
+    }
+}
+
+static
+NTSTATUS
+LdrpExposeX64Services(VOID)
+{
+    PIMAGE_EXPORT_DIRECTORY Exports;
+    PULONG Functions, Names;
+    PUSHORT Ordinals;
+    PCSTR Name;
+    PVOID Base;
+    SIZE_T Size;
+    ULONG ExportSize, Index, Service, OldProtect, IgnoredProtect;
+    NTSTATUS Status;
+
+    Exports = RtlImageDirectoryEntryToData(&__ImageBase, TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &ExportSize);
+    if (!Exports) return STATUS_INVALID_IMAGE_FORMAT;
+    Functions = (PULONG)((PUCHAR)&__ImageBase + Exports->AddressOfFunctions);
+    Names = (PULONG)((PUCHAR)&__ImageBase + Exports->AddressOfNames);
+    Ordinals = (PUSHORT)((PUCHAR)&__ImageBase + Exports->AddressOfNameOrdinals);
+
+    Base = Functions;
+    Size = Exports->NumberOfFunctions * sizeof(ULONG);
+    Status = ZwProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, PAGE_READWRITE, &OldProtect);
+    if (!NT_SUCCESS(Status)) return Status;
+    for (Index = 0; Index < Exports->NumberOfNames; Index++)
+    {
+        Name = (PCSTR)&__ImageBase + Names[Index];
+        if (Name[0] != 'N' || Name[1] != 't') continue;
+        for (Service = 0; Service < LdrpX64ServiceCount; Service++)
+        {
+            if (Functions[Ordinals[Index]] != LdrpX64Services[Service].Native) continue;
+            Functions[Ordinals[Index]] = LdrpX64Services[Service].Stub;
+            break;
+        }
+    }
+    return ZwProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, OldProtect, &IgnoredProtect);
 }
 
 static
@@ -265,7 +333,8 @@ LdrpArchLoadEmulation(VOID)
     NTSTATUS Status;
 
     if (!LdrpRv64xLoader) return STATUS_SUCCESS;
-    Status = LdrLoadDll(NULL, NULL, &Library, &Base);
+    Status = LdrpExposeX64Services();
+    if (NT_SUCCESS(Status)) Status = LdrLoadDll(NULL, NULL, &Library, &Base);
     for (Index = 0; NT_SUCCESS(Status) && Index < RTL_NUMBER_OF(Exports); Index++)
     {
         RtlInitAnsiString(&Export, Exports[Index].Name);

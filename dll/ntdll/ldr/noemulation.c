@@ -33,6 +33,17 @@ LdrpArchDetachThread(VOID)
 }
 
 VOID
+LdrpArchSnapExport(
+    _In_ PVOID ExportBase,
+    _In_opt_ PVOID ImportBase,
+    _Inout_ PULONG_PTR Function)
+{
+    UNREFERENCED_PARAMETER(ExportBase);
+    UNREFERENCED_PARAMETER(ImportBase);
+    UNREFERENCED_PARAMETER(Function);
+}
+
+VOID
 LdrpArchEnterEmulationHost(
     _Inout_ PCONTEXT Context,
     _In_ PTEB HostTeb,

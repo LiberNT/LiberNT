@@ -84,3 +84,69 @@ EmuInvokeNative:
     ret
     .seh_endepilogue
     .seh_endproc
+
+    .macro save_run_frame
+    addi sp, sp, -128
+    .seh_set_cfa x2, 128
+    sd ra, 120(sp)
+    .seh_save_gpr x1, -8
+    .set slot, 0
+    .irp reg,8,9,18,19,20,21,22,23,24,25,26,27
+    sd x\reg, slot(sp)
+    .seh_save_gpr x\reg, slot - 128
+    .set slot, slot + 8
+    .endr
+    .endm
+
+    .p2align 2
+    .globl EmuRunGuest
+    .seh_proc EmuRunGuest
+EmuRunGuest:
+    save_run_frame
+    mv s0, sp
+    .seh_set_cfa x8, 128
+    .seh_endprologue
+    sd sp, 0(a1)
+    beqz a2, 1f
+    mv sp, a2
+1:
+    call EmuCoreRun
+    .word 0
+    .seh_endproc
+
+    /* Unwinds to the run frame of EmuRunGuest, over recompiled code; EmuBoundaryHandler walks the AMD64 frames. */
+    .p2align 2
+    .globl EmuEnterBoundary
+    .seh_proc EmuEnterBoundary
+EmuEnterBoundary:
+    .seh_handler EmuBoundaryHandler, @except, @unwind
+    ld t0, 16(a0)
+    addi t0, t0, -48
+    sd sp, 32(t0)
+    sd sp, 64(a0)
+    mv sp, t0
+    sd ra, 24(sp)
+    sd s0, 16(sp)
+    sd s1, 8(sp)
+    sd a0, 0(sp)
+    ld s1, 16(a0)
+    .seh_set_cfa x9, 128
+    .seh_save_gpr x1, -8
+    .set slot, 0
+    .irp reg,8,9,18,19,20,21,22,23,24,25,26,27
+    .seh_save_gpr x\reg, slot - 128
+    .set slot, slot + 8
+    .endr
+    .seh_endprologue
+    call EmuBoundaryRoutine
+1:
+    ld s1, 8(sp)
+    ld s0, 16(sp)
+    ld ra, 24(sp)
+    ld sp, 32(sp)
+    ret
+    .globl EmuBoundaryResume
+EmuBoundaryResume:
+    call EmuBoundaryContinue
+    j 1b
+    .seh_endproc

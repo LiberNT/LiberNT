@@ -228,7 +228,7 @@ munmap(void *Address, size_t Length)
     SIZE_T Size = 0;
 
     UNREFERENCED_PARAMETER(Length);
-    return NT_SUCCESS(NtFreeVirtualMemory(NtCurrentProcess(), &Address, &Size, MEM_RELEASE)) ? 0 : -1;
+    return NT_SUCCESS(ZwFreeVirtualMemory(NtCurrentProcess(), &Address, &Size, MEM_RELEASE)) ? 0 : -1;
 }
 
 int
@@ -237,7 +237,7 @@ mprotect(void *Address, size_t Length, int Protection)
     SIZE_T Size = Length;
     ULONG OldProtection;
 
-    return NT_SUCCESS(NtProtectVirtualMemory(NtCurrentProcess(),
+    return NT_SUCCESS(ZwProtectVirtualMemory(NtCurrentProcess(),
                                              &Address,
                                              &Size,
                                              Felix86NtProtection(Protection),
@@ -257,7 +257,7 @@ void
 __riscv_flush_icache(void *Start, void *End, unsigned long Flags)
 {
     UNREFERENCED_PARAMETER(Flags);
-    NtFlushInstructionCache(NtCurrentProcess(), Start, (ULONG_PTR)End - (ULONG_PTR)Start);
+    ZwFlushInstructionCache(NtCurrentProcess(), Start, (ULONG_PTR)End - (ULONG_PTR)Start);
 }
 
 int

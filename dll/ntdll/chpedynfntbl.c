@@ -6,14 +6,12 @@
  * COPYRIGHT:   Adaptation Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#include <ntdll.h>
+#include <chpeamd64.h>
 
 #define NDEBUG
 #include <debug.h>
 
 #define TAG_RTLDYNFNTBL 'tfDP'
-
-ULONG CDECL ChpeDbgPrint(PCCH Format, ...);
 
 static PVOID NTAPI
 ChpepAllocateMemory(SIZE_T Bytes, ULONG Tag)
@@ -30,22 +28,22 @@ ChpepFreeMemory(PVOID Memory, ULONG Tag)
 }
 
 typedef
-_Function_class_(GET_RUNTIME_FUNCTION_CALLBACK)
-PRUNTIME_FUNCTION
-GET_RUNTIME_FUNCTION_CALLBACK(
+_Function_class_(CHPE_AMD64_GET_RUNTIME_FUNCTION_CALLBACK)
+PCHPE_AMD64_RUNTIME_FUNCTION
+CHPE_AMD64_GET_RUNTIME_FUNCTION_CALLBACK(
     _In_ DWORD64 ControlPc,
     _In_opt_ PVOID Context);
-typedef GET_RUNTIME_FUNCTION_CALLBACK *PGET_RUNTIME_FUNCTION_CALLBACK;
+typedef CHPE_AMD64_GET_RUNTIME_FUNCTION_CALLBACK *PCHPE_AMD64_GET_RUNTIME_FUNCTION_CALLBACK;
 
 typedef
-_Function_class_(OUT_OF_PROCESS_FUNCTION_TABLE_CALLBACK)
+_Function_class_(CHPE_AMD64_OUT_OF_PROCESS_FUNCTION_TABLE_CALLBACK)
 DWORD
-OUT_OF_PROCESS_FUNCTION_TABLE_CALLBACK(
+CHPE_AMD64_OUT_OF_PROCESS_FUNCTION_TABLE_CALLBACK(
     _In_ HANDLE Process,
     _In_ PVOID TableAddress,
     _Out_ PDWORD Entries,
-    _Out_ PRUNTIME_FUNCTION* Functions);
-typedef OUT_OF_PROCESS_FUNCTION_TABLE_CALLBACK *POUT_OF_PROCESS_FUNCTION_TABLE_CALLBACK;
+    _Out_ PCHPE_AMD64_RUNTIME_FUNCTION* Functions);
+typedef CHPE_AMD64_OUT_OF_PROCESS_FUNCTION_TABLE_CALLBACK *PCHPE_AMD64_OUT_OF_PROCESS_FUNCTION_TABLE_CALLBACK;
 
 typedef enum _FUNCTION_TABLE_TYPE
 {
@@ -58,12 +56,12 @@ typedef enum _FUNCTION_TABLE_TYPE
 typedef struct _DYNAMIC_FUNCTION_TABLE
 {
     LIST_ENTRY ListEntry;
-    PRUNTIME_FUNCTION FunctionTable;
+    PCHPE_AMD64_RUNTIME_FUNCTION FunctionTable;
     LARGE_INTEGER TimeStamp;
     ULONG64 MinimumAddress;
     ULONG64 MaximumAddress;
     ULONG64 BaseAddress;
-    PGET_RUNTIME_FUNCTION_CALLBACK Callback;
+    PCHPE_AMD64_GET_RUNTIME_FUNCTION_CALLBACK Callback;
     PVOID Context;
     PWCHAR OutOfProcessCallbackDll;
     FUNCTION_TABLE_TYPE Type;
@@ -82,14 +80,14 @@ typedef struct _DYNAMIC_FUNCTION_TABLE
 ULONG
 RtlpArm64FunctionLength(
     _In_ ULONG_PTR ImageBase,
-    _In_ PRUNTIME_FUNCTION FunctionEntry);
+    _In_ PCHPE_AMD64_RUNTIME_FUNCTION FunctionEntry);
 #endif
 
 static
 ULONG64
 RtlpGetFunctionEndAddress(
     _In_ ULONG64 BaseAddress,
-    _In_ PRUNTIME_FUNCTION FunctionEntry)
+    _In_ PCHPE_AMD64_RUNTIME_FUNCTION FunctionEntry)
 {
 #ifdef _M_ARM64
     return FunctionEntry->BeginAddress + RtlpArm64FunctionLength(BaseAddress, FunctionEntry);
@@ -159,7 +157,7 @@ RtlpInsertDynamicFunctionTable(PDYNAMIC_FUNCTION_TABLE DynamicTable)
 BOOLEAN
 NTAPI
 ChpepAmd64AddFunctionTable(
-    _In_ PRUNTIME_FUNCTION FunctionTable,
+    _In_ PCHPE_AMD64_RUNTIME_FUNCTION FunctionTable,
     _In_ DWORD EntryCount,
     _In_ DWORD64 BaseAddress)
 {
@@ -222,7 +220,7 @@ ChpepAmd64InstallFunctionTableCallback(
     _In_ DWORD64 TableIdentifier,
     _In_ DWORD64 BaseAddress,
     _In_ DWORD Length,
-    _In_ PGET_RUNTIME_FUNCTION_CALLBACK Callback,
+    _In_ PCHPE_AMD64_GET_RUNTIME_FUNCTION_CALLBACK Callback,
     _In_ PVOID Context,
     _In_opt_z_ PCWSTR OutOfProcessCallbackDll)
 {
@@ -257,7 +255,7 @@ ChpepAmd64InstallFunctionTableCallback(
     }
 
     /* Initialize fields */
-    dynamicTable->FunctionTable = (PRUNTIME_FUNCTION)TableIdentifier;
+    dynamicTable->FunctionTable = (PCHPE_AMD64_RUNTIME_FUNCTION)TableIdentifier;
     dynamicTable->EntryCount = 0;
     dynamicTable->MaximumEntryCount = 0;
     dynamicTable->BaseAddress = BaseAddress;
@@ -290,7 +288,7 @@ DWORD
 NTAPI
 ChpepAmd64AddGrowableFunctionTable(
     _Out_ PVOID *DynamicTable,
-    _In_ PRUNTIME_FUNCTION FunctionTable,
+    _In_ PCHPE_AMD64_RUNTIME_FUNCTION FunctionTable,
     _In_ DWORD EntryCount,
     _In_ DWORD MaximumEntryCount,
     _In_ ULONG_PTR RangeBase,
@@ -404,7 +402,7 @@ ChpepAmd64DeleteGrowableFunctionTable(
 BOOLEAN
 NTAPI
 ChpepAmd64DeleteFunctionTable(
-    _In_ PRUNTIME_FUNCTION FunctionTable)
+    _In_ PCHPE_AMD64_RUNTIME_FUNCTION FunctionTable)
 {
     PLIST_ENTRY listLink;
     PDYNAMIC_FUNCTION_TABLE dynamicTable;
@@ -438,17 +436,17 @@ ChpepAmd64DeleteFunctionTable(
     return removed;
 }
 
-PRUNTIME_FUNCTION
+PCHPE_AMD64_RUNTIME_FUNCTION
 NTAPI
 ChpepAmd64LookupDynamicFunctionEntry(
     _In_ DWORD64 ControlPc,
     _Out_ PDWORD64 ImageBase,
-    _In_ PUNWIND_HISTORY_TABLE HistoryTable)
+    _In_ PCHPE_AMD64_HISTORY_TABLE HistoryTable)
 {
     PLIST_ENTRY listLink;
     PDYNAMIC_FUNCTION_TABLE dynamicTable;
-    PRUNTIME_FUNCTION functionTable, foundEntry = NULL;
-    PGET_RUNTIME_FUNCTION_CALLBACK callback;
+    PCHPE_AMD64_RUNTIME_FUNCTION functionTable, foundEntry = NULL;
+    PCHPE_AMD64_GET_RUNTIME_FUNCTION_CALLBACK callback;
     DWORD64 ipOffset;
     ULONG indexLow, indexHigh, indexMid;
 
