@@ -842,6 +842,71 @@ typedef struct _FILE_REMOTE_PROTOCOL_INFO {
     } ProtocolSpecificReserved;
 } FILE_REMOTE_PROTOCOL_INFO, *PFILE_REMOTE_PROTOCOL_INFO;
 
+typedef struct _FILE_STREAM_INFO {
+    DWORD NextEntryOffset;
+    DWORD StreamNameLength;
+    LARGE_INTEGER StreamSize;
+    LARGE_INTEGER StreamAllocationSize;
+    WCHAR StreamName[1];
+} FILE_STREAM_INFO, *PFILE_STREAM_INFO;
+
+typedef struct _FILE_FULL_DIR_INFO {
+    ULONG NextEntryOffset;
+    ULONG FileIndex;
+    LARGE_INTEGER CreationTime;
+    LARGE_INTEGER LastAccessTime;
+    LARGE_INTEGER LastWriteTime;
+    LARGE_INTEGER ChangeTime;
+    LARGE_INTEGER EndOfFile;
+    LARGE_INTEGER AllocationSize;
+    ULONG FileAttributes;
+    ULONG FileNameLength;
+    ULONG EaSize;
+    WCHAR FileName[1];
+} FILE_FULL_DIR_INFO, *PFILE_FULL_DIR_INFO;
+
+#if (_WIN32_WINNT >= 0x0602)
+typedef struct _FILE_ALIGNMENT_INFO {
+    ULONG AlignmentRequirement;
+} FILE_ALIGNMENT_INFO, *PFILE_ALIGNMENT_INFO;
+
+#define STORAGE_INFO_FLAGS_ALIGNED_DEVICE                 0x00000001
+#define STORAGE_INFO_FLAGS_PARTITION_ALIGNED_ON_DEVICE    0x00000002
+#define STORAGE_INFO_OFFSET_UNKNOWN (0xffffffff)
+
+typedef struct _FILE_STORAGE_INFO {
+    ULONG LogicalBytesPerSector;
+    ULONG PhysicalBytesPerSectorForAtomicity;
+    ULONG PhysicalBytesPerSectorForPerformance;
+    ULONG FileSystemEffectivePhysicalBytesPerSectorForAtomicity;
+    ULONG Flags;
+    ULONG ByteOffsetForSectorAlignment;
+    ULONG ByteOffsetForPartitionAlignment;
+} FILE_STORAGE_INFO, *PFILE_STORAGE_INFO;
+
+typedef struct _FILE_ID_INFO {
+    ULONGLONG VolumeSerialNumber;
+    FILE_ID_128 FileId;
+} FILE_ID_INFO, *PFILE_ID_INFO;
+
+typedef struct _FILE_ID_EXTD_DIR_INFO {
+    ULONG NextEntryOffset;
+    ULONG FileIndex;
+    LARGE_INTEGER CreationTime;
+    LARGE_INTEGER LastAccessTime;
+    LARGE_INTEGER LastWriteTime;
+    LARGE_INTEGER ChangeTime;
+    LARGE_INTEGER EndOfFile;
+    LARGE_INTEGER AllocationSize;
+    ULONG FileAttributes;
+    ULONG FileNameLength;
+    ULONG EaSize;
+    ULONG ReparsePointTag;
+    FILE_ID_128 FileId;
+    WCHAR FileName[1];
+} FILE_ID_EXTD_DIR_INFO, *PFILE_ID_EXTD_DIR_INFO;
+#endif
+
 #endif
 
 
@@ -3637,6 +3702,18 @@ typedef ENUMRESTYPEPROCA ENUMRESTYPEPROC;
 typedef struct _FILE_DISPOSITION_INFO {
     BOOLEAN DeleteFile;
 } FILE_DISPOSITION_INFO, *PFILE_DISPOSITION_INFO;
+#endif
+
+#if (_WIN32_WINNT >= 0x0A00)
+#define FILE_DISPOSITION_FLAG_DO_NOT_DELETE              0x00000000
+#define FILE_DISPOSITION_FLAG_DELETE                     0x00000001
+#define FILE_DISPOSITION_FLAG_POSIX_SEMANTICS            0x00000002
+#define FILE_DISPOSITION_FLAG_FORCE_IMAGE_SECTION_CHECK  0x00000004
+#define FILE_DISPOSITION_FLAG_ON_CLOSE                   0x00000008
+
+typedef struct _FILE_DISPOSITION_INFO_EX {
+    DWORD Flags;
+} FILE_DISPOSITION_INFO_EX, *PFILE_DISPOSITION_INFO_EX;
 #endif
 #endif
 
