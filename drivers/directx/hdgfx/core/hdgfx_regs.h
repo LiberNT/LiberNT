@@ -40,7 +40,9 @@
     R(FORCEWAKE_MT_ACK,     0x130040, 0) \
     R(FORCEWAKE_ACK,        0x130090, 0) \
     R(GT_THREAD_STATUS,     0x13805C, 0) \
+    R(SNB_BLT_HWS_PGA,      0x24080, 0) \
     R(SOUTH_CHICKEN1,       0xC2000, 0) \
+    R(CPU_VGACNTRL,         0x41000, 0) \
     R(GTIMR,                0x44014, 0) \
     R(GTIIR,                0x44018, 0) \
     R(GTIER,                0x4401C, 0) \
@@ -117,6 +119,7 @@
     R(TRANS_CHICKEN2,       0xF0064, 0x1000)
 
 #define HDGFX_ILK_FIELDS(F) \
+    F(VGA_DISPLAY_DISABLE,      31, 31) \
     F(DE_MASTER,                31, 31) \
     F(DE_GSE_IVB,               29, 29) \
     F(DE_PCH_EVENT_IVB,         28, 28) \

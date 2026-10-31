@@ -44,6 +44,16 @@ static const USHORT HdgfxScaledModes[][2] =
     { 1280, 720 }, { 1024, 768 }, { 800, 600 }, { 640, 480 },
 };
 
+static const HDGFX_DTD HdgfxFallbackTiming =
+{
+    65000,
+    { 1024, 1024, 1344, 1048, 1184, 1344, 768, 768, 806, 771, 777, 806 },
+    false,
+    false,
+    0,
+    0
+};
+
 static uint32_t
 HdgfxReadRegister(
     _In_ void *Context,
@@ -1511,6 +1521,15 @@ HdgfxScanoutCommit(
     ULONGLONG Start;
     NTSTATUS Status = STATUS_SUCCESS;
 
+    if (!Scanout->PanelPresent)
+    {
+        Scanout->Panel = *Panel;
+        Scanout->Width = Width;
+        Scanout->Height = Height;
+        Scanout->Pitch = Pitch;
+        return STATUS_SUCCESS;
+    }
+
     States = ExAllocatePoolZero(NonPagedPoolNx, 2 * sizeof(*States), HDGFX_TAG);
     if (States == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -1885,7 +1904,7 @@ HdgfxCrtDetect(
         Scanout->CrtTiming = Parsed.Dtds[0];
         Scanout->CrtTimingValid = TRUE;
     }
-    else if (!Attached)
+    else if (!Attached && Scanout->PanelPresent)
     {
         Scanout->CrtTimingValid = FALSE;
     }
@@ -2043,15 +2062,29 @@ HdgfxScanoutStart(
             State->Pipes[0].Enabled, State->Pipes[0].SourceWidth, State->Pipes[0].SourceHeight,
             State->Pipes[0].PanelFitter.Enabled, State->Pipes[0].Primary.Stride,
             State->Pipes[0].Primary.Surface, State->Pipes[0].Primary.XTiled);
-    if (!State->Lvds.Detected)
+    Scanout->PanelPresent = State->Lvds.Detected;
+    if (!Scanout->PanelPresent)
     {
-        DPRINT1("No LVDS panel detected\n");
-        ExFreePoolWithTag(State, HDGFX_TAG);
-        return STATUS_NOT_SUPPORTED;
+        if (Scanout->Generation->DetectCrt == NULL)
+        {
+            DPRINT1("No LVDS panel detected\n");
+            ExFreePoolWithTag(State, HDGFX_TAG);
+            return STATUS_NOT_SUPPORTED;
+        }
+        HdgfxIlkDisableVgaPlane(&Mmio);
+        (VOID)HdgfxCrtDetect(Scanout, Scanout->CrtEdid, &Scanout->CrtEdidLength);
+        if (!Scanout->CrtTimingValid)
+        {
+            Scanout->CrtTiming = HdgfxFallbackTiming;
+            Scanout->CrtTimingValid = TRUE;
+        }
+        /* TODO: rebuild the mode list when a hot-plugged monitor has a larger native mode */
+        Scanout->PanelModes[0] = Scanout->CrtTiming;
+        Scanout->PanelModeCount = 1;
+        PanelFound = TRUE;
     }
-
-    if (HdgfxReadEdid("Panel", Scanout->Generation->PanelDdcPins, &Mmio, Scanout->PanelEdid, &Edid) &&
-        Edid.DtdCount != 0)
+    else if (HdgfxReadEdid("Panel", Scanout->Generation->PanelDdcPins, &Mmio, Scanout->PanelEdid, &Edid) &&
+             Edid.DtdCount != 0)
     {
         Scanout->PanelEdidLength = HDGFX_EDID_SIZE;
         for (Index = 0; Index < Edid.DtdCount; Index++)
@@ -2550,6 +2583,13 @@ HdgfxDdiStartDevice(
     }
     Adapter->Scanout = Scanout;
     HdgfxCrtStart(Scanout);
+    if (!Scanout->PanelPresent)
+    {
+        Scanout->LvdsActive = FALSE;
+        Status = HdgfxSetOutputs(Scanout, &Scanout->Modes[0], FALSE, TRUE);
+        if (!NT_SUCCESS(Status))
+            goto Failed;
+    }
 
     Status = HdgfxSlabStart(Adapter, &Scanout->Modes[0]);
     if (NT_SUCCESS(Status))
@@ -2558,7 +2598,7 @@ HdgfxDdiStartDevice(
         goto Failed;
 
     HdgfxQueryPanelChild(Adapter);
-    Adapter->VsyncTargetId = HDGFX_PANEL_CHILD_UID;
+    Adapter->VsyncTargetId = Scanout->PanelPresent ? HDGFX_PANEL_CHILD_UID : HDGFX_CRT_CHILD_UID;
     Adapter->VsyncEnabled = 0;
     Adapter->VsyncPhaseEnabled = 0;
     Adapter->PrimaryAddress = 0;
@@ -2573,7 +2613,7 @@ HdgfxDdiStartDevice(
     }
 
     *NumberOfVideoPresentSources = 1;
-    *NumberOfChildren = Scanout->CrtSupported ? 2 : 1;
+    *NumberOfChildren = (Scanout->PanelPresent ? 1 : 0) + (Scanout->CrtSupported ? 1 : 0);
     return STATUS_SUCCESS;
 
 Failed:

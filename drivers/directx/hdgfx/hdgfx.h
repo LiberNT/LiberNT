@@ -67,6 +67,7 @@ typedef struct _HDGFX_SCANOUT
 {
     PUCHAR Registers;
     const HDGFX_GENERATION *Generation;
+    BOOLEAN PanelPresent;
     HDGFX_DTD Panel;
     HDGFX_DTD PanelModes[HDGFX_EDID_MAX_DTDS];
     ULONG PanelModeCount;
