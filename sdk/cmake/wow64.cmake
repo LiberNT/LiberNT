@@ -327,6 +327,8 @@ add_cd_file(TARGET wow64_i386 FILE ${_wow64_fusion_file} DESTINATION reactos/Mic
 add_cd_file(TARGET wow64_i386 FILE ${_wow64_fusion_1_1_file} DESTINATION reactos/Microsoft.NET/Framework/v1.1.4322 FOR all)
 add_cd_file(TARGET wow64_i386 FILE ${_wow64_fusion_file} DESTINATION reactos/Microsoft.NET/Framework/v4.0.30319 FOR all)
 add_cd_file(TARGET wow64_i386 FILE ${_wow64_fusion_2_0_file} DESTINATION reactos/Microsoft.NET/Framework/v2.0.50727 FOR all)
+_wow64_get_target_file(iexplore _wow64_iexplore_file)
+add_cd_file(TARGET wow64_i386 FILE ${_wow64_iexplore_file} DESTINATION "Program Files (x86)/Internet Explorer" FOR all)
 add_cd_file(FILE
     ${REACTOS_SOURCE_DIR}/dll/win32/comctl32/x86_microsoft.windows.common-controls_6595b64144ccf1df_5.82.2600.2982_none_deadbeef.manifest
     ${REACTOS_SOURCE_DIR}/dll/win32/comctl32/x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef.manifest
