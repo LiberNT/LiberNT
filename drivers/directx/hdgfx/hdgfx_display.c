@@ -77,7 +77,8 @@ HdgfxTargetKnown(
     _In_ PHDGFX_SCANOUT Scanout,
     _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
 {
-    return TargetId == HDGFX_PANEL_CHILD_UID || (TargetId == HDGFX_CRT_CHILD_UID && Scanout->CrtSupported);
+    return (TargetId == HDGFX_PANEL_CHILD_UID && Scanout->PanelPresent) ||
+           (TargetId == HDGFX_CRT_CHILD_UID && Scanout->CrtSupported);
 }
 
 static ULONG
@@ -1291,27 +1292,33 @@ HdgfxDdiQueryChildRelations(
     PHDGFX_ADAPTER Adapter = MiniportDeviceContext;
     PHDGFX_SCANOUT Scanout = HdgfxScanoutOf(MiniportDeviceContext);
     ULONG Count;
+    ULONG Index;
 
     PAGED_CODE();
 
     if (Scanout == NULL || ChildRelations == NULL)
         return STATUS_INVALID_PARAMETER;
-    Count = Scanout->CrtSupported ? 2 : 1;
+    Count = (Scanout->PanelPresent ? 1 : 0) + (Scanout->CrtSupported ? 1 : 0);
     if (ChildRelationsSize < sizeof(DXGK_CHILD_DESCRIPTOR) * Count)
         return STATUS_BUFFER_TOO_SMALL;
 
     RtlZeroMemory(ChildRelations, sizeof(DXGK_CHILD_DESCRIPTOR) * Count);
-    ChildRelations[0].ChildDeviceType = TypeVideoOutput;
-    ChildRelations[0].ChildCapabilities.HpdAwareness = HpdAwarenessAlwaysConnected;
-    ChildRelations[0].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = Adapter->ChildOutputTechnology;
-    ChildRelations[0].AcpiUid = Adapter->ChildAcpiUid;
-    ChildRelations[0].ChildUid = HDGFX_PANEL_CHILD_UID;
+    Index = 0;
+    if (Scanout->PanelPresent)
+    {
+        ChildRelations[Index].ChildDeviceType = TypeVideoOutput;
+        ChildRelations[Index].ChildCapabilities.HpdAwareness = HpdAwarenessAlwaysConnected;
+        ChildRelations[Index].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = Adapter->ChildOutputTechnology;
+        ChildRelations[Index].AcpiUid = Adapter->ChildAcpiUid;
+        ChildRelations[Index].ChildUid = HDGFX_PANEL_CHILD_UID;
+        Index++;
+    }
     if (Scanout->CrtSupported)
     {
-        ChildRelations[1].ChildDeviceType = TypeVideoOutput;
-        ChildRelations[1].ChildCapabilities.HpdAwareness = HpdAwarenessInterruptible;
-        ChildRelations[1].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = D3DKMDT_VOT_HD15;
-        ChildRelations[1].ChildUid = HDGFX_CRT_CHILD_UID;
+        ChildRelations[Index].ChildDeviceType = TypeVideoOutput;
+        ChildRelations[Index].ChildCapabilities.HpdAwareness = HpdAwarenessInterruptible;
+        ChildRelations[Index].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = D3DKMDT_VOT_HD15;
+        ChildRelations[Index].ChildUid = HDGFX_CRT_CHILD_UID;
     }
     return STATUS_SUCCESS;
 }
