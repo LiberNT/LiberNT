@@ -3005,7 +3005,7 @@
 @ stdcall RtlAvlRemoveNode(ptr ptr)
 @ stdcall RtlCapabilityCheck(ptr ptr ptr)
 @ stdcall RtlCapabilityCheckForSingleSessionSku(ptr ptr ptr)
-@ stub -arch=win64 RtlCheckPortableOperatingSystem
+@ stdcall RtlCheckPortableOperatingSystem(ptr)
 @ stub -arch=win64 RtlCheckSystemBootStatusIntegrity
 @ stub -arch=win64 RtlCheckTokenCapability
 @ stdcall RtlCheckTokenMembership(ptr ptr ptr)

@@ -101,6 +101,15 @@ InbvDiscardBootScreen(
     VOID
 );
 
+NTSTATUS
+NTAPI
+InbvCopyBootScreen(
+    _Out_writes_bytes_(Height * Stride) PVOID Bits,
+    _In_ LONG Stride,
+    _In_ ULONG Width,
+    _In_ ULONG Height
+);
+
 BOOLEAN
 NTAPI
 InbvEnableDisplayString(

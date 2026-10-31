@@ -922,6 +922,21 @@ InbvGopExtractChannel(ULONG Pixel, ULONG Mask)
 static PULONG InbvBootScreen;
 static ULONG InbvBootScreenWidth;
 static ULONG InbvBootScreenHeight;
+static EX_PUSH_LOCK InbvBootScreenLock;
+
+static
+PULONG
+InbvTakeBootScreen(VOID)
+{
+    PULONG Pixels;
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&InbvBootScreenLock);
+    Pixels = InterlockedExchangePointer((PVOID *)&InbvBootScreen, NULL);
+    ExReleasePushLockExclusive(&InbvBootScreenLock);
+    KeLeaveCriticalRegion();
+    return Pixels;
+}
 
 BOOLEAN
 NTAPI
@@ -981,7 +996,11 @@ InbvGopCaptureScreen(VOID)
 
     InbvBootScreenWidth = DisplayInfo.PhysicalWidth;
     InbvBootScreenHeight = DisplayInfo.PhysicalHeight;
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&InbvBootScreenLock);
     InterlockedExchangePointer((PVOID *)&InbvBootScreen, Pixels);
+    ExReleasePushLockExclusive(&InbvBootScreenLock);
+    KeLeaveCriticalRegion();
     return TRUE;
 }
 
@@ -1016,7 +1035,7 @@ InbvQueryBootScreen(
         return STATUS_INVALID_PARAMETER;
     }
 
-    Pixels = InterlockedExchangePointer((PVOID *)&InbvBootScreen, NULL);
+    Pixels = InbvTakeBootScreen();
     if (!Pixels)
         return STATUS_NOT_FOUND;
 
@@ -1034,10 +1053,50 @@ VOID
 NTAPI
 InbvDiscardBootScreen(VOID)
 {
-    PVOID Pixels = InterlockedExchangePointer((PVOID *)&InbvBootScreen, NULL);
+    PVOID Pixels = InbvTakeBootScreen();
 
     if (Pixels)
         ExFreePoolWithTag(Pixels, INBV_LOGO_POOL_TAG);
+}
+
+NTSTATUS
+NTAPI
+InbvCopyBootScreen(
+    _Out_writes_bytes_(Height * Stride) PVOID Bits,
+    _In_ LONG Stride,
+    _In_ ULONG Width,
+    _In_ ULONG Height)
+{
+    NTSTATUS Status = STATUS_NOT_FOUND;
+    ULONG y;
+
+    if (!Bits)
+        return STATUS_INVALID_PARAMETER;
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockShared(&InbvBootScreenLock);
+    if (InbvBootScreen)
+    {
+        if (Width != InbvBootScreenWidth ||
+            Height != InbvBootScreenHeight ||
+            (ULONG)((Stride < 0) ? -Stride : Stride) < InbvBootScreenWidth * sizeof(ULONG))
+        {
+            Status = STATUS_INVALID_PARAMETER;
+        }
+        else
+        {
+            for (y = 0; y < InbvBootScreenHeight; y++)
+            {
+                RtlCopyMemory((PUCHAR)Bits + (LONG_PTR)y * Stride,
+                              InbvBootScreen + (SIZE_T)y * InbvBootScreenWidth,
+                              InbvBootScreenWidth * sizeof(ULONG));
+            }
+            Status = STATUS_SUCCESS;
+        }
+    }
+    ExReleasePushLockShared(&InbvBootScreenLock);
+    KeLeaveCriticalRegion();
+    return Status;
 }
 
 static VOID
