@@ -670,15 +670,15 @@ HdgfxStopRender(
     {
         HdgfxMmioInit(Adapter->Registers, &Mmio);
         if (!HdgfxIlkStopRing(&Mmio, &Adapter->Ring) ||
-            (Adapter->Generation->Gen >= 7 && !HdgfxIlkStopRing(&Mmio, &Adapter->BltRing)))
+            (Adapter->Generation->Gen >= 6 && !HdgfxIlkStopRing(&Mmio, &Adapter->BltRing)))
         {
             DPRINT1("Render ring busy at stop, head 0x%lx tail 0x%lx; keeping its memory\n",
                     HdgfxIlkRingHead(&Mmio, Adapter->ActiveRing), Adapter->ActiveRing->Tail);
             return;
         }
         Adapter->RingStarted = FALSE;
-        if (Adapter->Generation->Gen >= 7)
-            HdgfxIvbForceWakeRelease(&Mmio);
+        if (Adapter->Generation->ForceWakeRelease != NULL)
+            Adapter->Generation->ForceWakeRelease(&Mmio);
     }
     if (Adapter->GttWindow != NULL)
     {
@@ -831,17 +831,17 @@ HdgfxStartRender(
     if (!Adapter->Generation->Render)
         return;
     HdgfxMmioInit(Adapter->Registers, &Mmio);
-    if (Adapter->Generation->Gen >= 7)
+    if (Adapter->Generation->Gen >= 6)
     {
         Adapter->BltRing = Adapter->Ring;
         Adapter->BltRing.Commands = (uint32_t *)((PUCHAR)Adapter->RingMemory + HDGFX_RING_SIZE);
         Adapter->BltRing.Address = Adapter->Ring.Address + HDGFX_RING_SIZE;
         Adapter->BltRing.Base = HDGFX_BLT_RING_BASE;
-        Adapter->BltRing.StatusRegister = HDGFX_REG(BLT_HWS_PGA, 0);
+        Adapter->BltRing.StatusRegister = Adapter->Generation->BltStatusRegister;
         Adapter->BltRing.UserInterrupt = HDGFX_SET(GT_BLT_USER, 1);
         Adapter->BltRing.Blitter = TRUE;
         Adapter->Ring.StatusRegister = HDGFX_REG(RENDER_HWS_PGA, 0);
-        if (!HdgfxIvbForceWake(&Mmio))
+        if (!Adapter->Generation->ForceWake(&Mmio))
         {
             DPRINT1("Forcewake failed, ack 0x%lx thread status 0x%lx\n",
                     HdgfxReadRegister32(Adapter, HDGFX_REG(FORCEWAKE_MT_ACK, 0)),
@@ -849,10 +849,10 @@ HdgfxStartRender(
             HdgfxStopRender(Adapter);
             return;
         }
-        HdgfxIvbInitEngine(&Mmio);
+        Adapter->Generation->InitEngine(&Mmio);
     }
     Adapter->RingStarted = HdgfxIlkStartRing(&Mmio, &Adapter->Ring) &&
-                           (Adapter->Generation->Gen < 7 || HdgfxIlkStartRing(&Mmio, &Adapter->BltRing));
+                           (Adapter->Generation->Gen < 6 || HdgfxIlkStartRing(&Mmio, &Adapter->BltRing));
     if (!Adapter->RingStarted)
     {
         DPRINT1("Render ring did not start: start 0x%08lx ctl 0x%08lx head 0x%08lx\n",
@@ -1016,7 +1016,7 @@ HdgfxTestRing(
     ULONG Mismatches = 0;
     ULONG Count = 0;
     ULONG Index;
-    BOOLEAN Gen7 = Adapter->Generation->Gen >= 7;
+    BOOLEAN TwoRings = Adapter->Generation->Gen >= 6;
 
     if (!Adapter->RingStarted)
         return;
@@ -1024,14 +1024,14 @@ HdgfxTestRing(
     Breadcrumb = HdgfxRingRun(Adapter, NULL, 0, &BreadcrumbUs);
     Count += HdgfxBltFill(Dwords + Count, &Source, &Full, 0x11223344);
     Count += HdgfxBltFill(Dwords + Count, &Source, &Inner, 0x55667788);
-    if (Gen7)
+    if (TwoRings)
         Adapter->ActiveRing = &Adapter->BltRing;
     else
         Count += HdgfxMiFlush(Dwords + Count);
     Count += HdgfxBltCopy(Dwords + Count, &Destination, &Copy, &Source, 0, 0);
-    if (!Gen7)
+    if (!TwoRings)
         Count += HdgfxMiFlush(Dwords + Count);
-    if (Breadcrumb && Count == (Gen7 ? 20UL : 22UL))
+    if (Breadcrumb && Count == (TwoRings ? 20UL : 22UL))
     {
         Blit = HdgfxRingRun(Adapter, (const ULONG *)Dwords, Count, &BlitUs);
         for (Index = 0; Blit && Index < HDGFX_BLT_TEST_WIDTH * HDGFX_BLT_TEST_HEIGHT; Index++)
@@ -1125,14 +1125,14 @@ HdgfxRestartRender(
         Adapter->Seqno = 0;
         Adapter->RingUnfenced = FALSE;
         Adapter->ActiveRing = &Adapter->Ring;
-        if (Adapter->Generation->Gen >= 7)
+        if (Adapter->Generation->ForceWake != NULL)
         {
-            if (!HdgfxIvbForceWake(&Mmio))
+            if (!Adapter->Generation->ForceWake(&Mmio))
                 DPRINT1("Forcewake failed after reset\n");
-            HdgfxIvbInitEngine(&Mmio);
+            Adapter->Generation->InitEngine(&Mmio);
         }
         Adapter->RingStarted = HdgfxIlkStartRing(&Mmio, &Adapter->Ring) &&
-                               (Adapter->Generation->Gen < 7 || HdgfxIlkStartRing(&Mmio, &Adapter->BltRing));
+                               (Adapter->Generation->Gen < 6 || HdgfxIlkStartRing(&Mmio, &Adapter->BltRing));
         if (Adapter->GtInterruptMask != 0)
         {
             HdgfxWriteRegister32(Adapter, HDGFX_REG(GTIIR, 0), Adapter->GtInterruptMask);
@@ -1660,7 +1660,8 @@ HdgfxCrtCommit(
 
     HdgfxMmioInit(Scanout->Registers, &Mmio);
     Scanout->Generation->ReadDisplayState(&Mmio, &States[0]);
-    Result = Scanout->Generation->ComputeCrt(&States[0], &Mode, &States[1]);
+    Result = Scanout->DpPresent ? HdgfxIlkComputeDp(&States[0], &Mode, &Scanout->DpSink, &States[1]) :
+                                  Scanout->Generation->ComputeCrt(&States[0], &Mode, &States[1]);
     if (Result != HdgfxModesetSuccess)
     {
         DPRINT1("CRT %lux%lu on %lux%lu: %s\n", Scanout->Width, Scanout->Height,
@@ -1671,7 +1672,8 @@ HdgfxCrtCommit(
     }
 
     Start = KeQueryInterruptTime();
-    Result = Scanout->Generation->CommitCrt(&Mmio, &States[0], &States[1]);
+    Result = Scanout->DpPresent ? HdgfxIlkCommitDp(&Mmio, &Scanout->DpSink, &States[0], &States[1]) :
+                                  Scanout->Generation->CommitCrt(&Mmio, &States[0], &States[1]);
     Pipe = &States[1].Pipes[HDGFX_CRT_PIPE];
     Dpll = &States[1].Dplls[States[1].Transcoders[HDGFX_CRT_PIPE].Dpll];
     if (Result != HdgfxModesetSuccess)
@@ -1683,11 +1685,17 @@ HdgfxCrtCommit(
     else
     {
         Scanout->Generation->ReadDisplayState(&Mmio, &States[0]);
-        Mismatch = HdgfxCompareCrtState(&States[1], &States[0]);
+        Mismatch = Scanout->DpPresent ? HdgfxCompareDpState(&States[1], &States[0]) :
+                                        HdgfxCompareCrtState(&States[1], &States[0]);
+        if (Scanout->DpPresent)
+        {
+            DPRINT1("DP port %c: %lu lane(s) at %lu kHz, swing %lu, emphasis %lu\n", (CHAR)('B' + States[0].Dp.Port),
+                    States[0].Dp.Lanes, States[1].Dp.LinkKHz, States[0].Dp.Swing, States[0].Dp.Emphasis);
+        }
         DPRINT1("CRT %lux%lu on %lux%lu at %lu mHz pitch %lu at 0x%lx, fitter %u %lu,%lu %lux%lu; DPLL N %lu M1 %lu "
                 "M2 %lu P1 %lu P2 %lu = %lu kHz, FDI x%lu: %I64u ms, readback %s%s\n",
                 Scanout->Width, Scanout->Height, Pipe->Timings.HActive, Pipe->Timings.VActive,
-                HdgfxRefreshMilliHz(&Pipe->Timings, Dpll->DotKHz), Pipe->Primary.Stride, Pipe->Primary.Surface,
+                HdgfxRefreshMilliHz(&Pipe->Timings, Scanout->CrtTiming.DotKHz), Pipe->Primary.Stride, Pipe->Primary.Surface,
                 Pipe->PanelFitter.Enabled, Pipe->PanelFitter.X, Pipe->PanelFitter.Y,
                 Pipe->PanelFitter.Width, Pipe->PanelFitter.Height,
                 Dpll->N, Dpll->M1, Dpll->M2, Dpll->P1, Dpll->P2, Dpll->DotKHz, Pipe->FdiTx.Lanes,
@@ -1715,7 +1723,7 @@ HdgfxCrtOff(
 
     HdgfxMmioInit(Scanout->Registers, &Mmio);
     Scanout->Generation->ReadDisplayState(&Mmio, State);
-    Result = Scanout->Generation->DisableCrt(&Mmio, State);
+    Result = State->Dp.Enabled ? HdgfxIlkDisableDp(&Mmio, State) : Scanout->Generation->DisableCrt(&Mmio, State);
     DPRINT1("CRT off: %s\n", HdgfxModesetStatusName(Result));
     ExFreePoolWithTag(State, HDGFX_TAG);
     return Result == HdgfxModesetSuccess ? STATUS_SUCCESS : STATUS_DEVICE_HARDWARE_ERROR;
@@ -1880,6 +1888,39 @@ HdgfxCrtModes(
 }
 
 static BOOLEAN
+HdgfxDpDetect(
+    _Inout_ PHDGFX_SCANOUT Scanout,
+    _In_ const HDGFX_MMIO *Mmio,
+    _Out_writes_bytes_(HDGFX_EDID_SIZE) PUCHAR Edid,
+    _Out_ PULONG EdidLength)
+{
+    HDGFX_DP_SINK Sink;
+    HDGFX_EDID Parsed;
+
+    Scanout->DpPresent = FALSE;
+    if (Scanout->Generation->DpPrecharge == 0 ||
+        !HdgfxDpFindSink(Mmio, Scanout->Generation->DpPrecharge, &Sink))
+    {
+        return FALSE;
+    }
+
+    Scanout->DpSink = Sink;
+    Scanout->DpPresent = TRUE;
+    if (HdgfxDpReadI2c(Mmio, &Sink, HDGFX_DDC_ADDRESS, Edid, HDGFX_EDID_SIZE) && HdgfxEdidParse(Edid, &Parsed))
+    {
+        *EdidLength = HDGFX_EDID_SIZE;
+        if (Parsed.DtdCount != 0)
+        {
+            Scanout->CrtTiming = Parsed.Dtds[0];
+            Scanout->CrtTimingValid = TRUE;
+        }
+    }
+    DPRINT1("DP port %c: DPCD 0x%02lx, up to %lu lane(s) at %lu kHz, EDID %s\n", (CHAR)('B' + Sink.Port),
+            Sink.Revision, Sink.MaxLanes, Sink.MaxLinkKHz, *EdidLength != 0 ? "read" : "not read");
+    return TRUE;
+}
+
+static BOOLEAN
 HdgfxCrtDetect(
     _Inout_ PHDGFX_SCANOUT Scanout,
     _Out_writes_bytes_(HDGFX_EDID_SIZE) PUCHAR Edid,
@@ -1893,6 +1934,9 @@ HdgfxCrtDetect(
 
     *EdidLength = 0;
     HdgfxMmioInit(Scanout->Registers, &Mmio);
+    /* TODO: DisplayPort hot plug and retraining after the sink drops the link */
+    if (HdgfxDpDetect(Scanout, &Mmio, Edid, EdidLength))
+        return TRUE;
     Status = Scanout->Generation->DetectCrt(&Mmio, &Attached);
     if (Status != HdgfxModesetSuccess)
         DPRINT1("CRT load detection: %s\n", HdgfxModesetStatusName(Status));

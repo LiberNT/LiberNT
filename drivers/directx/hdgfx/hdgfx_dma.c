@@ -650,8 +650,9 @@ HdgfxRenderGen(
     End = (PULONG)(Base + BatchOffset + Submit.BatchLength);
     HdgfxMiBatchEnd((uint32_t *)End);
     End[1] = 0;
-    if (Adapter->Generation->Gen >= 7 &&
-        !HdgfxIvbCheckBatch((const uint32_t *)(Base + BatchOffset), Submit.BatchLength / sizeof(ULONG),
+    if (Adapter->Generation->Gen >= 6 &&
+        !HdgfxIvbCheckBatch(Adapter->Generation->Gen, (const uint32_t *)(Base + BatchOffset),
+                            Submit.BatchLength / sizeof(ULONG),
                             (Submit.Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0, &Offending))
     {
         DPRINT1("User batch refused at dword %lu: 0x%08lx 0x%08lx\n", Offending,
@@ -1101,7 +1102,7 @@ HdgfxRecheckUserBatch(
     PULONG Batch;
     uint32_t Offending;
 
-    if (Adapter->Generation->Gen < 7 ||
+    if (Adapter->Generation->Gen < 6 ||
         Patch->DmaBufferSubmissionEndOffset - Patch->DmaBufferSubmissionStartOffset < sizeof(*Record) + sizeof(*User))
     {
         return;
@@ -1111,7 +1112,8 @@ HdgfxRecheckUserBatch(
     if (Record->Type != HDGFX_DMA_USER || User->BatchOffset >= Record->Size)
         return;
     Batch = (PULONG)((PUCHAR)Record + User->BatchOffset);
-    if (!HdgfxIvbCheckBatch((const uint32_t *)Batch, (Record->Size - User->BatchOffset) / sizeof(ULONG),
+    if (!HdgfxIvbCheckBatch(Adapter->Generation->Gen, (const uint32_t *)Batch,
+                            (Record->Size - User->BatchOffset) / sizeof(ULONG),
                             (User->Flags & HDGFX_GEN_SUBMIT_BLITTER) != 0, &Offending))
     {
         DPRINT1("Patched user batch refused at dword %lu: 0x%08lx\n", Offending, Batch[Offending]);
@@ -1371,9 +1373,9 @@ HdgfxRunBatch(
     HDGFX_QUEUE_STATE State = HdgfxQueueDone;
     HDGFX_MMIO Mmio;
     uint32_t Dwords[4];
-    BOOLEAN Gen7 = Adapter->Generation->Gen >= 7;
-    PHDGFX_RING Ring = Gen7 && Blitter ? &Adapter->BltRing : &Adapter->Ring;
-    ULONG Count = Gen7 ? HdgfxIvbMiBatchStart(Dwords, Address) :
+    BOOLEAN TwoRings = Adapter->Generation->Gen >= 6;
+    PHDGFX_RING Ring = TwoRings && Blitter ? &Adapter->BltRing : &Adapter->Ring;
+    ULONG Count = TwoRings ? HdgfxIvbMiBatchStart(Dwords, Address) :
                   Secure ? HdgfxMiBatchStart(Dwords, Address) : HdgfxMiUserBatchStart(Dwords, Address);
     ULONG Bytes = Count * sizeof(ULONG);
     ULONG Padding;
@@ -1406,7 +1408,7 @@ HdgfxRunBatch(
             HdgfxRingFence(Adapter, &Mmio, Head);
         State = HdgfxQueueRing;
     }
-    else if ((!Gen7 || HdgfxIvbEmitInvalidate(Adapter->ActiveRing, Head)) &&
+    else if ((!TwoRings || HdgfxIvbEmitInvalidate(Adapter->ActiveRing, Head)) &&
              HdgfxRingEmit(Adapter->ActiveRing, Head, Dwords, Count))
     {
         Adapter->RingUnfenced = TRUE;

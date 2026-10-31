@@ -82,6 +82,8 @@ typedef struct _HDGFX_SCANOUT
     BOOLEAN LvdsActive;
     HDGFX_DTD CrtTiming;
     BOOLEAN CrtTimingValid;
+    BOOLEAN DpPresent;
+    HDGFX_DP_SINK DpSink;
     BOOLEAN CrtActive;
     BOOLEAN CrtDisplayOff;
     ULONGLONG Bar0;
