@@ -15,7 +15,7 @@
 typedef struct _TEST_CPU
 {
     ULONG64 Cr3, Cr4;
-    ULONG64 PageFlushes, FullFlushes, Cr3Writes, Cr4Writes, Invpcids, CpuidCalls;
+    ULONG64 PageFlushes, FullFlushes, NonGlobalFlushes, Cr3Writes, Cr4Writes, Invpcids, NonGlobalInvpcids, CpuidCalls;
     ULONG64 Pages[8];
     ULONG64 Pending;
     BOOLEAN Enabled;
@@ -44,15 +44,28 @@ static VOID FlushAll(VOID)
         Cpu->Pages[Index] = 0;
 }
 
+static VOID FlushNonGlobal(VOID)
+{
+    TEST_CPU *Cpu = &Cpus[CurrentCpu];
+    ULONG Index;
+    Cpu->NonGlobalFlushes++;
+    for (Index = 0; Index < RTL_NUMBER_OF(Cpu->Pages); Index++)
+        if (Cpu->Pages[Index] < MI_AMD64_USER_END)
+            Cpu->Pages[Index] = 0;
+}
+
 VOID MiAmd64TlbWriteCr3(ULONG64 Value)
 {
     TEST_CPU *Cpu = &Cpus[CurrentCpu];
     CHECK(!Cpu->Enabled);
     CHECK(!(Value & (1ULL << 63)));
-    CHECK((Cpu->Cr4 & ((1ULL << 7) | (1ULL << 17))) == 0);
+    CHECK((Cpu->Cr4 & (1ULL << 17)) == 0);
     Cpu->Cr3 = Value;
     Cpu->Cr3Writes++;
-    FlushAll();
+    if (Cpu->Cr4 & (1ULL << 7))
+        FlushNonGlobal();
+    else
+        FlushAll();
 }
 
 VOID MiAmd64TlbWriteCr4(ULONG64 Value)
@@ -99,6 +112,14 @@ VOID MiAmd64TlbInvpcid(VOID)
     CHECK(CurrentCpu % 4 == 0);
     Cpus[CurrentCpu].Invpcids++;
     FlushAll();
+}
+
+VOID MiAmd64TlbInvpcidNonGlobal(VOID)
+{
+    CHECK(!Cpus[CurrentCpu].Enabled);
+    CHECK(CurrentCpu % 4 == 0);
+    Cpus[CurrentCpu].NonGlobalInvpcids++;
+    FlushNonGlobal();
 }
 
 BOOLEAN MiAmd64TlbDisableInterrupts(VOID)
@@ -218,10 +239,30 @@ static VOID LocalCases(VOID)
         Full = Cpu->FullFlushes;
         MiAmd64FlushTargets(~ActiveCpus, 0, 0);
         CHECK(Cpu->FullFlushes == Full);
-        MiArchInvalidateTlbRange((PVOID)(ULONG_PTR)0x1000, 64 * PAGE_SIZE, MiTlbLocal);
+        MiArchInvalidateTlbRange((PVOID)(ULONG_PTR)0xffff800000001000ULL, 64 * PAGE_SIZE, MiTlbLocal);
         CHECK(Cpu->PageFlushes == Pages + 64 && Cpu->FullFlushes == Full);
-        MiArchInvalidateTlbRange((PVOID)(ULONG_PTR)0x1000, 65 * PAGE_SIZE, MiTlbLocal);
-        CHECK(Cpu->FullFlushes > Full);
+        MiArchInvalidateTlbRange((PVOID)(ULONG_PTR)0x1000, 31 * PAGE_SIZE, MiTlbLocal);
+        CHECK(Cpu->PageFlushes == Pages + 95 && Cpu->FullFlushes == Full && Cpu->NonGlobalFlushes == 0);
+        Cpu->Pages[0] = 0x2000;
+        Cpu->Pages[1] = 0xffff800000005000ULL;
+        MiArchInvalidateTlbRange((PVOID)(ULONG_PTR)0x1000, 32 * PAGE_SIZE, MiTlbLocal);
+        CHECK(Cpu->PageFlushes == Pages + 95 && Cpu->Pages[0] == 0);
+        CHECK(Cpu->NonGlobalInvpcids == (CpuIndex == 0 ? 1u : 0u));
+        if (CpuIndex == 0 || CpuIndex == 2)
+            CHECK(Cpu->NonGlobalFlushes == 1 && Cpu->FullFlushes == Full && Cpu->Pages[1] != 0);
+        else
+            CHECK(Cpu->NonGlobalFlushes == 0 && Cpu->FullFlushes == Full + (CpuIndex == 1 ? 1u : 2u));
+        CHECK(Cpu->Cr4 == Cr4 && Cpu->Enabled && Cpu->Irql == 0);
+        Full = Cpu->FullFlushes;
+        Cpu->NonGlobalFlushes = 0;
+        MiArchInvalidateTlbRange((PVOID)(ULONG_PTR)(MI_AMD64_USER_END - 32 * PAGE_SIZE), 32 * PAGE_SIZE, MiTlbLocal);
+        CHECK(Cpu->PageFlushes == Pages + 95);
+        CHECK(Cpu->NonGlobalFlushes + Cpu->FullFlushes - Full != 0);
+        MiArchInvalidateTlbRange((PVOID)(ULONG_PTR)(MI_AMD64_USER_END - 31 * PAGE_SIZE), 32 * PAGE_SIZE, MiTlbLocal);
+        CHECK(Cpu->PageFlushes == Pages + 95);
+        Full = Cpu->FullFlushes;
+        MiArchInvalidateTlbRange((PVOID)(ULONG_PTR)0xffff800000001000ULL, 65 * PAGE_SIZE, MiTlbLocal);
+        CHECK(Cpu->FullFlushes > Full && Cpu->PageFlushes == Pages + 95);
     }
     CHECK(KiTbFlushTimeStamp == 4);
     CHECK(Ipis == 0);

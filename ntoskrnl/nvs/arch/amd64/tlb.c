@@ -60,7 +60,15 @@ MiAmd64FlushLocal(ULONG64 Address, ULONG64 Pages)
 {
     BOOLEAN Enabled = MiAmd64TlbDisableInterrupts();
 
-    if (Pages != 0)
+    if (Pages == MI_AMD64_TLB_NON_GLOBAL && (MiAmd64TlbCapabilities() & MI_AMD64_TLB_INVPCID))
+    {
+        MiAmd64TlbInvpcidNonGlobal();
+    }
+    else if (Pages == MI_AMD64_TLB_NON_GLOBAL && !(MiAmd64TlbReadCr4() & (1ULL << 17)))
+    {
+        MiAmd64TlbWriteCr3(MiAmd64TlbReadCr3() & ~(1ULL << 63));
+    }
+    else if (Pages != 0 && Pages != MI_AMD64_TLB_NON_GLOBAL)
     {
         do
         {
@@ -117,10 +125,13 @@ MiAmd64FlushTargets(ULONG64 Targets, ULONG64 Address, ULONG64 Pages)
     MI_ASSERT(Cpu < MAXIMUM_PROCESSORS);
     Targets &= MiAmd64TlbActiveCpus() | (1ULL << Cpu);
     Address &= ~((ULONG64)PAGE_SIZE - 1);
-    if (Pages > MI_AMD64_TLB_RANGE_LIMIT ||
-        !MiAmd64CanonicalAddress(Address) ||
-        (Pages != 0 && (Pages - 1 > (~Address >> PAGE_SHIFT) ||
-                       !MiAmd64CanonicalAddress(Address + ((Pages - 1) << PAGE_SHIFT)))))
+    if (Pages > MI_AMD64_TLB_USER_RANGE_LIMIT && Address < MI_AMD64_USER_END &&
+        Pages - 1 < ((MI_AMD64_USER_END - Address) >> PAGE_SHIFT))
+        Pages = MI_AMD64_TLB_NON_GLOBAL;
+    else if (Pages > MI_AMD64_TLB_RANGE_LIMIT ||
+             !MiAmd64CanonicalAddress(Address) ||
+             (Pages != 0 && (Pages - 1 > (~Address >> PAGE_SHIFT) ||
+                            !MiAmd64CanonicalAddress(Address + ((Pages - 1) << PAGE_SHIFT)))))
         Pages = 0;
     Remote = Targets & ~(1ULL << Cpu);
     for (Remaining = Remote; Remaining != 0; Remaining &= Remaining - 1)

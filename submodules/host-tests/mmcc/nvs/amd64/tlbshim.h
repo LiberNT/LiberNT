@@ -30,5 +30,6 @@ KIRQL MiAmd64TlbRaiseIrql(VOID);
 VOID MiAmd64TlbLowerIrql(KIRQL Previous);
 VOID MiAmd64TlbPoll(VOID);
 VOID MiAmd64TlbInvpcid(VOID);
+VOID MiAmd64TlbInvpcidNonGlobal(VOID);
 VOID KeFlushCurrentTb(VOID);
 VOID KeFlushEntireTb(BOOLEAN Invalid, BOOLEAN AllProcessors);

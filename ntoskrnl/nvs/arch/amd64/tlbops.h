@@ -65,10 +65,9 @@ MiAmd64TlbPoll(VOID)
 
 FORCEINLINE
 VOID
-MiAmd64TlbInvpcid(VOID)
+MiAmd64TlbInvpcidType(ULONG64 Type)
 {
     volatile struct { ULONG64 Pcid, Address; } Descriptor;
-    ULONG64 Type = 2;
     Descriptor.Pcid = 0;
     Descriptor.Address = 0;
 #if defined(_MSC_VER) && !defined(__clang__)
@@ -76,5 +75,19 @@ MiAmd64TlbInvpcid(VOID)
 #else
     __asm__ __volatile__("invpcid %0, %1" : : "m"(Descriptor), "r"(Type) : "memory");
 #endif
+}
+
+FORCEINLINE
+VOID
+MiAmd64TlbInvpcid(VOID)
+{
+    MiAmd64TlbInvpcidType(2);
+}
+
+FORCEINLINE
+VOID
+MiAmd64TlbInvpcidNonGlobal(VOID)
+{
+    MiAmd64TlbInvpcidType(3);
 }
 #endif
