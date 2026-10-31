@@ -7,6 +7,7 @@ list(APPEND SOURCE
     LoadIconWithScaleDown.c
     propsheet.c
     TabControlKeys.c
+    TaskDialogTitle.c
     testlist.c
     themestate.c
     toolbar.c
