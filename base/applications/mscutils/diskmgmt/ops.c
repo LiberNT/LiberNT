@@ -542,14 +542,20 @@ AssignLetter(
         return FALSE;
     if (*Letter)
         return TRUE;
+    if (StorageUtilGetDriveLetter(DeviceName, Letter) && *Letter)
+        return TRUE;
     Used = GetLogicalDrives();
     for (Next = L'C'; Next <= L'Z'; Next++)
     {
-        if (!(Used & (1u << (Next - L'A'))) && StorageUtilAssignDriveLetter(DeviceName, Next))
+        if (Used & (1u << (Next - L'A')))
+            continue;
+        if (StorageUtilAssignDriveLetter(DeviceName, Next))
         {
             *Letter = Next;
             return TRUE;
         }
+        if (GetLastError() != ERROR_ALREADY_EXISTS)
+            return FALSE;
     }
     SetLastError(ERROR_NO_MORE_ITEMS);
     return FALSE;
