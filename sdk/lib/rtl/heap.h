@@ -523,11 +523,20 @@ RtlpLfhNoteBackendAllocate(PHEAP Heap, ULONG Flags, SIZE_T Size);
 VOID
 RtlpLfhNoteBackendFree(PHEAP Heap, PHEAP_ENTRY HeapEntry);
 
+typedef struct _RTLP_LFH_SLOT
+{
+    PVOID Block;
+    ULONG Index;
+} RTLP_LFH_SLOT, *PRTLP_LFH_SLOT;
+
 PHEAP
 RtlpLfhOwner(PVOID Ptr);
 
+PHEAP
+RtlpLfhLookup(PVOID Ptr, PRTLP_LFH_SLOT Slot);
+
 BOOLEAN
-RtlpLfhFree(PHEAP Heap, PVOID Ptr);
+RtlpLfhFree(PVOID Ptr, PRTLP_LFH_SLOT Slot);
 
 SIZE_T
 RtlpLfhSize(PHEAP Heap, PVOID Ptr);

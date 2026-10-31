@@ -169,11 +169,12 @@ RtlpLfhReleaseEntry(PHEAP_ENTRY Entry)
 
 static
 PRTLP_LFH_USER_BLOCK
-RtlpLfhBlockFromEntry(PHEAP Heap, PHEAP_ENTRY Entry, PVOID Low, PVOID High)
+RtlpLfhBlockFromEntryIndex(PHEAP Heap, PHEAP_ENTRY Entry, PVOID Low, PVOID High, PULONG Index)
 {
     PRTLP_LFH_USER_BLOCK Block;
     ULONG_PTR Offset;
     SIZE_T Distance;
+    ULONG Slot;
 
     if (Entry->SegmentOffset != HEAP_LFH_INDEX)
         return NULL;
@@ -195,10 +196,22 @@ RtlpLfhBlockFromEntry(PHEAP Heap, PHEAP_ENTRY Entry, PVOID Low, PVOID High)
         return NULL;
 
     Distance = (PUCHAR)Entry - Block->FirstSlot;
-    if (Distance % Block->SlotSize || Distance / Block->SlotSize >= Block->SlotCount)
+    if (Distance > MAXULONG)
+        return NULL;
+    Slot = (ULONG)Distance / Block->SlotSize;
+    if (Slot * Block->SlotSize != (ULONG)Distance || Slot >= Block->SlotCount)
         return NULL;
 
+    if (Index)
+        *Index = Slot;
     return Block;
+}
+
+static
+PRTLP_LFH_USER_BLOCK
+RtlpLfhBlockFromEntry(PHEAP Heap, PHEAP_ENTRY Entry, PVOID Low, PVOID High)
+{
+    return RtlpLfhBlockFromEntryIndex(Heap, Entry, Low, High, NULL);
 }
 
 static
@@ -513,35 +526,47 @@ RtlpLfhAllocate(PHEAP Heap, ULONG Flags, SIZE_T Size)
 }
 
 PHEAP
-RtlpLfhOwner(PVOID Ptr)
+RtlpLfhLookup(PVOID Ptr, PRTLP_LFH_SLOT Slot)
 {
     PRTLP_LFH_USER_BLOCK Block;
+    ULONG Index;
 
     if (!Ptr || ((ULONG_PTR)Ptr & (HEAP_ENTRY_SIZE - 1)))
         return NULL;
     if (((PHEAP_ENTRY)Ptr - 1)->SegmentOffset != HEAP_LFH_INDEX)
         return NULL;
-    Block = RtlpLfhBlockFromEntry(NULL, (PHEAP_ENTRY)Ptr - 1, NULL, NULL);
-    return Block ? Block->Heap : NULL;
+    Block = RtlpLfhBlockFromEntryIndex(NULL, (PHEAP_ENTRY)Ptr - 1, NULL, NULL, &Index);
+    if (!Block)
+        return NULL;
+    if (Slot)
+    {
+        Slot->Block = Block;
+        Slot->Index = Index;
+    }
+    return Block->Heap;
+}
+
+PHEAP
+RtlpLfhOwner(PVOID Ptr)
+{
+    return RtlpLfhLookup(Ptr, NULL);
 }
 
 BOOLEAN
-RtlpLfhFree(PHEAP Heap, PVOID Ptr)
+RtlpLfhFree(PVOID Ptr, PRTLP_LFH_SLOT Slot)
 {
-    PRTLP_LFH_HEAP Lfh = Heap->FrontEndHeap;
-    PRTLP_LFH_USER_BLOCK Block;
+    PRTLP_LFH_USER_BLOCK Block = Slot->Block;
+    PRTLP_LFH_HEAP Lfh = Block->Heap->FrontEndHeap;
     PHEAP_ENTRY Entry = (PHEAP_ENTRY)Ptr - 1;
+    ULONG Index = Slot->Index;
     LONGLONG Old, New;
-    ULONG Index;
 
-    Block = RtlpLfhBlockFromEntry(Heap, Entry, NULL, NULL);
-    if (!Block || !RtlpLfhReleaseEntry(Entry))
+    if (!RtlpLfhReleaseEntry(Entry))
     {
         RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
         return FALSE;
     }
 
-    Index = (ULONG)((PUCHAR)Entry - Block->FirstSlot) / (ULONG)Block->SlotSize;
     do
     {
         Old = RtlpLfhReadFreeState(Block);
@@ -589,6 +614,7 @@ PVOID
 RtlpLfhReAllocate(PHEAP Heap, ULONG Flags, PVOID Ptr, SIZE_T Size)
 {
     EXCEPTION_RECORD ExceptionRecord;
+    RTLP_LFH_SLOT Slot;
     SIZE_T OldSize;
     PVOID NewPtr;
 
@@ -622,7 +648,8 @@ RtlpLfhReAllocate(PHEAP Heap, ULONG Flags, PVOID Ptr, SIZE_T Size)
     if ((Flags & HEAP_ZERO_MEMORY) && Size > OldSize)
         RtlZeroMemory((PUCHAR)NewPtr + OldSize, Size - OldSize);
 
-    RtlpLfhFree(Heap, Ptr);
+    if (RtlpLfhLookup(Ptr, &Slot) == Heap)
+        RtlpLfhFree(Ptr, &Slot);
     return NewPtr;
 }
 

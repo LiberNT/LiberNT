@@ -147,6 +147,32 @@ TestWhileLocked(
     CloseHandle(Thread);
 }
 
+static
+VOID
+TestReAllocate(VOID)
+{
+    PUCHAR Block = HeapAlloc(TestHeap, 0, 24), Moved;
+    ULONG Index;
+
+    ok(Block != NULL, "HeapAlloc failed: %lu\n", GetLastError());
+    if (!Block)
+        return;
+    for (Index = 0; Index < 24; Index++)
+        Block[Index] = (UCHAR)(Index * 9 + 1);
+    Moved = HeapReAlloc(TestHeap, 0, Block, 4000);
+    ok(Moved != NULL, "HeapReAlloc failed: %lu\n", GetLastError());
+    if (!Moved)
+    {
+        HeapFree(TestHeap, 0, Block);
+        return;
+    }
+    for (Index = 0; Index < 24 && Moved[Index] == (UCHAR)(Index * 9 + 1); Index++);
+    ok(Index == 24, "HeapReAlloc lost the contents at byte %lu\n", Index);
+    ok(HeapSize(TestHeap, 0, Moved) >= 4000, "HeapSize is %Iu\n", HeapSize(TestHeap, 0, Moved));
+    ok(HeapValidate(TestHeap, 0, NULL), "HeapValidate failed after HeapReAlloc\n");
+    ok(HeapFree(TestHeap, 0, Moved), "HeapFree failed: %lu\n", GetLastError());
+}
+
 START_TEST(HeapLowFragmentation)
 {
     ULONG Compatibility = 2, Information = 0, Index;
@@ -165,6 +191,7 @@ START_TEST(HeapLowFragmentation)
        "HeapQueryInformation failed: %lu\n", GetLastError());
     ok(Information == 2, "HeapCompatibilityInformation is %lu\n", Information);
 
+    TestReAllocate();
     TestWhileLocked(AllocateWhileLocked, NULL, "A low-fragmentation heap allocation");
     TestWhileLocked(FreeWhileLocked, Warm[RTL_NUMBER_OF(Warm) - 1], "A low-fragmentation heap free");
     Warm[RTL_NUMBER_OF(Warm) - 1] = NULL;

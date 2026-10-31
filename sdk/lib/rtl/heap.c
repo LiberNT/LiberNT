@@ -2474,6 +2474,7 @@ BOOLEAN NTAPI RtlFreeHeap(
     PHEAP_VIRTUAL_ALLOC_ENTRY VirtualEntry;
     BOOLEAN Locked = FALSE;
     PHEAP LfhHeap = NULL;
+    RTLP_LFH_SLOT LfhSlot;
     NTSTATUS Status;
 
     /* Freeing NULL pointer is a legal operation */
@@ -2493,7 +2494,7 @@ BOOLEAN NTAPI RtlFreeHeap(
     /* Protect with SEH in case the pointer is not valid */
     _SEH2_TRY
     {
-        LfhHeap = RtlpLfhOwner(Ptr);
+        LfhHeap = RtlpLfhLookup(Ptr, &LfhSlot);
 
         /* Check this entry, fail if it's invalid */
         if (!LfhHeap && (!(HeapEntry->Flags & HEAP_ENTRY_BUSY) ||
@@ -2517,7 +2518,7 @@ BOOLEAN NTAPI RtlFreeHeap(
 
     if (LfhHeap)
     {
-        if (RtlpLfhFree(LfhHeap, Ptr))
+        if (RtlpLfhFree(Ptr, &LfhSlot))
             return TRUE;
         RtlpReportInvalidFree(HeapPtr, Ptr);
         return FALSE;
