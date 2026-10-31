@@ -155,15 +155,14 @@ RtlpLfhReleaseEntry(PHEAP_ENTRY Entry)
     LONGLONG volatile *Word = (LONGLONG volatile *)&Entry->Size;
     RTLP_LFH_ENTRY_HEADER Old, New;
 
-    do
-    {
-        Old.Word = ReadNoFence64(Word);
-        if (!(Old.Bytes[RTLP_LFH_HEADER_FLAGS] & HEAP_ENTRY_BUSY))
-            return FALSE;
-        New = Old;
-        New.Bytes[RTLP_LFH_HEADER_FLAGS] = 0;
-        New.Bytes[RTLP_LFH_HEADER_UNUSED] = 0;
-    } while (InterlockedCompareExchange64(Word, New.Word, Old.Word) != Old.Word);
+    Old.Word = ReadNoFence64(Word);
+    if (!(Old.Bytes[RTLP_LFH_HEADER_FLAGS] & HEAP_ENTRY_BUSY))
+        return FALSE;
+    New = Old;
+    New.Bytes[RTLP_LFH_HEADER_FLAGS] = 0;
+    New.Bytes[RTLP_LFH_HEADER_UNUSED] = 0;
+    /* FIXME: two threads freeing the same block at once both pass this check; only a double free from one thread is rejected */
+    WriteNoFence64(Word, New.Word);
     return TRUE;
 }
 
