@@ -28,12 +28,13 @@ NextDriveLetter(
 
 START_TEST(NextDriveLetter)
 {
-    WCHAR Letter[8], Drive[4], Root[4], Volume[MAX_PATH], DeviceName[MAX_PATH], System[MAX_PATH];
+    WCHAR Letter[8] = { 0 }, Drive[4], Root[4], Volume[MAX_PATH], DeviceName[MAX_PATH], System[MAX_PATH];
     MOUNTMGR_DRIVE_LETTER_INFORMATION Info;
     HANDLE MountMgr;
+    DWORD Length;
 
-    if (!GetEnvironmentVariableW(L"MOUNTMGR_TEST_VOLUME", Letter, ARRAYSIZE(Letter)) ||
-        !iswalpha(Letter[0]) || Letter[1])
+    Length = GetEnvironmentVariableW(L"MOUNTMGR_TEST_VOLUME", Letter, ARRAYSIZE(Letter));
+    if (Length != 1 || !iswalpha(Letter[0]))
     {
         skip("Set MOUNTMGR_TEST_VOLUME to the letter of a volume whose drive letter the test may remove\n");
         return;
@@ -69,7 +70,13 @@ START_TEST(NextDriveLetter)
     ok(Info.CurrentDriveLetter == 0, "CurrentDriveLetter is '%c'\n", Info.CurrentDriveLetter);
     ok(GetDriveTypeW(Root) == DRIVE_NO_ROOT_DIR, "%S still exists\n", Root);
 
-    ok(SetVolumeMountPointW(Root, Volume), "SetVolumeMountPoint failed with %lu\n", GetLastError());
+    if (!SetVolumeMountPointW(Root, Volume))
+    {
+        ok(0, "SetVolumeMountPoint failed with %lu; restore it with: mountvol %S %S\n", GetLastError(), Drive,
+           Volume);
+        CloseHandle(MountMgr);
+        return;
+    }
     ok(NextDriveLetter(MountMgr, DeviceName, &Info), "NEXT_DRIVE_LETTER failed with %lu\n", GetLastError());
     ok(!Info.DriveLetterWasAssigned, "a letter was assigned to a volume that has one\n");
     ok(towupper(Info.CurrentDriveLetter) == Drive[0], "CurrentDriveLetter is '%c'\n", Info.CurrentDriveLetter);
