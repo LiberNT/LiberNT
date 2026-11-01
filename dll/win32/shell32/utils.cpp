@@ -1696,6 +1696,59 @@ SHGetComputerDisplayNameW(
  *
  * https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shsetlocalizedname
  */
+static HRESULT
+SHELL_GetLocalizedNameLocation(
+    _In_ PCWSTR pszPath,
+    _Out_writes_(MAX_PATH) PWSTR pszFolder,
+    _Out_writes_(MAX_PATH) PWSTR pszIni,
+    _Out_ PCWSTR *ppszSection,
+    _Out_ PCWSTR *ppszKey)
+{
+    DWORD dwAttrs;
+
+    if (!pszPath)
+        return E_INVALIDARG;
+
+    dwAttrs = GetFileAttributesW(pszPath);
+    if (dwAttrs == INVALID_FILE_ATTRIBUTES)
+        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+
+    if (FAILED(StringCchCopyW(pszFolder, MAX_PATH, pszPath)))
+        return E_INVALIDARG;
+
+    if (dwAttrs & FILE_ATTRIBUTE_DIRECTORY)
+    {
+        *ppszSection = L".ShellClassInfo";
+        *ppszKey = L"LocalizedResourceName";
+    }
+    else
+    {
+        *ppszSection = L"LocalizedFileNames";
+        *ppszKey = PathFindFileNameW(pszPath);
+        PathRemoveFileSpecW(pszFolder);
+    }
+
+    if (FAILED(StringCchCopyW(pszIni, MAX_PATH, pszFolder)) || !PathAppendW(pszIni, L"desktop.ini"))
+        return E_INVALIDARG;
+    return S_OK;
+}
+
+static BOOL
+SHELL_IniHasKeys(_In_ PCWSTR pszIni)
+{
+    WCHAR szSections[1024], szKeys[64];
+    PCWSTR pszSection;
+
+    if (!GetPrivateProfileSectionNamesW(szSections, _countof(szSections), pszIni))
+        return FALSE;
+    for (pszSection = szSections; *pszSection; pszSection += wcslen(pszSection) + 1)
+    {
+        if (GetPrivateProfileSectionW(pszSection, szKeys, _countof(szKeys), pszIni))
+            return TRUE;
+    }
+    return FALSE;
+}
+
 EXTERN_C
 HRESULT WINAPI
 SHSetLocalizedName(
@@ -1703,70 +1756,116 @@ SHSetLocalizedName(
     _In_ PCWSTR pszResModule,
     _In_ INT idsRes)
 {
+    WCHAR szFolder[MAX_PATH], szIni[MAX_PATH], szShort[MAX_PATH], szValue[MAX_PATH + 16];
+    PCWSTR pszSection, pszKey;
+    DWORD dwAttrs;
     HRESULT hr;
-    IShellFolder *pDesktop = NULL, *pParent = NULL;
-    LPITEMIDLIST pidl = NULL;
-    LPCITEMIDLIST pidlLast;
-    HANDLE hProcessHeap;
-    INT cchShortMax, cchShort, cchName;
-    PWSTR pszShortPath = NULL, pszName = NULL;
 
-    hr = SHCoInitializeAnyApartment();
-    if (FAILED_UNEXPECTEDLY(hr))
+    hr = SHELL_GetLocalizedNameLocation(pszPath, szFolder, szIni, &pszSection, &pszKey);
+    if (FAILED(hr))
         return hr;
 
-    hr = SHGetDesktopFolder(&pDesktop);
-    if (FAILED_UNEXPECTEDLY(hr))
-        goto Cleanup;
+    if (GetShortPathNameW(pszResModule, szShort, _countof(szShort)))
+        pszResModule = szShort;
 
-    hr = pDesktop->ParseDisplayName(NULL, NULL, (PWSTR)pszPath, NULL, &pidl, NULL);
-    if (FAILED_UNEXPECTEDLY(hr))
-        goto Cleanup;
+    hr = StringCchPrintfW(szValue, _countof(szValue), L"@%s,%d", pszResModule, -idsRes);
+    if (FAILED(hr))
+        return hr;
 
-    hr = SHBindToParent(pidl, IID_PPV_ARG(IShellFolder, &pParent), &pidlLast);
-    if (FAILED_UNEXPECTEDLY(hr))
-        goto Cleanup;
+    dwAttrs = GetFileAttributesW(szIni);
+    if (dwAttrs != INVALID_FILE_ATTRIBUTES)
+        SetFileAttributesW(szIni, FILE_ATTRIBUTE_NORMAL);
 
-    hProcessHeap = GetProcessHeap();
-    cchShortMax = lstrlenW(pszResModule) + 1;
-    pszShortPath = (PWSTR)HeapAlloc(hProcessHeap, 0, cchShortMax * sizeof(WCHAR));
-    if (!pszShortPath)
+    if (!WritePrivateProfileStringW(pszSection, pszKey, szValue, szIni))
     {
-        hr = E_OUTOFMEMORY;
-        goto Cleanup;
+        hr = HRESULT_FROM_WIN32(GetLastError());
+        if (dwAttrs != INVALID_FILE_ATTRIBUTES)
+            SetFileAttributesW(szIni, dwAttrs);
+        return hr;
     }
+    WritePrivateProfileStringW(NULL, NULL, NULL, szIni);
 
-    cchShort = GetShortPathNameW(pszResModule, pszShortPath, cchShortMax);
-    if (cchShort)
-        pszResModule = pszShortPath;
+    SetFileAttributesW(szIni, FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
+    PathMakeSystemFolderW(szFolder);
+    return S_OK;
+}
+
+EXTERN_C
+HRESULT WINAPI
+SHRemoveLocalizedName(_In_ PCWSTR pszPath)
+{
+    WCHAR szFolder[MAX_PATH], szIni[MAX_PATH];
+    PCWSTR pszSection, pszKey;
+    DWORD dwAttrs;
+    HRESULT hr;
+
+    hr = SHELL_GetLocalizedNameLocation(pszPath, szFolder, szIni, &pszSection, &pszKey);
+    if (FAILED(hr))
+        return hr;
+
+    dwAttrs = GetFileAttributesW(szIni);
+    if (dwAttrs == INVALID_FILE_ATTRIBUTES)
+        return S_OK;
+
+    SetFileAttributesW(szIni, FILE_ATTRIBUTE_NORMAL);
+    WritePrivateProfileStringW(pszSection, pszKey, NULL, szIni);
+    WritePrivateProfileStringW(NULL, NULL, NULL, szIni);
+
+    if (!SHELL_IniHasKeys(szIni))
+        DeleteFileW(szIni);
     else
-        cchShort = cchShortMax;
+        SetFileAttributesW(szIni, dwAttrs);
+    return S_OK;
+}
 
-    /* 14 == '@' + ',' + '-' + (digits of max width 10) + NUL */
-    cchName = cchShort + 14;
-    pszName = (PWSTR)HeapAlloc(hProcessHeap, 0, cchName * sizeof(WCHAR));
-    if (!pszName)
-    {
-        hr = E_OUTOFMEMORY;
-        goto Cleanup;
-    }
+EXTERN_C
+HRESULT WINAPI
+SHGetLocalizedName(
+    _In_ PCWSTR pszPath,
+    _Out_writes_(cch) PWSTR pszResModule,
+    _In_ UINT cch,
+    _Out_ int *pidsRes)
+{
+    WCHAR szFolder[MAX_PATH], szIni[MAX_PATH], szValue[MAX_PATH + 32];
+    PCWSTR pszSection, pszKey;
+    PWSTR pszModule, pszComma;
+    int idsRes;
+    HRESULT hr;
 
-    wnsprintfW(pszName, cchName, L"@%s,%d", pszResModule, -idsRes);
-    hr = pParent->SetNameOf(NULL, pidlLast, pszName, 0, NULL);
+    TRACE("(%s, %p, %u, %p)\n", debugstr_w(pszPath), pszResModule, cch, pidsRes);
 
-Cleanup:
-    if (pszName)
-        HeapFree(hProcessHeap, 0, pszName);
-    if (pszShortPath)
-        HeapFree(hProcessHeap, 0, pszShortPath);
-    if (pParent)
-        pParent->Release();
-    if (pidl)
-        SHFree(pidl);
-    if (pDesktop)
-        pDesktop->Release();
-    CoUninitialize();
-    return hr;
+    if (!pszResModule || !cch || !pidsRes)
+        return E_INVALIDARG;
+
+    *pszResModule = UNICODE_NULL;
+    *pidsRes = 0;
+
+    hr = SHELL_GetLocalizedNameLocation(pszPath, szFolder, szIni, &pszSection, &pszKey);
+    if (FAILED(hr))
+        return hr;
+
+    if (!PathIsSystemFolderW(szFolder, 0))
+        return E_INVALIDARG;
+
+    if (!GetPrivateProfileStringW(pszSection, pszKey, L"", szValue, _countof(szValue), szIni) || !szValue[0])
+        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+
+    pszComma = wcsrchr(szValue, L',');
+    if (!pszComma)
+        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+
+    *pszComma++ = UNICODE_NULL;
+    idsRes = _wtoi(pszComma);
+    if (idsRes >= 0)
+        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+
+    pszModule = (szValue[0] == L'@') ? &szValue[1] : szValue;
+    if (wcslen(pszModule) >= cch)
+        return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+
+    StringCchCopyW(pszResModule, cch, pszModule);
+    *pidsRes = -idsRes;
+    return S_OK;
 }
 
 /*************************************************************************

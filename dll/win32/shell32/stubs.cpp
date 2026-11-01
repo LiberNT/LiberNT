@@ -771,63 +771,6 @@ SHChangeNotifyRegisterThread(_In_ SCNRT_STATUS Status)
     TRACE("SHChangeNotifyRegisterThread(%d)\n", Status);
 }
 
-EXTERN_C HRESULT
-WINAPI
-SHGetLocalizedName(
-    _In_ PCWSTR pszPath,
-    _Out_writes_(cch) PWSTR pszResModule,
-    _In_ UINT cch,
-    _Out_ int *pidsRes)
-{
-    WCHAR szIniFile[MAX_PATH];
-    WCHAR szValue[MAX_PATH + 32];
-    WCHAR szExpanded[MAX_PATH];
-    PWSTR pszComma;
-    int idsRes;
-
-    TRACE("(%s, %p, %u, %p)\n", debugstr_w(pszPath), pszResModule, cch, pidsRes);
-
-    if (!pszPath || !pszResModule || !cch || !pidsRes)
-        return E_INVALIDARG;
-
-    *pszResModule = UNICODE_NULL;
-    *pidsRes = 0;
-
-    if (FAILED(StringCchCopyW(szIniFile, _countof(szIniFile), pszPath)))
-        return E_FAIL;
-    if (!PathAppendW(szIniFile, L"desktop.ini"))
-        return E_FAIL;
-
-    if (!GetPrivateProfileStringW(L".ShellClassInfo", L"LocalizedResourceName", L"",
-                                  szValue, _countof(szValue), szIniFile) ||
-        !szValue[0])
-    {
-        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
-    }
-
-    pszComma = wcsrchr(szValue, L',');
-    if (!pszComma)
-        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
-
-    *pszComma++ = UNICODE_NULL;
-    idsRes = _wtoi(pszComma);
-    if (idsRes >= 0)
-        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
-
-    if (szValue[0] == L'@')
-        StringCchCopyW(szValue, _countof(szValue), &szValue[1]);
-
-    if (!ExpandEnvironmentStringsW(szValue, szExpanded, _countof(szExpanded)))
-        return HRESULT_FROM_WIN32(GetLastError());
-
-    if (wcslen(szExpanded) >= cch)
-        return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
-
-    StringCchCopyW(pszResModule, cch, szExpanded);
-    *pidsRes = -idsRes;
-    return S_OK;
-}
-
 EXTERN_C DWORD
 WINAPI
 DisconnectWindowsDialog(_In_ HWND hwndParent)
