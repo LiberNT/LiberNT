@@ -180,10 +180,10 @@ static SECURITY_STATUS SEC_ENTRY nego_InitializeSecurityContextW(
           Reserved1, TargetDataRep, pInput, Reserved1, phNewContext, pOutput,
           pfContextAttr, ptsExpiry);
 
-    return ntlm_InitializeSecurityContextW( phCredential, phContext, pszTargetName,
-                                            fContextReq, Reserved1, TargetDataRep,
-                                            pInput, Reserved2, phNewContext,
-                                            pOutput, pfContextAttr, ptsExpiry );
+    return NegoInitializeSecurityContextW( phCredential, phContext, pszTargetName,
+                                           fContextReq, Reserved1, TargetDataRep,
+                                           pInput, Reserved2, phNewContext,
+                                           pOutput, pfContextAttr, ptsExpiry );
 }
 
 /***********************************************************************
@@ -229,9 +229,9 @@ static SECURITY_STATUS SEC_ENTRY nego_AcceptSecurityContext(
           pInput, fContextReq, TargetDataRep, phNewContext, pOutput, pfContextAttr,
           ptsExpiry);
 
-    return ntlm_AcceptSecurityContext( phCredential, phContext, pInput,
-                                       fContextReq, TargetDataRep, phNewContext,
-                                       pOutput, pfContextAttr, ptsExpiry );
+    return NegoAcceptSecurityContext( phCredential, phContext, pInput,
+                                      fContextReq, TargetDataRep, phNewContext,
+                                      pOutput, pfContextAttr, ptsExpiry );
 }
 
 /***********************************************************************
@@ -261,7 +261,7 @@ static SECURITY_STATUS SEC_ENTRY nego_DeleteSecurityContext(PCtxtHandle phContex
 {
     TRACE("%p\n", phContext);
 
-    return ntlm_DeleteSecurityContext( phContext );
+    return NegoDeleteSecurityContext( phContext );
 }
 
 /***********************************************************************
@@ -304,7 +304,7 @@ static SECURITY_STATUS SEC_ENTRY nego_QueryContextAttributesW(
         return SEC_E_OK;
     }
     default:
-        return ntlm_QueryContextAttributesW( phContext, ulAttribute, pBuffer );
+        return ntlm_QueryContextAttributesW( NegoNtlmContext(phContext), ulAttribute, pBuffer );
     }
 }
 
@@ -328,7 +328,7 @@ static SECURITY_STATUS SEC_ENTRY nego_QueryContextAttributesA(PCtxtHandle phCont
         return SEC_E_OK;
     }
     default:
-        return ntlm_QueryContextAttributesA( phContext, ulAttribute, pBuffer );
+        return ntlm_QueryContextAttributesA( NegoNtlmContext(phContext), ulAttribute, pBuffer );
     }
 }
 
@@ -337,18 +337,9 @@ static SECURITY_STATUS SEC_ENTRY nego_QueryContextAttributesA(PCtxtHandle phCont
  */
 static SECURITY_STATUS SEC_ENTRY nego_ImpersonateSecurityContext(PCtxtHandle phContext)
 {
-    SECURITY_STATUS ret;
-
     TRACE("%p\n", phContext);
-    if (phContext)
-    {
-        ret = SEC_E_UNSUPPORTED_FUNCTION;
-    }
-    else
-    {
-        ret = SEC_E_INVALID_HANDLE;
-    }
-    return ret;
+
+    return ntlm_ImpersonateSecurityContext( NegoNtlmContext(phContext) );
 }
 
 /***********************************************************************
@@ -356,18 +347,16 @@ static SECURITY_STATUS SEC_ENTRY nego_ImpersonateSecurityContext(PCtxtHandle phC
  */
 static SECURITY_STATUS SEC_ENTRY nego_RevertSecurityContext(PCtxtHandle phContext)
 {
-    SECURITY_STATUS ret;
-
     TRACE("%p\n", phContext);
-    if (phContext)
-    {
-        ret = SEC_E_UNSUPPORTED_FUNCTION;
-    }
-    else
-    {
-        ret = SEC_E_INVALID_HANDLE;
-    }
-    return ret;
+
+    return ntlm_RevertSecurityContext( NegoNtlmContext(phContext) );
+}
+
+static SECURITY_STATUS SEC_ENTRY nego_QuerySecurityContextToken(PCtxtHandle phContext, HANDLE *phToken)
+{
+    TRACE("%p %p\n", phContext, phToken);
+
+    return ntlm_QuerySecurityContextToken( NegoNtlmContext(phContext), phToken );
 }
 
 /***********************************************************************
@@ -378,7 +367,7 @@ static SECURITY_STATUS SEC_ENTRY nego_MakeSignature(PCtxtHandle phContext,
 {
     TRACE("%p, 0x%08x, %p, %u\n", phContext, fQOP, pMessage, MessageSeqNo);
 
-    return ntlm_MakeSignature( phContext, fQOP, pMessage, MessageSeqNo );
+    return ntlm_MakeSignature( NegoNtlmContext(phContext), fQOP, pMessage, MessageSeqNo );
 }
 
 /***********************************************************************
@@ -389,7 +378,7 @@ static SECURITY_STATUS SEC_ENTRY nego_VerifySignature(PCtxtHandle phContext,
 {
     TRACE("%p, %p, %u, %p\n", phContext, pMessage, MessageSeqNo, pfQOP);
 
-    return ntlm_VerifySignature( phContext, pMessage, MessageSeqNo, pfQOP );
+    return ntlm_VerifySignature( NegoNtlmContext(phContext), pMessage, MessageSeqNo, pfQOP );
 }
 
 /***********************************************************************
@@ -410,7 +399,7 @@ static SECURITY_STATUS SEC_ENTRY nego_EncryptMessage(PCtxtHandle phContext,
 {
     TRACE("%p, 0x%08x, %p, %u\n", phContext, fQOP, pMessage, MessageSeqNo);
 
-    return ntlm_EncryptMessage( phContext, fQOP, pMessage, MessageSeqNo );
+    return ntlm_EncryptMessage( NegoNtlmContext(phContext), fQOP, pMessage, MessageSeqNo );
 }
 
 /***********************************************************************
@@ -421,7 +410,7 @@ static SECURITY_STATUS SEC_ENTRY nego_DecryptMessage(PCtxtHandle phContext,
 {
     TRACE("%p, %p, %u, %p\n", phContext, pMessage, MessageSeqNo, pfQOP);
 
-    return ntlm_DecryptMessage( phContext, pMessage, MessageSeqNo, pfQOP );
+    return ntlm_DecryptMessage( NegoNtlmContext(phContext), pMessage, MessageSeqNo, pfQOP );
 }
 
 static const SecurityFunctionTableA negoTableA = {
@@ -449,7 +438,7 @@ static const SecurityFunctionTableA negoTableA = {
     NULL,   /* ImportSecurityContextA */
     NULL,   /* AddCredentialsA */
     NULL,   /* Reserved8 */
-    NULL,   /* QuerySecurityContextToken */
+    nego_QuerySecurityContextToken,     /* QuerySecurityContextToken */
     nego_EncryptMessage,                /* EncryptMessage */
     nego_DecryptMessage,                /* DecryptMessage */
     NULL,   /* SetContextAttributesA */
@@ -480,7 +469,7 @@ static const SecurityFunctionTableW negoTableW = {
     NULL,   /* ImportSecurityContextW */
     NULL,   /* AddCredentialsW */
     NULL,   /* Reserved8 */
-    NULL,   /* QuerySecurityContextToken */
+    nego_QuerySecurityContextToken,     /* QuerySecurityContextToken */
     nego_EncryptMessage,                /* EncryptMessage */
     nego_DecryptMessage,                /* DecryptMessage */
     NULL,   /* SetContextAttributesW */
