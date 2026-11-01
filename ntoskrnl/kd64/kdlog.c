@@ -39,6 +39,7 @@ static ULONG KdpBootLogSectorSize;
 static PUCHAR KdpBootLogCrashBuffer;
 static ROS_STORAGE_DUMP_INTERFACE KdpBootLogStorage;
 static BOOLEAN KdpBootLogStorageReady;
+static BOOLEAN KdpBootLogStoragePrepared;
 static KEVENT KdpBootLogWake;
 static KEVENT KdpBootLogStopped;
 static volatile BOOLEAN KdpBootLogStopping;
@@ -342,9 +343,13 @@ NTSTATUS NTAPI KdpWriteBootLogAtCrash(_In_opt_ PROS_STORAGE_DUMP_INTERFACE Stora
         if (!KdpBootLogStorageReady)
             return STATUS_NOT_SUPPORTED;
         Storage = &KdpBootLogStorage;
-        Status = Storage->Prepare(Storage->Context);
-        if (!NT_SUCCESS(Status))
-            return Status;
+        if (!KdpBootLogStoragePrepared)
+        {
+            Status = Storage->Prepare(Storage->Context);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            KdpBootLogStoragePrepared = TRUE;
+        }
     }
     else
     {
