@@ -127,6 +127,8 @@ CCabinetWindow::CCabinetWindow() :
     m_DetailsBitmap(NULL),
     m_InHistoryNavigation(FALSE),
     m_FocusViewOnNavigate(FALSE),
+    m_NavigationDepth(0),
+    m_ClosePending(FALSE),
     m_ChangeNotify(0),
     m_NavigationVisible(TRUE),
     m_SearchBrowser(NULL),
@@ -1867,7 +1869,7 @@ CCabinetWindow::AddTab(PCIDLIST_ABSOLUTE pidl, BOOL activate)
         m_ActiveTab = index;
     SyncTabs();
     PlaceBrowsers();
-    if (FAILED(tab->Browser->BrowseToIDList(pidl, SBSP_ABSOLUTE)))
+    if (FAILED(BrowseTab(tab, pidl)))
     {
         CloseTab(index);
         return -1;
@@ -1972,7 +1974,23 @@ CCabinetWindow::Navigate(PCIDLIST_ABSOLUTE pidl)
     CabinetTab *tab = ActiveTab();
 
     if (tab && tab->Browser && pidl)
-        tab->Browser->BrowseToIDList(pidl, SBSP_ABSOLUTE);
+        BrowseTab(tab, pidl);
+}
+
+HRESULT
+CCabinetWindow::BrowseTab(CabinetTab *tab, PCIDLIST_ABSOLUTE pidl)
+{
+    HRESULT hr;
+
+    m_NavigationDepth++;
+    hr = tab->Browser->BrowseToIDList(pidl, SBSP_ABSOLUTE);
+    m_NavigationDepth--;
+    if (!m_NavigationDepth && m_ClosePending && m_hwnd)
+    {
+        m_ClosePending = FALSE;
+        PostMessageW(m_hwnd, WM_CLOSE, 0, 0);
+    }
+    return hr;
 }
 
 void
@@ -1987,7 +2005,7 @@ CCabinetWindow::NavigateHistory(int delta)
     if (target < 0 || target >= tab->HistoryCount)
         return;
     m_InHistoryNavigation = TRUE;
-    if (SUCCEEDED(tab->Browser->BrowseToIDList(tab->History[target], SBSP_ABSOLUTE)))
+    if (SUCCEEDED(BrowseTab(tab, tab->History[target])))
         tab->HistoryIndex = target;
     m_InHistoryNavigation = FALSE;
     UpdateCommands();
@@ -3391,6 +3409,11 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             break;
         }
         case WM_CLOSE:
+            if (m_NavigationDepth)
+            {
+                m_ClosePending = TRUE;
+                return 0;
+            }
             SavePlacement();
             while (m_TabCount > 1)
                 CloseTab(m_TabCount - 1);
