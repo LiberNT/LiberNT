@@ -1795,6 +1795,19 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
             goto done;
         }
     }
+    else if (PlainNetwork)
+    {
+        Status = BuildLm20LogonProfileBuffer(ClientRequest,
+                                             UserInfo,
+                                             &LogonPwdData,
+                                             (PMSV1_0_LM20_LOGON_PROFILE*)ProfileBuffer,
+                                             ProfileBufferSize);
+        if (!NT_SUCCESS(Status))
+        {
+            TRACE("BuildLm20LogonProfileBuffer failed (Status %08lx)\n", Status);
+            goto done;
+        }
+    }
     else if (LogonType == Network)
     {
         //FIXME: no need to do anything, its already done ...
