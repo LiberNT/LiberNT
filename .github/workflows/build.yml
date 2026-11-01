@@ -159,13 +159,7 @@ jobs:
   build-msvc:
     strategy:
       matrix:
-        include:
-          - arch: amd64
-            vsarch: amd64
-          - arch: i386
-            vsarch: amd64_x86
-          - arch: arm64
-            vsarch: amd64_arm64
+        arch: [amd64, i386, arm64]
       fail-fast: false
     runs-on: windows-2025
     steps:
@@ -175,7 +169,7 @@ jobs:
     - name: Set up the MSVC build environment
       uses: ilammy/msvc-dev-cmd@v1
       with:
-        arch: ${{matrix.vsarch}}
+        arch: ${{ matrix.arch == 'i386' && 'amd64_x86' || matrix.arch == 'arm64' && 'amd64_arm64' || 'amd64' }}
 
     - name: Install host build tools
       shell: pwsh
