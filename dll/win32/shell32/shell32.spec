@@ -412,7 +412,7 @@
 @ stdcall -version=0x600+ SHHelpShortcuts_RunDLLA(long long long long) # 2k3:see below, Vista:139
 @ stdcall -version=0x600+ SHHelpShortcuts_RunDLLW(long long long long) # 2k3:see below, Vista:150
 @ stdcall AppCompat_RunDLLW(ptr ptr wstr long) # 2k3:106, Vista:199
-@ stub -version=0x600+ AssocCreateForClasses # Vista:206
+@ stdcall -version=0x600+ AssocCreateForClasses(ptr long ptr ptr) # Vista:206
 @ stub -version=0x600+ AssocGetDetailsOfPropKey # Vista:207
 @ stdcall -version=0x502 CheckEscapesA(str long) # 2k3:107
 @ stdcall CheckEscapesW(wstr long) # 2k3:108, Vista:208

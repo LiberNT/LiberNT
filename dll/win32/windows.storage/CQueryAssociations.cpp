@@ -937,3 +937,208 @@ HRESULT CQueryAssociations::ReturnString(ASSOCF flags, LPWSTR out, DWORD *outlen
 
     return hr;
 }
+
+class CAssocClassesQuery :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IQueryAssociations
+{
+private:
+    IQueryAssociations **m_ppItems;
+    ULONG m_cItems;
+
+    static BOOL IsNotFound(HRESULT hr)
+    {
+        return hr == HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION) ||
+               hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) ||
+               hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+    }
+
+    static HKEY OpenClassKey(const ASSOCIATIONELEMENT *pElement)
+    {
+        WCHAR szKey[MAX_PATH];
+        PCWSTR pszSubKey = NULL;
+        HKEY hRoot = HKEY_CLASSES_ROOT, hKey = NULL;
+
+        switch (pElement->ac)
+        {
+            case ASSOCCLASS_SHELL_KEY:
+            case ASSOCCLASS_PROGID_KEY:
+            case ASSOCCLASS_CLSID_KEY:
+            case ASSOCCLASS_APP_KEY:
+                if (!pElement->hkClass)
+                    return NULL;
+                hRoot = pElement->hkClass;
+                break;
+
+            case ASSOCCLASS_PROGID_STR:
+            case ASSOCCLASS_FIXED_PROGID_STR:
+            case ASSOCCLASS_PROTOCOL_STR:
+                pszSubKey = pElement->pszClass;
+                break;
+
+            case ASSOCCLASS_CLSID_STR:
+                if (!pElement->pszClass || FAILED(StringCchPrintfW(szKey, _countof(szKey), L"CLSID\\%s", pElement->pszClass)))
+                    return NULL;
+                pszSubKey = szKey;
+                break;
+
+            case ASSOCCLASS_APP_STR:
+                if (!pElement->pszClass ||
+                    FAILED(StringCchPrintfW(szKey, _countof(szKey), L"Applications\\%s", PathFindFileNameW(pElement->pszClass))))
+                    return NULL;
+                pszSubKey = szKey;
+                break;
+
+            case ASSOCCLASS_SYSTEM_STR:
+                if (!pElement->pszClass ||
+                    FAILED(StringCchPrintfW(szKey, _countof(szKey), L"SystemFileAssociations\\%s", pElement->pszClass)))
+                    return NULL;
+                pszSubKey = szKey;
+                break;
+
+            case ASSOCCLASS_FOLDER:
+                pszSubKey = L"Folder";
+                break;
+
+            case ASSOCCLASS_STAR:
+                pszSubKey = L"*";
+                break;
+
+            default:
+                return NULL;
+        }
+
+        if (hRoot == HKEY_CLASSES_ROOT && (!pszSubKey || !*pszSubKey))
+            return NULL;
+        if (RegOpenKeyExW(hRoot, pszSubKey, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+            return NULL;
+        return hKey;
+    }
+
+public:
+    CAssocClassesQuery() : m_ppItems(NULL), m_cItems(0)
+    {
+    }
+
+    ~CAssocClassesQuery()
+    {
+        ULONG i;
+
+        for (i = 0; i < m_cItems; i++)
+            m_ppItems[i]->Release();
+        CoTaskMemFree(m_ppItems);
+    }
+
+    HRESULT Initialize(const ASSOCIATIONELEMENT *rgClasses, ULONG cClasses)
+    {
+        ULONG i;
+
+        if (!cClasses)
+            return S_OK;
+
+        m_ppItems = (IQueryAssociations **)CoTaskMemAlloc(cClasses * sizeof(*m_ppItems));
+        if (!m_ppItems)
+            return E_OUTOFMEMORY;
+
+        for (i = 0; i < cClasses; i++)
+        {
+            CComPtr<IQueryAssociations> pItem;
+            HKEY hKey = OpenClassKey(&rgClasses[i]);
+            HRESULT hr;
+
+            if (!hKey)
+                continue;
+            hr = CQueryAssociations::_CreatorClass::CreateInstance(NULL, IID_PPV_ARG(IQueryAssociations, &pItem));
+            if (SUCCEEDED(hr))
+                hr = pItem->Init(ASSOCF_NONE, NULL, hKey, NULL);
+            RegCloseKey(hKey);
+            if (FAILED(hr))
+                continue;
+            m_ppItems[m_cItems++] = pItem.Detach();
+        }
+        return S_OK;
+    }
+
+    STDMETHOD(Init)(ASSOCF flags, LPCWSTR pwszAssoc, HKEY hkProgid, HWND hwnd) override
+    {
+        return E_NOTIMPL;
+    }
+
+    STDMETHOD(GetString)(ASSOCF flags, ASSOCSTR str, LPCWSTR pwszExtra, LPWSTR pwszOut, DWORD *pcchOut) override
+    {
+        ULONG i;
+        HRESULT hr;
+
+        for (i = 0; i < m_cItems; i++)
+        {
+            hr = m_ppItems[i]->GetString(flags, str, pwszExtra, pwszOut, pcchOut);
+            if (!IsNotFound(hr))
+                return hr;
+        }
+        return HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION);
+    }
+
+    STDMETHOD(GetKey)(ASSOCF flags, ASSOCKEY key, LPCWSTR pwszExtra, HKEY *phkeyOut) override
+    {
+        ULONG i;
+        HRESULT hr;
+
+        for (i = 0; i < m_cItems; i++)
+        {
+            hr = m_ppItems[i]->GetKey(flags, key, pwszExtra, phkeyOut);
+            if (!IsNotFound(hr))
+                return hr;
+        }
+        return HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION);
+    }
+
+    STDMETHOD(GetData)(ASSOCF flags, ASSOCDATA data, LPCWSTR pwszExtra, void *pvOut, DWORD *pcbOut) override
+    {
+        ULONG i;
+        HRESULT hr;
+
+        for (i = 0; i < m_cItems; i++)
+        {
+            hr = m_ppItems[i]->GetData(flags, data, pwszExtra, pvOut, pcbOut);
+            if (!IsNotFound(hr))
+                return hr;
+        }
+        return HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION);
+    }
+
+    STDMETHOD(GetEnum)(ASSOCF cfFlags, ASSOCENUM assocenum, LPCWSTR pszExtra, REFIID riid, LPVOID *ppvOut) override
+    {
+        return E_NOTIMPL;
+    }
+
+    DECLARE_NOT_AGGREGATABLE(CAssocClassesQuery)
+    DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+    BEGIN_COM_MAP(CAssocClassesQuery)
+        COM_INTERFACE_ENTRY_IID(IID_IQueryAssociations, IQueryAssociations)
+    END_COM_MAP()
+};
+
+EXTERN_C HRESULT WINAPI
+AssocCreateForClasses(
+    _In_reads_(cClasses) const ASSOCIATIONELEMENT *rgClasses,
+    ULONG cClasses,
+    _In_ REFIID riid,
+    _COM_Outptr_ void **ppv)
+{
+    CComObject<CAssocClassesQuery> *pQuery;
+    CComPtr<IQueryAssociations> pHolder;
+    HRESULT hr;
+
+    *ppv = NULL;
+
+    hr = CComObject<CAssocClassesQuery>::CreateInstance(&pQuery);
+    if (FAILED(hr))
+        return hr;
+    pHolder = pQuery;
+
+    hr = pQuery->Initialize(rgClasses, cClasses);
+    if (FAILED(hr))
+        return hr;
+    return pHolder->QueryInterface(riid, ppv);
+}

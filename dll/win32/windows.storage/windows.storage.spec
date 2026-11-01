@@ -90,7 +90,7 @@
 2009 stub @
 
 @ stub ApplyProviderSettings
-@ stub AssocCreateForClasses
+@ stdcall AssocCreateForClasses(ptr long ptr ptr)
 @ stub AssocGetDetailsOfPropKey
 @ stub AssocShouldProcessUseAppToAppLaunching
 @ stub BrokerAppSiloShellItemsForApplicationUserModelId
