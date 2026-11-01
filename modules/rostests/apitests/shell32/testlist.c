@@ -5,6 +5,13 @@
 extern void func_WindowPropertyStore(void);
 extern void func_AddCommas(void);
 extern void func_AssocCreateElement(void);
+extern void func_AssocCreateForClasses(void);
+extern void func_DefaultProperties(void);
+extern void func_ILLoadFromStreamEx(void);
+extern void func_ItemPropertyStores(void);
+extern void func_LocalizedName(void);
+extern void func_SHAssocEnumHandlers(void);
+extern void func_SHGetDriveMedia(void);
 extern void func_Control_RunDLLW(void);
 extern void func_CFSFolder(void);
 extern void func_CheckEscapes(void);
@@ -91,6 +98,13 @@ const struct test winetest_testlist[] =
     { "StartMenuPin", func_StartMenuPin },
     { "AddCommas", func_AddCommas },
     { "AssocCreateElement", func_AssocCreateElement },
+    { "AssocCreateForClasses", func_AssocCreateForClasses },
+    { "DefaultProperties", func_DefaultProperties },
+    { "ILLoadFromStreamEx", func_ILLoadFromStreamEx },
+    { "ItemPropertyStores", func_ItemPropertyStores },
+    { "LocalizedName", func_LocalizedName },
+    { "SHAssocEnumHandlers", func_SHAssocEnumHandlers },
+    { "SHGetDriveMedia", func_SHGetDriveMedia },
     { "Control_RunDLLW", func_Control_RunDLLW },
     { "CFSFolder", func_CFSFolder },
     { "CheckEscapes", func_CheckEscapes },
