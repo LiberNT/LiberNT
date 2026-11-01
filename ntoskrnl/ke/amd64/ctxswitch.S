@@ -222,6 +222,12 @@ PUBLIC KiUserThreadStartupExit
     /* Load stack of new thread */
     mov rsp, [r8 + KTHREAD_KernelStack]
 
+    /* User mode can leave any selector in GS; the new thread starts with the flat one */
+    mov ax, gs
+    cmp ax, (KGDT64_R3_DATA OR RPL_MASK)
+    jne .ReloadGs
+.GsReloaded:
+
     /* Reload APC bypass */
     mov cl, [rsp + SwApcBypass]
 
@@ -231,6 +237,23 @@ PUBLIC KiUserThreadStartupExit
     add rsp, 6 * 8
     pop rbp
     ret
+
+.ReloadGs:
+    mov r9, rdx
+    mov ecx, MSR_GS_BASE
+    pushfq
+    cli
+    swapgs
+    rdmsr
+    mov r10d, eax
+    mov ax, (KGDT64_R3_DATA OR RPL_MASK)
+    mov gs, ax
+    mov eax, r10d
+    wrmsr
+    swapgs
+    popfq
+    mov rdx, r9
+    jmp .GsReloaded
 
 .ENDP
 
