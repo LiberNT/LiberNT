@@ -48,7 +48,7 @@
 830 stub @
 844 stub @
 845 stub @
-846 stub ILLoadFromStreamEx
+846 stdcall ILLoadFromStreamEx(ptr ptr)
 847 stub @
 849 stub @
 850 stub @

@@ -374,7 +374,7 @@
 843 stub -version=0x600+ -noname SHGetIdentityItem
 844 stub -version=0x600+ -noname SHCreateNotCondition
 845 stub -version=0x600+ -noname CreateConditionRange
-846 stub -version=0x600+ ILLoadFromStreamEx
+846 stdcall -version=0x600+ ILLoadFromStreamEx(ptr ptr)
 847 stub -version=0x600+ -noname SHCombineMultipleConditionsEx
 848 stub -version=0x600+ -noname SHGetNoAssocIconIndex
 849 stub -version=0x600+ -noname SHCreateConditionFactory

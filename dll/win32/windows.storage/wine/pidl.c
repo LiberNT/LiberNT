@@ -2931,6 +2931,54 @@ HRESULT WINAPI ILLoadFromStream (IStream * pStream, LPITEMIDLIST * ppPidl)
     return ret;
 }
 
+HRESULT WINAPI ILLoadFromStreamEx(IStream *pStream, PIDLIST_RELATIVE *ppPidl)
+{
+    WORD wLen = 0, cb;
+    DWORD dwBytesRead = 0, offset;
+    LPITEMIDLIST pidl;
+    HRESULT hr;
+
+    TRACE_(shell)("%p %p\n", pStream, ppPidl);
+
+    *ppPidl = NULL;
+
+    hr = IStream_Read(pStream, &wLen, sizeof(wLen), &dwBytesRead);
+    if (FAILED(hr) || dwBytesRead != sizeof(wLen) || !wLen)
+        return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+
+    pidl = SHAlloc(wLen);
+    if (!pidl)
+        return E_OUTOFMEMORY;
+    ZeroMemory(pidl, wLen);
+
+    hr = IStream_Read(pStream, pidl, wLen, &dwBytesRead);
+    if (FAILED(hr))
+    {
+        SHFree(pidl);
+        return hr;
+    }
+
+    for (offset = 0; ; offset += cb)
+    {
+        if (offset + sizeof(cb) > wLen)
+        {
+            SHFree(pidl);
+            return E_FAIL;
+        }
+        memcpy(&cb, (BYTE *)pidl + offset, sizeof(cb));
+        if (!cb)
+            break;
+        if (cb < sizeof(cb))
+        {
+            SHFree(pidl);
+            return E_FAIL;
+        }
+    }
+
+    *ppPidl = pidl;
+    return S_OK;
+}
+
 /*************************************************************************
  * ILSaveToStream (SHELL32.27)
  *
