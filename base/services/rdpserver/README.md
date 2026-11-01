@@ -42,8 +42,9 @@ transfer_root=C:\
 
 - `bind` and `allow` are explicit IPv4 addresses. The server accepts one
   controller, from exactly the `allow` address, over TLS with these
-  credentials; NLA is not enabled. Use a random password of at least 16
-  characters and pin the certificate fingerprint in the client.
+  credentials; NLA is off unless `nla=1` is set (see below). Use a random
+  password of at least 16 characters and pin the certificate fingerprint in
+  the client.
 - A relative `certificate` or `privatekey` path names a file next to the
   configuration, so the same configuration works on the live image (`X:`)
   and on an installed disk.
@@ -56,6 +57,11 @@ transfer_root=C:\
   address is not ready yet.
 - `transfer_root` enables file transfers below that local directory after
   authentication. Leave it out to disable transfers.
+- `nla=1` accepts only Network Level Authentication (CredSSP) instead of
+  TLS. The credentials go through the Negotiate package, and the server then
+  logs the user on with `LogonUser`, so `username` names a local account and
+  `password` is not used. The account needs a password; blank passwords are
+  refused over the network.
 
 Authentication, the first frame and disconnects are logged as `RDPTEST`
 lines on the kernel debugger and on stdout. An idle server captures nothing;
