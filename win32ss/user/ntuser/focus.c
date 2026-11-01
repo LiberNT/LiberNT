@@ -1781,7 +1781,8 @@ IntAllowSetForegroundWindow(DWORD dwProcessId)
 typedef struct _USER_PROCESS_START
 {
    LIST_ENTRY ListEntry;
-   PEPROCESS Process;
+   HANDLE ProcessId;
+   LONGLONG CreateTime;
    BOOLEAN AllowForeground;
    BOOLEAN ConsoleForeground;
 } USER_PROCESS_START, *PUSER_PROCESS_START;
@@ -1792,8 +1793,22 @@ static VOID
 IntFreeProcessStart(PUSER_PROCESS_START Start)
 {
    RemoveEntryList(&Start->ListEntry);
-   ObDereferenceObject(Start->Process);
    ExFreePoolWithTag(Start, USERTAG_PROCESSINFO);
+}
+
+static BOOLEAN
+IntIsProcessStartLive(PUSER_PROCESS_START Start)
+{
+   PEPROCESS Process;
+   BOOLEAN Live;
+
+   if (!NT_SUCCESS(PsLookupProcessByProcessId(Start->ProcessId, &Process)))
+      return FALSE;
+
+   Live = (PsGetProcessCreateTimeQuadPart(Process) == Start->CreateTime) &&
+          !PsGetProcessExitProcessCalled(Process);
+   ObDereferenceObject(Process);
+   return Live;
 }
 
 static PUSER_PROCESS_START
@@ -1801,14 +1816,16 @@ IntFindProcessStart(PEPROCESS Process)
 {
    PLIST_ENTRY Entry, Next;
    PUSER_PROCESS_START Start, Found = NULL;
+   HANDLE ProcessId = PsGetProcessId(Process);
+   LONGLONG CreateTime = PsGetProcessCreateTimeQuadPart(Process);
 
    for (Entry = gProcessStartList.Flink; Entry != &gProcessStartList; Entry = Next)
    {
       Next = Entry->Flink;
       Start = CONTAINING_RECORD(Entry, USER_PROCESS_START, ListEntry);
-      if (Start->Process == Process)
+      if (Start->ProcessId == ProcessId && Start->CreateTime == CreateTime)
          Found = Start;
-      else if (PsGetProcessExitProcessCalled(Start->Process))
+      else if (!IntIsProcessStartLive(Start))
          IntFreeProcessStart(Start);
    }
    return Found;
@@ -1826,8 +1843,8 @@ IntGetProcessStart(PEPROCESS Process)
    if (!Start)
       return NULL;
 
-   ObReferenceObject(Process);
-   Start->Process = Process;
+   Start->ProcessId = PsGetProcessId(Process);
+   Start->CreateTime = PsGetProcessCreateTimeQuadPart(Process);
    Start->AllowForeground = FALSE;
    Start->ConsoleForeground = FALSE;
    InsertTailList(&gProcessStartList, &Start->ListEntry);
