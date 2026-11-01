@@ -152,6 +152,9 @@ static char *dde_request(DWORD instance, HCONV hconv, const char *request_str)
 static BOOL check_window_exists(const char *name)
 {
     char title[MAX_PATH];
+#ifdef __REACTOS__
+    char win11_title[MAX_PATH + 16];
+#endif
     HWND window = NULL;
     int i;
 
@@ -163,11 +166,18 @@ static BOOL check_window_exists(const char *name)
     }
     else
         strcpy(title, name);
+#ifdef __REACTOS__
+    /* Windows 11 titles the folder window "<name> - File Explorer" */
+    sprintf(win11_title, "%s - File Explorer", title);
+#endif
 
     for (i = 0; i < 10; i++)
     {
         Sleep(100 * i);
         if ((window = FindWindowA("ExplorerWClass", title)) ||
+#ifdef __REACTOS__
+            (window = FindWindowA("CabinetWClass", win11_title)) ||
+#endif
             (window = FindWindowA("CabinetWClass", title)))
         {
             SendMessageA(window, WM_SYSCOMMAND, SC_CLOSE, 0);

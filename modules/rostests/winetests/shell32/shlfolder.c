@@ -86,10 +86,19 @@ static BOOL check_window_exists(const char *name)
 {
     HWND window = NULL;
     int i;
+#ifdef __REACTOS__
+    char win11_title[MAX_PATH + 16];
+
+    /* Windows 11 titles the folder window "<name> - File Explorer" */
+    sprintf(win11_title, "%s - File Explorer", name);
+#endif
 
     for (i = 0; i < 10; i++)
     {
         if ((window = FindWindowA("ExplorerWClass", name))
+#ifdef __REACTOS__
+            || (window = FindWindowA("CabinetWClass", win11_title))
+#endif
             || (window = FindWindowA("CabinetWClass", name)))
         {
             SendMessageA(window, WM_SYSCOMMAND, SC_CLOSE, 0);
