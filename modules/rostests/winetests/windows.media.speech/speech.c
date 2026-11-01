@@ -37,6 +37,9 @@
 #include "windows.media.speechrecognition.h"
 #define WIDL_using_Windows_Media_SpeechSynthesis
 #include "windows.media.speechsynthesis.h"
+#ifdef __REACTOS__
+#include "mmdeviceapi.h"
+#endif
 #include "wine/test.h"
 
 #define AsyncStatus_Closed 4
@@ -1797,6 +1800,23 @@ static DWORD WINAPI action_put_completed_thread(void *arg)
     return 0;
 }
 
+#ifdef __REACTOS__
+static BOOL has_audio_capture_endpoint(void)
+{
+    IMMDeviceEnumerator *enumerator;
+    IMMDevice *device;
+    HRESULT hr;
+
+    hr = CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, &IID_IMMDeviceEnumerator, (void **)&enumerator);
+    if (FAILED(hr)) return FALSE;
+    hr = IMMDeviceEnumerator_GetDefaultAudioEndpoint(enumerator, eCapture, eMultimedia, &device);
+    IMMDeviceEnumerator_Release(enumerator);
+    if (FAILED(hr)) return FALSE;
+    IMMDevice_Release(device);
+    return TRUE;
+}
+#endif
+
 static void test_Recognition(void)
 {
     static const WCHAR *list_constraint_name = L"Windows.Media.SpeechRecognition.SpeechRecognitionListConstraint";
@@ -1922,6 +1942,23 @@ static void test_Recognition(void)
                              &IID_IAsyncOperationCompletedHandler_SpeechRecognitionCompilationResult);
 
     IAsyncOperation_IInspectable_Release((IAsyncOperation_IInspectable *)operation);
+
+#ifdef __REACTOS__
+    if (!has_audio_capture_endpoint())
+    {
+        skip("No audio capture endpoint, the recognition session cannot capture.\n");
+        hr = ISpeechContinuousRecognitionSession_remove_ResultGenerated(session, token);
+        ok(hr == S_OK, "ISpeechContinuousRecognitionSession_remove_ResultGenerated failed, hr %#lx.\n", hr);
+        ISpeechContinuousRecognitionSession_Release(session);
+        ISpeechRecognizer2_Release(recognizer2);
+        ISpeechRecognizer_Release(recognizer);
+        IInspectable_Release(inspectable);
+        for (i = 0; i < ARRAY_SIZE(commands); i++)
+            WindowsDeleteString(commands[i]);
+        RoUninitialize();
+        return;
+    }
+#endif
 
     hr = ISpeechContinuousRecognitionSession_StartAsync(session, &action);
     ok(hr == S_OK, "ISpeechContinuousRecognitionSession_StartAsync failed, hr %#lx.\n", hr);
