@@ -26,6 +26,17 @@ DkRead(
     _Out_writes_bytes_(Length) PVOID Buffer);
 
 BOOLEAN
+DkWrite(
+    _In_ PDK_DEVICE Device,
+    _In_ ULONGLONG Offset,
+    _In_ ULONG Length,
+    _In_reads_bytes_(Length) const VOID* Buffer);
+
+BOOLEAN
+DkFlush(
+    _In_ PDK_DEVICE Device);
+
+BOOLEAN
 DkOpenBcdDevice(
     _In_ PBCD_DEVICE BcdDevice,
     _Out_ PDK_DEVICE Device);

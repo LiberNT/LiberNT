@@ -115,6 +115,12 @@ add_library(bootlib ${BOOTLIB_SOURCE})
 target_link_libraries(bootlib fatfs)
 add_dependencies(bootlib bugcodes asm xdk)
 
+add_library(bootntfs lib/ntfsenv.cpp $<TARGET_PROPERTY:ntfslib_new,SOURCES>)
+target_include_directories(bootntfs PRIVATE
+    ${REACTOS_SOURCE_DIR}/sdk/lib/fslib/ntfslib_new/include/public
+    ${REACTOS_SOURCE_DIR}/sdk/lib/fslib/ntfslib_new/include/internal)
+add_dependencies(bootntfs bugcodes xdk psdk)
+
 foreach(_asset font mono icons logo)
     if(_asset STREQUAL "font")
         set(_asset_source ${REACTOS_SOURCE_DIR}/media/fonts/selawk.ttf)
@@ -284,13 +290,14 @@ if(WINLOAD_ASM_SOURCE)
         winload/registry.c
         winload/resume.c
         winload/smbios.c
-        winload/startup.c)
+        winload/startup.c
+        winload/httpsync.c)
     if(ARCH STREQUAL "ppc")
         bootloader_ofw_application(winload 0x00400000)
     else()
         bootloader_efi_application(winload EfiEntry)
     endif()
-    target_link_libraries(winload bootwim)
+    target_link_libraries(winload bootwim bootntfs)
     if(MSVC)
         set_property(TARGET winload PROPERTY C_STANDARD 11)
     endif()

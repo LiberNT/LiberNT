@@ -640,6 +640,29 @@ FwReadBlocks(
 }
 
 BOOLEAN
+FwWriteBlocks(
+    _In_ PVOID Firmware,
+    _In_ ULONGLONG Block,
+    _In_ ULONG Count,
+    _In_ PVOID Buffer)
+{
+    POFW_DISK Disk = Firmware;
+    ULONG Length = Count * Disk->BlockSize;
+
+    return OfwAvailable &&
+           OfwSeek(Disk->Ihandle, Block * Disk->BlockSize) >= 0 &&
+           OfwWrite(Disk->Ihandle, Buffer, Length) == (LONG)Length;
+}
+
+BOOLEAN
+FwFlushBlocks(
+    _In_ PVOID Firmware)
+{
+    UNREFERENCED_PARAMETER(Firmware);
+    return OfwAvailable;
+}
+
+BOOLEAN
 FwBufferAligned(
     _In_ PVOID Firmware,
     _In_ PVOID Buffer)
@@ -841,10 +864,12 @@ PVOID
 FwDownloadFile(
     _In_ PCSTR Url,
     _In_opt_ PCSTR Address,
+    _In_ BOOLEAN Wait,
     _Out_ PULONG Size)
 {
     UNREFERENCED_PARAMETER(Url);
     UNREFERENCED_PARAMETER(Address);
+    UNREFERENCED_PARAMETER(Wait);
     *Size = 0;
     return NULL;
 }

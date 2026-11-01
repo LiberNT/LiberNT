@@ -1018,6 +1018,7 @@ PVOID
 FwDownloadFile(
     _In_ PCSTR Url,
     _In_opt_ PCSTR Address,
+    _In_ BOOLEAN Wait,
     _Out_ PULONG Size)
 {
     PVOID Image = NULL;
@@ -1026,7 +1027,8 @@ FwDownloadFile(
     EFI_STATUS Status;
 
     *Size = 0;
-    FwPrint(L"Waiting for the network. Press any key to return to the boot menu.\r\n");
+    if (Wait)
+        FwPrint(L"Waiting for the network. Press any key to return to the boot menu.\r\n");
 
     for (;;)
     {
@@ -1048,6 +1050,9 @@ FwDownloadFile(
                 Reported = TRUE;
             }
         }
+
+        if (!Wait)
+            return NULL;
 
         if (Cancelled || !UefiNetWaitForRetry())
         {

@@ -259,14 +259,28 @@ config BOOTLOADER_HTTP_BOOT
       network adapter, downloads the live image from the HTTP boot URL
       and starts it as a RAM disk.
 
+config BOOTLOADER_HTTP_SYNC
+    prompt "httpsync instead of HTTP boot"
+    type bool
+    default n
+    depends BOOTLOADER_HTTP_BOOT=y
+    help
+      Uses the HTTP boot settings for httpsync of the disk image instead
+      of HTTP boot. The installed system of LiberNT.img downloads the
+      archive at the HTTP boot URL at every start, writes its files to the
+      system volume and then loads the kernel; without an answer from the
+      server it starts unchanged. The HTTP boot entries are left out, and
+      the UEFI network drivers of the architecture go onto the disk
+      image's boot partition.
+
 config BOOTLOADER_HTTP_BOOT_URL
     prompt "Boot manager HTTP boot URL"
     type string
     default ""
     depends BOOTLOADER_HTTP_BOOT=y
     help
-      http:// URL of the live image HTTP boot downloads. Its host is an
-      IPv4 address.
+      http:// URL of the live image HTTP boot downloads, or of the archive
+      (sync.tar) with httpsync. Its host is an IPv4 address.
 
 config BOOTLOADER_HTTP_BOOT_IP
     prompt "Boot manager HTTP boot static IPv4 address"
@@ -274,14 +288,15 @@ config BOOTLOADER_HTTP_BOOT_IP
     default ""
     depends BOOTLOADER_HTTP_BOOT=y
     help
-      address/prefix[,gateway] HTTP boot uses instead of DHCP. Empty uses
-      DHCP.
+      address/prefix[,gateway] HTTP boot or httpsync uses instead of DHCP.
+      Empty uses DHCP.
 
 config BOOTLOADER_HTTP_BOOT_DEFAULT
     prompt "Start HTTP boot directly"
     type bool
     default n
     depends BOOTLOADER_HTTP_BOOT=y
+    depends BOOTLOADER_HTTP_SYNC!=y
     help
       The boot manager starts HTTP boot without showing its menu. The menu
       appears when HTTP boot returns.

@@ -323,6 +323,31 @@ FwReadBlocks(
 }
 
 BOOLEAN
+FwWriteBlocks(
+    _In_ PVOID Firmware,
+    _In_ ULONGLONG Block,
+    _In_ ULONG Count,
+    _In_ PVOID Buffer)
+{
+    EFI_BLOCK_IO_PROTOCOL* BlockIo = Firmware;
+
+    return !EFI_ERROR(BlockIo->WriteBlocks(BlockIo,
+                                           BlockIo->Media->MediaId,
+                                           Block,
+                                           (UINTN)Count * BlockIo->Media->BlockSize,
+                                           Buffer));
+}
+
+BOOLEAN
+FwFlushBlocks(
+    _In_ PVOID Firmware)
+{
+    EFI_BLOCK_IO_PROTOCOL* BlockIo = Firmware;
+
+    return !EFI_ERROR(BlockIo->FlushBlocks(BlockIo));
+}
+
+BOOLEAN
 FwBufferAligned(
     _In_ PVOID Firmware,
     _In_ PVOID Buffer)

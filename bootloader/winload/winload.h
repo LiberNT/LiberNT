@@ -221,6 +221,12 @@ OslResumeFromHibernation(
     _In_ PDK_DEVICE OsDevice);
 
 VOID
+OslHttpSync(
+    _In_ PDK_DEVICE OsDevice,
+    _In_ PCSTR Url,
+    _In_opt_ PCSTR Address);
+
+VOID
 OslHiberMarkOwned(
     _In_ ULONG64 BasePage,
     _In_ ULONG64 PageCount);

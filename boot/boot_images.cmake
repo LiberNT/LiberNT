@@ -100,6 +100,7 @@ option(BOOTLOADER_HTTP_BOOT_DEFAULT "Start the boot manager's HTTP boot directly
 set(BOOTLOADER_HTTP_IMAGE_URL "" CACHE STRING
     "URL of the installed disk image the boot manager's HTTP disk image entry downloads and starts from RAM; empty leaves the entry out")
 option(BOOTLOADER_HTTP_IMAGE_DEFAULT "Start the boot manager's HTTP disk image entry by default" OFF)
+option(BOOTLOADER_HTTP_SYNC "Use the HTTP boot URL and address for httpsync of the disk image instead of HTTP boot" OFF)
 
 set(FREELDR_PREINSTALL_OPTIONS "" CACHE STRING
     "Boot options appended to the boot entry of the preinstalled disk image")
@@ -894,13 +895,18 @@ if(DEFINED EFI_PLATFORM_ID)
         endif()
         libernt_standard_disk_ids()
     endif()
-    if(_uefi_driver_files)
+    set(_preinstall_uefi_driver_files ${_uefi_driver_files})
+    if(BOOTLOADER_UEFI AND BOOTLOADER_HTTP_BOOT AND BOOTLOADER_HTTP_SYNC AND NOT _preinstall_uefi_driver_files)
+        file(GLOB _preinstall_uefi_driver_files CONFIGURE_DEPENDS
+            "${REACTOS_SOURCE_DIR}/media/boot/uefi_drivers/${ARCH}/*.efi")
+    endif()
+    if(_preinstall_uefi_driver_files)
         list(APPEND _preinstall_boot_partition_files -mkdir EFI/BOOT/drivers)
-        foreach(_driver ${_uefi_driver_files})
+        foreach(_driver ${_preinstall_uefi_driver_files})
             get_filename_component(_driver_name "${_driver}" NAME)
             list(APPEND _preinstall_boot_partition_files -add "${_driver}" "EFI/BOOT/drivers/${_driver_name}")
         endforeach()
-        list(APPEND _preinstall_partition_deps ${_uefi_driver_files})
+        list(APPEND _preinstall_partition_deps ${_preinstall_uefi_driver_files})
     endif()
 endif()
 

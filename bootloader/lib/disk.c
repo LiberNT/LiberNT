@@ -160,6 +160,108 @@ DkRead(
 }
 
 static
+VOID
+DkCacheInvalidate(
+    _In_ PDK_DEVICE Device,
+    _In_ ULONGLONG Offset,
+    _In_ ULONG Length)
+{
+    ULONGLONG First = Offset / DK_CACHE_LINE;
+    ULONGLONG Last = (Offset + Length - 1) / DK_CACHE_LINE;
+    ULONG i;
+
+    for (i = 0; i < RTL_NUMBER_OF(DkCacheTags); i++)
+    {
+        if (DkCacheTags[i].Firmware == Device->Firmware &&
+            DkCacheTags[i].Line >= First &&
+            DkCacheTags[i].Line <= Last)
+        {
+            DkCacheTags[i].Firmware = NULL;
+        }
+    }
+}
+
+BOOLEAN
+DkWrite(
+    _In_ PDK_DEVICE Device,
+    _In_ ULONGLONG Offset,
+    _In_ ULONG Length,
+    _In_reads_bytes_(Length) const VOID* Buffer)
+{
+    const UCHAR* Input = Buffer;
+    ULONG Skip, Chunk, Blocks;
+
+    if (Device->BlockSize == 0 ||
+        Device->BlockSize > DK_BOUNCE_SIZE ||
+        Offset > Device->Length ||
+        Length > Device->Length - Offset)
+    {
+        return FALSE;
+    }
+
+    Offset += Device->Offset;
+
+    if (Device->Memory)
+    {
+        RtlCopyMemory(Device->Memory + Offset, Input, Length);
+        return TRUE;
+    }
+
+    if (Length != 0)
+        DkCacheInvalidate(Device, Offset, Length);
+
+    while (Length != 0)
+    {
+        Skip = (ULONG)(Offset % Device->BlockSize);
+
+        if (Skip == 0 && Length >= Device->BlockSize && FwBufferAligned(Device->Firmware, (PVOID)Input))
+        {
+            Chunk = min(Length, DK_DIRECT_SIZE) / Device->BlockSize * Device->BlockSize;
+            if (!FwWriteBlocks(Device->Firmware, Offset / Device->BlockSize, Chunk / Device->BlockSize, (PVOID)Input))
+                return FALSE;
+
+            Input += Chunk;
+            Offset += Chunk;
+            Length -= Chunk;
+            continue;
+        }
+
+        if (!DkBounce)
+        {
+            DkBounce = FwAllocatePages(DK_BOUNCE_SIZE);
+            if (!DkBounce)
+                return FALSE;
+        }
+
+        Chunk = min(Length, DK_BOUNCE_SIZE - Skip);
+        Blocks = (Skip + Chunk + Device->BlockSize - 1) / Device->BlockSize;
+
+        if ((Skip != 0 || Chunk % Device->BlockSize != 0) &&
+            !FwReadBlocks(Device->Firmware, Offset / Device->BlockSize, Blocks, DkBounce))
+        {
+            return FALSE;
+        }
+
+        RtlCopyMemory(DkBounce + Skip, Input, Chunk);
+        if (!FwWriteBlocks(Device->Firmware, Offset / Device->BlockSize, Blocks, DkBounce))
+            return FALSE;
+
+        Input += Chunk;
+        Offset += Chunk;
+        Length -= Chunk;
+    }
+
+    return TRUE;
+}
+
+BOOLEAN
+DkFlush(
+    _In_ PDK_DEVICE Device)
+{
+    return Device->Memory || FwFlushBlocks(Device->Firmware);
+}
+
+static
 BOOLEAN
 DkFindMbrPartition(
     _In_ PDK_DEVICE Disk,
