@@ -591,15 +591,60 @@ IntQueryWddmOpenGlInfo(
 }
 
 static BOOL
+IntUserPrefersHighPerformanceGpu(VOID)
+{
+    WCHAR Path[MAX_PATH], Setting[256];
+    DWORD Size = sizeof(Setting) - sizeof(WCHAR), Type = 0, Length;
+    const WCHAR *Value;
+    HKEY Key;
+    LONG Result;
+
+    Length = GetModuleFileNameW(NULL, Path, ARRAYSIZE(Path));
+    if (Length == 0 || Length >= ARRAYSIZE(Path))
+        return FALSE;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\DirectX\\UserGpuPreferences", 0,
+                      KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
+    {
+        return FALSE;
+    }
+    RtlZeroMemory(Setting, sizeof(Setting));
+    Result = RegQueryValueExW(Key, Path, NULL, &Type, (PBYTE)Setting, &Size);
+    RegCloseKey(Key);
+    if (Result != ERROR_SUCCESS || Type != REG_SZ || (Value = wcsstr(Setting, L"GpuPreference=")) == NULL)
+        return FALSE;
+    return Value[14] == L'2';
+}
+
+static ULONGLONG
+IntQueryDedicatedVideoMemory(
+    D3DKMT_HANDLE Adapter)
+{
+    D3DKMT_QUERYADAPTERINFO QueryInfo;
+    D3DKMT_SEGMENTSIZEINFO Segments;
+
+    RtlZeroMemory(&Segments, sizeof(Segments));
+    RtlZeroMemory(&QueryInfo, sizeof(QueryInfo));
+    QueryInfo.hAdapter = Adapter;
+    QueryInfo.Type = KMTQAITYPE_GETSEGMENTSIZE;
+    QueryInfo.pPrivateDriverData = &Segments;
+    QueryInfo.PrivateDriverDataSize = sizeof(Segments);
+    if (!NT_SUCCESS(D3DKMTQueryAdapterInfo(&QueryInfo)))
+        return 0;
+    return Segments.DedicatedVideoMemorySize;
+}
+
+static BOOL
 IntFindWddmRenderIcd(
     D3DKMT_OPENGLINFO *OpenGlInfo,
-    LUID *AdapterLuid)
+    LUID *AdapterLuid,
+    BOOL HighPerformance)
 {
     D3DKMT_ENUMADAPTERS2 Enumeration;
     D3DKMT_ADAPTERINFO *Adapters = NULL;
     D3DKMT_QUERYADAPTERINFO QueryInfo;
     D3DKMT_ADAPTERTYPE AdapterType;
     D3DKMT_OPENGLINFO CandidateInfo;
+    ULONGLONG BestMemory = 0;
     ULONG AdapterCount;
     ULONG FoundCount = 0;
     ULONG Index;
@@ -641,13 +686,28 @@ IntFindWddmRenderIcd(
         QueryInfo.PrivateDriverDataSize = sizeof(AdapterType);
         TypeKnown = NT_SUCCESS(D3DKMTQueryAdapterInfo(&QueryInfo));
         if (TypeKnown &&
-            (!AdapterType.RenderSupported || AdapterType.SoftwareDevice))
+            (!AdapterType.RenderSupported || AdapterType.SoftwareDevice ||
+             (HighPerformance && AdapterType.HybridIntegrated)))
         {
             continue;
         }
 
         if (!IntQueryWddmOpenGlInfo(Adapters[Index].hAdapter, &CandidateInfo))
             continue;
+
+        if (HighPerformance)
+        {
+            ULONGLONG Memory = IntQueryDedicatedVideoMemory(Adapters[Index].hAdapter);
+
+            if (FoundCount != 0 && Memory <= BestMemory)
+                continue;
+            BestMemory = Memory;
+            FoundCount = 1;
+            *OpenGlInfo = CandidateInfo;
+            if (AdapterLuid != NULL)
+                *AdapterLuid = Adapters[Index].AdapterLuid;
+            continue;
+        }
 
         /*
          * More than one render adapter can publish an ICD once every GPU in
@@ -1149,17 +1209,24 @@ IntGetWddmIcdInfo(
     SelectedLuid.LowPart = 0;
     SelectedLuid.HighPart = 0;
 
-    memset(&OpenAdapter, 0, sizeof(OpenAdapter));
-    OpenAdapter.hDc = hdc;
-    Status = D3DKMTOpenAdapterFromHdc(&OpenAdapter);
-    if (NT_SUCCESS(Status) && OpenAdapter.hAdapter != 0)
-    {
-        Adapter = OpenAdapter.hAdapter;
-        SelectedLuid = OpenAdapter.AdapterLuid;
-    }
+    /* TODO: INFO_NEEDED whether Windows 11 opengl32 applies the per-app GPU preference to the ICD choice */
+    Found = IntUserPrefersHighPerformanceGpu() &&
+            IntFindWddmRenderIcd(&OpenGlInfo, &SelectedLuid, TRUE);
 
-    Found = IntQueryWddmOpenGlInfo(Adapter, &OpenGlInfo);
-    IntCloseAdapter(Adapter);
+    if (!Found)
+    {
+        memset(&OpenAdapter, 0, sizeof(OpenAdapter));
+        OpenAdapter.hDc = hdc;
+        Status = D3DKMTOpenAdapterFromHdc(&OpenAdapter);
+        if (NT_SUCCESS(Status) && OpenAdapter.hAdapter != 0)
+        {
+            Adapter = OpenAdapter.hAdapter;
+            SelectedLuid = OpenAdapter.AdapterLuid;
+        }
+
+        Found = IntQueryWddmOpenGlInfo(Adapter, &OpenGlInfo);
+        IntCloseAdapter(Adapter);
+    }
 
     /* A redirected window DC is backed by a DIB, not by the scan-out PDEV.
      * Resolve that window's monitor when the HDC-selected adapter does not
@@ -1180,7 +1247,7 @@ IntGetWddmIcdInfo(
      * to that software adapter.  A separately started hardware render adapter
      * can still publish the ICD that should service windowed OpenGL. */
     if (!Found)
-        Found = IntFindWddmRenderIcd(&OpenGlInfo, &SelectedLuid);
+        Found = IntFindWddmRenderIcd(&OpenGlInfo, &SelectedLuid, FALSE);
 
     if (!Found)
         return FALSE;
