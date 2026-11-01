@@ -65,6 +65,7 @@ extern void func_keybd_event(void);
 extern void func_LoadImage(void);
 extern void func_LoadImageGCC(void);
 extern void func_LookupIconIdFromDirectoryEx(void);
+extern void func_MaximizedCaptionClick(void);
 extern void func_MenuUI(void);
 extern void func_MenuItemData(void);
 extern void func_MessageStateAnalyzer(void);
@@ -185,6 +186,7 @@ const struct test winetest_testlist[] =
     { "LoadImage", func_LoadImage },
     { "LoadImageGCC", func_LoadImageGCC },
     { "LookupIconIdFromDirectoryEx", func_LookupIconIdFromDirectoryEx },
+    { "MaximizedCaptionClick", func_MaximizedCaptionClick },
     { "MenuUI", func_MenuUI },
     { "MenuItemData", func_MenuItemData },
     { "MessageStateAnalyzer", func_MessageStateAnalyzer },

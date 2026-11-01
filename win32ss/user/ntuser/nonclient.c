@@ -428,7 +428,7 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
       else if (g_bWindowSnapEnabled && (msg.message == WM_LBUTTONUP ||
               (msg.message == WM_MOUSEMOVE && bMouseDrag && (MsqGetDownKeyState(pti->MessageQueue) & MK_LBUTTON) == 0)))
       { // If WindowSnapEnabled: Decide whether to snap before exiting
-         if (hittest == HTCAPTION && thickframe && /* Check for snapping if was moved by caption */
+         if (hittest == HTCAPTION && thickframe && moved && /* Check for snapping if was moved by caption */
              IntIsSnapAllowedForWindow(pwnd) && (ExStyle & WS_EX_MDICHILD) == 0)
          {
             BOOLEAN wasSnap = IntIsWindowSnapped(pwnd); /* Need the live snap state, not orgSnap nor maximized state */
