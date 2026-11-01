@@ -6499,6 +6499,7 @@ LxSynthStat(
 
         if (Tty == NULL)
             return -LX_ENOENT;
+        Stat->Mode = LX_S_IFCHR | Tty->Mode;
         Stat->Rdev = LxTtyDevice(Tty);
         Stat->Uid = Tty->Uid;
         Stat->Gid = Tty->Gid;
@@ -6599,6 +6600,21 @@ LxSynthMkdir(
     Child->Uid = Child->FileUid = Process->Fsuid;
     Child->Gid = Child->FileGid = Process->Fsgid;
     return 0;
+}
+
+PLX_TTY
+LxPtsNodeTty(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_NODE Node)
+{
+    LX_SYNTH Synth;
+
+    if (LxSynthResolve(Process, Node->Mount, Node->Relative, &Synth) != 0)
+        return NULL;
+    LxFree(Synth.LinkTarget);
+    if (Synth.Id != LxPtsTty)
+        return NULL;
+    return LxTtyLookup(Process->Instance, Synth.Index);
 }
 
 LONG

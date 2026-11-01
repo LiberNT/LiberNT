@@ -4745,6 +4745,7 @@ LxVfsSetAttributes(
 {
     HANDLE Handle = NULL;
     PLX_TMPFS_INODE Inode = NULL;
+    PLX_TTY Tty = NULL;
     ULONG OldMode, OldUid, OldGid;
     ULONG64 Device;
     LX_STAT Stat;
@@ -4770,6 +4771,19 @@ LxVfsSetAttributes(
     {
         return LxCgroupSetAttributes(Process, Node, Mode, Uid, Gid);
     }
+    else if ((File != NULL) && (LxFileGetTty(File) != NULL))
+    {
+        Tty = LxFileGetTty(File);
+        if ((File->Rdev != 0) && (File->Rdev != LxTtyDevice(Tty)))
+            return 0;
+        LxTtyReference(Tty);
+    }
+    else if ((File == NULL) && (Node != NULL) && (Node->Mount != NULL) && (Node->Mount->Kind == LxFsDevpts))
+    {
+        Tty = LxPtsNodeTty(Process, Node);
+        if (Tty == NULL)
+            return 0;
+    }
     else if ((Node != NULL) && (Node->Mount != NULL) && (Node->Mount->Kind == LxFsNt))
     {
         Error = LxNtOpenHandle(&Node->NtPath, FILE_READ_EA | FILE_WRITE_EA | FILE_READ_ATTRIBUTES, FILE_OPEN, 0, 0, &Handle);
@@ -4789,6 +4803,10 @@ LxVfsSetAttributes(
     if (Inode != NULL)
     {
         LxTmpfsInodeAttributes(Inode, &OldMode, &OldUid, &OldGid, &Device);
+    }
+    else if (Tty != NULL)
+    {
+        LxTtyGetAttributes(Tty, &OldMode, &OldUid, &OldGid);
     }
     else if ((LxNtReadLxAttributes(Handle, &OldMode, &OldUid, &OldGid, &Device) != 0) || (OldMode == MAXULONG))
     {
@@ -4830,6 +4848,8 @@ LxVfsSetAttributes(
             ZwClose(Handle);
         if (Inode != NULL)
             LxTmpfsInodeDereference(Inode);
+        if (Tty != NULL)
+            LxTtyDereference(Tty);
         return Error;
     }
     if ((Mode != MAXULONG) && !LxInGroup(Process, (Gid != MAXULONG) ? Gid : OldGid) &&
@@ -4854,6 +4874,12 @@ LxVfsSetAttributes(
     {
         LxTmpfsInodeSetAttributes(Inode, OldMode, OldUid, OldGid);
         LxTmpfsInodeDereference(Inode);
+        Error = 0;
+    }
+    else if (Tty != NULL)
+    {
+        LxTtySetAttributes(Tty, OldMode, OldUid, OldGid);
+        LxTtyDereference(Tty);
         Error = 0;
     }
     else
