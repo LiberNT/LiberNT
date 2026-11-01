@@ -55,4 +55,9 @@ DxgkPresentQueueCoreRemove(
     _In_opt_ PVOID MatchContext,
     _Out_ PVOID RemovedEntry);
 
+/* Windows bounds a D3DKMT v-blank wait to 80 ms and then reports STATUS_TIMEOUT. */
+#define DXGK_VBLANK_WAIT_TIMEOUT_100NS (80ULL * 10000ULL)
+
+NTSTATUS DxgkPresentVBlankWaitResult(_In_ BOOLEAN VBlankArrived);
+
 #endif /* _DXGK_PRESENT_QUEUE_CORE_H_ */

@@ -61,7 +61,6 @@
 #define DXGK_MMIO_FLIP_TIMEOUT_100NS  (2000ULL * 10000ULL)
 /* Longest a flip deadline is held while its link is being configured. */
 #define DXGK_MMIO_LINK_CONFIG_GRACE_100NS  (10000ULL * 10000ULL)
-#define DXGK_VBLANK_WAIT_TIMEOUT_100NS (2000ULL * 10000ULL)
 
 static volatile LONG g_DodPresentTraceCount = 0;
 static volatile LONG g_SharedPrimaryPresentTraceCount = 0;
@@ -750,7 +749,7 @@ DxgkpWaitForVerticalBlank(
         if (InterlockedCompareExchange64(&Queue->VBlankCount, 0, 0) >= Waiter.TargetVBlank)
         {
             KeReleaseSpinLock(&Queue->VBlankWaitLock, OldIrql);
-            Status = STATUS_SUCCESS;
+            Status = DxgkPresentVBlankWaitResult(TRUE);
             break;
         }
         if (Status == STATUS_TIMEOUT)
@@ -767,7 +766,7 @@ DxgkpWaitForVerticalBlank(
             }
             Status = DxgkpValidateVBlankSource(Adapter, VidPnSourceId);
             if (NT_SUCCESS(Status))
-                Status = STATUS_IO_TIMEOUT;
+                Status = DxgkPresentVBlankWaitResult(FALSE);
             break;
         }
         KeClearEvent(&Waiter.Event);
