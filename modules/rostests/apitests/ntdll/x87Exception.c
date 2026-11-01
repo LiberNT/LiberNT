@@ -73,6 +73,20 @@ typedef struct _X87_CAPTURE
 } X87_CAPTURE, *PX87_CAPTURE;
 
 static X87_CAPTURE X87Capture;
+static BOOLEAN X87IsQemuTcg;
+
+static
+BOOLEAN
+IsQemuTcg(VOID)
+{
+    int Registers[4];
+
+    __cpuid(Registers, 1);
+    if (!(Registers[2] & (1u << 31)))
+        return FALSE;
+    __cpuid(Registers, 0x40000000);
+    return !memcmp(&Registers[1], "TCGTCGTCGTCG", 12);
+}
 
 static
 LONG
@@ -180,8 +194,11 @@ X87TestException(
        Test->Name, (PUCHAR)X87Capture.Record.ExceptionAddress - Test->Wait);
     ok(X87Capture.Rip == (ULONG_PTR)Test->Wait, "%s: Rip = wait%+Id\n",
        Test->Name, (LONG_PTR)(X87Capture.Rip - (ULONG_PTR)Test->Wait));
-    ok(X87Capture.FltSave.ErrorOffset == (ULONG)(ULONG_PTR)Test->Fault, "%s: ErrorOffset = fault%+ld\n",
-       Test->Name, (LONG)(X87Capture.FltSave.ErrorOffset - (ULONG)(ULONG_PTR)Test->Fault));
+    if (X87IsQemuTcg && X87Capture.FltSave.ErrorOffset == 0)
+        skip("%s: QEMU TCG does not save the x87 instruction pointer\n", Test->Name);
+    else
+        ok(X87Capture.FltSave.ErrorOffset == (ULONG)(ULONG_PTR)Test->Fault, "%s: ErrorOffset = fault%+ld\n",
+           Test->Name, (LONG)(X87Capture.FltSave.ErrorOffset - (ULONG)(ULONG_PTR)Test->Fault));
     ok((X87Capture.FltSave.StatusWord & Test->ExpectedFlags) == Test->ExpectedFlags,
        "%s: StatusWord = 0x%04x\n", Test->Name, X87Capture.FltSave.StatusWord);
     ok(X87Capture.FltSave.ControlWord == (X87_DEFAULT_CONTROL_WORD & ~Test->UnmaskBit),
@@ -205,7 +222,7 @@ X87TestContinue(
 }
 
 static
-VOID
+BOOLEAN
 X87TestMasked(
     _In_ PX87_TEST Test)
 {
@@ -217,17 +234,25 @@ X87TestMasked(
     ok(Returned, "%s: masked trigger did not return\n", Test->Name);
     ok(X87Capture.Count == 0, "%s: masked Count = %lu, code 0x%08lx\n",
        Test->Name, X87Capture.Count, X87Capture.Record.ExceptionCode);
+    if (X87IsQemuTcg && (Result.StatusWord & Test->ExpectedFlags) != Test->ExpectedFlags)
+    {
+        skip("%s: QEMU TCG does not raise this x87 exception, StatusWord 0x%04x\n", Test->Name, Result.StatusWord);
+        return FALSE;
+    }
     ok((Result.StatusWord & Test->ExpectedFlags) == Test->ExpectedFlags,
        "%s: masked StatusWord = 0x%04x\n", Test->Name, Result.StatusWord);
+    return TRUE;
 }
 
 START_TEST(x87Exception)
 {
     ULONG i;
 
+    X87IsQemuTcg = IsQemuTcg();
     for (i = 0; i < ARRAYSIZE(X87Tests); i++)
     {
-        X87TestMasked(&X87Tests[i]);
+        if (!X87TestMasked(&X87Tests[i]))
+            continue;
         X87TestException(&X87Tests[i]);
         X87TestContinue(&X87Tests[i]);
     }
