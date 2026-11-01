@@ -522,7 +522,7 @@
 @ stdcall SHGetDiskFreeSpaceA(str ptr ptr ptr) kernel32.GetDiskFreeSpaceExA # 2k3:297, Vista:357
 @ stdcall SHGetDiskFreeSpaceExA(str ptr ptr ptr) kernel32.GetDiskFreeSpaceExA # 2k3:298, Vista:358
 @ stdcall SHGetDiskFreeSpaceExW(wstr ptr ptr ptr) kernel32.GetDiskFreeSpaceExW # 2k3:299, Vista:359
-@ stub -version=0x600+ SHGetDriveMedia # Vista:360
+@ stdcall -version=0x600+ SHGetDriveMedia(wstr ptr) # Vista:360
 @ stdcall SHGetFileInfo(ptr long ptr long long) SHGetFileInfoA # 2k3:300, Vista:361
 @ stdcall SHGetFileInfoA(ptr long ptr long long) # 2k3:301, Vista:362
 @ stdcall SHGetFileInfoW(ptr long ptr long long) # 2k3:302, Vista:363

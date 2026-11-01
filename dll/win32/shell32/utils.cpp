@@ -1868,6 +1868,35 @@ SHGetLocalizedName(
     return S_OK;
 }
 
+EXTERN_C
+HRESULT WINAPI
+SHGetDriveMedia(
+    _In_ PCWSTR pszDrive,
+    _Out_ DWORD *pdwMediaContent)
+{
+    WCHAR szRoot[] = L"A:\\";
+    int iDrive;
+
+    *pdwMediaContent = ARCONTENT_NONE;
+
+    iDrive = PathGetDriveNumberW(pszDrive);
+    if (iDrive < 0)
+        return E_INVALIDARG;
+
+    szRoot[0] += iDrive;
+    switch (GetDriveTypeW(szRoot))
+    {
+        case DRIVE_UNKNOWN:
+        case DRIVE_NO_ROOT_DIR:
+            return E_INVALIDARG;
+    }
+
+    /* FIXME: optical media (audio CD, DVD movie, blank discs) is not classified; media without a file system is reported as ARCONTENT_NONE */
+    if (GetVolumeInformationW(szRoot, NULL, 0, NULL, NULL, NULL, NULL, 0))
+        *pdwMediaContent = ARCONTENT_UNKNOWNCONTENT;
+    return S_OK;
+}
+
 /*************************************************************************
  *              LinkWindow_RegisterClass (SHELL32.258)
  *
