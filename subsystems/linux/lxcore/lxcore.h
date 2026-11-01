@@ -222,6 +222,7 @@ typedef struct _LX_TTY
     LONG Index;
     ULONG Uid;
     ULONG Gid;
+    ULONG Mode;
     LX_TERMIOS Termios;
     LX_WINSIZE WinSize;
     ULONG ForegroundPgrp;
@@ -1271,6 +1272,7 @@ LONG LxSynthOpen(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ ULONG Flags,
 LONG LxSynthStat(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _Out_ PLX_STAT Stat);
 LONG LxSynthMkdir(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node);
 LONG LxCgroupSetAttributes(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node, _In_ ULONG Mode, _In_ ULONG Uid, _In_ ULONG Gid);
+PLX_TTY LxPtsNodeTty(_In_ PLX_PROCESS Process, _In_ PLX_NODE Node);
 VOID LxTmpfsInitialize(VOID);
 PLX_TMPFS LxTmpfsCreate(_In_ ULONG Mode);
 LONG LxTmpfsParseOptions(_In_ PLX_PROCESS Process, _In_opt_ PCSTR Data, _Inout_ PLX_TMPFS_OPTIONS Options);
@@ -1343,6 +1345,8 @@ LONG64 LxTtyIoctl(_In_ PLX_PROCESS Process, _In_ PLX_TTY Tty, _In_ ULONG Request
 BOOLEAN LxTtyReadable(_In_ PLX_TTY Tty);
 PLX_FILE LxTtyOpen(_In_ PLX_TTY Tty, _In_ ULONG Flags);
 PLX_TTY LxFileGetTty(_In_ PLX_FILE File);
+VOID LxTtyGetAttributes(_In_ PLX_TTY Tty, _Out_ PULONG Mode, _Out_ PULONG Uid, _Out_ PULONG Gid);
+VOID LxTtySetAttributes(_In_ PLX_TTY Tty, _In_ ULONG Mode, _In_ ULONG Uid, _In_ ULONG Gid);
 LONG64 LxTtyMasterRead(_In_ PLX_TTY Tty, _Out_writes_bytes_(Length) PVOID Buffer, _In_ ULONG Length, _In_ BOOLEAN NonBlocking);
 LONG64 LxTtyMasterWrite(_In_ PLX_TTY Tty, _In_reads_bytes_(Length) const VOID *Buffer, _In_ ULONG Length, _In_ BOOLEAN NonBlocking);
 VOID LxTtyMasterClose(_In_ PLX_TTY Tty);
