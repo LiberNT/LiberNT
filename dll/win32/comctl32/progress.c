@@ -359,6 +359,68 @@ static const ProgressDrawProc *PROGRESS_GetDrawProcs(HWND hwnd, BOOL smooth, DWO
     return &drawProcClassic[proc_idx];
 }
 
+#ifdef __REACTOS__
+static int PROGRESS_StripePeriod( LONG style, const RECT *rect )
+{
+    int thickness = (style & PBS_VERTICAL) ? rect->right - rect->left : rect->bottom - rect->top;
+
+    return max( thickness, 2 ) * 2;
+}
+
+static void PROGRESS_DrawStripes( ProgressDrawInfo *pdi, const ProgressDrawProc *drawProcs, LONG style, int barSize )
+{
+    const RECT *r = &pdi->rect;
+    int period = PROGRESS_StripePeriod( style, r );
+    int band = period / 2;
+    int offset = pdi->infoPtr->MarqueePos % period;
+    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 64, 0 };
+    DWORD white = 0x00FFFFFF;
+    HBITMAP tint, old;
+    POINT points[4];
+    HDC tintDc;
+    int pos;
+
+    drawProcs[0]( pdi, 0, barSize );
+    if (SaveDC( pdi->hdc ) == 0)
+        return;
+
+    BeginPath( pdi->hdc );
+    for (pos = offset - period; pos < barSize + band; pos += period)
+    {
+        if (style & PBS_VERTICAL)
+        {
+            points[0].x = r->left;  points[0].y = r->bottom - pos;
+            points[1].x = r->right; points[1].y = r->bottom - pos - band;
+            points[2].x = r->right; points[2].y = r->bottom - pos - 2 * band;
+            points[3].x = r->left;  points[3].y = r->bottom - pos - band;
+        }
+        else
+        {
+            points[0].x = r->left + pos;            points[0].y = r->bottom;
+            points[1].x = r->left + pos + band;     points[1].y = r->top;
+            points[2].x = r->left + pos + 2 * band; points[2].y = r->top;
+            points[3].x = r->left + pos + band;     points[3].y = r->bottom;
+        }
+        Polygon( pdi->hdc, points, 4 );
+    }
+    EndPath( pdi->hdc );
+
+    tintDc = CreateCompatibleDC( pdi->hdc );
+    tint = CreateBitmap( 1, 1, 1, 32, &white );
+    if (tintDc && tint && SelectClipPath( pdi->hdc, RGN_AND ))
+    {
+        old = SelectObject( tintDc, tint );
+        GdiAlphaBlend( pdi->hdc, r->left, r->top, r->right - r->left, r->bottom - r->top, tintDc, 0, 0, 1, 1, blend );
+        SelectObject( tintDc, old );
+    }
+    if (tint)
+        DeleteObject( tint );
+    if (tintDc)
+        DeleteDC( tintDc );
+    RestoreDC( pdi->hdc, -1 );
+}
+#endif
+
 /***********************************************************************
  * PROGRESS_Draw
  * Draws the progress bar.
@@ -403,6 +465,13 @@ static LRESULT PROGRESS_Draw (PROGRESS_INFO *infoPtr, HDC hdc)
         pdi.ledW = get_led_size( infoPtr, dwStyle, &pdi.rect);
     pdi.ledGap = get_led_gap( infoPtr );
 
+#ifdef __REACTOS__
+    if (dwStyle & PBS_MARQUEE)
+    {
+        PROGRESS_DrawStripes( &pdi, PROGRESS_GetDrawProcs( infoPtr->Self, TRUE, dwStyle ), dwStyle, barSize );
+    }
+    else
+#endif
     if (dwStyle & PBS_MARQUEE)
     {
         const int ledW = !barSmooth ? (pdi.ledW + pdi.ledGap) : 1;
@@ -474,11 +543,16 @@ static void PROGRESS_UpdateMarquee (PROGRESS_INFO *infoPtr)
 {
     LONG style = GetWindowLongW (infoPtr->Self, GWL_STYLE);
     RECT rect;
+#ifndef __REACTOS__
     int ledWidth, leds;
     BOOL smooth = PROGRESS_IsSmooth (infoPtr->Self);
+#endif
 
     get_client_rect (infoPtr->Self, &rect);
 
+#ifdef __REACTOS__
+    infoPtr->MarqueePos = (infoPtr->MarqueePos + 1) % PROGRESS_StripePeriod( style, &rect );
+#else
     if (smooth)
         ledWidth = 1;
     else
@@ -490,6 +564,7 @@ static void PROGRESS_UpdateMarquee (PROGRESS_INFO *infoPtr)
     /* increment the marquee progress */
     if (++infoPtr->MarqueePos >= leds)
         infoPtr->MarqueePos = 0;
+#endif
 
     InvalidateRect(infoPtr->Self, &rect, TRUE);
     UpdateWindow(infoPtr->Self);
