@@ -1461,6 +1461,9 @@ LogonUserExExW(
     if (phToken != NULL)
         *phToken = NULL;
 
+    if (ppLogonSid != NULL)
+        *ppLogonSid = NULL;
+
     switch (dwLogonType)
     {
         case LOGON32_LOGON_INTERACTIVE:
@@ -1667,7 +1670,21 @@ LogonUserExExW(
     if (phToken != NULL)
         *phToken = TokenHandle;
 
-    /* FIXME: return ppLogonSid and pQuotaLimits */
+    if (ppProfileBuffer != NULL)
+    {
+        *ppProfileBuffer = ProfileBuffer;
+        *pdwProfileLength = ProfileBufferLength;
+        ProfileBuffer = NULL;
+    }
+
+    if (pQuotaLimits != NULL)
+        *pQuotaLimits = QuotaLimits;
+
+    if (ppLogonSid != NULL)
+    {
+        *ppLogonSid = LogonSid;
+        LogonSid = NULL;
+    }
 
 done:
     if (ProfileBuffer != NULL)
