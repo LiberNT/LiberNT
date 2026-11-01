@@ -6186,10 +6186,11 @@ GpuVaRawEntry(
     _In_ ULONG Index)
 {
     ULONG EntrySize = Table->EntryCount != 0 ? Table->Bytes / Table->EntryCount : 8;
-    const UCHAR *Raw = (const UCHAR *)Table->KernelVa + (ULONGLONG)Index * EntrySize;
+    const UCHAR *Raw;
 
     if (Table->KernelVa == NULL || EntrySize == 0 || EntrySize > 16)
         return 0;
+    Raw = (const UCHAR *)Table->KernelVa + (ULONGLONG)Index * EntrySize;
     if (EntrySize >= 8)
         return *(const volatile ULONGLONG *)Raw;
     return *(const volatile ULONG *)Raw;
