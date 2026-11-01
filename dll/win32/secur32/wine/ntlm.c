@@ -1152,7 +1152,7 @@ SECURITY_STATUS SEC_ENTRY ntlm_QueryContextAttributesA(PCtxtHandle phContext,
 /***********************************************************************
  *              ImpersonateSecurityContext
  */
-static SECURITY_STATUS SEC_ENTRY ntlm_ImpersonateSecurityContext(PCtxtHandle phContext)
+SECURITY_STATUS SEC_ENTRY ntlm_ImpersonateSecurityContext(PCtxtHandle phContext)
 {
     PNegoHelper helper;
     BOOL ret;
@@ -1176,13 +1176,33 @@ static SECURITY_STATUS SEC_ENTRY ntlm_ImpersonateSecurityContext(PCtxtHandle phC
 /***********************************************************************
  *              RevertSecurityContext
  */
-static SECURITY_STATUS SEC_ENTRY ntlm_RevertSecurityContext(PCtxtHandle phContext)
+SECURITY_STATUS SEC_ENTRY ntlm_RevertSecurityContext(PCtxtHandle phContext)
 {
     TRACE("%p\n", phContext);
     if (!phContext)
         return SEC_E_INVALID_HANDLE;
 
     return RevertToSelf() ? SEC_E_OK : SEC_E_NO_IMPERSONATION;
+}
+
+SECURITY_STATUS SEC_ENTRY ntlm_QuerySecurityContextToken(PCtxtHandle phContext, HANDLE *phToken)
+{
+    PNegoHelper helper;
+
+    TRACE("%p %p\n", phContext, phToken);
+    if (!phContext || !phToken)
+        return SEC_E_INVALID_HANDLE;
+
+    helper = (PNegoHelper)phContext->dwLower;
+    if (!helper || helper->mode != NTLM_SERVER || !helper->crypt.ntlm.a4i)
+        return SEC_E_INVALID_HANDLE;
+    if (!helper->token)
+        return SEC_E_NO_IMPERSONATION;
+
+    if (!DuplicateHandle(GetCurrentProcess(), helper->token, GetCurrentProcess(), phToken, 0, FALSE,
+                         DUPLICATE_SAME_ACCESS))
+        return SEC_E_INSUFFICIENT_MEMORY;
+    return SEC_E_OK;
 }
 
 
@@ -1608,7 +1628,7 @@ static const SecurityFunctionTableA ntlmTableA = {
     NULL,   /* ImportSecurityContextA */
     NULL,   /* AddCredentialsA */
     NULL,   /* Reserved8 */
-    NULL,   /* QuerySecurityContextToken */
+    ntlm_QuerySecurityContextToken,     /* QuerySecurityContextToken */
     ntlm_EncryptMessage,                /* EncryptMessage */
     ntlm_DecryptMessage,                /* DecryptMessage */
     NULL,   /* SetContextAttributesA */
@@ -1639,7 +1659,7 @@ static const SecurityFunctionTableW ntlmTableW = {
     NULL,   /* ImportSecurityContextW */
     NULL,   /* AddCredentialsW */
     NULL,   /* Reserved8 */
-    NULL,   /* QuerySecurityContextToken */
+    ntlm_QuerySecurityContextToken,     /* QuerySecurityContextToken */
     ntlm_EncryptMessage,                /* EncryptMessage */
     ntlm_DecryptMessage,                /* DecryptMessage */
     NULL,   /* SetContextAttributesW */

@@ -113,6 +113,9 @@ SECURITY_STATUS SEC_ENTRY ntlm_FreeCredentialsHandle(PCredHandle) DECLSPEC_HIDDE
 SECURITY_STATUS SEC_ENTRY ntlm_DeleteSecurityContext(PCtxtHandle) DECLSPEC_HIDDEN;
 SECURITY_STATUS SEC_ENTRY ntlm_MakeSignature(PCtxtHandle, ULONG, PSecBufferDesc, ULONG) DECLSPEC_HIDDEN;
 SECURITY_STATUS SEC_ENTRY ntlm_VerifySignature(PCtxtHandle, PSecBufferDesc, ULONG, PULONG) DECLSPEC_HIDDEN;
+SECURITY_STATUS SEC_ENTRY ntlm_ImpersonateSecurityContext(PCtxtHandle) DECLSPEC_HIDDEN;
+SECURITY_STATUS SEC_ENTRY ntlm_RevertSecurityContext(PCtxtHandle) DECLSPEC_HIDDEN;
+SECURITY_STATUS SEC_ENTRY ntlm_QuerySecurityContextToken(PCtxtHandle, HANDLE *) DECLSPEC_HIDDEN;
 
 SECURITY_STATUS NtlmBuildNegotiate(PNegoHelper context, BYTE *buffer, ULONG size, ULONG *length) DECLSPEC_HIDDEN;
 SECURITY_STATUS NtlmBuildChallenge(PNegoHelper context, const BYTE *negotiate, ULONG negotiate_len,
