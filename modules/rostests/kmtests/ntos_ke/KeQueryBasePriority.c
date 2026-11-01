@@ -88,7 +88,10 @@ START_TEST(KeQueryBasePriority)
     Expected = Worker->BasePriority - Worker->Process->BasePriority;
     for (Iteration = 0; Iteration < QUERY_ITERATIONS; ++Iteration)
     {
-        Increment = KeQueryBasePriorityThread(Worker);
+        THREAD_BASIC_INFORMATION Info;
+
+        Status = ZwQueryInformationThread(ThreadHandle, ThreadBasicInformation, &Info, sizeof(Info), NULL);
+        Increment = NT_SUCCESS(Status) ? Info.BasePriority : MAXLONG;
         if (Increment != Expected)
             Mismatches++;
         if (KeGetCurrentIrql() != PASSIVE_LEVEL)
