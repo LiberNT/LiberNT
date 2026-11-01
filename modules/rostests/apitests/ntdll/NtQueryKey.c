@@ -269,8 +269,122 @@ Test_KeyNameInformation(void)
     NtClose(HKLM_Key);
 }
 
+#ifndef REG_BINARY
+#define REG_BINARY 3
+#endif
+
+/* WDK KEY_CACHED_INFORMATION; the user-mode NDK headers do not declare it. */
+typedef struct _TEST_KEY_CACHED_INFORMATION
+{
+    LARGE_INTEGER LastWriteTime;
+    ULONG TitleIndex;
+    ULONG SubKeys;
+    ULONG MaxNameLen;
+    ULONG Values;
+    ULONG MaxValueNameLen;
+    ULONG MaxValueDataLen;
+    ULONG NameLength;
+} TEST_KEY_CACHED_INFORMATION;
+
+static
+void
+Test_KeyCachedInformationLargeData(void)
+{
+    UNICODE_STRING SourceName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\Software\\LiberNTTest_KcbMaxData");
+    UNICODE_STRING HiveName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\LiberNTTest_KcbHive");
+    UNICODE_STRING ChildName = RTL_CONSTANT_STRING(L"Child");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"Big");
+    OBJECT_ATTRIBUTES SourceAttributes, HiveAttributes, FileAttributes, ChildAttributes;
+    TEST_KEY_CACHED_INFORMATION CachedInformation;
+    KEY_FULL_INFORMATION FullInformation;
+    UNICODE_STRING FileName = { 0 };
+    WCHAR TempPath[MAX_PATH], HivePath[MAX_PATH];
+    HANDLE SourceKey = NULL, ChildKey = NULL, HiveRoot = NULL, HiveKey = NULL, File;
+    BOOLEAN OldBackup, OldRestore;
+    ULONG InfoLength, DataLength = 0x10010;
+    PUCHAR Data;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, TRUE, FALSE, &OldBackup)) ||
+        !NT_SUCCESS(RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, TRUE, FALSE, &OldRestore)))
+    {
+        skip("backup and restore privileges are not available\n");
+        return;
+    }
+
+    GetTempPathW(ARRAYSIZE(TempPath), TempPath);
+    StringCchPrintfW(HivePath, ARRAYSIZE(HivePath), L"%sntquerykey_kcb.hiv", TempPath);
+    DeleteFileW(HivePath);
+
+    InitializeObjectAttributes(&SourceAttributes, &SourceName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtCreateKey(&SourceKey, KEY_ALL_ACCESS, &SourceAttributes, 0, NULL, REG_OPTION_NON_VOLATILE, NULL);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Data = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, DataLength);
+    ok(Data != NULL, "allocation failed\n");
+    InitializeObjectAttributes(&ChildAttributes, &ChildName, OBJ_CASE_INSENSITIVE, SourceKey, NULL);
+    Status = NtCreateKey(&ChildKey, KEY_ALL_ACCESS, &ChildAttributes, 0, NULL, REG_OPTION_NON_VOLATILE, NULL);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    Status = NtSetValueKey(ChildKey, &ValueName, 0, REG_BINARY, Data, DataLength);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Data);
+
+    File = CreateFileW(HivePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFileW failed %lu\n", GetLastError());
+    if (File != INVALID_HANDLE_VALUE)
+    {
+        Status = NtSaveKey(SourceKey, File);
+        ok_ntstatus(Status, STATUS_SUCCESS);
+        CloseHandle(File);
+    }
+
+    ok(RtlDosPathNameToNtPathName_U(HivePath, &FileName, NULL, NULL), "path conversion failed\n");
+    InitializeObjectAttributes(&HiveAttributes, &HiveName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    InitializeObjectAttributes(&FileAttributes, &FileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtLoadKey(&HiveAttributes, &FileAttributes);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        /* The first open of the child builds its KCB from the key node. */
+        Status = NtOpenKey(&HiveRoot, KEY_READ, &HiveAttributes);
+        ok_ntstatus(Status, STATUS_SUCCESS);
+        InitializeObjectAttributes(&ChildAttributes, &ChildName, OBJ_CASE_INSENSITIVE, HiveRoot, NULL);
+        Status = NtOpenKey(&HiveKey, KEY_READ, &ChildAttributes);
+        ok_ntstatus(Status, STATUS_SUCCESS);
+        if (NT_SUCCESS(Status))
+        {
+            Status = NtQueryKey(HiveKey, KeyFullInformation, &FullInformation, sizeof(FullInformation), &InfoLength);
+            ok_ntstatus(Status, STATUS_SUCCESS);
+            ok_long(FullInformation.MaxValueDataLen, DataLength);
+            Status = NtQueryKey(HiveKey, KeyCachedInformation, &CachedInformation, sizeof(CachedInformation), &InfoLength);
+            ok_ntstatus(Status, STATUS_SUCCESS);
+            ok_long(CachedInformation.MaxValueDataLen, DataLength);
+            NtClose(HiveKey);
+        }
+        if (HiveRoot != NULL)
+            NtClose(HiveRoot);
+        Status = NtUnloadKey(&HiveAttributes);
+        ok_ntstatus(Status, STATUS_SUCCESS);
+    }
+
+    RtlFreeUnicodeString(&FileName);
+    DeleteFileW(HivePath);
+    if (ChildKey != NULL)
+    {
+        NtDeleteKey(ChildKey);
+        NtClose(ChildKey);
+    }
+    NtDeleteKey(SourceKey);
+    NtClose(SourceKey);
+    RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, OldRestore, FALSE, &OldRestore);
+    RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, OldBackup, FALSE, &OldBackup);
+}
+
 START_TEST(NtQueryKey)
 {
     Test_KeyFullInformation();
     Test_KeyNameInformation();
+    Test_KeyCachedInformationLargeData();
 }
