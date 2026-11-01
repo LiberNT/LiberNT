@@ -1117,9 +1117,15 @@ static BOOL SHLWAPI_UseSystemForSystemFolders(void)
     bCheckedReg = TRUE;
 
     /* Key tells Win what file attributes to use on system folders */
+#ifdef __REACTOS__
+    if (!SHGetValueA(HKEY_LOCAL_MACHINE,
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer",
+        "UseSystemForSystemFolders", 0, 0, 0))
+#else
     if (SHGetValueA(HKEY_LOCAL_MACHINE,
         "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer",
         "UseSystemForSystemFolders", 0, 0, 0))
+#endif
       bUseSystemForSystemFolders = TRUE;
   }
   return bUseSystemForSystemFolders;
