@@ -322,11 +322,29 @@ SnpReclaimTx(VOID)
         if (EFI_ERROR(SnpNet.Snp->GetStatus(SnpNet.Snp, NULL, &Done)) || !Done)
             return;
 
-        for (i = 0; i < SNP_TX_BUFFERS; i++)
+        for (i = 0; i < SNP_TX_BUFFERS && Done != SnpNet.Tx[i] + SNP_FRAME_PAD; i++)
         {
-            if (Done == SnpNet.Tx[i] + SNP_FRAME_PAD)
-                SnpNet.TxBusy[i] = FALSE;
         }
+
+        if (i < SNP_TX_BUFFERS)
+            SnpNet.TxBusy[i] = FALSE;
+        else
+            UdpLogRecycleForeign(SnpNet.Snp, Done);
+    }
+}
+
+static
+VOID
+SnpForeignRecycle(
+    _In_ EFI_SIMPLE_NETWORK_PROTOCOL* Snp,
+    _In_ VOID* Buffer)
+{
+    ULONG i;
+
+    for (i = 0; Snp == SnpNet.Snp && i < SNP_TX_BUFFERS; i++)
+    {
+        if (Buffer == SnpNet.Tx[i] + SNP_FRAME_PAD)
+            SnpNet.TxBusy[i] = FALSE;
     }
 }
 
@@ -1564,6 +1582,7 @@ SnpClose(VOID)
     EFI_SIMPLE_NETWORK_PROTOCOL* Snp = SnpNet.Snp;
     ULONG i;
 
+    UdpLogForeignRecycle = NULL;
     if (SnpNet.TickEvent)
         GlobalSystemTable->BootServices->CloseEvent(SnpNet.TickEvent);
 
@@ -1701,6 +1720,7 @@ SnpOpen(
     SnpNet.Rx = SnpNet.Buffers;
     for (i = 0; i < SNP_TX_BUFFERS; i++)
         SnpNet.Tx[i] = SnpNet.Buffers + (i + 1) * SNP_FRAME_BYTES;
+    UdpLogForeignRecycle = SnpForeignRecycle;
 
     SnpNet.Seed = 0x9E3779B9;
     for (Byte = 0; Byte < SNP_MAC_BYTES; Byte++)

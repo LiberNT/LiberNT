@@ -511,6 +511,25 @@ BmGetTimeout(VOID)
     return (LONG)min(Seconds, (ULONGLONG)MAXLONG);
 }
 
+static
+VOID
+BmDebugEntries(
+    _In_ ULONG Default,
+    _In_ ULONG DefaultTool,
+    _In_ LONG Timeout)
+{
+    ULONG i;
+
+    if (!DBG)
+        return;
+
+    DbgPrint("BCD store %ls: %lu entries, %lu tools, timeout %ld s\n", BmStorePath, BmCount, BmToolCount, Timeout);
+    for (i = 0; i < BmCount; i++)
+        DbgPrint("  Entry %lu: %ls%s\n", i + 1, BmEntries[i].Description, i == Default ? " (default)" : "");
+    for (i = 0; i < BmToolCount; i++)
+        DbgPrint("  Tool %lu: %ls%s\n", i + 1, BmTools[i].Description, i == DefaultTool ? " (default)" : "");
+}
+
 VOID
 BlMain(VOID)
 {
@@ -519,6 +538,7 @@ BlMain(VOID)
     ULONG Size, Default = 0, DefaultTool = MAXULONG, i;
     LONG Timeout;
 
+    FwDebugAnnounce("LiberNT Boot Manager", TRUE);
     Store = BmReadStore(BmStorePath, RTL_NUMBER_OF(BmStorePath), &Size);
 
     RtlStringCchCopyW(BmTitle, RTL_NUMBER_OF(BmTitle), BM_DEFAULT_TITLE);
@@ -558,6 +578,7 @@ BlMain(VOID)
 
     BmSelected = Default;
     Timeout = BmGetTimeout();
+    BmDebugEntries(Default, DefaultTool, Timeout);
     if (DefaultTool < BmToolCount)
     {
         RtlZeroMemory(&Startup, sizeof(Startup));

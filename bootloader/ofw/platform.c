@@ -132,6 +132,21 @@ FwDebugPrint(
     }
 }
 
+VOID
+FwDebugAnnounce(
+    _In_ PCSTR Application,
+    _In_ BOOLEAN NewLog)
+{
+    UNREFERENCED_PARAMETER(NewLog);
+
+    if (!DBG)
+        return;
+
+    FwDebugPrint("\n");
+    FwDebugPrint(Application);
+    FwDebugPrint(", Open Firmware console\n");
+}
+
 static
 BOOLEAN
 OfwRecordAllocation(

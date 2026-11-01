@@ -893,6 +893,7 @@ UefiNetPrepare(
     if (Cancelled)
         *Cancelled = FALSE;
 
+    UdpLogClose();
     if (!Context ||
         !GlobalSystemTable ||
         !GlobalSystemTable->BootServices)

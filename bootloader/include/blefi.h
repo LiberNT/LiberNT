@@ -35,3 +35,24 @@ UefiLeaveBootServices(VOID);
 VOID
 UefiSerialPutChar(
     _In_ UCHAR Character);
+
+ULONG
+UdpLogOpen(VOID);
+
+VOID
+UdpLogClose(VOID);
+
+VOID
+UdpLogWrite(
+    _In_ PCSTR Text);
+
+VOID
+BootLogStart(
+    _In_ BOOLEAN NewLog);
+
+VOID
+BootLogWrite(
+    _In_ PCSTR Text);
+
+VOID
+BootLogClose(VOID);

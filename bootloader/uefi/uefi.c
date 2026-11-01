@@ -44,12 +44,19 @@ FwPrint(
     ...)
 {
     WCHAR Text[512];
+    CHAR Narrow[RTL_NUMBER_OF(Text)];
     va_list Arguments;
     ULONG i;
 
     va_start(Arguments, Format);
     RtlStringCchVPrintfW(Text, RTL_NUMBER_OF(Text), Format, Arguments);
     va_end(Arguments);
+
+    for (i = 0; Text[i] != UNICODE_NULL; i++)
+        Narrow[i] = Text[i] <= 0x7F ? (CHAR)Text[i] : '?';
+    Narrow[i] = ANSI_NULL;
+    UdpLogWrite(Narrow);
+    BootLogWrite(Narrow);
 
     if (BootServicesExitedFlag || !GlobalSystemTable->ConOut)
     {

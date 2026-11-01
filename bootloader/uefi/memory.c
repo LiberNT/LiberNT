@@ -334,6 +334,8 @@ UefiLeaveBootServices(VOID)
     BOOLEAN MayAllocate = TRUE;
     ULONG Retry;
 
+    UdpLogClose();
+    BootLogClose();
     for (Retry = 0; Retry < UEFI_MAP_RETRIES; Retry++)
     {
         if (!UefiReadMemoryMap(MayAllocate, &MapKey, &UefiExitMapSize, &UefiExitDescriptorSize))

@@ -77,6 +77,13 @@ VOID
 UefiLattePandaFixMac(
     _In_ EFI_SIMPLE_NETWORK_PROTOCOL *Snp);
 
+extern VOID (*UdpLogForeignRecycle)(EFI_SIMPLE_NETWORK_PROTOCOL* Snp, VOID* Buffer);
+
+BOOLEAN
+UdpLogRecycleForeign(
+    _In_ EFI_SIMPLE_NETWORK_PROTOCOL* Snp,
+    _In_ VOID* Buffer);
+
 BOOLEAN
 UefiDhcpAcquire(
     _Inout_ PUEFI_NET_CONTEXT Context);

@@ -138,6 +138,11 @@ VOID
 FwDebugPrint(
     _In_ PCSTR Text);
 
+VOID
+FwDebugAnnounce(
+    _In_ PCSTR Application,
+    _In_ BOOLEAN NewLog);
+
 extern VOID (*FwLateDebugPutChar)(UCHAR Character);
 
 PVOID

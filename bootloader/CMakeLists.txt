@@ -91,6 +91,9 @@ if(ARCH STREQUAL "ppc")
         ofw/console.c)
 else()
     list(APPEND BOOTLIB_SOURCE
+        net/udplog.c
+        net/uefinet_hw.c
+        uefi/bootlog.c
         uefi/platform.c
         uefi/serial.c
         uefi/uefi.c)
@@ -256,7 +259,6 @@ if(NOT ARCH STREQUAL "ppc")
         net/uefidhcp.c
         net/uefihttp.c
         net/uefinet.c
-        net/uefinet_hw.c
         net/snpnet.c
         uefi/memory.c)
 endif()

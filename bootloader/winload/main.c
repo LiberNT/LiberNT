@@ -450,6 +450,7 @@ BlMain(VOID)
 {
     PUCHAR Stack;
 
+    FwDebugAnnounce("LiberNT OS Loader", FALSE);
     OslArchInitialize();
 
     if (!MmInitializeMemoryManager())

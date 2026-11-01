@@ -361,7 +361,10 @@ FwStartImage(
     LoadedImage->LoadOptions = (VOID*)LoadOptions;
     LoadedImage->LoadOptionsSize = (UINT32)((wcslen(LoadOptions) + 1) * sizeof(WCHAR));
 
+    UdpLogClose();
+    BootLogClose();
     Status = BootServices->StartImage(Handle, NULL, NULL);
+    UdpLogOpen();
     *Cancelled = (Status == EFI_ABORTED);
     return !EFI_ERROR(Status);
 }
