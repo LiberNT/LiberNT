@@ -3506,9 +3506,60 @@ QSI_DEF(SystemFirmwareTableInformation)
         }
         case SIG_FIRM:
         {
-            /* FIXME: Not implemented yet */
-            DPRINT1("FIRM provider not implemented\n");
-            Status = STATUS_NOT_IMPLEMENTED;
+            static const ULONG FirmTables[2][2] = { { 0xC0000, 0x20000 }, { 0xE0000, 0x20000 } };
+            PHYSICAL_ADDRESS Physical;
+            PVOID Mapping;
+            ULONG Index;
+
+            if (ExpFirmwareType != FirmwareTypeBios)
+            {
+                Status = STATUS_NOT_IMPLEMENTED;
+                break;
+            }
+
+            if (SysFirmwareInfo->Action == SystemFirmwareTable_Enumerate)
+            {
+                SysFirmwareInfo->TableBufferLength = sizeof(ULONG) * RTL_NUMBER_OF(FirmTables);
+                *ReqSize += SysFirmwareInfo->TableBufferLength;
+                if (SysFirmwareInfo->TableBufferLength <= DataBufSize)
+                {
+                    for (Index = 0; Index < RTL_NUMBER_OF(FirmTables); Index++)
+                        ((PULONG)SysFirmwareInfo->TableBuffer)[Index] = FirmTables[Index][0];
+                }
+                break;
+            }
+
+            if (SysFirmwareInfo->Action != SystemFirmwareTable_Get)
+            {
+                Status = STATUS_INVALID_PARAMETER_1;
+                break;
+            }
+
+            for (Index = 0; Index < RTL_NUMBER_OF(FirmTables); Index++)
+            {
+                if (FirmTables[Index][0] == SysFirmwareInfo->TableID)
+                    break;
+            }
+            if (Index == RTL_NUMBER_OF(FirmTables))
+            {
+                Status = STATUS_INVALID_PARAMETER_1;
+                break;
+            }
+
+            SysFirmwareInfo->TableBufferLength = FirmTables[Index][1];
+            *ReqSize += FirmTables[Index][1];
+            if (FirmTables[Index][1] > DataBufSize)
+                break;
+
+            Physical.QuadPart = FirmTables[Index][0];
+            Mapping = MmMapIoSpaceEx(Physical, FirmTables[Index][1], PAGE_READWRITE | PAGE_NOCACHE);
+            if (Mapping == NULL)
+            {
+                Status = STATUS_NOT_FOUND;
+                break;
+            }
+            RtlCopyMemory(SysFirmwareInfo->TableBuffer, Mapping, FirmTables[Index][1]);
+            MmUnmapIoSpace(Mapping, FirmTables[Index][1]);
             break;
         }
         case SIG_RSMB:
