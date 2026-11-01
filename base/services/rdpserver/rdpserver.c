@@ -43,11 +43,12 @@ static IPMask InterfaceMask;
 static ULONG AddressContext;
 static BOOL AddressAdded;
 static WCHAR TransferRoot[MAX_PATH];
+static BOOL UseNla;
 
 typedef struct DESKTOP_CONTEXT
 {
     rdpContext rdp;
-    BOOL Authorized, Active, Suppressed, Refresh;
+    BOOL Authorized, Active, Suppressed, Refresh, NlaLogon;
     int Width, Height;
     HDC ScreenDC, MemoryDC;
     HBITMAP Bitmap;
@@ -249,13 +250,42 @@ static BOOL Capabilities(freerdp_peer *peer)
                                        GetSystemMetrics(SM_CYSCREEN));
 }
 
+static BOOL Logon(freerdp_peer *peer, const SEC_WINNT_AUTH_IDENTITY *identity, BOOL automatic)
+{
+    DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
+    rdpSettings *settings = ctx->rdp.settings;
+    const char *user = freerdp_settings_get_string(settings, FreeRDP_Username);
+    const char *domain = freerdp_settings_get_string(settings, FreeRDP_Domain);
+    const char *password = freerdp_settings_get_string(settings, FreeRDP_Password);
+    WCHAR wuser[128], wdomain[256], wpassword[256];
+    HANDLE token;
+    (void)identity;
+    if (!UseNla) return TRUE;
+    if (!automatic || !user || !password || _stricmp(user, Username) ||
+        !MultiByteToWideChar(CP_UTF8, 0, user, -1, wuser, ARRAYSIZE(wuser)) ||
+        !MultiByteToWideChar(CP_UTF8, 0, (domain && *domain) ? domain : ".", -1, wdomain, ARRAYSIZE(wdomain)) ||
+        !MultiByteToWideChar(CP_UTF8, 0, password, -1, wpassword, ARRAYSIZE(wpassword)))
+    {
+        Log("NLA logon rejected for peer %s", peer->hostname);
+        return FALSE;
+    }
+    ctx->NlaLogon = LogonUserW(wuser, wdomain, wpassword, LOGON32_LOGON_INTERACTIVE, LOGON32_PROVIDER_DEFAULT, &token);
+    SecureZeroMemory(wpassword, sizeof(wpassword));
+    if (ctx->NlaLogon)
+        CloseHandle(token);
+    Log("NLA logon of %s for peer %s: %s (%lu)", user, peer->hostname, ctx->NlaLogon ? "accepted" : "rejected",
+        ctx->NlaLogon ? 0UL : GetLastError());
+    return ctx->NlaLogon;
+}
+
 static BOOL PostConnect(freerdp_peer *peer)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
     rdpSettings *settings = ctx->rdp.settings;
     const char *user = freerdp_settings_get_string(settings, FreeRDP_Username);
     const char *password = freerdp_settings_get_string(settings, FreeRDP_Password);
-    if (!user || !password || strcmp(user, Username) || strcmp(password, Password))
+    if (UseNla ? !ctx->NlaLogon :
+        (!user || !password || strcmp(user, Username) || strcmp(password, Password)))
     {
         Log("Authentication rejected for peer %s", peer->hostname);
         return FALSE;
@@ -411,8 +441,8 @@ static DWORD WINAPI ClientThread(void *arg)
     if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerCertificate, cert, 1))
     { freerdp_certificate_free(cert); goto cleanup; }
     if (!freerdp_settings_set_bool(settings, FreeRDP_RdpSecurity, FALSE) ||
-        !freerdp_settings_set_bool(settings, FreeRDP_TlsSecurity, TRUE) ||
-        !freerdp_settings_set_bool(settings, FreeRDP_NlaSecurity, FALSE) ||
+        !freerdp_settings_set_bool(settings, FreeRDP_TlsSecurity, !UseNla) ||
+        !freerdp_settings_set_bool(settings, FreeRDP_NlaSecurity, UseNla) ||
         !freerdp_settings_set_bool(settings, FreeRDP_ExtSecurity, FALSE) ||
         !freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, FALSE) ||
         !freerdp_settings_set_bool(settings, FreeRDP_NSCodec, FALSE) ||
@@ -420,7 +450,7 @@ static DWORD WINAPI ClientThread(void *arg)
         !freerdp_settings_set_bool(settings, FreeRDP_SuppressOutput, TRUE) ||
         !freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 32)) goto cleanup;
     peer->Capabilities = Capabilities;
-    peer->PostConnect = PostConnect; peer->Activate = Activate;
+    peer->Logon = Logon; peer->PostConnect = PostConnect; peer->Activate = Activate;
     ctx->rdp.input->SynchronizeEvent = Synchronize;
     ctx->rdp.input->KeyboardEvent = Keyboard;
     ctx->rdp.input->UnicodeKeyboardEvent = UnicodeKeyboard;
@@ -493,6 +523,7 @@ int main(int argc, char **argv)
     GetPrivateProfileStringA("server", "allow", "", AllowedPeer, sizeof(AllowedPeer), config);
     GetPrivateProfileStringA("server", "username", "", Username, sizeof(Username), config);
     GetPrivateProfileStringA("server", "password", "", Password, sizeof(Password), config);
+    UseNla = GetPrivateProfileIntA("server", "nla", 0, config) != 0;
     GetPrivateProfileStringA("server", "certificate", "", Certificate, sizeof(Certificate), config);
     GetPrivateProfileStringA("server", "privatekey", "", PrivateKey, sizeof(PrivateKey), config);
     GetPrivateProfileStringA("server", "interface_mac", "", mac, sizeof(mac), config);
@@ -528,7 +559,7 @@ int main(int argc, char **argv)
     if (!ConfigRelativePath(config, Certificate, sizeof(Certificate)) ||
         !ConfigRelativePath(config, PrivateKey, sizeof(PrivateKey)))
     { Log("Certificate or private key path is too long"); return 2; }
-    if (!Username[0] || strlen(Password) < 16 || inet_addr(BindAddress) == INADDR_NONE ||
+    if (!Username[0] || (!UseNla && strlen(Password) < 16) || inet_addr(BindAddress) == INADDR_NONE ||
         inet_addr(BindAddress) == INADDR_ANY || inet_addr(AllowedPeer) == INADDR_NONE ||
         inet_addr(AllowedPeer) == INADDR_ANY || !Certificate[0] || !PrivateKey[0])
     { Log("Invalid configuration: explicit bind/peer IPv4, credentials and TLS files required"); return 2; }
@@ -547,7 +578,7 @@ int main(int argc, char **argv)
     /* Autostart may run before PnP has finished configuring Ethernet. */
     while (!EnsureAddress() || !listener->Open(listener, BindAddress, 3389))
         if (WaitForSingleObject(StopEvent, 2000) != WAIT_TIMEOUT) goto done;
-    Log("Listening on %s:3389; TLS; allowed controller %s", BindAddress, AllowedPeer);
+    Log("Listening on %s:3389; %s; allowed controller %s", BindAddress, UseNla ? "NLA" : "TLS", AllowedPeer);
     for (;;)
     {
         events[0] = StopEvent;
