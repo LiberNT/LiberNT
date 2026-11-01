@@ -345,8 +345,9 @@ DnsQuery_W(LPCWSTR Name,
      * According to RFC a-z,A-Z,0-9,-,_, but can't start or end with - or _
      */
     NameLen = wcslen(Name);
-    if (Name[0] == L'-' || Name[0] == L'_' || Name[NameLen - 1] == L'-' ||
-        Name[NameLen - 1] == L'_' || wcsstr(Name, L"..") != NULL)
+    if (NameLen &&
+        (Name[0] == L'-' || Name[0] == L'_' || Name[NameLen - 1] == L'-' ||
+         Name[NameLen - 1] == L'_' || wcsstr(Name, L"..") != NULL))
     {
         return ERROR_INVALID_NAME;
     }
@@ -506,6 +507,21 @@ QueryLocalName(LPCWSTR Name, WORD Type, PDNS_RECORD *Result)
     ULONG Size = 16384;
     DWORD Error;
     IP4_ADDRESS Loopback4 = htonl(INADDR_LOOPBACK);
+
+    if (!Name[0])
+    {
+        WCHAR Host[MAX_HOSTNAME_LEN + 1];
+        DWORD HostLength = ARRAYSIZE(Host);
+
+        /* FIXME: the AAAA address and the other record types of the empty name are not measured on Windows */
+        if (Type != DNS_TYPE_A && Type != DNS_TYPE_AAAA)
+            return DNS_INFO_NO_RECORDS;
+        if (!GetComputerNameExW(ComputerNameDnsHostname, Host, &HostLength))
+            return GetLastError();
+        if (Type == DNS_TYPE_A)
+            return AppendAddressRecord(Host, Type, &Loopback4, &Tail, 1200, DnsSectionQuestion) ? ERROR_SUCCESS : ERROR_OUTOFMEMORY;
+        return AppendAddressRecord(Host, Type, &Loopback6, &Tail, 1200, DnsSectionQuestion) ? ERROR_SUCCESS : ERROR_OUTOFMEMORY;
+    }
 
     if (!_wcsicmp(Name, L"localhost") || !_wcsicmp(Name, L"localhost."))
     {
