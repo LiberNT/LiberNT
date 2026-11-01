@@ -408,4 +408,34 @@ DxgkPagingFenceQueueCoreQueryCommitted(
     return Value;
 }
 
+BOOLEAN
+DxgkPagingCoreReadContextResourceHints(
+    _In_ PVOID DriverAllocation,
+    _Out_ PULONG AllocationClass,
+    _Out_ PVOID *ContextResource)
+{
+    PUCHAR Base = (PUCHAR)DriverAllocation;
+    ULONG_PTR End;
+    ULONG_PTR Page;
+
+    *AllocationClass = 0;
+    *ContextResource = NULL;
+    if (Base == NULL)
+        return FALSE;
+    End = (ULONG_PTR)Base + DXGK_PAGING_CORE_CONTEXT_RESOURCE_OFFSET + sizeof(PVOID) - 1;
+    if (End < (ULONG_PTR)Base)
+        return FALSE;
+    for (Page = (ULONG_PTR)PAGE_ALIGN(Base); ; Page += PAGE_SIZE)
+    {
+        if (!MmIsAddressValid((PVOID)Page))
+            return FALSE;
+        if (Page >= (ULONG_PTR)PAGE_ALIGN((PVOID)End))
+            break;
+    }
+    /* FIXME: these are offsets inside the miniport's own allocation object, a layout only one miniport is known to keep */
+    *AllocationClass = *(ULONG UNALIGNED *)(Base + DXGK_PAGING_CORE_CONTEXT_CLASS_OFFSET);
+    *ContextResource = *(PVOID UNALIGNED *)(Base + DXGK_PAGING_CORE_CONTEXT_RESOURCE_OFFSET);
+    return TRUE;
+}
+
 /* EOF */

@@ -51,6 +51,7 @@
 
 #include "dxgkrnl_private.h"
 #include "handles.h"
+#include "paging_core.h"
 #include "residency_core.h"
 #include "vidmm.h"
 #include "vidmm_worker_drain_core.h"
@@ -2190,20 +2191,9 @@ DxgkVidMmCreateContextAllocation(
     RtlZeroMemory(ContextHandle, sizeof(*ContextHandle));
     Allocation->ContextAllocationHandle = ContextHandle;
     ContextHandle->hDriverAllocation = DriverAllocation;
-    _SEH2_TRY
-    {
-        ContextHandle->AllocationClass =
-            *(ULONG *)((PUCHAR)DriverAllocation + 0x10);
-        ContextHandle->ContextResource =
-            *(PVOID *)((PUCHAR)DriverAllocation + 0x758);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
-    if (!NT_SUCCESS(Status))
-        goto Failure;
+    (VOID)DxgkPagingCoreReadContextResourceHints(DriverAllocation,
+                                                 &ContextHandle->AllocationClass,
+                                                 &ContextHandle->ContextResource);
     ContextAllocationHandle = ContextHandle;
     /*
      * The miniport keeps the CPU address of a CpuVisible context allocation
