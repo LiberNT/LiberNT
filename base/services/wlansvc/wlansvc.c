@@ -109,8 +109,15 @@ ScanThreadRoutine(LPVOID lpParameter)
              entry = entry->Flink)
         {
             iface = CONTAINING_RECORD(entry, WLANSVC_INTERFACE, ListEntry);
-            if (!iface->Connected)
-                WlanSvcDoScan(iface, NULL);
+            if (!iface->Connected &&
+                WlanSvcDoScan(iface, NULL) == ERROR_SUCCESS &&
+                !iface->Connected)
+            {
+                /* Drive auto-connect from the background scan too, not only the
+                 * RPC scan path, so a saved connectionMode=auto profile connects
+                 * on boot with no UI interaction. */
+                WlanSvcTryAutoConnect(iface);
+            }
         }
         LeaveCriticalSection(&WlanSvcLock);
         wait = WaitForMultipleObjects(2, waitEvents, FALSE, 60000);
