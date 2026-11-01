@@ -241,7 +241,9 @@ KdQueueFileRequest(
     }
     KdpFileRequestName[Index] = UNICODE_NULL;
 
+#ifndef _WINKD_
     KdpResetFileIoHost();
+#endif
     InterlockedExchange(&KdpFileRequest, (LONG)Kind);
     return STATUS_SUCCESS;
 }
