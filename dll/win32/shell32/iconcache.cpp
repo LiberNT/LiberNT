@@ -1097,6 +1097,203 @@ EXTERN_C HICON WINAPI ExtractAssociatedIconExA(HINSTANCE hInst, LPSTR lpIconPath
 }
 
 
+static BOOL SIC_GetIconPixels(HICON hIcon, INT cx, PULONG pPixels)
+{
+    ICONINFO info;
+    BITMAP bm;
+    BITMAPINFO bmi;
+    HDC hdc;
+    BOOL bOk = FALSE;
+    INT i, cPixels = cx * cx;
+
+    if (!GetIconInfo(hIcon, &info))
+        return FALSE;
+
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+    bmi.bmiHeader.biWidth = cx;
+    bmi.bmiHeader.biHeight = -cx;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    hdc = CreateCompatibleDC(NULL);
+    /* FIXME: monochrome icons (no color bitmap) cannot be composed */
+    if (hdc && info.hbmColor && GetObjectW(info.hbmColor, sizeof(bm), &bm) &&
+        bm.bmWidth == cx && bm.bmHeight == cx &&
+        GetDIBits(hdc, info.hbmColor, 0, cx, pPixels, &bmi, DIB_RGB_COLORS) == cx)
+    {
+        bOk = TRUE;
+        for (i = 0; i < cPixels && !(pPixels[i] & 0xFF000000); ++i)
+            ;
+        if (i == cPixels)
+        {
+            PULONG pMask = (PULONG)HeapAlloc(GetProcessHeap(), 0, cPixels * sizeof(ULONG));
+
+            bOk = pMask && GetDIBits(hdc, info.hbmMask, 0, cx, pMask, &bmi, DIB_RGB_COLORS) == cx;
+            for (i = 0; bOk && i < cPixels; ++i)
+            {
+                if (!(pMask[i] & 0x00FFFFFF))
+                    pPixels[i] |= 0xFF000000;
+            }
+            if (pMask)
+                HeapFree(GetProcessHeap(), 0, pMask);
+        }
+    }
+
+    if (hdc)
+        DeleteDC(hdc);
+    if (info.hbmColor)
+        DeleteObject(info.hbmColor);
+    DeleteObject(info.hbmMask);
+    return bOk;
+}
+
+static HICON SIC_CreateIconFromPixels(INT cx, const ULONG *pPixels)
+{
+    ICONINFO info = { TRUE, 0, 0, NULL, NULL };
+    BITMAPINFO bmi;
+    PVOID pBits = NULL;
+    PBYTE pMaskBits;
+    HICON hIcon = NULL;
+    INT x, y, cbMaskRow = ((cx + 15) / 16) * 2;
+
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+    bmi.bmiHeader.biWidth = cx;
+    bmi.bmiHeader.biHeight = -cx;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    pMaskBits = (PBYTE)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, cbMaskRow * cx);
+    if (!pMaskBits)
+        return NULL;
+    for (y = 0; y < cx; ++y)
+    {
+        for (x = 0; x < cx; ++x)
+        {
+            if (!(pPixels[y * cx + x] & 0xFF000000))
+                pMaskBits[y * cbMaskRow + x / 8] |= 0x80 >> (x % 8);
+        }
+    }
+
+    info.hbmColor = CreateDIBSection(NULL, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+    info.hbmMask = CreateBitmap(cx, cx, 1, 1, pMaskBits);
+    if (info.hbmColor && info.hbmMask && pBits)
+    {
+        CopyMemory(pBits, pPixels, cx * cx * sizeof(ULONG));
+        hIcon = CreateIconIndirect(&info);
+    }
+
+    if (info.hbmColor)
+        DeleteObject(info.hbmColor);
+    if (info.hbmMask)
+        DeleteObject(info.hbmMask);
+    HeapFree(GetProcessHeap(), 0, pMaskBits);
+    return hIcon;
+}
+
+static VOID SIC_BlendPixels(PULONG pDest, INT cxDest, const ULONG *pSrc, INT cxSrc, INT x0, INT y0)
+{
+    INT x, y, c;
+
+    for (y = 0; y < cxSrc; ++y)
+    {
+        for (x = 0; x < cxSrc; ++x)
+        {
+            ULONG src = pSrc[y * cxSrc + x], dst = pDest[(y0 + y) * cxDest + x0 + x], out = 0;
+            ULONG sa = src >> 24, da = dst >> 24, oa = sa + da * (255 - sa) / 255;
+
+            if (!sa)
+                continue;
+            for (c = 0; oa && c < 24; c += 8)
+            {
+                ULONG sc = (src >> c) & 0xFF, dc = (dst >> c) & 0xFF;
+                out |= ((sc * sa + dc * da * (255 - sa) / 255) / oa) << c;
+            }
+            pDest[(y0 + y) * cxDest + x0 + x] = out | (oa << 24);
+        }
+    }
+}
+
+static HICON SIC_GetDocumentIcon(INT cx)
+{
+    if (!sic_hdpa)
+        SIC_Initialize();
+    if (cx == ShellLargeIconSize && ShellBigIconList)
+        return ImageList_GetIcon(ShellBigIconList, 0, ILD_TRANSPARENT);
+    if (cx == ShellSmallIconSize && ShellSmallIconList)
+        return ImageList_GetIcon(ShellSmallIconList, 0, ILD_TRANSPARENT);
+    return (HICON)LoadImageW(shell32_hInstance, MAKEINTRESOURCEW(IDI_SHELL_DOCUMENT), IMAGE_ICON, cx, cx, 0);
+}
+
+/* GIL_SIMULATEDOC draws the half-size icon centered on the document icon of the system image list */
+static HRESULT SIC_SimulateDocIcon(LPCWSTR pszIconFile, INT iIndex, INT cx, HICON *phIcon)
+{
+    HICON hOverlay = NULL, hDocument;
+    PULONG pDocument, pOverlay;
+    INT cxOverlay = cx / 2;
+    UINT ret;
+    HRESULT hr = E_FAIL;
+
+    *phIcon = NULL;
+    if (cxOverlay <= 0)
+        return E_FAIL;
+
+    ret = PrivateExtractIconsW(pszIconFile, iIndex, cxOverlay, cxOverlay, &hOverlay, NULL, 1, LR_DEFAULTCOLOR);
+    if (ret == 0xFFFFFFFF)
+        return E_FAIL;
+    if (!ret || !hOverlay)
+        return S_FALSE;
+
+    hDocument = SIC_GetDocumentIcon(cx);
+    pDocument = (PULONG)HeapAlloc(GetProcessHeap(), 0, cx * cx * sizeof(ULONG));
+    pOverlay = (PULONG)HeapAlloc(GetProcessHeap(), 0, cxOverlay * cxOverlay * sizeof(ULONG));
+    if (hDocument && pDocument && pOverlay &&
+        SIC_GetIconPixels(hDocument, cx, pDocument) &&
+        SIC_GetIconPixels(hOverlay, cxOverlay, pOverlay))
+    {
+        SIC_BlendPixels(pDocument, cx, pOverlay, cxOverlay, (cx - cxOverlay) / 2, (cx - cxOverlay) / 2);
+        *phIcon = SIC_CreateIconFromPixels(cx, pDocument);
+        if (*phIcon)
+            hr = S_OK;
+    }
+
+    if (pOverlay)
+        HeapFree(GetProcessHeap(), 0, pOverlay);
+    if (pDocument)
+        HeapFree(GetProcessHeap(), 0, pDocument);
+    if (hDocument)
+        DestroyIcon(hDocument);
+    DestroyIcon(hOverlay);
+    return hr;
+}
+
+static HRESULT SIC_ExtractSimulatedDocIcons(LPCWSTR pszIconFile, INT iIndex, HICON *phiconLarge,
+                                            HICON *phiconSmall, UINT nIconSize)
+{
+    HICON hLarge = NULL, hSmall = NULL;
+    HRESULT hr = S_OK;
+
+    if (phiconLarge)
+        hr = SIC_SimulateDocIcon(pszIconFile, iIndex, LOWORD(nIconSize), &hLarge);
+    if (hr == S_OK && phiconSmall)
+        hr = SIC_SimulateDocIcon(pszIconFile, iIndex, HIWORD(nIconSize), &hSmall);
+    if (hr != S_OK)
+    {
+        if (hLarge)
+            DestroyIcon(hLarge);
+        return hr;
+    }
+
+    if (phiconLarge)
+        *phiconLarge = hLarge;
+    if (phiconSmall)
+        *phiconSmall = hSmall;
+    return S_OK;
+}
+
 /****************************************************************************
  * SHDefExtractIconW        [SHELL32.@]
  */
@@ -1109,6 +1306,9 @@ HRESULT WINAPI SHDefExtractIconW(LPCWSTR pszIconFile, int iIndex, UINT uFlags,
 
     if (!nIconSize)
         nIconSize = MAKELONG(GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CXSMICON));
+
+    if (uFlags & GIL_SIMULATEDOC)
+        return SIC_ExtractSimulatedDocIcons(pszIconFile, iIndex, phiconLarge, phiconSmall, nIconSize);
 
     ret = PrivateExtractIconsW(pszIconFile, iIndex, nIconSize, nIconSize, hIcons, NULL, 2, LR_DEFAULTCOLOR);
     /* FIXME: deal with uFlags parameter which contains GIL_ flags */

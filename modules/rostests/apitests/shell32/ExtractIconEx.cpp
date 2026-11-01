@@ -225,6 +225,19 @@ START_TEST(SHDefExtractIcon)
         SafeDestroyIcon(hIcoSimDoc);
     }
 
+    hIcoLarge = hIcoSmall = NULL;
+    hr = SHDefExtractIcon(path, index, GIL_SIMULATEDOC, &hIcoLarge, &hIcoSmall, 0);
+    ok_hex(hr, S_OK);
+    ok(hIcoLarge && hIcoSmall && GetIcoSize(hIcoSmall) == GetSystemMetrics(SM_CXSMICON), "GIL_SIMULATEDOC small icon failed\n");
+    SafeDestroyIcon(hIcoLarge);
+    SafeDestroyIcon(hIcoSmall);
+
+    hIcoLarge = hIcoSmall = NULL;
+    hr = SHDefExtractIcon(path, index, GIL_SIMULATEDOC, &hIcoLarge, &hIcoSmall, SysBigIconSize * 2);
+    ok_hex(hr, E_FAIL);
+    SafeDestroyIcon(hIcoLarge);
+    SafeDestroyIcon(hIcoSmall);
+
     GetTempPathW(_countof(path), path);
     GetTempFileNameW(path, L"TEST", 0, path);
     ok(SHDEI(path) == S_FALSE, "Empty file should return S_FALSE\n");
