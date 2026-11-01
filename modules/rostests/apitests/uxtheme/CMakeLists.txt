@@ -5,6 +5,7 @@ list(APPEND SOURCE
     DrawThemeParentBackground.c
     GetThemeParseErrorInfo.c
     NonClientCaption.c
+    NonClientHitTest.c
     SetWindowTheme.c
     TextScaling.c
     SetThemeAppProperties.c

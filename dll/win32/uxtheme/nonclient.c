@@ -1822,6 +1822,8 @@ DefWndNCHitTest(HWND hWnd, POINT Point)
     {
         return HTNOWHERE;
     }
+    if (!(wi.dwStyle & WS_MINIMIZE) && PtInRect(&wi.rcClient, Point))
+        return HTCLIENT;
     WindowRect = wi.rcWindow;
 
     if (UserHasWindowEdge(wi.dwStyle, wi.dwExStyle))

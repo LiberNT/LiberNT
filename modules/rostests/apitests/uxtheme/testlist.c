@@ -7,6 +7,7 @@ extern void func_ColorPreference(void);
 extern void func_DrawThemeParentBackground(void);
 extern void func_GetThemeParseErrorInfo(void);
 extern void func_NonClientCaption(void);
+extern void func_NonClientHitTest(void);
 extern void func_SetThemeAppProperties(void);
 extern void func_SetWindowTheme(void);
 extern void func_TextScaling(void);
@@ -20,6 +21,7 @@ const struct test winetest_testlist[] =
     { "DrawThemeParentBackground", func_DrawThemeParentBackground },
     { "GetThemeParseErrorInfo", func_GetThemeParseErrorInfo },
     { "NonClientCaption", func_NonClientCaption },
+    { "NonClientHitTest", func_NonClientHitTest },
     { "SetWindowTheme", func_SetWindowTheme },
     { "TextScaling",    func_TextScaling },
     { "SetThemeAppProperties", func_SetThemeAppProperties },
