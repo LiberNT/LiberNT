@@ -542,8 +542,8 @@
 @ stdcall RegGetKeySecurity(long long ptr ptr) kernelbase.RegGetKeySecurity
 @ stdcall RegGetValueA(long str str long ptr ptr ptr) kernelbase.RegGetValueA
 @ stdcall RegGetValueW(long wstr wstr long ptr ptr ptr) kernelbase.RegGetValueW
-@ stdcall -stub -version=0x600+ RegLoadAppKeyA(str ptr long long long) kernelbase.RegLoadAppKeyA
-@ stdcall -stub -version=0x600+ RegLoadAppKeyW(wstr ptr long long long) kernelbase.RegLoadAppKeyW
+@ stdcall -version=0x600+ RegLoadAppKeyA(str ptr long long long) kernelbase.RegLoadAppKeyA
+@ stdcall -version=0x600+ RegLoadAppKeyW(wstr ptr long long long) kernelbase.RegLoadAppKeyW
 @ stdcall RegLoadKeyA(long str str) kernelbase.RegLoadKeyA
 @ stdcall RegLoadKeyW(long wstr wstr) kernelbase.RegLoadKeyW
 @ stdcall RegNotifyChangeKeyValue(long long long long long) kernelbase.RegNotifyChangeKeyValue
