@@ -1135,7 +1135,7 @@ EtwpTraceClassicEvent(
 
     Reserved = ALIGN_UP_BY(Total, sizeof(ULONG64));
     if (NT_SUCCESS(Status) &&
-        (Total > MAXUSHORT || Reserved > Logger->BufferSize - sizeof(WMI_BUFFER_HEADER)))
+        (Reserved > MAXUSHORT || Reserved > Logger->BufferSize - sizeof(WMI_BUFFER_HEADER)))
     {
         Status = STATUS_BUFFER_OVERFLOW;
     }
@@ -1208,7 +1208,7 @@ EtwpTraceClassicEvent(
         if (NT_SUCCESS(Status))
         {
             RtlZeroMemory(Record, sizeof(*Record));
-            Record->Size = (USHORT)Total;
+            Record->Size = (USHORT)Reserved;
             Record->HeaderType = Narrow ? TRACE_HEADER_TYPE_FULL_HEADER32 : TRACE_HEADER_TYPE_FULL_HEADER64;
             Record->MarkerFlags = (TRACE_HEADER_FLAG | TRACE_HEADER_EVENT_TRACE) >> 24;
             Record->Class = Header.Class;
