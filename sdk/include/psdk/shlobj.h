@@ -2593,6 +2593,8 @@ BOOL         WINAPI ILIsParent(_In_ PCIDLIST_ABSOLUTE, _In_ PCIDLIST_ABSOLUTE, B
 HRESULT      WINAPI ILLoadFromStream(_In_ LPSTREAM, _Inout_ PIDLIST_RELATIVE*);
 BOOL         WINAPI ILRemoveLastID(_Inout_opt_ PUIDLIST_RELATIVE);
 HRESULT      WINAPI ILSaveToStream(_In_ LPSTREAM, _In_ PCUIDLIST_RELATIVE);
+HRESULT      WINAPI ILLoadFromStreamEx(_In_ LPSTREAM, _Outptr_ PIDLIST_RELATIVE*);
+HRESULT      WINAPI AssocGetDetailsOfPropKey(_In_ IShellFolder*, _In_ PCUITEMID_CHILD, _In_ const PROPERTYKEY*, _Out_ VARIANT*, _Out_opt_ BOOL*);
 
 static inline BOOL ILIsEmpty(_In_opt_ PCUIDLIST_RELATIVE pidl)
 {

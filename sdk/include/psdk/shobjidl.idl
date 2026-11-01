@@ -5275,6 +5275,38 @@ interface IFileOperation : IUnknown
          [out] BOOL *pfAnyOperationsAborted);
 };
 
+cpp_quote("#define ARCONTENT_AUTORUNINF               0x00000002")
+cpp_quote("#define ARCONTENT_AUDIOCD                  0x00000004")
+cpp_quote("#define ARCONTENT_DVDMOVIE                 0x00000008")
+cpp_quote("#define ARCONTENT_BLANKCD                  0x00000010")
+cpp_quote("#define ARCONTENT_BLANKDVD                 0x00000020")
+cpp_quote("#define ARCONTENT_UNKNOWNCONTENT           0x00000040")
+cpp_quote("#define ARCONTENT_AUTOPLAYPIX              0x00000080")
+cpp_quote("#define ARCONTENT_AUTOPLAYMUSIC            0x00000100")
+cpp_quote("#define ARCONTENT_AUTOPLAYVIDEO            0x00000200")
+cpp_quote("#define ARCONTENT_VCD                      0x00000400")
+cpp_quote("#define ARCONTENT_SVCD                     0x00000800")
+cpp_quote("#define ARCONTENT_DVDAUDIO                 0x00001000")
+cpp_quote("#define ARCONTENT_BLANKBD                  0x00002000")
+cpp_quote("#define ARCONTENT_BLURAY                   0x00004000")
+cpp_quote("#define ARCONTENT_CAMERASTORAGE            0x00008000")
+cpp_quote("#define ARCONTENT_CUSTOMEVENT              0x00010000")
+cpp_quote("#define ARCONTENT_NONE                     0x00000000")
+cpp_quote("#define ARCONTENT_MASK                     0x0001FFFE")
+cpp_quote("#define ARCONTENT_PHASE_UNKNOWN            0x00000000")
+cpp_quote("#define ARCONTENT_PHASE_PRESNIFF           0x10000000")
+cpp_quote("#define ARCONTENT_PHASE_SNIFFING           0x20000000")
+cpp_quote("#define ARCONTENT_PHASE_FINAL              0x40000000")
+cpp_quote("#define ARCONTENT_PHASE_MASK               0x70000000")
+
+cpp_quote("HRESULT WINAPI SHGetPropertyStoreFromIDList(PCIDLIST_ABSOLUTE pidl, GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv);")
+cpp_quote("HRESULT WINAPI SHGetPropertyStoreFromParsingName(PCWSTR pszPath, IBindCtx *pbc, GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv);")
+cpp_quote("HRESULT WINAPI SHGetTemporaryPropertyForItem(IShellItem *psi, REFPROPERTYKEY propkey, PROPVARIANT *ppropvar);")
+cpp_quote("HRESULT WINAPI SHSetTemporaryPropertyForItem(IShellItem *psi, REFPROPERTYKEY propkey, REFPROPVARIANT propvar);")
+cpp_quote("HRESULT WINAPI SHAddDefaultPropertiesByExt(PCWSTR pszExt, IPropertyStore *pPropStore);")
+cpp_quote("HRESULT WINAPI SHCreateDefaultPropertiesOp(IShellItem *psi, IFileOperation **ppFileOp);")
+cpp_quote("HRESULT WINAPI SHSetDefaultProperties(HWND hwnd, IShellItem *psi, DWORD dwFileOpFlags, IFileOperationProgressSink *pfops);")
+
 [
     object,
     uuid(2c1c7e2e-2d0e-4059-831e-1e6f82335c2e),

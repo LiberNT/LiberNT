@@ -719,6 +719,47 @@ SHSetLocalizedName(
     _In_ PCWSTR pszResModule,
     _In_ INT idsRes);
 
+HRESULT WINAPI SHRemoveLocalizedName(_In_ PCWSTR pszPath);
+
+HRESULT WINAPI
+SHGetLocalizedName(
+    _In_ PCWSTR pszPath,
+    _Out_writes_(cch) PWSTR pszResModule,
+    _In_ UINT cch,
+    _Out_ int *pidsRes);
+
+HRESULT WINAPI SHGetDriveMedia(_In_ PCWSTR pszDrive, _Out_ DWORD *pdwMediaContent);
+
+typedef enum ASSOCCLASS
+{
+    ASSOCCLASS_SHELL_KEY = 0,
+    ASSOCCLASS_PROGID_KEY,
+    ASSOCCLASS_PROGID_STR,
+    ASSOCCLASS_CLSID_KEY,
+    ASSOCCLASS_CLSID_STR,
+    ASSOCCLASS_APP_KEY,
+    ASSOCCLASS_APP_STR,
+    ASSOCCLASS_SYSTEM_STR,
+    ASSOCCLASS_FOLDER,
+    ASSOCCLASS_STAR,
+    ASSOCCLASS_FIXED_PROGID_STR,
+    ASSOCCLASS_PROTOCOL_STR,
+} ASSOCCLASS;
+
+typedef struct ASSOCIATIONELEMENT
+{
+    ASSOCCLASS ac;
+    HKEY hkClass;
+    PCWSTR pszClass;
+} ASSOCIATIONELEMENT;
+
+HRESULT WINAPI
+AssocCreateForClasses(
+    _In_reads_(cClasses) const ASSOCIATIONELEMENT *rgClasses,
+    ULONG cClasses,
+    _In_ REFIID riid,
+    _COM_Outptr_ void **ppv);
+
 #ifdef UNICODE
 #define NOTIFYICONDATA_V1_SIZE NOTIFYICONDATAW_V1_SIZE
 #define NOTIFYICONDATA_V2_SIZE NOTIFYICONDATAW_V2_SIZE
