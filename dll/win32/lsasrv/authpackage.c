@@ -1291,6 +1291,8 @@ LsapSetTokenOwner(
             if (EqualSid(TokenInfo1->Groups->Groups[i].Sid, LsapAdministratorsSid))
             {
                 TokenInfo1->Groups->Groups[i].Attributes |= SE_GROUP_OWNER;
+                if (TokenInfo1->Groups->Groups[i].Attributes & SE_GROUP_ENABLED)
+                    OwnerSid = &TokenInfo1->Groups->Groups[i];
                 break;
             }
         }

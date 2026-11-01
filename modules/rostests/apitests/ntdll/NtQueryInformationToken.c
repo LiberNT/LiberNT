@@ -431,6 +431,32 @@ QueryTokenPrimaryGroupTests(
 }
 
 static
+BOOLEAN
+TokenHasLogonSid(
+    _In_ HANDLE Token)
+{
+    PTOKEN_GROUPS Groups;
+    ULONG BufferLength = 0;
+    BOOLEAN Found = FALSE;
+    ULONG Index;
+
+    NtQueryInformationToken(Token, TokenGroups, NULL, 0, &BufferLength);
+    Groups = RtlAllocateHeap(RtlGetProcessHeap(), 0, BufferLength);
+    if (!Groups)
+        return FALSE;
+    if (NT_SUCCESS(NtQueryInformationToken(Token, TokenGroups, Groups, BufferLength, &BufferLength)))
+    {
+        for (Index = 0; Index < Groups->GroupCount; Index++)
+        {
+            if ((Groups->Groups[Index].Attributes & SE_GROUP_LOGON_ID) == SE_GROUP_LOGON_ID)
+                Found = TRUE;
+        }
+    }
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Groups);
+    return Found;
+}
+
+static
 VOID
 QueryTokenDefaultDaclTests(
     _In_ HANDLE Token)
@@ -438,6 +464,7 @@ QueryTokenDefaultDaclTests(
     NTSTATUS Status;
     PTOKEN_DEFAULT_DACL Dacl;
     ULONG BufferLength;
+    ULONG ExpectedAces = TokenHasLogonSid(Token) ? 3 : 2;
 
     /*
      * Query the exact buffer length to hold
@@ -470,7 +497,7 @@ QueryTokenDefaultDaclTests(
                                      &BufferLength);
     ok_ntstatus(Status, STATUS_SUCCESS);
     ok(Dacl->DefaultDacl->AclRevision == 2, "The ACL revision of token default DACL must be 2 (current revision %u)!\n", Dacl->DefaultDacl->AclRevision);
-    ok(Dacl->DefaultDacl->AceCount == 2, "The ACL's ACE count must be 2 (current ACE count %u)!\n", Dacl->DefaultDacl->AceCount);
+    ok(Dacl->DefaultDacl->AceCount == ExpectedAces, "The ACL's ACE count must be %lu (current ACE count %u)!\n", ExpectedAces, Dacl->DefaultDacl->AceCount);
 
     RtlFreeHeap(RtlGetProcessHeap(), 0, Dacl);
 }
