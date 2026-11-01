@@ -404,6 +404,8 @@ CFSPropertyStoreFactory::AddFileSystemProperties(IPropertyStore *pStore)
     return S_OK;
 }
 
+EXTERN_C HRESULT SHELL_CreateReadOnlyPropertyStore(IPropertyStore *pInner, REFIID riid, void **ppv);
+
 STDMETHODIMP
 CFSPropertyStoreFactory::GetPropertyStore(GETPROPERTYSTOREFLAGS flags, IUnknown *pUnkFactory, REFIID riid, void **ppv)
 {
@@ -437,7 +439,7 @@ CFSPropertyStoreFactory::GetPropertyStore(GETPROPERTYSTOREFLAGS flags, IUnknown 
             StoreValue(pStore, key, pv, pHandler->GetValue(key, &pv));
         }
     }
-    return pStore->QueryInterface(riid, ppv);
+    return SHELL_CreateReadOnlyPropertyStore(pStore, riid, ppv);
 }
 
 STDMETHODIMP

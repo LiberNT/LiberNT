@@ -474,6 +474,68 @@ HRESULT CShellItem::GetDefaultPropertyStore(IPropertyStore **ppStore)
     return S_OK;
 }
 
+class CReadOnlyPropertyStore :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IPropertyStore,
+    public IPropertyStoreCapabilities
+{
+public:
+    CComPtr<IPropertyStore> m_pInner;
+
+    STDMETHOD(GetCount)(DWORD *cProps) override
+    {
+        return m_pInner->GetCount(cProps);
+    }
+
+    STDMETHOD(GetAt)(DWORD iProp, PROPERTYKEY *pkey) override
+    {
+        return m_pInner->GetAt(iProp, pkey);
+    }
+
+    STDMETHOD(GetValue)(REFPROPERTYKEY key, PROPVARIANT *pv) override
+    {
+        return m_pInner->GetValue(key, pv);
+    }
+
+    STDMETHOD(SetValue)(REFPROPERTYKEY key, REFPROPVARIANT propvar) override
+    {
+        return STG_E_ACCESSDENIED;
+    }
+
+    STDMETHOD(Commit)() override
+    {
+        return STG_E_ACCESSDENIED;
+    }
+
+    STDMETHOD(IsPropertyWritable)(REFPROPERTYKEY key) override
+    {
+        return S_OK;
+    }
+
+    DECLARE_NOT_AGGREGATABLE(CReadOnlyPropertyStore)
+    DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+    BEGIN_COM_MAP(CReadOnlyPropertyStore)
+        COM_INTERFACE_ENTRY_IID(IID_IPropertyStore, IPropertyStore)
+        COM_INTERFACE_ENTRY_IID(IID_IPropertyStoreCapabilities, IPropertyStoreCapabilities)
+    END_COM_MAP()
+};
+
+EXTERN_C HRESULT SHELL_CreateReadOnlyPropertyStore(IPropertyStore *pInner, REFIID riid, void **ppv)
+{
+    CComObject<CReadOnlyPropertyStore> *pReadOnly;
+    CComPtr<IPropertyStore> pHolder;
+    HRESULT hr;
+
+    *ppv = NULL;
+    hr = CComObject<CReadOnlyPropertyStore>::CreateInstance(&pReadOnly);
+    if (FAILED(hr))
+        return hr;
+    pHolder = pReadOnly;
+    pReadOnly->m_pInner = pInner;
+    return pHolder->QueryInterface(riid, ppv);
+}
+
 HRESULT WINAPI CShellItem::GetPropertyStore(GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv)
 {
     return GetPropertyStoreWithCreateObject(flags, NULL, riid, ppv);
@@ -506,7 +568,7 @@ HRESULT WINAPI CShellItem::GetPropertyStoreWithCreateObject(GETPROPERTYSTOREFLAG
     hr = GetDefaultPropertyStore(&pStore);
     if (FAILED(hr))
         return hr;
-    return pStore->QueryInterface(riid, ppv);
+    return SHELL_CreateReadOnlyPropertyStore(pStore, riid, ppv);
 }
 
 HRESULT WINAPI CShellItem::GetPropertyStoreForKeys(const PROPERTYKEY *rgKeys, UINT cKeys, GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv)
