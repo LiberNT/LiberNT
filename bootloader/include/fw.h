@@ -155,6 +155,10 @@ FwDebugAnnounce(
     _In_ PCSTR Application,
     _In_ BOOLEAN NewLog);
 
+BOOLEAN
+FwArchDebugPutChar(
+    _In_ UCHAR Character);
+
 extern VOID (*FwLateDebugPutChar)(UCHAR Character);
 
 PVOID

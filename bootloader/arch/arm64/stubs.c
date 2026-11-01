@@ -23,6 +23,14 @@ KeGetCurrentIrql(VOID)
     return PASSIVE_LEVEL;
 }
 
+BOOLEAN
+FwArchDebugPutChar(
+    _In_ UCHAR Character)
+{
+    UNREFERENCED_PARAMETER(Character);
+    return FALSE;
+}
+
 unsigned __int64
 __rdtsc(void)
 {

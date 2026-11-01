@@ -66,6 +66,7 @@ FwPrint(
     }
 
     GlobalSystemTable->ConOut->OutputString(GlobalSystemTable->ConOut, (CHAR16*)Text);
+    UefiSerialMirror(Text);
 }
 
 PVOID

@@ -56,3 +56,7 @@ BootLogWrite(
 
 VOID
 BootLogClose(VOID);
+
+VOID
+UefiSerialMirror(
+    _In_z_ PCWSTR Text);

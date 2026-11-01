@@ -22,6 +22,14 @@ KeGetCurrentIrql(VOID)
     return PASSIVE_LEVEL;
 }
 
+BOOLEAN
+FwArchDebugPutChar(
+    _In_ UCHAR Character)
+{
+    UNREFERENCED_PARAMETER(Character);
+    return FALSE;
+}
+
 /* RISC-V has no I/O port space: legacy port probes find no device. */
 UCHAR NTAPI READ_PORT_UCHAR(PUCHAR Port) { UNREFERENCED_PARAMETER(Port); return 0xFF; }
 USHORT NTAPI READ_PORT_USHORT(PUSHORT Port) { UNREFERENCED_PARAMETER(Port); return 0xFFFF; }

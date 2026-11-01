@@ -15,11 +15,15 @@
 static EFI_GUID UefiSerialIoGuid = EFI_SERIAL_IO_PROTOCOL_GUID;
 static EFI_GUID UefiGraphicsOutputGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
 static EFI_GUID UefiDevicePathGuid = EFI_DEVICE_PATH_PROTOCOL_GUID;
+static EFI_GUID UefiTextOutputGuid = EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL_GUID;
 static EFI_SERIAL_IO_PROTOCOL* UefiSerialPorts[UEFI_SERIAL_MAX_PORTS];
 static EFI_HANDLE UefiSerialHandles[UEFI_SERIAL_MAX_PORTS];
 static ULONG UefiSerialCount;
 static BOOLEAN UefiSerialProbed;
 static BOOLEAN UefiSerialUseConsole;
+static BOOLEAN UefiSerialDirect;
+static BOOLEAN UefiSerialConsoleProbed;
+static BOOLEAN UefiSerialConsole;
 
 VOID (*FwLateDebugPutChar)(UCHAR Character);
 
@@ -66,6 +70,42 @@ UefiSerialSamePort(
 }
 
 static
+BOOLEAN
+UefiSerialIsCom1(
+    _In_ EFI_HANDLE Handle)
+{
+    EFI_DEVICE_PATH_PROTOCOL* Path;
+    ACPI_EXTENDED_HID_DEVICE_PATH Extended;
+    ACPI_HID_DEVICE_PATH Acpi;
+
+    if (EFI_ERROR(GlobalSystemTable->BootServices->HandleProtocol(Handle, &UefiDevicePathGuid, (VOID**)&Path)))
+        return FALSE;
+
+    for (; Path && !IsDevicePathEndType(Path); Path = NextDevicePathNode(Path))
+    {
+        if (DevicePathNodeLength(Path) < sizeof(EFI_DEVICE_PATH_PROTOCOL))
+            return FALSE;
+
+        if (DevicePathType(Path) == ACPI_DEVICE_PATH && DevicePathSubType(Path) == ACPI_DP &&
+            DevicePathNodeLength(Path) >= sizeof(Acpi))
+        {
+            RtlCopyMemory(&Acpi, Path, sizeof(Acpi));
+            if (Acpi.HID == UEFI_SERIAL_PNP_ID && Acpi.UID == 0)
+                return TRUE;
+        }
+        else if (DevicePathType(Path) == ACPI_DEVICE_PATH && DevicePathSubType(Path) == ACPI_EXTENDED_DP &&
+                 DevicePathNodeLength(Path) > sizeof(Extended))
+        {
+            RtlCopyMemory(&Extended, Path, sizeof(Extended));
+            if ((Extended.HID == UEFI_SERIAL_PNP_ID || Extended.CID == UEFI_SERIAL_PNP_ID) && Extended.UID == 0)
+                return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static
 VOID
 UefiSerialProbe(VOID)
 {
@@ -77,6 +117,7 @@ UefiSerialProbe(VOID)
 
     UefiSerialProbed = TRUE;
     UefiSerialCount = 0;
+    UefiSerialDirect = TRUE;
 
     if (!EFI_ERROR(BootServices->LocateHandleBuffer(ByProtocol, &UefiSerialIoGuid, NULL, &Count, &Handles)))
     {
@@ -92,6 +133,8 @@ UefiSerialProbe(VOID)
                                                         (VOID**)&UefiSerialPorts[UefiSerialCount])) &&
                 UefiSerialPorts[UefiSerialCount])
             {
+                if (UefiSerialIsCom1(Handles[i]))
+                    UefiSerialDirect = FALSE;
                 UefiSerialHandles[UefiSerialCount++] = Handles[i];
             }
         }
@@ -147,7 +190,7 @@ UefiSerialPutChar(
 
     if (BootServicesExitedFlag)
     {
-        if (FwLateDebugPutChar)
+        if (!FwArchDebugPutChar(Character) && FwLateDebugPutChar)
             FwLateDebugPutChar(Character);
         return;
     }
@@ -161,6 +204,9 @@ UefiSerialPutChar(
         UefiSerialPorts[i]->Write(UefiSerialPorts[i], &Size, &Character);
     }
 
+    if (UefiSerialDirect && FwArchDebugPutChar(Character))
+        return;
+
     if (UefiSerialCount)
         return;
 
@@ -170,12 +216,75 @@ UefiSerialPutChar(
         FwLateDebugPutChar(Character);
 }
 
+static
+BOOLEAN
+UefiSerialIsConsole(VOID)
+{
+    EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
+    EFI_DEVICE_PATH_PROTOCOL* Node;
+    EFI_HANDLE* Handles;
+    UINTN Count, i;
+
+    if (UefiSerialConsoleProbed)
+        return UefiSerialConsole;
+
+    UefiSerialConsoleProbed = TRUE;
+    if (EFI_ERROR(BootServices->LocateHandleBuffer(ByProtocol, &UefiTextOutputGuid, NULL, &Count, &Handles)))
+        return FALSE;
+
+    for (i = 0; i < Count && !UefiSerialConsole; i++)
+    {
+        if (EFI_ERROR(BootServices->HandleProtocol(Handles[i], &UefiDevicePathGuid, (VOID**)&Node)))
+            continue;
+
+        for (; !IsDevicePathEndType(Node); Node = NextDevicePathNode(Node))
+        {
+            if (DevicePathType(Node) == MESSAGING_DEVICE_PATH && DevicePathSubType(Node) == MSG_UART_DP)
+            {
+                UefiSerialConsole = TRUE;
+                break;
+            }
+        }
+    }
+
+    BootServices->FreePool(Handles);
+    return UefiSerialConsole;
+}
+
+VOID
+UefiSerialMirror(
+    _In_z_ PCWSTR Text)
+{
+    UCHAR Character;
+    UINTN Size;
+    ULONG i;
+
+    if (BootServicesExitedFlag || UefiSerialIsConsole())
+        return;
+
+    if (!UefiSerialProbed)
+        UefiSerialProbe();
+
+    for (; *Text != UNICODE_NULL; Text++)
+    {
+        Character = *Text <= 0x7F ? (UCHAR)*Text : '?';
+        for (i = 0; i < UefiSerialCount; i++)
+        {
+            Size = 1;
+            UefiSerialPorts[i]->Write(UefiSerialPorts[i], &Size, &Character);
+        }
+        if (UefiSerialDirect)
+            FwArchDebugPutChar(Character);
+    }
+}
+
 VOID
 UefiSerialDisableFirmware(VOID)
 {
     UefiSerialProbed = TRUE;
     UefiSerialCount = 0;
     UefiSerialUseConsole = FALSE;
+    UefiSerialDirect = FALSE;
 }
 
 VOID
