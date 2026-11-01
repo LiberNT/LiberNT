@@ -36,6 +36,7 @@ BOOLEAN HalpApicTimerClock = FALSE;
 static ULONG64 HalpApicTimerFrequency;
 
 extern LARGE_INTEGER HalpCpuClockFrequency;
+extern BOOLEAN HalIsProfiling;
 
 static
 BOOLEAN
@@ -330,6 +331,9 @@ HalpClockInterruptHandler(IN PKTRAP_FRAME TrapFrame)
         HalpBroadcastClockIpi(CLOCK_IPI_VECTOR);
     }
 
+    if (HalpApicTimerClock && HalIsProfiling)
+        KeProfileInterruptWithSource(TrapFrame, ProfileTime);
+
     /* Update the system time -- on x86 the kernel will exit this trap  */
     KeUpdateSystemTime(TrapFrame, LastIncrement, Irql);
 
@@ -359,6 +363,9 @@ HalpClockIpiHandler(IN PKTRAP_FRAME TrapFrame)
 #endif
         return;
     }
+
+    if (HalpApicTimerClock && HalIsProfiling)
+        KeProfileInterruptWithSource(TrapFrame, ProfileTime);
 
     /* Call the kernel to update runtimes */
     KeUpdateRunTime(TrapFrame, Irql);

@@ -86,14 +86,15 @@ HalStartProfileInterrupt(IN KPROFILE_SOURCE ProfileSource)
 {
     LVT_REGISTER LvtEntry;
 
-    if (HalpApicTimerClock)
-        return;
-
     /* Only handle ProfileTime */
     if (ProfileSource == ProfileTime)
     {
         /* OK, we are profiling now */
         HalIsProfiling = TRUE;
+
+        /* FIXME: with the local APIC timer as the clock, samples come at the clock rate, not at the profile interval */
+        if (HalpApicTimerClock)
+            return;
 
         /* Set interrupt interval */
         ApicWrite(APIC_TICR, KeGetPcr()->HalReserved[HAL_PROFILING_INTERVAL]);
@@ -113,14 +114,13 @@ HalStopProfileInterrupt(IN KPROFILE_SOURCE ProfileSource)
 {
     LVT_REGISTER LvtEntry;
 
-    if (HalpApicTimerClock)
-        return;
-
     /* Only handle ProfileTime */
     if (ProfileSource == ProfileTime)
     {
         /* We are not profiling */
         HalIsProfiling = FALSE;
+        if (HalpApicTimerClock)
+            return;
 
         /* Mask interrupt */
         LvtEntry.Long = 0;
