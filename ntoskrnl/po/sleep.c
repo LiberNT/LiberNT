@@ -734,6 +734,9 @@ PopSleepSystem(
         }
     }
 
+    PopAction.Action = SystemAction;
+    PopAction.SystemState = SystemState;
+    PopAction.IrpMinor = IRP_MN_SET_POWER;
     Status = PopSleepSendDevices(PowerDevice, IRP_MN_SET_POWER, SystemState, SystemAction);
     if (NT_SUCCESS(Status))
     {
@@ -755,6 +758,9 @@ PopSleepSystem(
                     SystemState - PowerSystemWorking, Status);
     }
 
+    PopAction.IrpMinor = 0;
+    PopAction.Action = PowerActionNone;
+    PopAction.SystemState = PowerSystemWorking;
     PopSleepSendDevices(PowerDevice, IRP_MN_SET_POWER, PowerSystemWorking, SystemAction);
 
     if (ExAcquireTimeRefreshLock(TRUE))
