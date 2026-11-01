@@ -828,6 +828,26 @@ NtfsCachedRecordMatches(_In_ PNtfsCachedRecord Entry,
     return TRUE;
 }
 
+static
+BOOLEAN
+NtfsCachedRecordMatchesIgnoreCase(_In_ PNtfsCachedRecord Entry,
+                                  _In_ ULONG Hash,
+                                  _In_reads_(Length) PCWSTR Name,
+                                  _In_ USHORT Length)
+{
+    USHORT Index;
+
+    if (Entry->Hash != Hash || Entry->Length != Length)
+        return FALSE;
+
+    for (Index = 0; Index < Length; Index++)
+    {
+        if (RtlUpcaseUnicodeChar(Entry->Name[Index]) != RtlUpcaseUnicodeChar(Name[Index]))
+            return FALSE;
+    }
+    return TRUE;
+}
+
 /* Caller must hold RecordCacheMutex. */
 static
 PNtfsCachedRecord
@@ -1029,7 +1049,7 @@ NtfsEvictCachedRecord(_In_ PVolumeContextBlock VolCB,
             CONTAINING_RECORD(Entry, NtfsCachedRecord, HashLink);
 
         Next = Entry->Flink;
-        if (NtfsCachedRecordMatches(Candidate, Hash, Name, Length))
+        if (NtfsCachedRecordMatchesIgnoreCase(Candidate, Hash, Name, Length))
         {
             RemoveEntryList(&Candidate->Link);
             RemoveEntryList(&Candidate->HashLink);

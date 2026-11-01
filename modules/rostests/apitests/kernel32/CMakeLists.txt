@@ -17,6 +17,7 @@ list(APPEND SOURCE
     CreateDirectoryRoot.c
     CreateProcess.c
     DefaultActCtx.c
+    DeleteFileCase.c
     DeviceIoControl.c
     dosdev.c
     EnumSystemCodePages.c
