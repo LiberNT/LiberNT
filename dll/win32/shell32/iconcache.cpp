@@ -681,7 +681,7 @@ end:
     {
         if(sic_hdpa) DPA_Destroy(sic_hdpa);
         if(ShellSmallIconList) ImageList_Destroy(ShellSmallIconList);
-        if(ShellBigIconList) ImageList_Destroy(ShellSmallIconList);
+        if(ShellBigIconList) ImageList_Destroy(ShellBigIconList);
         sic_hdpa = NULL;
         ShellSmallIconList = NULL;
         ShellBigIconList = NULL;
