@@ -1423,6 +1423,16 @@ DWORD WINAPI DECLSPEC_HOTPATCH NotifyServiceStatusChangeW( SC_HANDLE service, DW
     return ERROR_SUCCESS;
 }
 
+#ifdef __REACTOS__
+DWORD WINAPI DECLSPEC_HOTPATCH NotifyServiceStatusChangeA( SC_HANDLE service, DWORD mask,
+                                                           SERVICE_NOTIFYA *notify_buffer )
+{
+    TRACE( "%p 0x%lx %p\n", service, mask, notify_buffer );
+
+    return NotifyServiceStatusChangeW( service, mask, (SERVICE_NOTIFYW *)notify_buffer );
+}
+#endif
+
 /* thunk for calling the RegisterServiceCtrlHandler handler function */
 static DWORD WINAPI ctrl_handler_thunk( DWORD control, DWORD type, void *data, void *context )
 {

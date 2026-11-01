@@ -448,6 +448,8 @@
 @ stdcall MapGenericMask(ptr ptr) kernelbase.MapGenericMask
 @ stdcall NotifyBootConfigStatus(long)
 @ stdcall NotifyChangeEventLog(long long)
+@ stdcall -version=0x600+ NotifyServiceStatusChange(ptr long ptr) sechost.NotifyServiceStatusChange
+@ stdcall -version=0x600+ NotifyServiceStatusChangeA(ptr long ptr) sechost.NotifyServiceStatusChangeA
 @ stdcall NotifyServiceStatusChangeW(ptr long ptr) sechost.NotifyServiceStatusChangeW
 @ stdcall ObjectCloseAuditAlarmA(str ptr long)
 @ stdcall ObjectCloseAuditAlarmW(wstr ptr long) kernelbase.ObjectCloseAuditAlarmW

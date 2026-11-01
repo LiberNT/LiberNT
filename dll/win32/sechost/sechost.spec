@@ -157,8 +157,8 @@
 @ stdcall LsaSetInformationPolicy(long long ptr) advapi32.LsaSetInformationPolicy
 @ stdcall LsaSetSecret(ptr ptr ptr) advapi32.LsaSetSecret
 @ stdcall LsaStorePrivateData(ptr ptr ptr) advapi32.LsaStorePrivateData
-@ stub NotifyServiceStatusChange
-@ stub NotifyServiceStatusChangeA
+@ stdcall NotifyServiceStatusChange(ptr long ptr) NotifyServiceStatusChangeW
+@ stdcall NotifyServiceStatusChangeA(ptr long ptr)
 @ stdcall NotifyServiceStatusChangeW(ptr long ptr)
 @ stdcall OpenSCManagerA(str str long) advapi32.OpenSCManagerA
 @ stdcall OpenSCManagerW(wstr wstr long) advapi32.OpenSCManagerW
