@@ -479,13 +479,10 @@ static BOOL DIALOG_IsAccelerator( HWND hwnd, HWND hwndDlg, WPARAM wParam )
                  GetWindowTextW( hwndControl, buffer, sizeof(buffer)/sizeof(WCHAR) ))
             {
                 /* find the accelerator key */
-                LPWSTR p = buffer - 2;
+                LPWSTR p = buffer;
 
-                do
-                {
-                    p = strchrW( p + 2, '&' );
-                }
-                while (p != NULL && p[1] == '&');
+                while ((p = strchrW( p, '&' )) != NULL && p[1] == '&')
+                    p += 2;
 
                 /* and check if it's the one we're looking for */
                 if (p != NULL && toupperW( p[1] ) == toupperW( wParam ) )

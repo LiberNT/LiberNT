@@ -22,6 +22,7 @@ extern void func_DeskWallpaper(void);
 extern void func_DestroyCursorIcon(void);
 extern void func_DestroyActiveWindow(void);
 extern void func_DestroyWindow(void);
+extern void func_DialogAccelerator(void);
 extern void func_DialogDpiChangeBehavior(void);
 extern void func_DM_REPOSITION(void);
 extern void func_Dpi(void);
@@ -143,6 +144,7 @@ const struct test winetest_testlist[] =
     { "DestroyCursorIcon", func_DestroyCursorIcon },
     { "DestroyActiveWindow", func_DestroyActiveWindow },
     { "DestroyWindow", func_DestroyWindow },
+    { "DialogAccelerator", func_DialogAccelerator },
     { "DialogDpiChangeBehavior", func_DialogDpiChangeBehavior },
     { "DM_REPOSITION", func_DM_REPOSITION },
     { "Dpi", func_Dpi },
