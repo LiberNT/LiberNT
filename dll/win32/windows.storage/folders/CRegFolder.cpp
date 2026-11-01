@@ -437,6 +437,8 @@ BOOL CRegFolder::_IsInNameSpace(_In_ LPCITEMIDLIST pidl)
         return TRUE;
     if (IsEqualGUID(clsid, CLSID_NetworkConnections))
         return TRUE;
+    if (IsEqualGUID(clsid, CLSID_ControlPanel))
+        return TRUE;
     for (size_t i = 0; i < GetRequiredItemsCount(); ++i)
     {
         if (IsEqualGUID(clsid, GetAt(i).clsid))
@@ -456,10 +458,7 @@ BOOL CRegFolder::_IsInNameSpace(_In_ LPCITEMIDLIST pidl)
             return TRUE;
         }
     }
-    if (!HCR_RegOpenClassIDKey(clsid, &hKey))
-        return FALSE;
-    RegCloseKey(hKey);
-    return TRUE;
+    return FALSE;
 }
 
 HRESULT WINAPI CRegFolder::ParseDisplayName(HWND hwndOwner, LPBC pbc, LPOLESTR lpszDisplayName,
