@@ -116,6 +116,21 @@ KiRaiseSecurityCheckFailureHandler(
                      TrapFrame);
 }
 
+DECLSPEC_NORETURN
+VOID
+NTAPI
+KiPageFaultIrqlBugCheck(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ KIRQL Irql)
+{
+    KeBugCheckWithTf(IRQL_NOT_LESS_OR_EQUAL,
+                     TrapFrame->FaultAddress,
+                     Irql,
+                     (TrapFrame->ErrorCode >> 1) & 9,
+                     TrapFrame->Rip,
+                     TrapFrame);
+}
+
 static
 BOOLEAN
 KiDispatchExceptionToUser(

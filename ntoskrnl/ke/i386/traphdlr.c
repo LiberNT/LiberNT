@@ -1382,6 +1382,17 @@ KiTrap0EHandler(IN PKTRAP_FRAME TrapFrame)
         KiEoiHelper(TrapFrame);
     }
 
+    /* An unresolved fault above APC_LEVEL is fatal */
+    if (KeGetCurrentIrql() > APC_LEVEL)
+    {
+        KeBugCheckWithTf(IRQL_NOT_LESS_OR_EQUAL,
+                         Cr2,
+                         KeGetCurrentIrql(),
+                         (TrapFrame->ErrCode >> 1) & 9,
+                         TrapFrame->Eip,
+                         TrapFrame);
+    }
+
     /* Check for syscall fault */
 #if 0
     if ((TrapFrame->Eip == (ULONG_PTR)CopyParams) ||

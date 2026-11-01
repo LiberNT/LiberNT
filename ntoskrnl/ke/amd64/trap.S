@@ -17,6 +17,7 @@ EXTERN KeBugCheckEx:PROC
 EXTERN KiRaiseSecurityCheckFailureHandler:PROC
 EXTERN MmAccessFault:PROC
 EXTERN KiSystemFatalException:PROC
+EXTERN KiPageFaultIrqlBugCheck:PROC
 EXTERN KiNpxNotAvailableFaultHandler:PROC
 EXTERN KiGeneralProtectionFaultHandler:PROC
 EXTERN KiInvalidOpcodeFaultHandler:PROC
@@ -569,18 +570,10 @@ SkipStackCheck:
 
 IntsDisabled:
 
-    /* Save current IRQL from cr8, lower to APC_LEVEL for page fault handling.
-     * Working set locks use KeEnterGuardedRegion which requires IRQL <= APC_LEVEL.
-     * Only lower if currently above APC_LEVEL.
-     * Push 16 bytes to maintain stack alignment for the call. */
+    /* Save the faulting IRQL; push 16 bytes to keep the call aligned */
     mov rax, cr8
     push rax
     sub rsp, HEX(28)
-    cmp rax, APC_LEVEL
-    jbe .LIrqlOk
-    mov rax, APC_LEVEL
-    mov cr8, rax
-.LIrqlOk:
 
     /* Call page fault handler */
     mov ecx, [rbp + KTRAP_FRAME_ErrorCode] // FaultCode
@@ -590,14 +583,25 @@ IntsDisabled:
     mov r9, rbp // TrapInformation
     call MmAccessFault
 
-    /* Restore previous IRQL */
     add rsp, HEX(28)
-    pop rcx
-    mov cr8, rcx
+    pop rdx
 
     /* Check for success */
     test eax, eax
-    jl PageFaultError
+    jge PageFaultSuccess
+
+    /* An unresolved fault above APC_LEVEL is fatal */
+    cmp edx, APC_LEVEL
+    jbe PageFaultError
+    mov rcx, rbp
+    call KiPageFaultIrqlBugCheck
+#ifdef _USE_ML
+    jmp $
+#else
+9:  jmp 9b
+#endif
+
+PageFaultSuccess:
 
     /* Check whether the kernel debugger has owed breakpoints to be inserted */
     call KdSetOwedBreakpoints
