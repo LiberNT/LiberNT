@@ -295,12 +295,13 @@
 @ stdcall SHGetPathFromIDListA(ptr ptr)
 @ stdcall SHGetPathFromIDListEx(ptr ptr long long)
 @ stdcall SHGetPathFromIDListW(ptr ptr)
+@ stdcall SHGetPropertyStoreFromIDList(ptr long ptr ptr)
 @ stdcall SHGetPropertyStoreFromParsingName(wstr ptr long ptr ptr)
 @ stdcall SHGetSpecialFolderLocation(long long ptr)
 @ stdcall SHGetSpecialFolderPathA(long ptr long long)
 @ stdcall SHGetSpecialFolderPathW(long ptr long long)
 @ stdcall SHGetStockIconInfo(long long ptr)
-@ stub SHGetTemporaryPropertyForItem
+@ stdcall SHGetTemporaryPropertyForItem(ptr ptr ptr)
 @ stdcall SHHandleUpdateImage(ptr)
 @ stdcall SHILCreateFromPathW(wstr ptr ptr)
 @ stub SHKnownFolderFromCSIDL
@@ -316,7 +317,7 @@
 @ stub SHSetFolderPathW
 @ stdcall SHSetKnownFolderPath(ptr long ptr wstr)
 @ stdcall SHSetLocalizedName(wstr wstr long)
-@ stub SHSetTemporaryPropertyForItem
+@ stdcall SHSetTemporaryPropertyForItem(ptr ptr ptr)
 @ stdcall SHSettingsChanged(ptr ptr)
 @ stdcall SHSimpleIDListFromPathAW(ptr)
 @ stdcall SHSimpleIDListFromPathW(wstr)

@@ -550,14 +550,14 @@
 @ stdcall -version=0x600+ SHGetPathFromIDListEx(ptr ptr long long) # Vista:382
 @ stdcall SHGetPathFromIDListW(ptr ptr) # 2k3:315, Vista:383
 @ stdcall -version=0x601+ SHGetPropertyStoreForWindow(long ptr ptr)
-@ stub -version=0x600+ SHGetPropertyStoreFromIDList # Vista:384
+@ stdcall -version=0x600+ SHGetPropertyStoreFromIDList(ptr long ptr ptr) # Vista:384
 @ stdcall -version=0x600+ SHGetPropertyStoreFromParsingName(wstr ptr long ptr ptr) # Vista:385
 @ stdcall SHGetSettings(ptr long) # 2k3:316, Vista:386
 @ stdcall SHGetSpecialFolderLocation(long long ptr) # 2k3:317, Vista:387
 @ stdcall SHGetSpecialFolderPathA(long ptr long long) # 2k3:318, Vista:388
 @ stdcall SHGetSpecialFolderPathW(long ptr long long) # 2k3:319, Vista:389
 @ stdcall -version=0x600+ SHGetStockIconInfo(long long ptr) # Vista:390
-@ stub -version=0x600+ SHGetTemporaryPropertyForItem # Vista:391
+@ stdcall -version=0x600+ SHGetTemporaryPropertyForItem(ptr ptr ptr) # Vista:391
 @ stdcall SHGetUnreadMailCountW(ptr wstr ptr ptr ptr long) # 2k3:320, Vista:392
 @ stdcall -version=0x502 SHHelpShortcuts_RunDLL(long long long long) SHHelpShortcuts_RunDLLA # 2k3:321
 @ stdcall -version=0x502 SHHelpShortcuts_RunDLLA(long long long long) # 2k3:322
@@ -579,7 +579,7 @@
 @ stub -version=0x600+ SHSetDefaultProperties # Vista:407
 @ stdcall -version=0x600+ SHSetKnownFolderPath(ptr long ptr wstr)
 @ stdcall SHSetLocalizedName(wstr wstr long) # 2k3:335, Vista:409
-@ stub -version=0x600+ SHSetTemporaryPropertyForItem # Vista:410
+@ stdcall -version=0x600+ SHSetTemporaryPropertyForItem(ptr ptr ptr) # Vista:410
 @ stdcall SHSetUnreadMailCountW (wstr long wstr) # 2k3:336, Vista:411
 @ stdcall SHUpdateRecycleBinIcon() # 2k3:337, Vista:412
 @ stdcall -version=0x601+ SetCurrentProcessExplicitAppUserModelID(wstr) shcore.SetCurrentProcessExplicitAppUserModelID
