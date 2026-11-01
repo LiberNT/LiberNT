@@ -107,35 +107,6 @@ BOOL WINAPI _SHDesktopMessageLoop(HANDLE hDesktop)
     return FALSE;
 }
 
-typedef BOOL (WINAPI *PWINLIST_INIT)(void);
-
-BOOL WINAPI _WinList_Init(void)
-{
-    HINSTANCE hFallback;
-
-    if (ghRShell)
-    {
-        PWINLIST_INIT func = (PWINLIST_INIT)GetProcAddress(ghRShell, "WinList_Init");
-        if (func)
-        {
-            return func();
-        }
-    }
-
-    hFallback = LoadLibraryW(L"shdocvw.dll");
-
-    if (hFallback)
-    {
-        PWINLIST_INIT func = (PWINLIST_INIT) GetProcAddress(hFallback, (LPCSTR) 110);
-        if (func)
-        {
-            return func();
-        }
-    }
-
-    return FALSE;
-}
-
 typedef void (WINAPI *PSHELLDDEINIT)(BOOL bInit);
 
 void WINAPI _ShellDDEInit(BOOL bInit)

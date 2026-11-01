@@ -7,8 +7,8 @@
 106 stub HlinkFindFrame
 107 stub SetShellOfflineState
 108 stdcall AddUrlToFavorites(ptr wstr wstr long)
-110 stdcall -noname WinList_Init()
-111 stdcall -noname WinList_Terminate()
+110 stdcall -noname -version=0x400-0x600 WinList_Init()
+111 stdcall -noname -version=0x400-0x600 WinList_Terminate()
 115 stub -noname CreateFromDesktop
 116 stub -noname DDECreatePostNotify
 117 stub -noname DDEHandleViewFolderNotify
@@ -59,9 +59,10 @@
 176 stub -noname EnsureWebViewRegSettings
 177 stdcall -noname WinList_NotifyNewLocation(ptr long ptr)
 178 stdcall -noname WinList_FindFolderWindow(ptr long ptr ptr)
-179 stdcall -noname WinList_GetShellWindows(long)
-180 stdcall -noname WinList_RegisterPending(long ptr long ptr)
-181 stdcall -noname WinList_Revoke(long)
+# FIXME: the release that retired 179-181 is not measured; Windows 11 does not export them
+179 stdcall -noname -version=0x500-0x600 WinList_GetShellWindows(long)
+180 stdcall -noname -version=0x500-0x600 WinList_RegisterPending(long ptr long ptr)
+181 stdcall -noname -version=0x500-0x600 WinList_Revoke(long)
 183 stub -noname SHMapNbspToSp
 185 stub -noname FireEvent_Quit
 187 stub -noname SHDGetPageLocation

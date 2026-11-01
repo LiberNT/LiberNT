@@ -26,11 +26,6 @@ AddUrlToFavorites(
     _In_ LPCWSTR pszTitleW,
     _In_ BOOL fDisplayUI);
 
-BOOL WINAPI WinList_Init(VOID);
-VOID WINAPI WinList_Terminate(VOID);
-HRESULT WINAPI WinList_Revoke(_In_ LONG lCookie);
-IShellWindows* WINAPI WinList_GetShellWindows(_In_ BOOL bCreate);
-
 HRESULT WINAPI
 WinList_NotifyNewLocation(
     _In_ IShellWindows *pShellWindows,
@@ -43,13 +38,6 @@ WinList_FindFolderWindow(
     _In_ DWORD dwUnused,
     _Out_opt_ PLONG phwnd,
     _Out_opt_ IWebBrowserApp **ppWebBrowserApp);
-
-HRESULT WINAPI
-WinList_RegisterPending(
-    _In_ DWORD dwThreadId,
-    _In_ LPCITEMIDLIST pidl,
-    _In_ DWORD dwUnused,
-    _Out_ PLONG plCookie);
 
 #ifdef __cplusplus
 } /* extern "C" */

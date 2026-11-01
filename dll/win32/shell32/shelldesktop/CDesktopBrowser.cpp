@@ -28,7 +28,6 @@
 
 #include <dbt.h>
 #include <atlsimpcoll.h>
-#include <shdocvw_undoc.h>
 
 static const GUID GUID_DEVINTERFACE_WPD_SHELL =
     { 0x6ac27878, 0xa6fa, 0x4155, { 0xba, 0x85, 0xf9, 0x8f, 0x49, 0x1d, 0x4f, 0x33 } };
@@ -67,6 +66,7 @@ private:
     DWORD m_dwDrives;
     HDEVNOTIFY m_hPortableDeviceNotify;
     LONG m_lShellWindowsCookie;
+    CComPtr<IShellWindows> m_pShellWindows;
     CComObject<CDesktopAutomation> *m_pAutomation;
     CSimpleArray<CComBSTR> m_PropertyNames;
     CSimpleArray<CComVariant> m_PropertyValues;
@@ -486,11 +486,13 @@ HRESULT CDesktopBrowser::Initialize(IShellDesktopTray *ShellDesk)
         m_pAutomation->m_pBrowser = this;
     }
 
-    CComPtr<IShellWindows> pShellWindows;
-    pShellWindows.Attach(WinList_GetShellWindows(TRUE));
-    if (pShellWindows && m_pAutomation)
-        pShellWindows->Register(static_cast<IDispatch *>(static_cast<IWebBrowser2 *>(m_pAutomation)),
-                                HandleToLong(m_hWnd), SWC_DESKTOP, &m_lShellWindowsCookie);
+    if (m_pAutomation &&
+        SUCCEEDED(CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_LOCAL_SERVER,
+                                   IID_PPV_ARG(IShellWindows, &m_pShellWindows))))
+    {
+        m_pShellWindows->Register(static_cast<IDispatch *>(static_cast<IWebBrowser2 *>(m_pAutomation)),
+                                  HandleToLong(m_hWnd), SWC_DESKTOP, &m_lShellWindowsCookie);
+    }
 
     return hRet;
 }
@@ -1272,11 +1274,10 @@ LRESULT CDesktopBrowser::OnSettingChange(UINT uMsg, WPARAM wParam, LPARAM lParam
 
 LRESULT CDesktopBrowser::OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
 {
-    if (m_lShellWindowsCookie)
-    {
-        WinList_Revoke(m_lShellWindowsCookie);
-        m_lShellWindowsCookie = 0;
-    }
+    if (m_lShellWindowsCookie && m_pShellWindows)
+        m_pShellWindows->Revoke(m_lShellWindowsCookie);
+    m_lShellWindowsCookie = 0;
+    m_pShellWindows.Release();
     if (m_hPortableDeviceNotify)
     {
         UnregisterDeviceNotification(m_hPortableDeviceNotify);

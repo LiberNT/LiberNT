@@ -147,6 +147,95 @@ IsExplorerSystemShell()
     return bIsSystemShell;
 }
 
+static IShellWindows *g_pShellWindows = NULL;
+static DWORD g_dwShellWindowsCookie = 0;
+
+class CShellWindowsClassFactory : public IClassFactory
+{
+public:
+    STDMETHOD(QueryInterface)(REFIID riid, void **ppv) override
+    {
+        if (!ppv)
+            return E_POINTER;
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_IClassFactory))
+        {
+            *ppv = static_cast<IClassFactory *>(this);
+            return S_OK;
+        }
+        *ppv = NULL;
+        return E_NOINTERFACE;
+    }
+
+    STDMETHOD_(ULONG, AddRef)() override
+    {
+        return 2;
+    }
+
+    STDMETHOD_(ULONG, Release)() override
+    {
+        return 1;
+    }
+
+    STDMETHOD(CreateInstance)(IUnknown *pUnkOuter, REFIID riid, void **ppv) override
+    {
+        if (!ppv)
+            return E_POINTER;
+        *ppv = NULL;
+        if (pUnkOuter)
+            return CLASS_E_NOAGGREGATION;
+        if (!g_pShellWindows)
+            return E_UNEXPECTED;
+        return g_pShellWindows->QueryInterface(riid, ppv);
+    }
+
+    STDMETHOD(LockServer)(BOOL fLock) override
+    {
+        return S_OK;
+    }
+};
+
+static CShellWindowsClassFactory g_ShellWindowsClassFactory;
+
+static VOID
+RegisterShellWindows(VOID)
+{
+    typedef HRESULT (WINAPI *PFN_DLLGETCLASSOBJECT)(REFCLSID, REFIID, LPVOID *);
+    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+    PFN_DLLGETCLASSOBJECT pfnGetClassObject =
+        hShell32 ? (PFN_DLLGETCLASSOBJECT)GetProcAddress(hShell32, "DllGetClassObject") : NULL;
+    CComPtr<IClassFactory> pFactory;
+
+    if (!pfnGetClassObject ||
+        FAILED(pfnGetClassObject(CLSID_ShellWindows, IID_PPV_ARG(IClassFactory, &pFactory))) ||
+        FAILED(pFactory->CreateInstance(NULL, IID_PPV_ARG(IShellWindows, &g_pShellWindows))))
+    {
+        return;
+    }
+
+    if (FAILED(CoRegisterClassObject(CLSID_ShellWindows, &g_ShellWindowsClassFactory, CLSCTX_LOCAL_SERVER,
+                                     REGCLS_MULTIPLEUSE, &g_dwShellWindowsCookie)))
+    {
+        g_pShellWindows->Release();
+        g_pShellWindows = NULL;
+        g_dwShellWindowsCookie = 0;
+    }
+}
+
+static VOID
+RevokeShellWindows(VOID)
+{
+    if (g_dwShellWindowsCookie)
+    {
+        CoRevokeClassObject(g_dwShellWindowsCookie);
+        g_dwShellWindowsCookie = 0;
+    }
+    if (g_pShellWindows)
+    {
+        g_pShellWindows->Release();
+        g_pShellWindows = NULL;
+    }
+}
+
 #if !WIN7_COMPAT_MODE
 static INT
 StartWithCommandLine(IN HINSTANCE hInstance)
@@ -202,7 +291,7 @@ StartWithDesktop(IN HINSTANCE hInstance)
     FileIconInit(TRUE);
 
     /* Initialize CLSID_ShellWindows class */
-    _WinList_Init();
+    RegisterShellWindows();
 
     InitializeServerAdminUI();
 
@@ -247,6 +336,7 @@ StartWithDesktop(IN HINSTANCE hInstance)
         DesktopDestroyShellWindow(hShellDesktop);
 #endif
 
+    RevokeShellWindows();
     OleUninitialize();
 
     RegCloseKey(hkExplorer);
