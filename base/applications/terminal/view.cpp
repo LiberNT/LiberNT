@@ -712,7 +712,7 @@ TermView::SelectedText() const
     {
         const Vt::Line &line = screen.LineAt(lineIndex);
         int from = 0, to = (int)line.Cells.size() - 1;
-        std::u32string part;
+        std::basic_string<char32_t> part;
 
         if (m_Tab->Select.Block)
         {
@@ -733,7 +733,7 @@ TermView::SelectedText() const
         }
         if (m_Tab->Select.Block || !line.Wrapped || lineIndex == end.Line)
         {
-            while (!part.empty() && part.back() == U' ')
+            while (!part.empty() && part[part.size() - 1] == U' ')
                 part.pop_back();
         }
         text += ToWide(part);
@@ -825,7 +825,7 @@ TermView::Find(const std::wstring &query, bool up, bool restart)
     if (restart || query != m_Tab->SearchText)
     {
         Vt::Screen &screen = m_Tab->Term->Screen();
-        std::u32string needle = FromWide(query);
+        std::basic_string<char32_t> needle = FromWide(query);
 
         m_Tab->SearchText = query;
         m_Tab->Matches.clear();
@@ -837,11 +837,11 @@ TermView::Find(const std::wstring &query, bool up, bool restart)
             for (size_t lineIndex = 0; lineIndex < screen.TotalLines(); lineIndex++)
             {
                 const Vt::Line &line = screen.LineAt(lineIndex);
-                std::u32string haystack;
+                std::basic_string<char32_t> haystack;
 
                 for (const Vt::Cell &cell : line.Cells)
                     haystack += (char32_t)towlower((wint_t)(cell.Ch ? cell.Ch : U' '));
-                for (size_t found = haystack.find(needle); found != std::u32string::npos;
+                for (size_t found = haystack.find(needle); found != std::basic_string<char32_t>::npos;
                      found = haystack.find(needle, found + 1))
                 {
                     m_Tab->Matches.push_back({ lineIndex, (int)found, (int)needle.size() });
@@ -1168,8 +1168,8 @@ TermView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             if (msg == WM_LBUTTONDBLCLK)
                 m_ClickCount = 2;
             else if (m_ClickCount == 2 && now - m_LastClick <= GetDoubleClickTime() &&
-                     abs(pt.x - m_LastClickPoint.x) < GetSystemMetrics(SM_CXDOUBLECLK) &&
-                     abs(pt.y - m_LastClickPoint.y) < GetSystemMetrics(SM_CYDOUBLECLK))
+                     labs(pt.x - m_LastClickPoint.x) < GetSystemMetrics(SM_CXDOUBLECLK) &&
+                     labs(pt.y - m_LastClickPoint.y) < GetSystemMetrics(SM_CYDOUBLECLK))
                 m_ClickCount = 3;
             else
                 m_ClickCount = 1;

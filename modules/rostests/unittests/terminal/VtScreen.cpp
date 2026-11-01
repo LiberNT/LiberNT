@@ -54,7 +54,7 @@ static std::string Trim(const std::wstring &text)
 
     for (wchar_t ch : text)
         out += ch < 0x80 ? (char)ch : '?';
-    while (!out.empty() && out.back() == ' ')
+    while (!out.empty() && out[out.size() - 1] == ' ')
         out.pop_back();
     return out;
 }

@@ -121,13 +121,13 @@ LoadStr(UINT id)
 }
 
 std::wstring
-ToWide(const std::u32string &text)
+ToWide(const std::basic_string<char32_t> &text)
 {
-    std::u16string utf16 = Vt::EncodeUtf16(text);
+    std::basic_string<char16_t> utf16 = Vt::EncodeUtf16(text);
     return std::wstring(reinterpret_cast<const wchar_t *>(utf16.c_str()), utf16.size());
 }
 
-std::u32string
+std::basic_string<char32_t>
 FromWide(const std::wstring &text)
 {
     return Vt::DecodeUtf16(reinterpret_cast<const char16_t *>(text.c_str()), text.size());

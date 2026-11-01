@@ -84,7 +84,7 @@ const char32_t DecGraphics[31] =
     0x2265, 0x03C0, 0x2260, 0x00A3, 0x00B7
 };
 
-bool ParseHexColor(const std::u32string &text, uint32_t *color)
+bool ParseHexColor(const std::basic_string<char32_t> &text, uint32_t *color)
 {
     unsigned value[3] = { 0, 0, 0 };
 
@@ -168,7 +168,7 @@ CharWidth(char32_t ch)
 }
 
 std::string
-EncodeUtf8(const std::u32string &text)
+EncodeUtf8(const std::basic_string<char32_t> &text)
 {
     std::string out;
 
@@ -200,10 +200,10 @@ EncodeUtf8(const std::u32string &text)
     return out;
 }
 
-std::u32string
+std::basic_string<char32_t>
 DecodeUtf16(const char16_t *text, size_t length)
 {
-    std::u32string out;
+    std::basic_string<char32_t> out;
 
     for (size_t i = 0; i < length; i++)
     {
@@ -223,10 +223,10 @@ DecodeUtf16(const char16_t *text, size_t length)
     return out;
 }
 
-std::u16string
-EncodeUtf16(const std::u32string &text)
+std::basic_string<char16_t>
+EncodeUtf16(const std::basic_string<char32_t> &text)
 {
-    std::u16string out;
+    std::basic_string<char16_t> out;
 
     for (char32_t ch : text)
     {
@@ -1680,7 +1680,7 @@ Screen::OscDispatch()
 {
     size_t separator = m_OscText.find(U';');
     int command = 0;
-    std::u32string argument;
+    std::basic_string<char32_t> argument;
 
     for (size_t i = 0; i < m_OscText.size() && i < separator; i++)
     {
@@ -1690,7 +1690,7 @@ Screen::OscDispatch()
             return;
         command = command * 10 + (int)(ch - U'0');
     }
-    if (separator != std::u32string::npos)
+    if (separator != std::basic_string<char32_t>::npos)
         argument = m_OscText.substr(separator + 1);
 
     switch (command)
@@ -1714,12 +1714,12 @@ Screen::OscDispatch()
                 unsigned index = 0;
                 uint32_t color;
 
-                if (indexEnd == std::u32string::npos)
+                if (indexEnd == std::basic_string<char32_t>::npos)
                     break;
                 for (size_t i = position; i < indexEnd; i++)
                     index = index * 10 + (unsigned)(argument[i] - U'0');
                 colorEnd = argument.find(U';', indexEnd + 1);
-                if (colorEnd == std::u32string::npos)
+                if (colorEnd == std::basic_string<char32_t>::npos)
                     colorEnd = argument.size();
                 if (index < 256 && ParseHexColor(argument.substr(indexEnd + 1, colorEnd - indexEnd - 1), &color))
                 {

@@ -110,7 +110,7 @@ public:
     int MouseMode() const { return m_MouseMode; }
     bool SgrMouse() const { return m_SgrMouse; }
 
-    const std::u32string &Title() const { return m_Title; }
+    const std::basic_string<char32_t> &Title() const { return m_Title; }
     bool TakeTitleChanged();
     bool TakeBell();
 
@@ -235,13 +235,13 @@ private:
     std::vector<bool> m_SubParam;
     bool m_ParamStarted = false;
     char32_t m_Private = 0;
-    std::u32string m_Intermediate;
-    std::u32string m_OscText;
+    std::basic_string<char32_t> m_Intermediate;
+    std::basic_string<char32_t> m_OscText;
 
     uint32_t m_Utf8Code = 0;
     int m_Utf8Remaining = 0;
 
-    std::u32string m_Title;
+    std::basic_string<char32_t> m_Title;
     bool m_TitleChanged = false;
     bool m_Bell = false;
     std::string m_Responses;
@@ -253,8 +253,8 @@ private:
 };
 
 int CharWidth(char32_t ch);
-std::string EncodeUtf8(const std::u32string &text);
-std::u32string DecodeUtf16(const char16_t *text, size_t length);
-std::u16string EncodeUtf16(const std::u32string &text);
+std::string EncodeUtf8(const std::basic_string<char32_t> &text);
+std::basic_string<char32_t> DecodeUtf16(const char16_t *text, size_t length);
+std::basic_string<char16_t> EncodeUtf16(const std::basic_string<char32_t> &text);
 
 }

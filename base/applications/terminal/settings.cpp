@@ -15,14 +15,14 @@
 namespace
 {
 
-std::u32string U32(const std::wstring &text)
+std::basic_string<char32_t> U32(const std::wstring &text)
 {
     return Vt::DecodeUtf16(reinterpret_cast<const char16_t *>(text.c_str()), text.size());
 }
 
-std::wstring W(const std::u32string &text)
+std::wstring W(const std::basic_string<char32_t> &text)
 {
-    std::u16string utf16 = Vt::EncodeUtf16(text);
+    std::basic_string<char16_t> utf16 = Vt::EncodeUtf16(text);
     return std::wstring(reinterpret_cast<const wchar_t *>(utf16.c_str()), utf16.size());
 }
 
@@ -695,6 +695,7 @@ std::wstring
 FormatKeys(const KeyBinding &binding)
 {
     std::wstring text;
+    wchar_t number[16];
 
     if (binding.Ctrl)
         text += L"ctrl+";
@@ -708,10 +709,14 @@ FormatKeys(const KeyBinding &binding)
             return text + name.Name;
     }
     if (binding.Key >= VK_F1 && binding.Key <= VK_F24)
-        return text + L"f" + std::to_wstring(binding.Key - VK_F1 + 1);
+    {
+        swprintf(number, ARRAYSIZE(number), L"f%u", binding.Key - VK_F1 + 1);
+        return text + number;
+    }
     if ((binding.Key >= L'A' && binding.Key <= L'Z') || (binding.Key >= L'0' && binding.Key <= L'9'))
         return text + (wchar_t)towlower((wint_t)binding.Key);
-    return text + L"vk" + std::to_wstring(binding.Key);
+    swprintf(number, ARRAYSIZE(number), L"vk%u", binding.Key);
+    return text + number;
 }
 
 bool

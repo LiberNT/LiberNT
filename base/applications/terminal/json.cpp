@@ -105,7 +105,7 @@ private:
         return true;
     }
 
-    bool ParseString(std::u32string &out)
+    bool ParseString(std::basic_string<char32_t> &out)
     {
         std::string bytes;
 
@@ -154,7 +154,7 @@ private:
                             return false;
                         code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00);
                     }
-                    bytes += Vt::EncodeUtf8(std::u32string(1, (char32_t)code));
+                    bytes += Vt::EncodeUtf8(std::basic_string<char32_t>(1, (char32_t)code));
                     break;
                 }
                 default:
@@ -164,9 +164,9 @@ private:
         return false;
     }
 
-    static std::u32string DecodeUtf8(const std::string &bytes)
+    static std::basic_string<char32_t> DecodeUtf8(const std::string &bytes)
     {
-        std::u32string out;
+        std::basic_string<char32_t> out;
 
         for (size_t i = 0; i < bytes.size();)
         {
@@ -255,7 +255,7 @@ private:
                 return true;
             for (;;)
             {
-                std::u32string key;
+                std::basic_string<char32_t> key;
                 Value member;
 
                 SkipSpace();
@@ -298,7 +298,7 @@ private:
         }
         if (ch == '"')
         {
-            std::u32string text;
+            std::basic_string<char32_t> text;
 
             if (!ParseString(text))
                 return false;
@@ -330,7 +330,7 @@ private:
     size_t m_Position = 0;
 };
 
-void WriteString(std::string &out, const std::u32string &text)
+void WriteString(std::string &out, const std::basic_string<char32_t> &text)
 {
     out += '"';
     for (char32_t ch : text)
@@ -351,7 +351,7 @@ void WriteString(std::string &out, const std::u32string &text)
                 }
                 else
                 {
-                    out += Vt::EncodeUtf8(std::u32string(1, ch));
+                    out += Vt::EncodeUtf8(std::basic_string<char32_t>(1, ch));
                 }
                 break;
         }
@@ -465,7 +465,7 @@ Value::Append(const Value &value)
 }
 
 const Value *
-Value::Find(const std::u32string &key) const
+Value::Find(const std::basic_string<char32_t> &key) const
 {
     if (m_Type != Type::Object)
         return NULL;
@@ -478,7 +478,7 @@ Value::Find(const std::u32string &key) const
 }
 
 Value &
-Value::Set(const std::u32string &key, const Value &value)
+Value::Set(const std::basic_string<char32_t> &key, const Value &value)
 {
     if (m_Type != Type::Object)
         *this = MakeObject();
@@ -490,12 +490,12 @@ Value::Set(const std::u32string &key, const Value &value)
             return member.second;
         }
     }
-    m_Members.emplace_back(key, value);
+    m_Members.push_back(std::make_pair(key, value));
     return m_Members.back().second;
 }
 
 void
-Value::Remove(const std::u32string &key)
+Value::Remove(const std::basic_string<char32_t> &key)
 {
     for (size_t i = 0; i < m_Members.size(); i++)
     {

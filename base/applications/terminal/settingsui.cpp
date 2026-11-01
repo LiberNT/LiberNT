@@ -150,7 +150,7 @@ private:
     COLORREF m_CustomColors[16] = {};
 };
 
-std::unique_ptr<SettingsWindow> g_SettingsWindow;
+OwnedPtr<SettingsWindow> g_SettingsWindow;
 
 const UINT SectionNames[] = { IDS_SET_SECTION_PROFILES, IDS_SET_SECTION_COLORS, IDS_SET_SECTION_WINDOW, IDS_SET_SECTION_KEYS };
 const LPCWSTR SectionIcons[] = { L"window_console_20_regular", L"color_20_regular", L"window_multiple_20_regular",
@@ -391,8 +391,9 @@ void
 SettingsWindow::ApplyFonts()
 {
     HFONT font = m_Theme.Font(ShellFrame::TextStyle::Body);
+    HWND parents[] = { m_Page, m_hwnd };
 
-    for (HWND parent : { m_Page, m_hwnd })
+    for (HWND parent : parents)
     {
         for (HWND child = GetWindow(parent, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT))
             SendMessageW(child, WM_SETFONT, (WPARAM)font, TRUE);
@@ -572,9 +573,13 @@ SettingsWindow::FillKeyList()
         std::wstring name = SettingsStore::ActionName(binding.Command);
         std::wstring keys = SettingsStore::FormatKeys(binding);
         LVITEMW item = {};
+        wchar_t number[16];
 
         if (binding.Argument)
-            name += L" " + std::to_wstring(binding.Argument);
+        {
+            StringCchPrintfW(number, ARRAYSIZE(number), L" %d", binding.Argument);
+            name += number;
+        }
         item.mask = LVIF_TEXT | LVIF_PARAM;
         item.iItem = (int)i;
         item.pszText = (LPWSTR)name.c_str();

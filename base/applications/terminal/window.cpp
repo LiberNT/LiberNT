@@ -28,6 +28,14 @@ Tab::Title() const
     return Term->Settings().Name;
 }
 
+static void
+DeleteTabs(std::vector<Tab *> &tabs)
+{
+    for (size_t i = 0; i < tabs.size(); i++)
+        delete tabs[i];
+    tabs.clear();
+}
+
 TerminalWindow::TerminalWindow() :
     m_View(this)
 {
@@ -35,6 +43,7 @@ TerminalWindow::TerminalWindow() :
 
 TerminalWindow::~TerminalWindow()
 {
+    DeleteTabs(m_Tabs);
     if (m_FindFont)
         DeleteObject(m_FindFont);
     if (m_TabFont)
@@ -333,16 +342,16 @@ void
 TerminalWindow::OnTabMove(int from, int to)
 {
     Tab *active = ActiveTab();
-    std::unique_ptr<Tab> moved;
+    Tab *moved;
 
     if (from < 0 || to < 0 || from >= (int)m_Tabs.size() || to >= (int)m_Tabs.size() || from == to)
         return;
-    moved = std::move(m_Tabs[from]);
+    moved = m_Tabs[from];
     m_Tabs.erase(m_Tabs.begin() + from);
-    m_Tabs.insert(m_Tabs.begin() + to, std::move(moved));
+    m_Tabs.insert(m_Tabs.begin() + to, moved);
     for (size_t i = 0; i < m_Tabs.size(); i++)
     {
-        if (m_Tabs[i].get() == active)
+        if (m_Tabs[i] == active)
             m_Active = (int)i;
     }
     InvalidateTabs();
@@ -369,7 +378,7 @@ TerminalWindow::OnNewTabMenu(POINT screen)
 bool
 TerminalWindow::NewTab(const Profile &profile, const std::wstring &commandLine, const std::wstring &directory)
 {
-    std::unique_ptr<Tab> tab(new Tab());
+    Tab *tab = new Tab();
     std::wstring error;
     RECT rc = { 0, 0, 800, 600 };
     int cols = g_Settings.InitialCols, rows = g_Settings.InitialRows;
@@ -389,7 +398,7 @@ TerminalWindow::NewTab(const Profile &profile, const std::wstring &commandLine, 
         tab->ErrorText = message;
         tab->Term->MarkExited(1);
     }
-    m_Tabs.push_back(std::move(tab));
+    m_Tabs.push_back(tab);
     ActivateTab((int)m_Tabs.size() - 1);
     return true;
 }
@@ -402,7 +411,7 @@ TerminalWindow::ActivateTab(int index)
     m_Active = index;
     m_Tabs[index]->Activity = false;
     m_Tabs[index]->Bell = false;
-    m_View.SetTab(m_Tabs[index].get());
+    m_View.SetTab(m_Tabs[index]);
     m_View.ApplyFont(m_Theme.Dpi());
     {
         RECT rc;
@@ -426,11 +435,15 @@ TerminalWindow::ActivateTab(int index)
 void
 TerminalWindow::CloseTab(int index)
 {
+    Tab *closing;
+
     if (index < 0 || index >= (int)m_Tabs.size())
         return;
     if (index == m_Active)
         m_View.SetTab(NULL);
+    closing = m_Tabs[index];
     m_Tabs.erase(m_Tabs.begin() + index);
+    delete closing;
     if (m_Tabs.empty())
     {
         m_Active = -1;
@@ -462,7 +475,7 @@ TerminalWindow::TabFromSession(UINT id, int *index)
         {
             if (index)
                 *index = (int)i;
-            return m_Tabs[i].get();
+            return m_Tabs[i];
         }
     }
     return NULL;
@@ -1008,7 +1021,7 @@ TerminalWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_DESTROY:
             KillTimer(m_hwnd, TIMER_SETTINGS);
             m_View.SetTab(NULL);
-            m_Tabs.clear();
+            DeleteTabs(m_Tabs);
             PostQuitMessage(0);
             break;
     }

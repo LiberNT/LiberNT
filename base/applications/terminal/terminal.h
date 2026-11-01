@@ -29,12 +29,29 @@
 #include "session.h"
 #include "vt.h"
 
+template <class T>
+class OwnedPtr
+{
+public:
+    OwnedPtr() : m_Ptr(NULL) {}
+    ~OwnedPtr() { delete m_Ptr; }
+    OwnedPtr(const OwnedPtr &) = delete;
+    OwnedPtr &operator=(const OwnedPtr &) = delete;
+    T *get() const { return m_Ptr; }
+    void reset(T *ptr = NULL) { T *old = m_Ptr; m_Ptr = ptr; delete old; }
+    T *operator->() const { return m_Ptr; }
+    explicit operator bool() const { return m_Ptr != NULL; }
+
+private:
+    T *m_Ptr;
+};
+
 extern HINSTANCE g_Instance;
 extern Settings g_Settings;
 
 std::wstring LoadStr(UINT id);
-std::wstring ToWide(const std::u32string &text);
-std::u32string FromWide(const std::wstring &text);
+std::wstring ToWide(const std::basic_string<char32_t> &text);
+std::basic_string<char32_t> FromWide(const std::wstring &text);
 void BroadcastSettingsChanged();
 void ShowSettings(HWND owner);
 bool SettingsPreTranslate(MSG *msg);
@@ -76,7 +93,7 @@ struct SearchMatch
 
 struct Tab
 {
-    std::unique_ptr<Session> Term;
+    OwnedPtr<Session> Term;
     std::wstring CustomTitle;
     bool Bell = false;
     bool Activity = false;
@@ -166,7 +183,7 @@ public:
 
     bool Open(int showCmd, const std::wstring &profile, const std::wstring &commandLine, const std::wstring &directory);
     bool PreTranslate(MSG *msg);
-    Tab *ActiveTab() { return m_Active >= 0 && m_Active < (int)m_Tabs.size() ? m_Tabs[m_Active].get() : NULL; }
+    Tab *ActiveTab() { return m_Active >= 0 && m_Active < (int)m_Tabs.size() ? m_Tabs[m_Active] : NULL; }
     void PerformAction(Action command, int argument);
     void ApplySettings();
     void UpdateWindowTitle();
@@ -209,7 +226,7 @@ private:
     static LRESULT CALLBACK FindEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR id, DWORD_PTR data);
 
     TermView m_View;
-    std::vector<std::unique_ptr<Tab>> m_Tabs;
+    std::vector<Tab *> m_Tabs;
     ShellFrame::TabBand m_Band;
     HFONT m_TabFont = NULL;
     int m_Active = -1;
