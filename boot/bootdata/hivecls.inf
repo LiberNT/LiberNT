@@ -6,6 +6,7 @@ HKLM,"SOFTWARE\Classes",,0x00000010
 
 ; Default key
 HKCR,"*","AlwaysShowExt",0x00000000,""
+HKCR,"*","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated"
 HKCR,"SystemFileAssociations",,0x00000010
 
 ; Open With List
@@ -869,6 +870,27 @@ HKCR,"MIME\Database\Rfc1766","043D",0x00000000,"ji;Yiddish"
 HKCR,"MIME\Database\Rfc1766","0435",0x00000000,"zu;Zulu"
 
 ; SystemFileAssociations
+HKCR,"SystemFileAssociations\.avci","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.avcs","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.avif","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.avifs","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.dng","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.heic","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.heics","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.heif","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.heifs","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.hif","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.jfif","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.jpe","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.jpeg","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.jpg","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.jxl","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.jxr","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.png","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.tif","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.tiff","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.wdp","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
+HKCR,"SystemFileAssociations\.webp","SetDefaultsFor",0x00000000,"prop:System.Author;System.Document.DateCreated;System.Photo.DateTaken"
 HKCR,"SystemFileAssociations\.txt","PerceivedType",0x00000000,"text"
 HKCR,"SystemFileAssociations\image\ShellEx\{e357fccd-a995-4576-b01f-234630154e96}","",0x00000000,"{C7657C4A-9F68-40fa-A4DF-96BC08EB3551}"
 HKCR,"SystemFileAssociations\text\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-152"

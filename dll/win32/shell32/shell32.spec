@@ -470,7 +470,7 @@
 @ stdcall RealShellExecuteExW(ptr wstr wstr wstr wstr ptr wstr ptr long ptr long) # 2k3:267, Vista:306
 @ stdcall RealShellExecuteW(ptr wstr wstr wstr wstr ptr wstr ptr long ptr) # 2k3:268, Vista:307
 @ stdcall RegenerateUserEnvironment(ptr long) # 2k3:269, Vista:308
-@ stub -version=0x600+ SHAddDefaultPropertiesByExt # Vista:309
+@ stdcall -version=0x600+ SHAddDefaultPropertiesByExt(wstr ptr) # Vista:309
 @ stdcall SHAddToRecentDocs(long ptr) # 2k3:270, Vista:310
 @ stdcall SHAppBarMessage(long ptr) # 2k3:271, Vista:311
 @ stub -version=0x600+ SHAssocEnumHandlers # Vista:312
@@ -489,7 +489,7 @@
 @ stdcall -version=0x600+ SHCreateDataObject(ptr long ptr ptr ptr ptr) # Vista:324
 @ stdcall -version=0x600+ SHCreateDefaultContextMenu(ptr ptr ptr) # Vista:325
 @ stdcall -version=0x600+ SHCreateDefaultExtractIcon(ptr ptr) # Vista:326
-@ stub -version=0x600+ SHCreateDefaultPropertiesOp # Vista:327
+@ stdcall -version=0x600+ SHCreateDefaultPropertiesOp(ptr ptr) # Vista:327
 @ stdcall SHCreateDirectoryExA(long str ptr) # 2k3:278, Vista:328
 @ stdcall SHCreateDirectoryExW(long wstr ptr) # 2k3:279, Vista:329
 @ stdcall -version=0x600+ SHCreateItemFromIDList(ptr ptr ptr) # Vista:330
@@ -576,7 +576,7 @@
 @ stdcall SHQueryRecycleBinW(wstr ptr) # 2k3:334, Vista:404
 @ stdcall -version=0x600+ SHQueryUserNotificationState(ptr) # Vista:405
 @ stdcall -version=0x600+ SHRemoveLocalizedName(wstr) # Vista:406
-@ stub -version=0x600+ SHSetDefaultProperties # Vista:407
+@ stdcall -version=0x600+ SHSetDefaultProperties(ptr ptr long ptr) # Vista:407
 @ stdcall -version=0x600+ SHSetKnownFolderPath(ptr long ptr wstr)
 @ stdcall SHSetLocalizedName(wstr wstr long) # 2k3:335, Vista:409
 @ stdcall -version=0x600+ SHSetTemporaryPropertyForItem(ptr ptr ptr) # Vista:410

@@ -6,6 +6,8 @@
  */
 
 #include "precomp.h"
+#include <propkey.h>
+#include <propvarutil.h>
 #include <lmcons.h>
 #include <lmapibuf.h>
 #include <lmaccess.h>
@@ -1895,6 +1897,146 @@ SHGetDriveMedia(
     if (GetVolumeInformationW(szRoot, NULL, 0, NULL, NULL, NULL, NULL, 0))
         *pdwMediaContent = ARCONTENT_UNKNOWNCONTENT;
     return S_OK;
+}
+
+static HRESULT
+SHELL_AddDefaultsFromList(
+    _In_ HKEY hkey,
+    _In_opt_ PCWSTR pszSubKey,
+    _In_ IPropertyStore *pStore,
+    _In_ PCWSTR pszUser)
+{
+    WCHAR szList[1024];
+    DWORD cbList = sizeof(szList);
+    PWSTR pszName, pszNext;
+    FILETIME ftNow;
+
+    if (RegGetValueW(hkey, pszSubKey, L"SetDefaultsFor", RRF_RT_REG_SZ, NULL, szList, &cbList) != ERROR_SUCCESS)
+        return S_OK;
+    if (_wcsnicmp(szList, L"prop:", 5))
+        return S_OK;
+
+    GetSystemTimeAsFileTime(&ftNow);
+    for (pszName = szList + 5; *pszName; pszName = pszNext)
+    {
+        CComPtr<IPropertyDescription> pDesc;
+        PROPERTYKEY key;
+        PROPVARIANT pv;
+        VARTYPE vt;
+
+        pszNext = wcschr(pszName, L';');
+        if (pszNext)
+            *pszNext++ = UNICODE_NULL;
+        else
+            pszNext = pszName + wcslen(pszName);
+        if (!*pszName)
+            continue;
+
+        if (FAILED(PSGetPropertyKeyFromName(pszName, &key)))
+            continue;
+
+        PropVariantInit(&pv);
+        if (SUCCEEDED(pStore->GetValue(key, &pv)) && pv.vt != VT_EMPTY)
+        {
+            PropVariantClear(&pv);
+            continue;
+        }
+
+        if (IsEqualPropertyKey(key, PKEY_Author))
+        {
+            if (FAILED(InitPropVariantFromStringVector(&pszUser, 1, &pv)))
+                continue;
+        }
+        else if (SUCCEEDED(PSGetPropertyDescription(key, IID_PPV_ARG(IPropertyDescription, &pDesc))) &&
+                 SUCCEEDED(pDesc->GetPropertyType(&vt)) && vt == VT_FILETIME)
+        {
+            InitPropVariantFromFileTime(&ftNow, &pv);
+        }
+        else
+        {
+            FIXME("No default value for %s\n", debugstr_w(pszName));
+            continue;
+        }
+
+        pStore->SetValue(key, pv);
+        PropVariantClear(&pv);
+    }
+    return S_OK;
+}
+
+EXTERN_C
+HRESULT WINAPI
+SHAddDefaultPropertiesByExt(
+    _In_ PCWSTR pszExt,
+    _In_ IPropertyStore *pPropStore)
+{
+    WCHAR szUser[UNLEN + 1], szKey[MAX_PATH];
+    DWORD cchUser = _countof(szUser);
+
+    if (!pszExt || !*pszExt || !pPropStore)
+        return E_INVALIDARG;
+    if (*pszExt != L'.')
+        return HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION);
+
+    if (!GetUserNameW(szUser, &cchUser))
+        szUser[0] = UNICODE_NULL;
+
+    if (SUCCEEDED(StringCchPrintfW(szKey, _countof(szKey), L"SystemFileAssociations\\%s", pszExt)))
+        SHELL_AddDefaultsFromList(HKEY_CLASSES_ROOT, szKey, pPropStore, szUser);
+    SHELL_AddDefaultsFromList(HKEY_CLASSES_ROOT, L"*", pPropStore, szUser);
+    SHELL_AddDefaultsFromList(HKEY_CLASSES_ROOT, L"AllFilesystemObjects", pPropStore, szUser);
+    return S_OK;
+}
+
+EXTERN_C
+HRESULT WINAPI
+SHCreateDefaultPropertiesOp(
+    _In_ IShellItem *psi,
+    _Outptr_ IFileOperation **ppFileOp)
+{
+    CComPtr<IShellItem2> pItem;
+    CComPtr<IPropertyStore> pStore;
+    HRESULT hr;
+
+    *ppFileOp = NULL;
+
+    hr = psi->QueryInterface(IID_PPV_ARG(IShellItem2, &pItem));
+    if (FAILED(hr))
+        return hr;
+    hr = pItem->GetPropertyStore(GPS_READWRITE, IID_PPV_ARG(IPropertyStore, &pStore));
+    if (FAILED(hr))
+        return E_FAIL;
+
+    /* FIXME: applying the defaults needs property change arrays, which propsys does not implement */
+    return E_NOTIMPL;
+}
+
+EXTERN_C
+HRESULT WINAPI
+SHSetDefaultProperties(
+    _In_opt_ HWND hwnd,
+    _In_ IShellItem *psi,
+    DWORD dwFileOpFlags,
+    _In_opt_ IFileOperationProgressSink *pfops)
+{
+    CComPtr<IFileOperation> pOperation;
+    DWORD dwCookie = 0;
+    HRESULT hr;
+
+    hr = SHCreateDefaultPropertiesOp(psi, &pOperation);
+    if (FAILED(hr))
+        return hr;
+
+    if (hwnd)
+        pOperation->SetOwnerWindow(hwnd);
+    hr = pOperation->SetOperationFlags(dwFileOpFlags);
+    if (SUCCEEDED(hr) && pfops)
+        hr = pOperation->Advise(pfops, &dwCookie);
+    if (SUCCEEDED(hr))
+        hr = pOperation->PerformOperations();
+    if (dwCookie)
+        pOperation->Unadvise(dwCookie);
+    return hr;
 }
 
 /*************************************************************************
