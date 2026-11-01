@@ -130,6 +130,7 @@ typedef struct _DXGKP_GPUVA_TABLE_SNAPSHOT
 {
     PDXGKRNL_GPUVA_PAGE_TABLE Table;
     DXGK_PTE                  *Entries;
+    DXGK_PTE                  *Entries64KB;
     ULONG                     StartIndex;
     ULONG                     EndIndex;
     BOOLEAN                   InitialUpdatePending;
@@ -1424,6 +1425,13 @@ GpuVaMarkChunkPage(
 }
 
 static BOOLEAN
+GpuVaDualPte(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    return (BOOLEAN)(Adapter->GpuMmuCapsValid && Adapter->GpuMmuCaps.DualPteSupported);
+}
+
+static BOOLEAN
 GpuVaLeafHolds64KPages(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ PDXGKRNL_GPUVA_PAGE_TABLE Leaf)
@@ -2299,6 +2307,7 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
             ULONG StartIndex;
             ULONG EndIndex;
             ULONG EntryCount;
+            BOOLEAN DualHalf;
 
             if (TableCount >= TableCapacity)
                 break;
@@ -2351,7 +2360,9 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
                 continue;
 
             EntryCount = EndIndex - StartIndex;
-            if ((SIZE_T)EntryCount > MAXULONG_PTR / sizeof(DXGK_PTE))
+            DualHalf = (BOOLEAN)(DxgkGpuVaCore64KBEntries(GpuVaDualPte(Adapter), Table->Level, FALSE) ==
+                                 DxgkGpuVa64KBEntriesTableHalf);
+            if ((SIZE_T)EntryCount > MAXULONG_PTR / (2 * sizeof(DXGK_PTE)))
             {
                 ExReleaseFastMutex(&Process->GpuVaLock);
                 Status = STATUS_INTEGER_OVERFLOW;
@@ -2359,7 +2370,7 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
             }
             Tables[TableCount].Entries = ExAllocatePoolWithTag(
                 NonPagedPool,
-                (SIZE_T)EntryCount * sizeof(DXGK_PTE),
+                (SIZE_T)EntryCount * (DualHalf ? 2 : 1) * sizeof(DXGK_PTE),
                 TAG_DXGK_GPUVA_PT);
             if (Tables[TableCount].Entries == NULL)
             {
@@ -2370,6 +2381,12 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
             RtlCopyMemory(Tables[TableCount].Entries,
                           Table->Entries + StartIndex,
                           (SIZE_T)EntryCount * sizeof(DXGK_PTE));
+            Tables[TableCount].Entries64KB = NULL;
+            if (DualHalf)
+            {
+                Tables[TableCount].Entries64KB = Tables[TableCount].Entries + EntryCount;
+                RtlZeroMemory(Tables[TableCount].Entries64KB, (SIZE_T)EntryCount * sizeof(DXGK_PTE));
+            }
             Tables[TableCount].Table = Table;
             Tables[TableCount].StartIndex = StartIndex;
             Tables[TableCount].EndIndex = EndIndex;
@@ -2482,6 +2499,9 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
             /* InitialUpdate describes the whole implicit table and cannot
              * attribute valid entries from several allocations at once. */
             Op.PageTableEntries = &ZeroPte;
+            Op.PageTableEntries64KB =
+                DxgkGpuVaCore64KBEntries(GpuVaDualPte(Adapter), Table->Level, TRUE) == DxgkGpuVa64KBEntriesZeroPte ?
+                &ZeroPte : NULL;
             Op.StartIndex = 0;
             Op.NumPageTableEntries = Table->EntryCount;
             Op.Repeat = TRUE;
@@ -2497,6 +2517,7 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
 
         Op.Repeat = FALSE;
         Op.InitialUpdate = FALSE;
+        Op.PageTableEntries64KB = NULL;
         if (Table->Level != 0 || SpanCount == 0)
         {
             /* Directory entries and unowned leaf entries do not name an
@@ -2515,6 +2536,7 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
                     Run++;
                 }
                 Op.PageTableEntries = Snapshot->Entries + First;
+                Op.PageTableEntries64KB = Snapshot->Entries64KB != NULL ? Snapshot->Entries64KB + First : NULL;
                 Op.StartIndex = Snapshot->StartIndex + First;
                 Op.NumPageTableEntries = Run;
                 Op.Use64KBPages = (BOOLEAN)(Table->Level == 1 && PageSize == DXGK_PTE_PAGE_TABLE_PAGE_64KB);
@@ -2529,6 +2551,7 @@ DxgkpGpuVaFlushPageTableUpdatesOnce(
                 First += Run;
             }
             Op.Use64KBPages = FALSE;
+            Op.PageTableEntries64KB = NULL;
         }
         if (Table->Level == 0 && SpanCount != 0)
         {

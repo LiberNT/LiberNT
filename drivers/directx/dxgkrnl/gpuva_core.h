@@ -88,6 +88,19 @@ DxgkGpuVaCoreNextMapPiece(
 #define DXGK_GPUVA_CORE_UPDATE_GPU_VIRTUAL   1
 #define DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL  2
 
+typedef enum _DXGK_GPUVA_64KB_ENTRIES
+{
+    DxgkGpuVa64KBEntriesNone = 0,
+    DxgkGpuVa64KBEntriesZeroPte,
+    DxgkGpuVa64KBEntriesTableHalf
+} DXGK_GPUVA_64KB_ENTRIES;
+
+DXGK_GPUVA_64KB_ENTRIES
+DxgkGpuVaCore64KBEntries(
+    _In_ BOOLEAN DualPteSupported,
+    _In_ ULONG PageTableLevel,
+    _In_ BOOLEAN Repeat);
+
 ULONG
 DxgkGpuVaCoreTableUpdateMode(
     _In_ ULONG AdapterUpdateMode,

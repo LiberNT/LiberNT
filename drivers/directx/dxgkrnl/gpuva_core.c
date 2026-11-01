@@ -386,6 +386,20 @@ DxgkGpuVaCorePteEqual(
            Left->LargePage == Right->LargePage;
 }
 
+DXGK_GPUVA_64KB_ENTRIES
+DxgkGpuVaCore64KBEntries(
+    _In_ BOOLEAN DualPteSupported,
+    _In_ ULONG PageTableLevel,
+    _In_ BOOLEAN Repeat)
+{
+    if (!DualPteSupported)
+        return DxgkGpuVa64KBEntriesNone;
+    /* Windows VidMm: entry-less updates repeat a zero PTE in both arrays, level-1 updates pass the 64 KB half. */
+    if (Repeat)
+        return DxgkGpuVa64KBEntriesZeroPte;
+    return PageTableLevel == 1 ? DxgkGpuVa64KBEntriesTableHalf : DxgkGpuVa64KBEntriesNone;
+}
+
 ULONG
 DxgkGpuVaCoreTableUpdateMode(
     _In_ ULONG AdapterUpdateMode,

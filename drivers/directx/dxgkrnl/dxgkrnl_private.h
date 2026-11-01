@@ -4275,6 +4275,7 @@ typedef struct _DXGKRNL_PAGING_OP
     ULONG                       PageTableLevel;
     DXGK_PAGETABLEUPDATEADDRESS PageTableAddress;
     DXGK_PTE                   *PageTableEntries;
+    DXGK_PTE                   *PageTableEntries64KB;
     ULONG                       StartIndex;
     ULONG                       NumPageTableEntries;
     ULONG64                     AllocationOffsetInBytes;

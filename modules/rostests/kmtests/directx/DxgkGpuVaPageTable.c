@@ -174,9 +174,23 @@ TestTableCpuMapping(VOID)
     ok_eq_bool(DxgkGpuVaCoreUsesPagingProcessVa(DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL), TRUE);
 }
 
+static VOID
+Test64KBEntries(VOID)
+{
+    ok_eq_int(DxgkGpuVaCore64KBEntries(FALSE, 1, FALSE), DxgkGpuVa64KBEntriesNone);
+    ok_eq_int(DxgkGpuVaCore64KBEntries(FALSE, 1, TRUE), DxgkGpuVa64KBEntriesNone);
+    ok_eq_int(DxgkGpuVaCore64KBEntries(TRUE, 1, FALSE), DxgkGpuVa64KBEntriesTableHalf);
+    ok_eq_int(DxgkGpuVaCore64KBEntries(TRUE, 0, FALSE), DxgkGpuVa64KBEntriesNone);
+    ok_eq_int(DxgkGpuVaCore64KBEntries(TRUE, 2, FALSE), DxgkGpuVa64KBEntriesNone);
+    ok_eq_int(DxgkGpuVaCore64KBEntries(TRUE, 0, TRUE), DxgkGpuVa64KBEntriesZeroPte);
+    ok_eq_int(DxgkGpuVaCore64KBEntries(TRUE, 1, TRUE), DxgkGpuVa64KBEntriesZeroPte);
+    ok_eq_int(DxgkGpuVaCore64KBEntries(TRUE, 3, TRUE), DxgkGpuVa64KBEntriesZeroPte);
+}
+
 START_TEST(DxgkGpuVaPageTable)
 {
     TestTableUpdateMode();
+    Test64KBEntries();
     TestTableCpuMapping();
     TestGeometryValidation();
     TestShiftsAndIndexing();

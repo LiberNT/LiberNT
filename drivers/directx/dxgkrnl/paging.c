@@ -239,6 +239,7 @@ DxgkpPagingFillBuildArgs(
             BuildArgs->UpdatePageTable.hAllocation = Op->hMiniportAllocation;
             BuildArgs->UpdatePageTable.PageTableAddress = Op->PageTableAddress;
             BuildArgs->UpdatePageTable.pPageTableEntries = Op->PageTableEntries;
+            BuildArgs->UpdatePageTable.pPageTableEntries64KB = Op->PageTableEntries64KB;
             BuildArgs->UpdatePageTable.StartIndex = Op->StartIndex;
             BuildArgs->UpdatePageTable.NumPageTableEntries = Op->NumPageTableEntries;
             BuildArgs->UpdatePageTable.Flags.Repeat = Op->Repeat ? 1 : 0;
