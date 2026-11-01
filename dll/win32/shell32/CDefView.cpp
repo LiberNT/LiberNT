@@ -4424,6 +4424,12 @@ HRESULT WINAPI CDefView::Refresh()
 
     _DoFolderViewCB(SFVM_LISTREFRESHED, TRUE, 0);
 
+    if (m_bmenuBarInitialized)
+    {
+        _UnmergeMenus();
+        _MergeMenus();
+    }
+
     m_ListView.DeleteAllItems();
     FillList();
 
