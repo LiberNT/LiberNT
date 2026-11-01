@@ -1138,3 +1138,18 @@ AssocCreateForClasses(
         return hr;
     return pHolder->QueryInterface(riid, ppv);
 }
+
+EXTERN_C HRESULT WINAPI
+AssocGetDetailsOfPropKey(
+    _In_ IShellFolder *psf,
+    _In_ PCUITEMID_CHILD pidl,
+    _In_ const PROPERTYKEY *pkey,
+    _Out_ VARIANT *pv,
+    _Out_opt_ BOOL *pfFoundPropKey)
+{
+    VariantInit(pv);
+    if (pfFoundPropKey)
+        *pfFoundPropKey = FALSE;
+    /* FIXME: values that namespace extensions publish through their association data are not looked up */
+    return E_FAIL;
+}
