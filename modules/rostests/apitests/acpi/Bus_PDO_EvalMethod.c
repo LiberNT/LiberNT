@@ -215,6 +215,7 @@ struct acpi_device
         {
             struct
             {
+                unsigned int valid:1;
                 unsigned int explicit_set:1;
             } flags;
             struct
@@ -222,7 +223,7 @@ struct acpi_device
                 UINT32 count;
                 ACPI_HANDLE handles[10];
             } resources;
-        } states[4];
+        } states[ACPI_STATE_D3_COLD + 1];
     } power;
 };
 
