@@ -82,6 +82,6 @@ add_executable(advapi32_apitest
 
 target_link_libraries(advapi32_apitest wine ${PSEH_LIB})
 set_module_type(advapi32_apitest win32cui)
-add_importlibs(advapi32_apitest advapi32 iphlpapi ws2_32 user32 netapi32 userenv rpcrt4 msvcrt kernel32 ntdll)
+add_importlibs(advapi32_apitest advapi32 iphlpapi ws2_32 user32 netapi32 userenv rpcrt4 secur32 msvcrt kernel32 ntdll)
 add_pch(advapi32_apitest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET advapi32_apitest)
