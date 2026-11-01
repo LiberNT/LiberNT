@@ -13,6 +13,7 @@ list(APPEND SOURCE
     stubs.c
     thunks.c
     ntlmmsg.c
+    spnego.c
     wrapper.c
     wine/hmac_md5.c
     wine/kerberos.c
