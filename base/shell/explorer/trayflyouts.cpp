@@ -594,10 +594,11 @@ public:
     BOOL m_bHover;
     RECT m_rcAnchor;
     ULONGLONG m_LeaveT0;
+    BOOL m_bFrameStarted;
 
     CTaskPreviewWnd() : m_hFont(NULL), m_nGroupId(0), m_iHot(-1),
                         m_bCloseHot(FALSE), m_bTracking(FALSE),
-                        m_bHover(FALSE), m_LeaveT0(0)
+                        m_bHover(FALSE), m_LeaveT0(0), m_bFrameStarted(FALSE)
     {
         ZeroMemory(&m_Pal, sizeof(m_Pal));
         ZeroMemory(&m_size, sizeof(m_size));
@@ -669,6 +670,8 @@ public:
 
         if (!m_hFont)
             m_hFont = TfyCreateFont(12, FW_NORMAL);
+        if (!m_bFrameStarted)
+            m_bFrameStarted = ShellFrame::Startup();
 
         BuildCards(pahWnd, cWindows);
         LayoutCards();
@@ -754,20 +757,18 @@ public:
             DrawTextW(hdcMem, card.szTitle, -1, &rcTitle,
                       DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
 
-            if (bHot)
+            if (bHot && m_bFrameStarted)
             {
                 COLORREF crX = m_bCloseHot ? RGB(232, 17, 35) : m_Pal.DimText;
-                HPEN hpen = CreatePen(PS_SOLID, Sc(2), crX);
-                HGDIOBJ hpenOld = SelectObject(hdcMem, hpen);
-                int cxm = (card.rcClose.left + card.rcClose.right) / 2;
-                int cym = (card.rcClose.top + card.rcClose.bottom) / 2;
-                int r = Sc(4);
-                MoveToEx(hdcMem, cxm - r, cym - r, NULL);
-                LineTo(hdcMem, cxm + r, cym + r);
-                MoveToEx(hdcMem, cxm + r, cym - r, NULL);
-                LineTo(hdcMem, cxm - r, cym + r);
-                SelectObject(hdcMem, hpenOld);
-                DeleteObject(hpen);
+                HICON hGlyph = ShellFrame::CreateGlyphIcon(L"dismiss_16_regular", Sc(16), crX);
+
+                if (hGlyph)
+                {
+                    DrawIconEx(hdcMem, (card.rcClose.left + card.rcClose.right - Sc(16)) / 2,
+                               (card.rcClose.top + card.rcClose.bottom - Sc(16)) / 2,
+                               hGlyph, Sc(16), Sc(16), 0, NULL, DI_NORMAL);
+                    DestroyIcon(hGlyph);
+                }
             }
 
             RECT rcThumbBox = { card.rc.left + Sc(8), card.rc.top + TitleH(),
@@ -951,6 +952,11 @@ public:
         {
             DeleteObject(m_hFont);
             m_hFont = NULL;
+        }
+        if (m_bFrameStarted)
+        {
+            ShellFrame::Shutdown();
+            m_bFrameStarted = FALSE;
         }
         return 0;
     }
