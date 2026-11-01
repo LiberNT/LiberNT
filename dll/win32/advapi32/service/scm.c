@@ -653,21 +653,125 @@ ControlService(SC_HANDLE hService,
 }
 
 
-/**********************************************************************
- *  ControlServiceEx
- *
- * @unimplemented
- */
 BOOL WINAPI
-ControlServiceEx(IN SC_HANDLE hService,
-                 IN DWORD dwControl,
-                 IN DWORD dwInfoLevel,
-                 IN OUT PVOID pControlParams)
+ControlServiceExA(IN SC_HANDLE hService,
+                  IN DWORD dwControl,
+                  IN DWORD dwInfoLevel,
+                  IN OUT PVOID pControlParams)
 {
-    FIXME("ControlServiceEx(%p %lu %lu %p)\n",
+    PSERVICE_CONTROL_STATUS_REASON_PARAMSA Params = pControlParams;
+    SERVICE_CONTROL_STATUS_REASON_IN_PARAMSA InParams;
+    SERVICE_CONTROL_STATUS_REASON_OUT_PARAMS OutParams;
+    SC_RPC_SERVICE_CONTROL_IN_PARAMSA ControlInParams;
+    SC_RPC_SERVICE_CONTROL_OUT_PARAMSA ControlOutParams;
+    DWORD dwError;
+
+    TRACE("ControlServiceExA(%p %lu %lu %p)\n",
           hService, dwControl, dwInfoLevel, pControlParams);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+
+    if (dwInfoLevel != SERVICE_CONTROL_STATUS_REASON_INFO)
+    {
+        SetLastError(ERROR_INVALID_LEVEL);
+        return FALSE;
+    }
+
+    if (Params == NULL)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    InParams.dwReason = Params->dwReason;
+    InParams.pszComment = Params->pszComment;
+    OutParams.ServiceStatus = Params->ServiceStatus;
+    ControlInParams.psrInParams = &InParams;
+    ControlOutParams.psrOutParams = &OutParams;
+
+    RpcTryExcept
+    {
+        dwError = RControlServiceExA((SC_RPC_HANDLE)hService,
+                                     dwControl,
+                                     dwInfoLevel,
+                                     &ControlInParams,
+                                     &ControlOutParams);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        dwError = ScmRpcStatusToWinError(RpcExceptionCode());
+    }
+    RpcEndExcept;
+
+    Params->ServiceStatus = OutParams.ServiceStatus;
+
+    if (dwError != ERROR_SUCCESS)
+    {
+        TRACE("RControlServiceExA() failed (Error %lu)\n", dwError);
+        SetLastError(dwError);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+
+BOOL WINAPI
+ControlServiceExW(IN SC_HANDLE hService,
+                  IN DWORD dwControl,
+                  IN DWORD dwInfoLevel,
+                  IN OUT PVOID pControlParams)
+{
+    PSERVICE_CONTROL_STATUS_REASON_PARAMSW Params = pControlParams;
+    SERVICE_CONTROL_STATUS_REASON_IN_PARAMSW InParams;
+    SERVICE_CONTROL_STATUS_REASON_OUT_PARAMS OutParams;
+    SC_RPC_SERVICE_CONTROL_IN_PARAMSW ControlInParams;
+    SC_RPC_SERVICE_CONTROL_OUT_PARAMSW ControlOutParams;
+    DWORD dwError;
+
+    TRACE("ControlServiceExW(%p %lu %lu %p)\n",
+          hService, dwControl, dwInfoLevel, pControlParams);
+
+    if (dwInfoLevel != SERVICE_CONTROL_STATUS_REASON_INFO)
+    {
+        SetLastError(ERROR_INVALID_LEVEL);
+        return FALSE;
+    }
+
+    if (Params == NULL)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    InParams.dwReason = Params->dwReason;
+    InParams.pszComment = Params->pszComment;
+    OutParams.ServiceStatus = Params->ServiceStatus;
+    ControlInParams.psrInParams = &InParams;
+    ControlOutParams.psrOutParams = &OutParams;
+
+    RpcTryExcept
+    {
+        dwError = RControlServiceExW((SC_RPC_HANDLE)hService,
+                                     dwControl,
+                                     dwInfoLevel,
+                                     &ControlInParams,
+                                     &ControlOutParams);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        dwError = ScmRpcStatusToWinError(RpcExceptionCode());
+    }
+    RpcEndExcept;
+
+    Params->ServiceStatus = OutParams.ServiceStatus;
+
+    if (dwError != ERROR_SUCCESS)
+    {
+        TRACE("RControlServiceExW() failed (Error %lu)\n", dwError);
+        SetLastError(dwError);
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 

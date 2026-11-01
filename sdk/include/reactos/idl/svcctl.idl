@@ -244,31 +244,13 @@ typedef struct _SC_RPC_NOTIFY_PARAMS_LIST {
 
 cpp_quote("#if 0")
 
-#if 0
-typedef
-[switch_type(DWORD)] union _SC_RPC_SERVICE_CONTROL_IN_PARAMSA {
-    [case(1)] PSERVICE_CONTROL_STATUS_REASON_IN_PARAMSA psrInParams;
-} SC_RPC_SERVICE_CONTROL_IN_PARAMSA, *LPSC_RPC_SERVICE_CONTROL_IN_PARAMSA;
-
-typedef
-[switch_type(DWORD)] union _SC_RPC_SERVICE_CONTROL_IN_PARAMSW {
-    [case(1)] PSERVICE_CONTROL_STATUS_REASON_IN_PARAMSW psrInParams;
-} SC_RPC_SERVICE_CONTROL_IN_PARAMSW, *LPSC_RPC_SERVICE_CONTROL_IN_PARAMSW;
-
-typedef
-[switch_type(DWORD)] union _SC_RPC_SERVICE_CONTROL_OUT_PARAMSA {
-    [case(1)] PSERVICE_CONTROL_STATUS_REASON_OUT_PARAMS psrOutParams;
-} SC_RPC_SERVICE_CONTROL_OUT_PARAMSA, *LPSC_RPC_SERVICE_CONTROL_OUT_PARAMSA;
-
-typedef
-[switch_type(DWORD)] union _SC_RPC_SERVICE_CONTROL_OUT_PARAMSW {
-    [case(1)] PSERVICE_CONTROL_STATUS_REASON_OUT_PARAMS psrOutParams;
-} SC_RPC_SERVICE_CONTROL_OUT_PARAMSW, *LPSC_RPC_SERVICE_CONTROL_OUT_PARAMSW;
-#endif
-
 typedef [v1_enum] enum _SC_STATUS_TYPE {
     SC_STATUS_PROCESS_INFO = 0,
 } SC_STATUS_TYPE;
+
+typedef SERVICE_NOTIFY_STATUS_CHANGE_PARAMS_2 SERVICE_NOTIFY_STATUS_CHANGE_PARAMS, *LPSERVICE_NOTIFY_STATUS_CHANGE_PARAMS;
+
+cpp_quote("#endif")
 
 typedef struct _SERVICE_CONTROL_STATUS_REASON_IN_PARAMSA {
     DWORD dwReason;
@@ -284,9 +266,25 @@ typedef struct _SERVICE_CONTROL_STATUS_REASON_OUT_PARAMS {
     SERVICE_STATUS_PROCESS ServiceStatus;
 } SERVICE_CONTROL_STATUS_REASON_OUT_PARAMS, *LPSERVICE_CONTROL_STATUS_REASON_OUT_PARAMS;
 
-typedef SERVICE_NOTIFY_STATUS_CHANGE_PARAMS_2 SERVICE_NOTIFY_STATUS_CHANGE_PARAMS, *LPSERVICE_NOTIFY_STATUS_CHANGE_PARAMS;
+typedef
+[switch_type(DWORD)] union _SC_RPC_SERVICE_CONTROL_IN_PARAMSA {
+    [case(1)] LPSERVICE_CONTROL_STATUS_REASON_IN_PARAMSA psrInParams;
+} SC_RPC_SERVICE_CONTROL_IN_PARAMSA, *LPSC_RPC_SERVICE_CONTROL_IN_PARAMSA;
 
-cpp_quote("#endif")
+typedef
+[switch_type(DWORD)] union _SC_RPC_SERVICE_CONTROL_IN_PARAMSW {
+    [case(1)] LPSERVICE_CONTROL_STATUS_REASON_IN_PARAMSW psrInParams;
+} SC_RPC_SERVICE_CONTROL_IN_PARAMSW, *LPSC_RPC_SERVICE_CONTROL_IN_PARAMSW;
+
+typedef
+[switch_type(DWORD)] union _SC_RPC_SERVICE_CONTROL_OUT_PARAMSA {
+    [case(1)] LPSERVICE_CONTROL_STATUS_REASON_OUT_PARAMS psrOutParams;
+} SC_RPC_SERVICE_CONTROL_OUT_PARAMSA, *LPSC_RPC_SERVICE_CONTROL_OUT_PARAMSA;
+
+typedef
+[switch_type(DWORD)] union _SC_RPC_SERVICE_CONTROL_OUT_PARAMSW {
+    [case(1)] LPSERVICE_CONTROL_STATUS_REASON_OUT_PARAMS psrOutParams;
+} SC_RPC_SERVICE_CONTROL_OUT_PARAMSW, *LPSC_RPC_SERVICE_CONTROL_OUT_PARAMSW;
 
 typedef struct _STRING_PTRSA {
     [string] LPSTR StringPtr;
@@ -859,9 +857,9 @@ interface svcctl
     RControlServiceExA(
         [in] SC_RPC_HANDLE hService,
         [in] DWORD dwControl,
-        [in] DWORD dwInfoLevel/*,
-        [in, switch_is(dwInfoLevel)] PSC_RPC_SERVICE_CONTROL_IN_PARAMSA pControlInParams,
-        [out, switch_is(dwInfoLevel)] PSC_RPC_SERVICE_CONTROL_IN_PARAMSA pControlOutParams*/);
+        [in] DWORD dwInfoLevel,
+        [in, switch_is(dwInfoLevel)] LPSC_RPC_SERVICE_CONTROL_IN_PARAMSA pControlInParams,
+        [out, switch_is(dwInfoLevel)] LPSC_RPC_SERVICE_CONTROL_OUT_PARAMSA pControlOutParams);
 
     /* Function 51 */
     DWORD
@@ -869,9 +867,9 @@ interface svcctl
     RControlServiceExW(
         [in] SC_RPC_HANDLE hService,
         [in] DWORD dwControl,
-        [in] DWORD dwInfoLevel/*,
-        [in, switch_is(dwInfoLevel)] PSC_RPC_SERVICE_CONTROL_IN_PARAMSW pControlInParams,
-        [out, switch_is(dwInfoLevel)] PSC_RPC_SERVICE_CONTROL_IN_PARAMSW pControlOutParams*/);
+        [in] DWORD dwInfoLevel,
+        [in, switch_is(dwInfoLevel)] LPSC_RPC_SERVICE_CONTROL_IN_PARAMSW pControlInParams,
+        [out, switch_is(dwInfoLevel)] LPSC_RPC_SERVICE_CONTROL_OUT_PARAMSW pControlOutParams);
 
     /* Function 52 */
     DWORD

@@ -71,6 +71,8 @@
 @ stdcall CommandLineFromMsiDescriptor(wstr ptr ptr)
 @ stub ComputeAccessTokenFromCodeAuthzLevel
 @ stdcall ControlService(long long ptr)
+@ stdcall -version=0x600+ ControlServiceExA(long long long ptr)
+@ stdcall -version=0x600+ ControlServiceExW(long long long ptr)
 @ stdcall -version=0x502 ControlTraceA(double str ptr long) ntdll.EtwControlTraceA
 @ stdcall -version=0x600+ ControlTraceA(double str ptr long) EtwControlTraceA
 @ stdcall -version=0x502 ControlTraceW(double wstr ptr long) ntdll.EtwControlTraceW

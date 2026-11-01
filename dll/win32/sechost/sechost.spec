@@ -26,8 +26,8 @@
 @ stdcall CloseServiceHandle(long) advapi32.CloseServiceHandle
 @ stdcall CloseTrace(int64)
 @ stdcall ControlService(long long ptr) advapi32.ControlService
-@ stub ControlServiceExA
-@ stub ControlServiceExW
+@ stdcall ControlServiceExA(long long long ptr) advapi32.ControlServiceExA
+@ stdcall ControlServiceExW(long long long ptr) advapi32.ControlServiceExW
 @ stdcall ControlTraceA(int64 str ptr long) advapi32.ControlTraceA
 @ stdcall ControlTraceW(int64 wstr ptr long) advapi32.ControlTraceW
 @ stub ConvertSDToStringSDRootDomainW

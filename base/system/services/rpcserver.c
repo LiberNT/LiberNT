@@ -1151,13 +1151,13 @@ RCloseServiceHandle(
 }
 
 
-/* Function 1 */
+static
 DWORD
-WINAPI
-RControlService(
+ScmSendControl(
     SC_RPC_HANDLE hService,
     DWORD dwControl,
-    LPSERVICE_STATUS lpServiceStatus)
+    LPSERVICE_STATUS lpServiceStatus,
+    BOOL bLogEvent)
 {
     PSERVICE_HANDLE hSvc;
     PSERVICE lpService;
@@ -1348,7 +1348,7 @@ RControlService(
                       sizeof(SERVICE_STATUS));
     }
 
-    if (dwError == ERROR_SUCCESS)
+    if (dwError == ERROR_SUCCESS && bLogEvent)
     {
         if (dwControl == SERVICE_CONTROL_STOP ||
             dwControl == SERVICE_CONTROL_PAUSE ||
@@ -1383,6 +1383,18 @@ RControlService(
     }
 
     return dwError;
+}
+
+
+/* Function 1 */
+DWORD
+WINAPI
+RControlService(
+    SC_RPC_HANDLE hService,
+    DWORD dwControl,
+    LPSERVICE_STATUS lpServiceStatus)
+{
+    return ScmSendControl(hService, dwControl, lpServiceStatus, TRUE);
 }
 
 
@@ -6887,16 +6899,85 @@ RCloseNotifyHandle(
 }
 
 
+static
+BOOL
+ScmIsValidStopReason(
+    DWORD dwReason)
+{
+    DWORD dwFlags = dwReason & 0xF0000000;
+    DWORD dwMajor = dwReason & 0x00FF0000;
+    DWORD dwMinor = dwReason & 0x0000FFFF;
+
+    if (dwFlags == SERVICE_STOP_REASON_FLAG_CUSTOM)
+    {
+        return dwMajor >= SERVICE_STOP_REASON_MAJOR_MIN_CUSTOM && dwMajor <= SERVICE_STOP_REASON_MAJOR_MAX_CUSTOM &&
+               dwMinor >= SERVICE_STOP_REASON_MINOR_MIN_CUSTOM && dwMinor <= SERVICE_STOP_REASON_MINOR_MAX_CUSTOM;
+    }
+
+    if (dwFlags != SERVICE_STOP_REASON_FLAG_PLANNED && dwFlags != SERVICE_STOP_REASON_FLAG_UNPLANNED)
+        return FALSE;
+
+    return dwMajor > SERVICE_STOP_REASON_MAJOR_MIN && dwMajor < SERVICE_STOP_REASON_MAJOR_MAX &&
+           dwMinor > SERVICE_STOP_REASON_MINOR_MIN && dwMinor < SERVICE_STOP_REASON_MINOR_MAX;
+}
+
+
 /* Function 50 */
 DWORD
 WINAPI
 RControlServiceExA(
     SC_RPC_HANDLE hService,
     DWORD dwControl,
-    DWORD dwInfoLevel)
+    DWORD dwInfoLevel,
+    LPSC_RPC_SERVICE_CONTROL_IN_PARAMSA pControlInParams,
+    LPSC_RPC_SERVICE_CONTROL_OUT_PARAMSA pControlOutParams)
 {
-    UNIMPLEMENTED;
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    SERVICE_CONTROL_STATUS_REASON_IN_PARAMSW InParamsW;
+    SC_RPC_SERVICE_CONTROL_IN_PARAMSW ControlInParamsW;
+    SC_RPC_SERVICE_CONTROL_OUT_PARAMSW ControlOutParamsW;
+    UNICODE_STRING Comment;
+    DWORD dwError;
+
+    DPRINT("RControlServiceExA() called\n");
+
+    if (pControlOutParams == NULL)
+        return ERROR_INVALID_PARAMETER;
+
+    if (pControlOutParams->psrOutParams == NULL)
+    {
+        pControlOutParams->psrOutParams = MIDL_user_allocate(sizeof(SERVICE_CONTROL_STATUS_REASON_OUT_PARAMS));
+        if (pControlOutParams->psrOutParams == NULL)
+            return ERROR_NOT_ENOUGH_MEMORY;
+        ZeroMemory(pControlOutParams->psrOutParams, sizeof(SERVICE_CONTROL_STATUS_REASON_OUT_PARAMS));
+    }
+
+    if (dwInfoLevel != SERVICE_CONTROL_STATUS_REASON_INFO)
+        return ERROR_INVALID_LEVEL;
+
+    if (pControlInParams == NULL || pControlInParams->psrInParams == NULL)
+        return ERROR_INVALID_PARAMETER;
+
+    RtlInitUnicodeString(&Comment, NULL);
+    if (pControlInParams->psrInParams->pszComment != NULL &&
+        !RtlCreateUnicodeStringFromAsciiz(&Comment, pControlInParams->psrInParams->pszComment))
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    InParamsW.dwReason = pControlInParams->psrInParams->dwReason;
+    InParamsW.pszComment = Comment.Buffer;
+    ControlInParamsW.psrInParams = &InParamsW;
+    ControlOutParamsW.psrOutParams = pControlOutParams->psrOutParams;
+
+    dwError = RControlServiceExW(hService,
+                                 dwControl,
+                                 dwInfoLevel,
+                                 &ControlInParamsW,
+                                 &ControlOutParamsW);
+
+    pControlOutParams->psrOutParams = ControlOutParamsW.psrOutParams;
+
+    RtlFreeUnicodeString(&Comment);
+
+    return dwError;
 }
 
 
@@ -6906,10 +6987,72 @@ WINAPI
 RControlServiceExW(
     SC_RPC_HANDLE hService,
     DWORD dwControl,
-    DWORD dwInfoLevel)
+    DWORD dwInfoLevel,
+    LPSC_RPC_SERVICE_CONTROL_IN_PARAMSW pControlInParams,
+    LPSC_RPC_SERVICE_CONTROL_OUT_PARAMSW pControlOutParams)
 {
-    UNIMPLEMENTED;
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    LPSERVICE_CONTROL_STATUS_REASON_IN_PARAMSW pReason;
+    LPSERVICE_STATUS_PROCESS lpStatus;
+    SERVICE_STATUS ServiceStatus;
+    PSERVICE_HANDLE hSvc;
+    PSERVICE lpService;
+    DWORD dwError;
+
+    DPRINT("RControlServiceExW() called\n");
+
+    if (pControlOutParams == NULL)
+        return ERROR_INVALID_PARAMETER;
+
+    if (pControlOutParams->psrOutParams == NULL)
+    {
+        pControlOutParams->psrOutParams = MIDL_user_allocate(sizeof(SERVICE_CONTROL_STATUS_REASON_OUT_PARAMS));
+        if (pControlOutParams->psrOutParams == NULL)
+            return ERROR_NOT_ENOUGH_MEMORY;
+        ZeroMemory(pControlOutParams->psrOutParams, sizeof(SERVICE_CONTROL_STATUS_REASON_OUT_PARAMS));
+    }
+
+    if (ScmShutdown)
+        return ERROR_SHUTDOWN_IN_PROGRESS;
+
+    if (dwInfoLevel != SERVICE_CONTROL_STATUS_REASON_INFO)
+        return ERROR_INVALID_LEVEL;
+
+    if (pControlInParams == NULL || pControlInParams->psrInParams == NULL)
+        return ERROR_INVALID_PARAMETER;
+
+    pReason = pControlInParams->psrInParams;
+    lpStatus = &pControlOutParams->psrOutParams->ServiceStatus;
+
+    hSvc = ScmGetServiceFromHandle(hService);
+    if (hSvc == NULL || hSvc->ServiceEntry == NULL)
+        return ERROR_INVALID_HANDLE;
+
+    lpService = hSvc->ServiceEntry;
+
+    if (dwControl == SERVICE_CONTROL_STOP && !ScmIsValidStopReason(pReason->dwReason))
+        return ERROR_INVALID_PARAMETER;
+
+    if (pReason->pszComment != NULL && wcslen(pReason->pszComment) + 1 >= SC_MAX_COMMENT_LENGTH)
+        return ERROR_INVALID_PARAMETER;
+
+    dwError = ScmSendControl(hService, dwControl, &ServiceStatus, FALSE);
+
+    ScmLockDatabaseShared();
+
+    RtlCopyMemory(lpStatus,
+                  &lpService->Status,
+                  sizeof(SERVICE_STATUS));
+
+    if ((lpService->Status.dwCurrentState == SERVICE_STOPPED) || (lpService->lpImage == NULL))
+        lpStatus->dwProcessId = 0;
+    else
+        lpStatus->dwProcessId = lpService->lpImage->dwProcessId;
+
+    lpStatus->dwServiceFlags = 0;
+
+    ScmUnlockDatabase();
+
+    return dwError;
 }
 
 
