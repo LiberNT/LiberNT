@@ -3056,7 +3056,20 @@ Exit:
 
         case IRP_MN_DEVICE_USAGE_NOTIFICATION:
             DPRINT("IRP_MN_DEVICE_USAGE_NOTIFICATION\n");
-            goto ForwardIrp;
+            Status = STATUS_UNSUCCESSFUL;
+            if (IoForwardIrpSynchronously(FdoCommonExtension->LowerDevice, Irp))
+                Status = Irp->IoStatus.Status;
+
+            if (NT_SUCCESS(Status) &&
+                IoStack->Parameters.UsageNotification.Type == DeviceUsageTypeHibernation)
+            {
+                IoAdjustPagingPathCount(&FdoExtension->HibernationPathCount,
+                                        IoStack->Parameters.UsageNotification.InPath);
+            }
+
+            Irp->IoStatus.Status = Status;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return Status;
 
         case IRP_MN_SURPRISE_REMOVAL:
             DPRINT1("IRP_MN_SURPRISE_REMOVAL\n");
@@ -3199,6 +3212,42 @@ USBPORT_GetDeviceHwIds(IN PDEVICE_OBJECT FdoDevice,
     RtlMoveMemory(Id, Buffer, Length);
 
     return Id;
+}
+
+static
+NTSTATUS
+USBPORT_NotifyParentUsage(IN PDEVICE_OBJECT ParentDevice,
+                          IN PIO_STACK_LOCATION IoStack)
+{
+    PDEVICE_OBJECT TopDevice;
+    PIO_STACK_LOCATION NextStack;
+    IO_STATUS_BLOCK IoStatus;
+    KEVENT Event;
+    NTSTATUS Status;
+    PIRP Irp;
+
+    TopDevice = IoGetAttachedDeviceReference(ParentDevice);
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP, TopDevice, NULL, 0, NULL, &Event, &IoStatus);
+    if (Irp == NULL)
+    {
+        ObDereferenceObject(TopDevice);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+    NextStack = IoGetNextIrpStackLocation(Irp);
+    NextStack->MinorFunction = IRP_MN_DEVICE_USAGE_NOTIFICATION;
+    NextStack->Parameters.UsageNotification = IoStack->Parameters.UsageNotification;
+    Status = IoCallDriver(TopDevice, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+
+    ObDereferenceObject(TopDevice);
+    return Status;
 }
 
 NTSTATUS
@@ -3505,6 +3554,7 @@ USBPORT_PdoPnP(IN PDEVICE_OBJECT PdoDevice,
 
         case IRP_MN_DEVICE_USAGE_NOTIFICATION:
             DPRINT("IRP_MN_DEVICE_USAGE_NOTIFICATION\n");
+            Status = USBPORT_NotifyParentUsage(FdoDevice, IoStack);
             break;
 
         case IRP_MN_SURPRISE_REMOVAL:

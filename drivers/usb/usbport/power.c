@@ -307,6 +307,12 @@ USBPORT_PdoDevicePowerState(IN PDEVICE_OBJECT PdoDevice,
             InterlockedDecrement(&FdoExtension->SetPowerLockCounter);
         }
     }
+    else if (State.DeviceState == PowerDeviceD3 &&
+             IoStack->Parameters.Power.ShutdownType == PowerActionHibernate &&
+             FdoExtension->HibernationPathCount != 0)
+    {
+        DPRINT1("USBPORT_PdoDevicePowerState: root hub stays powered for the hibernation file\n");
+    }
     else if (State.DeviceState  == PowerDeviceD1 ||
              State.DeviceState  == PowerDeviceD2 ||
              State.DeviceState  == PowerDeviceD3)
@@ -606,6 +612,13 @@ USBPORT_DevicePowerState(IN PDEVICE_OBJECT FdoDevice,
         case PowerDeviceD1:
         case PowerDeviceD2:
         case PowerDeviceD3:
+            if (State.DeviceState == PowerDeviceD3 &&
+                IoStack->Parameters.Power.ShutdownType == PowerActionHibernate &&
+                FdoExtension->HibernationPathCount != 0)
+            {
+                DPRINT1("USBPORT_DevicePowerState: controller stays powered for the hibernation file\n");
+                break;
+            }
             USBPORT_SuspendController(FdoDevice);
             FdoExtension->CommonExtension.DevicePowerState = State.DeviceState;
             break;
@@ -652,6 +665,12 @@ USBPORT_SystemPowerState(IN PDEVICE_OBJECT FdoDevice,
              * interrupts disabled. This funnels down into the miniport’s
              * SuspendController/StopController as appropriate.
              */
+            if (State.SystemState == PowerSystemHibernate &&
+                ((PUSBPORT_DEVICE_EXTENSION)FdoDevice->DeviceExtension)->HibernationPathCount != 0)
+            {
+                DPRINT1("USBPORT_SystemPowerState: controller stays powered for the hibernation file\n");
+                break;
+            }
             USBPORT_SuspendController(FdoDevice);
             break;
 
