@@ -232,7 +232,7 @@
 @ stub RebaseOnVolumeID
 @ stub RegistryVerbs_GetHandlerMultiSelectModel
 @ cdecl SH32_InternalRestricted(long)
-@ stub SHAssocEnumHandlers
+@ stdcall SHAssocEnumHandlers(wstr long ptr) shell32.SHAssocEnumHandlers
 @ stdcall SHAssocEnumHandlersForProtocolByApplication(wstr ptr ptr)
 @ stdcall SHBindToFolderIDListParent(ptr ptr ptr ptr ptr)
 @ stdcall SHBindToFolderIDListParentEx(ptr ptr ptr ptr ptr ptr)

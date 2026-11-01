@@ -164,10 +164,12 @@ class COpenWithList
         SApp *Add(LPCWSTR pwszPath);
         static BOOL SaveApp(SApp *pApp);
         SApp *Find(LPCWSTR pwszFilename);
+        SApp *FindOrResolve(LPCWSTR pwszFilename);
         static LPCWSTR GetName(SApp *pApp);
         static HICON GetIcon(SApp *pApp);
         static BOOL Execute(SApp *pApp, LPCWSTR pwszFilePath);
         static BOOL IsHidden(SApp *pApp);
+        static BOOL GetPathFromCmd(LPWSTR pwszAppPath, LPCWSTR pwszCmd);
         inline BOOL IsNoOpen(VOID) { return m_bNoOpen; }
         BOOL LoadRecommended(LPCWSTR pwszFilePath);
         BOOL SetDefaultHandler(SApp *pApp, LPCWSTR pwszFilename);
@@ -189,7 +191,6 @@ class COpenWithList
 
         SApp *AddInternal(LPCWSTR pwszFilename);
         static BOOL LoadInfo(SApp *pApp);
-        static BOOL GetPathFromCmd(LPWSTR pwszAppPath, LPCWSTR pwszCmd);
         BOOL LoadProgIdList(HKEY hKey, LPCWSTR pwszExt);
         static HANDLE OpenMRUList(HKEY hKey);
         BOOL LoadMRUList(HKEY hKey);
@@ -318,6 +319,31 @@ COpenWithList::SApp *COpenWithList::Find(LPCWSTR pwszFilename)
         if (_wcsicmp(m_pApp[i].wszFilename, pwszFilename) == 0)
             return &m_pApp[i];
     return NULL;
+}
+
+COpenWithList::SApp *COpenWithList::FindOrResolve(LPCWSTR pwszFilename)
+{
+    WCHAR wszKey[MAX_PATH], wszPath[MAX_PATH];
+    DWORD cbPath = sizeof(wszPath);
+    SApp *pApp;
+
+    pApp = Find(pwszFilename);
+    if (pApp)
+        return pApp;
+
+    if (FAILED(StringCbPrintfW(wszKey, sizeof(wszKey),
+                               L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\%s", pwszFilename)))
+        return NULL;
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, wszKey, NULL, RRF_RT_REG_SZ, NULL, wszPath, &cbPath) != ERROR_SUCCESS &&
+        !SearchPathW(NULL, pwszFilename, NULL, _countof(wszPath), wszPath, NULL))
+    {
+        return NULL;
+    }
+
+    pApp = AddInternal(pwszFilename);
+    if (pApp)
+        StringCbPrintfW(pApp->wszCmd, sizeof(pApp->wszCmd), L"\"%s\" \"%%1\"", wszPath);
+    return pApp;
 }
 
 LPCWSTR COpenWithList::GetName(SApp *pApp)
@@ -645,7 +671,7 @@ BOOL COpenWithList::LoadAppList(HKEY hKey)
             break;
 
         /* Set application as recommended */
-        SApp *pApp = Find(wszAppFilename);
+        SApp *pApp = FindOrResolve(wszAppFilename);
 
         TRACE("Recommended app %ls: %p\n", wszAppFilename, pApp);
         if (pApp)
@@ -1603,5 +1629,281 @@ SHOpenWithDialog(HWND hwndParent, const OPENASINFO *poainfo)
         return E_FAIL;
     }
 
+    return S_OK;
+}
+
+class CAssocHandlerInvoker :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IAssocHandlerInvoker
+{
+public:
+    CComPtr<IAssocHandler> m_pHandler;
+    CComPtr<IDataObject> m_pDataObject;
+
+    STDMETHOD(SupportsSelection)() override
+    {
+        return S_OK;
+    }
+
+    STDMETHOD(Invoke)() override
+    {
+        return m_pHandler->Invoke(m_pDataObject);
+    }
+
+    DECLARE_NOT_AGGREGATABLE(CAssocHandlerInvoker)
+    DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+    BEGIN_COM_MAP(CAssocHandlerInvoker)
+        COM_INTERFACE_ENTRY_IID(IID_IAssocHandlerInvoker, IAssocHandlerInvoker)
+    END_COM_MAP()
+};
+
+class CAssocHandler :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IAssocHandler
+{
+public:
+    WCHAR m_szPath[MAX_PATH];
+    WCHAR m_szName[256];
+    WCHAR m_szExt[MAX_PATH];
+    BOOL m_bRecommended;
+
+    STDMETHOD(GetName)(LPWSTR *ppsz) override
+    {
+        return SHStrDupW(m_szPath, ppsz);
+    }
+
+    STDMETHOD(GetUIName)(LPWSTR *ppsz) override
+    {
+        return SHStrDupW(m_szName, ppsz);
+    }
+
+    STDMETHOD(GetIconLocation)(LPWSTR *ppszPath, int *pIndex) override
+    {
+        if (!pIndex)
+            return E_POINTER;
+        *pIndex = 0;
+        return SHStrDupW(m_szPath, ppszPath);
+    }
+
+    STDMETHOD(IsRecommended)() override
+    {
+        return m_bRecommended ? S_OK : S_FALSE;
+    }
+
+    STDMETHOD(MakeDefault)(LPCWSTR pszDescription) override
+    {
+        COpenWithList List;
+        COpenWithList::SApp *pApp;
+
+        if (!m_szExt[0] || !List.Load())
+            return E_FAIL;
+        pApp = List.Find(PathFindFileNameW(m_szPath));
+        if (!pApp)
+            return E_FAIL;
+        return List.SetDefaultHandler(pApp, m_szExt) ? S_OK : E_FAIL;
+    }
+
+    STDMETHOD(Invoke)(IDataObject *pdo) override
+    {
+        FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+        SHELLEXECUTEINFOW sei = { sizeof(sei) };
+        WCHAR szFile[MAX_PATH], szParams[MAX_PATH + 2];
+        STGMEDIUM medium;
+        HDROP hDrop;
+        UINT i, cFiles;
+        HRESULT hr;
+
+        if (!pdo)
+            return E_INVALIDARG;
+
+        hr = pdo->GetData(&fmt, &medium);
+        if (FAILED(hr))
+            return hr;
+
+        hDrop = (HDROP)GlobalLock(medium.hGlobal);
+        cFiles = hDrop ? DragQueryFileW(hDrop, 0xFFFFFFFF, NULL, 0) : 0;
+        hr = cFiles ? S_OK : E_INVALIDARG;
+        for (i = 0; i < cFiles && SUCCEEDED(hr); i++)
+        {
+            if (!DragQueryFileW(hDrop, i, szFile, _countof(szFile)))
+                continue;
+            StringCchPrintfW(szParams, _countof(szParams), L"\"%s\"", szFile);
+            sei.fMask = SEE_MASK_FLAG_NO_UI;
+            sei.lpFile = m_szPath;
+            sei.lpParameters = szParams;
+            sei.nShow = SW_SHOWNORMAL;
+            if (!ShellExecuteExW(&sei))
+                hr = HRESULT_FROM_WIN32(GetLastError());
+        }
+        if (hDrop)
+            GlobalUnlock(medium.hGlobal);
+        ReleaseStgMedium(&medium);
+        return hr;
+    }
+
+    STDMETHOD(CreateInvoker)(IDataObject *pdo, IAssocHandlerInvoker **ppInvoker) override
+    {
+        CComObject<CAssocHandlerInvoker> *pInvoker;
+        HRESULT hr;
+
+        if (!ppInvoker)
+            return E_POINTER;
+        *ppInvoker = NULL;
+        if (!pdo)
+            return E_INVALIDARG;
+
+        hr = CComObject<CAssocHandlerInvoker>::CreateInstance(&pInvoker);
+        if (FAILED(hr))
+            return hr;
+        pInvoker->m_pHandler = this;
+        pInvoker->m_pDataObject = pdo;
+        return pInvoker->QueryInterface(IID_PPV_ARG(IAssocHandlerInvoker, ppInvoker));
+    }
+
+    DECLARE_NOT_AGGREGATABLE(CAssocHandler)
+    DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+    BEGIN_COM_MAP(CAssocHandler)
+        COM_INTERFACE_ENTRY_IID(IID_IAssocHandler, IAssocHandler)
+    END_COM_MAP()
+};
+
+class CEnumAssocHandlers :
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public IEnumAssocHandlers
+{
+public:
+    CSimpleArray<IAssocHandler *> m_Handlers;
+    ULONG m_iNext;
+
+    CEnumAssocHandlers() : m_iNext(0)
+    {
+    }
+
+    ~CEnumAssocHandlers()
+    {
+        for (int i = 0; i < m_Handlers.GetSize(); i++)
+            m_Handlers[i]->Release();
+    }
+
+    STDMETHOD(Next)(ULONG celt, IAssocHandler **rgelt, ULONG *pceltFetched) override
+    {
+        ULONG cFetched = 0;
+
+        if (!rgelt || (!pceltFetched && celt != 1))
+            return E_POINTER;
+
+        while (cFetched < celt && m_iNext < (ULONG)m_Handlers.GetSize())
+        {
+            rgelt[cFetched] = m_Handlers[m_iNext++];
+            rgelt[cFetched]->AddRef();
+            cFetched++;
+        }
+        if (pceltFetched)
+            *pceltFetched = cFetched;
+        return cFetched == celt ? S_OK : S_FALSE;
+    }
+
+    HRESULT Add(COpenWithList::SApp *pApp, LPCWSTR pszExt, BOOL bRecommended)
+    {
+        CComObject<CAssocHandler> *pHandler;
+        LPCWSTR pszName;
+        HRESULT hr;
+
+        hr = CComObject<CAssocHandler>::CreateInstance(&pHandler);
+        if (FAILED(hr))
+            return hr;
+        pHandler->AddRef();
+
+        if (!COpenWithList::GetPathFromCmd(pHandler->m_szPath, pApp->wszCmd))
+        {
+            pHandler->Release();
+            return S_FALSE;
+        }
+        pszName = COpenWithList::GetName(pApp);
+        StringCchCopyW(pHandler->m_szName, _countof(pHandler->m_szName), pszName ? pszName : pApp->wszFilename);
+        StringCchCopyW(pHandler->m_szExt, _countof(pHandler->m_szExt), pszExt);
+        pHandler->m_bRecommended = bRecommended;
+
+        if (!m_Handlers.Add(pHandler))
+        {
+            pHandler->Release();
+            return E_OUTOFMEMORY;
+        }
+        return S_OK;
+    }
+
+    DECLARE_NOT_AGGREGATABLE(CEnumAssocHandlers)
+    DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+    BEGIN_COM_MAP(CEnumAssocHandlers)
+        COM_INTERFACE_ENTRY_IID(IID_IEnumAssocHandlers, IEnumAssocHandlers)
+    END_COM_MAP()
+};
+
+EXTERN_C HRESULT WINAPI
+SHAssocEnumHandlers(
+    _In_ PCWSTR pszExtra,
+    _In_ ASSOC_FILTER afFilter,
+    _Outptr_ IEnumAssocHandlers **ppEnumHandler)
+{
+    CComObject<CEnumAssocHandlers> *pEnum;
+    CComPtr<IEnumAssocHandlers> pHolder;
+    COpenWithList List;
+    COpenWithList::SApp *pApps;
+    WCHAR szApp[MAX_PATH];
+    DWORD i, cchApp;
+    HKEY hKey;
+    HRESULT hr;
+
+    TRACE("(%s, %d, %p)\n", debugstr_w(pszExtra), afFilter, ppEnumHandler);
+
+    *ppEnumHandler = NULL;
+    if (!pszExtra)
+        return E_OUTOFMEMORY;
+
+    hr = CComObject<CEnumAssocHandlers>::CreateInstance(&pEnum);
+    if (FAILED(hr))
+        return hr;
+    pHolder = pEnum;
+
+    List.Load();
+    if (pszExtra[0] == L'.')
+        List.LoadRecommended(pszExtra);
+
+    pApps = List.GetList();
+    for (i = 0; i < List.GetCount(); i++)
+    {
+        if (!pApps[i].bRecommended || COpenWithList::IsHidden(&pApps[i]))
+            continue;
+        hr = pEnum->Add(&pApps[i], pszExtra, TRUE);
+        if (FAILED(hr))
+            return hr;
+    }
+
+    if (afFilter != ASSOC_FILTER_RECOMMENDED &&
+        RegOpenKeyExW(HKEY_CLASSES_ROOT, L"*\\OpenWithList", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        for (i = 0; ; i++)
+        {
+            COpenWithList::SApp *pApp;
+
+            cchApp = _countof(szApp);
+            if (RegEnumKeyExW(hKey, i, szApp, &cchApp, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+                break;
+            pApp = List.FindOrResolve(szApp);
+            if (!pApp || pApp->bRecommended || COpenWithList::IsHidden(pApp))
+                continue;
+            hr = pEnum->Add(pApp, pszExtra, FALSE);
+            if (FAILED(hr))
+                break;
+        }
+        RegCloseKey(hKey);
+        if (FAILED(hr))
+            return hr;
+    }
+
+    *ppEnumHandler = pHolder.Detach();
     return S_OK;
 }
