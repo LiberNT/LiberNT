@@ -182,8 +182,9 @@ static void test_details(void)
 
             VariantInit(&v);
             hr = AssocGetDetailsOfPropKey(folder, child, keys[i], &v, &found);
-            trace("AssocGetDetailsOfPropKey %s: hr 0x%lx found %d vt %u '%ls'\n", names[i], hr, found, V_VT(&v),
-                  V_VT(&v) == VT_BSTR ? V_BSTR(&v) : L"");
+            ok(hr == E_FAIL, "AssocGetDetailsOfPropKey %s: hr 0x%lx\n", names[i], hr);
+            ok(found == FALSE, "AssocGetDetailsOfPropKey %s: found %d\n", names[i], found);
+            ok(V_VT(&v) == VT_EMPTY, "AssocGetDetailsOfPropKey %s: vt %u\n", names[i], V_VT(&v));
             VariantClear(&v);
         }
         folder->Release();

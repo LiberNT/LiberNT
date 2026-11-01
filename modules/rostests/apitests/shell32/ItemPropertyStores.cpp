@@ -69,7 +69,28 @@ static void test_store_from_idlist(PCIDLIST_ABSOLUTE pidl)
         hr = SHGetPropertyStoreFromIDList(pidl, GPS_DEFAULT, IID_PPV_ARG(IPropertyStoreCapabilities, &caps));
         ok(hr == S_OK, "IPropertyStoreCapabilities hr 0x%lx\n", hr);
         if (caps)
+        {
+            hr = caps->IsPropertyWritable(PKEY_Comment);
+            ok(hr == S_OK, "IsPropertyWritable(Comment) hr 0x%lx\n", hr);
+            hr = caps->IsPropertyWritable(PKEY_FileName);
+            ok(hr == S_OK, "IsPropertyWritable(FileName) hr 0x%lx\n", hr);
             caps->Release();
+        }
+    }
+
+    store = NULL;
+    hr = SHGetPropertyStoreFromIDList(pidl, GPS_DEFAULT, IID_PPV_ARG(IPropertyStore, &store));
+    if (SUCCEEDED(hr))
+    {
+        PROPVARIANT pv;
+
+        InitPropVariantFromString(L"x", &pv);
+        hr = store->SetValue(PKEY_Comment, pv);
+        ok(hr == STG_E_ACCESSDENIED, "GPS_DEFAULT SetValue hr 0x%lx\n", hr);
+        PropVariantClear(&pv);
+        hr = store->Commit();
+        ok(hr == STG_E_ACCESSDENIED, "GPS_DEFAULT Commit hr 0x%lx\n", hr);
+        store->Release();
     }
 }
 
