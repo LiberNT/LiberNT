@@ -856,6 +856,10 @@ static LRESULT CALLBACK main_wndproc(HWND hWnd, UINT uMessage, WPARAM wParam, LP
         if (This && This->current_pidl && !_ILIsDesktop(This->current_pidl))
             IExplorerBrowser_BrowseToIDList(&This->IExplorerBrowser_iface, NULL, SBSP_PARENT);
         return 0;
+    case WM_SETFOCUS:
+        if (This && This->hwnd_sv)
+            SetFocus(This->hwnd_sv);
+        return 0;
 #endif
     default:                  return DefWindowProcW(hWnd, uMessage, wParam, lParam);
     }
@@ -2282,24 +2286,24 @@ static HRESULT WINAPI IInputObject_fnTranslateAcceleratorIO(IInputObject *iface,
     TRACE("%p (%p)\n", This, pMsg);
     if (!This->psv)
         return E_FAIL;
+
+    hwnd_focus = GetFocus();
+    if (!hwnd_focus || (hwnd_focus != This->hwnd_sv && !IsChild(This->hwnd_sv, hwnd_focus)))
+        return S_FALSE;
     if (IShellView_TranslateAccelerator(This->psv, pMsg) == S_OK)
         return S_OK;
     if (pMsg->message != WM_KEYDOWN)
         return S_FALSE;
-
-    hwnd_focus = GetFocus();
-    if (!hwnd_focus || (hwnd_focus != This->hwnd_sv && !IsChild(This->hwnd_sv, hwnd_focus)))
-    {
-        if (pMsg->wParam != VK_TAB)
-            return S_FALSE;
-        IShellView_UIActivate(This->psv, SVUIA_ACTIVATE_FOCUS);
-        return S_OK;
-    }
     if (hwnd_focus != This->hwnd_sv && GetParent(hwnd_focus) != This->hwnd_sv)
         return S_FALSE;
 
     switch (pMsg->wParam)
     {
+    case VK_TAB:
+    case VK_F6:
+        /* TODO: move the focus to the next frame pane once the navigation pane hosts a control */
+    case VK_F10:
+        return S_OK;
     case VK_BACK:
         PostMessageW(This->hwnd_main, EBM_NAVIGATEPARENT, 0, 0);
         return S_OK;
