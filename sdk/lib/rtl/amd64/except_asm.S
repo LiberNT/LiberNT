@@ -344,4 +344,78 @@ RaiseStatus:
 .ENDP
 
 
+/*
+ * PVOID
+ * RtlpCallConsolidateCallback(
+ *     _In_ PCONTEXT ContextRecord@<rcx>,
+ *     _In_ PVOID (*Callback)(PEXCEPTION_RECORD)@<rdx>,
+ *     _In_ PEXCEPTION_RECORD ExceptionRecord@<r8>);
+ */
+PUBLIC RtlpCallConsolidateCallback
+.PROC RtlpCallConsolidateCallback
+
+    /* Unwinding this frame resumes at the target context, past the frames already unwound */
+    sub rsp, HEX(28)
+    lea rax, [rcx + HEX(80)]
+    mov r10, [rax + CxRip - HEX(80)]
+    mov [rsp], r10
+    mov r10, [rax + CxRsp - HEX(80)]
+    mov [rsp + HEX(18)], r10
+    .PUSHFRAME
+
+    sub rsp, HEX(110)
+    .ALLOCSTACK HEX(110)
+    mov r10, [rax + CxRbx - HEX(80)]
+    mov [rsp + HEX(20)], r10
+    .SAVEREG rbx, HEX(20)
+    mov r10, [rax + CxRsi - HEX(80)]
+    mov [rsp + HEX(28)], r10
+    .SAVEREG rsi, HEX(28)
+    mov r10, [rax + CxRdi - HEX(80)]
+    mov [rsp + HEX(30)], r10
+    .SAVEREG rdi, HEX(30)
+    mov r10, [rax + CxR12 - HEX(80)]
+    mov [rsp + HEX(38)], r10
+    .SAVEREG r12, HEX(38)
+    mov r10, [rax + CxR13 - HEX(80)]
+    mov [rsp + HEX(40)], r10
+    .SAVEREG r13, HEX(40)
+    mov r10, [rax + CxR14 - HEX(80)]
+    mov [rsp + HEX(48)], r10
+    .SAVEREG r14, HEX(48)
+    mov r10, [rax + CxR15 - HEX(80)]
+    mov [rsp + HEX(50)], r10
+    .SAVEREG r15, HEX(50)
+    mov r10, [rax + CxRbp - HEX(80)]
+    mov [rsp + HEX(100)], r10
+    .SAVEREG rbp, HEX(100)
+    push rsi
+    push rdi
+    lea rsi, [rcx + CxXmm6]
+    lea rdi, [rsp + HEX(70)]
+    mov ecx, 20
+    cld
+    rep movsq
+    pop rdi
+    pop rsi
+    .SAVEXMM128 xmm6, HEX(60)
+    .SAVEXMM128 xmm7, HEX(70)
+    .SAVEXMM128 xmm8, HEX(80)
+    .SAVEXMM128 xmm9, HEX(90)
+    .SAVEXMM128 xmm10, HEX(A0)
+    .SAVEXMM128 xmm11, HEX(B0)
+    .SAVEXMM128 xmm12, HEX(C0)
+    .SAVEXMM128 xmm13, HEX(D0)
+    .SAVEXMM128 xmm14, HEX(E0)
+    .SAVEXMM128 xmm15, HEX(F0)
+    .ENDPROLOG
+
+    mov rcx, r8
+    call rdx
+    nop
+    add rsp, HEX(138)
+    ret
+.ENDP
+
+
 END
