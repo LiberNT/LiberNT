@@ -19,6 +19,7 @@
 #include "framebuttons.h"
 #include "gpucomp.h"
 #include "material.h"
+#include "animation.h"
 #include "presenttrace.h"
 #include "settings.h"
 
@@ -40,6 +41,8 @@ typedef struct _DWM_SURFACE
     BYTE  *View;
     ULONG  LastSeenFrame;
     BOOL   Used;
+    ULONG  ReplacedBy;
+    DWM_WIN Window;
 } DWM_SURFACE;
 #define DWM_VIEW_CACHE_SIZE (DWM_MAX_WINDOWS * 2)
 static DWM_SURFACE g_views[DWM_VIEW_CACHE_SIZE];
@@ -58,6 +61,7 @@ DwmGetSurfaceView(const DWM_WIN *w)
 {
     DWM_SURFACE *slot = NULL;
     DWM_SURFACE *sameIdOldest = NULL;
+    DWM_SURFACE *replaced = NULL;
     DWM_OPEN_SURFACE req;
     ULONG i;
 
@@ -72,6 +76,9 @@ DwmGetSurfaceView(const DWM_WIN *w)
             slot = &g_views[i];
             break;
         }
+        if (g_views[i].Used && g_views[i].Id == w->SurfaceId &&
+            (replaced == NULL || g_views[i].LastSeenFrame > replaced->LastSeenFrame))
+            replaced = &g_views[i];
         if (!g_views[i].Used && slot == NULL)
             slot = &g_views[i];
         else if (g_views[i].Used && g_views[i].Id == w->SurfaceId &&
@@ -82,6 +89,7 @@ DwmGetSurfaceView(const DWM_WIN *w)
     if (slot != NULL && slot->Used)
     {
         slot->LastSeenFrame = g_frameSeq;
+        slot->Window = *w;
         return slot->View;
     }
 
@@ -89,6 +97,8 @@ DwmGetSurfaceView(const DWM_WIN *w)
         slot = sameIdOldest;
     if (slot == NULL)
         return NULL;
+    if (replaced == slot)
+        replaced = NULL;
     if (slot->Used)
         DwmDropView(slot);
 
@@ -110,6 +120,9 @@ DwmGetSurfaceView(const DWM_WIN *w)
     slot->Generation = w->Generation;
     slot->LastSeenFrame = g_frameSeq;
     slot->Used = TRUE;
+    slot->Window = *w;
+    if (replaced != NULL && w->AnimFlags == DWM_ANIM_MAXIMIZE && w->Generation != 0)
+        replaced->ReplacedBy = w->Generation;
     return slot->View;
 }
 
@@ -3595,37 +3608,86 @@ DwmBlitWindowAnimated(ULONG *comp, LONG scrW,
 {
     LONG dstX = w->AnimX - g_originX;
     LONG dstY = w->AnimY - g_originY;
+    LONG drawCx = w->AnimCx, drawCy = w->AnimCy;
     ULONG alpha = 255;
 
     if (w->cx <= 0 || w->cy <= 0 || w->AnimCx <= 0 || w->AnimCy <= 0)
         return;
     if ((w->LayerFlags & DWM_LWA_ALPHA) && w->Alpha < 255)
         alpha = w->Alpha;
+    if (w->AnimFlags == DWM_ANIM_MAXIMIZE)
+    {
+        drawCx = w->cx;
+        drawCy = w->cy;
+        clipL = max(clipL, dstX);
+        clipT = max(clipT, dstY);
+        clipR = min(clipR, dstX + w->AnimCx);
+        clipB = min(clipB, dstY + w->AnimCy);
+        if (clipL >= clipR || clipT >= clipB)
+            return;
+    }
 
     DwmBlitScaled(comp, scrW, clipL, clipT, clipR, clipB,
                   pix, w->cx, w->cy, w->Stride,
-                  dstX, dstY, w->AnimCx, w->AnimCy, alpha, w,
+                  dstX, dstY, drawCx, drawCy, alpha, w,
                   backdropBase, w->CornerRadius);
 
     if (dxpix != NULL && w->DxWidth != 0 && w->DxHeight != 0)
     {
-        LONG cx = (LONG)((LONGLONG)w->DxDrawWidth * w->AnimCx / w->cx);
-        LONG cy = (LONG)((LONGLONG)w->DxDrawHeight * w->AnimCy / w->cy);
+        LONG cx = (LONG)((LONGLONG)w->DxDrawWidth * drawCx / w->cx);
+        LONG cy = (LONG)((LONGLONG)w->DxDrawHeight * drawCy / w->cy);
 
-        clipL = max(clipL, dstX + (LONG)((LONGLONG)w->DxClip.left * w->AnimCx / w->cx));
-        clipT = max(clipT, dstY + (LONG)((LONGLONG)w->DxClip.top * w->AnimCy / w->cy));
-        clipR = min(clipR, dstX + (LONG)((LONGLONG)w->DxClip.right * w->AnimCx / w->cx));
-        clipB = min(clipB, dstY + (LONG)((LONGLONG)w->DxClip.bottom * w->AnimCy / w->cy));
+        clipL = max(clipL, dstX + (LONG)((LONGLONG)w->DxClip.left * drawCx / w->cx));
+        clipT = max(clipT, dstY + (LONG)((LONGLONG)w->DxClip.top * drawCy / w->cy));
+        clipR = min(clipR, dstX + (LONG)((LONGLONG)w->DxClip.right * drawCx / w->cx));
+        clipB = min(clipB, dstY + (LONG)((LONGLONG)w->DxClip.bottom * drawCy / w->cy));
         if (clipL >= clipR || clipT >= clipB)
             return;
         if (cx < 1) cx = 1;
         if (cy < 1) cy = 1;
         DwmBlitScaled(comp, scrW, clipL, clipT, clipR, clipB,
                       dxpix, (LONG)w->DxWidth, (LONG)w->DxHeight, w->DxPitch,
-                      dstX + (LONG)((LONGLONG)w->DxClientX * w->AnimCx / w->cx),
-                      dstY + (LONG)((LONGLONG)w->DxClientY * w->AnimCy / w->cy),
+                      dstX + (LONG)((LONGLONG)w->DxClientX * drawCx / w->cx),
+                      dstY + (LONG)((LONGLONG)w->DxClientY * drawCy / w->cy),
                       cx, cy, alpha, NULL, NULL, 0);
     }
+}
+
+static void
+DwmBlitReplaced(ULONG *comp, LONG scrW,
+                LONG clipL, LONG clipT, LONG clipR, LONG clipB,
+                const DWM_WIN *w)
+{
+    DWM_SURFACE *source = NULL;
+    LONG dstX = w->AnimX - g_originX;
+    LONG dstY = w->AnimY - g_originY;
+    ULONG alpha, i;
+
+    if (w->AnimFlags != DWM_ANIM_MAXIMIZE || w->Generation == 0)
+        return;
+    for (i = 0; source == NULL && i < DWM_VIEW_CACHE_SIZE; i++)
+    {
+        if (g_views[i].Used && g_views[i].Id == w->SurfaceId &&
+            g_views[i].ReplacedBy == w->Generation)
+            source = &g_views[i];
+    }
+    if (source == NULL || source->Window.cx <= 0 || source->Window.cy <= 0)
+        return;
+    source->LastSeenFrame = g_frameSeq;
+    alpha = ((source->Window.LayerFlags & DWM_LWA_ALPHA) ? min(source->Window.Alpha, 255u) : 255u) *
+            DwmAnimationSourceAlpha(&source->Window, w) / 255u;
+    if (alpha == 0)
+        return;
+    clipL = max(clipL, dstX);
+    clipT = max(clipT, dstY);
+    clipR = min(clipR, dstX + w->AnimCx);
+    clipB = min(clipB, dstY + w->AnimCy);
+    if (clipL >= clipR || clipT >= clipB)
+        return;
+    DwmBlitScaled(comp, scrW, clipL, clipT, clipR, clipB,
+                  source->View, source->Window.cx, source->Window.cy, source->Window.Stride,
+                  dstX, dstY, source->Window.cx, source->Window.cy, alpha, &source->Window,
+                  NULL, source->Window.CornerRadius);
 }
 
 static HDC     g_hdcComp;
@@ -4590,6 +4652,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                                               cl, ct, cr, cb, pix,
                                               DwmDxGetSurfaceSnapshot(&wins[i]),
                                               &wins[i], animatedBackdrop);
+                        DwmBlitReplaced((ULONG *)g_compBits, g_W, cl, ct, cr, cb, &wins[i]);
                         DwmStatCounter(&stgB);
                         if (g_frameStats)
                             g_statAnimTicks += (ULONGLONG)(stgB.QuadPart - stgA.QuadPart);

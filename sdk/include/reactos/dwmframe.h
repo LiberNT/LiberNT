@@ -320,6 +320,7 @@ typedef struct _DXGK_REDIRECTION_SURFACES_SYNC
 #define DWM_ANIM_MINIMIZE 1u
 #define DWM_ANIM_RESTORE  2u
 #define DWM_ANIM_MOVE     3u
+#define DWM_ANIM_MAXIMIZE 4u
 
 /* DwmEnableBlurBehindWindow state carried to the user-mode compositor. */
 #define DWM_BLUR_ENABLE                  0x00000001u

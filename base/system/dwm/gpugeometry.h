@@ -34,6 +34,12 @@ DwmGpuWindowGeometry(const DWM_WIN *Window, LONG OriginX, LONG OriginY,
     return Geometry->Width > 0 && Geometry->Height > 0;
 }
 
+static inline BOOL
+DwmGpuAnimationScales(const DWM_WIN *Window)
+{
+    return Window->AnimFlags != 0 && Window->AnimFlags != DWM_ANIM_MAXIMIZE;
+}
+
 static LONGLONG
 DwmGpuScaleWindowEdge(LONGLONG Edge, LONG SourceSize, LONG DestinationSize)
 {
@@ -46,12 +52,17 @@ DwmGpuClipClient(const DWM_WIN *Window, const DWM_GPU_WINDOW_GEOMETRY *Owner, RE
     LONGLONG Left = Window->DxClip.left, Top = Window->DxClip.top;
     LONGLONG Right = Window->DxClip.right, Bottom = Window->DxClip.bottom;
 
-    if (Window->AnimFlags != 0)
+    if (DwmGpuAnimationScales(Window))
     {
         Left = DwmGpuScaleWindowEdge(Left, Window->cx, Owner->Width);
         Top = DwmGpuScaleWindowEdge(Top, Window->cy, Owner->Height);
         Right = DwmGpuScaleWindowEdge(Right, Window->cx, Owner->Width);
         Bottom = DwmGpuScaleWindowEdge(Bottom, Window->cy, Owner->Height);
+    }
+    else if (Window->AnimFlags != 0)
+    {
+        Right = min(Right, (LONGLONG)Owner->Width);
+        Bottom = min(Bottom, (LONGLONG)Owner->Height);
     }
     Left = max(Left + Owner->Left, (LONGLONG)Bounds->left);
     Top = max(Top + Owner->Top, (LONGLONG)Bounds->top);
@@ -76,7 +87,7 @@ DwmGpuClientGeometry(const DWM_WIN *Window, const DWM_GPU_WINDOW_GEOMETRY *Owner
     if (Window->DxDrawWidth == 0 || Window->DxDrawHeight == 0 ||
         Window->DxDrawWidth > MAXLONG || Window->DxDrawHeight > MAXLONG)
         return FALSE;
-    if (Window->AnimFlags != 0)
+    if (DwmGpuAnimationScales(Window))
     {
         Left = DwmGpuScaleWindowEdge(Left, Window->cx, Owner->Width);
         Top = DwmGpuScaleWindowEdge(Top, Window->cy, Owner->Height);

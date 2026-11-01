@@ -25,6 +25,7 @@
 
 #include "gpud3d.h"
 #include "gpud3dshader.h"
+#include "animation.h"
 #include "gpugeometry.h"
 #include "gpublurdamage.h"
 #include "gpuscenecache.h"
@@ -77,6 +78,9 @@ struct Surface
     ULONG SurfaceId, Share, Generation, LastFrame;
     ULONGLONG UpdateId;
     BOOL Client;
+    BOOL Replaced;
+    ULONG ReplacedBy;
+    DWM_WIN Window;
 
     void Reset()
     {
@@ -918,7 +922,8 @@ Surface *FindSurface(const DWM_WIN *Window, BOOL Client)
     for (ULONG Index = 0; Index < ARRAYSIZE(State.Surfaces); ++Index)
     {
         Surface *Slot = &State.Surfaces[Index];
-        if (Slot->Image.Resource != NULL && Slot->SurfaceId == Window->SurfaceId && Slot->Client == Client)
+        if (Slot->Image.Resource != NULL && Slot->SurfaceId == Window->SurfaceId && Slot->Client == Client &&
+            !Slot->Replaced)
             return Slot;
         if (Slot->Image.Resource == NULL && Available == NULL)
             Available = Slot;
@@ -930,6 +935,50 @@ Surface *FindSurface(const DWM_WIN *Window, BOOL Client)
     Oldest->Reset();
     ZeroMemory(Oldest, sizeof(*Oldest));
     return Oldest;
+}
+
+Surface *FindReplacedSurface(ULONG SurfaceId)
+{
+    for (ULONG Index = 0; Index < ARRAYSIZE(State.Surfaces); ++Index)
+    {
+        Surface *Slot = &State.Surfaces[Index];
+        if (Slot->Image.Resource != NULL && Slot->Replaced && Slot->SurfaceId == SurfaceId)
+            return Slot;
+    }
+    return NULL;
+}
+
+void RetainReplacedSurface(Surface *Slot, const DWM_WIN *Window)
+{
+    if (Window->AnimFlags != DWM_ANIM_MAXIMIZE || Slot->Image.Resource == NULL || Slot->Client ||
+        Slot->SurfaceId != Window->SurfaceId || Slot->Window.cx <= 0 || Slot->Window.cy <= 0 ||
+        Slot->Window.Generation == Window->Generation)
+        return;
+    Surface *Target = FindReplacedSurface(Window->SurfaceId);
+    for (ULONG Index = 0; Target == NULL && Index < ARRAYSIZE(State.Surfaces); ++Index)
+        if (State.Surfaces[Index].Image.Resource == NULL)
+            Target = &State.Surfaces[Index];
+    if (Target == NULL)
+    {
+        for (ULONG Index = 0; Index < ARRAYSIZE(State.Surfaces); ++Index)
+        {
+            Surface *Candidate = &State.Surfaces[Index];
+            if (Candidate != Slot && Candidate->LastFrame != State.Frame &&
+                (Target == NULL || Candidate->LastFrame < Target->LastFrame))
+                Target = Candidate;
+        }
+    }
+    if (Target == NULL)
+        return;
+    Target->Reset();
+    ZeroMemory(Target, sizeof(*Target));
+    Target->Image = Slot->Image;
+    ZeroMemory(&Slot->Image, sizeof(Slot->Image));
+    Target->SurfaceId = Window->SurfaceId;
+    Target->Replaced = TRUE;
+    Target->ReplacedBy = Window->Generation;
+    Target->Window = Slot->Window;
+    Target->LastFrame = State.Frame;
 }
 
 BOOL SurfaceCurrent(const Surface *Slot, const DWM_WIN *Window)
@@ -955,10 +1004,13 @@ Texture *UploadGdi(const DWM_WIN *Window, const BYTE *Pixels)
     if (Current && Slot->UpdateId == Window->BaseUpdateId)
     {
         Slot->LastFrame = State.Frame;
+        Slot->Window = *Window;
         return &Slot->Image;
     }
     if (Pixels == NULL)
         return NULL;
+    if (!Current)
+        RetainReplacedSurface(Slot, Window);
 
     RECT Dirty = {0, 0, Window->cx, Window->cy};
     if (Current && Slot->UpdateId == Window->BasePreviousUpdateId)
@@ -992,6 +1044,7 @@ Texture *UploadGdi(const DWM_WIN *Window, const BYTE *Pixels)
     Slot->Generation = Window->Generation;
     Slot->UpdateId = Window->BaseUpdateId;
     Slot->LastFrame = State.Frame;
+    Slot->Window = *Window;
     return &Slot->Image;
 }
 
@@ -1195,6 +1248,7 @@ Texture *Import(const DWM_WIN *Window, BOOL Client)
     if (Slot->SharedSource == NULL || Slot->Share != Share || Slot->Generation != Generation ||
         Slot->Image.Width != (LONG)Width || Slot->Image.Height != (LONG)Height)
     {
+        RetainReplacedSurface(Slot, Window);
         Slot->Reset();
         if (!Result(State.Device->OpenSharedResource((HANDLE)(ULONG_PTR)Share,
             IID_ID3D11Texture2D, (void **)&Slot->SharedSource), "OpenSharedResource"))
@@ -1230,6 +1284,7 @@ Texture *Import(const DWM_WIN *Window, BOOL Client)
         Slot->UpdateId = Window->BaseUpdateId;
     }
     Slot->LastFrame = State.Frame;
+    Slot->Window = *Window;
     return &Slot->Image;
 }
 
@@ -1392,7 +1447,7 @@ ID3D11ShaderResourceView *FrameButtonsView(const DWM_WIN *Window, ULONG Backgrou
 }
 
 BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG OriginX, LONG OriginY,
-                 Texture *Prepared = NULL)
+                 Texture *Prepared = NULL, const RECT *Limit = NULL)
 {
     DWM_GPU_WINDOW_GEOMETRY Geometry, Owner;
     if (!DwmGpuWindowGeometry(Window, OriginX, OriginY, &Geometry))
@@ -1404,6 +1459,7 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
     if (!DwmGpuDamageBounds(&Bounds, State.Width, State.Height, Geometry.Left, Geometry.Top,
         Geometry.Left + Geometry.Width, Geometry.Top + Geometry.Height) ||
         (Client && !DwmGpuClipClient(Window, &Owner, &Bounds)) ||
+        (Limit != NULL && !IntersectRect(&Bounds, &Bounds, Limit)) ||
         !DrawIntersects(Bounds))
         return TRUE;
     FLOAT Alpha = (Window->LayerFlags & DWM_LWA_ALPHA) ? min(Window->Alpha, 255u) / 255.0f : 1.0f;
@@ -1431,7 +1487,13 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
             return FALSE;
     }
     Constants Data = {};
-    SetRectangle(Data, Geometry.Left, Geometry.Top, Geometry.Left + Geometry.Width, Geometry.Top + Geometry.Height);
+    LONG Width = Geometry.Width, Height = Geometry.Height;
+    if (!Client && Window->AnimFlags == DWM_ANIM_MAXIMIZE)
+    {
+        Width = Window->cx;
+        Height = Window->cy;
+    }
+    SetRectangle(Data, Geometry.Left, Geometry.Top, Geometry.Left + Width, Geometry.Top + Height);
     Data.SourceSize[0] = Client ? Window->DxWidth : Window->cx;
     Data.SourceSize[1] = Client ? Window->DxHeight : Window->cy;
     Data.SourceSize[2] = Alpha;
@@ -1499,6 +1561,38 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
                 Blend,
                 Premultiplied,
                 Buttons);
+}
+
+BOOL DrawReplaced(const DWM_WIN *Window, LONG OriginX, LONG OriginY)
+{
+    Surface *Source = FindReplacedSurface(Window->SurfaceId);
+    if (Source == NULL)
+        return TRUE;
+    if (Window->AnimFlags != DWM_ANIM_MAXIMIZE || Source->ReplacedBy != Window->Generation)
+    {
+        Source->Reset();
+        ZeroMemory(Source, sizeof(*Source));
+        return TRUE;
+    }
+    Source->LastFrame = State.Frame;
+    DWM_GPU_WINDOW_GEOMETRY Moving;
+    RECT Limit;
+    if (!DwmGpuWindowGeometry(Window, OriginX, OriginY, &Moving) ||
+        !DwmGpuDamageBounds(&Limit, State.Width, State.Height, Moving.Left, Moving.Top,
+                            Moving.Left + Moving.Width, Moving.Top + Moving.Height))
+        return TRUE;
+    ULONG Fade = DwmAnimationSourceAlpha(&Source->Window, Window);
+    DWM_WIN Old = Source->Window;
+    Old.Alpha = ((Old.LayerFlags & DWM_LWA_ALPHA) ? min(Old.Alpha, 255u) : 255u) * Fade / 255u;
+    if (Old.Alpha == 0)
+        return TRUE;
+    Old.x = Window->AnimX;
+    Old.y = Window->AnimY;
+    Old.AnimFlags = 0;
+    Old.LayerFlags |= DWM_LWA_ALPHA;
+    Old.DxGlobalShare = 0;
+    Old.DxUpdateId = 0;
+    return DrawLayer(&Old, NULL, FALSE, OriginX, OriginY, &Source->Image, &Limit);
 }
 } // namespace
 
@@ -2041,7 +2135,9 @@ DwmD3dWindow(const DWM_WIN *Window, const BYTE *Pixels, LONG OriginX, LONG Origi
     for (ULONG Index = 0; Client != NULL && Index < State.OverlayCount; ++Index)
         if (State.Overlays[Index].SurfaceId == Window->SurfaceId)
             return TRUE;
-    return Client == NULL || DrawLayer(Window, NULL, TRUE, OriginX, OriginY, Client);
+    if (Client != NULL && !DrawLayer(Window, NULL, TRUE, OriginX, OriginY, Client))
+        return FALSE;
+    return DrawReplaced(Window, OriginX, OriginY);
 }
 
 BOOL

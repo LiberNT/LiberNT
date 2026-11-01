@@ -61,6 +61,7 @@ typedef struct _REDIRECT_ENTRY
     BOOL         MinRectValid;
     RECTL        MinRect;
     ULONG        AnimFlags;
+    BOOL         AnimPending;
     LONGLONG     AnimStart;
     LONGLONG     AnimDuration;
     RECTL        AnimRect;
@@ -1530,6 +1531,7 @@ IntCompositionCancelAnimation(_Inout_ REDIRECT_ENTRY *Entry)
         return;
 
     Entry->AnimFlags = 0;
+    Entry->AnimPending = FALSE;
     if (IntCompositionAccumulatePositionDamage(&Entry->AnimDamage))
         IntCompositionMarkDamage(FALSE);
 }
@@ -1550,7 +1552,7 @@ IntCompositionStartAnimation(_Inout_ REDIRECT_ENTRY *Entry,
         return;
     }
 
-    if (Entry->Redirect.FrontHeld && Entry->Wnd != NULL)
+    if (Entry->Redirect.FrontHeld && Entry->Wnd != NULL && Flags != DWM_ANIM_MAXIMIZE)
     {
         IntCompositionDamageHeld(&Entry->Redirect, (PRECTL)&Entry->Wnd->rcWindow);
         Entry->Redirect.FrontScaled = TRUE;
@@ -1564,12 +1566,12 @@ IntCompositionStartAnimation(_Inout_ REDIRECT_ENTRY *Entry,
     Entry->AnimStart = (LONGLONG)KeQueryInterruptTime();
     if (Flags == DWM_ANIM_MINIMIZE)
         Entry->AnimDuration = COMPOSITION_ANIM_MINIMIZE_100NS;
-    else if (Flags == DWM_ANIM_MOVE)
+    else if (Flags == DWM_ANIM_MOVE || Flags == DWM_ANIM_MAXIMIZE)
         Entry->AnimDuration = COMPOSITION_ANIM_MOVE_100NS;
     else
         Entry->AnimDuration = COMPOSITION_ANIM_RESTORE_100NS;
     Entry->AnimDamage = (Flags == DWM_ANIM_MINIMIZE) ? *Window : *Target;
-    if (Flags == DWM_ANIM_MOVE)
+    if (Flags == DWM_ANIM_MOVE || Flags == DWM_ANIM_MAXIMIZE)
         RECTL_bUnionRect(&Entry->AnimDamage, (PRECTL)Window, (PRECTL)Target);
     IntCompositionMarkDamage(FALSE);
 }
@@ -1628,7 +1630,7 @@ IntCompositionEvaluateAnimation(_Inout_ REDIRECT_ENTRY *Entry,
         RECTL_bUnionRect(prcDamage, &Entry->AnimDamage, &Entry->AnimRect);
         /* A move ends at its target, not where it started: the window is drawn
          * there at full size on this frame, beyond the last interpolated rect. */
-        if (Entry->AnimFlags == DWM_ANIM_MOVE)
+        if (Entry->AnimFlags == DWM_ANIM_MOVE || Entry->AnimFlags == DWM_ANIM_MAXIMIZE)
             RECTL_bUnionRect(prcDamage, prcDamage, &Entry->AnimTarget);
         Entry->AnimFlags = 0;
         return FALSE;
@@ -1642,7 +1644,7 @@ IntCompositionEvaluateAnimation(_Inout_ REDIRECT_ENTRY *Entry,
     else
         s = IntCompositionEase(u, FALSE);
 
-    if (Entry->AnimFlags == DWM_ANIM_MOVE)
+    if (Entry->AnimFlags == DWM_ANIM_MOVE || Entry->AnimFlags == DWM_ANIM_MAXIMIZE)
     {
         rc.left = IntCompositionAnimEdge(Entry->AnimTarget.left,
                                          Entry->AnimRect.left, s);
@@ -1850,6 +1852,7 @@ IntCompositionOnWindowResize(_In_ PWND Wnd)
     BOOL OldWindowRectValid;
     BOOL Minimized;
     BOOL WasMinimized;
+    BOOL MaximizeStarted = FALSE;
 
     if (!gbCompositionEnabled)
         return;
@@ -1889,8 +1892,9 @@ IntCompositionOnWindowResize(_In_ PWND Wnd)
     else if (g_DwmAttached && OldWindowRectValid &&
              Maximized != e->Maximized)
     {
-        IntCompositionStartAnimation(e, &OldWindowRect,
-                                     (PRECTL)&Wnd->rcWindow, DWM_ANIM_MOVE);
+        IntCompositionStartAnimation(e, &OldWindowRect, (PRECTL)&Wnd->rcWindow,
+                                     Maximized ? DWM_ANIM_MAXIMIZE : DWM_ANIM_MOVE);
+        MaximizeStarted = e->AnimFlags == DWM_ANIM_MAXIMIZE;
     }
     else if (e->AnimFlags != 0 && OldWindowRectValid &&
              (OldWindowRect.left != Wnd->rcWindow.left ||
@@ -1941,7 +1945,8 @@ IntCompositionOnWindowResize(_In_ PWND Wnd)
         {
             InterlockedExchange(&e->BackComplete, FALSE);
             e->Damaged = TRUE;
-            if (e->Redirect.FrontHeld && e->AnimFlags != 0)
+            if (e->Redirect.FrontHeld && e->AnimFlags != 0 &&
+                e->AnimFlags != DWM_ANIM_MAXIMIZE)
             {
                 e->Redirect.FrontScaled = TRUE;
                 e->Redirect.FrontOffset.x = e->Redirect.FrontOffset.y = 0;
@@ -1953,6 +1958,8 @@ IntCompositionOnWindowResize(_In_ PWND Wnd)
                 e->Redirect.FrontOffset.y += OldWindowRect.top - Wnd->rcWindow.top;
             }
         }
+        if (MaximizeStarted && e->Redirect.FrontHeld && !e->Redirect.FrontScaled)
+            e->AnimPending = TRUE;
         if (IntCompositionDamageHeld(&e->Redirect, (PRECTL)&Wnd->rcWindow))
             IntCompositionMarkDamage(FALSE);
     }
@@ -3212,7 +3219,12 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         g_DwmFrameWindows[count].AnimY = 0;
         g_DwmFrameWindows[count].AnimCx = 0;
         g_DwmFrameWindows[count].AnimCy = 0;
-        if (e->AnimFlags != 0)
+        if (e->AnimPending && !Held)
+        {
+            e->AnimPending = FALSE;
+            e->AnimStart = now;
+        }
+        if (e->AnimFlags != 0 && !e->AnimPending)
         {
             RECTL rcAnim, rcAnimDamage;
             ULONG AnimFlags = e->AnimFlags;
@@ -3266,7 +3278,9 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
             }
             if ((!(w->style & (WS_MINIMIZE | WS_MAXIMIZE)) ||
                  ((w->style & WS_MAXIMIZE) &&
-                  g_DwmFrameWindows[count].AnimFlags == DWM_ANIM_MOVE)) &&
+                  (g_DwmFrameWindows[count].AnimFlags == DWM_ANIM_MOVE ||
+                   g_DwmFrameWindows[count].AnimFlags == DWM_ANIM_MAXIMIZE ||
+                   e->AnimPending))) &&
                 UserHasWindowEdge(w->style, w->ExStyle))
             {
                 lf |= DWM_WINDOW_NC_SHADOW;
