@@ -11,6 +11,7 @@
 #include <Ip4Config2.h>
 #include <LoadedImage.h>
 #include <NetworkInterfaceIdentifier.h>
+#include <PciIo.h>
 #include <ServiceBinding.h>
 #include <SimpleFileSystem.h>
 #include <SimpleNetwork.h>
@@ -18,6 +19,8 @@
 #include "uefinetp.h"
 
 #define UEFI_NETWORK_INPUT_POLL_DELAY_US 100000
+
+#define UEFI_NETWORK_CONNECT_ROUNDS 4
 
 #define NET_STAGE_NII   0x0001
 #define NET_STAGE_SNP   0x0002
@@ -71,6 +74,7 @@ static EFI_GUID EfiNetworkInterfaceIdentifier31Guid =
 static EFI_GUID EfiSimpleFileSystemGuid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
 static EFI_GUID EfiSimpleNetworkGuid = EFI_SIMPLE_NETWORK_PROTOCOL_GUID;
 static EFI_GUID EfiFileInfoGuid = EFI_FILE_INFO_ID;
+static EFI_GUID EfiNetPciIoGuid = EFI_PCI_IO_PROTOCOL_GUID;
 
 static EFI_GUID EfiRngGuid =
     {0x3152bca5, 0xeade, 0x433d,
@@ -512,6 +516,7 @@ UefiLoadNetworkDrivers(
 
 
     BootDevice = FwGetBootDeviceHandle();
+    TRACE("UEFI Network: loading drivers from boot medium %p\n", BootDevice);
     if (!BootDevice)
         goto Cleanup;
 
@@ -545,6 +550,9 @@ UefiLoadNetworkDrivers(
             BootDevice,
             NetworkDrivers[Index].Path,
             &NetworkDriverImages[Index]);
+        TRACE("UEFI Network: %S %s\n",
+              NetworkDrivers[Index].Path,
+              NetworkDriverImages[Index] ? "loaded" : "not on the boot medium");
     }
 
     UefiStartNetworkDrivers(UefiNetworkDriverBase);
@@ -555,17 +563,134 @@ Cleanup:
 
 }
 
+static VOID
+UefiNetReportBridge(
+    _In_ EFI_PCI_IO_PROTOCOL *PciIo,
+    _In_ UINTN Bus,
+    _In_ UINTN Device,
+    _In_ UINTN Function)
+{
+    UINT32 Buses = 0, Header = 0, LinkCapabilities = 0, LinkStatus = 0;
+    UINT8 Pointer;
+    ULONG Steps;
+
+    PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, 0x18, 1, &Buses);
+    PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, 0x34, 1, &Header);
+    Pointer = (UINT8)Header & 0xFC;
+    for (Steps = 0; Pointer >= 0x40 && Steps < 48; Steps++)
+    {
+        PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, Pointer, 1, &Header);
+        if ((Header & 0xFF) == 0x10)
+        {
+            PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, Pointer + 0x0C, 1, &LinkCapabilities);
+            PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, Pointer + 0x10, 1, &LinkStatus);
+            LinkStatus >>= 16;
+            break;
+        }
+        Pointer = (UINT8)(Header >> 8) & 0xFC;
+    }
+
+    FwPrint(L"Bridge %02X:%02X.%X buses %u-%u, PCIe link status %04X (%s), width x%u gen %u\r\n",
+            (ULONG)Bus, (ULONG)Device, (ULONG)Function,
+            (Buses >> 8) & 0xFF, (Buses >> 16) & 0xFF,
+            LinkStatus,
+            !(LinkCapabilities & (1 << 20)) ? L"no link reporting" : (LinkStatus & (1 << 13)) ? L"link up" : L"link down",
+            (LinkStatus >> 4) & 0x3F, LinkStatus & 0xF);
+}
+
+static VOID
+UefiNetReportMissingAdapter(VOID)
+{
+    EFI_PCI_IO_PROTOCOL *PciIo;
+    EFI_HANDLE *Handles;
+    UINTN Count, Index;
+    UINT32 Id, Class;
+    ULONG Loaded = 0;
+    UINTN Segment, Bus, Device, Function;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(NetworkDrivers); Index++)
+    {
+        if (NetworkDrivers[Index].NicDriver && NetworkDriversStarted[Index])
+            Loaded++;
+    }
+
+    FwPrint(L"Network drivers started from the boot medium: %lu, UNDI interfaces: %lu.\r\n",
+            Loaded,
+            (ULONG)(UefiCountProtocol(&EfiNetworkInterfaceIdentifier31Guid, NULL) +
+                    UefiCountProtocol(&EfiNetworkInterfaceIdentifierGuid, NULL)));
+
+    if (EFI_ERROR(GlobalSystemTable->BootServices->LocateHandleBuffer(ByProtocol, &EfiNetPciIoGuid, NULL, &Count, &Handles)))
+        return;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (EFI_ERROR(GlobalSystemTable->BootServices->HandleProtocol(Handles[Index], &EfiNetPciIoGuid, (VOID **)&PciIo)) ||
+            EFI_ERROR(PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, 0, 1, &Id)) ||
+            EFI_ERROR(PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, 8, 1, &Class)) ||
+            (Class >> 24) != 0x02 ||
+            EFI_ERROR(PciIo->GetLocation(PciIo, &Segment, &Bus, &Device, &Function)))
+        {
+            continue;
+        }
+
+        FwPrint(L"Network controller %04X:%04X at %02X:%02X.%X has no network driver.\r\n",
+                Id & 0xFFFF, Id >> 16, (ULONG)Bus, (ULONG)Device, (ULONG)Function);
+    }
+
+    FwPrint(L"PCI functions seen by the firmware: %lu\r\n", (ULONG)Count);
+    for (Index = 0; DBG && Index < Count; Index++)
+    {
+        if (EFI_ERROR(GlobalSystemTable->BootServices->HandleProtocol(Handles[Index], &EfiNetPciIoGuid, (VOID **)&PciIo)) ||
+            EFI_ERROR(PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, 0, 1, &Id)) ||
+            EFI_ERROR(PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, 8, 1, &Class)) ||
+            EFI_ERROR(PciIo->GetLocation(PciIo, &Segment, &Bus, &Device, &Function)))
+        {
+            continue;
+        }
+
+        FwPrint(L"%02X:%02X.%X %04X:%04X %04X%s",
+                (ULONG)Bus, (ULONG)Device, (ULONG)Function, Id & 0xFFFF, Id >> 16, Class >> 16,
+                (Index % 4 == 3 || Index + 1 == Count) ? L"\r\n" : L"   ");
+    }
+
+    for (Index = 0; DBG && Index < Count; Index++)
+    {
+        if (!EFI_ERROR(GlobalSystemTable->BootServices->HandleProtocol(Handles[Index], &EfiNetPciIoGuid, (VOID **)&PciIo)) &&
+            !EFI_ERROR(PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, 8, 1, &Class)) &&
+            (Class >> 16) == 0x0604 &&
+            !EFI_ERROR(PciIo->GetLocation(PciIo, &Segment, &Bus, &Device, &Function)))
+        {
+            UefiNetReportBridge(PciIo, Bus, Device, Function);
+        }
+    }
+
+    GlobalSystemTable->BootServices->FreePool(Handles);
+}
+
 BOOLEAN
 UefiNetLoadNicDrivers(VOID)
 {
+    ULONG Round;
+
     UefiConnectAllControllers(FALSE);
     UefiLattePandaPrepareNic();
     if (!(UefiGetNetworkStageMask(NULL) & NET_STAGE_SNP))
     {
         UefiLoadNetworkDrivers(TRUE);
-        UefiConnectAllControllers(FALSE);
+        for (Round = 0;
+             Round < UEFI_NETWORK_CONNECT_ROUNDS && !(UefiGetNetworkStageMask(NULL) & NET_STAGE_SNP);
+             Round++)
+        {
+            UefiConnectAllControllers(FALSE);
+            TRACE("UEFI Network: connect round %lu, stages %08lx\n", Round + 1, UefiGetNetworkStageMask(NULL));
+        }
     }
-    return (UefiGetNetworkStageMask(NULL) & NET_STAGE_SNP) != 0;
+
+    if (UefiGetNetworkStageMask(NULL) & NET_STAGE_SNP)
+        return TRUE;
+
+    UefiNetReportMissingAdapter();
+    return FALSE;
 }
 
 static BOOLEAN
