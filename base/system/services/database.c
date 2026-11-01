@@ -2250,16 +2250,6 @@ ScmLoadService(PSERVICE Service,
         {
             Group->ServicesRunning = TRUE;
         }
-
-        /* Log a successful service start */
-        LoadStringW(GetModuleHandle(NULL), IDS_SERVICE_START, szLogBuffer, 80);
-        lpLogStrings[0] = Service->lpDisplayName;
-        lpLogStrings[1] = szLogBuffer;
-
-        ScmLogEvent(EVENT_SERVICE_CONTROL_SUCCESS,
-                    EVENTLOG_INFORMATION_TYPE,
-                    2,
-                    lpLogStrings);
     }
     else
     {
