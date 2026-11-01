@@ -302,21 +302,18 @@ HRESULT STDMETHODCALLTYPE CQueryAssociations::GetString(
         }
         case ASSOCSTR_FRIENDLYDOCNAME:
         {
-            WCHAR *pszFileType;
-
-            hr = this->GetValue(this->hkeySource, NULL, (void**)&pszFileType, NULL);
-            if (FAILED(hr))
+            if (!this->hkeyProgID)
             {
-                return hr;
+                return HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION);
             }
             DWORD size = 0;
-            DWORD ret = RegGetValueW(HKEY_CLASSES_ROOT, pszFileType, NULL, RRF_RT_REG_SZ, NULL, NULL, &size);
+            DWORD ret = RegGetValueW(this->hkeyProgID, NULL, NULL, RRF_RT_REG_SZ, NULL, NULL, &size);
             if (ret == ERROR_SUCCESS)
             {
                 WCHAR *docName = static_cast<WCHAR *>(HeapAlloc(GetProcessHeap(), 0, size));
                 if (docName)
                 {
-                    ret = RegGetValueW(HKEY_CLASSES_ROOT, pszFileType, NULL, RRF_RT_REG_SZ, NULL, docName, &size);
+                    ret = RegGetValueW(this->hkeyProgID, NULL, NULL, RRF_RT_REG_SZ, NULL, docName, &size);
                     if (ret == ERROR_SUCCESS)
                     {
                         hr = this->ReturnString(flags, pszOut, pcchOut, docName, strlenW(docName) + 1);
@@ -336,7 +333,6 @@ HRESULT STDMETHODCALLTYPE CQueryAssociations::GetString(
             {
                 hr = HRESULT_FROM_WIN32(ret);
             }
-            HeapFree(GetProcessHeap(), 0, pszFileType);
             return hr;
         }
         case ASSOCSTR_FRIENDLYAPPNAME:
