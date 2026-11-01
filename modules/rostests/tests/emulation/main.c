@@ -214,6 +214,117 @@ TestThreadCommit(VOID)
     printf("EMUTEST: %d running threads added %lld KB of private commit\n", COMMIT_THREADS, Growth / 1024);
 }
 
+#define HANDSHAKE_PAIRS  4
+#define HANDSHAKE_ROUNDS 5000
+
+typedef struct _HANDSHAKE_SIDE
+{
+    HANDLE Port;
+    volatile LONG State;
+    volatile LONG Incoming;
+} HANDSHAKE_SIDE;
+
+typedef struct _HANDSHAKE_PAIR
+{
+    HANDSHAKE_SIDE Sides[2];
+    volatile LONG LostWakeups;
+    volatile LONG Rounds;
+} HANDSHAKE_PAIR;
+
+typedef struct _HANDSHAKE_WORKER
+{
+    HANDSHAKE_PAIR *Pair;
+    ULONG Side;
+} HANDSHAKE_WORKER;
+
+static
+VOID
+HandshakePost(
+    _Inout_ HANDSHAKE_SIDE *Side)
+{
+    InterlockedIncrement(&Side->Incoming);
+    if (!InterlockedExchange(&Side->State, 1))
+        PostQueuedCompletionStatus(Side->Port, 0, 1, NULL);
+}
+
+static
+DWORD
+WINAPI
+HandshakeWorker(
+    _In_ PVOID Parameter)
+{
+    HANDSHAKE_WORKER *Worker = Parameter;
+    HANDSHAKE_SIDE *Self = &Worker->Pair->Sides[Worker->Side];
+    HANDSHAKE_SIDE *Other = &Worker->Pair->Sides[!Worker->Side];
+    LPOVERLAPPED Overlapped;
+    ULONG_PTR Key;
+    DWORD Bytes;
+    LONG Work;
+
+    if (Worker->Side == 0)
+        HandshakePost(Other);
+    while (Worker->Pair->Rounds < HANDSHAKE_ROUNDS)
+    {
+        Work = InterlockedExchange(&Self->Incoming, 0);
+        if (Work)
+        {
+            if (InterlockedIncrement(&Worker->Pair->Rounds) <= HANDSHAKE_ROUNDS)
+                HandshakePost(Other);
+            continue;
+        }
+        if (GetQueuedCompletionStatus(Self->Port, &Bytes, &Key, &Overlapped, 1000))
+            InterlockedExchange(&Self->State, 0);
+        else if (Self->Incoming)
+            InterlockedIncrement(&Worker->Pair->LostWakeups);
+    }
+    HandshakePost(Other);
+    return 0;
+}
+
+static
+VOID
+TestCompletionPortHandshake(VOID)
+{
+    static HANDSHAKE_PAIR Pairs[HANDSHAKE_PAIRS];
+    HANDSHAKE_WORKER Workers[HANDSHAKE_PAIRS * 2];
+    HANDLE Threads[HANDSHAKE_PAIRS * 2];
+    LONG Lost = 0, Rounds = 0;
+    DWORD Index, Start = GetTickCount();
+
+    RtlZeroMemory(Pairs, sizeof(Pairs));
+    for (Index = 0; Index < HANDSHAKE_PAIRS * 2; Index++)
+    {
+        HANDSHAKE_PAIR *Pair = &Pairs[Index / 2];
+
+        Pair->Sides[Index % 2].Port = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 1);
+        CHECK(Pair->Sides[Index % 2].Port != NULL);
+    }
+    for (Index = 0; Index < HANDSHAKE_PAIRS * 2; Index++)
+    {
+        Workers[Index].Pair = &Pairs[Index / 2];
+        Workers[Index].Side = Index % 2;
+        Threads[Index] = CreateThread(NULL, 0, HandshakeWorker, &Workers[Index], 0, NULL);
+        CHECK(Threads[Index] != NULL);
+    }
+    for (Index = 0; Index < HANDSHAKE_PAIRS * 2; Index++)
+    {
+        if (!Threads[Index])
+            continue;
+        CHECK(WaitForSingleObject(Threads[Index], 120000) == WAIT_OBJECT_0);
+        CloseHandle(Threads[Index]);
+    }
+    for (Index = 0; Index < HANDSHAKE_PAIRS; Index++)
+    {
+        Lost += Pairs[Index].LostWakeups;
+        Rounds += min(Pairs[Index].Rounds, HANDSHAKE_ROUNDS);
+        CloseHandle(Pairs[Index].Sides[0].Port);
+        CloseHandle(Pairs[Index].Sides[1].Port);
+    }
+    CHECK(Rounds == HANDSHAKE_PAIRS * HANDSHAKE_ROUNDS);
+    CHECK(Lost == 0);
+    printf("EMUTEST: %ld completion port handshakes, %ld lost wakeups, %lu ms\n", Rounds, Lost, GetTickCount() - Start);
+}
+
 static
 VOID
 TestFiles(VOID)
@@ -1344,6 +1455,7 @@ main(
     TestMachines();
     TestThreads();
     TestThreadCommit();
+    TestCompletionPortHandshake();
     TestFiles();
     TestApcs();
     TestThreadContext();
