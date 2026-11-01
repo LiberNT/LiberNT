@@ -185,6 +185,7 @@ dll/win32/nddeapi             # Synced to Wine-11.14
 dll/win32/netapi32            # Synced to Wine-11.14
 dll/win32/netprofm            # Synced to Wine-11.14
 dll/win32/netutils            # Synced to Wine-11.14
+dll/win32/npmshtml            # Synced to Wine-11.14
 dll/win32/npptools            # Synced to Wine-11.14
 dll/win32/nsi                 # Synced to Wine-11.14
 dll/win32/ntdsapi             # Synced to Wine-11.14

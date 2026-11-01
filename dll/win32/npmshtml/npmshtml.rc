@@ -1,0 +1,42 @@
+/*
+ * PROJECT:     LiberNT Gecko ActiveX plugin
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Version resource Gecko reads to register the plugin
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <windef.h>
+#include <winver.h>
+#include <reactos/version.h>
+#include <reactos/buildno.h>
+#include <ntverp.h>
+
+/* Gecko reads plugin strings from the 0409/04E4 block only, like Wine's VER_VERSION_TRANSLATION */
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     VER_PRODUCTVERSION
+PRODUCTVERSION  VER_PRODUCTVERSION
+FILEFLAGSMASK   0x3fL
+FILEFLAGS       0x0L
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_DLL
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "CompanyName",        "LiberNT Project"
+            VALUE "FileDescription",    "Wine ActiveX plugin"
+            VALUE "FileVersion",        VER_PRODUCTVERSION_STR
+            VALUE "InternalName",       "npmshtml"
+            VALUE "MIMEType",           "application/x-oleobject"
+            VALUE "OriginalFilename",   "npmshtml.dll"
+            VALUE "ProductName",        "LiberNT Operating System"
+            VALUE "ProductVersion",     VER_PRODUCTVERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 0x04E4
+    END
+END
