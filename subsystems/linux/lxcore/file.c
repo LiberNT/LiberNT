@@ -1876,14 +1876,14 @@ LxDeviceOpenFile(
     }
     else if ((Major == 5) && (Minor == 2))
     {
-        if (LxPtmxOpen(Process, Flags, &File) != 0)
+        if (LxPtmxOpen(Process, LxDevptsForPtmx(Process, Path), Flags, &File) != 0)
             return NULL;
         File->Path = LxStrDup(Path);
         return File;
     }
     else if (Major == 136)
     {
-        Tty = LxTtyLookup(Process->Instance, Minor);
+        Tty = LxTtyLookup(Process->Instance, Process->Instance->Devpts, Minor);
         if (Tty == NULL)
             return NULL;
         if (LxTtyOpenSlave(Process, Tty, Flags | LX_O_NOCTTY, &File) != 0)

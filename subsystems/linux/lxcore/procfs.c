@@ -4947,6 +4947,15 @@ LxMqDirAdd(
 }
 
 static
+PLX_DEVPTS
+LxPtsDevpts(
+    _In_ PLX_PROCESS Process,
+    _In_opt_ PLX_MOUNT Mount)
+{
+    return ((Mount != NULL) && (Mount->Devpts != NULL)) ? Mount->Devpts : Process->Instance->Devpts;
+}
+
+static
 LONG
 LxResolvePts(
     _In_ PLX_PROCESS Self,
@@ -4969,12 +4978,12 @@ LxResolvePts(
     {
         Synth->Id = LxPtsPtmx;
         Synth->Type = LX_S_IFCHR;
-        Synth->Mode = 0666;
+        Synth->Mode = LxPtsDevpts(Self, Synth->Mount)->PtmxMode;
         return 0;
     }
     if (LxParseNumber(Components[0], &Number))
     {
-        PLX_TTY Tty = LxTtyLookup(Self->Instance, Number);
+        PLX_TTY Tty = LxTtyLookup(Self->Instance, LxPtsDevpts(Self, Synth->Mount), Number);
 
         if (Tty == NULL)
             return -LX_ENOENT;
@@ -6084,7 +6093,7 @@ LxSynthOpen(
                 ULONG Indexes[64], Count, Slot;
 
                 LxDirAdd(&Text, LX_DT_CHR, "ptmx");
-                Count = LxTtyList(Process->Instance, Indexes, RTL_NUMBER_OF(Indexes));
+                Count = LxTtyList(Process->Instance, LxPtsDevpts(Process, Synth.Mount), Indexes, RTL_NUMBER_OF(Indexes));
                 for (Slot = 0; Slot < Count; Slot++)
                 {
                     CHAR Name[16];
@@ -6223,7 +6232,7 @@ LxSynthOpen(
     }
     else if (Synth.Id == LxPtsTty)
     {
-        PLX_TTY Tty = LxTtyLookup(Process->Instance, Synth.Index);
+        PLX_TTY Tty = LxTtyLookup(Process->Instance, LxPtsDevpts(Process, Synth.Mount), Synth.Index);
 
         if (Tty == NULL)
         {
@@ -6238,7 +6247,7 @@ LxSynthOpen(
     }
     else if (Synth.Id == LxPtsPtmx)
     {
-        Error = LxPtmxOpen(Process, Flags, &File);
+        Error = LxPtmxOpen(Process, LxPtsDevpts(Process, Synth.Mount), Flags, &File);
         if (Error != 0)
             goto Exit;
         File->Ino = LxSynthIno(Node);
@@ -6495,7 +6504,7 @@ LxSynthStat(
     }
     if (Synth.Id == LxPtsTty)
     {
-        PLX_TTY Tty = LxTtyLookup(Process->Instance, Synth.Index);
+        PLX_TTY Tty = LxTtyLookup(Process->Instance, LxPtsDevpts(Process, Synth.Mount), Synth.Index);
 
         if (Tty == NULL)
             return -LX_ENOENT;
@@ -6508,7 +6517,6 @@ LxSynthStat(
     else if (Synth.Id == LxPtsPtmx)
     {
         Stat->Rdev = (5 << 8) | 2;
-        Stat->Gid = 5;
     }
     else if ((Synth.Id == LxCgDir) || (Synth.Id == LxCgFile))
     {
@@ -6614,7 +6622,7 @@ LxPtsNodeTty(
     LxFree(Synth.LinkTarget);
     if (Synth.Id != LxPtsTty)
         return NULL;
-    return LxTtyLookup(Process->Instance, Synth.Index);
+    return LxTtyLookup(Process->Instance, LxPtsDevpts(Process, Synth.Mount), Synth.Index);
 }
 
 LONG

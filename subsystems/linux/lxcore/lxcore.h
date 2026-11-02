@@ -209,6 +209,18 @@ typedef struct _LX_FILE_OPS
 #define LX_TTY_LOCKED    0x00000002
 #define LX_TTY_NT_MASTER 0x00000004
 
+typedef struct _LX_DEVPTS
+{
+    LIST_ENTRY Link;
+    LIST_ENTRY Ptys;
+    ULONG PtmxMode;
+    ULONG Mode;
+    ULONG Uid;
+    ULONG Gid;
+    BOOLEAN UidSet;
+    BOOLEAN GidSet;
+} LX_DEVPTS, *PLX_DEVPTS;
+
 typedef struct _LX_TTY
 {
     volatile LONG RefCount;
@@ -322,6 +334,7 @@ struct _LX_MOUNT
     UNICODE_STRING NtRoot;
     HANDLE NtRootHandle;
     PLX_TMPFS Tmpfs;
+    PLX_DEVPTS Devpts;
     PSTR Root;
     PSTR Alias;
     BOOLEAN Detached;
@@ -443,7 +456,8 @@ struct _LX_INSTANCE
     LONG64 BootTime;
     PLX_CGROUP RootCgroup;
     PLX_TTY Console;
-    LIST_ENTRY Ptys;
+    LIST_ENTRY DevptsList;
+    PLX_DEVPTS Devpts;
     ULONG ProcessCount;
     BOOLEAN Booted;
     BOOLEAN ShuttingDown;
@@ -1336,7 +1350,10 @@ VOID LxCgroupAttach(_In_ PLX_PROCESS Process, _In_ PLX_CGROUP Cgroup);
 PSTR LxCgroupPath(_In_ PLX_CGROUP Cgroup);
 VOID LxCgroupFreeTree(_In_ PLX_CGROUP Cgroup);
 
-NTSTATUS LxTtyCreate(_In_ PLX_INSTANCE Instance, _In_ ULONG Flags, _In_ ULONG Uid, _In_ USHORT Rows, _In_ USHORT Columns, _Out_ PLX_TTY *Tty);
+NTSTATUS LxTtyCreate(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_DEVPTS Devpts, _In_ ULONG Flags, _In_ ULONG Uid, _In_ ULONG Gid, _In_ USHORT Rows, _In_ USHORT Columns, _Out_ PLX_TTY *Tty);
+LONG LxDevptsCreate(_In_opt_ PLX_PROCESS Process, _In_ PLX_INSTANCE Instance, _In_opt_ PCSTR Data, _Out_ PLX_DEVPTS *Devpts);
+VOID LxDevptsFreeAll(_In_ PLX_INSTANCE Instance);
+PLX_DEVPTS LxDevptsForPtmx(_In_ PLX_PROCESS Process, _In_opt_ PCSTR Path);
 VOID LxTtyReference(_In_ PLX_TTY Tty);
 VOID LxTtyDereference(_In_ PLX_TTY Tty);
 LONG64 LxTtyRead(_In_ PLX_TTY Tty, _In_ ULONG64 Buffer, _In_ ULONG64 Length, _In_ BOOLEAN NonBlocking);
@@ -1352,11 +1369,11 @@ LONG64 LxTtyMasterRead(_In_ PLX_TTY Tty, _Out_writes_bytes_(Length) PVOID Buffer
 LONG64 LxTtyMasterWrite(_In_ PLX_TTY Tty, _In_reads_bytes_(Length) const VOID *Buffer, _In_ ULONG Length, _In_ BOOLEAN NonBlocking);
 VOID LxTtyMasterClose(_In_ PLX_TTY Tty);
 VOID LxTtySetWinSize(_In_ PLX_TTY Tty, _In_ USHORT Rows, _In_ USHORT Columns);
-PLX_TTY LxTtyLookup(_In_ PLX_INSTANCE Instance, _In_ ULONG Index);
+PLX_TTY LxTtyLookup(_In_ PLX_INSTANCE Instance, _In_ PLX_DEVPTS Devpts, _In_ ULONG Index);
 LONG LxTtyOpenSlave(_In_ PLX_PROCESS Process, _In_ PLX_TTY Tty, _In_ ULONG Flags, _Out_ PLX_FILE *File);
-LONG LxPtmxOpen(_In_ PLX_PROCESS Process, _In_ ULONG Flags, _Out_ PLX_FILE *File);
+LONG LxPtmxOpen(_In_ PLX_PROCESS Process, _In_ PLX_DEVPTS Devpts, _In_ ULONG Flags, _Out_ PLX_FILE *File);
 ULONG64 LxTtyDevice(_In_ PLX_TTY Tty);
-ULONG LxTtyList(_In_ PLX_INSTANCE Instance, _Out_writes_(Count) PULONG Indexes, _In_ ULONG Count);
+ULONG LxTtyList(_In_ PLX_INSTANCE Instance, _In_ PLX_DEVPTS Devpts, _Out_writes_(Count) PULONG Indexes, _In_ ULONG Count);
 VOID LxTtyAttachControlling(_In_ PLX_PROCESS Process, _In_ PLX_TTY Tty);
 ULONG LxSignalGroup(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULONG Pgid, _In_ LONG Signal);
 ULONG LxSignalGroupInfo(_In_ PLX_INSTANCE Instance, _In_opt_ PLX_NS PidNs, _In_ ULONG Pgid, _In_ LONG Signal,
