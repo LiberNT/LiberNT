@@ -2553,6 +2553,7 @@ LxForkProcess(
         ObDereferenceObject(EProcess);
     }
     LxProcessRegister(Child);
+    LxTtyCheckSession(Child);
     InterlockedIncrement((PLONG)&Parent->Instance->ProcessCount);
 
     LxProcessReference(Child);
