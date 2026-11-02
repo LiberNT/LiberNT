@@ -83,6 +83,8 @@ BuildSystem(PageBuilder &page)
                   PageId::Multitasking);
     page.Navigate(Str(IDS_PAGE_BOOTLOADER), Str(IDS_BOOTLOADER_DESC), L"power_20_regular", PageId::BootLoader).Keywords =
         Str(IDS_BOOTLOADER_KEYWORDS);
+    page.Navigate(Str(IDS_PAGE_REMOTE_DESKTOP), Str(IDS_REMOTE_DESKTOP_DESC), L"desktop_20_regular",
+                  PageId::RemoteDesktop);
     page.Navigate(Str(IDS_PAGE_ABOUT), Str(IDS_ABOUT_DESC), L"info_20_regular", PageId::About);
 }
 
@@ -716,6 +718,38 @@ BuildMultitasking(PageBuilder &page)
                  SPI_SETWINARRANGING, false);
     AddSpiToggle(page, IDS_DRAG_FULL, IDS_DRAG_FULL_DESC, L"window_apps_20_regular", SPI_GETDRAGFULLWINDOWS,
                  SPI_SETDRAGFULLWINDOWS, false);
+}
+
+#define TERMINAL_SERVER_KEY L"SYSTEM\\CurrentControlSet\\Control\\Terminal Server"
+#define RDP_SERVICE_KEY L"SYSTEM\\CurrentControlSet\\Services\\LiberNTRDPServer"
+
+void
+BuildRemoteDesktop(PageBuilder &page)
+{
+    SettingsHost *host = page.Host;
+    bool installed = page.Indexing || !ReadString(HKEY_LOCAL_MACHINE, RDP_SERVICE_KEY, L"ImagePath").empty();
+    bool enabled = !page.Indexing && ReadDword(HKEY_LOCAL_MACHINE, TERMINAL_SERVER_KEY, L"fDenyTSConnections", 1) == 0;
+
+    page.Group();
+    page.Toggle(Str(IDS_PAGE_REMOTE_DESKTOP), Str(IDS_REMOTE_DESKTOP_TOGGLE_DESC), L"desktop_20_regular", enabled,
+                [host](int on)
+                {
+                    if (on && !Confirm(host->Window(), Str(IDS_REMOTE_DESKTOP_CONFIRM),
+                                       Str(IDS_REMOTE_DESKTOP_CONFIRM_TEXT), Str(IDS_REMOTE_DESKTOP_CONFIRM_ACTION)))
+                    {
+                        host->Refresh();
+                        return;
+                    }
+                    if (!WriteDword(HKEY_LOCAL_MACHINE, TERMINAL_SERVER_KEY, L"fDenyTSConnections", on ? 0 : 1))
+                        ShowError(host->Window(), ERROR_ACCESS_DENIED);
+                    host->Refresh();
+                }).Enabled = installed && IsAdmin();
+    if (!installed)
+        page.Text(Str(IDS_REMOTE_DESKTOP_MISSING));
+    page.Group();
+    page.Info(Str(IDS_REMOTE_DESKTOP_PC_NAME), ComputerName(), L"desktop_20_regular").Detail =
+        Str(IDS_REMOTE_DESKTOP_PC_NAME_DESC);
+    page.Info(Str(IDS_REMOTE_DESKTOP_PORT), L"3389");
 }
 
 static std::wstring
