@@ -511,7 +511,9 @@ LxInstallTty(
     }
 
     Status = LxTtyCreate(Process->Instance,
+                         Process->Instance->Devpts,
                          (Boot ? LX_TTY_CONSOLE : 0) | LX_TTY_NT_MASTER,
+                         0,
                          0,
                          In->Rows ? In->Rows : 25,
                          In->Columns ? In->Columns : 80,
