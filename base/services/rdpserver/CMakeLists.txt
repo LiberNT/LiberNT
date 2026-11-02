@@ -10,22 +10,17 @@ if(NOT MSVC)
 endif()
 target_link_libraries(rdpserver freerdp-server freerdp winpr libssl libcrypto uuid oldnames)
 set_module_type(rdpserver win32cui)
-add_importlibs(rdpserver advapi32 crypt32 dbghelp gdi32 iphlpapi ncrypt ole32 rpcrt4 secur32 shell32 shlwapi user32 winmm ws2_32 msvcrt kernel32 ntdll)
+add_importlibs(rdpserver advapi32 crypt32 dbghelp gdi32 ncrypt ole32 rpcrt4 secur32 shell32 shlwapi user32 winmm ws2_32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET rdpserver DESTINATION reactos/system32/rdpserver FOR all)
 add_cd_file(FILE ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/freerdp/LICENSE DESTINATION reactos/system32/rdpserver/licenses NAME_ON_CD FreeRDP-LICENSE FOR all)
 add_cd_file(FILE ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/openssl/LICENSE.txt DESTINATION reactos/system32/rdpserver/licenses NAME_ON_CD OpenSSL-LICENSE FOR all)
 
-# The in-tree configuration keeps the server disabled. Credentials and the TLS
-# key pair belong to a private directory outside the source tree.
+# A private rdpserver.ini, such as one with a file transfer root, replaces the in-tree one.
 if(RDPSERVER_CONFIG_DIR)
     if(NOT EXISTS "${RDPSERVER_CONFIG_DIR}/rdpserver.ini")
         message(FATAL_ERROR "RDPSERVER_CONFIG_DIR has no rdpserver.ini: ${RDPSERVER_CONFIG_DIR}")
     endif()
-    file(GLOB _rdpserver_config LIST_DIRECTORIES false
-        "${RDPSERVER_CONFIG_DIR}/rdpserver.ini"
-        "${RDPSERVER_CONFIG_DIR}/*.crt"
-        "${RDPSERVER_CONFIG_DIR}/*.key"
-        "${RDPSERVER_CONFIG_DIR}/*.pem")
+    set(_rdpserver_config "${RDPSERVER_CONFIG_DIR}/rdpserver.ini")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_rdpserver_config})
 else()
     set(_rdpserver_config "${CMAKE_CURRENT_SOURCE_DIR}/rdpserver.ini")
