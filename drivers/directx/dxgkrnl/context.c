@@ -2309,6 +2309,9 @@ NTAPI
 DxgkCreateDevice(
     _Inout_ D3DKMT_CREATEDEVICE *pCreateDevice)
 {
+    /* TODO: test devices once a test-signing mode exists; without it Windows 11 refuses them */
+    if (pCreateDevice == NULL || pCreateDevice->Flags.TestDevice)
+        return STATUS_INVALID_PARAMETER;
     return DxgkpCreateDevice(pCreateDevice, FALSE);
 }
 

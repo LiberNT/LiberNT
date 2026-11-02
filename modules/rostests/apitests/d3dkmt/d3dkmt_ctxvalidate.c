@@ -42,6 +42,8 @@ START_TEST(ctxvalidate)
     PFND3DKMT_CLOSEADAPTER pfnCloseAdapter = (PFND3DKMT_CLOSEADAPTER)LoadD3DKMTProc("D3DKMTCloseAdapter");
     PFND3DKMT_CREATEDEVICE pfnCreateDevice = (PFND3DKMT_CREATEDEVICE)LoadD3DKMTProc("D3DKMTCreateDevice");
     PFND3DKMT_DESTROYDEVICE pfnDestroyDevice = (PFND3DKMT_DESTROYDEVICE)LoadD3DKMTProc("D3DKMTDestroyDevice");
+    PFND3DKMT_EVICT pfnEvict = (PFND3DKMT_EVICT)LoadD3DKMTProc("D3DKMTEvict");
+    NTSTATUS Status;
     D3DKMT_ENUMADAPTERS2 Enum;
     D3DKMT_ADAPTERINFO *Adapters;
     D3DKMT_CLOSEADAPTER Close;
@@ -76,8 +78,30 @@ START_TEST(ctxvalidate)
 
             memset(&Device, 0, sizeof(Device));
             Device.hAdapter = Adapters[Index].hAdapter;
+            Device.Flags.TestDevice = 1;
+            Status = pfnCreateDevice(&Device);
+            ok(Status == STATUS_INVALID_PARAMETER, "Adapter %08lx:%08lx: test device returned 0x%08lx\n",
+               (ULONG)Luid.HighPart, Luid.LowPart, (ULONG)Status);
+            if (NT_SUCCESS(Status))
+            {
+                memset(&DestroyDevice, 0, sizeof(DestroyDevice));
+                DestroyDevice.hDevice = Device.hDevice;
+                pfnDestroyDevice(&DestroyDevice);
+            }
+            memset(&Device, 0, sizeof(Device));
+            Device.hAdapter = Adapters[Index].hAdapter;
             if (NT_SUCCESS(pfnCreateDevice(&Device)))
             {
+                if (pfnEvict != NULL)
+                {
+                    D3DKMT_EVICT Evict;
+
+                    memset(&Evict, 0, sizeof(Evict));
+                    Evict.hDevice = Device.hDevice;
+                    Status = pfnEvict(&Evict);
+                    ok(Status == STATUS_INVALID_PARAMETER, "Adapter %08lx:%08lx: evict without allocations returned 0x%08lx\n",
+                       (ULONG)Luid.HighPart, Luid.LowPart, (ULONG)Status);
+                }
                 CtxValidateRefused(Device.hDevice, Luid, "node ordinal past the last node", 0x1000, 0, NULL, 0);
                 CtxValidateRefused(Device.hDevice, Luid, "engine affinity naming a second physical adapter", 0, 2, NULL, 0);
                 CtxValidateRefused(Device.hDevice, Luid, "private data without a size", 0, 0, PrivateData, 0);

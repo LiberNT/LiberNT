@@ -13351,7 +13351,7 @@ DxgkpDispatchBufferedIoctlWorker(
                 return STATUS_BUFFER_TOO_SMALL;
 
             pEvict = (D3DKMT_EVICT_LOCAL *)SystemBuffer;
-            if (pEvict->hDevice == 0 || pEvict->NumAllocations > DXGKP_MAX_D3DKMT_LIST_COUNT || (pEvict->NumAllocations != 0 && pEvict->AllocationList == NULL) || pEvict->Flags.Reserved != 0)
+            if (pEvict->hDevice == 0 || pEvict->NumAllocations == 0 || pEvict->NumAllocations > DXGKP_MAX_D3DKMT_LIST_COUNT || pEvict->AllocationList == NULL || pEvict->Flags.Reserved != 0)
                 return STATUS_INVALID_PARAMETER;
 
             Status = DxgkReferenceOwnedDeviceByHandle(pEvict->hDevice, PsGetCurrentProcess(), &Adapter, &Device);
