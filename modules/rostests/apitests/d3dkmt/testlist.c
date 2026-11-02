@@ -43,6 +43,7 @@ extern void func_renderpath(void);
 extern void func_capsaudit(void);
 extern void func_umdabi(void);
 extern void func_adapterid(void);
+extern void func_queryregistry(void);
 extern void func_ctxvalidate(void);
 extern void func_gpusync(void);
 extern void func_ctxflags(void);
@@ -130,6 +131,7 @@ const struct test winetest_testlist[] =
     { "capsaudit",     func_capsaudit },
     { "umdabi",        func_umdabi },
     { "adapterid",     func_adapterid },
+    { "queryregistry", func_queryregistry },
     { "ctxvalidate",   func_ctxvalidate },
     { "gpusync",       func_gpusync },
     { "ctxflags",      func_ctxflags },

@@ -42,6 +42,7 @@ list(APPEND SOURCE
     d3dkmt_surface.c
     d3dkmt_adapterinfo.c
     d3dkmt_adapterid.c
+    d3dkmt_queryregistry.c
     d3dkmt_ctxvalidate.c
     d3dkmt_gpusync.c
     d3dkmt_ctxflags.c

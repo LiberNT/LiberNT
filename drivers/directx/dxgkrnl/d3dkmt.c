@@ -3318,126 +3318,67 @@ DxgkpQueryAdapterPerfDataClass(
     return STATUS_SUCCESS;
 }
 
-static SIZE_T
-DxgkpWideLength(
-    _In_reads_(MaxChars) PCWSTR String,
-    _In_ SIZE_T MaxChars)
-{
-    SIZE_T Length = 0;
-
-    while (Length < MaxChars && String[Length] != UNICODE_NULL)
-        ++Length;
-    return Length;
-}
+#if (NTDDI_VERSION < NTDDI_WINBLUE)
+NTKERNELAPI
+NTSTATUS
+NTAPI
+IoQueryFullDriverPath(
+    _In_ PDRIVER_OBJECT DriverObject,
+    _Out_ PUNICODE_STRING FullPath);
+#endif
 
 static NTSTATUS
 DxgkpQueryRegistryImagePath(
     _In_ PDXGKRNL_ADAPTER Adapter,
-    _In_ BOOLEAN Directory,
     _Outptr_ PWSTR *Path,
     _Out_ PULONG PathBytes)
 {
-    static const WCHAR SystemRootPrefix[] = L"\\SystemRoot\\";
-    static const WCHAR DosPrefix[] = L"\\??\\";
-    static const WCHAR StoreMarker[] = L"\\DriverStore\\FileRepository\\";
-    static const WCHAR System32[] = L"System32";
-    PKEY_VALUE_PARTIAL_INFORMATION ValueInfo = NULL;
-    HANDLE KeyHandle = NULL;
-    PCWSTR Image;
-    PCWSTR Root = NULL;
+    UNICODE_STRING FullPath;
     PWSTR Buffer;
-    SIZE_T ImageChars;
-    SIZE_T RootChars = 0;
-    SIZE_T Index;
-    SIZE_T TotalChars;
-    BOOLEAN InStore = FALSE;
     NTSTATUS Status;
 
     *Path = NULL;
     *PathBytes = 0;
-    Status = DxgkpOpenMiniportServiceKey(Adapter, &KeyHandle);
+    if (Adapter == NULL || Adapter->FunctionalDeviceObject == NULL ||
+        Adapter->FunctionalDeviceObject->DriverObject == NULL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    RtlZeroMemory(&FullPath, sizeof(FullPath));
+    Status = IoQueryFullDriverPath(Adapter->FunctionalDeviceObject->DriverObject, &FullPath);
     if (!NT_SUCCESS(Status))
         return Status;
-    Status = DxgkpQueryRegistryValue(KeyHandle, L"ImagePath", &ValueInfo);
-    ZwClose(KeyHandle);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    if ((ValueInfo->Type != REG_SZ && ValueInfo->Type != REG_EXPAND_SZ) ||
-        ValueInfo->DataLength < sizeof(WCHAR))
+    Buffer = ExAllocatePoolWithTag(PagedPool, FullPath.Length + sizeof(WCHAR), TAG_DXGK_REGISTRY);
+    if (Buffer != NULL)
     {
-        ExFreePoolWithTag(ValueInfo, TAG_DXGK_REGISTRY);
-        return STATUS_OBJECT_TYPE_MISMATCH;
+        RtlCopyMemory(Buffer, FullPath.Buffer, FullPath.Length);
+        Buffer[FullPath.Length / sizeof(WCHAR)] = UNICODE_NULL;
+        *Path = Buffer;
+        *PathBytes = FullPath.Length;
     }
-
-    Image = (PCWSTR)ValueInfo->Data;
-    ImageChars = DxgkpWideLength(Image, ValueInfo->DataLength / sizeof(WCHAR));
-    if (ImageChars >= RTL_NUMBER_OF(SystemRootPrefix) - 1 &&
-        _wcsnicmp(Image, SystemRootPrefix, RTL_NUMBER_OF(SystemRootPrefix) - 1) == 0)
-    {
-        Image += RTL_NUMBER_OF(SystemRootPrefix) - 1;
-        ImageChars -= RTL_NUMBER_OF(SystemRootPrefix) - 1;
-        Root = SharedUserData->NtSystemRoot;
-    }
-    else if (ImageChars >= RTL_NUMBER_OF(DosPrefix) - 1 &&
-             wcsncmp(Image, DosPrefix, RTL_NUMBER_OF(DosPrefix) - 1) == 0)
-    {
-        Image += RTL_NUMBER_OF(DosPrefix) - 1;
-        ImageChars -= RTL_NUMBER_OF(DosPrefix) - 1;
-    }
-    else if (ImageChars < 2 || Image[1] != L':')
-    {
-        Root = SharedUserData->NtSystemRoot;
-    }
-    if (Root != NULL)
-        RootChars = DxgkpWideLength(Root, RTL_NUMBER_OF(SharedUserData->NtSystemRoot));
-
-    for (Index = 0; Index + RTL_NUMBER_OF(StoreMarker) - 1 <= ImageChars; ++Index)
-    {
-        if (_wcsnicmp(Image + Index, StoreMarker, RTL_NUMBER_OF(StoreMarker) - 1) == 0)
-        {
-            InStore = TRUE;
-            break;
-        }
-    }
-    if (Directory)
-    {
-        if (InStore)
-        {
-            while (ImageChars > 0 && Image[ImageChars - 1] != L'\\')
-                --ImageChars;
-            if (ImageChars > 0)
-                --ImageChars;
-        }
-        else
-        {
-            Image = System32;
-            ImageChars = RTL_NUMBER_OF(System32) - 1;
-            Root = SharedUserData->NtSystemRoot;
-            RootChars = DxgkpWideLength(Root, RTL_NUMBER_OF(SharedUserData->NtSystemRoot));
-        }
-    }
-
-    TotalChars = (Root != NULL ? RootChars + 1 : 0) + ImageChars + 1;
-    Buffer = ExAllocatePoolWithTag(PagedPool, TotalChars * sizeof(WCHAR), TAG_DXGK_REGISTRY);
-    if (Buffer == NULL)
-    {
-        ExFreePoolWithTag(ValueInfo, TAG_DXGK_REGISTRY);
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-    Index = 0;
-    if (Root != NULL)
-    {
-        RtlCopyMemory(Buffer, Root, RootChars * sizeof(WCHAR));
-        Index = RootChars;
-        Buffer[Index++] = L'\\';
-    }
-    RtlCopyMemory(Buffer + Index, Image, ImageChars * sizeof(WCHAR));
-    Buffer[Index + ImageChars] = UNICODE_NULL;
-    ExFreePoolWithTag(ValueInfo, TAG_DXGK_REGISTRY);
-    *Path = Buffer;
-    *PathBytes = (ULONG)(TotalChars * sizeof(WCHAR));
-    return STATUS_SUCCESS;
+    ExFreePool(FullPath.Buffer);
+    return Buffer != NULL ? STATUS_SUCCESS : STATUS_INSUFFICIENT_RESOURCES;
 }
+
+static VOID
+DxgkpTrimDriverStorePath(
+    _Inout_ PWSTR Path,
+    _In_ PWSTR Repository,
+    _Out_ PULONG PathBytes)
+{
+    PWSTR Cursor = Repository;
+
+    while (*Cursor != UNICODE_NULL && *Cursor != L'\\')
+        ++Cursor;
+    if (*Cursor != UNICODE_NULL)
+        ++Cursor;
+    while (*Cursor != UNICODE_NULL && *Cursor != L'\\')
+        ++Cursor;
+    *Cursor = UNICODE_NULL;
+    *PathBytes = (ULONG)((Cursor - Path) * sizeof(WCHAR));
+}
+
+#define DXGKP_QUERYREGISTRY_PATH_OVERFLOW_PAD 16
 
 static NTSTATUS
 DxgkpQueryRegistryInfo(
@@ -3454,9 +3395,13 @@ DxgkpQueryRegistryInfo(
     PWSTR PathBuffer = NULL;
     PWSTR ValueName;
     PWSTR Separator;
+    PWSTR Repository;
     const VOID *Data = NULL;
     ULONG DataBytes = 0;
+    ULONG RequiredBytes = 0;
     ULONG Capacity;
+    BOOLEAN PathQuery = FALSE;
+    BOOLEAN Overflow = FALSE;
     NTSTATUS Status;
 
     if (Info == NULL || Size < sizeof(D3DDDI_QUERYREGISTRY_INFO))
@@ -3473,7 +3418,7 @@ DxgkpQueryRegistryInfo(
     Request.ValueName[RTL_NUMBER_OF(Request.ValueName) - 1] = UNICODE_NULL;
     Capacity = Size - FIELD_OFFSET(D3DDDI_QUERYREGISTRY_INFO, OutputDword);
 
-    if (Request.QueryFlags.MutableValue || Request.QueryFlags.Reserved || Request.PhysicalAdapterIndex != 0)
+    if (Request.QueryFlags.Reserved || Request.PhysicalAdapterIndex != 0)
     {
         Status = STATUS_INVALID_PARAMETER;
     }
@@ -3494,14 +3439,18 @@ DxgkpQueryRegistryInfo(
         }
         if (NT_SUCCESS(Status))
         {
+            PWSTR SubKeyName = Request.ValueName;
+
             ValueName = Request.ValueName;
             Separator = wcsrchr(Request.ValueName, L'\\');
             ValueKey = RootKey;
-            if (Separator != NULL)
+            if (Separator != NULL && Separator != Request.ValueName)
             {
                 *Separator = UNICODE_NULL;
                 ValueName = Separator + 1;
-                RtlInitUnicodeString(&SubKey, Request.ValueName);
+                while (*SubKeyName == L'\\')
+                    SubKeyName++;
+                RtlInitUnicodeString(&SubKey, SubKeyName);
                 InitializeObjectAttributes(&ObjectAttributes, &SubKey, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
                                            RootKey, NULL);
                 Status = ZwOpenKey(&ValueKey, KEY_READ, &ObjectAttributes);
@@ -3518,25 +3467,50 @@ DxgkpQueryRegistryInfo(
         {
             if (ValueInfo->Type != Request.ValueType)
             {
-                Status = STATUS_OBJECT_TYPE_MISMATCH;
+                Status = STATUS_INVALID_PARAMETER;
             }
             else
             {
                 Data = ValueInfo->Data;
                 DataBytes = ValueInfo->DataLength;
+                if (DataBytes > Capacity)
+                {
+                    Overflow = TRUE;
+                    RequiredBytes = DataBytes;
+                }
             }
         }
     }
     else if (Request.QueryType == D3DDDI_QUERYREGISTRY_DRIVERSTOREPATH ||
              Request.QueryType == D3DDDI_QUERYREGISTRY_DRIVERIMAGEPATH)
     {
-        if (Request.ValueType != 0)
+        PathQuery = TRUE;
+        if (Request.ValueType != 0 || Request.QueryFlags.TranslatePath)
             Status = STATUS_INVALID_PARAMETER;
         else
-            Status = DxgkpQueryRegistryImagePath(Adapter,
-                                                 Request.QueryType == D3DDDI_QUERYREGISTRY_DRIVERSTOREPATH,
-                                                 &PathBuffer,
-                                                 &DataBytes);
+            Status = DxgkpQueryRegistryImagePath(Adapter, &PathBuffer, &DataBytes);
+        if (NT_SUCCESS(Status) && Request.QueryType == D3DDDI_QUERYREGISTRY_DRIVERIMAGEPATH &&
+            DataBytes + sizeof(WCHAR) > Capacity)
+        {
+            Overflow = TRUE;
+            RequiredBytes = DataBytes;
+        }
+        else if (NT_SUCCESS(Status) && Request.QueryType == D3DDDI_QUERYREGISTRY_DRIVERSTOREPATH)
+        {
+            if (DataBytes + sizeof(WCHAR) >= Capacity)
+            {
+                Overflow = TRUE;
+                RequiredBytes = DataBytes + sizeof(WCHAR);
+            }
+            else if ((Repository = wcsstr(PathBuffer, L"FileRepository")) == NULL)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+            }
+            else
+            {
+                DxgkpTrimDriverStorePath(PathBuffer, Repository, &DataBytes);
+            }
+        }
         Data = PathBuffer;
     }
     else
@@ -3549,21 +3523,19 @@ DxgkpQueryRegistryInfo(
         if (!NT_SUCCESS(Status))
         {
             Info->Status = D3DDDI_QUERYREGISTRY_STATUS_FAIL;
-            if (Status == STATUS_OBJECT_NAME_NOT_FOUND ||
-                Status == STATUS_OBJECT_PATH_NOT_FOUND ||
-                Status == STATUS_OBJECT_TYPE_MISMATCH)
-            {
-                Status = STATUS_SUCCESS;
-            }
         }
-        else if (DataBytes > Capacity)
+        else if (Overflow)
         {
-            Info->OutputValueSize = DataBytes;
+            Info->OutputValueSize = RequiredBytes;
+            if (PathQuery || Request.QueryFlags.TranslatePath)
+                Info->OutputValueSize += DXGKP_QUERYREGISTRY_PATH_OVERFLOW_PAD;
             Info->Status = D3DDDI_QUERYREGISTRY_STATUS_BUFFER_OVERFLOW;
         }
         else
         {
             RtlCopyMemory(Info->OutputBinary, Data, DataBytes);
+            if (PathQuery)
+                Info->OutputString[DataBytes / sizeof(WCHAR)] = UNICODE_NULL;
             Info->OutputValueSize = DataBytes;
             Info->Status = D3DDDI_QUERYREGISTRY_STATUS_SUCCESS;
         }
