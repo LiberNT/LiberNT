@@ -66,6 +66,7 @@
 #define WDI_TLV_PEER_MAC_ADDRESS                    0x4C
 #define WDI_TLV_CIPHER_KEY_ID                       0x4D
 #define WDI_TLV_CIPHER_KEY_TYPE_INFO                0x4E
+#define WDI_TLV_CIPHER_KEY_RECEIVE_SEQUENCE_COUNT   0x4F
 #define WDI_TLV_CIPHER_KEY_CCMP_KEY                 0x50
 #define WDI_TLV_CIPHER_KEY_BIP_KEY                  0x51
 #define WDI_TLV_SET_CIPHER_KEY_INFO                 0x52
