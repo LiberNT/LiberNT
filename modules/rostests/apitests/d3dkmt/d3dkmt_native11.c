@@ -32,6 +32,18 @@ static ULONG NativeRefcount(IUnknown *object)
     return IUnknown_Release(object);
 }
 
+static BOOL NativeSameObject(IUnknown *identity, IUnknown *object)
+{
+    IUnknown *canonical = NULL;
+    BOOL same;
+
+    if (!identity || FAILED(IUnknown_QueryInterface(object, &IID_IUnknown, (void **)&canonical)))
+        return FALSE;
+    same = canonical == identity;
+    IUnknown_Release(canonical);
+    return same;
+}
+
 static void TestImmediateContext(ID3D11Device *device, ID3D11DeviceContext **context)
 {
     ID3D11DeviceContext *previous = *context, *second;
@@ -76,11 +88,11 @@ static void TestImmediateContext(ID3D11Device *device, ID3D11DeviceContext **con
     ok(hr == S_OK, "Context ID3D11Multithread returned %#lx\n", hr);
     if (!device_mt || !context_mt) goto done;
     hr = ID3D11Multithread_QueryInterface(device_mt, &IID_IUnknown, (void **)&identity);
-    ok(hr == S_OK && identity == (IUnknown *)device, "Device threading identity %#lx, %p\n", hr, identity);
+    ok(hr == S_OK && NativeSameObject(identity, (IUnknown *)device), "Device threading identity %#lx, %p\n", hr, identity);
     if (identity) IUnknown_Release(identity);
     identity = NULL;
     hr = ID3D11Multithread_QueryInterface(context_mt, &IID_IUnknown, (void **)&identity);
-    ok(hr == S_OK && identity == (IUnknown *)*context, "Context threading identity %#lx, %p\n", hr, identity);
+    ok(hr == S_OK && NativeSameObject(identity, (IUnknown *)*context), "Context threading identity %#lx, %p\n", hr, identity);
     if (identity) IUnknown_Release(identity);
     ok(!ID3D11Multithread_GetMultithreadProtected(context_mt), "Protection should default to off\n");
     ok(!ID3D11Multithread_SetMultithreadProtected(device_mt, TRUE), "Previous protection should be off\n");
@@ -272,7 +284,7 @@ static void TestTexture1D(ID3D11Device *device, ID3D11DeviceContext *context)
     ok(hr == S_OK, "Query 1D DXGI surface returned %#lx\n", hr);
     if (FAILED(hr)) goto done;
     hr = IDXGISurface_QueryInterface(surface, &IID_IUnknown, (void **)&identity);
-    ok(hr == S_OK && identity == (IUnknown *)staging, "Surface identity %#lx, %p\n", hr, identity);
+    ok(hr == S_OK && NativeSameObject(identity, (IUnknown *)staging), "Surface identity %#lx, %p\n", hr, identity);
     hr = IDXGISurface_GetDesc(surface, &surface_desc);
     ok(hr == S_OK && surface_desc.Width == 16 && surface_desc.Height == 1 && surface_desc.SampleDesc.Count == 1,
             "Unexpected 1D surface description, hr %#lx\n", hr);
