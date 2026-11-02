@@ -1602,6 +1602,11 @@ LX_SYSCALL(LxSysFchmod)
 
     if (File == NULL)
         return -LX_EBADF;
+    if (File->Flags & LX_O_PATH)
+    {
+        LxFileDereference(File);
+        return -LX_EBADF;
+    }
     Error = LxSetAttributesFile(Call->Process, File, (ULONG)Call->Args[1] & 07777, MAXULONG, MAXULONG);
     LxFileDereference(File);
     return Error;
@@ -1654,6 +1659,11 @@ LX_SYSCALL(LxSysFchown)
     File = LxCallFile(Call, 0);
     if (File == NULL)
         return -LX_EBADF;
+    if (File->Flags & LX_O_PATH)
+    {
+        LxFileDereference(File);
+        return -LX_EBADF;
+    }
     Error = LxSetAttributesFile(Call->Process, File, MAXULONG, Uid, Gid);
     LxFileDereference(File);
     return Error;
