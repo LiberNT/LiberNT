@@ -7117,7 +7117,15 @@ DxgkSetDisplayMode(
     Status = DxgkVidMmReferenceAllocation((HANDLE)(ULONG_PTR)pSetDisplayMode->hPrimaryAllocation, Adapter, Device, &Allocation);
     if (!NT_SUCCESS(Status))
     {
-        Status = STATUS_INVALID_HANDLE;
+        Status = STATUS_INVALID_PARAMETER;
+        goto Cleanup;
+    }
+    if (pSetDisplayMode->ScanLineOrdering < D3DDDI_VSSLO_PROGRESSIVE ||
+        pSetDisplayMode->ScanLineOrdering > D3DDDI_VSSLO_INTERLACED_LOWERFIELDFIRST ||
+        pSetDisplayMode->DisplayOrientation < D3DDDI_ROTATION_IDENTITY ||
+        pSetDisplayMode->DisplayOrientation > D3DDDI_ROTATION_270)
+    {
+        Status = STATUS_INVALID_PARAMETER;
         goto Cleanup;
     }
     VidPnSourceId = Allocation->PrimaryVidPnSourceId;
