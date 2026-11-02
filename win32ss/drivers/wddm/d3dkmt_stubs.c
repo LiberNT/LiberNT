@@ -4910,8 +4910,7 @@ D3DKMTCreateContextVirtual(
 
     if (Captured.hDevice == 0 ||
         Captured.PrivateDriverDataSize > RXGK_WDDM_MAX_PRIVATE_DRIVER_DATA ||
-        (Captured.PrivateDriverDataSize != 0 &&
-         Captured.pPrivateDriverData == NULL))
+        (Captured.PrivateDriverDataSize != 0) != (Captured.pPrivateDriverData != NULL))
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -4945,9 +4944,11 @@ D3DKMTCreateContextVirtual(
             goto Cleanup;
     }
 
-    Status = WddmBridgeSendIoctlWithInformation(IOCTL_D3DKMT_CREATECONTEXTVIRTUAL, Packet, (ULONG)PacketSize, Packet, sizeof(*Packet), &Information);
-    if (NT_SUCCESS(Status) && (Information != sizeof(*Packet) || Packet->ContextHandle == 0))
+    Status = WddmBridgeSendIoctlWithInformation(IOCTL_D3DKMT_CREATECONTEXTVIRTUAL, Packet, (ULONG)PacketSize, Packet, (ULONG)PacketSize, &Information);
+    if (NT_SUCCESS(Status) && ((Information != sizeof(*Packet) && Information != PacketSize) || Packet->ContextHandle == 0))
         Status = STATUS_INVALID_DEVICE_STATE;
+    if (NT_SUCCESS(Status) && Information == PacketSize && Captured.PrivateDriverDataSize != 0)
+        Status = WddmBridgeSafeCopyTo(Captured.pPrivateDriverData, (PUCHAR)Packet + Packet->PrivateDriverDataOffset, Captured.PrivateDriverDataSize);
     if (NT_SUCCESS(Status))
         Status = WddmBridgeSafeCopyTo((PUCHAR)pData + FIELD_OFFSET(D3DKMT_CREATECONTEXTVIRTUAL, hContext), &Packet->ContextHandle, sizeof(Packet->ContextHandle));
     if (!NT_SUCCESS(Status) && Packet->ContextHandle != 0)

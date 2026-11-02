@@ -2904,6 +2904,13 @@ DxgkCreateContextVirtual(
     if (!NT_SUCCESS(Status))
         return STATUS_INVALID_PARAMETER;
 
+    /* TODO: linked display adapters; a single physical adapter accepts engine affinity 0 or 1 only */
+    if (pCreateContext->EngineAffinity > 1 || pCreateContext->NodeOrdinal >= Adapter->NodeCount)
+    {
+        DxgkpDereferenceDevice(Device);
+        return STATUS_INVALID_PARAMETER;
+    }
+
     if (pCreateContext->NodeOrdinal >= Adapter->NodeCount ||
         !DxgkCapsCoreInterfaceVersionAtLeast(
             Adapter->MiniportContext->InitData.s.Version,

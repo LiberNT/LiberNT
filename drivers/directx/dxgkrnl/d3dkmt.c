@@ -12611,8 +12611,20 @@ DxgkpDispatchBufferedIoctlWorker(
             Status = DxgkCreateContextVirtual(&Request);
             if (NT_SUCCESS(Status))
             {
+                PDXGKRNL_ADAPTER ContextAdapter;
+                PDXGKRNL_DEVICE ContextDevice;
+                BOOLEAN ReturnPrivateData = FALSE;
+
                 Packet->ContextHandle = Request.hContext;
-                KmtRequest->Information = sizeof(*Packet);
+                if (Packet->PrivateDriverDataSize != 0 && OutputLength >= Packet->Size &&
+                    NT_SUCCESS(DxgkpValidateDeviceHandleForIoctl(Request.hDevice, &ContextAdapter, &ContextDevice)))
+                {
+                    ReturnPrivateData = !ContextAdapter->MiniportContext->UseDodLayout &&
+                        DxgkCapsCoreInterfaceVersionAtLeast(ContextAdapter->MiniportContext->InitData.s.Version,
+                                                            DXGK_CAPS_CORE_LEVEL_WDDM_2_2);
+                    DxgkDereferenceDevice(ContextDevice);
+                }
+                KmtRequest->Information = ReturnPrivateData ? Packet->Size : sizeof(*Packet);
             }
             return Status;
         }
