@@ -4894,9 +4894,12 @@ LxVfsSetAttributes(
     ULONG OldMode, OldUid, OldGid;
     ULONG64 Device;
     LX_STAT Stat;
+    PLX_MOUNT Mount = (File != NULL) ? File->Mount : ((Node != NULL) ? Node->Mount : NULL);
     BOOLEAN Close = FALSE;
     LONG Error;
 
+    if ((Mount != NULL) && (Mount->Flags & LX_MS_RDONLY))
+        return -LX_EROFS;
     if (LxTmpfsFileInode(File) != NULL)
     {
         Inode = LxTmpfsFileInode(File);
