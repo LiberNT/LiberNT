@@ -628,22 +628,6 @@ NwifiMsmConnect(
         goto ConnectFailed;
     }
 
-    {
-        /* Program the lower miniport's hardware receive filter. A full-MAC (WDI)
-         * adapter drops every received frame until its filter is set, so without
-         * this the EAPOL 4-way handshake never starts (the AP's M1 is discarded
-         * in firmware). Best-effort: softmac adapters that filter in software
-         * accept it too; nwifi still software-filters toward TCP/IP on
-         * CurrentPacketFilter. */
-        ULONG RxFilter = NDIS_PACKET_TYPE_DIRECTED | NDIS_PACKET_TYPE_BROADCAST |
-                         NDIS_PACKET_TYPE_MULTICAST;
-        NDIS_STATUS FilterStatus = NwifiProtocolDoRequest(
-            Adapter, NdisRequestSetInformation, OID_GEN_CURRENT_PACKET_FILTER,
-            &RxFilter, sizeof(RxFilter), NULL);
-        if (FilterStatus != NDIS_STATUS_SUCCESS)
-            DPRINT1("NWIFI: lower CURRENT_PACKET_FILTER set failed 0x%08X\n", FilterStatus);
-    }
-
     Status = NwifiProgramDesiredSsid(Adapter, &Params->Ssid);
     if (Status != NDIS_STATUS_SUCCESS)
     {
