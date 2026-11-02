@@ -335,9 +335,8 @@ config RDPSERVER_CONFIG_DIR
     type string
     default ""
     help
-      Directory outside the source tree with an rdpserver.ini that enables
-      the server, and its TLS certificate and key. Empty keeps the
-      disabled in-tree configuration.
+      Directory outside the source tree with an rdpserver.ini, for example
+      one with a file transfer root. Empty keeps the in-tree configuration.
 
 endmenu
 
