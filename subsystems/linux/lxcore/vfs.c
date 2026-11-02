@@ -5137,6 +5137,9 @@ LxVfsSetAttributes(
         OldMode &= ~LX_S_ISUID;
         if (OldMode & LX_S_IXGRP)
             OldMode &= ~LX_S_ISGID;
+    }
+    if ((Mode == MAXULONG) && ((OldMode & LX_S_IFMT) != LX_S_IFDIR) && ((Inode != NULL) || (Handle != NULL)))
+    {
         Error = LxXattrRemoveName(Inode, Handle, "security.capability");
         if (Error != 0)
         {
