@@ -221,7 +221,7 @@ LxNtOpenHandle(
     NTSTATUS Status;
 
     InitializeObjectAttributes(&ObjectAttributes, (PUNICODE_STRING)NtPath,
-                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE | OBJ_FORCE_ACCESS_CHECK, NULL, NULL);
     Status = ZwCreateFile(Handle, Access | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, Attributes,
                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, Disposition,
                           Options | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT, NULL, 0);
@@ -254,7 +254,7 @@ LxNtCreateById(
 
     Id.Buffer = (PWCH)&FileId;
     Id.Length = Id.MaximumLength = sizeof(FileId);
-    InitializeObjectAttributes(&ObjectAttributes, &Id, OBJ_KERNEL_HANDLE, Root, NULL);
+    InitializeObjectAttributes(&ObjectAttributes, &Id, OBJ_KERNEL_HANDLE | OBJ_FORCE_ACCESS_CHECK, Root, NULL);
     return ZwCreateFile(Handle, Access | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, 0,
                         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN,
                         Options | FILE_OPEN_BY_FILE_ID | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
@@ -2821,7 +2821,8 @@ LxNodeQuery(
     if (Error != 0)
         return Error;
 
-    InitializeObjectAttributes(&ObjectAttributes, &NtPath, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    InitializeObjectAttributes(&ObjectAttributes, &NtPath, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE | OBJ_FORCE_ACCESS_CHECK, NULL,
+                               NULL);
     Status = ZwQueryFullAttributesFile(&ObjectAttributes, &Information);
     if (!NT_SUCCESS(Status))
     {
@@ -5777,7 +5778,7 @@ LxXattrOpenFile(
         return -LX_EOPNOTSUPP;
     if (Write)
     {
-        InitializeObjectAttributes(&ObjectAttributes, &Empty, OBJ_KERNEL_HANDLE, File->Handle, NULL);
+        InitializeObjectAttributes(&ObjectAttributes, &Empty, OBJ_KERNEL_HANDLE | OBJ_FORCE_ACCESS_CHECK, File->Handle, NULL);
         if (NT_SUCCESS(ZwCreateFile(Handle, FILE_READ_EA | FILE_WRITE_EA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
                                     &ObjectAttributes, &Iosb, NULL, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                     FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0)))

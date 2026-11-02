@@ -1291,7 +1291,8 @@ LxNtEntryType(
 
     Name.Buffer = Entry->FileName;
     Name.Length = Name.MaximumLength = (USHORT)Entry->FileNameLength;
-    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, Directory->Handle, NULL);
+    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE | OBJ_FORCE_ACCESS_CHECK,
+                               Directory->Handle, NULL);
     if (NT_SUCCESS(ZwCreateFile(&Handle, FILE_READ_EA | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, 0,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN,
                                 FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT, NULL, 0)))

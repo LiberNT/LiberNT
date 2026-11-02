@@ -743,7 +743,8 @@ LxUnixNodeId(
     }
     if ((Node->Mount == NULL) || (Node->Mount->Kind != LxFsNt))
         return -LX_ECONNREFUSED;
-    InitializeObjectAttributes(&ObjectAttributes, &Node->NtPath, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    InitializeObjectAttributes(&ObjectAttributes, &Node->NtPath, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE | OBJ_FORCE_ACCESS_CHECK,
+                               NULL, NULL);
     Status = ZwOpenFile(&Handle, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &ObjectAttributes, &Iosb,
                         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                         FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT);

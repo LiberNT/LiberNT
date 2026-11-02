@@ -3611,7 +3611,7 @@ LxHandleToPath(
 
     ById.Buffer = (PWCH)&FileId;
     ById.Length = ById.MaximumLength = sizeof(FileId);
-    InitializeObjectAttributes(&ObjectAttributes, &ById, OBJ_KERNEL_HANDLE, Root, NULL);
+    InitializeObjectAttributes(&ObjectAttributes, &ById, OBJ_KERNEL_HANDLE | OBJ_FORCE_ACCESS_CHECK, Root, NULL);
     Status = ZwCreateFile(&Target, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, 0,
                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN,
                           FILE_OPEN_BY_FILE_ID | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);

@@ -725,7 +725,8 @@ LxExecDenyWrite(
     Status = ZwQueryObject(File->Handle, ObjectNameInformation, Name, Size, &Returned);
     if (NT_SUCCESS(Status) && (Name->Name.Length != 0))
     {
-        InitializeObjectAttributes(&ObjectAttributes, &Name->Name, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+        InitializeObjectAttributes(&ObjectAttributes, &Name->Name,
+                                   OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE | OBJ_FORCE_ACCESS_CHECK, NULL, NULL);
         Status = ZwCreateFile(&Handle, FILE_EXECUTE | SYNCHRONIZE, &ObjectAttributes, &Iosb, NULL, 0,
                               FILE_SHARE_READ | FILE_SHARE_DELETE, FILE_OPEN,
                               FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT, NULL, 0);
