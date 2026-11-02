@@ -5134,9 +5134,25 @@ LxVfsSetAttributes(
     }
     if ((Mode == MAXULONG) && ((OldMode & LX_S_IFMT) != LX_S_IFDIR))
     {
-        OldMode &= ~LX_S_ISUID;
-        if (OldMode & LX_S_IXGRP)
-            OldMode &= ~LX_S_ISGID;
+        ULONG Kill = OldMode & LX_S_ISUID;
+
+        if ((OldMode & LX_S_ISGID) &&
+            ((OldMode & LX_S_IXGRP) ||
+             (!LxInGroup(Process, OldGid) && !LxCapableWrtIds(Process, OldUid, OldGid, LX_CAP_FSETID))))
+        {
+            Kill |= LX_S_ISGID;
+        }
+        if ((Kill != 0) && !LxOwnerOrCapable(Process, OldUid, OldGid))
+        {
+            if (Close)
+                ZwClose(Handle);
+            if (Inode != NULL)
+                LxTmpfsInodeDereference(Inode);
+            if (Tty != NULL)
+                LxTtyDereference(Tty);
+            return -LX_EPERM;
+        }
+        OldMode &= ~Kill;
     }
     if ((Mode == MAXULONG) && ((OldMode & LX_S_IFMT) != LX_S_IFDIR) && ((Inode != NULL) || (Handle != NULL)))
     {
