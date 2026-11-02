@@ -1798,7 +1798,7 @@ static DWORD table_hash(const NPI_MODULEID *module, UINT table_id, ULONG *result
     /* Interface connectivity lives in the dynamic block. Include it so a
        retained Network List Manager sees link changes, but do not hash the
        traffic counters or continuously changing ages of other tables. */
-    if (table_id == NSI_IP_INTERFACE_TABLE &&
+    if ((table_id == NSI_IP_INTERFACE_TABLE || table_id == NSI_IP_UNICAST_TABLE) &&
         (module_equal(module, &NPI_MS_IPV4_MODULEID) || module_equal(module, &NPI_MS_IPV6_MODULEID)))
         dynamic_size = table->sizes[2];
     memset(&params, 0, sizeof(params));

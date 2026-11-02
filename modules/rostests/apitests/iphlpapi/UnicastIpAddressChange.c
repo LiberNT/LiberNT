@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API Tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Tests for stable unicast address rows and quiet change notifications
+ * PURPOSE:     Tests for stable unicast address rows and unicast change notifications
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -15,10 +15,23 @@
 
 static LONG UnicastCallbacks;
 static LONG RouteCallbacks;
+static LONG DadAdds;
+static LONG DadParameters;
+static ULONG DadAddress;
 
 static VOID WINAPI UnicastChanged(PVOID Context, PMIB_UNICASTIPADDRESS_ROW Row, MIB_NOTIFICATION_TYPE Type)
 {
     InterlockedIncrement(&UnicastCallbacks);
+}
+
+static VOID WINAPI DadChanged(PVOID Context, PMIB_UNICASTIPADDRESS_ROW Row, MIB_NOTIFICATION_TYPE Type)
+{
+    if (!Row || Row->Address.si_family != AF_INET || Row->Address.Ipv4.sin_addr.s_addr != DadAddress)
+        return;
+    if (Type == MibAddInstance)
+        InterlockedIncrement(&DadAdds);
+    else if (Type == MibParameterNotification)
+        InterlockedIncrement(&DadParameters);
 }
 
 static VOID WINAPI RouteChanged(PVOID Context, PMIB_IPFORWARD_ROW2 Row, MIB_NOTIFICATION_TYPE Type)
@@ -99,8 +112,59 @@ static VOID TestQuietNotifications(VOID)
     ok_long(RouteCallbacks, 0);
 }
 
+static VOID TestDadCompletionNotification(VOID)
+{
+    PMIB_UNICASTIPADDRESS_TABLE Table = NULL;
+    MIB_UNICASTIPADDRESS_ROW Row, Current;
+    const MIB_UNICASTIPADDRESS_ROW *Lease = NULL;
+    HANDLE Notify = NULL;
+    ULONG Index, Host;
+    DWORD Status;
+
+    ok_long(GetUnicastIpAddressTable(AF_INET, &Table), NO_ERROR);
+    for (Index = 0; Table && Index < Table->NumEntries && !Lease; Index++)
+    {
+        if (Table->Table[Index].PrefixOrigin == IpPrefixOriginDhcp && Table->Table[Index].DadState == IpDadStatePreferred)
+            Lease = &Table->Table[Index];
+    }
+    if (!Lease)
+    {
+        skip("No preferred DHCP IPv4 address to add a neighbor address beside\n");
+        FreeMibTable(Table);
+        return;
+    }
+
+    Host = ntohl(Lease->Address.Ipv4.sin_addr.s_addr);
+    Host = (Host & 0xFFFFFF00) | ((Host & 0xFF) == 0xFA ? 0xFB : 0xFA);
+    DadAddress = htonl(Host);
+    InitializeUnicastIpAddressEntry(&Row);
+    Row.InterfaceLuid = Lease->InterfaceLuid;
+    Row.Address.Ipv4.sin_family = AF_INET;
+    Row.Address.Ipv4.sin_addr.s_addr = DadAddress;
+    Row.OnLinkPrefixLength = Lease->OnLinkPrefixLength;
+    FreeMibTable(Table);
+
+    ok_long(NotifyUnicastIpAddressChange(AF_INET, DadChanged, NULL, FALSE, &Notify), NO_ERROR);
+    Status = CreateUnicastIpAddressEntry(&Row);
+    ok_long(Status, NO_ERROR);
+    if (Status == NO_ERROR)
+    {
+        trace("Waiting for duplicate address detection\n");
+        Sleep(5000);
+        Current = Row;
+        ok_long(GetUnicastIpAddressEntry(&Current), NO_ERROR);
+        ok_long(Current.DadState, IpDadStatePreferred);
+        ok_long(DeleteUnicastIpAddressEntry(&Row), NO_ERROR);
+    }
+    if (Notify)
+        ok_long(CancelMibChangeNotify2(Notify), NO_ERROR);
+    ok_long(DadAdds, 1);
+    ok(DadParameters >= 1, "No parameter notification when duplicate address detection completed\n");
+}
+
 START_TEST(UnicastIpAddressChange)
 {
     TestCreationTimeStamp();
     TestQuietNotifications();
+    TestDadCompletionNotification();
 }
