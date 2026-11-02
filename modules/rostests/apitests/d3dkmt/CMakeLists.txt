@@ -44,6 +44,7 @@ list(APPEND SOURCE
     d3dkmt_adapterid.c
     d3dkmt_queryregistry.c
     d3dkmt_ctxvalidate.c
+    d3dkmt_gpuvareserve.c
     d3dkmt_gpusync.c
     d3dkmt_ctxflags.c
     d3dkmt_umdcallbacks.c

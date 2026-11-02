@@ -3412,7 +3412,8 @@ DxgkGpuVaPlanReserve(_In_ PDXGKRNL_PROCESS Process, _In_ D3DGPU_VIRTUAL_ADDRESS 
 
     PAGED_CODE();
 
-    if (Process == NULL || OutAddress == NULL || SizeInBytes == 0 || (SizeInBytes & GPUVA_RESERVATION_MASK) != 0 || ReservationType > D3DDDIGPUVIRTUALADDRESS_RESERVE_NO_COMMIT)
+    if (Process == NULL || OutAddress == NULL || SizeInBytes == 0 || (SizeInBytes & GPUVA_PAGE_MASK) != 0 ||
+        ReservationType > D3DDDIGPUVIRTUALADDRESS_RESERVE_NO_COMMIT)
         return STATUS_INVALID_PARAMETER;
 
     *OutAddress = 0;
@@ -3614,7 +3615,8 @@ DxgkGpuVaReserve(
     DPRINT("DxgkGpuVaReserve: Process=%p Base=0x%I64x Size=0x%I64x\n",
            Process, BaseAddress, SizeInBytes);
 
-    if (Process == NULL || OutAddress == NULL || SizeInBytes == 0 || (SizeInBytes & GPUVA_RESERVATION_MASK) != 0 || ReservationType > D3DDDIGPUVIRTUALADDRESS_RESERVE_NO_COMMIT)
+    if (Process == NULL || OutAddress == NULL || SizeInBytes == 0 || (SizeInBytes & GPUVA_PAGE_MASK) != 0 ||
+        ReservationType > D3DDDIGPUVIRTUALADDRESS_RESERVE_NO_COMMIT)
         return STATUS_INVALID_PARAMETER;
 
     *OutAddress = 0;
